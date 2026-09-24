@@ -100,7 +100,9 @@ its refutation `ViewWitness.fundamentalProperty_refused`) is not carried: it qua
    `reborrow_self_of_imm` (`Support/Model/Unr.lean`).
 3. A closed program that loads a function through an immutable borrow and calls it —
    `Programs.callBorrowed` (`Examples/CallBorrowed.lean`), with `callBorrowed_runs` (adequacy)
-   and `callBorrowed_eval` (the interpreter).
+   and `callBorrowed_eval` (the interpreter).  `Programs.captures` and `Programs.fnMut`
+   (`Examples/Captures.lean`, `Examples/FnMut.lean`) exercise it with captured borrows and with
+   `withswap`.
 
 ### Why closed code, and not a closure former
 
@@ -117,9 +119,21 @@ code has image `∅`, which is determined.
   borrow that suffices to call it: `own` (`⊸`, Rust `FnOnce`), `mut` (`FnMut`), `imm` (`Fn`).
   The arms that differ between `fn` and `⊸` are the value clause, the shape, `Imm̲`, and the
   lemmas that read them; every structural arm is the `⊸` arm verbatim.
-- **A capturing example.** A closure over data is `(env, code)` with
-  `code : fn (E ⊗ T₁) T₂`; the capture is the baseline's data borrowing. No program here
-  exercises it yet.
+- **Captures of borrowed data** need nothing more. A closure is `(env, code)` with
+  `code : fn (E ⊗ T₁) T₂`; when `E` is already a borrow, its view through a later borrow does
+  not mention the new lifetime, so the stored code still applies
+  (`Examples/Captures.lean`: `Imm 'a 1` captured, the closure loaded through an `Imm` borrow and
+  called twice).
+- **`FnMut`** needs nothing more when the code is held beside a `Mut` borrow of the
+  environment: `code : fn (E ⊗ T₁) (E ⊗ T₂)` takes the environment by value and returns it, and
+  `withswap` runs it in place (`Examples/FnMut.lean`: two calls, the environment updated by
+  each).
+- **Borrowing a closure mutably** — a `Mut` borrow of a cell holding `(env, code)` — needs
+  `Δ ⊢ fn T₁ T₂ ⊐ @a`, which `OutlivesRules` lacks (it has no case for `⊸` either). Closed code
+  holds `∅`, so the rule is expected to hold at every `@a`; it is not yet proved.
+- **Captures of owned data** read through a borrow see `Imm̲ 'c E`, which mentions the lifetime
+  `withload` picks. The code must be lifetime-polymorphic, `∀'c. fn (Imm̲ 'c E ⊗ T₁) T₂`, and
+  `Imm̲ 'b (∀'a ⊏ @b. T) ≜ Unk`: this needs closed `∀` code, the `∀` counterpart of this entry.
 - **Conservative extension.** Every baseline derivation is a derivation here and means the
   same thing. `DerivesWf` only gains constructors and `vX` is unchanged at `fn`-free types,
   but no theorem states it: stating it needs the baseline and the core in one environment.
@@ -128,5 +142,7 @@ code has image `∅`, which is determined.
 
 ## Changelog
 
+- **0.1.1** (2026-09-24) — §2: capture and `FnMut` examples; the `Open` list records what
+  mutable borrows of closures and owned captures still need.
 - **0.1** (2026-09-24) — Baseline (§1). Entry 1, closed code (§2), from the `borrow_lang`
   experiments `CBPVSplit`, `ModesLabels`, `Shifts` and `BorrowedClosures`.

@@ -520,4 +520,5 @@ Declarations `SPEC.md` adds to the baseline, tagged `[spec §N]` in the source.
   `fn` clause (`Support/TypedWorld/Relation.lean`); `DerivesWf.fnI`, `fnE`, `copyFnAx`,
   `forgetFnAx` (`Support/Statics/Presupposed.lean`); `Typed.fnI_compatX`, `fnE_compatX`,
   `copyFn_compatX`, `forgetFn_compatX` (`Support/TypedWorld/Compatibility.lean`);
-  `Programs.callBorrowed` (`Examples/CallBorrowed.lean`).
+  `Programs.callBorrowed` (`Examples/CallBorrowed.lean`); `Programs.captures`
+  (`Examples/Captures.lean`); `Programs.fnMut` (`Examples/FnMut.lean`).

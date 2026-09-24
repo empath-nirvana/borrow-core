@@ -11,3 +11,5 @@ import Examples
 #print axioms BoCa.Fig16.LogRel.reborrow_vDen
 #print axioms BoCa.Programs.callBorrowed_runs
 #print axioms BoCa.Programs.callBorrowed_eval
+#print axioms BoCa.Programs.captures_runs
+#print axioms BoCa.Programs.fnMut_runs
