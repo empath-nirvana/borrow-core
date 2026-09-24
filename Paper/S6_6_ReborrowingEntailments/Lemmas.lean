@@ -527,12 +527,6 @@ theorem reborrow_vDen {α : Life} {x : LifeVar} {δ : LSub}
       intro v
       rw [vDen_immReborrow_lolli]
       exact reborrow_emp_box α _
-  | fn T₁ T₂ _ _ =>
-      -- `[α] 𝒱⟦fn T₁ T₂⟧δ(v) ⊨ ↺_α 𝒱⟦fn T₁ T₂⟧δ(v)`: its resource `∅` is its own reborrow.
-      -- `[spec §2]`
-      intro v
-      rw [vDen_immReborrow_fn]
-      exact reborrow_self_of_imm α _ (fun _ h => h.2 ▸ ⟨free_empty _, free_empty _⟩)
   | all y c T _ =>
       -- Analogous to the `T₁ ⊸ T₂` case.
       intro v
@@ -563,6 +557,11 @@ theorem reborrow_vDen {α : Life} {x : LifeVar} {δ : LSub}
           ⟨σ₀, σ, hc, box_L α _ σ₀ hp,
             reborrow_ptoOwn ℓ v' (vDen T δ) σ
               ⟨σ₁, σ₂, hc', box_L α _ σ₁ hown, hpay⟩⟩))
+  | bang T _ =>
+    -- `[α] 𝒱⟦!T⟧δ(v) ⊨ ↺_α 𝒱⟦!T⟧δ(v)`: its resource `∅` is its own reborrow.
+    intro v
+    show box α (vDen (.bang T) δ v) ⊨ reborrow α (vDen (.bang T) δ v)
+    exact reborrow_self_of_imm α _ (fun _ h => h.1.1 ▸ ⟨free_empty _, free_empty _⟩)
   | imm a T _ =>
       -- Unfold: `[α] ∃ℓ. ⌜v = ℓ⌝ ⋆ ℓ ↦I_{@bδ} 𝒱⟦T′⟧δ ⊨ ↺_α 𝒱⟦Imm @b T′⟧δ(v)`.
       intro v ρ hρ

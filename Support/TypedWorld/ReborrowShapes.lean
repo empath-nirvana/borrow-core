@@ -67,9 +67,6 @@ theorem reborrow_vShape {α : Life} {x : LifeVar} {δ : LSub}
   | lolli T₁ T₂ _ _ =>
       intro v
       exact reborrow_emp_box α _
-  | fn T₁ T₂ _ _ =>
-      intro v
-      exact reborrow_emp_box α _
   | all y c T _ =>
       intro v
       exact reborrow_emp_box α _
@@ -90,6 +87,9 @@ theorem reborrow_vShape {α : Life} {x : LifeVar} {δ : LSub}
             reborrow_ptoOwn ℓ v' (vShape T δ) σ
               ⟨σ₁, σ₂, hc', box_L α _ σ₁ hown, hpay⟩⟩
       exact ⟨χ, hr, α, hδ, ℓ, hχ⟩
+  | bang T _ =>
+    intro v
+    exact reborrow_emp_box α _
   | imm a T _ =>
       intro v ρ hρ
       obtain ⟨⟨γ, hγ, hb⟩, ho⟩ := hρ

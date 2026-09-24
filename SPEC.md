@@ -1,12 +1,11 @@
 # Borrow core — specification
 
-Version 0.1 · 2026-09-24
+Version 0.2 · 2026-09-24
 
 The library — `Paper/`, `Support/`, `Examples/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
 implements it, and code an entry adds or changes is tagged `[spec §N]`. Experiments live
-outside this repository and are never merged: what an experiment establishes reaches the
-library only through an entry.
+outside this repository; work from one lands here only after its entry is written.
 
 Notation follows Wagner, Gierczak, Marshall, Li and Ahmed, *From Linearity to Borrowing*
 (PACMPL 9:OOPSLA2:415, 2025): `[CONF]` is the paper, `[TR]` its supplement.
@@ -37,111 +36,120 @@ Baseline theorems, which every later entry must preserve:
 
 ---
 
-## 2. Entry 1 — closed code, `fn T₁ T₂`
+## 2. Entry 1 — the exponential, `!T`
 
 ### Motivation
 
-`Imm̲ 'b (T₁ ⊸ T₂) ≜ Unk` (`[CONF]` Fig. 8 clause (4)): an immutably borrowed function can only
-be forgotten, because it may capture linear resources. With closure conversion a closure is a
-pair of its environment and closed code. The environment is data, which `Imm̲` already views
-correctly; what is missing is a type for the code. Closed code captures nothing, so it holds
-no resource and can be kept whole through a borrow.
+`Imm̲ 'b (T₁ ⊸ T₂) ≜ Unk` and `Imm̲ 'b (∀'a ⊏ @b. T) ≜ Unk` (`[CONF]` Fig. 8 clauses (4), (8)):
+an immutably borrowed function can only be forgotten, because it may capture linear
+resources. With closure conversion a closure is a pair of its environment and code. The
+environment is data, which `Imm̲` already views correctly; what is missing is a way to say the
+code captures nothing, so that a borrow can keep it whole.
+
+The paper names the construct: *"Linear type systems are often presented with an exponential
+modality, `!T` … Exponentials are therefore an orthogonal extension that we will not develop
+in this paper, though they are completely compatible with our type system"* (`[CONF]` 415:4).
+BoLo has the matching connective, `!P ≜ emp ∧ P` (`[TR]` p. 6; definition row 5.38).
 
 ### Types
 
-    T ::= … | fn T₁ T₂
+    T ::= … | !T
 
-Scoping, well-formedness, lifetime substitution and `TyEq` treat `fn T₁ T₂` exactly as
-`T₁ ⊸ T₂`.
+Scoping, well-formedness, lifetime substitution and `TyEq` treat `!T` as a unary former over
+`T`.
 
-### Metafunction
+### Metafunction and outlives
 
-    Imm̲ 'b (fn T₁ T₂) ≜ fn T₁ T₂
+    Imm̲ 'b (!T) ≜ !T
+    ─────────────
+    Δ ⊢ !T ⊐ @a            (at every @a)
 
 ### Typing
 
-    Γ dead    Δ ⊢ T₁    Δ; x : T₁, Γ ⊢ e : T₂
-    ─────────────────────────────────────────  fnI
-            Δ; Γ ⊢ λx.e : fn T₁ T₂
+`!Γ` means every live slot of `Γ` has a `!`-type (`Ctx.Persistent`).
 
-    Δ; Γ₁ ⊢ a : T₁    Δ; Γ₂ ⊢ f : fn T₁ T₂
-    ──────────────────────────────────────  fnE
-            Δ; Γ₁, Γ₂ ⊢ f a : T₂
+    !Γ    Δ ⊢ T₁    Δ; x : T₁, Γ ⊢ e : T₂
+    ─────────────────────────────────────  !I-λ
+        Δ; Γ ⊢ λx.e : !(T₁ ⊸ T₂)
+
+    !Γ    'a ∉ dom(Δ)    Δ ⊧ @b    Δ, 'a ⊏ @b; Γ ⊢ e : T
+    ────────────────────────────────────────────────────  !I-Λ
+             Δ; Γ ⊢ Λ.e : !(∀'a ⊏ @b. T)
+
+    Δ; Γ ⊢ e : !T
+    ─────────────  !E
+    Δ; Γ ⊢ e : T
 
 Axioms, at a dead context:
 
-    copy   : fn T₁ T₂ ⊸ fn T₁ T₂ ⊗ fn T₁ T₂
-    forget : fn T₁ T₂ ⊸ 1
+    copy   : !T ⊸ !T ⊗ !T
+    forget : !T ⊸ 1
 
-No new terms and no new machine rules: `fn` is inhabited by `λ` and eliminated by
-application.
+Promotion is for `λ` and `Λ` only: an arbitrary term can allocate (`alloc ()` in an empty
+context must not have type `!(Ref 1)`). No new terms and no new machine rules.
 
 ### Semantics
 
-- Literal relation: `𝒱⟦fn T₁ T₂⟧δ(v) ≜ 𝒱⟦T₁ ⊸ T₂⟧δ(v) ∧ ρ = ∅`.
-- Typed world: `vX b (fn T₁ T₂) ls δ v ρ ≜ ρ = ∅ ∧` the `⊸` clause at `ls`, in **both** modes.
-  The observable view does not relax `fn` to `True` (it does for `⊸` and `∀`, §12.69).
-- Shape: `vShape (fn T₁ T₂) ≜ emp`.
+- Literal relation: `𝒱⟦!T⟧δ(v) ≜ !𝒱⟦T⟧δ(v)`, that is `𝒱⟦T⟧δ(v)` at resource `∅`.
+- Typed world: `vX b (!T) ls δ v ρ ≜ ρ = ∅ ∧ vX true T ls δ v ρ`, in **both** modes: the
+  observable view does not relax `!T` (it relaxes `⊸` and `∀`, §12.69).
+- Shape: `vShape (!T) ≜ emp`. `tyLife (!T) ≜ free`.
 
 ### Retired
 
 The literal-relation Fundamental Property (`[TR]` 6.151 at `Sem` under `WithloadEscrow`, and
-its refutation `ViewWitness.fundamentalProperty_refused`) is not carried: it quantifies over
-`DerivesWf`, which now includes the `fn` rules. `Sem` at a `withload` node
-(`ViewWitness.withloadSem_refused`) and the other literal readings in
-`Paper/LiteralReadings/` are kept.
+`ViewWitness.fundamentalProperty_refused`) is not carried: it quantifies over `DerivesWf`, which
+now includes the `!` rules. `Sem` at a `withload` node (`ViewWitness.withloadSem_refused`) and
+the other literal readings in `Paper/LiteralReadings/` are kept.
 
 ### Obligations
 
-1. The Fundamental Property and adequacy of §1 hold over the extended judgment —
-   `Fig16.LogRel.Typed.fundamentalProperty`, `adequacy`, with the cases `fnI_compatX`,
-   `fnE_compatX`, `copyFn_compatX`, `forgetFn_compatX` (`Support/TypedWorld/Compatibility.lean`).
-2. `[TR]` 6.131 at `fn`: `[α] 𝒱⟦fn T₁ T₂⟧ ⊨ ↺α 𝒱⟦fn T₁ T₂⟧` — `reborrow_vDen`'s `fn` case, by
+1. The Fundamental Property and adequacy of §1 over the extended judgment —
+   `Fig16.LogRel.Typed.fundamentalProperty`, `adequacy`; the new cases are `bangLamI_compatX`,
+   `bangAllI_compatX`, `bangE_compatX`, `copyBang_compatX`, `forgetBang_compatX`
+   (`Support/TypedWorld/Compatibility.lean`), over `gSepX_persistent` (`!Γ` holds `∅`).
+2. `[TR]` 6.60 at `!T` (`vDen_outlives`, `vX_outlives`): the resource is `∅`.
+3. `[TR]` 6.131 at `!T`: `[α] 𝒱⟦!T⟧ ⊨ ↺α 𝒱⟦!T⟧` — `reborrow_vDen`'s `!` case, by
    `reborrow_self_of_imm` (`Support/Model/Unr.lean`).
-3. A closed program that loads a function through an immutable borrow and calls it —
-   `Programs.callBorrowed` (`Examples/CallBorrowed.lean`), with `callBorrowed_runs` (adequacy)
-   and `callBorrowed_eval` (the interpreter).  `Programs.captures` and `Programs.fnMut`
-   (`Examples/Captures.lean`, `Examples/FnMut.lean`) exercise it with captured borrows and with
-   `withswap`.
+4. Programs (`Examples/`), each with its adequacy instance and an interpreter run:
+   - `callBorrowed` — `λx.x : !(1 ⊸ 1)` loaded through an `Imm` borrow and called;
+   - `captures` — a closure over an `Imm` borrow, loaded through a second borrow, called twice;
+   - `fnMut` — state-passing `!` code run twice on a `Mut` borrow of its environment;
+   - `ownedFn` — a closure owning its environment, with code `!(∀'c ⊏ ⊤. (Imm 'c 1 ⊗ 1) ⊸ 1)`,
+     loaded through an `Imm` borrow and called twice;
+   - `mutClosure` — a whole closure `(env, !code)` borrowed mutably and run twice.
 
-### Why closed code, and not a closure former
+### Closures, in these terms
+
+| Rust | here |
+|---|---|
+| `fn` item | `!(T₁ ⊸ T₂)` |
+| `FnOnce` | `T₁ ⊸ T₂`, or `(env, code)` consumed |
+| `FnMut` | `(env, !code)` behind a `Mut` borrow, `code : !(E ⊗ T₁ ⊸ E ⊗ T₂)`, run by `withswap` |
+| `Fn` | `(env, !code)` behind an `Imm` borrow, `code : !(∀'c. Imm̲ 'c E ⊗ T₁ ⊸ T₂)` |
+
+### Why `!`, and not a closure former
 
 The typed world chooses each reborrow's image from types (§12.69, §12.71). A closure's image
-must be its captured resource, and neither its type nor its value determines that: the
-relation is not precise. Packing the environment existentially does not link the image to the
-escrow, and neither does naming the environment's type while its value is free (both refuted
-in the `borrow_lang` experiment `Experiments/BorrowedClosures/FnFork/EnvCheck.lean`). Closed
-code has image `∅`, which is determined.
+must be its captured resource, and neither its type nor its value determines that. Packing the
+environment existentially does not link the image to the escrow, and neither does naming the
+environment's type while its value is free (both refuted in the `borrow_lang` experiment
+`Experiments/BorrowedClosures/FnFork/EnvCheck.lean`). `!T` has image `∅`, which is determined.
 
 ### Open
 
-- **One arrow former.** `fn` is the empty-environment case of a single arrow indexed by the
-  borrow that suffices to call it: `own` (`⊸`, Rust `FnOnce`), `mut` (`FnMut`), `imm` (`Fn`).
-  The arms that differ between `fn` and `⊸` are the value clause, the shape, `Imm̲`, and the
-  lemmas that read them; every structural arm is the `⊸` arm verbatim.
-- **Captures of borrowed data** need nothing more. A closure is `(env, code)` with
-  `code : fn (E ⊗ T₁) T₂`; when `E` is already a borrow, its view through a later borrow does
-  not mention the new lifetime, so the stored code still applies
-  (`Examples/Captures.lean`: `Imm 'a 1` captured, the closure loaded through an `Imm` borrow and
-  called twice).
-- **`FnMut`** needs nothing more when the code is held beside a `Mut` borrow of the
-  environment: `code : fn (E ⊗ T₁) (E ⊗ T₂)` takes the environment by value and returns it, and
-  `withswap` runs it in place (`Examples/FnMut.lean`: two calls, the environment updated by
-  each).
-- **Borrowing a closure mutably** — a `Mut` borrow of a cell holding `(env, code)` — needs
-  `Δ ⊢ fn T₁ T₂ ⊐ @a`, which `OutlivesRules` lacks (it has no case for `⊸` either). Closed code
-  holds `∅`, so the rule is expected to hold at every `@a`; it is not yet proved.
-- **Captures of owned data** read through a borrow see `Imm̲ 'c E`, which mentions the lifetime
-  `withload` picks. The code must be lifetime-polymorphic, `∀'c. fn (Imm̲ 'c E ⊗ T₁) T₂`, and
-  `Imm̲ 'b (∀'a ⊏ @b. T) ≜ Unk`: this needs closed `∀` code, the `∀` counterpart of this entry.
+- **Promotion at every value.** Needs `wp` at a value to leave the resource in place; not proved.
 - **Conservative extension.** Every baseline derivation is a derivation here and means the
-  same thing. `DerivesWf` only gains constructors and `vX` is unchanged at `fn`-free types,
-  but no theorem states it: stating it needs the baseline and the core in one environment.
+  same thing. `DerivesWf` only gains constructors and `vX` is unchanged at `!`-free types, but no
+  theorem states it: stating it needs the baseline and this library in one environment.
 
 ---
 
 ## Changelog
 
+- **0.2** (2026-09-24) — §2 restated as the exponential `!T`, replacing closed code
+  `fn T₁ T₂` (which is `!(T₁ ⊸ T₂)`): adds `!I-Λ`, `Δ ⊢ !T ⊐ @a` and promotion over `!Γ`; the
+  `ownedFn` and `mutClosure` programs. From the `borrow_lang` experiment `Experiments/Bang`.
 - **0.1.1** (2026-09-24) — §2: capture and `FnMut` examples; the `Open` list records what
   mutable borrows of closures and owned captures still need.
 - **0.1** (2026-09-24) — Baseline (§1). Entry 1, closed code (§2), from the `borrow_lang`

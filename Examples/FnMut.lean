@@ -9,7 +9,7 @@ import Examples.CallBorrowed
                    let (m₂, u₂) = withswap m₁ (λe. f₂ (e, ())); u₂; forget m₂; ());
     v; case (free c) {x ⇒ x, y ⇒ y}
 
-`f : fn (1 ⊕ 1 ⊗ 1) (1 ⊕ 1 ⊗ 1)` is closed code that takes its environment by value and returns
+`f : !(1 ⊕ 1 ⊗ 1 ⊸ 1 ⊕ 1 ⊗ 1)` is code that captures nothing and takes its environment by value and returns
 it updated.  `withswap` hands the `Mut` borrow's payload to such code and stores what it returns,
 so each call runs the code on the environment in place — `FnMut`'s behaviour — with the code
 held beside the borrow, not inside it.
@@ -20,8 +20,8 @@ noncomputable section
 namespace BoCa.Programs
 open BoCa BoCa.Lifetime
 
-/-- `fn (1 ⊕ 1 ⊗ 1) (1 ⊕ 1 ⊗ 1)`. -/
-abbrev MF : Ty := .fn (.tensor B .unit) (.tensor B .unit)
+/-- `!(1 ⊕ 1 ⊗ 1 ⊸ 1 ⊕ 1 ⊗ 1)`. -/
+abbrev MF : Ty := .bang (.lolli (.tensor B .unit) (.tensor B .unit))
 
 /-- `λp. let (e, u) = p; u; (case e {x ⇒ inj₂ x, y ⇒ inj₁ y}, ())`: flip the environment. -/
 def flipCode : Expr :=
@@ -42,7 +42,7 @@ def fnMut : Expr :=
         (.seq (.var 0) (dropB (.app free' (.var 1))))))
 
 theorem d_flipCode : DerivesWf LifeCtx.empty [] flipCode MF :=
-  .fnI .nil (by rfl)
+  .bangLamI (Ctx.Dead.persistent .nil) (by rfl)
     (.tensorE (T₁ := B) (T₂ := .unit) (.left .nil) (by rfl) (.var (.here .nil))
       (.unitE (.left (.right (.dead .nil))) (.var (.here (.cons (.cons .nil))))
         (.tensorI (.dead (.left (.dead .nil)))
@@ -56,17 +56,13 @@ theorem d_mutBody :
   .tensorE (T₁ := .mut (.var 0) B) (T₂ := .unit) (.left (.dead (.right (.left (.dead .nil))))) (by rfl)
     (.lolliE (.right (.dead (.dead (.left (.dead .nil)))))
       (.lolliI (by rfl)
-        (.fnE (.left (.dead (.dead (.dead (.right (.dead .nil))))))
-          (.tensorI (.left (.dead (.dead (.dead (.dead (.dead .nil)))))) (.var (.here (.cons (.cons (.cons (.cons (.cons .nil))))))) (.unitI (.cons (.cons (.cons (.cons (.cons (.cons .nil))))))))
-          (.var (.there (.there (.there (.there (.here (.cons .nil)))))))))
+        (.lolliE (.left (.dead (.dead (.dead (.right (.dead .nil)))))) (.tensorI (.left (.dead (.dead (.dead (.dead (.dead .nil)))))) (.var (.here (.cons (.cons (.cons (.cons (.cons .nil))))))) (.unitI (.cons (.cons (.cons (.cons (.cons (.cons .nil)))))))) (.bangE (.var (.there (.there (.there (.there (.here (.cons .nil))))))))))
       (.lolliE (.left (.dead (.dead (.dead (.dead .nil))))) (.var (.here (.cons (.cons (.cons (.cons .nil)))))) (.withswapAx (.cons (.cons (.cons (.cons (.cons .nil))))))))
     (.unitE (.left (.right (.dead (.dead (.right (.dead (.dead .nil))))))) (.var (.here (.cons (.cons (.cons (.cons (.cons (.cons .nil))))))))
       (.tensorE (T₁ := .mut (.var 0) B) (T₂ := .unit) (.dead (.left (.dead (.dead (.left (.dead (.dead .nil))))))) (by rfl)
         (.lolliE (.dead (.right (.dead (.dead (.left (.dead (.dead .nil)))))))
           (.lolliI (by rfl)
-            (.fnE (.left (.dead (.dead (.dead (.dead (.right (.dead (.dead .nil))))))))
-              (.tensorI (.left (.dead (.dead (.dead (.dead (.dead (.dead (.dead .nil)))))))) (.var (.here (.cons (.cons (.cons (.cons (.cons (.cons (.cons .nil))))))))) (.unitI (.cons (.cons (.cons (.cons (.cons (.cons (.cons (.cons .nil))))))))))
-              (.var (.there (.there (.there (.there (.there (.here (.cons (.cons .nil)))))))))))
+            (.lolliE (.left (.dead (.dead (.dead (.dead (.right (.dead (.dead .nil)))))))) (.tensorI (.left (.dead (.dead (.dead (.dead (.dead (.dead (.dead .nil)))))))) (.var (.here (.cons (.cons (.cons (.cons (.cons (.cons (.cons .nil))))))))) (.unitI (.cons (.cons (.cons (.cons (.cons (.cons (.cons (.cons .nil)))))))))) (.bangE (.var (.there (.there (.there (.there (.there (.here (.cons (.cons .nil))))))))))))
           (.lolliE (.dead (.left (.dead (.dead (.dead (.dead (.dead .nil))))))) (.var (.there (.here (.cons (.cons (.cons (.cons (.cons .nil)))))))) (.withswapAx (.cons (.cons (.cons (.cons (.cons (.cons (.cons .nil))))))))))
         (.unitE (.left (.right (.dead (.dead (.dead (.dead (.dead (.dead (.dead .nil))))))))) (.var (.here (.cons (.cons (.cons (.cons (.cons (.cons (.cons (.cons .nil))))))))))
           (.unitE (.dead (.left (.dead (.dead (.dead (.dead (.dead (.dead (.dead .nil)))))))))
@@ -83,7 +79,7 @@ theorem d_fnMut : DerivesWf LifeCtx.empty [] fnMut .unit :=
   .lolliE .nil d_flipCode
     (.lolliI (by rfl)
       (.tensorE (T₁ := MF) (T₂ := MF) (.left .nil) (by rfl)
-        (.lolliE (.left .nil) (.var (.here .nil)) (.copyFnAx (.cons .nil)))
+        (.lolliE (.left .nil) (.var (.here .nil)) (.copyBangAx (.cons .nil)))
         (.tensorE (T₁ := .ref B) (T₂ := .unit) (.left (.left (.dead .nil))) (by rfl)
           (.lolliE (.left (.left (.dead .nil))) d_mutCaller
             (.lolliE (.dead (.dead (.dead .nil)))

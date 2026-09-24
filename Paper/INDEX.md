@@ -513,12 +513,12 @@ headline results are inhabited.
 
 Declarations `SPEC.md` adds to the baseline, tagged `[spec §N]` in the source.
 
-* **§2, closed code** — `Ty.fn` (`Paper/S1_Syntax/Definitions.lean`); `Ty.immReborrow`'s `fn`
-  clause (`Paper/S2_Statics/Definitions.lean`); `vDen_fn` (`Paper/S4_LogicalRelation/Definitions.lean`);
-  `vDen_immReborrow_fn` (`Support/LogicalRelation/Facts.lean`); `reborrow_vDen`'s `fn` case
-  (`Paper/S6_6_ReborrowingEntailments/Lemmas.lean`); `Support/Model/Unr.lean`; `Typed.vX`'s
-  `fn` clause (`Support/TypedWorld/Relation.lean`); `DerivesWf.fnI`, `fnE`, `copyFnAx`,
-  `forgetFnAx` (`Support/Statics/Presupposed.lean`); `Typed.fnI_compatX`, `fnE_compatX`,
-  `copyFn_compatX`, `forgetFn_compatX` (`Support/TypedWorld/Compatibility.lean`);
-  `Programs.callBorrowed` (`Examples/CallBorrowed.lean`); `Programs.captures`
-  (`Examples/Captures.lean`); `Programs.fnMut` (`Examples/FnMut.lean`).
+* **§2, the exponential `!T`** — `Ty.bang` (`Paper/S1_Syntax/Definitions.lean`); `Ty.immReborrow`'s
+  and `OutlivesRules`'s `!` clauses (`Paper/S2_Statics/Definitions.lean`); `vDen`'s clause and
+  `vDen_bang` (`Paper/S4_LogicalRelation/Definitions.lean`); the `!` cases of `vDen_outlives`
+  (`Paper/S6_2_NonStandardLemmas/Lemmas.lean`) and `reborrow_vDen`
+  (`Paper/S6_6_ReborrowingEntailments/Lemmas.lean`); `Support/Model/Unr.lean`; `Typed.vX`'s clause
+  (`Support/TypedWorld/Relation.lean`); `Ctx.Persistent`, `DerivesWf.bangLamI`, `bangAllI`, `bangE`,
+  `copyBangAx`, `forgetBangAx` (`Support/Statics/Presupposed.lean`); `Typed.gSepX_persistent`,
+  `bangLamI_compatX`, `bangAllI_compatX`, `bangE_compatX`, `copyBang_compatX`, `forgetBang_compatX`
+  (`Support/TypedWorld/Compatibility.lean`); the programs in `Examples/`.

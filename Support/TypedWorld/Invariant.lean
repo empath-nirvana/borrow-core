@@ -892,9 +892,6 @@ theorem image_dom_mut {x : LifeVar} {δ δ' : LSub} :
   | lolli T₁ T₂ _ _ =>
       intro v c R hc _ m ψ e
       rw [empty_of_pure hc, PMap.empty_get] at e; cases e
-  | fn T₁ T₂ _ _ =>
-      intro v c R hc _ m ψ e
-      rw [empty_of_pure hc, PMap.empty_get] at e; cases e
   | ref S _ =>
       intro v c R hc hR m ψ e ζ eζ kζ
       obtain ⟨ζ', eζ', hown⟩ := image_dom (.ref S) hc hR e
@@ -911,6 +908,9 @@ theorem image_dom_mut {x : LifeVar} {δ δ' : LSub} :
       have := (ResU.CompS.get_left_of_ne_imm hab (ResU.single_get_self _ _) (by simp)).2
       rw [eζ] at this; cases Option.some.inj this
       exact absurd kζ (by simp)
+  | bang S _ =>
+    intro v c R hc hR m ψ e
+    rw [empty_of_pure hc, PMap.empty_get] at e; cases e
   | imm a S _ =>
       intro v c R hc hR m ψ e ζ eζ kζ
       obtain ⟨α', -, l'', hk'⟩ := hR
@@ -972,13 +972,13 @@ theorem lfree_immReborrow {x y : LifeVar} (T : Ty) :
         · exact Or.inl e
         · exact Or.inr (Or.inr h')
   | lolli _ _ _ _ => intro h; exact h.elim
-  | fn _ _ _ _ => intro h; exact Or.inr h
   | all _ _ _ _ => intro h; exact h.elim
   | ref T _ =>
       intro h
       rcases h with h | h
       · left; simpa [Lifetime.Life.mentions] using h
       · exact Or.inr h
+  | bang T _ => intro h; exact Or.inr h
   | imm a T _ => intro h; exact Or.inr h
   | «mut» a T _ =>
       intro h
@@ -1422,9 +1422,9 @@ theorem mutPos_unique {δ : LSub} :
       exact ih hb (MutPos.inv_box h₁) (MutPos.inv_box h₂)
   | unit => intro v R m S₁ S₂ _ hp; cases hp
   | lolli _ _ _ _ => intro v R m S₁ S₂ _ hp; cases hp
-  | fn _ _ _ _ => intro v R m S₁ S₂ _ hp; cases hp
   | imm _ _ _ => intro v R m S₁ S₂ _ hp; cases hp
   | ref _ _ => intro v R m S₁ S₂ _ hp; cases hp
+  | bang _ _ => intro v R m S₁ S₂ _ hp; cases hp
   | all _ _ _ _ => intro v R m S₁ S₂ _ hp; cases hp
   | unk => intro v R m S₁ S₂ _ hp; cases hp
 
@@ -1485,9 +1485,9 @@ theorem mut_ref_blocks {δ : LSub} :
       exact ih hb (MutPos.inv_box h₁) (RefPos.inv_box h₂)
   | «mut» _ _ _ => intro v R m l S₁ S₂ _ _ hp; cases hp
   | ref _ _ => intro v R m l S₁ S₂ _ hp; cases hp
+  | bang _ _ => intro v R m l S₁ S₂ _ hp; cases hp
   | unit => intro v R m l S₁ S₂ _ hp; cases hp
   | lolli _ _ _ _ => intro v R m l S₁ S₂ _ hp; cases hp
-  | fn _ _ _ _ => intro v R m l S₁ S₂ _ hp; cases hp
   | imm _ _ _ => intro v R m l S₁ S₂ _ hp; cases hp
   | all _ _ _ _ => intro v R m l S₁ S₂ _ hp; cases hp
   | unk => intro v R m l S₁ S₂ _ hp; cases hp

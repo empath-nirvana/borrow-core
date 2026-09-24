@@ -315,10 +315,10 @@ def Ty.wfB : Ty → LifeCtx → Bool
   | .unit,         _ => true
   | .unk,          _ => false
   | .ref T,        Δ => T.wfB Δ
+  | .bang T,        Δ => T.wfB Δ
   | .sum    T₁ T₂, Δ => T₁.wfB Δ && T₂.wfB Δ
   | .tensor T₁ T₂, Δ => T₁.wfB Δ && T₂.wfB Δ
   | .lolli  T₁ T₂, Δ => T₁.wfB Δ && T₂.wfB Δ
-  | .fn  T₁ T₂, Δ => T₁.wfB Δ && T₂.wfB Δ
   | .box a T,      Δ => a.wf Δ && T.wfB Δ
   | .imm a T,      Δ => a.wf Δ && T.wfB Δ
   | .mut a T,      Δ => a.wf Δ && T.wfB Δ
@@ -332,10 +332,10 @@ def Ty.bindsB : Ty → LifeVar → Bool
   | .unit,         _ => false
   | .unk,          _ => false
   | .ref T,        x => T.bindsB x
+  | .bang T,        x => T.bindsB x
   | .sum    T₁ T₂, x => T₁.bindsB x || T₂.bindsB x
   | .tensor T₁ T₂, x => T₁.bindsB x || T₂.bindsB x
   | .lolli  T₁ T₂, x => T₁.bindsB x || T₂.bindsB x
-  | .fn  T₁ T₂, x => T₁.bindsB x || T₂.bindsB x
   | .box _ T,      x => T.bindsB x
   | .imm _ T,      x => T.bindsB x
   | .mut _ T,      x => T.bindsB x
@@ -350,10 +350,10 @@ def Ty.scopedB : Ty → LifeCtx → Bool
   | .unit,         _ => true
   | .unk,          _ => true
   | .ref T,        Δ => T.scopedB Δ
+  | .bang T,        Δ => T.scopedB Δ
   | .sum    T₁ T₂, Δ => T₁.scopedB Δ && T₂.scopedB Δ
   | .tensor T₁ T₂, Δ => T₁.scopedB Δ && T₂.scopedB Δ
   | .lolli  T₁ T₂, Δ => T₁.scopedB Δ && T₂.scopedB Δ
-  | .fn  T₁ T₂, Δ => T₁.scopedB Δ && T₂.scopedB Δ
   | .box a T,      Δ => a.wf Δ && T.scopedB Δ
   | .imm a T,      Δ => a.wf Δ && T.scopedB Δ
   | .mut a T,      Δ => a.wf Δ && T.scopedB Δ
@@ -368,6 +368,7 @@ theorem Ty.scopedB_of_wfB : ∀ {T : Ty} {Δ : LifeCtx},
   | unit => intro _ _; rfl
   | unk => intro _ _; rfl
   | ref T ih => intro Δ h; exact ih h
+  | bang T ih => intro Δ h; exact ih h
   | sum T₁ T₂ ih₁ ih₂ =>
       intro Δ h; simp only [Ty.wfB, Ty.scopedB, Bool.and_eq_true] at h ⊢
       exact ⟨ih₁ h.1, ih₂ h.2⟩
@@ -375,9 +376,6 @@ theorem Ty.scopedB_of_wfB : ∀ {T : Ty} {Δ : LifeCtx},
       intro Δ h; simp only [Ty.wfB, Ty.scopedB, Bool.and_eq_true] at h ⊢
       exact ⟨ih₁ h.1, ih₂ h.2⟩
   | lolli T₁ T₂ ih₁ ih₂ =>
-      intro Δ h; simp only [Ty.wfB, Ty.scopedB, Bool.and_eq_true] at h ⊢
-      exact ⟨ih₁ h.1, ih₂ h.2⟩
-  | fn T₁ T₂ ih₁ ih₂ =>
       intro Δ h; simp only [Ty.wfB, Ty.scopedB, Bool.and_eq_true] at h ⊢
       exact ⟨ih₁ h.1, ih₂ h.2⟩
   | box a T ih =>
@@ -403,6 +401,7 @@ theorem Ty.scopedB_insert (x : LifeVar) (u : Life) :
   | unit => intro _ _ _ _; rfl
   | unk => intro _ _ _ _; rfl
   | ref T ih => intro t₁ t₂ hb h; exact ih t₁ t₂ hb h
+  | bang T ih => intro t₁ t₂ hb h; exact ih t₁ t₂ hb h
   | sum T₁ T₂ ih₁ ih₂ =>
       intro t₁ t₂ hb h
       simp only [Ty.bindsB, Bool.or_eq_false_iff] at hb
@@ -414,11 +413,6 @@ theorem Ty.scopedB_insert (x : LifeVar) (u : Life) :
       simp only [Ty.scopedB, Bool.and_eq_true] at h ⊢
       exact ⟨ih₁ t₁ t₂ hb.1 h.1, ih₂ t₁ t₂ hb.2 h.2⟩
   | lolli T₁ T₂ ih₁ ih₂ =>
-      intro t₁ t₂ hb h
-      simp only [Ty.bindsB, Bool.or_eq_false_iff] at hb
-      simp only [Ty.scopedB, Bool.and_eq_true] at h ⊢
-      exact ⟨ih₁ t₁ t₂ hb.1 h.1, ih₂ t₁ t₂ hb.2 h.2⟩
-  | fn T₁ T₂ ih₁ ih₂ =>
       intro t₁ t₂ hb h
       simp only [Ty.bindsB, Bool.or_eq_false_iff] at hb
       simp only [Ty.scopedB, Bool.and_eq_true] at h ⊢
@@ -622,6 +616,18 @@ theorem scopedB_axWithloadTy {Δ : LifeCtx} {a : Life} {x : LifeVar} {bnd : Life
   simp only [axWithloadTy, Ty.scopedB, Bool.and_eq_true] at h
   exact ⟨h.1.2, h.2.2⟩
 
+/-- `!Γ`: every live slot of `Γ` has a `!`-type — promotion's context.  `[spec §2]` -/
+def Ctx.Persistent (Γ : Ctx Ty) : Prop := ∀ s ∈ Γ, s.live = true → ∃ T, s.ty = .bang T
+
+theorem Ctx.Dead.persistent {Γ : Ctx Ty} (h : Ctx.Dead Γ) : Ctx.Persistent Γ := by
+  induction h with
+  | nil => intro s hs; cases hs
+  | cons _ ih =>
+      intro s hs hl
+      cases hs with
+      | head => exact absurd hl (by simp)
+      | tail _ hs' => exact ih s hs' hl
+
 inductive DerivesWf : LifeCtx → Ctx Ty → Expr → Ty → Prop where
   | var {Δ Γ i T} (h : Ctx.Solo Γ i T) : DerivesWf Δ Γ (.var i) T
   | unitI {Δ Γ} (h : Ctx.Dead Γ) : DerivesWf Δ Γ (.val .unit) .unit
@@ -702,20 +708,23 @@ inductive DerivesWf : LifeCtx → Ctx Ty → Expr → Ty → Prop where
       DerivesWf Δ Γ withload (axWithloadTy a x Δ.meetOfDom T₁ T₂)
   | withswapAx {Δ Γ a T₁ T₂} (hΓ : Ctx.Dead Γ) :
       DerivesWf Δ Γ withswap (axWithswapTy a T₁ T₂)
-  /-- `fnI`: a `λ` over a dead context captures nothing, so it is closed code.  `[spec §2]` -/
-  | fnI {Δ Γ b T₁ T₂} (hΓ : Ctx.Dead Γ) (hwf : T₁.scopedB Δ = true)
+  /-- `!I` at a `λ`: over `!Γ` the closure holds no resource.  `[spec §2]` -/
+  | bangLamI {Δ Γ b T₁ T₂} (hΓ : Ctx.Persistent Γ) (hwf : T₁.scopedB Δ = true)
       (h : DerivesWf Δ (⟨T₁, true⟩ :: Γ) b T₂) :
-      DerivesWf Δ Γ (.val (.lam b)) (.fn T₁ T₂)
-  /-- `fnE`: application.  `[spec §2]` -/
-  | fnE {Δ Γ Γ₁ Γ₂ f a T₁ T₂} (hs : Ctx.Split Γ Γ₁ Γ₂)
-      (ha : DerivesWf Δ Γ₁ a T₁) (hf : DerivesWf Δ Γ₂ f (.fn T₁ T₂)) :
-      DerivesWf Δ Γ (.app f a) T₂
-  /-- `copy : fn T₁ T₂ ⊸ fn T₁ T₂ ⊗ fn T₁ T₂`.  `[spec §2]` -/
-  | copyFnAx {Δ Γ T₁ T₂} (hΓ : Ctx.Dead Γ) :
-      DerivesWf Δ Γ copy (.lolli (.fn T₁ T₂) (.tensor (.fn T₁ T₂) (.fn T₁ T₂)))
-  /-- `forget : fn T₁ T₂ ⊸ 1`.  `[spec §2]` -/
-  | forgetFnAx {Δ Γ T₁ T₂} (hΓ : Ctx.Dead Γ) :
-      DerivesWf Δ Γ forget (.lolli (.fn T₁ T₂) .unit)
+      DerivesWf Δ Γ (.val (.lam b)) (.bang (.lolli T₁ T₂))
+  /-- `!I` at a `Λ`: over `!Γ` the closure holds no resource.  `[spec §2]` -/
+  | bangAllI {Δ Γ x b S e T} (hΓ : Ctx.Persistent Γ) (hx : Δ.find? x = none)
+      (hb : b.wf Δ = true) (hnb : ∀ s ∈ Γ, s.live = true → s.ty.bindsB x = false)
+      (h : DerivesWf (Δ.extend x b) (⟨S, false⟩ :: Γ) e T) :
+      DerivesWf Δ Γ (.val (.lam e)) (.bang (.all x b T))
+  /-- `!E`, dereliction.  `[spec §2]` -/
+  | bangE {Δ Γ e T} (h : DerivesWf Δ Γ e (.bang T)) : DerivesWf Δ Γ e T
+  /-- `copy : !T ⊸ !T ⊗ !T`.  `[spec §2]` -/
+  | copyBangAx {Δ Γ T} (hΓ : Ctx.Dead Γ) :
+      DerivesWf Δ Γ copy (.lolli (.bang T) (.tensor (.bang T) (.bang T)))
+  /-- `forget : !T ⊸ 1`.  `[spec §2]` -/
+  | forgetBangAx {Δ Γ T} (hΓ : Ctx.Dead Γ) :
+      DerivesWf Δ Γ forget (.lolli (.bang T) .unit)
 
 end BoCa
 

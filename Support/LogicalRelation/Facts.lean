@@ -73,10 +73,6 @@ theorem vDen_immReborrow_tensor (T₁ T₂ : Ty) :
 theorem vDen_immReborrow_lolli (T₁ T₂ : Ty) :
     vDen ((Ty.lolli T₁ T₂).immReborrow b) δ v = emp := rfl
 
-/-- `Imm̲ 'b (fn T₁ T₂) ≜ fn T₁ T₂`.  `[spec §2]` -/
-theorem vDen_immReborrow_fn (T₁ T₂ : Ty) :
-    vDen ((Ty.fn T₁ T₂).immReborrow b) δ v = vDen (.fn T₁ T₂) δ v := rfl
-
 /-- `Imm̲ 'b (Ref T) ≜ Imm 'b T`, the constructor — clause (5). -/
 theorem vDen_immReborrow_ref (T : Ty) :
     vDen ((Ty.ref T).immReborrow b) δ v =
@@ -188,6 +184,7 @@ theorem lt_lifeBound {x : LifeVar} : ∀ {T : Ty}, LFree x T → x < T.lifeBound
   | unit => intro h; exact h.elim
   | unk => intro h; exact h.elim
   | ref T ih => exact ih
+  | bang T ih => exact ih
   | imm a T ih =>
       rintro (h | h)
       · exact Nat.lt_of_lt_of_le (lt_varBound h) (Nat.le_max_left _ _)
@@ -209,10 +206,6 @@ theorem lt_lifeBound {x : LifeVar} : ∀ {T : Ty}, LFree x T → x < T.lifeBound
       · exact Nat.lt_of_lt_of_le (ih₁ h) (Nat.le_max_left _ _)
       · exact Nat.lt_of_lt_of_le (ih₂ h) (Nat.le_max_right _ _)
   | lolli T₁ T₂ ih₁ ih₂ =>
-      rintro (h | h)
-      · exact Nat.lt_of_lt_of_le (ih₁ h) (Nat.le_max_left _ _)
-      · exact Nat.lt_of_lt_of_le (ih₂ h) (Nat.le_max_right _ _)
-  | fn T₁ T₂ ih₁ ih₂ =>
       rintro (h | h)
       · exact Nat.lt_of_lt_of_le (ih₁ h) (Nat.le_max_left _ _)
       · exact Nat.lt_of_lt_of_le (ih₂ h) (Nat.le_max_right _ _)
@@ -410,6 +403,10 @@ theorem vDen_applyLSub : ∀ (T : Ty) (σ : Lifetime.LSubst) (δ δ' : LSub),
       intro σ δ δ' h; funext v
       simp only [Ty.applyLSub]
       rw [vDen_ref, vDen_ref, ih σ δ δ' h]
+  | bang T ih =>
+      intro σ δ δ' h; funext v
+      simp only [Ty.applyLSub]
+      rw [vDen_bang, vDen_bang, ih σ δ δ' h]
   | sum T₁ T₂ ih₁ ih₂ =>
       intro σ δ δ' h; funext v
       simp only [Ty.applyLSub]
@@ -424,11 +421,6 @@ theorem vDen_applyLSub : ∀ (T : Ty) (σ : Lifetime.LSubst) (δ δ' : LSub),
       intro σ δ δ' h; funext v
       simp only [Ty.applyLSub]
       rw [vDen_lolli, vDen_lolli, ih₁ σ δ δ' (fun y hy => h y (Or.inl hy)),
-        ih₂ σ δ δ' (fun y hy => h y (Or.inr hy))]
-  | fn T₁ T₂ ih₁ ih₂ =>
-      intro σ δ δ' h; funext v
-      simp only [Ty.applyLSub]
-      rw [vDen_fn, vDen_fn, ih₁ σ δ δ' (fun y hy => h y (Or.inl hy)),
         ih₂ σ δ δ' (fun y hy => h y (Or.inr hy))]
   | imm a T ih =>
       intro σ δ δ' h; funext v

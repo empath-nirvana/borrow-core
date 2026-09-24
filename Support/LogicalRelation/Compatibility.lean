@@ -228,6 +228,7 @@ theorem not_lfree_of_scopedB {x : LifeVar} :
   | unit => intro _ _ _ h; exact h
   | unk => intro _ _ _ h; exact h
   | ref T ih => intro Δ hx h; exact ih hx h
+  | bang T ih => intro Δ hx h; exact ih hx h
   | sum T₁ T₂ ih₁ ih₂ =>
       intro Δ hx h
       simp only [Ty.scopedB, Bool.and_eq_true] at h
@@ -241,12 +242,6 @@ theorem not_lfree_of_scopedB {x : LifeVar} :
       · exact ih₁ hx h.1 k
       · exact ih₂ hx h.2 k
   | lolli T₁ T₂ ih₁ ih₂ =>
-      intro Δ hx h
-      simp only [Ty.scopedB, Bool.and_eq_true] at h
-      rintro (k | k)
-      · exact ih₁ hx h.1 k
-      · exact ih₂ hx h.2 k
-  | fn T₁ T₂ ih₁ ih₂ =>
       intro Δ hx h
       simp only [Ty.scopedB, Bool.and_eq_true] at h
       rintro (k | k)
@@ -421,10 +416,10 @@ own clauses: the borrow formers contribute their index and do not recurse
 def tyLifeMeet (δ : LSub) : Ty → Option Life
   | .unit           => none
   | .lolli _ _      => none
-  | .fn _ _      => none
   | .all _ _ _      => none
   | .unk            => none
   | .ref T          => tyLifeMeet δ T
+  | .bang _          => none
   | .imm b _        => b.interp δ
   | .mut b _        => b.interp δ
   | .box b _        => b.interp δ
@@ -467,10 +462,10 @@ too — `Δ.Models δ` makes that case vacuous under the judgment. -/
 def tyLife (δ : LSub) : Ty → TyLife
   | .unit           => .free
   | .lolli _ _      => .unreached
-  | .fn _ _      => .unreached
   | .all _ _ _      => .unreached
   | .unk            => .unreached
   | .ref T          => tyLife δ T
+  | .bang _          => .free
   | .imm b _        => match b.interp δ with
       | some β => .bounded β
       | none   => .unreached
@@ -697,6 +692,7 @@ def EveryDerivationInRegime : Prop :=
 /-- Peel the `[@a]` modalities off the head of a type. -/
 def stripBox : Ty → Ty
   | .box _ T => stripBox T
+  | .bang T => stripBox T
   | T => T
 
 theorem aux : ∀ {Δ : LifeCtx} {Γ : Ctx Ty} {e : Expr} {T : Ty}, DerivesIn Δ Γ e T →
@@ -767,10 +763,16 @@ theorem auxWf : ∀ {Δ : LifeCtx} {Γ : Ctx Ty} {e : Expr} {T : Ty}, DerivesWf 
   | sumE _ _ _ _ _ _ _ _ => intro he; cases he
   | lolliI _ _ _ => intro _ hT; exact absurd hT (by simp [stripBox])
   | lolliE _ _ _ _ _ => intro he; cases he
-  | fnI _ _ _ _ => intro _ hT; exact absurd hT (by simp [stripBox])
-  | fnE _ _ _ _ _ => intro he; cases he
-  | copyFnAx _ => intro _ hT; exact absurd hT (by simp [stripBox])
-  | forgetFnAx _ => intro _ hT; exact absurd hT (by simp [stripBox])
+  | bangLamI _ _ _ _ => intro _ hT; exact absurd hT (by simp [stripBox])
+  | bangE _ ih => intro he hT; exact ih he hT
+  | copyBangAx _ => intro _ hT; exact absurd hT (by simp [stripBox])
+  | forgetBangAx _ => intro _ hT; exact absurd hT (by simp [stripBox])
+  | @bangAllI Δ' Γ' x b S e' T' _ hx hb _ _ _ =>
+      intro _ hT
+      have hT' : Ty.all x b T' = Ty.all 0 (Lifetime.Life.var 0) Ty.unit := hT
+      cases hT'
+      rw [show (Lifetime.Life.var 0).wf Δ' = (Δ'.find? 0).isSome from rfl, hx] at hb
+      exact absurd hb (by decide)
   | @allI Δ' Γ' x b S e' T' hx hb _ _ _ =>
       intro _ hT
       have hT' : Ty.all x b T' = Ty.all 0 (Lifetime.Life.var 0) Ty.unit := hT

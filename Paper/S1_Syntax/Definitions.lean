@@ -275,9 +275,9 @@ inductive Ty where
   | sum    (T₁ T₂ : Ty)
   | tensor (T₁ T₂ : Ty)
   | lolli  (T₁ T₂ : Ty)
-  /-- `fn T₁ T₂`: closed code, a `λ` capturing nothing.  `[spec §2]` -/
-  | fn     (T₁ T₂ : Ty)
   | ref    (T : Ty)
+  /-- `!T`: the exponential, a value of `T` holding no resource.  `[spec §2]` -/
+  | bang   (T : Ty)
   /-- `Imm @a T`. -/
   | imm    (a : Life) (T : Ty)
   /-- `Mut @a T`. -/

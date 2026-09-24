@@ -54,10 +54,10 @@ theorem TyEq.symm {S S' : Ty} {δ δ' : LSub} (h : TyEq S δ S' δ') : TyEq S' �
   | lolli A B ihA ihB =>
       cases S' <;> simp only [TyEq] at h ⊢
       exact ⟨ihA h.1, ihB h.2⟩
-  | fn A B ihA ihB =>
-      cases S' <;> simp only [TyEq] at h ⊢
-      exact ⟨ihA h.1, ihB h.2⟩
   | ref A ih =>
+      cases S' <;> simp only [TyEq] at h ⊢
+      exact ih h
+  | bang A ih =>
       cases S' <;> simp only [TyEq] at h ⊢
       exact ih h
   | box a A ih =>
@@ -90,11 +90,11 @@ theorem TyEq.trans {S S' S'' : Ty} {δ δ' δ'' : LSub} (h : TyEq S δ S' δ')
       cases S' <;> simp only [TyEq] at h
       cases S'' <;> simp only [TyEq] at h' ⊢
       exact ⟨ihA h.1 h'.1, ihB h.2 h'.2⟩
-  | fn A B ihA ihB =>
+  | ref A ih =>
       cases S' <;> simp only [TyEq] at h
       cases S'' <;> simp only [TyEq] at h' ⊢
-      exact ⟨ihA h.1 h'.1, ihB h.2 h'.2⟩
-  | ref A ih =>
+      exact ih h h'
+  | bang A ih =>
       cases S' <;> simp only [TyEq] at h
       cases S'' <;> simp only [TyEq] at h' ⊢
       exact ih h h'
@@ -125,9 +125,8 @@ theorem TyEq.of_agree : ∀ (T : Ty) {δ₁ δ₂ : LSub},
       TyEq.of_agree B (fun y hy => h y (Or.inr hy))⟩
   | .lolli A B, _, _, h => ⟨TyEq.of_agree A (fun y hy => h y (Or.inl hy)),
       TyEq.of_agree B (fun y hy => h y (Or.inr hy))⟩
-  | .fn A B, _, _, h => ⟨TyEq.of_agree A (fun y hy => h y (Or.inl hy)),
-      TyEq.of_agree B (fun y hy => h y (Or.inr hy))⟩
   | .ref A, _, _, h => TyEq.of_agree A h
+  | .bang A, _, _, h => TyEq.of_agree A h
   | .box a A, _, _, h => ⟨interp_congr a (fun y hy => h y (Or.inl hy)),
       TyEq.of_agree A (fun y hy => h y (Or.inr hy))⟩
   | .imm a A, _, _, h => ⟨interp_congr a (fun y hy => h y (Or.inl hy)),
@@ -156,7 +155,6 @@ theorem TyEq.immReborrow {S S' : Ty} {δ δ' : LSub} {c c' : Lifetime.Life}
   | unit => cases S' <;> simp_all [TyEq, Ty.immReborrow]
   | unk => cases S' <;> simp_all [TyEq, Ty.immReborrow]
   | lolli A B _ _ => cases S' <;> simp_all [TyEq, Ty.immReborrow]
-  | fn A B _ _ => cases S' <;> simp_all [TyEq, Ty.immReborrow]
   | all x b A _ => cases S' <;> simp_all [TyEq, Ty.immReborrow]
   | tensor A B ihA ihB =>
       cases S' <;> simp only [TyEq] at h
@@ -167,6 +165,7 @@ theorem TyEq.immReborrow {S S' : Ty} {δ δ' : LSub} {c c' : Lifetime.Life}
   | ref A _ =>
       cases S' <;> simp only [TyEq] at h
       exact ⟨hc, h⟩
+  | bang A _ => cases S' <;> simp_all [TyEq, Ty.immReborrow]
   | imm a A _ =>
       cases S' <;> simp only [TyEq] at h
       exact h
@@ -188,6 +187,7 @@ theorem TyEq.applyLSub : ∀ (T : Ty) (σ : Lifetime.LSubst) (δ δ' : LSub),
   | unit => intro _ _ _ _; trivial
   | unk => intro _ _ _ _; trivial
   | ref T ih => intro σ δ δ' h; exact ih σ δ δ' h
+  | bang T ih => intro σ δ δ' h; exact ih σ δ δ' h
   | sum T₁ T₂ ih₁ ih₂ =>
       intro σ δ δ' h
       exact ⟨ih₁ σ δ δ' (fun y hy => h y (Or.inl hy)), ih₂ σ δ δ' (fun y hy => h y (Or.inr hy))⟩
@@ -195,9 +195,6 @@ theorem TyEq.applyLSub : ∀ (T : Ty) (σ : Lifetime.LSubst) (δ δ' : LSub),
       intro σ δ δ' h
       exact ⟨ih₁ σ δ δ' (fun y hy => h y (Or.inl hy)), ih₂ σ δ δ' (fun y hy => h y (Or.inr hy))⟩
   | lolli T₁ T₂ ih₁ ih₂ =>
-      intro σ δ δ' h
-      exact ⟨ih₁ σ δ δ' (fun y hy => h y (Or.inl hy)), ih₂ σ δ δ' (fun y hy => h y (Or.inr hy))⟩
-  | fn T₁ T₂ ih₁ ih₂ =>
       intro σ δ δ' h
       exact ⟨ih₁ σ δ δ' (fun y hy => h y (Or.inl hy)), ih₂ σ δ δ' (fun y hy => h y (Or.inr hy))⟩
   | imm a T ih =>
@@ -300,7 +297,6 @@ theorem vShape_tyEq {S S' : Ty} {δ δ' : LSub} (h : TyEq S δ S' δ') : vShape 
   | unit => cases S' <;> first | rfl | simp_all [TyEq]
   | unk => cases S' <;> first | rfl | simp_all [TyEq]
   | lolli A B _ _ => cases S' <;> first | rfl | simp_all [TyEq]
-  | fn A B _ _ => cases S' <;> first | rfl | simp_all [TyEq]
   | all x b A _ =>
       cases S' <;> simp only [TyEq] at h
       rfl
@@ -313,6 +309,10 @@ theorem vShape_tyEq {S S' : Ty} {δ δ' : LSub} (h : TyEq S δ S' δ') : vShape 
       funext v
       simp only [vShape, ihA h.1, ihB h.2]
   | ref A ih =>
+      cases S' <;> simp only [TyEq] at h
+      funext v
+      simp only [vShape, ih h]
+  | bang A ih =>
       cases S' <;> simp only [TyEq] at h
       funext v
       simp only [vShape, ih h]
@@ -375,7 +375,7 @@ theorem vX_local : ∀ (b : Bool) (T : Ty) {ls ls' : List SRec} {δ : LSub} {v :
   | false, .lolli _ _, _, _, _, _, _, _, h => h
   | true, .all x c T, _, _, _, _, _, hk, h => fun ls'' hk' => h ls'' (hk.trans hk')
   | false, .all _ _ _, _, _, _, _, _, _, h => h
-  | _, .fn _ _, _, _, _, _, _, hk, h => ⟨h.1, fun ls'' hk' => h.2 ls'' (hk.trans hk')⟩
+  | _, .bang T, _, _, _, _, _, hk, h => ⟨h.1, vX_local true T hk h.2⟩
   | b, .box a T, _, _, _, _, _, hk, h => by
       obtain ⟨α, hα, hb, ho⟩ := h
       exact ⟨α, hα, vX_local b T hk hb, ho⟩
@@ -423,7 +423,6 @@ theorem vO_obs : ∀ (T : Ty) {ls : List SRec} {δ : LSub} {v : Val} {ρ : WRes}
       · exact Or.inl ⟨v₁, ρ₀, ρ₁, hc, hp, vO_obs T₁ h₁⟩
       · exact Or.inr ⟨v₂, ρ₀, ρ₂, hc, hp, vO_obs T₂ h₂⟩
   | .lolli _ _, _, _, _, _, _ => trivial
-  | .fn _ _, _, _, _, _, h => h
   | .all _ _ _, _, _, _, _, _ => trivial
   | .box a T, _, _, _, _, h => by
       obtain ⟨α, hα, hb, ho⟩ := h
@@ -431,6 +430,7 @@ theorem vO_obs : ∀ (T : Ty) {ls : List SRec} {δ : LSub} {v : Val} {ρ : WRes}
   | .ref T, _, _, _, _, h => by
       obtain ⟨ℓ, v', ρ₀, ρ₃, hc, hp, ρ₁, ρ₂, hc', ho, h₂⟩ := h
       exact ⟨ℓ, v', ρ₀, ρ₃, hc, hp, ρ₁, ρ₂, hc', ho, vO_obs T h₂⟩
+  | .bang T, _, _, _, _, h => h
   | .imm _ _, _, _, _, _, h => h
   | .mut _ _, _, _, _, _, h => h
   | .unk, _, _, _, _, h => h
@@ -450,7 +450,7 @@ theorem vX_vShape : ∀ (b : Bool) (T : Ty) {ls : List SRec} {δ : LSub} {v : Va
   | false, .lolli _ _, _, _, _, _, _ => trivial
   | true, .all _ _ _, _, _, _, _, _ => trivial
   | false, .all _ _ _, _, _, _, _, _ => trivial
-  | _, .fn _ _, _, _, _, _, h => ⟨h.1, trivial⟩
+  | _, .bang _, _, _, _, _, h => ⟨h.1, trivial⟩
   | b, .box a T, _, _, _, _, h => by
       obtain ⟨α, hα, hb, ho⟩ := h
       exact ⟨α, hα, vX_vShape b T hb, ho⟩
@@ -559,6 +559,9 @@ theorem vX_outlives {Δ : LifeCtx} {δ : LSub} {a : Lifetime.Life} {α : Life}
       obtain ⟨-, ρ₁, ρ₂, hc, rfl, h₂⟩ := pure_sep_iff.mp hs
       exact (outlives_comp hc α).mpr
         ⟨ResU.inStratum_single_own α ℓ w, ih ls w ρ₂ h₂⟩
+  | bang =>
+    rintro ls v ρ ⟨rfl, -⟩
+    exact ResU.inStratum_empty α
   | box hlt =>
       rintro ls v ρ ⟨β, hb, -, ho⟩
       obtain ⟨α', β', ha', hb', hlt'⟩ := hlt δ hδ
@@ -639,10 +642,6 @@ theorem vX_congr : ∀ (T : Ty) {δ₁ δ₂ : LSub}, (∀ y, LFree y T → δ�
       funext v; cases b
       · rfl
       · simp only [vX, h₁, h₂]
-  | .fn T₁ T₂, _, _, h, b, _ => by
-      have h₁ := vX_congr T₁ (fun y hy => h y (Or.inl hy))
-      have h₂ := vX_congr T₂ (fun y hy => h y (Or.inr hy))
-      funext v; cases b <;> simp only [vX, h₁, h₂]
   | .all x c T, δ₁, δ₂, h, b, _ => by
       have hc : c.interp δ₁ = c.interp δ₂ := interp_congr c (fun y hy => h y (Or.inl hy))
       have hT : ∀ (α : Life) (ls : List SRec),
@@ -662,6 +661,9 @@ theorem vX_congr : ∀ (T : Ty) {δ₁ δ₂ : LSub}, (∀ y, LFree y T → δ�
       have ih := vX_congr T (fun y hy => h y (Or.inr hy))
       funext v; cases b <;> simp only [vX, ih, atLife_congr' ha]
   | .ref T, _, _, h, b, _ => by
+      have ih := vX_congr T h
+      funext v; cases b <;> simp only [vX, ih]
+  | .bang T, _, _, h, b, _ => by
       have ih := vX_congr T h
       funext v; cases b <;> simp only [vX, ih]
   | .imm a T, δ₁, δ₂, h, b, _ => by
@@ -698,10 +700,10 @@ theorem vX_tyEq {S S' : Ty} {δ δ' : LSub} (h : TyEq S δ S' δ') :
       intro b ls; funext v; cases b
       · rfl
       · simp only [vX, ihA h.1, ihB h.2]
-  | fn A B ihA ihB =>
-      cases S' <;> simp only [TyEq] at h
-      intro b ls; funext v; cases b <;> simp only [vX, ihA h.1, ihB h.2]
   | ref A ih =>
+      cases S' <;> simp only [TyEq] at h
+      intro b ls; funext v; cases b <;> simp only [vX, ih h]
+  | bang A ih =>
       cases S' <;> simp only [TyEq] at h
       intro b ls; funext v; cases b <;> simp only [vX, ih h]
   | box a A ih =>
@@ -812,11 +814,6 @@ theorem obs_transfer {R : WRes} {ls : List SRec} (hLB : WitLB ls R) :
   | .unit, _, _, _, _, _, _, _, hB => hB
   | .unk, _, _, _, _, _, _, _, hB => hB
   | .lolli _ _, _, _, _, _, _, _, _, _ => trivial
-  | .fn _ _, _, _, _, _, _, _, h, hs => by
-      obtain ⟨hA, hc⟩ := h
-      obtain ⟨hB, -⟩ := hs
-      subst hA; subst hB
-      exact ⟨rfl, hc⟩
   | .all _ _ _, _, _, _, _, _, _, _, _ => trivial
   | .tensor T₁ T₂, _, _, _, _, hA, hB', h, hs => by
       obtain ⟨v₁, v₂, hk⟩ := h
@@ -870,6 +867,11 @@ theorem obs_transfer {R : WRes} {ls : List SRec} (hLB : WitLB ls R) :
       subst huu
       exact ⟨ℓ', u, pure_sep_mk hl' ⟨_, σb, hab', rfl,
         obs_transfer hLB S (hA.right hab) (hB'.right hab') hRb hSb⟩⟩
+  | .bang S, _, _, _, _, _, _, h, hs => by
+    obtain ⟨hA, hc⟩ := h
+    obtain ⟨hB, -⟩ := hs
+    subst hA; subst hB
+    exact ⟨rfl, hc⟩
   | .imm a S, δ, v, A, B, hA, hB', h, hs => by
       obtain ⟨α, hα, ℓ, ρ₀, ρ₁, hc, ⟨hρ₀, hv, hcoh⟩, hpto⟩ := h
       subst hρ₀
@@ -1023,15 +1025,6 @@ theorem relabel_obs {R : WRes} {ls : List SRec} {β β₀ : Life} {δ : LSub} {x
       intro _ _ v c Rl hc _ _ _ _ _ _
       obtain ⟨hce, -⟩ := hc
       subst hce; rw [relRes_empty]; exact ⟨rfl, trivial⟩
-  | fn T₁ T₂ _ _ =>
-      intro hfx _ v c Rl hc hRl _ _ _ _ _
-      obtain ⟨hce, -⟩ := hc
-      subst hce; rw [relRes_empty]
-      show vX wpX true (.fn T₁ T₂) ls (δ.extend x β) v PMap.empty
-      rw [vX_extend_of_not_free hfx true ls δ β]
-      obtain ⟨h0, hcall⟩ := hRl
-      subst h0
-      exact ⟨rfl, hcall⟩
   | all _ _ _ _ =>
       intro _ _ v c Rl hc _ _ _ _ _ _
       obtain ⟨hce, -⟩ := hc
@@ -1112,6 +1105,15 @@ theorem relabel_obs {R : WRes} {ls : List SRec} {β β₀ : Life} {δ : LSub} {x
         rw [vX_extend_of_not_free (T := S) hx]; exact hobs
       exact ⟨β, interp_ext_self δ x β, l', pure_sep_mk ⟨rfl, cohE_of_coh (hcr l' S w (RefPos.ref S l') eζ)⟩
         (ptoImmO_make hβ le_rfl hobs' (fun y hy _ => hβls y hy))⟩
+  | bang S _ =>
+    intro hfx _ v c Rl hc hRl _ _ _ _ _
+    obtain ⟨hce, -⟩ := hc
+    subst hce; rw [relRes_empty]
+    show vX wpX true (.bang S) ls (δ.extend x β) v PMap.empty
+    rw [vX_extend_of_not_free hfx true ls δ β]
+    obtain ⟨h0, hS⟩ := hRl
+    subst h0
+    exact ⟨rfl, hS⟩
   | imm a S _ =>
       intro hx hx₀ v c Rl hc hR hRl hcR _ _ _
       have hc' : vShape (.imm a S) (δ.extend x₀ β₀) v c := hc

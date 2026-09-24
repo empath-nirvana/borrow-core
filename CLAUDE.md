@@ -8,8 +8,8 @@ prints. Code an entry adds or changes is tagged `[spec §N]`.
 
 - No change to the library without a spec entry that states it. If an implementation needs
   something the entry does not state, stop and change the entry first.
-- Experiments live outside this repository and are never merged. What they establish enters
-  as a spec entry, and the library implements the entry fresh.
+- Experiments live outside this repository. Work from an experiment lands here only after
+  its spec entry is written.
 - Every entry says what it adds, which baseline theorems it must preserve, and what is open.
   The changelog records each version.
 

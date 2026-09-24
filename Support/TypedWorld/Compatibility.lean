@@ -592,82 +592,6 @@ theorem lolliE_compatX {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx Ty} {f arg : Expr} {
   rintro ls'' - v₂ τ ⟨τ₁, τ₂, hcτ, hv₂, hv₁'⟩
   exact hv₂ ls'' (Ext.refl _ _) v₁ τ₂ τ hv₁' hcτ
 
-
-/-! ## Closed code  `[spec §2]` -/
-
-/-- `fn`-intro at `SemX`: the closure's resource is the dead context's, `∅`. -/
-theorem fnI_compatX {Δ : LifeCtx} {Γ : Ctx Ty} {body : Expr} {T₁ T₂ : Ty}
-    (hΓ : Ctx.Dead Γ) (h : SemX Δ (⟨T₁, true⟩ :: Γ) body T₂) :
-    SemX Δ Γ (.val (.lam body)) (.fn T₁ T₂) := by
-  intro δ γ ls ρ hδ hg
-  obtain ⟨hlen, hgs⟩ := gDenX_iff.mp hg
-  have hρ : ρ = PMap.empty := gSepX_dead hΓ hgs
-  subst hρ
-  show wpTS ls (.val (.lam (Expr.psub 1 γ body))) _ PMap.empty
-  refine wpTS_val _ _ _ _ ⟨rfl, ?_⟩
-  intro ls' hext v' ρ₁ ρ₂ hv' hcomp
-  have hsub : substAll (v' :: γ) body = Expr.subst 0 v' (Expr.psub 1 γ body) := by
-    show Expr.psub 0 (v' :: γ) body = _
-    rw [Expr.psub_cons 0 v' γ body, Val.shift_zero]
-  refine wpTS_lolli ls' (Expr.psub 1 γ body) v' _ _ ?_
-  rw [← hsub]
-  exact h δ (v' :: γ) ls' _ hδ
-    (gDenX_mk (by simpa using hlen)
-      ⟨ρ₁, PMap.empty, ResU.CompS.comm hcomp, hv', gSepX_local hext hgs⟩)
-
-/-- `fn`-elim at `SemX`: `⊸E` with the callee's clause read past its `∅`. -/
-theorem fnE_compatX {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx Ty} {f arg : Expr} {T₁ T₂ : Ty}
-    (hsp : Ctx.Split Γ Γ₁ Γ₂) (ha : SemX Δ Γ₁ arg T₁) (hf : SemX Δ Γ₂ f (.fn T₁ T₂)) :
-    SemX Δ Γ (.app f arg) T₂ := by
-  intro δ γ ls ρ hδ hg
-  obtain ⟨ρ₁, ρ₂, hc, hg₁, hg₂⟩ := gDenX_split hsp hg
-  refine wpTS_bind_frame (.appR (substAll γ f) .hole) (substAll γ arg) ls
-    (fun ls' => vP T₁ ls' δ) (fun ls' => gDenX ls' δ Γ₂ γ) (fun ls' => vP T₂ ls' δ)
-    (fun ls' hls ρ h => gDenX_same hls h) ?_ ρ ⟨ρ₁, ρ₂, hc, ha δ γ ls ρ₁ hδ hg₁, hg₂⟩
-  rintro ls' - v₁ σ ⟨σ₁, σ₂, hcσ, hv₁, hg₂'⟩
-  refine wpTS_bind_frame (.appL .hole v₁) (substAll γ f) ls'
-    (fun ls'' => vP (.fn T₁ T₂) ls'' δ) (fun ls'' => vP T₁ ls'' δ v₁) (fun ls'' => vP T₂ ls'' δ)
-    (fun ls'' hls ρ h => vP_same hls h) ?_ σ
-    ⟨σ₂, σ₁, ResU.CompS.comm hcσ, hf δ γ ls' σ₂ hδ hg₂', hv₁⟩
-  rintro ls'' - v₂ τ ⟨τ₁, τ₂, hcτ, hv₂, hv₁'⟩
-  exact hv₂.2 ls'' (Ext.refl _ _) v₁ τ₂ τ hv₁' hcτ
-
-/-- `copy` at `fn`: closed code holds `∅`, so both copies are the original. -/
-theorem copyFn_compatX {Δ : LifeCtx} {Γ : Ctx Ty} {T₁ T₂ : Ty} (hΓ : Ctx.Dead Γ) :
-    SemX Δ Γ copy (.lolli (.fn T₁ T₂) (.tensor (.fn T₁ T₂) (.fn T₁ T₂))) := by
-  intro δ γ ls ρ _ hg
-  have hρ : ρ = PMap.empty := gSepX_dead hΓ (gDenX_iff.mp hg).2
-  subst hρ
-  show wpTS ls copy _ _
-  refine wpTS_val _ _ _ _ ?_
-  intro ls' _ v σ τ hv hcomp
-  rw [eq_of_compS_empty_left hcomp]
-  refine wpTS_lolli ls' (.pair BoCa.v0 BoCa.v0) v _ _ ?_
-  have hb : Expr.subst 0 v (.pair BoCa.v0 BoCa.v0) = Expr.pair (.val v) (.val v) := by
-    simp [BoCa.v0, Expr.subst]
-  rw [hb]
-  refine wpTS_val ls' (.pair v v) _ _ ?_
-  have hσ : σ = PMap.empty := hv.1
-  subst hσ
-  exact ⟨v, v, pure_sep_mk rfl ⟨PMap.empty, PMap.empty, ResU.comp_empty_right _, hv, hv⟩⟩
-
-/-- `forget` at `fn`: nothing to release. -/
-theorem forgetFn_compatX {Δ : LifeCtx} {Γ : Ctx Ty} {T₁ T₂ : Ty} (hΓ : Ctx.Dead Γ) :
-    SemX Δ Γ forget (.lolli (.fn T₁ T₂) .unit) := by
-  intro δ γ ls ρ _ hg
-  have hρ : ρ = PMap.empty := gSepX_dead hΓ (gDenX_iff.mp hg).2
-  subst hρ
-  show wpTS ls forget _ _
-  refine wpTS_val _ _ _ _ ?_
-  intro ls' _ v σ τ hv hcomp
-  rw [eq_of_compS_empty_left hcomp]
-  refine wpTS_lolli ls' unit' v _ _ ?_
-  have hb : Expr.subst 0 v unit' = unit' := by simp [unit', Expr.subst]
-  rw [hb]
-  have hσ : σ = PMap.empty := hv.1
-  subst hσ
-  exact wpTS_val ls' .unit _ _ ⟨rfl, rfl⟩
-
 /-! ### Lemma 6.164 ([]E-compat) at the typed world; record in `Paper/S6_8_FundamentalProperty/Lemmas.lean` -/
 /-- `[TR]` Lemma 6.164 (`[]E-compat`) at `SemX`.  `[as printed]`. -/
 theorem boxE_compatX {Δ : LifeCtx} {Γ : Ctx Ty} {e : Expr} {a : Lifetime.Life} {T : Ty}
@@ -934,6 +858,130 @@ theorem allI_compatX {Δ : LifeCtx} {Γ : Ctx Ty} {x : LifeVar} {b : Lifetime.Li
   exact gSepX_local hext hgs
 
 /-! ### Lemma 6.163 ([]I-compat) at the typed world; record in `Paper/S6_8_FundamentalProperty/Lemmas.lean` -/
+
+/-- `!Γ` holds no resource.  `[spec §2]` -/
+theorem gSepX_persistent {ls : List SRec} {δ : LSub} :
+    ∀ {Γ : Ctx Ty} {γ : List Val} {ρ : WRes}, Ctx.Persistent Γ → gSepX ls δ Γ γ ρ → ρ = PMap.empty
+  | [], _, _, _, h => h.1
+  | _ :: _, [], _, _, h => h.1
+  | s :: Γ, v :: γ, ρ, hp, h => by
+      have hp' : Ctx.Persistent Γ := fun t ht hl => hp t (List.mem_cons_of_mem _ ht) hl
+      unfold gSepX at h
+      split at h
+      · rename_i hl
+        obtain ⟨T, hT⟩ := hp s List.mem_cons_self hl
+        obtain ⟨ρ₁, ρ₂, hc, h₁, h₂⟩ := h
+        have e₁ : ρ₁ = PMap.empty := by rw [hT] at h₁; exact h₁.1
+        have e₂ := gSepX_persistent hp' h₂
+        subst e₁; subst e₂
+        first | exact eq_of_compS_empty_left hc | exact (eq_of_compS_empty_left hc).symm
+      · exact gSepX_persistent hp' h
+
+theorem bangLamI_compatX {Δ : LifeCtx} {Γ : Ctx Ty} {body : Expr} {T₁ T₂ : Ty}
+    (hΓp : Ctx.Persistent Γ) (h : SemX Δ (⟨T₁, true⟩ :: Γ) body T₂) :
+    SemX Δ Γ (.val (.lam body)) (.bang (.lolli T₁ T₂)) := by
+  intro δ γ ls ρ hδ hg
+  obtain ⟨hlen, hgs⟩ := gDenX_iff.mp hg
+  show wpTS ls (.val (.lam (Expr.psub 1 γ body))) _ ρ
+  refine wpTS_val _ _ _ _ ⟨gSepX_persistent hΓp hgs, ?_⟩
+  intro ls' hext v' ρ₁ ρ₂ hv' hcomp
+  have hsub : substAll (v' :: γ) body = Expr.subst 0 v' (Expr.psub 1 γ body) := by
+    show Expr.psub 0 (v' :: γ) body = _
+    rw [Expr.psub_cons 0 v' γ body, Val.shift_zero]
+  refine wpTS_lolli ls' (Expr.psub 1 γ body) v' _ _ ?_
+  rw [← hsub]
+  exact h δ (v' :: γ) ls' _ hδ
+    (gDenX_mk (by simpa using hlen) ⟨ρ₁, ρ, ResU.CompS.comm hcomp, hv', gSepX_local hext hgs⟩)
+
+/-! ### Lemma 6.160 (⊸E-compat) at the typed world; record in `Paper/S6_8_FundamentalProperty/Lemmas.lean` -/
+
+theorem bangAllI_compatX {Δ : LifeCtx} {Γ : Ctx Ty} {x : LifeVar} {b : Lifetime.Life}
+    {S : Ty} {e : Expr} {T : Ty} (hΓp : Ctx.Persistent Γ) (_hx : Δ.find? x = none)
+    (hbx : b.mentions x = false)
+    (hΔx : ∀ y u, Δ.find? y = some u → u.mentions x = false)
+    (hΓx : ∀ s ∈ Γ, s.live = true → ¬ LFree x s.ty)
+    (h : SemX (Δ.extend x b) (⟨S, false⟩ :: Γ) e T) :
+    SemX Δ Γ (.val (.lam e)) (.bang (.all x b T)) := by
+  intro δ γ ls ρ hδ hg
+  obtain ⟨hlen, hgs⟩ := gDenX_iff.mp hg
+  show wpTS ls (.val (.lam (Expr.psub 1 γ e))) _ ρ
+  refine wpTS_val _ _ _ _ ⟨gSepX_persistent hΓp hgs, ?_⟩
+  intro ls' hext α ρ₁ ρ₂ hpure hcomp
+  obtain ⟨rfl, β, hβ, hlt⟩ := hpure
+  have hρ₂ : ρ₂ = ρ := eq_of_compS_empty_left (ResU.CompS.comm hcomp)
+  subst ρ₂
+  have hfind : ∀ z, z ≠ x → (δ.extend x α).find? z = δ.find? z :=
+    fun z hz => find?_extend_ne δ α (Ne.symm hz)
+  have hδ' : (Δ.extend x b).Models (δ.extend x α) := by
+    intro y u hy
+    rw [LifeCtx.find?_extend] at hy
+    by_cases hxy : x = y
+    · subst hxy
+      rw [if_pos rfl] at hy
+      obtain rfl := Option.some.inj hy
+      exact ⟨α, β, find?_extend_self δ x α,
+        by rw [interp_extend_of_not_mentions hbx]; exact hβ, hlt⟩
+    · rw [if_neg hxy] at hy
+      obtain ⟨m, k, hm, hk, hlk⟩ := hδ y u hy
+      exact ⟨m, k, by rw [find?_extend_ne δ α hxy]; exact hm,
+        by rw [interp_extend_of_not_mentions (hΔx y u hy)]; exact hk, hlk⟩
+  have hsub : substAll (Val.unit :: γ) e = Expr.subst 0 Val.unit (Expr.psub 1 γ e) := by
+    show Expr.psub 0 (Val.unit :: γ) e = _
+    rw [Expr.psub_cons 0 Val.unit γ e, Val.shift_zero]
+  refine wpTS_lolli ls' (Expr.psub 1 γ e) Val.unit _ _ ?_
+  rw [← hsub]
+  refine h (δ.extend x α) (Val.unit :: γ) ls' ρ hδ' (gDenX_mk (by simpa using hlen) ?_)
+  show gSepX ls' (δ.extend x α) Γ γ ρ
+  have heq : gSepX ls' δ Γ γ = gSepX ls' (δ.extend x α) Γ γ :=
+    gSepX_congr (fun s hs hl => vX_congr s.ty (fun z hz =>
+      (hfind z (by rintro rfl; exact hΓx s hs hl hz)).symm) true ls')
+  rw [← heq]
+  exact gSepX_local hext hgs
+
+/-! ### Lemma 6.163 ([]I-compat) at the typed world; record in `Paper/S6_8_FundamentalProperty/Lemmas.lean` -/
+
+/-- `!E` at `SemX`: forget the `ρ = ∅`.  `[spec §2]` -/
+theorem bangE_compatX {Δ : LifeCtx} {Γ : Ctx Ty} {e : Expr} {T : Ty}
+    (h : SemX Δ Γ e (.bang T)) : SemX Δ Γ e T := by
+  intro δ γ ls ρ hδ hg
+  exact wpTS_mono (fun _ _ _ hb => hb.2) ρ (h δ γ ls ρ hδ hg)
+
+/-- `copy` at `!T`: both copies are the original, at `∅`.  `[spec §2]` -/
+theorem copyBang_compatX {Δ : LifeCtx} {Γ : Ctx Ty} {T : Ty} (hΓ : Ctx.Dead Γ) :
+    SemX Δ Γ copy (.lolli (.bang T) (.tensor (.bang T) (.bang T))) := by
+  intro δ γ ls ρ _ hg
+  have hρ : ρ = PMap.empty := gSepX_dead hΓ (gDenX_iff.mp hg).2
+  subst hρ
+  show wpTS ls copy _ _
+  refine wpTS_val _ _ _ _ ?_
+  intro ls' _ v σ τ hv hcomp
+  rw [eq_of_compS_empty_left hcomp]
+  refine wpTS_lolli ls' (.pair BoCa.v0 BoCa.v0) v _ _ ?_
+  have hb : Expr.subst 0 v (.pair BoCa.v0 BoCa.v0) = Expr.pair (.val v) (.val v) := by
+    simp [BoCa.v0, Expr.subst]
+  rw [hb]
+  refine wpTS_val ls' (.pair v v) _ _ ?_
+  have hσ : σ = PMap.empty := hv.1
+  subst hσ
+  exact ⟨v, v, pure_sep_mk rfl ⟨PMap.empty, PMap.empty, ResU.comp_empty_right _, hv, hv⟩⟩
+
+/-- `forget` at `!T`: nothing to release.  `[spec §2]` -/
+theorem forgetBang_compatX {Δ : LifeCtx} {Γ : Ctx Ty} {T : Ty} (hΓ : Ctx.Dead Γ) :
+    SemX Δ Γ forget (.lolli (.bang T) .unit) := by
+  intro δ γ ls ρ _ hg
+  have hρ : ρ = PMap.empty := gSepX_dead hΓ (gDenX_iff.mp hg).2
+  subst hρ
+  show wpTS ls forget _ _
+  refine wpTS_val _ _ _ _ ?_
+  intro ls' _ v σ τ hv hcomp
+  rw [eq_of_compS_empty_left hcomp]
+  refine wpTS_lolli ls' unit' v _ _ ?_
+  have hb : Expr.subst 0 v unit' = unit' := by simp [unit', Expr.subst]
+  rw [hb]
+  have hσ : σ = PMap.empty := hv.1
+  subst hσ
+  exact wpTS_val ls' .unit _ _ ⟨rfl, rfl⟩
+
 /-- `[TR]` Lemma 6.163 (`[]I-compat`) at `SemX`: 6.62 is `gSepX_outlives` (6.60 at `𝒱X`),
 `wp-[]` is `wpTS_box`.  `[as printed]`. -/
 theorem boxI_compatX {Δ : LifeCtx} {Γ : Ctx Ty} {e : Expr} {T : Ty} {a : Lifetime.Life}

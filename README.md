@@ -16,6 +16,5 @@ scripts/check-hygiene.sh
 lake env lean scripts/AxiomCheck.lean
 ```
 
-Entry 1 (`SPEC.md` §2) adds closed code, `fn T₁ T₂`: a function that captures nothing, which an
-immutable borrow keeps callable. `Examples/CallBorrowed.lean` loads one through a borrow and
-calls it.
+Entry 1 (`SPEC.md` §2) adds the exponential `!T`: a value that holds no resource, which a borrow
+keeps whole. `Examples/` loads closures through immutable and mutable borrows and calls them.

@@ -39,7 +39,9 @@ file.
 Each compatibility lemma is declared at the printed definitions read literally
 (`Sem`); its record names the same proof at the repaired judgment `SemX` under
 *Typed-world version* (`Support/TypedWorld/Compatibility.lean`; §12.69–§12.72).
-6.151 is stated and proved at `SemX`, over `DerivesWf` with `SPEC.md` §2's `fn` rules.
+6.151 is stated and proved at `SemX`.  `Fig16.LogRel.fundamentalProperty`, at the end of
+this file, runs the printed induction at `Sem` with `WithloadEscrow` as a hypothesis at
+the `withload` case; it is not among the results.
 -/
 
 noncomputable section
@@ -87,14 +89,17 @@ theorem fundamental :
   | lolliE hs _ _ iha ihf =>
       intro hΔ hΓ
       exact lolliE_compatX hs (iha hΔ (hΓ.split_left hs)) (ihf hΔ (hΓ.split_right hs))
-  | fnI hΓd hwf _ ih =>
+  | bangLamI hΓp hwf _ ih =>
       intro hΔ hΓ
-      exact fnI_compatX hΓd (ih hΔ (Ctx.ScopedB.cons (fun _ => hwf) hΓ))
-  | fnE hs _ _ iha ihf =>
+      exact bangLamI_compatX hΓp (ih hΔ (Ctx.ScopedB.cons (fun _ => hwf) hΓ))
+  | bangAllI hΓp hx hb hnb _ ih =>
       intro hΔ hΓ
-      exact fnE_compatX hs (iha hΔ (hΓ.split_left hs)) (ihf hΔ (hΓ.split_right hs))
-  | copyFnAx hΓd => intro _ _; exact copyFn_compatX hΓd
-  | forgetFnAx hΓd => intro _ _; exact forgetFn_compatX hΓd
+      have hside := allISide_of_scopedB hΔ hx hb hΓ
+      exact bangAllI_compatX hΓp hx hside.1 hside.2.1 hside.2.2
+        (ih (hΔ.extend hx hb) (Ctx.ScopedB.allI hnb hΓ))
+  | bangE _ ih => intro hΔ hΓ; exact bangE_compatX (ih hΔ hΓ)
+  | copyBangAx hΓd => intro _ _; exact copyBang_compatX hΓd
+  | forgetBangAx hΓd => intro _ _; exact forgetBang_compatX hΓd
   | allI hx hb hnb _ ih =>
       intro hΔ hΓ
       have hside := allISide_of_scopedB hΔ hx hb hΓ
@@ -152,7 +157,7 @@ def FundamentalProperty : Prop :=
 
 **Note.** `DerivesWf` is p. 2's typing rules with the scoping half of p. 2's `Δ ⊢ T` (`Ty.scopedB`, which also admits `Unk`) consulted at binders and eliminated types, and `∀I` carrying a Barendregt premise (C14); the Fundamental Property takes `⊧ Δ` (as `Δ.Ok`, sufficient: `Lifetime.LifeCtx.sat_of_ok`) and `Δ ⊢ Γ` (`Ctx.ScopedB`) as hypotheses, which p. 2's typing box does not print (`docs/adjudications.md` §C.26).  The conclusion `SemX` is p. 4's judgment at the repaired definitions (§12.69–§12.72), a different relation from the literal `Sem`; the result is a statement about `SemX`.  There is no other hypothesis.
 
-**Spec §2.** `DerivesWf` includes the `fn` rules; their cases are `fnI_compatX`, `fnE_compatX`, `copyFn_compatX` and `forgetFn_compatX` (`Support/TypedWorld/Compatibility.lean`).
+**Literal reading.** `Fig16.LogRel.fundamentalProperty`, below, runs the printed induction at `Sem` with `WithloadEscrow` as a hypothesis at the `withload` case; it is not among the results.  `Paper/LiteralReadings/S6_8_FundamentalProperty.lean` holds the `withload` configuration at `Sem` (`ViewWitness`, §12.68), the check that it is not a typed world (`ViewWitness.excluded`, §12.73), and the antecedent read as the rule figures alone (`FundamentalPropertyOverRules`).
 -/
 theorem fundamentalProperty : FundamentalProperty := fundamental
 

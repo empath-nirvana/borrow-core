@@ -118,9 +118,6 @@ noncomputable def vDen : Ty → LSub → Val → WProp
   -- 𝒱⟦T₁ ⊸ T₂⟧δ(v) ≜ ∀v′. 𝒱⟦T₁⟧δ(v′) ─⋆ ℰ⟦T₂⟧δ(v v′)
   | .lolli T₁ T₂, δ, v =>
       all fun v' => vDen T₁ δ v' ─⋆ wp (.app (.val v) (.val v')) (vDen T₂ δ)
-  | .fn T₁ T₂, δ, v =>
-      BoLo.and (all fun v' => vDen T₁ δ v' ─⋆ wp (.app (.val v) (.val v')) (vDen T₂ δ))
-        (fun ρ => ρ = PMap.empty)
   -- 𝒱⟦∀'x ⊏ @b. T⟧δ(v) ≜ ∀α. ⌜α ⊏ @bδ⌝ ─⋆ ℰ⟦T⟧_{δ['x↦α]}(v ())
   | .all x b T, δ, v =>
       all fun α =>
@@ -130,6 +127,8 @@ noncomputable def vDen : Ty → LSub → Val → WProp
   -- 𝒱⟦Ref T⟧δ(v) ≜ ∃ℓ,v′. ⌜v = ℓ⌝ ⋆ ℓ ↦ v′ ⋆ 𝒱⟦T⟧δ(v′)
   | .ref T, δ, v =>
       ex fun ℓ => ex fun v' => ⌜v = .loc ℓ⌝ ⋆ ptoOwn ℓ v' ⋆ vDen T δ v'
+  -- 𝒱⟦!T⟧δ(v) ≜ !𝒱⟦T⟧δ(v)
+  | .bang T, δ, v => BoLo.bang (vDen T δ v)
   -- 𝒱⟦Imm @a T⟧δ(v) ≜ ∃ℓ. ⌜v = ℓ⌝ ⋆ ℓ ↦ Imm @aδ 𝒱⟦T⟧δ
   | .imm a T, δ, v =>
       atLife δ a fun α => ex fun ℓ => ⌜v = .loc ℓ⌝ ⋆ ptoImm ℓ α (vDen T δ)
@@ -180,12 +179,6 @@ theorem vDen_lolli (T₁ T₂ : Ty) :
     vDen (.lolli T₁ T₂) δ v =
       all (fun v' => vDen T₁ δ v' ─⋆ wp (.app (.val v) (.val v')) (vDen T₂ δ)) := rfl
 
-/-- `𝒱⟦fn T₁ T₂⟧δ(v) ≜ 𝒱⟦T₁ ⊸ T₂⟧δ(v) ∧ ρ = ∅`: closed code holds no resource.  `[spec §2]` -/
-theorem vDen_fn (T₁ T₂ : Ty) :
-    vDen (.fn T₁ T₂) δ v =
-      BoLo.and (all (fun v' => vDen T₁ δ v' ─⋆ wp (.app (.val v) (.val v')) (vDen T₂ δ)))
-        (fun ρ => ρ = PMap.empty) := rfl
-
 /-!
 ### 4.5 · `𝒱⟦∀ 'a ⊏ @b. T⟧δ(v) ≜ ∀ α ⊏ @bδ. ℰ⟦T⟧δ(v ())` · [TR] p. 4 · `[repair]`
 
@@ -206,6 +199,9 @@ theorem vDen_box (a : Lifetime.Life) (T : Ty) :
 theorem vDen_ref (T : Ty) :
     vDen (.ref T) δ v =
       ex (fun ℓ => ex fun v' => ⌜v = .loc ℓ⌝ ⋆ ptoOwn ℓ v' ⋆ vDen T δ v') := rfl
+
+/-- `𝒱⟦!T⟧δ(v) ≜ !𝒱⟦T⟧δ(v)`.  `[spec §2]` -/
+theorem vDen_bang (T : Ty) : vDen (.bang T) δ v = BoLo.bang (vDen T δ v) := rfl
 
 /-!
 ### 4.8 · `𝒱⟦Imm @a T⟧δ(v) ≜ ∃ℓ. ⌜v = ℓ⌝ ⋆ ℓ ↦ Imm @aδ 𝒱⟦T⟧δ` · [TR] p. 4 · `[repair]`

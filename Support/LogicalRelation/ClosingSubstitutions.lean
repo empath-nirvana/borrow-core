@@ -40,13 +40,13 @@ def LFree (x : LifeVar) : Ty → Prop
   | .unit          => False
   | .unk           => False
   | .ref T         => LFree x T
+  | .bang T         => LFree x T
   | .imm a T       => a.mentions x = true ∨ LFree x T
   | .mut a T       => a.mentions x = true ∨ LFree x T
   | .box a T       => a.mentions x = true ∨ LFree x T
   | .sum T₁ T₂     => LFree x T₁ ∨ LFree x T₂
   | .tensor T₁ T₂  => LFree x T₁ ∨ LFree x T₂
   | .lolli T₁ T₂   => LFree x T₁ ∨ LFree x T₂
-  | .fn T₁ T₂   => LFree x T₁ ∨ LFree x T₂
   | .all y b T     => b.mentions x = true ∨ (x ≠ y ∧ LFree x T)
 
 end BoCa.Fig16.LogRel

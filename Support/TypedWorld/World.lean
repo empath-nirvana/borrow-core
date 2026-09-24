@@ -36,10 +36,10 @@ def vShape : Ty → LSub → Val → WProp
       BoLo.or (ex fun v₁ => ⌜v = .inj₁ v₁⌝ ⋆ vShape T₁ δ v₁)
               (ex fun v₂ => ⌜v = .inj₂ v₂⌝ ⋆ vShape T₂ δ v₂)
   | .lolli _ _, _, _ => fun _ => True
-  | .fn _ _, _, _ => emp
   | .all _ _ _, _, _ => fun _ => True
   | .box a T, δ, v => atLife δ a fun α => box α (vShape T δ v)
   | .ref T, δ, v => ex fun ℓ => ex fun v' => ⌜v = .loc ℓ⌝ ⋆ ptoOwn ℓ v' ⋆ vShape T δ v'
+  | .bang _, _, _ => emp
   | .imm a T, δ, v => atLife δ a fun α => ex fun ℓ => ⌜v = .loc ℓ⌝ ⋆ ptoImm ℓ α (vShape T δ)
   | .mut a T, δ, v => atLife δ a fun α => ex fun ℓ => ⌜v = .loc ℓ⌝ ⋆
       fun ρ => ∃ P, ptoMut ℓ α P ρ ∧ ∀ u σ, P u σ → vShape T δ u σ

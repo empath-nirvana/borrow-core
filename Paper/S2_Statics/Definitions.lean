@@ -213,8 +213,8 @@ def Ty.immReborrow (b : Life) : Ty → Ty
   | .sum    T₁ T₂  => .sum    (T₁.immReborrow b) (T₂.immReborrow b)   -- (2)
   | .tensor T₁ T₂  => .tensor (T₁.immReborrow b) (T₂.immReborrow b)   -- (3)
   | .lolli  _  _   => .unk                                           -- (4)
-  | .fn  T₁ T₂  => .fn T₁ T₂                     -- closed code is its own view  `[spec §2]`
   | .ref T         => .imm b T                                 -- (5) constructor
+  | .bang T        => .bang T                                  -- `!T` holds no resource  `[spec §2]`
   | .imm a T       => .imm a T                                 -- (6) constructor
   | .box _ T       => T.immReborrow b                          -- (7) recursive
   | .all _ _ _     => .unk                                           -- (8)
@@ -339,8 +339,8 @@ inductive WfTy : LifeCtx → Ty → Prop where
   | tensor {Δ T₁ T₂} : WfTy Δ T₁ → WfTy Δ T₂                → WfTy Δ (.tensor T₁ T₂)
   | sum    {Δ T₁ T₂} : WfTy Δ T₁ → WfTy Δ T₂                → WfTy Δ (.sum T₁ T₂)
   | lolli  {Δ T₁ T₂} : WfTy Δ T₁ → WfTy Δ T₂                → WfTy Δ (.lolli T₁ T₂)
-  | fn  {Δ T₁ T₂} : WfTy Δ T₁ → WfTy Δ T₂                → WfTy Δ (.fn T₁ T₂)
   | ref    {Δ T}     : WfTy Δ T                             → WfTy Δ (.ref T)
+  | bang    {Δ T}     : WfTy Δ T                             → WfTy Δ (.bang T)
   | all    {Δ x b T} : Δ.Defines b → WfTy (Δ.extend x b) T  → WfTy Δ (.all x b T)
   | box    {Δ a T}   : WfTy Δ T → Δ.Defines a               → WfTy Δ (.box a T)
   | imm    {Δ a T}   : WfTy Δ T → Δ.Defines a               → WfTy Δ (.imm a T)
@@ -394,6 +394,7 @@ inductive OutlivesRules (Δ : LifeCtx) (a : Life) : Ty → Prop where
   | sum    {T₁ T₂} : OutlivesRules Δ a T₁ → OutlivesRules Δ a T₂ →
       OutlivesRules Δ a (.sum T₁ T₂)
   | ref    {T}     : OutlivesRules Δ a T                       → OutlivesRules Δ a (.ref T)
+  | bang    {T}     :                                             OutlivesRules Δ a (.bang T)
   | box    {b T}   : Δ.EntailsLt a b                           → OutlivesRules Δ a (.box b T)
   | imm    {b T}   : Δ.EntailsLt a b                           → OutlivesRules Δ a (.imm b T)
   | mut    {b T}   : Δ.EntailsLt a b                           → OutlivesRules Δ a (.mut b T)

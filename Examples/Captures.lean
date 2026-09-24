@@ -4,15 +4,15 @@ import Examples.CallBorrowed
 
     let (r, u) = withbor (alloc ()) (Λ. λx.                     -- x : Imm 'a 1
       let (c, w) = withbor (alloc (x, code)) (Λ. λy.
-                     withload y (Λ. λq.                         -- q : Imm 'a 1 ⊗ fn (Imm 'a 1 ⊗ 1) 1
+                     withload y (Λ. λq.                         -- q : Imm 'a 1 ⊗ !(Imm 'a 1 ⊗ 1 ⊸ 1)
                        let (x₁, f) = q; let (x₂, x₃) = copy x₁; let (f₁, f₂) = copy f;
                        f₁ (x₂, ()); f₂ (x₃, ()); ()));
       w; let (x₄, g) = free c; forget x₄; forget g; ());
     u; free r
 
-The closure is the pair `(x, code)`: its environment `x : Imm 'a 1`, and closed code
-`code = λp. let (x′, u) = p; forget x′; u : fn (Imm 'a 1 ⊗ 1) 1`.  Loading it through a borrow
-gives `Imm̲ 'c (Imm 'a 1 ⊗ fn …) = Imm 'a 1 ⊗ fn …`: the environment is already a borrow and the
+The closure is the pair `(x, code)`: its environment `x : Imm 'a 1`, and code capturing nothing,
+`code = λp. let (x′, u) = p; forget x′; u : !(Imm 'a 1 ⊗ 1 ⊸ 1)`.  Loading it through a borrow
+gives `Imm̲ 'c (Imm 'a 1 ⊗ !…) = Imm 'a 1 ⊗ !…`: the environment is already a borrow and the
 code is kept, so the loader copies both and calls the code twice on the environment.
 -/
 
@@ -23,8 +23,8 @@ open BoCa BoCa.Lifetime
 
 /-- `Imm 'a 1`, the captured borrow. -/
 abbrev CA : Ty := .imm (.var 0) .unit
-/-- The code's type, `fn (Imm 'a 1 ⊗ 1) 1`. -/
-abbrev CF : Ty := .fn (.tensor CA .unit) .unit
+/-- The code's type, `!(Imm 'a 1 ⊗ 1 ⊸ 1)`. -/
+abbrev CF : Ty := .bang (.lolli (.tensor CA .unit) .unit)
 /-- The closure, environment and code. -/
 abbrev CP : Ty := .tensor CA CF
 
@@ -52,7 +52,7 @@ def captures : Expr :=
 
 theorem d_capCode {Δ : LifeCtx} {Γ : Ctx Ty} (hΓ : Ctx.Dead Γ) (hwf : (Ty.tensor CA .unit).scopedB Δ = true) :
     DerivesWf Δ Γ capCode CF :=
-  .fnI hΓ hwf
+  .bangLamI (Ctx.Dead.persistent hΓ) hwf
     (.tensorE (T₁ := CA) (T₂ := .unit) (.left hΓ.split) (by simpa using hwf) (.var (.here hΓ))
       (.unitE (.right (.left (.dead hΓ.split)))
         (.lolliE (.dead (.left (.dead hΓ.split))) (.var (.there (.here (.cons hΓ))))
@@ -70,15 +70,11 @@ theorem d_capLoader {Γ : Ctx Ty} (hΓ : Ctx.Dead Γ) :
         (.tensorE (T₁ := CA) (T₂ := CA) (.right (.left (.dead (.dead hΓ.split)))) (by rfl)
           (.lolliE (.dead (.left (.dead (.dead hΓ.split)))) (.var (.there (.here (.cons (.cons hΓ))))) (.copyAx (.cons (.cons (.cons (.cons hΓ))))))
           (.tensorE (T₁ := CF) (T₂ := CF) (.right (.right (.left (.dead (.dead (.dead hΓ.split)))))) (by rfl)
-            (.lolliE (.dead (.dead (.left (.dead (.dead (.dead hΓ.split)))))) (.var (.there (.there (.here (.cons (.cons (.cons hΓ))))))) (.copyFnAx (.cons (.cons (.cons (.cons (.cons (.cons hΓ))))))))
+            (.lolliE (.dead (.dead (.left (.dead (.dead (.dead hΓ.split)))))) (.var (.there (.there (.here (.cons (.cons (.cons hΓ))))))) (.copyBangAx (.cons (.cons (.cons (.cons (.cons (.cons hΓ))))))))
             (.unitE (.right (.left (.right (.left (.dead (.dead (.dead (.dead hΓ.split))))))))
-              (.fnE (.dead (.right (.dead (.left (.dead (.dead (.dead (.dead hΓ.split))))))))
-                (.tensorI (.dead (.dead (.dead (.left (.dead (.dead (.dead (.dead hΓ.split)))))))) (.var (.there (.there (.there (.here (.cons (.cons (.cons (.cons hΓ))))))))) (.unitI (.cons (.cons (.cons (.cons (.cons (.cons (.cons (.cons hΓ))))))))))
-                (.var (.there (.here (.cons (.cons (.cons (.cons (.cons (.cons hΓ))))))))))
+              (.lolliE (.dead (.right (.dead (.left (.dead (.dead (.dead (.dead hΓ.split)))))))) (.tensorI (.dead (.dead (.dead (.left (.dead (.dead (.dead (.dead hΓ.split)))))))) (.var (.there (.there (.there (.here (.cons (.cons (.cons (.cons hΓ))))))))) (.unitI (.cons (.cons (.cons (.cons (.cons (.cons (.cons (.cons hΓ)))))))))) (.bangE (.var (.there (.here (.cons (.cons (.cons (.cons (.cons (.cons hΓ)))))))))))
               (.unitE (.left (.dead (.left (.dead (.dead (.dead (.dead (.dead hΓ.split))))))))
-                (.fnE (.right (.dead (.left (.dead (.dead (.dead (.dead (.dead hΓ.split))))))))
-                  (.tensorI (.dead (.dead (.left (.dead (.dead (.dead (.dead (.dead hΓ.split)))))))) (.var (.there (.there (.here (.cons (.cons (.cons (.cons (.cons hΓ))))))))) (.unitI (.cons (.cons (.cons (.cons (.cons (.cons (.cons (.cons hΓ))))))))))
-                  (.var (.here (.cons (.cons (.cons (.cons (.cons (.cons (.cons hΓ))))))))))
+                (.lolliE (.right (.dead (.left (.dead (.dead (.dead (.dead (.dead hΓ.split)))))))) (.tensorI (.dead (.dead (.left (.dead (.dead (.dead (.dead (.dead hΓ.split)))))))) (.var (.there (.there (.here (.cons (.cons (.cons (.cons (.cons hΓ))))))))) (.unitI (.cons (.cons (.cons (.cons (.cons (.cons (.cons (.cons hΓ)))))))))) (.bangE (.var (.here (.cons (.cons (.cons (.cons (.cons (.cons (.cons hΓ)))))))))))
                 (.boxIctx (.boxIctx (.unitI (.cons (.cons (.cons (.cons (.cons (.cons (.cons (.cons hΓ)))))))))
                     (Ctx.Dead.outlives (LifeCtx.defines_of_wf rfl) (.cons (.cons (.cons (.cons (.cons (.cons (.cons (.cons hΓ))))))))))
                   (Ctx.Dead.outlives (LifeCtx.defines_of_wf rfl) (.cons (.cons (.cons (.cons (.cons (.cons (.cons (.cons hΓ))))))))))))))))
@@ -106,7 +102,7 @@ theorem d_capOuterBody {Γ : Ctx Ty} (hΓ : Ctx.Dead Γ) :
         (.unitE (.right (.left (.dead (.dead (.dead (.dead hΓ.split))))))
           (.lolliE (.dead (.left (.dead (.dead (.dead (.dead hΓ.split)))))) (.var (.there (.here (.cons (.cons (.cons (.cons hΓ))))))) (.forgetImmAx (.cons (.cons (.cons (.cons (.cons (.cons hΓ))))))))
           (.unitE (.left (.dead (.dead (.dead (.dead (.dead hΓ.split))))))
-            (.lolliE (.left (.dead (.dead (.dead (.dead (.dead hΓ.split)))))) (.var (.here (.cons (.cons (.cons (.cons (.cons hΓ))))))) (.forgetFnAx (.cons (.cons (.cons (.cons (.cons (.cons hΓ))))))))
+            (.lolliE (.left (.dead (.dead (.dead (.dead (.dead hΓ.split)))))) (.var (.here (.cons (.cons (.cons (.cons (.cons hΓ))))))) (.forgetBangAx (.cons (.cons (.cons (.cons (.cons (.cons hΓ))))))))
             (.boxIctx (.unitI (.cons (.cons (.cons (.cons (.cons (.cons hΓ)))))))
               (Ctx.Dead.outlives (LifeCtx.defines_of_wf rfl) (.cons (.cons (.cons (.cons (.cons (.cons hΓ))))))))))))
 

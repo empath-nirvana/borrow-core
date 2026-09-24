@@ -247,14 +247,13 @@ theorem _root_.BoCa.wfTy_of_wfB : ∀ {T : Ty} {Δ : LifeCtx}, T.wfB Δ = true �
   | unit => intro _ _; exact .unit
   | unk => intro Δ h; simp [Ty.wfB] at h
   | ref T ih => intro Δ h; exact .ref (ih h)
+  | bang T ih => intro Δ h; exact .bang (ih h)
   | sum T₁ T₂ ih₁ ih₂ =>
       intro Δ h; simp only [Ty.wfB, Bool.and_eq_true] at h; exact .sum (ih₁ h.1) (ih₂ h.2)
   | tensor T₁ T₂ ih₁ ih₂ =>
       intro Δ h; simp only [Ty.wfB, Bool.and_eq_true] at h; exact .tensor (ih₁ h.1) (ih₂ h.2)
   | lolli T₁ T₂ ih₁ ih₂ =>
       intro Δ h; simp only [Ty.wfB, Bool.and_eq_true] at h; exact .lolli (ih₁ h.1) (ih₂ h.2)
-  | fn T₁ T₂ ih₁ ih₂ =>
-      intro Δ h; simp only [Ty.wfB, Bool.and_eq_true] at h; exact .fn (ih₁ h.1) (ih₂ h.2)
   | box a T ih =>
       intro Δ h; simp only [Ty.wfB, Bool.and_eq_true] at h
       exact .box (ih h.2) (LifeCtx.defines_of_wf h.1)

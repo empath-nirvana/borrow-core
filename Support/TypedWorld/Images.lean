@@ -333,7 +333,6 @@ theorem vShape_congr : ∀ (T : Ty) {δ₁ δ₂ : LSub},
   | .unit, _, _, _ => rfl
   | .unk, _, _, _ => rfl
   | .lolli _ _, _, _, _ => rfl
-  | .fn _ _, _, _, _ => rfl
   | .all _ _ _, _, _, _ => rfl
   | .tensor T₁ T₂, δ₁, δ₂, h => by
       funext v
@@ -352,6 +351,7 @@ theorem vShape_congr : ∀ (T : Ty) {δ₁ δ₂ : LSub},
       show (ex fun ℓ => ex fun v' => ⌜v = .loc ℓ⌝ ⋆ ptoOwn ℓ v' ⋆ vShape T δ₁ v') =
         (ex fun ℓ => ex fun v' => ⌜v = .loc ℓ⌝ ⋆ ptoOwn ℓ v' ⋆ vShape T δ₂ v')
       rw [vShape_congr T h]
+  | .bang T, δ₁, δ₂, h => rfl
   | .box a T, δ₁, δ₂, h => by
       funext v
       exact atLife_congr (interp_congr a (fun w hw => h w (Or.inl hw)))
@@ -772,9 +772,6 @@ theorem image_dom {x : LifeVar} {δ δ' : LSub} :
   | lolli T₁ T₂ _ _ =>
       intro v c R hc _ m ψ e
       rw [empty_of_pure hc, PMap.empty_get] at e; cases e
-  | fn T₁ T₂ _ _ =>
-      intro v c R hc _ m ψ e
-      rw [empty_of_pure hc, PMap.empty_get] at e; cases e
   | ref S _ =>
       intro v c R hc hR m ψ e
       obtain ⟨α, -, l', hk⟩ := hc
@@ -788,6 +785,9 @@ theorem image_dom {x : LifeVar} {δ δ' : LSub} :
       rw [show ρa = ResU.single m (CellU.ownOf u) from hown] at hab
       have := (ResU.CompS.get_left_of_ne_imm hab (ResU.single_get_self _ _) (by simp)).2
       exact ⟨_, this, fun _ => ⟨S, RefPos.ref S m⟩⟩
+  | bang S _ =>
+    intro v c R hc _ m ψ e
+    rw [empty_of_pure hc, PMap.empty_get] at e; cases e
   | imm a S _ =>
       intro v c R hc hR m ψ e
       obtain ⟨α, -, l', hk⟩ := hc
@@ -1151,6 +1151,7 @@ theorem own_split {δ : LSub} :
       subst e
       rw [show ρa = ResU.single l (CellU.ownOf u) from hown] at hab
       exact ⟨u, ρb, R, hab, hden, ResU.Le.refl _⟩
+  | bang S₀ _ => intro v R l S hR hp; cases hp
   | tensor T₁ T₂ ih₁ ih₂ =>
       intro v R l S hR hp
       obtain ⟨v₁, v₂, rfl, hp'⟩ := RefPos.inv_tensor hp
@@ -1183,7 +1184,6 @@ theorem own_split {δ : LSub} :
       exact ih hb (RefPos.inv_box hp)
   | unit => intro v R l S _ hp; cases hp
   | lolli _ _ _ _ => intro v R l S _ hp; cases hp
-  | fn _ _ _ _ => intro v R l S _ hp; cases hp
   | imm _ _ _ => intro v R l S _ hp; cases hp
   | «mut» _ _ _ => intro v R l S _ hp; cases hp
   | all _ _ _ _ => intro v R l S _ hp; cases hp
@@ -1206,6 +1206,7 @@ theorem refPos_blocks {δ : LSub} :
       obtain ⟨e₂, rfl⟩ := RefPos.inv_ref h₂
       refine Or.inl ⟨?_, rfl⟩
       have := congrArg Subtype.val (e₁.symm.trans e₂); simpa using this
+  | bang S₀ _ => intro v R l₁ l₂ S₁ S₂ _ h₁ h₂; cases h₁
   | tensor T₁ T₂ ih₁ ih₂ =>
       intro v R l₁ l₂ S₁ S₂ hR h₁ h₂
       obtain ⟨v₁, v₂, rfl, h₁'⟩ := RefPos.inv_tensor h₁
@@ -1257,7 +1258,6 @@ theorem refPos_blocks {δ : LSub} :
       exact ih hb (RefPos.inv_box h₁) (RefPos.inv_box h₂)
   | unit => intro v R l₁ l₂ S₁ S₂ _ hp; cases hp
   | lolli _ _ _ _ => intro v R l₁ l₂ S₁ S₂ _ hp; cases hp
-  | fn _ _ _ _ => intro v R l₁ l₂ S₁ S₂ _ hp; cases hp
   | imm _ _ _ => intro v R l₁ l₂ S₁ S₂ _ hp; cases hp
   | «mut» _ _ _ => intro v R l₁ l₂ S₁ S₂ _ hp; cases hp
   | all _ _ _ _ => intro v R l₁ l₂ S₁ S₂ _ hp; cases hp

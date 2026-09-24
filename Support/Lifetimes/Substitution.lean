@@ -49,6 +49,7 @@ def Ty.lifeBound : Ty → Nat
   | .unit         => 0
   | .unk          => 0
   | .ref T        => T.lifeBound
+  | .bang T        => T.lifeBound
   | .imm a T      => max a.varBound T.lifeBound
   | .mut a T      => max a.varBound T.lifeBound
   | .box a T      => max a.varBound T.lifeBound
@@ -56,7 +57,6 @@ def Ty.lifeBound : Ty → Nat
   | .sum    T₁ T₂ => max T₁.lifeBound T₂.lifeBound
   | .tensor T₁ T₂ => max T₁.lifeBound T₂.lifeBound
   | .lolli  T₁ T₂ => max T₁.lifeBound T₂.lifeBound
-  | .fn  T₁ T₂ => max T₁.lifeBound T₂.lifeBound
 
 /-- Would applying `σ` capture a free `'y`?  (`LSubst` is an abbreviation for a
     `List`, so these cannot be dot-notation methods.) -/
@@ -77,13 +77,13 @@ def Ty.applyLSub (σ : LSubst) : Ty → Ty
   | .unit         => .unit
   | .unk          => .unk
   | .ref T        => .ref (T.applyLSub σ)
+  | .bang T        => .bang (T.applyLSub σ)
   | .imm a T      => .imm (a.applySub σ) (T.applyLSub σ)
   | .mut a T      => .mut (a.applySub σ) (T.applyLSub σ)
   | .box a T      => .box (a.applySub σ) (T.applyLSub σ)
   | .sum    T₁ T₂ => .sum    (T₁.applyLSub σ) (T₂.applyLSub σ)
   | .tensor T₁ T₂ => .tensor (T₁.applyLSub σ) (T₂.applyLSub σ)
   | .lolli  T₁ T₂ => .lolli  (T₁.applyLSub σ) (T₂.applyLSub σ)
-  | .fn  T₁ T₂ => .fn  (T₁.applyLSub σ) (T₂.applyLSub σ)
   | .all y b T    =>
       let σ' := lsubDrop σ y                    -- `'y` is shadowed inside `T`
       if lsubCaptures σ' y then

@@ -11,8 +11,7 @@ import Support.Model.Update
 `Free k ρ`: `ρ` has no cell of kind `k`.  A resource free of `own` and `mut` cells is idempotent
 under `●` (`compS_self_of_imm`) and is its own reborrow at any `α` it outlives
 (`reb_self_of_imm`), so `[α] P ⊨ ↺α P` for any `P` whose resources hold only `imm` cells
-(`reborrow_self_of_imm`).  `SPEC.md` §2 uses it for `[TR]` 6.131 at `fn T₁ T₂`, whose resource
-is `∅`.
+(`reborrow_self_of_imm`).  `SPEC.md` §2 uses it for `[TR]` 6.131 at `!T`, whose resource is `∅`.
 -/
 
 namespace BoCa.Fig16.BoLo

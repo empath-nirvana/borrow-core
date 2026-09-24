@@ -78,11 +78,8 @@ def vX (wpX : WpOp) : Bool → Ty → List SRec → LSub → Val → WProp
         (vX wpX true T₁ ls' δ v' ─⋆
           wpX ls' (.app (.val v) (.val v')) (fun ls'' => vX wpX true T₂ ls'' δ)) ρ
   | false, .lolli _ _, _, _, _ => fun _ => True
-  -- `fn`: resource `∅` and the `⊸` clause, in both modes.  `[spec §2]`
-  | _, .fn T₁ T₂, ls, δ, v => fun ρ => ρ = PMap.empty ∧
-      ∀ ls', Ext ls ls' ρ → ∀ v',
-        (vX wpX true T₁ ls' δ v' ─⋆
-          wpX ls' (.app (.val v) (.val v')) (fun ls'' => vX wpX true T₂ ls'' δ)) ρ
+  -- `!T`: resource `∅` and `T`'s full relation, in both modes.  `[spec §2]`
+  | _, .bang T, ls, δ, v => fun ρ => ρ = PMap.empty ∧ vX wpX true T ls δ v ρ
   | true, .all x c T, ls, δ, v => fun ρ =>
       ∀ ls', Ext ls ls' ρ → ∀ α,
         (⌜LtLife δ c α⌝ ─⋆ wpX ls' (.app (.val v) (.val .unit))

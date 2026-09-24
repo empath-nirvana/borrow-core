@@ -3636,6 +3636,9 @@ theorem vDen_outlives {Δ : LifeCtx} {δ : LSub} {a : Lifetime.Life} {α : Life}
       obtain ⟨-, ρ₁, ρ₂, hc, rfl, h₂⟩ := pure_sep_iff.mp hs
       exact (outlives_comp hc α).mpr
         ⟨ResU.inStratum_single_own α ℓ w, ih w ρ₂ h₂⟩
+  | bang =>
+      rintro v ρ ⟨⟨rfl, -⟩, -⟩
+      exact ResU.inStratum_empty α
   | box hlt =>
       rintro v ρ ⟨β, hb, -, ho⟩
       obtain ⟨α', β', ha', hb', hlt'⟩ := hlt δ hδ
