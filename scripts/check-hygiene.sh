@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+# No `sorry`, `axiom`, `native_decide`, `implemented_by`, `opaque`, `partial`,
+# `unsafe` in Paper/, Support/ and Examples/, outside comments; then every declaration's axioms.
+set -euo pipefail
+cd "$(dirname "$0")/.."
+python3 - <<'PY'
+import re, pathlib, sys
+BAD = re.compile(r"\b(sorry|axiom|native_decide|implemented_by|opaque|partial|unsafe)\b")
+hits = 0
+files = []
+for d in ("Paper", "Support", "Examples"):
+    files += sorted(pathlib.Path(d).glob("**/*.lean")) + [pathlib.Path(d + ".lean")]
+for p in files:
+    src = p.read_text(encoding="utf-8")
+    out, i, depth = [], 0, 0
+    while i < len(src):
+        if src.startswith("/-", i): depth += 1; i += 2; continue
+        if depth and src.startswith("-/", i): depth -= 1; i += 2; continue
+        if not depth and src.startswith("--", i):
+            j = src.find("\n", i); i = len(src) if j < 0 else j; continue
+        if not depth: out.append(src[i])
+        i += 1
+    code = "".join(out)
+    for m in BAD.finditer(code):
+        line = code[:m.start()].count("\n") + 1
+        print(f"{p}:{line}: {m.group(0)}"); hits += 1
+print(f"{hits} forbidden keyword(s) outside comments.")
+sys.exit(1 if hits else 0)
+PY
+lake env lean --run scripts/CheckAxioms.lean

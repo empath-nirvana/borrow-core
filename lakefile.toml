@@ -1,0 +1,16 @@
+name = "borrow_core"
+defaultTargets = ["Paper", "Support", "Examples"]
+
+[[require]]
+name = "mathlib"
+git = "https://github.com/leanprover-community/mathlib4.git"
+rev = "0df444a360eaa60ab8c11dca51a86af692955474"
+
+[[lean_lib]]
+name = "Support"
+
+[[lean_lib]]
+name = "Paper"
+
+[[lean_lib]]
+name = "Examples"
