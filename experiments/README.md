@@ -31,3 +31,6 @@ Each experiment builds against this repository's `Paper`/`Support` (and `Example
 These experiments were developed in `~/repos/borrow_lang/Experiments/`; the last `borrow_lang`
 commit containing them is `a31b498`. An archived experiment's README names the commits that hold
 its code.
+
+**Building the experiments.** The library's machine gained a host parameter (SPEC §8, commit
+`e4f41e0`), and the experiments were not updated. Check out `c8694fa` or earlier to build them.

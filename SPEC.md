@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 0.4 · 2026-09-25
+Version 0.5 · 2026-09-25
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -22,14 +22,17 @@ definitions, and `docs/adjudications.md` records every departure from the printe
 fixes:
 
 - **Syntax** — `[TR]` §1: values, expressions, types `1`, `⊕`, `⊗`, `⊸`, `Ref`, `Imm @a`,
-  `Mut @a`, `[@a]`, `∀'a ⊏ @b`, `Unk`.
+  `Mut @a`, `[@a]`, `∀'a ⊏ @b`, `Unk`. `Prim` also has the integer literals `lit` and the host
+  operations `host` of §8.
 - **Typing** — `[TR]` p. 2's rules and p. 3's axiom table, read under p. 2's presuppositions
   (`DerivesWf`).
-- **Machine** — `[TR]` §3 with the frames `K; e` and `injᵢ K` (`BoLo.Steps`).
+- **Machine** — `[TR]` §3 with the frames `K; e` and `injᵢ K` (`BoLo.Steps`), plus one host
+  step `(μ, host op v) ↦ (μ, r)` when `Host.call op v = some r` (§8). The machine is parameterized
+  by a host `ℍ` (`{ℍ : Host} [HostIs ℍ]`) and is deterministic for each host.
 - **Semantics** — the typed world: `[TR]` §§4–6 with the definition changes recorded in
   bolo-formalization's `docs/adjudications.md` §12.66–§12.73 (`vX`, `wpTS`, `SemX`).
 
-Baseline theorems, which every later entry must preserve:
+Baseline theorems, which every later entry must preserve (each holds for every host `ℍ`):
 
 - **Fundamental Property** — `DerivesWf Δ Γ e T → Δ.Ok → Ctx.ScopedB Δ Γ → SemX Δ Γ e T`.
 - **Adequacy** — `DerivesWf ∅ [] e 1 → Steps ∅ e ∅ ()`: a closed program typed at `1` has a
@@ -310,43 +313,52 @@ From `experiments/Recursion`, `CBPVMu`.
 
 ### Types
 
-    A ::= … | I32 | I64
+    A ::= … | I32 | I64                                   (VTy.int w)
 
-Opaque base types. They hold no resource: `I32` and `I64` are persistent (§10), `Imm̲ 'b I32 = I32`,
-and they outlive every lifetime.
+`I32`/`I64` hold no resource. They are persistent (§10), `Imm̲ 'b I32 = I32`, and they outlive every
+lifetime.
+
+### Terms and machine
+
+Integers are term constants. `Prim` gains `lit c`, with `c` an `i32`/`i64` literal (`UInt32`/`UInt64`),
+and `host op`, a host operation. One machine step applies a host operation:
+`(μ, host op v) ↦ (μ, r)` when `ℍ.call op v = some r` (`Support/Dynamics/Host.lean`). A host `ℍ` is a
+structure of typed Lean functions grouped by operation family (`bin32`, `div32`, `rel32`, …, their
+64-bit analogues, and the conversions), so every host is well-sorted by construction. An
+ill-shaped argument is stuck. Results are encoded as follows: arithmetic gives a literal; tests give
+`inj₂ ()` for true and `inj₁ ()` for false; partial operations give `inj₁ n`, or `inj₂ ()` where
+Wasm traps.
 
 ### Operations
 
-Wasm's integer instructions, as externs (§11) of `!` type, for each width:
+Wasm's integer instructions (`HostOp`, `Support/Syntax/Integers.lean`), at each width `w`:
 
 | group | operations | type (at `I32`) |
 |---|---|---|
-| literals | `i32[n]` | `I32` |
-| wrapping arithmetic | `add`, `sub`, `mul` | `I32 ⊗ I32 ⊸ F I32` |
-| partial arithmetic | `div_s`, `div_u`, `rem_s`, `rem_u` | `I32 ⊗ I32 ⊸ F (I32 ⊕ 1)` |
-| bitwise | `and`, `or`, `xor`, `shl`, `shr_s`, `shr_u`, `rotl`, `rotr` | `I32 ⊗ I32 ⊸ F I32` |
-| unary | `clz`, `ctz`, `popcnt` | `I32 ⊸ F I32` |
-| tests | `eqz`, `eq`, `ne`, `lt_s`, `lt_u`, `le_s`, `le_u`, `gt_s`, `gt_u`, `ge_s`, `ge_u` | `… ⊸ F (1 ⊕ 1)` |
-| conversion | `wrap`, `extend_s`, `extend_u`, `extend8_s`, `extend16_s` | as in Wasm |
+| literals | `lit` | `I32` |
+| binary | `add`, `sub`, `mul`, `and`, `or`, `xor`, `shl`, `shr_s`, `shr_u`, `rotl`, `rotr` | `I32 ⊗ I32 ⇒ I32` |
+| partial | `div_s`, `div_u`, `rem_s`, `rem_u` | `I32 ⊗ I32 ⇒ I32 ⊕ 1` |
+| unary | `clz`, `ctz`, `popcnt`, `extend8_s`, `extend16_s` | `I32 ⇒ I32` |
+| tests | `eqz`; `eq`, `ne`, `lt_s`, `lt_u`, `le_s`, `le_u`, `gt_s`, `gt_u`, `ge_s`, `ge_u` | `I32 ⇒ 1 ⊕ 1`; `I32 ⊗ I32 ⇒ 1 ⊕ 1` |
+| conversion | `wrap`, `extend_s`, `extend_u`, `extend32_s` | between widths |
 
-Partial operations return the right injection where Wasm traps (division by zero, `INT_MIN / -1`),
-because a trap would abandon linear resources.
+`A ⇒ B` is the call-by-value function type `U(A ⊸ F B)`. Typing: `CDerives.lit` gives a literal
+its width's type, and `CDerives.hostOp op` gives `host op` the type `!(hostArg op ⇒ hostRes op)`.
+Partial operations return a sum where Wasm traps, because a trap would abandon linear resources.
 
 ### Semantics
 
-The theorems are parametric in the integer signature. `I32`/`I64` are interpreted by arbitrary
-resource-free value predicates, and the operations by any total functions of the stated types.
-Nothing about arithmetic is proved. The compiler lowers each operation to its Wasm instruction,
-and compiler correctness is stated relative to one shared interpretation, instantiated with the
-target's own definitions (Talos's `i32.add` and so on). The interpreter may use any implementation;
-agreement between engines is tested on the corpus, not proved.
+The value relation at `int w` holds exactly at a literal of width `w` and the empty resource. Every
+theorem holds for every host `ℍ`, so nothing about arithmetic is proved. The concrete host
+`wasmHost` (on `BitVec`) is used only by the interpreter and by `decide`-checked evaluations.
+Compiler correctness will be stated with the target's own operations as the host. Agreement
+between engines is tested on the corpus, not proved.
 
 ### Open
 
 - Floats (`F32`, `F64`) by the same scheme; Wasm's NaN bit patterns are nondeterministic.
-- `u8` and checked (non-wrapping) arithmetic are derivable from the operations above, or can be
-  added as further externs.
-- Whether literals stay an extern family or become a term form, if the term language is forked.
+- `u8` and checked (non-wrapping) arithmetic are derivable from the operations above.
+- `plainV` excludes the integer types, so they cannot yet be `withborS` leaves.
 
 ---
 
@@ -403,7 +415,7 @@ which is outside the heap accounting of adequacy.
 
 A value type is **persistent** when its values hold no resource (`VTy.persistent`,
 `Core/Persistent.lean`): `1`, `0`, `Unk`, `!A` for any `A`, and `⊗`, `⊕`, `[@a]` and `μ` over
-persistent types. `I32` and `I64` (§8) will be persistent. `U C` is not, because a thunk holds its
+persistent types. `I32` and `I64` (§8) are persistent. `U C` is not, because a thunk holds its
 closure's resource; nor are `Ref`, `Imm` and `Mut`.
 
 `Core` extends the paper's context relations with one constructor each: `Ctx.SplitP` may send a
@@ -427,7 +439,8 @@ A program may declare `extern name : A`. Externs form the initial context of `ma
 Fundamental Property quantifies over every context satisfying its types, so a program is safe
 for every implementation of its externs that meets their semantic types; each extern is a named
 hypothesis of the end-to-end theorem. The trusted runtime components (the allocator, stack
-switching, host I/O, §8's integer operations, §9's buffers and strings) enter this way.
+switching, host I/O, §9's buffers and strings) enter this way. §8's integer operations do not:
+they are term constants, and the theorems are parametric in the host instead.
 
 Standard input and output are linear capabilities:
 
@@ -441,12 +454,16 @@ interpreter runs; the compiler lowers their operations to host calls (WASI `fd_r
 ## Status
 
 Entries 2–6 are implemented in the library directory `Core/`, with one `fundamentalC` and
-`adequacyC` covering every rule. Entry 9 (§10) is implemented in `Core/`. Entries 7, 8 and 10
-(§8, §9, §11) are specified only.
+`adequacyC` covering every rule. Entries 7 and 9 (§8, §10) are implemented; §8 extends `Paper/` and `Support/` with the literal
+and host-step forms. Entries 8 and 10 (§9, §11) are specified only.
 
 ---
 
 ## Changelog
+
+- **0.5** (2026-09-25) — §8 as implemented: integer literals and host operations are term
+  constants, one host step in the baseline machine, every theorem parametric in the host; §1 notes
+  the host step.
 
 - **0.4** (2026-09-25) — Entries 7–10: integers as opaque types with Wasm's operations and
   signature-parametric theorems (§8), buffers and strings as opaque linear types (§9), persistent

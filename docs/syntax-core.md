@@ -77,10 +77,11 @@ lexically, innermost first, and are then discarded. Two consequences:
 ## 4. Types
 
     value  A ::= 1 | 0 | A * A | A + A | U C | ref A | imm @ A | mut @ A | box @ A | !A | unk
+               | i32 | i64                                      (VTy.int, SPEC §8)
                | mu X. A | X | Name
                | A => A | all 'x < @. A                          (built-in abbreviations)
                | block σ | val σ | fam mut @ σ | fam imm @ σ | view @ A
-    comp   C ::= F A | A -o C | C & C | top | forall 'x < @. C | delay A | str A
+    comp   C ::= F A | A -o C | C & C | top | forall 'x < @. C | delay A | stream A
 
 `VTy`/`CTy` are defined at `Ty:33`/`Ty:57`. `box @ A` is `[@] A`.
 
@@ -337,6 +338,20 @@ Notes on the table:
   `withload` is `S2:186`; `withswap` is `…/S3_Dynamics/Definitions.lean:343`;
   `foldImmV (dec F)` is `FI:152`; `foldOwnV` is `FO:100`; `foldReuseV` is `FR:149`; `fixDV` is
   `De:74`; `unfoldSV` is `St:71`.
+
+## 8a. Integers
+
+Integer literals and operations are constants (`SPEC.md` §8, `Core/Integers.lean`):
+
+- **Literals:** `i32[n]`, `i64[n]` are the `Prim.lit` constant, typed by `CDerives.lit` at `i32`/`i64`.
+  `n` is decimal or `0x`-hex and is read modulo 2^32 / 2^64.
+- **Operations:** `host[op]`, typed by `CDerives.hostOp op : !(hostArg op => hostRes op)`. `op` is
+  written `add32`, `div_s32`, `lt_u64`, `wrap`, `extend_s`, … (one name per `HostOp`,
+  `Support/Syntax/Integers.lean`). A call is the value-level application of §6.1, e.g.
+  `host[add32] (x, y)`.
+- **Results:** tests return `1 + 1` with `inr ()` as true, and partial operations return
+  `i32 + 1` with `inr ()` where Wasm traps.
+- `i32`/`i64` are persistent (section 7), so integer variables are reused and dropped freely.
 
 ## 9. Derived forms
 
@@ -620,8 +635,8 @@ How this checks:
 
 - **Numerals and list literals** (`3`, `[1, 2, 3]`) are sugar and are out for now. The library
   builds them with Lean functions (`num`, `buildList`).
-- **Integers and arrays** are pending as `SPEC.md` §8/§9, not yet written. They may change the
-  erasure target from Paper `Expr` to a Core term language.
+- **Buffers and strings** (`SPEC.md` §9) are specified but not implemented. Integers are in
+  (section 8a), and the erasure target stays Paper `Expr`, which gained `Prim.lit`/`Prim.host`.
 - **Lifetime-parametric `def`s and `extern`s** are not supported.
 - **Block provenance** (`SPEC.md` §5 Open) is not enforced: `crossPack`
   (`Core/BlockPrograms.lean`) typechecks.
