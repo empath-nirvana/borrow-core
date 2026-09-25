@@ -22,6 +22,8 @@ import Core.FoldReuse
 import Core.Delay
 import Core.Fundamental
 import Core.Examples
+import Core.Embedding
+import Core.EmbeddingExamples
 import Core.Fix
 import Core.Lists
 import Core.Count
