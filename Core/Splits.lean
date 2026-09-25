@@ -109,11 +109,12 @@ macro_rules
 
 /-! ### Side conditions on concrete contexts -/
 
-/-- Types built from `1`, `0`, `⊕`, `⊗`, `!` and `μ`/`X` over them: they hold no borrow and
-outlive every lifetime. -/
+/-- Types built from `1`, `0`, `I32`, `I64`, `⊕`, `⊗`, `!` and `μ`/`X` over them: they hold no
+borrow and outlive every lifetime. -/
 def dataB : VTy → Bool
   | .unit => true
   | .zero => true
+  | .int _ => true
   | .sum A B => dataB A && dataB B
   | .tensor A B => dataB A && dataB B
   | .bang _ => true
@@ -132,6 +133,7 @@ theorem outlives_of_dataB {Δ : LifeCtx} {a : Lifetime.Life} :
       simp only [dataB, Bool.and_eq_true] at h
       exact .tensor (outlives_of_dataB h.1) (outlives_of_dataB h.2)
   | .bang _, _ => .bang
+  | .int _, _ => .int
   | .tvar _, _ => .tvar
   | .mu _, h => .mu (outlives_of_dataB (by simpa [dataB] using h))
 

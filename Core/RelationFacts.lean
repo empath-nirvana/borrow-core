@@ -56,6 +56,7 @@ theorem TyEq.immG {c c' : Lifetime.Life} {δ δ' : LSub} (hc : c.interp δ = c'.
   intro A
   induction A using VTy.recV with
   | unit => intro A' _ _ h _; cases A' <;> simp_all [TyEq, VTy.immG]
+  | int w => intro A' _ _ h _; cases A' <;> simp_all [TyEq, VTy.immG]
   | zero => intro A' _ _ h _; cases A' <;> simp_all [TyEq, VTy.immG]
   | unk => intro A' _ _ h _; cases A' <;> simp_all [TyEq, VTy.immG]
   | thunk C => intro A' _ _ h _; cases A' <;> simp_all [TyEq, VTy.immG]
@@ -102,6 +103,7 @@ theorem TyEq.applyLSub : ∀ (T : VTy) (σ : Lifetime.LSubst) (δ δ' : LSub),
     (∀ y, VFree y T → ((Lifetime.Life.var y).applySub σ).interp δ = δ'.find? y) →
       TyEq (T.applyLSub σ) δ T δ'
   | .unit, _, _, _, _ => trivial
+  | .int _, _, _, _, _ => rfl
   | .zero, _, _, _, _ => trivial
   | .unk, _, _, _, _ => trivial
   | .ref T, σ, δ, δ', h => TyEq.applyLSub T σ δ δ' h
@@ -257,6 +259,7 @@ theorem vC_local : ∀ (b : Bool) (T : VTy) {ls ls' : List SRec} {δ : LSub} {v 
   intro b T ls v ρ h ls' hk
   cases T with
   | unit => exact h
+  | int w => exact h
   | tensor T₁ T₂ =>
       obtain ⟨v₁, v₂, ρ₀, ρ₃, hc, hp, ρ₁, ρ₂, hc', h₁, h₂⟩ := h
       have hk' := hk.right hc
@@ -315,6 +318,7 @@ theorem vO_obs : ∀ (T : VTy) {ls : List SRec} {δ : LSub} {v : Val} {ρ : WRes
   intro b T ls v ρ h
   cases T with
   | unit => exact h
+  | int w => exact h
   | tensor T₁ T₂ =>
       obtain ⟨v₁, v₂, ρ₀, ρ₃, hc, hp, ρ₁, ρ₂, hc', h₁, h₂⟩ := h
       exact ⟨v₁, v₂, ρ₀, ρ₃, hc, hp, ρ₁, ρ₂, hc', h₁.2, h₂.2⟩
@@ -347,6 +351,7 @@ theorem vC_vShape : ∀ (b : Bool) (T : VTy) {ls : List SRec} {δ : LSub} {v : V
   intro b T ls v ρ h
   cases T with
   | unit => exact h
+  | int w => exact h
   | tensor T₁ T₂ =>
       obtain ⟨v₁, v₂, ρ₀, ρ₃, hc, hp, ρ₁, ρ₂, hc', h₁, h₂⟩ := h
       exact ⟨v₁, v₂, ρ₀, ρ₃, hc, hp, ρ₁, ρ₂, hc', h₁.2, h₂.2⟩
@@ -455,6 +460,9 @@ theorem vC_outlives {Δ : LifeCtx} {δ : LSub} {a : Lifetime.Life} {α : Life}
   intro b T ls v ρ h hT
   cases T with
   | unit =>
+      obtain ⟨rfl, -⟩ := h
+      exact ResU.inStratum_empty α
+  | int w =>
       obtain ⟨rfl, -⟩ := h
       exact ResU.inStratum_empty α
   | zero => exact False.elim h
@@ -570,6 +578,7 @@ theorem vCE_congr : ∀ (A : VTy) (η : Option (Nat → TEnt)) {δ₁ δ₂ : LS
     (∀ y, VFree y A → δ₁.find? y = δ₂.find? y) → EnvAgree η δ₁ δ₂ →
     ∀ (b : Bool) (ls : List SRec), vCE η b A ls δ₁ = vCE η b A ls δ₂
   | .unit, _, _, _, _, _, b, _ => by cases b <;> rfl
+  | .int w, _, _, _, _, _, b, _ => by cases b <;> rfl
   | .zero, _, _, _, _, _, b, _ => by cases b <;> rfl
   | .unk, _, _, _, _, _, b, _ => by cases b <;> rfl
   | .tvar _, _, _, _, _, _, _, _ => rfl
@@ -681,6 +690,9 @@ theorem vCE_tyEq : ∀ (S : VTy) {S' : VTy} {δ δ' : LSub} (η η' : Option (Na
   | .unit, S', _, _, _, _, h, _ => by
       cases S' <;> simp only [TyEq] at h
       intro b ls; cases b <;> rfl
+  | .int w, S', _, _, _, _, h, _ => by
+      cases S' <;> simp only [TyEq] at h
+      subst h; intro b ls; cases b <;> rfl
   | .zero, S', _, _, _, _, h, _ => by
       cases S' <;> simp only [TyEq] at h
       intro b ls; cases b <;> rfl
@@ -885,6 +897,7 @@ theorem obs_transfer {R : WRes} {ls : List SRec} (hLB : WitLB ls R) :
   subst hb; subst ls₁
   cases T with
   | unit => exact hs
+  | int w => exact hs
   | unk => exact hs
   | zero => exact h
   | thunk _ => trivial
@@ -1109,6 +1122,9 @@ theorem relabel_obs {R : WRes} {ls : List SRec} {β β₀ : Life} {δ : LSub} {x
     (vF_vC δ false T ls v Rl).mpr (vF_mono (fun _ _ _ _ _ h => h.1) δ false T ls v Rl hR)
   cases T with
   | unit =>
+      obtain ⟨hce, hv⟩ := hc
+      subst hce; rw [relRes_empty]; exact ⟨rfl, hv⟩
+  | int w =>
       obtain ⟨hce, hv⟩ := hc
       subst hce; rw [relRes_empty]; exact ⟨rfl, hv⟩
   | thunk _ =>

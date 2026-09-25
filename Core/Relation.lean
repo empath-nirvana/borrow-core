@@ -158,6 +158,7 @@ def vCE : Option (Nat → TEnt) → Bool → VTy → List SRec → LSub → Val 
       atLife δ a fun α => ex fun ℓ => ⌜v = .loc ℓ⌝ ⋆
         ptoMutS ℓ α ls (fun ls₀ => vCE η true A ls₀ δ)
   | _, _, .unk, _, _, _ => emp
+  | _, _, .int w, _, _, v => ⌜v.IsInt w⌝
   | η, b, .tvar n, ls, _, v => tEnvP η n b ls v
   | η, b, .mu A, ls, δ, v => fun ρ => VTy.NoMut 0 A ∧ (tClose η (.mu A)).Cl 0 ∧
       ∀ P : Bool → List SRec → Val → WProp,

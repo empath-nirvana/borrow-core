@@ -28,13 +28,15 @@ open BoCa.Fig16
 open BoCa.Fig16.BoLo
 open BoCa.Lifetime (LSub LifeCtx LifeVar)
 
-/-- A value type whose values hold no resource: `1`, `0`, `Unk`, `!A`, and `⊗`, `⊕`, `[@a]`
-and `μ` over persistent types, with a type variable persistent (it stands, under its `μ`, for a
-persistent type).  `U C`, `Ref A`, `Imm @a A` and `Mut @a A` are not.  `[spec §10]` -/
+/-- A value type whose values hold no resource: `1`, `0`, `Unk`, `I32`, `I64`, `!A`, and `⊗`,
+`⊕`, `[@a]` and `μ` over persistent types, with a type variable persistent (it stands, under its
+`μ`, for a persistent type).  `U C`, `Ref A`, `Imm @a A` and `Mut @a A` are not.
+`[spec §10, §8]` -/
 def VTy.persistent : VTy → Bool
   | .unit => true
   | .zero => true
   | .unk => true
+  | .int _ => true
   | .bang _ => true
   | .tvar _ => true
   | .tensor A B => A.persistent && B.persistent
@@ -64,6 +66,7 @@ theorem vCE_empty_of_persistent : ∀ (A : VTy) {η : Option (Nat → TEnt)},
   | .unit, _, _, _, _, _, _, _, _, h => h.1
   | .zero, _, _, _, _, _, _, _, _, h => h.elim
   | .unk, _, _, _, _, _, _, _, _, h => h.1
+  | .int _, _, _, _, _, _, _, _, _, h => h.1
   | .bang _, _, _, _, _, _, _, _, _, h => h.1
   | .tvar n, η, hη, _, b, ls, _, v, ρ, h => by
       cases η with

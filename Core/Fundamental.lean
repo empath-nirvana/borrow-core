@@ -1,4 +1,5 @@
 import Core.Compat
+import Core.Integers
 import Core.FoldReuse
 import Core.Stream
 import Support.LogicalRelation.Adequacy
@@ -146,6 +147,12 @@ inductive CDerives : LifeCtx → Ctx VTy → Expr → Jdg → Prop where
   | forgetImm {Δ Γ a A} (hΓ : Ctx.DeadP Γ) : CDerives Δ Γ forget (.val (axForgetImmTy a A))
   | forgetMut {Δ Γ a A} (hΓ : Ctx.DeadP Γ) : CDerives Δ Γ forget (.val (axForgetMutTy a A))
   | forgetUnk {Δ Γ} (hΓ : Ctx.DeadP Γ) : CDerives Δ Γ forget (.val axForgetUnkTy)
+  /-- An integer literal at its width.  `[spec §8]` -/
+  | lit {Δ Γ} (c : IntLit) (hΓ : Ctx.DeadP Γ) :
+      CDerives Δ Γ (.val ⟨.prim (.lit c), .prim⟩) (.val (.int c.width))
+  /-- A host operation at `!(A ⊸ F B)`, its signature in `SPEC.md` §8.  `[spec §8]` -/
+  | hostOp {Δ Γ} (op : HostOp) (hΓ : Ctx.DeadP Γ) :
+      CDerives Δ Γ (.val (.prim (.host op))) (.val (.bang (hostSig op)))
   | withbor1 {Δ Γ A B} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hx : Δ.find? x = none)
       (hsc₁ : VScoped Δ A) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) :
       CDerives Δ Γ withbor (.val (axWithbor1Ty x Δ.meetOfDom A B))
@@ -263,6 +270,8 @@ theorem fundamentalC {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg}
   | forgetImm hΓ => exact forgetImm_compatX hΓ
   | forgetMut hΓ => exact forgetMut_compatX hΓ
   | forgetUnk hΓ => exact forgetUnk_compatX hΓ
+  | lit c hΓ => exact lit_compatX c hΓ
+  | hostOp op hΓ => exact hostOp_compatX op hΓ
   | withbor1 x hΓ hx hsc₁ hf₁ hf₂ => exact withbor1_compatX x hΓ hx hsc₁ hf₁ hf₂
   | withbor2 x hΓ hx hside hf₁ hf₂ => exact withbor2_compatX x hΓ hx hside hf₁ hf₂
   | withbor3 x hΓ hx hf₁ hf₂ => exact withbor3_compatX x hΓ hx hf₁ hf₂

@@ -710,6 +710,8 @@ theorem image_dom {x : LifeVar} {δ δ' : LSub} :
   cases T with
   | unit =>
       rw [empty_of_pure hc, PMap.empty_get] at e; cases e
+  | int w =>
+      rw [empty_of_pure hc, PMap.empty_get] at e; cases e
   | sum T₁ T₂ =>
       rcases hc with ⟨a, hk⟩ | ⟨a, hk⟩ <;> rcases hR with ⟨b, hk'⟩ | ⟨b, hk'⟩
       · obtain ⟨he, h₁⟩ := pure_sep_iff.mp hk

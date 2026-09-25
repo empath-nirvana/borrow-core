@@ -55,6 +55,16 @@ def i32 (n : UInt32) : Val := ⟨.prim (.lit (.i32 n)), .prim⟩
 /-- `i64[n]` as a value.  `[spec §8]` -/
 def i64 (n : UInt64) : Val := ⟨.prim (.lit (.i64 n)), .prim⟩
 
+/-- `v` is a literal of width `w`: the values of `I32` and `I64`.  `[spec §8]` -/
+def IsInt : Width → Val → Prop
+  | .w32, v => ∃ n, v = .i32 n
+  | .w64, v => ∃ n, v = .i64 n
+
+theorem IsInt.val {w : Width} {v : Val} (h : v.IsInt w) : ∃ c, v.1 = .prim (.lit c) := by
+  cases w <;> obtain ⟨n, rfl⟩ := h
+  · exact ⟨_, rfl⟩
+  · exact ⟨_, rfl⟩
+
 /-- A boolean at `1 ⊕ 1`: `inj₁ ()` is false, `inj₂ ()` is true.  `[spec §8]` -/
 def bool (b : Bool) : Val := if b then .inj₂ .unit else .inj₁ .unit
 

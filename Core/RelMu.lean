@@ -72,6 +72,7 @@ theorem vCE_some (η : Option (Nat → TEnt)) :
   intro A
   induction A using VTy.recV with
   | unit => intro b; rfl
+  | int w => intro b; rfl
   | tensor A B ihA ihB => intro b; funext ls δ v; simp only [vCE, ihA, ihB]
   | zero => intro b; rfl
   | sum A B ihA ihB => intro b; funext ls δ v; simp only [vCE, ihA, ihB]
@@ -104,6 +105,7 @@ theorem vCE_rename : ∀ (A : VTy) (ρ : Nat → TEnt) (r : Nat → Nat) (b : Bo
   intro A
   induction A using VTy.recV with
   | unit => intro ρ r b; rfl
+  | int w => intro ρ r b; rfl
   | tensor A B ihA ihB => intro ρ r b; funext ls δ v; simp only [VTy.rename, vCE, ihA, ihB]
   | zero => intro ρ r b; rfl
   | sum A B ihA ihB => intro ρ r b; funext ls δ v; simp only [VTy.rename, vCE, ihA, ihB]
@@ -137,6 +139,7 @@ theorem vCE_subst : ∀ (A : VTy) (ρ : Nat → TEnt) (σ : Nat → VTy) (δ : L
   intro A
   induction A using VTy.recV with
   | unit => intro ρ σ δ b ls; rfl
+  | int w => intro ρ σ δ b ls; rfl
   | tensor A B ihA ihB => intro ρ σ δ b ls; funext v; simp only [VTy.subst, vCE, ihA, ihB]
   | zero => intro ρ σ δ b ls; rfl
   | sum A B ihA ihB => intro ρ σ δ b ls; funext v; simp only [VTy.subst, vCE, ihA, ihB]
@@ -192,6 +195,7 @@ theorem vCE_congr_occ : ∀ (A : VTy) (η₁ η₂ : Nat → TEnt), (∀ n, A.Oc
   intro A
   induction A using VTy.recV with
   | unit => intros; rfl
+  | int w => intros; rfl
   | tensor A B ihA ihB =>
       intro η₁ η₂ h b; funext ls δ v
       simp only [vCE, ihA η₁ η₂ (fun n hn => h n (Or.inl hn)),
@@ -237,6 +241,7 @@ theorem vCE_mono_at : ∀ (A : VTy) (k : Nat) (η₁ η₂ : Nat → TEnt), A.No
   intro A
   induction A using VTy.recV with
   | unit => intro _ _ _ _ _ _ _ _ _ _ _ _ h; exact h
+  | int w => intro _ _ _ _ _ _ _ _ _ _ _ _ h; exact h
   | tensor A B ihA ihB =>
       intro k η₁ η₂ hk ht hP hPk b ls δ v ρ h
       obtain ⟨v₁, v₂, ρ₀, ρ₃, hc, hp, ρ₁, ρ₂, hc', h₁, h₂⟩ := h
@@ -359,6 +364,7 @@ to: the `Mut` clause is kept, with `S` at its payload's type; at `μX. A` the un
 def vF (S : Bool → VTy → List SRec → Val → WProp) (δ : LSub) :
     Bool → VTy → List SRec → Val → WProp
   | _, .unit, _, v => ⌜v = .unit⌝
+  | _, .int w, _, v => ⌜v.IsInt w⌝
   | b, .tensor A B, ls, v => ex fun v₁ => ex fun v₂ => ⌜v = .pair v₁ v₂⌝ ⋆ S b A ls v₁ ⋆ S b B ls v₂
   | _, .zero, _, _ => fun _ => False
   | b, .sum A B, ls, v =>
@@ -379,6 +385,7 @@ def vF (S : Bool → VTy → List SRec → Val → WProp) (δ : LSub) :
 theorem vF_vC (δ : LSub) : ∀ (b : Bool) (T : VTy) (ls : List SRec) (v : Val) (ρ : WRes),
     vC b T ls δ v ρ ↔ vF (fun b T ls => vC b T ls δ) δ b T ls v ρ
   | _, .unit, _, _, _ => Iff.rfl
+  | _, .int w, _, _, _ => Iff.rfl
   | _, .tensor _ _, _, _, _ => Iff.rfl
   | _, .sum _ _, _, _, _ => Iff.rfl
   | _, .zero, _, _, _ => Iff.rfl
@@ -397,6 +404,7 @@ theorem vF_mono {S₁ S₂ : Bool → VTy → List SRec → Val → WProp}
     ∀ (b : Bool) (T : VTy) (ls : List SRec) (v : Val) (ρ : WRes),
       vF S₁ δ b T ls v ρ → vF S₂ δ b T ls v ρ
   | _, .unit, _, _, _, hs => hs
+  | _, .int w, _, _, _, hs => hs
   | b, .tensor T₁ T₂, ls, _, _, hs => by
       obtain ⟨v₁, v₂, ρ₀, ρ₃, hc, hp, ρ₁, ρ₂, hc', h₁, h₂⟩ := hs
       exact ⟨v₁, v₂, ρ₀, ρ₃, hc, hp, ρ₁, ρ₂, hc', h b T₁ ls v₁ ρ₁ h₁, h b T₂ ls v₂ ρ₂ h₂⟩
@@ -438,6 +446,7 @@ theorem vC_ind (δ : LSub) (Φ : Bool → VTy → List SRec → Val → WRes →
     intro A
     induction A using VTy.recV with
     | unit => intro _ _ _ _ _ b ls v r hr; exact hG b _ ls v r hr
+    | int w => intro _ _ _ _ _ b ls v r hr; exact hG b _ ls v r hr
     | tensor A B ihA ihB =>
         intro η₀ σ ht hP hex b ls v r hr
         obtain ⟨v₁, v₂, ρ₀, ρ₃, hc, hp, ρ₁, ρ₂, hc', h₁, h₂⟩ := hr

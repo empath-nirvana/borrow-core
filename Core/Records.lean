@@ -294,6 +294,8 @@ inductive Affine : VTy → Prop where
   | «mut» {a A} : Affine (.mut a A)
   | unk : Affine .unk
   | bang {A} : Affine (.bang A)
+  /-- `I32`, `I64`, dropped as persistent slots.  `[spec §8]` -/
+  | int {w} : Affine (.int w)
 
 /-- The closed consumer of an affine type. -/
 def dropT : VTy → Expr
@@ -328,6 +330,7 @@ theorem dropT_wf {Δ : LifeCtx} {A : VTy} (hA : Affine A) :
   | «mut» => intro Γ hΓ; exact .forgetMut hΓ
   | unk => intro Γ hΓ; exact .forgetUnk hΓ
   | bang => intro Γ hΓ; exact .forgetBang hΓ
+  | int => intro Γ hΓ; exact .lamV (.unitI (.drop rfl hΓ.toP))
 
 /-- The spine of `⊗`, `⊕` and `[@a]` holds no `μ` and no type variable. -/
 def VTy.SpineMuFree : VTy → Prop
@@ -343,6 +346,7 @@ def VTy.SpineMuFree : VTy → Prop
 theorem affine_immReborrow (b : Lifetime.Life) : ∀ A : VTy, A.SpineMuFree →
     Affine (A.immReborrow b)
   | .unit, _ => .unit
+  | .int _, _ => .int
   | .zero, _ => .zero
   | .tensor A B, ⟨h₁, h₂⟩ => .tensor (affine_immReborrow b A h₁) (affine_immReborrow b B h₂)
   | .sum A B, ⟨h₁, h₂⟩ => .sum (affine_immReborrow b A h₁) (affine_immReborrow b B h₂)

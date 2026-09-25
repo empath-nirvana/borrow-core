@@ -45,6 +45,8 @@ theorem reborrow_vShape {α : Life} {x : LifeVar} {δ : LSub}
   cases T with
   | unit =>
       exact Entails.trans (box_L α _) (reborrow_pure α _) ρ hρ
+  | int w =>
+      exact Entails.trans (box_L α _) (reborrow_pure α _) ρ hρ
   | sum T₁ T₂ =>
       rcases (box_or α _ _).1 ρ hρ with h | h
       · obtain ⟨v₁, h⟩ := (box_ex α _).2 ρ h

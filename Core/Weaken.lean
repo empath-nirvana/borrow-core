@@ -102,6 +102,8 @@ theorem CDerives.append_dead (h' : Ctx.Dead Γ') {Δ : LifeCtx} {Γ : Ctx VTy} {
   | forgetImm hΓ => exact .forgetImm (deadP_append h' hΓ)
   | forgetMut hΓ => exact .forgetMut (deadP_append h' hΓ)
   | forgetUnk hΓ => exact .forgetUnk (deadP_append h' hΓ)
+  | lit c hΓ => exact .lit c (deadP_append h' hΓ)
+  | hostOp op hΓ => exact .hostOp op (deadP_append h' hΓ)
   | withbor1 x hΓ hx hsc hf₁ hf₂ => exact .withbor1 x (deadP_append h' hΓ) hx hsc hf₁ hf₂
   | withbor2 x hΓ hx hside hf₁ hf₂ => exact .withbor2 x (deadP_append h' hΓ) hx hside hf₁ hf₂
   | withbor3 x hΓ hx hf₁ hf₂ => exact .withbor3 x (deadP_append h' hΓ) hx hf₁ hf₂
