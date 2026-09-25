@@ -200,7 +200,10 @@ this; it is kept for later same-lifetime views. From `experiments/Relaxed`.
 ### Records and variants
 
 A record is a binary tree of `⊗` (no trailing `1`); a variant is a nest of `⊕`. Both are derived
-forms: construction, projection, injection and case are derived rules, and `Imm̲` acts fieldwise.
+forms: construction, destructuring, projection, injection and case are derived rules, and `Imm̲`
+acts fieldwise. Projecting one field of a borrowed record drops the other fields' views, which
+must be `Affine`; `Affine` has no `μ` case, so projection past an unboxed `μ`-typed field is not
+available (destructuring is).
 
 ### Blocks
 
@@ -213,10 +216,13 @@ Blocks are allocated and freed whole (`allocS`, `freeS`).
 ### Family borrows
 
 Several disjoint places are borrowed at one lifetime by nesting `withbor` and shortening with
-`⊑Mut`/`⊑Imm`: `withbor2 : Ref A ⊗ Ref B ⊸ (∀'c. Mut 'c A ⊗ Mut 'c B ⊸ ['c] T) ⊸ …`, and its
-`Imm` form, and the block form `withborS`. A sub-family is passed on at the same lifetime. All
-are derived rules. Restriction: leaf and result types built from `1`, `⊗`, `⊕`, `Ref`, `!`, `[@e]`,
-`Imm @e`, `Mut @e` (no `⊸`, `∀`, `Unk` outside `!`).
+`⊑Mut`/`⊑Imm`: `withborF2 : Ref A ⊗ Ref B ⊸ (∀'c. Mut 'c A ⊗ Mut 'c B ⊸ ['c] T) ⊸ …`, its `Imm`
+form, and the block form `withborS`. A sub-family is passed on at the same lifetime. All are
+derived rules. Restrictions:
+
+- `withborF2`: the second leaf `B` and the result `T` outlive the outer lifetime (`VOutlives`).
+- `withborS`: leaves and result are lifetime-free — built from `1`, `0`, `⊗`, `⊕`, `Ref`, `!`,
+  `X`, `μ` (not `Imm @e`, `Mut @e`, `[@e]`; not derived, not known to be blocked).
 
 ### Open
 
@@ -272,7 +278,9 @@ From `experiments/Recursion`, `CBPVMu`.
 
 Each has an observation and `close`; `close` is required because no rule forgets a `U C`, and
 it releases a linear state. Both are interpreted as greatest fixed points; `delayIn`/`delayOut`
-(and the stream analogues) convert to and from the unrolling.
+and `strIn`/`strOut` convert to and from the unrolling. Streams are built by coiteration:
+
+    unfoldS : !U(S ⊸ F(A ⊗ S) & F 1) ⊸ !U(S ⊸ Str A)
 
 ### Loops
 
@@ -292,6 +300,7 @@ runs from empty memory and leaves memory empty.
 - Whether `D`'s greatest fixed point equals the intersection of its finite approximations is
   reduced to one property of `wpTS` (`WpChainCommutes`), not derived.
 - A general `νX. C` former is deferred; `D` and `Str` are fixed formers.
+- Stream adequacy is stated generically only at `Str 1` (`take_runs`).
 
 From `experiments/Recursion`, `CBPVMu`.
 
@@ -299,9 +308,9 @@ From `experiments/Recursion`, `CBPVMu`.
 
 ## Status
 
-Entries 2–6 are implemented in the experiment `experiments/Core` (being assembled from the
-experiments named in each entry). They move into the library after that world builds with one
-`fundamentalC` and `adequacyC`.
+Entries 2–6 are implemented in the experiment `experiments/Core`, assembled from the experiments
+named in each entry; it builds with one `fundamentalC` and `adequacyC` covering every rule. They
+move into the library when `Core` is promoted.
 
 ---
 
