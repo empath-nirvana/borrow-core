@@ -17,6 +17,7 @@ import CBPVMu.Compat
 import CBPVMu.Sized
 import CBPVMu.FoldImm
 import CBPVMu.FoldOwn
+import CBPVMu.FoldReuse
 import CBPVMu.Fundamental
 import CBPVMu.Examples
 import CBPVMu.Fix

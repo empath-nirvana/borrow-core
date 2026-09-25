@@ -1,5 +1,5 @@
 import CBPVMu.Compat
-import CBPVMu.FoldOwn
+import CBPVMu.FoldReuse
 import Support.LogicalRelation.Adequacy
 
 /-!
@@ -10,7 +10,8 @@ import Support.LogicalRelation.Adequacy
 the lifetime `∀` (`∀E` at every `C`), the `!` rules, `[]I`/`[]E` (`[]I` at every value type),
 `⊑imm`/`⊑mut`, one constant per borrow axiom at arbitrary value-type payloads, three
 call-by-value derived forms (`lolliE`, `allEV`, `ofRet`), `roll`/`unroll` at `μ`, and the
-borrowed and owned folds `foldImm`, `foldOwn` (`FoldImm.lean`, `FoldOwn.lean`).
+borrowed and owned folds `foldImm`, `foldOwn`, `foldReuse` (`FoldImm.lean`, `FoldOwn.lean`,
+`FoldReuse.lean`).
 `fundamentalC` proves every rule sound at `SemV`/`SemC`; `adequacyC` runs a closed `F 1`
 computation to `()` from the empty memory.
 -/
@@ -186,6 +187,11 @@ inductive CDerives : LifeCtx → Ctx VTy → Expr → Jdg → Prop where
   same class, `A′_R = T` with `R` at every recursive position, any `R`. -/
   | foldOwn {Δ Γ} (F : FShape) (R : VTy) (hΓ : Ctx.Dead Γ) (hF : F.WF) (hG : F.Guarded) :
       CDerives Δ Γ (.val (foldOwnV F)) (.val (.lolli (algOTy F R) (foldOTy F R)))
+  /-- The owned fold with reuse, a constant: `foldReuse : !U(A″_R ⊸ F R) ⊸ !U(μX. T ⊸ F R)`,
+  for `T` of the same class, `A″_R = T` with `R` at a head `X` and `Ref 1 ⊗ R` at every `Ref X`
+  (the emptied cell and the result on its content), any `R`. -/
+  | foldReuse {Δ Γ} (F : FShape) (R : VTy) (hΓ : Ctx.Dead Γ) (hF : F.WF) (hG : F.Guarded) :
+      CDerives Δ Γ (.val (foldReuseV F)) (.val (.lolli (algRTy F R) (foldOTy F R)))
 
 /-- The semantic judgment at a judgment form. -/
 def SemJ (Δ : LifeCtx) (Γ : Ctx VTy) (e : Expr) : Jdg → Prop
@@ -247,6 +253,7 @@ theorem fundamentalC {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg}
   | unroll _ ih => exact unroll_compatX ih
   | foldImm F y c R hΓ hF hG hyM hyR hR => exact foldImm_compatX F hF hG y c R hΓ hyM hyR hR
   | foldOwn F R hΓ hF hG => exact foldOwn_compatX F hF hG R hΓ
+  | foldReuse F R hΓ hF hG => exact foldReuse_compatX F hF hG R hΓ
 
 /-! ### Adequacy -/
 

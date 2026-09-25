@@ -9,7 +9,7 @@ swapped back into the same cell — by recursion on the list (`vC_mu_ind`, no fu
 holding the list is borrowed mutably (`withbor`), and the callback maps the whole list through
 `withswap`.
 
-* `wpTS_swap`: `swap ℓ v` at an owned cell, as a `wpTS` rule (6.169's steps).
+* `wpTS_swap` (`FoldReuse.lean`): `swap ℓ v` at an owned cell, as a `wpTS` rule (6.169's steps).
 * `mapInc_semV : SemV Δ [] mapInc (U(L′ ⊸ F L′))`.
 * `toPure : U(L′ ⊸ F P)` frees the list into the pure list `P = μX. 1 ⊕ (N ⊗ X)`.
 * `mapProg`: build `[0, 0, 0]`, put it in a cell, borrow it mutably and map it in place with
@@ -60,50 +60,6 @@ theorem pureL_closed : pureL.Cl 0 := by
 
 theorem pureL_unroll : VTy.inst pureL pureBody = .sum .unit (.tensor natN pureL) := rfl
 
-/-! ### `swap` at an owned cell -/
-
-/-- **`swap ℓ v`** at `ℓ ↦ w` returns `(ℓ, w)` with `ℓ ↦ v`: 6.169's steps (`wp⊸`, `wp-load`,
-`wp-store`, `wp1`, `wp-val`) as a rule. -/
-theorem wpTS_swap (ls : List SRec) (ℓ : Loc) (w v : Val) (Q : List SRec → Val → WProp) :
-    Entails (sep (ptoOwn ℓ w) (wand (ptoOwn ℓ v) (Q ls (.pair (.loc ℓ) w))))
-      (wpTS ls (.app (.app swap (.val (.loc ℓ))) (.val v)) Q) := by
-  rintro ρ ⟨ρo, ρR, hc, rfl, hR⟩
-  have hβ₁ : Expr.subst 0 (Val.loc ℓ)
-        (Expr.val (Val.lam (elet (.app load' BoCa.v1)
-          (.seq (.app (.app store' BoCa.v2) BoCa.v1) (.pair BoCa.v2 BoCa.v0)))))
-      = Expr.val (Val.lam (elet (eLoad ℓ)
-          (.seq (.app (.app store' (.val (.loc ℓ))) BoCa.v1)
-                (.pair (.val (.loc ℓ)) BoCa.v0)))) := by
-    simp [elet, eLoad, Expr.subst, Expr.shift, BoCa.v0, BoCa.v1, BoCa.v2, load', store']
-  refine wpTS_beta_in (.appL .hole v) _ (Val.loc ℓ) ls Q _ ?_
-  rw [hβ₁]
-  simp only [Kont.plug]
-  have hβ₂ : Expr.subst 0 v
-        (elet (eLoad ℓ) (.seq (.app (.app store' (.val (.loc ℓ))) BoCa.v1)
-                              (.pair (.val (.loc ℓ)) BoCa.v0)))
-      = elet (eLoad ℓ) (.seq (eStore ℓ (v.shift 1 0)) (.pair (.val (.loc ℓ)) BoCa.v0)) := by
-    simp [elet, eLoad, eStore, Expr.subst, BoCa.v0, BoCa.v1, store']
-  refine wpTS_lolli _ _ v _ _ ?_
-  rw [hβ₂]
-  refine wpTS_bind (.appR (.val (.lam _)) .hole) (eLoad ℓ) ls _ _ ?_
-  refine wpTS_load ls ℓ w _ _ ⟨_, ρR, hc, rfl, ?_⟩
-  intro ρ' σ' hp' hc'
-  subst hp'
-  simp only [Kont.plug]
-  have hβ₃ : Expr.subst 0 w
-        (Expr.seq (eStore ℓ (v.shift 1 0)) (.pair (.val (.loc ℓ)) BoCa.v0))
-      = Expr.seq (eStore ℓ v) (.pair (.val (.loc ℓ)) (.val w)) := by
-    simp [eStore, Expr.subst, BoCa.v0,
-      Expr.subst_shift 0 0 0 w v.val (Nat.le_refl 0) (Nat.le_refl 0), Expr.shift_zero]
-  refine wpTS_lolli _ _ w _ _ ?_
-  rw [hβ₃]
-  refine wpTS_bind (.seq .hole (.pair (.val (.loc ℓ)) (.val w))) (eStore ℓ v) ls _ _ ?_
-  refine wpTS_store ls ℓ w v _ _ ⟨_, ρR, ResU.CompS.comm hc', rfl, ?_⟩
-  intro ρ₃ σ₃ hp₃ hc₃
-  simp only [Kont.plug]
-  refine wpTS_1 _ _ _ _ ?_
-  exact wpTS_val ls (.pair (.loc ℓ) w) _ _ (hR ρ₃ σ₃ hp₃ hc₃)
-
 /-! ### Sizes and closed values -/
 
 theorem num_closed : ∀ k, closedAt 0 (num k).1 = true
@@ -147,8 +103,6 @@ def mapIncV : Val := fixV mB
 theorem mapIncV_closed : closedAt 0 mapIncV.1 = true := by
   simp [mapIncV, fixV, closedAt]
   rfl
-
-theorem swap_closed : closedAt 0 swap = true := rfl
 
 abbrev selfMI : Val := selfV mB
 
