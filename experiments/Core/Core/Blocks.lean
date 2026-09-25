@@ -21,7 +21,8 @@ locations from a base `b`, the leaf at in-order position `i` at `b + i`.
 The machine is unchanged (`Loc = ℕ`, one value per location).  A value names one location, so
 a one-word handle is a lowering of the tuple `addr b σ`; it is sound for tuples that are a
 block's.  A pair of leaf references from two different blocks has the same type
-(`experiments/LeafPlaces`' `crossPack`); keeping such pairs from being formed is a checker rule.
+(`BlockPrograms.lean`'s `crossPack`); keeping such pairs from being formed (block provenance)
+is open.  Borrowing a block through its leaf family is `BlockBorrow.lean`.
 -/
 
 noncomputable section

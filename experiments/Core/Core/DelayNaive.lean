@@ -1,5 +1,5 @@
 import Core.DelayPrograms
-import LeafPlaces.Steps
+import Core.Steps
 
 /-!
 # Core — `f = λd. later (g d)` is not a guardedness condition
@@ -14,7 +14,7 @@ typed as any other term, admits `g = skip`:
 with the Z combinator) is not in `⟦D 1⟧` (`naive_not_delay`, `naive_not_sem`): its first `next`
 returns `later t` (`nv_next_run`), and the `next` of `t` has no terminating run
 (`tv_next_diverges`) — forcing `t` forces `N`, whose `later` hands back `t` itself, and `skip`
-forces that again.  The step relation is deterministic along the way (`LeafPlaces`'
+forces that again.  The step relation is deterministic along the way (`Steps.lean`'s
 `step1_plug_inv`, with the head-step inversions below), so every run revisits its start.
 
 `skip` observes `d` twice for each `later` it emits.  In `fixD` the step returns a state, not a
@@ -29,7 +29,6 @@ open BoCa.Fig16
 open BoCa.Fig16.BoLo
 open BoCa.BoLo (Heap Steps Step1 Head Kont)
 open BoCa.Lifetime (LSub LifeCtx LifeVar)
-open BoCa.LeafPlaces (step1_plug_inv step1_beta_inv step1_top steps_peel steps_from_val)
 
 /-! ### `skip` -/
 

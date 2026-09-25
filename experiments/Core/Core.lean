@@ -37,7 +37,12 @@ import Core.Splits
 import Core.RecordPrograms
 import Core.Family
 import Core.FamilyPrograms
+import Core.Weaken
+import Core.BlockBorrow
+import Core.BlockTrack
+import Core.BlockPrograms
 import Core.ReuseList
 import Core.DelayApprox
 import Core.DelayPrograms
+import Core.Steps
 import Core.DelayNaive
