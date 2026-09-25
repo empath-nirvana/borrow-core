@@ -67,3 +67,8 @@ roots = ["LeafPlaces"]
 name = "Recursion"
 srcDir = "experiments/Recursion"
 roots = ["Recursion"]
+
+[[lean_lib]]
+name = "CBPVMu"
+srcDir = "experiments/CBPVMu"
+roots = ["CBPVMu"]
