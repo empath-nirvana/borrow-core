@@ -8,6 +8,8 @@ A stream is made by `unfoldS step s₀` and consumed by `next`s and a final `clo
 consumers are `CDerives` derivations, so each program is one closed derivation, run by
 adequacy and by the interpreter, with no hand proof:
 
+* `take_runs`: every closed `U(Str 1)`, observed `n` times and closed, runs to `()` with no
+  cell left.
 * `takeCloseR n`: the unit stream over a cell `s : Ref 1` (`next` returns `((), s)`, `close`
   frees `s`), observed `n` times and closed; `()` with no cell left.
 * `natsSum n`: the stream `0, 1, 2, …` over a numeral state (`next` duplicates the state by a
@@ -77,6 +79,13 @@ theorem d_takeE : ∀ (n : ℕ) {Γ : Ctx VTy}, Ctx.Dead Γ →
         (.tensorE (.left (.dead (deadSplit hΓ))) (.var (.here (.cons hΓ)))
           (.unitE (.right (.left (.dead (.dead (deadSplit hΓ))))) (.var (.there (.here (.cons (.cons hΓ)))))
             (d_takeE n (.cons (.cons (.cons hΓ))))))
+
+/-- **Adequacy for `Str 1`**: for a closed `e : U(Str 1)` and every `n`, observing `n` times
+then closing runs from the empty memory to `()` and the empty memory. -/
+theorem take_runs {e : Expr} (he : CDerives LifeCtx.empty [] e (.val (.thunk (.str .unit))))
+    (n : ℕ) :
+    BoCa.BoLo.Steps Adequacy.emptyMem (bindE e (takeE n)) Adequacy.emptyMem (.val .unit) :=
+  adequacyC (.bind .nil (.ret he) (d_takeE n .nil))
 
 /-! ### The unit stream over a cell -/
 
