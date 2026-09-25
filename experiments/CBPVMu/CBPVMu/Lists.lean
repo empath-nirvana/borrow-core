@@ -158,6 +158,30 @@ theorem build3Free_runs :
 /-- The executable interpreter agrees: `()` and no cell left. -/
 theorem build3Free_eval : Programs.unitNoLeak (eval build3Free) = true := by decide
 
+/-! ### `Imm̲` at the list and at a boxed tree -/
+
+/-- `Imm̲ 'b L = μY. 1 ⊕ Imm 'b L`: the tail borrow's payload is `L` itself. -/
+theorem listL_immReborrow (b : Lifetime.Life) :
+    listL.immReborrow b = .mu (.sum .unit (.imm b listL)) := rfl
+
+/-- The boxed binary tree `T = μX. 1 ⊕ (Ref X ⊗ Ref X)`. -/
+def treeBody : VTy := .sum .unit (.tensor (.ref (.tvar 0)) (.ref (.tvar 0)))
+
+def treeT : VTy := .mu treeBody
+
+theorem treeT_closed : treeT.Cl 0 := ⟨trivial, Nat.zero_lt_one, Nat.zero_lt_one⟩
+
+/-- `Imm̲ 'b` at the tree's unrolling: both children are borrows of trees. -/
+theorem treeT_immReborrow_unroll (b : Lifetime.Life) :
+    (VTy.inst treeT treeBody).immReborrow b = .sum .unit (.tensor (.imm b treeT) (.imm b treeT)) :=
+  rfl
+
+/-- A loaded tree view is a leaf or two child borrows, at the relation. -/
+theorem vC_tree_immReborrow {c : Lifetime.Life} {b : Bool} {ls : List SRec} {δ : LSub} {v : Val}
+    {ρ : WRes} : vC b (treeT.immReborrow c) ls δ v ρ ↔
+      vC b (.sum .unit (.tensor (.imm c treeT) (.imm c treeT))) ls δ v ρ :=
+  vC_immReborrow_mu_iff treeT_closed c b ls δ v ρ
+
 end BoCa.Fig16.LogRel.CBPVMu
 
 end
