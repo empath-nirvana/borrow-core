@@ -50,3 +50,5 @@ import Core.DelayNaive
 import Core.StreamRel
 import Core.Stream
 import Core.StreamPrograms
+import Core.Integers
+import Core.IntPrograms

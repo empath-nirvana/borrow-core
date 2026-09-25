@@ -385,7 +385,7 @@ def vF (S : Bool → VTy → List SRec → Val → WProp) (δ : LSub) :
 theorem vF_vC (δ : LSub) : ∀ (b : Bool) (T : VTy) (ls : List SRec) (v : Val) (ρ : WRes),
     vC b T ls δ v ρ ↔ vF (fun b T ls => vC b T ls δ) δ b T ls v ρ
   | _, .unit, _, _, _ => Iff.rfl
-  | _, .int w, _, _, _ => Iff.rfl
+  | _, .int _, _, _, _ => Iff.rfl
   | _, .tensor _ _, _, _, _ => Iff.rfl
   | _, .sum _ _, _, _, _ => Iff.rfl
   | _, .zero, _, _, _ => Iff.rfl
