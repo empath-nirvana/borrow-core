@@ -26,7 +26,7 @@ Every result's axioms are `[propext, Classical.choice, Quot.sound]` or a subset.
 | `Images.lean`, `Invariant.lean`, `ReborrowShapes.lean`, `RelationFacts.lean` | the lemmas that went by induction on a type now go by the induction principles, or by induction on a position (list below) |
 | `Fundamental.lean` | `roll`/`unroll` in `CDerives`, `roll_compatX`/`unroll_compatX` |
 | `Fix.lean` (new) | `experiments/Recursion/Recursion/Fix.lean` at this world's `wpTS`, with `substAll_closed` |
-| `Lists.lean`, `Count.lean`, `CountFree.lean` (new) | the programs; `CountFree.lean` also `withload_sized` |
+| `Lists.lean`, `Count.lean`, `CountFree.lean`, `MapMut.lean` (new) | the programs; `CountFree.lean` also `withload_sized`, `MapMut.lean` also `wpTS_swap` |
 
 `Wp`, `Reborrow`, `FrameRules`, `Compatibility`, `Computation`, `Compat` and `Examples` are
 CBPVWorld's files with only the namespace changed. `TW`, the invariants (`ChainInv`, `DeepInv`,
@@ -133,9 +133,25 @@ in a context holding the recursive functions, instantiated at their values.
   the empty memory to a numeral and the empty memory; `countProg_eval`: the interpreter returns
   `3` with no cell left.
 
-**(c) `Mut 'a L` updating every element in place** — not done. `L` here holds units; the
-program would need a list with payloads, an in-place map by `swap` on each cell, and a whole-list
-`withswap`. Nothing in steps 1–4 bears on it beyond what (a) and (b) use.
+**(c) An in-place map through `Mut`** (`MapMut.lean`).
+- `L′ = μX. 1 ⊕ Ref (N ⊗ X)` (`NoMut` holds: `X` is under `Ref`, not `Mut`), and the pure list
+  `P = μX. 1 ⊕ (N ⊗ X)`.
+- `wpTS_swap`: `swap ℓ v` at `ℓ ↦ w` as a `wpTS` rule (6.169's steps).
+- `mapInc = Z (λself. λl. case l {inj₁ u. inj₁ u | inj₂ r. swap r () to q. let (r₁, c) = q in
+  let (p, tl) = c in self tl to tl′. swap r₁ (inj₂ p, tl′) to q₂. let (r₂, u) = q₂ in u; inj₂ r₂})`
+  increments every payload in the same cells, with no fuel: `mapInc_wp` is induction on a bound of
+  the owned list's resource size (`dsize_tail_lt`: the tail's resource is smaller than the cell
+  and the tail together). **`mapInc_semV : SemV Δ [] mapInc (U(L′ ⊸ F L′))`**.
+- `toPure : U(L′ ⊸ F P)` frees the list into a pure list (`toPure_vC`); a pure list holds no
+  resource (`vC_pureL_empty`).
+- `mapProg`: build `[0, 0, 0]`, put it in a cell, borrow it mutably (`withbor`, `Mut 'x L′`), and
+  in the callback `withswap b (λl. mapInc l to l′. (l′, ()))`, forget the borrow; end the
+  borrow, free the cell, `toPure` the list. `mapProg_derives` at `F P` in the context
+  `mapInc, toPure`; `mapProg_runs`: from the empty memory to a pure list and the empty memory;
+  `mapProg_eval`: the interpreter returns `[1, 1, 1]` with no cell left.
+- `withswap` moves the whole list out of the `Mut` cell, so the per-cell recursion is on owned
+  cells. A map that recurses through `Mut` borrows of the tails (a `Mut 'x L′` per cell, by
+  nested `withbor`/`withswap` at the tail's position) is not written here.
 
 ## The borrowed fold
 
