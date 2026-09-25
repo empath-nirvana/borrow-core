@@ -192,7 +192,7 @@ theorem d_inner2 (bw : Borrows M side) (s : FamSide M Δ c x y A B T) {Γ : Ctx 
   have key : ∀ {Γ' : Ctx VTy}, Ctx.Solo Γ' 6 (cbTy2 M c Δ.meetOfDom A B T) →
       CDerives (FD₂ Δ x y) Γ' (.app (.var 6) unit')
         (.val (.lolli (famTy2 M (.var y) A B) (.box (.var y) T))) := fun h => by
-    have := CDerives.allEV (a := .var y) (.var h) (entailsLt_inner Δ x y)
+    have := CDerives.allEV (a := .var y) (.var h.toP) (entailsLt_inner Δ x y)
     rwa [s.hinst] at this
   exact appW (pairW (bw.sub (.var (by csolo)) (entailsLe_inner Δ x y)) (.var (by csolo)))
     (key (by csolo))

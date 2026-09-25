@@ -113,9 +113,10 @@ theorem d_c₀ {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
           (.ret (.roll natBody_noMut natN_closed (.sumI₁ (.unitI (.cons (.cons hΓ)))))))))))
 
 /-- The callback at a counter `g` (index `4`):
-`Λ. λu. case u {inj₁ w. w; forget g; 0 | inj₂ t. g [] t to n. inj₂ n}`. -/
+`Λ. λu. case u {inj₁ w. w; 0 | inj₂ t. g [] t to n. inj₂ n}`.  The `inj₁` branch drops `g`,
+a persistent slot, at its leaf.  `[spec §10]` -/
 def cbE : Expr := .val (.lam (.val (.lam (.case (.var 0)
-    (.seq (.var 0) (.seq (.app forget (.var 5)) (.inj₁ (.val .unit))))
+    (.seq (.var 0) (.inj₁ (.val .unit)))
     (bindE (.app (.app (.var 5) (.val .unit)) (.var 0)) (.inj₂ (.var 0)))))))
 
 theorem d_cb {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
@@ -136,23 +137,27 @@ theorem d_cb {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
   refine .sumE (A := .unit) (B := .imm (.var 1) listL)
     (.left (.dead (.dead (.dead (.right (deadSplit hΓ))))))
     (.unroll (A := VTy.immG (.var 1) (VTy.scons listL .tvar) listBody)
-      (.var (.here (hd (hd (hd (hd hΓ)))))))
+      (.var (.here (hd (hd (hd (hd hΓ)))).toP)))
     ?_ ?_
-  · -- `inj₁ w. w; forget g; 0`
+  · -- `inj₁ w. w; 0`, dropping `g`
     refine .unitE (.left (.dead (.dead (.dead (.dead (.right (deadSplit hΓ)))))))
-      (.var (.here (hd (hd (hd (hd (hd hΓ))))))) ?_
-    refine .unitE (.dead (.dead (.dead (.dead (.dead (.left (deadSplit hΓ)))))))
-      (.lolliE (.dead (.dead (.dead (.dead (.dead (.left (deadSplit hΓ)))))))
-        (.var (.there (.there (.there (.there (.there (.here hΓ)))))))
-        (.forgetBang (A := countFn) (hd (hd (hd (hd (hd (hd hΓ))))))))
-      ?_
-    exact .ret (.boxI (.roll natBody_noMut natN_closed
-      (.sumI₁ (.unitI (hd (hd (hd (hd (hd (hd hΓ))))))))) ⟨LifeCtx.defines_of_wf rfl,
-        dead_noLive (P := fun s => VOutlives Δ₂ (.var 1) s.ty) (hd (hd (hd (hd (hd (hd hΓ))))))⟩)
+      (.var (.here (hd (hd (hd (hd (hd hΓ))))).toP)) ?_
+    refine .ret (.boxI (.roll natBody_noMut natN_closed
+      (.sumI₁ (.unitI (.cons (.cons (.cons (.cons (.cons (.drop rfl hΓ.toP)))))))))
+      ⟨LifeCtx.defines_of_wf rfl, fun s hs hl => ?_⟩)
+    simp only [List.mem_cons] at hs
+    rcases hs with rfl | rfl | rfl | rfl | rfl | rfl | hs
+    · exact absurd hl (by simp)
+    · exact absurd hl (by simp)
+    · exact absurd hl (by simp)
+    · exact absurd hl (by simp)
+    · exact absurd hl (by simp)
+    · exact .bang
+    · exact dead_noLive (P := fun s => VOutlives Δ₂ (.var 1) s.ty) hΓ s hs hl
   · -- `inj₂ t. g [] t to n. inj₂ n`
     refine .bind (.left (.dead (.dead (.dead (.dead (.left (deadSplit hΓ)))))))
       (.ret (.lolliE (.left (.dead (.dead (.dead (.dead (.right (deadSplit hΓ)))))))
-        (.var (.here (hd (hd (hd (hd (hd hΓ)))))))
+        (.var (.here (hd (hd (hd (hd (hd hΓ))))).toP))
         (show CDerives Δ₂ _ _ (.val (.lolli (.imm (.var 1) listL) natN)) from
           .allEV (x := 0) (b := LifeCtx.empty.meetOfDom) (a := .var 1)
             (A := VTy.lolli (.imm (.var 0) listL) natN)
@@ -160,7 +165,7 @@ theorem d_cb {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
             entails_x_top)))
       ?_
     exact .ret (.boxI (.roll natBody_noMut natN_closed
-      (.sumI₂ (.var (.here (hd (hd (hd (hd (hd (hd hΓ))))))))))
+      (.sumI₂ (.var (.here (hd (hd (hd (hd (hd (hd hΓ)))))).toP))))
       (CtxOutlives.solo (LifeCtx.defines_of_wf rfl) (natN_outlives _ _)
         (hd (hd (hd (hd (hd (hd hΓ))))))))
 

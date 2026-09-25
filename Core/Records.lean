@@ -52,18 +52,18 @@ theorem CDerives.lamV {Δ : LifeCtx} {Γ : Ctx VTy} {M : Expr} {A B : VTy}
   .thunkV rfl (.lam (.ret h))
 
 theorem CDerives.letpairV {Δ : LifeCtx} {Γ Γp Γb : Ctx VTy} {V M : Expr} {A B C : VTy}
-    (hs : Ctx.Split Γ Γp Γb) (hV : CDerives Δ Γp V (.val (.tensor A B)))
+    (hs : Ctx.SplitP Γ Γp Γb) (hV : CDerives Δ Γp V (.val (.tensor A B)))
     (hM : CDerives Δ (⟨B, true⟩ :: ⟨A, true⟩ :: Γb) M (.val C)) :
     CDerives Δ Γ (.letpair V M) (.val C) :=
   .ofRet (.tensorE hs hV (.ret hM))
 
 theorem CDerives.seqV {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {V M : Expr} {C : VTy}
-    (hs : Ctx.Split Γ Γ₁ Γ₂) (hV : CDerives Δ Γ₁ V (.val .unit))
+    (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hV : CDerives Δ Γ₁ V (.val .unit))
     (hM : CDerives Δ Γ₂ M (.val C)) : CDerives Δ Γ (.seq V M) (.val C) :=
   .ofRet (.unitE hs hV (.ret hM))
 
 theorem CDerives.caseV {Δ : LifeCtx} {Γ Γs Γb : Ctx VTy} {V M₁ M₂ : Expr} {A B C : VTy}
-    (hs : Ctx.Split Γ Γs Γb) (hV : CDerives Δ Γs V (.val (.sum A B)))
+    (hs : Ctx.SplitP Γ Γs Γb) (hV : CDerives Δ Γs V (.val (.sum A B)))
     (h₁ : CDerives Δ (⟨A, true⟩ :: Γb) M₁ (.val C))
     (h₂ : CDerives Δ (⟨B, true⟩ :: Γb) M₂ (.val C)) :
     CDerives Δ Γ (.case V M₁ M₂) (.val C) :=
@@ -71,7 +71,7 @@ theorem CDerives.caseV {Δ : LifeCtx} {Γ Γs Γb : Ctx VTy} {V M₁ M₂ : Expr
 
 /-- `let x = e in b`, written `(λx. b) e`. -/
 theorem CDerives.eletV {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {e b : Expr} {A C : VTy}
-    (hs : Ctx.Split Γ Γ₁ Γ₂) (he : CDerives Δ Γ₁ e (.val A))
+    (hs : Ctx.SplitP Γ Γ₁ Γ₂) (he : CDerives Δ Γ₁ e (.val A))
     (hb : CDerives Δ (⟨A, true⟩ :: Γ₂) b (.val C)) : CDerives Δ Γ (elet e b) (.val C) :=
   .lolliE hs he (.lamV hb)
 
@@ -234,7 +234,7 @@ def tuple : ETree → Expr
 /-- The premises of `recI`: the context split once per node. -/
 inductive RecArgs (Δ : LifeCtx) : Ctx VTy → ETree → Shape → Prop where
   | leaf {Γ e A} : CDerives Δ Γ e (.val A) → RecArgs Δ Γ (.leaf e) (.leaf A)
-  | node {Γ Γ₁ Γ₂ t₁ t₂ s₁ s₂} : Ctx.Split Γ Γ₁ Γ₂ → RecArgs Δ Γ₁ t₁ s₁ →
+  | node {Γ Γ₁ Γ₂ t₁ t₂ s₁ s₂} : Ctx.SplitP Γ Γ₁ Γ₂ → RecArgs Δ Γ₁ t₁ s₁ →
       RecArgs Δ Γ₂ t₂ s₂ → RecArgs Δ Γ (.node t₁ t₂) (.node s₁ s₂)
 
 /-- Record introduction.  `[spec §5]` -/
@@ -259,7 +259,7 @@ def recLet : Shape → Expr → Expr → Expr
 
 /-- Record elimination, at a computation type.  `[spec §5]` -/
 theorem recE {Δ : LifeCtx} {C : CTy} :
-    ∀ (σ : Shape) {Γ Γp Γb : Ctx VTy} {e body : Expr}, Ctx.Split Γ Γp Γb →
+    ∀ (σ : Shape) {Γ Γp Γb : Ctx VTy} {e body : Expr}, Ctx.SplitP Γ Γp Γb →
       CDerives Δ Γp e (.val σ.valTy) → CDerives Δ (recCtx σ ++ Γb) body (.comp C) →
       CDerives Δ Γ (recLet σ e body) (.comp C)
   | .leaf _, _, _, _, _, _, hs, he, hb => .bind hs (.ret he) hb
@@ -270,12 +270,12 @@ theorem recE {Δ : LifeCtx} {C : CTy} :
       have hb' : CDerives Δ (recCtx s₁ ++ (recCtx s₂ ++ ⟨s₂.valTy, false⟩ :: ⟨s₁.valTy, false⟩ :: Γb))
           body (.comp C) := by simpa [recCtx, List.append_assoc] using hb
       exact .tensorE hs he
-        (recE s₂ (.left (.right (split_kill Γb))) (.var (.here (.cons (kill_dead Γb))))
-          (recE s₁ (split_append_right (recCtx s₂) (.dead (.left (split_kill Γb)))) (.var hv) hb'))
+        (recE s₂ (.left (.right (split_kill Γb))) (.var (.here (.cons (kill_dead Γb).toP)))
+          (recE s₁ (split_append_right (recCtx s₂) (.dead (.left (split_kill Γb)))).toP (.var hv.toP) hb'))
 
 /-- Record elimination, at a value type. -/
 theorem recEV {Δ : LifeCtx} {T : VTy} (σ : Shape) {Γ Γp Γb : Ctx VTy} {e body : Expr}
-    (hs : Ctx.Split Γ Γp Γb) (he : CDerives Δ Γp e (.val σ.valTy))
+    (hs : Ctx.SplitP Γ Γp Γb) (he : CDerives Δ Γp e (.val σ.valTy))
     (hb : CDerives Δ (recCtx σ ++ Γb) body (.val T)) :
     CDerives Δ Γ (recLet σ e body) (.val T) :=
   .ofRet (recE σ hs he (.ret hb))
@@ -423,15 +423,15 @@ inductive Branches (Δ : LifeCtx) (C : CTy) : Ctx VTy → Shape → ETree → Pr
 /-- Variant elimination.  `[spec §5]` -/
 theorem vcase_wf {Δ : LifeCtx} {C : CTy} {Γb : Ctx VTy} {σ : Shape} {t : ETree}
     (hB : Branches Δ C Γb σ t) :
-    ∀ {Γ Γs : Ctx VTy} {e : Expr}, Ctx.Split Γ Γs Γb → CDerives Δ Γs e (.val σ.sumTy) →
+    ∀ {Γ Γs : Ctx VTy} {e : Expr}, Ctx.SplitP Γ Γs Γb → CDerives Δ Γs e (.val σ.sumTy) →
       CDerives Δ Γ (vcase e t) (.comp C) := by
   induction hB with
   | leaf hb => intro Γ Γs e hs he; exact .bind hs (.ret he) hb
   | @node Γb s₁ s₂ t₁ t₂ _ _ ih₁ ih₂ =>
       intro Γ Γs e hs he
       exact .sumE hs he
-        (ih₁ (.left (split_kill Γb)) (.var (.here (kill_dead Γb))))
-        (ih₂ (.left (split_kill Γb)) (.var (.here (kill_dead Γb))))
+        (ih₁ (.left (split_kill Γb)) (.var (.here (kill_dead Γb).toP)))
+        (ih₂ (.left (split_kill Γb)) (.var (.here (kill_dead Γb).toP)))
 
 /-! ### Reading a field through an immutable borrow -/
 
@@ -461,7 +461,7 @@ theorem loadField_wf {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {σ : Sha
         ⟨.unit, false⟩ :: kill Γ) body (.val (.box (.var y) B))) :
     CDerives Δ Γ (loadField σ p y e body) (.val B) := by
   have kd := kill_dead Γ
-  refine .lolliE (split_kill Γ) ?_ (.lolliE (split_kill' Γ) he (.withload y kd hy hf₁ hf₂))
+  refine .lolliE (split_kill Γ).toP ?_ (.lolliE (split_kill' Γ).toP he (.withload y kd.toP hy hf₁ hf₂))
   refine .thunkV rfl (allI_fresh (S := .unit) hΔ hy kd (.ret (.lamV ?_)))
   refine .eletV (.left (.dead (deadSplit kd))) ?_ hb
   refine getAt_wf _ p (Shape.get?_map _ σ p hp) haff ?_
@@ -485,7 +485,7 @@ theorem loadCase_wf {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {σ : Shap
       (σ.map (VTy.immReborrow (.var y))) t) :
     CDerives Δ Γ (loadCase e t) (.val B) := by
   have kd := kill_dead Γ
-  refine .lolliE (split_kill Γ) ?_ (.lolliE (split_kill' Γ) he (.withload y kd hy hf₁ hf₂))
+  refine .lolliE (split_kill Γ).toP ?_ (.lolliE (split_kill' Γ).toP he (.withload y kd.toP hy hf₁ hf₂))
   refine .thunkV rfl (allI_fresh (S := .unit) hΔ hy kd (.ret (.thunkV rfl (.lam ?_))))
   refine vcase_wf hB (.left (.dead (deadSplit kd))) ?_
   rw [← immReborrow_sumTy]
@@ -544,7 +544,7 @@ theorem swapField_wf {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {σ : Sha
     (hg : ∀ {Γ : Ctx VTy}, Ctx.Dead Γ → CDerives Δ Γ g (.val (.lolli A (.tensor A B)))) :
     CDerives Δ Γ (swapField σ p m g) (.val (.tensor (.mut a σ.valTy) B)) :=
   .lolliE (split_kill Γ) (modAt_wf σ p hp hg (kill_dead Γ))
-    (.lolliE (split_kill' Γ) hm (.withswap (kill_dead Γ)))
+    (.lolliE (split_kill' Γ).toP hm (.withswap (kill_dead Γ).toP))
 
 /-! ### Soundness: the Fundamental Property, unchanged -/
 

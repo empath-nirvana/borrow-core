@@ -98,12 +98,12 @@ theorem callbackW {body : Expr} {x : LifeVar} {A B : VTy} (hΔ : Δ.Ok) (hx : Δ
 /-- `Γ` consumed. -/
 syntax "cdead" : tactic
 macro_rules
-  | `(tactic| cdead) => `(tactic| first | exact Ctx.Dead.nil | assumption | apply kill_dead | (apply Ctx.Dead.cons; cdead) | exact (part_dead _ (by cdead)).1 | exact (part_dead _ (by cdead)).2)
+  | `(tactic| cdead) => `(tactic| first | exact Ctx.Dead.nil | assumption | apply kill_dead | (apply Ctx.Dead.cons; cdead) | exact (part_dead _ (by cdead)).1 | exact (part_dead _ (by cdead)).2 | exact Ctx.Dead.toP (by cdead))
 
 /-- `Γ = x : A` at the goal's index. -/
 syntax "csolo" : tactic
 macro_rules
-  | `(tactic| csolo) => `(tactic| first | (apply Ctx.Solo.here; cdead) | (apply Ctx.Solo.there; csolo))
+  | `(tactic| csolo) => `(tactic| first | (apply Ctx.Solo.here; cdead) | (apply Ctx.Solo.there; csolo) | exact Ctx.Solo.toP (by csolo))
 
 /-! ### Side conditions on concrete contexts -/
 

@@ -354,10 +354,10 @@ theorem hOSpec_all {F : FShape} (hF : F.WF) (hG : F.Guarded) {R : VTy} {δ : LSu
 /-- **The owned fold is sound.**  `foldOwn : !U(A′_R ⊸ F R) ⊸ !U(μX. T ⊸ F R)` at every `T`
 of the class `FShape` and every `R`. -/
 theorem foldOwn_compatX {Δ : LifeCtx} {Γ : Ctx VTy} (F : FShape) (hF : F.WF) (hG : F.Guarded)
-    (R : VTy) (hΓ : Ctx.Dead Γ) :
+    (R : VTy) (hΓ : Ctx.DeadP Γ) :
     SemV Δ Γ (.val (foldOwnV F)) (.lolli (algOTy F R) (foldOTy F R)) := by
   intro δ γ ls ρ _ hg₀
-  have hρ : ρ = PMap.empty := gSepC_dead hΓ (gDenC_iff.mp hg₀).2
+  have hρ : ρ = PMap.empty := gSepC_deadP hΓ (gDenC_iff.mp hg₀).2
   subst hρ
   rw [substAll_closed (foldOwnV_closed F)]
   refine wpTS_val _ _ _ _ ?_

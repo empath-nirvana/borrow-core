@@ -621,11 +621,11 @@ theorem foldLam_subst (F : FShape) (g w : Val) :
 guarded `X`, under `⊗`/`⊕`), at a result type `R` that outlives every lifetime, with `'y` free
 in neither `μX. T` nor `R`. -/
 theorem foldImm_compatX {Δ : LifeCtx} {Γ : Ctx VTy} (F : FShape) (hF : F.WF) (hG : F.Guarded)
-    (y : LifeVar) (c : Lifetime.Life) (R : VTy) (hΓ : Ctx.Dead Γ)
+    (y : LifeVar) (c : Lifetime.Life) (R : VTy) (hΓ : Ctx.DeadP Γ)
     (hyM : ¬ VFree y (.mu F.ty)) (hyR : ¬ VFree y R) (hR : ∀ Δ a, VOutlives Δ a R) :
     SemV Δ Γ (.val (foldImmV F)) (.lolli (algTy F y R) (foldTy F y c R)) := by
   intro δ γ ls ρ _ hg₀
-  have hρ : ρ = PMap.empty := gSepC_dead hΓ (gDenC_iff.mp hg₀).2
+  have hρ : ρ = PMap.empty := gSepC_deadP hΓ (gDenC_iff.mp hg₀).2
   subst hρ
   rw [substAll_closed (foldImmV_closed F)]
   refine wpTS_val _ _ _ _ ?_

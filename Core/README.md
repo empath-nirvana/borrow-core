@@ -35,6 +35,12 @@ three call-by-value forms (`lolliE`, `allEV`, `ofRet`), `roll`/`unroll`, the fol
     fixD    : !U(S ⊸ F(A ⊕ S) & F 1) ⊸ !U(S ⊸ D A)
     unfoldS : !U(S ⊸ F(A ⊗ S) & F 1) ⊸ !U(S ⊸ Str A)
 
+Its context premises are `Ctx.SplitP`, `Ctx.DeadP` and `Ctx.SoloP` (`Persistent.lean`,
+`[spec §10]`), which extend the paper's `Ctx.Split`, `Ctx.Dead` and `Ctx.Solo`: a live slot of
+persistent type (`VTy.persistent`: `1`, `0`, `Unk`, `!A`, and `⊗`, `⊕`, `[@a]`, `μ` over
+persistent types) may go to both sides of a split and may be dropped at a leaf. The relation
+holds such a value only at `∅` (`vP_empty_of_persistent`).
+
 ### Theorems
 
 - **Fundamental Property.** `fundamentalC : CDerives Δ Γ e j → SemJ Δ Γ e j`, by induction

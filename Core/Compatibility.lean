@@ -33,6 +33,7 @@ import Core.Relation
 import Core.RelationFacts
 import Core.World
 import Core.Wp
+import Core.Persistent
 
 /-!
 # Core — Compatibility  `[spec §3]`
@@ -77,80 +78,12 @@ theorem gDenC_mk {ls : List SRec} {δ : LSub} {Γ : Ctx VTy} {γ : List Val} {ρ
     (hlen : Ctx.LiveWithin Γ γ) (hg : gSepC ls δ Γ γ ρ) : gDenC ls δ Γ γ ρ :=
   gDenC_iff.mpr ⟨hlen, hg⟩
 
-/-- A context with no live slot contributes nothing (`gSep_dead`). -/
-theorem gSepC_dead {ls : List SRec} {δ : LSub} : ∀ {Γ : Ctx VTy}, Ctx.Dead Γ →
-    ∀ {γ : List Val} {ρ : WRes}, gSepC ls δ Γ γ ρ → ρ = PMap.empty := by
-  intro Γ hd
-  induction hd with
-  | nil => intro γ ρ h; exact h.1
-  | cons _ ih =>
-      intro γ ρ h
-      cases γ with
-      | nil => exact h.1
-      | cons v γ' => exact ih (γ := γ') h
-
-/-- `ID`'s context (`gSep_solo`). -/
-theorem gSepC_solo {ls : List SRec} {δ : LSub} : ∀ {Γ : Ctx VTy} {i : Nat} {T : VTy},
-    Ctx.Solo Γ i T → ∀ {γ : List Val} {ρ : WRes}, i < γ.length → gSepC ls δ Γ γ ρ →
-      ∃ v, γ[i]? = some v ∧ vP T ls δ v ρ := by
-  intro Γ i T hs
-  induction hs with
-  | @here T Γ' hdead =>
-      intro γ ρ hlen hg
-      cases γ with
-      | nil => simp at hlen
-      | cons v γ' =>
-          obtain ⟨ρ₁, ρ₂, hc, hv, hrest⟩ := hg
-          rw [gSepC_dead hdead hrest] at hc
-          rw [ResU.CompS.functional hc (ResU.comp_empty_right ρ₁)]
-          exact ⟨v, rfl, hv⟩
-  | @there S T Γ' i' _ ih =>
-      intro γ ρ hlen hg
-      cases γ with
-      | nil => simp at hlen
-      | cons v γ' =>
-          obtain ⟨w, hw, hv⟩ := ih (γ := γ') (by simpa using hlen) hg
-          exact ⟨w, by simpa using hw, hv⟩
-
-/-- `Γ = Γ₁, Γ₂` splits the resource (`gSep_split`). -/
-theorem gSepC_split {ls : List SRec} {δ : LSub} : ∀ {Γ Γ₁ Γ₂ : Ctx VTy}, Ctx.Split Γ Γ₁ Γ₂ →
-    ∀ {γ : List Val} {ρ : WRes}, gSepC ls δ Γ γ ρ →
-      (gSepC ls δ Γ₁ γ ⋆ gSepC ls δ Γ₂ γ) ρ := by
-  intro Γ Γ₁ Γ₂ hsp
-  induction hsp with
-  | nil =>
-      intro γ ρ h
-      refine ⟨ρ, PMap.empty, ResU.comp_empty_right ρ, h, ?_⟩
-      cases γ <;> exact ⟨rfl, trivial⟩
-  | @left Γ' Γ₁' Γ₂' T _ ih =>
-      intro γ ρ h
-      cases γ with
-      | nil => exact ⟨ρ, PMap.empty, ResU.comp_empty_right ρ, h, ⟨rfl, trivial⟩⟩
-      | cons v γ' =>
-          obtain ⟨ρ₁, ρ₂, hc, hv, hrest⟩ := h
-          obtain ⟨σ₁, σ₂, hcσ, h₁, h₂⟩ := ih (γ := γ') hrest
-          obtain ⟨x, hx, hxρ⟩ := compS_reassoc' hcσ hc
-          exact ⟨x, σ₂, hxρ, ⟨ρ₁, σ₁, hx, hv, h₁⟩, h₂⟩
-  | @right Γ' Γ₁' Γ₂' T _ ih =>
-      intro γ ρ h
-      cases γ with
-      | nil => exact ⟨ρ, PMap.empty, ResU.comp_empty_right ρ, h, ⟨rfl, trivial⟩⟩
-      | cons v γ' =>
-          obtain ⟨ρ₁, ρ₂, hc, hv, hrest⟩ := h
-          obtain ⟨σ₁, σ₂, hcσ, h₁, h₂⟩ := ih (γ := γ') hrest
-          obtain ⟨x, hx, hxρ⟩ := compS_lcomm hcσ hc
-          exact ⟨σ₁, x, hxρ, h₁, ⟨ρ₁, σ₂, hx, hv, h₂⟩⟩
-  | @dead Γ' Γ₁' Γ₂' T _ ih =>
-      intro γ ρ h
-      cases γ with
-      | nil => exact ⟨ρ, PMap.empty, ResU.comp_empty_right ρ, h, ⟨rfl, trivial⟩⟩
-      | cons v γ' => exact ih (γ := γ') h
-
-theorem gDenC_split {ls : List SRec} {δ : LSub} {Γ Γ₁ Γ₂ : Ctx VTy} (hsp : Ctx.Split Γ Γ₁ Γ₂)
+/-- `Γ = Γ₁, Γ₂` splits the context relation; a persistent slot goes to both halves.  `[spec §10]` -/
+theorem gDenC_split {ls : List SRec} {δ : LSub} {Γ Γ₁ Γ₂ : Ctx VTy} (hsp : Ctx.SplitP Γ Γ₁ Γ₂)
     {γ : List Val} {ρ : WRes} (hg : gDenC ls δ Γ γ ρ) :
     (gDenC ls δ Γ₁ γ ⋆ gDenC ls δ Γ₂ γ) ρ := by
   obtain ⟨hlen, hs⟩ := gDenC_iff.mp hg
-  obtain ⟨ρ₁, ρ₂, hc, h₁, h₂⟩ := gSepC_split hsp hs
+  obtain ⟨ρ₁, ρ₂, hc, h₁, h₂⟩ := gSepC_splitP hsp hs
   exact ⟨ρ₁, ρ₂, hc, gDenC_mk (hsp.liveWithin hlen).1 h₁, gDenC_mk (hsp.liveWithin hlen).2 h₂⟩
 
 /-- `wpTS` is monotone in its postcondition. -/
@@ -315,11 +248,11 @@ The library's `withload_compat`, step for step, with no `hesc`.  "Apply theorem 
 at the loaded cell.  `[restricted: `hfree₁` (6.132's *"if `'a` not free in `T`"*) and `hfree₂`
 (p. 48's *"because `'b` does not occur free in `T₂`"*), as `withload_compat`]` -/
 theorem withload_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {T₁ T₂ : VTy}
-    (x : LifeVar) (hΓ : Ctx.Dead Γ) (_hx : Δ.find? x = none)
+    (x : LifeVar) (hΓ : Ctx.DeadP Γ) (_hx : Δ.find? x = none)
     (hfree₁ : ¬ VFree x T₁) (hfree₂ : ¬ VFree x T₂) :
     SemV Δ Γ withload (axWithloadTy a x Δ.meetOfDom T₁ T₂) := by
   intro δ γ ls ρ hδ hg
-  have hρ : ρ = PMap.empty := gSepC_dead hΓ (gDenC_iff.mp hg).2
+  have hρ : ρ = PMap.empty := gSepC_deadP hΓ (gDenC_iff.mp hg).2
   subst hρ
   show wpTS ls withload _ _
   refine wpTS_val _ _ _ _ ?_
@@ -424,10 +357,10 @@ theorem withload_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {T₁
 /-! ### Lemma 6.152 (id-compat) at the typed world; record in `Paper/S6_8_FundamentalProperty/Lemmas.lean` -/
 /-- `[TR]` Lemma 6.152 (`id-compat`) at `SemV`.  `[as printed]`. -/
 theorem id_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {i : Nat} {T : VTy}
-    (h : Ctx.Solo Γ i T) : SemV Δ Γ (.var i) T := by
+    (h : Ctx.SoloP Γ i T) : SemV Δ Γ (.var i) T := by
   intro δ γ ls ρ _ hg
   obtain ⟨hlen, hs⟩ := gDenC_iff.mp hg
-  obtain ⟨v, hv, hval⟩ := gSepC_solo h (h.lt_of_liveWithin hlen) hs
+  obtain ⟨v, hv, hval⟩ := gSepC_soloP h (h.lt_of_liveWithin hlen) hs
   have he : substAll γ (.var i) = .val v := by
     show Expr.psub 0 γ (.var i) = _
     simp only [Expr.psub, if_neg (Nat.not_lt_zero i), Nat.sub_zero, hv, Val.shift_zero]
@@ -436,17 +369,17 @@ theorem id_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {i : Nat} {T : VTy}
 
 /-! ### Lemma 6.153 (1I-compat) at the typed world; record in `Paper/S6_8_FundamentalProperty/Lemmas.lean` -/
 /-- `[TR]` Lemma 6.153 (`1I-compat`) at `SemV`.  `[as printed]`. -/
-theorem unitI_compatX {Δ : LifeCtx} {Γ : Ctx VTy} (h : Ctx.Dead Γ) :
+theorem unitI_compatX {Δ : LifeCtx} {Γ : Ctx VTy} (h : Ctx.DeadP Γ) :
     SemV Δ Γ (.val .unit) .unit := by
   intro δ γ ls ρ _ hg
   obtain ⟨-, hs⟩ := gDenC_iff.mp hg
-  rw [gSepC_dead h hs]
+  rw [gSepC_deadP h hs]
   exact wpTS_val ls Val.unit _ _ ⟨rfl, rfl⟩
 
 /-! ### Lemma 6.154 (1E-compat) at the typed world; record in `Paper/S6_8_FundamentalProperty/Lemmas.lean` -/
 /-- `[TR]` Lemma 6.154 (`1E-compat`) at `SemV`.  `[as printed]`. -/
 theorem unitE_compatX {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {e₁ e₂ : Expr} {T : VTy}
-    (hsp : Ctx.Split Γ Γ₁ Γ₂) (h₁ : SemV Δ Γ₁ e₁ .unit) (h₂ : SemV Δ Γ₂ e₂ T) :
+    (hsp : Ctx.SplitP Γ Γ₁ Γ₂) (h₁ : SemV Δ Γ₁ e₁ .unit) (h₂ : SemV Δ Γ₂ e₂ T) :
     SemV Δ Γ (.seq e₁ e₂) T := by
   intro δ γ ls ρ hδ hg
   obtain ⟨ρ₁, ρ₂, hc, hg₁, hg₂⟩ := gDenC_split hsp hg
@@ -460,7 +393,7 @@ theorem unitE_compatX {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {e₁ e₂ : Exp
 /-! ### Lemma 6.155 (⊗I-compat) at the typed world; record in `Paper/S6_8_FundamentalProperty/Lemmas.lean` -/
 /-- `[TR]` Lemma 6.155 (`⊗I-compat`) at `SemV`.  `[as printed]`. -/
 theorem tensorI_compatX {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {e₁ e₂ : Expr} {T₁ T₂ : VTy}
-    (hsp : Ctx.Split Γ Γ₁ Γ₂) (h₁ : SemV Δ Γ₁ e₁ T₁) (h₂ : SemV Δ Γ₂ e₂ T₂) :
+    (hsp : Ctx.SplitP Γ Γ₁ Γ₂) (h₁ : SemV Δ Γ₁ e₁ T₁) (h₂ : SemV Δ Γ₂ e₂ T₂) :
     SemV Δ Γ (.pair e₁ e₂) (.tensor T₁ T₂) := by
   intro δ γ ls ρ hδ hg
   obtain ⟨ρ₁, ρ₂, hc, hg₁, hg₂⟩ := gDenC_split hsp hg
@@ -479,7 +412,7 @@ theorem tensorI_compatX {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {e₁ e₂ : E
 /-! ### Lemma 6.156 (⊗E-compat) at the typed world; record in `Paper/S6_8_FundamentalProperty/Lemmas.lean` -/
 /-- `[TR]` Lemma 6.156 (`⊗E-compat`) at `SemV`.  `[as printed]`. -/
 theorem tensorE_compatX {Δ : LifeCtx} {Γ Γp Γb : Ctx VTy} {ep eb : Expr}
-    {T₁ T₂ T : VTy} (hsp : Ctx.Split Γ Γp Γb)
+    {T₁ T₂ T : VTy} (hsp : Ctx.SplitP Γ Γp Γb)
     (h₁ : SemV Δ Γp ep (.tensor T₁ T₂))
     (h₂ : SemV Δ (⟨T₂, true⟩ :: ⟨T₁, true⟩ :: Γb) eb T) :
     SemV Δ Γ (.letpair ep eb) T := by
@@ -524,7 +457,7 @@ theorem sumI₂_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {T₁ T₂ : VT
 /-! ### Lemma 6.158 (⊕E-compat) at the typed world; record in `Paper/S6_8_FundamentalProperty/Lemmas.lean` -/
 /-- `[TR]` Lemma 6.158 (`⊕E-compat`) at `SemV`.  `[as printed]`. -/
 theorem sumE_compatX {Δ : LifeCtx} {Γ Γs Γb : Ctx VTy} {es e₁ e₂ : Expr}
-    {T₁ T₂ T : VTy} (hsp : Ctx.Split Γ Γs Γb)
+    {T₁ T₂ T : VTy} (hsp : Ctx.SplitP Γ Γs Γb)
     (h₀ : SemV Δ Γs es (.sum T₁ T₂))
     (hb₁ : SemV Δ (⟨T₁, true⟩ :: Γb) e₁ T)
     (hb₂ : SemV Δ (⟨T₂, true⟩ :: Γb) e₂ T) :
@@ -575,7 +508,7 @@ theorem lolliI_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {body : Expr} {T₁ T₂ : 
 /-! ### Lemma 6.160 (⊸E-compat) at the typed world; record in `Paper/S6_8_FundamentalProperty/Lemmas.lean` -/
 /-- `[TR]` Lemma 6.160 (`⊸E-compat`) at `SemV`.  `[as printed]`. -/
 theorem lolliE_compatX {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {f arg : Expr} {T₁ T₂ : VTy}
-    (hsp : Ctx.Split Γ Γ₁ Γ₂) (ha : SemV Δ Γ₁ arg T₁) (hf : SemV Δ Γ₂ f (.lolli T₁ T₂)) :
+    (hsp : Ctx.SplitP Γ Γ₁ Γ₂) (ha : SemV Δ Γ₁ arg T₁) (hf : SemV Δ Γ₂ f (.lolli T₁ T₂)) :
     SemV Δ Γ (.app f arg) T₂ := by
   intro δ γ ls ρ hδ hg
   obtain ⟨ρ₁, ρ₂, hc, hg₁, hg₂⟩ := gDenC_split hsp hg
@@ -601,10 +534,10 @@ theorem boxE_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {a : Lifetime.Life
 
 /-! ### Lemma 6.166 (free-compat) at the typed world; record in `Paper/S6_8_FundamentalProperty/Lemmas.lean` -/
 /-- `[TR]` Lemma 6.166 (`free-compat`) at `SemV`.  `[as printed]`. -/
-theorem free_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {T : VTy} (hΓ : Ctx.Dead Γ) :
+theorem free_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {T : VTy} (hΓ : Ctx.DeadP Γ) :
     SemV Δ Γ (.val (.prim .free)) (.lolli (.ref T) T) := by
   intro δ γ ls ρ _ hg
-  have hρ : ρ = PMap.empty := gSepC_dead hΓ (gDenC_iff.mp hg).2
+  have hρ : ρ = PMap.empty := gSepC_deadP hΓ (gDenC_iff.mp hg).2
   subst hρ
   refine wpTS_val ls (Val.prim .free) _ _ ?_
   intro ls' _ v ρ₁ ρ₂ hv hcomp
@@ -641,10 +574,10 @@ theorem mutSub_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {a b : Lifetime.
 
 /-! ### Lemma 6.165 (alloc-compat) at the typed world; record in `Paper/S6_8_FundamentalProperty/Lemmas.lean` -/
 /-- `[TR]` Lemma 6.165 (`alloc-compat`) at `SemV`.  `[as printed]`. -/
-theorem alloc_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {T : VTy} (hΓ : Ctx.Dead Γ) :
+theorem alloc_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {T : VTy} (hΓ : Ctx.DeadP Γ) :
     SemV Δ Γ (.val (.prim .alloc)) (.lolli T (.ref T)) := by
   intro δ γ ls ρ _ hg
-  have hρ : ρ = PMap.empty := gSepC_dead hΓ (gDenC_iff.mp hg).2
+  have hρ : ρ = PMap.empty := gSepC_deadP hΓ (gDenC_iff.mp hg).2
   subst hρ
   refine wpTS_val ls (Val.prim .alloc) _ _ ?_
   intro ls' _ v ρ₁ ρ₂ hv hcomp
@@ -656,10 +589,10 @@ theorem alloc_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {T : VTy} (hΓ : Ctx.Dead Γ
 /-! ### Lemma 6.169 (swap-compat) at the typed world; record in `Paper/S6_8_FundamentalProperty/Lemmas.lean` -/
 /-- `[TR]` Lemma 6.169 (`swap-compat`) at `SemV`: the library's `swap_compat`, step for
 step.  `[as printed]`. -/
-theorem swap_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {T₁ T₂ : VTy} (hΓ : Ctx.Dead Γ) :
+theorem swap_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {T₁ T₂ : VTy} (hΓ : Ctx.DeadP Γ) :
     SemV Δ Γ swap (axSwapTy T₁ T₂) := by
   intro δ γ ls ρ _ hg
-  have hρ : ρ = PMap.empty := gSepC_dead hΓ (gDenC_iff.mp hg).2
+  have hρ : ρ = PMap.empty := gSepC_deadP hΓ (gDenC_iff.mp hg).2
   subst hρ
   show wpTS ls swap _ _
   refine wpTS_val _ _ _ _ ?_
@@ -716,9 +649,9 @@ theorem swap_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {T₁ T₂ : VTy} (hΓ : Ctx.
 /-- `[TR]` Lemma 6.170 (`copy-compat`) at `SemV`: `I-Dup` at the stratified cell, and
 `CohE` copied with the value.  `[as printed]`. -/
 theorem copy_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {T : VTy}
-    (hΓ : Ctx.Dead Γ) : SemV Δ Γ copy (axCopyTy a T) := by
+    (hΓ : Ctx.DeadP Γ) : SemV Δ Γ copy (axCopyTy a T) := by
   intro δ γ ls ρ _ hg
-  have hρ : ρ = PMap.empty := gSepC_dead hΓ (gDenC_iff.mp hg).2
+  have hρ : ρ = PMap.empty := gSepC_deadP hΓ (gDenC_iff.mp hg).2
   subst hρ
   show wpTS ls copy _ _
   refine wpTS_val _ _ _ _ ?_
@@ -738,9 +671,9 @@ theorem copy_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {T : VTy}
 /-! ### Lemma 6.171 (forget-compat) at the typed world; record in `Paper/S6_8_FundamentalProperty/Lemmas.lean` -/
 /-- `[TR]` Lemma 6.171 (`forget-compat`) at `SemV`, `B = Imm @a T`.  `[as printed]`. -/
 theorem forgetImm_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {T : VTy}
-    (hΓ : Ctx.Dead Γ) : SemV Δ Γ forget (axForgetImmTy a T) := by
+    (hΓ : Ctx.DeadP Γ) : SemV Δ Γ forget (axForgetImmTy a T) := by
   intro δ γ ls ρ _ hg
-  have hρ : ρ = PMap.empty := gSepC_dead hΓ (gDenC_iff.mp hg).2
+  have hρ : ρ = PMap.empty := gSepC_deadP hΓ (gDenC_iff.mp hg).2
   subst hρ
   show wpTS ls forget _ _
   refine wpTS_val _ _ _ _ ?_
@@ -757,9 +690,9 @@ theorem forgetImm_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {T :
 
 /-- `[TR]` Lemma 6.171 (`forget-compat`) at `SemV`, `B = Mut @a T`.  `[as printed]`. -/
 theorem forgetMut_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {T : VTy}
-    (hΓ : Ctx.Dead Γ) : SemV Δ Γ forget (axForgetMutTy a T) := by
+    (hΓ : Ctx.DeadP Γ) : SemV Δ Γ forget (axForgetMutTy a T) := by
   intro δ γ ls ρ _ hg
-  have hρ : ρ = PMap.empty := gSepC_dead hΓ (gDenC_iff.mp hg).2
+  have hρ : ρ = PMap.empty := gSepC_deadP hΓ (gDenC_iff.mp hg).2
   subst hρ
   show wpTS ls forget _ _
   refine wpTS_val _ _ _ _ ?_
@@ -776,9 +709,9 @@ theorem forgetMut_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {T :
 
 /-- `[TR]` Lemma 6.171 (`forget-compat`) at `SemV`, `B = Unk`.  `[as printed]`. -/
 theorem forgetUnk_compatX {Δ : LifeCtx} {Γ : Ctx VTy}
-    (hΓ : Ctx.Dead Γ) : SemV Δ Γ forget axForgetUnkTy := by
+    (hΓ : Ctx.DeadP Γ) : SemV Δ Γ forget axForgetUnkTy := by
   intro δ γ ls ρ _ hg
-  have hρ : ρ = PMap.empty := gSepC_dead hΓ (gDenC_iff.mp hg).2
+  have hρ : ρ = PMap.empty := gSepC_deadP hΓ (gDenC_iff.mp hg).2
   subst hρ
   show wpTS ls forget _ _
   refine wpTS_val _ _ _ _ ?_
@@ -945,10 +878,10 @@ theorem bangE_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {T : VTy}
   exact wpTS_mono (fun _ _ _ hb => hb.2) ρ (h δ γ ls ρ hδ hg)
 
 /-- `copy` at `!T`: both copies are the original, at `∅`. -/
-theorem copyBang_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {T : VTy} (hΓ : Ctx.Dead Γ) :
+theorem copyBang_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {T : VTy} (hΓ : Ctx.DeadP Γ) :
     SemV Δ Γ copy (.lolli (.bang T) (.tensor (.bang T) (.bang T))) := by
   intro δ γ ls ρ _ hg
-  have hρ : ρ = PMap.empty := gSepC_dead hΓ (gDenC_iff.mp hg).2
+  have hρ : ρ = PMap.empty := gSepC_deadP hΓ (gDenC_iff.mp hg).2
   subst hρ
   show wpTS ls copy _ _
   refine wpTS_val _ _ _ _ ?_
@@ -964,10 +897,10 @@ theorem copyBang_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {T : VTy} (hΓ : Ctx.Dead
   exact ⟨v, v, pure_sep_mk rfl ⟨PMap.empty, PMap.empty, ResU.comp_empty_right _, hv, hv⟩⟩
 
 /-- `forget` at `!T`: nothing to release. -/
-theorem forgetBang_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {T : VTy} (hΓ : Ctx.Dead Γ) :
+theorem forgetBang_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {T : VTy} (hΓ : Ctx.DeadP Γ) :
     SemV Δ Γ forget (.lolli (.bang T) .unit) := by
   intro δ γ ls ρ _ hg
-  have hρ : ρ = PMap.empty := gSepC_dead hΓ (gDenC_iff.mp hg).2
+  have hρ : ρ = PMap.empty := gSepC_deadP hΓ (gDenC_iff.mp hg).2
   subst hρ
   show wpTS ls forget _ _
   refine wpTS_val _ _ _ _ ?_
@@ -1000,11 +933,11 @@ theorem boxI_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {T : VTy} {a : Lif
 `[restricted: `hfree₁`/`hfree₂`, as `withbor1_compat`; `hsc₁`, `[TR]` p. 2's `Δ ⊢ T₁`,
 which `TW.immFrame` reads as `AdmWf`]` -/
 theorem withbor1_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {T₁ T₂ : VTy} (x : LifeVar)
-    (hΓ : Ctx.Dead Γ) (_hx : Δ.find? x = none) (hsc₁ : VScoped Δ T₁)
+    (hΓ : Ctx.DeadP Γ) (_hx : Δ.find? x = none) (hsc₁ : VScoped Δ T₁)
     (hfree₁ : ¬ VFree x T₁) (hfree₂ : ¬ VFree x T₂) :
     SemV Δ Γ withbor (axWithbor1Ty x Δ.meetOfDom T₁ T₂) := by
   intro δ γ ls ρ hδ hg
-  have hρ : ρ = PMap.empty := gSepC_dead hΓ (gDenC_iff.mp hg).2
+  have hρ : ρ = PMap.empty := gSepC_deadP hΓ (gDenC_iff.mp hg).2
   subst hρ
   show wpTS ls withbor _ _
   refine wpTS_val _ _ _ _ ?_
@@ -1090,12 +1023,12 @@ theorem withbor1_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {T₁ T₂ : VTy} (x : Li
 at `vC` at the side condition's `@bδ`, as printed.
 `[restricted: `hfree₁`/`hfree₂`, as `withbor2_compat`]` -/
 theorem withbor2_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {T₁ T₂ : VTy} (x : LifeVar)
-    (hΓ : Ctx.Dead Γ) (_hx : Δ.find? x = none)
+    (hΓ : Ctx.DeadP Γ) (_hx : Δ.find? x = none)
     (hside : ∃ b, Δ.Defines b ∧ VOutlives Δ b T₁)
     (hfree₁ : ¬ VFree x T₁) (hfree₂ : ¬ VFree x T₂) :
     SemV Δ Γ withbor (axWithbor2Ty x Δ.meetOfDom T₁ T₂) := by
   intro δ γ ls ρ hδ hg
-  have hρ : ρ = PMap.empty := gSepC_dead hΓ (gDenC_iff.mp hg).2
+  have hρ : ρ = PMap.empty := gSepC_deadP hΓ (gDenC_iff.mp hg).2
   subst hρ
   show wpTS ls withbor _ _
   refine wpTS_val _ _ _ _ ?_
@@ -1169,11 +1102,11 @@ theorem withbor2_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {T₁ T₂ : VTy} (x : Li
 with its premise read off the borrow in hand.
 `[restricted: `hfree₁`/`hfree₂`, as `withbor3_compat`]` -/
 theorem withbor3_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life}
-    {T₁ T₂ : VTy} (x : LifeVar) (hΓ : Ctx.Dead Γ) (_hx : Δ.find? x = none)
+    {T₁ T₂ : VTy} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (_hx : Δ.find? x = none)
     (hfree₁ : ¬ VFree x T₁) (hfree₂ : ¬ VFree x T₂) :
     SemV Δ Γ withbor (axWithbor3Ty a x Δ.meetOfDom T₁ T₂) := by
   intro δ γ ls ρ hδ hg
-  have hρ : ρ = PMap.empty := gSepC_dead hΓ (gDenC_iff.mp hg).2
+  have hρ : ρ = PMap.empty := gSepC_deadP hΓ (gDenC_iff.mp hg).2
   subst hρ
   show wpTS ls withbor _ _
   refine wpTS_val _ _ _ _ ?_
@@ -1254,10 +1187,10 @@ theorem withbor3_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life}
 /-! ### Lemma 6.176 (withswap-compat) at the typed world; record in `Paper/S6_8_FundamentalProperty/Lemmas.lean` -/
 /-- `[TR]` Lemma 6.176 (`withswap-compat`, pp. 48–49) at `SemV`.  `[as printed]`. -/
 theorem withswap_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life}
-    {T₁ T₂ : VTy} (hΓ : Ctx.Dead Γ) :
+    {T₁ T₂ : VTy} (hΓ : Ctx.DeadP Γ) :
     SemV Δ Γ withswap (axWithswapTy a T₁ T₂) := by
   intro δ γ ls ρ _ hg
-  have hρ : ρ = PMap.empty := gSepC_dead hΓ (gDenC_iff.mp hg).2
+  have hρ : ρ = PMap.empty := gSepC_deadP hΓ (gDenC_iff.mp hg).2
   subst hρ
   show wpTS ls withswap _ _
   refine wpTS_val _ _ _ _ ?_

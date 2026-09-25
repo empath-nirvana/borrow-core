@@ -70,8 +70,8 @@ theorem clistL_outlives (Δ : LifeCtx) (a : Lifetime.Life) : VOutlives Δ a clis
 /-- `inj₂ (allocS nodeC (n, t))`: a node, allocated as one block. -/
 def consC (n t : Expr) : Expr := .inj₂ (.app (allocS nodeC) (.pair n t))
 
-theorem d_consC {Δ : LifeCtx} {Γ Γ₁ Γ₂ ΓD : Ctx VTy} {n t : Expr} (hs : Ctx.Split Γ Γ₁ Γ₂)
-    (hA : Ctx.Split Γ Γ ΓD) (hD : Ctx.Dead ΓD)
+theorem d_consC {Δ : LifeCtx} {Γ Γ₁ Γ₂ ΓD : Ctx VTy} {n t : Expr} (hs : Ctx.SplitP Γ Γ₁ Γ₂)
+    (hA : Ctx.SplitP Γ Γ ΓD) (hD : Ctx.Dead ΓD)
     (hn : CDerives Δ Γ₁ n (.val natN)) (ht : CDerives Δ Γ₂ t (.val clistL)) :
     CDerives Δ Γ (consC n t) (.val clistL) :=
   .roll (FShape.noMut_ty clistF_WF) (FShape.Cl_ty clistF_WF)
@@ -259,8 +259,8 @@ theorem d_mapCAlg {Δ : LifeCtx} {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
       (.free (.cons (.cons G2)))))
     (.ret (d_consC (.left (.right (.dead (deadSplit G2)))) (.left (.left (.dead (deadSplit G2))))
       (.cons (.cons (.cons G2)))
-      (.roll natBody_noMut natN_closed (.sumI₂ (.var (.here (.cons (.cons G2))))))
-      (.var (.there (.here (.cons G2))))))
+      (.roll natBody_noMut natN_closed (.sumI₂ (.var (.here (.cons (.cons G2.toP))))))
+      (.var (.there (.here (.cons G2.toP))))))
 
 /-! ### The folds, by the rules -/
 

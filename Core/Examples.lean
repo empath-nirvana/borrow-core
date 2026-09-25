@@ -4,7 +4,8 @@ import Paper.Examples.Derivations
 /-!
 # Core — programs, typed in the CBPV judgment and run  `[spec §3]`
 
-* `cImmBorrow` and `cBang`: `experiments/CBPVCore`'s two programs, re-derived in this judgment.
+* `cImmBorrow`: `experiments/CBPVCore`'s program, re-derived in this judgment.
+* `cBang`: a `!` value used twice and dropped, with no `copy` or `forget` (`[spec §10]`).
 * `cRecBorrow`: an immutable borrow of a cell holding a record of methods
   `M = U (F 1 & F 1)`.  The borrower receives `Imm 'a M`, loads through it (`Imm̲ 'b M = Unk`)
   and forgets the view; after the borrow ends the cell is freed and a method is called:
@@ -34,7 +35,7 @@ open BoCa.Lifetime (LSub LifeCtx LifeVar)
 
 /-! ### Context helpers -/
 
-theorem deadSplit {Γ : Ctx VTy} (h : Ctx.Dead Γ) : Ctx.Split Γ Γ Γ := by
+theorem deadSplit {Γ : Ctx VTy} (h : Ctx.Dead Γ) : Ctx.SplitP Γ Γ Γ := by
   induction h with
   | nil => exact .nil
   | cons _ ih => exact .dead ih
@@ -167,32 +168,31 @@ theorem cImmBorrow_runs :
 /-- `U (1 ⊸ F 1)`. -/
 abbrev idTy : VTy := .thunk (.arr .unit (.ret .unit))
 
+/-- `return !(thunk λx. x) to f. f to g₁. g₁ () to r. r; f to g₂. g₂ ()`: `f : !U(1 ⊸ F 1)` is
+used twice with no `copy`, and is dropped at the last call with no `forget`.  `[spec §10]` -/
 def cBang : Expr :=
-  bindE (.val (.lam (.var 0))) (bindE copy (bindE (.app (.var 0) (.var 1))
-    (.letpair (.var 0) (bindE forget (bindE (.app (.var 0) (.var 1))
-      (.seq (.var 0) (bindE (.var 3) (bindE (.val .unit) (.app (.var 1) (.var 0))))))))))
+  bindE (.val (.lam (.var 0))) (bindE (.var 0) (bindE (.val .unit) (bindE (.app (.var 1) (.var 0))
+    (.seq (.var 0) (bindE (.var 3) (bindE (.val .unit) (.app (.var 1) (.var 0))))))))
 
 theorem cBang_derives : CDerives LifeCtx.empty [] cBang (.comp (.ret .unit)) := by
   refine .bind .nil (.ret (.bangThunkV (C := .arr .unit (.ret .unit)) (fun _ hs => by simp at hs) rfl
     (.lam (.ret (.var (.here .nil)))))) ?_
-  refine .bind (.right .nil) (.ret (.copyBang (A := idTy) (.cons .nil))) ?_
-  refine .bind (.left (.left .nil))
-    (.app (.left (.right .nil)) (.force (.here (.cons .nil))) (.there (.here .nil))) ?_
-  refine .tensorE (A := .bang idTy) (B := .bang idTy) (.left (.dead (.dead .nil)))
-    (.var (.here (by repeat constructor))) ?_
-  refine .bind (.right (.right (.dead (.dead (.dead .nil)))))
-    (.ret (.forgetBang (A := idTy) (by repeat constructor))) ?_
-  refine .bind (.left (.left (.right (.dead (.dead (.dead .nil))))))
-    (.app (.left (.right (.dead (.dead (.dead (.dead .nil))))))
-      (.force (.here (by repeat constructor))) (.there (.here (by repeat constructor)))) ?_
-  refine .unitE (.left (.dead (.dead (.right (.dead (.dead (.dead .nil)))))))
-    (.var (.here (by repeat constructor))) ?_
-  refine .bind (.dead (.dead (.dead (.left (.dead (.dead (.dead .nil)))))))
-    (.ret (.bangE (.var (.there (.there (.there (.here (by repeat constructor)))))))) ?_
-  refine .bind (.right (.dead (.dead (.dead (.dead (.dead (.dead (.dead .nil))))))))
-    (.ret (.unitI (by repeat constructor))) ?_
-  exact .app (.right (.left (.dead (.dead (.dead (.dead (.dead (.dead (.dead .nil)))))))))
-    (.force (.there (.here (by repeat constructor)))) (.here (by repeat constructor))
+  -- `f to g₁`: `f` goes to both sides.
+  refine .bind (.dup rfl .nil) (.ret (.bangE (.var (.here .nil)))) ?_
+  refine .bind (.right (.right .nil)) (.ret (.unitI (.cons (.cons .nil)))) ?_
+  refine .bind (.left (.left (.right .nil)))
+    (.app (.right (.left (.dead .nil))) (.force (.there (.here (.cons .nil))))
+      (.here (.cons (.cons .nil)))) ?_
+  refine .unitE (.left (.dead (.dead (.right .nil)))) (.var (.here (.cons (.cons (.cons .nil))))) ?_
+  -- `f to g₂`: `f` goes to both sides again.
+  refine .bind (.dead (.dead (.dead (.dup rfl .nil))))
+    (.ret (.bangE (.var (.there (.there (.there (.here .nil))))))) ?_
+  refine .bind (.right (.dead (.dead (.dead (.right .nil)))))
+    (.ret (.unitI (.cons (.cons (.cons (.cons (.cons .nil))))))) ?_
+  -- `g₂ ()`: `f` is dropped.
+  exact .app (.right (.left (.dead (.dead (.dead (.left .nil))))))
+    (.force (.there (.here (.cons (.cons (.cons (.drop rfl .nil)))))))
+    (.here (.cons (.cons (.cons (.cons (.cons .nil))))))
 
 theorem cBang_runs : BoCa.BoLo.Steps Adequacy.emptyMem cBang Adequacy.emptyMem (.val .unit) :=
   adequacyC cBang_derives

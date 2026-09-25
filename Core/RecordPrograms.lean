@@ -93,7 +93,7 @@ theorem d_freePt {Γ : Ctx VTy} {i : Nat}
       (.val Pt.valTy))
     (hΓ : Ctx.Dead (part (.app free' (.var i)) 0 Γ).2) :
     CDerives LifeCtx.empty Γ (freePt i) (.val .unit) :=
-  recEV Pt (part_split (.app free' (.var i)) 0 Γ) h
+  recEV Pt (part_split (.app free' (.var i)) 0 Γ).toP h
     (seqW (d_dropB (.var (by csolo)) (by cdead))
       (d_dropB (appW (.var (by csolo)) (.free (by cdead))) (by cdead)))
 
@@ -389,7 +389,7 @@ theorem d_bagProg : CDerives LifeCtx.empty [] bagProg (.val .unit) :=
           (by simp [VFree, Shape.valTy, natN, natBody, clistL, FShape.ty])
           (by simp [VFree])))) <|
   seqW (.var (by csolo)) <|
-  recEV Bag (part_split (.app free' (.var 1)) 0 _) (appW (.var (by csolo)) (.free (by cdead)))
+  recEV Bag (part_split (.app free' (.var 1)) 0 _).toP (appW (.var (by csolo)) (.free (by cdead)))
     (seqW (appW (.var (by csolo)) (d_freeNat (by cdead)))
       (appW (.var (by csolo)) (d_freeC (by cdead))))
 

@@ -131,10 +131,10 @@ theorem d_swapBoth {e₁ e₂ dropE : Expr} (hA : ∀ z, ¬ VFree z A) (hAo : �
       [⟨.unit, true⟩, ⟨refs2 A A, true⟩]).2).2 := by cdead
   exact .seqV (.right (.left (deadSplit hr)))
     (.lolliE (.dead (.left (deadSplit hr)))
-      (.lolliE (.dead (.left (deadSplit hr))) (.var (.there (.here hr))) (.free (.cons (.cons hr))))
+      (.lolliE (.dead (.left (deadSplit hr))) (.var (.there (.here hr.toP))) (.free (.cons (.cons hr.toP))))
       (hd (.cons (.cons hr))))
     (.lolliE (.left (.dead (deadSplit hr)))
-      (.lolliE (.left (.dead (deadSplit hr))) (.var (.here (.cons hr))) (.free (.cons (.cons hr))))
+      (.lolliE (.left (.dead (deadSplit hr))) (.var (.here (.cons hr.toP))) (.free (.cons (.cons hr.toP))))
       (hd (.cons (.cons hr))))
 
 end

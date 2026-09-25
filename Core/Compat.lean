@@ -43,23 +43,23 @@ private theorem substAll_var {γ : List Val} {i : Nat} {v : Val} (hv : γ[i]? = 
 /-! ### Values -/
 
 theorem var_compatC {Δ : LifeCtx} {Γ : Ctx VTy} {i : Nat} {A : VTy}
-    (h : Ctx.Solo Γ i A) : SemV Δ Γ (.var i) A := by
+    (h : Ctx.SoloP Γ i A) : SemV Δ Γ (.var i) A := by
   intro δ γ ls ρ _ hg
   obtain ⟨hlen, hs⟩ := gDenC_iff.mp hg
-  obtain ⟨v, hv, hval⟩ := gSepC_solo h (h.lt_of_liveWithin hlen) hs
+  obtain ⟨v, hv, hval⟩ := gSepC_soloP h (h.lt_of_liveWithin hlen) hs
   show wpTS ls _ _ ρ
   rw [substAll_var hv]
   exact wpTS_val ls v _ ρ hval
 
-theorem unitI_compatC {Δ : LifeCtx} {Γ : Ctx VTy} (h : Ctx.Dead Γ) :
+theorem unitI_compatC {Δ : LifeCtx} {Γ : Ctx VTy} (h : Ctx.DeadP Γ) :
     SemV Δ Γ (.val .unit) .unit := by
   intro δ γ ls ρ _ hg
   obtain ⟨-, hs⟩ := gDenC_iff.mp hg
-  rw [gSepC_dead h hs]
+  rw [gSepC_deadP h hs]
   exact wpTS_val ls Val.unit _ _ ⟨rfl, rfl⟩
 
 theorem tensorI_compatC {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {e₁ e₂ : Expr} {A B : VTy}
-    (hsp : Ctx.Split Γ Γ₁ Γ₂) (h₁ : SemV Δ Γ₁ e₁ A) (h₂ : SemV Δ Γ₂ e₂ B) :
+    (hsp : Ctx.SplitP Γ Γ₁ Γ₂) (h₁ : SemV Δ Γ₁ e₁ A) (h₂ : SemV Δ Γ₂ e₂ B) :
     SemV Δ Γ (.pair e₁ e₂) (.tensor A B) := by
   intro δ γ ls ρ hδ hg
   obtain ⟨ρ₁, ρ₂, hc, hg₁, hg₂⟩ := gDenC_split hsp hg
@@ -138,10 +138,10 @@ private theorem substAll_forceE {γ : List Val} {i : Nat} {v : Val} (hv : γ[i]?
 
 /-- `force x : C` for `x : U C`, written `forceE C x`. -/
 theorem force_compatC {Δ : LifeCtx} {Γ : Ctx VTy} {i : Nat} {C : CTy}
-    (h : Ctx.Solo Γ i (.thunk C)) : SemC Δ Γ (forceE C (.var i)) C := by
+    (h : Ctx.SoloP Γ i (.thunk C)) : SemC Δ Γ (forceE C (.var i)) C := by
   intro δ γ ls ρ _ hg
   obtain ⟨hlen, hs⟩ := gDenC_iff.mp hg
-  obtain ⟨v, hv, hval⟩ := gSepC_solo h (h.lt_of_liveWithin hlen) hs
+  obtain ⟨v, hv, hval⟩ := gSepC_soloP h (h.lt_of_liveWithin hlen) hs
   rw [substAll_forceE hv]
   exact hval ls (Ext.refl _ _)
 
@@ -157,12 +157,12 @@ theorem lam_compatC {Δ : LifeCtx} {Γ : Ctx VTy} {M : Expr} {A : VTy} {C : CTy}
 
 /-- `M x : C` for `M : A ⊸ C`, `x : A`. -/
 theorem app_compatC {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {M : Expr} {i : Nat} {A : VTy} {C : CTy}
-    (hsp : Ctx.Split Γ Γ₁ Γ₂) (hM : SemC Δ Γ₁ M (.arr A C)) (hx : Ctx.Solo Γ₂ i A) :
+    (hsp : Ctx.SplitP Γ Γ₁ Γ₂) (hM : SemC Δ Γ₁ M (.arr A C)) (hx : Ctx.SoloP Γ₂ i A) :
     SemC Δ Γ (.app M (.var i)) C := by
   intro δ γ ls ρ hδ hg
   obtain ⟨ρ₁, ρ₂, hc, hg₁, hg₂⟩ := gDenC_split hsp hg
   obtain ⟨hlen, hs⟩ := gDenC_iff.mp hg₂
-  obtain ⟨v, hv, hval⟩ := gSepC_solo hx (hx.lt_of_liveWithin hlen) hs
+  obtain ⟨v, hv, hval⟩ := gSepC_soloP hx (hx.lt_of_liveWithin hlen) hs
   have he : substAll γ (.app M (.var i)) = .app (substAll γ M) (.val v) := by
     show Expr.app (Expr.psub 0 γ M) (Expr.psub 0 γ (.var i)) = _
     rw [← substAll, ← substAll, substAll_var hv]
@@ -172,7 +172,7 @@ theorem app_compatC {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {M : Expr} {i : Na
 /-- `M to x. N : C`.  The context `N` needs is framed through `M`'s run, together with the stack
 `C` is eliminated by, and used at the list `M` returns (`cC_bind`). -/
 theorem bind_compatC {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {M N : Expr} {A : VTy} {C : CTy}
-    (hsp : Ctx.Split Γ Γ₁ Γ₂) (hM : SemC Δ Γ₁ M (.ret A))
+    (hsp : Ctx.SplitP Γ Γ₁ Γ₂) (hM : SemC Δ Γ₁ M (.ret A))
     (hN : SemC Δ (⟨A, true⟩ :: Γ₂) N C) :
     SemC Δ Γ (.app (.val (.lam N)) M) C := by
   intro δ γ ls ρ hδ hg
@@ -262,7 +262,7 @@ theorem topI_compatC {Δ : LifeCtx} {Γ : Ctx VTy} : SemC Δ Γ (.val .unit) .to
 
 /-- `V; M : C` for `V : 1`. -/
 theorem unitE_compatC {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {V M : Expr} {C : CTy}
-    (hsp : Ctx.Split Γ Γ₁ Γ₂) (hV : SemV Δ Γ₁ V .unit) (hM : SemC Δ Γ₂ M C) :
+    (hsp : Ctx.SplitP Γ Γ₁ Γ₂) (hV : SemV Δ Γ₁ V .unit) (hM : SemC Δ Γ₂ M C) :
     SemC Δ Γ (.seq V M) C := by
   intro δ γ ls ρ hδ hg
   obtain ⟨ρ₁, ρ₂, hc, hg₁, hg₂⟩ := gDenC_split hsp hg
@@ -275,7 +275,7 @@ theorem unitE_compatC {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {V M : Expr} {C 
 
 /-- `let (x, y) = V in M : C` for `V : A ⊗ B`. -/
 theorem tensorE_compatC {Δ : LifeCtx} {Γ Γp Γb : Ctx VTy} {V M : Expr} {A B : VTy} {C : CTy}
-    (hsp : Ctx.Split Γ Γp Γb) (hV : SemV Δ Γp V (.tensor A B))
+    (hsp : Ctx.SplitP Γ Γp Γb) (hV : SemV Δ Γp V (.tensor A B))
     (hM : SemC Δ (⟨B, true⟩ :: ⟨A, true⟩ :: Γb) M C) :
     SemC Δ Γ (.letpair V M) C := by
   intro δ γ ls ρ hδ hg
@@ -297,7 +297,7 @@ theorem tensorE_compatC {Δ : LifeCtx} {Γ Γp Γb : Ctx VTy} {V M : Expr} {A B 
 
 /-- `case V {inj₁ x. M₁ | inj₂ y. M₂} : C` for `V : A ⊕ B`. -/
 theorem sumE_compatC {Δ : LifeCtx} {Γ Γs Γb : Ctx VTy} {V M₁ M₂ : Expr} {A B : VTy} {C : CTy}
-    (hsp : Ctx.Split Γ Γs Γb) (hV : SemV Δ Γs V (.sum A B))
+    (hsp : Ctx.SplitP Γ Γs Γb) (hV : SemV Δ Γs V (.sum A B))
     (h₁ : SemC Δ (⟨A, true⟩ :: Γb) M₁ C) (h₂ : SemC Δ (⟨B, true⟩ :: Γb) M₂ C) :
     SemC Δ Γ (.case V M₁ M₂) C := by
   intro δ γ ls ρ hδ hg
@@ -322,7 +322,7 @@ context is absorbed. -/
 def absurdE (V : Expr) : Expr := .case V (.val .unit) (.val .unit)
 
 theorem zeroE_compatC {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {V : Expr} {C : CTy}
-    (hsp : Ctx.Split Γ Γ₁ Γ₂) (hV : SemV Δ Γ₁ V .zero) : SemC Δ Γ (absurdE V) C := by
+    (hsp : Ctx.SplitP Γ Γ₁ Γ₂) (hV : SemV Δ Γ₁ V .zero) : SemC Δ Γ (absurdE V) C := by
   intro δ γ ls ρ hδ hg
   obtain ⟨ρ₁, ρ₂, hc, hg₁, hg₂⟩ := gDenC_split hsp hg
   refine cC_bind C (.case .hole (.val .unit) (.val .unit)) (substAll γ V) ls δ
@@ -403,10 +403,10 @@ theorem bangE_compatC {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {A : VTy}
   exact wpTS_mono (fun _ _ _ hb => hb.2) ρ (h δ γ ls ρ hδ hg)
 
 /-- `copy : U (!A ⊸ F (!A ⊗ !A))`: both copies are the original, at `∅` (`copyBang_compatX`). -/
-theorem copyBang_compatC {Δ : LifeCtx} {Γ : Ctx VTy} {A : VTy} (hΓ : Ctx.Dead Γ) :
+theorem copyBang_compatC {Δ : LifeCtx} {Γ : Ctx VTy} {A : VTy} (hΓ : Ctx.DeadP Γ) :
     SemV Δ Γ copy (.thunk (.arr (.bang A) (.ret (.tensor (.bang A) (.bang A))))) := by
   intro δ γ ls ρ _ hg
-  have hρ : ρ = PMap.empty := gSepC_dead hΓ (gDenC_iff.mp hg).2
+  have hρ : ρ = PMap.empty := gSepC_deadP hΓ (gDenC_iff.mp hg).2
   subst hρ
   show wpTS ls copy _ _
   refine wpTS_val _ _ _ _ ?_
@@ -422,10 +422,10 @@ theorem copyBang_compatC {Δ : LifeCtx} {Γ : Ctx VTy} {A : VTy} (hΓ : Ctx.Dead
   exact ⟨v, v, pure_sep_mk rfl ⟨PMap.empty, PMap.empty, ResU.comp_empty_right _, hv, hv⟩⟩
 
 /-- `forget : U (!A ⊸ F 1)`: nothing to release (`forgetBang_compatX`). -/
-theorem forgetBang_compatC {Δ : LifeCtx} {Γ : Ctx VTy} {A : VTy} (hΓ : Ctx.Dead Γ) :
+theorem forgetBang_compatC {Δ : LifeCtx} {Γ : Ctx VTy} {A : VTy} (hΓ : Ctx.DeadP Γ) :
     SemV Δ Γ forget (.thunk (.arr (.bang A) (.ret .unit))) := by
   intro δ γ ls ρ _ hg
-  have hρ : ρ = PMap.empty := gSepC_dead hΓ (gDenC_iff.mp hg).2
+  have hρ : ρ = PMap.empty := gSepC_deadP hΓ (gDenC_iff.mp hg).2
   subst hρ
   show wpTS ls forget _ _
   refine wpTS_val _ _ _ _ ?_

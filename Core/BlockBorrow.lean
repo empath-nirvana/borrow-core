@@ -451,7 +451,7 @@ theorem shortenE_wf (F : Former M side) : ∀ {σ : Shape}, σ.plain = true →
   | .leaf _, _, _, _, _, _, _, h, hle => F.bw.sub h hle
   | .node s₁ s₂, hσ, _, Γ, _, _, _, h, hle => by
       simp only [Shape.plain, Bool.and_eq_true] at hσ
-      refine .letpairV (split_kill' Γ) h ?_
+      refine .letpairV (split_kill' Γ).toP h ?_
       exact .tensorI (.right (.left (deadSplit (kill_dead Γ))))
         (shortenE_wf F hσ.1 (.var (.there (.here (kill_dead Γ)))) hle)
         (shortenE_wf F hσ.2 (.var (.here (.cons (kill_dead Γ)))) hle)

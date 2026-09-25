@@ -244,7 +244,7 @@ theorem embed {Δ : LifeCtx} {Γ : Ctx Ty} {e : Expr} {T : Ty} (h : DerivesWf Δ
   | tensorE hs hwf _ _ ihp ihb =>
       intro hΔ hΓ
       obtain ⟨h₁, h₂⟩ := Bool.and_eq_true _ _ |>.mp hwf
-      exact .ofRet (.tensorE (split_cbvCtx hs) (ihp hΔ (hΓ.split_left hs))
+      exact .ofRet (.tensorE (split_cbvCtx hs).toP (ihp hΔ (hΓ.split_left hs))
         (.ret (ihb hΔ (Ctx.ScopedB.cons (fun _ => h₂)
           (Ctx.ScopedB.cons (fun _ => h₁) (hΓ.split_right hs))))))
   | sumI₁ _ ih => intro hΔ hΓ; exact .sumI₁ (ih hΔ hΓ)
@@ -252,7 +252,7 @@ theorem embed {Δ : LifeCtx} {Γ : Ctx Ty} {e : Expr} {T : Ty} (h : DerivesWf Δ
   | sumE hs hwf _ _ _ ih₀ ih₁ ih₂ =>
       intro hΔ hΓ
       obtain ⟨h₁, h₂⟩ := Bool.and_eq_true _ _ |>.mp hwf
-      exact .ofRet (.sumE (split_cbvCtx hs) (ih₀ hΔ (hΓ.split_left hs))
+      exact .ofRet (.sumE (split_cbvCtx hs).toP (ih₀ hΔ (hΓ.split_left hs))
         (.ret (ih₁ hΔ (Ctx.ScopedB.cons (fun _ => h₁) (hΓ.split_right hs))))
         (.ret (ih₂ hΔ (Ctx.ScopedB.cons (fun _ => h₂) (hΓ.split_right hs)))))
   | lolliI hwf _ ih =>

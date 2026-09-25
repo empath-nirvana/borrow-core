@@ -11,6 +11,7 @@ import Core.RelationFacts
 import Core.ReborrowShapes
 import Core.Reborrow
 import Core.FrameRules
+import Core.Persistent
 import Core.Compatibility
 import Core.DelayRel
 import Core.Computation

@@ -183,10 +183,10 @@ theorem candD_post {A S : VTy} {δ : LSub} {g : Val}
     exact fun ls'' hk => ⟨s', rfl, vC_local true S hk hs'⟩
 
 /-- **`fixD` is sound**: `fixD : !U(S ⊸ F(A ⊕ S) & F 1) ⊸ !U(S ⊸ D A)` at every `A` and `S`.  `[spec §7]` -/
-theorem fixD_compatX {Δ : LifeCtx} {Γ : Ctx VTy} (A S : VTy) (hΓ : Ctx.Dead Γ) :
+theorem fixD_compatX {Δ : LifeCtx} {Γ : Ctx VTy} (A S : VTy) (hΓ : Ctx.DeadP Γ) :
     SemV Δ Γ (.val fixDV) (fixDTy A S) := by
   intro δ γ ls ρ _ hg₀
-  have hρ : ρ = PMap.empty := gSepC_dead hΓ (gDenC_iff.mp hg₀).2
+  have hρ : ρ = PMap.empty := gSepC_deadP hΓ (gDenC_iff.mp hg₀).2
   subst hρ
   rw [substAll_closed fixDV_closed]
   refine wpTS_val _ _ _ _ ?_

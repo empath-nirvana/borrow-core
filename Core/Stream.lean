@@ -173,10 +173,10 @@ theorem candS_post {A S : VTy} {δ : LSub} {g : Val}
 
 /-- **`unfoldS` is sound**: `unfoldS : !U(S ⊸ F(A ⊗ S) & F 1) ⊸ !U(S ⊸ Str A)` at every `A`
 and `S`.  `[spec §7]` -/
-theorem unfoldS_compatX {Δ : LifeCtx} {Γ : Ctx VTy} (A S : VTy) (hΓ : Ctx.Dead Γ) :
+theorem unfoldS_compatX {Δ : LifeCtx} {Γ : Ctx VTy} (A S : VTy) (hΓ : Ctx.DeadP Γ) :
     SemV Δ Γ (.val unfoldSV) (unfoldSTy A S) := by
   intro δ γ ls ρ _ hg₀
-  have hρ : ρ = PMap.empty := gSepC_dead hΓ (gDenC_iff.mp hg₀).2
+  have hρ : ρ = PMap.empty := gSepC_deadP hΓ (gDenC_iff.mp hg₀).2
   subst hρ
   rw [substAll_closed unfoldSV_closed]
   refine wpTS_val _ _ _ _ ?_

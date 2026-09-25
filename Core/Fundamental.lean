@@ -46,11 +46,12 @@ inductive Jdg where
   | val (A : VTy)
   | comp (C : CTy)
 
-/-- The CBPV typing judgment.  `[spec §3]` -/
+/-- The CBPV typing judgment.  Its context premises are `Ctx.SplitP`, `Ctx.DeadP` and
+`Ctx.SoloP`: a live slot of persistent type may be duplicated and dropped.  `[spec §3, §10]` -/
 inductive CDerives : LifeCtx → Ctx VTy → Expr → Jdg → Prop where
-  | var {Δ Γ i A} (h : Ctx.Solo Γ i A) : CDerives Δ Γ (.var i) (.val A)
-  | unitI {Δ Γ} (h : Ctx.Dead Γ) : CDerives Δ Γ (.val .unit) (.val .unit)
-  | tensorI {Δ Γ Γ₁ Γ₂ e₁ e₂ A B} (hs : Ctx.Split Γ Γ₁ Γ₂)
+  | var {Δ Γ i A} (h : Ctx.SoloP Γ i A) : CDerives Δ Γ (.var i) (.val A)
+  | unitI {Δ Γ} (h : Ctx.DeadP Γ) : CDerives Δ Γ (.val .unit) (.val .unit)
+  | tensorI {Δ Γ Γ₁ Γ₂ e₁ e₂ A B} (hs : Ctx.SplitP Γ Γ₁ Γ₂)
       (h₁ : CDerives Δ Γ₁ e₁ (.val A)) (h₂ : CDerives Δ Γ₂ e₂ (.val B)) :
       CDerives Δ Γ (.pair e₁ e₂) (.val (.tensor A B))
   | sumI₁ {Δ Γ e A B} (h : CDerives Δ Γ e (.val A)) :
@@ -66,16 +67,16 @@ inductive CDerives : LifeCtx → Ctx VTy → Expr → Jdg → Prop where
   /-- `return V : F A`. -/
   | ret {Δ Γ V A} (h : CDerives Δ Γ V (.val A)) : CDerives Δ Γ V (.comp (.ret A))
   /-- `M to x. N`, written `(λx. N) M`. -/
-  | bind {Δ Γ Γ₁ Γ₂ M N A C} (hs : Ctx.Split Γ Γ₁ Γ₂)
+  | bind {Δ Γ Γ₁ Γ₂ M N A C} (hs : Ctx.SplitP Γ Γ₁ Γ₂)
       (hM : CDerives Δ Γ₁ M (.comp (.ret A))) (hN : CDerives Δ (⟨A, true⟩ :: Γ₂) N (.comp C)) :
       CDerives Δ Γ (.app (.val (.lam N)) M) (.comp C)
   /-- `force x`: `x ()` at `F A`, `x` itself at any other computation type. -/
-  | force {Δ Γ i C} (h : Ctx.Solo Γ i (.thunk C)) :
+  | force {Δ Γ i C} (h : Ctx.SoloP Γ i (.thunk C)) :
       CDerives Δ Γ (forceE C (.var i)) (.comp C)
   | lam {Δ Γ M A C} (h : CDerives Δ (⟨A, true⟩ :: Γ) M (.comp C)) :
       CDerives Δ Γ (.val (.lam M)) (.comp (.arr A C))
-  | app {Δ Γ Γ₁ Γ₂ M i A C} (hs : Ctx.Split Γ Γ₁ Γ₂)
-      (hM : CDerives Δ Γ₁ M (.comp (.arr A C))) (hx : Ctx.Solo Γ₂ i A) :
+  | app {Δ Γ Γ₁ Γ₂ M i A C} (hs : Ctx.SplitP Γ Γ₁ Γ₂)
+      (hM : CDerives Δ Γ₁ M (.comp (.arr A C))) (hx : Ctx.SoloP Γ₂ i A) :
       CDerives Δ Γ (.app M (.var i)) (.comp C)
   /-- `⟨M, N⟩ : C & D`, both components in the same context. -/
   | withI {Δ Γ M N C D} (hM : CDerives Δ (withCtx Γ) M (.comp C))
@@ -87,20 +88,20 @@ inductive CDerives : LifeCtx → Ctx VTy → Expr → Jdg → Prop where
       CDerives Δ Γ (.app M (.val (.inj₂ .unit))) (.comp D)
   /-- `⟨⟩ : ⊤` at any context. -/
   | topI {Δ Γ} : CDerives Δ Γ (.val .unit) (.comp .top)
-  | unitE {Δ Γ Γ₁ Γ₂ V M C} (hs : Ctx.Split Γ Γ₁ Γ₂)
+  | unitE {Δ Γ Γ₁ Γ₂ V M C} (hs : Ctx.SplitP Γ Γ₁ Γ₂)
       (hV : CDerives Δ Γ₁ V (.val .unit)) (hM : CDerives Δ Γ₂ M (.comp C)) :
       CDerives Δ Γ (.seq V M) (.comp C)
-  | tensorE {Δ Γ Γp Γb V M A B C} (hs : Ctx.Split Γ Γp Γb)
+  | tensorE {Δ Γ Γp Γb V M A B C} (hs : Ctx.SplitP Γ Γp Γb)
       (hV : CDerives Δ Γp V (.val (.tensor A B)))
       (hM : CDerives Δ (⟨B, true⟩ :: ⟨A, true⟩ :: Γb) M (.comp C)) :
       CDerives Δ Γ (.letpair V M) (.comp C)
-  | sumE {Δ Γ Γs Γb V M₁ M₂ A B C} (hs : Ctx.Split Γ Γs Γb)
+  | sumE {Δ Γ Γs Γb V M₁ M₂ A B C} (hs : Ctx.SplitP Γ Γs Γb)
       (hV : CDerives Δ Γs V (.val (.sum A B)))
       (h₁ : CDerives Δ (⟨A, true⟩ :: Γb) M₁ (.comp C))
       (h₂ : CDerives Δ (⟨B, true⟩ :: Γb) M₂ (.comp C)) :
       CDerives Δ Γ (.case V M₁ M₂) (.comp C)
   /-- `absurd V : C` for `V : 0`, at any rest of the context. -/
-  | zeroE {Δ Γ Γ₁ Γ₂ V C} (hs : Ctx.Split Γ Γ₁ Γ₂) (hV : CDerives Δ Γ₁ V (.val .zero)) :
+  | zeroE {Δ Γ Γ₁ Γ₂ V C} (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hV : CDerives Δ Γ₁ V (.val .zero)) :
       CDerives Δ Γ (absurdE V) (.comp C)
   /-- `Λ. M : ∀'x ⊏ @b. C`, written `λ_. M`; the binder's slot is dead, at any type. -/
   | allI {Δ Γ x b M S C} (hbx : b.mentions x = false)
@@ -121,9 +122,9 @@ inductive CDerives : LifeCtx → Ctx VTy → Expr → Jdg → Prop where
       CDerives Δ Γ (.val (.lam N)) (.val (.bang (.thunk C)))
   /-- Dereliction. -/
   | bangE {Δ Γ e A} (h : CDerives Δ Γ e (.val (.bang A))) : CDerives Δ Γ e (.val A)
-  | copyBang {Δ Γ A} (hΓ : Ctx.Dead Γ) :
+  | copyBang {Δ Γ A} (hΓ : Ctx.DeadP Γ) :
       CDerives Δ Γ copy (.val (.thunk (.arr (.bang A) (.ret (.tensor (.bang A) (.bang A))))))
-  | forgetBang {Δ Γ A} (hΓ : Ctx.Dead Γ) :
+  | forgetBang {Δ Γ A} (hΓ : Ctx.DeadP Γ) :
       CDerives Δ Γ forget (.val (.thunk (.arr (.bang A) (.ret .unit))))
   /-- `[]I`. -/
   | boxI {Δ Γ e a A} (h : CDerives Δ Γ e (.val A)) (hΓ : CtxOutlives Δ Γ a) :
@@ -134,34 +135,34 @@ inductive CDerives : LifeCtx → Ctx VTy → Expr → Jdg → Prop where
   | mutSub {Δ Γ e a b A} (h : CDerives Δ Γ e (.val (.mut b A))) (hle : Δ.EntailsLe a b) :
       CDerives Δ Γ e (.val (.mut a A))
   /-- The borrow axioms, at arbitrary value-type payloads. -/
-  | alloc {Δ Γ A} (hΓ : Ctx.Dead Γ) :
+  | alloc {Δ Γ A} (hΓ : Ctx.DeadP Γ) :
       CDerives Δ Γ (.val (.prim .alloc)) (.val (.lolli A (.ref A)))
-  | free {Δ Γ A} (hΓ : Ctx.Dead Γ) :
+  | free {Δ Γ A} (hΓ : Ctx.DeadP Γ) :
       CDerives Δ Γ (.val (.prim .free)) (.val (.lolli (.ref A) A))
-  | swap {Δ Γ A B} (hΓ : Ctx.Dead Γ) : CDerives Δ Γ swap (.val (axSwapTy A B))
-  | copy {Δ Γ a A} (hΓ : Ctx.Dead Γ) : CDerives Δ Γ copy (.val (axCopyTy a A))
-  | forgetImm {Δ Γ a A} (hΓ : Ctx.Dead Γ) : CDerives Δ Γ forget (.val (axForgetImmTy a A))
-  | forgetMut {Δ Γ a A} (hΓ : Ctx.Dead Γ) : CDerives Δ Γ forget (.val (axForgetMutTy a A))
-  | forgetUnk {Δ Γ} (hΓ : Ctx.Dead Γ) : CDerives Δ Γ forget (.val axForgetUnkTy)
-  | withbor1 {Δ Γ A B} (x : LifeVar) (hΓ : Ctx.Dead Γ) (hx : Δ.find? x = none)
+  | swap {Δ Γ A B} (hΓ : Ctx.DeadP Γ) : CDerives Δ Γ swap (.val (axSwapTy A B))
+  | copy {Δ Γ a A} (hΓ : Ctx.DeadP Γ) : CDerives Δ Γ copy (.val (axCopyTy a A))
+  | forgetImm {Δ Γ a A} (hΓ : Ctx.DeadP Γ) : CDerives Δ Γ forget (.val (axForgetImmTy a A))
+  | forgetMut {Δ Γ a A} (hΓ : Ctx.DeadP Γ) : CDerives Δ Γ forget (.val (axForgetMutTy a A))
+  | forgetUnk {Δ Γ} (hΓ : Ctx.DeadP Γ) : CDerives Δ Γ forget (.val axForgetUnkTy)
+  | withbor1 {Δ Γ A B} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hx : Δ.find? x = none)
       (hsc₁ : VScoped Δ A) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) :
       CDerives Δ Γ withbor (.val (axWithbor1Ty x Δ.meetOfDom A B))
-  | withbor2 {Δ Γ A B} (x : LifeVar) (hΓ : Ctx.Dead Γ) (hx : Δ.find? x = none)
+  | withbor2 {Δ Γ A B} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hx : Δ.find? x = none)
       (hside : ∃ b, Δ.Defines b ∧ VOutlives Δ b A)
       (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) :
       CDerives Δ Γ withbor (.val (axWithbor2Ty x Δ.meetOfDom A B))
-  | withbor3 {Δ Γ a A B} (x : LifeVar) (hΓ : Ctx.Dead Γ) (hx : Δ.find? x = none)
+  | withbor3 {Δ Γ a A B} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hx : Δ.find? x = none)
       (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) :
       CDerives Δ Γ withbor (.val (axWithbor3Ty a x Δ.meetOfDom A B))
-  | withload {Δ Γ a A B} (x : LifeVar) (hΓ : Ctx.Dead Γ) (hx : Δ.find? x = none)
+  | withload {Δ Γ a A B} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hx : Δ.find? x = none)
       (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) :
       CDerives Δ Γ withload (.val (axWithloadTy a x Δ.meetOfDom A B))
-  | withswap {Δ Γ a A B} (hΓ : Ctx.Dead Γ) :
+  | withswap {Δ Γ a A B} (hΓ : Ctx.DeadP Γ) :
       CDerives Δ Γ withswap (.val (axWithswapTy a A B))
   -- Call-by-value derived forms: BoLo's application and `∀E` on arbitrary subterms, and the
   -- reading of a computation of `F A` as a value-judged expression at `A`.
   /-- Call-by-value application `f a`, both arbitrary, at `VTy.lolli` (`lolliE_compatX`).  `[spec §3]` -/
-  | lolliE {Δ Γ Γ₁ Γ₂ f a A B} (hs : Ctx.Split Γ Γ₁ Γ₂)
+  | lolliE {Δ Γ Γ₁ Γ₂ f a A B} (hs : Ctx.SplitP Γ Γ₁ Γ₂)
       (ha : CDerives Δ Γ₁ a (.val A)) (hf : CDerives Δ Γ₂ f (.val (.lolli A B))) :
       CDerives Δ Γ (.app f a) (.val B)
   /-- Call-by-value `∀E`: `e []` for `e` at `VTy.all x b A` (`allE_compatX`).  `[spec §3]` -/
@@ -181,18 +182,18 @@ inductive CDerives : LifeCtx → Ctx VTy → Expr → Jdg → Prop where
   `⊗`/`⊕` from closed leaves, `Ref X` and `X` (not `X` itself), `A_R = Imm̲ 'y T` with `R` at
   every recursive position, `R` outliving every lifetime, `'y` free in neither `μX. T` nor
   `R`.  `[spec §6]` -/
-  | foldImm {Δ Γ} (F : FShape) (y : LifeVar) (c : Lifetime.Life) (R : VTy) (hΓ : Ctx.Dead Γ)
+  | foldImm {Δ Γ} (F : FShape) (y : LifeVar) (c : Lifetime.Life) (R : VTy) (hΓ : Ctx.DeadP Γ)
       (hF : F.WF) (hG : F.Guarded) (hyM : ¬ VFree y (.mu F.ty)) (hyR : ¬ VFree y R)
       (hR : ∀ Δ' a, VOutlives Δ' a R) :
       CDerives Δ Γ (.val (foldImmV F)) (.val (.lolli (algTy F y R) (foldTy F y c R)))
   /-- The owned fold, a constant: `foldOwn : !U(A′_R ⊸ F R) ⊸ !U(μX. T ⊸ F R)`, for `T` of the
   same class, `A′_R = T` with `R` at every recursive position, any `R`.  `[spec §6]` -/
-  | foldOwn {Δ Γ} (F : FShape) (R : VTy) (hΓ : Ctx.Dead Γ) (hF : F.WF) (hG : F.Guarded) :
+  | foldOwn {Δ Γ} (F : FShape) (R : VTy) (hΓ : Ctx.DeadP Γ) (hF : F.WF) (hG : F.Guarded) :
       CDerives Δ Γ (.val (foldOwnV F)) (.val (.lolli (algOTy F R) (foldOTy F R)))
   /-- The owned fold with reuse, a constant: `foldReuse : !U(A″_R ⊸ F R) ⊸ !U(μX. T ⊸ F R)`,
   for `T` of the same class, `A″_R = T` with `R` at a head `X` and `Ref 1 ⊗ R` at every `Ref X`
   (the emptied cell and the result on its content), any `R`.  `[spec §6]` -/
-  | foldReuse {Δ Γ} (F : FShape) (R : VTy) (hΓ : Ctx.Dead Γ) (hF : F.WF) (hG : F.Guarded) :
+  | foldReuse {Δ Γ} (F : FShape) (R : VTy) (hΓ : Ctx.DeadP Γ) (hF : F.WF) (hG : F.Guarded) :
       CDerives Δ Γ (.val (foldReuseV F)) (.val (.lolli (algRTy F R) (foldOTy F R)))
   /-- `D A` is its unrolling `F(A ⊕ U(D A)) & F 1` (`cC_delay_iff`), on the same term.  `[spec §7]` -/
   | delayIn {Δ Γ e A} (h : CDerives Δ Γ e (.comp (delayUnroll A))) :
@@ -201,7 +202,7 @@ inductive CDerives : LifeCtx → Ctx VTy → Expr → Jdg → Prop where
       CDerives Δ Γ e (.comp (delayUnroll A))
   /-- Guarded recursion on the delay type, a constant:
   `fixD : !U(S ⊸ F(A ⊕ S) & F 1) ⊸ !U(S ⊸ D A)` (`Delay.lean`).  `[spec §7]` -/
-  | fixD {Δ Γ} (A S : VTy) (hΓ : Ctx.Dead Γ) : CDerives Δ Γ (.val fixDV) (.val (fixDTy A S))
+  | fixD {Δ Γ} (A S : VTy) (hΓ : Ctx.DeadP Γ) : CDerives Δ Γ (.val fixDV) (.val (fixDTy A S))
   /-- `Str A` is its unrolling `F(A ⊗ U(Str A)) & F 1` (`cC_str_iff`), on the same term.  `[spec §7]` -/
   | strIn {Δ Γ e A} (h : CDerives Δ Γ e (.comp (strUnroll A))) :
       CDerives Δ Γ e (.comp (.str A))
@@ -209,7 +210,7 @@ inductive CDerives : LifeCtx → Ctx VTy → Expr → Jdg → Prop where
       CDerives Δ Γ e (.comp (strUnroll A))
   /-- Coiteration on the stream type, a constant:
   `unfoldS : !U(S ⊸ F(A ⊗ S) & F 1) ⊸ !U(S ⊸ Str A)` (`Stream.lean`).  `[spec §7]` -/
-  | unfoldS {Δ Γ} (A S : VTy) (hΓ : Ctx.Dead Γ) :
+  | unfoldS {Δ Γ} (A S : VTy) (hΓ : Ctx.DeadP Γ) :
       CDerives Δ Γ (.val unfoldSV) (.val (unfoldSTy A S))
 
 /-- The semantic judgment at a judgment form.  `[spec §3]` -/
