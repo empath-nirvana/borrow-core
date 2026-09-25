@@ -29,6 +29,8 @@ Every result's axioms are `[propext, Classical.choice, Quot.sound]` or a subset.
 | `Sized.lean` (new) | `dsize`, `dsize_del_lt`, `dsize_tail_lt`, `rebChooseTW_sized`, `withload_sized`, `WitLt` |
 | `FoldImm.lean`, `FoldOwn.lean` (new) | the fold rules' terms and soundness (`foldImm_compatX`, `foldOwn_compatX`) |
 | `Lists.lean`, `Count.lean`, `CountFree.lean`, `MapMut.lean`, `Folds.lean` (new) | the programs; `MapMut.lean` also `wpTS_swap` |
+| `Blocks.lean` (new) | `experiments/LeafPlaces`' block view at `VTy`: `Shape`, `refTy`, `allocS`/`freeS` and their derived typing, `Packed`, `packed_node`, block allocation (`wpTS_allocS`) |
+| `CommonList.lean` (new) | the common list shape `μX. 1 ⊕ Ref (N ⊗ X)` with each node one block; sum, map, `toPure` and free by the fold rules |
 
 `Wp`, `Reborrow`, `FrameRules`, `Compatibility`, `Computation`, `Compat` and `Examples` are
 CBPVWorld's files with only the namespace changed (`bindE` is defined in `FoldImm.lean`, which
@@ -259,12 +261,67 @@ interpreter.
 
 `*_runs` (adequacy) and `*_eval` (the interpreter, `decide`) for each program.
 
-**Not done.** A sum over `L′ = μX. 1 ⊕ Ref (N ⊗ X)`, and `toPure`/`mapInc` through `foldOwn`:
-`L′` is outside the class. A borrowed fold at `Ref S` with `X` inside a compound `S` would load
+**Not done here** (done in *The common list shape*, below, with each node one block): a sum over
+`L′ = μX. 1 ⊕ Ref (N ⊗ X)`, and `toPure`/`mapInc` through `foldOwn`: `L′`, with the node in one
+cell, is outside the class. A borrowed fold at `Ref S` with `X` inside a compound `S` would load
 `S` in a nested `withload`, and the leaves of `S` would be viewed at the inner load's lifetime,
 which `A_R` at `'y` does not name. I have not derived such a rule and have not verified that any
 obstruction is real. `foldImm`'s `R` must outlive every lifetime, so a fold returning a borrow
 into the structure is not covered.
+
+## The common list shape
+
+Rust's `Box<Node { val, next }>` list is `μX. 1 ⊕ Ref (N ⊗ X)`. An owned `Ref` of an unboxed
+product is a block, and a block's handle is the family of its leaf references
+(`experiments/LeafPlaces`). So for one block `Ref (A ⊗ B)` is `Ref A ⊗ Ref B`, and the list is
+`μX. 1 ⊕ (Ref N ⊗ Ref X)`, which is in `FShape`. Sum, map and `toPure` over it need no new fold
+rule: only the block view, then `foldImm`/`foldOwn`.
+
+**The form chosen: the split form is the representation.** `Ref (A ⊗ B)` is not a type former
+of its own. A block handle's type is `refTy σ`, defined as the leaf family
+(`refTy (node s₁ s₂) = refTy s₁ ⊗ refTy s₂`), so `Ref (A ⊗ B)` *is* `Ref A ⊗ Ref B`
+(`refTy_pair`, `rfl`). The list's body `1 ⊕ refTy (N ⊗ X)` is `clistF`'s (`clistF_ty`, `rfl`).
+This is option (a) of the task. There is no pack or unpack rule, so no term, typing rule or
+relation clause is added. Splitting a handle is the identity (`packed_node`). The joining
+direction is only sound, for a one-word handle, on leaves from one block: `crossPack` shows a
+pair of references from two blocks has the same type. Here the only producer of a node handle
+is `allocS`, which allocates one block (`wpTS_allocS`, `consC_block`). Keeping owned leaves from
+being re-paired across blocks remains a checker rule, as in LeafPlaces. Option (b) (an unpack
+rule and a pack rule restricted to block-origin leaves) would need a typing predicate that
+tracks block origin, which the calculus does not have. `Ref` does not distribute over `⊕`: a
+variant's leaf layout depends on its tag. That is out of scope here.
+
+**Ported** (`Blocks.lean`, the same Lean as LeafPlaces at `VTy` and this world's `wpTS`).
+`Shape`, `size`, `refTy`, `valTy`, `addr`; `allocS`/`freeS` as closed terms, typed leaf by leaf
+through the existing `alloc`/`free` rules (`d_allocS`, `d_freeS`); `Packed`, `packed_node`;
+`WpAt` and `wpAt_alloc`; block allocation `wpTS_allocS` (base above every allocated location,
+leaves at `b, b+1, …`). Machine and `Loc = ℕ` unchanged. `withborS` (borrowing a block's leaves
+at one lifetime) is not ported. The fold borrows the list through `withbor` of a cell holding
+it, and each node's leaves are then read through `withload` at nested lifetimes.
+
+**Derived programs, no hand proof** (`CommonList.lean`). A node is `consC n t =
+inj₂ (allocS (N ⊗ L) (n, t))`, one block.
+
+| Function | By | Type (`fundamentalC`) |
+|---|---|---|
+| `sumCE = foldImm sumAlg` | the algebra sees `1 ⊕ (Imm 'y N ⊗ N)`; it copies the payload with `natCopy` (a `foldImm`, derived at the algebra's lifetime context with its binder at `'1` and instantiated at `'y`, `d_natCopyAt`) and adds with `addE = foldOwn addAlg : N ⊸ F (U(N ⊸ F N))` | `!U(∀'a. Imm 'a L ⊸ F N)` (`sumC_semV`) |
+| `mapIncCE = foldOwn mapCAlg` | frees the value leaf, allocates the incremented node as a fresh block | `U(L ⊸ F L)` (`mapIncC_semV`) |
+| `toPureCE = foldOwn tpCAlg` | frees the value leaf | `U(L ⊸ F P)` (`toPureC_semV`) |
+| `freeCE = foldOwn freeCAlg` | frees the value leaf, frees the numeral by `freeNat` | `U(L ⊸ F 1)` |
+
+| Program | Derivation | Runs | Interpreter |
+|---|---|---|---|
+| `sumProg`: build `[1, 2, 3]`, borrow immutably, sum, end, free | `sumProg_derives` (`d_foldProg`) | `sumProg_runs` | `6`, no cell left (`sumProg_eval`) |
+| `mapProgC`: build `[0, 0, 0]`, borrow mutably, `withswap` + `mapIncCE`, end, free the cell, `toPureCE` | `mapProgC_derives` (`MapMut.lean`'s program at the list of blocks; closed by binding the two folds) | `mapProgC_runs` | `[1, 1, 1]`, no cell left (`mapProgC_eval`) |
+
+**Blocks.** `consC_block`: at every frame the typed world admits, a node is allocated as the
+handle `(ℓ, ℓ + 1)` at `Ref N ⊗ Ref L`. `buildC_blocks`, `mapIncC_blocks`: the interpreter's
+memory after `buildC`, and after `mapIncCE`, holds every node at adjacent cells `(ℓ, ℓ + 1)`, with
+the payloads `[1, 2, 3]` and `[1, 1, 1]`.
+
+**Against the in-place map.** `foldOwn` frees each `Ref X` cell before its algebra runs, so
+`mapIncCE` rebuilds the list in fresh blocks. `MapMut.lean`'s `mapInc` keeps the same cells. It
+stays a hand proof over `L′`, whose node is one cell holding a pair.
 
 ## Against the scope note
 
