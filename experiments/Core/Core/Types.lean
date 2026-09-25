@@ -11,7 +11,8 @@ Call-by-push-value types, the index of the typed world's records.
 
 * Value types `VTy ::= 1 | A ⊗ B | 0 | A ⊕ B | U C | Ref A | Imm @a A | Mut @a A | [@a] A | !A | Unk`.
 * Computation types `CTy ::= F A | A ⊸ C | C & D | ⊤ | ∀'x ⊏ @b. C | D A`, where `D A` is the
-  delay type `νX. F(A ⊕ U X) & F 1` (`Delay.lean`).
+  delay type `νX. F(A ⊕ U X) & F 1` (`Delay.lean`) and the stream type `νX. F(A ⊗ U X) & F 1`
+  (`Stream.lean`).
 
 `VTy.recV` is the value-type eliminator with `U C` a leaf: the typed world never looks inside
 a computation type.  Beside the formers: the free lifetime variables `VFree`/`CFree`, the
@@ -66,6 +67,8 @@ inductive CTy where
   | all (x : LifeVar) (b : Lifetime.Life) (C : CTy)
   /-- `D A = νX. F(A ⊕ U X) & F 1`: the delay type with `close`. -/
   | delay (A : VTy)
+  /-- `Str A = νX. F(A ⊗ U X) & F 1`: the stream type with `close`. -/
+  | str (A : VTy)
 end
 
 /-- The value-type eliminator with `U C` a leaf. -/
@@ -132,6 +135,7 @@ def CFree (x : LifeVar) : CTy → Prop
   | .top => False
   | .all y b C => b.mentions x = true ∨ (x ≠ y ∧ CFree x C)
   | .delay A => VFree x A
+  | .str A => VFree x A
 end
 
 /-! ### Type variables: renaming, substitution, closedness
@@ -1151,6 +1155,7 @@ def CTy.lifeBound : CTy → Nat
   | .top => 0
   | .all x b C => max (x + 1) (max b.varBound C.lifeBound)
   | .delay A => A.lifeBound
+  | .str A => A.lifeBound
 end
 
 mutual
@@ -1184,6 +1189,7 @@ def CTy.applyLSub (σ : LSubst) : CTy → CTy
       else
         .all y (b.applySub σ) (C.applyLSub (lsubDrop σ y))
   | .delay A => .delay (A.applyLSub σ)
+  | .str A => .str (A.applyLSub σ)
 end
 
 /-- `A[@a/'x]`. -/
@@ -1255,6 +1261,7 @@ theorem lt_cLifeBound {x : LifeVar} : ∀ {C : CTy}, CFree x C → x < C.lifeBou
       · exact Nat.lt_of_lt_of_le (lt_cLifeBound h)
           (Nat.le_trans (Nat.le_max_right _ _) (Nat.le_max_right _ _))
   | .delay A, h => lt_vLifeBound (A := A) h
+  | .str A, h => lt_vLifeBound (A := A) h
 end
 
 /-- `Imm̲` introduces only its index. -/

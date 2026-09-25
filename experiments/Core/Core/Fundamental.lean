@@ -1,6 +1,6 @@
 import Core.Compat
 import Core.FoldReuse
-import Core.Delay
+import Core.Stream
 import Support.LogicalRelation.Adequacy
 
 /-!
@@ -12,7 +12,8 @@ the lifetime `∀` (`∀E` at every `C`), the `!` rules, `[]I`/`[]E` (`[]I` at e
 `⊑imm`/`⊑mut`, one constant per borrow axiom at arbitrary value-type payloads, three
 call-by-value derived forms (`lolliE`, `allEV`, `ofRet`), `roll`/`unroll` at `μ`, and the
 borrowed and owned folds `foldImm`, `foldOwn`, `foldReuse` (`FoldImm.lean`, `FoldOwn.lean`,
-`FoldReuse.lean`).
+`FoldReuse.lean`), the delay type's `delayIn`/`delayOut` and `fixD` (`Delay.lean`), and the
+stream type's `strIn`/`strOut` and `unfoldS` (`Stream.lean`).
 `fundamentalC` proves every rule sound at `SemV`/`SemC`; `adequacyC` runs a closed `F 1`
 computation to `()` from the empty memory.
 -/
@@ -201,6 +202,15 @@ inductive CDerives : LifeCtx → Ctx VTy → Expr → Jdg → Prop where
   /-- Guarded recursion on the delay type, a constant:
   `fixD : !U(S ⊸ F(A ⊕ S) & F 1) ⊸ !U(S ⊸ D A)` (`Delay.lean`). -/
   | fixD {Δ Γ} (A S : VTy) (hΓ : Ctx.Dead Γ) : CDerives Δ Γ (.val fixDV) (.val (fixDTy A S))
+  /-- `Str A` is its unrolling `F(A ⊗ U(Str A)) & F 1` (`cC_str_iff`), on the same term. -/
+  | strIn {Δ Γ e A} (h : CDerives Δ Γ e (.comp (strUnroll A))) :
+      CDerives Δ Γ e (.comp (.str A))
+  | strOut {Δ Γ e A} (h : CDerives Δ Γ e (.comp (.str A))) :
+      CDerives Δ Γ e (.comp (strUnroll A))
+  /-- Coiteration on the stream type, a constant:
+  `unfoldS : !U(S ⊸ F(A ⊗ S) & F 1) ⊸ !U(S ⊸ Str A)` (`Stream.lean`). -/
+  | unfoldS {Δ Γ} (A S : VTy) (hΓ : Ctx.Dead Γ) :
+      CDerives Δ Γ (.val unfoldSV) (.val (unfoldSTy A S))
 
 /-- The semantic judgment at a judgment form. -/
 def SemJ (Δ : LifeCtx) (Γ : Ctx VTy) (e : Expr) : Jdg → Prop
@@ -266,6 +276,9 @@ theorem fundamentalC {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg}
   | delayIn _ ih => exact delayIn_compatX ih
   | delayOut _ ih => exact delayOut_compatX ih
   | fixD A S hΓ => exact fixD_compatX A S hΓ
+  | strIn _ ih => exact strIn_compatX ih
+  | strOut _ ih => exact strOut_compatX ih
+  | unfoldS A S hΓ => exact unfoldS_compatX A S hΓ
 
 /-! ### Adequacy -/
 

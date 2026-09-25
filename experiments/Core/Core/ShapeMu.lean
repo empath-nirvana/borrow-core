@@ -503,6 +503,9 @@ theorem cTyEq_symm : ∀ (C : CTy) {C' : CTy} {δ δ' : LSub}, CTyEq C δ C' δ'
   | .delay A, C', _, _, h => by
       cases C' <;> simp only [CTyEq] at h ⊢
       exact tyEq_symm A h
+  | .str A, C', _, _, h => by
+      cases C' <;> simp only [CTyEq] at h ⊢
+      exact tyEq_symm A h
 end
 
 theorem TyEq.symm {S S' : VTy} {δ δ' : LSub} (h : TyEq S δ S' δ') : TyEq S' δ' S δ :=
@@ -577,6 +580,10 @@ theorem cTyEq_trans : ∀ (C : CTy) {C' C'' : CTy} {δ δ' δ'' : LSub}, CTyEq C
       cases C' <;> simp only [CTyEq] at h
       cases C'' <;> simp only [CTyEq] at h' ⊢
       exact tyEq_trans A h h'
+  | .str A, C', C'', _, _, _, h, h' => by
+      cases C' <;> simp only [CTyEq] at h
+      cases C'' <;> simp only [CTyEq] at h' ⊢
+      exact tyEq_trans A h h'
 end
 
 theorem TyEq.trans {S S' S'' : VTy} {δ δ' δ'' : LSub} (h : TyEq S δ S' δ')
@@ -622,6 +629,7 @@ theorem CTyEq.of_agree : ∀ (C : CTy) {δ₁ δ₂ : LSub},
       · rw [find?_extend_ne _ _ hxy, find?_extend_ne _ _ hxy]
         exact h y (Or.inr ⟨Ne.symm hxy, hy⟩)
   | .delay A, _, _, h => TyEq.of_agree A h
+  | .str A, _, _, h => TyEq.of_agree A h
 end
 
 theorem TyEq.refl (T : VTy) (δ : LSub) : TyEq T δ T δ := TyEq.of_agree T (fun _ _ => rfl)

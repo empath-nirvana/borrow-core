@@ -112,6 +112,21 @@ def delayF (VA : List SRec → Val → WProp) (R : CPred) : CPred := fun ls e ρ
 def delayRel (VA : List SRec → Val → WProp) : CPred := fun ls e ρ =>
   ∃ R : CPred, R.Le (delayF VA R) ∧ R ls e ρ
 
+/-- The postcondition of `next : F(A ⊗ U X)`, with `VA` for `𝒱⟦A⟧` and `R` for `X`: a value
+and the rest of the stream. -/
+def strQ (VA : List SRec → Val → WProp) (R : CPred) (ls : List SRec) (w : Val) : WProp :=
+  ex fun v₁ => ex fun v₂ => ⌜w = .pair v₁ v₂⌝ ⋆ VA ls v₁ ⋆ thunkR R ls v₂
+
+/-- One unfolding of `Str A = νX. F(A ⊗ U X) & F 1`: the `next` observation (`π₁`) and the
+`close` observation (`π₂`).  It is `cC`'s `&`, `F`, `⊗` and `U` clauses with `R` for `cC X`. -/
+def strF (VA : List SRec → Val → WProp) (R : CPred) : CPred := fun ls e ρ =>
+  wpTS ls (.app e (.val (.inj₁ .unit))) (strQ VA R) ρ ∧
+  wpTS ls (.app e (.val (.inj₂ .unit))) (fun _ w => ⌜w = .unit⌝) ρ
+
+/-- `⟦Str A⟧ = ⋃{R | R ⊆ strF VA R}`, the greatest fixed point written in `Prop` as `∃ R`. -/
+def strRel (VA : List SRec → Val → WProp) : CPred := fun ls e ρ =>
+  ∃ R : CPred, R.Le (strF VA R) ∧ R ls e ρ
+
 mutual
 /-- `𝒱⟦A⟧(ls)δ(v)` under a type-variable environment.  `full = true`: the program's relation.
 `full = false`: the observable view an `Imm` payload is held at, with `U` positions relaxed to
@@ -158,6 +173,7 @@ def cC : CTy → List SRec → LSub → Expr → WProp
   | .all x c C, ls, δ, e => fun ρ =>
       ∀ α, (⌜LtLife δ c α⌝ ─⋆ cC C ls (δ.extend x α) (.app e (.val .unit))) ρ
   | .delay A, ls, δ, e => delayRel (fun ls'' v => vCE none true A ls'' δ v) ls e
+  | .str A, ls, δ, e => strRel (fun ls'' v => vCE none true A ls'' δ v) ls e
 end
 
 /-- `𝒱⟦A⟧(ls)δ(v)`: the relation at a type read with no environment. -/

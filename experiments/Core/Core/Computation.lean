@@ -1,4 +1,5 @@
 import Core.DelayRel
+import Core.StrRel
 
 /-!
 # Core — Computations
@@ -36,6 +37,9 @@ def sS : CTy → List SRec → LSub → List Val → (List SRec → Val → WPro
       ex fun α => ⌜v = .unit ∧ LtLife δ c α⌝ ⋆ sS C ls (δ.extend x α) S Q
   | .delay A, _, δ, [v], Q =>
       BoLo.or (⌜v = .inj₁ .unit ∧ Q = fun ls'' => vC true (.sum A (.thunk (.delay A))) ls'' δ⌝)
+        (⌜v = .inj₂ .unit ∧ Q = fun ls'' => vC true .unit ls'' δ⌝)
+  | .str A, _, δ, [v], Q =>
+      BoLo.or (⌜v = .inj₁ .unit ∧ Q = fun ls'' => vC true (.tensor A (.thunk (.str A))) ls'' δ⌝)
         (⌜v = .inj₂ .unit ∧ Q = fun ls'' => vC true .unit ls'' δ⌝)
   | _, _, _, _, _ => fun _ => False
 
@@ -121,6 +125,21 @@ theorem cC_iff_stacks : ∀ (C : CTy) (ls : List SRec) (δ : LSub) (e : Expr) (�
       · intro h
         exact ⟨h [_] _ PMap.empty ρ (Or.inl ⟨rfl, rfl, rfl⟩) (ResU.comp_empty_right ρ),
           h [_] _ PMap.empty ρ (Or.inr ⟨rfl, rfl, rfl⟩) (ResU.comp_empty_right ρ)⟩
+  | .str A, ls, δ, e, ρ => by
+      rw [cC_str_iff]
+      constructor
+      · rintro ⟨h₁, h₂⟩ S Q ρ₁ ρ₂ hs hc
+        rcases S with _ | ⟨v, _ | ⟨w, S⟩⟩
+        · exact hs.elim
+        · rcases hs with ⟨rfl, rfl, rfl⟩ | ⟨rfl, rfl, rfl⟩
+          · rw [eq_of_compS_empty_left (ResU.CompS.comm hc)]
+            exact h₁
+          · rw [eq_of_compS_empty_left (ResU.CompS.comm hc)]
+            exact h₂
+        · exact hs.elim
+      · intro h
+        exact ⟨h [_] _ PMap.empty ρ (Or.inl ⟨rfl, rfl, rfl⟩) (ResU.comp_empty_right ρ),
+          h [_] _ PMap.empty ρ (Or.inr ⟨rfl, rfl, rfl⟩) (ResU.comp_empty_right ρ)⟩
 
 /-- `𝒱⟦A⟧` is carried to a list with the same members (`vP_same` for `vC`). -/
 theorem vC_same {b : Bool} {A : VTy} {ls ls' : List SRec} {δ : LSub} {v : Val} {ρ : WRes}
@@ -154,6 +173,10 @@ theorem cC_step : ∀ (C : CTy) {e e' : Expr}, (∀ μ : Heap, Step1 μ e μ e')
         (h' α ρ₁ ρ₂ hp hc)
   | .delay A, _, _, h, ls, δ => fun ρ h' => by
       rw [cC_delay_iff] at h' ⊢
+      exact ⟨wpTS_step (fun μ => (h μ).plug (Kont.appL .hole _)) ls _ ρ h'.1,
+        wpTS_step (fun μ => (h μ).plug (Kont.appL .hole _)) ls _ ρ h'.2⟩
+  | .str A, _, _, h, ls, δ => fun ρ h' => by
+      rw [cC_str_iff] at h' ⊢
       exact ⟨wpTS_step (fun μ => (h μ).plug (Kont.appL .hole _)) ls _ ρ h'.1,
         wpTS_step (fun μ => (h μ).plug (Kont.appL .hole _)) ls _ ρ h'.2⟩
 
@@ -199,6 +222,12 @@ theorem cC_bind : ∀ (C : CTy) (K : Kont) (M : Expr) (ls : List SRec) (δ : LSu
           (fun ls' hls w σ hσ => ((cC_delay_iff A ls' δ _ σ).mp (h ls' hls w σ hσ)).1) ρ hρ,
         wpTS_bind_frame (.appL K _) M ls P R _ hR
           (fun ls' hls w σ hσ => ((cC_delay_iff A ls' δ _ σ).mp (h ls' hls w σ hσ)).2) ρ hρ⟩
+  | .str A, K, M, ls, δ, P, R, hR, h => fun ρ hρ => by
+      rw [cC_str_iff]
+      exact ⟨wpTS_bind_frame (.appL K _) M ls P R _ hR
+          (fun ls' hls w σ hσ => ((cC_str_iff A ls' δ _ σ).mp (h ls' hls w σ hσ)).1) ρ hρ,
+        wpTS_bind_frame (.appL K _) M ls P R _ hR
+          (fun ls' hls w σ hσ => ((cC_str_iff A ls' δ _ σ).mp (h ls' hls w σ hσ)).2) ρ hρ⟩
 
 
 /-- A dead slot contributes nothing. -/
