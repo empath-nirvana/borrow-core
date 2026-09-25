@@ -7,8 +7,8 @@ import Support.LogicalRelation.Adequacy
 `CDerives Δ Γ e j`: the CBPV typing judgment on BoLo expressions, with `j` a value judgment
 `val A` or a computation judgment `comp C`, in A-normal form.  Beside the CBPV formers it has
 the lifetime `∀` (`∀E` at every `C`), the `!` rules, `[]I`/`[]E` (`[]I` at every value type),
-`⊑imm`/`⊑mut`, one constant per borrow axiom at arbitrary value-type payloads, and three
-call-by-value derived forms (`lolliE`, `allEV`, `ofRet`) that the embedding of BoLo uses.
+`⊑imm`/`⊑mut`, one constant per borrow axiom at arbitrary value-type payloads, three
+call-by-value derived forms (`lolliE`, `allEV`, `ofRet`), and `roll`/`unroll` at `μ`.
 `fundamentalC` proves every rule sound at `SemV`/`SemC`; `adequacyC` runs a closed `F 1`
 computation to `()` from the empty memory.
 -/
@@ -21,6 +21,20 @@ open BoCa.Fig16
 open BoCa.Fig16.BoLo
 open BoCa.BoLo (Heap Steps Step1 Head Kont eLoad eStore)
 open BoCa.Lifetime (LSub LifeCtx LifeVar)
+
+/-! ### `roll` and `unroll`
+
+Typing rules on the same term, as `!E` is: the machine has no `roll`/`unroll` step. -/
+
+/-- `roll` is sound: the unroll equation at `vC true`, under `wpTS_mono`. -/
+theorem roll_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {A : VTy} (hA : A.NoMut 0)
+    (hc : (VTy.mu A).Cl 0) (h : SemV Δ Γ e (VTy.inst (.mu A) A)) : SemV Δ Γ e (.mu A) :=
+  fun δ γ ls ρ hδ hΓ => wpTS_mono (fun _ _ _ hv => vC_roll hA hc hv) ρ (h δ γ ls ρ hδ hΓ)
+
+/-- `unroll` is sound. -/
+theorem unroll_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {A : VTy}
+    (h : SemV Δ Γ e (.mu A)) : SemV Δ Γ e (VTy.inst (.mu A) A) :=
+  fun δ γ ls ρ hδ hΓ => wpTS_mono (fun _ _ _ hv => (vC_unfold hv).2.2) ρ (h δ γ ls ρ hδ hΓ)
 
 /-- A judgment form: a value at `A`, or a computation at `C`. -/
 inductive Jdg where
@@ -150,6 +164,13 @@ inductive CDerives : LifeCtx → Ctx VTy → Expr → Jdg → Prop where
       CDerives Δ Γ (.app e (.val .unit)) (.val (A.instLife x a))
   /-- A computation of `F A` is a value-judged expression at `A`: `SemV` is `SemC` at `F A`. -/
   | ofRet {Δ Γ e A} (h : CDerives Δ Γ e (.comp (.ret A))) : CDerives Δ Γ e (.val A)
+  /-- `roll`: a value of `A[μX. A/X]` is a value of `μX. A`, at a closed `μ` whose variable is
+  outside `A`'s `Mut` payloads (`docs/scope-recursion.md` §2.2). -/
+  | roll {Δ Γ e A} (hA : A.NoMut 0) (hc : (VTy.mu A).Cl 0)
+      (h : CDerives Δ Γ e (.val (VTy.inst (.mu A) A))) : CDerives Δ Γ e (.val (.mu A))
+  /-- `unroll`: a value of `μX. A` is a value of `A[μX. A/X]`. -/
+  | unroll {Δ Γ e A} (h : CDerives Δ Γ e (.val (.mu A))) :
+      CDerives Δ Γ e (.val (VTy.inst (.mu A) A))
 
 /-- The semantic judgment at a judgment form. -/
 def SemJ (Δ : LifeCtx) (Γ : Ctx VTy) (e : Expr) : Jdg → Prop
@@ -207,6 +228,8 @@ theorem fundamentalC {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg}
   | lolliE hs _ _ iha ihf => exact lolliE_compatX hs iha ihf
   | allEV _ hlt ih => exact allE_compatX ih hlt
   | ofRet _ ih => exact ih
+  | roll hA hc _ ih => exact roll_compatX hA hc ih
+  | unroll _ ih => exact unroll_compatX ih
 
 /-! ### Adequacy -/
 

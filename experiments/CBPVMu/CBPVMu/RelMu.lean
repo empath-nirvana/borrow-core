@@ -527,6 +527,19 @@ theorem vC_immReborrow_mu_iff {A : VTy} (hA : A.Cl 1) (c : Lifetime.Life) (b : B
   rw [VTy.immReborrow_mu c hA, VTy.immReborrow_unroll' c hA, vC_mu_iff]
   exact ⟨fun h => h.2.2, fun h => ⟨VTy.noMut_immX c hA 0, VTy.Cl_immX c hA, h⟩⟩
 
+/-- **Induction on the least fixed point at `μX. A`.**  A property closed under one unfolding
+of the body, with the relation and the property at `X`, holds of `vC (μX. A)`. -/
+theorem vC_mu_ind {A : VTy} {δ : LSub} (P : Bool → List SRec → Val → WProp)
+    (h : ∀ b ls v ρ, A.NoMut 0 → (VTy.mu A).Cl 0 →
+      cBody A δ (fun b ls v ρ => vC b (.mu A) ls δ v ρ ∧ P b ls v ρ) b ls v ρ → P b ls v ρ) :
+    ∀ b ls v ρ, vC b (.mu A) ls δ v ρ → P b ls v ρ := by
+  intro b ls v ρ hv
+  obtain ⟨hA, hc, hlfp⟩ := hv
+  refine (hlfp (fun b ls v ρ => vC b (.mu A) ls δ v ρ ∧ P b ls v ρ)
+    (fun b' ls' v' ρ' h' => ⟨vC_roll hA hc ?_, h b' ls' v' ρ' hA hc h'⟩)).2
+  rw [vC_inst]
+  exact cBody_mono A δ hA (fun _ _ _ _ h => h.1) b' ls' v' ρ' h'
+
 end BoCa.Fig16.LogRel.CBPVMu
 
 end

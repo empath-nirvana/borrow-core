@@ -1,10 +1,12 @@
 import CBPVMu.Types
 import CBPVMu.Records
 import CBPVMu.World
+import CBPVMu.ShapeMu
 import CBPVMu.Images
 import CBPVMu.Invariant
 import CBPVMu.Wp
 import CBPVMu.Relation
+import CBPVMu.RelMu
 import CBPVMu.RelationFacts
 import CBPVMu.ReborrowShapes
 import CBPVMu.Reborrow
@@ -14,3 +16,6 @@ import CBPVMu.Computation
 import CBPVMu.Compat
 import CBPVMu.Fundamental
 import CBPVMu.Examples
+import CBPVMu.Fix
+import CBPVMu.Lists
+import CBPVMu.Count
