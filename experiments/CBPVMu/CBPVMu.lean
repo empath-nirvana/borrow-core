@@ -31,3 +31,5 @@ import CBPVMu.Folds
 import CBPVMu.Blocks
 import CBPVMu.CommonList
 import CBPVMu.ReuseList
+import CBPVMu.DelayApprox
+import CBPVMu.DelayPrograms
