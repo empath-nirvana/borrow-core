@@ -35,6 +35,8 @@ import Core.CommonList
 import Core.Records
 import Core.Splits
 import Core.RecordPrograms
+import Core.Family
+import Core.FamilyPrograms
 import Core.ReuseList
 import Core.DelayApprox
 import Core.DelayPrograms
