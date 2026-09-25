@@ -37,3 +37,8 @@ roots = ["CBPVSplit.Split", "ModesLabels.Modes", "Shifts.Shifts", "BorrowedClosu
 name = "Projection"
 srcDir = "experiments/Projection"
 roots = ["Projection"]
+
+[[lean_lib]]
+name = "Relaxed"
+srcDir = "experiments/Relaxed"
+roots = ["Relaxed"]

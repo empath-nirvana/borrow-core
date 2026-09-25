@@ -13,6 +13,7 @@ is then implemented in the library afresh. None of these libraries is a default 
 | `CBPVCore/` | `CBPVCore` | `lake build CBPVCore` | ported |
 | `CBPVWorld/` | `CBPVWorld` | `lake build CBPVWorld` | ported |
 | `Projection/` | `Projection` | `lake build Projection` | negative: `no_projection` refutes a same-lifetime `Imm` projection at the typed world (`FrameLife`) |
+| `Relaxed/` | `Relaxed` | `lake build Relaxed` | FP and adequacy hold with `FrameLife.2` and `TW.reb`'s stratum non-strict; same-lifetime `Imm` projection still refuted, by `[TR]` 6.38 (`frame_view_excluded`) |
 | `Bang/` | — | — | archived: became `Paper/`, `Support/`, `Examples/Closures.lean` |
 
 Each experiment builds against this repository's `Paper`/`Support` (and `Examples`, for
