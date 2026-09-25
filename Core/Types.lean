@@ -5,7 +5,7 @@ import Support.LogicalRelation.Facts
 import Support.Statics.Contexts
 
 /-!
-# Core — Types
+# Core — Types  `[spec §3, §6, §7]`
 
 Call-by-push-value types, the index of the typed world's records.
 
@@ -29,7 +29,7 @@ open BoCa.Fig16
 open BoCa.Lifetime (LSub LifeCtx LifeVar LSubst)
 
 mutual
-/-- Value types. -/
+/-- Value types.  `[spec §3]` -/
 inductive VTy where
   | unit
   | tensor (A B : VTy)
@@ -53,7 +53,7 @@ inductive VTy where
   | tvar (n : Nat)
   /-- `μX. A`, binding index `0` in `A`. -/
   | mu (A : VTy)
-/-- Computation types. -/
+/-- Computation types.  `[spec §3]` -/
 inductive CTy where
   /-- `F A`. -/
   | ret (A : VTy)
@@ -482,7 +482,7 @@ def Occ : Nat → VTy → Prop
 
 /-- The variable `k` occurs in `A` only outside `Mut` payloads — `docs/scope-recursion.md` §2.2:
 the `Mut` clause stores its predicate by an equation, so it is not monotone.  A `U C` is a
-leaf, so a variable never occurs in a `⊸` domain. -/
+leaf, so a variable never occurs in a `⊸` domain.  `[spec §6]` -/
 def NoMut : Nat → VTy → Prop
   | _, .unit => True
   | k, .tensor A B => NoMut k A ∧ NoMut k B
@@ -1060,7 +1060,7 @@ type `A`.  `1`, `0`, `⊗`, `⊕` structurally; `U C ↦ Unk` (codata has no saf
 and `∀` in BoLo); `Ref A ↦ Imm 'b A`; `Imm @a A` kept; `Mut @a A ↦ Imm 'b A`;
 `[@a] A ↦ Imm̲ 'b A`; `!A` kept whole (it holds no resource); `Unk ↦ Unk`.  At `μX. A` the
 clause substitutes inside the payloads it keeps (`VTy.immG`, `docs/scope-recursion.md` §2.4):
-`Imm̲ 'b (μX. A) = μY. Imm̲ᵡ 'b A`, a head `X` becoming `Y` and a payload `X` becoming `μX. A`. -/
+`Imm̲ 'b (μX. A) = μY. Imm̲ᵡ 'b A`, a head `X` becoming `Y` and a payload `X` becoming `μX. A`.  `[spec §6]` -/
 def VTy.immReborrow (b : Lifetime.Life) : VTy → VTy
   | .unit => .unit
   | .tensor A B => .tensor (A.immReborrow b) (B.immReborrow b)

@@ -1,7 +1,7 @@
 import Core.Computation
 
 /-!
-# Core — Compatibility of the CBPV rules
+# Core — Compatibility of the CBPV rules  `[spec §3]`
 
 The compatibility lemmas at `SemC`, one per CBPV rule.  Terms are BoLo expressions:
 

@@ -1,7 +1,7 @@
 import Core.CountFree
 
 /-!
-# Core — an in-place map through a mutable borrow
+# Core — an in-place map through a mutable borrow  `[spec §6]`
 
 `L′ = μX. 1 ⊕ Ref (N ⊗ X)`, a boxed list of numerals.  `mapInc : U(L′ ⊸ F L′)` increments
 every payload in place — each cell is emptied by `swap`, its tail mapped, and the new pair

@@ -29,7 +29,7 @@ import Core.FrameRecords
 import Core.World
 
 /-!
-# Core — Wp
+# Core — Wp  `[spec §3, §4]`
 
 `Support/TypedWorld`'s layer `Wp`, with records typed at `VTy`.  Stratified record lists and `wp` at a tagged typed world: relevance, the Kripke order, the stratified `Mut` clause, tags, and the frame steps that only regroup.
 -/
@@ -197,7 +197,7 @@ theorem linLife_of_ag {W W' : WRes} {ps : List FrameRec} (t : ∀ a, AgW W' a �
 
 /-- A reborrow keeps `FrameLife`: a new view is at a lifetime of `ag(W)` or at `β`, and
 `β` is at most the frame (`StratumLe W β`); the frame's own cell gets no `β`, since the
-escrow reborrowed has no `own` or `mut` cell there. -/
+escrow reborrowed has no `own` or `mut` cell there.  `[spec §4]` -/
 theorem frameLife_reb_like {W W' c w₀ : WRes} {le : Loc} {s : LSet} {v : Val}
     {hs : w₀.InStratum s.join} {β : Life} (hvW : ResU.Valid W)
     (hle : W.get le = some (CellU.immOf s v w₀ hs)) (hreb : ResU.Reb β w₀ c)

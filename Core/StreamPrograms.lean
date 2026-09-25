@@ -2,7 +2,7 @@ import Core.DelayPrograms
 import Core.CommonList
 
 /-!
-# Core — programs over streams
+# Core — programs over streams  `[spec §7]`
 
 A stream is made by `unfoldS step s₀` and consumed by `next`s and a final `close`.  The
 consumers are `CDerives` derivations, so each program is one closed derivation, run by
@@ -81,7 +81,7 @@ theorem d_takeE : ∀ (n : ℕ) {Γ : Ctx VTy}, Ctx.Dead Γ →
             (d_takeE n (.cons (.cons (.cons hΓ))))))
 
 /-- **Adequacy for `Str 1`**: for a closed `e : U(Str 1)` and every `n`, observing `n` times
-then closing runs from the empty memory to `()` and the empty memory. -/
+then closing runs from the empty memory to `()` and the empty memory.  `[spec §7]` -/
 theorem take_runs {e : Expr} (he : CDerives LifeCtx.empty [] e (.val (.thunk (.str .unit))))
     (n : ℕ) :
     BoCa.BoLo.Steps Adequacy.emptyMem (bindE e (takeE n)) Adequacy.emptyMem (.val .unit) :=

@@ -2,7 +2,7 @@ import Core.Fundamental
 import Paper.Examples.Programs
 
 /-!
-# Core — runs through an evaluation context
+# Core — runs through an evaluation context  `[spec §3]`
 
 The machine's steps decompose uniquely: a step of `K[e]`, with `e` not a value, is a step of
 `e` under `K` (`step1_plug_inv`), so a run of `K[e]` to a value first runs `e` to a value

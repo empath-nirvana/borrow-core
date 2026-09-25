@@ -1,7 +1,7 @@
 import Core.Splits
 
 /-!
-# Core — borrowing a family of places at one lifetime
+# Core — borrowing a family of places at one lifetime  `[spec §5]`
 
 A place-record is a tuple of owned references, one per leaf.  Borrowing it borrows every leaf,
 and the callback receives the family of leaf borrows at **one** lifetime `'c`:
@@ -63,7 +63,7 @@ def inner2 : Expr := lam2 (.app (.app (.var 6) unit') (.pair (.var 2) (.var 0)))
 def outer2 : Expr :=
   lam2 (.letpair (.app (.app withbor (.var 2)) inner2) (.pair (.var 1) (.var 0)))
 
-/-- `λp. λg. let (x, y) = p; let (x′, r) = withbor x outer2; let (y′, t) = r; ((x′, y′), t)`. -/
+/-- `λp. λg. let (x, y) = p; let (x′, r) = withbor x outer2; let (y′, t) = r; ((x′, y′), t)`.  `[spec §5]` -/
 def withborF2 : Expr :=
   lam2 (.letpair (.var 1)
     (.letpair (.app (.app withbor (.var 1)) outer2)
@@ -241,7 +241,7 @@ theorem withborF2_wf (bw : Borrows M side) (s : FamSide M Δ c x y A B T) (hside
 end
 
 /-- The `Mut` family.  `A` needs `withbor` form (2)'s side condition at `Δ`; `B` and `T` need to
-outlive the outer lifetime `'a`, which also gives `B` its form (2) side condition. -/
+outlive the outer lifetime `'a`, which also gives `B` its form (2) side condition.  `[spec §5]` -/
 theorem withborM2_wf {Δ : LifeCtx} {c x y : LifeVar} {A B T : VTy}
     (s : FamSide mutM Δ c x y A B T) (hA : ∃ b, Δ.Defines b ∧ VOutlives Δ b A)
     (hBo : VOutlives (FD₁ Δ x) (.var x) B) (hTo : VOutlives (FD₁ Δ x) (.var x) T)
@@ -249,7 +249,7 @@ theorem withborM2_wf {Δ : LifeCtx} {c x y : LifeVar} {A B T : VTy}
     CDerives Δ Γ withborF2 (.val (withborF2Ty mutM c Δ.meetOfDom A B T)) :=
   withborF2_wf borrowsMut s hA ⟨.var x, LifeCtx.defines_of_wf (wf_var_self _ _ _), hBo⟩ hBo hTo hΓ
 
-/-- The `Imm` family. -/
+/-- The `Imm` family.  `[spec §5]` -/
 theorem withborI2_wf {Δ : LifeCtx} {c x y : LifeVar} {A B T : VTy}
     (s : FamSide immM Δ c x y A B T) (hA : VScoped Δ A) (hB : VScoped Δ B)
     (hBo : VOutlives (FD₁ Δ x) (.var x) B) (hTo : VOutlives (FD₁ Δ x) (.var x) T)

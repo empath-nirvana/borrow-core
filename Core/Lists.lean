@@ -3,7 +3,7 @@ import Core.Examples
 import Paper.Examples.Programs
 
 /-!
-# Core — the boxed list through the real former
+# Core — the boxed list through the real former  `[spec §6]`
 
 `L = μX. 1 ⊕ Ref X` is a `VTy`.  A list is built by a `CDerives` derivation (`roll`, `alloc`),
 and `freeAll = Z (λself. λl. case l {inj₁ u. u | inj₂ r. self (free r)})` frees it.

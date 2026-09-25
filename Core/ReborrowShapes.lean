@@ -12,7 +12,7 @@ import Core.Images
 import Core.World
 
 /-!
-# Core — ReborrowShapes
+# Core — ReborrowShapes  `[spec §3]`
 
 `Support/TypedWorld`'s layer `ReborrowShapes`, with records typed at `VTy`.  `[TR]` Lemmas 6.131 and 6.132 at the shape relation `vShape`.
 -/

@@ -1,7 +1,7 @@
 import Core.Blocks
 
 /-!
-# Core — records and variants as derived forms
+# Core — records and variants as derived forms  `[spec §5]`
 
 A record is a binary tree of fields, the block `Shape` of `Blocks.lean`, with no unit leaf:
 
@@ -121,7 +121,7 @@ abbrev FPath := List Bool
 
 namespace Shape
 
-/-- The variant of the leaves: `leaf A ↦ A`, `node s₁ s₂ ↦ sumTy s₁ ⊕ sumTy s₂`. -/
+/-- The variant of the leaves: `leaf A ↦ A`, `node s₁ s₂ ↦ sumTy s₁ ⊕ sumTy s₂`.  `[spec §5]` -/
 def sumTy : Shape → VTy
   | .leaf A => A
   | .node s₁ s₂ => .sum (sumTy s₁) (sumTy s₂)
@@ -167,7 +167,7 @@ end Shape
 
 Each is the `⊗` (resp. `⊕`) clause iterated over the tree. -/
 
-/-- `Imm̲ 'b {fields} = {Imm̲ 'b fields}`. -/
+/-- `Imm̲ 'b {fields} = {Imm̲ 'b fields}`.  `[spec §5]` -/
 theorem immReborrow_valTy (b : Lifetime.Life) :
     ∀ σ : Shape, σ.valTy.immReborrow b = (σ.map (VTy.immReborrow b)).valTy
   | .leaf _ => rfl
@@ -175,7 +175,7 @@ theorem immReborrow_valTy (b : Lifetime.Life) :
       simp only [Shape.valTy, VTy.immReborrow, Shape.map, immReborrow_valTy b s₁,
         immReborrow_valTy b s₂]
 
-/-- `Imm̲ 'b ⟨cases⟩ = ⟨Imm̲ 'b cases⟩`. -/
+/-- `Imm̲ 'b ⟨cases⟩ = ⟨Imm̲ 'b cases⟩`.  `[spec §5]` -/
 theorem immReborrow_sumTy (b : Lifetime.Life) :
     ∀ σ : Shape, σ.sumTy.immReborrow b = (σ.map (VTy.immReborrow b)).sumTy
   | .leaf _ => rfl
@@ -237,7 +237,7 @@ inductive RecArgs (Δ : LifeCtx) : Ctx VTy → ETree → Shape → Prop where
   | node {Γ Γ₁ Γ₂ t₁ t₂ s₁ s₂} : Ctx.Split Γ Γ₁ Γ₂ → RecArgs Δ Γ₁ t₁ s₁ →
       RecArgs Δ Γ₂ t₂ s₂ → RecArgs Δ Γ (.node t₁ t₂) (.node s₁ s₂)
 
-/-- Record introduction. -/
+/-- Record introduction.  `[spec §5]` -/
 theorem recI {Δ : LifeCtx} {Γ : Ctx VTy} {t : ETree} {σ : Shape} (h : RecArgs Δ Γ t σ) :
     CDerives Δ Γ (tuple t) (.val σ.valTy) := by
   induction h with
@@ -257,7 +257,7 @@ def recLet : Shape → Expr → Expr → Expr
   | .node s₁ s₂, e, body =>
       .letpair e (recLet s₂ (.var 0) (recLet s₁ (.var ((recCtx s₂).length + 1)) body))
 
-/-- Record elimination, at a computation type. -/
+/-- Record elimination, at a computation type.  `[spec §5]` -/
 theorem recE {Δ : LifeCtx} {C : CTy} :
     ∀ (σ : Shape) {Γ Γp Γb : Ctx VTy} {e body : Expr}, Ctx.Split Γ Γp Γb →
       CDerives Δ Γp e (.val σ.valTy) → CDerives Δ (recCtx σ ++ Γb) body (.comp C) →
@@ -366,7 +366,7 @@ def getAt : Shape → FPath → Expr → Expr
       .letpair e (.seq (.app (dropT s₁.valTy) (.var 1)) (getAt s₂ p (.var 0)))
   | _, _, e => e
 
-/-- Projection, for a record whose fields are affine. -/
+/-- Projection, for a record whose fields are affine.  `[spec §5]` -/
 theorem getAt_wf {Δ : LifeCtx} :
     ∀ (σ : Shape) (p : FPath) {A : VTy} {Γ : Ctx VTy} {e : Expr},
       σ.get? p = some A → σ.All Affine → CDerives Δ Γ e (.val σ.valTy) →
@@ -420,7 +420,7 @@ inductive Branches (Δ : LifeCtx) (C : CTy) : Ctx VTy → Shape → ETree → Pr
   | node {Γ s₁ s₂ t₁ t₂} : Branches Δ C (⟨s₁.sumTy, false⟩ :: Γ) s₁ t₁ →
       Branches Δ C (⟨s₂.sumTy, false⟩ :: Γ) s₂ t₂ → Branches Δ C Γ (.node s₁ s₂) (.node t₁ t₂)
 
-/-- Variant elimination. -/
+/-- Variant elimination.  `[spec §5]` -/
 theorem vcase_wf {Δ : LifeCtx} {C : CTy} {Γb : Ctx VTy} {σ : Shape} {t : ETree}
     (hB : Branches Δ C Γb σ t) :
     ∀ {Γ Γs : Ctx VTy} {e : Expr}, Ctx.Split Γ Γs Γb → CDerives Δ Γs e (.val σ.sumTy) →
@@ -450,7 +450,7 @@ theorem allI_fresh {Δ : LifeCtx} {Γ : Ctx VTy} {S : VTy} {M : Expr} {y : LifeV
 
 /-- Reading field `p` of `e : Imm @a {…}`.  The body runs at `'y ⊏ ⊓Δ` with the field's image
 `Imm̲ 'y A` at index 0 and returns `['y] B`; the other fields' images are consumed by
-`getAt`, which needs them affine. -/
+`getAt`, which needs them affine.  `[spec §5]` -/
 theorem loadField_wf {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {σ : Shape} {p : FPath}
     {A : VTy} {y : LifeVar} {e body : Expr} {B : VTy} (hΔ : Δ.Ok)
     (he : CDerives Δ Γ e (.val (.imm a σ.valTy))) (hp : σ.get? p = some A)
@@ -475,7 +475,7 @@ def loadCase (e : Expr) (t : ETree) : Expr :=
   .app (.app withload e) (.val (.lam (.val (.lam (vcase (.var 0) t)))))
 
 /-- Matching on `e : Imm @a ⟨…⟩`.  Branch `p` runs at `'y ⊏ ⊓Δ` with the case's image
-`Imm̲ 'y A` and returns `['y] B`. -/
+`Imm̲ 'y A` and returns `['y] B`.  `[spec §5]` -/
 theorem loadCase_wf {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {σ : Shape} {y : LifeVar}
     {e : Expr} {t : ETree} {B : VTy} (hΔ : Δ.Ok)
     (he : CDerives Δ Γ e (.val (.imm a σ.sumTy))) (hy : Δ.find? y = none)
@@ -537,7 +537,7 @@ theorem modAt_wf {Δ : LifeCtx} {B : VTy} {g : Expr} :
 def swapField (σ : Shape) (p : FPath) (m g : Expr) : Expr :=
   .app (.app withswap m) (modAt σ p g)
 
-/-- Field-level `withswap`: `Mut @a {…} ⊸ (A ⊸ A ⊗ B) ⊸ Mut @a {…} ⊗ B`, derived. -/
+/-- Field-level `withswap`: `Mut @a {…} ⊸ (A ⊸ A ⊗ B) ⊸ Mut @a {…} ⊗ B`, derived.  `[spec §5]` -/
 theorem swapField_wf {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {σ : Shape} {p : FPath}
     {A : VTy} {m g : Expr} {B : VTy}
     (hm : CDerives Δ Γ m (.val (.mut a σ.valTy))) (hp : σ.get? p = some A)

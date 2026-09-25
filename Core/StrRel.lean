@@ -1,7 +1,7 @@
 import Core.Compatibility
 
 /-!
-# Core — the stream type's relation
+# Core — the stream type's relation  `[spec §7]`
 
 `Str A = νX. F(A ⊗ U X) & F 1` is `cC`'s `str` clause, the greatest fixed point `strRel` of
 `strF` (`Relation.lean`).  `strF` is monotone in the candidate (`strF_mono`), so the greatest
@@ -44,7 +44,7 @@ theorem strRel_out (VA : List SRec → Val → WProp) : (strRel VA).Le (strF VA 
 theorem strRel_roll (VA : List SRec → Val → WProp) : (strF VA (strRel VA)).Le (strRel VA) :=
   strRel_coind (strF_mono VA (strRel_out VA))
 
-/-- **`Str A` is its unrolling**: `𝒞⟦Str A⟧ = 𝒞⟦F(A ⊗ U(Str A)) & F 1⟧`. -/
+/-- **`Str A` is its unrolling**: `𝒞⟦Str A⟧ = 𝒞⟦F(A ⊗ U(Str A)) & F 1⟧`.  `[spec §7]` -/
 theorem cC_str_iff (A : VTy) (ls : List SRec) (δ : LSub) (e : Expr) (ρ : WRes) :
     cC (.str A) ls δ e ρ ↔ cC (strUnroll A) ls δ e ρ :=
   ⟨fun h => strRel_out _ ls e ρ h, fun h => strRel_roll _ ls e ρ h⟩

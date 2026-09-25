@@ -1,7 +1,7 @@
 import Core.Records
 
 /-!
-# Core — splitting a context by the variables a subterm uses
+# Core — splitting a context by the variables a subterm uses  `[spec §5]`
 
 `part e i Γ` sends the live slots of `Γ` that `e` mentions (at de Bruijn offset `i`) to the
 left and the rest to the right.  The wrappers `appW`, `seqW`, `pairW`, `letW`, `caseW` and

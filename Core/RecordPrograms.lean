@@ -2,7 +2,7 @@ import Core.Splits
 import Core.CommonList
 
 /-!
-# Core — programs: field access through borrows
+# Core — programs: field access through borrows  `[spec §5]`
 
 Closed programs, each a `CDerives` derivation at `1` run by `adequacyC`, and a kernel-checked
 run of the interpreter; each `…Obs` variant returns what was read or written.

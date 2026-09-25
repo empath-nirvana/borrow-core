@@ -35,7 +35,7 @@ import Core.World
 import Core.Wp
 
 /-!
-# Core — Compatibility
+# Core — Compatibility  `[spec §3]`
 
 `Support/TypedWorld`'s layer `Compatibility`, with records typed at `VTy`.  The compatibility lemmas at `SemV`: `𝒢X⟦Γ⟧` split along the context, `wpTS` monotone and bound with a frame, the stratified connectives, and 6.152–6.176 as `_compatX`.
 -/

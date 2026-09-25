@@ -4,7 +4,7 @@ import Core.Stream
 import Support.LogicalRelation.Adequacy
 
 /-!
-# Core — Fundamental Property and adequacy
+# Core — Fundamental Property and adequacy  `[spec §3]`
 
 `CDerives Δ Γ e j`: the CBPV typing judgment on BoLo expressions, with `j` a value judgment
 `val A` or a computation judgment `comp C`, in A-normal form.  Beside the CBPV formers it has
@@ -41,12 +41,12 @@ theorem unroll_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {A : VTy}
     (h : SemV Δ Γ e (.mu A)) : SemV Δ Γ e (VTy.inst (.mu A) A) :=
   fun δ γ ls ρ hδ hΓ => wpTS_mono (fun _ _ _ hv => (vC_unfold hv).2.2) ρ (h δ γ ls ρ hδ hΓ)
 
-/-- A judgment form: a value at `A`, or a computation at `C`. -/
+/-- A judgment form: a value at `A`, or a computation at `C`.  `[spec §3]` -/
 inductive Jdg where
   | val (A : VTy)
   | comp (C : CTy)
 
-/-- The CBPV typing judgment. -/
+/-- The CBPV typing judgment.  `[spec §3]` -/
 inductive CDerives : LifeCtx → Ctx VTy → Expr → Jdg → Prop where
   | var {Δ Γ i A} (h : Ctx.Solo Γ i A) : CDerives Δ Γ (.var i) (.val A)
   | unitI {Δ Γ} (h : Ctx.Dead Γ) : CDerives Δ Γ (.val .unit) (.val .unit)
@@ -160,64 +160,64 @@ inductive CDerives : LifeCtx → Ctx VTy → Expr → Jdg → Prop where
       CDerives Δ Γ withswap (.val (axWithswapTy a A B))
   -- Call-by-value derived forms: BoLo's application and `∀E` on arbitrary subterms, and the
   -- reading of a computation of `F A` as a value-judged expression at `A`.
-  /-- Call-by-value application `f a`, both arbitrary, at `VTy.lolli` (`lolliE_compatX`). -/
+  /-- Call-by-value application `f a`, both arbitrary, at `VTy.lolli` (`lolliE_compatX`).  `[spec §3]` -/
   | lolliE {Δ Γ Γ₁ Γ₂ f a A B} (hs : Ctx.Split Γ Γ₁ Γ₂)
       (ha : CDerives Δ Γ₁ a (.val A)) (hf : CDerives Δ Γ₂ f (.val (.lolli A B))) :
       CDerives Δ Γ (.app f a) (.val B)
-  /-- Call-by-value `∀E`: `e []` for `e` at `VTy.all x b A` (`allE_compatX`). -/
+  /-- Call-by-value `∀E`: `e []` for `e` at `VTy.all x b A` (`allE_compatX`).  `[spec §3]` -/
   | allEV {Δ Γ e x b a A} (h : CDerives Δ Γ e (.val (.all x b A))) (hlt : Δ.EntailsLt a b) :
       CDerives Δ Γ (.app e (.val .unit)) (.val (A.instLife x a))
-  /-- A computation of `F A` is a value-judged expression at `A`: `SemV` is `SemC` at `F A`. -/
+  /-- A computation of `F A` is a value-judged expression at `A`: `SemV` is `SemC` at `F A`.  `[spec §3]` -/
   | ofRet {Δ Γ e A} (h : CDerives Δ Γ e (.comp (.ret A))) : CDerives Δ Γ e (.val A)
   /-- `roll`: a value of `A[μX. A/X]` is a value of `μX. A`, at a closed `μ` whose variable is
-  outside `A`'s `Mut` payloads (`docs/scope-recursion.md` §2.2). -/
+  outside `A`'s `Mut` payloads (`docs/scope-recursion.md` §2.2).  `[spec §6]` -/
   | roll {Δ Γ e A} (hA : A.NoMut 0) (hc : (VTy.mu A).Cl 0)
       (h : CDerives Δ Γ e (.val (VTy.inst (.mu A) A))) : CDerives Δ Γ e (.val (.mu A))
-  /-- `unroll`: a value of `μX. A` is a value of `A[μX. A/X]`. -/
+  /-- `unroll`: a value of `μX. A` is a value of `A[μX. A/X]`.  `[spec §6]` -/
   | unroll {Δ Γ e A} (h : CDerives Δ Γ e (.val (.mu A))) :
       CDerives Δ Γ e (.val (VTy.inst (.mu A) A))
   /-- The borrowed fold, a constant:
   `foldImm : !U(∀'y ⊏ ⊤. A_R ⊸ F R) ⊸ !U(∀'y ⊏ @c. Imm 'y (μX. T) ⊸ F R)`, for `T` built by
   `⊗`/`⊕` from closed leaves, `Ref X` and `X` (not `X` itself), `A_R = Imm̲ 'y T` with `R` at
   every recursive position, `R` outliving every lifetime, `'y` free in neither `μX. T` nor
-  `R`. -/
+  `R`.  `[spec §6]` -/
   | foldImm {Δ Γ} (F : FShape) (y : LifeVar) (c : Lifetime.Life) (R : VTy) (hΓ : Ctx.Dead Γ)
       (hF : F.WF) (hG : F.Guarded) (hyM : ¬ VFree y (.mu F.ty)) (hyR : ¬ VFree y R)
       (hR : ∀ Δ' a, VOutlives Δ' a R) :
       CDerives Δ Γ (.val (foldImmV F)) (.val (.lolli (algTy F y R) (foldTy F y c R)))
   /-- The owned fold, a constant: `foldOwn : !U(A′_R ⊸ F R) ⊸ !U(μX. T ⊸ F R)`, for `T` of the
-  same class, `A′_R = T` with `R` at every recursive position, any `R`. -/
+  same class, `A′_R = T` with `R` at every recursive position, any `R`.  `[spec §6]` -/
   | foldOwn {Δ Γ} (F : FShape) (R : VTy) (hΓ : Ctx.Dead Γ) (hF : F.WF) (hG : F.Guarded) :
       CDerives Δ Γ (.val (foldOwnV F)) (.val (.lolli (algOTy F R) (foldOTy F R)))
   /-- The owned fold with reuse, a constant: `foldReuse : !U(A″_R ⊸ F R) ⊸ !U(μX. T ⊸ F R)`,
   for `T` of the same class, `A″_R = T` with `R` at a head `X` and `Ref 1 ⊗ R` at every `Ref X`
-  (the emptied cell and the result on its content), any `R`. -/
+  (the emptied cell and the result on its content), any `R`.  `[spec §6]` -/
   | foldReuse {Δ Γ} (F : FShape) (R : VTy) (hΓ : Ctx.Dead Γ) (hF : F.WF) (hG : F.Guarded) :
       CDerives Δ Γ (.val (foldReuseV F)) (.val (.lolli (algRTy F R) (foldOTy F R)))
-  /-- `D A` is its unrolling `F(A ⊕ U(D A)) & F 1` (`cC_delay_iff`), on the same term. -/
+  /-- `D A` is its unrolling `F(A ⊕ U(D A)) & F 1` (`cC_delay_iff`), on the same term.  `[spec §7]` -/
   | delayIn {Δ Γ e A} (h : CDerives Δ Γ e (.comp (delayUnroll A))) :
       CDerives Δ Γ e (.comp (.delay A))
   | delayOut {Δ Γ e A} (h : CDerives Δ Γ e (.comp (.delay A))) :
       CDerives Δ Γ e (.comp (delayUnroll A))
   /-- Guarded recursion on the delay type, a constant:
-  `fixD : !U(S ⊸ F(A ⊕ S) & F 1) ⊸ !U(S ⊸ D A)` (`Delay.lean`). -/
+  `fixD : !U(S ⊸ F(A ⊕ S) & F 1) ⊸ !U(S ⊸ D A)` (`Delay.lean`).  `[spec §7]` -/
   | fixD {Δ Γ} (A S : VTy) (hΓ : Ctx.Dead Γ) : CDerives Δ Γ (.val fixDV) (.val (fixDTy A S))
-  /-- `Str A` is its unrolling `F(A ⊗ U(Str A)) & F 1` (`cC_str_iff`), on the same term. -/
+  /-- `Str A` is its unrolling `F(A ⊗ U(Str A)) & F 1` (`cC_str_iff`), on the same term.  `[spec §7]` -/
   | strIn {Δ Γ e A} (h : CDerives Δ Γ e (.comp (strUnroll A))) :
       CDerives Δ Γ e (.comp (.str A))
   | strOut {Δ Γ e A} (h : CDerives Δ Γ e (.comp (.str A))) :
       CDerives Δ Γ e (.comp (strUnroll A))
   /-- Coiteration on the stream type, a constant:
-  `unfoldS : !U(S ⊸ F(A ⊗ S) & F 1) ⊸ !U(S ⊸ Str A)` (`Stream.lean`). -/
+  `unfoldS : !U(S ⊸ F(A ⊗ S) & F 1) ⊸ !U(S ⊸ Str A)` (`Stream.lean`).  `[spec §7]` -/
   | unfoldS {Δ Γ} (A S : VTy) (hΓ : Ctx.Dead Γ) :
       CDerives Δ Γ (.val unfoldSV) (.val (unfoldSTy A S))
 
-/-- The semantic judgment at a judgment form. -/
+/-- The semantic judgment at a judgment form.  `[spec §3]` -/
 def SemJ (Δ : LifeCtx) (Γ : Ctx VTy) (e : Expr) : Jdg → Prop
   | .val A => SemV Δ Γ e A
   | .comp C => SemC Δ Γ e C
 
-/-- **Fundamental Property** of the CBPV judgment over the typed world at CBPV types. -/
+/-- **Fundamental Property** of the CBPV judgment over the typed world at CBPV types.  `[spec §3]` -/
 theorem fundamentalC {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg}
     (h : CDerives Δ Γ e j) : SemJ Δ Γ e j := by
   induction h with
@@ -338,7 +338,7 @@ theorem corollary33 (e : Expr) (hsem : SemC LifeCtx.empty [] e (.ret .unit)) :
   exact hsteps
 
 /-- **Adequacy**: a closed computation of type `F 1` runs from the empty memory to `()` and the
-empty memory. -/
+empty memory.  `[spec §3]` -/
 theorem adequacyC {e : Expr} (h : CDerives LifeCtx.empty [] e (.comp (.ret .unit))) :
     BoCa.BoLo.Steps Adequacy.emptyMem e Adequacy.emptyMem (.val .unit) :=
   corollary33 e (fundamentalC h)

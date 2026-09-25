@@ -8,6 +8,9 @@ mechanization of Wagner, Gierczak, Marshall, Li and Ahmed, *From Linearity to Bo
 - `Paper/`, `Support/` — the mechanization, with each entry's additions tagged `[spec §N]`.
   `Paper/INDEX.md` and `docs/adjudications.md` describe the baseline.
 - `Examples/` — programs that exercise the entries.
+- `Core/` — the call-by-push-value core with non-strict frame lifetimes, blocks, records and
+  family borrows, recursive types and folds, and delay and stream codata (`SPEC.md` §3–§7),
+  tagged `[spec §N]`; `Core/README.md` describes it.
 - `experiments/` — probes toward future entries, as non-default libraries the library never
   imports (`experiments/README.md`).
 
@@ -20,3 +23,6 @@ lake env lean scripts/AxiomCheck.lean
 
 Entry 1 (`SPEC.md` §2) adds the exponential `!T`: a value that holds no resource, which a borrow
 keeps whole. `Examples/` loads closures through immutable and mutable borrows and calls them.
+
+Entries 2–6 (`SPEC.md` §3–§7) are `Core/`: one typed world whose Fundamental Property and
+adequacy cover every rule, into which the baseline embeds.

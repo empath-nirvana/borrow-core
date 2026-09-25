@@ -31,7 +31,7 @@ import Core.World
 import Core.Wp
 
 /-!
-# Core — Reborrow
+# Core — Reborrow  `[spec §3, §4]`
 
 `Support/TypedWorld`'s layer `Reborrow`, with records typed at `VTy`.  `[TR]` Theorem 6.150 at `wpTS`: the chooser `RebChooseTW` that replaces `RebEscrow`, and the rule.
 -/

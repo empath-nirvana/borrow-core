@@ -11,7 +11,7 @@ import Core.FrameRecords
 import Core.World
 
 /-!
-# Core — Relation
+# Core — Relation  `[spec §3, §6, §7]`
 
 The mode-indexed CBPV relation over the typed world whose records are typed at `VTy`.
 
@@ -108,7 +108,7 @@ def delayF (VA : List SRec → Val → WProp) (R : CPred) : CPred := fun ls e ρ
   wpTS ls (.app e (.val (.inj₂ .unit))) (fun _ w => ⌜w = .unit⌝) ρ
 
 /-- `⟦D A⟧ = ⋃{R | R ⊆ delayF VA R}`, the greatest fixed point written in `Prop` as `∃ R`
-(`docs/scope-recursion.md` §3.1). -/
+(`docs/scope-recursion.md` §3.1).  `[spec §7]` -/
 def delayRel (VA : List SRec → Val → WProp) : CPred := fun ls e ρ =>
   ∃ R : CPred, R.Le (delayF VA R) ∧ R ls e ρ
 
@@ -123,7 +123,7 @@ def strF (VA : List SRec → Val → WProp) (R : CPred) : CPred := fun ls e ρ =
   wpTS ls (.app e (.val (.inj₁ .unit))) (strQ VA R) ρ ∧
   wpTS ls (.app e (.val (.inj₂ .unit))) (fun _ w => ⌜w = .unit⌝) ρ
 
-/-- `⟦Str A⟧ = ⋃{R | R ⊆ strF VA R}`, the greatest fixed point written in `Prop` as `∃ R`. -/
+/-- `⟦Str A⟧ = ⋃{R | R ⊆ strF VA R}`, the greatest fixed point written in `Prop` as `∃ R`.  `[spec §7]` -/
 def strRel (VA : List SRec → Val → WProp) : CPred := fun ls e ρ =>
   ∃ R : CPred, R.Le (strF VA R) ∧ R ls e ρ
 
@@ -133,7 +133,7 @@ mutual
 `True`.  At a variable the environment's candidate; at `μX. A` the least fixed point
 `⋂{P | A[P/X] ⊆ P}`, joint over the mode and the list and written in `Prop`
 (`docs/scope-recursion.md` §2.1), empty unless `X` is outside `A`'s `Mut` payloads (§2.2) and
-the `μ` is closed. -/
+the `μ` is closed.  `[spec §3]` -/
 def vCE : Option (Nat → TEnt) → Bool → VTy → List SRec → LSub → Val → WProp
   | _, _, .unit, _, _, v => ⌜v = .unit⌝
   | η, b, .tensor A B, ls, δ, v =>
@@ -162,7 +162,7 @@ def vCE : Option (Nat → TEnt) → Bool → VTy → List SRec → LSub → Val 
         (∀ b' ls' v' ρ', vCE (some (VTy.scons ⟨tClose η (.mu A), P⟩ (tEnv η))) b' A ls' δ v' ρ' →
           P b' ls' v' ρ') →
         P b ls v ρ
-/-- `𝒞⟦C⟧(ls)δ(e)`, curried on the connective. -/
+/-- `𝒞⟦C⟧(ls)δ(e)`, curried on the connective.  `[spec §3]` -/
 def cC : CTy → List SRec → LSub → Expr → WProp
   | .ret A, ls, δ, e => wpTS ls e (fun ls'' => vCE none true A ls'' δ)
   | .arr A C, ls, δ, e => fun ρ =>
@@ -192,11 +192,11 @@ def gSepC (ls : List SRec) (δ : LSub) : Ctx VTy → List Val → WProp
 def gDenC (ls : List SRec) (δ : LSub) (Γ : Ctx VTy) (γ : List Val) : WProp :=
   ⌜Ctx.LiveWithin Γ γ⌝ ⋆ gSepC ls δ Γ γ
 
-/-- `Δ; Γ ⊨ e : C`, at every record list. -/
+/-- `Δ; Γ ⊨ e : C`, at every record list.  `[spec §3]` -/
 def SemC (Δ : LifeCtx) (Γ : Ctx VTy) (e : Expr) (C : CTy) : Prop :=
   ∀ δ γ (ls : List SRec) ρ, Δ.Models δ → gDenC ls δ Γ γ ρ → cC C ls δ (substAll γ e) ρ
 
-/-- `Δ; Γ ⊨ V : A` for a value: `return V` at `F A`. -/
+/-- `Δ; Γ ⊨ V : A` for a value: `return V` at `F A`.  `[spec §3]` -/
 abbrev SemV (Δ : LifeCtx) (Γ : Ctx VTy) (e : Expr) (A : VTy) : Prop := SemC Δ Γ e (.ret A)
 
 /-- `!Γ`: every live slot is at a `!` type. -/

@@ -1,7 +1,7 @@
 import Core.Fix
 
 /-!
-# Core — the witness-size measure and `withload` with a sized callback
+# Core — the witness-size measure and `withload` with a sized callback  `[spec §6]`
 
 * `dsize ρ`: the number of cells of a resource.  A piece `q ≤ σ` holding `l`, less `l`, is
   smaller than `σ` (`dsize_del_lt`).

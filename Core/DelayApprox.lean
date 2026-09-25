@@ -1,7 +1,7 @@
 import Core.DelayRel
 
 /-!
-# Core — the delay type by its finite approximations
+# Core — the delay type by its finite approximations  `[spec §7]`
 
 `approx VA n` is `D A` observed correctly `n` times: `approx 0 = ⊤`,
 `approx (n+1) = delayF VA (approx n)`.  The greatest fixed point `delayRel` lies below every

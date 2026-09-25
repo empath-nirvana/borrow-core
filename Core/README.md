@@ -1,18 +1,17 @@
 # Core: the consolidated world
 
-One CBPV typed world holding what the experiments built separately: `μ` and the three folds,
-blocks, records and variants, family borrows, block borrows, the delay type with `fixD`, and the
-stream type with `unfoldS`. It is `SPEC.md` §3–§7 as an experiment; nothing here is in the
-library yet.
+One CBPV typed world holding `μ` and the three folds, blocks, records and variants, family
+borrows, block borrows, the delay type with `fixD`, and the stream type with `unfoldS`. It is
+the library's implementation of `SPEC.md` §3–§7; code an entry adds is tagged `[spec §N]`
+(each file's heading, and the main definitions, rules and theorems).
 
-Build: `lake build Core` (a non-default `[[lean_lib]]`). Namespace `BoCa.Fig16.LogRel.Core`,
-the namespace depth of the fork it starts from, so every name resolves as it did there. Core
-imports only `Paper`, `Support` and `Examples`, and no other experiment.
+Build: `lake build` (`Core` is a default target) or `lake build Core`. Namespace
+`BoCa.Fig16.LogRel.Core`, so names of the typed world in `BoCa.Fig16.LogRel` resolve
+unqualified. Core imports only `Paper`, `Support` and `Examples`.
 
-Every declaration's axioms are `[propext, Classical.choice, Quot.sound]` or a subset. This was
-checked for all 4361 declarations of the `Core.*` modules at once, with
-`scripts/CheckAxioms.lean` pointed at `Core`. The directory has no `sorry`, `axiom`,
-`native_decide`, `implemented_by`, `opaque`, `partial` or `unsafe` outside comments.
+`scripts/check-hygiene.sh` covers `Core/`: no `sorry`, `axiom`, `native_decide`,
+`implemented_by`, `opaque`, `partial` or `unsafe` outside comments, and every declaration's
+axioms among `[propext, Classical.choice, Quot.sound]` (`scripts/CheckAxioms.lean`).
 
 ## What it contains
 

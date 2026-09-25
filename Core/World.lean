@@ -10,7 +10,7 @@ import Support.Model.Notation
 import Core.FrameRecords
 
 /-!
-# Core — World
+# Core — World  `[spec §3, §4]`
 
 `Support/TypedWorld`'s layer `World`, with records typed at `VTy`.  The typed worlds: value shapes `vShape`, the family `TW` of configurations the printed proofs' operations produce, tagging, and `[TR]` p. 6's `wp` over them (`wpTS`, row 5.33's repair).
 -/
@@ -80,7 +80,7 @@ notation "vShape" => vShapeE none
 Row 5.33 · `wp (e) {Q̂} (ρ) ≜ ∀ρ_f # ρ. ∃ρ′ # ρ_f, ρ⁺ # (ρ_f ● ρ′), v. (⟦ρ_f ● ρ⟧,e) →* (⟦ρ_f ● ρ′ ● ρ⁺⟧,v) ∧ ρ ↭ ρ′ ● ρ⁺ ∧ ρ⁺∣own = ∅ ∧ Q̂(v)(ρ′)` · `[repair]`; the printed row is in `Paper/S5_Model/Definitions.lean`.
 -/
 /-- `W`'s lifetimes are all `⊒ β`: `W ∈ Res_β′` at every `β′ ⊏ β`.  `W.InStratum β` with the
-inequality non-strict. -/
+inequality non-strict.  `[spec §4]` -/
 def StratumLe (W : WRes) (β : Life) : Prop := ∀ β', β' ⊏ β → W.InStratum β'
 
 theorem stratumLe_of_inStratum {W : WRes} {β : Life} (h : W.InStratum β) : StratumLe W β :=

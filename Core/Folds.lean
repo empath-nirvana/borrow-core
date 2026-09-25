@@ -1,7 +1,7 @@
 import Core.MapMut
 
 /-!
-# Core — programs through the fold rules
+# Core — programs through the fold rules  `[spec §6]`
 
 Every function here is a `CDerives` derivation: a fold is `foldImm alg` or `foldOwn alg` with the
 algebra derived by the ordinary rules, and its semantic type comes from `fundamentalC`.  No

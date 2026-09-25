@@ -1,7 +1,7 @@
 import Core.Folds
 
 /-!
-# Core — unboxed products as blocks of leaf cells
+# Core — unboxed products as blocks of leaf cells  `[spec §5]`
 
 `experiments/LeafPlaces`' block view at this world's `VTy` and `wpTS`.  A product type is a
 binary tree of fields (`Shape`); one allocation of it takes a block of `size σ` consecutive
@@ -36,7 +36,7 @@ open BoCa.Lifetime (LSub LifeCtx LifeVar)
 
 /-! ### Shapes -/
 
-/-- An unboxed product: a binary tree whose leaves are the fields. -/
+/-- An unboxed product: a binary tree whose leaves are the fields.  `[spec §5]` -/
 inductive Shape where
   | leaf (A : VTy)
   | node (s₁ s₂ : Shape)
@@ -48,12 +48,12 @@ def size : Shape → Nat
   | .leaf _ => 1
   | .node s₁ s₂ => size s₁ + size s₂
 
-/-- The owned handle: the leaf family `Ref A₁ ⊗ …`, in the shape of the tree. -/
+/-- The owned handle: the leaf family `Ref A₁ ⊗ …`, in the shape of the tree.  `[spec §5]` -/
 def refTy : Shape → VTy
   | .leaf A => .ref A
   | .node s₁ s₂ => .tensor (refTy s₁) (refTy s₂)
 
-/-- The product's value: its leaves' values, in the shape of the tree. -/
+/-- The product's value: its leaves' values, in the shape of the tree.  `[spec §5]` -/
 def valTy : Shape → VTy
   | .leaf A => A
   | .node s₁ s₂ => .tensor (valTy s₁) (valTy s₂)
@@ -73,13 +73,13 @@ theorem refTy_pair (A B : VTy) :
 /-! ### Allocation and free, as terms -/
 
 /-- `allocS (leaf A) = alloc`; `allocS (node s₁ s₂) = λv. let (v₁, v₂) = v in
-(allocS s₁ v₁, allocS s₂ v₂)`. -/
+(allocS s₁ v₁, allocS s₂ v₂)`.  `[spec §5]` -/
 def allocS : Shape → Expr
   | .leaf _ => .val (.prim .alloc)
   | .node s₁ s₂ => .val (.lam (.letpair (.var 0)
       (.pair (.app (allocS s₁) (.var 1)) (.app (allocS s₂) (.var 0)))))
 
-/-- `freeS`: the same with `free`. -/
+/-- `freeS`: the same with `free`.  `[spec §5]` -/
 def freeS : Shape → Expr
   | .leaf _ => .val (.prim .free)
   | .node s₁ s₂ => .val (.lam (.letpair (.var 0)
@@ -99,7 +99,7 @@ theorem freeS_closed : ∀ σ : Shape, closedAt 0 (freeS σ) = true
       exact ⟨by omega, ⟨closedAt_mono _ (freeS_closed s₁) (by omega), by omega⟩,
         closedAt_mono _ (freeS_closed s₂) (by omega), by omega⟩
 
-/-- `allocS σ : valTy σ ⊸ refTy σ`, from the `alloc` rule at every leaf. -/
+/-- `allocS σ : valTy σ ⊸ refTy σ`, from the `alloc` rule at every leaf.  `[spec §5]` -/
 theorem d_allocS : ∀ (σ : Shape) {Δ : LifeCtx} {Γ : Ctx VTy}, Ctx.Dead Γ →
     CDerives Δ Γ (allocS σ) (.val (.lolli σ.valTy σ.refTy))
   | .leaf _, _, _, hΓ => .alloc hΓ
@@ -111,7 +111,7 @@ theorem d_allocS : ∀ (σ : Shape) {Δ : LifeCtx} {Γ : Ctx VTy}, Ctx.Dead Γ �
           (.lolliE (.left (.dead (.dead (deadSplit hΓ)))) (.var (.here (.cons (.cons hΓ))))
             (d_allocS s₂ (.cons (.cons (.cons hΓ)))))))))
 
-/-- `freeS σ : refTy σ ⊸ valTy σ`, from the `free` rule at every leaf. -/
+/-- `freeS σ : refTy σ ⊸ valTy σ`, from the `free` rule at every leaf.  `[spec §5]` -/
 theorem d_freeS : ∀ (σ : Shape) {Δ : LifeCtx} {Γ : Ctx VTy}, Ctx.Dead Γ →
     CDerives Δ Γ (freeS σ) (.val (.lolli σ.refTy σ.valTy))
   | .leaf _, _, _, hΓ => .free hΓ
@@ -327,7 +327,7 @@ theorem exists_free_above (μ : Heap) (fρ : WRes) (hμ : ResU.Lower fρ μ) :
     exact absurd hk (Nat.not_le.mpr (Nat.lt_succ_of_le this))
 
 /-- **Block allocation.**  `allocS σ v` allocates the product as one block: there is a base
-`b` with the returned handle `addr b σ`, packed. -/
+`b` with the returned handle `addr b σ`, packed.  `[spec §5]` -/
 theorem wpTS_allocS (σ : Shape) {ls : List SRec} {δ : LSub} {v : Val} {ρ : WRes}
     (hv : vP σ.valTy ls δ v ρ) :
     wpTS ls (.app (allocS σ) v.1) (fun ls' w => fun ρ' => ∃ b, Packed σ b ls' δ w ρ') ρ := by

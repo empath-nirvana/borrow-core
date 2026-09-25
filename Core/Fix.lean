@@ -1,7 +1,7 @@
 import Core.Compat
 
 /-!
-# Core — the Z combinator over BoCa's untyped λ
+# Core — the Z combinator over BoCa's untyped λ  `[spec §6]`
 
 `experiments/Recursion/Recursion/Fix.lean` at this world's `wpTS`, with `substAll_closed`.
 

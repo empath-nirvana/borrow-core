@@ -30,7 +30,7 @@ import Core.World
 import Core.Wp
 
 /-!
-# Core — FrameRules
+# Core — FrameRules  `[spec §3]`
 
 `Support/TypedWorld`'s layer `FrameRules`, with records typed at `VTy`.  `[TR]` Theorems 6.64, 6.65 and 6.66 at `wpTS`, with the record list carried.
 -/

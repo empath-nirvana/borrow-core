@@ -1,7 +1,7 @@
 import Core.FoldImm
 
 /-!
-# Core — guarded recursion on the delay type
+# Core — guarded recursion on the delay type  `[spec §7]`
 
 `D A = νX. F(A ⊕ U X) & F 1` (`cC`'s `delay` clause, `DelayRel.lean`): forcing a delayed
 computation with `next` (`π₁`) returns `now a` (`inj₁ a`) or `later t` (`inj₂ t`, `t` the rest,
@@ -182,7 +182,7 @@ theorem candD_post {A S : VTy} {δ : LSub} {g : Val}
   · refine nextKS_later g s' ls' _ σ (Or.inr ⟨etaD g s', σ₀, σ₃, hc, ⟨hσ₀, rfl⟩, ?_⟩)
     exact fun ls'' hk => ⟨s', rfl, vC_local true S hk hs'⟩
 
-/-- **`fixD` is sound**: `fixD : !U(S ⊸ F(A ⊕ S) & F 1) ⊸ !U(S ⊸ D A)` at every `A` and `S`. -/
+/-- **`fixD` is sound**: `fixD : !U(S ⊸ F(A ⊕ S) & F 1) ⊸ !U(S ⊸ D A)` at every `A` and `S`.  `[spec §7]` -/
 theorem fixD_compatX {Δ : LifeCtx} {Γ : Ctx VTy} (A S : VTy) (hΓ : Ctx.Dead Γ) :
     SemV Δ Γ (.val fixDV) (fixDTy A S) := by
   intro δ γ ls ρ _ hg₀

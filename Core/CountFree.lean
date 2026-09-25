@@ -2,7 +2,7 @@ import Core.Count
 import Core.Sized
 
 /-!
-# Core — a fuel-free borrowed fold
+# Core — a fuel-free borrowed fold  `[spec §6]`
 
 `countFree = Z (λself. Λ. λl. withload l (Λ. λu. case u {inj₁ w. w; 0 | inj₂ t. self [] t to n.
 inj₂ n}))` counts a borrowed list by recursion on the list itself.

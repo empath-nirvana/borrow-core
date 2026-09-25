@@ -2,7 +2,7 @@ import Core.Fundamental
 import Support.Statics.Presupposed
 
 /-!
-# Core — the call-by-value embedding of BoLo
+# Core — the call-by-value embedding of BoLo  `[spec §3]`
 
 `cbv : Ty → VTy` is the call-by-value translation of BoLo types: `T₁ ⊸ T₂ ↦ U (T₁⁺ ⊸ F T₂⁺)`
 (`VTy.lolli`), `∀'x ⊏ @b. T ↦ U (∀'x ⊏ @b. F T⁺)` (`VTy.all`), every other former to its
@@ -27,7 +27,7 @@ open BoCa
 open BoCa.Fig16
 open BoCa.Lifetime (LSub LifeCtx LifeVar LSubst)
 
-/-- The call-by-value translation of BoLo types. -/
+/-- The call-by-value translation of BoLo types.  `[spec §3]` -/
 def cbv : Ty → VTy
   | .unit => .unit
   | .unk => .unk
@@ -228,7 +228,7 @@ typed world's Fundamental Property (`Typed.fundamental`): `Δ.Ok` and `Δ ⊢ Γ
 * `1E`, `⊗E`, `⊕E` are CBPV's eliminators at `F T⁺`, read back at `T⁺` (`ofRet`).
 * `⊸I` is `thunk (λx. return b)`; `∀I` is `thunk (Λ. return e)`; `!I` promotes either.
 * `⊸E` and `∀E` are the call-by-value forms `lolliE` and `allEV`.
-* Each axiom is `CDerives`' constant at the translated payloads. -/
+* Each axiom is `CDerives`' constant at the translated payloads.  `[spec §3]` -/
 theorem embed {Δ : LifeCtx} {Γ : Ctx Ty} {e : Expr} {T : Ty} (h : DerivesWf Δ Γ e T) :
     Δ.Ok → Ctx.ScopedB Δ Γ → CDerives Δ (cbvCtx Γ) e (.val (cbv T)) := by
   induction h with
@@ -319,7 +319,7 @@ theorem embed {Δ : LifeCtx} {Γ : Ctx Ty} {e : Expr} {T : Ty} (h : DerivesWf Δ
   | forgetBangAx hΓd => intro _ _; exact .forgetBang (dead_cbvCtx hΓd)
 
 /-- **Adequacy of BoLo through the CBPV core.**  A closed BoLo program of type `1` runs from
-the empty memory to `()` and the empty memory: `embed`, then `adequacyC`. -/
+the empty memory to `()` and the empty memory: `embed`, then `adequacyC`.  `[spec §3]` -/
 theorem adequacy_of_derivesWf {e : Expr} (h : DerivesWf LifeCtx.empty [] e .unit) :
     BoCa.BoLo.Steps Adequacy.emptyMem e Adequacy.emptyMem (.val .unit) :=
   adequacyC (.ret (embed h ok_empty (fun _ hs => by cases hs)))

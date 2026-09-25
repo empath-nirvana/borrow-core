@@ -1,7 +1,7 @@
 import Core.Lists
 
 /-!
-# Core — a borrowed traversal of the boxed list
+# Core — a borrowed traversal of the boxed list  `[spec §6]`
 
 `N = μX. 1 ⊕ X` (unary numerals) and `count : U(∀'a. Imm 'a L ⊸ F N)` count the cells of a
 list through an immutable borrow.  `count` loads the head with `withload`; the callback, at a

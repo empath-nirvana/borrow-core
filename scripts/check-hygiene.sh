@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # No `sorry`, `axiom`, `native_decide`, `implemented_by`, `opaque`, `partial`,
-# `unsafe` in Paper/, Support/ and Examples/, outside comments; then every declaration's axioms.
+# `unsafe` in Paper/, Support/, Examples/ and Core/, outside comments; then every declaration's axioms.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 python3 - <<'PY'
@@ -8,7 +8,7 @@ import re, pathlib, sys
 BAD = re.compile(r"\b(sorry|axiom|native_decide|implemented_by|opaque|partial|unsafe)\b")
 hits = 0
 files = []
-for d in ("Paper", "Support", "Examples"):
+for d in ("Paper", "Support", "Examples", "Core"):
     files += sorted(pathlib.Path(d).glob("**/*.lean")) + [pathlib.Path(d + ".lean")]
 for p in files:
     src = p.read_text(encoding="utf-8")

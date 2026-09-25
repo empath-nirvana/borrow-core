@@ -2,7 +2,7 @@ import Core.Fundamental
 import Paper.Examples.Derivations
 
 /-!
-# Core — programs, typed in the CBPV judgment and run
+# Core — programs, typed in the CBPV judgment and run  `[spec §3]`
 
 * `cImmBorrow` and `cBang`: `experiments/CBPVCore`'s two programs, re-derived in this judgment.
 * `cRecBorrow`: an immutable borrow of a cell holding a record of methods

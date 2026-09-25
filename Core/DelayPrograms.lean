@@ -1,7 +1,7 @@
 import Core.Folds
 
 /-!
-# Core — driving a delayed computation, and programs by `fixD`
+# Core — driving a delayed computation, and programs by `fixD`  `[spec §7]`
 
 **The driver.** `driveE n` observes a delayed computation `d : U(D A)` at most `n` times: it
 returns `inj₁ a` if a `next` returned `now a`, and otherwise closes `d` after the `n`-th `later`

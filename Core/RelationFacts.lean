@@ -28,7 +28,7 @@ import Core.Wp
 import Core.RelMu
 
 /-!
-# Core — RelationFacts
+# Core — RelationFacts  `[spec §3, §4]`
 
 `Support/TypedWorld`'s layer `RelationFacts`, with records typed at `VTy`.  The repaired relation `vC` read at substitutions: monotonicity, the `imm` cell at the observable view, reading, writing and making a `mut` cell, 6.60 at `vC`, congruence in `δ`, and the choosers' inputs.
 -/

@@ -2,7 +2,7 @@ import Core.BlockTrack
 import Core.FamilyPrograms
 
 /-!
-# Core — programs over blocks
+# Core — programs over blocks  `[spec §5]`
 
 Each program is closed and typed at `1`: a `CDerives` derivation run by `adequacyC` (no leak),
 a kernel-checked interpreter run (`…_eval`) and an observation of the struct's contents

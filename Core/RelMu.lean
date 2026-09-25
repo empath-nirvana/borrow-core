@@ -6,7 +6,7 @@ import Core.Relation
 import Core.ShapeMu
 
 /-!
-# Core — the relation at `μ`
+# Core — the relation at `μ`  `[spec §6]`
 
 `vCE` reads a type variable at its environment entry and `μX. A` at the least fixed point
 `⋂{P | A[P/X] ⊆ P}`, joint over the mode and the record list.  This file proves:
@@ -343,7 +343,7 @@ theorem vC_unfold {A : VTy} {b : Bool} {ls : List SRec} {δ : LSub} {v : Val} {�
     cBody_mono A δ hA (fun b'' ls'' v'' ρ'' h'' => vC_roll hA hc (by rw [vC_inst]; exact h''))
       b' ls' v' ρ' h')
 
-/-- **The unroll equation.** -/
+/-- **The unroll equation.**  `[spec §6]` -/
 theorem vC_mu_iff {A : VTy} {b : Bool} {ls : List SRec} {δ : LSub} {v : Val} {ρ : WRes} :
     vC b (.mu A) ls δ v ρ ↔
       A.NoMut 0 ∧ (VTy.mu A).Cl 0 ∧ vC b (VTy.inst (.mu A) A) ls δ v ρ :=

@@ -1,7 +1,7 @@
 import Core.Compatibility
 
 /-!
-# Core — the delay type's relation
+# Core — the delay type's relation  `[spec §7]`
 
 `D A = νX. F(A ⊕ U X) & F 1` is `cC`'s `delay` clause, the greatest fixed point `delayRel` of
 `delayF` (`Relation.lean`).  `delayF` is monotone in the candidate (`delayF_mono`, from
@@ -46,7 +46,7 @@ theorem delayRel_out (VA : List SRec → Val → WProp) : (delayRel VA).Le (dela
 theorem delayRel_roll (VA : List SRec → Val → WProp) : (delayF VA (delayRel VA)).Le (delayRel VA) :=
   delayRel_coind (delayF_mono VA (delayRel_out VA))
 
-/-- **`D A` is its unrolling**: `𝒞⟦D A⟧ = 𝒞⟦F(A ⊕ U(D A)) & F 1⟧`. -/
+/-- **`D A` is its unrolling**: `𝒞⟦D A⟧ = 𝒞⟦F(A ⊕ U(D A)) & F 1⟧`.  `[spec §7]` -/
 theorem cC_delay_iff (A : VTy) (ls : List SRec) (δ : LSub) (e : Expr) (ρ : WRes) :
     cC (.delay A) ls δ e ρ ↔ cC (delayUnroll A) ls δ e ρ :=
   ⟨fun h => delayRel_out _ ls e ρ h, fun h => delayRel_roll _ ls e ρ h⟩

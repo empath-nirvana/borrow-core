@@ -1,7 +1,7 @@
 import Core.Blocks
 
 /-!
-# Core — the common list shape through the block view
+# Core — the common list shape through the block view  `[spec §5, §6]`
 
 Rust's `Box<Node { val, next }>` list is `μX. 1 ⊕ Ref (N ⊗ X)`: each node is one allocation of
 a product.  Read through `Blocks.lean`, the owned handle of a block of `N ⊗ X` is the leaf

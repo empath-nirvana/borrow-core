@@ -1,7 +1,7 @@
 import Core.FoldImm
 
 /-!
-# Core — the owned fold as a typing rule
+# Core — the owned fold as a typing rule  `[spec §6]`
 
 `foldOwn : !U(A′_R ⊸ F R) ⊸ !U(μX. T ⊸ F R)` for `T` in the class `FShape`, consuming the
 structure.  `A′_R = T.resO R` is `T` with `R` at every recursive position: at `Ref X` the fold

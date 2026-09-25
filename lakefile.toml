@@ -1,5 +1,5 @@
 name = "borrow_core"
-defaultTargets = ["Paper", "Support", "Examples"]
+defaultTargets = ["Paper", "Support", "Examples", "Core"]
 
 [[require]]
 name = "mathlib"
@@ -14,6 +14,9 @@ name = "Paper"
 
 [[lean_lib]]
 name = "Examples"
+
+[[lean_lib]]
+name = "Core"
 
 # Experiments: not default targets; the library never imports them.
 
@@ -72,8 +75,3 @@ roots = ["Recursion"]
 name = "CBPVMu"
 srcDir = "experiments/CBPVMu"
 roots = ["CBPVMu"]
-
-[[lean_lib]]
-name = "Core"
-srcDir = "experiments/Core"
-roots = ["Core"]

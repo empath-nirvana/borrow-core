@@ -2,7 +2,7 @@ import Core.DelayPrograms
 import Core.Steps
 
 /-!
-# Core — `f = λd. later (g d)` is not a guardedness condition
+# Core — `f = λd. later (g d)` is not a guardedness condition  `[spec §7]`
 
 A `fix` whose premise is only that `f` has the shape `λd. later (g d)`, with `g : U(D A) ⊸ D A`
 typed as any other term, admits `g = skip`:

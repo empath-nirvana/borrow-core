@@ -1,8 +1,8 @@
 # Borrow core — specification
 
-Version 0.3 · 2026-09-25
+Version 0.3.1 · 2026-09-25
 
-The library — `Paper/`, `Support/`, `Examples/` — implements this document and nothing else. A
+The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
 implements it, and code an entry adds or changes is tagged `[spec §N]`. Experiments live
 in `experiments/`, which the library never imports; work from one lands in the library only
@@ -308,14 +308,17 @@ From `experiments/Recursion`, `CBPVMu`.
 
 ## Status
 
-Entries 2–6 are implemented in the experiment `experiments/Core`, assembled from the experiments
-named in each entry; it builds with one `fundamentalC` and `adequacyC` covering every rule. They
-move into the library when `Core` is promoted.
+Entry 1 (§2) is implemented in `Paper/`, `Support/` and `Examples/`. Entries 2–6 (§3–§7) are
+implemented in `Core/`, one CBPV typed world with one `fundamentalC` and `adequacyC` covering
+every rule; `Paper/`, `Support/` and `Examples/` remain the §1 baseline that `Core` embeds
+(`adequacy_of_derivesWf`). `Core` was assembled in `experiments/Core` from the experiments named
+in each entry.
 
 ---
 
 ## Changelog
 
+- **0.3.1** (2026-09-25) — Status: entries 2–6 are implemented in the library, `Core/`.
 - **0.3** (2026-09-25) — Entries 2–6: the call-by-push-value core with the baseline restated
   through the embedding (§3), non-strict frame lifetimes (§4), blocks, family borrows and records
   (§5), recursive types and the three folds (§6), delay and stream codata with `fixD` (§7).

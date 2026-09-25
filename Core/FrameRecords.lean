@@ -8,7 +8,7 @@ import Support.Model.Prelude
 import Core.Types
 
 /-!
-# Core — frame records
+# Core — frame records  `[spec §3, §4]`
 
 `Support/TypedWorld`'s layer `Records`, with records typed at `VTy`.  The records the typed world keeps: frame records and their lineages, root, chain and `Mut` positions, coherence of a record with the world, tags, and the Kripke order `Ext`.
 -/
@@ -163,7 +163,7 @@ def LinLoc (p : FrameRec) (m : Loc) : Prop :=
   ∃ d, DescR p d ∧ ∃ ζ : CellU Loc Val, d.R.get m = some ζ ∧ ζ.kind ≠ Kind.imm
 
 /-- `p`'s frame is at `α`, and its lineage's views are no longer (`⊑`, non-strict).  `[about ours: an
-invariant of the typed world, 6.150 H11's choice of `β` read at a record]` -/
+invariant of the typed world, 6.150 H11's choice of `β` read at a record]`  `[spec §4]` -/
 def FrameLife (W : WRes) (p : FrameRec) (α : Life) : Prop :=
   (∀ a, AgW W a → ∀ (ζ : CellU Loc Val) t, a.get p.le = some ζ → ζ.lsOf = some t →
     ∀ y, t.mem y → y = α) ∧

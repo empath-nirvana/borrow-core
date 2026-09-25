@@ -6,7 +6,7 @@ import Core.World
 import Core.FrameRecords
 
 /-!
-# Core — the shape relation at `μ`
+# Core — the shape relation at `μ`  `[spec §6]`
 
 `vShapeE` reads a type variable at its environment entry and `μX. A` at the least fixed point
 `⋂{P | A[P/X] ⊆ P}`.  This file proves what the typed world needs of it:

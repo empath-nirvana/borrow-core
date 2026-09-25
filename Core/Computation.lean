@@ -2,7 +2,7 @@ import Core.DelayRel
 import Core.StrRel
 
 /-!
-# Core — Computations
+# Core — Computations  `[spec §3]`
 
 `𝒞⟦C⟧` as the stack semantics (`cC_iff_stacks`), closure under pure steps in front
 (`cC_step`, `cC_head`), bind at every computation type (`cC_bind`), and the context facts the

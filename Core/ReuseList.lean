@@ -1,7 +1,7 @@
 import Core.CommonList
 
 /-!
-# Core — the in-place map over the common list shape, by the fold with reuse
+# Core — the in-place map over the common list shape, by the fold with reuse  `[spec §6]`
 
 Over the common list `μX. 1 ⊕ (Ref E ⊗ Ref X)` (`CommonList.lean`, each node one block),
 `foldReuse` hands the algebra, at a cons node, the value leaf `Ref E`, the emptied next leaf

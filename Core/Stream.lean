@@ -1,7 +1,7 @@
 import Core.Delay
 
 /-!
-# Core — coiteration on the stream type
+# Core — coiteration on the stream type  `[spec §7]`
 
 `Str A = νX. F(A ⊗ U X) & F 1` (`cC`'s `str` clause, `StrRel.lean`): `next` (`π₁`) returns a
 value and the rest of the stream, a thunk of `Str A`; `close` (`π₂`) disposes of the stream.
@@ -172,7 +172,7 @@ theorem candS_post {A S : VTy} {δ : LSub} {g : Val}
   exact fun ls'' hk => ⟨s', rfl, vC_local true S hk hs'⟩
 
 /-- **`unfoldS` is sound**: `unfoldS : !U(S ⊸ F(A ⊗ S) & F 1) ⊸ !U(S ⊸ Str A)` at every `A`
-and `S`. -/
+and `S`.  `[spec §7]` -/
 theorem unfoldS_compatX {Δ : LifeCtx} {Γ : Ctx VTy} (A S : VTy) (hΓ : Ctx.Dead Γ) :
     SemV Δ Γ (.val unfoldSV) (unfoldSTy A S) := by
   intro δ γ ls ρ _ hg₀

@@ -33,7 +33,7 @@ import Core.FrameRecords
 import Core.World
 
 /-!
-# Core — Invariant
+# Core — Invariant  `[spec §3]`
 
 `Support/TypedWorld`'s layer `Invariant`, with records typed at `VTy`.  The family `TW` and its invariant: `mut` cells at any depth, `Mut` positions, coherence, sub-records and lineages, and preservation of the invariant by every step.
 -/

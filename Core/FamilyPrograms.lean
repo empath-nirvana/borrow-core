@@ -2,7 +2,7 @@ import Core.Family
 import Core.RecordPrograms
 
 /-!
-# Core — programs over place families
+# Core — programs over place families  `[spec §5]`
 
 Closed programs typed at `1`, each run by `adequacyC` and by the interpreter; each `…Obs`
 variant returns what the place-record holds at the end.

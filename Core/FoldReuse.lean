@@ -1,7 +1,7 @@
 import Core.FoldOwn
 
 /-!
-# Core — the owned fold with reuse
+# Core — the owned fold with reuse  `[spec §6]`
 
 `foldReuse : !U(A″_R ⊸ F R) ⊸ !U(μX. T ⊸ F R)` for `T` in the class `FShape`, consuming the
 structure and handing its cells to the algebra.  `A″_R = T.resR R` is `T` with `R` at a head

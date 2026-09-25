@@ -1,7 +1,7 @@
 import Core.BlockBorrow
 
 /-!
-# Core — borrowing a block returns the block's own handle
+# Core — borrowing a block returns the block's own handle  `[spec §5]`
 
 `withborS σ h g` returns `(h, t)` with `h` the handle it was given, on every run
 (`withborS_ret`, by the step inversions of `Steps.lean`).  The typing rule alone does not say
@@ -109,7 +109,7 @@ theorem inner_ret (s₁ : Shape) {g m₁ m₂ t : Val} {μ μ' : Heap} (hg : clA
 /-! ## The tracking theorem -/
 
 /-- **Borrowing returns the handle it was given.**  Every run of `withborS σ v g` to a value
-returns `(v, r)`, and `r` is the result of a run of `g () m` at a closed family `m`. -/
+returns `(v, r)`, and `r` is the result of a run of `g () m` at a closed family `m`.  `[spec §5]` -/
 theorem withborS_ret : ∀ (σ : Shape) {v g w : Val} {μ μ' : Heap},
     clAt 0 v.1 = true → clAt 0 g.1 = true →
     Steps μ (app2 (withborS σ) v.1 g.1) μ' w.1 →
@@ -192,7 +192,7 @@ theorem gDenC_packed {σ : Shape} {b : Loc} {ls : List SRec} {δ : LSub} {s : Va
 /-- **Borrowing keeps the handle packed.**  `withborS σ s cb`, at a packed `s`, returns
 `(s, t)`: the same handle, packed at the same block, and the callback's result.  `hd` is the
 derivation of the call with the handle as its free variable (`withborS_wf` and `cb`'s
-derivation); the Fundamental Property gives its `wpTS`, and `withborS_ret` the value. -/
+derivation); the Fundamental Property gives its `wpTS`, and `withborS_ret` the value.  `[spec §5]` -/
 theorem withborS_packed {Δ : LifeCtx} {σ : Shape} {cb : Expr} {T : VTy}
     (hcl : clAt 0 cb = true) (hcv : IsVal cb)
     (hd : CDerives Δ [⟨σ.refTy, true⟩] (app2 (withborS σ) (.var 0) cb)
@@ -228,7 +228,7 @@ theorem d_call {Δ : LifeCtx} {σ : Shape} {cb : Expr} {C T : VTy}
     (.lolliE (.left .nil) (.var (.here .nil)) hW)
 
 /-- **Allocate a struct as one block, then borrow its leaves.**  The handle that comes back is
-the block's: `(addr b σ, t)`, packed at `b`. -/
+the block's: `(addr b σ, t)`, packed at `b`.  `[spec §5]` -/
 theorem wpTS_allocBorrow {Δ : LifeCtx} {σ : Shape} {v cb : Val} {T : VTy}
     (hcl : clAt 0 cb.1 = true)
     (hd : CDerives Δ [⟨σ.refTy, true⟩] (app2 (withborS σ) (.var 0) cb.1)

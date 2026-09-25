@@ -1,7 +1,7 @@
 import Core.Sized
 
 /-!
-# Core — the borrowed fold as a typing rule
+# Core — the borrowed fold as a typing rule  `[spec §6]`
 
 `foldImm : !U(∀'b ⊏ ⊤. A_R ⊸ F R) ⊸ !U(∀'a ⊏ @c. Imm 'a (μX. T) ⊸ F R)` for `T` in the class
 `FShape`: `T` is built by `⊗` and `⊕` from closed leaves, `Ref X` and `X`, and is not `X`
@@ -25,7 +25,7 @@ open BoCa.Lifetime (LSub LifeCtx LifeVar)
 
 /-! ### The shapes -/
 
-/-- A `μ` body the borrowed fold covers: `⊗`, `⊕` over closed leaves, `Ref X` and `X`. -/
+/-- A `μ` body the borrowed fold covers: `⊗`, `⊕` over closed leaves, `Ref X` and `X`.  `[spec §6]` -/
 inductive FShape where
   | leaf (A : VTy)
   | refX

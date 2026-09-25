@@ -1,7 +1,7 @@
 import Core.Examples
 
 /-!
-# Core — weakening by dead slots at the end of a context
+# Core — weakening by dead slots at the end of a context  `[spec §3]`
 
 A derivation at `Γ` is one at `Γ ++ Γ'` when every slot of `Γ'` is consumed: the de Bruijn
 indices of `Γ` are unchanged, and every rule's context premise (`Split`, `Solo`, `Dead`,

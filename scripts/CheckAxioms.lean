@@ -1,6 +1,6 @@
 import Lean
 /-!
-`#print axioms` for every declaration of `Paper.*`, `Support.*` and `Examples.*` at once: for
+`#print axioms` for every declaration of `Paper.*`, `Support.*`, `Examples.*` and `Core.*` at once: for
 each, the axioms its type and value reach, transitively.  Fails unless every
 one is among `propext`, `Classical.choice` and `Quot.sound`.
 
@@ -23,14 +23,15 @@ partial def reach (env : Environment) (n : Name) (seen : IO.Ref NameSet) (axs : 
 unsafe def main : IO UInt32 := do
   initSearchPath (← findSysroot)
   enableInitializersExecution
-  let env ← importModules #[{ module := `Paper }, { module := `Support }, { module := `Examples }] {} 0 (loadExts := true)
+  let env ← importModules #[{ module := `Paper }, { module := `Support }, { module := `Examples }, { module := `Core }] {} 0 (loadExts := true)
   let ok : NameSet := NameSet.empty |>.insert ``propext |>.insert ``Classical.choice |>.insert ``Quot.sound
   let mut count := 0
   let mut bad := 0
   for (n, _) in env.constants.toList do
     let some idx := env.getModuleIdxFor? n | continue
     let mod := env.header.moduleNames[idx.toNat]!
-    unless (`Paper).isPrefixOf mod || (`Support).isPrefixOf mod || (`Examples).isPrefixOf mod do continue
+    unless (`Paper).isPrefixOf mod || (`Support).isPrefixOf mod || (`Examples).isPrefixOf mod ||
+        (`Core).isPrefixOf mod do continue
     let axs ← IO.mkRef NameSet.empty
     let s ← IO.mkRef NameSet.empty
     reach env n s axs

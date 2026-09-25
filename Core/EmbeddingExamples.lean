@@ -3,7 +3,7 @@ import Paper.Examples.Programs
 import Examples.Closures
 
 /-!
-# Core — BoLo's closed programs, run through the CBPV core
+# Core — BoLo's closed programs, run through the CBPV core  `[spec §3]`
 
 Each closed program of `Paper/Examples/Programs.lean` and `Examples/Closures.lean`
 (derivations `DerivesWf ∅ [] e 1`) runs from the empty memory to `()` by

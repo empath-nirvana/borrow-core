@@ -33,7 +33,7 @@ import Core.World
 import Core.ShapeMu
 
 /-!
-# Core — Images
+# Core — Images  `[spec §3]`
 
 `Support/TypedWorld`'s layer `Images`, with records typed at `VTy`.  The typed world's first layer: composition read cell by cell, walks through an escrow, the `immFrame` and `alloc` steps, roots and `Ref` chains, and typed reborrow images.
 -/

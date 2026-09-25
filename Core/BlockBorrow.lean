@@ -3,7 +3,7 @@ import Core.Steps
 import Core.Weaken
 
 /-!
-# Core — borrowing a block through its leaf family
+# Core — borrowing a block through its leaf family  `[spec §5]`
 
 `experiments/LeafPlaces`' `withborS` at `Blocks.lean`'s shapes.  A block of shape `σ` has the
 handle `refTy σ`, the family of its leaf references; `withborS σ` borrows every leaf and hands
@@ -107,7 +107,7 @@ def plain : Shape → Bool
   | .leaf A => plainV A
   | .node s₁ s₂ => plain s₁ && plain s₂
 
-/-- The family of leaf borrows `M @a A₁ ⊗ …` at one lifetime `@a`. -/
+/-- The family of leaf borrows `M @a A₁ ⊗ …` at one lifetime `@a`.  `[spec §5]` -/
 def famTy (M : Lifetime.Life → VTy → VTy) (a : Lifetime.Life) : Shape → VTy
   | .leaf A => M a A
   | .node s₁ s₂ => .tensor (famTy M a s₁) (famTy M a s₂)
@@ -340,7 +340,7 @@ def shortenE : Shape → Expr → Expr
   | .leaf _, e => e
   | .node s₁ s₂, e => .letpair e (.pair (shortenE s₁ (.var 1)) (shortenE s₂ (.var 0)))
 
-/-- Borrow a struct: every leaf, the family handed to the callback at one lifetime. -/
+/-- Borrow a struct: every leaf, the family handed to the callback at one lifetime.  `[spec §5]` -/
 def withborS : Shape → Expr
   | .leaf _ => withbor
   | .node s₁ s₂ =>
@@ -443,7 +443,7 @@ theorem exists_fresh_var (Δ : LifeCtx) (c : LifeVar) : ∃ x, Δ.find? x = none
 section
 variable {M : Lifetime.Life → VTy → VTy} {side : LifeCtx → VTy → Prop}
 
-/-- `⇓σ`: a family moved to a shorter lifetime, leaf by leaf. -/
+/-- `⇓σ`: a family moved to a shorter lifetime, leaf by leaf.  `[spec §5]` -/
 theorem shortenE_wf (F : Former M side) : ∀ {σ : Shape}, σ.plain = true →
     ∀ {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {a b : Lifetime.Life},
     CDerives Δ Γ e (.val (σ.famTy M b)) → Δ.EntailsLe a b →
@@ -465,7 +465,7 @@ theorem nf_cons {x : LifeVar} {Γ : Ctx VTy} {S : VTy} {l : Bool} (h : l = true 
   · exact hΓ s hs hl
 
 /-- **The derived rule.**  `withborS σ : refTy σ ⊸ (∀'c ⊏ ⊓Δ. famTy M 'c σ ⊸ ['c] T) ⊸
-refTy σ ⊗ T`, at `M = Mut` (`formerMut`) and `M = Imm` (`formerImm`). -/
+refTy σ ⊗ T`, at `M = Mut` (`formerMut`) and `M = Imm` (`formerImm`).  `[spec §5]` -/
 theorem withborS_wf (F : Former M side) : ∀ {σ : Shape}, σ.plain = true →
     ∀ {Δ : LifeCtx} {Γ : Ctx VTy} (c : LifeVar) {T : VTy}, plainV T = true → Δ.Ok →
     Δ.find? c = none → Ctx.Dead Γ → CDerives Δ Γ (withborS σ) (.val (wTy M c Δ.meetOfDom σ T))
@@ -549,13 +549,13 @@ theorem withborS_wf (F : Former M side) : ∀ {σ : Shape}, σ.plain = true →
           (.var (.there (.there (.there (.here (by cdead)))))) (.var (.there (.here (by cdead)))))
         (.var (.here (by cdead)))
 
-/-- `withborS` at `Mut`: every leaf mutably borrowed at one lifetime. -/
+/-- `withborS` at `Mut`: every leaf mutably borrowed at one lifetime.  `[spec §5]` -/
 theorem withborSM_wf {σ : Shape} (hσ : σ.plain = true) {Δ : LifeCtx} {Γ : Ctx VTy} (c : LifeVar)
     {T : VTy} (hT : plainV T = true) (hΔ : Δ.Ok) (hc : Δ.find? c = none) (hΓ : Ctx.Dead Γ) :
     CDerives Δ Γ (withborS σ) (.val (wTy mutM c Δ.meetOfDom σ T)) :=
   withborS_wf formerMut hσ c hT hΔ hc hΓ
 
-/-- `withborS` at `Imm`: every leaf immutably borrowed at one lifetime. -/
+/-- `withborS` at `Imm`: every leaf immutably borrowed at one lifetime.  `[spec §5]` -/
 theorem withborSI_wf {σ : Shape} (hσ : σ.plain = true) {Δ : LifeCtx} {Γ : Ctx VTy} (c : LifeVar)
     {T : VTy} (hT : plainV T = true) (hΔ : Δ.Ok) (hc : Δ.find? c = none) (hΓ : Ctx.Dead Γ) :
     CDerives Δ Γ (withborS σ) (.val (wTy immM c Δ.meetOfDom σ T)) :=
