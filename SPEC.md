@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 0.2 · 2026-09-24
+Version 0.3 · 2026-09-25
 
 The library — `Paper/`, `Support/`, `Examples/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -146,8 +146,170 @@ environment's type while its value is free (both refuted in the experiment
 
 ---
 
+## 3. Entry 2 — the call-by-push-value core
+
+### Motivation
+
+BoLo is call-by-value: effects, thunks and data share one type language. Splitting value types
+from computation types makes the shifts explicit, which is where closures are allocated and
+data is materialized, and gives codata (`&`, and the formers of §7) a home.
+
+### Types
+
+    A ::= 1 | A ⊗ A | 0 | A ⊕ A | U C | Ref A | Imm @a A | Mut @a A | [@a] A | !A | Unk
+        | X | μX. A                                                   (value types)
+    C ::= F A | A ⊸ C | C & C | ⊤ | ∀'a ⊏ @b. C | D A | Str A          (computation types)
+
+`X`, `μ` are §6; `D`, `Str` are §7.
+
+### Typing
+
+`CDerives Δ Γ e j`, with `j` either `val A` or `comp C`, over BoLo expressions in A-normal form:
+the CBPV formers (`thunk`, `force`, `return`, `to`, `λ`, application, `⟨·,·⟩`, projections),
+the lifetime `∀` (elimination at every `C`), the `!` rules of §2, `[]I` at every value type,
+`⊑Imm`/`⊑Mut`, one constant per borrow axiom of `[TR]` p. 3 at arbitrary value-type payloads,
+and three call-by-value derived forms (`lolliE`, `allEV`, `ofRet`). No new machine rules.
+
+### Semantics
+
+The typed world of §1, re-typed at `VTy`/`CTy`: `vC`, `cC`, `SemV`, `SemC`. `U C` is a leaf of the
+record machinery (`Imm̲ (U C) = Unk`).
+
+### Baseline, restated
+
+- **Fundamental Property** — `CDerives Δ Γ e j → SemV`/`SemC` (`fundamentalC`).
+- **Adequacy** — a closed computation at `F 1` runs to `()` and leaves memory empty (`adequacyC`).
+- **Embedding** — `embed : DerivesWf Δ Γ e T → CDerives Δ (cbvCtx Γ) e (val (cbv T))` for every
+  `DerivesWf` rule, so every baseline program is a program here and inherits adequacy
+  (`adequacy_of_derivesWf`). "Preserving the baseline" means this embedding; the baseline
+  theorem at `SemX` is not restated at `vC`.
+
+---
+
+## 4. Entry 3 — frame lifetimes are non-strict
+
+`FrameLife`'s second conjunct becomes `x ⊑ α` (was `x ⊏ α`), and the reborrow step's premise
+`W.InStratum β` becomes `StratumLe W β` (every lifetime of the world is at least `β`). The
+typed world then admits views that last exactly as long as their frame. No current rule uses
+this; it is kept for later same-lifetime views. From `experiments/Relaxed`.
+
+---
+
+## 5. Entry 4 — blocks, places and records
+
+### Records and variants
+
+A record is a binary tree of `⊗` (no trailing `1`); a variant is a nest of `⊕`. Both are derived
+forms: construction, projection, injection and case are derived rules, and `Imm̲` acts fieldwise.
+
+### Blocks
+
+`Shape ::= leaf A | node Shape Shape`. A block of shape `σ` is `size σ` cells, allocated at once.
+Its handle has type `refTy σ`, defined as the family of its leaf references, so
+`refTy (node σ₁ σ₂) = refTy σ₁ ⊗ refTy σ₂`: splitting a handle is the identity. An owned pointer to a
+struct (`Box<struct>`) is the block form; the one-cell `Ref (A ⊗ B)` remains a separate type.
+Blocks are allocated and freed whole (`allocS`, `freeS`).
+
+### Family borrows
+
+Several disjoint places are borrowed at one lifetime by nesting `withbor` and shortening with
+`⊑Mut`/`⊑Imm`: `withbor2 : Ref A ⊗ Ref B ⊸ (∀'c. Mut 'c A ⊗ Mut 'c B ⊸ ['c] T) ⊸ …`, and its
+`Imm` form, and the block form `withborS`. A sub-family is passed on at the same lifetime. All
+are derived rules. Restriction: leaf and result types built from `1`, `⊗`, `⊕`, `Ref`, `!`, `[@e]`,
+`Imm @e`, `Mut @e` (no `⊸`, `∀`, `Unk` outside `!`).
+
+### Open
+
+- **Block provenance.** Leaves of two different blocks must not be joined into one handle, and a
+  reuse hole (§6) must refill its own node. Neither is enforced by typing; the model is sound
+  either way, but lowering a handle to one word needs it. To be settled with the syntax.
+- **Variants in place.** A variant's layout depends on its tag; `Ref` does not distribute over
+  `⊕`.
+- **Same-lifetime views through a pointer** are excluded by the update relation
+  (`experiments/FrameEnd`, `imm_view_rejected`, `mut_view_rejected`).
+
+From `experiments/Records`, `Places`, `LeafPlaces`.
+
+---
+
+## 6. Entry 5 — recursive types and folds
+
+### Types
+
+`μX. A`, iso-recursive, with de Bruijn type variables. Positivity (`NoMut`): `X` does not occur
+under `Mut`. `U C` is a leaf for type variables.
+
+### Typing
+
+`roll`/`unroll` on the same term (no machine step). `Imm̲` at `μ` substitutes the closed `μ` type
+for `X` under `Ref`, `Imm`, `Mut`, `!` and keeps `X` at head positions.
+
+### Folds
+
+For `T` in the class `FShape` (closed leaf, `Ref X`, `X`, `⊗`, `⊕`; not `X` alone):
+
+    foldImm   : !U(∀'y ⊏ ⊤. A_R ⊸ F R) ⊸ !U(∀'y ⊏ @c. Imm 'y (μX.T) ⊸ F R)     R outlives every lifetime
+    foldOwn   : !U(A′_R ⊸ F R) ⊸ !U(μX.T ⊸ F R)
+    foldReuse : !U(A″_R ⊸ F R) ⊸ !U(μX.T ⊸ F R)
+
+`A_R` is the unrolled borrowed view with `R` at recursive positions; `A′_R` the unrolled owned
+value; `A″_R` gives `Ref 1 ⊗ R` at each `Ref X` (the emptied cell and the result), so the result can
+be built in place. `foldImm` terminates by the size of each view's witness, which is strictly
+smaller than its parent's; `foldOwn`/`foldReuse` by the size of the owned resource.
+
+### Semantics
+
+`vC` takes a type-variable environment; `μ` is an impredicative least fixed point.
+
+From `experiments/Recursion`, `CBPVMu`.
+
+---
+
+## 7. Entry 6 — codata: delay and streams
+
+    D A ≜ νX. F(A ⊕ U X) & F 1          (delay)
+    Str A ≜ νX. F(A ⊗ U X) & F 1        (stream)
+
+Each has an observation and `close`; `close` is required because no rule forgets a `U C`, and
+it releases a linear state. Both are interpreted as greatest fixed points; `delayIn`/`delayOut`
+(and the stream analogues) convert to and from the unrolling.
+
+### Loops
+
+    fixD : !U(S ⊸ F(A ⊕ S) & F 1) ⊸ !U(S ⊸ D A)
+
+The body maps a state to a result or the next state, and never observes the loop. Proved by
+coinduction on the greatest fixed point.
+
+### Adequacy
+
+For every `n`, observing a `D A` at most `n` times and then closing it is a closed program; it
+runs from empty memory and leaves memory empty.
+
+### Open
+
+- Non-tail recursion needs an explicit stack in the state, or a `bind` on `D` (not yet written).
+- Whether `D`'s greatest fixed point equals the intersection of its finite approximations is
+  reduced to one property of `wpTS` (`WpChainCommutes`), not derived.
+- A general `νX. C` former is deferred; `D` and `Str` are fixed formers.
+
+From `experiments/Recursion`, `CBPVMu`.
+
+---
+
+## Status
+
+Entries 2–6 are implemented in the experiment `experiments/Core` (being assembled from the
+experiments named in each entry). They move into the library after that world builds with one
+`fundamentalC` and `adequacyC`.
+
+---
+
 ## Changelog
 
+- **0.3** (2026-09-25) — Entries 2–6: the call-by-push-value core with the baseline restated
+  through the embedding (§3), non-strict frame lifetimes (§4), blocks, family borrows and records
+  (§5), recursive types and the three folds (§6), delay and stream codata with `fixD` (§7).
 - **0.2** (2026-09-24) — §2 restated as the exponential `!T`, replacing closed code
   `fn T₁ T₂` (which is `!(T₁ ⊸ T₂)`): adds `!I-Λ`, `Δ ⊢ !T ⊐ @a` and promotion over `!Γ`; the
   `ownedFn` and `mutClosure` programs. From the experiment `experiments/Bang`, originally developed in `borrow_lang`.
