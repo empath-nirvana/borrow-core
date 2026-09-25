@@ -47,6 +47,6 @@ import Core.DelayApprox
 import Core.DelayPrograms
 import Core.Steps
 import Core.DelayNaive
-import Core.StrRel
+import Core.StreamRel
 import Core.Stream
 import Core.StreamPrograms

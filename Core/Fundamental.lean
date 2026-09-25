@@ -13,7 +13,7 @@ the lifetime `∀` (`∀E` at every `C`), the `!` rules, `[]I`/`[]E` (`[]I` at e
 call-by-value derived forms (`lolliE`, `allEV`, `ofRet`), `roll`/`unroll` at `μ`, and the
 borrowed and owned folds `foldImm`, `foldOwn`, `foldReuse` (`FoldImm.lean`, `FoldOwn.lean`,
 `FoldReuse.lean`), the delay type's `delayIn`/`delayOut` and `fixD` (`Delay.lean`), and the
-stream type's `strIn`/`strOut` and `unfoldS` (`Stream.lean`).
+stream type's `streamIn`/`streamOut` and `unfoldS` (`Stream.lean`).
 `fundamentalC` proves every rule sound at `SemV`/`SemC`; `adequacyC` runs a closed `F 1`
 computation to `()` from the empty memory.
 -/
@@ -203,13 +203,13 @@ inductive CDerives : LifeCtx → Ctx VTy → Expr → Jdg → Prop where
   /-- Guarded recursion on the delay type, a constant:
   `fixD : !U(S ⊸ F(A ⊕ S) & F 1) ⊸ !U(S ⊸ D A)` (`Delay.lean`).  `[spec §7]` -/
   | fixD {Δ Γ} (A S : VTy) (hΓ : Ctx.DeadP Γ) : CDerives Δ Γ (.val fixDV) (.val (fixDTy A S))
-  /-- `Str A` is its unrolling `F(A ⊗ U(Str A)) & F 1` (`cC_str_iff`), on the same term.  `[spec §7]` -/
-  | strIn {Δ Γ e A} (h : CDerives Δ Γ e (.comp (strUnroll A))) :
-      CDerives Δ Γ e (.comp (.str A))
-  | strOut {Δ Γ e A} (h : CDerives Δ Γ e (.comp (.str A))) :
-      CDerives Δ Γ e (.comp (strUnroll A))
+  /-- `Stream A` is its unrolling `F(A ⊗ U(Stream A)) & F 1` (`cC_stream_iff`), on the same term.  `[spec §7]` -/
+  | streamIn {Δ Γ e A} (h : CDerives Δ Γ e (.comp (streamUnroll A))) :
+      CDerives Δ Γ e (.comp (.stream A))
+  | streamOut {Δ Γ e A} (h : CDerives Δ Γ e (.comp (.stream A))) :
+      CDerives Δ Γ e (.comp (streamUnroll A))
   /-- Coiteration on the stream type, a constant:
-  `unfoldS : !U(S ⊸ F(A ⊗ S) & F 1) ⊸ !U(S ⊸ Str A)` (`Stream.lean`).  `[spec §7]` -/
+  `unfoldS : !U(S ⊸ F(A ⊗ S) & F 1) ⊸ !U(S ⊸ Stream A)` (`Stream.lean`).  `[spec §7]` -/
   | unfoldS {Δ Γ} (A S : VTy) (hΓ : Ctx.DeadP Γ) :
       CDerives Δ Γ (.val unfoldSV) (.val (unfoldSTy A S))
 
@@ -277,8 +277,8 @@ theorem fundamentalC {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg}
   | delayIn _ ih => exact delayIn_compatX ih
   | delayOut _ ih => exact delayOut_compatX ih
   | fixD A S hΓ => exact fixD_compatX A S hΓ
-  | strIn _ ih => exact strIn_compatX ih
-  | strOut _ ih => exact strOut_compatX ih
+  | streamIn _ ih => exact streamIn_compatX ih
+  | streamOut _ ih => exact streamOut_compatX ih
   | unfoldS A S hΓ => exact unfoldS_compatX A S hΓ
 
 /-! ### Adequacy -/

@@ -1,5 +1,5 @@
 import Core.DelayRel
-import Core.StrRel
+import Core.StreamRel
 
 /-!
 # Core — Computations  `[spec §3]`
@@ -38,8 +38,8 @@ def sS : CTy → List SRec → LSub → List Val → (List SRec → Val → WPro
   | .delay A, _, δ, [v], Q =>
       BoLo.or (⌜v = .inj₁ .unit ∧ Q = fun ls'' => vC true (.sum A (.thunk (.delay A))) ls'' δ⌝)
         (⌜v = .inj₂ .unit ∧ Q = fun ls'' => vC true .unit ls'' δ⌝)
-  | .str A, _, δ, [v], Q =>
-      BoLo.or (⌜v = .inj₁ .unit ∧ Q = fun ls'' => vC true (.tensor A (.thunk (.str A))) ls'' δ⌝)
+  | .stream A, _, δ, [v], Q =>
+      BoLo.or (⌜v = .inj₁ .unit ∧ Q = fun ls'' => vC true (.tensor A (.thunk (.stream A))) ls'' δ⌝)
         (⌜v = .inj₂ .unit ∧ Q = fun ls'' => vC true .unit ls'' δ⌝)
   | _, _, _, _, _ => fun _ => False
 
@@ -125,8 +125,8 @@ theorem cC_iff_stacks : ∀ (C : CTy) (ls : List SRec) (δ : LSub) (e : Expr) (�
       · intro h
         exact ⟨h [_] _ PMap.empty ρ (Or.inl ⟨rfl, rfl, rfl⟩) (ResU.comp_empty_right ρ),
           h [_] _ PMap.empty ρ (Or.inr ⟨rfl, rfl, rfl⟩) (ResU.comp_empty_right ρ)⟩
-  | .str A, ls, δ, e, ρ => by
-      rw [cC_str_iff]
+  | .stream A, ls, δ, e, ρ => by
+      rw [cC_stream_iff]
       constructor
       · rintro ⟨h₁, h₂⟩ S Q ρ₁ ρ₂ hs hc
         rcases S with _ | ⟨v, _ | ⟨w, S⟩⟩
@@ -175,8 +175,8 @@ theorem cC_step : ∀ (C : CTy) {e e' : Expr}, (∀ μ : Heap, Step1 μ e μ e')
       rw [cC_delay_iff] at h' ⊢
       exact ⟨wpTS_step (fun μ => (h μ).plug (Kont.appL .hole _)) ls _ ρ h'.1,
         wpTS_step (fun μ => (h μ).plug (Kont.appL .hole _)) ls _ ρ h'.2⟩
-  | .str A, _, _, h, ls, δ => fun ρ h' => by
-      rw [cC_str_iff] at h' ⊢
+  | .stream A, _, _, h, ls, δ => fun ρ h' => by
+      rw [cC_stream_iff] at h' ⊢
       exact ⟨wpTS_step (fun μ => (h μ).plug (Kont.appL .hole _)) ls _ ρ h'.1,
         wpTS_step (fun μ => (h μ).plug (Kont.appL .hole _)) ls _ ρ h'.2⟩
 
@@ -222,12 +222,12 @@ theorem cC_bind : ∀ (C : CTy) (K : Kont) (M : Expr) (ls : List SRec) (δ : LSu
           (fun ls' hls w σ hσ => ((cC_delay_iff A ls' δ _ σ).mp (h ls' hls w σ hσ)).1) ρ hρ,
         wpTS_bind_frame (.appL K _) M ls P R _ hR
           (fun ls' hls w σ hσ => ((cC_delay_iff A ls' δ _ σ).mp (h ls' hls w σ hσ)).2) ρ hρ⟩
-  | .str A, K, M, ls, δ, P, R, hR, h => fun ρ hρ => by
-      rw [cC_str_iff]
+  | .stream A, K, M, ls, δ, P, R, hR, h => fun ρ hρ => by
+      rw [cC_stream_iff]
       exact ⟨wpTS_bind_frame (.appL K _) M ls P R _ hR
-          (fun ls' hls w σ hσ => ((cC_str_iff A ls' δ _ σ).mp (h ls' hls w σ hσ)).1) ρ hρ,
+          (fun ls' hls w σ hσ => ((cC_stream_iff A ls' δ _ σ).mp (h ls' hls w σ hσ)).1) ρ hρ,
         wpTS_bind_frame (.appL K _) M ls P R _ hR
-          (fun ls' hls w σ hσ => ((cC_str_iff A ls' δ _ σ).mp (h ls' hls w σ hσ)).2) ρ hρ⟩
+          (fun ls' hls w σ hσ => ((cC_stream_iff A ls' δ _ σ).mp (h ls' hls w σ hσ)).2) ρ hρ⟩
 
 
 /-- A dead slot contributes nothing. -/

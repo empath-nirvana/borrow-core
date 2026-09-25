@@ -134,7 +134,7 @@ theorem CTyEq.applyLSub : ∀ (C : CTy) (σ : Lifetime.LSubst) (δ δ' : LSub),
        CTyEq.applyLSub D σ δ δ' (fun y hy => h y (Or.inr hy))⟩
   | .top, _, _, _, _ => trivial
   | .delay A, σ, δ, δ', h => TyEq.applyLSub A σ δ δ' h
-  | .str A, σ, δ, δ', h => TyEq.applyLSub A σ δ δ' h
+  | .stream A, σ, δ, δ', h => TyEq.applyLSub A σ δ δ' h
   | .all y b S, σ, δ, δ', h => by
       have hb : (b.applySub σ).interp δ = b.interp δ' :=
         interp_applySub b (fun w hw => h w (Or.inl hw))
@@ -635,7 +635,7 @@ theorem cC_congr : ∀ (C : CTy) {δ₁ δ₂ : LSub}, (∀ y, CFree y C → δ�
   | .delay A, _, _, h, ls => by
       have ih := vCE_congr A none h (envAgree_none _ _) true
       funext e; simp only [cC, ih]
-  | .str A, _, _, h, ls => by
+  | .stream A, _, _, h, ls => by
       have ih := vCE_congr A none h (envAgree_none _ _) true
       funext e; simp only [cC, ih]
   | .all x c C, δ₁, δ₂, h, ls => by
@@ -773,7 +773,7 @@ theorem cC_tyEq_aux : ∀ (C : CTy) {C' : CTy} {δ δ' : LSub}, CTyEq C δ C' δ
       cases C' <;> simp only [CTyEq] at h
       have ih := vCE_tyEq A none none h (envEq_none _ _) true
       intro ls; funext e; simp only [cC, ih]
-  | .str A, C', _, _, h => by
+  | .stream A, C', _, _, h => by
       cases C' <;> simp only [CTyEq] at h
       have ih := vCE_tyEq A none none h (envEq_none _ _) true
       intro ls; funext e; simp only [cC, ih]

@@ -8,7 +8,7 @@ A stream is made by `unfoldS step s₀` and consumed by `next`s and a final `clo
 consumers are `CDerives` derivations, so each program is one closed derivation, run by
 adequacy and by the interpreter, with no hand proof:
 
-* `take_runs`: every closed `U(Str 1)`, observed `n` times and closed, runs to `()` with no
+* `take_runs`: every closed `U(Stream 1)`, observed `n` times and closed, runs to `()` with no
   cell left.
 * `takeCloseR n`: the unit stream over a cell `s : Ref 1` (`next` returns `((), s)`, `close`
   frees `s`), observed `n` times and closed; `()` with no cell left.
@@ -30,34 +30,34 @@ open BoCa.Programs (unitNoLeak)
 /-! ### A stream from a step and a state -/
 
 /-- `s₀ to s. unfoldS step to f. ⟨(f s) π₁, (f s) π₂⟩ to t. K`: the thunk
-`⟨(f s) π₁, (f s) π₂⟩` is `unfoldS step s₀` as a value of `U(Str A)`. -/
+`⟨(f s) π₁, (f s) π₂⟩` is `unfoldS step s₀` as a value of `U(Stream A)`. -/
 def progS (s₀ : Expr) (step : Val) (K : Expr) : Expr :=
   bindE s₀ (bindE (.app (.val unfoldSV) (.val step))
     (bindE (withPair (.app (.app (.var 2) (.var 3)) (.val (.inj₁ .unit)))
         (.app (.app (.var 2) (.var 3)) (.val (.inj₂ .unit))))
       K))
 
-/-- `f : U(S ⊸ Str A), s : S ⊢ (f s) πᵢ`, inside `withPair`'s two binders. -/
+/-- `f : U(S ⊸ Stream A), s : S ⊢ (f s) πᵢ`, inside `withPair`'s two binders. -/
 theorem d_fsS {A S : VTy} :
-    CDerives LifeCtx.empty (withCtx [⟨.thunk (.arr S (.str A)), true⟩, ⟨S, true⟩])
-      (.app (.var 2) (.var 3)) (.comp (.str A)) :=
+    CDerives LifeCtx.empty (withCtx [⟨.thunk (.arr S (.stream A)), true⟩, ⟨S, true⟩])
+      (.app (.var 2) (.var 3)) (.comp (.stream A)) :=
   .app (.dead (.dead (.left (.right .nil)))) (.force (.there (.there (.here (.cons .nil)))))
     (.there (.there (.there (.here .nil))))
 
-/-- `⟨(f s) π₁, (f s) π₂⟩ : U(Str A)`. -/
+/-- `⟨(f s) π₁, (f s) π₂⟩ : U(Stream A)`. -/
 theorem d_thunkFSS {A S : VTy} :
-    CDerives LifeCtx.empty [⟨.thunk (.arr S (.str A)), true⟩, ⟨S, true⟩]
+    CDerives LifeCtx.empty [⟨.thunk (.arr S (.stream A)), true⟩, ⟨S, true⟩]
       (withPair (.app (.app (.var 2) (.var 3)) (.val (.inj₁ .unit)))
         (.app (.app (.var 2) (.var 3)) (.val (.inj₂ .unit))))
-      (.val (.thunk (.str A))) :=
-  .thunkV rfl (.strIn (.withI (.proj₁ (.strOut d_fsS)) (.proj₂ (.strOut d_fsS))))
+      (.val (.thunk (.stream A))) :=
+  .thunkV rfl (.streamIn (.withI (.proj₁ (.streamOut d_fsS)) (.proj₂ (.streamOut d_fsS))))
 
 theorem d_progS {A S : VTy} {C : CTy} {s₀ K : Expr} {step : Val}
     (hs₀ : CDerives LifeCtx.empty [] s₀ (.val S))
     (hstep : CDerives LifeCtx.empty [⟨S, false⟩] (.val step)
       (.val (.bang (.thunk (stepSC A S)))))
     (hK : ∀ {Γ : Ctx VTy}, Ctx.Dead Γ →
-      CDerives LifeCtx.empty (⟨.thunk (.str A), true⟩ :: Γ) K (.comp C)) :
+      CDerives LifeCtx.empty (⟨.thunk (.stream A), true⟩ :: Γ) K (.comp C)) :
     CDerives LifeCtx.empty [] (progS s₀ step K) (.comp C) :=
   .bind .nil (.ret hs₀)
     (.bind (.right .nil)
@@ -66,23 +66,23 @@ theorem d_progS {A S : VTy} {C : CTy} {s₀ K : Expr} {step : Val}
 
 /-! ### Observing `n` times, then closing -/
 
-/-- `t : U(Str 1)` (index 0) observed `n` times, then closed. -/
+/-- `t : U(Stream 1)` (index 0) observed `n` times, then closed. -/
 def takeE : ℕ → Expr
   | 0 => .app (.var 0) (.val (.inj₂ .unit))
   | n + 1 => bindE (.app (.var 0) (.val (.inj₁ .unit))) (.letpair (.var 0) (.seq (.var 1) (takeE n)))
 
 theorem d_takeE : ∀ (n : ℕ) {Γ : Ctx VTy}, Ctx.Dead Γ →
-    CDerives LifeCtx.empty (⟨.thunk (.str .unit), true⟩ :: Γ) (takeE n) (.comp (.ret .unit))
-  | 0, _, hΓ => .proj₂ (.strOut (.force (.here hΓ)))
+    CDerives LifeCtx.empty (⟨.thunk (.stream .unit), true⟩ :: Γ) (takeE n) (.comp (.ret .unit))
+  | 0, _, hΓ => .proj₂ (.streamOut (.force (.here hΓ)))
   | n + 1, _, hΓ =>
-      .bind (.left (deadSplit hΓ)) (.proj₁ (.strOut (.force (.here hΓ))))
+      .bind (.left (deadSplit hΓ)) (.proj₁ (.streamOut (.force (.here hΓ))))
         (.tensorE (.left (.dead (deadSplit hΓ))) (.var (.here (.cons hΓ)))
           (.unitE (.right (.left (.dead (.dead (deadSplit hΓ))))) (.var (.there (.here (.cons (.cons hΓ)))))
             (d_takeE n (.cons (.cons (.cons hΓ))))))
 
-/-- **Adequacy for `Str 1`**: for a closed `e : U(Str 1)` and every `n`, observing `n` times
+/-- **Adequacy for `Stream 1`**: for a closed `e : U(Stream 1)` and every `n`, observing `n` times
 then closing runs from the empty memory to `()` and the empty memory.  `[spec §7]` -/
-theorem take_runs {e : Expr} (he : CDerives LifeCtx.empty [] e (.val (.thunk (.str .unit))))
+theorem take_runs {e : Expr} (he : CDerives LifeCtx.empty [] e (.val (.thunk (.stream .unit))))
     (n : ℕ) :
     BoCa.BoLo.Steps Adequacy.emptyMem (bindE e (takeE n)) Adequacy.emptyMem (.val .unit) :=
   adequacyC (.bind .nil (.ret he) (d_takeE n .nil))
@@ -167,21 +167,21 @@ theorem d_stepN {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
   · exact .ret (.lolliE (.dead (.dead (.left (deadSplit hΓ)))) (.var (.there (.there (.here hΓ))))
       (d_freeNat (.cons (.cons (.cons hΓ)))))
 
-/-- `acc : N` (index 0), `t : U(Str N)` (index 1): add the next `n` elements to `acc`, close. -/
+/-- `acc : N` (index 0), `t : U(Stream N)` (index 1): add the next `n` elements to `acc`, close. -/
 def sumK : ℕ → Expr
   | 0 => bindE (.app (.var 1) (.val (.inj₂ .unit))) (.seq (.var 0) (.var 1))
   | n + 1 => bindE (.app (.var 1) (.val (.inj₁ .unit)))
       (.letpair (.var 0) (bindE (.app (.app addE (.var 1)) (.var 3)) (sumK n)))
 
 theorem d_sumK : ∀ (n : ℕ) {Γ : Ctx VTy}, Ctx.Dead Γ →
-    CDerives LifeCtx.empty (⟨natN, true⟩ :: ⟨.thunk (.str natN), true⟩ :: Γ) (sumK n)
+    CDerives LifeCtx.empty (⟨natN, true⟩ :: ⟨.thunk (.stream natN), true⟩ :: Γ) (sumK n)
       (.comp (.ret natN))
   | 0, _, hΓ =>
-      .bind (.right (.left (deadSplit hΓ))) (.proj₂ (.strOut (.force (.there (.here hΓ)))))
+      .bind (.right (.left (deadSplit hΓ))) (.proj₂ (.streamOut (.force (.there (.here hΓ)))))
         (.unitE (.left (.right (.dead (deadSplit hΓ)))) (.var (.here (.cons (.cons hΓ))))
           (.ret (.var (.there (.here (.cons hΓ))))))
   | n + 1, _, hΓ =>
-      .bind (.right (.left (deadSplit hΓ))) (.proj₁ (.strOut (.force (.there (.here hΓ)))))
+      .bind (.right (.left (deadSplit hΓ))) (.proj₁ (.streamOut (.force (.there (.here hΓ)))))
         (.tensorE (.left (.right (.dead (deadSplit hΓ)))) (.var (.here (.cons (.cons hΓ))))
           (.bind (.right (.left (.dead (.left (.dead (deadSplit hΓ))))))
             (.ret (.lolliE (.dead (.right (.dead (.left (.dead (deadSplit hΓ))))))

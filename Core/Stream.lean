@@ -3,16 +3,17 @@ import Core.Delay
 /-!
 # Core — coiteration on the stream type  `[spec §7]`
 
-`Str A = νX. F(A ⊗ U X) & F 1` (`cC`'s `str` clause, `StrRel.lean`): `next` (`π₁`) returns a
-value and the rest of the stream, a thunk of `Str A`; `close` (`π₂`) disposes of the stream.
+`Stream A = νX. F(A ⊗ U X) & F 1` (`cC`'s `stream` clause, `StreamRel.lean`): `next` (`π₁`)
+returns a value and the rest of the stream, a thunk of `Stream A`; `close` (`π₂`) disposes of
+the stream.
 
-**The rule.** `unfoldS : !U(S ⊸ F(A ⊗ S) & F 1) ⊸ !U(S ⊸ Str A)`.  `unfoldS step` is the fixed
+**The rule.** `unfoldS : !U(S ⊸ F(A ⊗ S) & F 1) ⊸ !U(S ⊸ Stream A)`.  `unfoldS step` is the fixed
 point
 
     f = λs. ⟨step s π₁ to p. let (a, s′) = p in (a, f s′), step s π₂⟩
 
 (`etaS_next`, `etaS_close`, `nextKSS_pair`): the recursive handle `f` occurs only in the rest of
-the stream, applied to the next state.  The step returns a state, never a `Str A`.  The
+the stream, applied to the next state.  The step returns a state, never a `Stream A`.  The
 recursion is the rule's: the Z combinator (`Fix.lean`) over `fBS`.
 
 **Soundness** (`unfoldS_compatX`) is coinduction at the greatest fixed point, with the candidate
@@ -33,23 +34,23 @@ open BoCa.Lifetime (LSub LifeCtx LifeVar)
 /-- The step's type, `S ⊸ F(A ⊗ S) & F 1`. -/
 abbrev stepSC (A S : VTy) : CTy := .arr S (.amp (.ret (.tensor A S)) (.ret .unit))
 
-/-- `unfoldS`'s type, `!U(S ⊸ F(A ⊗ S) & F 1) ⊸ !U(S ⊸ Str A)`. -/
+/-- `unfoldS`'s type, `!U(S ⊸ F(A ⊗ S) & F 1) ⊸ !U(S ⊸ Stream A)`. -/
 abbrev unfoldSTy (A S : VTy) : VTy :=
-  .lolli (.bang (.thunk (stepSC A S))) (.bang (.thunk (.arr S (.str A))))
+  .lolli (.bang (.thunk (stepSC A S))) (.bang (.thunk (.arr S (.stream A))))
 
 /-! ### The term -/
 
 /-- `p to …`: the continuation of `next`, under the binders `p, u, o, s, g, self`:
 `let (a, s′) = p in (a, λo′. self g s′ o′)`. -/
-def nextKStr : Expr :=
+def nextKStream : Expr :=
   .letpair (.var 0)
     (.pair (.var 1) (.val (.lam (.app (.app (.app (.var 8) (.var 7)) (.var 1)) (.var 0)))))
 
-/-- The body of `unfoldS = Z (λself. λg. λs. λo. case o {inj₁ _. (g s π₁) to p. nextKStr |
+/-- The body of `unfoldS = Z (λself. λg. λs. λo. case o {inj₁ _. (g s π₁) to p. nextKStream |
 inj₂ _. g s π₂})`. -/
 def fBS : Expr :=
   .val (.lam (.val (.lam (.case (.var 0)
-    (bindE (.app (.app (.var 3) (.var 2)) (.val (.inj₁ .unit))) nextKStr)
+    (bindE (.app (.app (.var 3) (.var 2)) (.val (.inj₁ .unit))) nextKStream)
     (.app (.app (.var 3) (.var 2)) (.val (.inj₂ .unit)))))))
 
 theorem fBS_closed : closedAt 2 fBS = true := rfl
@@ -88,7 +89,7 @@ theorem hS_subst (g s : Val) :
       (.var 0)))) = .val (etaS g s) := by
   simp [etaS, closed_subst selfS_closed, subst_shift_succ]
 
-/-- `nextKStr` with `self`, `g`, `s` and `u` substituted: under the binder `p`,
+/-- `nextKStream` with `self`, `g`, `s` and `u` substituted: under the binder `p`,
 `let (a, s′) = p in (a, λo′. self g s′ o′)`. -/
 def nextKSS (g : Val) : Expr :=
   .letpair (.var 0)
@@ -121,7 +122,7 @@ theorem etaS_next (g s : Val) (ls : List SRec) (Q : List SRec → Val → WProp)
   refine wpTS_beta_in (.appL .hole _) _ s ls Q ρ ?_
   refine wpTS_lolli ls _ _ Q ρ ?_
   refine wpTS_sum₁ ls _ _ _ Q ρ ?_
-  simp [nextKStr, nextKSS, bindE, closed_subst selfS_closed, closed_shift selfS_closed,
+  simp [nextKStream, nextKSS, bindE, closed_subst selfS_closed, closed_shift selfS_closed,
     subst_shift_succ] at h ⊢
   exact h
 
@@ -153,12 +154,12 @@ theorem nextKSS_pair (g a s' : Val) (ls : List SRec) (Q : List SRec → Val → 
 def candS (g : Val) (S : VTy) (δ : LSub) : CPred := fun ls e ρ =>
   ∃ s, e = .val (etaS g s) ∧ vC true S ls δ s ρ
 
-/-- The candidate is a post-fixed point of `Str A`'s functor: `next` runs one step and returns
+/-- The candidate is a post-fixed point of `Stream A`'s functor: `next` runs one step and returns
 `(a, unfoldS step s′)` with `s′ ∈ 𝒱⟦S⟧`, back in the candidate; `close` runs the step's
 `close`. -/
 theorem candS_post {A S : VTy} {δ : LSub} {g : Val}
     (hg : ∀ ls, vC true (.bang (.thunk (stepSC A S))) ls δ g PMap.empty) :
-    (candS g S δ).Le (strF (fun ls v => vC true A ls δ v) (candS g S δ)) := by
+    (candS g S δ).Le (streamF (fun ls v => vC true A ls δ v) (candS g S δ)) := by
   rintro ls e ρ ⟨s, rfl, hs⟩
   obtain ⟨-, hthunk⟩ := hg ls
   obtain ⟨h₁, h₂⟩ := hthunk ls (Ext.refl _ _) s ρ ρ hs (ResU.CompS.comm (ResU.comp_empty_right ρ))
@@ -171,7 +172,7 @@ theorem candS_post {A S : VTy} {δ : LSub} {g : Val}
   refine nextKSS_pair g a s' ls' _ σ ⟨a, etaS g s', σ₀, σ₃, hc, ⟨hσ₀, rfl⟩, σ₁, σ₂, hc', ha, ?_⟩
   exact fun ls'' hk => ⟨s', rfl, vC_local true S hk hs'⟩
 
-/-- **`unfoldS` is sound**: `unfoldS : !U(S ⊸ F(A ⊗ S) & F 1) ⊸ !U(S ⊸ Str A)` at every `A`
+/-- **`unfoldS` is sound**: `unfoldS : !U(S ⊸ F(A ⊗ S) & F 1) ⊸ !U(S ⊸ Stream A)` at every `A`
 and `S`.  `[spec §7]` -/
 theorem unfoldS_compatX {Δ : LifeCtx} {Γ : Ctx VTy} (A S : VTy) (hΓ : Ctx.DeadP Γ) :
     SemV Δ Γ (.val unfoldSV) (unfoldSTy A S) := by
@@ -191,21 +192,21 @@ theorem unfoldS_compatX {Δ : LifeCtx} {Γ : Ctx VTy} (A S : VTy) (hΓ : Ctx.Dea
   refine wpTS_val _ _ _ _ ⟨rfl, ?_⟩
   intro ls₂ _ s ρ₂ τ hs hc
   rw [eq_of_compS_empty_left hc]
-  refine cC_head (.str A) (fun μ => Head.beta μ _ s) ls₂ δ ρ₂ ?_
+  refine cC_head (.stream A) (fun μ => Head.beta μ _ s) ls₂ δ ρ₂ ?_
   rw [hS_subst]
-  exact strRel_coind (candS_post hg) ls₂ _ ρ₂ ⟨s, rfl, hs⟩
+  exact streamRel_coind (candS_post hg) ls₂ _ ρ₂ ⟨s, rfl, hs⟩
 
-/-! ### `Str A` and its unrolling -/
+/-! ### `Stream A` and its unrolling -/
 
-/-- `strIn`: a computation of `F(A ⊗ U(Str A)) & F 1` is one of `Str A`. -/
-theorem strIn_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {A : VTy}
-    (h : SemC Δ Γ e (strUnroll A)) : SemC Δ Γ e (.str A) :=
-  fun δ γ ls ρ hδ hΓ => (cC_str_iff A ls δ _ ρ).mpr (h δ γ ls ρ hδ hΓ)
+/-- `streamIn`: a computation of `F(A ⊗ U(Stream A)) & F 1` is one of `Stream A`. -/
+theorem streamIn_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {A : VTy}
+    (h : SemC Δ Γ e (streamUnroll A)) : SemC Δ Γ e (.stream A) :=
+  fun δ γ ls ρ hδ hΓ => (cC_stream_iff A ls δ _ ρ).mpr (h δ γ ls ρ hδ hΓ)
 
-/-- `strOut`: a computation of `Str A` is one of `F(A ⊗ U(Str A)) & F 1`. -/
-theorem strOut_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {A : VTy}
-    (h : SemC Δ Γ e (.str A)) : SemC Δ Γ e (strUnroll A) :=
-  fun δ γ ls ρ hδ hΓ => (cC_str_iff A ls δ _ ρ).mp (h δ γ ls ρ hδ hΓ)
+/-- `streamOut`: a computation of `Stream A` is one of `F(A ⊗ U(Stream A)) & F 1`. -/
+theorem streamOut_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {A : VTy}
+    (h : SemC Δ Γ e (.stream A)) : SemC Δ Γ e (streamUnroll A) :=
+  fun δ γ ls ρ hδ hΓ => (cC_stream_iff A ls δ _ ρ).mp (h δ γ ls ρ hδ hΓ)
 
 end BoCa.Fig16.LogRel.Core
 

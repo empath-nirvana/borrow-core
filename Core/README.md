@@ -18,22 +18,22 @@ axioms among `[propext, Classical.choice, Quot.sound]` (`scripts/CheckAxioms.lea
 ### Types
 
     A ::= 1 | A ⊗ A | 0 | A ⊕ A | U C | Ref A | Imm @a A | Mut @a A | [@a] A | !A | Unk | X | μX. A
-    C ::= F A | A ⊸ C | C & C | ⊤ | ∀'a ⊏ @b. C | D A | Str A
+    C ::= F A | A ⊸ C | C & C | ⊤ | ∀'a ⊏ @b. C | D A | Stream A
 
-`D A = νX. F(A ⊕ U X) & F 1` and `Str A = νX. F(A ⊗ U X) & F 1` are fixed formers. Each is
-interpreted as a greatest fixed point (`delayRel`, `strRel`) and is equal to its unrolling
-(`cC_delay_iff`, `cC_str_iff`). There is no general `ν`.
+`D A = νX. F(A ⊕ U X) & F 1` and `Stream A = νX. F(A ⊗ U X) & F 1` are fixed formers. Each is
+interpreted as a greatest fixed point (`delayRel`, `streamRel`) and is equal to its unrolling
+(`cC_delay_iff`, `cC_stream_iff`). There is no general `ν`.
 
 ### The judgment `CDerives Δ Γ e j`
 
 `Fundamental.lean`. It has the CBPV formers, the lifetime `∀`, the `!` rules, `[]I`/`[]E`,
 `⊑Imm`/`⊑Mut`, and one constant per borrow axiom at arbitrary value-type payloads. It also has
 three call-by-value forms (`lolliE`, `allEV`, `ofRet`), `roll`/`unroll`, the folds `foldImm`,
-`foldOwn` and `foldReuse`, `delayIn`/`delayOut` with `fixD`, and `strIn`/`strOut` with
+`foldOwn` and `foldReuse`, `delayIn`/`delayOut` with `fixD`, and `streamIn`/`streamOut` with
 `unfoldS`:
 
     fixD    : !U(S ⊸ F(A ⊕ S) & F 1) ⊸ !U(S ⊸ D A)
-    unfoldS : !U(S ⊸ F(A ⊗ S) & F 1) ⊸ !U(S ⊸ Str A)
+    unfoldS : !U(S ⊸ F(A ⊗ S) & F 1) ⊸ !U(S ⊸ Stream A)
 
 Its context premises are `Ctx.SplitP`, `Ctx.DeadP` and `Ctx.SoloP` (`Persistent.lean`,
 `[spec §10]`), which extend the paper's `Ctx.Split`, `Ctx.Dead` and `Ctx.Solo`: a live slot of
@@ -86,7 +86,7 @@ interpreter (`…_eval`, kernel-checked by `decide`) with its result checked (`�
 | `RecordPrograms.lean` | `readFields`, `mutFields`, `matchSome`, `bagProg` (a record with a list field, pushed through `swapField`) |
 | `FamilyPrograms.lean` | `swapBothB` and `swapBothL` (`mem::swap` of two leaves, at `1 ⊕ 1` and at the common list), `readFamily`, `splitFour` (two nested families) |
 | `BlockPrograms.lean` | `blockSwap`, `nestSwap`, `blockRead`, `nestRead` (each with a `…_block` typed-world fact), `bagBlock` (a block with a list leaf), `crossPack` |
-| `StreamPrograms.lean` | `take_runs` (every closed `U(Str 1)` observed `n` times and closed), `takeCloseR`, `natsSum` (`0 + 1 + 2 = 3`) |
+| `StreamPrograms.lean` | `take_runs` (every closed `U(Stream 1)` observed `n` times and closed), `takeCloseR`, `natsSum` (`0 + 1 + 2 = 3`) |
 
 ## Where it came from
 
@@ -98,7 +98,7 @@ interpreter (`…_eval`, kernel-checked by `decide`) with its result checked (`�
 | `Records` | `Records.lean`, `Splits.lean`, `RecordPrograms.lean`, re-derived in `CDerives` at `VTy` in the binary-tree encoding |
 | `Places` | `Family.lean`, `FamilyPrograms.lean`, re-derived in `CDerives` at `VTy` payloads |
 | `LeafPlaces` | `Steps.lean` (step inversions; `DelayNaive.lean` uses it too), `Weaken.lean`, `BlockBorrow.lean` (plain types, `famTy`, `shortenE`, `withborS`, typing), `BlockTrack.lean` (`withborS_ret`, `withborS_packed`, `wpTS_allocBorrow`), `BlockPrograms.lean` |
-| `Recursion` (`Nu.lean`) | `StrRel.lean`, `Stream.lean`, `StreamPrograms.lean`, and the `str` cases of `Types`, `FrameRecords`, `Relation`, `ShapeMu`, `RelationFacts` and `Computation`, built the same way as `delay` |
+| `Recursion` (`Nu.lean`) | `StreamRel.lean`, `Stream.lean`, `StreamPrograms.lean`, and the `stream` cases of `Types`, `FrameRecords`, `Relation`, `ShapeMu`, `RelationFacts` and `Computation`, built the same way as `delay` |
 
 ## Decisions taken
 
@@ -109,7 +109,7 @@ interpreter (`…_eval`, kernel-checked by `decide`) with its result checked (`�
 3. **`Box<struct>` is the block form.** An owned struct is `refTy σ`, the family of its leaf
    references, handled by `allocS`/`freeS`/`withborS`. The one-cell `Ref σ.valTy` is a separate
    type (`MapMut`'s `L′`).
-4. **Codata is two fixed formers.** `D A` with `fixD`, and `Str A` with `unfoldS`. There is no
+4. **Codata is two fixed formers.** `D A` with `fixD`, and `Stream A` with `unfoldS`. There is no
    general `ν`.
 
 Name collisions settled:

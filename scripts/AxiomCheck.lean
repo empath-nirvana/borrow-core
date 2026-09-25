@@ -27,7 +27,7 @@ import Core
 #print axioms BoCa.Fig16.LogRel.Core.wpTS_allocS
 #print axioms BoCa.Fig16.LogRel.Core.wpTS_allocBorrow
 #print axioms BoCa.Fig16.LogRel.Core.cC_delay_iff
-#print axioms BoCa.Fig16.LogRel.Core.cC_str_iff
+#print axioms BoCa.Fig16.LogRel.Core.cC_stream_iff
 #print axioms BoCa.Fig16.LogRel.Core.fixD_compatX
 #print axioms BoCa.Fig16.LogRel.Core.unfoldS_compatX
 #print axioms BoCa.Fig16.LogRel.Core.take_runs

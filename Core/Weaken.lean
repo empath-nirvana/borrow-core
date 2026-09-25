@@ -117,8 +117,8 @@ theorem CDerives.append_dead (h' : Ctx.Dead Γ') {Δ : LifeCtx} {Γ : Ctx VTy} {
   | delayIn _ ih => exact .delayIn ih
   | delayOut _ ih => exact .delayOut ih
   | fixD A S hΓ => exact .fixD A S (deadP_append h' hΓ)
-  | strIn _ ih => exact .strIn ih
-  | strOut _ ih => exact .strOut ih
+  | streamIn _ ih => exact .streamIn ih
+  | streamOut _ ih => exact .streamOut ih
   | unfoldS A S hΓ => exact .unfoldS A S (deadP_append h' hΓ)
 
 end BoCa.Fig16.LogRel.Core
