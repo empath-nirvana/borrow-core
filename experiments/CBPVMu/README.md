@@ -26,7 +26,7 @@ Every result's axioms are `[propext, Classical.choice, Quot.sound]` or a subset.
 | `Images.lean`, `Invariant.lean`, `ReborrowShapes.lean`, `RelationFacts.lean` | the lemmas that went by induction on a type now go by the induction principles, or by induction on a position (list below) |
 | `Fundamental.lean` | `roll`/`unroll` in `CDerives`, `roll_compatX`/`unroll_compatX` |
 | `Fix.lean` (new) | `experiments/Recursion/Recursion/Fix.lean` at this world's `wpTS`, with `substAll_closed` |
-| `Lists.lean`, `Count.lean` (new) | the programs |
+| `Lists.lean`, `Count.lean`, `CountFree.lean` (new) | the programs; `CountFree.lean` also `withload_sized` |
 
 `Wp`, `Reborrow`, `FrameRules`, `Compatibility`, `Computation`, `Compat` and `Examples` are
 CBPVWorld's files with only the namespace changed. `TW`, the invariants (`ChainInv`, `DeepInv`,
@@ -118,7 +118,7 @@ in a context holding the recursive functions, instantiated at their values.
 - `build3Free_runs`: from the empty memory to `()` and the empty memory;
   `build3Free_eval`: the interpreter agrees.
 
-**(b) Borrowed traversal** (`Count.lean`).
+**(b) Borrowed traversal** (`Count.lean`; the fuel-free version is `CountFree.lean`, below).
 - `N = μX. 1 ⊕ X`; `vC_natN`: a numeral holds no resource.
 - `countN = Z (λself. λk. case k {inj₁ _. c₀ | inj₂ k′. self k′ to g. step[g]})` returns the
   counter at fuel `k`, a `!U(∀'a ⊏ ⊤. Imm 'a L ⊸ F N)`. `c₀ = Λ. λl. forget l; 0` (`d_c₀`) and
@@ -140,19 +140,34 @@ program would need a list with payloads, an in-place map by `swap` on each cell,
 ## The borrowed fold
 
 A fold through `withload`, with the recursion nested inside the callbacks at fresh lifetimes,
-works when the recursion is on a fuel: `countN`'s induction is on the numeral, and each stage is
-a typing derivation (`d_step`) at the counter one fuel lower.
+works both on a fuel (`Count.lean`) and on the list itself (`CountFree.lean`).
 
-Without fuel — `count = Z (λself. λl. withload l (Λ. λu. case u {… | inj₂ t. self t}))` with the
-recursion on the list — **I have not derived its semantic type and have not verified that any
-obstruction is real.** What the fuelled proof avoids: the recursive call is on the tail borrow
-`t`, whose cell sits in the image `c` the callback receives, and the callback's premise is only
-`vC (Imm̲ 'x L) u c` (`withload_compatX`'s statement). The measure a proof by induction would
-use — the least-fixed-point derivation of the parent's payload, or the size of the parent cell's
-witness — relates to `c` only through `c ∈ reb_β(σ)` (`typed_image_pos`: the tail's witness is
-a piece of the parent's witness), and that fact is inside the typed world, not in the callback's
-premise. The scope note's question, whether the rank survives the `withload` boundary, is
-therefore open for the fuel-free fold.
+**The measure.** The number of cells of the borrowed `imm` cell's witness (`dsize`, a `Finset`
+card over `PMap.finite`). It crosses the `withload` boundary because the view the callback
+receives is an image `χ ∈ reb_β(σ)` of the loaded cell's witness `σ`, and at the tail `ℓ′`
+`reb_β`'s `own` clause makes the tail's witness `q/ℓ′` for a piece `q ≤ σ` holding `ℓ′`
+(`typed_image_pos`); so the tail's witness has fewer cells (`dsize_del_lt`, `dsize_image_lt`).
+No world invariant is added, and `vC`, `withload_compatX` and every existing signature are
+unchanged.
+
+**The lemma (option 1 of the task).** `withload_sized` is `withload` at `Imm a T₁` whose
+callback is asked only at the views `χ ∈ 𝒱⟦Imm̲ 'x T₁⟧` that are images `χ ∈ reb_β(σ)` of a
+witness `σ` observable at `T₁` with `K σ`, where `K` is any property the borrowed cell's own
+witness has. Its proof is `withload_compatX`'s (6.144, 6.134, 6.150) with two changes: the
+payload predicate handed to `wpTS_load_I` carries `K`, and the chooser is wrapped by
+`rebChooseTW_sized`, which returns with the chosen image the witness it is an image of (the
+chooser already produces `χ ∈ reb_β(σ)`; `withload_compatX`'s callback premise drops it).
+The callback is proved by hand (not by `fundamentalC`), since its recursive call is typed only
+on the smaller borrows.
+
+**The program.**
+- `countFree = Z (λself. Λ. λl. withload l (Λ. λu. case u {inj₁ w. w; 0 | inj₂ t. self [] t to
+  n. inj₂ n}))`, no fuel. `countFree_body`: induction on a bound of the witness size.
+  **`countFree_semV : SemV Δ [] countFree (!U(∀'a. Imm 'a L ⊸ F N))`**, at the real type.
+- `countFreeProg`: build a 3-cell list, put it in a cell, borrow it immutably, count, end the
+  borrow, free the cell and the list, return the count; `countFreeProg_derives` at `F N` in the
+  context `countFree, freeAll`; `countFreeProg_runs`: from the empty memory to a numeral and the
+  empty memory; `countFreeProg_eval`: the interpreter returns `3` with no cell left.
 
 ## Against the scope note
 
