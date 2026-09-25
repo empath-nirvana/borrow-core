@@ -1,5 +1,6 @@
 import CBPVMu.Compat
 import CBPVMu.FoldReuse
+import CBPVMu.Delay
 import Support.LogicalRelation.Adequacy
 
 /-!
@@ -192,6 +193,14 @@ inductive CDerives : LifeCtx → Ctx VTy → Expr → Jdg → Prop where
   (the emptied cell and the result on its content), any `R`. -/
   | foldReuse {Δ Γ} (F : FShape) (R : VTy) (hΓ : Ctx.Dead Γ) (hF : F.WF) (hG : F.Guarded) :
       CDerives Δ Γ (.val (foldReuseV F)) (.val (.lolli (algRTy F R) (foldOTy F R)))
+  /-- `D A` is its unrolling `F(A ⊕ U(D A)) & F 1` (`cC_delay_iff`), on the same term. -/
+  | delayIn {Δ Γ e A} (h : CDerives Δ Γ e (.comp (delayUnroll A))) :
+      CDerives Δ Γ e (.comp (.delay A))
+  | delayOut {Δ Γ e A} (h : CDerives Δ Γ e (.comp (.delay A))) :
+      CDerives Δ Γ e (.comp (delayUnroll A))
+  /-- Guarded recursion on the delay type, a constant:
+  `fixD : !U(S ⊸ F(A ⊕ S) & F 1) ⊸ !U(S ⊸ D A)` (`Delay.lean`). -/
+  | fixD {Δ Γ} (A S : VTy) (hΓ : Ctx.Dead Γ) : CDerives Δ Γ (.val fixDV) (.val (fixDTy A S))
 
 /-- The semantic judgment at a judgment form. -/
 def SemJ (Δ : LifeCtx) (Γ : Ctx VTy) (e : Expr) : Jdg → Prop
@@ -254,6 +263,9 @@ theorem fundamentalC {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg}
   | foldImm F y c R hΓ hF hG hyM hyR hR => exact foldImm_compatX F hF hG y c R hΓ hyM hyR hR
   | foldOwn F R hΓ hF hG => exact foldOwn_compatX F hF hG R hΓ
   | foldReuse F R hΓ hF hG => exact foldReuse_compatX F hF hG R hΓ
+  | delayIn _ ih => exact delayIn_compatX ih
+  | delayOut _ ih => exact delayOut_compatX ih
+  | fixD A S hΓ => exact fixD_compatX A S hΓ
 
 /-! ### Adequacy -/
 
