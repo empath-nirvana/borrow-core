@@ -1,4 +1,5 @@
 import CBPVMu.Compat
+import CBPVMu.FoldImm
 import Support.LogicalRelation.Adequacy
 
 /-!
@@ -8,7 +9,8 @@ import Support.LogicalRelation.Adequacy
 `val A` or a computation judgment `comp C`, in A-normal form.  Beside the CBPV formers it has
 the lifetime `∀` (`∀E` at every `C`), the `!` rules, `[]I`/`[]E` (`[]I` at every value type),
 `⊑imm`/`⊑mut`, one constant per borrow axiom at arbitrary value-type payloads, three
-call-by-value derived forms (`lolliE`, `allEV`, `ofRet`), and `roll`/`unroll` at `μ`.
+call-by-value derived forms (`lolliE`, `allEV`, `ofRet`), `roll`/`unroll` at `μ`, and the
+borrowed fold `foldImm` (`FoldImm.lean`).
 `fundamentalC` proves every rule sound at `SemV`/`SemC`; `adequacyC` runs a closed `F 1`
 computation to `()` from the empty memory.
 -/
@@ -171,6 +173,15 @@ inductive CDerives : LifeCtx → Ctx VTy → Expr → Jdg → Prop where
   /-- `unroll`: a value of `μX. A` is a value of `A[μX. A/X]`. -/
   | unroll {Δ Γ e A} (h : CDerives Δ Γ e (.val (.mu A))) :
       CDerives Δ Γ e (.val (VTy.inst (.mu A) A))
+  /-- The borrowed fold, a constant:
+  `foldImm : !U(∀'y ⊏ ⊤. A_R ⊸ F R) ⊸ !U(∀'y ⊏ @c. Imm 'y (μX. T) ⊸ F R)`, for `T` built by
+  `⊗`/`⊕` from closed leaves, `Ref X` and `X` (not `X` itself), `A_R = Imm̲ 'y T` with `R` at
+  every recursive position, `R` outliving every lifetime, `'y` free in neither `μX. T` nor
+  `R`. -/
+  | foldImm {Δ Γ} (F : FShape) (y : LifeVar) (c : Lifetime.Life) (R : VTy) (hΓ : Ctx.Dead Γ)
+      (hF : F.WF) (hG : F.Guarded) (hyM : ¬ VFree y (.mu F.ty)) (hyR : ¬ VFree y R)
+      (hR : ∀ Δ' a, VOutlives Δ' a R) :
+      CDerives Δ Γ (.val (foldImmV F)) (.val (.lolli (algTy F y R) (foldTy F y c R)))
 
 /-- The semantic judgment at a judgment form. -/
 def SemJ (Δ : LifeCtx) (Γ : Ctx VTy) (e : Expr) : Jdg → Prop
@@ -230,6 +241,7 @@ theorem fundamentalC {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg}
   | ofRet _ ih => exact ih
   | roll hA hc _ ih => exact roll_compatX hA hc ih
   | unroll _ ih => exact unroll_compatX ih
+  | foldImm F y c R hΓ hF hG hyM hyR hR => exact foldImm_compatX F hF hG y c R hΓ hyM hyR hR
 
 /-! ### Adequacy -/
 

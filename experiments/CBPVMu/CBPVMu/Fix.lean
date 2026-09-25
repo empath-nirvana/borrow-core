@@ -1,4 +1,4 @@
-import CBPVMu.Fundamental
+import CBPVMu.Compat
 
 /-!
 # CBPVMu — the Z combinator over BoCa's untyped λ

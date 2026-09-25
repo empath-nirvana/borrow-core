@@ -213,9 +213,6 @@ theorem countNB_subst {S : Val} (hS : closedAt 0 S.1 = true) (w : Val) :
     fun j s => subst_closedAt stepV.1 s stepV_closed (Nat.le_add_left 1 j)
   simp [countNB, bindE, Expr.subst, h₁, h₂, h₃, h₄]
 
-theorem models_empty_any (δ : LSub) : LifeCtx.empty.Models δ := fun _ _ h => by
-  simp [LifeCtx.find?, LifeCtx.empty, Lifetime.assocFind] at h
-
 theorem substAll_single (w : Val) (e : Expr) : substAll [w] e = e.subst 0 w := by
   rw [substAll, Expr.psub_cons, Adequacy.psub_nil, Val.shift_zero]
 

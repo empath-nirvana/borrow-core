@@ -61,9 +61,6 @@ theorem CtxOutlives.solo {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {A : 
 
 /-! ### `cImmBorrow` -/
 
-/-- `M to x. N`, written `(λx. N) M`. -/
-def bindE (M N : Expr) : Expr := .app (.val (.lam N)) M
-
 /-- `Δ₁ = 'a ⊏ ⊓∅`, the context `withbor`'s callback runs in. -/
 abbrev Δ₁ : LifeCtx := LifeCtx.empty.extend 0 LifeCtx.empty.meetOfDom
 
