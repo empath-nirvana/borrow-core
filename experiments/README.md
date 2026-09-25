@@ -16,12 +16,13 @@ is then implemented in the library afresh. None of these libraries is a default 
 | `Relaxed/` | `Relaxed` | `lake build Relaxed` | FP and adequacy hold with `FrameLife.2` and `TW.reb`'s stratum non-strict; same-lifetime `Imm` projection still refuted, by `[TR]` 6.38 (`frame_view_excluded`) |
 | `FrameEnd/` | `FrameEnd` | `lake build FrameEnd` | `Relaxed` with 6.64's exit (`TW.immEnd`) subtracting the frame-lifetime image as 6.52 does; FP and adequacy hold, and at 6.64's end the subtraction is empty (`frame_image_empty`). Same-lifetime `Imm` projection still refuted: `↭`'s `imm` clause at the projecting run (`imm_view_rejected`). The same holds for L3 via the `mut` clause (`mut_view_rejected`); L2: no |
 | `Records/` | `Records` | `lake build Records` | records and variants as derived forms (`⊗`/`⊕`); `Imm̲`, outlives and 6.131 fieldwise; field read through `Imm` at the load's `'b`, field update by whole-record `withswap`; no model change |
+| `Places/` | `Places` | `lake build Places` | a family of disjoint places (a tuple of `Ref`s) borrowed at one lifetime is **derivable**: nested `withbor` + `⊑Mut`/`⊑Imm` (`withborM2_wf`, `withborI2_wf`), when the second leaf and the result outlive the outer lifetime; FP and adequacy apply unchanged. Simultaneous `Mut` of `s.a`, `s.b`; sub-family and whole family passed at the same lifetime; `Imm` version; static `split_at_mut`. No model or typed-world change |
 | `Bang/` | — | — | archived: became `Paper/`, `Support/`, `Examples/Closures.lean` |
 
 Each experiment builds against this repository's `Paper`/`Support` (and `Examples`, for
-`CBPVWorld`). Module names are unique across the libraries: the `Experiments` library's modules
-are `CBPVSplit.Split`, `ModesLabels.Modes`, `Shifts.Shifts`, `BorrowedClosures.Reborrow` and
-`BorrowedClosures.EnvCheck`.
+`CBPVWorld`; `Records`, for `Places`). Module names are unique across the libraries: the
+`Experiments` library's modules are `CBPVSplit.Split`, `ModesLabels.Modes`, `Shifts.Shifts`,
+`BorrowedClosures.Reborrow` and `BorrowedClosures.EnvCheck`.
 
 These experiments were developed in `~/repos/borrow_lang/Experiments/`; the last `borrow_lang`
 commit containing them is `a31b498`. An archived experiment's README names the commits that hold
