@@ -14,6 +14,7 @@ is then implemented in the library afresh. None of these libraries is a default 
 | `CBPVWorld/` | `CBPVWorld` | `lake build CBPVWorld` | ported |
 | `Projection/` | `Projection` | `lake build Projection` | negative: `no_projection` refutes a same-lifetime `Imm` projection at the typed world (`FrameLife`) |
 | `Relaxed/` | `Relaxed` | `lake build Relaxed` | FP and adequacy hold with `FrameLife.2` and `TW.reb`'s stratum non-strict; same-lifetime `Imm` projection still refuted, by `[TR]` 6.38 (`frame_view_excluded`) |
+| `Records/` | `Records` | `lake build Records` | records and variants as derived forms (`⊗`/`⊕`); `Imm̲`, outlives and 6.131 fieldwise; field read through `Imm` at the load's `'b`, field update by whole-record `withswap`; no model change |
 | `Bang/` | — | — | archived: became `Paper/`, `Support/`, `Examples/Closures.lean` |
 
 Each experiment builds against this repository's `Paper`/`Support` (and `Examples`, for

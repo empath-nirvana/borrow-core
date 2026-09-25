@@ -42,3 +42,8 @@ roots = ["Projection"]
 name = "Relaxed"
 srcDir = "experiments/Relaxed"
 roots = ["Relaxed"]
+
+[[lean_lib]]
+name = "Records"
+srcDir = "experiments/Records"
+roots = ["Records"]
