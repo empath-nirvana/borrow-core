@@ -2,7 +2,7 @@ import Paper
 import Support
 import Examples
 import Core
-/-! The theorems `SPEC.md` §1–§7 name, with their axioms. -/
+/-! The theorems `SPEC.md` §1–§8 name, with their axioms. -/
 #print axioms BoCa.Fig16.LogRel.Typed.fundamentalProperty
 #print axioms BoCa.Fig16.LogRel.Typed.adequacy
 #print axioms BoCa.Fig16.LogRel.Typed.bangLamI_compatX
@@ -37,3 +37,12 @@ import Core
 #print axioms BoCa.Fig16.LogRel.Core.splitFour_runs
 #print axioms BoCa.Fig16.LogRel.Core.blockSwap_runs
 #print axioms BoCa.Fig16.LogRel.Core.natsSum_runs
+#print axioms BoCa.Fig16.LogRel.Core.host_call_sound
+#print axioms BoCa.Fig16.LogRel.Core.hostOp_compatX
+#print axioms BoCa.Fig16.LogRel.Core.lit_compatX
+#print axioms BoCa.Fig16.LogRel.Core.sumToProg_runs
+#print axioms BoCa.Fig16.LogRel.Core.sumToProg_eval
+#print axioms BoCa.Fig16.LogRel.Core.sumListProg_runs
+#print axioms BoCa.Fig16.LogRel.Core.sumListProg_eval
+#print axioms BoCa.Fig16.LogRel.Core.signProg_runs
+#print axioms BoCa.Fig16.LogRel.Core.signProg_eval

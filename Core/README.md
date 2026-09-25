@@ -1,9 +1,10 @@
 # Core: the consolidated world
 
 One CBPV typed world holding `μ` and the three folds, blocks, records and variants, family
-borrows, block borrows, the delay type with `fixD`, and the stream type with `unfoldS`. It is
-the library's implementation of `SPEC.md` §3–§7; code an entry adds is tagged `[spec §N]`
-(each file's heading, and the main definitions, rules and theorems).
+borrows, block borrows, the delay type with `fixD`, the stream type with `unfoldS`, and the
+integer types with the host operations. It is the library's implementation of `SPEC.md` §3–§8
+and §10; code an entry adds is tagged `[spec §N]` (each file's heading, and the main
+definitions, rules and theorems).
 
 Build: `lake build` (`Core` is a default target) or `lake build Core`. Namespace
 `BoCa.Fig16.LogRel.Core`, so names of the typed world in `BoCa.Fig16.LogRel` resolve
@@ -18,7 +19,12 @@ axioms among `[propext, Classical.choice, Quot.sound]` (`scripts/CheckAxioms.lea
 ### Types
 
     A ::= 1 | A ⊗ A | 0 | A ⊕ A | U C | Ref A | Imm @a A | Mut @a A | [@a] A | !A | Unk | X | μX. A
+        | I32 | I64
     C ::= F A | A ⊸ C | C & C | ⊤ | ∀'a ⊏ @b. C | D A | Stream A
+
+`I32` and `I64` are one constructor, `VTy.int w` (`Integers.lean`, `[spec §8]`). The relation
+holds a literal of the width at `∅`, so they are persistent, `Imm̲ 'b I = I`, and they outlive
+every lifetime.
 
 `D A = νX. F(A ⊕ U X) & F 1` and `Stream A = νX. F(A ⊗ U X) & F 1` are fixed formers. Each is
 interpreted as a greatest fixed point (`delayRel`, `streamRel`) and is equal to its unrolling
@@ -28,7 +34,8 @@ interpreted as a greatest fixed point (`delayRel`, `streamRel`) and is equal to 
 
 `Fundamental.lean`. It has the CBPV formers, the lifetime `∀`, the `!` rules, `[]I`/`[]E`,
 `⊑Imm`/`⊑Mut`, and one constant per borrow axiom at arbitrary value-type payloads. It also has
-three call-by-value forms (`lolliE`, `allEV`, `ofRet`), `roll`/`unroll`, the folds `foldImm`,
+three call-by-value forms (`lolliE`, `allEV`, `ofRet`), the integer literal `lit` and the host
+operation `hostOp` (below), `roll`/`unroll`, the folds `foldImm`,
 `foldOwn` and `foldReuse`, `delayIn`/`delayOut` with `fixD`, and `streamIn`/`streamOut` with
 `unfoldS`:
 
@@ -37,9 +44,35 @@ three call-by-value forms (`lolliE`, `allEV`, `ofRet`), `roll`/`unroll`, the fol
 
 Its context premises are `Ctx.SplitP`, `Ctx.DeadP` and `Ctx.SoloP` (`Persistent.lean`,
 `[spec §10]`), which extend the paper's `Ctx.Split`, `Ctx.Dead` and `Ctx.Solo`: a live slot of
-persistent type (`VTy.persistent`: `1`, `0`, `Unk`, `!A`, and `⊗`, `⊕`, `[@a]`, `μ` over
-persistent types) may go to both sides of a split and may be dropped at a leaf. The relation
-holds such a value only at `∅` (`vP_empty_of_persistent`).
+persistent type (`VTy.persistent`: `1`, `0`, `Unk`, `I32`, `I64`, `!A`, and `⊗`, `⊕`, `[@a]`,
+`μ` over persistent types) may go to both sides of a split and may be dropped at a leaf. The
+relation holds such a value only at `∅` (`vP_empty_of_persistent`).
+
+### Integers and the host  `[spec §8]`
+
+The term language has two more constants, `Prim.lit c` (`i32[n]`, `i64[n]`) and `Prim.host op`,
+one `HostOp` per Wasm integer instruction at each width: `bin w o` (`add sub mul and or xor shl
+shr_s shr_u rotl rotr`), `div w o` (`div_s div_u rem_s rem_u`), `un w o` (`clz ctz popcnt
+extend8_s extend16_s`), `eqz w`, `rel w o` (`eq ne lt_s lt_u le_s le_u gt_s gt_u ge_s ge_u`),
+and `wrap`, `extend_s`, `extend_u`, `extend32_s` (`Support/Syntax/Integers.lean`).
+
+The machine (`BoLo.Head`) has one more step, `op v ↦ r` when `ℍ.call op v = some r`
+(`Paper/S3_Dynamics/Definitions.lean`). A `Host` (`Support/Dynamics/Host.lean`) gives each
+operation a Lean function of its type (`UInt32 → UInt32 → UInt32`, `… → Option UInt32` for the
+partial ones, `… → Bool` for the tests), and `Host.call` decodes the argument and encodes the
+answer: a literal, `inj₁ ()`/`inj₂ ()` for false/true, `inj₁ n`/`inj₂ ()` where Wasm traps. An
+ill-shaped argument is stuck.
+
+The host is threaded as `{ℍ : Host} [HostIs ℍ]`, a section variable of every file over the
+machine; `HostIs` carries no data and has no global instance. So every theorem over the
+machine — the relation, `fundamentalC`, `adequacyC`, every `*_runs` — holds at every host, and
+the machine is deterministic at each. `wasmHost` is Wasm's semantics on `UInt32`/`UInt64`; it
+is the interpreter's default host (`eval e (H := wasmHost)`) and nothing else uses it.
+
+Typing: `CDerives.lit c : I` at a consumed context, and one rule `CDerives.hostOp op :
+!(hostArg op ⊸ F (hostRes op))`, the table of `SPEC.md` §8. `hostOp_compatX` proves every
+operation sound by one host step, using only that `Host.call` answers at the stated type
+(`host_call_sound`).
 
 ### Theorems
 
@@ -87,6 +120,10 @@ interpreter (`…_eval`, kernel-checked by `decide`) with its result checked (`�
 | `FamilyPrograms.lean` | `swapBothB` and `swapBothL` (`mem::swap` of two leaves, at `1 ⊕ 1` and at the common list), `readFamily`, `splitFour` (two nested families) |
 | `BlockPrograms.lean` | `blockSwap`, `nestSwap`, `blockRead`, `nestRead` (each with a `…_block` typed-world fact), `bagBlock` (a block with a list leaf), `crossPack` |
 | `StreamPrograms.lean` | `take_runs` (every closed `U(Stream 1)` observed `n` times and closed), `takeCloseR`, `natsSum` (`0 + 1 + 2 = 3`) |
+| `IntPrograms.lean` | `sumToProg` (`fixD` over `I32 ⊗ I32`, `1 + … + 10 = 55`), `sumListProg` (`[100, 20, 3]` as `μX. 1 ⊕ Ref (I32 ⊗ X)`, read by `withload` inside an immutable borrow, `foldImm` sum `123`), `signProg` (`div_s`/`div_u` of `-7` by `2`, a wrapping `mul`, `div_u` by zero taking the error branch) |
+
+The `IntPrograms.lean` runs are theorems at every host; the interpreter's results are at
+`wasmHost`.
 
 ## Where it came from
 
@@ -139,6 +176,9 @@ Name collisions settled:
     `0`/`μ`/`X`, but has no rule at `U C` or `Unk`).
   - A generic n-ary family over a list of leaf types, or over `μX. 1 ⊕ (Ref A ⊗ X)`, is not
     built. Nesting is written out per program (`splitFour`).
+- **Integers.** `plainV` does not include `I32`/`I64`, so they are not yet `withborS` leaves.
+  The `experiments/` libraries over the machine do not take the host parameter and do not
+  build.
 - **Block borrows.** `withborS`'s leaves and result are `plainV`: `1`, `0`, `⊗`, `⊕`, `Ref`, `!`,
   `X` and `μ`, with no lifetime and no `U C`. That is narrower than `withborF2`, which admits
   `Imm @e`/`Mut @e`/`[@e]` leaves and results that outlive the outer lifetime. I have not
