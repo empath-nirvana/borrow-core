@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 0.3.1 · 2026-09-25
+Version 0.4 · 2026-09-25
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -158,9 +158,9 @@ data is materialized, and gives codata (`&`, and the formers of §7) a home.
 
     A ::= 1 | A ⊗ A | 0 | A ⊕ A | U C | Ref A | Imm @a A | Mut @a A | [@a] A | !A | Unk
         | X | μX. A                                                   (value types)
-    C ::= F A | A ⊸ C | C & C | ⊤ | ∀'a ⊏ @b. C | D A | Str A          (computation types)
+    C ::= F A | A ⊸ C | C & C | ⊤ | ∀'a ⊏ @b. C | D A | Stream A       (computation types)
 
-`X`, `μ` are §6; `D`, `Str` are §7.
+`X`, `μ` are §6; `D`, `Stream` are §7.
 
 ### Typing
 
@@ -274,13 +274,13 @@ From `experiments/Recursion`, `CBPVMu`.
 ## 7. Entry 6 — codata: delay and streams
 
     D A ≜ νX. F(A ⊕ U X) & F 1          (delay)
-    Str A ≜ νX. F(A ⊗ U X) & F 1        (stream)
+    Stream A ≜ νX. F(A ⊗ U X) & F 1     (stream)
 
 Each has an observation and `close`; `close` is required because no rule forgets a `U C`, and
 it releases a linear state. Both are interpreted as greatest fixed points; `delayIn`/`delayOut`
 and `strIn`/`strOut` convert to and from the unrolling. Streams are built by coiteration:
 
-    unfoldS : !U(S ⊸ F(A ⊗ S) & F 1) ⊸ !U(S ⊸ Str A)
+    unfoldS : !U(S ⊸ F(A ⊗ S) & F 1) ⊸ !U(S ⊸ Stream A)
 
 ### Loops
 
@@ -299,24 +299,148 @@ runs from empty memory and leaves memory empty.
 - Non-tail recursion needs an explicit stack in the state, or a `bind` on `D` (not yet written).
 - Whether `D`'s greatest fixed point equals the intersection of its finite approximations is
   reduced to one property of `wpTS` (`WpChainCommutes`), not derived.
-- A general `νX. C` former is deferred; `D` and `Str` are fixed formers.
-- Stream adequacy is stated generically only at `Str 1` (`take_runs`).
+- A general `νX. C` former is deferred; `D` and `Stream` are fixed formers.
+- Stream adequacy is stated generically only at `Stream 1` (`take_runs`).
 
 From `experiments/Recursion`, `CBPVMu`.
 
 ---
 
+## 8. Entry 7 — integers
+
+### Types
+
+    A ::= … | I32 | I64
+
+Opaque base types. They hold no resource: `I32` and `I64` are persistent (§10), `Imm̲ 'b I32 = I32`,
+and they outlive every lifetime.
+
+### Operations
+
+Wasm's integer instructions, as externs (§11) of `!` type, for each width:
+
+| group | operations | type (at `I32`) |
+|---|---|---|
+| literals | `i32[n]` | `I32` |
+| wrapping arithmetic | `add`, `sub`, `mul` | `I32 ⊗ I32 ⊸ F I32` |
+| partial arithmetic | `div_s`, `div_u`, `rem_s`, `rem_u` | `I32 ⊗ I32 ⊸ F (I32 ⊕ 1)` |
+| bitwise | `and`, `or`, `xor`, `shl`, `shr_s`, `shr_u`, `rotl`, `rotr` | `I32 ⊗ I32 ⊸ F I32` |
+| unary | `clz`, `ctz`, `popcnt` | `I32 ⊸ F I32` |
+| tests | `eqz`, `eq`, `ne`, `lt_s`, `lt_u`, `le_s`, `le_u`, `gt_s`, `gt_u`, `ge_s`, `ge_u` | `… ⊸ F (1 ⊕ 1)` |
+| conversion | `wrap`, `extend_s`, `extend_u`, `extend8_s`, `extend16_s` | as in Wasm |
+
+Partial operations return the right injection where Wasm traps (division by zero, `INT_MIN / -1`),
+because a trap would abandon linear resources.
+
+### Semantics
+
+The theorems are parametric in the integer signature. `I32`/`I64` are interpreted by arbitrary
+resource-free value predicates, and the operations by any total functions of the stated types.
+Nothing about arithmetic is proved. The compiler lowers each operation to its Wasm instruction,
+and compiler correctness is stated relative to one shared interpretation, instantiated with the
+target's own definitions (Talos's `i32.add` and so on). The interpreter may use any implementation;
+agreement between engines is tested on the corpus, not proved.
+
+### Open
+
+- Floats (`F32`, `F64`) by the same scheme; Wasm's NaN bit patterns are nondeterministic.
+- `u8` and checked (non-wrapping) arithmetic are derivable from the operations above, or can be
+  added as further externs.
+- Whether literals stay an extern family or become a term form, if the term language is forked.
+
+---
+
+## 9. Entry 8 — buffers and strings
+
+Opaque linear types with extern operations (§11). Their memory is not modelled cell by cell. Each
+extern's semantic type is a trusted obligation, like Rust's `unsafe` inside `std`.
+
+### Buffers
+
+    Buf A          (owned, growable, must be freed)
+
+| operation | type |
+|---|---|
+| `buf_new`, `buf_free` | `I32 ⊸ F (Buf A)`, `Buf A ⊸ F 1` (when `A` is persistent) |
+| `len` | `Imm 'a (Buf A) ⊸ F I32` |
+| `get` | `Imm 'a (Buf A) ⊗ I32 ⊸ F (Imm 'a A ⊕ 1)` — a same-lifetime element view, bounds-checked |
+| `set` | `Mut 'a (Buf A) ⊗ I32 ⊗ A ⊸ F (A ⊕ A)` — returns the old element, or the new one back on failure |
+| `push`, `pop` | `Mut 'a (Buf A) ⊗ A ⊸ F 1`, `Mut 'a (Buf A) ⊸ F (A ⊕ 1)` |
+
+`push` may reallocate. That is sound because a `Mut` borrow excludes outstanding element views.
+Byte buffers are `Buf I32` with 8-bit storage chosen by the lowering.
+
+### Strings
+
+    Str            (owned UTF-8 string, must be freed)
+    Imm 'a Str     (borrowed view; literals are Imm ⊤ Str)
+
+| operation | type |
+|---|---|
+| `str_new`, `str_free` | `F Str`, `Str ⊸ F 1` |
+| `len`, `byte_at` | `Imm 'a Str ⊸ F I32`, `Imm 'a Str ⊗ I32 ⊸ F (I32 ⊕ 1)` |
+| `slice` | `Imm 'a Str ⊗ I32 ⊗ I32 ⊸ F (Imm 'a Str ⊕ 1)` — same-lifetime sub-view |
+| `push_str` | `Mut 'a Str ⊗ Imm 'b Str ⊸ F 1` |
+| `concat` | `Imm 'a Str ⊗ Imm 'b Str ⊸ F Str` |
+| `eq`, `cmp` | `… ⊸ F (1 ⊕ 1)`, `… ⊸ F I32` |
+| `from_bytes` | `Buf I32 ⊸ F (Str ⊕ Buf I32)` — validates UTF-8; the buffer comes back on failure |
+| `to_str` | `I32 ⊸ F Str` |
+
+Every extern that produces a `Str` produces valid UTF-8; `from_bytes` is the only door from raw
+bytes. String literals are externs in `main`'s initial context, backed by the static data segment,
+which is outside the heap accounting of adequacy.
+
+### Open
+
+- Iteration over a borrowed buffer or string as a lifetime-indexed `Stream`.
+- `split_at_mut` on buffers as an extern.
+- Proving individual externs against Talos (a realizability model), removing them from the trusted
+  base one at a time.
+
+---
+
+## 10. Entry 9 — persistent variables
+
+A value type is **persistent** when its values hold no resource: `!A`, `1`, `0`, `I32`, `I64`, and
+`⊗`/`⊕` of persistent types. Context splitting may duplicate a live slot of persistent type, and a
+rule that requires a dead context may drop one. So persistent variables are used freely, and
+`copy_bang`/`forget_bang` are needed only where a persistent value is to be made explicit.
+Soundness: such a slot's resource is `∅`, and `∅ = ∅ ⋆ ∅`. The paper's `Ctx.Split` is unchanged;
+`Core` uses an extension of it, so the embedding (§3) still applies.
+
+---
+
+## 11. Entry 10 — externs
+
+A program may declare `extern name : A`. Externs form the initial context of `main`. The
+Fundamental Property quantifies over every context satisfying its types, so a program is safe
+for every implementation of its externs that meets their semantic types; each extern is a named
+hypothesis of the end-to-end theorem. The trusted runtime components (the allocator, stack
+switching, host I/O, §8's integer operations, §9's buffers and strings) enter this way.
+
+Standard input and output are linear capabilities:
+
+    main : Ref Input ⊸ Ref Output ⊸ F (Ref Input ⊗ Ref Output)
+
+In the model they are cells holding the remaining input and the accumulated output, which the
+interpreter runs; the compiler lowers their operations to host calls (WASI `fd_read`/`fd_write`).
+
+---
+
 ## Status
 
-Entry 1 (§2) is implemented in `Paper/`, `Support/` and `Examples/`. Entries 2–6 (§3–§7) are
-implemented in `Core/`, one CBPV typed world with one `fundamentalC` and `adequacyC` covering
-every rule; `Paper/`, `Support/` and `Examples/` remain the §1 baseline that `Core` embeds
-(`adequacy_of_derivesWf`). `Core` was assembled in `experiments/Core` from the experiments named
-in each entry.
+Entries 2–6 are implemented in the library directory `Core/`, with one `fundamentalC` and
+`adequacyC` covering every rule. Entry 9 (§10) is being implemented. Entries 7, 8 and 10
+(§8, §9, §11) are specified only.
 
 ---
 
 ## Changelog
+
+- **0.4** (2026-09-25) — Entries 7–10: integers as opaque types with Wasm's operations and
+  signature-parametric theorems (§8), buffers and strings as opaque linear types (§9), persistent
+  variables used freely (§10), externs as hypotheses of the theorems and stdio as capabilities
+  (§11). The stream former is renamed `Stream`.
 
 - **0.3.1** (2026-09-25) — Status: entries 2–6 are implemented in the library, `Core/`.
 - **0.3** (2026-09-25) — Entries 2–6: the call-by-push-value core with the baseline restated
