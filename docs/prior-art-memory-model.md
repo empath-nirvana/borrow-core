@@ -251,3 +251,90 @@ Citation notes: an entry is marked *(abstract only)* or *(secondary)* when the s
 - **Allocation as an effect with a safety proof.** Only Yarrow (regions plus handlers) and a blog post exist.
 - **A verified lowering from a borrow/lifetime calculus to Wasm, and from a place/tree memory to Wasm linear memory.** RichWasm stops short of borrows and of a proved lowering. CH2O targets C bits only.
 - **Borrows as lenses with stated laws.** Aeneas and RustHorn have the ingredients but state no lens laws. Callback-scoped borrows may be the first setting where the lens reading is derivable directly from the fundamental property.
+---
+
+## Move
+
+Move (Sui, Aptos) is the one production borrow checker with **second-class references**: a
+reference can never be stored in a struct, vector, global storage or (on Aptos) a closure.
+Sources were fetched and read in full unless marked.
+
+### What Move settles
+
+- **A reference is a rooted access path, because values are trees.** Records and vectors never
+  hold references, and `&&T` is forbidden, so values and global storage stay tree-shaped and a
+  reference is a location plus a field path, `ref⟨c, p⟩`. `BorrowField⟨f⟩` extends the path;
+  `WriteRef` updates `M[c ↦ v[p := v′]]`. Blackshear, Mitchell, Nowacki, Qadeer (2022),
+  *The Move Borrow Checker*, arXiv:2205.05181, https://arxiv.org/abs/2205.05181 (no peer-reviewed
+  venue found).
+- **The deployed checker is abstract interpretation over a path-labelled borrow graph.** An edge
+  `x –p→ y` means "`x.p` is borrowed by `y`"; paths are fixed or extensible (`p∗`); vector elements
+  get `∗` because the index is unknown. A borrow ends when the reference *value is destroyed*;
+  eliminating a node splices in-edges with out-edges, so transitive borrows survive. Writes need no
+  outgoing edges; reads and freezes need everything borrowing from the reference to be immutable;
+  calls add `∗` edges from input to output references. The soundness proof is a pen-and-paper sketch
+  over a subset with records but no vectors; globals are informal.
+- **The mechanised successor (2026) labels edges with regular expressions.** A path environment
+  maps pairs of references to regexes over field names, kept transitively closed. Extending a borrow
+  by `p` uses concatenation for edges into the new reference and the **Brzozowski derivative**
+  `δ(paths, p)` for edges out of it; the write check is `ℒ(paths(ρ,ρ′)) ⊆ {ε}`. Returned mutable
+  references must be pairwise disjoint and outbound-clean, and must not borrow a local. Type
+  soundness is mechanised in about 39K lines of Lean 4 with no sorry or axioms; generics, abilities,
+  globals and references inside records are not covered. It accepts all 292,141 published Sui
+  packages but is not yet in production. Nowacki, Blackshear, Mitchell, Qadeer, Sergey (2026),
+  *Tracking Borrows with Regular Expressions*, PACMPL 10 OOPSLA2, Art. 389,
+  https://doi.org/10.1145/3839521 (PDF https://verse-lab.org/papers/regex-borrows-oopsla26.pdf;
+  artefact https://github.com/ilyasergey/lean-move).
+- **Move's invariant is "no invalidation", not aliasing-XOR-mutation.** `&mut` has `copy` and
+  `drop`; the checker restricts uses. The 2026 paper accepts a write through `&mut a` while `&a` is
+  live, on the grounds that a type-preserving write leaves aliases of the same location valid, and
+  notes that a concurrent setting would need exclusivity. Move Book, *References*,
+  https://move-book.com/reference/primitive-types/references.
+- **Abilities are per-type structural rules, checked field-wise.** `copy` gates copying and reading
+  through a reference; `drop` gates discarding and overwriting (including writing through a
+  reference); `store` says a value may live inside stored data; `key` says it may be a top-level
+  storage entry. A type has an ability only if all its fields do; generics get abilities
+  conditionally. References have `copy` and `drop` but not `store`. Move Book, *Abilities*,
+  https://move-book.com/reference/abilities.
+- **Resource conservation.** Before abilities, resources could only be moved; Theorem 5.10 states
+  resources are created only by `Pack` and destroyed only by `Unpack`, proved on a concrete semantics
+  independently of the verifier. Blackshear et al. (2020), *Resources: A Safe Language Abstraction
+  for Money*, arXiv:2004.05106, https://arxiv.org/abs/2004.05106.
+- **The Move Prover eliminates references** using the checker's guarantees: `&T` becomes a value and
+  `&mut` a read-update-write cycle written back when the borrow ends. Dill et al. (2022), *Fast and
+  Reliable Formal Verification of Smart Contracts with the Move Prover*, TACAS 2022,
+  https://arxiv.org/abs/2110.08362.
+- **The verifier has had exploitable bugs** (non-canonical enum field labels allowing aliased
+  `&mut`; ability subtyping through `&mut` duplicating a resource), and Aptos now runs runtime
+  checks with per-root access-path trees alongside it. Gao et al. (2026), *Defense-in-Depth Runtime
+  Safety in Move*, arXiv:2606.18064, https://arxiv.org/abs/2606.18064.
+
+### What we can reuse
+
+- **The derivative as the projection rule on a place tree**, and regex emptiness (`⊆ {ε}`) as the
+  disjointness check; `.∗` covers loss of precision in the same notation.
+- **Two lemmas as templates:** path–heap coherence (a regex path from `ρ` to `ρ′` is realised in
+  memory) for the typed world's static-to-heap clause; path transfer (same type, same navigable
+  paths) for type-preserving writes. The flat enum encoding answers sum-typed cells: a variant-changing
+  write must invalidate payload views.
+- **The call/return contract from the signature alone:** returned mutable views disjoint and
+  outbound-clean, nothing returned borrows a local, outputs related to inputs by `.∗`.
+- **Abilities as surface syntax for modes:** `copy+drop` = unr, `drop` = aff, neither = lin; the
+  field rule and conditional abilities on generics. Reading through a view needs `copy`, overwriting
+  needs `drop`, swapping needs neither — the structural reading of `withload` and `withswap`.
+- **Evidence second-class references scale:** over half of measured Move signatures contain a
+  reference; the only reported friction was not being able to return references to globals.
+
+### Where our setting differs or is open
+
+- **Borrow end:** Move's is flow-sensitive (the reference value is destroyed); ours is syntactic
+  (the callback returns). Move is first-order; we are higher-order CBPV.
+- **Second-class views suffice for getters, field borrows and field-disjoint `&mut` returns.** They
+  do not suffice for split at an **index** (Move conflates all indices), iterators over slices, or
+  borrowed method records — all of which need views stored in data, which Move names as future work
+  gated on a `store`-like ability.
+- **Exclusivity:** do not import Move's weaker no-invalidation invariant; our `imm` cells promise
+  immutability and any concurrency needs the stronger rule.
+- **Relevant types:** Move allows `copy` without `drop`; our lin/aff/unr lattice has no such point.
+- **Assurance:** no mechanised combination of abilities, borrowing and leak-freedom exists; that is
+  what our adequacy theorem would provide.
