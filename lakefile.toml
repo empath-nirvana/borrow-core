@@ -62,3 +62,8 @@ roots = ["Places"]
 name = "LeafPlaces"
 srcDir = "experiments/LeafPlaces"
 roots = ["LeafPlaces"]
+
+[[lean_lib]]
+name = "Recursion"
+srcDir = "experiments/Recursion"
+roots = ["Recursion"]
