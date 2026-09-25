@@ -32,6 +32,9 @@ import Core.MapMut
 import Core.Folds
 import Core.Blocks
 import Core.CommonList
+import Core.Records
+import Core.Splits
+import Core.RecordPrograms
 import Core.ReuseList
 import Core.DelayApprox
 import Core.DelayPrograms
