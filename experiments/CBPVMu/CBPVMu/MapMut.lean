@@ -101,20 +101,6 @@ theorem wpTS_swap (ls : List SRec) (ℓ : Loc) (w v : Val) (Q : List SRec → Va
 
 /-! ### Sizes and closed values -/
 
-/-- The tail's resource beside an owned cell is smaller than the whole. -/
-theorem dsize_tail_lt {ℓ : Loc} {v : Val} {R ρ τ : WRes}
-    (hc : ResU.CompS (ResU.single ℓ (CellU.ownOf v)) R ρ) (hle : ResU.Le τ R) :
-    dsize τ < dsize ρ := by
-  have hself := ResU.CompS.get_left_of_ne_imm hc (ResU.single_get_self ℓ _) (by simp)
-  refine dsize_lt (l := ℓ) (by rw [hself.2]; simp) (fun m hm => ?_)
-  obtain ⟨ψ, eψ⟩ := Option.ne_none_iff_exists'.mp hm
-  obtain ⟨z, hz⟩ := hle
-  obtain ⟨ψ', eψ', -⟩ := ResU.CompS.get_left hz eψ
-  obtain ⟨ψ'', eψ'', -⟩ := ResU.CompS.get_right hc eψ'
-  refine ⟨by rw [eψ'']; simp, fun hml => ?_⟩
-  subst hml
-  rw [hself.1] at eψ'; cases eψ'
-
 theorem num_closed : ∀ k, closedAt 0 (num k).1 = true
   | 0 => rfl
   | k + 1 => by simpa [num, closedAt] using num_closed k

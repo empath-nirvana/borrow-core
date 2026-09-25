@@ -69,6 +69,20 @@ theorem dsize_del_lt {q σ : WRes} {l : Loc} (hle : ResU.Le q σ) (hq : ∃ ψ, 
     obtain ⟨φ', eφ', -⟩ := ResU.CompS.get_left hτ eφ
     exact ⟨by rw [eφ']; simp, hml⟩
 
+/-- The tail's resource beside an owned cell is smaller than the whole. -/
+theorem dsize_tail_lt {ℓ : Loc} {v : Val} {R ρ τ : WRes}
+    (hc : ResU.CompS (ResU.single ℓ (CellU.ownOf v)) R ρ) (hle : ResU.Le τ R) :
+    dsize τ < dsize ρ := by
+  have hself := ResU.CompS.get_left_of_ne_imm hc (ResU.single_get_self ℓ _) (by simp)
+  refine dsize_lt (l := ℓ) (by rw [hself.2]; simp) (fun m hm => ?_)
+  obtain ⟨ψ, eψ⟩ := Option.ne_none_iff_exists'.mp hm
+  obtain ⟨z, hz⟩ := hle
+  obtain ⟨ψ', eψ', -⟩ := ResU.CompS.get_left hz eψ
+  obtain ⟨ψ'', eψ'', -⟩ := ResU.CompS.get_right hc eψ'
+  refine ⟨by rw [eψ'']; simp, fun hml => ?_⟩
+  subst hml
+  rw [hself.1] at eψ'; cases eψ'
+
 /-! ### `withload` with the witness the view is an image of -/
 
 /-- A chooser whose payload input also asks `K` of the cell's witness returns, with its image

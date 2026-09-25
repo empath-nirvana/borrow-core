@@ -1,5 +1,5 @@
 import CBPVMu.Compat
-import CBPVMu.FoldImm
+import CBPVMu.FoldOwn
 import Support.LogicalRelation.Adequacy
 
 /-!
@@ -10,7 +10,7 @@ import Support.LogicalRelation.Adequacy
 the lifetime `∀` (`∀E` at every `C`), the `!` rules, `[]I`/`[]E` (`[]I` at every value type),
 `⊑imm`/`⊑mut`, one constant per borrow axiom at arbitrary value-type payloads, three
 call-by-value derived forms (`lolliE`, `allEV`, `ofRet`), `roll`/`unroll` at `μ`, and the
-borrowed fold `foldImm` (`FoldImm.lean`).
+borrowed and owned folds `foldImm`, `foldOwn` (`FoldImm.lean`, `FoldOwn.lean`).
 `fundamentalC` proves every rule sound at `SemV`/`SemC`; `adequacyC` runs a closed `F 1`
 computation to `()` from the empty memory.
 -/
@@ -182,6 +182,10 @@ inductive CDerives : LifeCtx → Ctx VTy → Expr → Jdg → Prop where
       (hF : F.WF) (hG : F.Guarded) (hyM : ¬ VFree y (.mu F.ty)) (hyR : ¬ VFree y R)
       (hR : ∀ Δ' a, VOutlives Δ' a R) :
       CDerives Δ Γ (.val (foldImmV F)) (.val (.lolli (algTy F y R) (foldTy F y c R)))
+  /-- The owned fold, a constant: `foldOwn : !U(A′_R ⊸ F R) ⊸ !U(μX. T ⊸ F R)`, for `T` of the
+  same class, `A′_R = T` with `R` at every recursive position, any `R`. -/
+  | foldOwn {Δ Γ} (F : FShape) (R : VTy) (hΓ : Ctx.Dead Γ) (hF : F.WF) (hG : F.Guarded) :
+      CDerives Δ Γ (.val (foldOwnV F)) (.val (.lolli (algOTy F R) (foldOTy F R)))
 
 /-- The semantic judgment at a judgment form. -/
 def SemJ (Δ : LifeCtx) (Γ : Ctx VTy) (e : Expr) : Jdg → Prop
@@ -242,6 +246,7 @@ theorem fundamentalC {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg}
   | roll hA hc _ ih => exact roll_compatX hA hc ih
   | unroll _ ih => exact unroll_compatX ih
   | foldImm F y c R hΓ hF hG hyM hyR hR => exact foldImm_compatX F hF hG y c R hΓ hyM hyR hR
+  | foldOwn F R hΓ hF hG => exact foldOwn_compatX F hF hG R hΓ
 
 /-! ### Adequacy -/
 
