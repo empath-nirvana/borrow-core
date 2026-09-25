@@ -12,6 +12,7 @@ is then implemented in the library afresh. None of these libraries is a default 
 | `BorrowedClosures/` | `Experiments` (`Reborrow.lean`, `EnvCheck.lean`) | `lake build Experiments` | ported; the `fn` fork archived |
 | `CBPVCore/` | `CBPVCore` | `lake build CBPVCore` | ported |
 | `CBPVWorld/` | `CBPVWorld` | `lake build CBPVWorld` | ported |
+| `Projection/` | `Projection` | `lake build Projection` | negative: `no_projection` refutes a same-lifetime `Imm` projection at the typed world (`FrameLife`) |
 | `Bang/` | — | — | archived: became `Paper/`, `Support/`, `Examples/Closures.lean` |
 
 Each experiment builds against this repository's `Paper`/`Support` (and `Examples`, for

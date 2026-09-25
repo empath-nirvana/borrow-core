@@ -32,3 +32,8 @@ name = "Experiments"
 srcDir = "experiments"
 roots = ["CBPVSplit.Split", "ModesLabels.Modes", "Shifts.Shifts", "BorrowedClosures.Reborrow",
   "BorrowedClosures.EnvCheck"]
+
+[[lean_lib]]
+name = "Projection"
+srcDir = "experiments/Projection"
+roots = ["Projection"]
