@@ -83,6 +83,35 @@ def tClose : Option (Nat → TEnt) → VTy → VTy
   | none, A => A
   | some η, A => A.subst (fun n => (η n).ty)
 
+/-- A candidate interpretation of the variable of `D A = νX. …`, at a fixed lifetime
+substitution: `cC`'s signature with `δ` applied (`D A` binds no lifetime, so its unfolding never
+changes `δ`). -/
+abbrev CPred := List SRec → Expr → WProp
+
+/-- `R ⊆ R'` pointwise. -/
+def CPred.Le (R R' : CPred) : Prop := ∀ ls e, Entails (R ls e) (R' ls e)
+
+/-- `vC true (U X)` at the candidate `R` for `X`, a computation type forced as it stands. -/
+def thunkR (R : CPred) (ls : List SRec) (v : Val) : WProp := fun ρ =>
+  ∀ ls', Ext ls ls' ρ → R ls' (.val v) ρ
+
+/-- The postcondition of `next : F(A ⊕ U X)`, with `VA` for `𝒱⟦A⟧` and `R` for `X`: `now a`
+(`inj₁`) or `later t` (`inj₂`, `t` a thunk of `X`). -/
+def delayQ (VA : List SRec → Val → WProp) (R : CPred) (ls : List SRec) (w : Val) : WProp :=
+  BoLo.or (ex fun v₁ => ⌜w = .inj₁ v₁⌝ ⋆ VA ls v₁) (ex fun v₂ => ⌜w = .inj₂ v₂⌝ ⋆ thunkR R ls v₂)
+
+/-- One unfolding of `D A = νX. F(A ⊕ U X) & F 1`, with `VA` for `𝒱⟦A⟧` and the candidate `R`
+for `X`: the `next` observation (`π₁`) and the `close` observation (`π₂`).  It is `cC`'s `&`,
+`F`, `⊕` and `U` clauses with `R` for `cC X` (`delayF_cC`). -/
+def delayF (VA : List SRec → Val → WProp) (R : CPred) : CPred := fun ls e ρ =>
+  wpTS ls (.app e (.val (.inj₁ .unit))) (delayQ VA R) ρ ∧
+  wpTS ls (.app e (.val (.inj₂ .unit))) (fun _ w => ⌜w = .unit⌝) ρ
+
+/-- `⟦D A⟧ = ⋃{R | R ⊆ delayF VA R}`, the greatest fixed point written in `Prop` as `∃ R`
+(`docs/scope-recursion.md` §3.1). -/
+def delayRel (VA : List SRec → Val → WProp) : CPred := fun ls e ρ =>
+  ∃ R : CPred, R.Le (delayF VA R) ∧ R ls e ρ
+
 mutual
 /-- `𝒱⟦A⟧(ls)δ(v)` under a type-variable environment.  `full = true`: the program's relation.
 `full = false`: the observable view an `Imm` payload is held at, with `U` positions relaxed to
@@ -128,6 +157,7 @@ def cC : CTy → List SRec → LSub → Expr → WProp
   | .top, _, _, _ => fun _ => True
   | .all x c C, ls, δ, e => fun ρ =>
       ∀ α, (⌜LtLife δ c α⌝ ─⋆ cC C ls (δ.extend x α) (.app e (.val .unit))) ρ
+  | .delay A, ls, δ, e => delayRel (fun ls'' v => vCE none true A ls'' δ v) ls e
 end
 
 /-- `𝒱⟦A⟧(ls)δ(v)`: the relation at a type read with no environment. -/

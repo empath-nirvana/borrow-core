@@ -1,4 +1,4 @@
-import CBPVMu.Compatibility
+import CBPVMu.DelayRel
 
 /-!
 # CBPVMu — Computations
@@ -34,6 +34,9 @@ def sS : CTy → List SRec → LSub → List Val → (List SRec → Val → WPro
       BoLo.or (⌜v = .inj₁ .unit⌝ ⋆ sS C ls δ S Q) (⌜v = .inj₂ .unit⌝ ⋆ sS D ls δ S Q)
   | .all x c C, ls, δ, v :: S, Q =>
       ex fun α => ⌜v = .unit ∧ LtLife δ c α⌝ ⋆ sS C ls (δ.extend x α) S Q
+  | .delay A, _, δ, [v], Q =>
+      BoLo.or (⌜v = .inj₁ .unit ∧ Q = fun ls'' => vC true (.sum A (.thunk (.delay A))) ls'' δ⌝)
+        (⌜v = .inj₂ .unit ∧ Q = fun ls'' => vC true .unit ls'' δ⌝)
   | _, _, _, _, _ => fun _ => False
 
 /-- `cC` is the stack semantics. -/
@@ -103,6 +106,21 @@ theorem cC_iff_stacks : ∀ (C : CTy) (ls : List SRec) (δ : LSub) (e : Expr) (�
         intro S Q ρ₁ ρ₂ hs hc
         exact h (.unit :: S) Q ρ₁ ρ₂ ⟨α, pure_sep_mk ⟨rfl, hlt⟩ hs⟩ hc
 
+  | .delay A, ls, δ, e, ρ => by
+      rw [cC_delay_iff]
+      constructor
+      · rintro ⟨h₁, h₂⟩ S Q ρ₁ ρ₂ hs hc
+        rcases S with _ | ⟨v, _ | ⟨w, S⟩⟩
+        · exact hs.elim
+        · rcases hs with ⟨rfl, rfl, rfl⟩ | ⟨rfl, rfl, rfl⟩
+          · rw [eq_of_compS_empty_left (ResU.CompS.comm hc)]
+            exact h₁
+          · rw [eq_of_compS_empty_left (ResU.CompS.comm hc)]
+            exact h₂
+        · exact hs.elim
+      · intro h
+        exact ⟨h [_] _ PMap.empty ρ (Or.inl ⟨rfl, rfl, rfl⟩) (ResU.comp_empty_right ρ),
+          h [_] _ PMap.empty ρ (Or.inr ⟨rfl, rfl, rfl⟩) (ResU.comp_empty_right ρ)⟩
 
 /-- `𝒱⟦A⟧` is carried to a list with the same members (`vP_same` for `vC`). -/
 theorem vC_same {b : Bool} {A : VTy} {ls ls' : List SRec} {δ : LSub} {v : Val} {ρ : WRes}
@@ -134,6 +152,10 @@ theorem cC_step : ∀ (C : CTy) {e e' : Expr}, (∀ μ : Heap, Step1 μ e μ e')
   | .all x _ C, _, _, h, ls, δ => fun _ h' α ρ₁ ρ₂ hp hc =>
       cC_step C (fun μ => (h μ).plug (Kont.appL .hole _)) ls (δ.extend x α) _
         (h' α ρ₁ ρ₂ hp hc)
+  | .delay A, _, _, h, ls, δ => fun ρ h' => by
+      rw [cC_delay_iff] at h' ⊢
+      exact ⟨wpTS_step (fun μ => (h μ).plug (Kont.appL .hole _)) ls _ ρ h'.1,
+        wpTS_step (fun μ => (h μ).plug (Kont.appL .hole _)) ls _ ρ h'.2⟩
 
 /-- One head step in front of `𝒞⟦C⟧`. -/
 theorem cC_head (C : CTy) {e e' : Expr} (h : ∀ μ : Heap, Head μ e μ e')
@@ -171,6 +193,12 @@ theorem cC_bind : ∀ (C : CTy) (K : Kont) (M : Expr) (ls : List SRec) (δ : LSu
       exact cC_bind C (.appL K .unit) M ls (δ.extend x α) P R hR
         (fun ls' hls w σ hσ => h ls' hls w σ hσ α PMap.empty σ ⟨rfl, hlt⟩
           (ResU.comp_empty_right σ)) ρ hρ
+  | .delay A, K, M, ls, δ, P, R, hR, h => fun ρ hρ => by
+      rw [cC_delay_iff]
+      exact ⟨wpTS_bind_frame (.appL K _) M ls P R _ hR
+          (fun ls' hls w σ hσ => ((cC_delay_iff A ls' δ _ σ).mp (h ls' hls w σ hσ)).1) ρ hρ,
+        wpTS_bind_frame (.appL K _) M ls P R _ hR
+          (fun ls' hls w σ hσ => ((cC_delay_iff A ls' δ _ σ).mp (h ls' hls w σ hσ)).2) ρ hρ⟩
 
 
 /-- A dead slot contributes nothing. -/

@@ -12,6 +12,7 @@ import CBPVMu.ReborrowShapes
 import CBPVMu.Reborrow
 import CBPVMu.FrameRules
 import CBPVMu.Compatibility
+import CBPVMu.DelayRel
 import CBPVMu.Computation
 import CBPVMu.Compat
 import CBPVMu.Sized

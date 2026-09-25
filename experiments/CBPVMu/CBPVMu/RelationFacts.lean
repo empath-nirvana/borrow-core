@@ -133,6 +133,7 @@ theorem CTyEq.applyLSub : ∀ (C : CTy) (σ : Lifetime.LSubst) (δ δ' : LSub),
       ⟨CTyEq.applyLSub C σ δ δ' (fun y hy => h y (Or.inl hy)),
        CTyEq.applyLSub D σ δ δ' (fun y hy => h y (Or.inr hy))⟩
   | .top, _, _, _, _ => trivial
+  | .delay A, σ, δ, δ', h => TyEq.applyLSub A σ δ δ' h
   | .all y b S, σ, δ, δ', h => by
       have hb : (b.applySub σ).interp δ = b.interp δ' :=
         interp_applySub b (fun w hw => h w (Or.inl hw))
@@ -630,6 +631,9 @@ theorem cC_congr : ∀ (C : CTy) {δ₁ δ₂ : LSub}, (∀ y, CFree y C → δ�
       have h₂ := cC_congr D (fun y hy => h y (Or.inr hy)) ls
       funext e; simp only [cC, h₁, h₂]
   | .top, _, _, _, _ => rfl
+  | .delay A, _, _, h, ls => by
+      have ih := vCE_congr A none h (envAgree_none _ _) true
+      funext e; simp only [cC, ih]
   | .all x c C, δ₁, δ₂, h, ls => by
       have hc : c.interp δ₁ = c.interp δ₂ := interp_congr c (fun y hy => h y (Or.inl hy))
       have hC : ∀ α : Life, cC C ls (δ₁.extend x α) = cC C ls (δ₂.extend x α) := by
@@ -761,6 +765,10 @@ theorem cC_tyEq_aux : ∀ (C : CTy) {C' : CTy} {δ δ' : LSub}, CTyEq C δ C' δ
   | .top, C', _, _, h => by
       cases C' <;> simp only [CTyEq] at h
       intro ls; rfl
+  | .delay A, C', _, _, h => by
+      cases C' <;> simp only [CTyEq] at h
+      have ih := vCE_tyEq A none none h (envEq_none _ _) true
+      intro ls; funext e; simp only [cC, ih]
   | .all x c C, C', δ, δ', h => by
       cases C' <;> simp only [CTyEq] at h
       rename_i x' c' C'

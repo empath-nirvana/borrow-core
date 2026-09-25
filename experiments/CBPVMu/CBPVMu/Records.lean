@@ -195,6 +195,7 @@ def CTyEq : CTy → LSub → CTy → LSub → Prop
   | .top, _, .top, _ => True
   | .all x b C, δ, .all x' b' C', δ' =>
       b.interp δ = b'.interp δ' ∧ ∀ α : Life, CTyEq C (δ.extend x α) C' (δ'.extend x' α)
+  | .delay A, δ, .delay A', δ' => TyEq A δ A' δ'
   | _, _, _, _ => False
 end
 
