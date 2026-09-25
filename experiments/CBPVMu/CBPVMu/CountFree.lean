@@ -13,12 +13,11 @@ image `χ ∈ reb_β(σ)` of the loaded cell's witness `σ`: at the tail `ℓ′
 gives `χ(ℓ′) = imm({β}, u, q/ℓ′)` for a piece `q ≤ σ` holding `ℓ′` (`typed_image_pos`), so the
 tail's witness `q/ℓ′` has strictly fewer cells than `σ` (`dsize_image_lt`).
 
-* `rebChooseTW_sized`: a chooser whose payload input carries a predicate `K` of the witness
-  also returns, with the chosen image, the witness it is an image of.
-* `withload_sized`: `withload` at `Imm a T₁` whose callback is asked only at the views
-  `χ ∈ reb_β(σ)` of a witness `σ` with `K σ` — `K` any property of the borrowed cell's own
-  witness.  The proof is `withload_compatX`'s, with the chooser of `rebChooseTW_sized`.
-* `countFree_wp`: induction on a bound of `dsize`.
+`dsize`, `rebChooseTW_sized` and `withload_sized` are in `Sized.lean`.
+
+* `countFree_body`: induction on a bound of `dsize`, the callback proved by hand.  The same
+  function through the typing rule `foldImm`, with no hand proof, is `countFoldE`
+  (`Folds.lean`).
 * `countFree_semV : SemV Δ [] countFree (!U(∀'a. Imm 'a L ⊸ F N))`.
 * `countFreeProg`: build a 3-cell list, borrow it, count, end the borrow, free it; it runs from
   the empty memory to a numeral and the empty memory (`countFreeProg_runs`), and the interpreter
@@ -72,8 +71,6 @@ theorem selfC_closed : closedAt 0 selfC.1 = true := selfV_closed cfB_closed
 
 theorem cbV_closed {S : Val} (hS : closedAt 0 S.1 = true) : closedAt 0 (cbV S).1 = true := by
   simp [cbV, bindE, closedAt, closedAt_mono S.1 hS (Nat.zero_le _)]
-
-theorem withload_closed : closedAt 0 withload = true := rfl
 
 /-- `countFree`'s body at `λl`, the handle `S` substituted. -/
 def bodyL (S : Val) : Expr := .app (.app withload (.var 0)) (.val (cbV S))

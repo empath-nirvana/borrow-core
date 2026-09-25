@@ -24,12 +24,15 @@ Every result's axioms are `[propext, Classical.choice, Quot.sound]` or a subset.
 | `ShapeMu.lean` (new) | the shape relation at `μ`: substitution, monotonicity, unroll, induction principle, `δ`- and `TyEq`-congruence; `TyEq` is an equivalence and commutes with substitution |
 | `RelMu.lean` (new) | the relation at `μ`: the same set, plus `vC_mu_ind` |
 | `Images.lean`, `Invariant.lean`, `ReborrowShapes.lean`, `RelationFacts.lean` | the lemmas that went by induction on a type now go by the induction principles, or by induction on a position (list below) |
-| `Fundamental.lean` | `roll`/`unroll` in `CDerives`, `roll_compatX`/`unroll_compatX` |
-| `Fix.lean` (new) | `experiments/Recursion/Recursion/Fix.lean` at this world's `wpTS`, with `substAll_closed` |
-| `Lists.lean`, `Count.lean`, `CountFree.lean`, `MapMut.lean` (new) | the programs; `CountFree.lean` also `withload_sized`, `MapMut.lean` also `wpTS_swap` |
+| `Fundamental.lean` | `roll`/`unroll`, `foldImm`, `foldOwn` in `CDerives`; their compatibility lemmas |
+| `Fix.lean` (new) | `experiments/Recursion/Recursion/Fix.lean` at this world's `wpTS`, with `substAll_closed`; imported before `Fundamental.lean` |
+| `Sized.lean` (new) | `dsize`, `dsize_del_lt`, `dsize_tail_lt`, `rebChooseTW_sized`, `withload_sized`, `WitLt` |
+| `FoldImm.lean`, `FoldOwn.lean` (new) | the fold rules' terms and soundness (`foldImm_compatX`, `foldOwn_compatX`) |
+| `Lists.lean`, `Count.lean`, `CountFree.lean`, `MapMut.lean`, `Folds.lean` (new) | the programs; `MapMut.lean` also `wpTS_swap` |
 
 `Wp`, `Reborrow`, `FrameRules`, `Compatibility`, `Computation`, `Compat` and `Examples` are
-CBPVWorld's files with only the namespace changed. `TW`, the invariants (`ChainInv`, `DeepInv`,
+CBPVWorld's files with only the namespace changed (`bindE` is defined in `FoldImm.lean`, which
+`Fundamental.lean` imports, instead of `Examples.lean`). `TW`, the invariants (`ChainInv`, `DeepInv`,
 `JointDeep`, …) and the choosers are unchanged.
 
 ## Step 1 — syntax
@@ -101,14 +104,16 @@ CBPVWorld's files with only the namespace changed. `TW`, the invariants (`ChainI
 ## Step 4 — Fundamental Property and adequacy
 
 `fundamentalC : CDerives Δ Γ e j → SemJ Δ Γ e j` over the judgment with `roll`/`unroll`
-(`roll_compatX`, `unroll_compatX`: the unroll equation under `wpTS_mono`). `adequacyC`,
+(`roll_compatX`, `unroll_compatX`: the unroll equation under `wpTS_mono`) and the fold rules
+`foldImm`/`foldOwn` (`foldImm_compatX`, `foldOwn_compatX`; see *The fold rules*). `adequacyC`,
 `theorem32` and `corollary33` are unchanged.
 
 ## Step 5 — programs
 
-Recursive functions are Z-combinator terms (`Fix.lean`), not named constants and not
-`CDerives` rules. Each is given its semantic type by hand; programs are `CDerives` derivations
-in a context holding the recursive functions, instantiated at their values.
+In (a)–(c) recursive functions are Z-combinator terms (`Fix.lean`), not `CDerives` rules. Each
+is given its semantic type by hand; programs are `CDerives` derivations in a context holding the
+recursive functions, instantiated at their values. The fold rules (*The fold rules*, below)
+replace the hand proofs for folds.
 
 **(a) Build a list, free it** (`Lists.lean`).
 - `build3_derives`: `inj₂ (alloc (inj₂ (alloc (inj₂ (alloc (inj₁ ()))))))` derives at `L` with
@@ -173,8 +178,10 @@ witness has. Its proof is `withload_compatX`'s (6.144, 6.134, 6.150) with two ch
 payload predicate handed to `wpTS_load_I` carries `K`, and the chooser is wrapped by
 `rebChooseTW_sized`, which returns with the chosen image the witness it is an image of (the
 chooser already produces `χ ∈ reb_β(σ)`; `withload_compatX`'s callback premise drops it).
-The callback is proved by hand (not by `fundamentalC`), since its recursive call is typed only
-on the smaller borrows.
+`withload_sized` also takes a bound `m` and asks the callback only at `β < m`, as
+`withload_compatX` asks it below `⊓Δδ`. In `countFree` the callback is proved by hand (not by
+`fundamentalC`), since its recursive call is typed only on the smaller borrows; the rule
+`foldImm` below removes the hand proof.
 
 **The program.**
 - `countFree = Z (λself. Λ. λl. withload l (Λ. λu. case u {inj₁ w. w; 0 | inj₂ t. self [] t to
@@ -184,6 +191,80 @@ on the smaller borrows.
   borrow, free the cell and the list, return the count; `countFreeProg_derives` at `F N` in the
   context `countFree, freeAll`; `countFreeProg_runs`: from the empty memory to a numeral and the
   empty memory; `countFreeProg_eval`: the interpreter returns `3` with no cell left.
+
+## The fold rules
+
+Structured recursion as two `CDerives` constants, so that a fold is `foldImm alg` or
+`foldOwn alg` with the algebra derived by the ordinary rules, and `fundamentalC` covers every
+program that uses them. No sizes in types.
+
+**The class** (`FShape`). `T ::= A | Ref X | X | T ⊗ T | T ⊕ T` with every leaf `A` closed
+(`FShape.WF`) and `T ≠ X` (`FShape.Guarded`); `F.ty` is the body with `X` the type variable `0`.
+`NoMut 0` and the closedness of `μX. T` follow (`FShape.noMut_ty`, `FShape.Cl_ty`). The boxed
+list `μX. 1 ⊕ Ref X`, the numerals `μX. 1 ⊕ X`, `μX. 1 ⊕ (B ⊗ Ref X)` and the trees
+`μX. B ⊕ (Ref X ⊗ Ref X)` are in it. Not in it: `X` under a `Ref` of a compound
+(`L′ = μX. 1 ⊕ Ref (N ⊗ X)`), `X` under `Imm`, `Mut`, `!`, `[@a]`, and a body that is `X`.
+
+**`foldImm`** (`FoldImm.lean`).
+
+    Γ dead   T ∈ FShape   'y ∉ fv(μX. T)   'y ∉ fv(R)   ∀Δ′ @a. Δ′ ⊢ R ⊐ @a
+    ─────────────────────────────────────────────────────────────────────────────────
+    Δ; Γ ⊢ foldImm : !U(∀'y ⊏ ⊤. A_R ⊸ F R) ⊸ !U(∀'y ⊏ @c. Imm 'y (μX. T) ⊸ F R)
+
+- `A_R = T.res 'y R`: `Imm̲ 'y T` with `R` at every `Ref X` and head `X`. `FShape.view_eq`: the
+  view `withload` hands over at `Imm 'y M`, `M = μX. T`, unrolled, is
+  `Imm̲ 'y (T[M/X]) = T.resRH 'y (Imm 'y M) (Imm̲ 'y M)`; `A_R` is it with `R` at both.
+- The term is closed and generated from the shape: `foldImm = λg. Λ. λl. travK (Ref X) h l` with
+  `h = λw. self g w`, `self = Z (λself. λg. λu. travK T (λw. self g w) u to r. g [] r)`, and
+  `travK` at a leaf `w`, at `Ref X` `withload w (λ_. h)`, at `X` `h w`, at `⊗`/`⊕`
+  componentwise. The machine is unchanged.
+- `R` outlives every lifetime: each result leaves a `withload` callback at a fresh `'x` as
+  `['x] R` (6.60, `vC_outlives`). The algebra is called at the load's lifetime `β ⊏ ⊤`, which
+  `withload_sized`'s bound supplies.
+- `foldImm_compatX`: `trav_spec` is induction on the shape, with the two recursive calls as
+  hypotheses — through a sub-borrow (`PSpec`: `withload` at witness size `< n`) and on a smaller
+  view (`HSpec`, head `X`). `Good M w χ n`: every `Ref` position of `w` holds, in `χ`, a cell
+  whose witness has fewer than `n` cells. `good_of_image`: the view `withload` hands over is
+  `Good` at the loaded witness's size (`own_split`, `typed_image_pos`, `dsize_del_lt`), at every
+  `Ref` position of `T`, not only the list's tail. `pSpec_succ`: `withload_sized`, then the
+  view's `HSpec`, then 6.60 for the callback's `['x]`. `hSpec_all`: induction on `n`, inside it
+  on the view value's size.
+
+**`foldOwn`** (`FoldOwn.lean`).
+
+    Γ dead   T ∈ FShape
+    ─────────────────────────────────────────────────────
+    Δ; Γ ⊢ foldOwn : !U(A′_R ⊸ F R) ⊸ !U(μX. T ⊸ F R)
+
+- `A′_R = T.resO R`: `T` with `R` at every recursive position; any `R`.
+- `travO` at `Ref X` is `h (free w)`, at `X` `h w`; `foldOwn = λg. λw. self g w`.
+- `foldOwn_compatX`: `travO_spec` by induction on the shape; `hOSpec_all` by strong induction on
+  a bound of the owned resource's `dsize` (`dsize_tail_lt` at a freed cell), inside it on the
+  value's size.
+
+**Programs with no hand proof** (`Folds.lean`). Each fold is `foldImm alg` or `foldOwn alg`
+with `alg` a `CDerives` derivation; each program is one closed `CDerives` derivation at `F R`
+(`d_foldProg`: build, `alloc`, `withbor` at `Imm 'x M`, fold inside the borrow, end the
+borrow, `free`, free the structure with an owned fold), run by `theorem32` and by the
+interpreter.
+
+| Fold | Type | Program | Result |
+|---|---|---|---|
+| `countFoldE = foldImm countAlg` | `!U(∀'a. Imm 'a L ⊸ F N)` (`countFold_semV` by `fundamentalC`) | `countFoldProg` | `3`, no cell left |
+| `freeFoldE = foldOwn freeLAlg` | `U(L ⊸ F 1)` (`freeFold_semV` by `fundamentalC`), `freeAll` | used by `countFoldProg` | |
+| `anyListE = foldImm anyLAlg` | `!U(∀'a. Imm 'a (μX. 1 ⊕ (B ⊗ Ref X)) ⊸ F B)` | `anyListProg` on `[false, true, false]` | `true`, no cell left |
+| `anyTreeE = foldImm anyTAlg` | `!U(∀'a. Imm 'a (μX. B ⊕ (Ref X ⊗ Ref X)) ⊸ F B)`, two recursive calls per node | `anyTreeProg` on `node(false, node(false, true))` | `true`, no cell left |
+| `natCopyE = foldImm countAlg` | `!U(∀'a. Imm 'a N ⊸ F N)`, recursion at a head `X` | `natCopyProg` on a cell holding `3` | `3`, no cell left |
+| `freeBListE`, `freeBTreeE`, `freeNatE` | `foldOwn` at the three other shapes | the frees of the programs above | |
+
+`*_runs` (adequacy) and `*_eval` (the interpreter, `decide`) for each program.
+
+**Not done.** A sum over `L′ = μX. 1 ⊕ Ref (N ⊗ X)`, and `toPure`/`mapInc` through `foldOwn`:
+`L′` is outside the class. A borrowed fold at `Ref S` with `X` inside a compound `S` would load
+`S` in a nested `withload`, and the leaves of `S` would be viewed at the inner load's lifetime,
+which `A_R` at `'y` does not name. I have not derived such a rule and have not verified that any
+obstruction is real. `foldImm`'s `R` must outlive every lifetime, so a fold returning a borrow
+into the structure is not covered.
 
 ## Against the scope note
 

@@ -184,7 +184,7 @@ def tB : FShape → Expr
 
 theorem travK_eq (G : FShape) : travK G = .lam (.val (.lam (tB G))) := by cases G <;> rfl
 
-theorem withload_closed' : closedAt 0 withload = true := rfl
+theorem withload_closed : closedAt 0 withload = true := rfl
 
 /-! ### The measure at the positions of a view -/
 
@@ -281,7 +281,7 @@ theorem tB_leaf (A : VTy) (h w : Val) :
 
 theorem tB_refX (h w : Val) :
     ((tB .refX).subst 1 (h.shift 1 0)).subst 0 w = .app (.app withload (.val w)) (.val (cbOf h)) := by
-  simp [tB, cbOf, subst_shift_succ, subst_closedAt withload _ withload_closed' (Nat.zero_le _)]
+  simp [tB, cbOf, subst_shift_succ, subst_closedAt withload _ withload_closed (Nat.zero_le _)]
 
 theorem tB_varX (h w : Val) :
     ((tB .varX).subst 1 (h.shift 1 0)).subst 0 w = .app (.val h) (.val w) := by
