@@ -28,6 +28,8 @@ have not verified that any obstruction to it is real.
 
 noncomputable section
 
+variable {ℍ : BoCa.Host} [BoCa.HostIs ℍ]
+
 namespace BoCa.Fig16.LogRel.Core
 open BoCa
 open BoCa.Fig16

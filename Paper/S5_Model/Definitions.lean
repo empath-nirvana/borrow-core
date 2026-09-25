@@ -42,6 +42,8 @@ stratum is membership (`InStratum`, row 5.48).  Rows are numbered as in
 
 noncomputable section
 
+variable {ℍ : BoCa.Host} [BoCa.HostIs ℍ]
+
 namespace BoCa.Fig16
 
 /-!

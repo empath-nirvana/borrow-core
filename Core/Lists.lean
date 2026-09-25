@@ -17,6 +17,8 @@ and `freeAll = Z (λself. λl. case l {inj₁ u. u | inj₂ r. self (free r)})` 
 
 noncomputable section
 
+variable {ℍ : BoCa.Host} [BoCa.HostIs ℍ]
+
 namespace BoCa.Fig16.LogRel.Core
 open BoCa
 open BoCa.Fig16

@@ -26,6 +26,8 @@ tail's witness `q/ℓ′` has strictly fewer cells than `σ` (`dsize_image_lt`).
 
 noncomputable section
 
+variable {ℍ : BoCa.Host} [BoCa.HostIs ℍ]
+
 namespace BoCa.Fig16.LogRel.Core
 open BoCa
 open BoCa.Fig16

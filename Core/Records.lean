@@ -34,6 +34,8 @@ and 6.60 (`vC_outlives`) at `valTy`/`sumTy`, each the binary clause iterated.
 
 noncomputable section
 
+variable {ℍ : BoCa.Host} [BoCa.HostIs ℍ]
+
 namespace BoCa.Fig16.LogRel.Core
 open BoCa
 open BoCa.Fig16

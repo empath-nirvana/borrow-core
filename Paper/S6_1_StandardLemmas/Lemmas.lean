@@ -32,6 +32,8 @@ marked `[about ours]`.  `§N` citations are to `docs/adjudications.md`.
 
 noncomputable section
 
+variable {ℍ : BoCa.Host} [BoCa.HostIs ℍ]
+
 namespace BoCa.Fig16
 variable {Loc Val : Type}
 

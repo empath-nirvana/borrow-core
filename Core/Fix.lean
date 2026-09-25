@@ -19,6 +19,8 @@ variable of `e` is below `k`; substitution and shifting at or above `k` leave `e
 
 noncomputable section
 
+variable {ℍ : BoCa.Host} [BoCa.HostIs ℍ]
+
 namespace BoCa.Fig16.LogRel.Core
 open BoCa
 open BoCa.Fig16

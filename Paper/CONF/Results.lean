@@ -43,6 +43,8 @@ as in §6.1's file.
 
 noncomputable section
 
+variable {ℍ : BoCa.Host} [BoCa.HostIs ℍ]
+
 namespace BoCa.Adequacy
 open BoCa.Fig16
 open BoCa.Fig16.BoLo (wp NoOwn WRes)

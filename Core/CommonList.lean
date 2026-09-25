@@ -33,6 +33,8 @@ fresh blocks.  The in-place map over this shape is `foldReuse` (`ReuseList.lean`
 
 noncomputable section
 
+variable {ℍ : BoCa.Host} [BoCa.HostIs ℍ]
+
 namespace BoCa.Fig16.LogRel.Core
 open BoCa
 open BoCa.Fig16
@@ -444,7 +446,7 @@ theorem consC_block {ls : List SRec} {δ : LSub} {v : Val} {ρ : WRes}
 def runMem : Nat → BoCa.Mem → Expr → Option (Val × BoCa.Mem)
   | 0, _, _ => none
   | n + 1, μ, e =>
-    match BoCa.step μ e with
+    match BoCa.step wasmHost μ e with
     | .value v => some (v, μ)
     | .next μ' e' => runMem n μ' e'
     | .stuck _ => none

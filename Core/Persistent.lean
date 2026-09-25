@@ -20,6 +20,8 @@ each of them: `gSepC_splitP`, `gSepC_deadP`, `gSepC_soloP`.
 
 noncomputable section
 
+variable {ℍ : BoCa.Host} [BoCa.HostIs ℍ]
+
 namespace BoCa.Fig16.LogRel.Core
 open BoCa
 open BoCa.Fig16

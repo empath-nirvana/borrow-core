@@ -12,6 +12,8 @@ import Support.Model.Prelude
 
 noncomputable section
 
+variable {ℍ : BoCa.Host} [BoCa.HostIs ℍ]
+
 namespace BoCa.Fig16
 
 /-- An option is `none` or a `some`, without rewriting the goal as `cases e : o`

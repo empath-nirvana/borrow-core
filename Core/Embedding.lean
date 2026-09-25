@@ -22,6 +22,8 @@ the axiom types (`cbv_axSwapTy`, …), outlives (`vOutlives_cbv`) and scoping (`
 
 noncomputable section
 
+variable {ℍ : BoCa.Host} [BoCa.HostIs ℍ]
+
 namespace BoCa.Fig16.LogRel.Core
 open BoCa
 open BoCa.Fig16

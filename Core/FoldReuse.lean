@@ -20,6 +20,8 @@ resource's size, here through the emptied cell (`dsize_tail_lt` at the cell befo
 
 noncomputable section
 
+variable {ℍ : BoCa.Host} [BoCa.HostIs ℍ]
+
 namespace BoCa.Fig16.LogRel.Core
 open BoCa
 open BoCa.Fig16

@@ -18,6 +18,8 @@ load's own lifetime `'b`, so the code is lifetime-polymorphic and closed: `!I` a
 
 noncomputable section
 
+variable {ℍ : BoCa.Host} [BoCa.HostIs ℍ]
+
 namespace BoCa.Programs
 open BoCa BoCa.Lifetime
 

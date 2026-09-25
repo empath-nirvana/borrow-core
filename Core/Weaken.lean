@@ -11,6 +11,8 @@ closed callback typed at `[]` sit beside a free variable.
 
 noncomputable section
 
+variable {ℍ : BoCa.Host} [BoCa.HostIs ℍ]
+
 namespace BoCa.Fig16.LogRel.Core
 open BoCa
 open BoCa.Lifetime (LSub LifeCtx LifeVar)

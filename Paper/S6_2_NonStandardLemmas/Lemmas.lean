@@ -48,6 +48,8 @@ reborrowing (6.52–6.59, 6.61), and the logical relation's outlives lemmas (6.6
 
 noncomputable section
 
+variable {ℍ : BoCa.Host} [BoCa.HostIs ℍ]
+
 namespace BoCa.Fig16
 variable {Loc Val : Type}
 

@@ -20,6 +20,8 @@ typing box does not print (`docs/adjudications.md` §C.26).
 
 noncomputable section
 
+variable {ℍ : BoCa.Host} [BoCa.HostIs ℍ]
+
 namespace BoCa.Lifetime.LSub
 
 def empty : LSub := ⟨[]⟩

@@ -25,6 +25,8 @@ blocks.  The in-place map over that list is `ReuseList.lean`'s `mapIncRE`, a `fo
 
 noncomputable section
 
+variable {ℍ : BoCa.Host} [BoCa.HostIs ℍ]
+
 namespace BoCa.Fig16.LogRel.Core
 open BoCa
 open BoCa.Fig16

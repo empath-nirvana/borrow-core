@@ -24,6 +24,8 @@ Row numbers are those of `Paper/INDEX.md` (*Definitions*).
 
 noncomputable section
 
+variable {ℍ : BoCa.Host} [BoCa.HostIs ℍ]
+
 namespace BoCa.Fig16
 variable {Loc Val : Type}
 

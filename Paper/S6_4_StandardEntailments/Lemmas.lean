@@ -17,6 +17,8 @@ is two declarations with aliases `TR.lemma_6_N_i`.  Records as in §6.1's file.
 
 noncomputable section
 
+variable {ℍ : BoCa.Host} [BoCa.HostIs ℍ]
+
 namespace BoCa.Fig16.BoLo
 variable {Loc Val : Type}
 

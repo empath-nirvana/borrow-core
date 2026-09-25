@@ -9,6 +9,8 @@ import Support.Model.Composition
 
 noncomputable section
 
+variable {ℍ : BoCa.Host} [BoCa.HostIs ℍ]
+
 namespace BoCa.Fig16
 variable {Loc Val : Type}
 

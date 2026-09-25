@@ -38,6 +38,8 @@ borrower ends in `; ()` with that `()` boxed, as §12.24 describes.
 
 noncomputable section
 
+variable {ℍ : BoCa.Host} [BoCa.HostIs ℍ]
+
 namespace BoCa.Programs
 
 open BoCa BoCa.Lifetime

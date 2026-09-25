@@ -18,6 +18,8 @@ The compatibility lemmas at `SemC`, one per CBPV rule.  Terms are BoLo expressio
 
 noncomputable section
 
+variable {ℍ : BoCa.Host} [BoCa.HostIs ℍ]
+
 namespace BoCa.Fig16.LogRel.Core
 open BoCa
 open BoCa.Fig16

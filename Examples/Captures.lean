@@ -18,6 +18,8 @@ code is kept, so the loader copies both and calls the code twice on the environm
 
 noncomputable section
 
+variable {ℍ : BoCa.Host} [BoCa.HostIs ℍ]
+
 namespace BoCa.Programs
 open BoCa BoCa.Lifetime
 

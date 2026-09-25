@@ -18,6 +18,8 @@ namespace BoCa.Fig16.BoLo
 open BoCa.Fig16
 noncomputable section
 
+variable {ℍ : BoCa.Host} [BoCa.HostIs ℍ]
+
 /-- `ρ` has no cell of kind `k`. -/
 def Free (k : Kind) (ρ : WRes) : Prop := ∀ l ψ, ρ.get l = some ψ → ψ.kind ≠ k
 

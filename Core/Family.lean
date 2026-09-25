@@ -27,6 +27,8 @@ has no rule at `U C` or `Unk`, so `B` and `T` hold neither outside `!`; they may
 
 noncomputable section
 
+variable {ℍ : BoCa.Host} [BoCa.HostIs ℍ]
+
 namespace BoCa.Fig16.LogRel.Core
 open BoCa
 open BoCa.Lifetime (LSub LifeCtx LifeVar)

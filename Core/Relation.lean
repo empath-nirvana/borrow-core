@@ -27,6 +27,8 @@ type is the λ-value that computation is, forced by using it as it stands (`forc
 
 noncomputable section
 
+variable {ℍ : BoCa.Host} [BoCa.HostIs ℍ]
+
 namespace BoCa.Fig16.LogRel.Core
 open BoCa
 open BoCa.Fig16

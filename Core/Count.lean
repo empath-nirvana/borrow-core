@@ -24,6 +24,8 @@ Each stage — `c₀` at fuel `0` (`d_c₀`) and the step at a counter `g` (`d_s
 
 noncomputable section
 
+variable {ℍ : BoCa.Host} [BoCa.HostIs ℍ]
+
 namespace BoCa.Fig16.LogRel.Core
 open BoCa
 open BoCa.Fig16

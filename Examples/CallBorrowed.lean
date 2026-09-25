@@ -14,6 +14,8 @@ program calls it again after `free`.  Under the baseline the same program with `
 
 noncomputable section
 
+variable {ℍ : BoCa.Host} [BoCa.HostIs ℍ]
+
 namespace BoCa.Programs
 open BoCa BoCa.Lifetime
 

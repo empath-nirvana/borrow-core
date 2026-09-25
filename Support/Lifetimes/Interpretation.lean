@@ -9,6 +9,8 @@ import Paper.S2_Statics.Definitions
 
 noncomputable section
 
+variable {ℍ : BoCa.Host} [BoCa.HostIs ℍ]
+
 namespace BoCa.Lifetime.LSub
 
 def extend (δ : LSub) (x : LifeVar) (v : Nat) : LSub := ⟨(x, v) :: δ.entries⟩

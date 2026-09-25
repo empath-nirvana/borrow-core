@@ -17,6 +17,8 @@ import Support.TypedWorld.Records
 
 noncomputable section
 
+variable {ℍ : BoCa.Host} [BoCa.HostIs ℍ]
+
 namespace BoCa.Fig16.LogRel.Typed
 open BoCa
 open BoCa.Fig16

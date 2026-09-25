@@ -21,6 +21,8 @@ bag is `node (leaf N) (leaf L)` with `L` the common list (`CommonList.lean`).
 
 noncomputable section
 
+variable {ℍ : BoCa.Host} [BoCa.HostIs ℍ]
+
 namespace BoCa.Fig16.LogRel.Core
 open BoCa
 open BoCa.Fig16

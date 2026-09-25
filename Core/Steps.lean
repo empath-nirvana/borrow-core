@@ -12,6 +12,8 @@ The machine's steps decompose uniquely: a step of `K[e]`, with `e` not a value, 
 
 noncomputable section
 
+variable {ℍ : BoCa.Host} [BoCa.HostIs ℍ]
+
 namespace BoCa.Fig16.LogRel.Core
 open BoCa BoCa.BoLo
 

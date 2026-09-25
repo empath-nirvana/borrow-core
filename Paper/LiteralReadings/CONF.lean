@@ -13,6 +13,8 @@ p. 2 types at `1`.  Nothing depends on this file.
 
 noncomputable section
 
+variable {ℍ : BoCa.Host} [BoCa.HostIs ℍ]
+
 namespace BoCa.TR3
 open BoCa.Fig16
 open BoCa.BoLo (Heap)

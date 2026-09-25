@@ -11,6 +11,8 @@ import Support.Statics.Contexts
 
 noncomputable section
 
+variable {ℍ : BoCa.Host} [BoCa.HostIs ℍ]
+
 namespace BoCa.Fig16.LogRel
 open BoCa.Fig16
 open BoCa.Fig16.BoLo

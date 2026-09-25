@@ -11,6 +11,8 @@ program only names its leaves; the tactics `cdead` and `csolo` close them.
 
 noncomputable section
 
+variable {ℍ : BoCa.Host} [BoCa.HostIs ℍ]
+
 namespace BoCa.Fig16.LogRel.Core
 open BoCa
 open BoCa.Lifetime (LSub LifeCtx LifeVar)

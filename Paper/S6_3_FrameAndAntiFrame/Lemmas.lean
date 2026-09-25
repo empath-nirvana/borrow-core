@@ -33,6 +33,8 @@ version* names the same result at `wpTS` (row 5.33's repair), declared in
 
 noncomputable section
 
+variable {ℍ : BoCa.Host} [BoCa.HostIs ℍ]
+
 namespace BoCa.Fig16.BoLo
 variable {Loc Val : Type}
 

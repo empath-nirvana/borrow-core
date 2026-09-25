@@ -17,6 +17,8 @@ held beside the borrow, not inside it.
 
 noncomputable section
 
+variable {ℍ : BoCa.Host} [BoCa.HostIs ℍ]
+
 namespace BoCa.Programs
 open BoCa BoCa.Lifetime
 

@@ -18,6 +18,8 @@ import Support.Model.WalkSplitting
 
 noncomputable section
 
+variable {ℍ : BoCa.Host} [BoCa.HostIs ℍ]
+
 namespace BoCa.Fig16
 
 theorem LSet.diff_join_le {s t u : LSet} (h : LSet.Diff s t u) : u.join ≤ s.join :=

@@ -8,6 +8,8 @@ import Paper.S5_Model.Definitions
 
 noncomputable section
 
+variable {ℍ : BoCa.Host} [BoCa.HostIs ℍ]
+
 namespace BoCa.Fig16
 
 theorem Life.sqsupset_iff (a b : Life) : a ⊐ b ↔ b < a := Iff.rfl

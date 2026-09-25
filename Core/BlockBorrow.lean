@@ -33,6 +33,8 @@ inversions of `Steps.lean`), so after the borrow the handle is again the block's
 
 noncomputable section
 
+variable {ℍ : BoCa.Host} [BoCa.HostIs ℍ]
+
 namespace BoCa.Fig16.LogRel.Core
 open BoCa
 open BoCa.Fig16

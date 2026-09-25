@@ -12,6 +12,8 @@ are declared in §6's files.  Theorems about definition rows whose proofs use
 
 noncomputable section
 
+variable {ℍ : BoCa.Host} [BoCa.HostIs ℍ]
+
 /-!
 ### 5.56 · `⨀` — the iterated composition, with no printed empty case · [TR] p. 5, rows 11, 12, 19 · `[repair]`
 

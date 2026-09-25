@@ -1,6 +1,7 @@
 import Mathlib
 import Paper.S1_Syntax.Definitions
 import Support.Syntax.Terms
+import Support.Dynamics.Host
 
 /-!
 # [TR] §3 Dynamics  (physical pp. 3–4)
@@ -275,8 +276,16 @@ Rows 3.11, 3.15, 3.16, 3.17, 3.18, 3.19, 3.20, continued.
 
 As row 3.22.
 -/
-/-- The head reductions of `[TR]` p. 4's `↦` box: `TR3.Head` under other names. -/
-inductive Head : Heap → Expr → Heap → Expr → Prop where
+/-!
+### — no printed counterpart — the host step · `[spec §8]`
+
+`(µ, h v) ↦ (µ, r)` when the host applies the operation `h` to `v` with result `r`
+(`Host.call`). The machine is parametric in the host: every definition over it takes
+`{ℍ : Host} [HostIs ℍ]`, and at each host it is deterministic.
+-/
+/-- The head reductions of `[TR]` p. 4's `↦` box: `TR3.Head` under other names, and the host
+    step of `SPEC.md` §8. -/
+inductive Head {ℍ : Host} [HostIs ℍ] : Heap → Expr → Heap → Expr → Prop where
   | beta (μ : Heap) (b : Expr) (v : Val) :
       Head μ (.app (.val (.lam b)) (.val v)) μ (b.subst 0 v)
   | alloc (μ : Heap) (v : Val) (ℓ : Loc) (h : μ ℓ = none) :
@@ -297,12 +306,15 @@ inductive Head : Heap → Expr → Heap → Expr → Prop where
       Head μ (.case (.val (.inj₁ v)) e₁ e₂) μ (e₁.subst 0 v)
   | case₂ (μ : Heap) (v : Val) (e₁ e₂ : Expr) :
       Head μ (.case (.val (.inj₂ v)) e₁ e₂) μ (e₂.subst 0 v)
+  /-- The host step: `Host.call op v = some r` ⟹ `(μ, op v) ↦ (μ, r)`.  `[spec §8]` -/
+  | host (μ : Heap) (op : HostOp) (v r : Val) (h : ℍ.call op v = some r) :
+      Head μ (.app (.val (.prim (.host op))) (.val v)) μ (.val r)
 
 /-!
 Rows 3.11, 3.12, continued.
 -/
 /-- `(μ,e) ↦ (μ',e')  ⟹  (μ, K[e]) → (μ', K[e'])`. -/
-def Step1 (μ : Heap) (e : Expr) (μ' : Heap) (e' : Expr) : Prop :=
+def Step1 {ℍ : Host} [HostIs ℍ] (μ : Heap) (e : Expr) (μ' : Heap) (e' : Expr) : Prop :=
   ∃ (K : Kont) (a a' : Expr), e = K.plug a ∧ e' = K.plug a' ∧ Head μ a μ' a'
 
 end BoCa.BoLo

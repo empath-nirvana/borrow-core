@@ -20,6 +20,8 @@ namespace BoCa.Fig16
 namespace SplitExample
 noncomputable section
 
+variable {ℍ : BoCa.Host} [BoCa.HostIs ℍ]
+
 /-- The witness of the shared `imm` cell, taken empty. -/
 private def wit : ResU Nat Nat := PMap.empty
 

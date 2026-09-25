@@ -12,6 +12,8 @@ Theorems about `ψ ∼ ψ′` (row 5.65) whose proofs use `[TR]` §6.
 
 noncomputable section
 
+variable {ℍ : BoCa.Host} [BoCa.HostIs ℍ]
+
 namespace BoCa.Fig16
 variable {Loc Val : Type}
 

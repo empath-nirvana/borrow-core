@@ -12,6 +12,8 @@ import Support.Syntax.Terms
 
 noncomputable section
 
+variable {ℍ : BoCa.Host} [BoCa.HostIs ℍ]
+
 namespace BoCa.TR3.Kont
 open BoCa.BoLo (Heap)
 

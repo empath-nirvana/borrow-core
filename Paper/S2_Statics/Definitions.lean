@@ -35,6 +35,8 @@ p. 4, so this file imports §3's.  Each row gives its number (`Paper/INDEX.md`,
 
 noncomputable section
 
+variable {ℍ : BoCa.Host} [BoCa.HostIs ℍ]
+
 namespace BoCa
 open BoCa.Lifetime
 

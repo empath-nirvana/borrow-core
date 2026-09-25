@@ -1,5 +1,6 @@
 import Paper.S1_Syntax.Definitions
 import Support.Syntax.Terms
+import Support.Dynamics.Host
 
 /-!
 # Support — Dynamics — Interpreter
@@ -40,7 +41,7 @@ def Mem.leaked (μ : Mem) : Bool := !μ.cells.isEmpty
 
 inductive Stuck where
   | unboundVar | notAFunction | notAPair | notASum | notAUnit
-  | useAfterFree | badPrimArg
+  | useAfterFree | badPrimArg | badHostArg
   deriving DecidableEq, Repr
 
 inductive Step where
@@ -60,8 +61,8 @@ A deterministic executable machine where the print gives a relation, with the `K
     application, so `delta` returns it as a value rather than stepping to one.
     Every value whose head is a primitive appears on the left, so `step` needs
     no arity test: the grammar already says how many arguments each production
-    still wants. -/
-def delta (μ : Mem) : Expr → Val → Step
+    still wants. A host operation is applied by `H.call` (`[spec §8]`). -/
+def delta (H : Host) (μ : Mem) : Expr → Val → Step
   | .prim .alloc,   v => let (ℓ, μ') := μ.alloc v; .next μ' (.loc ℓ)
   | .prim .free,    ⟨.loc ℓ, _⟩ =>
       match μ.get? ℓ with
@@ -76,6 +77,10 @@ def delta (μ : Mem) : Expr → Val → Step
       match μ.get? ℓ with
       | some _ => .next (μ.set ℓ v) .unit
       | none   => .stuck .useAfterFree
+  | .prim (.host op), v =>
+      match H.call op v with
+      | some r => .next μ r.val
+      | none   => .stuck .badHostArg
   | _, _ => .stuck .badPrimArg
 
 /-- One step of call-by-value reduction.
@@ -94,7 +99,7 @@ def delta (μ : Mem) : Expr → Val → Step
     same holds of `injᵢ v` and of `store v`.
 
     `seq` fires at `()` and nowhere else, as `1↦` prints it. -/
-def step (μ : Mem) : Expr → Step
+def step (H : Host) (μ : Mem) : Expr → Step
   | .var _  => .stuck .unboundVar
   | .unit   => .value .unit
   | .lam b  => .value (.lam b)
@@ -102,50 +107,50 @@ def step (μ : Mem) : Expr → Step
   | .prim p => .value (.prim p)
 
   | .pair e₁ e₂ =>
-    match step μ e₁ with
-    | .value v₁    => match step μ e₂ with
+    match step H μ e₁ with
+    | .value v₁    => match step H μ e₂ with
                       | .value v₂    => .value (.pair v₁ v₂)
                       | .next μ' e₂' => .next μ' (.pair e₁ e₂')
                       | .stuck r     => .stuck r
     | .next μ' e₁' => .next μ' (.pair e₁' e₂)
     | .stuck r     => .stuck r
 
-  | .inj₁ e => match step μ e with
+  | .inj₁ e => match step H μ e with
     | .value v    => .value (.inj₁ v)
     | .next μ' e' => .next μ' (.inj₁ e')
     | .stuck r    => .stuck r
 
-  | .inj₂ e => match step μ e with
+  | .inj₂ e => match step H μ e with
     | .value v    => .value (.inj₂ v)
     | .next μ' e' => .next μ' (.inj₂ e')
     | .stuck r    => .stuck r
 
-  | .seq e₁ e₂ => match step μ e₁ with
+  | .seq e₁ e₂ => match step H μ e₁ with
     | .value ⟨.unit, _⟩ => .next μ e₂
     | .value _          => .stuck .notAUnit
     | .next μ' e₁'      => .next μ' (.seq e₁' e₂)
     | .stuck r          => .stuck r
 
-  | .letpair e₁ e₂ => match step μ e₁ with
+  | .letpair e₁ e₂ => match step H μ e₁ with
     | .value ⟨.pair a b, h⟩ =>
         .next μ ((e₂.subst 0 (Val.shift 1 0 ⟨b, h.pair_right⟩)).subst 0 ⟨a, h.pair_left⟩)
     | .value _     => .stuck .notAPair
     | .next μ' e₁' => .next μ' (.letpair e₁' e₂)
     | .stuck r     => .stuck r
 
-  | .case e e₁ e₂ => match step μ e with
+  | .case e e₁ e₂ => match step H μ e with
     | .value ⟨.inj₁ a, h⟩ => .next μ (e₁.subst 0 ⟨a, h.inj₁_inv⟩)
     | .value ⟨.inj₂ a, h⟩ => .next μ (e₂.subst 0 ⟨a, h.inj₂_inv⟩)
     | .value _            => .stuck .notASum
     | .next μ' e'         => .next μ' (.case e' e₁ e₂)
     | .stuck r            => .stuck r
 
-  | .app f a => match step μ a with
-    | .value v    => match step μ f with
+  | .app f a => match step H μ a with
+    | .value v    => match step H μ f with
                      | .value w    => match w.val with
                                       | .lam b      => .next μ (b.subst 0 v)
-                                      | .prim p     => delta μ (.prim p) v
-                                      | .app f' a'  => delta μ (.app f' a') v
+                                      | .prim p     => delta H μ (.prim p) v
+                                      | .app f' a'  => delta H μ (.app f' a') v
                                       | _           => .stuck .notAFunction
                      | .next μ' f' => .next μ' (.app f' a)
                      | .stuck r    => .stuck r
@@ -159,15 +164,16 @@ inductive Outcome where
   | timeout
   deriving Repr
 
-def run : Nat → Mem → Expr → Outcome
+def run (H : Host) : Nat → Mem → Expr → Outcome
   | 0,     _, _ => .timeout
   | n + 1, μ, e =>
-    match step μ e with
+    match step H μ e with
     | .value v    => .value v μ.leaked
-    | .next μ' e' => run n μ' e'
+    | .next μ' e' => run H n μ' e'
     | .stuck r    => .stuck r
 
-def eval (e : Expr) : Outcome := run 1000 Mem.empty e
+/-- A bounded run from the empty memory, at the host `H` (Wasm's by default, `[spec §8]`). -/
+def eval (e : Expr) (H : Host := wasmHost) : Outcome := run H 1000 Mem.empty e
 
 end BoCa
 

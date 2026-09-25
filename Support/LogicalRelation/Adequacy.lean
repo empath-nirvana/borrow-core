@@ -17,6 +17,8 @@ import Support.Syntax.Terms
 
 noncomputable section
 
+variable {ℍ : BoCa.Host} [BoCa.HostIs ℍ]
+
 namespace BoCa.Adequacy
 open BoCa.Fig16
 open BoCa.Fig16.BoLo (wp NoOwn WRes)

@@ -30,6 +30,8 @@ carry the logical relation through it: `↺V₁` (6.131, by induction on the typ
 
 noncomputable section
 
+variable {ℍ : BoCa.Host} [BoCa.HostIs ℍ]
+
 namespace BoCa.Fig16.BoLo
 variable {Loc Val : Type}
 

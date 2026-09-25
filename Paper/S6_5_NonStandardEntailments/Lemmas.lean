@@ -22,6 +22,8 @@ names the statement proved at the typed world, in `Support/TypedWorld/`.
 
 noncomputable section
 
+variable {ℍ : BoCa.Host} [BoCa.HostIs ℍ]
+
 namespace BoCa.Fig16.BoLo
 variable {Loc Val : Type}
 

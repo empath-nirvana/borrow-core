@@ -13,6 +13,8 @@ Each closed program of `Paper/Examples/Programs.lean` and `Examples/Closures.lea
 
 noncomputable section
 
+variable {ℍ : BoCa.Host} [BoCa.HostIs ℍ]
+
 namespace BoCa.Fig16.LogRel.Core
 open BoCa
 open BoCa.Programs

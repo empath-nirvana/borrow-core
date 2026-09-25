@@ -1,3 +1,5 @@
+import Support.Syntax.Integers
+
 /-!
 # [TR] §1 Syntax  (physical p. 1)
 
@@ -38,9 +40,14 @@ abbrev Loc := Nat
 ### 1.13 · `Prim ::= … ∣ load` · [TR] p. 1 · `[as printed]`
 ### 1.14 · `Prim ::= … ∣ store` · [TR] p. 1 · `[as printed]`
 -/
-/-- The four nullary productions of `[TR]` p. 1's `Prim`; `store v` is row 1.15. -/
+/-- The four nullary productions of `[TR]` p. 1's `Prim`; `store v` is row 1.15.
+    `lit` and `host` are the integer constants of `SPEC.md` §8. -/
 inductive Prim where
   | alloc | free | load | store
+  /-- An integer literal.  `[spec §8]` -/
+  | lit (c : IntLit)
+  /-- A host operation, applied by the machine's host step.  `[spec §8]` -/
+  | host (op : HostOp)
   deriving DecidableEq, Repr
 
 /-!

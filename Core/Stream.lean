@@ -22,6 +22,8 @@ recursion is the rule's: the Z combinator (`Fix.lean`) over `fBS`.
 
 noncomputable section
 
+variable {ℍ : BoCa.Host} [BoCa.HostIs ℍ]
+
 namespace BoCa.Fig16.LogRel.Core
 open BoCa
 open BoCa.Fig16

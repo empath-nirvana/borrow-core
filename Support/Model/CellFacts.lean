@@ -9,6 +9,8 @@ import Support.Model.Prelude
 
 noncomputable section
 
+variable {ℍ : BoCa.Host} [BoCa.HostIs ℍ]
+
 namespace BoCa.Fig16.PMap
 variable {Loc A B : Type}
 

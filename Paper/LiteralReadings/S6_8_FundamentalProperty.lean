@@ -56,6 +56,8 @@ Nothing depends on this file.
 
 noncomputable section
 
+variable {ℍ : BoCa.Host} [BoCa.HostIs ℍ]
+
 namespace BoCa.Fig16.LogRel
 open BoCa.Fig16
 open BoCa.Fig16.BoLo
@@ -490,6 +492,7 @@ theorem step_beta_inv {μ μ' : Heap} {b : Expr} {v : Val} {e' : Expr}
     | letpair => simp at hE
     | case₁ => simp at hE
     | case₂ => simp at hE
+    | host => simp at hE
   · exact absurd ha (no_step_isVal v.2)
   · exact absurd hf (no_step_isVal .lam)
 
@@ -512,6 +515,7 @@ theorem step_load_inv {μ μ' : Heap} {ℓ : Loc} {e' : Expr}
     | letpair => simp at hE
     | case₁ => simp at hE
     | case₂ => simp at hE
+    | host => simp at hE
   · exact absurd ha (no_step_isVal .loc)
   · exact absurd hf (no_step_isVal .prim)
 
@@ -535,6 +539,7 @@ theorem step_store_inv {μ μ' : Heap} {ℓ : Loc} {v : Val} {e' : Expr}
     | letpair => simp at hE
     | case₁ => simp at hE
     | case₂ => simp at hE
+    | host => simp at hE
   · exact absurd ha (no_step_isVal v.2)
   · exact absurd hf (no_step_isVal (.storeV .loc))
 
