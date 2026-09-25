@@ -196,12 +196,12 @@ theorem linLife_of_ag {W W' : WRes} {ps : List FrameRec} (t : ∀ a, AgW W' a �
   exact ⟨α, frameLife_of_ag t hα⟩
 
 /-- A reborrow keeps `FrameLife`: a new view is at a lifetime of `ag(W)` or at `β`, and
-`β` is below the frame (`W.InStratum β`); the frame's own cell gets no `β`, since the
+`β` is at most the frame (`StratumLe W β`); the frame's own cell gets no `β`, since the
 escrow reborrowed has no `own` or `mut` cell there. -/
 theorem frameLife_reb_like {W W' c w₀ : WRes} {le : Loc} {s : LSet} {v : Val}
     {hs : w₀.InStratum s.join} {β : Life} (hvW : ResU.Valid W)
     (hle : W.get le = some (CellU.immOf s v w₀ hs)) (hreb : ResU.Reb β w₀ c)
-    (hW : ResU.CompS W c W') (hβ : W.InStratum β) {p : FrameRec} {α : Life}
+    (hW : ResU.CompS W c W') (hβ : StratumLe W β) {p : FrameRec} {α : Life}
     (hex : ∀ ζ : CellU Loc Val, w₀.get p.le = some ζ → ζ.kind = Kind.imm)
     (hcell : ∀ a, AgW W a → ∃ ζ : CellU Loc Val, a.get p.le = some ζ ∧ ζ.kind = Kind.imm)
     (h : FrameLife W p α) : FrameLife W' p α := by
@@ -218,12 +218,13 @@ theorem frameLife_reb_like {W W' c w₀ : WRes} {le : Loc} {s : LSet} {v : Val}
     · rcases img_ls haW hle hreb (fun _ _ e => e) hac e₁ ht₁ hx₁ with h₂ | ⟨rfl, -, h₃⟩
       · exact Or.inl h₂
       · exact Or.inr ⟨rfl, h₃⟩
-  have hβα : β ⊏ α := by
+  have hβα : β ⊑ α := by
     obtain ⟨ζ, e, k⟩ := hcell aW haW
     obtain ⟨t, ht⟩ := lsOf_of_imm k
-    have h₁ : t.meet ⊐ β := CellU.sqsupset_of_lsOf ht (AgW.inStratum haW β hβ _ ζ e)
+    refine le_of_not_gt fun hlt => ?_
+    have h₁ : t.meet ⊐ α := CellU.sqsupset_of_lsOf ht (AgW.inStratum haW α (hβ α hlt) _ ζ e)
     rw [h.1 aW haW ζ t e ht t.meet t.meet_mem] at h₁
-    exact h₁
+    exact lt_irrefl _ h₁
   refine ⟨fun a' ha' ζ t e ht y hy => ?_, fun a' ha' m hm ψ s' e hs' x hx => ?_⟩
   · rcases newls a' ha' p.le ζ t y e ht hy with ⟨ζ', t', e', ht', hy'⟩ | ⟨-, ζ', e', k'⟩
     · exact h.1 aW haW ζ' t' e' ht' y hy'
@@ -354,7 +355,7 @@ theorem TW.linLife {W : WRes} {ps rs : List FrameRec} (h : TW W ps rs) : LinLife
       intro p hp
       obtain ⟨α, hα⟩ := ih p hp
       have hpR : p ∈ rs := (hTI.2.2.2.2.2.2.1 p).mpr ⟨p, hp, DescR.refl p⟩
-      refine ⟨α, frameLife_reb_like hvW hcell hreb hW hβ (fun ζ e => ?_)
+      refine ⟨α, frameLife_reb_like hvW hcell hreb hW (stratumLe_of_inStratum hβ) (fun ζ e => ?_)
         (fun a ha => by obtain ⟨ψ, e, k, -⟩ := hTI.2.1 p hp a ha; exact ⟨ψ, e, k⟩) hα⟩
       rcases CellU.rep ζ with ⟨u, rfl⟩ | ⟨s₁, v₁, χ₁, h₁, rfl⟩ | ⟨b₁, v₁, χ₁, h₁, P, hw, rfl⟩
       · exact (hTI.2.2.2.1 p hpR r hr u (hw₀own _ u e)).elim
@@ -430,7 +431,7 @@ theorem lifeBound_of_tagged {W : WRes} {ps : List FrameRec} {ls : List SRec} {σ
   rcases linLoc_of_rel hpx hm with ⟨-, rfl⟩ | hL
   · have := hFL.1 aW haW ζ t eζ ht s.meet hmt
     rw [this] at hlow; exact hlow
-  · exact lt_trans hlow (hFL.2 aW haW m hL ζ t eζ ht s.meet hmt)
+  · exact lt_of_lt_of_le hlow (hFL.2 aW haW m hL ζ t eζ ht s.meet hmt)
 
 theorem tagged_of_frameLife {W W' : WRes} {ps : List FrameRec} {ls : List SRec}
     (t : ∀ p α, FrameLife W p α → FrameLife W' p α) (h : Tagged W ps ls) : Tagged W' ps ls :=
@@ -493,7 +494,7 @@ theorem not_rel_lineage {W : WRes} {p : FrameRec} {α : Life} (hFL : FrameLife W
   obtain ⟨ζ, t, eζ, ht, hmt⟩ := (hicp m ψ e).ls hs s.meet_mem
   rcases linLoc_of_rel hpx hm with ⟨-, rfl⟩ | hL
   · exact hl ψ e k
-  · exact lt_asymm hlow (hFL.2 aW haW m hL ζ t eζ ht s.meet hmt)
+  · exact (lt_irrefl _ (lt_of_lt_of_le hlow (hFL.2 aW haW m hL ζ t eζ ht s.meet hmt)))
 
 /-- `FrameLife` names the lifetime of a record's cell. -/
 theorem frameLife_eq {W : WRes} {p : FrameRec} {α β : Life} (hFL : FrameLife W p α)

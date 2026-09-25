@@ -1402,7 +1402,7 @@ theorem witLB_of {W : WRes} {ps : List FrameRec} {ls : List SRec} {le : Loc} {s 
   rcases linLoc_of_rel hpx hm with ⟨-, rfl⟩ | hL
   · have := hFL.1 aW haW ζ' t' eζ' ht' t.meet hmt
     rw [this] at hlow; exact hlow
-  · exact lt_trans hlow (hFL.2 aW haW m' hL ζ' t' eζ' ht' t.meet hmt)
+  · exact lt_of_lt_of_le hlow (hFL.2 aW haW m' hL ζ' t' eζ' ht' t.meet hmt)
 
 end BoCa.Fig16.LogRel.Core
 

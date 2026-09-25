@@ -49,7 +49,7 @@ open BoCa.Lifetime (LSub LifeCtx LifeVar)
 theorem tagged_reb {W W' c : WRes} {ps rs : List FrameRec} {ls : List SRec} {r : FrameRec}
     {le : Loc} {s : LSet} {β : Life} {hs : r.R.InStratum s.join}
     (hW₀ : TW W ps rs) (hr : r ∈ rs) (hle : W.get le = some (CellU.immOf s r.v r.R hs))
-    (hreb : ResU.Reb β r.R c) (hβ : W.InStratum β) (hW : ResU.CompS W c W')
+    (hreb : ResU.Reb β r.R c) (hβ : StratumLe W β) (hW : ResU.CompS W c W')
     (htag : Tagged W ps ls) : Tagged W' ps ls := by
   have hTI := hW₀.inv
   intro y hy
@@ -81,7 +81,7 @@ theorem tagged_rebDeep {W W' c : WRes} {ps rs : List FrameRec} {ls : List SRec} 
   intro y hy
   obtain ⟨p, hp, hd, hα⟩ := htag y hy
   have hpR : p ∈ rs := (hTI.2.2.2.2.2.2.1 p).mpr ⟨p, hp, DescR.refl p⟩
-  refine ⟨p, hp, hd, frameLife_reb_like hvW hcell hreb hW hβ (fun ζ e => ?_)
+  refine ⟨p, hp, hd, frameLife_reb_like hvW hcell hreb hW (stratumLe_of_inStratum hβ) (fun ζ e => ?_)
     (fun a ha => by obtain ⟨ψ, e, k, -⟩ := hTI.2.1 p hp a ha; exact ⟨ψ, e, k⟩) hα⟩
   rcases CellU.rep ζ with ⟨u, rfl⟩ | ⟨s₁, v₁, χ₁, h₁, rfl⟩ | ⟨b₁, v₁, χ₁, h₁, P, hw, rfl⟩
   · exact (hTI.2.2.2.1 p hpR r hr u (hw₀own _ u e)).elim
@@ -165,8 +165,8 @@ theorem rebChooseTW_top {ls : List SRec} {r : FrameRec} {x : LifeVar} {δ' : LSu
   · -- entry: `TW.reb`, its shape premise from `vC_vShape`
     have hsh : vShape (r.T.immReborrow (.var x)) (r.δ.extend x β) r.v χ := by
       rw [← vShape_immReb_agree hag]; exact vC_vShape true _ hPχ
-    exact ⟨TW.reb r x hT hr hle hx hreb hsh hβ hWc hv',
-      tagged_reb hT hr hle hreb hβ hWc htag⟩
+    exact ⟨TW.reb r x hT hr hle hx hreb hsh (stratumLe_of_inStratum hβ) hWc hv',
+      tagged_reb hT hr hle hreb (stratumLe_of_inStratum hβ) hWc htag⟩
   · -- exit: `TW.rebEnd`
     rintro ps' ls' Wp W'' - hls hTp htgp ⟨s'', hs'', hc''⟩ hcomp hβ''
     have hr' : r ∈ rsOf ls' := by

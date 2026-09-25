@@ -79,6 +79,13 @@ notation "vShape" => vShapeE none
 /-!
 Row 5.33 · `wp (e) {Q̂} (ρ) ≜ ∀ρ_f # ρ. ∃ρ′ # ρ_f, ρ⁺ # (ρ_f ● ρ′), v. (⟦ρ_f ● ρ⟧,e) →* (⟦ρ_f ● ρ′ ● ρ⁺⟧,v) ∧ ρ ↭ ρ′ ● ρ⁺ ∧ ρ⁺∣own = ∅ ∧ Q̂(v)(ρ′)` · `[repair]`; the printed row is in `Paper/S5_Model/Definitions.lean`.
 -/
+/-- `W`'s lifetimes are all `⊒ β`: `W ∈ Res_β′` at every `β′ ⊏ β`.  `W.InStratum β` with the
+inequality non-strict. -/
+def StratumLe (W : WRes) (β : Life) : Prop := ∀ β', β' ⊏ β → W.InStratum β'
+
+theorem stratumLe_of_inStratum {W : WRes} {β : Life} (h : W.InStratum β) : StratumLe W β :=
+  fun _ hβ' l ψ e => CellU.InStratum.mono hβ'.le (h l ψ e)
+
 /-- The typed world.  `TW W ps rs`: the configuration `W` — every frame together with the
 resource a `wp` runs at, `[TR]` p. 6's `ρ_f ● ρ` — is reached from `∅` by the operations the
 printed proofs perform, and `ps` are the frames `[TR]` 6.64 has taken and not ended, `rs` those
@@ -86,8 +93,9 @@ frames with every sub-record of their lineages.  One constructor per operation: 
 (6.141), `free` (6.142), `store` (6.145), `immFrame`/`immEnd` (6.64's entry and exit, recording
 the frame and its lineage and dropping them), `mutFold`/`mutUnfold` (6.65 and 6.66), and
 `reb`/`rebDeep` with `rebEnd`/`rebEndDeep` (6.150's entry and exit, at a record's cell or at a
-chain view of one, at any record, a sub-record included).  `reb`'s `β` is below every lifetime
-of the world, as 6.150's H11 takes it.  The typing premises are at `vShape`, `𝒱⟦T⟧`'s wp-free
+chain view of one, at any record, a sub-record included).  `reb`'s `β` is at most every lifetime
+of the world (`StratumLe`); `rebDeep`'s is below every lifetime of the world, as 6.150's H11
+takes it.  The typing premises are at `vShape`, `𝒱⟦T⟧`'s wp-free
 shape: a premise at the program's relation would put `TW` under the negative occurrence of
 `wpTS` in that relation's `⊸` clause.
 `[about ours: the configurations §6 quantifies over, as a family; docs/adjudications.md §12.72]` -/
@@ -108,7 +116,7 @@ inductive TW : WRes → List FrameRec → List FrameRec → Prop
       TW W ps rs → r ∈ rs → W.get le = some (CellU.immOf s r.v r.R hs) →
       ¬ VFree x r.T → ResU.Reb β r.R c →
       vShape (r.T.immReborrow (.var x)) (r.δ.extend x β) r.v c →
-      W.InStratum β → ResU.CompS W c W' → ResU.Valid W' → TW W' ps rs
+      StratumLe W β → ResU.CompS W c W' → ResU.Valid W' → TW W' ps rs
   | rebDeep {W W' c : WRes} {ps rs : List FrameRec} (r : FrameRec) {p : Option Loc} {l₀ : Loc}
       {S₀ : VTy} {u₀ : Val} {s : LSet} {w₀ : WRes} {hs : w₀.InStratum s.join} {β : Life}
       (x : LifeVar) :

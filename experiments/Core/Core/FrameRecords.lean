@@ -162,13 +162,13 @@ lineage — a chain position, or a sub-record's location.  `[about ours]` -/
 def LinLoc (p : FrameRec) (m : Loc) : Prop :=
   ∃ d, DescR p d ∧ ∃ ζ : CellU Loc Val, d.R.get m = some ζ ∧ ζ.kind ≠ Kind.imm
 
-/-- `p`'s frame is at `α`, and its lineage's views are shorter.  `[about ours: an
+/-- `p`'s frame is at `α`, and its lineage's views are no longer (`⊑`, non-strict).  `[about ours: an
 invariant of the typed world, 6.150 H11's choice of `β` read at a record]` -/
 def FrameLife (W : WRes) (p : FrameRec) (α : Life) : Prop :=
   (∀ a, AgW W a → ∀ (ζ : CellU Loc Val) t, a.get p.le = some ζ → ζ.lsOf = some t →
     ∀ y, t.mem y → y = α) ∧
   (∀ a, AgW W a → ∀ m, LinLoc p m → ∀ (ψ : CellU Loc Val) s, a.get m = some ψ →
-    ψ.lsOf = some s → ∀ x, s.mem x → x ⊏ α)
+    ψ.lsOf = some s → ∀ x, s.mem x → x ⊑ α)
 
 mutual
 /-- `S` at `δ` and `S′` at `δ′` are one value type.  `[about ours]` -/
