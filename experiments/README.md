@@ -1,0 +1,24 @@
+# Experiments
+
+Probes. Nothing in `Paper/`, `Support/` or `Examples/` imports anything here, and nothing here
+is ever merged into them: an experiment that works becomes an entry in `SPEC.md`, and the entry
+is then implemented in the library afresh. None of these libraries is a default target.
+
+| Directory | Library | Build | Status |
+|---|---|---|---|
+| `CBPVSplit/` | `Experiments` | `lake build Experiments` | ported |
+| `ModesLabels/` | `Experiments` | `lake build Experiments` | ported |
+| `Shifts/` | `Experiments` | `lake build Experiments` | ported |
+| `BorrowedClosures/` | `Experiments` (`Reborrow.lean`, `EnvCheck.lean`) | `lake build Experiments` | ported; the `fn` fork archived |
+| `CBPVCore/` | `CBPVCore` | `lake build CBPVCore` | ported |
+| `CBPVWorld/` | `CBPVWorld` | `lake build CBPVWorld` | ported |
+| `Bang/` | — | — | archived: became `Paper/`, `Support/`, `Examples/Closures.lean` |
+
+Each experiment builds against this repository's `Paper`/`Support` (and `Examples`, for
+`CBPVWorld`). Module names are unique across the libraries: the `Experiments` library's modules
+are `CBPVSplit.Split`, `ModesLabels.Modes`, `Shifts.Shifts`, `BorrowedClosures.Reborrow` and
+`BorrowedClosures.EnvCheck`.
+
+These experiments were developed in `~/repos/borrow_lang/Experiments/`; the last `borrow_lang`
+commit containing them is `a31b498`. An archived experiment's README names the commits that hold
+its code.

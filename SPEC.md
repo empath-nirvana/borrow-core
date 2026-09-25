@@ -5,7 +5,8 @@ Version 0.2 · 2026-09-24
 The library — `Paper/`, `Support/`, `Examples/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
 implements it, and code an entry adds or changes is tagged `[spec §N]`. Experiments live
-outside this repository; work from one lands here only after its entry is written.
+in `experiments/`, which the library never imports; work from one lands in the library only
+after its entry is written.
 
 Notation follows Wagner, Gierczak, Marshall, Li and Ahmed, *From Linearity to Borrowing*
 (PACMPL 9:OOPSLA2:415, 2025): `[CONF]` is the paper, `[TR]` its supplement.
@@ -133,8 +134,8 @@ the other literal readings in `Paper/LiteralReadings/` are kept.
 The typed world chooses each reborrow's image from types (§12.69, §12.71). A closure's image
 must be its captured resource, and neither its type nor its value determines that. Packing the
 environment existentially does not link the image to the escrow, and neither does naming the
-environment's type while its value is free (both refuted in the `borrow_lang` experiment
-`Experiments/BorrowedClosures/FnFork/EnvCheck.lean`). `!T` has image `∅`, which is determined.
+environment's type while its value is free (both refuted in the experiment
+`experiments/BorrowedClosures/EnvCheck.lean`). `!T` has image `∅`, which is determined.
 
 ### Open
 
@@ -149,8 +150,9 @@ environment's type while its value is free (both refuted in the `borrow_lang` ex
 
 - **0.2** (2026-09-24) — §2 restated as the exponential `!T`, replacing closed code
   `fn T₁ T₂` (which is `!(T₁ ⊸ T₂)`): adds `!I-Λ`, `Δ ⊢ !T ⊐ @a` and promotion over `!Γ`; the
-  `ownedFn` and `mutClosure` programs. From the `borrow_lang` experiment `Experiments/Bang`.
+  `ownedFn` and `mutClosure` programs. From the experiment `experiments/Bang`, originally developed in `borrow_lang`.
 - **0.1.1** (2026-09-24) — §2: capture and `FnMut` examples; the `Open` list records what
   mutable borrows of closures and owned captures still need.
-- **0.1** (2026-09-24) — Baseline (§1). Entry 1, closed code (§2), from the `borrow_lang`
-  experiments `CBPVSplit`, `ModesLabels`, `Shifts` and `BorrowedClosures`.
+- **0.1** (2026-09-24) — Baseline (§1). Entry 1, closed code (§2), from the experiments
+  `experiments/CBPVSplit`, `ModesLabels`, `Shifts` and `BorrowedClosures`, originally developed
+  in `borrow_lang`.

@@ -14,3 +14,21 @@ name = "Paper"
 
 [[lean_lib]]
 name = "Examples"
+
+# Experiments: not default targets; the library never imports them.
+
+[[lean_lib]]
+name = "CBPVCore"
+srcDir = "experiments/CBPVCore"
+roots = ["CBPVCore"]
+
+[[lean_lib]]
+name = "CBPVWorld"
+srcDir = "experiments/CBPVWorld"
+roots = ["CBPVWorld"]
+
+[[lean_lib]]
+name = "Experiments"
+srcDir = "experiments"
+roots = ["CBPVSplit.Split", "ModesLabels.Modes", "Shifts.Shifts", "BorrowedClosures.Reborrow",
+  "BorrowedClosures.EnvCheck"]

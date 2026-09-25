@@ -8,6 +8,8 @@ mechanization of Wagner, Gierczak, Marshall, Li and Ahmed, *From Linearity to Bo
 - `Paper/`, `Support/` — the mechanization, with each entry's additions tagged `[spec §N]`.
   `Paper/INDEX.md` and `docs/adjudications.md` describe the baseline.
 - `Examples/` — programs that exercise the entries.
+- `experiments/` — probes toward future entries, as non-default libraries the library never
+  imports (`experiments/README.md`).
 
 ```sh
 lake exe cache get
