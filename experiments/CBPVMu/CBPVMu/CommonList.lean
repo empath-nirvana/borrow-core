@@ -28,8 +28,7 @@ per-program proof.
   has every node at adjacent cells.
 
 `foldOwn` frees each `Ref X` cell before the algebra runs, so `mapIncCE` rebuilds the list in
-fresh blocks; the in-place map of `MapMut.lean` (over the boxed-node list `L′`) is not of this
-form.
+fresh blocks.  The in-place map over this shape is `foldReuse` (`ReuseList.lean`).
 -/
 
 noncomputable section

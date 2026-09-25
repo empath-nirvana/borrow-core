@@ -24,13 +24,14 @@ Every result's axioms are `[propext, Classical.choice, Quot.sound]` or a subset.
 | `ShapeMu.lean` (new) | the shape relation at `μ`: substitution, monotonicity, unroll, induction principle, `δ`- and `TyEq`-congruence; `TyEq` is an equivalence and commutes with substitution |
 | `RelMu.lean` (new) | the relation at `μ`: the same set, plus `vC_mu_ind` |
 | `Images.lean`, `Invariant.lean`, `ReborrowShapes.lean`, `RelationFacts.lean` | the lemmas that went by induction on a type now go by the induction principles, or by induction on a position (list below) |
-| `Fundamental.lean` | `roll`/`unroll`, `foldImm`, `foldOwn` in `CDerives`; their compatibility lemmas |
+| `Fundamental.lean` | `roll`/`unroll`, `foldImm`, `foldOwn`, `foldReuse` in `CDerives`; their compatibility lemmas |
 | `Fix.lean` (new) | `experiments/Recursion/Recursion/Fix.lean` at this world's `wpTS`, with `substAll_closed`; imported before `Fundamental.lean` |
 | `Sized.lean` (new) | `dsize`, `dsize_del_lt`, `dsize_tail_lt`, `rebChooseTW_sized`, `withload_sized`, `WitLt` |
-| `FoldImm.lean`, `FoldOwn.lean` (new) | the fold rules' terms and soundness (`foldImm_compatX`, `foldOwn_compatX`) |
-| `Lists.lean`, `Count.lean`, `CountFree.lean`, `MapMut.lean`, `Folds.lean` (new) | the programs; `MapMut.lean` also `wpTS_swap` |
+| `FoldImm.lean`, `FoldOwn.lean`, `FoldReuse.lean` (new) | the fold rules' terms and soundness (`foldImm_compatX`, `foldOwn_compatX`, `foldReuse_compatX`); `FoldReuse.lean` also `wpTS_swap` |
+| `Lists.lean`, `Count.lean`, `CountFree.lean`, `MapMut.lean`, `Folds.lean` (new) | the programs |
 | `Blocks.lean` (new) | `experiments/LeafPlaces`' block view at `VTy`: `Shape`, `refTy`, `allocS`/`freeS` and their derived typing, `Packed`, `packed_node`, block allocation (`wpTS_allocS`) |
 | `CommonList.lean` (new) | the common list shape `μX. 1 ⊕ Ref (N ⊗ X)` with each node one block; sum, map, `toPure` and free by the fold rules |
+| `ReuseList.lean` (new) | the in-place map over the common list shape by `foldReuse`; `take`/`fill`; node addresses before and after |
 
 `Wp`, `Reborrow`, `FrameRules`, `Compatibility`, `Computation`, `Compat` and `Examples` are
 CBPVWorld's files with only the namespace changed (`bindE` is defined in `FoldImm.lean`, which
@@ -107,7 +108,7 @@ CBPVWorld's files with only the namespace changed (`bindE` is defined in `FoldIm
 
 `fundamentalC : CDerives Δ Γ e j → SemJ Δ Γ e j` over the judgment with `roll`/`unroll`
 (`roll_compatX`, `unroll_compatX`: the unroll equation under `wpTS_mono`) and the fold rules
-`foldImm`/`foldOwn` (`foldImm_compatX`, `foldOwn_compatX`; see *The fold rules*). `adequacyC`,
+`foldImm`/`foldOwn` (`foldImm_compatX`, `foldOwn_compatX`, `foldReuse_compatX`; see *The fold rules* and *The owned fold with reuse*). `adequacyC`,
 `theorem32` and `corollary33` are unchanged.
 
 ## Step 5 — programs
@@ -143,7 +144,7 @@ replace the hand proofs for folds.
 **(c) An in-place map through `Mut`** (`MapMut.lean`).
 - `L′ = μX. 1 ⊕ Ref (N ⊗ X)` (`NoMut` holds: `X` is under `Ref`, not `Mut`), and the pure list
   `P = μX. 1 ⊕ (N ⊗ X)`.
-- `wpTS_swap`: `swap ℓ v` at `ℓ ↦ w` as a `wpTS` rule (6.169's steps).
+- `wpTS_swap` (`FoldReuse.lean`): `swap ℓ v` at `ℓ ↦ w` as a `wpTS` rule (6.169's steps).
 - `mapInc = Z (λself. λl. case l {inj₁ u. inj₁ u | inj₂ r. swap r () to q. let (r₁, c) = q in
   let (p, tl) = c in self tl to tl′. swap r₁ (inj₂ p, tl′) to q₂. let (r₂, u) = q₂ in u; inj₂ r₂})`
   increments every payload in the same cells, with no fuel: `mapInc_wp` is induction on a bound of
@@ -320,8 +321,68 @@ memory after `buildC`, and after `mapIncCE`, holds every node at adjacent cells 
 the payloads `[1, 2, 3]` and `[1, 1, 1]`.
 
 **Against the in-place map.** `foldOwn` frees each `Ref X` cell before its algebra runs, so
-`mapIncCE` rebuilds the list in fresh blocks. `MapMut.lean`'s `mapInc` keeps the same cells. It
-stays a hand proof over `L′`, whose node is one cell holding a pair.
+`mapIncCE` rebuilds the list in fresh blocks. The in-place map is `foldReuse`, below.
+`MapMut.lean`'s `mapInc` over `L′` (the node one cell holding a pair) stays a hand proof: `L′`
+is outside `FShape`.
+
+## The owned fold with reuse
+
+Functional-but-in-place (Perceus-style reuse): the owned fold hands its algebra the cells it
+consumed, so the algebra can rebuild into them.
+
+    Γ dead   T ∈ FShape
+    ──────────────────────────────────────────────────────
+    Δ; Γ ⊢ foldReuse : !U(A″_R ⊸ F R) ⊸ !U(μX. T ⊸ F R)
+
+- `A″_R = T.resR R`: `T` with `R` at a head `X` and **`Ref 1 ⊗ R` at every `Ref X`**: the
+  emptied cell and the fold of its former content. Any `R`.
+- **No new type former.** The reuse token ("`Hole`") is an owned `Ref 1`. `swap : Ref A ⊸ B ⊸
+  Ref B ⊗ A` already changes a cell's content type, so the token is made by `swap w ()` and
+  consumed by `swap c x`. Two closed derived functions name the operations (`ReuseList.lean`):
+  `take = λr. swap r () : Ref A ⊸ F (Ref 1 ⊗ A)` and `fill : Ref 1 ⊗ A ⊸ F (Ref A)` (swap in, drop
+  the `()`). In this model every leaf is one cell, whatever its type, so a token of `Ref 1` can be
+  filled at any `A`. A token is ordinary owned data. The algebra may also free it, or return it.
+- The term is `foldOwn`'s with the `Ref X` clause of the traversal replaced: `travR` at `Ref X` is
+  `swap w () to q. let (c, v) = q in h v to r. (c, r)`, where `foldOwn`'s is `h (free w)`.
+  `foldReuse = λg. λw. self g w`, recursion by the Z combinator; machine unchanged.
+- `foldReuse_compatX`: `foldOwn_compatX`'s proof with the `Ref X` case of the traversal
+  (`travR_spec`) through `wpTS_swap`. The measure is the same: the content's resource is smaller
+  than the cell's (`dsize_tail_lt` at the cell before the swap), and the emptied cell is carried
+  as a frame across the recursive call. No world invariant is added and `vC` is unchanged.
+  `fundamentalC` gains the case.
+
+**The in-place map, derived** (`ReuseList.lean`). Over `L_E = μX. 1 ⊕ (Ref E ⊗ Ref X)` the
+algebra at a cons node sees `(rn, (c, t)) : Ref E ⊗ (Ref 1 ⊗ L_E′)`.
+`mapRAlg f = case r {inj₁ u. inj₁ u | inj₂ p. let (rn, q) = p in let (c, x) = take rn in
+inj₂ (fill (c, f x), fill q)}` refills the value leaf with `f` of its content and the emptied
+next leaf with the mapped tail. It is a `CDerives` derivation for any closed `f : E ⊸ F E′`
+(`d_mapRAlg`), and `mapRE f = foldReuse (mapRAlg f) : U(L_E ⊸ F L_E′)` (`d_mapR`).
+
+| Function | Type (`fundamentalC`) |
+|---|---|
+| `mapIncRE = foldReuse (mapRAlg inc)` | `U(L ⊸ F L)` (`mapIncR_semV`) |
+| `isZeroRE = foldReuse (mapRAlg isZero)` | `U(L_N ⊸ F L_B)` (`isZeroR_semV`): the element type changes |
+
+| Program | Derivation | Runs | Interpreter |
+|---|---|---|---|
+| `mapProgR`: build `[0, 0, 0]`, borrow mutably, `withswap` + `mapIncRE`, end, free the cell, `toPureCE` (`MapMut.lean`'s program) | `mapProgR_derives` | `mapProgR_runs` | `[1, 1, 1]`, no cell left (`mapProgR_eval`) |
+
+**In place** (the interpreter, `decide`; `nodesOf` reads the list as `(address, payload)` with
+each node at adjacent cells `(ℓ, ℓ + 1)`):
+
+- `buildC0_nodes`: the built `[0, 0, 0]` has nodes at `4, 2, 0`.
+- `mapIncR_inPlace`: after `mapIncRE`, `[1, 1, 1]` at `4, 2, 0`, the same addresses.
+- `mapIncC_moves`: after `foldOwn`'s `mapIncCE`, the nodes are at `10, 8, 6`.
+- `isZeroR_inPlace`: `[0, 1, 0]` at `4, 2, 0` becomes `[true, false, true]` at `4, 2, 0`.
+
+**A map that changes the element type** reuses the cells too (`isZeroRE`, `N → B`). In this
+model a leaf is one cell at every type, so "leaf sizes match" holds of every pair of types; a
+layout with sized leaves would need the token to carry its size, which is not modelled.
+
+**Not done.** A shared (`Imm`/`Mut`) structure is not reused: `foldReuse` consumes an owned one.
+The token is not restricted to the node it came from: the algebra may put a cell of one node
+into another (still one cell per leaf, still owned); joining leaves from two blocks into one
+node handle is `CommonList`'s `crossPack` concern, a checker rule, unchanged here.
 
 ## Against the scope note
 

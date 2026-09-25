@@ -19,8 +19,8 @@ holding the list is borrowed mutably (`withbor`), and the callback maps the whol
 
 The derived versions are in `CommonList.lean`: over the same list with each node one block
 (`μX. 1 ⊕ (Ref N ⊗ Ref X)`), `mapIncCE` and `toPureCE` are `foldOwn` of `CDerives` algebras and
-`mapProgC` is one closed derivation, with no hand proof.  `mapInc` here stays the in-place map
-(same cells); `mapIncCE` rebuilds the list in fresh blocks.
+`mapProgC` is one closed derivation, with no hand proof; `mapIncCE` rebuilds the list in fresh
+blocks.  The in-place map over that list is `ReuseList.lean`'s `mapIncRE`, a `foldReuse`.
 -/
 
 noncomputable section
