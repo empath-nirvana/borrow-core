@@ -47,3 +47,8 @@ roots = ["Relaxed"]
 name = "Records"
 srcDir = "experiments/Records"
 roots = ["Records"]
+
+[[lean_lib]]
+name = "FrameEnd"
+srcDir = "experiments/FrameEnd"
+roots = ["FrameEnd"]
