@@ -57,3 +57,8 @@ roots = ["FrameEnd"]
 name = "Places"
 srcDir = "experiments/Places"
 roots = ["Places"]
+
+[[lean_lib]]
+name = "LeafPlaces"
+srcDir = "experiments/LeafPlaces"
+roots = ["LeafPlaces"]
