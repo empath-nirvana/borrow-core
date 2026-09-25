@@ -11,8 +11,8 @@ a thunk of `D A`); `close` (`π₂`) disposes of an unfinished computation.
 
     f = λs. ⟨step s π₁ to x. case x {inj₁ a. now a | inj₂ s′. later (f s′)}, step s π₂⟩
 
-(`fixD_next`, `fixD_close`): the recursive handle `f` occurs only under `later`, applied to the
-next state.  `▷` is the shape of the step's type: the step's `next` returns, under `F`, either a
+(`etaD_next`, `etaD_close`, `nextKS_now`, `nextKS_later`): the recursive handle `f` occurs only
+under `later`, applied to the next state.  `▷` is the shape of the step's type: the step's `next` returns, under `F`, either a
 result or a state `S` — never a `D A` — so it cannot observe the recursive computation before a
 `later` has been emitted.  The recursion itself is the rule's: the Z combinator
 (`Fix.lean`) over `fBD`.

@@ -9,6 +9,7 @@ out whether the typed world's choosers and invariants accept a recursive payload
 Build: `lake build CBPVMu`. `experiments/CBPVWorld` is forked into `CBPVMu/` under the
 namespace `BoCa.Fig16.LogRel.CBPVMu`, without its embedding files (`Embedding`,
 `EmbeddingExamples`). Everything below it (`Paper`, `Support`) is imported unchanged.
+`DelayNaive.lean` also imports `experiments/LeafPlaces`' `Steps.lean` (step inversion).
 
 Every result's axioms are `[propext, Classical.choice, Quot.sound]` or a subset. There is no
 `sorry`, `axiom`, `native_decide`, `implemented_by`, `opaque`, `partial` or `unsafe`.
@@ -32,6 +33,9 @@ Every result's axioms are `[propext, Classical.choice, Quot.sound]` or a subset.
 | `Blocks.lean` (new) | `experiments/LeafPlaces`' block view at `VTy`: `Shape`, `refTy`, `allocS`/`freeS` and their derived typing, `Packed`, `packed_node`, block allocation (`wpTS_allocS`) |
 | `CommonList.lean` (new) | the common list shape `μX. 1 ⊕ Ref (N ⊗ X)` with each node one block; sum, map, `toPure` and free by the fold rules |
 | `ReuseList.lean` (new) | the in-place map over the common list shape by `foldReuse`; `take`/`fill`; node addresses before and after |
+| `Types.lean`, `Records.lean`, `Relation.lean` | `CTy.delay A` (`D A = νX. F(A ⊕ U X) & F 1`) and its free variables, lifetime substitution, `CTyEq`; `cC`'s `delay` clause, the greatest fixed point `delayRel` of `delayF` |
+| `ShapeMu.lean`, `RelationFacts.lean`, `Computation.lean` | the `delay` cases of `TyEq`, `cC_congr`, `cC_tyEq`, the stack semantics, `cC_step` and `cC_bind` |
+| `DelayRel.lean`, `Delay.lean`, `DelayApprox.lean`, `DelayPrograms.lean`, `DelayNaive.lean` (new) | the delay type and guarded recursion (*The delay type*, below) |
 
 `Wp`, `Reborrow`, `FrameRules`, `Compatibility`, `Computation`, `Compat` and `Examples` are
 CBPVWorld's files with only the namespace changed (`bindE` is defined in `FoldImm.lean`, which
@@ -383,6 +387,87 @@ layout with sized leaves would need the token to carry its size, which is not mo
 The token is not restricted to the node it came from: the algebra may put a cell of one node
 into another (still one cell per leaf, still owned); joining leaves from two blocks into one
 node handle is `CommonList`'s `crossPack` concern, a checker rule, unchanged here.
+
+## The delay type and guarded recursion
+
+**Question.** General recursion as one rule, by a guarded `fix` on the delay type
+`D A = νX. F(A ⊕ U X) & F 1`: `next` (`π₁`) returns `now a` (`inj₁ a`) or `later t` (`inj₂ t`,
+`t : U(D A)` the rest), and `close` (`π₂`) disposes of an unfinished computation, since the state
+is linear. Does interpreting `ν` by its finite approximations agree with the direct greatest
+fixed point, how is `▷` expressed, and do the rule, the Fundamental Property and adequacy hold?
+
+**The type.** `CTy.delay A`, a computation type, so the typed world's records never see it (`U`
+is a leaf). `cC (.delay A) = delayRel (vC true A)`, the greatest fixed point
+`⋃{R | R ⊆ delayF R}` written as `∃ R` (`Relation.lean`), with the candidate indexed by the
+record list and the expression at a fixed `δ` (`D A` binds no lifetime). `delayF` is monotone by
+`wpTS_mono` alone; `cC_delay_iff`: `⟦D A⟧ = ⟦F(A ⊕ U(D A)) & F 1⟧` (`DelayRel.lean`). Every
+existing result builds with the new case; the new cases of the `CTy` inductions go through the
+unrolling.
+
+**Step 1: approximations** (`DelayApprox.lean`). `approx 0 = ⊤`, `approx (n+1) = delayF
+(approx n)`, `approxLim = ⋂ₙ approx n`.
+- `delayRel_le_approxLim`: the greatest fixed point lies below the intersection.
+- `approxLim_le_delayRel`: the converse holds if `wpTS` commutes with the intersection of a
+  decreasing chain of postconditions (`WpChainCommutes`); `delayRel_iff_approxLim` under it.
+  Inside `delayF` everything else commutes (`delayQ_lim`): the `⌜w = injᵢ v⌝ ⋆ _` splits are
+  forced, the disjunction is decided by the value, `thunkR` is a `∀`.
+- What is left is the `∃` in `wpTS` over the post-state witness
+  `(ρ', ρp, fρ', fρ'p, π, v, μ, μ', ps', ls')`: each `n` may choose its own ghost world, frame
+  part and record list. Over a finite witness type a decreasing chain commutes with `∃`
+  (`exists_forall_of_finite`); over `ℕ` it does not (`not_exists_forall`, `n ≤ w`). `wpTS`'s
+  witnesses range over worlds (lifetimes in `ℕᵒᵈ`, nested witnesses) and lists, so the finite
+  case does not apply; the delay functor's own branching (`π₁`/`π₂`, `inj₁`/`inj₂`) is finite
+  but is not where the `∃` is. I have not derived `WpChainCommutes` and have not verified that
+  any obstruction to it is real.
+- The rule below does not need the approximations: it is proved at the greatest fixed point.
+
+**Step 2: `▷`, by the shape of the step's type; no new former.**
+- `f = λd. later (g d)` with `g : U(D A) ⊸ D A` typed like any other term is **not** a
+  guardedness condition (`DelayNaive.lean`). `skip d = ⟨(d π₁) to x. case x {inj₁ a. now a |
+  inj₂ t. t π₁}, d π₂⟩` is a derivation (`d_skip`, `skip_sem`), and `N = later (skip N)` (`NV`,
+  by the Z combinator) is not in `⟦D 1⟧` (`naive_not_delay`, `naive_not_sem`): `N`'s `next`
+  returns `later t` (`nv_next_run`), and every run of `t`'s `next` revisits its start
+  (`cyc_step`, 14 deterministic steps), so none terminates (`tv_next_diverges`). `skip` observes
+  its argument twice per `later` it emits.
+- A `▷` former read as the one-step shift on approximations needs Step 1's converse, and every
+  term to be non-expansive at every level; the unindexed relation gives neither.
+- What works: the step's `next` returns, under `F`, a result or a **state**, never a `D A`, so
+  it cannot observe the recursive computation. `later` is `inj₂` of the next state; the rule
+  supplies the recursive call.
+
+**Step 3: the rule** (`Delay.lean`, `Fundamental.lean`).
+- `fixD : !U(S ⊸ F(A ⊕ S) & F 1) ⊸ !U(S ⊸ D A)`, a closed constant (`fixDV`, the Z combinator
+  over `fBD`), a `CDerives` rule (`CDerives.fixD`) with `delayIn`/`delayOut` (`D A` and its
+  unrolling, on the same term). `fixD step s` is the fixed point
+  `f s = ⟨step s π₁ to x. case x {inj₁ a. now a | inj₂ s′. later (f s′)}, step s π₂⟩`
+  (`etaD_next`, `etaD_close`, `nextKS_now`, `nextKS_later`).
+- **`fixD_compatX`**: coinduction with the candidate `{fixD step s | s ∈ 𝒱⟦S⟧}` (`candD`,
+  `candD_post`). No approximation and no index.
+- `fundamentalC` covers `fixD`, `delayIn`, `delayOut`; `adequacyC`, `theorem32` are unchanged.
+
+**Step 4: adequacy** (`DelayPrograms.lean`). `driveE n` observes `d : U(D A)` at most `n`
+times: `inj₁ a` at `now a`, else `close` after the `n`-th `later` and `inj₂ ()`. `d_drive`: it
+derives at `F(A ⊕ 1)` for every `n`, so for a closed `e : U(D A)`, `e to d. driveE n` is an
+ordinary closed program (`drive_derives`). **`drive_runs_unit`** (`D 1`) and **`drive_runs_nat`**
+(`D N`): from the empty memory to `inj₁` of a result or `inj₂ ()`, and the empty memory.
+
+**Step 5: programs** (`DelayPrograms.lean`), each a derivation (`progD`: state, `fixD step`,
+the thunk `⟨(f s) π₁, (f s) π₂⟩`, the driver) with no hand proof; runs by `theorem32`, and the
+interpreter by `decide`.
+- (a) `countDownProg`: state `(n, acc) : N ⊗ N`, `now acc` at `n = 0`, else
+  `later (n - 1, acc + 1)`; `close` frees both numerals. From `(3, 0)`, ten observations:
+  `countDownProg_runs`; the interpreter returns `now 3` with no cell left (`countDownProg_eval`).
+- (b) `loopProg`: `fixD (λs. ⟨return later s, return s⟩) ()`, never `now`; five observations
+  then `close` (`loopProg_runs`, `loopProg_eval`: closed, no cell).
+- (c) `counterProg`: state `r : Ref N`; `next` increments the cell in place by two `swap`s and
+  emits `later r`; `close` frees the cell and its numeral. Four observations then `close`
+  (`counterProg_runs`, `counterProg_eval`: closed, no cell).
+
+**Not done.** `fixD` is iteration with a state: a recursive call in non-tail position needs an
+explicit stack in the state (a `μ` list) or a `bind` on `D`, which is expressible as a `fixD`
+with state `U(D A) ⊕ U(D B)` and a `!` continuation but is not written here. Collatz is not
+written (unary halving is a fold of its own). `D A` has no `Imm̲`/`Mut` interaction beyond `U`
+being a leaf. The continuity question of Step 1 is open.
 
 ## Against the scope note
 

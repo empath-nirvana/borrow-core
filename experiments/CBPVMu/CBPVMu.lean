@@ -33,3 +33,4 @@ import CBPVMu.CommonList
 import CBPVMu.ReuseList
 import CBPVMu.DelayApprox
 import CBPVMu.DelayPrograms
+import CBPVMu.DelayNaive
