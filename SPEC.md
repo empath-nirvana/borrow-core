@@ -278,7 +278,7 @@ From `experiments/Recursion`, `CBPVMu`.
 
 Each has an observation and `close`; `close` is required because no rule forgets a `U C`, and
 it releases a linear state. Both are interpreted as greatest fixed points; `delayIn`/`delayOut`
-and `strIn`/`strOut` convert to and from the unrolling. Streams are built by coiteration:
+and `streamIn`/`streamOut` convert to and from the unrolling. Streams are built by coiteration:
 
     unfoldS : !U(S ⊸ F(A ⊗ S) & F 1) ⊸ !U(S ⊸ Stream A)
 
@@ -401,12 +401,23 @@ which is outside the heap accounting of adequacy.
 
 ## 10. Entry 9 — persistent variables
 
-A value type is **persistent** when its values hold no resource: `!A`, `1`, `0`, `I32`, `I64`, and
-`⊗`/`⊕` of persistent types. Context splitting may duplicate a live slot of persistent type, and a
-rule that requires a dead context may drop one. So persistent variables are used freely, and
-`copy_bang`/`forget_bang` are needed only where a persistent value is to be made explicit.
-Soundness: such a slot's resource is `∅`, and `∅ = ∅ ⋆ ∅`. The paper's `Ctx.Split` is unchanged;
-`Core` uses an extension of it, so the embedding (§3) still applies.
+A value type is **persistent** when its values hold no resource (`VTy.persistent`,
+`Core/Persistent.lean`): `1`, `0`, `Unk`, `!A` for any `A`, and `⊗`, `⊕`, `[@a]` and `μ` over
+persistent types. `I32` and `I64` (§8) will be persistent. `U C` is not, because a thunk holds its
+closure's resource; nor are `Ref`, `Imm` and `Mut`.
+
+`Core` extends the paper's context relations with one constructor each: `Ctx.SplitP` may send a
+persistent live slot to both sides, `Ctx.DeadP` may drop one, and `Ctx.SoloP` may drop one beside
+the variable used. So persistent variables are copied and dropped implicitly, at dead-context rules
+and at variable leaves alike, and `copy_bang`/`forget_bang` are needed only to make that explicit.
+Soundness (`vCE_empty_of_persistent`): at a persistent type the value relation holds only at `∅`,
+and `∅ = ∅ ⋆ ∅`. The paper's `Ctx.Split` is unchanged, and every paper relation converts into its
+extension, so the embedding (§3) still applies.
+
+### Open
+
+- The promotion premise `!Γ` (every live slot at `!A`) is not widened to "every live slot
+  persistent".
 
 ---
 
@@ -430,7 +441,7 @@ interpreter runs; the compiler lowers their operations to host calls (WASI `fd_r
 ## Status
 
 Entries 2–6 are implemented in the library directory `Core/`, with one `fundamentalC` and
-`adequacyC` covering every rule. Entry 9 (§10) is being implemented. Entries 7, 8 and 10
+`adequacyC` covering every rule. Entry 9 (§10) is implemented in `Core/`. Entries 7, 8 and 10
 (§8, §9, §11) are specified only.
 
 ---

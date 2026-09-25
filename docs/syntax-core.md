@@ -209,7 +209,7 @@ Mode: **S** synthesizes, **C** checks only, **S/C** synthesizes when its parts d
 | `Fun 'x < @. M` | `λ_. M` (dead binder) | `allI` `Fu:106` | S/C |
 | `M [@]` | `app M ()` | `allE` `Fu:112` | S |
 | `delay_in M` / `delay_out M` | `M` | `delayIn` / `delayOut` `Fu:198,200` | C / S |
-| `str_in M` / `str_out M` | `M` | `strIn` / `strOut` `Fu:206,208` | C / S |
+| `stream_in M` / `stream_out M` | `M` | `streamIn` / `streamOut` `Fu:206,208` | C / S |
 | `(M : C)` | `M` | none (ascription) | S |
 
 `[@]` takes any lifetime, not only a variable. Its premise is `Δ ⊨ @ ⊏ @b`, where `@b` is the
@@ -235,7 +235,7 @@ differently.
 
 `thunkV` types the term `.val (.lam N)` (`Fu:64`), so the body of `thunkv`/`!thunkv` must be a
 computation whose erasure is a λ. That means one of `fun …`, `Fun …`, `<M, N>`, or
-`delay_in`/`delay_out`/`str_in`/`str_out`/ascription wrapped around one of these. A computation
+`delay_in`/`delay_out`/`stream_in`/`stream_out`/ascription wrapped around one of these. A computation
 of type `F A` uses `thunk` instead.
 
 These are rejected: `thunkv (force t)` (erases to `t`), `thunkv (M x)`, `thunkv M.1`,
@@ -257,7 +257,7 @@ into a λ at its type. For example, a `U (delay A)` from `f : U (S -o delay A)` 
   `[@]`. So `force f s .1` is `((force f) s).1`.
 - **`force x` is an atom**, because it takes only a variable. `force f s` is `(force f) s`.
 - **Other prefix keywords take a whole spine**: `return`, `roll`, `unroll`, `inl`, `inr`,
-  `unbang`, `unbox`, `boxed[@]`, `run`, `delay_in`, `delay_out`, `str_in`, `str_out`,
+  `unbang`, `unbox`, `boxed[@]`, `run`, `delay_in`, `delay_out`, `stream_in`, `stream_out`,
   `absurd`. So `return f x` is `return (f x)`, and `roll inr n` is `roll (inr n)`. On the
   other hand, `unbang nat_copy ['y] b` is `unbang (nat_copy ['y] b)`, which is ill-typed; write
   `(unbang nat_copy) ['y] b`. Likewise write `(delay_out (force d)).1`.
@@ -267,23 +267,26 @@ into a λ at its type. For example, a `U (delay A)` from `f : U (S -o delay A)` 
 
 ## 7. Linearity
 
-Contexts are position-preserving lists of slots with a liveness bit (`Cx:11`). `Ctx.Split`
-(`Cx:19`) partitions the live slots. The leaves are exact: `var` and `force` need `Ctx.Solo`,
-where the one variable is live and every other slot is dead (`S2:53`), and `unitI`/constants
-need `Ctx.Dead` (`S2:47`). It follows that:
+Contexts are position-preserving lists of slots with a liveness bit (`Cx:11`). `Core` splits them
+with `Ctx.SplitP`, `Ctx.DeadP` and `Ctx.SoloP` (`Core/Persistent.lean`, SPEC §10), which extend the
+paper's `Ctx.Split`/`Dead`/`Solo` with one case each for **persistent** slots. A type is persistent
+when it holds no resource: `1`, `0`, `unk`, `!A`, and `*`, `+`, `box @` and `mu` over persistent
+types (`VTy.persistent`). It follows that:
 
-- **There is no implicit weakening or contraction, not even at `!A`.** A variable of type `!A`
-  is consumed by its one use like any other. Duplicate it with `copy_bang[A] x : !A * !A` and
-  discard it with `forget_bang[A] x : 1` (`Fu:124,126`). `imm @ A` has `copy[@, A]` and
-  `forget_imm[@, A]`; `mut @ A` has `forget_mut[@, A]`; `unk` has `forget_unk`. `ref A`,
-  `U C` and `box @ A` have no forget.
-- **Every `case` arm consumes the same live variables.** `sumE` gives both arms the same
+- **Persistent variables are copied and dropped implicitly.** A split may send a persistent live
+  slot to both sides, and a dead-context rule or a variable leaf may drop one.
+  `copy_bang[A]`/`forget_bang[A]` (`Fu:125,127`) remain, to make it explicit.
+- **Every other variable is used exactly once.** `imm @ A` has `copy[@, A]` and
+  `forget_imm[@, A]`; `mut @ A` has `forget_mut[@, A]`; `ref A`, `U C` and `box @ A` over a
+  non-persistent `A` have no forget. `U C` is not persistent, because a thunk holds its closure's
+  resource.
+- **Every `case` arm consumes the same non-persistent live variables.** `sumE` gives both arms the same
   `Γb` (`Fu:97`), so a variable live in `Γb` is consumed by each arm or by neither.
 - **Each `<M, N>` component consumes everything the pair consumes.** `withI` gives both
   components the whole `Γ` (`Fu:81`). This is not contraction, because only one component
   ever runs: `< (delay_out (force f s)).1, (delay_out (force f s)).2 >` uses `f` and `s` once
   in each component.
-- **The only discarding forms are `<>` and `absurd V`.** `topI` holds at any `Γ` (`Fu:89`),
+- **Apart from persistent slots, the only discarding forms are `<>` and `absurd V`.** `topI` holds at any `Γ` (`Fu:89`),
   and `zeroE` absorbs every slot that `V` does not use (`Fu:103`). Section 11 describes how the
   checker handles this.
 - **Constants and `def`s consume nothing.** They are typed at a dead context.
@@ -302,11 +305,11 @@ constant.
 | `free[A]` | `ref A => A` | `free` `Fu:139` | none |
 | `swap[A, B]` | `ref A => B => ref B * A` | `swap` `Fu:141`, `Ty:1395` | none |
 | `copy[@a, A]` | `imm @a A => imm @a A * imm @a A` | `copy` `Fu:142`, `Ty:1398` | none |
-| `copy_bang[A]` | `!A => !A * !A` | `copyBang` `Fu:124` | none |
+| `copy_bang[A]` | `!A => !A * !A` | `copyBang` `Fu:125` | none |
 | `forget_imm[@a, A]` | `imm @a A => 1` | `forgetImm` `Fu:143` | none |
 | `forget_mut[@a, A]` | `mut @a A => 1` | `forgetMut` `Fu:144` | none |
 | `forget_unk` | `unk => 1` | `forgetUnk` `Fu:145` | none |
-| `forget_bang[A]` | `!A => 1` | `forgetBang` `Fu:126` | none |
+| `forget_bang[A]` | `!A => 1` | `forgetBang` `Fu:127` | none |
 | `withbor1['x, A, B]` | `ref A => (all 'x < dom. imm 'x A => box 'x B) => ref A * B` | `withbor1` `Fu:146`, `Ty:1411` | `x` fresh; `VScoped Δ A`; `'x ∉ FV(A), FV(B)` |
 | `withbor2['x, @b, A, B]` | `ref A => (all 'x < dom. mut 'x A => box 'x B) => ref A * B` | `withbor2` `Fu:149`, `Ty:1416` | `x` fresh; `Δ ⊨ @b` and `Δ ⊢ A ⊐ @b` (the `∃ b` witness); `'x ∉ FV(A), FV(B)` |
 | `withbor3[@a, 'x, A, B]` | `mut @a A => (all 'x < dom. mut 'x A => box 'x B) => mut @a A * B` | `withbor3` `Fu:153`, `Ty:1421` | `x` fresh; `'x ∉ FV(A), FV(B)` |
@@ -401,7 +404,7 @@ keyword because each mode is a separate theorem.
     goes through `fold_*`, `fixd` or `unfold_s`.
 - **`extern name : A`** adds a live slot of type `A` to `main`'s initial context. The last
   declared extern gets index 0. `A` must be closed (no free lifetime variables). `main` must
-  consume every extern, and a `!`-typed extern is no exception (use `forget_bang`).
+  consume every non-persistent extern; persistent externs (such as `!`-typed ones) may go unused.
 - **`main : C = M`** is checked at `Δ = ∅` and `Γ =` the externs. `C` is any computation type.
 
 What a program means:
@@ -421,7 +424,7 @@ Drivers such as `driveE n` (`Core/DelayPrograms.lean:37`) are Lean meta-level re
 **Bidirectional.** Synthesis and checking follow the mode column of section 6. The annotations
 the checker cannot infer are required: `fun` binders, `Fun` bounds, every bracket argument of
 constants and derived forms, and `boxed[@]`. `inl`, `inr`, `roll`, `absurd`, `delay_in` and
-`str_in` only check, and an ascription `(V : A)` supplies the type.
+`stream_in` only check, and an ascription `(V : A)` supplies the type.
 
 **Contexts: input/output with ⊤-slack (Hodas and Miller 1994).** The judgment is
 `Δ; Γin ⊢ e ; Γout, s`. `Γout` is `Γin` with the consumed slots marked dead, and `s` is a slack
@@ -636,7 +639,7 @@ How this checks:
 3. There are two thunk keywords, `thunk` and `thunkv`, and two promoted ones. The de Bruijn
    layout is given, along with `thunkv`'s literal-λ restriction and the eta workaround
    (§6.3–§6.4).
-4. Linearity: no weakening or contraction at `!A`, explicit `copy_bang`/`forget_bang`, equal
+4. Linearity: implicit copy/drop only at persistent types (SPEC §10), exact use otherwise, equal
    consumption across `case` arms and `<,>` components, and `<>`/`absurd` as the only discards
    (§7).
 5. Constants with complete brackets, one keyword per rule, and their side conditions. Derived
