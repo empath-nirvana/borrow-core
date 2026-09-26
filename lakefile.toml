@@ -1,5 +1,5 @@
 name = "borrow_core"
-defaultTargets = ["Paper", "Support", "Examples", "Core"]
+defaultTargets = ["Paper", "Support", "Examples", "Core", "Frontend", "bcc"]
 
 [[require]]
 name = "mathlib"
@@ -17,6 +17,13 @@ name = "Examples"
 
 [[lean_lib]]
 name = "Core"
+
+[[lean_lib]]
+name = "Frontend"
+
+[[lean_exe]]
+name = "bcc"
+root = "Frontend.Main"
 
 # Experiments: not default targets; the library never imports them.
 
