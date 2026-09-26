@@ -1,12 +1,16 @@
 import Frontend.Parser
 import Frontend.Print
+import Frontend.Check.Program
 /-!
 # Frontend — `bcc`
 
     lake exe bcc parse <file>   parse, and check that printing and re-parsing gives the same AST
     lake exe bcc print <file>   parse and print in the canonical ASCII spelling
+    lake exe bcc check <file>   parse and type-check: print each declaration's type, or the error
 
-Exit code 0 on success, 1 on a syntax error or a round-trip mismatch, 2 on bad usage.
+Exit code 0 on success, 1 on a syntax error, a round-trip mismatch or a type error, 2 on bad
+usage. A successful `check` has built a `CDerives` derivation of `main`'s erasure
+(`Frontend.Check.checkProgram_sound`).
 -/
 
 open Frontend
@@ -23,7 +27,7 @@ def roundTrip (p : Program) : Except String Unit := do
 def main (argv : List String) : IO UInt32 := do
   match argv with
   | [cmd, file] =>
-    if cmd != "parse" && cmd != "print" then
+    if cmd != "parse" && cmd != "print" && cmd != "check" then
       IO.eprintln s!"unknown command `{cmd}`"; return 2
     let src ← IO.FS.readFile file
     match parseProgram src with
@@ -34,6 +38,14 @@ def main (argv : List String) : IO UInt32 := do
       if cmd == "print" then
         IO.print p.pp
         return 0
+      if cmd == "check" then
+        match Check.checkProgram p with
+        | .error e =>
+          IO.eprintln s!"{file}:{e.render}"
+          return 1
+        | .ok r =>
+          for l in r.lines do IO.println l
+          return 0
       match roundTrip p with
       | .error msg =>
         IO.eprintln s!"{file}: {msg}"
@@ -42,5 +54,5 @@ def main (argv : List String) : IO UInt32 := do
         IO.println s!"{file}: ok, {p.decls.length} declarations"
         return 0
   | _ =>
-    IO.eprintln "usage: bcc (parse | print) <file>"
+    IO.eprintln "usage: bcc (parse | print | check) <file>"
     return 2

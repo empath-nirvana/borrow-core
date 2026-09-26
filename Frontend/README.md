@@ -1,11 +1,12 @@
 # Frontend: the core syntax
 
-A lexer, parser and printer for the textual core language of `docs/syntax-core.md` (draft 1,
-with §8a integers). Checking and erasure to `CDerives` derivations are not here yet; the AST
-keeps written names, and resolving them is the checker's work (syntax-core §1, §3, §6.3).
+A lexer, parser, printer and type checker for the textual core language of
+`docs/syntax-core.md` (draft 1, with §8a integers). The checker elaborates a program to a BoLo
+`Expr` together with a `CDerives` derivation of it (`Frontend/Check/`, below).
 
     lake exe bcc parse <file>   parse, then print, re-parse and compare the ASTs up to spans
     lake exe bcc print <file>   print in the canonical ASCII spelling
+    lake exe bcc check <file>   type-check: print each declaration's type, or the first error
     scripts/parse-corpus.sh     every corpus/*.bc parses and round-trips; every
                                 corpus/fail/*.bc fails with the message on its `-- expect:` line
 
@@ -89,3 +90,35 @@ Where draft 1 is silent or ambiguous about parsing, the parser does the followin
 17. **Lexical details.** `-o` is one token even before a letter; `--` starts a comment
     everywhere; `⊓Δ` is `dom` and `⊓` alone is `/\`; `Imm̲` (with U+0332) is `view`. Only the
     Unicode spellings of the §2 table are accepted (no `→`, `⇒`).
+
+## The checker (`Frontend/Check/`)
+
+`CDerives` (`Core/Fundamental.lean`) is the specification, and the checker is derived from it:
+every step applies one `CDerives` constructor, so what the checker returns is a derivation.
+
+| file | contents |
+|---|---|
+| `Check/Decide.lean` | `DecidableEq` on `VTy`, `CTy`, `Expr`; a `Bool` decider for each side condition, with its soundness lemma |
+| `Check/Fam.lean` | linearity: masks `u` (used), `w` (absorbable) and a derivation at every liveness `L` between them |
+| `Check/Elab.lean` | surface types, lifetimes and shapes to `Core`'s, and a printer back |
+| `Check/Rules.lean` | one builder per `CDerives` constructor |
+| `Check/Steps.lean` | the environment, messages, and the steps shared by the checker's cases |
+| `Check/Consts.lean` | constants and derived forms |
+| `Check/Checker.lean` | the bidirectional checker, `synV`/`chkV`/`synC`/`chkC` |
+| `Check/Program.lean` | declarations, `main`, and the soundness theorems |
+
+**Soundness.** `checkProgram p = .ok r` with `r.main = some c` gives
+`CDerives LifeCtx.empty c.ctx c.e (.comp c.C)` (`checkProgram_sound`): `c.e` is `main`'s
+erasure, `c.ctx` its externs, all live. `checked_sem` is the Fundamental Property at it
+(`SemC ∅ c.ctx c.e c.C`, at every host) and `checked_runs` is adequacy for a closed
+`main : F 1`. The derivation is a field of the result, built by the rule builders from the
+checked premises; there is nothing else to prove.
+
+**Linearity** (syntax-core §7, §11). Each subterm is checked against the types `T` of every slot
+in scope and reports which slots it uses (`u`) and which live slots it can take without using
+(`w`: persistent slots, dropped at leaves; every slot, under `<>` and `absurd`). Its result is a
+derivation at every liveness `L` with `u ⊆ L ⊆ u ∪ w`. The enclosing rule picks `L`: a split
+gives each side its uses and routes an unused live slot to a side that absorbs it; a `case` or
+`<,>` needs one `L` for both parts. This is the input/output reading with ⊤-slack, with the
+output chosen by the enclosing rule instead of threaded. Premises on every live slot
+(`CtxOutlives`, `Persistent`, `allI`'s `hΓx`) restrict what may be absorbed.

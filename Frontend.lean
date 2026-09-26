@@ -4,3 +4,11 @@ import Frontend.Consts
 import Frontend.Parser
 import Frontend.Print
 import Frontend.Tests
+import Frontend.Check.Decide
+import Frontend.Check.Fam
+import Frontend.Check.Elab
+import Frontend.Check.Rules
+import Frontend.Check.Steps
+import Frontend.Check.Consts
+import Frontend.Check.Checker
+import Frontend.Check.Program
