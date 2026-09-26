@@ -1,44 +1,70 @@
 -- countDownProg (Core/DelayPrograms.lean: progD, countDownStep), from the corpus review's
--- 3-countDownProg, in draft 1. The state is (n, acc); each step moves one from n to acc, and
--- the delay is driven twice and then closed.
+-- 3-countDownProg, in draft 1, over i32. The state is (n, acc); each step appends the digit n
+-- to acc and decrements n. The delay from (3, 0) is driven to its end; a second, from (5, 0),
+-- is driven twice and then closed.
+--
+-- Answer: (inl i32[321], inr ()). The digits of 321 record every step, in order: a step
+-- skipped or run twice, a state not threaded from one step to the next, or a loop that stops
+-- one step early or late gives a different number or `inr ()`. The second component is the
+-- close; `live 0` checks that it runs.
 
-type Nat = mu X. 1 + X
+def ten : i32 => i32 = thunkv fun (a : i32) -> return ((unbang host[mul32]) (a, i32[10]))
 
-def free_l_alg : !(1 + 1 => 1) =
-  !thunkv fun (r : 1 + 1) -> case r { inl u -> return u | inr u -> return u }
-
-def free_nat : Nat => 1 = unbang (fold_own[1 + X, 1] free_l_alg)
-
-def three : Nat = roll (inr (roll (inr (roll (inr (roll (inl ())))))))
-
--- The step: `now acc` at n = 0, else `later (n - 1, acc + 1)`; close frees both numerals.
+-- The step: `now acc` at n = 0, else `later (n - 1, 10 acc + n)`; close has nothing to free.
 -- Both components of `<,>` consume s (withI gives each the whole context).
-def cd_step : !U (Nat * Nat -o F (Nat + Nat * Nat) & F 1) =
-  !thunkv fun (s : Nat * Nat) ->
+def cd_step : !U (i32 * i32 -o F (i32 + i32 * i32) & F 1) =
+  !thunkv fun (s : i32 * i32) ->
     < let (n, acc) = s;
-      case unroll n {
-        inl u -> let () = u; return (inl acc)
-      | inr m -> return (inr (m, roll (inr acc)))
+      case (unbang host[eqz32]) n {
+        inl u -> return (inr ((unbang host[sub32]) (n, i32[1]),
+                              (unbang host[add32]) (ten acc, n)))
+      | inr u -> return (inl acc)
       },
       let (n, acc) = s;
-      u <- return (free_nat n);
-      let () = u;
-      return (free_nat acc) >
+      return () >
 
-main : F (Nat + 1) =
-  s0 : Nat * Nat <- return (three, roll (inl ()));
-  f <- return (unbang (fixd[Nat, Nat * Nat] cd_step));
+main : F ((i32 + 1) * (i32 + 1)) =
+  f <- return (unbang (fixd[i32, i32 * i32] cd_step));
+  s0 : i32 * i32 <- return (i32[3], i32[0]);
   -- `thunkv (force f s0)` is rejected (section 6.4): eta-expand through the unrolling.
   d0 <- return (thunkv delay_in < (delay_out (force f s0)).1, (delay_out (force f s0)).2 >);
-  o1 <- (delay_out (force d0)).1;
-  case o1 {
-    inl a -> return (inl a)
-  | inr d1 ->
-      o2 <- (delay_out (force d1)).1;
-      case o2 {
-        inl a -> return (inl a)
-      | inr d2 ->
-          u <- (delay_out (force d2)).2;
-          return (inr u)
-      }
-  }
+  a : i32 + 1 <-
+    (o1 <- (delay_out (force d0)).1;
+     case o1 {
+       inl a -> return (inl a)
+     | inr d1 ->
+         o2 <- (delay_out (force d1)).1;
+         case o2 {
+           inl a -> return (inl a)
+         | inr d2 ->
+             o3 <- (delay_out (force d2)).1;
+             case o3 {
+               inl a -> return (inl a)
+             | inr d3 ->
+                 o4 <- (delay_out (force d3)).1;
+                 case o4 {
+                   inl a -> return (inl a)
+                 | inr d4 ->
+                     u <- (delay_out (force d4)).2;
+                     return (inr u)
+                 }
+             }
+         }
+     });
+  g <- return (unbang (fixd[i32, i32 * i32] cd_step));
+  t0 : i32 * i32 <- return (i32[5], i32[0]);
+  e0 <- return (thunkv delay_in < (delay_out (force g t0)).1, (delay_out (force g t0)).2 >);
+  b : i32 + 1 <-
+    (o1 <- (delay_out (force e0)).1;
+     case o1 {
+       inl a -> return (inl a)
+     | inr e1 ->
+         o2 <- (delay_out (force e1)).1;
+         case o2 {
+           inl a -> return (inl a)
+         | inr e2 ->
+             u <- (delay_out (force e2)).2;
+             return (inr u)
+         }
+     });
+  return (a, b)

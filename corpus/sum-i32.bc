@@ -1,0 +1,56 @@
+-- The i32 counterpart of sumProg (syntax-core.md §13.2): a list of i32 cells, each node one
+-- block, borrowed `imm` by withbor1 and summed by a fold_imm whose algebra reads each element
+-- through its borrow with withload; the cell and the list are then freed by a fold_own.
+--
+-- Answer: i32[123], the sum of [100, 20, 3]. Each element is counted exactly once: a fold
+-- that drops an element gives 23, 103 or 120, and one that counts an element twice gives
+-- 223, 143 or 126.
+
+type List = mu X. 1 + (ref i32 * ref X)
+shape Node = node (leaf i32) (leaf List)
+
+def plus : i32 * i32 => i32 = unbang host[add32]
+
+-- A_R = 1 + (view 'y (ref i32) * i32) = 1 + (imm 'y i32 * i32); view 'x i32 = i32.
+def sum_alg : !(all 'y < top. 1 + (imm 'y i32 * i32) => i32) =
+  !thunkv Fun 'y < top. return (thunkv fun (r : 1 + (imm 'y i32 * i32)) ->
+    case r {
+      inl u -> return i32[0]
+    | inr p -> let (b, s) = p;
+               n <- return (withload['y, 'x, i32, i32] b
+                      (thunkv Fun 'x < dom. return (thunkv fun (v : i32) -> return (boxed['x] v))));
+               return (plus (n, s))
+    })
+
+def sum_list : !(all 'a < top. imm 'a List => i32) =
+  fold_imm[1 + (ref i32 * ref X), 'a, top, i32] sum_alg
+
+-- A′_R = 1 + (ref i32 * 1)
+def free_list_alg : !(1 + (ref i32 * 1) => 1) =
+  !thunkv fun (r : 1 + (ref i32 * 1)) ->
+    case r {
+      inl u -> return u
+    | inr p -> let (rn, u) = p; let () = u;
+               n <- return (free[i32] rn);
+               return ()
+    }
+
+def free_list : List => 1 = unbang (fold_own[1 + (ref i32 * ref X), 1] free_list_alg)
+
+def nil : List = roll (inl ())
+
+def cons : i32 * List => List =
+  thunkv fun (p : i32 * List) -> return (roll (inr (alloc_s[Node] p)))
+
+main : F i32 =
+  l <- return (cons (i32[100], cons (i32[20], cons (i32[3], nil))));
+  r <- return (alloc[List] l);
+  q <- return (withbor1['x, List, i32] r
+         (thunkv Fun 'x < top. return (thunkv fun (b : imm 'x List) ->
+            n <- return ((unbang sum_list) ['x] b);
+            return (boxed['x] n))));
+  let (r2, n) = q;
+  l2 <- return (free[List] r2);
+  u  <- return (free_list l2);
+  let () = u;
+  return n

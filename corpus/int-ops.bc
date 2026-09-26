@@ -1,5 +1,12 @@
 -- Integers (section 8a) at both widths: arithmetic, bit operations, counts, tests, the partial
 -- operations on both sides of where Wasm traps, and the conversions. `k` is used three times.
+--
+-- Answer: one component per operation, each chosen so that a plausible wrong implementation
+-- gives a different value: 3 - 5 wraps to 2^32 - 2 (swapped operands give 2); k + k needs all
+-- 64 bits; shr_s of 0x80000000 fills with ones (a logical shift gives 0x08000000); rotl64
+-- carries the top bit round to bit 0 (a shift gives 2); the tests on 0xFFFFFFFF and 2^64 - 1
+-- tell signed from unsigned; INT_MIN / -1 and a zero divisor give `inr ()`, where Wasm traps;
+-- -7 / 2 and -7 rem 2 round toward zero (-3, -1); extend_s and extend_u of 0xFFFFFFFF differ.
 
 main : F (i32 * (i64 * (i32 * (i64 * (i32 * (i64 * (i32 * ((1 + 1) * ((1 + 1) * ((1 + 1) *
          ((i32 + 1) * ((i64 + 1) * ((i32 + 1) * ((i64 + 1) * (i64 * (i64 * (i64 * i32))))))))))))))))) =
