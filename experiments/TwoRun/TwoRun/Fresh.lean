@@ -17,8 +17,8 @@ permutation is extended by swapping `σ ℓA` with `ℓB`, which fixes everythin
 names because both picks are fresh.
 
 Freshness is what makes the swap harmless.  A run that reuses a location its configuration
-still names (a dangling pointer after `free`) is not related to a fresh run by any renaming
-(`Refute.lean`).
+still names (a dangling pointer after `free`) may read through that pointer, and then no
+renaming relates it to a fresh run (`Refute.lean`, `staleE`).
 -/
 
 noncomputable section
