@@ -1,0 +1,82 @@
+-- sumProg (Core/CommonList.lean:314) transcribed: `foldProg freeCE sumCE buildC`, the library
+-- of syntax-core §13.1 bound at the top as `f` and `s`, and `progOpen buildC` (Core/Folds.lean:280)
+-- written out: build [1, 2, 3], put it in a cell, borrow it with `withbor1` and the borrower
+-- `borrowerE` (Core/Count.lean:285), free the cell, free the list, return the sum. It erases to
+-- `sumProg` exactly (Frontend/Check/CrossCheck.lean).
+
+type Nat  = mu X. 1 + X
+type List = mu X. 1 + (ref Nat * ref X)          -- = mu X. 1 + block Node, by refTy
+shape Node = node (leaf Nat) (leaf List)          -- nodeC
+
+-- countAlgV (Fo:84): the foldImm algebra at 1 + X; A_R = 1 + Nat
+def count_alg : !(all 'y < top. 1 + Nat => Nat) =
+  !thunkv Fun 'y < top. return (thunkv fun (r : 1 + Nat) ->
+    case r {
+      inl u -> let () = u; return (roll (inl ()))
+    | inr n -> return (roll (inr n))
+    })
+
+-- natCopyE (Fo:492): a fold application, as a def
+def nat_copy : !(all 'y < top. imm 'y Nat => Nat) =
+  fold_imm[1 + X, 'y, top, Nat] count_alg
+
+-- freeLAlgV (Fo:94) and freeNatE (Fo:501)
+def free_l_alg : !(1 + 1 => 1) =
+  !thunkv fun (r : 1 + 1) -> case r { inl u -> return u | inr u -> return u }
+
+def free_nat : Nat => 1 = unbang (fold_own[1 + X, 1] free_l_alg)
+
+-- addAlgV and addE (CL:112,125): curried, Nat => Nat => Nat
+def add_alg : !(1 + (Nat => Nat) => (Nat => Nat)) =
+  !thunkv fun (r : 1 + (Nat => Nat)) ->
+    case r {
+      inl u -> let () = u; return (thunkv fun (m : Nat) -> return m)
+    | inr f -> return (thunkv fun (m : Nat) -> return (f (roll (inr m))))
+    }
+
+def add : Nat => Nat => Nat = unbang (fold_own[1 + X, Nat => Nat] add_alg)
+
+-- sumAlgV (CL:171): A_R = 1 + (view 'y (ref Nat) * Nat) = 1 + (imm 'y Nat * Nat)
+def sum_alg : !(all 'y < top. 1 + (imm 'y Nat * Nat) => Nat) =
+  !thunkv Fun 'y < top. return (thunkv fun (r : 1 + (imm 'y Nat * Nat)) ->
+    case r {
+      inl u -> let () = u; return (roll (inl ()))
+    | inr p -> let (b, s) = p;
+               n <- return ((unbang nat_copy) ['y] b);
+               return (add n s)
+    })
+
+-- sumCE (CL:268)
+def sum_list : !(all 'a < top. imm 'a List => Nat) =
+  fold_imm[1 + (ref Nat * ref X), 'a, top, Nat] sum_alg
+
+-- freeCAlgV and freeCE (CL:200,280): A′_R = 1 + (ref Nat * 1)
+def free_list_alg : !(1 + (ref Nat * 1) => 1) =
+  !thunkv fun (r : 1 + (ref Nat * 1)) ->
+    case r {
+      inl u -> return u
+    | inr p -> let (rn, u) = p; let () = u;
+               n <- return (free[Nat] rn);
+               return (free_nat n)
+    }
+
+def free_list : List => 1 = unbang (fold_own[1 + (ref Nat * ref X), 1] free_list_alg)
+
+main : F Nat =
+  f <- return free_list;
+  s <- return (unbang sum_list);
+  l : List <- return (roll (inr (alloc_s[Node] (roll (inr (roll (inl ()))),
+         roll (inr (alloc_s[Node] (roll (inr (roll (inr (roll (inl ()))))),
+           roll (inr (alloc_s[Node] (roll (inr (roll (inr (roll (inr (roll (inl ()))))))),
+             roll (inl ())))))))))));
+  r <- return (alloc[List] l);
+  g <- return s;
+  q <- return (withbor1['x, List, Nat] r
+         (thunkv Fun 'x < top. return (thunkv fun (b : imm 'x List) ->
+            n <- return (g ['x] b);
+            return (boxed['x] n))));
+  let (r2, n) = q;
+  l2 <- return (free[List] r2);
+  u <- return (f l2);
+  let () = u;
+  return n

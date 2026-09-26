@@ -12,3 +12,4 @@ import Frontend.Check.Steps
 import Frontend.Check.Consts
 import Frontend.Check.Checker
 import Frontend.Check.Program
+import Frontend.Check.CrossCheck

@@ -94,38 +94,101 @@ Where draft 1 is silent or ambiguous about parsing, the parser does the followin
 ## The checker (`Frontend/Check/`)
 
 `CDerives` (`Core/Fundamental.lean`) is the specification, and the checker is derived from it:
-every step applies one `CDerives` constructor, so what the checker returns is a derivation.
+every step applies one `CDerives` constructor (or one Core theorem concluding a `CDerives`
+judgment, for the derived forms of syntax-core §9), so what the checker returns is a derivation.
+
+    lake exe bcc check <file>     print each declaration's type, or the first error
+    scripts/check-corpus.sh       corpus/*.bc check (except `-- check: parse-only`);
+                                  corpus/reject/*.bc are rejected with their `-- expect:` message
 
 | file | contents |
 |---|---|
 | `Check/Decide.lean` | `DecidableEq` on `VTy`, `CTy`, `Expr`; a `Bool` decider for each side condition, with its soundness lemma |
-| `Check/Fam.lean` | linearity: masks `u` (used), `w` (absorbable) and a derivation at every liveness `L` between them |
-| `Check/Elab.lean` | surface types, lifetimes and shapes to `Core`'s, and a printer back |
+| `Check/Fam.lean` | linearity: masks of used and absorbable slots, and a derivation at every liveness between them |
+| `Check/Elab.lean` | surface lifetimes, types and shapes to `Core`'s; a printer back |
 | `Check/Rules.lean` | one builder per `CDerives` constructor |
 | `Check/Steps.lean` | the environment, messages, and the steps shared by the checker's cases |
-| `Check/Consts.lean` | constants and derived forms |
+| `Check/Consts.lean` | constants (§8, §8a) and derived forms (§9) |
 | `Check/Checker.lean` | the bidirectional checker, `synV`/`chkV`/`synC`/`chkC` |
 | `Check/Program.lean` | declarations, `main`, and the soundness theorems |
+| `Check/CrossCheck.lean` | erasures compared with `Core/`'s hand-written terms, by kernel evaluation |
 
-**Soundness.** `checkProgram p = .ok r` with `r.main = some c` gives
-`CDerives LifeCtx.empty c.ctx c.e (.comp c.C)` (`checkProgram_sound`): `c.e` is `main`'s
-erasure, `c.ctx` its externs, all live. `checked_sem` is the Fundamental Property at it
-(`SemC ∅ c.ctx c.e c.C`, at every host) and `checked_runs` is adequacy for a closed
-`main : F 1`. The derivation is a field of the result, built by the rule builders from the
-checked premises; there is nothing else to prove.
+### Soundness
 
-**Linearity** (syntax-core §7, §11). Each subterm is checked against the types `T` of every slot
-in scope and reports which slots it uses (`u`) and which live slots it can take without using
-(`w`: persistent slots, dropped at leaves; every slot, under `<>` and `absurd`). Its result is a
-derivation at every liveness `L` with `u ⊆ L ⊆ u ∪ w`. The enclosing rule picks `L`: a split
-gives each side its uses and routes an unused live slot to a side that absorbs it; a `case` or
-`<,>` needs one `L` for both parts. This is the input/output reading with ⊤-slack, with the
-output chosen by the enclosing rule instead of threaded. Premises on every live slot
-(`CtxOutlives`, `Persistent`, `allI`'s `hΓx`) restrict what may be absorbed.
+    theorem checkProgram_sound {p : Program} {r : Report} {c : Checked}
+        (h : checkProgram p = .ok r) (hc : r.main = some c) :
+        CDerives LifeCtx.empty c.ctx c.e (.comp c.C)
 
-**Constants and derived forms** (syntax-core §8, §8a, §9) are one constructor or one Lean theorem
-each (`Check/Consts.lean`): `alloc`…`withswap`, `fold_imm`/`fold_own`/`fold_reuse` with the shape
-decoded by §5's `dec`, `fixd`, `unfold_s`, `i32[n]`/`i64[n]`, `host[op]`, and `alloc_s`,
-`free_s`, `withbor_s_*`, `withbor_f2_*` (`d_allocS`, `d_freeS`, `withborS{M,I}_wf`,
-`withbor{M,I}2_wf`) and `shorten_*` (`shortenE_wf`). Binder arguments are numbered `Δ.freshVar`
-(§3); `withbor_f2`'s internal `'a`, `'b` are `Δ.freshVar` and `Δ.freshVar + 1` (§9).
+`c.e` is `main`'s erasure, `c.C` its type and `c.ctx` its externs, the last declared at index 0,
+all live. `checked_sem` is the Fundamental Property at it (`SemC ∅ c.ctx c.e c.C`, at every
+host), and `checked_runs` adequacy for a closed `main : F 1`.
+
+**How derivations are represented.** The checker returns, for each subterm, a `Res Δ T j`: the
+erasure `e` and a `Fam`, which holds masks `u` (the slots the subterm uses) and `w` (the live
+slots it can be given without using them) over the slot types `T`, and a proof of
+`CDerives Δ (mkCtx T L) e j` for every liveness `L` with `u ⊆ L ⊆ u ∪ w`. A `Res` is built only by
+the rule builders of `Rules.lean`/`Consts.lean`, each of which applies its constructor to the
+premises' proofs, with its side conditions discharged by the soundness lemmas of `Decide.lean`.
+So the theorem above is the `deriv` field of the result; there is no separate proof, and no
+data-level derivation tree to trust. The derivations are proofs, erased at run time: `bcc` runs
+the checker compiled, and `CrossCheck.lean` runs it in the kernel.
+
+**Linearity** (syntax-core §7, §11). `w` holds the persistent slots at every leaf
+(`Ctx.DeadP.drop`, `Ctx.SoloP.skip`) and every slot under `<>` and `absurd` (⊤-slack). The
+enclosing rule chooses `L`: a split (`Ctx.SplitP`) gives each side its uses, a slot used by both
+sides only if it is persistent, and routes an unused live slot to a side that absorbs it; a
+`case` or `<,>` needs one `L` for both parts, so each part's uses must be used or absorbed by the
+other (`Fam.merge`); a binder's slot must be used or absorbed when its scope closes. A premise on
+every live slot (`CtxOutlives`, `Persistent`, `allI`'s `hΓx`) is checked on the used slots and
+restricts what may be absorbed. This is Hodas–Miller's input/output reading with the output
+chosen by the enclosing rule instead of threaded.
+
+**Cross-check.** `CrossCheck.lean` proves by `decide +kernel` that the ten `def`s of §13.1
+erase to `countAlgV`, `natCopyE`, `freeLAlgV`, `freeNatE`, `addAlgV`, `addE`, `sumAlgV`,
+`sumCE`, `freeCAlgV` and `freeCE`, and that `corpus/sum-prog-exact.bc` and
+`corpus/count-down-exact.bc` check at the empty context and erase to `sumProg` and
+`countDownProg`; `sumProg_derives_bcc` and `countDownProg_derives_bcc` re-derive those
+judgments from `bcc`'s derivations. The parser runs at elaboration time (`bcc_program%`): parsing
+these files in the kernel takes more than ten minutes.
+
+### Incompleteness
+
+These are the known ways a derivation can exist that the checker does not find. Each is a limit
+of the search; none is a change to `CDerives`.
+
+1. **Modes** (§11). `inl`, `inr`, `roll` and `absurd` only check. A form that synthesizes needs
+   its parts to synthesize: an unannotated `x <- M; N` needs `M` to, the first arm of a `case`
+   and the first component of a `<,>` must synthesize when the whole is synthesized (the second
+   is checked against it), and a pair synthesizes only if both components do. There is no
+   unification; an ascription or `x : A <- M` supplies the type.
+2. **Types are compared by `=`**, with no α-conversion of lifetime binders (§3). In particular
+   a synthesized `Fun` gets the binder `Δ.freshVar`; checked against `forall 'x < @b. C` it takes
+   the type's binder.
+3. **The non-syntax-directed rules apply only where written**: `ret`, `ofRet`, `bangE`, `boxE`,
+   `immSub`/`mutSub`, `roll`/`unroll`, `delayIn`/`delayOut`, `streamIn`/`streamOut` apply at
+   `return`, `run`, `unbang`, `unbox`, `:>`, `roll`/`unroll` and the `delay_*`/`stream_*`
+   keywords, never implicitly (§14).
+4. **Lifetime entailment** (`ordB`, §12 item 1) is sound and searches only the structural rules:
+   reflexivity, `⊤` on the right, a variable through its bound, and `⊓`/`⊔` on either side. It
+   does not use distributivity (`('x ⊔ 'y) ⊓ 'z ⊑ ('x ⊓ 'z) ⊔ ('y ⊓ 'z)` is not found), and it
+   never concludes from an unsatisfiable `Δ`. `Δ ⊨ @a` is decided by `Life.wf`, which is
+   complete except when `⟦Δ⟧ = ∅`. `VOutlives` (`outlivesB`) is complete relative to `ordB`.
+5. **Derived forms stated at `Ctx.Dead`** (`alloc_s`, `free_s`, `withbor_s_*`, `withbor_f2_*`)
+   absorb no slot, persistent or not: a persistent variable must be dropped elsewhere.
+6. **Def type parameters** are elaborated at the use and substituted as elaborated types (§10
+   says textually); a `def` with parameters is checked only at its uses.
+7. **Fuel.** The checker's call tree is bounded at depth 2^20, type elaboration at 2^16.
+
+The deciders for `VFree`, `Cl`, `NoMut`, `VScoped`, `FShape.WF`/`Guarded`, `plainV`,
+`Shape.plain`, `Δ.Ok`, `Δ.find? x = none`, `C.isRet`, `FamSide.hinst` and foldImm's
+`∀ Δ' a, VOutlives Δ' a R` (`outlivesAllB`, §12 item 2) are complete.
+
+### Choices beyond draft 1
+
+1. `delay_in M` and `stream_in M` also synthesize, when `M`'s type is literally an unrolling
+   `F (A + U (delay A)) & F 1` / `F (A * U (stream A)) & F 1` (§6.2 lists them as check-only).
+2. `unbang V` checked against `A` checks `V` against `!A`.
+3. `Fun` checked against a `forall` type takes the type's binder number (item 2 above).
+4. `main`'s context is every `extern` of the file, in declaration order.
+5. Messages print lifetime variables by their source names where they are in scope, and as
+   `'lN` (the `LifeVar` number `N`) otherwise.
