@@ -122,3 +122,10 @@ gives each side its uses and routes an unused live slot to a side that absorbs i
 `<,>` needs one `L` for both parts. This is the input/output reading with ⊤-slack, with the
 output chosen by the enclosing rule instead of threaded. Premises on every live slot
 (`CtxOutlives`, `Persistent`, `allI`'s `hΓx`) restrict what may be absorbed.
+
+**Constants and derived forms** (syntax-core §8, §8a, §9) are one constructor or one Lean theorem
+each (`Check/Consts.lean`): `alloc`…`withswap`, `fold_imm`/`fold_own`/`fold_reuse` with the shape
+decoded by §5's `dec`, `fixd`, `unfold_s`, `i32[n]`/`i64[n]`, `host[op]`, and `alloc_s`,
+`free_s`, `withbor_s_*`, `withbor_f2_*` (`d_allocS`, `d_freeS`, `withborS{M,I}_wf`,
+`withbor{M,I}2_wf`) and `shorten_*` (`shortenE_wf`). Binder arguments are numbered `Δ.freshVar`
+(§3); `withbor_f2`'s internal `'a`, `'b` are `Δ.freshVar` and `Δ.freshVar + 1` (§9).

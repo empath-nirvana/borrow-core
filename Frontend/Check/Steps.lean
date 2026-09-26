@@ -32,6 +32,11 @@ def Env.elabS (E : Env) (Δ : LifeCtx) (σ : Shape) : Except Error CShape :=
   Frontend.Check.elabS tyFuel (E.tyEnv Δ) σ
 def Env.elabL (E : Env) (Δ : LifeCtx) (a : Life) : Except Error CLife := elabLife Δ E.lenv a
 
+/-- Types and lifetimes in messages, with the lifetime names in scope. -/
+def Env.ppV (E : Env) (A : CVTy) : String := Frontend.Check.ppV E.lenv 0 0 A
+def Env.ppC (E : Env) (C : CCTy) : String := Frontend.Check.ppC E.lenv 0 C
+def Env.ppL (E : Env) (a : CLife) : String := ppLifeP E.lenv 1 a
+
 /-! ### Messages -/
 
 def Env.slotName (E : Env) (i : Nat) : String :=
@@ -45,11 +50,11 @@ def firstOverlap : List CVTy → List Bool → List Bool → Option Nat
       if a && b && !A.persistent then some 0 else (firstOverlap T as bs).map (· + 1)
   | _, _, _ => none
 
-def slotTy (T : List CVTy) (i : Nat) : String := (T[i]?.map ppVTy).getD "?"
+def Env.slotTy (E : Env) (T : List CVTy) (i : Nat) : String := (T[i]?.map E.ppV).getD "?"
 
 def splitErr (E : Env) (T : List CVTy) (sp : Span) (u₁ u₂ : List Bool) : Error :=
   match firstOverlap T u₁ u₂ with
-  | some i => ⟨sp, s!"{E.slotName i} is used twice here, and its type `{slotTy T i}` is not " ++
+  | some i => ⟨sp, s!"{E.slotName i} is used twice here, and its type `{E.slotTy T i}` is not " ++
       "persistent"⟩
   | none => ⟨sp, "internal error: context split"⟩
 
@@ -65,8 +70,8 @@ def mergeErr (E : Env) (sp : Span) (what₁ what₂ intro : String) (u₁ w₁ u
   | _, some i => ⟨sp, s!"{intro}{E.slotName i} is consumed in {what₂} but not in {what₁}"⟩
   | _, _ => ⟨sp, "internal error: merge"⟩
 
-def unconsumed (sp : Span) (x : String) (A : CVTy) : Error :=
-  ⟨sp, s!"`{x}` is not consumed in its scope, and its type `{ppVTy A}` is not persistent " ++
+def unconsumed (E : Env) (sp : Span) (x : String) (A : CVTy) : Error :=
+  ⟨sp, s!"`{x}` is not consumed in its scope, and its type `{E.ppV A}` is not persistent " ++
     "(or it cannot be dropped where its scope ends)"⟩
 
 def mismatch (sp : Span) (want got : String) : Error :=
@@ -77,17 +82,17 @@ def mismatch (sp : Span) (want got : String) : Error :=
 section
 variable {Δ : LifeCtx} {T : List CVTy}
 
-def convV (sp : Span) (A : CVTy) : (Σ B : CVTy, Res Δ T (.val B)) → Except Error (Res Δ T (.val A))
-  | ⟨B, r⟩ => if h : B = A then pure (h ▸ r) else throw (mismatch sp (ppVTy A) (ppVTy B))
+def convV (E : Env) (sp : Span) (A : CVTy) : (Σ B : CVTy, Res Δ T (.val B)) → Except Error (Res Δ T (.val A))
+  | ⟨B, r⟩ => if h : B = A then pure (h ▸ r) else throw (mismatch sp (E.ppV A) (E.ppV B))
 
-def convC (sp : Span) (C : CCTy) : (Σ D : CCTy, Res Δ T (.comp D)) → Except Error (Res Δ T (.comp C))
-  | ⟨D, r⟩ => if h : D = C then pure (h ▸ r) else throw (mismatch sp (ppCTy C) (ppCTy D))
+def convC (E : Env) (sp : Span) (C : CCTy) : (Σ D : CCTy, Res Δ T (.comp D)) → Except Error (Res Δ T (.comp C))
+  | ⟨D, r⟩ => if h : D = C then pure (h ▸ r) else throw (mismatch sp (E.ppC C) (E.ppC D))
 
-def popL {A : CVTy} {P : List Bool → Prop} (sp : Span) (x : String) (F : Fam (A :: T) P) :
+def popL {A : CVTy} {P : List Bool → Prop} (E : Env) (sp : Span) (x : String) (F : Fam (A :: T) P) :
     Except Error (Fam T (fun L => P (true :: L))) :=
   match F.popLive with
   | some F' => pure F'
-  | none => throw (unconsumed sp x A)
+  | none => throw (unconsumed E sp x A)
 
 def popD {A : CVTy} {P : List Bool → Prop} (sp : Span) (F : Fam (A :: T) P) :
     Except Error (Fam T (fun L => P (false :: L))) :=
@@ -126,7 +131,7 @@ def thunkvLam : String :=
 
 def notBang (E : Env) (T : List CVTy) (sp : Span) : Option Nat → Error
   | some i => ⟨sp, s!"`!thunk` promotes only over `!` types, but {E.slotName i}, of type " ++
-      s!"`{slotTy T i}`, is used inside"⟩
+      s!"`{E.slotTy T i}`, is used inside"⟩
   | none => ⟨sp, thunkvLam⟩
 
 section
@@ -138,10 +143,10 @@ def boxIt {A : CVTy} (E : Env) (T : List CVTy) (sp : Span) (a : CLife) (r : Res 
   if hwf : a.wf Δ = true then
     if hs : usedSat (outlivesB Δ a) T r.F.u = true then pure (rBoxI a hwf r hs)
     else match firstBad (outlivesB Δ a) T r.F.u with
-      | some i => throw ⟨sp, s!"`boxed[{ppLife a}]`: {E.slotName i}, of type `{slotTy T i}`, " ++
-          s!"is used inside, and it cannot be shown to outlive `{ppLife a}`"⟩
+      | some i => throw ⟨sp, s!"`boxed[{E.ppL a}]`: {E.slotName i}, of type `{E.slotTy T i}`, " ++
+          s!"is used inside, and it cannot be shown to outlive `{E.ppL a}`"⟩
       | none => throw ⟨sp, "internal error: boxed"⟩
-  else throw ⟨sp, s!"`boxed[{ppLife a}]`: the lifetime is not defined here"⟩
+  else throw ⟨sp, s!"`boxed[{E.ppL a}]`: the lifetime is not defined here"⟩
 
 /-- `M x`. -/
 def appIt {A : CVTy} {C : CCTy} (E : Env) (T : List CVTy) (sp : Span) (x : Ident)
@@ -153,7 +158,7 @@ def appIt {A : CVTy} {C : CCTy} (E : Env) (T : List CVTy) (sp : Span) (x : Ident
     if hi : T[i]? = some A then
       if h : overlapOK T rM.F.u (oneL T i) = true then pure (rApp rM i hi h)
       else throw (splitErr E T sp rM.F.u (oneL T i))
-    else throw (mismatch x.span (ppVTy A) (slotTy T i))
+    else throw (mismatch x.span (E.ppV A) (E.slotTy T i))
 
 /-- `<M, N>`: both components at the pair's context. -/
 def withIt {C D : CCTy} (E : Env) (T : List CVTy) (sp : Span) (r₁ : Res Δ (withT T) (.comp C))
@@ -171,8 +176,8 @@ def withIt {C D : CCTy} (E : Env) (T : List CVTy) (sp : Span) (r₁ : Res Δ (wi
 def caseIt {A B : CVTy} {C : CCTy} (E : Env) (T : List CVTy) (sp : Span) (x y : Ident)
     (rV : Res Δ T (.val (.sum A B))) (r₁ : Res Δ (A :: T) (.comp C))
     (r₂ : Res Δ (B :: T) (.comp C)) : Except Error (Res Δ T (.comp C)) := do
-  let F₁ ← popL x.span x.name r₁.F
-  let F₂ ← popL y.span y.name r₂.F
+  let F₁ ← popL E x.span x.name r₁.F
+  let F₂ ← popL E y.span y.name r₂.F
   if s₁ : subL F₁.u (orL F₂.u F₂.w) = true then
     if s₂ : subL F₂.u (orL F₁.u F₁.w) = true then
       let F := F₁.merge F₂ s₁ s₂
@@ -190,7 +195,7 @@ def funIt {v : LifeVar} {bl : CLife} {C : CCTy} (E : Env) (T : List CVTy) (sp : 
       let F ← popD sp rM.F
       if hs : usedSat (fun A => !vfreeB v A) T F.u = true then pure (rAllI hbx hΔx F hs)
       else match firstBad (fun A => !vfreeB v A) T F.u with
-        | some i => throw ⟨sp, s!"`Fun '{name}`: {E.slotName i}, of type `{slotTy T i}`, is " ++
+        | some i => throw ⟨sp, s!"`Fun '{name}`: {E.slotName i}, of type `{E.slotTy T i}`, is " ++
             s!"used inside, and its type mentions `'{name}` ({ppLVar v})"⟩
         | none => throw ⟨sp, "internal error: Fun"⟩
     else throw ⟨sp, s!"`Fun '{name}`: its number {ppLVar v} occurs in a bound of the lifetime context"⟩

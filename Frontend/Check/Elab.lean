@@ -78,57 +78,63 @@ def err {α} (sp : Span) (msg : String) : Except Error α := throw ⟨sp, msg⟩
 
 /-! ### Printing -/
 
+def parenIf (b : Bool) (s : String) : String := if b then s!"({s})" else s
+
 def ppLVar (x : LifeVar) : String := s!"'l{x}"
 
-/-- A lifetime; `p > 0` parenthesizes a `/\\` or `\\/`. -/
-def ppLifeP (p : Nat) : CLife → String
-  | .var x => ppLVar x
-  | .top => "top"
-  | .meet a b => paren (p > 0) s!"{ppLifeP 1 a} /\\ {ppLifeP 0 b}"
-  | .join a b => paren (p > 0) s!"{ppLifeP 1 a} \\/ {ppLifeP 0 b}"
-where
-  paren (b : Bool) (s : String) : String := if b then s!"({s})" else s
+/-- A lifetime variable, by its source name if `nm` has one for it. -/
+def ppLVarN (nm : List (String × LifeVar)) (x : LifeVar) : String :=
+  match nm.find? (·.2 == x) with
+  | some (n, _) => s!"'{n}"
+  | none => ppLVar x
 
-def ppLife (a : CLife) : String := ppLifeP 1 a
+/-- A lifetime; `p > 0` parenthesizes a `/\\` or `\\/`. -/
+def ppLifeP (nm : List (String × LifeVar)) (p : Nat) : CLife → String
+  | .var x => ppLVarN nm x
+  | .top => "top"
+  | .meet a b => parenIf (p > 0) s!"{ppLifeP nm 1 a} /\\ {ppLifeP nm 0 b}"
+  | .join a b => parenIf (p > 0) s!"{ppLifeP nm 1 a} \\/ {ppLifeP nm 0 b}"
 
 def tvName (d : Nat) : String := if d == 0 then "X" else s!"X{d}"
 
-def parenIf (b : Bool) (s : String) : String := if b then s!"({s})" else s
-
 mutual
 /-- A value type in the surface syntax, at precedence `p` (syntax-core §4: `0` binders, `1`
-`-o`/`=>`, `2` `&`, `3` `+`, `4` `*`, `5` prefix); `d` is the number of enclosing `μ`s. -/
-def ppV (d p : Nat) : CVTy → String
+`-o`/`=>`, `2` `&`, `3` `+`, `4` `*`, `5` prefix); `d` is the number of enclosing `μ`s, and
+`nm` names lifetime variables. -/
+def ppV (nm : List (String × LifeVar)) (d p : Nat) : CVTy → String
   | .unit => "1"
   | .zero => "0"
-  | .tensor A B => parenIf (p > 4) s!"{ppV d 5 A} * {ppV d 4 B}"
-  | .sum A B => parenIf (p > 3) s!"{ppV d 4 A} + {ppV d 3 B}"
-  | .thunk (.arr A (.ret B)) => parenIf (p > 1) s!"{ppV d 2 A} => {ppV d 1 B}"
-  | .thunk (.all x b (.ret A)) => parenIf (p > 0) s!"all {ppLVar x} < {ppLife b}. {ppV d 0 A}"
-  | .thunk C => parenIf (p > 5) s!"U {ppC 6 C}"
-  | .ref A => parenIf (p > 5) s!"ref {ppV d 5 A}"
-  | .imm a A => parenIf (p > 5) s!"imm {ppLife a} {ppV d 5 A}"
-  | .mut a A => parenIf (p > 5) s!"mut {ppLife a} {ppV d 5 A}"
-  | .box a A => parenIf (p > 5) s!"box {ppLife a} {ppV d 5 A}"
-  | .bang A => parenIf (p > 5) s!"!{ppV d 5 A}"
+  | .tensor A B => parenIf (p > 4) s!"{ppV nm d 5 A} * {ppV nm d 4 B}"
+  | .sum A B => parenIf (p > 3) s!"{ppV nm d 4 A} + {ppV nm d 3 B}"
+  | .thunk (.arr A (.ret B)) => parenIf (p > 1) s!"{ppV nm d 2 A} => {ppV nm d 1 B}"
+  | .thunk (.all x b (.ret A)) =>
+      parenIf (p > 0) s!"all {ppLVar x} < {ppLifeP nm 1 b}. {ppV (nm.filter (·.2 != x)) d 0 A}"
+  | .thunk C => parenIf (p > 5) s!"U {ppC nm 6 C}"
+  | .ref A => parenIf (p > 5) s!"ref {ppV nm d 5 A}"
+  | .imm a A => parenIf (p > 5) s!"imm {ppLifeP nm 1 a} {ppV nm d 5 A}"
+  | .mut a A => parenIf (p > 5) s!"mut {ppLifeP nm 1 a} {ppV nm d 5 A}"
+  | .box a A => parenIf (p > 5) s!"box {ppLifeP nm 1 a} {ppV nm d 5 A}"
+  | .bang A => parenIf (p > 5) s!"!{ppV nm d 5 A}"
   | .unk => "unk"
   | .int .w32 => "i32"
   | .int .w64 => "i64"
   | .tvar n => if n < d then tvName (d - 1 - n) else s!"?{n}"
-  | .mu A => parenIf (p > 0) s!"mu {tvName d}. {ppV (d + 1) 0 A}"
+  | .mu A => parenIf (p > 0) s!"mu {tvName d}. {ppV nm (d + 1) 0 A}"
 /-- A computation type in the surface syntax, at precedence `p`. -/
-def ppC (p : Nat) : CCTy → String
-  | .ret A => parenIf (p > 5) s!"F {ppV 0 5 A}"
-  | .arr A C => parenIf (p > 1) s!"{ppV 0 2 A} -o {ppC 1 C}"
-  | .amp C D => parenIf (p > 2) s!"{ppC 3 C} & {ppC 2 D}"
+def ppC (nm : List (String × LifeVar)) (p : Nat) : CCTy → String
+  | .ret A => parenIf (p > 5) s!"F {ppV nm 0 5 A}"
+  | .arr A C => parenIf (p > 1) s!"{ppV nm 0 2 A} -o {ppC nm 1 C}"
+  | .amp C D => parenIf (p > 2) s!"{ppC nm 3 C} & {ppC nm 2 D}"
   | .top => "top"
-  | .all x b C => parenIf (p > 0) s!"forall {ppLVar x} < {ppLife b}. {ppC 0 C}"
-  | .delay A => parenIf (p > 5) s!"delay {ppV 0 5 A}"
-  | .stream A => parenIf (p > 5) s!"stream {ppV 0 5 A}"
+  | .all x b C =>
+      parenIf (p > 0) s!"forall {ppLVar x} < {ppLifeP nm 1 b}. {ppC (nm.filter (·.2 != x)) 0 C}"
+  | .delay A => parenIf (p > 5) s!"delay {ppV nm 0 5 A}"
+  | .stream A => parenIf (p > 5) s!"stream {ppV nm 0 5 A}"
 end
 
-def ppVTy (A : CVTy) : String := ppV 0 0 A
-def ppCTy (C : CCTy) : String := ppC 0 C
+def ppLife (a : CLife) : String := ppLifeP [] 1 a
+def ppVTy (A : CVTy) : String := ppV [] 0 0 A
+def ppCTy (C : CCTy) : String := ppC [] 0 C
 
 /-! ### Elaboration -/
 

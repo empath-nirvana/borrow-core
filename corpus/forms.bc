@@ -1,6 +1,7 @@
 -- Syntax coverage: every form of sections 3-10 that the programs above do not use, in both
 -- spellings where section 2 gives two. This file is for the parser; its declarations are not
 -- all meant to type-check.
+-- check: parse-only
 
 type Nat = μX. 1 ⊕ X
 type Cell = mu X. 1 + ref X

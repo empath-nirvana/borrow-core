@@ -35,7 +35,7 @@ def nats_step : !U (Nat -o F (Nat * Nat) & F 1) =
 
 main : F Nat =
   f <- return (unbang (unfold_s[Nat, Nat] nats_step));
-  z <- return (roll (inl ()));
+  z : Nat <- return (roll (inl ()));
   t0 <- return (thunkv stream_in < (stream_out (force f z)).1, (stream_out (force f z)).2 >);
   p1 <- (stream_out (force t0)).1;
   let (x1, t1) = p1;

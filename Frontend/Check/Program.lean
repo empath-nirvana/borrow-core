@@ -64,7 +64,7 @@ def checkMain (ds : Array Decl) (k : Nat) (sp : Span) (C : CTy) (M : Comp) :
     pure ⟨mkCtx T (allL T), r.e, C', r.F.d _ (btw_allL T _ _ r.F.hu r.F.hw h)⟩
   else match firstUnconsumed r.F.u r.F.w with
     | some i => throw ⟨sp, s!"`main` does not consume the extern {E.slotName i}, of type " ++
-        s!"`{slotTy T i}`, which is not persistent"⟩
+        s!"`{E.slotTy T i}`, which is not persistent"⟩
     | none => throw ⟨sp, "internal error: main"⟩
 
 /-- Check one declaration; the line `bcc check` prints for it, and `main`'s result. -/
