@@ -7,6 +7,7 @@ A lexer, parser, printer and type checker for the textual core language of
     lake exe bcc parse <file>   parse, then print, re-parse and compare the ASTs up to spans
     lake exe bcc print <file>   print in the canonical ASCII spelling
     lake exe bcc check <file>   type-check: print each declaration's type, or the first error
+    lake exe bcc compile|run|interp …   the backend (`Backend/README.md`)
     scripts/parse-corpus.sh     every corpus/*.bc parses and round-trips; every
                                 corpus/fail/*.bc fails with the message on its `-- expect:` line
 
@@ -21,8 +22,9 @@ A lexer, parser, printer and type checker for the textual core language of
 | `Main.lean` | `bcc` |
 
 The lexer, parser and printer import only `Support.Syntax.Integers` (for `Width`, `IntLit`,
-`HostOp`) and each other; the checker imports `Core`. `scripts/check-hygiene.sh` scans
-`Frontend/` and checks that it imports nothing outside the library.
+`HostOp`) and each other; the checker imports `Core`, and `Main.lean` the backend.
+`scripts/check-hygiene.sh` scans `Frontend/` and checks that it imports nothing outside the
+library.
 
 ## Termination without `partial`
 

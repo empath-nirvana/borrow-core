@@ -14,6 +14,10 @@ mechanization of Wagner, Gierczak, Marshall, Li and Ahmed, *From Linearity to Bo
 - `Frontend/` — the parser for the core syntax (`docs/syntax-core.md`) and the `bcc`
   executable (`lake exe bcc parse <file>`); `corpus/` holds its test programs
   (`scripts/parse-corpus.sh`). `Frontend/README.md` describes it.
+- `Backend/` — the compiler from a checked `main` to WebAssembly (`lake exe bcc run <file>`),
+  through a closure IR and a flat IR, each with an interpreter; `Backend/README.md` describes
+  it. `scripts/compile-corpus.sh` compiles every corpus program with a `main`, runs it under
+  `wasmtime`, and compares it with `Support`'s interpreter.
 - `experiments/` — probes toward future entries, as non-default libraries the library never
   imports (`experiments/README.md`).
 
@@ -22,6 +26,7 @@ lake exe cache get
 lake build
 scripts/check-hygiene.sh
 lake env lean scripts/AxiomCheck.lean
+scripts/compile-corpus.sh       # needs wasmtime on PATH
 ```
 
 Entry 1 (`SPEC.md` §2) adds the exponential `!T`: a value that holds no resource, which a borrow
