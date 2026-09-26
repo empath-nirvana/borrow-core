@@ -41,3 +41,13 @@ Each entry: the decision, and why. Newest last.
     corpus program, together.
 18. **The LLVM path proves contract satisfaction, not LLVM's optimizations.** Deferred until
     there is an LLVM backend.
+19. **No judgment index "for later".** A new coordinate (grades, temporal order) goes in a type
+    former or in the model, never as a defaulted index on `CDerives`: every index is a tax on every
+    rule, even when nothing reads it ([l_lang kernel](l-lang-kernel-and-lit.md), lesson L1).
+20. **A generalization lands with the deletion of its instances.** When a general former replaces
+    fixed ones (general `ν` for `delay` and `stream`), the fixed ones become abbreviations in the
+    same change; building the general form alongside them only adds proof (lesson L5).
+21. **Inverting `CDerives` is paid for deliberately.** The Fundamental Property never inverts the
+    judgment, which is why each rule costs one compatibility lemma. Inversion lemmas, syntactic
+    substitution over derivations, checker completeness and lowering proofs that invert typing
+    bring per-rule pairwise burden back; take them on only with the cost stated (lessons L2, L3).
