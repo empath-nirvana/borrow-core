@@ -229,7 +229,8 @@ derived rules. Restrictions:
 
 ### Open
 
-- **Block provenance.** Leaves of two different blocks must not be joined into one handle, and a
+- **Block provenance.** (The MVP backend keeps a block handle as a tree of separate cells, not one
+  word, so this is not yet exercised.) Leaves of two different blocks must not be joined into one handle, and a
   reuse hole (§6) must refill its own node. Neither is enforced by typing; the model is sound
   either way, but lowering a handle to one word needs it. To be settled with the syntax.
 - **Variants in place.** A variant's layout depends on its tag; `Ref` does not distribute over
@@ -359,6 +360,8 @@ between engines is tested on the corpus, not proved.
 - Floats (`F32`, `F64`) by the same scheme; Wasm's NaN bit patterns are nondeterministic.
 - `u8` and checked (non-wrapping) arithmetic are derivable from the operations above.
 - `plainV` excludes the integer types, so they cannot yet be `withborS` leaves.
+- The MVP backend lowers without types, so `I64` values are boxed (a full-width word leaves no
+  bit to tell a pointer from an immediate). Type-directed layout would unbox them.
 
 ---
 
@@ -438,8 +441,9 @@ extension, so the embedding (§3) still applies.
 A program may declare `extern name : A`. Externs form the initial context of `main`. The
 Fundamental Property quantifies over every context satisfying its types, so a program is safe
 for every implementation of its externs that meets their semantic types; each extern is a named
-hypothesis of the end-to-end theorem. The trusted runtime components (the allocator, stack
-switching, host I/O, §9's buffers and strings) enter this way. §8's integer operations do not:
+hypothesis of the end-to-end theorem. Trusted runtime components with a program-level interface (stack switching, host I/O, §9's
+buffers and strings) enter this way. The allocator does not: it is part of the compiled runtime,
+trusted against its written spec (`Backend/README.md`). §8's integer operations do not:
 they are term constants, and the theorems are parametric in the host instead.
 
 Standard input and output are linear capabilities:

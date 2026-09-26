@@ -434,6 +434,9 @@ What a program means:
 Drivers such as `driveE n` (`Core/DelayPrograms.lean:37`) are Lean meta-level recursion on
 `ℕ`. The syntax has no meta-recursion, so a driver is written out to the depth wanted.
 
+A closed `main` is compiled and run by `bcc run`; `scripts/compile-corpus.sh` compares every
+corpus `main` against the interpreter (`Backend/README.md`).
+
 ## 11. Checking
 
 **Bidirectional.** Synthesis and checking follow the mode column of section 6. The annotations
