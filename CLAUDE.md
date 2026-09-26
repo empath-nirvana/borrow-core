@@ -15,6 +15,21 @@ prints. Code an entry adds or changes is tagged `[spec §N]`.
 - Every entry says what it adds, which baseline theorems it must preserve, and what is open.
   The changelog records each version.
 
+## Growth discipline
+
+The proof burden of the previous language grew until it was unmaintainable
+(`docs/l-lang-kernel-and-lit.md` §2). Three rules (`docs/decisions.md` 19–21):
+
+- **No new index on `CDerives`.** Put a new coordinate in a type former or in the model.
+- **Generalize by deleting.** A general former lands in the same change that turns the fixed
+  formers it replaces into abbreviations.
+- **Do not invert `CDerives` casually.** Inversion lemmas, substitution over derivations, checker
+  completeness or lowering proofs that invert typing need their cost stated in the issue or PR.
+
+Prefer computation-type formers and derived forms over new value-type formers: a `VTy` former
+costs about 100 match arms across `Core/`, a `CTy` former about 20, a `CDerives` rule one
+compatibility lemma.
+
 ## Hygiene
 
 - No `sorry`, `axiom`, `native_decide`, `implemented_by`, `opaque`, `partial`, `unsafe` in
