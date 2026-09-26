@@ -24,5 +24,6 @@ Start here.
 - [Ideas: pointers, cycles, non-lexical lifetimes](ideas-pointers-and-lifetimes.md)
 - Scoping notes: [deep freeze](scope-deep-freeze.md), [recursion](scope-recursion.md)
 - [Salvage from l_lang](l-lang-salvage.md) — ideas and requirements kept from the previous language
+- [l_lang kernel and literature](l-lang-kernel-and-lit.md) — its μ/ν techniques, the anatomy of its proof burden, and an annotated bibliography
 - [Consolidation audit](consolidation-audit.md) — how the experiments became `Core/`
 - [Adjudications](adjudications.md) — departures from the paper's printed text in the baseline
