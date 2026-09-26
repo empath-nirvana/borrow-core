@@ -4,6 +4,7 @@ A borrow calculus under a written specification, `SPEC.md`, starting from the Le
 mechanization of Wagner, Gierczak, Marshall, Li and Ahmed, *From Linearity to Borrowing*
 (PACMPL 9:OOPSLA2:415, 2025), bolo-formalization commit `1658da9`.
 
+- `docs/Home.md` — start here: overview, pipeline, glossary, design decisions.
 - `SPEC.md` — the language: the paper's calculus as baseline (§1), then numbered entries.
 - `Paper/`, `Support/` — the mechanization, with each entry's additions tagged `[spec §N]`.
   `Paper/INDEX.md` and `docs/adjudications.md` describe the baseline.
