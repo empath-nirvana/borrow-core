@@ -1,4 +1,8 @@
 -- syntax-core.md §13.2 (`sumProg`, CL:312) after the library of §13.1, both verbatim.
+--
+-- Answer: 6 in Peano, the sum of [1, 2, 3]: a fold that drops an element gives at most 5, one
+-- that counts an element twice at least 7. The program is kept in Peano because it is the text
+-- of §13.2; sum-i32.bc is its i32 counterpart.
 
 type Nat  = mu X. 1 + X
 type List = mu X. 1 + (ref Nat * ref X)          -- = mu X. 1 + block Node, by refTy

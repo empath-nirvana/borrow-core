@@ -1,28 +1,29 @@
 -- mapProgR (Core/ReuseList.lean, MapMut.lean), from the corpus review's 2-mapProgR, in
--- draft 1: a list of numerals is borrowed `mut` by withbor2, incremented in place by a
--- fold_reuse under withswap, then freed into a pure list by fold_own.
+-- draft 1, over i32: a list [1, 3, 5] is borrowed `mut` by withbor2, incremented in place by
+-- a fold_reuse under withswap, then freed by a fold_own that reads it as the decimal digits
+-- of one number, head last.
+--
+-- Answer: i32[642], the list [2, 4, 6]. Unmapped gives 531, mapped twice 753; an element
+-- skipped or mapped twice changes one digit; a map or a free that reverses the list gives 246.
 
-type Nat  = mu X. 1 + X
-type List = mu X. 1 + (ref Nat * ref X)
-type Pure = mu X. 1 + Nat * X
-shape Node = node (leaf Nat) (leaf List)
+type List = mu X. 1 + (ref i32 * ref X)
+shape Node = node (leaf i32) (leaf List)
 
 def nil : List = roll (inl ())
-def zero : Nat = roll (inl ())
 
-def cons : Nat * List => List =
-  thunkv fun (p : Nat * List) -> return (roll (inr (alloc_s[Node] p)))
+def cons : i32 * List => List =
+  thunkv fun (p : i32 * List) -> return (roll (inr (alloc_s[Node] p)))
 
 -- A″_R = resR R: `ref 1 * R` at the tail. Take the head, put back its successor.
-def map_inc_alg : !(1 + ref Nat * (ref 1 * List) => List) =
-  !thunkv fun (r : 1 + ref Nat * (ref 1 * List)) ->
+def map_inc_alg : !(1 + ref i32 * (ref 1 * List) => List) =
+  !thunkv fun (r : 1 + ref i32 * (ref 1 * List)) ->
     case r {
       inl u -> return (roll (inl u))
     | inr p ->
         let (rn, q) = p;
-        cx <- return (swap[Nat, 1] rn ());
+        cx <- return (swap[i32, 1] rn ());
         let (c, x) = cx;
-        cu <- return (swap[1, Nat] c (roll (inr x)));
+        cu <- return (swap[1, i32] c ((unbang host[add32]) (x, i32[1])));
         let (c1, u1) = cu;
         let () = u1;
         let (c2, t) = q;
@@ -32,20 +33,22 @@ def map_inc_alg : !(1 + ref Nat * (ref 1 * List) => List) =
         return (roll (inr (c1, c3)))
     }
 
-def map_inc : List => List = unbang (fold_reuse[1 + ref Nat * ref X, List] map_inc_alg)
+def map_inc : List => List = unbang (fold_reuse[1 + ref i32 * ref X, List] map_inc_alg)
 
--- A′_R = resO R = 1 + ref Nat * Pure.
-def to_pure_alg : !(1 + ref Nat * Pure => Pure) =
-  !thunkv fun (r : 1 + ref Nat * Pure) ->
+-- A′_R = resO R = 1 + ref i32 * i32: free each cell, and read the list as digits, head last.
+def digits_alg : !(1 + ref i32 * i32 => i32) =
+  !thunkv fun (r : 1 + ref i32 * i32) ->
     case r {
-      inl u -> return (roll (inl u))
-    | inr p -> let (rn, t) = p; return (roll (inr (free[Nat] rn, t)))
+      inl u -> return i32[0]
+    | inr p ->
+        let (rn, t) = p;
+        return ((unbang host[add32]) (free[i32] rn, (unbang host[mul32]) (t, i32[10])))
     }
 
-def to_pure : List => Pure = unbang (fold_own[1 + ref Nat * ref X, Pure] to_pure_alg)
+def digits : List => i32 = unbang (fold_own[1 + ref i32 * ref X, i32] digits_alg)
 
-main : F Pure =
-  l <- return (cons (zero, cons (zero, cons (zero, nil))));
+main : F i32 =
+  l <- return (cons (i32[1], cons (i32[3], cons (i32[5], nil))));
   r <- return (alloc[List] l);
   q <- return (withbor2['x, top, List, 1] r
          (thunkv Fun 'x < top. return (thunkv fun (b : mut 'x List) ->
@@ -56,4 +59,4 @@ main : F Pure =
             return (boxed['x] ()))));
   let (r2, u) = q;
   let () = u;
-  return (to_pure (free[List] r2))
+  return (digits (free[List] r2))

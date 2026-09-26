@@ -1,5 +1,9 @@
 -- Integers (section 8a): literals, host operations applied at value level, a test and a
 -- partial division whose `inr` is where Wasm traps.
+--
+-- Answer: i32[6] = (40 + 2) / 7, reached through the `inr` (true) arm of 42 < 100. A test
+-- with its operands swapped, or its arms read the other way, takes the `inl` arm and gives
+-- wrap(2^32 + 5) = 5; a division with its operands swapped gives 0.
 
 def plus : i32 * i32 => i32 = unbang host[add32]
 

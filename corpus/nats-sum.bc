@@ -1,41 +1,25 @@
--- natsSum 3 (Core/StreamPrograms.lean: progS, stepN, dupE, sumK), from the corpus review's
--- 5-natsSum, in draft 1: the stream 0, 1, 2, … by unfold_s, three elements summed, then closed.
+-- natsSum (Core/StreamPrograms.lean: progS, stepN, sumK), from the corpus review's
+-- 5-natsSum, in draft 1, over i32: the stream 7, 17, 27, … by unfold_s, three elements taken
+-- and combined, then closed.
+--
+-- Answer: i32[271707], the three elements as base-100 digits, first element last. A state
+-- not advanced gives 70707, one advanced twice per element 472707, a first element skipped
+-- 372717, and the elements in reverse order 71727.
 
-type Nat = mu X. 1 + X
+-- The step at state s: emit s and continue at s + 10; close has nothing to free.
+def nats_step : !U (i32 -o F (i32 * i32) & F 1) =
+  !thunkv fun (s : i32) ->
+    < return (s, (unbang host[add32]) (s, i32[10])),
+      return () >
 
-def free_l_alg : !(1 + 1 => 1) =
-  !thunkv fun (r : 1 + 1) -> case r { inl u -> return u | inr u -> return u }
+def hundred : i32 * i32 => i32 =
+  thunkv fun (p : i32 * i32) ->
+    let (hi, lo) = p;
+    return ((unbang host[add32]) ((unbang host[mul32]) (hi, i32[100]), lo))
 
-def free_nat : Nat => 1 = unbang (fold_own[1 + X, 1] free_l_alg)
-
-def add_alg : !(1 + (Nat => Nat) => (Nat => Nat)) =
-  !thunkv fun (r : 1 + (Nat => Nat)) ->
-    case r {
-      inl u -> let () = u; return (thunkv fun (m : Nat) -> return m)
-    | inr f -> return (thunkv fun (m : Nat) -> return (f (roll (inr m))))
-    }
-
-def add : Nat => Nat => Nat = unbang (fold_own[1 + X, Nat => Nat] add_alg)
-
--- dup, a fold_own at R = Nat * Nat: A′_R = 1 + Nat * Nat.
-def dup_alg : !(1 + Nat * Nat => Nat * Nat) =
-  !thunkv fun (r : 1 + Nat * Nat) ->
-    case r {
-      inl u -> let () = u; return (roll (inl ()), roll (inl ()))
-    | inr p -> let (x, y) = p; return (roll (inr x), roll (inr y))
-    }
-
-def dup : Nat => Nat * Nat = unbang (fold_own[1 + X, Nat * Nat] dup_alg)
-
--- The step at state s: emit s and continue at s + 1; close frees the state.
-def nats_step : !U (Nat -o F (Nat * Nat) & F 1) =
-  !thunkv fun (s : Nat) ->
-    < let (a, b) = dup s; return (a, roll (inr b)),
-      return (free_nat s) >
-
-main : F Nat =
-  f <- return (unbang (unfold_s[Nat, Nat] nats_step));
-  z : Nat <- return (roll (inl ()));
+main : F i32 =
+  f <- return (unbang (unfold_s[i32, i32] nats_step));
+  z : i32 <- return i32[7];
   t0 <- return (thunkv stream_in < (stream_out (force f z)).1, (stream_out (force f z)).2 >);
   p1 <- (stream_out (force t0)).1;
   let (x1, t1) = p1;
@@ -45,4 +29,4 @@ main : F Nat =
   let (x3, t3) = p3;
   u <- (stream_out (force t3)).2;
   let () = u;
-  return (add x1 (add x2 x3))
+  return (hundred (hundred (x3, x2), x1))
