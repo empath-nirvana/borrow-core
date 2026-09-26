@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # No `sorry`, `axiom`, `native_decide`, `implemented_by`, `opaque`, `partial`,
-# `unsafe` in Paper/, Support/, Examples/, Core/ and Frontend/, outside comments; then every declaration's axioms.
+# `unsafe` in Paper/, Support/, Examples/, Core/, Frontend/ and Backend/, outside comments; then every
+# declaration's axioms.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 python3 - <<'PY'
@@ -8,7 +9,7 @@ import re, pathlib, sys
 BAD = re.compile(r"\b(sorry|axiom|native_decide|implemented_by|opaque|partial|unsafe)\b")
 hits = 0
 files = []
-for d in ("Paper", "Support", "Examples", "Core", "Frontend"):
+for d in ("Paper", "Support", "Examples", "Core", "Frontend", "Backend"):
     files += sorted(pathlib.Path(d).glob("**/*.lean")) + [pathlib.Path(d + ".lean")]
 for p in files:
     src = p.read_text(encoding="utf-8")
@@ -27,8 +28,9 @@ for p in files:
 print(f"{hits} forbidden keyword(s) outside comments.")
 sys.exit(1 if hits else 0)
 PY
-# Frontend/ imports only the library, never experiments/.
-if grep -rhE '^import ' Frontend Frontend.lean | grep -vE '^import +(Frontend|Support|Paper|Examples|Core)([. ]|$)'; then
-  echo "Frontend/ imports a module outside the library."; exit 1
+# Frontend/ and Backend/ import only the library (and Lean's `Std`), never experiments/.
+if grep -rhE '^import ' Frontend Frontend.lean Backend Backend.lean \
+    | grep -vE '^import +(Frontend|Backend|Support|Paper|Examples|Core|Std)([. ]|$)'; then
+  echo "Frontend/ or Backend/ imports a module outside the library."; exit 1
 fi
 lake env lean --run scripts/CheckAxioms.lean

@@ -1,0 +1,245 @@
+import Std.Data.HashMap
+import Support.Dynamics.Host
+import Backend.Value
+import Backend.Clos.Syntax
+
+/-!
+# Backend — closure-IR interpreter
+
+A fuelled interpreter for the closure IR over an explicit heap of objects (pairs, injections,
+closures, boxed `i64`s, cells), counting live objects. It checks the ownership discipline as it
+runs: using a variable consumes it, a consumed variable cannot be used again, and a call or
+`main` must end with every variable of its frame consumed. Host operations go through
+`Host.call` at `wasmHost`, as in the source interpreter.
+-/
+
+namespace Backend.Clos
+open BoCa
+
+/-- A word: an immediate or a heap address. -/
+inductive CV where
+  | unit
+  | i32 (n : UInt32)
+  | ptr (a : Nat)
+  deriving Repr, BEq, Inhabited
+
+inductive Obj where
+  | pair (a b : CV)
+  | inj (right : Bool) (a : CV)
+  | clos (code : Nat) (env : List CV)
+  | i64 (n : UInt64)
+  | cell (v : CV)
+  deriving Repr, Inhabited
+
+structure St where
+  heap : Std.HashMap Nat Obj
+  next : Nat
+
+abbrev IM := StateT St (Except String)
+
+abbrev Env := List (Var × CV)
+
+def allocObj (o : Obj) : IM CV := do
+  let s ← get
+  set { s with heap := s.heap.insert s.next o, next := s.next + 1 }
+  pure (.ptr s.next)
+
+def getObj (a : Nat) : IM Obj := do
+  match (← get).heap[a]? with
+  | some o => pure o
+  | none => throw s!"closure IR: dangling address {a}"
+
+def freeObj (a : Nat) : IM Unit := do
+  let _ ← getObj a
+  modify fun s => { s with heap := s.heap.erase a }
+
+def setObj (a : Nat) (o : Obj) : IM Unit :=
+  modify fun s => { s with heap := s.heap.insert a o }
+
+/-- Consume `x` from the frame. -/
+def take (env : Env) (x : Var) : IM (CV × Env) :=
+  match env.lookup x with
+  | some v => pure (v, env.filter (·.1 != x))
+  | none => throw s!"closure IR: variable {x} used after it was consumed, or unbound"
+
+def takeAll (env : Env) : List Var → IM (List CV × Env)
+  | [] => pure ([], env)
+  | x :: xs => do
+    let (v, env) ← take env x
+    let (vs, env) ← takeAll env xs
+    pure (v :: vs, env)
+
+/-- Deep copy: structure is copied, cells are shared (a location is copied as a word). -/
+def deepCopy : Nat → CV → IM CV
+  | 0, _ => throw "closure IR: out of fuel"
+  | n + 1, v => do
+    match v with
+    | .ptr a =>
+      match ← getObj a with
+      | .pair x y => do let x ← deepCopy n x; let y ← deepCopy n y; allocObj (.pair x y)
+      | .inj r x => do let x ← deepCopy n x; allocObj (.inj r x)
+      | .clos c xs => do let xs ← xs.mapM (deepCopy n); allocObj (.clos c xs)
+      | .i64 k => allocObj (.i64 k)
+      | .cell _ => pure v
+    | _ => pure v
+
+/-- Deep free: structure is freed, cells are not. -/
+def deepDrop : Nat → CV → IM Unit
+  | 0, _ => throw "closure IR: out of fuel"
+  | n + 1, v => do
+    match v with
+    | .ptr a =>
+      match ← getObj a with
+      | .pair x y => do deepDrop n x; deepDrop n y; freeObj a
+      | .inj _ x => do deepDrop n x; freeObj a
+      | .clos _ xs => do xs.forM (deepDrop n); freeObj a
+      | .i64 _ => freeObj a
+      | .cell _ => pure ()
+    | _ => pure ()
+
+/-- The source value a word denotes (for host operations). -/
+def toSource : Nat → CV → IM Val
+  | 0, _ => throw "closure IR: out of fuel"
+  | n + 1, v => do
+    match v with
+    | .unit => pure .unit
+    | .i32 k => pure (.i32 k)
+    | .ptr a =>
+      match ← getObj a with
+      | .pair x y => do pure (.pair (← toSource n x) (← toSource n y))
+      | .inj false x => do pure (.inj₁ (← toSource n x))
+      | .inj true x => do pure (.inj₂ (← toSource n x))
+      | .i64 k => pure (.i64 k)
+      | _ => throw "closure IR: a host operation applied to a function or location"
+
+/-- Allocate the representation of a data value. -/
+def ofSource : Expr → IM CV
+  | .unit => pure .unit
+  | .prim (.lit (.i32 k)) => pure (.i32 k)
+  | .prim (.lit (.i64 k)) => allocObj (.i64 k)
+  | .pair a b => do let a ← ofSource a; let b ← ofSource b; allocObj (.pair a b)
+  | .inj₁ a => do let a ← ofSource a; allocObj (.inj false a)
+  | .inj₂ a => do let a ← ofSource a; allocObj (.inj true a)
+  | _ => throw "closure IR: a host result that is not data"
+
+def cellOf (v : CV) : IM (Nat × CV) := do
+  match v with
+  | .ptr a => match ← getObj a with
+    | .cell c => pure (a, c)
+    | _ => throw "closure IR: not a cell"
+  | _ => throw "closure IR: not a cell"
+
+def objFuel : Nat := 1 <<< 20
+
+def applyOp : Op → List CV → IM CV
+  | .alloc, [v] => allocObj (.cell v)
+  | .free, [l] => do let (a, c) ← cellOf l; freeObj a; pure c
+  | .load, [l] => do let (_, c) ← cellOf l; deepCopy objFuel c
+  | .store, [l, v] => do
+      let (a, c) ← cellOf l
+      deepDrop objFuel c
+      setObj a (.cell v)
+      pure .unit
+  | .host op, [v] => do
+      let sv ← toSource objFuel v
+      deepDrop objFuel v
+      match wasmHost.call op sv with
+      | some r => ofSource r.1
+      | none => throw "closure IR: host operation stuck"
+  | _, _ => throw "closure IR: primitive arity"
+
+/-- Evaluate `t` in the frame `env`: its value and what is left of the frame. -/
+def eval (codes : Array Code) : Nat → Env → Tm → IM (CV × Env)
+  | 0, _, _ => throw "closure IR: out of fuel"
+  | n + 1, env, t =>
+    match t with
+    | .var x => take env x
+    | .unit => pure (.unit, env)
+    | .lit (.i32 k) => pure (.i32 k, env)
+    | .lit (.i64 k) => do pure (← allocObj (.i64 k), env)
+    | .pair a b => do
+        let (va, env) ← take env a
+        let (vb, env) ← take env b
+        pure (← allocObj (.pair va vb), env)
+    | .inj r a => do
+        let (va, env) ← take env a
+        pure (← allocObj (.inj r va), env)
+    | .clos c xs => do
+        let (vs, env) ← takeAll env xs
+        pure (← allocObj (.clos c vs), env)
+    | .prim op xs => do
+        let (vs, env) ← takeAll env xs
+        pure (← applyOp op vs, env)
+    | .app f a => do
+        let (vf, env) ← take env f
+        let (va, env) ← take env a
+        match vf with
+        | .ptr p =>
+          match ← getObj p with
+          | .clos c vs => do
+            freeObj p
+            let some code := codes[c]? | throw "closure IR: bad code index"
+            if code.env.length != vs.length then throw "closure IR: environment size"
+            let frame := (code.param, va) :: code.env.zip vs
+            let (r, rest) ← eval codes n frame code.body
+            if !rest.isEmpty then
+              throw s!"closure IR: code {c} leaves {rest.map (·.1)} unconsumed"
+            pure (r, env)
+          | _ => throw "closure IR: call of a non-closure"
+        | _ => throw "closure IR: call of a non-closure"
+    | .letv x e b => do
+        let (v, env) ← eval codes n env e
+        eval codes n ((x, v) :: env) b
+    | .letpair x y p b => do
+        let (vp, env) ← take env p
+        match vp with
+        | .ptr a =>
+          match ← getObj a with
+          | .pair va vb => do freeObj a; eval codes n ((x, va) :: (y, vb) :: env) b
+          | _ => throw "closure IR: letpair of a non-pair"
+        | _ => throw "closure IR: letpair of a non-pair"
+    | .case s x b₁ y b₂ => do
+        let (vs, env) ← take env s
+        match vs with
+        | .ptr a =>
+          match ← getObj a with
+          | .inj false v => do freeObj a; eval codes n ((x, v) :: env) b₁
+          | .inj true v => do freeObj a; eval codes n ((y, v) :: env) b₂
+          | _ => throw "closure IR: case of a non-injection"
+        | _ => throw "closure IR: case of a non-injection"
+    | .copy x x' b => do
+        let some v := env.lookup x | throw s!"closure IR: copy of consumed variable {x}"
+        let v' ← deepCopy objFuel v
+        eval codes n ((x', v') :: env) b
+    | .drop x b => do
+        let (v, env) ← take env x
+        deepDrop objFuel v
+        eval codes n env b
+
+/-- The observable form of a word. -/
+def observe : Nat → CV → IM PV
+  | 0, _ => throw "closure IR: out of fuel"
+  | n + 1, v => do
+    match v with
+    | .unit => pure .unit
+    | .i32 k => pure (.i32 k)
+    | .ptr a =>
+      match ← getObj a with
+      | .pair x y => do pure (.pair (← observe n x) (← observe n y))
+      | .inj r x => do pure (.inj r (← observe n x))
+      | .clos _ _ => pure .fn
+      | .i64 k => pure (.i64 k)
+      | .cell _ => pure .loc
+
+/-- Run `main`, print its value, drop it, and count the objects left. -/
+def interp (fuel : Nat) (p : Prog) : Except String String := do
+  let act : IM String := do
+    let (v, rest) ← eval p.codes fuel [] p.main
+    if !rest.isEmpty then throw "closure IR: main leaves variables unconsumed"
+    let pv ← observe objFuel v
+    deepDrop objFuel v
+    pure (report pv (← get).heap.size)
+  let (s, _) ← act.run ⟨{}, 1⟩
+  pure s
+
+end Backend.Clos

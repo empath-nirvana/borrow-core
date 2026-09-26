@@ -1,5 +1,5 @@
 name = "borrow_core"
-defaultTargets = ["Paper", "Support", "Examples", "Core", "Frontend", "bcc"]
+defaultTargets = ["Paper", "Support", "Examples", "Core", "Frontend", "Backend", "bcc"]
 
 [[require]]
 name = "mathlib"
@@ -20,6 +20,9 @@ name = "Core"
 
 [[lean_lib]]
 name = "Frontend"
+
+[[lean_lib]]
+name = "Backend"
 
 [[lean_exe]]
 name = "bcc"

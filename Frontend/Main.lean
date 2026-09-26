@@ -1,12 +1,16 @@
 import Frontend.Parser
 import Frontend.Print
 import Frontend.Check.Program
+import Backend.Driver
 /-!
 # Frontend — `bcc`
 
     lake exe bcc parse <file>   parse, and check that printing and re-parsing gives the same AST
     lake exe bcc print <file>   parse and print in the canonical ASCII spelling
     lake exe bcc check <file>   parse and type-check: print each declaration's type, or the error
+    lake exe bcc interp [--stage S] <file>
+                                run a closed `main` in the interpreter of stage `S` (`Backend/`):
+                                `source` (the default), `clos`
 
 Exit code 0 on success, 1 on a syntax error, a round-trip mismatch or a type error, 2 on bad
 usage. A successful `check` has built a `CDerives` derivation of `main`'s erasure
@@ -14,6 +18,13 @@ usage. A successful `check` has built a `CDerives` derivation of `main`'s erasur
 -/
 
 open Frontend
+
+/-- Print a stage's report on `file` (`Backend.interpStage`). -/
+def interp (stage file : String) : IO UInt32 := do
+  let src ← IO.FS.readFile file
+  match Backend.interpStage stage file src with
+  | .ok out => IO.print out; return 0
+  | .error e => IO.eprintln e; return 1
 
 /-- Parse `src`, print it, parse the output, and compare the two ASTs up to spans. -/
 def roundTrip (p : Program) : Except String Unit := do
@@ -26,6 +37,8 @@ def roundTrip (p : Program) : Except String Unit := do
 
 def main (argv : List String) : IO UInt32 := do
   match argv with
+  | ["interp", file] => interp "source" file
+  | ["interp", "--stage", stage, file] => interp stage file
   | [cmd, file] =>
     if cmd != "parse" && cmd != "print" && cmd != "check" then
       IO.eprintln s!"unknown command `{cmd}`"; return 2
@@ -54,5 +67,5 @@ def main (argv : List String) : IO UInt32 := do
         IO.println s!"{file}: ok, {p.decls.length} declarations"
         return 0
   | _ =>
-    IO.eprintln "usage: bcc (parse | print | check) <file>"
+    IO.eprintln "usage: bcc (parse | print | check | interp [--stage S]) <file>"
     return 2
