@@ -93,7 +93,7 @@ lexically, innermost first, and are then discarded. Two consequences:
 4. `+` associates to the right.
 5. `*` associates to the right.
 6. Prefix formers take one atom: `U`, `F`, `ref`, `!`, `imm @`, `mut @`, `box @`, `delay`,
-   `str`, `block`, `val`, `fam m @`, `view @`. Their lifetime argument is also an atom.
+   `stream`, `block`, `val`, `fam m @`, `view @`. Their lifetime argument is also an atom.
 
 For example, `S -o F (A + S) & F 1` is `S -o ((F (A + S)) & (F 1))`, and `imm 'a Nat * Nat`
 is `(imm 'a Nat) * Nat`. `F A * B` is a sort error: write `F (A * B)`. Sorts are checked after
@@ -320,7 +320,7 @@ constant.
 | `fold_own[F, R]` | `!(A′_R => R) => !((mu X. F) => R)` | `foldOwn` `Fu:190`, `FO:36,39` | `FShape.WF`, `Guarded` |
 | `fold_reuse[F, R]` | `!(A″_R => R) => !((mu X. F) => R)` | `foldReuse` `Fu:195`, `FR:85` | `FShape.WF`, `Guarded` |
 | `fixd[A, S]` | `!U (S -o F (A + S) & F 1) => !U (S -o delay A)` | `fixD` `Fu:204`, `De:37,40` | none |
-| `unfold_s[A, S]` | `!U (S -o F (A * S) & F 1) => !U (S -o str A)` | `unfoldS` `Fu:212`, `St:34,37` | none |
+| `unfold_s[A, S]` | `!U (S -o F (A * S) & F 1) => !U (S -o stream A)` | `unfoldS` `Fu:212`, `St:34,37` | none |
 
 Notes on the table:
 
@@ -429,7 +429,7 @@ What a program means:
 | any `C`, any externs | `SemC ∅ Γ e C`: for every substitution of the externs by values of their semantic types | `fundamentalC` `Fu:221` |
 | `F 1`, no externs | runs from empty memory to `()` and empty memory | `adequacyC` `Fu:342` |
 | `F A`, no externs | runs to some `v` from empty memory, given a lemma that `vC` at `A` holds no resource (such as `vC_natN`, `Core/Count.lean:60`) | `theorem32` `Fu:310`, as in `sumProg_runs` (`CL:320`) |
-| `F (U (delay A))`, `F (U (str 1))` | driven `n` times, then closed | `drive_runs_unit`/`_nat` (`Core/DelayPrograms.lean:77,90`), `take_runs` (`Core/StreamPrograms.lean:85`) |
+| `F (U (delay A))`, `F (U (stream 1))` | driven `n` times, then closed | `drive_runs_unit`/`_nat` (`Core/DelayPrograms.lean:77,90`), `take_runs` (`Core/StreamPrograms.lean:85`) |
 
 Drivers such as `driveE n` (`Core/DelayPrograms.lean:37`) are Lean meta-level recursion on
 `ℕ`. The syntax has no meta-recursion, so a driver is written out to the depth wanted.
