@@ -51,3 +51,8 @@ Each entry: the decision, and why. Newest last.
     judgment, which is why each rule costs one compatibility lemma. Inversion lemmas, syntactic
     substitution over derivations, checker completeness and lowering proofs that invert typing
     bring per-rule pairwise burden back; take them on only with the cost stated (lessons L2, L3).
+22. **Optics are a parallel to borrowing, not its abstraction.** Lenses, prisms and traversals
+    share a borrow's shape (a focus and a residual, put back later) and derive from existing rules
+    (`experiments/Optics`), but they do not explain why borrows are safe: every law that matters
+    needs a frame fact that comes from lifetimes and typing. The search for the underlying
+    abstraction continues at the frame guarantee (lifetime parametricity).
