@@ -85,6 +85,9 @@ frame hypothesis at all.
      even agree on the initial heap (`not_runsAgreeOnDom`, `store 0 (alloc ())`).
    - Such a renaming holds only when `alloc` does not reuse a location that the heap or the term
      still names after a `free`. The model states no such invariant.
+   - `experiments/TwoRun` settles this. `EveryRunFootprint` does not hold at a term outside the
+     calculus (`not_everyRunFootprint`). Its image under an injective renaming holds on every
+     fresh run of every `wpTS` term (`wpTS_footprint_fresh`).
 2. **Every closed heap.** `ElemFrame` and `PureFn` quantify over every closed heap, and the
    relation speaks only about heaps of typed worlds.
    - The shape law uses `ElemFrame` at the intermediate heaps of IterMut's own run.
