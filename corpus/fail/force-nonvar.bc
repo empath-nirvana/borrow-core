@@ -1,0 +1,2 @@
+-- expect: 2:20: expected a variable (`force` takes a variable), found `(`
+main : F 1 = force (f)

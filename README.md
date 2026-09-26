@@ -11,6 +11,9 @@ mechanization of Wagner, Gierczak, Marshall, Li and Ahmed, *From Linearity to Bo
 - `Core/` — the call-by-push-value core with non-strict frame lifetimes, blocks, records and
   family borrows, recursive types and folds, and delay and stream codata (`SPEC.md` §3–§7),
   tagged `[spec §N]`; `Core/README.md` describes it.
+- `Frontend/` — the parser for the core syntax (`docs/syntax-core.md`) and the `bcc`
+  executable (`lake exe bcc parse <file>`); `corpus/` holds its test programs
+  (`scripts/parse-corpus.sh`). `Frontend/README.md` describes it.
 - `experiments/` — probes toward future entries, as non-default libraries the library never
   imports (`experiments/README.md`).
 

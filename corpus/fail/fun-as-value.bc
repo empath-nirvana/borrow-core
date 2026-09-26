@@ -1,0 +1,3 @@
+-- A def body is value-judged: a function is `thunkv fun …`.
+-- expect: 3:18: expected a value, found `fun`
+def f : 1 => 1 = fun (x : 1) -> return x

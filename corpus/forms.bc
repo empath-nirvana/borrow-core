@@ -1,0 +1,48 @@
+-- Syntax coverage: every form of sections 3-10 that the programs above do not use, in both
+-- spellings where section 2 gives two. This file is for the parser; its declarations are not
+-- all meant to type-check.
+
+type Nat = μX. 1 ⊕ X
+type Cell = mu X. 1 + ref X
+type Obs = U (Nat ⊸ F Nat & ⊤) * !unk
+type Views = view 'a (ref Nat) * Imm̲ 'a (ref Nat)
+type Lives = box ('a /\ 'b \/ top) 1 * imm (⊓Δ ⊓ 'c ⊔ ⊤) 1 * mut dom i64
+type Poly = U (∀'x ⊏ top. Nat -o forall 'y < 'x. delay Nat)
+type Strs = U (stream Nat) * U (str 1) * U (∀'z ⊏ ⊤. ⊤)
+type Blocks = block (node (leaf Nat) (leaf (ref Nat))) * val Pair * fam imm top Pair
+type Arrows = all 'y < top. Nat => Nat => 0
+shape Pair = node (leaf Nat) (leaf Nat)
+
+extern world : !(1 => 1)
+extern cell : ref Nat
+
+def id[A] : A => A = thunkv fun (x : A) -> return x
+def pair_id[A, B] : A * B => A * B = id[A * B]
+
+def uses : Nat => Nat =
+  thunkv λ(n : Nat) -> return n
+
+def borrowed : !(all 'y < top. imm 'y Nat => Nat) =
+  fold_imm[1 + X, 'y, top, Nat] (!thunkv Λ'y ⊏ ⊤. return (thunkv fun (r : 1 + Nat) ->
+    case r { inl u -> return (roll (inl u)) | inr n -> return (roll (inr n)) }))
+
+def consts : 1 =
+  run (a <- return ((copy['a, Nat], copy_bang[Nat]), (forget_imm['a, Nat], forget_mut[top, Nat]));
+       b <- return ((forget_unk, forget_bang[1 + 1]), (fixd[Nat, 1], unfold_s[Nat, Nat]));
+       c <- return (withbor3['a, 'x, Nat, 1], withload['a, 'x, Nat, 1]);
+       d <- return (withbor_s_imm[Pair, 'c, 1], withbor_f2_imm['c, 'a, 'b, Nat, Nat, 1]);
+       e <- return (fold_own[1 + X, 1], (fold_reuse[1 + X * ref X, 1], free_s[Pair]));
+       return ())
+
+def values : 1 =
+  run (a <- return ((unbox boxed['a /\ top] roll inl () :> 'b), shorten_imm[Pair, 'a] f);
+       b : Nat * 1 <- return (g [top] x, (unroll (y : Nat) : 1 + Nat));
+       c <- return (thunk return (), !thunk return ());
+       return ())
+
+main : F 1 & top =
+  < x <- (force k : F 1);
+    y <- force h [dom] z .2;
+    let () = x;
+    absurd y,
+    <> >

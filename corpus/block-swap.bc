@@ -1,0 +1,26 @@
+-- blockSwap (Core/BlockPrograms.lean), from the corpus review's 4b-block-blockSwap, in
+-- draft 1: one block {a : B, b : B}, both leaves borrowed `mut` at one lifetime by
+-- withbor_s_mut, swapped with two nested withswaps, and the block freed whole.
+
+type B = 1 + 1
+shape Pair = node (leaf B) (leaf B)
+
+main : F 1 =
+  s0 <- return (alloc_s[Pair] (inl (), inr ()));
+  r <- return (withbor_s_mut[Pair, 'c, 1] s0
+         (thunkv Fun 'c < top. return (thunkv fun (m : fam mut 'c Pair) ->
+            let (ma, mb) = m;
+            q1 <- return (withswap['c, B, 1] ma (thunkv fun (x : B) ->
+                    q2 <- return (withswap['c, B, B] mb (thunkv fun (y : B) -> return (x, y)));
+                    let (mb2, y2) = q2;
+                    let () = forget_mut['c, B] mb2;
+                    return (y2, ())));
+            let (ma2, u1) = q1;
+            let () = u1;
+            let () = forget_mut['c, B] ma2;
+            return (boxed['c] ()))));
+  let (s, u) = r;
+  let () = u;
+  ab <- return (free_s[Pair] s);
+  let (a, b) = ab;
+  return ()

@@ -1,0 +1,48 @@
+-- natsSum 3 (Core/StreamPrograms.lean: progS, stepN, dupE, sumK), from the corpus review's
+-- 5-natsSum, in draft 1: the stream 0, 1, 2, … by unfold_s, three elements summed, then closed.
+
+type Nat = mu X. 1 + X
+
+def free_l_alg : !(1 + 1 => 1) =
+  !thunkv fun (r : 1 + 1) -> case r { inl u -> return u | inr u -> return u }
+
+def free_nat : Nat => 1 = unbang (fold_own[1 + X, 1] free_l_alg)
+
+def add_alg : !(1 + (Nat => Nat) => (Nat => Nat)) =
+  !thunkv fun (r : 1 + (Nat => Nat)) ->
+    case r {
+      inl u -> let () = u; return (thunkv fun (m : Nat) -> return m)
+    | inr f -> return (thunkv fun (m : Nat) -> return (f (roll (inr m))))
+    }
+
+def add : Nat => Nat => Nat = unbang (fold_own[1 + X, Nat => Nat] add_alg)
+
+-- dup, a fold_own at R = Nat * Nat: A′_R = 1 + Nat * Nat.
+def dup_alg : !(1 + Nat * Nat => Nat * Nat) =
+  !thunkv fun (r : 1 + Nat * Nat) ->
+    case r {
+      inl u -> let () = u; return (roll (inl ()), roll (inl ()))
+    | inr p -> let (x, y) = p; return (roll (inr x), roll (inr y))
+    }
+
+def dup : Nat => Nat * Nat = unbang (fold_own[1 + X, Nat * Nat] dup_alg)
+
+-- The step at state s: emit s and continue at s + 1; close frees the state.
+def nats_step : !U (Nat -o F (Nat * Nat) & F 1) =
+  !thunkv fun (s : Nat) ->
+    < let (a, b) = dup s; return (a, roll (inr b)),
+      return (free_nat s) >
+
+main : F Nat =
+  f <- return (unbang (unfold_s[Nat, Nat] nats_step));
+  z <- return (roll (inl ()));
+  t0 <- return (thunkv stream_in < (stream_out (force f z)).1, (stream_out (force f z)).2 >);
+  p1 <- (stream_out (force t0)).1;
+  let (x1, t1) = p1;
+  p2 <- (stream_out (force t1)).1;
+  let (x2, t2) = p2;
+  p3 <- (stream_out (force t2)).1;
+  let (x3, t3) = p3;
+  u <- (stream_out (force t3)).2;
+  let () = u;
+  return (add x1 (add x2 x3))

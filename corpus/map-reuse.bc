@@ -1,0 +1,59 @@
+-- mapProgR (Core/ReuseList.lean, MapMut.lean), from the corpus review's 2-mapProgR, in
+-- draft 1: a list of numerals is borrowed `mut` by withbor2, incremented in place by a
+-- fold_reuse under withswap, then freed into a pure list by fold_own.
+
+type Nat  = mu X. 1 + X
+type List = mu X. 1 + (ref Nat * ref X)
+type Pure = mu X. 1 + Nat * X
+shape Node = node (leaf Nat) (leaf List)
+
+def nil : List = roll (inl ())
+def zero : Nat = roll (inl ())
+
+def cons : Nat * List => List =
+  thunkv fun (p : Nat * List) -> return (roll (inr (alloc_s[Node] p)))
+
+-- A″_R = resR R: `ref 1 * R` at the tail. Take the head, put back its successor.
+def map_inc_alg : !(1 + ref Nat * (ref 1 * List) => List) =
+  !thunkv fun (r : 1 + ref Nat * (ref 1 * List)) ->
+    case r {
+      inl u -> return (roll (inl u))
+    | inr p ->
+        let (rn, q) = p;
+        cx <- return (swap[Nat, 1] rn ());
+        let (c, x) = cx;
+        cu <- return (swap[1, Nat] c (roll (inr x)));
+        let (c1, u1) = cu;
+        let () = u1;
+        let (c2, t) = q;
+        cu2 <- return (swap[1, List] c2 t);
+        let (c3, u2) = cu2;
+        let () = u2;
+        return (roll (inr (c1, c3)))
+    }
+
+def map_inc : List => List = unbang (fold_reuse[1 + ref Nat * ref X, List] map_inc_alg)
+
+-- A′_R = resO R = 1 + ref Nat * Pure.
+def to_pure_alg : !(1 + ref Nat * Pure => Pure) =
+  !thunkv fun (r : 1 + ref Nat * Pure) ->
+    case r {
+      inl u -> return (roll (inl u))
+    | inr p -> let (rn, t) = p; return (roll (inr (free[Nat] rn, t)))
+    }
+
+def to_pure : List => Pure = unbang (fold_own[1 + ref Nat * ref X, Pure] to_pure_alg)
+
+main : F Pure =
+  l <- return (cons (zero, cons (zero, cons (zero, nil))));
+  r <- return (alloc[List] l);
+  q <- return (withbor2['x, top, List, 1] r
+         (thunkv Fun 'x < top. return (thunkv fun (b : mut 'x List) ->
+            w <- return (withswap['x, List, 1] b (thunkv fun (k : List) -> return (map_inc k, ())));
+            let (b2, u) = w;
+            let () = u;
+            let () = forget_mut['x, List] b2;
+            return (boxed['x] ()))));
+  let (r2, u) = q;
+  let () = u;
+  return (to_pure (free[List] r2))

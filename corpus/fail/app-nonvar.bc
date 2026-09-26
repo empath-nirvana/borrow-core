@@ -1,0 +1,3 @@
+-- Computation-level application takes variables only (section 6, A-normal form).
+-- expect: 3:22: expected a declaration (`type`, `shape`, `def`, `extern` or `main`), found `(`
+main : F 1 = force f (g x)

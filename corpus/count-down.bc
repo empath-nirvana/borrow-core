@@ -1,0 +1,44 @@
+-- countDownProg (Core/DelayPrograms.lean: progD, countDownStep), from the corpus review's
+-- 3-countDownProg, in draft 1. The state is (n, acc); each step moves one from n to acc, and
+-- the delay is driven twice and then closed.
+
+type Nat = mu X. 1 + X
+
+def free_l_alg : !(1 + 1 => 1) =
+  !thunkv fun (r : 1 + 1) -> case r { inl u -> return u | inr u -> return u }
+
+def free_nat : Nat => 1 = unbang (fold_own[1 + X, 1] free_l_alg)
+
+def three : Nat = roll (inr (roll (inr (roll (inr (roll (inl ())))))))
+
+-- The step: `now acc` at n = 0, else `later (n - 1, acc + 1)`; close frees both numerals.
+-- Both components of `<,>` consume s (withI gives each the whole context).
+def cd_step : !U (Nat * Nat -o F (Nat + Nat * Nat) & F 1) =
+  !thunkv fun (s : Nat * Nat) ->
+    < let (n, acc) = s;
+      case unroll n {
+        inl u -> let () = u; return (inl acc)
+      | inr m -> return (inr (m, roll (inr acc)))
+      },
+      let (n, acc) = s;
+      u <- return (free_nat n);
+      let () = u;
+      return (free_nat acc) >
+
+main : F (Nat + 1) =
+  s0 <- return (three, roll (inl ()));
+  f <- return (unbang (fixd[Nat, Nat * Nat] cd_step));
+  -- `thunkv (force f s0)` is rejected (section 6.4): eta-expand through the unrolling.
+  d0 <- return (thunkv delay_in < (delay_out (force f s0)).1, (delay_out (force f s0)).2 >);
+  o1 <- (delay_out (force d0)).1;
+  case o1 {
+    inl a -> return (inl a)
+  | inr d1 ->
+      o2 <- (delay_out (force d1)).1;
+      case o2 {
+        inl a -> return (inl a)
+      | inr d2 ->
+          u <- (delay_out (force d2)).2;
+          return (inr u)
+      }
+  }
