@@ -1,0 +1,18 @@
+-- Two live `mut` borrows of one place: the callback's borrow `m` is used twice, so two
+-- mutable borrows of `r` would be live together.
+type B = 1 + 1
+
+main : F 1 =
+  r <- return (alloc[B] (inl ()));
+  q <- return (withbor2['x, top, B, 1] r
+         (thunkv Fun 'x < top. return (thunkv fun (m : mut 'x B) ->
+            p <- return (m, m);
+            let (m1, m2) = p;
+            let () = forget_mut['x, B] m1;
+            let () = forget_mut['x, B] m2;
+            return (boxed['x] ()))));
+  let (r2, u) = q;
+  let () = u;
+  x <- return (free[B] r2);
+  return ()
+-- expect: 9:25: `m` is used twice here, and its type `mut 'x (1 + 1)` is not persistent

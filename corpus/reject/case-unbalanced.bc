@@ -1,0 +1,11 @@
+-- The arms of a `case` consume different variables: `r` is freed in one arm only.
+type B = 1 + 1
+
+main : F 1 =
+  r <- return (alloc[B] (inl ()));
+  c <- return (inl () : B);
+  case c {
+    inl u -> x <- return (free[B] r); return u
+  | inr u -> return u
+  }
+-- expect: 7:3: in this `case`, `r` is consumed in the `inl` arm but not in the `inr` arm

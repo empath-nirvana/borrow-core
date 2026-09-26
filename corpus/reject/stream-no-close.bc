@@ -1,0 +1,20 @@
+-- Dropping a stream without `close`: after one element, the rest of the stream `t1` is
+-- dropped instead of closed by `.2`.
+type Nat = mu X. 1 + X
+
+def free_l_alg : !(1 + 1 => 1) =
+  !thunkv fun (r : 1 + 1) -> case r { inl u -> return u | inr u -> return u }
+
+def free_nat : Nat => 1 = unbang (fold_own[1 + X, 1] free_l_alg)
+
+def nats_step : !U (Nat -o F (Nat * Nat) & F 1) =
+  !thunkv fun (s : Nat) -> < return (s, roll (inr s)), return (free_nat s) >
+
+main : F Nat =
+  f <- return (unbang (unfold_s[Nat, Nat] nats_step));
+  z : Nat <- return (roll (inl ()));
+  t0 <- return (thunkv stream_in < (stream_out (force f z)).1, (stream_out (force f z)).2 >);
+  p1 <- (stream_out (force t0)).1;
+  let (x1, t1) = p1;
+  return x1
+-- expect: 18:12: `t1` is not consumed in its scope, and its type `U (stream (mu X. 1 + X))` is not persistent (or it cannot be dropped where its scope ends)

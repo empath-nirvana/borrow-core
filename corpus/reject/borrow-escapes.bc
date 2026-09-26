@@ -1,0 +1,16 @@
+-- A borrow escaping its lifetime: the callback returns a closure that captures its borrow
+-- `b : imm 'x B`, to be called after the borrow has ended. `boxed['x]` needs everything it
+-- captures to outlive `'x`, and `b` does not.
+type B = 1 + 1
+
+main : F 1 =
+  r <- return (alloc[B] (inl ()));
+  q <- return (withbor1['x, B, 1 => 1] r
+         (thunkv Fun 'x < top. return (thunkv fun (b : imm 'x B) ->
+            return (boxed['x] (thunkv fun (u : 1) -> let () = u; return (forget_imm['x, B] b))))));
+  let (r2, k) = q;
+  y <- return (k ());
+  let () = y;
+  x <- return (free[B] r2);
+  return ()
+-- expect: 10:21: `boxed['x]`: `b`, of type `imm 'x (1 + 1)`, is used inside, and it cannot be shown to outlive `'x`
