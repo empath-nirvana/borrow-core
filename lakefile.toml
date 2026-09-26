@@ -90,3 +90,8 @@ roots = ["CBPVMu"]
 name = "Optics"
 srcDir = "experiments/Optics"
 roots = ["Optics"]
+
+[[lean_lib]]
+name = "FrameTheorems"
+srcDir = "experiments/FrameTheorems"
+roots = ["FrameTheorems"]
