@@ -479,6 +479,23 @@ section 12).
 **Output.** A `CDerives Δ Γ e j` derivation together with its `Expr` `e`, or an error with a
 source span.
 
+### 11.1 As implemented (`Frontend/Check/`)
+
+The checker's behaviour where it goes beyond the sections above:
+
+- **Masks, not threading.** Each subterm yields its erasure with two masks over the context: the
+  slots it uses, and the live slots it can absorb without using them (⊤-slack). The enclosing rule
+  picks the split, and a proof of `CDerives` holds for every choice between the two.
+- **Modes.** `delay_in`/`stream_in` synthesize when the body's type is literally the unrolling.
+  `unbang V` checked at `A` checks `V` at `!A`. `Fun` checked against a `forall` type takes that
+  type's binder number, not `Δ.freshVar`.
+- **Declarations.** A def's type arguments are elaborated at the use site, and a parametric def is
+  checked only at its uses. `main`'s context is every extern in the file.
+- **Incompleteness.** Lifetime entailment uses only the structural rules, so it misses
+  distributivity (`('x \/ 'y) /\ 'z <= ('x /\ 'z) \/ ('y /\ 'z)`). The derived forms stated at
+  `Ctx.Dead` (`alloc_s`, `free_s`, `withbor_s_*`, `withbor_f2_*`) cannot drop persistent slots. The
+  full list is in `Frontend/README.md`.
+
 ## 12. Proof obligations for the checker
 
 Soundness needs only the "⇒ holds" direction of each item. Completeness, meaning that a program
