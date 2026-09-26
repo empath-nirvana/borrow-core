@@ -194,6 +194,25 @@ set_option maxRecDepth 100000 in
 /-- **In place**: after IterMut the nodes are where `buildList` put them. -/
 theorem iter_inPlace : nodesOf numOf iterKeep = some [(4, 1), (2, 1), (0, 1)] := by decide
 
+/-! ### The borrow form at one lifetime: the goal, stated
+
+IterMut lends the elements one at a time, each at its own lifetime.  Handing the callback every
+element at once, at one lifetime, over a list whose length is not static, is the following
+typing.  For a static shape it is `withborS` (`BlockBorrow.lean`).  I have not derived it for
+`L_E`, and I have not verified that any obstruction is real. -/
+
+/-- `μX. 1 ⊕ (Mut @c E ⊗ X)`: a list of borrows at one lifetime. -/
+def listMut (c : Lifetime.Life) (E : VTy) : VTy := .mu (.sum .unit (.tensor (.mut c E) (.tvar 0)))
+
+/-- **The goal**: a closed value lending every element of `L_E` at one fresh lifetime,
+`L_E ⊸ (∀'c ⊏ ⊓Δ. listMut 'c E ⊸ ['c] T) ⊸ L_E ⊗ T`, at every admissible `Δ`. -/
+def AllAtOnceGoal (E : VTy) : Prop :=
+  ∃ run : Val, closedAt 0 run.1 = true ∧
+    ∀ (Δ : LifeCtx) (c : LifeVar) (T : VTy), Δ.Ok → Δ.find? c = none → plainV T = true →
+      CDerives Δ [] (.val run)
+        (.val (.lolli (clistLE E) (.lolli (cbTy (fun a => listMut a E) c Δ.meetOfDom T)
+          (.tensor (clistLE E) T))))
+
 end BoCa.Fig16.LogRel.Core.Optics
 
 end

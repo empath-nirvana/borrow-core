@@ -398,7 +398,7 @@ def CompAdm (A₁ : LifeCtx → Lifetime.Life → LifeVar → Prop)
     Δ.find? y = none ∧ x₁ ≠ y
 
 /-- The composite's typing: `S ⊸ (∀'x ⊏ ⊓Δ. F('x) ⊸ ['x] T) ⊸ S ⊗ T`. -/
-theorem d_comp {S F : Lifetime.Life → VTy} {U : VTy} (hU : plainV U = true)
+theorem d_comp {S F : Lifetime.Life → VTy} {U : VTy}
     (L₁ : Lens S (fun c => .mut c U)) (L₂ : Lens (fun a => .mut a U) F)
     (hF : FocusFree F) (hFi : FocusInst F) {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life}
     {x : LifeVar} {T : VTy} (h : CompAdm L₁.Adm L₂.Adm Δ a x) (hT : plainV T = true)
@@ -481,7 +481,7 @@ def compCbV (run₂ g : Val) : Val :=
     (.seq (.app forget (.var 1)) (.var 0)))))
 
 /-- **Composition**: a lens onto `Mut 'x U`, then an optic from `Mut 'x U`, nested. -/
-def Optic.comp {S F : Lifetime.Life → VTy} {U : VTy} (hU : plainV U = true)
+def Optic.comp {S F : Lifetime.Life → VTy} {U : VTy}
     (L₁ : Lens S (fun c => .mut c U)) (L₂ : Lens (fun a => .mut a U) F)
     (hF : FocusFree F) (hFi : FocusInst F) (Dom₁ : Val → Prop) (f₁ : Val → Val)
     (h₁ : L₁.Obs = LensObs Dom₁ f₁)
@@ -490,7 +490,7 @@ def Optic.comp {S F : Lifetime.Life → VTy} {U : VTy} (hU : plainV U = true)
   run := compV L₁.run L₂.run
   closed := compV_closed L₁.closed L₂.closed
   Adm := CompAdm L₁.Adm L₂.Adm
-  wf h hT hΓ := d_comp hU L₁ L₂ hF hFi h hT hΓ
+  wf h hT hΓ := d_comp L₁ L₂ hF hFi h hT hΓ
   Obs μ μ' s g t := Dom₁ s ∧ L₂.Obs μ μ' (f₁ s) (innerV g) t
   runs {μ μ' s g w} hμ hs hg := by
     have hcb : closedAt 0 (compCbV L₂.run g).1 = true := by
@@ -540,14 +540,14 @@ def Optic.comp {S F : Lifetime.Life → VTy} {U : VTy} (hU : plainV U = true)
       exact .refl _ _
 
 /-- **Composition law**: composing two lenses composes their foci. -/
-theorem Optic.comp_obs {S F : Lifetime.Life → VTy} {U : VTy} (hU : plainV U = true)
+theorem Optic.comp_obs {S F : Lifetime.Life → VTy} {U : VTy}
     (L₁ : Lens S (fun c => .mut c U)) (L₂ : Lens (fun a => .mut a U) F)
     (hF : FocusFree F) (hFi : FocusInst F) (Dom₁ : Val → Prop) (f₁ : Val → Val)
     (h₁ : L₁.Obs = LensObs Dom₁ f₁)
     (hf₁ : ∀ s, closedAt 0 s.1 = true → Dom₁ s → closedAt 0 (f₁ s).1 = true)
     (Dom₂ : Val → Prop) (f₂ : Val → Val) (h₂ : L₂.Obs = LensObs Dom₂ f₂)
     {μ μ' : Heap} {s g t : Val} (hg : closedAt 0 g.1 = true) :
-    (Optic.comp hU L₁ L₂ hF hFi Dom₁ f₁ h₁ hf₁).Obs μ μ' s g t ↔
+    (Optic.comp L₁ L₂ hF hFi Dom₁ f₁ h₁ hf₁).Obs μ μ' s g t ↔
       LensObs (fun s => Dom₁ s ∧ Dom₂ (f₁ s)) (f₂ ∘ f₁) μ μ' s g t := by
   show Dom₁ s ∧ L₂.Obs μ μ' (f₁ s) (innerV g) t ↔ _
   rw [h₂]
@@ -779,6 +779,12 @@ theorem d_over {S V : VTy} (hV : plainV V = true) (L : Lens (fun _ => S) (fun c 
     · exact .boxI (.var (.here (.cons (.cons (.cons (.cons (.cons hD)))))))
         (CtxOutlives.solo (Lifetime.LifeCtx.defines_of_wf (wf_var_self _ _ _)) (plain_outlives hT)
           (.cons (.cons (.cons (.cons (.cons hΓ))))))
+
+/-- **A split of a mutable borrow at a fresh lifetime**: `Mut @a (Ref A ⊗ Ref B)` lends
+`Mut 'x A ⊗ Mut 'x B` at `'x ⊏ ⊓Δ`, the family lens lifted through `withswap`. -/
+def splitMut (A B : VTy) (hA : plainV A = true) (hB : plainV B = true) :
+    Lens (fun a => .mut a (refs2 A B)) (fun c => famTy2 mutM c A B) :=
+  (famLens A B hA hB).lift
 
 end BoCa.Fig16.LogRel.Core.Optics
 

@@ -56,15 +56,14 @@ def withloadV : Val := .lam (.val (.lam (.app (.app v0 unit') (.app load' v1))))
 theorem withloadV_eq : withloadV.1 = withload := rfl
 
 /-- `withload s g`: `s` is a cell `ℓ`, and `g` runs on its content from the same heap. -/
-theorem steps_withload_iff {μ μ' : Heap} {s g w : Val} (hg : closedAt 0 g.1 = true) :
+theorem steps_withload_iff {μ μ' : Heap} {s g w : Val} :
     Steps μ (app2 (.val withloadV) s.1 g.1) μ' w.1 ↔
       ∃ (ℓ : Loc) (v : Val), s = .loc ℓ ∧ μ ℓ = some v ∧ Steps μ (app2 g.1 unit' v.1) μ' w.1 := by
   rw [show Expr.val withloadV = lam2 (.app (.app v0 unit') (.app load' v1)) from rfl,
     steps_app2_iff]
   have e : ((Expr.app (.app v0 unit') (.app load' v1)).subst 1 (s.shift 1 0)).subst 0 g
       = .app (.app g.1 unit') (.app load' s.1) := by
-    simp [v0, v1, unit', load', closed_subst hg,
-      Expr.subst_shift 0 0 0 g s.1 (le_refl _) (le_refl _)]
+    simp [v0, v1, unit', load', Expr.subst_shift 0 0 0 g s.1 (le_refl _) (le_refl _)]
   rw [e, steps_appR_iff]
   constructor
   · rintro ⟨μm, v, hl, h⟩
@@ -79,10 +78,10 @@ def immGetter (A : VTy) (hA : plainV A = true) :
   run := withloadV
   closed := rfl
   Adm Δ _ x := Δ.find? x = none
-  wf {Δ Γ a x T} hx hT hΓ := .withload x hΓ.toP hx (plain_noFree hA) (plain_noFree hT)
+  wf {_ _ _ x _} hx hT hΓ := .withload x hΓ.toP hx (plain_noFree hA) (plain_noFree hT)
   Obs μ μ' s g w := ∃ (ℓ : Loc) (v : Val), s = .loc ℓ ∧ μ ℓ = some v ∧
     Steps μ (app2 g.1 unit' v.1) μ' w.1
-  runs _ hg := steps_withload_iff hg
+  runs _ _ := steps_withload_iff
 
 /-- `Λ. λy. y`: the reading callback. -/
 def readG : Val := .lam (.val (.lam (.var 0)))
@@ -92,7 +91,7 @@ heap as it was, on every run. -/
 theorem withload_read {μ μ' : Heap} {s w : Val} :
     Steps μ (app2 (.val withloadV) s.1 readG.1) μ' w.1 ↔
       ∃ ℓ : Loc, s = .loc ℓ ∧ μ ℓ = some w ∧ μ' = μ := by
-  rw [steps_withload_iff rfl]
+  rw [steps_withload_iff]
   constructor
   · rintro ⟨ℓ, v, rfl, hℓ, h⟩
     rw [show readG.1 = lam2 (.var 0) from rfl, steps_app2_unit_iff] at h

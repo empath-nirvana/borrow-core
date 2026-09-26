@@ -33,7 +33,7 @@ theorem PB_plain : plainV PB = true := rfl
 
 /-- The composite: `Ref (Ref B ⊗ Ref B) → Mut 'y B`, the first leaf. -/
 def cellFst : Lens (fun _ => .ref PB) (fun c => .mut c BB) :=
-  Optic.comp PB_plain (idLens PB PB_plain) (fstLens BB BB rfl).lift
+  Optic.comp (idLens PB PB_plain) (fstLens BB BB rfl).lift
     (mut_focusFree rfl) (mut_focusInst rfl) (fun _ => True) id rfl (fun _ h _ => h)
 
 /-- `Λ. λm. let (m′, u) = withswap m setG; u; forget m′; ()`. -/
