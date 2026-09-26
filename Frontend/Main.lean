@@ -10,7 +10,7 @@ import Backend.Driver
     lake exe bcc check <file>   parse and type-check: print each declaration's type, or the error
     lake exe bcc interp [--stage S] <file>
                                 run a closed `main` in the interpreter of stage `S` (`Backend/`):
-                                `source` (the default), `clos`
+                                `source` (the default), `clos`, `flat`
 
 Exit code 0 on success, 1 on a syntax error, a round-trip mismatch or a type error, 2 on bad
 usage. A successful `check` has built a `CDerives` derivation of `main`'s erasure

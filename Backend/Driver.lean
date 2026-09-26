@@ -3,6 +3,8 @@ import Frontend.Check.Program
 import Backend.Source
 import Backend.Clos.Convert
 import Backend.Clos.Interp
+import Backend.Flat.Lower
+import Backend.Flat.Interp
 
 /-!
 # Backend — driver
@@ -31,11 +33,15 @@ def checkedMain (file src : String) : Except String BoCa.Expr := do
 def closOf (file src : String) : Except String Clos.Prog := do
   Clos.convert (← checkedMain file src)
 
+def flatOf (file src : String) : Except String Flat.Prog := do
+  Flat.lower (← closOf file src)
+
 /-- A stage's report on a source file. -/
 def interpStage (stage file src : String) : Except String String := do
   match stage with
   | "source" => interpSource runFuel (← checkedMain file src)
   | "clos" => Clos.interp runFuel (← closOf file src)
+  | "flat" => Flat.interp runFuel (← flatOf file src)
   | _ => throw s!"unknown stage `{stage}`"
 
 end Backend

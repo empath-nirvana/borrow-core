@@ -4,3 +4,7 @@ import Backend.Clos.Syntax
 import Backend.Clos.Convert
 import Backend.Clos.Interp
 import Backend.Driver
+import Backend.Flat.Syntax
+import Backend.Flat.Runtime
+import Backend.Flat.Lower
+import Backend.Flat.Interp
