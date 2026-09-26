@@ -20,9 +20,9 @@ A lexer, parser, printer and type checker for the textual core language of
 | `Tests.lean` | precedence cases and round trips checked by the kernel (`decide +kernel`) |
 | `Main.lean` | `bcc` |
 
-`Frontend/` imports only `Support.Syntax.Integers` (for `Width`, `IntLit`, `HostOp`) and
-itself. `scripts/check-hygiene.sh` scans it and checks that it imports nothing outside the
-library.
+The lexer, parser and printer import only `Support.Syntax.Integers` (for `Width`, `IntLit`,
+`HostOp`) and each other; the checker imports `Core`. `scripts/check-hygiene.sh` scans
+`Frontend/` and checks that it imports nothing outside the library.
 
 ## Termination without `partial`
 
