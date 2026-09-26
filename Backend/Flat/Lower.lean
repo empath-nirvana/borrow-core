@@ -1,5 +1,6 @@
 import Backend.Clos.Syntax
 import Backend.Flat.Runtime
+import Backend.Flat.Host
 
 /-!
 # Backend — closure IR to flat IR
@@ -12,7 +13,7 @@ injection's header; `letpair` and `case` free the object they take apart. `copy`
 the runtime's deep copy and drop; `load` copies the cell's contents and `store` drops them.
 
 Function indices: the runtime functions (`runtimeFns`), one host function per host operation the
-program applies (none yet), the closure codes in table order, `main`, and the entry.
+program applies, the closure codes in table order, `main`, and the entry.
 -/
 
 namespace Backend.Flat
@@ -75,7 +76,8 @@ def lowerTm (hostIdx : HostOp → Nat) : Tm → Dest → LM (List Stmt)
   | .prim .store [l, v], d => do
       let l ← lv l
       return [.eval (.call fDrop [.load l 1]), .store l 1 (← lv v)] ++ emit d (.c64 unitW)
-  | .prim (.host _) _, _ => throw "flat IR: host operations are not lowered"
+  | .prim (.host op) [v], d => do
+      return emit d (.call (hostIdx op) [← lv v])
   | .prim _ _, _ => throw "flat IR: primitive arity"
   | .app f a, d => do
       let f ← lv f
@@ -140,11 +142,11 @@ def lower (p : Clos.Prog) : Except String Prog := do
   let ops := p.hostOps
   let hostBase := runtimeFns.length
   let hostIdx (o : HostOp) : Nat := hostBase + (ops.idxOf? o).getD 0
-  let codeBase := hostBase
+  let codeBase := hostBase + ops.length
   let codes ← p.codes.toList.zipIdx.mapM fun (c, k) => lowerCode hostIdx k c
   let fMain := codeBase + codes.length
   let main ← lowerMain hostIdx p.main
-  let fns := runtimeFns ++ codes ++ [main, entryFn fMain]
+  let fns := runtimeFns ++ ops.map hostFn ++ codes ++ [main, entryFn fMain]
   pure { fns := fns.toArray, table := (List.range codes.length).toArray.map (codeBase + ·),
          entry := fMain + 1 }
 

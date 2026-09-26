@@ -1,0 +1,26 @@
+-- Integers (section 8a) at both widths: arithmetic, bit operations, counts, tests, the partial
+-- operations on both sides of where Wasm traps, and the conversions. `k` is used three times.
+
+main : F (i32 * (i64 * (i32 * (i64 * (i32 * (i64 * (i32 * ((1 + 1) * ((1 + 1) * ((1 + 1) *
+         ((i32 + 1) * ((i64 + 1) * ((i32 + 1) * ((i64 + 1) * (i64 * (i64 * (i64 * i32))))))))))))))))) =
+  k <- return i64[0x100000000];
+  a1 <- return ((unbang host[sub32]) (i32[3], i32[5]));
+  a2 <- return ((unbang host[add64]) (k, k));
+  a3 <- return ((unbang host[shr_s32]) (i32[0x80000000], i32[4]));
+  a4 <- return ((unbang host[rotl64]) (i64[0x8000000000000001], i64[1]));
+  a5 <- return ((unbang host[clz32]) i32[1]);
+  a6 <- return ((unbang host[popcnt64]) i64[0xF0F0]);
+  a7 <- return ((unbang host[extend8_s32]) i32[0x80]);
+  a8 <- return ((unbang host[eqz64]) i64[0]);
+  a9 <- return ((unbang host[lt_u32]) (i32[0xFFFFFFFF], i32[0]));
+  a10 <- return ((unbang host[ge_s64]) (i64[0xFFFFFFFFFFFFFFFF], k));
+  a11 <- return ((unbang host[div_s32]) (i32[0x80000000], i32[0xFFFFFFFF]));
+  a12 <- return ((unbang host[div_s64]) (i64[0xFFFFFFFFFFFFFFF9], i64[2]));
+  a13 <- return ((unbang host[rem_u32]) (i32[7], i32[0]));
+  a14 <- return ((unbang host[rem_s64]) (i64[0xFFFFFFFFFFFFFFF9], i64[2]));
+  a15 <- return ((unbang host[extend_s]) i32[0xFFFFFFFF]);
+  a16 <- return ((unbang host[extend_u]) i32[0xFFFFFFFF]);
+  a17 <- return ((unbang host[extend32_s]) i64[0x80000000]);
+  a18 <- return ((unbang host[wrap]) k);
+  return (a1, (a2, (a3, (a4, (a5, (a6, (a7, (a8, (a9, (a10, (a11, (a12, (a13, (a14,
+    (a15, (a16, (a17, a18)))))))))))))))))

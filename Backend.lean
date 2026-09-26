@@ -6,6 +6,7 @@ import Backend.Clos.Interp
 import Backend.Driver
 import Backend.Flat.Syntax
 import Backend.Flat.Runtime
+import Backend.Flat.Host
 import Backend.Flat.Lower
 import Backend.Flat.Interp
 import Backend.Wasm.Syntax
