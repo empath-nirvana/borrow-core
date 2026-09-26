@@ -8,3 +8,7 @@ import Backend.Flat.Syntax
 import Backend.Flat.Runtime
 import Backend.Flat.Lower
 import Backend.Flat.Interp
+import Backend.Wasm.Syntax
+import Backend.Wasm.Runtime
+import Backend.Wasm.Lower
+import Backend.Wasm.Print

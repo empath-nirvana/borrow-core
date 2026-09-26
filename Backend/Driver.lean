@@ -5,6 +5,8 @@ import Backend.Clos.Convert
 import Backend.Clos.Interp
 import Backend.Flat.Lower
 import Backend.Flat.Interp
+import Backend.Wasm.Lower
+import Backend.Wasm.Print
 
 /-!
 # Backend — driver
@@ -35,6 +37,10 @@ def closOf (file src : String) : Except String Clos.Prog := do
 
 def flatOf (file src : String) : Except String Flat.Prog := do
   Flat.lower (← closOf file src)
+
+/-- The program as WAT. -/
+def compileWat (file src : String) : Except String String := do
+  pure (Wasm.printModule (Wasm.lowerProg (← flatOf file src)))
 
 /-- A stage's report on a source file. -/
 def interpStage (stage file src : String) : Except String String := do

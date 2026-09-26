@@ -8,6 +8,10 @@ import Backend.Driver
     lake exe bcc parse <file>   parse, and check that printing and re-parsing gives the same AST
     lake exe bcc print <file>   parse and print in the canonical ASCII spelling
     lake exe bcc check <file>   parse and type-check: print each declaration's type, or the error
+    lake exe bcc compile <file> -o <out.wat>
+                                compile a closed `main` to WebAssembly text (`Backend/`)
+    lake exe bcc run <file>     compile, and run under `wasmtime`: `main`'s value, then the number
+                                of live objects after it is dropped
     lake exe bcc interp [--stage S] <file>
                                 run a closed `main` in the interpreter of stage `S` (`Backend/`):
                                 `source` (the default), `clos`, `flat`
@@ -26,6 +30,29 @@ def interp (stage file : String) : IO UInt32 := do
   | .ok out => IO.print out; return 0
   | .error e => IO.eprintln e; return 1
 
+/-- Write `file`'s WAT to `out`. -/
+def compile (file out : String) : IO UInt32 := do
+  let src ← IO.FS.readFile file
+  match Backend.compileWat file src with
+  | .ok wat => IO.FS.writeFile out wat; return 0
+  | .error e => IO.eprintln e; return 1
+
+/-- Compile `file` and run it under `wasmtime` (with tail calls), passing its output through. -/
+def run (file : String) : IO UInt32 := do
+  let src ← IO.FS.readFile file
+  match Backend.compileWat file src with
+  | .error e => IO.eprintln e; return 1
+  | .ok wat =>
+    let dir ← IO.FS.createTempDir
+    let out := dir / "main.wat"
+    IO.FS.writeFile out wat
+    let r ← IO.Process.output
+      { cmd := "wasmtime", args := #["run", "-W", "tail-call=y", out.toString] }
+    IO.FS.removeDirAll dir
+    IO.print r.stdout
+    IO.eprint r.stderr
+    return (if r.exitCode == 0 then 0 else 1)
+
 /-- Parse `src`, print it, parse the output, and compare the two ASTs up to spans. -/
 def roundTrip (p : Program) : Except String Unit := do
   let out := p.pp
@@ -37,6 +64,8 @@ def roundTrip (p : Program) : Except String Unit := do
 
 def main (argv : List String) : IO UInt32 := do
   match argv with
+  | ["compile", file, "-o", out] => compile file out
+  | ["run", file] => run file
   | ["interp", file] => interp "source" file
   | ["interp", "--stage", stage, file] => interp stage file
   | [cmd, file] =>
@@ -67,5 +96,5 @@ def main (argv : List String) : IO UInt32 := do
         IO.println s!"{file}: ok, {p.decls.length} declarations"
         return 0
   | _ =>
-    IO.eprintln "usage: bcc (parse | print | check | interp [--stage S]) <file>"
+    IO.eprintln "usage: bcc (parse | print | check | run | interp [--stage S]) <file>\n       bcc compile <file> -o <out.wat>"
     return 2
