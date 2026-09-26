@@ -5,3 +5,4 @@ import Optics.Programs
 import Optics.Getter
 import Optics.Prism
 import Optics.Traversal
+import Optics.Shape
