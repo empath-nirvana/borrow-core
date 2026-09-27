@@ -1,0 +1,14 @@
+-- An array used after it is freed: `array_free` consumes the array, which is then replaced
+-- into.
+type A = array i32
+
+def tab : !(i32 => i32) = !thunkv fun (i : i32) -> return i
+
+def gone : !(i32 => 1) = !thunkv fun (x : i32) -> return ()
+
+main : F (A * (i32 + i32)) =
+  a <- return ((unbang array_new[i32]) (i32[2], tab));
+  u <- return ((unbang array_free[i32]) (gone, a));
+  let () = u;
+  return ((unbang array_replace[i32]) (a, (i32[0], i32[1])))
+-- expect: 11:3: `a` is used twice here, and its type `array i32` is not persistent

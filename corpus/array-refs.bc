@@ -1,0 +1,24 @@
+-- An array of owned cells (SPEC §9, §12): `array_new` allocates a cell per element, holding
+-- 7i + 1. Element 1 is replaced by a fresh cell and the old cell is freed, which returns its
+-- contents. The array, still owning three cells, is dropped implicitly at the end of `main`:
+-- its destructor is `array_free` with the destructor of `ref i32` as the consumer, which frees
+-- each element's cell and then the array.
+--
+-- Answer: i32[8], the contents of the cell that was element 1 of [1, 8, 15]. A tabulator
+-- applied at the wrong index gives 1 or 15. `live 0` checks that the destructor freed the four
+-- cells the array owned at the end and the array itself.
+
+type R = ref i32
+
+def mk : !(i32 => R) =
+  !thunkv fun (i : i32) ->
+    return (alloc[i32] ((unbang host[add32]) ((unbang host[mul32]) (i, i32[7]), i32[1])))
+
+main : F i32 =
+  a <- return ((unbang array_new[R]) (i32[3], mk));
+  q <- return ((unbang array_replace[R]) (a, (i32[1], alloc[i32] i32[100])));
+  let (a1, o) = q;
+  case o {
+    inl c -> return (free[i32] c)
+  | inr c -> return (free[i32] c)
+  }

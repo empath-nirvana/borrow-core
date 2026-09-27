@@ -701,7 +701,10 @@ fixes when the effect of a drop happens.
 Entries 2–6 are implemented in the library directory `Core/`, with one `fundamentalC` and
 `adequacyC` covering every rule; §7's `νX. C` is `Core/NuRel.lean` and `Core/Nu.lean`, and the
 checker reads `nu X. C`, `iter A R R'`, `nu_in`/`nu_out` and `unfold[C, S]`. Entries 7 and 9 (§8, §10) are implemented; §8 extends `Paper/` and `Support/` with the literal
-and host-step forms. Entries 8 and 10 (§9, §11) are specified only. Entry 11 (§12) is implemented in
+and host-step forms. Entry 8 (§9, arrays) is implemented: the former and its lemmas in `Core/Types.lean` and the typed
+world, the constants in `Core/Arrays.lean` (`Core/ArrayWp.lean` for the steps), the three machine
+steps in `Paper/` and `Support/`, the checker (`array`, `array_imm`, syntax-core §8b) and the
+backend. Entry 10 (§11) is specified only. Entry 11 (§12) is implemented in
 `Core/Dtor.lean` and the checker (`Frontend/Check/`), with no change to `CDerives`.
 
 ---

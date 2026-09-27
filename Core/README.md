@@ -1,8 +1,8 @@
 # Core: the consolidated world
 
 One CBPV typed world holding `μ` and the three folds, blocks, records and variants, family
-borrows, block borrows, the delay type with `fixD`, the stream type with `unfoldS`, and the
-integer types with the host operations. It is the library's implementation of `SPEC.md` §3–§8
+borrows, block borrows, the delay type with `fixD`, the stream type with `unfoldS`, the
+integer types with the host operations, and arrays. It is the library's implementation of `SPEC.md` §3–§8
 and §10; code an entry adds is tagged `[spec §N]` (each file's heading, and the main
 definitions, rules and theorems).
 
@@ -19,7 +19,7 @@ axioms among `[propext, Classical.choice, Quot.sound]` (`scripts/CheckAxioms.lea
 ### Types
 
     A ::= 1 | A ⊗ A | 0 | A ⊕ A | U C | Ref A | Imm @a A | Mut @a A | [@a] A | !A | Unk | X | μX. A
-        | I32 | I64
+        | I32 | I64 | [A]
     C ::= F A | A ⊸ C | C & C | ⊤ | ∀'a ⊏ @b. C | νX. C
 
 `I32` and `I64` are one constructor, `VTy.int w` (`Integers.lean`, `[spec §8]`). The relation
@@ -76,6 +76,24 @@ Typing: `CDerives.lit c : I` at a consumed context, and one rule `CDerives.hostO
 operation sound by one host step, using only that `Host.call` answers at the stated type
 (`host_call_sound`).
 
+### Arrays  `[spec §9]`
+
+`[L]` (`VTy.fam L`, `Types.lean`) is the run-time family `⊛_{i<n} L` of leaf places: a value
+`(ℓ, n)` whose leaf `i` is the location `ℓ + i`. The relation and the shape relation read it as
+the iterated separating conjunction `sepRange` (`SepRange.lean`) of `L`'s clause at the leaf
+locations. `Array A = [Ref A]`; `ArrayImm @a A = [Imm @a A]` is `Imm̲ 'a (Array A)`, the family
+`withload` gives at a borrow of a cell holding an array. `RefPos`/`MutPos` have the leaf
+positions of a family, and every lemma proved by induction on types or positions has its `[L]`
+case (6.131 `reborrow_vShape`, 6.60 `vC_outlives`, the images and invariants of reborrowing).
+
+The machine's steps `tab`, `idx`, `drop` (`Paper/S3_Dynamics/Definitions.lean`,
+`Support/Dynamics/Arrays.lean`) are put in front of `wpTS` by `wpTS_tab` (`n` of `TW.alloc` at a
+fresh run, `alloc_block`), `wpTS_idx` and `wpTS_dropStep` (`ArrayWp.lean`). The constants and
+their compatibility lemmas are `Arrays.lean`: `array_new` (`tabFill_wp`), `array_free`
+(`dropFill_wp`), `array_size`, `array_replace`, and on families `array_len`, `array_get`,
+`array_copy`, `array_forget`. `HasDtor` has `Array A` and `ArrayImm @a A` (`Dtor.lean`).
+`ArrayPrograms.lean` runs one program by adequacy and by the interpreter.
+
 ### Theorems
 
 - **Fundamental Property.** `fundamentalC : CDerives Δ Γ e j → SemJ Δ Γ e j`, by induction
@@ -124,6 +142,7 @@ interpreter (`…_eval`, kernel-checked by `decide`) with its result checked (`�
 | `BlockPrograms.lean` | `blockSwap`, `nestSwap`, `blockRead`, `nestRead` (each with a `…_block` typed-world fact), `bagBlock` (a block with a list leaf), `crossPack` |
 | `StreamPrograms.lean` | `take_runs` (every closed `U(Stream 1)` observed `n` times and closed), `takeCloseR`, `natsSum` (`0 + 1 + 2 = 3`) |
 | `IntPrograms.lean` | `sumToProg` (`fixD` over `I32 ⊗ I32`, `1 + … + 10 = 55`), `sumListProg` (`[100, 20, 3]` as `μX. 1 ⊕ Ref (I32 ⊗ X)`, read by `withload` inside an immutable borrow, `foldImm` sum `123`), `signProg` (`div_s`/`div_u` of `-7` by `2`, a wrapping `mul`, `div_u` by zero taking the error branch) |
+| `ArrayPrograms.lean` | `arrProg`: `array_new` of three elements, `array_replace` at index 1, `array_size`, `array_free`; observed `(inl 11, 3)` and no cell left |
 
 The `IntPrograms.lean` runs are theorems at every host; the interpreter's results are at
 `wasmHost`.
@@ -186,6 +205,9 @@ Name collisions settled:
   `X` and `μ`, with no lifetime and no `U C`. That is narrower than `withborF2`, which admits
   `Imm @e`/`Mut @e`/`[@e]` leaves and results that outlive the outer lifetime. I have not
   derived `withborS` at such leaves, and I have not verified that any obstruction to it is real.
+- **Arrays.** No primitive array borrow without a cell, and no mutable family `[Mut 'c A]`;
+  `split_at`, `iter`/`iter_mut`, `Vec`, `Str` are not built (`SPEC.md` §9 Open). `[L]` is not
+  in `SpineMuFree`, so an `Imm` record cannot be projected past an array field.
 - **Streams.** Only `A = 1` has a generic consumer with a stated adequacy theorem (`take_runs`).
   Every other stream program is a single closed derivation.
 - **From the audit** (`docs/consolidation-audit.md` §5), still open:

@@ -744,8 +744,9 @@ How this checks:
 
 - **Numerals and list literals** (`3`, `[1, 2, 3]`) are sugar and are out for now. The library
   builds them with Lean functions (`num`, `buildList`).
-- **Buffers and strings** (`SPEC.md` §9) are specified but not implemented. Integers are in
-  (section 8a), and the erasure target stays Paper `Expr`, which gained `Prim.lit`/`Prim.host`.
+- **Growable buffers and strings** are library code over arrays (`SPEC.md` §9), not yet written.
+  Integers (section 8a) and arrays (section 8b) are in, and the erasure target stays Paper
+  `Expr`, which gained `Prim.lit`/`Prim.host` and the array primitives `tab`, `idx`, `drop`.
 - **Lifetime-parametric `def`s and `extern`s** are not supported.
 - **Block provenance** (`SPEC.md` §5 Open) is not enforced: `crossPack`
   (`Core/BlockPrograms.lean`) typechecks.

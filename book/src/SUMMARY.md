@@ -12,6 +12,7 @@
 - [Recursive data and folds](guide/recursive-data.md)
 - [Codata: iterators, streams, delay](guide/codata.md)
 - [Integers](guide/integers.md)
+- [Arrays](guide/arrays.md)
 - [Implicit destructors](guide/implicit-destructors.md)
 - [Planned features](guide/planned/README.md)
   - [Pipelines and `for`](guide/planned/pipelines.md)
