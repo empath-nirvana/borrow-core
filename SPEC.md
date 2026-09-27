@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 0.8 · 2026-09-27
+Version 0.9 · 2026-09-27
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -696,6 +696,66 @@ fixes when the effect of a drop happens.
 
 ---
 
+## 13. Entry 12 — every run is safe
+
+### Motivation
+
+`adequacyC` is angelic: *some* run of a well-typed program is safe and leak-free. `alloc↦` and
+`tab↦` may choose any free location, and a compiled program runs under a real allocator, which
+reuses freed locations. Adequacy has to hold for every run (issue #75).
+
+### Allocators
+
+An **allocator** `A` (`Alloc`) answers the `k`-th allocation of a run, from memory `μ`, for a
+block of `n` cells, with a location `A.pick k μ n`; at every memory of finite domain, the cells
+`pick k μ n + i`, `i < n`, are free. The answer may depend on the count `k`, so an allocator can
+be any history-dependent policy, least-free reuse included. An **allocator run**
+(`ARun A k μ e k' μ' e'`) is a run whose `k`-th allocation step (`alloc v`, or `tab` of `n`
+cells) is at `A.pick k μ n`; every other step is a machine step that allocates nothing. The
+machine is unchanged.
+
+### Semantics
+
+`wpTS`'s run conjunct becomes: for every allocator `A` and count `k`, the run is an allocator
+run of `A` from `k`. Nothing else in `wpTS`, the relation or `CDerives` changes. The rules that
+build runs (value, the pure head steps, `alloc`, `free`, `load`, `store`, bind, host steps,
+`tab`, `idx`, `drop`) build allocator runs: `alloc` and `tab` are sound at any free location or
+free block.
+
+The rule `wpTS_step`/`cC_step` for a step in front takes a step that allocates nothing
+(`Step1N`): a `tab` of zero cells changes no memory but still chooses a location.
+
+### Every run
+
+Every non-allocating step is deterministic (`Head` at a fixed host), and every run is an
+allocator run of the allocator that replays its choices. So:
+
+- **`wpTSD`**, the demonic `wp`: from every configuration, every run of `e` can be continued to a
+  value run that lands in the postcondition. Hence no run reaches a stuck state, and every run
+  that reaches a value lands in the postcondition.
+- **`wpTS_demonic`**: `wpTS ⊢ wpTSD`, and so the Fundamental Property at `wpTSD`
+  (`fundamentalD`).
+- **`adequacyD`**: every run of a closed `F 1` program from empty memory can be continued to `()`
+  at empty memory; no run is stuck, and a run that reaches a value reaches `()` at empty memory.
+
+Divergence is allowed by `wpTSD`'s form (partial correctness plus safety). Every computation the
+relation holds terminates under every allocator: codata (§7) is observed one finite observation at
+a time.
+
+### Baseline
+
+`fundamentalC` and `adequacyC` keep their statements. The previous run conjunct is
+`wpTSAngelic`, and `wpTS ⊢ wpTSAngelic` (`wpTS_angelic`, at the least-free allocator).
+
+### Open
+
+- The host is deterministic (§8). A nondeterministic host would be a second oracle, answered
+  like the allocator.
+- The allocator's answer depends on the count and the memory, not on the program; that covers
+  every run of this machine.
+
+---
+
 ## Status
 
 Entries 2–6 are implemented in the library directory `Core/`, with one `fundamentalC` and
@@ -705,11 +765,16 @@ and host-step forms. Entry 8 (§9, arrays) is implemented: the former and its le
 world, the constants in `Core/Arrays.lean` (`Core/ArrayWp.lean` for the steps), the three machine
 steps in `Paper/` and `Support/`, the checker (`array`, `array_imm`, syntax-core §8b) and the
 backend. Entry 10 (§11) is specified only. Entry 11 (§12) is implemented in
-`Core/Dtor.lean` and the checker (`Frontend/Check/`), with no change to `CDerives`.
+`Core/Dtor.lean` and the checker (`Frontend/Check/`), with no change to `CDerives`. Entry 12
+(§13) is implemented in `Core/Alloc.lean`, `Core/World.lean` and `Core/Demonic.lean`.
 
 ---
 
 ## Changelog
+
+- **0.9** (2026-09-27) — Entry 12 (§13): every run is safe. `wpTS`'s run is an allocator run at
+  every allocator; `wpTSD` (every run continues to a value in the postcondition), `fundamentalD`
+  and `adequacyD`. The angelic run is `wpTSAngelic`, a corollary.
 
 - **0.8** (2026-09-27) — Entry 8 revised (§9): arrays. `[L]` (`VTy.fam`) is the run-time family
   `⊛_{i<n} L` of leaf places, with `Array A = [Ref A]` and the borrowed family `[Imm @a A]`; the
