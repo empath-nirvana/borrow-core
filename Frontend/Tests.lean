@@ -93,6 +93,10 @@ theorem rt_ty : roundTrips parseVTy VTy.strip (VTy.pp · 0)
     "!U (Nat -o F (all 'y < top. imm 'y Nat => Nat) & top) * mu X. 1 + ref X" = true := by
   decide +kernel
 
+theorem rt_array : roundTrips parseVTy VTy.strip (VTy.pp · 0)
+    "array (ref i32) * array_imm 'a i32 => ref array i32" = true := by
+  decide +kernel
+
 theorem rt_program : roundTrips parseProgram Program.strip Program.pp
     "type Nat = mu X. 1 + X
      shape Node = node (leaf Nat) (leaf (ref Nat))

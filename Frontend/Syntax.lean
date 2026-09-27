@@ -101,6 +101,10 @@ inductive VTy where
   | fam (sp : Span) (m : Mode) (a : Life) (σ : Shape)
   /-- `view @ A`, that is `Imm̲ @ A`. -/
   | view (sp : Span) (a : Life) (A : VTy)
+  /-- `array A`: an owned array, the family of its cells (SPEC §9). -/
+  | array (sp : Span) (A : VTy)
+  /-- `array_imm @ A`: the family of leaf views of an array (SPEC §9). -/
+  | arrayImm (sp : Span) (a : Life) (A : VTy)
 
 /-- Computation types (syntax-core §4). -/
 inductive CTy where
@@ -184,6 +188,17 @@ inductive Const where
   | withborF2Mut (c a b : Ident) (w : Life) (A B T : VTy)
   /-- `withbor_f2_imm['c, 'a, 'b, A, B, T]`. -/
   | withborF2Imm (c a b : Ident) (A B T : VTy)
+  /-- The array constants of SPEC §9: `array_new[A]`, `array_free[A]`, `array_size[A]`,
+      `array_replace[A]`, and on a family of leaf views `array_len[@, A]`, `array_get[@, A]`,
+      `array_copy[@, A]`, `array_forget[@, A]`. -/
+  | arrayNew (A : VTy)
+  | arrayFree (A : VTy)
+  | arraySize (A : VTy)
+  | arrayReplace (A : VTy)
+  | arrayLen (a : Life) (A : VTy)
+  | arrayGet (a : Life) (A : VTy)
+  | arrayCopy (a : Life) (A : VTy)
+  | arrayForget (a : Life) (A : VTy)
   deriving DecidableEq, Repr
 
 mutual
@@ -311,6 +326,8 @@ def VTy.strip : VTy → VTy
   | .val _ σ => .val .none σ.strip
   | .fam _ m a σ => .fam .none m a.strip σ.strip
   | .view _ a A => .view .none a.strip A.strip
+  | .array _ A => .array .none A.strip
+  | .arrayImm _ a A => .arrayImm .none a.strip A.strip
 
 def CTy.strip : CTy → CTy
   | .ret _ A => .ret .none A.strip
@@ -359,6 +376,14 @@ def Const.strip : Const → Const
   | .withborF2Mut c a b w A B T =>
       .withborF2Mut c.strip a.strip b.strip w.strip A.strip B.strip T.strip
   | .withborF2Imm c a b A B T => .withborF2Imm c.strip a.strip b.strip A.strip B.strip T.strip
+  | .arrayNew A => .arrayNew A.strip
+  | .arrayFree A => .arrayFree A.strip
+  | .arraySize A => .arraySize A.strip
+  | .arrayReplace A => .arrayReplace A.strip
+  | .arrayLen a A => .arrayLen a.strip A.strip
+  | .arrayGet a A => .arrayGet a.strip A.strip
+  | .arrayCopy a A => .arrayCopy a.strip A.strip
+  | .arrayForget a A => .arrayForget a.strip A.strip
 
 mutual
 def Val.strip : Val → Val
@@ -434,7 +459,8 @@ def Life.span : Life → Span
 def VTy.span : VTy → Span
   | .unit sp | .zero sp | .tensor sp _ _ | .sum sp _ _ | .thunk sp _ | .ref sp _ | .imm sp _ _
   | .mut sp _ _ | .box sp _ _ | .bang sp _ | .unk sp | .int sp _ | .mu sp _ _ | .name sp _
-  | .lolli sp _ _ | .all sp _ _ _ | .block sp _ | .val sp _ | .fam sp _ _ _ | .view sp _ _ => sp
+  | .lolli sp _ _ | .all sp _ _ _ | .block sp _ | .val sp _ | .fam sp _ _ _ | .view sp _ _
+  | .array sp _ | .arrayImm sp _ _ => sp
 
 def CTy.span : CTy → Span
   | .ret sp _ | .arr sp _ _ | .amp sp _ _ | .top sp | .all sp _ _ _ | .nu sp _ _ | .name sp _

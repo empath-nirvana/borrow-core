@@ -258,6 +258,34 @@ def synConst (E : Env) (Δ : LifeCtx) (T : List CVTy) (sp : Span) :
         s!"`{ppVTy T'}` must outlive the family's outer borrow"
       pure (cStrict _ fun hd => withborM2_wf s hA (outlivesB_sound _ _ _ hBo)
         (outlivesB_sound _ _ _ hTo) hd)
+  | .arrayNew A => do
+      let A ← E.elabV Δ A
+      pure (cDead _ fun hd => CDerives.arrNew A hd)
+  | .arrayFree A => do
+      let A ← E.elabV Δ A
+      pure (cDead _ fun hd => CDerives.arrFree A hd)
+  | .arraySize A => do
+      let A ← E.elabV Δ A
+      pure (cDead _ fun hd => CDerives.arrSize A hd)
+  | .arrayReplace A => do
+      let A ← E.elabV Δ A
+      pure (cDead _ fun hd => CDerives.arrReplace A hd)
+  | .arrayLen a A => do
+      let a ← E.elabL Δ a
+      let A ← E.elabV Δ A
+      pure (cDead _ fun hd => CDerives.arrLen a A hd)
+  | .arrayGet a A => do
+      let a ← E.elabL Δ a
+      let A ← E.elabV Δ A
+      pure (cDead _ fun hd => CDerives.arrGet a A hd)
+  | .arrayCopy a A => do
+      let a ← E.elabL Δ a
+      let A ← E.elabV Δ A
+      pure (cDead _ fun hd => CDerives.arrCopy a A hd)
+  | .arrayForget a A => do
+      let a ← E.elabL Δ a
+      let A ← E.elabV Δ A
+      pure (cDead _ fun hd => CDerives.arrForget a A hd)
   | .withborF2Imm _ _ _ A B T' => do
       let A ← E.elabV Δ A
       let B ← E.elabV Δ B
