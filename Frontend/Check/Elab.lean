@@ -74,6 +74,12 @@ where
       | some (.def_ _ m ps A V) => if m.name == n then some ⟨ps, A, V, ⟨s.decls, k⟩⟩ else go k
       | _ => go k
 
+/-- An `extern` named `n` is in scope. -/
+def Scope.hasExtern (s : Scope) (n : String) : Bool :=
+  (List.range s.upto).any fun k => match s.decls[k]? with
+    | some (.extern _ m _) => m.name == n
+    | _ => false
+
 def err {α} (sp : Span) (msg : String) : Except Error α := throw ⟨sp, msg⟩
 
 /-! ### Printing -/

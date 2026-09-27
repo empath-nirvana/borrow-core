@@ -23,7 +23,18 @@ open BoCa
 
 abbrev Var := Nat
 
-/-- The primitives of `[TR]` §1, §8 and §9, saturated. -/
+/-- The standard I/O operations of SPEC §11, the host implementations of the externs
+`read_byte` and `write_byte`. -/
+inductive IOOp where
+  /-- `read_byte m`: `(m, inl i32[b])` with the next byte of the stream in the cell `m`, or
+  `(m, inr ())` at its end. -/
+  | readByte
+  /-- `write_byte (m, i32[b])`: the low byte of `b` written to the stream in the cell `m`;
+  the result is `m`. -/
+  | writeByte
+  deriving Repr, DecidableEq
+
+/-- The primitives of `[TR]` §1, §8 and §9, saturated, and the I/O operations of §11. -/
 inductive Op where
   /-- `alloc v`: a fresh cell holding `v`. -/
   | alloc
@@ -41,6 +52,8 @@ inductive Op where
   | idx
   /-- `drop (f, (ℓ, n))`: each slot's contents to `f`, in order, then the array freed (§9). -/
   | drop
+  /-- A standard I/O operation (§11). -/
+  | io (k : IOOp)
   deriving Repr, DecidableEq
 
 inductive Tm where

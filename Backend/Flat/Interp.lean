@@ -1,6 +1,7 @@
 import Std.Data.HashMap
 import Support.Dynamics.Host
 import Backend.Flat.Syntax
+import Backend.Value
 
 /-!
 # Backend — flat-IR interpreter
@@ -23,7 +24,10 @@ structure FState where
   /-- Live ranges: start ↦ length in words. -/
   ranges : Std.HashMap Nat Nat
   next : Nat
-  out : String
+  /-- The standard input not yet read. -/
+  input : List UInt8
+  out : ByteArray
+  err : ByteArray
 
 abbrev FM := StateT FState (Except String)
 
@@ -109,6 +113,13 @@ def evalExp (p : Prog) : Nat → Array UInt64 → Exp → FM UInt64
         | none => throw s!"flat IR: no table entry {k}"
     | .alloc w => do allocRange (← evalExp p n fr w).toNat
     | .live => do pure (← get).ranges.size.toUInt64
+    | .getc fd => do
+        let fd ← evalExp p n fr fd
+        if fd != 0 then throw s!"flat IR: read from fd {fd}"
+        let s ← get
+        match s.input with
+        | [] => pure 0xFFFFFFFFFFFFFFFF
+        | b :: bs => do set { s with input := bs }; pure b.toUInt64
 
 def evalArgs (p : Prog) : Nat → Array UInt64 → List Exp → FM (List UInt64)
   | 0, _, _ => throw "flat IR: out of fuel"
@@ -152,7 +163,15 @@ def execStmt (p : Prog) : Nat → Array UInt64 → Stmt → FM (Array UInt64 × 
     | .eval e => do let _ ← evalExp p n fr e; pure (fr, none)
     | .out b => do
         let b ← evalExp p n fr b
-        modify fun st => { st with out := st.out.push (Char.ofNat (b.toNat % 256)) }
+        modify fun st => { st with out := st.out.push b.toUInt8 }
+        pure (fr, none)
+    | .putc fd b => do
+        let fd ← evalExp p n fr fd
+        let b ← evalExp p n fr b
+        match fd with
+        | 1 => modify fun st => { st with out := st.out.push b.toUInt8 }
+        | 2 => modify fun st => { st with err := st.err.push b.toUInt8 }
+        | _ => throw s!"flat IR: write to fd {fd}"
         pure (fr, none)
     | .ite c t e => do
         if (← evalExp p n fr c) != 0 then execBlock p n fr t else execBlock p n fr e
@@ -172,9 +191,9 @@ def execStmt (p : Prog) : Nat → Array UInt64 → Stmt → FM (Array UInt64 × 
     | .trap => throw "flat IR: trap"
 end
 
-/-- Run the entry function: the text it writes. -/
-def interp (fuel : Nat) (p : Prog) : Except String String := do
-  let (_, s) ← (callFn p fuel p.entry []).run ⟨{}, {}, 8, ""⟩
-  pure s.out
+/-- Run the entry function on the standard input `input`: what it writes. -/
+def interp (fuel : Nat) (p : Prog) (input : List UInt8) : Except String Output := do
+  let (_, s) ← (callFn p fuel p.entry []).run ⟨{}, {}, 8, input, .empty, .empty⟩
+  pure ⟨s.out, s.err⟩
 
 end Backend.Flat

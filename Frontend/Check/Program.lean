@@ -36,7 +36,7 @@ structure Report where
 /-- The depth bound for checking a term. -/
 def checkFuel : Nat := 1 <<< 20
 
-def Env.top (ds : Array Decl) (k : Nat) : Env := ⟨⟨ds, k⟩, [], [], [], []⟩
+def Env.top (ds : Array Decl) (k : Nat) : Env := ⟨⟨ds, k⟩, [], [], [], [], 0⟩
 
 /-- The externs, in declaration order, each elaborated in the declarations before it. -/
 def externs (ds : Array Decl) : Except Error (List (String × CVTy)) :=
@@ -57,7 +57,7 @@ def checkMain (ds : Array Decl) (k : Nat) (sp : Span) (C : CTy) (M : Comp) :
     Except Error Checked := do
   let xs ← externs ds
   let T := (xs.map (·.2)).reverse
-  let E : Env := { Env.top ds k with vars := (xs.map (some ·.1)).reverse }
+  let E : Env := { Env.top ds k with vars := (xs.map (some ·.1)).reverse, nExt := xs.length }
   let C' ← E.elabC LifeCtx.empty C
   let r ← chkC checkFuel E LifeCtx.empty T M C'
   if h : subL (allL T) (orL r.F.u r.F.w) = true then
@@ -77,9 +77,14 @@ def checkDecl (ds : Array Decl) (k : Nat) : Decl → Except Error (String × Opt
       pure (s!"shape {n.name}", none)
   | .def_ _ n ps A V =>
       if ps.isEmpty then do
-        let E := Env.top ds k
+        -- At the persistent externs declared before it (SPEC §11).
+        let xs ← externs (ds.extract 0 k)
+        let T := (xs.map (·.2)).reverse
+        let E : Env := { Env.top ds k with
+          vars := (xs.map fun (x, B) => if B.persistent then some x else none).reverse,
+          nExt := xs.length }
         let A' ← E.elabV LifeCtx.empty A
-        let _ ← chkV checkFuel E LifeCtx.empty [] V A'
+        let _ ← chkV checkFuel E LifeCtx.empty T V A'
         pure (s!"def {n.name} : {ppVTy A'}", none)
       else
         pure (s!"def {n.name}[{", ".intercalate (ps.map (·.name))}] : checked at each use", none)

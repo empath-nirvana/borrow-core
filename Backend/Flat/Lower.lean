@@ -81,6 +81,8 @@ def lowerTm (hostIdx : HostOp → Nat) : Tm → Dest → LM (List Stmt)
   | .prim .tab [v], d => do return emit d (.call fArrTab [← lv v])
   | .prim .idx [v], d => do return emit d (.call fArrIdx [← lv v])
   | .prim .drop [v], d => do return emit d (.call fArrDrop [← lv v])
+  | .prim (.io .readByte) [v], d => do return emit d (.call fReadByte [← lv v])
+  | .prim (.io .writeByte) [v], d => do return emit d (.call fWriteByte [← lv v])
   | .prim _ _, _ => throw "flat IR: primitive arity"
   | .app f a, d => do
       let f ← lv f

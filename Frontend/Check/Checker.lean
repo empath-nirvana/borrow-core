@@ -38,10 +38,14 @@ def synV : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Val →
         | none => err sp "internal error: variable out of range"
       | none =>
         match E.scope.findDef x with
-        | none => err sp s!"unknown variable `{x}`"
+        | none =>
+          if E.scope.hasExtern x then
+            err sp (s!"the capability `{x}` is not in scope: a `def` may use only persistent " ++
+              "externs; take the capability as an argument (SPEC §11)")
+          else err sp s!"unknown variable `{x}`"
         | some d =>
           if d.params.isEmpty then do
-            let E' := E.forDef d []
+            let E' := E.forDef T d []
             let A ← E'.elabV Δ d.ty
             let r ← tryCatch (chkV n E' Δ T d.body A) (fun e => throw (inDef x sp e))
             pure ⟨A, r⟩
@@ -52,7 +56,7 @@ def synV : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Val →
       | some d =>
         if d.params.length = args.length then do
           let targs ← args.mapM (E.elabV Δ)
-          let E' := E.forDef d ((d.params.map (·.name)).zip targs)
+          let E' := E.forDef T d ((d.params.map (·.name)).zip targs)
           let A ← E'.elabV Δ d.ty
           let r ← tryCatch (chkV n E' Δ T d.body A) (fun e => throw (inDef x sp e))
           pure ⟨A, r⟩

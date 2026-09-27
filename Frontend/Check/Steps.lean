@@ -165,6 +165,8 @@ structure Env where
   lenv : List (String × LifeVar)
   tps : List (String × CVTy)
   own : List Bool
+  /-- The number of extern slots, at the end of `vars` (SPEC §11). -/
+  nExt : Nat
 
 /-- The depth bound for elaborating a type. -/
 def tyFuel : Nat := 65536
@@ -292,9 +294,13 @@ def Env.ownIn (E : Env) (p : String → Bool) : Env :=
         | _ => false }
 
 /-- The environment of a `def`'s body at a use: its own scope, no variables or lifetimes of the
-use site, its type parameters bound. -/
-def Env.forDef (E : Env) (d : DefInfo) (tps : List (String × CVTy)) : Env :=
-  ⟨d.scope, E.vars.map (fun _ => none), [], tps, []⟩
+use site but the persistent externs (the operations of SPEC §11, which carry no authority; a
+capability is not persistent), its type parameters bound. -/
+def Env.forDef (E : Env) (T : List CVTy) (d : DefInfo) (tps : List (String × CVTy)) : Env :=
+  let n := E.vars.length
+  let vars := (List.range n).map fun i =>
+    if n ≤ i + E.nExt && (T[i]?.map (·.persistent)).getD false then E.vars.getD i none else none
+  ⟨d.scope, vars, [], tps, [], E.nExt⟩
 
 def inDef (x : String) (sp : Span) (e : Error) : Error :=
   { e with msg := s!"{e.msg}\n  in the body of `{x}`, used at {sp.start.render}" }
