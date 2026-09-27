@@ -69,3 +69,12 @@ Each entry: the decision, and why. Newest last.
     `for_each` consumer. Stack safety is a compiler property of each structured form, established
     once: loops run in constant stack, owned right folds can use pointer reversal (sound because
     linearity gives exclusive ownership), borrowed folds use an explicit stack.
+25. **Every lowering has a plain LLVM counterpart.** Wasm is the verified target, but no
+    semantics may depend on a Wasm-only feature: stack switching (WasmFX), `resume_throw`, Wasm
+    exceptions and Wasm GC may appear only as optimizations with a portable fallback. Async,
+    generators and effect handlers therefore lower to stackless state machines (as Rust `async` and
+    LLVM's `llvm.coro` do), and cancellation is the explicit `close` observation. Today's backend
+    emits only portable features: integer operations, loads and stores, `br_table` (a switch),
+    `call_indirect` (function pointers), `return_call`/`return_call_indirect` (LLVM `musttail`,
+    which needs matching signatures — the uniform word representation provides them) and
+    `memory.grow` (the allocator's host call).
