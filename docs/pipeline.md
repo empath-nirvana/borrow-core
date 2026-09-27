@@ -26,6 +26,7 @@ allocated. `live 0` is the leak check.
 | `scripts/parse-corpus.sh` | every corpus file parses and round-trips; each `corpus/fail/` file fails with its expected message |
 | `scripts/check-corpus.sh` | every corpus file checks; each `corpus/reject/` file is rejected with its expected message |
 | `scripts/compile-corpus.sh` | every corpus `main` gives the same value compiled and interpreted, with `live 0` |
+| `scripts/book-doctest.sh` | every `bc` block in `book/src/` checks and prints its `-- answer:` with `live 0`, or is rejected with its `-- expect:` message |
 | `scripts/check-hygiene.sh` | no `sorry`, `axiom`, `native_decide`, `partial` and the like; every declaration's axioms within the standard three |
 
 CI runs all of them on every push and pull request (`.github/workflows/ci.yml`).

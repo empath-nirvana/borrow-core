@@ -5,6 +5,9 @@ mechanization of Wagner, Gierczak, Marshall, Li and Ahmed, *From Linearity to Bo
 (PACMPL 9:OOPSLA2:415, 2025), bolo-formalization commit `1658da9`.
 
 - `docs/Home.md` — start here: overview, pipeline, glossary, design decisions.
+- `book/` — the guide and reference, an mdBook whose every program is doc-tested
+  (`scripts/book-doctest.sh`); contents in [`book/src/SUMMARY.md`](book/src/SUMMARY.md). Build it
+  with `mdbook build book`; CI uploads the built book as the `book` artifact of each run.
 - `SPEC.md` — the language: the paper's calculus as baseline (§1), then numbered entries.
 - `Paper/`, `Support/` — the mechanization, with each entry's additions tagged `[spec §N]`.
   `Paper/INDEX.md` and `docs/adjudications.md` describe the baseline.

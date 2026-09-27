@@ -1,6 +1,8 @@
 # borrow-core documentation
 
-Start here.
+Start here. For learning the language, read the book: the guide and reference in
+[`book/`](../book/src/SUMMARY.md), with doc-tested examples (`mdbook build book`, or the `book`
+artifact of any CI run). The pages below are design and research notes.
 
 | page | what it covers |
 |---|---|

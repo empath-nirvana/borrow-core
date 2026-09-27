@@ -1,0 +1,58 @@
+# What is proved
+
+Everything below is a Lean theorem, checked by CI on every change. No result depends on an axiom
+beyond Lean's standard three (`propext`, `Classical.choice`, `Quot.sound`), and the library
+contains no `sorry`, `native_decide` or `partial` (`scripts/check-hygiene.sh`).
+
+## The theorems, in plain language
+
+**Every typing rule is sound.** The typing judgment of the core is `CDerives`. Its meaning is a
+logical relation over a model of memory: a well-typed term, run in any memory that its inputs'
+types describe, finishes with a result of its type and leaves memory described by the result's
+type. The Fundamental Property says that every derivable judgment holds in this model.
+`fundamentalC` in [`Core/Fundamental.lean`](https://github.com/empath-nirvana/borrow-core/blob/main/Core/Fundamental.lean).
+
+**Closed programs run safely and leave memory empty.** A closed program of type `F 1` runs from
+empty memory to `()` and empty memory (`adequacyC`, same file). Because the run never gets
+stuck, there is no use after free or double free; because memory ends empty, there is no leak.
+`theorem32` gives the same for a program that returns a value, given that the value holds no resource.
+
+**Loops are covered one observation at a time.** A `delay` loop observed any number of times and
+then closed runs to a value and leaves memory empty (`drive_runs_unit`, `drive_runs_nat` in
+[`Core/DelayPrograms.lean`](https://github.com/empath-nirvana/borrow-core/blob/main/Core/DelayPrograms.lean); `take_runs` for streams in
+[`Core/StreamPrograms.lean`](https://github.com/empath-nirvana/borrow-core/blob/main/Core/StreamPrograms.lean)).
+
+**The checker produces proofs.** When `bcc check` accepts a program, the checker has built a
+`CDerives` derivation for `main`'s erasure: every step of the checker applies one typing rule
+to the proofs of its premises. `checkProgram_sound` in
+[`Frontend/Check/Program.lean`](https://github.com/empath-nirvana/borrow-core/blob/main/Frontend/Check/Program.lean) states it, and `checked_sem` and
+`checked_runs` apply the two theorems above to the checked program. The drops that the checker
+inserts ([Implicit destructors](guide/implicit-destructors.md)) are part of the derivation.
+
+**Arithmetic is a parameter.** The machine performs integer operations through a *host*, and
+every theorem above holds for every host. Nothing about arithmetic is assumed.
+
+**The baseline is preserved.** The paper's calculus (BoCa) and its logic (BoLo) embed into the
+core, and the paper's Fundamental Property and adequacy hold as before.
+[`Paper/INDEX.md`](https://github.com/empath-nirvana/borrow-core/blob/main/Paper/INDEX.md) indexes each result of the paper to its Lean declaration,
+and [`docs/adjudications.md`](https://github.com/empath-nirvana/borrow-core/blob/main/docs/adjudications.md) records each departure from the printed
+text.
+
+## What is trusted
+
+- **The compiler is tested, not yet proved.** Each stage has an interpreter. Every corpus program
+  and every runnable example in this book gives the same answer compiled as under the Lean
+  interpreter, and ends with `live 0`. The plan for proving it is #15.
+- **The allocator** is WebAssembly text, trusted against its written specification
+  ([`Backend/README.md`](https://github.com/empath-nirvana/borrow-core/blob/main/Backend/README.md)).
+- **The WAT printer and wasmtime** are trusted.
+- **Integer operations**: that WebAssembly's instructions agree with the interpreter's host is
+  tested (`corpus/int-ops.bc`).
+
+## What is not claimed
+
+- A `delay` loop is not claimed to terminate; its type says it may not.
+- The checker is not complete: a well-typed program may be rejected (`Frontend/README.md`,
+  *Incompleteness*).
+- Buffers, strings and externs are specified (`SPEC.md` §9, §11) but not implemented, so no
+  theorem covers them yet.
