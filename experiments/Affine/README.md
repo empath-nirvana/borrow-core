@@ -11,13 +11,14 @@ a closed `CDerives` derivation. The affine judgment `ADerives` elaborates into `
 translation that never inverts `CDerives`. Two programs with their frees removed run to the
 same answers with no cell left.
 
-Build: `lake build Affine`. The library imports `Core` and nothing imports it. `Paper/`,
-`Support/`, `Core/`, `Frontend/`, `Backend/` and `CDerives` are unchanged. Every declaration's
+Build: `lake build Affine`. The library imports `Core` and nothing imports it. The destructors
+have moved into the library (`Core/Dtor.lean`, SPEC §12), and the checker inserts them
+(`Frontend/Check`). `CDerives` is unchanged. Every declaration's
 axioms are within `[propext, Classical.choice, Quot.sound]`.
 
 | file | contents |
 |---|---|
-| `Dtor.lean` | `dtorE T : T ⊸ F 1`, `HasDtor` (the droppable types), `dtor_wf` (each destructor is a `CDerives` derivation), `hasDtor_of_affine`, `dtorE_imm`/`dtorE_mut` |
+| `Core/Dtor.lean` (library, SPEC §12) | `dtorE T : T ⊸ F 1`, `HasDtor` (the types with a destructor), `dtor_wf` (each destructor is a `CDerives` derivation), `hasDtor_of_affine`, `dtorE_imm`/`dtorE_mut`, `dropE`/`drop_derives` |
 | `Elab.lean` | `ADerives` (`CDerives` plus `drop`, indexed by the elaborated term), `ADerives.elab`, `fundamentalA`/`adequacyA`/`runsA`, `owner_not_shared`, `drop_needs_live` |
 | `Programs.lean` | `sumAff` (the i32 list sum with no frees) and `blockAff b` (a field and a block dropped in the arms that do not use them): derivations, adequacy, interpreter runs, and the leak without the drops |
 
@@ -70,7 +71,8 @@ adequacyA     : ADerives ∅ [] e e' (F 1) → e' runs from the empty memory to 
 runsA         : the same at any result type R, the value in vP R
 ```
 
-In `elab`, the `drop` case is `unitE` over `lolliE (dtor_wf …) (var …)` (`drop_derives`). Every
+In `elab`, the `drop` case is `unitE` over `lolliE (dtor_wf …) (var …)` (`drop_derives`,
+`Core/Dtor.lean`). Every
 other case is the constructor it copies. No case inverts `CDerives` (decision 21), and
 `CDerives` gains no index or rule (decision 19). The cost is one judgment that copies the
 structural rules (≈ 100 lines) and a 40-line induction.
@@ -162,10 +164,7 @@ implements.
 
 ## Not done
 
-* **Checker.** `Frontend/Check` does not insert drops. The integration is one builder
-  (`rDrop`, wrapping a `Res` in `dtorE T xᵢ; ·` over a split) and the policy at two sites:
-  leftover live droppable slots at a scope's end, and arms whose usage masks differ at a `case`
-  join. Completeness is not claimed (decision 21).
+* **Checker.** Done in the library (SPEC §12, `Frontend/Check`, `rDrop`).
 * **Lowering.** `Backend/Clos` already inserts deep drops for unused persistent variables
   (`wrapDrops`). The drops here are core terms (`free`, `foldOwn`, `close`), so they lower like
   any other code. A dedicated deep-free primitive for `μ` would replace the `foldOwn` traversal.
