@@ -13,6 +13,7 @@ Start here.
 
 - [`SPEC.md`](../SPEC.md) — the language, as numbered entries. The authority on what the language is.
 - [Core syntax](syntax-core.md) — the textual form the parser and checker accept.
+- [Surface syntax](surface-cbpv.md) — draft design: CBPV at the surface, with sugar only for shifts that cancel (#54).
 - [Properties worth proving](dream-properties.md) — the list of candidate theorems, including
   "can run useful programs".
 - [`Core/README.md`](../Core/README.md), [`Frontend/README.md`](../Frontend/README.md),

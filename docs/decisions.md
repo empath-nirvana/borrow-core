@@ -78,7 +78,12 @@ Each entry: the decision, and why. Newest last.
     `call_indirect` (function pointers), `return_call`/`return_call_indirect` (LLVM `musttail`,
     which needs matching signatures — the uniform word representation provides them) and
     `memory.grow` (the allocator's host call).
-26. **Codata is one former, `νX. C`, and its variable is a value type.** `X` occurs only as `U X`,
+26. **Sugar may be type-directed.** This revises decision 13's "sugar is syntactic": elaboration
+    may use types (filling type holes `_`, choosing `fold_imm`/`fold_own` from a type, inserting
+    copies or drops). It stays outside the trusted base anyway, because its output is a core program
+    that the checker must derive, returning a `CDerives` proof. What sugar may not do is hide a
+    surviving polarity shift (`docs/surface-cbpv.md`).
+27. **Codata is one former, `νX. C`, and its variable is a value type.** `X` occurs only as `U X`,
     which is the value-type variable `0` of `C`'s observations, so `ν` reuses `μ`'s substitution
     and environment machinery and `cC` takes no environment of its own. The body is a `&` of
     observation trees ending in `F A` with `U X` only under `⊗`/`⊕` (SPEC §7): that is where
