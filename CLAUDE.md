@@ -2,6 +2,7 @@
 
 ## Spec first
 
+<!-- ANCHOR: spec-first -->
 `SPEC.md` is the specification; `Paper/`, `Support/` and `Examples/` implement it (§1–§2),
 and `Core/` implements §3–§7. The task is
 to implement what the spec states, the way the paper mechanization transcribes what the paper
@@ -14,9 +15,11 @@ prints. Code an entry adds or changes is tagged `[spec §N]`.
   written.
 - Every entry says what it adds, which baseline theorems it must preserve, and what is open.
   The changelog records each version.
+<!-- ANCHOR_END: spec-first -->
 
 ## Growth discipline
 
+<!-- ANCHOR: growth -->
 The proof burden of the previous language grew until it was unmaintainable
 (`docs/l-lang-kernel-and-lit.md` §2). Three rules (`docs/decisions.md` 19–21):
 
@@ -29,6 +32,7 @@ The proof burden of the previous language grew until it was unmaintainable
 Prefer computation-type formers and derived forms over new value-type formers: a `VTy` former
 costs about 100 match arms across `Core/`, a `CTy` former about 20, a `CDerives` rule one
 compatibility lemma.
+<!-- ANCHOR_END: growth -->
 
 ## Hygiene
 

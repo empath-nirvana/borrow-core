@@ -1,0 +1,12 @@
+[book]
+title = "borrow-core"
+description = "A guide and reference for borrow-core: linear ownership with borrowing, in call-by-push-value, compiled to WebAssembly."
+language = "en"
+src = "src"
+
+[build]
+build-dir = "book"
+
+[output.html]
+git-repository-url = "https://github.com/empath-nirvana/borrow-core"
+edit-url-template = "https://github.com/empath-nirvana/borrow-core/edit/main/book/{path}"

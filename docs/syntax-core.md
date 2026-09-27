@@ -20,6 +20,7 @@ the parser and checker.
   to numbers), type and shape abbreviations, and top-level `def`s. Each is described below
   together with what it expands to.
 
+<!-- ANCHOR: citations -->
 **Citations.** `Fu:N` is `Core/Fundamental.lean` line N. The other files: `Ty` `Core/Types.lean`,
 `Co` `Core/Compat.lean`, `Rl` `Core/Relation.lean`, `Fa` `Core/Family.lean`,
 `Bl` `Core/Blocks.lean`, `BB` `Core/BlockBorrow.lean`, `FI` `Core/FoldImm.lean`,
@@ -27,9 +28,11 @@ the parser and checker.
 `Rc` `Core/Records.lean`, `CL` `Core/CommonList.lean`,
 `Fo` `Core/Folds.lean`, `S2` `Paper/S2_Statics/Definitions.lean`,
 `Cx` `Support/Statics/Contexts.lean`.
+<!-- ANCHOR_END: citations -->
 
 ## 2. Lexical
 
+<!-- ANCHOR: lexical -->
 - Term variables and `def` names: `[a-z_][A-Za-z0-9_']*`, excluding keywords.
 - Type abbreviations, shape abbreviations and `μ`-bound type variables: `[A-Z][A-Za-z0-9_]*`.
   A `μ`-bound name shadows an abbreviation of the same name.
@@ -47,9 +50,11 @@ the parser and checker.
   | `⊓Δ` | `dom` | | `Imm̲` | `view` |
 
 - `->`, `<-`, `:>`, `-o`, `=>`, `/\`, `\/` are single tokens, so a bare `>` only closes `<M, N>`.
+<!-- ANCHOR_END: lexical -->
 
 ## 3. Lifetimes
 
+<!-- ANCHOR: lifetimes -->
     lifetime  @ ::= 'x | top | dom | @ /\ @ | @ \/ @ | (@)
 
 `/\` binds tighter than `\/`, and both associate to the right. Lifetimes are Lean's
@@ -73,9 +78,11 @@ lexically, innermost first, and are then discarded. Two consequences:
   (`CTy.applyLSub`'s renaming branch, `Ty:1179`) can produce a binder number that differs from
   the one an annotation written at that point would get. The checker then reports a
   mismatch. Section 12 lists the α-equivalence lemma this would need.
+<!-- ANCHOR_END: lifetimes -->
 
 ## 4. Types
 
+<!-- ANCHOR: types -->
     value  A ::= 1 | 0 | A * A | A + A | U C | ref A | imm @ A | mut @ A | box @ A | !A | unk
                | i32 | i64                                      (VTy.int, SPEC §8)
                | mu X. A | X | Name
@@ -130,9 +137,11 @@ parsing.
   `U X`, the rest of the codata; it is the type variable `0` of `C`'s value types. `C` must be
   positive (`CTy.NuOk`, `Ty:1022`): a `&` of observation trees, each an `F A` or a `&` of them,
   with `U X` in each `A` only under `*` and `+`. `U X` may not occur inside an inner `U`.
+<!-- ANCHOR_END: types -->
 
 ## 5. Shapes and fold shapes
 
+<!-- ANCHOR: shapes -->
     shape σ ::= leaf A | node σ σ | Name                       (Shape, Bl:40)
 
 `Name` refers to an earlier `shape` declaration.
@@ -155,9 +164,11 @@ The decoding has to be fixed because the erasure depends on it: `leaf (1 + 1)` a
 `natF`, `Fo:487`). Since `FShape.ty (dec T) = T`, the type `mu X. T` written elsewhere matches
 the fold's `mu F.ty` exactly. `dec T = varX` (the body `X` alone) fails `FShape.Guarded`
 (`FI:64`) and is rejected.
+<!-- ANCHOR_END: shapes -->
 
 ## 6. Terms
 
+<!-- ANCHOR: terms -->
 There are two categories. A **value-judged expression** `V` is checked at a value type `A`
 (judgment `val A`). A **computation** `M` is checked at a computation type `C` (judgment
 `comp C`). Which category a position takes is fixed by the grammar.
@@ -279,9 +290,11 @@ into a λ at its type. For example, a `U (delay A)` from `f : U (S -o delay A)` 
 - `case V { … }` delimits its arms with braces. Ascriptions `( … : T)` and `( … :> @)` must be
   parenthesized.
 - A binding form used as a head or an operand must be parenthesized: `(fun (x : A) -> M) y`.
+<!-- ANCHOR_END: terms -->
 
 ## 7. Linearity
 
+<!-- ANCHOR: linearity -->
 Contexts are position-preserving lists of slots with a liveness bit (`Cx:11`). `Core` splits them
 with `Ctx.SplitP`, `Ctx.DeadP` and `Ctx.SoloP` (`Core/Persistent.lean`, SPEC §10), which extend the
 paper's `Ctx.Split`/`Dead`/`Solo` with one case each for **persistent** slots. A type is persistent
@@ -317,9 +330,11 @@ types (`VTy.persistent`). It follows that:
   with a destructor are balanced by dropping it in the arm that does not use it. Any other
   difference is an error. `linear x <- M; N` opts `x` out, and then `N` must consume it.
 - **Constants and `def`s consume nothing.** They are typed at a dead context.
+<!-- ANCHOR_END: linearity -->
 
 ## 8. Constants
 
+<!-- ANCHOR: constants -->
 Each constant is one `CDerives` constructor at a dead context. The brackets give every
 argument of the rule, so the checker never searches. A binder argument `'x` is numbered as in
 section 3; it is the `∀` binder in the callback's type, and its rule's premise
@@ -365,9 +380,11 @@ Notes on the table:
   `withload` is `S2:186`; `withswap` is `…/S3_Dynamics/Definitions.lean:343`;
   `foldImmV (dec F)` is `FI:152`; `foldOwnV` is `FO:100`; `foldReuseV` is `FR:149`; `unfoldV C` is
   `Nu:117`; `fixDV A` and `unfoldSV A` are `unfoldV` at the delay and stream bodies (`Fu:232,242`).
+<!-- ANCHOR_END: constants -->
 
 ## 8a. Integers
 
+<!-- ANCHOR: integers -->
 Integer literals and operations are constants (`SPEC.md` §8, `Core/Integers.lean`):
 
 - **Literals:** `i32[n]`, `i64[n]` are the `Prim.lit` constant, typed by `CDerives.lit` at `i32`/`i64`.
@@ -379,9 +396,11 @@ Integer literals and operations are constants (`SPEC.md` §8, `Core/Integers.lea
 - **Results:** tests return `1 + 1` with `inr ()` as true, and partial operations return
   `i32 + 1` with `inr ()` where Wasm traps.
 - `i32`/`i64` are persistent (section 7), so integer variables are reused and dropped freely.
+<!-- ANCHOR_END: integers -->
 
 ## 9. Derived forms
 
+<!-- ANCHOR: derived -->
 Each form is a Lean theorem concluding a `CDerives` judgment, with its own erasure, so
 `fundamentalC` covers it. None of them is a `CDerives` constructor. The checker instantiates
 the theorem and discharges its hypotheses. `m` is `mut` or `imm`, and each mode is a separate
@@ -414,9 +433,11 @@ keyword because each mode is a separate theorem.
   `run (let (x, y) = V; return W)`, and `lamV` is `thunkv fun (x : A) -> return W`.
 - Records and variants (`getAt`, `injAt`, `vcase`, `loadField`, `swapField`, `Rc`) are not in
   draft 1. They can be written out with the forms above.
+<!-- ANCHOR_END: derived -->
 
 ## 10. Declarations
 
+<!-- ANCHOR: declarations -->
     type Name = A
     shape Name = σ
     def name : A = V
@@ -464,6 +485,7 @@ Drivers such as `driveE n` (`Core/DelayPrograms.lean:37`) are Lean meta-level re
 
 A closed `main` is compiled and run by `bcc run`; `scripts/compile-corpus.sh` compares every
 corpus `main` against the interpreter (`Backend/README.md`).
+<!-- ANCHOR_END: declarations -->
 
 ## 11. Checking
 

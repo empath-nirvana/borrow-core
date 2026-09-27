@@ -46,3 +46,32 @@ jobs:
           scripts/parse-corpus.sh
           scripts/check-corpus.sh
           scripts/compile-corpus.sh
+
+      - name: Book doc-tests
+        run: scripts/book-doctest.sh
+
+  # The book builds without Lean; its programs are doc-tested in the build job, against bcc.
+  book:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install mdBook
+        uses: peaceiris/actions-mdbook@v2
+        with:
+          mdbook-version: '0.4.40'
+
+      - name: Build the book
+        run: |
+          mdbook build book
+          # A failed include is only a warning in mdBook; fail on one here.
+          if grep -rl '{{#include' book/book --include='*.html'; then
+            echo "unexpanded {{#include}} in the built book"; exit 1
+          fi
+
+      - name: Upload the book
+        uses: actions/upload-artifact@v4
+        with:
+          name: book
+          path: book/book
