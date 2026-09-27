@@ -105,3 +105,8 @@ roots = ["TwoRun"]
 name = "Grades"
 srcDir = "experiments/Grades"
 roots = ["Grades"]
+
+[[lean_lib]]
+name = "Affine"
+srcDir = "experiments/Affine"
+roots = ["Affine"]
