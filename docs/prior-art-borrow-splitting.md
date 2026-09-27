@@ -251,13 +251,18 @@ That changes how much of the affine literature transfers.
     propositions, and builds a linear logic (Iron++) on top of affine Iris using fractional
     "trackable" points-to `ℓ ↦_π v` (§1–2).
   - I found no linear version of the lifetime logic.
-- **Pure Borrow states the gap directly** (§7, related work): "All known separation logics that
-  support borrowing, including Iris, are fundamentally affine and do not guarantee leak freedom.
-  There exists a leak-free separation logic that supports invariants [Iron], but not yet one
-  that supports borrowing." That sentence does not account for BoLo, which is linear, has
-  borrowing, and builds its model without invariants. Pure Borrow still gets leak freedom with
-  *affine* borrowers: the lender recovers ownership from the history carried by `End α`, not
-  from returned borrowers.
+- **Pure Borrow states the gap directly** (arXiv 2604.15290, related work, RustBelt paragraph):
+  "All known separation logics that support borrowing, including Iris, are fundamentally affine
+  and do not guarantee leak freedom. There exists a leak-free separation logic that supports
+  invariants [Iron], but not yet one that supports borrowing." The paper does cite Wagner et al.
+  2025 in a separate paragraph, as "a new separation logic that supports borrowing", discussing it
+  only for purity; the general claim does not account for it — BoLo is linear, leak-free, has
+  borrowing, and builds its model without invariants. Pure Borrow's own metatheory "works toward"
+  safety and leak freedom (§5.5): confluence, well-typedness ⇒ association, and "safety ensures
+  leak freedom" are stated as theorems, but progress and bisimulation are "expected", not proved,
+  and nothing is mechanized; a semantic soundness proof is left as future work. It gets leak
+  freedom with *affine* borrowers: the lender recovers ownership from the history carried by
+  `End α`, not from returned borrowers.
 - **Charguéraud–Pottier is essentially compatible with linearity.** Footnote 5: with explicit
   deallocation, "one might wish to define GC as `∃H. RO(H)`, which means that read-only
   permissions can be implicitly discarded, but read-write permissions cannot". This is BoLo's
