@@ -1,7 +1,8 @@
 # Core syntax — draft 1
 
-Status: draft for review. Nothing here is implemented. Draft 1 resolves the three reviews of
-draft 0 (see *Changes from draft 0* at the end).
+Status: implemented. The parser (`Frontend/Parser.lean`) and checker (`Frontend/Check/`) accept this
+syntax, and the corpus and the book's examples are written in it. Draft 1 resolved the three reviews
+of draft 0 (see *Changes from draft 0* at the end).
 
 ## 1. Purpose and principles
 
