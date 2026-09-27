@@ -62,3 +62,10 @@ Each entry: the decision, and why. Newest last.
     does nothing, are affine. A destructor that frees or closes is an action whose placement can
     be observed. It goes at the end of each path, never earlier than an effect, and the opt-out is
     a `linear` binder rather than a grade on types. Types without a destructor stay linear.
+24. **Recursion is always structured; users are expected to know map and fold.** There is no
+    general direct recursion on the surface: it is a source of stack overflows, accidental
+    non-termination and invisible cost. Finite data is folded, iteration is a loop over explicit
+    state, streams are codata. The one concession is `for x in it { … }`, sugar for a
+    `for_each` consumer. Stack safety is a compiler property of each structured form, established
+    once: loops run in constant stack, owned right folds can use pointer reversal (sound because
+    linearity gives exclusive ownership), borrowed folds use an explicit stack.
