@@ -1,0 +1,43 @@
+-- An array of 1000 elements built by `array_new` (SPEC §9) from the tabulator i -> i + 1, and
+-- summed by a loop of 1024 steps: `twice` composes a step with itself, ten times over. Each
+-- step reads the element at the index by `array_replace` (writing 0, then the element back)
+-- and adds it; past the end `array_replace` takes the error branch and the step does nothing.
+-- The array is freed implicitly at the end of `main` (SPEC §12): its destructor frees every
+-- cell.
+--
+-- Answer: (i32[500500], i32[1000]): 1 + 2 + … + 1000, and the number of elements read. An
+-- element skipped or read twice changes the sum; a tabulator applied to the wrong index
+-- (i instead of i + 1) gives 499500; a length off by one gives 501501 or 499500 with 1001 or
+-- 999 reads.
+
+type S = array i32 * (i32 * i32)
+
+def plus : i32 * i32 => i32 = unbang host[add32]
+
+def tab : !(i32 => i32) = !thunkv fun (i : i32) -> return (plus (i, i32[1]))
+
+-- One step at (a, (i, acc)): read a[i], and continue at (i + 1, acc + a[i]).
+def step : !(S => S) =
+  !thunkv fun (st : S) ->
+    let (a, r) = st;
+    let (i, acc) = r;
+    q <- return ((unbang array_replace[i32]) (a, (i, i32[0])));
+    let (a1, o) = q;
+    case o {
+      inl x ->
+        q2 <- return ((unbang array_replace[i32]) (a1, (i, x)));
+        let (a2, o2) = q2;
+        return (a2, (plus (i, i32[1]), plus (acc, x)))
+    | inr z -> return (a1, (i, acc))
+    }
+
+def twice : !(S => S) => !(S => S) =
+  thunkv fun (f : !(S => S)) -> return (!thunkv fun (s : S) -> return ((unbang f) ((unbang f) s)))
+
+main : F (i32 * i32) =
+  a <- return ((unbang array_new[i32]) (i32[1000], tab));
+  f <- return (twice (twice (twice (twice (twice (twice (twice (twice (twice (twice step))))))))));
+  s <- return ((unbang f) (a, (i32[0], i32[0])));
+  let (a2, r) = s;
+  let (i, acc) = r;
+  return (acc, i)

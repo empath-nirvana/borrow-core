@@ -55,6 +55,8 @@ inductive RTy where
   | val (sp : Span) (σ : Shape)
   | fam (sp : Span) (m : Mode) (a : Life) (σ : Shape)
   | view (sp : Span) (a : Life) (A : RTy)
+  | array (sp : Span) (A : RTy)
+  | arrayImm (sp : Span) (a : Life) (A : RTy)
   | nu (sp : Span) (X : Ident) (C : RTy)
   | delay (sp : Span) (A : RTy)
   | stream (sp : Span) (A : RTy)
@@ -65,7 +67,7 @@ def RTy.span : RTy → Span
   | .imm sp _ _ | .mut sp _ _ | .box sp _ _ | .bang sp _ | .unk sp | .int sp _ | .mu sp _ _
   | .name sp _ | .lolli sp _ _ | .arr sp _ _ | .all sp _ _ _ | .forall_ sp _ _ _ | .amp sp _ _
   | .top sp | .block sp _ | .val sp _ | .fam sp _ _ _ | .view sp _ _ | .nu sp _ _ | .delay sp _
-  | .stream sp _ | .iter sp _ _ _ => sp
+  | .stream sp _ | .iter sp _ _ _ | .array sp _ | .arrayImm sp _ _ => sp
 
 /-- What a raw type is, for sort errors. -/
 def RTy.former : RTy → String
@@ -103,6 +105,8 @@ def RTy.toV : RTy → Except Error VTy
   | .val sp σ => pure (.val sp σ)
   | .fam sp m a σ => pure (.fam sp m a σ)
   | .view sp a A => return .view sp a (← A.toV)
+  | .array sp A => return .array sp (← A.toV)
+  | .arrayImm sp a A => return .arrayImm sp a (← A.toV)
   | t@(.F ..) | t@(.arr ..) | t@(.forall_ ..) | t@(.amp ..) | t@(.top ..) | t@(.nu ..)
   | t@(.delay ..) | t@(.stream ..) | t@(.iter ..) => sortErr t true
 
@@ -339,6 +343,8 @@ def rtyPrefix : Nat → P RTy
     | .kw "U" => unary .U
     | .kw "F" => unary .F
     | .kw "ref" => unary .ref
+    | .kw "array" => unary .array
+    | .kw "array_imm" => withLife .arrayImm
     | .sym "!" => unary .bang
     | .kw "delay" => unary .delay
     | .kw "stream" | .kw "str" => unary .stream

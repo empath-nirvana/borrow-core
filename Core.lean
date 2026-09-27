@@ -1,4 +1,5 @@
 import Core.Types
+import Core.SepRange
 import Core.FrameRecords
 import Core.World
 import Core.ShapeMu
@@ -51,3 +52,6 @@ import Core.StreamPrograms
 import Core.Integers
 import Core.IntPrograms
 import Core.Dtor
+import Core.ArrayWp
+import Core.Arrays
+import Core.ArrayPrograms

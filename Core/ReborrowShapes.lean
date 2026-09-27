@@ -28,6 +28,17 @@ open BoCa.Fig16.BoLo
 open BoCa.BoLo (Heap Steps Step1 Head Kont eLoad eStore)
 open BoCa.Lifetime (LSub LifeCtx LifeVar)
 
+/-- `↺_α` distributes over a range: a range whose every leaf reborrows, at `α`, reborrows.
+`[spec §9]` -/
+theorem reborrow_sepRange {α : Life} {P Q : BoCa.Loc → WProp}
+    (h : ∀ m ρ, P m ρ → BoLo.Outlives ρ α → reborrow α (Q m) ρ) :
+    ∀ {ℓ : BoCa.Loc} {n : Nat} {ρ : WRes}, sepRange P ℓ n ρ → BoLo.Outlives ρ α →
+      reborrow α (sepRange Q ℓ n) ρ
+  | _, 0, ρ, hs, _ => reborrow_pure α True ρ hs
+  | _, _ + 1, ρ, ⟨ρ₁, ρ₂, hc, h₁, h₂⟩, ho => by
+      obtain ⟨o₁, o₂⟩ := (outlives_comp hc α).mp ho
+      exact BoLo.reborrow_star α _ _ ρ ⟨ρ₁, ρ₂, hc, h _ _ h₁ o₁, reborrow_sepRange h h₂ o₂⟩
+
 /-! ### Lemma 6.131 (↺V₁) at the typed world; record in `Paper/S6_6_ReborrowingEntailments/Lemmas.lean` -/
 /-- `[TR]` Lemma 6.131 (`↺V₁`, p. 34) at the shape relation:
 `[α] vShape⟦T⟧δ(v) ⊨ ↺_α vShape⟦Imm̲ 'a T⟧δ(v)` where `δ('a) = α`, at every `T`.
@@ -111,6 +122,12 @@ theorem reborrow_vShape {α : Life} {x : LifeVar} {δ : LSub}
   | unk =>
       exact reborrow_emp_box α _ ρ hρ
   | tvar _ => exact hρ.1.elim
+  | fam L =>
+      obtain ⟨ℓ, n, σ₀, σ, hc, hp, hs⟩ := h
+      obtain ⟨-, o₂⟩ := (outlives_comp hc α).mp hout
+      obtain ⟨χ, hr, hχ⟩ := reborrow_star_pure α _ _ ρ ⟨σ₀, σ, hc, hp,
+        reborrow_sepRange (fun m σ' hm ho => hm.2 ho) hs o₂⟩
+      exact ⟨χ, hr, ℓ, n, hχ⟩
   | mu A =>
       obtain ⟨hcl, hG⟩ := h
       exact reborrow_mono (fun σ hσ => (vShape_immReborrow_mu_iff (show A.Cl 1 from hcl) _ δ v σ).mpr hσ)

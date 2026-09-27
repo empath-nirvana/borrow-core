@@ -30,8 +30,8 @@ open BoCa.Lifetime (LSub LifeCtx LifeVar)
 
 /-- A value type whose values hold no resource: `1`, `0`, `Unk`, `I32`, `I64`, `!A`, and `⊗`,
 `⊕`, `[@a]` and `μ` over persistent types, with a type variable persistent (it stands, under its
-`μ`, for a persistent type).  `U C`, `Ref A`, `Imm @a A` and `Mut @a A` are not.
-`[spec §10, §8]` -/
+`μ`, for a persistent type).  `U C`, `Ref A`, `Imm @a A`, `Mut @a A` and `[L]` are not.
+`[spec §10, §8, §9]` -/
 def VTy.persistent : VTy → Bool
   | .unit => true
   | .zero => true
@@ -47,6 +47,7 @@ def VTy.persistent : VTy → Bool
   | .ref _ => false
   | .imm _ _ => false
   | .mut _ _ => false
+  | .fam _ => false
 
 /-- `A` is persistent.  `[spec §10]` -/
 abbrev VTy.Persistent (A : VTy) : Prop := A.persistent = true

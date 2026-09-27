@@ -30,11 +30,13 @@ one typing rule. A more pleasant surface syntax that desugars to it is being des
 - **Codata.** One former, `nu X. C`, with coiteration. Loops that may not terminate (`delay`),
   streams and finite iterators are abbreviations over it, and each has a mandatory `close`.
 - **Integers.** `i32` and `i64` with WebAssembly's operations.
+- **Arrays.** `array A`, a run of `n` places with `n` known at run time, with bounds-checked
+  access and views of single elements.
 - **Implicit destructors.** An owned value that a program leaves unused is freed or closed by a
   destructor that the checker inserts.
 
-Buffers and strings (`SPEC.md` §9) and externs with standard input and output (§11) are
-specified but not implemented.
+Externs with standard input and output (`SPEC.md` §11) are specified but not implemented; a
+growable `Vec` and strings are planned as library code over arrays.
 
 ## What is proved, and what is trusted
 

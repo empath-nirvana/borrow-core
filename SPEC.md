@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 0.7 · 2026-09-27
+Version 0.8 · 2026-09-27
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -431,54 +431,136 @@ between engines is tested on the corpus, not proved.
 
 ---
 
-## 9. Entry 8 — buffers and strings
+## 9. Entry 8 — arrays
 
-Opaque linear types with extern operations (§11). Their memory is not modelled cell by cell. Each
-extern's semantic type is a trusted obligation, like Rust's `unsafe` inside `std`.
+### Motivation
 
-### Buffers
+The place structure has run-time-sized *values* (`μ`, §6) and statically sized *families of
+places* (blocks, §5), but no run-time-sized family of places. An array is that: `n` leaf places at
+consecutive locations, `n` known only at run time. It is the type-level counterpart of the
+iterated separating conjunction `⊛_{i<n}`. Records are not arrays: a record's labels have no
+arithmetic, its length is static, and its fields may differ in type, so it cannot be indexed at
+run time.
 
-    Buf A          (owned, growable, must be freed)
+### Types
 
-| operation | type |
+    A ::= … | [L]                                  (VTy.fam L)
+
+    Array A       ≜ [Ref A]
+    ArrayImm @a A ≜ [Imm @a A]
+
+`[L]` is the run-time family `⊛_{i<n} L` of leaf places. A value of `[L]` is a pair `(ℓ, n)` of a
+base location and a length `n : I32`, and its `i`-th leaf is the location `ℓ + i`, a value of `L`.
+An owned array is the family of its `n` cells. A borrowed array is the family of its `n` leaf
+borrows at one lifetime, as a borrowed block is the family `famTy` of its leaf borrows (§5).
+
+Scoping, well-formedness, lifetime substitution and `TyEq` treat `[L]` as a unary former over `L`.
+
+    Imm̲ 'b [L] ≜ [Imm̲ 'b L]        Δ ⊢ [L] ⊐ @a  if  Δ ⊢ L ⊐ @a
+
+`[L]` is never persistent: it holds cells or borrows of cells.
+
+### Borrowing an array
+
+An array is a value, so it is borrowed as any value is: in a cell. `Imm @a (Array A)` and
+`Mut @a (Array A)` are borrows of a cell `Ref (Array A)` that holds the handle (Rust's `&Vec` and
+`&mut Vec`), made by `withbor` (§1). No rule is added for them:
+
+- **The family of leaf views** comes from `withload` (`[TR]` p. 3) at `Imm @a (Array A)`: its
+  callback receives `Imm̲ 'x (Array A) = ArrayImm 'x A` at a lifetime `'x ⊏ @a`. That is the
+  array borrowed as a family, and 6.131 at `[L]` is what makes it sound.
+- **Mutation through `Mut @a (Array A)`** is `withswap` (§1): its callback owns the array for a
+  moment and uses the owned operations.
+
+**Leaf views are direct places.** `array_get` takes a leaf view out of the family `ArrayImm 'x A`
+at the family's own lifetime `'x`. In the family each leaf's `imm` cell is at the top level of the
+resource and no cell owns the leaves, so `get` hands out one of them and `↭` is never asked to
+accept a cell below a parent (as in `experiments/Places` §2). A leaf view at `@a` taken directly
+from `Imm @a (Array A)` would sit below the `imm` cell that holds the handle, whose witness owns
+the leaves; the update relation excludes exactly that (§5 Open; `experiments/FrameEnd`,
+`imm_view_rejected`), so the view is taken at the shorter `'x` of `withload`.
+
+### Machine
+
+Three primitives, `Prim.tab`, `Prim.idx` and `Prim.drop`, each with one head step. With
+`len(c) = c` when `c < 2³¹` and `0` otherwise (a negative length is the empty array):
+
+    (μ, tab (c, f))       ↦ (μ ⊎ {ℓ+i ↦ () | i < n},
+                              store (ℓ+0) (f 0); …; store (ℓ+n−1) (f (n−1)); (ℓ, n))
+                            where n = len(c) and ℓ, …, ℓ+n−1 are fresh
+    (μ, idx ((ℓ, n), i))  ↦ (μ, inj₁ (ℓ + i))   if i < n, unsigned
+                          ↦ (μ, inj₂ ())        otherwise
+    (μ, drop (f, (ℓ, n))) ↦ (μ, f (free (ℓ+0)); …; f (free (ℓ+n−1)); ())
+
+`tab` places the cells, then runs the ordinary term that fills them; `drop` is a pure step to the
+ordinary term that empties and frees them. The machine stays deterministic at each host up to the
+choice of fresh locations, as `alloc` is. An index out of range takes the sum's error branch; no
+step is stuck on a well-typed argument.
+
+### Relation
+
+    𝒱⟦[L]⟧δ(v) ≜ ∃ℓ c. ⌜v = (ℓ, i32 c)⌝ ⋆ ⊛_{i < c} 𝒱⟦L⟧δ(ℓ + i)
+
+At `Array A` this is `n` owned cells, each holding a value in `𝒱⟦A⟧`; at `ArrayImm @a A`, `n`
+`imm` cells at `@a`. Nothing else changes in the typed world: a block allocation is `n` of
+`TW.alloc`, a drop `n` of `TW.free`.
+
+### Operations
+
+The constants, at a dead context; `A ⇒ B` is `U(A ⊸ F B)`:
+
+| constant | type |
 |---|---|
-| `buf_new`, `buf_free` | `I32 ⊸ F (Buf A)`, `Buf A ⊸ F 1` (when `A` is persistent) |
-| `len` | `Imm 'a (Buf A) ⊸ F I32` |
-| `get` | `Imm 'a (Buf A) ⊗ I32 ⊸ F (Imm 'a A ⊕ 1)` — a same-lifetime element view, bounds-checked |
-| `set` | `Mut 'a (Buf A) ⊗ I32 ⊗ A ⊸ F (A ⊕ A)` — returns the old element, or the new one back on failure |
-| `push`, `pop` | `Mut 'a (Buf A) ⊗ A ⊸ F 1`, `Mut 'a (Buf A) ⊸ F (A ⊕ 1)` |
+| `array_new` | `!(I32 ⊗ !(I32 ⇒ A) ⇒ Array A)` — `tab`: the tabulator's result at each index |
+| `array_free` | `!(!(A ⇒ 1) ⊗ Array A ⇒ 1)` — `drop`: each element to the consumer, in index order, then the cells freed |
+| `array_size` | `!(Array A ⇒ Array A ⊗ I32)` |
+| `array_replace` | `!(Array A ⊗ (I32 ⊗ A) ⇒ Array A ⊗ (A ⊕ A))` — the old element, or the new one back if out of range |
+| `array_len` | `!(ArrayImm @a A ⇒ I32)` |
+| `array_get` | `!(ArrayImm @a A ⊗ I32 ⇒ Imm @a A ⊕ 1)` — `idx`: a leaf view at the family's lifetime |
+| `array_copy` | `!(ArrayImm @a A ⇒ ArrayImm @a A ⊗ ArrayImm @a A)` |
+| `array_forget` | `!(ArrayImm @a A ⇒ 1)` |
 
-`push` may reallocate. That is sound because a `Mut` borrow excludes outstanding element views.
-Byte buffers are `Buf I32` with 8-bit storage chosen by the lowering.
+`array_replace` on `Mut @a (Array A)` is `withswap` with `array_replace` in its callback.
 
-### Strings
+Implicit destructors (§12): `Array A` has one when `A` does, `array_free` with the destructor of
+`A` as the consumer; `ArrayImm @a A` is forgettable, by `array_forget`.
 
-    Str            (owned UTF-8 string, must be freed)
-    Imm 'a Str     (borrowed view; literals are Imm ⊤ Str)
+### Lowering
 
-| operation | type |
-|---|---|
-| `str_new`, `str_free` | `F Str`, `Str ⊸ F 1` |
-| `len`, `byte_at` | `Imm 'a Str ⊸ F I32`, `Imm 'a Str ⊗ I32 ⊸ F (I32 ⊕ 1)` |
-| `slice` | `Imm 'a Str ⊗ I32 ⊗ I32 ⊸ F (Imm 'a Str ⊕ 1)` — same-lifetime sub-view |
-| `push_str` | `Mut 'a Str ⊗ Imm 'b Str ⊸ F 1` |
-| `concat` | `Imm 'a Str ⊗ Imm 'b Str ⊸ F Str` |
-| `eq`, `cmp` | `… ⊸ F (1 ⊕ 1)`, `… ⊸ F I32` |
-| `from_bytes` | `Buf I32 ⊸ F (Str ⊕ Buf I32)` — validates UTF-8; the buffer comes back on failure |
-| `to_str` | `I32 ⊸ F Str` |
+An array is one allocation of `n` slots; slot `i` is at `base + i·s`, with `s` the slot size.
+`idx` is an unsigned compare of `i` with `n` and an address computation — a `getelementptr` and
+an `icmp ult` in LLVM, `i32.lt_u` and `i32.mul`/`i64.add` in Wasm. `tab` allocates the block and
+fills it in a loop; `drop` loops over the slots, moves each value to the consumer, and frees the
+block once. The MVP backend's uniform representation keeps a header word in every slot, so its
+`s` is 16 bytes and an element's location is an ordinary cell address; a type-directed layout
+has `s = sizeof A` and no header.
 
-Every extern that produces a `Str` produces valid UTF-8; `from_bytes` is the only door from raw
-bytes. String literals are externs in `main`'s initial context, backed by the static data segment,
-which is outside the heap accounting of adequacy.
+### Baseline
+
+`fundamentalC` covers the new constants and `adequacyC` is unchanged in statement; the machine
+gains three head steps, parametric in the host as before. `[L]` is one `VTy` former, and every
+lemma of the typed world proved by induction on types or on positions has its `[L]` case (6.131,
+6.60, the images and invariants of reborrowing), which is what makes `withload` sound at arrays.
+
+### Library, not primitive
+
+- **`Vec A`**, a growable array: reallocation is a new array and a move of the leaves, under
+  `Mut`. Its capacity slots are `1 ⊕ A` until uninitialised leaves exist.
+- **`Str`**: a byte array with the UTF-8 invariant kept by the library's constructors; string
+  literals as `Imm ⊤ Str` in the data segment.
+- **`u8`**: an integer width stored in bytes.
 
 ### Open
 
-- Iteration over a borrowed buffer or string as a lifetime-indexed `Iter` (§7).
-- `split_at_mut` on buffers as an extern.
-- Proving individual externs against Talos (a realizability model), removing them from the trusted
-  base one at a time.
-
----
+- A primitive array borrow `Array A ⊸ (∀'c. [M 'c A] ⊸ ['c] T) ⊸ Array A ⊗ T` with no cell, and
+  mutable families `[Mut 'c A]` (a leaf `Mut` view, `iter_mut`). Semantically each leaf would be
+  framed by its own 6.64/6.65 frame, nested; not built.
+- `split_at` at a run-time index, returning two disjoint sub-families at the borrow's lifetime.
+- `iter`/`iter_mut` over the leaf family, as a lifetime-indexed `Iter` (§7).
+- `replicate` for persistent `A` without a tabulator; creation from a list.
+- Uninitialised leaves (`Uninit`), and sized types (#72).
+- Buffers and strings as externs (the previous §9) are withdrawn in favour of the library forms
+  above.
 
 ## 10. Entry 9 — persistent variables
 
@@ -507,8 +589,8 @@ extension, so the embedding (§3) still applies.
 A program may declare `extern name : A`. Externs form the initial context of `main`. The
 Fundamental Property quantifies over every context satisfying its types, so a program is safe
 for every implementation of its externs that meets their semantic types; each extern is a named
-hypothesis of the end-to-end theorem. Trusted runtime components with a program-level interface (stack switching, host I/O, §9's
-buffers and strings) enter this way. The allocator does not: it is part of the compiled runtime,
+hypothesis of the end-to-end theorem. Trusted runtime components with a program-level interface (stack switching, host I/O) enter
+this way. The allocator does not: it is part of the compiled runtime,
 trusted against its written spec (`Backend/README.md`). §8's integer operations do not:
 they are term constants, and the theorems are parametric in the host instead.
 
@@ -604,8 +686,6 @@ fixes when the effect of a drop happens.
   need a destructor that performs I/O or can fail. `dtorE` is total and pure apart from
   deallocation and `close`. Whether such a type gets an implicit destructor, and what a failing
   one does, is not decided. Until then these are class 3.
-- **`Buf`/`Str`** (§9) are extern types outside `HasDtor`. Their destructors would be the externs
-  `str_free` and `buf_free` (a `Buf` of owned elements needs a drain first).
 - **Externs** are not owed. `main` must consume every non-persistent extern.
 - **`linear` on other binders** (`let`, `case` arms, `fun`) is not provided.
 - **Values** do not drop. The value `V` of `let`/`case` and the operands of value forms consume
@@ -621,12 +701,24 @@ fixes when the effect of a drop happens.
 Entries 2–6 are implemented in the library directory `Core/`, with one `fundamentalC` and
 `adequacyC` covering every rule; §7's `νX. C` is `Core/NuRel.lean` and `Core/Nu.lean`, and the
 checker reads `nu X. C`, `iter A R R'`, `nu_in`/`nu_out` and `unfold[C, S]`. Entries 7 and 9 (§8, §10) are implemented; §8 extends `Paper/` and `Support/` with the literal
-and host-step forms. Entries 8 and 10 (§9, §11) are specified only. Entry 11 (§12) is implemented in
+and host-step forms. Entry 8 (§9, arrays) is implemented: the former and its lemmas in `Core/Types.lean` and the typed
+world, the constants in `Core/Arrays.lean` (`Core/ArrayWp.lean` for the steps), the three machine
+steps in `Paper/` and `Support/`, the checker (`array`, `array_imm`, syntax-core §8b) and the
+backend. Entry 10 (§11) is specified only. Entry 11 (§12) is implemented in
 `Core/Dtor.lean` and the checker (`Frontend/Check/`), with no change to `CDerives`.
 
 ---
 
 ## Changelog
+
+- **0.8** (2026-09-27) — Entry 8 revised (§9): arrays. `[L]` (`VTy.fam`) is the run-time family
+  `⊛_{i<n} L` of leaf places, with `Array A = [Ref A]` and the borrowed family `[Imm @a A]`; the
+  machine steps `tab`, `idx` and `drop`; `array_new`, `array_free`, `array_size`,
+  `array_replace`, and on families `array_len`, `array_get` (a leaf view at the family's
+  lifetime), `array_copy` and `array_forget`. An array is borrowed in a cell, by `withbor`; the
+  family comes from `withload`, mutation through `Mut` from `withswap`. Buffers and strings as
+  extern types are withdrawn; `Vec` and `Str` are library code over arrays. §11 and §12 no longer
+  mention them.
 
 - **0.7** (2026-09-27) — Entry 6 revised (§7): one codata former `νX. C` with positivity
   (`X` only as `U X`, under `⊗`/`⊕` of observation results), `nuIn`/`nuOut` and coiteration

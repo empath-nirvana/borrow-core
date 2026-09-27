@@ -8,6 +8,7 @@ import Support.Lifetimes.Interpretation
 import Support.LogicalRelation.ClosingSubstitutions
 import Support.Model.Notation
 import Core.FrameRecords
+import Core.SepRange
 
 /-!
 # Core — World  `[spec §3, §4]`
@@ -75,6 +76,8 @@ def vShapeE : Option (Nat → SEnt) → VTy → LSub → Val → WProp
       ∀ P : Val → WProp,
         (∀ v' ρ', vShapeE (some (VTy.scons ⟨sClose η (.mu A), P⟩ (sEnv η))) A δ v' ρ' → P v' ρ') →
         P v ρ
+  | η, .fam L, δ, v => ex fun ℓ => ex fun c => ⌜v = Val.arr ℓ c⌝ ⋆
+      sepRange (fun m => vShapeE η L δ (.loc m)) ℓ c.toNat
 
 /-- `𝒱⟦A⟧`'s shape at a type read with no environment. -/
 notation "vShape" => vShapeE none

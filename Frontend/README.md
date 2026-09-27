@@ -1,7 +1,7 @@
 # Frontend: the core syntax
 
 A lexer, parser, printer and type checker for the textual core language of
-`docs/syntax-core.md` (draft 1, with §8a integers). The checker elaborates a program to a BoLo
+`docs/syntax-core.md` (draft 1, with §8a integers and §8b arrays). The checker elaborates a program to a BoLo
 `Expr` together with a `CDerives` derivation of it (`Frontend/Check/`, below).
 
     lake exe bcc parse <file>   parse, then print, re-parse and compare the ASTs up to spans
@@ -15,7 +15,7 @@ A lexer, parser, printer and type checker for the textual core language of
 |---|---|
 | `Syntax.lean` | the AST: `Life`, `VTy`/`CTy`/`Shape`, `Const`, `Val`/`Comp`, `Decl`, `Program`; every node has a `Span`; `strip` erases spans |
 | `Lexer.lean` | tokens of §2, with line:column spans; Unicode spellings read as their ASCII tokens |
-| `Consts.lean` | bracket signatures of the constants (§8, §8a, §9) and host-operation names, with `Const.ofArgs_toArgs` and `hostOpOfName_name` |
+| `Consts.lean` | bracket signatures of the constants (§8, §8a, §8b, §9) and host-operation names, with `Const.ofArgs_toArgs` and `hostOpOfName_name` |
 | `Parser.lean` | recursive descent for §3–§6 and §10; types parsed to `RTy` then sorted into `VTy`/`CTy` |
 | `Print.lean` | the printer, parenthesizing by the precedence levels of §4 and §6.5 |
 | `Tests.lean` | precedence cases and round trips checked by the kernel (`decide +kernel`) |
@@ -112,7 +112,7 @@ judgment, for the derived forms of syntax-core §9), so what the checker returns
 | `Check/Elab.lean` | surface lifetimes, types and shapes to `Core`'s; a printer back |
 | `Check/Rules.lean` | one builder per `CDerives` constructor, and `rDrop` (SPEC §12) |
 | `Check/Steps.lean` | the environment, messages, the deciders of fold shapes and destructors, the drops, and the steps shared by the checker's cases |
-| `Check/Consts.lean` | constants (§8, §8a) and derived forms (§9) |
+| `Check/Consts.lean` | constants (§8, §8a, §8b) and derived forms (§9) |
 | `Check/Checker.lean` | the bidirectional checker, `synV`/`chkV`/`synC`/`chkC` |
 | `Check/Program.lean` | declarations, `main`, and the soundness theorems |
 | `Check/CrossCheck.lean` | erasures compared with `Core/`'s hand-written terms, by kernel evaluation |

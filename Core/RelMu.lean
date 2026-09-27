@@ -78,6 +78,7 @@ theorem vCE_some (η : Option (Nat → TEnt)) :
   | sum A B ihA ihB => intro b; funext ls δ v; simp only [vCE, ihA, ihB]
   | thunk _ => intro b; cases b <;> rfl
   | ref A ih => intro b; funext ls δ v; simp only [vCE, ih]
+  | fam L ih => intro b; funext ls δ v; simp only [vCE, ih]
   | imm a A ih =>
       intro b; funext ls δ v
       have e : tClose η A = tClose (some (tEnv η)) A := by rw [tClose_eq]; rfl
@@ -111,6 +112,7 @@ theorem vCE_rename : ∀ (A : VTy) (ρ : Nat → TEnt) (r : Nat → Nat) (b : Bo
   | sum A B ihA ihB => intro ρ r b; funext ls δ v; simp only [VTy.rename, vCE, ihA, ihB]
   | thunk _ => intro ρ r b; cases b <;> rfl
   | ref A ih => intro ρ r b; funext ls δ v; simp only [VTy.rename, vCE, ih]
+  | fam L ih => intro ρ r b; funext ls δ v; simp only [VTy.rename, vCE, ih]
   | imm a A ih =>
       intro ρ r b; funext ls δ v
       have e : tClose (some ρ) (A.rename r) = tClose (some (ρ ∘ r)) A := by
@@ -145,6 +147,7 @@ theorem vCE_subst : ∀ (A : VTy) (ρ : Nat → TEnt) (σ : Nat → VTy) (δ : L
   | sum A B ihA ihB => intro ρ σ δ b ls; funext v; simp only [VTy.subst, vCE, ihA, ihB]
   | thunk _ => intro ρ σ δ b ls; cases b <;> rfl
   | ref A ih => intro ρ σ δ b ls; funext v; simp only [VTy.subst, vCE, ih]
+  | fam L ih => intro ρ σ δ b ls; funext v; simp only [VTy.subst, vCE, ih]
   | imm a A ih =>
       intro ρ σ δ b ls; funext v
       have e : tClose (some ρ) (A.subst σ) = tClose (some (substEnv ρ σ δ)) A := by
@@ -207,6 +210,7 @@ theorem vCE_congr_occ : ∀ (A : VTy) (η₁ η₂ : Nat → TEnt), (∀ n, A.Oc
         ihB η₁ η₂ (fun n hn => h n (Or.inr hn))]
   | thunk _ => intro _ _ _ b; cases b <;> rfl
   | ref A ih => intro η₁ η₂ h b; funext ls δ v; simp only [vCE, ih η₁ η₂ h]
+  | fam L ih => intro η₁ η₂ h b; funext ls δ v; simp only [vCE, ih η₁ η₂ h]
   | imm a A ih =>
       intro η₁ η₂ h b; funext ls δ v
       have e : tClose (some η₁) A = tClose (some η₂) A :=
@@ -258,6 +262,11 @@ theorem vCE_mono_at : ∀ (A : VTy) (k : Nat) (η₁ η₂ : Nat → TEnt), A.No
       intro k η₁ η₂ hk ht hP hPk b ls δ v ρ h
       obtain ⟨ℓ, v', ρ₀, ρ₃, hc, hp, ρ₁, ρ₂, hc', ho, h₂⟩ := h
       exact ⟨ℓ, v', ρ₀, ρ₃, hc, hp, ρ₁, ρ₂, hc', ho, ih k η₁ η₂ hk ht hP hPk b ls δ v' ρ₂ h₂⟩
+  | fam L ih =>
+      intro k η₁ η₂ hk ht hP hPk b ls δ v ρ h
+      obtain ⟨ℓ, c, ρ₀, ρ₁, hc, hp, hs⟩ := h
+      exact ⟨ℓ, c, ρ₀, ρ₁, hc, hp,
+        sepRange_mono' (fun m σ hm => ih k η₁ η₂ hk ht hP hPk b ls δ _ σ hm) hs⟩
   | imm a A ih =>
       intro k η₁ η₂ hk ht hP hPk b ls δ v ρ h
       have e : tClose (some η₁) A = tClose (some η₂) A := by
@@ -373,6 +382,8 @@ def vF (S : Bool → VTy → List SRec → Val → WProp) (δ : LSub) :
   | _, .bang A, ls, v => fun ρ => ρ = PMap.empty ∧ S true A ls v ρ
   | b, .box a A, ls, v => atLife δ a fun α => box α (S b A ls v)
   | b, .ref A, ls, v => ex fun ℓ => ex fun v' => ⌜v = .loc ℓ⌝ ⋆ ptoOwn ℓ v' ⋆ S b A ls v'
+  | b, .fam L, ls, v => ex fun ℓ => ex fun c => ⌜v = Val.arr ℓ c⌝ ⋆
+      sepRange (fun m => S b L ls (.loc m)) ℓ c.toNat
   | _, .imm a A, ls, v => atLife δ a fun α => ex fun ℓ => ⌜v = .loc ℓ ∧ CohE (rsOf ls) ℓ A δ⌝ ⋆
       ptoImmS ℓ α ls (fun ls₀ => S false A ls₀)
   | b, .mut a A, ls, v => fun ρ => vC b (.mut a A) ls δ v ρ ∧
@@ -392,6 +403,7 @@ theorem vF_vC (δ : LSub) : ∀ (b : Bool) (T : VTy) (ls : List SRec) (v : Val) 
   | _, .thunk _, _, _, _ => Iff.rfl
   | _, .box _ _, _, _, _ => Iff.rfl
   | _, .ref _, _, _, _ => Iff.rfl
+  | _, .fam _, _, _, _ => Iff.rfl
   | _, .bang _, _, _, _ => Iff.rfl
   | _, .imm _ _, _, _, _ => Iff.rfl
   | _, .mut _ _, _, _, _ => ⟨fun h => ⟨h, fun _ _ _ h => h⟩, And.left⟩
@@ -420,6 +432,9 @@ theorem vF_mono {S₁ S₂ : Bool → VTy → List SRec → Val → WProp}
   | b, .ref T, ls, _, _, hs => by
       obtain ⟨ℓ, v', ρ₀, ρ₃, hc, hp, ρ₁, ρ₂, hc', ho, h₂⟩ := hs
       exact ⟨ℓ, v', ρ₀, ρ₃, hc, hp, ρ₁, ρ₂, hc', ho, h b T ls v' ρ₂ h₂⟩
+  | b, .fam L, ls, _, _, hs => by
+      obtain ⟨ℓ, c, ρ₀, ρ₁, hc, hp, hs⟩ := hs
+      exact ⟨ℓ, c, ρ₀, ρ₁, hc, hp, sepRange_mono' (fun m σ hm => h b L ls _ σ hm) hs⟩
   | _, .bang T, ls, _, _, hs => ⟨hs.1, h true T ls _ _ hs.2⟩
   | _, .imm _ T, _, _, _, hs => by
       obtain ⟨α, hα, ℓ, ρ₀, ρ₁, hc, hp, hpto⟩ := hs
@@ -467,6 +482,11 @@ theorem vC_ind (δ : LSub) (Φ : Bool → VTy → List SRec → Val → WRes →
         obtain ⟨ℓ, v', ρ₀, ρ₃, hc, hp, ρ₁, ρ₂, hc', ho, h₂⟩ := hr
         exact hG b _ ls v r ⟨ℓ, v', ρ₀, ρ₃, hc, hp, ρ₁, ρ₂, hc', ho,
           ih η₀ σ ht hP hex b ls v' ρ₂ h₂⟩
+    | fam L ih =>
+        intro η₀ σ ht hP hex b ls v r hr
+        obtain ⟨ℓ, c, ρ₀, ρ₁, hc, hp, hs⟩ := hr
+        exact hG b _ ls v r ⟨ℓ, c, ρ₀, ρ₁, hc, hp,
+          sepRange_mono' (fun m σ' hm => ih η₀ σ ht hP hex b ls _ σ' hm) hs⟩
     | imm a A ih =>
         intro η₀ σ ht hP hex b ls v r hr
         have e : tClose (some η₀) A = A.subst σ := by

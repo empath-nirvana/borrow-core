@@ -64,6 +64,9 @@ def dtorB : Bool → CVTy → Bool
       CTy.nuOkB (.amp C (.ret R)) && VTy.clB 0 R && dtorB false R
   | _, .thunk _ => false
   | _, .unit | _, .zero | _, .int _ | _, .unk | _, .bang _ | _, .imm _ _ | _, .mut _ _ => true
+  | _, .fam (.ref A) => dtorB false A
+  | _, .fam (.imm _ _) => true
+  | _, .fam _ => false
 
 theorem dtorB_sound : ∀ (alg : Bool) (A : CVTy), dtorB alg A = true →
     HasDtor (cond alg ((toFShape A).resO .unit) A)
@@ -122,7 +125,8 @@ theorem dtorB_sound : ∀ (alg : Bool) (A : CVTy), dtorB alg A = true →
   | _, .thunk (.amp _ (.ret (.mut _ _))), h | _, .thunk (.amp _ (.ret (.box _ _))), h
   | _, .thunk (.amp _ (.ret (.bang _))), h | _, .thunk (.amp _ (.ret .unk)), h
   | _, .thunk (.amp _ (.ret (.tvar _))), h | _, .thunk (.amp _ (.ret (.mu _))), h
-  | _, .thunk (.amp _ (.ret (.int _))), h | _, .thunk (.amp _ (.arr _ _)), h
+  | _, .thunk (.amp _ (.ret (.int _))), h | _, .thunk (.amp _ (.ret (.fam _))), h
+  | _, .thunk (.amp _ (.arr _ _)), h
   | _, .thunk (.amp _ (.amp _ _)), h | _, .thunk (.amp _ .top), h
   | _, .thunk (.amp _ (.all _ _ _)), h | _, .thunk (.amp _ (.nu _)), h => by simp [dtorB] at h
   | alg, .unit, _ => by cases alg <;> exact .unit
@@ -132,6 +136,14 @@ theorem dtorB_sound : ∀ (alg : Bool) (A : CVTy), dtorB alg A = true →
   | alg, .bang _, _ => by cases alg <;> exact .bang
   | alg, .imm _ _, _ => by cases alg <;> exact .imm
   | alg, .mut _ _, _ => by cases alg <;> exact .mut
+  | alg, .fam (.ref A), h => by
+      have := HasDtor.array (dtorB_sound false A (by simpa [dtorB] using h))
+      cases alg <;> exact this
+  | alg, .fam (.imm _ _), _ => by cases alg <;> exact .arrayImm
+  | _, .fam .unit, h | _, .fam (.tensor _ _), h | _, .fam .zero, h | _, .fam (.sum _ _), h
+  | _, .fam (.thunk _), h | _, .fam (.mut _ _), h | _, .fam (.box _ _), h
+  | _, .fam (.bang _), h | _, .fam .unk, h | _, .fam (.tvar _), h | _, .fam (.mu _), h
+  | _, .fam (.int _), h | _, .fam (.fam _), h => by simp [dtorB] at h
 
 /-- `A` has a destructor. -/
 def hasDtorB (A : CVTy) : Bool := dtorB false A

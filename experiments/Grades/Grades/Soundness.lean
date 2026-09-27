@@ -379,6 +379,14 @@ theorem fundamentalG {P : Profile} (hP : ∀ T, P.drop T = true → SemForget (�
   | forgetUnk hΓ => exact viaDead hP hΓ fun _ h => forgetUnk_compatX h
   | lit c hΓ => exact viaDead hP hΓ fun _ h => lit_compatX c h
   | hostOp op hΓ => exact viaDead hP hΓ fun _ h => hostOp_compatX op h
+  | arrNew A hΓ => exact viaDead hP hΓ fun _ h => arrNew_compatX h
+  | arrFree A hΓ => exact viaDead hP hΓ fun _ h => arrFree_compatX h
+  | arrSize A hΓ => exact viaDead hP hΓ fun _ h => arrSize_compatX h
+  | arrReplace A hΓ => exact viaDead hP hΓ fun _ h => arrReplace_compatX h
+  | arrLen a A hΓ => exact viaDead hP hΓ fun _ h => arrLen_compatX h
+  | arrGet a A hΓ => exact viaDead hP hΓ fun _ h => arrGet_compatX h
+  | arrCopy a A hΓ => exact viaDead hP hΓ fun _ h => arrCopy_compatX h
+  | arrForget a A hΓ => exact viaDead hP hΓ fun _ h => arrForget_compatX h
   | withbor1 x hΓ hx hsc hf₁ hf₂ => exact viaDead hP hΓ fun _ h => withbor1_compatX x h hx hsc hf₁ hf₂
   | withbor2 x hΓ hx hside hf₁ hf₂ =>
       exact viaDead hP hΓ fun _ h => withbor2_compatX x h hx hside hf₁ hf₂

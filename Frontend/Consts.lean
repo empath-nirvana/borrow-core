@@ -24,6 +24,8 @@ inductive CKw where
   | foldImm | foldOwn | foldReuse | fixd | unfoldS | unfold
   | i32 | i64 | host
   | allocS | freeS | withborSMut | withborSImm | withborF2Mut | withborF2Imm
+  | arrayNew | arrayFree | arraySize | arrayReplace | arrayLen | arrayGet | arrayCopy
+  | arrayForget
   deriving DecidableEq, Repr
 
 /-- A constant keyword's spelling. -/
@@ -39,12 +41,17 @@ def CKw.str : CKw → String
   | .allocS => "alloc_s" | .freeS => "free_s"
   | .withborSMut => "withbor_s_mut" | .withborSImm => "withbor_s_imm"
   | .withborF2Mut => "withbor_f2_mut" | .withborF2Imm => "withbor_f2_imm"
+  | .arrayNew => "array_new" | .arrayFree => "array_free" | .arraySize => "array_size"
+  | .arrayReplace => "array_replace" | .arrayLen => "array_len" | .arrayGet => "array_get"
+  | .arrayCopy => "array_copy" | .arrayForget => "array_forget"
 
 def CKw.all : List CKw :=
   [.alloc, .free, .swap, .copy, .copyBang, .forgetImm, .forgetMut, .forgetUnk, .forgetBang,
    .withbor1, .withbor2, .withbor3, .withload, .withswap,
    .foldImm, .foldOwn, .foldReuse, .fixd, .unfoldS, .unfold, .i32, .i64, .host,
-   .allocS, .freeS, .withborSMut, .withborSImm, .withborF2Mut, .withborF2Imm]
+   .allocS, .freeS, .withborSMut, .withborSImm, .withborF2Mut, .withborF2Imm,
+   .arrayNew, .arrayFree, .arraySize, .arrayReplace, .arrayLen, .arrayGet, .arrayCopy,
+   .arrayForget]
 
 def CKw.ofString? (s : String) : Option CKw := CKw.all.find? (·.str == s)
 
@@ -53,6 +60,8 @@ open ArgKind in
     without brackets. -/
 def CKw.sig : CKw → List ArgKind
   | .alloc | .free | .copyBang | .forgetBang => [ty]
+  | .arrayNew | .arrayFree | .arraySize | .arrayReplace => [ty]
+  | .arrayLen | .arrayGet | .arrayCopy | .arrayForget => [life, ty]
   | .swap | .foldOwn | .foldReuse | .fixd | .unfoldS => [ty, ty]
   | .unfold => [cty, ty]
   | .copy | .forgetImm | .forgetMut => [life, ty]
@@ -102,6 +111,14 @@ def Const.ofArgs : CKw → List Arg → Option Const
       some (.withborF2Mut c a b w A B T)
   | .withborF2Imm, [.binder c, .binder a, .binder b, .ty A, .ty B, .ty T] =>
       some (.withborF2Imm c a b A B T)
+  | .arrayNew, [.ty A] => some (.arrayNew A)
+  | .arrayFree, [.ty A] => some (.arrayFree A)
+  | .arraySize, [.ty A] => some (.arraySize A)
+  | .arrayReplace, [.ty A] => some (.arrayReplace A)
+  | .arrayLen, [.life a, .ty A] => some (.arrayLen a A)
+  | .arrayGet, [.life a, .ty A] => some (.arrayGet a A)
+  | .arrayCopy, [.life a, .ty A] => some (.arrayCopy a A)
+  | .arrayForget, [.life a, .ty A] => some (.arrayForget a A)
   | _, _ => none
 
 /-- A constant's keyword and bracket arguments. -/
@@ -137,6 +154,14 @@ def Const.toArgs : Const → CKw × List Arg
       (.withborF2Mut, [.binder c, .binder a, .binder b, .life w, .ty A, .ty B, .ty T])
   | .withborF2Imm c a b A B T =>
       (.withborF2Imm, [.binder c, .binder a, .binder b, .ty A, .ty B, .ty T])
+  | .arrayNew A => (.arrayNew, [.ty A])
+  | .arrayFree A => (.arrayFree, [.ty A])
+  | .arraySize A => (.arraySize, [.ty A])
+  | .arrayReplace A => (.arrayReplace, [.ty A])
+  | .arrayLen a A => (.arrayLen, [.life a, .ty A])
+  | .arrayGet a A => (.arrayGet, [.life a, .ty A])
+  | .arrayCopy a A => (.arrayCopy, [.life a, .ty A])
+  | .arrayForget a A => (.arrayForget, [.life a, .ty A])
 
 theorem Const.ofArgs_toArgs (c : Const) : Const.ofArgs c.toArgs.1 c.toArgs.2 = some c := by
   cases c with

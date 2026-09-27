@@ -32,6 +32,14 @@ inserts ([Implicit destructors](guide/implicit-destructors.md)) are part of the 
 **Arithmetic is a parameter.** The machine performs integer operations through a *host*, and
 every theorem above holds for every host. Nothing about arithmetic is assumed.
 
+**Arrays are covered by the same two theorems.** Each array constant is a typing rule with its
+compatibility lemma in
+[`Core/Arrays.lean`](https://github.com/empath-nirvana/borrow-core/blob/main/Core/Arrays.lean):
+`array_new` places the cells at fresh consecutive locations and fills them, `array_free` frees
+them one by one, and `array_get` hands out one element's view. The family of an array's element
+views comes from `withload`, whose rule was already sound; what it needs of the new type is that
+every lemma about the model proved by induction on types has its array case, and each has.
+
 **The baseline is preserved.** The paper's calculus (BoCa) and its logic (BoLo) embed into the
 core, and the paper's Fundamental Property and adequacy hold as before.
 [`Paper/INDEX.md`](https://github.com/empath-nirvana/borrow-core/blob/main/Paper/INDEX.md) indexes each result of the paper to its Lean declaration,
@@ -54,5 +62,4 @@ text.
 - A `delay` loop is not claimed to terminate; its type says it may not.
 - The checker is not complete: a well-typed program may be rejected (`Frontend/README.md`,
   *Incompleteness*).
-- Buffers, strings and externs are specified (`SPEC.md` §9, §11) but not implemented, so no
-  theorem covers them yet.
+- Externs are specified (`SPEC.md` §11) but not implemented, so no theorem covers them yet.

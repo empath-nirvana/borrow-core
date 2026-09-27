@@ -1,0 +1,18 @@
+-- Mutating an array while a view of it is held: inside the `imm` borrow of the cell that holds
+-- the array, the cell is borrowed again, `mut`, to replace an element.
+type A = array i32
+
+def tab : !(i32 => i32) = !thunkv fun (i : i32) -> return i
+
+main : F 1 =
+  a <- return ((unbang array_new[i32]) (i32[2], tab));
+  r <- return (alloc[A] a);
+  q <- return (withbor1['x, A, 1] r
+         (thunkv Fun 'x < top. return (thunkv fun (b : imm 'x A) ->
+            q2 <- return (withbor2['z, top, A, 1] r
+                    (thunkv Fun 'z < dom. return (thunkv fun (m : mut 'z A) ->
+                       return (boxed['z] ()))));
+            return (boxed['x] ()))));
+  let (r2, u) = q;
+  return u
+-- expect: 10:16: `r` is used twice here, and its type `ref array i32` is not persistent

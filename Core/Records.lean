@@ -332,13 +332,14 @@ theorem dropT_wf {Δ : LifeCtx} {A : VTy} (hA : Affine A) :
   | bang => intro Γ hΓ; exact .forgetBang hΓ
   | int => intro Γ hΓ; exact .lamV (.unitI (.drop rfl hΓ.toP))
 
-/-- The spine of `⊗`, `⊕` and `[@a]` holds no `μ` and no type variable. -/
+/-- The spine of `⊗`, `⊕` and `[@a]` holds no `μ`, no type variable and no array. -/
 def VTy.SpineMuFree : VTy → Prop
   | .tensor A B => A.SpineMuFree ∧ B.SpineMuFree
   | .sum A B => A.SpineMuFree ∧ B.SpineMuFree
   | .box _ A => A.SpineMuFree
   | .tvar _ => False
   | .mu _ => False
+  | .fam _ => False
   | _ => True
 
 /-- `Imm̲ 'b A` is affine at a `μ`-free spine: `Imm̲` sends `Ref` and `Mut` to `Imm`, `U C` to
@@ -357,6 +358,7 @@ theorem affine_immReborrow (b : Lifetime.Life) : ∀ A : VTy, A.SpineMuFree →
   | .box _ A, h => affine_immReborrow b A h
   | .bang _, _ => .bang
   | .unk, _ => .unk
+  | .fam _, h => h.elim
 
 theorem affine_valTy : ∀ σ : Shape, σ.All Affine → Affine σ.valTy
   | .leaf _, h => h

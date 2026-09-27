@@ -28,7 +28,9 @@ variable {ℍ : BoCa.Host} [BoCa.HostIs ℍ]
 namespace BoCa.Fig16.LogRel.Core.TwoRun
 open BoCa
 open BoCa.BoLo (Heap Steps Step1 Head Kont)
-open BoCa.Fig16.LogRel.Core.FrameTheorems (allocRedex StepsNA Step1NA head_det)
+open BoCa.Fig16.LogRel.Core.FrameTheorems (allocRedex StepsNA Step1NA head_det ArrRedex
+  arrRedex_tab)
+open BoCa.BoLo (Step1R not_arrRedex_rename)
 
 /-! ### Naming and freshness -/
 
@@ -38,7 +40,7 @@ def Named (μ : Heap) (e : Expr) (ℓ : Loc) : Prop :=
 
 /-- A step that allocates only locations its configuration does not name. -/
 def Step1F (μ : Heap) (e : Expr) (μ' : Heap) (e' : Expr) : Prop :=
-  Step1 μ e μ' e' ∧ ∀ ℓ, μ' ℓ ≠ none → μ ℓ = none → ¬ Named μ e ℓ
+  Step1R μ e μ' e' ∧ ∀ ℓ, μ' ℓ ≠ none → μ ℓ = none → ¬ Named μ e ℓ
 
 /-- A run whose every allocation is of a location its configuration does not name. -/
 inductive FreshRun : Heap → Expr → Heap → Expr → Prop where
@@ -50,13 +52,15 @@ theorem FreshRun.toSteps {μ μ' : Heap} {e e' : Expr} (h : FreshRun μ e μ' e'
     Steps μ e μ' e' := by
   induction h with
   | refl => exact .refl _ _
-  | more h _ ih => exact .more h.1 ih
+  | more h _ ih => exact .more h.1.toStep1 ih
 
-/-- A head step that is not an allocation adds no location. -/
+/-- A head step that is neither an allocation nor an array step adds no location. -/
 theorem head_dom_of_not_alloc {μ μ' : Heap} {a a' : Expr} (h : Head μ a μ' a')
-    (hna : ∀ v : Val, a ≠ allocRedex v) {ℓ : Loc} (h' : μ' ℓ ≠ none) : μ ℓ ≠ none := by
+    (hna : ∀ v : Val, a ≠ allocRedex v) (hnr : ¬ ArrRedex a) {ℓ : Loc} (h' : μ' ℓ ≠ none) :
+    μ ℓ ≠ none := by
   cases h with
   | alloc v k _ => exact absurd rfl (hna v)
+  | tab => exact absurd (arrRedex_tab _) hnr
   | free k v _ =>
       intro h0; apply h'
       by_cases e : ℓ = k
@@ -75,9 +79,9 @@ theorem StepsNA.toFresh {μ μ' : Heap} {e e' : Expr} (h : StepsNA μ e μ' e') 
   induction h with
   | refl => exact .refl _ _
   | more h _ ih =>
-      obtain ⟨K, a, a', he, he', hh, hna⟩ := h
-      exact .more ⟨⟨K, a, a', he, he', hh⟩, fun ℓ h₁ h₂ => absurd h₂
-        (head_dom_of_not_alloc hh hna h₁)⟩ ih
+      obtain ⟨K, a, a', he, he', hh, hna, hnr⟩ := h
+      exact .more ⟨⟨K, a, a', he, he', hh, hnr⟩, fun ℓ h₁ h₂ => absurd h₂
+        (head_dom_of_not_alloc hh hna hnr h₁)⟩ ih
 
 /-! ### Renaming and naming -/
 
@@ -183,9 +187,9 @@ renaming `(σ μ, σ e)` end in configurations related by a permutation. -/
 theorem step1F_sim {σ : Equiv.Perm Loc} {μ μ' μB : Heap} {e e' eB : Expr}
     (hA : Step1F μ e μ' e') (hB : Step1F (μ.rename σ) (e.rename σ) μB eB) :
     ∃ σ' : Equiv.Perm Loc, μB = μ'.rename σ' ∧ eB = e'.rename σ' := by
-  obtain ⟨⟨K, a, a', rfl, rfl, hh⟩, hfA⟩ := hA
-  obtain ⟨⟨K', b, b', hE, rfl, hhB⟩, hfB⟩ := hB
-  have hh' := BoLo.head_rename σ hh
+  obtain ⟨⟨K, a, a', rfl, rfl, hh, hnr⟩, hfA⟩ := hA
+  obtain ⟨⟨K', b, b', hE, rfl, hhB, -⟩, hfB⟩ := hB
+  have hh' := BoLo.head_rename σ hh hnr
   rw [BoLo.Kont.rename_plug] at hE
   obtain ⟨K'', hb, rfl⟩ := Fig16.LogRel.Core.plug_decomp hhB (K.rename σ) K' hh'.not_isVal hE
   obtain rfl : K'' = .hole := Fig16.LogRel.Core.head_plug hh' K'' hhB.not_isVal hb
@@ -218,7 +222,7 @@ theorem step1F_sim {σ : Equiv.Perm Loc} {μ μ' μB : Heap} {e e' eB : Expr}
         Kont.rename_eq_self _ _ hfix]
       simp only [Expr.rename, Expr.val, Val.loc, τ, Equiv.swap_apply_left]
   · push Not at hal
-    obtain ⟨rfl, rfl⟩ := head_det hh' hhB (not_allocRedex_rename σ hal)
+    obtain ⟨rfl, rfl⟩ := head_det hh' hhB (not_allocRedex_rename σ hal) (not_arrRedex_rename σ hnr)
     exact ⟨σ, rfl, (BoLo.Kont.rename_plug σ K a').symm⟩
 
 /-! ### Fresh runs -/
@@ -237,11 +241,11 @@ theorem freshRun_sim {μ μ' : Heap} {e e' : Expr} (hA : FreshRun μ e μ' e') :
       intro hv σ μB eB hB _
       cases hB with
       | refl => exact ⟨σ, rfl, rfl⟩
-      | more h _ => exact absurd h.1 (not_step1_of_isVal (hv.rename σ))
+      | more h _ => exact absurd h.1.toStep1 (not_step1_of_isVal (hv.rename σ))
   | more hs _ ih =>
       intro hv σ μB eB hB hvB
       cases hB with
-      | refl => exact absurd hs.1 (not_step1_of_isVal (isVal_of_rename σ hvB))
+      | refl => exact absurd hs.1.toStep1 (not_step1_of_isVal (isVal_of_rename σ hvB))
       | more h t =>
           obtain ⟨σ₁, rfl, rfl⟩ := step1F_sim hs h
           exact ih hv t hvB

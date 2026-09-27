@@ -142,6 +142,8 @@ def vCE : Option (Nat → TEnt) → Bool → VTy → List SRec → LSub → Val 
         (∀ b' ls' v' ρ', vCE (some (VTy.scons ⟨tClose η (.mu A), P⟩ (tEnv η))) b' A ls' δ v' ρ' →
           P b' ls' v' ρ') →
         P b ls v ρ
+  | η, b, .fam L, ls, δ, v => ex fun ℓ => ex fun c => ⌜v = Val.arr ℓ c⌝ ⋆
+      sepRange (fun m => vCE η b L ls δ (.loc m)) ℓ c.toNat
 /-- `𝒞⟦C⟧(ls)δ(e)`, curried on the connective.  At `νX. C` the greatest fixed point
 `⋃{R | R ⊆ cB (nuEnv C R) C}`, written in `Prop` as `∃ R` (`docs/scope-recursion.md` §3.1), and
 trivial unless `C` is positive (`CTy.NuOk`).  `[spec §3, §7]` -/

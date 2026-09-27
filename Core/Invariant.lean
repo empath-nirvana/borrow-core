@@ -843,6 +843,15 @@ theorem mut_split {δ : LSub} {T : VTy} {v : Val} {m : Loc} {S : VTy} (hp : MutP
   | mu _ _ ih =>
       intro R hR
       exact ih (vShape_unfold hR).2
+  | fam hi _ ih =>
+      intro R hR
+      obtain ⟨ℓ', n', hk'⟩ := hR
+      obtain ⟨he', hs⟩ := pure_sep_iff.mp hk'
+      obtain ⟨rfl, rfl⟩ := Val.arr_inj he'
+      obtain ⟨Ri, hRi, τ, hτ⟩ := sepRange_le hi hs
+      obtain ⟨ζ, eζ, kζ⟩ := ih hRi
+      obtain ⟨ζ', eζ', kζ', -, -⟩ := compS_get_left' hτ eζ
+      exact ⟨ζ', eζ', kζ'.trans kζ⟩
 
 /-- A typed reborrow's cell over a `mut` cell sits at a `Mut` position — the `Mut @a S`
 clause of `Imm̲` (`[CONF]` Fig. 9, `[TR]` 6.122), carried up through `⊗`, `⊕` and `[@a]`.
@@ -944,6 +953,20 @@ theorem image_dom_mut {x : LifeVar} {δ δ' : LSub} :
       obtain ⟨S, hS⟩ := hG.2 ((vShape_immReborrow_mu_iff (show A.Cl 1 from hcl) _ _ v c).mp hc)
         e eζ kζ
       exact ⟨S, MutPos.mu hcl hS⟩
+  | fam L =>
+      obtain ⟨ℓ, n, hk⟩ := hc
+      obtain ⟨he, hs⟩ := pure_sep_iff.mp hk
+      obtain ⟨ℓ', n', hk'⟩ := hR
+      obtain ⟨he', hs'⟩ := pure_sep_iff.mp hk'
+      subst he
+      obtain ⟨rfl, rfl⟩ := Val.arr_inj he'
+      obtain ⟨i, hi, ρi, ψi, hPi, ei, -⟩ := sepRange_get hs e
+      obtain ⟨Ri, hRi, τ, hτ⟩ := sepRange_le hi hs'
+      obtain ⟨ζ₁, eζ₁, -⟩ := image_dom L hPi hRi.1 ei
+      obtain ⟨ζ', eζ', kζ', -, -⟩ := compS_get_left' hτ eζ₁
+      rw [eζ] at eζ'; cases Option.some.inj eζ'
+      obtain ⟨S, hS⟩ := hRi.2 hPi ei eζ₁ (kζ'.symm.trans kζ)
+      exact ⟨S, MutPos.fam hi hS⟩
 
 /-- A cell of a valid world that is neither `imm` nor absent at the top keeps `ag` off its
 location. -/
@@ -1276,6 +1299,11 @@ theorem MutPos.inv_mu {A S : VTy} {v : Val} {l : Loc} (h : MutPos (.mu A) v l S)
   cases h with
   | mu hc h => exact ⟨hc, h⟩
 
+theorem MutPos.inv_fam {L S : VTy} {v : Val} {l : Loc} (h : MutPos (.fam L) v l S) :
+    ∃ ℓ n j, v = Val.arr ℓ n ∧ j < n.toNat ∧ MutPos L (Val.loc (ℓ + j)) l S := by
+  cases h with
+  | fam hj h => exact ⟨_, _, _, rfl, hj, h⟩
+
 theorem MutPos.free {T : VTy} {v : Val} {l : Loc} {S : VTy} (h : MutPos T v l S) {y : LifeVar}
     (hy : VFree y S) : VFree y T := by
   induction h with
@@ -1286,6 +1314,7 @@ theorem MutPos.free {T : VTy} {v : Val} {l : Loc} {S : VTy} (h : MutPos T v l S)
   | sumR _ ih => exact Or.inr (ih hy)
   | box _ ih => exact Or.inr (ih hy)
   | mu _ _ ih => exact (vFree_inst (ih hy)).elim id id
+  | fam _ _ ih => exact ih hy
 
 /-- At a `Mut @a S` position a typed escrow holds `ℓ ↦ mut(b, u, χ, Q̂)` with
 `χ ∈ 𝒱⟦S⟧δ(u)` — `ptoMut`'s `ofS Q̂ = 𝒱⟦S⟧δ` read at the cell's own value and witness. -/
@@ -1341,6 +1370,14 @@ theorem mut_split_den {δ : LSub} {T : VTy} {v : Val} {m : Loc} {S : VTy} (hp : 
   | mu _ _ ih =>
       intro R hR
       exact ih (vShape_unfold hR).2
+  | fam hi _ ih =>
+      intro R hR
+      obtain ⟨ℓ', n', hk'⟩ := hR
+      obtain ⟨he', hs⟩ := pure_sep_iff.mp hk'
+      obtain ⟨rfl, rfl⟩ := Val.arr_inj he'
+      obtain ⟨Ri, hRi, τ, hτ⟩ := sepRange_le hi hs
+      obtain ⟨ζ, eζ, kζ, dζ⟩ := ih hRi
+      exact ⟨ζ, (ResU.CompS.get_left_of_ne_imm hτ eζ (by rw [kζ]; simp)).2, kζ, dζ⟩
 
 theorem not_mut_both {B₁ B₂ X : WRes} (h : ResU.CompS B₁ B₂ X) {l : Loc}
     {ψ₁ ψ₂ : CellU Loc Val} (e₁ : B₁.get l = some ψ₁) (k₁ : ψ₁.kind ≠ Kind.imm)
@@ -1401,6 +1438,23 @@ theorem mutPos_unique {δ : LSub} :
       obtain ⟨α, -, hb, -⟩ := hR
       exact ih hb (MutPos.inv_box h₂)
   | mu _ _ ih => exact ih (vShape_unfold hR).2 (MutPos.inv_mu h₂).2
+  | @fam L ℓ n i l S hi h₁' ih =>
+      obtain ⟨ℓ₂, n₂, j, he₂, hj, h₂'⟩ := MutPos.inv_fam h₂
+      obtain ⟨rfl, rfl⟩ := Val.arr_inj he₂
+      obtain ⟨ℓ', n', hk⟩ := hR
+      obtain ⟨he, hs⟩ := pure_sep_iff.mp hk
+      obtain ⟨rfl, rfl⟩ := Val.arr_inj he
+      rcases lt_trichotomy i j with hij | rfl | hij
+      · obtain ⟨Ri, Rj, X, hRi, hRj, hX, -⟩ := sepRange_pick2 hij hj hs
+        obtain ⟨ζ₁, e₁, k₁⟩ := mut_split h₁' hRi
+        obtain ⟨ζ₂, e₂, -⟩ := mut_split h₂' hRj
+        exact (not_mut_both hX e₁ (by rw [k₁]; simp) e₂).elim
+      · obtain ⟨Ri, hRi, -⟩ := sepRange_le hi hs
+        exact ih hRi h₂'
+      · obtain ⟨Rj, Ri, X, hRj, hRi, hX, -⟩ := sepRange_pick2 hij hi hs
+        obtain ⟨ζ₁, e₁, -⟩ := mut_split h₁' hRi
+        obtain ⟨ζ₂, e₂, k₂⟩ := mut_split h₂' hRj
+        exact (not_mut_both hX e₂ (by rw [k₂]; simp) e₁).elim
 
 /-- A `Mut` position and a `Ref` position of a typed escrow have strictly composable
 blocks: the `mut` cell, and the `Ref`'s `ℓ ↦ own(u) ● Q` with `Q ∈ 𝒱⟦S⟧δ(u)`. -/
@@ -1463,6 +1517,27 @@ theorem mut_ref_blocks {δ : LSub} :
       obtain ⟨α, -, hb, -⟩ := hR
       exact ih hb (RefPos.inv_box h₂)
   | mu _ _ ih => exact ih (vShape_unfold hR).2 (RefPos.inv_mu h₂).2
+  | @fam L ℓ n i m₀ S hi h₁' ih =>
+      obtain ⟨ℓ₂, n₂, j, he₂, hj, h₂'⟩ := RefPos.inv_fam h₂
+      obtain ⟨rfl, rfl⟩ := Val.arr_inj he₂
+      obtain ⟨ℓ', n', hk⟩ := hR
+      obtain ⟨he, hs⟩ := pure_sep_iff.mp hk
+      obtain ⟨rfl, rfl⟩ := Val.arr_inj he
+      rcases lt_trichotomy i j with hij | rfl | hij
+      · obtain ⟨Ri, Rj, X, hRi, hRj, hX, hle⟩ := sepRange_pick2 hij hj hs
+        obtain ⟨u, Q, B₂, hB, hQ, ⟨Y₂, hY₂⟩⟩ := own_split L hRj h₂'
+        obtain ⟨Y₁, hY₁⟩ := ResU.Le.refl Ri
+        obtain ⟨X', hX', hle'⟩ := sub_comp hY₁ hY₂ hX
+        exact ⟨Ri, B₂, X', u, Q, mut_split h₁' hRi, hB, hQ, hX', hle'.trans hle⟩
+      · obtain ⟨Ri, hRi, hle⟩ := sepRange_le hi hs
+        obtain ⟨B₁, B₂, X, u, Q, hm, hB, hQ, hX, hle'⟩ := ih hRi h₂'
+        exact ⟨B₁, B₂, X, u, Q, hm, hB, hQ, hX, hle'.trans hle⟩
+      · obtain ⟨Rj, Ri, X, hRj, hRi, hX, hle⟩ := sepRange_pick2 hij hi hs
+        obtain ⟨u, Q, B₂, hB, hQ, ⟨Y₂, hY₂⟩⟩ := own_split L hRj h₂'
+        obtain ⟨Y₁, hY₁⟩ := ResU.Le.refl Ri
+        obtain ⟨X', hX', hle'⟩ := sub_comp hY₂ hY₁ hX
+        exact ⟨Ri, B₂, X', u, Q, mut_split h₁' hRi, hB, hQ, ResU.CompS.comm hX',
+          hle'.trans hle⟩
 
 theorem GPos.of_chain {R : WRes} {T : VTy} {v : Val} {p : Option Loc} {l₀ : Loc} {S₀ : VTy}
     {u₀ : Val} (h : Chain R T v p l₀ S₀ u₀) {m : Loc} {S : VTy} (hm : MutPos S₀ u₀ m S) :

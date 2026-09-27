@@ -2,6 +2,7 @@ import Mathlib
 import Paper.S1_Syntax.Definitions
 import Support.Syntax.Terms
 import Support.Dynamics.Host
+import Support.Dynamics.Arrays
 
 /-!
 # [TR] §3 Dynamics  (physical pp. 3–4)
@@ -182,6 +183,10 @@ def upd (μ : Heap) (ℓ : Loc) (v : Val) : Heap := fun k => if k = ℓ then som
 @[simp] theorem upd_other {μ : Heap} {ℓ k : Loc} {v : Val} (h : k ≠ ℓ) :
     upd μ ℓ v k = μ k := by simp [upd, h]
 
+/-- `μ ⊎ {ℓ+i ↦ v | i < n}`, the result of the array step `tab`.  `[spec §9]` -/
+def fill (μ : Heap) (ℓ : Loc) (n : Nat) (v : Val) : Heap :=
+  fun k => if ℓ ≤ k ∧ k < ℓ + n then some v else μ k
+
 end BoCa.BoLo.Heap
 
 namespace BoCa.TR3
@@ -281,10 +286,16 @@ As row 3.22.
 
 `(µ, h v) ↦ (µ, r)` when the host applies the operation `h` to `v` with result `r`
 (`Host.call`). The machine is parametric in the host: every definition over it takes
-`{ℍ : Host} [HostIs ℍ]`, and at each host it is deterministic.
+`{ℍ : Host} [HostIs ℍ]`, and at each host it is deterministic up to the choice of fresh
+locations.
+
+### — no printed counterpart — the array steps · `[spec §9]`
+
+`tab` places `len(c)` cells at fresh consecutive locations and continues as `tabFill`; `idx`
+answers `idxAns`; `drop` continues as `dropFill` (`Support/Dynamics/Arrays.lean`).
 -/
-/-- The head reductions of `[TR]` p. 4's `↦` box: `TR3.Head` under other names, and the host
-    step of `SPEC.md` §8. -/
+/-- The head reductions of `[TR]` p. 4's `↦` box: `TR3.Head` under other names, the host
+    step of `SPEC.md` §8, and the array steps of §9. -/
 inductive Head {ℍ : Host} [HostIs ℍ] : Heap → Expr → Heap → Expr → Prop where
   | beta (μ : Heap) (b : Expr) (v : Val) :
       Head μ (.app (.val (.lam b)) (.val v)) μ (b.subst 0 v)
@@ -309,6 +320,19 @@ inductive Head {ℍ : Host} [HostIs ℍ] : Heap → Expr → Heap → Expr → P
   /-- The host step: `Host.call op v = some r` ⟹ `(μ, op v) ↦ (μ, r)`.  `[spec §8]` -/
   | host (μ : Heap) (op : HostOp) (v r : Val) (h : ℍ.call op v = some r) :
       Head μ (.app (.val (.prim (.host op))) (.val v)) μ (.val r)
+  /-- `(μ, tab (c, f)) ↦ (μ ⊎ {ℓ+i ↦ ()}_{i<n}, tabFill …)` at fresh `ℓ, …, ℓ+n−1`,
+      `n = len(c)`.  `[spec §9]` -/
+  | tab (μ : Heap) (c : UInt32) (f : Val) (ℓ : Loc)
+      (h : ∀ i, i < (arrLen c).toNat → μ (ℓ + i) = none) :
+      Head μ (.app (.val (.prim .tab)) (.val (.pair (.i32 c) f)))
+        (μ.fill ℓ (arrLen c).toNat .unit) (tabFill f ℓ (arrLen c) 0 (arrLen c).toNat)
+  /-- `(μ, idx ((ℓ, n), i)) ↦ (μ, idxAns ℓ n i)`.  `[spec §9]` -/
+  | idx (μ : Heap) (ℓ : Loc) (n i : UInt32) :
+      Head μ (.app (.val (.prim .idx)) (.val (.pair (.arr ℓ n) (.i32 i)))) μ
+        (.val (idxAns ℓ n i))
+  /-- `(μ, drop (f, (ℓ, n))) ↦ (μ, dropFill f ℓ 0 n)`.  `[spec §9]` -/
+  | drop (μ : Heap) (f : Val) (ℓ : Loc) (n : UInt32) :
+      Head μ (.app (.val (.prim .drop)) (.val (.pair f (.arr ℓ n)))) μ (dropFill f ℓ 0 n.toNat)
 
 /-!
 Rows 3.11, 3.12, continued.

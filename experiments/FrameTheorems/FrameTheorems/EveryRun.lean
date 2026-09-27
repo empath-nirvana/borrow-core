@@ -5,10 +5,11 @@ import Core.Steps
 # FrameTheorems — from the exhibited run to every run that does not allocate
 
 `wpTS` exhibits one run.  The machine is deterministic except at `alloc↦`, which may pick any
-location the heap misses.  So a run that takes no `alloc↦` step is the only run to a value from
-its start (`stepsNA_det`): every other run to a value takes the same steps.  The footprint of
-the exhibited run is therefore the footprint of every allocation-free run
-(`wpTS_footprint_every`).
+location the heap misses, and at the array step `tab`, which may place its cells at any run of
+such locations.  So a run that takes no `alloc↦` step and no array step (`ArrRedex`; `idx` and
+`drop` are excluded too, for `TwoRun`'s renaming) is the only run to a value from its start
+(`stepsNA_det`): every other run to a value takes the same steps.  The footprint of the
+exhibited run is therefore the footprint of every such run (`wpTS_footprint_every`).
 
 A run that allocates is related to the exhibited one only through a renaming of the locations
 it allocates.  Runs to values need not agree even on the initial heap's domain
@@ -32,25 +33,45 @@ open BoCa.BoLo (Heap Steps Step1 Head Kont)
 /-- The redex `alloc v`. -/
 def allocRedex (v : Val) : Expr := .app (.val (.prim .alloc)) (.val v)
 
-/-- Two head steps from one configuration agree, unless the redex is an allocation. -/
+/-- The redex of an array step, `tab v`, `idx v` or `drop v`.  `tab` picks a run of fresh
+consecutive locations, so it is not a function of the configuration, like `alloc`; `idx` and
+`drop` compute locations from a base, so a renaming of `Loc` does not carry them (`TwoRun`). -/
+def ArrRedex (a : Expr) : Prop :=
+  ∃ (p : Prim) (v : Val), (p = .tab ∨ p = .idx ∨ p = .drop) ∧ a = .app (.val (.prim p)) (.val v)
+
+theorem arrRedex_tab (v : Val) : ArrRedex (.app (.val (.prim .tab)) (.val v)) :=
+  ⟨.tab, v, .inl rfl, rfl⟩
+
+theorem arrRedex_idx (v : Val) : ArrRedex (.app (.val (.prim .idx)) (.val v)) :=
+  ⟨.idx, v, .inr (.inl rfl), rfl⟩
+
+theorem arrRedex_drop (v : Val) : ArrRedex (.app (.val (.prim .drop)) (.val v)) :=
+  ⟨.drop, v, .inr (.inr rfl), rfl⟩
+
+/-- Two head steps from one configuration agree, unless the redex is an allocation or an
+array step. -/
 theorem head_det_gen {μ μ' μ₁ μ₂ : Heap} {a b a₁ a₂ : Expr} (h₁ : Head μ a μ₁ a₁)
     (h₂ : Head μ' b μ₂ a₂) (hab : a = b) (hμ : μ = μ')
-    (hna : ∀ v : Val, a ≠ allocRedex v) : μ₂ = μ₁ ∧ a₂ = a₁ := by
+    (hna : ∀ v : Val, a ≠ allocRedex v) (hnr : ¬ ArrRedex a) : μ₂ = μ₁ ∧ a₂ = a₁ := by
   subst hμ
   cases h₁ with
   | alloc v _ _ => exact absurd rfl (hna v)
+  | tab => exact absurd (arrRedex_tab _) hnr
+  | idx => exact absurd (arrRedex_idx _) hnr
+  | drop => exact absurd (arrRedex_drop _) hnr
   | _ => cases h₂ <;> simp_all [allocRedex, Expr.val, Subtype.val_inj]
 
 theorem head_det {μ μ₁ μ₂ : Heap} {a a₁ a₂ : Expr} (h₁ : Head μ a μ₁ a₁)
-    (h₂ : Head μ a μ₂ a₂) (hna : ∀ v : Val, a ≠ allocRedex v) : μ₂ = μ₁ ∧ a₂ = a₁ :=
-  head_det_gen h₁ h₂ rfl rfl hna
+    (h₂ : Head μ a μ₂ a₂) (hna : ∀ v : Val, a ≠ allocRedex v) (hnr : ¬ ArrRedex a) :
+    μ₂ = μ₁ ∧ a₂ = a₁ :=
+  head_det_gen h₁ h₂ rfl rfl hna hnr
 
-/-- A step whose redex is not an allocation. -/
+/-- A step whose redex is neither an allocation nor an array step. -/
 def Step1NA (μ : Heap) (e : Expr) (μ' : Heap) (e' : Expr) : Prop :=
   ∃ (K : Kont) (a a' : Expr), e = K.plug a ∧ e' = K.plug a' ∧ Head μ a μ' a' ∧
-    ∀ v : Val, a ≠ allocRedex v
+    (∀ v : Val, a ≠ allocRedex v) ∧ ¬ ArrRedex a
 
-/-- A run that takes no `alloc↦` step. -/
+/-- A run that takes no `alloc↦` step and no array step. -/
 inductive StepsNA : Heap → Expr → Heap → Expr → Prop where
   | refl (μ : Heap) (e : Expr) : StepsNA μ e μ e
   | more {μ μ₁ μ' : Heap} {e e₁ e' : Expr}
@@ -70,11 +91,11 @@ theorem StepsNA.toSteps {μ μ' : Heap} {e e' : Expr} (h : StepsNA μ e μ' e') 
 /-- A step that is not an allocation is the only step. -/
 theorem step1_det {μ μ₁ μ₂ : Heap} {e e₁ e₂ : Expr} (h₁ : Step1NA μ e μ₁ e₁)
     (h₂ : Step1 μ e μ₂ e₂) : μ₂ = μ₁ ∧ e₂ = e₁ := by
-  obtain ⟨K, a, a', rfl, rfl, hh₁, hna⟩ := h₁
+  obtain ⟨K, a, a', rfl, rfl, hh₁, hna, hnr⟩ := h₁
   obtain ⟨K', b, b', hE, rfl, hh₂⟩ := h₂
   obtain ⟨K'', rfl, rfl⟩ := plug_decomp hh₂ K K' hh₁.not_isVal hE
   obtain rfl : K'' = .hole := head_plug hh₁ K'' hh₂.not_isVal rfl
-  obtain ⟨rfl, rfl⟩ := head_det hh₁ hh₂ hna
+  obtain ⟨rfl, rfl⟩ := head_det hh₁ hh₂ hna hnr
   exact ⟨rfl, by rw [Kont.plug_comp]; rfl⟩
 
 /-- **A run that does not allocate is the only run to a value.**  Every run to a value from

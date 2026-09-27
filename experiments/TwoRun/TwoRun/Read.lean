@@ -195,6 +195,7 @@ theorem not_readFootprint : ¬ ReadFootprint := by
     (Head.beta (fun _ => none) _ (.loc l)) t₁ v.2
   obtain ⟨rfl, rfl⟩ := head_det (Head.beta _ _ (.loc l)) hh₂
     (by intro w e; simp [allocRedex, Expr.val, Val.lam] at e)
+    (by rintro ⟨p, w, -, e⟩; simp [Expr.val, Val.lam, Val.prim] at e)
   -- the load of the frame's cell
   obtain ⟨-, -, -, ht, -⟩ := runIn_head_inv (K := .appR (.val (.lam (.val (.loc l)))) .hole)
     (a := loadE (.val (.loc 0)))

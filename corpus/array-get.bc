@@ -1,0 +1,49 @@
+-- Borrowing an array (SPEC §9). The array is a value, so it is borrowed in a cell: `withbor1`
+-- lends `imm 'x (array i32)`, and `withload` turns that borrow into the family of leaf views
+-- `array_imm 'y i32` at a shorter lifetime. The family is copied; `array_len` reads its
+-- length; `array_get` takes the view of one leaf at the family's lifetime, which `withload`
+-- reads; and `array_get` past the end takes the error branch. The cell and the array are
+-- dropped implicitly (SPEC §12): the cell is freed, then the array, cell by cell.
+--
+-- Answer: (i32[5], (i32[30], inr ())): the length, the element at index 3 of
+-- [0, 10, 20, 30, 40], and the error branch at index 7. A get at the wrong index gives 20 or
+-- 40; a bounds check that is signed or off by one would not give `inr ()` at 7, and 5 elements
+-- would print as 4 or 6.
+
+type A = array i32
+type T = i32 * (i32 * (1 + 1))
+
+def tab : !(i32 => i32) = !thunkv fun (i : i32) -> return ((unbang host[mul32]) (i, i32[10]))
+
+-- The leaf behind a view.
+def read : all 'z < top. imm 'z i32 => i32 =
+  thunkv Fun 'z < top. return (thunkv fun (v : imm 'z i32) ->
+    return (withload['z, 'w, i32, i32] v
+      (thunkv Fun 'w < dom. return (thunkv fun (x : i32) -> return (boxed['w] x)))))
+
+main : F T =
+  a <- return ((unbang array_new[i32]) (i32[5], tab));
+  r <- return (alloc[A] a);
+  q <- return (withbor1['x, A, T] r
+         (thunkv Fun 'x < top. return (thunkv fun (b : imm 'x A) ->
+            t <- return (withload['x, 'y, A, T] b
+                   (thunkv Fun 'y < dom. return (thunkv fun (f : array_imm 'y i32) ->
+                      c <- return ((unbang array_copy['y, i32]) f);
+                      let (f1, f2) = c;
+                      c2 <- return ((unbang array_copy['y, i32]) f2);
+                      let (f3, f4) = c2;
+                      n <- return ((unbang array_len['y, i32]) f1);
+                      g <- return ((unbang array_get['y, i32]) (f3, i32[3]));
+                      x : i32 <- case g {
+                        inl v -> return (read ['y] v)
+                      | inr u -> return i32[9999]
+                      };
+                      h <- return ((unbang array_get['y, i32]) (f4, i32[7]));
+                      o : 1 + 1 <- case h {
+                        inl v -> return (inl ())
+                      | inr u -> return (inr ())
+                      };
+                      return (boxed['y] (n, (x, o))))));
+            return (boxed['x] t))));
+  let (r2, t) = q;
+  return t

@@ -30,7 +30,9 @@ open BoCa
 open BoCa.Fig16
 open BoCa.Fig16.BoLo
 open BoCa.BoLo (Heap Steps Step1 Head Kont)
-open BoCa.Fig16.LogRel.Core.FrameTheorems (allocRedex head_det Footprint)
+open BoCa.Fig16.LogRel.Core.FrameTheorems (allocRedex head_det Footprint ArrRedex arrRedex_tab
+  arrRedex_idx arrRedex_drop)
+open BoCa.BoLo (not_arrRedex_rename)
 
 /-! ### The relation between the two runs' heaps -/
 
@@ -75,11 +77,14 @@ theorem HeapRel.injOn {g : Loc → Loc} {μB μA : Heap} (h : HeapRel g μB μA)
 /-- **A head step that is not an allocation, followed.**  If `B` takes it, `A` takes it at the
 image under `g`, and the heaps stay related. -/
 theorem head_sim {g : Loc → Loc} {μB μB' μA : Heap} {b b' : Expr} (hB : Head μB b μB' b')
-    (hR : HeapRel g μB μA) (hna : ∀ v : Val, b ≠ allocRedex v) :
+    (hR : HeapRel g μB μA) (hna : ∀ v : Val, b ≠ allocRedex v) (hnr : ¬ ArrRedex b) :
     ∃ μA', Head μA (b.rename g) μA' (b'.rename g) ∧ HeapRel g μB' μA' := by
   obtain ⟨h₁, h₂, h₃⟩ := hR
   cases hB with
   | alloc v _ _ => exact absurd rfl (hna v)
+  | tab => exact absurd (arrRedex_tab _) hnr
+  | idx => exact absurd (arrRedex_idx _) hnr
+  | drop => exact absurd (arrRedex_drop _) hnr
   | beta b v =>
       rw [Expr.rename_subst]
       exact ⟨μA, .beta _ (b.rename g) (v.rename g), h₁, h₂, h₃⟩
@@ -172,7 +177,7 @@ the image, and the resulting configurations are related along an update of `g`. 
 theorem step_sim {g : Loc → Loc} {μB μB' μA μA' : Heap} {eB eB' eA' : Expr}
     (hB : Step1F μB eB μB' eB') (hR : HeapRel g μB μA) (hA : Step1 μA (eB.rename g) μA' eA') :
     ∃ g', eA' = eB'.rename g' ∧ HeapRel g' μB' μA' := by
-  obtain ⟨⟨K, b, b', rfl, rfl, hhB⟩, hfB⟩ := hB
+  obtain ⟨⟨K, b, b', rfl, rfl, hhB, hnr⟩, hfB⟩ := hB
   obtain ⟨K', a, a', hE, rfl, hhA⟩ := hA
   rw [BoLo.Kont.rename_plug] at hE
   have hnv : ¬ IsVal (b.rename g) := fun h => hhB.not_isVal (isVal_of_rename g h)
@@ -233,11 +238,11 @@ theorem step_sim {g : Loc → Loc} {μB μB' μA μA' : Heap} {eB eB' eA' : Expr
           obtain ⟨x, hx, rfl⟩ := h₃ k hk
           exact ⟨x, by rwa [Heap.upd_other (ne x hx)], Function.update_of_ne (ne x hx) _ _⟩
   · push Not at hal
-    obtain ⟨μA'', hA'', hR''⟩ := head_sim hhB hR hal
+    obtain ⟨μA'', hA'', hR''⟩ := head_sim hhB hR hal hnr
     obtain rfl : K'' = .hole := Fig16.LogRel.Core.head_plug hA'' K'' hhA.not_isVal hb
     simp only [Kont.plug] at hb
     subst hb
-    obtain ⟨rfl, rfl⟩ := head_det hA'' hhA (not_allocRedex_rename g hal)
+    obtain ⟨rfl, rfl⟩ := head_det hA'' hhA (not_allocRedex_rename g hal) (not_arrRedex_rename g hnr)
     exact ⟨g, (BoLo.Kont.rename_plug g K b').symm, hR''⟩
 
 /-! ### Runs -/
@@ -258,7 +263,7 @@ theorem run_sim {μB μB' : Heap} {eB eB' : Expr} (hB : FreshRun μB eB μB' eB'
   | more hs _ ih =>
       intro hv g μA μA' eA' hR hA hvA
       cases hA with
-      | refl => exact absurd hs.1 (not_step1_of_isVal (isVal_of_rename g hvA))
+      | refl => exact absurd hs.1.toStep1 (not_step1_of_isVal (isVal_of_rename g hvA))
       | more h t =>
           obtain ⟨g₁, rfl, hR₁⟩ := step_sim hs hR h
           exact ih hv hR₁ t hvA

@@ -3,8 +3,8 @@ import Backend.Flat.Syntax
 /-!
 # Backend — the flat IR's runtime functions
 
-Deep copy, deep drop and the printer, as flat-IR functions over the representation of
-`Backend/Flat/Syntax.lean`. Cells are shared by a copy and left alone by a drop: a location is
+Deep copy, deep drop, the printer and the array operations, as flat-IR functions over the
+representation of `Backend/Flat/Syntax.lean`. Cells are shared by a copy and left alone by a drop: a location is
 copied as a word, and cells are freed only by `free`. The printer writes the text of
 `Backend.PV.render`.
 
@@ -20,6 +20,12 @@ def fDropEnv : Nat := 3
 def fPrint : Nat := 4
 def fPrintAtom : Nat := 5
 def fPrintDec : Nat := 6
+def fArrTab : Nat := 7
+def fArrInit : Nat := 8
+def fArrTabLoop : Nat := 9
+def fArrIdx : Nat := 10
+def fArrDrop : Nat := 11
+def fArrDropLoop : Nat := 12
 
 /-- `copy w`: locals `w`, `h`, `t`, `n`. -/
 def copyFn : Fn where
@@ -141,7 +147,109 @@ def printDecFn : Fn where
       .out (add64 (.c64 48) (.op (.div .w64 .rem_u) [n, .c64 10])),
       .ret (.c64 0) ]
 
+/-! ### Arrays  `[spec §9]`
+
+An array of `n` elements is one range of `max n 1` slots of two words each: a cell header and
+the contents. Slot `i` is at `base + 16·i`, and is an ordinary cell object, so its address is
+the element's location and `load`, `store`, a copy and a drop treat it as any cell. The array
+value is the pair `(base, i32[n])`. An empty array keeps one slot, so the base is an object. -/
+
+/-- The address of slot `i`. -/
+def slotAddr (b i : Exp) : Exp := add64 b (shl64 i (.c64 4))
+
+/-- `i32[i]` from a 64-bit `i` below `2³²`. -/
+def boxIdx (i : Exp) : Exp := or64 (shl64 i (.c64 32)) (.c64 3)
+
+/-- `array_tab p`, `p = (i32[c], f)`: `len(c)` slots filled by `f i` in order. Locals `p`,
+`n`, `f`, `b`, `s` (the slot count), `t`. -/
+def arrTabFn : Fn where
+  name := "array_tab"
+  params := 1
+  locals := 5
+  body :=
+    let p := Exp.loc 0; let n := Exp.loc 1; let f := Exp.loc 2; let b := Exp.loc 3
+    let s := Exp.loc 4
+    [ .set 1 (shr64 (.load p 1) (.c64 32)), .set 2 (.load p 2), .free p,
+      .ite (ltu64 n (.c64 0x80000000)) [] [.set 1 (.c64 0)],
+      .set 4 n, .ite (eq64 n (.c64 0)) [.set 4 (.c64 1)] [],
+      .set 3 (.alloc (shl64 s (.c64 1))),
+      .eval (.call fArrInit [b, .c64 0, s]),
+      .eval (.call fArrTabLoop [b, f, .c64 0, n]),
+      .eval (.call fDrop [f]) ] ++
+    mkObj 5 hPair [b, boxIdx n] ++ [.ret (.loc 5)]
+
+/-- `arrInit b i s`: slots `i … s-1` become cells holding `()`. -/
+def arrInitFn : Fn where
+  name := "array_init"
+  params := 3
+  locals := 0
+  body :=
+    let b := Exp.loc 0; let i := Exp.loc 1; let s := Exp.loc 2
+    [ .ite (ltu64 i s)
+        [ .store (slotAddr b i) 0 (.c64 hCell), .store (slotAddr b i) 1 (.c64 unitW),
+          .tailCall fArrInit [b, add64 i (.c64 1), s] ] [],
+      .ret (.c64 0) ]
+
+/-- `arrTabLoop b f i n`: slot `i` gets a copy of `f` applied to `i32[i]`, for `i < n`. -/
+def arrTabLoopFn : Fn where
+  name := "array_tab_loop"
+  params := 4
+  locals := 2
+  body :=
+    let b := Exp.loc 0; let f := Exp.loc 1; let i := Exp.loc 2; let n := Exp.loc 3
+    let fc := Exp.loc 4
+    [ .ite (ltu64 i n)
+        [ .set 4 (.call fCopy [f]),
+          .set 5 (.callInd (.load fc 1) [fc, boxIdx i]),
+          .store (slotAddr b i) 1 (.loc 5),
+          .tailCall fArrTabLoop [b, f, add64 i (.c64 1), n] ] [],
+      .ret (.c64 0) ]
+
+/-- `array_idx p`, `p = ((b, i32[n]), i32[i])`: `inl` of slot `i` when `i < n` unsigned, else
+`inr ()`. Locals `p`, `q`, `w`, `b`, `n`, `t`. -/
+def arrIdxFn : Fn where
+  name := "array_idx"
+  params := 1
+  locals := 5
+  body :=
+    let p := Exp.loc 0; let q := Exp.loc 1; let w := Exp.loc 2; let b := Exp.loc 3
+    let n := Exp.loc 4
+    [ .set 1 (.load p 1), .set 2 (.load p 2), .free p,
+      .set 3 (.load q 1), .set 4 (shr64 (.load q 2) (.c64 32)), .free q,
+      .ite (ltu64 (shr64 w (.c64 32)) n)
+        (mkObj 5 hInj₁ [slotAddr b (shr64 w (.c64 32))] ++ [.ret (.loc 5)])
+        (mkObj 5 hInj₂ [.c64 unitW] ++ [.ret (.loc 5)]) ]
+
+/-- `array_drop p`, `p = (f, (b, i32[n]))`: each element to a copy of `f`, in order, then the
+range freed. Locals `p`, `f`, `q`, `b`, `n`. -/
+def arrDropFn : Fn where
+  name := "array_drop"
+  params := 1
+  locals := 4
+  body :=
+    let p := Exp.loc 0; let f := Exp.loc 1; let q := Exp.loc 2; let b := Exp.loc 3
+    let n := Exp.loc 4
+    [ .set 1 (.load p 1), .set 2 (.load p 2), .free p,
+      .set 3 (.load q 1), .set 4 (shr64 (.load q 2) (.c64 32)), .free q,
+      .eval (.call fArrDropLoop [b, f, .c64 0, n]),
+      .eval (.call fDrop [f]), .free b, .ret (.c64 unitW) ]
+
+/-- `arrDropLoop b f i n`: slot `i`'s contents, moved out, to a copy of `f`, for `i < n`. -/
+def arrDropLoopFn : Fn where
+  name := "array_drop_loop"
+  params := 4
+  locals := 1
+  body :=
+    let b := Exp.loc 0; let f := Exp.loc 1; let i := Exp.loc 2; let n := Exp.loc 3
+    let fc := Exp.loc 4
+    [ .ite (ltu64 i n)
+        [ .set 4 (.call fCopy [f]),
+          .eval (.call fDrop [.callInd (.load fc 1) [fc, .load (slotAddr b i) 1]]),
+          .tailCall fArrDropLoop [b, f, add64 i (.c64 1), n] ] [],
+      .ret (.c64 0) ]
+
 def runtimeFns : List Fn :=
-  [copyFn, dropFn, copyEnvFn, dropEnvFn, printFn, printAtomFn, printDecFn]
+  [copyFn, dropFn, copyEnvFn, dropEnvFn, printFn, printAtomFn, printDecFn,
+   arrTabFn, arrInitFn, arrTabLoopFn, arrIdxFn, arrDropFn, arrDropLoopFn]
 
 end Backend.Flat

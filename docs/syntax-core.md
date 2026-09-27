@@ -89,6 +89,7 @@ lexically, innermost first, and are then discarded. Two consequences:
                | mu X. A | X | Name
                | A => A | all 'x < @. A                          (built-in abbreviations)
                | block σ | val σ | fam mut @ σ | fam imm @ σ | view @ A
+               | array A | array_imm @ A                        (VTy.fam, SPEC §9)
     comp   C ::= F A | A -o C | C & C | top | forall 'x < @. C | nu X. C
                | delay A | stream A | iter A A A                 (built-in abbreviations)
 
@@ -102,8 +103,8 @@ lexically, innermost first, and are then discarded. Two consequences:
 4. `+` associates to the right.
 5. `*` associates to the right.
 6. Prefix formers take one atom: `U`, `F`, `ref`, `!`, `imm @`, `mut @`, `box @`, `delay`,
-   `stream`, `block`, `val`, `fam m @`, `view @`; `iter` takes three. Their lifetime argument is
-   also an atom.
+   `stream`, `block`, `val`, `fam m @`, `view @`, `array`, `array_imm @`; `iter` takes three.
+   Their lifetime argument is also an atom.
 
 For example, `S -o F (A + S) & F 1` is `S -o ((F (A + S)) & (F 1))`, and `imm 'a Nat * Nat`
 is `(imm 'a Nat) * Nat`. `F A * B` is a sort error: write `F (A * B)`. Sorts are checked after
@@ -119,6 +120,8 @@ parsing.
 | `val σ` | `σ.valTy`: `A` at a leaf, `*` at a node | `Bl:57` |
 | `fam m @ σ` | `σ.famTy M @`: `m @ A` at each leaf, `*` at a node | `BB:111` |
 | `view @b A` | `Imm̲ @b A` | `VTy.immReborrow`, `Ty:1064` |
+| `array A` | `[ref A]`: the owned array, the family of its cells | `VTy.fam`, SPEC §9 |
+| `array_imm @a A` | `[imm @a A]`: the family of an array's leaf views | `VTy.fam`, SPEC §9 |
 | `delay A` | `nu X. F (A + U X) & F 1` | `CTy.delay`, `Ty:1042` |
 | `stream A` | `nu X. F (A * U X) & F 1` | `CTy.stream`, `Ty:1045` |
 | `iter A R R'` | `nu X. F (A * U X + R) & F R'` | `CTy.iter`, `Ty:1049` |
@@ -398,6 +401,35 @@ Integer literals and operations are constants (`SPEC.md` §8, `Core/Integers.lea
   `i32 + 1` with `inr ()` where Wasm traps.
 - `i32`/`i64` are persistent (section 7), so integer variables are reused and dropped freely.
 <!-- ANCHOR_END: integers -->
+
+## 8b. Arrays
+
+<!-- ANCHOR: arrays -->
+The array constants (`SPEC.md` §9, `Core/Arrays.lean`), each one `CDerives` constructor at a
+dead context, typed at `!(A => B)` like a host operation, so a call is `(unbang c) V`:
+
+| constant | type | rule |
+|---|---|---|
+| `array_new[A]` | `!(i32 * !(i32 => A) => array A)` | `arrNew` |
+| `array_free[A]` | `!(!(A => 1) * array A => 1)` | `arrFree` |
+| `array_size[A]` | `!(array A => array A * i32)` | `arrSize` |
+| `array_replace[A]` | `!(array A * (i32 * A) => array A * (A + A))` | `arrReplace` |
+| `array_len[@a, A]` | `!(array_imm @a A => i32)` | `arrLen` |
+| `array_get[@a, A]` | `!(array_imm @a A * i32 => imm @a A + 1)` | `arrGet` |
+| `array_copy[@a, A]` | `!(array_imm @a A => array_imm @a A * array_imm @a A)` | `arrCopy` |
+| `array_forget[@a, A]` | `!(array_imm @a A => 1)` | `arrForget` |
+
+- A negative length makes the empty array; an index is compared unsigned, so a negative index
+  is out of range and takes `inr`.
+- `array_replace` returns the old element, or on the error branch the new one back.
+- An array is borrowed in a cell: `withbor1`/`withbor2` on a `ref (array A)` lend
+  `imm 'x (array A)`/`mut 'x (array A)`. `withload` at the `imm` borrow gives the family
+  `view 'y (array A) = array_imm 'y A`; `withswap` at the `mut` borrow lends the array itself.
+- `array A` has a destructor when `A` has one (`array_free` with `A`'s destructor), and
+  `array_imm @a A` is forgettable (`array_forget`), so both are dropped implicitly (SPEC §12).
+- The erasures: `array_new`, `array_get`, `array_free` are the primitives `tab`, `idx`, `drop`;
+  the others are closed λ-terms (`arrLenV`, `sizeV`, `replaceV`, `copyV`, `forgetV`).
+<!-- ANCHOR_END: arrays -->
 
 ## 9. Derived forms
 
@@ -712,8 +744,9 @@ How this checks:
 
 - **Numerals and list literals** (`3`, `[1, 2, 3]`) are sugar and are out for now. The library
   builds them with Lean functions (`num`, `buildList`).
-- **Buffers and strings** (`SPEC.md` §9) are specified but not implemented. Integers are in
-  (section 8a), and the erasure target stays Paper `Expr`, which gained `Prim.lit`/`Prim.host`.
+- **Growable buffers and strings** are library code over arrays (`SPEC.md` §9), not yet written.
+  Integers (section 8a) and arrays (section 8b) are in, and the erasure target stays Paper
+  `Expr`, which gained `Prim.lit`/`Prim.host` and the array primitives `tab`, `idx`, `drop`.
 - **Lifetime-parametric `def`s and `extern`s** are not supported.
 - **Block provenance** (`SPEC.md` §5 Open) is not enforced: `crossPack`
   (`Core/BlockPrograms.lean`) typechecks.

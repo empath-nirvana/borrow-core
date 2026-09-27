@@ -59,6 +59,15 @@ byte is its kind, and its fields:
 | `i64[n]` | `5` | the 64 bits |
 | cell | `6` | the contents |
 
+An array (SPEC §9) is one allocation of `max n 1` slots of two words, each an ordinary cell
+(header `6`, then the contents); element `i` is the slot at `base + 16·i`, so its location is a
+cell address and `load`, `store`, copies and drops treat it as any cell. The array value is the
+pair `(base, i32[n])`. `idx` compares the index with `n` unsigned and computes the address;
+`tab` allocates the slots and fills them in a loop, calling a copy of the tabulator per element;
+`drop` moves each element to a copy of the consumer and frees the allocation once
+(`Backend/Flat/Runtime.lean`). The closure IR keeps an array as consecutive cells, as the source
+machine does. A type-directed layout would drop the header, making the slot `sizeof A`.
+
 `i64` is boxed: the erasure is untyped, so a deep copy or drop tells a pointer from an
 immediate by the word alone, and a full-width `i64` leaves no bit for that. A type-directed
 layout would unbox it.

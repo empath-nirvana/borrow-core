@@ -8,9 +8,13 @@ import FrameTheorems
 every step and every run is carried to a head step, step and run of the renamed configuration
 (`head_rename`, `step1_rename`, `steps_rename`).
 
-The machine names locations only through `alloc`, `free`, `load` and `store`, and treats them
-opaquely: no step compares two locations or computes one.  The host step's arguments and results
-are integer literals and booleans, and renaming fixes them (`host_call_rename`).
+Away from the array steps, the machine names locations only through `alloc`, `free`, `load` and
+`store`, and treats them opaquely: no step compares two locations or computes one.  The host
+step's arguments and results are integer literals and booleans, and renaming fixes them
+(`host_call_rename`).  The array steps compute locations: `tab` places a run of consecutive
+cells, and `idx` and `drop` add an index to a base.  A permutation of `Loc` does not preserve
+`ℓ + i`, so the results here are stated for steps whose redex is not an array step
+(`FrameTheorems.ArrRedex`), and runs of such steps (`StepsR`).
 -/
 
 noncomputable section
@@ -323,10 +327,42 @@ theorem Heap.rename_one (μ : Heap) : μ.rename 1 = μ := by
 
 /-! ### Runs are invariant under renaming -/
 
-/-- **A head step, renamed, is a head step.** -/
-theorem head_rename (σ : Equiv.Perm Loc) {μ μ' : Heap} {a a' : Expr} (h : Head μ a μ' a') :
+open BoCa.Fig16.LogRel.Core.FrameTheorems (ArrRedex arrRedex_tab arrRedex_idx arrRedex_drop)
+
+/-- A redex `p v` at a primitive that is not an array step is not an array redex. -/
+theorem not_arrRedex_prim {p : Prim} (hp : p ≠ .tab ∧ p ≠ .idx ∧ p ≠ .drop) (v : Val) :
+    ¬ ArrRedex (.app (.val (.prim p)) (.val v)) := by
+  rintro ⟨q, w, hq, h⟩
+  simp only [Expr.val, Val.prim, Expr.app.injEq, Expr.prim.injEq] at h
+  rcases hq with rfl | rfl | rfl
+  · exact hp.1 h.1
+  · exact hp.2.1 h.1
+  · exact hp.2.2 h.1
+
+/-- Renaming makes no term an array redex. -/
+theorem not_arrRedex_rename (σ : Loc → Loc) {a : Expr} (hnr : ¬ ArrRedex a) :
+    ¬ ArrRedex (a.rename σ) := by
+  rintro ⟨p, v, hp, h⟩
+  cases a with
+  | app f x =>
+      simp only [Expr.rename, Expr.app.injEq] at h
+      obtain ⟨h₁, h₂⟩ := h
+      cases f with
+      | prim q =>
+          simp only [Expr.rename, Expr.val, Val.prim, Expr.prim.injEq] at h₁
+          have hx : IsVal x := isVal_of_rename σ (h₂ ▸ v.2)
+          exact hnr ⟨p, ⟨x, hx⟩, hp, by rw [h₁]; rfl⟩
+      | _ => simp [Expr.rename, Expr.val, Val.prim] at h₁
+  | _ => simp [Expr.rename] at h
+
+/-- **A head step, renamed, is a head step**, when its redex is not an array step. -/
+theorem head_rename (σ : Equiv.Perm Loc) {μ μ' : Heap} {a a' : Expr} (h : Head μ a μ' a')
+    (hnr : ¬ ArrRedex a) :
     Head (μ.rename σ) (a.rename σ) (μ'.rename σ) (a'.rename σ) := by
   cases h with
+  | tab => exact absurd (arrRedex_tab _) hnr
+  | idx => exact absurd (arrRedex_idx _) hnr
+  | drop => exact absurd (arrRedex_drop _) hnr
   | beta b v =>
       rw [Expr.rename_subst]
       exact .beta _ (b.rename σ) (v.rename σ)
@@ -357,16 +393,31 @@ theorem head_rename (σ : Equiv.Perm Loc) {μ μ' : Heap} {a a' : Expr} (h : Hea
       rw [hr]
       exact .host _ op (v.rename σ) r (h₁.trans h)
 
-theorem step1_rename (σ : Equiv.Perm Loc) {μ μ' : Heap} {e e' : Expr} (h : Step1 μ e μ' e') :
-    Step1 (μ.rename σ) (e.rename σ) (μ'.rename σ) (e'.rename σ) := by
-  obtain ⟨K, a, a', rfl, rfl, hh⟩ := h
-  exact ⟨K.rename σ, a.rename σ, a'.rename σ, Kont.rename_plug σ K a, Kont.rename_plug σ K a',
-    head_rename σ hh⟩
+/-- A step whose redex is not an array step. -/
+def Step1R (μ : Heap) (e : Expr) (μ' : Heap) (e' : Expr) : Prop :=
+  ∃ (K : Kont) (a a' : Expr), e = K.plug a ∧ e' = K.plug a' ∧ Head μ a μ' a' ∧ ¬ ArrRedex a
 
-/-- **Runs are invariant under renaming.**  For a permutation `σ` of the locations, a run from
-`(μ, e)` to `(μ', e')` renames to a run from `(σ μ, σ e)` to `(σ μ', σ e')`. -/
-theorem steps_rename (σ : Equiv.Perm Loc) {μ μ' : Heap} {e e' : Expr} (h : Steps μ e μ' e') :
-    Steps (μ.rename σ) (e.rename σ) (μ'.rename σ) (e'.rename σ) := by
+theorem Step1R.toStep1 {μ μ' : Heap} {e e' : Expr} (h : Step1R μ e μ' e') : Step1 μ e μ' e' := by
+  obtain ⟨K, a, a', h₁, h₂, h₃, -⟩ := h
+  exact ⟨K, a, a', h₁, h₂, h₃⟩
+
+/-- A run that takes no array step. -/
+inductive StepsR : Heap → Expr → Heap → Expr → Prop where
+  | refl (μ : Heap) (e : Expr) : StepsR μ e μ e
+  | more {μ μ₁ μ' : Heap} {e e₁ e' : Expr}
+      (h : Step1R μ e μ₁ e₁) (t : StepsR μ₁ e₁ μ' e') : StepsR μ e μ' e'
+
+theorem step1_rename (σ : Equiv.Perm Loc) {μ μ' : Heap} {e e' : Expr} (h : Step1R μ e μ' e') :
+    Step1R (μ.rename σ) (e.rename σ) (μ'.rename σ) (e'.rename σ) := by
+  obtain ⟨K, a, a', rfl, rfl, hh, hnr⟩ := h
+  exact ⟨K.rename σ, a.rename σ, a'.rename σ, Kont.rename_plug σ K a, Kont.rename_plug σ K a',
+    head_rename σ hh hnr, not_arrRedex_rename σ hnr⟩
+
+/-- **Runs with no array step are invariant under renaming.**  For a permutation `σ` of the
+locations, such a run from `(μ, e)` to `(μ', e')` renames to one from `(σ μ, σ e)` to
+`(σ μ', σ e')`. -/
+theorem steps_rename (σ : Equiv.Perm Loc) {μ μ' : Heap} {e e' : Expr} (h : StepsR μ e μ' e') :
+    StepsR (μ.rename σ) (e.rename σ) (μ'.rename σ) (e'.rename σ) := by
   induction h with
   | refl => exact .refl _ _
   | more h _ ih => exact .more (step1_rename σ h) ih

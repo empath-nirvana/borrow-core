@@ -20,9 +20,11 @@ mechanization of Wagner, Gierczak, Marshall, Li and Ahmed, *From Linearity to Bo
   terminate, streams and finite iterators are abbreviations over it, each with a mandatory
   `close` (§7).
 - **Integers:** `i32`/`i64` with Wasm's operations (§8).
+- **Arrays:** `[L]`, the run-time family of leaf places; `array A` owns `n` cells, borrowed in a
+  cell and read through the family of leaf views (§9).
 - **Persistent variables:** values holding no resource are copied and dropped freely (§10).
 
-Specified but not yet implemented: buffers and strings (§9), externs and stdio (§11).
+Specified but not yet implemented: externs and stdio (§11).
 
 ## What is proved
 

@@ -38,7 +38,7 @@ def VTy.level : VTy → Nat
   | .sum .. => 2
   | .tensor .. => 3
   | .thunk .. | .ref .. | .imm .. | .mut .. | .box .. | .bang .. | .block .. | .val ..
-  | .fam .. | .view .. => 4
+  | .fam .. | .view .. | .array .. | .arrayImm .. => 4
   | _ => 5
 
 def CTy.level : CTy → Nat
@@ -80,6 +80,8 @@ def VTy.pp (A : VTy) (lvl : Nat := 0) : String :=
     | .val _ σ => "val " ++ ppShapeAtom σ σ.pp
     | .fam _ m a σ => "fam " ++ m.pp ++ " " ++ a.pp 2 ++ " " ++ ppShapeAtom σ σ.pp
     | .view _ a A => "view " ++ a.pp 2 ++ " " ++ A.pp 4
+    | .array _ A => "array " ++ A.pp 4
+    | .arrayImm _ a A => "array_imm " ++ a.pp 2 ++ " " ++ A.pp 4
 
 def CTy.pp (C : CTy) (lvl : Nat := 0) : String :=
   paren (C.level < lvl) <| match C with

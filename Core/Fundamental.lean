@@ -1,5 +1,6 @@
 import Core.Compat
 import Core.Integers
+import Core.Arrays
 import Core.FoldReuse
 import Core.Nu
 import Support.LogicalRelation.Adequacy
@@ -153,6 +154,29 @@ inductive CDerives : LifeCtx → Ctx VTy → Expr → Jdg → Prop where
   /-- A host operation at `!(A ⊸ F B)`, its signature in `SPEC.md` §8.  `[spec §8]` -/
   | hostOp {Δ Γ} (op : HostOp) (hΓ : Ctx.DeadP Γ) :
       CDerives Δ Γ (.val (.prim (.host op))) (.val (.bang (hostSig op)))
+  /-- `array_new : !(I32 ⊗ !(I32 ⇒ A) ⇒ Array A)`, the step `tab`.  `[spec §9]` -/
+  | arrNew {Δ Γ} (A : VTy) (hΓ : Ctx.DeadP Γ) :
+      CDerives Δ Γ (.val (.prim .tab)) (.val (arrNewTy A))
+  /-- `array_free : !(!(A ⇒ 1) ⊗ Array A ⇒ 1)`, the step `drop`.  `[spec §9]` -/
+  | arrFree {Δ Γ} (A : VTy) (hΓ : Ctx.DeadP Γ) :
+      CDerives Δ Γ (.val (.prim .drop)) (.val (arrFreeTy A))
+  /-- `array_size : !(Array A ⇒ Array A ⊗ I32)`.  `[spec §9]` -/
+  | arrSize {Δ Γ} (A : VTy) (hΓ : Ctx.DeadP Γ) : CDerives Δ Γ (.val sizeV) (.val (arrSizeTy A))
+  /-- `array_replace : !(Array A ⊗ (I32 ⊗ A) ⇒ Array A ⊗ (A ⊕ A))`.  `[spec §9]` -/
+  | arrReplace {Δ Γ} (A : VTy) (hΓ : Ctx.DeadP Γ) :
+      CDerives Δ Γ (.val replaceV) (.val (arrReplaceTy A))
+  /-- `array_len : !(ArrayImm @a A ⇒ I32)`.  `[spec §9]` -/
+  | arrLen {Δ Γ} (a : Lifetime.Life) (A : VTy) (hΓ : Ctx.DeadP Γ) :
+      CDerives Δ Γ (.val arrLenV) (.val (arrLenTy a A))
+  /-- `array_get : !(ArrayImm @a A ⊗ I32 ⇒ Imm @a A ⊕ 1)`, the step `idx`.  `[spec §9]` -/
+  | arrGet {Δ Γ} (a : Lifetime.Life) (A : VTy) (hΓ : Ctx.DeadP Γ) :
+      CDerives Δ Γ (.val (.prim .idx)) (.val (arrGetTy a A))
+  /-- `array_copy : !(ArrayImm @a A ⇒ ArrayImm @a A ⊗ ArrayImm @a A)`.  `[spec §9]` -/
+  | arrCopy {Δ Γ} (a : Lifetime.Life) (A : VTy) (hΓ : Ctx.DeadP Γ) :
+      CDerives Δ Γ (.val copyV) (.val (arrCopyTy a A))
+  /-- `array_forget : !(ArrayImm @a A ⇒ 1)`.  `[spec §9]` -/
+  | arrForget {Δ Γ} (a : Lifetime.Life) (A : VTy) (hΓ : Ctx.DeadP Γ) :
+      CDerives Δ Γ (.val forgetV) (.val (arrForgetTy a A))
   | withbor1 {Δ Γ A B} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hx : Δ.find? x = none)
       (hsc₁ : VScoped Δ A) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) :
       CDerives Δ Γ withbor (.val (axWithbor1Ty x Δ.meetOfDom A B))
@@ -319,6 +343,14 @@ theorem fundamentalC {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg}
   | forgetUnk hΓ => exact forgetUnk_compatX hΓ
   | lit c hΓ => exact lit_compatX c hΓ
   | hostOp op hΓ => exact hostOp_compatX op hΓ
+  | arrNew _ hΓ => exact arrNew_compatX hΓ
+  | arrFree _ hΓ => exact arrFree_compatX hΓ
+  | arrSize _ hΓ => exact arrSize_compatX hΓ
+  | arrReplace _ hΓ => exact arrReplace_compatX hΓ
+  | arrLen _ _ hΓ => exact arrLen_compatX hΓ
+  | arrGet _ _ hΓ => exact arrGet_compatX hΓ
+  | arrCopy _ _ hΓ => exact arrCopy_compatX hΓ
+  | arrForget _ _ hΓ => exact arrForget_compatX hΓ
   | withbor1 x hΓ hx hsc₁ hf₁ hf₂ => exact withbor1_compatX x hΓ hx hsc₁ hf₁ hf₂
   | withbor2 x hΓ hx hside hf₁ hf₂ => exact withbor2_compatX x hΓ hx hside hf₁ hf₂
   | withbor3 x hΓ hx hf₁ hf₂ => exact withbor3_compatX x hΓ hx hf₁ hf₂
