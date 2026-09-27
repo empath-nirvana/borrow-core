@@ -1,5 +1,6 @@
 import Std.Data.HashMap
 import Support.Dynamics.Host
+import Support.Dynamics.Arrays
 import Backend.Value
 import Backend.Clos.Syntax
 
@@ -7,7 +8,8 @@ import Backend.Clos.Syntax
 # Backend — closure-IR interpreter
 
 A fuelled interpreter for the closure IR over an explicit heap of objects (pairs, injections,
-closures, boxed `i64`s, cells), counting live objects. It checks the ownership discipline as it
+closures, boxed `i64`s, cells), counting live objects. An array is consecutive cells, as in the
+source machine (SPEC §9). It checks the ownership discipline as it
 runs: using a variable consumes it, a consumed variable cannot be used again, and a call or
 `main` must end with every variable of its frame consumed. Host operations go through
 `Host.call` at `wasmHost`, as in the source interpreter.
@@ -131,6 +133,18 @@ def cellOf (v : CV) : IM (Nat × CV) := do
 
 def objFuel : Nat := 1 <<< 20
 
+/-- Take a pair apart, freeing it. -/
+def unpair (v : CV) : IM (CV × CV) := do
+  match v with
+  | .ptr a => match ← getObj a with
+    | .pair x y => do freeObj a; pure (x, y)
+    | _ => throw "closure IR: not a pair"
+  | _ => throw "closure IR: not a pair"
+
+/-- An array of `n` elements is `max n 1` consecutive cells (SPEC §9); the handle is
+    `(base, i32[n])`. The extra cell of an empty array keeps the base an object. -/
+def arrSlots (n : Nat) : Nat := max n 1
+
 def applyOp : Op → List CV → IM CV
   | .alloc, [v] => allocObj (.cell v)
   | .free, [l] => do let (a, c) ← cellOf l; freeObj a; pure c
@@ -146,7 +160,57 @@ def applyOp : Op → List CV → IM CV
       match wasmHost.call op sv with
       | some r => ofSource r.1
       | none => throw "closure IR: host operation stuck"
+  | .idx, [v] => do
+      let (arr, i) ← unpair v
+      let (base, n) ← unpair arr
+      match base, n, i with
+      | .ptr a, .i32 n, .i32 i =>
+        if i < n then allocObj (.inj false (.ptr (a + i.toNat)))
+        else allocObj (.inj true .unit)
+      | _, _, _ => throw "closure IR: idx of a non-array"
   | _, _ => throw "closure IR: primitive arity"
+
+mutual
+/-- Call the closure `f` on `a`; the call frees `f`'s environment record. -/
+def callClos (codes : Array Code) : Nat → CV → CV → IM CV
+  | 0, _, _ => throw "closure IR: out of fuel"
+  | n + 1, vf, va => do
+    match vf with
+    | .ptr p =>
+      match ← getObj p with
+      | .clos c vs => do
+        freeObj p
+        let some code := codes[c]? | throw "closure IR: bad code index"
+        if code.env.length != vs.length then throw "closure IR: environment size"
+        let frame := (code.param, va) :: code.env.zip vs
+        let (r, rest) ← eval codes n frame code.body
+        if !rest.isEmpty then
+          throw s!"closure IR: code {c} leaves {rest.map (·.1)} unconsumed"
+        pure r
+      | _ => throw "closure IR: call of a non-closure"
+    | _ => throw "closure IR: call of a non-closure"
+
+/-- `tab`'s fill: cell `a + i` gets `f i`, for `i < k`, each call on a copy of `f`. -/
+def tabFill (codes : Array Code) : Nat → CV → Nat → Nat → Nat → IM Unit
+  | 0, _, _, _, _ => throw "closure IR: out of fuel"
+  | _ + 1, _, _, _, 0 => pure ()
+  | n + 1, f, a, i, k + 1 => do
+    let fc ← deepCopy objFuel f
+    let r ← callClos codes n fc (.i32 (UInt32.ofNat i))
+    setObj (a + i) (.cell r)
+    tabFill codes n f a (i + 1) k
+
+/-- `drop`'s drain: cell `a + i` is freed and its contents handed to a copy of `f`. -/
+def dropFill (codes : Array Code) : Nat → CV → Nat → Nat → Nat → IM Unit
+  | 0, _, _, _, _ => throw "closure IR: out of fuel"
+  | _ + 1, _, _, _, 0 => pure ()
+  | n + 1, f, a, i, k + 1 => do
+    let (_, c) ← cellOf (.ptr (a + i))
+    freeObj (a + i)
+    let fc ← deepCopy objFuel f
+    let r ← callClos codes n fc c
+    deepDrop objFuel r
+    dropFill codes n f a (i + 1) k
 
 /-- Evaluate `t` in the frame `env`: its value and what is left of the frame. -/
 def eval (codes : Array Code) : Nat → Env → Tm → IM (CV × Env)
@@ -167,26 +231,33 @@ def eval (codes : Array Code) : Nat → Env → Tm → IM (CV × Env)
     | .clos c xs => do
         let (vs, env) ← takeAll env xs
         pure (← allocObj (.clos c vs), env)
+    | .prim .tab [x] => do
+        let (v, env) ← take env x
+        let (c, f) ← unpair v
+        let .i32 c := c | throw "closure IR: tab of a non-length"
+        let len := (arrLen c).toNat
+        let base := (← get).next
+        for _ in List.range (arrSlots len) do discard (allocObj (.cell .unit))
+        tabFill codes n f base 0 len
+        deepDrop objFuel f
+        pure (← allocObj (.pair (.ptr base) (.i32 (arrLen c))), env)
+    | .prim .drop [x] => do
+        let (v, env) ← take env x
+        let (f, arr) ← unpair v
+        let (base, len) ← unpair arr
+        let .ptr a := base | throw "closure IR: drop of a non-array"
+        let .i32 len := len | throw "closure IR: drop of a non-array"
+        dropFill codes n f a 0 len.toNat
+        deepDrop objFuel f
+        if len.toNat = 0 then freeObj a
+        pure (.unit, env)
     | .prim op xs => do
         let (vs, env) ← takeAll env xs
         pure (← applyOp op vs, env)
     | .app f a => do
         let (vf, env) ← take env f
         let (va, env) ← take env a
-        match vf with
-        | .ptr p =>
-          match ← getObj p with
-          | .clos c vs => do
-            freeObj p
-            let some code := codes[c]? | throw "closure IR: bad code index"
-            if code.env.length != vs.length then throw "closure IR: environment size"
-            let frame := (code.param, va) :: code.env.zip vs
-            let (r, rest) ← eval codes n frame code.body
-            if !rest.isEmpty then
-              throw s!"closure IR: code {c} leaves {rest.map (·.1)} unconsumed"
-            pure (r, env)
-          | _ => throw "closure IR: call of a non-closure"
-        | _ => throw "closure IR: call of a non-closure"
+        pure (← callClos codes n vf va, env)
     | .letv x e b => do
         let (v, env) ← eval codes n env e
         eval codes n ((x, v) :: env) b
@@ -215,6 +286,7 @@ def eval (codes : Array Code) : Nat → Env → Tm → IM (CV × Env)
         let (v, env) ← take env x
         deepDrop objFuel v
         eval codes n env b
+end
 
 /-- The observable form of a word. -/
 def observe : Nat → CV → IM PV

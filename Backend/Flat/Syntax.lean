@@ -31,6 +31,9 @@ Objects start with a header word; bits 0–7 are the kind:
 | `i64[n]` | `5` | the raw 64 bits of `n` |
 | cell | `6` | the contents |
 
+An array (SPEC §9) is one range of `max n 1` cells, two words each, and its value is the pair
+`(base, i32[n])`; the cell at `base + 16·i` is element `i` (`Backend/Flat/Runtime.lean`).
+
 `i64` is boxed because the erasure is untyped: a deep copy or drop must tell a pointer from an
 immediate by the word alone.
 -/
