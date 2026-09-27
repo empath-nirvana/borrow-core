@@ -56,3 +56,9 @@ Each entry: the decision, and why. Newest last.
     (`experiments/Optics`), but they do not explain why borrows are safe: every law that matters
     needs a frame fact that comes from lifetimes and typing. The search for the underlying
     abstraction continues at the frame guarantee (lifetime parametricity).
+23. **Implicit destructors, not affine types.** An owned value that goes unused is consumed by its
+    derived destructor, which the checker inserts (SPEC §12), so the elaborated program stays
+    linear and leak freedom is `adequacyC` on it. Only the forgettable types, whose destructor
+    does nothing, are affine. A destructor that frees or closes is an action whose placement can
+    be observed. It goes at the end of each path, never earlier than an effect, and the opt-out is
+    a `linear` binder rather than a grade on types. Types without a destructor stay linear.
