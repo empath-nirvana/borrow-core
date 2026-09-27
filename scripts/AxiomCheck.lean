@@ -28,6 +28,12 @@ import Core
 #print axioms BoCa.Fig16.LogRel.Core.adequacyD_safe
 #print axioms BoCa.Fig16.LogRel.Core.adequacyD_val
 #print axioms BoCa.Fig16.LogRel.Core.mapProgC_every_run
+#print axioms BoCa.Fig16.LogRel.Core.staleL_angelic
+#print axioms BoCa.Fig16.LogRel.Core.staleCall_angelic
+#print axioms BoCa.Fig16.LogRel.Core.staleL_not_every_alloc
+#print axioms BoCa.Fig16.LogRel.Core.staleCall_not_every_alloc
+#print axioms BoCa.Fig16.LogRel.Core.staleClosure_not_vC
+#print axioms BoCa.Fig16.LogRel.Core.staleClosure_not_immPayload
 #print axioms BoCa.BoLo.AStep1.deterministic
 #print axioms BoCa.Fig16.LogRel.Core.steps_replay
 #print axioms BoCa.Fig16.LogRel.Core.embed

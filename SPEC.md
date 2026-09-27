@@ -742,6 +742,17 @@ Divergence is allowed by `wpTSD`'s form (partial correctness plus safety). Every
 relation holds terminates under every allocator: codata (§7) is observed one finite observation at
 a time.
 
+### Borrowed closures
+
+A `!` closure behind an `Imm` borrow is callable (`Imm̲ (!A) = !A`), and a caller reaches it at
+the program's view. It is in the relation only if every allocator runs it safely, so a closure
+that reads a location after freeing it is excluded (#41). `staleL`, which frees `x`, allocates
+`y` and loads `x`, is in `wpTSAngelic` (`staleL_angelic`): on the run that reuses `x`'s
+location for `y`, the load succeeds. It is in `wpTS` at no postcondition
+(`staleL_not_every_alloc`), because `Alloc.atCount` puts `y` elsewhere and the load is stuck.
+So `λ_. staleL` is outside the relation at `!U(1 ⊸ F 1)` (`staleClosure_not_vC`), and outside
+an `Imm` borrow of it (`staleClosure_not_immPayload`), in `Core/Stale.lean`.
+
 ### Baseline
 
 `fundamentalC` and `adequacyC` keep their statements. The previous run conjunct is
@@ -766,7 +777,8 @@ world, the constants in `Core/Arrays.lean` (`Core/ArrayWp.lean` for the steps), 
 steps in `Paper/` and `Support/`, the checker (`array`, `array_imm`, syntax-core §8b) and the
 backend. Entry 10 (§11) is specified only. Entry 11 (§12) is implemented in
 `Core/Dtor.lean` and the checker (`Frontend/Check/`), with no change to `CDerives`. Entry 12
-(§13) is implemented in `Core/Alloc.lean`, `Core/World.lean` and `Core/Demonic.lean`.
+(§13) is implemented in `Core/Alloc.lean`, `Core/World.lean`, `Core/Demonic.lean` and
+`Core/Stale.lean`.
 
 ---
 

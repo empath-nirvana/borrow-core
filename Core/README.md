@@ -109,7 +109,10 @@ their compatibility lemmas are `Arrays.lean`: `array_new` (`tabFill_wp`), `array
   `adequacyD`: every run of a closed `F 1` program from empty memory continues to `()` at empty
   memory, so none is stuck (`adequacyD_safe`) and a value run ends at `()` with nothing
   allocated (`adequacyD_val`). `mapProgC_every_run` is the `withswap` window under a reusing
-  allocator. The previous run conjunct is `wpTSAngelic` (`wpTS_angelic`).
+  allocator. The previous run conjunct is `wpTSAngelic` (`wpTS_angelic`). A borrowed `!` closure is in the
+  relation only if it is safe under every allocator: `λ_. staleL`, which loads a location it
+  freed, is in `wpTSAngelic` (`staleL_angelic`) but outside the relation at `!U(1 ⊸ F 1)`
+  (`staleClosure_not_vC`, `Stale.lean`; #41).
 - **Embedding.** `embed : DerivesWf Δ Γ e T → CDerives Δ (cbvCtx Γ) e (.val (cbv T))` for every
   `DerivesWf` rule, and `adequacy_of_derivesWf`. `EmbeddingExamples.lean` runs BoLo's baseline
   programs through it.
