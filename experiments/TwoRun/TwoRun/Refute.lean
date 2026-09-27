@@ -114,9 +114,10 @@ theorem reallocE_wp (α : Life) (ls : List SRec) :
 theorem reallocE_fresh1 :
     FreshRun heap0 reallocE (BoLo.Heap.upd (BoLo.Heap.del heap0 0) 1 .unit) (.val (.loc 1)) := by
   refine .more ⟨⟨.appR (.val (.prim .alloc)) .hole, _, _, rfl, rfl,
-    Head.free heap0 0 .unit (BoLo.Heap.upd_same _ _ _)⟩, fun ℓ h₁ h₂ => ?_⟩ (.more
-      ⟨Step1.head (Head.alloc _ .unit 1 (by simp [BoLo.Heap.del])),
-        fun ℓ h₁ h₂ => ?_⟩ (.refl _ _))
+    Head.free heap0 0 .unit (BoLo.Heap.upd_same _ _ _),
+      BoLo.not_arrRedex_prim (by decide) _⟩, fun ℓ h₁ h₂ => ?_⟩ (.more
+      ⟨⟨.hole, _, _, rfl, rfl, Head.alloc _ .unit 1 (by simp [BoLo.Heap.del]),
+        BoLo.not_arrRedex_prim (by decide) _⟩, fun ℓ h₁ h₂ => ?_⟩ (.refl _ _))
   · exact absurd h₂ (by
       by_cases hk : ℓ = 0
       · subst hk; simp at h₁

@@ -39,11 +39,14 @@ cell. The proof needs no new model fact. `flat_factor` (the flattening of `X ●
 `⦇X⦈` and `⦇Y⦈` cell by cell, and every location of it is one of theirs) is
 `ResU.Flat.split_factors` read through the erasure.
 
-**Every run that does not allocate** (`wpTS_footprint_every`). The machine's only
-nondeterministic step is `alloc↦`. `step1_det` shows that any other step is the only step
-(unique decomposition, `Core/Steps.lean`, and `head_det`). So a run that takes no `alloc↦` step
-is the only run to a value from its start (`stepsNA_det`), and it has the exhibited run's
-footprint.
+**Every run that does not allocate** (`wpTS_footprint_every`). The machine's nondeterministic
+steps are `alloc↦` and the array step `tab`, which places a run of fresh cells (SPEC §9).
+`step1_det` shows that any step other than these and the array steps `idx`, `drop` is the only
+step (unique decomposition, `Core/Steps.lean`, and `head_det`). So a run that takes no `alloc↦`
+step and no array step (`ArrRedex`) is the only run to a value from its start (`stepsNA_det`),
+and it has the exhibited run's footprint. Here and below, "does not allocate" means such a run.
+`idx` and `drop` are deterministic; they are excluded as well so that `TwoRun`, whose renaming
+results do not carry address arithmetic, can use `StepsNA` unchanged.
 
 **Callbacks** (`call_frame`). For `g` at `∀'x ⊏ @b. F('x) ⊸ ['x] T` in the relation at `ρg` and
 a borrow `v` at `F('x)` with `'x ↦ α ⊏ @b` at `ρv`, the relation's own clauses give

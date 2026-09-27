@@ -12,7 +12,7 @@ Every result's axioms are within `[propext, Classical.choice, Quot.sound]`.
 
 | file | contents |
 |---|---|
-| `Rename.lean` | `Expr.rename`, `Heap.rename`; renaming commutes with shifting, substitution and plugging; the host step is location-free (`host_call_rename`); runs are invariant under permutations of `Loc` (`head_rename`, `step1_rename`, `steps_rename`) |
+| `Rename.lean` | `Expr.rename`, `Heap.rename`; renaming commutes with shifting, substitution and plugging; the host step is location-free (`host_call_rename`); runs with no array step are invariant under permutations of `Loc` (`head_rename`, `step1_rename`, `steps_rename`) |
 | `Fresh.lean` | `Named`, fresh steps and runs (`Step1F`, `FreshRun`); a run that does not allocate is fresh (`StepsNA.toFresh`); fresh runs are deterministic up to a permutation (`step1F_sim`, `freshRun_det`) |
 | `Sim.lean` | every run follows every fresh run along a function (`HeapRel`, `head_sim`, `step_sim`, `run_sim`, `fresh_run_image`); the footprint of every fresh run (`wpTS_footprint_fresh`, `everyFreshRunFootprint`) |
 | `Refute.lean` | `EveryRunFootprint` does not hold, at a fresh run of `alloc (free 0)` (`not_everyRunFootprint`); its renamed form does not hold, at a stale run of `staleE` (`not_everyRunFootprintRen`) |
@@ -21,13 +21,18 @@ Every result's axioms are within `[propext, Classical.choice, Quot.sound]`.
 ## Step 1: renaming, and the footprint on every run
 
 **Renaming** (`steps_rename`). For a permutation `σ` of `Loc`, a run from `(μ, e)` to
-`(μ′, e′)` renames to a run from `(σ μ, σ e)` to `(σ μ′, σ e′)`. The machine treats locations
-opaquely: no step compares two locations or computes one. The host step's arguments and results
-are integer literals and booleans, which renaming fixes.
+`(μ′, e′)` that takes no array step renames to a run from `(σ μ, σ e)` to `(σ μ′, σ e′)`. Away
+from the array steps the machine treats locations opaquely: no step compares two locations or
+computes one. The host step's arguments and results are integer literals and booleans, which
+renaming fixes. The array steps (SPEC §9) compute locations: `tab` places consecutive cells,
+`idx` and `drop` add an index to a base, and a permutation does not preserve `ℓ + i`. Every
+result in this library is therefore stated for runs with no array step (`StepsR`, and `Step1F`
+requires it). Whether the results extend to runs with array steps, under a renaming of blocks
+rather than of single locations, I have not derived and have not checked.
 
 **Fresh runs.** A configuration *names* a location when the heap holds it, the term mentions
-it, or a value in the heap mentions it. A *fresh* run allocates only locations its
-configuration does not name. Every run that does not allocate is fresh (`StepsNA.toFresh`), and
+it, or a value in the heap mentions it. A *fresh* run takes no array step and allocates only
+locations its configuration does not name. Every run that does not allocate is fresh (`StepsNA.toFresh`), and
 so is every run of a bump allocator that starts above every location the initial configuration
 names.
 

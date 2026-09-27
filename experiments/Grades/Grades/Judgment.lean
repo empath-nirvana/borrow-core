@@ -126,6 +126,14 @@ inductive GDerives (P : Profile) : LifeCtx → GCtx → Expr → Jdg → Prop wh
       GDerives P Δ Γ (.val ⟨.prim (.lit c), .prim⟩) (.val (.int c.width))
   | hostOp {Δ Γ} (op : HostOp) (hΓ : GDead P Γ) :
       GDerives P Δ Γ (.val (.prim (.host op))) (.val (.bang (hostSig op)))
+  | arrNew {Δ Γ} (A : VTy) (hΓ : GDead P Γ) : GDerives P Δ Γ (.val (.prim .tab)) (.val (arrNewTy A))
+  | arrFree {Δ Γ} (A : VTy) (hΓ : GDead P Γ) : GDerives P Δ Γ (.val (.prim .drop)) (.val (arrFreeTy A))
+  | arrSize {Δ Γ} (A : VTy) (hΓ : GDead P Γ) : GDerives P Δ Γ (.val sizeV) (.val (arrSizeTy A))
+  | arrReplace {Δ Γ} (A : VTy) (hΓ : GDead P Γ) : GDerives P Δ Γ (.val replaceV) (.val (arrReplaceTy A))
+  | arrLen {Δ Γ} (a : Lifetime.Life) (A : VTy) (hΓ : GDead P Γ) : GDerives P Δ Γ (.val arrLenV) (.val (arrLenTy a A))
+  | arrGet {Δ Γ} (a : Lifetime.Life) (A : VTy) (hΓ : GDead P Γ) : GDerives P Δ Γ (.val (.prim .idx)) (.val (arrGetTy a A))
+  | arrCopy {Δ Γ} (a : Lifetime.Life) (A : VTy) (hΓ : GDead P Γ) : GDerives P Δ Γ (.val copyV) (.val (arrCopyTy a A))
+  | arrForget {Δ Γ} (a : Lifetime.Life) (A : VTy) (hΓ : GDead P Γ) : GDerives P Δ Γ (.val forgetV) (.val (arrForgetTy a A))
   | withbor1 {Δ Γ A B} (x : LifeVar) (hΓ : GDead P Γ) (hx : Δ.find? x = none)
       (hsc₁ : VScoped Δ A) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) :
       GDerives P Δ Γ withbor (.val (axWithbor1Ty x Δ.meetOfDom A B))
@@ -230,6 +238,14 @@ theorem GDerives.toCore {Δ : LifeCtx} {Γ : GCtx} {e : Expr} {j : Jdg}
   | forgetUnk hΓ => exact .forgetUnk hΓ.toDeadP
   | lit c hΓ => exact .lit c hΓ.toDeadP
   | hostOp op hΓ => exact .hostOp op hΓ.toDeadP
+  | arrNew A hΓ => exact .arrNew A hΓ.toDeadP
+  | arrFree A hΓ => exact .arrFree A hΓ.toDeadP
+  | arrSize A hΓ => exact .arrSize A hΓ.toDeadP
+  | arrReplace A hΓ => exact .arrReplace A hΓ.toDeadP
+  | arrLen a A hΓ => exact .arrLen a A hΓ.toDeadP
+  | arrGet a A hΓ => exact .arrGet a A hΓ.toDeadP
+  | arrCopy a A hΓ => exact .arrCopy a A hΓ.toDeadP
+  | arrForget a A hΓ => exact .arrForget a A hΓ.toDeadP
   | withbor1 x hΓ hx hsc hf₁ hf₂ => exact .withbor1 x hΓ.toDeadP hx hsc hf₁ hf₂
   | withbor2 x hΓ hx hside hf₁ hf₂ => exact .withbor2 x hΓ.toDeadP hx hside hf₁ hf₂
   | withbor3 x hΓ hx hf₁ hf₂ => exact .withbor3 x hΓ.toDeadP hx hf₁ hf₂
@@ -301,6 +317,14 @@ theorem CDerives.toGraded {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg}
   | forgetUnk hΓ => exact .forgetUnk (DeadP.toGDead hΓ)
   | lit c hΓ => exact .lit c (DeadP.toGDead hΓ)
   | hostOp op hΓ => exact .hostOp op (DeadP.toGDead hΓ)
+  | arrNew A hΓ => exact .arrNew A (DeadP.toGDead hΓ)
+  | arrFree A hΓ => exact .arrFree A (DeadP.toGDead hΓ)
+  | arrSize A hΓ => exact .arrSize A (DeadP.toGDead hΓ)
+  | arrReplace A hΓ => exact .arrReplace A (DeadP.toGDead hΓ)
+  | arrLen a A hΓ => exact .arrLen a A (DeadP.toGDead hΓ)
+  | arrGet a A hΓ => exact .arrGet a A (DeadP.toGDead hΓ)
+  | arrCopy a A hΓ => exact .arrCopy a A (DeadP.toGDead hΓ)
+  | arrForget a A hΓ => exact .arrForget a A (DeadP.toGDead hΓ)
   | withbor1 x hΓ hx hsc hf₁ hf₂ => exact .withbor1 x (DeadP.toGDead hΓ) hx hsc hf₁ hf₂
   | withbor2 x hΓ hx hside hf₁ hf₂ => exact .withbor2 x (DeadP.toGDead hΓ) hx hside hf₁ hf₂
   | withbor3 x hΓ hx hf₁ hf₂ => exact .withbor3 x (DeadP.toGDead hΓ) hx hf₁ hf₂
@@ -428,6 +452,14 @@ theorem GDerives.mono (hPQ : P.Le Q) {Δ : LifeCtx} {Γ : GCtx} {e : Expr} {j : 
   | forgetUnk hΓ => exact .forgetUnk (hPQ.dead hΓ)
   | lit c hΓ => exact .lit c (hPQ.dead hΓ)
   | hostOp op hΓ => exact .hostOp op (hPQ.dead hΓ)
+  | arrNew A hΓ => exact .arrNew A (hPQ.dead hΓ)
+  | arrFree A hΓ => exact .arrFree A (hPQ.dead hΓ)
+  | arrSize A hΓ => exact .arrSize A (hPQ.dead hΓ)
+  | arrReplace A hΓ => exact .arrReplace A (hPQ.dead hΓ)
+  | arrLen a A hΓ => exact .arrLen a A (hPQ.dead hΓ)
+  | arrGet a A hΓ => exact .arrGet a A (hPQ.dead hΓ)
+  | arrCopy a A hΓ => exact .arrCopy a A (hPQ.dead hΓ)
+  | arrForget a A hΓ => exact .arrForget a A (hPQ.dead hΓ)
   | withbor1 x hΓ hx hsc hf₁ hf₂ => exact .withbor1 x (hPQ.dead hΓ) hx hsc hf₁ hf₂
   | withbor2 x hΓ hx hside hf₁ hf₂ => exact .withbor2 x (hPQ.dead hΓ) hx hside hf₁ hf₂
   | withbor3 x hΓ hx hf₁ hf₂ => exact .withbor3 x (hPQ.dead hΓ) hx hf₁ hf₂
