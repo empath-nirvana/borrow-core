@@ -83,7 +83,15 @@ Each entry: the decision, and why. Newest last.
     copies or drops). It stays outside the trusted base anyway, because its output is a core program
     that the checker must derive, returning a `CDerives` proof. What sugar may not do is hide a
     surviving polarity shift (`docs/surface-cbpv.md`).
-27. **Codata is one former, `νX. C`, and its variable is a value type.** `X` occurs only as `U X`,
+27. **`unsafe` is an extern whose body we compile.** Safe code meets unchecked code only at a
+    trusted boundary with a semantic-type contract (the logical relation at the declared type). The
+    body may be host code (FFI) or low-level code of our own that the compiler compiles; the
+    contract may be assumed (then it is a hypothesis of the end-to-end theorem) or proved in Lean
+    (then it drops off the trusted base). There are no unsafe blocks inside safe code, so raw
+    pointers never flow into safe code and provenance tracking is unnecessary; the set of unproved
+    boundaries is the program's enumerable trusted base. A boundary can migrate — host extern,
+    compiled unsafe body, proved body — without its type or callers changing.
+28. **Codata is one former, `νX. C`, and its variable is a value type.** `X` occurs only as `U X`,
     which is the value-type variable `0` of `C`'s observations, so `ν` reuses `μ`'s substitution
     and environment machinery and `cC` takes no environment of its own. The body is a `&` of
     observation trees ending in `F A` with `U X` only under `⊗`/`⊕` (SPEC §7): that is where
