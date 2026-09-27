@@ -100,3 +100,8 @@ roots = ["FrameTheorems"]
 name = "TwoRun"
 srcDir = "experiments/TwoRun"
 roots = ["TwoRun"]
+
+[[lean_lib]]
+name = "Grades"
+srcDir = "experiments/Grades"
+roots = ["Grades"]
