@@ -1,0 +1,45 @@
+-- A borrowed iterator escaping its borrow: the withload callback returns the iterator over its
+-- views, to be pulled after the load has ended. The views are at the callback's lifetime 'y, so
+-- the iterator's type mentions 'y, and withload's result type may not (its side condition is
+-- that 'y is fresh in the result). Written at the outer lifetime 'x instead, the callback's
+-- result `boxed['y] it` is checked against `iter (imm 'x i32) 1 1`, and the iterator it has is
+-- over `imm 'y i32`: the views cannot be lengthened to 'x.
+
+type Seq = mu X. 1 + (ref i32 * X)
+
+def plus : i32 * i32 => i32 = unbang host[add32]
+
+def nil : Seq = roll (inl ())
+
+def cons : i32 * Seq => Seq =
+  thunkv fun (p : i32 * Seq) -> let (x, s) = p; return (roll (inr (alloc[i32] x, s)))
+
+-- The borrowed iterator (Core/BorrowedIter.lean, `iterImmV`): `unfold` with the views as its
+-- state. `next` yields the head view and the rest of the views; `close` drops the views that
+-- are left (the implicit destructor of the state forgets each `imm`).
+def iter_imm[A] : !(all 'a < top. (mu X. 1 + (imm 'a A * X)) => U (iter (imm 'a A) 1 1)) =
+  !thunkv Fun 'a < top.
+    f <- return (unbang (unfold[iter (imm 'a A) 1 1, mu X. 1 + (imm 'a A * X)]
+           (!thunkv fun (s : mu X. 1 + (imm 'a A * X)) ->
+              < case (unroll s) {
+                  inl u -> return (inr u : (imm 'a A * (mu X. 1 + (imm 'a A * X))) + 1)
+                | inr p -> return (inl p : (imm 'a A * (mu X. 1 + (imm 'a A * X))) + 1)
+                },
+                return () >)));
+    return (thunkv fun (vs : mu X. 1 + (imm 'a A * X)) ->
+      return (thunkv nu_in < (nu_out (force f vs)).1, (nu_out (force f vs)).2 >))
+
+main : F 1 =
+  l <- return (cons (i32[100], nil));
+  r <- return (alloc[Seq] l);
+  q <- return (withbor1['x, Seq, 1] r
+         (thunkv Fun 'x < top. return (thunkv fun (b : imm 'x Seq) ->
+            it <- return (withload['x, 'y, Seq, U (iter (imm 'x i32) 1 1)] b
+                    (thunkv Fun 'y < dom. return (thunkv fun (vs : view 'y Seq) ->
+                       it <- return ((unbang iter_imm[i32]) ['y] vs);
+                       return (boxed['y] it))));
+            u <- (nu_out (force it)).2;
+            return (boxed['x] u))));
+  let (r2, u) = q;
+  return u
+-- expect: 40:42: type mismatch: expected `U (iter (imm 'x i32) 1 1)`, but this has type `U (iter (imm 'y i32) 1 1)`
