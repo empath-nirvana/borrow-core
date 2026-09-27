@@ -26,10 +26,13 @@ import Core
 #print axioms BoCa.Fig16.LogRel.Core.withborS_ret
 #print axioms BoCa.Fig16.LogRel.Core.wpTS_allocS
 #print axioms BoCa.Fig16.LogRel.Core.wpTS_allocBorrow
-#print axioms BoCa.Fig16.LogRel.Core.cC_delay_iff
-#print axioms BoCa.Fig16.LogRel.Core.cC_stream_iff
-#print axioms BoCa.Fig16.LogRel.Core.fixD_compatX
-#print axioms BoCa.Fig16.LogRel.Core.unfoldS_compatX
+#print axioms BoCa.Fig16.LogRel.Core.cC_nu_iff
+#print axioms BoCa.Fig16.LogRel.Core.unfold_compatX
+#print axioms BoCa.Fig16.LogRel.Core.nuIn_compatX
+#print axioms BoCa.Fig16.LogRel.Core.nuOut_compatX
+#print axioms BoCa.Fig16.LogRel.Core.iterImm_wf
+#print axioms BoCa.Fig16.LogRel.Core.iterImm_sem
+#print axioms BoCa.Fig16.LogRel.Core.seqTy_view
 #print axioms BoCa.Fig16.LogRel.Core.take_runs
 #print axioms BoCa.Fig16.LogRel.Core.sumProg_runs
 #print axioms BoCa.Fig16.LogRel.Core.mapIncR_inPlace
