@@ -99,6 +99,7 @@ with no new case.
 | family borrow `withborF2 : Ref A ⊗ Ref B ⊸ (∀'c ⊏ ⊓Δ. M 'c A ⊗ M 'c B ⊸ ['c] T) ⊸ …`, `M = Mut`/`Imm`: `withborM2_wf`, `withborI2_wf` | `Family.lean` |
 | block borrow `withborS σ : refTy σ ⊸ (∀'c ⊏ ⊓Δ. famTy M 'c σ ⊸ ['c] T) ⊸ refTy σ ⊗ T`, `shortenE`: `withborS_wf`, `withborSM_wf`, `withborSI_wf`, `shortenE_wf` | `BlockBorrow.lean` |
 | block allocation and free: `allocS`, `freeS` (`d_allocS`, `d_freeS`) | `Blocks.lean` |
+| borrowed iteration `iterImm : Views @a A ⊸ U(Iter (Imm @a A) 1 1)`, `Views @a A = μX. 1 ⊕ (Imm @a A ⊗ X)`, by `unfold`; `seqTy_view : Imm̲ @b (Seq A) = Views @b A` for `Seq A = μX. 1 ⊕ (Ref A ⊗ X)`: `iterImm_wf`, `iterImm_sem` (SPEC §7) | `BorrowedIter.lean` |
 | destructors `dtorE T : T ⊸ F 1` at every `HasDtor T` (forgettable types, `Ref`, `⊗`/`⊕`/`[@a]`, fold-class `μ`, codata by `close`), and the drop `dropE T i e = (dtorE T xᵢ; e)`: `dtor_wf`, `drop_derives` (SPEC §12) | `Dtor.lean` |
 
 These facts are stated at the typed world:
@@ -178,7 +179,8 @@ Name collisions settled:
   - `withborF2`'s `B` and `T` must outlive the outer lifetime (`VOutlives`, which admits
     `0`/`μ`/`X`, but has no rule at `U C` or `Unk`).
   - A generic n-ary family over a list of leaf types, or over `μX. 1 ⊕ (Ref A ⊗ X)`, is not
-    built. Nesting is written out per program (`splitFour`).
+    built. Nesting is written out per program (`splitFour`). The `Mut` family over
+    `μX. 1 ⊕ (Ref A ⊗ X)` is what `iter_mut` needs (SPEC §7 Open).
 - **Integers.** `plainV` does not include `I32`/`I64`, so they are not yet `withborS` leaves.
   The `experiments/` libraries over the machine do not take the host parameter and do not
   build.

@@ -51,3 +51,4 @@ import Core.StreamPrograms
 import Core.Integers
 import Core.IntPrograms
 import Core.Dtor
+import Core.BorrowedIter
