@@ -28,7 +28,7 @@ lifetime at every node, and `VOutlives` has no rule at `U C` or `Unk`.
 
 **Borrowing returns the handle it was given** (`withborS_ret`, on every run, through the step
 inversions of `Steps.lean`), so after the borrow the handle is again the block's, packed
-(`withborS_packed`, `wpTS_allocBorrow`).
+(`withborS_packed`; `wpTSAngelic_allocBorrow` on the run that allocates it as one block).
 -/
 
 noncomputable section

@@ -7,8 +7,8 @@ import Core.BlockBorrow
 (`withborS_ret`, by the step inversions of `Steps.lean`).  The typing rule alone does not say
 so: `refTy σ ⊗ T` is inhabited by other handles too.  With the Fundamental Property at the
 call's derivation this gives `withborS_packed`: after the borrow the handle is packed at the
-same block, beside the callback's result; and `wpTS_allocBorrow`: allocated as one block
-(`wpTS_allocS`) and borrowed, the struct comes back as that block's handle.
+same block, beside the callback's result; and `wpTSAngelic_allocBorrow`: on the run that allocates
+it as one block (`wpTSAngelic_allocS`) and borrows it, the struct comes back as that block's handle.
 
 `⇓σ m` (`shortenE`) runs to `m` itself (`shortenE_run`).
 -/
@@ -176,11 +176,11 @@ theorem withborS_ret : ∀ (σ : Shape) {v g w : Val} {μ μ' : Heap},
 theorem wpTS_track {ls : List SRec} {e : Expr} {Q : List SRec → Val → WProp} {ρ : WRes}
     (R : Val → Prop) (hR : ∀ μ μ' (w : Val), Steps μ e μ' w.1 → R w) (h : wpTS ls e Q ρ) :
     wpTS ls e (fun ls' w => fun ρ' => R w ∧ Q ls' w ρ') ρ := by
-  intro ρf fρ ps hf hc hT htg
-  obtain ⟨ρ', ρp, fρ', fρ'p, π, v, μ, μ', ps', ls', h₁, h₂, h₃, h₄, h₅, h₆, h₇, h₈, h₉, h₁₀,
-    h₁₁, h₁₂, h₁₃, h₁₄, h₁₅⟩ := h ρf fρ ps hf hc hT htg
-  exact ⟨ρ', ρp, fρ', fρ'p, π, v, μ, μ', ps', ls', h₁, h₂, h₃, h₄, h₅, h₆, h₇, h₈, h₉, h₁₀,
-    h₁₁, h₁₂, h₁₃, h₁₄, ⟨hR μ μ' v h₇, h₁₅⟩⟩
+  intro ρf fρ ps hf hc hT htg A k
+  obtain ⟨ρ', ρp, fρ', fρ'p, π, v, μ, μ', ps', ls', h₁, h₂, h₃, h₄, h₅, h₆, ⟨j, h₇⟩, h₈, h₉, h₁₀,
+    h₁₁, h₁₂, h₁₃, h₁₄, h₁₅⟩ := h ρf fρ ps hf hc hT htg A k
+  exact ⟨ρ', ρp, fρ', fρ'p, π, v, μ, μ', ps', ls', h₁, h₂, h₃, h₄, h₅, h₆, ⟨j, h₇⟩, h₈, h₉, h₁₀,
+    h₁₁, h₁₂, h₁₃, h₁₄, ⟨hR μ μ' v h₇.toSteps, h₁₅⟩⟩
 
 /-- A closing substitution of one value. -/
 theorem substAll_one (s : Val) (e : Expr) : substAll [s] e = e.subst 0 s := by
@@ -229,23 +229,24 @@ theorem d_call {Δ : LifeCtx} {σ : Shape} {cb : Expr} {C T : VTy}
   .lolliE (.right .nil) (CDerives.append_dead (Γ' := [⟨σ.refTy, false⟩]) (.cons .nil) hcb)
     (.lolliE (.left .nil) (.var (.here .nil)) hW)
 
-/-- **Allocate a struct as one block, then borrow its leaves.**  The handle that comes back is
-the block's: `(addr b σ, t)`, packed at `b`.  `[spec §5]` -/
-theorem wpTS_allocBorrow {Δ : LifeCtx} {σ : Shape} {v cb : Val} {T : VTy}
+/-- **Allocate a struct as one block, then borrow its leaves, on some run.**  On the run that
+allocates the struct as one block (`wpTSAngelic_allocS`), the handle that comes back is the
+block's: `(addr b σ, t)`, packed at `b`.  `[spec §5, §13]` -/
+theorem wpTSAngelic_allocBorrow {Δ : LifeCtx} {σ : Shape} {v cb : Val} {T : VTy}
     (hcl : clAt 0 cb.1 = true)
     (hd : CDerives Δ [⟨σ.refTy, true⟩] (app2 (withborS σ) (.var 0) cb.1)
       (.val (.tensor σ.refTy T)))
     {δ : LSub} (hδ : Δ.Models δ) {ls : List SRec} {ρ : WRes}
     (hv : vP σ.valTy ls δ v ρ) :
-    wpTS ls (app2 (withborS σ) (.app (allocS σ) v.1) cb.1)
+    wpTSAngelic ls (app2 (withborS σ) (.app (allocS σ) v.1) cb.1)
       (fun ls' w => fun ρ' => ∃ b t, w = .pair (σ.addr b) t ∧
         (Packed σ b ls' δ (σ.addr b) ⋆ vP T ls' δ t) ρ') ρ := by
-  have hb := wpTS_bind (.appL (.appR (withborS σ) .hole) cb) (.app (allocS σ) v.1) ls
+  have hb := wpTSAngelic_bind (.appL (.appR (withborS σ) .hole) cb) (.app (allocS σ) v.1) ls
     (fun ls' w => fun ρ' => ∃ b t, w = .pair (σ.addr b) t ∧
         (Packed σ b ls' δ (σ.addr b) ⋆ vP T ls' δ t) ρ')
-  refine hb ρ (wpTS_mono (fun ls' w ρ' ⟨b, hp⟩ => ?_) ρ (wpTS_allocS σ hv))
-  have hw := withborS_packed hcl cb.2 hd hδ hp
-  refine wpTS_mono (fun ls'' u ρ'' ⟨t, hu, ht⟩ => ⟨b, t, ?_, ?_⟩) ρ' hw
+  refine hb ρ (wpTSAngelic_mono (fun ls' w ρ' ⟨b, hp⟩ => ?_) ρ (wpTSAngelic_allocS σ hv))
+  have hw := wpTS_angelic ρ' (withborS_packed hcl cb.2 hd hδ hp)
+  refine wpTSAngelic_mono (fun ls'' u ρ'' ⟨t, hu, ht⟩ => ⟨b, t, ?_, ?_⟩) ρ' hw
   · rw [hu, hp.1]
   · rw [← hp.1]; exact ht
 

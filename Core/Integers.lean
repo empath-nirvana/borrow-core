@@ -186,6 +186,6 @@ theorem hostOp_compatX {Δ : LifeCtx} {Γ : Ctx VTy} (op : HostOp) (hΓ : Ctx.De
   intro ls' _ v σ τ hv hcomp
   rw [eq_of_compS_empty_left hcomp]
   obtain ⟨rfl, r, hr, hres⟩ := host_call_sound ℍ op (ls' := ls') hv
-  exact wpTS_head (fun μ => Head.host μ op v r hr) ls' _ _ (wpTS_val ls' r _ _ hres)
+  exact wpTS_head (fun μ => Head.host μ op v r hr) rfl ls' _ _ (wpTS_val ls' r _ _ hres)
 
 end BoCa.Fig16.LogRel.Core

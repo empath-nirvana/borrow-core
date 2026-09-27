@@ -8,8 +8,8 @@ Each program is closed and typed at `1`: a `CDerives` derivation run by `adequac
 a kernel-checked interpreter run (`…_eval`) and an observation of the struct's contents
 (`…Obs_eval`).  The interpreter allocates by bumping a counter, so its `allocS` lays the leaves
 out at consecutive addresses.  `…_block` is the typed-world statement of the program's first
-half: allocated as one block and borrowed through the family, the struct comes back as the
-block's own handle, packed (`wpTS_allocBorrow`).
+half, on the run that allocates the struct as one block: borrowed through the family, the struct
+comes back as the block's own handle, packed (`wpTSAngelic_allocBorrow`).
 
 | program | struct | shows |
 |---|---|---|
@@ -138,13 +138,13 @@ theorem blockSwapObs_eval :
       | .value ⟨.pair (.inj₂ .unit) (.inj₁ .unit), _⟩ false => true
       | _ => false) = true := by decide
 
-/-- The first half of `blockSwap` at the typed world: one block, and the handle the borrow
-returns is that block's, packed. -/
+/-- The first half of `blockSwap` at the typed world, on the run that allocates one block: the
+handle the borrow returns is that block's, packed. -/
 theorem blockSwap_block :
-    wpTS [] (app2 (withborS σ2) (.app (allocS σ2) (vals2 false true).1) swapCb)
+    wpTSAngelic [] (app2 (withborS σ2) (.app (allocS σ2) (vals2 false true).1) swapCb)
       (fun ls w => fun ρ => ∃ b t, w = .pair (σ2.addr b) t ∧
         (Packed σ2 b ls LSub.empty (σ2.addr b) ⋆ vP .unit ls LSub.empty t) ρ) PMap.empty :=
-  wpTS_allocBorrow (cb := ⟨swapCb, .lam⟩) (by decide)
+  wpTSAngelic_allocBorrow (cb := ⟨swapCb, .lam⟩) (by decide)
     (d_call (d_withborS2 (by cdead) rfl) d_swapCbB) Adequacy.models_empty
     (vP_pair (vP_bval false) (vP_bval true))
 
@@ -205,10 +205,10 @@ theorem nestSwapObs_eval :
       | _ => false) = true := by decide
 
 theorem nestSwap_block :
-    wpTS [] (app2 (withborS σ3) (.app (allocS σ3) (vals3 false false true).1) nestCb)
+    wpTSAngelic [] (app2 (withborS σ3) (.app (allocS σ3) (vals3 false false true).1) nestCb)
       (fun ls w => fun ρ => ∃ b t, w = .pair (σ3.addr b) t ∧
         (Packed σ3 b ls LSub.empty (σ3.addr b) ⋆ vP .unit ls LSub.empty t) ρ) PMap.empty :=
-  wpTS_allocBorrow (cb := ⟨nestCb, .lam⟩) (by decide)
+  wpTSAngelic_allocBorrow (cb := ⟨nestCb, .lam⟩) (by decide)
     (d_call (d_withborS3 (by cdead) rfl) d_nestCb) Adequacy.models_empty
     (vP_pair (vP_pair (vP_bval false) (vP_bval false)) (vP_bval true))
 
@@ -243,10 +243,10 @@ theorem blockReadObs_eval :
       | _ => false) = true := by decide
 
 theorem blockRead_block :
-    wpTS [] (app2 (withborS σ2) (.app (allocS σ2) (vals2 false true).1) readCb)
+    wpTSAngelic [] (app2 (withborS σ2) (.app (allocS σ2) (vals2 false true).1) readCb)
       (fun ls w => fun ρ => ∃ b t, w = .pair (σ2.addr b) t ∧
         (Packed σ2 b ls LSub.empty (σ2.addr b) ⋆ vP B3 ls LSub.empty t) ρ) PMap.empty :=
-  wpTS_allocBorrow (cb := ⟨readCb, .lam⟩) (by decide)
+  wpTSAngelic_allocBorrow (cb := ⟨readCb, .lam⟩) (by decide)
     (d_call (d_withborSI2 (by cdead) rfl) d_readCb) Adequacy.models_empty
     (vP_pair (vP_bval false) (vP_bval true))
 
@@ -315,10 +315,10 @@ theorem nestReadObs_eval :
       | _ => false) = true := by decide
 
 theorem nestRead_block :
-    wpTS [] (app2 (withborS σ3) (.app (allocS σ3) (vals3 false true true).1) nestReadCb)
+    wpTSAngelic [] (app2 (withborS σ3) (.app (allocS σ3) (vals3 false true true).1) nestReadCb)
       (fun ls w => fun ρ => ∃ b t, w = .pair (σ3.addr b) t ∧
         (Packed σ3 b ls LSub.empty (σ3.addr b) ⋆ vP B21 ls LSub.empty t) ρ) PMap.empty :=
-  wpTS_allocBorrow (cb := ⟨nestReadCb, .lam⟩) (by decide)
+  wpTSAngelic_allocBorrow (cb := ⟨nestReadCb, .lam⟩) (by decide)
     (d_call (d_withborSI3 (by cdead) rfl) d_nestReadCb) Adequacy.models_empty
     (vP_pair (vP_pair (vP_bval false) (vP_bval true)) (vP_bval true))
 

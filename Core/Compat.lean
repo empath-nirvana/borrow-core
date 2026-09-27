@@ -109,7 +109,7 @@ theorem thunkF_compatC {Δ : LifeCtx} {Γ : Ctx VTy} {M : Expr} {A : VTy}
   show wpTS ls (.val (.lam (Expr.psub 1 γ M))) _ ρ
   refine wpTS_val _ _ _ _ ?_
   intro ls' hext
-  refine cC_head (.ret A) (fun μ => Head.beta μ (Expr.psub 1 γ M) Val.unit) ls' δ ρ ?_
+  refine cC_head (.ret A) (fun μ => Head.beta μ (Expr.psub 1 γ M) Val.unit) rfl ls' δ ρ ?_
   rw [← substAll_cons]
   exact h δ (Val.unit :: γ) ls' ρ hδ (gDenC_dead_cons _ _ (gDenC_local hext hg))
 
@@ -152,7 +152,7 @@ theorem lam_compatC {Δ : LifeCtx} {Γ : Ctx VTy} {M : Expr} {A : VTy} {C : CTy}
     (h : SemC Δ (⟨A, true⟩ :: Γ) M C) : SemC Δ Γ (.val (.lam M)) (.arr A C) := by
   intro δ γ ls ρ hδ hg v ρ₁ ρ₂ hv hc
   obtain ⟨hlen, hgs⟩ := gDenC_iff.mp hg
-  refine cC_head C (fun μ => Head.beta μ (Expr.psub 1 γ M) v) ls δ ρ₂ ?_
+  refine cC_head C (fun μ => Head.beta μ (Expr.psub 1 γ M) v) rfl ls δ ρ₂ ?_
   rw [← substAll_cons]
   exact h δ (v :: γ) ls ρ₂ hδ
     (gDenC_mk (by simpa using hlen) ⟨ρ₁, ρ, ResU.CompS.comm hc, hv, hgs⟩)
@@ -184,7 +184,7 @@ theorem bind_compatC {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {M N : Expr} {A :
     (fun ls' hls σ h => gDenC_same hls h) ?_ ρ ⟨ρ₁, ρ₂, hc, hM δ γ ls ρ₁ hδ hg₁, hg₂⟩
   rintro ls' - v σ ⟨σ₁, σ₂, hcσ, hv, hg₂'⟩
   obtain ⟨hlen, hgs⟩ := gDenC_iff.mp hg₂'
-  refine cC_head C (fun μ => Head.beta μ (Expr.psub 1 γ N) v) ls' δ σ ?_
+  refine cC_head C (fun μ => Head.beta μ (Expr.psub 1 γ N) v) rfl ls' δ σ ?_
   rw [← substAll_cons]
   exact hN δ (v :: γ) ls' σ hδ (gDenC_mk (by simpa using hlen) ⟨σ₁, σ₂, hcσ, hv, hgs⟩)
 
@@ -222,18 +222,18 @@ theorem withI_compatC {Δ : LifeCtx} {Γ : Ctx VTy} {M N : Expr} {C D : CTy}
   intro δ γ ls ρ hδ hg
   rw [substAll_withPair]
   refine ⟨?_, ?_⟩
-  · refine cC_head C (fun μ => Head.beta μ _ (Val.inj₁ Val.unit)) ls δ ρ ?_
+  · refine cC_head C (fun μ => Head.beta μ _ (Val.inj₁ Val.unit)) rfl ls δ ρ ?_
     rw [withBody_subst]
-    refine cC_head C (fun μ => Head.case₁ μ Val.unit _ _) ls δ ρ ?_
+    refine cC_head C (fun μ => Head.case₁ μ Val.unit _ _) rfl ls δ ρ ?_
     rw [seq_subst_unit]
-    refine cC_head C (fun μ => Head.seq μ _) ls δ ρ ?_
+    refine cC_head C (fun μ => Head.seq μ _) rfl ls δ ρ ?_
     rw [← substAll_cons]
     exact hM δ _ ls ρ hδ (gDenC_dead_cons _ _ (gDenC_dead_cons _ _ hg))
-  · refine cC_head D (fun μ => Head.beta μ _ (Val.inj₂ Val.unit)) ls δ ρ ?_
+  · refine cC_head D (fun μ => Head.beta μ _ (Val.inj₂ Val.unit)) rfl ls δ ρ ?_
     rw [withBody_subst]
-    refine cC_head D (fun μ => Head.case₂ μ Val.unit _ _) ls δ ρ ?_
+    refine cC_head D (fun μ => Head.case₂ μ Val.unit _ _) rfl ls δ ρ ?_
     rw [seq_subst_unit]
-    refine cC_head D (fun μ => Head.seq μ _) ls δ ρ ?_
+    refine cC_head D (fun μ => Head.seq μ _) rfl ls δ ρ ?_
     rw [← substAll_cons]
     exact hN δ _ ls ρ hδ (gDenC_dead_cons _ _ (gDenC_dead_cons _ _ hg))
 
@@ -273,7 +273,7 @@ theorem unitE_compatC {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {V M : Expr} {C 
     (fun ls' hls σ h => gDenC_same hls h) ?_ ρ ⟨ρ₁, ρ₂, hc, hV δ γ ls ρ₁ hδ hg₁, hg₂⟩
   rintro ls' - v σ ⟨σ₁, σ₂, hcσ, ⟨rfl, rfl⟩, hg₂'⟩
   rw [eq_of_compS_empty_left hcσ]
-  exact cC_head C (fun μ => Head.seq μ _) ls' δ σ₂ (hM δ γ ls' σ₂ hδ hg₂')
+  exact cC_head C (fun μ => Head.seq μ _) rfl ls' δ σ₂ (hM δ γ ls' σ₂ hδ hg₂')
 
 /-- `let (x, y) = V in M : C` for `V : A ⊗ B`. -/
 theorem tensorE_compatC {Δ : LifeCtx} {Γ Γp Γb : Ctx VTy} {V M : Expr} {A B : VTy} {C : CTy}
@@ -288,7 +288,7 @@ theorem tensorE_compatC {Δ : LifeCtx} {Γ Γp Γb : Ctx VTy} {V M : Expr} {A B 
   rintro ls' - v σ ⟨σ₁, σ₂, hcσ, hpair, hg₂'⟩
   obtain ⟨w₁, w₂, hs⟩ := hpair
   obtain ⟨rfl, b₁, b₂, hcb, hw₁, hw₂⟩ := pure_sep_iff.mp hs
-  refine cC_head C (fun μ => Head.letpair μ w₁ w₂ _) ls' δ σ ?_
+  refine cC_head C (fun μ => Head.letpair μ w₁ w₂ _) rfl ls' δ σ ?_
   rw [← substAll_cons₂]
   obtain ⟨x, hx, hxσ⟩ := compS_reassoc hcb hcσ
   obtain ⟨y, hy, hyσ⟩ := compS_lcomm hx hxσ
@@ -311,11 +311,11 @@ theorem sumE_compatC {Δ : LifeCtx} {Γ Γs Γb : Ctx VTy} {V M₁ M₂ : Expr} 
   obtain ⟨hlen, hgs⟩ := gDenC_iff.mp hg₂'
   rcases hsum with ⟨w, hs⟩ | ⟨w, hs⟩
   · obtain ⟨rfl, hw⟩ := pure_sep_iff.mp hs
-    refine cC_head C (fun μ => Head.case₁ μ w _ _) ls' δ σ ?_
+    refine cC_head C (fun μ => Head.case₁ μ w _ _) rfl ls' δ σ ?_
     rw [← substAll_cons]
     exact h₁ δ (w :: γ) ls' _ hδ (gDenC_mk (by simpa using hlen) ⟨σ₁, σ₂, hcσ, hw, hgs⟩)
   · obtain ⟨rfl, hw⟩ := pure_sep_iff.mp hs
-    refine cC_head C (fun μ => Head.case₂ μ w _ _) ls' δ σ ?_
+    refine cC_head C (fun μ => Head.case₂ μ w _ _) rfl ls' δ σ ?_
     rw [← substAll_cons]
     exact h₂ δ (w :: γ) ls' _ hδ (gDenC_mk (by simpa using hlen) ⟨σ₁, σ₂, hcσ, hw, hgs⟩)
 
@@ -362,7 +362,7 @@ theorem allI_compatC {Δ : LifeCtx} {Γ : Ctx VTy} {x : LifeVar} {b : Lifetime.L
       exact ⟨m, k, by rw [find?_extend_ne δ α hxy]; exact hm,
         by rw [interp_extend_of_not_mentions (hΔx y u hy)]; exact hk, hlk⟩
   show cC C ls (δ.extend x α) (.app (.val (.lam (Expr.psub 1 γ M))) (.val .unit)) ρ
-  refine cC_head C (fun μ => Head.beta μ (Expr.psub 1 γ M) Val.unit) ls (δ.extend x α) ρ ?_
+  refine cC_head C (fun μ => Head.beta μ (Expr.psub 1 γ M) Val.unit) rfl ls (δ.extend x α) ρ ?_
   rw [← substAll_cons]
   refine h (δ.extend x α) (Val.unit :: γ) ls ρ hδ' (gDenC_dead_cons _ _ ?_)
   obtain ⟨hlen, hgs⟩ := gDenC_iff.mp hg
@@ -381,7 +381,7 @@ theorem bangThunkF_compatC {Δ : LifeCtx} {Γ : Ctx VTy} {M : Expr} {A : VTy} (h
   show wpTS ls (.val (.lam (Expr.psub 1 γ M))) _ ρ
   refine wpTS_val _ _ _ _ ⟨gSepC_persistent hp hgs, ?_⟩
   intro ls' hext
-  refine cC_head (.ret A) (fun μ => Head.beta μ (Expr.psub 1 γ M) Val.unit) ls' δ ρ ?_
+  refine cC_head (.ret A) (fun μ => Head.beta μ (Expr.psub 1 γ M) Val.unit) rfl ls' δ ρ ?_
   rw [← substAll_cons]
   exact h δ (Val.unit :: γ) ls' ρ hδ (gDenC_dead_cons _ _ (gDenC_local hext hg))
 

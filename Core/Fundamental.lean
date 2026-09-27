@@ -401,8 +401,8 @@ theorem theorem32 (e : Expr) (P : Val → Prop)
   have htg : Tagged (PMap.empty : WRes) [] [] := fun x hx => absurd hx (by simp)
   obtain ⟨ρ', ρp, fρ', fρ'p, π, v, μ, μ', -, -,
     h1, h2, h3, h5, h6, h7, h8, h9, h10, h11, -, -, -, -, h12⟩ :=
-    hwp PMap.empty PMap.empty [] Fig16.LogRel.hash_empty (ResU.comp_empty_right _)
-      TW.empty htg
+    wpTS_angelic _ hwp PMap.empty PMap.empty [] Fig16.LogRel.hash_empty
+      (ResU.comp_empty_right _) TW.empty htg
   obtain ⟨hρ'e, hPv⟩ := h12
   subst hρ'e
   obtain rfl : (PMap.empty : WRes) = fρ' := ResU.eq_of_comp_empty_left h2

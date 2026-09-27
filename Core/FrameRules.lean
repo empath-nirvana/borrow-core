@@ -66,7 +66,7 @@ theorem wpTS_I_frameX (l : BoCa.Loc) (T : VTy) (δ : LSub) (hadm : AdmWf T δ) (
             wpTS ls' e (fun ls'' v' => box α (ptoOwn l v ─⋆ (vC true T ls'' δ v ─⋆ Q ls'' v')))) ρ))
       (wpTS ls e Q) := by
   classical
-  intro ρ hH2 ρf sρ ps hH3 hsρ hT htg
+  intro ρ hH2 ρf sρ ps hH3 hsρ hT htg alc kc
   have hTI := hT.inv
   have hvsρ : ResU.Valid sρ := hash_valid_comp hH3 hsρ
   -- 6.112 pulls `ℓ ↦ v ⋆ P̂(v)` inside the `⋔`
@@ -147,7 +147,7 @@ theorem wpTS_I_frameX (l : BoCa.Loc) (T : VTy) (δ : LSub) (hadm : AdmWf T δ) (
   have hwpBI := hwand ls' hadd hrec ρi BI hcell hBI
   obtain ⟨ρ', ρp, fρ', fρ'p, π, v', μ, μ', ps'', ls'',
     h1, h2, h3, h5, h6, h7, h8, h9, h10, h11, hT'', htg'', hps'', hls'', h12⟩ :=
-    hwpBI ρf fρ (p :: ps) hH17 h4 hTin htgin
+    hwpBI ρf fρ (p :: ps) hH17 h4 hTin htgin alc kc
   -- H24 and H25
   obtain ⟨hwand', houtρ'⟩ := h12
   -- H27
@@ -353,7 +353,7 @@ theorem wpTS_M_frameX (l : BoCa.Loc) (T : VTy) (δ : LSub) (β : Life)
             box α (all fun w => ptoOwn l w ─⋆ (vC true T ls'' δ w ─⋆ Q ls'' v')))))
       (wpTS ls e Q) := by
   classical
-  intro ρ hH2 ρf sρ ps hH3 hsρ hT htg
+  intro ρ hH2 ρf sρ ps hH3 hsρ hT htg alc kc
   have hvsρ : ResU.Valid sρ := hash_valid_comp hH3 hsρ
   -- 6.112 pulls `ℓ ↦ v ⋆ P̂(v)` inside the `⋔`
   obtain ⟨γ, hγ⟩ := fresh_frame (ptoOwn l v ⋆ vC true T ls δ v) _ ρ
@@ -417,7 +417,7 @@ theorem wpTS_M_frameX (l : BoCa.Loc) (T : VTy) (δ : LSub) (β : Life)
   have hwpBM := hwand ρm BM hcellm hBM
   obtain ⟨ρ', ρp, fρ', fρ'p, π, v', μ, μ', ps'', ls'',
     h1, h2, h3, h5, h6, h7, h8, h9, h10, h11, hT'', htg'', hps'', hls'', h12⟩ :=
-    hwpBM ρf fρ ps hH17 h4 hTin htgin
+    hwpBM ρf fρ ps hH17 h4 hTin htgin alc kc
   -- H24 and H25: unfolding `[α]`
   obtain ⟨hwand', houtρ'⟩ := h12
   -- H26: 6.27 -- the borrow is still at the top level of `ρ′ ● ρ⁺`
@@ -557,7 +557,7 @@ theorem wpTS_M_antiFrameX (l : BoCa.Loc) (α : Life) (T : VTy) (δ : LSub) (e : 
               (ptoMutS l α ls'' (fun ls₀ => vC true T ls₀ δ) ─⋆ Q ls'' v')))))
       (wpTS ls e Q) := by
   classical
-  intro ρ hH1 ρf sρ ps hH2 hsρ hT htg
+  intro ρ hH1 ρf sρ ps hH2 hsρ hT htg alc kc
   have hvsρ : ResU.Valid sρ := hash_valid_comp hH2 hsρ
   obtain ⟨ρm, ρa, hsplit, hM, hA⟩ := hH1
   obtain ⟨β, v, σP, hstr, Qs, hwit, ls₀, hαβ, hρm, hofS, hls₀, hunif⟩ := hM
@@ -601,7 +601,7 @@ theorem wpTS_M_antiFrameX (l : BoCa.Loc) (α : Life) (T : VTy) (δ : LSub) (e : 
       ha) htg
   obtain ⟨ρ', ρp, fρ', fρ'p, π, v', μ, μ', ps'', ls'',
     h1, h2, h3, h5, h6, h7, h8, h9, h10, h11, hT'', htg'', hps'', hls'', h12⟩ :=
-    hwpX ρf fρ ps hfX h4 hTin htgin
+    hwpX ρf fρ ps hfX h4 hTin htgin alc kc
   obtain ⟨v'', ρl'', rest, hcr, hl'', hrest⟩ := h12
   subst hl''
   obtain ⟨ρPv'', ρb, hcr2, hPv'', hb⟩ := hrest

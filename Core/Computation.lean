@@ -17,7 +17,7 @@ namespace BoCa.Fig16.LogRel.Core
 open BoCa
 open BoCa.Fig16
 open BoCa.Fig16.BoLo
-open BoCa.BoLo (Heap Steps Step1 Head Kont eLoad eStore)
+open BoCa.BoLo (Heap Steps Step1 Head Kont eLoad eStore Alloc ARun Step1N)
 open BoCa.Lifetime (LSub LifeCtx LifeVar)
 
 /-! ### Stacks -/
@@ -167,17 +167,17 @@ theorem vC_same {b : Bool} {A : VTy} {ls ls' : List SRec} {δ : LSub} {v : Val} 
 
 /-- One pure step, in any evaluation context, in front of a `wpTS` (`wpTS_head`, with the step
 taken by `Step1`). -/
-theorem wpTS_step {e e' : Expr} (h : ∀ μ : Heap, Step1 μ e μ e') (ls : List SRec)
+theorem wpTS_step {e e' : Expr} (h : ∀ μ : Heap, Step1N μ e μ e') (ls : List SRec)
     (Q : List SRec → Val → WProp) : Entails (wpTS ls e' Q) (wpTS ls e Q) := by
-  intro ρ hw ρf fρ ps hf hc hT htg
-  obtain ⟨ρ', ρp, fρ', fρ'p, π, v, μ, μ', ps', ls', h₁, h₂, h₃, h₅, h₆, h₇, h₈, h₉, hA, hB,
-    hT', htg', hps, hls, hC⟩ := hw ρf fρ ps hf hc hT htg
+  intro ρ hw ρf fρ ps hf hc hT htg A k
+  obtain ⟨ρ', ρp, fρ', fρ'p, π, v, μ, μ', ps', ls', h₁, h₂, h₃, h₅, h₆, h₇, ⟨j, h₈⟩, h₉, hA, hB,
+    hT', htg', hps, hls, hC⟩ := hw ρf fρ ps hf hc hT htg A k
   exact ⟨ρ', ρp, fρ', fρ'p, π, v, μ, μ', ps', ls', h₁, h₂, h₃, h₅, h₆, h₇,
-    .more (h μ) h₈, h₉, hA, hB, hT', htg', hps, hls, hC⟩
+    ⟨j, ARun.cons (h μ) h₈⟩, h₉, hA, hB, hT', htg', hps, hls, hC⟩
 
 /-- One unfolding of an observation tree is closed under a pure step in front. -/
 theorem cB_step (η : Option (Nat → TEnt)) : ∀ (C : CTy) {e e' : Expr},
-    (∀ μ : Heap, Step1 μ e μ e') → ∀ (ls : List SRec) (δ : LSub),
+    (∀ μ : Heap, Step1N μ e μ e') → ∀ (ls : List SRec) (δ : LSub),
       Entails (cB η C ls δ e') (cB η C ls δ e)
   | .ret _, _, _, h, ls, _ => wpTS_step h ls _
   | .amp C D, _, _, h, ls, δ => fun _ ⟨h₁, h₂⟩ =>
@@ -187,7 +187,7 @@ theorem cB_step (η : Option (Nat → TEnt)) : ∀ (C : CTy) {e e' : Expr},
   | .nu _, _, _, _, _, _ => fun _ _ => trivial
 
 /-- `𝒞⟦C⟧` is closed under a pure step in front. -/
-theorem cC_step : ∀ (C : CTy) {e e' : Expr}, (∀ μ : Heap, Step1 μ e μ e') →
+theorem cC_step : ∀ (C : CTy) {e e' : Expr}, (∀ μ : Heap, Step1N μ e μ e') →
     ∀ (ls : List SRec) (δ : LSub), Entails (cC C ls δ e') (cC C ls δ e)
   | .ret _, _, _, h, ls, _ => wpTS_step h ls _
   | .arr _ C, _, _, h, ls, δ => fun _ h' v ρ₁ ρ₂ hv hc =>
@@ -203,9 +203,9 @@ theorem cC_step : ∀ (C : CTy) {e e' : Expr}, (∀ μ : Heap, Step1 μ e μ e')
       ((cC_nu_unfold hC ls δ _ ρ).mpr (cB_step _ C h ls δ ρ ((cC_nu_unfold hC ls δ _ ρ).mp h'))) hC
 
 /-- One head step in front of `𝒞⟦C⟧`. -/
-theorem cC_head (C : CTy) {e e' : Expr} (h : ∀ μ : Heap, Head μ e μ e')
+theorem cC_head (C : CTy) {e e' : Expr} (h : ∀ μ : Heap, Head μ e μ e') (hn : e.allocs = false)
     (ls : List SRec) (δ : LSub) : Entails (cC C ls δ e') (cC C ls δ e) :=
-  cC_step C (fun μ => Step1.head (h μ)) ls δ
+  cC_step C (fun μ => Step1N.head (h μ) hn) ls δ
 
 /-- Bind at one unfolding of an observation tree. -/
 theorem cB_bind (η : Option (Nat → TEnt)) : ∀ (C : CTy) (K : Kont) (M : Expr) (ls : List SRec)

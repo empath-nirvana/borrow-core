@@ -161,7 +161,7 @@ theorem arrGet_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {A : VT
   intro ls' _ v σ τ hv hcomp
   rw [eq_of_compS_empty_left hcomp]
   obtain ⟨ℓ, n, i, rfl, hs⟩ := vP_fam_idx hv
-  refine wpTS_head (fun μ => Head.idx μ ℓ n i) ls' _ σ ?_
+  refine wpTS_head (fun μ => Head.idx μ ℓ n i) rfl ls' _ σ ?_
   rcases idxAns_cases ℓ n i with ⟨hi, he⟩ | he
   · rw [he]
     obtain ⟨ρi, ρr, hc, hPi, -⟩ := sepRange_pick hi hs
@@ -372,7 +372,7 @@ theorem arrReplace_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {A : VTy}
   refine wpTS_tensor ls' (Val.i32 i) x _ _ _ ?_
   rw [replace_body₃]
   refine wpTS_bind (.case .hole _ _) _ ls' _ σ ?_
-  refine wpTS_head (fun μ => Head.idx μ ℓ n i) ls' _ σ ?_
+  refine wpTS_head (fun μ => Head.idx μ ℓ n i) rfl ls' _ σ ?_
   refine wpTS_val ls' (idxAns ℓ n i) _ σ ?_
   simp only [Kont.plug]
   rcases idxAns_cases ℓ n i with ⟨hi, he⟩ | he

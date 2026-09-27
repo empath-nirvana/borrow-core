@@ -185,7 +185,7 @@ theorem mapV_tensor_steps (A B : VTy) (wr v₁ v₂ : Val) :
         (.app (.app (.val (mapV B)) (.val wr)) (.val v₂))) := by
   refine (PureSteps.beta_in (.appL .hole _) _ wr).trans ?_
   refine (PureSteps.beta _ _).trans ?_
-  refine (PureSteps.head (fun μ => Head.letpair μ v₁ v₂ _)).trans ?_
+  refine (PureSteps.head (fun μ => Head.letpair μ v₁ v₂ _) rfl).trans ?_
   simp [closed_subst (mapV_closed A), closed_subst (mapV_closed B), subst_shift_succ]
   exact .refl
 
@@ -194,7 +194,7 @@ theorem mapV_sum₁_steps (A B : VTy) (wr v : Val) :
       (.inj₁ (.app (.app (.val (mapV A)) (.val wr)) (.val v))) := by
   refine (PureSteps.beta_in (.appL .hole _) _ wr).trans ?_
   refine (PureSteps.beta _ _).trans ?_
-  refine (PureSteps.head (fun μ => Head.case₁ μ v _ _)).trans ?_
+  refine (PureSteps.head (fun μ => Head.case₁ μ v _ _) rfl).trans ?_
   simp [closed_subst (mapV_closed A), subst_shift_succ]
   exact .refl
 
@@ -203,7 +203,7 @@ theorem mapV_sum₂_steps (A B : VTy) (wr v : Val) :
       (.inj₂ (.app (.app (.val (mapV B)) (.val wr)) (.val v))) := by
   refine (PureSteps.beta_in (.appL .hole _) _ wr).trans ?_
   refine (PureSteps.beta _ _).trans ?_
-  refine (PureSteps.head (fun μ => Head.case₂ μ v _ _)).trans ?_
+  refine (PureSteps.head (fun μ => Head.case₂ μ v _ _) rfl).trans ?_
   simp [closed_subst (mapV_closed B), subst_shift_succ]
   exact .refl
 
@@ -236,7 +236,7 @@ theorem nodeV_amp₁_steps (C D : CTy) (wr c : Val) :
   refine (PureSteps.beta_in (.appL (.appL .hole _) _) _ wr).trans ?_
   refine (PureSteps.beta_in (.appL .hole _) _ _).trans ?_
   refine (PureSteps.beta _ _).trans ?_
-  refine (PureSteps.head (fun μ => Head.case₁ μ _ _ _)).trans ?_
+  refine (PureSteps.head (fun μ => Head.case₁ μ _ _ _) rfl).trans ?_
   simp [childV, closed_subst (nodeV_closed C), subst_shift_succ]
   exact .refl
 
@@ -247,7 +247,7 @@ theorem nodeV_amp₂_steps (C D : CTy) (wr c : Val) :
   refine (PureSteps.beta_in (.appL (.appL .hole _) _) _ wr).trans ?_
   refine (PureSteps.beta_in (.appL .hole _) _ _).trans ?_
   refine (PureSteps.beta _ _).trans ?_
-  refine (PureSteps.head (fun μ => Head.case₂ μ _ _ _)).trans ?_
+  refine (PureSteps.head (fun μ => Head.case₂ μ _ _ _) rfl).trans ?_
   simp [childV, closed_subst (nodeV_closed D), subst_shift_succ]
   exact .refl
 
@@ -397,7 +397,7 @@ theorem unfold_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {C : CTy} (hC : C.NuOk) (S 
   refine wpTS_val _ _ _ _ ⟨rfl, ?_⟩
   intro ls₂ _ s ρ₂ τ hs hc
   rw [eq_of_compS_empty_left hc]
-  refine cC_head (.nu C) (fun μ => Head.beta μ _ s) ls₂ δ ρ₂ ?_
+  refine cC_head (.nu C) (fun μ => Head.beta μ _ s) rfl ls₂ δ ρ₂ ?_
   rw [hN_subst]
   exact fun _ => nuRel_coind (candN_post hC hg) ls₂ _ ρ₂ ⟨s, rfl, hs⟩
 

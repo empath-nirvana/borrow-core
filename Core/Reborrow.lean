@@ -234,7 +234,7 @@ theorem wpTS_reborrow (ls : List SRec) (l : BoCa.Loc) (α : Life) (R : Val → W
       (ptoImm l α (fun v σ => R v σ ∧ fresh (fun b => reborrow b (P₀ b v)) σ) ⋆
         (fresh fun b => all fun v => P b v ─⋆ wpTS ls e (fun ls' v' => box b (Q ls' v'))))
       (wpTS ls e Q) := by
-  rintro ρ ⟨ρi, ρb, hc, hpi, hpb⟩ ρf fρ ps hf hcf hT htg
+  rintro ρ ⟨ρi, ρb, hc, hpi, hpb⟩ ρf fρ ps hf hcf hT htg alc kc
   -- H4 unfolded: `ρᵢ = ℓ ↦ imm(ᾱ, v′, ρ′)`, H7 and H8.
   obtain ⟨s, v', σ, hs, hρi, ⟨hRv, hP7⟩, hα⟩ := hpi
   subst hρi
@@ -289,7 +289,7 @@ theorem wpTS_reborrow (ls : List SRec) (l : BoCa.Loc) (α : Life) (R : Val → W
   -- H21: by the definition of `─⋆`.
   have h21 : wpTS ls e (fun ls' v'' => box β (Q ls' v'')) ρbχ := hwand χ ρbχ hPχ hbχ
   obtain ⟨ρQ, ρp, fρ', fρ'p, π, v, μ, μ', ps', ls', g1, g2, g3, g5, g6, g7, g8, g9, gA, gB,
-    gT, gtg, gps, gls, gC⟩ := h21 ρF Win ps hFbχ hWin hTin htgin
+    gT, gtg, gps, gls, gC⟩ := h21 ρF Win ps hFbχ hWin hTin htgin alc kc
   have g4 : ResU.CompS ρF ρbχ Win := hWin
   -- H28 and H29, by unfolding `[β]` in H27.
   obtain ⟨h28, h29⟩ := gC

@@ -87,8 +87,8 @@ positions of a family, and every lemma proved by induction on types or positions
 case (6.131 `reborrow_vShape`, 6.60 `vC_outlives`, the images and invariants of reborrowing).
 
 The machine's steps `tab`, `idx`, `drop` (`Paper/S3_Dynamics/Definitions.lean`,
-`Support/Dynamics/Arrays.lean`) are put in front of `wpTS` by `wpTS_tab` (`n` of `TW.alloc` at a
-fresh run, `alloc_block`), `wpTS_idx` and `wpTS_dropStep` (`ArrayWp.lean`). The constants and
+`Support/Dynamics/Arrays.lean`) are put in front of `wpTS` by `wpTS_tab` (`n` of `TW.alloc` at the
+allocator's block, `alloc_block`), `wpTS_idx` and `wpTS_dropStep` (`ArrayWp.lean`). The constants and
 their compatibility lemmas are `Arrays.lean`: `array_new` (`tabFill_wp`), `array_free`
 (`dropFill_wp`), `array_size`, `array_replace`, and on families `array_len`, `array_get`,
 `array_copy`, `array_forget`. `HasDtor` has `Array A` and `ArrayImm @a A` (`Dtor.lean`).
@@ -100,6 +100,16 @@ their compatibility lemmas are `Arrays.lean`: `array_new` (`tabFill_wp`), `array
   over every constructor.
 - **Adequacy.** `adequacyC` (with `theorem32` and `corollary33`): a closed computation of `F 1`
   runs to `()` and leaves memory empty.
+- **Every run** (`SPEC.md` §13, `Alloc.lean`, `Demonic.lean`). `wpTS`'s run is an allocator run
+  (`ARun`) under every allocator (`Alloc`: at the `k`-th allocation from memory `μ`, a free
+  block at `pick k μ n`). Every run of the machine is an allocator run of the allocator that
+  replays it (`steps_replay`), and allocator runs are deterministic (`AStep1.deterministic`), so
+  `wpTS` implies the demonic `wpTSD` (`wpTS_demonic`): every run continues to a value run that
+  lands in the postcondition. `fundamentalD` is the Fundamental Property at `wpTSD`;
+  `adequacyD`: every run of a closed `F 1` program from empty memory continues to `()` at empty
+  memory, so none is stuck (`adequacyD_safe`) and a value run ends at `()` with nothing
+  allocated (`adequacyD_val`). `mapProgC_every_run` is the `withswap` window under a reusing
+  allocator. The previous run conjunct is `wpTSAngelic` (`wpTS_angelic`).
 - **Embedding.** `embed : DerivesWf Δ Γ e T → CDerives Δ (cbvCtx Γ) e (.val (cbv T))` for every
   `DerivesWf` rule, and `adequacy_of_derivesWf`. `EmbeddingExamples.lean` runs BoLo's baseline
   programs through it.
@@ -121,9 +131,12 @@ with no new case.
 
 These facts are stated at the typed world:
 
-- `wpTS_allocS`: a block is allocated at consecutive locations.
+- `wpTSAngelic_allocS`: on some run, a block is allocated at consecutive locations. `allocS` is a
+  sequence of `alloc`s, so under an allocator that does not place them consecutively the leaves
+  are not one block (`SPEC.md` §13).
 - `withborS_ret`: a block borrow returns the handle it was given, on every run.
-- `withborS_packed` and `wpTS_allocBorrow`: after the borrow, the handle is packed again at the
+- `withborS_packed` (every run) and `wpTSAngelic_allocBorrow` (some run): after the borrow, the
+  handle is packed again at the
   same block.
 
 ### Programs
@@ -156,7 +169,7 @@ The `IntPrograms.lean` runs are theorems at every host; the interpreter's result
 | `Relaxed` | `FrameLife.2` non-strict (`FrameRecords.lean`); `StratumLe` and `TW.reb`'s premise (`World.lean`); `frameLife_reb_like` (`Wp.lean`); the `lt_of_lt_of_le`/`lt_irrefl` steps (`Wp.lean`, `RelationFacts.lean`); `tagged_reb`/`rebChooseTW_top` (`Reborrow.lean`) |
 | `Records` | `Records.lean`, `Splits.lean`, `RecordPrograms.lean`, re-derived in `CDerives` at `VTy` in the binary-tree encoding |
 | `Places` | `Family.lean`, `FamilyPrograms.lean`, re-derived in `CDerives` at `VTy` payloads |
-| `LeafPlaces` | `Steps.lean` (step inversions; `DelayNaive.lean` uses it too), `Weaken.lean`, `BlockBorrow.lean` (plain types, `famTy`, `shortenE`, `withborS`, typing), `BlockTrack.lean` (`withborS_ret`, `withborS_packed`, `wpTS_allocBorrow`), `BlockPrograms.lean` |
+| `LeafPlaces` | `Steps.lean` (step inversions; `DelayNaive.lean` uses it too), `Weaken.lean`, `BlockBorrow.lean` (plain types, `famTy`, `shortenE`, `withborS`, typing), `BlockTrack.lean` (`withborS_ret`, `withborS_packed`, `wpTSAngelic_allocBorrow`), `BlockPrograms.lean` |
 | `Recursion` (`Nu.lean`) | `StreamPrograms.lean`; the stream former it gave became an instance of the general `νX. C` (`NuRel.lean`, `Nu.lean`) |
 
 ## Decisions taken
