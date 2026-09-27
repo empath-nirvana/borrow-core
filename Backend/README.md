@@ -7,6 +7,7 @@
     lake exe bcc compile <file> -o <out.wat>   compile to WAT
     lake exe bcc run <file>                    compile, run under `wasmtime -W tail-call=y`
     lake exe bcc interp [--stage S] <file>     interpret stage S: source (default), clos, flat
+    lake exe bcc trusted <file>                the program's externs: contracts, host code, levels
     scripts/compile-corpus.sh                  the corpus, compiled against the interpreter
 
 Every stage prints the same report: `main`'s value, then `live N`, the number of objects live
@@ -111,7 +112,8 @@ The flat-IR interpreter implements exactly this (and never reuses an address, so
 load, store or free outside a live range). The WAT implementation keeps one free list per size
 below 1024 words and bumps a heap pointer otherwise, growing memory as needed; each range is
 preceded by a word holding its size, and the runtime's own data sits below address 16384.
-`live` is exported as `live_objects`; `$putc` writes a byte to standard output.
+`live` is exported as `live_objects`; `$putc` writes a byte to standard output, `$putfd` a byte to a
+descriptor and `$getc` reads one (SPEC §11).
 
 ## Host operations (SPEC §8)
 
@@ -122,7 +124,37 @@ or `INT_MIN / -1` for `div_s`, produces `inr ()`, anything else `inl n`. The fla
 evaluates the instructions with `wasmHost`, so the flat IR and the source agree on arithmetic by
 construction; Wasm agreeing with `wasmHost` is tested, not proved (SPEC §8).
 
+## Standard I/O (SPEC §11)
+
+A `main` may declare the standard externs (`Frontend/Check/Externs.lean`): the capabilities
+`stdin`, `stdout`, `stderr` (`ref input`, `ref output`) and the operations `read_byte`,
+`write_byte`. Its type is then `F (Caps ⊗ A)`, handing the capabilities back after `A`.
+
+- **Compiled stages.** `Clos.convertMain` binds each extern before `main` runs: a capability to a
+  fresh cell holding its file descriptor (`i32[0]`, `[1]`, `[2]`), an operation to the closure
+  `Λ. λm. op m` over the closure-IR primitive `io readByte`/`io writeByte`. An extern `main` does
+  not use is dropped. After `main`, its result `(caps, a)` is taken apart, each capability cell
+  freed, and `a` is the program's value. In the flat IR the operations are the runtime functions
+  `read_byte` and `write_byte` over the statements `getc fd` and `putc fd b`; in Wasm those are
+  `$getc` and `$putfd`, WASI `fd_read` and `fd_write` of one byte. They are unbuffered, so a
+  prompt is out before the next read. The plain LLVM/libc counterpart is `read(2)`/`write(2)`
+  on the same descriptors; nothing WASI-specific is part of the semantics.
+- **The source stage** runs the model: the checker's `run_io` wrapper, with every extern given
+  its Lean model (`IORun`), applied to standard input as a byte list, from the empty memory. Its
+  value holds the bytes written to each stream; the stage writes them, then the report of
+  `main`'s result. This is the term `IORun.every_run` (`io_every_run`) is about. It reads all of
+  standard input before it runs.
+- **The interpreters** `clos` and `flat` read a scripted standard input and collect the two
+  output streams; the flat IR's checks (every read and write inside a live range) cover the I/O
+  runtime functions too. That is the host implementations' assurance: interpreter-checked (2),
+  and agreement with the model on the corpus.
+
+Every stage writes the program's standard output, then the report, to standard output, and the
+program's standard error to standard error. `scripts/compile-corpus.sh` compares both with a
+program's golden `corpus/<name>.out` and `.err`, on `corpus/<name>.in`.
+
 ## Scope
 
-No optimizations, no type-directed layout, no externs (`main` must be closed), no stack
-switching. Recursion (the folds' fixed points) is non-tail and uses the Wasm stack.
+No optimizations, no type-directed layout, no stack switching. The only externs compiled are
+the standard I/O ones; the model's harness (`mk_input`, …) is not compiled. Recursion (the
+folds' fixed points) is non-tail and uses the Wasm stack.

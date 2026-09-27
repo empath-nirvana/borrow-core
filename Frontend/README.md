@@ -116,6 +116,7 @@ judgment, for the derived forms of syntax-core §9), so what the checker returns
 | `Check/Checker.lean` | the bidirectional checker, `synV`/`chkV`/`synC`/`chkC` |
 | `Check/Program.lean` | declarations, `main`, and the soundness theorems |
 | `Check/CrossCheck.lean` | erasures compared with `Core/`'s hand-written terms, by kernel evaluation |
+| `Check/Externs.lean` | the standard externs with their roles, models and assurance levels; the `run_io` wrapper; `IORun` (SPEC §11) |
 
 ### Soundness
 
@@ -207,6 +208,16 @@ of the search; none is a change to `CDerives`.
 9. **Externs are not owed.** `main` must consume every non-persistent extern, with or without a
    destructor.
 
+### Standard I/O (SPEC §11)
+
+`input` and `output` are the opaque types `VTy.opq`. `checkExterns` matches a program's externs
+with the table of standard externs by name and type. A `main` with capabilities must have type
+`F (Caps ⊗ A)`. `ioWrapper` prints `run_io` as source (the harness's externs and a `main` that
+makes the capabilities, runs `main`'s body with them bound to their names and takes them back),
+parses it and checks it; `ioRunOf` gives every extern of the wrapper its model by type
+(`modelsOf`), with the proof `io_every_run` asks for. `IORun.every_run` is that theorem at the
+checked wrapper.
+
 The deciders for `VFree`, `Cl`, `NoMut`, `CTy.NuOk`, `VScoped`, `FShape.WF`/`Guarded`, `plainV`,
 `Shape.plain`, `Δ.Ok`, `Δ.find? x = none`, `C.isRet`, `FamSide.hinst` and foldImm's
 `∀ Δ' a, VOutlives Δ' a R` (`outlivesAllB`, §12 item 2) are complete.
@@ -217,6 +228,9 @@ The deciders for `VFree`, `Cl`, `NoMut`, `CTy.NuOk`, `VScoped`, `FShape.WF`/`Gua
    `U (nu X. C)` occurs in it (`CTy.nuThunks`); for example `F (A + U (delay A)) & F 1`.
 2. `unbang V` checked against `A` checks `V` against `!A`.
 3. `Fun` checked against a `forall` type takes the type's binder number (item 2 above).
-4. `main`'s context is every `extern` of the file, in declaration order.
+4. `main`'s context is every `extern` of the file, in declaration order. A `def` sees the
+   persistent externs declared before it (SPEC §11): at its declaration it is checked at them,
+   and at a use it sees `main`'s slots of them and nothing else of the use site. A capability
+   is not persistent, so no `def` sees one.
 5. Messages print lifetime variables by their source names where they are in scope, and as
    `'lN` (the `LifeVar` number `N`) otherwise.

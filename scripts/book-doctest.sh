@@ -4,7 +4,9 @@
 #
 #   ```bc          must check, and `main` must print the value on its `-- answer:` line and then
 #                  `live 0`, under the interpreter (`bcc interp`) and compiled (`bcc run`, when
-#                  wasmtime is on PATH)
+#                  wasmtime is on PATH). A program with standard I/O (SPEC §11) reads its
+#                  `-- stdin:` lines, each followed by a newline, as standard input, and must
+#                  write its `-- output:` lines, each followed by a newline, before the value.
 #   ```bc,check    must check (a library, or a `main` whose value is not printed)
 #   ```bc,reject   must parse and be rejected by the checker with the message on its `-- expect:`
 #                  line (`line:col: message`, the line counted from the block's first line)
@@ -51,13 +53,17 @@ while IFS=$'\t' read -r n attrs md line; do
       want=$(sed -n 's/^-- answer: //p' "$f" | head -1)
       if [ -z "$want" ]; then fail "$at" "a \`bc\` block needs an \`-- answer:\` line (or mark it \`bc,check\`)"; continue; fi
       if ! out=$("$bcc" check "$f" 2>&1); then fail "$at" "rejected, but must check" "${out#"$f:"}"; continue; fi
-      expect=$(printf '%s\nlive 0' "$want")
-      got=$("$bcc" interp "$f" 2>&1) || true
+      in="$tmp/$n.in"; : > "$in"
+      sed -n 's/^-- stdin: \{0,1\}//p' "$f" | while IFS= read -r l; do printf '%s\n' "$l"; done > "$in"
+      outl=$(sed -n 's/^-- output: \{0,1\}//p' "$f" | while IFS= read -r l; do printf '%s\n' "$l"; done)
+      if [ -n "$outl" ]; then expect=$(printf '%s\n%s\nlive 0' "$outl" "$want")
+      else expect=$(printf '%s\nlive 0' "$want"); fi
+      got=$("$bcc" interp "$f" < "$in" 2>&1) || true
       if [ "$got" != "$expect" ]; then
         fail "$at" "interpreter output differs" "want: $(echo "$expect" | tr '\n' ' ')" "got:  $(echo "$got" | tr '\n' ' ')"; continue
       fi
       if [ "$wasm" = 1 ]; then
-        got=$("$bcc" run "$f" 2>&1) || true
+        got=$("$bcc" run "$f" < "$in" 2>&1) || true
         if [ "$got" != "$expect" ]; then
           fail "$at" "compiled output differs" "want: $(echo "$expect" | tr '\n' ' ')" "got:  $(echo "$got" | tr '\n' ' ')"; continue
         fi

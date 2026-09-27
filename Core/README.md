@@ -19,12 +19,16 @@ axioms among `[propext, Classical.choice, Quot.sound]` (`scripts/CheckAxioms.lea
 ### Types
 
     A ::= 1 | A ⊗ A | 0 | A ⊕ A | U C | Ref A | Imm @a A | Mut @a A | [@a] A | !A | Unk | X | μX. A
-        | I32 | I64 | [A]
+        | I32 | I64 | [A] | Input | Output
     C ::= F A | A ⊸ C | C & C | ⊤ | ∀'a ⊏ @b. C | νX. C
 
 `I32` and `I64` are one constructor, `VTy.int w` (`Integers.lean`, `[spec §8]`). The relation
 holds a literal of the width at `∅`, so they are persistent, `Imm̲ 'b I = I`, and they outlive
 every lifetime.
+
+`Input` and `Output` are one constructor, `VTy.opq k` (`Opaque.lean`, `[spec §11]`): a leaf with
+no rule, whose relation is the model `k.Holds` in both modes (a byte list; a descriptor and the
+bytes written), with `Imm̲ = Unk`, not persistent and with no destructor.
 
 `νX. C` (`[spec §7]`) has `U X` as the type variable `0` of `C`'s value types, and at a positive
 `C` (`CTy.NuOk`) is interpreted as a greatest fixed point equal to its unrolling (`NuRel.lean`,
@@ -93,6 +97,20 @@ their compatibility lemmas are `Arrays.lean`: `array_new` (`tabFill_wp`), `array
 (`dropFill_wp`), `array_size`, `array_replace`, and on families `array_len`, `array_get`,
 `array_copy`, `array_forget`. `HasDtor` has `Array A` and `ArrayImm @a A` (`Dtor.lean`).
 `ArrayPrograms.lean` runs one program by adequacy and by the interpreter.
+
+### Standard I/O  `[spec §11]`
+
+`Stdio.lean`. The capabilities and their operations are externs, hypotheses of the end-to-end
+theorem. `Bytes = μX. 1 ⊕ (I32 ⊗ X)` and `I32 ⊗ Bytes` are the representations of `Input` and
+`Output`, and the relation at each is the opaque type's (`vC_bytes`, `vC_outRep`). The model of
+`read_byte`, `write_byte` and the harness `mk_input`, `mk_output`, `take_input`, `take_output`
+is core terms at the representation, typed in `CDerives` (`d_readByte`, …), so each meets its
+extern's contract (`readByte_meets`, …, by `meets_of_derives` and the transparency). End to end:
+`externs_every_run`/`externs_safe` (every implementation meeting the contracts, `ExternsMeet`)
+and `io_every_run` (the model, `stdModel`) run a checked `run_io : Bytes ⊸ F R` from the empty
+memory under every allocator to a value at the empty memory; `externs_main_safe` is
+`fundamentalD` at `main`; `wpTSD_frame_own` keeps a frame's cell as it was (no capability, no
+effect).
 
 ### Theorems
 

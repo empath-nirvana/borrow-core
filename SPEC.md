@@ -652,8 +652,11 @@ and hand it back:
 | `write_byte` | `!(all 'a < top. mut 'a output * i32 => mut 'a output)` — the low 8 bits of the integer |
 
 So a function's type shows which capabilities it can use: a helper that writes takes
-`mut 'a output`, one that reads takes `mut 'a input`, and one that takes neither performs no
-I/O. `stdout` and `stderr` share the type `Output`: a writer is given an output stream, and
+`mut 'a output` (or the cell, `ref output`), one that reads takes `mut 'a input`, and one that
+takes neither performs no I/O. A `def` may use the persistent externs declared before it (the
+operations, which carry no authority), but never a capability: a capability is not persistent,
+so it is visible only in `main`, and a helper that does I/O takes it as an argument. The `def`
+is re-checked at each use, where the extern is `main`'s slot, as for any `def`. `stdout` and `stderr` share the type `Output`: a writer is given an output stream, and
 which one is its caller's choice. The bundle is split and lent with the existing machinery
 (§5): `main` destructures it, borrows one capability with `withbor2` and passes `mut 'a output`
 to a helper, or passes the whole cell.
@@ -668,7 +671,11 @@ these two cannot express it.
 **`main`.** A program with capability externs has `main : F (Caps ⊗ A)`, where `Caps` is its
 capability externs in declaration order (one alone, several as a right-nested tuple). The
 capabilities have no destructor (§12), so `main` hands them back; the runtime then ends the
-streams. `A` is the program's result.
+streams. `A` is the program's result; `bcc interp` prints it, so it is persistent.
+
+**Loops.** Recursion is structured (decision 24), so a loop over the input is a step function
+iterated a bounded number of times (the corpus composes `twice` with itself), and a step after
+the end of the input does nothing. The bound is part of the program.
 
 ### The model
 
@@ -700,15 +707,19 @@ operation externs; `bcc interp` runs it with the model implementations.
   `mkOutput_meets`, `takeInput_meets`, `takeOutput_meets`. Each is the Fundamental Property of the
   term at the transparent type, and the transparency of the relation at `Input`/`Output`
   (`vC_bytes`, `vC_outRep`: the relation at the representation is the model).
-- **End to end, every implementation** (`externs_every_run`). If `run_io`'s externs are all
-  persistent and `γ` implements each at `∅` (the named hypothesis), then for every input byte list,
-  every run of `run_io[γ] inp` from the empty memory, under every allocator, can be continued to
-  a value at the empty memory, and no run is stuck. It is `adequacyD`'s form (`theorem32D`).
+- **End to end, every implementation** (`externs_every_run`, `externs_safe`). If `run_io`'s
+  result `R` is persistent and `γ` implements each of its externs at `∅` (the named hypothesis
+  `ExternsMeet`), then for every input byte list, every run of `run_io[γ] inp` from the empty
+  memory, under every allocator, can be continued to a value of `R` at the empty memory, and no
+  run is stuck. It is `adequacyD`'s form (`theorem32D`).
 - **End to end, the model** (`io_every_run`): the same at the model implementations, with the
   outputs byte lists.
-- **Every run of `main`** (`checked_every_run`): at any extern context, from every configuration
-  whose resource satisfies the contracts, no run of `main` is stuck and every value run lands in
-  `main`'s type. This is `fundamentalD` at `main`.
+- **Every run of `main`** (`externs_main_safe`): at any extern context, from every
+  configuration whose resource satisfies the contracts, no run of `main` is stuck. This is
+  `fundamentalD` at `main`.
+- **The run `bcc interp` performs** (`IORun.every_run`, `Frontend/Check/Externs.lean`): the
+  checked `run_io` with the model of each extern, chosen by type, carries the proofs
+  `io_every_run` takes, and `bcc interp` runs exactly `run_io[γ] inp`.
 - **No capability, no effect** (`wpTSD_frame_own`). A cell owned by the frame of a computation
   holds the same value at the end of every value run of it. A computation's resource is what its
   context and captures hold, so a function given neither the `stdout` cell nor a borrow of it,
@@ -962,8 +973,9 @@ typed world, the model and the end-to-end theorems in `Core/Stdio.lean`, the che
   `Input`/`Output` (`VTy.opq`), with a model and `Imm̲ = Unk`; the capabilities `stdin`,
   `stdout`, `stderr` as cells, `read_byte`/`write_byte` on `Mut` borrows of them; the model
   harness `mk_input`, `mk_output`, `take_input`, `take_output`; `run_io`; the model meets the
-  contracts, `externs_every_run`/`io_every_run` in `adequacyD`'s form, `checked_every_run`, and
-  `wpTSD_frame_own` (no capability, no effect); assurance levels and `bcc trusted`.
+  contracts, `externs_every_run`/`io_every_run` in `adequacyD`'s form, `externs_main_safe`, and
+  `wpTSD_frame_own` (no capability, no effect); a `def` may use the persistent externs declared
+  before it; assurance levels and `bcc trusted`.
 
 - **0.9** (2026-09-27) — Entry 12 (§13): every run is safe. `wpTS`'s run is an allocator run at
   every allocator; `wpTSD` (every run continues to a value in the postcondition), `fundamentalD`

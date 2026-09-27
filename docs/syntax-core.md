@@ -86,6 +86,7 @@ lexically, innermost first, and are then discarded. Two consequences:
 <!-- ANCHOR: types -->
     value  A ::= 1 | 0 | A * A | A + A | U C | ref A | imm @ A | mut @ A | box @ A | !A | unk
                | i32 | i64                                      (VTy.int, SPEC §8)
+               | input | output                                 (VTy.opq, SPEC §11)
                | mu X. A | X | Name
                | A => A | all 'x < @. A                          (built-in abbreviations)
                | block σ | val σ | fam mut @ σ | fam imm @ σ | view @ A
@@ -501,7 +502,11 @@ keyword because each mode is a separate theorem.
 - **`extern name : A`** adds a live slot of type `A` to `main`'s initial context. The last
   declared extern gets index 0. `A` must be closed (no free lifetime variables). `main` must
   consume every non-persistent extern; persistent externs (such as `!`-typed ones) may go unused.
-  Externs are never dropped implicitly (§7).
+  Externs are never dropped implicitly (§7). A `def` may use the persistent externs declared
+  before it, never a non-persistent one (SPEC §11): it is checked at them, and at each use it
+  sees `main`'s slots of them. The standard externs (`stdin`, `stdout`, `stderr`, `read_byte`,
+  `write_byte`, and the model's harness) are listed by `bcc trusted`; a program with capability
+  externs has `main : F (Caps * A)` (SPEC §11).
 - **`main : C = M`** is checked at `Δ = ∅` and `Γ =` the externs. `C` is any computation type.
 
 What a program means:
@@ -512,11 +517,12 @@ What a program means:
 | `F 1`, no externs | runs from empty memory to `()` and empty memory | `adequacyC` `Fu:342` |
 | `F A`, no externs | runs to some `v` from empty memory, given a lemma that `vC` at `A` holds no resource (such as `vC_natN`, `Core/Count.lean:60`) | `theorem32` `Fu:310`, as in `sumProg_runs` (`CL:320`) |
 | `F (U (delay A))`, `F (U (stream 1))` | driven `n` times, then closed | `drive_runs_unit`/`_nat` (`Core/DelayPrograms.lean:77,90`), `take_runs` (`Core/StreamPrograms.lean:85`) |
+| `F (Caps * A)`, standard I/O externs, `A` persistent | `run_io` with the model: every run from empty memory continues to the outputs and `A` at empty memory; with any implementation meeting the contracts, the same | `IORun.every_run`, `io_every_run`, `externs_every_run` (`Core/Stdio.lean`, SPEC §11) |
 
 Drivers such as `driveE n` (`Core/DelayPrograms.lean:37`) are Lean meta-level recursion on
 `ℕ`. The syntax has no meta-recursion, so a driver is written out to the depth wanted.
 
-A closed `main` is compiled and run by `bcc run`; `scripts/compile-corpus.sh` compares every
+A closed `main`, or one with standard I/O externs, is compiled and run by `bcc run`; `scripts/compile-corpus.sh` compares every
 corpus `main` against the interpreter (`Backend/README.md`).
 <!-- ANCHOR_END: declarations -->
 

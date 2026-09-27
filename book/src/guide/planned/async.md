@@ -13,7 +13,7 @@ Already in place:
   (see [Implicit destructors](../implicit-destructors.md)).
 - An executor's run loop is a loop over explicit state.
 
-Still to come: externs and real I/O (#7), effects as borrowed capabilities with `await` as a
+Still to come (externs and standard I/O are built: [Command-line tools](../command-line-tools.md)): effects as borrowed capabilities with `await` as a
 handler operation (#18), an executor corpus program, borrows across `await`, and wakers. Async
 lowers to stackless state machines, as Rust's `async` does ([Design decisions](../../decisions.md),
 25).

@@ -14,11 +14,12 @@
 - [Integers](guide/integers.md)
 - [Arrays](guide/arrays.md)
 - [Implicit destructors](guide/implicit-destructors.md)
+- [Command-line tools](guide/command-line-tools.md)
 - [Planned features](guide/planned/README.md)
   - [Pipelines and `for`](guide/planned/pipelines.md)
   - [Effects](guide/planned/effects.md)
   - [Async](guide/planned/async.md)
-  - [Unsafe code and externs](guide/planned/unsafe.md)
+  - [Unsafe code](guide/planned/unsafe.md)
 
 # Reference
 
