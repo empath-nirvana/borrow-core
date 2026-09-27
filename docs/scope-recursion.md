@@ -210,6 +210,10 @@ point, and the Z-combinator's unrolling is pure head steps (`cC_head`,
 
 ## 3. `νX. B`
 
+Implemented in SPEC 0.7 (§7, `Core/NuRel.lean`, `Core/Nu.lean`). `U X` is the value-type
+variable `0` of the body's observations rather than a `CTy` variable, positivity is §3.1's with
+`X` under `⊗`/`⊕` only, and coiteration is §3.3's map, over `⊗`/`⊕`.
+
 ### 3.1 Route: a direct greatest fixed point in `CTy`, not a packed `∃S`
 
 - **`∃S. S ⊗ !U(S ⊸ B{S})` as a value type** runs into the obstruction already

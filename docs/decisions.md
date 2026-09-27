@@ -91,3 +91,11 @@ Each entry: the decision, and why. Newest last.
     pointers never flow into safe code and provenance tracking is unnecessary; the set of unproved
     boundaries is the program's enumerable trusted base. A boundary can migrate — host extern,
     compiled unsafe body, proved body — without its type or callers changing.
+28. **Codata is one former, `νX. C`, and its variable is a value type.** `X` occurs only as `U X`,
+    which is the value-type variable `0` of `C`'s observations, so `ν` reuses `μ`'s substitution
+    and environment machinery and `cC` takes no environment of its own. The body is a `&` of
+    observation trees ending in `F A` with `U X` only under `⊗`/`⊕` (SPEC §7): that is where
+    coiteration can map a state to the rest, and it keeps `X` out of `Mut` payloads, where the
+    relation would not be monotone. A `ν` outside that class holds everywhere, like `⊤`, and has
+    no eliminator. Delay, stream and finite iterators are abbreviations; iterator adapters are
+    library code over `Iter`, never formers or rules (rule 20).

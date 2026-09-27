@@ -23,8 +23,8 @@ the parser and checker.
 **Citations.** `Fu:N` is `Core/Fundamental.lean` line N. The other files: `Ty` `Core/Types.lean`,
 `Co` `Core/Compat.lean`, `Rl` `Core/Relation.lean`, `Fa` `Core/Family.lean`,
 `Bl` `Core/Blocks.lean`, `BB` `Core/BlockBorrow.lean`, `FI` `Core/FoldImm.lean`,
-`FO` `Core/FoldOwn.lean`, `FR` `Core/FoldReuse.lean`, `De` `Core/Delay.lean`,
-`St` `Core/Stream.lean`, `Rc` `Core/Records.lean`, `CL` `Core/CommonList.lean`,
+`FO` `Core/FoldOwn.lean`, `FR` `Core/FoldReuse.lean`, `Nu` `Core/Nu.lean`,
+`Rc` `Core/Records.lean`, `CL` `Core/CommonList.lean`,
 `Fo` `Core/Folds.lean`, `S2` `Paper/S2_Statics/Definitions.lean`,
 `Cx` `Support/Statics/Contexts.lean`.
 
@@ -81,19 +81,21 @@ lexically, innermost first, and are then discarded. Two consequences:
                | mu X. A | X | Name
                | A => A | all 'x < @. A                          (built-in abbreviations)
                | block σ | val σ | fam mut @ σ | fam imm @ σ | view @ A
-    comp   C ::= F A | A -o C | C & C | top | forall 'x < @. C | delay A | stream A
+    comp   C ::= F A | A -o C | C & C | top | forall 'x < @. C | nu X. C
+               | delay A | stream A | iter A A A                 (built-in abbreviations)
 
 `VTy`/`CTy` are defined at `Ty:33`/`Ty:57`. `box @ A` is `[@] A`.
 
 **Precedence**, loosest first:
 
-1. `forall 'x < @.`, `all 'x < @.` and `mu X.` extend as far right as possible.
+1. `forall 'x < @.`, `all 'x < @.`, `mu X.` and `nu X.` extend as far right as possible.
 2. `-o` and `=>` associate to the right.
 3. `&` associates to the right.
 4. `+` associates to the right.
 5. `*` associates to the right.
 6. Prefix formers take one atom: `U`, `F`, `ref`, `!`, `imm @`, `mut @`, `box @`, `delay`,
-   `stream`, `block`, `val`, `fam m @`, `view @`. Their lifetime argument is also an atom.
+   `stream`, `block`, `val`, `fam m @`, `view @`; `iter` takes three. Their lifetime argument is
+   also an atom.
 
 For example, `S -o F (A + S) & F 1` is `S -o ((F (A + S)) & (F 1))`, and `imm 'a Nat * Nat`
 is `(imm 'a Nat) * Nat`. `F A * B` is a sort error: write `F (A * B)`. Sorts are checked after
@@ -109,6 +111,9 @@ parsing.
 | `val σ` | `σ.valTy`: `A` at a leaf, `*` at a node | `Bl:57` |
 | `fam m @ σ` | `σ.famTy M @`: `m @ A` at each leaf, `*` at a node | `BB:111` |
 | `view @b A` | `Imm̲ @b A` | `VTy.immReborrow`, `Ty:1064` |
+| `delay A` | `nu X. F (A + U X) & F 1` | `CTy.delay`, `Ty:1042` |
+| `stream A` | `nu X. F (A * U X) & F 1` | `CTy.stream`, `Ty:1045` |
+| `iter A R R'` | `nu X. F (A * U X + R) & F R'` | `CTy.iter`, `Ty:1049` |
 
 `=>` is BoLo's arrow read call-by-value, and it is the type of every constant. `all` is BoLo's
 `∀` read the same way, and it is the type of every borrow callback and fold algebra.
@@ -121,6 +126,10 @@ parsing.
 - `mu X. A` must be closed (`Cl 0`, `Ty:298`), and `X` must not occur under `mut` (`NoMut`,
   `Ty:486`). These are `roll`'s premises (`Fu:174`).
 - `Name` refers to an earlier `type` declaration. Abbreviations are not recursive.
+- In `nu X. C` (SPEC §7, `CTy.nu`, `Ty:73`), `X` is a computation-type variable that occurs only as
+  `U X`, the rest of the codata; it is the type variable `0` of `C`'s value types. `C` must be
+  positive (`CTy.NuOk`, `Ty:1022`): a `&` of observation trees, each an `F A` or a `&` of them,
+  with `U X` in each `A` only under `*` and `+`. `U X` may not occur inside an inner `U`.
 
 ## 5. Shapes and fold shapes
 
@@ -210,9 +219,13 @@ Mode: **S** synthesizes, **C** checks only, **S/C** synthesizes when its parts d
 | `absurd V` | `case V () ()` (`absurdE`, `Co:322`) | `zeroE` `Fu:103` | C |
 | `Fun 'x < @. M` | `λ_. M` (dead binder) | `allI` `Fu:106` | S/C |
 | `M [@]` | `app M ()` | `allE` `Fu:112` | S |
-| `delay_in M` / `delay_out M` | `M` | `delayIn` / `delayOut` `Fu:198,200` | C / S |
-| `stream_in M` / `stream_out M` | `M` | `streamIn` / `streamOut` `Fu:206,208` | C / S |
+| `nu_in M` / `nu_out M` | `M` | `nuIn` / `nuOut` `Fu:209,211` | S/C / S |
 | `(M : C)` | `M` | none (ascription) | S |
+
+`delay_in`/`stream_in` and `delay_out`/`stream_out` are other spellings of `nu_in` and `nu_out`.
+`nu_out M` needs `M` at a `nu` type and has its unrolling. `nu_in M` checked against `nu X. C`
+checks `M` at the unrolling; it synthesizes when `M`'s type is the unrolling of a `nu` type whose
+thunk occurs in it.
 
 `[@]` takes any lifetime, not only a variable. Its premise is `Δ ⊨ @ ⊏ @b`, where `@b` is the
 `∀`'s bound. The result is `C[@/'x]` (`CTy.instLife`, `Ty:1199`).
@@ -237,7 +250,7 @@ differently.
 
 `thunkV` types the term `.val (.lam N)` (`Fu:64`), so the body of `thunkv`/`!thunkv` must be a
 computation whose erasure is a λ. That means one of `fun …`, `Fun …`, `<M, N>`, or
-`delay_in`/`delay_out`/`stream_in`/`stream_out`/ascription wrapped around one of these. A computation
+`nu_in`/`nu_out` (or their other spellings)/ascription wrapped around one of these. A computation
 of type `F A` uses `thunk` instead.
 
 These are rejected: `thunkv (force t)` (erases to `t`), `thunkv (M x)`, `thunkv M.1`,
@@ -259,8 +272,8 @@ into a λ at its type. For example, a `U (delay A)` from `f : U (S -o delay A)` 
   `[@]`. So `force f s .1` is `((force f) s).1`.
 - **`force x` is an atom**, because it takes only a variable. `force f s` is `(force f) s`.
 - **Other prefix keywords take a whole spine**: `return`, `roll`, `unroll`, `inl`, `inr`,
-  `unbang`, `unbox`, `boxed[@]`, `run`, `delay_in`, `delay_out`, `stream_in`, `stream_out`,
-  `absurd`. So `return f x` is `return (f x)`, and `roll inr n` is `roll (inr n)`. On the
+  `unbang`, `unbox`, `boxed[@]`, `run`, `nu_in`, `nu_out` (and `delay_in`, `delay_out`,
+  `stream_in`, `stream_out`), `absurd`. So `return f x` is `return (f x)`, and `roll inr n` is `roll (inr n)`. On the
   other hand, `unbang nat_copy ['y] b` is `unbang (nat_copy ['y] b)`, which is ill-typed; write
   `(unbang nat_copy) ['y] b`. Likewise write `(delay_out (force d)).1`.
 - `case V { … }` delimits its arms with braces. Ascriptions `( … : T)` and `( … :> @)` must be
@@ -297,8 +310,9 @@ types (`VTy.persistent`). It follows that:
   checker inserts its destructor `dtorE A x` immediately before the path's terminal computation,
   most recently bound variable first. The erasure contains the call, so the core term still uses
   the variable exactly once. Borrows are dropped by `forget`. `ref A` is dropped by `free` followed
-  by the destructor of `A`, a fold-class `mu` by `fold_own`, and `U (C & F 1)`, `U (delay A)` and
-  `U (stream A)` by `close` (`.2`). `U C` otherwise has no destructor, so an unused thunk is an error.
+  by the destructor of `A`, a fold-class `mu` by `fold_own`, `U (C & F 1)` by `close` (`.2`), and
+  `U (nu X. C & F R)` (`delay`, `stream`, `iter A R₀ R`) with `R` closed and droppable by `close`
+  followed by the destructor of the residual `R`. `U C` otherwise has no destructor, so an unused thunk is an error.
   The same holds for a `case` whose arms consume different variables: arms that differ in a variable
   with a destructor are balanced by dropping it in the arm that does not use it. Any other
   difference is an error. `linear x <- M; N` opts `x` out, and then `N` must consume it.
@@ -331,8 +345,9 @@ constant.
 | `fold_imm[F, 'y, @c, R]` | `!(all 'y < top. A_R => R) => !(all 'y < @c. imm 'y (mu X. F) => R)` | `foldImm` `Fu:184`, `FI:97,101` | `FShape.WF`, `Guarded`; `'y ∉ FV(mu X. F), FV(R)`; `∀ Δ' a, Δ' ⊢ R ⊐ a` |
 | `fold_own[F, R]` | `!(A′_R => R) => !((mu X. F) => R)` | `foldOwn` `Fu:190`, `FO:36,39` | `FShape.WF`, `Guarded` |
 | `fold_reuse[F, R]` | `!(A″_R => R) => !((mu X. F) => R)` | `foldReuse` `Fu:195`, `FR:85` | `FShape.WF`, `Guarded` |
-| `fixd[A, S]` | `!U (S -o F (A + S) & F 1) => !U (S -o delay A)` | `fixD` `Fu:204`, `De:37,40` | none |
-| `unfold_s[A, S]` | `!U (S -o F (A * S) & F 1) => !U (S -o stream A)` | `unfoldS` `Fu:212`, `St:34,37` | none |
+| `unfold[C, S]` | `!U (S -o C'[S/X]) => !U (S -o C)` for `C = nu X. C'` | `unfoldN` `Fu:215`, `Nu:40,117` | `C` is a `nu` type (positive by §4) |
+| `fixd[A, S]` | `!U (S -o F (A + S) & F 1) => !U (S -o delay A)`: `unfold[delay A, S]` | `fixD` `Fu:253` | none |
+| `unfold_s[A, S]` | `!U (S -o F (A * S) & F 1) => !U (S -o stream A)`: `unfold[stream A, S]` | `unfoldS` `Fu:267` | none |
 
 Notes on the table:
 
@@ -348,8 +363,8 @@ Notes on the table:
   (`S2:74`); `copy` and `copy_bang` are both `copy` (`Paper/S3_Dynamics/Definitions.lean:317`);
   every `forget_*` is `forget` (`…:322`); `withbor1/2/3` are all `withbor` (`S2:129`);
   `withload` is `S2:186`; `withswap` is `…/S3_Dynamics/Definitions.lean:343`;
-  `foldImmV (dec F)` is `FI:152`; `foldOwnV` is `FO:100`; `foldReuseV` is `FR:149`; `fixDV` is
-  `De:74`; `unfoldSV` is `St:71`.
+  `foldImmV (dec F)` is `FI:152`; `foldOwnV` is `FO:100`; `foldReuseV` is `FR:149`; `unfoldV C` is
+  `Nu:117`; `fixDV A` and `unfoldSV A` are `unfoldV` at the delay and stream bodies (`Fu:232,242`).
 
 ## 8a. Integers
 
@@ -428,7 +443,7 @@ keyword because each mode is a separate theorem.
     `take[Nat]` is re-checked. Lifetime parameters are not supported; lifetime polymorphism is
     written with `all`/`forall`.
   - `def`s are checked in order, and a `def` may not refer to itself or a later one. Recursion
-    goes through `fold_*`, `fixd` or `unfold_s`.
+    goes through `fold_*`, `fixd`, `unfold_s` or `unfold`.
 - **`extern name : A`** adds a live slot of type `A` to `main`'s initial context. The last
   declared extern gets index 0. `A` must be closed (no free lifetime variables). `main` must
   consume every non-persistent extern; persistent externs (such as `!`-typed ones) may go unused.
@@ -454,8 +469,8 @@ corpus `main` against the interpreter (`Backend/README.md`).
 
 **Bidirectional.** Synthesis and checking follow the mode column of section 6. The annotations
 the checker cannot infer are required: `fun` binders, `Fun` bounds, every bracket argument of
-constants and derived forms, and `boxed[@]`. `inl`, `inr`, `roll`, `absurd`, `delay_in` and
-`stream_in` only check, and an ascription `(V : A)` supplies the type.
+constants and derived forms, and `boxed[@]`. `inl`, `inr`, `roll` and `absurd` only check, and
+an ascription `(V : A)` supplies the type.
 
 **Contexts: input/output with ⊤-slack (Hodas and Miller 1994).** The judgment is
 `Δ; Γin ⊢ e ; Γout, s`. `Γout` is `Γin` with the consumed slots marked dead, and `s` is a slack
@@ -502,7 +517,8 @@ The checker's behaviour where it goes beyond the sections above:
 - **Masks, not threading.** Each subterm yields its erasure with two masks over the context: the
   slots it uses, and the live slots it can absorb without using them (⊤-slack). The enclosing rule
   picks the split, and a proof of `CDerives` holds for every choice between the two.
-- **Modes.** `delay_in`/`stream_in` synthesize when the body's type is literally the unrolling.
+- **Modes.** `nu_in` synthesizes when the body's type is the unrolling of a `nu` type whose thunk
+  occurs in it (`CTy.nuThunks`).
   `unbang V` checked at `A` checks `V` at `!A`. `Fun` checked against a `forall` type takes that
   type's binder number, not `Δ.freshVar`.
 - **Declarations.** A def's type arguments are elaborated at the use site, and a parametric def is
@@ -679,7 +695,7 @@ How this checks:
 - **Block provenance** (`SPEC.md` §5 Open) is not enforced: `crossPack`
   (`Core/BlockPrograms.lean`) typechecks.
 - **Records and variants** (`Rc`) are derived rules with no syntax in draft 1.
-- **Implicit `roll`/`unroll`/`delay_*`/`str_*`/`boxed`/`return`/`run`**: all are explicit in
+- **Implicit `roll`/`unroll`/`nu_*`/`boxed`/`return`/`run`**: all are explicit in
   draft 1.
 - **α-equivalence of lifetime binders**: not chosen (section 12, item 6).
 

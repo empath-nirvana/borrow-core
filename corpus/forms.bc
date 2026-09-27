@@ -10,6 +10,7 @@ type Views = view 'a (ref Nat) * Imm̲ 'a (ref Nat)
 type Lives = box ('a /\ 'b \/ top) 1 * imm (⊓Δ ⊓ 'c ⊔ ⊤) 1 * mut dom i64
 type Poly = U (∀'x ⊏ top. Nat -o forall 'y < 'x. delay Nat)
 type Strs = U (stream Nat) * U (str 1) * U (∀'z ⊏ ⊤. ⊤)
+type Codata = U (nu X. F (Nat * U X + 1) & F Nat & F 1) * U (iter Nat 1 (ref Nat))
 type Blocks = block (node (leaf Nat) (leaf (ref Nat))) * val Pair * fam imm top Pair
 type Arrows = all 'y < top. Nat => Nat => 0
 shape Pair = node (leaf Nat) (leaf Nat)

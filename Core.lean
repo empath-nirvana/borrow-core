@@ -13,14 +13,14 @@ import Core.Reborrow
 import Core.FrameRules
 import Core.Persistent
 import Core.Compatibility
-import Core.DelayRel
+import Core.NuRel
 import Core.Computation
 import Core.Compat
 import Core.Sized
 import Core.FoldImm
 import Core.FoldOwn
 import Core.FoldReuse
-import Core.Delay
+import Core.Nu
 import Core.Fundamental
 import Core.Examples
 import Core.Embedding
@@ -47,8 +47,6 @@ import Core.DelayApprox
 import Core.DelayPrograms
 import Core.Steps
 import Core.DelayNaive
-import Core.StreamRel
-import Core.Stream
 import Core.StreamPrograms
 import Core.Integers
 import Core.IntPrograms

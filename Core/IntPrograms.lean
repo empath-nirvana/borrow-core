@@ -152,7 +152,7 @@ theorem d_sumToStep :
   · exact .unitI (by cdeadP)
 
 /-- `fixD sumToStep (10, 0)`, driven at most twenty times. -/
-def sumToProg : Expr := progD (.pair (i32E 10) (i32E 0)) sumToStep 20
+def sumToProg : Expr := progD .i32 (.pair (i32E 10) (i32E 0)) sumToStep 20
 
 theorem sumToProg_derives :
     CDerives LifeCtx.empty [] sumToProg (.comp (.ret (.sum .i32 .unit))) :=

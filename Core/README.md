@@ -20,15 +20,16 @@ axioms among `[propext, Classical.choice, Quot.sound]` (`scripts/CheckAxioms.lea
 
     A ::= 1 | A ⊗ A | 0 | A ⊕ A | U C | Ref A | Imm @a A | Mut @a A | [@a] A | !A | Unk | X | μX. A
         | I32 | I64
-    C ::= F A | A ⊸ C | C & C | ⊤ | ∀'a ⊏ @b. C | D A | Stream A
+    C ::= F A | A ⊸ C | C & C | ⊤ | ∀'a ⊏ @b. C | νX. C
 
 `I32` and `I64` are one constructor, `VTy.int w` (`Integers.lean`, `[spec §8]`). The relation
 holds a literal of the width at `∅`, so they are persistent, `Imm̲ 'b I = I`, and they outlive
 every lifetime.
 
-`D A = νX. F(A ⊕ U X) & F 1` and `Stream A = νX. F(A ⊗ U X) & F 1` are fixed formers. Each is
-interpreted as a greatest fixed point (`delayRel`, `streamRel`) and is equal to its unrolling
-(`cC_delay_iff`, `cC_stream_iff`). There is no general `ν`.
+`νX. C` (`[spec §7]`) has `U X` as the type variable `0` of `C`'s value types, and at a positive
+`C` (`CTy.NuOk`) is interpreted as a greatest fixed point equal to its unrolling (`NuRel.lean`,
+`cC_nu_iff`). `D A`, `Stream A` and `Iter A R R'` are abbreviations over it (`CTy.delay`,
+`CTy.stream`, `CTy.iter`).
 
 ### The judgment `CDerives Δ Γ e j`
 
@@ -36,11 +37,12 @@ interpreted as a greatest fixed point (`delayRel`, `streamRel`) and is equal to 
 `⊑Imm`/`⊑Mut`, and one constant per borrow axiom at arbitrary value-type payloads. It also has
 three call-by-value forms (`lolliE`, `allEV`, `ofRet`), the integer literal `lit` and the host
 operation `hostOp` (below), `roll`/`unroll`, the folds `foldImm`,
-`foldOwn` and `foldReuse`, `delayIn`/`delayOut` with `fixD`, and `streamIn`/`streamOut` with
-`unfoldS`:
+`foldOwn` and `foldReuse`, and `nuIn`/`nuOut` with coiteration (`Nu.lean`):
 
-    fixD    : !U(S ⊸ F(A ⊕ S) & F 1) ⊸ !U(S ⊸ D A)
-    unfoldS : !U(S ⊸ F(A ⊗ S) & F 1) ⊸ !U(S ⊸ Stream A)
+    unfoldN : !U(S ⊸ C[S/X]) ⊸ !U(S ⊸ νX. C)
+
+`fixD`, `unfoldS` and `delayIn`/`delayOut`/`streamIn`/`streamOut` are these rules at the delay
+and stream bodies.
 
 Its context premises are `Ctx.SplitP`, `Ctx.DeadP` and `Ctx.SoloP` (`Persistent.lean`,
 `[spec §10]`), which extend the paper's `Ctx.Split`, `Ctx.Dead` and `Ctx.Solo`: a live slot of
@@ -136,7 +138,7 @@ The `IntPrograms.lean` runs are theorems at every host; the interpreter's result
 | `Records` | `Records.lean`, `Splits.lean`, `RecordPrograms.lean`, re-derived in `CDerives` at `VTy` in the binary-tree encoding |
 | `Places` | `Family.lean`, `FamilyPrograms.lean`, re-derived in `CDerives` at `VTy` payloads |
 | `LeafPlaces` | `Steps.lean` (step inversions; `DelayNaive.lean` uses it too), `Weaken.lean`, `BlockBorrow.lean` (plain types, `famTy`, `shortenE`, `withborS`, typing), `BlockTrack.lean` (`withborS_ret`, `withborS_packed`, `wpTS_allocBorrow`), `BlockPrograms.lean` |
-| `Recursion` (`Nu.lean`) | `StreamRel.lean`, `Stream.lean`, `StreamPrograms.lean`, and the `stream` cases of `Types`, `FrameRecords`, `Relation`, `ShapeMu`, `RelationFacts` and `Computation`, built the same way as `delay` |
+| `Recursion` (`Nu.lean`) | `StreamPrograms.lean`; the stream former it gave became an instance of the general `νX. C` (`NuRel.lean`, `Nu.lean`) |
 
 ## Decisions taken
 
@@ -147,8 +149,8 @@ The `IntPrograms.lean` runs are theorems at every host; the interpreter's result
 3. **`Box<struct>` is the block form.** An owned struct is `refTy σ`, the family of its leaf
    references, handled by `allocS`/`freeS`/`withborS`. The one-cell `Ref σ.valTy` is a separate
    type (`MapMut`'s `L′`).
-4. **Codata is two fixed formers.** `D A` with `fixD`, and `Stream A` with `unfoldS`. There is no
-   general `ν`.
+4. **Codata is one former, `νX. C`.** `D A`, `Stream A` and `Iter A R R'` are abbreviations, and
+   `fixD`/`unfoldS` are coiteration at their bodies (`docs/decisions.md` 26).
 
 Name collisions settled:
 - Places' family term is `withborF2` (with `famTy2`, `cbTy2`), because `withbor2` is the

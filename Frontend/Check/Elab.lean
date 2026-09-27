@@ -128,8 +128,13 @@ def ppC (nm : List (String × LifeVar)) (p : Nat) : CCTy → String
   | .top => "top"
   | .all x b C =>
       parenIf (p > 0) s!"forall {ppLVar x} < {ppLifeP nm 1 b}. {ppC (nm.filter (·.2 != x)) 0 C}"
-  | .delay A => parenIf (p > 5) s!"delay {ppV nm 0 5 A}"
-  | .stream A => parenIf (p > 5) s!"stream {ppV nm 0 5 A}"
+  | .nu (.amp (.ret (.sum A (.tvar 0))) (.ret .unit)) =>
+      parenIf (p > 5) s!"delay {ppV nm 0 5 A}"
+  | .nu (.amp (.ret (.tensor A (.tvar 0))) (.ret .unit)) =>
+      parenIf (p > 5) s!"stream {ppV nm 0 5 A}"
+  | .nu (.amp (.ret (.sum (.tensor A (.tvar 0)) R)) (.ret R')) =>
+      parenIf (p > 5) s!"iter {ppV nm 0 6 A} {ppV nm 0 6 R} {ppV nm 0 6 R'}"
+  | .nu C => parenIf (p > 0) s!"nu {tvName 0}. {ppC nm 0 C}"
 end
 
 def ppLife (a : CLife) : String := ppLifeP [] 1 a
@@ -182,6 +187,13 @@ def elabV : Nat → TyEnv → VTy → Except Error CVTy
     | .zero _ => pure .zero
     | .tensor _ A B => do pure (.tensor (← elabV n E A) (← elabV n E B))
     | .sum _ A B => do pure (.sum (← elabV n E A) (← elabV n E B))
+    | .thunk _ (.name sp X) =>
+        match indexOf? ("U " ++ X) E.mu with
+        | some i => pure (.tvar i)
+        | none =>
+          if E.hid.contains ("U " ++ X) then
+            err sp s!"the `nu` variable `{X}` occurs under an inner `U`"
+          else err sp s!"`U {X}`: `{X}` is not a `nu` variable in scope"
     | .thunk _ C => do pure (.thunk (← elabC n E.enterU C))
     | .ref _ A => do pure (.ref (← elabV n E A))
     | .imm _ a A => do pure (.imm (← elabLife E.Δ E.lenv a) (← elabV n E A))
@@ -238,8 +250,14 @@ def elabC : Nat → TyEnv → CTy → Except Error CCTy
         let v := E.Δn.freshVar
         let E' := { E with Δn := E.Δn.extend v bl, lenv := (x.name, v) :: E.lenv }
         pure (.all v bl (← elabC n E' C))
+    | .nu sp X C => do
+        let B ← elabC n { E.enterU with mu := ["U " ++ X.name] } C
+        if CTy.nuOkB B then pure (.nu B)
+        else err sp s!"`nu {X.name}. C` needs `C` to be a `&` of observations `F A`, with `U {X.name}` only under `*` and `+`"
+    | .name sp X => err sp s!"the `nu` variable `{X}` occurs only as `U {X}`"
     | .delay _ A => do pure (.delay (← elabV n E A))
     | .stream _ A => do pure (.stream (← elabV n E A))
+    | .iter _ A R R' => do pure (.iter (← elabV n E A) (← elabV n E R) (← elabV n E R'))
 /-- A shape. -/
 def elabS : Nat → TyEnv → Shape → Except Error CShape
   | 0, _, σ => err σ.span "shape abbreviations nested too deeply"

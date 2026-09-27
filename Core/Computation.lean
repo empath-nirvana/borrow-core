@@ -1,5 +1,4 @@
-import Core.DelayRel
-import Core.StreamRel
+import Core.NuRel
 
 /-!
 # Core — Computations  `[spec §3]`
@@ -28,6 +27,15 @@ def plugS : List Val → Expr → Expr
   | [], e => e
   | v :: S, e => plugS S (.app e (.val v))
 
+/-- The stacks of an observation tree under a type-variable environment: projections down to an
+`F A`, whose postcondition is `vCE η A`. -/
+def sSB (η : Option (Nat → TEnt)) :
+    CTy → List SRec → LSub → List Val → (List SRec → Val → WProp) → WProp
+  | .ret A, _, δ, [], Q => ⌜Q = fun ls'' => vCE η true A ls'' δ⌝
+  | .amp C D, ls, δ, v :: S, Q =>
+      BoLo.or (⌜v = .inj₁ .unit⌝ ⋆ sSB η C ls δ S Q) (⌜v = .inj₂ .unit⌝ ⋆ sSB η D ls δ S Q)
+  | _, _, _, _, _ => fun _ => False
+
 /-- `𝒮⟦C⟧(ls)δ(S, Q)`: `S` is a stack for `C` whose final `F A` has postcondition `Q`, and the
 resource holds its arguments. -/
 def sS : CTy → List SRec → LSub → List Val → (List SRec → Val → WProp) → WProp
@@ -37,13 +45,44 @@ def sS : CTy → List SRec → LSub → List Val → (List SRec → Val → WPro
       BoLo.or (⌜v = .inj₁ .unit⌝ ⋆ sS C ls δ S Q) (⌜v = .inj₂ .unit⌝ ⋆ sS D ls δ S Q)
   | .all x c C, ls, δ, v :: S, Q =>
       ex fun α => ⌜v = .unit ∧ LtLife δ c α⌝ ⋆ sS C ls (δ.extend x α) S Q
-  | .delay A, _, δ, [v], Q =>
-      BoLo.or (⌜v = .inj₁ .unit ∧ Q = fun ls'' => vC true (.sum A (.thunk (.delay A))) ls'' δ⌝)
-        (⌜v = .inj₂ .unit ∧ Q = fun ls'' => vC true .unit ls'' δ⌝)
-  | .stream A, _, δ, [v], Q =>
-      BoLo.or (⌜v = .inj₁ .unit ∧ Q = fun ls'' => vC true (.tensor A (.thunk (.stream A))) ls'' δ⌝)
-        (⌜v = .inj₂ .unit ∧ Q = fun ls'' => vC true .unit ls'' δ⌝)
+  | .nu C, ls, δ, S, Q => fun ρ =>
+      C.NuOk ∧ sSB (some (nuEnv C (fun ls e => cC (.nu C) ls δ e))) C ls δ S Q ρ
   | _, _, _, _, _ => fun _ => False
+
+/-- One unfolding of an observation tree is its stack semantics. -/
+theorem cB_iff_stacks (η : Option (Nat → TEnt)) : ∀ (C : CTy) (ls : List SRec) (δ : LSub)
+    (e : Expr) (ρ : WRes),
+    cB η C ls δ e ρ ↔ ∀ S Q, (sSB η C ls δ S Q ─⋆ wpTS ls (plugS S e) Q) ρ
+  | .ret A, ls, δ, e, ρ => by
+      constructor
+      · intro hw S Q ρ₁ ρ₂ hs hc
+        cases S with
+        | nil =>
+            obtain ⟨rfl, rfl⟩ := hs
+            rw [eq_of_compS_empty_left (ResU.CompS.comm hc)]
+            exact hw
+        | cons v S => exact hs.elim
+      · intro h
+        exact h [] _ PMap.empty ρ ⟨rfl, rfl⟩ (ResU.comp_empty_right ρ)
+  | .amp C D, ls, δ, e, ρ => by
+      constructor
+      · rintro ⟨h₁, h₂⟩ S Q ρ₁ ρ₂ hs hc
+        cases S with
+        | nil => exact hs.elim
+        | cons v S =>
+            rcases hs with hs | hs
+            · obtain ⟨rfl, hs'⟩ := pure_sep_iff.mp hs
+              exact (cB_iff_stacks η C ls δ _ ρ).mp h₁ S Q ρ₁ ρ₂ hs' hc
+            · obtain ⟨rfl, hs'⟩ := pure_sep_iff.mp hs
+              exact (cB_iff_stacks η D ls δ _ ρ).mp h₂ S Q ρ₁ ρ₂ hs' hc
+      · intro h
+        refine ⟨(cB_iff_stacks η C ls δ _ ρ).mpr ?_, (cB_iff_stacks η D ls δ _ ρ).mpr ?_⟩
+        · intro S Q ρ₁ ρ₂ hs hc
+          exact h (_ :: S) Q ρ₁ ρ₂ (Or.inl (pure_sep_mk rfl hs)) hc
+        · intro S Q ρ₁ ρ₂ hs hc
+          exact h (_ :: S) Q ρ₁ ρ₂ (Or.inr (pure_sep_mk rfl hs)) hc
+  | .arr _ _, _, _, _, _ | .top, _, _, _, _ | .all _ _ _, _, _, _, _ | .nu _, _, _, _, _ =>
+      ⟨fun _ S _ _ _ hs => by cases S <;> exact hs.elim, fun _ => trivial⟩
 
 /-- `cC` is the stack semantics. -/
 theorem cC_iff_stacks : ∀ (C : CTy) (ls : List SRec) (δ : LSub) (e : Expr) (ρ : WRes),
@@ -112,36 +151,12 @@ theorem cC_iff_stacks : ∀ (C : CTy) (ls : List SRec) (δ : LSub) (e : Expr) (�
         intro S Q ρ₁ ρ₂ hs hc
         exact h (.unit :: S) Q ρ₁ ρ₂ ⟨α, pure_sep_mk ⟨rfl, hlt⟩ hs⟩ hc
 
-  | .delay A, ls, δ, e, ρ => by
-      rw [cC_delay_iff]
-      constructor
-      · rintro ⟨h₁, h₂⟩ S Q ρ₁ ρ₂ hs hc
-        rcases S with _ | ⟨v, _ | ⟨w, S⟩⟩
-        · exact hs.elim
-        · rcases hs with ⟨rfl, rfl, rfl⟩ | ⟨rfl, rfl, rfl⟩
-          · rw [eq_of_compS_empty_left (ResU.CompS.comm hc)]
-            exact h₁
-          · rw [eq_of_compS_empty_left (ResU.CompS.comm hc)]
-            exact h₂
-        · exact hs.elim
-      · intro h
-        exact ⟨h [_] _ PMap.empty ρ (Or.inl ⟨rfl, rfl, rfl⟩) (ResU.comp_empty_right ρ),
-          h [_] _ PMap.empty ρ (Or.inr ⟨rfl, rfl, rfl⟩) (ResU.comp_empty_right ρ)⟩
-  | .stream A, ls, δ, e, ρ => by
-      rw [cC_stream_iff]
-      constructor
-      · rintro ⟨h₁, h₂⟩ S Q ρ₁ ρ₂ hs hc
-        rcases S with _ | ⟨v, _ | ⟨w, S⟩⟩
-        · exact hs.elim
-        · rcases hs with ⟨rfl, rfl, rfl⟩ | ⟨rfl, rfl, rfl⟩
-          · rw [eq_of_compS_empty_left (ResU.CompS.comm hc)]
-            exact h₁
-          · rw [eq_of_compS_empty_left (ResU.CompS.comm hc)]
-            exact h₂
-        · exact hs.elim
-      · intro h
-        exact ⟨h [_] _ PMap.empty ρ (Or.inl ⟨rfl, rfl, rfl⟩) (ResU.comp_empty_right ρ),
-          h [_] _ PMap.empty ρ (Or.inr ⟨rfl, rfl, rfl⟩) (ResU.comp_empty_right ρ)⟩
+  | .nu C, ls, δ, e, ρ => by
+      by_cases hC : C.NuOk
+      · refine (cC_nu_unfold hC ls δ e ρ).trans ((cB_iff_stacks _ C ls δ e ρ).trans ?_)
+        exact ⟨fun h S Q ρ₁ ρ₂ hs hc => h S Q ρ₁ ρ₂ hs.2 hc,
+          fun h S Q ρ₁ ρ₂ hs hc => h S Q ρ₁ ρ₂ ⟨hC, hs⟩ hc⟩
+      · exact ⟨fun _ _ _ _ _ hs => absurd hs.1 hC, fun _ h => absurd h hC⟩
 
 /-- `𝒱⟦A⟧` is carried to a list with the same members (`vP_same` for `vC`). -/
 theorem vC_same {b : Bool} {A : VTy} {ls ls' : List SRec} {δ : LSub} {v : Val} {ρ : WRes}
@@ -160,6 +175,17 @@ theorem wpTS_step {e e' : Expr} (h : ∀ μ : Heap, Step1 μ e μ e') (ls : List
   exact ⟨ρ', ρp, fρ', fρ'p, π, v, μ, μ', ps', ls', h₁, h₂, h₃, h₅, h₆, h₇,
     .more (h μ) h₈, h₉, hA, hB, hT', htg', hps, hls, hC⟩
 
+/-- One unfolding of an observation tree is closed under a pure step in front. -/
+theorem cB_step (η : Option (Nat → TEnt)) : ∀ (C : CTy) {e e' : Expr},
+    (∀ μ : Heap, Step1 μ e μ e') → ∀ (ls : List SRec) (δ : LSub),
+      Entails (cB η C ls δ e') (cB η C ls δ e)
+  | .ret _, _, _, h, ls, _ => wpTS_step h ls _
+  | .amp C D, _, _, h, ls, δ => fun _ ⟨h₁, h₂⟩ =>
+      ⟨cB_step η C (fun μ => (h μ).plug (Kont.appL .hole _)) ls δ _ h₁,
+       cB_step η D (fun μ => (h μ).plug (Kont.appL .hole _)) ls δ _ h₂⟩
+  | .arr _ _, _, _, _, _, _ | .top, _, _, _, _, _ | .all _ _ _, _, _, _, _, _
+  | .nu _, _, _, _, _, _ => fun _ _ => trivial
+
 /-- `𝒞⟦C⟧` is closed under a pure step in front. -/
 theorem cC_step : ∀ (C : CTy) {e e' : Expr}, (∀ μ : Heap, Step1 μ e μ e') →
     ∀ (ls : List SRec) (δ : LSub), Entails (cC C ls δ e') (cC C ls δ e)
@@ -173,19 +199,28 @@ theorem cC_step : ∀ (C : CTy) {e e' : Expr}, (∀ μ : Heap, Step1 μ e μ e')
   | .all x _ C, _, _, h, ls, δ => fun _ h' α ρ₁ ρ₂ hp hc =>
       cC_step C (fun μ => (h μ).plug (Kont.appL .hole _)) ls (δ.extend x α) _
         (h' α ρ₁ ρ₂ hp hc)
-  | .delay A, _, _, h, ls, δ => fun ρ h' => by
-      rw [cC_delay_iff] at h' ⊢
-      exact ⟨wpTS_step (fun μ => (h μ).plug (Kont.appL .hole _)) ls _ ρ h'.1,
-        wpTS_step (fun μ => (h μ).plug (Kont.appL .hole _)) ls _ ρ h'.2⟩
-  | .stream A, _, _, h, ls, δ => fun ρ h' => by
-      rw [cC_stream_iff] at h' ⊢
-      exact ⟨wpTS_step (fun μ => (h μ).plug (Kont.appL .hole _)) ls _ ρ h'.1,
-        wpTS_step (fun μ => (h μ).plug (Kont.appL .hole _)) ls _ ρ h'.2⟩
+  | .nu C, _, _, h, ls, δ => fun ρ h' hC =>
+      ((cC_nu_unfold hC ls δ _ ρ).mpr (cB_step _ C h ls δ ρ ((cC_nu_unfold hC ls δ _ ρ).mp h'))) hC
 
 /-- One head step in front of `𝒞⟦C⟧`. -/
 theorem cC_head (C : CTy) {e e' : Expr} (h : ∀ μ : Heap, Head μ e μ e')
     (ls : List SRec) (δ : LSub) : Entails (cC C ls δ e') (cC C ls δ e) :=
   cC_step C (fun μ => Step1.head (h μ)) ls δ
+
+/-- Bind at one unfolding of an observation tree. -/
+theorem cB_bind (η : Option (Nat → TEnt)) : ∀ (C : CTy) (K : Kont) (M : Expr) (ls : List SRec)
+    (δ : LSub) (P : List SRec → Val → WProp) (R : List SRec → WProp),
+    (∀ ls', (∀ x, x ∈ ls' ↔ x ∈ ls) → Entails (R ls) (R ls')) →
+    (∀ ls', (∀ x, x ∈ ls' ↔ x ∈ ls) → ∀ v,
+      Entails (P ls' v ⋆ R ls') (cB η C ls' δ (K.plug (.val v)))) →
+    Entails (wpTS ls M P ⋆ R ls) (cB η C ls δ (K.plug M))
+  | .ret A, K, M, ls, δ, P, R, hR, h =>
+      wpTS_bind_frame K M ls P R (fun ls'' => vCE η true A ls'' δ) hR h
+  | .amp C D, K, M, ls, δ, P, R, hR, h => fun ρ hρ =>
+      ⟨cB_bind η C (.appL K _) M ls δ P R hR (fun ls' hls w σ hσ => (h ls' hls w σ hσ).1) ρ hρ,
+       cB_bind η D (.appL K _) M ls δ P R hR (fun ls' hls w σ hσ => (h ls' hls w σ hσ).2) ρ hρ⟩
+  | .arr _ _, _, _, _, _, _, _, _, _ | .top, _, _, _, _, _, _, _, _
+  | .all _ _ _, _, _, _, _, _, _, _, _ | .nu _, _, _, _, _, _, _, _, _ => fun _ _ => trivial
 
 /-- **Bind at `𝒞⟦C⟧`.**  Run `M` in the hole of `K`, framing `R` through the run; the rest of
 the computation — `K` and the stack `C` is eliminated by — continues at the list `M` returns.
@@ -218,19 +253,9 @@ theorem cC_bind : ∀ (C : CTy) (K : Kont) (M : Expr) (ls : List SRec) (δ : LSu
       exact cC_bind C (.appL K .unit) M ls (δ.extend x α) P R hR
         (fun ls' hls w σ hσ => h ls' hls w σ hσ α PMap.empty σ ⟨rfl, hlt⟩
           (ResU.comp_empty_right σ)) ρ hρ
-  | .delay A, K, M, ls, δ, P, R, hR, h => fun ρ hρ => by
-      rw [cC_delay_iff]
-      exact ⟨wpTS_bind_frame (.appL K _) M ls P R _ hR
-          (fun ls' hls w σ hσ => ((cC_delay_iff A ls' δ _ σ).mp (h ls' hls w σ hσ)).1) ρ hρ,
-        wpTS_bind_frame (.appL K _) M ls P R _ hR
-          (fun ls' hls w σ hσ => ((cC_delay_iff A ls' δ _ σ).mp (h ls' hls w σ hσ)).2) ρ hρ⟩
-  | .stream A, K, M, ls, δ, P, R, hR, h => fun ρ hρ => by
-      rw [cC_stream_iff]
-      exact ⟨wpTS_bind_frame (.appL K _) M ls P R _ hR
-          (fun ls' hls w σ hσ => ((cC_stream_iff A ls' δ _ σ).mp (h ls' hls w σ hσ)).1) ρ hρ,
-        wpTS_bind_frame (.appL K _) M ls P R _ hR
-          (fun ls' hls w σ hσ => ((cC_stream_iff A ls' δ _ σ).mp (h ls' hls w σ hσ)).2) ρ hρ⟩
-
+  | .nu C, K, M, ls, δ, P, R, hR, h => fun ρ hρ hC =>
+      ((cC_nu_unfold hC ls δ _ ρ).mpr (cB_bind _ C K M ls δ P R hR
+        (fun ls' hls w σ hσ => (cC_nu_unfold hC ls' δ _ σ).mp (h ls' hls w σ hσ)) ρ hρ)) hC
 
 /-- A dead slot contributes nothing. -/
 theorem gDenC_dead_cons {ls : List SRec} {δ : LSub} {Γ : Ctx VTy} {γ : List Val} {ρ : WRes}

@@ -12,9 +12,10 @@
 Every stage prints the same report: `main`'s value, then `live N`, the number of objects live
 after the value has been dropped (`Backend.report`, `Backend/Value.lean`). Values print in
 the syntax of `docs/syntax-core.md` (`inl`, `inr`, pairs, `()`, `i32[n]`/`i64[n]` unsigned);
-a function prints as `<fun>` and a location as `<loc>`. A `main` whose value is codata (a
-`delay` or `stream` thunk) prints `<fun>`; the corpus drives such values inside `main`, as
-`Core/DelayPrograms.lean` does.
+a function prints as `<fun>` and a location as `<loc>`. A `main` whose value is codata (a thunk
+of a `nu` type such as `delay`, `stream` or `iter`) prints `<fun>`; the corpus drives such values
+inside `main`, as `Core/DelayPrograms.lean` does. Codata needs nothing of its own here: `nu_in`
+and `nu_out` erase, and `unfold` is a closed λ-term.
 
 ## Pipeline
 

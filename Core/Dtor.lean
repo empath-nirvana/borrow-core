@@ -16,7 +16,8 @@ value goes unused (`drop_derives`), so the elaborated term uses the value exactl
 | `A ⊗ B`, `A ⊕ B`, `[@a] A` | componentwise |
 | `Ref A` | `free`, then the destructor of `A` |
 | `μX. T`, `T` in `FShape` | `foldOwn` whose algebra is the destructor of `T[1/X]` |
-| `U(C & F 1)`, `U(D A)`, `U(Stream A)` | `close`: force, then the second projection |
+| `U(C & F 1)` | `close`: force, then the second projection |
+| `U(νX. C & F R)`, `R` closed | `close`, then the destructor of the residual `R` |
 
 The first two rows are the forgettable types, whose destructor does nothing; every type of
 `Affine` (`Core/Records.lean`) is one (`hasDtor_of_affine`). The other rows deallocate or run
@@ -103,8 +104,17 @@ def dtorAt : Bool → VTy → Expr
   | _, .box _ A => .val (.lam (.app (dtorAt false A) (.var 0)))
   | _, .mu A => .val (.lam (.app (.app (.val (foldOwnV (toFShape A)))
       (.val (.lam (.app (dtorAt true A) (.var 0))))) (.var 0)))
+  | _, .thunk (.nu (.amp _ (.ret R))) => .val (.lam
+      (bindE (.app (.var 0) (.val (.inj₂ .unit))) (.app (dtorAt false R) (.var 0))))
   | _, .thunk _ => .val (.lam (.app (.var 0) (.val (.inj₂ .unit))))
   | _, _ => forget
+
+/-- At a thunk the destructor does not depend on the mode. -/
+theorem dtorAt_thunk : ∀ (b : Bool) (C : CTy), dtorAt b (.thunk C) = dtorAt false (.thunk C)
+  | _, .nu (.amp _ (.ret _)) | _, .nu (.amp _ (.arr _ _)) | _, .nu (.amp _ (.amp _ _))
+  | _, .nu (.amp _ .top) | _, .nu (.amp _ (.all _ _ _)) | _, .nu (.amp _ (.nu _))
+  | _, .nu (.ret _) | _, .nu (.arr _ _) | _, .nu .top | _, .nu (.all _ _ _) | _, .nu (.nu _)
+  | _, .ret _ | _, .arr _ _ | _, .amp _ _ | _, .top | _, .all _ _ _ => rfl
 
 /-- The destructor of `T`, a closed `λ`.  `[spec §12]` -/
 abbrev dtorE : VTy → Expr := dtorAt false
@@ -122,7 +132,7 @@ theorem algE_eq : ∀ A : VTy, algE A = dtorE ((toFShape A).resO .unit)
   | .tvar (_ + 1) => rfl
   | .unit => rfl
   | .zero => rfl
-  | .thunk _ => rfl
+  | .thunk C => dtorAt_thunk true C
   | .ref .unit => rfl
   | .ref (.tensor _ _) => rfl
   | .ref .zero => rfl
@@ -165,8 +175,10 @@ inductive HasDtor : VTy → Prop where
       (h : HasDtor ((toFShape A).resO .unit)) : HasDtor (.mu A)
   /-- A computation with a `close` component. -/
   | close {C} : HasDtor (.thunk (.amp C (.ret .unit)))
-  | delay {A} : HasDtor (.thunk (.delay A))
-  | stream {A} : HasDtor (.thunk (.stream A))
+  /-- Codata `νX. C & F R` whose `close` returns a closed residual `R` with a destructor:
+  `close`, then the destructor of `R`.  `[spec §7, §12]` -/
+  | nu {C R} (hC : (CTy.amp C (.ret R)).NuOk) (hRc : R.Cl 0) (h : HasDtor R) :
+      HasDtor (.thunk (.nu (.amp C (.ret R))))
 
 theorem hasDtor_of_affine {A : VTy} (h : Affine A) : HasDtor A := by
   induction h with
@@ -245,14 +257,14 @@ theorem dtor_wf {Δ : LifeCtx} {T : VTy} (hT : HasDtor T) :
         rwa [toFShape_ty] at h
       exact .lamV (.lolliE (.left (deadSplit hΓ)) (.var (.here hΓ.toP)) hfold)
   | close => intro Γ hΓ; exact .thunkV rfl (.lam (close_body hΓ))
-  | @delay A =>
+  | @nu C R hC hRc _ ih =>
       intro Γ hΓ
-      exact .thunkV rfl (.lam (.proj₂ (C := .ret (.sum A (.thunk (.delay A))))
-        (.delayOut (.force (C := .delay A) (.here hΓ.toP)))))
-  | @stream A =>
-      intro Γ hΓ
-      exact .thunkV rfl (.lam (.proj₂ (C := .ret (.tensor A (.thunk (.stream A))))
-        (.streamOut (.force (C := .stream A) (.here hΓ.toP)))))
+      have hM := CDerives.proj₂ (Δ := Δ)
+        (.nuOut hC (.force (C := .nu (.amp C (.ret R))) (.here hΓ.toP)))
+      simp only [CTy.instT, VTy.inst, VTy.subst_closed0 hRc] at hM
+      exact .thunkV rfl (.lam (.bind (.left (deadSplit hΓ)) hM
+        (.ret (.lolliE (.left (.dead (deadSplit hΓ))) (.var (.here (Ctx.Dead.cons hΓ).toP))
+          (ih (.cons (.cons hΓ)))))))
 
 /-! ### A borrow's destructor frees nothing -/
 

@@ -16,8 +16,9 @@ mechanization of Wagner, Gierczak, Marshall, Li and Ahmed, *From Linearity to Bo
 - **Blocks and family borrows:** unboxed structs whose fields are separate places, borrowed
   together at one lifetime (§5).
 - **Recursive types and folds:** `μ` with borrowed, owned and in-place folds as typing rules (§6).
-- **Codata:** a delay type for loops that may not terminate and a stream type, each with a
-  mandatory `close` (§7).
+- **Codata:** one former `νX. C` with coiteration; the delay type for loops that may not
+  terminate, streams and finite iterators are abbreviations over it, each with a mandatory
+  `close` (§7).
 - **Integers:** `i32`/`i64` with Wasm's operations (§8).
 - **Persistent variables:** values holding no resource are copied and dropped freely (§10).
 

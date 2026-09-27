@@ -33,8 +33,8 @@ open BoCa.Programs (unitNoLeak)
 
 /-- `s₀ to s. unfoldS step to f. ⟨(f s) π₁, (f s) π₂⟩ to t. K`: the thunk
 `⟨(f s) π₁, (f s) π₂⟩` is `unfoldS step s₀` as a value of `U(Stream A)`. -/
-def progS (s₀ : Expr) (step : Val) (K : Expr) : Expr :=
-  bindE s₀ (bindE (.app (.val unfoldSV) (.val step))
+def progS (A : VTy) (s₀ : Expr) (step : Val) (K : Expr) : Expr :=
+  bindE s₀ (bindE (.app (.val (unfoldSV A)) (.val step))
     (bindE (withPair (.app (.app (.var 2) (.var 3)) (.val (.inj₁ .unit)))
         (.app (.app (.var 2) (.var 3)) (.val (.inj₂ .unit))))
       K))
@@ -60,7 +60,7 @@ theorem d_progS {A S : VTy} {C : CTy} {s₀ K : Expr} {step : Val}
       (.val (.bang (.thunk (stepSC A S)))))
     (hK : ∀ {Γ : Ctx VTy}, Ctx.Dead Γ →
       CDerives LifeCtx.empty (⟨.thunk (.stream A), true⟩ :: Γ) K (.comp C)) :
-    CDerives LifeCtx.empty [] (progS s₀ step K) (.comp C) :=
+    CDerives LifeCtx.empty [] (progS A s₀ step K) (.comp C) :=
   .bind .nil (.ret hs₀)
     (.bind (.right .nil)
       (.ret (.bangE (.lolliE (deadSplit (.cons .nil)) hstep (.unfoldS A S (.cons .nil)))))
@@ -105,7 +105,7 @@ theorem d_stepR {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
 
 /-- Allocate the cell, unfold, observe `n` times, close. -/
 def takeCloseR (n : ℕ) : Expr :=
-  progS (.app (.val (.prim .alloc)) (.val .unit)) stepR (takeE n)
+  progS .unit (.app (.val (.prim .alloc)) (.val .unit)) stepR (takeE n)
 
 theorem d_takeCloseR (n : ℕ) :
     CDerives LifeCtx.empty [] (takeCloseR n) (.comp (.ret .unit)) :=
@@ -194,7 +194,7 @@ theorem d_sumK : ∀ (n : ℕ) {Γ : Ctx VTy}, Ctx.Dead Γ →
             (d_sumK n (.cons (.cons (.cons (.cons hΓ)))))))
 
 /-- The numerals from `0`, the first `n` summed, the stream closed. -/
-def natsSum (n : ℕ) : Expr := progS (.val (num 0)) stepN (bindE (.val (num 0)) (sumK n))
+def natsSum (n : ℕ) : Expr := progS natN (.val (num 0)) stepN (bindE (.val (num 0)) (sumK n))
 
 theorem d_natsSum (n : ℕ) : CDerives LifeCtx.empty [] (natsSum n) (.comp (.ret natN)) :=
   d_progS (d_num .nil 0) (d_stepN (.cons .nil))

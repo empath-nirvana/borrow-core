@@ -107,8 +107,8 @@ theorem drive_runs_nat {e : Expr}
 
 /-- `s₀ to s. fixD step to f. ⟨(f s) π₁, (f s) π₂⟩ to d. driveE n`: the thunk
 `⟨(f s) π₁, (f s) π₂⟩` is `fixD step s₀` as a value of `U(D A)`. -/
-def progD (s₀ : Expr) (step : Val) (n : ℕ) : Expr :=
-  bindE s₀ (bindE (.app (.val fixDV) (.val step))
+def progD (A : VTy) (s₀ : Expr) (step : Val) (n : ℕ) : Expr :=
+  bindE s₀ (bindE (.app (.val (fixDV A)) (.val step))
     (bindE (withPair (.app (.app (.var 2) (.var 3)) (.val (.inj₁ .unit)))
         (.app (.app (.var 2) (.var 3)) (.val (.inj₂ .unit))))
       (driveE n)))
@@ -132,7 +132,7 @@ theorem d_progD {A S : VTy} {s₀ : Expr} {step : Val}
     (hs₀ : CDerives LifeCtx.empty [] s₀ (.val S))
     (hstep : CDerives LifeCtx.empty [⟨S, false⟩] (.val step)
       (.val (.bang (.thunk (stepDC A S))))) (n : ℕ) :
-    CDerives LifeCtx.empty [] (progD s₀ step n) (.comp (.ret (.sum A .unit))) :=
+    CDerives LifeCtx.empty [] (progD A s₀ step n) (.comp (.ret (.sum A .unit))) :=
   .bind .nil (.ret hs₀)
     (.bind (.right .nil)
       (.ret (.bangE (.lolliE (deadSplit (.cons .nil)) hstep (.fixD A S (.cons .nil)))))
@@ -162,7 +162,7 @@ theorem d_loopStep {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
     (.ret (.var (.there (.there (.here hΓ)))))))
 
 /-- `loop = fixD loopStep ()`, observed `n` times and closed. -/
-def loopProg (n : ℕ) : Expr := progD (.val .unit) loopStep n
+def loopProg (n : ℕ) : Expr := progD .unit (.val .unit) loopStep n
 
 theorem loopProg_derives (n : ℕ) :
     CDerives LifeCtx.empty [] (loopProg n) (.comp (.ret (.sum .unit .unit))) :=
@@ -225,7 +225,7 @@ theorem d_countDownStep {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
         (d_freeNat (.cons (.cons (.cons (.cons (.cons hΓ))))))))
 
 /-- `fixD countDownStep (3, 0)`, driven at most ten times. -/
-def countDownProg : Expr := progD (.pair (.val (num 3)) (.val (num 0))) countDownStep 10
+def countDownProg : Expr := progD natN (.pair (.val (num 3)) (.val (num 0))) countDownStep 10
 
 theorem countDownProg_derives :
     CDerives LifeCtx.empty [] countDownProg (.comp (.ret (.sum natN .unit))) :=
@@ -286,7 +286,7 @@ theorem d_counterStep {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
       (d_freeNat (.cons (.cons (.cons hΓ)))))
 
 /-- `fixD counterStep (alloc 0)`, observed four times and closed. -/
-def counterProg : Expr := progD (.app (.val (.prim .alloc)) (.val (num 0))) counterStep 4
+def counterProg : Expr := progD .unit (.app (.val (.prim .alloc)) (.val (num 0))) counterStep 4
 
 theorem counterProg_derives :
     CDerives LifeCtx.empty [] counterProg (.comp (.ret (.sum .unit .unit))) :=

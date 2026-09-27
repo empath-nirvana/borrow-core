@@ -51,14 +51,15 @@ def keywords : List String :=
     -- terms
     "return", "force", "fun", "let", "linear", "case", "inl", "inr", "thunk", "thunkv", "unbang",
     "boxed", "unbox", "roll", "unroll", "run", "absurd",
-    "delay_in", "delay_out", "stream_in", "stream_out",
+    "nu_in", "nu_out", "delay_in", "delay_out", "stream_in", "stream_out",
     -- types, lifetimes, shapes
     "ref", "imm", "mut", "box", "unk", "i32", "i64", "mu", "all", "forall", "top", "dom",
-    "block", "val", "fam", "view", "delay", "stream", "str", "leaf", "node",
+    "block", "val", "fam", "view", "nu", "delay", "stream", "str", "iter", "leaf",
+    "node",
     -- constants and derived forms
     "alloc", "free", "swap", "copy", "copy_bang", "forget_imm", "forget_mut", "forget_unk",
     "forget_bang", "withbor1", "withbor2", "withbor3", "withload", "withswap",
-    "fold_imm", "fold_own", "fold_reuse", "fixd", "unfold_s", "host",
+    "fold_imm", "fold_own", "fold_reuse", "fixd", "unfold_s", "unfold", "host",
     "alloc_s", "free_s", "withbor_s_mut", "withbor_s_imm", "withbor_f2_mut", "withbor_f2_imm",
     "shorten_mut", "shorten_imm" ]
 

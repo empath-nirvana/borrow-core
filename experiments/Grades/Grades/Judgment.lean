@@ -159,17 +159,12 @@ inductive GDerives (P : Profile) : LifeCtx → GCtx → Expr → Jdg → Prop wh
       GDerives P Δ Γ (.val (foldOwnV F)) (.val (.lolli (algOTy F R) (foldOTy F R)))
   | foldReuse {Δ Γ} (F : FShape) (R : VTy) (hΓ : GDead P Γ) (hF : F.WF) (hG : F.Guarded) :
       GDerives P Δ Γ (.val (foldReuseV F)) (.val (.lolli (algRTy F R) (foldOTy F R)))
-  | delayIn {Δ Γ e A} (h : GDerives P Δ Γ e (.comp (delayUnroll A))) :
-      GDerives P Δ Γ e (.comp (.delay A))
-  | delayOut {Δ Γ e A} (h : GDerives P Δ Γ e (.comp (.delay A))) :
-      GDerives P Δ Γ e (.comp (delayUnroll A))
-  | fixD {Δ Γ} (A S : VTy) (hΓ : GDead P Γ) : GDerives P Δ Γ (.val fixDV) (.val (fixDTy A S))
-  | streamIn {Δ Γ e A} (h : GDerives P Δ Γ e (.comp (streamUnroll A))) :
-      GDerives P Δ Γ e (.comp (.stream A))
-  | streamOut {Δ Γ e A} (h : GDerives P Δ Γ e (.comp (.stream A))) :
-      GDerives P Δ Γ e (.comp (streamUnroll A))
-  | unfoldS {Δ Γ} (A S : VTy) (hΓ : GDead P Γ) :
-      GDerives P Δ Γ (.val unfoldSV) (.val (unfoldSTy A S))
+  | nuIn {Δ Γ e C} (hC : C.NuOk) (h : GDerives P Δ Γ e (.comp C.unroll)) :
+      GDerives P Δ Γ e (.comp (.nu C))
+  | nuOut {Δ Γ e C} (hC : C.NuOk) (h : GDerives P Δ Γ e (.comp (.nu C))) :
+      GDerives P Δ Γ e (.comp C.unroll)
+  | unfoldN {Δ Γ} (C : CTy) (S : VTy) (hC : C.NuOk) (hΓ : GDead P Γ) :
+      GDerives P Δ Γ (.val (unfoldV C)) (.val (unfoldTy C S))
   /-- Erased abstraction: the binder at `[0,0]`; at run time it receives `inj₁ ()`. -/
   | lam0 {Δ Γ M A C} (he : P.erasure = true)
       (h : GDerives P Δ (⟨A, .erased⟩ :: Γ) M (.comp C)) :
@@ -248,12 +243,9 @@ theorem GDerives.toCore {Δ : LifeCtx} {Γ : GCtx} {e : Expr} {j : Jdg}
   | foldImm F y c R hΓ hF hG hyM hyR hR => exact .foldImm F y c R hΓ.toDeadP hF hG hyM hyR hR
   | foldOwn F R hΓ hF hG => exact .foldOwn F R hΓ.toDeadP hF hG
   | foldReuse F R hΓ hF hG => exact .foldReuse F R hΓ.toDeadP hF hG
-  | delayIn _ ih => exact .delayIn ih
-  | delayOut _ ih => exact .delayOut ih
-  | fixD A S hΓ => exact .fixD A S hΓ.toDeadP
-  | streamIn _ ih => exact .streamIn ih
-  | streamOut _ ih => exact .streamOut ih
-  | unfoldS A S hΓ => exact .unfoldS A S hΓ.toDeadP
+  | nuIn hC _ ih => exact .nuIn hC ih
+  | nuOut hC _ ih => exact .nuOut hC ih
+  | unfoldN C S hC hΓ => exact .unfoldN C S hC hΓ.toDeadP
   | lam0 he => exact absurd he (by decide)
   | app0 he => exact absurd he (by decide)
 
@@ -323,12 +315,9 @@ theorem CDerives.toGraded {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg}
       exact .foldImm F y c R (DeadP.toGDead hΓ) hF hG hyM hyR hR
   | foldOwn F R hΓ hF hG => exact .foldOwn F R (DeadP.toGDead hΓ) hF hG
   | foldReuse F R hΓ hF hG => exact .foldReuse F R (DeadP.toGDead hΓ) hF hG
-  | delayIn _ ih => exact .delayIn ih
-  | delayOut _ ih => exact .delayOut ih
-  | fixD A S hΓ => exact .fixD A S (DeadP.toGDead hΓ)
-  | streamIn _ ih => exact .streamIn ih
-  | streamOut _ ih => exact .streamOut ih
-  | unfoldS A S hΓ => exact .unfoldS A S (DeadP.toGDead hΓ)
+  | nuIn hC _ ih => exact .nuIn hC ih
+  | nuOut hC _ ih => exact .nuOut hC ih
+  | unfoldN C S hC hΓ => exact .unfoldN C S hC (DeadP.toGDead hΓ)
 
 /-- **The equivalence** on the fragment Core has: `CDerives` at `Γ` is `GDerives Profile.core`
 at `Γ` graded by the defaults, and a `Profile.core` derivation at any graded context is a
@@ -452,12 +441,9 @@ theorem GDerives.mono (hPQ : P.Le Q) {Δ : LifeCtx} {Γ : GCtx} {e : Expr} {j : 
   | foldImm F y c R hΓ hF hG hyM hyR hR => exact .foldImm F y c R (hPQ.dead hΓ) hF hG hyM hyR hR
   | foldOwn F R hΓ hF hG => exact .foldOwn F R (hPQ.dead hΓ) hF hG
   | foldReuse F R hΓ hF hG => exact .foldReuse F R (hPQ.dead hΓ) hF hG
-  | delayIn _ ih => exact .delayIn ih
-  | delayOut _ ih => exact .delayOut ih
-  | fixD A S hΓ => exact .fixD A S (hPQ.dead hΓ)
-  | streamIn _ ih => exact .streamIn ih
-  | streamOut _ ih => exact .streamOut ih
-  | unfoldS A S hΓ => exact .unfoldS A S (hPQ.dead hΓ)
+  | nuIn hC _ ih => exact .nuIn hC ih
+  | nuOut hC _ ih => exact .nuOut hC ih
+  | unfoldN C S hC hΓ => exact .unfoldN C S hC (hPQ.dead hΓ)
   | lam0 he _ ih => exact .lam0 (hPQ.erasure he) ih
   | app0 he hi _ ih => exact .app0 (hPQ.erasure he) hi ih
 

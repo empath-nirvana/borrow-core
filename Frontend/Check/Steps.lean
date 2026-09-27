@@ -60,8 +60,8 @@ def dtorB : Bool → CVTy → Bool
   | _, .box _ A => dtorB false A
   | _, .mu A => FShape.wfB (toFShape A) && FShape.guardedB (toFShape A) && dtorB true A
   | _, .thunk (.amp _ (.ret .unit)) => true
-  | _, .thunk (.delay _) => true
-  | _, .thunk (.stream _) => true
+  | _, .thunk (.nu (.amp C (.ret R))) =>
+      CTy.nuOkB (.amp C (.ret R)) && VTy.clB 0 R && dtorB false R
   | _, .thunk _ => false
   | _, .unit | _, .zero | _, .int _ | _, .unk | _, .bang _ | _, .imm _ _ | _, .mut _ _ => true
 
@@ -104,8 +104,16 @@ theorem dtorB_sound : ∀ (alg : Bool) (A : CVTy), dtorB alg A = true →
         (dtorB_sound true A h.2)
       cases alg <;> exact this
   | alg, .thunk (.amp _ (.ret .unit)), _ => by cases alg <;> exact .close
-  | alg, .thunk (.delay _), _ => by cases alg <;> exact .delay
-  | alg, .thunk (.stream _), _ => by cases alg <;> exact .stream
+  | alg, .thunk (.nu (.amp C (.ret R))), h => by
+      simp only [dtorB, Bool.and_eq_true] at h
+      have := HasDtor.nu (CTy.nuOkB_sound _ h.1.1) (VTy.clB_sound 0 R h.1.2)
+        (dtorB_sound false R h.2)
+      cases alg <;> exact this
+  | _, .thunk (.nu (.ret _)), h | _, .thunk (.nu (.arr _ _)), h | _, .thunk (.nu .top), h
+  | _, .thunk (.nu (.all _ _ _)), h | _, .thunk (.nu (.nu _)), h
+  | _, .thunk (.nu (.amp _ (.arr _ _))), h | _, .thunk (.nu (.amp _ (.amp _ _))), h
+  | _, .thunk (.nu (.amp _ .top)), h | _, .thunk (.nu (.amp _ (.all _ _ _))), h
+  | _, .thunk (.nu (.amp _ (.nu _))), h => by simp [dtorB] at h
   | _, .thunk (.ret _), h | _, .thunk (.arr _ _), h | _, .thunk .top, h
   | _, .thunk (.all _ _ _), h => by simp [dtorB] at h
   | _, .thunk (.amp _ (.ret (.tensor _ _))), h | _, .thunk (.amp _ (.ret .zero)), h
@@ -116,8 +124,7 @@ theorem dtorB_sound : ∀ (alg : Bool) (A : CVTy), dtorB alg A = true →
   | _, .thunk (.amp _ (.ret (.tvar _))), h | _, .thunk (.amp _ (.ret (.mu _))), h
   | _, .thunk (.amp _ (.ret (.int _))), h | _, .thunk (.amp _ (.arr _ _)), h
   | _, .thunk (.amp _ (.amp _ _)), h | _, .thunk (.amp _ .top), h
-  | _, .thunk (.amp _ (.all _ _ _)), h | _, .thunk (.amp _ (.delay _)), h
-  | _, .thunk (.amp _ (.stream _)), h => by simp [dtorB] at h
+  | _, .thunk (.amp _ (.all _ _ _)), h | _, .thunk (.amp _ (.nu _)), h => by simp [dtorB] at h
   | alg, .unit, _ => by cases alg <;> exact .unit
   | alg, .zero, _ => by cases alg <;> exact .zero
   | alg, .int _, _ => by cases alg <;> exact .int
@@ -310,8 +317,8 @@ def mentionsC (x : String) : Comp → Bool
   | .lam _ y _ M => y.name != x && mentionsC x M
   | .app _ M y => mentionsC x M || y.name == x
   | .with_ _ M N => mentionsC x M || mentionsC x N
-  | .proj _ _ M | .lamL _ _ _ M | .inst _ M _ | .delayIn _ M | .delayOut _ M | .streamIn _ M
-  | .streamOut _ M | .ascribe _ M _ => mentionsC x M
+  | .proj _ _ M | .lamL _ _ _ M | .inst _ M _ | .nuIn _ M | .nuOut _ M
+  | .ascribe _ M _ => mentionsC x M
   | .top _ => false
   | .letUnit _ V M => mentionsV x V || mentionsC x M
   | .letPair _ y z V M => mentionsV x V || (y.name != x && z.name != x && mentionsC x M)
@@ -320,11 +327,10 @@ def mentionsC (x : String) : Comp → Bool
 end
 
 /-- A path's terminal computation: every form except those that pass what is owed on to a tail
-position (`x <- M; N`, `let`, `case`, `<M, N>`, `fun`, `Fun`, `delay_in`, `stream_in`, an
-ascription). -/
+position (`x <- M; N`, `let`, `case`, `<M, N>`, `fun`, `Fun`, `nu_in`, an ascription). -/
 def _root_.Frontend.Comp.terminal : Comp → Bool
   | .bind .. | .letUnit .. | .letPair .. | .case .. | .with_ .. | .lam .. | .lamL ..
-  | .delayIn .. | .streamIn .. | .ascribe .. => false
+  | .nuIn .. | .ascribe .. => false
   | _ => true
 
 /-- The slots to drop before a terminal computation: owed, and neither used nor absorbed by it. -/

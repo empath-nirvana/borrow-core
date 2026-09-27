@@ -37,6 +37,9 @@ theorem.
 
 **Host** — the implementation of the integer operations; every theorem holds for every host (§8).
 
+**Iterator (`Iter A R R'`)** — finite codata: `next` yields an `A` and the rest, or finishes with
+`R`; `close` ends it early and returns a residual `R'` (§7).
+
 **Lifetime** — a lexical scope, introduced by a borrow's callback. Lifetimes nest.
 
 **Persistent** — a type whose values hold no resource (`1`, `!A`, `i32`, …); its variables are
@@ -51,3 +54,6 @@ proved in.
 
 **Witness** — the resource an `imm`/`mut` cell holds for what it borrows; why a same-lifetime view
 through a pointer is not available.
+
+**`νX. C`** — the codata former: a greatest fixed point whose observations return `U X`, the rest.
+Delay, streams and iterators are abbreviations over it (§7).

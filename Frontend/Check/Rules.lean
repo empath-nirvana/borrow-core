@@ -217,18 +217,13 @@ def rAllE {x : LifeVar} {b : CLife} {C : CCTy} (a : CLife) (hlt : ltB Δ a b = t
     (r : Res Δ T (.comp (.all x b C))) : Res Δ T (.comp (C.instLife x a)) :=
   ⟨.app r.e (Expr.val BoCa.Val.unit), r.F.map fun _ h => .allE h (ltB_sound hlt)⟩
 
-def rDelayIn {A : CVTy} (r : Res Δ T (.comp (BoCa.Fig16.LogRel.Core.delayUnroll A))) :
-    Res Δ T (.comp (.delay A)) := ⟨r.e, r.F.map fun _ h => .delayIn h⟩
+/-- `nu_in M`: `M` at the unrolling of a positive `νX. C`. -/
+def rNuIn {C : CCTy} (hC : C.NuOk) (r : Res Δ T (.comp C.unroll)) : Res Δ T (.comp (.nu C)) :=
+  ⟨r.e, r.F.map fun _ h => .nuIn hC h⟩
 
-def rDelayOut {A : CVTy} (r : Res Δ T (.comp (.delay A))) :
-    Res Δ T (.comp (BoCa.Fig16.LogRel.Core.delayUnroll A)) := ⟨r.e, r.F.map fun _ h => .delayOut h⟩
-
-def rStreamIn {A : CVTy} (r : Res Δ T (.comp (BoCa.Fig16.LogRel.Core.streamUnroll A))) :
-    Res Δ T (.comp (.stream A)) := ⟨r.e, r.F.map fun _ h => .streamIn h⟩
-
-def rStreamOut {A : CVTy} (r : Res Δ T (.comp (.stream A))) :
-    Res Δ T (.comp (BoCa.Fig16.LogRel.Core.streamUnroll A)) :=
-  ⟨r.e, r.F.map fun _ h => .streamOut h⟩
+/-- `nu_out M`. -/
+def rNuOut {C : CCTy} (hC : C.NuOk) (r : Res Δ T (.comp (.nu C))) : Res Δ T (.comp C.unroll) :=
+  ⟨r.e, r.F.map fun _ h => .nuOut hC h⟩
 
 end
 
