@@ -1,6 +1,7 @@
 -- swapBoth (Core/FamilyPrograms.lean), from the corpus review's 4a-family-swapBoth, in
 -- draft 1: two cells borrowed `mut` as one family by withbor_f2_mut, and swapped.
--- 'a and 'b name the family's two internal borrows (section 9); top is the witness @w.
+-- 'a and 'b name the family's two internal borrows (section 9); top is the witness @w. The
+-- borrows `mb2` and `ma2` that the withswaps hand back are dropped implicitly (SPEC §12).
 --
 -- Answer: (i32[500], i32[9]), from the cells a = 9, b = 500. The cells differ, so a swap
 -- that does not happen gives (9, 500), one that copies one cell into the other gives
@@ -15,11 +16,9 @@ main : F (i32 * i32) =
             q1 <- return (withswap['c, i32, 1] ma (thunkv fun (x : i32) ->
                     q2 <- return (withswap['c, i32, i32] mb (thunkv fun (y : i32) -> return (x, y)));
                     let (mb2, y2) = q2;
-                    let () = forget_mut['c, i32] mb2;
                     return (y2, ())));
             let (ma2, u1) = q1;
             let () = u1;
-            let () = forget_mut['c, i32] ma2;
             return (boxed['c] ()))));
   let (s, u) = r;
   let () = u;

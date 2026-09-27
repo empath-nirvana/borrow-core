@@ -1,7 +1,8 @@
 -- mapProgR (Core/ReuseList.lean, MapMut.lean), from the corpus review's 2-mapProgR, in
 -- draft 1, over i32: a list [1, 3, 5] is borrowed `mut` by withbor2, incremented in place by
 -- a fold_reuse under withswap, then freed by a fold_own that reads it as the decimal digits
--- of one number, head last.
+-- of one number, head last. The borrow `b2` that withswap hands back is dropped implicitly
+-- (SPEC §12).
 --
 -- Answer: i32[642], the list [2, 4, 6]. Unmapped gives 531, mapped twice 753; an element
 -- skipped or mapped twice changes one digit; a map or a free that reverses the list gives 246.
@@ -55,7 +56,6 @@ main : F i32 =
             w <- return (withswap['x, List, 1] b (thunkv fun (k : List) -> return (map_inc k, ())));
             let (b2, u) = w;
             let () = u;
-            let () = forget_mut['x, List] b2;
             return (boxed['x] ()))));
   let (r2, u) = q;
   let () = u;

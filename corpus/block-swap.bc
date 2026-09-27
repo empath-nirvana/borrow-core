@@ -1,6 +1,7 @@
 -- blockSwap (Core/BlockPrograms.lean), from the corpus review's 4b-block-blockSwap, in
 -- draft 1: one block {a : B, b : B}, both leaves borrowed `mut` at one lifetime by
--- withbor_s_mut, swapped with two nested withswaps, and the block freed whole.
+-- withbor_s_mut, swapped with two nested withswaps, and the block freed whole. The borrows
+-- `mb2` and `ma2` that the withswaps hand back are dropped implicitly (SPEC §12).
 --
 -- Answer: (inr (), inl ()), from the block {a = inl (), b = inr ()}. The leaves differ, so a
 -- swap that does not happen gives (inl (), inr ()), and one that writes the same value back
@@ -19,11 +20,9 @@ main : F (B * B) =
             q1 <- return (withswap['c, B, 1] ma (thunkv fun (x : B) ->
                     q2 <- return (withswap['c, B, B] mb (thunkv fun (y : B) -> return (x, y)));
                     let (mb2, y2) = q2;
-                    let () = forget_mut['c, B] mb2;
                     return (y2, ())));
             let (ma2, u1) = q1;
             let () = u1;
-            let () = forget_mut['c, B] ma2;
             return (boxed['c] ()))));
   let (s, u) = r;
   let () = u;

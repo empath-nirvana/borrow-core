@@ -12,6 +12,10 @@ file.bc ──parse──▶ AST ──check──▶ Expr + proof of CDerives �
 | run | wasmtime, with tail calls | `lake exe bcc run file.bc` |
 | interpret | `Support`'s interpreter, or a backend stage's | `lake exe bcc interp [--stage source\|clos\|flat] file.bc` |
 
+The check stage also inserts the destructor of every owned value that a path leaves unused (SPEC
+§12), so the `Expr` it hands on consumes each value exactly once, and the compiler lowers the
+inserted calls as ordinary code.
+
 Every command that runs a program prints the value, then `live N`, the number of objects still
 allocated. `live 0` is the leak check.
 
