@@ -89,6 +89,9 @@ def Op.ofPrim? : Prim → Option Op
   | .free => some .free
   | .load => some .load
   | .host op => some (.host op)
+  | .tab => some .tab
+  | .idx => some .idx
+  | .drop => some .drop
   | .store => none
   | .lit _ => none
 

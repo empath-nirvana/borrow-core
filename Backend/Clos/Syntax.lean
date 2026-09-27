@@ -23,7 +23,7 @@ open BoCa
 
 abbrev Var := Nat
 
-/-- The primitives of `[TR]` §1 and §8, saturated. -/
+/-- The primitives of `[TR]` §1, §8 and §9, saturated. -/
 inductive Op where
   /-- `alloc v`: a fresh cell holding `v`. -/
   | alloc
@@ -35,6 +35,12 @@ inductive Op where
   | store
   /-- A host operation of §8, applied to its (consumed) argument. -/
   | host (op : HostOp)
+  /-- `tab (n, f)`: an array of `len(n)` slots, slot `i` holding `f i` (§9). -/
+  | tab
+  /-- `idx ((ℓ, n), i)`: `inl` of the `i`-th slot's location when `i < n`, else `inr ()` (§9). -/
+  | idx
+  /-- `drop (f, (ℓ, n))`: each slot's contents to `f`, in order, then the array freed (§9). -/
+  | drop
   deriving Repr, DecidableEq
 
 inductive Tm where

@@ -41,13 +41,21 @@ abbrev Loc := Nat
 ### 1.14 · `Prim ::= … ∣ store` · [TR] p. 1 · `[as printed]`
 -/
 /-- The four nullary productions of `[TR]` p. 1's `Prim`; `store v` is row 1.15.
-    `lit` and `host` are the integer constants of `SPEC.md` §8. -/
+    `lit` and `host` are the integer constants of `SPEC.md` §8; `tab`, `idx` and `drop` the
+    array primitives of §9. -/
 inductive Prim where
   | alloc | free | load | store
   /-- An integer literal.  `[spec §8]` -/
   | lit (c : IntLit)
   /-- A host operation, applied by the machine's host step.  `[spec §8]` -/
   | host (op : HostOp)
+  /-- Array creation: `tab (c, f)` places the cells and fills them from `f`.  `[spec §9]` -/
+  | tab
+  /-- Array indexing: `idx ((ℓ, n), i)`, bounds-checked.  `[spec §9]` -/
+  | idx
+  /-- Array disposal: `drop (f, (ℓ, n))` frees each cell and hands its contents to `f`.
+      `[spec §9]` -/
+  | drop
   deriving DecidableEq, Repr
 
 /-!

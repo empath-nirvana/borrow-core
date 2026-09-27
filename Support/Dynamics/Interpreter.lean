@@ -1,6 +1,7 @@
 import Paper.S1_Syntax.Definitions
 import Support.Syntax.Terms
 import Support.Dynamics.Host
+import Support.Dynamics.Arrays
 
 /-!
 # Support — Dynamics — Interpreter
@@ -29,6 +30,10 @@ def Mem.get? (μ : Mem) (ℓ : Loc) : Option Val :=
 
 def Mem.alloc (μ : Mem) (v : Val) : Loc × Mem :=
   (μ.next, ⟨(μ.next, v) :: μ.cells, μ.next + 1⟩)
+
+/-- `n` cells holding `v` at `next, …, next + n − 1`: the block `tab` places.  `[spec §9]` -/
+def Mem.allocN (μ : Mem) (n : Nat) (v : Val) : Loc × Mem :=
+  (μ.next, ⟨(List.range n).map (fun i => (μ.next + i, v)) ++ μ.cells, μ.next + n⟩)
 
 def Mem.free (μ : Mem) (ℓ : Loc) : Mem :=
   { μ with cells := μ.cells.filter (·.1 ≠ ℓ) }
@@ -61,7 +66,8 @@ A deterministic executable machine where the print gives a relation, with the `K
     application, so `delta` returns it as a value rather than stepping to one.
     Every value whose head is a primitive appears on the left, so `step` needs
     no arity test: the grammar already says how many arguments each production
-    still wants. A host operation is applied by `H.call` (`[spec §8]`). -/
+    still wants. A host operation is applied by `H.call` (`[spec §8]`); the array steps
+    allocate a block at `next` (`[spec §9]`). -/
 def delta (H : Host) (μ : Mem) : Expr → Val → Step
   | .prim .alloc,   v => let (ℓ, μ') := μ.alloc v; .next μ' (.loc ℓ)
   | .prim .free,    ⟨.loc ℓ, _⟩ =>
@@ -81,6 +87,13 @@ def delta (H : Host) (μ : Mem) : Expr → Val → Step
       match H.call op v with
       | some r => .next μ r.val
       | none   => .stuck .badHostArg
+  | .prim .tab, ⟨.pair (.prim (.lit (.i32 c))) f, h⟩ =>
+      let (ℓ, μ') := μ.allocN (arrLen c).toNat .unit
+      .next μ' (tabFill ⟨f, h.pair_right⟩ ℓ (arrLen c) 0 (arrLen c).toNat)
+  | .prim .idx, ⟨.pair (.pair (.loc ℓ) (.prim (.lit (.i32 n)))) (.prim (.lit (.i32 i))), _⟩ =>
+      .next μ (idxAns ℓ n i).val
+  | .prim .drop, ⟨.pair f (.pair (.loc ℓ) (.prim (.lit (.i32 n)))), h⟩ =>
+      .next μ (dropFill ⟨f, h.pair_left⟩ ℓ 0 n.toNat)
   | _, _ => .stuck .badPrimArg
 
 /-- One step of call-by-value reduction.
