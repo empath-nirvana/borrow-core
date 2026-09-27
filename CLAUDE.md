@@ -34,6 +34,12 @@ costs about 100 match arms across `Core/`, a `CTy` former about 20, a `CDerives`
 compatibility lemma.
 <!-- ANCHOR_END: growth -->
 
+## The gate: local CI
+
+GitHub Actions does not run for this repository (the workflow is manual-only). The gate for every
+PR is `scripts/ci-local.sh`, which runs every check CI would. Run it before opening or merging a
+PR and paste its final summary into the PR body. Never report a PR as passing without it.
+
 ## Hygiene
 
 - No `sorry`, `axiom`, `native_decide`, `implemented_by`, `opaque`, `partial`, `unsafe` in
