@@ -656,15 +656,18 @@ So a function's type shows which capabilities it can use: a helper that writes t
 takes neither performs no I/O. A `def` may use the persistent externs declared before it (the
 operations, which carry no authority), but never a capability: a capability is not persistent,
 so it is visible only in `main`, and a helper that does I/O takes it as an argument. The `def`
-is re-checked at each use, where the extern is `main`'s slot, as for any `def`. `stdout` and `stderr` share the type `Output`: a writer is given an output stream, and
-which one is its caller's choice. The bundle is split and lent with the existing machinery
-(§5): `main` destructures it, borrows one capability with `withbor2` and passes `mut 'a output`
-to a helper, or passes the whole cell.
+is re-checked at each use, where the extern is `main`'s slot, as for any `def`.
+
+`stdout` and `stderr` share the type `Output`: a writer is given an output stream, and which one
+is its caller's choice. The bundle is split and lent with the existing machinery (§5): `main`
+destructures it, borrows one capability with `withbor2` and passes `mut 'a output` to a helper,
+or passes the whole cell.
 
 **Why two operations.** Bytes are the unit of both streams, and end of input is the `inr ()` of
 a sum. Everything else a command-line tool needs — reading a line or a chunk into a borrowed
 array (§9), writing a string from a borrowed array, parsing and printing numbers, hex — is a
-loop over these two, written as library code. A chunk primitive would change only the cost of a
+loop over these two, written as library code (`corpus/io-aoc.bc` reads each line into one
+borrowed array; `corpus/io-wc.bc` prints decimal). A chunk primitive would change only the cost of a
 call, and the runtime may buffer below the interface. A new primitive is added when a loop over
 these two cannot express it.
 
@@ -733,10 +736,10 @@ flushed or closed). That the compiled lowering behaves as the model is tested, n
 ### Assurance
 
 Each extern records its assurance level, on the ladder of decision 27: (1) assumed,
-(2) interpreter-checked, (3) property-tested, (4) typed-unsafe, (5) boundary-checked,
-(6) semi-automatically verified, (7) proved. `bcc trusted <file>` lists every extern a program
-declares with its level and its implementation; an unproved boundary is the program's trusted
-base.
+(2) interpreter-checked, (3) property-tested, (4) typed low-level (typed unsafe code),
+(5) boundary-checked, (6) semi-automatically verified, (7) proved. `bcc trusted <file>` lists
+every extern a program declares with its level and its implementation; an unproved boundary is
+the program's trusted base.
 
 | extern | model | host implementation |
 |---|---|---|

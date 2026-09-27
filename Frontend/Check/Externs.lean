@@ -56,7 +56,7 @@ def Assurance.name : Assurance → String
   | .assumed => "assumed"
   | .interpChecked => "interpreter-checked"
   | .propertyTested => "property-tested"
-  | .typedUnsafe => "typed-unsafe"
+  | .typedUnsafe => "typed low-level"
   | .boundaryChecked => "boundary-checked"
   | .smtVerified => "semi-automatically verified"
   | .proved => "proved"
