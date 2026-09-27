@@ -1,0 +1,67 @@
+-- cat (SPEC §11): standard input copied to standard output, byte by byte. The capabilities
+-- `stdin` and `stdout` are cells; `getb` takes only the input and `putb` only the output, and
+-- each lends its capability to one operation. A loop is 2^12 steps of a `!` step function over
+-- the state (input, (output, running)); once the input has ended a step does nothing.
+--
+-- Answer: the input, byte for byte (`corpus/io-cat.out`), including a multi-byte UTF-8 character
+-- and a tab, then `()` and `live 0`. A byte dropped or repeated, a step that reads past the end,
+-- or an output byte truncated to 7 bits changes the output.
+
+extern stdin : ref input
+extern stdout : ref output
+extern read_byte : !(all 'a < top. mut 'a input => mut 'a input * (i32 + 1))
+extern write_byte : !(all 'a < top. mut 'a output * i32 => mut 'a output)
+
+type In = ref input
+type Out = ref output
+type B = 1 + 1
+
+-- The next byte of an input stream, or `inr ()` at its end. It takes only an input: the
+-- capability is lent to `read_byte` for the one read and handed back.
+def getb : In => In * (i32 + 1) =
+  thunkv fun (c : In) ->
+    return (withbor2['x, top, input, i32 + 1] c
+      (thunkv Fun 'x < dom. return (thunkv fun (m : mut 'x input) ->
+         r <- return ((unbang read_byte) ['x] m);
+         let (m2, b) = r;
+         return (boxed['x] b))))
+
+-- Write one byte. It takes only an output.
+def putb : Out * i32 => Out =
+  thunkv fun (p : Out * i32) ->
+    let (c, b) = p;
+    q <- return (withbor2['x, top, output, 1] c
+      (thunkv Fun 'x < dom. return (thunkv fun (m : mut 'x output) ->
+         m2 <- return ((unbang write_byte) ['x] (m, b));
+         return (boxed['x] ()))));
+    let (c2, u) = q;
+    return c2
+
+type S = In * (Out * B)
+
+-- One step of the copy: while the input runs, a byte read is a byte written.
+def step : !(S => S) =
+  !thunkv fun (s : S) ->
+    let (i, r) = s;
+    let (o, d) = r;
+    case d {
+      inl u ->
+        q <- return (getb i);
+        let (i2, x) = q;
+        case x {
+          inl b -> return (i2, (putb (o, b), (inl () : B)))
+        | inr u2 -> return (i2, (o, (inr () : B)))
+        }
+    | inr u -> return (i, (o, (inr () : B)))
+    }
+
+def twice : !(S => S) => !(S => S) =
+  thunkv fun (f : !(S => S)) -> return (!thunkv fun (s : S) -> return ((unbang f) ((unbang f) s)))
+
+-- 2^12 steps: an input of up to 4095 bytes is copied whole.
+main : F ((In * Out) * 1) =
+  f <- return (twice (twice (twice (twice (twice (twice (twice (twice (twice (twice (twice (twice step))))))))))));
+  s <- return ((unbang f) (stdin, (stdout, (inl () : B))));
+  let (i, r) = s;
+  let (o, d) = r;
+  return ((i, o), ())

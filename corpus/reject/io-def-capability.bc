@@ -1,0 +1,9 @@
+-- expect: 7:32: the capability `stdout` is not in scope: a `def` may use only persistent externs; take the capability as an argument (SPEC §11)
+extern stdout : ref output
+extern write_byte : !(all 'a < top. mut 'a output * i32 => mut 'a output)
+
+-- A helper that writes must take the capability: `stdout` is not in scope in a `def`.
+def shout : 1 => ref output =
+  thunkv fun (u : 1) -> return stdout
+
+main : F (ref output * 1) = return (stdout, ())

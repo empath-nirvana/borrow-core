@@ -1,0 +1,216 @@
+-- The sum of the numbers on the input's lines, in the style of Advent of Code's day 1 (SPEC
+-- §11, §9). Every line is read into one buffer, an array of 16 slots allocated once and kept
+-- in a cell: each line borrows the cell mutably (`withbor2`), `read_line` fills the lent buffer
+-- through `withswap` and `array_replace`, and `parse_line` reads the digits back. The cell and
+-- the buffer are freed implicitly at the end.
+--
+-- Answer: `5496`, the sum of 1721, 979, 366, 299, 675 and 1456. A line lost or read twice, a
+-- digit read from a stale slot, or a buffer not reset between lines gives another number.
+
+extern stdin : ref input
+extern stdout : ref output
+extern read_byte : !(all 'a < top. mut 'a input => mut 'a input * (i32 + 1))
+extern write_byte : !(all 'a < top. mut 'a output * i32 => mut 'a output)
+
+type In = ref input
+type Out = ref output
+type B = 1 + 1
+
+-- The next byte of an input stream, or `inr ()` at its end. It takes only an input: the
+-- capability is lent to `read_byte` for the one read and handed back.
+def getb : In => In * (i32 + 1) =
+  thunkv fun (c : In) ->
+    return (withbor2['x, top, input, i32 + 1] c
+      (thunkv Fun 'x < dom. return (thunkv fun (m : mut 'x input) ->
+         r <- return ((unbang read_byte) ['x] m);
+         let (m2, b) = r;
+         return (boxed['x] b))))
+
+-- Write one byte. It takes only an output.
+def putb : Out * i32 => Out =
+  thunkv fun (p : Out * i32) ->
+    let (c, b) = p;
+    q <- return (withbor2['x, top, output, 1] c
+      (thunkv Fun 'x < dom. return (thunkv fun (m : mut 'x output) ->
+         m2 <- return ((unbang write_byte) ['x] (m, b));
+         return (boxed['x] ()))));
+    let (c2, u) = q;
+    return c2
+
+-- Decimal output. The state is (output, (n, (d, started))): `d` runs over 10^9, 10^8, …, 1,
+-- and the digit `n / d` is written once a nonzero digit has been, or at `d = 1`.
+type DS = Out * (i32 * (i32 * B))
+
+def dec_step : !(DS => DS) =
+  !thunkv fun (s : DS) ->
+    let (o, r) = s;
+    let (n, r2) = r;
+    let (d, st) = r2;
+    case (unbang host[eqz32]) d {
+      inl nz ->
+        q <- return ((unbang host[div_u32]) (n, d));
+        digit : i32 <- case q { inl x -> return x | inr u -> return i32[0] };
+        n2 <- return ((unbang host[sub32]) (n, (unbang host[mul32]) (digit, d)));
+        show : B <- case st {
+          inl u ->
+            case (unbang host[eqz32]) digit {
+              inl u2 -> return (inr () : B)
+            | inr u3 -> return ((unbang host[eq32]) (d, i32[1]))
+            }
+        | inr u -> return (inr () : B)
+        };
+        o2 : Out <- case show {
+          inl u -> return o
+        | inr u -> return (putb (o, (unbang host[add32]) (digit, i32[48])))
+        };
+        q2 <- return ((unbang host[div_u32]) (d, i32[10]));
+        d2 : i32 <- case q2 { inl x -> return x | inr u -> return i32[0] };
+        return (o2, (n2, (d2, show)))
+    | inr z -> return (o, (n, (d, st)))
+    }
+
+def dec_twice : !(DS => DS) => !(DS => DS) =
+  thunkv fun (f : !(DS => DS)) -> return (!thunkv fun (s : DS) -> return ((unbang f) ((unbang f) s)))
+
+-- `n` in unsigned decimal: sixteen steps cover the ten digits. It takes only an output.
+def put_dec : Out * i32 => Out =
+  thunkv fun (p : Out * i32) ->
+    let (o, n) = p;
+    s <- return ((unbang (dec_twice (dec_twice (dec_twice (dec_twice dec_step)))))
+                   (o, (n, (i32[1000000000], (inl () : B)))));
+    let (o2, r) = s;
+    return o2
+
+type A = array i32
+
+def zero : !(i32 => i32) = !thunkv fun (i : i32) -> return i32[0]
+def inc : i32 => i32 = thunkv fun (n : i32) -> return ((unbang host[add32]) (n, i32[1]))
+
+-- Filling the buffer with one line: (input, (buffer, (length, (stopped, at the end)))). A byte
+-- other than a newline goes to the next slot; past the buffer's 16 slots `array_replace` takes
+-- its error branch and the byte is dropped.
+type FS = In * (A * (i32 * (B * B)))
+
+def fill_step : !(FS => FS) =
+  !thunkv fun (s : FS) ->
+    let (i, r) = s;
+    let (a, r2) = r;
+    let (n, fl) = r2;
+    let (stop, eof) = fl;
+    case stop {
+      inl u ->
+        q <- return (getb i);
+        let (i2, x) = q;
+        case x {
+          inl b ->
+            case (unbang host[eq32]) (b, i32[10]) {
+              inl nl ->
+                q2 <- return ((unbang array_replace[i32]) (a, (n, b)));
+                let (a2, old) = q2;
+                return (i2, (a2, (inc n, ((inl () : B), eof))))
+            | inr nl -> return (i2, (a, (n, ((inr () : B), eof))))
+            }
+        | inr e -> return (i2, (a, (n, ((inr () : B), (inr () : B)))))
+        }
+    | inr u -> return (i, (a, (n, (stop, eof))))
+    }
+
+def fill_twice : !(FS => FS) => !(FS => FS) =
+  thunkv fun (f : !(FS => FS)) -> return (!thunkv fun (s : FS) -> return ((unbang f) ((unbang f) s)))
+
+-- Read one line into the borrowed buffer: its length, and whether the input has ended. The
+-- buffer is taken out of its cell by `withswap` for the fill and put back.
+def read_line : all 'x < top. mut 'x A * In => mut 'x A * (In * (i32 * B)) =
+  thunkv Fun 'x < top. return (thunkv fun (p : mut 'x A * In) ->
+    let (m, i) = p;
+    return (withswap['x, A, In * (i32 * B)] m (thunkv fun (a : A) ->
+      s <- return ((unbang (fill_twice (fill_twice (fill_twice (fill_twice (fill_twice fill_step))))))
+                     (i, (a, (i32[0], ((inl () : B), (inl () : B))))));
+      let (i2, r) = s;
+      let (a2, r2) = r;
+      let (n, fl) = r2;
+      let (stop, eof) = fl;
+      return (a2, (i2, (n, eof))))))
+
+-- Parsing the buffer: (buffer, (index, (length, value))). Each digit is read by taking it out
+-- of its slot and putting it back.
+type PS = A * (i32 * (i32 * i32))
+
+def parse_step : !(PS => PS) =
+  !thunkv fun (s : PS) ->
+    let (a, r) = s;
+    let (k, r2) = r;
+    let (n, v) = r2;
+    case (unbang host[lt_u32]) (k, n) {
+      inl done -> return (a, (k, (n, v)))
+    | inr more ->
+        q <- return ((unbang array_replace[i32]) (a, (k, i32[0])));
+        let (a2, o) = q;
+        case o {
+          inl d ->
+            q2 <- return ((unbang array_replace[i32]) (a2, (k, d)));
+            let (a3, o2) = q2;
+            v2 <- return ((unbang host[add32]) ((unbang host[mul32]) (v, i32[10]),
+                                                  (unbang host[sub32]) (d, i32[48])));
+            return (a3, (inc k, (n, v2)))
+        | inr d -> return (a2, (inc k, (n, v)))
+        }
+    }
+
+def parse_twice : !(PS => PS) => !(PS => PS) =
+  thunkv fun (f : !(PS => PS)) -> return (!thunkv fun (s : PS) -> return ((unbang f) ((unbang f) s)))
+
+-- The number in the first `n` slots of the borrowed buffer.
+def parse_line : all 'x < top. mut 'x A * i32 => mut 'x A * i32 =
+  thunkv Fun 'x < top. return (thunkv fun (p : mut 'x A * i32) ->
+    let (m, n) = p;
+    return (withswap['x, A, i32] m (thunkv fun (a : A) ->
+      s <- return ((unbang (parse_twice (parse_twice (parse_twice (parse_twice parse_step)))))
+                     (a, (i32[0], (n, i32[0]))));
+      let (a2, r) = s;
+      let (k, r2) = r;
+      let (n2, v) = r2;
+      return (a2, v))))
+
+-- One line: the buffer's cell is lent mutably, the line read into it and parsed, and the sum
+-- advanced. (cell, (input, (sum, at the end)))
+type S = ref A * (In * (i32 * B))
+
+def step : !(S => S) =
+  !thunkv fun (s : S) ->
+    let (c, r) = s;
+    let (i, r2) = r;
+    let (sum, eof) = r2;
+    case eof {
+      inl u ->
+        q <- return (withbor2['x, top, A, In * (i32 * B)] c
+               (thunkv Fun 'x < dom. return (thunkv fun (m : mut 'x A) ->
+                  l <- return (read_line ['x] (m, i));
+                  let (m1, t) = l;
+                  let (i1, t2) = t;
+                  let (n, e) = t2;
+                  v <- return (parse_line ['x] (m1, n));
+                  let (m2, x) = v;
+                  return (boxed['x] (i1, (x, e))))));
+        let (c2, t) = q;
+        let (i2, t2) = t;
+        let (x, e) = t2;
+        return (c2, (i2, ((unbang host[add32]) (sum, x), e)))
+    | inr u -> return (c, (i, (sum, eof)))
+    }
+
+def twice : !(S => S) => !(S => S) =
+  thunkv fun (f : !(S => S)) -> return (!thunkv fun (s : S) -> return ((unbang f) ((unbang f) s)))
+
+-- One buffer of 16 slots for every line, in one cell; up to 2^8 lines. The cell and the
+-- buffer are dropped implicitly at the end (SPEC §12).
+main : F ((In * Out) * i32) =
+  buf <- return ((unbang array_new[i32]) (i32[16], zero));
+  c <- return (alloc[A] buf);
+  f <- return (twice (twice (twice (twice (twice (twice (twice (twice step))))))));
+  s <- return ((unbang f) (c, (stdin, (i32[0], (inl () : B)))));
+  let (c2, r) = s;
+  let (i, r2) = r;
+  let (sum, eof) = r2;
+  o <- return (put_dec (stdout, sum));
+  return ((i, putb (o, i32[10])), sum)

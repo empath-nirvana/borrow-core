@@ -1,0 +1,141 @@
+-- wc (SPEC §11): lines, words and bytes of the input, written as `lines words bytes`. A word
+-- starts at a byte that is not a space, tab or newline after one that is. `put_dec` writes a
+-- number in decimal and takes only an output; the counts are also `main`'s result.
+--
+-- Answer: `3 10 50` for the input, as `wc` counts it: the last line has no newline, and the
+-- second starts with two spaces and has a tab. `(i32[3], (i32[10], i32[50]))` is the result.
+
+extern stdin : ref input
+extern stdout : ref output
+extern read_byte : !(all 'a < top. mut 'a input => mut 'a input * (i32 + 1))
+extern write_byte : !(all 'a < top. mut 'a output * i32 => mut 'a output)
+
+type In = ref input
+type Out = ref output
+type B = 1 + 1
+
+-- The next byte of an input stream, or `inr ()` at its end. It takes only an input: the
+-- capability is lent to `read_byte` for the one read and handed back.
+def getb : In => In * (i32 + 1) =
+  thunkv fun (c : In) ->
+    return (withbor2['x, top, input, i32 + 1] c
+      (thunkv Fun 'x < dom. return (thunkv fun (m : mut 'x input) ->
+         r <- return ((unbang read_byte) ['x] m);
+         let (m2, b) = r;
+         return (boxed['x] b))))
+
+-- Write one byte. It takes only an output.
+def putb : Out * i32 => Out =
+  thunkv fun (p : Out * i32) ->
+    let (c, b) = p;
+    q <- return (withbor2['x, top, output, 1] c
+      (thunkv Fun 'x < dom. return (thunkv fun (m : mut 'x output) ->
+         m2 <- return ((unbang write_byte) ['x] (m, b));
+         return (boxed['x] ()))));
+    let (c2, u) = q;
+    return c2
+
+-- Decimal output. The state is (output, (n, (d, started))): `d` runs over 10^9, 10^8, …, 1,
+-- and the digit `n / d` is written once a nonzero digit has been, or at `d = 1`.
+type DS = Out * (i32 * (i32 * B))
+
+def dec_step : !(DS => DS) =
+  !thunkv fun (s : DS) ->
+    let (o, r) = s;
+    let (n, r2) = r;
+    let (d, st) = r2;
+    case (unbang host[eqz32]) d {
+      inl nz ->
+        q <- return ((unbang host[div_u32]) (n, d));
+        digit : i32 <- case q { inl x -> return x | inr u -> return i32[0] };
+        n2 <- return ((unbang host[sub32]) (n, (unbang host[mul32]) (digit, d)));
+        show : B <- case st {
+          inl u ->
+            case (unbang host[eqz32]) digit {
+              inl u2 -> return (inr () : B)
+            | inr u3 -> return ((unbang host[eq32]) (d, i32[1]))
+            }
+        | inr u -> return (inr () : B)
+        };
+        o2 : Out <- case show {
+          inl u -> return o
+        | inr u -> return (putb (o, (unbang host[add32]) (digit, i32[48])))
+        };
+        q2 <- return ((unbang host[div_u32]) (d, i32[10]));
+        d2 : i32 <- case q2 { inl x -> return x | inr u -> return i32[0] };
+        return (o2, (n2, (d2, show)))
+    | inr z -> return (o, (n, (d, st)))
+    }
+
+def dec_twice : !(DS => DS) => !(DS => DS) =
+  thunkv fun (f : !(DS => DS)) -> return (!thunkv fun (s : DS) -> return ((unbang f) ((unbang f) s)))
+
+-- `n` in unsigned decimal: sixteen steps cover the ten digits. It takes only an output.
+def put_dec : Out * i32 => Out =
+  thunkv fun (p : Out * i32) ->
+    let (o, n) = p;
+    s <- return ((unbang (dec_twice (dec_twice (dec_twice (dec_twice dec_step)))))
+                   (o, (n, (i32[1000000000], (inl () : B)))));
+    let (o2, r) = s;
+    return o2
+
+-- The counts (lines, (words, bytes)) and the flags (in a word, at the end).
+type C = i32 * (i32 * i32)
+type S = In * (C * (B * B))
+
+def inc : i32 => i32 = thunkv fun (n : i32) -> return ((unbang host[add32]) (n, i32[1]))
+
+-- Space, tab or newline.
+def is_space : i32 => B =
+  thunkv fun (b : i32) ->
+    case (unbang host[eq32]) (b, i32[32]) {
+      inl u ->
+        case (unbang host[eq32]) (b, i32[10]) {
+          inl u2 -> return ((unbang host[eq32]) (b, i32[9]))
+        | inr u2 -> return (inr () : B)
+        }
+    | inr u -> return (inr () : B)
+    }
+
+-- One byte counted: a newline is a line, and a word starts at a byte that is not a space
+-- after one that is.
+def step : !(S => S) =
+  !thunkv fun (s : S) ->
+    let (i, r) = s;
+    let (cnt, fl) = r;
+    let (inw, eof) = fl;
+    case eof {
+      inl u ->
+        q <- return (getb i);
+        let (i2, x) = q;
+        case x {
+          inl b ->
+            let (l, r2) = cnt;
+            let (w, c) = r2;
+            l2 : i32 <- case (unbang host[eq32]) (b, i32[10]) { inl v -> return l | inr v -> return (inc l) };
+            case is_space b {
+              inl ns ->
+                w2 : i32 <- case inw { inl v -> return (inc w) | inr v -> return w };
+                return (i2, ((l2, (w2, inc c)), ((inr () : B), (inl () : B))))
+            | inr sp -> return (i2, ((l2, (w, inc c)), ((inl () : B), (inl () : B))))
+            }
+        | inr u2 -> return (i2, (cnt, (inw, (inr () : B))))
+        }
+    | inr u -> return (i, (cnt, (inw, eof)))
+    }
+
+def twice : !(S => S) => !(S => S) =
+  thunkv fun (f : !(S => S)) -> return (!thunkv fun (s : S) -> return ((unbang f) ((unbang f) s)))
+
+-- 2^11 steps: an input of up to 2047 bytes. The counts are written as `lines words bytes`.
+main : F ((In * Out) * C) =
+  f <- return (twice (twice (twice (twice (twice (twice (twice (twice (twice (twice (twice step)))))))))));
+  s <- return ((unbang f) (stdin, ((i32[0], (i32[0], i32[0])), ((inl () : B), (inl () : B)))));
+  let (i, r) = s;
+  let (cnt, fl) = r;
+  let (l, r2) = cnt;
+  let (w, c) = r2;
+  o1 <- return (put_dec (stdout, l));
+  o2 <- return (put_dec (putb (o1, i32[32]), w));
+  o3 <- return (put_dec (putb (o2, i32[32]), c));
+  return ((i, putb (o3, i32[10])), (l, (w, c)))

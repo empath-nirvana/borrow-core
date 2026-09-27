@@ -1,0 +1,5 @@
+-- expect: 5:52: `stdout` is used twice here, and its type `ref output` is not persistent
+extern stdout : ref output
+
+-- A capability is linear: it cannot be handed back twice.
+main : F ((ref output * ref output) * 1) = return ((stdout, stdout), ())
