@@ -1,4 +1,5 @@
 import Core.Fundamental
+import Core.Dtor
 
 /-!
 # Frontend — Check — deciders for the side conditions

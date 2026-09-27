@@ -15,7 +15,7 @@ namespace Frontend.Check
 open BoCa BoCa.Lifetime
 open BoCa.Fig16.LogRel.Core.Check
 open BoCa.Fig16.LogRel.Core (CDerives Jdg withPair withCtx absurdE forceE Persistent
-  CtxOutlives)
+  CtxOutlives HasDtor dropE drop_derives)
 
 abbrev CExpr := BoCa.Expr
 
@@ -190,6 +190,13 @@ def rSumE {A B : CVTy} {C : CCTy} (rV : Res Δ T (.val (.sum A B)))
       CDerives Δ (mkCtx (B :: T) (true :: L)) e₂ (.comp C)))
     (h : overlapOK T rV.F.u F.u = true) : Res Δ T (.comp C) :=
   ⟨.case rV.e e₁ e₂, (rV.F.split F h).map fun _ ⟨_, _, hs, h₁, h₂, h₃⟩ => .sumE hs h₁ h₂ h₃⟩
+
+/-- `dtorE A xᵢ; M`: the destructor of slot `i` before `M`, which does not use it (SPEC §12).
+`drop_derives`: `unitE` over `lolliE` of the variable and `dtor_wf`. -/
+def rDrop {C : CCTy} (i : Nat) (A : CVTy) (hi : T[i]? = some A) (hA : HasDtor A)
+    (r : Res Δ T (.comp C)) (h : overlapOK T (oneL T i) r.F.u = true) : Res Δ T (.comp C) :=
+  ⟨dropE A i r.e, ((Fam.var T i A hi).split r.F h).map fun _ ⟨_, _, hs, hx, hM⟩ =>
+    drop_derives hs hx hA hM⟩
 
 /-- `absurd V`: the rest of the context is absorbed. -/
 def rZeroE (C : CCTy) (rV : Res Δ T (.val .zero)) (h : overlapOK T rV.F.u (Fam.top T).u = true) :

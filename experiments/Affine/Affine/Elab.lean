@@ -1,4 +1,4 @@
-import Affine.Dtor
+import Core
 
 /-!
 # Affine — the affine judgment and its elaboration into `CDerives`
@@ -37,9 +37,6 @@ open BoCa
 open BoCa.Fig16
 open BoCa.Fig16.BoLo
 open BoCa.Lifetime (LSub LifeCtx LifeVar)
-
-/-- `dtorE T x; e`: the discard of the variable `i` at `T`, before `e`. -/
-def dropE (T : VTy) (i : Nat) (e : Expr) : Expr := .seq (.app (dtorE T) (.var i)) e
 
 /-- The affine judgment, with the elaborated term as its second index. -/
 inductive ADerives : LifeCtx → Ctx VTy → Expr → Expr → Jdg → Prop where
@@ -133,12 +130,6 @@ inductive ADerives : LifeCtx → Ctx VTy → Expr → Expr → Jdg → Prop wher
       ADerives Δ Γ e e' (.comp (.stream A))
   | streamOut {Δ Γ e e' A} (h : ADerives Δ Γ e e' (.comp (.stream A))) :
       ADerives Δ Γ e e' (.comp (streamUnroll A))
-
-/-- The discard is `unitE` over the destructor applied to the slot. -/
-theorem drop_derives {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {i : Nat} {T : VTy} {e : Expr} {C : CTy}
-    (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hx : Ctx.SoloP Γ₁ i T) (hT : HasDtor T)
-    (h : CDerives Δ Γ₂ e (.comp C)) : CDerives Δ Γ (dropE T i e) (.comp C) :=
-  .unitE hs (.lolliE (split_kill' Γ₁).toP (.var hx) (dtor_wf hT (kill_dead Γ₁))) h
 
 /-- **The elaboration is type-correct**: an affine derivation's elaborated term is a `CDerives`
 derivation at the same context and judgment. -/

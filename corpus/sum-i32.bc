@@ -1,6 +1,7 @@
 -- The i32 counterpart of sumProg (syntax-core.md §13.2): a list of i32 cells, each node one
 -- block, borrowed `imm` by withbor1 and summed by a fold_imm whose algebra reads each element
--- through its borrow with withload; the cell and the list are then freed by a fold_own.
+-- through its borrow with withload. The cell and the list are then dropped implicitly (SPEC
+-- §12): the destructor of `ref List` frees the cell, then frees the list by a fold_own.
 --
 -- Answer: i32[123], the sum of [100, 20, 3]. Each element is counted exactly once: a fold
 -- that drops an element gives 23, 103 or 120, and one that counts an element twice gives
@@ -25,18 +26,6 @@ def sum_alg : !(all 'y < top. 1 + (imm 'y i32 * i32) => i32) =
 def sum_list : !(all 'a < top. imm 'a List => i32) =
   fold_imm[1 + (ref i32 * ref X), 'a, top, i32] sum_alg
 
--- A′_R = 1 + (ref i32 * 1)
-def free_list_alg : !(1 + (ref i32 * 1) => 1) =
-  !thunkv fun (r : 1 + (ref i32 * 1)) ->
-    case r {
-      inl u -> return u
-    | inr p -> let (rn, u) = p; let () = u;
-               n <- return (free[i32] rn);
-               return ()
-    }
-
-def free_list : List => 1 = unbang (fold_own[1 + (ref i32 * ref X), 1] free_list_alg)
-
 def nil : List = roll (inl ())
 
 def cons : i32 * List => List =
@@ -50,7 +39,4 @@ main : F i32 =
             n <- return ((unbang sum_list) ['x] b);
             return (boxed['x] n))));
   let (r2, n) = q;
-  l2 <- return (free[List] r2);
-  u  <- return (free_list l2);
-  let () = u;
   return n

@@ -1,11 +1,12 @@
--- The arms of a `case` consume different variables: `r` is freed in one arm only.
+-- The arms of a `case` consume different variables: the thunk `k` is run in one arm only. A
+-- cell would be dropped in the other arm (SPEC §12), but a thunk has no destructor.
 type B = 1 + 1
 
-main : F 1 =
-  r <- return (alloc[B] (inl ()));
+main : F B =
+  k <- return (thunk (return (inl () : B)));
   c <- return (inl () : B);
   case c {
-    inl u -> x <- return (free[B] r); return u
-  | inr u -> return u
+    inl u -> force k
+  | inr u -> return (inr u : B)
   }
--- expect: 7:3: in this `case`, `r` is consumed in the `inl` arm but not in the `inr` arm
+-- expect: 8:3: in this `case`, `k` is consumed in the `inl` arm but not in the `inr` arm, and its type `U (F (1 + 1))` has no destructor

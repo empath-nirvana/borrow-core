@@ -197,6 +197,7 @@ Mode: **S** synthesizes, **C** checks only, **S/C** synthesizes when its parts d
 | `return V` | `V` | `ret` `Fu:67` | S/C |
 | `x <- M; N` | `(λx. N) M` (`bindE`, `FI:107`) | `bind` `Fu:69` | S/C |
 | `x : A <- M; N` | the same, `M` checked at `F A` | `bind` `Fu:69` | S/C |
+| `linear x <- M; N`, `linear x : A <- M; N` | the same; `x` is not dropped implicitly (§7) | `bind` `Fu:69` | S/C |
 | `force x` | `x ()` at `F A`, else `x` | `force` `Fu:73` | S |
 | `fun (x : A) -> M` | `λx. M` | `lam` `Fu:75` | S/C |
 | `M x` | `app M x` | `app` `Fu:77` | S |
@@ -287,9 +288,20 @@ types (`VTy.persistent`). It follows that:
   components the whole `Γ` (`Fu:81`). This is not contraction, because only one component
   ever runs: `< (delay_out (force f s)).1, (delay_out (force f s)).2 >` uses `f` and `s` once
   in each component.
-- **Apart from persistent slots, the only discarding forms are `<>` and `absurd V`.** `topI` holds at any `Γ` (`Fu:89`),
-  and `zeroE` absorbs every slot that `V` does not use (`Fu:103`). Section 11 describes how the
-  checker handles this.
+- **Apart from persistent slots, the only discarding forms of the core are `<>` and `absurd V`.**
+  `topI` holds at any `Γ` (`Fu:89`), and `zeroE` absorbs every slot that `V` does not use
+  (`Fu:103`). Section 11 describes how the checker handles this.
+- **Implicit destructors** (SPEC §12). A variable bound by `x <- M; N`, `let (x, y) = V; M`, a
+  `case` arm or `fun`, whose type has a destructor (`HasDtor`, `Core/Dtor.lean`) and is not
+  persistent, need not be consumed in the source. On each path that does not consume it, the
+  checker inserts its destructor `dtorE A x` immediately before the path's terminal computation,
+  most recently bound variable first. The erasure contains the call, so the core term still uses
+  the variable exactly once. Borrows are dropped by `forget`. `ref A` is dropped by `free` followed
+  by the destructor of `A`, a fold-class `mu` by `fold_own`, and `U (C & F 1)`, `U (delay A)` and
+  `U (stream A)` by `close` (`.2`). `U C` otherwise has no destructor, so an unused thunk is an error.
+  The same holds for a `case` whose arms consume different variables: arms that differ in a variable
+  with a destructor are balanced by dropping it in the arm that does not use it. Any other
+  difference is an error. `linear x <- M; N` opts `x` out, and then `N` must consume it.
 - **Constants and `def`s consume nothing.** They are typed at a dead context.
 
 ## 8. Constants
@@ -420,6 +432,7 @@ keyword because each mode is a separate theorem.
 - **`extern name : A`** adds a live slot of type `A` to `main`'s initial context. The last
   declared extern gets index 0. `A` must be closed (no free lifetime variables). `main` must
   consume every non-persistent extern; persistent externs (such as `!`-typed ones) may go unused.
+  Externs are never dropped implicitly (§7).
 - **`main : C = M`** is checked at `Δ = ∅` and `Γ =` the externs. `C` is any computation type.
 
 What a program means:
@@ -460,7 +473,7 @@ flag.
   be equal. The exception is an arm with slack, which may be extended to the other arm's set
   if its own set is contained in it. If both have slack, the result keeps slack.
 - When a binder's scope closes, its variable must be consumed, or be absorbed by slack in its
-  scope.
+  scope. With implicit destructors (§7) the checker consumes it itself where it can: see §11.1.
 - **Side conditions on contexts are read on the consumed context.** They are boxI's
   `CtxOutlives Δ Γ @` (`Ty:1383`), bangThunk's `Persistent Γ` (`Rl:203`), and allI's `hΓx`
   (`'x` is not free in any live slot). At such a boundary the slack is closed: the body
@@ -494,6 +507,11 @@ The checker's behaviour where it goes beyond the sections above:
   type's binder number, not `Δ.freshVar`.
 - **Declarations.** A def's type arguments are elaborated at the use site, and a parametric def is
   checked only at its uses. `main`'s context is every extern in the file.
+- **Drops** (§7, SPEC §12). The checker carries the set of variables owed to the current tail
+  position. At a terminal computation it checks the computation, then wraps it in `dtorE A x; …`
+  for each owed variable it did not use, lowest index first. The drop is one builder (`rDrop`),
+  `unitE` over `lolliE` of the variable and `dtor_wf`. The head `M` of `x <- M; N` is owed the owed
+  variables it mentions by name.
 - **Incompleteness.** Lifetime entailment uses only the structural rules, so it misses
   distributivity (`('x \/ 'y) /\ 'z <= ('x /\ 'z) \/ ('y /\ 'z)`). The derived forms stated at
   `Ctx.Dead` (`alloc_s`, `free_s`, `withbor_s_*`, `withbor_f2_*`) cannot drop persistent slots. The
@@ -694,3 +712,5 @@ How this checks:
 14. The worked example is fixed: `all` algebras, `Fun 'y. return (thunkv fun …)`, curried
     `add`, and fold applications as `def`s. A borrow example is added (§13).
 15. Integers and arrays are pending, and the erasure target is an open question (§14).
+16. Implicit destructors (SPEC §12): unused variables of a type with a destructor are
+    dropped by the checker at the end of each path; `linear x <- M; N` opts out (§6.2, §7, §11.1).

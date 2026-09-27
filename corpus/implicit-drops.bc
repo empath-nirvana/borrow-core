@@ -1,0 +1,69 @@
+-- Implicit destructors (SPEC §12): owned values that go unused are dropped by the checker, which
+-- inserts each one's destructor at the end of the path that leaves it unused.
+--
+-- * `r`, a cell, is never used: it is freed before `main` returns.
+-- * `l` and `k`, lists of cells, are each consumed in the `inr` arm of a `case` and dropped in
+--   the `inl` arm. The first `case` takes the `inr` arm, the second the `inl` arm. `head` keeps
+--   the first element and drops the rest of the list.
+-- * `t1`, a stream whose state owns a cell, is dropped after one element. Its destructor is
+--   `close`, and the close component returns `()` without mentioning its state `s`, which is
+--   dropped there: the close frees the cell.
+-- * `q` is `linear`: it must be consumed, and it is.
+--
+-- Answer: i32[6047]: 7 (the head of [7, 30]) + 1000 (the `inl` arm) + 5000 (the stream's first
+-- element) + 40 (read from `q`). The wrong arm of the first `case` gives 7040, of the second
+-- 5056; a head that reads the second element gives 6070, and a stream advanced once too often
+-- 6057. `live 0` checks that the unused cell, the list dropped in the `inl` arm, the rest of
+-- `head`'s list and the stream's cell are all freed.
+
+type B = 1 + 1
+type List = mu X. 1 + (ref i32 * ref X)
+shape Node = node (leaf i32) (leaf List)
+
+def plus : i32 * i32 => i32 = unbang host[add32]
+
+def nil : List = roll (inl ())
+
+def cons : i32 * List => List =
+  thunkv fun (p : i32 * List) -> return (roll (inr (alloc_s[Node] p)))
+
+-- The first element, or 0. The tail `t` is dropped.
+def head : List => i32 =
+  thunkv fun (l : List) ->
+    case (unroll l) {
+      inl u -> return i32[0]
+    | inr p -> let (c, t) = p; return (free[i32] c)
+    }
+
+-- Emit the cell's value and store the next one; the close drops the cell.
+def cell_step : !U (ref i32 -o F (i32 * ref i32) & F 1) =
+  !thunkv fun (s : ref i32) ->
+    < cx <- return (swap[i32, 1] s ());
+      let (c, x) = cx;
+      cu <- return (swap[1, i32] c ((unbang host[add32]) (x, i32[10])));
+      let (c1, u1) = cu;
+      return (x, c1),
+      return () >
+
+main : F i32 =
+  r <- return (alloc[B] (inl ()));
+  l <- return (cons (i32[7], cons (i32[30], nil)));
+  c <- return (inr () : B);
+  n <- case c {
+         inl u -> return i32[1000]
+       | inr u -> return (head l)
+       };
+  k <- return (cons (i32[9], nil));
+  d <- return (inl () : B);
+  m <- case d {
+         inl u -> return i32[1000]
+       | inr u -> return (head k)
+       };
+  f <- return (unbang (unfold_s[i32, ref i32] cell_step));
+  z <- return (alloc[i32] i32[5000]);
+  t0 <- return (thunkv stream_in < (stream_out (force f z)).1, (stream_out (force f z)).2 >);
+  p1 <- (stream_out (force t0)).1;
+  let (x1, t1) = p1;
+  linear q <- return (alloc[i32] i32[40]);
+  v <- return (free[i32] q);
+  return (plus (plus (plus (n, m), x1), v))

@@ -73,7 +73,8 @@ Where draft 1 is silent or ambiguous about parsing, the parser does the followin
 10. **`.1` / `.2`** are the token `.` followed by the integer `1` or `2`; whitespace may
     separate them (`force f s .1`).
 11. **`<>`** is the tokens `<` `>`; whitespace may separate them.
-12. **Reserved words.** All keywords of types, terms and declarations, every constant and
+12. **Reserved words.** All keywords of types, terms and declarations (including `linear`,
+    SPEC §12), every constant and
     derived-form keyword (`alloc`, `free`, `copy`, `swap`, `host`, …), `val`, `block`, `leaf`,
     `node`, `str`, and `main` are reserved as lower-case names; `U`, `F`, `Fun` as upper-case
     names. `main` has to be reserved: a `def` body ends where the next declaration begins.
@@ -108,8 +109,8 @@ judgment, for the derived forms of syntax-core §9), so what the checker returns
 | `Check/Decide.lean` | `DecidableEq` on `VTy`, `CTy`, `Expr`; a `Bool` decider for each side condition, with its soundness lemma |
 | `Check/Fam.lean` | linearity: masks of used and absorbable slots, and a derivation at every liveness between them |
 | `Check/Elab.lean` | surface lifetimes, types and shapes to `Core`'s; a printer back |
-| `Check/Rules.lean` | one builder per `CDerives` constructor |
-| `Check/Steps.lean` | the environment, messages, and the steps shared by the checker's cases |
+| `Check/Rules.lean` | one builder per `CDerives` constructor, and `rDrop` (SPEC §12) |
+| `Check/Steps.lean` | the environment, messages, the deciders of fold shapes and destructors, the drops, and the steps shared by the checker's cases |
 | `Check/Consts.lean` | constants (§8, §8a) and derived forms (§9) |
 | `Check/Checker.lean` | the bidirectional checker, `synV`/`chkV`/`synC`/`chkC` |
 | `Check/Program.lean` | declarations, `main`, and the soundness theorems |
@@ -144,6 +145,23 @@ other (`Fam.merge`); a binder's slot must be used or absorbed when its scope clo
 every live slot (`CtxOutlives`, `Persistent`, `allI`'s `hΓx`) is checked on the used slots and
 restricts what may be absorbed. This is Hodas–Miller's input/output reading with the output
 chosen by the enclosing rule instead of threaded.
+
+**Implicit destructors** (SPEC §12). `Env.own` marks the slots **owed** to the computation
+being checked: variables bound by `x <- M; N`, `let (x, y) = V; M`, a `case` arm or `fun` whose
+type has a destructor (`hasDtorB`, sound for `HasDtor` by `dtorB_sound`), is not persistent, and
+whose binder is not `linear`. What is owed flows into tail positions: the body of `<-` and `let`
+(less what the head or `V` used), both `case` arms, both `<,>` components, `fun`/`Fun` bodies,
+`delay_in`/`stream_in` and ascriptions. The head `M` of `x <- M; N` is owed the owed variables it
+mentions by name (`mentionsC`). A value, and so every computation inside one, starts with
+nothing owed. At a terminal computation (`Comp.terminal`), the checker checks it with nothing
+owed, then wraps the result in `dtorE A xᵢ; …` for each owed slot `i` it neither used nor
+absorbed, the lowest index outermost (`dropOwed`). Each wrap is `rDrop`, which applies
+`drop_derives` (`Core/Dtor.lean`: `unitE` over `lolliE` of the variable and `dtor_wf`) to a split
+of the variable leaf and the computation, so the result is still a `Res`, and
+`checkProgram_sound` is unchanged. The erasure contains the calls, and the backend compiles them
+as ordinary code. A binder whose variable is left unconsumed is reported with its reason: `linear`,
+or a type with no destructor. A `case` or `<,>` whose parts differ in a variable with no
+destructor names that type.
 
 **Cross-check.** `CrossCheck.lean` proves by `decide +kernel` that the ten `def`s of §13.1
 erase to `countAlgV`, `natCopyE`, `freeLAlgV`, `freeNatE`, `addAlgV`, `addE`, `sumAlgV`,
@@ -180,6 +198,13 @@ of the search; none is a change to `CDerives`.
 6. **Def type parameters** are elaborated at the use and substituted as elaborated types (§10
    says textually); a `def` with parameters is checked only at its uses.
 7. **Fuel.** The checker's call tree is bounded at depth 2^20, type elaboration at 2^16.
+8. **Drops only along tail positions** (SPEC §12). A value never drops: a variable consumed on
+   one path of a computation inside a value (`run M`, `thunk M`, the scrutinee of `case`) must be
+   consumed on every path of it. Apart from tail positions, only the head of `x <- M; N` is owed
+   what it mentions. The head `M` of an application `M x`, a projection or an instantiation is
+   part of a terminal computation, so a `case` there must balance its arms by itself.
+9. **Externs are not owed.** `main` must consume every non-persistent extern, with or without a
+   destructor.
 
 The deciders for `VFree`, `Cl`, `NoMut`, `VScoped`, `FShape.WF`/`Guarded`, `plainV`,
 `Shape.plain`, `Δ.Ok`, `Δ.find? x = none`, `C.isRet`, `FamSide.hinst` and foldImm's

@@ -1,10 +1,13 @@
-import Core
+import Core.Records
+import Core.Folds
 
 /-!
-# Affine — destructors as derived terms
+# Core — destructors  `[spec §12]`
 
-`dtorE T` is a closed term `T ⊸ F 1` for every type `T` with `HasDtor T`, and `dtor_wf` types it
-in `CDerives` at every dead context: it is an ordinary linear program built from existing rules.
+`dtorE T : T ⊸ F 1` is a closed term for every type `T` with `HasDtor T`, and `dtor_wf` types it
+in `CDerives` at every lifetime context and every dead context: it is an ordinary linear program
+built from existing rules. The checker inserts `dropE T i e = (dtorE T xᵢ; e)` where an owned
+value goes unused (`drop_derives`), so the elaborated term uses the value exactly once.
 
 | type | destructor |
 |---|---|
@@ -15,13 +18,13 @@ in `CDerives` at every dead context: it is an ordinary linear program built from
 | `μX. T`, `T` in `FShape` | `foldOwn` whose algebra is the destructor of `T[1/X]` |
 | `U(C & F 1)`, `U(D A)`, `U(Stream A)` | `close`: force, then the second projection |
 
-`U C` in general has none: a thunk of `F A` or of `A ⊸ C` can only be disposed of by running it.
-`μ` outside `FShape` (for example `X` under `U`) has none. A type is **droppable** when it has a
-destructor (`HasDtor`); every forgettable type of `Core/Records.lean` (`Affine`) is droppable
-(`hasDtor_of_affine`).
+The first two rows are the forgettable types, whose destructor does nothing; every type of
+`Affine` (`Core/Records.lean`) is one (`hasDtor_of_affine`). The other rows deallocate or run
+`close` code. `U C` in general has no destructor: a thunk of `F A` or of `A ⊸ C` can only be
+disposed of by running it. Nor does `μ` outside `FShape` (for example `X` under `U`).
 
 The `μ` case recovers the fold's shape from the body (`toFShape`, with `(toFShape A).ty = A`) and
-names the algebra by the same recursion in its `alg` mode (`algE = dt true`), so both are one
+names the algebra by the same recursion in its `alg` mode (`algE = dtorAt true`), so both are one
 structural recursion on `VTy`; `algE_eq` identifies the algebra with the destructor of `T[1/X]`.
 -/
 
@@ -29,7 +32,12 @@ noncomputable section
 
 variable {ℍ : BoCa.Host} [BoCa.HostIs ℍ]
 
-namespace BoCa.Fig16.LogRel.Core.Affine
+namespace BoCa.Fig16.LogRel.Core
+open BoCa
+open BoCa.Fig16
+open BoCa.Fig16.BoLo
+open BoCa.Lifetime (LSub LifeCtx LifeVar)
+
 open BoCa
 open BoCa.Fig16
 open BoCa.Fig16.BoLo
@@ -86,28 +94,28 @@ def isX0 : VTy → Bool
 
 /-- The destructor of `T` (`alg = false`), or of `T[1/X]` for a `μ` body `T` (`alg = true`: `forget`
 at `Ref X` and at `X`). -/
-def dt : Bool → VTy → Expr
+def dtorAt : Bool → VTy → Expr
   | alg, .tensor A B => .val (.lam (.letpair (.var 0)
-      (.seq (.app (dt alg A) (.var 1)) (.app (dt alg B) (.var 0)))))
-  | alg, .sum A B => .val (.lam (.case (.var 0) (.app (dt alg A) (.var 0)) (.app (dt alg B) (.var 0))))
+      (.seq (.app (dtorAt alg A) (.var 1)) (.app (dtorAt alg B) (.var 0)))))
+  | alg, .sum A B => .val (.lam (.case (.var 0) (.app (dtorAt alg A) (.var 0)) (.app (dtorAt alg B) (.var 0))))
   | alg, .ref A => if alg && isX0 A then forget else
-      .val (.lam (bindE (.app (.val (.prim .free)) (.var 0)) (.app (dt false A) (.var 0))))
-  | _, .box _ A => .val (.lam (.app (dt false A) (.var 0)))
+      .val (.lam (bindE (.app (.val (.prim .free)) (.var 0)) (.app (dtorAt false A) (.var 0))))
+  | _, .box _ A => .val (.lam (.app (dtorAt false A) (.var 0)))
   | _, .mu A => .val (.lam (.app (.app (.val (foldOwnV (toFShape A)))
-      (.val (.lam (.app (dt true A) (.var 0))))) (.var 0)))
+      (.val (.lam (.app (dtorAt true A) (.var 0))))) (.var 0)))
   | _, .thunk _ => .val (.lam (.app (.var 0) (.val (.inj₂ .unit))))
   | _, _ => forget
 
-/-- The destructor of `T`, a closed `λ`. -/
-abbrev dtorE : VTy → Expr := dt false
+/-- The destructor of `T`, a closed `λ`.  `[spec §12]` -/
+abbrev dtorE : VTy → Expr := dtorAt false
 
 /-- The `foldOwn` algebra of a `μ` body `T`: the destructor of `T[1/X]`. -/
-abbrev algE : VTy → Expr := dt true
+abbrev algE : VTy → Expr := dtorAt true
 
 /-- The algebra is the destructor of `T[1/X]`. -/
 theorem algE_eq : ∀ A : VTy, algE A = dtorE ((toFShape A).resO .unit)
-  | .tensor A B => by simp [dt, toFShape, FShape.resO, algE_eq A, algE_eq B]
-  | .sum A B => by simp [dt, toFShape, FShape.resO, algE_eq A, algE_eq B]
+  | .tensor A B => by simp [dtorAt, toFShape, FShape.resO, algE_eq A, algE_eq B]
+  | .sum A B => by simp [dtorAt, toFShape, FShape.resO, algE_eq A, algE_eq B]
   | .ref (.tvar 0) => rfl
   | .ref (.tvar (_ + 1)) => rfl
   | .tvar 0 => rfl
@@ -138,7 +146,7 @@ theorem algE_eq : ∀ A : VTy, algE A = dtorE ((toFShape A).resO .unit)
 
 /-! ### Which types have one -/
 
-/-- `T` is droppable: `dtorE T` is a destructor for it. -/
+/-- `T` has a destructor: `dtorE T` consumes a value of `T`.  `[spec §12]` -/
 inductive HasDtor : VTy → Prop where
   | unit : HasDtor .unit
   | zero : HasDtor .zero
@@ -185,8 +193,8 @@ theorem close_body {Δ : LifeCtx} {Γ : Ctx VTy} {C : CTy} (hΓ : Ctx.Dead Γ) :
       (.comp (.ret .unit)) :=
   .proj₂ (C := C) (.force (C := .amp C (.ret .unit)) (.here hΓ.toP))
 
-/-- **Every droppable type's destructor is a closed `CDerives` derivation**, at every lifetime
-context and every dead context. -/
+/-- **Every destructor is a closed `CDerives` derivation**, at every lifetime context and every
+dead context.  `[spec §12]` -/
 theorem dtor_wf {Δ : LifeCtx} {T : VTy} (hT : HasDtor T) :
     ∀ {Γ : Ctx VTy}, Ctx.Dead Γ → CDerives Δ Γ (dtorE T) (.val (.lolli T .unit)) := by
   induction hT generalizing Δ with
@@ -254,6 +262,18 @@ theorem dtorE_imm (a : Lifetime.Life) (A : VTy) : dtorE (.imm a A) = forget := r
 
 theorem dtorE_mut (a : Lifetime.Life) (A : VTy) : dtorE (.mut a A) = forget := rfl
 
-end BoCa.Fig16.LogRel.Core.Affine
+/-! ### Dropping a slot -/
+
+/-- `dtorE T xᵢ; e`: the destructor of the variable `i` at `T`, before `e`. -/
+def dropE (T : VTy) (i : Nat) (e : Expr) : Expr := .seq (.app (dtorE T) (.var i)) e
+
+/-- **A drop is a `CDerives` derivation**: `unitE` over the destructor applied to the slot.
+`[spec §12]` -/
+theorem drop_derives {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {i : Nat} {T : VTy} {e : Expr} {C : CTy}
+    (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hx : Ctx.SoloP Γ₁ i T) (hT : HasDtor T)
+    (h : CDerives Δ Γ₂ e (.comp C)) : CDerives Δ Γ (dropE T i e) (.comp C) :=
+  .unitE hs (.lolliE (split_kill' Γ₁).toP (.var hx) (dtor_wf hT (kill_dead Γ₁))) h
+
+end BoCa.Fig16.LogRel.Core
 
 end

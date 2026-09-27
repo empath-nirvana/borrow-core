@@ -39,37 +39,6 @@ def decF (sp : Span) : CVTy → Except Error FShape
     else err sp (s!"`{ppV [] 1 0 A}` is not a fold shape: `X` may occur only as `X`, `ref X`, " ++
       "or under `*` and `+`")
 
-/-- `FShape.WF`, decided. -/
-def FShape.wfB : FShape → Bool
-  | .leaf A => VTy.clB 0 A
-  | .refX => true
-  | .varX => true
-  | .tensor F G => FShape.wfB F && FShape.wfB G
-  | .sum F G => FShape.wfB F && FShape.wfB G
-
-theorem FShape.wfB_sound : ∀ F : FShape, FShape.wfB F = true → F.WF
-  | .leaf A, h => VTy.clB_sound 0 A h
-  | .refX, _ => trivial
-  | .varX, _ => trivial
-  | .tensor F G, h => by
-      simp only [FShape.wfB, Bool.and_eq_true] at h
-      exact ⟨wfB_sound F h.1, wfB_sound G h.2⟩
-  | .sum F G, h => by
-      simp only [FShape.wfB, Bool.and_eq_true] at h
-      exact ⟨wfB_sound F h.1, wfB_sound G h.2⟩
-
-/-- `FShape.Guarded`, decided. -/
-def FShape.guardedB : FShape → Bool
-  | .varX => false
-  | _ => true
-
-theorem FShape.guardedB_sound : ∀ F : FShape, FShape.guardedB F = true → F.Guarded
-  | .leaf _, _ => trivial
-  | .refX, _ => trivial
-  | .varX, h => by simp [FShape.guardedB] at h
-  | .tensor _ _, _ => trivial
-  | .sum _ _, _ => trivial
-
 /-- A fold's shape argument: elaborated with `X` bound, decoded, `WF` and `Guarded`. -/
 def elabFShape (E : Env) (Δ : LifeCtx) (sp : Span) (F : VTy) :
     Except Error {G : FShape // G.WF ∧ G.Guarded} := do

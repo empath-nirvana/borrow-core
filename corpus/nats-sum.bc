@@ -1,6 +1,7 @@
 -- natsSum (Core/StreamPrograms.lean: progS, stepN, sumK), from the corpus review's
 -- 5-natsSum, in draft 1, over i32: the stream 7, 17, 27, … by unfold_s, three elements taken
--- and combined, then closed.
+-- and combined. The rest of the stream, `t3`, is dropped implicitly (SPEC §12): its destructor
+-- is the close.
 --
 -- Answer: i32[271707], the three elements as base-100 digits, first element last. A state
 -- not advanced gives 70707, one advanced twice per element 472707, a first element skipped
@@ -27,6 +28,4 @@ main : F i32 =
   let (x2, t2) = p2;
   p3 <- (stream_out (force t2)).1;
   let (x3, t3) = p3;
-  u <- (stream_out (force t3)).2;
-  let () = u;
   return (hundred (hundred (x3, x2), x1))

@@ -122,6 +122,9 @@ def Comp.level : Comp → Nat
   | .app .. | .proj .. | .inst .. => 2
   | _ => 3
 
+/-- `linear ` before a `linear` binder. -/
+def linKw (lin : Bool) : String := if lin then "linear " else ""
+
 /-- A newline followed by `k` spaces. -/
 def nl (k : Nat) : String := "\n" ++ "".pushn ' ' k
 
@@ -157,9 +160,9 @@ def Val.pp (V : Val) (lvl : Nat := 0) (k : Nat := 0) : String :=
 def Comp.pp (M : Comp) (lvl : Nat := 0) (k : Nat := 0) : String :=
   paren (M.level < lvl) <| match M with
     | .ret _ V => "return " ++ V.pp 1 k
-    | .bind _ x none M N => x.name ++ " <- " ++ M.pp 1 (k + 2) ++ ";" ++ nl k ++ N.pp 0 k
-    | .bind _ x (some A) M N =>
-      x.name ++ " : " ++ A.pp ++ " <- " ++ M.pp 1 (k + 2) ++ ";" ++ nl k ++ N.pp 0 k
+    | .bind _ x none M N lin => linKw lin ++ x.name ++ " <- " ++ M.pp 1 (k + 2) ++ ";" ++ nl k ++ N.pp 0 k
+    | .bind _ x (some A) M N lin =>
+      linKw lin ++ x.name ++ " : " ++ A.pp ++ " <- " ++ M.pp 1 (k + 2) ++ ";" ++ nl k ++ N.pp 0 k
     | .force _ x => "force " ++ x.name
     | .lam _ x A M => "fun (" ++ x.name ++ " : " ++ A.pp ++ ") ->" ++ nl (k + 2) ++ M.pp 0 (k + 2)
     | .app _ M x => M.pp 2 k ++ " " ++ x.name

@@ -602,8 +602,8 @@ def valAtom : Nat → P Val
         | none => failAt (← spanFrom st) s!"malformed arguments of `{k.str}`"
       | none => expected "a value"
 
-/-- A computation: a binding form (`x <- M; N`, `x : A <- M; N`, `let`, `fun`, `Fun`),
-    which extends as far right as possible, or a prefix expression. -/
+/-- A computation: a binding form (`x <- M; N`, `x : A <- M; N`, `linear x <- M; N`, `let`,
+    `fun`, `Fun`), which extends as far right as possible, or a prefix expression. -/
 def comp : Nat → P Comp
   | 0 => outOfFuel
   | n + 1 => do
@@ -616,7 +616,7 @@ def comp : Nat → P Comp
       let M ← comp n
       expectSym ";"
       let N ← comp n
-      pure (.bind (← spanFrom st) ⟨x, t.span⟩ none M N)
+      pure (.bind (← spanFrom st) ⟨x, t.span⟩ none M N false)
     | .ident x, .sym ":" =>
       discard bump; discard bump
       let A ← vty n
@@ -624,7 +624,16 @@ def comp : Nat → P Comp
       let M ← comp n
       expectSym ";"
       let N ← comp n
-      pure (.bind (← spanFrom st) ⟨x, t.span⟩ (some A) M N)
+      pure (.bind (← spanFrom st) ⟨x, t.span⟩ (some A) M N false)
+    | .kw "linear", .ident x =>
+      discard bump
+      let xt ← bump
+      let A ← if ← isSym ":" then do discard bump; pure (some (← vty n)) else pure none
+      expectSym "<-"
+      let M ← comp n
+      expectSym ";"
+      let N ← comp n
+      pure (.bind (← spanFrom st) ⟨x, xt.span⟩ A M N true)
     | .kw "let", _ =>
       discard bump
       expectSym "("
