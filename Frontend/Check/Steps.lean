@@ -3,24 +3,146 @@ import Frontend.Check.Rules
 /-!
 # Frontend — Check — steps shared by the checker's cases
 
-The checker's environment, the messages it reports, and the steps that combine checked
-premises through a rule builder once its side conditions are decided: closing binders,
-splitting and merging contexts, `boxed`, application to a variable, `<,>`, `case` and `Fun`.
+The checker's environment, the messages it reports, the deciders of fold shapes and
+destructors, the implicit drops (SPEC §12), and the steps that combine checked premises through a
+rule builder once its side conditions are decided: closing binders, splitting and merging
+contexts, `boxed`, application to a variable, `<,>`, `case` and `Fun`.
 -/
 
 namespace Frontend.Check
 open BoCa BoCa.Lifetime
 open BoCa.Fig16.LogRel.Core.Check
-open BoCa.Fig16.LogRel.Core (CDerives Jdg)
+open BoCa.Fig16.LogRel.Core (CDerives Jdg FShape HasDtor toFShape isX0)
+
+/-! ### Fold shapes and destructors, decided -/
+
+/-- `FShape.WF`, decided. -/
+def FShape.wfB : FShape → Bool
+  | .leaf A => VTy.clB 0 A
+  | .refX => true
+  | .varX => true
+  | .tensor F G => FShape.wfB F && FShape.wfB G
+  | .sum F G => FShape.wfB F && FShape.wfB G
+
+theorem FShape.wfB_sound : ∀ F : FShape, FShape.wfB F = true → F.WF
+  | .leaf A, h => VTy.clB_sound 0 A h
+  | .refX, _ => trivial
+  | .varX, _ => trivial
+  | .tensor F G, h => by
+      simp only [FShape.wfB, Bool.and_eq_true] at h
+      exact ⟨wfB_sound F h.1, wfB_sound G h.2⟩
+  | .sum F G, h => by
+      simp only [FShape.wfB, Bool.and_eq_true] at h
+      exact ⟨wfB_sound F h.1, wfB_sound G h.2⟩
+
+/-- `FShape.Guarded`, decided. -/
+def FShape.guardedB : FShape → Bool
+  | .varX => false
+  | _ => true
+
+theorem FShape.guardedB_sound : ∀ F : FShape, FShape.guardedB F = true → F.Guarded
+  | .leaf _, _ => trivial
+  | .refX, _ => trivial
+  | .varX, h => by simp [FShape.guardedB] at h
+  | .tensor _ _, _ => trivial
+  | .sum _ _, _ => trivial
+
+/-! ### Destructors (SPEC §12) -/
+
+/-- `HasDtor`, decided: `dtorB false A` for `A`, and `dtorB true A` for `T[1/X]` at a `μ` body
+`T = A` (`Ref X` and `X` become `1`), the same recursion as `dtorAt`. -/
+def dtorB : Bool → CVTy → Bool
+  | alg, .tensor A B => dtorB alg A && dtorB alg B
+  | alg, .sum A B => dtorB alg A && dtorB alg B
+  | alg, .ref A => (alg && isX0 A) || dtorB false A
+  | alg, .tvar 0 => alg
+  | _, .tvar (_ + 1) => false
+  | _, .box _ A => dtorB false A
+  | _, .mu A => FShape.wfB (toFShape A) && FShape.guardedB (toFShape A) && dtorB true A
+  | _, .thunk (.amp _ (.ret .unit)) => true
+  | _, .thunk (.delay _) => true
+  | _, .thunk (.stream _) => true
+  | _, .thunk _ => false
+  | _, .unit | _, .zero | _, .int _ | _, .unk | _, .bang _ | _, .imm _ _ | _, .mut _ _ => true
+
+theorem dtorB_sound : ∀ (alg : Bool) (A : CVTy), dtorB alg A = true →
+    HasDtor (cond alg ((toFShape A).resO .unit) A)
+  | alg, .tensor A B, h => by
+      simp only [dtorB, Bool.and_eq_true] at h
+      have h₁ := dtorB_sound alg A h.1
+      have h₂ := dtorB_sound alg B h.2
+      cases alg <;> exact .tensor h₁ h₂
+  | alg, .sum A B, h => by
+      simp only [dtorB, Bool.and_eq_true] at h
+      have h₁ := dtorB_sound alg A h.1
+      have h₂ := dtorB_sound alg B h.2
+      cases alg <;> exact .sum h₁ h₂
+  | false, .ref A, h => .ref (dtorB_sound false A (by simpa [dtorB] using h))
+  | true, .ref A, h => by
+      by_cases hA : A = .tvar 0
+      · subst hA; exact .unit
+      · have hx : isX0 A = false := by
+          cases A with
+          | tvar n => cases n <;> simp_all [isX0]
+          | _ => rfl
+        have hl : toFShape (.ref A) = .leaf (.ref A) := by
+          cases A with
+          | tvar n => cases n <;> simp_all [toFShape]
+          | _ => rfl
+        simp only [dtorB, hx, Bool.true_and, Bool.false_or] at h
+        simp only [cond, hl, FShape.resO]
+        exact .ref (dtorB_sound false A h)
+  | true, .tvar 0, _ => .unit
+  | false, .tvar 0, h => by simp [dtorB] at h
+  | _, .tvar (_ + 1), h => by simp [dtorB] at h
+  | alg, .box _ A, h => by
+      have := HasDtor.box (a := ‹_›) (dtorB_sound false A (by simpa [dtorB] using h))
+      cases alg <;> exact this
+  | alg, .mu A, h => by
+      simp only [dtorB, Bool.and_eq_true] at h
+      have := HasDtor.mu (FShape.wfB_sound _ h.1.1) (FShape.guardedB_sound _ h.1.2)
+        (dtorB_sound true A h.2)
+      cases alg <;> exact this
+  | alg, .thunk (.amp _ (.ret .unit)), _ => by cases alg <;> exact .close
+  | alg, .thunk (.delay _), _ => by cases alg <;> exact .delay
+  | alg, .thunk (.stream _), _ => by cases alg <;> exact .stream
+  | _, .thunk (.ret _), h | _, .thunk (.arr _ _), h | _, .thunk .top, h
+  | _, .thunk (.all _ _ _), h => by simp [dtorB] at h
+  | _, .thunk (.amp _ (.ret (.tensor _ _))), h | _, .thunk (.amp _ (.ret .zero)), h
+  | _, .thunk (.amp _ (.ret (.sum _ _))), h | _, .thunk (.amp _ (.ret (.thunk _))), h
+  | _, .thunk (.amp _ (.ret (.ref _))), h | _, .thunk (.amp _ (.ret (.imm _ _))), h
+  | _, .thunk (.amp _ (.ret (.mut _ _))), h | _, .thunk (.amp _ (.ret (.box _ _))), h
+  | _, .thunk (.amp _ (.ret (.bang _))), h | _, .thunk (.amp _ (.ret .unk)), h
+  | _, .thunk (.amp _ (.ret (.tvar _))), h | _, .thunk (.amp _ (.ret (.mu _))), h
+  | _, .thunk (.amp _ (.ret (.int _))), h | _, .thunk (.amp _ (.arr _ _)), h
+  | _, .thunk (.amp _ (.amp _ _)), h | _, .thunk (.amp _ .top), h
+  | _, .thunk (.amp _ (.all _ _ _)), h | _, .thunk (.amp _ (.delay _)), h
+  | _, .thunk (.amp _ (.stream _)), h => by simp [dtorB] at h
+  | alg, .unit, _ => by cases alg <;> exact .unit
+  | alg, .zero, _ => by cases alg <;> exact .zero
+  | alg, .int _, _ => by cases alg <;> exact .int
+  | alg, .unk, _ => by cases alg <;> exact .unk
+  | alg, .bang _, _ => by cases alg <;> exact .bang
+  | alg, .imm _ _, _ => by cases alg <;> exact .imm
+  | alg, .mut _ _, _ => by cases alg <;> exact .mut
+
+/-- `A` has a destructor. -/
+def hasDtorB (A : CVTy) : Bool := dtorB false A
+
+theorem hasDtorB_sound {A : CVTy} (h : hasDtorB A = true) : HasDtor A := dtorB_sound false A h
+
 
 /-- What the checker knows at a point besides `Δ` and the slot types `T`: the declarations in
-scope, the name of each slot (a dead binder has none), the lifetime names and a `def`'s type
-parameters. -/
+scope, the name of each slot (a dead binder has none), the lifetime names, a `def`'s type
+parameters, and the slots **owed** to the current tail position (SPEC §12): variables with a
+destructor that the computation being checked must consume on every path, the checker dropping
+them where it does not. `own` is indexed like `vars`; a slot past its end is not owed. -/
 structure Env where
   scope : Scope
   vars : List (Option String)
   lenv : List (String × LifeVar)
   tps : List (String × CVTy)
+  own : List Bool
 
 /-- The depth bound for elaborating a type. -/
 def tyFuel : Nat := 65536
@@ -63,16 +185,28 @@ def firstMissing : List Bool → List Bool → List Bool → Option Nat
   | a :: as, b :: bs, c :: cs => if a && !(b || c) then some 0 else (firstMissing as bs cs).map (· + 1)
   | _, _, _ => none
 
+/-- Why slot `i` was not dropped where a path does not consume it. -/
+def Env.notDropped (E : Env) (T : List CVTy) (i : Nat) : String :=
+  match T[i]? with
+  | some A => if hasDtorB A then "" else s!", and its type `{E.ppV A}` has no destructor"
+  | none => ""
+
 /-- The two parts of a `case` or a `<,>` do not consume the same variables. -/
-def mergeErr (E : Env) (sp : Span) (what₁ what₂ intro : String) (u₁ w₁ u₂ w₂ : List Bool) : Error :=
+def mergeErr (E : Env) (T : List CVTy) (sp : Span) (what₁ what₂ intro : String)
+    (u₁ w₁ u₂ w₂ : List Bool) : Error :=
   match firstMissing u₁ u₂ w₂, firstMissing u₂ u₁ w₁ with
-  | some i, _ => ⟨sp, s!"{intro}{E.slotName i} is consumed in {what₁} but not in {what₂}"⟩
-  | _, some i => ⟨sp, s!"{intro}{E.slotName i} is consumed in {what₂} but not in {what₁}"⟩
+  | some i, _ => ⟨sp, s!"{intro}{E.slotName i} is consumed in {what₁} but not in {what₂}" ++
+      E.notDropped T i⟩
+  | _, some i => ⟨sp, s!"{intro}{E.slotName i} is consumed in {what₂} but not in {what₁}" ++
+      E.notDropped T i⟩
   | _, _ => ⟨sp, "internal error: merge"⟩
 
-def unconsumed (E : Env) (sp : Span) (x : String) (A : CVTy) : Error :=
-  ⟨sp, s!"`{x}` is not consumed in its scope, and its type `{E.ppV A}` is not persistent " ++
-    "(or it cannot be dropped where its scope ends)"⟩
+/-- A binder's variable is neither consumed nor dropped when its scope closes. -/
+def unconsumed (E : Env) (sp : Span) (x : String) (A : CVTy) (lin : Bool) : Error :=
+  if lin then ⟨sp, s!"`{x}` is declared `linear` and is not consumed in its scope"⟩
+  else if hasDtorB A then
+    ⟨sp, s!"`{x}` is not consumed in its scope, and it cannot be dropped where its scope ends"⟩
+  else ⟨sp, s!"`{x}` is not consumed in its scope, and its type `{E.ppV A}` has no destructor"⟩
 
 def mismatch (sp : Span) (want got : String) : Error :=
   ⟨sp, s!"type mismatch: expected `{want}`, but this has type `{got}`"⟩
@@ -88,11 +222,11 @@ def convV (E : Env) (sp : Span) (A : CVTy) : (Σ B : CVTy, Res Δ T (.val B)) �
 def convC (E : Env) (sp : Span) (C : CCTy) : (Σ D : CCTy, Res Δ T (.comp D)) → Except Error (Res Δ T (.comp C))
   | ⟨D, r⟩ => if h : D = C then pure (h ▸ r) else throw (mismatch sp (E.ppC C) (E.ppC D))
 
-def popL {A : CVTy} {P : List Bool → Prop} (E : Env) (sp : Span) (x : String) (F : Fam (A :: T) P) :
-    Except Error (Fam T (fun L => P (true :: L))) :=
+def popL {A : CVTy} {P : List Bool → Prop} (E : Env) (sp : Span) (x : String) (F : Fam (A :: T) P)
+    (lin : Bool := false) : Except Error (Fam T (fun L => P (true :: L))) :=
   match F.popLive with
   | some F' => pure F'
-  | none => throw (unconsumed E sp x A)
+  | none => throw (unconsumed E sp x A lin)
 
 def popD {A : CVTy} {P : List Bool → Prop} (sp : Span) (F : Fam (A :: T) P) :
     Except Error (Fam T (fun L => P (false :: L))) :=
@@ -114,12 +248,31 @@ def lookupVar (x : String) : List (Option String) → Option Nat
   | [] => none
   | y :: ys => if y == some x then some 0 else (lookupVar x ys).map (· + 1)
 
-def Env.push (E : Env) (x : Option String) : Env := { E with vars := x :: E.vars }
+/-- A slot that is not owed: a dead binder, or `linear`. -/
+def Env.push (E : Env) (x : Option String) : Env := { E with vars := x :: E.vars, own := false :: E.own }
+
+/-- A binder's live slot `x : A`, owed to its scope when `A` has a destructor, is not persistent
+and the binder is not `linear` (SPEC §12). -/
+def Env.pushOwn (E : Env) (x : String) (A : CVTy) (lin : Bool := false) : Env :=
+  { E with vars := some x :: E.vars, own := (!lin && !A.persistent && hasDtorB A) :: E.own }
+
+/-- Nothing owed: a value, or a computation that is not in tail position. -/
+def Env.clearOwn (E : Env) : Env := { E with own := [] }
+
+/-- What is still owed after the slots `u` are consumed. -/
+def Env.minus (E : Env) (u : List Bool) : Env := { E with own := andL E.own (u.map (! ·)) }
+
+/-- The owed slots a computation mentions by name, where the name is not shadowed. -/
+def Env.ownIn (E : Env) (p : String → Bool) : Env :=
+  { E with own := (List.range E.own.length).map fun i =>
+      E.own.getD i false && match E.vars[i]? with
+        | some (some x) => lookupVar x E.vars == some i && p x
+        | _ => false }
 
 /-- The environment of a `def`'s body at a use: its own scope, no variables or lifetimes of the
 use site, its type parameters bound. -/
 def Env.forDef (E : Env) (d : DefInfo) (tps : List (String × CVTy)) : Env :=
-  ⟨d.scope, E.vars.map (fun _ => none), [], tps⟩
+  ⟨d.scope, E.vars.map (fun _ => none), [], tps, []⟩
 
 def inDef (x : String) (sp : Span) (e : Error) : Error :=
   { e with msg := s!"{e.msg}\n  in the body of `{x}`, used at {sp.start.render}" }
@@ -136,6 +289,70 @@ def notBang (E : Env) (T : List CVTy) (sp : Span) : Option Nat → Error
 
 section
 variable {Δ : LifeCtx} {T : List CVTy}
+
+/-! ### Drops (SPEC §12) -/
+
+mutual
+/-- `x` occurs free in a value-judged expression. -/
+def mentionsV (x : String) : Val → Bool
+  | .var _ y => y == x
+  | .defApp .. | .unit _ | .const .. => false
+  | .pair _ V W | .app _ V W => mentionsV x V || mentionsV x W
+  | .inl _ V | .inr _ V | .unbang _ V | .boxed _ _ V | .unbox _ V | .sub _ V _ | .roll _ V
+  | .unroll _ V | .inst _ V _ | .ascribe _ V _ | .shorten _ _ _ _ V => mentionsV x V
+  | .thunk _ M | .thunkv _ M | .bangThunk _ M | .bangThunkv _ M | .run _ M => mentionsC x M
+
+/-- `x` occurs free in a computation. -/
+def mentionsC (x : String) : Comp → Bool
+  | .ret _ V | .absurd _ V => mentionsV x V
+  | .bind _ y _ M N _ => mentionsC x M || (y.name != x && mentionsC x N)
+  | .force _ y => y.name == x
+  | .lam _ y _ M => y.name != x && mentionsC x M
+  | .app _ M y => mentionsC x M || y.name == x
+  | .with_ _ M N => mentionsC x M || mentionsC x N
+  | .proj _ _ M | .lamL _ _ _ M | .inst _ M _ | .delayIn _ M | .delayOut _ M | .streamIn _ M
+  | .streamOut _ M | .ascribe _ M _ => mentionsC x M
+  | .top _ => false
+  | .letUnit _ V M => mentionsV x V || mentionsC x M
+  | .letPair _ y z V M => mentionsV x V || (y.name != x && z.name != x && mentionsC x M)
+  | .case _ V y M z N => mentionsV x V || (y.name != x && mentionsC x M) ||
+      (z.name != x && mentionsC x N)
+end
+
+/-- A path's terminal computation: every form except those that pass what is owed on to a tail
+position (`x <- M; N`, `let`, `case`, `<M, N>`, `fun`, `Fun`, `delay_in`, `stream_in`, an
+ascription). -/
+def _root_.Frontend.Comp.terminal : Comp → Bool
+  | .bind .. | .letUnit .. | .letPair .. | .case .. | .with_ .. | .lam .. | .lamL ..
+  | .delayIn .. | .streamIn .. | .ascribe .. => false
+  | _ => true
+
+/-- The slots to drop before a terminal computation: owed, and neither used nor absorbed by it. -/
+def owedLeft : List Bool → List Bool → List Bool → Nat → List Nat
+  | o :: os, u :: us, w :: ws, i => (if o && !u && !w then [i] else []) ++ owedLeft os us ws (i + 1)
+  | _, _, _, _ => []
+
+section
+variable {Δ : LifeCtx} {T : List CVTy}
+
+/-- `dtorE A xᵢ; M` for the slot `i`. -/
+def dropOne {C : CCTy} (sp : Span) (i : Nat) (r : Res Δ T (.comp C)) :
+    Except Error (Res Δ T (.comp C)) :=
+  match hi : T[i]? with
+  | some A =>
+    if hA : hasDtorB A = true then
+      if h : overlapOK T (oneL T i) r.F.u = true then pure (rDrop i A hi (hasDtorB_sound hA) r h)
+      else throw ⟨sp, "internal error: a dropped slot is used"⟩
+    else throw ⟨sp, "internal error: an owed slot has no destructor"⟩
+  | none => throw ⟨sp, "internal error: an owed slot is out of range"⟩
+
+/-- Drop what the terminal computation `r` leaves owed, the lowest index (the most recently
+bound variable) first. -/
+def dropOwed {C : CCTy} (E : Env) (sp : Span) (r : Res Δ T (.comp C)) :
+    Except Error (Res Δ T (.comp C)) :=
+  (owedLeft E.own r.F.u r.F.w 0).foldr (fun i acc => do dropOne sp i (← acc)) (pure r)
+
+end
 
 /-- `boxed[@a] V`. -/
 def boxIt {A : CVTy} (E : Env) (T : List CVTy) (sp : Span) (a : CLife) (r : Res Δ T (.val A)) :
@@ -167,9 +384,9 @@ def withIt {C D : CCTy} (E : Env) (T : List CVTy) (sp : Span) (r₁ : Res Δ (wi
   let F₂ ← withPop sp r₂.F
   if s₁ : subL F₁.u (orL F₂.u F₂.w) = true then
     if s₂ : subL F₂.u (orL F₁.u F₁.w) = true then pure (rWith r₁.e r₂.e (F₁.merge F₂ s₁ s₂))
-    else throw (mergeErr E sp "the first component" "the second" "in this `<M, N>`, "
+    else throw (mergeErr E T sp "the first component" "the second" "in this `<M, N>`, "
       F₁.u F₁.w F₂.u F₂.w)
-  else throw (mergeErr E sp "the first component" "the second" "in this `<M, N>`, "
+  else throw (mergeErr E T sp "the first component" "the second" "in this `<M, N>`, "
     F₁.u F₁.w F₂.u F₂.w)
 
 /-- `case V { inl x -> M | inr y -> N }`: both arms at one context. -/
@@ -183,8 +400,8 @@ def caseIt {A B : CVTy} {C : CCTy} (E : Env) (T : List CVTy) (sp : Span) (x y : 
       let F := F₁.merge F₂ s₁ s₂
       if h : overlapOK T rV.F.u F.u = true then pure (rSumE rV F h)
       else throw (splitErr E T sp rV.F.u F.u)
-    else throw (mergeErr E sp "the `inl` arm" "the `inr` arm" "in this `case`, " F₁.u F₁.w F₂.u F₂.w)
-  else throw (mergeErr E sp "the `inl` arm" "the `inr` arm" "in this `case`, " F₁.u F₁.w F₂.u F₂.w)
+    else throw (mergeErr E T sp "the `inl` arm" "the `inr` arm" "in this `case`, " F₁.u F₁.w F₂.u F₂.w)
+  else throw (mergeErr E T sp "the `inl` arm" "the `inr` arm" "in this `case`, " F₁.u F₁.w F₂.u F₂.w)
 
 /-- `Fun 'x < @b. M`. -/
 def funIt {v : LifeVar} {bl : CLife} {C : CCTy} (E : Env) (T : List CVTy) (sp : Span)

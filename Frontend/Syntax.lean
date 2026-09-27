@@ -218,8 +218,9 @@ inductive Val where
 /-- Computations (syntax-core §6.2), checked at a computation type. -/
 inductive Comp where
   | ret (sp : Span) (V : Val)
-  /-- `x <- M; N`, or `x : A <- M; N` with the annotation. -/
-  | bind (sp : Span) (x : Ident) (A : Option VTy) (M N : Comp)
+  /-- `x <- M; N`, or `x : A <- M; N` with the annotation; `lin` for `linear x <- M; N`, whose
+  variable is not dropped implicitly (SPEC §12). -/
+  | bind (sp : Span) (x : Ident) (A : Option VTy) (M N : Comp) (lin : Bool)
   /-- `force x`. -/
   | force (sp : Span) (x : Ident)
   /-- `fun (x : A) -> M`. -/
@@ -372,7 +373,7 @@ def Val.strip : Val → Val
 
 def Comp.strip : Comp → Comp
   | .ret _ V => .ret .none V.strip
-  | .bind _ x A M N => .bind .none x.strip (A.map VTy.strip) M.strip N.strip
+  | .bind _ x A M N lin => .bind .none x.strip (A.map VTy.strip) M.strip N.strip lin
   | .force _ x => .force .none x.strip
   | .lam _ x A M => .lam .none x.strip A.strip M.strip
   | .app _ M x => .app .none M.strip x.strip
@@ -410,7 +411,7 @@ def Val.span : Val → Span
 
 /-- The span of a computation. -/
 def Comp.span : Comp → Span
-  | .ret sp _ | .bind sp _ _ _ _ | .force sp _ | .lam sp _ _ _ | .app sp _ _ | .with_ sp _ _
+  | .ret sp _ | .bind sp _ _ _ _ _ | .force sp _ | .lam sp _ _ _ | .app sp _ _ | .with_ sp _ _
   | .proj sp _ _ | .top sp | .letUnit sp _ _ | .letPair sp _ _ _ _ | .case sp _ _ _ _ _
   | .absurd sp _ | .lamL sp _ _ _ | .inst sp _ _ | .delayIn sp _ | .delayOut sp _
   | .streamIn sp _ | .streamOut sp _ | .ascribe sp _ _ => sp

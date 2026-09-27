@@ -1,7 +1,0 @@
--- Leaking a linear value: the cell `r` is never freed.
-type B = 1 + 1
-
-main : F 1 =
-  r <- return (alloc[B] (inl ()));
-  return ()
--- expect: 5:3: `r` is not consumed in its scope, and its type `ref (1 + 1)` is not persistent (or it cannot be dropped where its scope ends)

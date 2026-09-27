@@ -49,7 +49,7 @@ def keywords : List String :=
   [ -- declarations
     "type", "shape", "def", "extern", "main",
     -- terms
-    "return", "force", "fun", "let", "case", "inl", "inr", "thunk", "thunkv", "unbang",
+    "return", "force", "fun", "let", "linear", "case", "inl", "inr", "thunk", "thunkv", "unbang",
     "boxed", "unbox", "roll", "unroll", "run", "absurd",
     "delay_in", "delay_out", "stream_in", "stream_out",
     -- types, lifetimes, shapes

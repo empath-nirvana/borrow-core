@@ -8,7 +8,9 @@ import Frontend.Check.Consts
 builder of `Frontend/Check/Rules.lean` (or `Consts.lean`) to the checked premises, so a success
 is a `Res`: the erasure with its `CDerives` derivations. Names are resolved on the way: a
 variable to its de Bruijn slot (§6.3), a lifetime name to its `LifeVar` (§3), a `def` to its
-body, re-checked at the use (§10).
+body, re-checked at the use (§10). Variables owed to the computation being checked (`Env.own`,
+SPEC §12) are passed to its tail positions and dropped before each terminal computation that
+leaves them unused (`dropOwed`).
 
 The recursion is structural on a fuel argument that bounds the depth of the call tree;
 running out is an error, not an assumption.
@@ -27,7 +29,7 @@ mutual
 def synV : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Val →
     Except Error (Σ A : CVTy, Res Δ T (.val A))
   | 0, _, _, _, v => err v.span "expression nested too deeply"
-  | n + 1, E, Δ, T, v => match v with
+  | n + 1, E, Δ, T, v => let E := E.clearOwn; match v with
     | .var sp x =>
       match lookupVar x E.vars with
       | some i =>
@@ -158,7 +160,7 @@ def synV : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Val →
 def chkV : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Val → (A : CVTy) →
     Except Error (Res Δ T (.val A))
   | 0, _, _, _, v, _ => err v.span "expression nested too deeply"
-  | n + 1, E, Δ, T, v, A => match v with
+  | n + 1, E, Δ, T, v, A => let E := E.clearOwn; match v with
     | .pair sp V W =>
       match A with
       | .tensor A B => do
@@ -237,14 +239,18 @@ def chkV : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Val → (A : C
 def synC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp →
     Except Error (Σ C : CCTy, Res Δ T (.comp C))
   | 0, _, _, _, m => err m.span "expression nested too deeply"
-  | n + 1, E, Δ, T, m => match m with
+  | n + 1, E, Δ, T, m =>
+    if m.terminal && E.own.any id then do
+      let ⟨C, r⟩ ← synC n E.clearOwn Δ T m
+      pure ⟨C, ← dropOwed E m.span r⟩
+    else match m with
     | .ret _ V => do
       let ⟨_, r⟩ ← synV n E Δ T V
       pure ⟨_, rRet r⟩
-    | .bind sp x oA M N => do
-      let ⟨A, rM⟩ ← bindHead n E Δ T sp oA M
-      let ⟨C, rN⟩ ← synC n (E.push (some x.name)) Δ (A :: T) N
-      let FN ← popL E x.span x.name rN.F
+    | .bind sp x oA M N lin => do
+      let ⟨A, rM⟩ ← bindHead n (E.ownIn (mentionsC · M)) Δ T sp oA M
+      let ⟨C, rN⟩ ← synC n ((E.minus rM.F.u).pushOwn x.name A lin) Δ (A :: T) N
+      let FN ← popL E x.span x.name rN.F lin
       if h : overlapOK T rM.F.u FN.u = true then pure ⟨C, rBind rM FN h⟩
       else throw (splitErr E T sp rM.F.u FN.u)
     | .force sp x =>
@@ -257,7 +263,7 @@ def synC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp →
       | none => err x.span s!"`force` takes a variable, and `{x.name}` is not one in scope; bind it first"
     | .lam _ x A M => do
       let A' ← E.elabV Δ A
-      let ⟨_, rM⟩ ← synC n (E.push (some x.name)) Δ (A' :: T) M
+      let ⟨_, rM⟩ ← synC n (E.pushOwn x.name A') Δ (A' :: T) M
       let FM ← popL E x.span x.name rM.F
       pure ⟨_, rLam FM⟩
     | .app sp M x => do
@@ -277,14 +283,15 @@ def synC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp →
     | .top _ => pure ⟨.top, rTop⟩
     | .letUnit sp V M => do
       let rV ← chkV n E Δ T V .unit
-      let ⟨C, rM⟩ ← synC n E Δ T M
+      let ⟨C, rM⟩ ← synC n (E.minus rV.F.u) Δ T M
       if h : overlapOK T rV.F.u rM.F.u = true then pure ⟨C, rUnitE rV rM h⟩
       else throw (splitErr E T sp rV.F.u rM.F.u)
     | .letPair sp x y V M => do
       let ⟨A, rV⟩ ← synV n E Δ T V
       match A, rV with
       | .tensor A B, rV => do
-        let ⟨C, rM⟩ ← synC n (E.push (some x.name) |>.push (some y.name)) Δ (B :: A :: T) M
+        let ⟨C, rM⟩ ← synC n ((E.minus rV.F.u).pushOwn x.name A |>.pushOwn y.name B) Δ
+          (B :: A :: T) M
         let F₁ ← popL E y.span y.name rM.F
         let F₂ ← popL E x.span x.name F₁
         if h : overlapOK T rV.F.u F₂.u = true then pure ⟨C, rTensorE rV F₂ h⟩
@@ -294,8 +301,9 @@ def synC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp →
       let ⟨A, rV⟩ ← synV n E Δ T V
       match A, rV with
       | .sum A B, rV => do
-        let ⟨C, r₁⟩ ← synC n (E.push (some x.name)) Δ (A :: T) M
-        let r₂ ← chkC n (E.push (some y.name)) Δ (B :: T) N C
+        let E' := E.minus rV.F.u
+        let ⟨C, r₁⟩ ← synC n (E'.pushOwn x.name A) Δ (A :: T) M
+        let r₂ ← chkC n (E'.pushOwn y.name B) Δ (B :: T) N C
         pure ⟨_, ← caseIt E T sp x y rV r₁ r₂⟩
       | A, _ => err V.span s!"`case V` needs a `+` type, but `V : {E.ppV A}`"
     | .absurd sp _ => err sp "the type of `absurd V` cannot be synthesized: ascribe it, `(absurd V : C)`"
@@ -360,15 +368,19 @@ def bindHead : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Span → O
 def chkC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp → (C : CCTy) →
     Except Error (Res Δ T (.comp C))
   | 0, _, _, _, m, _ => err m.span "expression nested too deeply"
-  | n + 1, E, Δ, T, m, C => match m with
+  | n + 1, E, Δ, T, m, C =>
+    if m.terminal && E.own.any id then do
+      let r ← chkC n E.clearOwn Δ T m C
+      dropOwed E m.span r
+    else match m with
     | .ret sp V =>
       match C with
       | .ret A => do pure (rRet (← chkV n E Δ T V A))
       | C => err sp s!"`return V` is checked against `{E.ppC C}`, which is not an `F` type"
-    | .bind sp x oA M N => do
-      let ⟨A, rM⟩ ← bindHead n E Δ T sp oA M
-      let rN ← chkC n (E.push (some x.name)) Δ (A :: T) N C
-      let FN ← popL E x.span x.name rN.F
+    | .bind sp x oA M N lin => do
+      let ⟨A, rM⟩ ← bindHead n (E.ownIn (mentionsC · M)) Δ T sp oA M
+      let rN ← chkC n ((E.minus rM.F.u).pushOwn x.name A lin) Δ (A :: T) N C
+      let FN ← popL E x.span x.name rN.F lin
       if h : overlapOK T rM.F.u FN.u = true then pure (rBind rM FN h)
       else throw (splitErr E T sp rM.F.u FN.u)
     | .lam sp x A M =>
@@ -376,7 +388,7 @@ def chkC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp → (C : 
       | .arr A₀ C => do
         let A' ← E.elabV Δ A
         if hA : A' = A₀ then do
-          let rM ← chkC n (E.push (some x.name)) Δ (A' :: T) M C
+          let rM ← chkC n (E.pushOwn x.name A') Δ (A' :: T) M C
           let FM ← popL E x.span x.name rM.F
           pure (hA ▸ rLam FM)
         else err A.span s!"the binder is annotated `{E.ppV A'}`, but the expected type is `{E.ppV A₀} -o …`"
@@ -394,14 +406,15 @@ def chkC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp → (C : 
       | C => err sp s!"`<>` has type `top`, but `{E.ppC C}` is expected"
     | .letUnit sp V M => do
       let rV ← chkV n E Δ T V .unit
-      let rM ← chkC n E Δ T M C
+      let rM ← chkC n (E.minus rV.F.u) Δ T M C
       if h : overlapOK T rV.F.u rM.F.u = true then pure (rUnitE rV rM h)
       else throw (splitErr E T sp rV.F.u rM.F.u)
     | .letPair sp x y V M => do
       let ⟨A, rV⟩ ← synV n E Δ T V
       match A, rV with
       | .tensor A B, rV => do
-        let rM ← chkC n (E.push (some x.name) |>.push (some y.name)) Δ (B :: A :: T) M C
+        let rM ← chkC n ((E.minus rV.F.u).pushOwn x.name A |>.pushOwn y.name B) Δ
+          (B :: A :: T) M C
         let F₁ ← popL E y.span y.name rM.F
         let F₂ ← popL E x.span x.name F₁
         if h : overlapOK T rV.F.u F₂.u = true then pure (rTensorE rV F₂ h)
@@ -411,8 +424,9 @@ def chkC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp → (C : 
       let ⟨A, rV⟩ ← synV n E Δ T V
       match A, rV with
       | .sum A B, rV => do
-        let r₁ ← chkC n (E.push (some x.name)) Δ (A :: T) M C
-        let r₂ ← chkC n (E.push (some y.name)) Δ (B :: T) N C
+        let E' := E.minus rV.F.u
+        let r₁ ← chkC n (E'.pushOwn x.name A) Δ (A :: T) M C
+        let r₂ ← chkC n (E'.pushOwn y.name B) Δ (B :: T) N C
         caseIt E T sp x y rV r₁ r₂
       | A, _ => err V.span s!"`case V` needs a `+` type, but `V : {E.ppV A}`"
     | .absurd sp V => do
