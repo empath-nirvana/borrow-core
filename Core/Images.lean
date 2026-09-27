@@ -345,6 +345,7 @@ theorem RefPos.not_free {T : VTy} {v : Val} {l : Loc} {S : VTy} (h : RefPos T v 
   | sumR _ ih => exact ih (fun h => hx (Or.inr h))
   | box _ ih => exact ih (fun h => hx (Or.inr h))
   | mu _ _ ih => exact ih (fun h => (vFree_inst h).elim hx hx)
+  | fam _ _ ih => exact ih hx
 
 theorem Val.pair_inj' {a b c d : Val} (h : Val.pair a b = Val.pair c d) : a = c ∧ b = d := by
   have hv := congrArg Subtype.val h
@@ -444,6 +445,15 @@ theorem image_at_pos {T : VTy} {v : Val} {l : Loc} {S : VTy} (hp : RefPos T v l 
       intro c hc
       exact ih (fun h => (vFree_inst h).elim hx hx)
         ((vShape_immReborrow_mu_iff (show A.Cl 1 from hcl) _ _ v c).mp hc)
+  | @fam L ℓ n i l S hi _ ih =>
+      intro c hc
+      obtain ⟨ℓ', n', hk⟩ := hc
+      obtain ⟨he, hs⟩ := pure_sep_iff.mp hk
+      obtain ⟨rfl, rfl⟩ := Val.arr_inj he
+      obtain ⟨ρi, hPi, τ, hτ⟩ := sepRange_le hi hs
+      obtain ⟨ψ, e, k, d⟩ := ih hx hPi
+      obtain ⟨ψ', e', k', w', r'⟩ := compS_get_left' hτ e
+      exact ⟨ψ', e', k'.trans k, by rw [w', r']; exact d⟩
 
 /-- `typed_image_pos`: 6.131's `Ref T′` case against `reb_β`'s `own` clause.  At a root
 `ℓ ↦ own(u)` of `σ` (`RefPos T v ℓ S`), a typed reborrow `c ∈ reb_β(σ) ∩ 𝒱⟦Imm̲ 'x T⟧` has
@@ -792,6 +802,18 @@ theorem image_dom {x : LifeVar} {δ δ' : LSub} :
       obtain ⟨hcl, hG⟩ := hR
       obtain ⟨ζ, eζ, hζ⟩ := hG.2 ((vShape_immReborrow_mu_iff (show A.Cl 1 from hcl) _ _ v c).mp hc) e
       exact ⟨ζ, eζ, fun k => let ⟨S, hS⟩ := hζ k; ⟨S, RefPos.mu hcl hS⟩⟩
+  | fam L =>
+      obtain ⟨ℓ, n, hk⟩ := hc
+      obtain ⟨he, hs⟩ := pure_sep_iff.mp hk
+      obtain ⟨ℓ', n', hk'⟩ := hR
+      obtain ⟨he', hs'⟩ := pure_sep_iff.mp hk'
+      subst he
+      obtain ⟨rfl, rfl⟩ := Val.arr_inj he'
+      obtain ⟨i, hi, ρi, ψi, hPi, ei, -⟩ := sepRange_get hs e
+      obtain ⟨Ri, hRi, τ, hτ⟩ := sepRange_le hi hs'
+      obtain ⟨ζ₁, eζ₁, hζ₁⟩ := hRi.2 hPi ei
+      obtain ⟨ζ, eζ, kζ, -, -⟩ := compS_get_left' hτ eζ₁
+      exact ⟨ζ, eζ, fun k => let ⟨S, hS⟩ := hζ₁ (kζ ▸ k); ⟨S, RefPos.fam hi hS⟩⟩
 
 open Classical in
 /-- The cell `reb_β`'s `own`/`mut` clauses would put at `m` over the same value and witness,
@@ -1085,6 +1107,11 @@ theorem RefPos.inv_mu {A S : VTy} {v : Val} {l : Loc} (h : RefPos (.mu A) v l S)
   cases h with
   | mu hc h => exact ⟨hc, h⟩
 
+theorem RefPos.inv_fam {L S : VTy} {v : Val} {l : Loc} (h : RefPos (.fam L) v l S) :
+    ∃ ℓ n j, v = Val.arr ℓ n ∧ j < n.toNat ∧ RefPos L (Val.loc (ℓ + j)) l S := by
+  cases h with
+  | fam hj h => exact ⟨_, _, _, rfl, hj, h⟩
+
 theorem own_of_le {B R : WRes} (h : ResU.Le B R) {l : Loc} {u : Val}
     (e : B.get l = some (CellU.ownOf u)) : R.get l = some (CellU.ownOf u) := by
   obtain ⟨τ, hτ⟩ := h
@@ -1155,6 +1182,13 @@ theorem own_split {δ : LSub} :
       obtain ⟨α, -, hb, -⟩ := hR
       exact ih hb
   | mu _ _ ih => exact ih (vShape_unfold hR).2
+  | fam hi _ ih =>
+      obtain ⟨ℓ', n', hk⟩ := hR
+      obtain ⟨he, hs⟩ := pure_sep_iff.mp hk
+      obtain ⟨rfl, rfl⟩ := Val.arr_inj he
+      obtain ⟨Ri, hRi, hle⟩ := sepRange_le hi hs
+      obtain ⟨u, P, B, hB, hP, hle'⟩ := ih hRi
+      exact ⟨u, P, B, hB, hP, hle'.trans hle⟩
 
 /-- Two roots of a typed escrow are one position, or their blocks compose strictly.
 The `⊗` clause's `⋆` is `●` (`[TR]` p. 6), and `●` composes no two `own` cells. -/
@@ -1225,6 +1259,28 @@ theorem refPos_blocks {δ : LSub} :
       obtain ⟨α, -, hb, -⟩ := hR
       exact ih hb (RefPos.inv_box h₂)
   | mu _ _ ih => exact ih (vShape_unfold hR).2 (RefPos.inv_mu h₂).2
+  | @fam L ℓ n i l S hi h₁' ih =>
+      obtain ⟨ℓ₂, n₂, j, he₂, hj, h₂'⟩ := RefPos.inv_fam h₂
+      obtain ⟨rfl, rfl⟩ := Val.arr_inj he₂
+      obtain ⟨ℓ', n', hk⟩ := hR
+      obtain ⟨he, hs⟩ := pure_sep_iff.mp hk
+      obtain ⟨rfl, rfl⟩ := Val.arr_inj he
+      rcases lt_trichotomy i j with hij | rfl | hij
+      · obtain ⟨Ri, Rj, X, hRi, hRj, hX, hle⟩ := sepRange_pick2 hij hj hs
+        obtain ⟨u₁, P₁, B₁, a₁, b₁, ⟨Y₁, hY₁⟩⟩ := own_split L hRi h₁'
+        obtain ⟨u₂, P₂, B₂, a₂, b₂, ⟨Y₂, hY₂⟩⟩ := own_split L hRj h₂'
+        obtain ⟨X', hX', hle'⟩ := sub_comp hY₁ hY₂ hX
+        exact Or.inr ⟨u₁, u₂, P₁, P₂, B₁, B₂, X', a₁, b₁, a₂, b₂, hX', hle'.trans hle⟩
+      · obtain ⟨Ri, hRi, hle⟩ := sepRange_le hi hs
+        rcases ih hRi h₂' with h | ⟨u₁, u₂, P₁, P₂, B₁, B₂, X, a₁, b₁, a₂, b₂, hX, hle'⟩
+        · exact Or.inl h
+        · exact Or.inr ⟨u₁, u₂, P₁, P₂, B₁, B₂, X, a₁, b₁, a₂, b₂, hX, hle'.trans hle⟩
+      · obtain ⟨Rj, Ri, X, hRj, hRi, hX, hle⟩ := sepRange_pick2 hij hi hs
+        obtain ⟨u₁, P₁, B₁, a₁, b₁, ⟨Y₁, hY₁⟩⟩ := own_split L hRi h₁'
+        obtain ⟨u₂, P₂, B₂, a₂, b₂, ⟨Y₂, hY₂⟩⟩ := own_split L hRj h₂'
+        obtain ⟨X', hX', hle'⟩ := sub_comp hY₂ hY₁ hX
+        exact Or.inr ⟨u₁, u₂, P₁, P₂, B₁, B₂, X', a₁, b₁, a₂, b₂, ResU.CompS.comm hX',
+          hle'.trans hle⟩
 
 theorem Chain.own {R : WRes} {T : VTy} {v : Val} {p : Option Loc} {l : Loc} {S : VTy} {u : Val}
     (h : Chain R T v p l S u) : R.get l = some (CellU.ownOf u) := by

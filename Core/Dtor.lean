@@ -78,6 +78,7 @@ theorem toFShape_ty : ∀ A : VTy, (toFShape A).ty = A
   | .ref .unk => rfl
   | .ref (.mu _) => rfl
   | .ref (.int _) => rfl
+  | .ref (.fam _) => rfl
   | .imm _ _ => rfl
   | .mut _ _ => rfl
   | .box _ _ => rfl
@@ -85,6 +86,7 @@ theorem toFShape_ty : ∀ A : VTy, (toFShape A).ty = A
   | .unk => rfl
   | .mu _ => rfl
   | .int _ => rfl
+  | .fam _ => rfl
 
 /-! ### The destructors -/
 
@@ -146,6 +148,7 @@ theorem algE_eq : ∀ A : VTy, algE A = dtorE ((toFShape A).resO .unit)
   | .ref .unk => rfl
   | .ref (.mu _) => rfl
   | .ref (.int _) => rfl
+  | .ref (.fam _) => rfl
   | .imm _ _ => rfl
   | .mut _ _ => rfl
   | .box _ _ => rfl
@@ -153,6 +156,7 @@ theorem algE_eq : ∀ A : VTy, algE A = dtorE ((toFShape A).resO .unit)
   | .unk => rfl
   | .mu _ => rfl
   | .int _ => rfl
+  | .fam _ => rfl
 
 /-! ### Which types have one -/
 

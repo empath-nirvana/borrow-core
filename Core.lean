@@ -1,4 +1,5 @@
 import Core.Types
+import Core.SepRange
 import Core.FrameRecords
 import Core.World
 import Core.ShapeMu

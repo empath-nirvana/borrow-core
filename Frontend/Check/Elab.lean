@@ -120,6 +120,7 @@ def ppV (nm : List (String × LifeVar)) (d p : Nat) : CVTy → String
   | .int .w64 => "i64"
   | .tvar n => if n < d then tvName (d - 1 - n) else s!"?{n}"
   | .mu A => parenIf (p > 0) s!"mu {tvName d}. {ppV nm (d + 1) 0 A}"
+  | .fam L => parenIf (p > 5) s!"array {ppV nm d 5 L}"
 /-- A computation type in the surface syntax, at precedence `p`. -/
 def ppC (nm : List (String × LifeVar)) (p : Nat) : CCTy → String
   | .ret A => parenIf (p > 5) s!"F {ppV nm 0 5 A}"

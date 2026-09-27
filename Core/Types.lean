@@ -57,6 +57,9 @@ inductive VTy where
   | mu (A : VTy)
   /-- `I32` (`w32`) and `I64` (`w64`): opaque integers, holding no resource.  `[spec §8]` -/
   | int (w : Width)
+  /-- `[L]`: the run-time family `⊛_{i<n} L` of leaf places, a value `(ℓ, n)` whose `i`-th
+  leaf is the location `ℓ + i`.  `Array A = [Ref A]`.  `[spec §9]` -/
+  | fam (L : VTy)
 /-- Computation types.  `[spec §3]` -/
 inductive CTy where
   /-- `F A`. -/
@@ -89,23 +92,25 @@ theorem VTy.recV {motive : VTy → Prop}
     (unk : motive .unk)
     (tvar : ∀ n, motive (.tvar n))
     (mu : ∀ A, motive A → motive (.mu A))
-    (int : ∀ w, motive (.int w)) : ∀ A, motive A
+    (int : ∀ w, motive (.int w))
+    (fam : ∀ L, motive L → motive (.fam L)) : ∀ A, motive A
   | .unit => unit
-  | .tensor A B => tensor A B (VTy.recV unit tensor zero sum thunk ref imm «mut» box bang unk tvar mu int A)
-      (VTy.recV unit tensor zero sum thunk ref imm «mut» box bang unk tvar mu int B)
+  | .tensor A B => tensor A B (VTy.recV unit tensor zero sum thunk ref imm «mut» box bang unk tvar mu int fam A)
+      (VTy.recV unit tensor zero sum thunk ref imm «mut» box bang unk tvar mu int fam B)
   | .zero => zero
-  | .sum A B => sum A B (VTy.recV unit tensor zero sum thunk ref imm «mut» box bang unk tvar mu int A)
-      (VTy.recV unit tensor zero sum thunk ref imm «mut» box bang unk tvar mu int B)
+  | .sum A B => sum A B (VTy.recV unit tensor zero sum thunk ref imm «mut» box bang unk tvar mu int fam A)
+      (VTy.recV unit tensor zero sum thunk ref imm «mut» box bang unk tvar mu int fam B)
   | .thunk C => thunk C
-  | .ref A => ref A (VTy.recV unit tensor zero sum thunk ref imm «mut» box bang unk tvar mu int A)
-  | .imm a A => imm a A (VTy.recV unit tensor zero sum thunk ref imm «mut» box bang unk tvar mu int A)
-  | .mut a A => «mut» a A (VTy.recV unit tensor zero sum thunk ref imm «mut» box bang unk tvar mu int A)
-  | .box a A => box a A (VTy.recV unit tensor zero sum thunk ref imm «mut» box bang unk tvar mu int A)
-  | .bang A => bang A (VTy.recV unit tensor zero sum thunk ref imm «mut» box bang unk tvar mu int A)
+  | .ref A => ref A (VTy.recV unit tensor zero sum thunk ref imm «mut» box bang unk tvar mu int fam A)
+  | .imm a A => imm a A (VTy.recV unit tensor zero sum thunk ref imm «mut» box bang unk tvar mu int fam A)
+  | .mut a A => «mut» a A (VTy.recV unit tensor zero sum thunk ref imm «mut» box bang unk tvar mu int fam A)
+  | .box a A => box a A (VTy.recV unit tensor zero sum thunk ref imm «mut» box bang unk tvar mu int fam A)
+  | .bang A => bang A (VTy.recV unit tensor zero sum thunk ref imm «mut» box bang unk tvar mu int fam A)
+  | .fam A => fam A (VTy.recV unit tensor zero sum thunk ref imm «mut» box bang unk tvar mu int fam A)
   | .unk => unk
   | .int w => int w
   | .tvar n => tvar n
-  | .mu A => mu A (VTy.recV unit tensor zero sum thunk ref imm «mut» box bang unk tvar mu int A)
+  | .mu A => mu A (VTy.recV unit tensor zero sum thunk ref imm «mut» box bang unk tvar mu int fam A)
 
 /-- `A ⊸ B` at value type: `U (A ⊸ F B)`, BoLo's arrow read call-by-value. -/
 abbrev VTy.lolli (A B : VTy) : VTy := .thunk (.arr A (.ret B))
@@ -127,6 +132,7 @@ def VFree (x : LifeVar) : VTy → Prop
   | .thunk C => CFree x C
   | .ref A => VFree x A
   | .bang A => VFree x A
+  | .fam A => VFree x A
   | .imm a A => a.mentions x = true ∨ VFree x A
   | .mut a A => a.mentions x = true ∨ VFree x A
   | .box a A => a.mentions x = true ∨ VFree x A
@@ -164,6 +170,7 @@ def rename (r : Nat → Nat) : VTy → VTy
   | .mut a A => .mut a (rename r A)
   | .box a A => .box a (rename r A)
   | .bang A => .bang (rename r A)
+  | .fam A => .fam (rename r A)
   | .unk => .unk
   | .int w => .int w
   | .tvar n => .tvar (r n)
@@ -187,6 +194,7 @@ def subst (σ : Nat → VTy) : VTy → VTy
   | .mut a A => .mut a (subst σ A)
   | .box a A => .box a (subst σ A)
   | .bang A => .bang (subst σ A)
+  | .fam A => .fam (subst σ A)
   | .unk => .unk
   | .int w => .int w
   | .tvar n => σ n
@@ -207,6 +215,7 @@ theorem rename_rename : ∀ (A : VTy) (r r' : Nat → Nat),
   | .mut _ A, r, r' => by simp [rename, rename_rename A]
   | .box _ A, r, r' => by simp [rename, rename_rename A]
   | .bang A, r, r' => by simp [rename, rename_rename A]
+  | .fam A, r, r' => by simp [rename, rename_rename A]
   | .unk, _, _ => rfl
   | .int _, _, _ => rfl
   | .tvar _, _, _ => rfl
@@ -227,6 +236,7 @@ theorem subst_rename : ∀ (A : VTy) (σ : Nat → VTy) (r : Nat → Nat),
   | .mut _ A, σ, r => by simp [rename, subst, subst_rename A]
   | .box _ A, σ, r => by simp [rename, subst, subst_rename A]
   | .bang A, σ, r => by simp [rename, subst, subst_rename A]
+  | .fam A, σ, r => by simp [rename, subst, subst_rename A]
   | .unk, _, _ => rfl
   | .int _, _, _ => rfl
   | .tvar _, _, _ => rfl
@@ -247,6 +257,7 @@ theorem rename_subst : ∀ (A : VTy) (r : Nat → Nat) (σ : Nat → VTy),
   | .mut _ A, r, σ => by simp [rename, subst, rename_subst A]
   | .box _ A, r, σ => by simp [rename, subst, rename_subst A]
   | .bang A, r, σ => by simp [rename, subst, rename_subst A]
+  | .fam A, r, σ => by simp [rename, subst, rename_subst A]
   | .unk, _, _ => rfl
   | .int _, _, _ => rfl
   | .tvar _, _, _ => rfl
@@ -272,6 +283,7 @@ theorem subst_subst : ∀ (A : VTy) (σ τ : Nat → VTy),
   | .mut _ A, σ, τ => by simp [subst, subst_subst A]
   | .box _ A, σ, τ => by simp [subst, subst_subst A]
   | .bang A, σ, τ => by simp [subst, subst_subst A]
+  | .fam A, σ, τ => by simp [subst, subst_subst A]
   | .unk, _, _ => rfl
   | .int _, _, _ => rfl
   | .tvar _, _, _ => rfl
@@ -297,6 +309,7 @@ theorem subst_id : ∀ (A : VTy), subst .tvar A = A
   | .mut _ A => by simp [subst, subst_id A]
   | .box _ A => by simp [subst, subst_id A]
   | .bang A => by simp [subst, subst_id A]
+  | .fam A => by simp [subst, subst_id A]
   | .unk => rfl
   | .int _ => rfl
   | .tvar _ => rfl
@@ -317,6 +330,7 @@ def Cl : Nat → VTy → Prop
   | k, .mut _ A => Cl k A
   | k, .box _ A => Cl k A
   | k, .bang A => Cl k A
+  | k, .fam A => Cl k A
   | _, .unk => True
   | _, .int _ => True
   | k, .tvar n => n < k
@@ -334,6 +348,7 @@ theorem Cl_rename : ∀ (A : VTy) {k k' : Nat} (r : Nat → Nat), Cl k A →
   | .mut _ A, _, _, r, h, hr => Cl_rename A r h hr
   | .box _ A, _, _, r, h, hr => Cl_rename A r h hr
   | .bang A, _, _, r, h, hr => Cl_rename A r h hr
+  | .fam A, _, _, r, h, hr => Cl_rename A r h hr
   | .unk, _, _, _, _, _ => trivial
   | .int _, _, _, _, _, _ => trivial
   | .tvar n, _, _, _, h, hr => hr n h
@@ -354,6 +369,7 @@ theorem Cl_substB : ∀ (A : VTy) {k j : Nat} (σ : Nat → VTy), Cl j A → (�
   | .mut _ A, _, _, σ, hA, h => Cl_substB A σ hA h
   | .box _ A, _, _, σ, hA, h => Cl_substB A σ hA h
   | .bang A, _, _, σ, hA, h => Cl_substB A σ hA h
+  | .fam A, _, _, σ, hA, h => Cl_substB A σ hA h
   | .unk, _, _, _, _, _ => trivial
   | .int _, _, _, _, _, _ => trivial
   | .tvar n, _, _, _, hA, h => h n hA
@@ -376,6 +392,7 @@ theorem Cl_subst : ∀ (A : VTy) {k : Nat} (σ : Nat → VTy), (∀ n, Cl k (σ 
   | .mut _ A, _, σ, h => Cl_subst A σ h
   | .box _ A, _, σ, h => Cl_subst A σ h
   | .bang A, _, σ, h => Cl_subst A σ h
+  | .fam A, _, σ, h => Cl_subst A σ h
   | .unk, _, _, _ => trivial
   | .int _, _, _, _ => trivial
   | .tvar n, _, _, h => h n
@@ -395,6 +412,7 @@ theorem Cl_mono : ∀ (A : VTy) {k k' : Nat}, Cl k A → k ≤ k' → Cl k' A
   | .mut _ A, _, _, h, hk => Cl_mono A h hk
   | .box _ A, _, _, h, hk => Cl_mono A h hk
   | .bang A, _, _, h, hk => Cl_mono A h hk
+  | .fam A, _, _, h, hk => Cl_mono A h hk
   | .unk, _, _, _, _ => trivial
   | .int _, _, _, _, _ => trivial
   | .tvar _, _, _, h, hk => Nat.lt_of_lt_of_le h hk
@@ -412,6 +430,7 @@ theorem rename_closed : ∀ (A : VTy) {k : Nat} (r : Nat → Nat), Cl k A →
   | .mut _ A, _, r, h, hr => by simp [rename, rename_closed A r h hr]
   | .box _ A, _, r, h, hr => by simp [rename, rename_closed A r h hr]
   | .bang A, _, r, h, hr => by simp [rename, rename_closed A r h hr]
+  | .fam A, _, r, h, hr => by simp [rename, rename_closed A r h hr]
   | .unk, _, _, _, _ => rfl
   | .int _, _, _, _, _ => rfl
   | .tvar n, _, _, h, hr => by simp [rename, hr n h]
@@ -434,6 +453,7 @@ theorem subst_closed : ∀ (A : VTy) {k : Nat} (σ : Nat → VTy), Cl k A →
   | .mut _ A, _, σ, h, hσ => by simp [subst, subst_closed A σ h hσ]
   | .box _ A, _, σ, h, hσ => by simp [subst, subst_closed A σ h hσ]
   | .bang A, _, σ, h, hσ => by simp [subst, subst_closed A σ h hσ]
+  | .fam A, _, σ, h, hσ => by simp [subst, subst_closed A σ h hσ]
   | .unk, _, _, _, _ => rfl
   | .int _, _, _, _, _ => rfl
   | .tvar n, _, _, h, hσ => hσ n h
@@ -457,6 +477,7 @@ theorem subst_congr : ∀ (A : VTy) {k : Nat} {σ τ : Nat → VTy}, Cl k A →
   | .mut _ A, _, _, _, h, hσ => by simp [subst, subst_congr A h hσ]
   | .box _ A, _, _, _, h, hσ => by simp [subst, subst_congr A h hσ]
   | .bang A, _, _, _, h, hσ => by simp [subst, subst_congr A h hσ]
+  | .fam A, _, _, _, h, hσ => by simp [subst, subst_congr A h hσ]
   | .unk, _, _, _, _, _ => rfl
   | .int _, _, _, _, _, _ => rfl
   | .tvar n, _, _, _, h, hσ => hσ n h
@@ -495,6 +516,7 @@ def Occ : Nat → VTy → Prop
   | k, .mut _ A => Occ k A
   | k, .box _ A => Occ k A
   | k, .bang A => Occ k A
+  | k, .fam A => Occ k A
   | _, .unk => False
   | _, .int _ => False
   | k, .tvar n => n = k
@@ -514,6 +536,7 @@ def NoMut : Nat → VTy → Prop
   | k, .mut _ A => ¬ Occ k A
   | k, .box _ A => NoMut k A
   | k, .bang A => NoMut k A
+  | k, .fam A => NoMut k A
   | _, .unk => True
   | _, .int _ => True
   | _, .tvar _ => True
@@ -532,6 +555,7 @@ theorem noMut_of_not_occ : ∀ (A : VTy) {k : Nat}, ¬ Occ k A → NoMut k A
   | .mut _ A, _, h => h
   | .box _ A, _, h => noMut_of_not_occ A h
   | .bang A, _, h => noMut_of_not_occ A h
+  | .fam A, _, h => noMut_of_not_occ A h
   | .unk, _, _ => trivial
   | .int _, _, _ => trivial
   | .tvar _, _, _ => trivial
@@ -548,6 +572,7 @@ theorem not_occ_of_Cl : ∀ (A : VTy) {j k : Nat}, Cl j A → j ≤ k → ¬ Occ
   | .mut _ A, _, _, hc, hk, h => not_occ_of_Cl A hc hk h
   | .box _ A, _, _, hc, hk, h => not_occ_of_Cl A hc hk h
   | .bang A, _, _, hc, hk, h => not_occ_of_Cl A hc hk h
+  | .fam A, _, _, hc, hk, h => not_occ_of_Cl A hc hk h
   | .unk, _, _, _, _, h => h
   | .int _, _, _, _, _, h => h
   | .tvar n, _, _, hc, hk, h => by simp only [Cl] at hc; simp only [Occ] at h; omega
@@ -568,6 +593,7 @@ theorem occ_rename : ∀ (A : VTy) {k : Nat} (r : Nat → Nat), Occ k (rename r 
   | .mut _ A, _, r, h => occ_rename A r h
   | .box _ A, _, r, h => occ_rename A r h
   | .bang A, _, r, h => occ_rename A r h
+  | .fam A, _, r, h => occ_rename A r h
   | .unk, _, _, h => h.elim
   | .int _, _, _, h => h.elim
   | .tvar n, _, _, h => ⟨n, h, rfl⟩
@@ -595,6 +621,7 @@ theorem occ_subst : ∀ (A : VTy) {k : Nat} (τ : Nat → VTy), Occ k (subst τ 
   | .mut _ A, _, τ, h => occ_subst A τ h
   | .box _ A, _, τ, h => occ_subst A τ h
   | .bang A, _, τ, h => occ_subst A τ h
+  | .fam A, _, τ, h => occ_subst A τ h
   | .unk, _, _, h => h.elim
   | .int _, _, _, h => h.elim
   | .tvar n, _, _, h => ⟨n, rfl, h⟩
@@ -624,6 +651,7 @@ theorem subst_congr_occ : ∀ (A : VTy) {σ τ : Nat → VTy}, (∀ n, Occ n A �
   | .mut _ A, _, _, h => by simp [subst, subst_congr_occ A h]
   | .box _ A, _, _, h => by simp [subst, subst_congr_occ A h]
   | .bang A, _, _, h => by simp [subst, subst_congr_occ A h]
+  | .fam A, _, _, h => by simp [subst, subst_congr_occ A h]
   | .unk, _, _, _ => rfl
   | .int _, _, _, _ => rfl
   | .tvar n, _, _, h => h n rfl
@@ -647,6 +675,7 @@ theorem occ_rename_of : ∀ (A : VTy) {j : Nat} (r : Nat → Nat), Occ j A → O
   | .mut _ A, _, r, h => occ_rename_of A r h
   | .box _ A, _, r, h => occ_rename_of A r h
   | .bang A, _, r, h => occ_rename_of A r h
+  | .fam A, _, r, h => occ_rename_of A r h
   | .unk, _, _, h => h
   | .int _, _, _, h => h
   | .tvar n, _, r, h => by simp only [Occ] at h; subst h; rfl
@@ -666,6 +695,7 @@ theorem occ_subst_of : ∀ (A : VTy) {n k : Nat} (τ : Nat → VTy), Occ n A →
   | .mut _ A, _, _, τ, h, hk => occ_subst_of A τ h hk
   | .box _ A, _, _, τ, h, hk => occ_subst_of A τ h hk
   | .bang A, _, _, τ, h, hk => occ_subst_of A τ h hk
+  | .fam A, _, _, τ, h, hk => occ_subst_of A τ h hk
   | .unk, _, _, _, h, _ => h.elim
   | .int _, _, _, _, h, _ => h.elim
   | .tvar m, _, _, τ, h, hk => by simp only [Occ] at h; subst h; exact hk
@@ -684,6 +714,7 @@ theorem noMut_of_subst : ∀ (A : VTy) {k : Nat} (τ : Nat → VTy), NoMut k (su
   | .mut _ A, k, τ, h, hk => fun ho => h (occ_subst_of A τ ho (by rw [hk]; rfl))
   | .box _ A, _, τ, h, hk => noMut_of_subst A τ h hk
   | .bang A, _, τ, h, hk => noMut_of_subst A τ h hk
+  | .fam A, _, τ, h, hk => noMut_of_subst A τ h hk
   | .unk, _, _, _, _ => trivial
   | .int _, _, _, _, _ => trivial
   | .tvar _, _, _, _, _ => trivial
@@ -705,6 +736,7 @@ theorem noMut_subst : ∀ (A : VTy) {k : Nat} (τ : Nat → VTy), NoMut k A → 
       · exact hτ n e ho
   | .box _ A, _, τ, h, hk, hτ => noMut_subst A τ h hk hτ
   | .bang A, _, τ, h, hk, hτ => noMut_subst A τ h hk hτ
+  | .fam A, _, τ, h, hk, hτ => noMut_subst A τ h hk hτ
   | .unk, _, _, _, _, _ => trivial
   | .int _, _, _, _, _, _ => trivial
   | .tvar n, k, τ, _, hk, hτ => by
@@ -734,6 +766,7 @@ theorem rename_eq_subst : ∀ (A : VTy) (r : Nat → Nat), rename r A = subst (f
   | .mut _ A, r => by simp [rename, subst, rename_eq_subst A]
   | .box _ A, r => by simp [rename, subst, rename_eq_subst A]
   | .bang A, r => by simp [rename, subst, rename_eq_subst A]
+  | .fam A, r => by simp [rename, subst, rename_eq_subst A]
   | .unk, _ => rfl
   | .int _, _ => rfl
   | .tvar _, _ => rfl
@@ -781,6 +814,7 @@ def immG (b : Lifetime.Life) (pay : Nat → VTy) : VTy → VTy
   | .mut _ A => .imm b (subst pay A)
   | .box _ A => immG b pay A
   | .bang A => .bang (subst pay A)
+  | .fam A => .fam (immG b pay A)
   | .unk => .unk
   | .int w => .int w
   | .tvar n => .tvar n
@@ -826,6 +860,7 @@ theorem immG_rename : ∀ (A : VTy) (pay : Nat → VTy) (r : Nat → Nat), (∀ 
   | .bang A, pay, r, h => by
       simp only [immG, rename, subst_rename]
       rw [rename_closed0 (Cl_subst A (pay ∘ r) (fun n => h (r n)))]
+  | .fam A, pay, r, h => by simp [immG, rename, immG_rename A pay r h]
   | .unk, _, _, _ => rfl
   | .int _, _, _, _ => rfl
   | .tvar _, _, _, _ => rfl
@@ -869,6 +904,7 @@ theorem immG_subst : ∀ (A : VTy) (pay σ : Nat → VTy), (∀ n, Cl 0 (pay n))
       simp only [immG, subst]
       rw [subst_closed0 (Cl_subst A (fun n => subst pay (σ n)) (fun n => Cl_subst (σ n) pay h)),
         subst_subst]
+  | .fam A, pay, σ, h => by simp [immG, subst, immG_subst A pay σ h]
   | .unk, _, _, _ => rfl
   | .int _, _, _, _ => rfl
   | .tvar _, _, _, _ => rfl
@@ -913,6 +949,7 @@ theorem immG_congr : ∀ (A : VTy) {k : Nat} {pay pay' : Nat → VTy}, Cl k A �
   | .mut _ A, _, _, _, h, hp => by simp [immG, subst_congr A h hp]
   | .box _ A, _, _, _, h, hp => by simp [immG, immG_congr A h hp]
   | .bang A, _, _, _, h, hp => by simp [immG, subst_congr A h hp]
+  | .fam A, _, _, _, h, hp => by simp [immG, immG_congr A h hp]
   | .unk, _, _, _, _, _ => rfl
   | .int _, _, _, _, _, _ => rfl
   | .tvar _, _, _, _, _, _ => rfl
@@ -935,6 +972,7 @@ theorem Cl_immG : ∀ (A : VTy) {k : Nat} (pay : Nat → VTy), (∀ n, Cl 0 (pay
   | .mut _ A, _, pay, hp, _ => Cl_mono _ (Cl_subst A pay hp) (Nat.zero_le _)
   | .box _ A, _, pay, hp, h => Cl_immG A pay hp h
   | .bang A, _, pay, hp, _ => Cl_mono _ (Cl_subst A pay hp) (Nat.zero_le _)
+  | .fam A, _, pay, hp, h => Cl_immG A pay hp h
   | .unk, _, _, _, _ => trivial
   | .int _, _, _, _, _ => trivial
   | .tvar _, _, _, _, h => h
@@ -954,6 +992,7 @@ theorem noMut_immG : ∀ (A : VTy) {k : Nat} (pay : Nat → VTy), (∀ n, Cl 0 (
   | .mut _ A, _, pay, hp => noMut_of_not_occ _ (not_occ_of_Cl _ (Cl_subst A pay hp) (Nat.zero_le _))
   | .box _ A, _, pay, hp => noMut_immG A pay hp
   | .bang A, _, pay, hp => noMut_of_not_occ _ (not_occ_of_Cl _ (Cl_subst A pay hp) (Nat.zero_le _))
+  | .fam A, _, pay, hp => noMut_immG A pay hp
   | .unk, _, _, _ => trivial
   | .int _, _, _, _ => trivial
   | .tvar _, _, _, _ => trivial
@@ -1001,7 +1040,7 @@ theorem VTy.noMut_of_poly : ∀ {A : VTy}, A.Poly → A.NoMut 0
   | .sum _ _, h => ⟨noMut_of_poly h.1, noMut_of_poly h.2⟩
   | .tvar _, _ => trivial
   | .unit, _ | .zero, _ | .thunk _, _ | .unk, _ | .int _, _ => trivial
-  | .ref _, h | .imm _ _, h | .mut _ _, h | .box _ _, h | .bang _, h | .mu _, h =>
+  | .ref _, h | .imm _ _, h | .mut _ _, h | .box _ _, h | .bang _, h | .fam _, h | .mu _, h =>
       VTy.noMut_of_not_occ _ h
 
 namespace CTy
@@ -1062,7 +1101,7 @@ theorem VTy.poly_of_not_occ : ∀ {A : VTy}, ¬ A.Occ 0 → A.Poly
       poly_of_not_occ (fun h' => h (Or.inr h'))⟩
   | .tvar _, _ => trivial
   | .unit, h | .zero, h | .thunk _, h | .unk, h | .int _, h => h
-  | .ref _, h | .imm _ _, h | .mut _ _, h | .box _ _, h | .bang _, h | .mu _, h => h
+  | .ref _, h | .imm _ _, h | .mut _ _, h | .box _ _, h | .bang _, h | .fam _, h | .mu _, h => h
 
 theorem VTy.not_occ_rename_succ (A : VTy) : ¬ (A.rename Nat.succ).Occ 0 := fun h => by
   obtain ⟨n, hn, -⟩ := VTy.occ_rename A Nat.succ h
@@ -1135,6 +1174,7 @@ theorem vFree_rename {y : LifeVar} : ∀ (A : VTy) (r : Nat → Nat), VFree y (A
   | .mut _ A, r => or_congr Iff.rfl (vFree_rename A r)
   | .box _ A, r => or_congr Iff.rfl (vFree_rename A r)
   | .bang A, r => vFree_rename A r
+  | .fam A, r => vFree_rename A r
   | .unk, _ => Iff.rfl
   | .int _, _ => Iff.rfl
   | .tvar _, _ => Iff.rfl
@@ -1159,6 +1199,7 @@ theorem vFree_subst {y : LifeVar} : ∀ (A : VTy) (σ : Nat → VTy),
   | .box _ A, σ, h => h.elim (fun h => Or.inl (Or.inl h))
       (fun h => (vFree_subst A σ h).elim (fun h => Or.inl (Or.inr h)) Or.inr)
   | .bang A, σ, h => vFree_subst A σ h
+  | .fam A, σ, h => vFree_subst A σ h
   | .unk, _, h => h.elim
   | .int _, _, h => h.elim
   | .tvar n, _, h => Or.inr ⟨n, h⟩
@@ -1182,6 +1223,7 @@ theorem vFree_subst_of {y : LifeVar} : ∀ (A : VTy) (σ : Nat → VTy), VFree y
   | .mut _ A, σ, h => h.elim Or.inl (fun h => Or.inr (vFree_subst_of A σ h))
   | .box _ A, σ, h => h.elim Or.inl (fun h => Or.inr (vFree_subst_of A σ h))
   | .bang A, σ, h => vFree_subst_of A σ h
+  | .fam A, σ, h => vFree_subst_of A σ h
   | .unk, _, h => h
   | .int _, _, h => h
   | .tvar _, _, h => h.elim
@@ -1221,6 +1263,8 @@ theorem vFree_immG {y : LifeVar} (b : Lifetime.Life) : ∀ (A : VTy) (pay : Nat 
       (fun h => h.elim (fun h => Or.inr (Or.inl (Or.inr h))) (fun h => Or.inr (Or.inr h)))
   | .bang A, pay, h => (vFree_subst A pay h).elim
       (fun h => Or.inr (Or.inl h)) (fun h => Or.inr (Or.inr h))
+  | .fam A, pay, h => (vFree_immG b A pay h).elim Or.inl
+      (fun h => h.elim (fun h => Or.inr (Or.inl h)) (fun h => Or.inr (Or.inr h)))
   | .unk, _, h => h.elim
   | .int _, _, h => h.elim
   | .tvar _, _, h => h.elim
@@ -1240,7 +1284,8 @@ theorem vFree_immG {y : LifeVar} (b : Lifetime.Life) : ∀ (A : VTy) (pay : Nat 
 /-- `Imm̲ 'b A`: the view a load through an immutable borrow at `'b` gives of a payload of
 type `A`.  `1`, `0`, `⊗`, `⊕` structurally; `U C ↦ Unk` (codata has no safe view, as `⊸`
 and `∀` in BoLo); `Ref A ↦ Imm 'b A`; `Imm @a A` kept; `Mut @a A ↦ Imm 'b A`;
-`[@a] A ↦ Imm̲ 'b A`; `!A` kept whole (it holds no resource); `Unk ↦ Unk`.  At `μX. A` the
+`[@a] A ↦ Imm̲ 'b A`; `!A` kept whole (it holds no resource); `Unk ↦ Unk`; `[L] ↦ [Imm̲ 'b L]`
+(`[spec §9]`).  At `μX. A` the
 clause substitutes inside the payloads it keeps (`VTy.immG`, `docs/scope-recursion.md` §2.4):
 `Imm̲ 'b (μX. A) = μY. Imm̲ᵡ 'b A`, a head `X` becoming `Y` and a payload `X` becoming `μX. A`.  `[spec §6]` -/
 def VTy.immReborrow (b : Lifetime.Life) : VTy → VTy
@@ -1254,6 +1299,7 @@ def VTy.immReborrow (b : Lifetime.Life) : VTy → VTy
   | .mut _ A => .imm b A
   | .box _ A => A.immReborrow b
   | .bang A => .bang A
+  | .fam A => .fam (A.immReborrow b)
   | .unk => .unk
   | .int w => .int w
   | .tvar n => .tvar n
@@ -1273,6 +1319,7 @@ theorem VTy.immReborrow_eq_immG (b : Lifetime.Life) : ∀ A : VTy, A.immReborrow
   | .mut _ A => by simp only [VTy.immReborrow, VTy.immG, VTy.subst_id]
   | .box _ A => by simp only [VTy.immReborrow, VTy.immG, VTy.immReborrow_eq_immG b A]
   | .bang A => by simp only [VTy.immReborrow, VTy.immG, VTy.subst_id]
+  | .fam A => by simp only [VTy.immReborrow, VTy.immG, VTy.immReborrow_eq_immG b A]
   | .unk => rfl
   | .int _ => rfl
   | .tvar _ => rfl
@@ -1327,6 +1374,7 @@ def VTy.lifeBound : VTy → Nat
   | .thunk C => C.lifeBound
   | .ref A => A.lifeBound
   | .bang A => A.lifeBound
+  | .fam A => A.lifeBound
   | .imm a A => max a.varBound A.lifeBound
   | .mut a A => max a.varBound A.lifeBound
   | .box a A => max a.varBound A.lifeBound
@@ -1354,6 +1402,7 @@ def VTy.applyLSub (σ : LSubst) : VTy → VTy
   | .thunk C => .thunk (C.applyLSub σ)
   | .ref A => .ref (A.applyLSub σ)
   | .bang A => .bang (A.applyLSub σ)
+  | .fam A => .fam (A.applyLSub σ)
   | .imm a A => .imm (a.applySub σ) (A.applyLSub σ)
   | .mut a A => .mut (a.applySub σ) (A.applyLSub σ)
   | .box a A => .box (a.applySub σ) (A.applyLSub σ)
@@ -1413,6 +1462,7 @@ theorem lt_vLifeBound {x : LifeVar} : ∀ {A : VTy}, VFree x A → x < A.lifeBou
   | .thunk C, h => lt_cLifeBound (C := C) h
   | .ref A, h => lt_vLifeBound (A := A) h
   | .bang A, h => lt_vLifeBound (A := A) h
+  | .fam A, h => lt_vLifeBound (A := A) h
   | .imm a A, h => by
       rcases h with h | h
       · exact Nat.lt_of_lt_of_le (lt_varBound h) (Nat.le_max_left _ _)
@@ -1489,6 +1539,7 @@ theorem vFree_immReborrow {x y : LifeVar} : ∀ (A : VTy),
       · exact Or.inl h
       · exact Or.inr (Or.inr h)
   | bang A _ => intro h; exact Or.inr h
+  | fam L ih => intro h; exact ih h
   | tvar _ => intro h; exact h.elim
   | mu A _ =>
       intro h
@@ -1521,6 +1572,8 @@ inductive VOutlives (Δ : LifeCtx) (a : Lifetime.Life) : VTy → Prop where
   | mu {A} : VOutlives Δ a A → VOutlives Δ a (.mu A)
   /-- `I32`/`I64` outlive every lifetime.  `[spec §8]` -/
   | int {w} : VOutlives Δ a (.int w)
+  /-- `Δ ⊢ [L] ⊐ @a` from `Δ ⊢ L ⊐ @a`.  `[spec §9]` -/
+  | fam {L} : VOutlives Δ a L → VOutlives Δ a (.fam L)
 
 theorem VOutlives.rename {Δ : LifeCtx} {a : Lifetime.Life} {A : VTy} (h : VOutlives Δ a A) :
     ∀ r : Nat → Nat, VOutlives Δ a (A.rename r) := by
@@ -1531,6 +1584,7 @@ theorem VOutlives.rename {Δ : LifeCtx} {a : Lifetime.Life} {A : VTy} (h : VOutl
   | sum _ _ ih₁ ih₂ => intro r; exact .sum (ih₁ r) (ih₂ r)
   | ref _ ih => intro r; exact .ref (ih r)
   | bang => intro _; exact .bang
+  | fam _ ih => intro r; exact .fam (ih r)
   | box h => intro _; exact .box h
   | imm h => intro _; exact .imm h
   | «mut» h => intro _; exact .mut h
@@ -1547,6 +1601,7 @@ theorem VOutlives.subst {Δ : LifeCtx} {a : Lifetime.Life} {A : VTy} (h : VOutli
   | sum _ _ ih₁ ih₂ => intro σ hσ; exact .sum (ih₁ σ hσ) (ih₂ σ hσ)
   | ref _ ih => intro σ hσ; exact .ref (ih σ hσ)
   | bang => intro _ _; exact .bang
+  | fam _ ih => intro σ hσ; exact .fam (ih σ hσ)
   | box h => intro _ _; exact .box h
   | imm h => intro _ _; exact .imm h
   | «mut» h => intro _ _; exact .mut h

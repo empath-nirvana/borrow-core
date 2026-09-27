@@ -83,6 +83,10 @@ theorem TyEq.immG {c c' : Lifetime.Life} {δ δ' : LSub} (hc : c.interp δ = c'.
       intro A' pay pay' h hp; cases A' <;> simp only [TyEq] at h
       simp only [VTy.immG]
       exact ih pay pay' h.2 hp
+  | fam A ih =>
+      intro A' pay pay' h hp; cases A' <;> simp only [TyEq] at h
+      simp only [VTy.immG]
+      exact ih pay pay' h hp
   | mu A ih =>
       intro A' pay pay' h hp; cases A' <;> simp only [TyEq] at h
       refine ih _ _ h (fun n => ?_)
@@ -108,6 +112,7 @@ theorem TyEq.applyLSub : ∀ (T : VTy) (σ : Lifetime.LSubst) (δ δ' : LSub),
   | .unk, _, _, _, _ => trivial
   | .ref T, σ, δ, δ', h => TyEq.applyLSub T σ δ δ' h
   | .bang T, σ, δ, δ', h => TyEq.applyLSub T σ δ δ' h
+  | .fam T, σ, δ, δ', h => TyEq.applyLSub T σ δ δ' h
   | .thunk C, σ, δ, δ', h => CTyEq.applyLSub C σ δ δ' h
   | .sum T₁ T₂, σ, δ, δ', h =>
       ⟨TyEq.applyLSub T₁ σ δ δ' (fun y hy => h y (Or.inl hy)),
@@ -308,6 +313,11 @@ theorem vC_local : ∀ (b : Bool) (T : VTy) {ls ls' : List SRec} {δ : LSub} {v 
   | unk => exact h
   | tvar _ => exact h.elim
   | mu A => exact vC_roll h.1 h.2.1 (h.2.2.2 _ hk)
+  | fam L =>
+      obtain ⟨ℓ, n, ρ₀, ρ₃, hc, hp, hs⟩ := h
+      exact ⟨ℓ, n, ρ₀, ρ₃, hc, hp, sepRange_mono_down (R := fun σ => Ext ls ls' σ)
+        (fun _ _ _ hc' hk' => ⟨hk'.left hc', hk'.right hc'⟩) (fun m σ hkσ hm => hm.2 _ hkσ)
+        (hk.right hc) hs⟩
 
 /-- The program's relation implies the observable view. -/
 theorem vO_obs : ∀ (T : VTy) {ls : List SRec} {δ : LSub} {v : Val} {ρ : WRes},
@@ -341,6 +351,9 @@ theorem vO_obs : ∀ (T : VTy) {ls : List SRec} {δ : LSub} {v : Val} {ρ : WRes
   | unk => exact h
   | tvar _ => exact h.elim
   | mu A => exact vC_roll h.1 h.2.1 h.2.2.2
+  | fam L =>
+      obtain ⟨ℓ, n, ρ₀, ρ₃, hc, hp, hs⟩ := h
+      exact ⟨ℓ, n, ρ₀, ρ₃, hc, hp, sepRange_mono' (fun m σ hm => hm.2) hs⟩
 
 /-- `vC ⊆ vShape`, both modes. -/
 theorem vC_vShape : ∀ (b : Bool) (T : VTy) {ls : List SRec} {δ : LSub} {v : Val} {ρ : WRes},
@@ -379,6 +392,9 @@ theorem vC_vShape : ∀ (b : Bool) (T : VTy) {ls : List SRec} {δ : LSub} {v : V
   | unk => exact h
   | tvar _ => exact h.elim
   | mu A => exact vShape_roll h.2.1 h.2.2.2
+  | fam L =>
+      obtain ⟨ℓ, n, ρ₀, ρ₃, hc, hp, hs⟩ := h
+      exact ⟨ℓ, n, ρ₀, ρ₃, hc, hp, sepRange_mono' (fun m σ hm => hm.2) hs⟩
 
 /-- Reading an `imm` cell at the observable view: the payload is observable-valid at
 the current list. -/
@@ -522,6 +538,13 @@ theorem vC_outlives {Δ : LifeCtx} {δ : LSub} {a : Lifetime.Life} {α : Life}
   | unk => cases hT
   | tvar _ => exact h.elim
   | mu A => exact h.2.2.2 hT.unroll
+  | fam L =>
+      cases hT with
+      | fam hL =>
+          obtain ⟨ℓ, n, hs⟩ := h
+          obtain ⟨-, hs⟩ := pure_sep_iff.mp hs
+          exact sepRange_closed (R := fun σ => BoLo.Outlives σ α) (ResU.inStratum_empty α)
+            (fun _ _ _ hc o₁ o₂ => (outlives_comp hc α).mpr ⟨o₁, o₂⟩) (fun m σ hm => hm.2 hL) hs
 
 end BoCa.Fig16.LogRel.Core
 
@@ -598,6 +621,9 @@ theorem vCE_congr : ∀ (A : VTy) (η : Option (Nat → TEnt)) {δ₁ δ₂ : LS
       have ih := vCE_congr A η h hη
       funext v; cases b <;> simp only [vCE, ih]
   | .bang A, η, _, _, h, hη, b, ls => by
+      have ih := vCE_congr A η h hη
+      funext v; cases b <;> simp only [vCE, ih]
+  | .fam A, η, _, _, h, hη, b, ls => by
       have ih := vCE_congr A η h hη
       funext v; cases b <;> simp only [vCE, ih]
   | .box a A, η, δ₁, δ₂, h, hη, b, ls => by
@@ -706,7 +732,7 @@ theorem TyEq.poly_iff : ∀ (A : VTy) {A' : VTy} {δ δ' : LSub}, TyEq A δ A' �
   | .tvar _, A', _, _, h => by cases A' <;> simp only [TyEq] at h; subst h; exact Iff.rfl
   | .unit, A', _, _, h | .zero, A', _, _, h | .thunk _, A', _, _, h | .unk, A', _, _, h
   | .int _, A', _, _, h | .ref _, A', _, _, h | .imm _ _, A', _, _, h | .mut _ _, A', _, _, h
-  | .box _ _, A', _, _, h | .bang _, A', _, _, h | .mu _, A', _, _, h => by
+  | .box _ _, A', _, _, h | .bang _, A', _, _, h | .mu _, A', _, _, h | .fam _, A', _, _, h => by
       have ho := TyEq.occ_iff _ 0 h
       cases A' <;> simp only [TyEq] at h
       simp only [VTy.Poly, ho]
@@ -770,6 +796,10 @@ theorem vCE_tyEq : ∀ (S : VTy) {S' : VTy} {δ δ' : LSub} (η η' : Option (Na
       have ih := vCE_tyEq A η η' h hη
       intro b ls; funext v; cases b <;> simp only [vCE, ih]
   | .bang A, S', _, _, η, η', h, hη => by
+      cases S' <;> simp only [TyEq] at h
+      have ih := vCE_tyEq A η η' h hη
+      intro b ls; funext v; cases b <;> simp only [vCE, ih]
+  | .fam A, S', _, _, η, η', h, hη => by
       cases S' <;> simp only [TyEq] at h
       have ih := vCE_tyEq A η η' h hη
       intro b ls; funext v; cases b <;> simp only [vCE, ih]
@@ -1076,6 +1106,16 @@ theorem obs_transfer {R : WRes} {ls : List SRec} (hLB : WitLB ls R) :
   | mu M =>
       obtain ⟨hnm, hcl, hG⟩ := h
       exact vC_roll hnm hcl (hG.2 rfl rfl _ hA hB' (vShape_unfold hs).2)
+  | fam L =>
+      obtain ⟨ℓ, n, hk⟩ := h
+      obtain ⟨he, hsA⟩ := pure_sep_iff.mp hk
+      obtain ⟨ℓ', n', hk'⟩ := hs
+      obtain ⟨he', hsB⟩ := pure_sep_iff.mp hk'
+      obtain ⟨rfl, rfl⟩ := Val.arr_inj (he.symm.trans he')
+      exact ⟨ℓ, n, pure_sep_mk he (sepRange_zip (RA := CellMatch R) (RB := CellMatch R) (f := id)
+        (fun _ _ _ hc h => ⟨h.left hc, h.right hc⟩) (fun _ _ _ hc h => ⟨h.left hc, h.right hc⟩)
+        (fun _ _ _ hc => hc) rfl
+        (fun m _ _ a b ha hb hPa hQb => hPa.2 rfl rfl _ ha hb hQb) hA hB' hsA hsB)⟩
 
 end BoCa.Fig16.LogRel.Core
 
@@ -1338,6 +1378,28 @@ theorem relabel_obs {R : WRes} {ls : List SRec} {β β₀ : Life} {δ : LSub} {x
       exact hG.2 rfl rfl (fun h => (vFree_inst h).elim hx hx) (fun h => (vFree_inst h).elim hx₀ hx₀)
         _ ((vShape_immReborrow_mu_iff hM _ _ v c).mp hc) hRl hcR hs
         (fun m S u h => hcr m S u (RefPos.mu hcl h)) (fun m S h => hcm m S (MutPos.mu hcl h))
+  | fam L =>
+      obtain ⟨ℓ, n, hk₁⟩ := hc
+      obtain ⟨he, hs₁⟩ := pure_sep_iff.mp hk₁
+      obtain ⟨ℓ', n', hk₂⟩ := hR
+      obtain ⟨he', hs₂⟩ := pure_sep_iff.mp hk₂
+      subst he
+      obtain ⟨rfl, rfl⟩ := Val.arr_inj he'
+      refine ⟨ℓ, n, pure_sep_mk rfl ?_⟩
+      exact sepRange_zip (RA := CellMatch R)
+        (RB := fun c => (∀ m ψ, c.get m = some ψ → ∃ ζ, R.get m = some ζ ∧ ψ.erase = ζ.erase ∧
+          (ζ.kind ≠ Kind.own → ψ.wit = ζ.wit) ∧ (ζ.kind = Kind.own → CellMatch R ψ.wit)) ∧
+          (∀ m ψ, c.get m = some ψ → (∃ ζ, R.get m = some ζ ∧ ζ.kind ≠ Kind.imm) →
+            ψ.wit.InStratum (LSet.singleton β).join))
+        (f := relRes R β)
+        (fun _ _ _ hc h => ⟨h.left hc, h.right hc⟩)
+        (fun _ _ _ hc h => ⟨⟨rebMatch_left hc h.1, strat_left hc h.2⟩,
+          ⟨rebMatch_left hc.comm h.1, strat_left hc.comm h.2⟩⟩)
+        (fun _ _ _ hc => relRes_compS hc) (relRes_empty R β)
+        (fun m hm hm' a b ha hb hPa hQb => hPa.2 rfl rfl hx hx₀ b hQb ha hb.1 hb.2
+          (fun m' S u h => hcr m' S u (RefPos.fam_at hm hm' h))
+          (fun m' S h => hcm m' S (MutPos.fam_at hm hm' h)))
+        hRl ⟨hcR, hs⟩ hs₂ hs₁
 
 /-- The chooser at a record's cell, at the program's relation, from the payload the
 program holds at the cell (`hRobs`, the observable view of the escrow, read by `ptoImmO_read`), `WitLB` at the escrow, and `β` below every tag.  If no root of the escrow

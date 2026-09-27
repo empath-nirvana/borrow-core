@@ -25,6 +25,13 @@ def arrLen (c : UInt32) : UInt32 := if c < 0x80000000 then c else 0
 /-- The array value `(ℓ, n)`.  `[spec §9]` -/
 def Val.arr (ℓ : Loc) (n : UInt32) : Val := .pair (.loc ℓ) (.i32 n)
 
+theorem Val.arr_inj {ℓ ℓ' : Loc} {n n' : UInt32} (h : Val.arr ℓ n = Val.arr ℓ' n') :
+    ℓ = ℓ' ∧ n = n' := by
+  have hv := congrArg Subtype.val h
+  simp only [Val.arr, Val.pair, Val.loc, Val.i32, Expr.pair.injEq, Expr.loc.injEq, Expr.prim.injEq,
+    Prim.lit.injEq, IntLit.i32.injEq] at hv
+  exact hv
+
 /-- `store (ℓ+i) (f i); …; store (ℓ+i+k−1) (f (i+k−1)); (ℓ, n)`.  `[spec §9]` -/
 def tabFill (f : Val) (ℓ : Loc) (n : UInt32) : Nat → Nat → Expr
   | _, 0 => .val (Val.arr ℓ n)

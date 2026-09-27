@@ -58,6 +58,9 @@ inductive RefPos : VTy → Val → Loc → VTy → Prop
   /-- A closed `μX. A` is read at its unrolling `A[μX. A/X]`. -/
   | mu {A : VTy} {v : Val} {l : Loc} {S : VTy} : (VTy.mu A).Cl 0 →
       RefPos (VTy.inst (.mu A) A) v l S → RefPos (.mu A) v l S
+  /-- The leaf at `ℓ + i`, `i < n`, of a family `(ℓ, n)`.  `[spec §9]` -/
+  | fam {L : VTy} {ℓ : Loc} {c : UInt32} {i : Nat} {l : Loc} {S : VTy} : i < c.toNat →
+      RefPos L (Val.loc (ℓ + i)) l S → RefPos (.fam L) (Val.arr ℓ c) l S
 
 /-- `Chain R T v p ℓ S u`: `ℓ ↦ own(u)` is in `R`, reached from `(T, v)` by a chain of
 `RefPos` steps whose intermediate values are read off `R`; `S` is `ℓ`'s pointee type and `p`
@@ -90,6 +93,21 @@ inductive MutPos : VTy → Val → Loc → VTy → Prop
   /-- A closed `μX. A` is read at its unrolling `A[μX. A/X]`. -/
   | mu {A : VTy} {v : Val} {l : Loc} {S : VTy} : (VTy.mu A).Cl 0 →
       MutPos (VTy.inst (.mu A) A) v l S → MutPos (.mu A) v l S
+  /-- The leaf at `ℓ + i`, `i < n`, of a family `(ℓ, n)`.  `[spec §9]` -/
+  | fam {L : VTy} {ℓ : Loc} {c : UInt32} {i : Nat} {l : Loc} {S : VTy} : i < c.toNat →
+      MutPos L (Val.loc (ℓ + i)) l S → MutPos (.fam L) (Val.arr ℓ c) l S
+
+/-- A leaf of a family, named by its location.  `[spec §9]` -/
+theorem RefPos.fam_at {L S : VTy} {ℓ : Nat} {n : UInt32} {m : Nat} {l : Loc} (h₁ : ℓ ≤ m)
+    (h₂ : m < ℓ + n.toNat) (h : RefPos L (Val.loc m) l S) : RefPos (.fam L) (Val.arr ℓ n) l S := by
+  obtain ⟨i, rfl⟩ : ∃ i, m = ℓ + i := ⟨m - ℓ, by omega⟩
+  exact RefPos.fam (by omega) h
+
+/-- A leaf of a family, named by its location.  `[spec §9]` -/
+theorem MutPos.fam_at {L S : VTy} {ℓ : Nat} {n : UInt32} {m : Nat} {l : Loc} (h₁ : ℓ ≤ m)
+    (h₂ : m < ℓ + n.toNat) (h : MutPos L (Val.loc m) l S) : MutPos (.fam L) (Val.arr ℓ n) l S := by
+  obtain ⟨i, rfl⟩ : ∃ i, m = ℓ + i := ⟨m - ℓ, by omega⟩
+  exact MutPos.fam (by omega) h
 
 /-- `δ′` agrees with `δ` on the free lifetime variables of `T`. -/
 def AgreeOn (T : VTy) (δ' δ : LSub) : Prop := ∀ y, VFree y T → δ'.find? y = δ.find? y
@@ -189,6 +207,7 @@ def TyEq : VTy → LSub → VTy → LSub → Prop
   | .mut a A, δ, .mut a' A', δ' => a.interp δ = a'.interp δ' ∧ TyEq A δ A' δ'
   | .tvar n, _, .tvar n', _ => n = n'
   | .mu A, δ, .mu A', δ' => TyEq A δ A' δ'
+  | .fam A, δ, .fam A', δ' => TyEq A δ A' δ'
   | _, _, _, _ => False
 /-- `C` at `δ` and `C′` at `δ′` are one computation type.  `[about ours]` -/
 def CTyEq : CTy → LSub → CTy → LSub → Prop
