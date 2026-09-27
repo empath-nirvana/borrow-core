@@ -99,3 +99,13 @@ Each entry: the decision, and why. Newest last.
     relation would not be monotone. A `ν` outside that class holds everywhere, like `⊤`, and has
     no eliminator. Delay, stream and finite iterators are abbreviations; iterator adapters are
     library code over `Iter`, never formers or rules (rule 20).
+29. **Arrays are primitive: the run-time-sized family of places.** Places come in a square:
+    statically sized values (records), run-time-sized values (`μ`), statically sized families of
+    places (blocks, §5), and run-time-sized families of places, which only a primitive gives.
+    `[L]` (SPEC §9) is the type-level `⊛_{i<n} L`: `Array A = [Ref A]`, and a borrowed array is
+    the family of its leaf borrows, `[Imm 'a A]`, never `Imm 'a (Array A)` (a borrow of a cell
+    holding the handle, below which a same-lifetime leaf view is excluded, decision 5). Records
+    are not arrays: l_lang tried arrays as indexed records, and labels have no arithmetic,
+    lengths are static, and heterogeneous fields block run-time indexing. One `VTy` former is
+    paid for (the growth rule's cost, accepted here); `Vec`, `Str` and sized types are later,
+    over it.
