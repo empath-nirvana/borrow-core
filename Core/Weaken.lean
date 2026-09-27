@@ -104,6 +104,14 @@ theorem CDerives.append_dead (h' : Ctx.Dead Γ') {Δ : LifeCtx} {Γ : Ctx VTy} {
   | forgetUnk hΓ => exact .forgetUnk (deadP_append h' hΓ)
   | lit c hΓ => exact .lit c (deadP_append h' hΓ)
   | hostOp op hΓ => exact .hostOp op (deadP_append h' hΓ)
+  | arrNew A hΓ => exact .arrNew A (deadP_append h' hΓ)
+  | arrFree A hΓ => exact .arrFree A (deadP_append h' hΓ)
+  | arrSize A hΓ => exact .arrSize A (deadP_append h' hΓ)
+  | arrReplace A hΓ => exact .arrReplace A (deadP_append h' hΓ)
+  | arrLen a A hΓ => exact .arrLen a A (deadP_append h' hΓ)
+  | arrGet a A hΓ => exact .arrGet a A (deadP_append h' hΓ)
+  | arrCopy a A hΓ => exact .arrCopy a A (deadP_append h' hΓ)
+  | arrForget a A hΓ => exact .arrForget a A (deadP_append h' hΓ)
   | withbor1 x hΓ hx hsc hf₁ hf₂ => exact .withbor1 x (deadP_append h' hΓ) hx hsc hf₁ hf₂
   | withbor2 x hΓ hx hside hf₁ hf₂ => exact .withbor2 x (deadP_append h' hΓ) hx hside hf₁ hf₂
   | withbor3 x hΓ hx hf₁ hf₂ => exact .withbor3 x (deadP_append h' hΓ) hx hf₁ hf₂

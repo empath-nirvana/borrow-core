@@ -18,6 +18,8 @@ value goes unused (`drop_derives`), so the elaborated term uses the value exactl
 | `μX. T`, `T` in `FShape` | `foldOwn` whose algebra is the destructor of `T[1/X]` |
 | `U(C & F 1)` | `close`: force, then the second projection |
 | `U(νX. C & F R)`, `R` closed | `close`, then the destructor of the residual `R` |
+| `Array A` | `array_free` with the destructor of `A` as the consumer |
+| `ArrayImm @a A` | `array_forget` |
 
 The first two rows are the forgettable types, whose destructor does nothing; every type of
 `Affine` (`Core/Records.lean`) is one (`hasDtor_of_affine`). The other rows deallocate or run
@@ -109,6 +111,8 @@ def dtorAt : Bool → VTy → Expr
   | _, .thunk (.nu (.amp _ (.ret R))) => .val (.lam
       (bindE (.app (.var 0) (.val (.inj₂ .unit))) (.app (dtorAt false R) (.var 0))))
   | _, .thunk _ => .val (.lam (.app (.var 0) (.val (.inj₂ .unit))))
+  | _, .fam (.ref A) => .val (.lam (.app (.val (.prim .drop))
+      (.pair (.val (.lam (.app (dtorAt false A) (.var 0)))) (.var 0))))
   | _, _ => forget
 
 /-- At a thunk the destructor does not depend on the mode. -/
@@ -156,7 +160,7 @@ theorem algE_eq : ∀ A : VTy, algE A = dtorE ((toFShape A).resO .unit)
   | .unk => rfl
   | .mu _ => rfl
   | .int _ => rfl
-  | .fam _ => rfl
+  | .fam L => by cases L <;> rfl
 
 /-! ### Which types have one -/
 
@@ -183,6 +187,11 @@ inductive HasDtor : VTy → Prop where
   `close`, then the destructor of `R`.  `[spec §7, §12]` -/
   | nu {C R} (hC : (CTy.amp C (.ret R)).NuOk) (hRc : R.Cl 0) (h : HasDtor R) :
       HasDtor (.thunk (.nu (.amp C (.ret R))))
+  /-- An array: each element to the destructor of `A`, then the cells freed (`array_free`).
+  `[spec §9, §12]` -/
+  | array {A} (h : HasDtor A) : HasDtor (.fam (.ref A))
+  /-- A family of leaf views, forgotten (`array_forget`).  `[spec §9, §12]` -/
+  | arrayImm {a A} : HasDtor (.fam (.imm a A))
 
 theorem hasDtor_of_affine {A : VTy} (h : Affine A) : HasDtor A := by
   induction h with
@@ -269,6 +278,16 @@ theorem dtor_wf {Δ : LifeCtx} {T : VTy} (hT : HasDtor T) :
       exact .thunkV rfl (.lam (.bind (.left (deadSplit hΓ)) hM
         (.ret (.lolliE (.left (.dead (deadSplit hΓ))) (.var (.here (Ctx.Dead.cons hΓ).toP))
           (ih (.cons (.cons hΓ)))))))
+  | array _ ih =>
+      intro Γ hΓ
+      exact .lamV (.lolliE (.left (deadSplit hΓ))
+        (.tensorI (.right (deadSplit hΓ))
+          (.bangThunkV (dead_noLive (Ctx.Dead.cons hΓ)) rfl
+            (.lam (.ret (.lolliE (.left (.dead (deadSplit hΓ)))
+              (.var (.here (Ctx.Dead.cons hΓ).toP)) (ih (.cons (.cons hΓ)))))))
+          (.var (.here hΓ.toP)))
+        (.bangE (.arrFree _ (Ctx.Dead.cons hΓ).toP)))
+  | arrayImm => intro Γ hΓ; exact .bangE (.arrForget _ _ hΓ.toP)
 
 /-! ### A borrow's destructor frees nothing -/
 

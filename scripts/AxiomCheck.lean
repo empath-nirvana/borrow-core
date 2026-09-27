@@ -46,3 +46,15 @@ import Core
 #print axioms BoCa.Fig16.LogRel.Core.sumListProg_eval
 #print axioms BoCa.Fig16.LogRel.Core.signProg_runs
 #print axioms BoCa.Fig16.LogRel.Core.signProg_eval
+#print axioms BoCa.Fig16.LogRel.Core.wpTS_tab
+#print axioms BoCa.Fig16.LogRel.Core.arrNew_compatX
+#print axioms BoCa.Fig16.LogRel.Core.arrFree_compatX
+#print axioms BoCa.Fig16.LogRel.Core.arrSize_compatX
+#print axioms BoCa.Fig16.LogRel.Core.arrReplace_compatX
+#print axioms BoCa.Fig16.LogRel.Core.arrLen_compatX
+#print axioms BoCa.Fig16.LogRel.Core.arrGet_compatX
+#print axioms BoCa.Fig16.LogRel.Core.arrCopy_compatX
+#print axioms BoCa.Fig16.LogRel.Core.arrForget_compatX
+#print axioms BoCa.Fig16.LogRel.Core.reborrow_vShape
+#print axioms BoCa.Fig16.LogRel.Core.arrProg_runs
+#print axioms BoCa.Fig16.LogRel.Core.arrProg_eval
