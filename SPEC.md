@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 0.7 · 2026-09-27
+Version 0.8 · 2026-09-27
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -346,6 +346,45 @@ The former rules of the instances are the general ones at their bodies:
 second projection (`close`), then the destructor of the residual `R`. Delay and stream have
 `R = 1`; an iterator's residual is dropped by its own destructor.
 
+### Borrowed iteration
+
+An iterator whose elements are views at the lifetime of its borrow, over a sequence the caller
+keeps owning. It is a derived term; it adds no rule.
+
+    Seq A        ≜ μX. 1 ⊕ (Ref A ⊗ X)            (a value spine of element cells)
+    Views @a A   ≜ μX. 1 ⊕ (Imm @a A ⊗ X)
+
+    iterImm : Views @a A ⊸ U(Iter (Imm @a A) 1 1)        at every @a, A closed
+
+`iterImm` is `unfold` with the views as its state: `next` unrolls the state and yields the head
+view and the rest, or finishes with `()`; `close` drops the remaining views (their destructor,
+§12, forgets each `Imm`). Elements are handed out at the state's own lifetime `@a`.
+
+**The list it needs.** `Imm̲ @b (Seq A) = Views @b A`: `Imm̲` keeps a head `X` and turns each
+`Ref A` into `Imm @b A` (§6). So one `withload` on `Imm @a (Seq A)` gives the callback every
+element's view at the callback's lifetime `'x`, and `iterImm` at `'x` iterates them there:
+
+    withload l (Λ'x. λvs. … iterImm vs …)  :  Imm @a (Seq A) ⊸ (∀'x ⊏ ⊓Δ. Views 'x A ⊸ ['x] B) ⊸ B
+
+The iterator lives inside the callback, as the borrow does, and cannot leave it (its type
+mentions `'x`, which `withload`'s result may not). The sequence is still the caller's after the
+borrow and is freed by its destructor or a `foldOwn`.
+
+A list linked through cells, `μX. 1 ⊕ (A ⊗ Ref X)` or the common list `μX. 1 ⊕ (Ref A ⊗ Ref X)`
+(one block per node, §5), is not iterated this way. Its view keeps the tail as a borrow through
+a pointer, `Imm 'x (μX. …)`, and an iterator's state would have to hold that tail after the run
+that produced it. A run that starts at the state's cell `ℓ ↦ imm(s, v, ρv)` and returns an
+`imm` cell at a location `m` that `ρv` owns is excluded by the update relation (§5 Open):
+machine-checked at every lifetime for `ρv = m ↦ own(u)` (`experiments/FrameEnd`,
+`Views.imm_view_rejected`), and for every `ρv` at a one-lifetime frame cell, when the returned
+resource owns nothing (`experiments/Relaxed`, `frame_view_excluded`). Inside a `withload` callback the tail
+view exists at a fresh `'x`, but a rest that captures it cannot be boxed at `'x`. An outlives
+rule at `U C` does not change this: `[]I` already boxes a thunk whenever its captured context
+outlives the lifetime, and this context does not. The boxed-lifetime codata of
+`docs/scope-recursion.md` §3.5 (`[@d] U(νX. C)`) is `[]I` at `U C`, and it gives no route for
+such lists. They are traversed inside the borrow, by `foldImm` (§6). The iterator-level
+statement (no `iterImm` over `Imm @a (List A)`) is not stated in Lean.
+
 ### Adequacy
 
 For every `n`, observing a `D A` at most `n` times and then closing it is a closed program; it
@@ -354,7 +393,7 @@ by `adequacyC`.
 
 ### Baseline
 
-`fundamentalC` covers `nuIn`, `nuOut` and `unfold`; `adequacyC` is unchanged. Nothing in §1–§6
+`fundamentalC` covers `nuIn`, `nuOut` and `unfold`; `adequacyC` is unchanged. `iterImm` is a derived term (`Core/BorrowedIter.lean`, `iterImm_wf`), so `fundamentalC` covers it with no new case. Nothing in §1–§6
 changes. `νX. C` is one `CTy` former and three `CDerives` rules; the fixed formers `D`/`Stream`,
 their relations and their six rules are deleted.
 
@@ -363,9 +402,13 @@ their relations and their six rules are deleted.
 - **Other positions of `X`.** `X` under a `Ref`, a borrow or `!` in an observation result, or in
   the argument of an observation (`A ⊸ …`, a sink), is outside `NuOk`. The relation is monotone
   wherever `X` avoids `Mut` payloads; what is missing is coiteration's map at those positions.
-- **Lifetime-indexed iteration.** An iterator over a borrowed list or buffer, whose state is a
-  borrow and whose rest keeps it, is not yet written as a program (§9 iteration, `[@d] U(νX. C)`
-  per `docs/scope-recursion.md` §3.5).
+- **Mutable borrowed iteration** (`iter_mut`, elements `Mut @a A`). `withload` gives only `Imm`
+  views. A `Mut` family over `Seq A` at one lifetime needs a family borrow over the `μ` spine
+  (§5's `withborF2`/`withborS` generalised to `μX. 1 ⊕ (Ref A ⊗ X)`: nested `withbor`s by a fold,
+  each level shortened to the innermost lifetime). Not derived. Given `μX. 1 ⊕ (Mut @a A ⊗ X)`,
+  the iterator would be `iterImm`'s term at `Mut`. Internal mutable traversal is `foldReuse`
+  (`experiments/Optics`, IterMut).
+- **Buffers** (§9). Borrowed iteration over a buffer is not written.
 - **General recursion.** Non-tail recursion needs an explicit stack in the state, or a `bind`
   on `D` (not yet written).
 - Whether `D`'s greatest fixed point equals the intersection of its finite approximations is
@@ -620,13 +663,18 @@ fixes when the effect of a drop happens.
 
 Entries 2–6 are implemented in the library directory `Core/`, with one `fundamentalC` and
 `adequacyC` covering every rule; §7's `νX. C` is `Core/NuRel.lean` and `Core/Nu.lean`, and the
-checker reads `nu X. C`, `iter A R R'`, `nu_in`/`nu_out` and `unfold[C, S]`. Entries 7 and 9 (§8, §10) are implemented; §8 extends `Paper/` and `Support/` with the literal
+checker reads `nu X. C`, `iter A R R'`, `nu_in`/`nu_out` and `unfold[C, S]`. Borrowed iteration is `Core/BorrowedIter.lean`; the checker needs nothing new for it, and `corpus/iter-borrowed*.bc` write `iterImm` as a library `def`. Entries 7 and 9 (§8, §10) are implemented; §8 extends `Paper/` and `Support/` with the literal
 and host-step forms. Entries 8 and 10 (§9, §11) are specified only. Entry 11 (§12) is implemented in
 `Core/Dtor.lean` and the checker (`Frontend/Check/`), with no change to `CDerives`.
 
 ---
 
 ## Changelog
+
+- **0.8** (2026-09-27) — §7: borrowed iteration. `iterImm : Views @a A ⊸ U(Iter (Imm @a A) 1 1)`
+  is `unfold` over the views of `Seq A = μX. 1 ⊕ (Ref A ⊗ X)`, which one `withload` gives at one
+  lifetime (`Imm̲ @b (Seq A) = Views @b A`). A derived term; no rule. Lists linked through cells
+  are not iterated this way (the tail is a view through a pointer, §5 Open). `iter_mut` is open.
 
 - **0.7** (2026-09-27) — Entry 6 revised (§7): one codata former `νX. C` with positivity
   (`X` only as `U X`, under `⊗`/`⊕` of observation results), `nuIn`/`nuOut` and coiteration

@@ -99,3 +99,12 @@ Each entry: the decision, and why. Newest last.
     relation would not be monotone. A `ν` outside that class holds everywhere, like `⊤`, and has
     no eliminator. Delay, stream and finite iterators are abbreviations; iterator adapters are
     library code over `Iter`, never formers or rules (rule 20).
+29. **Borrowed iteration is over a family's views, not a pointer-linked list.** An iterator
+    whose elements are `Imm @a A` at the borrow's own lifetime needs every element's view at `@a`
+    before it starts. A sequence whose spine is a value, `Seq A = μX. 1 ⊕ (Ref A ⊗ X)`, gives
+    that in one `withload` (`Imm̲` keeps a head `X`); a list linked through cells does not,
+    because its tail is a view through a pointer, which decision 5 already excludes. So
+    `iterImm` takes `Views @a A` and is plain `unfold`, with no new rule and no outlives rule at
+    `U C`, and the iterator stays inside the borrow's callback. Pointer-linked lists are
+    traversed inside the borrow by `foldImm`. `iter_mut` waits for a `Mut` family borrow over
+    the `μ` spine (SPEC §7 Open).

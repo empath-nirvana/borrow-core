@@ -285,6 +285,16 @@ through `VOutlives.mut`. After that, the `[@d]`-boxed iterator crosses scopes as
 `[@d] T` does. In particular it cannot leave the callback that borrows at `'a` itself, since
 `Mut 'a ⊐ 'a` is not derivable. That is Rust's behaviour. **[read / expected]**
 
+**Result (SPEC §7, borrowed iteration).** For an iterator over *borrowed* data this route does
+not help, and the missing outlives rule at `U` is not the obstacle. `[@d] U(νX.B)` is `[]I` at
+`U C`, which needs only the captured context to outlive `'d`. The iterator of issue #57 needs
+its state to hold element views at the list borrow's own lifetime. A list linked through cells
+yields its tail only as a view through a pointer, inside a `withload` callback at a fresh
+`'x`, and a rest capturing it cannot be boxed at `'x`; returning the tail view from a run is
+excluded by `↭` (`experiments/FrameEnd`). What works is a sequence with a value spine, whose
+`Imm̲` holds every element's view at one lifetime; `iterImm` (`Core/BorrowedIter.lean`) is
+`unfold` over those views.
+
 ### 3.6 `Imm̲` at `ν`
 
 - `Imm̲ 'b (U(νX.B)) = Unk` (`Types.lean:134`), as for any thunk.
