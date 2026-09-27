@@ -448,7 +448,6 @@ run time.
 
     Array A       ≜ [Ref A]
     ArrayImm @a A ≜ [Imm @a A]
-    ArrayMut @a A ≜ [Mut @a A]
 
 `[L]` is the run-time family `⊛_{i<n} L` of leaf places. A value of `[L]` is a pair `(ℓ, n)` of a
 base location and a length `n : I32`, and its `i`-th leaf is the location `ℓ + i`, a value of `L`.
@@ -459,15 +458,27 @@ Scoping, well-formedness, lifetime substitution and `TyEq` treat `[L]` as a unar
 
     Imm̲ 'b [L] ≜ [Imm̲ 'b L]        Δ ⊢ [L] ⊐ @a  if  Δ ⊢ L ⊐ @a
 
-`[L]` is never persistent: it holds cells or borrows of cells. So an array stored in a cell and
-read through `withload` at `'b` is seen as `ArrayImm 'b A`, at the shorter lifetime.
+`[L]` is never persistent: it holds cells or borrows of cells.
 
-**Leaf views are direct places.** `ArrayImm @a A` is not `Imm @a (Array A)`. The latter borrows a
-cell that holds the handle `(ℓ, n)`. The cell's witness owns the leaves, so a view of a leaf at
-`@a` would sit below a parent `imm` cell, and the update relation excludes that (§5 Open;
-`experiments/FrameEnd`, `imm_view_rejected`). In `ArrayImm @a A` each leaf's borrow cell is at
-the top level of the family's resource and no cell owns the leaves, so `get` hands out one of
-them and `↭` is never asked to accept a cell below a parent (as in `experiments/Places` §2).
+### Borrowing an array
+
+An array is a value, so it is borrowed as any value is: in a cell. `Imm @a (Array A)` and
+`Mut @a (Array A)` are borrows of a cell `Ref (Array A)` that holds the handle (Rust's `&Vec` and
+`&mut Vec`), made by `withbor` (§1). No rule is added for them:
+
+- **The family of leaf views** comes from `withload` (`[TR]` p. 3) at `Imm @a (Array A)`: its
+  callback receives `Imm̲ 'x (Array A) = ArrayImm 'x A` at a lifetime `'x ⊏ @a`. That is the
+  array borrowed as a family, and 6.131 at `[L]` is what makes it sound.
+- **Mutation through `Mut @a (Array A)`** is `withswap` (§1): its callback owns the array for a
+  moment and uses the owned operations.
+
+**Leaf views are direct places.** `array_get` takes a leaf view out of the family `ArrayImm 'x A`
+at the family's own lifetime `'x`. In the family each leaf's `imm` cell is at the top level of the
+resource and no cell owns the leaves, so `get` hands out one of them and `↭` is never asked to
+accept a cell below a parent (as in `experiments/Places` §2). A leaf view at `@a` taken directly
+from `Imm @a (Array A)` would sit below the `imm` cell that holds the handle, whose witness owns
+the leaves; the update relation excludes exactly that (§5 Open; `experiments/FrameEnd`,
+`imm_view_rejected`), so the view is taken at the shorter `'x` of `withload`.
 
 ### Machine
 
@@ -501,25 +512,18 @@ The constants, at a dead context; `A ⇒ B` is `U(A ⊸ F B)`:
 | constant | type |
 |---|---|
 | `array_new` | `!(I32 ⊗ !(I32 ⇒ A) ⇒ Array A)` — `tab`: the tabulator's result at each index |
-| `array_len` | `!(ArrayImm @a A ⇒ I32)` |
-| `array_get` | `!(ArrayImm @a A ⊗ I32 ⇒ Imm @a A ⊕ 1)` — `idx`: a same-lifetime leaf view |
-| `array_replace` | `!(ArrayMut @a A ⊗ (I32 ⊗ A) ⇒ ArrayMut @a A ⊗ (A ⊕ A))` — the old element, or the new one back if out of range |
-| `array_copy` | `!(ArrayImm @a A ⇒ ArrayImm @a A ⊗ ArrayImm @a A)` |
-| `array_forget_imm`, `array_forget_mut` | `!(ArrayImm @a A ⇒ 1)`, `!(ArrayMut @a A ⇒ 1)` |
 | `array_free` | `!(!(A ⇒ 1) ⊗ Array A ⇒ 1)` — `drop`: each element to the consumer, in index order, then the cells freed |
-| `withbor_a_imm` | `Array A ⊸ (∀'c ⊏ ⊓Δ. ArrayImm 'c A ⊸ ['c] T) ⊸ Array A ⊗ T` |
-| `withbor_a_mut` | `Array A ⊸ (∀'c ⊏ ⊓Δ. ArrayMut 'c A ⊸ ['c] T) ⊸ Array A ⊗ T` |
+| `array_size` | `!(Array A ⇒ Array A ⊗ I32)` |
+| `array_replace` | `!(Array A ⊗ (I32 ⊗ A) ⇒ Array A ⊗ (A ⊕ A))` — the old element, or the new one back if out of range |
+| `array_len` | `!(ArrayImm @a A ⇒ I32)` |
+| `array_get` | `!(ArrayImm @a A ⊗ I32 ⇒ Imm @a A ⊕ 1)` — `idx`: a leaf view at the family's lifetime |
+| `array_copy` | `!(ArrayImm @a A ⇒ ArrayImm @a A ⊗ ArrayImm @a A)` |
+| `array_forget` | `!(ArrayImm @a A ⇒ 1)` |
 
-`array_replace` returns the family, because a `Mut` family cannot be copied. The array borrows
-are `withbor` at an array: the term is `withbor`'s, `λx.λf.(x, f () x)`. Semantically each leaf is
-framed by its own `[TR]` 6.64 (`Imm`) or 6.65 (`Mut`) frame, nested, and the single lifetime `'c`
-is a fact about the type, as for `withborF2` (§5). Their side conditions are `withborF2`'s: `T`
-outlives the frame's lifetime (`Δ, 'c ⊏ ⊓Δ ⊢ T ⊐ 'c`), and at `Mut`, `Δ ⊢ A ⊐ @b` for some
-defined `@b` (`withbor`'s form (2)).
+`array_replace` on `Mut @a (Array A)` is `withswap` with `array_replace` in its callback.
 
 Implicit destructors (§12): `Array A` has one when `A` does, `array_free` with the destructor of
-`A` as the consumer; `ArrayImm @a A` and `ArrayMut @a A` are forgettable, by
-`array_forget_imm`/`array_forget_mut`.
+`A` as the consumer; `ArrayImm @a A` is forgettable, by `array_forget`.
 
 ### Lowering
 
@@ -534,7 +538,9 @@ has `s = sizeof A` and no header.
 ### Baseline
 
 `fundamentalC` covers the new constants and `adequacyC` is unchanged in statement; the machine
-gains three head steps, parametric in the host as before. `[L]` is one `VTy` former.
+gains three head steps, parametric in the host as before. `[L]` is one `VTy` former, and every
+lemma of the typed world proved by induction on types or on positions has its `[L]` case (6.131,
+6.60, the images and invariants of reborrowing), which is what makes `withload` sound at arrays.
 
 ### Library, not primitive
 
@@ -546,6 +552,9 @@ gains three head steps, parametric in the host as before. `[L]` is one `VTy` for
 
 ### Open
 
+- A primitive array borrow `Array A ⊸ (∀'c. [M 'c A] ⊸ ['c] T) ⊸ Array A ⊗ T` with no cell, and
+  mutable families `[Mut 'c A]` (a leaf `Mut` view, `iter_mut`). Semantically each leaf would be
+  framed by its own 6.64/6.65 frame, nested; not built.
 - `split_at` at a run-time index, returning two disjoint sub-families at the borrow's lifetime.
 - `iter`/`iter_mut` over the leaf family, as a lifetime-indexed `Iter` (§7).
 - `replicate` for persistent `A` without a tabulator; creation from a list.
@@ -700,10 +709,11 @@ and host-step forms. Entries 8 and 10 (§9, §11) are specified only. Entry 11 (
 ## Changelog
 
 - **0.8** (2026-09-27) — Entry 8 revised (§9): arrays. `[L]` (`VTy.fam`) is the run-time family
-  `⊛_{i<n} L` of leaf places, with `Array A = [Ref A]` and the borrowed arrays `[Imm @a A]`,
-  `[Mut @a A]`; the machine steps `tab`, `idx` and `drop`; `array_new`, `array_len`,
-  `array_get` (a same-lifetime view of a leaf), `array_replace`, `array_copy`, the forgets,
-  `array_free`, and the array borrows `withbor_a_imm`/`withbor_a_mut`. Buffers and strings as
+  `⊛_{i<n} L` of leaf places, with `Array A = [Ref A]` and the borrowed family `[Imm @a A]`; the
+  machine steps `tab`, `idx` and `drop`; `array_new`, `array_free`, `array_size`,
+  `array_replace`, and on families `array_len`, `array_get` (a leaf view at the family's
+  lifetime), `array_copy` and `array_forget`. An array is borrowed in a cell, by `withbor`; the
+  family comes from `withload`, mutation through `Mut` from `withswap`. Buffers and strings as
   extern types are withdrawn; `Vec` and `Str` are library code over arrays. §11 and §12 no longer
   mention them.
 
