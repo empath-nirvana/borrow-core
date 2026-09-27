@@ -9,4 +9,4 @@
 - [ ] Checker support
 - [ ] Backend lowering
 - [ ] Corpus program with a falsifier observable; `bcc interp` = `bcc run`, `live 0`
-- [ ] CI green
+- [ ] `scripts/ci-local.sh` passes (summary pasted in the PR)
