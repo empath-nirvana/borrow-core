@@ -136,3 +136,8 @@ Each entry: the decision, and why. Newest last.
       in declaration order.
     - The byte list is `μX. 1 ⊕ (I32 ⊗ X)` with bytes as `I32`; there is no `u8` yet.
     - Ambient I/O in `main` is specified as planned sugar and not built.
+    - A `def` may use the persistent externs declared before it (the operations), never a
+      capability, so helpers can call `read_byte`/`write_byte` without taking them as
+      arguments while every capability still has to be passed.
+    - `bcc interp` runs the model, which reads all of standard input before the program runs;
+      `bcc run` is interactive and unbuffered.
