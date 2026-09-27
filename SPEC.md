@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 0.5 · 2026-09-25
+Version 0.6 · 2026-09-27
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -455,15 +455,114 @@ interpreter runs; the compiler lowers their operations to host calls (WASI `fd_r
 
 ---
 
+## 12. Entry 11 — implicit destructors
+
+Types stay linear. Where a program lets an owned value go unused, the checker inserts a call
+of the value's **destructor**, and that call is the value's one use. The elaborated program is an
+ordinary linear core term with an ordinary `CDerives` derivation, so every owned value is still
+consumed exactly once, and leak freedom is `adequacyC` on the elaborated term. No typing rule,
+judgment index or semantic definition changes. From `experiments/Affine`.
+
+### Destructors
+
+`dtorE T : T ⊸ F 1` is a closed term, defined by one structural recursion on `T`
+(`Core/Dtor.lean`). `HasDtor T` is the class of types it is defined at, and `dtor_wf` types it
+in `CDerives` at every lifetime context and every dead context, using existing rules only.
+There are three classes of value type.
+
+1. **Forgettable types**: the persistent types (§10: `1`, `0`, `I32`, `I64`, `Unk`, `!A`, and
+   `⊗`, `⊕`, `[@a]`, `μ` over them), the borrows `Imm @a A`, `Mut @a A`, and `⊗`, `⊕`, `[@a]`
+   over these. The destructor is `forget = λx. ()` (at a borrow, the `forgetImm`/`forgetMut`
+   constant), componentwise at `⊗`, `⊕`, `[@a]`. Discarding one does
+   nothing: it deallocates nothing and runs no code, and ending a loan early is safe. These types
+   are genuinely affine. Persistent ones were already dropped by context splitting (§10), with no
+   call. Every type of `Core/Records.lean`'s `Affine` is here (`hasDtor_of_affine`).
+2. **Owned types with a derived destructor.** The destructor is an action:
+   | type | destructor |
+   |---|---|
+   | `A ⊗ B`, `A ⊕ B`, `[@a] A` | componentwise |
+   | `Ref A` | `free`, then the destructor of `A` |
+   | `μX. T`, `T` in `FShape` (§6) | `foldOwn`, whose algebra is the destructor of `T[1/X]` |
+   | `U(C & F 1)`, `U(D A)`, `U(Stream A)` | `close`: force, then the second projection (§7) |
+   These are linear. A value of one of these types that goes unused is consumed by its
+   destructor, which the checker inserts. Because the destructor deallocates memory and, at codata,
+   runs the object's `close` code, where it is inserted can be observed.
+3. **Types with no destructor**: `U C` other than the codata above (a thunk of `F A` or of
+   `A ⊸ C` can be disposed of only by running it, which has effects and may need an argument), `μ`
+   outside `FShape`, a type variable, and anything built from one of these. These are strictly linear.
+   A variable of one of these types must be consumed, and an unused one is a type error that
+   names the type.
+
+### Insertion policy
+
+A variable is **owed** to the body of its binder (`x <- M; N`, `let (x, y) = V; M`, a `case`
+arm, `fun (x : A) -> M`) when its type is in class 1 or 2, it is not persistent, and it is not
+declared `linear`. The body must consume an owed variable on every control path; on a path that
+does not, the checker consumes it by its destructor:
+
+- **At the end of the path.** The destructor calls go immediately before the path's terminal
+  computation: `return V`, `force x`, an application, a projection, an instantiation,
+  `delay_out`/`stream_out`. They go after every effect of the path and before the result is
+  produced. A value never used is therefore dropped at the end of its binder's scope, and a
+  `case` arm or a `<M, N>` component that does not consume an owed variable drops it, while one
+  that does, does not.
+- **In reverse binding order.** Several owed variables are dropped most recently bound first.
+- **Tail positions.** The owed set passes to the body of `x <- M; N`, `let () = V; M` and
+  `let (x, y) = V; M` (without what `V` or `M` consumed), to both arms of a `case`, both
+  components of `<M, N>`, the bodies of `fun` and `Fun`, and through `delay_in`, `stream_in` and
+  ascriptions. An owed variable that the head `M` of `x <- M; N` mentions is owed to `M`, which
+  must then consume it on every path of `M`, dropping it where it does not.
+- **Not moved across effects.** A drop is never placed earlier than the path's terminal
+  computation. Codata `close` runs code, so moving it would reorder effects.
+- `<>` and `absurd V` absorb any context (§11 of `docs/syntax-core.md`), so no drop is inserted
+  before them. A value (`thunk M`, `run M`, …) starts its computations with nothing owed: a thunk
+  that captures a variable consumes it.
+
+**Opt-out.** `linear x <- M; N` (and `linear x : A <- M; N`) declares `x` owed to nobody:
+`N` must consume it on every path, as before this entry. It is for values whose silent
+destruction is a bug, such as a transaction that must be committed or aborted.
+
+### Soundness
+
+The elaborated term, with drops inserted, is what the checker returns with its `CDerives`
+derivation (`checkProgram_sound`, unchanged). The drop is `unitE` over `lolliE` of the variable and
+`dtor_wf` (`drop_derives`). `fundamentalC` and `adequacyC` apply unchanged, so the baseline theorems
+(§1) and every theorem of entries 1–10 are preserved; nothing in them is touched. Placement does
+not affect soundness: any placement of a destructor call is a `CDerives` derivation. The policy
+fixes when the effect of a drop happens.
+
+### Open
+
+- **Destructors with effects that can fail.** A host resource (§11), such as a file handle, may
+  need a destructor that performs I/O or can fail. `dtorE` is total and pure apart from
+  deallocation and `close`. Whether such a type gets an implicit destructor, and what a failing
+  one does, is not decided. Until then these are class 3.
+- **`Buf`/`Str`** (§9) are extern types outside `HasDtor`. Their destructors would be the externs
+  `str_free` and `buf_free` (a `Buf` of owned elements needs a drain first).
+- **Externs** are not owed. `main` must consume every non-persistent extern.
+- **`linear` on other binders** (`let`, `case` arms, `fun`) is not provided.
+- **Values** do not drop. The value `V` of `let`/`case` and the operands of value forms consume
+  what they mention, on every path.
+- **Earlier placement** (after the last use rather than at the end of the scope) would free memory
+  sooner and is equally sound. It is not done, because it reorders `close` effects.
+- **A deep-free primitive** for `μ` would replace the `foldOwn` traversal in the lowering.
+
+---
+
 ## Status
 
 Entries 2–6 are implemented in the library directory `Core/`, with one `fundamentalC` and
 `adequacyC` covering every rule. Entries 7 and 9 (§8, §10) are implemented; §8 extends `Paper/` and `Support/` with the literal
-and host-step forms. Entries 8 and 10 (§9, §11) are specified only.
+and host-step forms. Entries 8 and 10 (§9, §11) are specified only. Entry 11 (§12) is implemented in
+`Core/Dtor.lean` and the checker (`Frontend/Check/`), with no change to `CDerives`.
 
 ---
 
 ## Changelog
+
+- **0.6** (2026-09-27) — Entry 11: implicit destructors (§12). Types stay linear. The checker
+  inserts a derived destructor (`dtorE`, `Core/Dtor.lean`) where an owned value goes unused: at the
+  end of each path, in reverse binding order. `linear` opts a binder out. No `CDerives` change.
 
 - **0.5** (2026-09-25) — §8 as implemented: integer literals and host operations are term
   constants, one host step in the baseline machine, every theorem parametric in the host; §1 notes
