@@ -120,7 +120,7 @@ Each entry: the decision, and why. Newest last.
     convention. `main` may later use its bundle implicitly, as sugar elaborated to explicit
     capability passing; no other function may. Operations are externs rather than rules, so a
     capability can later be served by a user-defined handler (#18) instead of the host.
-31. **Host resources are opaque types with a model.** One leaf former, `VTy.opaque k`, whose
+31. **Host resources are opaque types with a model.** One leaf former, `VTy.opq k`, whose
     relation is a predicate `k.Holds` on values and whose `Imm̲` is `Unk`: not persistent, no
     destructor, no rule. Its values can only be moved and handed to externs, so a handle is never
     copied (l_lang's L-199) and the model and the host can represent it differently (a byte list,

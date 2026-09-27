@@ -611,7 +611,7 @@ constants, and the theorems are parametric in the host instead.
 
 ### Opaque host types
 
-    A ::= … | Input | Output                       (VTy.opaque k, k ∈ {input, output})
+    A ::= … | Input | Output                       (VTy.opq k, k ∈ {input, output})
 
 An opaque type is a leaf with no introduction and no elimination rule. A value of one can be
 moved, stored in a cell and passed to an extern that takes it; it cannot be inspected, copied or
@@ -631,7 +631,7 @@ and used after it is closed (l_lang's L-199). `Imm̲` of an opaque type is `Unk`
 a cell holding a handle cannot copy it out either. In compiled code the content of an `Input` or
 `Output` cell is the stream's file descriptor.
 
-`VTy.opaque` is one `VTy` former, a leaf: every lemma by induction on value types gets a case
+`VTy.opq` is one `VTy` former, a leaf: every lemma by induction on value types gets a case
 that is the `I32` case with `Imm̲ = Unk`, as at `U C`. A new host resource is a new `k` with its
 model, not a new former.
 
@@ -761,7 +761,7 @@ WASI-only feature is part of the semantics (decision 25).
 
 ### Baseline
 
-`VTy.opaque` is one leaf former; no `CDerives` rule and no machine step is added. `fundamentalC`,
+`VTy.opq` is one leaf former; no `CDerives` rule and no machine step is added. `fundamentalC`,
 `adequacyC`, `fundamentalD` and `adequacyD` keep their statements and cover the new former.
 
 ### Open
@@ -947,7 +947,7 @@ checker reads `nu X. C`, `iter A R R'`, `nu_in`/`nu_out` and `unfold[C, S]`. Ent
 and host-step forms. Entry 8 (§9, arrays) is implemented: the former and its lemmas in `Core/Types.lean` and the typed
 world, the constants in `Core/Arrays.lean` (`Core/ArrayWp.lean` for the steps), the three machine
 steps in `Paper/` and `Support/`, the checker (`array`, `array_imm`, syntax-core §8b) and the
-backend. Entry 10 (§11) is implemented: the former `VTy.opaque` in `Core/Types.lean` and the
+backend. Entry 10 (§11) is implemented: the former `VTy.opq` in `Core/Types.lean` and the
 typed world, the model and the end-to-end theorems in `Core/Stdio.lean`, the checker (`input`,
 `output`, the `run_io` wrapper) and the backend (`Backend/Clos`, `Backend/Flat`, WASI imports). Entry 11 (§12) is implemented in
 `Core/Dtor.lean` and the checker (`Frontend/Check/`), with no change to `CDerives`. Entry 12
@@ -959,7 +959,7 @@ typed world, the model and the end-to-end theorems in `Core/Stdio.lean`, the che
 ## Changelog
 
 - **0.10** (2026-09-27) — Entry 10 (§11): externs and standard I/O. The opaque host types
-  `Input`/`Output` (`VTy.opaque`), with a model and `Imm̲ = Unk`; the capabilities `stdin`,
+  `Input`/`Output` (`VTy.opq`), with a model and `Imm̲ = Unk`; the capabilities `stdin`,
   `stdout`, `stderr` as cells, `read_byte`/`write_byte` on `Mut` borrows of them; the model
   harness `mk_input`, `mk_output`, `take_input`, `take_output`; `run_io`; the model meets the
   contracts, `externs_every_run`/`io_every_run` in `adequacyD`'s form, `checked_every_run`, and

@@ -118,6 +118,8 @@ def ppV (nm : List (String × LifeVar)) (d p : Nat) : CVTy → String
   | .unk => "unk"
   | .int .w32 => "i32"
   | .int .w64 => "i64"
+  | .opq .input => "input"
+  | .opq .output => "output"
   | .tvar n => if n < d then tvName (d - 1 - n) else s!"?{n}"
   | .mu A => parenIf (p > 0) s!"mu {tvName d}. {ppV nm (d + 1) 0 A}"
   | .fam (.ref A) => parenIf (p > 5) s!"array {ppV nm d 5 A}"
@@ -205,6 +207,7 @@ def elabV : Nat → TyEnv → VTy → Except Error CVTy
     | .bang _ A => do pure (.bang (← elabV n E A))
     | .unk _ => pure .unk
     | .int _ w => pure (.int w)
+    | .handle _ o => pure (.opq (if o then .output else .input))
     | .mu sp X A => do
         let B ← elabV n { E with mu := X.name :: E.mu } A
         if VTy.clB 1 B = false then

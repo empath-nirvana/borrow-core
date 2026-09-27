@@ -2,7 +2,7 @@ import Paper
 import Support
 import Examples
 import Core
-/-! The theorems `SPEC.md` §1–§8 name, with their axioms. -/
+/-! The theorems `SPEC.md` names, with their axioms. -/
 #print axioms BoCa.Fig16.LogRel.Typed.fundamentalProperty
 #print axioms BoCa.Fig16.LogRel.Typed.adequacy
 #print axioms BoCa.Fig16.LogRel.Typed.bangLamI_compatX
@@ -77,3 +77,17 @@ import Core
 #print axioms BoCa.Fig16.LogRel.Core.reborrow_vShape
 #print axioms BoCa.Fig16.LogRel.Core.arrProg_runs
 #print axioms BoCa.Fig16.LogRel.Core.arrProg_eval
+-- SPEC §11: externs and standard I/O
+#print axioms BoCa.Fig16.LogRel.Core.vC_bytes
+#print axioms BoCa.Fig16.LogRel.Core.vC_outRep
+#print axioms BoCa.Fig16.LogRel.Core.readByte_meets
+#print axioms BoCa.Fig16.LogRel.Core.writeByte_meets
+#print axioms BoCa.Fig16.LogRel.Core.mkInput_meets
+#print axioms BoCa.Fig16.LogRel.Core.mkOutput_meets
+#print axioms BoCa.Fig16.LogRel.Core.takeInput_meets
+#print axioms BoCa.Fig16.LogRel.Core.takeOutput_meets
+#print axioms BoCa.Fig16.LogRel.Core.externs_every_run
+#print axioms BoCa.Fig16.LogRel.Core.externs_safe
+#print axioms BoCa.Fig16.LogRel.Core.io_every_run
+#print axioms BoCa.Fig16.LogRel.Core.externs_main_safe
+#print axioms BoCa.Fig16.LogRel.Core.wpTSD_frame_own

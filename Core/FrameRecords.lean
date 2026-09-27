@@ -197,6 +197,7 @@ def TyEq : VTy → LSub → VTy → LSub → Prop
   | .zero, _, .zero, _ => True
   | .unk, _, .unk, _ => True
   | .int w, _, .int w', _ => w = w'
+  | .opq k, _, .opq k', _ => k = k'
   | .tensor A B, δ, .tensor A' B', δ' => TyEq A δ A' δ' ∧ TyEq B δ B' δ'
   | .sum A B, δ, .sum A' B', δ' => TyEq A δ A' δ' ∧ TyEq B δ B' δ'
   | .thunk C, δ, .thunk C', δ' => CTyEq C δ C' δ'

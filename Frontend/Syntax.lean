@@ -84,6 +84,8 @@ inductive VTy where
   | unk (sp : Span)
   /-- `i32` / `i64`. -/
   | int (sp : Span) (w : Width)
+  /-- `input` / `output` (`out = true`): the host stream types (SPEC §11). -/
+  | handle (sp : Span) (out : Bool)
   /-- `mu X. A`. -/
   | mu (sp : Span) (X : Ident) (A : VTy)
   /-- An upper-case name: a `mu`-bound variable, a `type` abbreviation, or a `def`'s type
@@ -318,6 +320,7 @@ def VTy.strip : VTy → VTy
   | .bang _ A => .bang .none A.strip
   | .unk _ => .unk .none
   | .int _ w => .int .none w
+  | .handle _ o => .handle .none o
   | .mu _ X A => .mu .none X.strip A.strip
   | .name _ n => .name .none n
   | .lolli _ A B => .lolli .none A.strip B.strip
@@ -458,7 +461,7 @@ def Life.span : Life → Span
 
 def VTy.span : VTy → Span
   | .unit sp | .zero sp | .tensor sp _ _ | .sum sp _ _ | .thunk sp _ | .ref sp _ | .imm sp _ _
-  | .mut sp _ _ | .box sp _ _ | .bang sp _ | .unk sp | .int sp _ | .mu sp _ _ | .name sp _
+  | .mut sp _ _ | .box sp _ _ | .bang sp _ | .unk sp | .int sp _ | .handle sp _ | .mu sp _ _ | .name sp _
   | .lolli sp _ _ | .all sp _ _ _ | .block sp _ | .val sp _ | .fam sp _ _ _ | .view sp _ _
   | .array sp _ | .arrayImm sp _ _ => sp
 

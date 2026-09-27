@@ -41,6 +41,7 @@ inductive RTy where
   | bang (sp : Span) (A : RTy)
   | unk (sp : Span)
   | int (sp : Span) (w : Width)
+  | handle (sp : Span) (out : Bool)
   | mu (sp : Span) (X : Ident) (A : RTy)
   | name (sp : Span) (n : String)
   /-- `A => B`. -/
@@ -64,7 +65,7 @@ inductive RTy where
 
 def RTy.span : RTy → Span
   | .unit sp | .zero sp | .tensor sp _ _ | .sum sp _ _ | .U sp _ | .F sp _ | .ref sp _
-  | .imm sp _ _ | .mut sp _ _ | .box sp _ _ | .bang sp _ | .unk sp | .int sp _ | .mu sp _ _
+  | .imm sp _ _ | .mut sp _ _ | .box sp _ _ | .bang sp _ | .unk sp | .int sp _ | .handle sp _ | .mu sp _ _
   | .name sp _ | .lolli sp _ _ | .arr sp _ _ | .all sp _ _ _ | .forall_ sp _ _ _ | .amp sp _ _
   | .top sp | .block sp _ | .val sp _ | .fam sp _ _ _ | .view sp _ _ | .nu sp _ _ | .delay sp _
   | .stream sp _ | .iter sp _ _ _ | .array sp _ | .arrayImm sp _ _ => sp
@@ -97,6 +98,7 @@ def RTy.toV : RTy → Except Error VTy
   | .bang sp A => return .bang sp (← A.toV)
   | .unk sp => pure (.unk sp)
   | .int sp w => pure (.int sp w)
+  | .handle sp o => pure (.handle sp o)
   | .mu sp X A => return .mu sp X (← A.toV)
   | .name sp n => pure (.name sp n)
   | .lolli sp A B => return .lolli sp (← A.toV) (← B.toV)
@@ -376,7 +378,7 @@ def rtyPrefix : Nat → P RTy
       pure (.fam (← spanFrom st) m a σ)
     | _ => rtyAtom n
 
-/-- `1`, `0`, `unk`, `i32`, `i64`, `top`, a name, or a parenthesized type. -/
+/-- `1`, `0`, `unk`, `i32`, `i64`, `input`, `output`, `top`, a name, or a parenthesized type. -/
 def rtyAtom : Nat → P RTy
   | 0 => outOfFuel
   | n + 1 => do
@@ -387,6 +389,8 @@ def rtyAtom : Nat → P RTy
     | .kw "unk" => discard bump; pure (.unk t.span)
     | .kw "i32" => discard bump; pure (.int t.span .w32)
     | .kw "i64" => discard bump; pure (.int t.span .w64)
+    | .kw "input" => discard bump; pure (.handle t.span false)
+    | .kw "output" => discard bump; pure (.handle t.span true)
     | .kw "top" => discard bump; pure (.top t.span)
     | .uident s => discard bump; pure (.name t.span s)
     | .sym "(" =>

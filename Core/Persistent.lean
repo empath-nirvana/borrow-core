@@ -30,7 +30,7 @@ open BoCa.Lifetime (LSub LifeCtx LifeVar)
 
 /-- A value type whose values hold no resource: `1`, `0`, `Unk`, `I32`, `I64`, `!A`, and `⊗`,
 `⊕`, `[@a]` and `μ` over persistent types, with a type variable persistent (it stands, under its
-`μ`, for a persistent type).  `U C`, `Ref A`, `Imm @a A`, `Mut @a A` and `[L]` are not.
+`μ`, for a persistent type).  `U C`, `Ref A`, `Imm @a A`, `Mut @a A`, `[L]` and the opaque host types are not.
 `[spec §10, §8, §9]` -/
 def VTy.persistent : VTy → Bool
   | .unit => true
@@ -38,6 +38,7 @@ def VTy.persistent : VTy → Bool
   | .unk => true
   | .int _ => true
   | .bang _ => true
+  | .opq _ => false
   | .tvar _ => true
   | .tensor A B => A.persistent && B.persistent
   | .sum A B => A.persistent && B.persistent
@@ -68,6 +69,7 @@ theorem vCE_empty_of_persistent : ∀ (A : VTy) {η : Option (Nat → TEnt)},
   | .zero, _, _, _, _, _, _, _, _, h => h.elim
   | .unk, _, _, _, _, _, _, _, _, h => h.1
   | .int _, _, _, _, _, _, _, _, _, h => h.1
+  | .opq _, _, _, _, _, _, _, _, _, h => h.1
   | .bang _, _, _, _, _, _, _, _, _, h => h.1
   | .tvar n, η, hη, _, b, ls, _, v, ρ, h => by
       cases η with

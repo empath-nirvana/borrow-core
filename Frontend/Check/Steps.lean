@@ -67,6 +67,7 @@ def dtorB : Bool → CVTy → Bool
   | _, .fam (.ref A) => dtorB false A
   | _, .fam (.imm _ _) => true
   | _, .fam _ => false
+  | _, .opq _ => false
 
 theorem dtorB_sound : ∀ (alg : Bool) (A : CVTy), dtorB alg A = true →
     HasDtor (cond alg ((toFShape A).resO .unit) A)
@@ -126,12 +127,14 @@ theorem dtorB_sound : ∀ (alg : Bool) (A : CVTy), dtorB alg A = true →
   | _, .thunk (.amp _ (.ret (.bang _))), h | _, .thunk (.amp _ (.ret .unk)), h
   | _, .thunk (.amp _ (.ret (.tvar _))), h | _, .thunk (.amp _ (.ret (.mu _))), h
   | _, .thunk (.amp _ (.ret (.int _))), h | _, .thunk (.amp _ (.ret (.fam _))), h
+  | _, .thunk (.amp _ (.ret (.opq _))), h
   | _, .thunk (.amp _ (.arr _ _)), h
   | _, .thunk (.amp _ (.amp _ _)), h | _, .thunk (.amp _ .top), h
   | _, .thunk (.amp _ (.all _ _ _)), h | _, .thunk (.amp _ (.nu _)), h => by simp [dtorB] at h
   | alg, .unit, _ => by cases alg <;> exact .unit
   | alg, .zero, _ => by cases alg <;> exact .zero
   | alg, .int _, _ => by cases alg <;> exact .int
+  | _, .opq _, h => by simp [dtorB] at h
   | alg, .unk, _ => by cases alg <;> exact .unk
   | alg, .bang _, _ => by cases alg <;> exact .bang
   | alg, .imm _ _, _ => by cases alg <;> exact .imm

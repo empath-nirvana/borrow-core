@@ -72,6 +72,7 @@ def VTy.pp (A : VTy) (lvl : Nat := 0) : String :=
     | .bang _ A => "!" ++ A.pp 4
     | .unk _ => "unk"
     | .int _ w => widthName w
+    | .handle _ o => if o then "output" else "input"
     | .mu _ X A => "mu " ++ X.name ++ ". " ++ A.pp 0
     | .name _ n => n
     | .lolli _ A B => A.pp 1 ++ " => " ++ B.pp 0
