@@ -110,3 +110,29 @@ Each entry: the decision, and why. Newest last.
     lengths are static, and heterogeneous fields block run-time indexing. One `VTy` former is
     paid for (the growth rule's cost, accepted here); `Vec`, `Str` and sized types are later,
     over it.
+30. **No ambient authority: one capability per effect.** Every I/O operation takes a
+    capability value, and there is one capability type per effect, not a monolithic `IO` or
+    `World`: `stdin`, `stdout` and `stderr` now (SPEC §11), and `Args`, `Env`, `Fs`, `Net`,
+    `Clock`, `Random` later by the same pattern. A capability is a cell with opaque content and
+    its operations take a `Mut` borrow, so a function's type shows exactly which effects it can
+    perform, and `main` hands each callee only what it needs. That a function given no
+    capability performs no effect is a theorem (the frame result, `wpTSD_frame_own`), not a
+    convention. `main` may later use its bundle implicitly, as sugar elaborated to explicit
+    capability passing; no other function may. Operations are externs rather than rules, so a
+    capability can later be served by a user-defined handler (#18) instead of the host.
+31. **Host resources are opaque types with a model.** One leaf former, `VTy.opaque k`, whose
+    relation is a predicate `k.Holds` on values and whose `Imm̲` is `Unk`: not persistent, no
+    destructor, no rule. Its values can only be moved and handed to externs, so a handle is never
+    copied (l_lang's L-199) and the model and the host can represent it differently (a byte list,
+    a file descriptor). A new host resource is a new `k`, not a new former.
+32. **Provisional (SPEC §11, to be confirmed by the user).**
+    - The surface names `input` and `output` for the opaque types, and the extern names
+      `stdin`, `stdout`, `stderr`, `read_byte`, `write_byte`, `mk_input`, `mk_output`,
+      `take_input`, `take_output`.
+    - `stdout` and `stderr` share the type `Output`; a writer is given an output stream.
+    - Two primitives, `read_byte` and `write_byte`, on `Mut` borrows; lines, chunks and numbers
+      are library loops.
+    - A `main` with capability externs has type `F (Caps ⊗ A)`, handing its capabilities back
+      in declaration order.
+    - The byte list is `μX. 1 ⊕ (I32 ⊗ X)` with bytes as `I32`; there is no `u8` yet.
+    - Ambient I/O in `main` is specified as planned sugar and not built.
