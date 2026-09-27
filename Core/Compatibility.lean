@@ -91,9 +91,9 @@ theorem gDenC_split {ls : List SRec} {δ : LSub} {Γ Γ₁ Γ₂ : Ctx VTy} (hsp
 /-- `wpTS` is monotone in its postcondition. -/
 theorem wpTS_mono {ls : List SRec} {e : Expr} {P Q : List SRec → Val → WProp}
     (h : ∀ ls' v, Entails (P ls' v) (Q ls' v)) : Entails (wpTS ls e P) (wpTS ls e Q) := by
-  intro ρ hw ρf fρ ps hf hc hT htg
+  intro ρ hw ρf fρ ps hf hc hT htg A k
   obtain ⟨ρ', ρp, fρ', fρ'p, π, v, μ, μ', ps', ls', h₁, h₂, h₃, h₅, h₆, h₇, h₈, h₉, hA, hB,
-    hT', htg', hps, hls, hC⟩ := hw ρf fρ ps hf hc hT htg
+    hT', htg', hps, hls, hC⟩ := hw ρf fρ ps hf hc hT htg A k
   exact ⟨ρ', ρp, fρ', fρ'p, π, v, μ, μ', ps', ls', h₁, h₂, h₃, h₅, h₆, h₇, h₈, h₉, hA, hB,
     hT', htg', hps, hls, h ls' v ρ' hC⟩
 

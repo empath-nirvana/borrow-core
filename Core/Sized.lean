@@ -184,7 +184,7 @@ theorem withload_sized {T₁ : VTy} (x : LifeVar) (hfree₁ : ¬ VFree x T₁)
 theorem wpTS_beta_in (K : Kont) (b : Expr) (v : Val) (ls : List SRec)
     (Q : List SRec → Val → WProp) :
     Entails (wpTS ls (K.plug (b.subst 0 v)) Q) (wpTS ls (K.plug (.app (.val (.lam b)) (.val v))) Q) :=
-  wpTS_step (step_in K (fun μ => Head.beta μ b v)) ls Q
+  wpTS_step (step_in K (fun μ => Head.beta μ b v) rfl) ls Q
 
 /-! ### Witness bounds -/
 

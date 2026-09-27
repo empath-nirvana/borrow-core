@@ -14,9 +14,11 @@ locations from a base `b`, the leaf at in-order position `i` at `b + i`.
   relation (`packed_node`).
 * **Allocation and free are derived terms** (`allocS`, `freeS`): leaf by leaf, typed by the
   existing `alloc`/`free` rules (`d_allocS`, `d_freeS`), so `fundamentalC` covers them.
-* **Block allocation** (`wpTS_allocS`): at every frame the typed world admits, `allocS σ v` has
-  a run placing the leaves at `b, b+1, …` for a base `b` above every allocated location, and
-  returns `addr b σ`, packed.
+* **Block allocation** (`wpTSAngelic_allocS`): at every frame the typed world admits, `allocS σ v`
+  has a run placing the leaves at `b, b+1, …` for a base `b` above every allocated location, and
+  returns `addr b σ`, packed.  `allocS` is a sequence of `alloc`s, so this is a statement about
+  some run (`wpTSAngelic`, `SPEC.md` §13): under an allocator that does not place the leaves
+  consecutively they are not one block.
 
 The machine is unchanged (`Loc = ℕ`, one value per location).  A value names one location, so
 a one-word handle is a lowering of the tuple `addr b σ`; it is sound for tuples that are a
@@ -171,17 +173,19 @@ def WpAt (ls : List SRec) (e : Expr) (Q : List SRec → Val → WProp) (ρ ρf f
     TW fρ'p ps' (rsOf ls') ∧ Tagged fρ'p ps' ls' ∧
     (∀ p, p ∈ ps' ↔ p ∈ ps) ∧ (∀ x, x ∈ ls' ↔ x ∈ ls) ∧ Q ls' v ρ'
 
-theorem wpTS_of_wpAt {ls : List SRec} {e : Expr} {Q : List SRec → Val → WProp} {ρ : WRes}
-    (h : ∀ ρf fρ ps, Cfg ls ρ ρf fρ ps → WpAt ls e Q ρ ρf fρ ps) : wpTS ls e Q ρ :=
+theorem wpTSAngelic_of_wpAt {ls : List SRec} {e : Expr} {Q : List SRec → Val → WProp}
+    {ρ : WRes} (h : ∀ ρf fρ ps, Cfg ls ρ ρf fρ ps → WpAt ls e Q ρ ρf fρ ps) :
+    wpTSAngelic ls e Q ρ :=
   fun ρf fρ ps hf hc hT htg => h ρf fρ ps ⟨hf, hc, hT, htg⟩
 
-theorem wpAt_of_wpTS {ls : List SRec} {e : Expr} {Q : List SRec → Val → WProp} {ρ ρf fρ : WRes}
-    {ps : List FrameRec} (h : wpTS ls e Q ρ) (hc : Cfg ls ρ ρf fρ ps) : WpAt ls e Q ρ ρf fρ ps :=
+theorem wpAt_of_wpTSAngelic {ls : List SRec} {e : Expr} {Q : List SRec → Val → WProp} {ρ ρf fρ : WRes}
+    {ps : List FrameRec} (h : wpTSAngelic ls e Q ρ) (hc : Cfg ls ρ ρf fρ ps) :
+    WpAt ls e Q ρ ρf fρ ps :=
   h ρf fρ ps hc.hash hc.comp hc.tw hc.tag
 
 theorem wpAt_val {ls : List SRec} {v : Val} {Q : List SRec → Val → WProp} {ρ ρf fρ : WRes}
     {ps : List FrameRec} (hc : Cfg ls ρ ρf fρ ps) (hQ : Q ls v ρ) : WpAt ls (.val v) Q ρ ρf fρ ps :=
-  wpAt_of_wpTS (wpTS_val ls v Q ρ hQ) hc
+  wpAt_of_wpTSAngelic (wpTS_angelic ρ (wpTS_val ls v Q ρ hQ)) hc
 
 /-- A step that leaves memory alone, in front. -/
 theorem wpAt_pure {ls : List SRec} {e e' : Expr} {Q : List SRec → Val → WProp} {ρ ρf fρ : WRes}
@@ -328,12 +332,15 @@ theorem exists_free_above (μ : Heap) (fρ : WRes) (hμ : ResU.Lower fρ μ) :
   · have : k ≤ d.sum := List.le_sum_of_mem (hd k h)
     exact absurd hk (Nat.not_le.mpr (Nat.lt_succ_of_le this))
 
-/-- **Block allocation.**  `allocS σ v` allocates the product as one block: there is a base
-`b` with the returned handle `addr b σ`, packed.  `[spec §5]` -/
-theorem wpTS_allocS (σ : Shape) {ls : List SRec} {δ : LSub} {v : Val} {ρ : WRes}
+/-- **Block allocation, on some run.**  `allocS σ v` allocates the product as one block on the
+run that places its leaves at consecutive locations: there is a base `b` with the returned
+handle `addr b σ`, packed.  `allocS` is a sequence of `alloc`s, so under an allocator that does
+not place them consecutively the leaves are not one block; the statement is angelic.
+`[spec §5, §13]` -/
+theorem wpTSAngelic_allocS (σ : Shape) {ls : List SRec} {δ : LSub} {v : Val} {ρ : WRes}
     (hv : vP σ.valTy ls δ v ρ) :
-    wpTS ls (.app (allocS σ) v.1) (fun ls' w => fun ρ' => ∃ b, Packed σ b ls' δ w ρ') ρ := by
-  refine wpTS_of_wpAt fun ρf fρ ps hc => ?_
+    wpTSAngelic ls (.app (allocS σ) v.1) (fun ls' w => fun ρ' => ∃ b, Packed σ b ls' δ w ρ') ρ := by
+  refine wpTSAngelic_of_wpAt fun ρf fρ ps hc => ?_
   obtain ⟨μ, hμ⟩ := lower_of_hash hc.hash hc.comp
   obtain ⟨b, hb⟩ := exists_free_above μ fρ hμ
   have := wpAt_allocS (Q := fun ls' w => fun ρ' => ∃ b, Packed σ b ls' δ w ρ') σ .hole b hc hμ hb

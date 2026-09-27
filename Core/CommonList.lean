@@ -23,7 +23,7 @@ per-program proof.
 * `toPureCE = foldOwn tpAlg : U(L ⊸ F P)`, `freeCE = foldOwn freeAlg : U(L ⊸ F 1)`.
 * `sumProg` sums `[1, 2, 3]` inside an immutable borrow (`6`, no cell left); `mapProgC` maps
   `[0, 0, 0]` inside a mutable borrow and returns `[1, 1, 1]`, no cell left.
-* `consC_block`: at every frame, a node is allocated as one block `(ℓ, ℓ + 1)`;
+* `consC_block`: at every frame, on some run, a node is allocated as one block `(ℓ, ℓ + 1)`;
   `buildC_blocks`, `mapIncC_blocks`: the interpreter's list after `buildC` and after `mapIncCE`
   has every node at adjacent cells.
 
@@ -433,14 +433,15 @@ theorem mapProgC_eval : pureNoLeak (eval mapProgC) = some [1, 1, 1] := by decide
 
 /-! ### Each node is one block -/
 
-/-- **A node is allocated as one block**: at every frame the typed world admits, `allocS nodeC`
-returns the handle `(ℓ, ℓ + 1)` of two adjacent cells, of type `Ref N ⊗ Ref L`. -/
+/-- **A node is allocated as one block, on some run**: at every frame the typed world admits, on
+the run that places the node's cells consecutively, `allocS nodeC` returns the handle
+`(ℓ, ℓ + 1)` of two adjacent cells, of type `Ref N ⊗ Ref L`.  `[spec §13]` -/
 theorem consC_block {ls : List SRec} {δ : LSub} {v : Val} {ρ : WRes}
     (hv : vP nodeC.valTy ls δ v ρ) :
-    wpTS ls (.app (allocS nodeC) v.1)
+    wpTSAngelic ls (.app (allocS nodeC) v.1)
       (fun ls' w => fun ρ' => ∃ b, w = .pair (.loc b) (.loc (b + 1)) ∧
         vP (.tensor (.ref natN) (.ref clistL)) ls' δ w ρ') ρ :=
-  wpTS_mono (fun _ _ _ ⟨b, hw, h⟩ => ⟨b, hw, h⟩) ρ (wpTS_allocS nodeC hv)
+  wpTSAngelic_mono (fun _ _ _ ⟨b, hw, h⟩ => ⟨b, hw, h⟩) ρ (wpTSAngelic_allocS nodeC hv)
 
 /-- The interpreter's run, returning the value and the memory. -/
 def runMem : Nat → BoCa.Mem → Expr → Option (Val × BoCa.Mem)

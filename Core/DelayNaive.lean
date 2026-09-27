@@ -267,7 +267,8 @@ theorem naive_not_delay (δ : LSub) : ¬ cC (.delay .unit) [] δ (.val NV) PMap.
   have htg : Tagged (PMap.empty : WRes) [] [] := fun x hx => absurd hx (by simp)
   obtain ⟨ρ', ρp, fρ', fρ'p, π, v, μ, μ', ps', ls', -, k₂, k₃, -, k₆, -, k₈, -, -, -,
     kT, ktg, -, -, kQ⟩ :=
-    h₁ PMap.empty PMap.empty [] Fig16.LogRel.hash_empty (ResU.comp_empty_right _) TW.empty htg
+    wpTS_angelic _ h₁ PMap.empty PMap.empty [] Fig16.LogRel.hash_empty (ResU.comp_empty_right _)
+      TW.empty htg
   obtain rfl := nv_next_run k₈
   obtain ⟨_, σ₀, σ₃, _, ⟨_, he⟩, _⟩ | ⟨t, σ₀, σ₃, hc, ⟨hσ₀, he⟩, ht⟩ := kQ
   · cases he
@@ -277,7 +278,7 @@ theorem naive_not_delay (δ : LSub) : ¬ cC (.delay .unit) [] δ (.val NV) PMap.
   obtain rfl := eq_of_compS_empty_left k₂
   have h₂ := (hout ls' _ _ (ht ls' (Ext.refl _ _))).1
   obtain ⟨_, _, _, _, _, _, μ₂, μ₃, _, _, -, -, -, -, -, -, k₈', -⟩ :=
-    h₂ ρp fρ'p ps' k₃ (ResU.CompS.comm k₆) kT ktg
+    wpTS_angelic _ h₂ ρp fρ'p ps' k₃ (ResU.CompS.comm k₆) kT ktg
   exact tv_next_diverges k₈'
 
 /-- **The naive rule's conclusion fails at `skip`**: `skip : U(U(D 1) ⊸ D 1)` (`skip_sem`), yet

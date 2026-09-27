@@ -9,6 +9,7 @@ import Support.LogicalRelation.ClosingSubstitutions
 import Support.Model.Notation
 import Core.FrameRecords
 import Core.SepRange
+import Core.Alloc
 
 /-!
 # Core — World  `[spec §3, §4]`
@@ -24,7 +25,7 @@ namespace BoCa.Fig16.LogRel.Core
 open BoCa
 open BoCa.Fig16
 open BoCa.Fig16.BoLo
-open BoCa.BoLo (Heap Steps Step1 Head Kont eLoad eStore)
+open BoCa.BoLo (Heap Steps Step1 Head Kont eLoad eStore Alloc ARun)
 open BoCa.Lifetime (LSub LifeCtx LifeVar)
 
 /-- An entry of the shape relation's type-variable environment: the closed type the variable
@@ -174,13 +175,31 @@ Row 4.11 · `ℰ⟦T⟧δ(v) ≜ wp (e) {𝒱⟦T⟧δ}` · `[repair]`; the prin
 
 Row 5.33, continued.
 -/
-/-- `[TR]` p. 6's `wp` at a tagged typed world.  The frame quantifier ranges over the
-completions `ρ_f ● ρ` that are `TW` worlds at the list's records, tagged, and the
-post-configuration is one too, with the same records proper and the same list members: a
-record 6.64 creates inside a run is ended before the run returns.  Every other conjunct is
-`Fig16.BoLo.wp`'s, verbatim.  `[about ours: [TR] p. 6's wp relativised to tagged typed worlds;
-docs/adjudications.md §12.72]` -/
+/-- `[TR]` p. 6's `wp` at a tagged typed world, with its run taken under every allocator.  The
+frame quantifier ranges over the completions `ρ_f ● ρ` that are `TW` worlds at the list's
+records, tagged, and the post-configuration is one too, with the same records proper and the
+same list members: a record 6.64 creates inside a run is ended before the run returns.  The run
+is an allocator run of every allocator `A` from every allocation count `k` (`[spec §13]`); every
+other conjunct is `Fig16.BoLo.wp`'s, verbatim.  `[about ours: [TR] p. 6's wp relativised to
+tagged typed worlds; docs/adjudications.md §12.72]` -/
 def wpTS (ls : List SRec) (e : Expr) (Q : List SRec → Val → WProp) : WProp := fun ρ =>
+  ∀ (ρf fρ : WRes) (ps : List FrameRec), ResU.Hash ρf ρ → ResU.CompS ρf ρ fρ →
+    TW fρ ps (rsOf ls) → Tagged fρ ps ls → ∀ (A : Alloc) (k : Nat),
+    ∃ (ρ' ρp fρ' fρ'p π : WRes) (v : Val) (μ μ' : Heap) (ps' : List FrameRec)
+      (ls' : List SRec),
+      ResU.Hash ρ' ρf ∧
+      ResU.CompS ρf ρ' fρ' ∧ ResU.Hash ρp fρ' ∧
+      ResU.Lower fρ μ ∧
+      ResU.CompS fρ' ρp fρ'p ∧ ResU.Lower fρ'p μ' ∧
+      (∃ k', ARun A k μ e k' μ' (.val v)) ∧
+      ResU.CompS ρ' ρp π ∧ ResU.UpdV ρ π ∧
+      NoOwn ρp ∧
+      TW fρ'p ps' (rsOf ls') ∧ Tagged fρ'p ps' ls' ∧
+      (∀ p, p ∈ ps' ↔ p ∈ ps) ∧ (∀ x, x ∈ ls' ↔ x ∈ ls) ∧ Q ls' v ρ'
+
+/-- `wpTS` with its run taken angelically: some run of the machine.  `wpTS` implies it
+(`wpTS_angelic`).  `[spec §13]` -/
+def wpTSAngelic (ls : List SRec) (e : Expr) (Q : List SRec → Val → WProp) : WProp := fun ρ =>
   ∀ (ρf fρ : WRes) (ps : List FrameRec), ResU.Hash ρf ρ → ResU.CompS ρf ρ fρ →
     TW fρ ps (rsOf ls) → Tagged fρ ps ls →
     ∃ (ρ' ρp fρ' fρ'p π : WRes) (v : Val) (μ μ' : Heap) (ps' : List FrameRec)

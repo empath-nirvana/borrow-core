@@ -4,8 +4,8 @@ import Core.Integers
 # Core — the array steps at the typed world  `[spec §9]`
 
 `tab` places `n` cells holding `()` at fresh consecutive locations and continues as `tabFill`.
-In the typed world that is `n` of `TW.alloc`, at the locations `ℓ, …, ℓ + n − 1` above every
-location the configuration holds (`fresh_block`): `alloc_block` builds the world after them,
+In the typed world that is `n` of `TW.alloc`, at the allocator's block `ℓ, …, ℓ + n − 1`, free in
+the configuration's memory (`Alloc.fresh`): `alloc_block` builds the world after them,
 and `wpTS_tab` puts the step in front of the run of `tabFill`. `idx` and `drop` change no memory:
 `wpTS_idx` and `wpTS_dropStep` are `wpTS_head`.
 -/
@@ -18,31 +18,11 @@ namespace BoCa.Fig16.LogRel.Core
 open BoCa
 open BoCa.Fig16
 open BoCa.Fig16.BoLo
-open BoCa.BoLo (Heap Steps Step1 Head Kont eLoad eStore)
+open BoCa.BoLo (Heap Steps Step1 Head Kont eLoad eStore Alloc ARun Step1N)
 open BoCa.Lifetime (LSub LifeCtx LifeVar)
 
 /-- `omega` at locations: `Loc` is `ℕ`. -/
 macro "lomega" : tactic => `(tactic| ((try unfold BoCa.Loc at *) <;> omega))
-
-/-- A finite map at `Loc = ℕ` misses a whole run of locations: every location from one past
-its largest.  `[spec §9]` -/
-theorem fresh_block {A : Type} (p : PMap BoCa.Loc A) : ∃ ℓ : Nat, ∀ j : Nat, p.get (ℓ + j) = none := by
-  obtain ⟨d, hd⟩ := p.finite
-  have hub : ∀ (t : List Nat) (l : Nat), l ∈ t → l ≤ t.foldr max 0 := by
-    intro t
-    induction t with
-    | nil => intro l hl; exact absurd hl (by simp)
-    | cons a t ih =>
-        intro l hl
-        rcases List.mem_cons.mp hl with rfl | hl
-        · exact Nat.le_max_left _ _
-        · exact Nat.le_trans (ih l hl) (Nat.le_max_right _ _)
-  refine ⟨d.foldr max 0 + 1, fun j => ?_⟩
-  cases e : p.get (d.foldr max 0 + 1 + j) with
-  | none => rfl
-  | some ψ =>
-      have := hub d _ (hd _ (by rw [e]; simp))
-      omega
 
 /-- One cell placed at a location the heap does not hold: the world after `TW.alloc`, with the
 frame kept.  `[spec §9]` -/
@@ -106,40 +86,40 @@ theorem alloc_block {ρf : WRes} {ps rs : List FrameRec} (v : Val) (ℓ : Nat) :
       · rwa [show ℓ + k + 1 = ℓ + (k + 1) by omega]
       · rw [← fill_succ]; rwa [show ℓ + k + 1 = ℓ + (k + 1) by omega]
 
-/-- **The `tab` step.**  At a fresh run of locations `ℓ, …`, the placeholders `ℓ + i ↦ ()` are
+/-- **The `tab` step.**  At the allocator's block `ℓ, …`, the placeholders `ℓ + i ↦ ()` are
 handed to the run of `tabFill`.  `[spec §9]` -/
 theorem wpTS_tab (ls : List SRec) (c : UInt32) (f : Val) (Q : List SRec → Val → WProp) :
     Entails (all fun ℓ : Loc => wand (sepRange (fun m => ptoOwn m .unit) ℓ (arrLen c).toNat)
         (wpTS ls (tabFill f ℓ (arrLen c) 0 (arrLen c).toNat) Q))
       (wpTS ls (.app (.val (.prim .tab)) (.val (Val.pair (Val.i32 c) f))) Q) := by
-  intro ρ h ρf σ ps hf hσ hT htg
+  intro ρ h ρf σ ps hf hσ hT htg A k
   obtain ⟨μ, hμ⟩ := lower_of_hash hf hσ
-  obtain ⟨τ, hτ, hval⟩ := id hμ
-  obtain ⟨ℓ, hℓ⟩ := fresh_block τ
-  have hfree : ∀ j, μ (ℓ + j) = none := fun j => (lower_eq_none_iff hval).mpr (hℓ j)
+  set ℓ := A.pick k μ (arrLen c).toNat
+  have hfree : ∀ j, j < (arrLen c).toNat → μ (ℓ + j) = none :=
+    A.fresh k μ _ (lower_finDom hμ)
   obtain ⟨x, σ', cells, hcells, hx, hf', hσ', hT', hμ', hu, hag⟩ :=
-    alloc_block .unit ℓ (arrLen c).toNat 0 hf hσ hT hμ (fun j _ => by simpa using hfree j)
+    alloc_block .unit ℓ (arrLen c).toNat 0 hf hσ hT hμ (fun j hj => by simpa using hfree j hj)
   simp only [Nat.add_zero] at hcells hμ'
-  obtain ⟨ρ', ρp, fρ', fρ'p, π, v, μ₁, μ', ps', ls', h₁, h₂, h₃, h₅, h₆, h₇, h₈, h₉, hA, hB,
+  obtain ⟨ρ', ρp, fρ', fρ'p, π, v, μ₁, μ', ps', ls', h₁, h₂, h₃, h₅, h₆, h₇, ⟨j, h₈⟩, h₉, hA, hB,
     hT'', htg', hps, hls, hC⟩ :=
-    h ℓ cells x hcells hx ρf σ' ps hf' hσ' hT' (tagged_of_ag hag htg)
+    h ℓ cells x hcells hx ρf σ' ps hf' hσ' hT' (tagged_of_ag hag htg) A (k + 1)
   cases ResU.Lower.functional h₅ hμ'
   exact ⟨ρ', ρp, fρ', fρ'p, π, v, μ, μ', ps', ls', h₁, h₂, h₃, hμ, h₆, h₇,
-    .more (Step1.head (Head.tab μ c f ℓ (fun i _ => hfree i))) h₈, h₉, hu.trans hA, hB,
-    hT'', htg', hps, hls, hC⟩
+    ⟨j, .more ⟨.hole, _, _, rfl, rfl, BoCa.BoLo.AHead.tab k μ c f hfree⟩ h₈⟩, h₉, hu.trans hA,
+    hB, hT'', htg', hps, hls, hC⟩
 
 /-- The `idx` step.  `[spec §9]` -/
 theorem wpTS_idx (ls : List SRec) (ℓ : Loc) (n i : UInt32) (Q : List SRec → Val → WProp) :
     Entails (wpTS ls (.val (idxAns ℓ n i)) Q)
       (wpTS ls (.app (.val (.prim .idx)) (.val (Val.pair (Val.arr ℓ n) (Val.i32 i)))) Q) :=
-  wpTS_head (fun μ => Head.idx μ ℓ n i) ls Q
+  wpTS_head (fun μ => Head.idx μ ℓ n i) rfl ls Q
 
 /-- The `drop` step.  `[spec §9]` -/
 theorem wpTS_dropStep (ls : List SRec) (f : Val) (ℓ : Loc) (n : UInt32)
     (Q : List SRec → Val → WProp) :
     Entails (wpTS ls (dropFill f ℓ 0 n.toNat) Q)
       (wpTS ls (.app (.val (.prim .drop)) (.val (Val.pair f (Val.arr ℓ n)))) Q) :=
-  wpTS_head (fun μ => Head.drop μ f ℓ n) ls Q
+  wpTS_head (fun μ => Head.drop μ f ℓ n) rfl ls Q
 
 end BoCa.Fig16.LogRel.Core
 

@@ -25,7 +25,7 @@ namespace BoCa.Fig16.LogRel.Core
 open BoCa
 open BoCa.Fig16
 open BoCa.Fig16.BoLo
-open BoCa.BoLo (Heap Steps Step1 Head Kont)
+open BoCa.BoLo (Heap Steps Step1 Head Kont Alloc ARun Step1N)
 open BoCa.Lifetime (LSub LifeCtx LifeVar)
 
 /-! ### Closed terms -/
@@ -209,15 +209,15 @@ theorem fixV_eq {B : Expr} (hB : closedAt 2 B = true) :
   rw [fixV, val_shift_closed (selfV_closed hB)]
 
 /-- A head step inside an evaluation context, at every heap. -/
-theorem step_in (K : Kont) {a a' : Expr} (h : ∀ μ : Heap, Head μ a μ a') :
-    ∀ μ : Heap, Step1 μ (K.plug a) μ (K.plug a') :=
-  fun μ => ⟨K, a, a', rfl, rfl, h μ⟩
+theorem step_in (K : Kont) {a a' : Expr} (h : ∀ μ : Heap, Head μ a μ a') (hn : a.allocs = false) :
+    ∀ μ : Heap, Step1N μ (K.plug a) μ (K.plug a') :=
+  fun μ => ⟨K, a, a', rfl, rfl, h μ, hn⟩
 
 /-! ### Pure reduction -/
 
 /-- `e` reduces to `e'` by steps that take every heap to itself. -/
 def PureSteps (e e' : Expr) : Prop :=
-  Relation.ReflTransGen (fun a b => ∀ μ : Heap, Step1 μ a μ b) e e'
+  Relation.ReflTransGen (fun a b => ∀ μ : Heap, Step1N μ a μ b) e e'
 
 theorem PureSteps.trans {a b c : Expr} (h₁ : PureSteps a b) (h₂ : PureSteps b c) :
     PureSteps a c :=
@@ -229,13 +229,14 @@ theorem PureSteps.plug (K : Kont) {e e' : Expr} (h : PureSteps e e') :
   | refl => exact .refl
   | tail _ hs ih => exact ih.tail (fun μ => (hs μ).plug K)
 
-theorem PureSteps.head {e e' : Expr} (h : ∀ μ : Heap, Head μ e μ e') : PureSteps e e' :=
-  .single (fun μ => Step1.head (h μ))
+theorem PureSteps.head {e e' : Expr} (h : ∀ μ : Heap, Head μ e μ e') (hn : e.allocs = false) :
+    PureSteps e e' :=
+  .single (fun μ => Step1N.head (h μ) hn)
 
 /-- `(λx. b) v ↦ b[v/x]`, in an evaluation context. -/
 theorem PureSteps.beta_in (K : Kont) (b : Expr) (v : Val) :
     PureSteps (K.plug (.app (.val (.lam b)) (.val v))) (K.plug (b.subst 0 v)) :=
-  .single (step_in K (fun μ => Head.beta μ b v))
+  .single (step_in K (fun μ => Head.beta μ b v) rfl)
 
 theorem PureSteps.beta (b : Expr) (v : Val) :
     PureSteps (.app (.val (.lam b)) (.val v)) (b.subst 0 v) :=
