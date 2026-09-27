@@ -1,4 +1,5 @@
 import Core.DelayPrograms
+import Core.DelayApprox
 import Core.Steps
 
 /-!
@@ -18,7 +19,7 @@ forces that again.  The step relation is deterministic along the way (`Steps.lea
 `step1_plug_inv`, with the head-step inversions below), so every run revisits its start.
 
 `skip` observes `d` twice for each `later` it emits.  In `fixD` the step returns a state, not a
-`D A`, and cannot observe the recursive computation at all (`Delay.lean`).
+`D A`, and cannot observe the recursive computation at all (`Nu.lean`).
 -/
 
 noncomputable section
@@ -256,8 +257,13 @@ theorem nv_next_run {μ μ' : Heap} {w : Val} (hs : Steps μ (.app (.val NV) (.v
 /-- **`N = later (skip N)` is not a delayed computation**: `⟦D 1⟧` does not hold of it at the
 empty list and resource. -/
 theorem naive_not_delay (δ : LSub) : ¬ cC (.delay .unit) [] δ (.val NV) PMap.empty := by
+  have hout : ∀ ls e ρ, cC (.delay .unit) ls δ e ρ →
+      delayF (fun ls v => vC true .unit ls δ v) (fun ls e => cC (.delay .unit) ls δ e) ls e ρ :=
+    fun ls e ρ h => by
+      rw [← nuF_delay]
+      exact (cC_nu_unfold (CTy.delayBody_nuOk _) ls δ e ρ).mp h
   intro h
-  have h₁ := (delayRel_out _ [] _ _ h).1
+  have h₁ := (hout [] _ _ h).1
   have htg : Tagged (PMap.empty : WRes) [] [] := fun x hx => absurd hx (by simp)
   obtain ⟨ρ', ρp, fρ', fρ'p, π, v, μ, μ', ps', ls', -, k₂, k₃, -, k₆, -, k₈, -, -, -,
     kT, ktg, -, -, kQ⟩ :=
@@ -269,7 +275,7 @@ theorem naive_not_delay (δ : LSub) : ¬ cC (.delay .unit) [] δ (.val NV) PMap.
   subst ht' hσ₀
   obtain rfl := eq_of_compS_empty_left hc
   obtain rfl := eq_of_compS_empty_left k₂
-  have h₂ := (delayRel_out _ ls' _ _ (ht ls' (Ext.refl _ _))).1
+  have h₂ := (hout ls' _ _ (ht ls' (Ext.refl _ _))).1
   obtain ⟨_, _, _, _, _, _, μ₂, μ₃, _, _, -, -, -, -, -, -, k₈', -⟩ :=
     h₂ ρp fρ'p ps' k₃ (ResU.CompS.comm k₆) kT ktg
   exact tv_next_diverges k₈'

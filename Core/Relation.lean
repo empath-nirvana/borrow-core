@@ -85,9 +85,8 @@ def tClose : Option (Nat → TEnt) → VTy → VTy
   | none, A => A
   | some η, A => A.subst (fun n => (η n).ty)
 
-/-- A candidate interpretation of the variable of `D A = νX. …`, at a fixed lifetime
-substitution: `cC`'s signature with `δ` applied (`D A` binds no lifetime, so its unfolding never
-changes `δ`). -/
+/-- A candidate interpretation of `νX. C` at a fixed lifetime substitution: `cC`'s signature with
+`δ` applied (`νX. C` binds no lifetime, so its unfolding never changes `δ`). -/
 abbrev CPred := List SRec → Expr → WProp
 
 /-- `R ⊆ R'` pointwise. -/
@@ -97,37 +96,15 @@ def CPred.Le (R R' : CPred) : Prop := ∀ ls e, Entails (R ls e) (R' ls e)
 def thunkR (R : CPred) (ls : List SRec) (v : Val) : WProp := fun ρ =>
   ∀ ls', Ext ls ls' ρ → R ls' (.val v) ρ
 
-/-- The postcondition of `next : F(A ⊕ U X)`, with `VA` for `𝒱⟦A⟧` and `R` for `X`: `now a`
-(`inj₁`) or `later t` (`inj₂`, `t` a thunk of `X`). -/
-def delayQ (VA : List SRec → Val → WProp) (R : CPred) (ls : List SRec) (w : Val) : WProp :=
-  BoLo.or (ex fun v₁ => ⌜w = .inj₁ v₁⌝ ⋆ VA ls v₁) (ex fun v₂ => ⌜w = .inj₂ v₂⌝ ⋆ thunkR R ls v₂)
+/-- The variable `U X` of `νX. C` read at the candidate `R`: `thunkR R` in the program's mode,
+`True` in the observable view (`vCE`'s `U` clauses). -/
+def nuP (R : CPred) : Bool → List SRec → Val → WProp
+  | true, ls, v => thunkR R ls v
+  | false, _, _ => fun _ => True
 
-/-- One unfolding of `D A = νX. F(A ⊕ U X) & F 1`, with `VA` for `𝒱⟦A⟧` and the candidate `R`
-for `X`: the `next` observation (`π₁`) and the `close` observation (`π₂`).  It is `cC`'s `&`,
-`F`, `⊕` and `U` clauses with `R` for `cC X` (`delayF_cC`). -/
-def delayF (VA : List SRec → Val → WProp) (R : CPred) : CPred := fun ls e ρ =>
-  wpTS ls (.app e (.val (.inj₁ .unit))) (delayQ VA R) ρ ∧
-  wpTS ls (.app e (.val (.inj₂ .unit))) (fun _ w => ⌜w = .unit⌝) ρ
-
-/-- `⟦D A⟧ = ⋃{R | R ⊆ delayF VA R}`, the greatest fixed point written in `Prop` as `∃ R`
-(`docs/scope-recursion.md` §3.1).  `[spec §7]` -/
-def delayRel (VA : List SRec → Val → WProp) : CPred := fun ls e ρ =>
-  ∃ R : CPred, R.Le (delayF VA R) ∧ R ls e ρ
-
-/-- The postcondition of `next : F(A ⊗ U X)`, with `VA` for `𝒱⟦A⟧` and `R` for `X`: a value
-and the rest of the stream. -/
-def streamQ (VA : List SRec → Val → WProp) (R : CPred) (ls : List SRec) (w : Val) : WProp :=
-  ex fun v₁ => ex fun v₂ => ⌜w = .pair v₁ v₂⌝ ⋆ VA ls v₁ ⋆ thunkR R ls v₂
-
-/-- One unfolding of `Stream A = νX. F(A ⊗ U X) & F 1`: the `next` observation (`π₁`) and the
-`close` observation (`π₂`).  It is `cC`'s `&`, `F`, `⊗` and `U` clauses with `R` for `cC X`. -/
-def streamF (VA : List SRec → Val → WProp) (R : CPred) : CPred := fun ls e ρ =>
-  wpTS ls (.app e (.val (.inj₁ .unit))) (streamQ VA R) ρ ∧
-  wpTS ls (.app e (.val (.inj₂ .unit))) (fun _ w => ⌜w = .unit⌝) ρ
-
-/-- `⟦Stream A⟧ = ⋃{R | R ⊆ streamF VA R}`, the greatest fixed point written in `Prop` as `∃ R`.  `[spec §7]` -/
-def streamRel (VA : List SRec → Val → WProp) : CPred := fun ls e ρ =>
-  ∃ R : CPred, R.Le (streamF VA R) ∧ R ls e ρ
+/-- The environment of `C`'s value types in one unfolding of `νX. C` at the candidate `R`:
+the variable `0` is `U(νX. C)`, read at `nuP R`. -/
+def nuEnv (C : CTy) (R : CPred) : Nat → TEnt := VTy.scons ⟨.thunk (.nu C), nuP R⟩ (tEnv none)
 
 mutual
 /-- `𝒱⟦A⟧(ls)δ(v)` under a type-variable environment.  `full = true`: the program's relation.
@@ -165,7 +142,9 @@ def vCE : Option (Nat → TEnt) → Bool → VTy → List SRec → LSub → Val 
         (∀ b' ls' v' ρ', vCE (some (VTy.scons ⟨tClose η (.mu A), P⟩ (tEnv η))) b' A ls' δ v' ρ' →
           P b' ls' v' ρ') →
         P b ls v ρ
-/-- `𝒞⟦C⟧(ls)δ(e)`, curried on the connective.  `[spec §3]` -/
+/-- `𝒞⟦C⟧(ls)δ(e)`, curried on the connective.  At `νX. C` the greatest fixed point
+`⋃{R | R ⊆ cB (nuEnv C R) C}`, written in `Prop` as `∃ R` (`docs/scope-recursion.md` §3.1), and
+trivial unless `C` is positive (`CTy.NuOk`).  `[spec §3, §7]` -/
 def cC : CTy → List SRec → LSub → Expr → WProp
   | .ret A, ls, δ, e => wpTS ls e (fun ls'' => vCE none true A ls'' δ)
   | .arr A C, ls, δ, e => fun ρ =>
@@ -175,8 +154,17 @@ def cC : CTy → List SRec → LSub → Expr → WProp
   | .top, _, _, _ => fun _ => True
   | .all x c C, ls, δ, e => fun ρ =>
       ∀ α, (⌜LtLife δ c α⌝ ─⋆ cC C ls (δ.extend x α) (.app e (.val .unit))) ρ
-  | .delay A, ls, δ, e => delayRel (fun ls'' v => vCE none true A ls'' δ v) ls e
-  | .stream A, ls, δ, e => streamRel (fun ls'' v => vCE none true A ls'' δ v) ls e
+  | .nu C, ls, δ, e => fun ρ => C.NuOk →
+      ∃ R : CPred, R.Le (fun ls' e' => cB (some (nuEnv C R)) C ls' δ e') ∧ R ls e ρ
+/-- One unfolding of an observation tree under a type-variable environment: `cC`'s `F` and `&`
+clauses with `vCE η` at `F`.  Other formers are not observation trees (`CTy.NuLeaf`) and hold
+trivially.  `[spec §7]` -/
+def cB : Option (Nat → TEnt) → CTy → List SRec → LSub → Expr → WProp
+  | η, .ret A, ls, δ, e => wpTS ls e (fun ls'' => vCE η true A ls'' δ)
+  | η, .amp C D, ls, δ, e => fun ρ =>
+      cB η C ls δ (.app e (.val (.inj₁ .unit))) ρ ∧ cB η D ls δ (.app e (.val (.inj₂ .unit))) ρ
+  | _, .arr _ _, _, _, _ | _, .top, _, _, _ | _, .all _ _ _, _, _, _ | _, .nu _, _, _, _ =>
+      fun _ => True
 end
 
 /-- `𝒱⟦A⟧(ls)δ(v)`: the relation at a type read with no environment. -/

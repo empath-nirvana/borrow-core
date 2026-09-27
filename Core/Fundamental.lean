@@ -1,7 +1,7 @@
 import Core.Compat
 import Core.Integers
 import Core.FoldReuse
-import Core.Stream
+import Core.Nu
 import Support.LogicalRelation.Adequacy
 
 /-!
@@ -13,8 +13,8 @@ the lifetime `∀` (`∀E` at every `C`), the `!` rules, `[]I`/`[]E` (`[]I` at e
 `⊑imm`/`⊑mut`, one constant per borrow axiom at arbitrary value-type payloads, three
 call-by-value derived forms (`lolliE`, `allEV`, `ofRet`), `roll`/`unroll` at `μ`, and the
 borrowed and owned folds `foldImm`, `foldOwn`, `foldReuse` (`FoldImm.lean`, `FoldOwn.lean`,
-`FoldReuse.lean`), the delay type's `delayIn`/`delayOut` and `fixD` (`Delay.lean`), and the
-stream type's `streamIn`/`streamOut` and `unfoldS` (`Stream.lean`).
+`FoldReuse.lean`), and `νX. C`'s `nuIn`/`nuOut` and coiteration `unfoldN` (`Nu.lean`), of which
+the delay and stream types' rules are instances (`fixD`, `unfoldS`).
 `fundamentalC` proves every rule sound at `SemV`/`SemC`; `adequacyC` runs a closed `F 1`
 computation to `()` from the empty memory.
 -/
@@ -204,23 +204,70 @@ inductive CDerives : LifeCtx → Ctx VTy → Expr → Jdg → Prop where
   (the emptied cell and the result on its content), any `R`.  `[spec §6]` -/
   | foldReuse {Δ Γ} (F : FShape) (R : VTy) (hΓ : Ctx.DeadP Γ) (hF : F.WF) (hG : F.Guarded) :
       CDerives Δ Γ (.val (foldReuseV F)) (.val (.lolli (algRTy F R) (foldOTy F R)))
-  /-- `D A` is its unrolling `F(A ⊕ U(D A)) & F 1` (`cC_delay_iff`), on the same term.  `[spec §7]` -/
-  | delayIn {Δ Γ e A} (h : CDerives Δ Γ e (.comp (delayUnroll A))) :
-      CDerives Δ Γ e (.comp (.delay A))
-  | delayOut {Δ Γ e A} (h : CDerives Δ Γ e (.comp (.delay A))) :
-      CDerives Δ Γ e (.comp (delayUnroll A))
-  /-- Guarded recursion on the delay type, a constant:
-  `fixD : !U(S ⊸ F(A ⊕ S) & F 1) ⊸ !U(S ⊸ D A)` (`Delay.lean`).  `[spec §7]` -/
-  | fixD {Δ Γ} (A S : VTy) (hΓ : Ctx.DeadP Γ) : CDerives Δ Γ (.val fixDV) (.val (fixDTy A S))
-  /-- `Stream A` is its unrolling `F(A ⊗ U(Stream A)) & F 1` (`cC_stream_iff`), on the same term.  `[spec §7]` -/
-  | streamIn {Δ Γ e A} (h : CDerives Δ Γ e (.comp (streamUnroll A))) :
-      CDerives Δ Γ e (.comp (.stream A))
-  | streamOut {Δ Γ e A} (h : CDerives Δ Γ e (.comp (.stream A))) :
-      CDerives Δ Γ e (.comp (streamUnroll A))
-  /-- Coiteration on the stream type, a constant:
-  `unfoldS : !U(S ⊸ F(A ⊗ S) & F 1) ⊸ !U(S ⊸ Stream A)` (`Stream.lean`).  `[spec §7]` -/
-  | unfoldS {Δ Γ} (A S : VTy) (hΓ : Ctx.DeadP Γ) :
-      CDerives Δ Γ (.val unfoldSV) (.val (unfoldSTy A S))
+  /-- `νX. C` is its unrolling `C[U(νX. C)/X]` (`cC_nu_iff`), on the same term, at a positive
+  `C`.  `[spec §7]` -/
+  | nuIn {Δ Γ e C} (hC : C.NuOk) (h : CDerives Δ Γ e (.comp C.unroll)) :
+      CDerives Δ Γ e (.comp (.nu C))
+  | nuOut {Δ Γ e C} (hC : C.NuOk) (h : CDerives Δ Γ e (.comp (.nu C))) :
+      CDerives Δ Γ e (.comp C.unroll)
+  /-- Coiteration, a constant: `unfold : !U(S ⊸ C[S/X]) ⊸ !U(S ⊸ νX. C)` (`Nu.lean`), at a
+  positive `C`.  `[spec §7]` -/
+  | unfoldN {Δ Γ} (C : CTy) (S : VTy) (hC : C.NuOk) (hΓ : Ctx.DeadP Γ) :
+      CDerives Δ Γ (.val (unfoldV C)) (.val (unfoldTy C S))
+
+/-! ### The delay, stream and finite iterator instances  `[spec §7]`
+
+`D A`, `Stream A` and `Iter A R R'` are `νX. C` at fixed bodies (`CTy.delay`, `CTy.stream`,
+`CTy.iter`), each positive and polynomial; their in/out rules and loops are `nuIn`, `nuOut` and
+`unfoldN` there. -/
+
+/-- The step's type of `fixD`, `S ⊸ F(A ⊕ S) & F 1`. -/
+abbrev stepDC (A S : VTy) : CTy := .arr S (.amp (.ret (.sum A S)) (.ret .unit))
+
+/-- `fixD`'s type, `!U(S ⊸ F(A ⊕ S) & F 1) ⊸ !U(S ⊸ D A)`. -/
+abbrev fixDTy (A S : VTy) : VTy :=
+  .lolli (.bang (.thunk (stepDC A S))) (.bang (.thunk (.arr S (.delay A))))
+
+/-- `fixD = unfold` at `D A`. -/
+abbrev fixDV (A : VTy) : Val := unfoldV (CTy.delayBody A)
+
+/-- The step's type of `unfoldS`, `S ⊸ F(A ⊗ S) & F 1`. -/
+abbrev stepSC (A S : VTy) : CTy := .arr S (.amp (.ret (.tensor A S)) (.ret .unit))
+
+/-- `unfoldS`'s type, `!U(S ⊸ F(A ⊗ S) & F 1) ⊸ !U(S ⊸ Stream A)`. -/
+abbrev unfoldSTy (A S : VTy) : VTy :=
+  .lolli (.bang (.thunk (stepSC A S))) (.bang (.thunk (.arr S (.stream A))))
+
+/-- `unfoldS = unfold` at `Stream A`. -/
+abbrev unfoldSV (A : VTy) : Val := unfoldV (CTy.streamBody A)
+
+theorem CDerives.delayIn {Δ Γ e A} (h : CDerives Δ Γ e (.comp (delayUnroll A))) :
+    CDerives Δ Γ e (.comp (.delay A)) :=
+  .nuIn (CTy.delayBody_nuOk A) (by rw [CTy.delay_unroll]; exact h)
+
+theorem CDerives.delayOut {Δ Γ e A} (h : CDerives Δ Γ e (.comp (.delay A))) :
+    CDerives Δ Γ e (.comp (delayUnroll A)) := by
+  rw [← CTy.delay_unroll]; exact .nuOut (CTy.delayBody_nuOk A) h
+
+/-- Guarded recursion on the delay type: `fixD : !U(S ⊸ F(A ⊕ S) & F 1) ⊸ !U(S ⊸ D A)`. -/
+theorem CDerives.fixD {Δ Γ} (A S : VTy) (hΓ : Ctx.DeadP Γ) :
+    CDerives Δ Γ (.val (fixDV A)) (.val (fixDTy A S)) := by
+  have h := CDerives.unfoldN (Δ := Δ) (CTy.delayBody A) S (CTy.delayBody_nuOk A) hΓ
+  rwa [unfoldTy, CTy.delayBody_instT] at h
+
+theorem CDerives.streamIn {Δ Γ e A} (h : CDerives Δ Γ e (.comp (streamUnroll A))) :
+    CDerives Δ Γ e (.comp (.stream A)) :=
+  .nuIn (CTy.streamBody_nuOk A) (by rw [CTy.stream_unroll]; exact h)
+
+theorem CDerives.streamOut {Δ Γ e A} (h : CDerives Δ Γ e (.comp (.stream A))) :
+    CDerives Δ Γ e (.comp (streamUnroll A)) := by
+  rw [← CTy.stream_unroll]; exact .nuOut (CTy.streamBody_nuOk A) h
+
+/-- Coiteration on the stream type: `unfoldS : !U(S ⊸ F(A ⊗ S) & F 1) ⊸ !U(S ⊸ Stream A)`. -/
+theorem CDerives.unfoldS {Δ Γ} (A S : VTy) (hΓ : Ctx.DeadP Γ) :
+    CDerives Δ Γ (.val (unfoldSV A)) (.val (unfoldSTy A S)) := by
+  have h := CDerives.unfoldN (Δ := Δ) (CTy.streamBody A) S (CTy.streamBody_nuOk A) hΓ
+  rwa [unfoldTy, CTy.streamBody_instT] at h
 
 /-- The semantic judgment at a judgment form.  `[spec §3]` -/
 def SemJ (Δ : LifeCtx) (Γ : Ctx VTy) (e : Expr) : Jdg → Prop
@@ -285,12 +332,9 @@ theorem fundamentalC {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg}
   | foldImm F y c R hΓ hF hG hyM hyR hR => exact foldImm_compatX F hF hG y c R hΓ hyM hyR hR
   | foldOwn F R hΓ hF hG => exact foldOwn_compatX F hF hG R hΓ
   | foldReuse F R hΓ hF hG => exact foldReuse_compatX F hF hG R hΓ
-  | delayIn _ ih => exact delayIn_compatX ih
-  | delayOut _ ih => exact delayOut_compatX ih
-  | fixD A S hΓ => exact fixD_compatX A S hΓ
-  | streamIn _ ih => exact streamIn_compatX ih
-  | streamOut _ ih => exact streamOut_compatX ih
-  | unfoldS A S hΓ => exact unfoldS_compatX A S hΓ
+  | nuIn hC _ ih => exact nuIn_compatX hC ih
+  | nuOut hC _ ih => exact nuOut_compatX hC ih
+  | unfoldN C S hC hΓ => exact unfold_compatX hC S hΓ
 
 /-! ### Adequacy -/
 

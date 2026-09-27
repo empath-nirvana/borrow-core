@@ -394,12 +394,9 @@ theorem fundamentalG {P : Profile} (hP : ∀ T, P.drop T = true → SemForget (�
       exact viaDead hP hΓ fun _ h => foldImm_compatX F hF hG y c R h hyM hyR hR
   | foldOwn F R hΓ hF hG => exact viaDead hP hΓ fun _ h => foldOwn_compatX F hF hG R h
   | foldReuse F R hΓ hF hG => exact viaDead hP hΓ fun _ h => foldReuse_compatX F hF hG R h
-  | delayIn _ ih => exact delayIn_compatX ih
-  | delayOut _ ih => exact delayOut_compatX ih
-  | fixD A S hΓ => exact viaDead hP hΓ fun _ h => fixD_compatX A S h
-  | streamIn _ ih => exact streamIn_compatX ih
-  | streamOut _ ih => exact streamOut_compatX ih
-  | unfoldS A S hΓ => exact viaDead hP hΓ fun _ h => unfoldS_compatX A S h
+  | nuIn hC _ ih => exact nuIn_compatX hC ih
+  | nuOut hC _ ih => exact nuOut_compatX hC ih
+  | unfoldN C S hC hΓ => exact viaDead hP hΓ fun _ h => unfold_compatX hC S h
   | lam0 _ _ ih => exact lam0_compat ih
   | app0 _ _ _ ih => exact app0_compat ih
 

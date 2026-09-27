@@ -10,9 +10,9 @@ import Support.Statics.Contexts
 Call-by-push-value types, the index of the typed world's records.
 
 * Value types `VTy ::= 1 | A ⊗ B | 0 | A ⊕ B | U C | Ref A | Imm @a A | Mut @a A | [@a] A | !A | Unk`.
-* Computation types `CTy ::= F A | A ⊸ C | C & D | ⊤ | ∀'x ⊏ @b. C | D A`, where `D A` is the
-  delay type `νX. F(A ⊕ U X) & F 1` (`Delay.lean`) and the stream type `νX. F(A ⊗ U X) & F 1`
-  (`Stream.lean`).
+* Computation types `CTy ::= F A | A ⊸ C | C & D | ⊤ | ∀'x ⊏ @b. C | νX. C`.  In `νX. C` the
+  value type `U X` is the type variable `0` of `C`'s value types (`Nu.lean`); the delay, stream
+  and finite iterator types are abbreviations over it.
 
 `VTy.recV` is the value-type eliminator with `U C` a leaf: the typed world never looks inside
 a computation type.  Beside the formers: the free lifetime variables `VFree`/`CFree`, the
@@ -69,10 +69,8 @@ inductive CTy where
   | top
   /-- `∀'x ⊏ @b. C`. -/
   | all (x : LifeVar) (b : Lifetime.Life) (C : CTy)
-  /-- `D A = νX. F(A ⊕ U X) & F 1`: the delay type with `close`. -/
-  | delay (A : VTy)
-  /-- `Stream A = νX. F(A ⊗ U X) & F 1`: the stream type with `close`. -/
-  | stream (A : VTy)
+  /-- `νX. C`: the greatest fixed point, with `U X` the type variable `0` in `C`.  `[spec §7]` -/
+  | nu (C : CTy)
 end
 
 /-- The value-type eliminator with `U C` a leaf. -/
@@ -141,8 +139,7 @@ def CFree (x : LifeVar) : CTy → Prop
   | .amp C D => CFree x C ∨ CFree x D
   | .top => False
   | .all y b C => b.mentions x = true ∨ (x ≠ y ∧ CFree x C)
-  | .delay A => VFree x A
-  | .stream A => VFree x A
+  | .nu C => CFree x C
 end
 
 /-! ### Type variables: renaming, substitution, closedness
@@ -984,6 +981,147 @@ end
 
 end VTy
 
+/-! ### `νX. C`: observation trees, positivity, unrolling  `[spec §7]`
+
+In `νX. C` the value type `U X` is the type variable `0` of `C`'s value types.  `C` is a
+`&`-tree of observations `F A` (`NuLeaf`), headed by `&` (`NuOk`), with `X` occurring in each
+`A` only under `⊗` and `⊕` (`VTy.Poly`): there the relation is monotone in `X` and coiteration
+maps a state to the rest. -/
+
+/-- `X` occurs in `A` only under `⊗` and `⊕`: a variable, or `⊗`/`⊕` of such types, or a type
+in which `X` does not occur. -/
+def VTy.Poly : VTy → Prop
+  | .tensor A B => A.Poly ∧ B.Poly
+  | .sum A B => A.Poly ∧ B.Poly
+  | .tvar _ => True
+  | A => ¬ A.Occ 0
+
+theorem VTy.noMut_of_poly : ∀ {A : VTy}, A.Poly → A.NoMut 0
+  | .tensor _ _, h => ⟨noMut_of_poly h.1, noMut_of_poly h.2⟩
+  | .sum _ _, h => ⟨noMut_of_poly h.1, noMut_of_poly h.2⟩
+  | .tvar _, _ => trivial
+  | .unit, _ | .zero, _ | .thunk _, _ | .unk, _ | .int _, _ => trivial
+  | .ref _, h | .imm _ _, h | .mut _ _, h | .box _ _, h | .bang _, h | .mu _, h =>
+      VTy.noMut_of_not_occ _ h
+
+namespace CTy
+
+/-- `C[S/X]` at the observations of a `&`-tree: `F A[S/X]` at each `F A`. -/
+def instT (S : VTy) : CTy → CTy
+  | .ret A => .ret (VTy.inst S A)
+  | .amp C D => .amp (instT S C) (instT S D)
+  | C => C
+
+/-- A `&`-tree of observations `F A`, each `A` polynomial in `X`. -/
+def NuLeaf : CTy → Prop
+  | .ret A => A.Poly
+  | .amp C D => NuLeaf C ∧ NuLeaf D
+  | _ => False
+
+/-- **Positivity** of `νX. C`: `C` is a `&` of two observation trees. -/
+def NuOk : CTy → Prop
+  | .amp C D => NuLeaf C ∧ NuLeaf D
+  | _ => False
+
+/-- The unrolling `C[U(νX. C)/X]`. -/
+abbrev unroll (C : CTy) : CTy := instT (.thunk (.nu C)) C
+
+/-- The body of `D A = νX. F(A ⊕ U X) & F 1`. -/
+abbrev delayBody (A : VTy) : CTy := .amp (.ret (.sum (A.rename Nat.succ) (.tvar 0))) (.ret .unit)
+
+/-- The body of `Stream A = νX. F(A ⊗ U X) & F 1`. -/
+abbrev streamBody (A : VTy) : CTy :=
+  .amp (.ret (.tensor (A.rename Nat.succ) (.tvar 0))) (.ret .unit)
+
+/-- The body of `Iter A R R' = νX. F((A ⊗ U X) ⊕ R) & F R'`. -/
+abbrev iterBody (A R R' : VTy) : CTy :=
+  .amp (.ret (.sum (.tensor (A.rename Nat.succ) (.tvar 0)) (R.rename Nat.succ)))
+    (.ret (R'.rename Nat.succ))
+
+/-- `D A = νX. F(A ⊕ U X) & F 1`: the delay type. -/
+abbrev delay (A : VTy) : CTy := .nu (delayBody A)
+
+/-- `Stream A = νX. F(A ⊗ U X) & F 1`: the stream type. -/
+abbrev stream (A : VTy) : CTy := .nu (streamBody A)
+
+/-- `Iter A R R' = νX. F((A ⊗ U X) ⊕ R) & F R'`: a finite iterator. `next` yields an element and
+the rest, or finishes with `R`; `close` returns the residual `R'`. -/
+abbrev iter (A R R' : VTy) : CTy := .nu (iterBody A R R')
+
+end CTy
+
+/-- `A↑[S/X] = A`. -/
+theorem VTy.inst_rename_succ (S A : VTy) : VTy.inst S (A.rename Nat.succ) = A := by
+  rw [VTy.inst, VTy.subst_rename]
+  exact VTy.subst_id A
+
+theorem VTy.poly_of_not_occ : ∀ {A : VTy}, ¬ A.Occ 0 → A.Poly
+  | .tensor _ _, h => ⟨poly_of_not_occ (fun h' => h (Or.inl h')),
+      poly_of_not_occ (fun h' => h (Or.inr h'))⟩
+  | .sum _ _, h => ⟨poly_of_not_occ (fun h' => h (Or.inl h')),
+      poly_of_not_occ (fun h' => h (Or.inr h'))⟩
+  | .tvar _, _ => trivial
+  | .unit, h | .zero, h | .thunk _, h | .unk, h | .int _, h => h
+  | .ref _, h | .imm _ _, h | .mut _ _, h | .box _ _, h | .bang _, h | .mu _, h => h
+
+theorem VTy.not_occ_rename_succ (A : VTy) : ¬ (A.rename Nat.succ).Occ 0 := fun h => by
+  obtain ⟨n, hn, -⟩ := VTy.occ_rename A Nat.succ h
+  exact Nat.succ_ne_zero n hn
+
+namespace CTy
+
+theorem inst_sum_var (S A : VTy) :
+    VTy.inst S (.sum (A.rename Nat.succ) (.tvar 0)) = .sum A S := by
+  simp only [VTy.inst, VTy.subst, VTy.scons]
+  rw [← VTy.inst, VTy.inst_rename_succ]
+
+theorem delayBody_instT (A S : VTy) :
+    (delayBody A).instT S = .amp (.ret (.sum A S)) (.ret .unit) := by
+  simp only [instT, inst_sum_var]; rfl
+
+theorem streamBody_instT (A S : VTy) :
+    (streamBody A).instT S = .amp (.ret (.tensor A S)) (.ret .unit) := by
+  simp only [instT, VTy.inst, VTy.subst, VTy.scons]
+  rw [← VTy.inst, VTy.inst_rename_succ]
+
+theorem iterBody_instT (A R R' S : VTy) :
+    (iterBody A R R').instT S = .amp (.ret (.sum (.tensor A S) R)) (.ret R') := by
+  simp only [instT, VTy.inst, VTy.subst, VTy.scons]
+  rw [← VTy.inst, ← VTy.inst, ← VTy.inst, VTy.inst_rename_succ, VTy.inst_rename_succ,
+    VTy.inst_rename_succ]
+
+theorem delayBody_nuOk (A : VTy) : (delayBody A).NuOk :=
+  ⟨⟨VTy.poly_of_not_occ (VTy.not_occ_rename_succ A), trivial⟩, fun h => h⟩
+
+theorem streamBody_nuOk (A : VTy) : (streamBody A).NuOk :=
+  ⟨⟨VTy.poly_of_not_occ (VTy.not_occ_rename_succ A), trivial⟩, fun h => h⟩
+
+theorem iterBody_nuOk (A R R' : VTy) : (iterBody A R R').NuOk :=
+  ⟨⟨⟨VTy.poly_of_not_occ (VTy.not_occ_rename_succ A), trivial⟩,
+    VTy.poly_of_not_occ (VTy.not_occ_rename_succ R)⟩,
+   VTy.poly_of_not_occ (VTy.not_occ_rename_succ R')⟩
+
+end CTy
+
+/-- The unrolling of `D A`: `F(A ⊕ U(D A)) & F 1`. -/
+abbrev delayUnroll (A : VTy) : CTy := .amp (.ret (.sum A (.thunk (.delay A)))) (.ret .unit)
+
+/-- The unrolling of `Stream A`: `F(A ⊗ U(Stream A)) & F 1`. -/
+abbrev streamUnroll (A : VTy) : CTy := .amp (.ret (.tensor A (.thunk (.stream A)))) (.ret .unit)
+
+/-- The unrolling of `Iter A R R'`: `F((A ⊗ U(Iter A R R')) ⊕ R) & F R'`. -/
+abbrev iterUnroll (A R R' : VTy) : CTy :=
+  .amp (.ret (.sum (.tensor A (.thunk (.iter A R R'))) R)) (.ret R')
+
+theorem CTy.delay_unroll (A : VTy) : (CTy.delayBody A).unroll = delayUnroll A :=
+  CTy.delayBody_instT A _
+
+theorem CTy.stream_unroll (A : VTy) : (CTy.streamBody A).unroll = streamUnroll A :=
+  CTy.streamBody_instT A _
+
+theorem CTy.iter_unroll (A R R' : VTy) : (CTy.iterBody A R R').unroll = iterUnroll A R R' :=
+  CTy.iterBody_instT A R R' _
+
 /-! ### Free lifetime variables under type substitution -/
 
 theorem vFree_rename {y : LifeVar} : ∀ (A : VTy) (r : Nat → Nat), VFree y (A.rename r) ↔ VFree y A
@@ -1201,8 +1339,7 @@ def CTy.lifeBound : CTy → Nat
   | .amp C D => max C.lifeBound D.lifeBound
   | .top => 0
   | .all x b C => max (x + 1) (max b.varBound C.lifeBound)
-  | .delay A => A.lifeBound
-  | .stream A => A.lifeBound
+  | .nu C => C.lifeBound
 end
 
 mutual
@@ -1236,8 +1373,7 @@ def CTy.applyLSub (σ : LSubst) : CTy → CTy
             (max (y + 1) (max (lsubRangeBound (lsubDrop σ y)) C.lifeBound))) :: lsubDrop σ y))
       else
         .all y (b.applySub σ) (C.applyLSub (lsubDrop σ y))
-  | .delay A => .delay (A.applyLSub σ)
-  | .stream A => .stream (A.applyLSub σ)
+  | .nu C => .nu (C.applyLSub σ)
 end
 
 /-- `A[@a/'x]`. -/
@@ -1309,8 +1445,7 @@ theorem lt_cLifeBound {x : LifeVar} : ∀ {C : CTy}, CFree x C → x < C.lifeBou
           (Nat.le_trans (Nat.le_max_left _ _) (Nat.le_max_right _ _))
       · exact Nat.lt_of_lt_of_le (lt_cLifeBound h)
           (Nat.le_trans (Nat.le_max_right _ _) (Nat.le_max_right _ _))
-  | .delay A, h => lt_vLifeBound (A := A) h
-  | .stream A, h => lt_vLifeBound (A := A) h
+  | .nu C, h => lt_cLifeBound (C := C) h
 end
 
 /-- `Imm̲` introduces only its index. -/

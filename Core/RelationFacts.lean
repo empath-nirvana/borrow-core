@@ -137,8 +137,7 @@ theorem CTyEq.applyLSub : ∀ (C : CTy) (σ : Lifetime.LSubst) (δ δ' : LSub),
       ⟨CTyEq.applyLSub C σ δ δ' (fun y hy => h y (Or.inl hy)),
        CTyEq.applyLSub D σ δ δ' (fun y hy => h y (Or.inr hy))⟩
   | .top, _, _, _, _ => trivial
-  | .delay A, σ, δ, δ', h => TyEq.applyLSub A σ δ δ' h
-  | .stream A, σ, δ, δ', h => TyEq.applyLSub A σ δ δ' h
+  | .nu C, σ, δ, δ', h => CTyEq.applyLSub C σ δ δ' h
   | .all y b S, σ, δ, δ', h => by
       have hb : (b.applySub σ).interp δ = b.interp δ' :=
         interp_applySub b (fun w hw => h w (Or.inl hw))
@@ -643,12 +642,14 @@ theorem cC_congr : ∀ (C : CTy) {δ₁ δ₂ : LSub}, (∀ y, CFree y C → δ�
       have h₂ := cC_congr D (fun y hy => h y (Or.inr hy)) ls
       funext e; simp only [cC, h₁, h₂]
   | .top, _, _, _, _ => rfl
-  | .delay A, _, _, h, ls => by
-      have ih := vCE_congr A none h (envAgree_none _ _) true
-      funext e; simp only [cC, ih]
-  | .stream A, _, _, h, ls => by
-      have ih := vCE_congr A none h (envAgree_none _ _) true
-      funext e; simp only [cC, ih]
+  | .nu C, δ₁, δ₂, h, ls => by
+      have hB : ∀ (R : CPred) (ls' : List SRec),
+          cB (some (nuEnv C R)) C ls' δ₁ = cB (some (nuEnv C R)) C ls' δ₂ :=
+        fun R ls' => cB_congr C (some (nuEnv C R)) h (fun n y hy => by
+          cases n with
+          | zero => exact h y hy
+          | succ n => exact hy.elim) ls'
+      funext e ρ; simp only [cC, hB]
   | .all x c C, δ₁, δ₂, h, ls => by
       have hc : c.interp δ₁ = c.interp δ₂ := interp_congr c (fun y hy => h y (Or.inl hy))
       have hC : ∀ α : Life, cC C ls (δ₁.extend x α) = cC C ls (δ₂.extend x α) := by
@@ -660,6 +661,20 @@ theorem cC_congr : ∀ (C : CTy) {δ₁ δ₂ : LSub}, (∀ y, CFree y C → δ�
           exact h y (Or.inr ⟨Ne.symm hxy, hy⟩)
       have hL : ∀ α : Life, LtLife δ₁ c α = LtLife δ₂ c α := by intro α; unfold LtLife; rw [hc]
       funext e; simp only [cC, hC, hL]
+/-- One unfolding of an observation tree depends on `δ` only at the free variables of the tree
+and of the environment's types. -/
+theorem cB_congr : ∀ (C : CTy) (η : Option (Nat → TEnt)) {δ₁ δ₂ : LSub},
+    (∀ y, CFree y C → δ₁.find? y = δ₂.find? y) → EnvAgree η δ₁ δ₂ →
+    ∀ (ls : List SRec), cB η C ls δ₁ = cB η C ls δ₂
+  | .ret A, η, _, _, h, hη, ls => by
+      have ih := vCE_congr A η h hη true
+      funext e; simp only [cB, ih]
+  | .amp C D, η, _, _, h, hη, ls => by
+      have h₁ := cB_congr C η (fun y hy => h y (Or.inl hy)) hη ls
+      have h₂ := cB_congr D η (fun y hy => h y (Or.inr hy)) hη ls
+      funext e; simp only [cB, h₁, h₂]
+  | .arr _ _, _, _, _, _, _, _ | .top, _, _, _, _, _, _ | .all _ _ _, _, _, _, _, _, _
+  | .nu _, _, _, _, _, _, _ => rfl
 end
 
 /-- `𝒱⟦A⟧δ` depends on `δ` only at the variables free in `A`. -/
@@ -682,6 +697,35 @@ theorem envEq_tClose {η η' : Option (Nat → TEnt)} {δ δ' : LSub} (hη : Env
     {A A' : VTy} (h : TyEq A δ A' δ') : TyEq (tClose η A) δ (tClose η' A') δ' := by
   rw [tClose_eq, tClose_eq]
   exact TyEq.subst A _ _ h (fun n => (hη n).2)
+
+/-- Polynomiality in `X` is invariant under `TyEq`. -/
+theorem TyEq.poly_iff : ∀ (A : VTy) {A' : VTy} {δ δ' : LSub}, TyEq A δ A' δ' → (A.Poly ↔ A'.Poly)
+  | .tensor A B, A', _, _, h | .sum A B, A', _, _, h => by
+      cases A' <;> simp only [TyEq] at h
+      exact and_congr (TyEq.poly_iff A h.1) (TyEq.poly_iff B h.2)
+  | .tvar _, A', _, _, h => by cases A' <;> simp only [TyEq] at h; subst h; exact Iff.rfl
+  | .unit, A', _, _, h | .zero, A', _, _, h | .thunk _, A', _, _, h | .unk, A', _, _, h
+  | .int _, A', _, _, h | .ref _, A', _, _, h | .imm _ _, A', _, _, h | .mut _ _, A', _, _, h
+  | .box _ _, A', _, _, h | .bang _, A', _, _, h | .mu _, A', _, _, h => by
+      have ho := TyEq.occ_iff _ 0 h
+      cases A' <;> simp only [TyEq] at h
+      simp only [VTy.Poly, ho]
+
+theorem CTyEq.nuLeaf_iff : ∀ (C : CTy) {C' : CTy} {δ δ' : LSub}, CTyEq C δ C' δ' →
+    (C.NuLeaf ↔ C'.NuLeaf)
+  | .ret A, C', _, _, h => by
+      cases C' <;> simp only [CTyEq] at h
+      exact TyEq.poly_iff A h
+  | .amp C D, C', _, _, h => by
+      cases C' <;> simp only [CTyEq] at h
+      exact and_congr (CTyEq.nuLeaf_iff C h.1) (CTyEq.nuLeaf_iff D h.2)
+  | .arr _ _, C', _, _, h | .top, C', _, _, h | .all _ _ _, C', _, _, h | .nu _, C', _, _, h => by
+      cases C' <;> simp_all [CTyEq, CTy.NuLeaf]
+
+/-- Positivity is invariant under `CTyEq`. -/
+theorem CTyEq.nuOk_iff {C C' : CTy} {δ δ' : LSub} (h : CTyEq C δ C' δ') : C.NuOk ↔ C'.NuOk := by
+  cases C <;> cases C' <;> simp only [CTyEq] at h <;> simp only [CTy.NuOk]
+  exact and_congr (CTyEq.nuLeaf_iff _ h.1) (CTyEq.nuLeaf_iff _ h.2)
 
 mutual
 theorem vCE_tyEq : ∀ (S : VTy) {S' : VTy} {δ δ' : LSub} (η η' : Option (Nat → TEnt)),
@@ -783,14 +827,17 @@ theorem cC_tyEq_aux : ∀ (C : CTy) {C' : CTy} {δ δ' : LSub}, CTyEq C δ C' δ
   | .top, C', _, _, h => by
       cases C' <;> simp only [CTyEq] at h
       intro ls; rfl
-  | .delay A, C', _, _, h => by
+  | .nu C, C', δ, δ', h => by
       cases C' <;> simp only [CTyEq] at h
-      have ih := vCE_tyEq A none none h (envEq_none _ _) true
-      intro ls; funext e; simp only [cC, ih]
-  | .stream A, C', _, _, h => by
-      cases C' <;> simp only [CTyEq] at h
-      have ih := vCE_tyEq A none none h (envEq_none _ _) true
-      intro ls; funext e; simp only [cC, ih]
+      rename_i C'
+      have hB : ∀ (R : CPred) (ls' : List SRec),
+          cB (some (nuEnv C R)) C ls' δ = cB (some (nuEnv C' R)) C' ls' δ' :=
+        fun R => cB_tyEq C h (some (nuEnv C R)) (some (nuEnv C' R)) (fun n => by
+          cases n with
+          | zero => exact ⟨rfl, h⟩
+          | succ n => exact ⟨rfl, rfl⟩)
+      have hO : C.NuOk ↔ C'.NuOk := CTyEq.nuOk_iff h
+      intro ls; funext e ρ; simp only [cC, hB, hO]
   | .all x c C, C', δ, δ', h => by
       cases C' <;> simp only [CTyEq] at h
       rename_i x' c' C'
@@ -800,6 +847,22 @@ theorem cC_tyEq_aux : ∀ (C : CTy) {C' : CTy} {δ δ' : LSub}, CTyEq C δ C' δ
       have hL : ∀ α : Life, LtLife δ c α = LtLife δ' c' α := by
         intro α; unfold LtLife; rw [h.1]
       intro ls; funext e; simp only [cC, hT, hL]
+theorem cB_tyEq : ∀ (C : CTy) {C' : CTy} {δ δ' : LSub}, CTyEq C δ C' δ' →
+    ∀ (η η' : Option (Nat → TEnt)), EnvEq η η' δ δ' →
+    ∀ (ls : List SRec), cB η C ls δ = cB η' C' ls δ'
+  | .ret A, C', _, _, h, η, η', hη, ls => by
+      cases C' <;> simp only [CTyEq] at h
+      have ih := vCE_tyEq A η η' h hη true
+      funext e; simp only [cB, ih]
+  | .amp C D, C', _, _, h, η, η', hη, ls => by
+      cases C' <;> simp only [CTyEq] at h
+      have ihC := cB_tyEq C h.1 η η' hη ls
+      have ihD := cB_tyEq D h.2 η η' hη ls
+      funext e; simp only [cB, ihC, ihD]
+  | .arr _ _, C', _, _, h, _, _, _, _ | .top, C', _, _, h, _, _, _, _
+  | .all _ _ _, C', _, _, h, _, _, _, _ | .nu _, C', _, _, h, _, _, _, _ => by
+      cases C' <;> simp only [CTyEq] at h
+      rfl
 end
 
 /-- `𝒱⟦A⟧` reads a type only up to `TyEq` — `Δ-subst` (`TyEq.applyLSub`) at the relation:

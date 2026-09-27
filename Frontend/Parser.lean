@@ -55,21 +55,23 @@ inductive RTy where
   | val (sp : Span) (σ : Shape)
   | fam (sp : Span) (m : Mode) (a : Life) (σ : Shape)
   | view (sp : Span) (a : Life) (A : RTy)
+  | nu (sp : Span) (X : Ident) (C : RTy)
   | delay (sp : Span) (A : RTy)
   | stream (sp : Span) (A : RTy)
+  | iter (sp : Span) (A R R' : RTy)
 
 def RTy.span : RTy → Span
   | .unit sp | .zero sp | .tensor sp _ _ | .sum sp _ _ | .U sp _ | .F sp _ | .ref sp _
   | .imm sp _ _ | .mut sp _ _ | .box sp _ _ | .bang sp _ | .unk sp | .int sp _ | .mu sp _ _
   | .name sp _ | .lolli sp _ _ | .arr sp _ _ | .all sp _ _ _ | .forall_ sp _ _ _ | .amp sp _ _
-  | .top sp | .block sp _ | .val sp _ | .fam sp _ _ _ | .view sp _ _ | .delay sp _
-  | .stream sp _ => sp
+  | .top sp | .block sp _ | .val sp _ | .fam sp _ _ _ | .view sp _ _ | .nu sp _ _ | .delay sp _
+  | .stream sp _ | .iter sp _ _ _ => sp
 
 /-- What a raw type is, for sort errors. -/
 def RTy.former : RTy → String
   | .F .. => "`F A`" | .arr .. => "`A -o C`" | .forall_ .. => "`forall 'x < @. C`"
-  | .amp .. => "`C & D`" | .top .. => "`top`" | .delay .. => "`delay A`"
-  | .stream .. => "`stream A`" | _ => "this type"
+  | .amp .. => "`C & D`" | .top .. => "`top`" | .nu .. => "`nu X. C`" | .delay .. => "`delay A`"
+  | .stream .. => "`stream A`" | .iter .. => "`iter A R R'`" | _ => "this type"
 
 private def sortErr (t : RTy) (isComp : Bool) : Except Error α :=
   if isComp then
@@ -84,6 +86,7 @@ def RTy.toV : RTy → Except Error VTy
   | .zero sp => pure (.zero sp)
   | .tensor sp A B => return .tensor sp (← A.toV) (← B.toV)
   | .sum sp A B => return .sum sp (← A.toV) (← B.toV)
+  | .U sp (.name sp' X) => pure (.thunk sp (.name sp' X))
   | .U sp C => return .thunk sp (← C.toC)
   | .ref sp A => return .ref sp (← A.toV)
   | .imm sp a A => return .imm sp a (← A.toV)
@@ -100,8 +103,8 @@ def RTy.toV : RTy → Except Error VTy
   | .val sp σ => pure (.val sp σ)
   | .fam sp m a σ => pure (.fam sp m a σ)
   | .view sp a A => return .view sp a (← A.toV)
-  | t@(.F ..) | t@(.arr ..) | t@(.forall_ ..) | t@(.amp ..) | t@(.top ..) | t@(.delay ..)
-  | t@(.stream ..) => sortErr t true
+  | t@(.F ..) | t@(.arr ..) | t@(.forall_ ..) | t@(.amp ..) | t@(.top ..) | t@(.nu ..)
+  | t@(.delay ..) | t@(.stream ..) | t@(.iter ..) => sortErr t true
 
 /-- Sort a raw type as a computation type. -/
 def RTy.toC : RTy → Except Error CTy
@@ -110,8 +113,10 @@ def RTy.toC : RTy → Except Error CTy
   | .amp sp C D => return .amp sp (← C.toC) (← D.toC)
   | .top sp => pure (.top sp)
   | .forall_ sp x b C => return .all sp x b (← C.toC)
+  | .nu sp X C => return .nu sp X (← C.toC)
   | .delay sp A => return .delay sp (← A.toV)
   | .stream sp A => return .stream sp (← A.toV)
+  | .iter sp A R R' => return .iter sp (← A.toV) (← R.toV) (← R'.toV)
   | t => sortErr t false
 end
 
@@ -226,9 +231,9 @@ end
 
 /-! ### Types and shapes (syntax-core §4, §5) -/
 
-/-- Tokens that begin a type binder: `forall`, `all`, `mu`. -/
+/-- Tokens that begin a type binder: `forall`, `all`, `mu`, `nu`. -/
 def isTyBinderStart (t : Tok) : Bool :=
-  t == .kw "forall" || t == .kw "all" || t == .kw "mu"
+  t == .kw "forall" || t == .kw "all" || t == .kw "mu" || t == .kw "nu"
 
 mutual
 /-- A full type: a binder, which extends as far right as possible, or an arrow chain. -/
@@ -253,6 +258,12 @@ def rty : Nat → P RTy
       expectSym "."
       let A ← rty n
       pure (.mu (← spanFrom st) X A)
+    | .kw "nu" =>
+      discard bump
+      let X ← uident "a type variable"
+      expectSym "."
+      let C ← rty n
+      pure (.nu (← spanFrom st) X C)
     | _ => rtyArrow n
 
 /-- `-o` and `=>`, associating to the right. -/
@@ -331,6 +342,12 @@ def rtyPrefix : Nat → P RTy
     | .sym "!" => unary .bang
     | .kw "delay" => unary .delay
     | .kw "stream" | .kw "str" => unary .stream
+    | .kw "iter" =>
+      discard bump
+      let A ← rtyPrefix n
+      let R ← rtyPrefix n
+      let R' ← rtyPrefix n
+      pure (.iter (← spanFrom st) A R R')
     | .kw "imm" => withLife .imm
     | .kw "mut" => withLife .mut
     | .kw "box" => withLife .box
@@ -420,6 +437,7 @@ def cty (n : Nat) : P CTy := do liftSort (← rty n).toC
 
 def arg (n : Nat) : ArgKind → P Arg
   | .ty => .ty <$> vty n
+  | .cty => .cty <$> cty n
   | .life => .life <$> life n
   | .binder => .binder <$> lifeVar
   | .shape => .shape <$> shape n
@@ -693,10 +711,8 @@ def compPrefix : Nat → P Comp
       discard bump
       let V ← valPrefix n
       pure (.absurd (← spanFrom st) V)
-    | .kw "delay_in" => unary .delayIn
-    | .kw "delay_out" => unary .delayOut
-    | .kw "stream_in" => unary .streamIn
-    | .kw "stream_out" => unary .streamOut
+    | .kw "nu_in" | .kw "delay_in" | .kw "stream_in" => unary .nuIn
+    | .kw "nu_out" | .kw "delay_out" | .kw "stream_out" => unary .nuOut
     | _ =>
       let M ← compAtom n
       compSuffixes n st M

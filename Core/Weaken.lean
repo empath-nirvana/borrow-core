@@ -118,12 +118,9 @@ theorem CDerives.append_dead (h' : Ctx.Dead Γ') {Δ : LifeCtx} {Γ : Ctx VTy} {
       exact .foldImm F y c R (deadP_append h' hΓ) hF hG hyM hyR hR
   | foldOwn F R hΓ hF hG => exact .foldOwn F R (deadP_append h' hΓ) hF hG
   | foldReuse F R hΓ hF hG => exact .foldReuse F R (deadP_append h' hΓ) hF hG
-  | delayIn _ ih => exact .delayIn ih
-  | delayOut _ ih => exact .delayOut ih
-  | fixD A S hΓ => exact .fixD A S (deadP_append h' hΓ)
-  | streamIn _ ih => exact .streamIn ih
-  | streamOut _ ih => exact .streamOut ih
-  | unfoldS A S hΓ => exact .unfoldS A S (deadP_append h' hΓ)
+  | nuIn hC _ ih => exact .nuIn hC ih
+  | nuOut hC _ ih => exact .nuOut hC ih
+  | unfoldN C S hC hΓ => exact .unfoldN C S hC (deadP_append h' hΓ)
 
 end BoCa.Fig16.LogRel.Core
 

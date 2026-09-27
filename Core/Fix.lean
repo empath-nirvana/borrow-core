@@ -213,12 +213,44 @@ theorem step_in (K : Kont) {a a' : Expr} (h : ∀ μ : Heap, Head μ a μ a') :
     ∀ μ : Heap, Step1 μ (K.plug a) μ (K.plug a') :=
   fun μ => ⟨K, a, a', rfl, rfl, h μ⟩
 
+/-! ### Pure reduction -/
+
+/-- `e` reduces to `e'` by steps that take every heap to itself. -/
+def PureSteps (e e' : Expr) : Prop :=
+  Relation.ReflTransGen (fun a b => ∀ μ : Heap, Step1 μ a μ b) e e'
+
+theorem PureSteps.trans {a b c : Expr} (h₁ : PureSteps a b) (h₂ : PureSteps b c) :
+    PureSteps a c :=
+  Relation.ReflTransGen.trans h₁ h₂
+
+theorem PureSteps.plug (K : Kont) {e e' : Expr} (h : PureSteps e e') :
+    PureSteps (K.plug e) (K.plug e') := by
+  induction h with
+  | refl => exact .refl
+  | tail _ hs ih => exact ih.tail (fun μ => (hs μ).plug K)
+
+theorem PureSteps.head {e e' : Expr} (h : ∀ μ : Heap, Head μ e μ e') : PureSteps e e' :=
+  .single (fun μ => Step1.head (h μ))
+
+/-- `(λx. b) v ↦ b[v/x]`, in an evaluation context. -/
+theorem PureSteps.beta_in (K : Kont) (b : Expr) (v : Val) :
+    PureSteps (K.plug (.app (.val (.lam b)) (.val v))) (K.plug (b.subst 0 v)) :=
+  .single (step_in K (fun μ => Head.beta μ b v))
+
+theorem PureSteps.beta (b : Expr) (v : Val) :
+    PureSteps (.app (.val (.lam b)) (.val v)) (b.subst 0 v) :=
+  PureSteps.beta_in .hole b v
+
+theorem wpTS_pureSteps {e e' : Expr} (h : PureSteps e e') (ls : List SRec)
+    (Q : List SRec → Val → WProp) : Entails (wpTS ls e' Q) (wpTS ls e Q) := by
+  induction h with
+  | refl => exact fun _ h => h
+  | tail _ hs ih => exact fun ρ h => ih ρ (wpTS_step hs ls Q ρ h)
+
 /-- **Unrolling**, in any evaluation context: `K[selfV w]` reaches `K[fixV w]` by three
 β-steps. -/
-theorem wpTS_selfV_in {B : Expr} (hB : closedAt 2 B = true) (K : Kont) (w : Val)
-    (ls : List SRec) (Q : List SRec → Val → WProp) :
-    Entails (wpTS ls (K.plug (.app (.val (fixV B)) (.val w))) Q)
-      (wpTS ls (K.plug (.app (.val (selfV B)) (.val w))) Q) := by
+theorem selfV_steps_in {B : Expr} (hB : closedAt 2 B = true) (K : Kont) (w : Val) :
+    PureSteps (K.plug (.app (.val (selfV B)) (.val w))) (K.plug (.app (.val (fixV B)) (.val w))) := by
   have hX := zX_closed hB
   -- `selfV w ↦ X X w`
   have h₁ : (Expr.app (.app (.val (zX B)) (.val (zX B))) (.var 0)).subst 0 w
@@ -231,16 +263,20 @@ theorem wpTS_selfV_in {B : Expr} (hB : closedAt 2 B = true) (K : Kont) (w : Val)
     simp [selfV, Expr.subst, val_shift_closed hX, subst_closedAt B (k := 2) (j := 2) _ hB le_rfl]
   have hK : ∀ e, K.plug (.app e (.val w)) = (K.comp (.appL .hole w)).plug e := fun e => by
     rw [Kont.plug_comp]; rfl
-  intro ρ h
-  refine wpTS_step (step_in K (fun μ => Head.beta μ _ w)) ls Q ρ ?_
+  refine (PureSteps.beta_in K _ w).trans ?_
   rw [h₁, hK]
-  refine wpTS_step (step_in _ (fun μ => Head.beta μ _ (zX B))) ls Q ρ ?_
-  show wpTS ls ((K.comp (.appL .hole w)).plug (Expr.subst 0 (zX B) (.app (.val (.lam (.lam B)))
-    (.val (.lam (.app (.app (.var 1) (.var 1)) (.var 0))))))) Q ρ
+  refine (PureSteps.beta_in _ _ (zX B)).trans ?_
   rw [h₂]
-  refine wpTS_step (step_in _ (fun μ => Head.beta μ (.lam B) (selfV B))) ls Q ρ ?_
+  refine (PureSteps.beta_in _ (.lam B) (selfV B)).trans ?_
   rw [← hK]
-  exact h
+  exact .refl
+
+/-- **Unrolling**, in any evaluation context, at `wpTS`. -/
+theorem wpTS_selfV_in {B : Expr} (hB : closedAt 2 B = true) (K : Kont) (w : Val)
+    (ls : List SRec) (Q : List SRec → Val → WProp) :
+    Entails (wpTS ls (K.plug (.app (.val (fixV B)) (.val w))) Q)
+      (wpTS ls (K.plug (.app (.val (selfV B)) (.val w))) Q) :=
+  wpTS_pureSteps (selfV_steps_in hB K w) ls Q
 
 /-- **Unrolling.** `selfV w` reaches `fixV w` by three β-steps. -/
 theorem wpTS_selfV {B : Expr} (hB : closedAt 2 B = true) (w : Val) (ls : List SRec)

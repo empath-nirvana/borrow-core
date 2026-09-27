@@ -1,0 +1,44 @@
+-- Early `close` with a residual (SPEC §7): a counter over a cell, `iter i32 1 (ref i32)`.
+-- `next` yields the cell's value and stores the next one; it never finishes. `close` hands the
+-- cell back as the residual instead of freeing it. The program pulls twice, closes, and reads
+-- the returned cell, which it frees. A second counter, `u0`, is never used: its implicit
+-- destructor (SPEC §12) runs `close` and then frees the residual cell.
+--
+-- Answer: (i32[40], (i32[41], i32[42])): the two elements, then the value left in the cell by
+-- the second `next`. A `next` that does not store the successor gives (40, (40, 40)); a close
+-- that runs one more `next` first gives 43; a close that returned a fresh cell could not return
+-- the counter's value. `live 0` checks that both cells are freed: the one handed back by the
+-- program, and `u0`'s by its destructor.
+
+def plus : i32 * i32 => i32 = unbang host[add32]
+
+def ctr_step : !U (ref i32 -o F (i32 * ref i32 + 1) & F (ref i32)) =
+  !thunkv fun (s : ref i32) ->
+    < cx <- return (swap[i32, 1] s ());
+      let (c, x) = cx;
+      cu <- return (swap[1, i32] c (plus (x, i32[1])));
+      let (c1, u1) = cu;
+      return (inl (x, c1)),
+      return s >
+
+main : F (i32 * (i32 * i32)) =
+  f <- return (unbang (unfold[iter i32 1 (ref i32), ref i32] ctr_step));
+  z <- return (alloc[i32] i32[40]);
+  t0 <- return (thunkv nu_in < (nu_out (force f z)).1, (nu_out (force f z)).2 >);
+  g <- return (unbang (unfold[iter i32 1 (ref i32), ref i32] ctr_step));
+  w <- return (alloc[i32] i32[7]);
+  u0 <- return (thunkv nu_in < (nu_out (force g w)).1, (nu_out (force g w)).2 >);
+  o1 <- (nu_out (force t0)).1;
+  case o1 {
+    inl p ->
+      let (x1, t1) = p;
+      o2 <- (nu_out (force t1)).1;
+      case o2 {
+        inl q ->
+          let (x2, t2) = q;
+          c <- (nu_out (force t2)).2;
+          return (x1, (x2, free[i32] c))
+      | inr u -> return (x1, (i32[0], i32[0]))
+      }
+  | inr u -> return (i32[0], (i32[0], i32[0]))
+  }

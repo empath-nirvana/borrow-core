@@ -14,8 +14,8 @@ and the body drops it (`forgetImm_graded`, `forgetMut_graded`).  `copy : Imm @a 
 constant: `Imm` is not persistent, so `[0,∞]` may not sit at it.
 
 **No ω-poison.**  The only rule whose conclusion context is scaled is promotion
-(`bangThunkF`/`bangThunkV`, at `GCtx.scale ω Γ`); no rule scales a premise.  The fold, `fixD` and
-`unfoldS` rules are constants at a droppable context.  Scaling a live non-persistent slot is
+(`bangThunkF`/`bangThunkV`, at `GCtx.scale ω Γ`); no rule scales a premise.  The fold and `unfoldN`
+rules are constants at a droppable context.  Scaling a live non-persistent slot is
 ill graded (`scale_nonpersistent_rejected`).  Every `CDerives` derivation, the fold, `fixD` and
 `unfoldS` programs included, is a graded derivation whose non-persistent slots are `[1,1]`
 (`embed_copyable`); two instances are spelled out: the delay driver's state and step

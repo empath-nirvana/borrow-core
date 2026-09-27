@@ -1,10 +1,11 @@
-import Core.DelayRel
+import Core.Nu
 
 /-!
 # Core — the delay type by its finite approximations  `[spec §7]`
 
-`approx VA n` is `D A` observed correctly `n` times: `approx 0 = ⊤`,
-`approx (n+1) = delayF VA (approx n)`.  The greatest fixed point `delayRel` lies below every
+`D A = νX. F(A ⊕ U X) & F 1` unfolds by `delayF` (`nuF_delay`), so `⟦D A⟧` is its greatest fixed
+point `delayRel` (`nuRel_delay`).  `approx VA n` is `D A` observed correctly `n` times:
+`approx 0 = ⊤`, `approx (n+1) = delayF VA (approx n)`.  The greatest fixed point `delayRel` lies below every
 approximation (`delayRel_le_approx`), so below their intersection `approxLim`.
 
 The converse — `approxLim ⊆ delayRel`, "the intersection is the greatest fixed point" — is
@@ -36,6 +37,54 @@ open BoCa.Fig16
 open BoCa.Fig16.BoLo
 open BoCa.BoLo (Heap Steps Step1 Head Kont)
 open BoCa.Lifetime (LSub LifeCtx LifeVar)
+
+/-- The postcondition of `next : F(A ⊕ U X)`, with `VA` for `𝒱⟦A⟧` and `R` for `X`: `now a`
+(`inj₁`) or `later t` (`inj₂`, `t` a thunk of `X`). -/
+def delayQ (VA : List SRec → Val → WProp) (R : CPred) (ls : List SRec) (w : Val) : WProp :=
+  BoLo.or (ex fun v₁ => ⌜w = .inj₁ v₁⌝ ⋆ VA ls v₁) (ex fun v₂ => ⌜w = .inj₂ v₂⌝ ⋆ thunkR R ls v₂)
+
+/-- One unfolding of `D A`, with `VA` for `𝒱⟦A⟧` and the candidate `R` for `X`: the `next`
+observation (`π₁`) and the `close` observation (`π₂`). -/
+def delayF (VA : List SRec → Val → WProp) (R : CPred) : CPred := fun ls e ρ =>
+  wpTS ls (.app e (.val (.inj₁ .unit))) (delayQ VA R) ρ ∧
+  wpTS ls (.app e (.val (.inj₂ .unit))) (fun _ w => ⌜w = .unit⌝) ρ
+
+/-- The greatest fixed point of `delayF VA`. -/
+def delayRel (VA : List SRec → Val → WProp) : CPred := fun ls e ρ =>
+  ∃ R : CPred, R.Le (delayF VA R) ∧ R ls e ρ
+
+/-- `νX. C`'s unfolding at `D A`'s body is `delayF`. -/
+theorem nuF_delay (A : VTy) (δ : LSub) (R : CPred) :
+    nuF (CTy.delayBody A) δ R = delayF (fun ls v => vC true A ls δ v) R := by
+  have hA : ∀ ls, vCE (some (nuEnv (CTy.delayBody A) R)) true (A.rename Nat.succ) ls δ
+      = vC true A ls δ := fun ls => by
+    rw [vCE_rename, vC_eq_some]; rfl
+  funext ls e
+  simp only [nuF, cB, vCE, hA]
+  rfl
+
+theorem nuRel_delay (A : VTy) (δ : LSub) :
+    nuRel (CTy.delayBody A) δ = delayRel (fun ls v => vC true A ls δ v) := by
+  funext ls e ρ
+  simp only [nuRel, delayRel, nuF_delay]
+
+theorem delayQ_mono {VA : List SRec → Val → WProp} {R R' : CPred} (h : R.Le R')
+    (ls : List SRec) (w : Val) : Entails (delayQ VA R ls w) (delayQ VA R' ls w) := by
+  rintro σ (hn | ⟨v₂, σ₀, σ₃, hc, hp, ht⟩)
+  · exact Or.inl hn
+  · exact Or.inr ⟨v₂, σ₀, σ₃, hc, hp, fun ls' hk => h _ _ _ (ht ls' hk)⟩
+
+theorem delayF_mono (VA : List SRec → Val → WProp) {R R' : CPred} (h : R.Le R') :
+    (delayF VA R).Le (delayF VA R') := fun _ _ ρ ⟨h₁, h₂⟩ =>
+  ⟨wpTS_mono (fun ls' w => delayQ_mono h ls' w) ρ h₁, h₂⟩
+
+theorem delayRel_coind {VA : List SRec → Val → WProp} {R : CPred} (hR : R.Le (delayF VA R)) :
+    R.Le (delayRel VA) :=
+  fun _ _ _ h => ⟨R, hR, h⟩
+
+theorem delayRel_out (VA : List SRec → Val → WProp) : (delayRel VA).Le (delayF VA (delayRel VA)) := by
+  rintro ls e ρ ⟨R, hR, h⟩
+  exact delayF_mono VA (delayRel_coind hR) ls e ρ (hR ls e ρ h)
 
 /-- The top candidate. -/
 def topP : CPred := fun _ _ _ => True

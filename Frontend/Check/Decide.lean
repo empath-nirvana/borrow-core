@@ -10,6 +10,7 @@ cases the comments name; where it is not, the gap is stated at the function.
 
 * `DecidableEq` on `VTy`, `CTy` and `Expr` (§12 item 4), derived.
 * `VTy.clB`, `VTy.occB`, `VTy.noMutB`: `Cl`, `Occ`, `NoMut`, exactly.
+* `CTy.nuOkB`: `νX. C`'s positivity `NuOk`, exactly.
 * `vfreeB`/`cfreeB`: `VFree`/`CFree`, exactly.
 * `ordB`: lifetime entailment `Δ ⊨ @a ⊏ @b` / `Δ ⊨ @a ⊑ @b` (§12 item 1), sound, by a bounded
   search over the structural rules of the carrier (`⊓` is `max`, `⊔` is `min`, `⊤` is `0`).
@@ -150,6 +151,65 @@ theorem VTy.noMutB_sound : ∀ (k : Nat) (A : VTy), VTy.noMutB k A = true → A.
   | _, .tvar _, _ => trivial
   | k, .mu A, h => noMutB_sound (k + 1) A h
 
+/-! ### `νX. C`: positivity and polynomial observations -/
+
+/-- `VTy.Poly`, decided. -/
+def VTy.polyB : VTy → Bool
+  | .tensor A B => VTy.polyB A && VTy.polyB B
+  | .sum A B => VTy.polyB A && VTy.polyB B
+  | .tvar _ => true
+  | A => !VTy.occB 0 A
+
+theorem VTy.polyB_sound : ∀ A : VTy, VTy.polyB A = true → A.Poly
+  | .tensor A B, h => by
+      simp only [VTy.polyB, Bool.and_eq_true] at h
+      exact ⟨polyB_sound A h.1, polyB_sound B h.2⟩
+  | .sum A B, h => by
+      simp only [VTy.polyB, Bool.and_eq_true] at h
+      exact ⟨polyB_sound A h.1, polyB_sound B h.2⟩
+  | .tvar _, _ => trivial
+  | .unit, h | .zero, h | .thunk _, h | .unk, h | .int _, h | .ref _, h | .imm _ _, h
+  | .mut _ _, h | .box _ _, h | .bang _, h | .mu _, h =>
+      VTy.not_occ_of_occB 0 _ (by simpa [VTy.polyB] using h)
+
+/-- `CTy.NuLeaf`, decided. -/
+def CTy.nuLeafB : CTy → Bool
+  | .ret A => VTy.polyB A
+  | .amp C D => CTy.nuLeafB C && CTy.nuLeafB D
+  | _ => false
+
+theorem CTy.nuLeafB_sound : ∀ C : CTy, CTy.nuLeafB C = true → C.NuLeaf
+  | .ret A, h => VTy.polyB_sound A h
+  | .amp C D, h => by
+      simp only [CTy.nuLeafB, Bool.and_eq_true] at h
+      exact ⟨nuLeafB_sound C h.1, nuLeafB_sound D h.2⟩
+  | .arr _ _, h | .top, h | .all _ _ _, h | .nu _, h => by simp [CTy.nuLeafB] at h
+
+/-- `CTy.NuOk`, decided. -/
+def CTy.nuOkB : CTy → Bool
+  | .amp C D => CTy.nuLeafB C && CTy.nuLeafB D
+  | _ => false
+
+theorem CTy.nuOkB_sound : ∀ C : CTy, CTy.nuOkB C = true → C.NuOk
+  | .amp C D, h => by
+      simp only [CTy.nuOkB, Bool.and_eq_true] at h
+      exact ⟨CTy.nuLeafB_sound C h.1, CTy.nuLeafB_sound D h.2⟩
+  | .ret _, h | .arr _ _, h | .top, h | .all _ _ _, h | .nu _, h => by simp [CTy.nuOkB] at h
+
+/-- The bodies `C` of the thunks `U(νX. C)` in a value type: where `nu_in` looks for the type
+whose unrolling its body has. -/
+def VTy.nuThunks : VTy → List CTy
+  | .thunk (.nu C) => [C]
+  | .tensor A B | .sum A B => VTy.nuThunks A ++ VTy.nuThunks B
+  | .ref A | .box _ A | .imm _ A | .bang A => VTy.nuThunks A
+  | _ => []
+
+/-- `VTy.nuThunks` over the observations of a `&`-tree. -/
+def CTy.nuThunks : CTy → List CTy
+  | .ret A => VTy.nuThunks A
+  | .amp C D => CTy.nuThunks C ++ CTy.nuThunks D
+  | _ => []
+
 /-! ### Free lifetime variables -/
 
 mutual
@@ -176,8 +236,7 @@ def cfreeB (x : LifeVar) : CTy → Bool
   | .amp C D => cfreeB x C || cfreeB x D
   | .top => false
   | .all y b C => b.mentions x || (x != y && cfreeB x C)
-  | .delay A => vfreeB x A
-  | .stream A => vfreeB x A
+  | .nu C => cfreeB x C
 end
 
 mutual
@@ -202,8 +261,7 @@ theorem cfreeB_iff (x : LifeVar) : ∀ C : CTy, cfreeB x C = true ↔ CFree x C
   | .amp C D => by simp [cfreeB, CFree, cfreeB_iff x C, cfreeB_iff x D]
   | .top => by simp [cfreeB, CFree]
   | .all y b C => by simp [cfreeB, CFree, cfreeB_iff x C]
-  | .delay A => by simp [cfreeB, CFree, vfreeB_iff x A]
-  | .stream A => by simp [cfreeB, CFree, vfreeB_iff x A]
+  | .nu C => by simp [cfreeB, CFree, cfreeB_iff x C]
 end
 
 theorem not_vfree_of_vfreeB {x : LifeVar} {A : VTy} (h : vfreeB x A = false) : ¬ VFree x A :=
@@ -476,8 +534,7 @@ def cScopedB (Δ : LifeCtx) (ex : List LifeVar) : CTy → Bool
   | .amp C D => cScopedB Δ ex C && cScopedB Δ ex D
   | .top => true
   | .all y b C => lifeScopedB Δ ex b && cScopedB Δ (y :: ex) C
-  | .delay A => vScopedB Δ ex A
-  | .stream A => vScopedB Δ ex A
+  | .nu C => cScopedB Δ ex C
 end
 
 mutual
@@ -526,8 +583,7 @@ theorem cScopedB_sound {Δ : LifeCtx} {y : LifeVar} : ∀ {ex : List LifeVar} (C
           · exact absurd rfl hne
           · exact Or.inl hm
         · exact Or.inr hs
-  | _, .delay A, h, hf => vScopedB_sound A h hf
-  | _, .stream A, h, hf => vScopedB_sound A h hf
+  | _, .nu C, h, hf => cScopedB_sound C h hf
 end
 
 /-- `VScoped Δ A`, decided soundly (and completely). -/

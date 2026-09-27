@@ -212,6 +212,15 @@ def synConst (E : Env) (Δ : LifeCtx) (T : List CVTy) (sp : Span) :
       let A ← E.elabV Δ A
       let S ← E.elabV Δ S
       pure (cDead _ fun hd => CDerives.unfoldS A S hd)
+  | .unfold C S => do
+      let C' ← E.elabC Δ C
+      let S ← E.elabV Δ S
+      match C' with
+      | .nu B =>
+        if hB : CTy.nuOkB B = true then
+          pure (cDead _ fun hd => CDerives.unfoldN B S (CTy.nuOkB_sound B hB) hd)
+        else err C.span s!"`unfold[C, S]` needs each observation of `{E.ppC C'}` to have `U X` only under `*` and `+`"
+      | _ => err C.span s!"`unfold[C, S]` needs a `nu` type, but `C` is `{E.ppC C'}`"
   | .lit c => pure (cDead _ fun hd => CDerives.lit c hd)
   | .host op => pure (cDead _ fun hd => CDerives.hostOp op hd)
   | .allocS σ => do

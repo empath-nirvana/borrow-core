@@ -62,7 +62,8 @@ Where draft 1 is silent or ambiguous about parsing, the parser does the followin
    `F A * B` is reported at the parse stage as "`F A` is a computation type, but a value type
    is expected here". A `type` abbreviation is a value type.
 6. **`stream` and `str`** are both accepted for the stream former (§4 grammar vs its prefix
-   list); the printer writes `stream`. Terms use `stream_in`/`stream_out` (§6.2).
+   list); the printer writes `stream`. `delay_in`/`stream_in` and `delay_out`/`stream_out` are
+   read as `nu_in` and `nu_out`, which the printer writes (§6.2).
 7. **Tuples are pairs.** `(V, W, Z)` is rejected; write `(V, (W, Z))` (§1, no sugar).
 8. **`case` arms come in the order `inl`, `inr`**, without a leading `|`.
 9. **Binding forms as operands.** The value of `let … = V;`, the scrutinee of `case V {`, the
@@ -151,7 +152,7 @@ being checked: variables bound by `x <- M; N`, `let (x, y) = V; M`, a `case` arm
 type has a destructor (`hasDtorB`, sound for `HasDtor` by `dtorB_sound`), is not persistent, and
 whose binder is not `linear`. What is owed flows into tail positions: the body of `<-` and `let`
 (less what the head or `V` used), both `case` arms, both `<,>` components, `fun`/`Fun` bodies,
-`delay_in`/`stream_in` and ascriptions. The head `M` of `x <- M; N` is owed the owed variables it
+`nu_in` and ascriptions. The head `M` of `x <- M; N` is owed the owed variables it
 mentions by name (`mentionsC`). A value, and so every computation inside one, starts with
 nothing owed. At a terminal computation (`Comp.terminal`), the checker checks it with nothing
 owed, then wraps the result in `dtorE A xᵢ; …` for each owed slot `i` it neither used nor
@@ -185,8 +186,8 @@ of the search; none is a change to `CDerives`.
    a synthesized `Fun` gets the binder `Δ.freshVar`; checked against `forall 'x < @b. C` it takes
    the type's binder.
 3. **The non-syntax-directed rules apply only where written**: `ret`, `ofRet`, `bangE`, `boxE`,
-   `immSub`/`mutSub`, `roll`/`unroll`, `delayIn`/`delayOut`, `streamIn`/`streamOut` apply at
-   `return`, `run`, `unbang`, `unbox`, `:>`, `roll`/`unroll` and the `delay_*`/`stream_*`
+   `immSub`/`mutSub`, `roll`/`unroll`, `nuIn`/`nuOut` apply at
+   `return`, `run`, `unbang`, `unbox`, `:>`, `roll`/`unroll` and the `nu_in`/`nu_out`
    keywords, never implicitly (§14).
 4. **Lifetime entailment** (`ordB`, §12 item 1) is sound and searches only the structural rules:
    reflexivity, `⊤` on the right, a variable through its bound, and `⊓`/`⊔` on either side. It
@@ -206,14 +207,14 @@ of the search; none is a change to `CDerives`.
 9. **Externs are not owed.** `main` must consume every non-persistent extern, with or without a
    destructor.
 
-The deciders for `VFree`, `Cl`, `NoMut`, `VScoped`, `FShape.WF`/`Guarded`, `plainV`,
+The deciders for `VFree`, `Cl`, `NoMut`, `CTy.NuOk`, `VScoped`, `FShape.WF`/`Guarded`, `plainV`,
 `Shape.plain`, `Δ.Ok`, `Δ.find? x = none`, `C.isRet`, `FamSide.hinst` and foldImm's
 `∀ Δ' a, VOutlives Δ' a R` (`outlivesAllB`, §12 item 2) are complete.
 
 ### Choices beyond draft 1
 
-1. `delay_in M` and `stream_in M` also synthesize, when `M`'s type is literally an unrolling
-   `F (A + U (delay A)) & F 1` / `F (A * U (stream A)) & F 1` (§6.2 lists them as check-only).
+1. `nu_in M` also synthesizes, when `M`'s type is the unrolling of a `nu` type whose thunk
+   `U (nu X. C)` occurs in it (`CTy.nuThunks`); for example `F (A + U (delay A)) & F 1`.
 2. `unbang V` checked against `A` checks `V` against `!A`.
 3. `Fun` checked against a `forall` type takes the type's binder number (item 2 above).
 4. `main`'s context is every `extern` of the file, in declaration order.

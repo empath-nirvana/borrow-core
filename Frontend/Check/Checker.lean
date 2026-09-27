@@ -19,7 +19,7 @@ running out is an error, not an assumption.
 namespace Frontend.Check
 open BoCa BoCa.Lifetime
 open BoCa.Fig16.LogRel.Core.Check
-open BoCa.Fig16.LogRel.Core (CDerives Jdg delayUnroll streamUnroll)
+open BoCa.Fig16.LogRel.Core (CDerives Jdg)
 
 /-! ### The checker -/
 
@@ -321,30 +321,21 @@ def synC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp →
         if h : ltB Δ al b = true then pure ⟨_, rAllE al h r⟩
         else err sp s!"cannot show `{E.ppL al}` ⊏ `{E.ppL b}` from the lifetime context"
       | C, _ => err M.span s!"this is instantiated, so it must have a type `forall 'x < @. C`, but it has type `{E.ppC C}`"
-    | .delayIn sp M => do
+    | .nuIn sp M => do
+      let ⟨C, r⟩ ← synC n E Δ T M
+      match (CTy.nuThunks C).find? (fun B => CTy.nuOkB B && decide (B.unroll = C)) with
+      | some B =>
+        if h : CTy.nuOkB B = true ∧ B.unroll = C then
+          pure ⟨_, rNuIn (CTy.nuOkB_sound B h.1) (h.2 ▸ r)⟩
+        else err sp s!"`nu_in M` needs `M` at the unrolling of a `nu` type, but `M : {E.ppC C}`"
+      | none => err sp s!"`nu_in M` needs `M` at the unrolling of a `nu` type, but `M : {E.ppC C}`"
+    | .nuOut sp M => do
       let ⟨C, r⟩ ← synC n E Δ T M
       match C, r with
-      | .amp (.ret (.sum A (.thunk (.delay A')))) (.ret .unit), r =>
-        if h : A' = A then pure ⟨_, rDelayIn (A := A) (by subst h; exact r)⟩
-        else err sp s!"`delay_in M` needs `M` at an unrolling `F (A + U (delay A)) & F 1`, but `M : {E.ppC C}`"
-      | C, _ => err sp s!"`delay_in M` needs `M` at an unrolling `F (A + U (delay A)) & F 1`, but `M : {E.ppC C}`"
-    | .delayOut sp M => do
-      let ⟨C, r⟩ ← synC n E Δ T M
-      match C, r with
-      | .delay _, r => pure ⟨_, rDelayOut r⟩
-      | C, _ => err sp s!"`delay_out M` needs `M : delay A`, but `M : {E.ppC C}`"
-    | .streamIn sp M => do
-      let ⟨C, r⟩ ← synC n E Δ T M
-      match C, r with
-      | .amp (.ret (.tensor A (.thunk (.stream A')))) (.ret .unit), r =>
-        if h : A' = A then pure ⟨_, rStreamIn (A := A) (by subst h; exact r)⟩
-        else err sp s!"`stream_in M` needs `M` at an unrolling `F (A * U (stream A)) & F 1`, but `M : {E.ppC C}`"
-      | C, _ => err sp s!"`stream_in M` needs `M` at an unrolling `F (A * U (stream A)) & F 1`, but `M : {E.ppC C}`"
-    | .streamOut sp M => do
-      let ⟨C, r⟩ ← synC n E Δ T M
-      match C, r with
-      | .stream _, r => pure ⟨_, rStreamOut r⟩
-      | C, _ => err sp s!"`stream_out M` needs `M : stream A`, but `M : {E.ppC C}`"
+      | .nu B, r =>
+        if h : CTy.nuOkB B = true then pure ⟨_, rNuOut (CTy.nuOkB_sound B h) r⟩
+        else err sp s!"`nu_out M` needs a positive `nu` type, but `M : {E.ppC (.nu B)}`"
+      | C, _ => err sp s!"`nu_out M` needs `M` at a `nu` type, but `M : {E.ppC C}`"
     | .ascribe _ M C => do
       let C' ← E.elabC Δ C
       let r ← chkC n E Δ T M C'
@@ -443,14 +434,13 @@ def chkC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp → (C : 
           pure (hb ▸ (← funIt E T sp x.name rM))
         else err b.span s!"the bound is `{E.ppL bl}`, but the expected type has bound `{E.ppL b₀}`"
       | C => err sp s!"`Fun` is checked against `{E.ppC C}`, which is not a `forall` type"
-    | .delayIn sp M =>
+    | .nuIn sp M =>
       match C with
-      | .delay A => do pure (rDelayIn (← chkC n E Δ T M (delayUnroll A)))
-      | C => err sp s!"`delay_in M` is checked against `{E.ppC C}`, which is not a `delay` type"
-    | .streamIn sp M =>
-      match C with
-      | .stream A => do pure (rStreamIn (← chkC n E Δ T M (streamUnroll A)))
-      | C => err sp s!"`stream_in M` is checked against `{E.ppC C}`, which is not a `stream` type"
+      | .nu B =>
+        if h : CTy.nuOkB B = true then do
+          pure (rNuIn (CTy.nuOkB_sound B h) (← chkC n E Δ T M B.unroll))
+        else err sp s!"`nu_in M` is checked against `{E.ppC C}`, which is not a positive `nu` type"
+      | C => err sp s!"`nu_in M` is checked against `{E.ppC C}`, which is not a `nu` type"
     | m => do convC E m.span C (← synC n E Δ T m)
 
 end

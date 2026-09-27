@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 0.6 · 2026-09-27
+Version 0.7 · 2026-09-27
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -161,9 +161,9 @@ data is materialized, and gives codata (`&`, and the formers of §7) a home.
 
     A ::= 1 | A ⊗ A | 0 | A ⊕ A | U C | Ref A | Imm @a A | Mut @a A | [@a] A | !A | Unk
         | X | μX. A                                                   (value types)
-    C ::= F A | A ⊸ C | C & C | ⊤ | ∀'a ⊏ @b. C | D A | Stream A       (computation types)
+    C ::= F A | A ⊸ C | C & C | ⊤ | ∀'a ⊏ @b. C | νX. C               (computation types)
 
-`X`, `μ` are §6; `D`, `Stream` are §7.
+`X`, `μ` are §6; `ν` (and the delay, stream and iterator types over it) is §7.
 
 ### Typing
 
@@ -275,38 +275,104 @@ From `experiments/Recursion`, `CBPVMu`.
 
 ---
 
-## 7. Entry 6 — codata: delay and streams
+## 7. Entry 6 — codata: `νX. C`
 
-    D A ≜ νX. F(A ⊕ U X) & F 1          (delay)
-    Stream A ≜ νX. F(A ⊗ U X) & F 1     (stream)
+One computation-type former for codata. Delay, streams and finite iterators are abbreviations
+over it; a new codata shape is a new abbreviation, and a library of iterator adapters (`map`,
+`take`, …) is ordinary code over `Iter`, never a former or a rule.
 
-Each has an observation and `close`; `close` is required because no rule forgets a `U C`, and
-it releases a linear state. Both are interpreted as greatest fixed points; `delayIn`/`delayOut`
-and `streamIn`/`streamOut` convert to and from the unrolling. Streams are built by coiteration:
+### The former
 
-    unfoldS : !U(S ⊸ F(A ⊗ S) & F 1) ⊸ !U(S ⊸ Stream A)
+    C ::= … | νX. C          (computation types)
 
-### Loops
+`X` is a computation-type variable bound in `C`; it occurs only as the value type `U X`, "the
+rest of the codata". Every observation of a `νX. C` returns, possibly among other values, a
+thunk of the rest.
 
-    fixD : !U(S ⊸ F(A ⊕ S) & F 1) ⊸ !U(S ⊸ D A)
+**Positivity** (`CTy.NuOk`). `C` is a `&` of two observation trees, and an observation tree is
+an `F A` or a `&` of two observation trees. In each result `A`, `U X` occurs only under `⊗` and
+`⊕`: `A` is `U X`, `B ⊗ B'` or `B ⊕ B'` of such types, or a type in which `X` does not occur
+(`VTy.Poly`). So `X` is never under a `⊸`, a `Ref`, a borrow, a box, a `!`, a `μ` or another
+`U`, and a `νX. C` always has at least two observations.
 
-The body maps a state to a result or the next state, and never observes the loop. Proved by
-coinduction on the greatest fixed point.
+**Relation.** At a positive `C`, `𝒞⟦νX. C⟧` is the greatest fixed point of one unfolding of the
+observation tree, with a candidate `R` for `U X`: `⋃{R | R ⊆ Φ_C(R)}`, written in `Prop` as
+`∃ R` (`docs/scope-recursion.md` §3.1). `Φ_C` is monotone because `X` is outside every `Mut`
+payload. It needs no approximation of `νX. C` and no step index.
+
+**In and out.** `C[U(νX. C)/X]` is the unrolling:
+
+    Γ ⊢ M : C[U(νX. C)/X]            Γ ⊢ M : νX. C
+    ──────────────────────  nuIn     ──────────────────────  nuOut
+    Γ ⊢ M : νX. C                    Γ ⊢ M : C[U(νX. C)/X]
+
+on the same term, at a positive `C`. Observing a `νX. C` is `nuOut` followed by the projections
+of the unrolling.
+
+**Coiteration.** At every positive `C` and every state type `S`:
+
+    unfold : !U(S ⊸ C[S/X]) ⊸ !U(S ⊸ νX. C)
+
+`C[S/X]` puts the state where `U X` was: the step answers each observation path with the
+next state in place of the rest. `unfold step s` answers an observation path by running the same
+path of `step s` and replacing each state `s′` in the result by `unfold step s′` (a map along the
+`⊗`/`⊕` positions of `X`). The recursion is the rule's: the step returns states, never a
+`νX. C`, so it cannot observe the codata it is building. Sound by coinduction with the candidate
+`{unfold step s | s ∈ 𝒱⟦S⟧}`.
+
+### Instances
+
+    D A          ≜ νX. F(A ⊕ U X) & F 1               (delay)
+    Stream A     ≜ νX. F(A ⊗ U X) & F 1               (stream)
+    Iter A R R'  ≜ νX. F((A ⊗ U X) ⊕ R) & F R'        (finite iterator)
+
+The first observation is `next`, the second `close`. A delay's `next` returns a result or the
+rest; a stream's returns an element and the rest. An iterator's `next` yields an element and the
+rest, or finishes with `R`; its `close` ends it early and returns a residual `R'` (for example a
+buffer or a cell handed back). `close` is required: no rule forgets a `U C`, so a linear state
+is released only by running `close`.
+
+The former rules of the instances are the general ones at their bodies:
+
+    fixD    = unfold at D A      : !U(S ⊸ F(A ⊕ S) & F 1) ⊸ !U(S ⊸ D A)
+    unfoldS = unfold at Stream A : !U(S ⊸ F(A ⊗ S) & F 1) ⊸ !U(S ⊸ Stream A)
+
+`delayIn`/`delayOut` and `streamIn`/`streamOut` are `nuIn`/`nuOut` at those bodies. A loop is
+`fixD`: the step maps a state to a result or the next state, and never observes the loop.
+
+### Destructor
+
+`U(νX. C & F R)` with `R` closed and in `HasDtor` has a destructor (§12): force, `nuOut`, the
+second projection (`close`), then the destructor of the residual `R`. Delay and stream have
+`R = 1`; an iterator's residual is dropped by its own destructor.
 
 ### Adequacy
 
 For every `n`, observing a `D A` at most `n` times and then closing it is a closed program; it
-runs from empty memory and leaves memory empty.
+runs from empty memory and leaves memory empty. Every closed `F 1` program over `νX. C` is covered
+by `adequacyC`.
+
+### Baseline
+
+`fundamentalC` covers `nuIn`, `nuOut` and `unfold`; `adequacyC` is unchanged. Nothing in §1–§6
+changes. `νX. C` is one `CTy` former and three `CDerives` rules; the fixed formers `D`/`Stream`,
+their relations and their six rules are deleted.
 
 ### Open
 
-- Non-tail recursion needs an explicit stack in the state, or a `bind` on `D` (not yet written).
+- **Other positions of `X`.** `X` under a `Ref`, a borrow or `!` in an observation result, or in
+  the argument of an observation (`A ⊸ …`, a sink), is outside `NuOk`. The relation is monotone
+  wherever `X` avoids `Mut` payloads; what is missing is coiteration's map at those positions.
+- **Lifetime-indexed iteration.** An iterator over a borrowed list or buffer, whose state is a
+  borrow and whose rest keeps it, is not yet written as a program (§9 iteration, `[@d] U(νX. C)`
+  per `docs/scope-recursion.md` §3.5).
+- **General recursion.** Non-tail recursion needs an explicit stack in the state, or a `bind`
+  on `D` (not yet written).
 - Whether `D`'s greatest fixed point equals the intersection of its finite approximations is
   reduced to one property of `wpTS` (`WpChainCommutes`), not derived.
-- A general `νX. C` former is deferred; `D` and `Stream` are fixed formers.
 - Stream adequacy is stated generically only at `Stream 1` (`take_runs`).
 
-From `experiments/Recursion`, `CBPVMu`.
+From `experiments/Recursion`, `CBPVMu`; general `ν` per `docs/scope-recursion.md` §3.
 
 ---
 
@@ -407,7 +473,7 @@ which is outside the heap accounting of adequacy.
 
 ### Open
 
-- Iteration over a borrowed buffer or string as a lifetime-indexed `Stream`.
+- Iteration over a borrowed buffer or string as a lifetime-indexed `Iter` (§7).
 - `split_at_mut` on buffers as an extern.
 - Proving individual externs against Talos (a realizability model), removing them from the trusted
   base one at a time.
@@ -483,7 +549,8 @@ There are three classes of value type.
    | `A ⊗ B`, `A ⊕ B`, `[@a] A` | componentwise |
    | `Ref A` | `free`, then the destructor of `A` |
    | `μX. T`, `T` in `FShape` (§6) | `foldOwn`, whose algebra is the destructor of `T[1/X]` |
-   | `U(C & F 1)`, `U(D A)`, `U(Stream A)` | `close`: force, then the second projection (§7) |
+   | `U(C & F 1)` | `close`: force, then the second projection |
+   | `U(νX. C & F R)`, `R` closed with a destructor (`D A`, `Stream A`, `Iter A R₀ R`) | `close` (§7), then the destructor of `R` |
    These are linear. A value of one of these types that goes unused is consumed by its
    destructor, which the checker inserts. Because the destructor deallocates memory and, at codata,
    runs the object's `close` code, where it is inserted can be observed.
@@ -502,14 +569,14 @@ does not, the checker consumes it by its destructor:
 
 - **At the end of the path.** The destructor calls go immediately before the path's terminal
   computation: `return V`, `force x`, an application, a projection, an instantiation,
-  `delay_out`/`stream_out`. They go after every effect of the path and before the result is
+  `nu_out`. They go after every effect of the path and before the result is
   produced. A value never used is therefore dropped at the end of its binder's scope, and a
   `case` arm or a `<M, N>` component that does not consume an owed variable drops it, while one
   that does, does not.
 - **In reverse binding order.** Several owed variables are dropped most recently bound first.
 - **Tail positions.** The owed set passes to the body of `x <- M; N`, `let () = V; M` and
   `let (x, y) = V; M` (without what `V` or `M` consumed), to both arms of a `case`, both
-  components of `<M, N>`, the bodies of `fun` and `Fun`, and through `delay_in`, `stream_in` and
+  components of `<M, N>`, the bodies of `fun` and `Fun`, and through `nu_in` and
   ascriptions. An owed variable that the head `M` of `x <- M; N` mentions is owed to `M`, which
   must then consume it on every path of `M`, dropping it where it does not.
 - **Not moved across effects.** A drop is never placed earlier than the path's terminal
@@ -552,13 +619,21 @@ fixes when the effect of a drop happens.
 ## Status
 
 Entries 2–6 are implemented in the library directory `Core/`, with one `fundamentalC` and
-`adequacyC` covering every rule. Entries 7 and 9 (§8, §10) are implemented; §8 extends `Paper/` and `Support/` with the literal
+`adequacyC` covering every rule; §7's `νX. C` is `Core/NuRel.lean` and `Core/Nu.lean`, and the
+checker reads `nu X. C`, `iter A R R'`, `nu_in`/`nu_out` and `unfold[C, S]`. Entries 7 and 9 (§8, §10) are implemented; §8 extends `Paper/` and `Support/` with the literal
 and host-step forms. Entries 8 and 10 (§9, §11) are specified only. Entry 11 (§12) is implemented in
 `Core/Dtor.lean` and the checker (`Frontend/Check/`), with no change to `CDerives`.
 
 ---
 
 ## Changelog
+
+- **0.7** (2026-09-27) — Entry 6 revised (§7): one codata former `νX. C` with positivity
+  (`X` only as `U X`, under `⊗`/`⊕` of observation results), `nuIn`/`nuOut` and coiteration
+  `unfold : !U(S ⊸ C[S/X]) ⊸ !U(S ⊸ νX. C)`. `D A` and `Stream A` become abbreviations and their
+  fixed formers and six rules are deleted (`fixD`, `unfoldS` are `unfold` at their bodies). The
+  finite iterator `Iter A R R'` is the first new instance. §12: `U(νX. C & F R)` has a destructor
+  that closes and then drops the residual `R`.
 
 - **0.6** (2026-09-27) — Entry 11: implicit destructors (§12). Types stay linear. The checker
   inserts a derived destructor (`dtorE`, `Core/Dtor.lean`) where an owned value goes unused: at the

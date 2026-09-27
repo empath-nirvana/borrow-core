@@ -42,10 +42,10 @@ def VTy.level : VTy → Nat
   | _ => 5
 
 def CTy.level : CTy → Nat
-  | .arr .. | .all .. => 0
+  | .arr .. | .all .. | .nu .. => 0
   | .amp .. => 1
-  | .ret .. | .delay .. | .stream .. => 4
-  | .top .. => 5
+  | .ret .. | .delay .. | .stream .. | .iter .. => 4
+  | .top .. | .name .. => 5
 
 def widthName : BoCa.Width → String
   | .w32 => "i32"
@@ -88,8 +88,11 @@ def CTy.pp (C : CTy) (lvl : Nat := 0) : String :=
     | .amp _ C D => C.pp 2 ++ " & " ++ D.pp 1
     | .top _ => "top"
     | .all _ x b C => "forall '" ++ x.name ++ " < " ++ b.pp ++ ". " ++ C.pp 0
+    | .nu _ X C => "nu " ++ X.name ++ ". " ++ C.pp 0
+    | .name _ n => n
     | .delay _ A => "delay " ++ A.pp 4
     | .stream _ A => "stream " ++ A.pp 4
+    | .iter _ A R R' => "iter " ++ A.pp 5 ++ " " ++ R.pp 5 ++ " " ++ R'.pp 5
 
 def Shape.pp : Shape → String
   | .leaf _ A => "leaf " ++ A.pp 4
@@ -99,6 +102,7 @@ end
 
 def Arg.pp : Arg → String
   | .ty A => A.pp
+  | .cty C => C.pp
   | .life a => a.pp
   | .binder x => "'" ++ x.name
   | .shape σ => σ.pp
@@ -118,7 +122,7 @@ def Val.level : Val → Nat
 
 def Comp.level : Comp → Nat
   | .bind .. | .letUnit .. | .letPair .. | .lam .. | .lamL .. => 0
-  | .ret .. | .absurd .. | .delayIn .. | .delayOut .. | .streamIn .. | .streamOut .. => 1
+  | .ret .. | .absurd .. | .nuIn .. | .nuOut .. => 1
   | .app .. | .proj .. | .inst .. => 2
   | _ => 3
 
@@ -178,10 +182,8 @@ def Comp.pp (M : Comp) (lvl : Nat := 0) (k : Nat := 0) : String :=
     | .absurd _ V => "absurd " ++ V.pp 1 k
     | .lamL _ x b M => "Fun '" ++ x.name ++ " < " ++ b.pp ++ "." ++ nl (k + 2) ++ M.pp 0 (k + 2)
     | .inst _ M a => M.pp 2 k ++ " [" ++ a.pp ++ "]"
-    | .delayIn _ M => "delay_in " ++ M.pp 1 k
-    | .delayOut _ M => "delay_out " ++ M.pp 1 k
-    | .streamIn _ M => "stream_in " ++ M.pp 1 k
-    | .streamOut _ M => "stream_out " ++ M.pp 1 k
+    | .nuIn _ M => "nu_in " ++ M.pp 1 k
+    | .nuOut _ M => "nu_out " ++ M.pp 1 k
     | .ascribe _ M C => "(" ++ M.pp 1 k ++ " : " ++ C.pp ++ ")"
 end
 

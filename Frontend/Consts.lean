@@ -14,14 +14,14 @@ open BoCa (Width IntLit HostOp BinOp DivOp UnOp RelOp)
 
 /-- The kind of one bracket argument. -/
 inductive ArgKind where
-  | ty | life | binder | shape | nat | op
+  | ty | cty | life | binder | shape | nat | op
   deriving DecidableEq, Repr
 
 /-- The keywords of constants. -/
 inductive CKw where
   | alloc | free | swap | copy | copyBang | forgetImm | forgetMut | forgetUnk | forgetBang
   | withbor1 | withbor2 | withbor3 | withload | withswap
-  | foldImm | foldOwn | foldReuse | fixd | unfoldS
+  | foldImm | foldOwn | foldReuse | fixd | unfoldS | unfold
   | i32 | i64 | host
   | allocS | freeS | withborSMut | withborSImm | withborF2Mut | withborF2Imm
   deriving DecidableEq, Repr
@@ -34,7 +34,7 @@ def CKw.str : CKw → String
   | .withbor1 => "withbor1" | .withbor2 => "withbor2" | .withbor3 => "withbor3"
   | .withload => "withload" | .withswap => "withswap"
   | .foldImm => "fold_imm" | .foldOwn => "fold_own" | .foldReuse => "fold_reuse"
-  | .fixd => "fixd" | .unfoldS => "unfold_s"
+  | .fixd => "fixd" | .unfoldS => "unfold_s" | .unfold => "unfold"
   | .i32 => "i32" | .i64 => "i64" | .host => "host"
   | .allocS => "alloc_s" | .freeS => "free_s"
   | .withborSMut => "withbor_s_mut" | .withborSImm => "withbor_s_imm"
@@ -43,7 +43,7 @@ def CKw.str : CKw → String
 def CKw.all : List CKw :=
   [.alloc, .free, .swap, .copy, .copyBang, .forgetImm, .forgetMut, .forgetUnk, .forgetBang,
    .withbor1, .withbor2, .withbor3, .withload, .withswap,
-   .foldImm, .foldOwn, .foldReuse, .fixd, .unfoldS, .i32, .i64, .host,
+   .foldImm, .foldOwn, .foldReuse, .fixd, .unfoldS, .unfold, .i32, .i64, .host,
    .allocS, .freeS, .withborSMut, .withborSImm, .withborF2Mut, .withborF2Imm]
 
 def CKw.ofString? (s : String) : Option CKw := CKw.all.find? (·.str == s)
@@ -54,6 +54,7 @@ open ArgKind in
 def CKw.sig : CKw → List ArgKind
   | .alloc | .free | .copyBang | .forgetBang => [ty]
   | .swap | .foldOwn | .foldReuse | .fixd | .unfoldS => [ty, ty]
+  | .unfold => [cty, ty]
   | .copy | .forgetImm | .forgetMut => [life, ty]
   | .forgetUnk => []
   | .withbor1 => [binder, ty, ty]
@@ -89,6 +90,7 @@ def Const.ofArgs : CKw → List Arg → Option Const
   | .foldReuse, [.ty F, .ty R] => some (.foldReuse F R)
   | .fixd, [.ty A, .ty S] => some (.fixd A S)
   | .unfoldS, [.ty A, .ty S] => some (.unfoldS A S)
+  | .unfold, [.cty C, .ty S] => some (.unfold C S)
   | .i32, [.nat n] => some (.lit (.i32 (UInt32.ofNat n)))
   | .i64, [.nat n] => some (.lit (.i64 (UInt64.ofNat n)))
   | .host, [.op o] => some (.host o)
@@ -123,6 +125,7 @@ def Const.toArgs : Const → CKw × List Arg
   | .foldReuse F R => (.foldReuse, [.ty F, .ty R])
   | .fixd A S => (.fixd, [.ty A, .ty S])
   | .unfoldS A S => (.unfoldS, [.ty A, .ty S])
+  | .unfold C S => (.unfold, [.cty C, .ty S])
   | .lit (.i32 n) => (.i32, [.nat n.toNat])
   | .lit (.i64 n) => (.i64, [.nat n.toNat])
   | .host o => (.host, [.op o])
