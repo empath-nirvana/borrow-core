@@ -4,8 +4,8 @@ import Support.Syntax.Integers
 # Backend — observable values
 
 The printable form of a result, shared by every stage: `Support`'s interpreter, the closure-IR
-and flat-IR interpreters, and the compiled program (whose printer, `Backend/Flat/Runtime.lean`,
-writes the same text). Integers print as their unsigned bit pattern in the syntax of
+and flat-IR interpreters, and the compiled program (whose printer, generated per layout type in
+`Backend/Flat/Lower.lean`, writes the same text). Integers print as their unsigned bit pattern in the syntax of
 `docs/syntax-core.md` §8a; a function (a `λ`, a primitive, a partial `store`) prints as `<fun>`
 and a location as `<loc>`, since neither has a machine-independent spelling.
 -/

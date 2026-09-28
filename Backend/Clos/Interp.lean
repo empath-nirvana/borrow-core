@@ -10,7 +10,8 @@ import Backend.Clos.Syntax
 A fuelled interpreter for the closure IR over an explicit heap of objects (pairs, injections,
 closures, boxed `i64`s, cells), counting live objects, with a scripted standard input and
 collected standard output and error for the I/O operations (SPEC §11). An array is consecutive cells, as in the
-source machine (SPEC §9). It checks the ownership discipline as it
+source machine (SPEC §9). This is the uniform boxed representation, independent of the layout
+types the flat IR uses (`Backend/Clos/Types.lean`). It checks the ownership discipline as it
 runs: using a variable consumes it, a consumed variable cannot be used again, and a call or
 `main` must end with every variable of its frame consumed. Host operations go through
 `Host.call` at `wasmHost`, as in the source interpreter.
