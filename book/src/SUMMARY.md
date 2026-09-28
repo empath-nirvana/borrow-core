@@ -15,6 +15,7 @@
 - [Arrays](guide/arrays.md)
 - [Implicit destructors](guide/implicit-destructors.md)
 - [Command-line tools](guide/command-line-tools.md)
+- [Divergence](guide/divergence.md)
 - [Planned features](guide/planned/README.md)
   - [Pipelines and `for`](guide/planned/pipelines.md)
   - [Effects](guide/planned/effects.md)

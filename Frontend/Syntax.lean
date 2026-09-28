@@ -289,12 +289,21 @@ end
 deriving instance DecidableEq for Val, Comp
 deriving instance Repr for Val, Comp
 
+/-- A `def`'s effect marker (SPEC §14): none, `total` (it must not loop) or `div` (it loops,
+or may one day). Divergence is inferred, so `div` is never needed. -/
+inductive Mark where
+  | none
+  | total
+  | div
+  deriving DecidableEq, Repr, Inhabited
+
 /-- Declarations (syntax-core §10). -/
 inductive Decl where
   | type (sp : Span) (n : Ident) (A : VTy)
   | shape (sp : Span) (n : Ident) (σ : Shape)
-  /-- `def name[P₁, …, Pₙ] : A = V`; `params` is empty for `def name : A = V`. -/
-  | def_ (sp : Span) (n : Ident) (params : List Ident) (A : VTy) (V : Val)
+  /-- `def name[P₁, …, Pₙ] : A = V`; `params` is empty for `def name : A = V`. `mark` is the
+  `total` or `div` written before `def`. -/
+  | def_ (sp : Span) (n : Ident) (params : List Ident) (A : VTy) (V : Val) (mark : Mark)
   | extern (sp : Span) (n : Ident) (A : VTy)
   | main (sp : Span) (C : CTy) (M : Comp)
   deriving DecidableEq, Repr
@@ -446,7 +455,7 @@ end
 def Decl.strip : Decl → Decl
   | .type _ n A => .type .none n.strip A.strip
   | .shape _ n σ => .shape .none n.strip σ.strip
-  | .def_ _ n ps A V => .def_ .none n.strip (ps.map Ident.strip) A.strip V.strip
+  | .def_ _ n ps A V m => .def_ .none n.strip (ps.map Ident.strip) A.strip V.strip m
   | .extern _ n A => .extern .none n.strip A.strip
   | .main _ C M => .main .none C.strip M.strip
 

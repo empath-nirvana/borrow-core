@@ -842,20 +842,14 @@ def decl (n : Nat) : P Decl := do
     expectSym "="
     let σ ← shape n
     pure (.shape (← spanFrom st) x σ)
+  | .kw "total" | .kw "div" =>
+    discard bump
+    unless (← peek).tok == .kw "def" do expected "`def` after `total` or `div`"
+    discard bump
+    defRest st (if t.tok == .kw "total" then .total else .div)
   | .kw "def" =>
     discard bump
-    let x ← ident "a `def` name"
-    let ps ← if ← isSym "[" then do
-        discard bump
-        let ps ← uidents n
-        expectSym "]"
-        pure ps
-      else pure []
-    expectSym ":"
-    let A ← vty n
-    expectSym "="
-    let V ← val n
-    pure (.def_ (← spanFrom st) x ps A V)
+    defRest st .none
   | .kw "extern" =>
     discard bump
     let x ← ident "an `extern` name"
@@ -871,6 +865,20 @@ def decl (n : Nat) : P Decl := do
     pure (.main (← spanFrom st) C M)
   | _ => expected "a declaration (`type`, `shape`, `def`, `extern` or `main`)"
 where
+  /-- A `def` after its keyword: `name[P₁, …] : A = V`. -/
+  defRest (st : Pos) (mk : Mark) : P Decl := do
+    let x ← ident "a `def` name"
+    let ps ← if ← isSym "[" then do
+        discard bump
+        let ps ← uidents n
+        expectSym "]"
+        pure ps
+      else pure []
+    expectSym ":"
+    let A ← vty n
+    expectSym "="
+    let V ← val n
+    pure (.def_ (← spanFrom st) x ps A V mk)
   /-- `P₁, …, Pₙ`: a `def`'s type parameters, at least one. -/
   uidents : Nat → P (List Ident)
     | 0 => outOfFuel

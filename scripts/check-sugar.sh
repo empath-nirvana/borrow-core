@@ -2,7 +2,8 @@
 # The I/O sugar (SPEC §11) is elaboration only. For every corpus/sugar/<name>.bc there is a
 # corpus/sugar/<name>.core.bc written without the sugar: both must check, and the checked `main`
 # of each must erase to the same term (`bcc erase`). A core form must also be its own
-# elaboration: `bcc desugar` leaves it as it is.
+# elaboration: `bcc desugar` leaves it as it is. A sugared file whose first line is
+# `-- core: <other>.core.bc` is compared with that core form instead.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 lake build bcc >/dev/null
@@ -13,6 +14,8 @@ bad=0
 for f in corpus/sugar/*.bc; do
   case "$f" in *.core.bc) continue ;; esac
   core=${f%.bc}.core.bc
+  named=$(sed -n '1s/^-- core: //p' "$f")
+  [ -n "$named" ] && core="$(dirname "$f")/$named"
   if [ ! -f "$core" ]; then echo "$f: no $core"; bad=$((bad + 1)); continue; fi
   if ! "$bcc" check "$f" > /dev/null 2> "$tmp/err" || ! "$bcc" check "$core" > /dev/null 2>> "$tmp/err"; then
     echo "$f: does not check: $(cat "$tmp/err")"; bad=$((bad + 1)); continue

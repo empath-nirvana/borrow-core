@@ -1,0 +1,62 @@
+-- Two div helpers sequenced (SPEC §14). `line_length` is a loop written out in core: its type,
+-- `In => U (loop (In * i32) (In * 1))`, says it is div. `count_lines` has a `for`, so it is div
+-- too, though nothing marks it. `sections` calls one and then the other in direct style, and
+-- `main` calls `sections` and then writes: each call is a delay bind, so the loops run one after
+-- the other and the input is read once, in order.
+--
+-- Answer: `6 3` and the result `(i32[6], i32[3])`: the header `header` has six bytes, and three
+-- lines follow it. A loop that ran the second helper first, or read a byte twice, changes a
+-- count.
+
+-- One step of `line_length`: the next byte, and whether the line goes on. Closed, it hands the
+-- capability back.
+def ll_step : !U (In * i32 -o F ((In * i32) + (In * i32)) & F (In * 1)) =
+  !thunkv fun (s : In * i32) ->
+    < let (c, n) = s;
+      q <- return (getb c);
+      let (c2, x) = q;
+      case x {
+        inl b ->
+          case (unbang host[eq32]) (b, i32[10]) {
+            inl u -> return (inr (c2, (unbang host[add32]) (n, i32[1])))
+          | inr u -> return (inl (c2, n))
+          }
+      | inr u -> return (inl (c2, n))
+      },
+      let (c, n) = s;
+      return (c, ()) >
+
+-- The length of the first line, and the input after it.
+def line_length : In => U (loop (In * i32) (In * 1)) =
+  thunkv fun (c : In) ->
+    f <- return (unbang (unfold[loop (In * i32) (In * 1), In * i32] ll_step));
+    s0 : In * i32 <- return (c, i32[0]);
+    return (thunkv nu_in < (nu_out (force f s0)).1, (nu_out (force f s0)).2 >)
+
+-- The number of lines left in the input.
+def count_lines : In => In * i32 =
+  thunkv fun (c : In) ->
+    n : i32 <- return i32[0];
+    for b in bytes c {
+      n : i32 <- case (unbang host[eq32]) (b, i32[10]) {
+        inl u -> return n
+      | inr u -> return ((unbang host[add32]) (n, i32[1]))
+      };
+      return ()
+    };
+    return (c, n)
+
+def sections : In => In * (i32 * i32) =
+  thunkv fun (c : In) ->
+    h <- return (line_length (&c));
+    n <- return (count_lines (&c));
+    return (c, (h, n))
+
+main : F (i32 * i32) =
+  r <- return (sections (&stdin));
+  let (h, n) = r;
+  _ <- return (put_dec (&stdout, h));
+  _ <- return (putb (&stdout, i32[32]));
+  _ <- return (put_dec (&stdout, n));
+  _ <- return (putb (&stdout, i32[10]));
+  return (h, n)

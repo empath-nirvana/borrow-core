@@ -76,7 +76,7 @@ def checkDecl (ds : Array Decl) (k : Nat) : Decl → Except Error (String × Opt
   | .shape _ n σ => do
       let _ ← (Env.top ds k).elabS LifeCtx.empty σ
       pure (s!"shape {n.name}", none)
-  | .def_ _ n ps A V =>
+  | .def_ _ n ps A V _ =>
       if ps.isEmpty then do
         -- At the persistent externs declared before it (SPEC §11).
         let xs ← externs (ds.extract 0 k)

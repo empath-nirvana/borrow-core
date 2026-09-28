@@ -72,6 +72,34 @@ main : F 1 =
 The code after the loop runs once, when the input ends. Here it prints the count; `main`'s
 value is what the last `putb` hands back, `()`.
 
+## Loops in helpers
+
+A `for` may appear in any function, not only in `main`. A helper that loops over its input
+takes the capability and hands it back with its result, and `main` goes on when it returns:
+
+```bc
+def count_bytes : In => In * i32 =
+  thunkv fun (c : In) ->
+    n : i32 <- return i32[0];
+    for b in bytes c {
+      n : i32 <- return ((unbang host[add32]) (n, i32[1]));
+      return ()
+    };
+    return (c, n)
+
+main : F 1 =
+  n <- return (count_bytes (&stdin));
+  _ <- return (put_dec (&stdout, n));
+  return (putb (&stdout, i32[10]))
+-- stdin: hello
+-- output: 6
+-- answer: ()
+```
+
+A loop over the input may never end, so `count_bytes` is *div*, and so is `main`, which calls it.
+Nothing marks either: the compiler infers it, and a function declared `total` that loops is
+rejected. [Divergence](divergence.md) says more.
+
 ## Helpers, and what their types say
 
 A helper names the capabilities it uses in its type. This one can write to an output and do
@@ -133,10 +161,13 @@ checks:
 
 - the library and an `extern` for each capability `main` uses;
 - `main : F A` becomes `main : F (Caps * A)`, handing the capabilities back where each path
-  ends; with a `for`, `main : F (U (loop (Caps * A) (Caps * 1)))`, a loop the runtime drives;
+  ends; when `main` loops, `main : F (U (loop (Caps * A) (Caps * 1)))`, a loop the runtime
+  drives;
 - `x <- f (&c, v); N` becomes `r <- f (c, v); let (c, x) = r; N`;
 - the `for` becomes a loop by `unfold` over the stream, the other capabilities and the threaded
-  variables.
+  variables;
+- a function that loops returns its loop, `A => U (loop B R)`, and a call of it in direct style
+  is the delay bind `div_bind` ([Divergence](divergence.md)).
 
 The same program can be written without sugar, declaring the externs and passing the
 capabilities by hand:
@@ -160,15 +191,19 @@ erase to the same term.
 
 ## The corpus
 
-Seven tools, each run by the interpreter and by wasmtime against a golden output, none with a
-bound on its input:
+Tools run by the interpreter and by wasmtime against a golden output, none with a bound on its
+input:
 
 | program | what it shows |
 |---|---|
 | `io-cat.bc` | the loop above; it also copies a 4860-byte input |
 | `io-hex.bc` | a helper that takes only an output |
 | `io-upper.bc` | a filter |
-| `io-wc.bc` | several counts threaded through a loop |
+| `io-wc.bc` | several counts threaded through a loop in a helper |
+| `io-lines.bc` | a helper that loops over the input and returns to `main`, which then writes |
+| `io-sections.bc` | two div helpers sequenced, one a loop written in core |
+| `io-for-then.bc` | a `for` followed by another loop |
+| `io-fuel.bc` | div functions run from total ones with a bound, and the input read on after a cut |
 | `io-aoc.bc` | every line read into one array, lent mutably per line (§9) |
 | `io-head.bc` | a stream closed early, handing the capability back, then read on |
 | `io-guess.bc` | a scripted guessing game, writing to standard error as well |
@@ -183,7 +218,8 @@ bound on its input:
 `bcc run` gives each capability a cell holding its file descriptor and lowers the operations to
 WASI `fd_read` and `fd_write` (in a plain LLVM/libc build, `read(2)` and `write(2)`). `bcc interp`
 runs the *model*: streams are byte lists in memory, and the operations are ordinary core terms.
-It is slow on large inputs, since each read copies what is left.
+It is slow: each step of the model walks the whole term, so it takes about ten milliseconds a
+byte on `io-cat.bc`.
 
 ## What is proved, and what is trusted
 
@@ -205,8 +241,9 @@ and nothing is claimed about them.
 
 ## Not yet
 
-- A `for` has no early exit; `io-guess.bc` keeps a flag instead. A `for` inside a function needs a
-  finite consumer (#59) and is not provided; neither are `|>` pipelines.
+- A `for` has no early exit; `io-guess.bc` keeps a flag instead, and `io-sections.bc` writes its
+  line reader as a loop in core. A `for` over a finite source, allowed in total code, is not
+  provided (#59); neither are `|>` pipelines.
 - A line reader: an observation must terminate, so a line of unbounded length is a loop of its
   own. Keep the line in the loop's state, as `io-aoc.bc` does.
 - I/O errors are not modeled: a read error is the end of the input.

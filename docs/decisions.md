@@ -151,9 +151,9 @@ Each entry: the decision, and why. Newest last.
     - `&c` lends an owned capability to one call that hands it back first. This differs from
       draft 0's `&mut x` (`docs/surface-cbpv.md`), which borrows a `let mut` cell: `&c` moves the
       cell and rebinds it. The spelling may change when #54 step 2 settles the surface.
-    - `for x in e { M }; N` is draft 0's form, but only at the end of a `main` with ambient
-      capabilities and only over `bytes c`; the threaded locals are typed by their bindings,
-      since the elaborator sees no types. There is no early exit.
+    - `for x in e { M }; N` is draft 0's form, only over `bytes c`; the threaded locals are
+      typed by their bindings, since the elaborator sees no types. There is no early exit. Its
+      restriction to the end of an ambient `main` is withdrawn by decision 35.
     - The ambient trigger: a program that declares no externs and whose `main` names `stdin`,
       `stdout` or `stderr`. Such a program gets the I/O library (`lib/io.bc`).
     - The library's names (`getb`, `putb`, `put_dec`, `bytes`, `In`, `Out`, `Bytes`) and its
@@ -162,3 +162,25 @@ Each entry: the decision, and why. Newest last.
     - No line reader: an observation must terminate, so a line of unbounded length is a loop of
       its own.
     - I/O errors stay unmodeled.
+35. **Divergence is an effect** (SPEC §14, #81). Any function may loop without bound if its type
+    says so; it is not a privilege of `main`, and code without it is total (a theorem,
+    `total_no_infinite_run`). A div function returns a loop, `A ⇒ U(Loop B R)`; sequencing loops
+    is the delay bind, library code over `unfold`, and running a loop is handling the effect: the
+    runtime drives `main` forever, and `div_fuel` runs `n` steps, which turns div code into
+    total code. Divergence is inferred in declaration order, so no annotation is needed;
+    `total def` is the annotation that matters, a promise the elaborator checks. Everything is
+    elaboration: the checker, the kernel and the proofs see only core. A higher-order function
+    serves total and div callbacks alike by specialization at the callback's computation type,
+    the mechanism later control effects (async, #52; handlers, #18) reuse, so there is no
+    function coloring and no kernel polymorphism over computation types.
+36. **Provisional (SPEC §14, to be confirmed by the user).**
+    - The markers are `total def` and `div def`, written before `def`; `div` never needs to be
+      written. In draft 0's surface they would be `total fn` and `div fn` (or `-> div T`).
+    - The residual of a div function is the capabilities its result hands back first (`K` of
+      `K * V`, recognized by the names `In`, `Out`, `ref input`, `ref output`), paired with `()`,
+      or `1`; so `div T` is `D T` for a function that holds no capability.
+    - A `main` that loops but uses no capability is given `stdout` ambiently, so the runtime can
+      drive it.
+    - The library names `div_bind` and `div_fuel` (`lib/div.bc`), with the fuel an `i32`.
+    - A direct-style div call is the head `return (f V)` of a bind or a terminal; a div call
+      anywhere else is a loop value. A copy made by specialization is named `h__k`.

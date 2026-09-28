@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 0.10 · 2026-09-27
+Version 0.11 · 2026-09-27
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -374,8 +374,8 @@ their relations and their six rules are deleted.
 - **Lifetime-indexed iteration.** An iterator over a borrowed list or buffer, whose state is a
   borrow and whose rest keeps it, is not yet written as a program (§9 iteration, `[@d] U(νX. C)`
   per `docs/scope-recursion.md` §3.5).
-- **General recursion.** Non-tail recursion needs an explicit stack in the state, or a `bind`
-  on `D` (not yet written).
+- **General recursion.** Non-tail recursion needs an explicit stack in the state. Sequencing
+  loops is the delay bind, library code over `unfold` (§14).
 - Whether `D`'s greatest fixed point equals the intersection of its finite approximations is
   reduced to one property of `wpTS` (`WpChainCommutes`), not derived.
 - Stream adequacy is stated generically only at `Stream 1` (`take_runs`).
@@ -819,16 +819,17 @@ elaborate to the same term.
   `r <- M[c/&c]; let (c, x) = r; N`: the call takes the capability and hands it back first, as
   `getb`, `putb` and `put_dec` do. A terminal `return V` of an ambient `main` or of a loop body
   may lend too: it becomes such a binding before the capabilities are handed back.
-- **`for x in bytes c { M }; N`**, at the end of an ambient `main`: the form of draft 0 of the
-  surface syntax (`docs/surface-cbpv.md`), here at the top level. It elaborates to a loop by
-  `unfold` whose state is the stream `bytes c`, the other capabilities, and the variables of
-  `main` that `M` or `N` reads, each at the type its binding `y : T <- …` gives (the elaborator
-  sees no other types). The loop's `next` observes the stream: an element `x` runs `M`, which
-  rebinds the state by name, and the loop goes on; at the end of the stream the capability it
-  hands back is bound to `c`, `N` runs, and the loop finishes with the capabilities and `N`'s
-  value. Its `close` closes the stream. `main : F A` then elaborates to
-  `main : F (U (Loop (Caps ⊗ A) (Caps ⊗ 1)))`. A `for` inside a function needs a finite consumer
-  (#59's `for_each`) and is not provided.
+- **`for x in bytes c { M }; N`**: the form of draft 0 of the surface syntax
+  (`docs/surface-cbpv.md`). It loops without bound, so it is a div construct: it may appear in
+  any function, which is then div, and in `main` anywhere on its spine (§14, which withdraws the
+  earlier restriction to the end of an ambient `main`). It elaborates to a loop by `unfold`
+  whose state is the stream `bytes c`, the other capabilities, and the variables that `M`
+  reads, each at the type its binding `y : T <- …` gives (the elaborator sees no other types).
+  The loop's `next` observes the stream: an element `x` runs `M`, which rebinds the state by
+  name, and the loop goes on; at the end of the stream the capability it hands back is bound to
+  `c`, and the loop finishes with the capabilities and the threaded variables. Its `close`
+  closes the stream and hands the capabilities back. The rest of the body, `N`, follows by the
+  delay bind (§14). A `for` in a total function over a finite source is not provided.
 
 ### Designed, not built
 
@@ -852,7 +853,8 @@ elaborate to the same term.
 - I/O errors are not modeled: a read error is end of input, a write error is ignored.
   Distinguishing them changes both operations' types and the model, which has no errors; left
   for an entry with a failing model.
-- `for` has no early exit: a program that stops reading keeps a flag in its state.
+- `for` has no early exit: a program that stops reading keeps a flag in its state, or writes its
+  loop in core (`corpus/io-sections.bc`'s `line_length`).
 - The host implementations agree with the model on the corpus; that is tested, not proved.
 - `wpTSD_frame_own` is about the end of a value run, not intermediate states.
 - Destructors for host resources, which perform I/O and can fail (§12 Open).
@@ -999,7 +1001,7 @@ allocator run of the allocator that replays its choices. So:
 
 Divergence is allowed by `wpTSD`'s form (partial correctness plus safety). Every computation the
 relation holds terminates under every allocator: codata (§7) is observed one finite observation at
-a time.
+a time. For a closed program this is the totality theorem of §14: it has no infinite run.
 
 ### Borrowed closures
 
@@ -1026,6 +1028,181 @@ an `Imm` borrow of it (`staleClosure_not_immPayload`), in `Core/Stale.lean`.
 
 ---
 
+## 14. Entry 13 — divergence as an effect
+
+### Motivation
+
+A program may loop without bound: a command-line tool reads until its input ends, a server runs
+until it is stopped, and whether some loops finish at all is unknown (the Collatz iteration). §11
+let only `main` loop, and only at its end. Divergence is an effect like any other: any function
+may diverge if its type says so, a function whose type does not say so terminates, and running a
+divergent computation is handling the effect.
+
+### Types
+
+A **div function** is one whose result is a loop (§7):
+
+    A ⇒ div B   ≜   U(A ⊸ F(U(Loop B R)))          D B = Loop B 1
+
+A call runs the function's code up to its first loop and returns the rest of the run as a loop,
+which finishes with `B` or, closed early, hands back the **residual** `R`. A **total function**
+is one whose result is `F B` with no loop: `U(A ⊸ F B)`. There is no new former, rule or relation
+clause: `div` is a reading of `Loop` (§7), which already exists, and the function types are the
+existing ones. `!(A ⇒ div B)` is the persistent form.
+
+**The residual.** A loop closed early must release its state, and a capability (§11) has no
+destructor, so the residual hands the capabilities back. The residual of a result `B` is `K ⊗ 1`
+when `B = K ⊗ V` and `K` is a capability type or a tuple of them (the convention of §11 that a
+helper hands its capability back first), and `1` otherwise, so `div B` is `D B` for a function
+that holds no capability. `main`'s loop `Loop (Caps ⊗ A) (Caps ⊗ 1)` (§11) is the instance.
+
+### The delay bind
+
+Sequencing two loops, run the first and then continue with its result, is library code
+(`lib/div.bc`), typed by the existing rules:
+
+    div_bind[A, B, R₁, R] : U(Loop A R₁) ⊗ U((A ⊸ F(U(Loop B R))) & (R₁ ⊸ F R)) ⇒ U(Loop B R)
+
+It is `unfold` (§7) at `Loop B R` with the state "in the first loop, with the continuation" or
+"in the continuation's loop":
+
+    S = (U(Loop A R₁) ⊗ U((A ⊸ F(U(Loop B R))) & (R₁ ⊸ F R))) ⊕ U(Loop B R)
+
+`next` in the first loop observes it: an unfinished loop is the next state; a finished one with
+`a` runs the continuation's first observation on `a`, which runs the code up to the next loop
+and returns it, the next state. `next` in the second loop observes it and finishes when it
+does. `close` in the first loop closes it and gives its residual to the continuation's second
+observation, which turns it into the whole's; `close` in the second loop closes it. The
+continuation is one linear thunk with two observations, so the variables it captures are used
+by whichever observation runs, and dropped (§12) by the other where they have destructors. If
+either loop never finishes, neither does the whole. Nothing in the kernel changes: `div_bind` is
+checked like any `def`, and `fundamentalC` and `adequacyC` cover every use.
+
+**The fuel handler.** `div_fuel[A, Q] : U(Loop A Q) ⊗ I32 ⇒ A ⊕ Q` observes a loop at most `n`
+times and closes it if it has not finished: `driveE n` (§7) with the count a value (a fold over
+the unary count of `n`, `div_nat`). Div code under it is total: `collatz_within` of
+`corpus/io-fuel.bc` is `total`, and a loop cut off hands its capabilities back.
+
+**The outermost handler.** The runtime drives a `main` that returns a loop until it finishes
+(§11); it never closes it. Timeouts and cooperative yielding to a scheduler (#52) are further
+handlers of the same loops.
+
+### Inference and markers
+
+A function is div when its type says so (`A ⇒ U(Loop B R)`), or when its body **loops**: on its
+spine (the tail positions of binds, `let`s, `case` arms and `for`s) it has a `for`, or a
+direct-style call `x <- return (f V); N` (or `return ((unbang f) V)`) of a div function `f`. A
+function written with a plain result `A ⇒ B` whose body loops is elaborated to
+`A ⇒ U(Loop B R)`. Definitions are in dependency order (recursion is structured, decision 24),
+so one pass in declaration order infers this; there is no fixed point.
+
+- `total def f : A = V` asserts that `f` does not loop: inference that finds a loop in its body
+  is a compile error naming it (`corpus/reject/total-loops.bc`, `total-calls-div.bc`). This is
+  how a library promises termination, and the common annotation.
+- `div def f : A = V` asserts that `f` is div. It is never needed, since inference supplies it;
+  it is allowed for documentation, and makes a function div that does not loop yet.
+- `main` has implicit div: it is elaborated as a loop exactly when its body loops, and its
+  written type is `F A` either way. A `main` that loops but uses no capability is given
+  `stdout` ambiently, so the runtime can drive it.
+
+A function whose written type is already a loop is core and is not elaborated; so is a `main`
+written at `F(U(Loop …))`. To bind a div function's loop as a value rather than call it in
+direct style, ascribe it or pass it as an argument: `div_fuel[…] (f V, n)`.
+
+### Elaboration
+
+All of this is elaboration in `Frontend/Sugar.lean`; the checker sees only core. In a div body
+of result `B` and residual `R`:
+
+- **A direct-style call** `x <- return (f V); N`, `f : A' ⇒ U(Loop B' R')`, becomes
+  `m <- return (f V); return (div_bind[B', B, R', R] (m, thunkv ⟨λa. x ← a; N', λr. abort⟩))`,
+  with `N'` the rest elaborated the same way. With `&c` in `V` (§11) the continuation binds
+  `(c, x)`. `abort` hands back the body's residual: `r` itself when `R' = R`; else the
+  capabilities by name, with `c` rebound from `r = (c, ())`.
+- **`for x in bytes c { M }; N`** becomes the loop of §11, with residual `R`. When `N` is total
+  and every variable it reads is bound with its type, `N` runs in the loop's last step and the
+  loop finishes with its value, as in §11. Otherwise the loop finishes with the capabilities and
+  the variables `M` threads, and `div_bind` runs `N'` with them rebound. `M` is one step of the
+  loop and must be total.
+- **A terminal** `T` becomes `v : B <- T; return (thunkv nu_in ⟨return (inl v), close⟩)`, the
+  loop that finishes with `v` at its first observation; `close` hands back the capabilities of
+  `v`.
+
+The capabilities a body hands back are named as its terminal `return (K, V)` names them, or, in
+an ambient `main`, `stdin`, `stdout` and `stderr`. The residual is chosen from the written result
+type, syntactically (`In`, `Out`, `ref input`, `ref output`). `bcc desugar` prints the
+elaborated program, and `corpus/sugar/div-infer.bc` pairs an unmarked div helper with its core
+form written by hand; `div-annotated.bc` is the same program with `div` and `total` markers.
+
+### Higher-order functions: specialization at the callback's type
+
+A callback's thunk type carries its effect: `U(A ⊸ F B)` is total and `U(A ⊸ F(U(Loop B R)))`
+is div. A higher-order function written once must serve both, or functions are colored. It is
+**specialized at the callback's computation type**: at a call `h V` of a function
+`h : P ⇒ Q = thunkv fun (p : P) -> M` where a component of `V` names a div function and `P`
+has a total function type (`A ⇒ B` or `!(A ⇒ B)`) there, the elaborator makes a copy of `h`
+with that component of `P` at the callback's type, infers the copy's divergence (calls through
+the parameter are now direct-style div calls, so the copy is div), and calls the copy
+(`corpus/div-hof.bc`, `sum3__0`). There is one copy per function and parameter type; a total
+callback uses `h` as written, which stays total. The core has no type ranging over computation
+types, so this is whole-program monomorphization, with no kernel change.
+
+The mechanism is not specific to divergence: it is specialization of a function at the
+computation type of a callback argument, followed by the effect's own inference on the copy.
+Another control effect (async, #52; generators and user handlers, #18) reuses it by giving:
+
+1. its computation type for a callback, as `Loop` is div's (the result shape a call returns);
+2. its inference on a body, as `loopsAt` is div's (which constructs make a body effectful);
+3. its elaboration of a body and of a direct-style call, as `loopBody` and `div_bind` are div's.
+
+The specialization itself — finding the callback's type at a call, copying, caching by
+(function, parameter type), renaming the call — is shared. What it does not yet cover is below.
+
+### The totality theorem
+
+A closed div-free program terminates on every run (`Core/Totality.lean`). For
+`CDerives ∅ [] e (F A)`, at every value type `A`:
+
+- `total_every_alloc`: under every allocator, from every allocation count, the run from the
+  empty memory reaches a value;
+- `total_run_prefix`: every run under an allocator is a prefix of that run;
+- `total_every_run`: every run continues to a value;
+- `total_no_infinite_run`: there is no infinite run. One allocator is built from the infinite
+  run (`Alloc.ofRun`: at count `k`, the location the run chose at its allocation of count `k`),
+  under which every prefix of it is an allocator run; `total_every_alloc` and determinism
+  (`AStep1.deterministic`) then put a value on it, which cannot step.
+
+"Div-free" is the type: a closed computation of `F A` is total, whatever it calls inside, since
+a loop it holds is observed a finite number of times (by `div_fuel`, or not at all). A program
+whose `main` loops is covered one prefix at a time instead (§11, `externs_loop_every_run`).
+
+### Baseline
+
+No `CDerives` rule, relation clause, machine step or kernel type is added. `fundamentalC`,
+`adequacyC`, `fundamentalD` and `adequacyD` keep their statements, and every theorem of §§1–13 is
+preserved. The runtime's obligation for a looping `main` is §11's.
+
+### Open
+
+- **`for` over a finite source in a total function** is not provided: `for` iterates only over
+  `bytes c`, which may not end, so a `for` always makes its function div. A finite consumer
+  (#59's `for_each` over a list or an array) would be total.
+- **Loop bodies are total**: a `for` body has no `for` and no div call. A nested loop is written
+  as a div helper called after the loop, or in core.
+- **Direct-style calls** are recognized only as the head `return (f V)` or
+  `return ((unbang f) V)` of a bind or a terminal, with at most one `&c`; a div call nested in
+  an argument is a loop value.
+- **The residual** is chosen syntactically from the result type; a div call that hands back
+  capabilities it did not borrow with `&c` must hand back exactly the caller's residual.
+- **Specialization** covers named functions without type parameters, with the callback passed
+  by name in a tuple component of the argument; a callback captured in a closure, returned, or
+  passed through a variable of the caller is not specialized. A div function has no type
+  parameters.
+- **`div_fuel` is `driveE`** by construction, not by a proved equation.
+- The model interpreter (`bcc interp`) copies the remaining input on every read.
+
+---
+
 ## Status
 
 Entries 2–6 are implemented in the library directory `Core/`, with one `fundamentalC` and
@@ -1039,11 +1216,21 @@ typed world, the model and the end-to-end theorems in `Core/Stdio.lean`, the che
 `output`, the `run_io` wrapper) and the backend (`Backend/Clos`, `Backend/Flat`, WASI imports). Entry 11 (§12) is implemented in
 `Core/Dtor.lean` and the checker (`Frontend/Check/`), with no change to `CDerives`. Entry 12
 (§13) is implemented in `Core/Alloc.lean`, `Core/World.lean`, `Core/Demonic.lean` and
-`Core/Stale.lean`.
+`Core/Stale.lean`. Entry 13 (§14) is implemented in `lib/div.bc`, `Frontend/Sugar.lean` and
+`Core/Totality.lean`, with no change to `CDerives`.
 
 ---
 
 ## Changelog
+
+- **0.11** (2026-09-27) — Entry 13 (§14): divergence as an effect. A div function returns a
+  loop, `A ⇒ U(Loop B R)`, with the residual handing capabilities back; the delay bind
+  `div_bind` and the fuel handler `div_fuel` as library code over `unfold`; divergence inferred
+  in declaration order, `total def` and `div def` markers, `main` div when its body loops;
+  direct-style calls, `for` in any function, and specialization of higher-order functions at
+  a div callback's type, all elaborated before checking; the totality theorem
+  (`total_every_alloc`, `total_run_prefix`, `total_every_run`, `total_no_infinite_run`). §11's
+  restriction of `for` to the end of an ambient `main` is withdrawn.
 
 - **0.10** (2026-09-27) — Entry 10 (§11): externs and standard I/O. The opaque host types
   `Input`/`Output` (`VTy.opq`), with a model and `Imm̲ = Unk`; the capabilities `stdin`,

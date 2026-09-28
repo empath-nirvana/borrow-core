@@ -55,6 +55,13 @@ prefix at a time, observed at most `n` times for every `n` (`externs_loop_every_
 `IORun.loop_every_run`). The I/O sugar is elaborated before checking, so these theorems are
 about the elaborated program, with no case of their own.
 
+**Code without divergence terminates.** A closed program of type `F A` terminates on every run:
+there is no infinite run of it (`total_no_infinite_run` in
+[`Core/Totality.lean`](https://github.com/empath-nirvana/borrow-core/blob/main/Core/Totality.lean)),
+and under every allocator its run reaches a value (`total_every_alloc`). Divergence shows in the
+type, as a loop the program returns ([Divergence](guide/divergence.md)); a total function that
+runs a loop under a fuel bound is still of type `F A`, and covered.
+
 **The baseline is preserved.** The paper's calculus (BoCa) and its logic (BoLo) embed into the
 core, and the paper's Fundamental Property and adequacy hold as before.
 [`Paper/INDEX.md`](https://github.com/empath-nirvana/borrow-core/blob/main/Paper/INDEX.md) indexes each result of the paper to its Lean declaration,
@@ -76,7 +83,7 @@ text.
 
 ## What is not claimed
 
-- A `delay` loop is not claimed to terminate; its type says it may not.
+- A loop (`delay`, `loop`, a div function) is not claimed to terminate; its type says it may not.
 - The checker is not complete: a well-typed program may be rejected (`Frontend/README.md`,
   *Incompleteness*).
 - Nothing is claimed about host handles: adequacy's empty memory is the model's cells, not file

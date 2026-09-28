@@ -41,6 +41,7 @@ deriving instance ToExpr for Frontend.Mode
 deriving instance ToExpr for Frontend.VTy, Frontend.CTy, Frontend.Shape
 deriving instance ToExpr for Frontend.Const
 deriving instance ToExpr for Frontend.Val, Frontend.Comp
+deriving instance ToExpr for Frontend.Mark
 deriving instance ToExpr for Frontend.Decl
 deriving instance ToExpr for Frontend.Program
 
@@ -60,7 +61,7 @@ open BoCa BoCa.Fig16.LogRel.Core
 def defErasure (p : Program) (k : Nat) : Option BoCa.Expr :=
   let ds := p.decls.toArray
   match ds[k]? with
-  | some (.def_ _ _ _ A V) =>
+  | some (.def_ _ _ _ A V _) =>
     let E := Env.top ds k
     match E.elabV BoCa.Lifetime.LifeCtx.empty A with
     | .error _ => none

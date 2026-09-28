@@ -71,7 +71,7 @@ where
   go : Nat → Option DefInfo
     | 0 => none
     | k + 1 => match s.decls[k]? with
-      | some (.def_ _ m ps A V) => if m.name == n then some ⟨ps, A, V, ⟨s.decls, k⟩⟩ else go k
+      | some (.def_ _ m ps A V _) => if m.name == n then some ⟨ps, A, V, ⟨s.decls, k⟩⟩ else go k
       | _ => go k
 
 /-- An `extern` named `n` is in scope. -/

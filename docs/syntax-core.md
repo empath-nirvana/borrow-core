@@ -249,8 +249,9 @@ thunk occurs in it.
 
 Two more forms are sugar for standard I/O (SPEC §11), elaborated before checking, so no rule
 checks them: `&x`, a value in the head of `y <- M; N` that lends the capability `x` to one call
-(`r <- M[x/&x]; let (x, y) = r; N`), and `for x in bytes c { M }; N`, which ends a `main` that
-uses the capabilities ambiently. `for`, `in` and `loop` are reserved.
+(`r <- M[x/&x]; let (x, y) = r; N`), and `for x in bytes c { M }; N`, a loop over the input in
+any function, which makes it div (SPEC §14). `for`, `in`, `loop`, `total` and `div` are
+reserved.
 
 ### 6.3 Binders and de Bruijn indices
 
@@ -482,6 +483,8 @@ keyword because each mode is a separate theorem.
     shape Name = σ
     def name : A = V
     def name[P₁, …, Pₙ] : A = V         -- value-type parameters, macro-expanded
+    total def name : A = V              -- asserts it does not loop (SPEC §14)
+    div def name : A = V                -- asserts it is div (SPEC §14)
     extern name : A
     main : C = M
 
@@ -517,8 +520,11 @@ keyword because each mode is a separate theorem.
 - **I/O sugar** (SPEC §11), elaborated before checking (`bcc desugar` prints the result): a
   program that declares no externs and whose `main` names `stdin`, `stdout` or `stderr` uses
   them ambiently and gets the I/O library (`lib/io.bc`); `&c` in the head of `x <- M; N` lends
-  the capability `c` to one call; `for x in bytes c { M }; N` ends such a `main` with a loop over
-  the input.
+  the capability `c` to one call; `for x in bytes c { M }; N` is a loop over the input.
+- **Divergence** (SPEC §14), elaborated before checking: a `def` whose body loops (a `for`, or a
+  direct-style call `x <- return (f V); N` of a div function) is div, and its `A => B` becomes
+  `A => U (loop B R)`; so is `main`, whose written type stays `F A`. `total def` asserts that a
+  body does not loop, `div def` that it is div.
 - **`main : C = M`** is checked at `Δ = ∅` and `Γ =` the externs. `C` is any computation type.
 
 What a program means:

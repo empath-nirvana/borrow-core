@@ -313,8 +313,8 @@ def synC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp →
         pure ⟨_, ← caseIt E T sp x y rV r₁ r₂⟩
       | A, _ => err V.span s!"`case V` needs a `+` type, but `V : {E.ppV A}`"
     | .absurd sp _ => err sp "the type of `absurd V` cannot be synthesized: ascribe it, `(absurd V : C)`"
-    | .for_ sp _ _ _ _ => err sp ("`for` may appear only at the end of a `main` that uses the " ++
-        "capabilities ambiently (SPEC §11)")
+    | .for_ sp _ _ _ _ => err sp ("`for` is elaborated before checking, on the spine of a " ++
+        "function's body or of `main` (SPEC §14)")
     | .lamL sp x b M => do
       let bl ← E.elabL Δ b
       let v := Δ.freshVar

@@ -1,0 +1,59 @@
+-- One higher-order function, total or div by its callback (SPEC §14). `sum3` applies a callback
+-- to three numbers and adds the results; it is written once, at a total callback type. Called
+-- with the total `double`, it is used as written and stays total. Called with `steps`, which is
+-- div, it is specialized: the elaborator makes a copy with the parameter at `steps`'s type, in
+-- which the calls through the parameter are delay binds, so the copy is div, and so is `main`.
+-- `bcc desugar` shows the copy, `sum3__0`.
+--
+-- `main` loops and uses no capability, so the runtime drives it with `stdout` (SPEC §14).
+--
+-- Answer: `(i32[12], i32[135])`: 2 + 4 + 6, and 8 + 16 + 111 steps from 6, 7 and 27. A copy
+-- that dropped a call, or ran one twice, changes the second sum.
+
+-- The Collatz steps from `n` (as in io-fuel.bc): whether this loop always finishes is open.
+def collatz_step : !U (i32 * i32 -o F (i32 + (i32 * i32)) & F 1) =
+  !thunkv fun (s : i32 * i32) ->
+    < let (n, k) = s;
+      case (unbang host[eq32]) (n, i32[1]) {
+        inl other ->
+          k2 <- return ((unbang host[add32]) (k, i32[1]));
+          case (unbang host[eqz32]) ((unbang host[and32]) (n, i32[1])) {
+            inl odd ->
+              return (inr ((unbang host[add32]) ((unbang host[mul32]) (n, i32[3]), i32[1]), k2))
+          | inr even -> return (inr ((unbang host[shr_u32]) (n, i32[1]), k2))
+          }
+      | inr one -> return (inl k)
+      },
+      let (n, k) = s;
+      return () >
+
+def collatz : i32 => U (loop i32 1) =
+  thunkv fun (n : i32) ->
+    f <- return (unbang (unfold[loop i32 1, i32 * i32] collatz_step));
+    s0 : i32 * i32 <- return (n, i32[0]);
+    return (thunkv nu_in < (nu_out (force f s0)).1, (nu_out (force f s0)).2 >)
+
+-- A callback of each kind: `double` is total; `steps` calls `collatz`, so it is div.
+total def double : !(i32 => i32) =
+  !thunkv fun (n : i32) -> return ((unbang host[add32]) (n, n))
+
+def steps : !(i32 => i32) =
+  !thunkv fun (n : i32) ->
+    k <- return (collatz n);
+    return k
+
+-- The higher-order function, written once.
+def sum3 : !(i32 => i32) * (i32 * (i32 * i32)) => i32 =
+  thunkv fun (p : !(i32 => i32) * (i32 * (i32 * i32))) ->
+    let (f, xs) = p;
+    let (a, r) = xs;
+    let (b, c) = r;
+    x <- return ((unbang f) a);
+    y <- return ((unbang f) b);
+    z <- return ((unbang f) c);
+    return ((unbang host[add32]) (x, (unbang host[add32]) (y, z)))
+
+main : F (i32 * i32) =
+  a <- return (sum3 (double, (i32[1], (i32[2], i32[3]))));
+  b <- return (sum3 (steps, (i32[6], (i32[7], i32[27]))));
+  return (a, b)

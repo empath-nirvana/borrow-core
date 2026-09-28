@@ -28,6 +28,10 @@ import Frontend.Check.Externs
 #print axioms BoCa.Fig16.LogRel.Core.adequacyD
 #print axioms BoCa.Fig16.LogRel.Core.adequacyD_safe
 #print axioms BoCa.Fig16.LogRel.Core.adequacyD_val
+#print axioms BoCa.Fig16.LogRel.Core.total_every_alloc
+#print axioms BoCa.Fig16.LogRel.Core.total_run_prefix
+#print axioms BoCa.Fig16.LogRel.Core.total_every_run
+#print axioms BoCa.Fig16.LogRel.Core.total_no_infinite_run
 #print axioms BoCa.Fig16.LogRel.Core.mapProgC_every_run
 #print axioms BoCa.Fig16.LogRel.Core.staleL_angelic
 #print axioms BoCa.Fig16.LogRel.Core.staleCall_angelic
