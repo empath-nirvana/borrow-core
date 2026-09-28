@@ -116,6 +116,7 @@ judgment, for the derived forms of syntax-core §9), so what the checker returns
 | `Check/Checker.lean` | the bidirectional checker, `synV`/`chkV`/`synC`/`chkC` |
 | `Check/Program.lean` | declarations, `main`, and the soundness theorems |
 | `Check/CrossCheck.lean` | erasures compared with `Core/`'s hand-written terms, by kernel evaluation |
+| `Sugar.lean` | the I/O sugar, elaborated before checking: ambient capabilities in `main`, `&c`, `for` (SPEC §11) |
 | `Check/Externs.lean` | the standard externs with their roles, models and assurance levels; the `run_io` wrapper; `IORun` (SPEC §11) |
 
 ### Soundness
@@ -210,9 +211,18 @@ of the search; none is a change to `CDerives`.
 
 ### Standard I/O (SPEC §11)
 
+`checkProgram` first elaborates the I/O sugar (`Sugar.elaborate`): a program that declares no
+externs and whose `main` names a capability gets `lib/io.bc` (embedded by `include_str`), the
+capability externs, and a `main` that hands them back at every terminal; `for x in bytes c { M };
+N` becomes a loop by `unfold` built from a template whose holes are filled with the program's own
+syntax; `&c` becomes a binding that rebinds `c`. Everything the checker sees is ordinary core.
+`bcc desugar` prints it, and `corpus/sugar/` pairs each sugar with its core form
+(`scripts/check-sugar.sh`).
+
 `input` and `output` are the opaque types `VTy.opq`. `checkExterns` matches a program's externs
 with the table of standard externs by name and type. A `main` with capabilities must have type
-`F (Caps ⊗ A)`. `ioWrapper` prints `run_io` as source (the harness's externs and a `main` that
+`F (Caps ⊗ A)`, or `F (U (loop (Caps ⊗ A) (Caps ⊗ B)))` to run until it finishes; `run_io` then
+maps the loop, taking the outputs back when it finishes or closes. `ioWrapper` prints `run_io` as source (the harness's externs and a `main` that
 makes the capabilities, runs `main`'s body with them bound to their names and takes them back),
 parses it and checks it; `ioRunOf` gives every extern of the wrapper its model by type
 (`modelsOf`), with the proof `io_every_run` asks for. `IORun.every_run` is that theorem at the

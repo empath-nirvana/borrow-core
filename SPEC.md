@@ -817,16 +817,18 @@ elaborate to the same term.
   capability.
 - **Lending a capability to one call, `&c`.** In `x <- M; N`, one `&c` in `M` elaborates to
   `r <- M[c/&c]; let (c, x) = r; N`: the call takes the capability and hands it back first, as
-  `getb`, `putb` and `put_dec` do.
-- **`for (x : A) in V with (y : T, …) { M }; N`**, at the end of an ambient `main`, where `V`
-  mentions one capability `c` and is an iterator `U (iter A C C)` over it. It elaborates to a
-  loop by `unfold`: the state is the iterator, the other capabilities and the listed variables.
-  Its `next` observes the iterator: an element `x` runs `M`, which rebinds the state by name, and
-  the loop goes on; at the end the capability the iterator hands back is bound to `c`, `N` runs,
-  and the loop finishes with the capabilities and `N`'s value. Its `close` closes the iterator.
-  `main : F A` then elaborates to `main : F (U (Loop (Caps ⊗ A) (Caps ⊗ 1)))`. This is the
-  top-level form of #59's `for`; a `for` inside a function needs a finite consumer and is not
-  provided.
+  `getb`, `putb` and `put_dec` do. A terminal `return V` of an ambient `main` or of a loop body
+  may lend too: it becomes such a binding before the capabilities are handed back.
+- **`for x in bytes c { M }; N`**, at the end of an ambient `main`: the form of draft 0 of the
+  surface syntax (`docs/surface-cbpv.md`), here at the top level. It elaborates to a loop by
+  `unfold` whose state is the stream `bytes c`, the other capabilities, and the variables of
+  `main` that `M` or `N` reads, each at the type its binding `y : T <- …` gives (the elaborator
+  sees no other types). The loop's `next` observes the stream: an element `x` runs `M`, which
+  rebinds the state by name, and the loop goes on; at the end of the stream the capability it
+  hands back is bound to `c`, `N` runs, and the loop finishes with the capabilities and `N`'s
+  value. Its `close` closes the stream. `main : F A` then elaborates to
+  `main : F (U (Loop (Caps ⊗ A) (Caps ⊗ 1)))`. A `for` inside a function needs a finite consumer
+  (#59's `for_each`) and is not provided.
 
 ### Designed, not built
 

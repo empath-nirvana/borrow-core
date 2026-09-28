@@ -49,7 +49,11 @@ For every implementation that meets the types, every run of the program's `run_i
 empty memory continues to its outputs at empty memory, under every allocator
 (`externs_every_run`); `bcc interp` runs the model, and `IORun.every_run` is the theorem at the
 very term it runs. A cell owned outside a computation keeps its value through every run of it
-(`wpTSD_frame_own`): a function given no capability does not touch the stream in it.
+(`wpTSD_frame_own`): a function given no capability does not touch the stream in it. A program
+that runs until its input ends returns a loop, which the runtime drives; it is covered one
+prefix at a time, observed at most `n` times for every `n` (`externs_loop_every_run`,
+`IORun.loop_every_run`). The I/O sugar is elaborated before checking, so these theorems are
+about the elaborated program, with no case of their own.
 
 **The baseline is preserved.** The paper's calculus (BoCa) and its logic (BoLo) embed into the
 core, and the paper's Fundamental Property and adequacy hold as before.

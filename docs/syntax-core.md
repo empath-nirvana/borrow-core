@@ -92,7 +92,7 @@ lexically, innermost first, and are then discarded. Two consequences:
                | block σ | val σ | fam mut @ σ | fam imm @ σ | view @ A
                | array A | array_imm @ A                        (VTy.fam, SPEC §9)
     comp   C ::= F A | A -o C | C & C | top | forall 'x < @. C | nu X. C
-               | delay A | stream A | iter A A A                 (built-in abbreviations)
+               | delay A | stream A | iter A A A | loop A A      (built-in abbreviations)
 
 `VTy`/`CTy` are defined at `Ty:33`/`Ty:57`. `box @ A` is `[@] A`.
 
@@ -126,6 +126,7 @@ parsing.
 | `delay A` | `nu X. F (A + U X) & F 1` | `CTy.delay`, `Ty:1042` |
 | `stream A` | `nu X. F (A * U X) & F 1` | `CTy.stream`, `Ty:1045` |
 | `iter A R R'` | `nu X. F (A * U X + R) & F R'` | `CTy.iter`, `Ty:1049` |
+| `loop A B` | `nu X. F (A + U X) & F B` (`delay A` is `loop A 1`) | `CTy.loop`, SPEC §7 |
 
 `=>` is BoLo's arrow read call-by-value, and it is the type of every constant. `all` is BoLo's
 `∀` read the same way, and it is the type of every borrow callback and fold algebra.
@@ -245,6 +246,11 @@ thunk occurs in it.
 
 `[@]` takes any lifetime, not only a variable. Its premise is `Δ ⊨ @ ⊏ @b`, where `@b` is the
 `∀`'s bound. The result is `C[@/'x]` (`CTy.instLife`, `Ty:1199`).
+
+Two more forms are sugar for standard I/O (SPEC §11), elaborated before checking, so no rule
+checks them: `&x`, a value in the head of `y <- M; N` that lends the capability `x` to one call
+(`r <- M[x/&x]; let (x, y) = r; N`), and `for x in bytes c { M }; N`, which ends a `main` that
+uses the capabilities ambiently. `for`, `in` and `loop` are reserved.
 
 ### 6.3 Binders and de Bruijn indices
 
@@ -506,7 +512,13 @@ keyword because each mode is a separate theorem.
   before it, never a non-persistent one (SPEC §11): it is checked at them, and at each use it
   sees `main`'s slots of them. The standard externs (`stdin`, `stdout`, `stderr`, `read_byte`,
   `write_byte`, and the model's harness) are listed by `bcc trusted`; a program with capability
-  externs has `main : F (Caps * A)` (SPEC §11).
+  externs has `main : F (Caps * A)`, or `main : F (U (loop (Caps * A) (Caps * B)))` to run until
+  it finishes (SPEC §11).
+- **I/O sugar** (SPEC §11), elaborated before checking (`bcc desugar` prints the result): a
+  program that declares no externs and whose `main` names `stdin`, `stdout` or `stderr` uses
+  them ambiently and gets the I/O library (`lib/io.bc`); `&c` in the head of `x <- M; N` lends
+  the capability `c` to one call; `for x in bytes c { M }; N` ends such a `main` with a loop over
+  the input.
 - **`main : C = M`** is checked at `Δ = ∅` and `Γ =` the externs. `C` is any computation type.
 
 What a program means:

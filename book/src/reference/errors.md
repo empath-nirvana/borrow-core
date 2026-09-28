@@ -149,10 +149,10 @@ main : F i32 =
 `def`.
 
 ```bc,reject
-def loop : i32 => i32 = thunkv fun (x : i32) -> return (loop x)
+def spin : i32 => i32 = thunkv fun (x : i32) -> return (spin x)
 
-main : F i32 = return (loop i32[0])
--- expect: 1:57: unknown variable `loop`
+main : F i32 = return (spin i32[0])
+-- expect: 1:57: unknown variable `spin`
 ```
 
 **Type restrictions.** A `mu` type must be closed, with its variable not under `mut` and not

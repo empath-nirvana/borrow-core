@@ -46,7 +46,9 @@ operation `hostOp` (below), `roll`/`unroll`, the folds `foldImm`,
     unfoldN : !U(S ⊸ C[S/X]) ⊸ !U(S ⊸ νX. C)
 
 `fixD`, `unfoldS` and `delayIn`/`delayOut`/`streamIn`/`streamOut` are these rules at the delay
-and stream bodies.
+and stream bodies. `Loop A B = νX. F(A ⊕ U X) & F B` (`CTy.loop`) is the loop whose `close`
+returns a residual, and `D A = Loop A 1`; the driver `driveE n` is typed at every loop
+(`d_driveL`, `DelayPrograms.lean`).
 
 Its context premises are `Ctx.SplitP`, `Ctx.DeadP` and `Ctx.SoloP` (`Persistent.lean`,
 `[spec §10]`), which extend the paper's `Ctx.Split`, `Ctx.Dead` and `Ctx.Solo`: a live slot of
@@ -109,7 +111,8 @@ extern's contract (`readByte_meets`, …, by `meets_of_derives` and the transpar
 `externs_every_run`/`externs_safe` (every implementation meeting the contracts, `ExternsMeet`)
 and `io_every_run` (the model, `stdModel`) run a checked `run_io : Bytes ⊸ F R` from the empty
 memory under every allocator to a value at the empty memory; `externs_main_safe` is
-`fundamentalD` at `main`; `wpTSD_frame_own` keeps a frame's cell as it was (no capability, no
+`fundamentalD` at `main`; `externs_loop_every_run`/`io_loop_every_run` cover a `run_io` that returns
+a loop, one prefix `driveE n` at a time (`d_ioLoop`); `wpTSD_frame_own` keeps a frame's cell as it was (no capability, no
 effect).
 
 ### Theorems

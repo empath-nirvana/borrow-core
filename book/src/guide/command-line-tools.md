@@ -1,133 +1,83 @@
 # Command-line tools
 
-A program talks to the world through **capabilities**: values it is given, one per effect. There
-is no ambient I/O. Standard input, standard output and standard error are three capabilities,
-declared as externs, and two operations act on them (SPEC §11):
+A program talks to the world through **capabilities**: values it is given, one per effect.
+Standard input, standard output and standard error are three of them, `stdin`, `stdout` and
+`stderr` (SPEC §11). In `main` they are in scope by name. Everywhere else a function that does
+I/O takes the capability it uses, so its type says what it can touch.
 
-```text
-extern stdin      : ref input
-extern stdout     : ref output
-extern stderr     : ref output
-extern read_byte  : !(all 'a < top. mut 'a input => mut 'a input * (i32 + 1))
-extern write_byte : !(all 'a < top. mut 'a output * i32 => mut 'a output)
-```
-
-A capability is a cell whose content is opaque: `input` and `output` have no rules, so a program
-can move them, keep them in cells and hand them to the operations, but cannot copy, inspect or
-drop them. The operations take a `mut` borrow of the cell and give it back. `read_byte` answers
-the next byte, or `inr ()` at the end of the input; `write_byte` writes the low 8 bits of an
-integer.
-
-A program declares the externs it uses. Its `main` hands the capabilities back after its result:
-`main : F (Caps * A)`, with `Caps` its capabilities in declaration order.
-
-## Writing
-
-`write_byte` needs a borrow of the output. `withbor2` lends one for a callback, and returns the
-cell with the callback's result:
+Here is `cat`:
 
 ```bc
-extern stdout : ref output
-extern write_byte : !(all 'a < top. mut 'a output * i32 => mut 'a output)
-
-main : F (ref output * 1) =
-  q <- return (withbor2['x, top, output, 1] stdout
-         (thunkv Fun 'x < dom. return (thunkv fun (m : mut 'x output) ->
-            m1 <- return ((unbang write_byte) ['x] (m, i32[104]));
-            m2 <- return ((unbang write_byte) ['x] (m1, i32[105]));
-            m3 <- return ((unbang write_byte) ['x] (m2, i32[10]));
-            return (boxed['x] ()))));
-  let (o, u) = q;
-  return (o, ())
--- output: hi
+main : F 1 =
+  for b in bytes stdin {
+    return (putb (&stdout, b))
+  };
+  return ()
+-- stdin: hello, world
+-- stdin: second line
+-- output: hello, world
+-- output: second line
 -- answer: ()
 ```
 
-The program writes `hi` and a newline; then `bcc` prints the result and `live 0`.
+`bytes stdin` is the input as a stream of bytes. `for` runs its body on each byte until the
+stream ends, however long the input is. `putb (&stdout, b)` writes one byte: `&stdout` lends the
+output to that one call, which hands it back. After the value, `bcc` prints `live 0`: every cell
+was freed.
+
+## The library
+
+These come with every program whose `main` uses the capabilities. They are ordinary code
+(`lib/io.bc`), not primitives:
+
+| name | type | |
+|---|---|---|
+| `getb` | `ref input => ref input * (i32 + 1)` | the next byte, or `inr ()` at the end |
+| `putb` | `ref output * i32 => ref output * 1` | write a byte |
+| `put_dec` | `ref output * i32 => ref output * 1` | write a number in decimal |
+| `bytes` | `ref input => U (iter i32 (ref input) (ref input))` | the input as a stream |
+
+Each helper takes a capability and hands it back first, which is what `&c` expects. Underneath
+are two operations, `read_byte` and `write_byte`, on `mut` borrows of the capabilities; the
+helpers do the borrowing so programs do not.
+
+## State across a loop
+
+A `for` carries the variables of `main` that its body, or the code after it, reads. Rebind one
+in the body and the next byte sees the new value. Bind each with its type, `n : T <- …`: the
+loop's state is built from those types.
+
+```bc
+def inc : i32 => i32 = thunkv fun (n : i32) -> return ((unbang host[add32]) (n, i32[1]))
+
+-- The number of lines of the input.
+main : F 1 =
+  lines : i32 <- return i32[0];
+  for b in bytes stdin {
+    lines : i32 <- case (unbang host[eq32]) (b, i32[10]) {
+      inl other -> return lines
+    | inr newline -> return (inc lines)
+    };
+    return ()
+  };
+  _ <- return (put_dec (&stdout, lines));
+  return (putb (&stdout, i32[10]))
+-- stdin: one
+-- stdin: two
+-- stdin: three
+-- output: 3
+-- answer: ()
+```
+
+The code after the loop runs once, when the input ends. Here it prints the count; `main`'s
+value is what the last `putb` hands back, `()`.
 
 ## Helpers, and what their types say
 
-A `def` may use the operations: they are persistent externs and carry no authority. It may not
-use a capability. A helper that reads takes the input; one that writes takes the output:
+A helper names the capabilities it uses in its type. This one can write to an output and do
+nothing else:
 
 ```bc
-extern stdin : ref input
-extern stdout : ref output
-extern read_byte : !(all 'a < top. mut 'a input => mut 'a input * (i32 + 1))
-extern write_byte : !(all 'a < top. mut 'a output * i32 => mut 'a output)
-
-type In = ref input
-type Out = ref output
-
--- The next byte, or `inr ()` at the end: it can only read.
-def getb : In => In * (i32 + 1) =
-  thunkv fun (c : In) ->
-    return (withbor2['x, top, input, i32 + 1] c
-      (thunkv Fun 'x < dom. return (thunkv fun (m : mut 'x input) ->
-         r <- return ((unbang read_byte) ['x] m);
-         let (m2, b) = r;
-         return (boxed['x] b))))
-
--- One byte out: it can only write.
-def putb : Out * i32 => Out =
-  thunkv fun (p : Out * i32) ->
-    let (c, b) = p;
-    q <- return (withbor2['x, top, output, 1] c
-      (thunkv Fun 'x < dom. return (thunkv fun (m : mut 'x output) ->
-         m2 <- return ((unbang write_byte) ['x] (m, b));
-         return (boxed['x] ()))));
-    let (c2, u) = q;
-    return c2
-
--- The first two bytes of the input, swapped.
-main : F ((In * Out) * 1) =
-  q1 <- return (getb stdin);
-  let (i1, x) = q1;
-  q2 <- return (getb i1);
-  let (i2, y) = q2;
-  o <- return (stdout);
-  o1 : Out <- case y { inl b -> return (putb (o, b)) | inr u -> return o };
-  o2 : Out <- case x { inl b -> return (putb (o1, b)) | inr u -> return o1 };
-  return ((i2, putb (o2, i32[10])), ())
--- stdin: ab
--- output: ba
--- answer: ()
-```
-
-`getb`'s type, `ref input => ref input * (i32 + 1)`, is the whole of what it can do to the
-world: read the input it is given. A function given no capability does no I/O, and that is a
-theorem, not a convention: a cell owned by a computation's frame keeps its value through every
-run of the computation (`wpTSD_frame_own`), so a function that does not hold the output cannot
-change the stream in it.
-
-The checker enforces the rest. A `def` that names a capability is rejected:
-
-```bc,reject
-extern stdout : ref output
-
-def leak : 1 => ref output = thunkv fun (u : 1) -> return stdout
-
-main : F (ref output * 1) = return (stdout, ())
--- expect: 3:59: the capability `stdout` is not in scope: a `def` may use only persistent externs; take the capability as an argument (SPEC §11)
-```
-
-and so is a capability used twice, or one `main` does not hand back:
-
-```bc,reject
-extern stdout : ref output
-
-main : F ((ref output * ref output) * 1) = return ((stdout, stdout), ())
--- expect: 3:52: `stdout` is used twice here, and its type `ref output` is not persistent
-```
-
-## Borrowed capabilities
-
-A helper can take a borrow instead of the cell, and its type then says it needs a lent stream
-for as long as it runs:
-
-```bc,check
-extern write_byte : !(all 'a < top. mut 'a output * i32 => mut 'a output)
-
 def hexd : i32 => i32 =
   thunkv fun (n : i32) ->
     case (unbang host[lt_u32]) (n, i32[10]) {
@@ -135,72 +85,130 @@ def hexd : i32 => i32 =
     | inr u -> return ((unbang host[add32]) (n, i32[48]))
     }
 
--- A byte as two hex digits, to a borrowed output.
-def put_hex : all 'a < top. mut 'a output * i32 => mut 'a output =
-  thunkv Fun 'a < top. return (thunkv fun (p : mut 'a output * i32) ->
-    let (m, b) = p;
-    m1 <- return ((unbang write_byte) ['a] (m, hexd ((unbang host[shr_u32]) (b, i32[4]))));
-    return ((unbang write_byte) ['a] (m1, hexd ((unbang host[and32]) (b, i32[15])))))
+-- A byte as two hex digits.
+def put_hex : Out * i32 => Out * 1 =
+  thunkv fun (p : Out * i32) ->
+    let (o, b) = p;
+    _ <- return (putb (&o, hexd ((unbang host[shr_u32]) (b, i32[4]))));
+    return (putb (o, hexd ((unbang host[and32]) (b, i32[15]))))
+
+main : F 1 =
+  for b in bytes stdin {
+    return (put_hex (&stdout, b))
+  };
+  return (putb (&stdout, i32[10]))
+-- stdin: Hi
+-- output: 48690a
+-- answer: ()
 ```
 
 `stdout` and `stderr` have the same type, `ref output`: a writer is given an output stream, and
-the caller chooses which. `corpus/io-guess.bc` points one decimal printer at both.
+its caller chooses which. A function given no capability does no I/O. That is a theorem, not a
+convention: a cell owned outside a computation keeps its value through every run of it
+(`wpTSD_frame_own`), so a function that does not hold an output cannot change the stream in it.
 
-## Loops
+Capabilities belong to `main`. A `def` that names one is rejected:
 
-Recursion is structured, so a loop over the input is a step function applied a bounded number
-of times, and a step after the end of the input does nothing. The corpus doubles a `!` step with
-`twice`, as the array programs do; `corpus/io-cat.bc` copies up to 4095 bytes in 2^12 steps:
+```bc,reject
+def leak : 1 => ref output = thunkv fun (u : 1) -> return stdout
 
-```bc,ignore
-def twice : !(S => S) => !(S => S) =
-  thunkv fun (f : !(S => S)) -> return (!thunkv fun (s : S) -> return ((unbang f) ((unbang f) s)))
+main : F 1 = return (putb (&stdout, i32[10]))
+-- expect: 1:59: unknown variable `stdout`
 ```
 
-The corpus has seven tools, each run by the interpreter and by wasmtime against a golden output:
+and a lent capability must come back through a binding:
+
+```bc,reject
+main : F 1 =
+  let (a, b) = (putb (&stdout, i32[104]));
+  return b
+-- expect: 2:23: `&stdout` lends a capability to one call: it may appear only in the head `M` of `y <- M; N` (SPEC §11)
+```
+
+## What the sugar means
+
+`main`'s ambient capabilities, `&c` and `for` are sugar. The frontend turns them into ordinary
+core before checking, and the checker never sees them. `bcc desugar tool.bc` prints what it
+checks:
+
+- the library and an `extern` for each capability `main` uses;
+- `main : F A` becomes `main : F (Caps * A)`, handing the capabilities back where each path
+  ends; with a `for`, `main : F (U (loop (Caps * A) (Caps * 1)))`, a loop the runtime drives;
+- `x <- f (&c, v); N` becomes `r <- f (c, v); let (c, x) = r; N`;
+- the `for` becomes a loop by `unfold` over the stream, the other capabilities and the threaded
+  variables.
+
+The same program can be written without sugar, declaring the externs and passing the
+capabilities by hand:
+
+```bc,check
+extern stdout : ref output
+extern write_byte : !(all 'a < top. mut 'a output * i32 => mut 'a output)
+
+main : F (ref output * 1) =
+  q <- return (withbor2['x, top, output, 1] stdout
+         (thunkv Fun 'x < dom. return (thunkv fun (m : mut 'x output) ->
+            m1 <- return ((unbang write_byte) ['x] (m, i32[104]));
+            m2 <- return ((unbang write_byte) ['x] (m1, i32[10]));
+            return (boxed['x] ()))));
+  let (o, u) = q;
+  return (o, ())
+```
+
+`corpus/sugar/` pairs each sugared program with its core form, and the gate checks that both
+erase to the same term.
+
+## The corpus
+
+Seven tools, each run by the interpreter and by wasmtime against a golden output, none with a
+bound on its input:
 
 | program | what it shows |
 |---|---|
-| `io-cat.bc` | copying, with helpers that take only the input or only the output |
-| `io-hex.bc` | a helper over a borrowed output (`put_hex`) |
+| `io-cat.bc` | the loop above; it also copies a 4860-byte input |
+| `io-hex.bc` | a helper that takes only an output |
 | `io-upper.bc` | a filter |
-| `io-wc.bc` | counting, and a decimal printer |
-| `io-aoc.bc` | every line read into one buffer, an array lent mutably per line (§9) |
-| `io-head.bc` | the input as an iterator that owns the capability, closed early, handing it back |
+| `io-wc.bc` | several counts threaded through a loop |
+| `io-aoc.bc` | every line read into one array, lent mutably per line (§9) |
+| `io-head.bc` | a stream closed early, handing the capability back, then read on |
 | `io-guess.bc` | a scripted guessing game, writing to standard error as well |
 
 ## Running
 
     bcc run tool.bc < input          compiled to Wasm, run by wasmtime: interactive, unbuffered
     bcc interp tool.bc < input       the model: reads all of the input first
+    bcc desugar tool.bc              the core program the sugar stands for
     bcc trusted tool.bc              the trusted boundaries
 
 `bcc run` gives each capability a cell holding its file descriptor and lowers the operations to
 WASI `fd_read` and `fd_write` (in a plain LLVM/libc build, `read(2)` and `write(2)`). `bcc interp`
-runs the *model*: the checker wraps `main` into `run_io`, which makes the capabilities from the
-input bytes, runs `main`, and takes the capabilities back. The model's streams are byte lists in
-memory, and its operations are ordinary core terms.
+runs the *model*: streams are byte lists in memory, and the operations are ordinary core terms.
+It is slow on large inputs, since each read copies what is left.
 
 ## What is proved, and what is trusted
 
-- The model of each operation meets its extern's type (`readByte_meets`, `writeByte_meets`):
-  proved in Lean, assurance level 7.
-- For every implementation of the externs that meets their types, every run of `run_io` from
-  empty memory, under every allocator, continues to the outputs at empty memory
-  (`externs_every_run`); the model is one such implementation (`io_every_run`), and
-  `bcc interp` runs exactly the term the theorem is about (`IORun.every_run`).
-- The host implementations (WASI calls in the runtime) are assumed to behave as the model. They
-  are interpreter-checked (level 2): the flat IR's interpreter runs the same lowering against
-  scripted streams, checking every memory access, and the corpus compares every stage with the
-  model's output.
+- The model of each operation meets its extern's type (`readByte_meets`, `writeByte_meets`),
+  proved in Lean.
+- For every implementation of the externs that meets their types, every run of the program's
+  `run_io` wrapper from empty memory, under every allocator, continues to its outputs at empty
+  memory (`externs_every_run`). A program that runs until its input ends is covered one prefix
+  at a time: observed at most `n` times, for every `n` (`externs_loop_every_run`). The model is
+  one such implementation, and `bcc interp` runs the very term the theorem is about
+  (`IORun.every_run`, `IORun.loop_every_run`).
+- The host implementations (WASI calls in the runtime) are assumed to behave as the model. The
+  flat IR's interpreter runs the same lowering against scripted streams, checking every memory
+  access, and the corpus compares every stage with the model.
 
-`bcc trusted` lists each extern a program declares with its contract, its host implementation
-and its level. Adequacy's "empty memory" is about the model's cells: file descriptors are not
-memory, and nothing is claimed about them.
+`bcc trusted` lists each extern a program uses, with its contract, its host implementation and
+its level. Adequacy's "empty memory" is about the model's cells: file descriptors are not memory,
+and nothing is claimed about them.
 
 ## Not yet
 
-Command-line arguments, environment variables, the exit status, files and the network are
-designed as more capabilities of the same kind (SPEC §11) but not built; a file source would be
-`io-head.bc` over a file's `input`. Inside `main` only, printing without naming `stdout` is
-planned as sugar that elaborates to the capability-passing form.
+- A `for` has no early exit; `io-guess.bc` keeps a flag instead. A `for` inside a function needs a
+  finite consumer (#59) and is not provided; neither are `|>` pipelines.
+- A line reader: an observation must terminate, so a line of unbounded length is a loop of its
+  own. Keep the line in the loop's state, as `io-aoc.bc` does.
+- I/O errors are not modeled: a read error is the end of the input.
+- Command-line arguments, environment variables, the exit status, files and the network are
+  designed as more capabilities of the same kind (SPEC §11) but not built.

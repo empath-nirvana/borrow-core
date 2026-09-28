@@ -128,7 +128,8 @@ construction; Wasm agreeing with `wasmHost` is tested, not proved (SPEC §8).
 
 A `main` may declare the standard externs (`Frontend/Check/Externs.lean`): the capabilities
 `stdin`, `stdout`, `stderr` (`ref input`, `ref output`) and the operations `read_byte`,
-`write_byte`. Its type is then `F (Caps ⊗ A)`, handing the capabilities back after `A`.
+`write_byte`. Its type is then `F (Caps ⊗ A)`, handing the capabilities back after `A`, or
+`F (U (loop (Caps ⊗ A) (Caps ⊗ B)))` for a program that runs until its input ends.
 
 - **Compiled stages.** `Clos.convertMain` binds each extern before `main` runs: a capability to a
   fresh cell holding its file descriptor (`i32[0]`, `[1]`, `[2]`), an operation to the closure
@@ -139,11 +140,17 @@ A `main` may declare the standard externs (`Frontend/Check/Externs.lean`): the c
   `$getc` and `$putfd`, WASI `fd_read` and `fd_write` of one byte. They are unbuffered, so a
   prompt is out before the next read. The plain LLVM/libc counterpart is `read(2)`/`write(2)`
   on the same descriptors; nothing WASI-specific is part of the semantics.
+- **Loops.** When `main` returns a loop, every stage drives it: it calls the loop on `inl ()`
+  until the answer is `inl r` (the source stage by `driveSource`, the closure IR by its `drive`,
+  the flat IR by the runtime function `drive`), then runs the epilogue on `r`, which the closure
+  conversion registers as the code `fin`. The source stage's run that finishes after `k`
+  observations is the run of `driveE k`, the program `IORun.loop_every_run` covers.
 - **The source stage** runs the model: the checker's `run_io` wrapper, with every extern given
   its Lean model (`IORun`), applied to standard input as a byte list, from the empty memory. Its
   value holds the bytes written to each stream; the stage writes them, then the report of
   `main`'s result. This is the term `IORun.every_run` (`io_every_run`) is about. It reads all of
-  standard input before it runs.
+  standard input before it runs, and holds it as a byte list in a cell, which each read copies:
+  it is a reference, quadratic in the input.
 - **The interpreters** `clos` and `flat` read a scripted standard input and collect the two
   output streams; the flat IR's checks (every read and write inside a live range) cover the I/O
   runtime functions too. That is the host implementations' assurance: interpreter-checked (2),
