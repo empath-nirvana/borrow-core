@@ -1,6 +1,7 @@
 import Std.Data.HashMap
 import Backend.Clos.Syntax
 import Backend.Clos.Types
+import Backend.Clos.Flow
 import Backend.Flat.Syntax
 
 /-!
@@ -15,21 +16,26 @@ The lowering is type-directed (`Backend/Clos/Types.lean`): a closure-IR variable
   tests the tag and binds the payload's words.
 - A **boxed field** (one that closes a recursive type) is a pointer to a fresh object holding the
   field's words: building allocates it, and taking it apart loads and frees it.
-- **Closures.** A closure of code `c` with captured values is an object: `c`, then the captured
-  values' words. A closure of a code that captures nothing is the word `2c + 1` and allocates
-  nothing (an object's address is even). Calling a closure is an indirect call through the table
-  at `c`, on the closure and the argument's words, and returns the answer's words; a code with an
-  environment loads it into locals and frees the object. A call in return position whose callee
-  answers exactly the caller's words is a tail call.
+- **Closures** are defunctionalized: a closure of type `n` is its code's tag in `n`'s union,
+  then the captured values' words, padded (`Backend/Clos/Types.lean`), and building one moves the
+  captured words into it. A code is a function of its captured values' words and the argument's
+  words, returning the answer's words. A call whose code is known, because the flow analysis
+  (`Backend/Clos/Flow.lean`) finds one code there or the union has one code, is a direct call of
+  that code on the closure's captured words; any other call is a call of the type's dispatcher
+  `apply`, a `switch` on the tag whose cases tail-call the codes. There are no function pointers.
+  A call in return position whose callee answers exactly the caller's words is a tail call.
+- **Recursive closure types** keep a heap environment: a closure is the word `2t + 1` when its
+  code `t` captures nothing, and otherwise an object holding `t` and the captured values' words.
+  Their codes take the closure's word, load the environment into locals and free the object.
 - **Cells and array slots** hold their contents' words, `max 1 |A|` words for a cell and `|A|`
   per slot.
-- `copy`, `drop`, the printer, the array primitives and the loop driver are functions generated
-  on demand per layout type (`Helper`); at a trivial type a copy is the words themselves and a
-  drop is nothing. Copying or dropping a closure of type `T` tests for a word `2c + 1` (nothing to
-  do), and otherwise selects the code among the codes of type `T` that capture something, by a
-  binary search on `c`, and calls that code's copy or drop directly.
+- `copy`, `drop`, the printer, the array primitives, the loop driver and the dispatchers are
+  functions generated on demand per layout type (`Helper`); at a trivial type a copy is the words
+  themselves and a drop is nothing. Copying or dropping a closure switches on its tag and copies
+  or drops that code's captured values; at a recursive closure type, a word `2t + 1` needs
+  nothing, and an object is copied or dropped by its code's `closCopy` or `closDrop`.
 
-Function indices: `print_dec`, the closure codes in table order, `main`, the entry, then the
+Function indices: `print_dec`, the closure codes in code order, `main`, the entry, then the
 generated helpers in the order they are first asked for.
 -/
 
@@ -41,7 +47,7 @@ inductive Helper where
   | copy (n : Nat)
   | drop (n : Nat)
   | print (n : Nat)
-  /-- Copy and drop a closure of code `c`. -/
+  /-- Copy and drop the heap environment of a closure of code `c`, at a recursive closure type. -/
   | closCopy (c : Nat)
   | closDrop (c : Nat)
   /-- `tab` and its loop, at element location type `a` and tabulator type `f`. -/
@@ -52,13 +58,16 @@ inductive Helper where
   | arrDropLoop (a f : Nat)
   /-- Drive a loop of type `n` (SPEC §11). -/
   | drive (n : Nat)
+  /-- The dispatcher of the closure type `n`: the closure's words and the argument's, answering
+  the code its tag names. -/
+  | apply (n : Nat)
   deriving BEq, Hashable, Repr, Inhabited
 
 structure Ctx where
   T : Types
   codes : Array Code
-  /-- The codes that capture something, by their type (a representative). -/
-  envCodes : Std.HashMap Nat (Array Nat)
+  /-- The calls whose code the flow analysis finds, by their function variable. -/
+  known : Std.HashMap Var Nat
   helperBase : Nat
 
 structure LState where
@@ -115,7 +124,7 @@ def helper (h : Helper) : LM Nat := do
     | .copy n => .copy (T.r n) | .drop n => .drop (T.r n) | .print n => .print (T.r n)
     | .tab a f => .tab (T.r a) (T.r f) | .tabLoop a f => .tabLoop (T.r a) (T.r f)
     | .arrDrop a f => .arrDrop (T.r a) (T.r f) | .arrDropLoop a f => .arrDropLoop (T.r a) (T.r f)
-    | .drive n => .drive (T.r n)
+    | .drive n => .drive (T.r n) | .apply n => .apply (T.r n)
     | h => h
   match (← get).helpers[h]? with
   | some i => pure i
@@ -187,36 +196,53 @@ def payload (n : Nat) (r : Bool) (ls : List Nat) (consume : Bool) : LM (List Stm
 
 /-! ### Closures -/
 
-/-- The table index of the closure in `f`: `c` from the word `2c + 1`, or from the object. -/
-def codeIndex (f : Nat) : LM (List Stmt × Exp) := do
-  let t ← fresh1
-  return ([.ite (wrap (and64 (.loc f) (.c64 1))) [.set t (shr64 (.loc f) (.c64 1))]
-    [.set t (.load (.loc f) 0)]], .loc t)
+/-- The words of a closure of code `c` whose captured values are the words `env`: the tag, then
+`env`, padded to the type's width; at a recursive closure type, the word `2t + 1` or a fresh
+object holding the tag and `env`. -/
+def closVals (c : Nat) (env : List Exp) : LM (List Stmt × List Exp) := do
+  let T ← T
+  let n := T.codeType c
+  let t := T.tag c
+  if T.isRec n then
+    if env.isEmpty then return ([], [.c64 (2 * t + 1).toUInt64])
+    let p ← fresh1
+    return ([.set p (.alloc (.c64 (1 + env.length).toUInt64)), .store (.loc p) 0 (.c64 t.toUInt64)] ++
+      storeAt (.loc p) 1 env, [.loc p])
+  return ([], [.c64 t.toUInt64] ++ env ++ zeros (T.words n - 1 - env.length))
 
-/-- Call the closure in `f` on the words `args`; the results go to `ds`. -/
-def callClosure (ds : List Nat) (f : Nat) (args : List Exp) : LM (List Stmt) := do
-  let (s, c) ← codeIndex f
-  return s ++ [.callInd ds c (.loc f :: args)]
+/-- The function and arguments that call the closure of type `n` in the locals `ls` on the words
+`args`. When its code `c` is known (`known`, from the flow analysis, or the union's one code),
+`c` directly, on the captured values' words (at a recursive type, on the closure's word);
+otherwise the type's dispatcher. -/
+def callTarget (n : Nat) (ls : List Nat) (args : List Exp) (known : Option Nat) :
+    LM (Nat × List Exp) := do
+  let T ← T
+  let u := T.union n
+  let known := match known with
+    | some c => if u.contains c then some c else none
+    | none => if u.size == 1 then u[0]? else none
+  match known with
+  | some c =>
+    if T.isRec n then return (codeFn c, .loc (ls.headD 0) :: args)
+    return (codeFn c, locs ((ls.drop 1).take (T.envWords c)) ++ args)
+  | none => return (← helper (.apply n), locs ls ++ args)
 
-/-- `act c` for the code `c` in the local `k`, one of `cs` (sorted): a binary search, of depth
-at most `fuel`. -/
-def dispatch (k : Nat) (act : Nat → LM (List Stmt)) : Nat → List Nat → LM (List Stmt)
-  | _, [] => pure [.trap]
-  | _, [c] => act c
-  | 0, _ => pure [.trap]
-  | fuel + 1, cs => do
-    let m := cs.length / 2
-    let pivot := cs[m]?.getD 0
-    return [.ite (ltu64 (.loc k) (.c64 pivot.toUInt64)) (← dispatch k act fuel (cs.take m))
-      (← dispatch k act fuel (cs.drop m))]
+/-- Call the closure of type `n` in the locals `ls` on the words `args`; the results go to
+`ds`. -/
+def callClosure (ds : List Nat) (n : Nat) (ls : List Nat) (args : List Exp) : LM (List Stmt) := do
+  let (g, as) ← callTarget n ls args none
+  return [.call ds g as]
 
-/-- For a closure of type `n` in local `0`: nothing when it is a word `2c + 1`, and otherwise
-`act c` for its code `c`. -/
-def onClosure (n : Nat) (none : List Stmt) (act : Nat → LM (List Stmt)) : LM (List Stmt) := do
-  let cs := (((← read).envCodes[(← T).r n]?).getD #[]).toList
-  let k ← fresh1
-  return [.ite (wrap (and64 (.loc 0) (.c64 1))) none
-    ([.set k (.load (.loc 0) 0)] ++ (← dispatch k act cs.length cs))]
+/-- `act c` for the code `c` of the closure of type `n` in the locals `ls`: a `switch` on its
+tag. At a recursive closure type, `imm` when the closure is a word `2t + 1`, and otherwise a
+`switch` on the tag its object holds. -/
+def onCode (n : Nat) (ls : List Nat) (imm : List Stmt) (act : Nat → LM (List Stmt)) :
+    LM (List Stmt) := do
+  let T ← T
+  let cases ← (T.union n).toList.mapM act
+  let f := Exp.loc (ls.headD 0)
+  if !T.isRec n then return [.switch f cases [.trap]]
+  return [.ite (wrap (and64 f (.c64 1))) imm [.switch (.load f 0) cases [.trap]]]
 
 /-! ### Copy and drop -/
 
@@ -352,16 +378,14 @@ def lowerPrim : Op → List Var → Dest → LM (List Stmt)
       | _ => throw "flat IR: write_byte of a non-pair"
   | _, _, _ => throw "flat IR: primitive arity"
 
-/-- Call the closure in `f` on the words `args`, answering `k` words, of which the first `w` are
-the result. -/
-def lowerCall (f : Nat) (args : List Nat) (k w : Nat) (d : Dest) : LM (List Stmt) := do
-  let (s, callee) ← codeIndex f
-  let args := .loc f :: locs args
+/-- Call the closure `f` on `a`, answering `k` words, of which the first `w` are the result. -/
+def lowerCall (f a : Var) (k w : Nat) (d : Dest) : LM (List Stmt) := do
+  let (g, args) ← callTarget (← vty f) (← vals f) (locs (← vals a)) ((← read).known[f]?)
   match d with
-  | .ret k' => if k' == k then return s ++ [.tailCallInd callee args] else pure ()
-  | .to ls => if ls.length == k then return s ++ [.callInd ls callee args] else pure ()
+  | .ret k' => if k' == k then return [.tailCall g args] else pure ()
+  | .to ls => if ls.length == k then return [.call ls g args] else pure ()
   let ts ← fresh k
-  return s ++ [.callInd ts callee args] ++ (← emit d (locs (ts.take w)))
+  return [.call ts g args] ++ (← emit d (locs (ts.take w)))
 
 def lowerTm : Tm → Dest → LM (List Stmt)
   | .var x, d => do emit d (locs (← vals x))
@@ -377,17 +401,13 @@ def lowerTm : Tm → Dest → LM (List Stmt)
       let (s, vs) ← mkInj n r (locs (← vals a))
       return s ++ (← emit d vs)
   | .clos c xs, d => do
-      let fields := (← xs.mapM vals).flatten
-      let t ← fresh1
-      if xs.isEmpty then return ← emit d [.c64 (2 * c + 1).toUInt64]
-      return [.set t (.alloc (.c64 (1 + fields.length).toUInt64)),
-        .store (.loc t) 0 (.c64 c.toUInt64)] ++ storeAt (.loc t) 1 (locs fields) ++
-        (← emit d [.loc t])
+      let (s, vs) ← closVals c (locs (← xs.mapM vals).flatten)
+      return s ++ (← emit d vs)
   | .prim op xs, d => lowerPrim op xs d
   | .app f a, d => do
       let T ← T
       let some r := T.apps[f]? | throw "flat IR: an untyped call"
-      lowerCall ((← vals f).headD 0) (← vals a) (T.answerWords (← vty f)) (T.words r) d
+      lowerCall f a (T.answerWords (← vty f)) (T.words r) d
   | .letv x e b, d => do
       let se ← lowerTm e (.to (← bindFresh x))
       return se ++ (← lowerTm b d)
@@ -419,8 +439,9 @@ def lowerTm : Tm → Dest → LM (List Stmt)
 /-- The words a closure's environment holds, per captured variable. -/
 def envWords (c : Code) : LM (List Nat) := c.env.mapM fun x => do words (← vty x)
 
-/-- Code `k` as a function of the closure and the argument's words, answering its type's
-`answerWords`. It loads the environment and frees the closure. A `sel` code's `case` on the
+/-- Code `k` as a function of its captured values' words and the argument's words, answering its
+type's `answerWords`. At a recursive closure type it takes the closure's word instead of the
+captured values, loads the environment and frees the object. A `sel` code's `case` on the
 parameter returns each arm at its own type, padded to the wider. -/
 def lowerCode (k : Nat) (c : Code) : LM Fn := do
   let T ← T
@@ -429,18 +450,29 @@ def lowerCode (k : Nat) (c : Code) : LM Fn := do
     | .fn a _ _ => (a, T.answerWords fTy)
     | _ => (fTy, 0)
   let pw ← words aTy
-  let (body, nloc) ← inFn (1 + pw) do
-    bindVals c.param (List.range' 1 pw)
-    let mut unpack : List Stmt := []
-    let mut off := 1
+  if T.isRec fTy then
+    let (body, nloc) ← inFn (1 + pw) do
+      bindVals c.param (List.range' 1 pw)
+      let mut unpack : List Stmt := []
+      let mut off := 1
+      for x in c.env do
+        let (s, ls) ← loadAt (.loc 0) off (← words (← vty x))
+        bindVals x ls
+        unpack := unpack ++ s
+        off := off + ls.length
+      let body ← lowerTm c.body (.ret ans)
+      pure (unpack ++ (if c.env.isEmpty then [] else [.free (.loc 0)]) ++ body ++ [.trap])
+    return { name := s!"code{k}", params := 1 + pw, results := ans, locals := nloc, body }
+  let ew := T.envWords k
+  let (body, nloc) ← inFn (ew + pw) do
+    let mut off := 0
     for x in c.env do
-      let (s, ls) ← loadAt (.loc 0) off (← words (← vty x))
-      bindVals x ls
-      unpack := unpack ++ s
-      off := off + ls.length
-    let body ← lowerTm c.body (.ret ans)
-    pure (unpack ++ (if c.env.isEmpty then [] else [.free (.loc 0)]) ++ body ++ [.trap])
-  pure { name := s!"code{k}", params := 1 + pw, results := ans, locals := nloc, body }
+      let w ← words (← vty x)
+      bindVals x (List.range' off w)
+      off := off + w
+    bindVals c.param (List.range' ew pw)
+    pure ((← lowerTm c.body (.ret ans)) ++ [.trap])
+  pure { name := s!"code{k}", params := ew + pw, results := ans, locals := nloc, body }
 
 def lowerMain (t : Tm) : LM Fn := do
   let k ← words (← T).mainTy
@@ -449,7 +481,7 @@ def lowerMain (t : Tm) : LM Fn := do
   pure { name := "main", params := 0, results := k, locals := nloc, body }
 
 /-- The counts of a run, written after the report when they are asked for: allocations and
-indirect calls. -/
+indirect (dispatched) calls. -/
 def countsReport : List Stmt :=
   outStr "allocs " ++ [.call [] fPrintDec [.stat 0]] ++ outStr "\nindirect " ++
     [.call [] fPrintDec [.stat 1]] ++ outStr "\n"
@@ -468,8 +500,11 @@ def entryFn (fMain : Nat) (fin : Option Nat) (counts : Bool) : LM Fn := do
           | _ => T.mainTy
         let rs ← fresh (T.words r)
         let es ← fresh (T.answerWords T.codeTy[c]!)
+        -- `fin` captures nothing.
+        let (_, fv) ← closVals c []
+        let self := if T.isRec (T.codeType c) then fv.take 1 else []
         pure ([Stmt.call m fMain [], .call rs (← helper (.drive T.mainTy)) (locs m),
-          .call es (codeFn c) (.c64 (2 * c + 1).toUInt64 :: locs rs)], es.take (T.words T.resTy))
+          .call es (codeFn c) (self ++ locs rs)], es.take (T.words T.resTy))
     let dr ← dropVals T.resTy v
     pure (run ++ [.call [] (← helper (.print T.resTy)) (locs v)] ++ outStr "\n" ++ dr ++
       outStr "live " ++ [.call [] fPrintDec [.live]] ++ outStr "\n" ++
@@ -541,9 +576,22 @@ def genHelper (h : Helper) : LM Fn := do
       let ps := List.range w
       match T.ty n with
       | .fn .. => do
-        let t ← fresh1
-        onClosure n [.ret [.loc 0]] fun c => do
-          return [.call [t] (← helper (.closCopy c)) [.loc 0], .ret [.loc t]]
+        if T.isRec n then
+          let t ← fresh1
+          onCode n ps [.ret [.loc 0]] fun c => do
+            if (T.env c).isEmpty then return [.trap]
+            return [.call [t] (← helper (.closCopy c)) [.loc 0], .ret [.loc t]]
+        else
+          onCode n ps [] fun c => do
+            let mut s : List Stmt := []
+            let mut out : List Nat := []
+            let mut off := 1
+            for e in T.env c do
+              let (s₁, ls) ← copyVals e (List.range' off (T.words e))
+              s := s ++ s₁
+              out := out ++ ls
+              off := off + T.words e
+            return s ++ [.ret ([.loc 0] ++ locs out ++ zeros (w - 1 - out.length))]
       | .pair .. => do
         let (s₁, a) ← copyField n 0 (← fieldLocals n 0 ps)
         let (s₂, b) ← copyField n 1 (← fieldLocals n 1 ps)
@@ -562,7 +610,16 @@ def genHelper (h : Helper) : LM Fn := do
       let ps := List.range w
       match T.ty n with
       | .fn .. => do
-        let s ← onClosure n [] fun c => do return [.call [] (← helper (.closDrop c)) [.loc 0]]
+        let s ← onCode n ps [] fun c => do
+          if T.isRec n then
+            if (T.env c).isEmpty then return [.trap]
+            return [.call [] (← helper (.closDrop c)) [.loc 0]]
+          let mut s : List Stmt := []
+          let mut off := 1
+          for e in T.env c do
+            s := s ++ (← dropVals e (List.range' off (T.words e)))
+            off := off + T.words e
+          return s
         pure (s ++ [.ret []])
       | .pair .. => do
         pure ((← dropField n 0 (← fieldLocals n 0 ps)) ++ (← dropField n 1 (← fieldLocals n 1 ps)) ++
@@ -622,79 +679,131 @@ def genHelper (h : Helper) : LM Fn := do
     pure { name := s!"drop_code{c}", params := 1, results := 0, locals := nloc, body }
   | .tab a f =>
     -- `tab (c, f)`: `len(c)` slots of `|a|` words, filled by `f i` in order.
-    let (body, nloc) ← inFn 2 do
+    let fw := T.words f
+    let (body, nloc) ← inFn (1 + fw) do
       let n := Exp.loc 0
+      let fls := List.range' 1 fw
       let sz ← fresh1
       let b ← fresh1
       let loop ← helper (.tabLoop a f)
-      let dr ← dropVals f [1]
+      let dr ← dropVals f fls
       pure ([.ite (ltu64 n (.c64 0x80000000)) [] [.set 0 (.c64 0)],
         .set sz (mul64 n (.c64 (T.cellWords a).toUInt64)),
         .ite (eqz64 (.loc sz)) [.set sz (.c64 1)] [],
         .set b (.alloc (.loc sz)),
-        .call [] loop [.loc b, .loc 1, .c64 0, n]] ++ dr ++ [.ret [.loc b, n]])
-    pure { name := "array_tab", params := 2, results := 2, locals := nloc, body }
+        .call [] loop ([.loc b] ++ locs fls ++ [.c64 0, n])] ++ dr ++ [.ret [.loc b, n]])
+    pure { name := "array_tab", params := 1 + fw, results := 2, locals := nloc, body }
   | .tabLoop a f =>
     -- `b f i n`: slot `i` gets a copy of `f` applied to `i`, for `i < n`.
     let (_, _, k) ← fnParts f
     let w ← words (← locElem a)
-    let (body, nloc) ← inFn 4 do
-      let (cs, fc) ← copyVals f [1]
+    let fw := T.words f
+    let fls := List.range' 1 fw
+    let i := Exp.loc (1 + fw)
+    let n := Exp.loc (2 + fw)
+    let (body, nloc) ← inFn (3 + fw) do
+      let (cs, fc) ← copyVals f fls
       let rs ← fresh k
-      let slot := add64 (.loc 0) (mul64 (.loc 2) (.c64 (8 * T.cellWords a).toUInt64))
-      pure [.ite (ltu64 (.loc 2) (.loc 3))
-        (cs ++ (← callClosure rs (fc.headD 1) [.loc 2]) ++
+      let slot := add64 (.loc 0) (mul64 i (.c64 (8 * T.cellWords a).toUInt64))
+      pure [.ite (ltu64 i n)
+        (cs ++ (← callClosure rs f fc [i]) ++
           storeAt slot 0 (locs (rs.take w)) ++
-          [.tailCall (← helper (.tabLoop a f)) [.loc 0, .loc 1, add64 (.loc 2) (.c64 1), .loc 3]])
+          [.tailCall (← helper (.tabLoop a f)) ([.loc 0] ++ locs fls ++ [add64 i (.c64 1), n])])
         [], .ret []]
-    pure { name := "array_tab_loop", params := 4, results := 0, locals := nloc, body }
+    pure { name := "array_tab_loop", params := 3 + fw, results := 0, locals := nloc, body }
   | .arrDrop a f =>
     -- `f b n`: each element to a copy of `f`, in order, then the range freed.
-    let (body, nloc) ← inFn 3 do
-      pure ([.call [] (← helper (.arrDropLoop a f)) [.loc 1, .loc 0, .c64 0, .loc 2]] ++
-        (← dropVals f [0]) ++ [.free (.loc 1), .ret []])
-    pure { name := "array_drop", params := 3, results := 0, locals := nloc, body }
+    let fw := T.words f
+    let fls := List.range fw
+    let (body, nloc) ← inFn (fw + 2) do
+      pure ([.call [] (← helper (.arrDropLoop a f))
+          ([.loc fw] ++ locs fls ++ [.c64 0, .loc (fw + 1)])] ++
+        (← dropVals f fls) ++ [.free (.loc fw), .ret []])
+    pure { name := "array_drop", params := fw + 2, results := 0, locals := nloc, body }
   | .arrDropLoop a f =>
     -- `b f i n`: slot `i`'s contents, moved out, to a copy of `f`, for `i < n`.
     let (_, r, k) ← fnParts f
     let w ← words (← locElem a)
-    let (body, nloc) ← inFn 4 do
-      let (cs, fc) ← copyVals f [1]
-      let slot := add64 (.loc 0) (mul64 (.loc 2) (.c64 (8 * T.cellWords a).toUInt64))
+    let fw := T.words f
+    let fls := List.range' 1 fw
+    let i := Exp.loc (1 + fw)
+    let n := Exp.loc (2 + fw)
+    let (body, nloc) ← inFn (3 + fw) do
+      let (cs, fc) ← copyVals f fls
+      let slot := add64 (.loc 0) (mul64 i (.c64 (8 * T.cellWords a).toUInt64))
       let (ls, es) ← loadAt slot 0 w
       let rs ← fresh k
-      pure [.ite (ltu64 (.loc 2) (.loc 3))
-        (cs ++ ls ++ (← callClosure rs (fc.headD 1) (locs es)) ++
+      pure [.ite (ltu64 i n)
+        (cs ++ ls ++ (← callClosure rs f fc (locs es)) ++
           (← dropVals r (rs.take (T.words r))) ++
-          [.tailCall (← helper (.arrDropLoop a f)) [.loc 0, .loc 1, add64 (.loc 2) (.c64 1), .loc 3]])
+          [.tailCall (← helper (.arrDropLoop a f)) ([.loc 0] ++ locs fls ++ [add64 i (.c64 1), n])])
         [], .ret []]
-    pure { name := "array_drop_loop", params := 4, results := 0, locals := nloc, body }
+    pure { name := "array_drop_loop", params := 3 + fw, results := 0, locals := nloc, body }
   | .drive n =>
     -- `d`: call `d` on `inl ()` until it answers `inl r`; `inr d'` goes on with `d'`.
     let (a, c, k) ← fnParts n
     let r := (T.field c 0).1
-    let (body, nloc) ← inFn 1 do
+    let nw := T.words n
+    let (body, nloc) ← inFn nw do
       let (s₀, sel) ← mkInj a false []
       let rs ← fresh k
       let cv := rs.take (T.words c)
       let (s₁, rv) ← payload c false cv true
       let (s₂, dv) ← payload c true cv true
-      pure (s₀ ++ (← callClosure rs 0 sel) ++ [
+      pure (s₀ ++ (← callClosure rs n (List.range nw) sel) ++ [
         .ite (eqz64 (.loc (cv.headD 0))) (s₁ ++ [.ret (locs rv)])
           (s₂ ++ [.tailCall (← helper (.drive n)) (locs dv)])])
-    pure { name := "drive", params := 1, results := T.words r, locals := nloc, body := body ++ [.trap] }
+    pure { name := "drive", params := nw, results := T.words r, locals := nloc, body := body ++ [.trap] }
+  | .apply n =>
+    -- A dispatched call: a `switch` on the closure's tag, each case a tail call of its code.
+    let (a, _, k) ← fnParts n
+    let nw := T.words n
+    let aw := T.words a
+    let args := locs (List.range' nw aw)
+    let (body, nloc) ← inFn (nw + aw) do
+      let f := Exp.loc 0
+      let t ← fresh1
+      let tagOf : List Stmt := if T.isRec n then
+          [.ite (wrap (and64 f (.c64 1))) [.set t (shr64 f (.c64 1))] [.set t (.load f 0)]]
+        else [.set t f]
+      let cases := (T.union n).toList.map fun c =>
+        if T.isRec n then [Stmt.tailCall (codeFn c) (f :: args)]
+        else [.tailCall (codeFn c) (locs (List.range' 1 (T.envWords c)) ++ args)]
+      pure ([.tick] ++ tagOf ++ [.switch (.loc t) cases [.trap]])
+    pure { name := "apply", params := nw + aw, results := k, locals := nloc, body := body ++ [.trap] }
+
+/-- The closure calls of a term, by their function variables. -/
+def callsOf : Tm → List Var
+  | .app f _ => [f]
+  | .letv _ e b => callsOf e ++ callsOf b
+  | .letpair _ _ _ b | .copy _ _ b | .drop _ b => callsOf b
+  | .case _ _ b₁ _ b₂ => callsOf b₁ ++ callsOf b₂
+  | _ => []
+
+/-- The calls whose code the flow analysis finds, by their function variable. -/
+def knownCalls (p : Clos.Prog) : Std.HashMap Var Nat :=
+  p.flow.fold (fun m f cs => if cs.size == 1 then m.insert f cs[0]! else m) {}
+
+/-- The program's closure calls: how many there are, how many call the one code of their type's
+union, and how many more a code the flow analysis finds. The rest are dispatched. -/
+def callSites (p : Clos.Prog) : Except String (Nat × Nat × Nat) := do
+  let T ← p.types
+  let known := knownCalls p
+  let calls := (p.codes.toList.flatMap (callsOf ·.body)) ++ callsOf p.main
+  let mut byType := 0
+  let mut byFlow := 0
+  for f in calls do
+    let u := T.union (T.varTy.getD f 0)
+    if u.size == 1 then byType := byType + 1
+    else if (known[f]?.map u.contains).getD false then byFlow := byFlow + 1
+  return (calls.length, byType, byFlow)
 
 def lower (p : Clos.Prog) (counts : Bool := false) : Except String Prog := do
   let T ← p.types
   let nc := p.codes.size
   let fMain := codeFn nc
-  let envCodes := (List.range nc).foldl (fun (m : Std.HashMap Nat (Array Nat)) c =>
-      if (p.codes[c]?.map (·.env.isEmpty)).getD true then m
-      else let t := T.r T.codeTy[c]!; m.insert t ((m.getD t #[]).push c)) {}
-  let ctx : Ctx := { T, codes := p.codes, envCodes, helperBase := fMain + 2 }
-  let act : LM (List Fn × Array Nat) := do
-    let table := (← (List.range nc).mapM fun c => do
-      pure [codeFn c]).flatten
+  let ctx : Ctx := { T, codes := p.codes, known := knownCalls p, helperBase := fMain + 2 }
+  let act : LM (List Fn) := do
     let codes ← p.codes.toList.zipIdx.mapM fun (c, k) => lowerCode k c
     let main ← lowerMain p.main
     let entry ← entryFn fMain p.fin counts
@@ -704,8 +813,8 @@ def lower (p : Clos.Prog) (counts : Bool := false) : Except String Prog := do
       match q[gen.size]? with
       | some h => gen := gen.push (← genHelper h)
       | none => break
-    pure ([printDecFn] ++ codes ++ [main, entry] ++ gen.toList, table.toArray)
-  let ((fns, table), _) ← (act.run ctx).run {}
-  pure { fns := fns.toArray, table, entry := fMain + 1 }
+    pure ([printDecFn] ++ codes ++ [main, entry] ++ gen.toList)
+  let (fns, _) ← (act.run ctx).run {}
+  pure { fns := fns.toArray, entry := fMain + 1 }
 
 end Backend.Flat
