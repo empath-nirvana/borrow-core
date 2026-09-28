@@ -1,0 +1,59 @@
+-- A source closed early (SPEC §11, §7): the input as the library's stream `bytes stdin`, an
+-- iterator that owns the input capability. Five bytes are taken from it by a bounded loop, then
+-- it is closed early, and its `close` hands the capability back; the program then reads on from
+-- where the iterator stopped, with a `for` over a new stream. (A file source would be the same
+-- program over a file's `input`; files are not externs yet, so the source is standard input.)
+--
+-- Answer: `hello | , world` for `hello, world`: the five bytes through the first stream, then
+-- the rest through the capability it returned. A capability not handed back could not read the
+-- rest; a byte lost at the close would drop the comma.
+
+type It = U (iter i32 In In)
+
+-- Taking up to `k` bytes: (output, (the stream, or the capability once it has finished, k)).
+-- At `k = 0` the stream is closed early.
+type T = Out * ((It + In) * i32)
+
+def take_step : !(T => T) =
+  !thunkv fun (s : T) ->
+    let (o, r) = s;
+    let (src, k) = r;
+    case src {
+      inl it ->
+        case (unbang host[eqz32]) k {
+          inl more ->
+            x <- (nu_out (force it)).1;
+            case x {
+              inl p ->
+                let (b, rest) = p;
+                q <- return (putb (o, b));
+                let (o2, u) = q;
+                return (o2, ((inl rest : It + In), (unbang host[sub32]) (k, i32[1])))
+            | inr c -> return (o, ((inr c : It + In), k))
+            }
+        | inr stop ->
+            c <- (nu_out (force it)).2;
+            return (o, ((inr c : It + In), k))
+        }
+    | inr c -> return (o, ((inr c : It + In), k))
+    }
+
+def take_twice : !(T => T) => !(T => T) =
+  thunkv fun (f : !(T => T)) -> return (!thunkv fun (s : T) -> return ((unbang f) ((unbang f) s)))
+
+main : F 1 =
+  t <- return ((unbang (take_twice (take_twice (take_twice take_step))))
+                 (stdout, ((inl (bytes stdin) : It + In), i32[5])));
+  let (stdout, r) = t;
+  let (src, k) = r;
+  stdin : In <- case src {
+    inl it -> (nu_out (force it)).2
+  | inr c -> return c
+  };
+  _ <- return (putb (&stdout, i32[32]));
+  _ <- return (putb (&stdout, i32[124]));
+  _ <- return (putb (&stdout, i32[32]));
+  for b in bytes stdin {
+    return (putb (&stdout, b))
+  };
+  return ()

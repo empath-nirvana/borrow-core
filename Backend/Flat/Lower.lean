@@ -81,6 +81,8 @@ def lowerTm (hostIdx : HostOp → Nat) : Tm → Dest → LM (List Stmt)
   | .prim .tab [v], d => do return emit d (.call fArrTab [← lv v])
   | .prim .idx [v], d => do return emit d (.call fArrIdx [← lv v])
   | .prim .drop [v], d => do return emit d (.call fArrDrop [← lv v])
+  | .prim (.io .readByte) [v], d => do return emit d (.call fReadByte [← lv v])
+  | .prim (.io .writeByte) [v], d => do return emit d (.call fWriteByte [← lv v])
   | .prim _ _, _ => throw "flat IR: primitive arity"
   | .app f a, d => do
       let f ← lv f
@@ -131,13 +133,20 @@ def lowerMain (hostIdx : HostOp → Nat) (t : Tm) : Except String Fn := do
   let (body, s) ← (lowerTm hostIdx t .ret).run ⟨[], 0⟩
   pure { name := "main", params := 0, locals := s.next, body := body ++ [.trap] }
 
-/-- Run `main`, print the value, drop it, print the live count. -/
-def entryFn (fMain : Nat) : Fn where
+/-- Run `main` (driving it and running the code `fin` on what it finishes with, when it returns
+a loop), print the value, drop it, print the live count. -/
+def entryFn (fMain : Nat) (fin : Option Nat) : Fn where
   name := "entry"
   params := 0
-  locals := 1
+  locals := 2
   body :=
-    [.set 0 (.call fMain []), .eval (.call fPrint [.loc 0])] ++ outStr "\n" ++
+    [.set 0 (.call fMain [])] ++
+    (match fin with
+      | none => []
+      | some c =>
+        [.set 0 (.call fDrive [.loc 0])] ++ mkObj 1 hClos [.c64 c.toUInt64] ++
+        [.set 0 (.callInd (.load (.loc 1) 1) [.loc 1, .loc 0])]) ++
+    [.eval (.call fPrint [.loc 0])] ++ outStr "\n" ++
       [.eval (.call fDrop [.loc 0])] ++ outStr "live " ++
       [.eval (.call fPrintDec [.live])] ++ outStr "\n" ++ [.ret (.c64 0)]
 
@@ -149,7 +158,7 @@ def lower (p : Clos.Prog) : Except String Prog := do
   let codes ← p.codes.toList.zipIdx.mapM fun (c, k) => lowerCode hostIdx k c
   let fMain := codeBase + codes.length
   let main ← lowerMain hostIdx p.main
-  let fns := runtimeFns ++ ops.map hostFn ++ codes ++ [main, entryFn fMain]
+  let fns := runtimeFns ++ ops.map hostFn ++ codes ++ [main, entryFn fMain p.fin]
   pure { fns := fns.toArray, table := (List.range codes.length).toArray.map (codeBase + ·),
          entry := fMain + 1 }
 

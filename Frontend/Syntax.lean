@@ -84,6 +84,8 @@ inductive VTy where
   | unk (sp : Span)
   /-- `i32` / `i64`. -/
   | int (sp : Span) (w : Width)
+  /-- `input` / `output` (`out = true`): the host stream types (SPEC §11). -/
+  | handle (sp : Span) (out : Bool)
   /-- `mu X. A`. -/
   | mu (sp : Span) (X : Ident) (A : VTy)
   /-- An upper-case name: a `mu`-bound variable, a `type` abbreviation, or a `def`'s type
@@ -125,6 +127,8 @@ inductive CTy where
   | delay (sp : Span) (A : VTy)
   | stream (sp : Span) (A : VTy)
   | iter (sp : Span) (A R R' : VTy)
+  /-- `loop A B`: `nu X. F (A + U X) & F B` (SPEC §7). -/
+  | loop (sp : Span) (A B : VTy)
 
 /-- Shapes `σ ::= leaf A | node σ σ | Name` (syntax-core §5). -/
 inductive Shape where
@@ -239,6 +243,8 @@ inductive Val where
   | const (sp : Span) (c : Const)
   /-- `shorten_mut[σ, @a] V` / `shorten_imm[σ, @a] V`. -/
   | shorten (sp : Span) (m : Mode) (σ : Shape) (a : Life) (V : Val)
+  /-- `&x`: lend the capability `x` to one call, elaborated away before checking (SPEC §11). -/
+  | lend (sp : Span) (x : Ident)
 
 /-- Computations (syntax-core §6.2), checked at a computation type. -/
 inductive Comp where
@@ -275,6 +281,9 @@ inductive Comp where
   | nuOut (sp : Span) (M : Comp)
   /-- `(M : C)`. -/
   | ascribe (sp : Span) (M : Comp) (C : CTy)
+  /-- `for x in V { M }; N`, at the end of a `main` with ambient capabilities, elaborated away
+  before checking (SPEC §11). -/
+  | for_ (sp : Span) (x : Ident) (V : Val) (M N : Comp)
 end
 
 deriving instance DecidableEq for Val, Comp
@@ -318,6 +327,7 @@ def VTy.strip : VTy → VTy
   | .bang _ A => .bang .none A.strip
   | .unk _ => .unk .none
   | .int _ w => .int .none w
+  | .handle _ o => .handle .none o
   | .mu _ X A => .mu .none X.strip A.strip
   | .name _ n => .name .none n
   | .lolli _ A B => .lolli .none A.strip B.strip
@@ -340,6 +350,7 @@ def CTy.strip : CTy → CTy
   | .delay _ A => .delay .none A.strip
   | .stream _ A => .stream .none A.strip
   | .iter _ A R R' => .iter .none A.strip R.strip R'.strip
+  | .loop _ A B => .loop .none A.strip B.strip
 
 def Shape.strip : Shape → Shape
   | .leaf _ A => .leaf .none A.strip
@@ -409,6 +420,7 @@ def Val.strip : Val → Val
   | .ascribe _ V A => .ascribe .none V.strip A.strip
   | .const _ c => .const .none c.strip
   | .shorten _ m σ a V => .shorten .none m σ.strip a.strip V.strip
+  | .lend _ x => .lend .none x.strip
 
 def Comp.strip : Comp → Comp
   | .ret _ V => .ret .none V.strip
@@ -428,6 +440,7 @@ def Comp.strip : Comp → Comp
   | .nuIn _ M => .nuIn .none M.strip
   | .nuOut _ M => .nuOut .none M.strip
   | .ascribe _ M C => .ascribe .none M.strip C.strip
+  | .for_ _ x V M N => .for_ .none x.strip V.strip M.strip N.strip
 end
 
 def Decl.strip : Decl → Decl
@@ -444,27 +457,28 @@ def Val.span : Val → Span
   | .var sp _ | .defApp sp _ _ | .unit sp | .pair sp _ _ | .inl sp _ | .inr sp _
   | .thunk sp _ | .thunkv sp _ | .bangThunk sp _ | .bangThunkv sp _ | .unbang sp _
   | .boxed sp _ _ | .unbox sp _ | .sub sp _ _ | .roll sp _ | .unroll sp _ | .run sp _
-  | .app sp _ _ | .inst sp _ _ | .ascribe sp _ _ | .const sp _ | .shorten sp _ _ _ _ => sp
+  | .app sp _ _ | .inst sp _ _ | .ascribe sp _ _ | .const sp _ | .shorten sp _ _ _ _
+  | .lend sp _ => sp
 
 /-- The span of a computation. -/
 def Comp.span : Comp → Span
   | .ret sp _ | .bind sp _ _ _ _ _ | .force sp _ | .lam sp _ _ _ | .app sp _ _ | .with_ sp _ _
   | .proj sp _ _ | .top sp | .letUnit sp _ _ | .letPair sp _ _ _ _ | .case sp _ _ _ _ _
   | .absurd sp _ | .lamL sp _ _ _ | .inst sp _ _ | .nuIn sp _ | .nuOut sp _
-  | .ascribe sp _ _ => sp
+  | .ascribe sp _ _ | .for_ sp _ _ _ _ => sp
 
 def Life.span : Life → Span
   | .var sp _ | .top sp | .dom sp | .meet sp _ _ | .join sp _ _ => sp
 
 def VTy.span : VTy → Span
   | .unit sp | .zero sp | .tensor sp _ _ | .sum sp _ _ | .thunk sp _ | .ref sp _ | .imm sp _ _
-  | .mut sp _ _ | .box sp _ _ | .bang sp _ | .unk sp | .int sp _ | .mu sp _ _ | .name sp _
+  | .mut sp _ _ | .box sp _ _ | .bang sp _ | .unk sp | .int sp _ | .handle sp _ | .mu sp _ _ | .name sp _
   | .lolli sp _ _ | .all sp _ _ _ | .block sp _ | .val sp _ | .fam sp _ _ _ | .view sp _ _
   | .array sp _ | .arrayImm sp _ _ => sp
 
 def CTy.span : CTy → Span
   | .ret sp _ | .arr sp _ _ | .amp sp _ _ | .top sp | .all sp _ _ _ | .nu sp _ _ | .name sp _
-  | .delay sp _ | .stream sp _ | .iter sp _ _ _ => sp
+  | .delay sp _ | .stream sp _ | .iter sp _ _ _ | .loop sp _ _ => sp
 
 def Shape.span : Shape → Span
   | .leaf sp _ | .node sp _ _ | .name sp _ => sp

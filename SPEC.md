@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 0.9 · 2026-09-27
+Version 0.10 · 2026-09-27
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -322,12 +322,14 @@ path of `step s` and replacing each state `s′` in the result by `unfold step s
 
 ### Instances
 
-    D A          ≜ νX. F(A ⊕ U X) & F 1               (delay)
+    Loop A B     ≜ νX. F(A ⊕ U X) & F B               (loop)
+    D A          ≜ Loop A 1                            (delay)
     Stream A     ≜ νX. F(A ⊗ U X) & F 1               (stream)
     Iter A R R'  ≜ νX. F((A ⊗ U X) ⊕ R) & F R'        (finite iterator)
 
 The first observation is `next`, the second `close`. A delay's `next` returns a result or the
-rest; a stream's returns an element and the rest. An iterator's `next` yields an element and the
+rest; a loop's does the same, and its `close` ends it early with a residual `B` (the delay is the
+loop whose residual is `1`); a stream's returns an element and the rest. An iterator's `next` yields an element and the
 rest, or finishes with `R`; its `close` ends it early and returns a residual `R'` (for example a
 buffer or a cell handed back). `close` is required: no rule forgets a `U C`, so a linear state
 is released only by running `close`.
@@ -338,7 +340,13 @@ The former rules of the instances are the general ones at their bodies:
     unfoldS = unfold at Stream A : !U(S ⊸ F(A ⊗ S) & F 1) ⊸ !U(S ⊸ Stream A)
 
 `delayIn`/`delayOut` and `streamIn`/`streamOut` are `nuIn`/`nuOut` at those bodies. A loop is
-`fixD`: the step maps a state to a result or the next state, and never observes the loop.
+`fixD` (or `unfold` at `Loop A B`): the step maps a state to a result or the next state, and never
+observes the loop.
+
+**The driver.** `driveE n` observes a loop at most `n` times and closes it if it has not
+finished: `d : U(Loop A B) ⊢ driveE n : F(A ⊕ B)`, a `CDerives` derivation at every `n`
+(`d_driveL`; at the delay, `d_drive`). So a closed program that returns a loop, followed by
+`driveE n`, is a closed program for every `n`, and adequacy covers it.
 
 ### Destructor
 
@@ -584,22 +592,273 @@ extension, so the embedding (§3) still applies.
 
 ---
 
-## 11. Entry 10 — externs
+## 11. Entry 10 — externs and standard I/O
 
-A program may declare `extern name : A`. Externs form the initial context of `main`. The
-Fundamental Property quantifies over every context satisfying its types, so a program is safe
-for every implementation of its externs that meets their semantic types; each extern is a named
-hypothesis of the end-to-end theorem. Trusted runtime components with a program-level interface (stack switching, host I/O) enter
-this way. The allocator does not: it is part of the compiled runtime,
-trusted against its written spec (`Backend/README.md`). §8's integer operations do not:
-they are term constants, and the theorems are parametric in the host instead.
+### Motivation
 
-Standard input and output are linear capabilities:
+A program meets the world only at named boundaries. Each boundary is an extern whose contract is
+a semantic type (decision 27), and every effect is performed through a capability that the
+program was given (decision 30): there is no ambient authority. Standard input, standard output
+and standard error are the first capabilities, enough to write command-line tools.
 
-    main : Ref Input ⊸ Ref Output ⊸ F (Ref Input ⊗ Ref Output)
+### Externs
 
-In the model they are cells holding the remaining input and the accumulated output, which the
-interpreter runs; the compiler lowers their operations to host calls (WASI `fd_read`/`fd_write`).
+    extern name : A
+
+adds a live slot of type `A` to `main`'s initial context, the last declared at index 0
+(syntax-core §10). The **contract** of an extern is its semantic type: a value `v` at resource
+`ρ` implements `extern name : A` when `vC true A ls δ v ρ`. Externs are named hypotheses, not
+rules: no `CDerives` constructor and no machine step is added for them, and an implementation
+may be host code, code of our own that the compiler compiles, or a Lean term (a model). The
+Fundamental Property quantifies over every closing substitution, so a checked `main` is safe
+under every implementation of its externs that meets their contracts.
+
+The allocator is not an extern: it is part of the compiled runtime, trusted against its written
+specification (`Backend/README.md`). §8's integer operations are not externs: they are term
+constants, and the theorems are parametric in the host instead.
+
+### Opaque host types
+
+    A ::= … | Input | Output                       (VTy.opq k, k ∈ {input, output})
+
+An opaque type is a leaf with no introduction and no elimination rule. A value of one can be
+moved, stored in a cell and passed to an extern that takes it; it cannot be inspected, copied or
+dropped. Each opaque type `k` has a **model**, a predicate `k.Holds` on values, and
+
+    𝒱⟦k⟧δ(v) ≜ ⌜k.Holds v⌝                                      (in both modes)
+    Imm̲ 'b k ≜ Unk          Δ ⊢ k ⊐ @a (at every @a)          not persistent, no destructor
+
+- `Input.Holds v`: `v` is a byte list `Bytes = μX. 1 ⊕ (I32 ⊗ X)`, the input not yet read.
+- `Output.Holds v`: `v = (fd, bs)` with `fd : I32` the stream and `bs : Bytes` the bytes written
+  to it, most recent first. The stream travels with the content: whichever cell holds it, a
+  write goes to `fd`.
+
+**Host handles.** An extern that yields a host resource (a file descriptor, a host-table index)
+yields a non-persistent opaque type, never `I32` or `I64`. A persistent handle could be copied
+and used after it is closed (l_lang's L-199). `Imm̲` of an opaque type is `Unk`, so a borrow of
+a cell holding a handle cannot copy it out either. In compiled code the content of an `Input` or
+`Output` cell is the stream's file descriptor.
+
+`VTy.opq` is one `VTy` former, a leaf: every lemma by induction on value types gets a case
+that is the `I32` case with `Imm̲ = Unk`, as at `U C`. A new host resource is a new `k` with its
+model, not a new former.
+
+### Capabilities
+
+Standard I/O is a bundle of three capabilities, one per effect:
+
+    extern stdin  : ref input
+    extern stdout : ref output
+    extern stderr : ref output
+
+A capability is a cell whose content is opaque. The operations take a `Mut` borrow of the cell
+and hand it back:
+
+| extern | type |
+|---|---|
+| `read_byte` | `!(all 'a < top. mut 'a input => mut 'a input * (i32 + 1))` — the next byte, or `inr ()` at the end of the input |
+| `write_byte` | `!(all 'a < top. mut 'a output * i32 => mut 'a output)` — the low 8 bits of the integer |
+
+So a function's type shows which capabilities it can use: a helper that writes takes
+`mut 'a output` (or the cell, `ref output`), one that reads takes `mut 'a input`, and one that
+takes neither performs no I/O. A `def` may use the persistent externs declared before it (the
+operations, which carry no authority), but never a capability: a capability is not persistent,
+so it is visible only in `main`, and a helper that does I/O takes it as an argument. The `def`
+is re-checked at each use, where the extern is `main`'s slot, as for any `def`.
+
+`stdout` and `stderr` share the type `Output`: a writer is given an output stream, and which one
+is its caller's choice. The bundle is split and lent with the existing machinery (§5): `main`
+destructures it, borrows one capability with `withbor2` and passes `mut 'a output` to a helper,
+or passes the whole cell.
+
+**Why two operations.** Bytes are the unit of both streams, and end of input is the `inr ()` of
+a sum. Everything else a command-line tool needs — reading a line or a chunk into a borrowed
+array (§9), writing a string from a borrowed array, parsing and printing numbers, hex — is a
+loop over these two, written as library code (`corpus/io-aoc.bc` reads each line into one
+borrowed array; `corpus/io-wc.bc` prints decimal). A chunk primitive would change only the cost of a
+call, and the runtime may buffer below the interface. A new primitive is added when a loop over
+these two cannot express it.
+
+**`main`.** A program with capability externs has `main : F (Caps ⊗ A)`, where `Caps` is its
+capability externs in declaration order (one alone, several as a right-nested tuple). The
+capabilities have no destructor (§12), so `main` hands them back; the runtime then ends the
+streams. `A` is the program's result; `bcc interp` prints it, so it is persistent.
+
+**Loops.** Recursion is structured (decision 24), so a loop over the input is a step function
+iterated a bounded number of times (the corpus composes `twice` with itself), and a step after
+the end of the input does nothing. The bound is part of the program.
+
+### The model
+
+In the model the capabilities are cells holding the remaining input and the accumulated output,
+and the operations are ordinary core terms over the transparent representation
+(`Core/Stdio.lean`): `read_byte` is `withswap` popping the head of the byte list, and
+`write_byte` is `withswap` consing onto it. Four more externs construct and read capabilities;
+they are the model's harness, a handler that serves the streams from memory:
+
+| extern | type | model |
+|---|---|---|
+| `mk_input` | `!(Bytes => ref input)` | `alloc` |
+| `mk_output` | `!(i32 => ref output)` | `alloc (fd, nil)` |
+| `take_input` | `!(ref input => Bytes)` | `free` |
+| `take_output` | `!(ref output => i32 * Bytes)` | `free` |
+
+**The run.** The checker wraps a `main` with capability externs into a closed-over-externs
+program `run_io : Bytes -o F ((i32 * Bytes) * ((i32 * Bytes) * A))`: it makes the declared
+capabilities from the input bytes by `mk_input`/`mk_output` (fd 1 for `stdout`, 2 for
+`stderr`), runs `main`'s body with them bound to their names, takes the capabilities back and
+returns the outputs with `main`'s result. An undeclared stream is made and taken back empty.
+`run_io` is checked like any `main`, so it has a `CDerives` derivation at the context of the
+operation externs; `bcc interp` runs it with the model implementations.
+
+### Theorems
+
+- **The model meets the contracts** (`Core/Stdio.lean`). Each model implementation is in the
+  relation at its extern's type, at `∅`: `readByte_meets`, `writeByte_meets`, `mkInput_meets`,
+  `mkOutput_meets`, `takeInput_meets`, `takeOutput_meets`. Each is the Fundamental Property of the
+  term at the transparent type, and the transparency of the relation at `Input`/`Output`
+  (`vC_bytes`, `vC_outRep`: the relation at the representation is the model).
+- **End to end, every implementation** (`externs_every_run`, `externs_safe`). If `run_io`'s
+  result `R` is persistent and `γ` implements each of its externs at `∅` (the named hypothesis
+  `ExternsMeet`), then for every input byte list, every run of `run_io[γ] inp` from the empty
+  memory, under every allocator, can be continued to a value of `R` at the empty memory, and no
+  run is stuck. It is `adequacyD`'s form (`theorem32D`).
+- **End to end, the model** (`io_every_run`): the same at the model implementations, with the
+  outputs byte lists.
+- **Every run of `main`** (`externs_main_safe`): at any extern context, from every
+  configuration whose resource satisfies the contracts, no run of `main` is stuck. This is
+  `fundamentalD` at `main`.
+- **The run `bcc interp` performs** (`IORun.every_run`, `Frontend/Check/Externs.lean`): the
+  checked `run_io` with the model of each extern, chosen by type, carries the proofs
+  `io_every_run` takes, and `bcc interp` runs exactly `run_io[γ] inp`.
+- **No capability, no effect** (`wpTSD_frame_own`). A cell owned by the frame of a computation
+  holds the same value at the end of every value run of it. A computation's resource is what its
+  context and captures hold, so a function given neither the `stdout` cell nor a borrow of it,
+  nor an `Output` in a cell it owns, leaves the stream's content as it was: it writes nothing to
+  standard output.
+
+**Adequacy's scope.** The empty-memory conclusion is about the model's cells. File descriptors
+and other host handles are not memory: adequacy says nothing about them (whether a stream was
+flushed or closed). That the compiled lowering behaves as the model is tested, not proved.
+
+### Assurance
+
+Each extern records its assurance level, on the ladder of decision 27: (1) assumed,
+(2) interpreter-checked, (3) property-tested, (4) typed low-level (typed unsafe code),
+(5) boundary-checked, (6) semi-automatically verified, (7) proved. `bcc trusted <file>` lists
+every extern a program declares with its level and its implementation; an unproved boundary is
+the program's trusted base.
+
+| extern | model | host implementation |
+|---|---|---|
+| `stdin`, `stdout`, `stderr` | proved (7): cells with the model content | runtime cells holding the fd; assumed (1), checked against the model on the corpus |
+| `read_byte`, `write_byte` | proved (7) | WASI `fd_read`/`fd_write`; interpreter-checked (2): the flat-IR interpreter runs the lowering against scripted streams |
+| `mk_input`, `mk_output`, `take_input`, `take_output` | proved (7) | none: the model's harness, not compiled |
+
+An extern the compiler has no implementation for is reported as assumed and not compiled.
+
+### Lowering
+
+The runtime allocates the three cells holding file descriptors 0, 1 and 2, runs `main`, frees
+the cells `main` returns and prints the result. `read_byte` is WASI `fd_read` of one byte from
+the cell's descriptor (end of input, or an error, is `inr ()`); `write_byte` is `fd_write` of one
+byte. Both are unbuffered, so a prompt appears before the next read. The plain LLVM/libc
+counterpart is `read(2)`/`write(2)` on the same descriptors (or `getc`/`putc` on a `FILE *`): no
+WASI-only feature is part of the semantics (decision 25).
+
+### Programs that run until their input ends
+
+`main` may return a loop over its capabilities:
+
+    main : F (U (Loop (Caps ⊗ A) (Caps ⊗ B)))
+
+The runtime drives it: it observes `next` until the loop finishes with `(caps, a)`, then takes
+the capabilities back and prints `a`; it never closes it. Nothing in the kernel changes (no
+rule, no relation clause, no machine step); what is new is this obligation of the runtime and
+its theorem. A driven program is covered one prefix at a time: for every `n`, `run_io` followed
+by `driveE n` is a closed program, and every run of it from the empty memory, under every
+allocator, continues to a value at the empty memory (`externs_loop_every_run`,
+`io_loop_every_run`, and `IORun.loop_every_run` at the term `bcc interp` runs). A run that
+finishes after `k` observations is the run of the `k`-th prefix, which ends at `inl`. A loop
+that never finishes runs forever, and every finite prefix of the run is safe. `run_io` is a
+loop too: its `next` observes `main`'s loop and, when it finishes, takes the outputs; its
+`close` closes `main`'s loop and takes them.
+
+### The I/O library
+
+`lib/io.bc` is ordinary library code over the externs, in scope in a program whose `main`
+uses the capabilities ambiently (below):
+
+| name | type | |
+|---|---|---|
+| `getb` | `ref input => ref input * (i32 + 1)` | one byte, the capability handed back |
+| `putb` | `ref output * i32 => ref output * 1` | one byte out |
+| `put_dec` | `ref output * i32 => ref output * 1` | a number in decimal |
+| `bytes` | `ref input => U (iter i32 (ref input) (ref input))` | the input as a stream of bytes, finishing, or closing early, with the capability |
+
+Each hides the borrow: it lends the capability to one operation and hands it back. A line
+reader is not provided: an observation must terminate, so a line of unbounded length is a loop
+of its own; programs consume `bytes` and keep the line in their state.
+
+### Sugar
+
+Each form below is elaborated by the frontend into ordinary core, which the unchanged checker
+then checks; the theorems apply to the elaborated program with no new case. None exists in the
+kernel, the checker's rules or the proofs. `bcc desugar <file>` prints the elaborated program,
+and `corpus/sugar/` pairs each sugared program with its hand-written core form, which must
+elaborate to the same term.
+
+- **Ambient capabilities in `main`.** A program that declares no externs and whose `main`
+  mentions `stdin`, `stdout` or `stderr` gets the I/O library, the operations, and an `extern`
+  for each capability it mentions (in the order `stdin`, `stdout`, `stderr`). `main : F A`
+  elaborates to `main : F (Caps ⊗ A)`: every terminal `return V` of its body becomes
+  `return (caps, V)`, and any other terminal `T` becomes `r <- T; return (caps, r)`, the
+  capabilities read by name where the path ends. Nothing else is ambient: a `def` never sees a
+  capability.
+- **Lending a capability to one call, `&c`.** In `x <- M; N`, one `&c` in `M` elaborates to
+  `r <- M[c/&c]; let (c, x) = r; N`: the call takes the capability and hands it back first, as
+  `getb`, `putb` and `put_dec` do. A terminal `return V` of an ambient `main` or of a loop body
+  may lend too: it becomes such a binding before the capabilities are handed back.
+- **`for x in bytes c { M }; N`**, at the end of an ambient `main`: the form of draft 0 of the
+  surface syntax (`docs/surface-cbpv.md`), here at the top level. It elaborates to a loop by
+  `unfold` whose state is the stream `bytes c`, the other capabilities, and the variables of
+  `main` that `M` or `N` reads, each at the type its binding `y : T <- …` gives (the elaborator
+  sees no other types). The loop's `next` observes the stream: an element `x` runs `M`, which
+  rebinds the state by name, and the loop goes on; at the end of the stream the capability it
+  hands back is bound to `c`, `N` runs, and the loop finishes with the capabilities and `N`'s
+  value. Its `close` closes the stream. `main : F A` then elaborates to
+  `main : F (U (Loop (Caps ⊗ A) (Caps ⊗ 1)))`. A `for` inside a function needs a finite consumer
+  (#59's `for_each`) and is not provided.
+
+### Designed, not built
+
+- **More capabilities, one pattern.** Each is a cell with opaque content, a model and externs
+  taking a `Mut` borrow: `Args` (`next_arg`: the next argument into a borrowed array, or the
+  end), `Env` (lookup by name into a borrowed array), `Fs` (open yields an `Input`/`Output`, close
+  consumes it), `Net`, `Clock`, `Random`.
+- **Exit.** The exit status is `main`'s result at `A = I32`; not yet passed to the host.
+- **Handlers.** A capability's meaning is its model and its operations are externs, not rules,
+  so a capability can be served by any value meeting the extern's type: the host, the model
+  (`bcc interp`'s handler), or later a user-defined handler (#18) such as a mock input or a
+  recording output. Nothing in the typing depends on the host.
+
+### Baseline
+
+`VTy.opq` is one leaf former; no `CDerives` rule and no machine step is added. `fundamentalC`,
+`adequacyC`, `fundamentalD` and `adequacyD` keep their statements and cover the new former.
+
+### Open
+
+- I/O errors are not modeled: a read error is end of input, a write error is ignored.
+  Distinguishing them changes both operations' types and the model, which has no errors; left
+  for an entry with a failing model.
+- `for` has no early exit: a program that stops reading keeps a flag in its state.
+- The host implementations agree with the model on the corpus; that is tested, not proved.
+- `wpTSD_frame_own` is about the end of a value run, not intermediate states.
+- Destructors for host resources, which perform I/O and can fail (§12 Open).
+- `main` with borrowed capabilities (lifetime-parametric externs) is not provided.
+- `Args`, `Env`, `Exit`, `Fs` and the rest are designed only.
+- `|>` pipelines (#59) are not provided.
 
 ---
 
@@ -775,7 +1034,9 @@ checker reads `nu X. C`, `iter A R R'`, `nu_in`/`nu_out` and `unfold[C, S]`. Ent
 and host-step forms. Entry 8 (§9, arrays) is implemented: the former and its lemmas in `Core/Types.lean` and the typed
 world, the constants in `Core/Arrays.lean` (`Core/ArrayWp.lean` for the steps), the three machine
 steps in `Paper/` and `Support/`, the checker (`array`, `array_imm`, syntax-core §8b) and the
-backend. Entry 10 (§11) is specified only. Entry 11 (§12) is implemented in
+backend. Entry 10 (§11) is implemented: the former `VTy.opq` in `Core/Types.lean` and the
+typed world, the model and the end-to-end theorems in `Core/Stdio.lean`, the checker (`input`,
+`output`, the `run_io` wrapper) and the backend (`Backend/Clos`, `Backend/Flat`, WASI imports). Entry 11 (§12) is implemented in
 `Core/Dtor.lean` and the checker (`Frontend/Check/`), with no change to `CDerives`. Entry 12
 (§13) is implemented in `Core/Alloc.lean`, `Core/World.lean`, `Core/Demonic.lean` and
 `Core/Stale.lean`.
@@ -783,6 +1044,17 @@ backend. Entry 10 (§11) is specified only. Entry 11 (§12) is implemented in
 ---
 
 ## Changelog
+
+- **0.10** (2026-09-27) — Entry 10 (§11): externs and standard I/O. The opaque host types
+  `Input`/`Output` (`VTy.opq`), with a model and `Imm̲ = Unk`; the capabilities `stdin`,
+  `stdout`, `stderr` as cells, `read_byte`/`write_byte` on `Mut` borrows of them; the model
+  harness `mk_input`, `mk_output`, `take_input`, `take_output`; `run_io`; the model meets the
+  contracts, `externs_every_run`/`io_every_run` in `adequacyD`'s form, `externs_main_safe`, and
+  `wpTSD_frame_own` (no capability, no effect); a `def` may use the persistent externs declared
+  before it; assurance levels and `bcc trusted`. `Loop A B` (§7; `D A = Loop A 1`) with the
+  driver typed at every loop (`d_driveL`); programs that run until their input ends
+  (`externs_loop_every_run`, `io_loop_every_run`); the I/O library; the sugar: ambient
+  capabilities in `main`, `&c`, and `for` at the end of `main`, each elaborated before checking.
 
 - **0.9** (2026-09-27) — Entry 12 (§13): every run is safe. `wpTS`'s run is an allocator run at
   every allocator; `wpTSD` (every run continues to a value in the postcondition), `fundamentalD`

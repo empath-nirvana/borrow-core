@@ -26,6 +26,9 @@ def fArrTabLoop : Nat := 9
 def fArrIdx : Nat := 10
 def fArrDrop : Nat := 11
 def fArrDropLoop : Nat := 12
+def fReadByte : Nat := 13
+def fWriteByte : Nat := 14
+def fDrive : Nat := 15
 
 /-- `copy w`: locals `w`, `h`, `t`, `n`. -/
 def copyFn : Fn where
@@ -248,8 +251,51 @@ def arrDropLoopFn : Fn where
           .tailCall fArrDropLoop [b, f, add64 i (.c64 1), n] ] [],
       .ret (.c64 0) ]
 
+/-! ### Standard I/O  `[spec §11]`
+
+A capability is a cell whose content is `i32[fd]`, the stream's file descriptor. -/
+
+/-- `read_byte m`: `(m, inl i32[b])` with the next byte of the stream in the cell `m`, or
+`(m, inr ())` at its end. Locals `m`, `b`, `r`, `t`. -/
+def readByteFn : Fn where
+  name := "read_byte"
+  params := 1
+  locals := 3
+  body :=
+    let m := Exp.loc 0; let b := Exp.loc 1
+    [ .set 1 (.getc (shr64 (.load m 1) (.c64 32))),
+      .ite (eq64 b (.c64 0xFFFFFFFFFFFFFFFF))
+        (mkObj 2 hInj₂ [.c64 unitW]) (mkObj 2 hInj₁ [box32 (wrap b)]) ] ++
+    mkObj 3 hPair [m, .loc 2] ++ [.ret (.loc 3)]
+
+/-- `write_byte p`, `p = (m, i32[b])`: the low byte of `b` to the stream in the cell `m`; the
+result is `m`. Locals `p`, `m`, `w`. -/
+def writeByteFn : Fn where
+  name := "write_byte"
+  params := 1
+  locals := 2
+  body :=
+    let p := Exp.loc 0; let m := Exp.loc 1; let w := Exp.loc 2
+    [ .set 1 (.load p 1), .set 2 (.load p 2), .free p,
+      .putc (shr64 (.load m 1) (.c64 32)) (shr64 w (.c64 32)), .ret m ]
+
+/-- `drive d`: observe the loop `d` until it finishes, calling it on `inl ()`; it answers
+`inl r` to finish with `r` or `inr d'` to go on with `d'` (SPEC §11). Locals `d`, `t`, `r`. -/
+def driveFn : Fn where
+  name := "drive"
+  params := 1
+  locals := 2
+  body :=
+    let d := Exp.loc 0; let r := Exp.loc 2
+    mkObj 1 hInj₁ [.c64 unitW] ++
+    [ .set 2 (.callInd (.load d 1) [d, .loc 1]),
+      .ite (eq64 (.load r 0) (.c64 hInj₁))
+        [.set 1 (.load r 1), .free r, .ret (.loc 1)]
+        [.set 0 (.load r 1), .free r, .tailCall fDrive [d]] ]
+
 def runtimeFns : List Fn :=
   [copyFn, dropFn, copyEnvFn, dropEnvFn, printFn, printAtomFn, printDecFn,
-   arrTabFn, arrInitFn, arrTabLoopFn, arrIdxFn, arrDropFn, arrDropLoopFn]
+   arrTabFn, arrInitFn, arrTabLoopFn, arrIdxFn, arrDropFn, arrDropLoopFn,
+   readByteFn, writeByteFn, driveFn]
 
 end Backend.Flat

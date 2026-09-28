@@ -44,7 +44,7 @@ def VTy.level : VTy → Nat
 def CTy.level : CTy → Nat
   | .arr .. | .all .. | .nu .. => 0
   | .amp .. => 1
-  | .ret .. | .delay .. | .stream .. | .iter .. => 4
+  | .ret .. | .delay .. | .stream .. | .iter .. | .loop .. => 4
   | .top .. | .name .. => 5
 
 def widthName : BoCa.Width → String
@@ -72,6 +72,7 @@ def VTy.pp (A : VTy) (lvl : Nat := 0) : String :=
     | .bang _ A => "!" ++ A.pp 4
     | .unk _ => "unk"
     | .int _ w => widthName w
+    | .handle _ o => if o then "output" else "input"
     | .mu _ X A => "mu " ++ X.name ++ ". " ++ A.pp 0
     | .name _ n => n
     | .lolli _ A B => A.pp 1 ++ " => " ++ B.pp 0
@@ -95,6 +96,7 @@ def CTy.pp (C : CTy) (lvl : Nat := 0) : String :=
     | .delay _ A => "delay " ++ A.pp 4
     | .stream _ A => "stream " ++ A.pp 4
     | .iter _ A R R' => "iter " ++ A.pp 5 ++ " " ++ R.pp 5 ++ " " ++ R'.pp 5
+    | .loop _ A B => "loop " ++ A.pp 5 ++ " " ++ B.pp 5
 
 def Shape.pp : Shape → String
   | .leaf _ A => "leaf " ++ A.pp 4
@@ -123,7 +125,7 @@ def Val.level : Val → Nat
   | _ => 3
 
 def Comp.level : Comp → Nat
-  | .bind .. | .letUnit .. | .letPair .. | .lam .. | .lamL .. => 0
+  | .bind .. | .letUnit .. | .letPair .. | .lam .. | .lamL .. | .for_ .. => 0
   | .ret .. | .absurd .. | .nuIn .. | .nuOut .. => 1
   | .app .. | .proj .. | .inst .. => 2
   | _ => 3
@@ -161,6 +163,7 @@ def Val.pp (V : Val) (lvl : Nat := 0) (k : Nat := 0) : String :=
     | .const _ c => c.pp
     | .shorten _ m σ a V =>
       "shorten_" ++ m.pp ++ "[" ++ σ.pp ++ ", " ++ a.pp ++ "] " ++ V.pp 1 k
+    | .lend _ x => "&" ++ x.name
 
 /-- A computation at level `lvl`, indented by `k` after each line break. -/
 def Comp.pp (M : Comp) (lvl : Nat := 0) (k : Nat := 0) : String :=
@@ -187,6 +190,9 @@ def Comp.pp (M : Comp) (lvl : Nat := 0) (k : Nat := 0) : String :=
     | .nuIn _ M => "nu_in " ++ M.pp 1 k
     | .nuOut _ M => "nu_out " ++ M.pp 1 k
     | .ascribe _ M C => "(" ++ M.pp 1 k ++ " : " ++ C.pp ++ ")"
+    | .for_ _ x V M N =>
+      "for " ++ x.name ++ " in " ++ V.pp 1 k ++ " {" ++ nl (k + 2) ++
+        M.pp 0 (k + 2) ++ nl k ++ "};" ++ nl k ++ N.pp 0 k
 end
 
 def Decl.pp : Decl → String

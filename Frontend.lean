@@ -13,3 +13,4 @@ import Frontend.Check.Consts
 import Frontend.Check.Checker
 import Frontend.Check.Program
 import Frontend.Check.CrossCheck
+import Frontend.Check.Externs

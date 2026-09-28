@@ -24,7 +24,9 @@ mechanization of Wagner, Gierczak, Marshall, Li and Ahmed, *From Linearity to Bo
   cell and read through the family of leaf views (§9).
 - **Persistent variables:** values holding no resource are copied and dropped freely (§10).
 
-Specified but not yet implemented: externs and stdio (§11).
+- **Externs and standard I/O:** `stdin`, `stdout`, `stderr` as capabilities with opaque
+  content, `read_byte`/`write_byte` on `mut` borrows of them, proved against their model and
+  compiled to WASI `fd_read`/`fd_write` (§11).
 
 ## What is proved
 
@@ -39,6 +41,10 @@ All in Lean, with no axioms beyond `propext`, `Classical.choice` and `Quot.sound
   judgment for it (`checkProgram_sound`), so the two theorems above apply to it.
 - **Parametric arithmetic:** every theorem holds for every implementation of the integer
   operations, so nothing about arithmetic is assumed.
+- **Externs:** a program with standard I/O is safe and leak-free on every run for every
+  implementation of its externs that meets their types (`externs_every_run`); the model of each
+  operation meets its type (`readByte_meets`, …), and a function given no capability does not
+  change the stream in it (`wpTSD_frame_own`).
 
 ## What is trusted, and what is tested
 
@@ -46,5 +52,7 @@ All in Lean, with no axioms beyond `propext`, `Classical.choice` and `Quot.sound
   as in the Lean interpreter, and ends with no live objects (`scripts/compile-corpus.sh`).
 - **The allocator** is trusted against its written spec (`Backend/README.md`).
 - **The WAT printer and wasmtime** are trusted.
+- **The host implementations of the externs** (WASI `fd_read`/`fd_write`) are assumed to behave
+  as their model; `bcc trusted` lists them with their assurance levels.
 
 The plan for proving the compiler is issue "Verification plan for the backend".

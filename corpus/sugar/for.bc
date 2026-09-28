@@ -1,0 +1,10 @@
+-- `for` at the end of `main` (SPEC §11): a loop by `unfold` over (the stream, the other
+-- capabilities, the threaded variables), which `main` returns and the runtime drives.
+-- `for.core.bc` is the elaborated program, as `bcc desugar` prints it.
+main : F i32 =
+  n : i32 <- return i32[0];
+  for b in bytes stdin {
+    n : i32 <- return ((unbang host[add32]) (n, i32[1]));
+    return (putb (&stdout, b))
+  };
+  return n

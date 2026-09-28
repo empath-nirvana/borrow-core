@@ -110,3 +110,55 @@ Each entry: the decision, and why. Newest last.
     lengths are static, and heterogeneous fields block run-time indexing. One `VTy` former is
     paid for (the growth rule's cost, accepted here); `Vec`, `Str` and sized types are later,
     over it.
+30. **No ambient authority: one capability per effect.** Every I/O operation takes a
+    capability value, and there is one capability type per effect, not a monolithic `IO` or
+    `World`: `stdin`, `stdout` and `stderr` now (SPEC §11), and `Args`, `Env`, `Fs`, `Net`,
+    `Clock`, `Random` later by the same pattern. A capability is a cell with opaque content and
+    its operations take a `Mut` borrow, so a function's type shows exactly which effects it can
+    perform, and `main` hands each callee only what it needs. That a function given no
+    capability performs no effect is a theorem (the frame result, `wpTSD_frame_own`), not a
+    convention. `main` uses its bundle implicitly, as sugar elaborated to explicit capability
+    passing (SPEC §11); no other function may. Operations are externs rather than rules, so a
+    capability can later be served by a user-defined handler (#18) instead of the host.
+31. **Host resources are opaque types with a model.** One leaf former, `VTy.opq k`, whose
+    relation is a predicate `k.Holds` on values and whose `Imm̲` is `Unk`: not persistent, no
+    destructor, no rule. Its values can only be moved and handed to externs, so a handle is never
+    copied (l_lang's L-199) and the model and the host can represent it differently (a byte list,
+    a file descriptor). A new host resource is a new `k`, not a new former.
+32. **Provisional (SPEC §11, to be confirmed by the user).**
+    - The surface names `input` and `output` for the opaque types, and the extern names
+      `stdin`, `stdout`, `stderr`, `read_byte`, `write_byte`, `mk_input`, `mk_output`,
+      `take_input`, `take_output`.
+    - `stdout` and `stderr` share the type `Output`; a writer is given an output stream.
+    - Two primitives, `read_byte` and `write_byte`, on `Mut` borrows; lines, chunks and numbers
+      are library loops.
+    - A `main` with capability externs has type `F (Caps ⊗ A)`, handing its capabilities back
+      in declaration order.
+    - The byte list is `μX. 1 ⊕ (I32 ⊗ X)` with bytes as `I32`; there is no `u8` yet.
+    - A `def` may use the persistent externs declared before it (the operations), never a
+      capability, so helpers can call `read_byte`/`write_byte` without taking them as
+      arguments while every capability still has to be passed.
+    - `bcc interp` runs the model, which reads all of standard input before the program runs;
+      `bcc run` is interactive and unbuffered.
+33. **Sugar is elaboration, and a program may run until its input ends.** Ambient capabilities
+    in `main`, `&c` and `for` are elaborated by the frontend (`Frontend/Sugar.lean`) into core
+    that the unchanged checker checks; nothing in the kernel, the checker's rules or the proofs
+    knows them, and `corpus/sugar/` pairs each with its core form. What is not sugar is running a
+    loop at the top level: `main` may return `U (Loop (Caps ⊗ A) (Caps ⊗ B))`, which the runtime
+    drives, covered one prefix at a time by `driveE` (SPEC §7, §11). It needs no kernel change
+    and has its own spec entry and theorem.
+34. **Provisional (SPEC §11, second pass, to be confirmed by the user).**
+    - `&c` lends an owned capability to one call that hands it back first. This differs from
+      draft 0's `&mut x` (`docs/surface-cbpv.md`), which borrows a `let mut` cell: `&c` moves the
+      cell and rebinds it. The spelling may change when #54 step 2 settles the surface.
+    - `for x in e { M }; N` is draft 0's form, but only at the end of a `main` with ambient
+      capabilities and only over `bytes c`; the threaded locals are typed by their bindings,
+      since the elaborator sees no types. There is no early exit.
+    - The ambient trigger: a program that declares no externs and whose `main` names `stdin`,
+      `stdout` or `stderr`. Such a program gets the I/O library (`lib/io.bc`).
+    - The library's names (`getb`, `putb`, `put_dec`, `bytes`, `In`, `Out`, `Bytes`) and its
+      convention that a helper hands its capability back first.
+    - `loop A B` as a type keyword; `D A = loop A 1`.
+    - No line reader: an observation must terminate, so a line of unbounded length is a loop of
+      its own.
+    - I/O errors stay unmodeled.

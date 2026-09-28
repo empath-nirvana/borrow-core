@@ -56,6 +56,8 @@ inductive Exp where
   | alloc (words : Exp)
   /-- The allocator's count of live ranges. -/
   | live
+  /-- The next byte of the stream `fd`, or `2⁶⁴ - 1` at its end (SPEC §11). -/
+  | getc (fd : Exp)
   deriving Repr, Inhabited
 
 inductive Stmt where
@@ -66,6 +68,8 @@ inductive Stmt where
   | eval (e : Exp)
   /-- Write the byte `b` to standard output. -/
   | out (b : Exp)
+  /-- Write the low byte of `b` to the stream `fd` (SPEC §11). -/
+  | putc (fd b : Exp)
   /-- `c` is a 32-bit test. -/
   | ite (c : Exp) (t e : List Stmt)
   /-- `s` is 32-bit; arm `k` runs when `s = k`, the last arm otherwise. -/

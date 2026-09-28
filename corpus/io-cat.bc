@@ -1,0 +1,13 @@
+-- cat (SPEC §11): standard input to standard output, byte by byte, with no bound on the input.
+-- `stdin` and `stdout` are used ambiently in `main`; `bytes` (the I/O library) is the input as a
+-- stream, and `&stdout` lends the output to one `putb`. `bcc desugar` shows the core program:
+-- a loop over (the stream, the output) that `main` returns and the runtime drives.
+--
+-- Answer: the input, byte for byte, including a multi-byte UTF-8 character and a tab, then `()`
+-- and `live 0`. `scripts/compile-corpus.sh` also copies an input of 4500 bytes.
+
+main : F 1 =
+  for b in bytes stdin {
+    return (putb (&stdout, b))
+  };
+  return ()

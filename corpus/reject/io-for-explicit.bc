@@ -1,0 +1,9 @@
+-- expect: 6:3: `for` may appear only at the end of a `main` that uses the capabilities ambiently (SPEC §11)
+-- `for` only ends a `main` that uses the capabilities ambiently.
+extern stdin : ref input
+
+main : F (ref input * 1) =
+  for b in bytes stdin {
+    return ()
+  };
+  return (stdin, ())

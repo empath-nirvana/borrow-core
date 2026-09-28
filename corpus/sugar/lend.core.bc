@@ -1,0 +1,19 @@
+-- `lend.bc` with `&stdout` written out: the call takes the capability, and the pair it answers
+-- rebinds it.
+extern stdout : ref output
+extern write_byte : !(all 'a < top. mut 'a output * i32 => mut 'a output)
+
+def putb : ref output * i32 => ref output * 1 =
+  thunkv fun (p : ref output * i32) ->
+    let (c, b) = p;
+    return (withbor2['x, top, output, 1] c
+      (thunkv Fun 'x < dom. return (thunkv fun (m : mut 'x output) ->
+         m2 <- return ((unbang write_byte) ['x] (m, b));
+         return (boxed['x] ()))))
+
+main : F (ref output * 1) =
+  r1 <- return (putb (stdout, i32[104]));
+  let (stdout, u) = r1;
+  r2 <- return (putb (stdout, i32[10]));
+  let (stdout, v) = r2;
+  return (stdout, v)

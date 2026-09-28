@@ -67,6 +67,7 @@ def dtorB : Bool → CVTy → Bool
   | _, .fam (.ref A) => dtorB false A
   | _, .fam (.imm _ _) => true
   | _, .fam _ => false
+  | _, .opq _ => false
 
 theorem dtorB_sound : ∀ (alg : Bool) (A : CVTy), dtorB alg A = true →
     HasDtor (cond alg ((toFShape A).resO .unit) A)
@@ -126,12 +127,14 @@ theorem dtorB_sound : ∀ (alg : Bool) (A : CVTy), dtorB alg A = true →
   | _, .thunk (.amp _ (.ret (.bang _))), h | _, .thunk (.amp _ (.ret .unk)), h
   | _, .thunk (.amp _ (.ret (.tvar _))), h | _, .thunk (.amp _ (.ret (.mu _))), h
   | _, .thunk (.amp _ (.ret (.int _))), h | _, .thunk (.amp _ (.ret (.fam _))), h
+  | _, .thunk (.amp _ (.ret (.opq _))), h
   | _, .thunk (.amp _ (.arr _ _)), h
   | _, .thunk (.amp _ (.amp _ _)), h | _, .thunk (.amp _ .top), h
   | _, .thunk (.amp _ (.all _ _ _)), h | _, .thunk (.amp _ (.nu _)), h => by simp [dtorB] at h
   | alg, .unit, _ => by cases alg <;> exact .unit
   | alg, .zero, _ => by cases alg <;> exact .zero
   | alg, .int _, _ => by cases alg <;> exact .int
+  | _, .opq _, h => by simp [dtorB] at h
   | alg, .unk, _ => by cases alg <;> exact .unk
   | alg, .bang _, _ => by cases alg <;> exact .bang
   | alg, .imm _ _, _ => by cases alg <;> exact .imm
@@ -162,6 +165,8 @@ structure Env where
   lenv : List (String × LifeVar)
   tps : List (String × CVTy)
   own : List Bool
+  /-- The number of extern slots, at the end of `vars` (SPEC §11). -/
+  nExt : Nat
 
 /-- The depth bound for elaborating a type. -/
 def tyFuel : Nat := 65536
@@ -289,9 +294,13 @@ def Env.ownIn (E : Env) (p : String → Bool) : Env :=
         | _ => false }
 
 /-- The environment of a `def`'s body at a use: its own scope, no variables or lifetimes of the
-use site, its type parameters bound. -/
-def Env.forDef (E : Env) (d : DefInfo) (tps : List (String × CVTy)) : Env :=
-  ⟨d.scope, E.vars.map (fun _ => none), [], tps, []⟩
+use site but the persistent externs (the operations of SPEC §11, which carry no authority; a
+capability is not persistent), its type parameters bound. -/
+def Env.forDef (E : Env) (T : List CVTy) (d : DefInfo) (tps : List (String × CVTy)) : Env :=
+  let n := E.vars.length
+  let vars := (List.range n).map fun i =>
+    if n ≤ i + E.nExt && (T[i]?.map (·.persistent)).getD false then E.vars.getD i none else none
+  ⟨d.scope, vars, [], tps, [], E.nExt⟩
 
 def inDef (x : String) (sp : Span) (e : Error) : Error :=
   { e with msg := s!"{e.msg}\n  in the body of `{x}`, used at {sp.start.render}" }
@@ -320,6 +329,7 @@ def mentionsV (x : String) : Val → Bool
   | .inl _ V | .inr _ V | .unbang _ V | .boxed _ _ V | .unbox _ V | .sub _ V _ | .roll _ V
   | .unroll _ V | .inst _ V _ | .ascribe _ V _ | .shorten _ _ _ _ V => mentionsV x V
   | .thunk _ M | .thunkv _ M | .bangThunk _ M | .bangThunkv _ M | .run _ M => mentionsC x M
+  | .lend _ y => y.name == x
 
 /-- `x` occurs free in a computation. -/
 def mentionsC (x : String) : Comp → Bool
@@ -336,6 +346,7 @@ def mentionsC (x : String) : Comp → Bool
   | .letPair _ y z V M => mentionsV x V || (y.name != x && z.name != x && mentionsC x M)
   | .case _ V y M z N => mentionsV x V || (y.name != x && mentionsC x M) ||
       (z.name != x && mentionsC x N)
+  | .for_ _ y V M N => mentionsV x V || (y.name != x && mentionsC x M) || mentionsC x N
 end
 
 /-- A path's terminal computation: every form except those that pass what is owed on to a tail

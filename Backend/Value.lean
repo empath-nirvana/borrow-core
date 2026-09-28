@@ -42,6 +42,15 @@ def PV.render : PV → String
   | .loc => "<loc>"
 end
 
+/-- What a stage writes: the program's standard output followed by the report, and its standard
+error. -/
+structure Output where
+  out : ByteArray
+  err : ByteArray
+
+/-- The program's output bytes, then the report. -/
+def Output.mk' (out err : ByteArray) (report : String) : Output := ⟨out ++ report.toUTF8, err⟩
+
 /-- What every stage prints for a finished run: the value, then the number of live objects
 after the value has been dropped. The source counts cells; the compiled stages count every
 object, so a leaked cell also counts the structure it holds. The two counts are zero together. -/

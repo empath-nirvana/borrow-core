@@ -74,6 +74,12 @@ where
       | some (.def_ _ m ps A V) => if m.name == n then some ⟨ps, A, V, ⟨s.decls, k⟩⟩ else go k
       | _ => go k
 
+/-- An `extern` named `n` is in scope. -/
+def Scope.hasExtern (s : Scope) (n : String) : Bool :=
+  (List.range s.upto).any fun k => match s.decls[k]? with
+    | some (.extern _ m _) => m.name == n
+    | _ => false
+
 def err {α} (sp : Span) (msg : String) : Except Error α := throw ⟨sp, msg⟩
 
 /-! ### Printing -/
@@ -118,6 +124,8 @@ def ppV (nm : List (String × LifeVar)) (d p : Nat) : CVTy → String
   | .unk => "unk"
   | .int .w32 => "i32"
   | .int .w64 => "i64"
+  | .opq .input => "input"
+  | .opq .output => "output"
   | .tvar n => if n < d then tvName (d - 1 - n) else s!"?{n}"
   | .mu A => parenIf (p > 0) s!"mu {tvName d}. {ppV nm (d + 1) 0 A}"
   | .fam (.ref A) => parenIf (p > 5) s!"array {ppV nm d 5 A}"
@@ -135,6 +143,8 @@ def ppC (nm : List (String × LifeVar)) (p : Nat) : CCTy → String
       parenIf (p > 5) s!"delay {ppV nm 0 5 A}"
   | .nu (.amp (.ret (.tensor A (.tvar 0))) (.ret .unit)) =>
       parenIf (p > 5) s!"stream {ppV nm 0 5 A}"
+  | .nu (.amp (.ret (.sum A (.tvar 0))) (.ret B)) =>
+      parenIf (p > 5) s!"loop {ppV nm 0 6 A} {ppV nm 0 6 B}"
   | .nu (.amp (.ret (.sum (.tensor A (.tvar 0)) R)) (.ret R')) =>
       parenIf (p > 5) s!"iter {ppV nm 0 6 A} {ppV nm 0 6 R} {ppV nm 0 6 R'}"
   | .nu C => parenIf (p > 0) s!"nu {tvName 0}. {ppC nm 0 C}"
@@ -205,6 +215,7 @@ def elabV : Nat → TyEnv → VTy → Except Error CVTy
     | .bang _ A => do pure (.bang (← elabV n E A))
     | .unk _ => pure .unk
     | .int _ w => pure (.int w)
+    | .handle _ o => pure (.opq (if o then .output else .input))
     | .mu sp X A => do
         let B ← elabV n { E with mu := X.name :: E.mu } A
         if VTy.clB 1 B = false then
@@ -263,6 +274,7 @@ def elabC : Nat → TyEnv → CTy → Except Error CCTy
     | .delay _ A => do pure (.delay (← elabV n E A))
     | .stream _ A => do pure (.stream (← elabV n E A))
     | .iter _ A R R' => do pure (.iter (← elabV n E A) (← elabV n E R) (← elabV n E R'))
+    | .loop _ A B => do pure (.loop (← elabV n E A) (← elabV n E B))
 /-- A shape. -/
 def elabS : Nat → TyEnv → Shape → Except Error CShape
   | 0, _, σ => err σ.span "shape abbreviations nested too deeply"

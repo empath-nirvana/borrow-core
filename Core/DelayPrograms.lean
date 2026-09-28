@@ -3,9 +3,10 @@ import Core.Folds
 /-!
 # Core — driving a delayed computation, and programs by `fixD`  `[spec §7]`
 
-**The driver.** `driveE n` observes a delayed computation `d : U(D A)` at most `n` times: it
-returns `inj₁ a` if a `next` returned `now a`, and otherwise closes `d` after the `n`-th `later`
-and returns `inj₂ ()`.  It is a `CDerives` derivation at `F(A ⊕ 1)` for every `n` (`d_drive`), so
+**The driver.** `driveE n` observes a loop `d : U(Loop A B)` at most `n` times: it returns
+`inj₁ a` if a `next` finished with `a`, and otherwise closes `d` after the `n`-th observation
+and returns `inj₂ b`, its residual.  It is a `CDerives` derivation at `F(A ⊕ B)` for every `n`
+(`d_driveL`; at the delay `D A = Loop A 1`, `d_drive`), so
 for a closed `e : U(D A)`, `e to d. driveE n` is an ordinary closed computation and the existing
 adequacy applies to it unchanged (`drive_runs_unit`, `drive_runs_nat`: from the empty memory to
 `now` or `closed`, and the empty memory).
@@ -40,18 +41,34 @@ def driveE : ℕ → Expr
   | 0 => bindE (.app (.var 0) (.val (.inj₂ .unit))) (.inj₂ (.var 0))
   | n + 1 => bindE (.app (.var 0) (.val (.inj₁ .unit))) (.case (.var 0) (.inj₁ (.var 0)) (driveE n))
 
-/-- `d : U(D A) ⊢ driveE n : F(A ⊕ 1)`. -/
-theorem d_drive {Δ : LifeCtx} (A : VTy) :
+theorem CDerives.loopOut {Δ Γ e A B} (h : CDerives Δ Γ e (.comp (.loop A B))) :
+    CDerives Δ Γ e (.comp (loopUnroll A B)) := by
+  rw [← CTy.loop_unroll]; exact .nuOut (CTy.loopBody_nuOk A B) h
+
+theorem CDerives.loopIn {Δ Γ e A B} (h : CDerives Δ Γ e (.comp (loopUnroll A B))) :
+    CDerives Δ Γ e (.comp (.loop A B)) :=
+  .nuIn (CTy.loopBody_nuOk A B) (by rw [CTy.loop_unroll]; exact h)
+
+/-- `d : U(Loop A B) ⊢ driveE n : F(A ⊕ B)`: observe at most `n` times, and close with the
+residual `B` if the loop has not finished.  `[spec §7, §11]` -/
+theorem d_driveL {Δ : LifeCtx} (A B : VTy) :
     ∀ (n : ℕ) {Γ : Ctx VTy}, Ctx.Dead Γ →
-      CDerives Δ (⟨.thunk (.delay A), true⟩ :: Γ) (driveE n) (.comp (.ret (.sum A .unit)))
+      CDerives Δ (⟨.thunk (.loop A B), true⟩ :: Γ) (driveE n) (.comp (.ret (.sum A B)))
   | 0, _, hΓ =>
-      .bind (.left (deadSplit hΓ)) (.proj₂ (.delayOut (.force (.here hΓ))))
+      .bind (.left (deadSplit hΓ))
+        (.proj₂ (.loopOut (.force (.here hΓ))))
         (.ret (.sumI₂ (.var (.here (.cons hΓ)))))
   | n + 1, _, hΓ =>
-      .bind (.left (deadSplit hΓ)) (.proj₁ (.delayOut (.force (.here hΓ))))
+      .bind (.left (deadSplit hΓ))
+        (.proj₁ (.loopOut (.force (.here hΓ))))
         (.sumE (.left (.dead (deadSplit hΓ))) (.var (.here (.cons hΓ)))
           (.ret (.sumI₁ (.var (.here (.cons (.cons hΓ))))))
-          (d_drive A n (.cons (.cons hΓ))))
+          (d_driveL A B n (.cons (.cons hΓ))))
+
+/-- `d : U(D A) ⊢ driveE n : F(A ⊕ 1)`: the driver at the delay, `Loop A 1`. -/
+theorem d_drive {Δ : LifeCtx} (A : VTy) (n : ℕ) {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
+    CDerives Δ (⟨.thunk (.delay A), true⟩ :: Γ) (driveE n) (.comp (.ret (.sum A .unit))) :=
+  d_driveL A .unit n hΓ
 
 /-- **The driver is an ordinary program**: for a closed `e : U(D A)` and every `n`,
 `e to d. driveE n` is a closed computation of `F(A ⊕ 1)`. -/

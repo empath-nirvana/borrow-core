@@ -57,3 +57,4 @@ import Core.Arrays
 import Core.ArrayPrograms
 import Core.Demonic
 import Core.Stale
+import Core.Stdio

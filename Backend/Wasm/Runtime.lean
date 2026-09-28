@@ -10,9 +10,12 @@ in `Backend/README.md`:
 - `$free a`, for `a` returned by `$alloc` and not freed since, ends that range's life and
   subtracts one from the live count.
 - `$live` is the live count, and is exported as `live_objects`.
-- `$putc b` writes the low byte of `b` to standard output (WASI `fd_write`).
+- `$putc b` writes the low byte of `b` to standard output, and `$putfd fd b` to the stream
+  `fd` (WASI `fd_write`; `write(2)` in libc).
+- `$getc fd` reads one byte of the stream `fd`, or answers `-1` at its end or on an error
+  (WASI `fd_read`; `read(2)` in libc).
 
-Layout: bytes `0–31` hold `$putc`'s I/O vector and byte; `1024 + 4s` holds the head of the
+Layout: bytes `0–31` hold `$putfd`'s I/O vector and byte, bytes `32–63` `$getc`'s; `1024 + 4s` holds the head of the
 free list of ranges of `s` words, for `s < 1024`; ranges start at `16384`, each preceded by a
 word holding its size. `$alloc` pops the free list of its size, or else bumps `$heap`, growing
 memory as needed. A freed range of `s < 1024` words is pushed onto its free list (its first
@@ -24,6 +27,8 @@ namespace Backend.Wasm
 def runtimeWat : String := "
   (import \"wasi_snapshot_preview1\" \"fd_write\"
     (func $fd_write (param i32 i32 i32 i32) (result i32)))
+  (import \"wasi_snapshot_preview1\" \"fd_read\"
+    (func $fd_read (param i32 i32 i32 i32) (result i32)))
   (memory (export \"memory\") 1)
   (global $heap (mut i32) (i32.const 16376))
   (global $live (mut i64) (i64.const 0))
@@ -70,10 +75,24 @@ def runtimeWat : String := "
     (global.get $live))
 
   (func $putc (param $b i64)
+    (call $putfd (i64.const 1) (local.get $b)))
+
+  (func $putfd (param $fd i64) (param $b i64)
     (i32.store8 (i32.const 16) (i32.wrap_i64 (local.get $b)))
     (i32.store (i32.const 0) (i32.const 16))
     (i32.store (i32.const 4) (i32.const 1))
-    (drop (call $fd_write (i32.const 1) (i32.const 0) (i32.const 1) (i32.const 24))))
+    (drop (call $fd_write (i32.wrap_i64 (local.get $fd))
+      (i32.const 0) (i32.const 1) (i32.const 24))))
+
+  (func $getc (param $fd i64) (result i64)
+    (i32.store (i32.const 32) (i32.const 48))
+    (i32.store (i32.const 36) (i32.const 1))
+    (i32.store (i32.const 40) (i32.const 0))
+    (if (i32.or
+          (call $fd_read (i32.wrap_i64 (local.get $fd)) (i32.const 32) (i32.const 1) (i32.const 40))
+          (i32.eqz (i32.load (i32.const 40))))
+      (then (return (i64.const -1))))
+    (i64.load8_u (i32.const 48)))
 "
 
 end Backend.Wasm

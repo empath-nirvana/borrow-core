@@ -1,0 +1,5 @@
+-- expect: 4:23: `&stdout` lends a capability to one call: it may appear only in the head `M` of `y <- M; N` (SPEC §11)
+-- A lent capability comes back through a binding: `&stdout` inside a `let` has nowhere to go.
+main : F 1 =
+  let (a, b) = (putb (&stdout, i32[104]));
+  return b

@@ -27,6 +27,7 @@ def lowerExp : Flat.Exp → List Instr
   | .callInd f args => lowerArgs args ++ lowerExp f ++ [.num .wrap, .callIndirect args.length]
   | .alloc w => lowerExp w ++ [.call "$alloc"]
   | .live => [.call "$live"]
+  | .getc fd => lowerExp fd ++ [.call "$getc"]
 where
   lowerArgs : List Flat.Exp → List Instr
     | [] => []
@@ -49,6 +50,7 @@ def lowerStmt : Flat.Stmt → List Instr
   | .free a => lowerExp a ++ [.call "$free"]
   | .eval e => lowerExp e ++ [.drop]
   | .out b => lowerExp b ++ [.call "$putc"]
+  | .putc fd b => lowerExp fd ++ lowerExp b ++ [.call "$putfd"]
   | .ite c t e => lowerExp c ++ [.ifElse (lowerBlock t) (lowerBlock e)]
   | .switch s arms => switchCode (lowerExp s) (lowerArms arms)
   | .ret e => lowerExp e ++ [.ret]

@@ -1,0 +1,6 @@
+-- expect: 6:1: `main` does not consume the extern `stdout`, of type `ref output`, which is not persistent
+extern stdin : ref input
+extern stdout : ref output
+
+-- A capability has no destructor: `main` must hand `stdout` back.
+main : F (ref input * 1) = return (stdin, ())

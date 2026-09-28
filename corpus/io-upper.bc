@@ -1,0 +1,18 @@
+-- An uppercase filter (SPEC §11): `a`-`z` become `A`-`Z`, every other byte passes through. The
+-- test is one unsigned comparison, `b - 97 < 26`.
+--
+-- Answer: the input upper-cased. The bytes around the range (`` ` `` is 96, `{` is 123, `@` is
+-- 64, `[` is 91) stay as they are; an off-by-one bound would change one of them.
+
+def upper : i32 => i32 =
+  thunkv fun (b : i32) ->
+    case (unbang host[lt_u32]) ((unbang host[sub32]) (b, i32[97]), i32[26]) {
+      inl u -> return b
+    | inr u -> return ((unbang host[sub32]) (b, i32[32]))
+    }
+
+main : F 1 =
+  for b in bytes stdin {
+    return (putb (&stdout, upper b))
+  };
+  return ()

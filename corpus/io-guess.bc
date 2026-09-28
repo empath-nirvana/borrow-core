@@ -1,0 +1,123 @@
+-- A guessing game (SPEC §11), played from a scripted input. The secret is 42. Each line is a
+-- guess, read a digit at a time; each message is a helper that takes only an output. The number
+-- of guesses goes to standard error through `put_dec`, the same function the other programs point
+-- at standard output: `stdout` and `stderr` are both `ref output`, and the caller chooses which
+-- one a writer gets. After the right guess the rest of the input is ignored (a `for` has no early
+-- exit).
+--
+-- Answer: `too high`, `too low`, `too high`, `correct!` for 50, 30, 45, 42, then 4 guesses on
+-- standard error and as the result. A comparison the wrong way round, or a number misparsed,
+-- changes a message.
+
+type B = 1 + 1
+
+def inc : i32 => i32 = thunkv fun (n : i32) -> return ((unbang host[add32]) (n, i32[1]))
+
+def say_prompt : Out => Out * 1 =
+  thunkv fun (o : Out) ->
+    _ <- return (putb (&o, i32[103]));
+    _ <- return (putb (&o, i32[117]));
+    _ <- return (putb (&o, i32[101]));
+    _ <- return (putb (&o, i32[115]));
+    _ <- return (putb (&o, i32[115]));
+    _ <- return (putb (&o, i32[63]));
+    return (putb (o, i32[32]))
+
+def say_low : Out => Out * 1 =
+  thunkv fun (o : Out) ->
+    _ <- return (putb (&o, i32[116]));
+    _ <- return (putb (&o, i32[111]));
+    _ <- return (putb (&o, i32[111]));
+    _ <- return (putb (&o, i32[32]));
+    _ <- return (putb (&o, i32[108]));
+    _ <- return (putb (&o, i32[111]));
+    _ <- return (putb (&o, i32[119]));
+    return (putb (o, i32[10]))
+
+def say_high : Out => Out * 1 =
+  thunkv fun (o : Out) ->
+    _ <- return (putb (&o, i32[116]));
+    _ <- return (putb (&o, i32[111]));
+    _ <- return (putb (&o, i32[111]));
+    _ <- return (putb (&o, i32[32]));
+    _ <- return (putb (&o, i32[104]));
+    _ <- return (putb (&o, i32[105]));
+    _ <- return (putb (&o, i32[103]));
+    _ <- return (putb (&o, i32[104]));
+    return (putb (o, i32[10]))
+
+def say_right : Out => Out * 1 =
+  thunkv fun (o : Out) ->
+    _ <- return (putb (&o, i32[99]));
+    _ <- return (putb (&o, i32[111]));
+    _ <- return (putb (&o, i32[114]));
+    _ <- return (putb (&o, i32[114]));
+    _ <- return (putb (&o, i32[101]));
+    _ <- return (putb (&o, i32[99]));
+    _ <- return (putb (&o, i32[116]));
+    _ <- return (putb (&o, i32[33]));
+    return (putb (o, i32[10]))
+
+def say_bye : Out => Out * 1 =
+  thunkv fun (o : Out) ->
+    _ <- return (putb (&o, i32[98]));
+    _ <- return (putb (&o, i32[121]));
+    _ <- return (putb (&o, i32[101]));
+    return (putb (o, i32[10]))
+
+-- `too high` or `too low`.
+def say_wrong : Out * i32 => Out * 1 =
+  thunkv fun (p : Out * i32) ->
+    let (o, value) = p;
+    case (unbang host[lt_u32]) (value, i32[42]) {
+      inl high -> return (say_high o)
+    | inr low -> return (say_low o)
+    }
+
+-- `bye`, unless the game is over.
+def say_bye_if : Out * B => Out * 1 =
+  thunkv fun (p : Out * B) ->
+    let (o, done) = p;
+    case done {
+      inl playing -> return (say_bye o)
+    | inr over -> return (o, ())
+    }
+
+main : F i32 =
+  value : i32 <- return i32[0];
+  guesses : i32 <- return i32[0];
+  done : B <- return (inl () : B);
+  _ <- return (say_prompt &stdout);
+  for b in bytes stdin {
+    case done {
+      inl playing ->
+        case (unbang host[eq32]) (b, i32[10]) {
+          inl other ->
+            case (unbang host[lt_u32]) ((unbang host[sub32]) (b, i32[48]), i32[10]) {
+              inl skip -> return ()
+            | inr digit ->
+                value : i32 <- return ((unbang host[add32]) ((unbang host[mul32]) (value, i32[10]),
+                                                              (unbang host[sub32]) (b, i32[48])));
+                return ()
+            }
+        | inr newline ->
+            guesses : i32 <- return (inc guesses);
+            case (unbang host[eq32]) (value, i32[42]) {
+              inl wrong ->
+                _ <- return (say_wrong (&stdout, value));
+                _ <- return (say_prompt &stdout);
+                value : i32 <- return i32[0];
+                return ()
+            | inr right ->
+                _ <- return (say_right &stdout);
+                done : B <- return (inr () : B);
+                return ()
+            }
+        }
+    | inr over -> return ()
+    }
+  };
+  _ <- return (say_bye_if (&stdout, done));
+  _ <- return (put_dec (&stderr, guesses));
+  _ <- return (putb (&stderr, i32[10]));
+  return guesses

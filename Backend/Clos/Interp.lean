@@ -8,7 +8,8 @@ import Backend.Clos.Syntax
 # Backend — closure-IR interpreter
 
 A fuelled interpreter for the closure IR over an explicit heap of objects (pairs, injections,
-closures, boxed `i64`s, cells), counting live objects. An array is consecutive cells, as in the
+closures, boxed `i64`s, cells), counting live objects, with a scripted standard input and
+collected standard output and error for the I/O operations (SPEC §11). An array is consecutive cells, as in the
 source machine (SPEC §9). It checks the ownership discipline as it
 runs: using a variable consumes it, a consumed variable cannot be used again, and a call or
 `main` must end with every variable of its frame consumed. Host operations go through
@@ -36,6 +37,10 @@ inductive Obj where
 structure St where
   heap : Std.HashMap Nat Obj
   next : Nat
+  /-- The standard input not yet read. -/
+  input : List UInt8
+  out : ByteArray
+  err : ByteArray
 
 abbrev IM := StateT St (Except String)
 
@@ -168,6 +173,22 @@ def applyOp : Op → List CV → IM CV
         if i < n then allocObj (.inj false (.ptr (a + i.toNat)))
         else allocObj (.inj true .unit)
       | _, _, _ => throw "closure IR: idx of a non-array"
+  | .io .readByte, [m] => do
+      let (_, c) ← cellOf m
+      let .i32 _ := c | throw "closure IR: read_byte on a cell that holds no stream"
+      let s ← get
+      match s.input with
+      | [] => do allocObj (.pair m (← allocObj (.inj true .unit)))
+      | b :: bs => do
+        set { s with input := bs }
+        allocObj (.pair m (← allocObj (.inj false (.i32 b.toUInt32))))
+  | .io .writeByte, [p] => do
+      let (m, w) ← unpair p
+      let (_, c) ← cellOf m
+      match c, w with
+      | .i32 1, .i32 b => do modify fun s => { s with out := s.out.push b.toUInt8 }; pure m
+      | .i32 2, .i32 b => do modify fun s => { s with err := s.err.push b.toUInt8 }; pure m
+      | _, _ => throw "closure IR: write_byte on a cell that holds no output stream"
   | _, _ => throw "closure IR: primitive arity"
 
 mutual
@@ -303,15 +324,36 @@ def observe : Nat → CV → IM PV
       | .i64 k => pure (.i64 k)
       | .cell _ => pure .loc
 
-/-- Run `main`, print its value, drop it, and count the objects left. -/
-def interp (fuel : Nat) (p : Prog) : Except String String := do
+/-- Observe the loop `d` until it finishes: call it on `inl ()`, which answers `inl r` to finish
+with `r` or `inr d'` to go on with `d'` (SPEC §11). -/
+def drive (codes : Array Code) : Nat → CV → IM CV
+  | 0, _ => throw "closure IR: out of fuel"
+  | n + 1, d => do
+    let t ← allocObj (.inj false .unit)
+    let r ← callClos codes n d t
+    match r with
+    | .ptr a =>
+      match ← getObj a with
+      | .inj false v => do freeObj a; pure v
+      | .inj true d' => do freeObj a; drive codes n d'
+      | _ => throw "closure IR: a loop's `next` answered no injection"
+    | _ => throw "closure IR: a loop's `next` answered no injection"
+
+/-- Run `main` on the standard input `input` (driving it if it returns a loop), print its value,
+drop it, and count the objects left. -/
+def interp (fuel : Nat) (p : Prog) (input : List UInt8) : Except String Output := do
   let act : IM String := do
     let (v, rest) ← eval p.codes fuel [] p.main
     if !rest.isEmpty then throw "closure IR: main leaves variables unconsumed"
+    let v ← match p.fin with
+      | none => pure v
+      | some c => do
+        let r ← drive p.codes fuel v
+        callClos p.codes fuel (← allocObj (.clos c [])) r
     let pv ← observe objFuel v
     deepDrop objFuel v
     pure (report pv (← get).heap.size)
-  let (s, _) ← act.run ⟨{}, 1⟩
-  pure s
+  let (r, s) ← act.run ⟨{}, 1, input, .empty, .empty⟩
+  pure (.mk' s.out s.err r)
 
 end Backend.Clos

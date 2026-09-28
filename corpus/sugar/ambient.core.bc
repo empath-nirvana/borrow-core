@@ -1,0 +1,98 @@
+-- The elaboration of `ambient.bc` (SPEC §11), as `bcc desugar` prints it: an ordinary core program, with
+-- the I/O library the sugar brings in. `scripts/check-sugar.sh` checks that both erase to one term.
+extern read_byte : !(all 'a < top. mut 'a input => mut 'a input * (i32 + 1))
+
+extern write_byte : !(all 'a < top. mut 'a output * i32 => mut 'a output)
+
+type In = ref input
+
+type Out = ref output
+
+type Bytes = mu X. 1 + i32 * X
+
+def getb : In => In * (i32 + 1) =
+  thunkv fun (c : In) ->
+      return withbor2['x, top, input, i32 + 1] c (thunkv Fun 'x < dom.
+          return (thunkv fun (m : mut 'x input) ->
+              r <- return (unbang read_byte) ['x] m;
+              let (m2, b) = r;
+              return boxed['x] b))
+
+def putb : Out * i32 => Out * 1 =
+  thunkv fun (p : Out * i32) ->
+      let (c, b) = p;
+      return withbor2['x, top, output, 1] c (thunkv Fun 'x < dom.
+          return (thunkv fun (m : mut 'x output) ->
+              m2 <- return (unbang write_byte) ['x] (m, b);
+              return boxed['x] ()))
+
+def io_dec_step : !(Out * i32 * i32 * (1 + 1) => Out * i32 * i32 * (1 + 1)) =
+  !thunkv fun (s : Out * i32 * i32 * (1 + 1)) ->
+      let (o, r) = s;
+      let (n, r2) = r;
+      let (d, st) = r2;
+      case (unbang host[eqz32]) d {
+        inl nz -> q <- return (unbang host[div_u32]) (n, d);
+          digit : i32 <- case q {
+              inl x -> return x
+            | inr u -> return i32[0]
+            };
+          n2 <- return (unbang host[sub32]) (n, (unbang host[mul32]) (digit, d));
+          show : 1 + 1 <- case st {
+              inl u -> case (unbang host[eqz32]) digit {
+                  inl u2 -> return (inr () : 1 + 1)
+                | inr u3 -> return (unbang host[eq32]) (d, i32[1])
+                }
+            | inr u -> return (inr () : 1 + 1)
+            };
+          o2 : Out <- case show {
+              inl u -> return o
+            | inr u -> q2 <- return putb (o, (unbang host[add32]) (digit, i32[48]));
+                let (o3, v) = q2;
+                return o3
+            };
+          q3 <- return (unbang host[div_u32]) (d, i32[10]);
+          d2 : i32 <- case q3 {
+              inl x -> return x
+            | inr u -> return i32[0]
+            };
+          return (o2, (n2, (d2, show)))
+      | inr z -> return (o, (n, (d, st)))
+      }
+
+def io_dec_twice : !(Out * i32 * i32 * (1 + 1) => Out * i32 * i32 * (1 + 1)) => !(Out * i32 * i32 * (1 + 1) => Out * i32 * i32 * (1 + 1)) =
+  thunkv fun (f : !(Out * i32 * i32 * (1 + 1) => Out * i32 * i32 * (1 + 1))) ->
+      return (!thunkv fun (s : Out * i32 * i32 * (1 + 1)) ->
+          return (unbang f) ((unbang f) s))
+
+def put_dec : Out * i32 => Out * 1 =
+  thunkv fun (p : Out * i32) ->
+      let (o, n) = p;
+      s <- return (unbang io_dec_twice (io_dec_twice (io_dec_twice (io_dec_twice io_dec_step)))) (o, (n, (i32[1000000000], (inl () : 1 + 1))));
+      let (o2, r) = s;
+      return (o2, ())
+
+def io_bytes_step : !U (In -o F (i32 * In + In) & F In) =
+  !thunkv fun (c : In) ->
+      < q <- return getb c;
+        let (c2, x) = q;
+        case x {
+          inl b -> return inl (b, c2)
+        | inr u -> return inr c2
+        },
+        return c >
+
+def bytes : In => U iter i32 In In =
+  thunkv fun (c : In) ->
+      f <- return unbang unfold[iter i32 In In, In] io_bytes_step;
+      return (thunkv nu_in < (nu_out force f c).1,
+          (nu_out force f c).2 >)
+
+extern stdout : ref output
+
+main : F (ref output * i32) =
+  q <- return putb (stdout, i32[104]);
+  let (stdout, u) = q;
+  q2 <- return putb (stdout, i32[10]);
+  let (stdout, v) = q2;
+  return (stdout, i32[7])

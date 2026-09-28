@@ -29,10 +29,10 @@ def cons : i32 * List => List =
 A `def` may not refer to itself or to a later `def`:
 
 ```bc,reject
-def loop : i32 => i32 = thunkv fun (x : i32) -> return (loop x)
+def spin : i32 => i32 = thunkv fun (x : i32) -> return (spin x)
 
-main : F i32 = return (loop i32[0])
--- expect: 1:57: unknown variable `loop`
+main : F i32 = return (spin i32[0])
+-- expect: 1:57: unknown variable `spin`
 ```
 
 Recursion over data is a **fold**, and a loop that may not terminate is a `delay` (see

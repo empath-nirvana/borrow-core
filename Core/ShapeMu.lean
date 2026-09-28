@@ -49,6 +49,7 @@ theorem vShapeE_some (η : Option (Nat → SEnt)) :
   induction A using VTy.recV with
   | unit => rfl
   | int w => rfl
+  | opq k => rfl
   | tensor A B ihA ihB => funext δ v; simp only [vShapeE, ihA, ihB]
   | zero => rfl
   | sum A B ihA ihB => funext δ v; simp only [vShapeE, ihA, ihB]
@@ -87,6 +88,7 @@ theorem vShapeE_rename : ∀ (A : VTy) (ρ : Nat → SEnt) (r : Nat → Nat),
   induction A using VTy.recV with
   | unit => intro ρ r; rfl
   | int w => intro ρ r; rfl
+  | opq k => intro ρ r; rfl
   | tensor A B ihA ihB => intro ρ r; funext δ v; simp only [VTy.rename, vShapeE, ihA, ihB]
   | zero => intro ρ r; rfl
   | sum A B ihA ihB => intro ρ r; funext δ v; simp only [VTy.rename, vShapeE, ihA, ihB]
@@ -114,6 +116,7 @@ theorem vShapeE_subst : ∀ (A : VTy) (ρ : Nat → SEnt) (σ : Nat → VTy) (δ
   induction A using VTy.recV with
   | unit => intro ρ σ δ; rfl
   | int w => intro ρ σ δ; rfl
+  | opq k => intro ρ σ δ; rfl
   | tensor A B ihA ihB => intro ρ σ δ; funext v; simp only [VTy.subst, vShapeE, ihA, ihB]
   | zero => intro ρ σ δ; rfl
   | sum A B ihA ihB => intro ρ σ δ; funext v; simp only [VTy.subst, vShapeE, ihA, ihB]
@@ -171,6 +174,7 @@ theorem vShapeE_mono : ∀ (A : VTy) (η₁ η₂ : Nat → SEnt), (∀ n, (η�
   induction A using VTy.recV with
   | unit => intro _ _ _ _ _ _ _ h; exact h
   | int w => intro _ _ _ _ _ _ _ h; exact h
+  | opq k => intro _ _ _ _ _ _ _ h; exact h
   | tensor A B ihA ihB =>
       intro η₁ η₂ ht hP δ v ρ h
       obtain ⟨v₁, v₂, ρ₀, ρ₃, hc, hp, ρ₁, ρ₂, hc', h₁, h₂⟩ := h
@@ -291,6 +295,7 @@ def sF (S : VTy → Val → WProp) (δ : LSub) : VTy → Val → WProp
       fun ρ => ∃ P, ptoMut ℓ α P ρ ∧ ∀ u σ, P u σ → S T u σ
   | .unk, _ => emp
   | .int w, v => ⌜v.IsInt w⌝
+  | .opq k, v => ⌜k.Holds v⌝
   | .tvar _, _ => fun _ => False
   | .mu A, v => fun ρ => (VTy.mu A).Cl 0 ∧ S (VTy.inst (.mu A) A) v ρ
 
@@ -310,6 +315,7 @@ theorem sF_vShape (δ : LSub) : ∀ (T : VTy) (v : Val) (ρ : WRes),
   | .mut _ _, _, _ => Iff.rfl
   | .unk, _, _ => Iff.rfl
   | .int _, _, _ => Iff.rfl
+  | .opq _, _, _ => Iff.rfl
   | .tvar _, _, _ => Iff.rfl
   | .mu _, _, _ => vShape_mu_iff
 
@@ -343,6 +349,7 @@ theorem sF_mono {S₁ S₂ : VTy → Val → WProp} (h : ∀ T v ρ, S₁ T v ρ
       exact ⟨α, hα, ℓ, ρ₀, ρ₁, hc, hp, Q, hQ, fun u σ hu => h T u σ (hsub u σ hu)⟩
   | .unk, _, _, hs => hs
   | .int _, _, _, hs => hs
+  | .opq _, _, _, hs => hs
   | .tvar _, _, _, hs => hs
   | .mu A, _, _, hs => ⟨hs.1, h _ _ _ hs.2⟩
 
@@ -376,6 +383,7 @@ theorem vShape_ind (δ : LSub) (Φ : VTy → Val → WRes → Prop)
     induction A using VTy.recV with
     | unit => intro _ _ _ _ v r hr; exact hG _ v r hr
     | int w => intro _ _ _ _ v r hr; exact hG _ v r hr
+    | opq k => intro _ _ _ _ v r hr; exact hG _ v r hr
     | tensor A B ihA ihB =>
         intro ρe σ ht hP v r hr
         obtain ⟨v₁, v₂, ρ₀, ρ₃, hc, hp, ρ₁, ρ₂, hc', h₁, h₂⟩ := hr
@@ -446,6 +454,7 @@ theorem vShapeE_congr : ∀ (T : VTy) (η : Option (Nat → SEnt)) {δ₁ δ₂ 
   induction T using VTy.recV with
   | unit => intros; rfl
   | int w => intros; rfl
+  | opq k => intros; rfl
   | tensor A B ihA ihB =>
       intro η δ₁ δ₂ h; funext v
       simp only [vShapeE, ihA η (fun y hy => h y (Or.inl hy)), ihB η (fun y hy => h y (Or.inr hy))]
@@ -488,6 +497,7 @@ theorem tyEq_symm : ∀ (S : VTy) {S' : VTy} {δ δ' : LSub}, TyEq S δ S' δ' �
   | .zero, S', _, _, h => by cases S' <;> simp_all [TyEq]
   | .unk, S', _, _, h => by cases S' <;> simp_all [TyEq]
   | .int _, S', _, _, h => by cases S' <;> simp_all [TyEq]
+  | .opq _, S', _, _, h => by cases S' <;> simp_all [TyEq]
   | .tensor A B, S', _, _, h => by
       cases S' <;> simp only [TyEq] at h ⊢
       exact ⟨tyEq_symm A h.1, tyEq_symm B h.2⟩
@@ -551,6 +561,7 @@ theorem tyEq_trans : ∀ (S : VTy) {S' S'' : VTy} {δ δ' δ'' : LSub}, TyEq S �
   | .zero, S', S'', _, _, _, h, h' => by cases S' <;> cases S'' <;> simp_all [TyEq]
   | .unk, S', S'', _, _, _, h, h' => by cases S' <;> cases S'' <;> simp_all [TyEq]
   | .int _, S', S'', _, _, _, h, h' => by cases S' <;> cases S'' <;> simp_all [TyEq]
+  | .opq _, S', S'', _, _, _, h, h' => by cases S' <;> cases S'' <;> simp_all [TyEq]
   | .tensor A B, S', S'', _, _, _, h, h' => by
       cases S' <;> simp only [TyEq] at h
       cases S'' <;> simp only [TyEq] at h' ⊢
@@ -630,6 +641,7 @@ theorem TyEq.of_agree : ∀ (T : VTy) {δ₁ δ₂ : LSub},
   | .zero, _, _, _ => trivial
   | .unk, _, _, _ => trivial
   | .int _, _, _, _ => rfl
+  | .opq _, _, _, _ => rfl
   | .tensor A B, _, _, h => ⟨TyEq.of_agree A (fun y hy => h y (Or.inl hy)),
       TyEq.of_agree B (fun y hy => h y (Or.inr hy))⟩
   | .sum A B, _, _, h => ⟨TyEq.of_agree A (fun y hy => h y (Or.inl hy)),
@@ -676,6 +688,7 @@ theorem TyEq.rename : ∀ (A : VTy) {A' : VTy} {δ δ' : LSub} (r : Nat → Nat)
   induction A using VTy.recV with
   | unit => intro A' _ _ r h; cases A' <;> simp_all [TyEq, VTy.rename]
   | int w => intro A' _ _ r h; cases A' <;> simp_all [TyEq, VTy.rename]
+  | opq k => intro A' _ _ r h; cases A' <;> simp_all [TyEq, VTy.rename]
   | zero => intro A' _ _ r h; cases A' <;> simp_all [TyEq, VTy.rename]
   | unk => intro A' _ _ r h; cases A' <;> simp_all [TyEq, VTy.rename]
   | thunk C => intro A' _ _ r h; cases A' <;> simp_all [TyEq, VTy.rename]
@@ -704,6 +717,7 @@ theorem TyEq.subst : ∀ (A : VTy) {A' : VTy} {δ δ' : LSub} (σ σ' : Nat → 
   induction A using VTy.recV with
   | unit => intro A' _ _ σ σ' h _; cases A' <;> simp_all [TyEq, VTy.subst]
   | int w => intro A' _ _ σ σ' h _; cases A' <;> simp_all [TyEq, VTy.subst]
+  | opq k => intro A' _ _ σ σ' h _; cases A' <;> simp_all [TyEq, VTy.subst]
   | zero => intro A' _ _ σ σ' h _; cases A' <;> simp_all [TyEq, VTy.subst]
   | unk => intro A' _ _ σ σ' h _; cases A' <;> simp_all [TyEq, VTy.subst]
   | thunk C => intro A' _ _ σ σ' h _; cases A' <;> simp_all [TyEq, VTy.subst]
@@ -744,6 +758,7 @@ theorem TyEq.Cl_iff : ∀ (A : VTy) {A' : VTy} {δ δ' : LSub} (k : Nat),
   induction A using VTy.recV with
   | unit => intro A' _ _ k h; cases A' <;> simp_all [TyEq, VTy.Cl]
   | int w => intro A' _ _ k h; cases A' <;> simp_all [TyEq, VTy.Cl]
+  | opq k => intro A' _ _ k h; cases A' <;> simp_all [TyEq, VTy.Cl]
   | zero => intro A' _ _ k h; cases A' <;> simp_all [TyEq, VTy.Cl]
   | unk => intro A' _ _ k h; cases A' <;> simp_all [TyEq, VTy.Cl]
   | thunk C => intro A' _ _ k h; cases A' <;> simp_all [TyEq, VTy.Cl]
@@ -768,6 +783,7 @@ theorem TyEq.occ_iff : ∀ (A : VTy) {A' : VTy} {δ δ' : LSub} (k : Nat),
   induction A using VTy.recV with
   | unit => intro A' _ _ k h; cases A' <;> simp_all [TyEq, VTy.Occ]
   | int w => intro A' _ _ k h; cases A' <;> simp_all [TyEq, VTy.Occ]
+  | opq k => intro A' _ _ k h; cases A' <;> simp_all [TyEq, VTy.Occ]
   | zero => intro A' _ _ k h; cases A' <;> simp_all [TyEq, VTy.Occ]
   | unk => intro A' _ _ k h; cases A' <;> simp_all [TyEq, VTy.Occ]
   | thunk C => intro A' _ _ k h; cases A' <;> simp_all [TyEq, VTy.Occ]
@@ -792,6 +808,7 @@ theorem TyEq.noMut_iff : ∀ (A : VTy) {A' : VTy} {δ δ' : LSub} (k : Nat),
   induction A using VTy.recV with
   | unit => intro A' _ _ k h; cases A' <;> simp_all [TyEq, VTy.NoMut]
   | int w => intro A' _ _ k h; cases A' <;> simp_all [TyEq, VTy.NoMut]
+  | opq k => intro A' _ _ k h; cases A' <;> simp_all [TyEq, VTy.NoMut]
   | zero => intro A' _ _ k h; cases A' <;> simp_all [TyEq, VTy.NoMut]
   | unk => intro A' _ _ k h; cases A' <;> simp_all [TyEq, VTy.NoMut]
   | thunk C => intro A' _ _ k h; cases A' <;> simp_all [TyEq, VTy.NoMut]
@@ -828,6 +845,9 @@ theorem vShapeE_tyEq : ∀ (A : VTy) {A' : VTy} {δ δ' : LSub} (η η' : Nat �
   induction A using VTy.recV with
   | unit => intro A' _ _ η η' h _; cases A' <;> first | rfl | simp_all [TyEq]
   | int w =>
+      intro A' _ _ η η' h _; cases A' <;> simp only [TyEq] at h
+      subst h; rfl
+  | opq k =>
       intro A' _ _ η η' h _; cases A' <;> simp only [TyEq] at h
       subst h; rfl
   | zero => intro A' _ _ η η' h _; cases A' <;> first | rfl | simp_all [TyEq]

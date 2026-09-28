@@ -40,6 +40,21 @@ them one by one, and `array_get` hands out one element's view. The family of an 
 views comes from `withload`, whose rule was already sound; what it needs of the new type is that
 every lemma about the model proved by induction on types has its array case, and each has.
 
+**Programs with standard I/O are safe for every implementation of their externs.** The
+capabilities and their operations are externs, hypotheses rather than rules. The model of each
+operation, ordinary core terms over a byte list in a cell, meets its extern's type
+(`readByte_meets`, `writeByte_meets`, … in
+[`Core/Stdio.lean`](https://github.com/empath-nirvana/borrow-core/blob/main/Core/Stdio.lean)).
+For every implementation that meets the types, every run of the program's `run_io` wrapper from
+empty memory continues to its outputs at empty memory, under every allocator
+(`externs_every_run`); `bcc interp` runs the model, and `IORun.every_run` is the theorem at the
+very term it runs. A cell owned outside a computation keeps its value through every run of it
+(`wpTSD_frame_own`): a function given no capability does not touch the stream in it. A program
+that runs until its input ends returns a loop, which the runtime drives; it is covered one
+prefix at a time, observed at most `n` times for every `n` (`externs_loop_every_run`,
+`IORun.loop_every_run`). The I/O sugar is elaborated before checking, so these theorems are
+about the elaborated program, with no case of their own.
+
 **The baseline is preserved.** The paper's calculus (BoCa) and its logic (BoLo) embed into the
 core, and the paper's Fundamental Property and adequacy hold as before.
 [`Paper/INDEX.md`](https://github.com/empath-nirvana/borrow-core/blob/main/Paper/INDEX.md) indexes each result of the paper to its Lean declaration,
@@ -56,10 +71,13 @@ text.
 - **The WAT printer and wasmtime** are trusted.
 - **Integer operations**: that WebAssembly's instructions agree with the interpreter's host is
   tested (`corpus/int-ops.bc`).
+- **The host implementations of the externs**: that WASI `fd_read`/`fd_write` behave as the
+  model is tested on the corpus, not proved. `bcc trusted` lists each boundary with its level.
 
 ## What is not claimed
 
 - A `delay` loop is not claimed to terminate; its type says it may not.
 - The checker is not complete: a well-typed program may be rejected (`Frontend/README.md`,
   *Incompleteness*).
-- Externs are specified (`SPEC.md` §11) but not implemented, so no theorem covers them yet.
+- Nothing is claimed about host handles: adequacy's empty memory is the model's cells, not file
+  descriptors (whether a stream was flushed or closed). I/O errors are not modeled.

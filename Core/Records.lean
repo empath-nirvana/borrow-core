@@ -352,6 +352,7 @@ theorem affine_immReborrow (b : Lifetime.Life) : ∀ A : VTy, A.SpineMuFree →
   | .tensor A B, ⟨h₁, h₂⟩ => .tensor (affine_immReborrow b A h₁) (affine_immReborrow b B h₂)
   | .sum A B, ⟨h₁, h₂⟩ => .sum (affine_immReborrow b A h₁) (affine_immReborrow b B h₂)
   | .thunk _, _ => .unk
+  | .opq _, _ => .unk
   | .ref _, _ => .imm
   | .imm _ _, _ => .imm
   | .mut _ _, _ => .imm

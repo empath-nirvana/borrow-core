@@ -188,6 +188,74 @@ def conv (ctx : List Var) : Expr → CM Tm
 /-- Closure-convert a closed term. -/
 def convert (e : Expr) : Except String Prog := do
   let (t, s) ← (conv [] e).run ⟨dummy + 1, #[]⟩
-  pure ⟨s.codes, t⟩
+  pure { codes := s.codes, main := t }
+
+/-! ### Externs  `[spec §11]` -/
+
+/-- The host implementation of an extern: a capability cell holding a stream's file
+descriptor, or an I/O operation. -/
+inductive ExtImpl where
+  | cap (fd : Nat)
+  | io (k : IOOp)
+
+/-- An operation's closure, as the extern's value: `Λ. λm. op m` (the lifetime argument is
+`()`, and is dropped). -/
+def ioValue (k : IOOp) : CM Tm := do
+  let u ← fresh; let m ← fresh
+  let c₂ ← register ⟨[], m, .prim (.io k) [m]⟩
+  let c₁ ← register ⟨[], u, .drop u (.clos c₂ [])⟩
+  pure (.clos c₁ [])
+
+/-- Take the capabilities back from `main`'s result `(caps, a)`: each cell is freed with its
+content, and the result is `a`. -/
+def epilogue (r : Var) (n : Nat) : CM Tm := do
+  if n == 0 then return .var r
+  let caps ← fresh; let a ← fresh
+  -- The capability variables, and the destructuring that binds them.
+  let rec split : Nat → Var → CM (List Var × (Tm → Tm))
+    | 0, _ => pure ([], id)
+    | 1, v => pure ([v], id)
+    | k + 1, v => do
+      let x ← fresh; let rest ← fresh
+      let (xs, wrap) ← split k rest
+      pure (x :: xs, fun t => .letpair x rest v (wrap t))
+  let (xs, wrap) ← split n caps
+  let mut body : Tm := .var a
+  for x in xs.reverse do
+    let c ← fresh
+    body := .letv c (.prim .free [x]) (.drop c body)
+  return .letpair caps a r (wrap body)
+
+/-- Closure-convert `main` over its externs, given in declaration order: the prologue binds each
+extern to its host implementation (a fresh cell holding a capability's file descriptor, or an
+operation's closure), an extern `main` does not use is dropped, and when there are capabilities
+`main`'s result `(caps, a)` gives them back and `a` is the program's value. When `main` returns a
+loop (`loops`), its value is the loop, and the taking back is the code `fin`, run on the value
+the loop finishes with.  `[spec §11]` -/
+def convertMain (exts : List ExtImpl) (loops : Bool) (e : Expr) : Except String Prog := do
+  let ncaps := (exts.filter fun | .cap _ => true | _ => false).length
+  let act : CM (Tm × Option Nat) := do
+    let xs ← exts.mapM fun _ => fresh
+    let ctx := xs.reverse
+    let used := fvs e 0
+    let r ← fresh
+    let t ← conv ctx e
+    let ep ← epilogue r ncaps
+    let (main, fin) ← if loops then do
+        let c ← register ⟨[], r, ep⟩
+        pure (t, some c)
+      else pure (.letv r t ep, none)
+    let mut body : Tm := main
+    for (x, i) in ctx.zipIdx do
+      if i ∉ used then body := .drop x body
+    for (x, ext) in (xs.zip exts).reverse do
+      match ext with
+      | .cap fd =>
+        let l ← fresh
+        body := .letv l (.lit (.i32 fd.toUInt32)) (.letv x (.prim .alloc [l]) body)
+      | .io k => body := .letv x (← ioValue k) body
+    return (body, fin)
+  let ((t, fin), s) ← act.run ⟨dummy + 1, #[]⟩
+  pure { codes := s.codes, main := t, fin }
 
 end Backend.Clos
