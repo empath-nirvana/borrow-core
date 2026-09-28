@@ -125,6 +125,7 @@ def isHole : VTy → Bool
 def Val.level : Val → Nat
   | .thunkv _ (.lam _ _ A _) | .bangThunkv _ (.lam _ _ A _) => if isHole A then 2 else 0
   | .app _ (.sugar _ (.op _)) _ | .app _ (.sugar _ (.call _)) _ => 3
+  | .app _ (.sugar _ .deref) _ => 2
   | .app _ (.sugar _ .brace) _ | .app _ (.app _ (.sugar _ (.borrow ..)) _) _ => 2
   | .thunk .. | .thunkv .. | .bangThunk .. | .bangThunkv .. => 0
   | .inl .. | .inr .. | .roll .. | .unroll .. | .unbang .. | .unbox .. | .boxed .. | .run ..
@@ -162,6 +163,7 @@ def Val.pp (V : Val) (lvl : Nat := 0) (k : Nat := 0) : String :=
       else "!thunkv fun (" ++ x.name ++ " : " ++ A.pp ++ ") ->" ++ nl (k + 4) ++ M.pp 0 (k + 4)
     | .app _ (.sugar _ (.op o)) (.pair _ a b) => "(" ++ a.pp 2 k ++ " " ++ o.str ++ " " ++ b.pp 2 k ++ ")"
     | .app _ (.sugar _ (.call c)) W => c ++ "(" ++ W.pp 0 k ++ ")"
+    | .app _ (.sugar _ .deref) V => "*" ++ V.pp 3 k
     | .app _ (.sugar _ .brace) (.thunk _ M) => "{ " ++ M.pp 0 (k + 2) ++ " }"
     | .app _ (.sugar _ .brace) (.bangThunk _ M) => "!{ " ++ M.pp 0 (k + 2) ++ " }"
     | .app _ (.app _ (.sugar _ (.borrow bk x)) P) (.thunkv _ (.lam _ b _ M)) =>
@@ -186,7 +188,7 @@ def Val.pp (V : Val) (lvl : Nat := 0) (k : Nat := 0) : String :=
     | .const _ c => c.pp
     | .shorten _ m σ a V =>
       "shorten_" ++ m.pp ++ "[" ++ σ.pp ++ ", " ++ a.pp ++ "] " ++ V.pp 1 k
-    | .lend _ x => "&" ++ x.name
+    | .lend _ x m => (if m == .mut then "&mut " else "&") ++ x.name
     | .sugar _ (.lit n) => toString n
     | .sugar _ s => s!"<{reprStr s}>"
 
@@ -229,6 +231,7 @@ def Decl.pp : Decl → String
     mk ++ "def " ++ n.name ++ params ++ " : " ++ A.pp ++ " =" ++ nl 2 ++ V.pp 0 2
   | .extern _ n A => "extern " ++ n.name ++ " : " ++ A.pp
   | .main _ C M => "main : " ++ C.pp ++ " =" ++ nl 2 ++ M.pp 0 2
+  | .include _ n => "include " ++ n.name
 
 def Program.pp (p : Program) : String :=
   "\n\n".intercalate (p.decls.map Decl.pp) ++ "\n"

@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 0.15 · 2026-09-28
+Version 0.16 · 2026-09-28
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -817,10 +817,16 @@ elaborate to the same term.
   `return (caps, V)`, and any other terminal `T` becomes `r <- T; return (caps, r)`, the
   capabilities read by name where the path ends. Nothing else is ambient: a `def` never sees a
   capability.
-- **Lending a capability to one call, `&c`.** In `x <- M; N`, one `&c` in `M` elaborates to
-  `r <- M[c/&c]; let (c, x) = r; N`: the call takes the capability and hands it back first, as
-  `getb`, `putb` and `put_dec` do. A terminal `return V` of an ambient `main` or of a loop body
-  may lend too: it becomes such a binding before the capabilities are handed back.
+- **Lending a place to one call, `&mut c` (and `&c` shared).** In `x <- M; N`, one lent place
+  in `M` elaborates to `r <- M[c/&mut c]; let (c, x) = r; N`: the call takes the place and hands
+  it back first, as `getb`, `putb` and `put_dec` do with a capability. A terminal `return V` of
+  an ambient `main` or of a loop body may lend too: it becomes such a binding before the
+  capabilities are handed back. When the parameter at the lent place is a borrow `mut 'a A` (or
+  `imm 'a A` for `&c`) under the function's lifetime binder, the call is wrapped in the borrow,
+  `withbor2` (`withbor1`) of a cell `c : ref A`, or of a cell scoped to the call for a value
+  `c : A` (`alloc`, the borrow, `free`); the borrow's result `(c, x)` rebinds `c` the same way
+  (`docs/typed-elaboration.md` §5.1). The earlier spelling `&c` for an exclusive lend is
+  retired: `&c` is the shared lend.
 - **`for x in bytes c { M }; N`**: the form of draft 0 of the surface syntax
   (`docs/surface-cbpv.md`). It loops without bound, so it is a div construct: it may appear in
   any function, which is then div, and in `main` anywhere on its spine (§14, which withdraws the
@@ -1135,7 +1141,7 @@ result `B` and residual `R`:
   in (`corpus/sugar/div-nested.bc`).
 - **A direct-style call** `x <- return (f V); N`, `f : A' ⇒ U(Loop B' R')`, becomes
   `m <- return (f V); return (div_bind[B', B, R', R] (m, thunkv ⟨λa. x ← a; N', λr. abort⟩))`,
-  with `N'` the rest elaborated the same way. With `&c` in `V` (§11) the continuation binds
+  with `N'` the rest elaborated the same way. With `&mut c` in `V` (§11) the continuation binds
   `(c, x)`. `abort` hands back the body's residual: `r` itself when `R' = R`; else the
   capabilities by name, with `c` rebound from `r = (c, ())`.
 - **`for x in V { M }; N`**, `V : U(Iter A R₀ R₀')` made from a capability `c`, becomes the loop
@@ -1214,9 +1220,9 @@ preserved. The runtime's obligation for a looping `main` is §11's.
   (#59's `for_each` over a list or an array) would be total.
 - **Loop bodies are total**: a `for` body has no `for` and no div call. A nested loop is written
   as a div helper called after the loop, or in core.
-- **A call lends at most one capability** with `&c`, and a div call whose residual differs
+- **A call lends at most one capability** with `&mut c`, and a div call whose residual differs
   from the caller's must hand back, in its residual, the capability it was lent (it is matched
-  to the lent `&c`), or nothing.
+  to the lent `&mut c`), or nothing.
 - **Specialization** is of named functions without type parameters, at parameter types only;
   a callback stored in data or a cell keeps the effect its type says. A div function has no type
   parameters.
@@ -1244,6 +1250,14 @@ typed world, the model and the end-to-end theorems in `Core/Stdio.lean`, the che
 ---
 
 ## Changelog
+
+- **0.16** (2026-09-28) — The surface's places and conditions (#54, stages 6–7 of
+  `docs/typed-elaboration.md`): `&mut x` and `&x` lend a place, by type a move handed back, a
+  borrow of a cell, or a cell scoped to the call for a value (`&c` retired for the exclusive
+  lend); `*e`; `modify &mut x`; `let mut` with assignment, joins at `match`/`if` and threading
+  through `for`; `bool` (`1 + 1`, `inr ()` true), `if`/`else`, `&&`, `||`; the prelude
+  (`lib/prelude.bc`: `true`, `false`, `not`), and `include` of the embedded `lib/` modules
+  (#59). No kernel, rule or checker change.
 
 - **0.15** (2026-09-28) — Draft 0's expression layer (#54, stage 5 of
   `docs/typed-elaboration.md`): `fn` and `main ->` declarations, `let` with patterns, `match`,

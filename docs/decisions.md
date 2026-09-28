@@ -214,3 +214,31 @@ Each entry: the decision, and why. Newest last.
       (`loop f from e`, `.next`, `.close`), fold blocks, `|>`, `if`, `let mut`, `&mut`, and the
       operators `& | ^ << >>` and unsigned comparisons (a host operation is called like a
       function: `host[lt_u32] (a, b)`).
+38. **Places and conditions of the surface** (typed elaboration, stages 6–7).
+    - **One lend, by type** (the user's decision 3). `&mut x` lends `x` exclusively and `&x`
+      shared; after the call `x` is the place handed back. The mechanism is the parameter's type:
+      a borrow `mut 'a A`/`imm 'a A` under the function's lifetime binder is a `withbor2`/
+      `withbor1` of the cell `x : ref A`, or of a cell scoped to the call when `x : A` is a
+      value; a parameter of `x`'s own type takes `x` and hands it back first (a capability). The
+      lent place stays the borrow's place, so every mechanism rebinds `x` through the one lend
+      rebinding of SPEC §11. `&c` for the exclusive lend is retired; the corpus says `&mut c`.
+    - **`let mut`** is rebinding: `x = e` binds `x` again, and is allowed only for a `let mut`
+      variable. A `match` or `if` whose arms assign `let mut` variables hands them on after it
+      (each arm returns them, in declaration order; the join), and a `for` threads them as it
+      threads any variable its body reads. A `let mut` value lent with `&mut x` or `&x` is in a
+      cell scoped to that one call; there is no cell for its whole life.
+    - **`*e`** reads a persistent content: of an `imm` borrow through `withload`, or of a cell
+      `x : ref A` borrowed `imm` around the read. A `mut` borrow is read by `modify`.
+    - **`bool` is `1 + 1` with `inr ()` true**, as the host's comparisons return it. `bool` is
+      written by the parser as `1 + 1`; `true`, `false` and `not` are the prelude's.
+    - **The prelude and `include`** (#59). `lib/prelude.bc` is in scope in every program, and a
+      declaration of it is emitted only when the program names it, as the I/O and divergence
+      libraries are. `include m` puts the declarations of the embedded module `lib/m.bc` at that
+      point, at most once; the modules are a table in `Frontend/Sugar.lean` (`libModules`), so a
+      new library module (arena and array helpers, the standard library) is a file of `lib/` and
+      a line there. Include of a user's own file, and namespaces, are the module system (#63).
+    - `&&` and `||` are `case`s that do not evaluate their right operand when the left decides;
+      `if c { … } else { … }` has braces, and `else if` nests.
+    - Not yet provided: a reborrow `&mut m` of a `mut` borrow, a lend inside a nested
+      computation of a call's argument, `*m` of a `mut` borrow, and assignment inside a closure
+      or a borrow block of a variable outside it.

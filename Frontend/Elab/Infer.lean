@@ -91,7 +91,7 @@ def inferV : Nat → Env → LifeCtx → List CVTy → Option CVTy → Val → I
     | .var _ x => pure (node (varTy E Δ T x) [])
     | .defApp _ x args => pure (node (defAppTy E Δ T x args) [])
     | .unit _ => pure (node (some .unit) [])
-    | .lend _ x => pure (node (varTy E Δ T x.name) [])
+    | .lend _ x _ => pure (node (varTy E Δ T x.name) [])
     | .sugar .. => pure (node none [])
     | .const sp c =>
       pure (node (match synConst E Δ T sp c with | .ok ⟨A, _⟩ => some A | .error _ => none) [])

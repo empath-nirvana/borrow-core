@@ -329,7 +329,7 @@ def mentionsV (x : String) : Val → Bool
   | .inl _ V | .inr _ V | .unbang _ V | .boxed _ _ V | .unbox _ V | .sub _ V _ | .roll _ V
   | .unroll _ V | .inst _ V _ | .ascribe _ V _ | .shorten _ _ _ _ V => mentionsV x V
   | .thunk _ M | .thunkv _ M | .bangThunk _ M | .bangThunkv _ M | .run _ M => mentionsC x M
-  | .lend _ y => y.name == x
+  | .lend _ y _ => y.name == x
 
 /-- `x` occurs free in a computation. -/
 def mentionsC (x : String) : Comp → Bool

@@ -1,4 +1,4 @@
--- `lend.bc` with `&stdout` written out: the call takes the capability, and the pair it answers
+-- `lend.bc` with `&mut stdout` written out: the call takes the capability, and the pair it answers
 -- rebinds it.
 extern stdout : ref output
 extern write_byte : !(all 'a < top. mut 'a output * i32 => mut 'a output)

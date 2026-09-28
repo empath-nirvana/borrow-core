@@ -1,0 +1,5 @@
+-- expect: 3:1: no library module `strings`: the modules are io, div, prelude
+-- `include` names a module of `lib/`, embedded in the compiler.
+include strings
+
+main -> i32 = 0

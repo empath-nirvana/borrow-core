@@ -24,9 +24,9 @@ def count_lines : In => In * i32 =
     return (c, n)
 
 main : F i32 =
-  n <- return (count_lines (&stdin));
-  _ <- return (put_dec (&stdout, n));
-  _ <- return (putb (&stdout, i32[10]));
+  n <- return (count_lines (&mut stdin));
+  _ <- return (put_dec (&mut stdout, n));
+  _ <- return (putb (&mut stdout, i32[10]));
   return n
 -- stdin: one
 -- stdin: two
@@ -55,7 +55,7 @@ total def count : In => In * i32 =
     return (c, n)
 
 main : F i32 =
-  r <- return (count (&stdin));
+  r <- return (count (&mut stdin));
   let (stdin, n) = r;
   return n
 -- expect: 4:5: `count` is declared `total`, but it has a `for` (SPEC §14)

@@ -1,7 +1,7 @@
 -- The I/O library (SPEC §11): the standard operations, and helpers over the capabilities that
 -- hide the borrow. It is ordinary library code, checked with the program, and in scope in a
 -- program whose `main` uses the capabilities ambiently. Each helper takes a capability and
--- hands it back first, so `&c` can lend it to one call.
+-- hands it back first, so `&mut c` can lend it to one call.
 
 extern read_byte : !(all 'a < top. mut 'a input => mut 'a input * (i32 + 1))
 extern write_byte : !(all 'a < top. mut 'a output * i32 => mut 'a output)

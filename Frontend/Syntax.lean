@@ -244,6 +244,8 @@ inductive VSugar where
   | brace
   /-- A borrow block at the lifetime `'x`, applied to the place and then to the callback. -/
   | borrow (k : BorrowKind) (x : String)
+  /-- `*e`: the content of a borrow or a cell, applied to it. -/
+  | deref
   deriving DecidableEq, Repr, Inhabited
 
 mutual
@@ -284,8 +286,9 @@ inductive Val where
   | const (sp : Span) (c : Const)
   /-- `shorten_mut[σ, @a] V` / `shorten_imm[σ, @a] V`. -/
   | shorten (sp : Span) (m : Mode) (σ : Shape) (a : Life) (V : Val)
-  /-- `&x`: lend the capability `x` to one call, elaborated away before checking (SPEC §11). -/
-  | lend (sp : Span) (x : Ident)
+  /-- `&mut x` (`mut`) or `&x` (`imm`): lend the place `x` to one call, which hands it back,
+  elaborated away before checking (SPEC §11; typed elaboration §5.1). -/
+  | lend (sp : Span) (x : Ident) (m : Mode)
   /-- A surface form that needs types, elaborated away before checking. -/
   | sugar (sp : Span) (s : VSugar)
 
@@ -349,6 +352,8 @@ inductive Decl where
   | def_ (sp : Span) (n : Ident) (params : List Ident) (A : VTy) (V : Val) (mark : Mark)
   | extern (sp : Span) (n : Ident) (A : VTy)
   | main (sp : Span) (C : CTy) (M : Comp)
+  /-- `include name`: the declarations of the library module `name` (`lib/name.bc`). -/
+  | include (sp : Span) (name : Ident)
   deriving DecidableEq, Repr
 
 /-- A source file: its declarations in order. -/
@@ -472,7 +477,7 @@ def Val.strip : Val → Val
   | .ascribe _ V A => .ascribe .none V.strip A.strip
   | .const _ c => .const .none c.strip
   | .shorten _ m σ a V => .shorten .none m σ.strip a.strip V.strip
-  | .lend _ x => .lend .none x.strip
+  | .lend _ x m => .lend .none x.strip m
   | .sugar _ s => .sugar .none s
 
 def Comp.strip : Comp → Comp
@@ -502,6 +507,7 @@ def Decl.strip : Decl → Decl
   | .def_ _ n ps A V m => .def_ .none n.strip (ps.map Ident.strip) A.strip V.strip m
   | .extern _ n A => .extern .none n.strip A.strip
   | .main _ C M => .main .none C.strip M.strip
+  | .include _ n => .include .none n.strip
 
 def Program.strip (p : Program) : Program := ⟨p.decls.map Decl.strip⟩
 
@@ -511,7 +517,7 @@ def Val.span : Val → Span
   | .thunk sp _ | .thunkv sp _ | .bangThunk sp _ | .bangThunkv sp _ | .unbang sp _
   | .boxed sp _ _ | .unbox sp _ | .sub sp _ _ | .roll sp _ | .unroll sp _ | .run sp _
   | .app sp _ _ | .inst sp _ _ | .ascribe sp _ _ | .const sp _ | .shorten sp _ _ _ _
-  | .lend sp _ | .sugar sp _ => sp
+  | .lend sp _ _ | .sugar sp _ => sp
 
 /-- The span of a computation. -/
 def Comp.span : Comp → Span

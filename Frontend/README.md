@@ -116,7 +116,7 @@ judgment, for the derived forms of syntax-core §9), so what the checker returns
 | `Check/Checker.lean` | the bidirectional checker, `synV`/`chkV`/`synC`/`chkC` |
 | `Check/Program.lean` | declarations, `main`, and the soundness theorems |
 | `Check/CrossCheck.lean` | erasures compared with `Core/`'s hand-written terms, by kernel evaluation |
-| `Sugar.lean` | the sugar, elaborated before checking and decided by types (`Elab/Meta.lean`): draft 0's surface forms that need types (`Val.sugar`: literals, operators, `alloc(e)`, blocks and closures, borrow blocks; `surfDecl`, decision 37); ambient capabilities in `main`, `&c`, `for` (SPEC §11); divergence inferred, `total`/`div` markers, direct-style div calls as delay binds, specialization at a callback's type (SPEC §14) |
+| `Sugar.lean` | the sugar, elaborated before checking and decided by types (`Elab/Meta.lean`): draft 0's surface forms that need types (`Val.sugar`: literals, operators, `alloc(e)`, blocks and closures, borrow blocks; `surfDecl`, decision 37); ambient capabilities in `main`, lends `&mut x` and `&x` (`lendCall`, decision 38), `for` (SPEC §11); divergence inferred, `total`/`div` markers, direct-style div calls as delay binds, specialization at a callback's type (SPEC §14) |
 | `Elab/Respan.lean` | `respan`: generated syntax at the span of the sugar that produced it |
 | `Elab/Meta.lean` | typing contexts for the sugar (`TCx`: the program as written, typed by inference), loops and iterators read off types, and metavariables that annotate bindings of injections (`fillProgram`) |
 | `Elab/Tir.lean` | the typed IR: one node per node of the program, with its type, binders (identity, type, class) and effect (`docs/typed-elaboration.md` §1.1) |
@@ -220,7 +220,7 @@ of the search; none is a change to `CDerives`.
 then the typed IR). In the sugar, a program that declares no externs and whose `main` names a capability gets `lib/io.bc` (embedded by `include_str`), the
 capability externs, and a `main` that hands them back at every terminal; `for x in bytes c { M };
 N` becomes a loop by `unfold` built from a template whose holes are filled with the program's own
-syntax, and whose own nodes carry the span of the `for`; `&c` becomes a binding that rebinds
+syntax, and whose own nodes carry the span of the `for`; `&mut c` becomes a binding that rebinds
 `c`. Everything the checker sees is ordinary core. An error the checker reports at the span of a
 sugar is in code generated for it, and the message says so.
 `bcc desugar` prints it, and `corpus/sugar/` pairs each sugar with its core form

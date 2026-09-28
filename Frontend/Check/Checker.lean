@@ -159,8 +159,8 @@ def synV : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Val →
       let al ← E.elabL Δ a
       let ⟨_, r⟩ ← synV n E Δ T V
       shortenIt E T sp m s al r
-    | .lend sp x => err sp (s!"`&{x.name}` lends a capability to one call: it may appear only in " ++
-        "the head `M` of `y <- M; N` (SPEC §11)")
+    | .lend sp x m => err sp (s!"`{if m == .mut then "&mut " else "&"}{x.name}` lends a place to " ++
+        "one call: it may appear only in the head `M` of `y <- M; N` (SPEC §11)")
     | .sugar sp _ => err sp "internal error: a surface form was not elaborated before checking"
 
 /-- Check a value-judged expression against a type. -/

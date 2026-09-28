@@ -41,10 +41,10 @@ def line_length : In => U (loop (In * i32) (In * 1)) =
 
 div def two_lines : In => In * (i32 * i32) =
   thunkv fun (c : In) ->
-    a <- return (line_length (&c));
-    b <- return (line_length (&c));
+    a <- return (line_length (&mut c));
+    b <- return (line_length (&mut c));
     return (c, (a, b))
 
 main : F (ref input * (i32 * i32)) =
-  p <- return (two_lines (&stdin));
+  p <- return (two_lines (&mut stdin));
   return (stdin, p)

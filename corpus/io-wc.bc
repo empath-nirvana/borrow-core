@@ -49,13 +49,13 @@ def count : In => In * (i32 * (i32 * i32)) =
     return (c, (lines, (words, chars)))
 
 main : F (i32 * (i32 * i32)) =
-  r <- return (count (&stdin));
+  r <- return (count (&mut stdin));
   let (lines, r2) = r;
   let (words, chars) = r2;
-  _ <- return (put_dec (&stdout, lines));
-  _ <- return (putb (&stdout, i32[32]));
-  _ <- return (put_dec (&stdout, words));
-  _ <- return (putb (&stdout, i32[32]));
-  _ <- return (put_dec (&stdout, chars));
-  _ <- return (putb (&stdout, i32[10]));
+  _ <- return (put_dec (&mut stdout, lines));
+  _ <- return (putb (&mut stdout, i32[32]));
+  _ <- return (put_dec (&mut stdout, words));
+  _ <- return (putb (&mut stdout, i32[32]));
+  _ <- return (put_dec (&mut stdout, chars));
+  _ <- return (putb (&mut stdout, i32[10]));
   return (lines, (words, chars))

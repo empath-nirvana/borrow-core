@@ -135,7 +135,7 @@ def TCx.surfaceL (c : TCx) (sp : Span) : BoCa.Lifetime.Life → Except Error Fro
 mutual
 /-- The `&c` of a value outside nested computations, replaced by `c`. -/
 def _root_.Frontend.Val.takeLends : Val → Val × List Ident
-  | .lend _ x => (.var x.span x.name, [x])
+  | .lend _ x _ => (.var x.span x.name, [x])
   | .pair sp V W =>
     let (V', a) := V.takeLends
     let (W', b) := W.takeLends
@@ -155,6 +155,7 @@ def _root_.Frontend.Val.takeLends : Val → Val × List Ident
   | .inst sp V l => let (V', a) := V.takeLends; (.inst sp V' l, a)
   | .ascribe sp V A => let (V', a) := V.takeLends; (.ascribe sp V' A, a)
   | .shorten sp m σ l V => let (V', a) := V.takeLends; (.shorten sp m σ l V', a)
+  | .run sp M => let (M', a) := M.takeLends; (.run sp M', a)
   | V => (V, [])
 
 /-- The `&c` of the head of a bind, outside nested binders. -/
@@ -167,6 +168,7 @@ def _root_.Frontend.Comp.takeLends : Comp → Comp × List Ident
   | .nuIn sp M => let (M', a) := M.takeLends; (.nuIn sp M', a)
   | .nuOut sp M => let (M', a) := M.takeLends; (.nuOut sp M', a)
   | .ascribe sp M C => let (M', a) := M.takeLends; (.ascribe sp M' C, a)
+  | .letPair sp x y V M => let (V', a) := V.takeLends; (.letPair sp x y V' M, a)
   | M => (M, [])
 end
 
@@ -269,7 +271,7 @@ mutual
 def synM : Nat → MCx → Val → MM MTy
   | 0, _, _ => freshM
   | n + 1, c, v => match v with
-    | .var _ x | .lend _ ⟨x, _⟩ => match c.env.lookup x with
+    | .var _ x | .lend _ ⟨x, _⟩ _ => match c.env.lookup x with
       | some t => pure t
       | none => ofOpt (c.tc.tyV (.var Span.none x))
     | .unit _ => pure (.known .unit)

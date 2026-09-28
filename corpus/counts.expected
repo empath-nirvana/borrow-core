@@ -34,3 +34,5 @@ sum-prog-exact 159 9
 surface/family-swap 2 0
 surface/io-upper 670 134
 surface/io-wc 726 154
+surface/array-sum 1 0
+surface/map-reuse 27 0

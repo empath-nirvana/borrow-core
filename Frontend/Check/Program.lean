@@ -89,6 +89,7 @@ def checkDecl (ds : Array Decl) (k : Nat) : Decl → Except Error (String × Opt
         pure (s!"def {n.name} : {ppVTy A'}", none)
       else
         pure (s!"def {n.name}[{", ".intercalate (ps.map (·.name))}] : checked at each use", none)
+  | .include sp n => throw ⟨sp, s!"internal error: `include {n.name}` was not resolved"⟩
   | .extern _ n A => do
       let A' ← (Env.top ds k).elabV LifeCtx.empty A
       pure (s!"extern {n.name} : {ppVTy A'}", none)

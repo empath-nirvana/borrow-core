@@ -12,11 +12,11 @@ def count : In => In * i32 =
 
 total def twice : In => In * i32 =
   thunkv fun (c : In) ->
-    a <- return (count (&c));
-    b <- return (count (&c));
+    a <- return (count (&mut c));
+    b <- return (count (&mut c));
     return (c, (unbang host[add32]) (a, b))
 
 main : F i32 =
-  r <- return (twice (&stdin));
+  r <- return (twice (&mut stdin));
   let (stdin, n) = r;
   return n

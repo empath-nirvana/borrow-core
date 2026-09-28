@@ -865,6 +865,17 @@ ascribed its loop type so that it is a loop value, not a call run in direct styl
 same counts: `corpus/surface/family-swap.bc` (19 core lines, 7 surface), `io-wc.bc` (46, 33),
 `io-upper.bc` (11, 5).
 
+**Stages 6–7, as built** (decision 38 of `docs/decisions.md`). `&mut x`/`&x` are `Val.lend`
+with a mode; `lendCall` wraps a call whose parameter at the lent place is a borrow in
+`withbor2`/`withbor1`, or in a scoped cell (`lendBorrow`), keeping the lent place as the
+borrow's place so that `Comp.elab`'s lend rebinding hands it back. `*e` and `modify &mut x` are
+elaborated the same way. `let mut`, assignments and joins are desugared by the parser, which
+tracks the `let mut` variables in scope and those each arm assigns. `lib/prelude.bc` holds
+`true`, `false`, `not`; `include` resolves against `libModules`. Surface versions:
+`corpus/surface/io-wc.bc` is §6.1's program (19 lines against 46), `map-reuse.bc` (20 against 44;
+its `main` is the scoped cell) and `array-sum.bc` (16 against 25), each with the same answer and
+counts. Pairs: `corpus/sugar/surface-mut.bc`, `surface-lend.bc`, `surface-bool.bc`.
+
 Stages 1–4 retire the #54 shortcuts and change no surface syntax, except that `&c` stays until
 stage 6. Stages 5–9 are the rest of step 2. After stage 9, step 3 of #54 (rewriting 6–10 corpus
 programs and measuring) can start.

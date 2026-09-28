@@ -1,0 +1,28 @@
+-- `surface-mut.bc` written by hand in core: each assignment a binding, the `if` a `case` whose
+-- arms return the variables they may assign, and the lend a cell scoped to the call.
+def bump : !(all 'a < top. mut 'a i32 => 1) =
+  !thunkv Fun 'a < top. return (thunkv fun (m : mut 'a i32) ->
+    w <- return (withswap['a, i32, 1] m (thunkv fun (v : i32) ->
+      return ((unbang host[add32]) (v, i32[1]), ())));
+    let (m2, u) = w;
+    return u)
+
+main : F (i32 * i32) =
+  n <- return i32[5];
+  k <- return i32[0];
+  j <- case (unbang host[gt_s32]) (n, i32[3]) {
+         inl e -> k <- return i32[2]; u <- return (); return (n, k)
+       | inr t ->
+           n <- return ((unbang host[mul32]) (n, i32[2]));
+           k <- return i32[1];
+           u <- return ();
+           return (n, k)
+       };
+  let (n, k) = j;
+  r <- return (run (let (c, s) = withbor2['l, top, i32, 1] (alloc[i32] n)
+         (thunkv Fun 'l < dom. return (thunkv fun (m : mut 'l i32) ->
+            q <- return ((unbang bump) ['l] m);
+            return (boxed['l] q)));
+       return (free[i32] c, s)));
+  let (n, d) = r;
+  return (n, k)

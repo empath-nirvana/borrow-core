@@ -66,6 +66,6 @@ total def lines_within : In * i32 => In * (i32 + 1) =
 main : F (((i32 + 1) * (i32 + 1)) * ((i32 + 1) * (i32 + 1))) =
   a <- return (collatz_within (i32[27], i32[200]));
   b <- return (collatz_within (i32[27], i32[50]));
-  c <- return (lines_within (&stdin, i32[3]));
-  d <- return (lines_within (&stdin, i32[1000]));
+  c <- return (lines_within (&mut stdin, i32[3]));
+  d <- return (lines_within (&mut stdin, i32[1000]));
   return ((a, b), (c, d))

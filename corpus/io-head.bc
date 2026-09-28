@@ -50,10 +50,10 @@ main : F 1 =
     inl it -> (nu_out (force it)).2
   | inr c -> return c
   };
-  _ <- return (putb (&stdout, i32[32]));
-  _ <- return (putb (&stdout, i32[124]));
-  _ <- return (putb (&stdout, i32[32]));
+  _ <- return (putb (&mut stdout, i32[32]));
+  _ <- return (putb (&mut stdout, i32[124]));
+  _ <- return (putb (&mut stdout, i32[32]));
   for b in bytes stdin {
-    return (putb (&stdout, b))
+    return (putb (&mut stdout, b))
   };
   return ()

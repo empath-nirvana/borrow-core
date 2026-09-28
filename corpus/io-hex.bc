@@ -1,5 +1,5 @@
 -- Hex encoding (SPEC §11): each input byte as two lower-case hex digits, then a newline.
--- `put_hex` takes only an output, and hands it back first, so `&stdout` can lend it.
+-- `put_hex` takes only an output, and hands it back first, so `&mut stdout` can lend it.
 --
 -- Answer: `48656c6c6f2c20576f726c64210a` for `Hello, World!\n`. Swapped nibbles, a digit
 -- offset by one, or upper-case letters give a different line.
@@ -15,11 +15,11 @@ def hexd : i32 => i32 =
 def put_hex : Out * i32 => Out * 1 =
   thunkv fun (p : Out * i32) ->
     let (o, b) = p;
-    _ <- return (putb (&o, hexd ((unbang host[shr_u32]) (b, i32[4]))));
+    _ <- return (putb (&mut o, hexd ((unbang host[shr_u32]) (b, i32[4]))));
     return (putb (o, hexd ((unbang host[and32]) (b, i32[15]))))
 
 main : F 1 =
   for b in bytes stdin {
-    return (put_hex (&stdout, b))
+    return (put_hex (&mut stdout, b))
   };
-  return (putb (&stdout, i32[10]))
+  return (putb (&mut stdout, i32[10]))
