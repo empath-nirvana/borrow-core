@@ -1,0 +1,12 @@
+-- `inject.bc` with the injections' types written: each binding says the type of its injection.
+def pick : (1 + 1) * i32 => i32 =
+  thunkv fun (p : (1 + 1) * i32) ->
+    let (b, n) = p;
+    case b { inl u -> return n | inr u -> return i32[0] }
+
+main : F i32 =
+  flag : 1 + 1 <- return (inl ());
+  other : 1 + 1 <- return (inr ());
+  r <- return (pick (flag, i32[7]));
+  s <- return (pick (other, i32[5]));
+  return ((unbang host[add32]) (r, s))

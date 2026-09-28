@@ -151,7 +151,8 @@ Each entry: the decision, and why. Newest last.
       draft 0's `&mut x` (`docs/surface-cbpv.md`), which borrows a `let mut` cell: `&c` moves the
       cell and rebinds it. The spelling may change when #54 step 2 settles the surface.
     - `for x in e { M }; N` is draft 0's form, only over `bytes c`; the threaded locals are
-      typed by their bindings, since the elaborator sees no types. There is no early exit. Its
+      typed by their bindings, since the elaborator sees no types (withdrawn by decision 36:
+      they are inferred). There is no early exit. Its
       restriction to the end of an ambient `main` is withdrawn by decision 35.
     - The ambient trigger: a program that declares no externs and whose `main` names `stdin`,
       `stdout` or `stderr`. Such a program gets the I/O library (`lib/io.bc`).
@@ -175,11 +176,16 @@ Each entry: the decision, and why. Newest last.
 36. **Provisional (SPEC §14, to be confirmed by the user).**
     - The markers are `total def` and `div def`, written before `def`; `div` never needs to be
       written. In draft 0's surface they would be `total fn` and `div fn` (or `-> div T`).
-    - The residual of a div function is the capabilities its result hands back first (`K` of
-      `K * V`, recognized by the names `In`, `Out`, `ref input`, `ref output`), paired with `()`,
-      or `1`; so `div T` is `D T` for a function that holds no capability.
+    - *Withdrawn* (typed elaboration, stage 2): the residual was recognized by the names `In`,
+      `Out`, `ref input` and `ref output`. It is now read off the result type: the components
+      with no destructor (SPEC §12), paired with `()`, or `1` (SPEC §14).
     - A `main` that loops but uses no capability is given `stdout` ambiently, so the runtime can
       drive it.
     - The library names `div_bind` and `div_fuel` (`lib/div.bc`), with the fuel an `i32`.
-    - A direct-style div call is the head `return (f V)` of a bind or a terminal; a div call
-      anywhere else is a loop value. A copy made by specialization is named `h__k`.
+    - *Withdrawn* (stage 2): a direct-style div call was only the head `return (f V)` of a bind
+      or a terminal. It is now any application whose type is a loop where that loop is not the
+      type expected, at any depth; checked against its loop type, it is the loop as a value.
+    - *Withdrawn* (stage 2, with decision 34): the variables a `for` threads were typed by
+      their bindings `y : T <- …`, and an injection needed an ascription. Both types are now
+      inferred (`docs/typed-elaboration.md`).
+    - A copy made by specialization is named `h__k`.

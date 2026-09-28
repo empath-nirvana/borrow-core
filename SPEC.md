@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 0.11 · 2026-09-27
+Version 0.12 · 2026-09-28
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -824,7 +824,7 @@ elaborate to the same term.
   any function, which is then div, and in `main` anywhere on its spine (§14, which withdraws the
   earlier restriction to the end of an ambient `main`). It elaborates to a loop by `unfold`
   whose state is the stream `bytes c`, the other capabilities, and the variables that `M`
-  reads, each at the type its binding `y : T <- …` gives (the elaborator sees no other types).
+  reads, each at the type inference gives it (`docs/typed-elaboration.md`).
   The loop's `next` observes the stream: an element `x` runs `M`, which rebinds the state by
   name, and the loop goes on; at the end of the stream the capability it hands back is bound to
   `c`, and the loop finishes with the capabilities and the threaded variables. Its `close`
@@ -1050,11 +1050,12 @@ is one whose result is `F B` with no loop: `U(A ⊸ F B)`. There is no new forme
 clause: `div` is a reading of `Loop` (§7), which already exists, and the function types are the
 existing ones. `!(A ⇒ div B)` is the persistent form.
 
-**The residual.** A loop closed early must release its state, and a capability (§11) has no
-destructor, so the residual hands the capabilities back. The residual of a result `B` is `K ⊗ 1`
-when `B = K ⊗ V` and `K` is a capability type or a tuple of them (the convention of §11 that a
-helper hands its capability back first), and `1` otherwise, so `div B` is `D B` for a function
-that holds no capability. `main`'s loop `Loop (Caps ⊗ A) (Caps ⊗ 1)` (§11) is the instance.
+**The residual.** A loop closed early must release its state. What has a destructor (§12) is
+dropped, and what has none, such as a capability (§11), must be handed back. The residual of a
+result `B` is `K ⊗ 1`, where `K` is the tuple of the components of `B` (its right-nested `⊗`)
+whose type has no destructor, in their order in `B`; it is `1` when there are none, so `div B` is
+`D B` for a function that holds no such resource. The residual is read off the type, not
+recognized by names. `main`'s loop `Loop (Caps ⊗ A) (Caps ⊗ 1)` (§11) is the instance.
 
 ### The delay bind
 
@@ -1090,8 +1091,10 @@ handlers of the same loops.
 ### Inference and markers
 
 A function is div when its type says so (`A ⇒ U(Loop B R)`), or when its body **loops**: on its
-spine (the tail positions of binds, `let`s, `case` arms and `for`s) it has a `for`, or a
-direct-style call `x <- return (f V); N` (or `return ((unbang f) V)`) of a div function `f`. A
+spine (the tail positions of binds, `let`s, `case` arms and `for`s) it has a `for`, or it runs
+a call of a div function in **direct style**: an application whose type is a loop, where the
+type expected of it is not that loop, at any depth of a bound or returned value, a `case`
+scrutinee or a `let`'s value. A
 function written with a plain result `A ⇒ B` whose body loops is elaborated to
 `A ⇒ U(Loop B R)`. Definitions are in dependency order (recursion is structured, decision 24),
 so one pass in declaration order infers this; there is no fixed point.
@@ -1106,31 +1109,37 @@ so one pass in declaration order infers this; there is no fixed point.
   `stdout` ambiently, so the runtime can drive it.
 
 A function whose written type is already a loop is core and is not elaborated; so is a `main`
-written at `F(U(Loop …))`. To bind a div function's loop as a value rather than call it in
-direct style, ascribe it or pass it as an argument: `div_fuel[…] (f V, n)`.
+written at `F(U(Loop …))`. A call checked against its own loop type is the loop as a value, not
+a call in direct style: an annotated binding `l : U (loop B R) <- return (f V)`, or an argument
+of a parameter of that type, `div_fuel[…] (f V, n)`.
 
 ### Elaboration
 
-All of this is elaboration in `Frontend/Sugar.lean`; the checker sees only core. In a div body
-of result `B` and residual `R`:
+All of this is elaboration in `Frontend/Sugar.lean`, on types that inference gives
+(`Frontend/Elab/`, `docs/typed-elaboration.md`); the checker sees only core. In a div body of
+result `B` and residual `R`:
 
+- **Nested calls** are lifted first: a value with a call in direct style below its top has its
+  applications bound before it, innermost and leftmost first, the order its evaluation runs them
+  in (`corpus/sugar/div-nested.bc`).
 - **A direct-style call** `x <- return (f V); N`, `f : A' ⇒ U(Loop B' R')`, becomes
   `m <- return (f V); return (div_bind[B', B, R', R] (m, thunkv ⟨λa. x ← a; N', λr. abort⟩))`,
   with `N'` the rest elaborated the same way. With `&c` in `V` (§11) the continuation binds
   `(c, x)`. `abort` hands back the body's residual: `r` itself when `R' = R`; else the
   capabilities by name, with `c` rebound from `r = (c, ())`.
-- **`for x in bytes c { M }; N`** becomes the loop of §11, with residual `R`. When `N` is total
-  and every variable it reads is bound with its type, `N` runs in the loop's last step and the
+- **`for x in V { M }; N`**, `V : U(Iter A R₀ R₀')` made from a capability `c`, becomes the loop
+  of §11, with residual `R`; the variables it threads have the types inference gives them
+  (`corpus/sugar/for-untyped.bc`). When `N` is total and every variable it reads has a type, `N` runs in the loop's last step and the
   loop finishes with its value, as in §11. Otherwise the loop finishes with the capabilities and
   the variables `M` threads, and `div_bind` runs `N'` with them rebound. `M` is one step of the
   loop and must be total.
 - **A terminal** `T` becomes `v : B <- T; return (thunkv nu_in ⟨return (inl v), close⟩)`, the
-  loop that finishes with `v` at its first observation; `close` hands back the capabilities of
-  `v`.
+  loop that finishes with `v` at its first observation; `close` hands back the components of `v`
+  that have no destructor.
 
-The capabilities a body hands back are named as its terminal `return (K, V)` names them, or, in
-an ambient `main`, `stdin`, `stdout` and `stderr`. The residual is chosen from the written result
-type, syntactically (`In`, `Out`, `ref input`, `ref output`). `bcc desugar` prints the
+The variables that hold `K` are named as a terminal `return` names them, or, in an ambient
+`main`, `stdin`, `stdout` and `stderr` (`corpus/sugar/residual-alias.bc`: a residual under a
+name of the program's own). `bcc desugar` prints the
 elaborated program, and `corpus/sugar/div-infer.bc` pairs an unmarked div helper with its core
 form written by hand; `div-annotated.bc` is the same program with `div` and `total` markers.
 
@@ -1189,11 +1198,9 @@ preserved. The runtime's obligation for a looping `main` is §11's.
   (#59's `for_each` over a list or an array) would be total.
 - **Loop bodies are total**: a `for` body has no `for` and no div call. A nested loop is written
   as a div helper called after the loop, or in core.
-- **Direct-style calls** are recognized only as the head `return (f V)` or
-  `return ((unbang f) V)` of a bind or a terminal, with at most one `&c`; a div call nested in
-  an argument is a loop value.
-- **The residual** is chosen syntactically from the result type; a div call that hands back
-  capabilities it did not borrow with `&c` must hand back exactly the caller's residual.
+- **A call lends at most one capability** with `&c`, and a div call whose residual differs
+  from the caller's must hand back, in its residual, the capability it was lent (it is matched
+  to the lent `&c`), or nothing.
 - **Specialization** covers named functions without type parameters, with the callback passed
   by name in a tuple component of the argument; a callback captured in a closure, returned, or
   passed through a variable of the caller is not specialized. A div function has no type
@@ -1222,6 +1229,13 @@ typed world, the model and the end-to-end theorems in `Core/Stdio.lean`, the che
 ---
 
 ## Changelog
+
+- **0.12** (2026-09-28) — §14's elaboration on types (#54, stage 2 of
+  `docs/typed-elaboration.md`). The residual is the components of the result with no destructor,
+  read off the type; a call of a div function in direct style is any application whose type is a
+  loop where that loop is not expected, at any depth, nested calls lifted in evaluation order;
+  the variables a `for` threads, and bindings of injections, have inferred types. No kernel,
+  rule or checker change.
 
 - **0.11** (2026-09-27) — Entry 13 (§14): divergence as an effect. A div function returns a
   loop, `A ⇒ U(Loop B R)`, with the residual handing capabilities back; the delay bind

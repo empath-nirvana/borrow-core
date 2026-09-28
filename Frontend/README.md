@@ -116,8 +116,9 @@ judgment, for the derived forms of syntax-core §9), so what the checker returns
 | `Check/Checker.lean` | the bidirectional checker, `synV`/`chkV`/`synC`/`chkC` |
 | `Check/Program.lean` | declarations, `main`, and the soundness theorems |
 | `Check/CrossCheck.lean` | erasures compared with `Core/`'s hand-written terms, by kernel evaluation |
-| `Sugar.lean` | the sugar, elaborated before checking: ambient capabilities in `main`, `&c`, `for` (SPEC §11); divergence inferred, `total`/`div` markers, direct-style div calls as delay binds, specialization at a callback's type (SPEC §14) |
+| `Sugar.lean` | the sugar, elaborated before checking and decided by types (`Elab/Meta.lean`): ambient capabilities in `main`, `&c`, `for` (SPEC §11); divergence inferred, `total`/`div` markers, direct-style div calls as delay binds, specialization at a callback's type (SPEC §14) |
 | `Elab/Respan.lean` | `respan`: generated syntax at the span of the sugar that produced it |
+| `Elab/Meta.lean` | typing contexts for the sugar (`TCx`: the program as written, typed by inference), loops and iterators read off types, and metavariables that annotate bindings of injections (`fillProgram`) |
 | `Elab/Tir.lean` | the typed IR: one node per node of the program, with its type, binders (identity, type, class) and effect (`docs/typed-elaboration.md` §1.1) |
 | `Elab/Infer.lean` | inference: the typed IR of each declaration, bidirectionally, in the environment the checker uses; the checker's synthesis answers for the core's substitutions |
 | `Elab/Pipeline.lean` | the pipeline `checkProgram` runs: the sugar, inference, lowering (the identity on core at stage 1), and errors in generated code named by their sugar (`renderError`); `bcc tir` |

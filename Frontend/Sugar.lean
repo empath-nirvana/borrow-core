@@ -2,6 +2,7 @@ import Frontend.Parser
 import Frontend.Print
 import Frontend.Check.Steps
 import Frontend.Elab.Respan
+import Frontend.Elab.Meta
 
 /-!
 # Frontend — the sugar  `[spec §11, §14]`
@@ -9,7 +10,9 @@ import Frontend.Elab.Respan
 The forms below are elaborated here into ordinary core syntax before checking. The checker, the
 kernel and the theorems never see them: what they check is a program a user could have written
 by hand (`bcc desugar` prints it). Divergence (§14) is elaborated here too: see the section
-*Divergence* below.
+*Divergence* below. The elaboration uses types (docs/typed-elaboration.md): inference types the
+program as written (`Frontend.Elab.TCx`), bindings whose type only their uses determine are
+annotated first (`Frontend.Elab.fillProgram`), and each decision below reads those types.
 
 * **Ambient capabilities in `main`.** A program that declares no externs and whose `main`
   mentions `stdin`, `stdout` or `stderr` gets the I/O library (`lib/io.bc`), which declares the
@@ -17,9 +20,9 @@ by hand (`bcc desugar` prints it). Divergence (§14) is elaborated here too: see
   `stderr`. `main : F A` becomes `main : F (Caps * A)`: each terminal `return V` of its body
   becomes `return (caps, V)`, and any other terminal `T` becomes `r <- T; return (caps, r)`,
   with the capabilities read by name where the path ends (`wrapTail`).
-* **`for x in bytes c { M }; N`** in any function or `main` becomes a loop by `unfold` over the
-  state (iterator, other capabilities, threaded variables), and makes the function div
-  (`forLoop`, §14).
+* **`for x in V { M }; N`**, `V` an iterator made from a capability, in any function or `main`
+  becomes a loop by `unfold` over the state (iterator, other capabilities, threaded variables at
+  their inferred types), and makes the function div (`forLoop`, §14).
 * **`&c`** in the head of `x <- M; N` becomes `r <- M[c/&c]; let (c, x) = r; N` (`Comp.elab`).
 
 The generated code is a template, printed and parsed, whose holes are filled with the program's
@@ -40,49 +43,9 @@ def divLibrary : String := include_str "../lib/div.bc"
 
 def capNames : List String := ["stdin", "stdout", "stderr"]
 
-def capTySrc (c : String) : String := if c == "stdin" then "ref input" else "ref output"
-
 def capTy (sp : Span) (c : String) : VTy := .ref sp (.handle sp (c != "stdin"))
 
 /-! ### Lending a capability to one call -/
-
-mutual
-/-- The `&c` of a value outside nested computations, replaced by `c`. -/
-def _root_.Frontend.Val.takeLends : Val → Val × List Ident
-  | .lend _ x => (.var x.span x.name, [x])
-  | .pair sp V W =>
-    let (V', a) := V.takeLends
-    let (W', b) := W.takeLends
-    (.pair sp V' W', a ++ b)
-  | .app sp V W =>
-    let (V', a) := V.takeLends
-    let (W', b) := W.takeLends
-    (.app sp V' W', a ++ b)
-  | .inl sp V => let (V', a) := V.takeLends; (.inl sp V', a)
-  | .inr sp V => let (V', a) := V.takeLends; (.inr sp V', a)
-  | .unbang sp V => let (V', a) := V.takeLends; (.unbang sp V', a)
-  | .boxed sp l V => let (V', a) := V.takeLends; (.boxed sp l V', a)
-  | .unbox sp V => let (V', a) := V.takeLends; (.unbox sp V', a)
-  | .sub sp V l => let (V', a) := V.takeLends; (.sub sp V' l, a)
-  | .roll sp V => let (V', a) := V.takeLends; (.roll sp V', a)
-  | .unroll sp V => let (V', a) := V.takeLends; (.unroll sp V', a)
-  | .inst sp V l => let (V', a) := V.takeLends; (.inst sp V' l, a)
-  | .ascribe sp V A => let (V', a) := V.takeLends; (.ascribe sp V' A, a)
-  | .shorten sp m σ l V => let (V', a) := V.takeLends; (.shorten sp m σ l V', a)
-  | V => (V, [])
-
-/-- The `&c` of the head of a bind, outside nested binders. -/
-def _root_.Frontend.Comp.takeLends : Comp → Comp × List Ident
-  | .ret sp V => let (V', a) := V.takeLends; (.ret sp V', a)
-  | .absurd sp V => let (V', a) := V.takeLends; (.absurd sp V', a)
-  | .app sp M x => let (M', a) := M.takeLends; (.app sp M' x, a)
-  | .proj sp i M => let (M', a) := M.takeLends; (.proj sp i M', a)
-  | .inst sp M l => let (M', a) := M.takeLends; (.inst sp M' l, a)
-  | .nuIn sp M => let (M', a) := M.takeLends; (.nuIn sp M', a)
-  | .nuOut sp M => let (M', a) := M.takeLends; (.nuOut sp M', a)
-  | .ascribe sp M C => let (M', a) := M.takeLends; (.ascribe sp M' C, a)
-  | M => (M, [])
-end
 
 mutual
 /-- Elaborate `&c` in a value; with `lend`, a `&c` outside nested computations becomes `c`. -/
@@ -243,21 +206,33 @@ def parseComp (src : String) : Except Error Comp := do
 A function whose result type is a loop, `A => U (loop B R)`, is a **div function**: a call runs
 its code up to its first loop and returns the rest of the run as a loop, which finishes with `B`
 or, closed early, hands back the residual `R`. A function is div when its type says so, or when
-its body loops: it has a `for`, or a direct-style call `x <- return (f V); N` of a div function
-`f`, on its spine (the tail positions of binds, `let`s, `case` arms and `for`s). Definitions are
-in dependency order, so one pass infers this. A div function written with a plain result
-`A => B` is elaborated to `A => U (loop B R)`, and so is `main`; `total def` asserts that the body
-does not loop.
+its body loops: it has a `for`, or it runs a call of a div function in direct style, on its spine
+(the tail positions of binds, `let`s, `case` arms and `for`s). Definitions are in dependency
+order, so one pass infers this. A div function written with a plain result `A => B` is
+elaborated to `A => U (loop B R)`, and so is `main`; `total def` asserts that the body does not
+loop.
 
-In a div body, a direct-style call becomes the delay bind of `lib/div.bc`, `div_bind`, with the
-rest of the body as its continuation; a `for` becomes a loop by `unfold` followed by the same bind;
-a terminal `return V` becomes the loop that finishes with `V` at its first observation. The
-residual `R` is the capabilities the result hands back first (`K` of `K * V`, SPEC §11), paired
-with `()`, or `1` when there are none: a loop closed early hands its capabilities back.
+Everything here is decided by types (`Frontend.Elab.TCx`, docs/typed-elaboration.md §2.4):
+
+* **A call run in direct style** is an application whose type is a loop, where the type expected
+  of it is not that loop. It may stand at any depth of a bound or returned value, a scrutinee or
+  a `let`'s value: the value's applications are then lifted out, innermost and leftmost first,
+  into bindings (`liftApps`), and each call becomes the delay bind of `lib/div.bc`, `div_bind`,
+  with the rest of the body as its continuation. Checked against its own loop type (an argument
+  of `div_fuel`, an annotated binding) the call is the loop as a value.
+* **A `for`** becomes a loop by `unfold` whose state is the iterator, the other capabilities, and
+  the variables the body reads, at their inferred types; then the same bind.
+* **A terminal** `return V` becomes the loop that finishes with `V` at its first observation.
+* **The residual** `R` is `K * 1`, where `K` is the components of the result type `B` that have
+  no destructor (SPEC §12), or `1` when there are none: a loop closed early hands back what it
+  cannot drop. The variables that hold `K` are the ones a terminal `return` puts there.
 -/
 
-/-- A function returning a loop, `A => U (loop B R)` or `!(A => U (loop B R))` (a `delay B`
-is `loop B 1`): its `B` and `R`. -/
+open Frontend.Elab (TCx loopOf iterOf loopFnOf spineT tupleT ppT toSurface Class)
+open Frontend.Check (CVTy)
+
+/-- A function returning a loop, as written: `A => U (loop B R)` or `!(A => U (loop B R))` (a
+`delay B` is `loop B 1`): its `B` and `R`. Specialization reads it off a parameter's type. -/
 def loopSig : VTy → Option (VTy × VTy)
   | .lolli _ _ (.thunk _ (.loop _ B R)) | .bang _ (.lolli _ _ (.thunk _ (.loop _ B R))) =>
     some (B, R)
@@ -265,120 +240,250 @@ def loopSig : VTy → Option (VTy × VTy)
     some (B, .unit sp)
   | _ => none
 
-/-- A capability type as written: `In`, `Out`, `ref input`, `ref output`, or a tuple of them. -/
-def isCapTy : VTy → Bool
-  | .name _ n => n == "In" || n == "Out"
-  | .ref _ (.handle _ _) => true
-  | .tensor _ A B => isCapTy A && isCapTy B
-  | _ => false
-
-/-- The capabilities a result hands back first: `K` of `K * V`. -/
-def capPart : VTy → Option VTy
-  | .tensor _ K _ => if isCapTy K then some K else none
-  | _ => none
-
-/-- The components of a right-nested tuple type. -/
-def tupleParts : VTy → List VTy
-  | .tensor _ A B => A :: tupleParts B
-  | A => [A]
-
-/-- A type with the I/O library's names for the capability types expanded, for comparing
-residuals as written. -/
-def capNorm : VTy → VTy
-  | .name sp "In" => .ref sp (.handle sp false)
-  | .name sp "Out" => .ref sp (.handle sp true)
-  | .tensor sp A B => .tensor sp (capNorm A) (capNorm B)
-  | A => A.strip
-
-/-- The residual of a div function with result `B`: `K * 1`, or `1`. -/
-def residual (B : VTy) : VTy :=
-  match capPart B with
-  | some K => .tensor K.span K (.unit K.span)
-  | none => .unit B.span
-
 /-- `F (U (loop B R))` (or `F (U (delay B))`): a computation type that returns a loop, written
 out; such a body is core, not elaborated. -/
 def _root_.Frontend.CTy.returnsLoop : CTy → Bool
   | .ret _ (.thunk _ (.loop ..)) | .ret _ (.thunk _ (.delay ..)) => true
   | _ => false
 
-/-- The div functions in scope, with their types. -/
+/-- The div functions made so far, with their types. -/
 abbrev Divs := List (String × VTy)
 
-/-- The variables bound so far, newest first, with the type their binding gives. -/
-abbrev TyEnv := List (String × Option VTy)
+/-- The depth bound for the traversals below. -/
+def divFuel : Nat := 1 <<< 16
 
-/-- The type of a function name: a variable's, or else a div function's. -/
-def fnTy (ds : Divs) (env : TyEnv) (f : String) : Option VTy :=
-  match env.lookup f with
-  | some T => T
-  | none => ds.lookup f
+/-! #### Calls run in direct style -/
 
-/-- The callee of a direct-style call `return (f V)`, or `return ((unbang f) V)` at a `!` type. -/
-def callee : Comp → Option String
-  | .ret _ (.app _ (.var _ f) _) | .ret _ (.app _ (.unbang _ (.var _ f)) _) => some f
+/-- The function a call applies, by name, for messages. -/
+def calleeName : Val → Option String
+  | .app _ (.var _ f) _ | .app _ (.unbang _ (.var _ f)) _ => some f
   | _ => none
 
-/-- The head of `x <- M; N` is a direct-style call of a div function: its `B` and `R`. -/
-def divCall (ds : Divs) (env : TyEnv) (M : Comp) : Option (VTy × VTy) := do
-  let f ← callee M
-  let T ← fnTy ds env f
-  let bang := match M, T with
-    | .ret _ (.app _ (.unbang ..) _), .bang .. | .ret _ (.app _ (.var ..) _), .lolli .. => true
-    | _, _ => false
-  if bang then loopSig T else none
+/-- A call run in direct style: an application whose type is a loop, where the type expected of
+it, when known, is not that loop. Its `B` and `R`. -/
+def directCall (c : TCx) (exp : Option CVTy) : Val → Option (CVTy × CVTy)
+  | V@(.app ..) => do
+    let A ← c.tyV V
+    if exp = some A then none else loopOf A
+  | _ => none
 
-/-- A direct-style call of a div function, described. -/
-def divCallAt (ds : Divs) (env : TyEnv) (M : Comp) : Option (Span × String) :=
-  match divCall ds env M.takeLends.1, callee M.takeLends.1 with
-  | some _, some f => some (M.span, s!"it calls the div function `{f}`")
-  | _, _ => none
+/-- The subvalues of a value outside nested computations, each with the type expected of it. -/
+def children (c : TCx) (exp : Option CVTy) : Val → List (Option CVTy × Val)
+  | .app _ f W =>
+    [(none, f), (match c.tyV f with | some (.thunk (.arr A _)) => some A | _ => none, W)]
+  | .pair _ V W => match exp with
+    | some (.tensor A B) => [(some A, V), (some B, W)]
+    | _ => [(none, V), (none, W)]
+  | .inl _ V => [(match exp with | some (.sum A _) => some A | _ => none, V)]
+  | .inr _ V => [(match exp with | some (.sum _ B) => some B | _ => none, V)]
+  | .ascribe _ V A => [(c.elabV A, V)]
+  | .unbang _ V | .boxed _ _ V | .unbox _ V | .sub _ V _ | .roll _ V | .unroll _ V
+  | .inst _ V _ | .shorten _ _ _ _ V => [(none, V)]
+  | _ => []
 
-/-- The type a `let (x, y) = V` gives its names, when `V` is a variable of known pair type. -/
-def pairTypes (env : TyEnv) : Val → Option VTy × Option VTy
-  | .var _ z => match env.lookup z with
-    | some (some (.tensor _ A B)) => (some A, some B)
-    | _ => (none, none)
+/-- A call run in direct style in a value, at any depth outside nested computations: its span
+and callee. -/
+def callIn (c : TCx) : Nat → Option CVTy → Val → Option (Span × Option String)
+  | 0, _, _ => none
+  | n + 1, exp, V => match directCall c exp V with
+    | some _ => some (V.span, calleeName V)
+    | none => (children c exp V).findSome? fun (e, W) => callIn c n e W
+
+/-- A call run in direct style strictly below the top of a value. -/
+def nestedCall (c : TCx) (exp : Option CVTy) (V : Val) : Option (Span × Option String) :=
+  (children c exp V).findSome? fun (e, W) => callIn c divFuel e W
+
+/-- The applications of a value outside nested computations, lifted out innermost and leftmost
+first, the order its evaluation runs them in: each becomes a binding `io_nK <- return (f W)`,
+and the value refers to its variable. -/
+def liftApps : Nat → Val → StateM (List (Ident × Val)) Val
+  | 0, V => pure V
+  | n + 1, V => match V with
+    | .app sp f W => do
+      let f' ← liftApps n f
+      let W' ← liftApps n W
+      let x : Ident := ⟨s!"io_n{(← get).length}", sp⟩
+      modify (· ++ [(x, .app sp f' W')])
+      pure (.var sp x.name)
+    | .pair sp V W => do pure (.pair sp (← liftApps n V) (← liftApps n W))
+    | .inl sp V => do pure (.inl sp (← liftApps n V))
+    | .inr sp V => do pure (.inr sp (← liftApps n V))
+    | .ascribe sp V A => do pure (.ascribe sp (← liftApps n V) A)
+    | .unbang sp V => do pure (.unbang sp (← liftApps n V))
+    | .boxed sp l V => do pure (.boxed sp l (← liftApps n V))
+    | .unbox sp V => do pure (.unbox sp (← liftApps n V))
+    | .sub sp V l => do pure (.sub sp (← liftApps n V) l)
+    | .roll sp V => do pure (.roll sp (← liftApps n V))
+    | .unroll sp V => do pure (.unroll sp (← liftApps n V))
+    | .inst sp V l => do pure (.inst sp (← liftApps n V) l)
+    | .shorten sp m σ l V => do pure (.shorten sp m σ l (← liftApps n V))
+    | V => pure V
+
+/-- The applications below the top of a value, lifted (`liftApps`). -/
+def liftBelow (V : Val) : Val × List (Ident × Val) :=
+  let go : StateM (List (Ident × Val)) Val := match V with
+    | .app sp f W => do pure (.app sp (← liftApps divFuel f) (← liftApps divFuel W))
+    | V => liftApps divFuel V
+  go.run []
+
+/-- Every application of a value, lifted (`liftApps`). -/
+def liftAll (V : Val) : Val × List (Ident × Val) := (liftApps divFuel V).run []
+
+/-- The lifted applications bound before `M`. -/
+def chain (bs : List (Ident × Val)) (M : Comp) : Comp :=
+  bs.foldr (fun (x, V) N => .bind V.span x none (.ret V.span V) N false) M
+
+/-! #### Types of bound variables -/
+
+/-- The type `x <- M` gives `x`: the annotation; else the result of a call run in direct style,
+the value's type, or the computation's result; with `&c` in `M`, the second component, since the
+call hands the capability back first (SPEC §11). -/
+def bindTy (c : TCx) (A : Option VTy) (M : Comp) : Option CVTy :=
+  match A with
+  | some A => c.elabV A
+  | none =>
+    let t := match M with
+      | .ret _ V => match directCall c none V with
+        | some (B, _) => some B
+        | none => c.tyV V
+      | M => match c.tyC M with
+        | some (.ret A) => some A
+        | _ => none
+    if M.takeLends.2.isEmpty then t else match t with
+      | some (.tensor _ B) => some B
+      | _ => none
+
+/-- The types `let (x, y) = V` gives its names. -/
+def pairTys (c : TCx) (V : Val) : Option CVTy × Option CVTy :=
+  match c.tyV V with
+  | some (.tensor A B) => (some A, some B)
   | _ => (none, none)
 
-/-- Where a body loops, on its spine: a `for`, or a direct-style call of a div function. -/
-def loopsAt (ds : Divs) : TyEnv → Comp → Option (Span × String)
-  | env, .bind _ x A M N _ => (divCallAt ds env M).orElse fun _ => loopsAt ds ((x.name, A) :: env) N
-  | env, .letUnit _ _ M => loopsAt ds env M
-  | env, .letPair _ x y V M =>
-    let (Ax, Ay) := pairTypes env V
-    loopsAt ds ((y.name, Ay) :: (x.name, Ax) :: env) M
-  | env, .case _ _ x M y N =>
-    (loopsAt ds ((x.name, none) :: env) M).orElse fun _ => loopsAt ds ((y.name, none) :: env) N
-  | _, .for_ sp .. => some (sp, "it has a `for`")
-  | env, T => divCallAt ds env T
+/-- The types `case V { inl x -> … | inr y -> … }` gives its names. -/
+def sumTys (c : TCx) (V : Val) : Option CVTy × Option CVTy :=
+  match c.tyV V with
+  | some (.sum A B) => (some A, some B)
+  | _ => (none, none)
 
-/-- The names of a tuple of variables. -/
-def tupleVars : Val → Option (List String)
-  | .var _ x => some [x]
-  | .pair _ V W => do pure ((← tupleVars V) ++ (← tupleVars W))
+/-- A call found in a value, described. -/
+def callMsg (sp : Span) : Option String → Span × String
+  | some f => (sp, s!"it calls the div function `{f}`")
+  | none => (sp, "it calls a div function")
+
+/-- A call run in direct style in a bound or returned value: at its top (reported at the
+computation) or below it. -/
+def headLoops (c : TCx) (exp : Option CVTy) : Comp → Option (Span × String)
+  | M@(.ret _ V) => match directCall c exp V with
+    | some _ => some (callMsg M.span (calleeName V))
+    | none => (nestedCall c exp V).map fun (sp, f) => callMsg sp f
   | _ => none
 
-/-- The names under which a body hands back `n` capabilities: the first component of a
-terminal `return (K, V)`. -/
-def termCaps (n : Nat) : Comp → Option (List String)
-  | .bind _ _ _ _ N _ | .letUnit _ _ N | .letPair _ _ _ _ N | .for_ _ _ _ _ N => termCaps n N
-  | .case _ _ _ M _ N => (termCaps n M).orElse fun _ => termCaps n N
-  | .ret _ (.pair _ K _) => (tupleVars K).filter (·.length == n)
+/-- Where a body loops, on its spine: a `for`, or a call run in direct style. `B` is the body's
+result type. -/
+def loopsAt (c : TCx) (B : Option CVTy) : Comp → Option (Span × String)
+  | .bind _ x A M N _ =>
+    (headLoops c (A.bind c.elabV) M).orElse fun _ => loopsAt (c.push x.name (bindTy c A M)) B N
+  | .letUnit _ V M =>
+    ((callIn c divFuel (some .unit) V).map fun (sp, f) => callMsg sp f).orElse fun _ =>
+      loopsAt c B M
+  | .letPair _ x y V M =>
+    let (Ax, Ay) := pairTys c V
+    ((callIn c divFuel none V).map fun (sp, f) => callMsg sp f).orElse fun _ =>
+      loopsAt ((c.push x.name Ax).push y.name Ay) B M
+  | .case _ V x M y N =>
+    let (Ax, Ay) := sumTys c V
+    ((callIn c divFuel none V).map fun (sp, f) => callMsg sp f).orElse fun _ =>
+      (loopsAt (c.push x.name Ax) B M).orElse fun _ => loopsAt (c.push y.name Ay) B N
+  | .for_ sp .. => some (sp, "it has a `for`")
+  | T => headLoops c B T
+
+mutual
+/-- `n` occurs in a value, as a variable or a `def` applied to type arguments. -/
+def _root_.Frontend.Val.names (n : String) : Val → Bool
+  | .var _ x | .defApp _ x _ => x == n
+  | .pair _ V W | .app _ V W => V.names n || W.names n
+  | .inl _ V | .inr _ V | .unbang _ V | .boxed _ _ V | .unbox _ V | .sub _ V _ | .roll _ V
+  | .unroll _ V | .inst _ V _ | .ascribe _ V _ | .shorten _ _ _ _ V => V.names n
+  | .thunk _ M | .thunkv _ M | .bangThunk _ M | .bangThunkv _ M | .run _ M => M.names n
+  | _ => false
+
+/-- `n` occurs in a computation. -/
+def _root_.Frontend.Comp.names (n : String) : Comp → Bool
+  | .ret _ V | .absurd _ V => V.names n
+  | .bind _ _ _ M N _ | .with_ _ M N => M.names n || N.names n
+  | .lam _ _ _ M | .app _ M _ | .proj _ _ M | .lamL _ _ _ M | .inst _ M _ | .nuIn _ M
+  | .nuOut _ M | .ascribe _ M _ => M.names n
+  | .letUnit _ V M | .letPair _ _ _ V M => V.names n || M.names n
+  | .case _ V _ M _ N => V.names n || M.names n || N.names n
+  | .for_ _ _ V M N => V.names n || M.names n || N.names n
+  | .force .. | .top _ => false
+end
+
+/-! #### The residual -/
+
+/-- A right-nested tuple of values against a right-nested tuple type's components: the value at
+each component, where the value's tuple reaches it (its last component may cover the rest). -/
+def alignV : List CVTy → Val → List (Option Val)
+  | [], _ => []
+  | [_], v => [some v]
+  | _ :: ts, .pair _ v w => some v :: alignV ts w
+  | ts, _ => ts.map fun _ => none
+
+/-- The variables a value names a component of type `A` with: the variable itself, or one per
+component of a tuple. -/
+def varsFor (A : CVTy) : Val → Option (List (String × CVTy))
+  | .var _ x => some [(x, A)]
+  | V => ((alignV (spineT A) V).zip (spineT A)).mapM fun
+    | (some (.var _ x), T) => some (x, T)
+    | _ => none
+
+def isLinear (A : CVTy) : Bool := Class.of A == .linear
+
+/-- The variables a terminal `return V` of the body puts in each component of the result that
+has no destructor. -/
+def termParts (parts : List CVTy) : Comp → Option (List (List (String × CVTy)))
+  | .bind _ _ _ _ N _ | .letUnit _ _ N | .letPair _ _ _ _ N | .for_ _ _ _ _ N => termParts parts N
+  | .case _ _ _ M _ N => (termParts parts M).orElse fun _ => termParts parts N
+  | .ret _ V => ((parts.zip (alignV parts V)).filter (isLinear ·.1)).mapM fun (A, v) =>
+      v.bind (varsFor A)
   | _ => none
 
-/-- What a div body is elaborated at: its result, its residual and its capabilities. -/
+/-- What a div body is elaborated at: its result `B`, its residual `R = K * 1` (or `1`), `K`, and
+the variables holding each component of `K`. -/
 structure LoopCx where
-  ds : Divs
-  B : VTy
-  R : VTy
-  caps : List (String × VTy)
+  B : CVTy
+  R : CVTy
+  K : CVTy
+  parts : List (List (String × CVTy))
 
-def LoopCx.kSrc (cx : LoopCx) : String := tupleSrc (cx.caps.map (·.1))
+def LoopCx.caps (cx : LoopCx) : List (String × CVTy) := cx.parts.flatten
+
+def LoopCx.capNames (cx : LoopCx) : List String := cx.caps.map (·.1)
+
+def LoopCx.kSrc (cx : LoopCx) : String := tupleSrc (cx.parts.map fun p => tupleSrc (p.map (·.1)))
 
 /-- The residual built from the capabilities in scope. -/
 def LoopCx.rSrc (cx : LoopCx) : String :=
-  if cx.caps.isEmpty then "()" else s!"({cx.kSrc}, ())"
+  if cx.parts.isEmpty then "()" else s!"({cx.kSrc}, ())"
+
+/-- Bind the variables of each component of `K`, held in `v`. -/
+def destructParts (v : String) (parts : List (List (String × CVTy))) : String :=
+  match parts with
+  | [p] => destructSrc v (p.map (·.1))
+  | ps =>
+    let ns := (List.range ps.length).map (s!"{v}_p{·}")
+    destructSrc v ns ++ String.join ((ns.zip ps).map fun (n, p) => destructSrc n (p.map (·.1)))
+
+/-- The context a div function with result `B` and body `M` is elaborated at.  `[spec §14]` -/
+def loopCxOf (sp : Span) (B : CVTy) (M : Comp) : Except Error LoopCx := do
+  let parts := spineT B
+  let lin := parts.filter isLinear
+  if lin.isEmpty then return ⟨B, .unit, .unit, []⟩
+  let K := tupleT lin
+  match termParts parts M with
+  | some ps => pure ⟨B, .tensor K .unit, K, ps⟩
+  | none => throw ⟨sp, s!"a div function whose result holds `{ppT K}`, which has no destructor, " ++
+      "must hand it back by name: `return (c, …)` (SPEC §14)"⟩
 
 def internalError (sp : Span) (what : String) (e : Error) : Error :=
   ⟨sp, s!"internal error in {what}: {e.render}"⟩
@@ -399,12 +504,20 @@ def template (sp : Span) (what : String) (src : String) : SM Comp := do
   note sp what
   pure (L.respan sp)
 
+/-! #### Elaborating a div body -/
+
 /-- A terminal `T` of a div body: `io_v : B <- T`, then the loop that finishes with `io_v` at
-its first observation; closed instead, it hands back the capabilities of `io_v`. -/
+its first observation; closed instead, it hands back the components of `io_v` that have no
+destructor, and the checker drops the others. -/
 def dret (cx : LoopCx) (T : Comp) : SM Comp := do
-  let close := if cx.caps.isEmpty then "return ()"
-    else "let (io_k, io_w) = io_v; return (io_k, ())"
-  let src := s!"io_v : {cx.B.pp} <- force io_hole_t;
+  let parts := spineT cx.B
+  let lin := parts.map isLinear
+  let last := (lin.zip (List.range lin.length)).foldl (fun a (b, i) => if b then i + 1 else a) 0
+  let close := if last == 0 then "return ()" else
+    let ns := (List.range last).map (s!"io_w{·}") ++ (if last < parts.length then ["io_wr"] else [])
+    let keep := ((List.range last).zip lin).filterMap fun (i, b) => if b then some s!"io_w{i}" else none
+    destructSrc "io_v" ns ++ s!"return ({tupleSrc keep}, ())"
+  let src := s!"io_v : {ppT cx.B} <- force io_hole_t;
 return (thunkv nu_in < return (inl io_v), {close} >)"
   let L ← template T.span "the loop a div function's result becomes" src
   let L := L.fill (fun _ => none) (fun n => if n == "io_hole_t" then some T else none)
@@ -419,85 +532,88 @@ replaced: the delay bind of `f`'s loop and the continuation, which binds `x` (wi
 lent) and runs `N'`; closed during `f`'s loop, the continuation turns `f`'s residual into the
 body's. -/
 def divBind (cx : LoopCx) (sp : Span) (x : Ident) (A : Option VTy) (call : Comp)
-    (lend : Option Ident) (Bf Rf : VTy) (N' : Comp) : SM Comp := do
+    (lend : Option Ident) (Bf Rf : CVTy) (N' : Comp) : SM Comp := do
   let bindX := match lend, A with
     | some c, _ => s!"let ({c.name}, {x.name}) = io_a;"
     | none, some A => s!"{x.name} : {A.pp} <- return io_a;"
     | none, none => s!"{x.name} <- return io_a;"
-  let abort ← if (capNorm Rf).strip == (capNorm cx.R).strip then pure "return io_r"
+  let abort ← if Rf = cx.R then pure "return io_r"
     else match Rf, lend with
-      | .unit _, _ => pure s!"let () = io_r; return {cx.rSrc}"
-      | .tensor _ _ (.unit _), some c =>
-        if cx.caps.any (·.1 == c.name) then pure s!"let ({c.name}, io_u) = io_r; return {cx.rSrc}"
-        else throw ⟨sp, s!"the call lends `{c.name}`, which is not among the capabilities this " ++
-          "function hands back"⟩
-      | _, _ => throw ⟨sp, s!"a call of a div function whose loop hands back `{Rf.pp}` when closed " ++
-          "must lend its capability with `&c`, or hand back what this function hands back, " ++
-          s!"`{cx.R.pp}` (SPEC §14)"⟩
+      | .unit, _ => pure s!"let () = io_r; return {cx.rSrc}"
+      | .tensor _ .unit, some c =>
+        if cx.capNames.contains c.name then
+          pure s!"let ({c.name}, io_u) = io_r; return {cx.rSrc}"
+        else throw ⟨sp, s!"the call lends `{c.name}`, which is not among what this function " ++
+          "hands back"⟩
+      | _, _ => throw ⟨sp, s!"a call of a div function whose loop hands back `{ppT Rf}` when " ++
+          "closed must lend what it hands back with `&c`, or hand back what this function hands " ++
+          s!"back, `{ppT cx.R}` (SPEC §14)"⟩
   let src := s!"io_m <- force io_hole_call;
-return (div_bind[{Bf.pp}, {cx.B.pp}, {Rf.pp}, {cx.R.pp}] (io_m, thunkv
-  < fun (io_a : {Bf.pp}) -> {bindX} force io_hole_rest,
-    fun (io_r : {Rf.pp}) -> {abort} >))"
+return (div_bind[{ppT Bf}, {ppT cx.B}, {ppT Rf}, {ppT cx.R}] (io_m, thunkv
+  < fun (io_a : {ppT Bf}) -> {bindX} force io_hole_rest,
+    fun (io_r : {ppT Rf}) -> {abort} >))"
   let L ← template sp "a call of a div function (`div_bind`)" src
   pure (L.fill (fun _ => none)
     (fun n => if n == "io_hole_call" then some call else if n == "io_hole_rest" then some N'
       else none))
 
 /-- The latest binding of each name, oldest first. -/
-def latest (env : List (String × Option VTy)) : List (String × Option VTy) :=
+def latest (env : List (String × Option CVTy)) : List (String × Option CVTy) :=
   env.reverse.foldl (fun acc (y, T) => (acc.filter (·.1 != y)) ++ [(y, T)]) []
 
 /-- `for x in V { M }; N` in a div body: a loop by `unfold` whose state is the iterator `V`,
-the other capabilities and the variables the loop threads, each at the type its binding gives.
-Its `close` closes the iterator and hands the capabilities back. When `N` is total, `rest` is
-`.inl N`: at the end of the stream the loop runs `N` and finishes with its value, and it threads
-the variables `M` or `N` mentions. Otherwise `rest` is `.inr N'`, `N` elaborated: the loop
-threads the variables `M` mentions, finishes with the capabilities and those variables, and
-the delay bind runs `N'` with them rebound.  `[spec §14]` -/
-def forLoop (cx : LoopCx) (env : TyEnv) (sp : Span) (x : Ident) (V : Val) (M : Comp)
+the other capabilities and the variables the loop threads, at their inferred types. Its `close`
+closes the iterator and hands the capabilities back. When `N` is total, `rest` is `.inl N`: at
+the end of the stream the loop runs `N` and finishes with its value, and it threads the
+variables `M` or `N` mentions. Otherwise `rest` is `.inr N'`, `N` elaborated: the loop threads
+the variables `M` mentions, finishes with the capabilities and those variables, and the delay
+bind runs `N'` with them rebound.  `[spec §14]` -/
+def forLoop (cx : LoopCx) (c : TCx) (sp : Span) (x : Ident) (V : Val) (M : Comp)
     (rest : Comp ⊕ Comp) : SM Comp := do
-  let Ax : VTy ← match V with
-    | .app _ (.var _ "bytes") _ => pure (.int sp .w32)
-    | _ => throw ⟨V.span, "`for` iterates over `bytes c`, the input `c` as a stream of bytes"⟩
-  if let some (sp', what) := loopsAt cx.ds env M then
+  let Vt ← match c.tyV V with
+    | some Vt => pure Vt
+    | none => throw ⟨V.span, "the type of the iterator of this `for` is not determined"⟩
+  let (Ax, _, _) ← match iterOf Vt with
+    | some it => pure it
+    | none => throw ⟨V.span, s!"`for` iterates over an iterator `U (iter A R R')`, but this has " ++
+        s!"type `{ppT Vt}`"⟩
+  if let some (sp', what) := loopsAt (c.push x.name (some Ax)) none M then
     throw ⟨sp', s!"the body of a `for` is one step of its loop and must be total, but {what} " ++
       "(SPEC §14)"⟩
-  let cs := cx.caps.map (·.1)
-  let c ← match cs.filter (mentionsV · V) with
-    | [c] => pure c
+  let cs := cx.capNames
+  let cap ← match cs.filter (mentionsV · V) with
+    | [cap] => pure cap
     | _ => throw ⟨V.span, "the iterator of a `for` must be made from one capability that the " ++
         "function hands back, which the iterator hands back at its end"⟩
   let reads (y : String) : Bool := match rest with
     | .inl N => mentionsC y M || mentionsC y N
     | .inr _ => mentionsC y M
-  let used := (latest env).filter fun (y, _) => !cs.contains y && y != x.name && reads y
+  let used := (latest c.locals).filter fun (y, _) => !cs.contains y && y != x.name && reads y
   let ws ← used.mapM fun (y, T) => match T with
     | some T => pure (y, T)
-    | none => throw ⟨sp, s!"the loop threads `{y}`: bind it with its type, `{y} : T <- …;`"⟩
-  let th := cx.caps.filter (·.1 != c)
+    | none => throw ⟨sp, s!"the loop threads `{y}`, whose type is not determined: ascribe it"⟩
+  let th := cx.caps.filter (·.1 != cap)
   let sv := th.map (·.1) ++ ws.map (·.1)
-  let svTy := th.map (·.2.pp) ++ ws.map (·.2.pp)
-  let cTy := ((cx.caps.lookup c).map (·.pp)).getD "1"
-  let st := s!"U (iter ({Ax.pp}) ({cTy}) ({cTy})) * {tupleTySrc svTy}"
-  let kT := tupleTySrc (cx.caps.map (·.2.pp))
-  let wT := tupleTySrc (ws.map (·.2.pp))
+  let svTy := th.map (ppT ·.2) ++ ws.map (ppT ·.2)
+  let st := s!"{ppT Vt} * {tupleTySrc svTy}"
+  let wT := tupleTySrc (ws.map (ppT ·.2))
   let fin := match rest with
-    | .inl _ => s!"({cx.B.pp})"
-    | .inr _ => s!"({kT} * {wT})"
+    | .inl _ => s!"({ppT cx.B})"
+    | .inr _ => s!"(({ppT cx.K}) * {wT})"
   let wv := tupleSrc (ws.map (·.1))
   let finish := match rest with
     | .inl _ => "force io_hole_fin"
     | .inr _ => s!"return (inl ({cx.kSrc}, {wv}))"
-  let R := cx.R.pp
+  let R := ppT cx.R
   let ds := destructSrc "io_st" sv
   let wn : List String := ws.map (·.1)
   let result := match rest with
     | .inl _ => "return (thunkv nu_in < (nu_out (force io_f io_s0)).1, (nu_out (force io_f io_s0)).2 >)"
     | .inr _ => s!"io_l <- return (thunkv nu_in < (nu_out (force io_f io_s0)).1, (nu_out (force io_f io_s0)).2 >);
-return (div_bind[{fin}, {cx.B.pp}, ({R}), ({R})] (io_l, thunkv
+return (div_bind[{fin}, {ppT cx.B}, ({R}), ({R})] (io_l, thunkv
   < fun (io_a : {fin}) ->
       let (io_ka, io_wa) = io_a;
-      {destructSrc "io_ka" cs}      {destructSrc "io_wa" wn}      force io_hole_rest,
+      {destructParts "io_ka" cx.parts}      {destructSrc "io_wa" wn}      force io_hole_rest,
     fun (io_r : {R}) -> return io_r >))"
   let src := s!"io_step : !U ({st} -o F ({fin} + ({st})) & F ({R})) <- return (!thunkv fun (io_s : {st}) ->
   < let (io_it, io_st) = io_s;
@@ -507,24 +623,25 @@ return (div_bind[{fin}, {cx.B.pp}, ({R}), ({R})] (io_l, thunkv
         let ({x.name}, io_it) = io_p;
         force io_hole_body
     | inr io_c ->
-        {c} <- return io_c;
+        {cap} <- return io_c;
         {finish}
     },
     let (io_it, io_st) = io_s;
     {ds}    io_c <- (nu_out (force io_it)).2;
-    {c} <- return io_c;
+    {cap} <- return io_c;
     return {cx.rSrc} >);
 io_f <- return (unbang (unfold[loop {fin} ({R}), {st}] io_step));
 io_s0 : {st} <- return (io_hole_v, {tupleSrc sv});
 {result}"
   let L ← template sp "`for`" src
+  let Bs ← toSurface sp cx.B
   let body := wrapTail (fun T => .bind T.span ⟨"io_u", T.span⟩ none T
       (.ret T.span (.inr T.span (.pair T.span (.var T.span "io_it") (tupleVal T.span sv)))) false) M
   let hole : String → Option Comp := match rest with
     | .inl N => fun n =>
       if n == "io_hole_body" then some body
       else if n == "io_hole_fin" then some (wrapTail (fun T =>
-        let fin := Comp.bind T.span ⟨"io_v", T.span⟩ (some cx.B) T
+        let fin := Comp.bind T.span ⟨"io_v", T.span⟩ (some Bs) T
           (.ret T.span (.inl T.span (.var T.span "io_v"))) false
         -- A terminal that lends keeps its binding unannotated, as `&c` requires.
         match T.takeLends.2, fin with
@@ -536,64 +653,74 @@ io_s0 : {st} <- return (io_hole_v, {tupleSrc sv});
       if n == "io_hole_body" then some body else if n == "io_hole_rest" then some N' else none
   pure (L.fill (fun v => if v == "io_hole_v" then some V else none) hole)
 
-/-- A div body, elaborated to compute its loop (see the section's comment). `env` holds the
-variables bound so far, newest first, with the type their binding gives.  `[spec §14]` -/
-def loopBody (cx : LoopCx) : List (String × Option VTy) → Comp → SM Comp
-  | env, .bind sp x A M N lin => do
+/-- A div body, elaborated to compute its loop (see the section's comment). `c` is the typing
+context at the point reached.  `[spec §14]` -/
+def loopBody (cx : LoopCx) : Nat → TCx → Comp → SM Comp
+  | 0, _, M => throw ⟨M.span, "internal error: a div body nested too deeply"⟩
+  | n + 1, c, .bind sp x A M N lin => do
+    let exp := A.bind c.elabV
+    -- Calls run in direct style below the top of the bound value are lifted out first.
+    if let .ret sp' V := M then
+      if (nestedCall c exp V).isSome then
+        let (V', bs) := liftBelow V
+        return (← loopBody cx n c (chain bs (.bind sp x A (.ret sp' V') N lin)))
     let (M', lends) := M.takeLends
-    match divCall cx.ds env M' with
+    match (match M' with | .ret _ V => directCall c exp V | _ => none) with
     | none =>
-      let N' ← loopBody cx ((x.name, A) :: env) N
+      let N' ← loopBody cx n (c.push x.name (bindTy c A M)) N
       pure (.bind sp x A M N' lin)
     | some (Bf, Rf) =>
       let lend ← match lends with
         | [] => pure none
-        | [c] => pure (some c)
+        | [l] => pure (some l)
         | _ => throw ⟨sp, "a call lends at most one capability with `&`"⟩
-      let env' := match lend with
-        | some c =>
-          let (Kc, Vx) := match Bf with
-            | .tensor _ K V => (some K, some V)
-            | _ => (none, none)
-          (x.name, A.orElse fun _ => Vx) :: (c.name, Kc) :: env
-        | none => (x.name, A.orElse fun _ => some Bf) :: env
-      let N' ← loopBody cx env' N
+      let c' := match lend, Bf with
+        | some l, .tensor K Vx => (c.push l.name (some K)).push x.name (exp <|> some Vx)
+        | some l, _ => (c.push l.name none).push x.name exp
+        | none, _ => c.push x.name (exp <|> some Bf)
+      let N' ← loopBody cx n c' N
       divBind cx sp x A M' lend Bf Rf N'
-  | env, .letUnit sp V M => return .letUnit sp V (← loopBody cx env M)
-  | env, .letPair sp x y V M => do
-    let (Ax, Ay) := pairTypes env V
-    return .letPair sp x y V (← loopBody cx ((y.name, Ay) :: (x.name, Ax) :: env) M)
-  | env, .case sp V x M y N =>
-    return .case sp V x (← loopBody cx ((x.name, none) :: env) M) y
-      (← loopBody cx ((y.name, none) :: env) N)
-  | env, .for_ sp x V M N => do
+  | n + 1, c, .letUnit sp V M => do
+    if (callIn c divFuel (some .unit) V).isSome then
+      let (V', bs) := liftAll V
+      return (← loopBody cx n c (chain bs (.letUnit sp V' M)))
+    return .letUnit sp V (← loopBody cx n c M)
+  | n + 1, c, .letPair sp x y V M => do
+    if (callIn c divFuel none V).isSome then
+      let (V', bs) := liftAll V
+      return (← loopBody cx n c (chain bs (.letPair sp x y V' M)))
+    let (Ax, Ay) := pairTys c V
+    return .letPair sp x y V (← loopBody cx n ((c.push x.name Ax).push y.name Ay) M)
+  | n + 1, c, .case sp V x M y N => do
+    if (callIn c divFuel none V).isSome then
+      let (V', bs) := liftAll V
+      return (← loopBody cx n c (chain bs (.case sp V' x M y N)))
+    let (Ax, Ay) := sumTys c V
+    return .case sp V x (← loopBody cx n (c.push x.name Ax) M) y
+      (← loopBody cx n (c.push y.name Ay) N)
+  | n + 1, c, .for_ sp x V M N => do
     -- What follows runs inside the loop's last step when it is total and every variable it
     -- reads has a type; otherwise it follows by the delay bind.
-    let cs := cx.caps.map (·.1)
-    let typed := (latest env).all fun (y, T) =>
+    let cs := cx.capNames
+    let typed := (latest c.locals).all fun (y, T) =>
       cs.contains y || y == x.name || !mentionsC y N || T.isSome
-    if (loopsAt cx.ds env N).isNone && typed then forLoop cx env sp x V M (.inl N)
-    else forLoop cx env sp x V M (.inr (← loopBody cx env N))
-  | env, T => do
+    if (loopsAt c (some cx.B) N).isNone && typed then forLoop cx c sp x V M (.inl N)
+    else forLoop cx c sp x V M (.inr (← loopBody cx n c N))
+  | n + 1, c, T => do
+    if let .ret sp V := T then
+      if (nestedCall c (some cx.B) V).isSome then
+        let (V', bs) := liftBelow V
+        return (← loopBody cx n c (chain bs (.ret sp V')))
     let (T', lends) := T.takeLends
-    match divCall cx.ds env T', lends with
+    match (match T' with | .ret _ V => directCall c (some cx.B) V | _ => none), lends with
     | some (Bf, Rf), [] =>
       let x : Ident := ⟨"io_t", T.span⟩
       divBind cx T.span x none T' none Bf Rf (← dret cx (.ret T.span (.var T.span "io_t")))
-    | _, _ => dret cx T
-
-/-- The context a div function with result `B` and body `M` is elaborated at: its capabilities
-are those its result hands back first, named as a terminal `return (K, V)` names them. -/
-def loopCxOf (ds : Divs) (sp : Span) (B : VTy) (M : Comp) : Except Error LoopCx := do
-  let caps ← match capPart B with
-    | none => pure []
-    | some K =>
-      let Ks := tupleParts K
-      match termCaps Ks.length M with
-      | some ns => pure (ns.zip Ks)
-      | none => throw ⟨sp, s!"a div function whose result hands back capabilities, `{K.pp}`, " ++
-          "must hand them back by name: `return (c, …)` (SPEC §14)"⟩
-  pure ⟨ds, B, residual B, caps⟩
+    | some _, _ =>
+      -- A terminal call that lends is bound first, as a lend in a terminal is (SPEC §11).
+      let x : Ident := ⟨"io_t", T.span⟩
+      loopBody cx n c (.bind T.span x none T (.ret T.span (.var T.span "io_t")) false)
+    | none, _ => dret cx T
 
 /-! ### Programs -/
 
@@ -607,8 +734,12 @@ def ambientCaps (p : Program) (loops : Bool) : List String :=
     if cs.isEmpty && loops then ["stdout"] else cs
   | none => []
 
-/-- `main` with ambient capabilities, elaborated: its new type and body.  `[spec §11, §14]` -/
-def ambientMain (ds : Divs) (cs : List String) (sp : Span) (C : CTy) (M : Comp) :
+/-- A capability's type. -/
+def capTyC (c : String) : CVTy := .ref (.opq (if c == "stdin" then .input else .output))
+
+/-- `main` with ambient capabilities, elaborated: its new type and body. `c` is the typing
+context of `main`.  `[spec §11, §14]` -/
+def ambientMain (c : TCx) (cs : List String) (sp : Span) (C : CTy) (M : Comp) :
     SM (CTy × Comp) := do
   let A ← match C with
     | .ret _ A => pure A
@@ -622,20 +753,40 @@ def ambientMain (ds : Divs) (cs : List String) (sp : Span) (C : CTy) (M : Comp) 
           (.ret T.span (.pair T.span capsV (.var T.span "io_r"))) false) M
   let capsT := tupleTy sp (cs.map (capTy sp))
   let B := .tensor sp capsT A
-  if (loopsAt ds [] M).isNone then return (.ret sp B, M')
-  let cx : LoopCx := ⟨ds, B, .tensor sp capsT (.unit sp), cs.zip (cs.map (capTy sp))⟩
-  pure (.ret sp (.thunk sp (.loop sp B cx.R)), ← loopBody cx [] M')
+  let Ac := c.elabV A
+  if (loopsAt c Ac M).isNone then return (.ret sp B, M')
+  let some Ac := Ac | throw ⟨A.span, "internal error: `main`'s result type"⟩
+  let K := tupleT (cs.map capTyC)
+  let cx : LoopCx := ⟨.tensor K Ac, .tensor K .unit, K, [cs.map fun n => (n, capTyC n)]⟩
+  pure (.ret sp (.thunk sp (.loop sp B (.tensor sp capsT (.unit sp)))), ← loopBody cx divFuel c M')
+
+/-- The result `B` of a function type `A => B` or `!(A => B)`. -/
+def resultOf : Option CVTy → Option CVTy
+  | some (.thunk (.arr _ (.ret B))) | some (.bang (.thunk (.arr _ (.ret B)))) => some B
+  | _ => none
+
+/-- A written function type whose result may be a loop: a thunk or a name there. -/
+def _root_.Frontend.VTy.mayReturnLoop : VTy → Bool
+  | .lolli _ _ B | .bang _ (.lolli _ _ B) => match B with
+    | .thunk .. | .name .. => true
+    | _ => false
+  | .name .. => true
+  | _ => false
 
 /-- A `def`, with divergence inferred: the declaration as elaborated, and its entry in the div
 functions when it is one. A div function is `thunkv fun (x : A) -> M` at `A => B`, or
-`!thunkv fun (x : A) -> M` at `!(A => B)`.  `[spec §14]` -/
-def elabDef (ds : Divs) : Decl → SM (Decl × Option (String × VTy))
+`!thunkv fun (x : A) -> M` at `!(A => B)`. `scope` is the declarations before it, the
+libraries first.  `[spec §14]` -/
+def elabDef (scope : List Decl) : Decl → SM (Decl × Option (String × VTy))
   | d@(.def_ sp n ps A V mk) => do
-    if (loopSig A).isSome then return (d, some (n.name, A))
+    let c := TCx.ofScope scope false
+    if (loopSig A).isSome || (A.mayReturnLoop && ((c.elabV A).bind loopFnOf).isSome) then
+      return (d, some (n.name, A))
     let lam := match V with
       | .thunkv _ (.lam _ x Ax M) | .bangThunkv _ (.lam _ x Ax M) => some (x, Ax, M)
       | _ => none
-    let why := lam.bind fun (x, Ax, M) => loopsAt ds [(x.name, some Ax)] M
+    let why := lam.bind fun (x, Ax, M) =>
+      loopsAt (c.push x.name (c.elabV Ax)) (resultOf (c.elabV A)) M
     match mk, why with
     | .total, some (sp', what) =>
       throw ⟨sp', s!"`{n.name}` is declared `total`, but {what} (SPEC §14)"⟩
@@ -649,9 +800,12 @@ def elabDef (ds : Divs) : Decl → SM (Decl × Option (String × VTy))
         | _, _ => throw ⟨A.span, "a div function has type `A => B` or `!(A => B)` (SPEC §14)"⟩
       if !ps.isEmpty then
         throw ⟨sp, "a div function has no type parameters (SPEC §14)"⟩
-      let cx ← loopCxOf ds sp B M
-      let M' ← loopBody cx [(x.name, some Ax)] M
-      let F := VTy.lolli A.span Ar (.thunk B.span (.loop B.span B cx.R))
+      let some Bc := resultOf (c.elabV A)
+        | throw ⟨A.span, s!"the type of `{n.name}` does not elaborate"⟩
+      let cx ← loopCxOf sp Bc M
+      let M' ← loopBody cx divFuel (c.push x.name (c.elabV Ax)) M
+      let Rs ← toSurface sp cx.R
+      let F := VTy.lolli A.span Ar (.thunk B.span (.loop B.span B Rs))
       let A' := if bang then VTy.bang A.span F else F
       let V' := match V with
         | .thunkv vsp (.lam lsp _ _ _) => Val.thunkv vsp (.lam lsp x Ax M')
@@ -780,6 +934,8 @@ def hofOf (srcs : List Decl) (h : String) : Option Hof :=
 ones, in order; the div functions; whether any body became a loop; and the copies made, by
 function and parameter type. -/
 structure DivSt where
+  /-- The libraries, in scope for typing. -/
+  lib : List Decl := []
   srcs : List Decl := []
   out : List Decl := []
   ds : Divs := []
@@ -815,51 +971,31 @@ def elabDecl : Nat → DivSt → Decl → SM DivSt
       | .def_ sp n ps A V mk => Decl.def_ sp n ps A (V.renameCalls st.copyFor) mk
       | .main sp C M => .main sp C (M.renameCalls st.copyFor)
       | d => d
-    let (d', e) ← elabDef st.ds d
-    let elaborated := match d, e with
-      | .def_ _ _ _ A _ _, some _ => (loopSig A).isNone
-      | _, _ => false
+    let (d', e) ← elabDef (st.lib ++ st.out) d
+    let elaborated := e.isSome && decide (d' ≠ d)
     pure { st with srcs := d :: st.srcs, out := st.out ++ [d'], ds := e.toList ++ st.ds,
                    any := st.any || elaborated }
 
 /-- The declarations with divergence inferred, in order (copies before their first use), the
 div functions, and whether any body was elaborated as a loop. -/
-def elabDivs (decls : List Decl) : SM (List Decl × Divs × Bool) := do
-  let st ← decls.foldlM (init := ({} : DivSt)) (elabDecl (4 * decls.length + 4))
+def elabDivs (lib decls : List Decl) : SM (List Decl × Divs × Bool) := do
+  let st ← decls.foldlM (init := ({ lib } : DivSt)) (elabDecl (4 * decls.length + 4))
   pure (st.out, st.ds, st.any)
 
-/-- A `main` that is not ambient, elaborated as a loop when its body loops. -/
-def plainMain (ds : Divs) (sp : Span) (C : CTy) (M : Comp) : SM (CTy × Comp) := do
+/-- A `main` that is not ambient, elaborated as a loop when its body loops. `c` is the typing
+context of `main`. -/
+def plainMain (c : TCx) (sp : Span) (C : CTy) (M : Comp) : SM (CTy × Comp) := do
   if C.returnsLoop then return (C, M)
-  match C, loopsAt ds [] M with
-  | .ret _ B, some _ =>
-    let cx ← loopCxOf ds sp B M
-    pure (.ret sp (.thunk sp (.loop sp B cx.R)), ← loopBody cx [] M)
-  | _, some (sp', what) =>
+  let Bc := match C with
+    | .ret _ B => c.elabV B
+    | _ => none
+  match C, Bc, loopsAt c Bc M with
+  | .ret _ B, some Bc, some _ =>
+    let cx ← loopCxOf sp Bc M
+    pure (.ret sp (.thunk sp (.loop sp B (← toSurface sp cx.R))), ← loopBody cx divFuel c M)
+  | _, _, some (sp', what) =>
     throw ⟨sp', s!"`main` loops ({what}), so its type is written `F A` (SPEC §14)"⟩
-  | _, none => pure (C, M)
-
-mutual
-/-- `n` occurs in a value, as a variable or a `def` applied to type arguments. -/
-def _root_.Frontend.Val.names (n : String) : Val → Bool
-  | .var _ x | .defApp _ x _ => x == n
-  | .pair _ V W | .app _ V W => V.names n || W.names n
-  | .inl _ V | .inr _ V | .unbang _ V | .boxed _ _ V | .unbox _ V | .sub _ V _ | .roll _ V
-  | .unroll _ V | .inst _ V _ | .ascribe _ V _ | .shorten _ _ _ _ V => V.names n
-  | .thunk _ M | .thunkv _ M | .bangThunk _ M | .bangThunkv _ M | .run _ M => M.names n
-  | _ => false
-
-/-- `n` occurs in a computation. -/
-def _root_.Frontend.Comp.names (n : String) : Comp → Bool
-  | .ret _ V | .absurd _ V => V.names n
-  | .bind _ _ _ M N _ | .with_ _ M N => M.names n || N.names n
-  | .lam _ _ _ M | .app _ M _ | .proj _ _ M | .lamL _ _ _ M | .inst _ M _ | .nuIn _ M
-  | .nuOut _ M | .ascribe _ M _ => M.names n
-  | .letUnit _ V M | .letPair _ _ _ V M => V.names n || M.names n
-  | .case _ V _ M _ N => V.names n || M.names n || N.names n
-  | .for_ _ _ V M N => V.names n || M.names n || N.names n
-  | .force .. | .top _ => false
-end
+  | _, _, none => pure (C, M)
 
 /-- A program uses the library function `n` without defining it. -/
 def usesName (n : String) (p : Program) : Bool :=
@@ -869,24 +1005,40 @@ def usesName (n : String) (p : Program) : Bool :=
 /-- The program with its sugar elaborated, and the number of library declarations it begins
 with, recording the origins of generated code.  `[spec §11, §14]` -/
 def elaborateS (p : Program) : SM (Program × Nat) := do
-  -- Divergence of the user's definitions, before the libraries (which do not loop) come in.
-  let (decls, ds, anyDiv) ← elabDivs p.decls
-  let mainLoops := match decls.findSome? (fun | .main _ C M => some (C, M) | _ => none) with
-    | some (C@(.ret _ _), M) => !C.returnsLoop && (loopsAt ds [] M).isSome
-    | _ => false
-  let cs := ambientCaps p mainLoops
-  let needDiv := anyDiv || mainLoops || usesName "div_fuel" p || usesName "div_bind" p
   let libOf (name src : String) : Except Error (List Decl) :=
     match parseProgram src with
     | .ok l => pure l.decls
     | .error e => throw ⟨e.span, s!"{name}: {e.msg}"⟩
-  let ioLib ← if cs.isEmpty then pure [] else libOf "lib/io.bc" ioLibrary
-  let divLib ← if needDiv then libOf "lib/div.bc" divLibrary else pure []
+  -- The libraries are in scope for typing when the program may use them: the I/O library when
+  -- `main` may use the capabilities ambiently, the divergence library when the program names
+  -- its functions. They are emitted below only when the program uses them. The capabilities are
+  -- in scope for typing `main`, which may use them ambiently.
+  let mayIO := !(ambientCaps p false).isEmpty
+  let mayDiv := usesName "div_fuel" p || usesName "div_bind" p
+  let ioAll ← if mayIO then libOf "lib/io.bc" ioLibrary else pure []
+  let divAll ← if mayDiv then libOf "lib/div.bc" divLibrary else pure []
+  let typing := ioAll ++ divAll
+  let capDecls := if mayIO then capNames.map fun c =>
+      Decl.extern Span.none ⟨c, Span.none⟩ (capTy Span.none c) else []
+  -- Bindings whose type only their uses determine (an injection) are annotated first.
+  let p := Elab.fillProgram typing capDecls p
+  -- Divergence of the user's definitions, before the libraries (which do not loop) come in.
+  let (decls, _, anyDiv) ← elabDivs typing p.decls
   let rest := decls.filter fun | .main .. => false | _ => true
+  let mc := TCx.ofScope (typing ++ rest ++ capDecls) true
+  let mainLoops := match decls.findSome? (fun | .main _ C M => some (C, M) | _ => none) with
+    | some (C@(.ret _ B), M) => !C.returnsLoop && (loopsAt mc (mc.elabV B) M).isSome
+    | _ => false
+  let cs := ambientCaps p mainLoops
+  let needDiv := anyDiv || mainLoops || usesName "div_fuel" p || usesName "div_bind" p
+  let ioLib ← if cs.isEmpty then pure [] else
+    if mayIO then pure ioAll else libOf "lib/io.bc" ioLibrary
+  let divLib ← if needDiv then
+    if mayDiv then pure divAll else libOf "lib/div.bc" divLibrary else pure []
   let exts := cs.map fun c => Decl.extern Span.none ⟨c, Span.none⟩ (capTy Span.none c)
   let mains ← decls.filterMapM fun
     | .main sp C M => do
-      let (C', M') ← if cs.isEmpty then plainMain ds sp C M else ambientMain ds cs sp C M
+      let (C', M') ← if cs.isEmpty then plainMain mc sp C M else ambientMain mc cs sp C M
       pure (some (Decl.main sp C' M'))
     | _ => pure none
   let lib := ioLib ++ divLib
