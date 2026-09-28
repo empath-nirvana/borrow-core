@@ -6,16 +6,19 @@ Marshall, Li and Ahmed, *From Linearity to Borrowing* (PACMPL 9:OOPSLA2:415, 202
 bolo-formalization commit `1658da9`), under a written specification, [`SPEC.md`](SPEC.md).
 
 ```
-main : F 1 =
-  for b in bytes stdin {
-    return (putb (&stdout, b))
+main -> i32 * i32 =
+  let ra = alloc(9);
+  let rb = alloc(500);
+  borrow mut (ra, rb) { (ma, mb) ->
+    modify ma { x -> let y = modify mb { y -> (x, y) }; y }
   };
-  return ()
+  (free(ra), free(rb))
 ```
 
-That is `cat`, from `corpus/io-cat.bc`. The core syntax is call-by-push-value written out in
-full. A surface syntax is being built over it by typed elaboration (issue #54,
-[`docs/typed-elaboration.md`](docs/typed-elaboration.md)).
+That program swaps two heap cells through a family borrow; it is `corpus/surface/family-swap.bc`.
+The surface syntax elaborates, by typed elaboration, into a call-by-push-value core that the
+checker proves well typed. `bcc desugar` prints the core. The surface is still growing
+(issue #54, [`docs/typed-elaboration.md`](docs/typed-elaboration.md)).
 
 ## What is proved
 
