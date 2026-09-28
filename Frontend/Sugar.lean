@@ -41,6 +41,14 @@ def ioLibrary : String := include_str "../lib/io.bc"
 /-- The divergence library, `lib/div.bc`: the delay bind and the fuel handler. -/
 def divLibrary : String := include_str "../lib/div.bc"
 
+/-- The prelude, `lib/prelude.bc`: `true`, `false`, `not`. -/
+def preludeLibrary : String := include_str "../lib/prelude.bc"
+
+/-- The library modules, by the name `include` gives them (#59). A module is a file of `lib/`,
+embedded in the compiler; adding one is adding its line here. -/
+def libModules : List (String × String) :=
+  [("io", ioLibrary), ("div", divLibrary), ("prelude", preludeLibrary)]
+
 def capNames : List String := ["stdin", "stdout", "stderr"]
 
 def capTy (sp : Span) (c : String) : VTy := .ref sp (.handle sp (c != "stdin"))
@@ -50,9 +58,9 @@ def capTy (sp : Span) (c : String) : VTy := .ref sp (.handle sp (c != "stdin"))
 mutual
 /-- Elaborate `&c` in a value; with `lend`, a `&c` outside nested computations becomes `c`. -/
 def _root_.Frontend.Val.elab (lend : Bool) : Val → Except Error Val
-  | .lend sp x =>
+  | .lend sp x m =>
     if lend then pure (.var x.span x.name) else
-    throw ⟨sp, s!"`&{x.name}` lends a capability to one call: it may appear only " ++
+    throw ⟨sp, s!"`{if m == .mut then "&mut " else "&"}{x.name}` lends a place to one call: it may appear only " ++
       "in the head `M` of `y <- M; N` (SPEC §11)"⟩
   | .pair sp V W => return .pair sp (← V.elab lend) (← W.elab lend)
   | .app sp V W => return .app sp (← V.elab lend) (← W.elab lend)
@@ -71,7 +79,7 @@ def _root_.Frontend.Val.elab (lend : Bool) : Val → Except Error Val
   | .thunkv sp M => return .thunkv sp (← M.elab false)
   | .bangThunk sp M => return .bangThunk sp (← M.elab false)
   | .bangThunkv sp M => return .bangThunkv sp (← M.elab false)
-  | .run sp M => return .run sp (← M.elab false)
+  | .run sp M => return .run sp (← M.elab lend)
   | V@(.var ..) | V@(.defApp ..) | V@(.unit ..) | V@(.const ..) | V@(.sugar ..) => pure V
 
 /-- Elaborate `&c` in a computation: in `x <- M; N`, one `&c` in `M` becomes
@@ -97,7 +105,7 @@ def _root_.Frontend.Comp.elab (lend : Bool) : Comp → Except Error Comp
   | .proj sp i M => return .proj sp i (← M.elab lend)
   | .top sp => pure (.top sp)
   | .letUnit sp V M => return .letUnit sp (← V.elab false) (← M.elab false)
-  | .letPair sp x y V M => return .letPair sp x y (← V.elab false) (← M.elab false)
+  | .letPair sp x y V M => return .letPair sp x y (← V.elab lend) (← M.elab false)
   | .case sp V x M y N => return .case sp (← V.elab false) x (← M.elab false) y (← N.elab false)
   | .lamL sp x b M => return .lamL sp x b (← M.elab false)
   | .inst sp M a => return .inst sp (← M.elab lend) a
@@ -567,6 +575,8 @@ the variables `M` mentions, finishes with the capabilities and those variables, 
 bind runs `N'` with them rebound.  `[spec §14]` -/
 def forLoop (cx : LoopCx) (c : TCx) (sp : Span) (x : Ident) (V : Val) (M : Comp)
     (rest : Comp ⊕ Comp) : SM Comp := do
+  -- `bytes(&mut c)`: the iterator takes `c`, and hands it back at its end (typed elaboration §5.1).
+  let V := V.takeLends.1
   let Vt ← match c.tyV V with
     | some Vt => pure Vt
     | none => throw ⟨V.span, "the type of the iterator of this `for` is not determined"⟩
@@ -991,6 +1001,80 @@ def resultOfC : Option CCTy → Option CVTy
   | some (.ret A) => some A
   | _ => none
 
+/-! #### Lending a place: `&mut x` and `&x`  (typed elaboration §5.1)
+
+A lent place is handed back to its name: the lent value is the place of a borrow, and the
+borrow's result `(x, B)` rebinds `x` as `&c` always has (`Comp.elab`). Which borrow is chosen by
+types. A call `f(…, &mut x, …)` of a function whose parameter there is a `mut 'a A` (or, for `&x`,
+an `imm 'a A`) under its lifetime binder borrows `x` for the call: `withbor2` (or `withbor1`) when
+`x : ref A`, and a cell scoped to the call when `x : A` is a value (a `let mut`): `alloc`, the
+borrow, `free`. A parameter of `x`'s own type takes `x` and hands it back first, as a capability
+is lent (SPEC §11). `modify &mut x { … }` borrows the same way around the `withswap`. -/
+
+/-- The place lent in an argument, outside nested computations, with the parameter type at it. -/
+def lendParam : CVTy → Val → Option (Ident × Mode × CVTy)
+  | P, .lend _ x m => some (x, m, P)
+  | .tensor P Q, .pair _ V W => (lendParam P V).orElse fun _ => lendParam Q W
+  | _, _ => none
+
+/-- The argument with its lent place replaced by `y`. -/
+def replaceLend (y : String) : Val → Val
+  | .lend sp _ _ => .var sp y
+  | .pair sp V W => .pair sp (replaceLend y V) (replaceLend y W)
+  | V => V
+
+/-- A borrow of the place `x`, lent at the call `sp`, around the body `body` that uses the
+borrow `m : mut 'l A` (or `imm 'l A`) and returns `B`: its value, which the lend rebinds. -/
+def lendBorrow (c : TCx) (sp : Span) (x : Ident) (m : Mode) (A B : CVTy)
+    (body : String → String → Comp) : DM Val := do
+  let l := s!"io_lb{sp.start.line}_{sp.start.col}"
+  let mv := s!"io_lm{sp.start.line}_{sp.start.col}"
+  let As ← (c.surface sp A : Except Error VTy)
+  let Bs ← (c.surface sp B : Except Error VTy)
+  let li : Ident := ⟨l, sp⟩
+  let Tm : VTy := if m == .mut then .mut sp (.var sp l) As else .imm sp (.var sp l) As
+  let cb : Val := .thunkv sp (.lamL sp li (.dom sp) (.ret sp (.thunkv sp
+    (.lam sp ⟨mv, sp⟩ Tm (body l mv)))))
+  let C : Const := if m == .mut then .withbor2 li (.top sp) As Bs else .withbor1 li As Bs
+  let place := Val.lend sp x m
+  match c.tyV (.var sp x.name) with
+  | some (.ref _) => pure (.app sp (.app sp (.const sp C) place) cb)
+  | some (.mut ..) | some (.imm ..) =>
+    throw ⟨x.span, s!"`{x.name}` is a borrow; lend it by passing it (a reborrow is not provided)"⟩
+  | _ =>
+    -- A value: a cell scoped to the call.
+    let cell : Val := .app sp (.const sp (.alloc As)) place
+    pure (.run sp (.letPair sp ⟨"io_sc", sp⟩ ⟨"io_sr", sp⟩
+      (.app sp (.app sp (.const sp C) cell) cb)
+      (.ret sp (.pair sp (.app sp (.const sp (.free As)) (.var sp "io_sc")) (.var sp "io_sr")))))
+
+/-- The body of a borrow callback: `r <- M; return (boxed['l] r)`. -/
+def boxedResult (sp : Span) (l : String) (M : Comp) : Comp :=
+  .bind sp ⟨"io_lr", sp⟩ none M (.ret sp (.boxed sp (.var sp l) (.var sp "io_lr"))) false
+
+/-- A call `f W` whose argument lends a place at a borrow parameter of `f`: the borrow around
+the call. `none` when it does not. -/
+def lendCall (c : TCx) (sp : Span) (f W : Val) : DM (Option Val) := do
+  -- `f : !(all 'a < b. P => Q)` or `all 'a < b. P => Q`.
+  let (bang, v, P, Q) ← match c.tyV f with
+    | some (.bang (.thunk (.all v _ (.ret (.thunk (.arr P (.ret Q))))))) => pure (true, v, P, Q)
+    | some (.thunk (.all v _ (.ret (.thunk (.arr P (.ret Q)))))) => pure (false, v, P, Q)
+    | _ => return none
+  let some (x, m, Px) := lendParam P W | return none
+  let (pm, A) ← match Px with
+    | .mut (.var w) A => if w == v then pure (Mode.mut, A) else return none
+    | .imm (.var w) A => if w == v then pure (Mode.imm, A) else return none
+    | _ => return none
+  if pm != m then
+    throw ⟨x.span, s!"the parameter here is {if pm == .mut then "a `mut`" else "an `imm`"} borrow: " ++
+      s!"lend `{x.name}` as `{if pm == .mut then "&mut " else "&"}{x.name}`"⟩
+  if BoCa.Fig16.LogRel.Core.Check.vfreeB v Q then
+    throw ⟨sp, "the call's result mentions the lifetime of the lent place, so the place cannot " ++
+      "be handed back after it"⟩
+  let f' := if bang then Val.unbang f.span f else f
+  some <$> lendBorrow c sp x m A Q fun l mv =>
+    boxedResult sp l (.ret sp (.app sp (.inst sp f' (.var sp l)) (replaceLend mv W)))
+
 mutual
 /-- A value with its surface forms elaborated; `exp` is the type expected of it, when known. -/
 def surfV : Nat → TCx → Option CVTy → Val → DM Val
@@ -1042,8 +1126,53 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
       -- Ascribed its loop type, it is the loop as a value, not a call run in direct style.
       pure (.ascribe sp (.app sp (.defApp sp "div_defer" [Bs, Rs]) (.thunkv sp (.with_ sp M'' abort)))
         (.thunk sp (.loop sp Bs Rs)))
+    | .app sp (.sugar dsp .deref) V => do
+      let V' ← surfV n c none V
+      -- `*e`: `withload` at the identity, reading a persistent content (its view is itself).
+      let y : Ident := ⟨s!"io_ly{dsp.start.line}_{dsp.start.col}", dsp⟩
+      let load (a : Frontend.Life) (As : VTy) (b : Val) : Val :=
+        .app sp (.app sp (.const dsp (.withload a y As As)) b)
+          (.thunkv sp (.lamL sp y (.dom sp) (.ret sp (.thunkv sp (.lam sp ⟨"io_dv", sp⟩
+            (.view sp (.var sp y.name) As) (.ret sp (.boxed sp (.var sp y.name) (.var sp "io_dv"))))))))
+      let content (A : CVTy) : DM VTy := do
+        unless Class.of A == .persistent do
+          throw ⟨dsp, s!"`*` copies the content, and `{ppT A}` is not persistent"⟩
+        (c.surface dsp A : Except Error VTy)
+      match c.tyV V', V' with
+      | some (.imm a A), _ =>
+        pure (load (← (c.surfaceL dsp a : Except Error Frontend.Life)) (← content A) V')
+      | some (.ref A), .var vsp x => do
+        -- An owned cell: borrowed `imm` around the read, and handed back to its name.
+        let As ← content A
+        lendBorrow c dsp ⟨x, vsp⟩ .imm A A fun l mv =>
+          boxedResult sp l (.ret sp (load (.var sp l) As (.var sp mv)))
+      | t, _ => throw ⟨dsp, s!"`*` reads an `imm` borrow or a cell, but this has type " ++
+          s!"`{(t.map ppT).getD "?"}`"⟩
     | .app sp (.sugar _ .brace) (.bangThunk tsp M) => do
       pure (.bangThunk tsp (← surfC n c.pushDead none M))
+    | .app sp (.app sp₂ (.sugar ksp (.borrow .modify _)) (.lend psp px pm))
+        (.thunkv tsp (.lam lsp b _ S)) => do
+      -- `modify &mut x { … }`: `x` borrowed around the `withswap` (a cell or a scoped cell).
+      unless pm == .mut do throw ⟨psp, s!"`modify` changes the place: lend it with `&mut {px.name}`"⟩
+      let A ← match c.tyV (.var psp px.name) with
+        | some (.ref A) => pure A
+        | some (.mut ..) | some (.imm ..) =>
+          throw ⟨psp, s!"`{px.name}` is a borrow: `modify {px.name} \{ … }` takes it as it is"⟩
+        | some A => pure A
+        | none => throw ⟨psp, s!"the type of `{px.name}` is not determined here: ascribe it"⟩
+      let S' ← surfC n (c.push b.name (some A)) none S
+      let X ← need tsp "`modify`'s body" (resultOfC ((c.push b.name (some A)).tyC S'))
+      let (S'', B) := match X with
+        | .tensor A' B => if A' = A then (S', B) else (unitTail S', .unit)
+        | _ => (unitTail S', .unit)
+      let As ← (c.surface ksp A : Except Error VTy)
+      let Bs ← (c.surface ksp B : Except Error VTy)
+      lendBorrow c sp px .mut A B fun l mv =>
+        .bind sp ⟨"io_mw", sp⟩ none
+          (.ret sp (.app sp (.app sp (.const ksp (.withswap (.var ksp l) As Bs)) (.var sp mv))
+            (.thunkv tsp (.lam lsp b As S''))))
+          (.letPair sp ⟨"io_mm", sp⟩ ⟨"io_mr", sp⟩ (.var sp "io_mw")
+            (.ret sp (.boxed sp (.var sp l) (.var sp "io_mr")))) false
     | .app sp (.app sp₂ (.sugar ksp (.borrow k x)) P) (.thunkv tsp (.lam lsp b _ S)) => do
       let P' ← surfV n c none P
       let tP ← need P.span "the borrowed place" (c.tyV P')
@@ -1090,6 +1219,8 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
           "`borrow mut` take a cell `ref A` (a pair of cells for a family), `modify` a `mut` borrow"⟩
     | .app sp f W => do
       let f' ← surfV n c none f
+      if W.lends then
+        if let some V' ← lendCall c sp f' (← surfV n c none W) then return V'
       let tf := c.tyV f'
       let (f', pW) := match tf with
         | some (.bang (.thunk (.arr A _))) => (Val.unbang f.span f', some A)
@@ -1357,11 +1488,29 @@ def elaborateS (p : Program) : SM (Program × Nat) := do
   -- `main` may use the capabilities ambiently, the divergence library when the program names
   -- its functions. They are emitted below only when the program uses them. The capabilities are
   -- in scope for typing `main`, which may use them ambiently.
-  let mayIO := !(ambientCaps p).isEmpty
+  -- The capabilities `main` uses ambiently are read off the program as written: an included
+  -- module's externs (`include io`) do not make them declared.
+  let p₀ := p
+  let mayIO := !(ambientCaps p₀).isEmpty
+  -- `include m`: the module's declarations, in place (at most once each).
+  let (decls, incl) ← p.decls.foldlM (init := (([] : List Decl), ([] : List String))) fun (acc, inc) d =>
+    match d with
+    | .include sp m =>
+      if inc.contains m.name then pure (acc, inc) else
+      match libModules.lookup m.name with
+      | some src => do pure (acc ++ (← libOf s!"lib/{m.name}.bc" src), m.name :: inc)
+      | none => throw ⟨sp, s!"no library module `{m.name}`: the modules are " ++
+          ", ".intercalate (libModules.map (·.1))⟩
+    | d => pure (acc ++ [d], inc)
+  let p : Program := ⟨decls⟩
   let mayDiv := usesName "div_fuel" p || usesName "div_bind" p || usesName "div_defer" p
-  let ioAll ← if mayIO then libOf "lib/io.bc" ioLibrary else pure []
-  let divAll ← if mayDiv then libOf "lib/div.bc" divLibrary else pure []
-  let typing := ioAll ++ divAll
+  -- The prelude is in scope when the program names one of its declarations.
+  let preludeNames := ["true", "false", "not"]
+  let mayPrelude := !incl.contains "prelude" && preludeNames.any (usesName · p)
+  let ioAll ← if mayIO && !incl.contains "io" then libOf "lib/io.bc" ioLibrary else pure []
+  let divAll ← if mayDiv && !incl.contains "div" then libOf "lib/div.bc" divLibrary else pure []
+  let preludeAll ← if mayPrelude then libOf "lib/prelude.bc" preludeLibrary else pure []
+  let typing := preludeAll ++ ioAll ++ divAll
   let capDecls := if mayIO then capNames.map fun c =>
       Decl.extern Span.none ⟨c, Span.none⟩ (capTy Span.none c) else []
   -- Bindings whose type only their uses determine (an injection) are annotated first.
@@ -1373,20 +1522,20 @@ def elaborateS (p : Program) : SM (Program × Nat) := do
   let mainLoops := match decls.findSome? (fun | .main _ C M => some (C, M) | _ => none) with
     | some (C@(.ret _ B), M) => !C.returnsLoop && (loopsAt mc (mc.elabV B) M).isSome
     | _ => false
-  let cs := ambientCaps p
+  let cs := ambientCaps p₀
   let needDiv := anyDiv || mainLoops || usesName "div_fuel" p || usesName "div_bind" p ||
     usesName "div_defer" p
-  let ioLib ← if cs.isEmpty then pure [] else
+  let ioLib ← if cs.isEmpty || incl.contains "io" then pure [] else
     if mayIO then pure ioAll else libOf "lib/io.bc" ioLibrary
-  let divLib ← if needDiv then
-    if mayDiv then pure divAll else libOf "lib/div.bc" divLibrary else pure []
+  let divLib ← if !needDiv || incl.contains "div" then pure [] else
+    if mayDiv then pure divAll else libOf "lib/div.bc" divLibrary
   let exts := cs.map fun c => Decl.extern Span.none ⟨c, Span.none⟩ (capTy Span.none c)
   let mains ← decls.filterMapM fun
     | .main sp C M => do
       let (C', M') ← if cs.isEmpty then plainMain mc sp C M else ambientMain mc cs sp C M
       pure (some (Decl.main sp C' M'))
     | _ => pure none
-  let lib := ioLib ++ divLib
+  let lib := preludeAll ++ ioLib ++ divLib
   let decls ← (lib ++ rest ++ exts ++ mains).mapM fun
     | .def_ sp n ps A V mk => return .def_ sp n ps A (← V.elab false) mk
     | .main sp C M => return .main sp C (← M.elab false)

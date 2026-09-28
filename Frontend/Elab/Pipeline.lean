@@ -89,6 +89,7 @@ def TDecl.name : TDecl → String
     | .shape _ n _ => s!"shape {n.name}"
     | .extern _ n _ => s!"extern {n.name}"
     | .main .. => "main"
+    | .include _ n => s!"include {n.name}"
 
 /-- What `bcc tir` prints for a declaration with a body: its name, effect, node count, the
 nodes whose type is not known, and its binders. The library declarations (the first `lib`) are

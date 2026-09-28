@@ -44,5 +44,5 @@ def count : Src => Src * i32 =
     return (c, n)
 
 main : F (ref input * i32) =
-  r <- return (count (&stdin));
+  r <- return (count (&mut stdin));
   return (stdin, r)

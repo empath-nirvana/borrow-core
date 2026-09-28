@@ -1,0 +1,10 @@
+-- expect: 9:14: the parameter here is an `imm` borrow: lend `r` as `&r`
+-- A lend's spelling says which borrow it is: `get` takes an `imm` borrow, so `r` is lent `&r`.
+def get : !(all 'a < top. imm 'a i32 => i32) =
+  !thunkv Fun 'a < top. return (thunkv fun (b : imm 'a i32) -> return *b)
+
+main -> i32 =
+  let r = alloc(41);
+  let x =
+    get(&mut r);
+  free(r) + x

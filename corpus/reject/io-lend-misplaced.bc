@@ -1,4 +1,4 @@
--- expect: 4:14: `&stdout` lends a capability to one call: it may appear only in the head `M` of `y <- M; N` (SPEC §11)
--- A lent capability comes back through a binding: `&stdout` in a `case`'s scrutinee has nowhere to go.
+-- expect: 4:14: `&mut stdout` lends a place to one call: it may appear only in the head `M` of `y <- M; N` (SPEC §11)
+-- A lent capability comes back through a binding: `&mut stdout` in a `case`'s scrutinee has nowhere to go.
 main : F 1 =
-  case putb (&stdout, i32[104]) { inl u -> return () | inr u -> return () }
+  case putb (&mut stdout, i32[104]) { inl u -> return () | inr u -> return () }

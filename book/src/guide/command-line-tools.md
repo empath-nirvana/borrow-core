@@ -10,7 +10,7 @@ Here is `cat`:
 ```bc
 main : F 1 =
   for b in bytes stdin {
-    return (putb (&stdout, b))
+    return (putb (&mut stdout, b))
   };
   return ()
 -- stdin: hello, world
@@ -21,7 +21,7 @@ main : F 1 =
 ```
 
 `bytes stdin` is the input as a stream of bytes. `for` runs its body on each byte until the
-stream ends, however long the input is. `putb (&stdout, b)` writes one byte: `&stdout` lends the
+stream ends, however long the input is. `putb (&mut stdout, b)` writes one byte: `&mut stdout` lends the
 output to that one call, which hands it back. After the value, `bcc` prints `live 0`: every cell
 was freed.
 
@@ -37,7 +37,7 @@ These come with every program whose `main` uses the capabilities. They are ordin
 | `put_dec` | `ref output * i32 => ref output * 1` | write a number in decimal |
 | `bytes` | `ref input => U (iter i32 (ref input) (ref input))` | the input as a stream |
 
-Each helper takes a capability and hands it back first, which is what `&c` expects. Underneath
+Each helper takes a capability and hands it back first, which is what `&mut c` expects. Underneath
 are two operations, `read_byte` and `write_byte`, on `mut` borrows of the capabilities; the
 helpers do the borrowing so programs do not.
 
@@ -60,8 +60,8 @@ main : F 1 =
     };
     return ()
   };
-  _ <- return (put_dec (&stdout, lines));
-  return (putb (&stdout, i32[10]))
+  _ <- return (put_dec (&mut stdout, lines));
+  return (putb (&mut stdout, i32[10]))
 -- stdin: one
 -- stdin: two
 -- stdin: three
@@ -88,9 +88,9 @@ def count_bytes : In => In * i32 =
     return (c, n)
 
 main : F 1 =
-  n <- return (count_bytes (&stdin));
-  _ <- return (put_dec (&stdout, n));
-  return (putb (&stdout, i32[10]))
+  n <- return (count_bytes (&mut stdin));
+  _ <- return (put_dec (&mut stdout, n));
+  return (putb (&mut stdout, i32[10]))
 -- stdin: hello
 -- output: 6
 -- answer: ()
@@ -117,14 +117,14 @@ def hexd : i32 => i32 =
 def put_hex : Out * i32 => Out * 1 =
   thunkv fun (p : Out * i32) ->
     let (o, b) = p;
-    _ <- return (putb (&o, hexd ((unbang host[shr_u32]) (b, i32[4]))));
+    _ <- return (putb (&mut o, hexd ((unbang host[shr_u32]) (b, i32[4]))));
     return (putb (o, hexd ((unbang host[and32]) (b, i32[15]))))
 
 main : F 1 =
   for b in bytes stdin {
-    return (put_hex (&stdout, b))
+    return (put_hex (&mut stdout, b))
   };
-  return (putb (&stdout, i32[10]))
+  return (putb (&mut stdout, i32[10]))
 -- stdin: Hi
 -- output: 48690a
 -- answer: ()
@@ -140,7 +140,7 @@ Capabilities belong to `main`. A `def` that names one is rejected:
 ```bc,reject
 def leak : 1 => ref output = thunkv fun (u : 1) -> return stdout
 
-main : F 1 = return (putb (&stdout, i32[10]))
+main : F 1 = return (putb (&mut stdout, i32[10]))
 -- expect: 1:59: unknown variable `stdout`
 ```
 
@@ -149,13 +149,13 @@ the capability is what it binds), not a `case`'s scrutinee:
 
 ```bc,reject
 main : F 1 =
-  case putb (&stdout, i32[104]) { inl u -> return () | inr u -> return () }
--- expect: 2:14: `&stdout` lends a capability to one call: it may appear only in the head `M` of `y <- M; N` (SPEC §11)
+  case putb (&mut stdout, i32[104]) { inl u -> return () | inr u -> return () }
+-- expect: 2:14: `&mut stdout` lends a place to one call: it may appear only in the head `M` of `y <- M; N` (SPEC §11)
 ```
 
 ## What the sugar means
 
-`main`'s ambient capabilities, `&c` and `for` are sugar. The frontend turns them into ordinary
+`main`'s ambient capabilities, `&mut c` and `for` are sugar. The frontend turns them into ordinary
 core before checking, and the checker never sees them. `bcc desugar tool.bc` prints what it
 checks:
 
@@ -163,7 +163,7 @@ checks:
 - `main : F A` becomes `main : F (Caps * A)`, handing the capabilities back where each path
   ends; when `main` loops, `main : F (U (loop (Caps * A) (Caps * 1)))`, a loop the runtime
   drives;
-- `x <- f (&c, v); N` becomes `r <- f (c, v); let (c, x) = r; N`;
+- `x <- f (&mut c, v); N` becomes `r <- f (c, v); let (c, x) = r; N`;
 - the `for` becomes a loop by `unfold` over the stream, the other capabilities and the threaded
   variables;
 - a function that loops returns its loop, `A => U (loop B R)`, and a call of it in direct style

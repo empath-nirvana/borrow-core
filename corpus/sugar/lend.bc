@@ -1,4 +1,4 @@
--- `&c` (SPEC §11): in `x <- M; N`, `&c` in `M` lends the capability `c` to one call that hands
+-- `&mut c` (SPEC §11): in `x <- M; N`, `&mut c` in `M` lends the capability `c` to one call that hands
 -- it back first. `lend.core.bc` is the same program written by hand; both erase to one term.
 extern stdout : ref output
 extern write_byte : !(all 'a < top. mut 'a output * i32 => mut 'a output)
@@ -12,6 +12,6 @@ def putb : ref output * i32 => ref output * 1 =
          return (boxed['x] ()))))
 
 main : F (ref output * 1) =
-  u <- return (putb (&stdout, i32[104]));
-  v <- return (putb (&stdout, i32[10]));
+  u <- return (putb (&mut stdout, i32[104]));
+  v <- return (putb (&mut stdout, i32[10]));
   return (stdout, v)

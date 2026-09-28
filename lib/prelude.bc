@@ -1,0 +1,18 @@
+-- The prelude (typed elaboration §5.4, §5.9): in scope in every program, as the I/O and
+-- divergence libraries are; a declaration of it is emitted only when the program names it.
+--
+-- `bool` is `1 + 1` with `inr ()` true: the host's comparisons return it so (syntax-core §8a),
+-- and this is the one place that says so. `bool` itself is written by the parser as `1 + 1`.
+
+-- True and false.
+def true : 1 + 1 = inr ()
+
+def false : 1 + 1 = inl ()
+
+-- Negation.
+def not : !(1 + 1 => 1 + 1) =
+  !thunkv fun (b : 1 + 1) ->
+    case b {
+      inl u -> return true
+    | inr u -> return false
+    }

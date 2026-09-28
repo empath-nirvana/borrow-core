@@ -18,7 +18,7 @@ def count_lines : In => In * i32 =
     return (c, n)
 
 main : F i32 =
-  n <- return (count_lines (&stdin));
-  _ <- return (put_dec (&stdout, n));
-  _ <- return (putb (&stdout, i32[10]));
+  n <- return (count_lines (&mut stdin));
+  _ <- return (put_dec (&mut stdout, n));
+  _ <- return (putb (&mut stdout, i32[10]));
   return n

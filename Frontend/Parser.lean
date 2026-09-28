@@ -140,6 +140,12 @@ structure PState where
   fresh : Nat := 0
   /-- Inside `< M, N >`, where `>` is not an operator. -/
   angle : Bool := false
+  /-- The `let mut` variables in scope. -/
+  muts : List String := []
+  /-- The `let mut` variables assigned since the enclosing `match` or `if` arm began. -/
+  assigned : List String := []
+  /-- The variables the `match` or `if` just parsed assigns, which it must hand on. -/
+  joined : List String := []
 
 abbrev P := StateT PState (Except Error)
 
@@ -404,6 +410,8 @@ def rtyAtom : Nat → P RTy
     | .kw "input" => discard bump; pure (.handle t.span false)
     | .kw "output" => discard bump; pure (.handle t.span true)
     | .kw "top" => discard bump; pure (.top t.span)
+    -- `bool` is `1 + 1`, `inr ()` for true (the prelude, typed elaboration §5.4).
+    | .ident "bool" => discard bump; pure (.sum t.span (.unit t.span) (.unit t.span))
     | .uident s => discard bump; pure (.name t.span s)
     | .sym "(" =>
       discard bump
@@ -517,6 +525,13 @@ inductive Pat where
 def freshName (pre : String) : P String :=
   modifyGet fun s => (s!"{pre}{s.fresh}", { s with fresh := s.fresh + 1 })
 
+/-- A right-nested tuple pattern. -/
+def nestPat (sp : Span) : List Pat → Pat
+  | [] => .unit sp
+  | [p] => p
+  | p :: ps => .pair sp p (nestPat sp ps)
+
+mutual
 /-- A pattern. -/
 def pat : Nat → P Pat
   | 0 => outOfFuel
@@ -531,10 +546,22 @@ def pat : Nat → P Pat
       if ← isSym ")" then discard bump; return .unit (← spanFrom st)
       let p ← pat n
       expectSym ","
-      let q ← pat n
+      -- `(p₁, p₂, …, pₙ)` is right-nested, as a tuple is.
+      let qs ← pats n
       expectSym ")"
-      pure (.pair (← spanFrom st) p q)
+      let sp ← spanFrom st
+      pure (.pair sp p (nestPat sp qs))
     | _ => expected "a pattern: a name, `_`, `()` or `(p, q)`"
+
+/-- The components after the first of a tuple pattern, at least one. -/
+def pats : Nat → P (List Pat)
+  | 0 => outOfFuel
+  | n + 1 => do
+    let p ← pat n
+    if ← isSym "," then discard bump; return p :: (← pats n)
+    pure [p]
+
+end
 
 /-- `let p = V; M`, the value `V` already bound or a value without a lent capability. -/
 def bindPat (sp : Span) : Nat → Pat → Val → Comp → P Comp
@@ -619,22 +646,71 @@ def startsValAtom (t : Tok) : Bool :=
 def startsComp (t : Tok) : Bool :=
   match t with
   | .kw "return" | .kw "absurd" | .kw "nu_in" | .kw "delay_in" | .kw "stream_in" | .kw "nu_out"
-  | .kw "delay_out" | .kw "stream_out" | .kw "force" | .sym "<" | .kw "case" | .kw "match" => true
+  | .kw "delay_out" | .kw "stream_out" | .kw "force" | .sym "<" | .kw "case" | .kw "match"
+  | .kw "if" => true
   | _ => false
 
-/-- The operator of a token, with its precedence: comparisons 0, `+`/`-` 1, `*` 2. -/
-def opOf (angle : Bool) : Tok → Option (SurfOp × Nat)
-  | .sym "==" => some (.eq, 0) | .sym "!=" => some (.ne, 0) | .sym "<" => some (.lt, 0)
-  | .sym "<=" => some (.le, 0) | .sym ">=" => some (.ge, 0)
-  | .sym ">" => if angle then none else some (.gt, 0)
-  | .sym "+" => some (.add, 1) | .sym "-" => some (.sub, 1) | .sym "*" => some (.mul, 2)
+/-- A binary operator: one of the surface's arithmetic and comparisons, or `&&`/`||`, which are
+`case`s (they do not evaluate their right operand when the left decides). -/
+inductive BinTok where
+  | op (o : SurfOp)
+  | and
+  | or
+
+/-- The operator of a token, with its precedence: `||` 0, `&&` 1, comparisons 2, `+`/`-` 3,
+`*` 4. -/
+def opOf (angle : Bool) : Tok → Option (BinTok × Nat)
+  | .sym "||" => some (.or, 0) | .sym "&&" => some (.and, 1)
+  | .sym "==" => some (.op .eq, 2) | .sym "!=" => some (.op .ne, 2) | .sym "<" => some (.op .lt, 2)
+  | .sym "<=" => some (.op .le, 2) | .sym ">=" => some (.op .ge, 2)
+  | .sym ">" => if angle then none else some (.op .gt, 2)
+  | .sym "+" => some (.op .add, 3) | .sym "-" => some (.op .sub, 3) | .sym "*" => some (.op .mul, 4)
   | _ => none
+
+/-- `a && b` and `a || b` as `case`s on `a`, `inr ()` being true; `b` runs only when needed. -/
+def shortCircuit (sp : Span) (isAnd : Bool) (a b : Val) : Val :=
+  let lit (tru : Bool) : Val :=
+    .ascribe sp (if tru then .inr sp (.unit sp) else .inl sp (.unit sp))
+      (.sum sp (.unit sp) (.unit sp))
+  let u : Ident := ⟨"io_sc", sp⟩
+  .run sp (if isAnd then .case sp a u (.ret sp (lit false)) u (.ret sp b)
+    else .case sp a u (.ret sp b) u (.ret sp (lit true)))
 
 /-- A right-nested tuple of the values (the value itself when there is one). -/
 def nest (sp : Span) : List Val → Val
   | [] => .unit sp
   | [V] => V
   | V :: Vs => .pair sp V (nest sp Vs)
+
+/-- A computation with `f` applied at each terminal reached through tail positions. -/
+def wrapTerms (f : Comp → Comp) : Comp → Comp
+  | .bind sp x A M N lin => .bind sp x A M (wrapTerms f N) lin
+  | .letUnit sp V M => .letUnit sp V (wrapTerms f M)
+  | .letPair sp x y V M => .letPair sp x y V (wrapTerms f M)
+  | .case sp V x M y N => .case sp V x (wrapTerms f M) y (wrapTerms f N)
+  | .for_ sp x V M N => .for_ sp x V M (wrapTerms f N)
+  | T => f T
+
+/-- The tuple of the variables `xs`. -/
+def varTuple (sp : Span) : List String → Val
+  | [] => .unit sp
+  | [x] => .var sp x
+  | x :: xs => .pair sp (.var sp x) (varTuple sp xs)
+
+/-- The pattern of the variables `xs`. -/
+def varPat (sp : Span) : List String → Pat
+  | [] => .unit sp
+  | [x] => .var ⟨x, sp⟩
+  | x :: xs => .pair sp (.var ⟨x, sp⟩) (varPat sp xs)
+
+/-- A `match` or `if` whose arms assign the `let mut` variables `xs`: each arm ends by handing
+them on (the join; typed elaboration §5.2). -/
+def joinArms (xs : List String) : Comp → Comp
+  | .case sp V x M y N =>
+    let hand (T : Comp) : Comp :=
+      .bind T.span ⟨"io_ju", T.span⟩ none T (.ret T.span (varTuple T.span xs)) false
+    .case sp V x (wrapTerms hand M) y (wrapTerms hand N)
+  | M => M
 
 /-- A binder type to be filled by the elaborator (a closure's, a borrow callback's). -/
 def holeTy (sp : Span) : VTy := .name sp "_"
@@ -666,7 +742,7 @@ def valOps : Nat → Nat → P Val
   | 0, _ => outOfFuel
   | n + 1, lvl => do
     let st ← startPos
-    let a ← if lvl ≥ 2 then valPrefix n else valOps n (lvl + 1)
+    let a ← if lvl ≥ 4 then valPrefix n else valOps n (lvl + 1)
     opsLoop n lvl st a
 
 /-- The operators of precedence `lvl` after the operand `a`. -/
@@ -679,11 +755,14 @@ def opsLoop : Nat → Nat → Pos → Val → P Val
       if l != lvl then return a
       let osp := t.span
       discard bump
-      let b ← if lvl ≥ 2 then valPrefix m else valOps m (lvl + 1)
+      let b ← if lvl ≥ 4 then valPrefix m else valOps m (lvl + 1)
       let sp ← spanFrom st
-      let v := Val.app sp (.sugar osp (.op o)) (.pair sp a b)
+      let v := match o with
+        | .op o => Val.app sp (.sugar osp (.op o)) (.pair sp a b)
+        | .and => shortCircuit sp true a b
+        | .or => shortCircuit sp false a b
       -- Comparisons do not associate.
-      if lvl == 0 then return v else opsLoop m lvl st v
+      if lvl == 2 then return v else opsLoop m lvl st v
     | none => return a
 
 /-- The components after the first of a tuple, at least one. -/
@@ -707,7 +786,7 @@ def brace : Nat → Pos → Bool → P Val
       catch _ => set saved; pure none
     match p? with
     | some p =>
-      let M ← comp n
+      let M ← blockBody n
       expectSym "}"
       let sp ← spanFrom st
       let (x, M) ← match p with
@@ -718,7 +797,7 @@ def brace : Nat → Pos → Bool → P Val
       let lam := Comp.lam sp x (holeTy sp) M
       pure (if bang then .bangThunkv sp lam else .thunkv sp lam)
     | none =>
-      let M ← comp n
+      let M ← blockBody n
       expectSym "}"
       let sp ← spanFrom st
       pure (.app sp (.sugar sp .brace) (if bang then .bangThunk sp M else .thunk sp M))
@@ -762,6 +841,11 @@ def valPrefix : Nat → P Val
       let m := if t.tok == .kw "shorten_mut" then Mode.mut else Mode.imm
       pure (.shorten (← spanFrom st) m σ a V)
     | .kw "borrow" | .kw "modify" => borrowBlock n
+    | .sym "*" =>
+      discard bump
+      let V ← valPrefix n
+      let sp ← spanFrom st
+      pure (.app sp (.sugar t.span .deref) V)
     -- A block after a prefix keyword (`return { … }`); as an argument it is parenthesized.
     | .sym "{" => brace n st false
     | .sym "!" =>
@@ -792,7 +876,7 @@ def borrowBlock : Nat → P Val
       else if k == .modify then pure "" else freshName "io_l"
     let p ← pat n
     expectSym "->"
-    let M ← comp n
+    let M ← blockBody n
     expectSym "}"
     let sp ← spanFrom st
     let (b, M) ← match p with
@@ -871,8 +955,9 @@ def valAtom : Nat → P Val
       pure r
     | .sym "&" =>
       discard bump
-      let x ← ident "the name of a capability"
-      pure (.lend (← spanFrom st) x)
+      let m ← if ← isKw "mut" then do discard bump; pure Mode.mut else pure Mode.imm
+      let x ← ident "the name of a place"
+      pure (.lend (← spanFrom st) x m)
     | tok =>
       match constKw? tok with
       | some k =>
@@ -918,6 +1003,20 @@ def compG : Nat → Bool → P Comp
       expectSym ";"
       let N ← comp n
       pure (.bind (← spanFrom st) ⟨x, t.span⟩ (some A) M N false)
+    | .ident x, .sym "=" =>
+      -- `x = e`: a `let mut` variable rebound (typed elaboration §5.2).
+      discard bump; discard bump
+      unless (← get).muts.contains x do
+        failAt t.span s!"`{x}` is assigned, but it is not declared `let mut`"
+      modify fun s => { s with assigned := x :: s.assigned }
+      let V ← val n
+      if !head && (← isSym ";") then
+        discard bump
+        let N ← comp n
+        pure (.bind (← spanFrom st) ⟨x, t.span⟩ none (.ret V.span V) N false)
+      else
+        let sp ← spanFrom st
+        pure (.bind sp ⟨x, t.span⟩ none (.ret V.span V) (.ret sp (.unit sp)) false)
     | .kw "linear", .ident x =>
       discard bump
       let xt ← bump
@@ -940,10 +1039,15 @@ def compG : Nat → Bool → P Comp
       pure (.for_ (← spanFrom st) x V M N)
     | .kw "let", _ =>
       discard bump
+      let isMut ← if ← isKw "mut" then do discard bump; pure true else pure false
       let p ← pat n
+      if isMut then
+        match p with
+        | .var x => modify fun s => { s with muts := x.name :: s.muts }
+        | _ => failAt (← spanFrom st) "`let mut` binds a name"
       let A ← if ← isSym ":" then do discard bump; pure (some (← vty n)) else pure none
       expectSym "="
-      if (← peek).tok == .kw "match" then
+      if (← peek).tok == .kw "match" || (← peek).tok == .kw "if" then
         let M ← compPrefix n
         expectSym ";"
         let N ← comp n
@@ -985,6 +1089,7 @@ def statement : Nat → Pos → Bool → P Comp
   | n + 1, st, head => do
     let t ← peek
     let t1 ← peekAt 1
+    modify fun s => { s with joined := [] }
     -- A statement expression, and the place it rebinds.
     let (S, rebind) ← match t.tok, t1.tok with
       | .ident f, .sym "!" =>
@@ -1014,10 +1119,16 @@ def statement : Nat → Pos → Bool → P Comp
         else do
           let V ← val n
           pure (Comp.ret (← spanFrom st) V, V.rebinds)
+    let joined := (← get).joined
     if !head && (← isSym ";") then
       discard bump
       let N ← comp n
       let sp ← spanFrom st
+      -- A `match` or `if` that assigns `let mut` variables hands them on to what follows.
+      if !joined.isEmpty then
+        let j ← freshName "io_j"
+        return .bind sp ⟨j, sp⟩ none (joinArms joined S)
+          (← bindPat sp n (varPat sp joined) (.var sp j) N) false
       match S, rebind with
       | .ret _ V, some _ => letVal sp n (.wild sp) none V N
       | S, _ =>
@@ -1081,8 +1192,40 @@ def compSuffixes : Nat → Pos → Comp → P Comp
       compSuffixes n st (.inst (← spanFrom st) M a)
     | _ => pure M
 
-/-- A computation atom: `force x`, `<>`, `<M, N>`, `case V { … }`, `match V { … }`, `(M)`,
-    `(M : C)`. -/
+/-- An arm of a `match` or `if`: its computation, and the `let mut` variables it assigns. The
+`let mut`s it declares are its own. -/
+def armOf : Nat → P (Comp × List String)
+  | 0 => outOfFuel
+  | n + 1 => do
+    let s₀ ← get
+    set { s₀ with assigned := [] }
+    let M ← comp n
+    let a := (← get).assigned
+    modify fun s => { s with muts := s₀.muts, assigned := s₀.assigned ++ a }
+    pure (M, a)
+
+/-- `else if …`: an `if` as the arm, with what it assigns. -/
+def armIf : Nat → P (Comp × List String)
+  | 0 => outOfFuel
+  | n + 1 => do
+    let s₀ ← get
+    set { s₀ with assigned := [] }
+    let M ← compAtom n
+    let a := (← get).assigned
+    modify fun s => { s with muts := s₀.muts, assigned := s₀.assigned ++ a }
+    pure (M, a)
+
+/-- A block's body: assignments inside it are not the enclosing arm's. -/
+def blockBody : Nat → P Comp
+  | 0 => outOfFuel
+  | n + 1 => do
+    let s₀ ← get
+    let M ← comp n
+    modify fun s => { s with muts := s₀.muts, assigned := s₀.assigned }
+    pure M
+
+/-- A computation atom: `force x`, `<>`, `<M, N>`, `case V { … }`, `match V { … }`, `if`,
+    `(M)`, `(M : C)`. -/
 def compAtom : Nat → P Comp
   | 0 => outOfFuel
   | n + 1 => do
@@ -1124,18 +1267,21 @@ def compAtom : Nat → P Comp
       pure (.case (← spanFrom st) V x M y N)
     | .kw "match" =>
       discard bump
+      let outer := (← get).muts
       let V ← val n
       expectSym "{"
       expectKw "inl"
       let p ← pat n
       expectSym "->"
-      let M ← comp n
+      let (M, a₁) ← armOf n
       expectSym "|"
       expectKw "inr"
       let q ← pat n
       expectSym "->"
-      let N ← comp n
+      let (N, a₂) ← armOf n
       expectSym "}"
+      -- In the order the variables were declared.
+      modify fun s => { s with joined := (outer.filter (a₁ ++ a₂).contains).reverse }
       let sp ← spanFrom st
       let arm (p : Pat) (M : Comp) : P (Ident × Comp) := match p with
         | .var x => pure (x, M)
@@ -1145,6 +1291,29 @@ def compAtom : Nat → P Comp
       let (x, M) ← arm p M
       let (y, N) ← arm q N
       pure (.case sp V x M y N)
+    | .kw "if" =>
+      -- `if V { S₁ } else { S₂ }`: `inr ()` is true (typed elaboration §5.4).
+      discard bump
+      let outer := (← get).muts
+      let V ← val n
+      expectSym "{"
+      let (M, a₁) ← armOf n
+      expectSym "}"
+      let (N, a₂) ← if ← isKw "else" then do
+          discard bump
+          if ← isKw "if" then armIf n
+          else do
+            expectSym "{"
+            let r ← armOf n
+            expectSym "}"
+            pure r
+        else do
+          let sp ← spanFrom st
+          pure (Comp.ret sp (.unit sp), [])
+      let sp ← spanFrom st
+      -- In the order the variables were declared.
+      modify fun s => { s with joined := (outer.filter (a₁ ++ a₂).contains).reverse }
+      pure (.case sp V ⟨"io_else", sp⟩ N ⟨"io_then", sp⟩ M)
     | .sym "(" =>
       discard bump
       let angle := (← get).angle
@@ -1191,6 +1360,10 @@ def decl (n : Nat) : P Decl := do
   | .kw "fn" =>
     discard bump
     fnRest st .none
+  | .kw "include" =>
+    discard bump
+    let x ← ident "the name of a library module"
+    pure (.include (← spanFrom st) x)
   | .kw "def" =>
     discard bump
     defRest st .none
@@ -1245,6 +1418,7 @@ where
     expectSym "->"
     let T ← rty n
     expectSym "="
+    modify fun s => { s with muts := [], assigned := [] }
     let M ← comp n
     let sp ← spanFrom st
     let A := tupleTy sp (ps.map (·.2))

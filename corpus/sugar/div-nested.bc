@@ -46,9 +46,9 @@ def inc : i32 => i32 = thunkv fun (n : i32) -> return ((unbang host[add32]) (n, 
 
 def two_lines : In => In * (i32 * i32) =
   thunkv fun (c : In) ->
-    p <- return (inc (line_length (&c)), inc (line_length (&c)));
+    p <- return (inc (line_length (&mut c)), inc (line_length (&mut c)));
     return (c, p)
 
 main : F (ref input * (i32 * i32)) =
-  p <- return (two_lines (&stdin));
+  p <- return (two_lines (&mut stdin));
   return (stdin, p)

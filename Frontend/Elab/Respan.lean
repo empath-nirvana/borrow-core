@@ -128,7 +128,7 @@ def Val.respan (sp : Span) : Val → Val
   | .ascribe _ V A => .ascribe sp (V.respan sp) (A.respan sp)
   | .const _ c => .const sp (c.respan sp)
   | .shorten _ m σ a V => .shorten sp m (σ.respan sp) (a.respan sp) (V.respan sp)
-  | .lend _ x => .lend sp (x.respan sp)
+  | .lend _ x m => .lend sp (x.respan sp) m
   | .sugar _ s => .sugar sp s
 
 def Comp.respan (sp : Span) : Comp → Comp

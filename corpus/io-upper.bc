@@ -13,6 +13,6 @@ def upper : i32 => i32 =
 
 main : F 1 =
   for b in bytes stdin {
-    return (putb (&stdout, upper b))
+    return (putb (&mut stdout, upper b))
   };
   return ()

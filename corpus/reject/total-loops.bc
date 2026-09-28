@@ -11,6 +11,6 @@ total def count : In => In * i32 =
     return (c, n)
 
 main : F i32 =
-  r <- return (count (&stdin));
+  r <- return (count (&mut stdin));
   let (stdin, n) = r;
   return n

@@ -6,6 +6,6 @@ main : F i32 =
   n : i32 <- return i32[0];
   for b in bytes stdin {
     n : i32 <- return ((unbang host[add32]) (n, i32[1]));
-    return (putb (&stdout, b))
+    return (putb (&mut stdout, b))
   };
   return n

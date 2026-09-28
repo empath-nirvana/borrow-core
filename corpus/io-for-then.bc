@@ -21,9 +21,9 @@ main : F (i32 * i32) =
   n : i32 <- return i32[0];
   for b in bytes stdin {
     n : i32 <- return ((unbang host[add32]) (n, i32[1]));
-    return (putb (&stdout, b))
+    return (putb (&mut stdout, b))
   };
-  m <- return (count_lines (&stdin));
-  _ <- return (put_dec (&stdout, n));
-  _ <- return (putb (&stdout, i32[10]));
+  m <- return (count_lines (&mut stdin));
+  _ <- return (put_dec (&mut stdout, n));
+  _ <- return (putb (&mut stdout, i32[10]));
   return (n, m)

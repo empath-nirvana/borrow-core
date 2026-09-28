@@ -48,15 +48,15 @@ def count_lines : In => In * i32 =
 
 def sections : In => In * (i32 * i32) =
   thunkv fun (c : In) ->
-    h <- return (line_length (&c));
-    n <- return (count_lines (&c));
+    h <- return (line_length (&mut c));
+    n <- return (count_lines (&mut c));
     return (c, (h, n))
 
 main : F (i32 * i32) =
-  r <- return (sections (&stdin));
+  r <- return (sections (&mut stdin));
   let (h, n) = r;
-  _ <- return (put_dec (&stdout, h));
-  _ <- return (putb (&stdout, i32[32]));
-  _ <- return (put_dec (&stdout, n));
-  _ <- return (putb (&stdout, i32[10]));
+  _ <- return (put_dec (&mut stdout, h));
+  _ <- return (putb (&mut stdout, i32[32]));
+  _ <- return (put_dec (&mut stdout, n));
+  _ <- return (putb (&mut stdout, i32[10]));
   return (h, n)
