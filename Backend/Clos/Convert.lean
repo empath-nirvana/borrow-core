@@ -17,9 +17,14 @@ IR. One pass does three things:
   uses it once. An arm drops what only the other arm uses, and every binder is dropped where
   its scope does not use it. So each variable is consumed exactly once on every path, as
   substitution does in the source.
+- **`let`.** A β-redex `(λx. b) a`, how the erasure spells `let`, is `letv x a b`: the
+  argument is evaluated first, as the machine does, and no closure is made.
 - **Closures.** `λ` captures its free variables, in index order, into an environment. A
   primitive in function position with its arguments present becomes `prim`; a primitive used
   as a value is η-expanded into closure code (`store` into two).
+- **`swap`.** The axiom `swap ≜ λx.λy. let z = load x; store x y; (x, z)` becomes the closure
+  IR's `swap`, which moves the old contents out instead of copying them and dropping the
+  original. Its contents change type, which the layout types (`Backend/Clos/Types.lean`) follow.
 -/
 
 namespace Backend.Clos
@@ -111,6 +116,19 @@ def primValue : Prim → CM Tm
         pure (.clos c [])
       | none => throw "unreachable primitive"
 
+/-- The axiom `swap ≜ λx.λy. let z = load x; store x y; (x, z)` (`Paper.S2_Statics`, [TR] 3.24). -/
+def isSwap : Expr → Bool
+  | .lam (.lam (.app (.lam (.seq (.app (.app (.prim .store) (.var 2)) (.var 1))
+      (.pair (.var 2) (.var 0)))) (.app (.prim .load) (.var 1)))) => true
+  | _ => false
+
+/-- The code of the axiom `swap`: `λx. λy. swap x y`. -/
+def swapValue : CM Tm := do
+  let l ← fresh; let l' ← fresh; let v ← fresh
+  let c₂ ← register ⟨[l'], v, .prim .swap [l', v]⟩
+  let c₁ ← register ⟨[], l, .clos c₂ [l]⟩
+  pure (.clos c₁ [])
+
 def conv (ctx : List Var) : Expr → CM Tm
   | .var i => return .var (← lookup ctx i)
   | .unit => return .unit
@@ -161,6 +179,25 @@ def conv (ctx : List Var) : Expr → CM Tm
       let tl ← conv cl l
       return wrapCopies cs (.letv vv tv (.letv lv tl (.prim .store [lv, vv])))
   | .app f a => do
+      match f with
+      | .app sw l =>
+        if isSwap sw then
+          -- `swap l a`, saturated: `a`, then `l`, as the machine evaluates them.
+          let (cs, cv, cl) ← plan2 ctx (fvs a 0) (fvs l 0)
+          let vv ← fresh; let lv ← fresh
+          let tv ← conv cv a
+          let tl ← conv cl l
+          return wrapCopies cs (.letv vv tv (.letv lv tl (.prim .swap [lv, vv])))
+      | .lam b =>
+        if !isSwap f then
+          -- `(λx. b) a`, the erasure's `let`: `a` is bound to `x` and no closure is made.
+          let (cs, ca, cb) ← plan2 ctx (fvs a 0) (fvs b 1)
+          let x ← fresh
+          let ta ← conv ca a
+          let tb ← conv (x :: cb) b
+          let tb := if 0 ∈ fvs b 0 then tb else .drop x tb
+          return wrapCopies cs (.letv x ta tb)
+      | _ => pure ()
       match f, Op.ofPrim? (match f with | .prim p => p | _ => .store) with
       | .prim _, some op =>
         let av ← fresh
@@ -172,6 +209,7 @@ def conv (ctx : List Var) : Expr → CM Tm
         let tf ← conv cf f
         return wrapCopies cs (.letv av ta (.letv fv tf (.app fv av)))
   | .lam b => do
+      if isSwap (.lam b) then return ← swapValue
       let fv := fvs b 1
       let xs ← vars ctx fv
       let es ← fv.mapM fun _ => fresh

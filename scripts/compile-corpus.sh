@@ -13,14 +13,43 @@
 #
 # No I/O program has a bound on its input: `corpus/io-cat.bc` also copies a generated input of
 # 4860 bytes, at every stage.
+#
+# Counts. Every program run is also run by `bcc-counts` (the flat IR and wasm, built to count,
+# which must agree): the objects it allocates and the indirect calls it makes. Each must be at
+# most the program's entry in `corpus/counts.expected` (`name allocs indirect`); a count above
+# it fails, one below it is reported so the file can be lowered. `--write-counts` rewrites the
+# file with the counts of this run.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 command -v wasmtime >/dev/null || { echo "wasmtime is not on PATH"; exit 1; }
-lake build bcc >/dev/null
+lake build bcc bcc-counts >/dev/null
 bcc=.lake/build/bin/bcc
+bccCounts=.lake/build/bin/bcc-counts
+expected=corpus/counts.expected
+write=0; [ "${1:-}" = "--write-counts" ] && write=1
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 bad=0
+: > "$tmp/counts"
+# The counts of file $1 on input $2, checked against the expected ones; appended to the table.
+counts() {
+  local name got a i want wa wi
+  name=$(basename "${1%.bc}")
+  if ! got=$("$bccCounts" "$1" < "$2" 2>&1); then echo "$1: counts: $got"; return 1; fi
+  a=$(echo "$got" | awk '{print $2}'); i=$(echo "$got" | awk '{print $4}')
+  echo "$name $a $i" >> "$tmp/counts"
+  cnt="allocs $a, indirect $i"
+  [ "$write" = 1 ] && return 0
+  want=$(awk -v n="$name" '$1 == n {print $2, $3}' "$expected" 2>/dev/null || true)
+  if [ -z "$want" ]; then echo "$1: no entry in $expected ($cnt)"; return 1; fi
+  wa=${want% *}; wi=${want#* }
+  if [ "$a" -gt "$wa" ] || [ "$i" -gt "$wi" ]; then
+    echo "$1: counts regressed: $cnt, expected at most allocs $wa, indirect $wi"; return 1
+  fi
+  if [ "$a" -lt "$wa" ] || [ "$i" -lt "$wi" ]; then
+    cnt="$cnt (below $expected's $wa, $wi: lower it)"
+  fi
+}
 # Same value, and memory empty in both or in neither.
 agree() {
   [ "$(echo "$1" | head -1)" = "$(echo "$2" | head -1)" ] &&
@@ -52,7 +81,8 @@ for f in corpus/*.bc; do
     if [ "$ok" = 1 ] && [ "$(tail -1 "$base.out")" != "live 0" ]; then
       echo "$f: agrees, but leaves objects live"; ok=0
     fi
-    if [ "$ok" = 1 ]; then echo "$f: $(wc -c < "$base.out" | tr -d ' ') bytes as $base.out at every stage | live 0"
+    if [ "$ok" = 1 ] && ! counts "$f" "$in"; then ok=0; fi
+    if [ "$ok" = 1 ]; then echo "$f: $(wc -c < "$base.out" | tr -d ' ') bytes as $base.out at every stage | live 0 | $cnt"
     else bad=$((bad + 1)); fi
     continue
   fi
@@ -72,8 +102,10 @@ for f in corpus/*.bc; do
     bad=$((bad + 1))
   elif [ "$(echo "$got" | tail -1)" != "live 0" ]; then
     echo "$f: agrees, but leaves objects live: $(echo "$got" | tr '\n' ' ')"; bad=$((bad + 1))
+  elif ! counts "$f" /dev/null; then
+    bad=$((bad + 1))
   else
-    echo "$f: $(echo "$got" | head -1) | $(echo "$got" | tail -1)"
+    echo "$f: $(echo "$got" | head -1) | $(echo "$got" | tail -1) | $cnt"
   fi
 done
 # An input past any fixed bound: 4860 bytes, copied whole at every stage.
@@ -86,5 +118,11 @@ for st in source clos flat wasm; do
   if ! cmp -s "$tmp/out" "$tmp/big.out"; then echo "corpus/io-cat.bc: stage $st differs on a $(wc -c < "$tmp/big.in" | tr -d ' ')-byte input"; bigok=0; fi
 done
 if [ "$bigok" = 1 ]; then echo "corpus/io-cat.bc: a $(wc -c < "$tmp/big.in" | tr -d ' ')-byte input copied whole at every stage"; else bad=$((bad + 1)); fi
+if [ "$write" = 1 ]; then
+  { echo "# Allocations and indirect calls per run of each corpus program (scripts/compile-corpus.sh)."
+    echo "# name allocs indirect"
+    sort "$tmp/counts"; } > "$expected"
+  echo "wrote $expected"
+fi
 echo "$bad failure(s)."
 [ "$bad" -eq 0 ]

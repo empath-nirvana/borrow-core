@@ -434,8 +434,8 @@ between engines is tested on the corpus, not proved.
 - Floats (`F32`, `F64`) by the same scheme; Wasm's NaN bit patterns are nondeterministic.
 - `u8` and checked (non-wrapping) arithmetic are derivable from the operations above.
 - `plainV` excludes the integer types, so they cannot yet be `withborS` leaves.
-- The MVP backend lowers without types, so `I64` values are boxed (a full-width word leaves no
-  bit to tell a pointer from an immediate). Type-directed layout would unbox them.
+- The backend's layout is type-directed (`Backend/README.md`, Representation): `I32` and `I64`
+  are each one unboxed word.
 
 ---
 
@@ -539,9 +539,9 @@ An array is one allocation of `n` slots; slot `i` is at `base + i·s`, with `s` 
 `idx` is an unsigned compare of `i` with `n` and an address computation — a `getelementptr` and
 an `icmp ult` in LLVM, `i32.lt_u` and `i32.mul`/`i64.add` in Wasm. `tab` allocates the block and
 fills it in a loop; `drop` loops over the slots, moves each value to the consumer, and frees the
-block once. The MVP backend's uniform representation keeps a header word in every slot, so its
-`s` is 16 bytes and an element's location is an ordinary cell address; a type-directed layout
-has `s = sizeof A` and no header.
+block once. The backend's type-directed layout has `s = sizeof A` (the widest contents the slot
+holds) and no header, so an element's location is a cell address like any other
+(`Backend/README.md`, Representation).
 
 ### Baseline
 

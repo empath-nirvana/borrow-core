@@ -44,6 +44,10 @@ inductive Op where
   | load
   /-- `store ℓ v`: the old contents are dropped and `v` stored; the result is `()`. -/
   | store
+  /-- `swap ℓ v`: `(ℓ, old)`, the old contents moved out and `v` moved in. It is the axiom
+  `swap ≜ λx.λy. let z = load x; store x y; (x, z)` ([TR] 3.24) with its copy of the old contents
+  and their drop cancelled; the contents may change type (`Ref A ⊸ B ⊸ Ref B ⊗ A`). -/
+  | swap
   /-- A host operation of §8, applied to its (consumed) argument. -/
   | host (op : HostOp)
   /-- `tab (n, f)`: an array of `len(n)` slots, slot `i` holding `f i` (§9). -/
@@ -92,19 +96,5 @@ structure Prog where
   with, once the stage has driven it. -/
   fin : Option Nat := none
   deriving Repr, Inhabited
-
-/-- The host operations a term applies. -/
-def Tm.hostOps : Tm → List HostOp
-  | .prim (.host op) _ => [op]
-  | .letv _ e b => e.hostOps ++ b.hostOps
-  | .letpair _ _ _ b => b.hostOps
-  | .case _ _ b₁ _ b₂ => b₁.hostOps ++ b₂.hostOps
-  | .copy _ _ b => b.hostOps
-  | .drop _ b => b.hostOps
-  | _ => []
-
-/-- The host operations a program applies, each once. -/
-def Prog.hostOps (p : Prog) : List HostOp :=
-  ((p.codes.toList.map (·.body)).foldr (fun t acc => t.hostOps ++ acc) p.main.hostOps).eraseDups
 
 end Backend.Clos

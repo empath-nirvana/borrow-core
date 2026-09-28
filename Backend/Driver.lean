@@ -67,12 +67,14 @@ def closOf (file src : String) : Except String Clos.Prog := do
   | none => Clos.convert k.main.e
   | some m => Clos.convertMain (← extImpls m) m.loopB.isSome k.main.e
 
-def flatOf (file src : String) : Except String Flat.Prog := do
-  Flat.lower (← closOf file src)
+/-- The flat IR; with `counts`, the entry writes the run's counts after the report. -/
+def flatOf (file src : String) (counts : Bool := false) : Except String Flat.Prog := do
+  Flat.lower (← closOf file src) counts
 
-/-- The program as WAT. -/
-def compileWat (file src : String) : Except String String := do
-  pure (Wasm.printModule (Wasm.lowerProg (← flatOf file src)))
+/-- The program as WAT; with `counts`, it counts indirect calls and writes the run's counts after
+the report. -/
+def compileWat (file src : String) (counts : Bool := false) : Except String String := do
+  pure (Wasm.printModule (Wasm.lowerProg (← flatOf file src counts) counts))
 
 /-- The model run of a program with capabilities: `run_io` checked, with every extern's model
 (`Frontend.Check.IORun`). -/
@@ -97,6 +99,7 @@ def interpStage (stage file src : String) (input : List UInt8) : Except String O
       if r.loops then interpIOLoop runFuel (r.expr input) else interpIO runFuel (r.expr input)
   | "clos" => Clos.interp runFuel (← closOf file src) input
   | "flat" => Flat.interp runFuel (← flatOf file src) input
+  | "flat-counts" => Flat.interp runFuel (← flatOf file src true) input
   | _ => throw s!"unknown stage `{stage}`"
 
 /-- The program's trusted boundaries (`bcc trusted`).  `[spec §11]` -/
