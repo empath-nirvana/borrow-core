@@ -1,5 +1,6 @@
 import Core.Demonic
 import Core.IntPrograms
+import Core.DelayPrograms
 
 /-!
 # Core — standard I/O  `[spec §11]`
@@ -421,6 +422,85 @@ theorem wpTSD_frame_own {ls : List SRec} {e : Expr} {Q : List SRec → Val → W
   obtain ⟨ψ, hψ, -, -, he⟩ := Typed.compS_get_left' h₂ hl
   obtain ⟨ψ', hψ', -, -, he'⟩ := Typed.compS_get_left' h₄ hψ
   rw [lower_get h₅ hψ', he', he, CellU.erase_ownOf]
+
+/-! ### Programs that run until their input ends  `[spec §11]` -/
+
+/-- A byte list as a value of `Bytes`. -/
+def bytesVal : List UInt8 → Val
+  | [] => .inj₁ .unit
+  | b :: bs => .inj₂ (.pair (.i32 b.toUInt32) (bytesVal bs))
+
+theorem bytesVal_bytes : ∀ bs, BytesV (bytesVal bs)
+  | [] => .nil
+  | b :: bs => .cons b.toUInt32 (bytesVal_bytes bs)
+
+theorem d_bytesVal {Δ : LifeCtx} {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
+    ∀ bs, CDerives Δ Γ (.val (bytesVal bs)) (.val bytesTy)
+  | [] => .roll bytesBody_noMut bytesTy_closed (.sumI₁ (.unitI hΓ.toP))
+  | b :: bs => .roll bytesBody_noMut bytesTy_closed
+      (.sumI₂ (.tensorI (deadSplit hΓ) (.lit (.i32 b.toUInt32) hΓ.toP) (d_bytesVal hΓ bs)))
+
+/-- Every slot to the left. -/
+theorem splitP_left_all : ∀ Γ : Ctx VTy, Ctx.SplitP Γ Γ (kill Γ)
+  | [] => .nil
+  | ⟨_, true⟩ :: Γ => .left (splitP_left_all Γ)
+  | ⟨_, false⟩ :: Γ => .dead (splitP_left_all Γ)
+
+/-- Every slot to the right. -/
+theorem splitP_right_all : ∀ Γ : Ctx VTy, Ctx.SplitP Γ (kill Γ) Γ
+  | [] => .nil
+  | ⟨_, true⟩ :: Γ => .right (splitP_right_all Γ)
+  | ⟨_, false⟩ :: Γ => .dead (splitP_right_all Γ)
+
+/-- `run_io inp`, driven: `run_io` applied to the input, then observed at most `n` times and
+closed if it has not finished (`driveE`, SPEC §7). -/
+def ioLoopE (N : Expr) (bs : List UInt8) (n : ℕ) : Expr :=
+  bindE (.app (.val (.lam N)) (.val (bytesVal bs))) (driveE n)
+
+/-- **The driven program is an ordinary program**: at the externs' context, for every input and
+every `n`. -/
+theorem d_ioLoop {Γ : Ctx VTy} {N : Expr} {R R' : VTy}
+    (h : CDerives LifeCtx.empty Γ (.val (.lam N)) (.comp (.arr bytesTy (.ret (.thunk (.loop R R'))))))
+    (bs : List UInt8) (n : ℕ) :
+    CDerives LifeCtx.empty Γ (ioLoopE N bs n) (.comp (.ret (.sum R R'))) :=
+  .bind (splitP_left_all Γ)
+    (.ret (.lolliE (splitP_right_all Γ) (d_bytesVal (kill_dead Γ) bs) (.thunkV rfl h)))
+    (d_driveL R R' n (kill_dead Γ))
+
+/-- **End to end for a program that runs until its input ends, at every implementation of the
+externs.**  `run_io : Bytes ⊸ F (U (Loop R R'))`, both residuals persistent, `γ` meeting the
+contracts at `∅`. For every input and every `n`, every run of `run_io[γ] inp` observed at most
+`n` times, from the empty memory and under every allocator, continues to a value at the empty
+memory: `inl` of the finished result, or `inr` of the closed residual.  `[spec §11, §13]` -/
+theorem externs_loop_every_run {Γ : Ctx VTy} {N : Expr} {R R' : VTy}
+    (h : CDerives LifeCtx.empty Γ (.val (.lam N)) (.comp (.arr bytesTy (.ret (.thunk (.loop R R'))))))
+    (hR : R.Persistent) (hR' : R'.Persistent) {γ : List Val} (hγ : ExternsMeet Γ γ)
+    (bs : List UInt8) (n : ℕ) {μ₁ : Heap} {e₁ : Expr}
+    (hs : Steps Adequacy.emptyMem (substAll γ (ioLoopE N bs n)) μ₁ e₁) :
+    ∃ v : Val, Steps μ₁ e₁ Adequacy.emptyMem (.val v) ∧
+      ∃ ls δ, vC true (.sum R R') ls δ v PMap.empty := by
+  have hwp := fundamentalC (d_ioLoop h bs n) LSub.empty γ [] PMap.empty Adequacy.models_empty
+    (gDenC_of_meets hγ [] LSub.empty)
+  have hS : (VTy.sum R R').Persistent := by
+    simp only [VTy.Persistent, VTy.persistent, Bool.and_eq_true]; exact ⟨hR, hR'⟩
+  have hwp' : wpTS [] (substAll γ (ioLoopE N bs n))
+      (fun _ v => Fig16.BoLo.pure (∃ ls δ, vC true (.sum R R') ls δ v PMap.empty)) PMap.empty := by
+    refine wpTS_mono (fun ls v ρ hv => ?_) PMap.empty hwp
+    obtain rfl := vP_empty_of_persistent hS hv
+    exact ⟨rfl, ls, LSub.empty, hv⟩
+  exact theorem32D _ _ hwp' hs
+
+/-- **End to end for a program that runs until its input ends, at the model.**
+`[spec §11, §13]` -/
+theorem io_loop_every_run {Γ : Ctx VTy} {N : Expr} {R R' : VTy}
+    (h : CDerives LifeCtx.empty Γ (.val (.lam N)) (.comp (.arr bytesTy (.ret (.thunk (.loop R R'))))))
+    (hR : R.Persistent) (hR' : R'.Persistent) {γ : List Val}
+    (hγ : List.Forall₂ (fun s v => s.live = true ∧ (s.ty, v) ∈ stdModel) Γ γ)
+    (bs : List UInt8) (n : ℕ) {μ₁ : Heap} {e₁ : Expr}
+    (hs : Steps Adequacy.emptyMem (substAll γ (ioLoopE N bs n)) μ₁ e₁) :
+    ∃ v : Val, Steps μ₁ e₁ Adequacy.emptyMem (.val v) ∧
+      ∃ ls δ, vC true (.sum R R') ls δ v PMap.empty :=
+  externs_loop_every_run h hR hR' (externsMeet_of_model hγ) bs n hs
 
 end BoCa.Fig16.LogRel.Core
 

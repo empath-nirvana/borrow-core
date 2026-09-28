@@ -91,3 +91,7 @@ import Core
 #print axioms BoCa.Fig16.LogRel.Core.io_every_run
 #print axioms BoCa.Fig16.LogRel.Core.externs_main_safe
 #print axioms BoCa.Fig16.LogRel.Core.wpTSD_frame_own
+#print axioms BoCa.Fig16.LogRel.Core.d_driveL
+#print axioms BoCa.Fig16.LogRel.Core.d_ioLoop
+#print axioms BoCa.Fig16.LogRel.Core.externs_loop_every_run
+#print axioms BoCa.Fig16.LogRel.Core.io_loop_every_run

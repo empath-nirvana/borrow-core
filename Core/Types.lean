@@ -1105,8 +1105,12 @@ def NuOk : CTy → Prop
 /-- The unrolling `C[U(νX. C)/X]`. -/
 abbrev unroll (C : CTy) : CTy := instT (.thunk (.nu C)) C
 
-/-- The body of `D A = νX. F(A ⊕ U X) & F 1`. -/
-abbrev delayBody (A : VTy) : CTy := .amp (.ret (.sum (A.rename Nat.succ) (.tvar 0))) (.ret .unit)
+/-- The body of `Loop A B = νX. F(A ⊕ U X) & F B`.  `[spec §7, §11]` -/
+abbrev loopBody (A B : VTy) : CTy :=
+  .amp (.ret (.sum (A.rename Nat.succ) (.tvar 0))) (.ret (B.rename Nat.succ))
+
+/-- The body of `D A = Loop A 1`. -/
+abbrev delayBody (A : VTy) : CTy := loopBody A .unit
 
 /-- The body of `Stream A = νX. F(A ⊗ U X) & F 1`. -/
 abbrev streamBody (A : VTy) : CTy :=
@@ -1117,7 +1121,11 @@ abbrev iterBody (A R R' : VTy) : CTy :=
   .amp (.ret (.sum (.tensor (A.rename Nat.succ) (.tvar 0)) (R.rename Nat.succ)))
     (.ret (R'.rename Nat.succ))
 
-/-- `D A = νX. F(A ⊕ U X) & F 1`: the delay type. -/
+/-- `Loop A B = νX. F(A ⊕ U X) & F B`: a loop. `next` finishes with `A` or goes on; `close`
+ends it early with the residual `B`.  `[spec §7, §11]` -/
+abbrev loop (A B : VTy) : CTy := .nu (loopBody A B)
+
+/-- `D A = Loop A 1`: the delay type. -/
 abbrev delay (A : VTy) : CTy := .nu (delayBody A)
 
 /-- `Stream A = νX. F(A ⊗ U X) & F 1`: the stream type. -/
@@ -1154,9 +1162,12 @@ theorem inst_sum_var (S A : VTy) :
   simp only [VTy.inst, VTy.subst, VTy.scons]
   rw [← VTy.inst, VTy.inst_rename_succ]
 
+theorem loopBody_instT (A B S : VTy) :
+    (loopBody A B).instT S = .amp (.ret (.sum A S)) (.ret B) := by
+  simp only [instT, inst_sum_var, VTy.inst_rename_succ]
+
 theorem delayBody_instT (A S : VTy) :
-    (delayBody A).instT S = .amp (.ret (.sum A S)) (.ret .unit) := by
-  simp only [instT, inst_sum_var]; rfl
+    (delayBody A).instT S = .amp (.ret (.sum A S)) (.ret .unit) := loopBody_instT A .unit S
 
 theorem streamBody_instT (A S : VTy) :
     (streamBody A).instT S = .amp (.ret (.tensor A S)) (.ret .unit) := by
@@ -1169,8 +1180,11 @@ theorem iterBody_instT (A R R' S : VTy) :
   rw [← VTy.inst, ← VTy.inst, ← VTy.inst, VTy.inst_rename_succ, VTy.inst_rename_succ,
     VTy.inst_rename_succ]
 
-theorem delayBody_nuOk (A : VTy) : (delayBody A).NuOk :=
-  ⟨⟨VTy.poly_of_not_occ (VTy.not_occ_rename_succ A), trivial⟩, fun h => h⟩
+theorem loopBody_nuOk (A B : VTy) : (loopBody A B).NuOk :=
+  ⟨⟨VTy.poly_of_not_occ (VTy.not_occ_rename_succ A), trivial⟩,
+   VTy.poly_of_not_occ (VTy.not_occ_rename_succ B)⟩
+
+theorem delayBody_nuOk (A : VTy) : (delayBody A).NuOk := loopBody_nuOk A .unit
 
 theorem streamBody_nuOk (A : VTy) : (streamBody A).NuOk :=
   ⟨⟨VTy.poly_of_not_occ (VTy.not_occ_rename_succ A), trivial⟩, fun h => h⟩
@@ -1182,6 +1196,9 @@ theorem iterBody_nuOk (A R R' : VTy) : (iterBody A R R').NuOk :=
 
 end CTy
 
+/-- The unrolling of `Loop A B`: `F(A ⊕ U(Loop A B)) & F B`. -/
+abbrev loopUnroll (A B : VTy) : CTy := .amp (.ret (.sum A (.thunk (.loop A B)))) (.ret B)
+
 /-- The unrolling of `D A`: `F(A ⊕ U(D A)) & F 1`. -/
 abbrev delayUnroll (A : VTy) : CTy := .amp (.ret (.sum A (.thunk (.delay A)))) (.ret .unit)
 
@@ -1191,6 +1208,9 @@ abbrev streamUnroll (A : VTy) : CTy := .amp (.ret (.tensor A (.thunk (.stream A)
 /-- The unrolling of `Iter A R R'`: `F((A ⊗ U(Iter A R R')) ⊕ R) & F R'`. -/
 abbrev iterUnroll (A R R' : VTy) : CTy :=
   .amp (.ret (.sum (.tensor A (.thunk (.iter A R R'))) R)) (.ret R')
+
+theorem CTy.loop_unroll (A B : VTy) : (CTy.loopBody A B).unroll = loopUnroll A B :=
+  CTy.loopBody_instT A B _
 
 theorem CTy.delay_unroll (A : VTy) : (CTy.delayBody A).unroll = delayUnroll A :=
   CTy.delayBody_instT A _

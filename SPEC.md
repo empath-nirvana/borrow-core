@@ -322,12 +322,14 @@ path of `step s` and replacing each state `s′` in the result by `unfold step s
 
 ### Instances
 
-    D A          ≜ νX. F(A ⊕ U X) & F 1               (delay)
+    Loop A B     ≜ νX. F(A ⊕ U X) & F B               (loop)
+    D A          ≜ Loop A 1                            (delay)
     Stream A     ≜ νX. F(A ⊗ U X) & F 1               (stream)
     Iter A R R'  ≜ νX. F((A ⊗ U X) ⊕ R) & F R'        (finite iterator)
 
 The first observation is `next`, the second `close`. A delay's `next` returns a result or the
-rest; a stream's returns an element and the rest. An iterator's `next` yields an element and the
+rest; a loop's does the same, and its `close` ends it early with a residual `B` (the delay is the
+loop whose residual is `1`); a stream's returns an element and the rest. An iterator's `next` yields an element and the
 rest, or finishes with `R`; its `close` ends it early and returns a residual `R'` (for example a
 buffer or a cell handed back). `close` is required: no rule forgets a `U C`, so a linear state
 is released only by running `close`.
@@ -338,7 +340,13 @@ The former rules of the instances are the general ones at their bodies:
     unfoldS = unfold at Stream A : !U(S ⊸ F(A ⊗ S) & F 1) ⊸ !U(S ⊸ Stream A)
 
 `delayIn`/`delayOut` and `streamIn`/`streamOut` are `nuIn`/`nuOut` at those bodies. A loop is
-`fixD`: the step maps a state to a result or the next state, and never observes the loop.
+`fixD` (or `unfold` at `Loop A B`): the step maps a state to a result or the next state, and never
+observes the loop.
+
+**The driver.** `driveE n` observes a loop at most `n` times and closes it if it has not
+finished: `d : U(Loop A B) ⊢ driveE n : F(A ⊕ B)`, a `CDerives` derivation at every `n`
+(`d_driveL`; at the delay, `d_drive`). So a closed program that returns a loop, followed by
+`driveE n`, is a closed program for every `n`, and adequacy covers it.
 
 ### Destructor
 
@@ -758,6 +766,68 @@ byte. Both are unbuffered, so a prompt appears before the next read. The plain L
 counterpart is `read(2)`/`write(2)` on the same descriptors (or `getc`/`putc` on a `FILE *`): no
 WASI-only feature is part of the semantics (decision 25).
 
+### Programs that run until their input ends
+
+`main` may return a loop over its capabilities:
+
+    main : F (U (Loop (Caps ⊗ A) (Caps ⊗ B)))
+
+The runtime drives it: it observes `next` until the loop finishes with `(caps, a)`, then takes
+the capabilities back and prints `a`; it never closes it. Nothing in the kernel changes (no
+rule, no relation clause, no machine step); what is new is this obligation of the runtime and
+its theorem. A driven program is covered one prefix at a time: for every `n`, `run_io` followed
+by `driveE n` is a closed program, and every run of it from the empty memory, under every
+allocator, continues to a value at the empty memory (`externs_loop_every_run`,
+`io_loop_every_run`, and `IORun.loop_every_run` at the term `bcc interp` runs). A run that
+finishes after `k` observations is the run of the `k`-th prefix, which ends at `inl`. A loop
+that never finishes runs forever, and every finite prefix of the run is safe. `run_io` is a
+loop too: its `next` observes `main`'s loop and, when it finishes, takes the outputs; its
+`close` closes `main`'s loop and takes them.
+
+### The I/O library
+
+`lib/io.bc` is ordinary library code over the externs, in scope in a program whose `main`
+uses the capabilities ambiently (below):
+
+| name | type | |
+|---|---|---|
+| `getb` | `ref input => ref input * (i32 + 1)` | one byte, the capability handed back |
+| `putb` | `ref output * i32 => ref output * 1` | one byte out |
+| `put_dec` | `ref output * i32 => ref output * 1` | a number in decimal |
+| `bytes` | `ref input => U (iter i32 (ref input) (ref input))` | the input as a stream of bytes, finishing, or closing early, with the capability |
+
+Each hides the borrow: it lends the capability to one operation and hands it back. A line
+reader is not provided: an observation must terminate, so a line of unbounded length is a loop
+of its own; programs consume `bytes` and keep the line in their state.
+
+### Sugar
+
+Each form below is elaborated by the frontend into ordinary core, which the unchanged checker
+then checks; the theorems apply to the elaborated program with no new case. None exists in the
+kernel, the checker's rules or the proofs. `bcc desugar <file>` prints the elaborated program,
+and `corpus/sugar/` pairs each sugared program with its hand-written core form, which must
+elaborate to the same term.
+
+- **Ambient capabilities in `main`.** A program that declares no externs and whose `main`
+  mentions `stdin`, `stdout` or `stderr` gets the I/O library, the operations, and an `extern`
+  for each capability it mentions (in the order `stdin`, `stdout`, `stderr`). `main : F A`
+  elaborates to `main : F (Caps ⊗ A)`: every terminal `return V` of its body becomes
+  `return (caps, V)`, and any other terminal `T` becomes `r <- T; return (caps, r)`, the
+  capabilities read by name where the path ends. Nothing else is ambient: a `def` never sees a
+  capability.
+- **Lending a capability to one call, `&c`.** In `x <- M; N`, one `&c` in `M` elaborates to
+  `r <- M[c/&c]; let (c, x) = r; N`: the call takes the capability and hands it back first, as
+  `getb`, `putb` and `put_dec` do.
+- **`for (x : A) in V with (y : T, …) { M }; N`**, at the end of an ambient `main`, where `V`
+  mentions one capability `c` and is an iterator `U (iter A C C)` over it. It elaborates to a
+  loop by `unfold`: the state is the iterator, the other capabilities and the listed variables.
+  Its `next` observes the iterator: an element `x` runs `M`, which rebinds the state by name, and
+  the loop goes on; at the end the capability the iterator hands back is bound to `c`, `N` runs,
+  and the loop finishes with the capabilities and `N`'s value. Its `close` closes the iterator.
+  `main : F A` then elaborates to `main : F (U (Loop (Caps ⊗ A) (Caps ⊗ 1)))`. This is the
+  top-level form of #59's `for`; a `for` inside a function needs a finite consumer and is not
+  provided.
+
 ### Designed, not built
 
 - **More capabilities, one pattern.** Each is a cell with opaque content, a model and externs
@@ -765,9 +835,6 @@ WASI-only feature is part of the semantics (decision 25).
   end), `Env` (lookup by name into a borrowed array), `Fs` (open yields an `Input`/`Output`, close
   consumes it), `Net`, `Clock`, `Random`.
 - **Exit.** The exit status is `main`'s result at `A = I32`; not yet passed to the host.
-- **Ambient I/O in `main`** (planned sugar). Inside `main`'s body only, `print`-style forms may
-  use the bundle implicitly, elaborated to the explicit capability-passing core. Everywhere else
-  a function that does I/O takes the capability. The core and the theorems are unchanged.
 - **Handlers.** A capability's meaning is its model and its operations are externs, not rules,
   so a capability can be served by any value meeting the extern's type: the host, the model
   (`bcc interp`'s handler), or later a user-defined handler (#18) such as a mock input or a
@@ -781,11 +848,15 @@ WASI-only feature is part of the semantics (decision 25).
 ### Open
 
 - I/O errors are not modeled: a read error is end of input, a write error is ignored.
+  Distinguishing them changes both operations' types and the model, which has no errors; left
+  for an entry with a failing model.
+- `for` has no early exit: a program that stops reading keeps a flag in its state.
 - The host implementations agree with the model on the corpus; that is tested, not proved.
 - `wpTSD_frame_own` is about the end of a value run, not intermediate states.
 - Destructors for host resources, which perform I/O and can fail (§12 Open).
 - `main` with borrowed capabilities (lifetime-parametric externs) is not provided.
 - `Args`, `Env`, `Exit`, `Fs` and the rest are designed only.
+- `|>` pipelines (#59) are not provided.
 
 ---
 
@@ -978,7 +1049,10 @@ typed world, the model and the end-to-end theorems in `Core/Stdio.lean`, the che
   harness `mk_input`, `mk_output`, `take_input`, `take_output`; `run_io`; the model meets the
   contracts, `externs_every_run`/`io_every_run` in `adequacyD`'s form, `externs_main_safe`, and
   `wpTSD_frame_own` (no capability, no effect); a `def` may use the persistent externs declared
-  before it; assurance levels and `bcc trusted`.
+  before it; assurance levels and `bcc trusted`. `Loop A B` (§7; `D A = Loop A 1`) with the
+  driver typed at every loop (`d_driveL`); programs that run until their input ends
+  (`externs_loop_every_run`, `io_loop_every_run`); the I/O library; the sugar: ambient
+  capabilities in `main`, `&c`, and `for` at the end of `main`, each elaborated before checking.
 
 - **0.9** (2026-09-27) — Entry 12 (§13): every run is safe. `wpTS`'s run is an allocator run at
   every allocator; `wpTSD` (every run continues to a value in the postcondition), `fundamentalD`
