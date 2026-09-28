@@ -47,9 +47,10 @@ def Error.render (e : Error) : String := s!"{e.span.start.render}: {e.msg}"
 /-- The reserved lower-case words. -/
 def keywords : List String :=
   [ -- declarations
-    "type", "shape", "def", "extern", "main", "total", "div",
+    "type", "shape", "def", "extern", "main", "total", "div", "fn",
     -- terms
-    "return", "force", "fun", "let", "linear", "case", "inl", "inr", "thunk", "thunkv", "unbang",
+    "return", "force", "fun", "let", "linear", "case", "match", "borrow", "modify", "inl", "inr",
+    "thunk", "thunkv", "unbang",
     "boxed", "unbox", "roll", "unroll", "run", "absurd",
     "nu_in", "nu_out", "delay_in", "delay_out", "stream_in", "stream_out",
     -- types, lifetimes, shapes
@@ -95,11 +96,12 @@ def spanChars (p : Char → Bool) : List Char → List Char × List Char
 /-- Two-character symbols, in their ASCII spelling. -/
 private def twoCharSyms : List (Char × Char × String) :=
   [('-', 'o', "-o"), ('-', '>', "->"), ('<', '-', "<-"), (':', '>', ":>"), ('=', '>', "=>"),
-   ('/', '\\', "/\\"), ('\\', '/', "\\/")]
+   ('/', '\\', "/\\"), ('\\', '/', "\\/"), ('=', '=', "=="), ('!', '=', "!="), ('<', '=', "<="),
+   ('>', '=', ">=")]
 
 /-- One-character symbols. -/
 private def oneCharSyms : List Char :=
-  ['(', ')', '[', ']', '{', '}', ',', ';', ':', '.', '=', '|', '<', '>', '*', '+', '&', '!']
+  ['(', ')', '[', ']', '{', '}', ',', ';', ':', '.', '=', '|', '<', '>', '*', '+', '&', '!', '-']
 
 /-- The Unicode spellings of syntax-core §2 that are one character, with their ASCII token.
     `⊓Δ` (`dom`) and `Imm̲` (`view`) are two- and four-character spellings, handled in `lexGo`. -/

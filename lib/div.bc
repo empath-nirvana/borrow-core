@@ -107,3 +107,38 @@ def div_fuel[A, Q] : U (loop A Q) * i32 => A + Q =
     h <- return ((unbang (fold_own[1 + X, !(U (loop A Q) => A + Q)] div_fuel_alg[A, Q]))
            (div_nat n));
     return ((unbang h) l)
+
+-- A loop that runs nothing until it is first observed: its state is the code to start it, `t`,
+-- whose first observation runs the code up to the loop and returns the loop, and whose second
+-- hands back the residual without running anything; or, once started, the loop. `{ S }` of a
+-- body `S` that loops is `div_defer` of `< S, abort >` (typed elaboration, decision 2).
+def div_defer_step[B, R] :
+    !U (U (F (U (loop B R)) & F R) + U (loop B R)
+        -o F (B + (U (F (U (loop B R)) & F R) + U (loop B R))) & F R) =
+  !thunkv fun (s : U (F (U (loop B R)) & F R) + U (loop B R)) ->
+    < case s {
+        inl t ->
+          l <- (force t).1;
+          o <- (nu_out (force l)).1;
+          case o {
+            inl b -> return (inl b)
+          | inr l2 -> return (inr (inr l2))
+          }
+      | inr l ->
+          o <- (nu_out (force l)).1;
+          case o {
+            inl b -> return (inl b)
+          | inr l2 -> return (inr (inr l2))
+          }
+      },
+      case s {
+        inl t -> (force t).2
+      | inr l -> (nu_out (force l)).2
+      } >
+
+def div_defer[B, R] : U (F (U (loop B R)) & F R) => U (loop B R) =
+  thunkv fun (t : U (F (U (loop B R)) & F R)) ->
+    f <- return (unbang (unfold[loop B R, U (F (U (loop B R)) & F R) + U (loop B R)]
+           div_defer_step[B, R]));
+    s0 : U (F (U (loop B R)) & F R) + U (loop B R) <- return (inl t);
+    return (thunkv nu_in < (nu_out (force f s0)).1, (nu_out (force f s0)).2 >)

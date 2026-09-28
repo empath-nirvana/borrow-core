@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 0.14 · 2026-09-28
+Version 0.15 · 2026-09-28
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -1086,6 +1086,15 @@ times and closes it if it has not finished: `driveE n` (§7) with the count a va
 the unary count of `n`, `div_nat`). Div code under it is total: `collatz_within` of
 `corpus/io-fuel.bc` is `total`, and a loop cut off hands its capabilities back.
 
+**Deferring a loop.** `div_defer[B, R] : U(F(U(Loop B R)) & F R) ⇒ U(Loop B R)` is the loop
+that runs nothing until it is first observed. Its argument has two observations: the first runs
+the code up to a loop and returns the loop, the second hands back the residual without running
+anything. It is `unfold` at `Loop B R` with the state "not started, with the code" or "started,
+with the loop": `next` before the start runs the code and observes its loop, `close` before the
+start takes the second observation. The surface block `{ S }` of a body `S` that loops is
+`div_defer` of `⟨S', abort⟩`, `S'` the body elaborated as a div body and `abort` handing back
+its residual (`corpus/sugar/surface-defer.bc`). Library code over `unfold`, like `div_bind`.
+
 **The outermost handler.** The runtime drives a `main` that returns a loop until it finishes
 (§11); it never closes it. Timeouts and cooperative yielding to a scheduler (#52) are further
 handlers of the same loops.
@@ -1235,6 +1244,14 @@ typed world, the model and the end-to-end theorems in `Core/Stdio.lean`, the che
 ---
 
 ## Changelog
+
+- **0.15** (2026-09-28) — Draft 0's expression layer (#54, stage 5 of
+  `docs/typed-elaboration.md`): `fn` and `main ->` declarations, `let` with patterns, `match`,
+  statements, forces `t!` and `f!(e)`, blocks and closures `{ … }`, borrow blocks and `modify`
+  with lifetime and unit elision, integer literals and operators at their operands' width, calls
+  of persistent functions without `unbang`, and n-ary tuples, in one grammar with the core,
+  elaborated into core. §14's `div_defer`: a block whose body loops runs nothing until it is
+  first observed. No kernel, rule or checker change.
 
 - **0.14** (2026-09-28) — §11, §14: a `main` with no externs may return a loop, which the runtime
   drives with no capabilities (`run_io`'s loop wrapper at `Caps = 1`, `ioMainOf`), so a `main`

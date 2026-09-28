@@ -1,0 +1,44 @@
+-- `corpus/io-wc.bc` in draft 0's surface (typed elaboration, stage 5): lines, words and bytes of
+-- the input. `fn`s are called without `unbang`, values are bound with `let`, literals and
+-- operators take their width from their operands, and the loop's state is inferred. `count` is
+-- div (it has a `for`), so is `main`, which calls it. Each lent capability comes back to its name.
+--
+-- Answer: `3 10 50` and (i32[3], (i32[10], i32[50])), as `corpus/io-wc.bc` (the same input and
+-- golden output).
+
+-- Space, tab or newline.
+fn is_space(b: i32) -> 1 + 1 =
+  match b == 32 {
+    inl _ -> match b == 10 { inl _ -> b == 9 | inr _ -> inr () }
+  | inr _ -> inr ()
+  }
+
+fn count(c: In) -> In * (i32 * (i32 * i32)) =
+  let lines = 0;
+  let words = 0;
+  let chars = 0;
+  let in_word : 1 + 1 = inl ();
+  for b in bytes c {
+    let chars = chars + 1;
+    let lines = match b == 10 { inl _ -> lines | inr _ -> lines + 1 };
+    match is_space(b) {
+      inl _ ->
+        let words = match in_word { inl _ -> words + 1 | inr _ -> words };
+        let in_word : 1 + 1 = inr ();
+        ()
+    | inr _ ->
+        let in_word : 1 + 1 = inl ();
+        ()
+    }
+  };
+  (c, (lines, (words, chars)))
+
+main -> i32 * (i32 * i32) =
+  let (lines, (words, chars)) = count(&stdin);
+  put_dec(&stdout, lines);
+  putb(&stdout, 32);
+  put_dec(&stdout, words);
+  putb(&stdout, 32);
+  put_dec(&stdout, chars);
+  putb(&stdout, 10);
+  (lines, (words, chars))

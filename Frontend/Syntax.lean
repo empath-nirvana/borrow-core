@@ -35,6 +35,9 @@ def Span.join (a b : Span) : Span := ⟨a.start, b.stop⟩
 
 def Pos.render (p : Pos) : String := s!"{p.line}:{p.col}"
 
+/-- `p` comes after `q` in the source. -/
+def Pos.later (p q : Pos) : Bool := p.line > q.line || (p.line == q.line && p.col > q.col)
+
 /-- A name at a binding or declaring occurrence. -/
 structure Ident where
   name : String
@@ -205,6 +208,44 @@ inductive Const where
   | arrayForget (a : Life) (A : VTy)
   deriving DecidableEq, Repr
 
+/-- A binary operator of the surface (draft 0 §2.12), resolved by the width of its operands. -/
+inductive SurfOp where
+  | add | sub | mul | eq | ne | lt | le | gt | ge
+  deriving DecidableEq, Repr, Inhabited
+
+def SurfOp.str : SurfOp → String
+  | .add => "+" | .sub => "-" | .mul => "*" | .eq => "==" | .ne => "!=" | .lt => "<"
+  | .le => "<=" | .gt => ">" | .ge => ">="
+
+/-- The kinds of borrow block (draft 0 §2.6). -/
+inductive BorrowKind where
+  /-- `borrow imm r { … }`: `withbor1`. -/
+  | imm
+  /-- `borrow mut r { … }`: `withbor2`. -/
+  | mut
+  /-- `borrow mut (r₁, r₂) { … }`: `withbor_f2_mut`, a family of two cells at one lifetime. -/
+  | famMut
+  /-- `modify m { … }`: `withswap`. -/
+  | modify
+  deriving DecidableEq, Repr, Inhabited
+
+/-- A surface form that needs types to elaborate (docs/typed-elaboration.md §5): a leaf, applied
+to its operands as values, and elaborated to core by the typed pass of `Frontend/Sugar.lean`. -/
+inductive VSugar where
+  /-- An integer literal, `i32` or `i64` by the type expected of it (`i32` by default). -/
+  | lit (n : Nat)
+  /-- A binary operator, applied to a pair of operands. -/
+  | op (o : SurfOp)
+  /-- A constant written without its bracket arguments, `alloc(e)`, `free(e)`, `swap(c, e)`,
+  applied to its operands. -/
+  | call (k : String)
+  /-- `{ S }`: applied to the thunk it marks. A block whose body loops runs nothing until the
+  loop is first observed (`div_defer`). -/
+  | brace
+  /-- A borrow block at the lifetime `'x`, applied to the place and then to the callback. -/
+  | borrow (k : BorrowKind) (x : String)
+  deriving DecidableEq, Repr, Inhabited
+
 mutual
 /-- Value-judged expressions (syntax-core §6.1), checked at a value type. -/
 inductive Val where
@@ -245,6 +286,8 @@ inductive Val where
   | shorten (sp : Span) (m : Mode) (σ : Shape) (a : Life) (V : Val)
   /-- `&x`: lend the capability `x` to one call, elaborated away before checking (SPEC §11). -/
   | lend (sp : Span) (x : Ident)
+  /-- A surface form that needs types, elaborated away before checking. -/
+  | sugar (sp : Span) (s : VSugar)
 
 /-- Computations (syntax-core §6.2), checked at a computation type. -/
 inductive Comp where
@@ -430,6 +473,7 @@ def Val.strip : Val → Val
   | .const _ c => .const .none c.strip
   | .shorten _ m σ a V => .shorten .none m σ.strip a.strip V.strip
   | .lend _ x => .lend .none x.strip
+  | .sugar _ s => .sugar .none s
 
 def Comp.strip : Comp → Comp
   | .ret _ V => .ret .none V.strip
@@ -467,7 +511,7 @@ def Val.span : Val → Span
   | .thunk sp _ | .thunkv sp _ | .bangThunk sp _ | .bangThunkv sp _ | .unbang sp _
   | .boxed sp _ _ | .unbox sp _ | .sub sp _ _ | .roll sp _ | .unroll sp _ | .run sp _
   | .app sp _ _ | .inst sp _ _ | .ascribe sp _ _ | .const sp _ | .shorten sp _ _ _ _
-  | .lend sp _ => sp
+  | .lend sp _ | .sugar sp _ => sp
 
 /-- The span of a computation. -/
 def Comp.span : Comp → Span

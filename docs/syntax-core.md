@@ -289,8 +289,9 @@ into a λ at its type. For example, a `U (delay A)` from `f : U (S -o delay A)` 
   `let … = V; M`, `fun`, `Fun`, `thunk`, `thunkv`, `!thunk` and `!thunkv`. The extent ends
   at the enclosing `)`, `}` or `>`, at the `|` before the next `case` arm, or at the `,` between
   `<M, N>`'s components. So inside a `case` arm or a `<,>` component, a chain of `x <- …;`
-  belongs to that arm or component. `;` belongs to a binding form; there is no free-standing
-  sequencing `M; N` (write `u <- M; let () = u; N`).
+  belongs to that arm or component. In the core forms `;` belongs to a binding form. The
+  surface's statements add `M; N` and a value as a computation (`docs/surface-cbpv.md`,
+  decision 37).
 - **Spines.** An atom followed by suffixes associates left: argument atoms, `.1`, `.2`,
   `[@]`. So `force f s .1` is `((force f) s).1`.
 - **`force x` is an atom**, because it takes only a variable. `force f s` is `(force f) s`.

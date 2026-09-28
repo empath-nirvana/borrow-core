@@ -1,2 +1,0 @@
--- expect: 2:14: expected a computation, found name `x`
-main : F 1 = x

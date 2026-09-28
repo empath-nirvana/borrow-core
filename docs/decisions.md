@@ -193,3 +193,24 @@ Each entry: the decision, and why. Newest last.
       It now covers any callback whose type inference knows: locals, returned callbacks, and
       closures (elaborated as div bodies when they loop), at parameter types only.
     - A copy made by specialization is named `h__k`.
+37. **Draft 0's surface is the core's grammar, extended** (typed elaboration, stage 5; the user's
+    decisions 1–7 in `docs/typed-elaboration.md` §8). One grammar and one `.bc` file type:
+    the surface forms and the core forms mix freely. A surface form that needs no type is
+    desugared by the parser into core at its own spans (`let` with patterns, `match`, `e;`, a
+    tail expression, forces, the rebinding of a borrowed place, `fn`); one that needs types is a
+    `Val.sugar` node that the elaborator turns into core with every bracket argument written
+    (literals, operators, `alloc(e)`/`free(e)`/`swap(c, e)`, blocks and closures, borrow blocks).
+    The checker sees only core. Draft 0 is followed except:
+    - a call `f(e)` of a persistent function has `unbang` inserted by type, so `f(e)` is also
+      the core application `f e`, parenthesized; a call of a constant is `alloc(e)`, with its
+      brackets filled, only for `alloc`, `free` and `swap`;
+    - `(V₁, …, Vₙ)` is the right-nested tuple, for n-ary calls; bare sequencing `M; N` and a
+      value as a computation, which draft 1 of the core syntax rejected, are statements;
+    - a borrow block on a named place rebinds the place, as `&c` does (§5.1 of the note);
+    - unit elision is at `modify`'s body and at the result of a block used as a statement;
+    - `x <- e` with `e` a value is allowed (`<-` is required for forces, not reserved to them);
+    - not yet provided: lifetime parameters of `fn` (`fn f<'a>`, written as a core `def`),
+      `reborrow`, `load` and `*v`, the family borrow `imm`, codata construction and observation
+      (`loop f from e`, `.next`, `.close`), fold blocks, `|>`, `if`, `let mut`, `&mut`, and the
+      operators `& | ^ << >>` and unsigned comparisons (a host operation is called like a
+      function: `host[lt_u32] (a, b)`).

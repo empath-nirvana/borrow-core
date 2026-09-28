@@ -144,13 +144,13 @@ main : F 1 = return (putb (&stdout, i32[10]))
 -- expect: 1:59: unknown variable `stdout`
 ```
 
-and a lent capability must come back through a binding:
+and a lent capability must come back through a binding (a `let` is one: the call's result after
+the capability is what it binds), not a `case`'s scrutinee:
 
 ```bc,reject
 main : F 1 =
-  let (a, b) = (putb (&stdout, i32[104]));
-  return b
--- expect: 2:23: `&stdout` lends a capability to one call: it may appear only in the head `M` of `y <- M; N` (SPEC §11)
+  case putb (&stdout, i32[104]) { inl u -> return () | inr u -> return () }
+-- expect: 2:14: `&stdout` lends a capability to one call: it may appear only in the head `M` of `y <- M; N` (SPEC §11)
 ```
 
 ## What the sugar means

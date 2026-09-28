@@ -853,6 +853,18 @@ capabilities. `IORun.loop_every_run` is stated at the checked wrapper and covers
 Pair: `corpus/sugar/loop-main.bc`, whose core form on `main` before this stage ran once and
 printed `<fun>`.
 
+**Stage 5, as built.** Draft 0's expression layer is in the one grammar (decision 37 of
+`docs/decisions.md` lists what it follows and what it defers). The parser desugars the forms
+that need no type; `Val.sugar` nodes carry the rest, and `surfDecl`/`surfV`/`surfC` in
+`Sugar.lean` elaborate them on types, before specialization and divergence. `TCx` tracks the
+lifetime binders it enters (`pushLife`), so a borrow block's body is typed at its lifetime and its
+type arguments are printed by name. `{ S }` of a body that loops is `div_defer` (decision 2),
+ascribed its loop type so that it is a loop value, not a call run in direct style. Pairs:
+`corpus/sugar/surface-fn.bc`, `surface-ops.bc`, `surface-closure.bc`, `surface-defer.bc`,
+`surface-borrow.bc`. Surface versions of three corpus programs run with the same goldens and the
+same counts: `corpus/surface/family-swap.bc` (19 core lines, 7 surface), `io-wc.bc` (46, 33),
+`io-upper.bc` (11, 5).
+
 Stages 1–4 retire the #54 shortcuts and change no surface syntax, except that `&c` stays until
 stage 6. Stages 5–9 are the rest of step 2. After stage 9, step 3 of #54 (rewriting 6–10 corpus
 programs and measuring) can start.

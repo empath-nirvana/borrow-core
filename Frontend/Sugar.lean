@@ -72,7 +72,7 @@ def _root_.Frontend.Val.elab (lend : Bool) : Val → Except Error Val
   | .bangThunk sp M => return .bangThunk sp (← M.elab false)
   | .bangThunkv sp M => return .bangThunkv sp (← M.elab false)
   | .run sp M => return .run sp (← M.elab false)
-  | V@(.var ..) | V@(.defApp ..) | V@(.unit ..) | V@(.const ..) => pure V
+  | V@(.var ..) | V@(.defApp ..) | V@(.unit ..) | V@(.const ..) | V@(.sugar ..) => pure V
 
 /-- Elaborate `&c` in a computation: in `x <- M; N`, one `&c` in `M` becomes
 `io_lend <- M[c/&c]; let (c, x) = io_lend; N`. With `lend`, the computation is such a head, and
@@ -229,7 +229,7 @@ Everything here is decided by types (`Frontend.Elab.TCx`, docs/typed-elaboration
 -/
 
 open Frontend.Elab (TCx loopOf iterOf loopFnOf spineT tupleT ppT toSurface Class)
-open Frontend.Check (CVTy)
+open Frontend.Check (CVTy CCTy)
 
 /-- A function returning a loop, as written: `A => U (loop B R)` or `!(A => U (loop B R))` (a
 `delay B` is `loop B 1`): its `B` and `R`. Specialization reads it off a parameter's type. -/
@@ -922,6 +922,292 @@ def argAt (c : TCx) : CVTy → Val → DM (Val × Option CVTy)
     pure (.pair sp V' W', do pure (.tensor (← a) (← b)))
   | P, V => closureAt c P V
 
+/-! ### The surface forms that need types  `[#54, docs/typed-elaboration.md §5]`
+
+Draft 0's surface (docs/surface-cbpv.md) is parsed into core, with the forms that need types left
+as `Val.sugar` nodes (`Frontend/Parser.lean`). They are elaborated here, on the types inference
+gives (`TCx`), into core with every bracket argument written:
+
+* **Literals** are `i32[n]`, or `i64[n]` where an `i64` is expected.
+* **Operators** `+ - * == != < <= > >=` are the host operation at the width of their operands:
+  `add32` or `add64`, …, `lt_s32`, …; a comparison returns `1 + 1`, `inr ()` for true.
+* **`alloc(e)`, `free(e)`, `swap(c, e)`** are the constants with their type arguments read off
+  their operands.
+* **A call `f(e)` of a persistent function** `f : !(A => B)` is `(unbang f) e`: `!` is not a
+  shift, and `unbang` erases.
+* **A closure `{ x -> S }`** takes its parameter's type from the function type expected of it.
+* **A block `{ S }`** is `thunk S`; when `S` loops, it is the loop that runs `S` at its first
+  observation and not before, `div_defer[B, R] (thunkv < S', abort >)` (SPEC §14, decision 2 of
+  typed elaboration), `abort` handing back the residual without running anything.
+* **Borrow blocks** `borrow imm r { 'x, b -> S }` (`withbor1`), `borrow mut r { … }` (`withbor2`),
+  `borrow mut (r₁, r₂) { 'c, (m₁, m₂) -> S }` (`withbor_f2_mut`) and `modify m { x -> S }`
+  (`withswap`) take their type arguments from the place and the body, and the body's tail is
+  boxed at the lifetime (`boxed['x]`). `modify`'s body returns the new content and a result, or
+  the new content alone, which is the new content and `()` (unit elision). The parser has already
+  rebound the place where the block is bound or a statement.
+-/
+
+/-- The host operation of a surface operator at a width. -/
+def _root_.Frontend.SurfOp.host (w : BoCa.Width) : SurfOp → BoCa.HostOp
+  | .add => .bin w .add | .sub => .bin w .sub | .mul => .bin w .mul
+  | .eq => .rel w .eq | .ne => .rel w .ne | .lt => .rel w .lt_s | .le => .rel w .le_s
+  | .gt => .rel w .gt_s | .ge => .rel w .ge_s
+
+/-- The width of an integer type. -/
+def widthOf : Option CVTy → Option BoCa.Width
+  | some (.int w) => some w
+  | _ => none
+
+/-- A literal at a width. -/
+def litAt (sp : Span) (w : BoCa.Width) (n : Nat) : Val :=
+  .const sp (.lit (match w with | .w32 => .i32 (UInt32.ofNat n) | .w64 => .i64 (UInt64.ofNat n)))
+
+def isHoleTy : VTy → Bool
+  | .name _ "_" => true
+  | _ => false
+
+/-- A value or a type that must be known here. -/
+def need {α} (sp : Span) (what : String) : Option α → DM α
+  | some a => pure a
+  | none => throw ⟨sp, s!"the type of {what} is not determined here: ascribe it"⟩
+
+/-- The body `S` of a block with its tail values boxed at `'x`: a tail value is bound first, so
+that what it computes from the borrow is not inside the box (`boxI`'s context outlives `'x`). -/
+def boxTail (x : String) (S : Comp) : Comp :=
+  wrapTail (fun
+    | .ret sp V@(.var ..) | .ret sp V@(.unit _) => .ret sp (.boxed sp (.var sp x) V)
+    | T => .bind T.span ⟨"io_bx", T.span⟩ none T
+        (.ret T.span (.boxed T.span (.var T.span x) (.var T.span "io_bx"))) false) S
+
+/-- The body `S` of `modify` returning the new content alone, with `()` for the result. -/
+def unitTail (S : Comp) : Comp :=
+  wrapTail (fun
+    | .ret sp V => .ret sp (.pair sp V (.unit sp))
+    | T => .bind T.span ⟨"io_mv", T.span⟩ none T
+        (.ret T.span (.pair T.span (.var T.span "io_mv") (.unit T.span))) false) S
+
+/-- The result type of a computation, as its tail gives it. -/
+def resultOfC : Option CCTy → Option CVTy
+  | some (.ret A) => some A
+  | _ => none
+
+mutual
+/-- A value with its surface forms elaborated; `exp` is the type expected of it, when known. -/
+def surfV : Nat → TCx → Option CVTy → Val → DM Val
+  | 0, _, _, V => pure V
+  | n + 1, c, exp, V => match V with
+    | .sugar sp (.lit k) => pure (litAt sp ((widthOf exp).getD .w32) k)
+    | .app sp (.sugar osp (.op o)) (.pair psp a b) => do
+      let arith := match o with | .add | .sub | .mul => true | _ => false
+      -- The width: expected of an arithmetic result, or an operand's; `i32` by default.
+      let a₀ ← surfV n c none a
+      let b₀ ← surfV n c none b
+      let w := ((if arith then widthOf exp else none).orElse fun _ =>
+        (widthOf (c.tyV a₀)).orElse fun _ => widthOf (c.tyV b₀)).getD .w32
+      let a' ← surfV n c (some (.int w)) a
+      let b' ← surfV n c (some (.int w)) b
+      pure (.app sp (.unbang osp (.const osp (.host (o.host w)))) (.pair psp a' b'))
+    | .app sp (.sugar ksp (.call k)) W => do
+      let W' ← surfV n c none W
+      match k, W' with
+      | "alloc", W' => do
+        let A ← need W.span "`alloc`'s argument" (c.tyV W')
+        pure (.app sp (.const ksp (.alloc (← c.surface ksp A))) W')
+      | "free", W' => do
+        let A ← match c.tyV W' with
+          | some (.ref A) => pure A
+          | _ => throw ⟨W.span, "`free` takes a cell, `ref A`"⟩
+        pure (.app sp (.const ksp (.free (← c.surface ksp A))) W')
+      | "swap", .pair _ r v => do
+        let A ← match c.tyV r with
+          | some (.ref A) => pure A
+          | _ => throw ⟨W.span, "`swap` takes a cell, `ref A`, and a value"⟩
+        let B ← need W.span "`swap`'s value" (c.tyV v)
+        pure (.app sp (.app sp (.const ksp (.swap (← c.surface ksp A) (← c.surface ksp B))) r) v)
+      | k, _ => throw ⟨ksp, s!"`{k}` is written with its arguments: `{k}(…)`"⟩
+    | .app sp (.sugar _ .brace) (.thunk tsp M) => do
+      let c' := c.pushDead
+      let M' ← surfC n c' none M
+      if (loopsAt c' none M').isNone then return .thunk tsp M'
+      -- A block whose body loops: the loop that runs it at its first observation.
+      let B ← match exp.bind loopOf with
+        | some (B, _) => pure B
+        | none => need sp "the block's result" ((resultOfC (c.tyC M')).map Frontend.Elab.direct)
+      let cx ← (loopCxOf sp B M' : Except Error LoopCx)
+      let M'' ← (loopBody cx divFuel c M' : SM Comp)
+      let abort ← (template sp "a block that loops (`div_defer`)" s!"return {cx.rSrc}" : SM Comp)
+      modify fun st => { st with any := true }
+      let Bs ← c.surface sp B
+      let Rs ← c.surface sp cx.R
+      -- Ascribed its loop type, it is the loop as a value, not a call run in direct style.
+      pure (.ascribe sp (.app sp (.defApp sp "div_defer" [Bs, Rs]) (.thunkv sp (.with_ sp M'' abort)))
+        (.thunk sp (.loop sp Bs Rs)))
+    | .app sp (.sugar _ .brace) (.bangThunk tsp M) => do
+      pure (.bangThunk tsp (← surfC n c.pushDead none M))
+    | .app sp (.app sp₂ (.sugar ksp (.borrow k x)) P) (.thunkv tsp (.lam lsp b _ S)) => do
+      let P' ← surfV n c none P
+      let tP ← need P.span "the borrowed place" (c.tyV P')
+      match k, tP with
+      | .imm, .ref A | .mut, .ref A => do
+        let dom ← need lsp "the block's bound" (c.elabL (.dom lsp))
+        let c₁ := c.pushLife x dom
+        let some v := c₁.E.lenv.lookup x | throw ⟨lsp, "internal error: a borrow block"⟩
+        let Tb : CVTy := if k == .imm then .imm (.var v) A else .mut (.var v) A
+        let S' ← surfC n (c₁.push b.name (some Tb)) none S
+        let B ← need tsp "the block's result" (resultOfC ((c₁.push b.name (some Tb)).tyC S'))
+        let As ← c.surface ksp A
+        let Bs ← c.surface ksp B
+        let xi : Ident := ⟨x, ksp⟩
+        let C := if k == .imm then Const.withbor1 xi As Bs else .withbor2 xi (.top ksp) As Bs
+        let Tbs := if k == .imm then VTy.imm lsp (.var lsp x) As else .mut lsp (.var lsp x) As
+        pure (.app sp (.app sp₂ (.const ksp C) P') (.thunkv tsp (.lamL lsp xi (.dom lsp)
+          (.ret lsp (.thunkv lsp (.lam lsp b Tbs (boxTail x S')))))))
+      | .famMut, .tensor (.ref A) (.ref B) => do
+        let dom ← need lsp "the block's bound" (c.elabL (.dom lsp))
+        let c₁ := c.pushLife x dom
+        let some v := c₁.E.lenv.lookup x | throw ⟨lsp, "internal error: a borrow block"⟩
+        let Tb : CVTy := .tensor (.mut (.var v) A) (.mut (.var v) B)
+        let S' ← surfC n (c₁.push b.name (some Tb)) none S
+        let T ← need tsp "the block's result" (resultOfC ((c₁.push b.name (some Tb)).tyC S'))
+        let As ← c.surface ksp A
+        let Bs ← c.surface ksp B
+        let Ts ← c.surface ksp T
+        let xi : Ident := ⟨x, ksp⟩
+        let C := Const.withborF2Mut xi ⟨x ++ "_a", ksp⟩ ⟨x ++ "_b", ksp⟩ (.top ksp) As Bs Ts
+        let Tbs := VTy.tensor lsp (.mut lsp (.var lsp x) As) (.mut lsp (.var lsp x) Bs)
+        pure (.app sp (.app sp₂ (.const ksp C) P') (.thunkv tsp (.lamL lsp xi (.dom lsp)
+          (.ret lsp (.thunkv lsp (.lam lsp b Tbs (boxTail x S')))))))
+      | .modify, .mut a A => do
+        let S' ← surfC n (c.push b.name (some A)) none S
+        let X ← need tsp "`modify`'s body" (resultOfC ((c.push b.name (some A)).tyC S'))
+        let (S'', B) := match X with
+          | .tensor A' B => if A' = A then (S', B) else (unitTail S', .unit)
+          | _ => (unitTail S', .unit)
+        let C := Const.withswap (← c.surfaceL ksp a) (← c.surface ksp A) (← c.surface ksp B)
+        pure (.app sp (.app sp₂ (.const ksp C) P')
+          (.thunkv tsp (.lam lsp b (← c.surface lsp A) S'')))
+      | _, _ => throw ⟨P.span, s!"this borrow block's place has type `{ppT tP}`: `borrow imm`/" ++
+          "`borrow mut` take a cell `ref A` (a pair of cells for a family), `modify` a `mut` borrow"⟩
+    | .app sp f W => do
+      let f' ← surfV n c none f
+      let tf := c.tyV f'
+      let (f', pW) := match tf with
+        | some (.bang (.thunk (.arr A _))) => (Val.unbang f.span f', some A)
+        | some (.thunk (.arr A _)) => (f', some A)
+        | _ => (f', none)
+      pure (.app sp f' (← surfV n c pW W))
+    | .thunkv sp (.lam lsp x A M) =>
+      if isHoleTy A then do
+        let (A', C) ← match exp with
+          | some (.thunk (.arr A' C)) => pure (A', C)
+          | _ => throw ⟨lsp, s!"the type of the closure's parameter `{x.name}` is not " ++
+              "determined here: pass it where a function type is expected, or write `thunkv fun`"⟩
+        pure (.thunkv sp (.lam lsp x (← c.surface lsp A') (← surfC n (c.push x.name (some A')) (some C) M)))
+      else do pure (.thunkv sp (← surfC n c (exp.bind fun | .thunk C => some C | _ => none) (.lam lsp x A M)))
+    | .bangThunkv sp (.lam lsp x A M) =>
+      if isHoleTy A then do
+        let (A', C) ← match exp with
+          | some (.bang (.thunk (.arr A' C))) => pure (A', C)
+          | _ => throw ⟨lsp, s!"the type of the closure's parameter `{x.name}` is not " ++
+              "determined here: pass it where a function type is expected, or write `!thunkv fun`"⟩
+        pure (.bangThunkv sp (.lam lsp x (← c.surface lsp A') (← surfC n (c.push x.name (some A')) (some C) M)))
+      else do
+        pure (.bangThunkv sp (← surfC n c (exp.bind fun | .bang (.thunk C) => some C | _ => none)
+          (.lam lsp x A M)))
+    | .pair sp V W => do
+      let (a, b) := match exp with
+        | some (.tensor A B) => (some A, some B)
+        | _ => (none, none)
+      pure (.pair sp (← surfV n c a V) (← surfV n c b W))
+    | .inl sp V => do pure (.inl sp (← surfV n c (match exp with | some (.sum A _) => some A | _ => none) V))
+    | .inr sp V => do pure (.inr sp (← surfV n c (match exp with | some (.sum _ B) => some B | _ => none) V))
+    | .ascribe sp V A => do pure (.ascribe sp (← surfV n c (c.elabV A) V) A)
+    | .unbang sp V => do pure (.unbang sp (← surfV n c (exp.map .bang) V))
+    | .boxed sp l V => do pure (.boxed sp l (← surfV n c none V))
+    | .unbox sp V => do pure (.unbox sp (← surfV n c none V))
+    | .sub sp V l => do pure (.sub sp (← surfV n c none V) l)
+    | .roll sp V => do
+      let e := match exp with
+        | some (.mu A) => some (BoCa.Fig16.LogRel.Core.VTy.inst (.mu A) A)
+        | _ => none
+      pure (.roll sp (← surfV n c e V))
+    | .unroll sp V => do pure (.unroll sp (← surfV n c none V))
+    | .inst sp V l => do pure (.inst sp (← surfV n c none V) l)
+    | .shorten sp m σ l V => do pure (.shorten sp m σ l (← surfV n c none V))
+    | .thunk sp M => do
+      pure (.thunk sp (← surfC n c.pushDead (exp.bind fun | .thunk C => some C | _ => none) M))
+    | .thunkv sp M => do
+      pure (.thunkv sp (← surfC n c (exp.bind fun | .thunk C => some C | _ => none) M))
+    | .bangThunk sp M => do
+      pure (.bangThunk sp (← surfC n c.pushDead (exp.bind fun | .bang (.thunk C) => some C | _ => none) M))
+    | .bangThunkv sp M => do
+      pure (.bangThunkv sp (← surfC n c (exp.bind fun | .bang (.thunk C) => some C | _ => none) M))
+    | .run sp M => do pure (.run sp (← surfC n c (exp.map .ret) M))
+    | V => pure V
+
+/-- A computation with its surface forms elaborated; `exp` is its type, when known. -/
+def surfC : Nat → TCx → Option CCTy → Comp → DM Comp
+  | 0, _, _, M => pure M
+  | n + 1, c, exp, M => match M with
+    | .ret sp V => do pure (.ret sp (← surfV n c (match exp with | some (.ret A) => some A | _ => none) V))
+    | .absurd sp V => do pure (.absurd sp (← surfV n c (some .zero) V))
+    | .bind sp x A M N lin => do
+      let M' ← surfC n c ((A.bind c.elabV).map .ret) M
+      let N' ← surfC n (c.push x.name (bindTy c A M')) exp N
+      pure (.bind sp x A M' N' lin)
+    | .lam sp x A M => do
+      let (A', C) := match exp with
+        | some (.arr A' C) => (some A', some C)
+        | _ => (c.elabV A, none)
+      let As ← if isHoleTy A then c.surface sp (← need sp s!"`{x.name}`" A') else pure A
+      pure (.lam sp x As (← surfC n (c.push x.name (c.elabV As)) C M))
+    | .app sp M x => do pure (.app sp (← surfC n c none M) x)
+    | .with_ sp M N => do
+      let (a, b) := match exp with
+        | some (.amp C D) => (some C, some D)
+        | _ => (none, none)
+      pure (.with_ sp (← surfC n c.pushDead.pushDead a M) (← surfC n c.pushDead.pushDead b N))
+    | .proj sp i M => do pure (.proj sp i (← surfC n c none M))
+    | .letUnit sp V M => do pure (.letUnit sp (← surfV n c (some .unit) V) (← surfC n c exp M))
+    | .letPair sp x y V M => do
+      let V' ← surfV n c none V
+      let (Ax, Ay) := pairTys c V'
+      pure (.letPair sp x y V' (← surfC n ((c.push x.name Ax).push y.name Ay) exp M))
+    | .case sp V x M y N => do
+      let V' ← surfV n c none V
+      let (Ax, Ay) := sumTys c V'
+      pure (.case sp V' x (← surfC n (c.push x.name Ax) exp M) y (← surfC n (c.push y.name Ay) exp N))
+    | .lamL sp x b M => do
+      let bl := (c.elabL b).getD .top
+      let e := match exp with | some (.all _ _ C) => some C | _ => none
+      pure (.lamL sp x b (← surfC n (c.pushLife x.name bl) e M))
+    | .inst sp M a => do pure (.inst sp (← surfC n c none M) a)
+    | .nuIn sp M => do pure (.nuIn sp (← surfC n c (exp.bind fun | .nu B => some B.unroll | _ => none) M))
+    | .nuOut sp M => do pure (.nuOut sp (← surfC n c none M))
+    | .ascribe sp M C => do pure (.ascribe sp (← surfC n c (c.E.elabC c.Δ C).toOption M) C)
+    | .for_ sp x V M N => do
+      let V' ← surfV n c none V
+      let el := (c.tyV V').bind iterOf |>.map (·.1)
+      pure (.for_ sp x V' (← surfC n (c.push x.name el) none M) (← surfC n c exp N))
+    | M => pure M
+end
+
+/-- A declaration with its surface forms elaborated, in the context the checker checks it in. -/
+def surfDecl : Nat → Decl → DM Decl
+  | n, .def_ sp nm ps A V mk => do
+    let st ← get
+    let c := TCx.ofScope (st.lib ++ st.out) false
+    pure (.def_ sp nm ps A (← surfV n c (c.elabV A) V) mk)
+  | n, .main sp C M => do
+    let st ← get
+    let caps := capNames.map fun x => Decl.extern Span.none ⟨x, Span.none⟩ (capTy Span.none x)
+    let c := TCx.ofScope (st.lib ++ st.out ++ caps) true
+    let exp := match (c.E.elabC c.Δ C).toOption with
+      | some (.ret A) => some (BoCa.Fig16.LogRel.Core.CTy.ret A)
+      | e => e
+    pure (.main sp C (← surfC n c exp M))
+  | _, d => pure d
+
 mutual
 /-- Elaborate one declaration: first the copies its calls need (each elaborated the same way),
 then its own divergence, with its calls renamed to the copies.  `[spec §14]` -/
@@ -929,6 +1215,7 @@ def elabDecl : Nat → DivSt → Decl → SM DivSt
   | 0, _, d => throw ⟨(match d with | .def_ sp .. | .main sp .. => sp | _ => Span.none),
       "specialization at callback types does not terminate"⟩
   | fuel + 1, st, d => do
+    let (d, st) ← (surfDecl divFuel d).run st
     let (d, st) ← (specDecl fuel d).run st
     let (d', e) ← elabDef (st.lib ++ st.out) d
     let elaborated := e.isSome && decide (d' ≠ d)
@@ -1071,7 +1358,7 @@ def elaborateS (p : Program) : SM (Program × Nat) := do
   -- its functions. They are emitted below only when the program uses them. The capabilities are
   -- in scope for typing `main`, which may use them ambiently.
   let mayIO := !(ambientCaps p).isEmpty
-  let mayDiv := usesName "div_fuel" p || usesName "div_bind" p
+  let mayDiv := usesName "div_fuel" p || usesName "div_bind" p || usesName "div_defer" p
   let ioAll ← if mayIO then libOf "lib/io.bc" ioLibrary else pure []
   let divAll ← if mayDiv then libOf "lib/div.bc" divLibrary else pure []
   let typing := ioAll ++ divAll
@@ -1087,7 +1374,8 @@ def elaborateS (p : Program) : SM (Program × Nat) := do
     | some (C@(.ret _ B), M) => !C.returnsLoop && (loopsAt mc (mc.elabV B) M).isSome
     | _ => false
   let cs := ambientCaps p
-  let needDiv := anyDiv || mainLoops || usesName "div_fuel" p || usesName "div_bind" p
+  let needDiv := anyDiv || mainLoops || usesName "div_fuel" p || usesName "div_bind" p ||
+    usesName "div_defer" p
   let ioLib ← if cs.isEmpty then pure [] else
     if mayIO then pure ioAll else libOf "lib/io.bc" ioLibrary
   let divLib ← if needDiv then

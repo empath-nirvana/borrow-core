@@ -1,0 +1,11 @@
+-- `surface-ops.bc` written by hand in core: each operator its host operation at 32 or 64 bits.
+def mix : !(i32 * i64 => i64 * (1 + 1)) =
+  !thunkv fun (p : i32 * i64) ->
+    let (a, b) = p;
+    c <- return ((unbang host[sub32])
+      ((unbang host[add32]) ((unbang host[mul32]) (a, i32[2]), i32[1]), a));
+    return ((unbang host[add64]) ((unbang host[mul64]) (b, i64[10]), i64[7]),
+            (unbang host[lt_s32]) (c, i32[5]))
+
+main : F ((i64 * (1 + 1)) * (1 + 1)) =
+  return ((unbang mix) (i32[3], i64[4]), (unbang host[ge_s32]) (i32[2], i32[3]))

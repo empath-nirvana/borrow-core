@@ -1,6 +1,7 @@
 import Frontend.Elab.Infer
 import Frontend.Parser
 import Frontend.Print
+import Frontend.Elab.Respan
 
 /-!
 # Frontend — Elab — typing contexts and metavariables  `[#54, docs/typed-elaboration.md §2]`
@@ -34,10 +35,18 @@ structure TCx where
   T : List CVTy
   /-- The variables the body has bound so far, newest first, with their types when known. -/
   locals : List (String × Option CVTy) := []
+  /-- The lifetime context: the `Fun` binders entered, as the checker numbers them. -/
+  Δ : LifeCtx := LifeCtx.empty
 
 /-- Bind `x : A` (`A` unknown when `none`). -/
 def TCx.push (c : TCx) (x : String) (A : Option CVTy) : TCx :=
   { c with E := c.E.push (some x), T := A.getD .unit :: c.T, locals := (x, A) :: c.locals }
+
+/-- Enter `Fun 'x < @b`, as the checker does: a dead slot, `'x` named, `Δ` extended. -/
+def TCx.pushLife (c : TCx) (x : String) (b : BoCa.Lifetime.Life) : TCx :=
+  let v := c.Δ.freshVar
+  { c with E := { c.E.push none with lenv := (x, v) :: c.E.lenv }, T := .unit :: c.T,
+           Δ := c.Δ.extend v b }
 
 /-- A slot with no name: a dead binder of the checker (`thunk M`, `<M, N>`, `Fun`). -/
 def TCx.pushDead (c : TCx) : TCx := { c with E := c.E.push none, T := .unit :: c.T }
@@ -48,18 +57,21 @@ def TCx.ofScope (scope : List Decl) (all : Bool) : TCx :=
   let ds := scope.toArray
   let xs := externsBefore ds ds.size
   let vars := (xs.map (fun (x, B) => if all || B.persistent then some x else none)).reverse
-  ⟨Env.mk ⟨ds, ds.size⟩ vars [] [] [] xs.length, (xs.map (·.2)).reverse, []⟩
+  { E := Env.mk ⟨ds, ds.size⟩ vars [] [] [] xs.length, T := (xs.map (·.2)).reverse }
 
 /-- A written type, elaborated. -/
-def TCx.elabV (c : TCx) (A : VTy) : Option CVTy := (c.E.elabV LifeCtx.empty A).toOption
+def TCx.elabV (c : TCx) (A : VTy) : Option CVTy := (c.E.elabV c.Δ A).toOption
+
+/-- A written lifetime, elaborated. -/
+def TCx.elabL (c : TCx) (a : Frontend.Life) : Option BoCa.Lifetime.Life := (c.E.elabL c.Δ a).toOption
 
 /-- The type inference synthesizes for a value. -/
 def TCx.tyV (c : TCx) (V : Val) : Option CVTy :=
-  ((inferV inferFuel c.E LifeCtx.empty c.T none V).run' 0).ty.v?
+  ((inferV inferFuel c.E c.Δ c.T none V).run' 0).ty.v?
 
 /-- The type inference synthesizes for a computation. -/
 def TCx.tyC (c : TCx) (M : Comp) : Option CCTy :=
-  ((inferC inferFuel c.E LifeCtx.empty c.T none M).run' 0).ty.c?
+  ((inferC inferFuel c.E c.Δ c.T none M).run' 0).ty.c?
 
 /-! ### Loops and iterators -/
 
@@ -101,6 +113,22 @@ def toSurface (sp : Span) (A : CVTy) : Except Error VTy := do
   match parseProgram s!"type IoT = {ppT A}\n" with
   | .ok ⟨[.type _ _ B]⟩ => pure B
   | _ => throw ⟨sp, s!"internal error: the type `{ppT A}` does not print as surface syntax"⟩
+
+/-- A type as surface syntax in a context, its lifetimes by the names the context gives them. -/
+def TCx.surface (c : TCx) (sp : Span) (A : CVTy) : Except Error VTy := do
+  let src := ppV c.E.lenv 0 0 A
+  match parseProgram s!"type IoT = {src}\n" with
+  | .ok ⟨[.type _ _ B]⟩ => pure (B.respan sp)
+  | _ => throw ⟨sp, s!"internal error: the type `{src}` does not print as surface syntax"⟩
+
+/-- A lifetime as surface syntax in a context. -/
+def TCx.surfaceL (c : TCx) (sp : Span) : BoCa.Lifetime.Life → Except Error Frontend.Life
+  | .var v => match c.E.lenv.find? (·.2 == v) with
+    | some (x, _) => pure (.var sp x)
+    | none => throw ⟨sp, "internal error: a lifetime with no name"⟩
+  | .top => pure (.top sp)
+  | .meet a b => do pure (.meet sp (← c.surfaceL sp a) (← c.surfaceL sp b))
+  | .join a b => do pure (.join sp (← c.surfaceL sp a) (← c.surfaceL sp b))
 
 /-! ### Lent capabilities -/
 

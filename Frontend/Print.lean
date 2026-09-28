@@ -117,7 +117,15 @@ def Const.pp (c : Const) : String :=
   let (k, as) := c.toArgs
   if as.isEmpty then k.str else k.str ++ "[" ++ ", ".intercalate (as.map Arg.pp) ++ "]"
 
+/-- A closure `{ x -> M }` of the surface: its binder's type is a hole. -/
+def isHole : VTy → Bool
+  | .name _ "_" => true
+  | _ => false
+
 def Val.level : Val → Nat
+  | .thunkv _ (.lam _ _ A _) | .bangThunkv _ (.lam _ _ A _) => if isHole A then 2 else 0
+  | .app _ (.sugar _ (.op _)) _ | .app _ (.sugar _ (.call _)) _ => 3
+  | .app _ (.sugar _ .brace) _ | .app _ (.app _ (.sugar _ (.borrow ..)) _) _ => 2
   | .thunk .. | .thunkv .. | .bangThunk .. | .bangThunkv .. => 0
   | .inl .. | .inr .. | .roll .. | .unroll .. | .unbang .. | .unbox .. | .boxed .. | .run ..
   | .shorten .. => 1
@@ -146,6 +154,21 @@ def Val.pp (V : Val) (lvl : Nat := 0) (k : Nat := 0) : String :=
     | .pair _ V W => "(" ++ V.pp 0 k ++ ", " ++ W.pp 0 k ++ ")"
     | .inl _ V => "inl " ++ V.pp 1 k
     | .inr _ V => "inr " ++ V.pp 1 k
+    | .thunkv _ (.lam _ x A M) =>
+      if isHole A then "{ " ++ x.name ++ " -> " ++ M.pp 0 (k + 2) ++ " }"
+      else "thunkv fun (" ++ x.name ++ " : " ++ A.pp ++ ") ->" ++ nl (k + 4) ++ M.pp 0 (k + 4)
+    | .bangThunkv _ (.lam _ x A M) =>
+      if isHole A then "!{ " ++ x.name ++ " -> " ++ M.pp 0 (k + 2) ++ " }"
+      else "!thunkv fun (" ++ x.name ++ " : " ++ A.pp ++ ") ->" ++ nl (k + 4) ++ M.pp 0 (k + 4)
+    | .app _ (.sugar _ (.op o)) (.pair _ a b) => "(" ++ a.pp 2 k ++ " " ++ o.str ++ " " ++ b.pp 2 k ++ ")"
+    | .app _ (.sugar _ (.call c)) W => c ++ "(" ++ W.pp 0 k ++ ")"
+    | .app _ (.sugar _ .brace) (.thunk _ M) => "{ " ++ M.pp 0 (k + 2) ++ " }"
+    | .app _ (.sugar _ .brace) (.bangThunk _ M) => "!{ " ++ M.pp 0 (k + 2) ++ " }"
+    | .app _ (.app _ (.sugar _ (.borrow bk x)) P) (.thunkv _ (.lam _ b _ M)) =>
+      let kw := match bk with
+        | .imm => "borrow imm " | .mut | .famMut => "borrow mut " | .modify => "modify "
+      let lt := if x == "" then "" else "'" ++ x ++ ", "
+      kw ++ P.pp 3 k ++ " { " ++ lt ++ b.name ++ " ->" ++ nl (k + 2) ++ M.pp 0 (k + 2) ++ " }"
     | .thunk _ M => "thunk " ++ M.pp 0 (k + 2)
     | .thunkv _ M => "thunkv " ++ M.pp 0 (k + 2)
     | .bangThunk _ M => "!thunk " ++ M.pp 0 (k + 2)
@@ -164,6 +187,8 @@ def Val.pp (V : Val) (lvl : Nat := 0) (k : Nat := 0) : String :=
     | .shorten _ m σ a V =>
       "shorten_" ++ m.pp ++ "[" ++ σ.pp ++ ", " ++ a.pp ++ "] " ++ V.pp 1 k
     | .lend _ x => "&" ++ x.name
+    | .sugar _ (.lit n) => toString n
+    | .sugar _ s => s!"<{reprStr s}>"
 
 /-- A computation at level `lvl`, indented by `k` after each line break. -/
 def Comp.pp (M : Comp) (lvl : Nat := 0) (k : Nat := 0) : String :=

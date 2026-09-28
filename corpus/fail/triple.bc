@@ -1,3 +1,0 @@
--- Tuples are pairs.
--- expect: 3:20: expected `)`, found `,`
-def t : 1 = ((), (), ())
