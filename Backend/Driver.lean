@@ -3,6 +3,7 @@ import Frontend.Check.Program
 import Frontend.Check.Externs
 import Backend.Source
 import Backend.Clos.Convert
+import Backend.Clos.Collapse
 import Backend.Clos.Interp
 import Backend.Flat.Lower
 import Backend.Flat.Interp
@@ -63,9 +64,10 @@ def readsInput (file src : String) : Bool :=
 
 def closOf (file src : String) : Except String Clos.Prog := do
   let k ← checkedOf file src
-  match k.io with
-  | none => Clos.convert k.main.e
-  | some m => Clos.convertMain (← extImpls m) m.loopB.isSome k.main.e
+  let p ← match k.io with
+    | none => Clos.convert k.main.e
+    | some m => Clos.convertMain (← extImpls m) m.loopB.isSome k.main.e
+  pure p.collapse
 
 /-- The flat IR; with `counts`, the entry writes the run's counts after the report. -/
 def flatOf (file src : String) (counts : Bool := false) : Except String Flat.Prog := do

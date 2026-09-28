@@ -25,6 +25,11 @@ IR. One pass does three things:
 - **`swap`.** The axiom `swap ≜ λx.λy. let z = load x; store x y; (x, z)` becomes the closure
   IR's `swap`, which moves the old contents out instead of copying them and dropping the
   original. Its contents change type, which the layout types (`Backend/Clos/Types.lean`) follow.
+- **Fixed points.** The Z combinator's fixed point `selfV B` (`Core/Fix.lean`) is one code
+  `λx. B[self := clos c []]` that calls itself through a closure of its own code, which captures
+  nothing; applied, `selfV B a` is a call of it. When `B` is the step of `fold_own` or
+  `fold_reuse`, the step's code is recorded (`Prog.folds`) for the flat IR's pointer reversal.
+- **η.** `λv. y v` of a variable `y` is `y`.
 -/
 
 namespace Backend.Clos
@@ -51,11 +56,19 @@ def fvs (e : Expr) (d : Nat) : List Nat := (fvsRaw e d).eraseDups
 structure CState where
   next : Nat
   codes : Array Code
+  folds : List FoldCode := []
 
 abbrev CM := StateT CState (Except String)
 
 /-- The variable standing for an index a closure body cannot refer to. -/
 def dummy : Var := 0
+
+/-- The variables from `selfBase` on are not variables: `selfBase + c` stands for `self` in the
+native fixed point of code `c` (see `conv`), the closure `clos c []`, built where it is used. It
+is never captured, copied or dropped. -/
+def selfBase : Var := 1 <<< 62
+
+def Var.isSelf (x : Var) : Bool := x ≥ selfBase
 
 def fresh : CM Var := modifyGet fun s => (s.next, { s with next := s.next + 1 })
 
@@ -81,13 +94,15 @@ def plan2 (ctx : List Var) (f₁ f₂ : List Nat) : CM (List (Var × Var) × Lis
   let mut ctx₁ := ctx
   for i in shared do
     let x ← lookup ctx i
+    if x.isSelf then continue
     let x' ← fresh
     cs := cs ++ [(x, x')]
     ctx₁ := ctx₁.set i x'
   return (cs, ctx₁, ctx)
 
-/-- The variables of the indices `is` in `ctx`. -/
-def vars (ctx : List Var) (is : List Nat) : CM (List Var) := is.mapM (lookup ctx)
+/-- The variables of the indices `is` in `ctx`, but for the fixed points' `self`s. -/
+def vars (ctx : List Var) (is : List Nat) : CM (List Var) :=
+  return (← is.mapM (lookup ctx)).filter (!·.isSelf)
 
 def Op.ofPrim? : Prim → Option Op
   | .alloc => some .alloc
@@ -129,8 +144,61 @@ def swapValue : CM Tm := do
   let c₁ ← register ⟨[], l, .clos c₂ [l]⟩
   pure (.clos c₁ [])
 
+deriving instance BEq for BoCa.Expr
+
+/-- `X = λx. F (λv. x x v)` for `F = λself. λx. B` (`Core/Fix.lean`, `zX`). -/
+def zXE (B : Expr) : Expr :=
+  .lam (.app (.lam (.lam B)) (.lam (.app (.app (.var 1) (.var 1)) (.var 0))))
+
+/-- The Z combinator's fixed point `selfV B = λv. X X v` (`Core/Fix.lean`, `selfV`), with
+`B` closed under its two binders (`self` = 1, `x` = 0): its body `B`. -/
+def fixBody? : Expr → Option Expr
+  | .lam (.app (.app (.lam (.app (.lam (.lam B)) (.lam (.app (.app (.var 1) (.var 1)) (.var 0)))))
+      x₂) (.var 0)) =>
+    if x₂ == zXE B && (fvs B 0).all (· < 2) then some B else none
+  | _ => none
+
+/-- The shape of an owned fold's traversal, `travO F` (`Core/FoldOwn.lean`) or, with `reuse`,
+`travR F` (`Core/FoldReuse.lean`). -/
+def travShape? (reuse : Bool) : Expr → Option FSh
+  | .lam (.lam (.var 0)) => some .leaf
+  | .lam (.lam (.app (.var 1) (.var 0))) => some .varX
+  | .lam (.lam (.app (.var 1) (.app (.prim .free) (.var 0)))) => if reuse then none else some .refX
+  | .lam (.lam (.app (.lam (.letpair (.var 0) (.app (.lam (.pair (.var 2) (.var 0)))
+      (.app (.var 4) (.var 0))))) (.app (.app sw (.var 0)) .unit))) =>
+    if reuse && isSwap sw then some .refX else none
+  | .lam (.lam (.letpair (.var 0) (.app (.lam (.app (.lam (.pair (.var 1) (.var 0)))
+      (.app (.app tG (.var 4)) (.var 1)))) (.app (.app tF (.var 3)) (.var 1))))) =>
+    match travShape? reuse tF, travShape? reuse tG with
+    | some F, some G => some (.tensor F G)
+    | _, _ => none
+  | .lam (.lam (.case (.var 0) (.app (.lam (.inj₁ (.var 0))) (.app (.app tF (.var 2)) (.var 0)))
+      (.app (.lam (.inj₂ (.var 0))) (.app (.app tG (.var 2)) (.var 0))))) =>
+    match travShape? reuse tF, travShape? reuse tG with
+    | some F, some G => some (.sum F G)
+    | _, _ => none
+  | _ => none
+
+/-- The body of an owned fold's fixed point, `λu. trav T (λw. self g w) u to r. g r`
+(`fBO`, `fBR`): whether it is `fold_reuse`'s, and its shape. -/
+def foldShape? : Expr → Option (Bool × FSh)
+  | .lam (.app (.lam (.app (.var 2) (.var 0)))
+      (.app (.app t (.lam (.app (.app (.var 3) (.var 2)) (.var 0)))) (.var 0))) =>
+    match travShape? false t with
+    | some F => some (false, F)
+    | none => (travShape? true t).map (true, ·)
+  | _ => none
+
+/-- Reserve a code index, filled by `setCode`. -/
+def reserve : CM Nat := register ⟨[], dummy, .unit⟩
+
+def setCode (c : Nat) (code : Code) : CM Unit :=
+  modify fun s => { s with codes := s.codes.set! c code }
+
 def conv (ctx : List Var) : Expr → CM Tm
-  | .var i => return .var (← lookup ctx i)
+  | .var i => do
+      let x ← lookup ctx i
+      return if x.isSelf then .clos (x - selfBase) [] else .var x
   | .unit => return .unit
   | .loc _ => throw "a location in the source term"
   | .prim p => primValue p
@@ -189,7 +257,7 @@ def conv (ctx : List Var) : Expr → CM Tm
           let tl ← conv cl l
           return wrapCopies cs (.letv vv tv (.letv lv tl (.prim .swap [lv, vv])))
       | .lam b =>
-        if !isSwap f then
+        if !isSwap f && (fixBody? f).isNone then
           -- `(λx. b) a`, the erasure's `let`: `a` is bound to `x` and no closure is made.
           let (cs, ca, cb) ← plan2 ctx (fvs a 0) (fvs b 1)
           let x ← fresh
@@ -210,14 +278,36 @@ def conv (ctx : List Var) : Expr → CM Tm
         return wrapCopies cs (.letv av ta (.letv fv tf (.app fv av)))
   | .lam b => do
       if isSwap (.lam b) then return ← swapValue
-      let fv := fvs b 1
+      match b with
+      | .app (.var (k + 1)) (.var 0) =>
+        -- `λv. y v` of a variable `y` is `y` (η): no closure wraps a closure of its own type.
+        return .var (← lookup ctx k)
+      | .app (.app (.lam (.app (.lam (.lam B)) (.lam (.app (.app (.var 1) (.var 1)) (.var 0)))))
+          _) (.var 0) =>
+        if (fixBody? (.lam b)).isSome then
+          -- The native fixed point: code `c` is `λx. B[self := clos c []]`; it captures
+          -- nothing and calls itself through a closure of its own code, built where `self`
+          -- is used.
+          let c ← reserve
+          let x ← fresh
+          let body ← conv [x, selfBase + c] B
+          if let (some (reuse, shape), .clos cu xs) := (foldShape? B, body) then
+            if let some i := xs.idxOf? x then
+              modify fun st => { st with folds := ⟨cu, reuse, shape, i⟩ :: st.folds }
+          let body := if 0 ∈ fvs B 0 then body else .drop x body
+          setCode c ⟨[], x, body⟩
+          return .clos c []
+      | _ => pure ()
+      let fvAll := fvs b 1
+      let selfs ← fvAll.filterM fun i => return (← lookup ctx i).isSelf
+      let fv := fvAll.filter (· ∉ selfs)
       let xs ← vars ctx fv
       let es ← fv.mapM fun _ => fresh
       let p ← fresh
       let inner := (List.range ctx.length).map fun i =>
         match fv.idxOf? i with
         | some k => es.getD k dummy
-        | none => dummy
+        | none => if i ∈ selfs then ctx.getD i dummy else dummy
       let body ← conv (p :: inner) b
       let body := if 0 ∈ fvs b 0 then body else .drop p body
       let c ← register ⟨es, p, body⟩
@@ -225,8 +315,8 @@ def conv (ctx : List Var) : Expr → CM Tm
 
 /-- Closure-convert a closed term. -/
 def convert (e : Expr) : Except String Prog := do
-  let (t, s) ← (conv [] e).run ⟨dummy + 1, #[]⟩
-  pure { codes := s.codes, main := t }
+  let (t, s) ← (conv [] e).run ⟨dummy + 1, #[], []⟩
+  pure { codes := s.codes, main := t, folds := s.folds }
 
 /-! ### Externs  `[spec §11]` -/
 
@@ -293,7 +383,7 @@ def convertMain (exts : List ExtImpl) (loops : Bool) (e : Expr) : Except String 
         body := .letv l (.lit (.i32 fd.toUInt32)) (.letv x (.prim .alloc [l]) body)
       | .io k => body := .letv x (← ioValue k) body
     return (body, fin)
-  let ((t, fin), s) ← act.run ⟨dummy + 1, #[]⟩
-  pure { codes := s.codes, main := t, fin }
+  let ((t, fin), s) ← act.run ⟨dummy + 1, #[], []⟩
+  pure { codes := s.codes, main := t, fin, folds := s.folds }
 
 end Backend.Clos

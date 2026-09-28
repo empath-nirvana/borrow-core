@@ -42,7 +42,7 @@ search over the pair and sum edges) are stored behind a pointer to a heap object
 own layout.
 
 **Closures** are defunctionalized. The codes of a closure type `fn(A; C, D)` (the codes whose
-type unifies with it) are its *union*, numbered in code order; a closure is its code's number in
+type unifies with it and whose closures the program builds) are its *union*, numbered in code order; a closure is its code's number in
 the union (the *tag*), then its captured values' words, padded to the widest environment of the
 union. A union that contains itself, a closure type that lies on a cycle of the graph whose edges
 are pair and sum fields and a closure type's captured values, would be infinitely wide; such a
@@ -500,8 +500,8 @@ types are those on a cycle of pair, sum and captured-value edges; then one depth
 over the remaining edges finds the boxed fields (its back edges, all pair or sum fields, since no
 other closure type lies on a cycle), and widths and triviality are computed as each node
 finishes. -/
-def resolve (s : TState) (codeTy : Array Nat) (codeEnv : Array (List Nat)) (mainTy resTy : Nat) :
-    Types := Id.run do
+def resolve (s : TState) (codeTy : Array Nat) (codeEnv : Array (List Nat)) (mainTy resTy : Nat)
+    (live : Nat → Bool) : Types := Id.run do
   let n := s.nodes.size
   let rep := (Array.range n).map (findIn s.parent)
   let shape := (Array.range n).map fun i =>
@@ -512,7 +512,7 @@ def resolve (s : TState) (codeTy : Array Nat) (codeEnv : Array (List Nat)) (main
     | .loc a c => .loc rep[a]! (findIn s.classes c)
     | t => t
   let codeEnv := codeEnv.map (·.map fun t => rep[t]!)
-  let unions : Std.HashMap Nat (Array Nat) := (List.range codeTy.size).foldl
+  let unions : Std.HashMap Nat (Array Nat) := ((List.range codeTy.size).filter live).foldl
     (fun m c => let t := rep[codeTy[c]!]!; m.insert t ((m.getD t #[]).push c)) {}
   -- The captured values' types of a closure type's union.
   let envOf (v : Nat) : List Nat := (unions.getD v #[]).toList.flatMap fun c => codeEnv[c]!
@@ -571,6 +571,26 @@ def resolve (s : TState) (codeTy : Array Nat) (codeEnv : Array (List Nat)) (main
   return { rep, shape, boxed, width, trivial, cellWidth, varTy := s.varTy, cons := s.cons,
            apps := s.apps, codeTy, codeEnv, unions, recFn, mainTy, resTy }
 
+/-- The codes a term builds closures of. -/
+def Tm.builds : Tm → List Nat
+  | .clos c _ => [c]
+  | .letv _ e b => e.builds ++ b.builds
+  | .letpair _ _ _ b | .copy _ _ b | .drop _ b => b.builds
+  | .case _ _ b₁ _ b₂ => b₁.builds ++ b₂.builds
+  | _ => []
+
+/-- The codes whose closures the program builds, from `main` and the codes it builds, and
+`fin`, which the entry calls: the others are in no union. -/
+def Prog.liveCodes (p : Prog) : Std.HashSet Nat := Id.run do
+  let mut live : Std.HashSet Nat := {}
+  let mut work := p.main.builds ++ p.fin.toList
+  for _ in [0:p.codes.size + 1] do
+    let new := work.filter (!live.contains ·)
+    if new.isEmpty then break
+    live := new.foldl (·.insert ·) live
+    work := new.flatMap fun c => (p.codes[c]?.map (·.body.builds)).getD []
+  return live
+
 /-- The layout types of a program. -/
 def Prog.types (p : Prog) : Except String Types := do
   let act : TM (Array Nat × Array (List Nat) × Nat × Nat) := do
@@ -590,6 +610,7 @@ def Prog.types (p : Prog) : Except String Types := do
     let env ← p.codes.mapM fun c => c.env.mapM tyVar
     pure (codeTy, env, m, res)
   let ((codeTy, env, m, res), s) ← act.run {}
-  pure (resolve s codeTy env m res)
+  let live := p.liveCodes
+  pure (resolve s codeTy env m res live.contains)
 
 end Backend.Clos

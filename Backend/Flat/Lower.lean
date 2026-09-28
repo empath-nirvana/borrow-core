@@ -20,10 +20,11 @@ The lowering is type-directed (`Backend/Clos/Types.lean`): a closure-IR variable
   then the captured values' words, padded (`Backend/Clos/Types.lean`), and building one moves the
   captured words into it. A code is a function of its captured values' words and the argument's
   words, returning the answer's words. A call whose code is known, because the flow analysis
-  (`Backend/Clos/Flow.lean`) finds one code there or the union has one code, is a direct call of
+  (`Backend/Clos/Flow.lean`) finds one code of the union there or the union has one code, is a direct call of
   that code on the closure's captured words; any other call is a call of the type's dispatcher
   `apply`, a `switch` on the tag whose cases tail-call the codes. There are no function pointers.
   A call in return position whose callee answers exactly the caller's words is a tail call.
+- **Owned folds** of a linear shape run by pointer reversal, in constant stack (below).
 - **Recursive closure types** keep a heap environment: a closure is the word `2t + 1` when its
   code `t` captures nothing, and otherwise an object holding `t` and the captured values' words.
   Their codes take the closure's word, load the environment into locals and free the object.
@@ -61,6 +62,10 @@ inductive Helper where
   /-- The dispatcher of the closure type `n`: the closure's words and the argument's, answering
   the code its tag names. -/
   | apply (n : Nat)
+  /-- The descent and the ascent of the owned fold whose step is code `c`, by pointer
+  reversal. -/
+  | foldDown (c : Nat)
+  | foldUp (c : Nat)
   deriving BEq, Hashable, Repr, Inhabited
 
 structure Ctx where
@@ -68,6 +73,12 @@ structure Ctx where
   codes : Array Code
   /-- The calls whose code the flow analysis finds, by their function variable. -/
   known : Std.HashMap Var Nat
+  /-- The owned folds' steps, by code. -/
+  folds : Std.HashMap Nat FoldCode := {}
+  /-- The codes whose closures the program builds (`Clos.Prog.liveCodes`). -/
+  live : Std.HashSet Nat := {}
+  /-- The code of the loops the entry drives, when the flow analysis finds one. -/
+  driveKnown : Option Nat := none
   helperBase : Nat
 
 structure LState where
@@ -179,6 +190,15 @@ def mkInj (n : Nat) (r : Bool) (a : List Exp) : LM (List Stmt × List Exp) := do
   let (s, v) ← putField n (if r then 1 else 0) a
   let pw := (← words n) - 1
   pure (s, [.c64 (if r then 1 else 0)] ++ v ++ zeros (pw - v.length))
+
+/-- The fields of a pair's or injection's locals. -/
+def fieldLocals (n i : Nat) (ls : List Nat) : LM (List Nat) := do
+  let T ← T
+  match T.ty n with
+  | .pair .. =>
+    let w₀ := T.fieldWords n 0
+    pure (if i == 0 then ls.take w₀ else (ls.drop w₀).take (T.fieldWords n 1))
+  | _ => pure ((ls.drop 1).take (T.fieldWords n i))
 
 /-- The two components of a pair's locals. -/
 def splitPair (n : Nat) (ls : List Nat) (consume : Bool) :
@@ -434,6 +454,212 @@ def lowerTm : Tm → Dest → LM (List Stmt)
       let s ← dropVals (← vty x) (← vals x)
       return s ++ (← lowerTm b d)
 
+/-! ### Owned folds by pointer reversal
+
+The step of `fold_own` or `fold_reuse` at a shape `T` (`FoldCode`) is
+`λu. trav T (λw. self g w) u to r. g r`: it recurses into the child at `T`'s recursive
+position, then calls the algebra `g` on the node with the child's result there. When `T` is
+*linear* (a `⊗` has a recursive position on at most one side) and the node reaches its child
+through exactly one pointer, the boxed field at `X` or the cell at `Ref X`, the step is two loops
+of tail calls in constant stack (Deutsch–Schorr–Waite). The descent stores each node's words in
+its child's object, with the pointer to the child replaced by the pointer to the node's own
+object (`0` at the root), and goes on with the child. At a node with no child it calls `g`, and
+the ascent loads each stored node back, calls `g` on it with the result at the recursive
+position, and frees the object (`fold_own`, whose traversal frees it) or hands it to `g` as the
+emptied cell (`fold_reuse`, `Ref 1 ⊗ R`). The object is the child's own, as wide as the node's
+words, so the reversal allocates nothing; it is safe because the fold owns the structure: no
+other word points into it while the pointers are reversed. -/
+
+/-- The plan of a fold step: the node type `M`, the algebra's type, argument type and result
+words, and the code's answer words. -/
+structure FoldPlan where
+  fc : FoldCode
+  m : Nat
+  g : Nat
+  gVar : Var
+  arg : Nat
+  res : Nat
+  ans : Nat
+
+/-- `F` at the node-side type `n` and the algebra-side type `a` can be reversed: linear, with
+the path to each recursive position inline but for its last step (`root` is `M`). -/
+def dswOK (T : Types) (M : Nat) : FSh → Nat → Nat → Bool
+  | .leaf, _, _ => true
+  | .refX, n, _ => match T.ty n with | .loc .. => true | _ => false
+  | .varX, _, _ => false
+  | .tensor F G, n, a =>
+    match T.ty n, T.ty a with
+    | .pair .., .pair .. => !(F.hasX && G.hasX) && child F 0 n a && child G 1 n a
+    | _, _ => false
+  | .sum F G, n, a =>
+    match T.ty n, T.ty a with
+    | .sum .., .sum .. => child F 0 n a && child G 1 n a
+    | _, _ => false
+where
+  child (F : FSh) (i n a : Nat) : Bool :=
+    let (cn, b) := T.field n i
+    let ca := (T.field a i).1
+    match F with
+    | .varX => b && T.r cn == T.r M
+    | F => (!F.hasX || !b) && dswOK T M F cn ca
+
+/-- The plan of code `k`'s fold step, when it can be reversed. -/
+def foldPlan? (k : Nat) (c : Code) : LM (Option FoldPlan) := do
+  let some fc := (← read).folds[k]? | return none
+  let T ← T
+  let some gVar := c.env[fc.alg]? | return none
+  let m := T.r (← vty c.param)
+  let g := T.r (← vty gVar)
+  let .fn arg rc _ := T.ty g | return none
+  let ans := T.answerWords (T.codeType k)
+  let res := T.words rc
+  if T.answerWords g != res || ans != res then return none
+  if !fc.shape.hasX || !dswOK T m fc.shape m arg then return none
+  if fc.reuse then
+    -- `fold_reuse` has no `X` position, only `Ref X`.
+    let rec noVar : FSh → Bool
+      | .varX => false
+      | .tensor F G | .sum F G => noVar F && noVar G
+      | _ => true
+    if !noVar fc.shape then return none
+  return some ⟨fc, m, g, gVar, T.r arg, res, ans⟩
+
+/-- The code calling the algebra is known when the flow analysis finds one code at the step's
+own call of `g`. -/
+def algKnown (c : Code) (g : Nat) : LM (Option Nat) := do
+  let T ← T
+  let ctx ← read
+  let calls := callsOf c.body
+  return calls.findSome? fun f =>
+    if T.r (T.varTy.getD f 0) == g then ctx.known[f]? else none
+where
+  callsOf : Tm → List Var
+    | .app f _ => [f]
+    | .letv _ e b => callsOf e ++ callsOf b
+    | .letpair _ _ _ b | .copy _ _ b | .drop _ b => callsOf b
+    | .case _ _ b₁ _ b₂ => callsOf b₁ ++ callsOf b₂
+    | _ => []
+
+/-- `act j` at the recursive position of the node of type `n` in the locals `ls`, `j` the local
+holding the pointer to the child's object; `none` at a node with no child. -/
+def atSlot (F : FSh) (n : Nat) (ls : List Nat) (act : Option Nat → LM (List Stmt)) :
+    LM (List Stmt) := do
+  let T ← T
+  let sub (Fi : FSh) (i : Nat) (rec : List Nat → LM (List Stmt)) : LM (List Stmt) := do
+    if !Fi.hasX then act none else
+    let li ← fieldLocals n i ls
+    if let .varX := Fi then act li.head? else rec li
+  match F with
+  | .refX => act ls.head?
+  | .tensor F₀ F₁ =>
+    if F₀.hasX then sub F₀ 0 fun li => atSlot F₀ (T.field n 0).1 li act
+    else sub F₁ 1 fun li => atSlot F₁ (T.field n 1).1 li act
+  | .sum F₀ F₁ =>
+    return [.ite (eqz64 (.loc (ls.headD 0)))
+      (← sub F₀ 0 fun li => atSlot F₀ (T.field n 0).1 li act)
+      (← sub F₁ 1 fun li => atSlot F₁ (T.field n 1).1 li act)]
+  | _ => act none
+
+/-- Field `i` of the algebra's argument of type `a`, from field `i` of the node of type `n` in the
+locals `ls`: the words `r` at a recursive position `X`, and otherwise `rec` of the field's
+words. -/
+def argField (Fi : FSh) (n a i : Nat) (ls : List Nat) (r : Option (List Exp))
+    (rec : List Nat → LM (List Stmt × List Exp)) : LM (List Stmt × List Exp) := do
+  let T ← T
+  let li ← fieldLocals n i ls
+  match Fi, r with
+  | .varX, none => pure ([.trap], zeros (T.fieldWords a i))
+  | .varX, some r => putField a i r
+  | _, _ =>
+    let (s₁, vs) ← getField n i li true
+    let (s₂, w) ← rec vs
+    let wl ← fresh w.length
+    let s₃ ← emit (.to wl) w
+    let (s₄, w) ← putField a i (locs wl)
+    pure (s₁ ++ s₂ ++ s₃ ++ s₄, w)
+
+/-- The algebra's argument, of type `a`, built from the node of type `n` in the locals `ls`
+(consumed) with the words `r` at the recursive position and `cell` the emptied cell there
+(`fold_reuse`). With `r = none` the recursive position is not reached. -/
+def buildArg (reuse : Bool) (F : FSh) (n a : Nat) (ls : List Nat) (r : Option (List Exp))
+    (cell : Exp) : LM (List Stmt × List Exp) := do
+  let T ← T
+  let rec' (Fi : FSh) (i : Nat) (go : Nat → Nat → List Nat → LM (List Stmt × List Exp)) :=
+    argField Fi n a i ls r (go (T.field n i).1 (T.field a i).1)
+  match F with
+  | .leaf => pure ([], locs ls)
+  | .refX | .varX =>
+    match r with
+    | none => pure ([.trap], zeros (T.words a))
+    | some r => if reuse then mkPair a [cell] r else pure ([], r)
+  | .tensor F₀ F₁ =>
+    let (s₀, w₀) ← rec' F₀ 0 fun n a ls => buildArg reuse F₀ n a ls r cell
+    let (s₁, w₁) ← rec' F₁ 1 fun n a ls => buildArg reuse F₁ n a ls r cell
+    let (s₂, w) ← mkPair a w₀ w₁
+    pure (s₀ ++ s₁ ++ s₂, w)
+  | .sum F₀ F₁ =>
+    let dst ← fresh (T.words a)
+    let (s₀, w₀) ← rec' F₀ 0 fun n a ls => buildArg reuse F₀ n a ls r cell
+    let (s₀', v₀) ← mkInj a false w₀
+    let (s₁, w₁) ← rec' F₁ 1 fun n a ls => buildArg reuse F₁ n a ls r cell
+    let (s₁', v₁) ← mkInj a true w₁
+    return ([.ite (eqz64 (.loc (ls.headD 0))) (s₀ ++ s₀' ++ (← emit (.to dst) v₀))
+      (s₁ ++ s₁' ++ (← emit (.to dst) v₁))], locs dst)
+
+/-- Call a copy of the algebra (in the locals `gl`) on `arg`; its result's words. -/
+def callAlg (P : FoldPlan) (known : Option Nat) (gl : List Nat) (arg : List Exp) :
+    LM (List Stmt × List Nat) := do
+  let (cs, gc) ← copyVals P.g gl
+  let (f, as) ← callTarget P.g gc arg known
+  let rs ← fresh ((← T).answerWords P.g)
+  pure (cs ++ [.call rs f as], rs.take P.res)
+
+/-- The descent: `g`, the stored parent `up`, the node's words. -/
+def foldDownFn (k : Nat) (c : Code) (P : FoldPlan) : LM Fn := do
+  let T ← T
+  let gw := T.words P.g
+  let mw := T.words P.m
+  let known ← algKnown c P.g
+  let (body, nloc) ← inFn (gw + 1 + mw) do
+    let gl := List.range gw
+    let up := gw
+    let node := List.range' (gw + 1) mw
+    atSlot P.fc.shape P.m node fun
+      | some j => do
+        let p ← fresh1
+        let (ld, child) ← loadAt (.loc p) 0 mw
+        pure ([.set p (.loc j)] ++ ld ++ [.set j (.loc up)] ++ storeAt (.loc p) 0 (locs node) ++
+          [.tailCall (← helper (.foldDown k)) (locs gl ++ [.loc p] ++ locs child)])
+      | none => do
+        let (sa, arg) ← buildArg P.fc.reuse P.fc.shape P.m P.arg node none (.c64 0)
+        let (sc, rs) ← callAlg P known gl arg
+        pure (sa ++ sc ++ [.tailCall (← helper (.foldUp k)) (locs gl ++ [.loc up] ++ locs rs)])
+  pure { name := s!"fold_down{k}", params := gw + 1 + mw, results := P.ans, locals := nloc,
+         body := body ++ [.trap] }
+
+/-- The ascent: `g`, the stored node `up` (`0` past the root), the child's result. -/
+def foldUpFn (k : Nat) (c : Code) (P : FoldPlan) : LM Fn := do
+  let T ← T
+  let gw := T.words P.g
+  let mw := T.words P.m
+  let known ← algKnown c P.g
+  let (body, nloc) ← inFn (gw + 1 + P.res) do
+    let gl := List.range gw
+    let up := Exp.loc gw
+    let r := locs (List.range' (gw + 1) P.res)
+    let (ld, node) ← loadAt up 0 mw
+    let step ← atSlot P.fc.shape P.m node fun
+      | some j => do
+        let next ← fresh1
+        let (sa, arg) ← buildArg P.fc.reuse P.fc.shape P.m P.arg node (some r) up
+        let (sc, rs) ← callAlg P known gl arg
+        pure ([.set next (.loc j)] ++ sa ++ (if P.fc.reuse then [] else [.free up]) ++ sc ++
+          [.tailCall (← helper (.foldUp k)) (locs gl ++ [.loc next] ++ locs rs)])
+      | none => pure [.trap]
+    pure [.ite (eqz64 up) ((← dropVals P.g gl) ++ [.ret r]) (ld ++ step)]
+  pure { name := s!"fold_up{k}", params := gw + 1 + P.res, results := P.ans, locals := nloc,
+         body := body ++ [.trap] }
+
 /-! ### Codes, `main` and the entry -/
 
 /-- The words a closure's environment holds, per captured variable. -/
@@ -445,6 +671,25 @@ captured values, loads the environment and frees the object. A `sel` code's `cas
 parameter returns each arm at its own type, padded to the wider. -/
 def lowerCode (k : Nat) (c : Code) : LM Fn := do
   let T ← T
+  if !(← read).live.contains k then
+    -- No closure of this code is built: a stub keeps the function indices.
+    return { name := s!"code{k}", params := 0, results := 0, locals := 0, body := [.trap] }
+  if let some P ← foldPlan? k c then
+    -- An owned fold's step by pointer reversal: the descent from the node `u`.
+    let ew := T.envWords k
+    let pw := T.words P.m
+    let (body, nloc) ← inFn (ew + pw) do
+      let mut off := 0
+      let mut drops : List Stmt := []
+      let mut gl : List Nat := []
+      for x in c.env do
+        let w ← words (← vty x)
+        if x == P.gVar then gl := List.range' off w
+        else drops := drops ++ (← dropVals (← vty x) (List.range' off w))
+        off := off + w
+      pure (drops ++ [.tailCall (← helper (.foldDown k))
+        (locs gl ++ [.c64 0] ++ locs (List.range' ew pw))])
+    return { name := s!"code{k}", params := ew + pw, results := P.ans, locals := nloc, body }
   let fTy := T.codeTy[k]!
   let (aTy, ans) := match T.ty fTy with
     | .fn a _ _ => (a, T.answerWords fTy)
@@ -550,15 +795,6 @@ def printField (n i : Nat) (ls : List Nat) (atom : Bool) : LM (List Stmt) := do
   match T.ty c, atom with
   | .sum .., true => pure (s ++ outStr "(" ++ call ++ outStr ")")
   | _, _ => pure (s ++ call)
-
-/-- The fields of a pair's or injection's locals. -/
-def fieldLocals (n i : Nat) (ls : List Nat) : LM (List Nat) := do
-  let T ← T
-  match T.ty n with
-  | .pair .. =>
-    let w₀ := T.fieldWords n 0
-    pure (if i == 0 then ls.take w₀ else (ls.drop w₀).take (T.fieldWords n 1))
-  | _ => pure ((ls.drop 1).take (T.fieldWords n i))
 
 /-- Split a closure's type: argument, answer type on an unknown argument, answer words. -/
 def fnParts (f : Nat) : LM (Nat × Nat × Nat) := do
@@ -750,10 +986,17 @@ def genHelper (h : Helper) : LM Fn := do
       let cv := rs.take (T.words c)
       let (s₁, rv) ← payload c false cv true
       let (s₂, dv) ← payload c true cv true
-      pure (s₀ ++ (← callClosure rs n (List.range nw) sel) ++ [
+      let (g, as) ← callTarget n (List.range nw) sel (← read).driveKnown
+      pure (s₀ ++ [.call rs g as] ++ [
         .ite (eqz64 (.loc (cv.headD 0))) (s₁ ++ [.ret (locs rv)])
           (s₂ ++ [.tailCall (← helper (.drive n)) (locs dv)])])
     pure { name := "drive", params := nw, results := T.words r, locals := nloc, body := body ++ [.trap] }
+  | .foldDown k | .foldUp k =>
+    let some c := (← read).codes[k]? | throw "flat IR: no code"
+    let some P ← foldPlan? k c | throw "flat IR: not a reversible fold"
+    match h with
+    | .foldDown _ => foldDownFn k c P
+    | _ => foldUpFn k c P
   | .apply n =>
     -- A dispatched call: a `switch` on the closure's tag, each case a tail call of its code.
     let (a, _, k) ← fnParts n
@@ -780,16 +1023,27 @@ def callsOf : Tm → List Var
   | .case _ _ b₁ _ b₂ => callsOf b₁ ++ callsOf b₂
   | _ => []
 
-/-- The calls whose code the flow analysis finds, by their function variable. -/
+/-- The calls whose code is known, by their function variable: the flow analysis's codes there
+that are in the union of the call's closure type are one. Each analysis over-approximates the
+codes that reach the call, so their intersection does. -/
 def knownCalls (p : Clos.Prog) : Std.HashMap Var Nat :=
-  p.flow.fold (fun m f cs => if cs.size == 1 then m.insert f cs[0]! else m) {}
+  match p.types with
+  | .error _ => {}
+  | .ok T =>
+  p.flow.fold (fun m f cs =>
+    let u := T.union (T.varTy.getD f 0)
+    match cs.filter u.contains with
+    | #[c] => m.insert f c
+    | _ => m) {}
 
 /-- The program's closure calls: how many there are, how many call the one code of their type's
 union, and how many more a code the flow analysis finds. The rest are dispatched. -/
 def callSites (p : Clos.Prog) : Except String (Nat × Nat × Nat) := do
   let T ← p.types
   let known := knownCalls p
-  let calls := (p.codes.toList.flatMap (callsOf ·.body)) ++ callsOf p.main
+  let live := p.liveCodes
+  let calls := (p.codes.toList.zipIdx.flatMap fun (c, k) =>
+    if live.contains k then callsOf c.body else []) ++ callsOf p.main
   let mut byType := 0
   let mut byFlow := 0
   for f in calls do
@@ -798,11 +1052,27 @@ def callSites (p : Clos.Prog) : Except String (Nat × Nat × Nat) := do
     else if (known[f]?.map u.contains).getD false then byFlow := byFlow + 1
   return (calls.length, byType, byFlow)
 
+/-- The program's owned folds: how many are compiled by pointer reversal, and how many recurse. -/
+def foldSites (p : Clos.Prog) : Except String (Nat × Nat) := do
+  let T ← p.types
+  let ctx : Ctx := { T, codes := p.codes, known := knownCalls p, helperBase := 0,
+                     folds := p.folds.foldl (fun m f => m.insert f.code f) {} }
+  let act : LM Nat := p.folds.foldlM (fun k f => do
+    let some c := p.codes[f.code]? | pure k
+    pure (if (← foldPlan? f.code c).isSome then k + 1 else k)) 0
+  let (n, _) ← (act.run ctx).run {}
+  pure (n, p.folds.length - n)
+
 def lower (p : Clos.Prog) (counts : Bool := false) : Except String Prog := do
   let T ← p.types
   let nc := p.codes.size
   let fMain := codeFn nc
-  let ctx : Ctx := { T, codes := p.codes, known := knownCalls p, helperBase := fMain + 2 }
+  let ctx : Ctx := { T, codes := p.codes, known := knownCalls p, helperBase := fMain + 2,
+                     folds := p.folds.foldl (fun m f => m.insert f.code f) {},
+                     live := p.liveCodes,
+                     driveKnown := match p.flowAll.2 with
+                       | some #[c] => some c
+                       | _ => none }
   let act : LM (List Fn) := do
     let codes ← p.codes.toList.zipIdx.mapM fun (c, k) => lowerCode k c
     let main ← lowerMain p.main

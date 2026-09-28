@@ -33,6 +33,8 @@ inductive Key where
   /-- Code `c`'s answer. -/
   | res (c : Nat)
   | syn (n : Nat)
+  /-- The loops the entry drives. -/
+  | drive
   deriving BEq, Hashable, Repr, Inhabited
 
 /-- An abstract value. -/
@@ -166,7 +168,7 @@ def Prog.constraints (p : Prog) : Array Con := Id.run do
     let m ← gen p.codes p.main
     if let some fin := p.fin then
       -- The entry drives the loop `main` returns: `inl r` goes to `fin`, `inr` loops again.
-      let loop ← freshKey
+      let loop := Key.drive
       emit (.sub m loop)
       let r ← freshKey
       emit (.app loop .none r)
@@ -237,18 +239,25 @@ def solve (codes : Array Code) (cs : Array Con) : Nat → Sets → Option Sets
     let (S, changed) := step codes cs S
     if changed then solve codes cs fuel S else some S
 
+/-- The codes of the closures in `k`, in code order. -/
+def Sets.codes (S : Sets) (k : Key) : Array Nat :=
+  ((S.of k).fold (fun acc v => match v with
+    | .clos c => acc.push c
+    | _ => acc) #[]).qsort (· < ·)
+
 /-- For every call `app f a`, keyed by `f` (which only the call consumes): the codes whose
-closures may be called there, in code order. With no solution, no call's codes are known. -/
-def Prog.flow (p : Prog) : Std.HashMap Var (Array Nat) := Id.run do
+closures may be called there, in code order; and the codes of the loops the entry drives. With
+no solution, no call's codes are known. -/
+def Prog.flowAll (p : Prog) : Std.HashMap Var (Array Nat) × Option (Array Nat) := Id.run do
   let cs := p.constraints
-  let some S := solve p.codes cs 100000 {} | return {}
+  let some S := solve p.codes cs 100000 {} | return ({}, none)
   let mut out : Std.HashMap Var (Array Nat) := {}
   for c in cs do
     if let .app (.var f) _ _ := c then
-      let codes := (S.of (.var f)).fold (fun acc v => match v with
-        | .clos c => acc.push c
-        | _ => acc) #[]
-      out := out.insert f (codes.qsort (· < ·))
-  return out
+      out := out.insert f (S.codes (.var f))
+  return (out, if p.fin.isSome then some (S.codes .drive) else none)
+
+/-- For every call `app f a`, keyed by `f`: the codes whose closures may be called there. -/
+def Prog.flow (p : Prog) : Std.HashMap Var (Array Nat) := p.flowAll.1
 
 end Backend.Clos

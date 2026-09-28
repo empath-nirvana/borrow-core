@@ -89,9 +89,36 @@ structure Code where
   body : Tm
   deriving Repr, Inhabited
 
+/-- A fold's shape (`Core/FoldImm.lean`, `FShape`) with its leaves' types erased. -/
+inductive FSh where
+  | leaf
+  | refX
+  | varX
+  | tensor (F G : FSh)
+  | sum (F G : FSh)
+  deriving Repr, Inhabited, BEq
+
+/-- `F` has a recursive position. -/
+def FSh.hasX : FSh → Bool
+  | .leaf => false
+  | .refX | .varX => true
+  | .tensor F G | .sum F G => F.hasX || G.hasX
+
+/-- A code that is the step of an owned fold, `λu. trav T (λw. self g w) u to r. g r` of
+`fold_own` (`reuse = false`) or `fold_reuse` (`reuse = true`) at the shape `shape`. -/
+structure FoldCode where
+  code : Nat
+  reuse : Bool
+  shape : FSh
+  /-- The position of the algebra `g` in the code's environment. -/
+  alg : Nat
+  deriving Repr, Inhabited
+
 structure Prog where
   codes : Array Code
   main : Tm
+  /-- The owned folds' steps, which the flat IR may compile by pointer reversal. -/
+  folds : List FoldCode := []
   /-- For a `main` that returns a loop (SPEC §11): the code run on the value the loop finishes
   with, once the stage has driven it. -/
   fin : Option Nat := none
