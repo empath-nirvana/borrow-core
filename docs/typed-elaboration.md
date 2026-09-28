@@ -56,7 +56,8 @@ invariant: lowering copies no subterm outside additive positions, and every plac
 | lower | TIR → core AST | no | new: `Frontend/Elab/Lower.lean`, replacing `Frontend/Sugar.lean` |
 | check | core AST → `Expr` + `CDerives` | derivation checked by Lean | `Frontend/Check/`, unchanged |
 
-**The surface AST is a superset of the core AST**, as today: core is the sublanguage in which
+**One grammar, one `.bc` file type** (decision 4, §8). **The surface AST is a superset of the
+core AST**, as today: core is the sublanguage in which
 every annotation is written and no sugar node occurs. Hand-written core (the escape hatch the
 issue keeps, such as explicit `alloc`) mixes freely with sugar in one file. On a core node,
 inference runs in check mode, fills nothing, and lowering is the identity.
@@ -247,9 +248,23 @@ Because inference types every call, no syntactic pattern is involved.
 
 **Taking the loop as a value.** `{ f(x) }` is the loop value `U (Loop B R)`, and it is how a
 loop is passed to `div_fuel` or stored. It follows draft 0's rule that `{ … }` is the visible
-thunk, the shift that survives. It lowers to `f V`, the call that returns the loop. For a general
-div block `{ S }`, it lowers to `run ⟦S⟧`, the code up to the first loop run eagerly (open question
-Q2).
+thunk, the shift that survives, and it **runs nothing until it is first observed** (decision 2,
+§8). It lowers through a library function in `lib/div.bc`:
+
+    div_defer[B, R] : U (F (U (Loop B R)) & F R) => U (Loop B R)
+
+Its argument is a thunk with two observations. `start` runs the code up to the first loop and
+returns that loop. `abort` hands back the residual without running anything. `div_defer` is
+`unfold` at `Loop B R`, with state `U (F (U (Loop B R)) & F R) + U (Loop B R)`:
+
+- **before the first observation**, `next` runs `start` and observes the loop it returns, and
+  `close` runs `abort`;
+- **after it**, both observations go to the loop.
+
+`{ S }` for a div block `S` lowers to `div_defer (thunkv < ⟦S⟧, abort >)`, where `abort` hands
+back the residual from the captured variables by identity (as at any close point, below). The
+two components capture the same variables additively, as `div_bind`'s continuation does.
+`{ f(x) }` is the instance `S = f(x)`, so its `start` is the call `f V`.
 
 **The residual, from the type.** A loop closed early must release what it holds. Anything with
 a destructor is dropped by the checker, on the close path, like any unused value (SPEC §12). What
@@ -294,8 +309,9 @@ IR widens where it applies:
 - **The written type** of a callback parameter (`A => B`) is read as "any effect". A parameter
   that must stay total is written `total A => B`, so a div argument there is an error at the call,
   not a copy.
-- **Not covered:** a callback whose effect is fixed by a *stored* type (a field of a `data`
-  value, a cell's contents). Its written type is its type. This is open question Q6.
+- **Not covered:** a callback whose effect is fixed by a *stored* or *returned* type (a field
+  of a `data` value, a cell's contents, a function result). Its written type is its type:
+  effect inference is on parameter types only (decision 6, §8).
 
 It stays whole-program monomorphization (decision 8). The core never gets effect polymorphism.
 The mechanism is the one SPEC §14 names for later control effects: each effect contributes an
@@ -414,14 +430,14 @@ sugar pair.
 
 ### 5.1 `&x` and `&mut x`: one form for #78's `&c` and draft 0's `&mut x`
 
-**Proposal.** There is one pair of forms. `&mut x` lends `x` exclusively to one construct, and
+**Decided** (decision 3, §8). There is one pair of forms. `&mut x` lends `x` exclusively to one construct, and
 `&x` lends it shared. Afterwards `x` is usable again, possibly changed. `&c` is retired, and
 existing uses become `&mut c`. `x` must be a place: a variable, which the construct rebinds. The
 lowering is chosen by the types of `x` and of the parameter it is passed to (decision 26):
 
 | `x : …` | parameter `: …` | lowering |
 |---|---|---|
-| `ref A` (an owned cell: a capability, a `box`) | `mut 'a A` | `withbor2` around the call, fresh `'x`; `x` rebound from the pair |
+| `ref A`, written `box A` (an owned cell: a capability, a `box`) | `mut 'a A` | `withbor2` around the call, fresh `'x`; `x` rebound from the pair |
 | `ref A` | `imm 'a A` (`&x`) | `withbor1`, likewise |
 | a `let mut` value `A` | `mut 'a A` / `imm 'a A` | a **scoped cell**: `alloc`, `withbor2`/`withbor1` around the call, `free`, `x` rebound to the value |
 | `mut 'b A` | `mut 'a A` | `withbor3` (reborrow) |
@@ -451,46 +467,45 @@ in the head of a bind", because the A-normal form of §2.4 gives every call a bi
 
 ### 5.3 `data` and `box`
 
-`box e` is the only surface heap allocation, apart from arrays (user decision): `alloc[A] ⟦e⟧`,
-of type `ref A`. `free(r)` is unchanged.
+`box e` is the only surface heap allocation, apart from arrays (user decision). The surface
+heap type is spelled `box A`, and it is the core's `ref A` (decision 7, §8). The core's
+`box @ A`, the lifetime box `[@]`, takes a lifetime and is never written in the surface, so the
+two do not collide. `box e` is `alloc[A] ⟦e⟧`, and `free(r)` is unchanged.
+
+**A node is one block, with a cell per field** (decision 1, §8). The prelude's `List` is
 
 ```
-data List = Nil | Cons(head: i32, tail: box List)
+data List = Nil | Cons(head: i32, tail: List)
 ```
 
 This generates:
 
-- `type List = mu X. 1 + (i32 * ref X)`. Each constructor is one summand (right-nested `+`) and
-  its fields are a right-nested `*`. `box List` in a field is `ref X`, so recursion sits under
-  `box` as decided. A recursive field that is not under `box` is an error that asks for `box`,
-  never a silent promotion.
-- Constructors: `Cons(x, box(t))` is `(roll (inr (x, alloc[List] t)) : List)`. `Nil` is
-  `(roll (inl ()) : List)`.
-- Patterns: `match l { Nil -> S₁ | Cons(h, t) -> S₂ }` is
-  `case (unroll l) { inl u -> let () = u; ⟦S₁⟧ | inr p -> let (h, t) = p; ⟦S₂⟧ }`. `t` is the
-  `ref List` cell. A pattern `Cons(h, box t)` frees it and binds the list.
+- **The type and shape.** `shape List_Cons = node (leaf i32) (leaf List)` and
+  `type List = mu X. 1 + (ref i32 * ref X)`, the corpus's `List`. Each constructor is one
+  summand (right-nested `+`); a constructor with fields is the block of its fields, so every
+  field is a separately borrowable place, and recursion sits under a cell as decided. A
+  constructor with no fields is `1`.
+- **Construction.** `box Cons(x, t)` is `(roll (inr (alloc_s[List_Cons] (x, t))) : List)`: one
+  explicit heap allocation per node, visible at the site. `Cons(x, t)` without `box` is an
+  error that asks for `box`, never a silent promotion. `Nil` is `(roll (inl ()) : List)`, with
+  no allocation.
+- **Reassembly from cells.** `Cons(c, d)` applied to cells (`c : box i32`, `d : box List`)
+  rebuilds a node from existing cells without allocating, which is what `fold_reuse` needs.
+  This form is typed: it is taken only when the arguments are cells.
+- **Patterns.** `match l { Nil -> S₁ | Cons(c, t) -> S₂ }` is
+  `case (unroll l) { inl u -> let () = u; ⟦S₁⟧ | inr p -> let (c, t) = p; ⟦S₂⟧ }`, binding the
+  cells. The pattern `box Cons(x, t)` frees the block (`free_s`) and binds the values.
 - **Fold arms** use the same constructor patterns. Recursive fields are replaced as the fold's
   `A_R`/`A′_R`/`A″_R` dictate, computed by the checker's functions: in `fold_own` the `tail`
-  field binds the result `R`; in `fold_reuse` it binds `(ref 1 cell, R)`. The algebra's type
+  field binds the result `R`; in `fold_reuse` it binds `(emptied cell, R)`. The algebra's type
   is filled, which removes the hand-computed fold types.
 
-**Block constructors (one allocation, a cell per field).** The corpus's `List` is
-`mu X. 1 + (ref i32 * ref X)` over `shape Node`: one block with every field a separately
-borrowable place. It is written
-
-```
-data List = Nil | box Cons(head: i32, tail: List)
-```
-
-It generates `shape List_Cons = node (leaf i32) (leaf List)` and the summand `ref i32 * ref X`.
-Construction is `box Cons(x, t)`, which is `alloc_s[List_Cons] (x, t)`, so the allocation is
-visible at the site. `Cons(c, d)` on cells reassembles a node from cells without allocating,
-which is what `fold_reuse` needs. The pattern `Cons(c, t)` binds the cells, and `box Cons(x, t)`
-frees the block (`free_s`) and binds the values. Which form the prelude's `List` uses is open
-question Q1.
+A field may also have type `box A` explicitly: a cell of its own inside the node's value, for a
+type with no block (`data Opt = None | Some(v: box T)` does not need one). A recursive
+occurrence that is under neither a block nor `box` is an error.
 
 Nested patterns and match compilation stay out (draft 0 Q9). A pattern is one constructor
-over variables, `_`, `()`, tuples, and `box p` in a boxed field.
+over variables, `_`, `()`, tuples, and `box p`.
 
 ### 5.4 `bool`, `true`/`false`, `if`
 
@@ -513,8 +528,9 @@ negation, because it forces a thunk. `host[...]` leaves user code.
   (`add32` or `add64`, and so on). This answers draft 0 Q5 now that types are available.
   Comparisons return `bool`.
 - Signedness: `<` and `>>` are signed, and `<u`/`>>u` (or `lt_u(…)`) are unsigned.
-- Division and remainder are partial in the host (`i32 + 1`, `inr ()` where Wasm traps), which
-  is open question Q5.
+- There is no `/` or `%` operator (decision 5, §8). Division and remainder are the prelude
+  functions `div(a, b)` and `rem(a, b)` (signed; `div_u`, `rem_u` unsigned), returning
+  `i32 + 1` with `inr ()` where Wasm traps.
 
 ### 5.6 Unit elision
 
@@ -667,7 +683,7 @@ callee's residual, and `stdout` is the caller's own.
 Surface, 15 lines (the core file is 44):
 
 ```
-data List = Nil | box Cons(head: i32, tail: List)
+data List = Nil | Cons(head: i32, tail: List)
 
 fn map_inc(l: List) -> List =
   fold_reuse l {
@@ -777,7 +793,7 @@ A stage that generalizes a sugar deletes the narrow version in the same change (
 | 2 | **Port `Sugar.lean` onto the TIR.** Typed `for` locals; injection ascriptions filled; residual from type by identity; direct-style div calls anywhere (A-normal form). Delete `isCapTy`, `capPart`, `capNorm`, `termCaps`, `callee`, `divCall`, `loopsAt`. | residual-by-syntax, typed `for` locals, injection ascriptions, narrow div calls | `io-for-untyped` becomes a pair; nested div call; a helper holding `stderr` and `stdout`; a residual-mismatch reject |
 | 3 | **Specialization by effect instantiation** (§2.4). Delete `specParamN`, `hofOf`. | narrow HOF specialization | a callback through a local, a closure, a returned callback; a `total` parameter reject |
 | 4 | **Looping `main` without capabilities.** The `run_io` wrapper for `Caps = 1`; SPEC §11/§14 text. Delete the `stdout` injection. | injected `stdout` | `div-hof.bc` runs with no capability; `bcc trusted` output |
-| 5 | **Draft 0's expression layer**: `fn`, `let`, `f(e)` without `unbang`/`force`, nested direct style, tail `return` elided, `{ … }`/`!`, borrow blocks with lifetime elision, unit elision, literals and operators. | none | one pair per form; draft 0 §5.1–5.6 as pairs against their core files |
+| 5 | **Draft 0's expression layer**: `fn`, `let`, `f(e)` without `unbang`/`force`, nested direct style, tail `return` elided, `{ … }`/`!` (with `div_defer` in `lib/div.bc`), borrow blocks with lifetime elision, unit elision, literals and operators. | none | one pair per form; draft 0 §5.1–5.6 as pairs against their core files |
 | 6 | **Lends and places**: `&x`/`&mut x` (§5.1) replacing `&c`, `*r`, `modify`, `let mut` (rebinding, joins, threading, scoped cells). | `&c` | `lend.bc` and `io-*` rewritten; a scoped-cell pair; a double-use reject |
 | 7 | **Prelude and `include`** (#59), with `bool`/`true`/`false`/`if`/`&&`/`||`/`not`. | per-file `List`/`plus`/`getb` | `is_space` pair; an include-cycle reject |
 | 8 | **`data` and `box`**: constructors, block constructors, patterns, fold arms. | hand-written `μ`/`shape`/`roll` | `map-reuse`, `sum-i32` as pairs; an unboxed-recursion reject |
@@ -791,39 +807,23 @@ The only change outside `Frontend/Elab/` and `Frontend/Parser.lean` is stage 4's
 `Frontend/Check/Externs.lean`, with its SPEC text. `Backend/` is not touched by this plan. If
 stage 4 turns out to need a runtime change, it is raised on #80.
 
-## 8. Open questions for the user
+## 8. Decisions
 
-1. **The default `data` layout.** A field under `box` (`Cons(head: i32, tail: box List)`,
-   Rust's `Box<List>`, construction `Cons(x, box t)`) or a block constructor
-   (`box Cons(head: i32, tail: List)`, one allocation with a cell per field, construction
-   `box Cons(x, t)`, the corpus's `List`). Both are proposed (§5.3). The question is which the
-   prelude's `List` uses and which the examples teach. Block constructors keep every field a
-   borrowable place and let `fold_reuse` reuse whole nodes; field boxes allocate less when
-   fields are small.
-2. **When does a div function's prefix run, when its loop is taken as a value?** `{ f(x) }`
-   lowers to the call `f V`, which runs `f`'s code up to its first loop *now* (SPEC §14 today),
-   including any I/O in that prefix. The alternative is a library `div_defer` that runs the
-   prefix at the first observation, like a real thunk. Should `{ … }` of a div computation be
-   eager (cheaper; today's behaviour) or deferred (matches `{ … }`'s reading)?
-3. **`&c` → `&mut c`.** §5.1 makes `&` Rust-shaped: `&x` shared, `&mut x` exclusive, with the
-   mechanism (borrow, scoped cell, or move-and-rebind for a hand-back callee) chosen by type.
-   Is one spelling for "lent and back afterwards" right, or should move-and-rebind, which is
-   what a div callee requires, look different from a real borrow?
-4. **One grammar or two.** This design keeps one AST, in which core is the fully annotated
-   sublanguage and sugar and core mix in one `.bc` file. Draft 0's error examples use `.bcs`.
-   Should surface files have their own extension, with core-only `.bc` files?
-5. **Division.** Host `div_s32` and `rem_s32` return `i32 + 1`. Should `/` and `%` be operators
-   of type `i32 + 1`, which makes every division a `match`, or stay functions (`div_s(a, b)`)
-   with no operator?
-6. **Which callback types are effect-open.** §2.4 makes the effect of every *parameter* arrow a
-   variable, inferred per call. A callback *stored* in data or a cell, or *returned*, keeps the
-   effect its written type says. Should written arrow types in result and field positions also
-   be effect-open (more specialization, and harder to predict), or is parameter-only right?
-7. **The heap type's name.** `box e` allocates, and its type is the core's `ref A`. Should the
-   surface spell that type `box A`, as Rust does? The core's `box @ A` (the lifetime box `[@]`)
-   takes a lifetime and is never written in the surface, so the two cannot be confused
-   syntactically. Readers of the printed core would, however, see `ref` for what they wrote as
-   `box`.
+The user settled the seven questions of the first draft. The sections above follow them.
+
+1. **The `data` layout.** A node is one block with a cell per field. The allocation is written
+   at construction, `box Cons(x, t)`: one explicit heap allocation per node. The prelude's
+   `List` uses it (§5.3).
+2. **`{ f(x) }` is lazy.** It runs nothing until it is first observed, through the library
+   `div_defer`. This is consistent with braces meaning "suspend" (§2.4).
+3. **One spelling, `&mut x`,** for "lent and handed back", and `&x` for a shared borrow. The
+   mechanism (a real borrow, a scoped cell, or move-and-rebind for a div callee) is chosen by
+   type. `&c` is retired (§5.1).
+4. **One grammar and one `.bc` file type.** Surface and core mix freely (§1.1).
+5. **No `/` or `%` operator for now.** `div(a, b)` and `rem(a, b)` return `i32 + 1` (§5.5).
+6. **Effect inference on callback parameter types only,** for now. Stored and returned callback
+   types keep their written effect (§2.4).
+7. **The surface heap type is spelled `box A`,** which is the core's `ref A` (§5.3).
 
 ## 9. Prior art
 
