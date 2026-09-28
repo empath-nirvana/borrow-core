@@ -11,6 +11,9 @@
 # its whole standard output, the program's bytes followed by the report, must equal
 # `<name>.out`, and its standard error `<name>.err` (empty if there is none).
 #
+# A program marked `-- check: no-source` has a golden output and is too large for the source
+# interpreter (`corpus/deep-list.bc`): it is run at every other stage.
+#
 # No I/O program has a bound on its input: `corpus/io-cat.bc` also copies a generated input of
 # 4860 bytes, at every stage.
 #
@@ -71,7 +74,9 @@ for f in corpus/*.bc corpus/surface/*.bc; do
     in=/dev/null; [ -f "$base.in" ] && in="$base.in"
     err=/dev/null; [ -f "$base.err" ] && err="$base.err"
     ok=1
-    for st in source clos flat wasm; do
+    stages="source clos flat wasm"
+    grep -q '^-- check: no-source' "$f" && stages="clos flat wasm"
+    for st in $stages; do
       if ! runStage "$st" "$f" "$in"; then
         echo "$f: stage $st fails: $(head -3 "$tmp/err")"; ok=0; break
       fi

@@ -4,6 +4,7 @@ import Backend.Clos.Syntax
 import Backend.Clos.Convert
 import Backend.Clos.Types
 import Backend.Clos.Flow
+import Backend.Clos.Collapse
 import Backend.Clos.Interp
 import Backend.Driver
 import Backend.Flat.Syntax

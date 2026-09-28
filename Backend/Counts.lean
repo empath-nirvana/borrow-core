@@ -15,8 +15,9 @@ first and gives it to both. `scripts/compile-corpus.sh` compares the counts with
 
 With `--sites`, print the program's closure calls instead (`Flat.callSites`): how many there
 are, how many are direct because their type's union has one code, how many more because the flow
-analysis finds one code, and the recursive closure types, which keep heap environments, with the
-number of codes in each union.
+analysis finds one code, the recursive closure types, which keep heap environments, with the
+number of codes in each union, and the owned folds compiled by pointer reversal and those that
+recurse.
 -/
 
 /-- All of standard input, read in at most `fuel` chunks of 64 KiB. -/
@@ -41,7 +42,9 @@ def sites (file src : String) : Except String String := do
   let (n, ty, fl) ← Backend.Flat.callSites p
   let T ← p.types
   let recs := T.recFn.toList.map fun t => (T.union t).size
-  pure s!"calls {n} direct {ty + fl} (union {ty}, flow {fl}) dispatched {n - ty - fl} recursive-types {recs.length} {recs}"
+  let (rev, rc) ← Backend.Flat.foldSites p
+  pure (s!"calls {n} direct {ty + fl} (union {ty}, flow {fl}) dispatched {n - ty - fl} " ++
+    s!"recursive-types {recs.length} {recs} owned-folds reversed {rev} recursive {rc}")
 
 def main (argv : List String) : IO UInt32 := do
   if let ["--sites", file] := argv then

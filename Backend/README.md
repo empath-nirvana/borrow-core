@@ -26,7 +26,7 @@ and `nu_out` erase, and `unfold` is a closed λ-term.
 | stage | file | what it is | interpreter |
 |---|---|---|---|
 | source | `Source.lean` | `main`'s erasure | `Support`'s `step` at `wasmHost` |
-| closure IR | `Clos/Syntax.lean`, `Clos/Convert.lean` | named A-normal form, explicit environments and ownership | `Clos/Interp.lean` |
+| closure IR | `Clos/Syntax.lean`, `Clos/Convert.lean`, `Clos/Collapse.lean` | named A-normal form, explicit environments and ownership | `Clos/Interp.lean` |
 | layout types | `Clos/Types.lean` | a layout type for every closure-IR variable, code and constructor; each type's layout; each closure type's union of codes | — |
 | closure flow | `Clos/Flow.lean` | a 0-CFA: the codes each call may call | — |
 | flat IR | `Flat/Syntax.lean`, `Flat/Lower.lean` | functions over words, locals, allocation, calls and tail calls of several results, `ite` | `Flat/Interp.lean` |
@@ -35,7 +35,9 @@ and `nu_out` erase, and `unfold` is a closed λ-term.
 
 All passes are structural recursion (the interpreters take fuel); `Driver.lean` composes them.
 No stage optimizes beyond choosing layouts, defunctionalizing closures, calling known codes
-directly, compiling `let` as a binding and cancelling the copy and drop inside `swap`. The WAT printer and the runtime are the only steps no Lean interpreter
+directly, compiling `let` as a binding, cancelling the copy and drop inside `swap`, compiling
+the Z combinator's fixed point natively, building codata thunks eagerly, merging equal codes, and
+compiling owned folds by pointer reversal (Stack). The WAT printer and the runtime are the only steps no Lean interpreter
 observes.
 
 **Closure conversion** (`Clos/Convert.lean`). De Bruijn indices become variables, and each
@@ -45,6 +47,29 @@ variables `xs` captured by value; a β-redex `(λx. b) a`, the erasure's `let`, 
 and makes no closure. A primitive applied to its argument is `prim`; used as a value it is
 η-expanded into closure code. The axiom `swap ≜ λx.λy. let z = load x; store x y; (x, z)` is the
 primitive `swap`, which moves the old contents out where the axiom copies and then drops them.
+
+Two more shapes are recognized, as `swap` is. **The Z combinator's fixed point**
+`selfV B = λv. X X v`, `X = λx. (λself. λx. B) (λv. x x v)` (`Core/Fix.lean`), with `B` closed
+under `self` and `x`, is one code `c`, `λx. B[self := clos c []]`: it captures nothing, and
+`self` is a closure of its own code, built where it is used (it is never captured, copied or
+dropped), so the recursion is a call of `c` by its code index. Applied to an argument,
+`selfV B a` is that call, not a `let`. Every fixed point of the core is built this
+way: `fold_imm`, `fold_own`, `fold_reuse`, `unfold` (so `ν`, loops, `fixd`, streams and
+iterators) and the programs of `Core/`. **η** `λv. y v` of a variable `y` is `y` itself, as
+`unfold`'s map at a recursive position forwards the rest of the codata: no closure wraps a closure
+of its own type. A term of neither shape is converted as any other λ; the combinator written
+some other way (a bare `X X`, as `Core/DelayNaive.lean` does) stays the λ-terms it is.
+
+**Codata thunks and equal codes** (`Clos/Collapse.lean`). A loop, stream or iterator is first
+the thunk `nu_in ⟨(nu_out (force f s₀)).1, (nu_out (force f s₀)).2⟩` the program builds, and
+after its first observation the thunk `unfold`'s map builds, so an observation would see two
+codes. The first is replaced by what forcing it computes first when that is a value: `t` itself
+when both projections observe the captured `t` (η), or the call `f s₀`, made where the thunk is
+built, when the flow analysis finds that `f` is always one code whose body only builds a value
+(`unfold step` is `λs. λo. …`). Then codes equal up to their variables' names, of the same layout
+type and with captured values of the same types, are merged: `unfold`'s first state
+`λo. self g s o` and its map's `λo. self g s′ o` are one code once `self` is native. A code no
+closure of which is built (from `main`, transitively) is in no union and is compiled as a stub.
 
 **Layout types** (`Clos/Types.lean`). Unification over the closure IR gives every variable a
 layout type `1 | i32 | i64 | A ⊗ B | A ⊕ B | fn(A; C, D) | loc A` (see Representation).
@@ -59,15 +84,17 @@ is reported, not compiled; the source's typing derivation is what makes the corp
 **Closure flow** (`Clos/Flow.lean`). A monovariant 0-CFA over the whole closure IR: every value
 is abstracted by its construction site (a closure by its code, a pair or injection by its
 operands, a cell or array by its contents), and the least solution of the inclusion constraints
-gives, for every call, the codes whose closures may reach it. The helpers that call closures
-(`tab`, an array's `drop`, the loop driver) are constraints too.
+gives, for every call and for the loop driver, the codes whose closures may reach it. The helpers
+that call closures (`tab`, an array's `drop`, the loop driver) are constraints too. A call's code
+is known when the codes the analysis finds there that are in its type's union are one: each set
+over-approximates, so their intersection does.
 
 **Flat IR** (`Flat/Lower.lean`). A value of layout type `A` is `|A|` words: in `|A|` locals,
 passed as `|A|` arguments, returned as `|A|` results. Closures are defunctionalized (see
 Representation): a closure code is a function of its captured values' words and the argument's
 words, returning the answer's words. A call is a direct call of the code when it is known (the
-closure type's union has one code, or the flow analysis finds one code at the call), and
-otherwise a call of the type's dispatcher `apply`, a `switch` on the closure's tag whose cases
+closure type's union has one code, or the flow analysis finds one code of it at the call; the
+loop driver's call too), and otherwise a call of the type's dispatcher `apply`, a `switch` on the closure's tag whose cases
 tail-call the codes. A call in return position whose callee answers the caller's words is a tail
 call. `case` is an `if` on the tag word. Copy, drop, the
 printer, the array primitives and the loop driver are flat-IR functions generated per layout
@@ -136,17 +163,57 @@ whether a word is an integer, a tag, a closure (`<fun>`) or a location (`<loc>`)
 answering two projections at two types. Its code returns `max |C| |D|` words, the arm's own
 words then zeros; a projection's caller takes the first `|C|` or `|D|`.
 
-**Open.** The recursive closure types are the Z combinator's (`Core/Fix.lean`): its handle
-`selfV = λv. X X v` captures `X`, whose union is `X`'s own type, so every fixed point (the folds
-`fold_imm` and `fold_own`, `ν`'s unfold, the loops) keeps a heap environment, allocated at each
-unrolling. Every corpus program that recurses hits it (`bcc-counts --sites` lists the types):
-`13-2-sum-prog`, `sum-prog-exact`, `count-down`, `count-down-exact`, `div-hof`,
-`implicit-drops`, `iter-close`, `iter-range`, `map-reuse`, `nats-sum`, `sum-i32` and every
-`io-*` program. Nearly all of the corpus's remaining allocations are these environments. Two
-ways out: compile the fixed point natively (a code that calls itself by its code index, so the
-handle captures only the body's free variables and no union contains itself), or let the source
-say `box` (#54). Placement of the objects that remain (stack, frame arena or heap, by escape
-analysis) is also open.
+**Open.** With fixed points native, a recursive closure type is one the program builds as
+data: a closure that captures a closure of its own type, as a fold whose result is a function
+does (`add` of `13-2-sum-prog` and `sum-prog-exact`, one type; `div_fuel`'s handler in
+`lib/div.bc`, used by `io-fuel`, four). `bcc-counts --sites` lists them. They keep the heap
+representation until the source can say `box` (#54). Placement of the objects that remain
+(stack, frame arena or heap, by escape analysis) is also open.
+
+The dispatched calls that remain are calls of those closures: a chain of functions built by
+a fold, whose links are different codes (`13-2-sum-prog`'s and `sum-prog-exact`'s `add`,
+`io-fuel`'s fuel handler). Every other call of the corpus is direct.
+
+## Stack
+
+A call is a tail call (`return_call`; LLVM `musttail`) when it is in return position and its
+callee answers the caller's words. What runs in constant stack:
+
+- **Loops.** Every `ν`-type program, `unfold`, `fixd`, `div_bind` and the `for` loop: an
+  observation runs the step once and returns the next state inside the rest, so the depth does
+  not grow with the number of observations. The loop driver (`drive`) calls the loop and then
+  tail-calls itself; `div_fuel`'s handler ends each observation with a tail call of the next.
+  A left fold is written as a loop whose state is the rest of the structure and the accumulator
+  (`corpus/deep-list.bc`); this is the only left-fold shape the core has.
+- **A self-call in tail position**, of the native fixed point: its code is known, so the call is
+  a direct tail call of the code itself.
+- **Arrays.** `tab` and an array's `drop` are loops of tail calls.
+- **Owned folds by pointer reversal** (Deutsch–Schorr–Waite). The step of `fold_own` or
+  `fold_reuse` (`λu. trav T (λw. self g w) u to r. g r`, recognized as the conversion recognizes
+  the fixed point) is compiled as two loops of tail calls (`Flat/Lower.lean`, `foldDown`,
+  `foldUp`) when the shape `T` is linear (a `⊗` has a recursive position on at most one side,
+  so lists and unary numbers are) and the node reaches its child through one pointer: the boxed
+  field at `X`, or the cell at `Ref X`. The descent stores each node's words in its child's
+  object, with the pointer to the child replaced by the pointer to the node's own object (`0`
+  at the root), and goes on with the child; at a node with no child it calls the algebra `g`.
+  The ascent loads each stored node back, calls `g` on it with the child's result at the
+  recursive position, and frees the object (`fold_own`) or hands it to `g` as the emptied cell
+  `Ref 1` (`fold_reuse`). The child's object is exactly as wide as a node, so nothing is
+  allocated. It is safe because the fold owns the structure linearly: while the pointers are
+  reversed, no other word can reach it. Every owned fold of the corpus qualifies
+  (`bcc-counts --sites`, `owned-folds reversed`).
+
+What does not:
+
+- **`fold_imm`** keeps a native frame per level of the structure: it traverses borrowed data,
+  whose pointers it cannot reverse. Under wasmtime's default stack a list of about 2500
+  elements is the limit. A heap-allocated stack of the pending nodes, or a left-fold (loop)
+  reformulation where the algebra allows, would remove it.
+- **Owned folds over non-linear shapes** (trees, with a recursive position on both sides of a
+  `⊗`) or whose child is reached through more than one pointer recurse natively. Pointer
+  reversal extends to them with a mark per node saying which child is being visited, and room
+  in the node for the results of the children already folded; the objects are not always wide
+  enough for those results, so it is not done.
 
 ## Memory discipline
 
@@ -261,10 +328,12 @@ stages must agree. An indirect call is a dispatched one: a call of a type's `app
 the `switch` on the tag chooses at run time. There is no other kind of indirect call. `scripts/compile-corpus.sh` checks every corpus program's counts against
 `corpus/counts.expected`: a count above the file fails the gate, one below it is reported, and
 `--write-counts` rewrites the file. A pure arithmetic program (`int-arith`, `int-ops`) allocates
-nothing and makes no indirect call; what remains is cells, arrays, heap environments of
-recursive closure types, and boxed recursive fields. `bcc-counts --sites <file>` prints the
-program's closure calls: how many are direct because the union has one code, how many more
-because the flow analysis finds one, how many are dispatched, and the recursive closure types.
+nothing and makes no indirect call; what remains is cells, arrays, boxed recursive fields (a
+list's nodes), and the heap environments of the few recursive closure types (Open), whose calls
+are the only dispatched ones. `bcc-counts --sites <file>` prints the program's closure calls: how
+many are direct because the union has one code, how many more because the flow analysis finds
+one, how many are dispatched; the recursive closure types; and the owned folds, how many are
+compiled by pointer reversal and how many recurse.
 
 ## Verification (#15)
 
@@ -300,11 +369,39 @@ helpers and the entry make, so a call where it finds one code calls that code on
 Nothing checks the solution at run time; a proof would show that the abstraction of every run's
 values is included in it.
 
+**Collapsing and merging.** Merging codes equal up to renaming needs nothing: a closure of one
+is a closure of the other with the same captured values. Building a codata thunk eagerly needs
+that the call made early, `f s₀` of a known code whose body only builds a value, cannot fail and
+reads or writes no memory but that value, so it commutes with everything between the thunk's
+construction and its first observation; the thunk's captures are consumed by it as either
+projection would consume them, and a thunk that is dropped unobserved drops the same values
+(the call's result holds them). η of a thunk of `&` for a variable is the same step as η above.
+Removing unbuilt codes from the unions needs the reachability argument (a closure is built only
+by a `clos` of a code whose closure is built, or by `main`).
+
+**Native fixed points** are an obligation of their own: the code `λx. B[self := clos c []]`
+simulates the combinator's `selfV B`. The source side is `Core/Fix.lean`'s unrolling
+(`selfV_steps_in`: `selfV w` reaches `fixV w = B[selfV/self][w/x]` by three pure β-steps, in any
+evaluation context), so the simulation relates `selfV B` to `clos c []` and a call of `c` on `w`
+to those three steps and `fixV w`; the closure IR skips the steps, which neither allocate nor
+touch the heap. η for a variable (`λv. y v` is `y`) is the same kind of step: calling the wrapper
+is one β-step and then calling `y`. The ownership invariant is unchanged: `self` captures nothing,
+so its copies are its tag word.
+
+**Pointer reversal** needs the classic separation-logic proof of Deutsch–Schorr–Waite (Yang,
+*Verifying the Schorr–Waite algorithm*; Bornat; Mehta and Nipkow), here for a linear shape: the
+invariant is that the objects on the reversed path, each holding its node's words with the child
+pointer replaced by the parent's, together with the current node, form the original structure
+with the path's pointers reversed, disjoint from everything else. The fold's ownership of the
+structure gives the disjointness; the algebra is called on the same arguments, in the same
+order, as the recursive step calls it, so the refinement is to the recursive code. The flat-IR
+interpreter checks every load and store of the reversal against the live ranges.
+
 ## Scope
 
-No optimizations beyond the layouts, defunctionalization and direct calls of known codes, no
-stack switching. The only externs compiled are the
-standard I/O ones; the model's harness (`mk_input`, …) is not compiled. Recursion (the folds'
-fixed points) is non-tail and uses the Wasm stack. Closures of recursive closure types keep an
-environment object (Representation, Open), and unboxed recursive values (`μX. 1 + (i32 ⊗ X)`
-laid out flat) are a follow-up.
+No optimizations beyond the layouts, defunctionalization, direct calls of known codes, native
+fixed points and pointer reversal; no stack switching. The only externs compiled are the
+standard I/O ones; the model's harness (`mk_input`, …) is not compiled. `fold_imm` and the owned
+folds that pointer reversal does not cover recurse on the Wasm stack (Stack). Closures of
+recursive closure types keep an environment object (Representation, Open), and unboxed recursive
+values (`μX. 1 + (i32 ⊗ X)` laid out flat) are a follow-up.
