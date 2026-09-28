@@ -1,0 +1,13 @@
+-- expect: 9:3: `k` is not consumed in its scope, and its type `U (F 1)` has no destructor
+-- expect|   in the core generated for `for` here (`bcc desugar` shows it)
+-- An error in code a sugar generates is reported at the sugar, with a note naming it
+-- (docs/typed-elaboration.md §3). The loop threads `k`, a thunk with no destructor; the loop's
+-- `close` path, which the `for` generates, does not consume it. The error is at the `for`, not
+-- at a position inside the generated template.
+main : F 1 =
+  k : U (F 1) <- return (thunk (return ()));
+  for b in bytes stdin {
+    k : U (F 1) <- return k;
+    return ()
+  };
+  force k

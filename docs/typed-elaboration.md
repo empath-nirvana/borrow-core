@@ -799,6 +799,21 @@ A stage that generalizes a sugar deletes the narrow version in the same change (
 | 8 | **`data` and `box`**: constructors, block constructors, patterns, fold arms. | hand-written `μ`/`shape`/`roll` | `map-reuse`, `sum-i32` as pairs; an unboxed-recursion reject |
 | 9 | **Finite `for`** over arrays and counts (total), in the prelude. | "`for` over `bytes c` only" | `array-sum` with `for`; a total function with `for` |
 
+**Stage 1, as built.** `Frontend/Elab/` holds the typed IR (`Tir.lean`), inference
+(`Infer.lean`) and the pipeline (`Pipeline.lean`), which `checkProgram` and `bcc desugar` run.
+The sugar is still elaborated first, by `Sugar.lean`; the typed IR is inferred on the core it
+produces; lowering rebuilds each node from its lowered children, which is the identity on core.
+Where a type needs one of the core's substitutions (instantiating a lifetime, unrolling a `μ` or a
+`ν`, shortening a family), inference asks the checker's own synthesis for that node's type. The
+checker is used as a function and is not changed. `Sugar.lean`'s templates are respanned to the
+sugar that produced them and recorded as origins, so a checker error in generated code is
+reported at the sugar, with its name (`corpus/reject/for-generated-origin.bc`). `bcc tir` prints
+the typed IR, and `scripts/check-elab.sh` checks that every checked corpus program is fully
+typed and lowers back unchanged, and pins two outputs (`corpus/tir/`). `Backend/Driver.lean`
+still calls `Sugar.elaborate` directly. It sees the same core, because lowering is the identity;
+switching it to `Elab.elaborate` is a one-line change for the stage that makes lowering do
+something.
+
 Stages 1–4 retire the #54 shortcuts and change no surface syntax, except that `&c` stays until
 stage 6. Stages 5–9 are the rest of step 2. After stage 9, step 3 of #54 (rewriting 6–10 corpus
 programs and measuring) can start.

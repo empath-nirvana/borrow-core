@@ -117,6 +117,10 @@ judgment, for the derived forms of syntax-core §9), so what the checker returns
 | `Check/Program.lean` | declarations, `main`, and the soundness theorems |
 | `Check/CrossCheck.lean` | erasures compared with `Core/`'s hand-written terms, by kernel evaluation |
 | `Sugar.lean` | the sugar, elaborated before checking: ambient capabilities in `main`, `&c`, `for` (SPEC §11); divergence inferred, `total`/`div` markers, direct-style div calls as delay binds, specialization at a callback's type (SPEC §14) |
+| `Elab/Respan.lean` | `respan`: generated syntax at the span of the sugar that produced it |
+| `Elab/Tir.lean` | the typed IR: one node per node of the program, with its type, binders (identity, type, class) and effect (`docs/typed-elaboration.md` §1.1) |
+| `Elab/Infer.lean` | inference: the typed IR of each declaration, bidirectionally, in the environment the checker uses; the checker's synthesis answers for the core's substitutions |
+| `Elab/Pipeline.lean` | the pipeline `checkProgram` runs: the sugar, inference, lowering (the identity on core at stage 1), and errors in generated code named by their sugar (`renderError`); `bcc tir` |
 | `Check/Externs.lean` | the standard externs with their roles, models and assurance levels; the `run_io` wrapper; `IORun` (SPEC §11) |
 
 ### Soundness
@@ -211,11 +215,13 @@ of the search; none is a change to `CDerives`.
 
 ### Standard I/O (SPEC §11)
 
-`checkProgram` first elaborates the I/O sugar (`Sugar.elaborate`): a program that declares no
-externs and whose `main` names a capability gets `lib/io.bc` (embedded by `include_str`), the
+`checkProgram` first elaborates the program (`Elab.elaborate`, which runs `Sugar.elaborate` and
+then the typed IR). In the sugar, a program that declares no externs and whose `main` names a capability gets `lib/io.bc` (embedded by `include_str`), the
 capability externs, and a `main` that hands them back at every terminal; `for x in bytes c { M };
 N` becomes a loop by `unfold` built from a template whose holes are filled with the program's own
-syntax; `&c` becomes a binding that rebinds `c`. Everything the checker sees is ordinary core.
+syntax, and whose own nodes carry the span of the `for`; `&c` becomes a binding that rebinds
+`c`. Everything the checker sees is ordinary core. An error the checker reports at the span of a
+sugar is in code generated for it, and the message says so.
 `bcc desugar` prints it, and `corpus/sugar/` pairs each sugar with its core form
 (`scripts/check-sugar.sh`).
 
