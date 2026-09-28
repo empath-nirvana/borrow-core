@@ -188,4 +188,7 @@ Each entry: the decision, and why. Newest last.
     - *Withdrawn* (stage 2, with decision 34): the variables a `for` threads were typed by
       their bindings `y : T <- …`, and an injection needed an ascription. Both types are now
       inferred (`docs/typed-elaboration.md`).
+    - *Withdrawn* (stage 3): specialization covered only a named div function passed by name.
+      It now covers any callback whose type inference knows: locals, returned callbacks, and
+      closures (elaborated as div bodies when they loop), at parameter types only.
     - A copy made by specialization is named `h__k`.

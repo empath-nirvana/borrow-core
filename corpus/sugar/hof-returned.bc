@@ -1,0 +1,29 @@
+-- A callback an earlier call returned (SPEC §14, docs/typed-elaboration.md §2.4). `pick`'s type
+-- says it returns a div function, so `g`'s type is known and `twice (g, 5)` is specialized at
+-- it. `hof-returned.core.bc` is the program written by hand in core.
+-- Answer: `inl 7`.
+-- A loop that finishes at its first observation, with `n + 1`.
+def once : i32 => U (loop i32 1) =
+  thunkv fun (n : i32) ->
+    return (thunkv nu_in < return (inl ((unbang host[add32]) (n, i32[1]))), return () >)
+
+-- A callback that runs a loop: it calls `once` in direct style, so it is div.
+def steps : !(i32 => i32) =
+  !thunkv fun (n : i32) ->
+    k <- return (once n);
+    return k
+
+-- A higher-order function, written once at a total callback type.
+def twice : !(i32 => i32) * i32 => i32 =
+  thunkv fun (p : !(i32 => i32) * i32) ->
+    let (f, a) = p;
+    x <- return ((unbang f) a);
+    y <- return ((unbang f) x);
+    return y
+-- A function whose result is a div function; its type says so.
+def pick : 1 => !(i32 => U (loop i32 1)) = thunkv fun (u : 1) -> let () = u; return steps
+
+main : F (i32 + 1) =
+  g <- return (pick ());
+  r <- return (div_fuel[i32, 1] (twice (g, i32[5]), i32[10]));
+  return r

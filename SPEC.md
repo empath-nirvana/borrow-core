@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 0.12 · 2026-09-28
+Version 0.13 · 2026-09-28
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -1148,11 +1148,16 @@ form written by hand; `div-annotated.bc` is the same program with `div` and `tot
 A callback's thunk type carries its effect: `U(A ⊸ F B)` is total and `U(A ⊸ F(U(Loop B R)))`
 is div. A higher-order function written once must serve both, or functions are colored. It is
 **specialized at the callback's computation type**: at a call `h V` of a function
-`h : P ⇒ Q = thunkv fun (p : P) -> M` where a component of `V` names a div function and `P`
-has a total function type (`A ⇒ B` or `!(A ⇒ B)`) there, the elaborator makes a copy of `h`
-with that component of `P` at the callback's type, infers the copy's divergence (calls through
-the parameter are now direct-style div calls, so the copy is div), and calls the copy
-(`corpus/div-hof.bc`, `sum3__0`). There is one copy per function and parameter type; a total
+`h : P ⇒ Q = thunkv fun (p : P) -> M` (or its `!` form) where `P` has a total function type
+(`A ⇒ B` or `!(A ⇒ B)`) at a component whose argument's type, as inference gives it, is a div
+function's (`A ⇒ U(Loop B R)`), the elaborator makes a copy of `h` with that component of `P` at
+the argument's type, infers the copy's divergence (calls through the parameter are now
+direct-style div calls, so the copy is div), and calls the copy (`corpus/div-hof.bc`,
+`sum3__0`). The callback may be a named function, a local holding one
+(`corpus/sugar/hof-local.bc`), a callback an earlier call returned (`hof-returned.bc`), or a
+closure (`hof-closure.bc`): a closure `thunkv fun (x : A) -> M` passed at a callback type whose
+body loops is first elaborated in place as a div function body. Only parameter types are
+instantiated: a callback's effect in a stored or returned type is the one its type says. There is one copy per function and parameter type; a total
 callback uses `h` as written, which stays total. The core has no type ranging over computation
 types, so this is whole-program monomorphization, with no kernel change.
 
@@ -1201,9 +1206,8 @@ preserved. The runtime's obligation for a looping `main` is §11's.
 - **A call lends at most one capability** with `&c`, and a div call whose residual differs
   from the caller's must hand back, in its residual, the capability it was lent (it is matched
   to the lent `&c`), or nothing.
-- **Specialization** covers named functions without type parameters, with the callback passed
-  by name in a tuple component of the argument; a callback captured in a closure, returned, or
-  passed through a variable of the caller is not specialized. A div function has no type
+- **Specialization** is of named functions without type parameters, at parameter types only;
+  a callback stored in data or a cell keeps the effect its type says. A div function has no type
   parameters.
 - **`div_fuel` is `driveE`** by construction, not by a proved equation.
 - The model interpreter (`bcc interp`) copies the remaining input on every read.
@@ -1229,6 +1233,10 @@ typed world, the model and the end-to-end theorems in `Core/Stdio.lean`, the che
 ---
 
 ## Changelog
+
+- **0.13** (2026-09-28) — §14's specialization reads the callback's type from inference
+  (#54, stage 3): any callback whose type is known, including locals, returned callbacks and
+  closures, which are elaborated as div bodies when they loop. No kernel, rule or checker change.
 
 - **0.12** (2026-09-28) — §14's elaboration on types (#54, stage 2 of
   `docs/typed-elaboration.md`). The residual is the components of the result with no destructor,

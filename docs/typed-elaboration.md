@@ -836,6 +836,15 @@ now includes all of this. What remains of §4's table after stage 2 is specializ
 and the injected `stdout` (stage 4). One limit stays: a call lends at most one capability, and a
 div call's residual is matched to its `&c`.
 
+**Stage 3, as built.** Specialization runs on types (`specDecl`, `specV`, `specC` in
+`Sugar.lean`). A traversal of each declaration with its typing context finds calls of named
+higher-order functions (plain or `!`). It types the argument, elaborating a closure at a callback
+type as a div body when it loops (`closureAt`), and reads the instantiation off the argument's
+type (`specTy`). The copy is made on first use and cached by (function, parameter type). The
+syntactic `calls`, `renameCalls`, `fnShape`, `specParamN`, `specParam`, `copyFor` and
+`Decl.calls` are deleted. Pairs: `corpus/sugar/hof-local.bc`, `hof-closure.bc`,
+`hof-returned.bc`.
+
 Stages 1–4 retire the #54 shortcuts and change no surface syntax, except that `&c` stays until
 stage 6. Stages 5–9 are the rest of step 2. After stage 9, step 3 of #54 (rewriting 6–10 corpus
 programs and measuring) can start.

@@ -39,6 +39,9 @@ structure TCx where
 def TCx.push (c : TCx) (x : String) (A : Option CVTy) : TCx :=
   { c with E := c.E.push (some x), T := A.getD .unit :: c.T, locals := (x, A) :: c.locals }
 
+/-- A slot with no name: a dead binder of the checker (`thunk M`, `<M, N>`, `Fun`). -/
+def TCx.pushDead (c : TCx) : TCx := { c with E := c.E.push none, T := .unit :: c.T }
+
 /-- The context of a body among the declarations `scope`: every extern when `all`, else the
 persistent ones (the context of a `def`, SPEC §11). -/
 def TCx.ofScope (scope : List Decl) (all : Bool) : TCx :=
