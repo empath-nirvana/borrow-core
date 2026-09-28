@@ -1,0 +1,45 @@
+-- pending: #18, and an open design question (multi-shot continuations)
+-- Backtracking search with a `choose` operation whose handler resumes its continuation twice:
+-- once with `true` and, if that branch fails, again with `false`.
+--
+-- Axes: effects × codata (a handler is a fold of the free model; its continuation is a
+-- suspended computation, `U C`) × scope (what the continuation captures).
+--
+-- Blocked by: #18 (no handlers in the surface), and an open design question. A continuation of
+-- type `U C` is linear in the core, hence one-shot: a thunk may capture owned cells or borrows,
+-- and running it twice would use them twice (the strict account, §6: "multi-shot continuations
+-- are excluded by linearity"). Options, with their trade-offs:
+--   - One-shot only, and search written with explicit state: the choices as data (a tree, or a
+--     list of pending branches) consumed by a fold or a loop. Expressible today in core; the
+--     direct style of this program is lost.
+--   - Multi-shot when the continuation is persistent: a continuation that captures only
+--     persistent values is a `!U C`, which `copy_bang` duplicates. A typing condition on the
+--     handler's `k`; it covers pure search (this program), and not search that mutates a
+--     borrowed board.
+--   - Multi-shot with an explicit copy of the captured state (a `Clone` on the environment): the
+--     handler pays for the copy where it resumes twice; needs a copy for every captured type,
+--     and borrows cannot be copied `mut`.
+--   - Undo instead of copy (a trail, as in Prolog engines): one continuation, and state restored
+--     by the handler before the second resume. Keeps linearity; the restore is the programmer's
+--     obligation, or a library's.
+--
+-- Spelling (a hypothesis): draft 0's `cap` with a continuation parameter
+-- (`docs/surface-cbpv.md` §2.11), and a `handle … in { … }` whose clause calls `k` twice.
+--
+-- Today: the parser stops at `cap`, which is not a declaration.
+--
+-- Once it lands: the first pair (a, b) of choices from {1, 2} with a + b = 3, as the number
+-- 10 * a + b; the branch (1, 1) fails and is retried. Golden: `i32[12]`, `live 0`.
+
+cap Choose { choose(k: {bool -> r}) -> r }
+
+fn search<'h>(c: imm 'h Choose) -> i32 =
+  let a = if suspend c.choose() { 1 } else { 2 };
+  let b = if suspend c.choose() { 1 } else { 2 };
+  if a + b == 3 { 10 * a + b } else { 0 }
+
+main -> i32 =
+  handle Choose {
+    choose(k) -> let x = k!(true); if x == 0 { k!(false) } else { x }
+  } in { c -> search(c) }
+-- now: 34:1: expected a declaration (`type`, `shape`, `def`, `extern` or `main`), found name `cap`

@@ -1,0 +1,31 @@
+-- Axes: effects × coeffects. A persistent function with an `imm` demand on its input side and
+-- a capability (linear state, an effect) on its output side, called three times.
+--
+-- `emit` reads a separator through an `imm` borrow (a coeffect: the reader comonad) and writes a
+-- number and the separator to an output it is handed and hands back (an effect). It is `!`
+-- (persistent, a coeffect on the function itself), so it is called three times with nothing
+-- copied. The two directions do not interact: `!` is promoted only at a `fun`/`Fun` (SPEC §2),
+-- so a coeffect never has to cross `F`, and the account's missing distributive law `D T → T D`
+-- is never needed (the strict account, §3). Each call lends the separator's cell with `&sep` for
+-- that call; the capability is passed and handed back by name, since a call lends at most one
+-- place today (`corpus/pending/lend-two.bc`).
+--
+-- Answer: `1,2,3,` and a newline, and `i32[44]`, the separator's cell freed at the end. A
+-- borrow that did not hand the cell back does not check; `emit` writing the separator before
+-- the number prints `,1,2,3`.
+
+def emit : !(all 'a < top. imm 'a i32 * (Out * i32) => Out * 1) =
+  !thunkv Fun 'a < top. return (thunkv fun (p : imm 'a i32 * (Out * i32)) ->
+    let (sep, r) = p;
+    let (o, n) = r;
+    let (o, _) = put_dec(o, n);
+    let s = *sep;
+    putb(o, s))
+
+main -> i32 =
+  let sep = alloc(44);
+  let (stdout, _) = emit(&sep, stdout, 1);
+  let (stdout, _) = emit(&sep, stdout, 2);
+  let (stdout, _) = emit(&sep, stdout, 3);
+  putb(&mut stdout, 10);
+  free(sep)

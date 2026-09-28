@@ -1,0 +1,27 @@
+-- pending: #54, stage 9
+-- A total function with a `for` over a count: the sum of the first `n` squares.
+--
+-- Axes: codata × effects (divergence): whether a loop is div is a property of its source.
+--
+-- Blocked by: the surface. `for` iterates only over `bytes c` today, a source that may not end,
+-- so a `for` always makes its function div (SPEC §14 Open: "`for` over a finite source in a
+-- total function is not provided"). Stage 9 plans finite `for` over counts and arrays as
+-- library code in the prelude, a `fold_own` over the unary count as `div_nat` does, which is
+-- total. `range` is not a name today, and `total` would reject a `for` anyway.
+--
+-- Spelling: `docs/typed-elaboration.md` §4 (`range(n)`, a count), and draft 0's `total fn`.
+--
+-- Today: the elaborator rejects the `total` promise first, since a `for` always loops. (Without
+-- `total`, it reports that the type of the `for`'s iterator is not determined: there is no
+-- `range`.)
+--
+-- Once it lands: 0 + 1 + 4 + … + 81. Golden: `i32[285]`, `live 0`; `sum_squares` is total, so
+-- `main` is not a loop.
+
+total fn sum_squares(n: i32) -> i32 =
+  let mut acc = 0;
+  for i in range(n) { acc = acc + i * i };
+  acc
+
+main -> i32 = sum_squares(10)
+-- now: 23:3: `sum_squares` is declared `total`, but it has a `for` (SPEC §14)

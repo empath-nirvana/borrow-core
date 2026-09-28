@@ -1,0 +1,42 @@
+-- Axes: data × effects, owned. A list is built while the input is echoed, then consumed by a
+-- fold whose result is an effectful function.
+--
+-- The `for` over `bytes stdin` writes each byte back to standard output (the effect: `stdout`
+-- is linear state, SPEC §11) and conses it onto a `let mut` list (data: `mu`, built by
+-- constructors). After the loop the list is folded by `fold_own` into a `Run`, a function that
+-- takes the output capability and hands it back: a fold into the effect, so the list's bytes are
+-- written, head first, when `main` runs the function. The list is consumed by the fold, so
+-- every node is freed.
+--
+-- Answer: on the input `stressed`, the output `stressed`, a newline, `desserts` (the list holds
+-- the input reversed), a newline; and the result `i32[8]`. A fold that wrote the tail before the
+-- head would print `stressed` twice; a loop that did not thread the list or the count gives an
+-- empty second line or `i32[0]`; a fold that skipped a `free` leaves objects live.
+
+type List = mu X. 1 + (ref i32 * ref X)
+shape Node = node (leaf i32) (leaf List)
+
+def nil : List = roll inl ()
+fn cons(x: i32, t: List) -> List = roll inr alloc_s[Node] (x, t)
+
+-- A computation that writes to an output it is given, and hands it back.
+type Run = U (Out -o F (Out * 1))
+
+-- The algebra: the empty list writes nothing; a node writes its byte, then runs the tail's.
+fn run_alg(r: 1 + ref i32 * Run) -> Run =
+  match r {
+    inl _ -> { o -> (o, ()) }
+  | inr (c, k) -> let x = free(c); { o -> let (o, _) = putb(o, x); k!(o) }
+  }
+def run_list : !(List => Run) = fold_own[1 + ref i32 * ref X, Run] run_alg
+
+main -> i32 =
+  let mut l = nil;
+  let mut n = 0;
+  for b in bytes stdin { putb(&mut stdout, b); l = cons(b, l); n = n + 1 };
+  putb(&mut stdout, 10);
+  let w = run_list(l);
+  r <- w!(stdout);
+  let (stdout, _) = r;
+  putb(&mut stdout, 10);
+  n

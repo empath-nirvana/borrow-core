@@ -1,0 +1,36 @@
+-- pending: #18
+-- A generator written in direct style, with `yield` as a suspending operation, consumed by a
+-- `for`.
+--
+-- Axes: codata × effects. A generator is codata (an `iter`) whose state is the rest of the
+-- producer's run; `yield` is an operation whose handler receives the continuation.
+--
+-- Blocked by: the surface and its elaboration (#18). The kernel needs nothing new for this
+-- program: the generator is an `unfold` state machine over `Iter` (SPEC §7), the same generator
+-- written by hand runs today (`corpus/iter-range.bc`), and the strict account (§8, item 3)
+-- plans handlers that resume later as codata observers, elaborated as SPEC §14 elaborates div.
+-- What is missing is that elaboration: turning `produce`'s direct-style body into the state
+-- machine (the continuation reified at each `suspend`, decision 25), and `generate`.
+--
+-- Spelling (a hypothesis): `docs/surface-cbpv.md` §2.11 and §5.7, draft 0's sketch: `cap` for
+-- a capability signature, `k: {1 -> r}` marking the continuation, `suspend` at the suspension
+-- point, `generate { gen -> … }` for the library handler that stores the continuation in an
+-- iterator's state. The strict account's sketch spells it `effect Yield a performs yield`.
+--
+-- Today: the parser stops at `cap`, which is not a declaration.
+--
+-- Once it lands: `produce` yields 1, 4 and 9, and `main` sums them. Golden: `i32[14]`,
+-- `live 0`. The generator's state is freed when it finishes.
+
+cap Gen { yield(x: i32, k: {1 -> r}) -> r }
+
+fn produce<'h>(gen: imm 'h Gen) -> 1 =
+  suspend gen.yield(1);
+  suspend gen.yield(4);
+  suspend gen.yield(9)
+
+main -> i32 =
+  let mut acc = 0;
+  for x in generate { gen -> produce(gen) } { acc = acc + x };
+  acc
+-- now: 25:1: expected a declaration (`type`, `shape`, `def`, `extern` or `main`), found name `cap`

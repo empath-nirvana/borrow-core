@@ -1,0 +1,42 @@
+-- pending: a kernel rule (same-lifetime `[@a]` comultiplication)
+-- A value already boxed at a lifetime, boxed again at the same lifetime by generic code.
+--
+-- Axes: coeffects × scope. `[@a]` is the lifetime-indexed necessity; its comultiplication
+-- `[@a]A ⊸ [@a][@a]A` holds in the model (`box_idem`) and is not a rule.
+--
+-- Blocked by: the kernel. `boxed['a] v` needs `v`'s type to outlive `'a`, and `box 'a A`
+-- outlives only lifetimes strictly shorter than `'a` (`VOutlives.box` is strict, which gives
+-- `d_box_dig` for `a ⊏ b` only). Adding the same-index case is one compatibility lemma the
+-- model validates (the strict account, §2.3 and §8 item 6). The need is rare: here `stash` is
+-- generic code (a container's `push`, say) that boxes whatever it is given at the caller's
+-- lifetime, instantiated at a value `peek` already boxed.
+--
+-- Spelling: the core's, as today (`main` is written in core, since `unbox` in a borrow block's
+-- tail is not inferred by the surface).
+--
+-- Today: `stash` is re-checked at `A = box 'x i32` and the checker rejects its `boxed['a] x`:
+-- `x` cannot be shown to outlive `'a`.
+--
+-- Once it lands: `main` reads 41 through the double box. Golden: `i32[41]`, `live 0`.
+
+-- Read an `imm` borrow and box the number at the borrow's lifetime.
+def peek : !(all 'a < top. imm 'a i32 => box 'a i32) =
+  !thunkv Fun 'a < top. return (thunkv fun (b : imm 'a i32) ->
+    withload['a, 'y, i32, box 'a i32] b (thunkv Fun 'y < dom. return (thunkv fun (v : i32) ->
+      return (boxed['y] (boxed['a] v)))))
+
+-- Box anything at the caller's lifetime.
+def stash[A] : !(all 'a < top. A => box 'a A) =
+  !thunkv Fun 'a < top. return (thunkv fun (x : A) -> return (boxed['a] x))
+
+main : F i32 =
+  r <- return (alloc[i32] i32[41]);
+  q <- return (withbor1['x, i32, i32] r (thunkv Fun 'x < top. return (thunkv fun (b : imm 'x i32) ->
+    v <- return ((unbang peek) ['x] b);
+    w <- return ((unbang stash[box 'x i32]) ['x] v);
+    return (unbox w))));
+  let (r, n) = q;
+  _ <- return (free[i32] r);
+  return n
+-- now: 30:63: `boxed['a]`: `x`, of type `box 'l0 i32`, is used inside, and it cannot be shown to outlive `'a`
+-- now|   in the body of `stash`, used at 36:26

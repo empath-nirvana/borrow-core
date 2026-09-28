@@ -1,0 +1,54 @@
+-- pending: #52
+-- An async task that holds a borrow: two tasks read one borrowed list, one of them yielding to
+-- the scheduler between elements, and the block awaits both before the borrow ends.
+--
+-- Axes: codata × effects × scope. A task is codata (a `Loop` whose state is the rest of the
+-- task's run) over the ambient effect; its state holds an `imm` borrow of the list (scope).
+--
+-- Blocked by: the surface, the runtime and one open design question (#52). A task that holds a
+-- borrow within the borrow's scope is covered by the kernel as it is: the thunk clause of the
+-- relation holds a suspended computation at its resource, borrows included, and a task that
+-- leaves a nested scope does so as `[@d] U(Loop …)`, the rule `corpus/axes/scope-boxed-iter.bc`
+-- uses. Not built: `async fn` (a function elaborated as a state machine, reusing SPEC §14's
+-- specialization with a scheduler step as the effect's computation type), `spawn`, `.await`,
+-- and a scheduler. Open design question: a scheduler holding tasks whose borrows have
+-- different lifetimes (the strict account, §6).
+--   - Scoped spawning: a task cannot outlive the scope that spawned it (this program's shape).
+--     Needs no new typing; the scheduler is a loop inside the scope. But a borrow scope's body
+--     is one computation of `F`, so a scheduler that runs until its tasks finish, without
+--     bound, meets `corpus/pending/borrow-across-loop.bc`.
+--   - Existential lifetimes: a task queue of type `exists 'a. [@a] U(Loop …)` holds tasks from
+--     different scopes. A new type former and a new relation clause, and the scope must still
+--     outlive the queue.
+--   - Owned data only (`'static` tasks, Rust's `tokio::spawn`): no borrows cross into a task;
+--     simplest, and it rules this program out.
+--
+-- Spelling (a hypothesis): Rust's `async fn`, `spawn`, `.await`, and `yield_now()`.
+--
+-- Today: the parser reads `async` as one more argument of the application that ends the line
+-- before (`alloc_s[Node] (x, t)`), and stops at `<`: neither `async fn` nor a `fn` with a
+-- lifetime parameter is provided.
+--
+-- Once it lands: the tasks compute 6 (the sum) and 3 (the length). Golden: `i32[9]`, `live 0`.
+
+type List = mu X. 1 + (ref i32 * ref X)
+shape Node = node (leaf i32) (leaf List)
+
+def nil : List = roll inl ()
+fn cons(x: i32, t: List) -> List = roll inr alloc_s[Node] (x, t)
+
+async fn sum<'a>(l: imm 'a List) -> i32 =
+  fold_imm l { inl () -> 0 | inr (b, s) -> yield_now().await; *b + s }
+
+async fn len<'a>(l: imm 'a List) -> i32 =
+  fold_imm l { inl () -> 0 | inr (_, n) -> n + 1 }
+
+main -> i32 =
+  let l = alloc(cons(1, cons(2, cons(3, nil))));
+  borrow imm l { b ->
+    let (b1, b2) = copy(b);
+    let t = spawn(sum(b1));
+    let u = spawn(len(b2));
+    t.await + u.await
+  }
+-- now: 40:13: expected `(`, found `<`

@@ -1,0 +1,61 @@
+-- Axes: codata × coeffects × scope. An iterator that holds a borrow leaves an inner borrow
+-- block as `[@w] U(iter …)`, and is consumed after that block ends (the strict account's §6,
+-- test case 2; `docs/scope-recursion.md` §3.5).
+--
+-- The outer scope borrows an array `imm` and turns it into its family of leaf views at `'z`.
+-- Inside it, a second borrow block (of an unrelated cell `g`, at `'w`, shorter than `'z`) builds
+-- a cursor over the family and returns it. A thunk has no outlives rule, so the only way it
+-- crosses the inner block's end is the box: `boxed['w]` checks that everything the thunk
+-- captures (the family at `'z`, the `!` step) outlives `'w`. The inner block ends, and the
+-- outer scope pulls three elements from the cursor it got back. The box is the same `[]I` rule
+-- that boxes data; nothing specific to codata is involved.
+--
+-- Answer: i32[24]: the array holds 7 * i + 1 for i < 5, that is 1, 8, 15, 22, 29, and the first
+-- three pulls give 1 + 8 + 15. A cursor that started one late gives 45; one whose state was
+-- restarted when it crossed the box gives 3 (the first element three times); pulls past a
+-- finished cursor count 0.
+
+def cur_step : !(all 'y < top. !U (array_imm 'y i32 * i32 -o F (i32 * (array_imm 'y i32 * i32) + 1) & F 1)) =
+  !thunkv Fun 'y < top. return (!thunkv fun (s : array_imm 'y i32 * i32) ->
+    < let (a, i) = s;
+      let (a, a2) = array_copy['y, i32] a;
+      match array_get['y, i32] (a2, i) {
+        inl e -> let x = *e; inl (x, (a, i + 1))
+      | inr _ -> inr ()
+      },
+      let (a, i) = s;
+      () >)
+
+-- The next element, or 0 once the cursor has finished.
+fn pull(it: U (iter i32 1 1)) -> i32 * (U (iter i32 1 1) + 1) =
+  o <- (nu_out (force it)).1;
+  match o { inl (x, it) -> (x, inl it) | inr _ -> (0, inr ()) }
+
+fn tab(i: i32) -> i32 = 7 * i + 1
+
+main -> i32 =
+  let arr = alloc(array_new[i32] (5, tab));
+  let g = alloc(0);
+  let n = borrow imm arr { 'x, b ->
+    withload['x, 'z, array i32, i32] b (thunkv Fun 'z < dom. return (thunkv fun (xs : array_imm 'z i32) ->
+      -- The inner block: build the cursor, and box it at `'w` to leave.
+      q <- return (withbor1['w, i32, U (iter i32 1 1)] g (thunkv Fun 'w < dom. return (thunkv fun (h : imm 'w i32) ->
+        f <- return (unfold[iter i32 1 1, array_imm 'z i32 * i32] ((unbang cur_step) ['z]));
+        s : array_imm 'z i32 * i32 <- return (xs, 0);
+        return (boxed['w] (thunkv nu_in <
+          (f1 <- return (unbang f); (nu_out (force f1 s)).1),
+          (f2 <- return (unbang f); (nu_out (force f2 s)).2) >)))));
+      -- Out of it: the cell `g` is back, and so is the cursor, still reading the family at `'z`.
+      let (g, c) = q;
+      let (x1, r) = pull(c);
+      match r {
+        inl c ->
+          let (x2, r) = pull(c);
+          match r {
+            inl c -> let (x3, r) = pull(c); boxed['z] (x1 + x2 + x3)
+          | inr _ -> boxed['z] (x1 + x2)
+          }
+      | inr _ -> boxed['z] x1
+      }))
+  };
+  n

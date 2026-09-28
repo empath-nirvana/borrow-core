@@ -1,0 +1,34 @@
+-- pending: #54 (`fn` with lifetime parameters)
+-- A function over a borrowed argument, declared with a lifetime parameter and called with a
+-- lend.
+--
+-- Axes: coeffects × scope: the `imm` demand in a signature, which is where every function over a
+-- borrow starts.
+--
+-- Blocked by: the surface. A function taking a borrow is written today as a core `def` with
+-- `all 'a < top.` and a `!thunkv Fun 'a < top. …` body (`corpus/axes/data-coeffects.bc`), and
+-- called with a lend (`sum(&l)`) or, inside a borrow block, with the lifetime written
+-- (`(unbang sum) ['x] b`). Draft 0 (`docs/surface-cbpv.md` §2.5) has `fn name<'a>(…)`, elaborated
+-- as `all 'a < top`; decision 37 defers it. Every corpus program over a borrow pays for this.
+--
+-- Spelling: draft 0's.
+--
+-- Today: the parser stops at `<`: after a `fn`'s name it expects `(`.
+--
+-- Once it lands: the list [100, 20, 3], read through a borrow. Golden: `i32[123]`, `live 0`.
+
+type List = mu X. 1 + (ref i32 * ref X)
+shape Node = node (leaf i32) (leaf List)
+
+def nil : List = roll inl ()
+fn cons(x: i32, t: List) -> List = roll inr alloc_s[Node] (x, t)
+
+fn sum_alg<'y>(r: 1 + imm 'y i32 * i32) -> i32 = match r { inl _ -> 0 | inr (b, s) -> *b + s }
+
+fn sum<'a>(l: imm 'a List) -> i32 = (unbang (fold_imm[1 + ref i32 * ref X, 'b, top, i32] sum_alg)) ['a] l
+
+main -> i32 =
+  let l = alloc(cons(100, cons(20, cons(3, nil))));
+  let n = sum(&l);
+  n
+-- now: 26:11: expected `(`, found `<`

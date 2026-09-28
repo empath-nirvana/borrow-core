@@ -1,0 +1,37 @@
+-- Axes: data × coeffects, borrowed. One `imm` borrow of a list is demanded by two folds.
+--
+-- An `imm` demand is the reader comonad (the strict account, §2.3): its counit is `forget` and
+-- its comultiplication is `copy`, so one borrow `b` serves two readers. `sum` and `len` are
+-- `fold_imm`s over the borrowed list (data), each reading through its own copy of `b`, inside
+-- one borrow block (scope). `sum(&l)` lends the cell a second time, for one call. The list is
+-- never consumed; its destructor frees it at the end of `main`.
+--
+-- Answer: (i32[123], i32[6]): the sum of [100, 20, 3], then the length read through two copies
+-- of the one borrow, 3 + 3. A fold that dropped a node gives 23, 103 or 120 and 4; a fold that
+-- counted a node twice gives 223, 143 or 126 and 8.
+
+type List = mu X. 1 + (ref i32 * ref X)
+shape Node = node (leaf i32) (leaf List)
+
+def nil : List = roll inl ()
+fn cons(x: i32, t: List) -> List = roll inr alloc_s[Node] (x, t)
+
+-- The algebras see each element as an `imm` view and each tail as its result.
+def sum_alg : !(all 'y < top. 1 + (imm 'y i32 * i32) => i32) =
+  !thunkv Fun 'y < top. return (thunkv fun (r : 1 + (imm 'y i32 * i32)) ->
+    match r { inl _ -> 0 | inr (b, s) -> *b + s })
+def sum : !(all 'a < top. imm 'a List => i32) = fold_imm[1 + (ref i32 * ref X), 'a, top, i32] sum_alg
+
+def len_alg : !(all 'y < top. 1 + (imm 'y i32 * i32) => i32) =
+  !thunkv Fun 'y < top. return (thunkv fun (r : 1 + (imm 'y i32 * i32)) ->
+    match r { inl _ -> 0 | inr (_, n) -> n + 1 })
+def len : !(all 'a < top. imm 'a List => i32) = fold_imm[1 + (ref i32 * ref X), 'a, top, i32] len_alg
+
+main -> i32 * i32 =
+  let l = alloc(cons(100, cons(20, cons(3, nil))));
+  let s = sum(&l);
+  let n = borrow imm l { 'x, b ->
+    let (b1, b2) = copy['x, List] b;
+    (unbang len) ['x] b1 + (unbang len) ['x] b2
+  };
+  (s, n)

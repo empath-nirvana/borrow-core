@@ -1,0 +1,35 @@
+-- Axes: codata × effects, owned. An iterator whose every `next` writes to standard output.
+--
+-- `ticks(o, n)` is an `iter i32 Out Out` built by `unfold` (codata: defined by its
+-- observations). Its state owns the output capability: `next` writes the counter and a newline
+-- (the effect happens at the observation) and yields the counter, and finishes after `n` with
+-- the capability as its result; `close` hands the capability back. `main` consumes it with a
+-- `for`, which lends `stdout` to the iterator and gets it back when the iterator finishes.
+--
+-- Answer: the lines `1` to `5`, and `i32[15]`. A `next` that wrote after advancing prints `2`
+-- to `6`; one that finished a step late prints `6` and gives 21; a `for` that did not get the
+-- capability back from the finished iterator does not check.
+
+type St = Out * (i32 * i32)
+
+def tick_step : !U (St -o F (i32 * St + Out) & F Out) =
+  !thunkv fun (s : St) ->
+    < let (o, r) = s;
+      let (i, n) = r;
+      if n < i { inr o } else {
+        let (o, _) = put_dec(o, i);
+        let (o, _) = putb(o, 10);
+        inl (i, (o, (i + 1, n)))
+      },
+      let (o, r) = s;
+      o >
+
+fn ticks(o: Out, n: i32) -> U (iter i32 Out Out) =
+  let f = unbang (unfold[iter i32 Out Out, St] tick_step);
+  let s = (o, (1, n));
+  thunkv nu_in < (nu_out (force f s)).1, (nu_out (force f s)).2 >
+
+main -> i32 =
+  let mut acc = 0;
+  for x in ticks(&mut stdout, 5) { acc = acc + x };
+  acc

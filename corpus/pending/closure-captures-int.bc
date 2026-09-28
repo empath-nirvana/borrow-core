@@ -1,0 +1,34 @@
+-- pending: #9
+-- `add_all(n, l)`: map a list with a persistent closure that captures the integer `n`.
+--
+-- Axes: coeffects × data. `!` is the exponential; a value that holds no resource, such as an
+-- `i32`, is persistent (SPEC §10) and is copied freely, but it is not of a `!` type.
+--
+-- Blocked by: the kernel. Promotion (`!I-λ`, SPEC §2) requires every live slot of the context to
+-- have a `!` type (`!Γ`); SPEC §10 Open: "The promotion premise `!Γ` (every live slot at `!A`)
+-- is not widened to 'every live slot persistent'" (#9). So `!{ x -> x + n }` cannot capture
+-- `n : i32`, although `i32` holds no resource and `vC` at a persistent type holds only at `∅`
+-- (`vCE_empty_of_persistent`), which is what the rule needs of `!Γ`. A fold's algebra and a
+-- callback stored for later are `!`, so this is the common case of a closure over a number.
+--
+-- Spelling: today's surface.
+--
+-- Today: the checker rejects the closure: "`!thunk` promotes only over `!` types, but `n`, of
+-- type `i32`, is used inside".
+--
+-- Once it lands: [1, 2, 3] plus 10 is [11, 12, 13], read as base-100 digits, head last.
+-- Golden: `i32[131211]`, `live 0`.
+
+type List = mu X. 1 + (i32 * X)
+
+def nil : List = roll inl ()
+fn cons(x: i32, t: List) -> List = roll inr (x, t)
+
+fn add_all(n: i32, l: List) -> List =
+  (unbang (fold_own[1 + i32 * X, List] (!{ r -> match r { inl _ -> nil | inr (x, t) -> cons(x + n, t) } }))) l
+
+fn digits(l: List) -> i32 =
+  (unbang (fold_own[1 + i32 * X, i32] (!{ r -> match r { inl _ -> 0 | inr (x, t) -> x + t * 100 } }))) l
+
+main -> i32 = digits(add_all(10, cons(1, cons(2, cons(3, nil)))))
+-- now: 28:41: `!thunk` promotes only over `!` types, but `n`, of type `i32`, is used inside

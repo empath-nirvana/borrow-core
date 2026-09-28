@@ -1,0 +1,48 @@
+-- Axes: codata × effects, inside a borrow block (scope). An iterator holds a `mut` borrow of
+-- standard output, not the capability itself.
+--
+-- `borrow mut stdout { 'x, o -> … }` lends the capability at a fresh lifetime `'x`. `ticks`
+-- builds an `iter i32 1 1` whose state is the borrow `mut 'x output` and a counter: each `next`
+-- writes the counter's digit and a newline through the borrow (`write_byte` at `'x`) and yields
+-- the counter. The block pulls three elements, and the rest of the iterator is closed by its
+-- destructor inside the block, which drops the borrow; the block then hands `stdout` back. The
+-- iterator cannot outlive the block: its state holds a borrow at `'x`.
+--
+-- Answer: the lines `1`, `2`, `3`, and `i32[6]`. An iterator that wrote at `close` too prints a
+-- fourth line; a `next` that did not advance prints `1` three times and gives 3.
+
+def tick_step : !(all 'y < top. !U (mut 'y output * i32 -o F (i32 * (mut 'y output * i32) + 1) & F 1)) =
+  !thunkv Fun 'y < top. return (!thunkv fun (s : mut 'y output * i32) ->
+    < let (o, i) = s;
+      let o = (unbang write_byte) ['y] (o, i + 48);
+      let o = (unbang write_byte) ['y] (o, 10);
+      inl (i, (o, i + 1)),
+      let (o, i) = s;
+      () >)
+
+def ticks : !(all 'y < top. mut 'y output => U (iter i32 1 1)) =
+  !thunkv Fun 'y < top. return (thunkv fun (o : mut 'y output) ->
+    f <- return (unbang (unfold[iter i32 1 1, mut 'y output * i32] ((unbang tick_step) ['y])));
+    s : mut 'y output * i32 <- return (o, 1);
+    return (thunkv nu_in < (nu_out (force f s)).1, (nu_out (force f s)).2 >))
+
+-- The next element, or 0 once the iterator has finished.
+fn pull(it: U (iter i32 1 1)) -> i32 * (U (iter i32 1 1) + 1) =
+  o <- (nu_out (force it)).1;
+  match o { inl (x, it) -> (x, inl it) | inr _ -> (0, inr ()) }
+
+main -> i32 =
+  let n = borrow mut stdout { 'x, o ->
+    let it = (unbang ticks) ['x] o;
+    let (a, rest) = pull(it);
+    match rest {
+      inl it ->
+        let (b, rest) = pull(it);
+        match rest {
+          inl it -> let (c, rest) = pull(it); a + b + c
+        | inr _ -> a + b
+        }
+    | inr _ -> a
+    }
+  };
+  n

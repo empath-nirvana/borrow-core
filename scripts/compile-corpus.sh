@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Compile and run the corpus. For every corpus/*.bc and corpus/surface/*.bc with a `main` (except
-# a file marked `-- check: parse-only`), `bcc run` (WebAssembly under wasmtime) must print the
-# value that `Support`'s interpreter prints (`bcc interp`), and then `live 0`: no object is live once the
-# value is dropped. (Each prints `live N`; the source counts cells, the compiled stages all
-# objects, so the two agree when either is 0.) On a difference, the closure-IR and flat-IR
+# Compile and run the corpus. For every corpus/*.bc, corpus/surface/*.bc and corpus/axes/*.bc with
+# a `main` (except a file marked `-- check: parse-only`), `bcc run` (WebAssembly under wasmtime)
+# must print the value that `Support`'s interpreter prints (`bcc interp`), and then `live 0`: no
+# object is live once the value is dropped. (Each prints `live N`; the source counts cells, the
+# compiled stages all objects, so the two agree when either is 0.) On a difference, the closure-IR and flat-IR
 # interpreters (`bcc interp --stage clos|flat`) name the first stage that diverges.
 #
 # A program with a golden output `<name>.out` beside it (the standard I/O programs of SPEC §11)
@@ -21,8 +21,8 @@
 # which must agree): the objects it allocates and the indirect calls it makes, the closure
 # calls whose code a `switch` on the closure's tag chooses at run time. Each must be at most the
 # program's entry in `corpus/counts.expected` (`name allocs indirect`, the name the file's path
-# under `corpus/`, as `io-wc` or `surface/io-wc`); a count above it fails, one below it is
-# reported so the file can be lowered. `--write-counts` rewrites the file with
+# under `corpus/`, as `io-wc`, `surface/io-wc` or `axes/data-effects`); a count above it fails,
+# one below it is reported so the file can be lowered. `--write-counts` rewrites the file with
 # the counts of this run.
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -66,7 +66,7 @@ runStage() {
   if [ "$1" = wasm ]; then "$bcc" run "$2" < "$3" > "$tmp/out" 2> "$tmp/err"
   else "$bcc" interp --stage "$1" "$2" < "$3" > "$tmp/out" 2> "$tmp/err"; fi
 }
-for f in corpus/*.bc corpus/surface/*.bc; do
+for f in corpus/*.bc corpus/surface/*.bc corpus/axes/*.bc; do
   if grep -q '^-- check: parse-only' "$f"; then echo "$f: parse-only, skipped"; continue; fi
   if ! grep -q '^main' "$f"; then echo "$f: no main, skipped"; continue; fi
   base=${f%.bc}

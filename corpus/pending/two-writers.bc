@@ -1,0 +1,44 @@
+-- pending: open design question (parallel `mut` contraction)
+-- One capability lent `mut` twice to one call: a report written to a log and to a data stream,
+-- and the caller sends both to standard output.
+--
+-- Axes: effects × scope. A `mut` demand is linear state, not a comonad: `Mut ⊸ Mut ⊗ Mut` is
+-- not a rule, so two live `mut` borrows of one place cannot be passed together.
+--
+-- Blocked by: an open design question, in the kernel or the surface.
+--   - As Rust: reject, and the user reborrows in sequence (two calls, or one callee taking one
+--     writer). No change; the program is written differently.
+--   - Contraction as a kernel rule, `Mut 'a U ⊸ Mut 'a U ⊗ Mut 'a U` at some payloads. BoLo's
+--     `○` composes two `mut` cells at one location (`CellU.CompR.mutMut`), so the resource
+--     algebra does not forbid it (the strict account, §2.3: "not derived, no obstruction
+--     verified"). One compatibility lemma if it holds, and its reach (opaque payloads only,
+--     where interleaved writes are the stream's own order?) is the design question.
+--   - Contraction as elaboration: when the callee uses its two demands one after the other, a
+--     `needs` layer (PR #100) threads one borrow through both uses by reborrowing (`d_seqD`,
+--     proved). Surface only, and it needs the callee's order of use in its type.
+--
+-- Spelling (a hypothesis): Rust's, two `&mut` arguments naming the same place.
+--
+-- Today: the elaborator lends `stdout` once, as one `withbor2` whose borrow it passes twice, and
+-- the checker rejects the second use. (The message names the elaborator's variable, not
+-- `stdout`.)
+--
+-- Once it lands: `report` writes `L7` and a newline to the log, then `D7` and a newline to the
+-- data stream, both standard output. Golden: the lines `L7` and `D7`, then `()`, `live 0`.
+
+def report : !(all 'a < top. mut 'a output * (mut 'a output * i32) => 1) =
+  !thunkv Fun 'a < top. return (thunkv fun (p : mut 'a output * (mut 'a output * i32)) ->
+    let (log, r) = p;
+    let (out, n) = r;
+    let log = (unbang write_byte) ['a] (log, 76);
+    let log = (unbang write_byte) ['a] (log, n + 48);
+    let log = (unbang write_byte) ['a] (log, 10);
+    let out = (unbang write_byte) ['a] (out, 68);
+    let out = (unbang write_byte) ['a] (out, n + 48);
+    let out = (unbang write_byte) ['a] (out, 10);
+    ())
+
+main -> 1 =
+  report(&mut stdout, &mut stdout, 7);
+  ()
+-- now: 42:9: `io_lm42_3` is used twice here, and its type `mut 'io_lb42_3 output` is not persistent

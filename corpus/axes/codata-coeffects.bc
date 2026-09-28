@@ -1,0 +1,70 @@
+-- Axes: codata × coeffects, borrowed. Two iterators read one borrowed array.
+--
+-- A cursor is an `iter i32 1 1` whose state is an `imm` demand: the array borrowed as the
+-- family of its leaf views, `array_imm 'y i32`, and an index. `next` reads the element at the
+-- index through its view and moves on; past the end it finishes. The family is copied
+-- (`array_copy`, the reader comonad's comultiplication), so two cursors, one a step ahead of the
+-- other, read the one borrow at once. `step` pulls both and counts the places where the array
+-- increases; eight steps cover the array. Everything runs inside the borrow of the array's cell
+-- and the `withload` that turns it into the family (scope), and the cursors are closed there by
+-- their destructors.
+--
+-- Answer: i32[5]. The array is i * i - 4 * i for i < 8, that is 0, -3, -4, -3, 0, 5, 12, 21,
+-- which increases five times. Two cursors at the same index give 0; a `next` that did not
+-- advance the index never finishes, and gives 99.
+
+def cur_step : !(all 'y < top. !U (array_imm 'y i32 * i32 -o F (i32 * (array_imm 'y i32 * i32) + 1) & F 1)) =
+  !thunkv Fun 'y < top. return (!thunkv fun (s : array_imm 'y i32 * i32) ->
+    < let (a, i) = s;
+      let (a, a2) = array_copy['y, i32] a;
+      match array_get['y, i32] (a2, i) {
+        inl e -> let x = *e; inl (x, (a, i + 1))
+      | inr _ -> inr ()
+      },
+      let (a, i) = s;
+      () >)
+
+type Cur = U (iter i32 1 1)
+
+def cursor : !(all 'y < top. array_imm 'y i32 * i32 => Cur) =
+  !thunkv Fun 'y < top. return (thunkv fun (s : array_imm 'y i32 * i32) ->
+    f <- return (unbang (unfold[iter i32 1 1, array_imm 'y i32 * i32] ((unbang cur_step) ['y])));
+    return (thunkv nu_in < (nu_out (force f s)).1, (nu_out (force f s)).2 >))
+
+-- Both cursors and the count while both yield; the count alone once either finishes.
+type S = Cur * (Cur * i32) + i32
+
+fn step(s: S) -> S =
+  match s {
+    inl (c, r) ->
+      let (d, k) = r;
+      o <- (nu_out (force c)).1;
+      match o {
+        inl (x, c) ->
+          p <- (nu_out (force d)).1;
+          match p {
+            inl (y, d) -> if x < y { inl (c, (d, k + 1)) } else { inl (c, (d, k)) }
+          | inr _ -> inr k
+          }
+      | inr _ -> inr k
+      }
+  | inr k -> inr k
+  }
+
+fn twice(f: !(S => S)) -> !(S => S) = !{ s -> f(f(s)) }
+
+fn tab(i: i32) -> i32 = i * i - 4 * i
+
+main -> i32 =
+  let arr = alloc(array_new[i32] (8, tab));
+  let n = borrow imm arr { 'x, b ->
+    withload['x, 'z, array i32, i32] b (thunkv Fun 'z < dom. return (thunkv fun (xs : array_imm 'z i32) ->
+      let (xs1, xs2) = array_copy['z, i32] xs;
+      let c = (unbang cursor) ['z] (xs1, 0);
+      let d = (unbang cursor) ['z] (xs2, 1);
+      match twice(twice(twice(step)))(inl (c, (d, 0))) {
+        inl (c, r) -> boxed['z] 99
+      | inr k -> boxed['z] k
+      }))
+  };
+  n

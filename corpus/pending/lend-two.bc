@@ -1,0 +1,36 @@
+-- pending: #54 (two lends in one call)
+-- One call that lends two places: a borrowed separator (`&sep`, `imm`) and the output
+-- capability (`&mut stdout`, handed back).
+--
+-- Axes: effects × coeffects × scope: an `imm` demand and a capability in one call.
+--
+-- Blocked by: the surface. SPEC §14 Open: "A call lends at most one capability with `&mut c`".
+-- Each lend is elaborated at the call, as a borrow around it or as a move handed back first;
+-- two of them need both hand-backs threaded through one result. `corpus/axes/effects-coeffects.bc`
+-- is this program with the capability passed and rebound by name.
+--
+-- Spelling: today's surface.
+--
+-- Today: the checker reports a type mismatch at the second lend: the elaboration of the two lends
+-- does not line up (`ref output` expected where the separator's borrow is). With the lends in the
+-- other order, the elaborator says "a call lends at most one capability with `&`".
+--
+-- Once it lands: as `corpus/axes/effects-coeffects.bc`. Golden: the line `1,2,3,`, then
+-- `i32[44]`, `live 0`.
+
+def emit : !(all 'a < top. imm 'a i32 * (Out * i32) => Out * 1) =
+  !thunkv Fun 'a < top. return (thunkv fun (p : imm 'a i32 * (Out * i32)) ->
+    let (sep, r) = p;
+    let (o, n) = r;
+    let (o, _) = put_dec(o, n);
+    let s = *sep;
+    putb(o, s))
+
+main -> i32 =
+  let sep = alloc(44);
+  emit(&sep, &mut stdout, 1);
+  emit(&sep, &mut stdout, 2);
+  emit(&sep, &mut stdout, 3);
+  putb(&mut stdout, 10);
+  free(sep)
+-- now: 31:14: type mismatch: expected `ref output`, but this has type `imm 'io_lb31_3 i32`

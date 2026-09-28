@@ -1,0 +1,56 @@
+-- pending: SPEC §6 (`X` under `U` in fold shapes)
+-- A free monad whose operations include `read`: the continuation of `read` is a function of the
+-- byte read, so the program type has its recursive position under a thunk. An interpreter
+-- runs it against standard input and output by a fold.
+--
+-- Axes: effects × data. Handlers are folds of the free model (the strict account, §3); an
+-- operation of non-finite arity puts `X` under `U`.
+--
+-- Blocked by: the kernel. The folds take a shape in `FShape` (closed leaf, `ref X`, `X`, `*`,
+-- `+`), which excludes `X` under `U` or `-o` (SPEC §6), so there is no fold of this `Prog`,
+-- and `mu` itself treats `U C` as a leaf for type variables. The finite-arity case runs today
+-- (`corpus/axes/free-monad.bc`: `write` only). The strict account (§8 item 3) names this the
+-- one kernel extension on the handlers path: `X` under `U` in `FShape`, which needs the fold's
+-- functor action at that position (a map under a thunk) and its soundness.
+--
+-- Spelling: the core's `mu` and `fold_own`, as today, with `X` inside the thunk type.
+--
+-- Today: the elaborator stops first, at the closure passed to `read`: it cannot type its
+-- parameter, because `Prog` is not a type the checker accepts. With every closure written with
+-- its types (`thunkv fun (o : i32 + 1) -> …`), the checker reports the cause at the `type`
+-- declaration: "the type variable `X` occurs under `U` (inside a computation type)".
+--
+-- Once it lands: on the input `ab`, the program reads two bytes, echoes them and returns their
+-- sum. Golden: the output `ab`, then `i32[195]`, `live 0`.
+
+type Prog = mu X. i32 + (i32 * X + U (i32 + 1 -o F X))
+
+fn done(n: i32) -> Prog = roll inl n
+fn write(b: i32, k: Prog) -> Prog = roll inr inl (b, k)
+fn read(k: U (i32 + 1 -o F Prog)) -> Prog = roll inr inr k
+
+-- Read a byte, echo it, and continue with it; at the end of the input, 0.
+fn echo_then(k: !(i32 => Prog)) -> Prog =
+  read({ o -> match o { inl b -> write(b, k(b)) | inr _ -> k(0) } })
+
+fn prog() -> Prog = echo_then(!{ a -> echo_then(!{ b -> done(a + b) }) })
+
+type Run = U (In * Out -o F ((In * Out) * i32))
+
+fn run_alg(r: i32 + (i32 * Run + U (i32 + 1 -o F Run))) -> Run =
+  match r {
+    inl n -> { io -> (io, n) }
+  | inr op ->
+      match op {
+        inl (b, k) -> { io -> let (i, o) = io; let (o, _) = putb(o, b); k!((i, o)) }
+      | inr k -> { io -> let (i, o) = io; let (i, c) = getb(i); r <- k!(c); r!((i, o)) }
+      }
+  }
+def interp : !(Prog => Run) = fold_own[i32 + (i32 * X + U (i32 + 1 -o F X)), Run] run_alg
+
+main -> i32 =
+  let h = interp(prog());
+  r <- h!((stdin, stdout));
+  let ((stdin, stdout), n) = r;
+  n
+-- now: 34:8: the type of the closure's parameter `o` is not determined here: pass it where a function type is expected, or write `thunkv fun`
