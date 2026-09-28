@@ -159,6 +159,8 @@ def synV : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Val →
       let al ← E.elabL Δ a
       let ⟨_, r⟩ ← synV n E Δ T V
       shortenIt E T sp m s al r
+    | .lend sp x => err sp (s!"`&{x.name}` lends a capability to one call: it may appear only in " ++
+        "the head `M` of `y <- M; N` (SPEC §11)")
 
 /-- Check a value-judged expression against a type. -/
 def chkV : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Val → (A : CVTy) →
@@ -311,6 +313,8 @@ def synC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp →
         pure ⟨_, ← caseIt E T sp x y rV r₁ r₂⟩
       | A, _ => err V.span s!"`case V` needs a `+` type, but `V : {E.ppV A}`"
     | .absurd sp _ => err sp "the type of `absurd V` cannot be synthesized: ascribe it, `(absurd V : C)`"
+    | .for_ sp _ _ _ _ => err sp ("`for` may appear only at the end of a `main` that uses the " ++
+        "capabilities ambiently (SPEC §11)")
     | .lamL sp x b M => do
       let bl ← E.elabL Δ b
       let v := Δ.freshVar

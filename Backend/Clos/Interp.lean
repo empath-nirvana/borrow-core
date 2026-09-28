@@ -324,12 +324,32 @@ def observe : Nat → CV → IM PV
       | .i64 k => pure (.i64 k)
       | .cell _ => pure .loc
 
-/-- Run `main` on the standard input `input`, print its value, drop it, and count the objects
-left. -/
+/-- Observe the loop `d` until it finishes: call it on `inl ()`, which answers `inl r` to finish
+with `r` or `inr d'` to go on with `d'` (SPEC §11). -/
+def drive (codes : Array Code) : Nat → CV → IM CV
+  | 0, _ => throw "closure IR: out of fuel"
+  | n + 1, d => do
+    let t ← allocObj (.inj false .unit)
+    let r ← callClos codes n d t
+    match r with
+    | .ptr a =>
+      match ← getObj a with
+      | .inj false v => do freeObj a; pure v
+      | .inj true d' => do freeObj a; drive codes n d'
+      | _ => throw "closure IR: a loop's `next` answered no injection"
+    | _ => throw "closure IR: a loop's `next` answered no injection"
+
+/-- Run `main` on the standard input `input` (driving it if it returns a loop), print its value,
+drop it, and count the objects left. -/
 def interp (fuel : Nat) (p : Prog) (input : List UInt8) : Except String Output := do
   let act : IM String := do
     let (v, rest) ← eval p.codes fuel [] p.main
     if !rest.isEmpty then throw "closure IR: main leaves variables unconsumed"
+    let v ← match p.fin with
+      | none => pure v
+      | some c => do
+        let r ← drive p.codes fuel v
+        callClos p.codes fuel (← allocObj (.clos c [])) r
     let pv ← observe objFuel v
     deepDrop objFuel v
     pure (report pv (← get).heap.size)

@@ -16,6 +16,8 @@ import Backend.Driver
                                 run `main` in the interpreter of stage `S` (`Backend/`):
                                 `source` (the default), `clos`, `flat`; a program that
                                 declares `stdin` reads all of standard input first
+    lake exe bcc desugar <file> print the program with its I/O sugar elaborated (SPEC §11)
+    lake exe bcc erase <file>   print the erasure of the checked `main`
     lake exe bcc trusted <file> list the program's externs with their contracts, host
                                 implementations and assurance levels (SPEC §11)
 
@@ -49,6 +51,22 @@ def interp (stage file : String) : IO UInt32 := do
     err.flush
     return 0
   | .error e => IO.eprintln e; return 1
+
+/-- Print `file` with its I/O sugar elaborated. -/
+def desugar (file : String) : IO UInt32 := do
+  let src ← IO.FS.readFile file
+  match parseProgram src with
+  | .error e => IO.eprintln s!"{file}:{e.render}"; return 1
+  | .ok p => match Frontend.Sugar.elaborate p with
+    | .error e => IO.eprintln s!"{file}:{e.render}"; return 1
+    | .ok (q, _) => IO.print q.pp; return 0
+
+/-- Print the erasure of `file`'s checked `main`. -/
+def erase (file : String) : IO UInt32 := do
+  let src ← IO.FS.readFile file
+  match Backend.checkedOf file src with
+  | .error e => IO.eprintln e; return 1
+  | .ok k => IO.println (reprStr k.main.e); return 0
 
 /-- Print `file`'s trusted boundaries. -/
 def trusted (file : String) : IO UInt32 := do
@@ -97,6 +115,8 @@ def main (argv : List String) : IO UInt32 := do
   | ["interp", file] => interp "source" file
   | ["interp", "--stage", stage, file] => interp stage file
   | ["trusted", file] => trusted file
+  | ["desugar", file] => desugar file
+  | ["erase", file] => erase file
   | [cmd, file] =>
     if cmd != "parse" && cmd != "print" && cmd != "check" then
       IO.eprintln s!"unknown command `{cmd}`"; return 2
@@ -125,5 +145,5 @@ def main (argv : List String) : IO UInt32 := do
         IO.println s!"{file}: ok, {p.decls.length} declarations"
         return 0
   | _ =>
-    IO.eprintln "usage: bcc (parse | print | check | run | trusted | interp [--stage S]) <file>\n       bcc compile <file> -o <out.wat>"
+    IO.eprintln "usage: bcc (parse | print | check | run | trusted | desugar | erase | interp [--stage S]) <file>\n       bcc compile <file> -o <out.wat>"
     return 2

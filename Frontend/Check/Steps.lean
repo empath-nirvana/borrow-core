@@ -329,6 +329,7 @@ def mentionsV (x : String) : Val → Bool
   | .inl _ V | .inr _ V | .unbang _ V | .boxed _ _ V | .unbox _ V | .sub _ V _ | .roll _ V
   | .unroll _ V | .inst _ V _ | .ascribe _ V _ | .shorten _ _ _ _ V => mentionsV x V
   | .thunk _ M | .thunkv _ M | .bangThunk _ M | .bangThunkv _ M | .run _ M => mentionsC x M
+  | .lend _ y => y.name == x
 
 /-- `x` occurs free in a computation. -/
 def mentionsC (x : String) : Comp → Bool
@@ -345,6 +346,7 @@ def mentionsC (x : String) : Comp → Bool
   | .letPair _ y z V M => mentionsV x V || (y.name != x && z.name != x && mentionsC x M)
   | .case _ V y M z N => mentionsV x V || (y.name != x && mentionsC x M) ||
       (z.name != x && mentionsC x N)
+  | .for_ _ y V M N => mentionsV x V || (y.name != x && mentionsC x M) || mentionsC x N
 end
 
 /-- A path's terminal computation: every form except those that pass what is owed on to a tail

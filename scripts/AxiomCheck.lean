@@ -2,6 +2,7 @@ import Paper
 import Support
 import Examples
 import Core
+import Frontend.Check.Externs
 /-! The theorems `SPEC.md` names, with their axioms. -/
 #print axioms BoCa.Fig16.LogRel.Typed.fundamentalProperty
 #print axioms BoCa.Fig16.LogRel.Typed.adequacy
@@ -95,3 +96,5 @@ import Core
 #print axioms BoCa.Fig16.LogRel.Core.d_ioLoop
 #print axioms BoCa.Fig16.LogRel.Core.externs_loop_every_run
 #print axioms BoCa.Fig16.LogRel.Core.io_loop_every_run
+#print axioms Frontend.Check.IORun.every_run
+#print axioms Frontend.Check.IORun.loop_every_run

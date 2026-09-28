@@ -188,7 +188,7 @@ def conv (ctx : List Var) : Expr → CM Tm
 /-- Closure-convert a closed term. -/
 def convert (e : Expr) : Except String Prog := do
   let (t, s) ← (conv [] e).run ⟨dummy + 1, #[]⟩
-  pure ⟨s.codes, t⟩
+  pure { codes := s.codes, main := t }
 
 /-! ### Externs  `[spec §11]` -/
 
@@ -229,17 +229,23 @@ def epilogue (r : Var) (n : Nat) : CM Tm := do
 /-- Closure-convert `main` over its externs, given in declaration order: the prologue binds each
 extern to its host implementation (a fresh cell holding a capability's file descriptor, or an
 operation's closure), an extern `main` does not use is dropped, and when there are capabilities
-`main`'s result `(caps, a)` gives them back and `a` is the program's value.  `[spec §11]` -/
-def convertMain (exts : List ExtImpl) (e : Expr) : Except String Prog := do
-  let act : CM Tm := do
+`main`'s result `(caps, a)` gives them back and `a` is the program's value. When `main` returns a
+loop (`loops`), its value is the loop, and the taking back is the code `fin`, run on the value
+the loop finishes with.  `[spec §11]` -/
+def convertMain (exts : List ExtImpl) (loops : Bool) (e : Expr) : Except String Prog := do
+  let ncaps := (exts.filter fun | .cap _ => true | _ => false).length
+  let act : CM (Tm × Option Nat) := do
     let xs ← exts.mapM fun _ => fresh
     let ctx := xs.reverse
     let used := fvs e 0
     let r ← fresh
     let t ← conv ctx e
-    let ncaps := (exts.filter fun | .cap _ => true | _ => false).length
     let ep ← epilogue r ncaps
-    let mut body : Tm := .letv r t ep
+    let (main, fin) ← if loops then do
+        let c ← register ⟨[], r, ep⟩
+        pure (t, some c)
+      else pure (.letv r t ep, none)
+    let mut body : Tm := main
     for (x, i) in ctx.zipIdx do
       if i ∉ used then body := .drop x body
     for (x, ext) in (xs.zip exts).reverse do
@@ -248,8 +254,8 @@ def convertMain (exts : List ExtImpl) (e : Expr) : Except String Prog := do
         let l ← fresh
         body := .letv l (.lit (.i32 fd.toUInt32)) (.letv x (.prim .alloc [l]) body)
       | .io k => body := .letv x (← ioValue k) body
-    return body
-  let (t, s) ← act.run ⟨dummy + 1, #[]⟩
-  pure ⟨s.codes, t⟩
+    return (body, fin)
+  let ((t, fin), s) ← act.run ⟨dummy + 1, #[]⟩
+  pure { codes := s.codes, main := t, fin }
 
 end Backend.Clos

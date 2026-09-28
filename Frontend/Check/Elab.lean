@@ -143,6 +143,8 @@ def ppC (nm : List (String × LifeVar)) (p : Nat) : CCTy → String
       parenIf (p > 5) s!"delay {ppV nm 0 5 A}"
   | .nu (.amp (.ret (.tensor A (.tvar 0))) (.ret .unit)) =>
       parenIf (p > 5) s!"stream {ppV nm 0 5 A}"
+  | .nu (.amp (.ret (.sum A (.tvar 0))) (.ret B)) =>
+      parenIf (p > 5) s!"loop {ppV nm 0 6 A} {ppV nm 0 6 B}"
   | .nu (.amp (.ret (.sum (.tensor A (.tvar 0)) R)) (.ret R')) =>
       parenIf (p > 5) s!"iter {ppV nm 0 6 A} {ppV nm 0 6 R} {ppV nm 0 6 R'}"
   | .nu C => parenIf (p > 0) s!"nu {tvName 0}. {ppC nm 0 C}"
@@ -272,6 +274,7 @@ def elabC : Nat → TyEnv → CTy → Except Error CCTy
     | .delay _ A => do pure (.delay (← elabV n E A))
     | .stream _ A => do pure (.stream (← elabV n E A))
     | .iter _ A R R' => do pure (.iter (← elabV n E A) (← elabV n E R) (← elabV n E R'))
+    | .loop _ A B => do pure (.loop (← elabV n E A) (← elabV n E B))
 /-- A shape. -/
 def elabS : Nat → TyEnv → Shape → Except Error CShape
   | 0, _, σ => err σ.span "shape abbreviations nested too deeply"

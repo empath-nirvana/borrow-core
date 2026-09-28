@@ -1,0 +1,17 @@
+-- `&c` (SPEC §11): in `x <- M; N`, `&c` in `M` lends the capability `c` to one call that hands
+-- it back first. `lend.core.bc` is the same program written by hand; both erase to one term.
+extern stdout : ref output
+extern write_byte : !(all 'a < top. mut 'a output * i32 => mut 'a output)
+
+def putb : ref output * i32 => ref output * 1 =
+  thunkv fun (p : ref output * i32) ->
+    let (c, b) = p;
+    return (withbor2['x, top, output, 1] c
+      (thunkv Fun 'x < dom. return (thunkv fun (m : mut 'x output) ->
+         m2 <- return ((unbang write_byte) ['x] (m, b));
+         return (boxed['x] ()))))
+
+main : F (ref output * 1) =
+  u <- return (putb (&stdout, i32[104]));
+  v <- return (putb (&stdout, i32[10]));
+  return (stdout, v)

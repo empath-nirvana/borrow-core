@@ -1,207 +1,123 @@
--- A guessing game (SPEC §11), played from a scripted input. The secret is 42; each round
--- prompts, reads a number with `read_num` (which takes only the input) and answers with a
--- message (each taking only the output). The number of guesses goes to standard error through
--- `put_dec`, the same function other programs point at standard output: `stdout` and `stderr`
--- are both `ref output`, and the caller chooses which one a writer gets.
+-- A guessing game (SPEC §11), played from a scripted input. The secret is 42. Each line is a
+-- guess, read a digit at a time; each message is a helper that takes only an output. The number
+-- of guesses goes to standard error through `put_dec`, the same function the other programs point
+-- at standard output: `stdout` and `stderr` are both `ref output`, and the caller chooses which
+-- one a writer gets. After the right guess the rest of the input is ignored (a `for` has no early
+-- exit).
 --
 -- Answer: `too high`, `too low`, `too high`, `correct!` for 50, 30, 45, 42, then 4 guesses on
 -- standard error and as the result. A comparison the wrong way round, or a number misparsed,
 -- changes a message.
 
-extern stdin : ref input
-extern stdout : ref output
-extern read_byte : !(all 'a < top. mut 'a input => mut 'a input * (i32 + 1))
-extern write_byte : !(all 'a < top. mut 'a output * i32 => mut 'a output)
-
-type In = ref input
-type Out = ref output
 type B = 1 + 1
-
--- The next byte of an input stream, or `inr ()` at its end. It takes only an input: the
--- capability is lent to `read_byte` for the one read and handed back.
-def getb : In => In * (i32 + 1) =
-  thunkv fun (c : In) ->
-    return (withbor2['x, top, input, i32 + 1] c
-      (thunkv Fun 'x < dom. return (thunkv fun (m : mut 'x input) ->
-         r <- return ((unbang read_byte) ['x] m);
-         let (m2, b) = r;
-         return (boxed['x] b))))
-
--- Write one byte. It takes only an output.
-def putb : Out * i32 => Out =
-  thunkv fun (p : Out * i32) ->
-    let (c, b) = p;
-    q <- return (withbor2['x, top, output, 1] c
-      (thunkv Fun 'x < dom. return (thunkv fun (m : mut 'x output) ->
-         m2 <- return ((unbang write_byte) ['x] (m, b));
-         return (boxed['x] ()))));
-    let (c2, u) = q;
-    return c2
-extern stderr : ref output
-
--- Decimal output. The state is (output, (n, (d, started))): `d` runs over 10^9, 10^8, …, 1,
--- and the digit `n / d` is written once a nonzero digit has been, or at `d = 1`.
-type DS = Out * (i32 * (i32 * B))
-
-def dec_step : !(DS => DS) =
-  !thunkv fun (s : DS) ->
-    let (o, r) = s;
-    let (n, r2) = r;
-    let (d, st) = r2;
-    case (unbang host[eqz32]) d {
-      inl nz ->
-        q <- return ((unbang host[div_u32]) (n, d));
-        digit : i32 <- case q { inl x -> return x | inr u -> return i32[0] };
-        n2 <- return ((unbang host[sub32]) (n, (unbang host[mul32]) (digit, d)));
-        show : B <- case st {
-          inl u ->
-            case (unbang host[eqz32]) digit {
-              inl u2 -> return (inr () : B)
-            | inr u3 -> return ((unbang host[eq32]) (d, i32[1]))
-            }
-        | inr u -> return (inr () : B)
-        };
-        o2 : Out <- case show {
-          inl u -> return o
-        | inr u -> return (putb (o, (unbang host[add32]) (digit, i32[48])))
-        };
-        q2 <- return ((unbang host[div_u32]) (d, i32[10]));
-        d2 : i32 <- case q2 { inl x -> return x | inr u -> return i32[0] };
-        return (o2, (n2, (d2, show)))
-    | inr z -> return (o, (n, (d, st)))
-    }
-
-def dec_twice : !(DS => DS) => !(DS => DS) =
-  thunkv fun (f : !(DS => DS)) -> return (!thunkv fun (s : DS) -> return ((unbang f) ((unbang f) s)))
-
--- `n` in unsigned decimal: sixteen steps cover the ten digits. It takes only an output.
-def put_dec : Out * i32 => Out =
-  thunkv fun (p : Out * i32) ->
-    let (o, n) = p;
-    s <- return ((unbang (dec_twice (dec_twice (dec_twice (dec_twice dec_step)))))
-                   (o, (n, (i32[1000000000], (inl () : B)))));
-    let (o2, r) = s;
-    return o2
 
 def inc : i32 => i32 = thunkv fun (n : i32) -> return ((unbang host[add32]) (n, i32[1]))
 
--- Reading a number: (input, (value, (digits seen, (stopped, at the end)))). Digits accumulate
--- up to a newline or the end of the input; other bytes are skipped.
-type RS = In * (i32 * (i32 * (B * B)))
+def say_prompt : Out => Out * 1 =
+  thunkv fun (o : Out) ->
+    _ <- return (putb (&o, i32[103]));
+    _ <- return (putb (&o, i32[117]));
+    _ <- return (putb (&o, i32[101]));
+    _ <- return (putb (&o, i32[115]));
+    _ <- return (putb (&o, i32[115]));
+    _ <- return (putb (&o, i32[63]));
+    return (putb (o, i32[32]))
 
-def num_step : !(RS => RS) =
-  !thunkv fun (s : RS) ->
-    let (i, r) = s;
-    let (v, r2) = r;
-    let (k, fl) = r2;
-    let (stop, eof) = fl;
-    case stop {
-      inl u ->
-        q <- return (getb i);
-        let (i2, x) = q;
-        case x {
-          inl b ->
-            case (unbang host[eq32]) (b, i32[10]) {
-              inl nl ->
-                case (unbang host[lt_u32]) ((unbang host[sub32]) (b, i32[48]), i32[10]) {
-                  inl other -> return (i2, (v, (k, (stop, eof))))
-                | inr digit ->
-                    v2 <- return ((unbang host[add32]) ((unbang host[mul32]) (v, i32[10]),
-                                                          (unbang host[sub32]) (b, i32[48])));
-                    return (i2, (v2, (inc k, (stop, eof))))
-                }
-            | inr nl -> return (i2, (v, (k, ((inr () : B), eof))))
-            }
-        | inr e -> return (i2, (v, (k, ((inr () : B), (inr () : B)))))
-        }
-    | inr u -> return (i, (v, (k, (stop, eof))))
+def say_low : Out => Out * 1 =
+  thunkv fun (o : Out) ->
+    _ <- return (putb (&o, i32[116]));
+    _ <- return (putb (&o, i32[111]));
+    _ <- return (putb (&o, i32[111]));
+    _ <- return (putb (&o, i32[32]));
+    _ <- return (putb (&o, i32[108]));
+    _ <- return (putb (&o, i32[111]));
+    _ <- return (putb (&o, i32[119]));
+    return (putb (o, i32[10]))
+
+def say_high : Out => Out * 1 =
+  thunkv fun (o : Out) ->
+    _ <- return (putb (&o, i32[116]));
+    _ <- return (putb (&o, i32[111]));
+    _ <- return (putb (&o, i32[111]));
+    _ <- return (putb (&o, i32[32]));
+    _ <- return (putb (&o, i32[104]));
+    _ <- return (putb (&o, i32[105]));
+    _ <- return (putb (&o, i32[103]));
+    _ <- return (putb (&o, i32[104]));
+    return (putb (o, i32[10]))
+
+def say_right : Out => Out * 1 =
+  thunkv fun (o : Out) ->
+    _ <- return (putb (&o, i32[99]));
+    _ <- return (putb (&o, i32[111]));
+    _ <- return (putb (&o, i32[114]));
+    _ <- return (putb (&o, i32[114]));
+    _ <- return (putb (&o, i32[101]));
+    _ <- return (putb (&o, i32[99]));
+    _ <- return (putb (&o, i32[116]));
+    _ <- return (putb (&o, i32[33]));
+    return (putb (o, i32[10]))
+
+def say_bye : Out => Out * 1 =
+  thunkv fun (o : Out) ->
+    _ <- return (putb (&o, i32[98]));
+    _ <- return (putb (&o, i32[121]));
+    _ <- return (putb (&o, i32[101]));
+    return (putb (o, i32[10]))
+
+-- `too high` or `too low`.
+def say_wrong : Out * i32 => Out * 1 =
+  thunkv fun (p : Out * i32) ->
+    let (o, value) = p;
+    case (unbang host[lt_u32]) (value, i32[42]) {
+      inl high -> return (say_high o)
+    | inr low -> return (say_low o)
     }
 
-def num_twice : !(RS => RS) => !(RS => RS) =
-  thunkv fun (f : !(RS => RS)) -> return (!thunkv fun (s : RS) -> return ((unbang f) ((unbang f) s)))
-
--- The next line's number, or `inr ()` when the input has ended with no digits. It takes only
--- an input.
-def read_num : In => In * (i32 + 1) =
-  thunkv fun (c : In) ->
-    s <- return ((unbang (num_twice (num_twice (num_twice (num_twice num_step)))))
-                   (c, (i32[0], (i32[0], ((inl () : B), (inl () : B))))));
-    let (i, r) = s;
-    let (v, r2) = r;
-    let (k, fl) = r2;
-    let (stop, eof) = fl;
-    case eof {
-      inl more -> return (i, (inl v : i32 + 1))
-    | inr end ->
-        case (unbang host[eqz32]) k {
-          inl some -> return (i, (inl v : i32 + 1))
-        | inr none -> return (i, (inr () : i32 + 1))
-        }
-    }
-
--- The messages. Each takes only an output.
-def say_prompt : Out => Out =
-  thunkv fun (o : Out) ->
-    return (putb (putb (putb (putb (putb (putb (putb (o, i32[103]), i32[117]), i32[101]),
-      i32[115]), i32[115]), i32[63]), i32[32]))
-
-def say_low : Out => Out =
-  thunkv fun (o : Out) ->
-    return (putb (putb (putb (putb (putb (putb (putb (putb (o, i32[116]), i32[111]), i32[111]),
-      i32[32]), i32[108]), i32[111]), i32[119]), i32[10]))
-
-def say_high : Out => Out =
-  thunkv fun (o : Out) ->
-    return (putb (putb (putb (putb (putb (putb (putb (putb (putb (o, i32[116]), i32[111]),
-      i32[111]), i32[32]), i32[104]), i32[105]), i32[103]), i32[104]), i32[10]))
-
-def say_right : Out => Out =
-  thunkv fun (o : Out) ->
-    return (putb (putb (putb (putb (putb (putb (putb (putb (putb (o, i32[99]), i32[111]),
-      i32[114]), i32[114]), i32[101]), i32[99]), i32[116]), i32[33]), i32[10]))
-
-def say_bye : Out => Out =
-  thunkv fun (o : Out) ->
-    return (putb (putb (putb (putb (o, i32[98]), i32[121]), i32[101]), i32[10]))
-
--- One round: (input, (output, (guesses, done))). The secret is 42.
-type G = In * (Out * (i32 * B))
-
-def round : !(G => G) =
-  !thunkv fun (s : G) ->
-    let (i, r) = s;
-    let (o, r2) = r;
-    let (n, done) = r2;
+-- `bye`, unless the game is over.
+def say_bye_if : Out * B => Out * 1 =
+  thunkv fun (p : Out * B) ->
+    let (o, done) = p;
     case done {
-      inl u ->
-        o1 <- return (say_prompt o);
-        q <- return (read_num i);
-        let (i2, x) = q;
-        case x {
-          inl g ->
-            case (unbang host[eq32]) (g, i32[42]) {
-              inl ne ->
-                case (unbang host[lt_u32]) (g, i32[42]) {
-                  inl hi -> return (i2, (say_high o1, (inc n, (inl () : B))))
-                | inr lo -> return (i2, (say_low o1, (inc n, (inl () : B))))
-                }
-            | inr eq -> return (i2, (say_right o1, (inc n, (inr () : B))))
-            }
-        | inr e -> return (i2, (say_bye o1, (n, (inr () : B))))
-        }
-    | inr u -> return (i, (o, (n, done)))
+      inl playing -> return (say_bye o)
+    | inr over -> return (o, ())
     }
 
-def twice : !(G => G) => !(G => G) =
-  thunkv fun (f : !(G => G)) -> return (!thunkv fun (s : G) -> return ((unbang f) ((unbang f) s)))
-
--- Up to 2^5 rounds. The number of guesses goes to standard error, by the same `put_dec` that
--- other programs point at standard output; the result is that number too.
-main : F ((In * (Out * Out)) * i32) =
-  s <- return ((unbang (twice (twice (twice (twice (twice round))))))
-                 (stdin, (stdout, (i32[0], (inl () : B)))));
-  let (i, r) = s;
-  let (o, r2) = r;
-  let (n, done) = r2;
-  e <- return (putb (put_dec (stderr, n), i32[10]));
-  return ((i, (o, e)), n)
+main : F i32 =
+  value : i32 <- return i32[0];
+  guesses : i32 <- return i32[0];
+  done : B <- return (inl () : B);
+  _ <- return (say_prompt &stdout);
+  for b in bytes stdin {
+    case done {
+      inl playing ->
+        case (unbang host[eq32]) (b, i32[10]) {
+          inl other ->
+            case (unbang host[lt_u32]) ((unbang host[sub32]) (b, i32[48]), i32[10]) {
+              inl skip -> return ()
+            | inr digit ->
+                value : i32 <- return ((unbang host[add32]) ((unbang host[mul32]) (value, i32[10]),
+                                                              (unbang host[sub32]) (b, i32[48])));
+                return ()
+            }
+        | inr newline ->
+            guesses : i32 <- return (inc guesses);
+            case (unbang host[eq32]) (value, i32[42]) {
+              inl wrong ->
+                _ <- return (say_wrong (&stdout, value));
+                _ <- return (say_prompt &stdout);
+                value : i32 <- return i32[0];
+                return ()
+            | inr right ->
+                _ <- return (say_right &stdout);
+                done : B <- return (inr () : B);
+                return ()
+            }
+        }
+    | inr over -> return ()
+    }
+  };
+  _ <- return (say_bye_if (&stdout, done));
+  _ <- return (put_dec (&stderr, guesses));
+  _ <- return (putb (&stderr, i32[10]));
+  return guesses

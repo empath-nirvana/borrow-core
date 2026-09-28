@@ -54,7 +54,8 @@ def keywords : List String :=
     "nu_in", "nu_out", "delay_in", "delay_out", "stream_in", "stream_out",
     -- types, lifetimes, shapes
     "ref", "imm", "mut", "box", "unk", "i32", "i64", "input", "output", "mu", "all", "forall", "top", "dom",
-    "block", "val", "fam", "view", "nu", "delay", "stream", "str", "iter", "leaf",
+    "block", "val", "fam", "view", "nu", "delay", "loop", "stream", "str", "iter", "leaf",
+    "for", "in",
     "node", "array", "array_imm",
     -- constants and derived forms
     "alloc", "free", "swap", "copy", "copy_bang", "forget_imm", "forget_mut", "forget_unk",

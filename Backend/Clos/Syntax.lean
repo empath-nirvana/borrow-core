@@ -88,6 +88,9 @@ structure Code where
 structure Prog where
   codes : Array Code
   main : Tm
+  /-- For a `main` that returns a loop (SPEC §11): the code run on the value the loop finishes
+  with, once the stage has driven it. -/
+  fin : Option Nat := none
   deriving Repr, Inhabited
 
 /-- The host operations a term applies. -/

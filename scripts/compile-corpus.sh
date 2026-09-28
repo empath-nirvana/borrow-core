@@ -10,6 +10,9 @@
 # reads `corpus/<name>.in` as standard input (the empty input if there is none). At every stage,
 # its whole standard output, the program's bytes followed by the report, must equal
 # `corpus/<name>.out`, and its standard error `corpus/<name>.err` (empty if there is none).
+#
+# No I/O program has a bound on its input: `corpus/io-cat.bc` also copies a generated input of
+# 4860 bytes, at every stage.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 command -v wasmtime >/dev/null || { echo "wasmtime is not on PATH"; exit 1; }
@@ -73,5 +76,15 @@ for f in corpus/*.bc; do
     echo "$f: $(echo "$got" | head -1) | $(echo "$got" | tail -1)"
   fi
 done
+# An input past any fixed bound: 4860 bytes, copied whole at every stage.
+awk 'BEGIN { for (i = 0; i < 90; i++) printf "line %02d of a long input, copied byte for byte by cat.\n", i }' \
+  > "$tmp/big.in"
+printf '()\nlive 0\n' | cat "$tmp/big.in" - > "$tmp/big.out"
+bigok=1
+for st in source clos flat wasm; do
+  runStage "$st" corpus/io-cat.bc "$tmp/big.in" || true
+  if ! cmp -s "$tmp/out" "$tmp/big.out"; then echo "corpus/io-cat.bc: stage $st differs on a $(wc -c < "$tmp/big.in" | tr -d ' ')-byte input"; bigok=0; fi
+done
+if [ "$bigok" = 1 ]; then echo "corpus/io-cat.bc: a $(wc -c < "$tmp/big.in" | tr -d ' ')-byte input copied whole at every stage"; else bad=$((bad + 1)); fi
 echo "$bad failure(s)."
 [ "$bad" -eq 0 ]

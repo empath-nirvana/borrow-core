@@ -1,40 +1,9 @@
--- An uppercase filter (SPEC §11): `a`-`z` become `A`-`Z`, every other byte passes through.
--- The test is one unsigned comparison, `b - 97 < 26`.
+-- An uppercase filter (SPEC §11): `a`-`z` become `A`-`Z`, every other byte passes through. The
+-- test is one unsigned comparison, `b - 97 < 26`.
 --
 -- Answer: the input upper-cased. The bytes around the range (`` ` `` is 96, `{` is 123, `@` is
 -- 64, `[` is 91) stay as they are; an off-by-one bound would change one of them.
 
-extern stdin : ref input
-extern stdout : ref output
-extern read_byte : !(all 'a < top. mut 'a input => mut 'a input * (i32 + 1))
-extern write_byte : !(all 'a < top. mut 'a output * i32 => mut 'a output)
-
-type In = ref input
-type Out = ref output
-type B = 1 + 1
-
--- The next byte of an input stream, or `inr ()` at its end. It takes only an input: the
--- capability is lent to `read_byte` for the one read and handed back.
-def getb : In => In * (i32 + 1) =
-  thunkv fun (c : In) ->
-    return (withbor2['x, top, input, i32 + 1] c
-      (thunkv Fun 'x < dom. return (thunkv fun (m : mut 'x input) ->
-         r <- return ((unbang read_byte) ['x] m);
-         let (m2, b) = r;
-         return (boxed['x] b))))
-
--- Write one byte. It takes only an output.
-def putb : Out * i32 => Out =
-  thunkv fun (p : Out * i32) ->
-    let (c, b) = p;
-    q <- return (withbor2['x, top, output, 1] c
-      (thunkv Fun 'x < dom. return (thunkv fun (m : mut 'x output) ->
-         m2 <- return ((unbang write_byte) ['x] (m, b));
-         return (boxed['x] ()))));
-    let (c2, u) = q;
-    return c2
-
--- `a`-`z` to `A`-`Z`; every other byte as it is. `b - 97 < 26`, unsigned, is `a <= b <= z`.
 def upper : i32 => i32 =
   thunkv fun (b : i32) ->
     case (unbang host[lt_u32]) ((unbang host[sub32]) (b, i32[97]), i32[26]) {
@@ -42,30 +11,8 @@ def upper : i32 => i32 =
     | inr u -> return ((unbang host[sub32]) (b, i32[32]))
     }
 
-type S = In * (Out * B)
-
-def step : !(S => S) =
-  !thunkv fun (s : S) ->
-    let (i, r) = s;
-    let (o, d) = r;
-    case d {
-      inl u ->
-        q <- return (getb i);
-        let (i2, x) = q;
-        case x {
-          inl b -> return (i2, (putb (o, upper b), (inl () : B)))
-        | inr u2 -> return (i2, (o, (inr () : B)))
-        }
-    | inr u -> return (i, (o, (inr () : B)))
-    }
-
-def twice : !(S => S) => !(S => S) =
-  thunkv fun (f : !(S => S)) -> return (!thunkv fun (s : S) -> return ((unbang f) ((unbang f) s)))
-
--- 2^11 steps: an input of up to 2047 bytes.
-main : F ((In * Out) * 1) =
-  f <- return (twice (twice (twice (twice (twice (twice (twice (twice (twice (twice (twice step)))))))))));
-  s <- return ((unbang f) (stdin, (stdout, (inl () : B))));
-  let (i, r) = s;
-  let (o, d) = r;
-  return ((i, o), ())
+main : F 1 =
+  for b in bytes stdin {
+    return (putb (&stdout, upper b))
+  };
+  return ()

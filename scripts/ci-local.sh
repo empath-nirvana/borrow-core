@@ -16,6 +16,7 @@ step "axiom report"     lake env lean scripts/AxiomCheck.lean
 step "parse corpus"     scripts/parse-corpus.sh
 step "check corpus"     scripts/check-corpus.sh
 step "compile corpus"   scripts/compile-corpus.sh
+step "sugar pairs"      scripts/check-sugar.sh
 step "book doc-tests"   scripts/book-doctest.sh
 if command -v mdbook >/dev/null; then
   step "book build" mdbook build book

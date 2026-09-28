@@ -34,6 +34,9 @@ def checkedOf (file src : String) : Except String CheckedProg := do
   let p ← match Frontend.parseProgram src with
     | .ok p => pure p
     | .error e => throw s!"{file}:{e.render}"
+  let p ← match Frontend.Sugar.elaborate p with
+    | .ok (p, _) => pure p
+    | .error e => throw s!"{file}:{e.render}"
   let r ← match Frontend.Check.checkProgram p with
     | .ok r => pure r
     | .error e => throw s!"{file}:{e.render}"
@@ -62,7 +65,7 @@ def closOf (file src : String) : Except String Clos.Prog := do
   let k ← checkedOf file src
   match k.io with
   | none => Clos.convert k.main.e
-  | some m => Clos.convertMain (← extImpls m) k.main.e
+  | some m => Clos.convertMain (← extImpls m) m.loopB.isSome k.main.e
 
 def flatOf (file src : String) : Except String Flat.Prog := do
   Flat.lower (← closOf file src)
@@ -89,7 +92,9 @@ def interpStage (stage file src : String) (input : List UInt8) : Except String O
     let k ← checkedOf file src
     match k.io with
     | none => interpSource runFuel k.main.e
-    | some m => interpIO runFuel ((← ioRunOf file k m).expr input)
+    | some m =>
+      let r ← ioRunOf file k m
+      if r.loops then interpIOLoop runFuel (r.expr input) else interpIO runFuel (r.expr input)
   | "clos" => Clos.interp runFuel (← closOf file src) input
   | "flat" => Flat.interp runFuel (← flatOf file src) input
   | _ => throw s!"unknown stage `{stage}`"
@@ -98,6 +103,9 @@ def interpStage (stage file src : String) (input : List UInt8) : Except String O
 def trusted (file src : String) : Except String String := do
   let p ← match Frontend.parseProgram src with
     | .ok p => pure p
+    | .error e => throw s!"{file}:{e.render}"
+  let p ← match Frontend.Sugar.elaborate p with
+    | .ok (p, _) => pure p
     | .error e => throw s!"{file}:{e.render}"
   let xs ← match Frontend.Check.externs p.decls.toArray with
     | .ok xs => pure xs

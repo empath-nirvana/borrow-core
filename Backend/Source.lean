@@ -44,12 +44,10 @@ def bytesOf : Expr → Option (List UInt8)
   | .inj₂ (.pair (.prim (.lit (.i32 b))) r) => (bytesOf r).map (b.toUInt8 :: ·)
   | _ => none
 
-/-- The model run of a program with capabilities (SPEC §11): `run_io[γ] inp` from the empty
-memory, whose value `((fd, out), ((fd', err), a))` holds the bytes written to each stream,
-most recent first, and `main`'s result `a`. Each stream's bytes go to its descriptor, then the
-report of `a`. -/
-def interpIO (fuel : Nat) (e : Expr) : Except String Output := do
-  let (v, μ) ← runSource fuel Mem.empty e
+/-- The output of a finished model run: `((fd, out), ((fd', err), a))` holds the bytes written to
+each stream, most recent first, and `main`'s result `a`. Each stream's bytes go to its
+descriptor, then the report of `a`. -/
+def ioOutput (v : Val) (μ : Mem) : Except String Output := do
   match v.1 with
   | .pair (.pair (.prim (.lit (.i32 fd₁))) o₁) (.pair (.pair (.prim (.lit (.i32 fd₂))) o₂) a) =>
     let some b₁ := bytesOf o₁ | throw "source interpreter: an output stream is not a byte list"
@@ -59,6 +57,31 @@ def interpIO (fuel : Nat) (e : Expr) : Except String Output := do
       ⟨(streams.filter (·.1 == fd)).foldl (fun acc s => acc ++ s.2.toArray) #[]⟩
     pure (.mk' (on 1) (on 2) (report (pvOfExpr a) μ.cells.length))
   | _ => throw "source interpreter: run_io's value is not its outputs and result"
+
+/-- The model run of a program with capabilities (SPEC §11): `run_io[γ] inp` from the empty
+memory. -/
+def interpIO (fuel : Nat) (e : Expr) : Except String Output := do
+  let (v, μ) ← runSource fuel Mem.empty e
+  ioOutput v μ
+
+/-- Observe the loop `d` until it finishes: each `next` is `d (inl ())`, which answers `inl r` to
+finish with `r` or `inr d'` to go on with `d'`. This is `driveE` without its bound: a run that
+finishes after `k` observations is the run of `driveE k` (SPEC §7, §11). -/
+def driveSource (fuel : Nat) : Nat → Mem → Val → Except String (Val × Mem)
+  | 0, _, _ => .error "source interpreter: out of fuel"
+  | n + 1, μ, d => do
+    let (w, μ') ← runSource fuel μ (.app (.val d) (.val (.inj₁ .unit)))
+    match w with
+    | ⟨.inj₁ r, h⟩ => pure (⟨r, by cases h; assumption⟩, μ')
+    | ⟨.inj₂ d', h⟩ => driveSource fuel n μ' ⟨d', by cases h; assumption⟩
+    | _ => .error "source interpreter: a loop's `next` answered neither `inl` nor `inr`"
+
+/-- The model run of a program that runs until its input ends: `run_io[γ] inp` returns a loop,
+which is observed until it finishes. -/
+def interpIOLoop (fuel : Nat) (e : Expr) : Except String Output := do
+  let (d, μ) ← runSource fuel Mem.empty e
+  let (v, μ') ← driveSource fuel fuel μ d
+  ioOutput v μ'
 
 
 end Backend

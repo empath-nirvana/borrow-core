@@ -1,65 +1,17 @@
--- A source with early close (SPEC §11, §7): the input as a finite iterator of bytes, `iter i32
--- In In`, that owns the input capability. Five bytes are taken from it, then it is closed
--- early, and its `close` hands the capability back; the program then reads on from where the
--- iterator stopped. (A file source would be the same program over a file's `Input`; files are
--- not externs yet, so the source is standard input.)
+-- A source closed early (SPEC §11, §7): the input as the library's stream `bytes stdin`, an
+-- iterator that owns the input capability. Five bytes are taken from it by a bounded loop, then
+-- it is closed early, and its `close` hands the capability back; the program then reads on from
+-- where the iterator stopped, with a `for` over a new stream. (A file source would be the same
+-- program over a file's `input`; files are not externs yet, so the source is standard input.)
 --
--- Answer: `hello | , world` for `hello, world`: the five bytes through the iterator, then the
--- rest of the line through the capability it returned. A capability not handed back could not
--- read the rest; a byte lost at the close would drop the comma.
+-- Answer: `hello | , world` for `hello, world`: the five bytes through the first stream, then
+-- the rest through the capability it returned. A capability not handed back could not read the
+-- rest; a byte lost at the close would drop the comma.
 
-extern stdin : ref input
-extern stdout : ref output
-extern read_byte : !(all 'a < top. mut 'a input => mut 'a input * (i32 + 1))
-extern write_byte : !(all 'a < top. mut 'a output * i32 => mut 'a output)
-
-type In = ref input
-type Out = ref output
-type B = 1 + 1
-
--- The next byte of an input stream, or `inr ()` at its end. It takes only an input: the
--- capability is lent to `read_byte` for the one read and handed back.
-def getb : In => In * (i32 + 1) =
-  thunkv fun (c : In) ->
-    return (withbor2['x, top, input, i32 + 1] c
-      (thunkv Fun 'x < dom. return (thunkv fun (m : mut 'x input) ->
-         r <- return ((unbang read_byte) ['x] m);
-         let (m2, b) = r;
-         return (boxed['x] b))))
-
--- Write one byte. It takes only an output.
-def putb : Out * i32 => Out =
-  thunkv fun (p : Out * i32) ->
-    let (c, b) = p;
-    q <- return (withbor2['x, top, output, 1] c
-      (thunkv Fun 'x < dom. return (thunkv fun (m : mut 'x output) ->
-         m2 <- return ((unbang write_byte) ['x] (m, b));
-         return (boxed['x] ()))));
-    let (c2, u) = q;
-    return c2
-
--- The input as a finite iterator of bytes (SPEC §7) that owns the input capability: `next` reads
--- a byte, and finishes with the capability at the end of the input; `close` hands the
--- capability back. `Iter i32 In In`.
 type It = U (iter i32 In In)
 
-def src_step : !U (In -o F (i32 * In + In) & F In) =
-  !thunkv fun (c : In) ->
-    < q <- return (getb c);
-      let (c2, x) = q;
-      case x {
-        inl b -> return (inl (b, c2))
-      | inr u -> return (inr c2)
-      },
-      return c >
-
-def source : In => It =
-  thunkv fun (c : In) ->
-    f <- return (unbang (unfold[iter i32 In In, In] src_step));
-    return (thunkv nu_in < (nu_out (force f c)).1, (nu_out (force f c)).2 >)
-
--- Taking up to `k` bytes from the source: (output, (the source, or the capability once it is
--- closed or finished, k)). At `k = 0` the source is closed early.
+-- Taking up to `k` bytes: (output, (the stream, or the capability once it has finished, k)).
+-- At `k = 0` the stream is closed early.
 type T = Out * ((It + In) * i32)
 
 def take_step : !(T => T) =
@@ -74,7 +26,9 @@ def take_step : !(T => T) =
             case x {
               inl p ->
                 let (b, rest) = p;
-                return (putb (o, b), ((inl rest : It + In), (unbang host[sub32]) (k, i32[1])))
+                q <- return (putb (o, b));
+                let (o2, u) = q;
+                return (o2, ((inl rest : It + In), (unbang host[sub32]) (k, i32[1])))
             | inr c -> return (o, ((inr c : It + In), k))
             }
         | inr stop ->
@@ -87,40 +41,19 @@ def take_step : !(T => T) =
 def take_twice : !(T => T) => !(T => T) =
   thunkv fun (f : !(T => T)) -> return (!thunkv fun (s : T) -> return ((unbang f) ((unbang f) s)))
 
--- After the source is closed, the capability reads on from where it stopped.
-type S = In * (Out * B)
-
-def step : !(S => S) =
-  !thunkv fun (s : S) ->
-    let (i, r) = s;
-    let (o, d) = r;
-    case d {
-      inl u ->
-        q <- return (getb i);
-        let (i2, x) = q;
-        case x {
-          inl b -> return (i2, (putb (o, b), (inl () : B)))
-        | inr u2 -> return (i2, (o, (inr () : B)))
-        }
-    | inr u -> return (i, (o, (inr () : B)))
-    }
-
-def twice : !(S => S) => !(S => S) =
-  thunkv fun (f : !(S => S)) -> return (!thunkv fun (s : S) -> return ((unbang f) ((unbang f) s)))
-
--- The first 5 bytes through the source, closed early; ` | `; then the rest of the input.
-main : F ((In * Out) * 1) =
+main : F 1 =
   t <- return ((unbang (take_twice (take_twice (take_twice take_step))))
-                 (stdout, ((inl (source stdin) : It + In), i32[5])));
-  let (o, r) = t;
+                 (stdout, ((inl (bytes stdin) : It + In), i32[5])));
+  let (stdout, r) = t;
   let (src, k) = r;
-  i : In <- case src {
+  stdin : In <- case src {
     inl it -> (nu_out (force it)).2
   | inr c -> return c
   };
-  o2 <- return (putb (putb (putb (o, i32[32]), i32[124]), i32[32]));
-  f <- return (twice (twice (twice (twice (twice (twice (twice (twice step))))))));
-  s <- return ((unbang f) (i, (o2, (inl () : B))));
-  let (i2, r2) = s;
-  let (o3, d) = r2;
-  return ((i2, o3), ())
+  _ <- return (putb (&stdout, i32[32]));
+  _ <- return (putb (&stdout, i32[124]));
+  _ <- return (putb (&stdout, i32[32]));
+  for b in bytes stdin {
+    return (putb (&stdout, b))
+  };
+  return ()
