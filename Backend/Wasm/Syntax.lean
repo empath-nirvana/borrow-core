@@ -34,6 +34,10 @@ inductive Instr where
   | ret
   | drop
   | unreachable
+  /-- The value of the runtime's global `name`. -/
+  | globalGet (name : String)
+  /-- Add one to the runtime's count of indirect calls. -/
+  | countInd
   deriving Repr, Inhabited
 
 structure Func where

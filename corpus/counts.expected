@@ -1,0 +1,33 @@
+# Allocations and indirect calls per run of each corpus program (scripts/compile-corpus.sh).
+# name allocs indirect
+13-2-sum-prog 751 583
+array-empty 22 6
+array-get 71 46
+array-refs 43 20
+array-replace 92 39
+array-sum 30334 11109
+block-swap 46 27
+count-down 236 169
+count-down-exact 127 93
+div-hof 23363 17933
+family-swap 41 27
+implicit-drops 234 168
+int-arith 11 5
+int-ops 75 19
+io-aoc 4772 2615
+io-cat 4345 3270
+io-for-then 1483 967
+io-fuel 48899 39405
+io-guess 2393 1567
+io-head 1283 922
+io-hex 1737 1218
+io-lines 2046 1411
+io-sections 4061 2840
+io-upper 6361 4628
+io-wc 7409 4858
+iter-close 166 122
+iter-range 265 164
+map-reuse 315 211
+nats-sum 141 101
+sum-i32 288 214
+sum-prog-exact 751 583

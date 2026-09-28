@@ -133,9 +133,15 @@ def lowerMain (hostIdx : HostOp → Nat) (t : Tm) : Except String Fn := do
   let (body, s) ← (lowerTm hostIdx t .ret).run ⟨[], 0⟩
   pure { name := "main", params := 0, locals := s.next, body := body ++ [.trap] }
 
+/-- The counts of a run, written after the report when they are asked for: allocations and
+indirect calls. -/
+def countsReport : List Stmt :=
+  outStr "allocs " ++ [.eval (.call fPrintDec [.stat 0])] ++ outStr "\nindirect " ++
+    [.eval (.call fPrintDec [.stat 1])] ++ outStr "\n"
+
 /-- Run `main` (driving it and running the code `fin` on what it finishes with, when it returns
-a loop), print the value, drop it, print the live count. -/
-def entryFn (fMain : Nat) (fin : Option Nat) : Fn where
+a loop), print the value, drop it, print the live count, and with `counts` the run's counts. -/
+def entryFn (fMain : Nat) (fin : Option Nat) (counts : Bool) : Fn where
   name := "entry"
   params := 0
   locals := 2
@@ -148,9 +154,10 @@ def entryFn (fMain : Nat) (fin : Option Nat) : Fn where
         [.set 0 (.callInd (.load (.loc 1) 1) [.loc 1, .loc 0])]) ++
     [.eval (.call fPrint [.loc 0])] ++ outStr "\n" ++
       [.eval (.call fDrop [.loc 0])] ++ outStr "live " ++
-      [.eval (.call fPrintDec [.live])] ++ outStr "\n" ++ [.ret (.c64 0)]
+      [.eval (.call fPrintDec [.live])] ++ outStr "\n" ++
+      (if counts then countsReport else []) ++ [.ret (.c64 0)]
 
-def lower (p : Clos.Prog) : Except String Prog := do
+def lower (p : Clos.Prog) (counts : Bool := false) : Except String Prog := do
   let ops := p.hostOps
   let hostBase := runtimeFns.length
   let hostIdx (o : HostOp) : Nat := hostBase + (ops.idxOf? o).getD 0
@@ -158,7 +165,7 @@ def lower (p : Clos.Prog) : Except String Prog := do
   let codes ← p.codes.toList.zipIdx.mapM fun (c, k) => lowerCode hostIdx k c
   let fMain := codeBase + codes.length
   let main ← lowerMain hostIdx p.main
-  let fns := runtimeFns ++ ops.map hostFn ++ codes ++ [main, entryFn fMain p.fin]
+  let fns := runtimeFns ++ ops.map hostFn ++ codes ++ [main, entryFn fMain p.fin counts]
   pure { fns := fns.toArray, table := (List.range codes.length).toArray.map (codeBase + ·),
          entry := fMain + 1 }
 

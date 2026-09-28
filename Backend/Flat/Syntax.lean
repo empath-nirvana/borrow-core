@@ -58,6 +58,8 @@ inductive Exp where
   | live
   /-- The next byte of the stream `fd`, or `2⁶⁴ - 1` at its end (SPEC §11). -/
   | getc (fd : Exp)
+  /-- A run's counter: `0` the allocations so far, `1` the indirect calls so far. -/
+  | stat (k : Nat)
   deriving Repr, Inhabited
 
 inductive Stmt where

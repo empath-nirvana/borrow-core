@@ -28,6 +28,10 @@ structure FState where
   input : List UInt8
   out : ByteArray
   err : ByteArray
+  /-- Allocations so far. -/
+  allocs : Nat := 0
+  /-- Indirect calls so far. -/
+  indirect : Nat := 0
 
 abbrev FM := StateT FState (Except String)
 
@@ -75,7 +79,8 @@ def allocRange (n : Nat) : FM UInt64 := do
   let s ← get
   let a := s.next
   let mem := (List.range n).foldl (fun m i => m.insert (a + 8 * i) none) s.mem
-  set { s with mem, ranges := s.ranges.insert a n, next := a + 8 * n + 8 }
+  set { s with mem, ranges := s.ranges.insert a n, next := a + 8 * n + 8,
+               allocs := s.allocs + 1 }
   pure a.toUInt64
 
 def freeRange (a : Nat) : FM Unit := do
@@ -108,6 +113,7 @@ def evalExp (p : Prog) : Nat → Array UInt64 → Exp → FM UInt64
     | .callInd f args => do
         let args ← evalArgs p n fr args
         let k ← evalExp p n fr f
+        modify fun s => { s with indirect := s.indirect + 1 }
         match p.table[k.toNat]? with
         | some g => callFn p n g args
         | none => throw s!"flat IR: no table entry {k}"
@@ -120,6 +126,8 @@ def evalExp (p : Prog) : Nat → Array UInt64 → Exp → FM UInt64
         match s.input with
         | [] => pure 0xFFFFFFFFFFFFFFFF
         | b :: bs => do set { s with input := bs }; pure b.toUInt64
+    | .stat 0 => do pure (← get).allocs.toUInt64
+    | .stat _ => do pure (← get).indirect.toUInt64
 
 def evalArgs (p : Prog) : Nat → Array UInt64 → List Exp → FM (List UInt64)
   | 0, _, _ => throw "flat IR: out of fuel"
@@ -185,6 +193,7 @@ def execStmt (p : Prog) : Nat → Array UInt64 → Stmt → FM (Array UInt64 × 
     | .tailCallInd f args => do
         let args ← evalArgs p n fr args
         let k ← evalExp p n fr f
+        modify fun s => { s with indirect := s.indirect + 1 }
         match p.table[k.toNat]? with
         | some g => pure (fr, some (← callFn p n g args))
         | none => throw s!"flat IR: no table entry {k}"
@@ -193,7 +202,7 @@ end
 
 /-- Run the entry function on the standard input `input`: what it writes. -/
 def interp (fuel : Nat) (p : Prog) (input : List UInt8) : Except String Output := do
-  let (_, s) ← (callFn p fuel p.entry []).run ⟨{}, {}, 8, input, .empty, .empty⟩
+  let (_, s) ← (callFn p fuel p.entry []).run { mem := {}, ranges := {}, next := 8, input, out := .empty, err := .empty }
   pure ⟨s.out, s.err⟩
 
 end Backend.Flat

@@ -17,21 +17,24 @@ open BoCa Backend.Flat
 
 def fname (k : Nat) : String := s!"$f{k}"
 
-def lowerExp : Flat.Exp → List Instr
+def lowerExp (cnt : Bool) : Flat.Exp → List Instr
   | .loc i => [.localGet i]
   | .c64 n => [.i64Const n]
   | .c32 n => [.i32Const n]
-  | .load a off => lowerExp a ++ [.num .wrap, .i64Load (8 * off)]
+  | .load a off => lowerExp cnt a ++ [.num .wrap, .i64Load (8 * off)]
   | .op o args => lowerArgs args ++ [.num o]
   | .call f args => lowerArgs args ++ [.call (fname f)]
-  | .callInd f args => lowerArgs args ++ lowerExp f ++ [.num .wrap, .callIndirect args.length]
-  | .alloc w => lowerExp w ++ [.call "$alloc"]
+  | .callInd f args => lowerArgs args ++ lowerExp cnt f ++ [.num .wrap] ++ countInd cnt ++
+      [.callIndirect args.length]
+  | .alloc w => lowerExp cnt w ++ [.call "$alloc"]
   | .live => [.call "$live"]
-  | .getc fd => lowerExp fd ++ [.call "$getc"]
+  | .getc fd => lowerExp cnt fd ++ [.call "$getc"]
+  | .stat k => [.globalGet (if k == 0 then "$allocs" else "$indirect")]
 where
+  countInd (cnt : Bool) : List Instr := if cnt then [.countInd] else []
   lowerArgs : List Flat.Exp → List Instr
     | [] => []
-    | e :: es => lowerExp e ++ lowerArgs es
+    | e :: es => lowerExp cnt e ++ lowerArgs es
 
 /-- `br_table` over `n` arms: arm `k` is reached by branching out of the `k`-th innermost block;
     after arm `k` (not the last) a branch leaves the switch. -/
@@ -44,37 +47,38 @@ def switchCode (scrut : List Instr) (arms : List (List Instr)) : List Instr :=
     | k, a :: as, acc => go (k + 1) as ([.block acc] ++ a ++ [.br (n - 1 - k)])
   [.block (go 0 arms inner)]
 
-def lowerStmt : Flat.Stmt → List Instr
-  | .set i e => lowerExp e ++ [.localSet i]
-  | .store a off v => lowerExp a ++ [.num .wrap] ++ lowerExp v ++ [.i64Store (8 * off)]
-  | .free a => lowerExp a ++ [.call "$free"]
-  | .eval e => lowerExp e ++ [.drop]
-  | .out b => lowerExp b ++ [.call "$putc"]
-  | .putc fd b => lowerExp fd ++ lowerExp b ++ [.call "$putfd"]
-  | .ite c t e => lowerExp c ++ [.ifElse (lowerBlock t) (lowerBlock e)]
-  | .switch s arms => switchCode (lowerExp s) (lowerArms arms)
-  | .ret e => lowerExp e ++ [.ret]
-  | .tailCall f args => lowerExp.lowerArgs args ++ [.returnCall (fname f)]
+def lowerStmt (cnt : Bool) : Flat.Stmt → List Instr
+  | .set i e => lowerExp cnt e ++ [.localSet i]
+  | .store a off v => lowerExp cnt a ++ [.num .wrap] ++ lowerExp cnt v ++ [.i64Store (8 * off)]
+  | .free a => lowerExp cnt a ++ [.call "$free"]
+  | .eval e => lowerExp cnt e ++ [.drop]
+  | .out b => lowerExp cnt b ++ [.call "$putc"]
+  | .putc fd b => lowerExp cnt fd ++ lowerExp cnt b ++ [.call "$putfd"]
+  | .ite c t e => lowerExp cnt c ++ [.ifElse (lowerBlock t) (lowerBlock e)]
+  | .switch s arms => switchCode (lowerExp cnt s) (lowerArms arms)
+  | .ret e => lowerExp cnt e ++ [.ret]
+  | .tailCall f args => lowerExp.lowerArgs cnt args ++ [.returnCall (fname f)]
   | .tailCallInd f args =>
-      lowerExp.lowerArgs args ++ lowerExp f ++ [.num .wrap, .returnCallIndirect args.length]
+      lowerExp.lowerArgs cnt args ++ lowerExp cnt f ++ [.num .wrap] ++ lowerExp.countInd cnt ++ [.returnCallIndirect args.length]
   | .trap => [.unreachable]
 where
   lowerBlock : List Flat.Stmt → List Instr
     | [] => []
-    | s :: ss => lowerStmt s ++ lowerBlock ss
+    | s :: ss => lowerStmt cnt s ++ lowerBlock ss
   lowerArms : List (List Flat.Stmt) → List (List Instr)
     | [] => []
     | a :: as => lowerBlock a :: lowerArms as
 
-def lowerFn (k : Nat) (f : Flat.Fn) : Func where
+def lowerFn (cnt : Bool) (k : Nat) (f : Flat.Fn) : Func where
   name := fname k
   params := f.params
   result := true
   locals := f.locals
-  body := lowerStmt.lowerBlock f.body ++ [.unreachable]
+  body := lowerStmt.lowerBlock cnt f.body ++ [.unreachable]
 
-def lowerProg (p : Flat.Prog) : Module where
-  funcs := p.fns.toList.zipIdx.map (fun (f, k) => lowerFn k f) ++
+/-- The module; with `cnt`, every indirect call adds one to the runtime's count. -/
+def lowerProg (p : Flat.Prog) (cnt : Bool := false) : Module where
+  funcs := p.fns.toList.zipIdx.map (fun (f, k) => lowerFn cnt k f) ++
     [{ name := "$start", params := 0, result := false, locals := 0,
        body := [.call (fname p.entry), .drop], export? := some "_start" }]
   table := p.table.toList.map fname

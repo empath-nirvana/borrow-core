@@ -69,6 +69,9 @@ def printInstr (d : Nat) : Instr → List String
   | .ret => [indent d ++ "return"]
   | .drop => [indent d ++ "drop"]
   | .unreachable => [indent d ++ "unreachable"]
+  | .globalGet g => [indent d ++ s!"global.get {g}"]
+  | .countInd => [indent d ++ "global.get $indirect", indent d ++ "i64.const 1",
+      indent d ++ "i64.add", indent d ++ "global.set $indirect"]
 where
   printBody (d : Nat) : List Instr → List String
     | [] => []

@@ -10,6 +10,8 @@ in `Backend/README.md`:
 - `$free a`, for `a` returned by `$alloc` and not freed since, ends that range's life and
   subtracts one from the live count.
 - `$live` is the live count, and is exported as `live_objects`.
+- `$allocs` counts the calls of `$alloc`, and `$indirect` the indirect calls, which the
+  compiled code counts when it is compiled for counting.
 - `$putc b` writes the low byte of `b` to standard output, and `$putfd fd b` to the stream
   `fd` (WASI `fd_write`; `write(2)` in libc).
 - `$getc fd` reads one byte of the stream `fd`, or answers `-1` at its end or on an error
@@ -32,11 +34,14 @@ def runtimeWat : String := "
   (memory (export \"memory\") 1)
   (global $heap (mut i32) (i32.const 16376))
   (global $live (mut i64) (i64.const 0))
+  (global $allocs (mut i64) (i64.const 0))
+  (global $indirect (mut i64) (i64.const 0))
 
   (func $alloc (param $n i64) (result i64)
     (local $s i32) (local $head i32) (local $p i32) (local $top i32) (local $have i32)
     (local.set $s (i32.wrap_i64 (local.get $n)))
     (global.set $live (i64.add (global.get $live) (i64.const 1)))
+    (global.set $allocs (i64.add (global.get $allocs) (i64.const 1)))
     (if (i32.lt_u (local.get $s) (i32.const 1024))
       (then
         (local.set $head (i32.add (i32.const 1024) (i32.shl (local.get $s) (i32.const 2))))
