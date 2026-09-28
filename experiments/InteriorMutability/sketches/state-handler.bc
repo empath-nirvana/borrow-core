@@ -1,0 +1,26 @@
+-- SKETCH, not runnable: effect handlers are #18 and not built; the syntax below
+-- (`effect`, `perform`, `handle … with`) is invented for this sketch. Nothing here is checked.
+--
+-- The recording mock (rs/mock.rs) with the messenger as an effect. `set_value` performs
+-- `send`; it neither takes nor returns the messenger's state. In production the handler writes
+-- to `stdout` (a capability it holds); in the test it is a State handler over the log. #18's
+-- design provides a handler's capability as a borrow (`withbor h (Fun 'h. fun cap -> …)`), so
+-- `set_value`'s type still names the capability it needs, but callers in between need not
+-- thread a state value through their own signatures.
+
+effect Send { send : i32 => 1 }
+
+def set_value : all 'h < top. mut 'h Send * (i32 * i32) => mut 'h Send =
+  … perform send 75 / 90 / 100 as in bc/mock-cap.bc …
+
+-- The test: a State handler over `Log = mu X. 1 + (i32 * X)`, a fold over the handled
+-- computation (decision 15: a deep handler is a fold or a loop).
+def test_mock : 1 => Log =
+  handle (set_value 50; set_value 80; set_value 95; set_value 100)
+  with State[Log] (roll (inl ()))  { send code, log -> resume ((), roll (inr (code, log))) }
+
+-- What it buys over bc/mock-cap.bc: the intermediate code (a tracker inside a service inside
+-- a test) does not thread `M`; the effect row (a capability borrow) is the only mark. What it
+-- costs: #18 itself, and a handler is still a capability in the type, so it does not give
+-- Rust's hidden `&self` mutation; it gives Rust's `&mut dyn Messenger` without the plumbing.
+-- The same shape covers the event emitter (State over `St`), counters and memo tables.

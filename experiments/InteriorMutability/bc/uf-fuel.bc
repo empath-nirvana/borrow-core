@@ -1,0 +1,157 @@
+-- Union-find with path compression, the parent table an owned array threaded through every
+-- operation (the `&mut self` API). Rust's `find(&self)` with `Vec<Cell<usize>>` becomes
+-- `find : A * i32 => A * i32`: the caller hands the table in and gets it back.
+--
+-- Unions (0,1), (1,2), (2,3), (4,5), (6,7), (5,7) over 8 elements, linking root to root, build
+-- the chain 0 -> 1 -> 2 -> 3. `find 0` returns 3 and compresses: parent[0] is 1 before and 3
+-- after. Then same(0,3), same(0,4), same(4,6) and the number of components.
+--
+-- Answer: (1, (3, (1, (0, (1, 2))))) as i32s. The walks are loops (`unfold`) run under
+-- `div_fuel` with the table's size as the fuel (a path is shorter than the table), so every
+-- function here is total. A loop closed for lack of fuel hands the table back.
+
+type A = array i32
+
+def ident : !(i32 => i32) = !thunkv fun (i : i32) -> return i
+
+-- Slot `i` read by taking it out and putting it back; 0 out of range.
+def get : A * i32 => A * i32 =
+  thunkv fun (p : A * i32) ->
+    let (a, i) = p;
+    q <- return ((unbang array_replace[i32]) (a, (i, i32[0])));
+    let (a1, o) = q;
+    case o {
+      inl x ->
+        q2 <- return ((unbang array_replace[i32]) (a1, (i, x)));
+        let (a2, o2) = q2;
+        return (a2, x)
+    | inr z -> return (a1, i32[0])
+    }
+
+def set : A * (i32 * i32) => A =
+  thunkv fun (p : A * (i32 * i32)) ->
+    q <- return ((unbang array_replace[i32]) p);
+    let (a, o) = q;
+    return a
+
+-- Walk to the root: (table, x) until parent[x] = x.
+def root_step : !U (A * i32 -o F ((A * i32) + (A * i32)) & F (A * 1)) =
+  !thunkv fun (s : A * i32) ->
+    < let (a, x) = s;
+      q <- return (get (a, x));
+      let (a1, p) = q;
+      case (unbang host[eq32]) (p, x) {
+        inl ne -> return (inr (a1, p))
+      | inr eq -> return (inl (a1, x))
+      },
+      let (a, x) = s;
+      return (a, ()) >
+
+def find_root : A * i32 => U (loop (A * i32) (A * 1)) =
+  thunkv fun (s0 : A * i32) ->
+    f <- return (unbang (unfold[loop (A * i32) (A * 1), A * i32] root_step));
+    return (thunkv nu_in < (nu_out (force f s0)).1, (nu_out (force f s0)).2 >)
+
+-- Compress: (table, (x, root)); point x at the root and move to its old parent.
+def comp_step : !U (A * (i32 * i32) -o F ((A * 1) + (A * (i32 * i32))) & F (A * 1)) =
+  !thunkv fun (s : A * (i32 * i32)) ->
+    < let (a, r) = s;
+      let (x, root) = r;
+      case (unbang host[eq32]) (x, root) {
+        inl ne ->
+          q <- return (get (a, x));
+          let (a1, p) = q;
+          a2 <- return (set (a1, (x, root)));
+          return (inr (a2, (p, root)))
+      | inr eq -> return (inl (a, ()))
+      },
+      let (a, r) = s;
+      return (a, ()) >
+
+def compress : A * (i32 * i32) => U (loop (A * 1) (A * 1)) =
+  thunkv fun (s0 : A * (i32 * i32)) ->
+    f <- return (unbang (unfold[loop (A * 1) (A * 1), A * (i32 * i32)] comp_step));
+    return (thunkv nu_in < (nu_out (force f s0)).1, (nu_out (force f s0)).2 >)
+
+def find : A * i32 => A * i32 =
+  thunkv fun (p : A * i32) ->
+    let (a, x) = p;
+    r <- return (div_fuel[A * i32, A * 1] (find_root (a, x), i32[8]));
+    case r {
+      inl q1 ->
+        let (a1, root) = q1;
+        q <- return (div_fuel[A * 1, A * 1] (compress (a1, (x, root)), i32[8]));
+        a2 : A <- case q { inl d -> let (a2, u) = d; return a2 | inr c -> let (a2, u) = c; return a2 };
+        return (a2, root)
+    | inr c -> let (a1, u) = c; return (a1, x)
+    }
+
+def union : A * (i32 * i32) => A =
+  thunkv fun (p : A * (i32 * i32)) ->
+    let (a, r) = p;
+    let (x, y) = r;
+    q1 <- return (find (a, x));
+    let (a1, rx) = q1;
+    q2 <- return (find (a1, y));
+    let (a2, ry) = q2;
+    a3 <- return (set (a2, (rx, ry)));
+    return a3
+
+def bit : 1 + 1 => i32 =
+  thunkv fun (b : 1 + 1) -> case b { inl u -> return i32[0] | inr u -> return i32[1] }
+
+def same : A * (i32 * i32) => A * i32 =
+  thunkv fun (p : A * (i32 * i32)) ->
+    let (a, r) = p;
+    let (x, y) = r;
+    q1 <- return (find (a, x));
+    let (a1, rx) = q1;
+    q2 <- return (find (a1, y));
+    let (a2, ry) = q2;
+    return (a2, bit ((unbang host[eq32]) (rx, ry)))
+
+-- Components: (table, (i, count)) over i < 8, counting the roots.
+def count_step : !U (A * (i32 * i32) -o F ((A * i32) + (A * (i32 * i32))) & F (A * 1)) =
+  !thunkv fun (s : A * (i32 * i32)) ->
+    < let (a, r) = s;
+      let (i, n) = r;
+      case (unbang host[lt_u32]) (i, i32[8]) {
+        inl done -> return (inl (a, n))
+      | inr more ->
+          q <- return (get (a, i));
+          let (a1, p) = q;
+          n2 <- return ((unbang host[add32]) (n, bit ((unbang host[eq32]) (p, i))));
+          return (inr (a1, ((unbang host[add32]) (i, i32[1]), n2)))
+      },
+      let (a, r) = s;
+      return (a, ()) >
+
+def components : A => U (loop (A * i32) (A * 1)) =
+  thunkv fun (a : A) ->
+    f <- return (unbang (unfold[loop (A * i32) (A * 1), A * (i32 * i32)] count_step));
+    s0 : A * (i32 * i32) <- return (a, (i32[0], i32[0]));
+    return (thunkv nu_in < (nu_out (force f s0)).1, (nu_out (force f s0)).2 >)
+
+main : F (i32 * (i32 * (i32 * (i32 * (i32 * i32))))) =
+  a <- return ((unbang array_new[i32]) (i32[8], ident));
+  a1 <- return (union (a, (i32[0], i32[1])));
+  a2 <- return (union (a1, (i32[1], i32[2])));
+  a3 <- return (union (a2, (i32[2], i32[3])));
+  a4 <- return (union (a3, (i32[4], i32[5])));
+  a5 <- return (union (a4, (i32[6], i32[7])));
+  a6 <- return (union (a5, (i32[5], i32[7])));
+  q0 <- return (get (a6, i32[0]));
+  let (a7, before) = q0;
+  q1 <- return (find (a7, i32[0]));
+  let (a8, r0) = q1;
+  q2 <- return (get (a8, i32[0]));
+  let (a9, after) = q2;
+  q3 <- return (same (a9, (i32[0], i32[3])));
+  let (a10, s03) = q3;
+  q4 <- return (same (a10, (i32[0], i32[4])));
+  let (a11, s04) = q4;
+  q5 <- return (same (a11, (i32[4], i32[6])));
+  let (a12, s46) = q5;
+  q6 <- return (div_fuel[A * i32, A * 1] (components a12, i32[9]));
+  n : i32 <- case q6 { inl d -> let (a13, n) = d; return n | inr c -> return i32[99] };
+  return (before, (after, (s03, (s04, (s46, n)))))

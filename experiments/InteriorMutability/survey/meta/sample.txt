@@ -1,0 +1,92 @@
+# R crates=78 sampled=50
+R01 top/opentelemetry-0.33.0/src/context.rs:35:    static CURRENT_CONTEXT: RefCell<ContextStack> = RefCell::new(ContextStack::default());
+R02 top/hashlink-0.12.2/tests/linked_hash_map.rs:1028:    struct Key(RefCell<String>);
+R03 cat/egui-0.36.2/src/context.rs:67:    static IMMEDIATE_VIEWPORT_RENDERER: RefCell<Option<Box<ImmediateViewportRendererCallback>>> = Default::default();
+R04 cat/serde-wasm-bindgen-0.6.5/src/lib.rs:49:        static CACHE: RefCell<HashMap<*const str, JsString, PtrBuildHasher>> = Default::default();
+R05 top/schemars-1.2.2/src/json_schema_impls/wrapper.rs:22:wrapper_impl!(<T: ?Sized> JsonSchema for core::cell::RefCell<T>);
+R06 top/futures-executor-0.3.34/tests/local_pool.rs:438:    wakeups_remaining: Rc<RefCell<usize>>,
+R07 top/wasm-bindgen-0.2.129/src/rt/mod.rs:496:    inner: RefCell<T>,
+R08 cat/parry3d-0.31.1/examples/utils3d.rs:78:) -> std::rc::Rc<std::cell::RefCell<kiss3d::resource::GpuMesh3d>> {
+R09 top/hyper-1.11.1/src/common/date.rs:44:thread_local!(static CACHED: RefCell<CachedDate> = RefCell::new(CachedDate::new()));
+R10 cat/kasuari-0.4.12/tests/common/mod.rs:10:struct Values(Rc<RefCell<HashMap<Variable, f64>>>);
+R11 cat/eframe-0.36.2/src/web/web_runner.rs:34:    frame: Rc<RefCell<Option<AnimationFrameRequest>>>,
+R12 cat/tauri-2.12.0/src/test/mock_runtime.rs:58:  windows: Arc<RefCell<HashMap<WindowId, Window>>>,
+R13 cat/rapier3d-0.36.0/tests/issue_253_unsync_callbacks.rs:12:    events: Rc<RefCell<Vec<CollisionEvent>>>,
+R14 top/serde_with-3.24.0/src/ser/impls.rs:279:impl<T, U> SerializeAs<RefCell<T>> for RefCell<U>
+R15 top/quinn-0.11.12/src/work_limiter.rs:206:        pub static TIME: RefCell<Instant> = RefCell::new(Instant::now());
+R16 cat/ts-rs-12.0.1/tests/integration/simple.rs:12:    c: (i32, String, RefCell<i32>),
+R17 top/itertools-0.15.0/src/rciter_impl.rs:10:    pub rciter: Rc<RefCell<I>>,
+R18 top/png-0.18.1/src/decoder/stream.rs:2718:        state: Rc<RefCell<StreamingInputState>>,
+R19 top/object-0.40.0/src/read/read_cache.rs:32:    cache: RefCell<ReadCacheInternal<R>>,
+R20 top/criterion-0.8.2/src/stats/rand_util.rs:8:    static SEED_RAND: RefCell<Rand64> = RefCell::new(Rand64::new(
+R21 cat/tao-0.37.1/src/platform_impl/linux/util.rs:84:  pub fn new(window: W, resizable: bool) -> Rc<RefCell<Self>> {
+R22 cat/dae-parser-0.11.0/src/lib.rs:523:            static COLLADA_PREFIX: RefCell<BTreeMap<Option<String>, String>> =
+R23 cat/boa_engine-0.22.0/src/object/shape/unique_shape.rs:19:    property_table: RefCell<PropertyTableInner>,
+R24 top/serde_core-1.0.229/src/de/impls.rs:2104:    (T), RefCell<T>, RefCell::new
+R25 top/serde_derive-1.0.229/src/internals/ctxt.rs:15:    errors: RefCell<Option<Vec<syn::Error>>>,
+R26 cat/wasmtime-environ-49.0.1/src/scopevec.rs:16:    data: RefCell<Vec<Box<[T]>>>,
+R27 top/proc-macro-error-1.0.4/src/dummy.rs:122:    static DUMMY_IMPL: RefCell<Option<TokenStream>> = RefCell::new(None);
+R28 cat/oxc_semantic-0.152.0/src/builder.rs:78:    pub(crate) errors: RefCell<Diagnostics>,
+R29 cat/walrus-0.27.2/src/module/debug/dwarf.rs:395:        let called_address_to_be_converted: RefCell<Vec<(u64, AddressSearchPreference)>> =
+R30 top/serde_path_to_error-0.1.20/tests/serialize.rs:27:        refcell: &'a RefCell<String>,
+R31 cat/gloo-net-0.7.0/src/websocket/futures.rs:124:        let waker: Rc<RefCell<Option<Waker>>> = Rc::new(RefCell::new(None));
+R32 top/thread_local-1.1.10/src/lib.rs:805:        foo::<ThreadLocal<RefCell<String>>>();
+R33 top/proc-macro2-1.0.107/src/fallback.rs:327:    static SOURCE_MAP: RefCell<SourceMap> = RefCell::new(SourceMap {
+R34 top/aws-lc-sys-0.45.0/builder/system_library.rs:96:    pub ssl_lib: RefCell<Option<ResolvedLib>>,
+R35 cat/muda-0.20.0/src/items/submenu.rs:42:    pub(crate) platform: Rc<RefCell<PlatformMenuItem>>,
+R36 top/event-listener-5.4.2/src/intrusive.rs:27:    critical_section::Mutex<RefCell<Inner<T>>>,
+R37 top/pyo3-build-config-0.29.2/src/impl_.rs:44:    static READ_ENV_VARS: RefCell<Vec<String>> = const { RefCell::new(Vec::new()) };
+R38 top/js-sys-0.3.106/src/futures/task/wait_async_polyfill.rs:37:static HELPERS: RefCell<Vec<Worker>> = RefCell::new(vec![]);
+R39 top/serde-1.0.229/src/core/ser/impls.rs:612:impl<T> Serialize for RefCell<T>
+R40 top/regex-automata-0.4.18/src/nfa/thompson/compiler.rs:735:    utf8_suffix: RefCell<Utf8SuffixMap>,
+R41 top/nix-0.31.3/src/sys/termios.rs:157:    inner: RefCell<libc::termios>,
+R42 cat/winit-0.30.13/src/platform_impl/macos/window_delegate.rs:114:    fullscreen: RefCell<Option<Fullscreen>>,
+R43 top/tokio-1.53.1/src/runtime/scheduler/defer.rs:5:    deferred: RefCell<Vec<Waker>>,
+R44 top/textwrap-0.16.4/src/wrap_algorithms/optimal_fit.rs:162:    line_numbers: RefCell<Vec<usize>>,
+R45 top/hashbrown-0.17.1/src/map.rs:5170:    thread_local! { static DROP_VECTOR: RefCell<Vec<i32>> = const { RefCell::new(Vec::new()) } }
+R46 top/futures-lite-2.6.1/src/future.rs:72:        static CACHE: RefCell<(Parker, Waker)> = RefCell::new(parker_and_waker());
+R47 top/wasm-bindgen-macro-support-0.2.129/src/codegen.rs:5304:            static DESCRIPTORS_EMITTED: RefCell<HashSet<String>> = RefCell::default();
+R48 top/env_logger-0.11.11/src/logger.rs:663:                static FORMATTER: RefCell<Option<Formatter>> = const { RefCell::new(None) };
+R49 top/serde_derive_internals-0.30.0/src/ctxt.rs:15:    errors: RefCell<Option<Vec<syn::Error>>>,
+R50 top/bindgen-0.73.2/ir/context.rs:391:    generated_opaque_array: RefCell<HashSet<usize>>,
+# C crates=100 sampled=40
+C01 top/uuid-1.26.1/src/timestamp.rs:766:            counter: Cell<Counter>,
+C02 top/memoffset-0.9.1/src/offset_of.rs:389:            b: core::cell::Cell<u32>,
+C03 top/crossbeam-epoch-0.9.21/src/internal.rs:310:    pin_count: Cell<Wrapping<usize>>,
+C04 cat/gtk-0.19.0/src/rt.rs:14:    static IS_MAIN_THREAD: Cell<bool> = const { Cell::new(false) }
+C05 top/aws-lc-sys-0.45.0/builder/cc_builder.rs:44:    compiler_features: Cell<Vec<CompilerFeature>>,
+C06 top/hashlink-0.12.2/tests/linked_hash_map.rs:985:        should_panic: Rc<Cell<bool>>,
+C07 cat/ts-rs-12.0.1/tests/integration/nested.rs:11:    y1: Cell<i32>,
+C08 top/async-stream-0.3.6/src/yielder.rs:37:thread_local!(static STORE: Cell<*mut ()> = const { Cell::new(ptr::null_mut()) });
+C09 top/bytemuck-1.25.2/src/zeroable.rs:77:unsafe impl<T: Zeroable> Zeroable for core::cell::Cell<T> {}
+C10 cat/oxc_semantic-0.152.0/src/builder.rs:829:    fn enter_scope(&mut self, flags: ScopeFlags, scope_id: &Cell<Option<ScopeId>>) {
+C11 cat/eframe-0.36.2/src/native/event_loop_context.rs:5:    static CURRENT_EVENT_LOOP: Cell<Option<*const ActiveEventLoop>> = const { Cell::new(None) };
+C12 top/wasm-bindgen-macro-support-0.2.129/src/parser.rs:47:    parsed: Cell<usize>,
+C13 top/spin-0.12.3/src/lazylock.rs:43:    init: Cell<Option<F>>,
+C14 top/tracing-core-0.1.36/src/lazy.rs:21:        init: Cell<Option<F>>,
+C15 top/smallvec-1.16.2/src/tests.rs:866:    thread_local! { static ZST_DROPS: Cell<usize> = Cell::new(0); }
+C16 cat/oxc_ast-0.152.0/src/ast/ts.rs:733:    pub node_id: Cell<NodeId>,
+C17 top/fastrand-2.5.0/src/global_rng.rs:60:    rng: &'a Cell<Rng>,
+C18 top/once_cell-1.21.4/src/imp_std.rs:139:    thread: Cell<Option<Thread>>,
+C19 cat/muda-0.20.0/src/platform_impl/gtk4/mod.rs:1466:    selected: &Rc<Cell<bool>>,
+C20 top/serde_path_to_error-0.1.20/src/lib.rs:140:    path: Cell<Option<Path>>,
+C21 cat/winit-0.30.13/src/platform_impl/macos/app_state.rs:33:    is_launched: Cell<bool>,
+C22 top/serde_with-3.24.0/tests/serde_as/lib.rs:109:    struct SCell(#[serde_as(as = "Cell<DisplayFromStr>")] Cell<u32>);
+C23 cat/oxc_ast_visit-0.152.0/src/generated/visit.rs:31:    fn enter_scope(&mut self, flags: ScopeFlags, scope_id: &Cell<Option<ScopeId>>) {}
+C24 cat/oxc_syntax-0.152.0/src/semantic_id.rs:99:        cell: &Cell<Option<Self>>,
+C25 cat/oxc_allocator-0.152.0/src/tracking.rs:44:    num_alloc: Cell<usize>,
+C26 top/sharded-slab-0.1.7/src/tid.rs:25:struct Registration(Cell<Option<usize>>);
+C27 top/arc-swap-1.9.2/src/debt/helping.rs:126:    generation: Cell<usize>,
+C28 top/syn-3.0.6/src/parse.rs:442:pub(crate) fn get_unexpected(buffer: &ParseBuffer) -> Rc<Cell<Unexpected>> {
+C29 top/thread_local-1.1.10/src/thread_id.rs:95:            id: Cell<usize>,
+C30 cat/tao-0.37.1/src/platform_impl/windows/event_loop/runner.rs:40:  owned_windows: Cell<HashSet<isize>>,
+C31 top/proc-macro-error-1.0.4/src/imp/delegate.rs:68:    static IS_DIRTY: Cell<bool> = Cell::new(false);
+C32 top/winapi-0.3.9/build.rs:415:    included: Cell<bool>,
+C33 top/lock_api-0.4.14/src/remutex.rs:66:    lock_count: Cell<usize>,
+C34 top/wasm-bindgen-0.2.129/src/rt/mod.rs:812:static GLOBAL_EXNDATA: ThreadLocalWrapper<Cell<[u32; 2]>> = ThreadLocalWrapper(Cell::new([0; 2]));
+C35 cat/gdkx11-0.19.0/src/rt.rs:7:    static IS_MAIN_THREAD: Cell<bool> = const { Cell::new(false) }
+C36 top/clap_builder-4.6.7/src/parser/parser.rs:25:    cur_idx: Cell<usize>,
+C37 top/lazy_static-1.5.0/src/inline_lazy.rs:19:pub struct Lazy<T: Sync>(Cell<MaybeUninit<T>>, Once);
+C38 top/futures-util-0.3.34/src/async_await/random.rs:29:        static RNG: Cell<Wrapping<u64>> = Cell::new(Wrapping(prng_seed()));
+C39 cat/oxc_data_structures-0.152.0/src/types.rs:188:        assert!(!implements!(std::cell::Cell<u32>: Sync));
+C40 top/radium-1.1.1/src/lib.rs:868:		assert_impl_all!(Cell<i8>: Radium<Item = i8>);

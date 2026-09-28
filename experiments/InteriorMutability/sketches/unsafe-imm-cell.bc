@@ -1,0 +1,24 @@
+-- SKETCH, not runnable and not proposed: `unsafe def … assurance …` is the syntax proposed on
+-- #79. This records why the direct route is closed.
+--
+-- The direct route to `Cell` is an `unsafe` operation that writes through an `Imm` borrow of
+-- an ordinary model cell:
+
+unsafe def imm_set : all 'a < top. imm 'a i32 * i32 => 1       assurance assumed
+
+-- #79's contract is the declared signature read semantically: the body must be in the
+-- relation at `all 'a. imm 'a i32 * i32 => 1`. That is false for any body that writes. The
+-- relation's `Imm` clause makes the lent cell an `imm` cell in the resource, and the frame
+-- result `imm_call_keeps` (experiments/FrameTheorems) proves that every semantically typed
+-- callback given `imm 'a A` leaves that cell's value unchanged, on the run `wpTS` exhibits
+-- and on every run that does not allocate (`wpTS_footprint`). A body that stores to the location is a counterexample to the
+-- contract, so `assurance proved` is impossible, `tested` would pass tests that do not
+-- observe a second reader, and `assumed` adds a false hypothesis to the end-to-end theorem.
+-- Everything proved from the `Imm` clause would then hold vacuously for the program: the
+-- purity of a function given only `Imm` borrows, `optic_frame`, the frame laws the backend
+-- may use to keep a loaded value in a register across a call.
+--
+-- So a `Cell` needs its contents outside the `imm` cell: the opaque-handle store of
+-- `cell-handle.bc` (no model change), or a new resource kind in the typed world whose `Imm`
+-- clause permits writes (a model change: `↭`'s `imm` clause, 6.131 and every frame result
+-- would be re-proved with an exception for that kind).

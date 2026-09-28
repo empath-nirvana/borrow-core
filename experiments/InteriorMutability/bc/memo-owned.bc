@@ -1,0 +1,97 @@
+-- A memo table threaded as an owned value (the `&mut self` API). Rust's `Fib::get(&self)`
+-- with a `RefCell<HashMap>` and a `Cell` miss counter becomes `fib : M * i32 => M * i32`: the
+-- caller hands the table in and gets it back, and `report` hands it on.
+--
+-- There is no direct recursion (decision 24), so the top-down memoized recursion becomes a
+-- fill loop over the table: slot i holds fib i + 1, 0 when empty, and `fib n` fills the empty
+-- slots 0..n in order, counting each fill as a miss. The table has 32 slots and the loop is 32
+-- steps (`twice` five times over).
+--
+-- Answer: (i32[6765], (i32[832040], i32[31])): fib 20, fib 30, and 31 misses (0..20 on the
+-- first query, 21..30 on the second), as `rs/memo.rs` prints.
+
+type A = array i32
+type M = A * i32
+type S = M * (i32 * i32)
+
+def zero : !(i32 => i32) = !thunkv fun (i : i32) -> return i32[0]
+def add : i32 * i32 => i32 = unbang host[add32]
+def sub : i32 * i32 => i32 = unbang host[sub32]
+
+def get : A * i32 => A * i32 =
+  thunkv fun (p : A * i32) ->
+    let (a, i) = p;
+    q <- return ((unbang array_replace[i32]) (a, (i, i32[0])));
+    let (a1, o) = q;
+    case o {
+      inl x ->
+        q2 <- return ((unbang array_replace[i32]) (a1, (i, x)));
+        let (a2, o2) = q2;
+        return (a2, x)
+    | inr z -> return (a1, i32[0])
+    }
+
+def set : A * (i32 * i32) => A =
+  thunkv fun (p : A * (i32 * i32)) ->
+    q <- return ((unbang array_replace[i32]) p);
+    let (a, o) = q;
+    return a
+
+-- One step at ((table, misses), (i, n)): fill slot i if it is empty and i <= n, then i + 1.
+def fill_step : !(S => S) =
+  !thunkv fun (s : S) ->
+    let (m, r) = s;
+    let (a, misses) = m;
+    let (i, n) = r;
+    case (unbang host[gt_s32]) (i, n) {
+      inl upto ->
+        q <- return (get (a, i));
+        let (a1, cur) = q;
+        case (unbang host[eqz32]) cur {
+          inl full -> return ((a1, misses), (add (i, i32[1]), n))
+        | inr empty ->
+            w : A * i32 <- case (unbang host[lt_s32]) (i, i32[2]) {
+              inl big ->
+                q1 <- return (get (a1, sub (i, i32[1])));
+                let (a2, x) = q1;
+                q2 <- return (get (a2, sub (i, i32[2])));
+                let (a3, y) = q2;
+                return (a3, sub (add (x, y), i32[2]))
+            | inr small -> return (a1, i)
+            };
+            let (a4, v) = w;
+            a5 <- return (set (a4, (i, add (v, i32[1]))));
+            return ((a5, add (misses, i32[1])), (add (i, i32[1]), n))
+        }
+    | inr past -> return ((a, misses), (i, n))
+    }
+
+def twice : !(S => S) => !(S => S) =
+  thunkv fun (f : !(S => S)) -> return (!thunkv fun (s : S) -> return ((unbang f) ((unbang f) s)))
+
+def fib : M * i32 => M * i32 =
+  thunkv fun (p : M * i32) ->
+    let (m, n) = p;
+    s <- return ((unbang (twice (twice (twice (twice (twice fill_step)))))) (m, (i32[0], n)));
+    let (m2, r) = s;
+    let (a, misses) = m2;
+    q <- return (get (a, n));
+    let (a2, v) = q;
+    return ((a2, misses), sub (v, i32[1]))
+
+-- Rust's `report(&Fib)`: two queries on one table.
+def report : M => M * (i32 * i32) =
+  thunkv fun (m : M) ->
+    q1 <- return (fib (m, i32[20]));
+    let (m1, a) = q1;
+    q2 <- return (fib (m1, i32[30]));
+    let (m2, b) = q2;
+    return (m2, (a, b))
+
+main : F (i32 * (i32 * i32)) =
+  t <- return ((unbang array_new[i32]) (i32[32], zero));
+  q <- return (report (t, i32[0]));
+  let (m, ab) = q;
+  let (a, b) = ab;
+  let (t2, misses) = m;
+  return (a, (b, misses))
