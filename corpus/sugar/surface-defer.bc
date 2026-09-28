@@ -1,0 +1,15 @@
+-- A block whose body loops (typed elaboration, decision 2). `{ once(4) }` calls the div function
+-- `once` in direct style, so the block is a loop, which runs nothing until it is first observed:
+-- `div_defer` of the code up to the loop and of the residual, handed back without running
+-- anything. `div_fuel` observes it. `surface-defer.core.bc` is the program written by hand in
+-- core.
+-- Answer: `inl 5`.
+
+-- A loop that finishes at its first observation, with `n + 1`.
+def once : i32 => U (loop i32 1) =
+  thunkv fun (n : i32) ->
+    return (thunkv nu_in < return (inl ((unbang host[add32]) (n, i32[1]))), return () >)
+
+main -> i32 + 1 =
+  let l = { once(4) };
+  div_fuel[i32, 1] (l, 10)

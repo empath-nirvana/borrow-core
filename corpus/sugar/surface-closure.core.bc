@@ -1,0 +1,16 @@
+-- `surface-closure.bc` written by hand in core: the closures `thunkv fun`, the block `thunk`, the
+-- forces `force t` and `(force g) y`.
+def apply : !(!(i32 => i32) * i32 => i32) =
+  !thunkv fun (p : !(i32 => i32) * i32) ->
+    let (f, x) = p;
+    return ((unbang f) x)
+
+main : F (i32 * i32) =
+  a <- return ((unbang apply)
+         ((!thunkv fun (n : i32) -> return ((unbang host[add32]) (n, i32[1]))), i32[41]));
+  t <- return (thunk return ((unbang apply)
+         ((!thunkv fun (n : i32) -> return ((unbang host[mul32]) (n, i32[2]))), a)));
+  g : U (i32 -o F i32) <- return (thunkv fun (n : i32) -> return ((unbang host[sub32]) (n, i32[1])));
+  b <- force t;
+  c <- (y <- return b; (force g) y);
+  return (a, c)

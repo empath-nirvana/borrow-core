@@ -1,0 +1,13 @@
+-- `corpus/io-upper.bc` in draft 0's surface (typed elaboration, stage 5): the input with its
+-- lower-case letters in upper case. A host operation is called like a function; operators and
+-- literals take their width from their operands.
+--
+-- Answer: the golden output of `corpus/io-upper.bc`, on the same input.
+
+-- `a`–`z` to `A`–`Z`: `b - 97` is below 26, unsigned, exactly for the lower-case letters.
+fn upper(b: i32) -> i32 =
+  match host[lt_u32] (b - 97, 26) { inl _ -> b | inr _ -> b - 32 }
+
+main -> 1 =
+  for b in bytes stdin { putb(&stdout, upper(b)) };
+  ()

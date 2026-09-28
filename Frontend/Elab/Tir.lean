@@ -104,7 +104,7 @@ def Head.kids : Head → List Head
     | .inl _ V | .inr _ V | .unbang _ V | .boxed _ _ V | .unbox _ V | .sub _ V _ | .roll _ V
     | .unroll _ V | .inst _ V _ | .ascribe _ V _ | .shorten _ _ _ _ V => [.val V]
     | .thunk _ M | .thunkv _ M | .bangThunk _ M | .bangThunkv _ M | .run _ M => [.comp M]
-    | .var .. | .defApp .. | .unit _ | .const .. | .lend .. => []
+    | .var .. | .defApp .. | .unit _ | .const .. | .lend .. | .sugar .. => []
   | .comp M => match M with
     | .ret _ V | .absurd _ V => [.val V]
     | .bind _ _ _ M N _ | .with_ _ M N => [.comp M, .comp N]
@@ -137,7 +137,7 @@ def Head.rebuild : Head → List Head → Option Head
     | .bangThunkv sp _, [.comp M] => some (.val (.bangThunkv sp M))
     | .run sp _, [.comp M] => some (.val (.run sp M))
     | v@(.var ..), [] | v@(.defApp ..), [] | v@(.unit _), [] | v@(.const ..), []
-    | v@(.lend ..), [] => some (.val v)
+    | v@(.lend ..), [] | v@(.sugar ..), [] => some (.val v)
     | _, _ => none
   | .comp M, ks => match M, ks with
     | .ret sp _, [.val V] => some (.comp (.ret sp V))

@@ -136,6 +136,10 @@ structure PState where
   pos : Nat
   /-- The end of the last consumed token. -/
   lastStop : Pos
+  /-- The next number for a generated name. -/
+  fresh : Nat := 0
+  /-- Inside `< M, N >`, where `>` is not an operator. -/
+  angle : Bool := false
 
 abbrev P := StateT PState (Except Error)
 
@@ -492,22 +496,152 @@ def tyList (n : Nat) : Nat → P (List VTy)
       return A :: (← tyList n m)
     else pure [A]
 
-/-! ### Terms (syntax-core §6) -/
+/-! ### Terms (syntax-core §6, and draft 0's surface, docs/surface-cbpv.md)
 
-/-- The keyword of a constant, if the token is one. -/
+The core forms and the surface forms are one grammar (decision 36's successor, typed
+elaboration §8, decision 4): a file may mix them. The surface forms that need no type are
+desugared here into core nodes, at their own spans: `let` with patterns, `match`, a statement
+`e;`, a tail expression `e`, forces `t!` and `f!(e)`, and the rebinding of a borrowed place. The
+surface forms that need types (literals, operators, constants without brackets, `{ … }`, borrow
+blocks) are `Val.sugar` nodes, elaborated by `Frontend/Sugar.lean`. -/
+
+/-- A pattern of `let`, `match` and closures: a name, `_`, `()` or a pair. -/
+inductive Pat where
+  | var (x : Ident)
+  | wild (sp : Span)
+  | unit (sp : Span)
+  | pair (sp : Span) (p q : Pat)
+  deriving Inhabited
+
+/-- A fresh name with the prefix `pre`, reserved for generated code. -/
+def freshName (pre : String) : P String :=
+  modifyGet fun s => (s!"{pre}{s.fresh}", { s with fresh := s.fresh + 1 })
+
+/-- A pattern. -/
+def pat : Nat → P Pat
+  | 0 => outOfFuel
+  | n + 1 => do
+    let st ← startPos
+    let t ← peek
+    match t.tok with
+    | .ident "_" => discard bump; pure (.wild t.span)
+    | .ident x => discard bump; pure (.var ⟨x, t.span⟩)
+    | .sym "(" =>
+      discard bump
+      if ← isSym ")" then discard bump; return .unit (← spanFrom st)
+      let p ← pat n
+      expectSym ","
+      let q ← pat n
+      expectSym ")"
+      pure (.pair (← spanFrom st) p q)
+    | _ => expected "a pattern: a name, `_`, `()` or `(p, q)`"
+
+/-- `let p = V; M`, the value `V` already bound or a value without a lent capability. -/
+def bindPat (sp : Span) : Nat → Pat → Val → Comp → P Comp
+  | 0, _, _, M => pure M
+  | _ + 1, .var x, V, M => pure (.bind sp x none (.ret sp V) M false)
+  | _ + 1, .wild sp', V, M => do
+    pure (.bind sp ⟨← freshName "io_d", sp'⟩ none (.ret sp V) M false)
+  | _ + 1, .unit _, V, M => pure (.letUnit sp V M)
+  | n + 1, .pair _ p q, V, M => do
+    let x : Ident := match p with
+      | .var x => x
+      | _ => ⟨"", sp⟩
+    let y : Ident := match q with
+      | .var y => y
+      | _ => ⟨"", sp⟩
+    let x ← if x.name == "" then pure ⟨← freshName (if p matches .wild _ then "io_d" else "io_p"), sp⟩
+      else pure x
+    let y ← if y.name == "" then pure ⟨← freshName (if q matches .wild _ then "io_d" else "io_p"), sp⟩
+      else pure y
+    -- A name or `_` is bound by the pair itself (an unused name is dropped).
+    let M ← match q with
+      | .var _ | .wild _ => pure M
+      | q => bindPat sp n q (.var sp y.name) M
+    let M ← match p with
+      | .var _ | .wild _ => pure M
+      | p => bindPat sp n p (.var sp x.name) M
+    pure (.letPair sp x y V M)
+
+/-- A `&c` in a value, outside nested computations. -/
+def Val.lends : Val → Bool
+  | .lend .. => true
+  | .pair _ V W | .app _ V W => V.lends || W.lends
+  | .inl _ V | .inr _ V | .unbang _ V | .boxed _ _ V | .unbox _ V | .sub _ V _ | .roll _ V
+  | .unroll _ V | .inst _ V _ | .ascribe _ V _ | .shorten _ _ _ _ V => V.lends
+  | _ => false
+
+/-- A borrow block or `modify` on a place that is a name (or, for a family, a pair of names): the
+names it rebinds. -/
+def Val.rebinds : Val → Option Pat
+  | .app _ (.app _ (.sugar _ (.borrow _ _)) P) _ => placeNames P
+  | _ => none
+where
+  placeNames : Val → Option Pat
+    | .var sp x => some (.var ⟨x, sp⟩)
+    | .pair sp (.var s₁ x) (.var s₂ y) => some (.pair sp (.var ⟨x, s₁⟩) (.var ⟨y, s₂⟩))
+    | _ => none
+
+/-- `p = V; M` for a value `V`: a borrow block or `modify` on a place rebinds the place, which the
+block hands back first; a value with a lent capability is bound first; the core forms
+`let () = V` and `let (x, y) = V` are kept. -/
+def letVal (sp : Span) (n : Nat) (p : Pat) (A : Option VTy) (V : Val) (M : Comp) : P Comp := do
+  if let some place := V.rebinds then
+    let b ← freshName "io_b"
+    return .bind sp ⟨b, sp⟩ none (.ret sp V) (← bindPat sp n (.pair sp place p) (.var sp b) M) false
+  match p, A with
+  | .var x, _ => pure (.bind sp x A (.ret sp V) M false)
+  | .wild sp', _ => pure (.bind sp ⟨← freshName "io_d", sp'⟩ A (.ret sp V) M false)
+  | .unit _, none => if V.lends then viaBind else bindPat sp n p V M
+  | .pair _ (.var _) (.var _), none => if V.lends then viaBind else bindPat sp n p V M
+  | _, _ => viaBind
+where
+  viaBind : P Comp := do
+    let t ← freshName "io_t"
+    pure (.bind sp ⟨t, sp⟩ A (.ret sp V) (← bindPat sp n p (.var sp t) M) false)
+
+/-- The constant keyword of a token, if it is one. -/
 def constKw? : Tok → Option CKw
   | .kw s => CKw.ofString? s
   | _ => none
 
-/-- Tokens that begin a value atom, hence an argument of `V W`. -/
+/-- The constants that may be written without their bracket arguments, applied: `alloc(e)`. -/
+def bracketless : List String := ["alloc", "free", "swap"]
+
+/-- Tokens that begin a value atom, hence an argument of `V W`. A `{` does not: it would be read
+as the block of a keyword (`case V {`, `for x in V {`). -/
 def startsValAtom (t : Tok) : Bool :=
   match t with
-  | .ident _ | .sym "(" | .sym "&" => true
+  | .ident _ | .sym "(" | .sym "&" | .int _ => true
   | _ => (constKw? t).isSome
+
+/-- Tokens that begin a computation, as against a value statement. -/
+def startsComp (t : Tok) : Bool :=
+  match t with
+  | .kw "return" | .kw "absurd" | .kw "nu_in" | .kw "delay_in" | .kw "stream_in" | .kw "nu_out"
+  | .kw "delay_out" | .kw "stream_out" | .kw "force" | .sym "<" | .kw "case" | .kw "match" => true
+  | _ => false
+
+/-- The operator of a token, with its precedence: comparisons 0, `+`/`-` 1, `*` 2. -/
+def opOf (angle : Bool) : Tok → Option (SurfOp × Nat)
+  | .sym "==" => some (.eq, 0) | .sym "!=" => some (.ne, 0) | .sym "<" => some (.lt, 0)
+  | .sym "<=" => some (.le, 0) | .sym ">=" => some (.ge, 0)
+  | .sym ">" => if angle then none else some (.gt, 0)
+  | .sym "+" => some (.add, 1) | .sym "-" => some (.sub, 1) | .sym "*" => some (.mul, 2)
+  | _ => none
+
+/-- A right-nested tuple of the values (the value itself when there is one). -/
+def nest (sp : Span) : List Val → Val
+  | [] => .unit sp
+  | [V] => V
+  | V :: Vs => .pair sp V (nest sp Vs)
+
+/-- A binder type to be filled by the elaborator (a closure's, a borrow callback's). -/
+def holeTy (sp : Span) : VTy := .name sp "_"
 
 mutual
 /-- A value-judged expression: a binding form (`thunk`, `thunkv`, `!thunk`, `!thunkv`), which
-    extends as far right as possible, or a prefix expression. -/
+    extends as far right as possible, a block `{ … }` or `!{ … }`, or an operator expression. -/
 def val : Nat → P Val
   | 0 => outOfFuel
   | n + 1 => do
@@ -522,8 +656,72 @@ def val : Nat → P Val
         discard bump; let M ← comp n; pure (.bangThunk (← spanFrom st) M)
       else if ← isKw "thunkv" then
         discard bump; let M ← comp n; pure (.bangThunkv (← spanFrom st) M)
-      else expected "`thunk` or `thunkv` after `!`"
-    | _ => valPrefix n
+      else if ← isSym "{" then brace n st true
+      else expected "`thunk`, `thunkv` or `{` after `!`"
+    | .sym "{" => brace n st false
+    | _ => valOps n 0
+
+/-- Operators, by precedence `lvl` and above, associating to the left. -/
+def valOps : Nat → Nat → P Val
+  | 0, _ => outOfFuel
+  | n + 1, lvl => do
+    let st ← startPos
+    let a ← if lvl ≥ 2 then valPrefix n else valOps n (lvl + 1)
+    opsLoop n lvl st a
+
+/-- The operators of precedence `lvl` after the operand `a`. -/
+def opsLoop : Nat → Nat → Pos → Val → P Val
+  | 0, _, _, _ => outOfFuel
+  | m + 1, lvl, st, a => do
+    let t ← peek
+    match opOf (← get).angle t.tok with
+    | some (o, l) =>
+      if l != lvl then return a
+      let osp := t.span
+      discard bump
+      let b ← if lvl ≥ 2 then valPrefix m else valOps m (lvl + 1)
+      let sp ← spanFrom st
+      let v := Val.app sp (.sugar osp (.op o)) (.pair sp a b)
+      -- Comparisons do not associate.
+      if lvl == 0 then return v else opsLoop m lvl st v
+    | none => return a
+
+/-- The components after the first of a tuple, at least one. -/
+def rest : Nat → P (List Val)
+  | 0 => outOfFuel
+  | n + 1 => do
+    let W ← val n
+    if ← isSym "," then discard bump; return W :: (← rest n)
+    pure [W]
+
+/-- A block: `{ S }`, or a closure `{ p -> S }`; `!` before it makes it persistent. -/
+def brace : Nat → Pos → Bool → P Val
+  | 0, _, _ => outOfFuel
+  | n + 1, st, bang => do
+    expectSym "{"
+    -- A closure when a pattern and `->` come first.
+    let saved ← get
+    let p? ← try
+        let p ← pat n
+        if ← isSym "->" then discard bump; pure (some p) else set saved; pure none
+      catch _ => set saved; pure none
+    match p? with
+    | some p =>
+      let M ← comp n
+      expectSym "}"
+      let sp ← spanFrom st
+      let (x, M) ← match p with
+        | .var x => pure (x, M)
+        | p => do
+          let x : Ident := ⟨← freshName "io_c", sp⟩
+          pure (x, ← bindPat sp n p (.var sp x.name) M)
+      let lam := Comp.lam sp x (holeTy sp) M
+      pure (if bang then .bangThunkv sp lam else .thunkv sp lam)
+    | none =>
+      let M ← comp n
+      expectSym "}"
+      let sp ← spanFrom st
+      pure (.app sp (.sugar sp .brace) (if bang then .bangThunk sp M else .thunk sp M))
 
 /-- A prefix keyword applied to a prefix expression, or a spine. -/
 def valPrefix : Nat → P Val
@@ -563,9 +761,47 @@ def valPrefix : Nat → P Val
       let V ← valPrefix n
       let m := if t.tok == .kw "shorten_mut" then Mode.mut else Mode.imm
       pure (.shorten (← spanFrom st) m σ a V)
+    | .kw "borrow" | .kw "modify" => borrowBlock n
+    -- A block after a prefix keyword (`return { … }`); as an argument it is parenthesized.
+    | .sym "{" => brace n st false
+    | .sym "!" =>
+      if (← peekAt 1).tok == .sym "{" then do discard bump; brace n st true
+      else let V ← valAtom n; valSuffixes n st V
     | _ =>
       let V ← valAtom n
       valSuffixes n st V
+
+/-- A borrow block: `borrow imm V { 'x, p -> S }`, `borrow mut V { … }`, `borrow mut (V, W)
+{ … }` (a family), or `modify V { p -> S }`. The lifetime `'x` may be left out. -/
+def borrowBlock : Nat → P Val
+  | 0 => outOfFuel
+  | n + 1 => do
+    let st ← startPos
+    let t ← bump
+    let k ← if t.tok == .kw "modify" then pure BorrowKind.modify else
+      if ← isKw "imm" then discard bump; pure .imm
+      else if ← isKw "mut" then discard bump; pure .mut
+      else expected "`imm` or `mut` after `borrow`"
+    let place ← valPrefix n
+    let k := match k, place with
+      | .mut, .pair .. => BorrowKind.famMut
+      | k, _ => k
+    expectSym "{"
+    let x ← if (match (← peek).tok with | .life _ => true | _ => false)
+      then do let x ← lifeVar; expectSym ","; pure x.name
+      else if k == .modify then pure "" else freshName "io_l"
+    let p ← pat n
+    expectSym "->"
+    let M ← comp n
+    expectSym "}"
+    let sp ← spanFrom st
+    let (b, M) ← match p with
+      | .var b => pure (b, M)
+      | p => do
+        let b : Ident := ⟨← freshName "io_c", sp⟩
+        pure (b, ← bindPat sp n p (.var sp b.name) M)
+    pure (.app sp (.app sp (.sugar t.span (.borrow k x)) place)
+      (.thunkv sp (.lam sp b (holeTy sp) M)))
 
 /-- The suffixes of a value spine, associating to the left: argument atoms and `[@]`. -/
 def valSuffixes : Nat → Pos → Val → P Val
@@ -582,7 +818,7 @@ def valSuffixes : Nat → Pos → Val → P Val
       valSuffixes n st (.app (← spanFrom st) V W)
     else pure V
 
-/-- A value atom: a name, `name[A, …]`, a constant, `()`, `(V)`, `(V, W)`, `(V : A)`,
+/-- A value atom: a name, `name[A, …]`, a constant, an integer, `()`, `(V)`, `(V, W)`, `(V : A)`,
     `(V :> @)`. -/
 def valAtom : Nat → P Val
   | 0 => outOfFuel
@@ -599,31 +835,40 @@ def valAtom : Nat → P Val
         expectSym "]"
         pure (.defApp (← spanFrom st) s As)
       else pure (.var t.span s)
+    | .int k => discard bump; pure (.sugar t.span (.lit k))
     | .sym "(" =>
       discard bump
       if ← isSym ")" then
         discard bump
         return .unit (← spanFrom st)
+      -- Inside parentheses `>` is an operator again.
+      let angle := (← get).angle
+      modify fun s => { s with angle := false }
       let V ← val n
       let t' ← peek
-      match t'.tok with
-      | .sym ")" => discard bump; pure V
-      | .sym "," =>
-        discard bump
-        let W ← val n
-        expectSym ")"
-        pure (.pair (← spanFrom st) V W)
-      | .sym ":" =>
-        discard bump
-        let A ← vty n
-        expectSym ")"
-        pure (.ascribe (← spanFrom st) V A)
-      | .sym ":>" =>
-        discard bump
-        let a ← life n
-        expectSym ")"
-        pure (.sub (← spanFrom st) V a)
-      | _ => expected "`)`, `,`, `:` or `:>`"
+      let r ← match t'.tok with
+        | .sym ")" => discard bump; pure V
+        | .sym "," =>
+          discard bump
+          -- `(V₁, V₂, …, Vₙ)` is the right-nested `(V₁, (V₂, … Vₙ))`: the argument of an n-ary
+          -- call (draft 0 §2.2).
+          let Ws ← rest n
+          expectSym ")"
+          let sp ← spanFrom st
+          pure (.pair sp V (nest sp Ws))
+        | .sym ":" =>
+          discard bump
+          let A ← vty n
+          expectSym ")"
+          pure (.ascribe (← spanFrom st) V A)
+        | .sym ":>" =>
+          discard bump
+          let a ← life n
+          expectSym ")"
+          pure (.sub (← spanFrom st) V a)
+        | _ => expected "`)`, `,`, `:` or `:>`"
+      modify fun s => { s with angle }
+      pure r
     | .sym "&" =>
       discard bump
       let x ← ident "the name of a capability"
@@ -632,6 +877,8 @@ def valAtom : Nat → P Val
       match constKw? tok with
       | some k =>
         discard bump
+        if bracketless.contains k.str && (← isSym "(") then
+          return .sugar t.span (.call k.str)
         let as ← if k.sig.isEmpty then pure [] else do
           expectSym "["
           let as ← args n k.sig
@@ -642,18 +889,24 @@ def valAtom : Nat → P Val
         | none => failAt (← spanFrom st) s!"malformed arguments of `{k.str}`"
       | none => expected "a value"
 
-/-- A computation: a binding form (`x <- M; N`, `x : A <- M; N`, `linear x <- M; N`, `let`,
-    `fun`, `Fun`), which extends as far right as possible, or a prefix expression. -/
+/-- A computation in sequence position: a binding form or a statement sequence. -/
 def comp : Nat → P Comp
   | 0 => outOfFuel
-  | n + 1 => do
+  | n + 1 => compG n false
+
+/-- A computation: a binding form (`x <- M; N`, `x : A <- M; N`, `linear x <- M; N`, `let`,
+    `fun`, `Fun`, `for`), which extends as far right as possible, or a statement. In the head `M`
+    of `x <- M; N` (`head`), a statement is not followed by `; N`: the `;` is the binding's. -/
+def compG : Nat → Bool → P Comp
+  | 0, _ => outOfFuel
+  | n + 1, head => do
     let st ← startPos
     let t ← peek
     let t1 ← peekAt 1
     match t.tok, t1.tok with
     | .ident x, .sym "<-" =>
       discard bump; discard bump
-      let M ← comp n
+      let M ← compG n true
       expectSym ";"
       let N ← comp n
       pure (.bind (← spanFrom st) ⟨x, t.span⟩ none M N false)
@@ -661,7 +914,7 @@ def comp : Nat → P Comp
       discard bump; discard bump
       let A ← vty n
       expectSym "<-"
-      let M ← comp n
+      let M ← compG n true
       expectSym ";"
       let N ← comp n
       pure (.bind (← spanFrom st) ⟨x, t.span⟩ (some A) M N false)
@@ -670,7 +923,7 @@ def comp : Nat → P Comp
       let xt ← bump
       let A ← if ← isSym ":" then do discard bump; pure (some (← vty n)) else pure none
       expectSym "<-"
-      let M ← comp n
+      let M ← compG n true
       expectSym ";"
       let N ← comp n
       pure (.bind (← spanFrom st) ⟨x, xt.span⟩ A M N true)
@@ -687,24 +940,23 @@ def comp : Nat → P Comp
       pure (.for_ (← spanFrom st) x V M N)
     | .kw "let", _ =>
       discard bump
-      expectSym "("
-      if ← isSym ")" then
-        discard bump
-        expectSym "="
-        let V ← val n
+      let p ← pat n
+      let A ← if ← isSym ":" then do discard bump; pure (some (← vty n)) else pure none
+      expectSym "="
+      if (← peek).tok == .kw "match" then
+        let M ← compPrefix n
         expectSym ";"
-        let M ← comp n
-        pure (.letUnit (← spanFrom st) V M)
-      else
-        let x ← ident "a name or `)`"
-        expectSym ","
-        let y ← ident
-        expectSym ")"
-        expectSym "="
-        let V ← val n
-        expectSym ";"
-        let M ← comp n
-        pure (.letPair (← spanFrom st) x y V M)
+        let N ← comp n
+        let sp ← spanFrom st
+        match p with
+        | .var x => return .bind sp x A M N false
+        | p =>
+          let tv ← freshName "io_t"
+          return .bind sp ⟨tv, sp⟩ A M (← bindPat sp n p (.var sp tv) N) false
+      let V ← val n
+      expectSym ";"
+      let N ← comp n
+      letVal (← spanFrom st) n p A V N
     | .kw "fun", _ =>
       discard bump
       expectSym "("
@@ -723,7 +975,62 @@ def comp : Nat → P Comp
       expectSym "."
       let M ← comp n
       pure (.lamL (← spanFrom st) x b M)
-    | _, _ => compPrefix n
+    | _, _ => statement n st head
+
+/-- A statement: a computation, a force `t!` or `f!(e)`, or an expression `e`, which is returned.
+    Outside the head of a binding, `S; N` sequences it (its result is dropped), and a borrow
+    block or `modify` on a place rebinds the place. -/
+def statement : Nat → Pos → Bool → P Comp
+  | 0, _, _ => outOfFuel
+  | n + 1, st, head => do
+    let t ← peek
+    let t1 ← peekAt 1
+    -- A statement expression, and the place it rebinds.
+    let (S, rebind) ← match t.tok, t1.tok with
+      | .ident f, .sym "!" =>
+        discard bump; discard bump
+        if ← isSym "(" then
+          let V ← valAtom n
+          let sp ← spanFrom st
+          let a ← freshName "io_a"
+          pure (Comp.bind sp ⟨a, sp⟩ none (.ret sp V) (.app sp (.force t.span ⟨f, t.span⟩) ⟨a, sp⟩)
+            false, none)
+        else pure (Comp.force (← spanFrom st) ⟨f, t.span⟩, none)
+      | tok, _ =>
+        if startsComp tok then pure (← compPrefix n, none)
+        else if tok == .sym "(" then
+          -- A value, or else a parenthesized computation (`(force t).1`, `(M : C)`): the value
+          -- reading first, since a computation spine can also read `(f) ['x] b`.
+          let saved ← get
+          let V? ← try Sum.inl <$> val n catch e => set saved; pure (.inr e)
+          match V? with
+          | .inl V => pure (Comp.ret (← spanFrom st) V, V.rebinds)
+          | .inr e₁ =>
+            let M? ← try Sum.inl <$> compPrefix n catch e₂ => pure (.inr e₂)
+            match M? with
+            | .inl M => pure (M, none)
+            -- Neither: report the attempt that got further.
+            | .inr e₂ => throw (if e₂.span.start.later e₁.span.start then e₂ else e₁)
+        else do
+          let V ← val n
+          pure (Comp.ret (← spanFrom st) V, V.rebinds)
+    if !head && (← isSym ";") then
+      discard bump
+      let N ← comp n
+      let sp ← spanFrom st
+      match S, rebind with
+      | .ret _ V, some _ => letVal sp n (.wild sp) none V N
+      | S, _ =>
+        let d ← freshName "io_s"
+        pure (.bind sp ⟨d, sp⟩ none S N false)
+    else
+      match S, rebind with
+      | .ret _ V, some _ =>
+        -- A tail borrow block hands back its result; the place is rebound, and dropped.
+        let sp ← spanFrom st
+        let v ← freshName "io_v"
+        letVal sp n (.var ⟨v, sp⟩) none V (.ret sp (.var sp v))
+      | S, _ => pure S
 
 /-- A prefix keyword applied to its operand, or a spine. -/
 def compPrefix : Nat → P Comp
@@ -774,7 +1081,8 @@ def compSuffixes : Nat → Pos → Comp → P Comp
       compSuffixes n st (.inst (← spanFrom st) M a)
     | _ => pure M
 
-/-- A computation atom: `force x`, `<>`, `<M, N>`, `case V { … }`, `(M)`, `(M : C)`. -/
+/-- A computation atom: `force x`, `<>`, `<M, N>`, `case V { … }`, `match V { … }`, `(M)`,
+    `(M : C)`. -/
 def compAtom : Nat → P Comp
   | 0 => outOfFuel
   | n + 1 => do
@@ -790,10 +1098,14 @@ def compAtom : Nat → P Comp
       if ← isSym ">" then
         discard bump
         return .top (← spanFrom st)
+      -- Inside `< M, N >`, `>` closes the pair and is not an operator.
+      let angle := (← get).angle
+      modify fun s => { s with angle := true }
       let M ← comp n
       expectSym ","
       let N ← comp n
       expectSym ">"
+      modify fun s => { s with angle }
       pure (.with_ (← spanFrom st) M N)
     | .kw "case" =>
       discard bump
@@ -810,17 +1122,44 @@ def compAtom : Nat → P Comp
       let N ← comp n
       expectSym "}"
       pure (.case (← spanFrom st) V x M y N)
+    | .kw "match" =>
+      discard bump
+      let V ← val n
+      expectSym "{"
+      expectKw "inl"
+      let p ← pat n
+      expectSym "->"
+      let M ← comp n
+      expectSym "|"
+      expectKw "inr"
+      let q ← pat n
+      expectSym "->"
+      let N ← comp n
+      expectSym "}"
+      let sp ← spanFrom st
+      let arm (p : Pat) (M : Comp) : P (Ident × Comp) := match p with
+        | .var x => pure (x, M)
+        | p => do
+          let x : Ident := ⟨← freshName "io_m", sp⟩
+          pure (x, ← bindPat sp n p (.var sp x.name) M)
+      let (x, M) ← arm p M
+      let (y, N) ← arm q N
+      pure (.case sp V x M y N)
     | .sym "(" =>
       discard bump
+      let angle := (← get).angle
+      modify fun s => { s with angle := false }
       let M ← comp n
-      if ← isSym ":" then
-        discard bump
-        let C ← cty n
-        expectSym ")"
-        pure (.ascribe (← spanFrom st) M C)
-      else
-        expectSym ")"
-        pure M
+      let r ← if ← isSym ":" then do
+          discard bump
+          let C ← cty n
+          expectSym ")"
+          pure (Comp.ascribe (← spanFrom st) M C)
+        else do
+          expectSym ")"
+          pure M
+      modify fun s => { s with angle }
+      pure r
     | _ => expected "a computation"
 end
 
@@ -844,9 +1183,14 @@ def decl (n : Nat) : P Decl := do
     pure (.shape (← spanFrom st) x σ)
   | .kw "total" | .kw "div" =>
     discard bump
-    unless (← peek).tok == .kw "def" do expected "`def` after `total` or `div`"
+    let mk := if t.tok == .kw "total" then Mark.total else .div
+    if (← peek).tok == .kw "fn" then discard bump; return ← fnRest st mk
+    unless (← peek).tok == .kw "def" do expected "`def` or `fn` after `total` or `div`"
     discard bump
-    defRest st (if t.tok == .kw "total" then .total else .div)
+    defRest st mk
+  | .kw "fn" =>
+    discard bump
+    fnRest st .none
   | .kw "def" =>
     discard bump
     defRest st .none
@@ -858,6 +1202,16 @@ def decl (n : Nat) : P Decl := do
     pure (.extern (← spanFrom st) x A)
   | .kw "main" =>
     discard bump
+    -- `main -> T = S` (draft 0): the result is `F T` when `T` is a value type.
+    if ← isSym "->" then
+      discard bump
+      let T ← rty n
+      let C ← match T.toV with
+        | .ok A => pure (CTy.ret A.span A)
+        | .error _ => liftSort T.toC
+      expectSym "="
+      let M ← comp n
+      return .main (← spanFrom st) C M
     expectSym ":"
     let C ← cty n
     expectSym "="
@@ -879,6 +1233,52 @@ where
     expectSym "="
     let V ← val n
     pure (.def_ (← spanFrom st) x ps A V mk)
+  /-- A `fn` after its keyword (draft 0 §2.5): `name(x₁: A₁, …, xₙ: Aₙ) -> T = S`. It is the
+  persistent `def name : !(A₁ * … * Aₙ => T) = !thunkv fun (p : A₁ * … * Aₙ) -> …`, the
+  parameters bound from `p` and the body `S` a statement sequence; with no parameter, `p : 1`.
+  When `T` is a computation type `C`, the result is `C` itself: `!U (A -o C)`. -/
+  fnRest (st : Pos) (mk : Mark) : P Decl := do
+    let x ← ident "a `fn` name"
+    expectSym "("
+    let ps ← if ← isSym ")" then pure [] else params n
+    expectSym ")"
+    expectSym "->"
+    let T ← rty n
+    expectSym "="
+    let M ← comp n
+    let sp ← spanFrom st
+    let A := tupleTy sp (ps.map (·.2))
+    let pn ← freshName "io_p"
+    let body ← bindParams sp pn (ps.map (·.1)) M
+    let lam := Comp.lam sp ⟨pn, sp⟩ A body
+    let ty ← match T.toV with
+      | .ok B => pure (VTy.bang sp (.lolli sp A B))
+      | .error _ => do let C ← liftSort T.toC; pure (VTy.bang sp (.thunk sp (.arr sp A C)))
+    pure (.def_ sp x [] ty (.bangThunkv sp lam) mk)
+  /-- `x₁: A₁, …, xₙ: Aₙ`, at least one. -/
+  params : Nat → P (List (Ident × VTy))
+    | 0 => outOfFuel
+    | m + 1 => do
+      let x ← ident "a parameter name"
+      expectSym ":"
+      let A ← vty n
+      if ← isSym "," then
+        discard bump
+        return (x, A) :: (← params m)
+      else pure [(x, A)]
+  /-- The parameter tuple's type (`1` with no parameters). -/
+  tupleTy (sp : Span) : List VTy → VTy
+    | [] => .unit sp
+    | [A] => A
+    | A :: As => .tensor sp A (tupleTy sp As)
+  /-- Bind the parameters from the tuple `p`. -/
+  bindParams (sp : Span) (p : String) : List Ident → Comp → P Comp
+    | [], M => pure (.letUnit sp (.var sp p) M)
+    | [x], M => pure (.bind sp x none (.ret sp (.var sp p)) M false)
+    | [x, y], M => pure (.letPair sp x y (.var sp p) M)
+    | x :: xs, M => do
+      let r ← freshName "io_p"
+      pure (.letPair sp x ⟨r, sp⟩ (.var sp p) (← bindParams sp r xs M))
   /-- `P₁, …, Pₙ`: a `def`'s type parameters, at least one. -/
   uidents : Nat → P (List Ident)
     | 0 => outOfFuel
@@ -908,7 +1308,7 @@ def runP {α} (p : Nat → P α) (src : String) : Except Error α := do
     let a ← p fuel
     if (← peek).tok != .eof then expected "end of input"
     pure a
-  (·.1) <$> go.run ⟨toks, 0, ⟨1, 1⟩⟩
+  (·.1) <$> go.run { toks, pos := 0, lastStop := ⟨1, 1⟩ }
 
 /-- The declarations of a source file. At most one `main` is accepted. -/
 def parseProgram (src : String) : Except Error Program := do

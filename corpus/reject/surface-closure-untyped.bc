@@ -1,0 +1,6 @@
+-- expect: 5:11: the type of the closure's parameter `n` is not determined here: pass it where a function type is expected, or write `thunkv fun`
+-- A closure's parameter takes its type from the function type expected of the closure: bound
+-- with no annotation, it has none.
+main -> i32 =
+  let f = { n -> n + 1 };
+  0

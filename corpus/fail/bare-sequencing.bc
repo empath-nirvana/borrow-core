@@ -1,3 +1,0 @@
--- There is no free-standing sequencing `M; N` (section 6.5).
--- expect: 3:23: expected a declaration (`type`, `shape`, `def`, `extern` or `main`), found `;`
-main : F 1 = return (); return ()

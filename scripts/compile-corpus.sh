@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
-# Compile and run the corpus. For every corpus/*.bc with a `main` (except a file marked
-# `-- check: parse-only`), `bcc run` (WebAssembly under wasmtime) must print the value that
-# `Support`'s interpreter prints (`bcc interp`), and then `live 0`: no object is live once the
+# Compile and run the corpus. For every corpus/*.bc and corpus/surface/*.bc with a `main` (except
+# a file marked `-- check: parse-only`), `bcc run` (WebAssembly under wasmtime) must print the
+# value that `Support`'s interpreter prints (`bcc interp`), and then `live 0`: no object is live once the
 # value is dropped. (Each prints `live N`; the source counts cells, the compiled stages all
 # objects, so the two agree when either is 0.) On a difference, the closure-IR and flat-IR
 # interpreters (`bcc interp --stage clos|flat`) name the first stage that diverges.
 #
-# A program with a golden output `corpus/<name>.out` (the standard I/O programs of SPEC §11)
-# reads `corpus/<name>.in` as standard input (the empty input if there is none). At every stage,
+# A program with a golden output `<name>.out` beside it (the standard I/O programs of SPEC §11)
+# reads `<name>.in` as standard input (the empty input if there is none). At every stage,
 # its whole standard output, the program's bytes followed by the report, must equal
-# `corpus/<name>.out`, and its standard error `corpus/<name>.err` (empty if there is none).
+# `<name>.out`, and its standard error `<name>.err` (empty if there is none).
 #
 # No I/O program has a bound on its input: `corpus/io-cat.bc` also copies a generated input of
 # 4860 bytes, at every stage.
@@ -17,8 +17,9 @@
 # Counts. Every program run is also run by `bcc-counts` (the flat IR and wasm, built to count,
 # which must agree): the objects it allocates and the indirect calls it makes, the closure
 # calls whose code a `switch` on the closure's tag chooses at run time. Each must be at most the
-# program's entry in `corpus/counts.expected` (`name allocs indirect`); a count above it fails,
-# one below it is reported so the file can be lowered. `--write-counts` rewrites the file with
+# program's entry in `corpus/counts.expected` (`name allocs indirect`, the name the file's path
+# under `corpus/`, as `io-wc` or `surface/io-wc`); a count above it fails, one below it is
+# reported so the file can be lowered. `--write-counts` rewrites the file with
 # the counts of this run.
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -35,7 +36,7 @@ bad=0
 # The counts of file $1 on input $2, checked against the expected ones; appended to the table.
 counts() {
   local name got a i want wa wi
-  name=$(basename "${1%.bc}")
+  name=${1#corpus/}; name=${name%.bc}
   if ! got=$("$bccCounts" "$1" < "$2" 2>&1); then echo "$1: counts: $got"; return 1; fi
   a=$(echo "$got" | awk '{print $2}'); i=$(echo "$got" | awk '{print $4}')
   echo "$name $a $i" >> "$tmp/counts"
@@ -62,7 +63,7 @@ runStage() {
   if [ "$1" = wasm ]; then "$bcc" run "$2" < "$3" > "$tmp/out" 2> "$tmp/err"
   else "$bcc" interp --stage "$1" "$2" < "$3" > "$tmp/out" 2> "$tmp/err"; fi
 }
-for f in corpus/*.bc; do
+for f in corpus/*.bc corpus/surface/*.bc; do
   if grep -q '^-- check: parse-only' "$f"; then echo "$f: parse-only, skipped"; continue; fi
   if ! grep -q '^main' "$f"; then echo "$f: no main, skipped"; continue; fi
   base=${f%.bc}

@@ -40,6 +40,9 @@ deriving instance ToExpr for Frontend.Life
 deriving instance ToExpr for Frontend.Mode
 deriving instance ToExpr for Frontend.VTy, Frontend.CTy, Frontend.Shape
 deriving instance ToExpr for Frontend.Const
+deriving instance ToExpr for Frontend.SurfOp
+deriving instance ToExpr for Frontend.BorrowKind
+deriving instance ToExpr for Frontend.VSugar
 deriving instance ToExpr for Frontend.Val, Frontend.Comp
 deriving instance ToExpr for Frontend.Mark
 deriving instance ToExpr for Frontend.Decl

@@ -1,0 +1,17 @@
+-- Draft 0's declarations and statements (typed elaboration, stage 5). A `fn` is a persistent
+-- `def` of its parameters' tuple; a call of it needs no `unbang`; `let` binds a value, a pattern
+-- destructures one, `let _ =` drops one, `match` is `case` with patterns, and a tail expression is
+-- returned. `surface-fn.core.bc` is the program written by hand in core.
+-- Answer: 6.
+fn add3(a: i32, b: i32, c: i32) -> i32 = host[add32] (host[add32] (a, b), c)
+
+fn zero() -> i32 = i32[0]
+
+fn pick(p: (1 + 1) * i32) -> i32 =
+  let (flag, n) = p;
+  match flag { inl _ -> n | inr () -> zero() }
+
+main -> i32 =
+  let x = add3(i32[1], i32[2], i32[3]);
+  let _ = zero();
+  pick((inl () : 1 + 1), x)
