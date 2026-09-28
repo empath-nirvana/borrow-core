@@ -23,7 +23,7 @@ artifact of any CI run). The pages below are design and research notes.
 
 ## Background and design notes
 
-- [Prior art: memory model](prior-art-memory-model.md), [prior art: borrow splitting](prior-art-borrow-splitting.md)
+- [Prior art: memory model](prior-art-memory-model.md), [prior art: borrow splitting](prior-art-borrow-splitting.md), [prior art: session types, par and modes](prior-art-sessions.md)
 - [Ideas: pointers, cycles, non-lexical lifetimes](ideas-pointers-and-lifetimes.md)
 - Scoping notes: [deep freeze](scope-deep-freeze.md), [recursion](scope-recursion.md)
 - [Salvage from l_lang](l-lang-salvage.md) — ideas and requirements kept from the previous language
