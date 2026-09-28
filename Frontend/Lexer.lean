@@ -47,7 +47,7 @@ def Error.render (e : Error) : String := s!"{e.span.start.render}: {e.msg}"
 /-- The reserved lower-case words. -/
 def keywords : List String :=
   [ -- declarations
-    "type", "shape", "def", "extern", "main",
+    "type", "shape", "def", "extern", "main", "total", "div",
     -- terms
     "return", "force", "fun", "let", "linear", "case", "inl", "inr", "thunk", "thunkv", "unbang",
     "boxed", "unbox", "roll", "unroll", "run", "absurd",

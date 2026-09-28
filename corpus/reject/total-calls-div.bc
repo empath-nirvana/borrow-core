@@ -1,0 +1,22 @@
+-- expect: 15:10: `twice` is declared `total`, but it calls the div function `count` (SPEC §14)
+-- A function that calls a div function in direct style is div, so it cannot be declared `total`:
+-- to run one from total code, bound it with `div_fuel`.
+def count : In => In * i32 =
+  thunkv fun (c : In) ->
+    n : i32 <- return i32[0];
+    for b in bytes c {
+      n : i32 <- return ((unbang host[add32]) (n, i32[1]));
+      return ()
+    };
+    return (c, n)
+
+total def twice : In => In * i32 =
+  thunkv fun (c : In) ->
+    a <- return (count (&c));
+    b <- return (count (&c));
+    return (c, (unbang host[add32]) (a, b))
+
+main : F i32 =
+  r <- return (twice (&stdin));
+  let (stdin, n) = r;
+  return n

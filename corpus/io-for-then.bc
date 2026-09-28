@@ -1,0 +1,29 @@
+-- A `for` followed by another loop (SPEC §14). `main` copies its input and counts the bytes, then
+-- calls the div function `count_lines`. What follows the `for` loops, so it does not run inside
+-- the `for`'s last step: the `for`'s loop finishes with the capabilities and the count, and the
+-- delay bind runs the rest. The input has ended by then, so `count_lines` finds no line.
+--
+-- Answer: the input, then `6`, and the result `(i32[6], i32[0])`.
+
+def count_lines : In => In * i32 =
+  thunkv fun (c : In) ->
+    n : i32 <- return i32[0];
+    for b in bytes c {
+      n : i32 <- case (unbang host[eq32]) (b, i32[10]) {
+        inl u -> return n
+      | inr u -> return ((unbang host[add32]) (n, i32[1]))
+      };
+      return ()
+    };
+    return (c, n)
+
+main : F (i32 * i32) =
+  n : i32 <- return i32[0];
+  for b in bytes stdin {
+    n : i32 <- return ((unbang host[add32]) (n, i32[1]));
+    return (putb (&stdout, b))
+  };
+  m <- return (count_lines (&stdin));
+  _ <- return (put_dec (&stdout, n));
+  _ <- return (putb (&stdout, i32[10]));
+  return (n, m)

@@ -116,7 +116,7 @@ judgment, for the derived forms of syntax-core §9), so what the checker returns
 | `Check/Checker.lean` | the bidirectional checker, `synV`/`chkV`/`synC`/`chkC` |
 | `Check/Program.lean` | declarations, `main`, and the soundness theorems |
 | `Check/CrossCheck.lean` | erasures compared with `Core/`'s hand-written terms, by kernel evaluation |
-| `Sugar.lean` | the I/O sugar, elaborated before checking: ambient capabilities in `main`, `&c`, `for` (SPEC §11) |
+| `Sugar.lean` | the sugar, elaborated before checking: ambient capabilities in `main`, `&c`, `for` (SPEC §11); divergence inferred, `total`/`div` markers, direct-style div calls as delay binds, specialization at a callback's type (SPEC §14) |
 | `Check/Externs.lean` | the standard externs with their roles, models and assurance levels; the `run_io` wrapper; `IORun` (SPEC §11) |
 
 ### Soundness

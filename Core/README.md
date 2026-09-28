@@ -134,6 +134,11 @@ effect).
   relation only if it is safe under every allocator: `λ_. staleL`, which loads a location it
   freed, is in `wpTSAngelic` (`staleL_angelic`) but outside the relation at `!U(1 ⊸ F 1)`
   (`staleClosure_not_vC`, `Stale.lean`; #41).
+- **Totality** (`SPEC.md` §14, `Totality.lean`). A closed computation of `F A` terminates on every
+  run: under every allocator its run reaches a value (`total_every_alloc`), every run under an
+  allocator is a prefix of it (`total_run_prefix`), every run continues to a value
+  (`total_every_run`), and there is no infinite run (`total_no_infinite_run`, through the
+  allocator `Alloc.ofRun` built from the run).
 - **Embedding.** `embed : DerivesWf Δ Γ e T → CDerives Δ (cbvCtx Γ) e (.val (cbv T))` for every
   `DerivesWf` rule, and `adequacy_of_derivesWf`. `EmbeddingExamples.lean` runs BoLo's baseline
   programs through it.

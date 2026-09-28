@@ -1,0 +1,50 @@
+-- Divergence is inferred (SPEC §14). `two_lines` is written with a plain result and no marker;
+-- it calls the div function `line_length` twice in direct style, so it is div, and so is `main`.
+-- `div-infer.core.bc` is the same program written by hand in core: `two_lines` and `main` with
+-- their loop types, each call a `div_bind`. Both erase to one term.
+extern stdin : ref input
+extern read_byte : !(all 'a < top. mut 'a input => mut 'a input * (i32 + 1))
+
+type In = ref input
+
+def getb : In => In * (i32 + 1) =
+  thunkv fun (c : In) ->
+    return (withbor2['x, top, input, i32 + 1] c
+      (thunkv Fun 'x < dom. return (thunkv fun (m : mut 'x input) ->
+         r <- return ((unbang read_byte) ['x] m);
+         let (m2, b) = r;
+         return (boxed['x] b))))
+
+-- One step of `line_length`: the next byte, and whether the line goes on.
+def ll_step : !U (In * i32 -o F ((In * i32) + (In * i32)) & F (In * 1)) =
+  !thunkv fun (s : In * i32) ->
+    < let (c, n) = s;
+      q <- return (getb c);
+      let (c2, x) = q;
+      case x {
+        inl b ->
+          case (unbang host[eq32]) (b, i32[10]) {
+            inl u -> return (inr (c2, (unbang host[add32]) (n, i32[1])))
+          | inr u -> return (inl (c2, n))
+          }
+      | inr u -> return (inl (c2, n))
+      },
+      let (c, n) = s;
+      return (c, ()) >
+
+-- A loop written in core: its type says it is div.
+def line_length : In => U (loop (In * i32) (In * 1)) =
+  thunkv fun (c : In) ->
+    f <- return (unbang (unfold[loop (In * i32) (In * 1), In * i32] ll_step));
+    s0 : In * i32 <- return (c, i32[0]);
+    return (thunkv nu_in < (nu_out (force f s0)).1, (nu_out (force f s0)).2 >)
+
+def two_lines : In => In * (i32 * i32) =
+  thunkv fun (c : In) ->
+    a <- return (line_length (&c));
+    b <- return (line_length (&c));
+    return (c, (a, b))
+
+main : F (ref input * (i32 * i32)) =
+  p <- return (two_lines (&stdin));
+  return (stdin, p)

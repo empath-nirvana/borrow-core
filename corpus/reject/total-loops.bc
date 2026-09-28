@@ -1,0 +1,16 @@
+-- expect: 7:5: `count` is declared `total`, but it has a `for` (SPEC §14)
+-- A function declared `total` must not loop: a `for` over the input may never end.
+total def count : In => In * i32 =
+  thunkv fun (c : In) ->
+    n : i32 <- return i32[0];
+    -- the input may never end
+    for b in bytes c {
+      n : i32 <- return ((unbang host[add32]) (n, i32[1]));
+      return ()
+    };
+    return (c, n)
+
+main : F i32 =
+  r <- return (count (&stdin));
+  let (stdin, n) = r;
+  return n

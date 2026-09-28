@@ -157,6 +157,13 @@ path, or reject if its type has no destructor.
   using it as a value (`walk(xs, f)`, `fixd` of it) costs nothing.
 - Lifetime parameters `<'a>` are `all 'a < top`; a bound is written `<'b < 'a>`.
 - `def`, `type`, `shape` and `extern` are unchanged from §10.
+- **Divergence is inferred** (SPEC §14). A `fn` whose body loops (a `for` over a source that
+  may not end, or a direct-style call of a div function) is div: its `-> T` elaborates to
+  `-> U (loop T R)`, and a call of it in direct style is the delay bind. `main` is div when its
+  body loops. `total fn` asserts that a function does not loop, which inference checks; it is
+  the common annotation, the one a library writes to promise termination. `div fn` (or
+  `-> div T`) is allowed but never needed. The core today spells these `total def` and
+  `div def`.
 
 ### 2.6 Borrowing
 
@@ -218,6 +225,9 @@ become one `out`, and observation names come from the codata declaration (`Iter`
   `let (v⃗) = for_each_with(e, (v⃗), !{ (x, (v⃗)) -> S; (v⃗) })`. The body is closed either way,
   so it is static code: no closure, and after `for_each` is specialized (defs are macros, §10),
   one loop.
+- A `for` over a source that may not end (the input, `bytes c`) is a loop: it makes the enclosing
+  function div (SPEC §14), and may appear in any function. A `for` over a finite source is total
+  (not yet provided).
 - A body that consumes a threaded variable (a `mut` borrow passed away, an owned value freed) is
   rejected, because it cannot hand it back. Borrowed variables are threaded by reborrowing; see
   open question Q3 for `imm`.

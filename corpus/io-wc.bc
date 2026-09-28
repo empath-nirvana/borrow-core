@@ -1,7 +1,9 @@
--- wc (SPEC §11): lines, words and bytes of the input, written as `lines words bytes`. A word
--- starts at a byte that is not a space, tab or newline after one that is. The loop threads the
--- counts, which are bound with their types before it; `put_dec` (the I/O library) writes a
--- number, and the counts are also `main`'s result.
+-- wc (SPEC §11, §14): lines, words and bytes of the input, written as `lines words bytes`. A
+-- word starts at a byte that is not a space, tab or newline after one that is. `count` loops over
+-- the input and hands the counts back with the capability; its loop threads the counts, which
+-- are bound with their types before it. `count` is div (it has a `for`) and so is `main`, which
+-- calls it and then writes the counts with `put_dec` (the I/O library). The counts are also
+-- `main`'s result.
 --
 -- Answer: `3 10 50` for the input, as `wc` counts it: the last line has no newline, and the
 -- second starts with two spaces and has a tab. `(i32[3], (i32[10], i32[50]))` is the result.
@@ -22,27 +24,34 @@ def is_space : i32 => B =
     | inr u -> return (inr () : B)
     }
 
-main : F (i32 * (i32 * i32)) =
-  lines : i32 <- return i32[0];
-  words : i32 <- return i32[0];
-  chars : i32 <- return i32[0];
-  in_word : B <- return (inl () : B);
-  for b in bytes stdin {
-    chars : i32 <- return (inc chars);
-    lines : i32 <- case (unbang host[eq32]) (b, i32[10]) {
-      inl u -> return lines
-    | inr u -> return (inc lines)
+def count : In => In * (i32 * (i32 * i32)) =
+  thunkv fun (c : In) ->
+    lines : i32 <- return i32[0];
+    words : i32 <- return i32[0];
+    chars : i32 <- return i32[0];
+    in_word : B <- return (inl () : B);
+    for b in bytes c {
+      chars : i32 <- return (inc chars);
+      lines : i32 <- case (unbang host[eq32]) (b, i32[10]) {
+        inl u -> return lines
+      | inr u -> return (inc lines)
+      };
+      case is_space b {
+        inl letter ->
+          words : i32 <- case in_word { inl u -> return (inc words) | inr u -> return words };
+          in_word : B <- return (inr () : B);
+          return ()
+      | inr space ->
+          in_word : B <- return (inl () : B);
+          return ()
+      }
     };
-    case is_space b {
-      inl letter ->
-        words : i32 <- case in_word { inl u -> return (inc words) | inr u -> return words };
-        in_word : B <- return (inr () : B);
-        return ()
-    | inr space ->
-        in_word : B <- return (inl () : B);
-        return ()
-    }
-  };
+    return (c, (lines, (words, chars)))
+
+main : F (i32 * (i32 * i32)) =
+  r <- return (count (&stdin));
+  let (lines, r2) = r;
+  let (words, chars) = r2;
   _ <- return (put_dec (&stdout, lines));
   _ <- return (putb (&stdout, i32[32]));
   _ <- return (put_dec (&stdout, words));
