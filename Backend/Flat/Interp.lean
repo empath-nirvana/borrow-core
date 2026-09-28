@@ -30,7 +30,7 @@ structure FState where
   err : ByteArray
   /-- Allocations so far. -/
   allocs : Nat := 0
-  /-- Indirect calls so far. -/
+  /-- Dispatched calls so far. -/
   indirect : Nat := 0
 
 abbrev FM := StateT FState (Except String)
@@ -104,13 +104,6 @@ def getLocal (fr : Array UInt64) (i : Nat) : FM UInt64 :=
   | some v => pure v
   | none => throw s!"flat IR: no local {i}"
 
-/-- The function at table index `k`, counting the indirect call. -/
-def tableFn (p : Prog) (k : UInt64) : FM Nat := do
-  modify fun s => { s with indirect := s.indirect + 1 }
-  match p.table[k.toNat]? with
-  | some g => pure g
-  | none => throw s!"flat IR: no table entry {k}"
-
 mutual
 def evalExp (p : Prog) : Nat → Array UInt64 → Exp → FM UInt64
   | 0, _, _ => throw "flat IR: out of fuel"
@@ -141,9 +134,8 @@ def evalArgs (p : Prog) : Nat → Array UInt64 → List Exp → FM (List UInt64)
     let vs ← evalArgs p n fr es
     pure (v :: vs)
 
-/-- Call function `f` on `args`, expecting `results` results (`none`: any number, for a direct
-call, whose arity the lowering fixes). As Wasm's `call_indirect` does, an indirect call checks
-the callee's signature. -/
+/-- Call function `f` on `args`, expecting `results` results (`none`: a tail call, whose results
+are the caller's). -/
 def callFn (p : Prog) : Nat → Nat → List UInt64 → Option Nat → FM (List UInt64)
   | 0, _, _, _ => throw "flat IR: out of fuel"
   | n + 1, f, args, results => do
@@ -197,17 +189,15 @@ def execStmt (p : Prog) : Nat → Array UInt64 → Stmt → FM (Array UInt64 × 
     | .call ds f args => do
         let rs ← callFn p n f (← evalArgs p n fr args) (some ds.length)
         pure (← setLocals fr ds rs, none)
-    | .callInd ds f args => do
-        let args ← evalArgs p n fr args
-        let g ← tableFn p (← evalExp p n fr f)
-        let rs ← callFn p n g args (some ds.length)
-        pure (← setLocals fr ds rs, none)
+    | .switch e cs d => do
+        match cs[(← evalExp p n fr e).toNat]? with
+        | some b => execBlock p n fr b
+        | none => execBlock p n fr d
     | .ret es => do pure (fr, some (← evalArgs p n fr es))
     | .tailCall f args => do pure (fr, some (← callFn p n f (← evalArgs p n fr args) none))
-    | .tailCallInd f args => do
-        let args ← evalArgs p n fr args
-        let g ← tableFn p (← evalExp p n fr f)
-        pure (fr, some (← callFn p n g args none))
+    | .tick => do
+        modify fun st => { st with indirect := st.indirect + 1 }
+        pure (fr, none)
     | .trap => throw "flat IR: trap"
 end
 

@@ -74,10 +74,9 @@ Each entry: the decision, and why. Newest last.
     exceptions and Wasm GC may appear only as optimizations with a portable fallback. Async,
     generators and effect handlers therefore lower to stackless state machines (as Rust `async` and
     LLVM's `llvm.coro` do), and cancellation is the explicit `close` observation. Today's backend
-    emits only portable features: integer operations, loads and stores, `br_table` (a switch),
-    `call_indirect` (function pointers), `return_call`/`return_call_indirect` (LLVM `musttail`,
-    which needs matching signatures — the uniform word representation provides them) and
-    `memory.grow` (the allocator's host call).
+    emits only portable features: integer operations, loads and stores, `br_table` (a switch; LLVM
+    `switch`, which also dispatches defunctionalized closures), `return_call` (LLVM `musttail`) and
+    `memory.grow` (the allocator's host call). No function table or `call_indirect` is emitted.
 26. **Sugar may be type-directed.** This revises decision 13's "sugar is syntactic": elaboration
     may use types (filling type holes `_`, choosing `fold_imm`/`fold_own` from a type, inserting
     copies or drops). It stays outside the trusted base anyway, because its output is a core program

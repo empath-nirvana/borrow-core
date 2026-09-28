@@ -10,8 +10,9 @@ in `Backend/README.md`:
 - `$free a`, for `a` returned by `$alloc` and not freed since, ends that range's life and
   subtracts one from the live count.
 - `$live` is the live count, and is exported as `live_objects`.
-- `$allocs` counts the calls of `$alloc`, and `$indirect` the indirect calls, which the
-  compiled code counts when it is compiled for counting.
+- `$allocs` counts the calls of `$alloc`, and `$indirect` the dispatched calls (closure calls
+  whose code a switch chooses at run time), which the compiled code counts when it is compiled
+  for counting.
 - `$putc b` writes the low byte of `b` to standard output, and `$putfd fd b` to the stream
   `fd` (WASI `fd_write`; `write(2)` in libc).
 - `$getc fd` reads one byte of the stream `fd`, or answers `-1` at its end or on an error

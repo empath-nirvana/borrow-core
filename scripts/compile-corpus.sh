@@ -15,10 +15,11 @@
 # 4860 bytes, at every stage.
 #
 # Counts. Every program run is also run by `bcc-counts` (the flat IR and wasm, built to count,
-# which must agree): the objects it allocates and the indirect calls it makes. Each must be at
-# most the program's entry in `corpus/counts.expected` (`name allocs indirect`); a count above
-# it fails, one below it is reported so the file can be lowered. `--write-counts` rewrites the
-# file with the counts of this run.
+# which must agree): the objects it allocates and the indirect calls it makes, the closure
+# calls whose code a `switch` on the closure's tag chooses at run time. Each must be at most the
+# program's entry in `corpus/counts.expected` (`name allocs indirect`); a count above it fails,
+# one below it is reported so the file can be lowered. `--write-counts` rewrites the file with
+# the counts of this run.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 command -v wasmtime >/dev/null || { echo "wasmtime is not on PATH"; exit 1; }
@@ -119,7 +120,7 @@ for st in source clos flat wasm; do
 done
 if [ "$bigok" = 1 ]; then echo "corpus/io-cat.bc: a $(wc -c < "$tmp/big.in" | tr -d ' ')-byte input copied whole at every stage"; else bad=$((bad + 1)); fi
 if [ "$write" = 1 ]; then
-  { echo "# Allocations and indirect calls per run of each corpus program (scripts/compile-corpus.sh)."
+  { echo "# Allocations and indirect (dispatched) calls per run of each corpus program (scripts/compile-corpus.sh)."
     echo "# name allocs indirect"
     sort "$tmp/counts"; } > "$expected"
   echo "wrote $expected"

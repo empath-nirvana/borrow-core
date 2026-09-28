@@ -3,11 +3,12 @@ import Support.Syntax.Integers
 /-!
 # Backend — the flat IR
 
-Functions over 64-bit words with numbered locals, explicit allocation and free, direct and
-indirect calls with any number of results, explicit tail calls, and structured control (`ite`,
-`switch`); no closures and no variables beyond locals. It is meant to lower as directly to LLVM
-IR as to Wasm: a function of several results is a Wasm multi-value function, and an LLVM
-function returning a struct by value (or through an `sret` pointer when it is wide).
+Functions over 64-bit words with numbered locals, explicit allocation and free, direct calls
+with any number of results, explicit tail calls, and structured control (`ite`, `switch`); no
+closures, no function pointers and no variables beyond locals. It is meant to lower as directly
+to LLVM IR as to Wasm: a function of several results is a Wasm multi-value function, and an LLVM
+function returning a struct by value (or through an `sret` pointer when it is wide); `switch` is
+Wasm's `br_table` and LLVM's `switch`.
 
 Words are `i64`. An operation's operands and result have the widths §8 gives it: the numeric
 operations are `HostOp`, the integer instructions of Wasm, and a test yields a 32-bit `0`/`1`.
@@ -34,7 +35,7 @@ inductive Exp where
   | live
   /-- The next byte of the stream `fd`, or `2⁶⁴ - 1` at its end (SPEC §11). -/
   | getc (fd : Exp)
-  /-- A run's counter: `0` the allocations so far, `1` the indirect calls so far. -/
+  /-- A run's counter: `0` the allocations so far, `1` the dispatched calls so far. -/
   | stat (k : Nat)
   deriving Repr, Inhabited
 
@@ -49,14 +50,15 @@ inductive Stmt where
   | putc (fd b : Exp)
   /-- `c` is a 32-bit test. -/
   | ite (c : Exp) (t e : List Stmt)
+  /-- `cases[k]` when `e` is `k < cases.length`, else `dflt`. -/
+  | switch (e : Exp) (cases : List (List Stmt)) (dflt : List Stmt)
   /-- Call function `f`; its results go to the locals `dsts`. -/
   | call (dsts : List Nat) (f : Nat) (args : List Exp)
-  /-- Call through the function table at `f`; the results go to the locals `dsts`. -/
-  | callInd (dsts : List Nat) (f : Exp) (args : List Exp)
   | ret (es : List Exp)
-  /-- Tail calls: the callee's results are the caller's. -/
+  /-- A tail call: the callee's results are the caller's. -/
   | tailCall (f : Nat) (args : List Exp)
-  | tailCallInd (f : Exp) (args : List Exp)
+  /-- Count a dispatched call: a closure call whose code is chosen at run time. -/
+  | tick
   | trap
   deriving Repr, Inhabited
 
@@ -71,8 +73,6 @@ structure Fn where
 
 structure Prog where
   fns : Array Fn
-  /-- The function table: closure code `c` is `fns[table[c]]`. -/
-  table : Array Nat
   /-- Runs `main`, prints its value, drops it, and prints the live count. -/
   entry : Nat
   deriving Repr, Inhabited

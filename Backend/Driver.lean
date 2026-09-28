@@ -71,7 +71,7 @@ def closOf (file src : String) : Except String Clos.Prog := do
 def flatOf (file src : String) (counts : Bool := false) : Except String Flat.Prog := do
   Flat.lower (← closOf file src) counts
 
-/-- The program as WAT; with `counts`, it counts indirect calls and writes the run's counts after
+/-- The program as WAT; with `counts`, it counts dispatched calls and writes the run's counts after
 the report. -/
 def compileWat (file src : String) (counts : Bool := false) : Except String String := do
   pure (Wasm.printModule (Wasm.lowerProg (← flatOf file src counts) counts))

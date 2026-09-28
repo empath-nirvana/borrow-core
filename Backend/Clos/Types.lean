@@ -35,12 +35,21 @@ A call whose argument is a literal injection (after `let`s and copies) is a proj
 answers the arm's type. The source's typing derivation guarantees that the erasure has these
 types; a program for which unification fails is reported, not compiled.
 
-**Layout.** `1` and `any` are no words; `i32`, `i64`, `fn` and `loc` one; a pair is its two
+**Layout.** `1` and `any` are no words; `i32`, `i64` and `loc` one; a pair is its two
 components side by side; a sum is a tag word and the larger of its two payloads. A recursive type
 would be infinitely wide, so the fields that close a cycle (the back edges of one depth-first
 search over the pair and sum edges) are stored behind a pointer to a heap object of the field's
-own layout. A type is *trivial* when copying it is copying its words and dropping it is
-nothing: it holds no closure and no such pointer.
+own layout.
+
+**Closures** are defunctionalized. The codes of a closure type `fn(A; C, D)` (the codes whose
+type unifies with it) are its *union*, numbered in code order; a closure is its code's number in
+the union (the *tag*), then its captured values' words, padded to the widest environment of the
+union. A union that contains itself, a closure type that lies on a cycle of the graph whose edges
+are pair and sum fields and a closure type's captured values, would be infinitely wide; such a
+*recursive* closure type keeps one word, `2t + 1` for a code `t` that captures nothing, or else
+the address of a heap object holding `t` and the captured words. A type is *trivial* when copying
+it is copying its words and dropping it is nothing: it holds no boxed field, no recursive closure
+type, and no closure whose code captures a non-trivial value.
 -/
 
 namespace Backend.Clos
@@ -384,6 +393,12 @@ structure Types where
   cons : Std.HashMap Var Nat
   apps : Std.HashMap Var Nat
   codeTy : Array Nat
+  /-- Every code's captured values' types (representatives), in environment order. -/
+  codeEnv : Array (List Nat)
+  /-- Every closure type's union: the codes of that type, in code order. -/
+  unions : Std.HashMap Nat (Array Nat)
+  /-- The recursive closure types, which keep a heap environment. -/
+  recFn : Std.HashSet Nat
   /-- `main`'s type. -/
   mainTy : Nat
   /-- The type of the program's value: `main`'s, or `fin`'s answer when `main` returns a loop. -/
@@ -418,12 +433,75 @@ def answerWords (T : Types) (n : Nat) : Nat :=
   | .fn _ c d => max (T.words c) (T.words d)
   | _ => 0
 
+/-- The union of the closure type `n`. -/
+def union (T : Types) (n : Nat) : Array Nat := T.unions.getD (T.r n) #[]
+
+/-- The closure type `n` is recursive: its closures keep a heap environment. -/
+def isRec (T : Types) (n : Nat) : Bool := T.recFn.contains (T.r n)
+
+/-- Code `c`'s type. -/
+def codeType (T : Types) (c : Nat) : Nat := T.r (T.codeTy[c]?.getD 0)
+
+/-- Code `c`'s tag: its position in its type's union. -/
+def tag (T : Types) (c : Nat) : Nat := ((T.union (T.codeType c)).idxOf? c).getD 0
+
+/-- The types of code `c`'s captured values. -/
+def env (T : Types) (c : Nat) : List Nat := T.codeEnv[c]?.getD []
+
+/-- The words of code `c`'s captured values. -/
+def envWords (T : Types) (c : Nat) : Nat := (T.env c).foldl (fun k n => k + T.words n) 0
+
 end Types
 
-/-- Resolve the unifier's state: representatives, and one depth-first search over the pair and
-sum edges, whose back edges are the boxed fields; widths and triviality are computed as each
-node finishes. -/
-def resolve (s : TState) (codeTy : Array Nat) (mainTy resTy : Nat) : Types := Id.run do
+/-- The strongly connected component of every node of the graph `succ` (Tarjan's algorithm,
+iteratively), and whether the node lies on a cycle: its component has two nodes or more, or it
+is its own successor. -/
+def onCycle (succ : Array (List Nat)) : Array Bool := Id.run do
+  let n := succ.size
+  let mut index : Array (Option Nat) := Array.replicate n none
+  let mut low : Array Nat := Array.replicate n 0
+  let mut onStack : Array Bool := Array.replicate n false
+  let mut stack : List Nat := []
+  let mut next := 0
+  let mut cyc : Array Bool := Array.replicate n false
+  for root in [0:n] do
+    if index[root]!.isSome then continue
+    index := index.set! root (some next); low := low.set! root next; next := next + 1
+    stack := root :: stack; onStack := onStack.set! root true
+    let mut calls : List (Nat × Nat) := [(root, 0)]
+    for _ in [0:4 * n + 4 + succ.foldl (fun k l => k + l.length) 0] do
+      match calls with
+      | [] => break
+      | (v, i) :: rest =>
+        match succ[v]![i]? with
+        | some w =>
+          calls := (v, i + 1) :: rest
+          match index[w]! with
+          | none =>
+            index := index.set! w (some next); low := low.set! w next; next := next + 1
+            stack := w :: stack; onStack := onStack.set! w true
+            calls := (w, 0) :: calls
+          | some iw => if onStack[w]! then low := low.set! v (min low[v]! iw)
+        | none =>
+          calls := rest
+          if some low[v]! == index[v]! then
+            let comp := (stack.takeWhile (· != v)) ++ [v]
+            stack := (stack.dropWhile (· != v)).drop 1
+            for u in comp do onStack := onStack.set! u false
+            let isCyc := comp.length > 1 || succ[v]!.contains v
+            if isCyc then for u in comp do cyc := cyc.set! u true
+          match rest with
+          | (u, _) :: _ => low := low.set! u (min low[u]! low[v]!)
+          | [] => pure ()
+  return cyc
+
+/-- Resolve the unifier's state. The unions are grouped by representative; the recursive closure
+types are those on a cycle of pair, sum and captured-value edges; then one depth-first search
+over the remaining edges finds the boxed fields (its back edges, all pair or sum fields, since no
+other closure type lies on a cycle), and widths and triviality are computed as each node
+finishes. -/
+def resolve (s : TState) (codeTy : Array Nat) (codeEnv : Array (List Nat)) (mainTy resTy : Nat) :
+    Types := Id.run do
   let n := s.nodes.size
   let rep := (Array.range n).map (findIn s.parent)
   let shape := (Array.range n).map fun i =>
@@ -433,6 +511,22 @@ def resolve (s : TState) (codeTy : Array Nat) (mainTy resTy : Nat) : Types := Id
     | .fn a c d => .fn rep[a]! rep[c]! rep[d]!
     | .loc a c => .loc rep[a]! (findIn s.classes c)
     | t => t
+  let codeEnv := codeEnv.map (·.map fun t => rep[t]!)
+  let unions : Std.HashMap Nat (Array Nat) := (List.range codeTy.size).foldl
+    (fun m c => let t := rep[codeTy[c]!]!; m.insert t ((m.getD t #[]).push c)) {}
+  -- The captured values' types of a closure type's union.
+  let envOf (v : Nat) : List Nat := (unions.getD v #[]).toList.flatMap fun c => codeEnv[c]!
+  let succ := (Array.range n).map fun v =>
+    if rep[v]! != v then [] else match shape[v]! with
+      | .pair a b | .sum a b => [a, b]
+      | .fn .. => envOf v
+      | _ => []
+  let cyc := onCycle succ
+  let recFn : Std.HashSet Nat := (List.range n).foldl (fun m v =>
+    match shape[v]! with
+    | .fn .. => if rep[v]! == v && cyc[v]! then m.insert v else m
+    | _ => m) {}
+  let fieldsOf (v : Nat) : List Nat := if recFn.contains v then [] else succ[v]!
   let mut color : Array Nat := Array.replicate n 0
   let mut width : Array Nat := Array.replicate n 0
   let mut trivial : Array Bool := Array.replicate n true
@@ -441,11 +535,11 @@ def resolve (s : TState) (codeTy : Array Nat) (mainTy resTy : Nat) : Types := Id
     if rep[root]! != root || color[root]! != 0 then continue
     let mut stack : List (Nat × Nat) := [(root, 0)]
     color := color.set! root 1
-    for _ in [0:4 * n + 4] do
+    for _ in [0:4 * n + 4 + succ.foldl (fun k l => k + l.length) 0] do
       match stack with
       | [] => break
       | (v, i) :: rest =>
-        let fs := shape[v]!.fields
+        let fs := fieldsOf v
         match fs[i]? with
         | some c =>
           stack := (v, i + 1) :: rest
@@ -459,7 +553,11 @@ def resolve (s : TState) (codeTy : Array Nat) (mainTy resTy : Nat) : Types := Id
           let (w, t) := match shape[v]! with
             | .any | .unit => (0, true)
             | .int _ | .loc .. => (1, true)
-            | .fn .. => (1, false)
+            | .fn .. =>
+              if recFn.contains v then (1, false) else
+              let cs := (unions.getD v #[]).toList
+              (1 + cs.foldl (fun k c => max k ((codeEnv[c]!).foldl (fun k t => k + width[t]!) 0)) 0,
+               cs.all fun c => (codeEnv[c]!).all (trivial[·]!))
             | .pair a b => (fw 0 a + fw 1 b, ft 0 a && ft 1 b)
             | .sum a b => (1 + max (fw 0 a) (fw 1 b), ft 0 a && ft 1 b)
           width := width.set! v w
@@ -471,11 +569,11 @@ def resolve (s : TState) (codeTy : Array Nat) (mainTy resTy : Nat) : Types := Id
     if let .loc a c := shape[v]! then
       cellWidth := cellWidth.insert c (max (cellWidth.getD c 0) width[a]!)
   return { rep, shape, boxed, width, trivial, cellWidth, varTy := s.varTy, cons := s.cons,
-           apps := s.apps, codeTy, mainTy, resTy }
+           apps := s.apps, codeTy, codeEnv, unions, recFn, mainTy, resTy }
 
 /-- The layout types of a program. -/
 def Prog.types (p : Prog) : Except String Types := do
-  let act : TM (Array Nat × Nat × Nat) := do
+  let act : TM (Array Nat × Array (List Nat) × Nat × Nat) := do
     let codeTy ← p.codes.mapM fun _ => newNode .any
     for (c, k) in p.codes.toList.zipIdx do inferCode codeTy p.codes k c
     let m ← infer codeTy p.codes p.main
@@ -489,8 +587,9 @@ def Prog.types (p : Prog) : Except String Types := do
         let e ← newNode .any
         unify codeTy[c]! (← newNode (.fn r e e))
         pure e
-    pure (codeTy, m, res)
-  let ((codeTy, m, res), s) ← act.run {}
-  pure (resolve s codeTy m res)
+    let env ← p.codes.mapM fun c => c.env.mapM tyVar
+    pure (codeTy, env, m, res)
+  let ((codeTy, env, m, res), s) ← act.run {}
+  pure (resolve s codeTy env m res)
 
 end Backend.Clos

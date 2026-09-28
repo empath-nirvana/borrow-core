@@ -44,8 +44,6 @@ def opName : HostOp → String
   | .extend_u => "i64.extend_i32_u"
   | .extend32_s => "i64.extend32_s"
 
-def typeName (params results : Nat) : String := s!"$t{params}_{results}"
-
 /-- `(param i64 …) (result i64 …)`. -/
 def sigText (params results : Nat) : String :=
   (if params > 0 then " (param" ++ String.join (List.replicate params " i64") ++ ")" else "") ++
@@ -62,12 +60,13 @@ def printInstr (d : Nat) : Instr → List String
   | .i64Store off => [indent d ++ s!"i64.store offset={off}"]
   | .num o => [indent d ++ opName o]
   | .call f => [indent d ++ s!"call {f}"]
-  | .callIndirect p r => [indent d ++ s!"call_indirect (type {typeName p r})"]
   | .returnCall f => [indent d ++ s!"return_call {f}"]
-  | .returnCallIndirect p r => [indent d ++ s!"return_call_indirect (type {typeName p r})"]
   | .ifElse t e =>
       [indent d ++ "if"] ++ printBody (d + 1) t ++ [indent d ++ "else"] ++ printBody (d + 1) e ++
         [indent d ++ "end"]
+  | .block b => [indent d ++ "block"] ++ printBody (d + 1) b ++ [indent d ++ "end"]
+  | .br k => [indent d ++ s!"br {k}"]
+  | .brTable ts k => [indent d ++ "br_table" ++ String.join (ts.map (s!" {·}")) ++ s!" {k}"]
   | .ret => [indent d ++ "return"]
   | .drop => [indent d ++ "drop"]
   | .unreachable => [indent d ++ "unreachable"]
@@ -87,24 +86,9 @@ def printFunc (f : Func) : List String :=
   [indent 1 ++ s!"(func {f.name}{exp}{sig}"] ++ locals ++ printInstr.printBody 2 f.body ++
     [indent 1 ++ ")"]
 
-/-- The signatures of the indirect calls in an instruction. -/
-def sigs : Instr → List (Nat × Nat)
-  | .callIndirect p r | .returnCallIndirect p r => [(p, r)]
-  | .ifElse t e => sigsOf t ++ sigsOf e
-  | _ => []
-where
-  sigsOf : List Instr → List (Nat × Nat)
-    | [] => []
-    | i :: is => sigs i ++ sigsOf is
-
-/-- The module's text: a type for each indirect call's signature. -/
+/-- The module's text. -/
 def printModule (m : Module) : String :=
-  let types := (m.funcs.flatMap (sigs.sigsOf ·.body)).eraseDups.map fun (p, r) =>
-    indent 1 ++ s!"(type {typeName p r} (func{sigText p r}))"
-  let table := [indent 1 ++ s!"(table {m.table.length} funcref)"] ++
-    (if m.table.isEmpty then [] else
-      [indent 1 ++ "(elem (i32.const 0) func " ++ " ".intercalate m.table ++ ")"])
-  let lines := ["(module", runtimeWat] ++ types ++ table ++ (m.funcs.flatMap printFunc) ++ [")"]
+  let lines := ["(module", runtimeWat] ++ (m.funcs.flatMap printFunc) ++ [")"]
   "\n".intercalate lines ++ "\n"
 
 end Backend.Wasm
