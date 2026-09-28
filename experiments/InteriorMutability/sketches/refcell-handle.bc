@@ -1,0 +1,49 @@
+-- SKETCH, not runnable: `unsafe def … assurance …` is the syntax proposed on #79, and
+-- `refcell T` is not a type today. Nothing here is checked.
+--
+-- `RefCell<T>` as a std-lib type: an opaque handle whose contents live in the runtime's store
+-- (as `cell-handle.bc`), plus a borrow flag, and borrowing INTO it by moving the contents into
+-- a fresh model cell for the length of a callback. This is `withswap` across the unsafe
+-- boundary: two unsafe primitives, and the borrow itself in safe code, where ordinary borrow
+-- checking and the Fundamental Property apply to the callback.
+
+type RC[T] = refcell T                    -- VTy.opq (refcell T)
+
+-- Take the contents out and set the flag; `inr ()` if the flag is already set (RefCell's
+-- `BorrowMutError`, as a sum instead of a panic).
+unsafe def rc_take[T] : all 'a < top. imm 'a (refcell T) => T + 1     assurance tested "…"
+-- Put the contents back and clear the flag.
+unsafe def rc_put[T] : all 'a < top. imm 'a (refcell T) * T => 1      assurance tested "…"
+
+-- Safe library code. The callback gets an ordinary `mut 'x T` on a model cell.
+def with_borrow_mut[T, R] : all 'a < top.
+    imm 'a (refcell T) * !(all 'x < top. mut 'x T => ['x] R) => R + 1 =
+  thunkv Fun 'a < top. return (thunkv fun (p : …) ->
+    let (h, k) = p;
+    let (h1, h2) = copy['a, refcell T] h;
+    o <- return ((unbang rc_take[T]) ['a] h1);
+    case o {
+      inl t ->
+        r <- return (alloc[T] t);                            -- one model cell per borrow
+        q <- return (withbor2['x, top, T, R] r (thunkv Fun 'x < top. (unbang k) ['x]));
+        let (r2, res) = q;
+        t2 <- return (free[T] r2);
+        u <- return ((unbang rc_put[T]) ['a] (h2, t2));
+        return (inl res)
+    | inr u -> return (inr ())                               -- re-entrant borrow caught
+    })
+
+-- What it covers:
+--  * exclusive borrows of any `T`, including resource-holding `T` (a `Vec` of owned nodes);
+--  * re-entrancy, caught on the error branch (rs/memo.rs's recursive `get` would take it on the
+--    inner call, where Rust's `borrow_mut` would panic).
+-- What it limits:
+--  * `with_borrow` (shared): for plain `T` a reader gets a copy (`cell_get`); for
+--    resource-holding `T` this simple version allows one borrow at a time, since the contents
+--    are in one model cell for one callback;
+--  * callback-scoped, no guard objects (`Ref`/`RefMut` that outlive a statement);
+--  * shared OWNERSHIP is still missing: the handle is linear (`VTy.opq`: never copied), so a
+--    graph whose nodes are owned by several parents (rs/tree.rs's `Rc<Node>`, rs/emitter.rs's
+--    `Rc<RefCell<Stats>>` in three closures) has no owner to put the handle in. Sharing is by
+--    `imm 'a` borrows of one owner's handle, which `!` closures cannot capture (SPEC §10), so
+--    observers receive the handle as an argument rather than capturing it.

@@ -1,0 +1,66 @@
+-- An event emitter whose handlers transform a shared state rather than capture it. Rust's
+-- handlers are `Box<dyn Fn(&Event)>` that each capture an `Rc<RefCell<Stats>>`; here a handler
+-- is `H = !(St * Ev => St)`, a persistent function that takes the state with the event and
+-- returns it, and the registry is a list of them. `emit` runs the registered handlers in order
+-- over the one state, which the caller owns and threads: the sharing is in the threading,
+-- not in the handlers. The registry folds (`fold_own`) into one composed handler.
+--
+-- Events: click, key 65, click, key 66, click. Answer: (i32[3], (i32[131], i32[5])), as
+-- `rs/emitter.rs`: clicks, the sum of key codes, and all events.
+
+type Ev = 1 + i32
+type St = i32 * (i32 * i32)
+type H = !(St * Ev => St)
+type Reg = mu X. 1 + (H * X)
+
+def add : i32 * i32 => i32 = unbang host[add32]
+
+def on_click : H =
+  !thunkv fun (p : St * Ev) ->
+    let (s, e) = p;
+    let (c, r) = s;
+    case e { inl u -> return (add (c, i32[1]), r) | inr k -> return (c, r) }
+
+def on_key : H =
+  !thunkv fun (p : St * Ev) ->
+    let (s, e) = p;
+    let (c, r) = s;
+    let (k, a) = r;
+    case e { inl u -> return (c, (k, a)) | inr code -> return (c, (add (k, code), a)) }
+
+def on_any : H =
+  !thunkv fun (p : St * Ev) ->
+    let (s, e) = p;
+    let (c, r) = s;
+    let (k, a) = r;
+    return (c, (k, add (a, i32[1])))
+
+def register : H * Reg => Reg =
+  thunkv fun (p : H * Reg) -> let (h, reg) = p; return (roll (inr (h, reg)) : Reg)
+
+-- The registry as one handler: each handler, then the rest.
+def compose_alg : !(1 + (H * H) => H) =
+  !thunkv fun (c : 1 + (H * H)) ->
+    case c {
+      inl u ->
+        let () = u;
+        return (!thunkv fun (p : St * Ev) -> let (s, e) = p; return s)
+    | inr hr ->
+        let (h, rest) = hr;
+        return (!thunkv fun (p : St * Ev) ->
+          let (s, e) = p;
+          return ((unbang rest) ((unbang h) (s, e), e)))
+    }
+
+def emitter : Reg => H = unbang (fold_own[1 + (H * X), H] compose_alg)
+
+main : F St =
+  reg <- return (register (on_click, register (on_key, register (on_any, (roll (inl ()) : Reg)))));
+  emit <- return (emitter reg);
+  s0 : St <- return (i32[0], (i32[0], i32[0]));
+  s1 <- return ((unbang emit) (s0, (inl () : Ev)));
+  s2 <- return ((unbang emit) (s1, (inr i32[65] : Ev)));
+  s3 <- return ((unbang emit) (s2, (inl () : Ev)));
+  s4 <- return ((unbang emit) (s3, (inr i32[66] : Ev)));
+  s5 <- return ((unbang emit) (s4, (inl () : Ev)));
+  return s5

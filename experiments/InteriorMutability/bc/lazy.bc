@@ -1,0 +1,53 @@
+-- Lazy configuration as an explicit once-cell threaded through its readers. Rust's
+-- `static CONFIG: LazyLock<Config>`, readable from any function, becomes a value
+-- `L = (C + 1) * i32`: the configuration once computed (`inl`) or not yet (`inr ()`), and the
+-- number of initializations. `get_or_init` computes it on first use; every reader takes `L`
+-- and hands it back. The configuration is plain data, so it is copied freely once computed:
+-- after the first read a caller may pass the `C` itself (`area_of` below), as an ordinary
+-- parameter.
+--
+-- Answer: (i32[15], (i32[36], i32[1])), as `rs/lazy.rs`: 3 + width, width * scale, and one
+-- initialization.
+
+type C = i32 * i32
+type L = (C + 1) * i32
+
+def add : i32 * i32 => i32 = unbang host[add32]
+
+-- The expensive computation, run once.
+def compute : 1 => C = thunkv fun (u : 1) -> return (i32[12], i32[3])
+
+def get_or_init : L => L * C =
+  thunkv fun (l : L) ->
+    let (o, n) = l;
+    case o {
+      inl c -> return (((inl c : C + 1), n), c)
+    | inr u ->
+        c <- return (compute ());
+        return (((inl c : C + 1), add (n, i32[1])), c)
+    }
+
+def padded : L * i32 => L * i32 =
+  thunkv fun (p : L * i32) ->
+    let (l, k) = p;
+    q <- return (get_or_init l);
+    let (l2, c) = q;
+    let (w, s) = c;
+    return (l2, add (k, w))
+
+def area_of : C => i32 =
+  thunkv fun (c : C) -> let (w, s) = c; return ((unbang host[mul32]) (w, s))
+
+def area : L => L * i32 =
+  thunkv fun (l : L) ->
+    q <- return (get_or_init l);
+    let (l2, c) = q;
+    return (l2, area_of c)
+
+main : F (i32 * (i32 * i32)) =
+  q1 <- return (padded (((inr () : C + 1), i32[0]), i32[3]));
+  let (l1, a) = q1;
+  q2 <- return (area l1);
+  let (l2, b) = q2;
+  let (o, inits) = l2;
+  return (a, (b, inits))

@@ -1,0 +1,27 @@
+-- Counting calls with the count threaded through the callback. Rust's `apply_twice(&dyn Fn)`
+-- with a counter in a `Cell` becomes `apply_twice` over `!(i32 * i32 => i32 * i32)`: the
+-- callback takes the count with its argument and hands it back with its result, so the count
+-- shows in the callback's type. `counted` is Rust's `Counted::call` in that shape.
+--
+-- Answer: (i32[31], i32[4]), as `rs/counter.rs`: 1, 3, 7, 15, 31, and four calls.
+
+type CX = i32 * i32
+
+def add : i32 * i32 => i32 = unbang host[add32]
+
+-- x * 2 + 1, counted.
+def counted : !(CX => CX) =
+  !thunkv fun (p : CX) ->
+    let (n, x) = p;
+    return (add (n, i32[1]), add ((unbang host[mul32]) (x, i32[2]), i32[1]))
+
+def apply_twice : !(CX => CX) * CX => CX =
+  thunkv fun (p : !(CX => CX) * CX) ->
+    let (f, s) = p;
+    return ((unbang f) ((unbang f) s))
+
+main : F (i32 * i32) =
+  q1 <- return (apply_twice (counted, (i32[0], i32[1])));
+  q2 <- return (apply_twice (counted, q1));
+  let (n, y) = q2;
+  return (y, n)

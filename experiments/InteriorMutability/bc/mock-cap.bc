@@ -1,0 +1,63 @@
+-- The Rust Book's mock (ch15-05), with the messenger as a parameter the tracker threads.
+-- Rust's `LimitTracker` holds `&dyn Messenger` whose `send(&self)` cannot mutate, so the mock
+-- records into a `RefCell<Vec<_>>`. Here `set_value[M]` is generic in the messenger's state
+-- `M` and takes its `send : !(M * i32 => M)`: the state goes in and comes back, as a capability
+-- does (SPEC §11). In production `M` would be `Out` and `send` would write to it; in the test
+-- `M` is the list of messages sent so far, and `send` conses. The mock is a pure function.
+--
+-- Values 50, 80, 95, 100 against a maximum of 100. Answer: (i32[3], (i32[75], i32[100])), as
+-- `rs/mock.rs`: three messages, the first and the last.
+
+type Log = mu X. 1 + (i32 * X)
+type R = i32 * (i32 * i32)
+
+def add : i32 * i32 => i32 = unbang host[add32]
+
+-- Rust's `LimitTracker::set_value`: a message code for the percentage, if any, to `send`.
+def set_value[M] : !(M * i32 => M) * (M * (i32 * i32)) => M =
+  thunkv fun (p : !(M * i32 => M) * (M * (i32 * i32))) ->
+    let (send, r) = p;
+    let (m, r2) = r;
+    let (value, max) = r2;
+    q <- return ((unbang host[div_s32]) ((unbang host[mul32]) (value, i32[100]), max));
+    pct : i32 <- case q { inl x -> return x | inr u -> return i32[0] };
+    case (unbang host[lt_s32]) (pct, i32[100]) {
+      inl over -> return ((unbang send) (m, i32[100]))
+    | inr under ->
+        case (unbang host[lt_s32]) (pct, i32[90]) {
+          inl urgent -> return ((unbang send) (m, i32[90]))
+        | inr below ->
+            case (unbang host[lt_s32]) (pct, i32[75]) {
+              inl warn -> return ((unbang send) (m, i32[75]))
+            | inr quiet -> return m
+            }
+        }
+    }
+
+-- The mock: record the message.
+def record : !(Log * i32 => Log) =
+  !thunkv fun (p : Log * i32) ->
+    let (log, code) = p;
+    return (roll (inr (code, log)) : Log)
+
+-- (count, (first, last)) of the log, newest first.
+def summary_alg : !(1 + (i32 * R) => R) =
+  !thunkv fun (c : 1 + (i32 * R)) ->
+    case c {
+      inl u -> return (i32[0], (i32[0], i32[0]))
+    | inr p ->
+        let (x, r) = p;
+        let (n, fl) = r;
+        let (first, last) = fl;
+        case (unbang host[eqz32]) n {
+          inl some -> return (add (n, i32[1]), (first, x))
+        | inr none -> return (i32[1], (x, x))
+        }
+    }
+
+main : F R =
+  l1 <- return (set_value[Log] (record, ((roll (inl ()) : Log), (i32[50], i32[100]))));
+  l2 <- return (set_value[Log] (record, (l1, (i32[80], i32[100]))));
+  l3 <- return (set_value[Log] (record, (l2, (i32[95], i32[100]))));
+  l4 <- return (set_value[Log] (record, (l3, (i32[100], i32[100]))));
+  return ((unbang (fold_own[1 + (i32 * X), R] summary_alg)) l4)

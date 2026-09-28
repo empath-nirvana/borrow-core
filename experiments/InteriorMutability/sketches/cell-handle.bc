@@ -1,0 +1,58 @@
+-- SKETCH, not runnable: `unsafe def … assurance …` is the syntax proposed on #79 and is not
+-- built; `cell T` is not a type today. Nothing here is checked.
+--
+-- `Cell<T>` as a std-lib type implemented in `unsafe` (#79): our own compiled code with a
+-- declared semantic type and an assurance level, listed by `bcc trusted` under `unsafe`. It is
+-- not an `extern`: `extern` stays for the host/FFI boundary.
+--
+-- The handle is an opaque type (`VTy.opq`, SPEC §11) whose contents live in a store kept by the
+-- runtime, outside the model heap. An `Imm` borrow freezes the model cell holding the handle,
+-- and `Imm̲` of an opaque type is `Unk`, so the handle cannot be copied out of the borrow. The
+-- model heap stays deeply immutable under `Imm`, so the relation's `Imm` clause and every frame
+-- result (`experiments/FrameTheorems`: `imm_call_keeps`, `wpTS_footprint`) are unchanged. The
+-- operations are effects on the store, like `write_byte` on an output. Contents are plain
+-- (persistent) data at first. Storing a resource needs the destructor to hand the contents
+-- back, or leak freedom (`adequacyC`'s empty final heap) no longer covers what the store holds.
+
+type Cell = cell i32                      -- VTy.opq (cell i32): the handle
+type CR = ref Cell                        -- the model cell holding it; borrowed as `imm 'a Cell`
+
+-- The contract of each operation is its signature, read semantically; the store's
+-- invariant (one slot per live handle, holding a plain value) is its model.
+unsafe def cell_new : i32 => Cell                                   assurance tested "corpus/cell-*.bc"
+unsafe def cell_get : all 'a < top. imm 'a Cell => i32              assurance tested "corpus/cell-*.bc"
+unsafe def cell_set : all 'a < top. imm 'a Cell * i32 => 1          assurance tested "corpus/cell-*.bc"
+unsafe def cell_into : Cell => i32        -- the destructor: frees the slot, hands the value back
+
+-- 1. Counter behind `&self` (rs/counter.rs's `Counted::call`). The count no longer comes back
+--    with the result: `counted` takes `imm`, which `copy` duplicates.
+def counted : all 'a < top. imm 'a Cell * i32 => i32 =
+  thunkv Fun 'a < top. return (thunkv fun (p : imm 'a Cell * i32) ->
+    let (c, x) = p;
+    n <- return ((unbang cell_get) ['a] (copy['a, Cell] c).1);   -- schematic: copy, then read
+    u <- return ((unbang cell_set) ['a] (c, (unbang host[add32]) (n, i32[1])));
+    return ((unbang host[add32]) ((unbang host[mul32]) (x, i32[2]), i32[1])))
+
+-- What this does NOT buy: `apply_twice(&dyn Fn)`. The callback must be `!(i32 => i32)` to be
+-- called twice, and a `!` thunk is promoted only from a context of `!` types (SPEC §2, §10:
+-- `Imm` is not persistent). So a closure cannot capture `imm 'a Cell`, and the callback still
+-- takes the handle as an argument: `!(imm 'a Cell * i32 => i32)`. Compared with
+-- `bc/counter-mut.bc`'s `!(mut 'a i32 * i32 => mut 'a i32 * i32)` the borrow need not be handed
+-- back, and the handle can be read by others meanwhile; the signature still names it.
+
+-- 2. Memo table behind `&self` (rs/memo.rs): `fib : imm 'a MemoCell * i32 => i32`, with the
+--    table as `cell (array i32)` needs a non-plain `T` (an array holds cells), so it needs
+--    `cell_replace`/`cell_take` with the destructor handing the array back:
+unsafe def cell_replace[T] : all 'a < top. imm 'a (cell T) * T => T
+-- `fib` takes the table out (`cell_replace` with an empty array), fills, and puts it back.
+-- Re-entrant `fib` (the recursion of rs/memo.rs) would find the empty array: the store
+-- does not know a take is outstanding. RefCell's flag is what catches that
+-- (`refcell-handle.bc`).
+
+-- 3. Recording mock (rs/mock.rs): `send : !(imm 'a (cell Log) * i32 => 1)`, `Log` plain.
+--    `set_value[M]` of `bc/mock-cap.bc` already threads `M`; with the cell, `M` becomes
+--    `imm 'a (cell Log)` and `send` returns `1`. The tracker's type still names the messenger.
+
+-- 4. Lazy init (`OnceCell`): `get_or_init : imm 'a (cell (C + 1)) * !(1 => C) => C`, written in
+--    safe code over `cell_get`/`cell_set` for plain `C`. `LazyLock`'s static (no parameter)
+--    stays inexpressible: there is no global, and a handle is only reachable as an argument.

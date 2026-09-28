@@ -1,0 +1,43 @@
+-- Counting calls with the counter in a cell lent `mut` to the callback. Rust's
+-- `apply_twice(&dyn Fn)` with a `Cell` counter becomes `apply_twice` at a lifetime `'a`, over a
+-- callback `!(mut 'a i32 * i32 => mut 'a i32 * i32)`: the borrow of the counter is passed with
+-- the argument and handed back with the result (`&mut` threading). The counter's owner lends it
+-- once, for the whole computation.
+--
+-- Answer: (i32[31], i32[4]), as `rs/counter.rs` and `counter-thread.bc`.
+
+def add : i32 * i32 => i32 = unbang host[add32]
+
+-- One increment through the borrow: the count is out of the cell for the addition.
+def bump : all 'a < top. mut 'a i32 => mut 'a i32 =
+  thunkv Fun 'a < top. return (thunkv fun (m : mut 'a i32) ->
+    s <- return (withswap['a, i32, 1] m (thunkv fun (n : i32) -> return (add (n, i32[1]), ())));
+    let (m2, u) = s;
+    return m2)
+
+-- x * 2 + 1, counted.
+def counted : all 'a < top. !(mut 'a i32 * i32 => mut 'a i32 * i32) =
+  thunkv Fun 'a < top. return (!thunkv fun (p : mut 'a i32 * i32) ->
+    let (m, x) = p;
+    m2 <- return (bump ['a] m);
+    return (m2, add ((unbang host[mul32]) (x, i32[2]), i32[1])))
+
+def apply_twice : all 'a < top.
+    !(mut 'a i32 * i32 => mut 'a i32 * i32) * (mut 'a i32 * i32) => mut 'a i32 * i32 =
+  thunkv Fun 'a < top. return (thunkv fun
+      (p : !(mut 'a i32 * i32 => mut 'a i32 * i32) * (mut 'a i32 * i32)) ->
+    let (f, s) = p;
+    return ((unbang f) ((unbang f) s)))
+
+main : F (i32 * i32) =
+  r <- return (alloc[i32] i32[0]);
+  q <- return (withbor2['x, top, i32, i32] r
+         (thunkv Fun 'x < top. return (thunkv fun (m : mut 'x i32) ->
+            f <- return (counted ['x]);
+            s1 <- return (apply_twice ['x] (f, (m, i32[1])));
+            s2 <- return (apply_twice ['x] (f, s1));
+            let (m2, y) = s2;
+            return (boxed['x] y))));
+  let (r2, y) = q;
+  n <- return (free[i32] r2);
+  return (y, n)
