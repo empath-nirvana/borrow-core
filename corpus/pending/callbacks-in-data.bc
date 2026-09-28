@@ -1,0 +1,55 @@
+-- pending: SPEC §14 Open (the effect of a stored callback)
+-- A list of callbacks, some total and one div, each applied to the same number.
+--
+-- Axes: data × effects (div) × coeffects (`!`). The callbacks are persistent code stored in
+-- data; one of them may diverge.
+--
+-- Blocked by: the surface's specialization, and behind it the kernel. Specialization
+-- instantiates the effect of a callback only at a function's parameter types; "a callback
+-- stored in data or a cell keeps the effect its type says" (SPEC §14 Open). `Fs` says its
+-- callbacks are total, `i32 => i32`, so the div `steps` cannot be stored in it. A list whose
+-- elements have different effects needs one type for both: effect polymorphism in the kernel
+-- (a variable over computation types, absent by SPEC §14), or every element at the div type
+-- (`!(i32 => U (loop i32 1))`, which a total callback can be lifted into by a loop that
+-- finishes at once, as `corpus/sugar/hof-closure.bc`'s `once` does) chosen by the
+-- elaborator for the whole list. Open: which, and whether the surface should ask for it.
+--
+-- Spelling: today's surface.
+--
+-- Today: specialization makes a copy of `cons` at `steps`'s type, and the checker rejects the
+-- copy's `roll`: `Fs` holds total callbacks, and `steps` is `!(i32 => U (delay i32))`.
+--
+-- Once it lands: 27 doubled, plus the Collatz steps from 27, plus 27 + 1. Golden:
+-- `i32[193]` (54 + 111 + 28), `live 0`.
+
+type Fs = mu X. 1 + (!(i32 => i32) * X)
+
+def nil : Fs = roll inl ()
+fn cons(f: !(i32 => i32), t: Fs) -> Fs = roll inr (f, t)
+
+def collatz_step : !U (i32 * i32 -o F (i32 + (i32 * i32)) & F 1) =
+  !thunkv fun (s : i32 * i32) ->
+    < let (n, k) = s;
+      if n == 1 { inl k } else {
+        if host[and32] (n, 1) == 0 { inr (host[shr_u32] (n, 1), k + 1) }
+        else { inr (n * 3 + 1, k + 1) }
+      },
+      () >
+
+def collatz : i32 => U (loop i32 1) =
+  thunkv fun (n : i32) ->
+    f <- return (unbang (unfold[loop i32 1, i32 * i32] collatz_step));
+    s0 : i32 * i32 <- return (n, i32[0]);
+    return (thunkv nu_in < (nu_out (force f s0)).1, (nu_out (force f s0)).2 >)
+
+fn steps(n: i32) -> i32 = collatz(n)
+fn double(n: i32) -> i32 = n + n
+fn succ(n: i32) -> i32 = n + 1
+
+-- Each callback applied to 27, and the results summed. (27 is written in the algebra: a `!`
+-- closure cannot capture an `i32` parameter today, `corpus/pending/closure-captures-int.bc`.)
+fn apply_all(fs: Fs) -> i32 =
+  (unbang (fold_own[1 + !(i32 => i32) * X, i32] (!{ r -> match r { inl _ -> 0 | inr (f, s) -> f(27) + s } }))) fs
+
+main -> i32 = apply_all(cons(double, cons(steps, cons(succ, nil))))
+-- now: 28:52: type mismatch: expected `!(i32 => i32)`, but this has type `!(i32 => U (delay i32))`

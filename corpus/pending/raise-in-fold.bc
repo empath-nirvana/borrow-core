@@ -1,0 +1,92 @@
+-- pending: #18, and open design questions (effect polymorphism of the folds; unwinding)
+-- Errors as an effect: the ordinary `fold_own` and `fold_imm`, with algebras that `raise` on a
+-- byte that is not a digit, and a `try` at each call that turns the effect into `i32 + i32`.
+-- Nothing fold-specific handles the error: if the algebra raises, the fold raises.
+--
+-- Axes: data × effects (failure, handled without resuming) × scope (the owned nodes and the
+-- borrow that a raise abandons). The same folds with the error written as data run today:
+-- `corpus/axes/result-fold-own.bc` and `result-fold-imm.bc` (the hand-threaded `Result`).
+--
+-- Blocked by: #18 (no `raise` or `try` in the surface), and two open design questions, which
+-- this program tests.
+--
+-- (a) Effect polymorphism of the kernel's fold rules. The algebra's type is fixed:
+-- `foldOwn : !U(A'_R ⊸ F R) ⊸ !U(μX.T ⊸ F R)` (SPEC §6), and the core has no variable over
+-- computation types (SPEC §14), so a fold cannot be stated once for every effect its algebra
+-- has. Two formulations:
+--   - The effect in the type, inferred (as SPEC §14 infers div and plans for later control
+--     effects): `sum_alg` raises, so its result is the raising computation type, and the fold is
+--     elaborated at that type, by specialization at the callback's computation type (the div
+--     mechanism) or by a kernel fold whose algebra is at `F (R + E)` with `raise` as the `inr`.
+--     This program assumes this formulation: `raise` is unqualified and `sum_alg` is a
+--     top-level function.
+--   - Capability style (Effekt): `try` binds a capability, and the algebra raises through it,
+--     so the fold's type does not change. The algebra is `!` code, which captures only `!`
+--     values today (and not an `i32`, `closure-captures-int.bc`), so the capability would be
+--     persistent, and passed or captured explicitly; the program would name it.
+--
+-- (b) Non-local exit. `raise` abandons the rest of the fold, the control part. A fold's algebra
+-- runs on the way back up (the tail is folded before the head, SPEC §6's `fold_beta`), so the
+-- first raise is at the last non-digit in list order, and the pending work is the nodes above
+-- it:
+--   - in `fold_own`, the frames above it own those nodes' cells, which must be freed;
+--   - in `fold_imm`, the fold holds a borrow of the list, which must end, handing the cell back
+--     to its lender (`bad`, lent by `&bad` inside the `try`) so that `len(&bad)` can use it.
+-- The principled semantics unwinds by the implicit destructors (SPEC §12): each abandoned
+-- owned value runs its destructor, each borrow ends. A resource with no destructor (a
+-- capability, a thunk: SPEC §12 class 3) cannot be unwound, so `raise` would be illegal where
+-- one is live, or the handler would receive it back with the error, as a div loop's `close`
+-- hands back its residual (SPEC §14). Which, is open.
+--
+-- Spelling (a hypothesis): `raise(e)` as an operation, and `try { … }` as the handler that turns
+-- it into `inl` the value or `inr` the error, as the user settled for errors.
+--
+-- Today: the parser stops at `try {`: `try` is read as a name, and a block cannot follow it.
+-- (`raise` would next be an unknown name.)
+--
+-- Once it lands: `123` sums to 6 by either fold; `1x3y` raises at `y` (byte 121: the last
+-- non-digit, the first one the fold reaches); after the failing `fold_imm`, `bad` still has its
+-- 4 nodes. Golden: `(inl i32[6], (inr i32[121], (inl i32[6], (inr i32[121], i32[4]))))`,
+-- `live 0`. (The `Result` baselines give 120, the first non-digit in list order, because their
+-- algebras choose it.)
+
+type List = mu X. 1 + (ref i32 * ref X)
+shape Node = node (leaf i32) (leaf List)
+
+def nil : List = roll inl ()
+fn cons(x: i32, t: List) -> List = roll inr alloc_s[Node] (x, t)
+
+fn is_digit(b: i32) -> bool = host[lt_u32] (b - 48, 10)
+
+-- Owned: each cell freed, and its digit added; a non-digit raises.
+fn sum_alg(r: 1 + ref i32 * i32) -> i32 =
+  match r {
+    inl _ -> 0
+  | inr (c, s) -> let b = free(c); if is_digit(b) { b - 48 + s } else { raise(b) }
+  }
+def digit_sum : !(List => i32) = fold_own[1 + ref i32 * ref X, i32] sum_alg
+
+-- Borrowed: each byte read through its view.
+def view_alg : !(all 'y < top. 1 + (imm 'y i32 * i32) => i32) =
+  !thunkv Fun 'y < top. return (thunkv fun (r : 1 + (imm 'y i32 * i32)) ->
+    match r {
+      inl _ -> 0
+    | inr (v, s) -> let b = *v; if is_digit(b) { b - 48 + s } else { raise(b) }
+    })
+def view_sum : !(all 'a < top. imm 'a List => i32) = fold_imm[1 + (ref i32 * ref X), 'a, top, i32] view_alg
+
+def len_alg : !(all 'y < top. 1 + (imm 'y i32 * i32) => i32) =
+  !thunkv Fun 'y < top. return (thunkv fun (r : 1 + (imm 'y i32 * i32)) ->
+    match r { inl _ -> 0 | inr (_, n) -> n + 1 })
+def len : !(all 'a < top. imm 'a List => i32) = fold_imm[1 + (ref i32 * ref X), 'a, top, i32] len_alg
+
+main -> (i32 + i32) * ((i32 + i32) * ((i32 + i32) * ((i32 + i32) * i32))) =
+  let a = try { digit_sum(cons(49, cons(50, cons(51, nil)))) };
+  let b = try { digit_sum(cons(49, cons(120, cons(51, cons(121, nil))))) };
+  let good = alloc(cons(49, cons(50, cons(51, nil))));
+  let bad = alloc(cons(49, cons(120, cons(51, cons(121, nil)))));
+  let c = try { view_sum(&good) };
+  let d = try { view_sum(&bad) };
+  let n = len(&bad);
+  (a, (b, (c, (d, n))))
+-- now: 84:15: expected `;`, found `{`

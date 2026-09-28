@@ -1,0 +1,35 @@
+-- pending: #54 (a lend inside an operand)
+-- A lend inside an operand: `acc = acc + get(&t, c - 48)`.
+--
+-- Axes: scope × coeffects. `&t` lends the cell `imm` for one call, in the middle of an
+-- expression.
+--
+-- Blocked by: the surface. A lend is elaborated at a call that is the head of a binding (the
+-- borrow wraps the call, and its result rebinds `t`); a call nested in an operator's operand is
+-- not lifted to a binding first. Binding it by hand (`let v = get(&t, c - 48); acc = acc + v`)
+-- runs today: `corpus/axes/scope-loop-lend.bc`. Decision 38 lists it as not yet provided.
+--
+-- Spelling: today's surface.
+--
+-- Today: the checker reports a type mismatch at the call: the operand of `+` is the lend's
+-- hand-back `(t, v)`, `ref array i32 * i32`, where `i32` is expected. The message does not
+-- mention the lend.
+--
+-- Once it lands: the same run as `corpus/axes/scope-loop-lend.bc`. Golden, on the input `1203`:
+-- `i32[60]`, `live 0`.
+
+fn tab(i: i32) -> i32 = i * 10
+
+-- The entry at `i`, or 0 out of range.
+def get : !(all 'a < top. imm 'a (array i32) * i32 => i32) =
+  !thunkv Fun 'a < top. return (thunkv fun (p : imm 'a (array i32) * i32) ->
+    let (b, i) = p;
+    withload['a, 'z, array i32, i32] b (thunkv Fun 'z < dom. return (thunkv fun (xs : array_imm 'z i32) ->
+      match array_get['z, i32] (xs, i) { inl e -> let v = *e; boxed['z] v | inr _ -> boxed['z] 0 })))
+
+main -> i32 =
+  let t = alloc(array_new[i32] (10, tab));
+  let mut acc = 0;
+  for c in bytes stdin { acc = acc + get(&t, c - 48) };
+  acc
+-- now: 33:38: type mismatch: expected `i32`, but this has type `ref array i32 * i32`

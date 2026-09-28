@@ -1,0 +1,28 @@
+-- Axes: codata × effects × coeffects, with the scope inside the loop. A table is borrowed
+-- `imm` once per byte of the input, inside a `for` that runs until the input ends.
+--
+-- The `for` over `bytes stdin` is a loop (codata over the div effect, SPEC §14) whose steps
+-- read input (effects). Each step lends the table's cell with `&t` for one call of `get`
+-- (a `withbor1` around the call: an `imm` demand, scoped to that call), which reads one entry
+-- through `withload` and the array's leaf view. The borrow is taken and ended within each step,
+-- so the loop's state holds the owned cell, never a borrow. Holding one borrow across the whole
+-- loop is `corpus/pending/borrow-across-loop.bc`.
+--
+-- Answer: i32[60] on the input `1203`: the table holds 10 * i, and 10 + 20 + 0 + 30 = 60. A
+-- digit read as a byte (no `- 48`) is out of range and gives 0; a loop that did not thread `acc`
+-- gives 30; a lend that did not hand the cell back does not check.
+
+fn tab(i: i32) -> i32 = i * 10
+
+-- The entry at `i`, or 0 out of range.
+def get : !(all 'a < top. imm 'a (array i32) * i32 => i32) =
+  !thunkv Fun 'a < top. return (thunkv fun (p : imm 'a (array i32) * i32) ->
+    let (b, i) = p;
+    withload['a, 'z, array i32, i32] b (thunkv Fun 'z < dom. return (thunkv fun (xs : array_imm 'z i32) ->
+      match array_get['z, i32] (xs, i) { inl e -> let v = *e; boxed['z] v | inr _ -> boxed['z] 0 })))
+
+main -> i32 =
+  let t = alloc(array_new[i32] (10, tab));
+  let mut acc = 0;
+  for c in bytes stdin { let v = get(&t, c - 48); acc = acc + v };
+  acc

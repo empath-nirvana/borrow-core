@@ -1,0 +1,53 @@
+-- pending: open design question (a loop inside a borrow scope)
+-- A lookup table borrowed once, and read on every byte of the input by a `for` inside the
+-- borrow block.
+--
+-- Axes: codata (the div loop) × effects (input) × coeffects (the `imm` demand) × scope (one
+-- borrow held across the loop).
+--
+-- Blocked by: the kernel, as a design question. A borrow block's body is the callback of
+-- `withbor`, of type `F (box 'x B)`: one computation, which returns. A body with a `for` over the
+-- input is div: it returns a loop, `U (loop …)`, and a thunk has no outlives rule, so the loop
+-- cannot leave the scope whose borrow it holds, and the scope cannot stay open while the loop
+-- runs one observation at a time. `withbor` is a scoped, non-algebraic operation (the strict
+-- account, §4): it does not commute with the loop's bind. What runs today: a borrow per step,
+-- `get(&t, …)` inside the `for` (`corpus/axes/scope-loop-lend.bc`), and a bounded loop inside the
+-- scope under `div_fuel`, which is total. Options:
+--   - Borrow per step (today): no change; a borrow's set-up is paid on every step, and a `mut`
+--     borrow cannot keep state between steps except through its cell.
+--   - A borrow block at loop type: a derived or new form `Ref A ⊸ (∀'x. Mut 'x A ⊸ U (Loop
+--     (['x] B) R)) ⊸ U (Loop (Ref A ⊗ B) (Ref A ⊗ R))` whose scope spans every observation and
+--     ends at `finish` or `close`. Its soundness is the frame (6.64) held across a sequence of
+--     observations, which the typed world does not state today.
+--   - Fuel: run the loop to a bound inside the scope (`div_fuel`), and let the caller loop
+--     over scopes. Total, and the bound is visible in the program.
+--
+-- Spelling: today's surface; the capability is threaded through the block, as it must be
+-- today.
+--
+-- Today: the elaborator reports that the block's result type is not determined. Ascribing it
+-- (`let p : In * i32 = borrow …`) gives the same message; the same block with one `getb` in
+-- place of the `for` checks and runs. The body loops, and a block's result is a value, not a
+-- loop.
+--
+-- Once it lands: on the input `1203`, the entries 10, 20, 0, 30. Golden: `i32[60]`, `live 0`,
+-- as `corpus/axes/scope-loop-lend.bc`.
+
+fn tab(i: i32) -> i32 = i * 10
+
+-- The entry at `i`, or 0 out of range.
+def get : !(all 'a < top. imm 'a (array i32) * i32 => i32) =
+  !thunkv Fun 'a < top. return (thunkv fun (p : imm 'a (array i32) * i32) ->
+    let (b, i) = p;
+    withload['a, 'z, array i32, i32] b (thunkv Fun 'z < dom. return (thunkv fun (xs : array_imm 'z i32) ->
+      match array_get['z, i32] (xs, i) { inl e -> let v = *e; boxed['z] v | inr _ -> boxed['z] 0 })))
+
+main -> i32 =
+  let t = alloc(array_new[i32] (10, tab));
+  let (stdin, n) = borrow imm t { 'x, b ->
+    let mut acc = 0;
+    for c in bytes(&mut stdin) { acc = acc + (unbang get) ['x] (b, c - 48) };
+    (stdin, acc)
+  };
+  n
+-- now: 47:20: the type of the block's result is not determined here: ascribe it

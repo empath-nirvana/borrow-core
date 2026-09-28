@@ -1,0 +1,46 @@
+-- Axes: data × effects, inside borrow blocks (scope). A list in a cell is updated in place
+-- under a `mut` borrow, then summed under an `imm` borrow that also writes the sum out.
+--
+-- `borrow mut r { m -> modify m { … } }` lends the cell holding the list; `modify` owns the
+-- list for a moment, and `map_inc` rebuilds it in place with `fold_reuse` (each node's cells are
+-- reused). The second block borrows the cell `imm`, folds the list with `fold_imm`, and writes
+-- the sum to standard output inside the borrow: the capability is not borrowed, so it is
+-- passed into the block and handed back out with the block's result.
+--
+-- Answer: the line `126`, and `i32[126]`: [100, 20, 3] incremented is [101, 21, 4]. A
+-- `fold_reuse` that lost the new content gives 123; one that incremented a node twice gives 127,
+-- 128 or 129; a block that dropped the capability does not check.
+
+type List = mu X. 1 + (ref i32 * ref X)
+shape Node = node (leaf i32) (leaf List)
+
+def nil : List = roll inl ()
+fn cons(x: i32, t: List) -> List = roll inr alloc_s[Node] (x, t)
+
+-- In place: each node's element cell gets its successor, and its tail cell the mapped tail.
+fn map_inc_alg(r: 1 + ref i32 * (ref 1 * List)) -> List =
+  match r {
+    inl _ -> nil
+  | inr (c, (d, t)) ->
+      let (c, x) = swap(c, ());
+      let (c, ()) = swap(c, x + 1);
+      let (d, ()) = swap(d, t);
+      roll inr (c, d)
+  }
+def map_inc : !(List => List) = fold_reuse[1 + ref i32 * ref X, List] map_inc_alg
+
+def sum_alg : !(all 'y < top. 1 + (imm 'y i32 * i32) => i32) =
+  !thunkv Fun 'y < top. return (thunkv fun (r : 1 + (imm 'y i32 * i32)) ->
+    match r { inl _ -> 0 | inr (b, s) -> *b + s })
+def sum : !(all 'a < top. imm 'a List => i32) = fold_imm[1 + (ref i32 * ref X), 'a, top, i32] sum_alg
+
+main -> i32 =
+  let r = alloc(cons(100, cons(20, cons(3, nil))));
+  borrow mut r { m -> modify m { l -> map_inc(l) } };
+  let (stdout, n) = borrow imm r { 'x, b ->
+    let n = (unbang sum) ['x] b;
+    let (stdout, _) = put_dec(stdout, n);
+    let (stdout, _) = putb(stdout, 10);
+    (stdout, n)
+  };
+  n

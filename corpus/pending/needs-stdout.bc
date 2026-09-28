@@ -1,0 +1,31 @@
+-- pending: `needs`/`provide` (PR #100)
+-- Helpers that need standard output without naming it at each call: `greet` calls `log`
+-- three times, and `main` provides `stdout` once.
+--
+-- Axes: effects (the account's classification: a threaded `mut` capability is linear state,
+-- so `needs` elaborates effect threading) × scope (`provide` is a borrow of the capability's
+-- cell for its block).
+--
+-- Blocked by: the surface. PR #100 builds the `needs Mut U` layer as elaboration into
+-- `CDerives` with no new rule (`KDem.elab`, sound by `fundamentalC`): the demand is a `withbor`
+-- callback's parameter, sequential uses are reborrows (`d_seqD`), and `provide` is `withbor`
+-- on the cell. The surface form is not built. Decision 30 (no ambient authority) is kept: the
+-- need is in `log`'s and `greet`'s types, and only `main` holds the capability. Open in the
+-- design: several needs at once (bundles), and a persistent function whose need is latent.
+--
+-- Spelling: PR #100's sketch (`fn log(b: i32) needs stdout = …`, `provide stdout { … }`), a
+-- hypothesis; the strict account (§8) would split it into `needs` for reader demands and an
+-- effect word (`does`) for threaded capabilities.
+--
+-- Today: the parser stops at `needs`: after a `fn`'s result type it expects `=`.
+--
+-- Once it lands: two greetings. Golden: the lines `Hi` and `Hi`, then `i32[6]` (the bytes
+-- written, counted by `greet`'s results), `live 0`.
+
+fn log(b: i32) -> i32 needs stdout = putb(&mut stdout, b); 1
+
+fn greet() -> i32 needs stdout = log(72) + log(105) + log(10)
+
+main -> i32 =
+  provide stdout { greet() + greet() }
+-- now: 25:23: expected `=`, found name `needs`

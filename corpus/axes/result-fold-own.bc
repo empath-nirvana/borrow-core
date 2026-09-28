@@ -1,0 +1,42 @@
+-- Axes: data × effects (failure), owned. The baseline for errors: the hand-threaded `Result`,
+-- written as data (what `try_fold` is in Rust). It is here for comparison with the error effect
+-- (`corpus/pending/raise-in-fold.bc`), and to test the error path's cleanup; it is not the
+-- intended style.
+--
+-- `digit_sum` folds an owned list of bytes with `fold_own`. Its algebra returns `i32 + i32`:
+-- `inl` the sum of the digits so far, or `inr` the first byte that is not a digit. The fold is a
+-- right fold, so the algebra sees each node after its tail's result: a non-digit replaces the
+-- tail's result with itself (so the first error in the list wins), and a digit adds itself to a
+-- sum, or passes an error on. Nothing short-circuits the traversal: every node is visited and its
+-- cell freed on the error path too, which `live 0` checks.
+--
+-- Answer: (inl i32[6], inr i32[120]): the digits of `123` sum to 6, and `1x3y` fails at `x`
+-- (byte 120). An algebra that let a later error win gives 121 (`y`); one that treated the error
+-- as a digit gives a sum; a fold that stopped freeing cells after the error leaves objects live.
+
+type List = mu X. 1 + (ref i32 * ref X)
+shape Node = node (leaf i32) (leaf List)
+
+def nil : List = roll inl ()
+fn cons(x: i32, t: List) -> List = roll inr alloc_s[Node] (x, t)
+
+-- A digit's value, or `inr` the byte itself.
+fn digit(b: i32) -> i32 + i32 =
+  match host[lt_u32] (b - 48, 10) { inl _ -> inr b | inr _ -> inl (b - 48) }
+
+fn sum_alg(r: 1 + ref i32 * (i32 + i32)) -> i32 + i32 =
+  match r {
+    inl _ -> inl 0
+  | inr (c, t) ->
+      let b = free(c);
+      match digit(b) {
+        inl d -> match t { inl s -> inl (d + s) | inr e -> inr e }
+      | inr e -> inr e
+      }
+  }
+def digit_sum : !(List => i32 + i32) = fold_own[1 + ref i32 * ref X, i32 + i32] sum_alg
+
+main -> (i32 + i32) * (i32 + i32) =
+  let good = digit_sum(cons(49, cons(50, cons(51, nil))));
+  let bad = digit_sum(cons(49, cons(120, cons(51, cons(121, nil)))));
+  (good, bad)

@@ -1,0 +1,45 @@
+-- pending: #54 (a lend to a closure call)
+-- A lend to the call of a closure: `w!(&mut stdout)`, where `w` is a computation that takes
+-- the output capability and hands it back.
+--
+-- Axes: data × effects: `w` is the result of a fold into the effect, as in
+-- `corpus/axes/data-effects.bc`.
+--
+-- Blocked by: the surface. `&mut c` is elaborated at a call of a named function (and of a
+-- persistent one called as `f(e)`); `w!(…)` forces a local thunk and applies it, and the lend is
+-- not threaded through it. Passing the capability and rebinding it by name
+-- (`r <- w!(stdout); let (stdout, _) = r;`) runs today: `corpus/axes/data-effects.bc`.
+--
+-- Spelling: today's surface.
+--
+-- Today: the checker rejects the elaborated rebinding: `let (x, y) = V` needs a `*` type, but
+-- `V` is the capability alone, `ref output`.
+--
+-- Once it lands: as `corpus/axes/data-effects.bc`. Golden, on the input `stressed`: the lines
+-- `stressed` and `desserts`, then `i32[8]`, `live 0`.
+
+type List = mu X. 1 + (ref i32 * ref X)
+shape Node = node (leaf i32) (leaf List)
+
+def nil : List = roll inl ()
+fn cons(x: i32, t: List) -> List = roll inr alloc_s[Node] (x, t)
+
+type Run = U (Out -o F (Out * 1))
+
+fn run_alg(r: 1 + ref i32 * Run) -> Run =
+  match r {
+    inl _ -> { o -> (o, ()) }
+  | inr (c, k) -> let x = free(c); { o -> let (o, _) = putb(o, x); k!(o) }
+  }
+def run_list : !(List => Run) = fold_own[1 + ref i32 * ref X, Run] run_alg
+
+main -> i32 =
+  let mut l = nil;
+  let mut n = 0;
+  for b in bytes stdin { putb(&mut stdout, b); l = cons(b, l); n = n + 1 };
+  putb(&mut stdout, 10);
+  let w = run_list(l);
+  w!(&mut stdout);
+  putb(&mut stdout, 10);
+  n
+-- now: 42:11: `let (x, y) = V` needs a `*` type, but `V : ref output`

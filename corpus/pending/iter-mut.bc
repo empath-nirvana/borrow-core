@@ -1,0 +1,45 @@
+-- pending: #57
+-- `IterMut<'a>`: a `for` over the elements of a borrowed array, each one lent `mut`, updating
+-- them in place.
+--
+-- Axes: codata × effects × scope. The iterator is codata whose state holds `mut` borrows of the
+-- remaining elements (scope); each observation hands one out.
+--
+-- Blocked by: the kernel. An array borrowed `mut` is a borrow of the cell holding its handle,
+-- mutated through `withswap`, which owns the whole array for one callback (SPEC §9); there is
+-- no family of leaf `mut` borrows `[Mut 'c A]` to hand out one at a time (SPEC §9 Open: "mutable
+-- families `[Mut 'c A]` (a leaf `Mut` view, `iter_mut`)", semantically each leaf framed by its
+-- own 6.64/6.65 frame, not built), and no `iter`/`iter_mut` over a family (SPEC §9 Open, #57).
+-- The `imm` counterpart is expressible today: `corpus/axes/codata-coeffects.bc` iterates a
+-- family of leaf views, and `corpus/axes/scope-boxed-iter.bc` carries such an iterator across a
+-- scope. Also not provided, in the surface: `for` over a finite source (stage 9 of
+-- `docs/typed-elaboration.md`), and `fn` with a lifetime parameter.
+--
+-- Spelling (a hypothesis): Rust's `iter_mut`, with `modify` for the write through a `mut`
+-- borrow (`*x = …` through a `mut` borrow is not provided either, decision 38).
+--
+-- Today: there is no `iter_mut`. The checker reports the `modify` first: the loop variable's
+-- type is not determined, and is taken as `1`.
+--
+-- Once it lands: the array [1, 2, 3, 4] becomes [10, 20, 30, 40], and `main` returns its sum.
+-- Golden: `i32[100]`, `live 0`.
+
+fn tab(i: i32) -> i32 = i + 1
+
+-- The element at `i` added to `acc`, read by taking it out of its slot and putting it back.
+fn add_at(a: array i32, i: i32, acc: i32) -> array i32 * i32 =
+  let (a, o) = array_replace[i32] (a, i, 0);
+  match o {
+    inl x -> let (a, _) = array_replace[i32] (a, i, x); (a, acc + x)
+  | inr _ -> (a, acc)
+  }
+
+main -> i32 =
+  let mut a = array_new[i32] (4, tab);
+  for x in iter_mut(&mut a) { modify x { v -> v * 10 } };
+  let (a, v) = add_at(a, 0, 0);
+  let (a, v) = add_at(a, 1, v);
+  let (a, v) = add_at(a, 2, v);
+  let (a, v) = add_at(a, 3, v);
+  v
+-- now: 39:38: this borrow block's place has type `1`: `borrow imm`/`borrow mut` take a cell `ref A` (a pair of cells for a family), `modify` a `mut` borrow

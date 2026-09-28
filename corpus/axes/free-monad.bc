@@ -1,0 +1,45 @@
+-- Axes: effects × data (the strict account's §3: "a free monad is data; handlers are folds").
+-- A program of `write` operations is built as a value, then handled twice: once by a fold that
+-- performs the writes, once by a fold that counts them.
+--
+-- `Prog` is the free model of the signature `{write : i32 ⇝ 1}` over an `i32` result:
+-- `mu X. i32 + (i32 * X)`, `done(n)` or `write(b, k)`. `greet(7)` is a program that writes `h`,
+-- `i` and a newline, then returns 7; building it performs nothing. A handler is a fold of it
+-- (`fold_own`, the unique algebra map): `run_out` interprets `write` by `putb` on the output
+-- capability, and `count` interprets it as `+ 1`. `Prog` holds no cell, so it is persistent and
+-- `p` is used twice with no copy written (SPEC §10). The operation has a finite arity; one with
+-- an input (`read`, whose continuation is a function) needs `X` under `U`, which is
+-- `corpus/pending/fold-under-u.bc`.
+--
+-- Answer: the line `hi`, and (i32[7], i32[3]): the program's result, and its three writes. A
+-- handler that ran the continuation before the operation writes the bytes in reverse; one that
+-- dropped the result gives 0 for the first component.
+
+type Prog = mu X. i32 + (i32 * X)
+
+fn done(n: i32) -> Prog = roll inl n
+fn write(b: i32, k: Prog) -> Prog = roll inr (b, k)
+
+fn greet(n: i32) -> Prog = write(104, write(105, write(10, done(n))))
+
+-- The effectful handler: a program becomes a computation on the output capability.
+type Run = U (Out -o F (Out * i32))
+
+fn run_alg(r: i32 + i32 * Run) -> Run =
+  match r {
+    inl n -> { o -> (o, n) }
+  | inr (b, k) -> { o -> let (o, _) = putb(o, b); k!(o) }
+  }
+def run_out : !(Prog => Run) = fold_own[i32 + i32 * X, Run] run_alg
+
+-- The pure handler: the number of writes.
+fn count_alg(r: i32 + i32 * i32) -> i32 = match r { inl _ -> 0 | inr (_, k) -> k + 1 }
+def count : !(Prog => i32) = fold_own[i32 + i32 * X, i32] count_alg
+
+main -> i32 * i32 =
+  let p = greet(7);
+  let w = count(p);
+  let h = run_out(p);
+  r <- h!(stdout);
+  let (stdout, n) = r;
+  (n, w)
