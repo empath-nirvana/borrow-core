@@ -6,19 +6,34 @@ Marshall, Li and Ahmed, *From Linearity to Borrowing* (PACMPL 9:OOPSLA2:415, 202
 bolo-formalization commit `1658da9`), under a written specification, [`SPEC.md`](SPEC.md).
 
 ```
-main -> i32 * i32 =
-  let ra = alloc(9);
-  let rb = alloc(500);
-  borrow mut (ra, rb) { (ma, mb) ->
-    modify ma { x -> let y = modify mb { y -> (x, y) }; y }
+fn is_space(b: i32) -> bool = b == 32 || b == 10 || b == 9
+
+fn count(c: In) -> In * (i32 * (i32 * i32)) =
+  let mut lines = 0;
+  let mut words = 0;
+  let mut chars = 0;
+  let mut in_word = false;
+  for b in bytes(&mut c) {
+    chars = chars + 1;
+    if b == 10 { lines = lines + 1 };
+    if is_space(b) { in_word = false }
+    else { if not(in_word) { words = words + 1 }; in_word = true }
   };
-  (free(ra), free(rb))
+  (c, (lines, (words, chars)))
+
+main -> i32 * (i32 * i32) =
+  let (lines, (words, chars)) = count(&mut stdin);
+  put_dec(&mut stdout, lines); putb(&mut stdout, 32);
+  put_dec(&mut stdout, words); putb(&mut stdout, 32);
+  put_dec(&mut stdout, chars); putb(&mut stdout, 10);
+  (lines, (words, chars))
 ```
 
-That program swaps two heap cells through a family borrow; it is `corpus/surface/family-swap.bc`.
-The surface syntax elaborates, by typed elaboration, into a call-by-push-value core that the
-checker proves well typed. `bcc desugar` prints the core. The surface is still growing
-(issue #54, [`docs/typed-elaboration.md`](docs/typed-elaboration.md)).
+That is `wc`, from `corpus/surface/io-wc.bc`. The program reads stdin through a borrowed
+capability, so `count`'s type shows that it does I/O. It compiles to WebAssembly that allocates
+twice and makes no indirect calls. The surface syntax elaborates into a call-by-push-value core,
+and the checker proves that core well typed; `bcc desugar` prints it. The surface is still
+growing (issue #54, [`docs/typed-elaboration.md`](docs/typed-elaboration.md)).
 
 ## What is proved
 
@@ -56,8 +71,10 @@ records why it was added:
 - divergence as an inferred effect.
 
 The compiler lowers checked programs to WebAssembly through a closure IR and a flat IR. Values
-are unboxed by type, and closures are defunctionalized into sized stack values. The allocations
-and indirect calls of every corpus program are counted, and the gate fails if a count rises.
+are unboxed by type, and closures are defunctionalized into sized stack values. Fixed points
+are compiled natively, and loops and owned folds run in constant stack (owned folds by pointer
+reversal). The allocations and indirect calls of every corpus program are counted, and the gate
+fails if a count rises.
 
 ## Layout
 
