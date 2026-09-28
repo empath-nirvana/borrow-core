@@ -722,13 +722,11 @@ def loopBody (cx : LoopCx) : Nat → TCx → Comp → SM Comp
 /-! ### Programs -/
 
 /-- The capabilities a program uses ambiently: none if it declares an extern. A `main` that loops
-but mentions no capability is driven by the runtime with `stdout`. -/
-def ambientCaps (p : Program) (loops : Bool) : List String :=
+but mentions no capability has none: the runtime drives its loop without them (SPEC §14). -/
+def ambientCaps (p : Program) : List String :=
   if p.decls.any (fun | .extern .. => true | _ => false) then [] else
   match p.decls.findSome? (fun | .main _ _ M => some M | _ => none) with
-  | some M =>
-    let cs := capNames.filter (mentionsC · M)
-    if cs.isEmpty && loops then ["stdout"] else cs
+  | some M => capNames.filter (mentionsC · M)
   | none => []
 
 /-- A capability's type. -/
@@ -1072,7 +1070,7 @@ def elaborateS (p : Program) : SM (Program × Nat) := do
   -- `main` may use the capabilities ambiently, the divergence library when the program names
   -- its functions. They are emitted below only when the program uses them. The capabilities are
   -- in scope for typing `main`, which may use them ambiently.
-  let mayIO := !(ambientCaps p false).isEmpty
+  let mayIO := !(ambientCaps p).isEmpty
   let mayDiv := usesName "div_fuel" p || usesName "div_bind" p
   let ioAll ← if mayIO then libOf "lib/io.bc" ioLibrary else pure []
   let divAll ← if mayDiv then libOf "lib/div.bc" divLibrary else pure []
@@ -1088,7 +1086,7 @@ def elaborateS (p : Program) : SM (Program × Nat) := do
   let mainLoops := match decls.findSome? (fun | .main _ C M => some (C, M) | _ => none) with
     | some (C@(.ret _ B), M) => !C.returnsLoop && (loopsAt mc (mc.elabV B) M).isSome
     | _ => false
-  let cs := ambientCaps p mainLoops
+  let cs := ambientCaps p
   let needDiv := anyDiv || mainLoops || usesName "div_fuel" p || usesName "div_bind" p
   let ioLib ← if cs.isEmpty then pure [] else
     if mayIO then pure ioAll else libOf "lib/io.bc" ioLibrary

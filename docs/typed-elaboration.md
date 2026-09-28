@@ -832,8 +832,8 @@ so far, so a div function has its loop type and a call of it in direct style bin
   determine (`corpus/sugar/inject.bc`).
 
 Lowering is still the identity, so `Backend/Driver.lean` keeps calling `Sugar.elaborate`, which
-now includes all of this. What remains of §4's table after stage 2 is specialization (stage 3)
-and the injected `stdout` (stage 4). One limit stays: a call lends at most one capability, and a
+now includes all of this. What remained of §4's table after stage 2, specialization and the
+injected `stdout`, is stages 3 and 4. One limit stays: a call lends at most one capability, and a
 div call's residual is matched to its `&c`.
 
 **Stage 3, as built.** Specialization runs on types (`specDecl`, `specV`, `specC` in
@@ -844,6 +844,14 @@ type (`specTy`). The copy is made on first use and cached by (function, paramete
 syntactic `calls`, `renameCalls`, `fnShape`, `specParamN`, `specParam`, `copyFor` and
 `Decl.calls` are deleted. Pairs: `corpus/sugar/hof-local.bc`, `hof-closure.bc`,
 `hof-returned.bc`.
+
+**Stage 4, as built.** `ioMainOf` (`Frontend/Check/Externs.lean`) takes a `main` with no externs
+whose type is `F (U (loop A B))` as a program run by `run_io` with no capabilities, and
+`loopWrapperSrc` binds the loop's result directly when there are none. `ambientCaps` no longer
+gives such a `main` `stdout`. The backend needed no change: `convertMain` already handles zero
+capabilities. `IORun.loop_every_run` is stated at the checked wrapper and covers it unchanged.
+Pair: `corpus/sugar/loop-main.bc`, whose core form on `main` before this stage ran once and
+printed `<fun>`.
 
 Stages 1–4 retire the #54 shortcuts and change no surface syntax, except that `&c` stays until
 stage 6. Stages 5–9 are the rest of step 2. After stage 9, step 3 of #54 (rewriting 6–10 corpus

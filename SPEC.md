@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 0.13 · 2026-09-28
+Version 0.14 · 2026-09-28
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -773,7 +773,9 @@ WASI-only feature is part of the semantics (decision 25).
     main : F (U (Loop (Caps ⊗ A) (Caps ⊗ B)))
 
 The runtime drives it: it observes `next` until the loop finishes with `(caps, a)`, then takes
-the capabilities back and prints `a`; it never closes it. Nothing in the kernel changes (no
+the capabilities back and prints `a`; it never closes it. A `main` with no externs may return a
+loop with no capabilities, `main : F (U (Loop A B))`, the instance `Caps = 1` written without
+them: the runtime drives it the same way and prints `a` (`corpus/sugar/loop-main.bc`). Nothing in the kernel changes (no
 rule, no relation clause, no machine step); what is new is this obligation of the runtime and
 its theorem. A driven program is covered one prefix at a time: for every `n`, `run_io` followed
 by `driveE n` is a closed program, and every run of it from the empty memory, under every
@@ -1105,8 +1107,8 @@ so one pass in declaration order infers this; there is no fixed point.
 - `div def f : A = V` asserts that `f` is div. It is never needed, since inference supplies it;
   it is allowed for documentation, and makes a function div that does not loop yet.
 - `main` has implicit div: it is elaborated as a loop exactly when its body loops, and its
-  written type is `F A` either way. A `main` that loops but uses no capability is given
-  `stdout` ambiently, so the runtime can drive it.
+  written type is `F A` either way. A `main` that loops but uses no capability is given none:
+  the runtime drives a loop with no capabilities (§11).
 
 A function whose written type is already a loop is core and is not elaborated; so is a `main`
 written at `F(U(Loop …))`. A call checked against its own loop type is the loop as a value, not
@@ -1233,6 +1235,12 @@ typed world, the model and the end-to-end theorems in `Core/Stdio.lean`, the che
 ---
 
 ## Changelog
+
+- **0.14** (2026-09-28) — §11, §14: a `main` with no externs may return a loop, which the runtime
+  drives with no capabilities (`run_io`'s loop wrapper at `Caps = 1`, `ioMainOf`), so a `main`
+  that loops but uses no capability is no longer given `stdout` (#54, stage 4). The theorems
+  (`IORun.loop_every_run`, `externs_loop_every_run`) are stated at the checked `run_io` and cover
+  it unchanged; no kernel, rule or checker change.
 
 - **0.13** (2026-09-28) — §14's specialization reads the callback's type from inference
   (#54, stage 3): any callback whose type is known, including locals, returned callbacks and

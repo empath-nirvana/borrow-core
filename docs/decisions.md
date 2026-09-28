@@ -179,8 +179,9 @@ Each entry: the decision, and why. Newest last.
     - *Withdrawn* (typed elaboration, stage 2): the residual was recognized by the names `In`,
       `Out`, `ref input` and `ref output`. It is now read off the result type: the components
       with no destructor (SPEC §12), paired with `()`, or `1` (SPEC §14).
-    - A `main` that loops but uses no capability is given `stdout` ambiently, so the runtime can
-      drive it.
+    - *Withdrawn* (stage 4): a `main` that looped but used no capability was given `stdout`
+      ambiently, so the runtime could drive it. The runtime now drives a loop with no
+      capabilities (SPEC §11).
     - The library names `div_bind` and `div_fuel` (`lib/div.bc`), with the fuel an `i32`.
     - *Withdrawn* (stage 2): a direct-style div call was only the head `return (f V)` of a bind
       or a terminal. It is now any application whose type is a loop where that loop is not the
