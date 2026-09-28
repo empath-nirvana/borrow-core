@@ -271,7 +271,7 @@ def hostVals (o : HostOp) (ls : List Nat) : LM (List Stmt × List Exp) := do
       | _ => zero
     pure ([.ite trapC [.set t₀ (.c64 1), .set t₁ (.c64 0)]
             [.set t₀ (.c64 0), .set t₁ (word w (.op o args))]], [.loc t₀, .loc t₁])
-  | .trapping _, _ => throw "flat IR: a partial operation that is not a division"
+  | .trapping _, _ => throw "flat IR: a trapping operation that is not a division"
 
 /-- The contents' type of a `loc` type. -/
 def locElem (n : Nat) : LM Nat := do
