@@ -5,7 +5,7 @@
 -- which the calls through the parameter are delay binds, so the copy is div, and so is `main`.
 -- `bcc desugar` shows the copy, `sum3__0`.
 --
--- `main` loops and uses no capability, so the runtime drives it with `stdout` (SPEC §14).
+-- `main` loops and uses no capability; the runtime drives its loop with none (SPEC §11, §14).
 --
 -- Answer: `(i32[12], i32[135])`: 2 + 4 + 6, and 8 + 16 + 111 steps from 6, 7 and 27. A copy
 -- that dropped a call, or ran one twice, changes the second sum.

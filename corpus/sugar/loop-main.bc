@@ -1,0 +1,14 @@
+-- A `main` that loops and uses no capability (SPEC §11, §14). `main` calls the div function
+-- `once` in direct style, so it is div: it returns a loop, which the runtime drives. It is given
+-- no capability: the runtime drives a loop with none. `loop-main.core.bc` is the program written
+-- by hand in core.
+-- Answer: 5.
+
+-- A loop that finishes at its first observation, with `n + 1`.
+def once : i32 => U (loop i32 1) =
+  thunkv fun (n : i32) ->
+    return (thunkv nu_in < return (inl ((unbang host[add32]) (n, i32[1]))), return () >)
+
+main : F i32 =
+  k <- return (once i32[4]);
+  return k

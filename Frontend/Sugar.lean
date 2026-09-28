@@ -246,9 +246,6 @@ def _root_.Frontend.CTy.returnsLoop : CTy → Bool
   | .ret _ (.thunk _ (.loop ..)) | .ret _ (.thunk _ (.delay ..)) => true
   | _ => false
 
-/-- The div functions made so far, with their types. -/
-abbrev Divs := List (String × VTy)
-
 /-- The depth bound for the traversals below. -/
 def divFuel : Nat := 1 <<< 16
 
@@ -725,13 +722,11 @@ def loopBody (cx : LoopCx) : Nat → TCx → Comp → SM Comp
 /-! ### Programs -/
 
 /-- The capabilities a program uses ambiently: none if it declares an extern. A `main` that loops
-but mentions no capability is driven by the runtime with `stdout`. -/
-def ambientCaps (p : Program) (loops : Bool) : List String :=
+but mentions no capability has none: the runtime drives its loop without them (SPEC §14). -/
+def ambientCaps (p : Program) : List String :=
   if p.decls.any (fun | .extern .. => true | _ => false) then [] else
   match p.decls.findSome? (fun | .main _ _ M => some M | _ => none) with
-  | some M =>
-    let cs := capNames.filter (mentionsC · M)
-    if cs.isEmpty && loops then ["stdout"] else cs
+  | some M => capNames.filter (mentionsC · M)
   | none => []
 
 /-- A capability's type. -/
@@ -814,111 +809,30 @@ def elabDef (scope : List Decl) : Decl → SM (Decl × Option (String × VTy))
       return (.def_ sp n ps A' V' mk, some (n.name, A'))
   | d => pure (d, none)
 
-/-! ### Specialization at a callback's type
+/-! ### Specialization at a callback's computation type
 
-A higher-order function takes a callback at a function type, `A => B` or `!(A => B)`. Passed a
-div function there, `A => U (loop B R)`, it is specialized: the elaborator makes a copy of it
-with that parameter at the callback's type and infers the copy's divergence, so calls through
-the parameter become direct-style calls of a div function, and the copy is div. There is one
-copy per function and parameter type. A total callback uses the function as written, which
-stays total. So one definition serves both kinds of callback, and the core never has a type
-that ranges over them.  `[spec §14]` -/
+A higher-order function takes a callback at a function type, `A => B` or `!(A => B)`. Given a
+callback whose type is a div function's, `A => U (loop B R)`, it is specialized: the elaborator
+makes a copy of it with that parameter at the callback's type and infers the copy's divergence,
+so calls through the parameter become calls of a div function in direct style, and the copy is
+div. There is one copy per function and instantiation. A total callback uses the function as
+written, which stays total. So one definition serves both kinds of callback, and the core never
+has a type that ranges over them.
 
-mutual
-/-- The calls `h V` of a named function in a value. -/
-def _root_.Frontend.Val.calls : Val → List (String × Val)
-  | .app _ (.var _ h) V => (h, V) :: V.calls
-  | .pair _ V W | .app _ V W => V.calls ++ W.calls
-  | .inl _ V | .inr _ V | .unbang _ V | .boxed _ _ V | .unbox _ V | .sub _ V _ | .roll _ V
-  | .unroll _ V | .inst _ V _ | .ascribe _ V _ | .shorten _ _ _ _ V => V.calls
-  | .thunk _ M | .thunkv _ M | .bangThunk _ M | .bangThunkv _ M | .run _ M => M.calls
-  | _ => []
+The callback's type is the type inference gives the argument (`TCx`), so any callback whose type
+is known is covered: a named function, a local variable holding one, a callback an earlier call
+returned, a component of a tuple held in a variable. A closure `thunkv fun (x : A) -> M` passed
+at a callback type is elaborated first: when its body loops, it is elaborated as a div function
+body in place, and its type is that of a div function. Only parameter types are instantiated
+(decision 36): a callback's effect in a stored or returned type is the one its type says.
+`[spec §14]` -/
 
-/-- The calls `h V` of a named function in a computation. -/
-def _root_.Frontend.Comp.calls : Comp → List (String × Val)
-  | .ret _ V | .absurd _ V => V.calls
-  | .bind _ _ _ M N _ | .with_ _ M N => M.calls ++ N.calls
-  | .lam _ _ _ M | .app _ M _ | .proj _ _ M | .lamL _ _ _ M | .inst _ M _ | .nuIn _ M
-  | .nuOut _ M | .ascribe _ M _ => M.calls
-  | .letUnit _ V M | .letPair _ _ _ V M => V.calls ++ M.calls
-  | .case _ V _ M _ N => V.calls ++ M.calls ++ N.calls
-  | .for_ _ _ V M N => V.calls ++ M.calls ++ N.calls
-  | .force .. | .top _ => []
-end
-
-mutual
-/-- Rename the callee of each call `h V` that `f` names a copy for. -/
-def _root_.Frontend.Val.renameCalls (f : String → Val → Option String) : Val → Val
-  | .app sp (.var sp' h) V =>
-    let V' := V.renameCalls f
-    .app sp (.var sp' ((f h V').getD h)) V'
-  | .pair sp V W => .pair sp (V.renameCalls f) (W.renameCalls f)
-  | .app sp V W => .app sp (V.renameCalls f) (W.renameCalls f)
-  | .inl sp V => .inl sp (V.renameCalls f)
-  | .inr sp V => .inr sp (V.renameCalls f)
-  | .unbang sp V => .unbang sp (V.renameCalls f)
-  | .boxed sp l V => .boxed sp l (V.renameCalls f)
-  | .unbox sp V => .unbox sp (V.renameCalls f)
-  | .sub sp V l => .sub sp (V.renameCalls f) l
-  | .roll sp V => .roll sp (V.renameCalls f)
-  | .unroll sp V => .unroll sp (V.renameCalls f)
-  | .inst sp V l => .inst sp (V.renameCalls f) l
-  | .ascribe sp V A => .ascribe sp (V.renameCalls f) A
-  | .shorten sp m σ l V => .shorten sp m σ l (V.renameCalls f)
-  | .thunk sp M => .thunk sp (M.renameCalls f)
-  | .thunkv sp M => .thunkv sp (M.renameCalls f)
-  | .bangThunk sp M => .bangThunk sp (M.renameCalls f)
-  | .bangThunkv sp M => .bangThunkv sp (M.renameCalls f)
-  | .run sp M => .run sp (M.renameCalls f)
-  | V => V
-
-def _root_.Frontend.Comp.renameCalls (f : String → Val → Option String) : Comp → Comp
-  | .ret sp V => .ret sp (V.renameCalls f)
-  | .absurd sp V => .absurd sp (V.renameCalls f)
-  | .bind sp x A M N lin => .bind sp x A (M.renameCalls f) (N.renameCalls f) lin
-  | .lam sp x A M => .lam sp x A (M.renameCalls f)
-  | .app sp M x => .app sp (M.renameCalls f) x
-  | .with_ sp M N => .with_ sp (M.renameCalls f) (N.renameCalls f)
-  | .proj sp i M => .proj sp i (M.renameCalls f)
-  | .letUnit sp V M => .letUnit sp (V.renameCalls f) (M.renameCalls f)
-  | .letPair sp x y V M => .letPair sp x y (V.renameCalls f) (M.renameCalls f)
-  | .case sp V x M y N => .case sp (V.renameCalls f) x (M.renameCalls f) y (N.renameCalls f)
-  | .lamL sp x b M => .lamL sp x b (M.renameCalls f)
-  | .inst sp M a => .inst sp (M.renameCalls f) a
-  | .nuIn sp M => .nuIn sp (M.renameCalls f)
-  | .nuOut sp M => .nuOut sp (M.renameCalls f)
-  | .ascribe sp M C => .ascribe sp (M.renameCalls f) C
-  | .for_ sp x V M N => .for_ sp x (V.renameCalls f) (M.renameCalls f) (N.renameCalls f)
-  | M => M
-end
-
-/-- `A => B` (`false`) or `!(A => B)` (`true`). -/
-def fnShape : VTy → Option Bool
-  | .lolli .. => some false
-  | .bang _ (.lolli ..) => some true
-  | _ => none
-
-/-- The parameter type at which a call passes `V` to a parameter of type `P`: where a component
-of `V` names a div function and `P` has a function type of the same shape there that is not
-div, the div function's type. `none` when the call needs no copy. The recursion is bounded by
-the depth `n` of the tuple, so the checker's own evaluation in the kernel can run it. -/
-def specParamN (ds : Divs) : Nat → VTy → Val → Option VTy
-  | n + 1, .tensor sp P Q, .pair _ V W =>
-    match specParamN ds n P V, specParamN ds n Q W with
-    | none, none => none
-    | a, b => some (.tensor sp (a.getD P) (b.getD Q))
-  | _, P, .var _ g =>
-    match fnShape P, loopSig P, ds.lookup g with
-    | some b, none, some T => if fnShape T == some b then some T else none
-    | _, _, _ => none
-  | _, _, _ => none
-
-def specParam (ds : Divs) (P : VTy) (V : Val) : Option VTy := specParamN ds 64 P V
-
-/-- A higher-order function as written: `def h : P => Q = thunkv fun (x : P) -> M`. -/
+/-- A higher-order function as written: `def h : P => Q = thunkv fun (x : P) -> M`, or its
+persistent form `def h : !(P => Q) = !thunkv fun (x : P) -> M`. -/
 structure Hof where
   sp : Span
   name : Ident
+  bang : Bool
   P : VTy
   Q : VTy
   x : Ident
@@ -927,60 +841,203 @@ structure Hof where
 /-- The latest source `def` named `h`, when it is a function without type parameters. -/
 def hofOf (srcs : List Decl) (h : String) : Option Hof :=
   match srcs.find? (fun | .def_ _ n _ _ _ _ => n.name == h | _ => false) with
-  | some (.def_ sp n [] (.lolli _ P Q) (.thunkv _ (.lam _ x _ M)) _) => some ⟨sp, n, P, Q, x, M⟩
+  | some (.def_ sp n [] (.lolli _ P Q) (.thunkv _ (.lam _ x _ M)) _) =>
+    some ⟨sp, n, false, P, Q, x, M⟩
+  | some (.def_ sp n [] (.bang _ (.lolli _ P Q)) (.bangThunkv _ (.lam _ x _ M)) _) =>
+    some ⟨sp, n, true, P, Q, x, M⟩
   | _ => none
 
-/-- The elaboration so far: the source declarations in scope, newest first; the elaborated
-ones, in order; the div functions; whether any body became a loop; and the copies made, by
-function and parameter type. -/
+/-- A function of a callback's type at a function type `P` (`A => B`, or `!(A => B)`) that is
+total: its argument type, its result, and whether it is persistent. -/
+def totalFn : CVTy → Option (CVTy × CVTy × Bool)
+  | .thunk (.arr A (.ret B)) => if (loopOf B).isSome then none else some (A, B, false)
+  | .bang (.thunk (.arr A (.ret B))) => if (loopOf B).isSome then none else some (A, B, true)
+  | _ => none
+
+/-- The parameter type at which a function with parameter type `P` is called with an argument of
+type `T`: where `P` has a total function type and `T` a div function's type of the same argument,
+result and shape, `T`. `none` when the call needs no copy. -/
+def specTy : CVTy → CVTy → Option CVTy
+  | .tensor P Q, .tensor S T =>
+    match specTy P S, specTy Q T with
+    | none, none => none
+    | a, b => some (.tensor (a.getD P) (b.getD Q))
+  | P, T => do
+    let (A, B, bang) ← totalFn P
+    let (B', _) ← loopFnOf T
+    let A' ← match T with
+      | .thunk (.arr A' _) => if bang then none else some A'
+      | .bang (.thunk (.arr A' _)) => if bang then some A' else none
+      | _ => none
+    if A' = A ∧ B' = B then some T else none
+
+/-- The elaboration so far: the libraries (in scope for typing); the source declarations in
+scope, newest first; the elaborated ones, in order; whether any body became a loop; and the
+copies made, by function and parameter type. -/
 structure DivSt where
-  /-- The libraries, in scope for typing. -/
   lib : List Decl := []
   srcs : List Decl := []
   out : List Decl := []
-  ds : Divs := []
   any : Bool := false
   copies : List ((String × VTy) × String) := []
 
-def _root_.Frontend.Decl.calls : Decl → List (String × Val)
-  | .def_ _ _ _ _ V _ => V.calls
-  | .main _ _ M => M.calls
-  | _ => []
+/-- Elaboration with the state of the declarations. -/
+abbrev DM := StateT DivSt SM
 
-/-- The copy of `h` a call `h V` names, if one was made. -/
-def DivSt.copyFor (st : DivSt) (h : String) (V : Val) : Option String := do
-  let hof ← hofOf st.srcs h
-  let P' ← specParam st.ds hof.P V
-  st.copies.lookup (h, P'.strip)
+/-- The function a call applies, by name, when it is a higher-order function as written. -/
+def hofCallee : Val → Option String
+  | .var _ h | .unbang _ (.var _ h) => some h
+  | _ => none
 
+/-- A callee renamed. -/
+def renameCallee (name : String) : Val → Val
+  | .var sp _ => .var sp name
+  | .unbang sp (.var sp' _) => .unbang sp (.var sp' name)
+  | f => f
+
+/-- A closure passed at a callback type, elaborated when its body loops: the closure, and its
+type when known. `P` is the parameter type it is passed at. -/
+def closureAt (c : TCx) (P : CVTy) (V : Val) : DM (Val × Option CVTy) := do
+  let some (_, B, bang) := totalFn P | return (V, c.tyV V)
+  match V, bang with
+  | .thunkv sp (.lam lsp x A M), false | .bangThunkv sp (.lam lsp x A M), true =>
+    let Ac := c.elabV A
+    let c' := c.push x.name Ac
+    if (loopsAt c' (some B) M).isNone then return (V, c.tyV V)
+    let cx ← (loopCxOf lsp B M : Except Error LoopCx)
+    let M' ← (loopBody cx divFuel c' M : SM Comp)
+    modify fun st => { st with any := true }
+    let some Ac := Ac | return (V, none)
+    let F : CVTy := .thunk (.arr Ac (.ret (.thunk (BoCa.Fig16.LogRel.Core.CTy.loop B cx.R))))
+    let lam := Comp.lam lsp x A M'
+    return (if bang then (.bangThunkv sp lam, some (.bang F)) else (.thunkv sp lam, some F))
+  | V, _ => return (V, c.tyV V)
+
+/-- The argument of a call at parameter type `P`, with its closures at callback types elaborated,
+and the argument's type. -/
+def argAt (c : TCx) : CVTy → Val → DM (Val × Option CVTy)
+  | .tensor P Q, .pair sp V W => do
+    let (V', a) ← argAt c P V
+    let (W', b) ← argAt c Q W
+    pure (.pair sp V' W', do pure (.tensor (← a) (← b)))
+  | P, V => closureAt c P V
+
+mutual
 /-- Elaborate one declaration: first the copies its calls need (each elaborated the same way),
 then its own divergence, with its calls renamed to the copies.  `[spec §14]` -/
 def elabDecl : Nat → DivSt → Decl → SM DivSt
   | 0, _, d => throw ⟨(match d with | .def_ sp .. | .main sp .. => sp | _ => Span.none),
       "specialization at callback types does not terminate"⟩
   | fuel + 1, st, d => do
-    let st ← d.calls.foldlM (init := st) fun st (h, V) => do
-      let some hof := hofOf st.srcs h | pure st
-      let some P' := specParam st.ds hof.P V | pure st
-      if (st.copies.lookup (h, P'.strip)).isSome then return st
-      let name := s!"{h}__{st.copies.length}"
-      let copy := Decl.def_ hof.sp ⟨name, hof.name.span⟩ [] (.lolli hof.P.span P' hof.Q)
-        (.thunkv hof.sp (.lam hof.sp hof.x P' hof.M)) .none
-      elabDecl fuel { st with copies := ((h, P'.strip), name) :: st.copies } copy
-    let d := match d with
-      | .def_ sp n ps A V mk => Decl.def_ sp n ps A (V.renameCalls st.copyFor) mk
-      | .main sp C M => .main sp C (M.renameCalls st.copyFor)
-      | d => d
+    let (d, st) ← (specDecl fuel d).run st
     let (d', e) ← elabDef (st.lib ++ st.out) d
     let elaborated := e.isSome && decide (d' ≠ d)
-    pure { st with srcs := d :: st.srcs, out := st.out ++ [d'], ds := e.toList ++ st.ds,
-                   any := st.any || elaborated }
+    pure { st with srcs := d :: st.srcs, out := st.out ++ [d'], any := st.any || elaborated }
 
-/-- The declarations with divergence inferred, in order (copies before their first use), the
-div functions, and whether any body was elaborated as a loop. -/
-def elabDivs (lib decls : List Decl) : SM (List Decl × Divs × Bool) := do
-  let st ← decls.foldlM (init := ({ lib } : DivSt)) (elabDecl (4 * decls.length + 4))
-  pure (st.out, st.ds, st.any)
+/-- A declaration with each call of a higher-order function at a div callback renamed to a copy
+at the callback's type, made on first use. -/
+def specDecl : Nat → Decl → DM Decl
+  | 0, d => pure d
+  | n + 1, .def_ sp nm ps A V mk => do
+    let st ← get
+    let c := TCx.ofScope (st.lib ++ st.out) false
+    pure (.def_ sp nm ps A (← specV n c V) mk)
+  | n + 1, .main sp C M => do
+    let st ← get
+    let caps := capNames.map fun x => Decl.extern Span.none ⟨x, Span.none⟩ (capTy Span.none x)
+    let c := TCx.ofScope (st.lib ++ st.out ++ caps) true
+    pure (.main sp C (← specC n c M))
+  | _, d => pure d
+
+/-- The copy of `h` with parameter type `P'`, made on first use. -/
+def copyOf : Nat → Hof → VTy → DM String
+  | 0, hof, _ => pure hof.name.name
+  | n + 1, hof, P' => do
+    let st ← get
+    if let some name := st.copies.lookup (hof.name.name, P'.strip) then return name
+    let name := s!"{hof.name.name}__{st.copies.length}"
+    let F := VTy.lolli hof.P.span P' hof.Q
+    let lam := Comp.lam hof.sp hof.x P' hof.M
+    let copy := if hof.bang then Decl.def_ hof.sp ⟨name, hof.name.span⟩ [] (.bang hof.P.span F)
+        (.bangThunkv hof.sp lam) .none
+      else Decl.def_ hof.sp ⟨name, hof.name.span⟩ [] F (.thunkv hof.sp lam) .none
+    let st' ← (elabDecl n { st with copies := ((hof.name.name, P'.strip), name) :: st.copies }
+      copy : SM DivSt)
+    set st'
+    pure name
+
+/-- A value with its calls of higher-order functions specialized. -/
+def specV : Nat → TCx → Val → DM Val
+  | 0, _, V => pure V
+  | n + 1, c, V => match V with
+    | .app sp f W => do
+      let W ← specV n c W
+      let some h := hofCallee f | return .app sp (← specV n c f) W
+      let some hof := hofOf (← get).srcs h | return .app sp f W
+      let some P := c.elabV hof.P | return .app sp f W
+      let (W', T) ← argAt c P W
+      match T.bind (specTy P) with
+      | none => return .app sp f W'
+      | some P' =>
+        let P's ← (toSurface sp P' : Except Error VTy)
+        return .app sp (renameCallee (← copyOf n hof P's) f) W'
+    | .pair sp V W => do pure (.pair sp (← specV n c V) (← specV n c W))
+    | .inl sp V => do pure (.inl sp (← specV n c V))
+    | .inr sp V => do pure (.inr sp (← specV n c V))
+    | .unbang sp V => do pure (.unbang sp (← specV n c V))
+    | .boxed sp l V => do pure (.boxed sp l (← specV n c V))
+    | .unbox sp V => do pure (.unbox sp (← specV n c V))
+    | .sub sp V l => do pure (.sub sp (← specV n c V) l)
+    | .roll sp V => do pure (.roll sp (← specV n c V))
+    | .unroll sp V => do pure (.unroll sp (← specV n c V))
+    | .inst sp V l => do pure (.inst sp (← specV n c V) l)
+    | .ascribe sp V A => do pure (.ascribe sp (← specV n c V) A)
+    | .shorten sp m σ l V => do pure (.shorten sp m σ l (← specV n c V))
+    | .thunk sp M => do pure (.thunk sp (← specC n c.pushDead M))
+    | .thunkv sp M => do pure (.thunkv sp (← specC n c M))
+    | .bangThunk sp M => do pure (.bangThunk sp (← specC n c.pushDead M))
+    | .bangThunkv sp M => do pure (.bangThunkv sp (← specC n c M))
+    | .run sp M => do pure (.run sp (← specC n c M))
+    | V => pure V
+
+/-- A computation with its calls of higher-order functions specialized. -/
+def specC : Nat → TCx → Comp → DM Comp
+  | 0, _, M => pure M
+  | n + 1, c, M => match M with
+    | .ret sp V => do pure (.ret sp (← specV n c V))
+    | .absurd sp V => do pure (.absurd sp (← specV n c V))
+    | .bind sp x A M N lin => do
+      let t := bindTy c A M
+      pure (.bind sp x A (← specC n c M) (← specC n (c.push x.name t) N) lin)
+    | .lam sp x A M => do pure (.lam sp x A (← specC n (c.push x.name (c.elabV A)) M))
+    | .app sp M x => do pure (.app sp (← specC n c M) x)
+    | .with_ sp M N => do pure (.with_ sp (← specC n c.pushDead.pushDead M)
+        (← specC n c.pushDead.pushDead N))
+    | .proj sp i M => do pure (.proj sp i (← specC n c M))
+    | .letUnit sp V M => do pure (.letUnit sp (← specV n c V) (← specC n c M))
+    | .letPair sp x y V M => do
+      let (Ax, Ay) := pairTys c V
+      pure (.letPair sp x y (← specV n c V) (← specC n ((c.push x.name Ax).push y.name Ay) M))
+    | .case sp V x M y N => do
+      let (Ax, Ay) := sumTys c V
+      pure (.case sp (← specV n c V) x (← specC n (c.push x.name Ax) M) y
+        (← specC n (c.push y.name Ay) N))
+    | .lamL sp x b M => do pure (.lamL sp x b (← specC n c.pushDead M))
+    | .inst sp M a => do pure (.inst sp (← specC n c M) a)
+    | .nuIn sp M => do pure (.nuIn sp (← specC n c M))
+    | .nuOut sp M => do pure (.nuOut sp (← specC n c M))
+    | .ascribe sp M C => do pure (.ascribe sp (← specC n c M) C)
+    | .for_ sp x V M N => do
+      let el := (c.tyV V).bind iterOf |>.map (·.1)
+      pure (.for_ sp x (← specV n c V) (← specC n (c.push x.name el) M) (← specC n c N))
+    | M => pure M
+end
+
+/-- The declarations with divergence inferred, in order (copies before their first use), and
+whether any body was elaborated as a loop. -/
+def elabDivs (lib decls : List Decl) : SM (List Decl × Bool) := do
+  let st ← decls.foldlM (init := ({ lib } : DivSt)) (elabDecl divFuel)
+  pure (st.out, st.any)
 
 /-- A `main` that is not ambient, elaborated as a loop when its body loops. `c` is the typing
 context of `main`. -/
@@ -1013,7 +1070,7 @@ def elaborateS (p : Program) : SM (Program × Nat) := do
   -- `main` may use the capabilities ambiently, the divergence library when the program names
   -- its functions. They are emitted below only when the program uses them. The capabilities are
   -- in scope for typing `main`, which may use them ambiently.
-  let mayIO := !(ambientCaps p false).isEmpty
+  let mayIO := !(ambientCaps p).isEmpty
   let mayDiv := usesName "div_fuel" p || usesName "div_bind" p
   let ioAll ← if mayIO then libOf "lib/io.bc" ioLibrary else pure []
   let divAll ← if mayDiv then libOf "lib/div.bc" divLibrary else pure []
@@ -1023,13 +1080,13 @@ def elaborateS (p : Program) : SM (Program × Nat) := do
   -- Bindings whose type only their uses determine (an injection) are annotated first.
   let p := Elab.fillProgram typing capDecls p
   -- Divergence of the user's definitions, before the libraries (which do not loop) come in.
-  let (decls, _, anyDiv) ← elabDivs typing p.decls
+  let (decls, anyDiv) ← elabDivs typing p.decls
   let rest := decls.filter fun | .main .. => false | _ => true
   let mc := TCx.ofScope (typing ++ rest ++ capDecls) true
   let mainLoops := match decls.findSome? (fun | .main _ C M => some (C, M) | _ => none) with
     | some (C@(.ret _ B), M) => !C.returnsLoop && (loopsAt mc (mc.elabV B) M).isSome
     | _ => false
-  let cs := ambientCaps p mainLoops
+  let cs := ambientCaps p
   let needDiv := anyDiv || mainLoops || usesName "div_fuel" p || usesName "div_bind" p
   let ioLib ← if cs.isEmpty then pure [] else
     if mayIO then pure ioAll else libOf "lib/io.bc" ioLibrary

@@ -1,0 +1,60 @@
+-- `loop-main.bc` written by hand in core: `main` returns the loop of `once` bound to its
+-- continuation, with no capability; it finishes with the number, and closed early hands back
+-- `()`. The delay bind is copied from the divergence library (`lib/div.bc`).
+-- The bind's state: in the first loop, with the continuation; or in the continuation's loop.
+-- The continuation has two observations: go on with the first loop's result, or, when the
+-- whole is closed during the first loop, turn that loop's residual into the whole's.
+def div_bind_step[A, B, R1, R] :
+    !U ((U (loop A R1) * U ((A -o F (U (loop B R))) & (R1 -o F R))) + U (loop B R)
+        -o F (B + ((U (loop A R1) * U ((A -o F (U (loop B R))) & (R1 -o F R))) + U (loop B R)))
+         & F R) =
+  !thunkv fun (s : (U (loop A R1) * U ((A -o F (U (loop B R))) & (R1 -o F R))) + U (loop B R)) ->
+    < case s {
+        inl p ->
+          let (m, k) = p;
+          o <- (nu_out (force m)).1;
+          case o {
+            inl a ->
+              l <- (force k).1 a;
+              return (inr (inr l))
+          | inr m2 -> return (inr (inl (m2, k)))
+          }
+      | inr l ->
+          o <- (nu_out (force l)).1;
+          case o {
+            inl b -> return (inl b)
+          | inr l2 -> return (inr (inr l2))
+          }
+      },
+      case s {
+        inl p ->
+          let (m, k) = p;
+          r1 <- (nu_out (force m)).2;
+          (force k).2 r1
+      | inr l -> (nu_out (force l)).2
+      } >
+
+-- The delay bind: run the first loop, then the continuation on its result. If either never
+-- finishes, neither does the whole.
+def div_bind[A, B, R1, R] :
+    U (loop A R1) * U ((A -o F (U (loop B R))) & (R1 -o F R)) => U (loop B R) =
+  thunkv fun (p : U (loop A R1) * U ((A -o F (U (loop B R))) & (R1 -o F R))) ->
+    f <- return (unbang (unfold[loop B R,
+           (U (loop A R1) * U ((A -o F (U (loop B R))) & (R1 -o F R))) + U (loop B R)]
+           div_bind_step[A, B, R1, R]));
+    s0 : (U (loop A R1) * U ((A -o F (U (loop B R))) & (R1 -o F R))) + U (loop B R) <-
+      return (inl p);
+    return (thunkv nu_in < (nu_out (force f s0)).1, (nu_out (force f s0)).2 >)
+-- A loop that finishes at its first observation, with `n + 1`.
+def once : i32 => U (loop i32 1) =
+  thunkv fun (n : i32) ->
+    return (thunkv nu_in < return (inl ((unbang host[add32]) (n, i32[1]))), return () >)
+
+main : F (U (loop i32 1)) =
+  m <- return (once i32[4]);
+  return (div_bind[i32, i32, 1, 1] (m, thunkv
+    < fun (a : i32) ->
+        k <- return a;
+        v : i32 <- return k;
+        return (thunkv nu_in < return (inl v), return () >),
+      fun (q : 1) -> return q >))

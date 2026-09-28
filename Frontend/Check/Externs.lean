@@ -198,7 +198,11 @@ def loopWrapperSrc (caps : List String) (capsT A B : CVTy) (body : Comp) : Strin
     | [t] => t
     | [t, u] => s!"({t} * {u})"
     | _ => "(ref input * (ref output * ref output))"
-  let inner := s!"U (loop (({ppVTy capsT}) * ({ppVTy A})) (({ppVTy capsT}) * ({ppVTy B})))"
+  -- With no capabilities, `main`'s loop finishes with `A` itself and hands back `B` (SPEC §14).
+  let inner := if caps.isEmpty then s!"U (loop ({ppVTy A}) ({ppVTy B}))"
+    else s!"U (loop (({ppVTy capsT}) * ({ppVTy A})) (({ppVTy capsT}) * ({ppVTy B})))"
+  let finA := if caps.isEmpty then "io_a <- return io_fin;" else "let (io_caps, io_a) = io_fin;"
+  let finB := if caps.isEmpty then "io_b <- return io_fin;" else "let (io_caps, io_b) = io_fin;"
   let st := s!"({inner}) * {extraT}"
   let res := s!"({out} * ({out} * ({ppVTy A})))"
   let res' := s!"({out} * ({out} * ({ppVTy B})))"
@@ -221,7 +225,7 @@ main : {bs} -o F (U (loop {res} {res'})) =
         {dx}io_o <- (nu_out (force io_it)).1;
         case io_o \{
           inl io_fin ->
-            let (io_caps, io_a) = io_fin;
+            {finA}
             {rc}io_in <- return ((unbang take_input) stdin);
             io_out <- return ((unbang take_output) stdout);
             io_err <- return ((unbang take_output) stderr);
@@ -230,7 +234,7 @@ main : {bs} -o F (U (loop {res} {res'})) =
         },
         let (io_it, io_x) = io_s;
         {dx}io_fin <- (nu_out (force io_it)).2;
-        let (io_caps, io_b) = io_fin;
+        {finB}
         {rc}io_in <- return ((unbang take_input) stdin);
         io_out <- return ((unbang take_output) stdout);
         io_err <- return ((unbang take_output) stderr);
@@ -240,13 +244,15 @@ main : {bs} -o F (U (loop {res} {res'})) =
     return (thunkv nu_in < (nu_out (force io_f io_s0)).1, (nu_out (force io_f io_s0)).2 >)
 "
 
-/-- A checked program with capability externs: its externs, and `main`'s result type `A`. -/
+/-- A checked program run by `run_io`: its externs, its capabilities, and `main`'s result type
+`A`. A program with capability externs, or a `main` with no externs that returns a loop (its
+capabilities are none, and its loop is `U (loop A B)`). -/
 structure IOMain where
   externs : List ExternSpec
   caps : List ExternSpec
   A : CVTy
-  /-- `some B` when `main` returns a loop `U (loop (Caps * A) (Caps * B))`, run until it finishes
-  (SPEC §11). -/
+  /-- `some B` when `main` returns a loop `U (loop (Caps * A) (Caps * B))` (or `U (loop A B)`
+  with no capabilities), run until it finishes (SPEC §11, §14). -/
   loopB : Option CVTy
 
 /-- The externs of a checked `main`, and, when it has capabilities, its result type after them. -/
@@ -255,7 +261,12 @@ def ioMainOf (p : Program) (c : Checked) : Except String (Option IOMain) := do
   let xs ← match externs ds with
     | .ok xs => pure xs
     | .error e => throw e.render
-  if xs.isEmpty then return none
+  -- A `main` with no externs that returns a loop is driven too, with no capabilities (SPEC §14).
+  if xs.isEmpty then
+    match c.C with
+    | .ret (.thunk (.nu (.amp (.ret (.sum A (.tvar 0))) (.ret B)))) =>
+      return if c.C = .ret (.thunk (.loop A B)) then some ⟨[], [], A, some B⟩ else none
+    | _ => return none
   let specs ← checkExterns xs
   let caps := capsOf specs
   if caps.isEmpty then

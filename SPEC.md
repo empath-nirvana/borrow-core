@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 0.12 · 2026-09-28
+Version 0.14 · 2026-09-28
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -773,7 +773,9 @@ WASI-only feature is part of the semantics (decision 25).
     main : F (U (Loop (Caps ⊗ A) (Caps ⊗ B)))
 
 The runtime drives it: it observes `next` until the loop finishes with `(caps, a)`, then takes
-the capabilities back and prints `a`; it never closes it. Nothing in the kernel changes (no
+the capabilities back and prints `a`; it never closes it. A `main` with no externs may return a
+loop with no capabilities, `main : F (U (Loop A B))`, the instance `Caps = 1` written without
+them: the runtime drives it the same way and prints `a` (`corpus/sugar/loop-main.bc`). Nothing in the kernel changes (no
 rule, no relation clause, no machine step); what is new is this obligation of the runtime and
 its theorem. A driven program is covered one prefix at a time: for every `n`, `run_io` followed
 by `driveE n` is a closed program, and every run of it from the empty memory, under every
@@ -1105,8 +1107,8 @@ so one pass in declaration order infers this; there is no fixed point.
 - `div def f : A = V` asserts that `f` is div. It is never needed, since inference supplies it;
   it is allowed for documentation, and makes a function div that does not loop yet.
 - `main` has implicit div: it is elaborated as a loop exactly when its body loops, and its
-  written type is `F A` either way. A `main` that loops but uses no capability is given
-  `stdout` ambiently, so the runtime can drive it.
+  written type is `F A` either way. A `main` that loops but uses no capability is given none:
+  the runtime drives a loop with no capabilities (§11).
 
 A function whose written type is already a loop is core and is not elaborated; so is a `main`
 written at `F(U(Loop …))`. A call checked against its own loop type is the loop as a value, not
@@ -1148,11 +1150,16 @@ form written by hand; `div-annotated.bc` is the same program with `div` and `tot
 A callback's thunk type carries its effect: `U(A ⊸ F B)` is total and `U(A ⊸ F(U(Loop B R)))`
 is div. A higher-order function written once must serve both, or functions are colored. It is
 **specialized at the callback's computation type**: at a call `h V` of a function
-`h : P ⇒ Q = thunkv fun (p : P) -> M` where a component of `V` names a div function and `P`
-has a total function type (`A ⇒ B` or `!(A ⇒ B)`) there, the elaborator makes a copy of `h`
-with that component of `P` at the callback's type, infers the copy's divergence (calls through
-the parameter are now direct-style div calls, so the copy is div), and calls the copy
-(`corpus/div-hof.bc`, `sum3__0`). There is one copy per function and parameter type; a total
+`h : P ⇒ Q = thunkv fun (p : P) -> M` (or its `!` form) where `P` has a total function type
+(`A ⇒ B` or `!(A ⇒ B)`) at a component whose argument's type, as inference gives it, is a div
+function's (`A ⇒ U(Loop B R)`), the elaborator makes a copy of `h` with that component of `P` at
+the argument's type, infers the copy's divergence (calls through the parameter are now
+direct-style div calls, so the copy is div), and calls the copy (`corpus/div-hof.bc`,
+`sum3__0`). The callback may be a named function, a local holding one
+(`corpus/sugar/hof-local.bc`), a callback an earlier call returned (`hof-returned.bc`), or a
+closure (`hof-closure.bc`): a closure `thunkv fun (x : A) -> M` passed at a callback type whose
+body loops is first elaborated in place as a div function body. Only parameter types are
+instantiated: a callback's effect in a stored or returned type is the one its type says. There is one copy per function and parameter type; a total
 callback uses `h` as written, which stays total. The core has no type ranging over computation
 types, so this is whole-program monomorphization, with no kernel change.
 
@@ -1201,9 +1208,8 @@ preserved. The runtime's obligation for a looping `main` is §11's.
 - **A call lends at most one capability** with `&c`, and a div call whose residual differs
   from the caller's must hand back, in its residual, the capability it was lent (it is matched
   to the lent `&c`), or nothing.
-- **Specialization** covers named functions without type parameters, with the callback passed
-  by name in a tuple component of the argument; a callback captured in a closure, returned, or
-  passed through a variable of the caller is not specialized. A div function has no type
+- **Specialization** is of named functions without type parameters, at parameter types only;
+  a callback stored in data or a cell keeps the effect its type says. A div function has no type
   parameters.
 - **`div_fuel` is `driveE`** by construction, not by a proved equation.
 - The model interpreter (`bcc interp`) copies the remaining input on every read.
@@ -1229,6 +1235,16 @@ typed world, the model and the end-to-end theorems in `Core/Stdio.lean`, the che
 ---
 
 ## Changelog
+
+- **0.14** (2026-09-28) — §11, §14: a `main` with no externs may return a loop, which the runtime
+  drives with no capabilities (`run_io`'s loop wrapper at `Caps = 1`, `ioMainOf`), so a `main`
+  that loops but uses no capability is no longer given `stdout` (#54, stage 4). The theorems
+  (`IORun.loop_every_run`, `externs_loop_every_run`) are stated at the checked `run_io` and cover
+  it unchanged; no kernel, rule or checker change.
+
+- **0.13** (2026-09-28) — §14's specialization reads the callback's type from inference
+  (#54, stage 3): any callback whose type is known, including locals, returned callbacks and
+  closures, which are elaborated as div bodies when they loop. No kernel, rule or checker change.
 
 - **0.12** (2026-09-28) — §14's elaboration on types (#54, stage 2 of
   `docs/typed-elaboration.md`). The residual is the components of the result with no destructor,
