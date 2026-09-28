@@ -17,4 +17,5 @@ import Frontend.Check.Externs
 import Frontend.Elab.Respan
 import Frontend.Elab.Tir
 import Frontend.Elab.Infer
+import Frontend.Elab.Meta
 import Frontend.Elab.Pipeline

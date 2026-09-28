@@ -1,9 +1,0 @@
--- expect: 5:3: the loop threads `n`: bind it with its type, `n : T <- …;`
--- The loop threads `n`, so its binding must give its type.
-main : F 1 =
-  n <- return i32[0];
-  for b in bytes stdin {
-    n : i32 <- return ((unbang host[add32]) (n, b));
-    return ()
-  };
-  return ()

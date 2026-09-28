@@ -1,0 +1,116 @@
+-- `residual-alias.bc` written by hand in core (SPEC §14). `count` returns a loop whose residual is
+-- `Src * 1`: closed early, it closes the stream and hands back the capability the stream hands
+-- back. Its state is the stream and the count. The delay bind is copied from the divergence
+-- library (`lib/div.bc`).
+extern stdin : ref input
+extern read_byte : !(all 'a < top. mut 'a input => mut 'a input * (i32 + 1))
+
+-- The input under a name of this program's own.
+type Src = ref input
+
+def getb : Src => Src * (i32 + 1) =
+  thunkv fun (c : Src) ->
+    return (withbor2['x, top, input, i32 + 1] c
+      (thunkv Fun 'x < dom. return (thunkv fun (m : mut 'x input) ->
+         r <- return ((unbang read_byte) ['x] m);
+         let (m2, b) = r;
+         return (boxed['x] b))))
+
+-- The input as a stream of bytes, finishing (or closed) with the capability.
+def src_step : !U (Src -o F (i32 * Src + Src) & F Src) =
+  !thunkv fun (c : Src) ->
+    < q <- return (getb c);
+      let (c2, x) = q;
+      case x {
+        inl b -> return (inl (b, c2))
+      | inr u -> return (inr c2)
+      },
+      return c >
+
+def src_bytes : Src => U (iter i32 Src Src) =
+  thunkv fun (c : Src) ->
+    f <- return (unbang (unfold[iter i32 Src Src, Src] src_step));
+    return (thunkv nu_in < (nu_out (force f c)).1, (nu_out (force f c)).2 >)
+
+def div_bind_step[A, B, R1, R] :
+    !U ((U (loop A R1) * U ((A -o F (U (loop B R))) & (R1 -o F R))) + U (loop B R)
+        -o F (B + ((U (loop A R1) * U ((A -o F (U (loop B R))) & (R1 -o F R))) + U (loop B R)))
+         & F R) =
+  !thunkv fun (s : (U (loop A R1) * U ((A -o F (U (loop B R))) & (R1 -o F R))) + U (loop B R)) ->
+    < case s {
+        inl p ->
+          let (m, k) = p;
+          o <- (nu_out (force m)).1;
+          case o {
+            inl a ->
+              l <- (force k).1 a;
+              return (inr (inr l))
+          | inr m2 -> return (inr (inl (m2, k)))
+          }
+      | inr l ->
+          o <- (nu_out (force l)).1;
+          case o {
+            inl b -> return (inl b)
+          | inr l2 -> return (inr (inr l2))
+          }
+      },
+      case s {
+        inl p ->
+          let (m, k) = p;
+          r1 <- (nu_out (force m)).2;
+          (force k).2 r1
+      | inr l -> (nu_out (force l)).2
+      } >
+
+-- The delay bind: run the first loop, then the continuation on its result. If either never
+-- finishes, neither does the whole.
+def div_bind[A, B, R1, R] :
+    U (loop A R1) * U ((A -o F (U (loop B R))) & (R1 -o F R)) => U (loop B R) =
+  thunkv fun (p : U (loop A R1) * U ((A -o F (U (loop B R))) & (R1 -o F R))) ->
+    f <- return (unbang (unfold[loop B R,
+           (U (loop A R1) * U ((A -o F (U (loop B R))) & (R1 -o F R))) + U (loop B R)]
+           div_bind_step[A, B, R1, R]));
+    s0 : (U (loop A R1) * U ((A -o F (U (loop B R))) & (R1 -o F R))) + U (loop B R) <-
+      return (inl p);
+    return (thunkv nu_in < (nu_out (force f s0)).1, (nu_out (force f s0)).2 >)
+
+-- The loop: each byte adds one; at the end of the stream the loop finishes with the capability
+-- and the count.
+def count : Src => U (loop (Src * i32) (Src * 1)) =
+  thunkv fun (c : Src) ->
+    n <- return i32[0];
+    step : !U (U (iter i32 Src Src) * i32 -o F ((Src * i32) + (U (iter i32 Src Src) * i32))
+                 & F (Src * 1)) <-
+      return (!thunkv fun (s : U (iter i32 Src Src) * i32) ->
+        < let (it, st) = s;
+          n <- return st;
+          o <- (nu_out (force it)).1;
+          case o {
+            inl p ->
+              let (b, it) = p;
+              n <- return ((unbang host[add32]) (n, i32[1]));
+              u <- return ();
+              return (inr (it, n))
+          | inr c2 ->
+              c <- return c2;
+              v : Src * i32 <- return (c, n);
+              return (inl v)
+          },
+          let (it, st) = s;
+          n <- return st;
+          c2 <- (nu_out (force it)).2;
+          c <- return c2;
+          return (c, ()) >);
+    f <- return (unbang (unfold[loop (Src * i32) (Src * 1), U (iter i32 Src Src) * i32] step));
+    s0 : U (iter i32 Src Src) * i32 <- return (src_bytes c, n);
+    return (thunkv nu_in < (nu_out (force f s0)).1, (nu_out (force f s0)).2 >)
+
+-- `main` runs `count`'s loop, then finishes with the capability and the count.
+main : F (U (loop (ref input * i32) (ref input * 1))) =
+  l <- return (count stdin);
+  return (div_bind[Src * i32, ref input * i32, Src * 1, ref input * 1] (l, thunkv
+    < fun (r : Src * i32) ->
+        let (stdin, k) = r;
+        done : ref input * i32 <- return (stdin, k);
+        return (thunkv nu_in < return (inl done), let (cap, rest) = done; return (cap, ()) >),
+      fun (q : Src * 1) -> return q >))

@@ -814,6 +814,28 @@ still calls `Sugar.elaborate` directly. It sees the same core, because lowering 
 switching it to `Elab.elaborate` is a one-line change for the stage that makes lowering do
 something.
 
+**Stage 2, as built.** `Sugar.lean` now decides on types. A typing context (`TCx`,
+`Frontend/Elab/Meta.lean`) types the program as written, with each `def` at the type elaborated
+so far, so a div function has its loop type and a call of it in direct style binds the loop's
+`B`. The syntactic `isCapTy`, `capPart`, `capNorm`, `residual`, `termCaps`, `callee`, `divCall`,
+`divCallAt`, `fnTy`, `pairTypes` and the `bytes` pattern are deleted:
+
+- **The residual** is the destructor-less components of the result (`isLinear`, `loopCxOf`),
+  named by the terminal's variables (`termParts`) (`corpus/sugar/residual-alias.bc`).
+- **A call in direct style** is any application of loop type where that loop is not expected
+  (`directCall`, `callIn`), and nested calls are lifted in evaluation order (`liftApps`)
+  (`corpus/sugar/div-nested.bc`).
+- **`for`** threads its variables at their inferred types, and reads its element type off the
+  iterator's (`corpus/sugar/for-untyped.bc`).
+- **Metavariables** are value types with unknowns, solved by first-order unification within one
+  declaration (`fillProgram`). They annotate bindings whose injection's type only the uses
+  determine (`corpus/sugar/inject.bc`).
+
+Lowering is still the identity, so `Backend/Driver.lean` keeps calling `Sugar.elaborate`, which
+now includes all of this. What remains of §4's table after stage 2 is specialization (stage 3)
+and the injected `stdout` (stage 4). One limit stays: a call lends at most one capability, and a
+div call's residual is matched to its `&c`.
+
 Stages 1–4 retire the #54 shortcuts and change no surface syntax, except that `&c` stays until
 stage 6. Stages 5–9 are the rest of step 2. After stage 9, step 3 of #54 (rewriting 6–10 corpus
 programs and measuring) can start.

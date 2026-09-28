@@ -1,0 +1,54 @@
+-- A call of a div function nested in an argument (SPEC §14, docs/typed-elaboration.md §2.4).
+-- `two_lines` adds one to each line's length, calling the div function `line_length` inside the
+-- argument of `inc`, twice in one tuple. Inference sees that each call's type is a loop where a
+-- number is expected, so each is run in direct style: the value's applications are lifted out
+-- into bindings in evaluation order, and each call of `line_length` becomes a delay bind.
+-- `div-nested.core.bc` is the same program written by hand in core.
+-- their loop types, each call a `div_bind`. Both erase to one term.
+extern stdin : ref input
+extern read_byte : !(all 'a < top. mut 'a input => mut 'a input * (i32 + 1))
+
+type In = ref input
+
+def getb : In => In * (i32 + 1) =
+  thunkv fun (c : In) ->
+    return (withbor2['x, top, input, i32 + 1] c
+      (thunkv Fun 'x < dom. return (thunkv fun (m : mut 'x input) ->
+         r <- return ((unbang read_byte) ['x] m);
+         let (m2, b) = r;
+         return (boxed['x] b))))
+
+-- One step of `line_length`: the next byte, and whether the line goes on.
+def ll_step : !U (In * i32 -o F ((In * i32) + (In * i32)) & F (In * 1)) =
+  !thunkv fun (s : In * i32) ->
+    < let (c, n) = s;
+      q <- return (getb c);
+      let (c2, x) = q;
+      case x {
+        inl b ->
+          case (unbang host[eq32]) (b, i32[10]) {
+            inl u -> return (inr (c2, (unbang host[add32]) (n, i32[1])))
+          | inr u -> return (inl (c2, n))
+          }
+      | inr u -> return (inl (c2, n))
+      },
+      let (c, n) = s;
+      return (c, ()) >
+
+-- A loop written in core: its type says it is div.
+def line_length : In => U (loop (In * i32) (In * 1)) =
+  thunkv fun (c : In) ->
+    f <- return (unbang (unfold[loop (In * i32) (In * 1), In * i32] ll_step));
+    s0 : In * i32 <- return (c, i32[0]);
+    return (thunkv nu_in < (nu_out (force f s0)).1, (nu_out (force f s0)).2 >)
+
+def inc : i32 => i32 = thunkv fun (n : i32) -> return ((unbang host[add32]) (n, i32[1]))
+
+def two_lines : In => In * (i32 * i32) =
+  thunkv fun (c : In) ->
+    p <- return (inc (line_length (&c)), inc (line_length (&c)));
+    return (c, p)
+
+main : F (ref input * (i32 * i32)) =
+  p <- return (two_lines (&stdin));
+  return (stdin, p)

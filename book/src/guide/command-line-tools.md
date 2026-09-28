@@ -44,8 +44,8 @@ helpers do the borrowing so programs do not.
 ## State across a loop
 
 A `for` carries the variables of `main` that its body, or the code after it, reads. Rebind one
-in the body and the next byte sees the new value. Bind each with its type, `n : T <- …`: the
-loop's state is built from those types.
+in the body and the next byte sees the new value. The loop's state is built from their types,
+which are inferred; an annotation, `n : T <- …`, is allowed but not needed.
 
 ```bc
 def inc : i32 => i32 = thunkv fun (n : i32) -> return ((unbang host[add32]) (n, i32[1]))

@@ -1,0 +1,11 @@
+-- core: for.core.bc
+-- `for.bc` with no type on the variables the loop threads (SPEC §14, docs/typed-elaboration.md
+-- §4): `n` is bound and rebound without annotation, and inference gives the loop's state its
+-- type. It elaborates to the same core as `for.bc`, written by hand in `for.core.bc`.
+main : F i32 =
+  n <- return i32[0];
+  for b in bytes stdin {
+    n <- return ((unbang host[add32]) (n, i32[1]));
+    return (putb (&stdout, b))
+  };
+  return n
