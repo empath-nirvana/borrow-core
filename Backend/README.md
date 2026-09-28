@@ -10,6 +10,7 @@ from it (`Clos/Types.lean`), and every stage from the flat IR on lays values out
     lake exe bcc interp [--stage S] <file>     interpret stage S: source (default), clos, flat
     lake exe bcc trusted <file>                the program's externs: contracts, host code, levels
     lake exe bcc-counts <file>                 allocations and indirect calls of a run
+    lake exe bcc-counts --sites <file>         the closure calls: direct, dispatched; recursive types
     scripts/compile-corpus.sh                  the corpus, compiled against the interpreter
 
 Every stage prints the same report: `main`'s value, then `live N`, the number of objects live
@@ -26,14 +27,15 @@ and `nu_out` erase, and `unfold` is a closed λ-term.
 |---|---|---|---|
 | source | `Source.lean` | `main`'s erasure | `Support`'s `step` at `wasmHost` |
 | closure IR | `Clos/Syntax.lean`, `Clos/Convert.lean` | named A-normal form, explicit environments and ownership | `Clos/Interp.lean` |
-| layout types | `Clos/Types.lean` | a layout type for every closure-IR variable, code and constructor; each type's layout | — |
+| layout types | `Clos/Types.lean` | a layout type for every closure-IR variable, code and constructor; each type's layout; each closure type's union of codes | — |
+| closure flow | `Clos/Flow.lean` | a 0-CFA: the codes each call may call | — |
 | flat IR | `Flat/Syntax.lean`, `Flat/Lower.lean` | functions over words, locals, allocation, calls and tail calls of several results, `ite` | `Flat/Interp.lean` |
 | Wasm | `Wasm/Syntax.lean`, `Wasm/Lower.lean` | the Wasm subset, as an AST | `wasmtime` |
 | WAT | `Wasm/Print.lean`, `Wasm/Runtime.lean` | text; the runtime inserted as written | — |
 
 All passes are structural recursion (the interpreters take fuel); `Driver.lean` composes them.
-No stage optimizes beyond choosing layouts, compiling `let` as a binding and cancelling the copy
-and drop inside `swap`. The WAT printer and the runtime are the only steps no Lean interpreter
+No stage optimizes beyond choosing layouts, defunctionalizing closures, calling known codes
+directly, compiling `let` as a binding and cancelling the copy and drop inside `swap`. The WAT printer and the runtime are the only steps no Lean interpreter
 observes.
 
 **Closure conversion** (`Clos/Convert.lean`). De Bruijn indices become variables, and each
@@ -54,19 +56,30 @@ injection is a projection; a code that passes its parameter to a function in tai
 `unfold` forwards an observation) has that function's type. A program the unification rejects
 is reported, not compiled; the source's typing derivation is what makes the corpus pass.
 
+**Closure flow** (`Clos/Flow.lean`). A monovariant 0-CFA over the whole closure IR: every value
+is abstracted by its construction site (a closure by its code, a pair or injection by its
+operands, a cell or array by its contents), and the least solution of the inclusion constraints
+gives, for every call, the codes whose closures may reach it. The helpers that call closures
+(`tab`, an array's `drop`, the loop driver) are constraints too.
+
 **Flat IR** (`Flat/Lower.lean`). A value of layout type `A` is `|A|` words: in `|A|` locals,
-passed as `|A|` arguments, returned as `|A|` results. A closure code is a function of the
-closure and the argument's words, returning the answer's words; a call is an indirect call
-through the table on the closure's code index, and a call in return position whose callee
-answers the caller's words is a tail call. `case` is an `if` on the tag word. Copy, drop, the
+passed as `|A|` arguments, returned as `|A|` results. Closures are defunctionalized (see
+Representation): a closure code is a function of its captured values' words and the argument's
+words, returning the answer's words. A call is a direct call of the code when it is known (the
+closure type's union has one code, or the flow analysis finds one code at the call), and
+otherwise a call of the type's dispatcher `apply`, a `switch` on the closure's tag whose cases
+tail-call the codes. A call in return position whose callee answers the caller's words is a tail
+call. `case` is an `if` on the tag word. Copy, drop, the
 printer, the array primitives and the loop driver are flat-IR functions generated per layout
 type; host operations are inline.
 
 **Wasm** (`Wasm/Lower.lean`). One Wasm function per flat-IR function, `i64` locals, several
-results as a multi-value function, tail calls as `return_call`/`return_call_indirect`. `_start`
-runs the entry, which prints through WASI `fd_write`. The LLVM counterpart of a multi-value
-function is a function returning a struct by value (an `sret` pointer when it is wide), and of a
-flattened pair its fields as separate SSA values (decision 25).
+results as a multi-value function, tail calls as `return_call`, a `switch` as `br_table` over
+nested blocks. There is no function table and no `call_indirect`. `_start` runs the entry, which
+prints through WASI `fd_write`. The LLVM counterpart of a multi-value function is a function
+returning a struct by value (an `sret` pointer when it is wide), of a flattened pair or closure
+union its fields as separate SSA values, of `switch` LLVM's `switch`, and of a tail call a
+`musttail` call (decision 25).
 
 ## Representation
 
@@ -80,10 +93,25 @@ word is an `i64` local; `|A|` is the number of words of `A`.
 | `A ⊗ B` | `\|A\| + \|B\|` | `A`'s words, then `B`'s |
 | `A ⊕ B` | `1 + max \|A\| \|B\|` | a tag word (`0` for `inl`), then the payload's words, padded |
 | `loc A` | 1 | the address of the cell's contents |
-| `fn(A; C, D)` | 1 | a closure: the word `2c + 1`, or the address of an environment object |
+| `fn(A; C, D)` | `1 + max_c \|env c\|` | a closure: its code's tag in the type's union, then the captured values' words, padded |
+| `fn(A; C, D)`, recursive | 1 | a closure: the word `2t + 1`, or the address of a heap environment object |
 
 So a pair is never an object, a `bool` (`1 + 1`) is one tag word, `1 + A` is a tag and `A`, an
-`i64` is unboxed, and none of these allocates. The only objects are:
+`i64` is unboxed, a closure is a tag and its captured values, and none of these allocates.
+
+**Closures are defunctionalized** (Reynolds). The codes whose type unifies with a closure type
+`fn(A; C, D)` are that type's *union*, numbered (tagged) in code order; `Clos/Types.lean` groups
+them by the closure IR's inferred types. A closure is a stack value: its tag, then its captured
+values' words, padded to the union's widest environment. Building it moves the captured words
+in; calling it moves them into the code's parameters. A known call is a direct call; any other
+call goes through the type's dispatcher, one `switch` per type. A union that contains itself
+(a closure type on a cycle of the graph whose edges are pair and sum fields and a union's
+captured values' types) would be infinitely wide, and under the explicit-heap rule (#54) the
+source would say `box` there; the source language cannot yet, so such a *recursive closure
+type* keeps the heap representation: the word `2t + 1` for a code `t` that captures nothing,
+and otherwise an object holding `t` and the captured values' words.
+
+The only objects are:
 
 - **Cells.** `alloc v` allocates the cell's contents, `max 1 w` words with no header, where `w`
   is the widest contents its *cell class* holds: `swap` changes a cell's type
@@ -93,9 +121,9 @@ So a pair is never an object, a `bool` (`1 + 1`) is one tag word, `1 + A` is a t
   element type: element `i`'s location is `base + 8·s·i`, a cell address like any other. The
   array value is the pair `(base, n)`, two words. `idx` is an unsigned compare and an address
   computation, and allocates nothing.
-- **Closures that capture.** An object: the code index `c`, then the captured values' words. A
-  code that captures nothing is the word `2c + 1` (objects are 8-aligned, so bit 0 tells the two
-  apart) and allocates nothing.
+- **Closures of a recursive closure type that capture.** An object: the tag `t`, then the
+  captured values' words. A code that captures nothing is the word `2t + 1` (objects are
+  8-aligned, so bit 0 tells the two apart) and allocates nothing.
 - **Boxed fields.** A recursive type would be infinitely wide, so the fields that close a cycle
   of pair and sum edges (the back edges of one depth-first search over the types) are stored as
   a pointer to an object of the field's own layout. `μX. 1 + (A ⊗ X)` is a tag and a payload
@@ -108,12 +136,17 @@ whether a word is an integer, a tag, a closure (`<fun>`) or a location (`<loc>`)
 answering two projections at two types. Its code returns `max |C| |D|` words, the arm's own
 words then zeros; a projection's caller takes the first `|C|` or `|D|`.
 
-**Open.** A closure that captures stays an environment object, allocated when it is built and
-freed when it is called, and a closure call is an indirect call. This conflicts with the
-explicit-heap decision (#54, #80): closures and codata state should be sized values on the
-stack unless boxed, by whole-program defunctionalization (each `U C` a tagged union of the
-codes that flow there), and calls of known code direct. Placement of the objects that remain
-(stack, frame arena or heap, by escape analysis) is also open.
+**Open.** The recursive closure types are the Z combinator's (`Core/Fix.lean`): its handle
+`selfV = λv. X X v` captures `X`, whose union is `X`'s own type, so every fixed point (the folds
+`fold_imm` and `fold_own`, `ν`'s unfold, the loops) keeps a heap environment, allocated at each
+unrolling. Every corpus program that recurses hits it (`bcc-counts --sites` lists the types):
+`13-2-sum-prog`, `sum-prog-exact`, `count-down`, `count-down-exact`, `div-hof`,
+`implicit-drops`, `iter-close`, `iter-range`, `map-reuse`, `nats-sum`, `sum-i32` and every
+`io-*` program. Nearly all of the corpus's remaining allocations are these environments. Two
+ways out: compile the fixed point natively (a code that calls itself by its code index, so the
+handle captures only the body's free variables and no union contains itself), or let the source
+say `box` (#54). Placement of the objects that remain (stack, frame arena or heap, by escape
+analysis) is also open.
 
 ## Memory discipline
 
@@ -122,20 +155,24 @@ object owned by exactly one word, so it can free an object where the source stop
 typed layouts:
 
 - **Eliminations free.** `let (x, y) = p` and `case` bind the components' or payload's words
-  (and load and free a boxed field); calling a closure frees its environment object (the code
-  unpacks it into locals first). A pair, an injection, an integer and a code word `2c + 1` hold
+  (and load and free a boxed field); calling a closure moves its captured words into the
+  code's parameters (at a recursive closure type, the code unpacks the environment object into
+  locals and frees it). A pair, an injection, an integer, a closure union and a word `2t + 1` hold
   no object of their own, so there is nothing else to free.
 - **Duplication copies.** A variable used by two sequential parts of a term (the halves of a
   pair, the argument and function of an application, a `let`'s bound term and body, a `case`'s
   scrutinee and arms) is copied for all but the last. The two arms of a `case` are one part:
-  only one runs. At a *trivial* type (one with no closure and no boxed field) the copy is the
-  words themselves; otherwise it is the type's generated copy, which allocates a new object for
-  each environment and boxed field it meets. A closure is copied by its code's copy function,
-  chosen by a binary search on the code index among the codes of its type.
+  only one runs. At a *trivial* type the copy is the words themselves; otherwise it is the
+  type's generated copy, which allocates a new object for each boxed field and heap environment
+  it meets. A type is trivial when it has no boxed field, no recursive closure type, and no
+  closure whose code captures a non-trivial value. A closure is copied by a `switch` on its tag
+  that copies that code's captured values; so a closure whose captures are all trivial, as a `!`
+  closure's persistent captures are unless they hold a boxed field or a recursive closure, is
+  copied as plain words.
 - **Discarding drops.** A variable that a path does not use is dropped where its scope starts
   on that path: an unused binder, or in a `case` arm, what only the other arm uses. At a
-  trivial type a drop is nothing; otherwise the type's generated drop frees each environment
-  and boxed field.
+  trivial type a drop is nothing; otherwise the type's generated drop frees each heap
+  environment and boxed field, a closure's by a `switch` on its tag.
 - **Cells.** `alloc v` allocates a cell holding `v`'s words; `load` copies the contents (the
   source copies the value out); `store` drops the old contents; `free` moves them out and frees
   the cell; `swap` moves the old contents out and the new in. A copy copies a location as a
@@ -143,7 +180,10 @@ typed layouts:
 
 So each variable is consumed exactly once on every path, as substitution does in the source;
 the closure-IR interpreter, which keeps the uniform boxed objects, checks this as it runs, and the
-flat IR follows the same consumption at typed layouts. Persistent types (SPEC §10) hold no
+flat IR follows the same consumption at typed layouts. For a closure union: the captured words
+after its tag are owned by that union value alone, and the padding words own nothing; building
+moves the captures in, a call moves them out to the code (so a linear closure's captures are
+moved, never shared), a copy copies them by the tag, and a drop drops them by the tag. Persistent types (SPEC §10) hold no
 resource, so copying a persistent value copies no resource. After `main`'s value is printed and
 dropped, the live count is 0 exactly when the source run ends with empty memory.
 
@@ -164,7 +204,7 @@ below 1024 words and bumps a heap pointer otherwise, growing memory as needed; e
 preceded by a word holding its size, and the runtime's own data sits below address 16384.
 `live` is exported as `live_objects`; `$putc` writes a byte to standard output, `$putfd` a byte to a
 descriptor and `$getc` reads one (SPEC §11). `$allocs` counts the calls of `$alloc` and `$indirect`
-the indirect calls, which the compiled code counts when it is built to count.
+the dispatched calls, which the compiled code counts when it is built to count.
 
 ## Host operations (SPEC §8)
 
@@ -217,11 +257,14 @@ program's golden `corpus/<name>.out` and `.err`, on `corpus/<name>.in`.
 `bcc-counts <file>` runs the program at the flat IR and under `wasmtime`, each built to count
 (`Driver.flatOf`, `compileWat` with `counts`: the entry writes `allocs N` and `indirect M` after
 the report), and prints the objects the run allocates and the indirect calls it makes; the two
-stages must agree. `scripts/compile-corpus.sh` checks every corpus program's counts against
+stages must agree. An indirect call is a dispatched one: a call of a type's `apply`, whose code
+the `switch` on the tag chooses at run time. There is no other kind of indirect call. `scripts/compile-corpus.sh` checks every corpus program's counts against
 `corpus/counts.expected`: a count above the file fails the gate, one below it is reported, and
 `--write-counts` rewrites the file. A pure arithmetic program (`int-arith`, `int-ops`) allocates
-nothing and makes no indirect call; what remains is cells, arrays, closures that capture, and
-boxed recursive fields, and the indirect calls are closure calls.
+nothing and makes no indirect call; what remains is cells, arrays, heap environments of
+recursive closure types, and boxed recursive fields. `bcc-counts --sites <file>` prints the
+program's closure calls: how many are direct because the union has one code, how many more
+because the flow analysis finds one, how many are dispatched, and the recursive closure types.
 
 ## Verification (#15)
 
@@ -232,21 +275,36 @@ IR's runtime invariants are now layout-aware:
 - a closure-IR variable of layout type `A` corresponds to `|A|` flat-IR words, related to the
   closure IR's boxed object graph by `A`'s layout (a pair by its components' words, an injection
   by its tag and padded payload, a boxed field by an object of the field's layout, a closure by
-  `2c + 1` or an environment object);
+  its code's tag in the union and its captured values' words, related to the environment
+  object's fields, or at a recursive closure type by `2t + 1` or an environment object);
 - the words of every live object are written (`Flat/Interp.lean` checks every read), and a cell
   is as wide as its class;
-- a call's results match the callee's signature, which Wasm's `call_indirect` checks and the
-  flat-IR interpreter checks too;
+- a call's results match the callee's signature, which the flat-IR interpreter checks, and
+  Wasm validation checks for every direct call and tail call;
 - the layout types are an obligation of their own: the closure IR must be typable, which the
   source's `CDerives` derivation should give for everything but the axioms' bodies (`swap`,
   whose contents change type, is why cell classes exist).
 
 The ownership invariant (each object owned by exactly one word, consumed once per path) is the
-same as before, restated over typed words.
+same as before, restated over typed words and closure unions (Memory discipline).
+
+**Defunctionalization** is a compiler obligation of its own: calling a closure through its type's
+`apply` behaves as calling it through its code. The standard proof (Reynolds; Danvy and
+Nielsen, *Defunctionalization at work*; Pottier and Gauthier's typed version) is a simulation
+relating a closure to the tag and captured values of its code, and `apply`'s case to that code's
+body. Here it needs, besides the layout typing above, that a closure's union contains its code
+(every closure of a type is built by a code of that type, which unification gives), and the
+word relation of a recursive closure type. A direct call adds the flow analysis's soundness: the
+0-CFA's solution over-approximates the codes that reach every call, including the calls the
+helpers and the entry make, so a call where it finds one code calls that code on every run.
+Nothing checks the solution at run time; a proof would show that the abstraction of every run's
+values is included in it.
 
 ## Scope
 
-No optimizations beyond the layouts, no stack switching. The only externs compiled are the
+No optimizations beyond the layouts, defunctionalization and direct calls of known codes, no
+stack switching. The only externs compiled are the
 standard I/O ones; the model's harness (`mk_input`, …) is not compiled. Recursion (the folds'
-fixed points) is non-tail and uses the Wasm stack. Closures that capture keep an environment
-object, and unboxed recursive values (`μX. 1 + (i32 ⊗ X)` laid out flat) are a follow-up.
+fixed points) is non-tail and uses the Wasm stack. Closures of recursive closure types keep an
+environment object (Representation, Open), and unboxed recursive values (`μX. 1 + (i32 ⊗ X)`
+laid out flat) are a follow-up.
