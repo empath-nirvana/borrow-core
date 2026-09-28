@@ -2,11 +2,10 @@ import Backend.Value
 import Backend.Source
 import Backend.Clos.Syntax
 import Backend.Clos.Convert
+import Backend.Clos.Types
 import Backend.Clos.Interp
 import Backend.Driver
 import Backend.Flat.Syntax
-import Backend.Flat.Runtime
-import Backend.Flat.Host
 import Backend.Flat.Lower
 import Backend.Flat.Interp
 import Backend.Wasm.Syntax

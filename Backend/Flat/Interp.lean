@@ -94,10 +94,22 @@ def freeRange (a : Nat) : FM Unit := do
 def setLocal (fr : Array UInt64) (i : Nat) (v : UInt64) : FM (Array UInt64) :=
   if i < fr.size then pure (fr.set! i v) else throw s!"flat IR: no local {i}"
 
+def setLocals (fr : Array UInt64) : List Nat → List UInt64 → FM (Array UInt64)
+  | [], [] => pure fr
+  | i :: is, v :: vs => do setLocals (← setLocal fr i v) is vs
+  | _, _ => throw "flat IR: a call's results and its destinations differ in number"
+
 def getLocal (fr : Array UInt64) (i : Nat) : FM UInt64 :=
   match fr[i]? with
   | some v => pure v
   | none => throw s!"flat IR: no local {i}"
+
+/-- The function at table index `k`, counting the indirect call. -/
+def tableFn (p : Prog) (k : UInt64) : FM Nat := do
+  modify fun s => { s with indirect := s.indirect + 1 }
+  match p.table[k.toNat]? with
+  | some g => pure g
+  | none => throw s!"flat IR: no table entry {k}"
 
 mutual
 def evalExp (p : Prog) : Nat → Array UInt64 → Exp → FM UInt64
@@ -109,14 +121,6 @@ def evalExp (p : Prog) : Nat → Array UInt64 → Exp → FM UInt64
     | .c32 k => pure k.toUInt64
     | .load a off => do readWord ((← evalExp p n fr a).toNat + 8 * off)
     | .op o args => do liftE (evalOp o (← evalArgs p n fr args))
-    | .call f args => do callFn p n f (← evalArgs p n fr args)
-    | .callInd f args => do
-        let args ← evalArgs p n fr args
-        let k ← evalExp p n fr f
-        modify fun s => { s with indirect := s.indirect + 1 }
-        match p.table[k.toNat]? with
-        | some g => callFn p n g args
-        | none => throw s!"flat IR: no table entry {k}"
     | .alloc w => do allocRange (← evalExp p n fr w).toNat
     | .live => do pure (← get).ranges.size.toUInt64
     | .getc fd => do
@@ -137,18 +141,26 @@ def evalArgs (p : Prog) : Nat → Array UInt64 → List Exp → FM (List UInt64)
     let vs ← evalArgs p n fr es
     pure (v :: vs)
 
-def callFn (p : Prog) : Nat → Nat → List UInt64 → FM UInt64
-  | 0, _, _ => throw "flat IR: out of fuel"
-  | n + 1, f, args => do
+/-- Call function `f` on `args`, expecting `results` results (`none`: any number, for a direct
+call, whose arity the lowering fixes). As Wasm's `call_indirect` does, an indirect call checks
+the callee's signature. -/
+def callFn (p : Prog) : Nat → Nat → List UInt64 → Option Nat → FM (List UInt64)
+  | 0, _, _, _ => throw "flat IR: out of fuel"
+  | n + 1, f, args, results => do
     let some fn := p.fns[f]? | throw s!"flat IR: no function {f}"
     if args.length != fn.params then throw s!"flat IR: {fn.name} takes {fn.params} arguments"
+    if let some k := results then
+      if k != fn.results then throw s!"flat IR: {fn.name} answers {fn.results} results, not {k}"
     let fr := (args ++ List.replicate fn.locals 0).toArray
     match ← execBlock p n fr fn.body with
-    | (_, some r) => pure r
+    | (_, some r) =>
+      if r.length != fn.results then throw s!"flat IR: {fn.name} returns {r.length} results"
+      pure r
     | (_, none) => throw s!"flat IR: {fn.name} ends without returning"
 
 /-- Run statements; `some r` when one returns `r`. -/
-def execBlock (p : Prog) : Nat → Array UInt64 → List Stmt → FM (Array UInt64 × Option UInt64)
+def execBlock (p : Prog) : Nat → Array UInt64 → List Stmt →
+    FM (Array UInt64 × Option (List UInt64))
   | 0, _, _ => throw "flat IR: out of fuel"
   | _, fr, [] => pure (fr, none)
   | n + 1, fr, s :: ss => do
@@ -157,7 +169,7 @@ def execBlock (p : Prog) : Nat → Array UInt64 → List Stmt → FM (Array UInt
     | some v => pure (fr, some v)
     | none => execBlock p n fr ss
 
-def execStmt (p : Prog) : Nat → Array UInt64 → Stmt → FM (Array UInt64 × Option UInt64)
+def execStmt (p : Prog) : Nat → Array UInt64 → Stmt → FM (Array UInt64 × Option (List UInt64))
   | 0, _, _ => throw "flat IR: out of fuel"
   | n + 1, fr, s =>
     match s with
@@ -168,7 +180,6 @@ def execStmt (p : Prog) : Nat → Array UInt64 → Stmt → FM (Array UInt64 × 
         writeWord (a.toNat + 8 * off) v
         pure (fr, none)
     | .free a => do freeRange (← evalExp p n fr a).toNat; pure (fr, none)
-    | .eval e => do let _ ← evalExp p n fr e; pure (fr, none)
     | .out b => do
         let b ← evalExp p n fr b
         modify fun st => { st with out := st.out.push b.toUInt8 }
@@ -183,26 +194,26 @@ def execStmt (p : Prog) : Nat → Array UInt64 → Stmt → FM (Array UInt64 × 
         pure (fr, none)
     | .ite c t e => do
         if (← evalExp p n fr c) != 0 then execBlock p n fr t else execBlock p n fr e
-    | .switch sc arms => do
-        let k := (← evalExp p n fr sc).toNat
-        match arms[k]? with
-        | some arm => execBlock p n fr arm
-        | none => execBlock p n fr (arms.getLastD [])
-    | .ret e => do pure (fr, some (← evalExp p n fr e))
-    | .tailCall f args => do pure (fr, some (← callFn p n f (← evalArgs p n fr args)))
+    | .call ds f args => do
+        let rs ← callFn p n f (← evalArgs p n fr args) (some ds.length)
+        pure (← setLocals fr ds rs, none)
+    | .callInd ds f args => do
+        let args ← evalArgs p n fr args
+        let g ← tableFn p (← evalExp p n fr f)
+        let rs ← callFn p n g args (some ds.length)
+        pure (← setLocals fr ds rs, none)
+    | .ret es => do pure (fr, some (← evalArgs p n fr es))
+    | .tailCall f args => do pure (fr, some (← callFn p n f (← evalArgs p n fr args) none))
     | .tailCallInd f args => do
         let args ← evalArgs p n fr args
-        let k ← evalExp p n fr f
-        modify fun s => { s with indirect := s.indirect + 1 }
-        match p.table[k.toNat]? with
-        | some g => pure (fr, some (← callFn p n g args))
-        | none => throw s!"flat IR: no table entry {k}"
+        let g ← tableFn p (← evalExp p n fr f)
+        pure (fr, some (← callFn p n g args none))
     | .trap => throw "flat IR: trap"
 end
 
 /-- Run the entry function on the standard input `input`: what it writes. -/
 def interp (fuel : Nat) (p : Prog) (input : List UInt8) : Except String Output := do
-  let (_, s) ← (callFn p fuel p.entry []).run { mem := {}, ranges := {}, next := 8, input, out := .empty, err := .empty }
+  let (_, s) ← (callFn p fuel p.entry [] (some 0)).run { mem := {}, ranges := {}, next := 8, input, out := .empty, err := .empty }
   pure ⟨s.out, s.err⟩
 
 end Backend.Flat

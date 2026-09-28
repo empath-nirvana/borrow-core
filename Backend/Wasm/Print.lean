@@ -44,7 +44,12 @@ def opName : HostOp → String
   | .extend_u => "i64.extend_i32_u"
   | .extend32_s => "i64.extend32_s"
 
-def typeName (arity : Nat) : String := s!"$t{arity}"
+def typeName (params results : Nat) : String := s!"$t{params}_{results}"
+
+/-- `(param i64 …) (result i64 …)`. -/
+def sigText (params results : Nat) : String :=
+  (if params > 0 then " (param" ++ String.join (List.replicate params " i64") ++ ")" else "") ++
+  (if results > 0 then " (result" ++ String.join (List.replicate results " i64") ++ ")" else "")
 
 def indent (d : Nat) : String := "".pushn ' ' (2 * d)
 
@@ -57,15 +62,12 @@ def printInstr (d : Nat) : Instr → List String
   | .i64Store off => [indent d ++ s!"i64.store offset={off}"]
   | .num o => [indent d ++ opName o]
   | .call f => [indent d ++ s!"call {f}"]
-  | .callIndirect k => [indent d ++ s!"call_indirect (type {typeName k})"]
+  | .callIndirect p r => [indent d ++ s!"call_indirect (type {typeName p r})"]
   | .returnCall f => [indent d ++ s!"return_call {f}"]
-  | .returnCallIndirect k => [indent d ++ s!"return_call_indirect (type {typeName k})"]
-  | .block body => [indent d ++ "block"] ++ printBody (d + 1) body ++ [indent d ++ "end"]
+  | .returnCallIndirect p r => [indent d ++ s!"return_call_indirect (type {typeName p r})"]
   | .ifElse t e =>
       [indent d ++ "if"] ++ printBody (d + 1) t ++ [indent d ++ "else"] ++ printBody (d + 1) e ++
         [indent d ++ "end"]
-  | .br l => [indent d ++ s!"br {l}"]
-  | .brTable ls dflt => [indent d ++ "br_table " ++ " ".intercalate (ls.map toString) ++ s!" {dflt}"]
   | .ret => [indent d ++ "return"]
   | .drop => [indent d ++ "drop"]
   | .unreachable => [indent d ++ "unreachable"]
@@ -79,20 +81,26 @@ where
 
 def printFunc (f : Func) : List String :=
   let exp := match f.export? with | some n => s!" (export \"{n}\")" | none => ""
-  let params := String.join ((List.replicate f.params " i64").map id)
-  let sig := (if f.params > 0 then s!" (param{params})" else "") ++
-    (if f.result then " (result i64)" else "")
+  let sig := sigText f.params f.results
   let locals := if f.locals > 0 then
     [indent 2 ++ "(local" ++ String.join (List.replicate f.locals " i64") ++ ")"] else []
   [indent 1 ++ s!"(func {f.name}{exp}{sig}"] ++ locals ++ printInstr.printBody 2 f.body ++
     [indent 1 ++ ")"]
 
-/-- The module's text. -/
+/-- The signatures of the indirect calls in an instruction. -/
+def sigs : Instr → List (Nat × Nat)
+  | .callIndirect p r | .returnCallIndirect p r => [(p, r)]
+  | .ifElse t e => sigsOf t ++ sigsOf e
+  | _ => []
+where
+  sigsOf : List Instr → List (Nat × Nat)
+    | [] => []
+    | i :: is => sigs i ++ sigsOf is
+
+/-- The module's text: a type for each indirect call's signature. -/
 def printModule (m : Module) : String :=
-  let types := (List.range 5).map fun k =>
-    indent 1 ++ s!"(type {typeName k} (func" ++
-      (if k > 0 then " (param" ++ String.join (List.replicate k " i64") ++ ")" else "") ++
-      " (result i64)))"
+  let types := (m.funcs.flatMap (sigs.sigsOf ·.body)).eraseDups.map fun (p, r) =>
+    indent 1 ++ s!"(type {typeName p r} (func{sigText p r}))"
   let table := [indent 1 ++ s!"(table {m.table.length} funcref)"] ++
     (if m.table.isEmpty then [] else
       [indent 1 ++ "(elem (i32.const 0) func " ++ " ".intercalate m.table ++ ")"])

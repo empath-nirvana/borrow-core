@@ -5,7 +5,7 @@ import Support.Syntax.Integers
 
 The subset of Wasm the backend emits: `i64` locals, one linear memory, `i64` loads and stores,
 the integer instructions of §8 (`HostOp`), direct, indirect and tail calls through one function
-table, and `block`/`if`/`br`/`br_table`. Functions are named; a function refers to another by
+table, functions of several `i64` results (multi-value), and `if`. Functions are named; a function refers to another by
 name. The runtime functions (`Backend/Wasm/Runtime.lean`) are written in WAT and referred to
 by name: `$alloc`, `$free`, `$live`, `$putc`.
 -/
@@ -23,14 +23,11 @@ inductive Instr where
   | i64Store (off : Nat)
   | num (o : HostOp)
   | call (f : String)
-  /-- `call_indirect` at the type of `arity` `i64` parameters and an `i64` result. -/
-  | callIndirect (arity : Nat)
+  /-- `call_indirect` at the type of `params` `i64` parameters and `results` `i64` results. -/
+  | callIndirect (params results : Nat)
   | returnCall (f : String)
-  | returnCallIndirect (arity : Nat)
-  | block (body : List Instr)
+  | returnCallIndirect (params results : Nat)
   | ifElse (t e : List Instr)
-  | br (l : Nat)
-  | brTable (ls : List Nat) (d : Nat)
   | ret
   | drop
   | unreachable
@@ -43,8 +40,8 @@ inductive Instr where
 structure Func where
   name : String
   params : Nat
-  /-- One `i64` result, or none. -/
-  result : Bool
+  /-- The number of `i64` results. -/
+  results : Nat
   locals : Nat
   body : List Instr
   export? : Option String := none

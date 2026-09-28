@@ -20,6 +20,9 @@ IR. One pass does three things:
 - **Closures.** `λ` captures its free variables, in index order, into an environment. A
   primitive in function position with its arguments present becomes `prim`; a primitive used
   as a value is η-expanded into closure code (`store` into two).
+- **`swap`.** The axiom `swap ≜ λx.λy. let z = load x; store x y; (x, z)` becomes the closure
+  IR's `swap`, which moves the old contents out instead of copying them and dropping the
+  original. Its contents change type, which the layout types (`Backend/Clos/Types.lean`) follow.
 -/
 
 namespace Backend.Clos
@@ -111,8 +114,17 @@ def primValue : Prim → CM Tm
         pure (.clos c [])
       | none => throw "unreachable primitive"
 
+/-- The code of the axiom `swap` (`Paper.S2_Statics`, [TR] 3.24): `λx. λy. swap x y`. -/
+def swapValue : CM Tm := do
+  let l ← fresh; let l' ← fresh; let v ← fresh
+  let c₂ ← register ⟨[l'], v, .prim .swap [l', v]⟩
+  let c₁ ← register ⟨[], l, .clos c₂ [l]⟩
+  pure (.clos c₁ [])
+
 def conv (ctx : List Var) : Expr → CM Tm
   | .var i => return .var (← lookup ctx i)
+  | .lam (.lam (.app (.lam (.seq (.app (.app (.prim .store) (.var 2)) (.var 1))
+      (.pair (.var 2) (.var 0)))) (.app (.prim .load) (.var 1)))) => swapValue
   | .unit => return .unit
   | .loc _ => throw "a location in the source term"
   | .prim p => primValue p
