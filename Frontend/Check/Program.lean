@@ -1,5 +1,5 @@
 import Frontend.Check.Checker
-import Frontend.Sugar
+import Frontend.Elab.Pipeline
 
 /-!
 # Frontend — Check — programs
@@ -96,18 +96,21 @@ def checkDecl (ds : Array Decl) (k : Nat) : Decl → Except Error (String × Opt
       let c ← checkMain ds k sp C M
       pure (s!"main : {ppCTy c.C}", some c)
 
-/-- Check a program, after elaborating its I/O sugar (`Frontend.Sugar.elaborate`, SPEC §11): the
-checker sees only the elaborated program. The lines of the I/O library, when it is included,
-are not reported. -/
+/-- Check a program, after elaborating it (`Frontend.Elab.elaborate`: the sugar of SPEC §11 and
+§14, then the typed IR and its lowering): the checker sees only the elaborated program. The lines
+of the libraries, when they are included, are not reported. An error in code generated for a
+sugar names the sugar (`Frontend.Elab.renderError`). -/
 def checkProgram (p : Program) : Except Error Report := do
-  let (p, lib) ← Frontend.Sugar.elaborate p
-  let ds := p.decls.toArray
-  (List.range ds.size).foldlM (init := (⟨[], none⟩ : Report)) fun acc k =>
-    match (ds[k]? : Option Decl) with
-    | some d => do
-        let (line, m) ← checkDecl ds k d
-        pure ⟨if k < lib then acc.lines else acc.lines ++ [line], m <|> acc.main⟩
-    | none => pure acc
+  let el ← Frontend.Elab.elaborate p
+  let ds := el.prog.decls.toArray
+  let lib := el.lib
+  let r : Except Error Report := (List.range ds.size).foldlM (init := (⟨[], none⟩ : Report))
+    fun acc k => match (ds[k]? : Option Decl) with
+      | some d => do
+          let (line, m) ← checkDecl ds k d
+          pure (⟨if k < lib then acc.lines else acc.lines ++ [line], m <|> acc.main⟩ : Report)
+      | none => pure acc
+  r.mapError (Frontend.Elab.renderError el.origins)
 
 /-! ### Soundness -/
 

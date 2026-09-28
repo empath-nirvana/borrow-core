@@ -7,6 +7,7 @@ file.bc ──parse──▶ AST ──check──▶ Expr + proof of CDerives �
 | stage | code | command |
 |---|---|---|
 | parse | `Frontend/Lexer.lean`, `Frontend/Parser.lean` | `lake exe bcc parse file.bc` |
+| elaborate | `Frontend/Sugar.lean`, `Frontend/Elab/` (the typed IR, `docs/typed-elaboration.md`) | `lake exe bcc desugar file.bc`, `lake exe bcc tir file.bc` |
 | check | `Frontend/Check/` | `lake exe bcc check file.bc` |
 | compile | `Backend/` (closure IR → flat IR → Wasm AST → WAT) | `lake exe bcc compile file.bc -o out.wat` |
 | run | wasmtime, with tail calls | `lake exe bcc run file.bc` |
@@ -25,6 +26,7 @@ allocated. `live 0` is the leak check.
 |---|---|
 | `scripts/parse-corpus.sh` | every corpus file parses and round-trips; each `corpus/fail/` file fails with its expected message |
 | `scripts/check-corpus.sh` | every corpus file checks; each `corpus/reject/` file is rejected with its expected message |
+| `scripts/check-elab.sh` | every checked corpus program and sugar pair has a fully typed IR that lowers back to the elaborated program; each `corpus/tir/*.tir` matches `bcc tir` |
 | `scripts/compile-corpus.sh` | every corpus `main` gives the same value compiled and interpreted, with `live 0` |
 | `scripts/book-doctest.sh` | every `bc` block in `book/src/` checks and prints its `-- answer:` with `live 0`, or is rejected with its `-- expect:` message |
 | `scripts/check-hygiene.sh` | no `sorry`, `axiom`, `native_decide`, `partial` and the like; every declaration's axioms within the standard three |
