@@ -114,3 +114,27 @@ main -> i32 =
   for n in lens(&mut stdin, 2) { s = s * 10 + n };
   s
 ```
+
+## Delegating: `yield from`
+
+`yield from g` yields everything the generator `g` yields, and its value is what `g` finishes
+with:
+
+```bc
+-- answer: i32[1256]
+gen fn two() -> i32, i32 =
+  yield 1;
+  yield 2;
+  5
+
+gen fn around() -> i32, i32 =
+  yield 0;
+  let n = yield from two();
+  yield n;
+  n + 1
+
+main -> i32 =
+  let mut acc = 0;
+  let r = for x in around() { acc = acc * 10 + x };
+  acc * 10 + r
+```

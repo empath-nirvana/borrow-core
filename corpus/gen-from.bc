@@ -1,0 +1,48 @@
+-- `yield from` (#109): a generator delegates to another, yielding everything it yields, and goes
+-- on with what it finishes with. `x <- yield from g; N` is `gen_bind` of `g` and the rest.
+--
+-- `both` delegates twice and finishes with a number built from the two results. `echo` yields
+-- the bytes of its input; `framed` lends its input to `echo` with `&mut c` and gets it back when
+-- `echo` finishes, then yields a marker. `chained` delegates inside a loop, once per element of
+-- another generator, and finishes with a delegation (`yield from` last: its value is the
+-- generator's).
+--
+-- Answer: on the input `ab`, i32[125032198], read as `125`, `032` and `198`: `both(3, 2)` yields
+-- 0 1 2, 100, 10 11 (124) and finishes with 32 (3 and 2 elements); `framed` yields 1, 97, 98, 2
+-- (198); `chained(3)` yields 0 (its loop's delegations to `range(0, 0)` and `range(0, 1)`), then
+-- 0 1 (its last), which adds 1, and finishes with 2, which the `- 2` cancels. A `yield from` that
+-- lost its delegate's value gives 0 for the 32; one that did not hand `c` back to `framed` does
+-- not check.
+
+gen fn range(lo: i32, hi: i32) -> i32, i32 =
+  let mut i = lo;
+  while i < hi { yield i; i = i + 1 };
+  hi - lo
+
+gen fn both(a: i32, b: i32) -> i32, i32 =
+  let n = yield from range(0, a);
+  yield 100;
+  let m = yield from range(10, 10 + b);
+  n * 10 + m
+
+gen fn echo(c: In) -> i32, In =
+  for b in bytes(c) { yield b };
+  c
+
+gen fn framed(c: In) -> i32, In =
+  yield 1;
+  yield from echo(&mut c);
+  yield 2;
+  c
+
+gen fn chained(n: i32) -> i32, i32 =
+  for k in range(0, n - 1) { let _ = yield from range(0, k); () };
+  yield from range(0, n - 1)
+
+main -> i32 =
+  let mut acc = 0;
+  let r = for x in both(3, 2) { acc = acc + x };
+  let mut s = 0;
+  for b in framed(&mut stdin) { s = s + b };
+  let q = for x in chained(3) { acc = acc + x };
+  acc * 1000000 + r * 1000 + s + q - 2

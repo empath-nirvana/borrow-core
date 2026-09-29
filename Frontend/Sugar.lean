@@ -534,7 +534,8 @@ def _root_.Frontend.Comp.hasFor : Comp → Bool
 mutual
 /-- The first `yield`, `break` or `return e` (of a generator) in a value. -/
 def _root_.Frontend.Val.yieldAt : Val → Option Span
-  | .app sp (.sugar _ .yield_) _ | .sugar sp .brk | .app sp (.sugar _ .retE) _ => some sp
+  | .app sp (.sugar _ .yield_) _ | .sugar sp .brk | .app sp (.sugar _ .retE) _
+  | .app sp (.sugar _ .yieldFrom) _ => some sp
   | .pair _ V W | .app _ V W => V.yieldAt.orElse fun _ => W.yieldAt
   | .inl _ V | .inr _ V | .unbang _ V | .boxed _ _ V | .unbox _ V | .sub _ V _ | .roll _ V
   | .unroll _ V | .inst _ V _ | .ascribe _ V _ | .shorten _ _ _ _ V => V.yieldAt
@@ -603,8 +604,8 @@ def _root_.Frontend.Comp.sugarAt (p : VSugar → Bool) : Comp → Option Span
   | .force .. | .top _ => none
 end
 
-/-- A `yield`: of a generator's body only. -/
-def isYieldKw (k : VSugar) : Bool := k == .yield_
+/-- A `yield` or `yield from`: of a generator's body only. -/
+def isYieldKw (k : VSugar) : Bool := k == .yield_ || k == .yieldFrom
 
 /-- A generator's `return e` in a computation, at any depth of its loops. -/
 def _root_.Frontend.Comp.hasRet (M : Comp) : Bool := M.anySugar (· == .retE)
@@ -612,7 +613,7 @@ def _root_.Frontend.Comp.hasRet (M : Comp) : Bool := M.anySugar (· == .retE)
 /-- A computation yields or loops: what follows a generator's loop runs in the loop's last step
 when it does neither. -/
 def _root_.Frontend.Comp.yieldsOrLoops (M : Comp) : Bool :=
-  M.anySugar (· == .yield_) || M.hasFor
+  M.anySugar (fun k => k == .yield_ || k == .yieldFrom) || M.hasFor
 
 /-- A terminal that leaves: `break`, `break e` or a generator's `return e`. -/
 def _root_.Frontend.Comp.isExit : Comp → Bool
@@ -1429,6 +1430,30 @@ def genBody (g : GenCx) : Nat → TCx → Comp → SM Comp
     let rest := Comp.bind sp x A (.ret ysp (.unit ysp)) N' lin
     pure (L.fill (fun v => if v == "io_hole_e" then some e else none)
       (fun v => if v == "io_hole_rest" then some rest else none))
+  | n + 1, c, .bind sp x A (.ret ysp (.app _ (.sugar _ .yieldFrom) e)) N lin => do
+    -- `x <- yield from e; N`: the generator `e` runs first, and `x` is what it finishes with.
+    if e.hasYield then throw (yieldOffSpine (e.yieldAt.getD e.span))
+    let (e', lends) := e.takeLends
+    let lend ← match lends with
+      | [] => pure none
+      | [l] => pure (some l)
+      | _ => throw ⟨ysp, "a call lends at most one capability with `&mut`"⟩
+    let Te ← match c.tyV e' with
+      | some T => pure T
+      | none => throw ⟨e.span, "the type of the generator of this `yield from` is not determined"⟩
+    let (Ae, Bf, Rf) ← match genOf Te with
+      | some t => pure t
+      | none => throw ⟨e.span, s!"`yield from` delegates to a generator `U (gen A B R)`, but " ++
+          s!"this has type `{ppT Te}`"⟩
+    unless Ae == g.A do
+      throw ⟨e.span, s!"this generator yields `{ppT Ae}`, and the one it is delegated from " ++
+        s!"yields `{ppT g.A}`"⟩
+    let c' := match lend, Bf with
+      | some l, .tensor K X => (c.push l.name (some K)).push x.name (some X)
+      | some l, K => (c.push l.name (some K)).push x.name (some .unit)
+      | none, _ => c.push x.name ((A.bind c.elabV).orElse fun _ => some Bf)
+    let N' ← genBody g n c' N
+    genDelegate g c c' sp x A (.ret ysp e') lend true Bf Rf N N'
   | n + 1, c, .bind sp x A M N lin => do
     if M.hasYield then
       -- A head that yields: what follows goes into it (a commuting conversion), so the `yield`
@@ -1494,6 +1519,9 @@ def genBody (g : GenCx) : Nat → TCx → Comp → SM Comp
   | n + 1, c, T@(.ret sp (.app _ (.sugar _ .yield_) _)) =>
     -- A `yield` last: yield, then finish with `()`.
     genBody g n c (.bind sp ⟨"io_y", sp⟩ none T (.ret sp (.unit sp)) false)
+  | n + 1, c, T@(.ret sp (.app _ (.sugar _ .yieldFrom) _)) =>
+    -- A `yield from` last: the generator finishes with what the delegate finishes with.
+    genBody g n c (.bind sp ⟨"io_t", sp⟩ none T (.ret sp (.var sp "io_t")) false)
   | _ + 1, _, .ret sp (.app _ (.sugar _ .retE) v) => do
     -- `return v`: the generator finishes with `v`.
     if v.hasYield then throw (yieldOffSpine (v.yieldAt.getD v.span))

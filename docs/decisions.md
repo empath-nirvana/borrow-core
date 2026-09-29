@@ -326,3 +326,7 @@ Each entry: the decision, and why. Newest last.
       skip (`gen_bind_loop`); the alternative of running the loop to its end inside one
       observation would make that observation div, and a generator's observations total is what
       lets a consumer bound its work.
+    - **`yield from g`** is Python's spelling (`from` is not a keyword: it is read after `yield`
+      only). It delegates to a generator of the same element type, and its value is what the
+      delegate finishes with. A lent capability `&mut c` comes back as the delegate's result
+      (`c`, or `(c, x)`), as for a `for`.

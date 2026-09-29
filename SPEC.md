@@ -1263,6 +1263,13 @@ elaborates, in `Frontend/Sugar.lean`, to `f : !(A₁ * … => U (gen A B R))`, `
   `corpus/sugar/gen-div.bc`). What follows a loop runs in its last step only when it neither
   yields nor loops nor calls a div function. `yield` outside a generator's body is an error
   (`corpus/reject/yield-outside.bc`).
+- **`x <- yield from g; N`** delegates to the generator `g : U (gen A B' R')` (of the same
+  element type): `gen_bind[A, B', R', B, R] (g, ⟨λb. x ← b; return (thunkv nu_in ⟨N', close⟩),
+  λr. abort⟩)`, whose first observation is the generator's. Everything `g` yields is yielded, and
+  `x` is what it finishes with; a `yield from` last finishes the generator with it. A capability
+  lent with `&mut c` comes back in `g`'s result (`c` itself, or `(c, x)`) or, closed during `g`,
+  its residual (`corpus/gen-from.bc`, `corpus/sugar/gen-from.bc`,
+  `corpus/reject/gen-from-elem.bc`).
 
 `yield`, `break` and `return` stand on the spine: before elaboration, what follows a head that
 contains one (a `match` or `if`, a bind, a `let`, a loop) is moved into it, into both arms of a
@@ -1275,8 +1282,7 @@ leave that borrow's scope, by the existing rule for thunks (`corpus/reject/gen-e
 A `for` in a div body iterates a generator too (a skip goes round the loop), and an iterator or
 generator that holds no capability (`range(1, 10)`, a pipeline of generators).
 
-**Open.** Delegation to another
-generator (`yield from`, a `gen_bind` of the call); a `gen { … }` block; a total consumer (a `for` over a generator is
+**Open.** A `gen { … }` block; a total consumer (a `for` over a generator is
 div). Generators are not yet a case of §14's specialization (a callback that yields).
 
 ### Borrow scopes over loops, per observation

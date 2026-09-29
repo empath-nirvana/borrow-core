@@ -864,6 +864,12 @@ def valPrefix : Nat → P Val
     | .kw "yield" =>
       -- `yield e` takes a whole expression: `yield x * x` yields the product.
       discard bump
+      -- `yield from e`: delegate to the generator `e`.
+      if (← peek).tok == .ident "from" then
+        discard bump
+        let V ← val n
+        let sp ← spanFrom st
+        return .app sp (.sugar t.span .yieldFrom) V
       let V ← val n
       let sp ← spanFrom st
       pure (.app sp (.sugar t.span .yield_) V)

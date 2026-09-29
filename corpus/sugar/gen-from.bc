@@ -1,0 +1,21 @@
+-- `yield from` (#109): `around` yields 0, then everything `two` yields, then what `two` finished
+-- with. `x <- yield from g; N` is `gen_bind` (`lib/gen.bc`) of `g` and a continuation that binds
+-- `x` to what `g` finishes with and is the generator of `N`; the generator's first observation is
+-- the bind's. `gen-from.core.bc` is the program written by hand in core.
+-- Answer: i32[1256]: the elements 0, 1, 2, 5 read as digits, then `around`'s value 6.
+
+gen fn two() -> i32, i32 =
+  yield 1;
+  yield 2;
+  5
+
+gen fn around() -> i32, i32 =
+  yield 0;
+  let n = yield from two();
+  yield n;
+  n + 1
+
+main -> i32 =
+  let mut acc = 0;
+  let r = for x in around() { acc = acc * 10 + x };
+  acc * 10 + r

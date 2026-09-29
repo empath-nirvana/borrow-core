@@ -1,0 +1,15 @@
+-- expect: 9:14: this generator yields `i64`, and the one it is delegated from yields `i32`
+-- `yield from g` yields what `g` yields, so the two generators yield the same type.
+gen fn wide() -> i64 =
+  let x : i64 = 1;
+  yield x;
+  ()
+
+gen fn narrow() -> i32 =
+  yield from wide();
+  ()
+
+main -> i32 =
+  let mut a = 0;
+  for x in narrow() { a = a + x };
+  a
