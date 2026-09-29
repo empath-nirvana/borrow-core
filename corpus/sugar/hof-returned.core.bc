@@ -31,54 +31,27 @@ def div_bind[A, B, R1, R] : U loop A R1 * U ((A -o F U loop B R) & (R1 -o F R)) 
       return (thunkv nu_in < (nu_out force f s0).1,
           (nu_out force f s0).2 >)
 
-def div_double_alg : !(1 + (mu X. 1 + X) => mu X. 1 + X) =
-  !thunkv fun (r : 1 + (mu X. 1 + X)) ->
-      case r {
-        inl u -> return (roll inl u : mu X. 1 + X)
-      | inr m -> return (roll inr (roll inr m : mu X. 1 + X) : mu X. 1 + X)
-      }
-
-def div_nat_step : !(i32 * (mu X. 1 + X) => i32 * (mu X. 1 + X)) =
-  !thunkv fun (s : i32 * (mu X. 1 + X)) ->
-      let (n, acc) = s;
-      d <- return (unbang fold_own[1 + X, mu X. 1 + X] div_double_alg) acc;
-      n2 <- return (unbang host[shl32]) (n, i32[1]);
-      case (unbang host[eqz32]) ((unbang host[shr_u32]) (n, i32[31])) {
-        inl one -> return (n2, (roll inr d : mu X. 1 + X))
-      | inr zero -> return (n2, d)
-      }
-
-def div_nat_twice : !(i32 * (mu X. 1 + X) => i32 * (mu X. 1 + X)) => !(i32 * (mu X. 1 + X) => i32 * (mu X. 1 + X)) =
-  thunkv fun (f : !(i32 * (mu X. 1 + X) => i32 * (mu X. 1 + X))) ->
-      return (!thunkv fun (s : i32 * (mu X. 1 + X)) ->
-          return (unbang f) ((unbang f) s))
-
-def div_nat : i32 => mu X. 1 + X =
-  thunkv fun (n : i32) ->
-      s <- return (unbang div_nat_twice (div_nat_twice (div_nat_twice (div_nat_twice (div_nat_twice div_nat_step))))) (n, (roll inl () : mu X. 1 + X));
-      let (z, acc) = s;
-      return acc
-
-def div_fuel_alg[A, Q] : !(1 + !(U loop A Q => A + Q) => !(U loop A Q => A + Q)) =
-  !thunkv fun (r : 1 + !(U loop A Q => A + Q)) ->
-      case r {
-        inl u -> let () = u;
-          return (!thunkv fun (l : U loop A Q) ->
-              q <- (nu_out force l).2;
-              return inr q)
-      | inr k -> return (!thunkv fun (l : U loop A Q) ->
-              o <- (nu_out force l).1;
-              case o {
-                inl a -> return inl a
-              | inr l2 -> return (unbang k) l2
-              })
+def div_fuel_step[A, Q] : !(i32 * (U loop A Q + A + Q) => U loop A Q + A + Q) =
+  !thunkv fun (p : i32 * (U loop A Q + A + Q)) ->
+      let (i, s) = p;
+      case s {
+        inl l -> o <- (nu_out force l).1;
+          case o {
+            inl a -> return inr inl a
+          | inr l2 -> return inl l2
+          }
+      | inr r -> return inr r
       }
 
 def div_fuel[A, Q] : U loop A Q * i32 => A + Q =
   thunkv fun (p : U loop A Q * i32) ->
       let (l, n) = p;
-      h <- return (unbang fold_own[1 + X, !(U loop A Q => A + Q)] div_fuel_alg[A, Q]) (div_nat n);
-      return (unbang h) l
+      s <- return (unbang count_fold[U loop A Q + A + Q]) (div_fuel_step[A, Q], (n, (i32[0], inl l)));
+      case s {
+        inl l2 -> q <- (nu_out force l2).2;
+          return inr q
+      | inr r -> return r
+      }
 
 def div_defer_step[B, R] : !U (U (F U loop B R & F R) + U loop B R -o F (B + U (F U loop B R & F R) + U loop B R) & F R) =
   !thunkv fun (s : U (F U loop B R & F R) + U loop B R) ->
