@@ -152,6 +152,10 @@ structure PState where
   /-- Inside a generator's body (and not inside a closure, block or borrow block in it), where a
   statement `return e` finishes the generator from any depth (`VSugar.retE`). -/
   inGen : Bool := false
+  /-- A `yield` was read (reset around a borrow block's body, to see whether it yields). -/
+  yielded : Bool := false
+  /-- The borrow block just read yields: its body is a generator. -/
+  blockYields : Bool := false
 
 abbrev P := StateT PState (Except Error)
 
@@ -880,6 +884,7 @@ def valPrefix : Nat → P Val
         return .app sp (.sugar t.span .yieldFrom) V
       let V ← val n
       let sp ← spanFrom st
+      modify fun s => { s with yielded := true }
       pure (.app sp (.sugar t.span .yield_) V)
     | .sym "*" =>
       discard bump
@@ -899,7 +904,9 @@ def valPrefix : Nat → P Val
 { … }` (a family), or `modify V { p -> S }`. The lifetime `'x` may be left out. -/
 def borrowBlock : Nat → P Val
   | 0 => outOfFuel
-  | n + 1 => withGen false do
+  | n + 1 => do
+    let inGen := (← get).inGen
+    withGen false do
     let st ← startPos
     let t ← bump
     let k ← if t.tok == .kw "modify" then pure BorrowKind.modify else
@@ -916,9 +923,19 @@ def borrowBlock : Nat → P Val
       else if k == .modify then pure "" else freshName "io_l"
     let p ← pat n
     expectSym "->"
+    let y₀ := (← get).yielded
+    modify fun s => { s with yielded := false }
     let M ← blockBody n
+    let yields := (← get).yielded
+    modify fun s => { s with yielded := y₀ || yields }
     expectSym "}"
     let sp ← spanFrom st
+    -- A body that yields is a generator made in the block, which the statement delegates to
+    -- (`statement`): a generator cannot hold a borrow of its own local across a `yield`, and the
+    -- typing of the block, whose result is boxed at its lifetime, says so.  `[spec §15]`
+    let yields := yields && inGen
+    let M := if yields then Comp.ret sp (.app sp (.sugar t.span .genBlock) (.thunk sp M)) else M
+    modify fun s => { s with blockYields := yields }
     let (b, M) ← match p with
       | .var b => pure (b, M)
       | p => do
@@ -1159,7 +1176,7 @@ def statement : Nat → Pos → Bool → P Comp
   | n + 1, st, head => do
     let t ← peek
     let t1 ← peekAt 1
-    modify fun s => { s with joined := [] }
+    modify fun s => { s with joined := [], blockYields := false }
     -- A statement expression, and the place it rebinds.
     let (S, rebind) ← match t.tok, t1.tok with
       | .kw "return", _ =>
@@ -1209,7 +1226,14 @@ def statement : Nat → Pos → Bool → P Comp
         return .bind sp ⟨j, sp⟩ none (joinArms joined S)
           (← bindPat sp n (varPat sp joined) (.var sp j) N) false
       match S, rebind with
-      | .ret _ V, some _ => letVal sp n (.wild sp) none V N
+      | .ret _ V, some _ =>
+        if (← get).blockYields then
+          -- A borrow block whose body yields: delegate to the generator it makes.
+          let g ← freshName "io_g"
+          let d ← freshName "io_d"
+          letVal sp n (.var ⟨g, sp⟩) none V
+            (.bind sp ⟨d, sp⟩ none (.ret sp (.app sp (.sugar sp .yieldFrom) (.var sp g))) N false)
+        else letVal sp n (.wild sp) none V N
       | S, _ =>
         let d ← freshName "io_s"
         pure (.bind sp ⟨d, sp⟩ none S N false)
@@ -1219,7 +1243,9 @@ def statement : Nat → Pos → Bool → P Comp
         -- A tail borrow block hands back its result; the place is rebound, and dropped.
         let sp ← spanFrom st
         let v ← freshName "io_v"
-        letVal sp n (.var ⟨v, sp⟩) none V (.ret sp (.var sp v))
+        if (← get).blockYields then
+          letVal sp n (.var ⟨v, sp⟩) none V (.ret sp (.app sp (.sugar sp .yieldFrom) (.var sp v)))
+        else letVal sp n (.var ⟨v, sp⟩) none V (.ret sp (.var sp v))
       | S, _ => pure S
 
 /-- A prefix keyword applied to its operand, or a spine. -/

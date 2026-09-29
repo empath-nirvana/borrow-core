@@ -494,7 +494,7 @@ def destructParts (v : String) (parts : List (List (String × CVTy))) : String :
     destructSrc v ns ++ String.join ((ns.zip ps).map fun (n, p) => destructSrc n (p.map (·.1)))
 
 /-- The context a div function with result `B` and body `M` is elaborated at, or a generator
-(`gen`), whose residual is `K`.  `[spec §14]` -/
+(`gen`), whose residual is `K`.  `[spec §14, §15]` -/
 def loopCxOf (sp : Span) (B : CVTy) (M : Comp) (gen : Bool := false) : Except Error LoopCx := do
   let parts := spineT B
   let lin := parts.filter isLinear
@@ -680,10 +680,8 @@ def stripRet : Comp → Comp :=
 /-- The error for a `yield` or `break` off the spine. -/
 def yieldOffSpine (sp : Span) : Error :=
   ⟨sp, "`yield` and `break` may appear only on the spine of a generator's body (the tail " ++
-    "positions of binds, `let`s, `match` arms and loops): not inside a value, a call's argument or " ++
-    "a borrow block. A generator's state is what lives between two observations, and a borrow " ++
-    "block's body is one computation that returns before the block ends, so a generator cannot " ++
-    "hold a borrow of its own local across a `yield`"⟩
+    "positions of binds, `let`s, `match` arms, loops and borrow blocks): not inside a value or a " ++
+    "call's argument"⟩
 
 /-- Moved to tail positions: the exits (`break`, `return e`) and `yield`s of a body's heads. What
 follows a head that leaves or yields goes into it (a commuting conversion): into both arms of a
@@ -1008,7 +1006,7 @@ def loopBody (cx : LoopCx) : Nat → TCx → Comp → SM Comp
       loopBody cx n c (.bind T.span x none T (.ret T.span (.var T.span "io_t")) false)
     | none, _ => dret cx T
 
-/-! ### Generators  `[lib/gen.bc]`
+/-! ### Generators  `[spec §15]`
 
 A `gen fn f(ps) -> A, B = S` is a generator of `A` finishing with `B`: it is elaborated to a function
 returning `U (gen A B R)` (`lib/gen.bc`), whose residual `R` is read off `B` as a div function's is
@@ -1032,9 +1030,11 @@ yields), and `abort` hands back the residual without running anything. On the bo
 * **A `yield` in a bound computation** (`x <- if c { yield e } else { … }; N`) takes `N` into
   the computation's arms, so that the `yield` is on the spine.
 
-A `yield` anywhere else, such as inside a borrow block, is an error: a generator's state is what
-lives between observations, and a borrow block's body is one computation that returns before the
-block ends. -/
+* **A borrow block whose body yields** is a delegation to the generator its body makes
+  (`Parser.borrowBlock`), which the typing of the block rejects: its result is boxed at the
+  block's lifetime, and a thunk has no outlives rule (SPEC §15, Self-reference).
+
+A `yield` anywhere else, such as inside a value or a call's argument, is an error. -/
 
 /-- A thunk's `<next, close>` consumes what it captures in both components: `close`, which does not
 run `next`, binds each captured variable of `M` other than `keep` (the capabilities it hands
@@ -1394,7 +1394,7 @@ argument with the lent capability `lend` replaced; `Bf` and `Rf` are what it fin
 with; `N'` is the rest elaborated to its first observation in the context `cN` (with `x` bound).
 The continuation binds `x` (and the lent capability) and is the generator of the rest; closed
 during the call, it turns the call's residual into the generator's. The result is the bind's first
-observation.  `[spec §14]` -/
+observation.  `[spec §15]` -/
 def genDelegate (g : GenCx) (c cN : TCx) (sp : Span) (x : Ident) (A : Option VTy) (call : Comp)
     (lend : Option Ident) (isGen : Bool) (Bf Rf : CVTy) (N N' : Comp) : SM Comp := do
   let cx := g.L
@@ -1663,7 +1663,7 @@ def lastTy : Nat → TCx → Comp → Option CVTy
 /-- A generator body `M` in the context `c`, as a generator: `thunkv nu_in < M', close >`, with
 `M'` its first observation and `close` handing back its residual without running it; and its
 type. The element type is `A`, or what `M` yields first; the result `B`, or what `M` finishes
-with. `what` names the form in messages.  `[spec §14]` -/
+with. `what` names the form in messages.  `[spec §15]` -/
 def genValue (c : TCx) (sp : Span) (M : Comp) (A B : Option CVTy) (what : String) :
     SM (Val × CVTy) := do
   let M ← normExits divFuel M
@@ -2453,6 +2453,15 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
         let some v := c₁.E.lenv.lookup x | throw ⟨lsp, "internal error: a borrow block"⟩
         let Tb : CVTy := if k == .imm then .imm (.var v) A else .mut (.var v) A
         let S' ← surfC n (c₁.push b.name (some Tb)) none S
+        -- A body that yields is a generator made in the block (`Parser.borrowBlock`), elaborated
+        -- here, where the borrow is in scope: the typing of the block then rejects it, since its
+        -- result is boxed at `'x` and a thunk has no outlives rule.  `[spec §15]`
+        let S' ← match S' with
+          | .ret rsp (.app gsp (.sugar _ .genBlock) (.thunk _ M)) => do
+            let (g, _) ← (genValue (c₁.push b.name (some Tb)) gsp M none none
+              "the generator of a borrow block that yields" : SM (Val × CVTy))
+            pure (Comp.ret rsp g)
+          | S' => pure S'
         let B ← need tsp "the block's result" (resultOfC ((c₁.push b.name (some Tb)).tyC S'))
         if BoCa.Fig16.LogRel.Core.Check.vfreeB v B then
           throw (Frontend.Elab.LoopLend.escapeError tsp x (Frontend.Check.ppV c₁.E.lenv 0 0 B))
@@ -2643,7 +2652,7 @@ def surfDecl : Nat → Decl → DM Decl
 
 /-- The instance of the generic generator `t` at the types of a call's argument `W`, or at the
 type arguments `targs` written: its name, made and elaborated on first use; and the argument, its
-components elaborated.  `[spec §14]` -/
+components elaborated.  `[spec §15]` -/
 def instOf : Nat → TCx → Span → Decl → Option (List VTy) → Val → DM (String × Val)
   | 0, _, sp, _, _, _ => throw ⟨sp, "instantiation of generic generators does not terminate"⟩
   | n + 1, c, sp, t, targs, W => do
