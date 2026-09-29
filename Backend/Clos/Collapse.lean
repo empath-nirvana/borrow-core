@@ -137,13 +137,31 @@ def Tm.canon : Tm → RM Tm
   | .drop x b => return .drop (← rn x) (← b.canon)
   | t => pure t
 
+/-- A term as a string that determines it (a key for `mergeCodes`), built directly: the derived
+`Repr` lays the text out, which dominates the cost on large programs. -/
+def Tm.keyStr : Tm → String
+  | .var x => s!"v{x}"
+  | .unit => "u"
+  | .lit c => s!"l({reprStr c})"
+  | .pair a b => s!"p({a},{b})"
+  | .inj r a => s!"i({r},{a})"
+  | .clos c xs => s!"c({c},{xs})"
+  | .prim op xs => s!"o({reprStr op},{xs})"
+  | .app f a => s!"a({f},{a})"
+  | .letv x e b => s!"L({x},{e.keyStr},{b.keyStr})"
+  | .letpair x y p b => s!"P({x},{y},{p},{b.keyStr})"
+  | .case s x b₁ y b₂ => s!"C({s},{x},{b₁.keyStr},{y},{b₂.keyStr})"
+  | .copy x x' b => s!"K({x},{x'},{b.keyStr})"
+  | .drop x b => s!"D({x},{b.keyStr})"
+
 /-- A code's text with its variables numbered in order of appearance. -/
 def Code.key (c : Code) : String :=
   let act : RM Code := do
     let env ← c.env.mapM rn
     let param ← rn c.param
     pure ⟨env, param, ← c.body.canon⟩
-  reprStr (act.run' {})
+  let k := act.run' {}
+  s!"{k.env}|{k.param}|{k.body.keyStr}"
 
 def Tm.renameCodes (f : Nat → Nat) : Tm → Tm
   | .clos c xs => .clos (f c) xs

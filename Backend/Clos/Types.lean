@@ -464,12 +464,14 @@ def onCycle (succ : Array (List Nat)) : Array Bool := Id.run do
   let mut stack : List Nat := []
   let mut next := 0
   let mut cyc : Array Bool := Array.replicate n false
+  -- A bound on the steps of one search: every node entered and left, every edge followed.
+  let steps := 4 * n + 4 + succ.foldl (fun k l => k + l.length) 0
   for root in [0:n] do
     if index[root]!.isSome then continue
     index := index.set! root (some next); low := low.set! root next; next := next + 1
     stack := root :: stack; onStack := onStack.set! root true
     let mut calls : List (Nat × Nat) := [(root, 0)]
-    for _ in [0:4 * n + 4 + succ.foldl (fun k l => k + l.length) 0] do
+    for _ in [0:steps] do
       match calls with
       | [] => break
       | (v, i) :: rest =>
@@ -531,11 +533,12 @@ def resolve (s : TState) (codeTy : Array Nat) (codeEnv : Array (List Nat)) (main
   let mut width : Array Nat := Array.replicate n 0
   let mut trivial : Array Bool := Array.replicate n true
   let mut boxed : Std.HashSet (Nat × Nat) := {}
+  let steps := 4 * n + 4 + succ.foldl (fun k l => k + l.length) 0
   for root in [0:n] do
     if rep[root]! != root || color[root]! != 0 then continue
     let mut stack : List (Nat × Nat) := [(root, 0)]
     color := color.set! root 1
-    for _ in [0:4 * n + 4 + succ.foldl (fun k l => k + l.length) 0] do
+    for _ in [0:steps] do
       match stack with
       | [] => break
       | (v, i) :: rest =>
