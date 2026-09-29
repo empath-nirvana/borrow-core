@@ -124,7 +124,7 @@ def byteEscape : Char → Option Nat
 
 /-- The lexer loop. `pos` is the position of the head of `cs`; `spaced` records whether
     whitespace was skipped since the last token. A byte literal `b'c'` is read as the tokens of
-    `u8[n]`, `n` the ASCII code of `c` (strings S1, `docs/decisions.md` 42). -/
+    `u8[n]`, `n` the ASCII code of `c` (strings S1, `docs/decisions.md` 43). -/
 def lexGo : Nat → List Char → Pos → Bool → Array Token → Except Error (Array Token)
   | 0, _, pos, _, _ => .error ⟨⟨pos, pos⟩, "lexer ran out of fuel"⟩
   | fuel + 1, cs, pos, spaced, acc =>

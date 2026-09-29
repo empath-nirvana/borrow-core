@@ -424,7 +424,7 @@ The grouped operations are Wasm's, at `w32` and `w64`. At `w8` they exist as nam
 (`hostArg`), so none is applicable, and `Host.call` has no argument shape for them: arithmetic
 on bytes is done at `I32`, as in Wasm. The surface elaborates an operator at `u8` to the `i32`
 operation on `extend8_u` of its operands, narrowing an arithmetic result by `wrap8`, and reads
-the byte literal `b'c'` as `u8[n]` (`docs/decisions.md` 42).
+the byte literal `b'c'` as `u8[n]` (`docs/decisions.md` 43).
 
 `A ⇒ B` is the call-by-value function type `U(A ⊸ F B)`. Typing: `CDerives.lit` gives a literal
 its width's type, and `CDerives.hostOp op` gives `host op` the type `!(hostArg op ⇒ hostRes op)`.
