@@ -477,7 +477,8 @@ end Types
 /-- The strongly connected component of every node of the graph `succ` (Tarjan's algorithm,
 iteratively), and whether the node lies on a cycle: its component has two nodes or more, or it
 is its own successor. -/
-def onCycle (succ : Array (List Nat)) : Array Bool := Id.run do
+def onCycle (succL : Array (List Nat)) : Array Bool := Id.run do
+  let succ := succL.map List.toArray
   let n := succ.size
   let mut index : Array (Option Nat) := Array.replicate n none
   let mut low : Array Nat := Array.replicate n 0
@@ -486,7 +487,7 @@ def onCycle (succ : Array (List Nat)) : Array Bool := Id.run do
   let mut next := 0
   let mut cyc : Array Bool := Array.replicate n false
   -- A bound on the steps of one search: every node entered and left, every edge followed.
-  let steps := 4 * n + 4 + succ.foldl (fun k l => k + l.length) 0
+  let steps := 4 * n + 4 + succ.foldl (fun k l => k + l.size) 0
   for root in [0:n] do
     if index[root]!.isSome then continue
     index := index.set! root (some next); low := low.set! root next; next := next + 1
@@ -549,7 +550,8 @@ def resolve (s : TState) (codeTy : Array Nat) (codeEnv : Array (List Nat)) (main
     match shape[v]! with
     | .fn .. => if rep[v]! == v && cyc[v]! then m.insert v else m
     | _ => m) {}
-  let fieldsOf (v : Nat) : List Nat := if recFn.contains v then [] else succ[v]!
+  let succA := succ.map List.toArray
+  let fieldsOf (v : Nat) : Array Nat := if recFn.contains v then #[] else succA[v]!
   let mut color : Array Nat := Array.replicate n 0
   let mut width : Array Nat := Array.replicate n 0
   let mut trivial : Array Bool := Array.replicate n true

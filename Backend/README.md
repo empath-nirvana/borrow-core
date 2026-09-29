@@ -12,6 +12,9 @@ from it (`Clos/Types.lean`), and every stage from the flat IR on lays values out
     lake exe bcc-counts <file>                 allocations, indirect calls and deep copies of a run
     lake exe bcc-counts --sites <file>         the closure calls: direct, dispatched; recursive types
     scripts/compile-corpus.sh                  the corpus, compiled against the interpreter
+    lake exe bcc compile --timings <file> -o <out.wat>
+                                               each stage's time and output size, on stderr
+    scripts/compile-scaling.sh                 compile time against program size, per stage
 
 Every stage prints the same report: `main`'s value, then `live N`, the number of objects live
 after the value has been dropped (`Backend.report`, `Backend/Value.lean`). Values print in
@@ -85,7 +88,13 @@ is reported, not compiled; the source's typing derivation is what makes the corp
 is abstracted by its construction site (a closure by its code, a pair or injection by its
 operands, a cell or array by its contents), and the least solution of the inclusion constraints
 gives, for every call and for the loop driver, the codes whose closures may reach it. The helpers
-that call closures (`tab`, an array's `drop`, the loop driver) are constraints too. A call's code
+that call closures (`tab`, an array's `drop`, the loop driver) are constraints too. Like the layout
+types, it reads `&`: a code that cases on its parameter has one answer per arm, a call whose
+argument is a literal injection takes that arm's answer only, and a code that forwards its
+parameter answers each projection as the function it forwards to does. Without this, every
+observation of a thunk would receive what both projections answer, and the sets would grow with
+the program. The solver is a worklist indexed by the keys each constraint reads, passing on only
+the values a key gains, so its time is about the size of the solution. A call's code
 is known when the codes the analysis finds there that are in its type's union are one: each set
 over-approximates, so their intersection does.
 
@@ -98,7 +107,10 @@ loop driver's call too), and otherwise a call of the type's dispatcher `apply`, 
 tail-call the codes. A call in return position whose callee answers the caller's words is a tail
 call. `case` is an `if` on the tag word. Copy, drop, the
 printer, the array primitives, the counted loop and the loop driver are flat-IR functions
-generated per layout type; host operations are inline.
+generated per layout type; host operations are inline. Every local is set once, where it is made,
+so a `let` whose value's words are already in locals (a variable, a component, a call's results)
+binds its variable to those locals, and moves no word; only words computed there get locals of
+their own.
 
 **Wasm** (`Wasm/Lower.lean`). One Wasm function per flat-IR function, `i64` locals, several
 results as a multi-value function, tail calls as `return_call`, a `switch` as `br_table` over
@@ -408,6 +420,34 @@ structure gives the disjointness; the algebra is called on the same arguments, i
 order, as the recursive step calls it, so the refinement is to the recursive code. The flat-IR
 interpreter checks every load and store of the reversal against the live ranges.
 
+## Compile time (#122)
+
+`bcc compile --timings` writes each stage's time and output size, and times the flow analysis
+and the layout types on their own on the program each stage receives. `scripts/compile-scaling.sh`
+compiles programs of 1, 2, 4, 8 and 16 copies of a corpus-like body (functions of loops over
+generators and adapters, `imm` and `mut` borrows, and per copy a loop and calls in `main`) and
+fits each stage's growth; with `--guard` it is a step of the gate, which fails when the 8× program
+takes more than 16 times the 1× program's time.
+
+Every backend pass grows about linearly on that benchmark (fitted exponents 1.0 to 1.25 from 1×
+to 32×; the time per step of the flow analysis grows as its tables outgrow the caches): the
+closure conversion computes every subterm's free indices once, bottom-up, and keeps its context
+in a map by level; the flow analysis's worklist passes each value along each edge once, and its
+sets stay the size of the program because it reads `&` (above); collapsing's last round of code
+merging finds the layout types of its result, which the flat IR reuses.
+
+**Known slow shapes.** These are superlinear and are left so:
+
+- *One body with many resumption points.* A generator or div body is one state machine (SPEC
+  §15) whose state is a sum with one summand per point, nested to the right. Each summand
+  adds a tag word to the state's width, and a transition to point `k` builds `k` nested
+  injections, so the source's and the closure IR's size, the state's width and the words each
+  transition passes are all proportional to the number of points: a body of `P` points costs
+  about `P²`. A `main` of 160 points (loops and direct-style div calls) compiles in about 4 s.
+- *The checker on a large body.* `Frontend/Check` keeps a use mask as long as the context at each
+  node (`orL`, `subL`), and decides freeness by walking types (`vfreeB`); on the body of such a
+  `main` it grows about as the square of the body (1.1 s of the 4 s above). Its masks carry the
+  checker's proofs (`Frontend/Check/Fam.lean`), and are left for their own change.
 ## Scope
 
 No optimizations beyond the layouts, defunctionalization, direct calls of known codes, native

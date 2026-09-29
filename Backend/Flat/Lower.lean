@@ -299,17 +299,35 @@ def dropVals (n : Nat) (ls : List Nat) : LM (List Stmt) := do
 
 /-! ### Terms -/
 
-/-- Where a term's words go: locals, or returned, padded to `k` words. -/
+/-- Where a term's words go: locals, returned (padded to `k` words), or bound to the variable
+`x`. -/
 inductive Dest where
   | to (ls : List Nat)
   | ret (k : Nat)
+  | bind (x : Var)
+
+def emitTo (ls : List Nat) (vs : List Exp) : LM (List Stmt) := do
+  if ls.length != vs.length then
+    throw s!"flat IR: {vs.length} words for {ls.length} locals"
+  pure (ls.zip vs |>.map fun (l, e) => .set l e)
 
 def emit : Dest → List Exp → LM (List Stmt)
-  | .to ls, vs => do
-    if ls.length != vs.length then
-      throw s!"flat IR: {vs.length} words for {ls.length} locals"
-    pure (ls.zip vs |>.map fun (l, e) => .set l e)
+  | .to ls, vs => emitTo ls vs
   | .ret k, vs => pure [.ret (vs ++ zeros (k - vs.length))]
+  | .bind x, vs => do
+    -- A word already in a local is held there: every local is set once, where it is made, and
+    -- what it held is consumed here. Any other word is set in a fresh local.
+    let mut ls : Array Nat := #[]
+    let mut ss : Array Stmt := #[]
+    for v in vs do
+      match v with
+      | .loc l => ls := ls.push l
+      | e =>
+        let t ← fresh1
+        ss := ss.push (.set t e)
+        ls := ls.push t
+    bindVals x ls.toList
+    return ss.toList
 
 /-- A host operation on its operand's words (§8): an integer, a tag, or a partial operation's
 tag and integer. A 32-bit integer is held zero-extended. -/
@@ -441,6 +459,7 @@ def lowerCall (f a : Var) (k w : Nat) (d : Dest) : LM (List Stmt) := do
   match d with
   | .ret k' => if k' == k then return [.tailCall g args] else pure ()
   | .to ls => if ls.length == k then return [.call ls g args] else pure ()
+  | .bind _ => pure ()
   let ts ← fresh k
   return [.call ts g args] ++ (← emit d (locs (ts.take w)))
 
@@ -467,7 +486,7 @@ def lowerTm : Tm → Dest → LM (List Stmt)
       let some r := T.apps[f]? | throw "flat IR: an untyped call"
       lowerCall f a (T.answerWords (← vty f)) (T.words r) d
   | .letv x e b, d => do
-      let se ← lowerTm e (.to (← bindFresh x))
+      let se ← lowerTm e (.bind x)
       return se ++ (← lowerTm b d)
   | .letpair x y p b, d => do
       let (s, vx, vy) ← splitPair (← vty p) (← vals p) true
@@ -475,6 +494,10 @@ def lowerTm : Tm → Dest → LM (List Stmt)
       bindVals y vy
       return s ++ (← lowerTm b d)
   | .case s x b₁ y b₂, d => do
+      -- Both arms write the same locals.
+      let d ← match d with
+        | .bind z => pure (.to (← bindFresh z))
+        | d => pure d
       let n ← vty s
       let ls ← vals s
       let (s₁, v₁) ← payload n false ls true
@@ -1104,15 +1127,18 @@ def callsOf : Tm → List Var
 /-- The calls whose code is known, by their function variable: the flow analysis's codes there
 that are in the union of the call's closure type are one. Each analysis over-approximates the
 codes that reach the call, so their intersection does. -/
-def knownCalls (p : Clos.Prog) : Std.HashMap Var Nat :=
-  match p.types with
-  | .error _ => {}
-  | .ok T =>
-  p.flow.fold (fun m f cs =>
+def knownCallsOf (T : Types) (flow : Std.HashMap Var (Array Nat)) : Std.HashMap Var Nat :=
+  flow.fold (fun m f cs =>
     let u := T.union (T.varTy.getD f 0)
     match cs.filter u.contains with
     | #[c] => m.insert f c
     | _ => m) {}
+
+/-- `knownCallsOf` at the program's types and flow. -/
+def knownCalls (p : Clos.Prog) : Std.HashMap Var Nat :=
+  match p.types with
+  | .error _ => {}
+  | .ok T => knownCallsOf T p.flow
 
 /-- The program's closure calls: how many there are, how many call the one code of their type's
 union, and how many more a code the flow analysis finds. The rest are dispatched. -/
@@ -1141,14 +1167,19 @@ def foldSites (p : Clos.Prog) : Except String (Nat × Nat) := do
   let (n, _) ← (act.run ctx).run {}
   pure (n, p.folds.length - n)
 
-def lower (p : Clos.Prog) (counts : Bool := false) : Except String Prog := do
-  let T ← p.types
+/-- The flat IR of `p`; `types` are `p`'s layout types when they are known already. -/
+def lower (p : Clos.Prog) (counts : Bool := false) (types : Option Types := none) :
+    Except String Prog := do
+  let T ← match types with
+    | some T => pure T
+    | none => p.types
   let nc := p.codes.size
   let fMain := codeFn nc
-  let ctx : Ctx := { T, codes := p.codes, known := knownCalls p, helperBase := fMain + 2,
+  let (flow, drive) := p.flowAll
+  let ctx : Ctx := { T, codes := p.codes, known := knownCallsOf T flow, helperBase := fMain + 2,
                      folds := p.folds.foldl (fun m f => m.insert f.code f) {},
                      live := p.liveCodes,
-                     driveKnown := match p.flowAll.2 with
+                     driveKnown := match drive with
                        | some #[c] => some c
                        | _ => none }
   let act : LM (List Fn) := do
