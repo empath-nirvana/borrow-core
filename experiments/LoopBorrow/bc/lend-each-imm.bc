@@ -1,0 +1,85 @@
+-- O1, a lending yield in push form: each observation lends one element of an array to the
+-- consumer's body as a view `imm 'z i32`, a borrow that ends inside the observation. The loop's
+-- state holds the array's owner; each step borrows it `imm` at 'x, takes the view of one entry
+-- at 'z (`withload`, `array_get`), and runs the body on the view. The element is never handed
+-- out of the observation: the body is the step's input, not its result.
+--
+-- Answer: i32[100]: the table holds 10 * i, the body reads entries 4, 3, 2, 1 through their
+-- views, and 40 + 30 + 20 + 10 = 100. A body that ignored the view gives 0.
+
+def drive_alg[A, Q] :
+    !(1 + !(U (loop A Q) => A + Q) => !(U (loop A Q) => A + Q)) =
+  !thunkv fun (r : 1 + !(U (loop A Q) => A + Q)) ->
+    case r {
+      inl u ->
+        let () = u;
+        return (!thunkv fun (l : U (loop A Q)) ->
+          q <- (nu_out (force l)).2;
+          return (inr q))
+    | inr k ->
+        return (!thunkv fun (l : U (loop A Q)) ->
+          o <- (nu_out (force l)).1;
+          case o {
+            inl a -> return (inl a)
+          | inr l2 -> return ((unbang k) l2)
+          })
+    }
+
+def z0 : mu X. 1 + X = roll (inl ())
+def z1 : mu X. 1 + X = roll (inr z0)
+def z2 : mu X. 1 + X = roll (inr z1)
+def z3 : mu X. 1 + X = roll (inr z2)
+def z4 : mu X. 1 + X = roll (inr z3)
+def z5 : mu X. 1 + X = roll (inr z4)
+def z6 : mu X. 1 + X = roll (inr z5)
+def z7 : mu X. 1 + X = roll (inr z6)
+def z8 : mu X. 1 + X = roll (inr z7)
+
+fn tab(i: i32) -> i32 = i * 10
+
+-- The consumer's body: an element view and the running sum; it reads through the view.
+def body : !(all 'z < top. imm 'z i32 * i32 => box 'z i32) =
+  !thunkv Fun 'z < top. return (thunkv fun (p : imm 'z i32 * i32) ->
+    let (e, acc) = p;
+    let v = *e;
+    boxed['z] (acc + v))
+
+type T = array i32
+type St = ref T * (i32 * i32)
+type ULp = U (loop (ref T * i32) (ref T * 1))
+
+-- The lending loop over the entries `n, n - 1, …, 1`: each step lends entry `n` to `body`.
+def lend_each : !U (St -o loop (ref T * i32) (ref T * 1)) =
+  unfold[loop (ref T * i32) (ref T * 1), St]
+    (!thunkv fun (p : St) ->
+      < let (r, s) = p;
+        let (n, acc) = s;
+        if n == 0 { return (inl (r, acc)) }
+        else {
+          q <- return (withbor1['x, T, i32] r (thunkv Fun 'x < dom. return (thunkv fun (b : imm 'x T) ->
+                 v <- return (withload['x, 'z, T, i32] b (thunkv Fun 'z < dom. return (thunkv fun (xs : array_imm 'z i32) ->
+                        match array_get['z, i32] (xs, n) {
+                          inl e -> return ((unbang body) ['z] (e, acc))
+                        | inr _ -> boxed['z] acc
+                        })));
+                 boxed['x] v)));
+          let (r2, acc2) = q;
+          return (inr (r2, ((unbang host[sub32]) (n, 1), acc2)))
+        },
+        let (r, s) = p;
+        let (n, acc) = s;
+        return (r, ()) >)
+
+main : F i32 =
+  a <- return (array_new[i32] (i32[10], tab));
+  t <- return (alloc[T] a);
+  f <- return (unbang lend_each);
+  s0 : St <- return (t, (i32[4], i32[0]));
+  l : ULp <- return (thunkv nu_in < (nu_out (force f s0)).1, (nu_out (force f s0)).2 >);
+  d <- return ((unbang (fold_own[1 + X, !(ULp => (ref T * i32) + (ref T * 1))]
+         drive_alg[ref T * i32, ref T * 1])) z8);
+  o <- return ((unbang d) l);
+  case o {
+    inl p -> let (t2, n) = p; return n
+  | inr q -> let (t2, u) = q; let () = u; return i32[0]
+  }

@@ -124,3 +124,8 @@ roots = ["Coeffects"]
 name = "CoeffectsStrict"
 srcDir = "experiments/CoeffectsStrict"
 roots = ["CoeffectsStrict"]
+
+[[lean_lib]]
+name = "LoopBorrow"
+srcDir = "experiments/LoopBorrow"
+roots = ["LoopBorrow"]

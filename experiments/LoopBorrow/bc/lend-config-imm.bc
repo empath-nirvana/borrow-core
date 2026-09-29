@@ -1,0 +1,94 @@
+-- O1, the coalgebraic form: a loop-invariant configuration, borrowed `imm` by every
+-- iteration. The configuration is a cell holding `(step, limit)`; the loop adds `step` to an
+-- accumulator until it reaches `limit`, reading both through the borrow at each iteration.
+--
+-- Answer: (i32[12], i32[4]): with `(3, 10)` the accumulator goes 0, 3, 6, 9, 12, in four
+-- iterations. A loop that read the limit once as 0 stops at once with (0, 0); one that ignored
+-- the step never finishes within the driver's bound and is closed with (0, 0).
+
+-- A driver: observe a loop at most `n` times (a unary count), and close it if it has not
+-- finished. `div_fuel`'s algebra (`lib/div.bc`) over a count written out.
+def drive_alg[A, Q] :
+    !(1 + !(U (loop A Q) => A + Q) => !(U (loop A Q) => A + Q)) =
+  !thunkv fun (r : 1 + !(U (loop A Q) => A + Q)) ->
+    case r {
+      inl u ->
+        let () = u;
+        return (!thunkv fun (l : U (loop A Q)) ->
+          q <- (nu_out (force l)).2;
+          return (inr q))
+    | inr k ->
+        return (!thunkv fun (l : U (loop A Q)) ->
+          o <- (nu_out (force l)).1;
+          case o {
+            inl a -> return (inl a)
+          | inr l2 -> return ((unbang k) l2)
+          })
+    }
+
+def z0 : mu X. 1 + X = roll (inl ())
+def z1 : mu X. 1 + X = roll (inr z0)
+def z2 : mu X. 1 + X = roll (inr z1)
+def z3 : mu X. 1 + X = roll (inr z2)
+def z4 : mu X. 1 + X = roll (inr z3)
+def z5 : mu X. 1 + X = roll (inr z4)
+def z6 : mu X. 1 + X = roll (inr z5)
+def z7 : mu X. 1 + X = roll (inr z6)
+def z8 : mu X. 1 + X = roll (inr z7)
+
+-- The lend over a loop, `imm`: the step sees the lender borrowed at `'x` for one observation,
+-- and returns a result or the next state, both outliving `'x`.
+def lend_loop_imm[A, S, B, R] :
+    !(all 'x < top. imm 'x A * S => box 'x (B + S)) * !(all 'x < top. imm 'x A * S => box 'x R) =>
+    !U (ref A * S -o loop (ref A * B) (ref A * R)) =
+  thunkv fun (st : !(all 'x < top. imm 'x A * S => box 'x (B + S)) *
+                   !(all 'x < top. imm 'x A * S => box 'x R)) ->
+    let (nx, cl) = st;
+    return (unfold[loop (ref A * B) (ref A * R), ref A * S]
+      (!thunkv fun (p : ref A * S) ->
+        < let (r, s) = p;
+          q <- return (withbor1['x, A, B + S] r (thunkv Fun 'x < dom. return (thunkv fun (b : imm 'x A) ->
+                 return ((unbang nx) ['x] (b, s)))));
+          let (r, o) = q;
+          case o { inl v -> return (inl (r, v)) | inr s2 -> return (inr (r, s2)) },
+          let (r, s) = p;
+          withbor1['x, A, R] r (thunkv Fun 'x < dom. return (thunkv fun (b : imm 'x A) ->
+            return ((unbang cl) ['x] (b, s)))) >))
+
+type Cfg = i32 * i32
+type St = i32 * i32
+
+-- One iteration over `(acc, k)`: finish with `(acc, k)` once `acc` reaches the limit, else add
+-- the step.
+def round : !(all 'x < top. imm 'x Cfg * St => box 'x (St + St)) =
+  !thunkv Fun 'x < top. return (thunkv fun (p : imm 'x Cfg * St) ->
+    let (b, s) = p;
+    let (acc, k) = s;
+    r <- return (withload['x, 'z, Cfg, St + St] b (thunkv Fun 'z < dom. return (thunkv fun (c : Cfg) ->
+      let (step, limit) = c;
+      case (unbang host[lt_s32]) (acc, limit) {
+        inl ge -> return (boxed['z] (inl (acc, k)))
+      | inr lt -> return (boxed['z] (inr ((unbang host[add32]) (acc, step),
+                                          (unbang host[add32]) (k, i32[1]))))
+      })));
+    return (boxed['x] r))
+
+def halt : !(all 'x < top. imm 'x Cfg * St => box 'x 1) =
+  !thunkv Fun 'x < top. return (thunkv fun (p : imm 'x Cfg * St) ->
+    let (b, s) = p;
+    return (boxed['x] ()))
+
+type ULp = U (loop (ref Cfg * St) (ref Cfg * 1))
+
+main : F St =
+  t <- return (alloc[Cfg] (i32[3], i32[10]));
+  f <- return (unbang (lend_loop_imm[Cfg, St, St, 1] (round, halt)));
+  s0 : ref Cfg * St <- return (t, (i32[0], i32[0]));
+  l : ULp <- return (thunkv nu_in < (nu_out (force f s0)).1, (nu_out (force f s0)).2 >);
+  d <- return ((unbang (fold_own[1 + X, !(ULp => (ref Cfg * St) + (ref Cfg * 1))]
+         drive_alg[ref Cfg * St, ref Cfg * 1])) z8);
+  o <- return ((unbang d) l);
+  case o {
+    inl p -> let (t2, n) = p; return n
+  | inr q -> let (t2, u) = q; let () = u; return (i32[0], i32[0])
+  }
