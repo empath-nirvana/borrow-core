@@ -709,6 +709,27 @@ The two kernel questions, O1's loop-scoped borrow and O2's input observations (#
 in step 10. Everything before it is elaboration, library code, or externs under the existing
 SPEC §11 pattern.
 
+## 6a. Milestones: standalone programs
+
+The path in §6 is delivered as a ladder of small standalone programs. Each is useful on its
+own, forces one cluster of features, and is accepted when it runs end to end with its goldens.
+The operator is then mostly composition of them.
+
+| # | deliverable | forces | §6 steps |
+|---|---|---|---|
+| M1 | text tools (`grep`/`wc`/`cut`-style) | bytes, text, slices; finite `for`; `\|>` over lines; bulk I/O | 1–2 |
+| M2 | `jq`-lite: pretty-print and filter JSON | `data`/`box` with generics; `Vec`, maps; recursive data; JSON parse/serialize (derive) | 1, 4 |
+| M3 | config validator: all errors, or first error | the error effect with unwinding; `try` ↔ `Result`; a fold with a failing algebra | 3 |
+| M4 | rate limiter / retry simulator with tests | answering effects (`effect`/`handler`/`with`); fake logger and clock in tests | 5 |
+| M5 | `curl`-lite against localhost | args, env, signals; blocking net; streaming body `\|> lines`; timeouts | 6 |
+| M6 | local reconciler: make a directory match a spec | desired vs actual, diff, patch, retry/backoff, graceful shutdown, against the filesystem | 3–6 |
+| M7 | streaming log processor built from generators | `gen`/`yield`; the adapter library over pure and effectful sources | 9 |
+| M8 | concurrent fetcher with bounded parallelism and timeouts | async, `race`, structured concurrency (O1, O2) | 10 |
+
+M3 and M4 can proceed in parallel once M1–M2 land. M6 runs the operator's control flow
+before networking, TLS or Kubernetes, and the same reconcile code runs against the real
+filesystem and against fake handlers in tests.
+
 ## 7. Surface hypotheses and alternatives
 
 Each spelling below is a hypothesis.
