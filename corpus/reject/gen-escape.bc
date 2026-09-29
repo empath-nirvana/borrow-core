@@ -1,0 +1,31 @@
+-- expect: 27:7: `boxed['z]`: `g`, of type `U (gen i32 1 1)`, is used inside, and it cannot be shown to outlive `'z`
+-- A generator that holds a borrow cannot leave the borrow's scope. `elems` is made over the
+-- family of an array borrowed at `'z`, and `main` tries to return it from the borrow block, to
+-- run it after the borrow ends. The block's result is boxed at `'z`, and a thunk has no outlives
+-- rule: the generator captures the family at `'z`, so it is not shown to outlive `'z`. This is
+-- the existing borrow typing; nothing specific to generators is involved, and no `Pin` is needed.
+gen fn elems<'a>(xs: array_imm 'a i32) -> i32 =
+  let mut xs = xs;
+  let mut i = 0;
+  while true {
+    let (xs1, xs2) = array_copy['a, i32] xs;
+    xs = xs1;
+    match array_get['a, i32] (xs2, i) {
+      inl e -> let x = *e; i = i + 1; yield x
+    | inr _ -> break
+    }
+  };
+  ()
+
+fn tab(i: i32) -> i32 = 7 * i + 1
+
+main -> i32 =
+  let arr = alloc(array_new[i32] (5, tab));
+  let g : U (gen i32 1 1) = borrow imm arr { 'x, b ->
+    withload['x, 'z, array i32, U (gen i32 1 1)] b (thunkv Fun 'z < dom. return (thunkv fun (xs : array_imm 'z i32) ->
+      g <- return ((unbang elems) ['z] xs);
+      boxed['z] g))
+  };
+  let mut acc = 0;
+  for x in g { acc = acc + x };
+  acc

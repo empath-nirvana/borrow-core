@@ -1,0 +1,16 @@
+-- A generator with three `yield`s and no loop (`lib/gen.bc`). `gen fn` elaborates the body to its
+-- first observation: each `yield e; rest` answers `next` with `e` and a thunk of the rest, whose
+-- `next` runs `rest` and whose `close` hands back the residual (`()` here) without running it.
+-- The call runs nothing: it returns the thunk whose `next` runs the body up to the first
+-- `yield`. `gen-yields.core.bc` is the program written by hand in core.
+-- Answer: i32[14].
+
+gen fn produce() -> i32 =
+  yield 1;
+  yield 4;
+  yield 9
+
+main -> i32 =
+  let mut acc = 0;
+  for x in produce() { acc = acc + x };
+  acc

@@ -89,6 +89,17 @@ def iterOf (V : CVTy) : Option (CVTy × CVTy × CVTy) :=
     if V = .thunk (BoCa.Fig16.LogRel.Core.CTy.iter A R R') then some (A, R, R') else none
   | _ => none
 
+/-- `U (gen A B R)`: its `A`, `B` and `R`. -/
+def genOf (V : CVTy) : Option (CVTy × CVTy × CVTy) :=
+  match V with
+  | .thunk (.nu (.amp (.ret (.sum (.tensor A (.tvar 0)) (.sum B (.tvar 0)))) (.ret R))) =>
+    if V = .thunk (Frontend.Check.genTy A B R) then some (A, B, R) else none
+  | _ => none
+
+/-- The element type of an iterator or a generator. -/
+def elemOf (V : CVTy) : Option CVTy :=
+  ((iterOf V).map (·.1)).orElse fun _ => (genOf V).map (·.1)
+
 /-- A function returning a loop, `A => U (loop B R)` or `!(A => U (loop B R))`: `B` and `R`. -/
 def loopFnOf : CVTy → Option (CVTy × CVTy)
   | .thunk (.arr _ (.ret L)) | .bang (.thunk (.arr _ (.ret L))) => loopOf L
@@ -332,7 +343,7 @@ def synCM : Nat → MCx → Comp → MM MTy
       unifyM r₁ r₂
       pure r₁
     | .for_ _ x V M N => do
-      let el := (c.tc.tyV V).bind iterOf |>.map (·.1)
+      let el := (c.tc.tyV V).bind elemOf
       let _ ← synCM n (← c.push x.name (← ofOpt el)) M
       synCM n c N
     | m => match c.tc.tyC m with

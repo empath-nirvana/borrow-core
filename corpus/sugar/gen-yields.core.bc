@@ -1,0 +1,49 @@
+-- `gen-yields.bc` written by hand in core. The generator is `U (gen i32 1 1)`, its `next` the
+-- first `yield`: the element and the rest, a thunk that runs the next step when observed and
+-- hands back `()` when closed. The `for` is the loop of SPEC §14 over it; a skip goes round the
+-- loop, and at the end the loop finishes with the sum.
+
+def produce : !(1 => U (gen i32 1 1)) =
+  !thunkv fun (p : 1) ->
+    return (thunkv nu_in <
+      let () = p;
+      return (inl (i32[1], thunkv nu_in <
+        s1 <- return ();
+        return (inl (i32[4], thunkv nu_in <
+          s2 <- return ();
+          return (inl (i32[9], thunkv nu_in <
+            s3 <- return ();
+            v : 1 <- return ();
+            return (inr (inl v)),
+            return () >)),
+          return () >)),
+        return () >)),
+      let () = p;
+      return () >)
+
+main : F (U (loop i32 1)) =
+  acc <- return i32[0];
+  step : !U (U (gen i32 1 1) * i32 -o F (i32 + U (gen i32 1 1) * i32) & F 1) <-
+    return (!thunkv fun (s : U (gen i32 1 1) * i32) ->
+      < let (it, st) = s;
+        acc <- return st;
+        o <- (nu_out (force it)).1;
+        case o {
+          inl p ->
+            let (x, it) = p;
+            acc <- return ((unbang host[add32]) (acc, x));
+            u <- return ();
+            return (inr (it, acc))
+        | inr d ->
+            case d {
+              inl q -> v : i32 <- return acc; return (inl v)
+            | inr it -> return (inr (it, acc))
+            }
+        },
+        let (it, st) = s;
+        acc <- return st;
+        c <- (nu_out (force it)).2;
+        return () >);
+  f <- return (unbang (unfold[loop i32 1, U (gen i32 1 1) * i32] step));
+  s0 : U (gen i32 1 1) * i32 <- return ((unbang produce) (), acc);
+  return (thunkv nu_in < (nu_out (force f s0)).1, (nu_out (force f s0)).2 >)

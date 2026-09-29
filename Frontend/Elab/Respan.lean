@@ -59,6 +59,7 @@ def CTy.respan (sp : Span) : CTy → CTy
   | .stream _ A => .stream sp (A.respan sp)
   | .iter _ A R R' => .iter sp (A.respan sp) (R.respan sp) (R'.respan sp)
   | .loop _ A B => .loop sp (A.respan sp) (B.respan sp)
+  | .gen _ A B R => .gen sp (A.respan sp) (B.respan sp) (R.respan sp)
 
 def Shape.respan (sp : Span) : Shape → Shape
   | .leaf _ A => .leaf sp (A.respan sp)
