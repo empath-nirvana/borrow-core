@@ -119,3 +119,8 @@ roots = ["Affine"]
 name = "Coeffects"
 srcDir = "experiments/Coeffects"
 roots = ["Coeffects"]
+
+[[lean_lib]]
+name = "CoeffectsStrict"
+srcDir = "experiments/CoeffectsStrict"
+roots = ["CoeffectsStrict"]
