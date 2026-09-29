@@ -24,7 +24,8 @@ annotated first (`Frontend.Elab.fillProgram`), and each decision below reads tho
   with the capabilities read by name where the path ends (`wrapTail`).
 * **`for x in V { M }; N`**, `V` an iterator made from a capability, in any function or `main`
   becomes a loop by `unfold` over the state (iterator, other capabilities, threaded variables at
-  their inferred types), and makes the function div (`forLoop`, §14).
+  their inferred types), and makes the function div (§14): a state of the body's one state
+  machine (`divMachine`, §15), or `forLoop` where the machine does not apply.
 * **`&c`** in the head of `x <- M; N` becomes `r <- M[c/&c]; let (c, x) = r; N` (`Comp.elab`).
 
 The generated code is a template, printed and parsed, whose holes are filled with the program's
@@ -1025,8 +1026,10 @@ yields), and `abort` hands back the residual without running anything. On the bo
   follows the loop runs in its last step when it neither yields nor loops, and is sequenced by
   `gen_bind` otherwise.
 * **A body that is code, one loop, and code after it that neither yields nor loops** is one
-  `unfold` whose first state is the parameters (`splitLoop`): every observation of it is then a
-  call of one known code, with no closure to dispatch on.
+  `unfold` whose first state is the parameters (`splitLoop`).
+
+This is the elaboration by nested binds, used where a body's state machine (the section *One
+state machine per body* below, SPEC §15) does not apply; the machine is tried first.
 * **A `yield` in a bound computation** (`x <- if c { yield e } else { … }; N`) takes `N` into
   the computation's arms, so that the `yield` is on the spine.
 
@@ -1612,6 +1615,575 @@ def closeGiven (cx : LoopCx) (gs : List (String × Option CVTy)) : String × Lis
     | none => pure ()
   pure (out, used)
 
+/-! ### One state machine per body  `[spec §15, §14]`
+
+A generator body, or a div body, is elaborated to **one `unfold`**: its state is a sum with one
+summand per **resumption point** (a `yield`'s continuation, a loop's head, a `yield from` or a
+call of a div function in progress), each holding the variables live there, and its step is one
+code with a `case` on the state. Every observation is then a call of known code: no closure is
+dispatched on, and no bind is nested in another.
+
+* **The code between points** is the program's own, with its transitions replaced: a `yield e`
+  returns `e` with the state of its continuation; reaching a loop's head, a delegation or a call
+  is a **move** to its point; `break` closes the loop's iterator and moves to the code after the
+  loop (its **join**); the end of a loop's body moves back to its head; a terminal finishes.
+* **A move** calls the point's code (`io_run_k`, a `!` function) when that runs in the same
+  observation, and otherwise returns the point's state as a skip. A function calls only the
+  functions of points after it in the body, so none calls itself: a move back to a loop's head
+  from the code of a point inside the loop is a skip, and one from a `yield`'s continuation (code
+  of the step itself) is a call, so a loop whose body yields once per iteration yields at every
+  observation. In a div body every move to a summand is a skip, so each iteration of a loop is
+  one observation, as with the delay bind.
+* **The residual** is handed back by name at every summand: its `close` closes what the state
+  holds (the iterators of the loops around it, the delegate or the call's loop), binding the
+  capabilities they hand back, and returns the residual from the names.
+* **A generator runs nothing when called**: its first state holds the parameters (or what a
+  `gen { … }` block captures). **A div body runs its code up to its first point when called**,
+  and returns the machine at that point (`io_mk`), as `div_bind` did.
+
+A shape the machine does not cover is elaborated as before (`genBody`, `loopBody`). -/
+
+/-- A resumption point of a body's machine, or a join. -/
+structure MPoint where
+  id : Nat
+  /-- Its place in the body: the functions are defined last to first, and a function calls only
+  the functions of later points. -/
+  pos : Nat
+  /-- A summand of the state: the machine may stop here between observations. A join is not. -/
+  summand : Bool
+  /-- It has a function of its own, `io_run_{id}`. -/
+  fn : Bool
+  vars : List (String × CVTy)
+  /-- The sugar it comes from, where errors in its code are reported. -/
+  sp : Span
+  what : String
+  code : Comp := .top Span.none
+  close : Comp := .top Span.none
+
+/-- What a state holds that must be closed: a loop's iterator, a delegate, or a call's loop, by
+its variable, with the code that closes it and binds the capabilities it hands back. -/
+structure MHeld where
+  v : String
+  T : CVTy
+  closeSrc : String
+  caps : List String
+
+/-- A loop around the code being elaborated. -/
+structure MLoop where
+  head : Nat
+  held : Option MHeld
+  needs : List String
+  keep : Option (String × CVTy)
+  join : Option Nat
+
+/-- What a machine's code is elaborated at. -/
+structure MCx where
+  gen : Bool
+  A : CVTy
+  L : LoopCx
+  pp : CVTy → String
+  loops : List MLoop := []
+  /-- What the loops around hold, innermost first. -/
+  held : List MHeld := []
+  /-- The place of the function whose code this is; none in the step's own code. -/
+  cur : Option Nat := none
+  /-- In a div body's code before its first point, run when it is called. -/
+  pre : Bool := false
+
+structure MSt where
+  pts : Array MPoint := #[]
+  pos : Nat := 0
+
+abbrev MM := StateT MSt SM
+
+def mNew (sp : Span) (what : String) (summand fn : Bool) (vars : List (String × CVTy)) : MM Nat := do
+  let st ← get
+  let id := st.pts.size
+  set { st with pts := st.pts.push { id, pos := st.pos, summand, fn, vars, sp, what },
+                pos := st.pos + 1 }
+  pure id
+
+def mSet (id : Nat) (code close : Comp) : MM Unit :=
+  modify fun st => { st with pts := st.pts.modify id fun p => { p with code, close } }
+
+def mSetPos (id : Nat) : MM Unit :=
+  modify fun st => { st with pts := st.pts.modify id fun p => { p with pos := st.pos }, pos := st.pos + 1 }
+
+def mPt (id : Nat) : MM MPoint := do
+  match (← get).pts[id]? with
+  | some p => pure p
+  | none => throw ⟨Span.none, "internal error: a machine point"⟩
+
+def mTemplate (sp : Span) (what src : String) (vs : List (String × Val)) (cs : List (String × Comp)) :
+    MM Comp := do
+  let L ← (template sp what src : SM Comp)
+  pure (L.fill (fun v => vs.lookup v) (fun v => cs.lookup v))
+
+/-- `M` with each terminal that goes on (the end of a loop's body, or a `break`) also naming
+`needs`: what a point inside the loop must carry for the loop's next iteration. -/
+def augment (needs : List String) (M : Comp) : Comp :=
+  if needs.isEmpty then M else wrapTail (fun
+    | T@(.ret _ (.app _ (.sugar _ .retE) _)) => T
+    | T => .bind T.span ⟨"io_u", T.span⟩ none T (.ret T.span (tupleVal T.span needs)) false) M
+
+def MCx.restOf (m : MCx) (M : Comp) : Comp := match m.loops with
+  | [] => M
+  | l :: _ => augment l.needs M
+
+/-- The extern slots of a context, with their types. -/
+def mExterns (c : TCx) : List (String × CVTy) :=
+  let vs := c.E.vars.zip c.T
+  (vs.drop (vs.length - c.E.nExt)).filterMap fun (x, T) => x.map (·, T)
+
+/-- The locals, other than capabilities and `excl`, that `rest` uses, with their types. -/
+def mLive (m : MCx) (c : TCx) (rest : Comp) (excl : List String) : MM (List (String × CVTy)) := do
+  let caps := m.L.capNames
+  for (y, T) in mExterns c do
+    if !T.persistent && !caps.contains y && mentionsC y rest && !c.locals.any (·.1 == y) then
+      throw ⟨rest.span, s!"machine: the extern `{y}` is not a capability of the body"⟩
+  (latest c.locals).filterMapM fun (y, T) =>
+    if caps.contains y || excl.contains y || !mentionsC y rest then pure none
+    else match T with
+      | some T => pure (some (y, T))
+      | none => throw ⟨rest.span, s!"machine: the type of `{y}` is not determined"⟩
+
+/-- The state at a point that holds `own` besides what the loops around hold, before `rest`. -/
+def mVars (m : MCx) (c : TCx) (own : List MHeld) (rest : Comp) (excl : List String) :
+    MM (List (String × CVTy)) := do
+  let held := own ++ m.held
+  let hcaps := held.flatMap (·.caps)
+  let hv := held.reverse.map fun h => (h.v, h.T)
+  let caps := m.L.caps.filter fun (y, _) => !hcaps.contains y && !excl.contains y
+  pure (hv ++ caps ++ (← mLive m c (m.restOf rest) excl))
+
+/-- A state value: the injection of point `id`'s tuple, resolved when the summands are known. -/
+def mInj (sp : Span) (id : Nat) (vars : List (String × CVTy)) : Val :=
+  .app sp (.var sp s!"io_inj_{id}") (tupleVal sp (vars.map (·.1)))
+
+/-- A skip to the state `s`. -/
+def MCx.skip (m : MCx) (sp : Span) (s : Val) : Val := if m.gen then .inr sp (.inr sp s) else .inr sp s
+
+/-- A move to point `q`, from the code of `m`. -/
+def mGoto (m : MCx) (sp : Span) (q : Nat) : MM Comp := do
+  let p ← mPt q
+  if m.pre then
+    return .ret sp (.app sp (.unbang sp (.var sp "io_mk")) (mInj sp q p.vars))
+  let later := match m.cur with
+    | none => true
+    | some k => k < p.pos
+  let call := p.fn && (!p.summand || (m.gen && later))
+  if call then return .ret sp (.app sp (.unbang sp (.var sp s!"io_run_{q}")) (tupleVal sp (p.vars.map (·.1))))
+  if !p.summand then throw ⟨sp, "internal error: a join reached by a skip"⟩
+  pure (.ret sp (m.skip sp (mInj sp q p.vars)))
+
+/-- The `close` of a state that holds `held` (innermost first): each closed, then the residual. -/
+def mClose (m : MCx) (sp : Span) (what : String) (held : List MHeld) : MM Comp :=
+  mTemplate sp what (String.join (held.map (·.closeSrc)) ++ s!"return {m.L.rSrc}")
+    [] []
+
+/-- The machine's finish with the value `T` computes. -/
+def mFinish (m : MCx) (T : Comp) : MM Comp := do
+  if m.pre then return (← (dret m.L T : SM Comp))
+  let fin := if m.gen then "inr (inl io_v)" else "inl io_v"
+  let L ← mTemplate T.span "a body's result" s!"io_v : {m.pp m.L.B} <- force io_hole_t;\nreturn ({fin})"
+    [] [("io_hole_t", T)]
+  match T.takeLends.2, L with
+  | [], _ => pure L
+  | _, .bind sp x _ M N lin => pure (.bind sp x none M N lin)
+  | _, L => pure L
+
+/-- The residual `io_r` of a delegate or a call closed early (`Rf`), bound by name: the lent
+capability, nothing, or the body's own residual; and the capabilities it holds. -/
+def mAbort (m : MCx) (sp : Span) (lend : Option Ident) (Rf : CVTy) : MM (String × List String) := do
+  let cx := m.L
+  -- A lent place other than a capability (a borrowed owner) comes back in the result only.
+  match lend.filter (cx.capNames.contains ·.name) with
+  | some l =>
+    match Rf with
+    | .tensor _ .unit => pure (s!"let ({l.name}, io_ru) = io_r;\n", [l.name])
+    | _ => pure (s!"{l.name} <- return io_r;\n", [l.name])
+  | none =>
+    if Rf == .unit then pure ("let () = io_r;\n", [])
+    else if Rf == cx.R && !cx.parts.isEmpty then
+      pure ((if cx.tail1 then destructR "io_r" cx.parts else destructParts "io_r" cx.parts), cx.capNames)
+    else throw ⟨sp, s!"machine: a residual `{ppT Rf}` other than the body's"⟩
+
+/-- `break` (with the loop's value `e`): the innermost loop's iterator closed, then its join. -/
+def mBreak (m : MCx) (sp : Span) (e : Val) : MM Comp := do
+  let some l := m.loops.head? | throw ⟨sp, "`break` is outside every loop"⟩
+  let some j := l.join | throw ⟨sp, "internal error: a loop without its join"⟩
+  let keepSrc := match l.keep with
+    | some (r, _) => s!"{r} <- return io_hole_e;\n"
+    | none => ""
+  let go ← mGoto { m with loops := m.loops.drop 1 } sp j
+  mTemplate sp "`break`" (((l.held.map (·.closeSrc)).getD "") ++ keepSrc ++ "force io_hole_go")
+    [("io_hole_e", e)] [("io_hole_go", go)]
+
+set_option maxHeartbeats 1000000 in
+mutual
+/-- The code of a machine from a point of the body `M`, in the context `c`: it runs `M` within
+one observation, to a `yield`, a move or a finish. -/
+def mWalk (m : MCx) : Nat → TCx → Comp → MM Comp
+  | 0, _, M => throw ⟨M.span, "internal error: a body nested too deeply"⟩
+  | n + 1, c, .bind sp x A (.ret ysp (.app ksp (.sugar k .yield_) e)) N lin => do
+    unless m.gen do throw ⟨ysp, "machine: a `yield` outside a generator"⟩
+    if e.hasYield then throw (yieldOffSpine (e.yieldAt.getD e.span))
+    if (callIn c divFuel (some m.A) e).isSome then
+      let (e', bs) := liftAll e
+      return (← mWalk m n c (chain bs (.bind sp x A (.ret ysp (.app ksp (.sugar k .yield_) e')) N lin)))
+    let vars ← mVars m c [] N [x.name]
+    let y ← mNew ysp "`yield`" true false vars
+    let code ← mWalk { m with cur := none } n (c.push x.name (some .unit)) N
+    mSet y (.bind sp x A (.ret ysp (.unit ysp)) code lin) (← mClose m ysp "`yield`" m.held)
+    pure (.ret ysp (.inl ysp (.pair ysp e (mInj ysp y vars))))
+  | n + 1, c, .bind sp x A (.ret ysp (.app _ (.sugar _ .yieldFrom) e)) N _ => do
+    unless m.gen do throw ⟨ysp, "machine: `yield from` outside a generator"⟩
+    if e.hasYield then throw (yieldOffSpine (e.yieldAt.getD e.span))
+    let (e', lends) := e.takeLends
+    let lend ← match lends with
+      | [] => pure none
+      | [l] => pure (some l)
+      | _ => throw ⟨ysp, "a call lends at most one capability with `&mut`"⟩
+    let some Te := c.tyV e' | throw ⟨e.span, "machine: the delegate's type"⟩
+    let some (Ae, Bf, Rf) := genOf Te | throw ⟨e.span, "machine: not a generator"⟩
+    unless Ae == m.A do throw ⟨e.span, "machine: the delegate's elements"⟩
+    let c' := match lend, Bf with
+      | some l, .tensor K X => (c.push l.name (some K)).push x.name (some X)
+      | some l, K => (c.push l.name (some K)).push x.name (some .unit)
+      | none, _ => c.push x.name ((A.bind c.elabV).orElse fun _ => some Bf)
+    mCall m n c c' sp x A (.ret ysp e') lend true Te Bf Rf N
+  | n + 1, c, .bind sp x A M N lin => do
+    if M.hasYield then
+      match M with
+      | .case csp V y M₁ z M₂ =>
+        if mentionsC y.name N || mentionsC z.name N then throw (yieldOffSpine (M.yieldAt.getD M.span))
+        return (← mWalk m n c (.case csp V y (.bind sp x A M₁ N lin) z (.bind sp x A M₂ N lin)))
+      | .bind bsp y B M₁ M₂ lin' =>
+        if mentionsC y.name N then throw (yieldOffSpine (M.yieldAt.getD M.span))
+        return (← mWalk m n c (.bind bsp y B M₁ (.bind sp x A M₂ N lin) lin'))
+      | .letPair lsp y z V M₁ =>
+        if mentionsC y.name N || mentionsC z.name N then throw (yieldOffSpine (M.yieldAt.getD M.span))
+        return (← mWalk m n c (.letPair lsp y z V (.bind sp x A M₁ N lin)))
+      | .letUnit lsp V M₁ => return (← mWalk m n c (.letUnit lsp V (.bind sp x A M₁ N lin)))
+      | _ => throw (yieldOffSpine (M.yieldAt.getD M.span))
+    let exp := A.bind c.elabV
+    if let .ret sp' V := M then
+      if (nestedCall c exp V).isSome then
+        let (V', bs) := liftBelow V
+        return (← mWalk m n c (chain bs (.bind sp x A (.ret sp' V') N lin)))
+    let (M', lends) := M.takeLends
+    match (match M' with | .ret _ V => (directCall c exp V).map (V, ·) | _ => none) with
+    | some (V, Bf, Rf) =>
+      let lend ← match lends with
+        | [] => pure none
+        | [l] => pure (some l)
+        | _ => throw ⟨sp, "a call lends at most one capability with `&mut`"⟩
+      let c' := match lend, Bf with
+        | some l, .tensor K Vx => (c.push l.name (some K)).push x.name (exp <|> some Vx)
+        | some l, _ => (c.push l.name none).push x.name exp
+        | none, _ => c.push x.name (exp <|> some Bf)
+      let some Tm := c.tyV V | throw ⟨sp, "machine: the call's type"⟩
+      mCall m n c c' sp x A M' lend false Tm Bf Rf N
+    | none =>
+      pure (.bind sp x A M (← mWalk m n (c.push x.name (bindTy c A M)) N) lin)
+  | n + 1, c, .letUnit sp V M => do
+    if V.hasYield then throw (yieldOffSpine (V.yieldAt.getD V.span))
+    if (callIn c divFuel (some .unit) V).isSome then
+      let (V', bs) := liftAll V
+      return (← mWalk m n c (chain bs (.letUnit sp V' M)))
+    return .letUnit sp V (← mWalk m n c M)
+  | n + 1, c, .letPair sp x y V M => do
+    if V.hasYield then throw (yieldOffSpine (V.yieldAt.getD V.span))
+    if (callIn c divFuel none V).isSome then
+      let (V', bs) := liftAll V
+      return (← mWalk m n c (chain bs (.letPair sp x y V' M)))
+    let (Ax, Ay) := pairTys c V
+    return .letPair sp x y V (← mWalk m n ((c.push x.name Ax).push y.name Ay) M)
+  | n + 1, c, .case sp V x M y N => do
+    if V.hasYield then throw (yieldOffSpine (V.yieldAt.getD V.span))
+    if (callIn c divFuel none V).isSome then
+      let (V', bs) := liftAll V
+      return (← mWalk m n c (chain bs (.case sp V' x M y N)))
+    let (Ax, Ay) := sumTys c V
+    return .case sp V x (← mWalk m n (c.push x.name Ax) M) y (← mWalk m n (c.push y.name Ay) N)
+  | n + 1, c, .for_ sp x V M N => mLoop m n c sp x V M N
+  | n + 1, c, T@(.ret sp (.app _ (.sugar _ .yield_) _)) =>
+    mWalk m n c (.bind sp ⟨"io_y", sp⟩ none T (.ret sp (.unit sp)) false)
+  | n + 1, c, T@(.ret sp (.app _ (.sugar _ .yieldFrom) _)) =>
+    mWalk m n c (.bind sp ⟨"io_t", sp⟩ none T (.ret sp (.var sp "io_t")) false)
+  | _ + 1, _, .ret sp (.app _ (.sugar _ .retE) v) => do
+    unless m.gen do throw ⟨sp, "machine: a generator's `return` outside one"⟩
+    if v.hasYield then throw (yieldOffSpine (v.yieldAt.getD v.span))
+    -- Every loop it leaves closes its iterator.
+    mTemplate sp "`return`" (String.join (m.held.map (·.closeSrc)) ++
+      s!"io_v : {m.pp m.L.B} <- return io_hole_rv;\nreturn (inr (inl io_v))") [("io_hole_rv", v)] []
+  | _ + 1, _, .ret sp (.sugar _ .brk) => mBreak m sp (.unit sp)
+  | _ + 1, _, .ret sp (.app _ (.sugar _ .brk) e) => mBreak m sp e
+  | n + 1, c, T => do
+    if T.hasYield then throw (yieldOffSpine (T.yieldAt.getD T.span))
+    if let .ret sp V := T then
+      if (nestedCall c (if m.loops.isEmpty then some m.L.B else none) V).isSome then
+        let (V', bs) := liftBelow V
+        return (← mWalk m n c (chain bs (.ret sp V')))
+    let (T', _) := T.takeLends
+    if (match T' with | .ret _ V => directCall c (if m.loops.isEmpty then some m.L.B else none) V | _ => none).isSome then
+      return (← mWalk m n c (.bind T.span ⟨"io_t", T.span⟩ none T (.ret T.span (.var T.span "io_t")) false))
+    match m.loops.head? with
+    | some l =>
+      -- The end of a loop's body: back to its head.
+      let go ← mGoto m T.span l.head
+      pure (.bind T.span ⟨"io_u", T.span⟩ none T go false)
+    | none => mFinish m T
+
+/-- `x <- M; N` where `M` computes a delegate (`yield from`, `isGen`) or a call's loop, of type
+`Tm`, finishing with `Bf` and closed with `Rf`: a point holding it with what `N` uses. -/
+def mCall (m : MCx) : Nat → TCx → TCx → Span → Ident → Option VTy → Comp → Option Ident → Bool →
+    CVTy → CVTy → CVTy → Comp → MM Comp
+  | 0, _, _, sp, _, _, _, _, _, _, _, _, _ => throw ⟨sp, "internal error: a body nested too deeply"⟩
+  | n + 1, c, c', sp, x, A, call, lend, isGen, Tm, Bf, Rf, N => do
+    let (abort, hcaps) ← mAbort m sp lend Rf
+    let k := (← get).pts.size
+    let v := s!"io_d{k}"
+    let h : MHeld := { v, T := Tm, closeSrc := s!"io_r <- (nu_out (force {v})).2;\n{abort}", caps := hcaps }
+    let excl := x.name :: lend.toList.map (·.name)
+    let vars ← mVars m c [h] N excl
+    let d ← mNew sp (if isGen then "`yield from`" else "a call of a div function") true true vars
+    let bindX := match lend, A with
+      | some l, _ => match Bf with
+        | .tensor .. => s!"let ({l.name}, {x.name}) = io_b;\n"
+        | _ => s!"{l.name} <- return io_b;\n{x.name} <- return ();\n"
+      | none, some A => s!"{x.name} : {A.pp} <- return io_b;\n"
+      | none, none => s!"{x.name} <- return io_b;\n"
+    let pd ← mPt d
+    let rest ← mWalk { m with cur := some pd.pos, pre := false } n c' N
+    let skip := m.skip sp (mInj sp d vars)
+    let src := if isGen then s!"io_o <- (nu_out (force {v})).1;
+  case io_o \{
+    inl io_y -> let (io_e, {v}) = io_y; return (inl (io_e, io_hole_s))
+  | inr io_dd ->
+      case io_dd \{
+        inl io_b -> {bindX}force io_hole_rest
+      | inr {v} -> return io_hole_k
+      }
+  }" else s!"io_o <- (nu_out (force {v})).1;
+  case io_o \{
+    inl io_b -> {bindX}force io_hole_rest
+  | inr {v} -> return io_hole_k
+  }"
+    let what := if isGen then "`yield from`" else "a call of a div function"
+    let code ← mTemplate sp what src [("io_hole_s", mInj sp d vars), ("io_hole_k", skip)] [("io_hole_rest", rest)]
+    mSet d code (← mClose { m with pre := false } sp (if isGen then "`yield from`" else "a call of a div function") (h :: m.held))
+    let go ← mGoto m sp d
+    pure (.bind sp ⟨v, sp⟩ none call go false)
+
+/-- `for x in V { M }; N` or `while c { M }; N`: a point at its head, and a join after it when its
+body has a `break`. -/
+def mLoop (m : MCx) : Nat → TCx → Span → Ident → Val → Comp → Comp → MM Comp
+  | 0, _, sp, _, _, _, _ => throw ⟨sp, "internal error: a body nested too deeply"⟩
+  | n + 1, c, sp, x, V, M, N => do
+    let P ← (genLoopPlan { A := m.A, L := m.L, pp := m.pp } c sp x V M N : SM GenLoop)
+    let M ← (normExits divFuel M : Except Error Comp)
+    if !m.gen then
+      if P.cond.isSome then throw ⟨sp, "machine: `while` in a div body"⟩
+      if (M.sugarAt isYieldKw).isSome then throw ⟨sp, "machine: a `yield` in a div body"⟩
+      if (loopsAt (c.push x.name ((P.it.map (·.2.1)))) none M).isSome then
+        throw ⟨sp, "machine: a loop's body that loops, in a div body"⟩
+    let N := P.rest
+    let cr := match P.keep with
+      | some (r, T) => c.push r (some T)
+      | none => c
+    let caps := m.L.capNames
+    let needs := ((latest c.locals).map (·.1)).filter fun y => !caps.contains y &&
+      ((y != x.name && mentionsC y M) || (P.cond.map (mentionsV y)).getD false || mentionsC y (m.restOf N))
+    let k := (← get).pts.size
+    let own : Option MHeld := P.it.map fun (Vt, _, _, _, Q') =>
+      { v := s!"io_it{k}", T := Vt, closeSrc := s!"io_c <- (nu_out (force io_it{k})).2;\n{bindCap P.cap Q' "io_c"}",
+        caps := P.cap.toList }
+    let held := own.toList ++ m.held
+    let hcaps := held.flatMap (·.caps)
+    let needVars ← ((latest c.locals).filter (needs.contains ·.1)).mapM fun (y, T) => match T with
+      | some T => pure (y, T)
+      | none => (throw ⟨sp, s!"machine: the type of `{y}` is not determined"⟩ : MM _)
+    let vars := held.reverse.map (fun h => (h.v, h.T)) ++ m.L.caps.filter (!hcaps.contains ·.1) ++ needVars
+    let what := if P.cond.isSome then "`while`" else if m.gen then "`for` in a generator" else "`for`"
+    let h ← mNew sp what true true vars
+    let ph ← mPt h
+    let join ← if M.spineBreaks.isEmpty then pure none else do
+      let jv ← mVars m cr [] N []
+      pure (some (← mNew sp what false true jv))
+    let ml : MLoop := { head := h, held := own, needs, keep := P.keep, join }
+    let mb : MCx := { m with loops := ml :: m.loops, held := held, cur := some ph.pos, pre := false }
+    let cb := match P.it with
+      | some (_, E, _, _, _) => c.push x.name (some E)
+      | none => c
+    let body ← mWalk mb n cb M
+    let after ← match join with
+      | some j => do
+        mSetPos j
+        let pj ← mPt j
+        let jc ← mWalk { m with cur := some pj.pos, pre := false } n cr N
+        mSet j jc (.top sp)
+        mGoto { m with cur := some ph.pos, pre := false } sp j
+      | none => mWalk { m with cur := some ph.pos, pre := false } n cr N
+    let skip := m.skip sp (mInj sp h vars)
+    let code ← match P.it, P.cond with
+      | some (_, _, isGen, Q, _), _ => do
+        let v := s!"io_it{k}"
+        let ended := match P.keep with
+          | some (r, _) => s!"{r} <- return io_q;\nforce io_hole_after"
+          | none => s!"{bindCap P.cap Q "io_q"}force io_hole_after"
+        let fin := if isGen then s!"case io_d \{ inl io_q -> {ended} | inr {v} -> return io_hole_k }"
+          else s!"io_q <- return io_d;\n{ended}"
+        let src := s!"io_o <- (nu_out (force {v})).1;\ncase io_o \{ inl io_p -> let ({x.name}, {v}) = io_p; force io_hole_body | inr io_d -> {fin} }"
+        mTemplate sp what src [("io_hole_k", skip)] [("io_hole_body", body), ("io_hole_after", after)]
+      | none, some cnd => do
+        mTemplate sp what "case io_hole_c { inl io_f -> force io_hole_after | inr io_t -> force io_hole_body }"
+          [("io_hole_c", cnd)] [("io_hole_body", body), ("io_hole_after", after)]
+      | none, none => throw ⟨sp, "internal error: a loop with neither iterator nor condition"⟩
+    mSet h code (← mClose { m with pre := false } sp what held)
+    let go ← mGoto m sp h
+    match own with
+    | some o => pure (.bind sp ⟨o.v, sp⟩ none (.ret sp P.V) go false)
+    | none => pure go
+end
+
+mutual
+/-- The injections of a machine's states resolved: `io_inj_k V` is the injection of point `k`'s
+summand, the `r`-th of `n`. -/
+def mResV (inj : Nat → Option (Nat × Nat)) : Val → Val
+  | .app sp (.var vsp f) V =>
+    let V := mResV inj V
+    match (if f.startsWith "io_inj_" then (f.drop 7).toNat? else none).bind inj with
+    | some (r, n) =>
+      let base := if r + 1 == n then V else .inl sp V
+      (List.range (min r (n - 1))).foldl (fun W _ => .inr sp W) base
+    | none => .app sp (.var vsp f) V
+  | .pair sp V W => .pair sp (mResV inj V) (mResV inj W)
+  | .app sp V W => .app sp (mResV inj V) (mResV inj W)
+  | .inl sp V => .inl sp (mResV inj V)
+  | .inr sp V => .inr sp (mResV inj V)
+  | .unbang sp V => .unbang sp (mResV inj V)
+  | .boxed sp l V => .boxed sp l (mResV inj V)
+  | .unbox sp V => .unbox sp (mResV inj V)
+  | .sub sp V l => .sub sp (mResV inj V) l
+  | .roll sp V => .roll sp (mResV inj V)
+  | .unroll sp V => .unroll sp (mResV inj V)
+  | .inst sp V l => .inst sp (mResV inj V) l
+  | .ascribe sp V A => .ascribe sp (mResV inj V) A
+  | .shorten sp md σ l V => .shorten sp md σ l (mResV inj V)
+  | .thunk sp M => .thunk sp (mResC inj M)
+  | .thunkv sp M => .thunkv sp (mResC inj M)
+  | .bangThunk sp M => .bangThunk sp (mResC inj M)
+  | .bangThunkv sp M => .bangThunkv sp (mResC inj M)
+  | .run sp M => .run sp (mResC inj M)
+  | V => V
+
+def mResC (inj : Nat → Option (Nat × Nat)) : Comp → Comp
+  | .ret sp V => .ret sp (mResV inj V)
+  | .absurd sp V => .absurd sp (mResV inj V)
+  | .bind sp x A M N lin => .bind sp x A (mResC inj M) (mResC inj N) lin
+  | .lam sp x A M => .lam sp x A (mResC inj M)
+  | .app sp M x => .app sp (mResC inj M) x
+  | .with_ sp M N => .with_ sp (mResC inj M) (mResC inj N)
+  | .proj sp i M => .proj sp i (mResC inj M)
+  | .letUnit sp V M => .letUnit sp (mResV inj V) (mResC inj M)
+  | .letPair sp x y V M => .letPair sp x y (mResV inj V) (mResC inj M)
+  | .case sp V x M y N => .case sp (mResV inj V) x (mResC inj M) y (mResC inj N)
+  | .lamL sp x b M => .lamL sp x b (mResC inj M)
+  | .inst sp M a => .inst sp (mResC inj M) a
+  | .nuIn sp M => .nuIn sp (mResC inj M)
+  | .nuOut sp M => .nuOut sp (mResC inj M)
+  | .ascribe sp M C => .ascribe sp (mResC inj M) C
+  | .for_ sp x V M N => .for_ sp x (mResV inj V) (mResC inj M) (mResC inj N)
+  | M => M
+end
+
+/-- A right-nested sum type of the summands (`T₀ + (T₁ + …)`). -/
+def sumTySrc : List String → String
+  | [] => "0"
+  | [T] => T
+  | T :: Ts => s!"({T}) + ({sumTySrc Ts})"
+
+/-- A `case` on a state held in `v`, over the summands `ps`, with `f p` the arm of `p`, which
+finds its tuple in `io_a`. -/
+def mTree (f : MPoint → String) (v : String) : List MPoint → String
+  | [] => "return ()"
+  | [p] => f p
+  | [p, q] => s!"case {v} \{ inl io_a -> {f p} | inr io_a -> {f q} }"
+  | p :: ps => s!"case {v} \{ inl io_a -> {f p} | inr io_b{p.id} -> {mTree f s!"io_b{p.id}" ps} }"
+
+/-- The machine, assembled around its points: the functions (last point first), the step, and
+then `tail`: for a generator, the codata at the first state `s0`; for a div body, `io_mk` and the
+code before the first point. -/
+def mAssemble (m : MCx) (sp : Span) (st : MSt) (s0 : Option Val) (pre : Option Comp) : SM Comp := do
+  let pts := st.pts.toList
+  let sums := pts.filter (·.summand)
+  if sums.isEmpty then throw ⟨sp, "machine: no point"⟩
+  let tyOf (p : MPoint) : String := tupleTySrc (p.vars.map (m.pp ·.2))
+  let S := sumTySrc (sums.map tyOf)
+  let Obs := if m.gen then s!"({m.pp m.A}) * ({S}) + (({m.pp m.L.B}) + ({S}))" else s!"({m.pp m.L.B}) + ({S})"
+  let Cod := if m.gen then s!"gen ({m.pp m.A}) ({m.pp m.L.B}) ({m.pp m.L.R})" else s!"loop ({m.pp m.L.B}) ({m.pp m.L.R})"
+  let fns := (pts.filter (·.fn)).toArray.qsort (fun a b => a.pos > b.pos) |>.toList
+  let defs := String.join (fns.map fun p =>
+    s!"io_run_{p.id} : !(({tyOf p}) => {Obs}) <-\n  return (!thunkv fun (io_a : {tyOf p}) -> force io_hole_c{p.id});\n")
+  let arm (p : MPoint) : String :=
+    if p.fn then s!"return ((unbang io_run_{p.id}) io_a)" else s!"force io_hole_c{p.id}"
+  let carm (p : MPoint) : String := s!"force io_hole_k{p.id}"
+  let obs := s!"(nu_out (force io_f io_s0)).1, (nu_out (force io_f io_s0)).2"
+  let tail := match s0 with
+    | some _ => s!"io_f <- return (unbang (unfold[{Cod}, {S}] io_step));
+io_s0 : {S} <- return io_hole_s0;
+return (thunkv nu_in < {obs} >)"
+    | none => s!"io_mk : !(({S}) => U ({Cod})) <- return (!thunkv fun (io_s0 : {S}) ->
+  io_f <- return (unbang (unfold[{Cod}, {S}] io_step));
+  return (thunkv nu_in < {obs} >));
+force io_hole_pre"
+  let src := defs ++ s!"io_step : !U ({S} -o F ({Obs}) & F ({m.pp m.L.R})) <-
+  return (!thunkv fun ({if sums.length == 1 then "io_a" else "io_s"} : {S}) -> < {mTree arm "io_s" sums}, {mTree carm "io_s" sums} >);
+" ++ tail
+  let what := if m.gen then "a generator's state machine" else "a div body's state machine"
+  let L ← template sp what src
+  -- Each point's code and `close`, from its tuple in `io_a`, at the sugar it comes from.
+  let bound (p : MPoint) (M : Comp) : SM Comp := do
+    let L ← template p.sp p.what s!"{destructSrc "io_a" (p.vars.map (·.1))}force io_hole_body"
+    pure (L.fill (fun _ => none) (fun v => if v == "io_hole_body" then some M else none))
+  let codes ← pts.mapM fun p => do pure (s!"io_hole_c{p.id}", ← bound p p.code)
+  let closes ← (pts.filter (·.summand)).mapM fun p => do pure (s!"io_hole_k{p.id}", ← bound p p.close)
+  let L := L.fill (fun v => if v == "io_hole_s0" then s0 else none)
+    (fun v => if v == "io_hole_pre" then pre else (codes.lookup v).orElse fun _ => closes.lookup v)
+  let n := sums.length
+  let ranks := sums.zip (List.range n) |>.map fun (p, r) => (p.id, r)
+  pure (mResC (fun id => (ranks.lookup id).map (·, n)) L)
+
+/-- A generator's machine: the code, in the body's context, that returns the generator. Its first
+state holds `start` (the parameter, or what a block captures), where its first observation runs
+the body `M` from the top; `close0` is the `close` there. -/
+def genMachine (g : GenCx) (c : TCx) (sp : Span) (start : List (String × CVTy)) (close0 : Comp)
+    (M : Comp) : SM Comp := do
+  let m : MCx := { gen := true, A := g.A, L := g.L, pp := g.pp }
+  let go : MM Unit := do
+    let s ← mNew sp "a generator's body" true false start
+    let code ← mWalk m divFuel c M
+    mSet s code close0
+  let ((), st) ← go.run {}
+  mAssemble m sp st (some (mInj sp 0 start)) none
+
+/-- A div body's machine: its code before the first point, then the machine there.  `[spec §14]` -/
+def divMachine (cx : LoopCx) (c : TCx) (M : Comp) : SM Comp := do
+  let m : MCx := { gen := false, A := .unit, L := cx, pp := ppT, pre := true }
+  let (pre, st) ← (mWalk m divFuel c M).run {}
+  mAssemble m M.span st none (some pre)
+
+/-- `x`, else `y` from the same origins: a shape the machine does not cover is elaborated by the
+nested binds. -/
+def orElseM {α} (x y : SM α) : SM α := fun s => match x s with
+  | .ok r => .ok r
+  | .error _ => y s
+
+/-- A div body: its machine, or the delay binds where the machine does not apply. -/
+def divBody (cx : LoopCx) (c : TCx) (M : Comp) : SM Comp :=
+  orElseM (divMachine cx c M) (loopBody cx divFuel c M)
+
 /-! ### Blocks and callbacks that yield -/
 
 /-- The type of the first element a body yields: of its first `yield e`, or the element type of
@@ -1675,14 +2247,30 @@ def genValue (c : TCx) (sp : Span) (M : Comp) (A B : Option CVTy) (what : String
     | throw ⟨sp, s!"what {what} finishes with is not determined here"⟩
   let cx ← loopCxOf sp B M (gen := true)
   let g : GenCx := { A := A, L := cx, pp := fun T => Frontend.Check.ppV c.E.lenv 0 0 T }
-  let M' ← genBody g divFuel c M
-  let (closes, closed) := closeGiven cx ((latest c.locals).filter (mentionsC ·.1 M))
-  let ab ← template sp s!"the `close` of {what} before it starts"
-    s!"{closes}{dropsFor c (cx.capNames ++ closed) M}return {cx.rSrc}"
   let G : CVTy := .thunk (Frontend.Check.genTy A B cx.R)
   -- Ascribed its type, so that inference types it where it is used.
   let Gs ← (c.surface sp G : Except Error VTy)
-  pure (.ascribe sp (.thunkv sp (.nuIn sp (.with_ sp M' ab))) Gs, G)
+  -- Its machine, whose first state holds what the block captures.
+  let machine : SM Val := do
+    let caps := cx.caps.filter (mentionsC ·.1 M)
+    let locs := (latest c.locals).filter fun (y, _) => mentionsC y M && !cx.capNames.contains y
+    for (y, T) in mExterns c do
+      if !T.persistent && !cx.capNames.contains y && mentionsC y M && !c.locals.any (·.1 == y) then
+        throw ⟨sp, s!"machine: the block captures the extern `{y}`"⟩
+    let start ← locs.mapM fun (y, T) => match T with
+      | some T => pure (y, T)
+      | none => (throw ⟨sp, s!"machine: the type of `{y}` is not determined"⟩ : SM _)
+    let (closes, _) := closeGiven cx (locs ++ caps.map fun (y, T) => (y, some T))
+    let close0 ← template sp s!"the `close` of {what} before it starts" s!"{closes}return {cx.rSrc}"
+    let Mm ← genMachine g c sp (start ++ caps) close0 M
+    pure (.ascribe sp (.run sp Mm) Gs)
+  let old : SM Val := do
+    let M' ← genBody g divFuel c M
+    let (closes, closed) := closeGiven cx ((latest c.locals).filter (mentionsC ·.1 M))
+    let ab ← template sp s!"the `close` of {what} before it starts"
+      s!"{closes}{dropsFor c (cx.capNames ++ closed) M}return {cx.rSrc}"
+    pure (.ascribe sp (.thunkv sp (.nuIn sp (.with_ sp M' ab))) Gs)
+  pure (← orElseM machine old, G)
 
 /-- In the copy of a higher-order function made at a callback type that yields, the calls through
 the callback: an application of a function of one of the types `Fs` (the callbacks' types, as
@@ -1758,7 +2346,7 @@ def ambientMain (c : TCx) (cs : List String) (sp : Span) (C : CTy) (M : Comp) :
   let some Ac := Ac | throw ⟨A.span, "internal error: `main`'s result type"⟩
   let K := tupleT (cs.map capTyC)
   let cx : LoopCx := ⟨.tensor K Ac, .tensor K .unit, K, [cs.map fun n => (n, capTyC n)], true⟩
-  pure (.ret sp (.thunk sp (.loop sp B (.tensor sp capsT (.unit sp)))), ← loopBody cx divFuel c M')
+  pure (.ret sp (.thunk sp (.loop sp B (.tensor sp capsT (.unit sp)))), ← divBody cx c M')
 
 /-- The result `B` of a function type `A => B` or `!(A => B)`. -/
 def resultOf : Option CVTy → Option CVTy
@@ -1856,7 +2444,10 @@ def genDef (scope : List Decl) : Decl → SM Decl
     let whole : SM Comp := do
       let M' ← genBody g divFuel c₀ M
       pure (Comp.ret sp (.thunkv sp (.nuIn sp (.with_ sp M' abort))))
-    let body ← match splitLoop fin divFuel c₀ M with
+    let machine : SM Comp := do
+      let some Pc := cl.elabV Ax | throw ⟨sp, "machine: the parameter's type"⟩
+      genMachine g c₀ sp [(x.name, Pc)] abort M
+    let old : SM Comp := match splitLoop fin divFuel c₀ M with
       | some (pre, cm, lsp, lx, LV, LM, LN, arm) => do
         -- One loop: the generator is that loop's `unfold`, with a first state that runs the code
         -- before it. Every observation is then a call of one known code. An arm before it that
@@ -1866,6 +2457,7 @@ def genDef (scope : List Decl) : Decl → SM Decl
         let bodyL ← genBody { g with L := P.bcx, inLoop := true } divFuel P.cb P.bodyW
         genLoopSrc g cm lsp lx P bodyL P.rest P.rest (some (x.name, Ax.pp, pre, abort))
       | none => whole
+    let body ← orElseM machine old
     let lam := Comp.lam sp x Ax body
     match life with
     | none =>
@@ -1916,7 +2508,7 @@ def elabDef (scope : List Decl) : Decl → SM (Decl × Option (String × VTy))
       let some Bc := resultOf (c.elabV A)
         | throw ⟨A.span, s!"the type of `{n.name}` does not elaborate"⟩
       let cx ← loopCxOf sp Bc M
-      let M' ← loopBody cx divFuel (c.push x.name (c.elabV Ax)) M
+      let M' ← divBody cx (c.push x.name (c.elabV Ax)) M
       let Rs ← toSurface sp cx.R
       let F := VTy.lolli A.span Ar (.thunk B.span (.loop B.span B Rs))
       let A' := if bang then VTy.bang A.span F else F
@@ -2054,7 +2646,7 @@ def closureAt (c : TCx) (P : CVTy) (V : Val) : DM (Val × Option CVTy) := do
       return (if bang then (.bangThunkv sp lam, some (.bang F)) else (.thunkv sp lam, some F))
     if (loopsAt c' (some B) M).isNone then return (V, c.tyV V)
     let cx ← (loopCxOf lsp B M : Except Error LoopCx)
-    let M' ← (loopBody cx divFuel c' M : SM Comp)
+    let M' ← (divBody cx c' M : SM Comp)
     modify fun st => { st with any := true }
     let some Ac := Ac | return (V, none)
     let F : CVTy := .thunk (.arr Ac (.ret (.thunk (BoCa.Fig16.LogRel.Core.CTy.loop B cx.R))))
@@ -2388,7 +2980,7 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
         | some (B, _) => pure B
         | none => need sp "the block's result" ((resultOfC (c.tyC M')).map Frontend.Elab.direct)
       let cx ← (loopCxOf sp B M' : Except Error LoopCx)
-      let M'' ← (loopBody cx divFuel c M' : SM Comp)
+      let M'' ← (divBody cx c M' : SM Comp)
       let abort ← (template sp "a block that loops (`div_defer`)" s!"return {cx.rSrc}" : SM Comp)
       modify fun st => { st with any := true }
       let Bs ← c.surface sp B
@@ -2931,7 +3523,7 @@ def plainMain (c : TCx) (sp : Span) (C : CTy) (M : Comp) : SM (CTy × Comp) := d
   match C, Bc, loopsAt c Bc M with
   | .ret _ B, some Bc, some _ =>
     let cx ← loopCxOf sp Bc M
-    pure (.ret sp (.thunk sp (.loop sp B (← toSurface sp cx.R))), ← loopBody cx divFuel c M)
+    pure (.ret sp (.thunk sp (.loop sp B (← toSurface sp cx.R))), ← divBody cx c M)
   | _, _, some (sp', what) =>
     throw ⟨sp', s!"`main` loops ({what}), so its type is written `F A` (SPEC §14)"⟩
   | _, _, none => pure (C, M)
@@ -2991,18 +3583,21 @@ def elaborateS (p : Program) : SM (Program × Nat) := do
     | some (C@(.ret _ B), M) => !C.returnsLoop && (loopsAt mc (mc.elabV B) M).isSome
     | _ => false
   let cs := ambientCaps p₀
-  let needDiv := anyDiv || mainLoops || usesName "div_fuel" p || usesName "div_bind" p ||
-    usesName "div_defer" p
   let ioLib ← if cs.isEmpty || incl.contains "io" then pure [] else
     if mayIO then pure ioAll else libOf "lib/io.bc" ioLibrary
-  let divLib ← if !needDiv || incl.contains "div" then pure [] else
-    if mayDiv then pure divAll else libOf "lib/div.bc" divLibrary
   let exts := cs.map fun c => Decl.extern Span.none ⟨c, Span.none⟩ (capTy Span.none c)
   let mains ← decls.filterMapM fun
     | .main sp C M => do
       let (C', M') ← if cs.isEmpty then plainMain mc sp C M else ambientMain mc cs sp C M
       pure (some (Decl.main sp C' M'))
     | _ => pure none
+  -- The divergence library when the elaborated program names it: a div body elaborated as a
+  -- state machine (`divMachine`) does not.
+  let uses (ns : List String) : Bool := (rest ++ mains).any fun
+    | .def_ _ _ _ _ V _ => ns.any V.names | .main _ _ M => ns.any M.names | _ => false
+  let needDiv := (anyDiv || mainLoops || mayDiv) && uses ["div_bind", "div_fuel", "div_defer"]
+  let divLib ← if !needDiv || incl.contains "div" then pure [] else
+    if mayDiv then pure divAll else libOf "lib/div.bc" divLibrary
   -- The generator library when an elaborated generator sequences with `gen_bind`.
   -- (A program that defines them itself, a core form written by hand, uses its own.)
   let genNames := ["gen_bind", "gen_bind_loop", "gen_pull"].filter fun n =>

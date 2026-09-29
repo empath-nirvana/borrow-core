@@ -6,10 +6,9 @@
 -- `loop B R` is the generator that never yields, and `iter A B R` the one that never skips.
 --
 -- This is ordinary library code over `unfold` (SPEC §7), checked with the program and emitted
--- when an elaborated `gen fn` uses it (`Frontend/Sugar.lean`): the code up to each `yield` is one
--- observation, a loop in the body is a generator by `unfold` over its state, code after a loop
--- that yields or loops again is sequenced by `gen_bind`, and a div function called in direct style
--- is sequenced by `gen_bind_loop`.
+-- when an elaborated program uses it (`Frontend/Sugar.lean`). An elaborated `gen fn` is one state
+-- machine (SPEC §15) and uses none of it; `gen_bind` and `gen_bind_loop` sequence the parts of a
+-- body the machine does not cover, and `gen_pull` is `zip`'s (`lib/adapters.bc`).
 
 -- The bind's state: in the first generator, with the continuation; or in the continuation's
 -- generator. The continuation has two observations: go on with the first generator's result,
