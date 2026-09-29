@@ -375,7 +375,8 @@ their relations and their six rules are deleted.
   borrow and whose rest keeps it, is not yet written as a program (§9 iteration, `[@d] U(νX. C)`
   per `docs/scope-recursion.md` §3.5).
 - **General recursion.** Non-tail recursion needs an explicit stack in the state. Sequencing
-  loops is the delay bind, library code over `unfold` (§14).
+  loops is library code over `unfold` (the delay bind, §14), or one `unfold` for a whole body
+  (§15).
 - Whether `D`'s greatest fixed point equals the intersection of its finite approximations is
   reduced to one property of `wpTS` (`WpChainCommutes`), not derived.
 - Stream adequacy is stated generically only at `Stream 1` (`take_runs`).
@@ -850,8 +851,8 @@ elaborate to the same term.
   The loop's `next` observes the stream: an element `x` runs `M`, which rebinds the state by
   name, and the loop goes on; at the end of the stream the capability it hands back is bound to
   `c`, and the loop finishes with the capabilities and the threaded variables. Its `close`
-  closes the stream and hands the capabilities back. The rest of the body, `N`, follows by the
-  delay bind (§14). A `for` in a total function over a finite source is not provided.
+  closes the stream and hands the capabilities back. The rest of the body, `N`, runs at the
+  loop's end, in the body's one state machine (§14, §15). A `for` in a total function over a finite source is not provided.
 
 ### Designed, not built
 
@@ -1099,7 +1100,9 @@ observation, which turns it into the whole's; `close` in the second loop closes 
 continuation is one linear thunk with two observations, so the variables it captures are used
 by whichever observation runs, and dropped (§12) by the other where they have destructors. If
 either loop never finishes, neither does the whole. Nothing in the kernel changes: `div_bind` is
-checked like any `def`, and `fundamentalC` and `adequacyC` cover every use.
+checked like any `def`, and `fundamentalC` and `adequacyC` cover every use. The elaboration of a
+div body does not nest delay binds: the whole body is one `unfold` whose states are its loops
+and calls (below, and §15's *One state machine per body*).
 
 **The fuel handler.** `div_fuel[A, Q] : U(Loop A Q) ⊗ I32 ⇒ A ⊕ Q` observes a loop at most `n`
 times and closes it if it has not finished: `driveE n` (§7) with the count a value (a fold over
@@ -1153,20 +1156,28 @@ result `B` and residual `R`:
 - **Nested calls** are lifted first: a value with a call in direct style below its top has its
   applications bound before it, innermost and leftmost first, the order its evaluation runs them
   in (`corpus/sugar/div-nested.bc`).
-- **A direct-style call** `x <- return (f V); N`, `f : A' ⇒ U(Loop B' R')`, becomes
-  `m <- return (f V); return (div_bind[B', B, R', R] (m, thunkv ⟨λa. x ← a; N', λr. abort⟩))`,
-  with `N'` the rest elaborated the same way. With `&mut c` in `V` (§11) the continuation binds
-  `(c, x)`. `abort` hands back the body's residual: `r` itself when `R' = R`; else the
-  capabilities by name, with `c` rebound from `r = (c, ())`.
-- **`for x in V { M }; N`**, `V : U(Iter A R₀ R₀')` made from a capability `c`, becomes the loop
-  of §11, with residual `R`; the variables it threads have the types inference gives them
-  (`corpus/sugar/for-untyped.bc`). When `N` is total and every variable it reads has a type, `N` runs in the loop's last step and the
-  loop finishes with its value, as in §11. Otherwise the loop finishes with the capabilities and
-  the variables `M` threads, and `div_bind` runs `N'` with them rebound. `M` is one step of the
+- **The body is one state machine** (§15, *One state machine per body*): `unfold` at
+  `Loop B R` whose state has a summand for each `for` (its iterator, the capabilities it does not
+  hold and the variables live there) and for each call of a div function in direct style (the
+  callee's loop and what the rest uses). Each observation is one iteration of a loop, or one
+  observation of a callee's loop; what follows a loop or a call runs, within the observation
+  that ends it, up to the next state, which the observation returns (a skip), or to a terminal,
+  which finishes. The call of the function runs its code up to its first state and returns the
+  machine there (`corpus/sugar/for-value.core.bc`, written by hand).
+- **A direct-style call** `x <- return (f V); N`, `f : A' ⇒ U(Loop B' R')`, is a state holding
+  `f V`'s loop: its observation observes that loop, a skip until it finishes with `a`, then binds
+  `x` to `a` (with `&mut c` in `V` (§11), `(c, x)`) and runs `N`. Closed there, the machine closes
+  the callee's loop and hands back the body's residual: its residual itself when `R' = R`; else
+  the capabilities by name, with `c` rebound from `r = (c, ())`.
+- **`for x in V { M }; N`**, `V : U(Iter A R₀ R₀')` made from a capability `c`, is the loop of
+  §11 as a state, with residual `R`; the variables it holds have the types inference gives them
+  (`corpus/sugar/for-untyped.bc`). At the end of the stream `c` is bound to what the iterator
+  hands back and `N` runs; after `break`, the iterator is closed first. `M` is one step of the
   loop and must be total.
-- **A terminal** `T` becomes `v : B <- T; return (thunkv nu_in ⟨return (inl v), close⟩)`, the
-  loop that finishes with `v` at its first observation; `close` hands back the components of `v`
-  that have no destructor.
+- **A terminal** `T` finishes: `v : B <- T; return (inl v)`. Before the first state, when the
+  function is called, it is the loop that finishes with `v` at its first observation,
+  `thunkv nu_in ⟨return (inl v), close⟩`; `close` hands back the components of `v` that have no
+  destructor.
 
 The variables that hold `K` are named as a terminal `return` names them, or, in an ambient
 `main`, `stdin`, `stdout` and `stderr` (`corpus/sugar/residual-alias.bc`: a residual under a
@@ -1198,7 +1209,7 @@ Another control effect (async, #52; generators and user handlers, #18) reuses it
 
 1. its computation type for a callback, as `Loop` is div's (the result shape a call returns);
 2. its inference on a body, as `loopsAt` is div's (which constructs make a body effectful);
-3. its elaboration of a body and of a direct-style call, as `loopBody` and `div_bind` are div's.
+3. its elaboration of a body and of a direct-style call, as the body's state machine is div's.
 
 The specialization itself — finding the callback's type at a call, copying, caching by
 (function, parameter type), renaming the call — is shared. What it does not yet cover is below.
@@ -1342,26 +1353,24 @@ closed, so `gen A K K` is a source that can be stopped (below).
 ### Declarations and elaboration
 
 `gen fn f(x₁: A₁, …) -> A, B = S` (`-> A` finishes with `1`; `gen fn f<'a>(…)` takes a lifetime)
-elaborates, in `Frontend/Sugar.lean`, to `f : !(A₁ * … => U (gen A B R))`. The body is
-elaborated to its first observation:
+elaborates, in `Frontend/Sugar.lean`, to `f : !(A₁ * … => U (gen A B R))`. The body is one
+state machine (*One state machine per body*, below); on its spine:
 
-- **`yield e; N`** is `return (inl (e, thunkv nu_in < N', close >))`: the rest runs `N` when it
-  is observed, and its `close` drops what `N` would have used and hands back the residual.
+- **`yield e; N`** returns `e` with the state after it, which holds what `N` uses: the next
+  observation runs `N`, and the state's `close` drops what `N` would have used and hands back the
+  residual.
 - **A terminal** `T` finishes: `return (inr (inl T))`.
 - **`for x in V { M }; N`** (`V` an iterator or a generator) and **`while c { M }; N`** are a
-  generator by `unfold` over the loop's variables and iterator, or the body's rest with them.
-  The body `M` is itself a generator body, which may `yield` and `break`. A loop head starts an
-  iteration; an iteration that the head started and that ends without yielding is a skip, and one
-  that resumed after a `yield` starts the next at once. What follows the loop runs in the loop's
-  last step when it neither yields nor loops, and is sequenced by `gen_bind` otherwise.
-- **The call runs nothing**: it returns `thunkv nu_in < S', close >`. A body that is code, one
-  loop, and code with no `yield` is one `unfold` whose first state is the parameters, so every
-  observation of it is a call of one known code. Closed before it starts, a generator closes the
-  generators and iterators it was given, to hand back what they hold.
+  state at the loop's head, holding the iterator and the variables live there. The body `M` is
+  part of the same machine, and may `yield` and `break`. The head starts an iteration; an
+  iteration that the head started and that ends without yielding is a skip, and one that resumed
+  after a `yield` starts the next at once. What follows the loop runs at its end, and after a
+  `break`, which closes the iterator first.
+- **The call runs nothing**: it returns the machine at its first state, which holds the
+  parameters. Closed there, a generator closes the generators and iterators it was given, to
+  hand back what they hold.
 - **`return e`** anywhere in the body finishes the generator with `e`, from any depth of its
-  loops: a loop's body with a `return` finishes with `inr (inr e)` (`inl` goes on, `inr (inl …)`
-  is a `break`), and each loop it leaves closes its iterator and finishes at once, skipping what
-  follows it (`corpus/gen-return.bc`, `corpus/sugar/gen-return.bc`). The loops it leaves must
+  loops: each loop it leaves closes its iterator, and what follows them does not run (`corpus/gen-return.bc`, `corpus/sugar/gen-return.bc`). The loops it leaves must
   hold nothing without a destructor beyond what `e` hands back; a `return` inside a `for` over an
   iterator made from a capability is rejected, since the iterator holds the capability
   (`corpus/reject/gen-return-held.bc`). `return` is a generator's: in a `gen fn`'s body, a
@@ -1383,32 +1392,29 @@ elaborated to its first observation:
   from `c` does (a `gen { … }` block that captured `stdin`, `corpus/gen-block.bc`).
 - **A call of a div function in direct style** (§14's definition, at any depth of a bound or
   returned value, a scrutinee or an element being yielded) runs the call's loop inside the
-  generator: `x <- f V; N` becomes `gen_bind_loop[A, B', R', B, R] (f V, ⟨λa. x ← a;
-  return (thunkv nu_in ⟨N', close⟩), λr. abort⟩)` (`lib/gen.bc`), whose state is the loop with
-  the continuation, then the continuation's generator. Each turn of the loop is a skip, so every
-  observation stays total; `abort` turns the loop's residual into the generator's, as a div
-  body's does, including a capability lent with `&mut c` (`corpus/gen-div.bc`,
-  `corpus/sugar/gen-div.bc`). What follows a loop runs in its last step only when it neither
-  yields nor loops nor calls a div function. `yield` outside a generator's body is an error
+  generator: `x <- f V; N` is a state that holds the loop and what `N` uses. Each turn of the loop
+  is a skip, so every observation stays total; when it finishes with `a`, `x` is bound to `a` and
+  `N` runs. Closed there, the generator closes the loop and turns its residual into its own, as a
+  div body does, including a capability lent with `&mut c` (`corpus/gen-div.bc`,
+  `corpus/sugar/gen-div.bc`). `yield` outside a generator's body is an error
   (`corpus/reject/yield-outside.bc`).
 - **`x <- yield from g; N`** delegates to the generator `g : U (gen A B' R')` (of the same
-  element type): `gen_bind[A, B', R', B, R] (g, ⟨λb. x ← b; return (thunkv nu_in ⟨N', close⟩),
-  λr. abort⟩)`, whose first observation is the generator's. Everything `g` yields is yielded, and
-  `x` is what it finishes with; a `yield from` last finishes the generator with it. A capability
+  element type): a state that holds `g` and what `N` uses, entered by observing `g`. Everything
+  `g` yields is yielded with that state, a skip of `g` is a skip, and `x` is what it finishes with; a `yield from` last finishes the generator with it. A capability
   lent with `&mut c` comes back in `g`'s result (`c` itself, or `(c, x)`) or, closed during `g`,
   its residual (`corpus/gen-from.bc`, `corpus/sugar/gen-from.bc`,
   `corpus/reject/gen-from-elem.bc`).
 - **`gen { S }`** is a generator in place: the body `S` elaborated as a `gen fn`'s is, to
-  `(thunkv nu_in ⟨S', close⟩ : U (gen A B R))`, capturing what it uses, with `close` dropping it
-  and handing back the residual. Its element type is what `S` yields first, and `B` what it
+  `(run M : U (gen A B R))`, `M` the machine at a first state that holds what `S` uses, whose
+  `close` drops it and hands back the residual. Its element type is what `S` yields first, and `B` what it
   finishes with (`corpus/gen-block.bc`, `corpus/sugar/gen-block.bc`,
   `corpus/reject/gen-block-empty.bc`). It is elaborated after specialization, so a call in it may
   have a callback that yields.
 - **A callback that yields**, a closure whose body has a `yield`, passed at a callback type
   `A ⇒ B`, is a generator function `A ⇒ U (gen E B R)`, its body elaborated in place. The function
   it is passed to is specialized at that type (§14's specialization, with a generator function as
-  the callback's computation type, `yield` as its inference and `gen_bind` as its elaboration of
-  a call): in the copy, each call of the callback is a `yield from` of the generator it returns,
+  the callback's computation type, `yield` as its inference and `yield from` as its elaboration
+  of a call): in the copy, each call of the callback is a `yield from` of the generator it returns,
   so the copy is a generator of `E`, and the call of the copy is a `yield from` too, in a
   generator's body or a block (`corpus/sugar/gen-callback.bc`; outside one it is rejected,
   `corpus/reject/gen-callback-outside.bc`). The calls through the callback are on the copy's
@@ -1423,6 +1429,58 @@ error.
 
 A `for` in a div body iterates a generator too (a skip goes round the loop), and an iterator or
 generator that holds no capability (`range(1, 10)`, a pipeline of generators).
+
+### One state machine per body
+
+Every generator body and every div body is **one `unfold`** (`Frontend/Sugar.lean`, `mWalk`,
+`mAssemble`; #109 item 8). Its state is a sum with one summand per **resumption point**, a place
+where the body stops between two observations, holding the variables live there:
+
+| point | the state holds |
+|---|---|
+| the start (a generator) | the parameters, or what a `gen { }` block captures |
+| after a `yield` | what the rest of the body uses |
+| a loop's head | its iterator (a `for`), and what the loop and what follows it use |
+| a `yield from` | the delegate, and what follows uses |
+| a call of a div function in direct style | the callee's loop, and what follows uses |
+
+Inside a loop, a state also holds the iterators of the loops around it, and what they use. The
+step is one code with a `case` on the state. The code between points is the program's own, with
+its transitions replaced: `yield e` returns `e` with the next state; reaching a head, a
+delegation or a call is a **move** to its point; the end of a loop's body moves back to its head;
+`break` closes the iterator and moves to the code after the loop, its **join**; `return e` closes
+the iterators of the loops it leaves and finishes; a terminal finishes.
+
+**Moves.** The code of each head, delegation and call, and of each join, is a `!` function of
+its state, defined before the step. A move calls it when that runs in the same observation, and
+otherwise returns the state as a skip. A function calls only the functions of points after it in
+the body, so none calls itself and every observation ends: a move back to a head from inside its
+loop is a skip, and from a `yield`'s continuation (the step's own code) a call, so a loop whose
+body yields once per iteration yields at every observation. In a div body every move to a state
+is a skip: each observation is one iteration, or one observation of a callee, as with the delay
+bind. A div body runs its code up to its first state when called and returns the machine there;
+a generator runs nothing.
+
+**The residual by name.** Each state's `close` closes what the state holds, innermost first:
+the delegate or the callee's loop (turning its residual into the body's: the lent capability,
+`()`, or the body's own residual, bound by name), then the loops' iterators (binding the
+capability each hands back); then it returns the residual from the names. Every other variable
+of the state is dropped (§12).
+
+Every observation is then a call of known code. The dispatched calls left in the corpus
+(`corpus/counts.expected`) are the programs' own closures (the functions `gen-lines` folds a line
+into, the steps passed to `lib/lend.bc`'s combinators, `div_fuel`'s handler) and `gen-lazy`'s
+observations written by hand, none from sequencing a body; and `corpus/gen-adapters-io.bc`, whose `main` runs six
+adapter pipelines over an input, compiles in about a second. Pairs written by hand:
+`corpus/sugar/gen-from.core.bc` (a generator with a delegation and three `yield`s) and
+`for-value.core.bc` (a div body with two loops and a `break`).
+
+**Where it does not apply.** The machine needs the type of every variable a state holds, and
+needs a delegate's or callee's residual to be `()`, a lent capability or the body's own; a body
+that uses a capability-less extern of a type with no destructor across a point is not covered
+either. Such a body, and one the elaboration rejects, is elaborated by the nested binds of
+`lib/gen.bc` and `lib/div.bc` (`gen_bind`, `gen_bind_loop`, `div_bind`), which report the
+errors. No program of the corpus takes that path except the rejected ones.
 
 ### Self-reference
 
@@ -1465,16 +1523,13 @@ source themselves, so they take a source that hands back, closed, what it finish
 finishes with an error it computes (`i32 + 1`) and hands back `1`; stopped early it has no error
 to report, and such a call is rejected at the instance (`corpus/reject/take-failing.bc`). `zip`
 pulls its second source one element at a time with `gen_pull` (`lib/gen.bc`), whose skips are
-`zip`'s. Tests: pure sources `corpus/gen-adapters.bc`, inputs `corpus/gen-adapters-io.bc` and
-`corpus/gen-adapters-io2.bc`, failing sources `corpus/gen-adapters-fail.bc`, and a pipeline
-`corpus/gen-pipeline-adapters.bc`.
+`zip`'s. Tests: pure sources `corpus/gen-adapters.bc`, inputs `corpus/gen-adapters-io.bc`,
+failing sources `corpus/gen-adapters-fail.bc`, and a pipeline `corpus/gen-pipeline-adapters.bc`.
 
-A pipeline of the adapters whose bodies are one loop (`map`, `filter`, `take`, `skip`,
-`enumerate`, `scan`, `take_until`, `flat_map`, `from_iter`), with known functions, allocates
-nothing and makes no dispatched call (`corpus/gen-pipeline-adapters.bc`: 0, 0, 0). `chain`,
-`zip`, `chunks`, `lines` and `batch` have two parts sequenced by `gen_bind`, whose observation
-calls the part it is in through its closure: one dispatched call per observation
-(`corpus/counts.expected` names them).
+A pipeline of the adapters with known functions allocates nothing and makes no dispatched call
+(`corpus/gen-pipeline-adapters.bc`: 0, 0, 0). Every adapter is one state machine, `chain`, `zip`,
+`chunks`, `lines` and `batch`, whose bodies have two parts, included: none dispatches
+(`corpus/gen-adapters.bc`, `gen-adapters-io.bc`, `gen-adapters-fail.bc`).
 
 ### Baseline
 
@@ -1486,16 +1541,13 @@ preserved: every construct of this entry is elaborated into core before checking
 
 - **A total consumer.** A `for` over a generator is div, even over a finite one (stage 9 of
   `docs/typed-elaboration.md`).
-- **Zero dispatch for bodies with several parts.** A body with two loops, a `yield` after a loop,
-  or a `yield from` is sequenced by `gen_bind`, which calls the part it is in through a closure
-  (one dispatched call per observation). The design that removes it is a whole-body state
-  machine: one `unfold` whose state is a sum with one summand per resumption point (each `yield`,
-  loop head and delegation), holding the variables live there, and whose step is one code with a
-  `case` on the state; `break`, `return` and the end of a loop are moves to another summand, and
-  a delegate or a div call is held in its summand. Every observation is then a call of one known
-  code. The same machine for a div body (a generator that never yields) removes the delay binds
-  of a body with several loops, whose nesting also makes the source interpreter's run and the
-  closure flow analysis grow faster than linearly in the number of loops of one body.
+- **The source interpreter** (`bcc interp`, `Support`'s substitution machine) substitutes into
+  the whole step at each observation, so its time per observation grows with the size of the
+  body's machine, and a body with more loops has more observations: its run grows about as the
+  square of the loops of one body (a `main` of 16 loops over a 10-element generator takes about
+  a minute). The compiled stages do not.
+- **The backend's compile time** still grows faster than linearly in the size of a program: a
+  `main` of 18 adapter loops over an input compiles in about 21 s, one of 6 in about 1 s.
 - **A source that both holds a capability and fails** (`B = In ⊗ E`) is not an instance of the
   adapters: an adapter's result is one variable `k`, and the residual is handed back by name.
   Stopping a failing source (`take` over `U (gen A (1 + E) 1)`) is not provided.
@@ -1519,11 +1571,18 @@ typed world, the model and the end-to-end theorems in `Core/Stdio.lean`, the che
 `Core/Stale.lean`. Entry 13 (§14) is implemented in `lib/div.bc`, `lib/lend.bc`, `Frontend/Sugar.lean`,
 `Frontend/Elab/LoopLend.lean` and `Core/Totality.lean`, with no change to `CDerives`. Entry 14 (§15) is implemented in
 `lib/gen.bc`, `lib/adapters.bc`, `Frontend/Parser.lean`, `Frontend/Sugar.lean` and
-`Frontend/Elab/Subst.lean`, with no change to `CDerives`.
+`Frontend/Elab/Subst.lean`, with no change to `CDerives`; each generator and div body is one
+state machine (§15).
 
 ---
 
 ## Changelog
+
+- **0.20** (2026-09-29) — §14, §15: one state machine per body (#109 item 8). Every generator
+  body and every div body is one `unfold` whose state has a summand per resumption point, and
+  whose step is one code with a `case` on the state; `gen_bind`, `gen_bind_loop` and `div_bind`
+  remain the library's binds, and the elaboration's for the shapes the machine does not cover.
+  No generator or div body of the corpus dispatches a call. No kernel, rule or checker change.
 
 - **0.19** (2026-09-29) — Entry 14 (§15): generators, replacing §14's spike subsection (#109).
   `return` and `break` anywhere in a generator's body, a `for` that keeps its finishing value,

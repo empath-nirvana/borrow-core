@@ -367,3 +367,32 @@ Each entry: the decision, and why. Newest last.
       the existing typing rejects it (the block's result is boxed at `'x`, and a thunk has no
       outlives rule). The error is the checker's on the generated `boxed['x]`, in place of the
       elaborator's "off the spine".
+42. **Provisional (SPEC §15, one state machine per body; #109 item 8; to be confirmed by the
+    user).**
+    - **One `unfold` per body, generators and div bodies alike.** The state's summands are the
+      resumption points (the start of a generator, each `yield`'s continuation, each loop head,
+      each `yield from`, each call of a div function in direct style); a loop's join (what
+      follows it, reached from its end and its `break`s) is a function, not a summand.
+    - **Calls or skips.** A move to a point calls its function when a later point is reached,
+      or when the move is from a `yield`'s continuation; a move back to a loop's head from inside
+      the loop is a skip. In a div body every move to a state is a skip, so each observation is
+      one iteration or one observation of a callee, as with the delay bind, and `div_fuel`
+      counts the same observations. The alternative of calling forward in a div body too (fewer
+      observations) was not taken for that reason.
+    - **When the code runs.** A div body runs its code up to its first state when called and
+      returns the machine there (§14's "a call runs the function's code up to its first loop");
+      a generator runs nothing, its first state holding the parameters. A `gen { }` block is
+      `run` of its machine, whose first state holds what it captures.
+    - **The nested binds stay as the fallback.** `gen_bind`, `gen_bind_loop` and `div_bind`
+      elaborate a body the machine does not cover (a variable of undetermined type live at a
+      point, a delegate's residual that is neither `()`, a lent capability nor the body's, a
+      capability-less extern with no destructor used across a point) and report the errors of a
+      body the elaboration rejects. The alternative, deleting them, would need every such error
+      rebuilt in the machine; no accepted program of the corpus takes the fallback.
+    - **The divergence library is emitted only when the elaborated program names it**, as the
+      generator library already was: a program whose div bodies are machines has no `div_bind`.
+    - **The I/O adapter tests are one file again**, `corpus/gen-adapters-io.bc` with six loops in
+      `main`: it compiles in about a second (it took about 90 s with nested binds).
+    - **Sugar pairs.** The core forms of `corpus/sugar/gen-from.bc` and `for-value.bc` are
+      written by hand as machines; the other pairs whose elaboration changed have as core form
+      the elaboration as `bcc desugar` prints it.

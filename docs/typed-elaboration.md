@@ -241,8 +241,9 @@ function to be div.
 **Direct-style calls, anywhere.** In a body, any call of a div function that is not wrapped in
 `{ … }` (below) *runs* it. Lowering puts the body in A-normal form first: a nested div call
 `g(f(x), y + 1)` becomes a sequence of binds, left to right. This is the order the value-level
-application `lolliE` already evaluates in. The bind of a div call then becomes `div_bind` with
-the rest of the body as its continuation (SPEC §14's translation). So a div call may stand in an
+application `lolliE` already evaluates in. The bind of a div call then becomes a state of the
+body's state machine that holds the callee's loop, with the rest of the body run when it finishes
+(SPEC §14, §15; §7 below); `div_bind` is the same bind as library code. So a div call may stand in an
 argument, an operand, a `let`, a `match` scrutinee or a tail, not only at the head `return (f V)`.
 Because inference types every call, no syntactic pattern is involved.
 
@@ -678,6 +679,10 @@ main : F (U (loop ((In * Out) * (i32 * (i32 * i32))) ((In * Out) * 1))) =
 `In * Out`. The continuation's close observation fills it by identity: `stdin` comes from the
 callee's residual, and `stdout` is the caller's own.
 
+This is the draft's form. As built, `main` is one state machine (§7, *Whole-body state
+machines*): the call of `count` is a state holding `count`'s loop and `stdout`, whose `close`
+binds `stdin` from the callee's residual in the same way.
+
 ### 6.2 `map-reuse` (block constructors, `fold_reuse`, `&mut` on a `let mut`)
 
 Surface, 15 lines (the core file is 44):
@@ -883,6 +888,22 @@ body that uses the borrow is a borrow block of its own and each `for`'s body bor
 result is elaborated as any surface code. A `def` over a borrow whose body loops is rewritten to
 take the owner before `surfDecl` (`lentDef`). Pairs: `corpus/sugar/lend-block.bc`, `lend-let.bc`,
 `lend-div.bc`.
+
+**Whole-body state machines, as built** (SPEC §15, *One state machine per body*; #109 item 8;
+decision 42 of `docs/decisions.md`). `mWalk` in `Sugar.lean` walks a generator or div body once,
+on the same typing context as the rest of the elaboration, and records a point for each `yield`'s
+continuation, loop head, `yield from`, call of a div function in direct style, and loop join,
+with the variables live there (their inferred types; the capabilities of the residual by name).
+The code between points is the program's own, with each transition replaced by a move: a call of
+the point's `!` function, or its state returned as a skip. `mAssemble` builds the sum type of the
+states, the functions (last point first), the step with a `case` on the state for `next` and for
+`close`, and the `unfold`; each point's code is a template at the span of the sugar it comes
+from, so an error in it is reported there. `genDef`, `genValue` (blocks and callbacks) and every
+div body (`divBody`: `def`s, `main`, closures, `{ … }`) use it; a body it does not cover, and one
+the elaboration rejects, is elaborated by `genBody` and `loopBody` as before. The core forms of
+`corpus/sugar/gen-from.bc` and `for-value.bc` are written by hand as machines; those of the other
+pairs whose elaboration changed are the elaboration as `bcc desugar` prints it. The divergence library is emitted only when the
+elaborated program names it.
 
 Stages 1–4 retire the #54 shortcuts and change no surface syntax, except that `&c` stays until
 stage 6. Stages 5–9 are the rest of step 2. After stage 9, step 3 of #54 (rewriting 6–10 corpus
