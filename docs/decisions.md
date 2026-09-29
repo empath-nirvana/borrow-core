@@ -304,7 +304,7 @@ Each entry: the decision, and why. Newest last.
       is covered.
     - `|>` is not provided: draft 0 puts the piped value last (#17), and #109's adapters take the
       source first; the two are to be reconciled with it.
-41. **Provisional (SPEC §14 Generators, #109, to be confirmed by the user).**
+41. **Provisional (SPEC §15 Generators, #109, to be confirmed by the user).**
     - **`return e` is a generator's.** In the body of a `gen fn`, a statement `return e` that is
       not the head of a bind (`x <- return V; N` stays the core's) finishes the generator with
       `e` from any depth of its loops. In `fn` and `main` bodies, closures, blocks and borrow
@@ -341,3 +341,29 @@ Each entry: the decision, and why. Newest last.
     - **`let c = for …` where `c` is a capability** the body hands back binds it as the
       capability the iterator hands back (at its end or when closed), so a generator stored in a
       variable can hand `stdin` back: `let stdin = for b in g { … }`.
+    - **Generic generators, `gen fn f[A, …](…)`** (item 6): type parameters in brackets, as a
+      core `def`'s, instantiated per call at the types of the arguments (read off them, or
+      written `f[T, …](…)`), each instance a copy named `f__gN`. Only generators are generic,
+      and an instance's types have no lifetimes. Alternative not taken: kernel polymorphism over
+      value types, which §1's baseline does not have.
+    - **A generator's residual is what it holds, `K`**, not a div body's `K ⊗ 1`: a generator
+      that finishes with `stdin` hands back `stdin` when closed, so `stdout <- (nu_out (force
+      g)).2` in place of `let (stdout, _) = …` (`corpus/gen-lazy.bc`), and `gen A K K` is a
+      source that can be stopped.
+    - **The adapter library** (`include adapters`, `lib/adapters.bc`): the names `map`, `filter`,
+      `take`, `skip`, `enumerate`, `chain`, `flat_map`, `take_until`, `scan`, `zip`, `chunks`,
+      `lines`, `batch`, `from_iter` (Rust's, with `take_until` for Rust's negated `take_while`
+      and `batch` for a grouping by a function); argument order source first, then numbers,
+      then functions. `chain`'s second source, `flat_map`'s inner ones and `zip`'s second are
+      pure (`gen B 1 1`), so the whole finishes with the first source's value. `chunks` and
+      `lines` build lists last element first.
+    - **Stopping takes `U (gen A K K)`**: `take`, `take_until` and `zip` close their source, so
+      its residual must be what it finishes with. A failing source (`gen A (1 + E) 1`) is
+      rejected there rather than given a result type `K + R` (which the residual by name cannot
+      hand back when `K = R = In`) or a function `R ⇒ K` argument (which the same rule defeats
+      when the source holds a capability).
+    - **A borrow block that yields is a delegation** (item 7): `borrow … { 'x, b -> S }` with a
+      `yield` in `S`, in a generator's body, is `yield from borrow … { 'x, b -> gen { S } }`, and
+      the existing typing rejects it (the block's result is boxed at `'x`, and a thunk has no
+      outlives rule). The error is the checker's on the generated `boxed['x]`, in place of the
+      elaborator's "off the spine".

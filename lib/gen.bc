@@ -2,7 +2,7 @@
 -- element `A` with the rest, finishes with `B`, or skips a step with the rest; its `close` ends it
 -- early and hands back the residual `R`. A skip is a step of the generator's own work that
 -- yields nothing (one turn of a loop in its body that did not yield), so every observation is
--- total and a consumer decides how many to make: a `for` over a generator is a loop (SPEC §14).
+-- total and a consumer decides how many to make: a `for` over a generator is a loop (SPEC §15).
 -- `loop B R` is the generator that never yields, and `iter A B R` the one that never skips.
 --
 -- This is ordinary library code over `unfold` (SPEC §7), checked with the program and emitted
@@ -70,7 +70,7 @@ def gen_bind[A, B1, R1, B, R] :
     return (thunkv nu_in < (nu_out (force f s0)).1, (nu_out (force f s0)).2 >)
 
 -- A loop inside a generator: a call of a div function in direct style in a generator's body
--- (SPEC §14). The state is the loop with the continuation, or the continuation's generator. Each
+-- (SPEC §15). The state is the loop with the continuation, or the continuation's generator. Each
 -- turn of the loop is a skip, so every observation stays total; when the loop finishes, the
 -- continuation's generator is the next state. Closed during the loop, the loop's residual goes to
 -- the continuation's second observation.

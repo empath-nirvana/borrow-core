@@ -1,5 +1,5 @@
 -- Generator adapters (#109). Each is a generic `gen fn`, written once and instantiated at the
--- types of each call (SPEC §14, generic generators): the instance is ordinary code at those
+-- types of each call (SPEC §15, generic generators): the instance is ordinary code at those
 -- types, so an adapter over a pure source, one over an input and one over a source that fails are
 -- three instances of one definition. A pipeline of single-loop adapters whose functions are known
 -- makes no allocation and no dispatched call; `chain`, `zip`, `chunks`, `lines` and `batch`
