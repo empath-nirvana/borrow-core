@@ -38,6 +38,8 @@ inductive Instr where
   | globalGet (name : String)
   /-- Add one to the runtime's count of dispatched calls. -/
   | countInd
+  /-- Add one to the runtime's count of copies at a non-trivial type. -/
+  | countCopy
   deriving Repr, Inhabited
 
 structure Func where

@@ -32,14 +32,16 @@ structure CheckedProg where
 
 /-- Parse and check `src`; a `main` with externs must be a standard I/O program (SPEC §11). -/
 def checkedOf (file src : String) : Except String CheckedProg := do
-  let p ← match Frontend.parseProgram src with
+  let p₀ ← match Frontend.parseProgram src with
     | .ok p => pure p
     | .error e => throw s!"{file}:{e.render}"
-  let p ← match Frontend.Sugar.elaborate p with
-    | .ok (p, _) => pure p
-    | .error e => throw s!"{file}:{e.render}"
-  let r ← match Frontend.Check.checkProgram p with
+  -- The checker elaborates the program as parsed: its explicit copies (`clone(x)`) are known
+  -- only there.
+  let r ← match Frontend.Check.checkProgram p₀ with
     | .ok r => pure r
+    | .error e => throw s!"{file}:{e.render}"
+  let p ← match Frontend.Sugar.elaborate p₀ with
+    | .ok (p, _) => pure p
     | .error e => throw s!"{file}:{e.render}"
   let some c := r.main | throw s!"{file}: no `main`"
   match Frontend.Check.ioMainOf p c with

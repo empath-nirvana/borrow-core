@@ -125,7 +125,9 @@ def isHole : VTy → Bool
 
 def Val.level : Val → Nat
   | .thunkv _ (.lam _ _ A _) | .bangThunkv _ (.lam _ _ A _) => if isHole A then 2 else 0
-  | .app _ (.sugar _ (.op _)) _ | .app _ (.sugar _ (.call _)) _ => 3
+  | .app _ (.sugar _ (.op _)) _ => 3
+  -- `alloc(e)`, `clone(x)`: an application, parenthesized as an argument.
+  | .app _ (.sugar _ (.call _)) _ => 2
   | .app _ (.sugar _ .deref) _ => 2
   | .app _ (.sugar _ .yield_) _ => 1
   | .app _ (.sugar _ .brace) _ | .app _ (.app _ (.sugar _ (.borrow ..)) _) _ => 2

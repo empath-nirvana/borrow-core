@@ -1,62 +1,63 @@
-# Allocations and indirect (dispatched) calls per run of each corpus program (scripts/compile-corpus.sh).
-# name allocs indirect
-13-2-sum-prog 37 9
-array-empty 1 0
-array-get 2 0
-array-refs 5 0
-array-replace 2 0
-array-sum 1 0
-axes/codata-coeffects 2 0
-axes/codata-effects 1 0
-axes/codata-generic 1 0
-axes/data-coeffects 7 0
-axes/data-effects 26 9
-axes/effects-coeffects 2 0
-axes/free-monad 11 4
-axes/result-fold-imm 16 0
-axes/result-fold-own 14 0
-axes/scope-boxed-iter 3 0
-axes/scope-codata-effects 1 0
-axes/scope-data-effects 8 0
-axes/scope-loop-lend 3 0
-block-swap 2 0
-count-down 0 0
-count-down-exact 6 0
-deep-list 100000 150004
-div-hof 0 143
-family-swap 2 0
-gen-borrowed 2 0
-gen-cell 1 0
-gen-close 4 0
-gen-digits 2 5
-gen-fib 0 0
-gen-lazy 1 4
-gen-lines 42 50
-gen-pipeline 0 0
-gen-produce 0 4
-implicit-drops 9 0
-int-arith 0 0
-int-ops 0 0
-io-aoc 4 0
-io-cat 2 0
-io-for-assign 1 0
-io-for-then 2 0
-io-fuel 3746 174
-io-guess 3 0
-io-head 2 0
-io-hex 2 0
-io-lines 2 0
-io-sections 2 0
-io-upper 2 0
-io-wc 2 0
-iter-close 2 0
-iter-range 0 0
-map-reuse 7 0
-nats-sum 0 0
-sum-i32 7 0
-sum-prog-exact 37 9
-surface/array-sum 1 0
-surface/family-swap 2 0
-surface/io-upper 2 0
-surface/io-wc 2 0
-surface/map-reuse 7 0
+# Allocations, indirect (dispatched) calls and copies at a non-trivial type per run of each corpus program (scripts/compile-corpus.sh).
+# name allocs indirect copies
+13-2-sum-prog 37 9 0
+array-empty 1 0 0
+array-get 2 0 0
+array-refs 5 0 0
+array-replace 2 0 0
+array-sum 1 0 0
+axes/codata-coeffects 2 0 0
+axes/codata-effects 1 0 0
+axes/codata-generic 1 0 0
+axes/data-coeffects 7 0 0
+axes/data-effects 26 9 0
+axes/effects-coeffects 2 0 0
+axes/free-monad 11 4 1
+axes/result-fold-imm 16 0 0
+axes/result-fold-own 14 0 0
+axes/scope-boxed-iter 3 0 0
+axes/scope-codata-effects 1 0 0
+axes/scope-data-effects 8 0 0
+axes/scope-loop-lend 3 0 0
+block-swap 2 0 0
+clone-reuse 6 0 1
+count-down 0 0 0
+count-down-exact 6 0 0
+deep-list 100000 150004 0
+div-hof 0 143 0
+family-swap 2 0 0
+gen-borrowed 2 0 0
+gen-cell 1 0 0
+gen-close 4 0 0
+gen-digits 2 5 0
+gen-fib 0 0 0
+gen-lazy 1 4 0
+gen-lines 42 50 0
+gen-pipeline 0 0 0
+gen-produce 0 4 0
+implicit-drops 9 0 0
+int-arith 0 0 0
+int-ops 0 0 0
+io-aoc 4 0 0
+io-cat 2 0 0
+io-for-assign 1 0 0
+io-for-then 2 0 0
+io-fuel 3746 174 0
+io-guess 3 0 0
+io-head 2 0 0
+io-hex 2 0 0
+io-lines 2 0 0
+io-sections 2 0 0
+io-upper 2 0 0
+io-wc 2 0 0
+iter-close 2 0 0
+iter-range 0 0 0
+map-reuse 7 0 0
+nats-sum 0 0 0
+sum-i32 7 0 0
+sum-prog-exact 37 9 0
+surface/array-sum 1 0 0
+surface/family-swap 2 0 0
+surface/io-upper 2 0 0
+surface/io-wc 2 0 0
+surface/map-reuse 7 0 0

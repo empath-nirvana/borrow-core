@@ -35,7 +35,8 @@ inductive Exp where
   | live
   /-- The next byte of the stream `fd`, or `2⁶⁴ - 1` at its end (SPEC §11). -/
   | getc (fd : Exp)
-  /-- A run's counter: `0` the allocations so far, `1` the dispatched calls so far. -/
+  /-- A run's counter: `0` the allocations so far, `1` the dispatched calls so far, `2` the
+  copies of a variable at a non-trivial type so far. -/
   | stat (k : Nat)
   deriving Repr, Inhabited
 
@@ -59,6 +60,8 @@ inductive Stmt where
   | tailCall (f : Nat) (args : List Exp)
   /-- Count a dispatched call: a closure call whose code is chosen at run time. -/
   | tick
+  /-- Count a copy of a variable at a non-trivial type: a generated copy that allocates. -/
+  | tickCopy
   | trap
   deriving Repr, Inhabited
 

@@ -10,9 +10,10 @@ in `Backend/README.md`:
 - `$free a`, for `a` returned by `$alloc` and not freed since, ends that range's life and
   subtracts one from the live count.
 - `$live` is the live count, and is exported as `live_objects`.
-- `$allocs` counts the calls of `$alloc`, and `$indirect` the dispatched calls (closure calls
-  whose code a switch chooses at run time), which the compiled code counts when it is compiled
-  for counting.
+- `$allocs` counts the calls of `$alloc`, `$indirect` the dispatched calls (closure calls
+  whose code a switch chooses at run time), and `$copies` the copies of a variable at a
+  non-trivial type (a generated copy, which allocates); the compiled code counts the last two
+  when it is compiled for counting.
 - `$putc b` writes the low byte of `b` to standard output, and `$putfd fd b` to the stream
   `fd` (WASI `fd_write`; `write(2)` in libc).
 - `$getc fd` reads one byte of the stream `fd`, or answers `-1` at its end or on an error
@@ -37,6 +38,7 @@ def runtimeWat : String := "
   (global $live (mut i64) (i64.const 0))
   (global $allocs (mut i64) (i64.const 0))
   (global $indirect (mut i64) (i64.const 0))
+  (global $copies (mut i64) (i64.const 0))
 
   (func $alloc (param $n i64) (result i64)
     (local $s i32) (local $head i32) (local $p i32) (local $top i32) (local $have i32)

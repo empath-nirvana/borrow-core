@@ -9,7 +9,7 @@ from it (`Clos/Types.lean`), and every stage from the flat IR on lays values out
     lake exe bcc run <file>                    compile, run under `wasmtime -W tail-call=y`
     lake exe bcc interp [--stage S] <file>     interpret stage S: source (default), clos, flat
     lake exe bcc trusted <file>                the program's externs: contracts, host code, levels
-    lake exe bcc-counts <file>                 allocations and indirect calls of a run
+    lake exe bcc-counts <file>                 allocations, indirect calls and deep copies of a run
     lake exe bcc-counts --sites <file>         the closure calls: direct, dispatched; recursive types
     scripts/compile-corpus.sh                  the corpus, compiled against the interpreter
 
@@ -231,7 +231,9 @@ typed layouts:
   scrutinee and arms) is copied for all but the last. The two arms of a `case` are one part:
   only one runs. At a *trivial* type the copy is the words themselves; otherwise it is the
   type's generated copy, which allocates a new object for each boxed field and heap environment
-  it meets. A type is trivial when it has no boxed field, no recursive closure type, and no
+  it meets (`bcc-counts` counts these copies; at the surface, a use that makes one at a type
+  holding recursive data is written `clone(x)`, SPEC §10). A type is trivial when it has no
+  boxed field, no recursive closure type, and no
   closure whose code captures a non-trivial value. A closure is copied by a `switch` on its tag
   that copies that code's captured values; so a closure whose captures are all trivial, as a `!`
   closure's persistent captures are unless they hold a boxed field or a recursive closure, is
@@ -322,10 +324,13 @@ program's golden `corpus/<name>.out` and `.err`, on `corpus/<name>.in`.
 ## Counts
 
 `bcc-counts <file>` runs the program at the flat IR and under `wasmtime`, each built to count
-(`Driver.flatOf`, `compileWat` with `counts`: the entry writes `allocs N` and `indirect M` after
-the report), and prints the objects the run allocates and the indirect calls it makes; the two
-stages must agree. An indirect call is a dispatched one: a call of a type's `apply`, whose code
-the `switch` on the tag chooses at run time. There is no other kind of indirect call. `scripts/compile-corpus.sh` checks every corpus program's counts against
+(`Driver.flatOf`, `compileWat` with `counts`: the entry writes `allocs N`, `indirect M` and
+`copies K` after the report), and prints the objects the run allocates, the indirect calls it
+makes and the deep copies it makes; the two stages must agree. An indirect call is a dispatched
+one: a call of a type's `apply`, whose code the `switch` on the tag chooses at run time. There is
+no other kind of indirect call. A deep copy is a `copy` of the closure IR (Memory discipline: a
+variable used by two sequential parts) at a non-trivial type, which calls the type's generated
+copy; a copy at a trivial type is the words themselves and is not counted. `scripts/compile-corpus.sh` checks every corpus program's counts against
 `corpus/counts.expected`: a count above the file fails the gate, one below it is reported, and
 `--write-counts` rewrites the file. A pure arithmetic program (`int-arith`, `int-ops`) allocates
 nothing and makes no indirect call; what remains is cells, arrays, boxed recursive fields (a

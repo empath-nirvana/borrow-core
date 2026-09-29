@@ -240,7 +240,7 @@ inductive VSugar where
   /-- A binary operator, applied to a pair of operands. -/
   | op (o : SurfOp)
   /-- A constant written without its bracket arguments, `alloc(e)`, `free(e)`, `swap(c, e)`,
-  applied to its operands. -/
+  applied to its operands; or `clone(x)`, an explicit copy of a persistent variable. -/
   | call (k : String)
   /-- `{ S }`: applied to the thunk it marks. A block whose body loops runs nothing until the
   loop is first observed (`div_defer`). -/

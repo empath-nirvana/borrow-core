@@ -387,9 +387,11 @@ theorem IORun.loop_every_run (r : IORun) (hl : r.loops = true) (inp : List UInt8
 
 end
 
-/-- Check the wrapper and give every extern its model. -/
+/-- Check the wrapper and give every extern its model. The wrapper holds `main`'s printed core,
+checked already with its explicit copies (`clone(x)`, printed as `x`), so implicit copies are not
+checked again. -/
 def ioRunOf (w : Program) : Except String IORun := do
-  let r ← match checkProgram w with
+  let r ← match checkProgram w (copies := false) with
     | .ok r => pure r
     | .error e => throw s!"run_io:{e.render}"
   let some c := r.main | throw "run_io: no main"
