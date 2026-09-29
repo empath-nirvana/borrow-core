@@ -1,0 +1,988 @@
+-- The Memcached operator, in the language we want.
+--
+-- Not a corpus program. Nothing below parses today, and it is not meant to run. It is the
+-- program a user would want to write: the operator-sdk "Memcached" tutorial operator, with
+-- kube-rs's controller features (watch with resync and reconnect, server-side apply, status,
+-- finalizers, bounded concurrency, retries with backoff, timeouts, graceful shutdown), plus
+-- structured logging, metrics and leader election. `README.md` in this directory walks through
+-- it, sets it beside kube-rs, and lists what the engine has and lacks for each line.
+--
+-- Layout:
+--   Part 1  the standard library the operator uses, as interfaces (with bodies where the body
+--           is the point): effects, iterators and pipelines, time, text and JSON, HTTP, the
+--           Kubernetes client, the controller runtime, tasks.
+--   Part 2  the operator.
+--   Part 3  its tests: the reconcile run against a fake API server and a virtual clock.
+--
+-- Annotation convention. `[G1]`–`[G9]` name the experience goals of README §1:
+--   G1 one function for every context: no async/sync, fallible/infallible, stream/iterator twins
+--   G2 failure is handled where it is handled; nothing in between says `?` or `map_err`
+--   G3 cleanup is automatic on every exit: return, raise, timeout, cancellation, shutdown
+--   G4 ambient services (log, clock, metrics) reach code without being threaded through it
+--   G5 tests replace the world by handlers: no traits for mocking, no DI, no paused runtime
+--   G6 a stream is an iterator: one adapter library for pure, fallible and suspending sources
+--   G7 a codec is written (or derived) once per type and runs over any byte source
+--   G8 cost stays readable: `box` allocates, `{ … }` suspends, a copy per effect set
+--   G9 concurrency is structured: nothing outlives its scope; no Arc, no Send + 'static
+-- and `not-think:` / `types-tell:` say what a reader may ignore and what the types still show.
+--
+-- Spelling conventions (all hypotheses; README §5 lists the alternatives):
+--   `fn f(x: A) -> B`           effects are inferred, never required in a signature;
+--   `fn f(x: A) -> B / {E, F}`  an effect row written out: a checked promise, like `total`;
+--   `effect E { fn op(…) -> … }` an effect signature; `handler h(…) for E { op(…) -> … }` one
+--                               implementation of it; `with h(…) { … }` installs it for a block;
+--   `&x`, `&mut x`              lends, as today (decision 38); `box e` allocates (stage 8);
+--   `{ … }`                     a suspended block (a thunk), as today (typed elaboration §2.4);
+--   `|>`                        pipes its left side into the first argument (#59).
+
+
+-- ============================================================================================
+-- Part 1. The standard library, as the operator sees it
+-- ============================================================================================
+
+-- --------------------------------------------------------------------------------------------
+-- 1.1 Effects. Four control effects, built in, and the answering effects the library declares.
+-- --------------------------------------------------------------------------------------------
+
+-- Failure. `raise` never returns; `try` turns a block's failure into a value; `catch` handles
+-- it in place. There is no `?`: a call that may fail is just a call. [G2]
+--   not-think: which calls can fail, and converting error types at every call.
+--   types-tell: `Fail<E>` in the inferred row of every function that can fail, with `E`.
+effect Fail<E> {
+  fn raise(e: E) -> never
+}
+fn try<T, E>(body: { -> T / {Fail<E>, ..} }) -> Result<T, E>          -- the handler
+fn map_err<T, E, F>(f: fn(E) -> F, body: { -> T / {Fail<E>, ..} }) -> T / {Fail<F>}
+
+-- Generators. `yield` hands a value to whoever is iterating; `generate` turns a block that
+-- yields into an `Iter`. The block is compiled as a state machine (decision 25). [G6]
+effect Yield<T> {
+  fn yield(x: T)
+}
+fn generate<T, R>(body: { -> R / {Yield<T>, ..} }) -> Iter<T, R>
+
+-- Suspension. Only the runtime and the I/O library perform `wait`; user code never names it,
+-- and no function is marked async. Whether `wait` blocks the thread or suspends a task is up to
+-- whoever runs the computation, so the same `get` is a blocking call under `block_on` and a
+-- state-machine step under the scheduler. [G1]
+--
+-- `Async` differs from the answering effects below in one way: a `wait` goes to whoever is
+-- running the computation (the observer of its state machine: the scheduler, a `race`, a
+-- `timeout`), not to the handler that was in scope where the code was written. That is what
+-- lets `timeout` cancel a read performed by a body stream that the HTTP handler created. It is
+-- the codata reading of #52 and decision 15: a suspension is yielded to the observer.
+--   not-think: async/sync, `.await`, `Pin`, `Send`, which runtime.
+--   types-tell: `Async` in the row of anything that may wait on I/O or time.
+effect Async {
+  fn wait(on: Interest)                          -- an fd's readiness or a deadline, or a set
+}
+-- `wait` returns nothing: after it, the waiter tries its non-blocking read or write again, as a
+-- Rust future re-polls after a wake. So resuming a suspended task passes it no data, which keeps
+-- a task an ordinary `Iter` (README §3, O2).
+fn block_on<T>(body: { -> T / {Async, ..} }) -> T                     -- host `poll`, one task
+-- The scheduler is `scope` (1.8); the test scheduler with virtual time is `simulated` (Part 3).
+
+-- Early exit from a function (`return e`) is `Fail` with a private error type, handled at the
+-- function's boundary: the same unwinding as `raise`, so `return` runs the same cleanup. [G3]
+
+-- Answering effects: the handler returns a value to the caller and the caller continues. They
+-- compile to direct calls through a borrowed capability (the `needs`/`provide` elaboration of
+-- PR #100), never to a state machine of their own. [G4]
+
+effect Log {
+  fn emit(r: &Record)
+}
+data Level derives Json, Ord = Debug | Info | Warn | Error
+data Record<'a> = { level: Level, msg: lit, fields: JsonView<'a>, span: Span<'a> }
+
+-- Fields are any value with a codec: a record literal is the usual form, so the call site
+-- reads like `tracing`'s `info!(name = %n, "msg")` without a macro. [G4, G7]
+fn info<F: Json>(msg: lit, fields: &F)  = emit(&Record { level: Info,  msg, fields: view(fields), span: here() })
+fn warn<F: Json>(msg: lit, fields: &F)  = emit(&Record { level: Warn,  msg, fields: view(fields), span: here() })
+fn error<F: Json>(msg: lit, fields: &F) = emit(&Record { level: Error, msg, fields: view(fields), span: here() })
+fn debug<F: Json>(msg: lit, fields: &F) = emit(&Record { level: Debug, msg, fields: view(fields), span: here() })
+
+-- A span is a handler of `Log` that adds its fields and forwards to the outer `Log`. It is
+-- lexical: it covers what runs inside its block, including tasks spawned there. [G4, G9]
+fn span<F: Json, T>(name: lit, fields: &F, body: { -> T }) -> T =
+  with handler for Log { emit(r) -> emit(&r.within(name, view(fields))) } { body() }
+
+handler json_lines(out: &mut Output, min: Level) for Log {
+  emit(r) -> if r.level >= min { encode_line(out, r) }         -- one `write_all` per record
+}
+
+effect Clock {
+  fn now() -> Instant
+  fn sleep(d: Duration)                          -- the real handler performs `wait`
+}
+handler system_clock(c: &mut ClockCap) for Clock {
+  now()    -> monotonic(c)
+  sleep(d) -> { let until = monotonic(c) + d; wait(Interest::deadline(until)); () }
+}
+-- `sleep` is a `wait` on a deadline, so whoever runs the sleeper (a `timeout`, the scheduler,
+-- the test's simulated time) sees it and can cut it short.
+
+effect Metrics {
+  fn inc(c: Counter, labels: &Labels)
+  fn observe(h: Histogram, v: f64, labels: &Labels)
+  fn render(out: &mut Buf<u8>)                    -- the text exposition format
+}
+-- The registry is owned by the handler. Tasks that count and the task that serves `/metrics`
+-- share it through the effect, not through a lock: the cooperative scheduler runs one handler
+-- clause at a time. No interior mutability. [G4, G9]
+handler prometheus(reg: &mut Registry) for Metrics {
+  inc(c, l)        -> reg.counter(c, l) += 1
+  observe(h, v, l) -> reg.histogram(h, l).record(v)
+  render(out)      -> reg.encode(out)
+}
+
+-- Capabilities in `main` (decision 30): `stdin`, `stdout`, `stderr`, `args`, `env`, `net`,
+-- `clock`, `signals`, `fs`. Only `main` holds them; it hands handlers what they need.
+
+
+-- --------------------------------------------------------------------------------------------
+-- 1.2 Iterators and pipelines. One `Iter`, one adapter library. [G6]
+-- --------------------------------------------------------------------------------------------
+
+-- `Iter<T, R>` is the core's `iter` (SPEC §7): each `next` yields a `T` or finishes with `R`;
+-- `close` (run by the destructor when an iterator is dropped) releases its state. There is no
+-- `Stream`: an iterator whose `next` waits on the network is an `Iter` whose `next` performs
+-- `Async`. An adapter is written once; its copy at a suspending source suspends, its copy at a
+-- fallible source fails, its copy at a pure source is a plain loop. [G1, G6, G8]
+--   not-think: `Iterator` vs `Stream` vs `TryStream`, `StreamExt` vs `TryStreamExt`,
+--              `filter_map(|x| async move { … })`, `Box::pin`, `try_fold`.
+--   types-tell: the effects of `next`, carried into the row of whoever consumes the pipeline.
+fn map<T, U, R>(it: Iter<T, R>, f: fn(T) -> U) -> Iter<U, R> =
+  generate { for x in it { yield(f(x)) } }
+fn filter<T, R>(it: Iter<T, R>, p: fn(&T) -> bool) -> Iter<T, R> =
+  generate { for x in it { if p(&x) { yield(x) } } }
+fn filter_map<T, U, R>(it: Iter<T, R>, f: fn(T) -> Option<U>) -> Iter<U, R> =
+  generate { for x in it { match f(x) { Some(y) -> yield(y) | None -> () } } }
+fn take_until<T, R, S>(it: Iter<T, R>, stop: { -> S }) -> Iter<T, Option<R>>   -- ends when `stop` finishes
+fn merge<T, R>(a: Iter<T, R>, b: Iter<T, R>) -> Iter<T, R>                     -- whichever is ready
+fn debounce<T, K: Ord, R>(it: Iter<T, R>, window: Duration, key: fn(&T) -> K) -> Iter<T, R>
+fn batch<T, R>(it: Iter<T, R>, max: i32, within: Duration) -> Iter<Vec<T>, R>
+fn inspect<T, R>(it: Iter<T, R>, f: fn(&T)) -> Iter<T, R>
+fn take<T, R>(it: Iter<T, R>, n: i32) -> Iter<T, Option<R>>                  -- closes the rest
+fn map_end<T, R, S>(it: Iter<T, R>, f: fn(R) -> S) -> Iter<T, S>
+fn chunks<R>(it: Iter<Bytes, R>) -> Iter<u8, R>                                -- flatten chunks
+fn lines<R>(it: Iter<u8, R>) -> Iter<Buf<u8>, R>
+fn collect<T, R>(it: Iter<T, R>) -> Vec<T>
+fn fold<T, A, R>(it: Iter<T, R>, init: A, f: fn(A, T) -> A) -> A
+fn for_each_concurrent<T, R>(it: Iter<T, R>, limit: i32, f: fn(T))            -- 1.8
+
+-- `for x in xs { … }` over a finite collection is total (stage 9); over an `Iter` it has the
+-- iterator's effects. `map` over a `Vec` is the same `map`: `xs.iter() |> map(f)`. [G1]
+
+
+-- --------------------------------------------------------------------------------------------
+-- 1.3 Time, text, collections (planned elsewhere; interfaces only)
+-- --------------------------------------------------------------------------------------------
+
+data Duration derives Json, Ord = { nanos: i64 }         -- `100.ms`, `30.s`: literal suffixes
+data Instant  derives Ord       = { nanos: i64 }
+fn timeout<T>(d: Duration, body: { -> T }) -> Option<T> =
+  match race(body, { sleep(d) }) { Left(v) -> Some(v) | Right(()) -> None }
+  -- `race` (1.8) observes both; each `wait` of the body is combined with the deadline. When the
+  -- deadline wins, the body is not resumed. Not resuming is how every cancellation works: the
+  -- body unwinds as if it had raised, its destructors run (its connection closes, its borrows
+  -- end), and nothing is left running. Under simulated time it cancels in virtual time. [G3, G5]
+
+-- Text and bytes: `docs/strings-slices-design.md` (u8, `slice 'a A`, `buf A`, `string`,
+-- `str 'a`, `lit`). `Vec<T>` is `buf T`. `Map<K, V>` is #64, ordered.
+
+
+-- --------------------------------------------------------------------------------------------
+-- 1.4 JSON: one codec per type, over any byte source. [G7]
+-- --------------------------------------------------------------------------------------------
+
+-- A byte source is an `Iter<Bytes, R>`: an in-memory buffer (pure), a file, an HTTP body
+-- (`Async`, `Fail<HttpError>`). The decoder asks the source for the next chunk when it runs
+-- out; that call suspends, fails or returns according to the source. The decoder is written
+-- once, as a pull parser, and copied per source by the compiler. [G1, G7, G8]
+--   not-think: `from_slice` vs `from_reader` vs an async codec; buffering the whole body first.
+--   types-tell: `decode`'s row is the source's row plus `Fail<JsonError>`.
+data Parser<'s, R> = { src: &mut 's Iter<Bytes, R>, buf: Bytes, pos: i32 }
+
+-- `Json` is what `derives Json` provides: a decoder and an encoder, generated from the type's
+-- structure and field names. How `T: Json` finds them is a new-design question (README §3,
+-- N8). Unknown fields are skipped, so a type may decode just the part of an object it reads.
+interface Json {
+  fn decode<'s, R>(p: &mut Parser<'s, R>) -> Self / {Fail<JsonError>, ..}
+  fn encode(w: &mut Buf<u8>, v: &Self)
+}
+fn decode<T: Json, R>(src: &mut Iter<Bytes, R>) -> T =
+  let mut p = Parser { src, buf: empty(), pos: 0 };
+  T::decode(&mut p)
+fn decode_str<T: Json>(s: str) -> T = decode(&mut once(s.as_bytes()))
+
+-- Encoding writes into a `Writer`, a buffer that hands full chunks to a sink: a `Buf` in memory,
+-- `stderr`, or a connection whose `write` may wait. The same encoder serves all three. [G7]
+data Writer<'s> = { buf: Buf<u8>, sink: &mut 's Sink }
+fn encode_into<T: Json>(w: &mut Writer, v: &T)
+fn encode<T: Json>(v: &T) -> Buf<u8>                                -- into memory
+fn encode_line<T: Json>(out: &mut Output, v: &T)                    -- encode, `\n`, `write_all`
+
+-- What `derives Json` generates for `MemcachedSpec` (2.1), shown once; nobody writes it. It is
+-- ordinary code: a loop over the object's keys that decodes each field it knows and skips the
+-- rest. `next_key` pulls bytes from the source when the buffer runs out, so this one function
+-- decodes from a `Vec` in a test and from a chunked HTTP body mid-watch. [G1, G7]
+--   types-tell: the row is the source's row, plus `Fail<JsonError>`; plus divergence when the
+--               source is unbounded (a byte stream need not end), which is SPEC §14's rule.
+impl Json for MemcachedSpec {
+  fn decode(p) =
+    let mut size = None;
+    let mut port = None;
+    p.begin_object();
+    loop {
+      match p.next_key() {
+        None                  -> break
+      | Some("size")          -> size = Some(i32::decode(p))
+      | Some("containerPort") -> port = Some(i32::decode(p))
+      | Some(_)               -> p.skip_value()
+      }
+    };
+    MemcachedSpec { size: size.or_else(|| raise(JsonError::missing("size"))),
+                    container_port: port.or_else(|| raise(JsonError::missing("containerPort"))) }
+  fn encode(w, v) =
+    w.begin_object();
+    w.key("size"); i32::encode(w, &v.size);
+    w.key("containerPort"); i32::encode(w, &v.container_port);
+    w.end_object()
+}
+
+-- A JSON value, for patches and for what no type describes.
+data Value derives Json = Null | Bool(bool) | Num(f64) | Str(string)
+                        | Arr(Vec<Value>) | Obj(Map<string, Value>)
+fn to_value<T: Json>(v: &T) -> Value
+data JsonView<'a>                                                  -- a borrowed `Json` value
+
+-- RFC 7386: apply a merge patch. A fold over the patch; total. [data transformation]
+total fn merge_patch(target: Value, patch: &Value) -> Value =
+  match (target, patch) {
+    (Obj(mut t), Obj(p)) ->
+      for (k, v) in p.iter() {
+        match v { Null -> t.remove(k) | _ -> t.insert(k.to_string(), merge_patch(t.take(k).or(Null), v)) }
+      };
+      Obj(t)
+  | (_, p) -> p.clone()
+  }
+
+-- The merge patch that takes `actual` to `desired`, restricted to the fields `desired`
+-- mentions (fields another manager owns are left alone). `None` when nothing differs. Total.
+total fn diff(desired: &Value, actual: &Value) -> Option<Value> =
+  match (desired, actual) {
+    (Obj(d), Obj(a)) ->
+      let changed = d.iter()
+        |> filter_map(|(k, dv)| match a.get(k) {
+             Some(av) -> diff(dv, av) |> map_opt(|p| (k.to_string(), p))
+           | None     -> Some((k.to_string(), dv.clone())) })
+        |> collect();
+      if changed.is_empty() { None } else { Some(Obj(Map::from(changed))) }
+  | (d, a) -> if d == a { None } else { Some(d.clone()) }
+  }
+
+
+-- --------------------------------------------------------------------------------------------
+-- 1.5 HTTP: an effect, so a test can answer it. [G1, G5]
+-- --------------------------------------------------------------------------------------------
+
+data Method = Get | Post | Put | Patch | Delete
+data Request<'a> = { method: Method, path: str 'a, query: slice 'a (lit * str 'a),
+                     content_type: lit, body: slice 'a u8 }
+data Response = { status: i32, body: Body }
+
+-- The body streams: it is an iterator of chunks, and dropping it closes the connection (or
+-- returns it to the pool), on every path, including a raise or a cancellation in the middle
+-- of reading it. [G3, G6]
+type Body = Iter<Bytes, ()>
+
+effect Http {
+  fn send(req: &Request) -> Response
+}
+data HttpError derives Json = Connect(string) | Status(i32, string) | Protocol(string) | TimedOut
+
+-- The real handler: HTTP/1.1 over `net`, chunked transfer decoding, one connection pool. Its
+-- clauses perform `Async` (through `net`) and `Fail<HttpError>`, so every caller of `send`
+-- has those in its row when this handler is installed, and not when a fake is. [G1, G5]
+handler http_client(net: &mut Net, base: &Endpoint, pool: &mut Pool) for Http {
+  send(req) ->
+    let mut conn = pool.checkout(net, base);           -- `Conn` closes its socket when dropped
+    write_request(&mut conn, req);
+    let head = read_head(&mut conn);                   -- raises `Protocol` on garbage
+    Response { status: head.status, body: body_of(conn, head) }
+}
+
+-- `Request` is built from borrowed views; nothing is copied into it. [G8]
+fn get_req<'a>(path: str 'a) -> Request<'a> =
+  Request { method: Get, path, query: &[], content_type: "", body: &[] }
+
+
+-- --------------------------------------------------------------------------------------------
+-- 1.6 The Kubernetes client: ordinary functions over `Http`. [G1]
+-- --------------------------------------------------------------------------------------------
+
+data ObjectMeta derives Json = {
+  name: string, namespace: Option<string>, uid: Option<string>,
+  resource_version: Option<string> @json("resourceVersion"),
+  generation: Option<i64>,
+  labels: Map<string, string>,
+  finalizers: Vec<string>,
+  deletion_timestamp: Option<string> @json("deletionTimestamp"),
+  owner_references: Vec<OwnerReference> @json("ownerReferences"),
+}
+data OwnerReference derives Json = {
+  api_version: string @json("apiVersion"), kind: string, name: string, uid: string,
+  controller: Option<bool>, block_owner_deletion: Option<bool> @json("blockOwnerDeletion"),
+}
+data Condition derives Json = {
+  type_: string @json("type"), status: string, reason: string, message: string,
+  last_transition_time: string @json("lastTransitionTime"),
+  observed_generation: Option<i64> @json("observedGeneration"),
+}
+
+interface Resource {                                -- derived with `derives Resource(…)`
+  const GROUP: lit; const VERSION: lit; const PLURAL: lit; const KIND: lit
+  fn meta(&self) -> &ObjectMeta
+}
+
+data Api<K> = { path: string }                     -- `/apis/<g>/<v>/namespaces/<ns>/<plural>`
+fn namespaced<K: Resource>(ns: str) -> Api<K>
+fn all<K: Resource>() -> Api<K>
+
+data KubeError derives Json =
+    Http(HttpError)
+  | Api({ code: i32, reason: string, message: string })   -- a `Status` object from the server
+  | Decode(JsonError)
+fn is_not_found(e: &KubeError) -> bool
+fn is_conflict(e: &KubeError) -> bool
+fn is_transient(e: &KubeError) -> bool              -- 429, 5xx, connect, timeout
+
+-- One version of each. A caller in a test (fake `Http`, simulated time), a CLI (`block_on`) or
+-- a task under the scheduler calls the same `get`. [G1, G2]
+--   not-think: `.await`, `?`, `map_err(Error::Kube)`.
+--   types-tell: `Http`, `Fail<KubeError>` in the row; the rest comes from the handler.
+fn get<K: Resource + Json>(api: &Api<K>, name: str) -> Option<K> =
+  let resp = map_err(KubeError::Http, { send(&get_req(&api.item(name))) });
+  match resp.status {
+    200 -> Some(decode_or_raise(&mut resp.body))    -- the body streams into the decoder
+  | 404 -> None
+  | s   -> raise(api_error(s, &mut resp.body))
+  }
+
+-- Server-side apply: `PATCH` with `application/apply-patch+yaml` (JSON is YAML). The object is
+-- encoded straight from borrowed views of the custom resource: no intermediate owned copy.
+fn apply<K: Resource + Json, D: Json>(api: &Api<K>, name: str, desired: &D, manager: lit, force: bool) -> K
+fn apply_status<K: Resource + Json, S: Json>(api: &Api<K>, name: str, status: &S, manager: lit) -> K
+fn merge_patch_obj<K: Resource + Json>(api: &Api<K>, name: str, patch: &Value) -> K
+fn json_patch<K: Resource + Json>(api: &Api<K>, name: str, ops: &Vec<PatchOp>) -> K
+fn delete<K: Resource + Json>(api: &Api<K>, name: str) -> ()
+fn list<K: Resource + Json>(api: &Api<K>, sel: &Selector) -> (Vec<K>, string)   -- items, resourceVersion
+
+-- A watch is a generator over a streaming body: one JSON object per line. Written in direct
+-- style; `generate` makes it a state machine; dropping it closes the connection. [G3, G6, G7]
+data WatchEvent<K> derives Json = { type_: string @json("type"), object: K }
+
+fn watch<K: Resource + Json>(api: &Api<K>, sel: &Selector, rv: str, timeout_s: i32) -> Iter<WatchEvent<K>, ()> =
+  generate {
+    let resp = send(&watch_req(api, sel, rv, timeout_s));
+    if resp.status == 410 { raise(KubeError::Api(gone())) };     -- the caller relists
+    -- A pipeline with effects in every stage: `resp.body` waits on the socket and can fail
+    -- (`Async`, `Fail<HttpError>`), `lines` is pure, the `map` decodes and can fail
+    -- (`Fail<JsonError>`, turned into `KubeError` for the block). The adapters are the ones a
+    -- test runs over a `Vec<u8>`. [G6, G7]
+    let events = resp.body
+      |> chunks
+      |> lines
+      |> map(|line| map_err(KubeError::Decode, { decode_str::<WatchEvent<K>>(&line) }));
+    for ev in events { yield(ev) }
+  }
+
+-- kube-runtime's `watcher`: list, then watch from the list's resourceVersion; on a `410 Gone`
+-- or a dropped connection, relist; on errors, back off. Emits `Apply` and `Delete`, and a
+-- `Resync` after every relist so the consumer can reconcile everything again.
+data Event<K> = Apply(K) | Delete(K) | Resync
+
+fn watcher<K: Resource + Json>(api: &Api<K>, sel: &Selector) -> Iter<Event<K>, never> =
+  generate {
+    let mut backoff = Backoff::default();                        -- 800ms .. 30s, jittered
+    loop {
+      match try {
+        let (items, mut rv) = list(api, sel);
+        for o in items { yield(Apply(o)) };
+        yield(Resync);
+        backoff.reset();
+        loop {                                                   -- reconnect on server timeout
+          for ev in watch(api, sel, &rv, 290) {
+            rv = ev.object.meta().resource_version.or_default();
+            match ev.type_.as_str() {
+              "ADDED" | "MODIFIED" -> yield(Apply(ev.object))
+            | "DELETED"            -> yield(Delete(ev.object))
+            | _                    -> ()                         -- BOOKMARK
+            }
+          }
+        }
+      } {
+        Ok(never) -> never
+      | Err(e) ->
+          warn("watch failed; relisting", &{ error: &e, retry_in: backoff.peek() });
+          sleep(backoff.next())                                  -- `Clock`: real or virtual
+      }
+    }
+  }
+
+
+-- --------------------------------------------------------------------------------------------
+-- 1.7 Retries with backoff: a function over a block. [G1, G2, G3]
+-- --------------------------------------------------------------------------------------------
+
+data Backoff = { base: Duration, cap: Duration, factor: i32, attempt: i32 }
+
+-- Runs `body`; on a failure `retryable` accepts, sleeps with exponential backoff and runs it
+-- again, up to `max` attempts. A failed attempt's resources (its connection, the partial body
+-- it was reading, the borrows it held) are released before the sleep: unwinding runs the
+-- destructors. `body` is called several times, so it is `fn` rather than a one-shot block.
+fn retry<T, E>(policy: Backoff, max: i32, retryable: fn(&E) -> bool,
+               body: fn() -> T / {Fail<E>, ..}) -> T / {Fail<E>} =
+  let mut b = policy;
+  loop {
+    match try { body() } {
+      Ok(v) -> return v
+    | Err(e) ->
+        if b.attempt + 1 >= max || !retryable(&e) { raise(e) };
+        debug("retrying", &{ attempt: b.attempt, in_: b.peek() });
+        sleep(b.next())
+    }
+  }
+
+
+-- --------------------------------------------------------------------------------------------
+-- 1.8 Tasks: structured, bounded, cancellable. [G9]
+-- --------------------------------------------------------------------------------------------
+
+-- `scope` is the scheduler: it handles `Async` for the tasks spawned in it, and returns when
+-- all of them have finished. A task may borrow anything that outlives the scope, so there is
+-- no `Arc` and no `'static`. Cancelling a task is observing `close` on its state machine:
+-- its destructors run (connections close, borrows end, owned buffers are freed) and it hands
+-- back what has no destructor. [G3, G9]
+--   not-think: `Send + 'static`, `Arc<Context>`, `JoinHandle`s that can be forgotten.
+--   types-tell: the tasks' effects appear in the scope's row, except `Async`, which the scope
+--               handles only when it is the outermost scheduler.
+fn scope<T>(body: fn(&mut Spawner) -> T) -> T
+fn spawn(s: &mut Spawner, task: { -> () })                   -- the block captures borrows
+fn race<A, B>(a: { -> A }, b: { -> B }) -> Either<A, B>      -- the loser is closed
+
+-- Up to `limit` calls of `f` at once, one per item, in arrival order. Items keep arriving while
+-- calls run. When the source ends, waits for the running calls. Written with `scope`, `merge`
+-- and a counter; no locks. [G6, G9]
+fn for_each_concurrent<T, R>(it: Iter<T, R>, limit: i32, f: fn(T))
+
+-- Signals are a capability of `main`. `terminated` finishes on SIGTERM or SIGINT.
+fn terminated(s: &mut Signals) -> { -> () }
+
+
+-- --------------------------------------------------------------------------------------------
+-- 1.9 The controller runtime (kube-runtime's `Controller`, as library code)
+-- --------------------------------------------------------------------------------------------
+
+data ObjectKey derives Json, Ord = { namespace: string, name: string }
+data Action = Requeue(Duration) | AwaitChange
+
+-- What triggers a reconcile of a key: its object changed, an object it owns changed, a relist,
+-- or its requeue came due.
+data Trigger = Changed(ObjectKey) | ResyncAll | Due(ObjectKey)
+
+-- The queue: at most one reconcile per key at a time; a key triggered while it runs is run
+-- again after; requeues are timers; triggers within `debounce` are merged. Everything here is
+-- owned by one loop, so none of it is shared.
+data Queue = { pending: Map<ObjectKey, Instant>, running: Set<ObjectKey>,
+               dirty: Set<ObjectKey>, known: Set<ObjectKey>, failures: Map<ObjectKey, i32> }
+
+-- What one reconcile reports. `Failed` carries the requeue delay the error policy chose; the
+-- controller counts consecutive failures per key and passes the count back in.
+data Outcome = Reconciled(Action) | Failed(Duration)
+
+-- Runs `reconcile` for every triggered key, at most `concurrency` at once, until `triggers`
+-- ends; then waits for the reconciles in flight, closing any still running after `grace`.
+-- `reconcile` gets the key and its count of consecutive failures. Failure handling is the
+-- caller's (the operator's `reconcile_key`), not the runtime's: `reconcile` cannot fail.
+--   types-tell: `reconcile`'s row may not contain `Fail`; the callback's other effects are the
+--               controller's effects.
+fn run_controller(triggers: Iter<Trigger, ()>, concurrency: i32, grace: Duration,
+                  reconcile: fn(&ObjectKey, i32) -> Outcome)
+
+
+-- ============================================================================================
+-- Part 2. The operator
+-- ============================================================================================
+
+-- --------------------------------------------------------------------------------------------
+-- 2.1 The custom resource (cache.example.com/v1alpha1, kind Memcached), as in the tutorial
+-- --------------------------------------------------------------------------------------------
+
+data Memcached derives Json, Resource(group = "cache.example.com", version = "v1alpha1",
+                                      kind = "Memcached", plural = "memcacheds") = {
+  metadata: ObjectMeta,
+  spec: MemcachedSpec,
+  status: Option<MemcachedStatus>,
+}
+data MemcachedSpec derives Json = {
+  size: i32,                                           -- 1..=3, enforced by the CRD schema
+  container_port: i32 @json("containerPort"),
+}
+data MemcachedStatus derives Json = { conditions: Vec<Condition> }
+
+-- The Deployment is written by us and read back only for its replica count, so the type we
+-- decode is the part we read (unknown fields are skipped). [G7]
+data DeploymentScale derives Json, Resource(group = "apps", version = "v1", kind = "Deployment",
+                                            plural = "deployments") = {
+  metadata: ObjectMeta,
+  spec: { replicas: i32 },
+  status: Option<{ ready_replicas: Option<i32> @json("readyReplicas") }>,
+}
+
+const FINALIZER: lit = "cache.example.com/finalizer"
+const MANAGER: lit = "memcached-operator"
+
+
+-- --------------------------------------------------------------------------------------------
+-- 2.2 Configuration: from args and env, parsed once in `main`, then passed as a value
+-- --------------------------------------------------------------------------------------------
+
+data Config = {
+  image: string,                   -- MEMCACHED_IMAGE (required, as in the tutorial)
+  namespace: Option<string>,       -- --namespace, else all namespaces
+  concurrency: i32,                -- --concurrency, default 4
+  api: Endpoint,                   -- KUBERNETES_SERVICE_HOST/PORT, or --api for `kubectl proxy`
+  log_level: Level,                -- RUST_LOG-like: LOG_LEVEL, default Info
+  metrics_port: i32,               -- --metrics-port, default 8080
+  lease: Option<string>,           -- --leader-elect=<lease name>
+  identity: string,                -- POD_NAME, for the lease
+  request_timeout: Duration,       -- 10s
+  shutdown_grace: Duration,        -- 25s (the pod's grace period is 30s)
+}
+data ConfigError derives Json = Missing(lit) | Invalid(lit, string)
+
+-- Total apart from `Fail<ConfigError>`: reading `args` and `env` is done by `main`, which
+-- passes borrowed views of them. [G2]
+fn parse_config<'a>(args: slice 'a (str 'a), env: &'a EnvVars) -> Config =
+  let flags = parse_flags(args);
+  Config {
+    image:       env.get("MEMCACHED_IMAGE").or_else(|| raise(ConfigError::Missing("MEMCACHED_IMAGE"))).to_string(),
+    namespace:   flags.get("namespace").map_opt(to_string),
+    concurrency: flags.int("concurrency").or(4),
+    api:         flags.get("api").map_opt(Endpoint::parse).or_else(|| Endpoint::in_cluster(env)),
+    log_level:   env.get("LOG_LEVEL").map_opt(decode_str).or(Info),
+    metrics_port: flags.int("metrics-port").or(8080),
+    lease:       flags.get("leader-elect").map_opt(to_string),
+    identity:    env.get("POD_NAME").or("memcached-operator-local").to_string(),
+    request_timeout: 10.s,
+    shutdown_grace:  25.s,
+  }
+
+
+-- --------------------------------------------------------------------------------------------
+-- 2.3 Desired state: a pure function from the custom resource to the Deployment
+-- --------------------------------------------------------------------------------------------
+
+-- The Deployment we want, as borrowed views of `cr` and `cfg`: building it allocates the label
+-- map and the vectors, and copies no string. It is encoded straight into the request body.
+-- `total`: no effect can creep in. [G8, data transformation]
+--   types-tell: `'a` ties the result to `cr` and `cfg`; `total` promises no effect.
+type Labels<'a> = Map<lit, str 'a>
+
+total fn labels<'a>(cfg: &'a Config) -> Labels<'a> =
+  Map::from([
+    ("app.kubernetes.io/name",       "memcached-operator"),
+    ("app.kubernetes.io/version",    cfg.image.split_once(':').map_opt(|(_, t)| t).or("latest")),
+    ("app.kubernetes.io/managed-by", "MemcachedController"),
+  ])
+
+data DeploymentApply<'a> derives Json = {
+  api_version: lit @json("apiVersion"), kind: lit,
+  metadata: { name: str 'a, namespace: str 'a, owner_references: Vec<OwnerRef<'a>> @json("ownerReferences") },
+  spec: {
+    replicas: i32,
+    selector: { match_labels: Labels<'a> @json("matchLabels") },
+    template: {
+      metadata: { labels: Labels<'a> },
+      spec: { security_context: PodSecurity @json("securityContext"), containers: Vec<Container<'a>> },
+    },
+  },
+}
+
+total fn desired<'a>(cr: &'a Memcached, cfg: &'a Config) -> DeploymentApply<'a> =
+  let ls = labels(cfg);
+  DeploymentApply {
+    api_version: "apps/v1", kind: "Deployment",
+    metadata: { name: &cr.metadata.name, namespace: cr.namespace(),
+                owner_references: vec![controller_ref(cr)] },
+    spec: {
+      replicas: cr.spec.size,
+      selector: { match_labels: ls.clone() },
+      template: {
+        metadata: { labels: ls },
+        spec: {
+          security_context: PodSecurity::restricted(),
+          containers: vec![Container {
+            name: "memcached", image: &cfg.image, image_pull_policy: "IfNotPresent",
+            ports: vec![{ container_port: cr.spec.container_port, name: "memcached" }],
+            command: vec!["memcached", "-m=64", "-o", "modern", "-v"],
+            security_context: ContainerSecurity::restricted(1001),
+          }],
+        },
+      },
+    },
+  }
+
+-- Status conditions, as `meta.SetStatusCondition` does: replace the condition of the same type,
+-- keeping its transition time when the status did not change. Total. [data transformation]
+total fn set_condition(conds: Vec<Condition>, c: Condition) -> Vec<Condition> =
+  let (same, mut rest) = conds |> partition(|x| x.type_ == c.type_);
+  let c = match same.first() {
+    Some(old) if old.status == c.status -> Condition { last_transition_time: old.last_transition_time.clone(), ..c }
+  | _ -> c
+  };
+  rest.push(c);
+  rest
+
+
+-- --------------------------------------------------------------------------------------------
+-- 2.4 Reconcile. One function; it does not know whether it is async, retried, timed out,
+--     logged to a file or to a test buffer, or talking to a real API server. [G1–G5]
+-- --------------------------------------------------------------------------------------------
+
+data ReconcileError derives Json =
+    Kube(KubeError)
+  | Invalid(string)                          -- a spec the CRD schema should have rejected
+
+-- The inferred row of `reconcile` is {Http, Clock, Async, Log, Metrics, Fail<ReconcileError>}:
+-- that is what the signature would say if written, and what `bcc sig` prints. Nothing in the
+-- body names `Http`, `Clock` or `Async`; they arrive through `get`, `retry` and `timeout`. [G4]
+fn reconcile(cfg: &Config, key: &ObjectKey) -> Action =
+  span("reconcile", key, {
+    let api = namespaced::<Memcached>(&key.namespace);
+    let cr = match call(cfg, || get(&api, &key.name)) {
+      None -> { debug("gone; nothing to do", &{}); return AwaitChange }
+    | Some(cr) -> cr
+    };
+    if cr.spec.size < 1 || cr.spec.size > 3 {
+      raise(ReconcileError::Invalid(format!("size {} out of range", cr.spec.size)))
+    };
+    match cr.metadata.deletion_timestamp {
+      Some(_) -> finalize(cfg, &api, cr)
+    | None    -> apply_memcached(cfg, &api, cr)
+    }
+  })
+
+-- `KubeError` becomes `ReconcileError` for the block, once, instead of `.map_err(…)?` at every
+-- call. [G2]
+fn kube<T>(body: { -> T / {Fail<KubeError>, ..} }) -> T = map_err(ReconcileError::Kube, body)
+
+-- Every API call is retried on transient errors and bounded by the request timeout. [G2, G3]
+fn call<T>(cfg: &Config, body: fn() -> T / {Fail<KubeError>, ..}) -> T =
+  kube(retry(Backoff::new(100.ms, 5.s), 4, is_transient, || {
+    match timeout(cfg.request_timeout, body) {
+      Some(v) -> v
+    | None    -> raise(KubeError::Http(HttpError::TimedOut))   -- the cancelled request's
+    }                                                          -- connection is already closed
+  }))
+
+fn apply_memcached(cfg: &Config, api: &Api<Memcached>, cr: Memcached) -> Action =
+  -- 1. Our finalizer first, so a delete cannot race past the cleanup. A JSON patch with a
+  --    `test` op, as kube-rs's `finalizer` helper does, so two writers cannot both add it.
+  if !cr.metadata.finalizers.contains(FINALIZER) {
+    info("adding finalizer", &{});
+    call(cfg, || json_patch(api, &cr.metadata.name, &add_finalizer_ops(&cr, FINALIZER)));
+    return Requeue(0.s)                                        -- the patch triggers a watch event
+  };
+
+  -- 2. The Deployment, by server-side apply. We read the current one first only to decide
+  --    whether to write and to log what changes; apply is idempotent either way.
+  let deployments = namespaced::<DeploymentScale>(cr.namespace());
+  let want = desired(&cr, cfg);                                -- views into `cr` and `cfg`
+  let have = call(cfg, || get(&deployments, &cr.metadata.name));
+  let change = match &have {
+    None    -> Some(to_value(&want))
+  | Some(d) -> diff(&to_value(&want), &to_value(d))           -- only fields we set
+  };
+  match change {
+    None -> debug("deployment up to date", &{ replicas: cr.spec.size })
+  | Some(patch) ->
+      info("applying deployment", &{ change: &patch });
+      call(cfg, || apply(&deployments, &cr.metadata.name, &want, MANAGER, true));
+      inc(Counter::DeploymentsApplied, &{})
+  };
+
+  -- 3. Status. `ready` is what the Deployment reports; the condition says whether the size is
+  --    reached. `set_condition` is pure; the write is one status apply.
+  let ready = have.and_then(|d| d.status).and_then(|s| s.ready_replicas).or(0);
+  let cond = if ready == cr.spec.size {
+    condition("Available", "True", "Reconciled", format!("{} replicas ready", ready), &cr)
+  } else {
+    condition("Available", "False", "Scaling", format!("{} of {} replicas ready", ready, cr.spec.size), &cr)
+  };
+  let conds = set_condition(cr.status.map_or(Vec::new(), |s| s.conditions), cond);
+  call(cfg, || apply_status(api, &cr.metadata.name, &{ conditions: &conds }, MANAGER));
+
+  if ready == cr.spec.size { Requeue(5.min) } else { Requeue(15.s) }
+
+-- Cleanup on delete: record an event (the tutorial's "doFinalizerOperations"), set the Degraded
+-- condition, then remove the finalizer. The Deployment is garbage-collected through its owner
+-- reference. If any step fails, the finalizer stays and the reconcile is retried: the object
+-- cannot disappear before its cleanup has run. [G2, G3]
+fn finalize(cfg: &Config, api: &Api<Memcached>, cr: Memcached) -> Action =
+  if !cr.metadata.finalizers.contains(FINALIZER) { return AwaitChange };
+  info("finalizing", &{});
+  publish_event(cfg, &cr, "Warning", "Deleting",
+                format!("Custom Resource {} is being deleted from the namespace {}",
+                        cr.metadata.name, cr.namespace()));
+  let conds = set_condition(cr.status.map_or(Vec::new(), |s| s.conditions),
+                            condition("Degraded", "True", "Finalizing", "finalizer operations done".into(), &cr));
+  call(cfg, || apply_status(api, &cr.metadata.name, &{ conditions: &conds }, MANAGER));
+  call(cfg, || json_patch(api, &cr.metadata.name, &remove_finalizer_ops(&cr, FINALIZER)));
+  inc(Counter::Finalized, &{});
+  AwaitChange
+
+fn publish_event(cfg: &Config, cr: &Memcached, type_: lit, reason: lit, note: string)
+
+
+-- --------------------------------------------------------------------------------------------
+-- 2.5 The error policy: failures stop here, and nowhere earlier. [G2]
+-- --------------------------------------------------------------------------------------------
+
+-- The only `try` in the operator. What escapes `reconcile` is logged, counted and requeued with
+-- a per-key backoff; the controller never sees a failure. [G2, G4]
+--
+-- The count of failures is an argument, not a `&mut Map` captured by this callback: up to
+-- `concurrency` calls run at once, each would hold the `&mut`, and the borrow checker rejects
+-- that. The count belongs to the controller's queue, which one loop owns. [G9]
+fn reconcile_key(cfg: &Config, key: &ObjectKey, failures: i32) -> Outcome =
+  let start = now();
+  let outcome = try { reconcile(cfg, key) };
+  observe(Histogram::ReconcileSeconds, (now() - start).secs(), &{});
+  match outcome {
+    Ok(a) -> { inc(Counter::Reconciled, &{ result: "ok" }); Reconciled(a) }
+  | Err(e) ->
+      let delay = Backoff::new(1.s, 5.min).nth(failures);
+      error("reconcile failed", &{ key, error: &e, retry_in: delay });
+      inc(Counter::Reconciled, &{ result: "error" });
+      Failed(delay)
+  }
+
+
+-- --------------------------------------------------------------------------------------------
+-- 2.6 Wiring: triggers as a pipeline, then the controller
+-- --------------------------------------------------------------------------------------------
+
+-- The owner of a Deployment we manage, if it is a Memcached. Total.
+total fn owner_key(d: &DeploymentScale) -> Option<ObjectKey> =
+  d.metadata.owner_references.iter()
+    |> find(|o| o.kind == "Memcached" && o.controller == Some(true))
+    |> map_opt(|o| ObjectKey { namespace: d.namespace().to_string(), name: o.name.clone() })
+
+-- Triggers of one key within the debounce window are one trigger; `ResyncAll` is its own key.
+total fn trigger_key(t: &Trigger) -> Option<ObjectKey> =
+  match t { Changed(k) | Due(k) -> Some(k.clone()) | ResyncAll -> None }
+
+-- Watch the Memcacheds and the Deployments they own; each event becomes a trigger. The two
+-- watchers are generators that list, watch, relist and back off (1.6); `merge` interleaves them
+-- as their events arrive; `take_until` ends the stream on SIGTERM. The adapters are the same
+-- ones a test uses on a `Vec`. [G6]
+--   not-think: `Stream` vs `Iterator`, `.boxed()`, `select_all`, pinning, `owns()` plumbing.
+--   types-tell: the pipeline's element type at each stage; its row is the watchers' row.
+fn triggers(cfg: &Config, stop: { -> () }) -> Iter<Trigger, ()> =
+  let sel = Selector::all();
+  let crs = match &cfg.namespace { Some(ns) -> namespaced::<Memcached>(ns) | None -> all::<Memcached>() };
+  let deps = match &cfg.namespace { Some(ns) -> namespaced::<DeploymentScale>(ns) | None -> all::<DeploymentScale>() };
+  let from_crs = watcher(&crs, &sel)
+    |> map(|ev| match ev {
+         Apply(m) | Delete(m) -> Changed(m.key())
+       | Resync               -> ResyncAll });
+  let from_deps = watcher(&deps, &Selector::managed_by(MANAGER))
+    |> filter_map(|ev| match ev {
+         Apply(d) | Delete(d) -> owner_key(&d) |> map_opt(Changed)
+       | Resync               -> None });
+  merge(from_crs, from_deps)
+    |> take_until(stop)                                  -- SIGTERM ends the stream
+    |> debounce(1.s, trigger_key)                        -- waits: `Clock`, `Async`
+    |> inspect(|t| inc(Counter::Triggers, &{ kind: t.kind() }))   -- `Metrics`
+    |> map_end(|_| ())
+
+-- Leadership: run `body` while holding the lease; renew it every `renew`; if it is lost,
+-- close `body` (the reconciles in flight are cancelled and clean up) and return. [G3, G9]
+fn while_leader<T>(lease: str, identity: str, body: { -> T }) -> Option<T> =
+  acquire(lease, identity);                           -- waits, re-trying, until we hold it
+  match race(body, { renew_until_lost(lease, identity, 10.s) }) {
+    Left(v)  -> { release(lease, identity); Some(v) }
+  | Right(_) -> { warn("lost leadership", &{ lease }); None }
+  }
+
+-- `/metrics` and `/healthz`, forever; the caller stops it by abandoning it (`race`).
+-- `render` is a `Metrics` operation: the registry is read through the handler that owns it,
+-- while reconciles in other tasks count into it. [G4, G9]
+fn serve_metrics(l: Listener) -> never =
+  for conn in accept_all(l) {
+    let req = read_request(&conn);
+    match req.path {
+      "/metrics" -> { let mut b = Buf::new(); render(&mut b); respond(conn, 200, &b) }
+    | "/healthz" -> respond(conn, 200, "ok")
+    | _          -> respond(conn, 404, "")
+    }
+  }
+
+
+-- --------------------------------------------------------------------------------------------
+-- 2.7 main: the only place that holds capabilities and chooses handlers
+-- --------------------------------------------------------------------------------------------
+
+-- `main` receives its capabilities ambiently (decision 30). It chooses the real handlers once;
+-- nothing below it knows which were chosen. Its own row is what those handlers leave unhandled:
+-- nothing, so `main` is a plain program the runtime drives. [G4, G5, G9]
+main =
+  let cfg = match try { parse_config(&args, &env) } {
+    Ok(c)  -> c
+  | Err(e) -> { encode_line(&mut stderr, &{ level: "error", msg: "bad configuration", error: &e }); exit(2) }
+  };
+  let mut registry = Registry::new();
+  let mut pool = Pool::new(8);
+  let listener = bind(&mut net, cfg.metrics_port);      -- owned; closed when dropped
+  let stop = terminated(&mut signals);                  -- finishes on SIGTERM or SIGINT
+
+  with json_lines(&mut stderr, cfg.log_level),
+       system_clock(&mut clock),
+       prometheus(&mut registry),
+       http_client(&mut net, &cfg.api, &mut pool) {
+    info("starting", &{ image: &cfg.image, namespace: &cfg.namespace, concurrency: cfg.concurrency });
+    -- Shutdown order, by structure: SIGTERM ends the trigger stream; the controller drains its
+    -- reconciles (closing any still running after the grace period) and returns; `race` then
+    -- abandons the metrics server, whose listener closes. [G3, G9]
+    let controller = {
+      let run = { run_controller(triggers(&cfg, stop), cfg.concurrency, cfg.shutdown_grace,
+                                 |key, failures| reconcile_key(&cfg, key, failures)) };
+      match &cfg.lease { Some(l) -> ignore(while_leader(l, &cfg.identity, run)) | None -> run() }
+    };
+    ignore(race({ serve_metrics(listener) }, controller));
+    info("stopped", &{})
+  };
+  0
+
+
+-- ============================================================================================
+-- Part 3. Tests: the same `reconcile`, another world
+-- ============================================================================================
+
+-- A fake API server is a handler of `Http` over an in-memory store of objects: it routes the
+-- request, applies patches with the same `merge_patch` the library uses, bumps
+-- resourceVersions, and records every request. No socket, no `tower_test`, no trait. [G5]
+data Store = { objects: Map<string, Value>, requests: Vec<string>, faults: Vec<Fault>, rv: i64 }
+data Fault = { method: Method, path_prefix: string, status: i32, times: i32 }
+
+handler fake_apiserver(st: &mut Store) for Http {
+  send(req) ->
+    st.requests.push(format!("{} {}", req.method, req.path));
+    match st.take_fault(req) {
+      Some(code) -> Response { status: code, body: once(status_json(code)) }
+    | None       -> st.route(req)                     -- GET, PATCH (apply, merge, json), DELETE
+    }
+}
+
+-- Simulated time: a handler of `Clock` and a runner of `Async`, in one. `sleep` records the
+-- duration and waits on a deadline in virtual time; when everything running is waiting on a
+-- deadline, virtual time jumps to the earliest one. Nothing waits on a real clock, and the run
+-- is deterministic. `timeout` and `race` work unchanged, because they only see `wait`s.
+-- `slept` records the sleeps that ran to their end; a timeout's sleep that loses its race was
+-- cancelled, and is not recorded. [G5]
+fn simulated<T>(t: &mut Instant, slept: &mut Vec<Duration>, body: { -> T / {Clock, Async, ..} }) -> T
+
+handler capture_logs(into: &mut Vec<Value>) for Log { emit(r) -> into.push(to_value(r)) }
+handler no_metrics() for Metrics { inc(_, _) -> () | observe(_, _, _) -> () | render(_) -> () }
+
+fn test_config() -> Config = Config { image: "memcached:1.6.26-alpine".into(), concurrency: 1, ..Config::default() }
+
+-- `reconcile` here is the production `reconcile`, specialized at the test's handlers: the fake
+-- `Http` answers without waiting, so the only suspensions left are the timeouts' and the
+-- retries' `sleep`s, which `simulated` runs in virtual time. The copy a test runs is made from
+-- the same source by the same rules as the production copy; nothing in it is a mock. [G1, G5, G8]
+test "a new Memcached gets a finalizer, then a Deployment and a status" =
+  let cfg = test_config();
+  let key = ObjectKey { namespace: "default".into(), name: "m1".into() };
+  let mut st = Store::with([memcached_json("default", "m1", 3)]);
+  let mut t = Instant::zero();
+  let mut slept = Vec::new();
+  let mut logs = Vec::new();
+  let (a1, a2) = simulated(&mut t, &mut slept, {
+    with fake_apiserver(&mut st), capture_logs(&mut logs), no_metrics() {
+      (reconcile(&cfg, &key), reconcile(&cfg, &key))
+    }
+  });
+  assert_eq(a1, Requeue(0.s));                                 -- first pass: the finalizer only
+  assert_eq(a2, Requeue(15.s));                                -- second: applied, not yet ready
+  assert(st.memcached("default", "m1").metadata.finalizers.contains(FINALIZER));
+  assert_eq(st.deployment("default", "m1").spec.replicas, 3);
+  assert_eq(st.memcached("default", "m1").condition("Available").reason, "Scaling");
+  assert_eq(st.requests, vec![
+    "GET /apis/cache.example.com/v1alpha1/namespaces/default/memcacheds/m1",
+    "PATCH /apis/cache.example.com/v1alpha1/namespaces/default/memcacheds/m1",
+    "GET /apis/cache.example.com/v1alpha1/namespaces/default/memcacheds/m1",
+    "GET /apis/apps/v1/namespaces/default/deployments/m1",
+    "PATCH /apis/apps/v1/namespaces/default/deployments/m1",
+    "PATCH /apis/cache.example.com/v1alpha1/namespaces/default/memcacheds/m1/status",
+  ]);
+  assert(slept.is_empty())
+
+test "transient 503s are retried with backoff, in virtual time" =
+  let cfg = test_config();
+  let key = ObjectKey { namespace: "default".into(), name: "m1".into() };
+  let mut st = Store::with([memcached_json_finalized("default", "m1", 2)])
+    .fail(Patch, "/apis/apps/v1/", 503, 2);                    -- two failures, then success
+  let mut t = Instant::zero();
+  let mut slept = Vec::new();
+  let a = simulated(&mut t, &mut slept, {
+    with fake_apiserver(&mut st), capture_logs(&mut Vec::new()), no_metrics() { reconcile(&cfg, &key) }
+  });
+  assert_eq(a, Requeue(15.s));
+  assert_eq(slept, vec![100.ms, 200.ms]);                      -- the backoff, observed exactly
+  assert_eq(t, Instant::zero() + 300.ms)                       -- and no real time passed
+
+test "a reconcile that fails is requeued with backoff and logged once" =
+  let cfg = test_config();
+  let key = ObjectKey { namespace: "default".into(), name: "bad".into() };
+  let mut st = Store::with([memcached_json_finalized("default", "bad", 7)]);   -- size out of range
+  let mut logs = Vec::new();
+  let a = simulated(&mut Instant::zero(), &mut Vec::new(), {
+    with fake_apiserver(&mut st), capture_logs(&mut logs), no_metrics() {
+      (reconcile_key(&cfg, &key, 0), reconcile_key(&cfg, &key, 3))
+    }
+  });
+  assert_eq(a, (Failed(1.s), Failed(8.s)));
+  assert_eq(logs.filter_level(Error).len(), 2);
+  assert_eq(logs.filter_level(Error).len(), 1);
+  assert_eq(st.requests.len(), 2)                              -- a GET each; nothing written
+
+test "a slow API server times out, and the cancelled request leaves nothing open" =
+  let cfg = Config { request_timeout: 2.s, ..test_config() };
+  let key = ObjectKey { namespace: "default".into(), name: "m1".into() };
+  let mut st = Store::with([memcached_json_finalized("default", "m1", 1)]);
+  let mut t = Instant::zero();
+  let mut open = 0;
+  -- A fake whose GET of the Deployment streams its body slowly: each chunk sleeps 1s in virtual
+  -- time, and the body counts itself open until it is dropped (closed). Each attempt times out
+  -- at 2s and is retried (a timeout is transient) until `call` gives up after four.
+  let r = simulated(&mut t, &mut Vec::new(), {
+    with slow_body_apiserver(&mut st, 1.s, &mut open), capture_logs(&mut Vec::new()), no_metrics() {
+      try { reconcile(&cfg, &key) }
+    }
+  });
+  assert(matches(r, Err(ReconcileError::Kube(KubeError::Http(HttpError::TimedOut)))));
+  assert_eq(open, 0);                                          -- every cancelled body was closed
+  assert_eq(t, Instant::zero() + 4 * 2.s + 100.ms + 200.ms + 400.ms)
+
+test "the watcher relists after 410 Gone and emits Resync" =
+  let mut st = Store::with([memcached_json("default", "a", 1)]).watch_always_gone();
+  let evs = simulated(&mut Instant::zero(), &mut Vec::new(), {
+    with fake_apiserver(&mut st), capture_logs(&mut Vec::new()) {
+      watcher(&all::<Memcached>(), &Selector::all()) |> map(kind_of) |> take(5) |> collect()
+    }
+  });
+  assert_eq(evs, vec!["Apply", "Resync", "Apply", "Resync", "Apply"])
