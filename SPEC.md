@@ -389,10 +389,11 @@ From `experiments/Recursion`, `CBPVMu`; general `ν` per `docs/scope-recursion.m
 
 ### Types
 
-    A ::= … | I32 | I64                                   (VTy.int w)
+    A ::= … | I32 | I64 | U8                              (VTy.int w)
 
-`I32`/`I64` hold no resource. They are persistent (§10), `Imm̲ 'b I32 = I32`, and they outlive every
-lifetime.
+`I32`/`I64`/`U8` hold no resource. They are persistent (§10), `Imm̲ 'b I32 = I32`, and they outlive
+every lifetime. `U8` (`Width.w8`) is the byte: its reason is layout (an array of bytes is one byte
+per element, `Backend/README.md`), and it has no arithmetic of its own.
 
 ### Terms and machine
 
@@ -417,6 +418,13 @@ Wasm's integer instructions (`HostOp`, `Support/Syntax/Integers.lean`), at each 
 | unary | `clz`, `ctz`, `popcnt`, `extend8_s`, `extend16_s` | `I32 ⇒ I32` |
 | tests | `eqz`; `eq`, `ne`, `lt_s`, `lt_u`, `le_s`, `le_u`, `gt_s`, `gt_u`, `ge_s`, `ge_u` | `I32 ⇒ 1 ⊕ 1`; `I32 ⊗ I32 ⇒ 1 ⊕ 1` |
 | conversion | `wrap`, `extend_s`, `extend_u`, `extend32_s` | between widths |
+| byte | `wrap8`, `extend8_u` | `I32 ⇒ U8` (the low 8 bits), `U8 ⇒ I32` |
+
+The grouped operations are Wasm's, at `w32` and `w64`. At `w8` they exist as names and take `0`
+(`hostArg`), so none is applicable, and `Host.call` has no argument shape for them: arithmetic
+on bytes is done at `I32`, as in Wasm. The surface elaborates an operator at `u8` to the `i32`
+operation on `extend8_u` of its operands, narrowing an arithmetic result by `wrap8`, and reads
+the byte literal `b'c'` as `u8[n]` (`docs/decisions.md` 42).
 
 `A ⇒ B` is the call-by-value function type `U(A ⊸ F B)`. Typing: `CDerives.lit` gives a literal
 its width's type, and `CDerives.hostOp op` gives `host op` the type `!(hostArg op ⇒ hostRes op)`.
@@ -433,7 +441,9 @@ between engines is tested on the corpus, not proved.
 ### Open
 
 - Floats (`F32`, `F64`) by the same scheme; Wasm's NaN bit patterns are nondeterministic.
-- `u8` and checked (non-wrapping) arithmetic are derivable from the operations above.
+- Checked (non-wrapping) arithmetic is derivable from the operations above.
+- `read_byte`/`write_byte` (§11) still take and return `I32`; moving them and the byte list
+  `Bytes` to `U8` changes every I/O program's types, and is left to the text library (S5).
 - `plainV` excludes the integer types, so they cannot yet be `withborS` leaves.
 - The backend's layout is type-directed (`Backend/README.md`, Representation): `I32` and `I64`
   are each one unboxed word.

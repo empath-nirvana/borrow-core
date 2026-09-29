@@ -50,6 +50,7 @@ def CTy.level : CTy → Nat
 def widthName : BoCa.Width → String
   | .w32 => "i32"
   | .w64 => "i64"
+  | .w8 => "u8"
 
 /-- A printed shape as a shape atom: a name as it is, anything else parenthesized. -/
 def ppShapeAtom (σ : Shape) (printed : String) : String :=

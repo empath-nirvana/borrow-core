@@ -24,6 +24,7 @@ open BoCa
 inductive CV where
   | unit
   | i32 (n : UInt32)
+  | u8 (n : UInt8)
   | ptr (a : Nat)
   deriving Repr, BEq, Inhabited
 
@@ -112,6 +113,7 @@ def toSource : Nat → CV → IM Val
     match v with
     | .unit => pure .unit
     | .i32 k => pure (.i32 k)
+    | .u8 k => pure (.u8 k)
     | .ptr a =>
       match ← getObj a with
       | .pair x y => do pure (.pair (← toSource n x) (← toSource n y))
@@ -125,6 +127,7 @@ def ofSource : Expr → IM CV
   | .unit => pure .unit
   | .prim (.lit (.i32 k)) => pure (.i32 k)
   | .prim (.lit (.i64 k)) => allocObj (.i64 k)
+  | .prim (.lit (.u8 k)) => pure (.u8 k)
   | .pair a b => do let a ← ofSource a; let b ← ofSource b; allocObj (.pair a b)
   | .inj₁ a => do let a ← ofSource a; allocObj (.inj false a)
   | .inj₂ a => do let a ← ofSource a; allocObj (.inj true a)
@@ -257,6 +260,7 @@ def eval (codes : Array Code) : Nat → Env → Tm → IM (CV × Env)
     | .unit => pure (.unit, env)
     | .lit (.i32 k) => pure (.i32 k, env)
     | .lit (.i64 k) => do pure (← allocObj (.i64 k), env)
+    | .lit (.u8 k) => pure (.u8 k, env)
     | .pair a b => do
         let (va, env) ← take env a
         let (vb, env) ← take env b
@@ -341,6 +345,7 @@ def observe : Nat → CV → IM PV
     match v with
     | .unit => pure .unit
     | .i32 k => pure (.i32 k)
+    | .u8 k => pure (.u8 k)
     | .ptr a =>
       match ← getObj a with
       | .pair x y => do pure (.pair (← observe n x) (← observe n y))

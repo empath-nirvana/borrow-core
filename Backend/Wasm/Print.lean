@@ -15,6 +15,7 @@ open BoCa
 def widthName : Width → String
   | .w32 => "i32"
   | .w64 => "i64"
+  | .w8 => "i32"
 
 def binName : BinOp → String
   | .add => "add" | .sub => "sub" | .mul => "mul" | .and => "and" | .or => "or"
@@ -43,6 +44,8 @@ def opName : HostOp → String
   | .extend_s => "i64.extend_i32_s"
   | .extend_u => "i64.extend_i32_u"
   | .extend32_s => "i64.extend32_s"
+  -- The byte's conversions are word operations (`Flat/Lower.lean`, `hostVals`), never emitted.
+  | .wrap8 | .extend8_u => "unreachable"
 
 /-- `(param i64 …) (result i64 …)`. -/
 def sigText (params results : Nat) : String :=

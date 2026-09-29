@@ -36,13 +36,19 @@ abbrev VTy.i64 : VTy := .int .w64
 /-- `1 ⊕ 1`, the tests' result: `inj₁ ()` is false, `inj₂ ()` true (`Val.bool`). -/
 abbrev VTy.boolT : VTy := .sum .unit .unit
 
+/-- `U8`, the byte.  `[spec §8]` -/
+abbrev VTy.u8 : VTy := .int .w8
+
 /-- The width of a literal. -/
 def _root_.BoCa.IntLit.width : IntLit → Width
   | .i32 _ => .w32
   | .i64 _ => .w64
+  | .u8 _ => .w8
 
-/-- The argument type of a host operation.  `[spec §8]` -/
+/-- The argument type of a host operation. The grouped operations at `w8` take `0`: a byte has
+no arithmetic, and none of them is applicable.  `[spec §8]` -/
 def hostArg : HostOp → VTy
+  | .bin .w8 _ | .div .w8 _ | .un .w8 _ | .eqz .w8 | .rel .w8 _ => .zero
   | .bin w _ => .tensor (.int w) (.int w)
   | .div w _ => .tensor (.int w) (.int w)
   | .un w _ => .int w
@@ -52,6 +58,8 @@ def hostArg : HostOp → VTy
   | .extend_s => .int .w32
   | .extend_u => .int .w32
   | .extend32_s => .int .w64
+  | .wrap8 => .int .w32
+  | .extend8_u => .int .w8
 
 /-- The result type of a host operation: `I`, `I ⊕ 1` for the partial operations, `1 ⊕ 1` for
 the tests.  `[spec §8]` -/
@@ -65,6 +73,8 @@ def hostRes : HostOp → VTy
   | .extend_s => .int .w64
   | .extend_u => .int .w64
   | .extend32_s => .int .w64
+  | .wrap8 => .int .w8
+  | .extend8_u => .int .w32
 
 /-- `hostArg op ⊸ hostRes op` at value type: `U (A ⊸ F B)`.  `[spec §8]` -/
 abbrev hostSig (op : HostOp) : VTy := .lolli (hostArg op) (hostRes op)
@@ -79,12 +89,16 @@ theorem vP_lit (c : IntLit) {ls : List SRec} {δ : LSub} :
   cases c with
   | i32 n => exact ⟨rfl, n, rfl⟩
   | i64 n => exact ⟨rfl, n, rfl⟩
+  | u8 n => exact ⟨rfl, n, rfl⟩
 
 theorem vP_i32 (n : UInt32) {ls : List SRec} {δ : LSub} :
     vP (.int .w32) ls δ (Val.i32 n) PMap.empty := ⟨rfl, n, rfl⟩
 
 theorem vP_i64 (n : UInt64) {ls : List SRec} {δ : LSub} :
     vP (.int .w64) ls δ (Val.i64 n) PMap.empty := ⟨rfl, n, rfl⟩
+
+theorem vP_u8 (n : UInt8) {ls : List SRec} {δ : LSub} :
+    vP (.int .w8) ls δ (Val.u8 n) PMap.empty := ⟨rfl, n, rfl⟩
 
 theorem vP_bool (b : Bool) {ls : List SRec} {δ : LSub} :
     vP .boolT ls δ (Val.bool b) PMap.empty := by
@@ -119,15 +133,23 @@ theorem host_call_sound (H : Host) (op : HostOp) {ls ls' : List SRec} {δ : LSub
     ρ = PMap.empty ∧ ∃ r, H.call op v = some r ∧ vP (hostRes op) ls' δ r PMap.empty := by
   cases op with
   | bin w o =>
-      obtain ⟨rfl, a, b, rfl, ha, hb⟩ := vP_int_pair h
-      refine ⟨rfl, ?_⟩
-      cases w <;> obtain ⟨n, rfl⟩ := ha <;> obtain ⟨m, rfl⟩ := hb
+      cases w
+      case w8 => exact h.elim
+      all_goals
+        obtain ⟨rfl, a, b, rfl, ha, hb⟩ := vP_int_pair h
+        refine ⟨rfl, ?_⟩
+        obtain ⟨n, rfl⟩ := ha
+        obtain ⟨m, rfl⟩ := hb
       · exact ⟨_, rfl, vP_i32 _⟩
       · exact ⟨_, rfl, vP_i64 _⟩
   | div w o =>
-      obtain ⟨rfl, a, b, rfl, ha, hb⟩ := vP_int_pair h
-      refine ⟨rfl, ?_⟩
-      cases w <;> obtain ⟨n, rfl⟩ := ha <;> obtain ⟨m, rfl⟩ := hb
+      cases w
+      case w8 => exact h.elim
+      all_goals
+        obtain ⟨rfl, a, b, rfl, ha, hb⟩ := vP_int_pair h
+        refine ⟨rfl, ?_⟩
+        obtain ⟨n, rfl⟩ := ha
+        obtain ⟨m, rfl⟩ := hb
       · refine ⟨_, rfl, vP_opt fun r hr => ?_⟩
         obtain ⟨k, -, rfl⟩ := Option.map_eq_some_iff.mp hr
         exact vP_i32 k
@@ -135,23 +157,28 @@ theorem host_call_sound (H : Host) (op : HostOp) {ls ls' : List SRec} {δ : LSub
         obtain ⟨k, -, rfl⟩ := Option.map_eq_some_iff.mp hr
         exact vP_i64 k
   | un w o =>
-      obtain ⟨rfl, ha⟩ := h
-      refine ⟨rfl, ?_⟩
-      cases w <;> obtain ⟨n, rfl⟩ := ha
+      cases w
+      case w8 => exact h.elim
+      all_goals
+        obtain ⟨rfl, n, rfl⟩ := h
+        refine ⟨rfl, ?_⟩
       · exact ⟨_, rfl, vP_i32 _⟩
       · exact ⟨_, rfl, vP_i64 _⟩
   | eqz w =>
-      obtain ⟨rfl, ha⟩ := h
-      refine ⟨rfl, ?_⟩
-      cases w <;> obtain ⟨n, rfl⟩ := ha
-      · exact ⟨_, rfl, vP_bool _⟩
-      · exact ⟨_, rfl, vP_bool _⟩
+      cases w
+      case w8 => exact h.elim
+      all_goals
+        obtain ⟨rfl, n, rfl⟩ := h
+        exact ⟨rfl, _, rfl, vP_bool _⟩
   | rel w o =>
-      obtain ⟨rfl, a, b, rfl, ha, hb⟩ := vP_int_pair h
-      refine ⟨rfl, ?_⟩
-      cases w <;> obtain ⟨n, rfl⟩ := ha <;> obtain ⟨m, rfl⟩ := hb
-      · exact ⟨_, rfl, vP_bool _⟩
-      · exact ⟨_, rfl, vP_bool _⟩
+      cases w
+      case w8 => exact h.elim
+      all_goals
+        obtain ⟨rfl, a, b, rfl, ha, hb⟩ := vP_int_pair h
+        refine ⟨rfl, ?_⟩
+        obtain ⟨n, rfl⟩ := ha
+        obtain ⟨m, rfl⟩ := hb
+        exact ⟨_, rfl, vP_bool _⟩
   | wrap =>
       obtain ⟨rfl, n, rfl⟩ := h
       exact ⟨rfl, _, rfl, vP_i32 _⟩
@@ -164,6 +191,12 @@ theorem host_call_sound (H : Host) (op : HostOp) {ls ls' : List SRec} {δ : LSub
   | extend32_s =>
       obtain ⟨rfl, n, rfl⟩ := h
       exact ⟨rfl, _, rfl, vP_i64 _⟩
+  | wrap8 =>
+      obtain ⟨rfl, n, rfl⟩ := h
+      exact ⟨rfl, _, rfl, vP_u8 _⟩
+  | extend8_u =>
+      obtain ⟨rfl, n, rfl⟩ := h
+      exact ⟨rfl, _, rfl, vP_i32 _⟩
 
 /-! ### Compatibility -/
 

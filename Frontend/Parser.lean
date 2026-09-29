@@ -424,7 +424,7 @@ def rtyPrefix : Nat → P RTy
       pure (.fam (← spanFrom st) m a σ)
     | _ => rtyAtom n
 
-/-- `1`, `0`, `unk`, `i32`, `i64`, `input`, `output`, `top`, a name, or a parenthesized type. -/
+/-- `1`, `0`, `unk`, `i32`, `i64`, `u8`, `input`, `output`, `top`, a name, or a parenthesized type. -/
 def rtyAtom : Nat → P RTy
   | 0 => outOfFuel
   | n + 1 => do
@@ -435,6 +435,7 @@ def rtyAtom : Nat → P RTy
     | .kw "unk" => discard bump; pure (.unk t.span)
     | .kw "i32" => discard bump; pure (.int t.span .w32)
     | .kw "i64" => discard bump; pure (.int t.span .w64)
+    | .kw "u8" => discard bump; pure (.int t.span .w8)
     | .kw "input" => discard bump; pure (.handle t.span false)
     | .kw "output" => discard bump; pure (.handle t.span true)
     | .kw "top" => discard bump; pure (.top t.span)

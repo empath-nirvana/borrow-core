@@ -53,7 +53,7 @@ def lendLibrary : String := include_str "../lib/lend.bc"
 /-- The generator adapters, `lib/adapters.bc`: `map`, `filter`, `take`, … (`include adapters`). -/
 def adaptersLibrary : String := include_str "../lib/adapters.bc"
 
-/-- The prelude, `lib/prelude.bc`: `true`, `false`, `not`. -/
+/-- The prelude, `lib/prelude.bc`: `true`, `false`, `not`, `to_i32`, `to_u8`. -/
 def preludeLibrary : String := include_str "../lib/prelude.bc"
 
 /-- The library modules, by the name `include` gives them (#59). A module is a file of `lib/`,
@@ -2669,7 +2669,8 @@ Draft 0's surface (docs/surface-cbpv.md) is parsed into core, with the forms tha
 as `Val.sugar` nodes (`Frontend/Parser.lean`). They are elaborated here, on the types inference
 gives (`TCx`), into core with every bracket argument written:
 
-* **Literals** are `i32[n]`, or `i64[n]` where an `i64` is expected.
+* **Literals** are `i32[n]`, or `i64[n]`/`u8[n]` where an `i64`/`u8` is expected. An operator
+  at `u8` widens its operands and works at `i32` (`byteOp`).
 * **Operators** `+ - * == != < <= > >=` are the host operation at the width of their operands:
   `add32` or `add64`, …, `lt_s32`, …; a comparison returns `1 + 1`, `inr ()` for true.
 * **`alloc(e)`, `free(e)`, `swap(c, e)`** are the constants with their type arguments read off
@@ -2701,7 +2702,17 @@ def widthOf : Option CVTy → Option BoCa.Width
 
 /-- A literal at a width. -/
 def litAt (sp : Span) (w : BoCa.Width) (n : Nat) : Val :=
-  .const sp (.lit (match w with | .w32 => .i32 (UInt32.ofNat n) | .w64 => .i64 (UInt64.ofNat n)))
+  .const sp (.lit (match w with
+    | .w32 => .i32 (UInt32.ofNat n) | .w64 => .i64 (UInt64.ofNat n) | .w8 => .u8 (UInt8.ofNat n)))
+
+/-- An operator at `u8`: the operands widened by `extend8_u`, the operation at `i32`, and an
+arithmetic result narrowed by `wrap8`. A byte has no arithmetic of its own (SPEC §8). -/
+def byteOp (sp osp psp : Span) (o : SurfOp) (a b : Val) : Val :=
+  let h (op : BoCa.HostOp) (x : Val) : Val := .app sp (.unbang osp (.const osp (.host op))) x
+  let r := h (o.host .w32) (.pair psp (h .extend8_u a) (h .extend8_u b))
+  match o with
+  | .add | .sub | .mul => h .wrap8 r
+  | _ => r
 
 def isHoleTy : VTy → Bool
   | .name _ "_" => true
@@ -2940,6 +2951,7 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
         (widthOf (c.tyV a₀)).orElse fun _ => widthOf (c.tyV b₀)).getD .w32
       let a' ← surfV n c (some (.int w)) a
       let b' ← surfV n c (some (.int w)) b
+      if w == .w8 then return byteOp sp osp psp o a' b'
       pure (.app sp (.unbang osp (.const osp (.host (o.host w)))) (.pair psp a' b'))
     | .app sp (.sugar ksp (.call k)) W => do
       let W' ← surfV n c none W
@@ -3581,7 +3593,7 @@ def elaborateS (p : Program) : SM (Program × Nat) := do
   let p : Program := ⟨decls⟩
   let mayDiv := usesName "div_fuel" p || usesName "div_bind" p || usesName "div_defer" p
   -- The prelude is in scope when the program names one of its declarations.
-  let preludeNames := ["true", "false", "not"]
+  let preludeNames := ["true", "false", "not", "to_i32", "to_u8"]
   let mayPrelude := !incl.contains "prelude" && preludeNames.any (usesName · p)
   let ioAll ← if mayIO && !incl.contains "io" then libOf "lib/io.bc" ioLibrary else pure []
   -- The generator library is in scope for typing when the program names it (`gen_pull` in

@@ -59,6 +59,8 @@ def evalOp : HostOp → List UInt64 → Except String UInt64
   | .extend_s, [a] => .ok (wasmHost.extendS a.toUInt32)
   | .extend_u, [a] => .ok (wasmHost.extendU a.toUInt32)
   | .extend32_s, [a] => .ok (wasmHost.extend32S a)
+  | .wrap8, [a] => .ok (wasmHost.wrap8 a.toUInt32).toUInt64
+  | .extend8_u, [a] => .ok (wasmHost.extend8U a.toUInt8).toUInt64
   | _, _ => .error "flat IR: operation arity"
 
 def liftE {α} (x : Except String α) : FM α := match x with

@@ -297,12 +297,18 @@ def emit : Dest → List Exp → LM (List Stmt)
 /-- A host operation on its operand's words (§8): an integer, a tag, or a partial operation's
 tag and integer. A 32-bit integer is held zero-extended. -/
 def hostVals (o : HostOp) (ls : List Nat) : LM (List Stmt × List Exp) := do
+  -- A byte is held zero-extended, as an `i32` is: `wrap8` keeps the low 8 bits, and
+  -- `extend8_u` is the word itself.
+  match o with
+  | .wrap8 => return ([], [and64 (.loc (ls.headD 0)) (.c64 0xff)])
+  | .extend8_u => return ([], [.loc (ls.headD 0)])
+  | _ => pure ()
   let raw (l : Nat) : Exp := match hostArgWidth o with
-    | .w32 => wrap (.loc l)
+    | .w32 | .w8 => wrap (.loc l)
     | .w64 => .loc l
   let args := ls.map raw
   let word (w : Width) (e : Exp) : Exp := match w with
-    | .w32 => extendU e
+    | .w32 | .w8 => extendU e
     | .w64 => e
   match hostResKind o, o with
   | .int w, _ => pure ([], [word w (.op o args)])
@@ -315,8 +321,10 @@ def hostVals (o : HostOp) (ls : List Nat) : LM (List Stmt × List Exp) := do
     let zero := Exp.op (.eqz w) [b]
     let trapC := match d with
       | .div_s =>
-        let intMin := match w with | .w32 => Exp.c32 0x80000000 | .w64 => .c64 0x8000000000000000
-        let minus1 := match w with | .w32 => Exp.c32 0xFFFFFFFF | .w64 => .c64 0xFFFFFFFFFFFFFFFF
+        let intMin := match w with
+          | .w32 | .w8 => Exp.c32 0x80000000 | .w64 => .c64 0x8000000000000000
+        let minus1 := match w with
+          | .w32 | .w8 => Exp.c32 0xFFFFFFFF | .w64 => .c64 0xFFFFFFFFFFFFFFFF
         or32 zero (and32 (.op (.rel w .eq) [a, intMin]) (.op (.rel w .eq) [b, minus1]))
       | _ => zero
     pure ([.ite trapC [.set t₀ (.c64 1), .set t₁ (.c64 0)]
@@ -423,6 +431,7 @@ def lowerTm : Tm → Dest → LM (List Stmt)
   | .unit, d => emit d []
   | .lit (.i32 n), d => emit d [.c64 n.toUInt64]
   | .lit (.i64 n), d => emit d [.c64 n]
+  | .lit (.u8 n), d => emit d [.c64 n.toUInt64]
   | .pair a b, d => do
       let some n := (← T).cons[a]? | throw "flat IR: an untyped pair"
       let (s, vs) ← mkPair n (locs (← vals a)) (locs (← vals b))
@@ -887,6 +896,7 @@ def genHelper (h : Helper) : LM Fn := do
       | .unit => pure (outStr "()")
       | .int .w32 => pure (outStr "i32[" ++ [.call [] fPrintDec [.loc 0]] ++ outStr "]")
       | .int .w64 => pure (outStr "i64[" ++ [.call [] fPrintDec [.loc 0]] ++ outStr "]")
+      | .int .w8 => pure (outStr "u8[" ++ [.call [] fPrintDec [.loc 0]] ++ outStr "]")
       | .fn .. => pure (outStr "<fun>")
       | .loc .. => pure (outStr "<loc>")
       | .pair .. => do

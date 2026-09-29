@@ -411,6 +411,13 @@ Integer literals and operations are constants (`SPEC.md` §8, `Core/Integers.lea
 - **Results:** tests return `1 + 1` with `inr ()` as true, and partial operations return
   `i32 + 1` with `inr ()` where Wasm traps.
 - `i32`/`i64` are persistent (section 7), so integer variables are reused and dropped freely.
+- **Bytes:** the type `u8`, the literal `u8[n]` (read modulo 2^8) and the byte literal `b'c'`
+  (a printable ASCII character, or `b'\n'`, `b'\t'`, `b'\r'`, `b'\0'`, `b'\\'`, `b'\''`), which
+  the lexer reads as `u8[n]`. The byte's operations are its conversions, `host[wrap8]`
+  (`i32 => u8`, the low 8 bits) and `host[extend8_u]` (`u8 => i32`); the grouped names at
+  `8` (`add8`, …) take `0`. At the surface an operator at `u8` widens its operands and works at
+  `i32`, narrowing an arithmetic result back; the prelude's `to_i32` and `to_u8` are the
+  conversions.
 <!-- ANCHOR_END: integers -->
 
 ## 8b. Arrays

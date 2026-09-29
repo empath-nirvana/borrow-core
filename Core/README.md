@@ -19,10 +19,12 @@ axioms among `[propext, Classical.choice, Quot.sound]` (`scripts/CheckAxioms.lea
 ### Types
 
     A ::= 1 | A ⊗ A | 0 | A ⊕ A | U C | Ref A | Imm @a A | Mut @a A | [@a] A | !A | Unk | X | μX. A
-        | I32 | I64 | [A] | Input | Output
+        | I32 | I64 | U8 | [A] | Input | Output
     C ::= F A | A ⊸ C | C & C | ⊤ | ∀'a ⊏ @b. C | νX. C
 
-`I32` and `I64` are one constructor, `VTy.int w` (`Integers.lean`, `[spec §8]`). The relation
+`I32`, `I64` and the byte `U8` are one constructor, `VTy.int w` (`Integers.lean`, `[spec §8]`);
+the byte has only its conversions `wrap8`/`extend8_u`, and the grouped operations at `w8` take
+`0`. The relation
 holds a literal of the width at `∅`, so they are persistent, `Imm̲ 'b I = I`, and they outlive
 every lifetime.
 

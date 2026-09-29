@@ -22,7 +22,7 @@ inductive CKw where
   | alloc | free | swap | copy | copyBang | forgetImm | forgetMut | forgetUnk | forgetBang
   | withbor1 | withbor2 | withbor3 | withload | withswap
   | foldImm | foldOwn | foldReuse | fixd | unfoldS | unfold
-  | i32 | i64 | host
+  | i32 | i64 | u8 | host
   | allocS | freeS | withborSMut | withborSImm | withborF2Mut | withborF2Imm
   | arrayNew | arrayFree | arraySize | arrayReplace | arrayLen | arrayGet | arrayCopy
   | arrayForget | sliceBorrowMut | sliceBorrowImm | sliceGetMut | sliceLenMut
@@ -38,7 +38,7 @@ def CKw.str : CKw → String
   | .withload => "withload" | .withswap => "withswap"
   | .foldImm => "fold_imm" | .foldOwn => "fold_own" | .foldReuse => "fold_reuse"
   | .fixd => "fixd" | .unfoldS => "unfold_s" | .unfold => "unfold"
-  | .i32 => "i32" | .i64 => "i64" | .host => "host"
+  | .i32 => "i32" | .i64 => "i64" | .u8 => "u8" | .host => "host"
   | .allocS => "alloc_s" | .freeS => "free_s"
   | .withborSMut => "withbor_s_mut" | .withborSImm => "withbor_s_imm"
   | .withborF2Mut => "withbor_f2_mut" | .withborF2Imm => "withbor_f2_imm"
@@ -52,7 +52,7 @@ def CKw.str : CKw → String
 def CKw.all : List CKw :=
   [.alloc, .free, .swap, .copy, .copyBang, .forgetImm, .forgetMut, .forgetUnk, .forgetBang,
    .withbor1, .withbor2, .withbor3, .withload, .withswap,
-   .foldImm, .foldOwn, .foldReuse, .fixd, .unfoldS, .unfold, .i32, .i64, .host,
+   .foldImm, .foldOwn, .foldReuse, .fixd, .unfoldS, .unfold, .i32, .i64, .u8, .host,
    .allocS, .freeS, .withborSMut, .withborSImm, .withborF2Mut, .withborF2Imm,
    .arrayNew, .arrayFree, .arraySize, .arrayReplace, .arrayLen, .arrayGet, .arrayCopy,
    .arrayForget, .sliceBorrowMut, .sliceBorrowImm, .sliceGetMut, .sliceLenMut,
@@ -78,7 +78,7 @@ def CKw.sig : CKw → List ArgKind
   | .withbor3 | .withload => [life, binder, ty, ty]
   | .withswap => [life, ty, ty]
   | .foldImm => [ty, binder, life, ty]
-  | .i32 | .i64 => [nat]
+  | .i32 | .i64 | .u8 => [nat]
   | .host => [op]
   | .allocS | .freeS => [shape]
   | .withborSMut | .withborSImm => [shape, binder, ty]
@@ -109,6 +109,7 @@ def Const.ofArgs : CKw → List Arg → Option Const
   | .unfold, [.cty C, .ty S] => some (.unfold C S)
   | .i32, [.nat n] => some (.lit (.i32 (UInt32.ofNat n)))
   | .i64, [.nat n] => some (.lit (.i64 (UInt64.ofNat n)))
+  | .u8, [.nat n] => some (.lit (.u8 (UInt8.ofNat n)))
   | .host, [.op o] => some (.host o)
   | .allocS, [.shape σ] => some (.allocS σ)
   | .freeS, [.shape σ] => some (.freeS σ)
@@ -157,6 +158,7 @@ def Const.toArgs : Const → CKw × List Arg
   | .unfold C S => (.unfold, [.cty C, .ty S])
   | .lit (.i32 n) => (.i32, [.nat n.toNat])
   | .lit (.i64 n) => (.i64, [.nat n.toNat])
+  | .lit (.u8 n) => (.u8, [.nat n.toNat])
   | .host o => (.host, [.op o])
   | .allocS σ => (.allocS, [.shape σ])
   | .freeS σ => (.freeS, [.shape σ])
@@ -192,12 +194,14 @@ theorem CKw.ofString_str (k : CKw) : CKw.ofString? k.str = some k := by
 /-! ### Host operation names
 
 `host[op]` names an operation as its Wasm instruction name with the width as a suffix
-(`add32`, `div_s32`, `lt_u64`, `eqz64`, `extend8_s32`), and the four conversions by their bare
-names (`wrap`, `extend_s`, `extend_u`, `extend32_s`). -/
+(`add32`, `div_s32`, `lt_u64`, `eqz64`, `extend8_s32`), and the conversions by their bare
+names (`wrap`, `extend_s`, `extend_u`, `extend32_s`, and the byte's `wrap8`, `extend8_u`). The
+grouped names at `8` (`add8`, …) exist and take `0`: a byte has no arithmetic (SPEC §8). -/
 
 def widthSuffix : Width → String
   | .w32 => "32"
   | .w64 => "64"
+  | .w8 => "8"
 
 def binOpName : BinOp → String
   | .add => "add" | .sub => "sub" | .mul => "mul" | .and => "and" | .or => "or"
@@ -225,10 +229,12 @@ def hostOpName : HostOp → String
   | .extend_s => "extend_s"
   | .extend_u => "extend_u"
   | .extend32_s => "extend32_s"
+  | .wrap8 => "wrap8"
+  | .extend8_u => "extend8_u"
 
 /-- Every host operation. -/
 def allHostOps : List HostOp :=
-  let ws := [Width.w32, .w64]
+  let ws := [Width.w32, .w64, .w8]
   (ws.flatMap fun w =>
     ([.add, .sub, .mul, .and, .or, .xor, .shl, .shr_s, .shr_u, .rotl, .rotr] : List BinOp).map
         (.bin w) ++
@@ -237,13 +243,13 @@ def allHostOps : List HostOp :=
       [.eqz w] ++
       ([.eq, .ne, .lt_s, .lt_u, .le_s, .le_u, .gt_s, .gt_u, .ge_s, .ge_u] : List RelOp).map
         (.rel w)) ++
-  [.wrap, .extend_s, .extend_u, .extend32_s]
+  [.wrap, .extend_s, .extend_u, .extend32_s, .wrap8, .extend8_u]
 
 def hostOpOfName (s : String) : Option HostOp := allHostOps.find? (hostOpName · == s)
 
 /-- Every host operation is listed, and the names are distinct, so `hostOpOfName` inverts `hostOpName`. -/
 theorem hostOpOfName_name (o : HostOp) : hostOpOfName (hostOpName o) = some o := by
-  rcases o with ⟨w, o⟩ | ⟨w, o⟩ | ⟨w, o⟩ | w | ⟨w, o⟩ | _ | _ | _ | _ <;>
+  rcases o with ⟨w, o⟩ | ⟨w, o⟩ | ⟨w, o⟩ | w | ⟨w, o⟩ | _ | _ | _ | _ | _ | _ <;>
     (try cases w) <;> (try cases o) <;> decide
 
 end Frontend

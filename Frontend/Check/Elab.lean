@@ -131,6 +131,7 @@ def ppV (nm : List (String × LifeVar)) (d p : Nat) : CVTy → String
   | .unk => "unk"
   | .int .w32 => "i32"
   | .int .w64 => "i64"
+  | .int .w8 => "u8"
   | .opq .input => "input"
   | .opq .output => "output"
   | .tvar n => if n < d then tvName (d - 1 - n) else s!"?{n}"
