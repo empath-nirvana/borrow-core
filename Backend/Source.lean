@@ -20,6 +20,7 @@ def pvOfExpr : Expr → PV
   | .inj₂ a => .inj true (pvOfExpr a)
   | .prim (.lit (.i32 n)) => .i32 n
   | .prim (.lit (.i64 n)) => .i64 n
+  | .prim (.lit (.u8 n)) => .u8 n
   | .loc _ => .loc
   | _ => .fn
 

@@ -55,16 +55,17 @@ def keywords : List String :=
     "boxed", "unbox", "roll", "unroll", "run", "absurd",
     "nu_in", "nu_out", "delay_in", "delay_out", "stream_in", "stream_out",
     -- types, lifetimes, shapes
-    "ref", "imm", "mut", "box", "unk", "i32", "i64", "input", "output", "mu", "all", "forall", "top", "dom",
+    "ref", "imm", "mut", "box", "unk", "i32", "i64", "u8", "input", "output", "mu", "all", "forall", "top", "dom",
     "block", "val", "fam", "view", "nu", "delay", "loop", "stream", "str", "iter", "leaf",
     "for", "in",
-    "node", "array", "array_imm",
+    "node", "array", "array_imm", "array_mut",
     -- constants and derived forms
     "alloc", "free", "swap", "copy", "copy_bang", "forget_imm", "forget_mut", "forget_unk",
     "forget_bang", "withbor1", "withbor2", "withbor3", "withload", "withswap",
     "fold_imm", "fold_own", "fold_reuse", "fixd", "unfold_s", "unfold", "host",
     "alloc_s", "free_s", "withbor_s_mut", "withbor_s_imm", "withbor_f2_mut", "withbor_f2_imm",
     "shorten_mut", "shorten_imm", "array_new", "array_free", "array_size", "array_replace",
+    "slice_borrow_mut", "slice_borrow_imm", "slice_get_mut", "slice_len_mut", "count_fold",
     "array_len", "array_get", "array_copy", "array_forget" ]
 
 /-- The reserved upper-case words. -/
@@ -116,8 +117,14 @@ private def advance (p : Pos) (n : Nat) : Pos := ⟨p.line, p.col + n⟩
 private def natOfDigits (base : Nat) (ds : List Char) : Nat :=
   ds.foldl (fun acc c => acc * base + hexVal c) 0
 
+/-- The byte of an escaped byte literal `b'\e'`: `\n`, `\t`, `\r`, `\0`, `\\`, `\'`. -/
+def byteEscape : Char → Option Nat
+  | 'n' => some 10 | 't' => some 9 | 'r' => some 13 | '0' => some 0
+  | '\\' => some 92 | '\'' => some 39 | _ => none
+
 /-- The lexer loop. `pos` is the position of the head of `cs`; `spaced` records whether
-    whitespace was skipped since the last token. -/
+    whitespace was skipped since the last token. A byte literal `b'c'` is read as the tokens of
+    `u8[n]`, `n` the ASCII code of `c` (strings S1, `docs/decisions.md` 43). -/
 def lexGo : Nat → List Char → Pos → Bool → Array Token → Except Error (Array Token)
   | 0, _, pos, _, _ => .error ⟨⟨pos, pos⟩, "lexer ran out of fuel"⟩
   | fuel + 1, cs, pos, spaced, acc =>
@@ -131,6 +138,21 @@ def lexGo : Nat → List Char → Pos → Bool → Array Token → Except Error 
       let (skipped, rest) := spanChars (· ≠ '\n') r
       lexGo fuel rest (advance pos (skipped.length + 2)) true acc
     | '⊓' :: 'Δ' :: r => push (.kw "dom") 2 r
+    | 'b' :: '\'' :: '\\' :: e :: '\'' :: r =>
+      match byteEscape e with
+      | some n =>
+        let stop := advance pos 5
+        let sp : Span := ⟨pos, stop⟩
+        lexGo fuel r stop false (acc.push ⟨.kw "u8", sp, spaced⟩ |>.push ⟨.sym "[", sp, false⟩
+          |>.push ⟨.int n, sp, false⟩ |>.push ⟨.sym "]", sp, false⟩)
+      | none => .error ⟨⟨pos, advance pos 5⟩, s!"unknown escape `\\{e}` in a byte literal"⟩
+    | 'b' :: '\'' :: c :: '\'' :: r =>
+      if c.toNat < 128 && c.toNat ≥ 32 && c != '\\' && c != '\'' then
+        let stop := advance pos 4
+        let sp : Span := ⟨pos, stop⟩
+        lexGo fuel r stop false (acc.push ⟨.kw "u8", sp, spaced⟩ |>.push ⟨.sym "[", sp, false⟩
+          |>.push ⟨.int c.toNat, sp, false⟩ |>.push ⟨.sym "]", sp, false⟩)
+      else .error ⟨⟨pos, advance pos 4⟩, "a byte literal `b'c'` holds a printable ASCII character"⟩
     | 'I' :: 'm' :: 'm' :: '̲' :: r => push (.kw "view") 4 r
     | c :: r =>
       if c == ' ' || c == '\t' || c == '\r' then lexGo fuel r (advance pos 1) true acc

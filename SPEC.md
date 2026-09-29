@@ -389,10 +389,11 @@ From `experiments/Recursion`, `CBPVMu`; general `ν` per `docs/scope-recursion.m
 
 ### Types
 
-    A ::= … | I32 | I64                                   (VTy.int w)
+    A ::= … | I32 | I64 | U8                              (VTy.int w)
 
-`I32`/`I64` hold no resource. They are persistent (§10), `Imm̲ 'b I32 = I32`, and they outlive every
-lifetime.
+`I32`/`I64`/`U8` hold no resource. They are persistent (§10), `Imm̲ 'b I32 = I32`, and they outlive
+every lifetime. `U8` (`Width.w8`) is the byte: its reason is layout (an array of bytes is one byte
+per element, `Backend/README.md`), and it has no arithmetic of its own.
 
 ### Terms and machine
 
@@ -417,6 +418,13 @@ Wasm's integer instructions (`HostOp`, `Support/Syntax/Integers.lean`), at each 
 | unary | `clz`, `ctz`, `popcnt`, `extend8_s`, `extend16_s` | `I32 ⇒ I32` |
 | tests | `eqz`; `eq`, `ne`, `lt_s`, `lt_u`, `le_s`, `le_u`, `gt_s`, `gt_u`, `ge_s`, `ge_u` | `I32 ⇒ 1 ⊕ 1`; `I32 ⊗ I32 ⇒ 1 ⊕ 1` |
 | conversion | `wrap`, `extend_s`, `extend_u`, `extend32_s` | between widths |
+| byte | `wrap8`, `extend8_u` | `I32 ⇒ U8` (the low 8 bits), `U8 ⇒ I32` |
+
+The grouped operations are Wasm's, at `w32` and `w64`. At `w8` they exist as names and take `0`
+(`hostArg`), so none is applicable, and `Host.call` has no argument shape for them: arithmetic
+on bytes is done at `I32`, as in Wasm. The surface elaborates an operator at `u8` to the `i32`
+operation on `extend8_u` of its operands, narrowing an arithmetic result by `wrap8`, and reads
+the byte literal `b'c'` as `u8[n]` (`docs/decisions.md` 43).
 
 `A ⇒ B` is the call-by-value function type `U(A ⊸ F B)`. Typing: `CDerives.lit` gives a literal
 its width's type, and `CDerives.hostOp op` gives `host op` the type `!(hostArg op ⇒ hostRes op)`.
@@ -433,7 +441,9 @@ between engines is tested on the corpus, not proved.
 ### Open
 
 - Floats (`F32`, `F64`) by the same scheme; Wasm's NaN bit patterns are nondeterministic.
-- `u8` and checked (non-wrapping) arithmetic are derivable from the operations above.
+- Checked (non-wrapping) arithmetic is derivable from the operations above.
+- `read_byte`/`write_byte` (§11) still take and return `I32`; moving them and the byte list
+  `Bytes` to `U8` changes every I/O program's types, and is left to the text library (S5).
 - `plainV` excludes the integer types, so they cannot yet be `withborS` leaves.
 - The backend's layout is type-directed (`Backend/README.md`, Representation): `I32` and `I64`
   are each one unboxed word.
@@ -489,6 +499,49 @@ from `Imm @a (Array A)` would sit below the `imm` cell that holds the handle, wh
 the leaves; the update relation excludes exactly that (§5 Open; `experiments/FrameEnd`,
 `imm_view_rejected`), so the view is taken at the shorter `'x` of `withload`.
 
+### Slice borrows
+
+An owned array is also lent directly, as a family of leaf borrows at one lifetime, with no cell
+(`Core/Slices.lean`, K2 of `docs/strings-slices-design.md`):
+
+    slice_borrow_mut : Array A ⊸ (∀'x ⊏ ⊓Δ. [Mut 'x A] ⊸ ['x] B) ⊸ Array A ⊗ B
+    slice_borrow_imm : Array A ⊸ (∀'x ⊏ ⊓Δ. [Imm 'x A] ⊸ ['x] B) ⊸ Array A ⊗ B
+
+    ArrayMut @a A ≜ [Mut @a A]
+
+Each is a constant at a dead context whose term is `withbor`'s, `λa. λg. (a, g () a)`: the
+handle `(ℓ, n)` goes to the callback and comes back, and nothing new runs. Side conditions, at
+both modes: `A` and `B` each outlive a lifetime `@b` defined by `Δ` (`withbor2`'s condition on
+`A`, and `withborF2`'s on its result), `'x` free in neither; at `Imm`, `A` is scoped in `Δ`.
+
+**Soundness.** The model reads a family of places as the iterated separating conjunction of its
+leaves. One Mut Frame (`[TR]` 6.65) per leaf, nested around the one callback, is an induction on
+the list of places (`wpTS_M_frameList`, `Core/SliceFrames.lean`); at `Imm`, one Imm Frame
+(6.64) per leaf, each adding its record, with the leaves stable along `Ext`
+(`wpTS_I_frameList`). Frame `j` takes its own lifetime `α_j`, strictly below the one before;
+the callback runs at a lifetime below all of them, where every leaf is a leaf of `[M 'x A]`
+because leaf cells are antitone in their lifetime (6.118, 6.114). The callback's result, and at
+`Imm` the payloads handed back, are reboxed at each outer frame's lifetime by 6.60
+(`vC_outlives`): that is what the side conditions on `A` and `B` pay for. The compatibility
+lemmas are `sliceBorrowM_compatX` and `sliceBorrowI_compatX`.
+
+**On a `mut` family** (`ArrayMut @a A`), the element operations, with the terms of their `imm`
+counterparts:
+
+| constant | type |
+|---|---|
+| `slice_get_mut` | `!(ArrayMut @a A ⊗ I32 ⇒ Mut @a A ⊕ 1)` — `idx`: the leaf at the index; the rest of the family is forgotten, since a `mut` leaf holds no `own` cell (`noOwn_mut`) |
+| `slice_len_mut` | `!(ArrayMut @a A ⇒ ArrayMut @a A ⊗ I32)` — the family handed back beside its length |
+
+A family `[L]` is split at a run-time index, and two adjacent ones joined, at every leaf type
+(`vP_fam_split`, `vP_fam_join`); no constant exposes that yet.
+
+**Surface.** `borrow imm a { 'x, v -> S }` and `borrow mut a { 'x, v -> S }` on an array `a`
+elaborate to `slice_borrow_imm['x, top, A, B]` and `slice_borrow_mut['x, top, A, B]`, `v` at
+`array_imm 'x A` and `array_mut 'x A`, and rebind `a` from the pair, as the blocks on a cell do.
+The lowering is the term's: the handle is passed, and there is no cell (`corpus/slice-imm.bc`,
+`corpus/slice-mut.bc`).
+
 ### Machine
 
 Three primitives, `Prim.tab`, `Prim.idx` and `Prim.drop`, each with one head step. With
@@ -508,11 +561,18 @@ step is stuck on a well-typed argument.
 
 ### Relation
 
-    𝒱⟦[L]⟧δ(v) ≜ ∃ℓ c. ⌜v = (ℓ, i32 c)⌝ ⋆ ⊛_{i < c} 𝒱⟦L⟧δ(ℓ + i)
+    𝒱⟦[L]⟧δ(v) ≜ ∃ℓ c. ⌜v = (ℓ, i32 c) ∧ c < 2³¹⌝ ⋆ ⊛_{i < c} 𝒱⟦L⟧δ(ℓ + i)
 
 At `Array A` this is `n` owned cells, each holding a value in `𝒱⟦A⟧`; at `ArrayImm @a A`, `n`
 `imm` cells at `@a`. Nothing else changes in the typed world: a block allocation is `n` of
 `TW.alloc`, a drop `n` of `TW.free`.
+
+**The length bound.** A family in the relation has `tab`'s length: `len(c) = c`
+(`arrLen_of_bound`). `tab` builds only such families (`arrLen_bound`), every operation hands
+back the length it was given, and a split (`vP_fam_split`) only shortens one. So a constant
+whose result array has its argument's length (a map, a clone) builds exactly that many cells;
+without the bound a family with `c ≥ 2³¹` would be in the relation, and `tab (c, …)` would
+build the empty array beside it (`experiments/PositiveArrays`, `FamLenBound`).
 
 ### Operations
 
@@ -542,7 +602,8 @@ an `icmp ult` in LLVM, `i32.lt_u` and `i32.mul`/`i64.add` in Wasm. `tab` allocat
 fills it in a loop; `drop` loops over the slots, moves each value to the consumer, and frees the
 block once. The backend's type-directed layout has `s = sizeof A` (the widest contents the slot
 holds) and no header, so an element's location is a cell address like any other
-(`Backend/README.md`, Representation).
+(`Backend/README.md`, Representation). A slot of `U8` is one byte (`load8_u`/`store8`), and an
+empty array allocates nothing.
 
 ### Baseline
 
@@ -561,10 +622,13 @@ lemma of the typed world proved by induction on types or on positions has its `[
 
 ### Open
 
-- A primitive array borrow `Array A ⊸ (∀'c. [M 'c A] ⊸ ['c] T) ⊸ Array A ⊗ T` with no cell, and
-  mutable families `[Mut 'c A]` (a leaf `Mut` view, `iter_mut`). Semantically each leaf would be
-  framed by its own 6.64/6.65 frame, nested; not built.
-- `split_at` at a run-time index, returning two disjoint sub-families at the borrow's lifetime.
+- `split_at` at a run-time index, returning two disjoint sub-families at the borrow's lifetime
+  (K3; the relation's content is `vP_fam_split`), and writes that keep the rest of a `mut`
+  family (K5: `slice_replace`, `slice_swap`).
+- An `imm` reborrow of a `mut` family (K2′), and a destructor for `ArrayMut @a A` (a forget, as
+  `array_forget` is for `ArrayImm`).
+- Whether `slice_borrow`'s side conditions on `A` and `B` can be dropped: they are used by the
+  proof, and not known to be needed.
 - `iter`/`iter_mut` over the leaf family, as a lifetime-indexed `Iter` (§7).
 - `replicate` for persistent `A` without a tabulator; creation from a list.
 - Uninitialised leaves (`Uninit`), and sized types (#72).
@@ -1105,8 +1169,9 @@ div body does not nest delay binds: the whole body is one `unfold` whose states 
 and calls (below, and §15's *One state machine per body*).
 
 **The fuel handler.** `div_fuel[A, Q] : U(Loop A Q) ⊗ I32 ⇒ A ⊕ Q` observes a loop at most `n`
-times and closes it if it has not finished: `driveE n` (§7) with the count a value (a fold over
-the unary count of `n`, `div_nat`). Div code under it is total: `collatz_within` of
+times and closes it if it has not finished: `driveE n` (§7) with the count a value, counted by
+`count_fold` (§16), whose state is the loop or, once it has finished, its result. A count of
+`2³¹` or more (a negative `i32`) observes nothing. Div code under it is total: `collatz_within` of
 `corpus/io-fuel.bc` is `total`, and a loop cut off hands its capabilities back.
 
 **Deferring a loop.** `div_defer[B, R] : U(F(U(Loop B R)) & F R) ⇒ U(Loop B R)` is the loop
@@ -1555,6 +1620,78 @@ preserved: every construct of this entry is elaborated into core before checking
 
 ---
 
+## 16. Entry 15 — counted loops
+
+### Motivation
+
+Every total loop over a count or a view needs a loop whose bound is known when it starts. The
+only total loops were folds over data, so a counted loop folded over the unary count
+`μX. 1 ⊕ X` (`div_nat`, #95), and a loop of `n` steps allocated `n` objects. A counted loop
+is K0 of `docs/strings-slices-design.md`.
+
+### The constant
+
+    count_fold : !(!(I32 ⊗ S ⇒ S) ⊗ (I32 ⊗ (I32 ⊗ S)) ⇒ S)        (CDerives.countFold S)
+
+`count_fold (f, (n, (i, s)))` runs `f` at `i, i + 1, …, len(n) − 1`, threading the state, and
+answers the last state; `s` itself when `i ≥ len(n)`. `len(n)` is `tab`'s (§9): `n` when
+`n < 2³¹`, else `0`, so a negative bound is the empty loop. The step is persistent: what it
+changes is the state, which may hold anything (an array, a capability).
+
+### Machine
+
+One primitive, `Prim.count`, with one head step that allocates nothing:
+
+    (μ, count (f, (n, (i, s)))) ↦ (μ, count (f, (n, (i + 1, f (i, s)))))   if i < len(n)
+                                ↦ (μ, s)                                   otherwise
+
+(`countNext`, `Support/Dynamics/Arrays.lean`). The comparison and the increment are the
+machine's, on `UInt32`, not host operations.
+
+**Why a step, and not a Z-combinator loop over the host's `add` and `lt_u`.** Every theorem
+holds at every host (§8), and `wpTS` asks that every run reach a value. A loop that counts with
+the host's operations terminates only at hosts whose operations count: at the host whose
+`add32` answers its first argument and whose `lt_u32` answers true, the loop from `0` steps
+back to itself and never ends, so no such term is in the relation at every host. The machine's
+own counter is what makes the loop total at every host. This is the one change the design's K0
+did not foresee: it adds a machine step, as §9's `tab`, `idx` and `drop` did.
+
+### Semantics
+
+`countLoop_wp` is the induction on `len(n) − i`: one `count` step, then `f (i, s)` by the
+step's validity (`bang_app`), then the loop from `i + 1`. `countFold_compatX` is the constant,
+at every host (`Core/CountFold.lean`). The step is deterministic and allocates nothing, so
+determinism (`head_det`), allocator runs (§13) and the totality theorem (§14) take it with no
+new argument.
+
+### Lowering
+
+A generated loop of tail calls per step and state type (`count_loop`, `Backend/Flat/Lower.lean`):
+compare, call the step on a copy of the closure, tail-call with `i + 1`. It allocates nothing
+(`corpus/count-fold.bc`: allocs 0).
+
+### Uses
+
+- `div_fuel` (§14) counts its observations with it, in place of the unary count: `io-fuel`
+  went from 3746 allocations and 174 dispatched calls to 1 and 0.
+- A counted loop over an array's indices, each index lent as a `mut` leaf
+  (`corpus/iter-mut-count.bc`).
+
+### Baseline
+
+`fundamentalC`, `adequacyC`, `adequacyD` and the totality theorem keep their statements; the
+machine gains one head step, parametric in the host as before.
+
+### Open
+
+- The surface's total `for` over a count (`for i in range(n)`, stage 9 of typed elaboration)
+  elaborated to `count_fold`, with the `let mut` variables the body assigns as the state. Today
+  the constant is called directly, with the step a function or a closure.
+- Stopping early: a finished state is carried to the bound (`div_fuel` does), which costs a
+  test per remaining count.
+
+---
+
 ## Status
 
 Entries 2–6 are implemented in the library directory `Core/`, with one `fundamentalC` and
@@ -1572,11 +1709,25 @@ typed world, the model and the end-to-end theorems in `Core/Stdio.lean`, the che
 `Frontend/Elab/LoopLend.lean` and `Core/Totality.lean`, with no change to `CDerives`. Entry 14 (§15) is implemented in
 `lib/gen.bc`, `lib/adapters.bc`, `Frontend/Parser.lean`, `Frontend/Sugar.lean` and
 `Frontend/Elab/Subst.lean`, with no change to `CDerives`; each generator and div body is one
-state machine (§15).
+state machine (§15). Entry 15 (§16) is implemented in
+`Paper/` and `Support/` (the step), `Core/CountFold.lean`, the checker (`count_fold`) and the
+backend (`count_loop`). §9's slice borrows are `Core/SliceFrames.lean` and `Core/Slices.lean`,
+the checker (`slice_borrow_*`, `slice_*_mut`, `array_mut`) and the borrow blocks of
+`Frontend/Sugar.lean`; §8's byte is `Width.w8` throughout.
 
 ---
 
 ## Changelog
+
+- **0.21** (2026-09-29) — Strings S1–S2 (`docs/strings-slices-design.md`). §9: the family
+  relation carries the length bound `c < 2³¹`; slice borrows `slice_borrow_mut` and
+  `slice_borrow_imm` lend an owned array as a family of leaf borrows with no cell (K2, from
+  `experiments/PositiveArrays`), and `slice_get_mut`/`slice_len_mut` act on a `mut` family (K4);
+  a borrow block on an array lends it so. §8: the byte `U8` (`Width.w8`), its literal and its
+  conversions `wrap8`/`extend8_u`; the grouped operations take `0` at `w8`. Entry 15 (§16): the
+  counted loop `count_fold`, a machine step (`count`) so that it is total at every host;
+  `div_fuel` counts with it. The backend lays out byte slots, and an empty array allocates
+  nothing.
 
 - **0.20** (2026-09-29) — §14, §15: one state machine per body (#109 item 8). Every generator
   body and every div body is one `unfold` whose state has a summand per resumption point, and

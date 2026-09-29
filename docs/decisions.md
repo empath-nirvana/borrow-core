@@ -396,3 +396,22 @@ Each entry: the decision, and why. Newest last.
     - **Sugar pairs.** The core forms of `corpus/sugar/gen-from.bc` and `for-value.bc` are
       written by hand as machines; the other pairs whose elaboration changed have as core form
       the elaboration as `bcc desugar` prints it.
+
+43. **Provisional (strings S1–S2, SPEC §8–§9, to be confirmed by the user).**
+    - **`array_mut @a A`** is the core spelling of `[Mut @a A]`, beside `array_imm @a A`; the
+      design's `slice 'a A` / `slice mut 'a A` are the surface names to come with the view
+      library (S3–S4), as abbreviations.
+    - **`slice_borrow_mut['x, @b, A, B]` / `slice_borrow_imm['x, @b, A, B]`** take one lifetime
+      `@b` that both `A` and `B` must outlive; **`slice_get_mut[@a, A]`**,
+      **`slice_len_mut[@a, A]`** are the `mut` counterparts of `array_get`/`array_size`.
+    - **`u8`** is the byte type; **`b'c'`** the byte literal, read by the lexer as `u8[n]`;
+      **`to_i32(b)`** and **`to_u8(i)`** (the prelude) the conversions, `extend8_u` and `wrap8`.
+      An operator at `u8` works at `i32` on the widened operands and narrows an arithmetic
+      result back, so `c - 32` at `u8` is `to_u8(to_i32(c) - 32)`. Alternatives not taken:
+      `i32(b)`/`u8(i)` (the type keywords as functions), and no operators at `u8`.
+    - **`count_fold[S] (f, n, i, s)`** is called directly for now; the total `for` over a count
+      (`for i in range(n)`) that elaborates to it is typed elaboration's stage 9.
+    - **`borrow imm a { 'x, v -> S }` and `borrow mut a { 'x, v -> S }` on an array** lend it as
+      a family, with no cell, rather than rejecting a place that is not a cell. Alternative not
+      taken: a new keyword (`borrow slice`), since the place's type already says which lend is
+      meant, as `&x` does (typed elaboration §5.1).

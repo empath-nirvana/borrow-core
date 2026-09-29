@@ -1,9 +1,22 @@
 # Strings and slices, end to end — design
 
-Status: a design for review. Nothing here is built. It proposes spec entries, and names the
-theorems each needs. One claim was checked in Lean as a spike, outside the repository: the
-run-time split of a family (§5.1, `vP_fam_split`, below). Everything else is argued from the
-existing lemmas it names.
+Status: a design. Stages S1 and S2 are built (below, *Stage status*); the rest is proposed. It
+proposes spec entries, and names the theorems each needs.
+
+**Stage status.**
+
+| stage | status | where |
+|---|---|---|
+| §9 length bound | built: `⌜c < 2³¹⌝` in the `[L]` clause; `FamLenBound` derived | SPEC §9, `Core/Relation.lean`, `arrLen_of_bound` |
+| S1 K0 | built, **as a machine step** `count`, not a Z-combinator loop: a loop that counts with the host's `add`/`lt_u` is total only at hosts whose operations count, and every theorem holds at every host (SPEC §16, *Why a step*). The constant takes a start index: `count_fold (f, (n, (i, s)))` | SPEC §16, `Core/CountFold.lean` (`countFold_compatX`), `corpus/count-fold.bc` |
+| S1 K1 | built: `u8`, `b'c'`, `wrap8`/`extend8_u`, surface operators at `u8` through `i32`, `to_i32`/`to_u8` | SPEC §8, `corpus/bytes-upper.bc` |
+| S1 backend | built: byte slots for `u8`, `tab 0` allocates nothing | `Backend/README.md`, Representation |
+| S1 `read_byte`/`write_byte` at `u8` | not done: it changes every I/O program's types; left to S5 | SPEC §8 Open |
+| S1 total `for` | not done: typed elaboration's stage 9; `count_fold` is called directly | SPEC §16 Open, `corpus/pending/for-finite.bc` |
+| S2 K2 | built at `Mut` and `Imm`, with the side conditions of `experiments/PositiveArrays`; `borrow mut a { 'x, v -> … }` on an array | SPEC §9, `Core/Slices.lean`, `corpus/slice-mut.bc`, `corpus/slice-imm.bc` |
+| S2 K4 | built with S2: `slice_get_mut`, `slice_len_mut` (a `mut` family is unusable without them) | `Core/Slices.lean` |
+| P12 | as a counted loop lending one `mut` leaf per index; `iter_mut` itself waits for K3 and S4 | `corpus/iter-mut-count.bc`, `corpus/pending/iter-mut.bc` |
+| `div_fuel` over K0 | built: `io-fuel` from 3746 allocations and 174 dispatched calls to 1 and 0 | `lib/div.bc` |
 
 The method follows the user's direction. The programs come first (§1), then the types they need
 (§2, §3), then the API (§4), and then the memory model that API forces (§5). Arrays and buffers

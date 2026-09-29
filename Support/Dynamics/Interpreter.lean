@@ -94,6 +94,8 @@ def delta (H : Host) (μ : Mem) : Expr → Val → Step
       .next μ (idxAns ℓ n i).val
   | .prim .drop, ⟨.pair f (.pair (.loc ℓ) (.prim (.lit (.i32 n)))), h⟩ =>
       .next μ (dropFill ⟨f, h.pair_left⟩ ℓ 0 n.toNat)
+  | .prim .count, ⟨.pair f (.pair (.prim (.lit (.i32 n))) (.pair (.prim (.lit (.i32 i))) s)), h⟩ =>
+      .next μ (countNext ⟨f, h.pair_left⟩ n i ⟨s, h.pair_right.pair_right.pair_right⟩)
   | _, _ => .stuck .badPrimArg
 
 /-- One step of call-by-value reduction.

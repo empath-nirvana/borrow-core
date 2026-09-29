@@ -90,7 +90,7 @@ lexically, innermost first, and are then discarded. Two consequences:
                | mu X. A | X | Name
                | A => A | all 'x < @. A                          (built-in abbreviations)
                | block σ | val σ | fam mut @ σ | fam imm @ σ | view @ A
-               | array A | array_imm @ A                        (VTy.fam, SPEC §9)
+               | array A | array_imm @ A | array_mut @ A        (VTy.fam, SPEC §9)
     comp   C ::= F A | A -o C | C & C | top | forall 'x < @. C | nu X. C
                | delay A | stream A | iter A A A | loop A A      (built-in abbreviations)
 
@@ -104,7 +104,8 @@ lexically, innermost first, and are then discarded. Two consequences:
 4. `+` associates to the right.
 5. `*` associates to the right.
 6. Prefix formers take one atom: `U`, `F`, `ref`, `!`, `imm @`, `mut @`, `box @`, `delay`,
-   `stream`, `block`, `val`, `fam m @`, `view @`, `array`, `array_imm @`; `iter` takes three.
+   `stream`, `block`, `val`, `fam m @`, `view @`, `array`, `array_imm @`, `array_mut @`; `iter`
+   takes three.
    Their lifetime argument is also an atom.
 
 For example, `S -o F (A + S) & F 1` is `S -o ((F (A + S)) & (F 1))`, and `imm 'a Nat * Nat`
@@ -123,6 +124,7 @@ parsing.
 | `view @b A` | `Imm̲ @b A` | `VTy.immReborrow`, `Ty:1064` |
 | `array A` | `[ref A]`: the owned array, the family of its cells | `VTy.fam`, SPEC §9 |
 | `array_imm @a A` | `[imm @a A]`: the family of an array's leaf views | `VTy.fam`, SPEC §9 |
+| `array_mut @a A` | `[mut @a A]`: the family of an array's `mut` leaf borrows | `VTy.fam`, SPEC §9 |
 | `delay A` | `nu X. F (A + U X) & F 1` | `CTy.delay`, `Ty:1042` |
 | `stream A` | `nu X. F (A * U X) & F 1` | `CTy.stream`, `Ty:1045` |
 | `iter A R R'` | `nu X. F (A * U X + R) & F R'` | `CTy.iter`, `Ty:1049` |
@@ -409,6 +411,13 @@ Integer literals and operations are constants (`SPEC.md` §8, `Core/Integers.lea
 - **Results:** tests return `1 + 1` with `inr ()` as true, and partial operations return
   `i32 + 1` with `inr ()` where Wasm traps.
 - `i32`/`i64` are persistent (section 7), so integer variables are reused and dropped freely.
+- **Bytes:** the type `u8`, the literal `u8[n]` (read modulo 2^8) and the byte literal `b'c'`
+  (a printable ASCII character, or `b'\n'`, `b'\t'`, `b'\r'`, `b'\0'`, `b'\\'`, `b'\''`), which
+  the lexer reads as `u8[n]`. The byte's operations are its conversions, `host[wrap8]`
+  (`i32 => u8`, the low 8 bits) and `host[extend8_u]` (`u8 => i32`); the grouped names at
+  `8` (`add8`, …) take `0`. At the surface an operator at `u8` widens its operands and works at
+  `i32`, narrowing an arithmetic result back; the prelude's `to_i32` and `to_u8` are the
+  conversions.
 <!-- ANCHOR_END: integers -->
 
 ## 8b. Arrays
@@ -438,7 +447,34 @@ dead context, typed at `!(A => B)` like a host operation, so a call is `(unbang 
   `array_imm @a A` is forgettable (`array_forget`), so both are dropped implicitly (SPEC §12).
 - The erasures: `array_new`, `array_get`, `array_free` are the primitives `tab`, `idx`, `drop`;
   the others are closed λ-terms (`arrLenV`, `sizeV`, `replaceV`, `copyV`, `forgetV`).
+
+The slice borrows (`SPEC.md` §9, `Core/Slices.lean`): an owned array lent as a family of leaf
+borrows, with no cell. The two borrows are curried, as `withbor2` is; the element operations are
+typed at `!(A => B)`:
+
+| constant | type | rule |
+|---|---|---|
+| `slice_borrow_mut['x, @b, A, B]` | `array A -o (all 'x < dom. array_mut 'x A -o F (box 'x B)) -o F (array A * B)` | `sliceBorrowM` |
+| `slice_borrow_imm['x, @b, A, B]` | `array A -o (all 'x < dom. array_imm 'x A -o F (box 'x B)) -o F (array A * B)` | `sliceBorrowI` |
+| `slice_get_mut[@a, A]` | `!(array_mut @a A * i32 => mut @a A + 1)` | `sliceGetM` |
+| `slice_len_mut[@a, A]` | `!(array_mut @a A => array_mut @a A * i32)` | `sliceLenM` |
+
+- `A` and `B` must outlive `@b`, a lifetime defined here (`top` at a closed `main`); at
+  `imm`, `A` must be scoped. The erasure of both borrows is `withbor`'s term.
+- `slice_get_mut` forgets the rest of the family; `slice_len_mut` hands it back.
+- `borrow imm a { 'x, v -> S }` / `borrow mut a { 'x, v -> S }` on an array `a` are these
+  borrows at `@b = top` (draft 0's borrow blocks).
 <!-- ANCHOR_END: arrays -->
+
+## 8c. Counted loops
+
+<!-- ANCHOR: counted -->
+`count_fold[S] : !(!(i32 * S => S) * (i32 * (i32 * S)) => S)` (`SPEC.md` §16, rule
+`countFold`, erasure the primitive `count`): `(unbang count_fold[S]) (f, (n, (i, s)))` runs `f`
+at `i, …, n − 1`, threading the state, and answers the last state. A negative `n` is the empty
+loop, as a negative array length is. At the surface it is called as any constant:
+`count_fold[i32] (step, n, 0, acc)`.
+<!-- ANCHOR_END: counted -->
 
 ## 9. Derived forms
 

@@ -46,6 +46,7 @@ def VTy.respan (sp : Span) : VTy → VTy
   | .view _ a A => .view sp (a.respan sp) (A.respan sp)
   | .array _ A => .array sp (A.respan sp)
   | .arrayImm _ a A => .arrayImm sp (a.respan sp) (A.respan sp)
+  | .arrayMut _ a A => .arrayMut sp (a.respan sp) (A.respan sp)
 
 def CTy.respan (sp : Span) : CTy → CTy
   | .ret _ A => .ret sp (A.respan sp)
@@ -104,6 +105,13 @@ def Const.respan (sp : Span) : Const → Const
   | .arrayGet a A => .arrayGet (a.respan sp) (A.respan sp)
   | .arrayCopy a A => .arrayCopy (a.respan sp) (A.respan sp)
   | .arrayForget a A => .arrayForget (a.respan sp) (A.respan sp)
+  | .sliceBorrowMut x b A B =>
+      .sliceBorrowMut (x.respan sp) (b.respan sp) (A.respan sp) (B.respan sp)
+  | .sliceBorrowImm x b A B =>
+      .sliceBorrowImm (x.respan sp) (b.respan sp) (A.respan sp) (B.respan sp)
+  | .sliceGetMut a A => .sliceGetMut (a.respan sp) (A.respan sp)
+  | .sliceLenMut a A => .sliceLenMut (a.respan sp) (A.respan sp)
+  | .countFold S => .countFold (S.respan sp)
 
 mutual
 def Val.respan (sp : Span) : Val → Val

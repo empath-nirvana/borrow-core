@@ -293,6 +293,11 @@ locations.
 
 `tab` places `len(c)` cells at fresh consecutive locations and continues as `tabFill`; `idx`
 answers `idxAns`; `drop` continues as `dropFill` (`Support/Dynamics/Arrays.lean`).
+
+### — no printed counterpart — the counted loop · `[spec §16]`
+
+`count (f, (n, (i, s)))` continues as `countNext`: `f (i, s)` and `count` from `i + 1` while
+`i < len(n)`, else `s`.
 -/
 /-- The head reductions of `[TR]` p. 4's `↦` box: `TR3.Head` under other names, the host
     step of `SPEC.md` §8, and the array steps of §9. -/
@@ -333,6 +338,10 @@ inductive Head {ℍ : Host} [HostIs ℍ] : Heap → Expr → Heap → Expr → P
   /-- `(μ, drop (f, (ℓ, n))) ↦ (μ, dropFill f ℓ 0 n)`.  `[spec §9]` -/
   | drop (μ : Heap) (f : Val) (ℓ : Loc) (n : UInt32) :
       Head μ (.app (.val (.prim .drop)) (.val (.pair f (.arr ℓ n)))) μ (dropFill f ℓ 0 n.toNat)
+  /-- `(μ, count (f, (n, (i, s)))) ↦ (μ, countNext f n i s)`.  `[spec §16]` -/
+  | count (μ : Heap) (f : Val) (n i : UInt32) (s : Val) :
+      Head μ (.app (.val (.prim .count)) (.val (.pair f (.pair (.i32 n) (.pair (.i32 i) s))))) μ
+        (countNext f n i s)
 
 /-!
 Rows 3.11, 3.12, continued.

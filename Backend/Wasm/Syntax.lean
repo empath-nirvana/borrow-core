@@ -22,6 +22,9 @@ inductive Instr where
   /-- `i64.load offset=off`, at an `i32` address. -/
   | i64Load (off : Nat)
   | i64Store (off : Nat)
+  /-- `i64.load8_u` and `i64.store8`: a byte slot. -/
+  | i64Load8U
+  | i64Store8
   | num (o : HostOp)
   | call (f : String)
   | returnCall (f : String)

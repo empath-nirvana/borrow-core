@@ -1,0 +1,38 @@
+-- Bytes (SPEC §8, `u8`): an array of the 26 lower-case letters, upper-cased in place, then read
+-- back. `b'a'` is the byte literal `u8[97]`; an operator at `u8` widens its operands and works
+-- at `i32`, and an arithmetic result is narrowed back (`c - 32`); `to_u8` and `to_i32` are the
+-- conversions (`wrap8`, `extend8_u`). The array is built by `array_new[u8]`, upper-cased by a
+-- counted loop that lends it `mut` one leaf at a time (SPEC §16, §9), and read by a counted loop
+-- over `imm` leaves, which folds every byte into a checksum.
+--
+-- Answer: (u8[65], (u8[90], (i32[218640813], u8[97]))): the first and last letters, now `A`
+-- and `Z`; the checksum `acc * 31 + b` over `ABC…Z`, modulo 2³²; and `to_u8(353)`, the low byte
+-- 97. A byte not upper-cased shows as 97 or 122 and changes the checksum; a narrowing that kept
+-- more than 8 bits would print 353.
+
+fn letter(i: i32) -> u8 = to_u8(i + 97)
+
+fn upper(c: u8) -> u8 = if b'a' <= c && c <= b'z' { c - 32 } else { c }
+
+fn up_at(i: i32, a: array u8) -> array u8 =
+  borrow mut a { 'x, v ->
+    match slice_get_mut['x, u8] (v, i) { inl m -> modify m { c -> upper(c) } | inr _ -> () }
+  };
+  a
+
+fn byte_at(a: array u8, i: i32) -> array u8 * u8 =
+  let b = borrow imm a { 'x, v -> match array_get['x, u8] (v, i) { inl g -> *g | inr _ -> b'?' } };
+  (a, b)
+
+fn mix(i: i32, s: array u8 * i32) -> array u8 * i32 =
+  let (a, acc) = s;
+  let (a, b) = byte_at(a, i);
+  (a, acc * 31 + to_i32(b))
+
+main -> u8 * (u8 * (i32 * u8)) =
+  let a = array_new[u8] (26, letter);
+  let a = count_fold[array u8] (up_at, 26, 0, a);
+  let (a, first) = byte_at(a, 0);
+  let (a, last) = byte_at(a, 25);
+  let (_, sum) = count_fold[array u8 * i32] (mix, 26, 0, (a, 0));
+  (first, last, sum, to_u8(353))

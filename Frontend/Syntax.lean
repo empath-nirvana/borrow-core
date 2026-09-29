@@ -110,6 +110,8 @@ inductive VTy where
   | array (sp : Span) (A : VTy)
   /-- `array_imm @ A`: the family of leaf views of an array (SPEC §9). -/
   | arrayImm (sp : Span) (a : Life) (A : VTy)
+  /-- `array_mut @ A`: the family of `mut` leaf borrows of an array (SPEC §9). -/
+  | arrayMut (sp : Span) (a : Life) (A : VTy)
 
 /-- Computation types (syntax-core §4). -/
 inductive CTy where
@@ -209,6 +211,15 @@ inductive Const where
   | arrayGet (a : Life) (A : VTy)
   | arrayCopy (a : Life) (A : VTy)
   | arrayForget (a : Life) (A : VTy)
+  /-- The slice borrows of SPEC §9: `slice_borrow_mut['x, @b, A, B]`,
+      `slice_borrow_imm['x, @b, A, B]`, and on a `mut` family `slice_get_mut[@, A]`,
+      `slice_len_mut[@, A]`. -/
+  | sliceBorrowMut (x : Ident) (b : Life) (A B : VTy)
+  | sliceBorrowImm (x : Ident) (b : Life) (A B : VTy)
+  | sliceGetMut (a : Life) (A : VTy)
+  | sliceLenMut (a : Life) (A : VTy)
+  /-- `count_fold[S]`: the counted loop of SPEC §16. -/
+  | countFold (S : VTy)
   deriving DecidableEq, Repr
 
 /-- A binary operator of the surface (draft 0 §2.12), resolved by the width of its operands. -/
@@ -418,6 +429,7 @@ def VTy.strip : VTy → VTy
   | .view _ a A => .view .none a.strip A.strip
   | .array _ A => .array .none A.strip
   | .arrayImm _ a A => .arrayImm .none a.strip A.strip
+  | .arrayMut _ a A => .arrayMut .none a.strip A.strip
 
 def CTy.strip : CTy → CTy
   | .ret _ A => .ret .none A.strip
@@ -476,6 +488,11 @@ def Const.strip : Const → Const
   | .arrayGet a A => .arrayGet a.strip A.strip
   | .arrayCopy a A => .arrayCopy a.strip A.strip
   | .arrayForget a A => .arrayForget a.strip A.strip
+  | .sliceBorrowMut x b A B => .sliceBorrowMut x.strip b.strip A.strip B.strip
+  | .sliceBorrowImm x b A B => .sliceBorrowImm x.strip b.strip A.strip B.strip
+  | .sliceGetMut a A => .sliceGetMut a.strip A.strip
+  | .sliceLenMut a A => .sliceLenMut a.strip A.strip
+  | .countFold S => .countFold S.strip
 
 mutual
 def Val.strip : Val → Val
@@ -561,7 +578,7 @@ def VTy.span : VTy → Span
   | .unit sp | .zero sp | .tensor sp _ _ | .sum sp _ _ | .thunk sp _ | .ref sp _ | .imm sp _ _
   | .mut sp _ _ | .box sp _ _ | .bang sp _ | .unk sp | .int sp _ | .handle sp _ | .mu sp _ _ | .name sp _
   | .lolli sp _ _ | .all sp _ _ _ | .block sp _ | .val sp _ | .fam sp _ _ _ | .view sp _ _
-  | .array sp _ | .arrayImm sp _ _ => sp
+  | .array sp _ | .arrayImm sp _ _ | .arrayMut sp _ _ => sp
 
 def CTy.span : CTy → Span
   | .ret sp _ | .arr sp _ _ | .amp sp _ _ | .top sp | .all sp _ _ _ | .nu sp _ _ | .name sp _

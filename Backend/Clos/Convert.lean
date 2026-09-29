@@ -112,6 +112,7 @@ def Op.ofPrim? : Prim → Option Op
   | .tab => some .tab
   | .idx => some .idx
   | .drop => some .drop
+  | .count => some .count
   | .store => none
   | .lit _ => none
 

@@ -1,0 +1,15 @@
+-- A total counted loop (SPEC §16): `count_fold[S] (f, n, i, s)` runs `f` at `i, …, n − 1`,
+-- threading the state `s`, and answers the last state. The counter is the machine's, so the
+-- loop is total at every host and allocates nothing: `sum_squares` is `total`, and no unary
+-- count is built. A loop from 3 runs the step at 3 … 9; a negative bound is the empty loop.
+--
+-- Answer: (i32[285], (i32[280], i32[7])): 0 + 1 + 4 + … + 81; the same from 3, which skips
+-- 0 + 1 + 4 = 5; and a bound of -1, which runs nothing and answers the initial state 7. A loop
+-- that ran to n inclusive gives 385; one that ran a negative bound as unsigned would not end.
+
+fn sq(i: i32, acc: i32) -> i32 = acc + i * i
+
+total fn sum_squares(n: i32) -> i32 = count_fold[i32] (sq, n, 0, 0)
+
+main -> i32 * (i32 * i32) =
+  (sum_squares(10), count_fold[i32] (sq, 10, 3, 0), count_fold[i32] (sq, 0 - 1, 0, 7))

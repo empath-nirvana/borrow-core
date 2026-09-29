@@ -58,6 +58,7 @@ inductive RTy where
   | view (sp : Span) (a : Life) (A : RTy)
   | array (sp : Span) (A : RTy)
   | arrayImm (sp : Span) (a : Life) (A : RTy)
+  | arrayMut (sp : Span) (a : Life) (A : RTy)
   | nu (sp : Span) (X : Ident) (C : RTy)
   | delay (sp : Span) (A : RTy)
   | stream (sp : Span) (A : RTy)
@@ -70,7 +71,8 @@ def RTy.span : RTy → Span
   | .imm sp _ _ | .mut sp _ _ | .box sp _ _ | .bang sp _ | .unk sp | .int sp _ | .handle sp _ | .mu sp _ _
   | .name sp _ | .lolli sp _ _ | .arr sp _ _ | .all sp _ _ _ | .forall_ sp _ _ _ | .amp sp _ _
   | .top sp | .block sp _ | .val sp _ | .fam sp _ _ _ | .view sp _ _ | .nu sp _ _ | .delay sp _
-  | .stream sp _ | .iter sp _ _ _ | .loop sp _ _ | .gen sp _ _ _ | .array sp _ | .arrayImm sp _ _ => sp
+  | .stream sp _ | .iter sp _ _ _ | .loop sp _ _ | .gen sp _ _ _ | .array sp _ | .arrayImm sp _ _
+  | .arrayMut sp _ _ => sp
 
 /-- What a raw type is, for sort errors. -/
 def RTy.former : RTy → String
@@ -113,6 +115,7 @@ def RTy.toV : RTy → Except Error VTy
   | .view sp a A => return .view sp a (← A.toV)
   | .array sp A => return .array sp (← A.toV)
   | .arrayImm sp a A => return .arrayImm sp a (← A.toV)
+  | .arrayMut sp a A => return .arrayMut sp a (← A.toV)
   | t@(.F ..) | t@(.arr ..) | t@(.forall_ ..) | t@(.amp ..) | t@(.top ..) | t@(.nu ..)
   | t@(.delay ..) | t@(.stream ..) | t@(.iter ..) | t@(.loop ..) | t@(.gen ..) => sortErr t true
 
@@ -378,6 +381,7 @@ def rtyPrefix : Nat → P RTy
     | .kw "ref" => unary .ref
     | .kw "array" => unary .array
     | .kw "array_imm" => withLife .arrayImm
+    | .kw "array_mut" => withLife .arrayMut
     | .sym "!" => unary .bang
     | .kw "delay" => unary .delay
     | .kw "stream" | .kw "str" => unary .stream
@@ -420,7 +424,7 @@ def rtyPrefix : Nat → P RTy
       pure (.fam (← spanFrom st) m a σ)
     | _ => rtyAtom n
 
-/-- `1`, `0`, `unk`, `i32`, `i64`, `input`, `output`, `top`, a name, or a parenthesized type. -/
+/-- `1`, `0`, `unk`, `i32`, `i64`, `u8`, `input`, `output`, `top`, a name, or a parenthesized type. -/
 def rtyAtom : Nat → P RTy
   | 0 => outOfFuel
   | n + 1 => do
@@ -431,6 +435,7 @@ def rtyAtom : Nat → P RTy
     | .kw "unk" => discard bump; pure (.unk t.span)
     | .kw "i32" => discard bump; pure (.int t.span .w32)
     | .kw "i64" => discard bump; pure (.int t.span .w64)
+    | .kw "u8" => discard bump; pure (.int t.span .w8)
     | .kw "input" => discard bump; pure (.handle t.span false)
     | .kw "output" => discard bump; pure (.handle t.span true)
     | .kw "top" => discard bump; pure (.top t.span)

@@ -1,0 +1,31 @@
+-- An owned array lent as a family of `mut` leaf borrows, with no cell (SPEC §9,
+-- `slice_borrow_mut`). `borrow mut a { 'x, v -> … }` on an array lends `array_mut 'x i32`;
+-- `slice_get_mut` takes the leaf at an index (the rest of the family is forgotten: a `mut`
+-- leaf holds no cell of its own), and `modify` writes through it. Each lend hands the array
+-- back. `slice_len_mut` reads the length and hands the family back.
+--
+-- Answer: (i32[5], i32[30]): the length, and the element at index 2 of [1, 2, 3, 4, 5] after it
+-- is multiplied by 10. A write through the wrong leaf gives 3; an out-of-range index would take
+-- the error branch and leave the element unchanged.
+
+fn tab(i: i32) -> i32 = i + 1
+
+-- The element at `i` read by taking it out of its slot and putting it back.
+fn read_at(a: array i32, i: i32) -> array i32 * i32 =
+  let (a, o) = array_replace[i32] (a, i, 0);
+  match o {
+    inl x -> let (a, _) = array_replace[i32] (a, i, x); (a, x)
+  | inr _ -> (a, 0)
+  }
+
+main -> i32 * i32 =
+  let mut a = array_new[i32] (5, tab);
+  borrow mut a { 'x, v ->
+    match slice_get_mut['x, i32] (v, 2) {
+      inl m -> modify m { c -> c * 10 }
+    | inr _ -> ()
+    }
+  };
+  let n = borrow mut a { 'x, v -> let (v, n) = slice_len_mut['x, i32] v; slice_get_mut['x, i32] (v, 9); n };
+  let (a, x) = read_at(a, 2);
+  (n, x)

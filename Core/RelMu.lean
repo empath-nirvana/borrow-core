@@ -388,7 +388,7 @@ def vF (S : Bool → VTy → List SRec → Val → WProp) (δ : LSub) :
   | _, .bang A, ls, v => fun ρ => ρ = PMap.empty ∧ S true A ls v ρ
   | b, .box a A, ls, v => atLife δ a fun α => box α (S b A ls v)
   | b, .ref A, ls, v => ex fun ℓ => ex fun v' => ⌜v = .loc ℓ⌝ ⋆ ptoOwn ℓ v' ⋆ S b A ls v'
-  | b, .fam L, ls, v => ex fun ℓ => ex fun c => ⌜v = Val.arr ℓ c⌝ ⋆
+  | b, .fam L, ls, v => ex fun ℓ => ex fun c => ⌜v = Val.arr ℓ c ∧ c.toNat < 2 ^ 31⌝ ⋆
       sepRange (fun m => S b L ls (.loc m)) ℓ c.toNat
   | _, .imm a A, ls, v => atLife δ a fun α => ex fun ℓ => ⌜v = .loc ℓ ∧ CohE (rsOf ls) ℓ A δ⌝ ⋆
       ptoImmS ℓ α ls (fun ls₀ => S false A ls₀)

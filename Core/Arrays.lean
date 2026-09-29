@@ -55,17 +55,31 @@ abbrev VTy.arrayImm (a : Lifetime.Life) (A : VTy) : VTy := .fam (.imm a A)
 
 theorem vP_fam_iff {L : VTy} {ls : List SRec} {δ : LSub} {v : Val} {ρ : WRes} :
     vP (.fam L) ls δ v ρ ↔
-      ∃ ℓ n, v = Val.arr ℓ n ∧ sepRange (fun m => vP L ls δ (.loc m)) ℓ n.toNat ρ := by
+      ∃ ℓ n, v = Val.arr ℓ n ∧ n.toNat < 2 ^ 31 ∧
+        sepRange (fun m => vP L ls δ (.loc m)) ℓ n.toNat ρ := by
   constructor
   · rintro ⟨ℓ, n, hs⟩
-    obtain ⟨he, hs⟩ := pure_sep_iff.mp hs
-    exact ⟨ℓ, n, he, hs⟩
-  · rintro ⟨ℓ, n, he, hs⟩
-    exact ⟨ℓ, n, pure_sep_mk he hs⟩
+    obtain ⟨⟨he, hn⟩, hs⟩ := pure_sep_iff.mp hs
+    exact ⟨ℓ, n, he, hn, hs⟩
+  · rintro ⟨ℓ, n, he, hn, hs⟩
+    exact ⟨ℓ, n, pure_sep_mk ⟨he, hn⟩ hs⟩
 
 theorem vP_fam_mk {L : VTy} {ls : List SRec} {δ : LSub} {ℓ : Loc} {n : UInt32} {ρ : WRes}
-    (hs : sepRange (fun m => vP L ls δ (.loc m)) ℓ n.toNat ρ) : vP (.fam L) ls δ (Val.arr ℓ n) ρ :=
-  vP_fam_iff.mpr ⟨ℓ, n, rfl, hs⟩
+    (hn : n.toNat < 2 ^ 31) (hs : sepRange (fun m => vP L ls δ (.loc m)) ℓ n.toNat ρ) :
+    vP (.fam L) ls δ (Val.arr ℓ n) ρ :=
+  vP_fam_iff.mpr ⟨ℓ, n, rfl, hn, hs⟩
+
+/-- A family in the relation has `tab`'s length: `arrLen n = n`.  `[spec §9]` -/
+theorem arrLen_of_bound {n : UInt32} (hn : n.toNat < 2 ^ 31) : arrLen n = n := by
+  unfold arrLen
+  rw [if_pos (UInt32.lt_iff_toNat_lt.mpr (by simpa using hn))]
+
+/-- `tab`'s length is below `2³¹`. -/
+theorem arrLen_bound (c : UInt32) : (arrLen c).toNat < 2 ^ 31 := by
+  unfold arrLen
+  split
+  · rename_i h; have := UInt32.lt_iff_toNat_lt.mp h; simpa using this
+  · simp
 
 /-- A leaf borrow holds no `own` cell. -/
 theorem noOwn_imm {a : Lifetime.Life} {A : VTy} {ls : List SRec} {δ : LSub} {v : Val} {ρ : WRes}
@@ -78,7 +92,7 @@ theorem noOwn_imm {a : Lifetime.Life} {A : VTy} {ls : List SRec} {δ : LSub} {v 
 theorem noOwn_fam {L : VTy} {ls : List SRec} {δ : LSub}
     (hL : ∀ m ρ, vP L ls δ (.loc m) ρ → NoOwn ρ) {v : Val} {ρ : WRes}
     (h : vP (.fam L) ls δ v ρ) : NoOwn ρ := by
-  obtain ⟨ℓ, n, -, hs⟩ := vP_fam_iff.mp h
+  obtain ⟨ℓ, n, -, -, hs⟩ := vP_fam_iff.mp h
   exact sepRange_closed noOwn_empty (fun _ _ _ hc h₁ h₂ => noOwn_compS hc h₁ h₂) hL hs
 
 theorem noOwn_arrayImm {a : Lifetime.Life} {A : VTy} {ls : List SRec} {δ : LSub} {v : Val}
@@ -121,7 +135,7 @@ theorem arrLen_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {A : VT
   refine sem_const hΓ rfl fun δ ls _ => ⟨rfl, ?_⟩
   intro ls' _ v σ τ hv hcomp
   rw [eq_of_compS_empty_left hcomp]
-  obtain ⟨ℓ, n, rfl, -⟩ := vP_fam_iff.mp hv
+  obtain ⟨ℓ, n, rfl, -, -⟩ := vP_fam_iff.mp hv
   refine wpTS_drop (noOwn_arrayImm hv) (ResU.comp_empty_right σ) ?_
   refine wpTS_lolli ls' _ _ _ _ ?_
   show wpTS ls' (.letpair (.val (Val.arr ℓ n)) (.var 0)) _ _
@@ -137,14 +151,14 @@ abbrev arrGetTy (a : Lifetime.Life) (A : VTy) : VTy :=
 /-- The argument of an operation on a family and an index. -/
 theorem vP_fam_idx {L : VTy} {ls : List SRec} {δ : LSub} {v : Val} {ρ : WRes}
     (h : vP (.tensor (.fam L) (.int .w32)) ls δ v ρ) :
-    ∃ ℓ n i, v = Val.pair (Val.arr ℓ n) (Val.i32 i) ∧
+    ∃ ℓ n i, v = Val.pair (Val.arr ℓ n) (Val.i32 i) ∧ n.toNat < 2 ^ 31 ∧
       sepRange (fun m => vP L ls δ (.loc m)) ℓ n.toNat ρ := by
   obtain ⟨v₁, v₂, hk⟩ := h
   obtain ⟨rfl, ρ₁, ρ₂, hc, h₁, ⟨e₂, i, rfl⟩⟩ := pure_sep_iff.mp hk
   subst e₂
-  obtain ⟨ℓ, n, rfl, hs⟩ := vP_fam_iff.mp h₁
+  obtain ⟨ℓ, n, rfl, hn, hs⟩ := vP_fam_iff.mp h₁
   rw [ResU.CompS.functional hc (ResU.comp_empty_right ρ₁)]
-  exact ⟨ℓ, n, i, rfl, hs⟩
+  exact ⟨ℓ, n, i, rfl, hn, hs⟩
 
 /-- The leaf `idx` answers: in range, the leaf at `ℓ + i` beside the rest of the family;
 otherwise nothing. -/
@@ -160,7 +174,7 @@ theorem arrGet_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {A : VT
   refine sem_const hΓ rfl fun δ ls _ => ⟨rfl, ?_⟩
   intro ls' _ v σ τ hv hcomp
   rw [eq_of_compS_empty_left hcomp]
-  obtain ⟨ℓ, n, i, rfl, hs⟩ := vP_fam_idx hv
+  obtain ⟨ℓ, n, i, rfl, -, hs⟩ := vP_fam_idx hv
   refine wpTS_head (fun μ => Head.idx μ ℓ n i) rfl ls' _ σ ?_
   rcases idxAns_cases ℓ n i with ⟨hi, he⟩ | he
   · rw [he]
@@ -213,12 +227,12 @@ theorem arrCopy_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {a : Lifetime.Life} {A : V
   refine sem_const hΓ rfl fun δ ls _ => ⟨rfl, ?_⟩
   intro ls' _ v σ τ hv hcomp
   rw [eq_of_compS_empty_left hcomp]
-  obtain ⟨ℓ, n, rfl, hs⟩ := vP_fam_iff.mp hv
+  obtain ⟨ℓ, n, rfl, hn, hs⟩ := vP_fam_iff.mp hv
   refine wpTS_lolli ls' _ _ _ _ ?_
   show wpTS ls' (.pair (.val (Val.arr ℓ n)) (.val (Val.arr ℓ n))) _ _
   refine wpTS_val ls' (Val.pair (Val.arr ℓ n) (Val.arr ℓ n)) _ _ ?_
   obtain ⟨τ₁, τ₂, hc, h₁, h₂⟩ := sepRange_dup (fun _ _ h => vP_imm_dup h) hs
-  exact ⟨_, _, pure_sep_mk rfl ⟨τ₁, τ₂, hc, vP_fam_mk h₁, vP_fam_mk h₂⟩⟩
+  exact ⟨_, _, pure_sep_mk rfl ⟨τ₁, τ₂, hc, vP_fam_mk hn h₁, vP_fam_mk hn h₂⟩⟩
 
 /-- `array_forget : !(ArrayImm @a A ⇒ 1)`.  `[spec §9]` -/
 abbrev arrForgetTy (a : Lifetime.Life) (A : VTy) : VTy := .bang (.lolli (.arrayImm a A) .unit)
@@ -254,12 +268,12 @@ theorem arrSize_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {A : VTy} (hΓ : Ctx.DeadP
   refine sem_const hΓ rfl fun δ ls _ => ⟨rfl, ?_⟩
   intro ls' _ v σ τ hv hcomp
   rw [eq_of_compS_empty_left hcomp]
-  obtain ⟨ℓ, n, rfl, hs⟩ := vP_fam_iff.mp hv
+  obtain ⟨ℓ, n, rfl, hn, hs⟩ := vP_fam_iff.mp hv
   refine wpTS_lolli ls' _ _ _ _ ?_
   show wpTS ls' (.letpair (.val (Val.arr ℓ n)) (.pair (.pair (.var 1) (.var 0)) (.var 0))) _ _
   refine wpTS_tensor ls' (Val.loc ℓ) (Val.i32 n) _ _ _ ?_
   refine wpTS_val ls' (Val.pair (Val.arr ℓ n) (Val.i32 n)) _ _ ?_
-  exact ⟨_, _, pure_sep_mk rfl ⟨σ, PMap.empty, ResU.comp_empty_right σ, vP_fam_mk hs,
+  exact ⟨_, _, pure_sep_mk rfl ⟨σ, PMap.empty, ResU.comp_empty_right σ, vP_fam_mk hn hs,
     vP_i32 n⟩⟩
 
 /-! ### `array_replace` -/
@@ -360,7 +374,7 @@ theorem arrReplace_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {A : VTy}
   rw [eq_of_compS_empty_left hcomp]
   obtain ⟨v₁, v₂, hk⟩ := hv
   obtain ⟨rfl, σ₁, σ₂, hc, h₁, h₂⟩ := pure_sep_iff.mp hk
-  obtain ⟨ℓ, n, rfl, hs⟩ := vP_fam_iff.mp h₁
+  obtain ⟨ℓ, n, rfl, hn, hs⟩ := vP_fam_iff.mp h₁
   obtain ⟨w₁, x, hk₂⟩ := h₂
   obtain ⟨rfl, ρ₀, σx, hc₂, ⟨e₀, i, rfl⟩, hx⟩ := pure_sep_iff.mp hk₂
   subst e₀
@@ -407,14 +421,14 @@ theorem arrReplace_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {A : VTy}
     obtain ⟨X, hX, hp₃'⟩ := compS_exch (ResU.CompS.comm hG) hp₃
     obtain ⟨L, hL, hXL⟩ := compS_reassoc hF hX
     exact ⟨_, _, pure_sep_mk rfl ⟨X, ρold, hp₃',
-      vP_fam_mk (hback L X (ResU.CompS.comm hXL)
+      vP_fam_mk hn (hback L X (ResU.CompS.comm hXL)
         ⟨_, x, pure_sep_mk rfl ⟨c₃, σx, ResU.CompS.comm hL, hc₃, hx⟩⟩),
       Or.inl ⟨old, pure_sep_mk rfl hold⟩⟩⟩
   · rw [he]
     refine wpTS_sum₂ ls' _ _ _ _ σ ?_
     rw [replace_out]
     exact wpTS_val ls' _ _ σ ⟨_, _, pure_sep_mk rfl
-      ⟨σ₁, σx, hc, vP_fam_mk hs, Or.inr ⟨x, pure_sep_mk rfl hx⟩⟩⟩
+      ⟨σ₁, σx, hc, vP_fam_mk hn hs, Or.inr ⟨x, pure_sep_mk rfl hx⟩⟩⟩
 
 /-! ### `array_new` -/
 
@@ -444,14 +458,14 @@ theorem doneP_same {A : VTy} {ls ls' : List SRec} {δ : LSub} (hls : ∀ x, x �
 /-- **The fill.**  With the cells `ℓ, …, ℓ + i − 1` filled and `ℓ + i, …, ℓ + i + k − 1` holding
 `()`, the rest of `tabFill` runs to the array.  `[spec §9]` -/
 theorem tabFill_wp {A : VTy} {δ : LSub} {ls₀ : List SRec} (f : Val) (ℓ : Loc) (N : UInt32)
-    (hf : vP (.bang (.lolli (.int .w32) A)) ls₀ δ f PMap.empty) :
+    (hN31 : N.toNat < 2 ^ 31) (hf : vP (.bang (.lolli (.int .w32) A)) ls₀ δ f PMap.empty) :
     ∀ (k i : Nat) (ls : List SRec) (ρd ρt ρ : WRes), (∀ x, x ∈ ls ↔ x ∈ ls₀) →
       i + k = N.toNat → sepRange (doneP A ls δ) ℓ i ρd → sepRange todoP (ℓ + i) k ρt →
       ResU.CompS ρd ρt ρ → wpTS ls (tabFill f ℓ N i k) (fun ls' => vP (.array A) ls' δ) ρ
   | 0, i, ls, ρd, ρt, ρ, _, hN, hd, ht, hc => by
       obtain ⟨rfl, -⟩ := ht
       rw [ResU.CompS.functional hc (ResU.comp_empty_right ρd)]
-      refine wpTS_val ls (Val.arr ℓ N) _ ρd (vP_fam_mk ?_)
+      refine wpTS_val ls (Val.arr ℓ N) _ ρd (vP_fam_mk hN31 ?_)
       rw [← hN]; exact hd
   | k + 1, i, ls, ρd, ρt, ρ, hls, hN, hd, ⟨c, ρt', hct, hcell, ht'⟩, hc => by
       show wpTS ls (.seq (.app (.app (.val (.prim .store)) (.val (.loc (ℓ + i))))
@@ -479,7 +493,7 @@ theorem tabFill_wp {A : VTy} {δ : LSub} {ls₀ : List SRec} (f : Val) (ℓ : Lo
         obtain ⟨D, hD, hσ₃''⟩ := compS_reassoc' hM hσ₃'
         have hleaf : doneP A ls' δ (ℓ + i) L :=
           ⟨ℓ + i, w, pure_sep_mk rfl ⟨c₃, σw, ResU.CompS.comm hL, hc₃, hw⟩⟩
-        refine tabFill_wp f ℓ N hf k (i + 1) ls' D σt σ₃ (fun x => (hls' x).trans (hls x))
+        refine tabFill_wp f ℓ N hN31 hf k (i + 1) ls' D σt σ₃ (fun x => (hls' x).trans (hls x))
           (by rw [← hN]; ring) (sepRange_append hD hd' ⟨L, PMap.empty, ResU.comp_empty_right L,
             hleaf, ⟨rfl, trivial⟩⟩) ?_ hσ₃''
         rwa [show ℓ + i + 1 = ℓ + (i + 1) by ring] at ht''
@@ -497,7 +511,7 @@ theorem arrNew_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {A : VTy} (hΓ : Ctx.DeadP 
   refine wpTS_tab ls' c f _ PMap.empty ?_
   intro ℓ cells x hcells hx
   rw [eq_of_compS_empty_left hx]
-  exact tabFill_wp f ℓ (arrLen c) hf (arrLen c).toNat 0 ls' PMap.empty cells cells
+  exact tabFill_wp f ℓ (arrLen c) (arrLen_bound c) hf (arrLen c).toNat 0 ls' PMap.empty cells cells
     (fun _ => Iff.rfl) (by simp) ⟨rfl, trivial⟩ (by simpa using hcells) (compS_empty_left cells)
 
 /-! ### `array_free` -/
@@ -554,7 +568,7 @@ theorem arrFree_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {A : VTy} (hΓ : Ctx.DeadP
   have e₁ : σ₁ = PMap.empty := hf.1
   subst e₁
   rw [eq_of_compS_empty_left hc]
-  obtain ⟨ℓ, n, rfl, hs⟩ := vP_fam_iff.mp h₂
+  obtain ⟨ℓ, n, rfl, hn, hs⟩ := vP_fam_iff.mp h₂
   refine wpTS_dropStep ls' f ℓ n _ σ₂ ?_
   exact dropFill_wp f ℓ hf n.toNat 0 ls' σ₂ (fun _ => Iff.rfl) (by simpa using hs)
 

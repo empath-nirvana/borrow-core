@@ -42,6 +42,8 @@ structure Host where
   extendS : UInt32 → UInt64
   extendU : UInt32 → UInt64
   extend32S : UInt64 → UInt64
+  wrap8   : UInt32 → UInt8
+  extend8U : UInt8 → UInt32
 
 /-- The machine runs at the host `ℍ`.  `[spec §8]` -/
 class HostIs (ℍ : outParam Host) : Prop where
@@ -55,13 +57,18 @@ def i32 (n : UInt32) : Val := ⟨.prim (.lit (.i32 n)), .prim⟩
 /-- `i64[n]` as a value.  `[spec §8]` -/
 def i64 (n : UInt64) : Val := ⟨.prim (.lit (.i64 n)), .prim⟩
 
-/-- `v` is a literal of width `w`: the values of `I32` and `I64`.  `[spec §8]` -/
+/-- `u8[n]` as a value.  `[spec §8]` -/
+def u8 (n : UInt8) : Val := ⟨.prim (.lit (.u8 n)), .prim⟩
+
+/-- `v` is a literal of width `w`: the values of `I32`, `I64` and `U8`.  `[spec §8]` -/
 def IsInt : Width → Val → Prop
   | .w32, v => ∃ n, v = .i32 n
   | .w64, v => ∃ n, v = .i64 n
+  | .w8, v => ∃ n, v = .u8 n
 
 theorem IsInt.val {w : Width} {v : Val} (h : v.IsInt w) : ∃ c, v.1 = .prim (.lit c) := by
   cases w <;> obtain ⟨n, rfl⟩ := h
+  · exact ⟨_, rfl⟩
   · exact ⟨_, rfl⟩
   · exact ⟨_, rfl⟩
 
@@ -92,6 +99,11 @@ def Expr.arg64? (e : Expr) : Option UInt64 :=
   | some (.i64 n) => some n
   | _ => none
 
+def Expr.arg8? (e : Expr) : Option UInt8 :=
+  match e.lit? with
+  | some (.u8 n) => some n
+  | _ => none
+
 /-- The operands of a binary operation: a pair of literals of one width.  `[spec §8]` -/
 def Expr.args32? : Expr → Option (UInt32 × UInt32)
   | .pair a b => do pure (← a.arg32?, ← b.arg32?)
@@ -102,7 +114,8 @@ def Expr.args64? : Expr → Option (UInt64 × UInt64)
   | _ => none
 
 /-- Apply a host operation to an argument value. `none` when the argument is not of the
-    operation's shape; a typed program never reaches that case.  `[spec §8]` -/
+    operation's shape; a typed program never reaches that case. The grouped operations at `w8`
+    have no argument shape: a byte has no arithmetic.  `[spec §8]` -/
 def Host.call (H : Host) : HostOp → Val → Option Val
   | .bin .w32 o, v => v.1.args32?.map fun (a, b) => .i32 (H.bin32 o a b)
   | .bin .w64 o, v => v.1.args64?.map fun (a, b) => .i64 (H.bin64 o a b)
@@ -118,6 +131,9 @@ def Host.call (H : Host) : HostOp → Val → Option Val
   | .extend_s,   v => v.1.arg32?.map fun a => .i64 (H.extendS a)
   | .extend_u,   v => v.1.arg32?.map fun a => .i64 (H.extendU a)
   | .extend32_s, v => v.1.arg64?.map fun a => .i64 (H.extend32S a)
+  | .wrap8,      v => v.1.arg32?.map fun a => .u8 (H.wrap8 a)
+  | .extend8_u,  v => v.1.arg8?.map fun a => .i32 (H.extend8U a)
+  | .bin .w8 _, _ | .div .w8 _, _ | .un .w8 _, _ | .eqz .w8, _ | .rel .w8 _, _ => none
 
 /-! ### Wasm's integer semantics -/
 
@@ -197,6 +213,8 @@ def wasmHost : Host where
   extendS a := .ofBitVec (a.toBitVec.signExtend 64)
   extendU a := .ofBitVec (a.toBitVec.zeroExtend 64)
   extend32S a := .ofBitVec ((a.toBitVec.truncate 32).signExtend 64)
+  wrap8 a := a.toUInt8
+  extend8U a := a.toUInt32
 
 /-! Spot checks of `wasmHost` against Wasm's reference results, by the kernel. -/
 
@@ -225,6 +243,8 @@ example : wasmHost.extendS 0xFFFFFFFF = 0xFFFFFFFFFFFFFFFF := by decide
 example : wasmHost.extendU 0xFFFFFFFF = 0xFFFFFFFF := by decide
 example : wasmHost.extend32S 0x80000000 = 0xFFFFFFFF80000000 := by decide
 example : wasmHost.bin64 .mul 0x100000000 0x100000000 = 0 := by decide
+example : wasmHost.wrap8 0x1234 = 0x34 := by decide
+example : wasmHost.extend8U 0xFF = 255 := by decide
 example : wasmHost.un64 .clz 1 = 63 := by decide
 
 end BoCa

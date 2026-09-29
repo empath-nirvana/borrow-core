@@ -17,6 +17,7 @@ inductive PV where
   | unit
   | i32 (n : UInt32)
   | i64 (n : UInt64)
+  | u8 (n : UInt8)
   | pair (a b : PV)
   | inj (right : Bool) (a : PV)
   | fn
@@ -36,6 +37,7 @@ def PV.render : PV → String
   | .unit => "()"
   | .i32 n => s!"i32[{n.toNat}]"
   | .i64 n => s!"i64[{n.toNat}]"
+  | .u8 n => s!"u8[{n.toNat}]"
   | .pair a b => "(" ++ PV.render a ++ ", " ++ PV.render b ++ ")"
   | .inj r a => PV.renderInj r a
   | .fn => "<fun>"

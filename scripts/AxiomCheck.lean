@@ -82,6 +82,29 @@ import Frontend.Check.Externs
 #print axioms BoCa.Fig16.LogRel.Core.reborrow_vShape
 #print axioms BoCa.Fig16.LogRel.Core.arrProg_runs
 #print axioms BoCa.Fig16.LogRel.Core.arrProg_eval
+-- SPEC §8: the byte
+#print axioms BoCa.Fig16.LogRel.Core.vP_u8
+-- SPEC §16: counted loops
+#print axioms BoCa.Fig16.LogRel.Core.wpTS_count
+#print axioms BoCa.Fig16.LogRel.Core.countLoop_wp
+#print axioms BoCa.Fig16.LogRel.Core.countFold_compatX
+-- SPEC §9: the length bound, and slice borrows
+#print axioms BoCa.Fig16.LogRel.Core.arrLen_of_bound
+#print axioms BoCa.Fig16.LogRel.Core.arrLen_bound
+#print axioms BoCa.Fig16.LogRel.Core.wpTS_M_frameList
+#print axioms BoCa.Fig16.LogRel.Core.wpTS_M_frameFam
+#print axioms BoCa.Fig16.LogRel.Core.wpTS_I_frameList
+#print axioms BoCa.Fig16.LogRel.Core.wpTS_I_frameFam
+#print axioms BoCa.Fig16.LogRel.Core.vP_fam_split
+#print axioms BoCa.Fig16.LogRel.Core.vP_fam_join
+#print axioms BoCa.Fig16.LogRel.Core.sepList_partition
+#print axioms BoCa.Fig16.LogRel.Core.sliceBorrowM_compatX
+#print axioms BoCa.Fig16.LogRel.Core.sliceBorrowI_compatX
+#print axioms BoCa.Fig16.LogRel.Core.noOwn_mut
+#print axioms BoCa.Fig16.LogRel.Core.famGet_compatX
+#print axioms BoCa.Fig16.LogRel.Core.famSize_compatX
+#print axioms BoCa.Fig16.LogRel.Core.sliceGetM_compatX
+#print axioms BoCa.Fig16.LogRel.Core.sliceLenM_compatX
 -- SPEC §11: externs and standard I/O
 #print axioms BoCa.Fig16.LogRel.Core.vC_bytes
 #print axioms BoCa.Fig16.LogRel.Core.vC_outRep

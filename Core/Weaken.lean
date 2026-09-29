@@ -112,6 +112,12 @@ theorem CDerives.append_dead (h' : Ctx.Dead Γ') {Δ : LifeCtx} {Γ : Ctx VTy} {
   | arrGet a A hΓ => exact .arrGet a A (deadP_append h' hΓ)
   | arrCopy a A hΓ => exact .arrCopy a A (deadP_append h' hΓ)
   | arrForget a A hΓ => exact .arrForget a A (deadP_append h' hΓ)
+  | countFold S hΓ => exact .countFold S (deadP_append h' hΓ)
+  | sliceBorrowM x hΓ hA hB hf₁ hf₂ => exact .sliceBorrowM x (deadP_append h' hΓ) hA hB hf₁ hf₂
+  | sliceBorrowI x hΓ hsc hA hB hf₁ hf₂ =>
+      exact .sliceBorrowI x (deadP_append h' hΓ) hsc hA hB hf₁ hf₂
+  | sliceGetM a A hΓ => exact .sliceGetM a A (deadP_append h' hΓ)
+  | sliceLenM a A hΓ => exact .sliceLenM a A (deadP_append h' hΓ)
   | withbor1 x hΓ hx hsc hf₁ hf₂ => exact .withbor1 x (deadP_append h' hΓ) hx hsc hf₁ hf₂
   | withbor2 x hΓ hx hside hf₁ hf₂ => exact .withbor2 x (deadP_append h' hΓ) hx hside hf₁ hf₂
   | withbor3 x hΓ hx hf₁ hf₂ => exact .withbor3 x (deadP_append h' hΓ) hx hf₁ hf₂

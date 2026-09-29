@@ -38,7 +38,7 @@ def VTy.level : VTy → Nat
   | .sum .. => 2
   | .tensor .. => 3
   | .thunk .. | .ref .. | .imm .. | .mut .. | .box .. | .bang .. | .block .. | .val ..
-  | .fam .. | .view .. | .array .. | .arrayImm .. => 4
+  | .fam .. | .view .. | .array .. | .arrayImm .. | .arrayMut .. => 4
   | _ => 5
 
 def CTy.level : CTy → Nat
@@ -50,6 +50,7 @@ def CTy.level : CTy → Nat
 def widthName : BoCa.Width → String
   | .w32 => "i32"
   | .w64 => "i64"
+  | .w8 => "u8"
 
 /-- A printed shape as a shape atom: a name as it is, anything else parenthesized. -/
 def ppShapeAtom (σ : Shape) (printed : String) : String :=
@@ -83,6 +84,7 @@ def VTy.pp (A : VTy) (lvl : Nat := 0) : String :=
     | .view _ a A => "view " ++ a.pp 2 ++ " " ++ A.pp 4
     | .array _ A => "array " ++ A.pp 4
     | .arrayImm _ a A => "array_imm " ++ a.pp 2 ++ " " ++ A.pp 4
+    | .arrayMut _ a A => "array_mut " ++ a.pp 2 ++ " " ++ A.pp 4
 
 def CTy.pp (C : CTy) (lvl : Nat := 0) : String :=
   paren (C.level < lvl) <| match C with

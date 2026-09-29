@@ -16,3 +16,8 @@ def not : !(1 + 1 => 1 + 1) =
       inl u -> return true
     | inr u -> return false
     }
+
+-- A byte as an `i32` (0 … 255), and the low byte of an `i32` (SPEC §8: `extend8_u`, `wrap8`).
+def to_i32 : !(u8 => i32) = !thunkv fun (b : u8) -> return ((unbang host[extend8_u]) b)
+
+def to_u8 : !(i32 => u8) = !thunkv fun (i : i32) -> return ((unbang host[wrap8]) i)

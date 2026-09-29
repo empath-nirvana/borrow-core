@@ -1,0 +1,30 @@
+-- `corpus/pending/iter-mut.bc` with what S1–S2 give: a counted loop over the indices of an
+-- array, each index lent as a `mut` leaf. `count_fold` (SPEC §16) threads the array through
+-- `times10`, which lends it as `array_mut 'x i32` with no cell (`borrow mut a`, SPEC §9),
+-- takes the leaf at `i` (`slice_get_mut`) and writes through it (`modify`). The sum is a second
+-- counted loop, over `imm` leaves. The pending program's `for x in iter_mut(&mut a)` waits for
+-- an iterator over a `mut` family (a run-time split, K3) and a total `for` (S4).
+--
+-- Answer: i32[100]: [1, 2, 3, 4] becomes [10, 20, 30, 40]. One allocation, the array: a lend
+-- costs no cell, and a count no object. A leaf written twice or skipped gives 190 or 91.
+
+fn tab(i: i32) -> i32 = i + 1
+
+fn times10(i: i32, a: array i32) -> array i32 =
+  borrow mut a { 'x, v ->
+    match slice_get_mut['x, i32] (v, i) { inl m -> modify m { c -> c * 10 } | inr _ -> () }
+  };
+  a
+
+fn add_at(i: i32, s: array i32 * i32) -> array i32 * i32 =
+  let (a, acc) = s;
+  let acc = borrow imm a { 'x, v ->
+    match array_get['x, i32] (v, i) { inl g -> acc + *g | inr _ -> acc }
+  };
+  (a, acc)
+
+main -> i32 =
+  let a = array_new[i32] (4, tab);
+  let a = count_fold[array i32] (times10, 4, 0, a);
+  let (_, v) = count_fold[array i32 * i32] (add_at, 4, 0, (a, 0));
+  v

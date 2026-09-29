@@ -15,6 +15,7 @@ open BoCa
 def widthName : Width → String
   | .w32 => "i32"
   | .w64 => "i64"
+  | .w8 => "i32"
 
 def binName : BinOp → String
   | .add => "add" | .sub => "sub" | .mul => "mul" | .and => "and" | .or => "or"
@@ -43,6 +44,8 @@ def opName : HostOp → String
   | .extend_s => "i64.extend_i32_s"
   | .extend_u => "i64.extend_i32_u"
   | .extend32_s => "i64.extend32_s"
+  -- The byte's conversions are word operations (`Flat/Lower.lean`, `hostVals`), never emitted.
+  | .wrap8 | .extend8_u => "unreachable"
 
 /-- `(param i64 …) (result i64 …)`. -/
 def sigText (params results : Nat) : String :=
@@ -58,6 +61,8 @@ def printInstr (d : Nat) : Instr → List String
   | .localSet i => [indent d ++ s!"local.set {i}"]
   | .i64Load off => [indent d ++ s!"i64.load offset={off}"]
   | .i64Store off => [indent d ++ s!"i64.store offset={off}"]
+  | .i64Load8U => [indent d ++ "i64.load8_u"]
+  | .i64Store8 => [indent d ++ "i64.store8"]
   | .num o => [indent d ++ opName o]
   | .call f => [indent d ++ s!"call {f}"]
   | .returnCall f => [indent d ++ s!"return_call {f}"]

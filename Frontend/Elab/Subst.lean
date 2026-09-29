@@ -40,6 +40,7 @@ def VTy.subst (σ : TySubst) : VTy → VTy
   | .view sp a A => .view sp a (A.subst σ)
   | .array sp A => .array sp (A.subst σ)
   | .arrayImm sp a A => .arrayImm sp a (A.subst σ)
+  | .arrayMut sp a A => .arrayMut sp a (A.subst σ)
 
 def CTy.subst (σ : TySubst) : CTy → CTy
   | .ret sp A => .ret sp (A.subst σ)
@@ -97,6 +98,11 @@ def Const.subst (σ : TySubst) : Const → Const
   | .arrayGet a A => .arrayGet a (A.subst σ)
   | .arrayCopy a A => .arrayCopy a (A.subst σ)
   | .arrayForget a A => .arrayForget a (A.subst σ)
+  | .sliceBorrowMut x b A B => .sliceBorrowMut x b (A.subst σ) (B.subst σ)
+  | .sliceBorrowImm x b A B => .sliceBorrowImm x b (A.subst σ) (B.subst σ)
+  | .sliceGetMut a A => .sliceGetMut a (A.subst σ)
+  | .sliceLenMut a A => .sliceLenMut a (A.subst σ)
+  | .countFold S => .countFold (S.subst σ)
 
 mutual
 def Val.subst (σ : TySubst) : Val → Val

@@ -11,15 +11,17 @@ What an operation computes is not fixed here. The machine applies a host operati
 
 namespace BoCa
 
-/-- An integer literal: `i32[n]` or `i64[n]`.  `[spec §8]` -/
+/-- An integer literal: `i32[n]`, `i64[n]`, or the byte `u8[n]`.  `[spec §8]` -/
 inductive IntLit where
   | i32 (n : UInt32)
   | i64 (n : UInt64)
+  | u8 (n : UInt8)
   deriving DecidableEq, Repr
 
-/-- The operand width of an operation.  `[spec §8]` -/
+/-- The width of an integer type. The grouped operations are Wasm's, at `w32` and `w64`; `w8`
+    is the byte, which has only its conversions (`wrap8`, `extend8_u`).  `[spec §8]` -/
 inductive Width where
-  | w32 | w64
+  | w32 | w64 | w8
   deriving DecidableEq, Repr
 
 /-- Binary operations `I ⊗ I ⊸ F I`: wrapping arithmetic and the bitwise group.
@@ -48,7 +50,9 @@ inductive RelOp where
 
     - `bin w o`, `div w o`, `un w o`, `eqz w`, `rel w o`: the grouped operations at width `w`;
     - `wrap` (`i32.wrap_i64`), `extend_s`/`extend_u` (`i64.extend_i32_s`/`_u`) and
-      `extend32_s` (`i64.extend32_s`): the conversions. -/
+      `extend32_s` (`i64.extend32_s`): the conversions;
+    - `wrap8` (the low 8 bits of an `i32`, `i32.and 0xff`) and `extend8_u` (a byte as an
+      `i32`): the byte's conversions. -/
 inductive HostOp where
   | bin (w : Width) (o : BinOp)
   | div (w : Width) (o : DivOp)
@@ -59,6 +63,8 @@ inductive HostOp where
   | extend_s
   | extend_u
   | extend32_s
+  | wrap8
+  | extend8_u
   deriving DecidableEq, Repr
 
 end BoCa

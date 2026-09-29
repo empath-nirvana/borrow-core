@@ -1,5 +1,4 @@
-import PositiveArrays.FrameFam
-import PositiveArrays.Split
+import Core
 
 /-!
 # PositiveArrays — a partial borrow: lend some places, keep the others

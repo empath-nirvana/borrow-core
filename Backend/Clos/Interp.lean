@@ -24,6 +24,7 @@ open BoCa
 inductive CV where
   | unit
   | i32 (n : UInt32)
+  | u8 (n : UInt8)
   | ptr (a : Nat)
   deriving Repr, BEq, Inhabited
 
@@ -112,6 +113,7 @@ def toSource : Nat → CV → IM Val
     match v with
     | .unit => pure .unit
     | .i32 k => pure (.i32 k)
+    | .u8 k => pure (.u8 k)
     | .ptr a =>
       match ← getObj a with
       | .pair x y => do pure (.pair (← toSource n x) (← toSource n y))
@@ -125,6 +127,7 @@ def ofSource : Expr → IM CV
   | .unit => pure .unit
   | .prim (.lit (.i32 k)) => pure (.i32 k)
   | .prim (.lit (.i64 k)) => allocObj (.i64 k)
+  | .prim (.lit (.u8 k)) => pure (.u8 k)
   | .pair a b => do let a ← ofSource a; let b ← ofSource b; allocObj (.pair a b)
   | .inj₁ a => do let a ← ofSource a; allocObj (.inj false a)
   | .inj₂ a => do let a ← ofSource a; allocObj (.inj true a)
@@ -226,6 +229,16 @@ def tabFill (codes : Array Code) : Nat → CV → Nat → Nat → Nat → IM Uni
     setObj (a + i) (.cell r)
     tabFill codes n f a (i + 1) k
 
+/-- `count`'s loop: while `i < len(n)`, the state goes to a copy of `f` with the index. -/
+def countLoop (codes : Array Code) : Nat → CV → UInt32 → UInt32 → CV → IM CV
+  | 0, _, _, _, _ => throw "closure IR: out of fuel"
+  | n + 1, f, len, i, s => do
+    if i < arrLen len then
+      let fc ← deepCopy objFuel f
+      let s' ← callClos codes n fc (← allocObj (.pair (.i32 i) s))
+      countLoop codes n f len (i + 1) s'
+    else pure s
+
 /-- `drop`'s drain: cell `a + i` is freed and its contents handed to a copy of `f`. -/
 def dropFill (codes : Array Code) : Nat → CV → Nat → Nat → Nat → IM Unit
   | 0, _, _, _, _ => throw "closure IR: out of fuel"
@@ -247,6 +260,7 @@ def eval (codes : Array Code) : Nat → Env → Tm → IM (CV × Env)
     | .unit => pure (.unit, env)
     | .lit (.i32 k) => pure (.i32 k, env)
     | .lit (.i64 k) => do pure (← allocObj (.i64 k), env)
+    | .lit (.u8 k) => pure (.u8 k, env)
     | .pair a b => do
         let (va, env) ← take env a
         let (vb, env) ← take env b
@@ -267,6 +281,16 @@ def eval (codes : Array Code) : Nat → Env → Tm → IM (CV × Env)
         tabFill codes n f base 0 len
         deepDrop objFuel f
         pure (← allocObj (.pair (.ptr base) (.i32 (arrLen c))), env)
+    | .prim .count [x] => do
+        let (v, env) ← take env x
+        let (f, r) ← unpair v
+        let (len, r) ← unpair r
+        let (i, s) ← unpair r
+        let .i32 len := len | throw "closure IR: count of a non-length"
+        let .i32 i := i | throw "closure IR: count from a non-index"
+        let s ← countLoop codes n f len i s
+        deepDrop objFuel f
+        pure (s, env)
     | .prim .drop [x] => do
         let (v, env) ← take env x
         let (f, arr) ← unpair v
@@ -321,6 +345,7 @@ def observe : Nat → CV → IM PV
     match v with
     | .unit => pure .unit
     | .i32 k => pure (.i32 k)
+    | .u8 k => pure (.u8 k)
     | .ptr a =>
       match ← getObj a with
       | .pair x y => do pure (.pair (← observe n x) (← observe n y))

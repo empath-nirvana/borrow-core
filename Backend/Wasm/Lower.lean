@@ -23,6 +23,7 @@ def lowerExp : Flat.Exp → List Instr
   | .c64 n => [.i64Const n]
   | .c32 n => [.i32Const n]
   | .load a off => lowerExp a ++ [.num .wrap, .i64Load (8 * off)]
+  | .load8 a => lowerExp a ++ [.num .wrap, .i64Load8U]
   | .op o args => lowerArgs args ++ [.num o]
   | .alloc w => lowerExp w ++ [.call "$alloc"]
   | .live => [.call "$live"]
@@ -63,6 +64,7 @@ def switchCode (e : List Instr) (cases : List (List Instr)) (dflt : List Instr) 
 def lowerStmt (cnt : Bool) : Flat.Stmt → List Instr
   | .set i e => lowerExp e ++ [.localSet i]
   | .store a off v => lowerExp a ++ [.num .wrap] ++ lowerExp v ++ [.i64Store (8 * off)]
+  | .store8 a v => lowerExp a ++ [.num .wrap] ++ lowerExp v ++ [.i64Store8]
   | .free a => lowerExp a ++ [.call "$free"]
   | .out b => lowerExp b ++ [.call "$putc"]
   | .putc fd b => lowerExp fd ++ lowerExp b ++ [.call "$putfd"]

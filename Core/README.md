@@ -19,10 +19,12 @@ axioms among `[propext, Classical.choice, Quot.sound]` (`scripts/CheckAxioms.lea
 ### Types
 
     A ::= 1 | A ⊗ A | 0 | A ⊕ A | U C | Ref A | Imm @a A | Mut @a A | [@a] A | !A | Unk | X | μX. A
-        | I32 | I64 | [A] | Input | Output
+        | I32 | I64 | U8 | [A] | Input | Output
     C ::= F A | A ⊸ C | C & C | ⊤ | ∀'a ⊏ @b. C | νX. C
 
-`I32` and `I64` are one constructor, `VTy.int w` (`Integers.lean`, `[spec §8]`). The relation
+`I32`, `I64` and the byte `U8` are one constructor, `VTy.int w` (`Integers.lean`, `[spec §8]`);
+the byte has only its conversions `wrap8`/`extend8_u`, and the grouped operations at `w8` take
+`0`. The relation
 holds a literal of the width at `∅`, so they are persistent, `Imm̲ 'b I = I`, and they outlive
 every lifetime.
 
@@ -98,7 +100,14 @@ allocator's block, `alloc_block`), `wpTS_idx` and `wpTS_dropStep` (`ArrayWp.lean
 their compatibility lemmas are `Arrays.lean`: `array_new` (`tabFill_wp`), `array_free`
 (`dropFill_wp`), `array_size`, `array_replace`, and on families `array_len`, `array_get`,
 `array_copy`, `array_forget`. `HasDtor` has `Array A` and `ArrayImm @a A` (`Dtor.lean`).
-`ArrayPrograms.lean` runs one program by adequacy and by the interpreter.
+`ArrayPrograms.lean` runs one program by adequacy and by the interpreter. The relation's
+clause carries the length bound `c < 2³¹`, so a family has `tab`'s length (`arrLen_of_bound`).
+
+An owned array is lent as a family of leaf borrows with no cell by `slice_borrow_mut` and
+`slice_borrow_imm` (`Slices.lean`, `withbor`'s term): one Mut or Imm Frame per leaf around the
+one callback, by induction on the list of places (`wpTS_M_frameList`, `wpTS_I_frameList`,
+`SliceFrames.lean`, with the split `vP_fam_split`/`vP_fam_join`). On `[Mut @a A]`,
+`slice_get_mut` (`idx`) and `slice_len_mut` (`array_size`'s term).
 
 ### Standard I/O  `[spec §11]`
 
@@ -247,8 +256,8 @@ Name collisions settled:
   `X` and `μ`, with no lifetime and no `U C`. That is narrower than `withborF2`, which admits
   `Imm @e`/`Mut @e`/`[@e]` leaves and results that outlive the outer lifetime. I have not
   derived `withborS` at such leaves, and I have not verified that any obstruction to it is real.
-- **Arrays.** No primitive array borrow without a cell, and no mutable family `[Mut 'c A]`;
-  `split_at`, `iter`/`iter_mut`, `Vec`, `Str` are not built (`SPEC.md` §9 Open). `[L]` is not
+- **Arrays.** `split_at` (K3), the writes that keep a `mut` family (K5), `iter`/`iter_mut`,
+  `Vec`, `Str` are not built, and `[Mut @a A]` has no destructor (`SPEC.md` §9 Open). `[L]` is not
   in `SpineMuFree`, so an `Imm` record cannot be projected past an array field.
 - **Streams.** Only `A = 1` has a generic consumer with a stated adequacy theorem (`take_runs`).
   Every other stream program is a single closed derivation.

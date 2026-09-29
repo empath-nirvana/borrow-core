@@ -47,6 +47,15 @@ def dropFill (f : Val) (ℓ : Loc) : Nat → Nat → Expr
       .seq (.app (.val f) (.app (.val (.prim .free)) (.val (.loc (ℓ + i)))))
         (dropFill f ℓ (i + 1) k)
 
+/-- One step of `count (f, (n, (i, s)))`: while `i < len(n)`, apply `f` to `(i, s)` and count on
+    from `i + 1`; then answer `s`. The counter is the machine's, so every host counts alike.
+    `[spec §16]` -/
+def countNext (f : Val) (n i : UInt32) (s : Val) : Expr :=
+  if i < arrLen n then
+    .app (.val (.prim .count)) (.pair (.val f) (.pair (.val (.i32 n))
+      (.pair (.val (.i32 (i + 1))) (.app (.val f) (.val (.pair (.i32 i) s))))))
+  else .val s
+
 /-- The answer of `idx ((ℓ, n), i)`: the `i`-th leaf when `i < n`, unsigned; else `inj₂ ()`.
     `[spec §9]` -/
 def idxAns (ℓ : Loc) (n i : UInt32) : Val :=

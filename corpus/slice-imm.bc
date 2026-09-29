@@ -1,0 +1,22 @@
+-- An owned array lent as a family of leaf views, with no cell (SPEC §9, `slice_borrow_imm`).
+-- `borrow imm a { 'x, v -> … }` on an array lends `array_imm 'x i32` directly: before, a family
+-- of views came only from `withload` of a borrow of a cell holding the handle
+-- (`corpus/array-get.bc`). The family is copied; `array_len` reads its length; `array_get`
+-- takes the view of one leaf, which `*` reads; past the end it takes the error branch. The
+-- array comes back, and is dropped implicitly at the end of `main`.
+--
+-- Answer: (i32[5], (i32[30], inr ())): the length, the element at index 3 of
+-- [0, 10, 20, 30, 40], and the error branch at index 7, as `corpus/array-get.bc`.
+
+fn tab(i: i32) -> i32 = i * 10
+
+main -> i32 * (i32 * (1 + 1)) =
+  let a = array_new[i32] (5, tab);
+  borrow imm a { 'x, v ->
+    let (f1, f2) = array_copy['x, i32] v;
+    let (f3, f4) = array_copy['x, i32] f2;
+    let n = array_len['x, i32] f1;
+    let x = match array_get['x, i32] (f3, 3) { inl g -> *g | inr _ -> 9999 };
+    let o = match array_get['x, i32] (f4, 7) { inl _ -> false | inr _ -> true };
+    (n, x, o)
+  }

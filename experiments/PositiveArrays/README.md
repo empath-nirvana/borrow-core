@@ -15,14 +15,13 @@ experiment builds at `main`.
 
 | file | contents |
 |---|---|
-| `Index.lean` | the indexed tensor over a finite list of places, `sepList`; the range instance, `sepRange_eq_sepList`; splitting and permuting the index set (`sepList_append`, `sepList_perm`) |
-| `FrameFam.lean` | **`wpTS_M_frameList`**: one Mut Frame (`[TR]` 6.65) per place of a finite list, around one expression, the leaves' types free to differ; `wpTS_M_frameFam`, its instance at an array's range |
-| `ImmFam.lean` | **`wpTS_I_frameList`**, the same with Imm Frame (`[TR]` 6.64): records added at each frame, leaves stable along `Ext` (`immLeaf_ext`); `wpTS_I_frameFam` |
-| `K2Mut.lean` | **`sliceBorrowM_compatX`**: K2 at `Mut`, the compatibility lemma of `slice_borrow : Array A ⊸ (∀'x ⊏ ⊓Δ. [Mut 'x A] ⊸ ['x] B) ⊸ Array A ⊗ B` |
-| `K2Imm.lean` | **`sliceBorrowI_compatX`**: K2 at `Imm`, the same type at `[Imm 'x A]` |
-| `Split.lean` | K3's content: `vP_fam_split`, `vP_fam_join` (a family at every leaf predicate splits at a run-time index and joins back); `sepList_partition` (any predicate on the places) |
+| `MapOwn.lean` | the owned eliminator: **`wpTS_arrayMap`**, each element consumed once by a persistent indexed body, results an `Array B`; `arrMap_compatX`, the constant `array_map`; `famLenBound`, from §9's length bound |
 | `Partial.lean` | `wpTS_M_framePartial`: lend the places satisfying a predicate, and keep the others owned inside the callback |
-| `MapOwn.lean` | the owned eliminator: **`wpTS_arrayMap`**, each element consumed once by a persistent indexed body, results an `Array B`; `arrMap_compatX`, the constant `array_map`, given `FamLenBound` (stated) |
+
+**Promoted to `Core/`** (SPEC §9): the indexed tensor, both frame inductions and the split
+(`Core/SliceFrames.lean`: `sepList`, `wpTS_M_frameList`/`Fam`, `wpTS_I_frameList`/`Fam`,
+`vP_fam_split`/`join`, `sepList_partition`), and K2 with its constants (`Core/Slices.lean`:
+`sliceBorrowM_compatX`, `sliceBorrowI_compatX`). The names below refer to those files.
 
 There is no `sorry` and no `axiom`. Every result's `#print axioms` is within `[propext,
 Classical.choice, Quot.sound]`.
@@ -58,9 +57,10 @@ Classical.choice, Quot.sound]`.
   (`arrMap_compatX`); `array_free` is its instance at `B = 1`. K0 is a
   different eliminator (a fold over the index set with loop-carried state), and it is still
   needed.
-- **One gap surfaced.** `tab` builds `arrLen c` cells (`c` if `c < 2³¹`, else `0`), while
-  `𝒱⟦[L]⟧` admits every `c`. A constant that returns an array as long as its argument, such as
-  a map, needs the relation to carry `c < 2³¹` (`FamLenBound`, stated, not derived).
+- **One gap surfaced, now closed.** `tab` builds `arrLen c` cells (`c` if `c < 2³¹`, else
+  `0`). A constant that returns an array as long as its argument, such as a map, needs the
+  relation to carry `c < 2³¹` (`FamLenBound`). SPEC §9's clause now carries it, and
+  `famLenBound` derives the fact.
 
 ## 1. The paper, read first-hand
 
@@ -178,14 +178,13 @@ third range, the unconsumed source, shrinking one leaf per step (`mapFill_wp`).
 `B = 1`, with the index dropped and the unit results discarded.
 
 `wpTS_arrayMap` carries `arrLen n = n`. `arrMap_compatX` proves the closed constant
-`array_map` (the term above under `λp`, two `let`s) sound, given `FamLenBound`. The reason:
+`array_map` (the term above under `λp`, two `let`s) sound. It needs `FamLenBound`:
 `tab (c, g)` places `arrLen c` cells, `c` when `c < 2³¹` and `0` otherwise, while
 `𝒱⟦[L]⟧(ℓ, c)` is `c.toNat` leaves for every `c`. For a family with `c ≥ 2³¹` in the relation,
 `tab` would build an empty result and leave the source's leaves, and `B` has no destructor in
 general, so nothing could consume them. `FamLenBound` states the missing fact: every family in
-the relation has `tab`'s length. It is not derived. It holds of every family a program builds
-(only `tab` builds one), and it would hold by definition if §9's clause carried `⌜c < 2³¹⌝`.
-The same obstacle applies to any constant whose result array has its argument's length.
+the relation has `tab`'s length. §9's clause now carries `⌜c < 2³¹⌝`, and `famLenBound` derives
+it. The same fact serves any constant whose result array has its argument's length.
 
 ### (b) `Imm`: K2 at `Imm`
 
@@ -241,7 +240,7 @@ and to K0 otherwise. Stage 9's "bounded `for` is K0" stays right for the statefu
 | `sepList_partition`, `sepList_unpartition` | any predicate on the places splits the family and joins it back |
 | `wpTS_M_framePartial` | lend the places satisfying `p`; the callback owns the rest |
 | `wpTS_arrayMap` | the owned eliminator, at `wpTS`, given `arrLen n = n` |
-| `arrMap_compatX` | `array_map : !(!(I32 ⊗ A ⇒ B) ⊗ Array A ⇒ Array B)` as a closed constant, given `FamLenBound` |
+| `arrMap_compatX` | `array_map : !(!(I32 ⊗ A ⇒ B) ⊗ Array A ⇒ Array B)` as a closed constant |
 
 **How the design's named obstacles came out** (`docs/strings-slices-design.md` §5.2 asked to
 check them at `n = 2`; the induction settles every `n`):
@@ -269,9 +268,9 @@ check them at `n = 2`; the induction settles every `n`):
   is not needed: the condition is `VOutlives`, which is weaker.
 - An `imm` reborrow of a `mut` family (the design's K2′). It is the same list induction with
   `withbor3`'s anti-frame per leaf, and was not attempted.
-- K3, K4 and K5 as constants (the host-comparison terms), and K0.
-- `FamLenBound`, which `arrMap_compatX` assumes. Map fusion and fission are two-run properties
-  (`experiments/TwoRun`); they were not attempted.
+- K3 and K5 as constants (the host-comparison terms). K0 and K4 are in `Core/`.
+- Map fusion and fission are two-run properties (`experiments/TwoRun`); they were not
+  attempted.
 
 ## 5. K3: splitting is partitioning the index set
 

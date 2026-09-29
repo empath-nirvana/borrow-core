@@ -399,7 +399,7 @@ theorem vC_vShape : ∀ (b : Bool) (T : VTy) {ls : List SRec} {δ : LSub} {v : V
   | mu A => exact vShape_roll h.2.1 h.2.2.2
   | fam L =>
       obtain ⟨ℓ, n, ρ₀, ρ₃, hc, hp, hs⟩ := h
-      exact ⟨ℓ, n, ρ₀, ρ₃, hc, hp, sepRange_mono' (fun m σ hm => hm.2) hs⟩
+      exact ⟨ℓ, n, ρ₀, ρ₃, hc, ⟨hp.1, hp.2.1⟩, sepRange_mono' (fun m σ hm => hm.2) hs⟩
 
 /-- Reading an `imm` cell at the observable view: the payload is observable-valid at
 the current list. -/
@@ -1124,7 +1124,7 @@ theorem obs_transfer {R : WRes} {ls : List SRec} (hLB : WitLB ls R) :
       obtain ⟨he, hsA⟩ := pure_sep_iff.mp hk
       obtain ⟨ℓ', n', hk'⟩ := hs
       obtain ⟨he', hsB⟩ := pure_sep_iff.mp hk'
-      obtain ⟨rfl, rfl⟩ := Val.arr_inj (he.symm.trans he')
+      obtain ⟨rfl, rfl⟩ := Val.arr_inj (he.1.symm.trans he')
       exact ⟨ℓ, n, pure_sep_mk he (sepRange_zip (RA := CellMatch R) (RB := CellMatch R) (f := id)
         (fun _ _ _ hc h => ⟨h.left hc, h.right hc⟩) (fun _ _ _ hc h => ⟨h.left hc, h.right hc⟩)
         (fun _ _ _ hc => hc) rfl
@@ -1400,8 +1400,9 @@ theorem relabel_obs {R : WRes} {ls : List SRec} {β β₀ : Life} {δ : LSub} {x
       obtain ⟨ℓ', n', hk₂⟩ := hR
       obtain ⟨he', hs₂⟩ := pure_sep_iff.mp hk₂
       subst he
+      obtain ⟨he', hn⟩ := he'
       obtain ⟨rfl, rfl⟩ := Val.arr_inj he'
-      refine ⟨ℓ, n, pure_sep_mk rfl ?_⟩
+      refine ⟨ℓ, n, pure_sep_mk ⟨rfl, hn⟩ ?_⟩
       exact sepRange_zip (RA := CellMatch R)
         (RB := fun c => (∀ m ψ, c.get m = some ψ → ∃ ζ, R.get m = some ζ ∧ ψ.erase = ζ.erase ∧
           (ζ.kind ≠ Kind.own → ψ.wit = ζ.wit) ∧ (ζ.kind = Kind.own → CellMatch R ψ.wit)) ∧

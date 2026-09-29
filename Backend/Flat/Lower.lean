@@ -57,6 +57,9 @@ inductive Helper where
   /-- `drop` of an array and its loop, at element location type `a` and consumer type `f`. -/
   | arrDrop (a f : Nat)
   | arrDropLoop (a f : Nat)
+  /-- `count` and its loop, at step type `f` and state type `s` (SPEC §16). -/
+  | count (f s : Nat)
+  | countLoop (f s : Nat)
   /-- Drive a loop of type `n` (SPEC §11). -/
   | drive (n : Nat)
   /-- The dispatcher of the closure type `n`: the closure's words and the argument's, answering
@@ -135,6 +138,7 @@ def helper (h : Helper) : LM Nat := do
     | .copy n => .copy (T.r n) | .drop n => .drop (T.r n) | .print n => .print (T.r n)
     | .tab a f => .tab (T.r a) (T.r f) | .tabLoop a f => .tabLoop (T.r a) (T.r f)
     | .arrDrop a f => .arrDrop (T.r a) (T.r f) | .arrDropLoop a f => .arrDropLoop (T.r a) (T.r f)
+    | .count f s => .count (T.r f) (T.r s) | .countLoop f s => .countLoop (T.r f) (T.r s)
     | .drive n => .drive (T.r n) | .apply n => .apply (T.r n)
     | h => h
   match (← get).helpers[h]? with
@@ -164,6 +168,23 @@ def storeAt (a : Exp) (off : Nat) (vs : List Exp) : List Stmt :=
 def loadAt (a : Exp) (off k : Nat) : LM (List Stmt × List Nat) := do
   let ls ← fresh k
   pure (ls.zipIdx.map (fun (l, i) => .set l (.load a (off + i))), ls)
+
+/-- The contents (`k` words) of the cell or slot at `a`, of location type `n`: a byte slot's
+byte, or the words. -/
+def loadCell (n : Nat) (a : Exp) (k : Nat) : LM (List Stmt × List Nat) := do
+  if (← read).T.byteCell n then
+    let t ← fresh1
+    return ([.set t (.load8 a)], [t])
+  loadAt a 0 k
+
+/-- Store `vs` in the cell or slot at `a`, of location type `n`. -/
+def storeCell (n : Nat) (a : Exp) (vs : List Exp) : LM (List Stmt) := do
+  if (← read).T.byteCell n then return [.store8 a (vs.headD (.c64 0))]
+  return storeAt a 0 vs
+
+/-- The bytes between two slots of an array of location type `n`: one for a byte slot, else
+the class's words. -/
+def slotBytes (T : Types) (n : Nat) : Nat := if T.byteCell n then 1 else 8 * T.cellWords n
 
 /-- Field `i` of `n` built from its words: behind a pointer, a fresh object holding them. -/
 def putField (n i : Nat) (vs : List Exp) : LM (List Stmt × List Exp) := do
@@ -293,12 +314,18 @@ def emit : Dest → List Exp → LM (List Stmt)
 /-- A host operation on its operand's words (§8): an integer, a tag, or a partial operation's
 tag and integer. A 32-bit integer is held zero-extended. -/
 def hostVals (o : HostOp) (ls : List Nat) : LM (List Stmt × List Exp) := do
+  -- A byte is held zero-extended, as an `i32` is: `wrap8` keeps the low 8 bits, and
+  -- `extend8_u` is the word itself.
+  match o with
+  | .wrap8 => return ([], [and64 (.loc (ls.headD 0)) (.c64 0xff)])
+  | .extend8_u => return ([], [.loc (ls.headD 0)])
+  | _ => pure ()
   let raw (l : Nat) : Exp := match hostArgWidth o with
-    | .w32 => wrap (.loc l)
+    | .w32 | .w8 => wrap (.loc l)
     | .w64 => .loc l
   let args := ls.map raw
   let word (w : Width) (e : Exp) : Exp := match w with
-    | .w32 => extendU e
+    | .w32 | .w8 => extendU e
     | .w64 => e
   match hostResKind o, o with
   | .int w, _ => pure ([], [word w (.op o args)])
@@ -311,8 +338,10 @@ def hostVals (o : HostOp) (ls : List Nat) : LM (List Stmt × List Exp) := do
     let zero := Exp.op (.eqz w) [b]
     let trapC := match d with
       | .div_s =>
-        let intMin := match w with | .w32 => Exp.c32 0x80000000 | .w64 => .c64 0x8000000000000000
-        let minus1 := match w with | .w32 => Exp.c32 0xFFFFFFFF | .w64 => .c64 0xFFFFFFFFFFFFFFFF
+        let intMin := match w with
+          | .w32 | .w8 => Exp.c32 0x80000000 | .w64 => .c64 0x8000000000000000
+        let minus1 := match w with
+          | .w32 | .w8 => Exp.c32 0xFFFFFFFF | .w64 => .c64 0xFFFFFFFFFFFFFFFF
         or32 zero (and32 (.op (.rel w .eq) [a, intMin]) (.op (.rel w .eq) [b, minus1]))
       | _ => zero
     pure ([.ite trapC [.set t₀ (.c64 1), .set t₁ (.c64 0)]
@@ -331,30 +360,31 @@ def lowerPrim : Op → List Var → Dest → LM (List Stmt)
       let ls ← vals v
       let t ← fresh1
       return [.set t (.alloc (.c64 (max 1 ((← T).cellWords n)).toUInt64))] ++
-        storeAt (.loc t) 0 (locs ls) ++ (← emit d [.loc t])
+        (← storeCell n (.loc t) (locs ls)) ++ (← emit d [.loc t])
   | .free, [l], d => do
       let a ← locElem (← vty l)
       let p := Exp.loc ((← vals l).headD 0)
-      let (s, ls) ← loadAt p 0 (← words a)
+      let (s, ls) ← loadCell (← vty l) p (← words a)
       return s ++ [.free p] ++ (← emit d (locs ls))
   | .load, [l], d => do
       let a ← locElem (← vty l)
       let p := Exp.loc ((← vals l).headD 0)
-      let (s, ls) ← loadAt p 0 (← words a)
+      let (s, ls) ← loadCell (← vty l) p (← words a)
       let (c, ls) ← copyVals a ls
       return s ++ c ++ (← emit d (locs ls))
   | .store, [l, v], d => do
       let a ← vty v
       let p := Exp.loc ((← vals l).headD 0)
-      let (s, old) ← loadAt p 0 (← words a)
+      let (s, old) ← loadCell (← vty l) p (← words a)
       let dr ← dropVals a old
       let s := if dr.isEmpty then [] else s ++ dr
-      return s ++ storeAt p 0 (locs (← vals v)) ++ (← emit d [])
+      return s ++ (← storeCell (← vty l) p (locs (← vals v))) ++ (← emit d [])
   | .swap, [l, v], d => do
       let a ← locElem (← vty l)
       let m := (← vals l).headD 0
-      let (s, old) ← loadAt (.loc m) 0 (← words a)
-      return s ++ storeAt (.loc m) 0 (locs (← vals v)) ++ (← emit d (locs (m :: old)))
+      let (s, old) ← loadCell (← vty l) (.loc m) (← words a)
+      return s ++ (← storeCell (← vty l) (.loc m) (locs (← vals v))) ++
+        (← emit d (locs (m :: old)))
   | .host op, [v], d => do
       let (s, vs) ← hostVals op (← vals v)
       return s ++ (← emit d vs)
@@ -368,7 +398,7 @@ def lowerPrim : Op → List Var → Dest → LM (List Stmt)
   | .idx, [v], d => do
       let T ← T
       let h := (T.field (← vty v) 0).1
-      let w := T.cellWords (T.field h 0).1 * 8
+      let w := slotBytes T (T.field h 0).1
       match ← vals v with
       | [b, n, i] =>
         let t₀ ← fresh1
@@ -383,6 +413,13 @@ def lowerPrim : Op → List Var → Dest → LM (List Stmt)
       let f := (T.field n 0).1
       let l := (T.field (T.field n 1).1 0).1
       return [.call [] (← helper (.arrDrop l f)) (locs (← vals v))] ++ (← emit d [])
+  | .count, [v], d => do
+      let T ← T
+      let n ← vty v
+      let f := (T.field n 0).1
+      let s := (T.field (T.field (T.field n 1).1 1).1 1).1
+      let ts ← fresh (T.words s)
+      return [.call ts (← helper (.count f s)) (locs (← vals v))] ++ (← emit d (locs ts))
   | .io .readByte, [m], d => do
       let m := (← vals m).headD 0
       let b ← fresh1
@@ -412,6 +449,7 @@ def lowerTm : Tm → Dest → LM (List Stmt)
   | .unit, d => emit d []
   | .lit (.i32 n), d => emit d [.c64 n.toUInt64]
   | .lit (.i64 n), d => emit d [.c64 n]
+  | .lit (.u8 n), d => emit d [.c64 n.toUInt64]
   | .pair a b, d => do
       let some n := (← T).cons[a]? | throw "flat IR: an untyped pair"
       let (s, vs) ← mkPair n (locs (← vals a)) (locs (← vals b))
@@ -876,6 +914,7 @@ def genHelper (h : Helper) : LM Fn := do
       | .unit => pure (outStr "()")
       | .int .w32 => pure (outStr "i32[" ++ [.call [] fPrintDec [.loc 0]] ++ outStr "]")
       | .int .w64 => pure (outStr "i64[" ++ [.call [] fPrintDec [.loc 0]] ++ outStr "]")
+      | .int .w8 => pure (outStr "u8[" ++ [.call [] fPrintDec [.loc 0]] ++ outStr "]")
       | .fn .. => pure (outStr "<fun>")
       | .loc .. => pure (outStr "<loc>")
       | .pair .. => do
@@ -916,7 +955,8 @@ def genHelper (h : Helper) : LM Fn := do
       pure (s ++ [.free (.loc 0), .ret []])
     pure { name := s!"drop_code{c}", params := 1, results := 0, locals := nloc, body }
   | .tab a f =>
-    -- `tab (c, f)`: `len(c)` slots of `|a|` words, filled by `f i` in order.
+    -- `tab (c, f)`: `len(c)` slots of `|a|` words (a byte each for a byte slot), filled by
+    -- `f i` in order. An empty array allocates nothing: its base is `0`.
     let fw := T.words f
     let (body, nloc) ← inFn (1 + fw) do
       let n := Exp.loc 0
@@ -925,10 +965,11 @@ def genHelper (h : Helper) : LM Fn := do
       let b ← fresh1
       let loop ← helper (.tabLoop a f)
       let dr ← dropVals f fls
+      let words : Exp := if T.byteCell a then shr64 (add64 n (.c64 7)) (.c64 3)
+        else mul64 n (.c64 (T.cellWords a).toUInt64)
       pure ([.ite (ltu64 n (.c64 0x80000000)) [] [.set 0 (.c64 0)],
-        .set sz (mul64 n (.c64 (T.cellWords a).toUInt64)),
-        .ite (eqz64 (.loc sz)) [.set sz (.c64 1)] [],
-        .set b (.alloc (.loc sz)),
+        .set sz words,
+        .ite (eqz64 (.loc sz)) [.set b (.c64 0)] [.set b (.alloc (.loc sz))],
         .call [] loop ([.loc b] ++ locs fls ++ [.c64 0, n])] ++ dr ++ [.ret [.loc b, n]])
     pure { name := "array_tab", params := 1 + fw, results := 2, locals := nloc, body }
   | .tabLoop a f =>
@@ -942,10 +983,10 @@ def genHelper (h : Helper) : LM Fn := do
     let (body, nloc) ← inFn (3 + fw) do
       let (cs, fc) ← copyVals f fls
       let rs ← fresh k
-      let slot := add64 (.loc 0) (mul64 i (.c64 (8 * T.cellWords a).toUInt64))
+      let slot := add64 (.loc 0) (mul64 i (.c64 (slotBytes T a).toUInt64))
       pure [.ite (ltu64 i n)
         (cs ++ (← callClosure rs f fc [i]) ++
-          storeAt slot 0 (locs (rs.take w)) ++
+          (← storeCell a slot (locs (rs.take w))) ++
           [.tailCall (← helper (.tabLoop a f)) ([.loc 0] ++ locs fls ++ [add64 i (.c64 1), n])])
         [], .ret []]
     pure { name := "array_tab_loop", params := 3 + fw, results := 0, locals := nloc, body }
@@ -956,7 +997,10 @@ def genHelper (h : Helper) : LM Fn := do
     let (body, nloc) ← inFn (fw + 2) do
       pure ([.call [] (← helper (.arrDropLoop a f))
           ([.loc fw] ++ locs fls ++ [.c64 0, .loc (fw + 1)])] ++
-        (← dropVals f fls) ++ [.free (.loc fw), .ret []])
+        (← dropVals f fls) ++
+        -- An empty array, and an array of slots of no words, allocated nothing.
+        (if T.cellWords a == 0 && !T.byteCell a then [] else
+          [.ite (eqz64 (.loc (fw + 1))) [] [.free (.loc fw)]]) ++ [.ret []])
     pure { name := "array_drop", params := fw + 2, results := 0, locals := nloc, body }
   | .arrDropLoop a f =>
     -- `b f i n`: slot `i`'s contents, moved out, to a copy of `f`, for `i < n`.
@@ -968,8 +1012,8 @@ def genHelper (h : Helper) : LM Fn := do
     let n := Exp.loc (2 + fw)
     let (body, nloc) ← inFn (3 + fw) do
       let (cs, fc) ← copyVals f fls
-      let slot := add64 (.loc 0) (mul64 i (.c64 (8 * T.cellWords a).toUInt64))
-      let (ls, es) ← loadAt slot 0 w
+      let slot := add64 (.loc 0) (mul64 i (.c64 (slotBytes T a).toUInt64))
+      let (ls, es) ← loadCell a slot w
       let rs ← fresh k
       pure [.ite (ltu64 i n)
         (cs ++ ls ++ (← callClosure rs f fc (locs es)) ++
@@ -977,6 +1021,38 @@ def genHelper (h : Helper) : LM Fn := do
           [.tailCall (← helper (.arrDropLoop a f)) ([.loc 0] ++ locs fls ++ [add64 i (.c64 1), n])])
         [], .ret []]
     pure { name := "array_drop_loop", params := 3 + fw, results := 0, locals := nloc, body }
+  | .count f s =>
+    -- `count (f, (n, (i, s)))`: `len(n)`, the loop, then `f` dropped.
+    let fw := T.words f
+    let sw := T.words s
+    let (body, nloc) ← inFn (fw + 2 + sw) do
+      let fls := List.range fw
+      let n := Exp.loc fw
+      let rs ← fresh sw
+      pure ([.ite (ltu64 n (.c64 0x80000000)) [] [.set fw (.c64 0)],
+        .call rs (← helper (.countLoop f s)) (locs (List.range (fw + 2 + sw)))] ++
+        (← dropVals f fls) ++ [.ret (locs rs)])
+    pure { name := "count", params := fw + 2 + sw, results := sw, locals := nloc, body }
+  | .countLoop f s =>
+    -- `f n i s`: while `i < n`, the state goes to a copy of `f` with `i`.
+    let (a, _, k) ← fnParts f
+    let fw := T.words f
+    let sw := T.words s
+    let fls := List.range fw
+    let n := Exp.loc fw
+    let i := Exp.loc (fw + 1)
+    let sls := List.range' (fw + 2) sw
+    let (body, nloc) ← inFn (fw + 2 + sw) do
+      let (cs, fc) ← copyVals f fls
+      let (ps, arg) ← mkPair a [i] (locs sls)
+      let rs ← fresh k
+      pure [.ite (ltu64 i n)
+        (cs ++ ps ++ (← callClosure rs f fc arg) ++
+          [.tailCall (← helper (.countLoop f s))
+            (locs fls ++ [n, add64 i (.c64 1)] ++ locs (rs.take sw))])
+        [.ret (locs sls)]]
+    pure { name := "count_loop", params := fw + 2 + sw, results := sw, locals := nloc,
+           body := body ++ [.trap] }
   | .drive n =>
     -- `d`: call `d` on `inl ()` until it answers `inl r`; `inr d'` goes on with `d'`.
     let (a, c, k) ← fnParts n

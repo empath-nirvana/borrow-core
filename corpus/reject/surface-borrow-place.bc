@@ -1,4 +1,4 @@
--- expect: 5:22: this borrow block's place has type `i32`: `borrow imm`/`borrow mut` take a cell `ref A` (a pair of cells for a family), `modify` a `mut` borrow
+-- expect: 5:22: this borrow block's place has type `i32`: `borrow imm`/`borrow mut` take a cell `ref A` or an array (a pair of cells for a family), `modify` a `mut` borrow
 -- A borrow block borrows a cell: a number is not one.
 main -> i32 =
   let k = 5;
