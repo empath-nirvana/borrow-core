@@ -129,3 +129,8 @@ roots = ["CoeffectsStrict"]
 name = "LoopBorrow"
 srcDir = "experiments/LoopBorrow"
 roots = ["LoopBorrow"]
+
+[[lean_lib]]
+name = "PositiveArrays"
+srcDir = "experiments/PositiveArrays"
+roots = ["PositiveArrays"]
