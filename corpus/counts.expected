@@ -37,6 +37,7 @@ gen-lines 42 50 0
 gen-pipeline 0 0 0
 gen-produce 0 4 0
 gen-return 1 13 0
+gen-value 0 20 0
 implicit-drops 9 0 0
 int-arith 0 0 0
 int-ops 0 0 0

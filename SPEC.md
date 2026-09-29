@@ -1245,6 +1245,14 @@ elaborates, in `Frontend/Sugar.lean`, to `f : !(A₁ * … => U (gen A B R))`, `
 - **`break`** leaves the innermost loop from any position of its body, not only its tail
   (`corpus/reject/gen-break-outside.bc` outside every loop). So does `break` in a `for` of a div
   body: the iterator is closed and what follows the loop runs (`corpus/io-break.bc`).
+- **`let r = for x in V { M }; N`** binds `r` in `N` to the loop's value: what the iterator
+  finishes with (a generator's `B`, an iterator's `R`), or `e` after `break e`. It is written in
+  the parse as `for x in V { M }; (r <- <value>; N)`, and the loop finishes with `r` among what
+  it hands on; in a generator and in a div body alike (`corpus/gen-value.bc`,
+  `corpus/sugar/for-value.bc`). `break e` needs a bound value
+  (`corpus/reject/for-break-value.bc`), and a bare `break` in such a loop gives `()` only when the
+  value is `1`. An iterator made from a capability finishes by handing it back, so its loop's
+  value is not bound (`corpus/reject/for-value-held.bc`).
 
 `yield`, `break` and `return` stand on the spine: before elaboration, what follows a head that
 contains one (a `match` or `if`, a bind, a `let`, a loop) is moved into it, into both arms of a
@@ -1258,7 +1266,7 @@ A `for` in a div body iterates a generator too (a skip goes round the loop), and
 generator that holds no capability (`range(1, 10)`, a pipeline of generators).
 
 **Open.** A direct-style call of a div function in a generator body; delegation to another
-generator (`yield from`, a `gen_bind` of the call); a `gen { … }` block; a `for` that binds the finishing value; a total consumer (a `for` over a generator is
+generator (`yield from`, a `gen_bind` of the call); a `gen { … }` block; a total consumer (a `for` over a generator is
 div). Generators are not yet a case of §14's specialization (a callback that yields).
 
 ### Borrow scopes over loops, per observation

@@ -601,6 +601,41 @@ def _root_.Frontend.Comp.spineBreak : Comp → Option Span
   | .ret sp (.sugar _ .brk) | .ret sp (.app _ (.sugar _ .brk) _) => some sp
   | _ => none
 
+/-- The `break`s on the spine outside every inner loop, with their values. -/
+def _root_.Frontend.Comp.spineBreaks : Comp → List (Span × Option Val)
+  | .bind _ _ _ _ N _ | .letUnit _ _ N | .letPair _ _ _ _ N | .for_ _ _ _ _ N => N.spineBreaks
+  | .case _ _ _ M _ N => M.spineBreaks ++ N.spineBreaks
+  | .ret sp (.sugar _ .brk) => [(sp, none)]
+  | .ret sp (.app _ (.sugar _ .brk) e) => [(sp, some e)]
+  | _ => []
+
+/-- What follows a loop whose value is bound (`let r = for …; N`): `r`, its written type, and
+`N`. -/
+def _root_.Frontend.Comp.forRes? : Comp → Option (Ident × Option VTy × Comp)
+  | .bind _ r A (.ret _ (.sugar _ .forRes)) N _ => some (r, A, N)
+  | _ => none
+
+/-- A right-nested tuple of values (`()` when empty). -/
+def tupleVals (sp : Span) : List Val → Val
+  | [] => .unit sp
+  | [v] => v
+  | v :: vs => .pair sp v (tupleVals sp vs)
+
+/-- What an iterator or a generator finishes with: the value of a `for` over it. -/
+def finOf (T : CVTy) : Option CVTy :=
+  ((genOf T).map (·.2.1)).orElse fun _ => (iterOf T).map (·.2.1)
+
+/-- The `break`s of a loop's body against whether the loop's value is bound (`keep`, of type
+`T`): a bare `break` gives `()` only when the value is `1`, and `break e` needs a bound value. -/
+def checkBreaks (M : Comp) (keep : Option CVTy) : Except Error Unit :=
+  for (bsp, e) in M.spineBreaks do
+    match keep, e with
+    | none, some _ => throw ⟨bsp, "`break e` gives the value of a `for` whose value is bound: " ++
+        "`let r = for x in … { … }; …`"⟩
+    | some T, none => if T != .unit then
+        throw ⟨bsp, s!"this `for`'s value, of type `{ppT T}`, is bound: `break e` gives it"⟩
+    | _, _ => pure ()
+
 /-- A generator's `return e` terminals as the plain terminal `e`: at the generator's top level, where
 finishing with `e` is what the terminal does. -/
 def stripRet : Comp → Comp :=
@@ -735,7 +770,7 @@ variables `M` or `N` mentions. Otherwise `rest` is `.inr N'`, `N` elaborated: th
 the variables `M` mentions, finishes with the capabilities and those variables, and the delay
 bind runs `N'` with them rebound.  `[spec §14]` -/
 def forLoop (cx : LoopCx) (c : TCx) (sp : Span) (x : Ident) (V : Val) (M : Comp)
-    (rest : Comp ⊕ Comp) : SM Comp := do
+    (keep₀ : Option Ident) (rest : Comp ⊕ Comp) : SM Comp := do
   if let .app _ (.sugar wsp .while_) _ := V then
     throw ⟨wsp, "`while` is a generator's loop: it may appear only in the body of a `gen fn`"⟩
   -- `bytes(&mut c)`: the iterator takes `c`, and hands it back at its end (typed elaboration §5.1).
@@ -759,6 +794,14 @@ def forLoop (cx : LoopCx) (c : TCx) (sp : Span) (x : Ident) (V : Val) (M : Comp)
     | [] => pure none
     | [cap] => pure (some cap)
     | _ => throw ⟨V.span, "the iterator of a `for` is made from at most one capability"⟩
+  -- `let r = for …`: the loop's value, what the iterator finishes with or a `break e`.
+  let keep : Option (String × CVTy) ← match keep₀, cap with
+    | none, _ => pure none
+    | some r, none => pure (some (r.name, Q))
+    | some r, some c =>
+      throw ⟨r.span, s!"the iterator of this `for` is made from `{c}`, which it hands back " ++
+        "when it finishes: the loop's value is not bound"⟩
+  checkBreaks M (keep.map (·.2))
   -- A variable the body reads or assigns (a `let mut` rebound in it) is threaded.
   let reads (y : String) : Bool := match rest with
     | .inl N => mentionsC y M || M.rebinds y || mentionsC y N
@@ -771,17 +814,23 @@ def forLoop (cx : LoopCx) (c : TCx) (sp : Span) (x : Ident) (V : Val) (M : Comp)
   let sv := th.map (·.1) ++ ws.map (·.1)
   let svTy := th.map (ppT ·.2) ++ ws.map (ppT ·.2)
   let st := s!"{ppT Vt} * {tupleTySrc svTy}"
-  let wT := tupleTySrc (ws.map (ppT ·.2))
+  -- What the loop finishes with when what follows it runs after it: the capabilities, the
+  -- variables the body threads, and the loop's value when it is bound.
+  let wT := tupleTySrc ((ws ++ keep.toList).map (ppT ·.2))
   let fin := match rest with
     | .inl _ => s!"({ppT cx.B})"
     | .inr _ => s!"(({ppT cx.K}) * {wT})"
-  let wv := tupleSrc (ws.map (·.1))
+  let wv := tupleSrc ((ws ++ keep.toList).map (·.1))
   let finish := match rest with
     | .inl _ => "force io_hole_fin"
     | .inr _ => s!"return (inl ({cx.kSrc}, {wv}))"
   let R := ppT cx.R
   let ds := destructSrc "io_st" sv
-  let wn : List String := ws.map (·.1)
+  let wn : List String := (ws ++ keep.toList).map (·.1)
+  -- At the end of the stream: the capability handed back, or the loop's value bound.
+  let atEnd (v : String) : String := match keep with
+    | some (r, _) => s!"{r} <- return {v};\n"
+    | none => bindCap cap Q v
   let result := match rest with
     | .inl _ => "return (thunkv nu_in < (nu_out (force io_f io_s0)).1, (nu_out (force io_f io_s0)).2 >)"
     | .inr _ => s!"io_l <- return (thunkv nu_in < (nu_out (force io_f io_s0)).1, (nu_out (force io_f io_s0)).2 >);
@@ -791,9 +840,9 @@ return (div_bind[{fin}, {ppT cx.B}, ({R}), ({R})] (io_l, thunkv
       {destructParts "io_ka" cx.parts}      {destructSrc "io_wa" wn}      force io_hole_rest,
     fun (io_r : {R}) -> return io_r >))"
   let ended := if isGen then s!"case io_d \{
-          inl io_c -> {bindCap cap Q "io_c"}{finish}
+          inl io_c -> {atEnd "io_c"}{finish}
         | inr io_it -> return (inr (io_it, {tupleSrc sv}))
-        }" else s!"{bindCap cap Q "io_c"}{finish}"
+        }" else s!"{atEnd "io_c"}{finish}"
   let src := s!"io_step : !U ({st} -o F ({fin} + ({st})) & F ({R})) <- return (!thunkv fun (io_s : {st}) ->
   < let (io_it, io_st) = io_s;
     {ds}    io_o <- (nu_out (force io_it)).1;
@@ -825,8 +874,13 @@ io_s0 : {st} <- return (io_hole_v, {tupleSrc sv});
   -- `break`: the iterator closed, then what follows the loop, as at the end of the stream.
   let brk ← template sp "`break`" s!"io_c <- (nu_out (force io_it)).2;\n{bindCap cap Q' "io_c"}{finish}"
   let brk := brk.fill (fun _ => none) (fun n => if n == "io_hole_fin" then finN else none)
+  -- `break e` binds the loop's value first.
+  let brkWith (bsp : Span) (e : Val) : Comp := match keep with
+    | some (r, _) => .bind bsp ⟨r, bsp⟩ none (.ret bsp e) brk false
+    | none => brk
   let body := wrapTail (fun
-      | .ret _ (.sugar _ .brk) => brk
+      | .ret bsp (.sugar _ .brk) => brkWith bsp (.unit bsp)
+      | .ret bsp (.app _ (.sugar _ .brk) e) => brkWith bsp e
       | T => .bind T.span ⟨"io_u", T.span⟩ none T
         (.ret T.span (.inr T.span (.pair T.span (.var T.span "io_it") (tupleVal T.span sv)))) false) M
   let hole : String → Option Comp := match rest with
@@ -884,13 +938,20 @@ def loopBody (cx : LoopCx) : Nat → TCx → Comp → SM Comp
     return .case sp V x (← loopBody cx n (c.push x.name Ax) M) y
       (← loopBody cx n (c.push y.name Ay) N)
   | n + 1, c, .for_ sp x V M N => do
+    -- `let r = for …; N`: `r` is bound in `N` to the loop's value.
+    let (keep, N) := match N.forRes? with
+      | some (r, _, N₀) => (some r, N₀)
+      | none => (none, N)
+    let cr := match keep with
+      | some r => c.push r.name ((c.tyV V.takeLends.1).bind finOf)
+      | none => c
     -- What follows runs inside the loop's last step when it is total and every variable it
     -- reads has a type; otherwise it follows by the delay bind.
     let cs := cx.capNames
     let typed := (latest c.locals).all fun (y, T) =>
       cs.contains y || y == x.name || !mentionsC y N || T.isSome
-    if (loopsAt c (some cx.B) N).isNone && typed then forLoop cx c sp x V M (.inl N)
-    else forLoop cx c sp x V M (.inr (← loopBody cx n c N))
+    if (loopsAt cr (some cx.B) N).isNone && typed then forLoop cx c sp x V M keep (.inl N)
+    else forLoop cx c sp x V M keep (.inr (← loopBody cx n cr N))
   | n + 1, c, T => do
     if let .ret sp V := T then
       if (nestedCall c (some cx.B) V).isSome then
@@ -1016,6 +1077,10 @@ structure GenLoop where
   /-- The body has a `return`: it finishes with `inr (inr v)` for `return v`, and `inr (inl …)`
   after `break`. -/
   hasRet : Bool := false
+  /-- `let r = for …`: the loop's value `r` and its type. -/
+  keep : Option (String × CVTy) := none
+  /-- What follows the loop (without the binding of `r`). -/
+  rest : Comp
 
 /-- `for x in V { M }; N` or `while c { M }; N` in a generator body: a generator by `unfold` over
 the loop's state, then `gen_bind` of what follows. -/
@@ -1029,6 +1094,10 @@ def genLoopPlan (g : GenCx) (c : TCx) (sp : Span) (x : Ident) (V : Val) (M N : C
   let M ← normExits divFuel M
   let hasRet := M.hasRet
   let V := V.takeLends.1
+  -- `let r = for …; N`: the loop's value is bound to `r` in `N`.
+  let (keep₀, N) := match N.forRes? with
+    | some (r, _, N₀) => (some r, N₀)
+    | none => (none, N)
   -- The iterator: its type, whether it is a generator, and what it finishes and closes with.
   let it ← match cond with
     | some _ => pure none
@@ -1051,6 +1120,15 @@ def genLoopPlan (g : GenCx) (c : TCx) (sp : Span) (x : Ident) (V : Val) (M N : C
   let xs := match it with
     | some (_, E, _, _, _) => [(x.name, E)]
     | none => []
+  let keep : Option (String × CVTy) ← match keep₀, it with
+    | none, _ => pure none
+    | some r, some (_, _, _, Q, _) => do
+      if let some c := cap then
+        throw ⟨r.span, s!"the iterator of this `for` is made from `{c}`, which it hands back " ++
+          "when it finishes: the loop's value is not bound"⟩
+      pure (some (r.name, Q))
+    | some r, none => throw ⟨r.span, "a `while` has no value"⟩
+  checkBreaks M (keep.map (·.2))
   let direct := if N.yieldsOrLoops then none else some (if g.inLoop then N else stripRet N)
   if hasRet then if let some c := cap then
     throw ⟨sp, s!"a `return` inside a `for` over an iterator made from `{c}` cannot hand `{c}` " ++
@@ -1067,8 +1145,11 @@ def genLoopPlan (g : GenCx) (c : TCx) (sp : Span) (x : Ident) (V : Val) (M N : C
   let sv := svs.map (·.1)
   let svT := tupleT (svs.map (·.2))
   let outs := ws.filter fun (y, T) => isLinear T || mentionsC y N
-  let bv := (th ++ outs).map (·.1)
-  let bvT := tupleT ((th ++ outs).map (·.2))
+  -- What the loop finishes with: the capabilities, the variables what follows reads, and the
+  -- loop's value when it is bound.
+  let bv := (th ++ outs ++ keep.toList).map (·.1)
+  let bvT := tupleT ((th ++ outs ++ keep.toList).map (·.2))
+  let bvs := (th ++ outs).map (·.1)
   -- The body: a generator of `A` finishing with the threaded variables, `inl` to go on and `inr`
   -- after `break` (with those the loop finishes with); its residual is the threaded capabilities.
   let lin := svs.filter (isLinear ·.2)
@@ -1083,12 +1164,15 @@ def genLoopPlan (g : GenCx) (c : TCx) (sp : Span) (x : Ident) (V : Val) (M N : C
   let bcx : LoopCx := if lin.isEmpty then ⟨Bb, .unit, .unit, []⟩ else
     ⟨Bb, .tensor (tupleT (lin.map (·.2))) .unit, tupleT (lin.map (·.2)), lin.map ([·])⟩
   let brkV (tsp : Span) (w : Val) : Val := if hasRet then .inr tsp (.inl tsp w) else .inr tsp w
+  let brkVal (tsp : Span) (e : Val) : Val :=
+    brkV tsp (tupleVals tsp (bvs.map (Val.var tsp ·) ++ (if keep.isSome then [e] else [])))
   let bodyW := wrapTail (fun
-    | .ret tsp (.sugar _ .brk) => .ret tsp (brkV tsp (tupleVal tsp bv))
+    | .ret tsp (.sugar _ .brk) => .ret tsp (brkVal tsp (.unit tsp))
+    | .ret tsp (.app _ (.sugar _ .brk) e) => .ret tsp (brkVal tsp e)
     | .ret tsp (.app _ (.sugar _ .retE) v) => .ret tsp (.inr tsp (.inr tsp v))
     | T => .bind T.span ⟨"io_u", T.span⟩ none T (.ret T.span (.inl T.span (tupleVal T.span sv))) false) M
   let cb := xs.foldl (fun c (y, E) => c.push y (some E)) (svs.foldl (fun c (y, T) => c.push y (some T)) c)
-  pure ⟨cond, V, it, cap, svs, ws, outs, bcx, bodyW, cb, direct, hasRet⟩
+  pure ⟨cond, V, it, cap, svs, ws, outs, bcx, bodyW, cb, direct, hasRet, keep, N⟩
 
 /-- The core of a generator's loop, around its elaborated body and what follows it. -/
 def genLoopSrc (g : GenCx) (c : TCx) (sp : Span) (x : Ident) (P : GenLoop) (body N N' : Comp)
@@ -1098,16 +1182,16 @@ def genLoopSrc (g : GenCx) (c : TCx) (sp : Span) (x : Ident) (P : GenLoop) (body
   -- A loop that starts a generator's body has a state before it, the parameter, whose
   -- observation runs the code before the loop (`start`): the loop's own states are `inr`.
   let stv (v : String) : String := if start.isSome then s!"(inr {v})" else v
-  let ⟨cond, V, it, cap, svs, ws, outs, bcx, _, _, direct, hasRet⟩ := P
+  let ⟨cond, V, it, cap, svs, ws, outs, bcx, _, _, direct, hasRet, keep, _⟩ := P
   let bg : GenCx := { g with L := bcx, inLoop := true }
   let sv := svs.map (·.1)
   let svT := tupleT (svs.map (·.2))
   let svTs := s!"({ppT svT})"
   let svSrc := tupleSrc sv
   -- What a `break` hands on: the capabilities and the variables the loop finishes with.
-  let bv := svs.filter (fun (y, _) => !ws.any (·.1 == y)) ++ outs |>.map (·.1)
-  let wn := outs.map (·.1)
-  let wT := tupleTySrc (outs.map (ppT ·.2))
+  let bv := svs.filter (fun (y, _) => !ws.any (·.1 == y)) ++ outs ++ keep.toList |>.map (·.1)
+  let wn := (outs ++ keep.toList).map (·.1)
+  let wT := tupleTySrc ((outs ++ keep.toList).map (ppT ·.2))
   -- The loop finishes with what follows it (`direct`), or with the capabilities and the variables
   -- it hands on; after a `return`, with the returned value (`inr`).
   let fin := if direct.isSome then s!"({ppT cx.B})"
@@ -1155,7 +1239,9 @@ def genLoopSrc (g : GenCx) (c : TCx) (sp : Span) (x : Ident) (P : GenLoop) (body
       let It := ppT Vt
       let St := s!"(({It}) * {svTs}) + (U ({gb}) * ({It}))"
       let wrap (g2 : String) := stv s!"(inr ({g2}, io_it))"
-      let ended := s!"{bindCap cap Q "io_q"}{finish}"
+      let ended := match keep with
+        | some (r, _) => s!"{r} <- return io_q;\n{finish}"
+        | none => s!"{bindCap cap Q "io_q"}{finish}"
       let fin := if isGen then s!"case io_d \{
           inl io_q -> {ended}
         | inr io_it -> return (inr (inr {stv s!"(inl (io_it, {svSrc}))"}))
@@ -1318,8 +1404,11 @@ def genLoop (g : GenCx) : Nat → TCx → Span → Ident → Val → Comp → Co
   | n + 1, c, sp, x, V, M, N => do
     let P ← genLoopPlan g c sp x V M N
     let body ← genBody { g with L := P.bcx, inLoop := true } n P.cb P.bodyW
-    let N' ← if P.direct.isSome then pure N else genBody g n c N
-    genLoopSrc g c sp x P body N N'
+    let cr := match P.keep with
+      | some (r, T) => c.push r (some T)
+      | none => c
+    let N' ← if P.direct.isSome then pure P.rest else genBody g n cr P.rest
+    genLoopSrc g c sp x P body P.rest N'
 end
 
 /-! ### Programs -/
@@ -1434,7 +1523,7 @@ def genDef (scope : List Decl) : Decl → SM Decl
         -- before it. Every observation is then a call of one known code.
         let P ← genLoopPlan g cm lsp lx LV LM LN
         let bodyL ← genBody { g with L := P.bcx, inLoop := true } divFuel P.cb P.bodyW
-        genLoopSrc g cm lsp lx P bodyL LN LN (some (x.name, Ax.pp, pre, abort))
+        genLoopSrc g cm lsp lx P bodyL P.rest P.rest (some (x.name, Ax.pp, pre, abort))
       | none => do
         let M' ← genBody g divFuel c₀ M
         pure (Comp.ret sp (.thunkv sp (.nuIn sp (.with_ sp M' abort))))
@@ -2024,7 +2113,14 @@ def surfC : Nat → TCx → Option CCTy → Comp → DM Comp
     | .for_ sp x V M N => do
       let V' ← surfV n c none V
       let el := (c.tyV V').bind elemOf
-      pure (.for_ sp x V' (← surfC n (c.push x.name el) none M) (← surfC n c exp N))
+      let M' ← surfC n (c.push x.name el) none M
+      -- `let r = for …; N`: `r` has the type the iterator finishes with.
+      match N.forRes? with
+      | some (r, A, N₀) =>
+        let rT := (A.bind c.elabV).orElse fun _ => (c.tyV V'.takeLends.1).bind finOf
+        let N₀' ← surfC n (c.push r.name rT) exp N₀
+        pure (.for_ sp x V' M' (.bind N.span r A (.ret r.span (.sugar r.span .forRes)) N₀' false))
+      | none => pure (.for_ sp x V' M' (← surfC n c exp N))
     | M => pure M
 end
 
@@ -2158,7 +2254,13 @@ def specC : Nat → TCx → Comp → DM Comp
     | .ascribe sp M C => do pure (.ascribe sp (← specC n c M) C)
     | .for_ sp x V M N => do
       let el := (c.tyV V).bind elemOf
-      pure (.for_ sp x (← specV n c V) (← specC n (c.push x.name el) M) (← specC n c N))
+      let M' ← specC n (c.push x.name el) M
+      match N.forRes? with
+      | some (r, A, N₀) =>
+        let rT := (A.bind c.elabV).orElse fun _ => (c.tyV V.takeLends.1).bind finOf
+        let N₀' ← specC n (c.push r.name rT) N₀
+        pure (.for_ sp x (← specV n c V) M' (.bind N.span r A (.ret r.span (.sugar r.span .forRes)) N₀' false))
+      | none => pure (.for_ sp x (← specV n c V) M' (← specC n c N))
     | M => pure M
 end
 

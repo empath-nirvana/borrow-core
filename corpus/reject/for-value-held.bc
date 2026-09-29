@@ -1,0 +1,9 @@
+-- expect: 8:7: the iterator of this `for` is made from `stdin`, which it hands back when it finishes: the loop's value is not bound
+-- An iterator made from a capability finishes by handing the capability back: `bytes(&mut
+-- stdin)` gives `stdin` back when its input ends, and that is what the loop does with the value
+-- it finishes with. So the loop's value is not bound to a name.
+main -> i32 =
+  let mut n = 0;
+  putb(&mut stdout, 10);
+  let r = for b in bytes(&mut stdin) { n = n + 1 };
+  n

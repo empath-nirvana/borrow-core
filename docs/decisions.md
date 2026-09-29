@@ -315,3 +315,9 @@ Each entry: the decision, and why. Newest last.
     - A `return` inside a `for` over an iterator made from a capability is rejected rather than
       closing the iterator to get the capability back: the returned value is computed inside
       the loop, where the capability is not in scope.
+    - **`let r = for x in V { M }; N`** keeps a loop's value: what the iterator finishes with, or
+      `e` after `break e`. `break e` is allowed only in such a loop, and a bare `break` there
+      only when the value is `1`: Rust's `break e` is only in `loop`, whose value is always
+      bound; here every `for` over a generator has a finishing value to keep. A loop over an
+      iterator made from a capability keeps none (it hands the capability back). `while` has no
+      value.

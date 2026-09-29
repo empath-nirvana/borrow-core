@@ -227,6 +227,10 @@ def Comp.pp (M : Comp) (lvl : Nat := 0) (k : Nat := 0) : String :=
     | .for_ _ _ (.app _ (.sugar _ .while_) c) M N =>
       "while " ++ c.pp 1 k ++ " {" ++ nl (k + 2) ++
         M.pp 0 (k + 2) ++ nl k ++ "};" ++ nl k ++ N.pp 0 k
+    | .for_ _ x V M (.bind _ r A (.ret _ (.sugar _ .forRes)) N _) =>
+      "let " ++ r.name ++ (match A with | some A => " : " ++ A.pp | none => "") ++ " = for " ++
+        x.name ++ " in " ++ V.pp 1 k ++ " {" ++ nl (k + 2) ++
+        M.pp 0 (k + 2) ++ nl k ++ "};" ++ nl k ++ N.pp 0 k
     | .for_ _ x V M N =>
       "for " ++ x.name ++ " in " ++ V.pp 1 k ++ " {" ++ nl (k + 2) ++
         M.pp 0 (k + 2) ++ nl k ++ "};" ++ nl k ++ N.pp 0 k

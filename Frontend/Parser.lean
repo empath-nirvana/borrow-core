@@ -1086,6 +1086,23 @@ def compG : Nat → Bool → P Comp
         | _ => failAt (← spanFrom st) "`let mut` binds a name"
       let A ← if ← isSym ":" then do discard bump; pure (some (← vty n)) else pure none
       expectSym "="
+      if (← peek).tok == .kw "for" then
+        -- `let r = for x in V { M }; N`: the loop's value, what its iterator finishes with or
+        -- what a `break e` gives, bound in what follows it.
+        let r ← match p with
+          | .var r => pure r
+          | _ => failAt (← spanFrom st) "`let … = for …` binds a name"
+        discard bump
+        let x ← ident
+        expectKw "in"
+        let V ← val n
+        expectSym "{"
+        let M ← comp n
+        expectSym "}"
+        expectSym ";"
+        let N ← comp n
+        let sp ← spanFrom st
+        return .for_ sp x V M (.bind sp r A (.ret sp (.sugar sp .forRes)) N false)
       if (← peek).tok == .kw "match" || (← peek).tok == .kw "if" then
         let M ← compPrefix n
         expectSym ";"

@@ -60,3 +60,26 @@ main -> i32 =
 
 `return` is a generator's: in `fn` and `main` bodies it is the core's `return`. `break` also
 leaves a `for` in `main` or any other function.
+
+## The value of a loop
+
+A generator finishes with a value. `let r = for x in g { … }; …` keeps it, or, after
+`break e`, keeps `e`:
+
+```bc
+-- answer: i32[1006]
+gen fn upto(n: i32) -> i32, i32 =
+  let mut i = 0;
+  while i < n { yield i; i = i + 1 };
+  n
+
+gen fn firstbig(it: U (gen i32 i32 1), lim: i32) -> i32, i32 =
+  let r = for x in it {
+    if x > lim { break x } else { yield x }
+  };
+  r + 1000
+
+main -> i32 =
+  let s = for x in firstbig(upto(10), 5) { () };
+  s
+```
