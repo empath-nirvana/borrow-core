@@ -508,11 +508,18 @@ step is stuck on a well-typed argument.
 
 ### Relation
 
-    𝒱⟦[L]⟧δ(v) ≜ ∃ℓ c. ⌜v = (ℓ, i32 c)⌝ ⋆ ⊛_{i < c} 𝒱⟦L⟧δ(ℓ + i)
+    𝒱⟦[L]⟧δ(v) ≜ ∃ℓ c. ⌜v = (ℓ, i32 c) ∧ c < 2³¹⌝ ⋆ ⊛_{i < c} 𝒱⟦L⟧δ(ℓ + i)
 
 At `Array A` this is `n` owned cells, each holding a value in `𝒱⟦A⟧`; at `ArrayImm @a A`, `n`
 `imm` cells at `@a`. Nothing else changes in the typed world: a block allocation is `n` of
 `TW.alloc`, a drop `n` of `TW.free`.
+
+**The length bound.** A family in the relation has `tab`'s length: `len(c) = c`
+(`arrLen_of_bound`). `tab` builds only such families (`arrLen_bound`), every operation hands
+back the length it was given, and a split (`vP_fam_split`) only shortens one. So a constant
+whose result array has its argument's length (a map, a clone) builds exactly that many cells;
+without the bound a family with `c ≥ 2³¹` would be in the relation, and `tab (c, …)` would
+build the empty array beside it (`experiments/PositiveArrays`, `FamLenBound`).
 
 ### Operations
 
