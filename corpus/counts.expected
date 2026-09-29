@@ -36,10 +36,12 @@ gen-lazy 1 4 0
 gen-lines 42 50 0
 gen-pipeline 0 0 0
 gen-produce 0 4 0
+gen-return 1 13 0
 implicit-drops 9 0 0
 int-arith 0 0 0
 int-ops 0 0 0
 io-aoc 4 0 0
+io-break 2 0 0
 io-cat 2 0 0
 io-for-assign 1 0 0
 io-for-then 2 0 0

@@ -256,6 +256,9 @@ inductive VSugar where
   | while_
   /-- `break` in the body of a generator's loop: the loop ends. -/
   | brk
+  /-- `return e` in a generator's body, applied to the value: the generator finishes with it,
+  from any depth of its loops. -/
+  | retE
   deriving DecidableEq, Repr, Inhabited
 
 mutual

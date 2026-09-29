@@ -149,8 +149,19 @@ structure PState where
   assigned : List String := []
   /-- The variables the `match` or `if` just parsed assigns, which it must hand on. -/
   joined : List String := []
+  /-- Inside a generator's body (and not inside a closure, block or borrow block in it), where a
+  statement `return e` finishes the generator from any depth (`VSugar.retE`). -/
+  inGen : Bool := false
 
 abbrev P := StateT PState (Except Error)
+
+/-- Parse with `inGen` set to `g`, restored after. -/
+def withGen {α} (g : Bool) (p : P α) : P α := do
+  let g₀ := (← get).inGen
+  modify fun s => { s with inGen := g }
+  let r ← p
+  modify fun s => { s with inGen := g₀ }
+  pure r
 
 def fuelPerToken : Nat := 16
 
@@ -733,14 +744,14 @@ def val : Nat → P Val
     let st ← startPos
     let t ← peek
     match t.tok with
-    | .kw "thunk" => discard bump; let M ← comp n; pure (.thunk (← spanFrom st) M)
-    | .kw "thunkv" => discard bump; let M ← comp n; pure (.thunkv (← spanFrom st) M)
+    | .kw "thunk" => discard bump; let M ← withGen false (comp n); pure (.thunk (← spanFrom st) M)
+    | .kw "thunkv" => discard bump; let M ← withGen false (comp n); pure (.thunkv (← spanFrom st) M)
     | .sym "!" =>
       discard bump
       if ← isKw "thunk" then
-        discard bump; let M ← comp n; pure (.bangThunk (← spanFrom st) M)
+        discard bump; let M ← withGen false (comp n); pure (.bangThunk (← spanFrom st) M)
       else if ← isKw "thunkv" then
-        discard bump; let M ← comp n; pure (.bangThunkv (← spanFrom st) M)
+        discard bump; let M ← withGen false (comp n); pure (.bangThunkv (← spanFrom st) M)
       else if ← isSym "{" then brace n st true
       else expected "`thunk`, `thunkv` or `{` after `!`"
     | .sym "{" => brace n st false
@@ -785,7 +796,7 @@ def rest : Nat → P (List Val)
 /-- A block: `{ S }`, or a closure `{ p -> S }`; `!` before it makes it persistent. -/
 def brace : Nat → Pos → Bool → P Val
   | 0, _, _ => outOfFuel
-  | n + 1, st, bang => do
+  | n + 1, st, bang => withGen false do
     expectSym "{"
     -- A closure when a pattern and `->` come first.
     let saved ← get
@@ -874,7 +885,7 @@ def valPrefix : Nat → P Val
 { … }` (a family), or `modify V { p -> S }`. The lifetime `'x` may be left out. -/
 def borrowBlock : Nat → P Val
   | 0 => outOfFuel
-  | n + 1 => do
+  | n + 1 => withGen false do
     let st ← startPos
     let t ← bump
     let k ← if t.tok == .kw "modify" then pure BorrowKind.modify else
@@ -1097,7 +1108,7 @@ def compG : Nat → Bool → P Comp
       let A ← vty n
       expectSym ")"
       expectSym "->"
-      let M ← comp n
+      let M ← withGen false (comp n)
       pure (.lam (← spanFrom st) x A M)
     | .kw "Fun", _ =>
       discard bump
@@ -1120,6 +1131,15 @@ def statement : Nat → Pos → Bool → P Comp
     modify fun s => { s with joined := [] }
     -- A statement expression, and the place it rebinds.
     let (S, rebind) ← match t.tok, t1.tok with
+      | .kw "return", _ =>
+        if (← get).inGen && !head then
+          -- `return e` in a generator's body: the generator finishes with `e`.
+          discard bump
+          let V ← if t1.tok == .sym "}" || t1.tok == .sym ";" then pure (Val.unit t.span)
+            else val n
+          let sp ← spanFrom st
+          pure (Comp.ret sp (.app sp (.sugar t.span .retE) V), none)
+        else pure (← compPrefix n, none)
       | .ident f, .sym "!" =>
         discard bump; discard bump
         if ← isSym "(" then
@@ -1184,6 +1204,13 @@ def compPrefix : Nat → P Comp
     match t.tok with
     | .kw "return" =>
       discard bump
+      let t' ← peek
+      if t'.tok == .kw "return" then
+        -- A generator's early `return e`, as it is printed: `return return e`.
+        discard bump
+        let V ← val n
+        let sp ← spanFrom st
+        return .ret sp (.app sp (.sugar t'.span .retE) V)
       let V ← valPrefix n
       pure (.ret (← spanFrom st) V)
     | .kw "absurd" =>
@@ -1397,7 +1424,7 @@ def decl (n : Nat) : P Decl := do
       let A ← vty n
       expectSym "]"
       expectKw "def"
-      return ← defRest st (.gen A)
+      return ← withGen true (defRest st (.gen A))
     expectKw "fn"
     genRest st
   | .kw "include" =>
@@ -1488,7 +1515,7 @@ where
     let B ← if ← isSym "," then do discard bump; vty n else pure (.unit (← spanFrom st))
     expectSym "="
     modify fun s => { s with muts := [], assigned := [] }
-    let M ← comp n
+    let M ← withGen true (comp n)
     let sp ← spanFrom st
     let P := tupleTy sp (ps.map (·.2))
     let pn ← freshName "io_p"

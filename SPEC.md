@@ -1234,8 +1234,22 @@ elaborates, in `Frontend/Sugar.lean`, to `f : !(A₁ * … => U (gen A B R))`, `
   loop, and code with no `yield` is one `unfold` whose first state is the parameters, so every
   observation of it is a call of one known code.
 
-`yield` and `break` stand only on the spine (binds, `let`s, `match` and `if` arms, which a
-`yield` in a bound computation is pushed into, and loop bodies). A `yield` inside a borrow block is
+- **`return e`** anywhere in the body finishes the generator with `e`, from any depth of its
+  loops: a loop's body with a `return` finishes with `inr (inr e)` (`inl` goes on, `inr (inl …)`
+  is a `break`), and each loop it leaves closes its iterator and finishes at once, skipping what
+  follows it (`corpus/gen-return.bc`, `corpus/sugar/gen-return.bc`). The loops it leaves must
+  hold nothing without a destructor beyond what `e` hands back; a `return` inside a `for` over an
+  iterator made from a capability is rejected, since the iterator holds the capability
+  (`corpus/reject/gen-return-held.bc`). `return` is a generator's: in its body, a statement
+  `return e` that is not the head of a bind; elsewhere `return` is the core's.
+- **`break`** leaves the innermost loop from any position of its body, not only its tail
+  (`corpus/reject/gen-break-outside.bc` outside every loop). So does `break` in a `for` of a div
+  body: the iterator is closed and what follows the loop runs (`corpus/io-break.bc`).
+
+`yield`, `break` and `return` stand on the spine: before elaboration, what follows a head that
+contains one (a `match` or `if`, a bind, a `let`, a loop) is moved into it, into both arms of a
+`match` or `if` (a commuting conversion), and what follows a `break` or `return` is dropped
+(`normExits`). A `yield` inside a borrow block is
 rejected: a generator cannot hold a borrow of its own local across a `yield`
 (`corpus/reject/gen-self-borrow.bc`), and a generator that holds a borrow of outside data cannot
 leave that borrow's scope, by the existing rule for thunks (`corpus/reject/gen-escape.bc`).
@@ -1244,8 +1258,7 @@ A `for` in a div body iterates a generator too (a skip goes round the loop), and
 generator that holds no capability (`range(1, 10)`, a pipeline of generators).
 
 **Open.** A direct-style call of a div function in a generator body; delegation to another
-generator (`yield from`, a `gen_bind` of the call); `return` from inside a loop; a `gen { … }`
-block; a `for` that binds the finishing value; a total consumer (a `for` over a generator is
+generator (`yield from`, a `gen_bind` of the call); a `gen { … }` block; a `for` that binds the finishing value; a total consumer (a `for` over a generator is
 div). Generators are not yet a case of §14's specialization (a callback that yields).
 
 ### Borrow scopes over loops, per observation

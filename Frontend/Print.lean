@@ -129,7 +129,7 @@ def Val.level : Val → Nat
   -- `alloc(e)`, `clone(x)`: an application, parenthesized as an argument.
   | .app _ (.sugar _ (.call _)) _ => 2
   | .app _ (.sugar _ .deref) _ => 2
-  | .app _ (.sugar _ .yield_) _ => 1
+  | .app _ (.sugar _ .yield_) _ | .app _ (.sugar _ .retE) _ => 1
   | .app _ (.sugar _ .brace) _ | .app _ (.app _ (.sugar _ (.borrow ..)) _) _ => 2
   | .thunk .. | .thunkv .. | .bangThunk .. | .bangThunkv .. => 0
   | .inl .. | .inr .. | .roll .. | .unroll .. | .unbang .. | .unbox .. | .boxed .. | .run ..
@@ -169,6 +169,7 @@ def Val.pp (V : Val) (lvl : Nat := 0) (k : Nat := 0) : String :=
     | .app _ (.sugar _ (.call c)) W => c ++ "(" ++ W.pp 0 k ++ ")"
     | .app _ (.sugar _ .deref) V => "*" ++ V.pp 3 k
     | .app _ (.sugar _ .yield_) V => "yield " ++ V.pp 1 k
+    | .app _ (.sugar _ .retE) V => "return " ++ V.pp 1 k
     | .app _ (.sugar _ .brace) (.thunk _ M) => "{ " ++ M.pp 0 (k + 2) ++ " }"
     | .app _ (.sugar _ .brace) (.bangThunk _ M) => "!{ " ++ M.pp 0 (k + 2) ++ " }"
     | .app _ (.app _ (.sugar _ (.borrow bk x)) P) (.thunkv _ (.lam _ b _ M)) =>

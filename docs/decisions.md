@@ -304,3 +304,14 @@ Each entry: the decision, and why. Newest last.
       is covered.
     - `|>` is not provided: draft 0 puts the piped value last (#17), and #109's adapters take the
       source first; the two are to be reconciled with it.
+41. **Provisional (SPEC §14 Generators, #109, to be confirmed by the user).**
+    - **`return e` is a generator's.** In the body of a `gen fn`, a statement `return e` that is
+      not the head of a bind (`x <- return V; N` stays the core's) finishes the generator with
+      `e` from any depth of its loops. In `fn` and `main` bodies, closures, blocks and borrow
+      blocks, `return` is the core's `return`, as before: giving it Rust's meaning there would
+      change what existing core-style bodies mean. It is printed `return return e`.
+    - **`break` anywhere in a loop's body**, in a generator and in a `for` of a div body; after
+      it, the iterator is closed and what follows the loop runs.
+    - A `return` inside a `for` over an iterator made from a capability is rejected rather than
+      closing the iterator to get the capability back: the returned value is computed inside
+      the loop, where the capability is not in scope.
