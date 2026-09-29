@@ -1,0 +1,19 @@
+-- expect: 11:5: `yield` and `break` may appear only on the spine of a generator's body (the tail positions of binds, `let`s, `match` arms and loops): not inside a value, a call's argument or a borrow block. A generator's state is what lives between two observations, and a borrow block's body is one computation that returns before the block ends, so a generator cannot hold a borrow of its own local across a `yield`
+-- A generator that would hold a borrow of its own local across a `yield` (a self-reference,
+-- which Rust's generators forbid and its `async` needs `Pin` for). A borrow block's body is one
+-- computation that returns before the block ends, so a `yield` cannot stand inside it: the
+-- generator's state is what lives between observations, and a borrow of the generator's own
+-- cell is not among it. What is allowed is to own the cell in the state and borrow it anew at
+-- each step (`corpus/gen-cell.bc`).
+gen fn selfref() -> i32 =
+  let c = alloc(5);
+  borrow imm c { 'x, b ->
+    yield *b;
+    ()
+  };
+  free(c)
+
+main -> i32 =
+  let mut acc = 0;
+  for x in selfref() { acc = acc + x };
+  acc

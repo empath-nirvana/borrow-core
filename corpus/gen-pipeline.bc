@@ -1,0 +1,30 @@
+-- Generators composed: a `range` written with `while`, a map (`squares`) and a filter (`above`)
+-- written as generators over another generator, and a `for` that sums the pipeline.
+--
+-- Each generator here is one loop: its body is elaborated to one `unfold` whose first state runs
+-- the code before the loop (so the call runs nothing), and whose loop head starts the next
+-- iteration at once when the body finishes without yielding. Every observation is then a call
+-- of one known code: the pipeline allocates nothing and makes no dispatched call
+-- (`corpus/counts.expected`: 0 and 0).
+--
+-- Answer: i32[355], the squares from 1 to 10 that are above 20: 25 + 36 + 49 + 64 + 81 + 100. A
+-- range that stopped one early gives 255; a filter that kept everything gives 385; a map that
+-- yielded the element instead of its square gives 0 (nothing above 20).
+
+gen fn range(lo: i32, hi: i32) -> i32 =
+  let mut i = lo;
+  while i < hi { yield i; i = i + 1 };
+  ()
+
+gen fn squares(it: U (gen i32 1 1)) -> i32 =
+  for x in it { yield x * x };
+  ()
+
+gen fn above(n: i32, it: U (gen i32 1 1)) -> i32 =
+  for x in it { if n < x { yield x } else { () } };
+  ()
+
+main -> i32 =
+  let mut acc = 0;
+  for x in above(20, squares(range(1, 11))) { acc = acc + x };
+  acc

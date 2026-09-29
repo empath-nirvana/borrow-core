@@ -1,0 +1,44 @@
+-- A generator is lazy, and closing it runs no more of it. `ticks` writes `>` before its first
+-- `yield` and each number before yielding it, through the output capability it is given; it
+-- finishes, or is closed, handing the capability back.
+--
+-- `main` makes a generator and closes it at once: nothing is written, since its body runs only
+-- when it is observed. It makes a second, observes it once (`>0`) and closes it: the rest of the
+-- body never runs. Then a `for` lends `stdout` to a third and runs it to its end. The dots mark
+-- where `main` writes.
+--
+-- Answer: the lines `.>0`, `.>0`, `1`, `2`, and i32[3] (0 + 1 + 2 from the `for`). A generator
+-- that ran its first step when it was made writes `>` before the first dot; a `close` that ran
+-- the rest writes `1` and `2` before the second dot.
+
+gen fn ticks(o: Out, n: i32) -> i32, Out =
+  putb(&mut o, 62);
+  let mut i = 0;
+  while i < n {
+    put_dec(&mut o, i);
+    putb(&mut o, 10);
+    yield i;
+    i = i + 1
+  };
+  o
+
+main -> i32 =
+  let g = ticks(stdout, 3);
+  r <- (nu_out (force g)).2;
+  let (stdout, _) = r;
+  putb(&mut stdout, 46);
+  let g = ticks(stdout, 3);
+  o <- (nu_out (force g)).1;
+  match o {
+    inl (x, g) ->
+      r <- (nu_out (force g)).2;
+      let (stdout, _) = r;
+      putb(&mut stdout, 46);
+      let mut acc = x;
+      for y in ticks(&mut stdout, 3) { acc = acc + y };
+      acc
+  | inr d -> match d {
+      inl stdout -> 99
+    | inr g -> r <- (nu_out (force g)).2; let (stdout, _) = r; 98
+    }
+  }

@@ -132,6 +132,9 @@ inductive CTy where
   | iter (sp : Span) (A R R' : VTy)
   /-- `loop A B`: `nu X. F (A + U X) & F B` (SPEC §7). -/
   | loop (sp : Span) (A B : VTy)
+  /-- `gen A B R`: `nu X. F (A * U X + (B + U X)) & F R`, a generator: `next` yields an `A`,
+  finishes with `B`, or skips a step; `close` hands back `R` (`lib/gen.bc`). -/
+  | gen (sp : Span) (A B R : VTy)
 
 /-- Shapes `σ ::= leaf A | node σ σ | Name` (syntax-core §5). -/
 inductive Shape where
@@ -246,6 +249,13 @@ inductive VSugar where
   | borrow (k : BorrowKind) (x : String)
   /-- `*e`: the content of a borrow or a cell, applied to it. -/
   | deref
+  /-- `yield e` in a generator's body, applied to the element. -/
+  | yield_
+  /-- `while c { M }; N` in a generator's body: the condition, applied to it, as the iterator
+  of a `for` (`Comp.for_`) whose variable is not used. -/
+  | while_
+  /-- `break` in the body of a generator's loop: the loop ends. -/
+  | brk
   deriving DecidableEq, Repr, Inhabited
 
 mutual
@@ -341,6 +351,8 @@ inductive Mark where
   | none
   | total
   | div
+  /-- `gen fn`: a generator yielding `A` (`lib/gen.bc`). -/
+  | gen (A : VTy)
   deriving DecidableEq, Repr, Inhabited
 
 /-- Declarations (syntax-core §10). -/
@@ -408,6 +420,7 @@ def CTy.strip : CTy → CTy
   | .stream _ A => .stream .none A.strip
   | .iter _ A R R' => .iter .none A.strip R.strip R'.strip
   | .loop _ A B => .loop .none A.strip B.strip
+  | .gen _ A B R => .gen .none A.strip B.strip R.strip
 
 def Shape.strip : Shape → Shape
   | .leaf _ A => .leaf .none A.strip
@@ -501,10 +514,14 @@ def Comp.strip : Comp → Comp
   | .for_ _ x V M N => .for_ .none x.strip V.strip M.strip N.strip
 end
 
+def Mark.strip : Mark → Mark
+  | .gen A => .gen A.strip
+  | m => m
+
 def Decl.strip : Decl → Decl
   | .type _ n A => .type .none n.strip A.strip
   | .shape _ n σ => .shape .none n.strip σ.strip
-  | .def_ _ n ps A V m => .def_ .none n.strip (ps.map Ident.strip) A.strip V.strip m
+  | .def_ _ n ps A V m => .def_ .none n.strip (ps.map Ident.strip) A.strip V.strip m.strip
   | .extern _ n A => .extern .none n.strip A.strip
   | .main _ C M => .main .none C.strip M.strip
   | .include _ n => .include .none n.strip
@@ -537,7 +554,7 @@ def VTy.span : VTy → Span
 
 def CTy.span : CTy → Span
   | .ret sp _ | .arr sp _ _ | .amp sp _ _ | .top sp | .all sp _ _ _ | .nu sp _ _ | .name sp _
-  | .delay sp _ | .stream sp _ | .iter sp _ _ _ | .loop sp _ _ => sp
+  | .delay sp _ | .stream sp _ | .iter sp _ _ _ | .loop sp _ _ | .gen sp _ _ _ => sp
 
 def Shape.span : Shape → Span
   | .leaf sp _ | .node sp _ _ | .name sp _ => sp

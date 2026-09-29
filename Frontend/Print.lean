@@ -44,7 +44,7 @@ def VTy.level : VTy → Nat
 def CTy.level : CTy → Nat
   | .arr .. | .all .. | .nu .. => 0
   | .amp .. => 1
-  | .ret .. | .delay .. | .stream .. | .iter .. | .loop .. => 4
+  | .ret .. | .delay .. | .stream .. | .iter .. | .loop .. | .gen .. => 4
   | .top .. | .name .. => 5
 
 def widthName : BoCa.Width → String
@@ -97,6 +97,7 @@ def CTy.pp (C : CTy) (lvl : Nat := 0) : String :=
     | .stream _ A => "stream " ++ A.pp 4
     | .iter _ A R R' => "iter " ++ A.pp 5 ++ " " ++ R.pp 5 ++ " " ++ R'.pp 5
     | .loop _ A B => "loop " ++ A.pp 5 ++ " " ++ B.pp 5
+    | .gen _ A B R => "gen " ++ A.pp 5 ++ " " ++ B.pp 5 ++ " " ++ R.pp 5
 
 def Shape.pp : Shape → String
   | .leaf _ A => "leaf " ++ A.pp 4
@@ -126,6 +127,7 @@ def Val.level : Val → Nat
   | .thunkv _ (.lam _ _ A _) | .bangThunkv _ (.lam _ _ A _) => if isHole A then 2 else 0
   | .app _ (.sugar _ (.op _)) _ | .app _ (.sugar _ (.call _)) _ => 3
   | .app _ (.sugar _ .deref) _ => 2
+  | .app _ (.sugar _ .yield_) _ => 1
   | .app _ (.sugar _ .brace) _ | .app _ (.app _ (.sugar _ (.borrow ..)) _) _ => 2
   | .thunk .. | .thunkv .. | .bangThunk .. | .bangThunkv .. => 0
   | .inl .. | .inr .. | .roll .. | .unroll .. | .unbang .. | .unbox .. | .boxed .. | .run ..
@@ -164,6 +166,7 @@ def Val.pp (V : Val) (lvl : Nat := 0) (k : Nat := 0) : String :=
     | .app _ (.sugar _ (.op o)) (.pair _ a b) => "(" ++ a.pp 2 k ++ " " ++ o.str ++ " " ++ b.pp 2 k ++ ")"
     | .app _ (.sugar _ (.call c)) W => c ++ "(" ++ W.pp 0 k ++ ")"
     | .app _ (.sugar _ .deref) V => "*" ++ V.pp 3 k
+    | .app _ (.sugar _ .yield_) V => "yield " ++ V.pp 1 k
     | .app _ (.sugar _ .brace) (.thunk _ M) => "{ " ++ M.pp 0 (k + 2) ++ " }"
     | .app _ (.sugar _ .brace) (.bangThunk _ M) => "!{ " ++ M.pp 0 (k + 2) ++ " }"
     | .app _ (.app _ (.sugar _ (.borrow bk x)) P) (.thunkv _ (.lam _ b _ M)) =>
@@ -190,6 +193,7 @@ def Val.pp (V : Val) (lvl : Nat := 0) (k : Nat := 0) : String :=
       "shorten_" ++ m.pp ++ "[" ++ σ.pp ++ ", " ++ a.pp ++ "] " ++ V.pp 1 k
     | .lend _ x m => (if m == .mut then "&mut " else "&") ++ x.name
     | .sugar _ (.lit n) => toString n
+    | .sugar _ .brk => "break"
     | .sugar _ s => s!"<{reprStr s}>"
 
 /-- A computation at level `lvl`, indented by `k` after each line break. -/
@@ -217,6 +221,9 @@ def Comp.pp (M : Comp) (lvl : Nat := 0) (k : Nat := 0) : String :=
     | .nuIn _ M => "nu_in " ++ M.pp 1 k
     | .nuOut _ M => "nu_out " ++ M.pp 1 k
     | .ascribe _ M C => "(" ++ M.pp 1 k ++ " : " ++ C.pp ++ ")"
+    | .for_ _ _ (.app _ (.sugar _ .while_) c) M N =>
+      "while " ++ c.pp 1 k ++ " {" ++ nl (k + 2) ++
+        M.pp 0 (k + 2) ++ nl k ++ "};" ++ nl k ++ N.pp 0 k
     | .for_ _ x V M N =>
       "for " ++ x.name ++ " in " ++ V.pp 1 k ++ " {" ++ nl (k + 2) ++
         M.pp 0 (k + 2) ++ nl k ++ "};" ++ nl k ++ N.pp 0 k
@@ -227,7 +234,8 @@ def Decl.pp : Decl → String
   | .shape _ n σ => "shape " ++ n.name ++ " = " ++ σ.pp
   | .def_ _ n ps A V m =>
     let params := if ps.isEmpty then "" else "[" ++ ", ".intercalate (ps.map (·.name)) ++ "]"
-    let mk := match m with | .none => "" | .total => "total " | .div => "div "
+    let mk := match m with
+      | .none => "" | .total => "total " | .div => "div " | .gen E => "gen[" ++ E.pp ++ "] "
     mk ++ "def " ++ n.name ++ params ++ " : " ++ A.pp ++ " =" ++ nl 2 ++ V.pp 0 2
   | .extern _ n A => "extern " ++ n.name ++ " : " ++ A.pp
   | .main _ C M => "main : " ++ C.pp ++ " =" ++ nl 2 ++ M.pp 0 2

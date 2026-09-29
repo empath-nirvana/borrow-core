@@ -1,0 +1,20 @@
+-- A generator in direct style (`corpus/pending/generator-handler.bc`, written as a `gen fn`
+-- instead of a handler): `produce` yields 1, 4 and 9, and `main` sums them with a `for`.
+--
+-- `gen fn` elaborates the body to its first observation (`Frontend/Sugar.lean`, generators):
+-- each `yield e; rest` answers `next` with `e` and a thunk whose `next` runs `rest`, and whose
+-- `close` runs nothing. The generator is `U (gen i32 1 1)` (`lib/gen.bc`), codata with no new
+-- former or rule; the state between two observations is what the rest's thunk captures.
+--
+-- Answer: i32[14]. A generator that ran a step twice gives 18 or 23; one that stopped a step
+-- early gives 5; one that lost its first element gives 13.
+
+gen fn produce() -> i32 =
+  yield 1;
+  yield 4;
+  yield 9
+
+main -> i32 =
+  let mut acc = 0;
+  for x in produce() { acc = acc + x };
+  acc

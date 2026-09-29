@@ -17,6 +17,10 @@
 -- point, `generate { gen -> … }` for the library handler that stores the continuation in an
 -- iterator's state. The strict account's sketch spells it `effect Yield a performs yield`.
 --
+-- The same program written as a `gen fn` runs (`corpus/gen-produce.bc`, SPEC §14 Generators):
+-- what stays pending is the handler form, a capability signature with `suspend` and a library
+-- `generate` that stores the continuation.
+--
 -- Today: the parser stops at `cap`, which is not a declaration.
 --
 -- Once it lands: `produce` yields 1, 4 and 9, and `main` sums them. Golden: `i32[14]`,
@@ -33,4 +37,4 @@ main -> i32 =
   let mut acc = 0;
   for x in generate { gen -> produce(gen) } { acc = acc + x };
   acc
--- now: 25:1: expected a declaration (`type`, `shape`, `def`, `extern` or `main`), found name `cap`
+-- now: 29:1: expected a declaration (`type`, `shape`, `def`, `extern` or `main`), found name `cap`

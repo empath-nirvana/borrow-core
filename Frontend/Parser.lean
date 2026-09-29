@@ -63,19 +63,21 @@ inductive RTy where
   | stream (sp : Span) (A : RTy)
   | iter (sp : Span) (A R R' : RTy)
   | loop (sp : Span) (A B : RTy)
+  | gen (sp : Span) (A B R : RTy)
 
 def RTy.span : RTy → Span
   | .unit sp | .zero sp | .tensor sp _ _ | .sum sp _ _ | .U sp _ | .F sp _ | .ref sp _
   | .imm sp _ _ | .mut sp _ _ | .box sp _ _ | .bang sp _ | .unk sp | .int sp _ | .handle sp _ | .mu sp _ _
   | .name sp _ | .lolli sp _ _ | .arr sp _ _ | .all sp _ _ _ | .forall_ sp _ _ _ | .amp sp _ _
   | .top sp | .block sp _ | .val sp _ | .fam sp _ _ _ | .view sp _ _ | .nu sp _ _ | .delay sp _
-  | .stream sp _ | .iter sp _ _ _ | .loop sp _ _ | .array sp _ | .arrayImm sp _ _ => sp
+  | .stream sp _ | .iter sp _ _ _ | .loop sp _ _ | .gen sp _ _ _ | .array sp _ | .arrayImm sp _ _ => sp
 
 /-- What a raw type is, for sort errors. -/
 def RTy.former : RTy → String
   | .F .. => "`F A`" | .arr .. => "`A -o C`" | .forall_ .. => "`forall 'x < @. C`"
   | .amp .. => "`C & D`" | .top .. => "`top`" | .nu .. => "`nu X. C`" | .delay .. => "`delay A`"
   | .stream .. => "`stream A`" | .iter .. => "`iter A R R'`" | .loop .. => "`loop A B`"
+  | .gen .. => "`gen A B R`"
   | _ => "this type"
 
 private def sortErr (t : RTy) (isComp : Bool) : Except Error α :=
@@ -112,7 +114,7 @@ def RTy.toV : RTy → Except Error VTy
   | .array sp A => return .array sp (← A.toV)
   | .arrayImm sp a A => return .arrayImm sp a (← A.toV)
   | t@(.F ..) | t@(.arr ..) | t@(.forall_ ..) | t@(.amp ..) | t@(.top ..) | t@(.nu ..)
-  | t@(.delay ..) | t@(.stream ..) | t@(.iter ..) | t@(.loop ..) => sortErr t true
+  | t@(.delay ..) | t@(.stream ..) | t@(.iter ..) | t@(.loop ..) | t@(.gen ..) => sortErr t true
 
 /-- Sort a raw type as a computation type. -/
 def RTy.toC : RTy → Except Error CTy
@@ -126,6 +128,7 @@ def RTy.toC : RTy → Except Error CTy
   | .stream sp A => return .stream sp (← A.toV)
   | .iter sp A R R' => return .iter sp (← A.toV) (← R.toV) (← R'.toV)
   | .loop sp A B => return .loop sp (← A.toV) (← B.toV)
+  | .gen sp A B R => return .gen sp (← A.toV) (← B.toV) (← R.toV)
   | t => sortErr t false
 end
 
@@ -374,6 +377,12 @@ def rtyPrefix : Nat → P RTy
       let R ← rtyPrefix n
       let R' ← rtyPrefix n
       pure (.iter (← spanFrom st) A R R')
+    | .kw "gen" =>
+      discard bump
+      let A ← rtyPrefix n
+      let B ← rtyPrefix n
+      let R ← rtyPrefix n
+      pure (.gen (← spanFrom st) A B R)
     | .kw "imm" => withLife .imm
     | .kw "mut" => withLife .mut
     | .kw "box" => withLife .box
@@ -841,6 +850,12 @@ def valPrefix : Nat → P Val
       let m := if t.tok == .kw "shorten_mut" then Mode.mut else Mode.imm
       pure (.shorten (← spanFrom st) m σ a V)
     | .kw "borrow" | .kw "modify" => borrowBlock n
+    | .kw "yield" =>
+      -- `yield e` takes a whole expression: `yield x * x` yields the product.
+      discard bump
+      let V ← val n
+      let sp ← spanFrom st
+      pure (.app sp (.sugar t.span .yield_) V)
     | .sym "*" =>
       discard bump
       let V ← valPrefix n
@@ -920,6 +935,7 @@ def valAtom : Nat → P Val
         pure (.defApp (← spanFrom st) s As)
       else pure (.var t.span s)
     | .int k => discard bump; pure (.sugar t.span (.lit k))
+    | .kw "break" => discard bump; pure (.sugar t.span .brk)
     | .sym "(" =>
       discard bump
       if ← isSym ")" then
@@ -1037,6 +1053,17 @@ def compG : Nat → Bool → P Comp
       expectSym ";"
       let N ← comp n
       pure (.for_ (← spanFrom st) x V M N)
+    | .kw "while", _ =>
+      -- `while c { M }; N`: a `for` whose iterator is the condition (a generator's loop).
+      discard bump
+      let c ← val n
+      expectSym "{"
+      let M ← comp n
+      expectSym "}"
+      expectSym ";"
+      let N ← comp n
+      let sp ← spanFrom st
+      pure (.for_ sp ⟨"io_while", t.span⟩ (.app c.span (.sugar t.span .while_) c) M N)
     | .kw "let", _ =>
       discard bump
       let isMut ← if ← isKw "mut" then do discard bump; pure true else pure false
@@ -1360,6 +1387,18 @@ def decl (n : Nat) : P Decl := do
   | .kw "fn" =>
     discard bump
     fnRest st .none
+  | .kw "gen" =>
+    -- `gen fn f(ps) -> A = S` or `-> A, B = S`: a generator yielding `A`, finishing with `B`
+    -- (`1` when left out). `gen[A] def` is its printed form.
+    discard bump
+    if ← isSym "[" then
+      discard bump
+      let A ← vty n
+      expectSym "]"
+      expectKw "def"
+      return ← defRest st (.gen A)
+    expectKw "fn"
+    genRest st
   | .kw "include" =>
     discard bump
     let x ← ident "the name of a library module"
@@ -1429,6 +1468,36 @@ where
       | .ok B => pure (VTy.bang sp (.lolli sp A B))
       | .error _ => do let C ← liftSort T.toC; pure (VTy.bang sp (.thunk sp (.arr sp A C)))
     pure (.def_ sp x [] ty (.bangThunkv sp lam) mk)
+  /-- A `gen fn` after its keywords: `name(x₁: A₁, …) -> A = S` or `-> A, B = S`. It is the
+  `fn` of result `B` (`1` when left out) marked as a generator of `A`. -/
+  genRest (st : Pos) : P Decl := do
+    let x ← ident "a `gen fn` name"
+    -- `gen fn f<'a>(…)`: a generator with a lifetime parameter, bounded by `top`.
+    let life ← if ← isSym "<" then do
+        discard bump
+        let a ← lifeVar
+        expectSym ">"
+        pure (some a)
+      else pure none
+    expectSym "("
+    let ps ← if ← isSym ")" then pure [] else params n
+    expectSym ")"
+    expectSym "->"
+    let A ← vty n
+    let B ← if ← isSym "," then do discard bump; vty n else pure (.unit (← spanFrom st))
+    expectSym "="
+    modify fun s => { s with muts := [], assigned := [] }
+    let M ← comp n
+    let sp ← spanFrom st
+    let P := tupleTy sp (ps.map (·.2))
+    let pn ← freshName "io_p"
+    let body ← bindParams sp pn (ps.map (·.1)) M
+    let lam := Comp.lam sp ⟨pn, sp⟩ P body
+    match life with
+    | none => pure (.def_ sp x [] (.bang sp (.lolli sp P B)) (.bangThunkv sp lam) (.gen A))
+    | some a =>
+      pure (.def_ sp x [] (.bang sp (.all sp a (.top sp) (.lolli sp P B)))
+        (.bangThunkv sp (.lamL sp a (.top sp) (.ret sp (.thunkv sp lam)))) (.gen A))
   /-- `x₁: A₁, …, xₙ: Aₙ`, at least one. -/
   params : Nat → P (List (Ident × VTy))
     | 0 => outOfFuel

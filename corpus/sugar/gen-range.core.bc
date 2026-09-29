@@ -1,0 +1,112 @@
+-- `gen-range.bc` written by hand in core. `Vars` are the loop's variables `(hi, i)`; `Body` is
+-- the body's generator, which finishes with the variables, `inl` to go on (`inr` would be a
+-- `break`); a state `St` is the parameters, the variables before an iteration, or the body's
+-- rest. `head` starts an iteration; the step's `next` runs the code before the loop in the first
+-- state, and the head again when the body's rest finishes an iteration.
+
+type Vars = i32 * i32
+type Body = U (gen i32 (Vars + Vars) 1)
+type St = i32 * i32 + (Vars + Body)
+
+def range : !(i32 * i32 => U (gen i32 1 1)) =
+  !thunkv fun (p : i32 * i32) ->
+    head : !(Vars => i32 * St + (1 + St)) <-
+      return (!thunkv fun (a : Vars) ->
+        st <- return a;
+        let (hi, i) = st;
+        case (unbang host[lt_s32]) (i, hi) {
+          inl f -> v : 1 <- return (); return (inr (inl v))
+        | inr t ->
+            b : i32 * Body + ((Vars + Vars) + Body) <-
+              return (inl (i, thunkv nu_in <
+                y <- return ();
+                i <- return ((unbang host[add32]) (i, i32[1]));
+                u <- return ();
+                v : Vars + Vars <- return (inl (hi, i));
+                return (inr (inl v)),
+                dhi <- return hi;
+                di <- return i;
+                return () >));
+            case b {
+              inl e -> let (x, g) = e; return (inl (x, inr (inr g)))
+            | inr d ->
+                case d {
+                  inl r ->
+                    case r {
+                      inl sv -> return (inr (inr (inr (inl sv))))
+                    | inr sv -> let (hi, i) = sv; v : 1 <- return (); return (inr (inl v))
+                    }
+                | inr g -> return (inr (inr (inr (inr g))))
+                }
+            }
+        });
+    step : !U (St -o F (i32 * St + (1 + St)) & F 1) <-
+      return (!thunkv fun (s : St) ->
+        < case s {
+            inl p0 ->
+              p <- return p0;
+              let (lo, hi) = p;
+              i <- return lo;
+              return ((unbang head) (hi, i))
+          | inr s ->
+              case s {
+                inl a -> return ((unbang head) a)
+              | inr a ->
+                  g <- return a;
+                  b <- (nu_out (force g)).1;
+                  case b {
+                    inl e -> let (x, g2) = e; return (inl (x, inr (inr g2)))
+                  | inr d ->
+                      case d {
+                        inl r ->
+                          case r {
+                            inl sv -> return ((unbang head) sv)
+                          | inr sv -> let (hi, i) = sv; v : 1 <- return (); return (inr (inl v))
+                          }
+                      | inr g2 -> return (inr (inr (inr (inr g2))))
+                      }
+                  }
+              }
+          },
+          case s {
+            inl p0 ->
+              p <- return p0;
+              let (lo, hi) = p;
+              i <- return lo;
+              return ()
+          | inr s ->
+              case s {
+                inl st -> let (hi, i) = st; return ()
+              | inr g -> rb <- (nu_out (force g)).2; let () = rb; return ()
+              }
+          } >);
+    f <- return (unbang (unfold[gen i32 1 1, St] step));
+    s0 : St <- return (inl p);
+    return (thunkv nu_in < (nu_out (force f s0)).1, (nu_out (force f s0)).2 >)
+
+main : F (U (loop i32 1)) =
+  acc <- return i32[0];
+  step : !U (U (gen i32 1 1) * i32 -o F (i32 + U (gen i32 1 1) * i32) & F 1) <-
+    return (!thunkv fun (s : U (gen i32 1 1) * i32) ->
+      < let (it, st) = s;
+        acc <- return st;
+        o <- (nu_out (force it)).1;
+        case o {
+          inl p ->
+            let (x, it) = p;
+            acc <- return ((unbang host[add32]) (acc, x));
+            u <- return ();
+            return (inr (it, acc))
+        | inr d ->
+            case d {
+              inl q -> v : i32 <- return acc; return (inl v)
+            | inr it -> return (inr (it, acc))
+            }
+        },
+        let (it, st) = s;
+        acc <- return st;
+        c <- (nu_out (force it)).2;
+        return () >);
+  f <- return (unbang (unfold[loop i32 1, U (gen i32 1 1) * i32] step));
+  s0 : U (gen i32 1 1) * i32 <- return ((unbang range) (i32[1], i32[11]), acc);
+  return (thunkv nu_in < (nu_out (force f s0)).1, (nu_out (force f s0)).2 >)

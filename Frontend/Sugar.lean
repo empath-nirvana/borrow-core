@@ -41,6 +41,9 @@ def ioLibrary : String := include_str "../lib/io.bc"
 /-- The divergence library, `lib/div.bc`: the delay bind and the fuel handler. -/
 def divLibrary : String := include_str "../lib/div.bc"
 
+/-- The generator library, `lib/gen.bc`: `gen_bind`. -/
+def genLibrary : String := include_str "../lib/gen.bc"
+
 /-- The prelude, `lib/prelude.bc`: `true`, `false`, `not`. -/
 def preludeLibrary : String := include_str "../lib/prelude.bc"
 
@@ -236,7 +239,7 @@ Everything here is decided by types (`Frontend.Elab.TCx`, docs/typed-elaboration
   cannot drop. The variables that hold `K` are the ones a terminal `return` puts there.
 -/
 
-open Frontend.Elab (TCx loopOf iterOf loopFnOf spineT tupleT ppT toSurface Class)
+open Frontend.Elab (TCx loopOf iterOf genOf elemOf loopFnOf spineT tupleT ppT toSurface Class)
 open Frontend.Check (CVTy CCTy)
 
 /-- A function returning a loop, as written: `A => U (loop B R)` or `!(A => U (loop B R))` (a
@@ -566,6 +569,27 @@ return (div_bind[{ppT Bf}, {ppT cx.B}, {ppT Rf}, {ppT cx.R}] (io_m, thunkv
 def latest (env : List (String × Option CVTy)) : List (String × Option CVTy) :=
   env.reverse.foldl (fun acc (y, T) => (acc.filter (·.1 != y)) ++ [(y, T)]) []
 
+/-- A computation binds `y` on its spine. -/
+def _root_.Frontend.Comp.rebindsN (y : String) : Comp → Bool
+  | .bind _ x _ M N _ => x.name == y || M.rebindsN y || N.rebindsN y
+  | .letUnit _ _ M => M.rebindsN y
+  | .letPair _ a b _ M => a.name == y || b.name == y || M.rebindsN y
+  | .case _ _ _ M _ N => M.rebindsN y || N.rebindsN y
+  | .for_ _ _ _ M N => M.rebindsN y || N.rebindsN y
+  | _ => false
+
+/-- A computation binds `y` on its spine: a `let mut` variable assigned in it. The wildcard `_`
+names nothing. -/
+def _root_.Frontend.Comp.rebinds (y : String) (M : Comp) : Bool := y != "_" && M.rebindsN y
+
+/-- Bind the capability `cap` (when there is one) from `v`, the value an iterator hands back
+of type `Q`: itself, or `(cap, ())` as a residual. -/
+def bindCap (cap : Option String) (Q : CVTy) (v : String) : String :=
+  match cap, Q with
+  | none, _ => ""
+  | some c, .tensor _ .unit => s!"let ({c}, {v}_u) = {v};\n"
+  | some c, _ => s!"{c} <- return {v};\n"
+
 /-- `for x in V { M }; N` in a div body: a loop by `unfold` whose state is the iterator `V`,
 the other capabilities and the variables the loop threads, at their inferred types. Its `close`
 closes the iterator and hands the capabilities back. When `N` is total, `rest` is `.inl N`: at
@@ -575,31 +599,37 @@ the variables `M` mentions, finishes with the capabilities and those variables, 
 bind runs `N'` with them rebound.  `[spec §14]` -/
 def forLoop (cx : LoopCx) (c : TCx) (sp : Span) (x : Ident) (V : Val) (M : Comp)
     (rest : Comp ⊕ Comp) : SM Comp := do
+  if let .app _ (.sugar wsp .while_) _ := V then
+    throw ⟨wsp, "`while` is a generator's loop: it may appear only in the body of a `gen fn`"⟩
   -- `bytes(&mut c)`: the iterator takes `c`, and hands it back at its end (typed elaboration §5.1).
   let V := V.takeLends.1
   let Vt ← match c.tyV V with
     | some Vt => pure Vt
     | none => throw ⟨V.span, "the type of the iterator of this `for` is not determined"⟩
-  let (Ax, _, _) ← match iterOf Vt with
-    | some it => pure it
-    | none => throw ⟨V.span, s!"`for` iterates over an iterator `U (iter A R R')`, but this has " ++
-        s!"type `{ppT Vt}`"⟩
+  let (Ax, isGen, Q, Q') ← match iterOf Vt, genOf Vt with
+    | some (A, Q, Q'), _ => pure (A, false, Q, Q')
+    | none, some (A, Q, Q') => pure (A, true, Q, Q')
+    | none, none => throw ⟨V.span, s!"`for` iterates over an iterator `U (iter A R R')` or a " ++
+        s!"generator `U (gen A B R)`, but this has type `{ppT Vt}`"⟩
   if let some (sp', what) := loopsAt (c.push x.name (some Ax)) none M then
     throw ⟨sp', s!"the body of a `for` is one step of its loop and must be total, but {what} " ++
       "(SPEC §14)"⟩
   let cs := cx.capNames
+  -- The capability the iterator is made from, which it hands back at its end; none for an
+  -- iterator that holds no capability.
   let cap ← match cs.filter (mentionsV · V) with
-    | [cap] => pure cap
-    | _ => throw ⟨V.span, "the iterator of a `for` must be made from one capability that the " ++
-        "function hands back, which the iterator hands back at its end"⟩
+    | [] => pure none
+    | [cap] => pure (some cap)
+    | _ => throw ⟨V.span, "the iterator of a `for` is made from at most one capability"⟩
+  -- A variable the body reads or assigns (a `let mut` rebound in it) is threaded.
   let reads (y : String) : Bool := match rest with
-    | .inl N => mentionsC y M || mentionsC y N
-    | .inr _ => mentionsC y M
+    | .inl N => mentionsC y M || M.rebinds y || mentionsC y N
+    | .inr _ => mentionsC y M || M.rebinds y
   let used := (latest c.locals).filter fun (y, _) => !cs.contains y && y != x.name && reads y
   let ws ← used.mapM fun (y, T) => match T with
     | some T => pure (y, T)
     | none => throw ⟨sp, s!"the loop threads `{y}`, whose type is not determined: ascribe it"⟩
-  let th := cx.caps.filter (·.1 != cap)
+  let th := cx.caps.filter (some ·.1 != cap)
   let sv := th.map (·.1) ++ ws.map (·.1)
   let svTy := th.map (ppT ·.2) ++ ws.map (ppT ·.2)
   let st := s!"{ppT Vt} * {tupleTySrc svTy}"
@@ -622,6 +652,10 @@ return (div_bind[{fin}, {ppT cx.B}, ({R}), ({R})] (io_l, thunkv
       let (io_ka, io_wa) = io_a;
       {destructParts "io_ka" cx.parts}      {destructSrc "io_wa" wn}      force io_hole_rest,
     fun (io_r : {R}) -> return io_r >))"
+  let ended := if isGen then s!"case io_d \{
+          inl io_c -> {bindCap cap Q "io_c"}{finish}
+        | inr io_it -> return (inr (io_it, {tupleSrc sv}))
+        }" else s!"{bindCap cap Q "io_c"}{finish}"
   let src := s!"io_step : !U ({st} -o F ({fin} + ({st})) & F ({R})) <- return (!thunkv fun (io_s : {st}) ->
   < let (io_it, io_st) = io_s;
     {ds}    io_o <- (nu_out (force io_it)).1;
@@ -629,14 +663,12 @@ return (div_bind[{fin}, {ppT cx.B}, ({R}), ({R})] (io_l, thunkv
       inl io_p ->
         let ({x.name}, io_it) = io_p;
         force io_hole_body
-    | inr io_c ->
-        {cap} <- return io_c;
-        {finish}
+    | inr {if isGen then "io_d" else "io_c"} ->
+        {ended}
     },
     let (io_it, io_st) = io_s;
     {ds}    io_c <- (nu_out (force io_it)).2;
-    {cap} <- return io_c;
-    return {cx.rSrc} >);
+    {bindCap cap Q' "io_c"}return {cx.rSrc} >);
 io_f <- return (unbang (unfold[loop {fin} ({R}), {st}] io_step));
 io_s0 : {st} <- return (io_hole_v, {tupleSrc sv});
 {result}"
@@ -729,6 +761,385 @@ def loopBody (cx : LoopCx) : Nat → TCx → Comp → SM Comp
       loopBody cx n c (.bind T.span x none T (.ret T.span (.var T.span "io_t")) false)
     | none, _ => dret cx T
 
+/-! ### Generators  `[lib/gen.bc]`
+
+A `gen fn f(ps) -> A, B = S` is a generator of `A` finishing with `B`: it is elaborated to a function
+returning `U (gen A B R)` (`lib/gen.bc`), whose residual `R` is read off `B` as a div function's is
+(`loopCxOf`). The call runs nothing: it returns `thunkv nu_in < S', abort >`, where `S'` is the
+body elaborated to its **first observation** (the code up to the first `yield`, then what it
+yields), and `abort` hands back the residual without running anything. On the body's spine:
+
+* **`yield e; N`** is `return (inl (e, thunkv nu_in < N', abort >))`: the element, and the rest,
+  which runs `N` only when it is observed.
+* **A terminal** `T` finishes: `return (inr (inl T))`.
+* **`for x in V { M }; N`** (`V` an iterator or a generator) and **`while c { M }; N`** are a
+  generator by `unfold` over the loop's state (the iterator and the threaded variables, or the
+  body's own generator while it runs), whose body `M` is itself a generator body that may `yield`
+  and `break`. The loop's head starts an iteration; one that the head started and that ends
+  without yielding is a skip, and one resumed after a `yield` starts the next at once. What
+  follows the loop runs in its last step when it neither yields nor loops, and is sequenced by
+  `gen_bind` otherwise.
+* **A body that is code, one loop, and code after it that neither yields nor loops** is one
+  `unfold` whose first state is the parameters (`splitLoop`): every observation of it is then a
+  call of one known code, with no closure to dispatch on.
+* **A `yield` in a bound computation** (`x <- if c { yield e } else { … }; N`) takes `N` into
+  the computation's arms, so that the `yield` is on the spine.
+
+A `yield` anywhere else, such as inside a borrow block, is an error: a generator's state is what
+lives between observations, and a borrow block's body is one computation that returns before the
+block ends. -/
+
+/-- A computation has a loop on its spine or anywhere in it. -/
+def _root_.Frontend.Comp.hasFor : Comp → Bool
+  | .bind _ _ _ M N _ | .with_ _ M N => M.hasFor || N.hasFor
+  | .lam _ _ _ M | .app _ M _ | .proj _ _ M | .lamL _ _ _ M | .inst _ M _ | .nuIn _ M
+  | .nuOut _ M | .ascribe _ M _ | .letUnit _ _ M | .letPair _ _ _ _ M => M.hasFor
+  | .case _ _ _ M _ N => M.hasFor || N.hasFor
+  | .for_ .. => true
+  | _ => false
+
+mutual
+/-- The first `yield` or `break` in a value. -/
+def _root_.Frontend.Val.yieldAt : Val → Option Span
+  | .app sp (.sugar _ .yield_) _ | .sugar sp .brk => some sp
+  | .pair _ V W | .app _ V W => V.yieldAt.orElse fun _ => W.yieldAt
+  | .inl _ V | .inr _ V | .unbang _ V | .boxed _ _ V | .unbox _ V | .sub _ V _ | .roll _ V
+  | .unroll _ V | .inst _ V _ | .ascribe _ V _ | .shorten _ _ _ _ V => V.yieldAt
+  | .thunk _ M | .thunkv _ M | .bangThunk _ M | .bangThunkv _ M | .run _ M => M.yieldAt
+  | _ => none
+
+/-- The first `yield` or `break` in a computation. -/
+def _root_.Frontend.Comp.yieldAt : Comp → Option Span
+  | .ret _ V | .absurd _ V => V.yieldAt
+  | .bind _ _ _ M N _ | .with_ _ M N => M.yieldAt.orElse fun _ => N.yieldAt
+  | .lam _ _ _ M | .app _ M _ | .proj _ _ M | .lamL _ _ _ M | .inst _ M _ | .nuIn _ M
+  | .nuOut _ M | .ascribe _ M _ => M.yieldAt
+  | .letUnit _ V M | .letPair _ _ _ V M => V.yieldAt.orElse fun _ => M.yieldAt
+  | .case _ V _ M _ N => V.yieldAt.orElse fun _ => M.yieldAt.orElse fun _ => N.yieldAt
+  | .for_ _ _ V M N => V.yieldAt.orElse fun _ => M.yieldAt.orElse fun _ => N.yieldAt
+  | .force .. | .top _ => none
+end
+
+/-- A `yield` or `break` in a value. -/
+def _root_.Frontend.Val.hasYield (V : Val) : Bool := V.yieldAt.isSome
+
+/-- A `yield` or `break` in a computation. -/
+def _root_.Frontend.Comp.hasYield (M : Comp) : Bool := M.yieldAt.isSome
+
+/-- A thunk's `<next, close>` consumes what it captures in both components: `close`, which does not
+run `next`, binds each captured variable of `M` other than `keep` (the capabilities it hands
+back), so that its destructor runs (SPEC §12). -/
+def dropsFor (c : TCx) (keep : List String) (M : Comp) : String :=
+  String.join ((latest c.locals).filterMap fun (y, _) =>
+    if !keep.contains y && mentionsC y M then some s!"io_dr_{y} <- return {y};\n" else none)
+
+/-- The bindings of a `fn`'s parameters at the start of its body (`Parser.fnRest`), before `T`. -/
+def paramPrefix : Comp → Comp → Comp
+  | .letPair sp x y V@(.var ..) M, T => .letPair sp x y V (paramPrefix M T)
+  | .letUnit sp V@(.var ..) M, T => .letUnit sp V (paramPrefix M T)
+  | .bind sp x A (.ret s V@(.var ..)) M lin, T => .bind sp x A (.ret s V) (paramPrefix M T) lin
+  | _, T => T
+
+/-- What a generator body is elaborated at: the element type `A`, and its result and residual. -/
+structure GenCx where
+  A : CVTy
+  L : LoopCx
+  /-- Types printed in the generator's context, its lifetime parameter by name. -/
+  pp : CVTy → String := ppT
+
+def GenCx.gTy (g : GenCx) : String := s!"gen ({g.pp g.A}) ({g.pp g.L.B}) ({g.pp g.L.R})"
+
+/-- The error for a `yield` or `break` off the spine. -/
+def yieldOffSpine (sp : Span) : Error :=
+  ⟨sp, "`yield` and `break` may appear only on the spine of a generator's body (the tail " ++
+    "positions of binds, `let`s, `match` arms and loops): not inside a value, a call's argument or " ++
+    "a borrow block. A generator's state is what lives between two observations, and a borrow " ++
+    "block's body is one computation that returns before the block ends, so a generator cannot " ++
+    "hold a borrow of its own local across a `yield`"⟩
+
+/-- Bind the variables of each component of `K` from `v`, a residual `K * 1` (or `1`). -/
+def destructR (v : String) (parts : List (List (String × CVTy))) : String :=
+  if parts.isEmpty then s!"let () = {v};\n" else
+    s!"let ({v}_k, {v}_u) = {v};\nlet () = {v}_u;\n" ++ destructParts s!"{v}_k" parts
+
+/-- A generator's loop, planned: its condition (`while`) or iterator (its type, element, whether
+it is a generator, what it finishes and closes with), the capability the iterator is made from,
+the threaded variables (capabilities first), the body's context, and the body with its terminals
+going on (`inl`) or breaking (`inr`) with them, and the typing context of the body. -/
+structure GenLoop where
+  cond : Option Val
+  V : Val
+  it : Option (CVTy × CVTy × Bool × CVTy × CVTy)
+  cap : Option String
+  svs : List (String × CVTy)
+  ws : List (String × CVTy)
+  bcx : LoopCx
+  bodyW : Comp
+  cb : TCx
+  /-- What follows the loop, when it has no `yield` and no loop: it runs in the loop's last step,
+  and the loop finishes with its value. -/
+  direct : Option Comp
+
+/-- `for x in V { M }; N` or `while c { M }; N` in a generator body: a generator by `unfold` over
+the loop's state, then `gen_bind` of what follows. -/
+def genLoopPlan (g : GenCx) (c : TCx) (sp : Span) (x : Ident) (V : Val) (M N : Comp) :
+    SM GenLoop := do
+  let cx := g.L
+  let cond := match V with
+    | .app _ (.sugar _ .while_) b => some b
+    | _ => none
+  if V.hasYield && cond.isNone then throw (yieldOffSpine (V.yieldAt.getD V.span))
+  let V := V.takeLends.1
+  -- The iterator: its type, whether it is a generator, and what it finishes and closes with.
+  let it ← match cond with
+    | some _ => pure none
+    | none => do
+      let Vt ← match c.tyV V with
+        | some Vt => pure Vt
+        | none => throw ⟨V.span, "the type of the iterator of this `for` is not determined"⟩
+      match iterOf Vt, genOf Vt with
+      | some (E, Q, Q'), _ => pure (some (Vt, E, false, Q, Q'))
+      | none, some (E, Q, Q') => pure (some (Vt, E, true, Q, Q'))
+      | none, none => throw ⟨V.span, s!"`for` iterates over an iterator `U (iter A R R')` or a " ++
+          s!"generator `U (gen A B R)`, but this has type `{ppT Vt}`"⟩
+  let cs := cx.capNames
+  let cap ← match cond with
+    | some _ => pure none
+    | none => match cs.filter (mentionsV · V) with
+      | [] => pure none
+      | [c] => pure (some c)
+      | _ => throw ⟨V.span, "the iterator of a `for` is made from at most one capability"⟩
+  let xs := match it with
+    | some (_, E, _, _, _) => [(x.name, E)]
+    | none => []
+  let direct := if N.hasYield || N.hasFor then none else some N
+  -- A variable the body reads or assigns (a `let mut` rebound in it) is threaded.
+  let reads (y : String) : Bool := mentionsC y M || M.rebinds y ||
+    (cond.map (mentionsV y)).getD false || (direct.map (mentionsC y)).getD false
+  let used := (latest c.locals).filter fun (y, _) => !cs.contains y && y != x.name && reads y
+  let ws ← used.mapM fun (y, T) => match T with
+    | some T => pure (y, T)
+    | none => throw ⟨sp, s!"the loop threads `{y}`, whose type is not determined: ascribe it"⟩
+  let th := cx.caps.filter (some ·.1 != cap)
+  let svs := th ++ ws
+  let sv := svs.map (·.1)
+  let svT := tupleT (svs.map (·.2))
+  -- The body: a generator of `A` finishing with the threaded variables, `inl` to go on and `inr`
+  -- after `break`; its residual is the threaded capabilities.
+  let lin := svs.filter (isLinear ·.2)
+  let Bb : CVTy := .sum svT svT
+  let bcx : LoopCx := if lin.isEmpty then ⟨Bb, .unit, .unit, []⟩ else
+    ⟨Bb, .tensor (tupleT (lin.map (·.2))) .unit, tupleT (lin.map (·.2)), lin.map ([·])⟩
+  let bodyW := wrapTail (fun
+    | .ret tsp (.sugar _ .brk) => .ret tsp (.inr tsp (tupleVal tsp sv))
+    | T => .bind T.span ⟨"io_u", T.span⟩ none T (.ret T.span (.inl T.span (tupleVal T.span sv))) false) M
+  let cb := xs.foldl (fun c (y, E) => c.push y (some E)) (svs.foldl (fun c (y, T) => c.push y (some T)) c)
+  pure ⟨cond, V, it, cap, svs, ws, bcx, bodyW, cb, direct⟩
+
+/-- The core of a generator's loop, around its elaborated body and what follows it. -/
+def genLoopSrc (g : GenCx) (c : TCx) (sp : Span) (x : Ident) (P : GenLoop) (body N N' : Comp)
+    (start : Option (String × String × (Comp → Comp) × Comp) := none) : SM Comp := do
+  let cx := g.L
+  let ppT := g.pp
+  -- A loop that starts a generator's body has a state before it, the parameter, whose
+  -- observation runs the code before the loop (`start`): the loop's own states are `inr`.
+  let stv (v : String) : String := if start.isSome then s!"(inr {v})" else v
+  let ⟨cond, V, it, cap, svs, ws, bcx, _, _, direct⟩ := P
+  let bg : GenCx := ⟨g.A, bcx, g.pp⟩
+  let sv := svs.map (·.1)
+  let svT := tupleT (svs.map (·.2))
+  let svTs := s!"({ppT svT})"
+  let svSrc := tupleSrc sv
+  let wn := ws.map (·.1)
+  let wT := tupleTySrc (ws.map (ppT ·.2))
+  let fin := if direct.isSome then s!"({ppT cx.B})" else s!"(({ppT cx.K}) * {wT})"
+  let finish := if direct.isSome then s!"io_v : {fin} <- force io_hole_fin;\nreturn (inr (inl io_v))"
+    else s!"return (inr (inl ({cx.kSrc}, {tupleSrc wn})))"
+  let A := ppT g.A
+  let R := ppT cx.R
+  let gb := bg.gTy
+  let obsB := s!"({A}) * U ({gb}) + ({ppT bcx.B}) + U ({gb})"
+  let ds := destructSrc "io_st" sv
+  let brk (itClose : String) := s!"{destructSrc "io_sv" sv}{itClose}{finish}"
+  let closeIt := match it with
+    | some (_, _, _, _, Q') => s!"io_c <- (nu_out (force io_it)).2;\n{bindCap cap Q' "io_c"}"
+    | none => ""
+  -- One observation of the body's generator `io_b`, with the loop's state rebuilt around it; the
+  -- body finishing to go on is `cont`.
+  let step (wrap : String → String) (cont : String) :=
+    s!"case io_b \{
+  inl io_y -> let (io_e, io_g2) = io_y; return (inl (io_e, {wrap "io_g2"}))
+| inr io_bd ->
+    case io_bd \{
+      inl io_r ->
+        case io_r \{
+          inl io_sv -> {cont}
+        | inr io_sv -> {brk closeIt}
+        }
+    | inr io_g2 -> return (inr (inr {wrap "io_g2"}))
+    }
+}"
+  -- The loop's head, `io_head`, starts an iteration from the loop's variables (and iterator): it
+  -- runs the body up to its first observation. An iteration that ends without yielding is a skip
+  -- when it started at the head, and starts the next one at once when it resumed the body: so a
+  -- loop whose body yields once per iteration yields at every observation.
+  let (St, Sa, head, resume, close, s0) := match it, cond with
+    | some (Vt, _, isGen, Q, _), _ =>
+      let It := ppT Vt
+      let St := s!"(({It}) * {svTs}) + (U ({gb}) * ({It}))"
+      let wrap (g2 : String) := stv s!"(inr ({g2}, io_it))"
+      let ended := s!"{bindCap cap Q "io_q"}{finish}"
+      let fin := if isGen then s!"case io_d \{
+          inl io_q -> {ended}
+        | inr io_it -> return (inr (inr {stv s!"(inl (io_it, {svSrc}))"}))
+        }" else s!"io_q <- return io_d;\n{ended}"
+      let head := s!"let (io_it, io_st) = io_a;
+{ds}io_o <- (nu_out (force io_it)).1;
+case io_o \{
+  inl io_p ->
+    let ({x.name}, io_it) = io_p;
+    io_b : {obsB} <- force io_hole_body;
+    {step wrap s!"return (inr (inr {stv "(inl (io_it, io_sv))"}))"}
+| inr io_d ->
+    {fin}
+}"
+      let resume := s!"let (io_g, io_it) = io_a;
+io_b <- (nu_out (force io_g)).1;
+{step wrap "return ((unbang io_head) (io_it, io_sv))"}"
+      let close := s!"case io_s \{
+  inl io_a ->
+    let (io_it, io_st) = io_a;
+    {ds}{closeIt}return {cx.rSrc}
+| inr io_a ->
+    let (io_g, io_it) = io_a;
+    io_rb <- (nu_out (force io_g)).2;
+    {destructR "io_rb" bcx.parts}{closeIt}return {cx.rSrc}
+}"
+      (St, s!"({It}) * {svTs}", head, resume, close, "(io_hole_v, " ++ svSrc ++ ")")
+    | none, _ =>
+      let St := s!"{svTs} + U ({gb})"
+      let wrap (g2 : String) := stv s!"(inr {g2})"
+      let head := s!"io_st <- return io_a;
+{ds}case io_hole_c \{
+  inl io_f -> {finish}
+| inr io_t ->
+    io_b : {obsB} <- force io_hole_body;
+    {step wrap s!"return (inr (inr {stv "(inl io_sv)"}))"}
+}"
+      let resume := s!"io_g <- return io_a;
+io_b <- (nu_out (force io_g)).1;
+{step wrap "return ((unbang io_head) io_sv)"}"
+      let close := s!"case io_s \{
+  inl io_st -> {ds}return {cx.rSrc}
+| inr io_g ->
+    io_rb <- (nu_out (force io_g)).2;
+    {destructR "io_rb" bcx.parts}return {cx.rSrc}
+}"
+      (St, svTs, head, resume, close, svSrc)
+  let next := s!"case io_s \{
+  inl io_a -> return ((unbang io_head) io_a)
+| inr io_a ->
+    {resume}
+}"
+  let (St, next, close, s0) := match start with
+    | some (p, Pt, _, _) =>
+      (s!"({Pt}) + ({St})", s!"case io_s \{ inl io_p0 -> force io_hole_start | inr io_s -> {next} }",
+        s!"case io_s \{ inl io_p0 -> force io_hole_stclose | inr io_s -> {close} }", p)
+    | none => (St, next, close, s0)
+  let obsL := s!"({A}) * ({St}) + ({fin} + ({St}))"
+  let src := s!"io_head : !(({Sa}) => {obsL}) <-
+  return (!thunkv fun (io_a : {Sa}) -> {head});
+io_step : !U ({St} -o F ({obsL}) & F ({R})) <-
+  return (!thunkv fun (io_s : {St}) -> < {next}, {close} >);
+io_f <- return (unbang (unfold[gen ({A}) {fin} ({R}), {St}] io_step));
+io_s0 : {St} <- return (inl {s0});
+" ++ if start.isSome then "return (thunkv nu_in < (nu_out (force io_f io_s0)).1, (nu_out (force io_f io_s0)).2 >)"
+  else "io_l <- return (thunkv nu_in < (nu_out (force io_f io_s0)).1, (nu_out (force io_f io_s0)).2 >);
+" ++ if direct.isSome then "(nu_out (force io_l)).1" else s!"io_gb <- return (gen_bind[{A}, {fin}, ({R}), ({ppT cx.B}), ({R})] (io_l, thunkv
+  < fun (io_a : {fin}) ->
+      let (io_ka, io_wa) = io_a;
+      {destructParts "io_ka" cx.parts}{destructSrc "io_wa" wn}return (thunkv nu_in < force io_hole_rest, {dropsFor c cx.capNames N}return {cx.rSrc} >),
+    fun (io_r : {R}) -> {dropsFor c (cx.capNames ++ wn ++ [x.name]) N}return io_r >));
+(nu_out (force io_gb)).1"
+  let what := if cond.isSome then "`while`" else "`for` in a generator"
+  let L ← template sp what src
+  -- The start: the code before the loop, then the loop's head on its first state.
+  let (stCode, stClose) ← match start with
+    | some (p, _, pre, cl) => do
+      let go ← template sp what (if cond.isSome then s!"return ((unbang io_head) {svSrc})"
+        else s!"return ((unbang io_head) (io_hole_v, {svSrc}))")
+      let go := go.fill (fun v => if v == "io_hole_v" then some V else none) (fun _ => none)
+      let pb (M : Comp) : Comp := .bind sp ⟨p, sp⟩ none (.ret sp (.var sp "io_p0")) M false
+      pure (some (pb (pre go)), some (pb cl))
+    | none => pure (none, none)
+  pure (L.fill (fun v => if v == "io_hole_v" then some V
+      else if v == "io_hole_c" then cond else none)
+    (fun v => if v == "io_hole_body" then some body else if v == "io_hole_rest" then some N'
+      else if v == "io_hole_fin" then direct else if v == "io_hole_start" then stCode
+      else if v == "io_hole_stclose" then stClose else none))
+mutual
+/-- A generator body, elaborated to its first observation: code of type
+`F (A * U (gen A B R) + (B + U (gen A B R)))`. -/
+def genBody (g : GenCx) : Nat → TCx → Comp → SM Comp
+  | 0, _, M => throw ⟨M.span, "internal error: a generator body nested too deeply"⟩
+  | n + 1, c, .bind sp x A (.ret ysp (.app _ (.sugar _ .yield_) e)) N lin => do
+    if e.hasYield then throw (yieldOffSpine (e.yieldAt.getD e.span))
+    let N' ← genBody g n (c.push x.name (some .unit)) N
+    let L ← template ysp "`yield`" s!"return (inl (io_hole_e, thunkv nu_in < force io_hole_rest, {dropsFor c g.L.capNames N}return {g.L.rSrc} >))"
+    -- The rest binds the `yield`'s own result, `()`, to the name the program gave it.
+    let rest := Comp.bind sp x A (.ret ysp (.unit ysp)) N' lin
+    pure (L.fill (fun v => if v == "io_hole_e" then some e else none)
+      (fun v => if v == "io_hole_rest" then some rest else none))
+  | n + 1, c, .bind sp x A M N lin => do
+    if M.hasYield then
+      -- A head that yields: what follows goes into it (a commuting conversion), so the `yield`
+      -- is on the spine. A `match` or `if` duplicates what follows into its arms.
+      match M with
+      | .case csp V y M₁ z M₂ =>
+        if mentionsC y.name N || mentionsC z.name N then throw (yieldOffSpine (M.yieldAt.getD M.span))
+        return (← genBody g n c (.case csp V y (.bind sp x A M₁ N lin) z (.bind sp x A M₂ N lin)))
+      | .bind bsp y B M₁ M₂ lin' =>
+        if mentionsC y.name N then throw (yieldOffSpine (M.yieldAt.getD M.span))
+        return (← genBody g n c (.bind bsp y B M₁ (.bind sp x A M₂ N lin) lin'))
+      | .letPair lsp y z V M₁ =>
+        if mentionsC y.name N || mentionsC z.name N then throw (yieldOffSpine (M.yieldAt.getD M.span))
+        return (← genBody g n c (.letPair lsp y z V (.bind sp x A M₁ N lin)))
+      | .letUnit lsp V M₁ => return (← genBody g n c (.letUnit lsp V (.bind sp x A M₁ N lin)))
+      | _ => throw (yieldOffSpine (M.yieldAt.getD M.span))
+    let N' ← genBody g n (c.push x.name (bindTy c A M)) N
+    pure (.bind sp x A M N' lin)
+  | n + 1, c, .letUnit sp V M => do
+    if V.hasYield then throw (yieldOffSpine (V.yieldAt.getD V.span))
+    return .letUnit sp V (← genBody g n c M)
+  | n + 1, c, .letPair sp x y V M => do
+    if V.hasYield then throw (yieldOffSpine (V.yieldAt.getD V.span))
+    let (Ax, Ay) := pairTys c V
+    return .letPair sp x y V (← genBody g n ((c.push x.name Ax).push y.name Ay) M)
+  | n + 1, c, .case sp V x M y N => do
+    if V.hasYield then throw (yieldOffSpine (V.yieldAt.getD V.span))
+    let (Ax, Ay) := sumTys c V
+    return .case sp V x (← genBody g n (c.push x.name Ax) M) y (← genBody g n (c.push y.name Ay) N)
+  | n + 1, c, .for_ sp x V M N => genLoop g n c sp x V M N
+  | n + 1, c, T@(.ret sp (.app _ (.sugar _ .yield_) _)) =>
+    -- A `yield` last: yield, then finish with `()`.
+    genBody g n c (.bind sp ⟨"io_y", sp⟩ none T (.ret sp (.unit sp)) false)
+  | _ + 1, _, T => do
+    if T.hasYield then throw (yieldOffSpine (T.yieldAt.getD T.span))
+    let L ← template T.span "a generator's result" s!"io_v : {g.pp g.L.B} <- force io_hole_t;
+return (inr (inl io_v))"
+    pure (L.fill (fun _ => none) (fun v => if v == "io_hole_t" then some T else none))
+
+/-- `for x in V { M }; N` or `while c { M }; N` in a generator body: a generator by `unfold` over
+the loop's state, then `gen_bind` of what follows. -/
+def genLoop (g : GenCx) : Nat → TCx → Span → Ident → Val → Comp → Comp → SM Comp
+  | 0, _, sp, _, _, _, _ => throw ⟨sp, "internal error: a generator body nested too deeply"⟩
+  | n + 1, c, sp, x, V, M, N => do
+    let P ← genLoopPlan g c sp x V M N
+    let body ← genBody ⟨g.A, P.bcx, g.pp⟩ n P.cb P.bodyW
+    let N' ← if P.direct.isSome then pure N else genBody g n c N
+    genLoopSrc g c sp x P body N N'
+end
+
 /-! ### Programs -/
 
 /-- The capabilities a program uses ambiently: none if it declares an extern. A `main` that loops
@@ -769,6 +1180,94 @@ def ambientMain (c : TCx) (cs : List String) (sp : Span) (C : CTy) (M : Comp) :
 def resultOf : Option CVTy → Option CVTy
   | some (.thunk (.arr _ (.ret B))) | some (.bang (.thunk (.arr _ (.ret B)))) => some B
   | _ => none
+
+/-- A value that must be known here. -/
+def need' {α} (sp : Span) (what : String) : Option α → SM α
+  | some a => pure a
+  | none => throw ⟨sp, s!"{what} is not determined here"⟩
+
+/-- A generator body that is straight-line code, then one loop, then code with no `yield` and no
+loop: the code before the loop (as a function of what replaces the loop), the typing context at
+the loop, and the loop. -/
+def splitLoop : Nat → TCx → Comp →
+    Option ((Comp → Comp) × TCx × Span × Ident × Val × Comp × Comp)
+  | 0, _, _ => none
+  | n + 1, c, .bind sp x A M N lin =>
+    if M.hasYield || M.hasFor then none else
+    (splitLoop n (c.push x.name (bindTy c A M)) N).map fun (pre, r) =>
+      (fun T => .bind sp x A M (pre T) lin, r)
+  | n + 1, c, .letUnit sp V M =>
+    if V.hasYield then none else
+    (splitLoop n c M).map fun (pre, r) => (fun T => .letUnit sp V (pre T), r)
+  | n + 1, c, .letPair sp x y V M =>
+    if V.hasYield then none else
+    let (Ax, Ay) := pairTys c V
+    (splitLoop n ((c.push x.name Ax).push y.name Ay) M).map fun (pre, r) =>
+      (fun T => .letPair sp x y V (pre T), r)
+  | _ + 1, c, .for_ sp x V M N =>
+    if N.hasYield || N.hasFor then none else some (id, c, sp, x, V, M, N)
+  | _, _, _ => none
+
+/-- A `gen fn`, elaborated: `gen[E] def f : !(P => B) = !thunkv fun (x : P) -> M` becomes
+`def f : !(P => U (gen E B R)) = !thunkv fun (x : P) -> return (thunkv nu_in < M', abort >)`, which
+runs nothing until the generator is observed. `scope` is the declarations before it. -/
+def genDef (scope : List Decl) : Decl → SM Decl
+  | .def_ sp n ps A V (.gen E) => do
+    let c := TCx.ofScope scope false
+    -- `!thunkv fun (x : P) -> M`, or with a lifetime parameter `'y`,
+    -- `!thunkv Fun 'y < b. return (thunkv fun (x : P) -> M)` (`gen fn f<'y>(…)`).
+    let (life, x, Ax, M) ← match V with
+      | .thunkv _ (.lam _ x Ax M) | .bangThunkv _ (.lam _ x Ax M) => pure (none, x, Ax, M)
+      | .bangThunkv _ (.lamL _ y b (.ret _ (.thunkv _ (.lam _ x Ax M)))) =>
+        pure (some (y, b), x, Ax, M)
+      | _ => throw ⟨sp, "a generator is written `gen fn f(…) -> A = S`"⟩
+    let (bang, Ar, B) ← match A, V, life with
+      | .lolli _ Ar B, .thunkv .., none => pure (false, Ar, B)
+      | .bang _ (.lolli _ Ar B), .bangThunkv .., none => pure (true, Ar, B)
+      | .bang _ (.all _ _ _ (.lolli _ Ar B)), .bangThunkv .., some _ => pure (true, Ar, B)
+      | _, _, _ => throw ⟨A.span, "a generator has type `A => B` or `!(A => B)`"⟩
+    if !ps.isEmpty then throw ⟨sp, "a generator has no type parameters"⟩
+    let cl ← match life with
+      | none => pure c
+      | some (y, b) => do
+        let bl ← need' b.span "the lifetime's bound" (c.elabL b)
+        pure (c.pushLife y.name bl)
+    let some Bc := cl.elabV B
+      | throw ⟨B.span, s!"the result type of `{n.name}` does not elaborate"⟩
+    let some Ec := cl.elabV E
+      | throw ⟨E.span, s!"the element type of `{n.name}` does not elaborate"⟩
+    let cx ← loopCxOf sp Bc M
+    let c₀ := cl.push x.name (cl.elabV Ax)
+    let g : GenCx := ⟨Ec, cx, fun T => Frontend.Check.ppV cl.E.lenv 0 0 T⟩
+    let ab ← template sp "a generator's `close` before it starts" s!"return {cx.rSrc}"
+    let abort := paramPrefix M ab
+    let Rs ← toSurface sp cx.R
+    let G := VTy.thunk B.span (.gen B.span E B Rs)
+    let F := VTy.lolli A.span Ar G
+    let body ← match splitLoop divFuel c₀ M with
+      | some (pre, cm, lsp, lx, LV, LM, LN) => do
+        -- One loop: the generator is that loop's `unfold`, with a first state that runs the code
+        -- before it. Every observation is then a call of one known code.
+        let P ← genLoopPlan g cm lsp lx LV LM LN
+        let bodyL ← genBody ⟨g.A, P.bcx, g.pp⟩ divFuel P.cb P.bodyW
+        genLoopSrc g cm lsp lx P bodyL LN LN (some (x.name, Ax.pp, pre, abort))
+      | none => do
+        let M' ← genBody g divFuel c₀ M
+        pure (Comp.ret sp (.thunkv sp (.nuIn sp (.with_ sp M' abort))))
+    let lam := Comp.lam sp x Ax body
+    match life with
+    | none =>
+      let A' := if bang then VTy.bang A.span F else F
+      let V' := if bang then Val.bangThunkv sp lam else Val.thunkv sp lam
+      pure (.def_ sp n ps A' V' .none)
+    | some (y, b) =>
+      pure (.def_ sp n ps (.bang A.span (.all A.span y b F))
+        (.bangThunkv sp (.lamL sp y b (.ret sp (.thunkv sp lam)))) .none)
+  | d => pure d
+
+/-- The program declares a generator. -/
+def hasGen (ds : List Decl) : Bool :=
+  ds.any fun | .def_ _ _ _ _ _ (.gen _) => true | _ => false
 
 /-- A written function type whose result may be a loop: a thunk or a name there. -/
 def _root_.Frontend.VTy.mayReturnLoop : VTy → Bool
@@ -1318,7 +1817,7 @@ def surfC : Nat → TCx → Option CCTy → Comp → DM Comp
     | .ascribe sp M C => do pure (.ascribe sp (← surfC n c (c.E.elabC c.Δ C).toOption M) C)
     | .for_ sp x V M N => do
       let V' ← surfV n c none V
-      let el := (c.tyV V').bind iterOf |>.map (·.1)
+      let el := (c.tyV V').bind elemOf
       pure (.for_ sp x V' (← surfC n (c.push x.name el) none M) (← surfC n c exp N))
     | M => pure M
 end
@@ -1348,6 +1847,9 @@ def elabDecl : Nat → DivSt → Decl → SM DivSt
   | fuel + 1, st, d => do
     let (d, st) ← (surfDecl divFuel d).run st
     let (d, st) ← (specDecl fuel d).run st
+    if let .def_ _ _ _ _ _ (.gen _) := d then
+      let d' ← genDef (st.lib ++ st.out) d
+      return { st with srcs := d :: st.srcs, out := st.out ++ [d'] }
     let (d', e) ← elabDef (st.lib ++ st.out) d
     let elaborated := e.isSome && decide (d' ≠ d)
     pure { st with srcs := d :: st.srcs, out := st.out ++ [d'], any := st.any || elaborated }
@@ -1446,7 +1948,7 @@ def specC : Nat → TCx → Comp → DM Comp
     | .nuOut sp M => do pure (.nuOut sp (← specC n c M))
     | .ascribe sp M C => do pure (.ascribe sp (← specC n c M) C)
     | .for_ sp x V M N => do
-      let el := (c.tyV V).bind iterOf |>.map (·.1)
+      let el := (c.tyV V).bind elemOf
       pure (.for_ sp x (← specV n c V) (← specC n (c.push x.name el) M) (← specC n c N))
     | M => pure M
 end
@@ -1535,7 +2037,12 @@ def elaborateS (p : Program) : SM (Program × Nat) := do
       let (C', M') ← if cs.isEmpty then plainMain mc sp C M else ambientMain mc cs sp C M
       pure (some (Decl.main sp C' M'))
     | _ => pure none
-  let lib := preludeAll ++ ioLib ++ divLib
+  -- The generator library when an elaborated generator sequences with `gen_bind`.
+  let usesBind := (rest ++ mains).any fun
+    | .def_ _ _ _ _ V _ => V.names "gen_bind" | .main _ _ M => M.names "gen_bind" | _ => false
+  let genLib ← if hasGen p.decls && usesBind && !incl.contains "gen" then
+    libOf "lib/gen.bc" genLibrary else pure []
+  let lib := preludeAll ++ ioLib ++ divLib ++ genLib
   let decls ← (lib ++ rest ++ exts ++ mains).mapM fun
     | .def_ sp n ps A V mk => return .def_ sp n ps A (← V.elab false) mk
     | .main sp C M => return .main sp C (← M.elab false)

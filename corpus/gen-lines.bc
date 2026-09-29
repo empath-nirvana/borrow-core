@@ -1,0 +1,47 @@
+-- A line splitter: `lines` is a generator over the bytes of an input that yields each line as a
+-- list of its bytes, and finishes handing the input back. It holds the input capability and the
+-- line being read in its state between two `yield`s; a last line without a newline is yielded
+-- after the loop. `main` writes each line reversed (the list holds it last byte first).
+--
+-- The `for` inside `lines` iterates `bytes(c)`, which may not end: in a generator that loop is a
+-- state machine (a state of the generator), so each observation of `lines` stays total. What
+-- follows the loop yields too, so it is sequenced by `gen_bind` (`lib/gen.bc`).
+--
+-- Answer: on the input `stressed`, `level`, `live on` (no final newline), the lines `desserts`,
+-- `level`, `no evil`, and i32[3]. A splitter that lost the last line prints two lines and gives
+-- 2; one that kept the newline in a line prints an empty line first.
+
+type List = mu X. 1 + (i32 * X)
+
+def nil : List = roll inl ()
+fn cons(x: i32, t: List) -> List = roll inr (x, t)
+
+gen fn lines(c: In) -> List, In =
+  let mut line = nil;
+  let mut any = false;
+  for b in bytes(c) {
+    if b == 10 { yield line; line = nil; any = false } else { line = cons(b, line); any = true }
+  };
+  if any { yield line } else { () };
+  c
+
+-- A list written head first: a fold into a function of the output (`corpus/axes/data-effects.bc`).
+type Run = U (Out -o F (Out * 1))
+
+fn run_alg(r: 1 + i32 * Run) -> Run =
+  match r {
+    inl _ -> { o -> (o, ()) }
+  | inr (x, k) -> { o -> let (o, _) = putb(o, x); k!(o) }
+  }
+def run_list : !(List => Run) = fold_own[1 + i32 * X, Run] run_alg
+
+main -> i32 =
+  let mut n = 0;
+  for l in lines(stdin) {
+    let w = run_list(l);
+    r <- w!(stdout);
+    let (stdout, _) = r;
+    putb(&mut stdout, 10);
+    n = n + 1
+  };
+  n

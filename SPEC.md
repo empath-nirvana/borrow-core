@@ -1189,6 +1189,51 @@ Another control effect (async, #52; generators and user handlers, #18) reuses it
 The specialization itself — finding the callback's type at a call, copying, caching by
 (function, parameter type), renaming the call — is shared. What it does not yet cover is below.
 
+### Generators (spike, #18)
+
+A generator is codata with one more observation result than an iterator, a **skip**:
+
+    gen A B R ≜ νX. F((A ⊗ U X) ⊕ (B ⊕ U X)) & F R            (lib/gen.bc)
+
+`next` yields an element with the rest, finishes with `B`, or skips a step with the rest;
+`close` ends it early and hands back the residual `R`. A skip is a turn of a loop in the
+generator's body that yielded nothing. Every observation is total, so a loop in a generator is a
+state of the generator, never a loop inside one observation; whether the whole finishes is the
+consumer's business, as for a loop (`loop B R` is the generator that never yields, `iter A B R`
+the one that never skips). `gen` is an abbreviation of the frontend over `ν` (§7), with no
+counterpart in `Core/`: no former, rule, relation clause or machine step is added.
+
+`gen fn f(x₁: A₁, …) -> A, B = S` (`-> A` finishes with `1`; `gen fn f<'a>(…)` takes a lifetime)
+elaborates, in `Frontend/Sugar.lean`, to `f : !(A₁ * … => U (gen A B R))`, `R` the residual of
+`B` as for a div function. The body is elaborated to its first observation:
+
+- **`yield e; N`** is `return (inl (e, thunkv nu_in < N', close >))`: the rest runs `N` when it
+  is observed, and its `close` drops what `N` would have used and hands back the residual.
+- **A terminal** `T` finishes: `return (inr (inl T))`.
+- **`for x in V { M }; N`** (`V` an iterator or a generator) and **`while c { M }; N`** are a
+  generator by `unfold` over the loop's variables and iterator, or the body's rest with them.
+  The body `M` is itself a generator body, which may `yield` and `break`. A loop head starts an
+  iteration; an iteration that the head started and that ends without yielding is a skip, and one
+  that resumed after a `yield` starts the next at once. What follows the loop runs in the loop's
+  last step when it neither yields nor loops, and is sequenced by `gen_bind` otherwise.
+- **The call runs nothing**: it returns `thunkv nu_in < S', close >`. A body that is code, one
+  loop, and code with no `yield` is one `unfold` whose first state is the parameters, so every
+  observation of it is a call of one known code.
+
+`yield` and `break` stand only on the spine (binds, `let`s, `match` and `if` arms, which a
+`yield` in a bound computation is pushed into, and loop bodies). A `yield` inside a borrow block is
+rejected: a generator cannot hold a borrow of its own local across a `yield`
+(`corpus/reject/gen-self-borrow.bc`), and a generator that holds a borrow of outside data cannot
+leave that borrow's scope, by the existing rule for thunks (`corpus/reject/gen-escape.bc`).
+
+A `for` in a div body iterates a generator too (a skip goes round the loop), and an iterator or
+generator that holds no capability (`range(1, 10)`, a pipeline of generators).
+
+**Open.** A direct-style call of a div function in a generator body; delegation to another
+generator (`yield from`, a `gen_bind` of the call); `return` from inside a loop; a `gen { … }`
+block; a `for` that binds the finishing value; a total consumer (a `for` over a generator is
+div). Generators are not yet a case of §14's specialization (a callback that yields).
+
 ### The totality theorem
 
 A closed div-free program terminates on every run (`Core/Totality.lean`). For

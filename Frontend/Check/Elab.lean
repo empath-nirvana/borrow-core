@@ -32,6 +32,13 @@ abbrev CCTy := BoCa.Fig16.LogRel.Core.CTy
 abbrev CShape := BoCa.Fig16.LogRel.Core.Shape
 abbrev CLife := BoCa.Lifetime.Life
 
+/-- `gen A B R = νX. F((A ⊗ U X) ⊕ (B ⊕ U X)) & F R`: a generator (`lib/gen.bc`). It is an
+abbreviation of the frontend over `ν` (SPEC §7: a new codata shape is a new abbreviation), with no
+counterpart in `Core/`. -/
+def genTy (A B R : CVTy) : CCTy :=
+  .nu (.amp (.ret (.sum (.tensor (A.rename Nat.succ) (.tvar 0)) (.sum (B.rename Nat.succ) (.tvar 0))))
+    (.ret (R.rename Nat.succ)))
+
 /-- The declarations visible at a point: those before index `upto`. -/
 structure Scope where
   decls : Array Decl
@@ -145,6 +152,8 @@ def ppC (nm : List (String × LifeVar)) (p : Nat) : CCTy → String
       parenIf (p > 5) s!"stream {ppV nm 0 5 A}"
   | .nu (.amp (.ret (.sum A (.tvar 0))) (.ret B)) =>
       parenIf (p > 5) s!"loop {ppV nm 0 6 A} {ppV nm 0 6 B}"
+  | .nu (.amp (.ret (.sum (.tensor A (.tvar 0)) (.sum B (.tvar 0)))) (.ret R)) =>
+      parenIf (p > 5) s!"gen {ppV nm 0 6 A} {ppV nm 0 6 B} {ppV nm 0 6 R}"
   | .nu (.amp (.ret (.sum (.tensor A (.tvar 0)) R)) (.ret R')) =>
       parenIf (p > 5) s!"iter {ppV nm 0 6 A} {ppV nm 0 6 R} {ppV nm 0 6 R'}"
   | .nu C => parenIf (p > 0) s!"nu {tvName 0}. {ppC nm 0 C}"
@@ -275,6 +284,7 @@ def elabC : Nat → TyEnv → CTy → Except Error CCTy
     | .stream _ A => do pure (.stream (← elabV n E A))
     | .iter _ A R R' => do pure (.iter (← elabV n E A) (← elabV n E R) (← elabV n E R'))
     | .loop _ A B => do pure (.loop (← elabV n E A) (← elabV n E B))
+    | .gen _ A B R => do pure (genTy (← elabV n E A) (← elabV n E B) (← elabV n E R))
 /-- A shape. -/
 def elabS : Nat → TyEnv → Shape → Except Error CShape
   | 0, _, σ => err σ.span "shape abbreviations nested too deeply"
