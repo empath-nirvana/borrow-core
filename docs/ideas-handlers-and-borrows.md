@@ -23,6 +23,12 @@ It is one kind of handler, not all of them. Handlers differ in what they do with
 | stores `k` and resumes once, later | generators, async, coroutines | codata (`k` is the one-shot `U X`) |
 | resumes many times | backtracking, nondeterminism | copying `k`; only when what it holds is persistent (`!`) |
 
+Rows 1 and 2 together are what Ahman and Bauer call a **runner**: co-operations run against a
+resource and resume exactly once, with initialisation and finalisation around the computation
+("Runners in Action", ESOP 2020). A borrow with an epilogue is a runner. On this reading, runners
+are not something to add to the language: linearity and borrows already are runners, which is why
+they looked unnecessary earlier.
+
 With linearity, the kind of handler is not only a compilation strategy (as in Koka or Effekt), but
 also decides what the handler may touch:
 - a lend for the first two rows;
