@@ -1,0 +1,124 @@
+-- `gen-div.bc` written by hand in core. The call of `collatz` runs its loop inside the
+-- generator: `gen_bind_loop` (copied from the generator library, `lib/gen.bc`) observes the loop
+-- once per observation of the generator, a skip until it finishes, and then goes on with the
+-- continuation's generator, which binds `k` and yields it. Closed during the loop, the
+-- continuation's second observation hands back the residual, `()`.
+
+-- One step from `(n, k)`: `k` steps so far.
+def collatz_step : !U (i32 * i32 -o F (i32 + (i32 * i32)) & F 1) =
+  !thunkv fun (s : i32 * i32) ->
+    < let (n, k) = s;
+      case (unbang host[eq32]) (n, i32[1]) {
+        inl other ->
+          k2 <- return ((unbang host[add32]) (k, i32[1]));
+          case (unbang host[eqz32]) ((unbang host[and32]) (n, i32[1])) {
+            inl odd ->
+              return (inr ((unbang host[add32]) ((unbang host[mul32]) (n, i32[3]), i32[1]), k2))
+          | inr even -> return (inr ((unbang host[shr_u32]) (n, i32[1]), k2))
+          }
+      | inr one -> return (inl k)
+      },
+      let (n, k) = s;
+      return () >
+
+def collatz : i32 => U (loop i32 1) =
+  thunkv fun (n : i32) ->
+    f <- return (unbang (unfold[loop i32 1, i32 * i32] collatz_step));
+    s0 : i32 * i32 <- return (n, i32[0]);
+    return (thunkv nu_in < (nu_out (force f s0)).1, (nu_out (force f s0)).2 >)
+
+-- The loop inside a generator, from the generator library.
+def gen_bind_loop_step[A, B1, R1, B, R] :
+    !U ((U (loop B1 R1) * U ((B1 -o F (U (gen A B R))) & (R1 -o F R))) + U (gen A B R)
+        -o F (A * ((U (loop B1 R1) * U ((B1 -o F (U (gen A B R))) & (R1 -o F R))) + U (gen A B R))
+              + (B + ((U (loop B1 R1) * U ((B1 -o F (U (gen A B R))) & (R1 -o F R))) + U (gen A B R))))
+         & F R) =
+  !thunkv fun (s : (U (loop B1 R1) * U ((B1 -o F (U (gen A B R))) & (R1 -o F R))) + U (gen A B R)) ->
+    < case s {
+        inl p ->
+          let (m, k) = p;
+          o <- (nu_out (force m)).1;
+          case o {
+            inl b1 ->
+              l <- (force k).1 b1;
+              return (inr (inr (inr l)))
+          | inr m2 -> return (inr (inr (inl (m2, k))))
+          }
+      | inr l ->
+          o <- (nu_out (force l)).1;
+          case o {
+            inl y ->
+              let (a, l2) = y;
+              return (inl (a, inr l2))
+          | inr d ->
+              case d {
+                inl b -> return (inr (inl b))
+              | inr l2 -> return (inr (inr (inr l2)))
+              }
+          }
+      },
+      case s {
+        inl p ->
+          let (m, k) = p;
+          r1 <- (nu_out (force m)).2;
+          (force k).2 r1
+      | inr l -> (nu_out (force l)).2
+      } >
+
+def gen_bind_loop[A, B1, R1, B, R] :
+    U (loop B1 R1) * U ((B1 -o F (U (gen A B R))) & (R1 -o F R)) => U (gen A B R) =
+  thunkv fun (p : U (loop B1 R1) * U ((B1 -o F (U (gen A B R))) & (R1 -o F R))) ->
+    f <- return (unbang (unfold[gen A B R,
+           (U (loop B1 R1) * U ((B1 -o F (U (gen A B R))) & (R1 -o F R))) + U (gen A B R)]
+           gen_bind_loop_step[A, B1, R1, B, R]));
+    s0 : (U (loop B1 R1) * U ((B1 -o F (U (gen A B R))) & (R1 -o F R))) + U (gen A B R) <-
+      return (inl p);
+    return (thunkv nu_in < (nu_out (force f s0)).1, (nu_out (force f s0)).2 >)
+
+def steps : !(i32 => U (gen i32 1 1)) =
+  !thunkv fun (p : i32) ->
+    return (thunkv nu_in <
+      n <- return p;
+      m <- return (collatz n);
+      g <- return (gen_bind_loop[i32, i32, 1, 1, 1] (m, thunkv
+        < fun (a : i32) ->
+            k <- return a;
+            return (thunkv nu_in <
+              return (inl (k, thunkv nu_in <
+                s0 <- return ();
+                v : 1 <- return ();
+                return (inr (inl v)),
+                return () >)),
+              dk <- return k;
+              return () >),
+          fun (r : 1) -> let () = r; return () >));
+      (nu_out (force g)).1,
+      n <- return p;
+      return () >)
+
+main : F (U (loop i32 1)) =
+  acc <- return i32[0];
+  step : !U (U (gen i32 1 1) * i32 -o F (i32 + U (gen i32 1 1) * i32) & F 1) <-
+    return (!thunkv fun (s : U (gen i32 1 1) * i32) ->
+      < let (it, st) = s;
+        acc <- return st;
+        o <- (nu_out (force it)).1;
+        case o {
+          inl q ->
+            let (k, it) = q;
+            acc <- return ((unbang host[add32]) (acc, k));
+            u <- return ();
+            return (inr (it, acc))
+        | inr d ->
+            case d {
+              inl c -> v : i32 <- return acc; return (inl v)
+            | inr it -> return (inr (it, acc))
+            }
+        },
+        let (it, st) = s;
+        acc <- return st;
+        c <- (nu_out (force it)).2;
+        return () >);
+  f <- return (unbang (unfold[loop i32 1, U (gen i32 1 1) * i32] step));
+  s0 : U (gen i32 1 1) * i32 <- return ((unbang steps) i32[27], acc);
+  return (thunkv nu_in < (nu_out (force f s0)).1, (nu_out (force f s0)).2 >)

@@ -1,0 +1,73 @@
+-- Calls of div functions in direct style inside generators (#109). A generator's observations
+-- are total, so a loop it calls runs inside it one turn per observation, each turn a skip
+-- (`gen_bind_loop`, `lib/gen.bc`); when the loop finishes, the body goes on with its result.
+--
+-- `collatz` is a loop written in core. `steps` calls it inside its own loop, once per element;
+-- `two` calls it in the element of a `yield`, in a `let`, and as its result. `line_len` is div
+-- (it has a `for`), and `lens` lends it the input it holds, `line_len(&mut c)`: the call hands
+-- `c` back when it finishes, or, if the generator is closed during it, in its residual.
+--
+-- Answer: on the input `abc`, `de`, `xyz`, i32[32924039]: `steps` over 1 … 7 gives 0 1 7 2 5 8
+-- 16 (39); `two(6, 7)` yields 8 and 16 (24000) and finishes with 9, the steps from 13 (900000);
+-- `lens(stdin, 2)` yields the lengths 3 and 2 (32000000). A call whose result the body lost gives
+-- 0 in its place; a `lens` that did not get `c` back from `line_len` does not check.
+
+-- One step from `(n, k)`: `k` steps so far.
+def collatz_step : !U (i32 * i32 -o F (i32 + (i32 * i32)) & F 1) =
+  !thunkv fun (s : i32 * i32) ->
+    < let (n, k) = s;
+      case (unbang host[eq32]) (n, i32[1]) {
+        inl other ->
+          k2 <- return ((unbang host[add32]) (k, i32[1]));
+          case (unbang host[eqz32]) ((unbang host[and32]) (n, i32[1])) {
+            inl odd ->
+              return (inr ((unbang host[add32]) ((unbang host[mul32]) (n, i32[3]), i32[1]), k2))
+          | inr even -> return (inr ((unbang host[shr_u32]) (n, i32[1]), k2))
+          }
+      | inr one -> return (inl k)
+      },
+      let (n, k) = s;
+      return () >
+
+def collatz : i32 => U (loop i32 1) =
+  thunkv fun (n : i32) ->
+    f <- return (unbang (unfold[loop i32 1, i32 * i32] collatz_step));
+    s0 : i32 * i32 <- return (n, i32[0]);
+    return (thunkv nu_in < (nu_out (force f s0)).1, (nu_out (force f s0)).2 >)
+
+gen fn range(lo: i32, hi: i32) -> i32 =
+  let mut i = lo;
+  while i < hi { yield i; i = i + 1 };
+  ()
+
+gen fn steps(it: U (gen i32 1 1)) -> i32 =
+  for n in it { let k = collatz(n); yield k };
+  ()
+
+gen fn two(a: i32, b: i32) -> i32, i32 =
+  yield collatz(a);
+  let k = collatz(b);
+  yield k;
+  collatz(a + b)
+
+fn line_len(c: In) -> In * i32 =
+  let mut n = 0;
+  for b in bytes(&mut c) { if b == 10 { break } else { n = n + 1 } };
+  (c, n)
+
+gen fn lens(c: In, k: i32) -> i32, In =
+  let mut i = 0;
+  while i < k {
+    let n = line_len(&mut c);
+    yield n;
+    i = i + 1
+  };
+  c
+
+main -> i32 =
+  let mut acc = 0;
+  for k in steps(range(1, 8)) { acc = acc + k };
+  let r = for k in two(6, 7) { acc = acc + k * 1000 };
+  let mut s = 0;
+  for n in lens(&mut stdin, 2) { s = s * 10 + n };
+  acc + r * 100000 + s * 1000000

@@ -83,3 +83,34 @@ main -> i32 =
   let s = for x in firstbig(upto(10), 5) { () };
   s
 ```
+
+## Calling a loop from a generator
+
+A generator may call a function that loops (a div function, see
+[Divergence](divergence.md)) as it would call any other. The loop runs inside the generator, one
+turn per observation, so every observation still terminates: a consumer that stops early stops
+the loop too.
+
+```bc
+-- stdin: abc
+-- stdin: de
+-- answer: i32[32]
+fn line_len(c: In) -> In * i32 =
+  let mut n = 0;
+  for b in bytes(&mut c) { if b == 10 { break } else { n = n + 1 } };
+  (c, n)
+
+gen fn lens(c: In, k: i32) -> i32, In =
+  let mut i = 0;
+  while i < k {
+    let n = line_len(&mut c);
+    yield n;
+    i = i + 1
+  };
+  c
+
+main -> i32 =
+  let mut s = 0;
+  for n in lens(&mut stdin, 2) { s = s * 10 + n };
+  s
+```

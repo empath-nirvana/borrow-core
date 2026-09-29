@@ -321,3 +321,8 @@ Each entry: the decision, and why. Newest last.
       bound; here every `for` over a generator has a finishing value to keep. A loop over an
       iterator made from a capability keeps none (it hands the capability back). `while` has no
       value.
+    - **A div call in a generator is a run of skips.** A call of a div function in direct style
+      in a generator's body runs its loop inside the generator, one turn per observation, each a
+      skip (`gen_bind_loop`); the alternative of running the loop to its end inside one
+      observation would make that observation div, and a generator's observations total is what
+      lets a consumer bound its work.

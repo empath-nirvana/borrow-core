@@ -1253,6 +1253,16 @@ elaborates, in `Frontend/Sugar.lean`, to `f : !(A₁ * … => U (gen A B R))`, `
   (`corpus/reject/for-break-value.bc`), and a bare `break` in such a loop gives `()` only when the
   value is `1`. An iterator made from a capability finishes by handing it back, so its loop's
   value is not bound (`corpus/reject/for-value-held.bc`).
+- **A call of a div function in direct style** (§14's definition, at any depth of a bound or
+  returned value, a scrutinee or an element being yielded) runs the call's loop inside the
+  generator: `x <- f V; N` becomes `gen_bind_loop[A, B', R', B, R] (f V, ⟨λa. x ← a;
+  return (thunkv nu_in ⟨N', close⟩), λr. abort⟩)` (`lib/gen.bc`), whose state is the loop with
+  the continuation, then the continuation's generator. Each turn of the loop is a skip, so every
+  observation stays total; `abort` turns the loop's residual into the generator's, as a div
+  body's does, including a capability lent with `&mut c` (`corpus/gen-div.bc`,
+  `corpus/sugar/gen-div.bc`). What follows a loop runs in its last step only when it neither
+  yields nor loops nor calls a div function. `yield` outside a generator's body is an error
+  (`corpus/reject/yield-outside.bc`).
 
 `yield`, `break` and `return` stand on the spine: before elaboration, what follows a head that
 contains one (a `match` or `if`, a bind, a `let`, a loop) is moved into it, into both arms of a
@@ -1265,7 +1275,7 @@ leave that borrow's scope, by the existing rule for thunks (`corpus/reject/gen-e
 A `for` in a div body iterates a generator too (a skip goes round the loop), and an iterator or
 generator that holds no capability (`range(1, 10)`, a pipeline of generators).
 
-**Open.** A direct-style call of a div function in a generator body; delegation to another
+**Open.** Delegation to another
 generator (`yield from`, a `gen_bind` of the call); a `gen { … }` block; a total consumer (a `for` over a generator is
 div). Generators are not yet a case of §14's specialization (a callback that yields).
 

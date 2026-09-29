@@ -1,0 +1,10 @@
+-- expect: 7:3: `yield` is in the body of a generator only: a `gen fn`
+-- `yield` suspends a generator; a function's body is not one. Its result would be a generator
+-- (`gen fn f() -> i32, i32`), and its caller would iterate it.
+gen fn one() -> i32 = yield 1
+
+fn f() -> i32 =
+  yield 4;
+  3
+
+main -> i32 = f()

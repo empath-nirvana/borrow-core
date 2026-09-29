@@ -581,12 +581,38 @@ def _root_.Frontend.Comp.anySugar (p : VSugar → Bool) : Comp → Bool
   | .force .. | .top _ => false
 end
 
+mutual
+/-- The first surface leaf satisfying `p` in a value. -/
+def _root_.Frontend.Val.sugarAt (p : VSugar → Bool) : Val → Option Span
+  | .sugar sp s => if p s then some sp else none
+  | .pair _ V W | .app _ V W => (V.sugarAt p).orElse fun _ => W.sugarAt p
+  | .inl _ V | .inr _ V | .unbang _ V | .boxed _ _ V | .unbox _ V | .sub _ V _ | .roll _ V
+  | .unroll _ V | .inst _ V _ | .ascribe _ V _ | .shorten _ _ _ _ V => V.sugarAt p
+  | .thunk _ M | .thunkv _ M | .bangThunk _ M | .bangThunkv _ M | .run _ M => M.sugarAt p
+  | _ => none
+
+/-- The first surface leaf satisfying `p` in a computation. -/
+def _root_.Frontend.Comp.sugarAt (p : VSugar → Bool) : Comp → Option Span
+  | .ret _ V | .absurd _ V => V.sugarAt p
+  | .bind _ _ _ M N _ | .with_ _ M N => (M.sugarAt p).orElse fun _ => N.sugarAt p
+  | .lam _ _ _ M | .app _ M _ | .proj _ _ M | .lamL _ _ _ M | .inst _ M _ | .nuIn _ M
+  | .nuOut _ M | .ascribe _ M _ => M.sugarAt p
+  | .letUnit _ V M | .letPair _ _ _ V M => (V.sugarAt p).orElse fun _ => M.sugarAt p
+  | .case _ V _ M _ N => ((V.sugarAt p).orElse fun _ => M.sugarAt p).orElse fun _ => N.sugarAt p
+  | .for_ _ _ V M N => ((V.sugarAt p).orElse fun _ => M.sugarAt p).orElse fun _ => N.sugarAt p
+  | .force .. | .top _ => none
+end
+
+/-- A `yield`: of a generator's body only. -/
+def isYieldKw (k : VSugar) : Bool := k == .yield_
+
 /-- A generator's `return e` in a computation, at any depth of its loops. -/
 def _root_.Frontend.Comp.hasRet (M : Comp) : Bool := M.anySugar (· == .retE)
 
 /-- A computation yields or loops: what follows a generator's loop runs in the loop's last step
 when it does neither. -/
-def _root_.Frontend.Comp.yieldsOrLoops (M : Comp) : Bool := M.anySugar (· == .yield_) || M.hasFor
+def _root_.Frontend.Comp.yieldsOrLoops (M : Comp) : Bool :=
+  M.anySugar (· == .yield_) || M.hasFor
 
 /-- A terminal that leaves: `break`, `break e` or a generator's `return e`. -/
 def _root_.Frontend.Comp.isExit : Comp → Bool
@@ -1129,7 +1155,12 @@ def genLoopPlan (g : GenCx) (c : TCx) (sp : Span) (x : Ident) (V : Val) (M N : C
       pure (some (r.name, Q))
     | some r, none => throw ⟨r.span, "a `while` has no value"⟩
   checkBreaks M (keep.map (·.2))
-  let direct := if N.yieldsOrLoops then none else some (if g.inLoop then N else stripRet N)
+  -- What follows runs in the loop's last step when it neither yields nor loops (a `for`, or a
+  -- call of a div function in direct style).
+  let cN := match keep with
+    | some (r, T) => c.push r (some T)
+    | none => c
+  let direct := if N.yieldsOrLoops || (loopsAt cN none N).isSome then none else some (if g.inLoop then N else stripRet N)
   if hasRet then if let some c := cap then
     throw ⟨sp, s!"a `return` inside a `for` over an iterator made from `{c}` cannot hand `{c}` " ++
       "back: the iterator holds it until the loop ends. `break`, and `return` after the loop"⟩
@@ -1337,13 +1368,61 @@ io_s0 : {St} <- return (inl {s0});
     (fun v => if v == "io_hole_body" then some body else if v == "io_hole_rest" then some N'
       else if v == "io_hole_fin" then direct else if v == "io_hole_start" then stCode
       else if v == "io_hole_stclose" then stClose else none))
+/-- `x <- M; N` in a generator's body, where `M` computes a computation of its own that the
+generator runs before going on: a loop, from a call of a div function in direct style
+(`gen_bind_loop`), or another generator, from `yield from` (`gen_bind`). `call` computes it, its
+argument with the lent capability `lend` replaced; `Bf` and `Rf` are what it finishes and closes
+with; `N'` is the rest elaborated to its first observation in the context `cN` (with `x` bound).
+The continuation binds `x` (and the lent capability) and is the generator of the rest; closed
+during the call, it turns the call's residual into the generator's. The result is the bind's first
+observation.  `[spec §14]` -/
+def genDelegate (g : GenCx) (c cN : TCx) (sp : Span) (x : Ident) (A : Option VTy) (call : Comp)
+    (lend : Option Ident) (isGen : Bool) (Bf Rf : CVTy) (N N' : Comp) : SM Comp := do
+  let cx := g.L
+  let bindX := match lend, A with
+    | some l, _ => match Bf with
+      | .tensor .. => s!"let ({l.name}, {x.name}) = io_a;"
+      | _ => s!"{l.name} <- return io_a; {x.name} <- return ();"
+    | none, some A => s!"{x.name} : {A.pp} <- return io_a;"
+    | none, none => s!"{x.name} <- return io_a;"
+  let drops := dropsFor c cx.capNames N
+  let abort ← match Rf, lend with
+    | .unit, _ => pure s!"let () = io_r; {drops}return {cx.rSrc}"
+    | .tensor _ .unit, some l =>
+      if cx.capNames.contains l.name then
+        pure s!"let ({l.name}, io_u) = io_r; {drops}return {cx.rSrc}"
+      else throw ⟨sp, s!"the call lends `{l.name}`, which is not among what this generator " ++
+          "hands back"⟩
+    | _, _ =>
+      if Rf = cx.R then pure s!"{drops}return io_r" else
+      throw ⟨sp, s!"a call whose {if isGen then "generator" else "loop"} hands back `{ppT Rf}` " ++
+        "when closed must lend what it hands back with `&mut c`, or hand back what this " ++
+        s!"generator hands back, `{ppT cx.R}` (SPEC §14)"⟩
+  let fn := if isGen then "gen_bind" else "gen_bind_loop"
+  let src := s!"io_m <- force io_hole_call;
+io_gb <- return ({fn}[{g.pp g.A}, {g.pp Bf}, {g.pp Rf}, {g.pp cx.B}, {g.pp cx.R}] (io_m, thunkv
+  < fun (io_a : {g.pp Bf}) -> {bindX}
+      return (thunkv nu_in < force io_hole_rest, {dropsFor cN cx.capNames N}return {cx.rSrc} >),
+    fun (io_r : {g.pp Rf}) -> {abort} >));
+(nu_out (force io_gb)).1"
+  let what := if isGen then "`yield from` (`gen_bind`)" else
+    "a call of a div function in a generator (`gen_bind_loop`)"
+  let L ← template sp what src
+  pure (L.fill (fun _ => none)
+    (fun n => if n == "io_hole_call" then some call else if n == "io_hole_rest" then some N'
+      else none))
+
 mutual
 /-- A generator body, elaborated to its first observation: code of type
 `F (A * U (gen A B R) + (B + U (gen A B R)))`. -/
 def genBody (g : GenCx) : Nat → TCx → Comp → SM Comp
   | 0, _, M => throw ⟨M.span, "internal error: a generator body nested too deeply"⟩
-  | n + 1, c, .bind sp x A (.ret ysp (.app _ (.sugar _ .yield_) e)) N lin => do
+  | n + 1, c, .bind sp x A (.ret ysp (.app ksp (.sugar k .yield_) e)) N lin => do
     if e.hasYield then throw (yieldOffSpine (e.yieldAt.getD e.span))
+    -- Calls of div functions run in direct style in the element are lifted out first.
+    if (callIn c divFuel (some g.A) e).isSome then
+      let (e', bs) := liftAll e
+      return (← genBody g n c (chain bs (.bind sp x A (.ret ysp (.app ksp (.sugar k .yield_) e')) N lin)))
     let N' ← genBody g n (c.push x.name (some .unit)) N
     let L ← template ysp "`yield`" s!"return (inl (io_hole_e, thunkv nu_in < force io_hole_rest, {dropsFor c g.L.capNames N}return {g.L.rSrc} >))"
     -- The rest binds the `yield`'s own result, `()`, to the name the program gave it.
@@ -1366,17 +1445,49 @@ def genBody (g : GenCx) : Nat → TCx → Comp → SM Comp
         return (← genBody g n c (.letPair lsp y z V (.bind sp x A M₁ N lin)))
       | .letUnit lsp V M₁ => return (← genBody g n c (.letUnit lsp V (.bind sp x A M₁ N lin)))
       | _ => throw (yieldOffSpine (M.yieldAt.getD M.span))
-    let N' ← genBody g n (c.push x.name (bindTy c A M)) N
-    pure (.bind sp x A M N' lin)
+    let exp := A.bind c.elabV
+    -- Calls of div functions run in direct style below the top of the bound value are lifted
+    -- out first, as in a div body.
+    if let .ret sp' V := M then
+      if (nestedCall c exp V).isSome then
+        let (V', bs) := liftBelow V
+        return (← genBody g n c (chain bs (.bind sp x A (.ret sp' V') N lin)))
+    let (M', lends) := M.takeLends
+    match (match M' with | .ret _ V => directCall c exp V | _ => none) with
+    | some (Bf, Rf) =>
+      -- A call of a div function in direct style: its loop runs inside the generator, each turn
+      -- a skip.
+      let lend ← match lends with
+        | [] => pure none
+        | [l] => pure (some l)
+        | _ => throw ⟨sp, "a call lends at most one capability with `&mut`"⟩
+      let c' := match lend, Bf with
+        | some l, .tensor K Vx => (c.push l.name (some K)).push x.name (exp <|> some Vx)
+        | some l, _ => (c.push l.name none).push x.name exp
+        | none, _ => c.push x.name (exp <|> some Bf)
+      let N' ← genBody g n c' N
+      genDelegate g c c' sp x A M' lend false Bf Rf N N'
+    | none =>
+      let N' ← genBody g n (c.push x.name (bindTy c A M)) N
+      pure (.bind sp x A M N' lin)
   | n + 1, c, .letUnit sp V M => do
     if V.hasYield then throw (yieldOffSpine (V.yieldAt.getD V.span))
+    if (callIn c divFuel (some .unit) V).isSome then
+      let (V', bs) := liftAll V
+      return (← genBody g n c (chain bs (.letUnit sp V' M)))
     return .letUnit sp V (← genBody g n c M)
   | n + 1, c, .letPair sp x y V M => do
     if V.hasYield then throw (yieldOffSpine (V.yieldAt.getD V.span))
+    if (callIn c divFuel none V).isSome then
+      let (V', bs) := liftAll V
+      return (← genBody g n c (chain bs (.letPair sp x y V' M)))
     let (Ax, Ay) := pairTys c V
     return .letPair sp x y V (← genBody g n ((c.push x.name Ax).push y.name Ay) M)
   | n + 1, c, .case sp V x M y N => do
     if V.hasYield then throw (yieldOffSpine (V.yieldAt.getD V.span))
+    if (callIn c divFuel none V).isSome then
+      let (V', bs) := liftAll V
+      return (← genBody g n c (chain bs (.case sp V' x M y N)))
     let (Ax, Ay) := sumTys c V
     return .case sp V x (← genBody g n (c.push x.name Ax) M) y (← genBody g n (c.push y.name Ay) N)
   | n + 1, c, .for_ sp x V M N => genLoop g n c sp x V M N
@@ -1391,8 +1502,16 @@ return (inr (inl io_v))"
     pure (L.fill (fun x => if x == "io_hole_rv" then some v else none) (fun _ => none))
   | _ + 1, _, .ret sp (.sugar _ .brk) | _ + 1, _, .ret sp (.app _ (.sugar _ .brk) _) =>
     throw ⟨sp, "`break` is outside every loop"⟩
-  | _ + 1, _, T => do
+  | n + 1, c, T => do
     if T.hasYield then throw (yieldOffSpine (T.yieldAt.getD T.span))
+    -- A call of a div function in direct style last: bound, then finished with.
+    if let .ret sp V := T then
+      if (nestedCall c (some g.L.B) V).isSome then
+        let (V', bs) := liftBelow V
+        return (← genBody g n c (chain bs (.ret sp V')))
+    let (T', _) := T.takeLends
+    if (match T' with | .ret _ V => directCall c (some g.L.B) V | _ => none).isSome then
+      return (← genBody g n c (.bind T.span ⟨"io_t", T.span⟩ none T (.ret T.span (.var T.span "io_t")) false))
     let L ← template T.span "a generator's result" s!"io_v : {g.pp g.L.B} <- force io_hole_t;
 return (inr (inl io_v))"
     pure (L.fill (fun _ => none) (fun v => if v == "io_hole_t" then some T else none))
@@ -1464,19 +1583,19 @@ def splitLoop : Nat → TCx → Comp →
     Option ((Comp → Comp) × TCx × Span × Ident × Val × Comp × Comp)
   | 0, _, _ => none
   | n + 1, c, .bind sp x A M N lin =>
-    if M.hasYield || M.hasFor then none else
+    if M.hasYield || M.hasFor || (headLoops c (A.bind c.elabV) M).isSome then none else
     (splitLoop n (c.push x.name (bindTy c A M)) N).map fun (pre, r) =>
       (fun T => .bind sp x A M (pre T) lin, r)
   | n + 1, c, .letUnit sp V M =>
-    if V.hasYield then none else
+    if V.hasYield || (callIn c divFuel (some .unit) V).isSome then none else
     (splitLoop n c M).map fun (pre, r) => (fun T => .letUnit sp V (pre T), r)
   | n + 1, c, .letPair sp x y V M =>
-    if V.hasYield then none else
+    if V.hasYield || (callIn c divFuel none V).isSome then none else
     let (Ax, Ay) := pairTys c V
     (splitLoop n ((c.push x.name Ax).push y.name Ay) M).map fun (pre, r) =>
       (fun T => .letPair sp x y V (pre T), r)
   | _ + 1, c, .for_ sp x V M N =>
-    if N.hasYield || N.hasFor then none else some (id, c, sp, x, V, M, N)
+    if N.hasYield || N.hasFor || (loopsAt c none N).isSome then none else some (id, c, sp, x, V, M, N)
   | _, _, _ => none
 
 /-- A `gen fn`, elaborated: `gen[E] def f : !(P => B) = !thunkv fun (x : P) -> M` becomes
@@ -2152,6 +2271,14 @@ def elabDecl : Nat → DivSt → Decl → SM DivSt
       Except Error (Option Decl))).getD d
     let (d, st) ← (surfDecl divFuel d).run st
     let (d, st) ← (specDecl fuel d).run st
+    -- `yield` outside a generator's body.
+    let yieldSp := match d with
+      | .def_ _ _ _ _ _ (.gen _) => none
+      | .def_ _ _ _ _ V _ => V.sugarAt isYieldKw
+      | .main _ _ M => M.sugarAt isYieldKw
+      | _ => none
+    if let some ysp := yieldSp then
+      throw ⟨ysp, "`yield` is in the body of a generator only: a `gen fn`"⟩
     if let .def_ _ _ _ _ _ (.gen _) := d then
       let d' ← genDef (st.lib ++ st.out) d
       return { st with srcs := d :: st.srcs, out := st.out ++ [d'] }
@@ -2349,8 +2476,9 @@ def elaborateS (p : Program) : SM (Program × Nat) := do
       pure (some (Decl.main sp C' M'))
     | _ => pure none
   -- The generator library when an elaborated generator sequences with `gen_bind`.
+  let genNames := ["gen_bind", "gen_bind_loop"]
   let usesBind := (rest ++ mains).any fun
-    | .def_ _ _ _ _ V _ => V.names "gen_bind" | .main _ _ M => M.names "gen_bind" | _ => false
+    | .def_ _ _ _ _ V _ => genNames.any V.names | .main _ _ M => genNames.any M.names | _ => false
   let genLib ← if hasGen p.decls && usesBind && !incl.contains "gen" then
     libOf "lib/gen.bc" genLibrary else pure []
   let lib := preludeAll ++ ioLib ++ divLib ++ genLib

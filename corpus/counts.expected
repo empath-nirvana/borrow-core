@@ -31,6 +31,7 @@ gen-borrowed 2 0 0
 gen-cell 1 0 0
 gen-close 4 0 0
 gen-digits 2 5 0
+gen-div 1 99 0
 gen-fib 0 0 0
 gen-lazy 1 4 0
 gen-lines 42 50 0
