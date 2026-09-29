@@ -1,8 +1,8 @@
 -- A `gen { … }` block (#109): a generator written in place, whose body captures what it uses
 -- (`k` here). It yields `k` and `k + 1` and finishes with `()`. It is elaborated as a `gen fn`'s
--- body is, to `thunkv nu_in < S', close >` with `S'` its first observation and `close` dropping
--- what it captured; the block runs nothing until it is observed. `gen-block.core.bc` is the
--- program written by hand in core.
+-- body is, to one state machine (SPEC §15) whose first state holds what the block captures, and
+-- whose `close` there drops it; the block runs nothing until it is observed. `gen-block.core.bc`
+-- is its elaboration in core, as `bcc desugar` prints it.
 -- Answer: i32[7], 3 + 4.
 
 main -> i32 =

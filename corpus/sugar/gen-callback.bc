@@ -2,8 +2,8 @@
 -- `pairs` passes it a closure whose body yields: the closure is a generator function, and `twice`
 -- is specialized at its type (SPEC §14's specialization): in the copy `twice__0`, each call of
 -- the callback is a `yield from` of the generator it returns, so the copy is a generator, and
--- the call of it in `pairs` is a `yield from` too. `gen-callback.core.bc` is the program written
--- by hand in core.
+-- the call of it in `pairs` is a `yield from` too. `gen-callback.core.bc` is its elaboration
+-- in core, as `bcc desugar` prints it.
 -- Answer: i32[55]: 2, 20, 3, 30.
 
 fn twice(f: !(i32 => 1), x: i32) -> 1 =

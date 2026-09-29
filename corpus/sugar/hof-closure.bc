@@ -1,7 +1,7 @@
 -- A closure passed as a callback (SPEC §14, docs/typed-elaboration.md §2.4). The closure's body
 -- calls `once` in direct style, so it is elaborated as a div function body in place, and
--- `twice` is specialized at its type. `hof-closure.core.bc` is the program written by hand in
--- core.
+-- `twice` is specialized at its type. `hof-closure.core.bc` is its elaboration in core, as
+-- `bcc desugar` prints it.
 -- Answer: `inl 7`.
 -- A loop that finishes at its first observation, with `n + 1`.
 def once : i32 => U (loop i32 1) =

@@ -1,7 +1,7 @@
 -- A `main` that loops and uses no capability (SPEC §11, §14). `main` calls the div function
 -- `once` in direct style, so it is div: it returns a loop, which the runtime drives. It is given
--- no capability: the runtime drives a loop with none. `loop-main.core.bc` is the program written
--- by hand in core.
+-- no capability: the runtime drives a loop with none. `loop-main.core.bc` is its
+-- elaboration in core, as `bcc desugar` prints it.
 -- Answer: 5.
 
 -- A loop that finishes at its first observation, with `n + 1`.

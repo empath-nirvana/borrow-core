@@ -1,7 +1,7 @@
 -- A loop-invariant borrow (SPEC §14, borrow scopes over loops): `let tb = &t` borrows the table
 -- for the rest of `main`, which loops, so it is the borrow block `borrow imm t { tb -> … }` lent
 -- per observation. `get(tb, i)` takes its lifetime from `tb`: `(unbang get) ['l] (tb, i)`.
--- `lend-let.core.bc` is the program written by hand in core.
+-- `lend-let.core.bc` is its elaboration in core, as `bcc desugar` prints it.
 -- Answer: i32[100]: the entries at 4, 3, 2, 1 of 10 * i.
 
 def get : !(all 'a < top. imm 'a (array i32) * i32 => i32) =

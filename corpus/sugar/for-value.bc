@@ -1,8 +1,8 @@
 -- A `for` that keeps its value (#109): `let r = for x in V { M }; N` binds `r` in `N` to what
 -- the iterator finishes with, or to `e` after `break e`. `pair` yields 1 and 2 and finishes
 -- with 7. The first loop runs to the end, so `r` is 7; the second leaves at its second element
--- with `break 40`. What follows each loop is total, so it runs in the loop's last step, with
--- `r` bound there. `for-value.core.bc` is the program written by hand in core.
+-- with `break 40`. What follows each loop runs at the loop's end, or after the `break`, with `r`
+-- bound there. `for-value.core.bc` is the program written by hand in core.
 -- Answer: i32[78]: (1 + 2) * 10 + 7 = 37, then the second loop adds its first element, 1, and
 -- leaves with 40. A `break` whose value was lost gives 38; a first loop whose value was not the
 -- generator's gives 71 or 31.

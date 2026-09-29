@@ -1,6 +1,7 @@
--- The elaboration of `for.bc` (SPEC §11, §14), as `bcc desugar` prints it: an ordinary core program,
--- with the I/O and divergence libraries the sugar brings in. `scripts/check-sugar.sh` checks that
--- both erase to one term.
+-- The elaboration of `for.bc` (SPEC §11, §14), as `bcc desugar` prints it: an ordinary core
+-- program, with the I/O library the sugar brings in, whose `main` is one state machine (SPEC §15).
+-- `scripts/check-sugar.sh` checks that both erase to one term.
+
 extern read_byte : !(all 'a < top. mut 'a input => mut 'a input * (i32 + 1))
 
 extern write_byte : !(all 'a < top. mut 'a output * i32 => mut 'a output)
@@ -89,111 +90,37 @@ def bytes : In => U iter i32 In In =
       return (thunkv nu_in < (nu_out force f c).1,
           (nu_out force f c).2 >)
 
-def div_bind_step[A, B, R1, R] : !U (U loop A R1 * U ((A -o F U loop B R) & (R1 -o F R)) + U loop B R -o F (B + U loop A R1 * U ((A -o F U loop B R) & (R1 -o F R)) + U loop B R) & F R) =
-  !thunkv fun (s : U loop A R1 * U ((A -o F U loop B R) & (R1 -o F R)) + U loop B R) ->
-      < case s {
-          inl p -> let (m, k) = p;
-            o <- (nu_out force m).1;
-            case o {
-              inl a -> l <- force k.1 a;
-                return inr inr l
-            | inr m2 -> return inr inl (m2, k)
-            }
-        | inr l -> o <- (nu_out force l).1;
-            case o {
-              inl b -> return inl b
-            | inr l2 -> return inr inr l2
-            }
-        },
-        case s {
-          inl p -> let (m, k) = p;
-            r1 <- (nu_out force m).2;
-            force k.2 r1
-        | inr l -> (nu_out force l).2
-        } >
-
-def div_bind[A, B, R1, R] : U loop A R1 * U ((A -o F U loop B R) & (R1 -o F R)) => U loop B R =
-  thunkv fun (p : U loop A R1 * U ((A -o F U loop B R) & (R1 -o F R))) ->
-      f <- return unbang unfold[loop B R, U loop A R1 * U ((A -o F U loop B R) & (R1 -o F R)) + U loop B R] div_bind_step[A, B, R1, R];
-      s0 : U loop A R1 * U ((A -o F U loop B R) & (R1 -o F R)) + U loop B R <- return inl p;
-      return (thunkv nu_in < (nu_out force f s0).1,
-          (nu_out force f s0).2 >)
-
-def div_double_alg : !(1 + (mu X. 1 + X) => mu X. 1 + X) =
-  !thunkv fun (r : 1 + (mu X. 1 + X)) ->
-      case r {
-        inl u -> return (roll inl u : mu X. 1 + X)
-      | inr m -> return (roll inr (roll inr m : mu X. 1 + X) : mu X. 1 + X)
-      }
-
-def div_nat_step : !(i32 * (mu X. 1 + X) => i32 * (mu X. 1 + X)) =
-  !thunkv fun (s : i32 * (mu X. 1 + X)) ->
-      let (n, acc) = s;
-      d <- return (unbang fold_own[1 + X, mu X. 1 + X] div_double_alg) acc;
-      n2 <- return (unbang host[shl32]) (n, i32[1]);
-      case (unbang host[eqz32]) ((unbang host[shr_u32]) (n, i32[31])) {
-        inl one -> return (n2, (roll inr d : mu X. 1 + X))
-      | inr zero -> return (n2, d)
-      }
-
-def div_nat_twice : !(i32 * (mu X. 1 + X) => i32 * (mu X. 1 + X)) => !(i32 * (mu X. 1 + X) => i32 * (mu X. 1 + X)) =
-  thunkv fun (f : !(i32 * (mu X. 1 + X) => i32 * (mu X. 1 + X))) ->
-      return (!thunkv fun (s : i32 * (mu X. 1 + X)) ->
-          return (unbang f) ((unbang f) s))
-
-def div_nat : i32 => mu X. 1 + X =
-  thunkv fun (n : i32) ->
-      s <- return (unbang div_nat_twice (div_nat_twice (div_nat_twice (div_nat_twice (div_nat_twice div_nat_step))))) (n, (roll inl () : mu X. 1 + X));
-      let (z, acc) = s;
-      return acc
-
-def div_fuel_alg[A, Q] : !(1 + !(U loop A Q => A + Q) => !(U loop A Q => A + Q)) =
-  !thunkv fun (r : 1 + !(U loop A Q => A + Q)) ->
-      case r {
-        inl u -> let () = u;
-          return (!thunkv fun (l : U loop A Q) ->
-              q <- (nu_out force l).2;
-              return inr q)
-      | inr k -> return (!thunkv fun (l : U loop A Q) ->
-              o <- (nu_out force l).1;
-              case o {
-                inl a -> return inl a
-              | inr l2 -> return (unbang k) l2
-              })
-      }
-
-def div_fuel[A, Q] : U loop A Q * i32 => A + Q =
-  thunkv fun (p : U loop A Q * i32) ->
-      let (l, n) = p;
-      h <- return (unbang fold_own[1 + X, !(U loop A Q => A + Q)] div_fuel_alg[A, Q]) (div_nat n);
-      return (unbang h) l
-
 extern stdin : ref input
 
 extern stdout : ref output
 
 main : F U loop ((ref input * ref output) * i32) ((ref input * ref output) * 1) =
-  n : i32 <- return i32[0];
-  io_step : !U (U iter i32 (ref input) (ref input) * ref output * i32 -o F ((ref input * ref output) * i32 + U iter i32 (ref input) (ref input) * ref output * i32) & F ((ref input * ref output) * 1)) <- return (!thunkv fun (io_s : U iter i32 (ref input) (ref input) * ref output * i32) ->
-        < let (io_it, io_st) = io_s;
-          let (stdout, n) = io_st;
-          io_o <- (nu_out force io_it).1;
-          case io_o {
-            inl io_p -> let (b, io_it) = io_p;
-              n : i32 <- return (unbang host[add32]) (n, i32[1]);
-              io_lend <- return putb (stdout, b);
-              let (stdout, io_u) = io_lend;
-              return inr (io_it, (stdout, n))
-          | inr io_c -> stdin <- return io_c;
-              io_v : (ref input * ref output) * i32 <- return ((stdin, stdout), n);
-              return inl io_v
-          },
-          let (io_it, io_st) = io_s;
-          let (stdout, n) = io_st;
-          io_c <- (nu_out force io_it).2;
+  io_run_0 : !(U iter i32 (ref input) (ref input) * ref output * i32 => (ref input * ref output) * i32 + U iter i32 (ref input) (ref input) * ref output * i32) <- return (!thunkv fun (io_a : U iter i32 (ref input) (ref input) * ref output * i32) ->
+        let (io_it0, io_a_t) = io_a;
+        let (stdout, n) = io_a_t;
+        io_o <- (nu_out force io_it0).1;
+        case io_o {
+          inl io_p -> let (b, io_it0) = io_p;
+            n : i32 <- return (unbang host[add32]) (n, i32[1]);
+            io_lend <- return putb (stdout, b);
+            let (stdout, io_u) = io_lend;
+            return inr (io_it0, (stdout, n))
+        | inr io_d -> io_q <- return io_d;
+            stdin <- return io_q;
+            io_v : (ref input * ref output) * i32 <- return ((stdin, stdout), n);
+            return inl io_v
+        });
+  io_step : !U (U iter i32 (ref input) (ref input) * ref output * i32 -o F ((ref input * ref output) * i32 + U iter i32 (ref input) (ref input) * ref output * i32) & F ((ref input * ref output) * 1)) <- return (!thunkv fun (io_a : U iter i32 (ref input) (ref input) * ref output * i32) ->
+        < return (unbang io_run_0) io_a,
+          let (io_it0, io_a_t) = io_a;
+          let (stdout, n) = io_a_t;
+          io_c <- (nu_out force io_it0).2;
           stdin <- return io_c;
           return ((stdin, stdout), ()) >);
-  io_f <- return unbang unfold[loop ((ref input * ref output) * i32) ((ref input * ref output) * 1), U iter i32 (ref input) (ref input) * ref output * i32] io_step;
-  io_s0 : U iter i32 (ref input) (ref input) * ref output * i32 <- return (bytes stdin, (stdout, n));
-  return (thunkv nu_in < (nu_out force io_f io_s0).1,
-      (nu_out force io_f io_s0).2 >)
+  io_mk : !(U iter i32 (ref input) (ref input) * ref output * i32 => U loop ((ref input * ref output) * i32) ((ref input * ref output) * 1)) <- return (!thunkv fun (io_s0 : U iter i32 (ref input) (ref input) * ref output * i32) ->
+        io_f <- return unbang unfold[loop ((ref input * ref output) * i32) ((ref input * ref output) * 1), U iter i32 (ref input) (ref input) * ref output * i32] io_step;
+        return (thunkv nu_in < (nu_out force io_f io_s0).1,
+            (nu_out force io_f io_s0).2 >));
+  n : i32 <- return i32[0];
+  io_it0 <- return bytes stdin;
+  return (unbang io_mk) (io_it0, (stdout, n))

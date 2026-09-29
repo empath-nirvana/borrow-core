@@ -1,8 +1,8 @@
 -- A callback passed through a local variable (SPEC §14, docs/typed-elaboration.md §2.4). `g` is
 -- bound to the div function `steps`, and `twice (g, 5)` specializes `twice` at `g`'s type,
--- which inference gives: the copy's calls through its parameter are delay binds, so the copy is
--- div. `main` runs it under `div_fuel`, so `main` is total. `hof-local.core.bc` is the
--- program written by hand in core, the copy named `twice_div`.
+-- which inference gives: the copy's calls through its parameter are calls of a div function, so
+-- the copy is div. `main` runs it under `div_fuel`, so `main` is total. `hof-local.core.bc` is
+-- its elaboration in core, as `bcc desugar` prints it.
 -- Answer: `inl 7` (5 + 1 + 1).
 -- A loop that finishes at its first observation, with `n + 1`.
 def once : i32 => U (loop i32 1) =

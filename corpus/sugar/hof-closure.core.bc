@@ -1,157 +1,213 @@
--- `hof-closure.bc` written by hand in core: the closure is a div function body, the delay
--- bind of `once`'s loop and the rest, and `twice` is called at its copy for div callbacks.
--- The divergence library (`lib/div.bc`) is copied in.
--- The bind's state: in the first loop, with the continuation; or in the continuation's loop.
--- The continuation has two observations: go on with the first loop's result, or, when the
--- whole is closed during the first loop, turn that loop's residual into the whole's.
-def div_bind_step[A, B, R1, R] :
-    !U ((U (loop A R1) * U ((A -o F (U (loop B R))) & (R1 -o F R))) + U (loop B R)
-        -o F (B + ((U (loop A R1) * U ((A -o F (U (loop B R))) & (R1 -o F R))) + U (loop B R)))
-         & F R) =
-  !thunkv fun (s : (U (loop A R1) * U ((A -o F (U (loop B R))) & (R1 -o F R))) + U (loop B R)) ->
-    < case s {
-        inl p ->
-          let (m, k) = p;
-          o <- (nu_out (force m)).1;
-          case o {
-            inl a ->
-              l <- (force k).1 a;
-              return (inr (inr l))
-          | inr m2 -> return (inr (inl (m2, k)))
-          }
-      | inr l ->
-          o <- (nu_out (force l)).1;
-          case o {
-            inl b -> return (inl b)
-          | inr l2 -> return (inr (inr l2))
-          }
-      },
-      case s {
-        inl p ->
-          let (m, k) = p;
-          r1 <- (nu_out (force m)).2;
-          (force k).2 r1
-      | inr l -> (nu_out (force l)).2
-      } >
+-- `hof-closure.bc` in core, as `bcc desugar` prints it: the closure is a div function body, a
+-- state machine (SPEC §15) whose state holds `once`'s loop, and `twice` is called at its copy for
+-- div callbacks, whose two calls are two states.
 
--- The delay bind: run the first loop, then the continuation on its result. If either never
--- finishes, neither does the whole.
-def div_bind[A, B, R1, R] :
-    U (loop A R1) * U ((A -o F (U (loop B R))) & (R1 -o F R)) => U (loop B R) =
-  thunkv fun (p : U (loop A R1) * U ((A -o F (U (loop B R))) & (R1 -o F R))) ->
-    f <- return (unbang (unfold[loop B R,
-           (U (loop A R1) * U ((A -o F (U (loop B R))) & (R1 -o F R))) + U (loop B R)]
-           div_bind_step[A, B, R1, R]));
-    s0 : (U (loop A R1) * U ((A -o F (U (loop B R))) & (R1 -o F R))) + U (loop B R) <-
-      return (inl p);
-    return (thunkv nu_in < (nu_out (force f s0)).1, (nu_out (force f s0)).2 >)
+def div_bind_step[A, B, R1, R] : !U (U loop A R1 * U ((A -o F U loop B R) & (R1 -o F R)) + U loop B R -o F (B + U loop A R1 * U ((A -o F U loop B R) & (R1 -o F R)) + U loop B R) & F R) =
+  !thunkv fun (s : U loop A R1 * U ((A -o F U loop B R) & (R1 -o F R)) + U loop B R) ->
+      < case s {
+          inl p -> let (m, k) = p;
+            o <- (nu_out force m).1;
+            case o {
+              inl a -> l <- force k.1 a;
+                return inr inr l
+            | inr m2 -> return inr inl (m2, k)
+            }
+        | inr l -> o <- (nu_out force l).1;
+            case o {
+              inl b -> return inl b
+            | inr l2 -> return inr inr l2
+            }
+        },
+        case s {
+          inl p -> let (m, k) = p;
+            r1 <- (nu_out force m).2;
+            force k.2 r1
+        | inr l -> (nu_out force l).2
+        } >
 
--- Fuel. `div_nat` turns an `i32` into a unary count (`mu X. 1 + X`), one bit at a time from
--- the highest: thirty-two steps of `acc := 2 acc + bit`.
+def div_bind[A, B, R1, R] : U loop A R1 * U ((A -o F U loop B R) & (R1 -o F R)) => U loop B R =
+  thunkv fun (p : U loop A R1 * U ((A -o F U loop B R) & (R1 -o F R))) ->
+      f <- return unbang unfold[loop B R, U loop A R1 * U ((A -o F U loop B R) & (R1 -o F R)) + U loop B R] div_bind_step[A, B, R1, R];
+      s0 : U loop A R1 * U ((A -o F U loop B R) & (R1 -o F R)) + U loop B R <- return inl p;
+      return (thunkv nu_in < (nu_out force f s0).1,
+          (nu_out force f s0).2 >)
+
 def div_double_alg : !(1 + (mu X. 1 + X) => mu X. 1 + X) =
   !thunkv fun (r : 1 + (mu X. 1 + X)) ->
-    case r {
-      inl u -> return (roll (inl u) : mu X. 1 + X)
-    | inr m -> return (roll (inr (roll (inr m) : mu X. 1 + X)) : mu X. 1 + X)
-    }
+      case r {
+        inl u -> return (roll inl u : mu X. 1 + X)
+      | inr m -> return (roll inr (roll inr m : mu X. 1 + X) : mu X. 1 + X)
+      }
 
 def div_nat_step : !(i32 * (mu X. 1 + X) => i32 * (mu X. 1 + X)) =
   !thunkv fun (s : i32 * (mu X. 1 + X)) ->
-    let (n, acc) = s;
-    d <- return ((unbang (fold_own[1 + X, mu X. 1 + X] div_double_alg)) acc);
-    n2 <- return ((unbang host[shl32]) (n, i32[1]));
-    case (unbang host[eqz32]) ((unbang host[shr_u32]) (n, i32[31])) {
-      inl one -> return (n2, (roll (inr d) : mu X. 1 + X))
-    | inr zero -> return (n2, d)
-    }
+      let (n, acc) = s;
+      d <- return (unbang fold_own[1 + X, mu X. 1 + X] div_double_alg) acc;
+      n2 <- return (unbang host[shl32]) (n, i32[1]);
+      case (unbang host[eqz32]) ((unbang host[shr_u32]) (n, i32[31])) {
+        inl one -> return (n2, (roll inr d : mu X. 1 + X))
+      | inr zero -> return (n2, d)
+      }
 
-def div_nat_twice : !(i32 * (mu X. 1 + X) => i32 * (mu X. 1 + X)) =>
-    !(i32 * (mu X. 1 + X) => i32 * (mu X. 1 + X)) =
+def div_nat_twice : !(i32 * (mu X. 1 + X) => i32 * (mu X. 1 + X)) => !(i32 * (mu X. 1 + X) => i32 * (mu X. 1 + X)) =
   thunkv fun (f : !(i32 * (mu X. 1 + X) => i32 * (mu X. 1 + X))) ->
-    return (!thunkv fun (s : i32 * (mu X. 1 + X)) -> return ((unbang f) ((unbang f) s)))
+      return (!thunkv fun (s : i32 * (mu X. 1 + X)) ->
+          return (unbang f) ((unbang f) s))
 
 def div_nat : i32 => mu X. 1 + X =
   thunkv fun (n : i32) ->
-    s <- return ((unbang (div_nat_twice (div_nat_twice (div_nat_twice (div_nat_twice
-           (div_nat_twice div_nat_step)))))) (n, (roll (inl ()) : mu X. 1 + X)));
-    let (z, acc) = s;
-    return acc
+      s <- return (unbang div_nat_twice (div_nat_twice (div_nat_twice (div_nat_twice (div_nat_twice div_nat_step))))) (n, (roll inl () : mu X. 1 + X));
+      let (z, acc) = s;
+      return acc
 
--- One more observation of a loop, before the handler `k` for the rest: at zero, close.
-def div_fuel_alg[A, Q] :
-    !(1 + !(U (loop A Q) => A + Q) => !(U (loop A Q) => A + Q)) =
-  !thunkv fun (r : 1 + !(U (loop A Q) => A + Q)) ->
-    case r {
-      inl u ->
-        let () = u;
-        return (!thunkv fun (l : U (loop A Q)) ->
-          q <- (nu_out (force l)).2;
-          return (inr q))
-    | inr k ->
-        return (!thunkv fun (l : U (loop A Q)) ->
-          o <- (nu_out (force l)).1;
-          case o {
-            inl a -> return (inl a)
-          | inr l2 -> return ((unbang k) l2)
-          })
-    }
+def div_fuel_alg[A, Q] : !(1 + !(U loop A Q => A + Q) => !(U loop A Q => A + Q)) =
+  !thunkv fun (r : 1 + !(U loop A Q => A + Q)) ->
+      case r {
+        inl u -> let () = u;
+          return (!thunkv fun (l : U loop A Q) ->
+              q <- (nu_out force l).2;
+              return inr q)
+      | inr k -> return (!thunkv fun (l : U loop A Q) ->
+              o <- (nu_out force l).1;
+              case o {
+                inl a -> return inl a
+              | inr l2 -> return (unbang k) l2
+              })
+      }
 
--- The fuel handler: observe a loop at most `n` times, and close it if it has not finished.
--- It is `driveE n` (SPEC §7) with the count a value: div code under it is total.
-def div_fuel[A, Q] : U (loop A Q) * i32 => A + Q =
-  thunkv fun (p : U (loop A Q) * i32) ->
-    let (l, n) = p;
-    h <- return ((unbang (fold_own[1 + X, !(U (loop A Q) => A + Q)] div_fuel_alg[A, Q]))
-           (div_nat n));
-    return ((unbang h) l)
--- A loop that finishes at its first observation, with `n + 1`.
-def once : i32 => U (loop i32 1) =
+def div_fuel[A, Q] : U loop A Q * i32 => A + Q =
+  thunkv fun (p : U loop A Q * i32) ->
+      let (l, n) = p;
+      h <- return (unbang fold_own[1 + X, !(U loop A Q => A + Q)] div_fuel_alg[A, Q]) (div_nat n);
+      return (unbang h) l
+
+def div_defer_step[B, R] : !U (U (F U loop B R & F R) + U loop B R -o F (B + U (F U loop B R & F R) + U loop B R) & F R) =
+  !thunkv fun (s : U (F U loop B R & F R) + U loop B R) ->
+      < case s {
+          inl t -> l <- force t.1;
+            o <- (nu_out force l).1;
+            case o {
+              inl b -> return inl b
+            | inr l2 -> return inr inr l2
+            }
+        | inr l -> o <- (nu_out force l).1;
+            case o {
+              inl b -> return inl b
+            | inr l2 -> return inr inr l2
+            }
+        },
+        case s {
+          inl t -> force t.2
+        | inr l -> (nu_out force l).2
+        } >
+
+def div_defer[B, R] : U (F U loop B R & F R) => U loop B R =
+  thunkv fun (t : U (F U loop B R & F R)) ->
+      f <- return unbang unfold[loop B R, U (F U loop B R & F R) + U loop B R] div_defer_step[B, R];
+      s0 : U (F U loop B R & F R) + U loop B R <- return inl t;
+      return (thunkv nu_in < (nu_out force f s0).1,
+          (nu_out force f s0).2 >)
+
+def once : i32 => U loop i32 1 =
   thunkv fun (n : i32) ->
-    return (thunkv nu_in < return (inl ((unbang host[add32]) (n, i32[1]))), return () >)
+      return (thunkv nu_in < return inl (unbang host[add32]) (n, i32[1]),
+          return () >)
 
--- `steps`, div: its call of `once` is the delay bind of `once`'s loop and the rest.
-def steps : !(i32 => U (loop i32 1)) =
+def steps : !(i32 => U loop i32 1) =
   !thunkv fun (n : i32) ->
-    m <- return (once n);
-    return (div_bind[i32, i32, 1, 1] (m, thunkv
-      < fun (a : i32) ->
-          k <- return a;
-          v : i32 <- return k;
-          return (thunkv nu_in < return (inl v), return () >),
-        fun (r : 1) -> return r >))
+      io_run_0 : !(U delay i32 => i32 + U delay i32) <- return (!thunkv fun (io_a : U delay i32) ->
+            io_d0 <- return io_a;
+            io_o <- (nu_out force io_d0).1;
+            case io_o {
+              inl io_b -> k <- return io_b;
+                io_v : i32 <- return k;
+                return inl io_v
+            | inr io_d0 -> return inr io_d0
+            });
+      io_step : !U (U delay i32 -o F (i32 + U delay i32) & F 1) <- return (!thunkv fun (io_a : U delay i32) ->
+            < return (unbang io_run_0) io_a,
+              io_d0 <- return io_a;
+              io_r <- (nu_out force io_d0).2;
+              let () = io_r;
+              return () >);
+      io_mk : !(U delay i32 => U loop i32 1) <- return (!thunkv fun (io_s0 : U delay i32) ->
+            io_f <- return unbang unfold[loop i32 1, U delay i32] io_step;
+            return (thunkv nu_in < (nu_out force io_f io_s0).1,
+                (nu_out force io_f io_s0).2 >));
+      io_d0 <- return once n;
+      return (unbang io_mk) io_d0
 
--- `twice` as written, for total callbacks.
 def twice : !(i32 => i32) * i32 => i32 =
   thunkv fun (p : !(i32 => i32) * i32) ->
-    let (f, a) = p;
-    x <- return ((unbang f) a);
-    y <- return ((unbang f) x);
-    return y
+      let (f, a) = p;
+      x <- return (unbang f) a;
+      y <- return (unbang f) x;
+      return y
 
--- `twice` at a div callback: each call through `f` is a delay bind.
-def twice_div : !(i32 => U (loop i32 1)) * i32 => U (loop i32 1) =
-  thunkv fun (p : !(i32 => U (loop i32 1)) * i32) ->
-    let (f, a) = p;
-    m1 <- return ((unbang f) a);
-    return (div_bind[i32, i32, 1, 1] (m1, thunkv
-      < fun (a1 : i32) ->
-          x <- return a1;
-          m2 <- return ((unbang f) x);
-          return (div_bind[i32, i32, 1, 1] (m2, thunkv
-            < fun (a2 : i32) ->
-                y <- return a2;
-                v : i32 <- return y;
-                return (thunkv nu_in < return (inl v), return () >),
-              fun (r : 1) -> return r >)),
-        fun (r : 1) -> return r >))
+def twice__0 : !(i32 => U delay i32) * i32 => U loop i32 1 =
+  thunkv fun (p : !(i32 => U delay i32) * i32) ->
+      io_run_1 : !(U delay i32 => i32 + U delay i32 * !(i32 => U delay i32) + U delay i32) <- return (!thunkv fun (io_a : U delay i32) ->
+            io_d1 <- return io_a;
+            io_o <- (nu_out force io_d1).1;
+            case io_o {
+              inl io_b -> y <- return io_b;
+                io_v : i32 <- return y;
+                return inl io_v
+            | inr io_d1 -> return inr inr io_d1
+            });
+      io_run_0 : !(U delay i32 * !(i32 => U delay i32) => i32 + U delay i32 * !(i32 => U delay i32) + U delay i32) <- return (!thunkv fun (io_a : U delay i32 * !(i32 => U delay i32)) ->
+            let (io_d0, f) = io_a;
+            io_o <- (nu_out force io_d0).1;
+            case io_o {
+              inl io_b -> x <- return io_b;
+                io_d1 <- return (unbang f) x;
+                return inr inr io_d1
+            | inr io_d0 -> return inr inl (io_d0, f)
+            });
+      io_step : !U (U delay i32 * !(i32 => U delay i32) + U delay i32 -o F (i32 + U delay i32 * !(i32 => U delay i32) + U delay i32) & F 1) <- return (!thunkv fun (io_s : U delay i32 * !(i32 => U delay i32) + U delay i32) ->
+            < case io_s {
+                inl io_a -> return (unbang io_run_0) io_a
+              | inr io_a -> return (unbang io_run_1) io_a
+              },
+              case io_s {
+                inl io_a -> let (io_d0, f) = io_a;
+                  io_r <- (nu_out force io_d0).2;
+                  let () = io_r;
+                  return ()
+              | inr io_a -> io_d1 <- return io_a;
+                  io_r <- (nu_out force io_d1).2;
+                  let () = io_r;
+                  return ()
+              } >);
+      io_mk : !(U delay i32 * !(i32 => U delay i32) + U delay i32 => U loop i32 1) <- return (!thunkv fun (io_s0 : U delay i32 * !(i32 => U delay i32) + U delay i32) ->
+            io_f <- return unbang unfold[loop i32 1, U delay i32 * !(i32 => U delay i32) + U delay i32] io_step;
+            return (thunkv nu_in < (nu_out force io_f io_s0).1,
+                (nu_out force io_f io_s0).2 >));
+      let (f, a) = p;
+      io_d0 <- return (unbang f) a;
+      return (unbang io_mk) (inl (io_d0, f))
+
 main : F (i32 + 1) =
-  r <- return (div_fuel[i32, 1]
-         (twice_div ((!thunkv fun (n : i32) ->
-            m <- return (once n);
-            return (div_bind[i32, i32, 1, 1] (m, thunkv
-              < fun (a : i32) ->
-                  k <- return a;
-                  v : i32 <- return k;
-                  return (thunkv nu_in < return (inl v), return () >),
-                fun (q : 1) -> return q >))), i32[5]), i32[10]));
+  r <- return div_fuel[i32, 1] (twice__0 (!thunkv fun (n : i32) ->
+        io_run_0 : !(U delay i32 => i32 + U delay i32) <- return (!thunkv fun (io_a : U delay i32) ->
+              io_d0 <- return io_a;
+              io_o <- (nu_out force io_d0).1;
+              case io_o {
+                inl io_b -> k <- return io_b;
+                  io_v : i32 <- return k;
+                  return inl io_v
+              | inr io_d0 -> return inr io_d0
+              });
+        io_step : !U (U delay i32 -o F (i32 + U delay i32) & F 1) <- return (!thunkv fun (io_a : U delay i32) ->
+              < return (unbang io_run_0) io_a,
+                io_d0 <- return io_a;
+                io_r <- (nu_out force io_d0).2;
+                let () = io_r;
+                return () >);
+        io_mk : !(U delay i32 => U loop i32 1) <- return (!thunkv fun (io_s0 : U delay i32) ->
+              io_f <- return unbang unfold[loop i32 1, U delay i32] io_step;
+              return (thunkv nu_in < (nu_out force io_f io_s0).1,
+                  (nu_out force io_f io_s0).2 >));
+        io_d0 <- return once n;
+        return (unbang io_mk) io_d0, i32[5]), i32[10]);
   return r

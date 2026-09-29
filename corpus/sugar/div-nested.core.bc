@@ -1,114 +1,112 @@
--- `div-nested.bc` written by hand in core (SPEC §14). Each nested call of `line_length` is bound
--- before the application it is an argument of, in evaluation order, and is a `div_bind` of its
--- loop and the rest of the body; `inc` of its result is bound after it. The delay bind is copied
--- from the divergence library (`lib/div.bc`).
+-- `div-nested.bc` in core (SPEC §14), as `bcc desugar` prints it. Each nested call of
+-- `line_length` is bound before the application it is an argument of, in evaluation order, and is
+-- a state of the body's machine (SPEC §15) holding its loop; `inc` of its result is bound after
+-- it.
+
 extern stdin : ref input
+
 extern read_byte : !(all 'a < top. mut 'a input => mut 'a input * (i32 + 1))
 
 type In = ref input
 
 def getb : In => In * (i32 + 1) =
   thunkv fun (c : In) ->
-    return (withbor2['x, top, input, i32 + 1] c
-      (thunkv Fun 'x < dom. return (thunkv fun (m : mut 'x input) ->
-         r <- return ((unbang read_byte) ['x] m);
-         let (m2, b) = r;
-         return (boxed['x] b))))
+      return withbor2['x, top, input, i32 + 1] c (thunkv Fun 'x < dom.
+          return (thunkv fun (m : mut 'x input) ->
+              r <- return (unbang read_byte) ['x] m;
+              let (m2, b) = r;
+              return boxed['x] b))
 
--- One step of `line_length`: the next byte, and whether the line goes on.
-def ll_step : !U (In * i32 -o F ((In * i32) + (In * i32)) & F (In * 1)) =
+def ll_step : !U (In * i32 -o F (In * i32 + In * i32) & F (In * 1)) =
   !thunkv fun (s : In * i32) ->
-    < let (c, n) = s;
-      q <- return (getb c);
-      let (c2, x) = q;
-      case x {
-        inl b ->
-          case (unbang host[eq32]) (b, i32[10]) {
-            inl u -> return (inr (c2, (unbang host[add32]) (n, i32[1])))
-          | inr u -> return (inl (c2, n))
-          }
-      | inr u -> return (inl (c2, n))
-      },
-      let (c, n) = s;
-      return (c, ()) >
+      < let (c, n) = s;
+        q <- return getb c;
+        let (c2, x) = q;
+        case x {
+          inl b -> case (unbang host[eq32]) (b, i32[10]) {
+              inl u -> return inr (c2, (unbang host[add32]) (n, i32[1]))
+            | inr u -> return inl (c2, n)
+            }
+        | inr u -> return inl (c2, n)
+        },
+        let (c, n) = s;
+        return (c, ()) >
 
--- A loop written in core: its type says it is div.
-def line_length : In => U (loop (In * i32) (In * 1)) =
+def line_length : In => U loop (In * i32) (In * 1) =
   thunkv fun (c : In) ->
-    f <- return (unbang (unfold[loop (In * i32) (In * 1), In * i32] ll_step));
-    s0 : In * i32 <- return (c, i32[0]);
-    return (thunkv nu_in < (nu_out (force f s0)).1, (nu_out (force f s0)).2 >)
+      f <- return unbang unfold[loop (In * i32) (In * 1), In * i32] ll_step;
+      s0 : In * i32 <- return (c, i32[0]);
+      return (thunkv nu_in < (nu_out force f s0).1,
+          (nu_out force f s0).2 >)
 
-def div_bind_step[A, B, R1, R] :
-    !U ((U (loop A R1) * U ((A -o F (U (loop B R))) & (R1 -o F R))) + U (loop B R)
-        -o F (B + ((U (loop A R1) * U ((A -o F (U (loop B R))) & (R1 -o F R))) + U (loop B R)))
-         & F R) =
-  !thunkv fun (s : (U (loop A R1) * U ((A -o F (U (loop B R))) & (R1 -o F R))) + U (loop B R)) ->
-    < case s {
-        inl p ->
-          let (m, k) = p;
-          o <- (nu_out (force m)).1;
-          case o {
-            inl a ->
-              l <- (force k).1 a;
-              return (inr (inr l))
-          | inr m2 -> return (inr (inl (m2, k)))
-          }
-      | inr l ->
-          o <- (nu_out (force l)).1;
-          case o {
-            inl b -> return (inl b)
-          | inr l2 -> return (inr (inr l2))
-          }
-      },
-      case s {
-        inl p ->
-          let (m, k) = p;
-          r1 <- (nu_out (force m)).2;
-          (force k).2 r1
-      | inr l -> (nu_out (force l)).2
-      } >
+def inc : i32 => i32 =
+  thunkv fun (n : i32) ->
+      return (unbang host[add32]) (n, i32[1])
 
--- The delay bind: run the first loop, then the continuation on its result. If either never
--- finishes, neither does the whole.
-def div_bind[A, B, R1, R] :
-    U (loop A R1) * U ((A -o F (U (loop B R))) & (R1 -o F R)) => U (loop B R) =
-  thunkv fun (p : U (loop A R1) * U ((A -o F (U (loop B R))) & (R1 -o F R))) ->
-    f <- return (unbang (unfold[loop B R,
-           (U (loop A R1) * U ((A -o F (U (loop B R))) & (R1 -o F R))) + U (loop B R)]
-           div_bind_step[A, B, R1, R]));
-    s0 : (U (loop A R1) * U ((A -o F (U (loop B R))) & (R1 -o F R))) + U (loop B R) <-
-      return (inl p);
-    return (thunkv nu_in < (nu_out (force f s0)).1, (nu_out (force f s0)).2 >)
-
-def inc : i32 => i32 = thunkv fun (n : i32) -> return ((unbang host[add32]) (n, i32[1]))
-
--- The first line's loop, then its length plus one, then the second line's loop, then its
--- length plus one. Closed during either line, the whole hands back that line's capability.
-def two_lines : In => U (loop (In * (i32 * i32)) (In * 1)) =
+def two_lines : In => U loop (In * i32 * i32) (ref input * 1) =
   thunkv fun (c : In) ->
-    first <- return (line_length c);
-    return (div_bind[In * i32, In * (i32 * i32), In * 1, In * 1] (first, thunkv
-      < fun (r1 : In * i32) ->
-          let (c, a) = r1;
-          a1 <- return (inc a);
-          second <- return (line_length c);
-          return (div_bind[In * i32, In * (i32 * i32), In * 1, In * 1] (second, thunkv
-            < fun (r2 : In * i32) ->
-                let (c, b) = r2;
-                b1 <- return (inc b);
-                p <- return (a1, b1);
-                done : In * (i32 * i32) <- return (c, p);
-                return (thunkv nu_in < return (inl done), let (k, rest) = done; return (k, ()) >),
-              fun (q : In * 1) -> return q >)),
-        fun (q : In * 1) -> return q >))
+      io_run_1 : !(U loop (ref input * i32) (ref input * 1) * i32 => ref input * i32 * i32 + U loop (ref input * i32) (ref input * 1) + U loop (ref input * i32) (ref input * 1) * i32) <- return (!thunkv fun (io_a : U loop (ref input * i32) (ref input * 1) * i32) ->
+            let (io_d1, io_n1) = io_a;
+            io_o <- (nu_out force io_d1).1;
+            case io_o {
+              inl io_b -> let (c, io_n2) = io_b;
+                io_n3 <- return inc io_n2;
+                p <- return (io_n1, io_n3);
+                io_v : ref input * i32 * i32 <- return (c, p);
+                return inl io_v
+            | inr io_d1 -> return inr inr (io_d1, io_n1)
+            });
+      io_run_0 : !(U loop (ref input * i32) (ref input * 1) => ref input * i32 * i32 + U loop (ref input * i32) (ref input * 1) + U loop (ref input * i32) (ref input * 1) * i32) <- return (!thunkv fun (io_a : U loop (ref input * i32) (ref input * 1)) ->
+            io_d0 <- return io_a;
+            io_o <- (nu_out force io_d0).1;
+            case io_o {
+              inl io_b -> let (c, io_n0) = io_b;
+                io_n1 <- return inc io_n0;
+                io_d1 <- return line_length c;
+                return inr inr (io_d1, io_n1)
+            | inr io_d0 -> return inr inl io_d0
+            });
+      io_step : !U (U loop (ref input * i32) (ref input * 1) + U loop (ref input * i32) (ref input * 1) * i32 -o F (ref input * i32 * i32 + U loop (ref input * i32) (ref input * 1) + U loop (ref input * i32) (ref input * 1) * i32) & F (ref input * 1)) <- return (!thunkv fun (io_s : U loop (ref input * i32) (ref input * 1) + U loop (ref input * i32) (ref input * 1) * i32) ->
+            < case io_s {
+                inl io_a -> return (unbang io_run_0) io_a
+              | inr io_a -> return (unbang io_run_1) io_a
+              },
+              case io_s {
+                inl io_a -> io_d0 <- return io_a;
+                  io_r <- (nu_out force io_d0).2;
+                  let (c, io_ru) = io_r;
+                  return (c, ())
+              | inr io_a -> let (io_d1, io_n1) = io_a;
+                  io_r <- (nu_out force io_d1).2;
+                  let (c, io_ru) = io_r;
+                  return (c, ())
+              } >);
+      io_mk : !(U loop (ref input * i32) (ref input * 1) + U loop (ref input * i32) (ref input * 1) * i32 => U loop (ref input * i32 * i32) (ref input * 1)) <- return (!thunkv fun (io_s0 : U loop (ref input * i32) (ref input * 1) + U loop (ref input * i32) (ref input * 1) * i32) ->
+            io_f <- return unbang unfold[loop (ref input * i32 * i32) (ref input * 1), U loop (ref input * i32) (ref input * 1) + U loop (ref input * i32) (ref input * 1) * i32] io_step;
+            return (thunkv nu_in < (nu_out force io_f io_s0).1,
+                (nu_out force io_f io_s0).2 >));
+      io_d0 <- return line_length c;
+      return (unbang io_mk) (inl io_d0)
 
--- `main` runs `two_lines`'s loop and then finishes with the capability and the lengths.
-main : F (U (loop (ref input * (i32 * i32)) (ref input * 1))) =
-  l <- return (two_lines stdin);
-  return (div_bind[In * (i32 * i32), ref input * (i32 * i32), In * 1, ref input * 1] (l, thunkv
-    < fun (r : In * (i32 * i32)) ->
-        let (stdin, p) = r;
-        done : ref input * (i32 * i32) <- return (stdin, p);
-        return (thunkv nu_in < return (inl done), let (k, rest) = done; return (k, ()) >),
-      fun (q : In * 1) -> return q >))
+main : F U loop (ref input * i32 * i32) (ref input * 1) =
+  io_run_0 : !(U loop (ref input * i32 * i32) (ref input * 1) => ref input * i32 * i32 + U loop (ref input * i32 * i32) (ref input * 1)) <- return (!thunkv fun (io_a : U loop (ref input * i32 * i32) (ref input * 1)) ->
+        io_d0 <- return io_a;
+        io_o <- (nu_out force io_d0).1;
+        case io_o {
+          inl io_b -> let (stdin, p) = io_b;
+            io_v : ref input * i32 * i32 <- return (stdin, p);
+            return inl io_v
+        | inr io_d0 -> return inr io_d0
+        });
+  io_step : !U (U loop (ref input * i32 * i32) (ref input * 1) -o F (ref input * i32 * i32 + U loop (ref input * i32 * i32) (ref input * 1)) & F (ref input * 1)) <- return (!thunkv fun (io_a : U loop (ref input * i32 * i32) (ref input * 1)) ->
+        < return (unbang io_run_0) io_a,
+          io_d0 <- return io_a;
+          io_r <- (nu_out force io_d0).2;
+          let (stdin, io_ru) = io_r;
+          return (stdin, ()) >);
+  io_mk : !(U loop (ref input * i32 * i32) (ref input * 1) => U loop (ref input * i32 * i32) (ref input * 1)) <- return (!thunkv fun (io_s0 : U loop (ref input * i32 * i32) (ref input * 1)) ->
+        io_f <- return unbang unfold[loop (ref input * i32 * i32) (ref input * 1), U loop (ref input * i32 * i32) (ref input * 1)] io_step;
+        return (thunkv nu_in < (nu_out force io_f io_s0).1,
+            (nu_out force io_f io_s0).2 >));
+  io_d0 <- return two_lines stdin;
+  return (unbang io_mk) io_d0
