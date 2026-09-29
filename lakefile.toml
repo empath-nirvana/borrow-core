@@ -114,3 +114,8 @@ roots = ["Grades"]
 name = "Affine"
 srcDir = "experiments/Affine"
 roots = ["Affine"]
+
+[[lean_lib]]
+name = "Coeffects"
+srcDir = "experiments/Coeffects"
+roots = ["Coeffects"]
