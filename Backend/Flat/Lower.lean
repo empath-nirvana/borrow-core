@@ -169,6 +169,23 @@ def loadAt (a : Exp) (off k : Nat) : LM (List Stmt × List Nat) := do
   let ls ← fresh k
   pure (ls.zipIdx.map (fun (l, i) => .set l (.load a (off + i))), ls)
 
+/-- The contents (`k` words) of the cell or slot at `a`, of location type `n`: a byte slot's
+byte, or the words. -/
+def loadCell (n : Nat) (a : Exp) (k : Nat) : LM (List Stmt × List Nat) := do
+  if (← read).T.byteCell n then
+    let t ← fresh1
+    return ([.set t (.load8 a)], [t])
+  loadAt a 0 k
+
+/-- Store `vs` in the cell or slot at `a`, of location type `n`. -/
+def storeCell (n : Nat) (a : Exp) (vs : List Exp) : LM (List Stmt) := do
+  if (← read).T.byteCell n then return [.store8 a (vs.headD (.c64 0))]
+  return storeAt a 0 vs
+
+/-- The bytes between two slots of an array of location type `n`: one for a byte slot, else
+the class's words. -/
+def slotBytes (T : Types) (n : Nat) : Nat := if T.byteCell n then 1 else 8 * T.cellWords n
+
 /-- Field `i` of `n` built from its words: behind a pointer, a fresh object holding them. -/
 def putField (n i : Nat) (vs : List Exp) : LM (List Stmt × List Exp) := do
   let (_, b) := (← T).field n i
@@ -343,30 +360,31 @@ def lowerPrim : Op → List Var → Dest → LM (List Stmt)
       let ls ← vals v
       let t ← fresh1
       return [.set t (.alloc (.c64 (max 1 ((← T).cellWords n)).toUInt64))] ++
-        storeAt (.loc t) 0 (locs ls) ++ (← emit d [.loc t])
+        (← storeCell n (.loc t) (locs ls)) ++ (← emit d [.loc t])
   | .free, [l], d => do
       let a ← locElem (← vty l)
       let p := Exp.loc ((← vals l).headD 0)
-      let (s, ls) ← loadAt p 0 (← words a)
+      let (s, ls) ← loadCell (← vty l) p (← words a)
       return s ++ [.free p] ++ (← emit d (locs ls))
   | .load, [l], d => do
       let a ← locElem (← vty l)
       let p := Exp.loc ((← vals l).headD 0)
-      let (s, ls) ← loadAt p 0 (← words a)
+      let (s, ls) ← loadCell (← vty l) p (← words a)
       let (c, ls) ← copyVals a ls
       return s ++ c ++ (← emit d (locs ls))
   | .store, [l, v], d => do
       let a ← vty v
       let p := Exp.loc ((← vals l).headD 0)
-      let (s, old) ← loadAt p 0 (← words a)
+      let (s, old) ← loadCell (← vty l) p (← words a)
       let dr ← dropVals a old
       let s := if dr.isEmpty then [] else s ++ dr
-      return s ++ storeAt p 0 (locs (← vals v)) ++ (← emit d [])
+      return s ++ (← storeCell (← vty l) p (locs (← vals v))) ++ (← emit d [])
   | .swap, [l, v], d => do
       let a ← locElem (← vty l)
       let m := (← vals l).headD 0
-      let (s, old) ← loadAt (.loc m) 0 (← words a)
-      return s ++ storeAt (.loc m) 0 (locs (← vals v)) ++ (← emit d (locs (m :: old)))
+      let (s, old) ← loadCell (← vty l) (.loc m) (← words a)
+      return s ++ (← storeCell (← vty l) (.loc m) (locs (← vals v))) ++
+        (← emit d (locs (m :: old)))
   | .host op, [v], d => do
       let (s, vs) ← hostVals op (← vals v)
       return s ++ (← emit d vs)
@@ -380,7 +398,7 @@ def lowerPrim : Op → List Var → Dest → LM (List Stmt)
   | .idx, [v], d => do
       let T ← T
       let h := (T.field (← vty v) 0).1
-      let w := T.cellWords (T.field h 0).1 * 8
+      let w := slotBytes T (T.field h 0).1
       match ← vals v with
       | [b, n, i] =>
         let t₀ ← fresh1
@@ -937,7 +955,8 @@ def genHelper (h : Helper) : LM Fn := do
       pure (s ++ [.free (.loc 0), .ret []])
     pure { name := s!"drop_code{c}", params := 1, results := 0, locals := nloc, body }
   | .tab a f =>
-    -- `tab (c, f)`: `len(c)` slots of `|a|` words, filled by `f i` in order.
+    -- `tab (c, f)`: `len(c)` slots of `|a|` words (a byte each for a byte slot), filled by
+    -- `f i` in order. An empty array allocates nothing: its base is `0`.
     let fw := T.words f
     let (body, nloc) ← inFn (1 + fw) do
       let n := Exp.loc 0
@@ -946,10 +965,11 @@ def genHelper (h : Helper) : LM Fn := do
       let b ← fresh1
       let loop ← helper (.tabLoop a f)
       let dr ← dropVals f fls
+      let words : Exp := if T.byteCell a then shr64 (add64 n (.c64 7)) (.c64 3)
+        else mul64 n (.c64 (T.cellWords a).toUInt64)
       pure ([.ite (ltu64 n (.c64 0x80000000)) [] [.set 0 (.c64 0)],
-        .set sz (mul64 n (.c64 (T.cellWords a).toUInt64)),
-        .ite (eqz64 (.loc sz)) [.set sz (.c64 1)] [],
-        .set b (.alloc (.loc sz)),
+        .set sz words,
+        .ite (eqz64 (.loc sz)) [.set b (.c64 0)] [.set b (.alloc (.loc sz))],
         .call [] loop ([.loc b] ++ locs fls ++ [.c64 0, n])] ++ dr ++ [.ret [.loc b, n]])
     pure { name := "array_tab", params := 1 + fw, results := 2, locals := nloc, body }
   | .tabLoop a f =>
@@ -963,10 +983,10 @@ def genHelper (h : Helper) : LM Fn := do
     let (body, nloc) ← inFn (3 + fw) do
       let (cs, fc) ← copyVals f fls
       let rs ← fresh k
-      let slot := add64 (.loc 0) (mul64 i (.c64 (8 * T.cellWords a).toUInt64))
+      let slot := add64 (.loc 0) (mul64 i (.c64 (slotBytes T a).toUInt64))
       pure [.ite (ltu64 i n)
         (cs ++ (← callClosure rs f fc [i]) ++
-          storeAt slot 0 (locs (rs.take w)) ++
+          (← storeCell a slot (locs (rs.take w))) ++
           [.tailCall (← helper (.tabLoop a f)) ([.loc 0] ++ locs fls ++ [add64 i (.c64 1), n])])
         [], .ret []]
     pure { name := "array_tab_loop", params := 3 + fw, results := 0, locals := nloc, body }
@@ -977,7 +997,10 @@ def genHelper (h : Helper) : LM Fn := do
     let (body, nloc) ← inFn (fw + 2) do
       pure ([.call [] (← helper (.arrDropLoop a f))
           ([.loc fw] ++ locs fls ++ [.c64 0, .loc (fw + 1)])] ++
-        (← dropVals f fls) ++ [.free (.loc fw), .ret []])
+        (← dropVals f fls) ++
+        -- An empty array, and an array of slots of no words, allocated nothing.
+        (if T.cellWords a == 0 && !T.byteCell a then [] else
+          [.ite (eqz64 (.loc (fw + 1))) [] [.free (.loc fw)]]) ++ [.ret []])
     pure { name := "array_drop", params := fw + 2, results := 0, locals := nloc, body }
   | .arrDropLoop a f =>
     -- `b f i n`: slot `i`'s contents, moved out, to a copy of `f`, for `i < n`.
@@ -989,8 +1012,8 @@ def genHelper (h : Helper) : LM Fn := do
     let n := Exp.loc (2 + fw)
     let (body, nloc) ← inFn (3 + fw) do
       let (cs, fc) ← copyVals f fls
-      let slot := add64 (.loc 0) (mul64 i (.c64 (8 * T.cellWords a).toUInt64))
-      let (ls, es) ← loadAt slot 0 w
+      let slot := add64 (.loc 0) (mul64 i (.c64 (slotBytes T a).toUInt64))
+      let (ls, es) ← loadCell a slot w
       let rs ← fresh k
       pure [.ite (ltu64 i n)
         (cs ++ ls ++ (← callClosure rs f fc (locs es)) ++

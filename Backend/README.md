@@ -116,7 +116,7 @@ word is an `i64` local; `|A|` is the number of words of `A`.
 | layout type | words | layout |
 |---|---|---|
 | `1` | 0 | nothing |
-| `i32`, `i64` | 1 | the integer (an `i32` zero-extended) |
+| `i32`, `i64`, `u8` | 1 | the integer (an `i32` or a `u8` zero-extended) |
 | `A ⊗ B` | `\|A\| + \|B\|` | `A`'s words, then `B`'s |
 | `A ⊕ B` | `1 + max \|A\| \|B\|` | a tag word (`0` for `inl`), then the payload's words, padded |
 | `loc A` | 1 | the address of the cell's contents |
@@ -144,10 +144,14 @@ The only objects are:
   is the widest contents its *cell class* holds: `swap` changes a cell's type
   (`Ref A ⊸ B ⊸ Ref B ⊗ A`), so the locations that may be one cell are a class, and a cell is as
   wide as its class needs.
-- **Arrays** (SPEC §9). One allocation of `max 1 (n·s)` words, `s` the class width of the
-  element type: element `i`'s location is `base + 8·s·i`, a cell address like any other. The
-  array value is the pair `(base, n)`, two words. `idx` is an unsigned compare and an address
-  computation, and allocates nothing.
+- **Arrays** (SPEC §9). One allocation of `n·s` words, `s` the class width of the element
+  type: element `i`'s location is `base + 8·s·i`, a cell address like any other. The array value
+  is the pair `(base, n)`, two words. `idx` is an unsigned compare and an address computation,
+  and allocates nothing. An array whose slots are bytes (a cell class that holds only `u8`,
+  `Types.byteCell`) has one byte per slot, at `base + i`, in `⌈n/8⌉` words, read and written by
+  `load8_u`/`store8` (`loadCell`, `storeCell`); every access to a location of that class is a
+  byte access, so a cell of the class is one byte too. An empty array, or one whose slots take
+  no words, allocates nothing: its base is `0`, and `drop` frees nothing.
 - **Closures of a recursive closure type that capture.** An object: the tag `t`, then the
   captured values' words. A code that captures nothing is the word `2t + 1` (objects are
   8-aligned, so bit 0 tells the two apart) and allocates nothing.

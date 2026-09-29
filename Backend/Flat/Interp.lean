@@ -78,6 +78,21 @@ def writeWord (a : Nat) (w : UInt64) : FM Unit := do
   | some _ => modify fun s => { s with mem := s.mem.insert a (some w) }
   | none => throw s!"flat IR: write outside a live range at {a}"
 
+/-- The byte at `a`: byte `a % 8` of the word holding it, which must be written. -/
+def readByte (a : Nat) : FM UInt64 := do
+  let w ← readWord (a - a % 8)
+  pure ((w >>> (8 * (a % 8)).toUInt64) &&& 0xff)
+
+/-- Write the low byte of `v` at `a`, keeping the word's other bytes (`0` in an unwritten word). -/
+def writeByte (a : Nat) (v : UInt64) : FM Unit := do
+  let wa := a - a % 8
+  let old ← match (← get).mem[wa]? with
+    | some (some w) => pure w
+    | some none => pure 0
+    | none => throw s!"flat IR: write outside a live range at {a}"
+  let sh := (8 * (a % 8)).toUInt64
+  writeWord wa ((old &&& ~~~(0xff <<< sh)) ||| ((v &&& 0xff) <<< sh))
+
 def allocRange (n : Nat) : FM UInt64 := do
   if n == 0 then throw "flat IR: allocation of no words"
   let s ← get
@@ -117,6 +132,7 @@ def evalExp (p : Prog) : Nat → Array UInt64 → Exp → FM UInt64
     | .c64 k => pure k
     | .c32 k => pure k.toUInt64
     | .load a off => do readWord ((← evalExp p n fr a).toNat + 8 * off)
+    | .load8 a => do readByte (← evalExp p n fr a).toNat
     | .op o args => do liftE (evalOp o (← evalArgs p n fr args))
     | .alloc w => do allocRange (← evalExp p n fr w).toNat
     | .live => do pure (← get).ranges.size.toUInt64
@@ -175,6 +191,11 @@ def execStmt (p : Prog) : Nat → Array UInt64 → Stmt → FM (Array UInt64 × 
         let a ← evalExp p n fr a
         let v ← evalExp p n fr v
         writeWord (a.toNat + 8 * off) v
+        pure (fr, none)
+    | .store8 a v => do
+        let a ← evalExp p n fr a
+        let v ← evalExp p n fr v
+        writeByte a.toNat v
         pure (fr, none)
     | .free a => do freeRange (← evalExp p n fr a).toNat; pure (fr, none)
     | .out b => do

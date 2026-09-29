@@ -401,6 +401,9 @@ structure Types where
   trivial : Array Bool
   /-- Every cell class's width: its widest contents. -/
   cellWidth : Std.HashMap Nat Nat
+  /-- The cell classes whose every contents is a byte: their cells and array slots are one byte
+  wide. -/
+  cellByte : Std.HashSet Nat
   varTy : Std.HashMap Var Nat
   cons : Std.HashMap Var Nat
   apps : Std.HashMap Var Nat
@@ -438,6 +441,12 @@ def cellWords (T : Types) (n : Nat) : Nat :=
   match T.ty n with
   | .loc _ c => T.cellWidth.getD c 0
   | _ => 0
+
+/-- The cells and array slots of the location type `n` are one byte: its class holds bytes only. -/
+def byteCell (T : Types) (n : Nat) : Bool :=
+  match T.ty n with
+  | .loc _ c => T.cellByte.contains c
+  | _ => false
 
 /-- The words a closure of type `n` answers with: the wider of its two answers. -/
 def answerWords (T : Types) (n : Nat) : Nat :=
@@ -580,10 +589,16 @@ def resolve (s : TState) (codeTy : Array Nat) (codeEnv : Array (List Nat)) (main
           color := color.set! v 2
           stack := rest
   let mut cellWidth : Std.HashMap Nat Nat := {}
+  let mut bytes : Std.HashSet Nat := {}
+  let mut notBytes : Std.HashSet Nat := {}
   for v in [0:n] do
     if let .loc a c := shape[v]! then
       cellWidth := cellWidth.insert c (max (cellWidth.getD c 0) width[a]!)
-  return { rep, shape, boxed, width, trivial, cellWidth, varTy := s.varTy, cons := s.cons,
+      match shape[a]! with
+      | .int .w8 => bytes := bytes.insert c
+      | _ => notBytes := notBytes.insert c
+  let cellByte := bytes.filter (!notBytes.contains ·)
+  return { rep, shape, boxed, width, trivial, cellWidth, cellByte, varTy := s.varTy, cons := s.cons,
            apps := s.apps, codeTy, codeEnv, unions, recFn, mainTy, resTy }
 
 /-- The codes a term builds closures of. -/

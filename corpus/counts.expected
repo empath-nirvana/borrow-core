@@ -1,7 +1,7 @@
 # Allocations, indirect (dispatched) calls and copies at a non-trivial type per run of each corpus program (scripts/compile-corpus.sh).
 # name allocs indirect copies
 13-2-sum-prog 37 9 0
-array-empty 1 0 0
+array-empty 0 0 0
 array-get 2 0 0
 array-refs 5 0 0
 array-replace 2 0 0

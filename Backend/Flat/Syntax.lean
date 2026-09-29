@@ -12,7 +12,8 @@ Wasm's `br_table` and LLVM's `switch`.
 
 Words are `i64`. An operation's operands and result have the widths §8 gives it: the numeric
 operations are `HostOp`, the integer instructions of Wasm, and a test yields a 32-bit `0`/`1`.
-Addresses are words; `load a k` and `store a k v` access the word at `a + 8k`.
+Addresses are words; `load a k` and `store a k v` access the word at `a + 8k`, and `load8 a` and
+`store8 a v` the byte at `a` (a byte slot, `Backend/README.md`, Representation).
 
 A value of layout type `A` (`Backend/Clos/Types.lean`) is `|A|` words, held in `|A|` locals,
 passed as `|A|` arguments and returned as `|A|` results (`Backend/README.md`, Representation).
@@ -27,6 +28,8 @@ inductive Exp where
   | c32 (n : UInt32)
   /-- The word at `addr + 8·off`. -/
   | load (addr : Exp) (off : Nat)
+  /-- The byte at `addr`, zero-extended. -/
+  | load8 (addr : Exp)
   /-- A Wasm integer instruction; a partial one traps where its §8 form answers `inr ()`. -/
   | op (o : HostOp) (args : List Exp)
   /-- The allocator: a fresh range of `words` words. -/
@@ -43,6 +46,8 @@ inductive Exp where
 inductive Stmt where
   | set (i : Nat) (e : Exp)
   | store (addr : Exp) (off : Nat) (v : Exp)
+  /-- The low byte of `v` at `addr`. -/
+  | store8 (addr : Exp) (v : Exp)
   /-- Return a range to the allocator. -/
   | free (addr : Exp)
   /-- Write the byte `b` to standard output. -/

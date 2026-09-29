@@ -602,7 +602,8 @@ an `icmp ult` in LLVM, `i32.lt_u` and `i32.mul`/`i64.add` in Wasm. `tab` allocat
 fills it in a loop; `drop` loops over the slots, moves each value to the consumer, and frees the
 block once. The backend's type-directed layout has `s = sizeof A` (the widest contents the slot
 holds) and no header, so an element's location is a cell address like any other
-(`Backend/README.md`, Representation).
+(`Backend/README.md`, Representation). A slot of `U8` is one byte (`load8_u`/`store8`), and an
+empty array allocates nothing.
 
 ### Baseline
 
