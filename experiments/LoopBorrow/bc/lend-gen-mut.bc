@@ -1,0 +1,93 @@
+-- O1, the coalgebraic form at a generator: a generator whose state holds the lender, and each
+-- observation lends it `mut` for that observation. The generator counts through a cell: each
+-- `next` borrows the cell, takes its value out and puts the successor back, and yields the old
+-- value. The consumer pulls three elements and closes the generator, which hands the cell back.
+--
+-- Answer: (i32[18], i32[8]): the cell starts at 5, the three elements are 5, 6, 7, and the cell
+-- holds 8 when it comes back. A step that yielded after the store gives 21; a lend that did not
+-- store through the borrow gives (15, 5); a close that dropped the cell could not return it.
+
+-- The lend over a generator, `mut`.
+def lend_gen_mut[A, S, E, B, R] :
+    !(all 'x < top. mut 'x A * S => box 'x ((E * S) + (B + S))) *
+    !(all 'x < top. mut 'x A * S => box 'x R) =>
+    !U (ref A * S -o gen E (ref A * B) (ref A * R)) =
+  thunkv fun (st : !(all 'x < top. mut 'x A * S => box 'x ((E * S) + (B + S))) *
+                   !(all 'x < top. mut 'x A * S => box 'x R)) ->
+    let (nx, cl) = st;
+    return (unfold[gen E (ref A * B) (ref A * R), ref A * S]
+      (!thunkv fun (p : ref A * S) ->
+        < let (r, s) = p;
+          q <- return (withbor2['x, top, A, (E * S) + (B + S)] r
+                 (thunkv Fun 'x < dom. return (thunkv fun (m : mut 'x A) ->
+                   return ((unbang nx) ['x] (m, s)))));
+          let (r, o) = q;
+          case o {
+            inl y -> let (e, s2) = y; return (inl (e, (r, s2)))
+          | inr d -> case d { inl b -> return (inr (inl (r, b))) | inr s2 -> return (inr (inr (r, s2))) }
+          },
+          let (r, s) = p;
+          withbor2['x, top, A, R] r (thunkv Fun 'x < dom. return (thunkv fun (m : mut 'x A) ->
+            return ((unbang cl) ['x] (m, s)))) >))
+
+-- One step over the count `n` left: finish at 0, else take the cell's value `v` out, put
+-- `v + 1` back, and yield `v`.
+def tick : !(all 'x < top. mut 'x i32 * i32 => box 'x ((i32 * i32) + (1 + i32))) =
+  !thunkv Fun 'x < top. return (thunkv fun (p : mut 'x i32 * i32) ->
+    let (m, n) = p;
+    case (unbang host[eqz32]) n {
+      inl nonzero ->
+        s <- return (withswap['x, i32, i32] m (thunkv fun (v : i32) ->
+               return ((unbang host[add32]) (v, i32[1]), v)));
+        let (m2, v) = s;
+        return (boxed['x] (inl (v, (unbang host[sub32]) (n, i32[1]))))
+    | inr zero -> return (boxed['x] (inr (inl ())))
+    })
+
+def untick : !(all 'x < top. mut 'x i32 * i32 => box 'x 1) =
+  !thunkv Fun 'x < top. return (thunkv fun (p : mut 'x i32 * i32) ->
+    let (m, n) = p;
+    return (boxed['x] ()))
+
+type UG = U (gen i32 (ref i32 * 1) (ref i32 * 1))
+
+-- The next element and the rest, or 0 and nothing once the generator has finished; a skip
+-- counts 0 and goes on.
+def pull : UG => i32 * (UG + ref i32 * 1) =
+  thunkv fun (g : UG) ->
+    o <- (nu_out (force g)).1;
+    case o {
+      inl y -> let (x, g2) = y; return (x, inl g2)
+    | inr d -> case d { inl b -> return (i32[0], inr b) | inr g2 -> return (i32[0], inl g2) }
+    }
+
+-- The rest closed, or the cell handed back when the generator finished.
+def finish : UG + ref i32 * 1 => ref i32 =
+  thunkv fun (r : UG + ref i32 * 1) ->
+    case r {
+      inl g -> q <- (nu_out (force g)).2; let (c, u) = q; let () = u; return c
+    | inr b -> let (c, u) = b; let () = u; return c
+    }
+
+main : F (i32 * i32) =
+  c <- return (alloc[i32] i32[5]);
+  f <- return (unbang (lend_gen_mut[i32, i32, i32, 1, 1] (tick, untick)));
+  s0 : ref i32 * i32 <- return (c, i32[3]);
+  g : UG <- return (thunkv nu_in < (nu_out (force f s0)).1, (nu_out (force f s0)).2 >);
+  p1 <- return (pull g);
+  let (x1, r1) = p1;
+  case r1 {
+    inl g1 ->
+      p2 <- return (pull g1);
+      let (x2, r2) = p2;
+      case r2 {
+        inl g2 ->
+          p3 <- return (pull g2);
+          let (x3, r3) = p3;
+          c2 <- return (finish r3);
+          v <- return (free[i32] c2);
+          return ((unbang host[add32]) (x1, (unbang host[add32]) (x2, x3)), v)
+      | inr b -> c2 <- return (finish (inr b)); v <- return (free[i32] c2); return (i32[0], v)
+      }
+  | inr b -> c2 <- return (finish (inr b)); v <- return (free[i32] c2); return (i32[0], v)
+  }

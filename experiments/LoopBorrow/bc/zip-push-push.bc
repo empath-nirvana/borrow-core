@@ -1,0 +1,107 @@
+-- O1, zip of two lending sources (push × push): each observation lends one entry of each of
+-- two arrays to the body at once, as two views borrowed at the same time. Both sources are
+-- state and step (each array's owner is in the zip's state), so the two lends nest inside one
+-- observation: the first array is borrowed at 'x, the second at 'y inside it, and the body sees
+-- the views at 'z and 'w.
+--
+-- Answer: i32[300]: the dot product of the entries 4, 3, 2, 1 of 10 * i and of i:
+-- 160 + 90 + 40 + 10 = 300. Reading one view twice gives 3000 or 30.
+
+def drive_alg[A, Q] :
+    !(1 + !(U (loop A Q) => A + Q) => !(U (loop A Q) => A + Q)) =
+  !thunkv fun (r : 1 + !(U (loop A Q) => A + Q)) ->
+    case r {
+      inl u ->
+        let () = u;
+        return (!thunkv fun (l : U (loop A Q)) ->
+          q <- (nu_out (force l)).2;
+          return (inr q))
+    | inr k ->
+        return (!thunkv fun (l : U (loop A Q)) ->
+          o <- (nu_out (force l)).1;
+          case o {
+            inl a -> return (inl a)
+          | inr l2 -> return ((unbang k) l2)
+          })
+    }
+
+def z0 : mu X. 1 + X = roll (inl ())
+def z1 : mu X. 1 + X = roll (inr z0)
+def z2 : mu X. 1 + X = roll (inr z1)
+def z3 : mu X. 1 + X = roll (inr z2)
+def z4 : mu X. 1 + X = roll (inr z3)
+def z5 : mu X. 1 + X = roll (inr z4)
+def z6 : mu X. 1 + X = roll (inr z5)
+def z7 : mu X. 1 + X = roll (inr z6)
+def z8 : mu X. 1 + X = roll (inr z7)
+
+fn tab(i: i32) -> i32 = i * 10
+fn ident(i: i32) -> i32 = i
+
+-- The consumer's body: two element views, borrowed at once, and the running sum.
+def body : !(all 'z < top. all 'w < top. imm 'z i32 * (imm 'w i32 * i32) => box 'w i32) =
+  !thunkv Fun 'z < top. return (thunkv Fun 'w < top. return (thunkv fun (p : imm 'z i32 * (imm 'w i32 * i32)) ->
+    let (e1, q) = p;
+    let (e2, acc) = q;
+    let v1 = *e1;
+    let v2 = *e2;
+    boxed['w] (acc + v1 * v2)))
+
+type T = array i32
+type St = ref T * (ref T * (i32 * i32))
+type ULp = U (loop (ref T * (ref T * i32)) (ref T * (ref T * 1)))
+
+-- One entry of the second array, lent inside the lend of the first.
+def inner : !(all 'z < top. imm 'z i32 * (ref T * (i32 * i32)) => box 'z (ref T * i32)) =
+  !thunkv Fun 'z < top. return (thunkv fun (p : imm 'z i32 * (ref T * (i32 * i32))) ->
+    let (e1, q) = p;
+    let (r2, s) = q;
+    let (n, acc) = s;
+    q2 <- return (withbor1['y, T, i32] r2 (thunkv Fun 'y < dom. return (thunkv fun (b2 : imm 'y T) ->
+            v <- return (withload['y, 'w, T, i32] b2 (thunkv Fun 'w < dom. return (thunkv fun (xs : array_imm 'w i32) ->
+                   match array_get['w, i32] (xs, n) {
+                     inl e2 -> return ((unbang body) ['z] ['w] (e1, (e2, acc)))
+                   | inr _ -> let v1 = *e1; boxed['w] (acc + v1 * 0)
+                   })));
+            boxed['y] v)));
+    boxed['z] q2)
+
+def zip2 : !U (St -o loop (ref T * (ref T * i32)) (ref T * (ref T * 1))) =
+  unfold[loop (ref T * (ref T * i32)) (ref T * (ref T * 1)), St]
+    (!thunkv fun (p : St) ->
+      < let (r1, s) = p;
+        let (r2, s1) = s;
+        let (n, acc) = s1;
+        if n == 0 { return (inl (r1, (r2, acc))) }
+        else {
+          q <- return (withbor1['x, T, ref T * i32] r1 (thunkv Fun 'x < dom. return (thunkv fun (b1 : imm 'x T) ->
+                 v <- return (withload['x, 'z, T, ref T * i32] b1 (thunkv Fun 'z < dom. return (thunkv fun (xs : array_imm 'z i32) ->
+                        match array_get['z, i32] (xs, n) {
+                          inl e1 -> return ((unbang inner) ['z] (e1, (r2, (n, acc))))
+                        | inr _ -> boxed['z] (r2, acc)
+                        })));
+                 boxed['x] v)));
+          let (r1b, q1) = q;
+          let (r2b, acc2) = q1;
+          return (inr (r1b, (r2b, ((unbang host[sub32]) (n, 1), acc2))))
+        },
+        let (r1, s) = p;
+        let (r2, s1) = s;
+        let (n, acc) = s1;
+        return (r1, (r2, ())) >)
+
+main : F i32 =
+  a1 <- return (array_new[i32] (i32[10], tab));
+  t1 <- return (alloc[T] a1);
+  a2 <- return (array_new[i32] (i32[10], ident));
+  t2 <- return (alloc[T] a2);
+  f <- return (unbang zip2);
+  s0 : St <- return (t1, (t2, (i32[4], i32[0])));
+  l : ULp <- return (thunkv nu_in < (nu_out (force f s0)).1, (nu_out (force f s0)).2 >);
+  d <- return ((unbang (fold_own[1 + X, !(ULp => (ref T * (ref T * i32)) + (ref T * (ref T * 1)))]
+         drive_alg[ref T * (ref T * i32), ref T * (ref T * 1)])) z8);
+  o <- return ((unbang d) l);
+  case o {
+    inl p -> let (u1, q) = p; let (u2, n) = q; return n
+  | inr q -> let (u1, q2) = q; let (u2, u) = q2; let () = u; return i32[0]
+  }
