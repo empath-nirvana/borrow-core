@@ -138,3 +138,36 @@ main -> i32 =
   let r = for x in around() { acc = acc * 10 + x };
   acc * 10 + r
 ```
+
+## Generators in place, and callbacks that yield
+
+`gen { … }` is a generator written where it is used. It captures what it uses and runs nothing
+until it is observed:
+
+```bc
+-- answer: i32[31]
+main -> i32 =
+  let k = 7;
+  let mut acc = 0;
+  for x in gen { yield 1; let mut i = 0; while i < 3 { yield k + i; i = i + 1 }; () } {
+    acc = acc + x
+  };
+  acc + 6
+```
+
+A callback may yield. The function it is passed to was written for a callback that returns a
+value; it is specialized into a generator (as it is specialized into a loop for a callback that
+may diverge, see [Divergence](divergence.md)), and its call yields everything the callbacks
+yield. No function is written twice:
+
+```bc
+-- answer: i32[1111]
+fn twice(f: !(i32 => 1), x: i32) -> 1 =
+  f(x);
+  f(x + 1)
+
+main -> i32 =
+  let mut acc = 0;
+  for x in gen { twice(!{ y -> yield y; yield y * 100 }, 5) } { acc = acc + x };
+  acc
+```

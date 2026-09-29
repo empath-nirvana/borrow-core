@@ -330,3 +330,14 @@ Each entry: the decision, and why. Newest last.
       only). It delegates to a generator of the same element type, and its value is what the
       delegate finishes with. A lent capability `&mut c` comes back as the delegate's result
       (`c`, or `(c, x)`), as for a `for`.
+    - **`gen { S }`** writes a generator in place (Rust's unstable `gen { }` blocks, Python's
+      generator expressions). Its element type is inferred from its first `yield`; there is no
+      annotation on the block, and one that yields nothing is rejected.
+    - **A callback that yields yields to whoever runs the function it is passed to.** The
+      function is specialized into a generator, and its call is a `yield from`: so `for_each(xs,
+      { x -> yield f(x) })` inside a generator yields each `f(x)` from that generator. Outside a
+      generator's body or a `gen { }` block such a call is rejected rather than made a generator
+      value silently.
+    - **`let c = for …` where `c` is a capability** the body hands back binds it as the
+      capability the iterator hands back (at its end or when closed), so a generator stored in a
+      variable can hand `stdin` back: `let stdin = for b in g { … }`.

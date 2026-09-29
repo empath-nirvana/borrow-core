@@ -1,0 +1,42 @@
+-- `gen-block.bc` written by hand in core. The block is the generator `thunkv nu_in < next,
+-- close >` in place: `next` yields `k` with the rest, whose `next` yields `k + 1`; each `close`
+-- drops the `k` it captured (a copy, `i32`) and hands back `()`. The `for` is the loop of SPEC §14.
+
+main : F (U (loop i32 1)) =
+  k <- return i32[3];
+  acc <- return i32[0];
+  step : !U (U (gen i32 1 1) * i32 -o F (i32 + U (gen i32 1 1) * i32) & F 1) <-
+    return (!thunkv fun (s : U (gen i32 1 1) * i32) ->
+      < let (it, st) = s;
+        acc <- return st;
+        o <- (nu_out (force it)).1;
+        case o {
+          inl p ->
+            let (x, it) = p;
+            acc <- return ((unbang host[add32]) (acc, x));
+            u <- return ();
+            return (inr (it, acc))
+        | inr d ->
+            case d {
+              inl c -> v : i32 <- return acc; return (inl v)
+            | inr it -> return (inr (it, acc))
+            }
+        },
+        let (it, st) = s;
+        acc <- return st;
+        c <- (nu_out (force it)).2;
+        return () >);
+  f <- return (unbang (unfold[loop i32 1, U (gen i32 1 1) * i32] step));
+  s0 : U (gen i32 1 1) * i32 <- return ((thunkv nu_in <
+    return (inl (k, thunkv nu_in <
+      s0 <- return ();
+      return (inl ((unbang host[add32]) (k, i32[1]), thunkv nu_in <
+        y <- return ();
+        v : 1 <- return ();
+        return (inr (inl v)),
+        return () >)),
+      dk <- return k;
+      return () >)),
+    dk <- return k;
+    return () > : U (gen i32 1 1)), acc);
+  return (thunkv nu_in < (nu_out (force f s0)).1, (nu_out (force f s0)).2 >)

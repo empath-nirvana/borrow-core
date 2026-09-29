@@ -1240,8 +1240,9 @@ elaborates, in `Frontend/Sugar.lean`, to `f : !(A₁ * … => U (gen A B R))`, `
   follows it (`corpus/gen-return.bc`, `corpus/sugar/gen-return.bc`). The loops it leaves must
   hold nothing without a destructor beyond what `e` hands back; a `return` inside a `for` over an
   iterator made from a capability is rejected, since the iterator holds the capability
-  (`corpus/reject/gen-return-held.bc`). `return` is a generator's: in its body, a statement
-  `return e` that is not the head of a bind; elsewhere `return` is the core's.
+  (`corpus/reject/gen-return-held.bc`). `return` is a generator's: in a `gen fn`'s body, a statement
+  `return e` that is not the head of a bind; elsewhere (a `gen { … }` block included) `return`
+  is the core's.
 - **`break`** leaves the innermost loop from any position of its body, not only its tail
   (`corpus/reject/gen-break-outside.bc` outside every loop). So does `break` in a `for` of a div
   body: the iterator is closed and what follows the loop runs (`corpus/io-break.bc`).
@@ -1270,6 +1271,25 @@ elaborates, in `Frontend/Sugar.lean`, to `f : !(A₁ * … => U (gen A B R))`, `
   lent with `&mut c` comes back in `g`'s result (`c` itself, or `(c, x)`) or, closed during `g`,
   its residual (`corpus/gen-from.bc`, `corpus/sugar/gen-from.bc`,
   `corpus/reject/gen-from-elem.bc`).
+- **`gen { S }`** is a generator in place: the body `S` elaborated as a `gen fn`'s is, to
+  `(thunkv nu_in ⟨S', close⟩ : U (gen A B R))`, capturing what it uses, with `close` dropping it
+  and handing back the residual. Its element type is what `S` yields first, and `B` what it
+  finishes with (`corpus/gen-block.bc`, `corpus/sugar/gen-block.bc`,
+  `corpus/reject/gen-block-empty.bc`). It is elaborated after specialization, so a call in it may
+  have a callback that yields.
+- **A callback that yields**, a closure whose body has a `yield`, passed at a callback type
+  `A ⇒ B`, is a generator function `A ⇒ U (gen E B R)`, its body elaborated in place. The function
+  it is passed to is specialized at that type (§14's specialization, with a generator function as
+  the callback's computation type, `yield` as its inference and `gen_bind` as its elaboration of
+  a call): in the copy, each call of the callback is a `yield from` of the generator it returns,
+  so the copy is a generator of `E`, and the call of the copy is a `yield from` too, in a
+  generator's body or a block (`corpus/sugar/gen-callback.bc`; outside one it is rejected,
+  `corpus/reject/gen-callback-outside.bc`). The calls through the callback are on the copy's
+  spine; one inside a fold's algebra is rejected as a `yield` off the spine, as a div callback
+  there is (`corpus/pending/map-div-fold.bc`).
+- **`let c = for x in V { M }; N`** with `c` among the capabilities the body hands back binds `c`
+  as the capability the iterator hands back when it finishes or is closed, as an iterator made
+  from `c` does (a `gen { … }` block that captured `stdin`, `corpus/gen-block.bc`).
 
 `yield`, `break` and `return` stand on the spine: before elaboration, what follows a head that
 contains one (a `match` or `if`, a bind, a `let`, a loop) is moved into it, into both arms of a
@@ -1282,8 +1302,7 @@ leave that borrow's scope, by the existing rule for thunks (`corpus/reject/gen-e
 A `for` in a div body iterates a generator too (a skip goes round the loop), and an iterator or
 generator that holds no capability (`range(1, 10)`, a pipeline of generators).
 
-**Open.** A `gen { … }` block; a total consumer (a `for` over a generator is
-div). Generators are not yet a case of §14's specialization (a callback that yields).
+**Open.** A total consumer (a `for` over a generator is div).
 
 ### Borrow scopes over loops, per observation
 

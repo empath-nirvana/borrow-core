@@ -265,6 +265,8 @@ inductive VSugar where
   /-- `yield from e` in a generator's body, applied to the generator it delegates to: its
   elements are yielded, and the `yield from` finishes with what it finishes with. -/
   | yieldFrom
+  /-- `gen { S }`: a generator whose body is `S`, applied to the thunk it marks. -/
+  | genBlock
   deriving DecidableEq, Repr, Inhabited
 
 mutual

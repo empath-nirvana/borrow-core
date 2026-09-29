@@ -861,6 +861,14 @@ def valPrefix : Nat → P Val
       let m := if t.tok == .kw "shorten_mut" then Mode.mut else Mode.imm
       pure (.shorten (← spanFrom st) m σ a V)
     | .kw "borrow" | .kw "modify" => borrowBlock n
+    | .kw "gen" =>
+      -- `gen { S }`: a generator whose body is `S`. (`return` in it is the core's.)
+      discard bump
+      expectSym "{"
+      let M ← withGen false (blockBody n)
+      expectSym "}"
+      let sp ← spanFrom st
+      pure (.app sp (.sugar t.span .genBlock) (.thunk sp M))
     | .kw "yield" =>
       -- `yield e` takes a whole expression: `yield x * x` yields the product.
       discard bump
