@@ -242,7 +242,7 @@ Each entry: the decision, and why. Newest last.
     - Not yet provided: a reborrow `&mut m` of a `mut` borrow, a lend inside a nested
       computation of a call's argument, `*m` of a `mut` borrow, and assignment inside a closure
       or a borrow block of a variable outside it.
-39. **Provisional (#108, to be confirmed by the user): deep copies are written.** Revises
+39. **Deep copies are written (#108; confirmed by the user).** Revises
     decision 11 at the surface; the core rule is unchanged.
     - A use of a persistent variable that the compiled program copies deep (the variable is used
       again later, and its type holds recursive data: a `μ`, also under `⊗`, `⊕`, `[@a]`, `!`)
