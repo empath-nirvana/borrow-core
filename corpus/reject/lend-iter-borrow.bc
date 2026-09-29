@@ -1,0 +1,29 @@
+-- expect: 26:14: the iterator of this `for` holds the borrow of `b`: a borrow block over a loop lends its place again at each step, so what the loop holds between steps must not hold the borrow (SPEC §14, borrow scopes over loops)
+-- A borrow block over a loop whose iterator holds the borrow (SPEC §14, borrow scopes over loops).
+-- The generator `over` reads the table through the borrow it is given, so its state holds the
+-- borrow between observations. The block lends the table again at each step, so what the loop
+-- holds between steps must not hold the borrow. This is a borrowed collection consumed by a
+-- pipeline; rewriting the source to hold the owner needs the pipeline to hand the owner back.
+
+fn tab(i: i32) -> i32 = i * 10
+
+-- The entry at `i`, or 0 out of range.
+def get : !(all 'a < top. imm 'a (array i32) * i32 => i32) =
+  !thunkv Fun 'a < top. return (thunkv fun (p : imm 'a (array i32) * i32) ->
+    let (b, i) = p;
+    withload['a, 'z, array i32, i32] b (thunkv Fun 'z < dom. return (thunkv fun (xs : array_imm 'z i32) ->
+      match array_get['z, i32] (xs, i) { inl e -> let v = *e; boxed['z] v | inr _ -> boxed['z] 0 })))
+
+gen fn over<'a>(b: imm 'a (array i32), n: i32) -> i32 =
+  let mut i = 0;
+  while i < n { yield get(b, i); i = i + 1 };
+  ()
+
+main -> i32 =
+  let t = alloc(array_new[i32] (10, tab));
+  let n = borrow imm t { b ->
+    let mut acc = 0;
+    for x in over(b, 4) { acc = acc + x };
+    acc
+  };
+  n

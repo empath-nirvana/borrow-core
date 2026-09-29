@@ -1,0 +1,141 @@
+-- The per-observation lend (SPEC §14, borrow scopes over loops; `experiments/LoopBorrow`). A
+-- loop or a generator whose state holds the owner of a cell, `ref A`, and lends it at each
+-- observation, for that observation only: the step borrows the owner with an ordinary `withbor`
+-- inside one run, and hands back the owner with the next state. Between observations the state
+-- holds the owner, never a borrow, so what a step computes from the borrow must outlive it: its
+-- result is boxed at the borrow's lifetime.
+--
+-- Each combinator takes the steps (`next`, then `close`) and the first state, and returns the
+-- codata. When it finishes or is closed it hands the owner back with the result. This is
+-- ordinary library code over `unfold` (SPEC §7), checked with the program that includes it
+-- (`include lend`). A borrow block whose body loops is elaborated to the same form inline
+-- (`Frontend/Elab/LoopLend.lean`), so that each step is known code.
+
+-- A loop lending its owner `imm` at each observation: `next` maps the borrow and the state to a
+-- result or the next state; `close` maps them to the residual.
+def loop_lend_imm[A, S, B, R] :
+    (!(all 'x < top. imm 'x A * S => B + S) * !(all 'x < top. imm 'x A * S => R)) * (ref A * S)
+    => U (loop (ref A * B) (ref A * R)) =
+  thunkv fun (q : (!(all 'x < top. imm 'x A * S => B + S) * !(all 'x < top. imm 'x A * S => R))
+                  * (ref A * S)) ->
+    let (st, s0) = q;
+    let (nx, cl) = st;
+    f <- return (unbang (unfold[loop (ref A * B) (ref A * R), ref A * S]
+      (!thunkv fun (p : ref A * S) ->
+        < let (r, s) = p;
+          q <- return (withbor1['x, A, B + S] r (thunkv Fun 'x < dom. return (thunkv fun (b : imm 'x A) ->
+                 o <- return ((unbang nx) ['x] (b, s));
+                 return (boxed['x] o))));
+          let (r, o) = q;
+          case o { inl v -> return (inl (r, v)) | inr s2 -> return (inr (r, s2)) },
+          let (r, s) = p;
+          withbor1['x, A, R] r (thunkv Fun 'x < dom. return (thunkv fun (b : imm 'x A) ->
+            o <- return ((unbang cl) ['x] (b, s));
+            return (boxed['x] o))) >)));
+    return (thunkv nu_in < (nu_out (force f s0)).1, (nu_out (force f s0)).2 >)
+
+-- A loop lending its owner `mut` at each observation.
+def loop_lend_mut[A, S, B, R] :
+    (!(all 'x < top. mut 'x A * S => B + S) * !(all 'x < top. mut 'x A * S => R)) * (ref A * S)
+    => U (loop (ref A * B) (ref A * R)) =
+  thunkv fun (q : (!(all 'x < top. mut 'x A * S => B + S) * !(all 'x < top. mut 'x A * S => R))
+                  * (ref A * S)) ->
+    let (st, s0) = q;
+    let (nx, cl) = st;
+    f <- return (unbang (unfold[loop (ref A * B) (ref A * R), ref A * S]
+      (!thunkv fun (p : ref A * S) ->
+        < let (r, s) = p;
+          q <- return (withbor2['x, top, A, B + S] r (thunkv Fun 'x < dom. return (thunkv fun (m : mut 'x A) ->
+                 o <- return ((unbang nx) ['x] (m, s));
+                 return (boxed['x] o))));
+          let (r, o) = q;
+          case o { inl v -> return (inl (r, v)) | inr s2 -> return (inr (r, s2)) },
+          let (r, s) = p;
+          withbor2['x, top, A, R] r (thunkv Fun 'x < dom. return (thunkv fun (m : mut 'x A) ->
+            o <- return ((unbang cl) ['x] (m, s));
+            return (boxed['x] o))) >)));
+    return (thunkv nu_in < (nu_out (force f s0)).1, (nu_out (force f s0)).2 >)
+
+-- A generator lending its owner `imm` at each observation: `next` maps the borrow and the state
+-- to an element with the next state, a result, or a skip with the next state.
+def gen_lend_imm[A, S, E, B, R] :
+    (!(all 'x < top. imm 'x A * S => E * S + (B + S)) * !(all 'x < top. imm 'x A * S => R))
+    * (ref A * S) => U (gen E (ref A * B) (ref A * R)) =
+  thunkv fun (q : (!(all 'x < top. imm 'x A * S => E * S + (B + S))
+                  * !(all 'x < top. imm 'x A * S => R)) * (ref A * S)) ->
+    let (st, s0) = q;
+    let (nx, cl) = st;
+    f <- return (unbang (unfold[gen E (ref A * B) (ref A * R), ref A * S]
+      (!thunkv fun (p : ref A * S) ->
+        < let (r, s) = p;
+          q <- return (withbor1['x, A, E * S + (B + S)] r (thunkv Fun 'x < dom. return (thunkv fun (b : imm 'x A) ->
+                 o <- return ((unbang nx) ['x] (b, s));
+                 return (boxed['x] o))));
+          let (r, o) = q;
+          case o {
+            inl y -> let (e, s2) = y; return (inl (e, (r, s2)))
+          | inr d -> case d { inl v -> return (inr (inl (r, v))) | inr s2 -> return (inr (inr (r, s2))) }
+          },
+          let (r, s) = p;
+          withbor1['x, A, R] r (thunkv Fun 'x < dom. return (thunkv fun (b : imm 'x A) ->
+            o <- return ((unbang cl) ['x] (b, s));
+            return (boxed['x] o))) >)));
+    return (thunkv nu_in < (nu_out (force f s0)).1, (nu_out (force f s0)).2 >)
+
+-- A generator lending its owner `mut` at each observation.
+def gen_lend_mut[A, S, E, B, R] :
+    (!(all 'x < top. mut 'x A * S => E * S + (B + S)) * !(all 'x < top. mut 'x A * S => R))
+    * (ref A * S) => U (gen E (ref A * B) (ref A * R)) =
+  thunkv fun (q : (!(all 'x < top. mut 'x A * S => E * S + (B + S))
+                  * !(all 'x < top. mut 'x A * S => R)) * (ref A * S)) ->
+    let (st, s0) = q;
+    let (nx, cl) = st;
+    f <- return (unbang (unfold[gen E (ref A * B) (ref A * R), ref A * S]
+      (!thunkv fun (p : ref A * S) ->
+        < let (r, s) = p;
+          q <- return (withbor2['x, top, A, E * S + (B + S)] r (thunkv Fun 'x < dom. return (thunkv fun (m : mut 'x A) ->
+                 o <- return ((unbang nx) ['x] (m, s));
+                 return (boxed['x] o))));
+          let (r, o) = q;
+          case o {
+            inl y -> let (e, s2) = y; return (inl (e, (r, s2)))
+          | inr d -> case d { inl v -> return (inr (inl (r, v))) | inr s2 -> return (inr (inr (r, s2))) }
+          },
+          let (r, s) = p;
+          withbor2['x, top, A, R] r (thunkv Fun 'x < dom. return (thunkv fun (m : mut 'x A) ->
+            o <- return ((unbang cl) ['x] (m, s));
+            return (boxed['x] o))) >)));
+    return (thunkv nu_in < (nu_out (force f s0)).1, (nu_out (force f s0)).2 >)
+
+-- The lending loop in push form: at each observation it lends one entry of an array, as a view
+-- `imm 'z E` borrowed inside that observation, to the body `k` with the running state `T`. The
+-- entries are visited in index order, and the loop finishes with the array and the state. The
+-- element is never handed out of the observation: the body is the loop's input, and runs inside
+-- the step.
+def array_each_imm[E, T] :
+    !(all 'z < top. imm 'z E * T => T) * (ref (array E) * T)
+    => U (loop (ref (array E) * T) (ref (array E) * 1)) =
+  thunkv fun (q : !(all 'z < top. imm 'z E * T => T) * (ref (array E) * T)) ->
+    let (k, s0) = q;
+    let (r0, t0) = s0;
+    f <- return (unbang (unfold[loop (ref (array E) * T) (ref (array E) * 1), ref (array E) * (i32 * T)]
+      (!thunkv fun (p : ref (array E) * (i32 * T)) ->
+        < let (r, s) = p;
+          let (i, t) = s;
+          q <- return (withbor1['x, array E, T + T] r (thunkv Fun 'x < dom. return (thunkv fun (b : imm 'x (array E)) ->
+                 v <- return (withload['x, 'z, array E, T + T] b (thunkv Fun 'z < dom. return (thunkv fun (xs : array_imm 'z E) ->
+                        match (unbang array_get['z, E]) (xs, i) {
+                          inl e -> t2 <- return ((unbang k) ['z] (e, t)); return (boxed['z] (inr t2))
+                        | inr u -> return (boxed['z] (inl t))
+                        })));
+                 return (boxed['x] v))));
+          let (r2, o) = q;
+          case o {
+            inl t2 -> return (inl (r2, t2))
+          | inr t2 -> return (inr (r2, ((unbang host[add32]) (i, i32[1]), t2)))
+          },
+          let (r, s) = p;
+          let (i, t) = s;
+          return (r, ()) >)));
+    s1 : ref (array E) * (i32 * T) <- return (r0, (i32[0], t0));
+    return (thunkv nu_in < (nu_out (force f s1)).1, (nu_out (force f s1)).2 >)

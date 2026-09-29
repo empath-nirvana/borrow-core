@@ -39,6 +39,7 @@ today, and the golden once it lands).
 | `scope-data-effects.bc` | data × effects × scope | an in-place `fold_reuse` under a `mut` borrow; a `fold_imm` with output inside an `imm` borrow block | runs |
 | `scope-codata-effects.bc` | codata × effects × scope | an iterator holding `mut 'x output` inside `borrow mut stdout` | runs |
 | `scope-loop-lend.bc` | codata × effects × coeffects × scope | a `for` over the input that lends a table `imm` on every step | runs |
+| `borrow-across-loop.bc` | codata × effects × coeffects × scope | a `for` over the input inside a borrow block of a table, lent per observation (SPEC §14) | runs |
 | `scope-boxed-iter.bc` | codata × coeffects × scope | an iterator holding a borrow leaves an inner borrow block as `[@w] U(iter …)` (the account's §6, test case 2) | runs |
 | `free-monad.bc` | effects × data | a program of `write` operations as data, handled by two folds (the account's §3: handlers are folds) | runs |
 | `codata-generic.bc` | codata × effects, independence | one consumer written once, run on a pure iterator and an I/O iterator (the account's §6, test case 1) | runs |
@@ -72,7 +73,6 @@ the options and their trade-offs and settles none of them.
 | `backtrack-multishot.bc` | effects × codata × scope | handlers; a continuation `U C` is linear, so one-shot | surface; open design question | pending (#18) |
 | `fold-under-u.bc` | effects × data | an operation with an input (`read`) puts `X` under `U`, outside `FShape` and outside `mu` | kernel | pending (SPEC §6) |
 | `raise-in-fold.bc` | data × effects (failure) × scope | `raise`/`try`; the folds are not polymorphic in their algebra's effect; unwinding of the abandoned rest | surface, kernel; open design questions | pending (#18) |
-| `borrow-across-loop.bc` | codata × effects × coeffects × scope | a borrow block's body is one `F` computation, so a div loop cannot run inside one borrow | kernel; open design question | pending |
 | `print-borrowed-list.bc` | data × effects × coeffects × scope | `fold_imm`'s result must outlive every lifetime, so it cannot be a writer; no borrowed list iterator | kernel | pending (#57) |
 | `closure-captures-int.bc` | coeffects × data | a `!` closure may capture only `!` values, not an `i32` | kernel | pending (#9, SPEC §10 Open) |
 | `fn-lifetime.bc` | coeffects × scope | `fn f<'a>(…)` is not provided; functions over borrows are core `def`s | surface | pending (#54, decision 37) |
@@ -103,14 +103,11 @@ Judged by how natural the program is, and how often a user would write it:
 4. **`for-finite.bc`** (stage 9): a `for` over a count in a total function.
 5. **`closure-captures-int.bc`** (#9): a fold or callback that uses a parameter, as
    `map(|x| x + n)` does. The model already validates it (`vCE_empty_of_persistent`).
-6. **`borrow-across-loop.bc`**: a table borrowed once and consulted while reading the input.
-   A borrow per step works today (`scope-loop-lend.bc`); holding one across the loop is a design
-   question about `withbor` at loop type.
-7. **`lend-nested.bc`, `lend-two.bc`, `closure-lend.bc`**: small surface gaps, each met in the
+6. **`lend-nested.bc`, `lend-two.bc`, `closure-lend.bc`**: small surface gaps, each met in the
    first programs written here, and each reported with a message that does not mention the lend.
-8. **`raise-in-fold.bc`, `generator-handler.bc`** (#18): errors and generators are the first
+7. **`raise-in-fold.bc`, `generator-handler.bc`** (#18): errors and generators are the first
    control effects users will reach for.
-9. **`map-div-fold.bc`, `callbacks-in-data.bc`**: div callbacks in folds and in data.
+8. **`map-div-fold.bc`, `callbacks-in-data.bc`**: div callbacks in folds and in data.
 
 Less natural, each needed mostly through generic code or in niche programs: `dig-bang.bc`,
 `box-dup.bc` (the model validates both; each is one lemma), `noalloc.bc`, `two-writers.bc`
@@ -136,10 +133,13 @@ there is a runtime), `needs-stdout.bc` (ambient `main` and `&mut` cover the comm
 
 **Blocked for a reason not in the list of current limits.**
 
-- **A loop cannot run inside a borrow scope** (`borrow-across-loop.bc`). A borrow block's body is
-  one computation of `F`, and a div body returns a loop, which cannot leave the scope that holds
-  its borrow. This is the account's "`withbor` is a scoped, non-algebraic operation" met by the
-  div effect; it also bounds scoped spawning for async (#52).
+- **A loop inside a borrow scope** (`borrow-across-loop.bc`, now running). A borrow block's body
+  is one computation of `F`, and a div body returns a loop, which cannot leave the scope that
+  holds its borrow. This is the account's "`withbor` is a scoped, non-algebraic operation" met by
+  the div effect. It is met by lending again at each observation (SPEC §14, borrow scopes over
+  loops): the elaborated program is `scope-loop-lend.bc`'s. What remains is a loop whose codata
+  holds the borrow itself (a pipeline over a borrowed source); it also bounds scoped spawning for
+  async (#52).
 - **A div callback inside a fold's algebra is not specialized** (`map-div-fold.bc`), even in the
   whole program: SPEC §14's specialization reaches callbacks called on a function's spine, not
   inside the `!` closure a fold takes. This is the case of `map` over a list, before separate

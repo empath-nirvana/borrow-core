@@ -1,0 +1,39 @@
+-- A div function that takes a borrow (SPEC §14, borrow scopes over loops): `serve` reads its
+-- input to the end, handling each byte under a configuration it borrows, and `main` calls it in
+-- direct style with `serve(&config, stdin)`.
+--
+-- `serve` loops, so a call runs one step at a time, and the borrow of `config` cannot stay open
+-- across the steps. It is elaborated to take the owner instead, `ref Cfg` in place of
+-- `imm 'a Cfg`, and hand it back first: its body is a borrow block of the owner, lent per
+-- observation, so each step of its loop borrows the configuration for that step. The call lends
+-- the place, `&config`, as a capability is lent, and gets it back when the loop finishes. No
+-- borrow is held between steps, and no kernel rule is involved.
+--
+-- Answer: i32[65] on the input `1203`: the configuration is (step 10, bias 1), so each digit adds
+-- `10 * d + 1`, giving 64, and `main` adds the bias read from the configuration it got back. A
+-- server that dropped the configuration could not return it; one that read the step once as 0
+-- gives 5.
+
+type Cfg = i32 * i32
+
+-- `acc + step * d + bias`.
+def handle : !(all 'a < top. imm 'a Cfg * (i32 * i32) => i32) =
+  !thunkv Fun 'a < top. return (thunkv fun (p : imm 'a Cfg * (i32 * i32)) ->
+    let (cfg, q) = p;
+    let (acc, d) = q;
+    let (step, bias) = *cfg;
+    acc + step * d + bias)
+
+-- Reads its input to the end, handling each byte under the configuration it borrows.
+def serve : !(all 'a < top. imm 'a Cfg * ref input => ref input * i32) =
+  !thunkv Fun 'a < top. return (thunkv fun (p : imm 'a Cfg * ref input) ->
+    let (cfg, i) = p;
+    let mut acc = 0;
+    for c in bytes(&mut i) { acc = handle(cfg, (acc, c - 48)) };
+    (i, acc))
+
+main -> i32 =
+  let config = alloc((10, 1));
+  let (stdin, n) = serve(&config, stdin);
+  let (step, bias) = free(config);
+  n + bias

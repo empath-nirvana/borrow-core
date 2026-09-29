@@ -1,0 +1,38 @@
+-- A div function taking a borrow (SPEC §14, borrow scopes over loops). `total_at` loops over its
+-- argument's entries, so it is elaborated to take the owner, `ref (array i32)`, and hand it back
+-- first, with its body a borrow block of the owner lent per observation. `total_at(&t)` lends the
+-- place as a capability is lent; inside a borrow block, `total_at(b)` passes the block's borrow,
+-- which is the place lent instead. `lend-div.core.bc` is the program written by hand in core.
+-- Answer: i32[200]: each call sums the entries at 4, 3, 2, 1 of 10 * i.
+
+def get : !(all 'a < top. imm 'a (array i32) * i32 => i32) =
+  !thunkv Fun 'a < top. return (thunkv fun (p : imm 'a (array i32) * i32) ->
+    let (b, i) = p;
+    withload['a, 'z, array i32, i32] b (thunkv Fun 'z < dom. return (thunkv fun (xs : array_imm 'z i32) ->
+      match array_get['z, i32] (xs, i) { inl e -> let v = *e; boxed['z] v | inr _ -> boxed['z] 0 })))
+
+def tab : !(i32 => i32) = !thunkv fun (i : i32) -> return ((unbang host[mul32]) (i, i32[10]))
+
+-- The numbers from `n` down to 1.
+def down : i32 => U (iter i32 1 1) =
+  thunkv fun (n : i32) ->
+    f <- return (unbang (unfold[iter i32 1 1, i32] (!thunkv fun (k : i32) ->
+      < case (unbang host[eqz32]) k {
+          inl nz -> return (inl (k, (unbang host[sub32]) (k, i32[1])))
+        | inr z -> return (inr ())
+        },
+        return () >)));
+    return (thunkv nu_in < (nu_out (force f n)).1, (nu_out (force f n)).2 >)
+
+-- The sum of the entries at 4, 3, 2, 1.
+def total_at : !(all 'a < top. imm 'a (array i32) => i32) =
+  !thunkv Fun 'a < top. return (thunkv fun (b : imm 'a (array i32)) ->
+    let mut acc = 0;
+    for i in down(4) { acc = acc + get(b, i) };
+    acc)
+
+main -> i32 =
+  let t = alloc(array_new[i32] (10, tab));
+  let n = total_at(&t);
+  let m = borrow imm t { b -> total_at(b) };
+  n + m

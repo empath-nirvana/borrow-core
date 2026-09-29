@@ -1,0 +1,78 @@
+-- `lend-block.bc` written by hand in core: the borrow block over the loop, lent per observation.
+-- The stretch before the loop is a `withbor1` of `t` that hands on `first` and `acc`; the loop is
+-- an `unfold` whose state holds the iterator, `t` and the threaded variables, and whose step
+-- borrows `t` around the body; the stretch after the loop borrows `t` in the loop's last step.
+-- The entry at `i`, or 0 out of range.
+def get : !(all 'a < top. imm 'a (array i32) * i32 => i32) =
+  !thunkv Fun 'a < top. return (thunkv fun (p : imm 'a (array i32) * i32) ->
+    let (b, i) = p;
+    return (withload['a, 'z, array i32, i32] b (thunkv Fun 'z < dom. return (thunkv fun (xs : array_imm 'z i32) ->
+      case (unbang array_get['z, i32]) (xs, i) {
+        inl e ->
+          v <- return (withload['z, 'y, i32, i32] e (thunkv Fun 'y < dom. return (thunkv fun (w : view 'y i32) ->
+                 return (boxed['y] w))));
+          return (boxed['z] v)
+      | inr u -> d <- return u; return (boxed['z] i32[0])
+      }))))
+
+def tab : !(i32 => i32) = !thunkv fun (i : i32) -> return ((unbang host[mul32]) (i, i32[10]))
+
+-- The numbers from `n` down to 1.
+def down : i32 => U (iter i32 1 1) =
+  thunkv fun (n : i32) ->
+    f <- return (unbang (unfold[iter i32 1 1, i32] (!thunkv fun (k : i32) ->
+      < case (unbang host[eqz32]) k {
+          inl nz -> return (inl (k, (unbang host[sub32]) (k, i32[1])))
+        | inr z -> return (inr ())
+        },
+        return () >)));
+    return (thunkv nu_in < (nu_out (force f n)).1, (nu_out (force f n)).2 >)
+
+main : F U (loop i32 1) =
+  t <- return (alloc[array i32] ((unbang array_new[i32]) (i32[10], tab)));
+  q <- return (withbor1['x, array i32, i32 * i32] t (thunkv Fun 'x < dom.
+         return (thunkv fun (b : imm 'x (array i32)) ->
+           first <- return ((unbang get) ['x] (b, i32[1]));
+           acc <- return i32[0];
+           r <- return (first, acc);
+           return (boxed['x] r))));
+  let (t, r) = q;
+  let (first, acc) = r;
+  step : !U (U (iter i32 1 1) * (ref (array i32) * (i32 * i32))
+             -o F (i32 + U (iter i32 1 1) * (ref (array i32) * (i32 * i32))) & F 1) <-
+    return (!thunkv fun (s : U (iter i32 1 1) * (ref (array i32) * (i32 * i32))) ->
+      < let (it, st) = s;
+        let (t, st2) = st;
+        let (first, acc) = st2;
+        o <- (nu_out (force it)).1;
+        case o {
+          inl p ->
+            let (i, it) = p;
+            q <- return (withbor1['x, array i32, i32] t (thunkv Fun 'x < dom.
+                   return (thunkv fun (b : imm 'x (array i32)) ->
+                     acc <- return ((unbang host[add32]) ((unbang host[add32]) (acc, first),
+                                                         (unbang get) ['x] (b, i)));
+                     u <- return ();
+                     return (boxed['x] acc))));
+            let (t, a) = q;
+            acc <- return a;
+            u <- return ();
+            return (inr (it, (t, (first, acc))))
+        | inr e ->
+            q <- return (withbor1['x, array i32, i32] t (thunkv Fun 'x < dom.
+                   return (thunkv fun (b : imm 'x (array i32)) ->
+                     v <- return ((unbang host[add32]) ((unbang host[sub32]) (acc, i32[6]),
+                                                       (unbang get) ['x] (b, i32[0])));
+                     return (boxed['x] v))));
+            let (t, n) = q;
+            v : i32 <- return n;
+            return (inl v)
+        },
+        let (it, st) = s;
+        let (t, st2) = st;
+        let (first, acc) = st2;
+        c <- (nu_out (force it)).2;
+        return () >);
+  f <- return (unbang (unfold[loop i32 1, U (iter i32 1 1) * (ref (array i32) * (i32 * i32))] step));
+  s0 : U (iter i32 1 1) * (ref (array i32) * (i32 * i32)) <- return (down i32[4], (t, (first, acc)));
+  return (thunkv nu_in < (nu_out (force f s0)).1, (nu_out (force f s0)).2 >)

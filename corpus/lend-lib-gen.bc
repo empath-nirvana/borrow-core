@@ -1,0 +1,52 @@
+-- The per-observation lend at a generator (`lib/lend.bc`, SPEC §14): `gen_lend_mut` builds a
+-- generator whose state holds a cell, and whose every `next` borrows it `mut` for that
+-- observation. Each `next` takes the cell's value out, puts the successor back, and yields the
+-- old value. The consumer pulls three elements and closes the generator, which hands the cell back.
+--
+-- Answer: (i32[18], i32[8]): the cell starts at 5, the three elements are 5, 6, 7, and the cell
+-- holds 8 when it comes back. A step that yielded after the store gives 21; a lend that did not
+-- store through the borrow gives (15, 5); a close that dropped the cell could not return it.
+
+include lend
+
+-- One step over the count `n` left: finish at 0, else take the cell's value `v` out, put
+-- `v + 1` back, and yield `v`.
+def tick : !(all 'x < top. mut 'x i32 * i32 => i32 * i32 + (1 + i32)) =
+  !thunkv Fun 'x < top. return (thunkv fun (p : mut 'x i32 * i32) ->
+    let (m, n) = p;
+    if n == 0 { inr (inl ()) }
+    else { let v = modify m { v -> (v + 1, v) }; inl (v, n - 1) })
+
+def untick : !(all 'x < top. mut 'x i32 * i32 => 1) =
+  !thunkv Fun 'x < top. return (thunkv fun (p : mut 'x i32 * i32) -> let (m, n) = p; ())
+
+type UG = U (gen i32 (ref i32 * 1) (ref i32 * 1))
+
+-- The next element and the rest, or 0 and the cell once the generator has finished.
+fn pull(g: UG) -> i32 * (UG + ref i32 * 1) =
+  o <- (nu_out (force g)).1;
+  match o {
+    inl (x, g2) -> (x, inl g2)
+  | inr d -> match d { inl b -> (0, inr b) | inr g2 -> (0, inl g2) }
+  }
+
+-- The rest closed, or the cell handed back when the generator finished.
+fn finish(r: UG + ref i32 * 1) -> ref i32 =
+  match r {
+    inl g -> q <- (nu_out (force g)).2; let (c, _) = q; c
+  | inr (c, _) -> c
+  }
+
+main -> i32 * i32 =
+  let c = alloc(5);
+  let g : UG = gen_lend_mut[i32, i32, i32, 1, 1] ((tick, untick), (c, 3));
+  let (x1, r1) = pull(g);
+  match r1 {
+    inl g1 ->
+      let (x2, r2) = pull(g1);
+      match r2 {
+        inl g2 -> let (x3, r3) = pull(g2); (x1 + x2 + x3, free(finish(r3)))
+      | inr b -> (0, free(finish(inr b)))
+      }
+  | inr b -> (0, free(finish(inr b)))
+  }

@@ -1,0 +1,33 @@
+-- Axes: codata (the div loop) × effects (input) × coeffects (the `imm` demand) × scope (one
+-- borrow block around the loop). A lookup table borrowed once, and read on every byte of the
+-- input by a `for` inside the borrow block.
+--
+-- A borrow block's body is one computation, and a `for` over the input is a loop observed one
+-- step at a time, so the borrow cannot stay open while the loop runs. The block is elaborated
+-- per observation (SPEC §14, borrow scopes over loops; `Frontend/Elab/LoopLend.lean`): the table's
+-- cell `t` moves into the loop's state, and each step borrows it again for that step, around the
+-- body of the `for`. What follows the loop, `(stdin, acc)`, does not use the borrow, so it runs
+-- outside any block, in the loop's last step. The elaborated program is the one
+-- `scope-loop-lend.bc` writes by hand (a borrow per step), with the same counts.
+--
+-- Answer: i32[60] on the input `1203`: the table holds 10 * i, and 10 + 20 + 0 + 30 = 60. A
+-- digit read as a byte (no `- 48`) is out of range and gives 0; a loop that did not thread `acc`
+-- gives 30; a lend that did not hand the cell back does not check.
+
+fn tab(i: i32) -> i32 = i * 10
+
+-- The entry at `i`, or 0 out of range.
+def get : !(all 'a < top. imm 'a (array i32) * i32 => i32) =
+  !thunkv Fun 'a < top. return (thunkv fun (p : imm 'a (array i32) * i32) ->
+    let (b, i) = p;
+    withload['a, 'z, array i32, i32] b (thunkv Fun 'z < dom. return (thunkv fun (xs : array_imm 'z i32) ->
+      match array_get['z, i32] (xs, i) { inl e -> let v = *e; boxed['z] v | inr _ -> boxed['z] 0 })))
+
+main -> i32 =
+  let t = alloc(array_new[i32] (10, tab));
+  let (stdin, n) = borrow imm t { 'x, b ->
+    let mut acc = 0;
+    for c in bytes(&mut stdin) { acc = acc + (unbang get) ['x] (b, c - 48) };
+    (stdin, acc)
+  };
+  n

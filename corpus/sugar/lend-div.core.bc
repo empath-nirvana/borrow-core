@@ -1,0 +1,114 @@
+-- `lend-div.bc` written by hand in core. `total_at` takes the owner and hands it back first; its
+-- loop's state holds the owner, and each step borrows it around the body. `main` calls it twice in
+-- direct style, each a delay bind (`lib/div.bc`); the second call is the borrow block's, whose
+-- borrow passed to `total_at` is the place lent instead.
+
+-- The delay bind, as `lib/div.bc` has it.
+def div_bind_step[A, B, R1, R] : !U (U loop A R1 * U ((A -o F U loop B R) & (R1 -o F R)) + U loop B R -o F (B + U loop A R1 * U ((A -o F U loop B R) & (R1 -o F R)) + U loop B R) & F R) =
+  !thunkv fun (s : U loop A R1 * U ((A -o F U loop B R) & (R1 -o F R)) + U loop B R) ->
+      < case s {
+          inl p -> let (m, k) = p;
+            o <- (nu_out force m).1;
+            case o {
+              inl a -> l <- force k.1 a;
+                return inr inr l
+            | inr m2 -> return inr inl (m2, k)
+            }
+        | inr l -> o <- (nu_out force l).1;
+            case o {
+              inl b -> return inl b
+            | inr l2 -> return inr inr l2
+            }
+        },
+        case s {
+          inl p -> let (m, k) = p;
+            r1 <- (nu_out force m).2;
+            force k.2 r1
+        | inr l -> (nu_out force l).2
+        } >
+
+def div_bind[A, B, R1, R] : U loop A R1 * U ((A -o F U loop B R) & (R1 -o F R)) => U loop B R =
+  thunkv fun (p : U loop A R1 * U ((A -o F U loop B R) & (R1 -o F R))) ->
+      f <- return unbang unfold[loop B R, U loop A R1 * U ((A -o F U loop B R) & (R1 -o F R)) + U loop B R] div_bind_step[A, B, R1, R];
+      s0 : U loop A R1 * U ((A -o F U loop B R) & (R1 -o F R)) + U loop B R <- return inl p;
+      return (thunkv nu_in < (nu_out force f s0).1,
+          (nu_out force f s0).2 >)
+
+
+-- The entry at `i`, or 0 out of range.
+def get : !(all 'a < top. imm 'a (array i32) * i32 => i32) =
+  !thunkv Fun 'a < top. return (thunkv fun (p : imm 'a (array i32) * i32) ->
+    let (b, i) = p;
+    return (withload['a, 'z, array i32, i32] b (thunkv Fun 'z < dom. return (thunkv fun (xs : array_imm 'z i32) ->
+      case (unbang array_get['z, i32]) (xs, i) {
+        inl e ->
+          v <- return (withload['z, 'y, i32, i32] e (thunkv Fun 'y < dom. return (thunkv fun (w : view 'y i32) ->
+                 return (boxed['y] w))));
+          return (boxed['z] v)
+      | inr u -> d <- return u; return (boxed['z] i32[0])
+      }))))
+
+def tab : !(i32 => i32) = !thunkv fun (i : i32) -> return ((unbang host[mul32]) (i, i32[10]))
+
+-- The numbers from `n` down to 1.
+def down : i32 => U (iter i32 1 1) =
+  thunkv fun (n : i32) ->
+    f <- return (unbang (unfold[iter i32 1 1, i32] (!thunkv fun (k : i32) ->
+      < case (unbang host[eqz32]) k {
+          inl nz -> return (inl (k, (unbang host[sub32]) (k, i32[1])))
+        | inr z -> return (inr ())
+        },
+        return () >)));
+    return (thunkv nu_in < (nu_out (force f n)).1, (nu_out (force f n)).2 >)
+
+-- The sum of the entries at 4, 3, 2, 1, over the owner, borrowed at each step.
+def total_at : !(ref (array i32) => U (loop (ref (array i32) * i32) 1)) =
+  !thunkv fun (own : ref (array i32)) ->
+    t <- return own;
+    acc <- return i32[0];
+    step : !U (U (iter i32 1 1) * (ref (array i32) * i32)
+               -o F (ref (array i32) * i32 + U (iter i32 1 1) * (ref (array i32) * i32)) & F 1) <-
+      return (!thunkv fun (s : U (iter i32 1 1) * (ref (array i32) * i32)) ->
+        < let (it, st) = s;
+          let (t, acc) = st;
+          o <- (nu_out (force it)).1;
+          case o {
+            inl p ->
+              let (i, it) = p;
+              q <- return (withbor1['a, array i32, i32] t (thunkv Fun 'a < dom.
+                     return (thunkv fun (b : imm 'a (array i32)) ->
+                       acc <- return ((unbang host[add32]) (acc, (unbang get) ['a] (b, i)));
+                       u <- return ();
+                       return (boxed['a] acc))));
+              let (t, a) = q;
+              acc <- return a;
+              u <- return ();
+              return (inr (it, (t, acc)))
+          | inr e ->
+              v : ref (array i32) * i32 <- return (t, acc);
+              return (inl v)
+          },
+          let (it, st) = s;
+          let (t, acc) = st;
+          c <- (nu_out (force it)).2;
+          return () >);
+    f <- return (unbang (unfold[loop (ref (array i32) * i32) 1, U (iter i32 1 1) * (ref (array i32) * i32)] step));
+    s0 : U (iter i32 1 1) * (ref (array i32) * i32) <- return (down i32[4], (t, acc));
+    return (thunkv nu_in < (nu_out (force f s0)).1, (nu_out (force f s0)).2 >)
+
+main : F U (loop i32 1) =
+  t <- return (alloc[array i32] ((unbang array_new[i32]) (i32[10], tab)));
+  l1 <- return ((unbang total_at) t);
+  return (div_bind[ref (array i32) * i32, i32, 1, 1] (l1, thunkv
+    < fun (a1 : ref (array i32) * i32) ->
+        let (t, n) = a1;
+        l2 <- return ((unbang total_at) t);
+        return (div_bind[ref (array i32) * i32, i32, 1, 1] (l2, thunkv
+          < fun (a2 : ref (array i32) * i32) ->
+              let (t, r) = a2;
+              q <- return (t, r);
+              let (t, m) = q;
+              v : i32 <- return ((unbang host[add32]) (n, m));
+              return (thunkv nu_in < return (inl v), return () >),
+            fun (r2 : 1) -> return r2 >)),
+      fun (r1 : 1) -> return r1 >))

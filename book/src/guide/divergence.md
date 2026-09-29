@@ -117,6 +117,62 @@ total callback, and serves both kinds: given a div function, the compiler makes 
 the callback's type, and the copy is div. Given a total one, it uses the function as written,
 which stays total. So functions do not come in two colors (`corpus/div-hof.bc`).
 
+## Borrows around a loop
+
+A borrow lasts for one computation, and a loop runs one step at a time, so a borrow cannot stay
+open while a loop runs. It does not need to: a borrow of a cell costs nothing at run time, and the
+compiler takes it again at each step. The cell moves into the loop's state, and each step
+borrows it for that step. Here the table is borrowed for the rest of `main`, and read on every
+byte of the input:
+
+```bc
+fn tab(i: i32) -> i32 = i * 10
+
+-- The entry at `i`, or 0 out of range.
+def get : !(all 'a < top. imm 'a (array i32) * i32 => i32) =
+  !thunkv Fun 'a < top. return (thunkv fun (p : imm 'a (array i32) * i32) ->
+    let (b, i) = p;
+    withload['a, 'z, array i32, i32] b (thunkv Fun 'z < dom. return (thunkv fun (xs : array_imm 'z i32) ->
+      match array_get['z, i32] (xs, i) { inl e -> let v = *e; boxed['z] v | inr _ -> boxed['z] 0 })))
+
+main -> i32 =
+  let t = alloc(array_new[i32] (10, tab));
+  let tb = &t;
+  let mut acc = 0;
+  for c in bytes(&mut stdin) { acc = acc + get(tb, c - 48) };
+  acc
+-- stdin: 1203
+-- answer: i32[60]
+```
+
+`let tb = &t` borrows `t` for the rest of the block, and `get(tb, …)` takes its lifetime from
+`tb`. A `borrow imm t { b -> … }` or `borrow mut` block around a loop is elaborated the same way,
+and so is a div function that takes a borrow: it takes the cell instead, and a call lends it,
+`serve(&config)` (`corpus/lend-server.bc`). The loop can keep what does not hold the borrow; what
+holds it must be taken again at each step. An iterator that holds the borrow is rejected:
+
+```bc,reject
+fn tab(i: i32) -> i32 = i * 10
+
+gen fn over<'a>(b: imm 'a (array i32), n: i32) -> i32 =
+  let mut i = 0;
+  while i < n { yield i; i = i + 1 };
+  ()
+
+main -> i32 =
+  let t = alloc(array_new[i32] (10, tab));
+  let n = borrow imm t { b ->
+    let mut acc = 0;
+    for x in over(b, 4) { acc = acc + x };
+    acc
+  };
+  n
+-- expect: 12:14: the iterator of this `for` holds the borrow of `b`: a borrow block over a loop lends its place again at each step, so what the loop holds between steps must not hold the borrow (SPEC §14, borrow scopes over loops)
+```
+
+The same form is library code for loops and generators written by hand: `loop_lend_imm`,
+`gen_lend_mut` and the rest of `lib/lend.bc` (`include lend`).
+
 ## What it means in core
 
 A div function returning `B` has the core type `A => U (loop B R)`: a call runs the function up

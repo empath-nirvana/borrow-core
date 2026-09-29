@@ -61,13 +61,13 @@ run time, since `withbor` passes the location.
 
 | program | per-observation lend | needs |
 |---|---|---|
-| `for` inside a borrow block (`borrow-across-loop.bc`) | **covered** when the loop's state outlives `'x`: the owner moves into the loop's state (`lend-loop-imm.bc`). The surface form needs an elaboration (the block's loop becomes `lend_loop_*`), not built | — |
+| `for` inside a borrow block (`borrow-across-loop.bc`) | **covered** when the loop's state outlives `'x`: the owner moves into the loop's state (`lend-loop-imm.bc`). The surface form is elaborated so (SPEC §14, borrow scopes over loops; `Frontend/Elab/LoopLend.lean`), and the program runs as `corpus/axes/borrow-across-loop.bc` | — |
 | generators holding a lender, driven in the scope | **covered** (`lend-gen-mut.bc`) | — |
 | a borrow spanning a `yield` | **covered** when the borrow is taken again at the resume. Nothing else derived from it can survive the yield in this model: a view is made inside a run and ends there (`upd_borrow_top`) | — |
 | lending yields | **push form covered** (`lend-each-imm.bc`). The body is the step's input, and a `for` body is fixed per loop, so no sink observation is needed. **Pull form excluded** (below) | — |
 | async tasks borrowing config | **covered in step form**: the scheduler's state holds the owner and lends per poll (`lend-config-imm.bc`) | a task written as an opaque `U(Loop …)` capturing the borrow needs the spanning lend |
 | scoped threads | as async: step form covered | the same |
-| a div function with a borrow parameter, called in direct style inside a borrow block | not covered: its loop is opaque codata capturing the borrow | the spanning lend |
+| a div function with a borrow parameter, called in direct style inside a borrow block | **covered when its body is visible**: it is elaborated to take the owner and lend it at each step, and the call lends the place (`corpus/lend-server.bc`, `lend-div.bc`). Not covered for a borrow not lent from a place, or opaque codata capturing a borrow | the spanning lend, for those |
 
 The spanning lend buys one thing: **opaque codata holding a borrow across observations**. A
 library `gen fn iter<'a>(xs: &'a T)`, or a div function taking a borrow, driven from inside a
@@ -190,11 +190,9 @@ paper, not a Lean result.
 
 ## Promotion cost
 
-- **The per-observation lend.** No kernel change. `lend_loop_*`, `lend_gen_*` and `lend_each`
-  are library code over `unfold`, as `div_bind` is (`SPEC.md` §14). They land as a §7/§14 note
-  plus `lib/` combinators. The surface `for` inside a borrow block needs an elaboration in
-  `Frontend/Sugar.lean`: the block's loop becomes a lend combinator, and the owner moves into
-  the state.
+- **The per-observation lend.** No kernel change. Landed (SPEC §14, borrow scopes over loops):
+  the combinators are `lib/lend.bc` (`loop_lend_*`, `gen_lend_*`, `array_each_imm`), and the
+  surface forms are elaborated by `Frontend/Elab/LoopLend.lean`.
 - **Sink observations.** A `NuOk` clause and five cases (above). No new former, no `CDerives`
   index, one `unfold` compatibility case.
 - **The spanning lend.** A new coordinate of the model, the register of open lends:
