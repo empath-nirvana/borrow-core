@@ -1,5 +1,7 @@
 # Coeffects: borrows, capabilities and handlers
 
+> **Superseded in part** by [`experiments/CoeffectsStrict`](../CoeffectsStrict/README.md) (#101), which defines the four notions strictly and corrects this spike's classification (e.g. `Mut` capabilities are effects, not coeffects). The `needs` elaboration prototype here remains valid.
+
 **Question.** Andrew Wagner suggested that borrowing and effect handling are deeply related,
 and pointed at coeffects. The hypothesis tested here is hers: a borrow block (`withbor`)
 *provides* a coeffect (access to a resource at `'a`) for its scope, the way a handler
