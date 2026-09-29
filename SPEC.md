@@ -1709,11 +1709,25 @@ typed world, the model and the end-to-end theorems in `Core/Stdio.lean`, the che
 `Frontend/Elab/LoopLend.lean` and `Core/Totality.lean`, with no change to `CDerives`. Entry 14 (§15) is implemented in
 `lib/gen.bc`, `lib/adapters.bc`, `Frontend/Parser.lean`, `Frontend/Sugar.lean` and
 `Frontend/Elab/Subst.lean`, with no change to `CDerives`; each generator and div body is one
-state machine (§15).
+state machine (§15). Entry 15 (§16) is implemented in
+`Paper/` and `Support/` (the step), `Core/CountFold.lean`, the checker (`count_fold`) and the
+backend (`count_loop`). §9's slice borrows are `Core/SliceFrames.lean` and `Core/Slices.lean`,
+the checker (`slice_borrow_*`, `slice_*_mut`, `array_mut`) and the borrow blocks of
+`Frontend/Sugar.lean`; §8's byte is `Width.w8` throughout.
 
 ---
 
 ## Changelog
+
+- **0.21** (2026-09-29) — Strings S1–S2 (`docs/strings-slices-design.md`). §9: the family
+  relation carries the length bound `c < 2³¹`; slice borrows `slice_borrow_mut` and
+  `slice_borrow_imm` lend an owned array as a family of leaf borrows with no cell (K2, from
+  `experiments/PositiveArrays`), and `slice_get_mut`/`slice_len_mut` act on a `mut` family (K4);
+  a borrow block on an array lends it so. §8: the byte `U8` (`Width.w8`), its literal and its
+  conversions `wrap8`/`extend8_u`; the grouped operations take `0` at `w8`. Entry 15 (§16): the
+  counted loop `count_fold`, a machine step (`count`) so that it is total at every host;
+  `div_fuel` counts with it. The backend lays out byte slots, and an empty array allocates
+  nothing.
 
 - **0.20** (2026-09-29) — §14, §15: one state machine per body (#109 item 8). Every generator
   body and every div body is one `unfold` whose state has a summand per resumption point, and
