@@ -1,0 +1,47 @@
+-- `gen { … }` blocks and callbacks that yield (#109).
+--
+-- A block is a generator written in place: it captures what it uses and runs nothing until it
+-- is observed. `evens` is a block over a captured count; `upper` is a block that captures the
+-- input capability, yields each byte plus one, and hands the capability back when it finishes.
+-- The `for` over it keeps that value as `stdin`: a loop whose value is a capability `main` hands
+-- back gets it from the iterator when it finishes or is closed, as `bytes(&mut stdin)` does.
+--
+-- A callback whose body yields makes the function that calls it a generator: `for_each` and
+-- `twice` are written once for callbacks that return `()`, and a closure that yields is passed to
+-- each. They are specialized at the closure's type (SPEC §14): in each copy, a call of the
+-- callback is a `yield from` of the generator it returns, so the copy is a generator, and its own
+-- call is a `yield from` too, in a `gen fn` (`tens`) or a block. `for_each` loops (it has a
+-- `for`), so its copy is a generator with a loop.
+--
+-- Answer: on the input `ab`, the line `bc` and i32[198166]: the block over `k` yields 1, 7, 8, 9
+-- (25); `tens(3)` 0, 10, 20 (30); the block around `twice` 5, 500, 6, 600 (1111); `upper` yields
+-- 98 and 99 (197000, written as `bc`). A callback whose yields were lost gives 197055.
+
+gen fn range(lo: i32, hi: i32) -> i32 =
+  let mut i = lo;
+  while i < hi { yield i; i = i + 1 };
+  ()
+
+fn for_each(it: U (gen i32 1 1), f: !(i32 => 1)) -> 1 =
+  for x in it { f(x) };
+  ()
+
+fn twice(f: !(i32 => 1), x: i32) -> 1 =
+  f(x);
+  f(x + 1)
+
+gen fn tens(n: i32) -> i32 =
+  for_each(range(0, n), !{ x -> yield x * 10 })
+
+main -> i32 =
+  let k = 7;
+  let evens = gen { yield 1; let mut i = 0; while i < 3 { yield k + i; i = i + 1 }; () };
+  let mut acc = 0;
+  for x in evens { acc = acc + x };
+  for x in tens(3) { acc = acc + x };
+  for x in gen { twice(!{ y -> yield y; yield y * 100 }, 5) } { acc = acc + x };
+  let upper = gen { for c in bytes(&mut stdin) { yield c + 1 }; stdin };
+  let mut s = 0;
+  let stdin = for b in upper { putb(&mut stdout, b); s = s + b };
+  putb(&mut stdout, 10);
+  acc + s * 1000

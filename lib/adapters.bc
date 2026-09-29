@@ -1,0 +1,137 @@
+-- Generator adapters (#109). Each is a generic `gen fn`, written once and instantiated at the
+-- types of each call (SPEC §15, generic generators): the instance is ordinary code at those
+-- types, so an adapter over a pure source, one over an input and one over a source that fails are
+-- three instances of one definition. A pipeline of single-loop adapters whose functions are known
+-- makes no allocation and no dispatched call; `chain`, `zip`, `chunks`, `lines` and `batch`
+-- sequence two parts of their body with `gen_bind` (`lib/gen.bc`) and dispatch once per
+-- observation.
+--
+-- A source is a generator `U (gen A K R)`: it yields `A`, finishes with `K`, and, closed early,
+-- hands back `R`. An adapter that runs its source to the end finishes with the source's `K`, and
+-- closed early it closes the source and hands its `R` on. One that may stop the source early
+-- (`take`, `take_until`, `zip`) needs a source that finishes with what it hands back when closed,
+-- `U (gen A K K)`: a pure source (`1`), or one that holds a capability and hands it back (`In`).
+-- A source that fails finishes with an error it hands back no part of when closed (`i32 + 1`,
+-- closed `1`): stopped early it has no error to report, and it is rejected there
+-- (`corpus/reject/take-failing.bc`).
+--
+-- `include adapters` puts them in scope; only those a program calls are elaborated.
+
+-- Each element `x` as `f(x)`.
+gen fn map[A, B, K, R](it: U (gen A K R), f: !(A => B)) -> B, K =
+  let k = for x in it { yield f(x) };
+  k
+
+-- The elements for which `p` holds. `p` takes the element and `filter` yields it after, so the
+-- element is copied: an `i32`, a `bool` or a tuple of them.
+gen fn filter[A, K, R](it: U (gen A K R), p: !(A => bool)) -> A, K =
+  let k = for x in it { if p(x) { yield x } else { () } };
+  k
+
+-- The first `n` elements. The source is closed after the `n`-th, before it computes another.
+gen fn take[A, K](it: U (gen A K K), n: i32) -> A, K =
+  if n <= 0 { k <- (nu_out (force it)).2; return k } else { () };
+  let mut i = 0;
+  let k = for x in it { yield x; i = i + 1; if i == n { break } else { () } };
+  k
+
+-- The elements after the first `n`.
+gen fn skip[A, K, R](it: U (gen A K R), n: i32) -> A, K =
+  let mut i = 0;
+  let k = for x in it { if i < n { i = i + 1 } else { yield x } };
+  k
+
+-- Each element with its position, from 0.
+gen fn enumerate[A, K, R](it: U (gen A K R)) -> i32 * A, K =
+  let mut i = 0;
+  let k = for x in it { yield (i, x); i = i + 1 };
+  k
+
+-- The elements of `a`, then those of `b`, which holds nothing (it is dropped, closed, if `a` is
+-- closed first).
+gen fn chain[A, K, R](a: U (gen A K R), b: U (gen A 1 1)) -> A, K =
+  let k = yield from a;
+  let _ = yield from b;
+  k
+
+-- The elements of each `f(x)`, in order.
+gen fn flat_map[A, B, K, R](it: U (gen A K R), f: !(A => U (gen B 1 1))) -> B, K =
+  let k = for x in it { let _ = yield from f(x); () };
+  k
+
+-- The elements before the first for which `p` holds; the source is closed there.
+gen fn take_until[A, K](it: U (gen A K K), p: !(A => bool)) -> A, K =
+  let k = for x in it { if p(x) { break } else { yield x } };
+  k
+
+-- The successive states `f(s, x)` from `s` (a running total). The state is yielded and kept, so it
+-- is copied.
+gen fn scan[A, S, K, R](it: U (gen A K R), s: S, f: !(S * A => S)) -> S, K =
+  let mut s = s;
+  let k = for x in it { s = f(s, x); yield s };
+  k
+
+-- Pairs of an element of `a` and one of `b`, until either ends; `b` holds nothing. Each element
+-- of `b` is pulled with `gen_pull` (`lib/gen.bc`), so a skip of `b` is a skip of `zip`.
+gen fn zip[A, K, B](a: U (gen A K K), b: U (gen B 1 1)) -> A * B, K =
+  let mut rb = (inl b : U (gen B 1 1) + 1);
+  let k = for x in a {
+    match rb {
+      inl g ->
+        let o = yield from gen_pull[A * B, B, 1, 1](g);
+        match o {
+          inl yg -> let (y, g2) = yg; rb = (inl g2 : U (gen B 1 1) + 1); yield (x, y)
+        | inr u -> rb = (inr u : U (gen B 1 1) + 1); break
+        }
+    | inr u -> rb = (inr u : U (gen B 1 1) + 1); break
+    }
+  };
+  k
+
+-- The elements in lists of `n`, the last one shorter; each list holds its elements last first.
+gen fn chunks[A, K, R](it: U (gen A K R), n: i32) -> mu X. 1 + (A * X), K =
+  let mut acc = (roll inl () : mu X. 1 + (A * X));
+  let mut m = 0;
+  let k = for x in it {
+    acc = (roll inr (x, acc) : mu X. 1 + (A * X));
+    m = m + 1;
+    if m == n { yield acc; acc = (roll inl () : mu X. 1 + (A * X)); m = 0 } else { () }
+  };
+  if m > 0 { yield acc } else { () };
+  k
+
+-- A source of bytes split into lines, each a list of its bytes, last first, without its newline;
+-- a last line without a newline is yielded too.
+gen fn lines[K, R](it: U (gen i32 K R)) -> mu X. 1 + (i32 * X), K =
+  let mut line = (roll inl () : mu X. 1 + (i32 * X));
+  let mut any = false;
+  let k = for b in it {
+    if b == 10 {
+      yield line;
+      line = (roll inl () : mu X. 1 + (i32 * X));
+      any = false
+    } else {
+      line = (roll inr (b, line) : mu X. 1 + (i32 * X));
+      any = true
+    }
+  };
+  if any { yield line } else { () };
+  k
+
+-- Elements added into a state by `add`, which says when the state is full: then it is yielded and
+-- the next starts again from `s0`; a last state that is not full is yielded if anything was added
+-- to it. `chunks` is `batch` into lists by count; `batch` also groups by size or by a separator.
+gen fn batch[A, S, K, R](it: U (gen A K R), s0: S, add: !(S * A => S * bool)) -> S, K =
+  let mut s = s0;
+  let mut any = false;
+  let k = for x in it {
+    let (s2, full) = add(s, x);
+    if full { yield s2; s = s0; any = false } else { s = s2; any = true }
+  };
+  if any { yield s } else { () };
+  k
+
+-- An iterator (`U (iter A K R)`, such as `bytes(c)`) as a generator.
+gen fn from_iter[A, K, R](it: U (iter A K R)) -> A, K =
+  let k = for x in it { yield x };
+  k

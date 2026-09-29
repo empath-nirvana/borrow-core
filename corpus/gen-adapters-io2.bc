@@ -1,0 +1,48 @@
+-- check: no-source
+-- Adapters of the library (#109, `lib/adapters.bc`) over an input, continuing
+-- `corpus/gen-adapters-io.bc`: `line(stdin)` yields the digits of one line and hands the input
+-- back. `zip` stops its second source, which is pure; `from_iter` and `lines` read what is left
+-- of the input, as bytes.
+--
+-- The source interpreter takes about 20 s over it (`check: no-source`); the other stages run it.
+--
+-- Answer: on `corpus/gen-adapters-io2.in`, i32[220525], read as 22, 05, 25, one loop to a line:
+--   29       zip (batch sums up to 10) (lengths of chunks of 2 of 0 … 4): 11 with 2       22
+--   12345    lengths of chunks of 2: 2 2 1                                              5
+--   ab, cde  lines of from_iter of the bytes: 2 lines (20) of 5 bytes                  25
+-- A `batch` that did not yield its last state when the source ended gives 0 for the 22; `lines`
+-- that dropped a last line without a newline gives 12.
+
+include adapters
+
+type List = mu X. 1 + (i32 * X)
+
+gen fn line(c: In) -> i32, In =
+  for b in bytes(&mut c) { if b == 10 { break } else { yield b - 48 } };
+  c
+
+gen fn range(lo: i32, hi: i32) -> i32 =
+  let mut i = lo;
+  while i < hi { yield i; i = i + 1 };
+  ()
+
+fn len_alg(r: 1 + i32 * i32) -> i32 = match r { inl _ -> 0 | inr (x, n) -> n + 1 }
+def len : !(List => i32) = fold_own[1 + i32 * X, i32] len_alg
+
+fn add_up(p: i32 * i32) -> i32 * bool =
+  let (s, x) = p;
+  if s + x >= 10 { (s + x, true) } else { (s + x, false) }
+
+main -> i32 =
+  let mut u = 0;
+  for p in zip(batch(line(stdin), 0, add_up), map(chunks(range(0, 5), 2), len)) {
+    let (x, y) = p;
+    u = u + x * y
+  };
+  u = u * 100;
+  for l in chunks(line(stdin), 2) { u = u + len(l) };
+  u = u * 100;
+  let mut n = 0;
+  let mut m = 0;
+  for l in lines(from_iter(bytes(stdin))) { n = n + 1; m = m + len(l) };
+  u + n * 10 + m

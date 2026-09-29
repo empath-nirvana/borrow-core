@@ -1,0 +1,25 @@
+-- A pipeline of adapters from the library (#109, `lib/adapters.bc`): numbers paired with their
+-- positions, squared, filtered, and the first five taken. Each adapter is a generic `gen fn`
+-- instantiated at `i32`, and each instance is one loop whose generator is one `unfold`; the
+-- functions passed are known. So the pipeline allocates nothing, makes no dispatched call and
+-- copies nothing (`corpus/counts.expected`: 0, 0, 0), and `take` closes its source after the
+-- fifth element without computing a sixth.
+--
+-- Answer: i32[320]: of the products `i * x` of each `x` of 10, 11, … with its position `i`, the
+-- first five even ones, 0*10 + 2*12 + 4*14 + 6*16 + 8*18. A `take` that went one further adds
+-- 10*20; a filter that let odd products through takes 11 and 39 in place of 96 and 144.
+
+include adapters
+
+gen fn range(lo: i32, hi: i32) -> i32 =
+  let mut i = lo;
+  while i < hi { yield i; i = i + 1 };
+  ()
+
+fn times(p: i32 * i32) -> i32 = let (i, x) = p; i * x
+fn even(x: i32) -> bool = host[and32] (x, 1) == 0
+
+main -> i32 =
+  let mut acc = 0;
+  for y in take(filter(map(enumerate(range(10, 1000)), times), even), 5) { acc = acc + y };
+  acc

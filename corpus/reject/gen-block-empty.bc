@@ -1,0 +1,7 @@
+-- expect: 6:12: the element type of this `gen { … }` block is not determined: it yields nothing, or what it yields has no type here
+-- A block's element type is read off what it yields. One that yields nothing has none: it
+-- would be a loop (`{ S }`) or a value.
+main -> i32 =
+  let mut acc = 0;
+  for x in gen { () } { acc = acc + x };
+  acc

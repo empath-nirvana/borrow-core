@@ -1,0 +1,20 @@
+-- `break` in a `for` of `main` (#109): the loop ends at once, closing its iterator, which hands
+-- its capability back, and what follows the loop runs. The first loop copies its input up to a
+-- `.`; the `break` stands in the middle of the body, not at its tail (what follows the `if`
+-- runs only when the `else` arm does). The second loop counts what is left of the input:
+-- closing the first iterator gave `stdin` back, one byte past the `.`.
+--
+-- Answer: on the input `abc.defg`, the line `abc` and i32[305]: three bytes copied, then the five
+-- bytes `defg` and the newline. A `break` that only ended the iteration copies `abcdefg`; one that
+-- dropped the input instead of handing it back does not check.
+main -> i32 =
+  let mut n = 0;
+  for b in bytes(&mut stdin) {
+    if b == 46 { break } else { () };
+    putb(&mut stdout, b);
+    n = n + 1
+  };
+  putb(&mut stdout, 10);
+  let mut m = 0;
+  for b in bytes(&mut stdin) { m = m + 1 };
+  n * 100 + m

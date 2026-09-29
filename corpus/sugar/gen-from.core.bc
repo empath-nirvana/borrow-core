@@ -1,0 +1,129 @@
+-- `gen-from.bc` written by hand in core. `yield from two()` is `gen_bind` (copied from the
+-- generator library, `lib/gen.bc`) of `two()` and the continuation: its first observation goes on
+-- with `n`, what `two` finished with, as the generator of the rest (`yield n`, then `n + 1`); its
+-- second hands back the residual, `()`, when the whole is closed while `two` runs.
+
+-- The bind's state: in the first generator, with the continuation; or in the continuation's
+-- generator. The continuation has two observations: go on with the first generator's result,
+-- or, when the whole is closed during the first, turn its residual into the whole's.
+def gen_bind_step[A, B1, R1, B, R] :
+    !U ((U (gen A B1 R1) * U ((B1 -o F (U (gen A B R))) & (R1 -o F R))) + U (gen A B R)
+        -o F (A * ((U (gen A B1 R1) * U ((B1 -o F (U (gen A B R))) & (R1 -o F R))) + U (gen A B R))
+              + (B + ((U (gen A B1 R1) * U ((B1 -o F (U (gen A B R))) & (R1 -o F R))) + U (gen A B R))))
+         & F R) =
+  !thunkv fun (s : (U (gen A B1 R1) * U ((B1 -o F (U (gen A B R))) & (R1 -o F R))) + U (gen A B R)) ->
+    < case s {
+        inl p ->
+          let (m, k) = p;
+          o <- (nu_out (force m)).1;
+          case o {
+            inl y ->
+              let (a, m2) = y;
+              return (inl (a, inl (m2, k)))
+          | inr d ->
+              case d {
+                inl b1 ->
+                  l <- (force k).1 b1;
+                  return (inr (inr (inr l)))
+              | inr m2 -> return (inr (inr (inl (m2, k))))
+              }
+          }
+      | inr l ->
+          o <- (nu_out (force l)).1;
+          case o {
+            inl y ->
+              let (a, l2) = y;
+              return (inl (a, inr l2))
+          | inr d ->
+              case d {
+                inl b -> return (inr (inl b))
+              | inr l2 -> return (inr (inr (inr l2)))
+              }
+          }
+      },
+      case s {
+        inl p ->
+          let (m, k) = p;
+          r1 <- (nu_out (force m)).2;
+          (force k).2 r1
+      | inr l -> (nu_out (force l)).2
+      } >
+
+-- The bind: run the first generator, passing on what it yields, then the continuation on its
+-- result. It is `div_bind` (SPEC §14) with elements.
+def gen_bind[A, B1, R1, B, R] :
+    U (gen A B1 R1) * U ((B1 -o F (U (gen A B R))) & (R1 -o F R)) => U (gen A B R) =
+  thunkv fun (p : U (gen A B1 R1) * U ((B1 -o F (U (gen A B R))) & (R1 -o F R))) ->
+    f <- return (unbang (unfold[gen A B R,
+           (U (gen A B1 R1) * U ((B1 -o F (U (gen A B R))) & (R1 -o F R))) + U (gen A B R)]
+           gen_bind_step[A, B1, R1, B, R]));
+    s0 : (U (gen A B1 R1) * U ((B1 -o F (U (gen A B R))) & (R1 -o F R))) + U (gen A B R) <-
+      return (inl p);
+    return (thunkv nu_in < (nu_out (force f s0)).1, (nu_out (force f s0)).2 >)
+
+def two : !(1 => U (gen i32 i32 1)) =
+  !thunkv fun (p : 1) ->
+    return (thunkv nu_in <
+      let () = p;
+      return (inl (i32[1], thunkv nu_in <
+        s1 <- return ();
+        return (inl (i32[2], thunkv nu_in <
+          s0 <- return ();
+          v : i32 <- return i32[5];
+          return (inr (inl v)),
+          return () >)),
+        return () >)),
+      let () = p;
+      return () >)
+
+def around : !(1 => U (gen i32 i32 1)) =
+  !thunkv fun (p : 1) ->
+    return (thunkv nu_in <
+      let () = p;
+      return (inl (i32[0], thunkv nu_in <
+        s4 <- return ();
+        m <- return ((unbang two) ());
+        g <- return (gen_bind[i32, i32, 1, i32, 1] (m, thunkv
+          < fun (a : i32) ->
+              n <- return a;
+              return (thunkv nu_in <
+                return (inl (n, thunkv nu_in <
+                  s3 <- return ();
+                  v : i32 <- return ((unbang host[add32]) (n, i32[1]));
+                  return (inr (inl v)),
+                  dn <- return n;
+                  return () >)),
+                dn <- return n;
+                return () >),
+            fun (r : 1) -> let () = r; return () >));
+        (nu_out (force g)).1,
+        return () >)),
+      let () = p;
+      return () >)
+
+main : F (U (loop i32 1)) =
+  acc <- return i32[0];
+  step : !U (U (gen i32 i32 1) * i32 -o F (i32 + U (gen i32 i32 1) * i32) & F 1) <-
+    return (!thunkv fun (s : U (gen i32 i32 1) * i32) ->
+      < let (it, st) = s;
+        acc <- return st;
+        o <- (nu_out (force it)).1;
+        case o {
+          inl q ->
+            let (x, it) = q;
+            acc <- return ((unbang host[add32]) ((unbang host[mul32]) (acc, i32[10]), x));
+            u <- return ();
+            return (inr (it, acc))
+        | inr d ->
+            case d {
+              inl c -> r <- return c; v : i32 <- return ((unbang host[add32]) ((unbang host[mul32]) (acc, i32[10]), r)); return (inl v)
+            | inr it -> return (inr (it, acc))
+            }
+        },
+        let (it, st) = s;
+        acc <- return st;
+        c <- (nu_out (force it)).2;
+        return () >);
+  f <- return (unbang (unfold[loop i32 1, U (gen i32 i32 1) * i32] step));
+  s0 : U (gen i32 i32 1) * i32 <- return ((unbang around) (), acc);
+  return (thunkv nu_in < (nu_out (force f s0)).1, (nu_out (force f s0)).2 >)

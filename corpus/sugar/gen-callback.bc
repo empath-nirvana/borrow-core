@@ -1,0 +1,19 @@
+-- A callback that yields (#109). `twice` is written once, for a callback that returns `()`.
+-- `pairs` passes it a closure whose body yields: the closure is a generator function, and `twice`
+-- is specialized at its type (SPEC §14's specialization): in the copy `twice__0`, each call of
+-- the callback is a `yield from` of the generator it returns, so the copy is a generator, and
+-- the call of it in `pairs` is a `yield from` too. `gen-callback.core.bc` is the program written
+-- by hand in core.
+-- Answer: i32[55]: 2, 20, 3, 30.
+
+fn twice(f: !(i32 => 1), x: i32) -> 1 =
+  f(x);
+  f(x + 1)
+
+gen fn pairs(x: i32) -> i32 =
+  twice(!{ y -> yield y; yield y * 10 }, x)
+
+main -> i32 =
+  let mut acc = 0;
+  for v in pairs(2) { acc = acc + v };
+  acc

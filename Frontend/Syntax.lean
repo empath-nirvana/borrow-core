@@ -256,6 +256,17 @@ inductive VSugar where
   | while_
   /-- `break` in the body of a generator's loop: the loop ends. -/
   | brk
+  /-- `return e` in a generator's body, applied to the value: the generator finishes with it,
+  from any depth of its loops. -/
+  | retE
+  /-- `let r = for x in V { M }; N`: the loop's value, bound in what follows it as
+  `r <- return <forRes>; N` (what the iterator finishes with, or a `break e`). -/
+  | forRes
+  /-- `yield from e` in a generator's body, applied to the generator it delegates to: its
+  elements are yielded, and the `yield from` finishes with what it finishes with. -/
+  | yieldFrom
+  /-- `gen { S }`: a generator whose body is `S`, applied to the thunk it marks. -/
+  | genBlock
   deriving DecidableEq, Repr, Inhabited
 
 mutual

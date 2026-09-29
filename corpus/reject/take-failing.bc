@@ -1,0 +1,17 @@
+-- expect: 16:17: this argument of `take` has type `U (gen i32 (i32 + 1) 1)`, which is not `U gen A K K`
+-- `take` stops its source and closes it, so it takes a source that hands back, when closed, what
+-- it finishes with (`U (gen A K K)`, `lib/adapters.bc`). A source that fails finishes with an
+-- error (`i32 + 1`) it cannot hand back when closed before it computed one (it hands back `1`):
+-- closed by `take`, it has no error to report, and `take` nothing to finish with.
+
+include adapters
+
+gen fn upto(lo: i32, hi: i32, bad: i32) -> i32, i32 + 1 =
+  let mut i = lo;
+  while i < hi && i != bad { yield i; i = i + 1 };
+  if i == bad { (inl i : i32 + 1) } else { (inr () : i32 + 1) }
+
+main -> i32 =
+  let mut t = 0;
+  for y in take(upto(0, 10, 4), 2) { t = t + y };
+  t

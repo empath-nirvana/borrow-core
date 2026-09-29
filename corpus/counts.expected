@@ -27,19 +27,30 @@ count-down-exact 6 0 0
 deep-list 100000 150004 0
 div-hof 0 143 0
 family-swap 2 0 0
+gen-adapters 5 87 0 # chain 21, zip over batch and chunks 27: each sequences two parts with gen_bind (#109 item 8); main's three loops, delay binds, 39
+gen-adapters-fail 8 104 0 # chain, chunks, batch and lines sequence two parts with gen_bind (#109 item 8); main's ten loops are delay binds
+gen-adapters-io 1 11 0 # chain sequences two parts with gen_bind (#109 item 8); main's three loops are delay binds
+gen-adapters-io2 13 30 0 # zip, batch, chunks and lines sequence two parts with gen_bind (#109 item 8); main's three loops are delay binds
+gen-block 2 47 0
 gen-borrowed 2 0 0
 gen-cell 1 0 0
 gen-close 4 0 0
 gen-digits 2 5 0
+gen-div 1 99 0
 gen-fib 0 0 0
+gen-from 1 34 0
 gen-lazy 1 4 0
 gen-lines 42 50 0
 gen-pipeline 0 0 0
+gen-pipeline-adapters 0 0 0
 gen-produce 0 4 0
+gen-return 1 13 0
+gen-value 0 20 0
 implicit-drops 9 0 0
 int-arith 0 0 0
 int-ops 0 0 0
 io-aoc 4 0 0
+io-break 2 0 0
 io-cat 2 0 0
 io-for-assign 1 0 0
 io-for-then 2 0 0

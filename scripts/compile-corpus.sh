@@ -25,7 +25,7 @@
 # program's entry in `corpus/counts.expected` (`name allocs indirect copies`, the name the file's path
 # under `corpus/`, as `io-wc`, `surface/io-wc` or `axes/data-effects`); a count above it fails,
 # one below it is reported so the file can be lowered. `--write-counts` rewrites the file with
-# the counts of this run.
+# the counts of this run, keeping the comment an entry ends with (`# …`).
 set -euo pipefail
 cd "$(dirname "$0")/.."
 command -v wasmtime >/dev/null || { echo "wasmtime is not on PATH"; exit 1; }
@@ -40,12 +40,14 @@ bad=0
 : > "$tmp/counts"
 # The counts of file $1 on input $2, checked against the expected ones; appended to the table.
 counts() {
-  local name got a i c want wa wi wc
+  local name got a i c want wa wi wc note
   name=${1#corpus/}; name=${name%.bc}
   if ! got=$("$bccCounts" "$1" < "$2" 2>&1); then echo "$1: counts: $got"; return 1; fi
   a=$(echo "$got" | awk '{print $2}'); i=$(echo "$got" | awk '{print $4}')
   c=$(echo "$got" | awk '{print $6}')
-  echo "$name $a $i $c" >> "$tmp/counts"
+  # An entry may end with a comment (`# …`), kept when the file is rewritten.
+  note=$(awk -v n="$name" '$1 == n { sub(/^[^#]*/, ""); print }' "$expected" 2>/dev/null || true)
+  echo "$name $a $i $c${note:+ $note}" >> "$tmp/counts"
   cnt="allocs $a, indirect $i, copies $c"
   [ "$write" = 1 ] && return 0
   want=$(awk -v n="$name" '$1 == n {print $2, $3, $4}' "$expected" 2>/dev/null || true)

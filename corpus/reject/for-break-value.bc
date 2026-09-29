@@ -1,0 +1,11 @@
+-- expect: 10:34: `break e` gives the value of a `for` whose value is bound: `let r = for x in … { … }; …`
+-- `break e` gives a value to the loop it leaves; a `for` that is a statement has none to give.
+gen fn upto(n: i32) -> i32, i32 =
+  let mut i = 0;
+  while i < n { yield i; i = i + 1 };
+  n
+
+main -> i32 =
+  let mut acc = 0;
+  for x in upto(5) { if x == 3 { break 7 } else { acc = acc + x } };
+  acc

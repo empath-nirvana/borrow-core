@@ -129,8 +129,9 @@ def Val.level : Val → Nat
   -- `alloc(e)`, `clone(x)`: an application, parenthesized as an argument.
   | .app _ (.sugar _ (.call _)) _ => 2
   | .app _ (.sugar _ .deref) _ => 2
-  | .app _ (.sugar _ .yield_) _ => 1
-  | .app _ (.sugar _ .brace) _ | .app _ (.app _ (.sugar _ (.borrow ..)) _) _ => 2
+  | .app _ (.sugar _ .yield_) _ | .app _ (.sugar _ .retE) _ | .app _ (.sugar _ .yieldFrom) _ => 1
+  | .app _ (.sugar _ .brace) _ | .app _ (.sugar _ .genBlock) _
+  | .app _ (.app _ (.sugar _ (.borrow ..)) _) _ => 2
   | .thunk .. | .thunkv .. | .bangThunk .. | .bangThunkv .. => 0
   | .inl .. | .inr .. | .roll .. | .unroll .. | .unbang .. | .unbox .. | .boxed .. | .run ..
   | .shorten .. => 1
@@ -169,7 +170,10 @@ def Val.pp (V : Val) (lvl : Nat := 0) (k : Nat := 0) : String :=
     | .app _ (.sugar _ (.call c)) W => c ++ "(" ++ W.pp 0 k ++ ")"
     | .app _ (.sugar _ .deref) V => "*" ++ V.pp 3 k
     | .app _ (.sugar _ .yield_) V => "yield " ++ V.pp 1 k
+    | .app _ (.sugar _ .retE) V => "return " ++ V.pp 1 k
+    | .app _ (.sugar _ .yieldFrom) V => "yield from " ++ V.pp 1 k
     | .app _ (.sugar _ .brace) (.thunk _ M) => "{ " ++ M.pp 0 (k + 2) ++ " }"
+    | .app _ (.sugar _ .genBlock) (.thunk _ M) => "gen { " ++ M.pp 0 (k + 2) ++ " }"
     | .app _ (.sugar _ .brace) (.bangThunk _ M) => "!{ " ++ M.pp 0 (k + 2) ++ " }"
     | .app _ (.app _ (.sugar _ (.borrow bk x)) P) (.thunkv _ (.lam _ b _ M)) =>
       let kw := match bk with
@@ -225,6 +229,10 @@ def Comp.pp (M : Comp) (lvl : Nat := 0) (k : Nat := 0) : String :=
     | .ascribe _ M C => "(" ++ M.pp 1 k ++ " : " ++ C.pp ++ ")"
     | .for_ _ _ (.app _ (.sugar _ .while_) c) M N =>
       "while " ++ c.pp 1 k ++ " {" ++ nl (k + 2) ++
+        M.pp 0 (k + 2) ++ nl k ++ "};" ++ nl k ++ N.pp 0 k
+    | .for_ _ x V M (.bind _ r A (.ret _ (.sugar _ .forRes)) N _) =>
+      "let " ++ r.name ++ (match A with | some A => " : " ++ A.pp | none => "") ++ " = for " ++
+        x.name ++ " in " ++ V.pp 1 k ++ " {" ++ nl (k + 2) ++
         M.pp 0 (k + 2) ++ nl k ++ "};" ++ nl k ++ N.pp 0 k
     | .for_ _ x V M N =>
       "for " ++ x.name ++ " in " ++ V.pp 1 k ++ " {" ++ nl (k + 2) ++

@@ -304,3 +304,66 @@ Each entry: the decision, and why. Newest last.
       is covered.
     - `|>` is not provided: draft 0 puts the piped value last (#17), and #109's adapters take the
       source first; the two are to be reconciled with it.
+41. **Provisional (SPEC §15 Generators, #109, to be confirmed by the user).**
+    - **`return e` is a generator's.** In the body of a `gen fn`, a statement `return e` that is
+      not the head of a bind (`x <- return V; N` stays the core's) finishes the generator with
+      `e` from any depth of its loops. In `fn` and `main` bodies, closures, blocks and borrow
+      blocks, `return` is the core's `return`, as before: giving it Rust's meaning there would
+      change what existing core-style bodies mean. It is printed `return return e`.
+    - **`break` anywhere in a loop's body**, in a generator and in a `for` of a div body; after
+      it, the iterator is closed and what follows the loop runs.
+    - A `return` inside a `for` over an iterator made from a capability is rejected rather than
+      closing the iterator to get the capability back: the returned value is computed inside
+      the loop, where the capability is not in scope.
+    - **`let r = for x in V { M }; N`** keeps a loop's value: what the iterator finishes with, or
+      `e` after `break e`. `break e` is allowed only in such a loop, and a bare `break` there
+      only when the value is `1`: Rust's `break e` is only in `loop`, whose value is always
+      bound; here every `for` over a generator has a finishing value to keep. A loop over an
+      iterator made from a capability keeps none (it hands the capability back). `while` has no
+      value.
+    - **A div call in a generator is a run of skips.** A call of a div function in direct style
+      in a generator's body runs its loop inside the generator, one turn per observation, each a
+      skip (`gen_bind_loop`); the alternative of running the loop to its end inside one
+      observation would make that observation div, and a generator's observations total is what
+      lets a consumer bound its work.
+    - **`yield from g`** is Python's spelling (`from` is not a keyword: it is read after `yield`
+      only). It delegates to a generator of the same element type, and its value is what the
+      delegate finishes with. A lent capability `&mut c` comes back as the delegate's result
+      (`c`, or `(c, x)`), as for a `for`.
+    - **`gen { S }`** writes a generator in place (Rust's unstable `gen { }` blocks, Python's
+      generator expressions). Its element type is inferred from its first `yield`; there is no
+      annotation on the block, and one that yields nothing is rejected.
+    - **A callback that yields yields to whoever runs the function it is passed to.** The
+      function is specialized into a generator, and its call is a `yield from`: so `for_each(xs,
+      { x -> yield f(x) })` inside a generator yields each `f(x)` from that generator. Outside a
+      generator's body or a `gen { }` block such a call is rejected rather than made a generator
+      value silently.
+    - **`let c = for …` where `c` is a capability** the body hands back binds it as the
+      capability the iterator hands back (at its end or when closed), so a generator stored in a
+      variable can hand `stdin` back: `let stdin = for b in g { … }`.
+    - **Generic generators, `gen fn f[A, …](…)`** (item 6): type parameters in brackets, as a
+      core `def`'s, instantiated per call at the types of the arguments (read off them, or
+      written `f[T, …](…)`), each instance a copy named `f__gN`. Only generators are generic,
+      and an instance's types have no lifetimes. Alternative not taken: kernel polymorphism over
+      value types, which §1's baseline does not have.
+    - **A generator's residual is what it holds, `K`**, not a div body's `K ⊗ 1`: a generator
+      that finishes with `stdin` hands back `stdin` when closed, so `stdout <- (nu_out (force
+      g)).2` in place of `let (stdout, _) = …` (`corpus/gen-lazy.bc`), and `gen A K K` is a
+      source that can be stopped.
+    - **The adapter library** (`include adapters`, `lib/adapters.bc`): the names `map`, `filter`,
+      `take`, `skip`, `enumerate`, `chain`, `flat_map`, `take_until`, `scan`, `zip`, `chunks`,
+      `lines`, `batch`, `from_iter` (Rust's, with `take_until` for Rust's negated `take_while`
+      and `batch` for a grouping by a function); argument order source first, then numbers,
+      then functions. `chain`'s second source, `flat_map`'s inner ones and `zip`'s second are
+      pure (`gen B 1 1`), so the whole finishes with the first source's value. `chunks` and
+      `lines` build lists last element first.
+    - **Stopping takes `U (gen A K K)`**: `take`, `take_until` and `zip` close their source, so
+      its residual must be what it finishes with. A failing source (`gen A (1 + E) 1`) is
+      rejected there rather than given a result type `K + R` (which the residual by name cannot
+      hand back when `K = R = In`) or a function `R ⇒ K` argument (which the same rule defeats
+      when the source holds a capability).
+    - **A borrow block that yields is a delegation** (item 7): `borrow … { 'x, b -> S }` with a
+      `yield` in `S`, in a generator's body, is `yield from borrow … { 'x, b -> gen { S } }`, and
+      the existing typing rejects it (the block's result is boxed at `'x`, and a thunk has no
+      outlives rule). The error is the checker's on the generated `boxed['x]`, in place of the
+      elaborator's "off the spine".

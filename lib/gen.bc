@@ -2,13 +2,14 @@
 -- element `A` with the rest, finishes with `B`, or skips a step with the rest; its `close` ends it
 -- early and hands back the residual `R`. A skip is a step of the generator's own work that
 -- yields nothing (one turn of a loop in its body that did not yield), so every observation is
--- total and a consumer decides how many to make: a `for` over a generator is a loop (SPEC §14).
+-- total and a consumer decides how many to make: a `for` over a generator is a loop (SPEC §15).
 -- `loop B R` is the generator that never yields, and `iter A B R` the one that never skips.
 --
 -- This is ordinary library code over `unfold` (SPEC §7), checked with the program and emitted
 -- when an elaborated `gen fn` uses it (`Frontend/Sugar.lean`): the code up to each `yield` is one
--- observation, a loop in the body is a generator by `unfold` over its state, and code after a
--- loop that yields or loops again is sequenced by `gen_bind`.
+-- observation, a loop in the body is a generator by `unfold` over its state, code after a loop
+-- that yields or loops again is sequenced by `gen_bind`, and a div function called in direct style
+-- is sequenced by `gen_bind_loop`.
 
 -- The bind's state: in the first generator, with the continuation; or in the continuation's
 -- generator. The continuation has two observations: go on with the first generator's result,
@@ -67,3 +68,79 @@ def gen_bind[A, B1, R1, B, R] :
     s0 : (U (gen A B1 R1) * U ((B1 -o F (U (gen A B R))) & (R1 -o F R))) + U (gen A B R) <-
       return (inl p);
     return (thunkv nu_in < (nu_out (force f s0)).1, (nu_out (force f s0)).2 >)
+
+-- A loop inside a generator: a call of a div function in direct style in a generator's body
+-- (SPEC §15). The state is the loop with the continuation, or the continuation's generator. Each
+-- turn of the loop is a skip, so every observation stays total; when the loop finishes, the
+-- continuation's generator is the next state. Closed during the loop, the loop's residual goes to
+-- the continuation's second observation.
+def gen_bind_loop_step[A, B1, R1, B, R] :
+    !U ((U (loop B1 R1) * U ((B1 -o F (U (gen A B R))) & (R1 -o F R))) + U (gen A B R)
+        -o F (A * ((U (loop B1 R1) * U ((B1 -o F (U (gen A B R))) & (R1 -o F R))) + U (gen A B R))
+              + (B + ((U (loop B1 R1) * U ((B1 -o F (U (gen A B R))) & (R1 -o F R))) + U (gen A B R))))
+         & F R) =
+  !thunkv fun (s : (U (loop B1 R1) * U ((B1 -o F (U (gen A B R))) & (R1 -o F R))) + U (gen A B R)) ->
+    < case s {
+        inl p ->
+          let (m, k) = p;
+          o <- (nu_out (force m)).1;
+          case o {
+            inl b1 ->
+              l <- (force k).1 b1;
+              return (inr (inr (inr l)))
+          | inr m2 -> return (inr (inr (inl (m2, k))))
+          }
+      | inr l ->
+          o <- (nu_out (force l)).1;
+          case o {
+            inl y ->
+              let (a, l2) = y;
+              return (inl (a, inr l2))
+          | inr d ->
+              case d {
+                inl b -> return (inr (inl b))
+              | inr l2 -> return (inr (inr (inr l2)))
+              }
+          }
+      },
+      case s {
+        inl p ->
+          let (m, k) = p;
+          r1 <- (nu_out (force m)).2;
+          (force k).2 r1
+      | inr l -> (nu_out (force l)).2
+      } >
+
+def gen_bind_loop[A, B1, R1, B, R] :
+    U (loop B1 R1) * U ((B1 -o F (U (gen A B R))) & (R1 -o F R)) => U (gen A B R) =
+  thunkv fun (p : U (loop B1 R1) * U ((B1 -o F (U (gen A B R))) & (R1 -o F R))) ->
+    f <- return (unbang (unfold[gen A B R,
+           (U (loop B1 R1) * U ((B1 -o F (U (gen A B R))) & (R1 -o F R))) + U (gen A B R)]
+           gen_bind_loop_step[A, B1, R1, B, R]));
+    s0 : (U (loop B1 R1) * U ((B1 -o F (U (gen A B R))) & (R1 -o F R))) + U (gen A B R) <-
+      return (inl p);
+    return (thunkv nu_in < (nu_out (force f s0)).1, (nu_out (force f s0)).2 >)
+
+-- One element of a generator, pulled from another generator's body (`yield from gen_pull[E, A, B,
+-- R] g`): a generator of `E` that yields nothing, and finishes with `g`'s next element and its
+-- rest, or with what `g` finishes with. Each skip of `g` is a skip of it, so a body that pulls
+-- from two generators at once (`zip`) stays total. Closed, it closes `g`.
+def gen_pull_step[E, A, B, R] :
+    !U (U (gen A B R) -o F (E * U (gen A B R) + (((A * U (gen A B R)) + B) + U (gen A B R))) & F R) =
+  !thunkv fun (g : U (gen A B R)) ->
+    < o <- (nu_out (force g)).1;
+      case o {
+        inl y -> return (inr (inl (inl y)))
+      | inr d ->
+          case d {
+            inl b -> return (inr (inl (inr b)))
+          | inr g2 -> return (inr (inr g2))
+          }
+      },
+      (nu_out (force g)).2 >
+
+def gen_pull[E, A, B, R] : U (gen A B R) => U (gen E ((A * U (gen A B R)) + B) R) =
+  thunkv fun (g : U (gen A B R)) ->
+    f <- return (unbang (unfold[gen E ((A * U (gen A B R)) + B) R, U (gen A B R)]
+           gen_pull_step[E, A, B, R]));
+    return (thunkv nu_in < (nu_out (force f g)).1, (nu_out (force f g)).2 >)

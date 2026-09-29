@@ -1,0 +1,73 @@
+-- check: no-source
+-- Every adapter of the library (#109, `lib/adapters.bc`) that runs its source to the end, over a
+-- source that fails: `upto(lo, hi, bad)` yields `lo`, `lo + 1`, … and finishes with `inl bad`
+-- when it reaches `bad` (`inr ()` at `hi`), handing back `()` when closed. Each adapter finishes
+-- with its source's error, bound by `let e = for …`. The adapters that stop their source
+-- (`take`, `take_until`, `zip`) take one that finishes with what it hands back when closed, which
+-- a failing source does not (`corpus/reject/take-failing.bc`).
+--
+-- Answer: i32[118052]: the elements, 118, and the errors, 52, one adapter per line:
+--   map, squares of upto(0, 10, 4)             0 1 4 9                 14    error 4
+--   filter above 1 of upto(0, 10, 5)           2 3 4                   9     error 5
+--   skip 2 of upto(0, 10, 5)                   2 3 4                   9     error 5
+--   enumerate, i * x of upto(1, 10, 4)         0 2 6                   8     error 4
+--   chain upto(0, 10, 3) then 10 11            0 1 2 10 11             24    error 3
+--   flat_map n to 0 … n - 1, upto(0, 10, 3)    0 0 1                   1     error 3
+--   scan, running sums of upto(1, 10, 4)       1 3 6                   10    error 4
+--   chunks of 2 of upto(1, 10, 6), lengths     2 2 1                   5     error 6
+--   batch, sums up to 10 of upto(1, 10, 6)     10 5                    15    error 6
+--   lines of the bytes upto(8, 14, 12)         [8 9] [11]: 2 lines, 3  23    error 12
+-- The source interpreter takes about a minute over it (`check: no-source`); the other stages run
+-- it.
+-- An adapter that lost its source's error gives 0 in its place; `batch` or `chunks` that did not
+-- yield the last partial group when the source failed gives 5 or 1 less.
+
+include adapters
+
+type List = mu X. 1 + (i32 * X)
+
+gen fn upto(lo: i32, hi: i32, bad: i32) -> i32, i32 + 1 =
+  let mut i = lo;
+  while i < hi && i != bad { yield i; i = i + 1 };
+  if i == bad { (inl i : i32 + 1) } else { (inr () : i32 + 1) }
+
+gen fn range(lo: i32, hi: i32) -> i32 =
+  let mut i = lo;
+  while i < hi { yield i; i = i + 1 };
+  ()
+
+fn err(e: i32 + 1) -> i32 = match e { inl b -> b | inr u -> 0 }
+
+fn len_alg(r: 1 + i32 * i32) -> i32 = match r { inl _ -> 0 | inr (x, n) -> n + 1 }
+def len : !(List => i32) = fold_own[1 + i32 * X, i32] len_alg
+
+fn add_up(p: i32 * i32) -> i32 * bool =
+  let (s, x) = p;
+  if s + x >= 10 { (s + x, true) } else { (s + x, false) }
+
+main -> i32 =
+  let mut t = 0;
+  let mut es = 0;
+  let e = for y in map(upto(0, 10, 4), !{ x -> x * x }) { t = t + y };
+  es = es + err(e);
+  let e = for y in filter(upto(0, 10, 5), !{ x -> x > 1 }) { t = t + y };
+  es = es + err(e);
+  let e = for y in skip(upto(0, 10, 5), 2) { t = t + y };
+  es = es + err(e);
+  let e = for p in enumerate(upto(1, 10, 4)) { let (i, x) = p; t = t + i * x };
+  es = es + err(e);
+  let e = for y in chain(upto(0, 10, 3), range(10, 12)) { t = t + y };
+  es = es + err(e);
+  let e = for y in flat_map(upto(0, 10, 3), !{ n -> range(0, n) }) { t = t + y };
+  es = es + err(e);
+  let e = for y in scan(upto(1, 10, 4), 0, !{ (s, x) -> s + x }) { t = t + y };
+  es = es + err(e);
+  let e = for l in chunks(upto(1, 10, 6), 2) { t = t + len(l) };
+  es = es + err(e);
+  let e = for y in batch(upto(1, 10, 6), 0, add_up) { t = t + y };
+  es = es + err(e);
+  let mut n = 0;
+  let mut m = 0;
+  let e = for l in lines(upto(8, 14, 12)) { n = n + 1; m = m + len(l) };
+  es = es + err(e);
+  (t + n * 10 + m) * 1000 + es

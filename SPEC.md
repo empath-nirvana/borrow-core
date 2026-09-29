@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 0.18 · 2026-09-29
+Version 0.19 · 2026-09-29
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -1203,50 +1203,10 @@ Another control effect (async, #52; generators and user handlers, #18) reuses it
 The specialization itself — finding the callback's type at a call, copying, caching by
 (function, parameter type), renaming the call — is shared. What it does not yet cover is below.
 
-### Generators (spike, #18)
+### Generators
 
-A generator is codata with one more observation result than an iterator, a **skip**:
-
-    gen A B R ≜ νX. F((A ⊗ U X) ⊕ (B ⊕ U X)) & F R            (lib/gen.bc)
-
-`next` yields an element with the rest, finishes with `B`, or skips a step with the rest;
-`close` ends it early and hands back the residual `R`. A skip is a turn of a loop in the
-generator's body that yielded nothing. Every observation is total, so a loop in a generator is a
-state of the generator, never a loop inside one observation; whether the whole finishes is the
-consumer's business, as for a loop (`loop B R` is the generator that never yields, `iter A B R`
-the one that never skips). `gen` is an abbreviation of the frontend over `ν` (§7), with no
-counterpart in `Core/`: no former, rule, relation clause or machine step is added.
-
-`gen fn f(x₁: A₁, …) -> A, B = S` (`-> A` finishes with `1`; `gen fn f<'a>(…)` takes a lifetime)
-elaborates, in `Frontend/Sugar.lean`, to `f : !(A₁ * … => U (gen A B R))`, `R` the residual of
-`B` as for a div function. The body is elaborated to its first observation:
-
-- **`yield e; N`** is `return (inl (e, thunkv nu_in < N', close >))`: the rest runs `N` when it
-  is observed, and its `close` drops what `N` would have used and hands back the residual.
-- **A terminal** `T` finishes: `return (inr (inl T))`.
-- **`for x in V { M }; N`** (`V` an iterator or a generator) and **`while c { M }; N`** are a
-  generator by `unfold` over the loop's variables and iterator, or the body's rest with them.
-  The body `M` is itself a generator body, which may `yield` and `break`. A loop head starts an
-  iteration; an iteration that the head started and that ends without yielding is a skip, and one
-  that resumed after a `yield` starts the next at once. What follows the loop runs in the loop's
-  last step when it neither yields nor loops, and is sequenced by `gen_bind` otherwise.
-- **The call runs nothing**: it returns `thunkv nu_in < S', close >`. A body that is code, one
-  loop, and code with no `yield` is one `unfold` whose first state is the parameters, so every
-  observation of it is a call of one known code.
-
-`yield` and `break` stand only on the spine (binds, `let`s, `match` and `if` arms, which a
-`yield` in a bound computation is pushed into, and loop bodies). A `yield` inside a borrow block is
-rejected: a generator cannot hold a borrow of its own local across a `yield`
-(`corpus/reject/gen-self-borrow.bc`), and a generator that holds a borrow of outside data cannot
-leave that borrow's scope, by the existing rule for thunks (`corpus/reject/gen-escape.bc`).
-
-A `for` in a div body iterates a generator too (a skip goes round the loop), and an iterator or
-generator that holds no capability (`range(1, 10)`, a pipeline of generators).
-
-**Open.** A direct-style call of a div function in a generator body; delegation to another
-generator (`yield from`, a `gen_bind` of the call); `return` from inside a loop; a `gen { … }`
-block; a `for` that binds the finishing value; a total consumer (a `for` over a generator is
-div). Generators are not yet a case of §14's specialization (a callback that yields).
+A generator is a loop that also yields elements, and a `for` over one is a loop of a div body:
+§15.
 
 ### Borrow scopes over loops, per observation
 
@@ -1348,6 +1308,201 @@ preserved. The runtime's obligation for a looping `main` is §11's.
 
 ---
 
+## 15. Entry 14 — generators
+
+### Motivation
+
+A producer is easiest to write in direct style: a loop that `yield`s each element, with the
+consumer deciding how many to take (#18, #107, #109). Python, C# and Rust (`gen { }`, unstable)
+write it so; Rust's iterator adapters (`map`, `zip`, `take`) compose producers. Here a
+generator is codata (§7) and every construct of this entry is elaboration into core, so the
+kernel, the checker's rules and the proofs are unchanged, and a generator is not a function
+colour: a function that loops, one that yields and one that does neither are called alike, and
+a higher-order function is specialized at a callback that yields (§14's specialization).
+
+### The type
+
+A generator is codata with one more observation result than an iterator, a **skip**:
+
+    gen A B R ≜ νX. F((A ⊗ U X) ⊕ (B ⊕ U X)) & F R            (lib/gen.bc)
+
+`next` yields an element with the rest, finishes with `B`, or skips a step with the rest;
+`close` ends it early and hands back the residual `R`. A skip is a turn of a loop in the
+generator's body that yielded nothing. Every observation is total, so a loop in a generator is a
+state of the generator, never a loop inside one observation; whether the whole finishes is the
+consumer's business, as for a loop (`loop B R` is the generator that never yields, `iter A B R`
+the one that never skips). `gen` is an abbreviation of the frontend over `ν` (§7), with no
+counterpart in `Core/`: no former, rule, relation clause or machine step is added.
+
+**The residual** of a generator is the components of `B` with no destructor, `K` (`R = K`, or
+`1` when there are none), handed back by name as a div function's are (§14); a div function's
+residual is `K ⊗ 1`. A generator that finishes with what it holds hands back the same when it is
+closed, so `gen A K K` is a source that can be stopped (below).
+
+### Declarations and elaboration
+
+`gen fn f(x₁: A₁, …) -> A, B = S` (`-> A` finishes with `1`; `gen fn f<'a>(…)` takes a lifetime)
+elaborates, in `Frontend/Sugar.lean`, to `f : !(A₁ * … => U (gen A B R))`. The body is
+elaborated to its first observation:
+
+- **`yield e; N`** is `return (inl (e, thunkv nu_in < N', close >))`: the rest runs `N` when it
+  is observed, and its `close` drops what `N` would have used and hands back the residual.
+- **A terminal** `T` finishes: `return (inr (inl T))`.
+- **`for x in V { M }; N`** (`V` an iterator or a generator) and **`while c { M }; N`** are a
+  generator by `unfold` over the loop's variables and iterator, or the body's rest with them.
+  The body `M` is itself a generator body, which may `yield` and `break`. A loop head starts an
+  iteration; an iteration that the head started and that ends without yielding is a skip, and one
+  that resumed after a `yield` starts the next at once. What follows the loop runs in the loop's
+  last step when it neither yields nor loops, and is sequenced by `gen_bind` otherwise.
+- **The call runs nothing**: it returns `thunkv nu_in < S', close >`. A body that is code, one
+  loop, and code with no `yield` is one `unfold` whose first state is the parameters, so every
+  observation of it is a call of one known code. Closed before it starts, a generator closes the
+  generators and iterators it was given, to hand back what they hold.
+- **`return e`** anywhere in the body finishes the generator with `e`, from any depth of its
+  loops: a loop's body with a `return` finishes with `inr (inr e)` (`inl` goes on, `inr (inl …)`
+  is a `break`), and each loop it leaves closes its iterator and finishes at once, skipping what
+  follows it (`corpus/gen-return.bc`, `corpus/sugar/gen-return.bc`). The loops it leaves must
+  hold nothing without a destructor beyond what `e` hands back; a `return` inside a `for` over an
+  iterator made from a capability is rejected, since the iterator holds the capability
+  (`corpus/reject/gen-return-held.bc`). `return` is a generator's: in a `gen fn`'s body, a
+  statement `return e` that is not the head of a bind; elsewhere (a `gen { … }` block included)
+  `return` is the core's.
+- **`break`** leaves the innermost loop from any position of its body, not only its tail
+  (`corpus/reject/gen-break-outside.bc` outside every loop). So does `break` in a `for` of a div
+  body: the iterator is closed and what follows the loop runs (`corpus/io-break.bc`).
+- **`let r = for x in V { M }; N`** binds `r` in `N` to the loop's value: what the iterator
+  finishes with (a generator's `B`, an iterator's `R`), or `e` after `break e`. It is written in
+  the parse as `for x in V { M }; (r <- <value>; N)`, and the loop finishes with `r` among what
+  it hands on; in a generator and in a div body alike (`corpus/gen-value.bc`,
+  `corpus/sugar/for-value.bc`). `break e` needs a bound value
+  (`corpus/reject/for-break-value.bc`), and a bare `break` in such a loop gives `()` only when the
+  value is `1`. An iterator made from a capability finishes by handing it back, so its loop's
+  value is not bound (`corpus/reject/for-value-held.bc`).
+- **`let c = for x in V { M }; N`** with `c` among the capabilities the body hands back binds `c`
+  as the capability the iterator hands back when it finishes or is closed, as an iterator made
+  from `c` does (a `gen { … }` block that captured `stdin`, `corpus/gen-block.bc`).
+- **A call of a div function in direct style** (§14's definition, at any depth of a bound or
+  returned value, a scrutinee or an element being yielded) runs the call's loop inside the
+  generator: `x <- f V; N` becomes `gen_bind_loop[A, B', R', B, R] (f V, ⟨λa. x ← a;
+  return (thunkv nu_in ⟨N', close⟩), λr. abort⟩)` (`lib/gen.bc`), whose state is the loop with
+  the continuation, then the continuation's generator. Each turn of the loop is a skip, so every
+  observation stays total; `abort` turns the loop's residual into the generator's, as a div
+  body's does, including a capability lent with `&mut c` (`corpus/gen-div.bc`,
+  `corpus/sugar/gen-div.bc`). What follows a loop runs in its last step only when it neither
+  yields nor loops nor calls a div function. `yield` outside a generator's body is an error
+  (`corpus/reject/yield-outside.bc`).
+- **`x <- yield from g; N`** delegates to the generator `g : U (gen A B' R')` (of the same
+  element type): `gen_bind[A, B', R', B, R] (g, ⟨λb. x ← b; return (thunkv nu_in ⟨N', close⟩),
+  λr. abort⟩)`, whose first observation is the generator's. Everything `g` yields is yielded, and
+  `x` is what it finishes with; a `yield from` last finishes the generator with it. A capability
+  lent with `&mut c` comes back in `g`'s result (`c` itself, or `(c, x)`) or, closed during `g`,
+  its residual (`corpus/gen-from.bc`, `corpus/sugar/gen-from.bc`,
+  `corpus/reject/gen-from-elem.bc`).
+- **`gen { S }`** is a generator in place: the body `S` elaborated as a `gen fn`'s is, to
+  `(thunkv nu_in ⟨S', close⟩ : U (gen A B R))`, capturing what it uses, with `close` dropping it
+  and handing back the residual. Its element type is what `S` yields first, and `B` what it
+  finishes with (`corpus/gen-block.bc`, `corpus/sugar/gen-block.bc`,
+  `corpus/reject/gen-block-empty.bc`). It is elaborated after specialization, so a call in it may
+  have a callback that yields.
+- **A callback that yields**, a closure whose body has a `yield`, passed at a callback type
+  `A ⇒ B`, is a generator function `A ⇒ U (gen E B R)`, its body elaborated in place. The function
+  it is passed to is specialized at that type (§14's specialization, with a generator function as
+  the callback's computation type, `yield` as its inference and `gen_bind` as its elaboration of
+  a call): in the copy, each call of the callback is a `yield from` of the generator it returns,
+  so the copy is a generator of `E`, and the call of the copy is a `yield from` too, in a
+  generator's body or a block (`corpus/sugar/gen-callback.bc`; outside one it is rejected,
+  `corpus/reject/gen-callback-outside.bc`). The calls through the callback are on the copy's
+  spine; one inside a fold's algebra is rejected as a `yield` off the spine, as a div callback
+  there is (`corpus/pending/map-div-fold.bc`).
+
+`yield`, `break` and `return` stand on the spine: before elaboration, what follows a head that
+contains one (a `match` or `if`, a bind, a `let`, a loop) is moved into it, into both arms of a
+`match` or `if` (a commuting conversion), and what follows a `break` or `return` is dropped
+(`normExits`). Elsewhere (inside a value, a call's argument, a fold's algebra) a `yield` is an
+error.
+
+A `for` in a div body iterates a generator too (a skip goes round the loop), and an iterator or
+generator that holds no capability (`range(1, 10)`, a pipeline of generators).
+
+### Self-reference
+
+A generator may not hold a borrow of its own local across a `yield` (Rust's generators forbid
+it, and its `async` needs `Pin` for it). This is the existing borrow typing, with no check of
+its own. A statement borrow block of a cell whose body yields, in a `gen fn`'s body,
+`borrow imm c { 'x, b -> S }` (or `borrow mut`), is elaborated as a delegation to the generator
+its body makes, `yield from borrow imm c { 'x, b -> gen { S } }` (`Parser.borrowBlock`; the
+generator is elaborated where `b` is in scope): the block's result is boxed at `'x`, and a
+thunk has no outlives rule, so the generator, which would hold `b` between observations, cannot
+leave the block (`corpus/reject/gen-self-borrow.bc`). A generator that holds a borrow of outside
+data cannot leave that borrow's scope, by the same rule (`corpus/reject/gen-escape.bc`). What is
+allowed is to own the cell in the generator's state and borrow it anew at each step
+(`corpus/gen-cell.bc`).
+
+### Generic generators
+
+`gen fn f[A, …](x₁: A₁, …) -> E, B = S` is generic in the types `A, …`. It is a template: it is
+not elaborated as written, and a call of it is a call of its instance at the types of the call,
+the template with the types substituted for its parameters (`Frontend/Elab/Subst.lean`), made
+and elaborated on first use and shared by later calls at the same types (whole-program
+monomorphization, as Rust's generics; the instance is named `f__gN`). The type arguments are
+written, `f[T, …](…)`, or read off the arguments' types by matching each parameter's type with
+the type parameters as placeholders; a closure whose parameter's type is left out is typed last,
+from its parameter's type with what the other arguments determined. An instance is ordinary
+code at its types, checked by the unchanged checker, so an adapter over a pure source, one over
+an input and one over a failing source are three instances of one definition. Instances are at
+types without lifetimes.
+
+### The adapter library
+
+`include adapters` (`lib/adapters.bc`) provides generic generators over a source
+`U (gen A K R)`: `map`, `filter`, `skip`, `enumerate`, `scan`, `chain` (then a pure second
+source), `flat_map` (into pure generators), `chunks`, `batch` (grouping by an adding function
+that says when a group is full), `lines` (bytes into lists) and `from_iter` (an iterator such as
+`bytes(c)` as a generator). Each runs its source to the end, finishes with the source's `K`, and
+closed early closes the source and hands its `R` on. `take`, `take_until` and `zip` stop their
+source themselves, so they take a source that hands back, closed, what it finishes with,
+`U (gen A K K)`: a pure source (`1`) or one that holds a capability (`In`). A source that fails
+finishes with an error it computes (`i32 + 1`) and hands back `1`; stopped early it has no error
+to report, and such a call is rejected at the instance (`corpus/reject/take-failing.bc`). `zip`
+pulls its second source one element at a time with `gen_pull` (`lib/gen.bc`), whose skips are
+`zip`'s. Tests: pure sources `corpus/gen-adapters.bc`, inputs `corpus/gen-adapters-io.bc` and
+`corpus/gen-adapters-io2.bc`, failing sources `corpus/gen-adapters-fail.bc`, and a pipeline
+`corpus/gen-pipeline-adapters.bc`.
+
+A pipeline of the adapters whose bodies are one loop (`map`, `filter`, `take`, `skip`,
+`enumerate`, `scan`, `take_until`, `flat_map`, `from_iter`), with known functions, allocates
+nothing and makes no dispatched call (`corpus/gen-pipeline-adapters.bc`: 0, 0, 0). `chain`,
+`zip`, `chunks`, `lines` and `batch` have two parts sequenced by `gen_bind`, whose observation
+calls the part it is in through its closure: one dispatched call per observation
+(`corpus/counts.expected` names them).
+
+### Baseline
+
+No `CDerives` rule, relation clause, machine step or kernel type is added. `fundamentalC`,
+`adequacyC`, `fundamentalD` and `adequacyD` keep their statements, and every theorem of §§1–14 is
+preserved: every construct of this entry is elaborated into core before checking.
+
+### Open
+
+- **A total consumer.** A `for` over a generator is div, even over a finite one (stage 9 of
+  `docs/typed-elaboration.md`).
+- **Zero dispatch for bodies with several parts.** A body with two loops, a `yield` after a loop,
+  or a `yield from` is sequenced by `gen_bind`, which calls the part it is in through a closure
+  (one dispatched call per observation). The design that removes it is a whole-body state
+  machine: one `unfold` whose state is a sum with one summand per resumption point (each `yield`,
+  loop head and delegation), holding the variables live there, and whose step is one code with a
+  `case` on the state; `break`, `return` and the end of a loop are moves to another summand, and
+  a delegate or a div call is held in its summand. Every observation is then a call of one known
+  code. The same machine for a div body (a generator that never yields) removes the delay binds
+  of a body with several loops, whose nesting also makes the source interpreter's run and the
+  closure flow analysis grow faster than linearly in the number of loops of one body.
+- **A source that both holds a capability and fails** (`B = In ⊗ E`) is not an instance of the
+  adapters: an adapter's result is one variable `k`, and the residual is handed back by name.
+  Stopping a failing source (`take` over `U (gen A (1 + E) 1)`) is not provided.
+- **Generic `fn`s**: only generators are generic; a generic instance's types have no lifetimes.
+
+---
+
 ## Status
 
 Entries 2–6 are implemented in the library directory `Core/`, with one `fundamentalC` and
@@ -1362,11 +1517,20 @@ typed world, the model and the end-to-end theorems in `Core/Stdio.lean`, the che
 `Core/Dtor.lean` and the checker (`Frontend/Check/`), with no change to `CDerives`. Entry 12
 (§13) is implemented in `Core/Alloc.lean`, `Core/World.lean`, `Core/Demonic.lean` and
 `Core/Stale.lean`. Entry 13 (§14) is implemented in `lib/div.bc`, `lib/lend.bc`, `Frontend/Sugar.lean`,
-`Frontend/Elab/LoopLend.lean` and `Core/Totality.lean`, with no change to `CDerives`.
+`Frontend/Elab/LoopLend.lean` and `Core/Totality.lean`, with no change to `CDerives`. Entry 14 (§15) is implemented in
+`lib/gen.bc`, `lib/adapters.bc`, `Frontend/Parser.lean`, `Frontend/Sugar.lean` and
+`Frontend/Elab/Subst.lean`, with no change to `CDerives`.
 
 ---
 
 ## Changelog
+
+- **0.19** (2026-09-29) — Entry 14 (§15): generators, replacing §14's spike subsection (#109).
+  `return` and `break` anywhere in a generator's body, a `for` that keeps its finishing value,
+  direct-style div calls, `yield from`, `gen { }` blocks and callbacks that yield; generic
+  generators, instantiated per call, and the adapter library (`include adapters`); a generator's
+  residual is what it holds, `K`; a borrow block that yields is a delegation, rejected by the
+  borrow typing (a self-reference). No kernel, rule or checker change.
 
 - **0.18** (2026-09-29) — §14: borrow scopes over loops, per observation (O1, step 1). A
   borrow block whose body loops, `let r = &x` over a loop, and a div function over a borrow are
