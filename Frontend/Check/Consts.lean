@@ -286,6 +286,33 @@ def synConst (E : Env) (Δ : LifeCtx) (T : List CVTy) (sp : Span) :
       let a ← E.elabL Δ a
       let A ← E.elabV Δ A
       pure (cDead _ fun hd => CDerives.arrForget a A hd)
+  | .sliceBorrowMut _ b A B => do
+      let b ← E.elabL Δ b
+      let A ← E.elabV Δ A
+      let B ← E.elabV Δ B
+      let x := Δ.freshVar
+      let ⟨⟨_, h₁, h₂⟩⟩ ← freshFor (Δ := Δ) sp x A B
+      let ⟨hA⟩ ← outlivesWitness sp b A
+      let ⟨hB⟩ ← outlivesWitness sp b B
+      pure (cDead _ fun hd => CDerives.sliceBorrowM x hd hA hB h₁ h₂)
+  | .sliceBorrowImm _ b A B => do
+      let b ← E.elabL Δ b
+      let A ← E.elabV Δ A
+      let B ← E.elabV Δ B
+      let x := Δ.freshVar
+      let ⟨⟨_, h₁, h₂⟩⟩ ← freshFor (Δ := Δ) sp x A B
+      let ⟨hsc⟩ ← needB sp (scopedB Δ A) s!"`{ppVTy A}` mentions a lifetime not in scope"
+      let ⟨hA⟩ ← outlivesWitness sp b A
+      let ⟨hB⟩ ← outlivesWitness sp b B
+      pure (cDead _ fun hd => CDerives.sliceBorrowI x hd (scopedB_sound hsc) hA hB h₁ h₂)
+  | .sliceGetMut a A => do
+      let a ← E.elabL Δ a
+      let A ← E.elabV Δ A
+      pure (cDead _ fun hd => CDerives.sliceGetM a A hd)
+  | .sliceLenMut a A => do
+      let a ← E.elabL Δ a
+      let A ← E.elabV Δ A
+      pure (cDead _ fun hd => CDerives.sliceLenM a A hd)
   | .withborF2Imm _ _ _ A B T' => do
       let A ← E.elabV Δ A
       let B ← E.elabV Δ B

@@ -137,6 +137,7 @@ def ppV (nm : List (String × LifeVar)) (d p : Nat) : CVTy → String
   | .mu A => parenIf (p > 0) s!"mu {tvName d}. {ppV nm (d + 1) 0 A}"
   | .fam (.ref A) => parenIf (p > 5) s!"array {ppV nm d 5 A}"
   | .fam (.imm a A) => parenIf (p > 5) s!"array_imm {ppLifeP nm 1 a} {ppV nm d 5 A}"
+  | .fam (.mut a A) => parenIf (p > 5) s!"array_mut {ppLifeP nm 1 a} {ppV nm d 5 A}"
   | .fam L => parenIf (p > 5) s!"[{ppV nm d 0 L}]"
 /-- A computation type in the surface syntax, at precedence `p`. -/
 def ppC (nm : List (String × LifeVar)) (p : Nat) : CCTy → String
@@ -262,6 +263,7 @@ def elabV : Nat → TyEnv → VTy → Except Error CVTy
     | .view _ a A => do pure ((← elabV n E A).immReborrow (← elabLife E.Δ E.lenv a))
     | .array _ A => do pure (.fam (.ref (← elabV n E A)))
     | .arrayImm _ a A => do pure (.fam (.imm (← elabLife E.Δ E.lenv a) (← elabV n E A)))
+    | .arrayMut _ a A => do pure (.fam (.mut (← elabLife E.Δ E.lenv a) (← elabV n E A)))
 /-- A computation type. -/
 def elabC : Nat → TyEnv → CTy → Except Error CCTy
   | 0, _, C => err C.span "type abbreviations nested too deeply"

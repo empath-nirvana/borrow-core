@@ -3064,6 +3064,25 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
         let Tbs := if k == .imm then VTy.imm lsp (.var lsp x) As else .mut lsp (.var lsp x) As
         pure (.app sp (.app sp₂ (.const ksp C) P') (.thunkv tsp (.lamL lsp xi (.dom lsp)
           (.ret lsp (.thunkv lsp (.lam lsp b Tbs (boxTail x S')))))))
+      | .imm, .fam (.ref A) | .mut, .fam (.ref A) => do
+        -- An owned array lent as a family of leaf borrows, with no cell (`slice_borrow_*`,
+        -- SPEC §9).
+        let dom ← need lsp "the block's bound" (c.elabL (.dom lsp))
+        let c₁ := c.pushLife x dom
+        let some v := c₁.E.lenv.lookup x | throw ⟨lsp, "internal error: a borrow block"⟩
+        let Tb : CVTy := .fam (if k == .imm then .imm (.var v) A else .mut (.var v) A)
+        let S' ← surfC n (c₁.push b.name (some Tb)) none S
+        let B ← need tsp "the block's result" (resultOfC ((c₁.push b.name (some Tb)).tyC S'))
+        if BoCa.Fig16.LogRel.Core.Check.vfreeB v B then
+          throw (Frontend.Elab.LoopLend.escapeError tsp x (Frontend.Check.ppV c₁.E.lenv 0 0 B))
+        let As ← c.surface ksp A
+        let Bs ← c.surface ksp B
+        let xi : Ident := ⟨x, ksp⟩
+        let C := if k == .imm then Const.sliceBorrowImm xi (.top ksp) As Bs
+          else .sliceBorrowMut xi (.top ksp) As Bs
+        let Tbs := if k == .imm then VTy.arrayImm lsp (.var lsp x) As else .arrayMut lsp (.var lsp x) As
+        pure (.app sp (.app sp₂ (.const ksp C) P') (.thunkv tsp (.lamL lsp xi (.dom lsp)
+          (.ret lsp (.thunkv lsp (.lam lsp b Tbs (boxTail x S')))))))
       | .famMut, .tensor (.ref A) (.ref B) => do
         let dom ← need lsp "the block's bound" (c.elabL (.dom lsp))
         let c₁ := c.pushLife x dom
@@ -3091,7 +3110,8 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
         pure (.app sp (.app sp₂ (.const ksp C) P')
           (.thunkv tsp (.lam lsp b (← c.surface lsp A) S'')))
       | _, _ => throw ⟨P.span, s!"this borrow block's place has type `{ppT tP}`: `borrow imm`/" ++
-          "`borrow mut` take a cell `ref A` (a pair of cells for a family), `modify` a `mut` borrow"⟩
+          "`borrow mut` take a cell `ref A` or an array (a pair of cells for a family), `modify` a `mut` " ++
+          "borrow"⟩
     | .app sp f W => do
       -- A call of a generic generator: a call of its instance at the argument's types.
       if let some (h, targs) := genericCallee f then

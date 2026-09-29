@@ -1,6 +1,7 @@
 import Core.Compat
 import Core.Integers
 import Core.Arrays
+import Core.Slices
 import Core.FoldReuse
 import Core.Nu
 import Support.LogicalRelation.Adequacy
@@ -177,6 +178,24 @@ inductive CDerives : LifeCtx → Ctx VTy → Expr → Jdg → Prop where
   /-- `array_forget : !(ArrayImm @a A ⇒ 1)`.  `[spec §9]` -/
   | arrForget {Δ Γ} (a : Lifetime.Life) (A : VTy) (hΓ : Ctx.DeadP Γ) :
       CDerives Δ Γ (.val forgetV) (.val (arrForgetTy a A))
+  /-- `slice_borrow_mut : Array A ⊸ (∀'x ⊏ ⊓Δ. [Mut 'x A] ⊸ ['x] B) ⊸ Array A ⊗ B`, the term
+  `withbor`'s: an owned array lent as a family of `mut` leaves, with no cell.  `[spec §9]` -/
+  | sliceBorrowM {Δ Γ A B} (x : LifeVar) (hΓ : Ctx.DeadP Γ)
+      (hsideA : ∃ b, Δ.Defines b ∧ VOutlives Δ b A) (hsideB : ∃ b, Δ.Defines b ∧ VOutlives Δ b B)
+      (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) :
+      CDerives Δ Γ withbor (.val (sliceBorrowMTy x Δ.meetOfDom A B))
+  /-- `slice_borrow_imm : Array A ⊸ (∀'x ⊏ ⊓Δ. [Imm 'x A] ⊸ ['x] B) ⊸ Array A ⊗ B`, the term
+  `withbor`'s: an owned array lent as a family of `imm` leaves, with no cell.  `[spec §9]` -/
+  | sliceBorrowI {Δ Γ A B} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hsc : VScoped Δ A)
+      (hsideA : ∃ b, Δ.Defines b ∧ VOutlives Δ b A) (hsideB : ∃ b, Δ.Defines b ∧ VOutlives Δ b B)
+      (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) :
+      CDerives Δ Γ withbor (.val (sliceBorrowITy x Δ.meetOfDom A B))
+  /-- `slice_get_mut : !([Mut @a A] ⊗ I32 ⇒ Mut @a A ⊕ 1)`, the step `idx`.  `[spec §9]` -/
+  | sliceGetM {Δ Γ} (a : Lifetime.Life) (A : VTy) (hΓ : Ctx.DeadP Γ) :
+      CDerives Δ Γ (.val (.prim .idx)) (.val (sliceGetMTy a A))
+  /-- `slice_len_mut : !([Mut @a A] ⇒ [Mut @a A] ⊗ I32)`.  `[spec §9]` -/
+  | sliceLenM {Δ Γ} (a : Lifetime.Life) (A : VTy) (hΓ : Ctx.DeadP Γ) :
+      CDerives Δ Γ (.val sizeV) (.val (sliceLenMTy a A))
   | withbor1 {Δ Γ A B} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hx : Δ.find? x = none)
       (hsc₁ : VScoped Δ A) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) :
       CDerives Δ Γ withbor (.val (axWithbor1Ty x Δ.meetOfDom A B))
@@ -351,6 +370,10 @@ theorem fundamentalC {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg}
   | arrGet _ _ hΓ => exact arrGet_compatX hΓ
   | arrCopy _ _ hΓ => exact arrCopy_compatX hΓ
   | arrForget _ _ hΓ => exact arrForget_compatX hΓ
+  | sliceBorrowM x hΓ hA hB hf₁ hf₂ => exact sliceBorrowM_compatX x hΓ hA hB hf₁ hf₂
+  | sliceBorrowI x hΓ hsc hA hB hf₁ hf₂ => exact sliceBorrowI_compatX x hΓ hsc hA hB hf₁ hf₂
+  | sliceGetM _ _ hΓ => exact sliceGetM_compatX hΓ
+  | sliceLenM _ _ hΓ => exact sliceLenM_compatX hΓ
   | withbor1 x hΓ hx hsc₁ hf₁ hf₂ => exact withbor1_compatX x hΓ hx hsc₁ hf₁ hf₂
   | withbor2 x hΓ hx hside hf₁ hf₂ => exact withbor2_compatX x hΓ hx hside hf₁ hf₂
   | withbor3 x hΓ hx hf₁ hf₂ => exact withbor3_compatX x hΓ hx hf₁ hf₂

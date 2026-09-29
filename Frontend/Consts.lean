@@ -25,7 +25,7 @@ inductive CKw where
   | i32 | i64 | host
   | allocS | freeS | withborSMut | withborSImm | withborF2Mut | withborF2Imm
   | arrayNew | arrayFree | arraySize | arrayReplace | arrayLen | arrayGet | arrayCopy
-  | arrayForget
+  | arrayForget | sliceBorrowMut | sliceBorrowImm | sliceGetMut | sliceLenMut
   deriving DecidableEq, Repr
 
 /-- A constant keyword's spelling. -/
@@ -44,6 +44,8 @@ def CKw.str : CKw → String
   | .arrayNew => "array_new" | .arrayFree => "array_free" | .arraySize => "array_size"
   | .arrayReplace => "array_replace" | .arrayLen => "array_len" | .arrayGet => "array_get"
   | .arrayCopy => "array_copy" | .arrayForget => "array_forget"
+  | .sliceBorrowMut => "slice_borrow_mut" | .sliceBorrowImm => "slice_borrow_imm"
+  | .sliceGetMut => "slice_get_mut" | .sliceLenMut => "slice_len_mut"
 
 def CKw.all : List CKw :=
   [.alloc, .free, .swap, .copy, .copyBang, .forgetImm, .forgetMut, .forgetUnk, .forgetBang,
@@ -51,7 +53,7 @@ def CKw.all : List CKw :=
    .foldImm, .foldOwn, .foldReuse, .fixd, .unfoldS, .unfold, .i32, .i64, .host,
    .allocS, .freeS, .withborSMut, .withborSImm, .withborF2Mut, .withborF2Imm,
    .arrayNew, .arrayFree, .arraySize, .arrayReplace, .arrayLen, .arrayGet, .arrayCopy,
-   .arrayForget]
+   .arrayForget, .sliceBorrowMut, .sliceBorrowImm, .sliceGetMut, .sliceLenMut]
 
 def CKw.ofString? (s : String) : Option CKw := CKw.all.find? (·.str == s)
 
@@ -62,6 +64,8 @@ def CKw.sig : CKw → List ArgKind
   | .alloc | .free | .copyBang | .forgetBang => [ty]
   | .arrayNew | .arrayFree | .arraySize | .arrayReplace => [ty]
   | .arrayLen | .arrayGet | .arrayCopy | .arrayForget => [life, ty]
+  | .sliceGetMut | .sliceLenMut => [life, ty]
+  | .sliceBorrowMut | .sliceBorrowImm => [binder, life, ty, ty]
   | .swap | .foldOwn | .foldReuse | .fixd | .unfoldS => [ty, ty]
   | .unfold => [cty, ty]
   | .copy | .forgetImm | .forgetMut => [life, ty]
@@ -119,6 +123,10 @@ def Const.ofArgs : CKw → List Arg → Option Const
   | .arrayGet, [.life a, .ty A] => some (.arrayGet a A)
   | .arrayCopy, [.life a, .ty A] => some (.arrayCopy a A)
   | .arrayForget, [.life a, .ty A] => some (.arrayForget a A)
+  | .sliceBorrowMut, [.binder x, .life b, .ty A, .ty B] => some (.sliceBorrowMut x b A B)
+  | .sliceBorrowImm, [.binder x, .life b, .ty A, .ty B] => some (.sliceBorrowImm x b A B)
+  | .sliceGetMut, [.life a, .ty A] => some (.sliceGetMut a A)
+  | .sliceLenMut, [.life a, .ty A] => some (.sliceLenMut a A)
   | _, _ => none
 
 /-- A constant's keyword and bracket arguments. -/
@@ -162,6 +170,10 @@ def Const.toArgs : Const → CKw × List Arg
   | .arrayGet a A => (.arrayGet, [.life a, .ty A])
   | .arrayCopy a A => (.arrayCopy, [.life a, .ty A])
   | .arrayForget a A => (.arrayForget, [.life a, .ty A])
+  | .sliceBorrowMut x b A B => (.sliceBorrowMut, [.binder x, .life b, .ty A, .ty B])
+  | .sliceBorrowImm x b A B => (.sliceBorrowImm, [.binder x, .life b, .ty A, .ty B])
+  | .sliceGetMut a A => (.sliceGetMut, [.life a, .ty A])
+  | .sliceLenMut a A => (.sliceLenMut, [.life a, .ty A])
 
 theorem Const.ofArgs_toArgs (c : Const) : Const.ofArgs c.toArgs.1 c.toArgs.2 = some c := by
   cases c with

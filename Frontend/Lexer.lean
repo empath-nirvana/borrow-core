@@ -58,13 +58,14 @@ def keywords : List String :=
     "ref", "imm", "mut", "box", "unk", "i32", "i64", "input", "output", "mu", "all", "forall", "top", "dom",
     "block", "val", "fam", "view", "nu", "delay", "loop", "stream", "str", "iter", "leaf",
     "for", "in",
-    "node", "array", "array_imm",
+    "node", "array", "array_imm", "array_mut",
     -- constants and derived forms
     "alloc", "free", "swap", "copy", "copy_bang", "forget_imm", "forget_mut", "forget_unk",
     "forget_bang", "withbor1", "withbor2", "withbor3", "withload", "withswap",
     "fold_imm", "fold_own", "fold_reuse", "fixd", "unfold_s", "unfold", "host",
     "alloc_s", "free_s", "withbor_s_mut", "withbor_s_imm", "withbor_f2_mut", "withbor_f2_imm",
     "shorten_mut", "shorten_imm", "array_new", "array_free", "array_size", "array_replace",
+    "slice_borrow_mut", "slice_borrow_imm", "slice_get_mut", "slice_len_mut",
     "array_len", "array_get", "array_copy", "array_forget" ]
 
 /-- The reserved upper-case words. -/

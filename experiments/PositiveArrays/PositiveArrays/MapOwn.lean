@@ -1,4 +1,4 @@
-import PositiveArrays.FrameFam
+import Core
 
 /-!
 # PositiveArrays — the owned eliminator: each element consumed once by an indexed body
@@ -21,11 +21,9 @@ source cell. `array_free` (SPEC §9) is the instance at `B = 1` with the index d
 result array.
 
 **The length.** `tab (c, g)` places `arrLen c` cells (`c` when `c < 2³¹`, else `0`), while
-`𝒱⟦[L]⟧` places `c.toNat` leaves for every `c`. `wpTS_arrayMap` carries `arrLen n = n`.
-`arrMap_compatX`, the constant's compatibility lemma, takes `FamLenBound`: every family in the
-relation has `tab`'s length. That is stated, not derived. Every family a program builds
-satisfies it, since `tab` builds them, and it would hold by definition if the relation's clause
-at `[L]` carried `⌜c < 2³¹⌝`.
+`𝒱⟦[L]⟧` places `c.toNat` leaves for a family `(ℓ, c)`. `wpTS_arrayMap` carries
+`arrLen n = n`. Every family in the relation has `tab`'s length (`famLenBound`), because §9's
+clause at `[L]` carries `⌜c < 2³¹⌝`, so `arrMap_compatX` needs no hypothesis.
 -/
 
 noncomputable section
@@ -39,10 +37,17 @@ open BoCa.Fig16.BoLo
 open BoCa.BoLo (Heap Steps Step1 Head Kont eLoad eStore)
 open BoCa.Lifetime (LSub LifeCtx LifeVar)
 
-/-- The relation's families have `tab`'s lengths. Stated, not derived. -/
+/-- The relation's families have `tab`'s lengths. -/
 def FamLenBound : Prop :=
   ∀ (L : VTy) (ls : List SRec) (δ : LSub) (ℓ : Loc) (n : UInt32) (ρ : WRes),
     vP (.fam L) ls δ (Val.arr ℓ n) ρ → arrLen n = n
+
+/-- `FamLenBound` holds: the relation's clause at `[L]` carries `c < 2³¹` (SPEC §9). -/
+theorem famLenBound : FamLenBound := by
+  intro L ls δ ℓ n ρ h
+  obtain ⟨ℓ', n', he, hn, -⟩ := vP_fam_iff.mp h
+  obtain ⟨-, rfl⟩ := Val.arr_inj he
+  exact arrLen_of_bound hn
 
 /-- The tabulator, closed over `f` and the source `(ℓ, n)`. -/
 def mapTab (f : Val) (ℓ : Loc) (n : UInt32) : Val :=
@@ -98,7 +103,8 @@ theorem mapTab_wp {A B : VTy} {δ : LSub} {ls₀ ls : List SRec} (f : Val) (ℓ 
 /-- **The fill.** With the cells `ℓ, …, ℓ + i − 1` holding results, `ℓ + i, …` holding `()`, and
 the source leaves `ℓs + i, …` not yet consumed, the rest of the fill runs to an `Array B`. -/
 theorem mapFill_wp {A B : VTy} {δ : LSub} {ls₀ : List SRec} (f : Val) (ℓs ℓ : Loc)
-    (n : UInt32) (hf : vP (.bang (.lolli (.tensor (.int .w32) A) B)) ls₀ δ f PMap.empty) :
+    (n : UInt32) (hN31 : n.toNat < 2 ^ 31)
+    (hf : vP (.bang (.lolli (.tensor (.int .w32) A) B)) ls₀ δ f PMap.empty) :
     ∀ (k i : Nat) (ls : List SRec) (ρd ρt ρs ρ₀ ρ : WRes), (∀ x, x ∈ ls ↔ x ∈ ls₀) →
       i + k = n.toNat → sepRange (doneP B ls δ) ℓ i ρd → sepRange todoP (ℓ + i) k ρt →
       sepRange (ownLeaf A ls δ) (ℓs + i) k ρs → ResU.CompS ρd ρt ρ₀ → ResU.CompS ρ₀ ρs ρ →
@@ -108,7 +114,7 @@ theorem mapFill_wp {A B : VTy} {δ : LSub} {ls₀ : List SRec} (f : Val) (ℓs �
       obtain ⟨rfl, -⟩ := hs
       rw [ResU.CompS.functional hc (ResU.comp_empty_right ρ₀),
         ResU.CompS.functional hc₀ (ResU.comp_empty_right ρd)]
-      refine wpTS_val ls (Val.arr ℓ n) _ ρd (vP_fam_mk ?_)
+      refine wpTS_val ls (Val.arr ℓ n) _ ρd (vP_fam_mk hN31 ?_)
       rw [← hN]; exact hd
   | k + 1, i, ls, ρd, ρt, ρs, ρ₀, ρ, hls, hN, hd, ⟨c, ρt', hct, hcell, ht'⟩,
       ⟨ρl, ρs', hcs, hleaf, hs'⟩, hc₀, hc => by
@@ -149,7 +155,7 @@ theorem mapFill_wp {A B : VTy} {δ : LSub} {ls₀ : List SRec} (f : Val) (ℓs �
         obtain ⟨Y, hY, hLD'⟩ := compS_reassoc' hdt hLD
         have hleaf' : doneP B ls' δ (ℓ + i) L :=
           ⟨ℓ + i, w, pure_sep_mk rfl ⟨c₃, σw, ResU.CompS.comm hL, hc₃, hw⟩⟩
-        refine mapFill_wp f ℓs ℓ n hf k (i + 1) ls' Y σt σs LD σ₃
+        refine mapFill_wp f ℓs ℓ n hN31 hf k (i + 1) ls' Y σt σs LD σ₃
           (fun x => (hls' x).trans (hls x)) (by omega)
           (sepRange_append (ResU.CompS.comm hY) hd' ⟨L, PMap.empty, ResU.comp_empty_right L,
             hleaf', ⟨rfl, trivial⟩⟩) ?_ ?_ hLD' hσ₃'
@@ -166,11 +172,12 @@ theorem wpTS_arrayMap {A B : VTy} {δ : LSub} {ls₀ ls : List SRec} (f : Val)
   refine wpTS_tab ls n (mapTab f ℓs n) _ ρ ?_
   intro ℓ cells x hcells hx
   rw [hn] at hcells ⊢
-  exact mapFill_wp f ℓs ℓ n hf n.toNat 0 ls PMap.empty cells ρ cells x hls (by simp)
+  have hN31 : n.toNat < 2 ^ 31 := by rw [← hn]; exact arrLen_bound n
+  exact mapFill_wp f ℓs ℓ n hN31 hf n.toNat 0 ls PMap.empty cells ρ cells x hls (by simp)
     ⟨rfl, trivial⟩ (by simpa using hcells) (by simpa using hs) (compS_empty_left cells)
     (ResU.CompS.comm hx)
 
-/-! ### As a constant, given the length bound -/
+/-! ### As a constant -/
 
 /-- `array_map : !(!(I32 ⊗ A ⇒ B) ⊗ Array A ⇒ Array B)`. -/
 abbrev arrMapTy (A B : VTy) : VTy :=
@@ -208,8 +215,8 @@ theorem mapV_steps₂ (f : Val) (ℓ : Loc) (n : UInt32) :
   simp [Expr.subst, mapBody, mapE, mapTab, Val.shift, Expr.shift_shift, shift_arr, subst_arr,
     Val.pair, Val.lam, Val.i32, h₂, h₃]
 
-/-- **The owned eliminator as a constant**, given `FamLenBound`. -/
-theorem arrMap_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {A B : VTy} (hbound : FamLenBound)
+/-- **The owned eliminator as a constant.** -/
+theorem arrMap_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {A B : VTy}
     (hΓ : Ctx.DeadP Γ) : SemV Δ Γ (.val mapV) (arrMapTy A B) := by
   refine sem_const hΓ rfl fun δ ls _ => ⟨rfl, ?_⟩
   intro ls' _ v σ τ hv hcomp
@@ -219,8 +226,8 @@ theorem arrMap_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {A B : VTy} (hbound : FamLe
   have e₁ : σ₁ = PMap.empty := hf.1
   subst e₁
   rw [eq_of_compS_empty_left hc]
-  obtain ⟨ℓ, n, rfl, hs⟩ := vP_fam_iff.mp h₂
-  have hn := hbound _ _ _ _ _ _ h₂
+  obtain ⟨ℓ, n, rfl, hn31, hs⟩ := vP_fam_iff.mp h₂
+  have hn := arrLen_of_bound hn31
   refine wpTS_lolli ls' _ _ _ _ ?_
   rw [mapV_beta₁]
   refine wpTS_tensor ls' f (Val.arr ℓ n) _ _ _ ?_

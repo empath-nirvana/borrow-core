@@ -73,6 +73,8 @@ lend-pipeline 2 0 0
 lend-server 2 0 0
 map-reuse 7 0 0
 nats-sum 0 0 0
+slice-imm 1 0 0
+slice-mut 1 0 0
 sum-i32 7 0 0
 sum-prog-exact 37 9 0
 surface/array-sum 1 0 0

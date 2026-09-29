@@ -90,7 +90,7 @@ lexically, innermost first, and are then discarded. Two consequences:
                | mu X. A | X | Name
                | A => A | all 'x < @. A                          (built-in abbreviations)
                | block σ | val σ | fam mut @ σ | fam imm @ σ | view @ A
-               | array A | array_imm @ A                        (VTy.fam, SPEC §9)
+               | array A | array_imm @ A | array_mut @ A        (VTy.fam, SPEC §9)
     comp   C ::= F A | A -o C | C & C | top | forall 'x < @. C | nu X. C
                | delay A | stream A | iter A A A | loop A A      (built-in abbreviations)
 
@@ -104,7 +104,8 @@ lexically, innermost first, and are then discarded. Two consequences:
 4. `+` associates to the right.
 5. `*` associates to the right.
 6. Prefix formers take one atom: `U`, `F`, `ref`, `!`, `imm @`, `mut @`, `box @`, `delay`,
-   `stream`, `block`, `val`, `fam m @`, `view @`, `array`, `array_imm @`; `iter` takes three.
+   `stream`, `block`, `val`, `fam m @`, `view @`, `array`, `array_imm @`, `array_mut @`; `iter`
+   takes three.
    Their lifetime argument is also an atom.
 
 For example, `S -o F (A + S) & F 1` is `S -o ((F (A + S)) & (F 1))`, and `imm 'a Nat * Nat`
@@ -123,6 +124,7 @@ parsing.
 | `view @b A` | `Imm̲ @b A` | `VTy.immReborrow`, `Ty:1064` |
 | `array A` | `[ref A]`: the owned array, the family of its cells | `VTy.fam`, SPEC §9 |
 | `array_imm @a A` | `[imm @a A]`: the family of an array's leaf views | `VTy.fam`, SPEC §9 |
+| `array_mut @a A` | `[mut @a A]`: the family of an array's `mut` leaf borrows | `VTy.fam`, SPEC §9 |
 | `delay A` | `nu X. F (A + U X) & F 1` | `CTy.delay`, `Ty:1042` |
 | `stream A` | `nu X. F (A * U X) & F 1` | `CTy.stream`, `Ty:1045` |
 | `iter A R R'` | `nu X. F (A * U X + R) & F R'` | `CTy.iter`, `Ty:1049` |
@@ -438,6 +440,23 @@ dead context, typed at `!(A => B)` like a host operation, so a call is `(unbang 
   `array_imm @a A` is forgettable (`array_forget`), so both are dropped implicitly (SPEC §12).
 - The erasures: `array_new`, `array_get`, `array_free` are the primitives `tab`, `idx`, `drop`;
   the others are closed λ-terms (`arrLenV`, `sizeV`, `replaceV`, `copyV`, `forgetV`).
+
+The slice borrows (`SPEC.md` §9, `Core/Slices.lean`): an owned array lent as a family of leaf
+borrows, with no cell. The two borrows are curried, as `withbor2` is; the element operations are
+typed at `!(A => B)`:
+
+| constant | type | rule |
+|---|---|---|
+| `slice_borrow_mut['x, @b, A, B]` | `array A -o (all 'x < dom. array_mut 'x A -o F (box 'x B)) -o F (array A * B)` | `sliceBorrowM` |
+| `slice_borrow_imm['x, @b, A, B]` | `array A -o (all 'x < dom. array_imm 'x A -o F (box 'x B)) -o F (array A * B)` | `sliceBorrowI` |
+| `slice_get_mut[@a, A]` | `!(array_mut @a A * i32 => mut @a A + 1)` | `sliceGetM` |
+| `slice_len_mut[@a, A]` | `!(array_mut @a A => array_mut @a A * i32)` | `sliceLenM` |
+
+- `A` and `B` must outlive `@b`, a lifetime defined here (`top` at a closed `main`); at
+  `imm`, `A` must be scoped. The erasure of both borrows is `withbor`'s term.
+- `slice_get_mut` forgets the rest of the family; `slice_len_mut` hands it back.
+- `borrow imm a { 'x, v -> S }` / `borrow mut a { 'x, v -> S }` on an array `a` are these
+  borrows at `@b = top` (draft 0's borrow blocks).
 <!-- ANCHOR_END: arrays -->
 
 ## 9. Derived forms

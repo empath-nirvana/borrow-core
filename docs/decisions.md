@@ -396,3 +396,15 @@ Each entry: the decision, and why. Newest last.
     - **Sugar pairs.** The core forms of `corpus/sugar/gen-from.bc` and `for-value.bc` are
       written by hand as machines; the other pairs whose elaboration changed have as core form
       the elaboration as `bcc desugar` prints it.
+
+43. **Provisional (strings S1–S2, SPEC §8–§9, to be confirmed by the user).**
+    - **`array_mut @a A`** is the core spelling of `[Mut @a A]`, beside `array_imm @a A`; the
+      design's `slice 'a A` / `slice mut 'a A` are the surface names to come with the view
+      library (S3–S4), as abbreviations.
+    - **`slice_borrow_mut['x, @b, A, B]` / `slice_borrow_imm['x, @b, A, B]`** take one lifetime
+      `@b` that both `A` and `B` must outlive; **`slice_get_mut[@a, A]`**,
+      **`slice_len_mut[@a, A]`** are the `mut` counterparts of `array_get`/`array_size`.
+    - **`borrow imm a { 'x, v -> S }` and `borrow mut a { 'x, v -> S }` on an array** lend it as
+      a family, with no cell, rather than rejecting a place that is not a cell. Alternative not
+      taken: a new keyword (`borrow slice`), since the place's type already says which lend is
+      meant, as `&x` does (typed elaboration §5.1).

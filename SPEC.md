@@ -489,6 +489,49 @@ from `Imm @a (Array A)` would sit below the `imm` cell that holds the handle, wh
 the leaves; the update relation excludes exactly that (§5 Open; `experiments/FrameEnd`,
 `imm_view_rejected`), so the view is taken at the shorter `'x` of `withload`.
 
+### Slice borrows
+
+An owned array is also lent directly, as a family of leaf borrows at one lifetime, with no cell
+(`Core/Slices.lean`, K2 of `docs/strings-slices-design.md`):
+
+    slice_borrow_mut : Array A ⊸ (∀'x ⊏ ⊓Δ. [Mut 'x A] ⊸ ['x] B) ⊸ Array A ⊗ B
+    slice_borrow_imm : Array A ⊸ (∀'x ⊏ ⊓Δ. [Imm 'x A] ⊸ ['x] B) ⊸ Array A ⊗ B
+
+    ArrayMut @a A ≜ [Mut @a A]
+
+Each is a constant at a dead context whose term is `withbor`'s, `λa. λg. (a, g () a)`: the
+handle `(ℓ, n)` goes to the callback and comes back, and nothing new runs. Side conditions, at
+both modes: `A` and `B` each outlive a lifetime `@b` defined by `Δ` (`withbor2`'s condition on
+`A`, and `withborF2`'s on its result), `'x` free in neither; at `Imm`, `A` is scoped in `Δ`.
+
+**Soundness.** The model reads a family of places as the iterated separating conjunction of its
+leaves. One Mut Frame (`[TR]` 6.65) per leaf, nested around the one callback, is an induction on
+the list of places (`wpTS_M_frameList`, `Core/SliceFrames.lean`); at `Imm`, one Imm Frame
+(6.64) per leaf, each adding its record, with the leaves stable along `Ext`
+(`wpTS_I_frameList`). Frame `j` takes its own lifetime `α_j`, strictly below the one before;
+the callback runs at a lifetime below all of them, where every leaf is a leaf of `[M 'x A]`
+because leaf cells are antitone in their lifetime (6.118, 6.114). The callback's result, and at
+`Imm` the payloads handed back, are reboxed at each outer frame's lifetime by 6.60
+(`vC_outlives`): that is what the side conditions on `A` and `B` pay for. The compatibility
+lemmas are `sliceBorrowM_compatX` and `sliceBorrowI_compatX`.
+
+**On a `mut` family** (`ArrayMut @a A`), the element operations, with the terms of their `imm`
+counterparts:
+
+| constant | type |
+|---|---|
+| `slice_get_mut` | `!(ArrayMut @a A ⊗ I32 ⇒ Mut @a A ⊕ 1)` — `idx`: the leaf at the index; the rest of the family is forgotten, since a `mut` leaf holds no `own` cell (`noOwn_mut`) |
+| `slice_len_mut` | `!(ArrayMut @a A ⇒ ArrayMut @a A ⊗ I32)` — the family handed back beside its length |
+
+A family `[L]` is split at a run-time index, and two adjacent ones joined, at every leaf type
+(`vP_fam_split`, `vP_fam_join`); no constant exposes that yet.
+
+**Surface.** `borrow imm a { 'x, v -> S }` and `borrow mut a { 'x, v -> S }` on an array `a`
+elaborate to `slice_borrow_imm['x, top, A, B]` and `slice_borrow_mut['x, top, A, B]`, `v` at
+`array_imm 'x A` and `array_mut 'x A`, and rebind `a` from the pair, as the blocks on a cell do.
+The lowering is the term's: the handle is passed, and there is no cell (`corpus/slice-imm.bc`,
+`corpus/slice-mut.bc`).
+
 ### Machine
 
 Three primitives, `Prim.tab`, `Prim.idx` and `Prim.drop`, each with one head step. With
@@ -568,10 +611,13 @@ lemma of the typed world proved by induction on types or on positions has its `[
 
 ### Open
 
-- A primitive array borrow `Array A ⊸ (∀'c. [M 'c A] ⊸ ['c] T) ⊸ Array A ⊗ T` with no cell, and
-  mutable families `[Mut 'c A]` (a leaf `Mut` view, `iter_mut`). Semantically each leaf would be
-  framed by its own 6.64/6.65 frame, nested; not built.
-- `split_at` at a run-time index, returning two disjoint sub-families at the borrow's lifetime.
+- `split_at` at a run-time index, returning two disjoint sub-families at the borrow's lifetime
+  (K3; the relation's content is `vP_fam_split`), and writes that keep the rest of a `mut`
+  family (K5: `slice_replace`, `slice_swap`).
+- An `imm` reborrow of a `mut` family (K2′), and a destructor for `ArrayMut @a A` (a forget, as
+  `array_forget` is for `ArrayImm`).
+- Whether `slice_borrow`'s side conditions on `A` and `B` can be dropped: they are used by the
+  proof, and not known to be needed.
 - `iter`/`iter_mut` over the leaf family, as a lifetime-indexed `Iter` (§7).
 - `replicate` for persistent `A` without a tabulator; creation from a list.
 - Uninitialised leaves (`Uninit`), and sized types (#72).
