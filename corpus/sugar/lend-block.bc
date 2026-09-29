@@ -2,7 +2,7 @@
 -- borrowed around code before a `for`, the `for`, and code after it, each of which reads it. The
 -- block is lent per observation: the stretch before the loop, each step of the loop, and the
 -- stretch after it each borrow `t` for themselves, and the loop threads `t` in its state.
--- `lend-block.core.bc` is the program written by hand in core.
+-- `lend-block.core.bc` is its elaboration in core, as `bcc desugar` prints it.
 -- Answer: i32[134]: the entries at 4, 3, 2, 1 of 10 * i sum to 100, the first entry read before
 -- the loop is 10 (added once per step, 40), and the entry read after it is 0 less 6.
 

@@ -1,5 +1,6 @@
 -- `yield from` (#109): a generator delegates to another, yielding everything it yields, and goes
--- on with what it finishes with. `x <- yield from g; N` is `gen_bind` of `g` and the rest.
+-- on with what it finishes with. `x <- yield from g; N` is a state of the generator's machine that
+-- holds `g` (SPEC §15).
 --
 -- `both` delegates twice and finishes with a number built from the two results. `echo` yields
 -- the bytes of its input; `framed` lends its input to `echo` with `&mut c` and gets it back when

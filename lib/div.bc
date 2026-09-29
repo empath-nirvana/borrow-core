@@ -1,8 +1,9 @@
 -- Divergence (SPEC §14): the delay bind and the fuel handler. A div function of `A` returning
 -- `B` is `A => U (loop B R)`: calling it runs its code up to its first loop and returns the rest
 -- as a loop, which finishes with `B` or, closed early, hands back the residual `R`. This is
--- ordinary library code over `unfold` (SPEC §7), checked with the program and in scope in a
--- program that has a div function.
+-- ordinary library code over `unfold` (SPEC §7), checked with the program and emitted when the
+-- elaborated program names it. An elaborated div body is one state machine (SPEC §15) and uses
+-- no `div_bind`; the delay bind sequences the parts of a body the machine does not cover.
 
 -- The bind's state: in the first loop, with the continuation; or in the continuation's loop.
 -- The continuation has two observations: go on with the first loop's result, or, when the

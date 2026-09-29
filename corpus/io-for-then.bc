@@ -1,7 +1,8 @@
 -- A `for` followed by another loop (SPEC §14). `main` copies its input and counts the bytes, then
 -- calls the div function `count_lines`. What follows the `for` loops, so it does not run inside
--- the `for`'s last step: the `for`'s loop finishes with the capabilities and the count, and the
--- delay bind runs the rest. The input has ended by then, so `count_lines` finds no line.
+-- the `for`'s last step: the `for`'s end runs the code up to the call, and `main`'s machine moves
+-- to the state that holds the call's loop (SPEC §15). The input has ended by then, so
+-- `count_lines` finds no line.
 --
 -- Answer: the input, then `6`, and the result `(i32[6], i32[0])`.
 

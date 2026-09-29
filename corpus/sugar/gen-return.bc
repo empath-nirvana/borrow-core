@@ -2,9 +2,9 @@
 -- `0, 1, …` up to `n` and finishes with `n`, or `return`s early with `i` when it reaches `stop`;
 -- `break` leaves the loop when `i` is odd and above `skip`. The `if`s' `else` arms go on, so
 -- what follows each `if` is moved into its `else` arm and the `return`/`break` are terminals of
--- the loop's body. The body's generator then finishes with `inl` (go on), `inr (inl …)` (`break`)
--- or `inr (inr v)` (`return v`), and the loop finishes with what follows it, or at once with `v`.
--- `gen-return.core.bc` is the program written by hand in core.
+-- the loop's body. The loop's end and `break` go on to what follows the loop, and `return v`
+-- finishes the generator with `v` at once.
+-- `gen-return.core.bc` is its elaboration in core, as `bcc desugar` prints it.
 -- Answer: i32[6], 0 + 1 + 2 + 3 before `stop` returns at 4.
 
 gen fn upto(n: i32, stop: i32) -> i32, i32 =

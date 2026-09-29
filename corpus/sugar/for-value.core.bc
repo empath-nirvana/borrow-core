@@ -1,131 +1,99 @@
--- `for-value.bc` written by hand in core. Each `for` is the loop of SPEC §14 over the generator.
--- The first loop's rest yields again (a second loop follows), so it finishes with the
--- capabilities (none, `()`), the variables what follows reads (`acc`) and its value `r`, bound
--- where the iterator finishes; `div_bind` runs what follows with them. The second loop's rest is
--- total and runs in its last step; `break 40` binds `s` to 40, closes the iterator and runs it.
+-- `for-value.bc` written by hand in core. Each body is one state machine (SPEC §15): an `unfold`
+-- whose state has one summand per point where the body stops between observations, and whose
+-- step is one code with a `case` on the state.
+--
+-- `pair` is a generator with three states: before it starts (its parameter), after `yield 1`
+-- and after `yield 2`. Each observation runs to the next `yield`, with the state after it, or
+-- finishes with 7.
+--
+-- `main` is a div body with two loops: a state for the head of each, holding the loop's
+-- iterator and what it threads (`acc`, then `n`). It runs its code up to the first loop when it
+-- is called and returns the machine there (`mk`). Each observation is one iteration; the first
+-- loop's end binds `r`, runs the code between the loops and moves to the second loop's state (a
+-- skip). The code after the second loop is `after`, a function of `n` and the loop's value `s`,
+-- called from the loop's end and from `break 40`, which closes the iterator first.
 
 def pair : !(1 => U (gen i32 i32 1)) =
   !thunkv fun (p : 1) ->
-    return (thunkv nu_in <
-      let () = p;
-      return (inl (i32[1], thunkv nu_in <
-        s1 <- return ();
-        return (inl (i32[2], thunkv nu_in <
-          s0 <- return ();
-          v : i32 <- return i32[7];
-          return (inr (inl v)),
-          return () >)),
-        return () >)),
-      let () = p;
-      return () >)
-
--- The delay bind, copied from the divergence library (`lib/div.bc`).
-def div_bind_step[A, B, R1, R] :
-    !U ((U (loop A R1) * U ((A -o F (U (loop B R))) & (R1 -o F R))) + U (loop B R)
-        -o F (B + ((U (loop A R1) * U ((A -o F (U (loop B R))) & (R1 -o F R))) + U (loop B R)))
-         & F R) =
-  !thunkv fun (s : (U (loop A R1) * U ((A -o F (U (loop B R))) & (R1 -o F R))) + U (loop B R)) ->
-    < case s {
-        inl p ->
-          let (m, k) = p;
-          o <- (nu_out (force m)).1;
-          case o {
-            inl a ->
-              l <- (force k).1 a;
-              return (inr (inr l))
-          | inr m2 -> return (inr (inl (m2, k)))
-          }
-      | inr l ->
-          o <- (nu_out (force l)).1;
-          case o {
-            inl b -> return (inl b)
-          | inr l2 -> return (inr (inr l2))
-          }
-      },
-      case s {
-        inl p ->
-          let (m, k) = p;
-          r1 <- (nu_out (force m)).2;
-          (force k).2 r1
-      | inr l -> (nu_out (force l)).2
-      } >
-
--- The delay bind: run the first loop, then the continuation on its result. If either never
--- finishes, neither does the whole.
-def div_bind[A, B, R1, R] :
-    U (loop A R1) * U ((A -o F (U (loop B R))) & (R1 -o F R)) => U (loop B R) =
-  thunkv fun (p : U (loop A R1) * U ((A -o F (U (loop B R))) & (R1 -o F R))) ->
-    f <- return (unbang (unfold[loop B R,
-           (U (loop A R1) * U ((A -o F (U (loop B R))) & (R1 -o F R))) + U (loop B R)]
-           div_bind_step[A, B, R1, R]));
-    s0 : (U (loop A R1) * U ((A -o F (U (loop B R))) & (R1 -o F R))) + U (loop B R) <-
-      return (inl p);
+    step : !U (1 + (1 + 1) -o F (i32 * (1 + (1 + 1)) + (i32 + (1 + (1 + 1)))) & F 1) <-
+      return (!thunkv fun (s : 1 + (1 + 1)) ->
+        < case s {
+            inl a -> p <- return a; let () = p; return (inl (i32[1], inr (inl ())))
+          | inr b -> case b {
+              inl a -> let () = a; u <- return (); return (inl (i32[2], inr (inr ())))
+            | inr a -> let () = a; u <- return (); v : i32 <- return i32[7]; return (inr (inl v))
+            }
+          },
+          case s {
+            inl a -> p <- return a; let () = p; return ()
+          | inr b -> case b {
+              inl a -> let () = a; return ()
+            | inr a -> let () = a; return ()
+            }
+          } >);
+    f <- return (unbang (unfold[gen i32 i32 1, 1 + (1 + 1)] step));
+    s0 : 1 + (1 + 1) <- return (inl p);
     return (thunkv nu_in < (nu_out (force f s0)).1, (nu_out (force f s0)).2 >)
 
-type Out = 1 * (i32 * i32)
-
 main : F (U (loop i32 1)) =
-  acc <- return i32[0];
-  step : !U (U (gen i32 i32 1) * i32 -o F (Out + U (gen i32 i32 1) * i32) & F 1) <-
-    return (!thunkv fun (s : U (gen i32 i32 1) * i32) ->
-      < let (it, st) = s;
-        acc <- return st;
-        o <- (nu_out (force it)).1;
-        case o {
-          inl p ->
-            let (x, it) = p;
-            acc <- return ((unbang host[add32]) (acc, x));
-            u <- return ();
-            return (inr (it, acc))
-        | inr d ->
-            case d {
-              inl q -> r <- return q; return (inl ((), (acc, r)))
-            | inr it -> return (inr (it, acc))
-            }
+  -- After the second loop, with its value `s`.
+  after : !(i32 * i32 => i32 + (U (gen i32 i32 1) * i32 + U (gen i32 i32 1) * i32)) <-
+    return (!thunkv fun (a : i32 * i32) ->
+      let (n, s) = a;
+      v : i32 <- return ((unbang host[add32]) (n, s));
+      return (inl v));
+  -- The second loop's head: one iteration.
+  second : !(U (gen i32 i32 1) * i32 => i32 + (U (gen i32 i32 1) * i32 + U (gen i32 i32 1) * i32)) <-
+    return (!thunkv fun (a : U (gen i32 i32 1) * i32) ->
+      let (it, n) = a;
+      o <- (nu_out (force it)).1;
+      case o {
+        inl y ->
+          let (x, it) = y;
+          case (unbang host[eq32]) (x, i32[2]) {
+            inl no -> n <- return ((unbang host[add32]) (n, x)); u <- return (); return (inr (inr (it, n)))
+          | inr yes -> c <- (nu_out (force it)).2; s <- return i32[40]; return ((unbang after) (n, s))
+          }
+      | inr d -> case d {
+          inl q -> s <- return q; return ((unbang after) (n, s))
+        | inr it -> return (inr (inr (it, n)))
+        }
+      });
+  -- The first loop's head: one iteration; at its end, the code up to the second loop.
+  first : !(U (gen i32 i32 1) * i32 => i32 + (U (gen i32 i32 1) * i32 + U (gen i32 i32 1) * i32)) <-
+    return (!thunkv fun (a : U (gen i32 i32 1) * i32) ->
+      let (it, acc) = a;
+      o <- (nu_out (force it)).1;
+      case o {
+        inl y ->
+          let (x, it) = y;
+          acc <- return ((unbang host[add32]) (acc, x));
+          u <- return ();
+          return (inr (inl (it, acc)))
+      | inr d -> case d {
+          inl q ->
+            r <- return q;
+            n <- return ((unbang host[add32]) ((unbang host[mul32]) (acc, i32[10]), r));
+            it2 <- return ((unbang pair) ());
+            return (inr (inr (it2, n)))
+        | inr it -> return (inr (inl (it, acc)))
+        }
+      });
+  step : !U (U (gen i32 i32 1) * i32 + U (gen i32 i32 1) * i32
+             -o F (i32 + (U (gen i32 i32 1) * i32 + U (gen i32 i32 1) * i32)) & F 1) <-
+    return (!thunkv fun (s : U (gen i32 i32 1) * i32 + U (gen i32 i32 1) * i32) ->
+      < case s {
+          inl a -> return ((unbang first) a)
+        | inr a -> return ((unbang second) a)
         },
-        let (it, st) = s;
-        acc <- return st;
-        c <- (nu_out (force it)).2;
-        return () >);
-  f <- return (unbang (unfold[loop Out 1, U (gen i32 i32 1) * i32] step));
-  s0 : U (gen i32 i32 1) * i32 <- return ((unbang pair) (), acc);
-  l <- return (thunkv nu_in < (nu_out (force f s0)).1, (nu_out (force f s0)).2 >);
-  return (div_bind[Out, i32, 1, 1] (l, thunkv
-    < fun (a : Out) ->
-        let (ka, wa) = a;
-        let () = ka;
-        let (acc, r) = wa;
-        n <- return ((unbang host[add32]) ((unbang host[mul32]) (acc, i32[10]), r));
-        step : !U (U (gen i32 i32 1) * i32 -o F (i32 + U (gen i32 i32 1) * i32) & F 1) <-
-          return (!thunkv fun (s : U (gen i32 i32 1) * i32) ->
-            < let (it, st) = s;
-              n <- return st;
-              o <- (nu_out (force it)).1;
-              case o {
-                inl p ->
-                  let (x, it) = p;
-                  case (unbang host[eq32]) (x, i32[2]) {
-                    inl ne ->
-                      n <- return ((unbang host[add32]) (n, x));
-                      u <- return ();
-                      return (inr (it, n))
-                  | inr eq ->
-                      s <- return i32[40];
-                      c <- (nu_out (force it)).2;
-                      v : i32 <- return ((unbang host[add32]) (n, s));
-                      return (inl v)
-                  }
-              | inr d ->
-                  case d {
-                    inl q -> s <- return q; v : i32 <- return ((unbang host[add32]) (n, s)); return (inl v)
-                  | inr it -> return (inr (it, n))
-                  }
-              },
-              let (it, st) = s;
-              n <- return st;
-              c <- (nu_out (force it)).2;
-              return () >);
-        f <- return (unbang (unfold[loop i32 1, U (gen i32 i32 1) * i32] step));
-        s0 : U (gen i32 i32 1) * i32 <- return ((unbang pair) (), n);
-        return (thunkv nu_in < (nu_out (force f s0)).1, (nu_out (force f s0)).2 >),
-      fun (r : 1) -> return r >))
+        case s {
+          inl a -> let (it, acc) = a; c <- (nu_out (force it)).2; return ()
+        | inr a -> let (it, n) = a; c <- (nu_out (force it)).2; return ()
+        } >);
+  mk : !(U (gen i32 i32 1) * i32 + U (gen i32 i32 1) * i32 => U (loop i32 1)) <-
+    return (!thunkv fun (s0 : U (gen i32 i32 1) * i32 + U (gen i32 i32 1) * i32) ->
+      f <- return (unbang (unfold[loop i32 1, U (gen i32 i32 1) * i32 + U (gen i32 i32 1) * i32] step));
+      return (thunkv nu_in < (nu_out (force f s0)).1, (nu_out (force f s0)).2 >));
+  acc <- return i32[0];
+  it <- return ((unbang pair) ());
+  return ((unbang mk) (inl (it, acc)))

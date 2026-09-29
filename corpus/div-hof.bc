@@ -2,7 +2,8 @@
 -- to three numbers and adds the results; it is written once, at a total callback type. Called
 -- with the total `double`, it is used as written and stays total. Called with `steps`, which is
 -- div, it is specialized: the elaborator makes a copy with the parameter at `steps`'s type, in
--- which the calls through the parameter are delay binds, so the copy is div, and so is `main`.
+-- which the calls through the parameter are calls of a div function in direct style, so the copy
+-- is div, and so is `main`.
 -- `bcc desugar` shows the copy, `sum3__0`.
 --
 -- `main` loops and uses no capability; the runtime drives its loop with none (SPEC §11, §14).

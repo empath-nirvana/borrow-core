@@ -1,8 +1,8 @@
--- A generator with three `yield`s and no loop (`lib/gen.bc`). `gen fn` elaborates the body to its
--- first observation: each `yield e; rest` answers `next` with `e` and a thunk of the rest, whose
--- `next` runs `rest` and whose `close` hands back the residual (`()` here) without running it.
--- The call runs nothing: it returns the thunk whose `next` runs the body up to the first
--- `yield`. `gen-yields.core.bc` is the program written by hand in core.
+-- A generator with three `yield`s and no loop. `gen fn` elaborates the body to one state machine
+-- (SPEC §15): a state before it starts and one after each `yield`; each `next` runs to the next
+-- `yield` and answers with the element and the state after it, and `close` hands back the
+-- residual (`()` here) without running anything. The call runs nothing: it returns the machine at
+-- its first state. `gen-yields.core.bc` is its elaboration in core, as `bcc desugar` prints it.
 -- Answer: i32[14].
 
 gen fn produce() -> i32 =

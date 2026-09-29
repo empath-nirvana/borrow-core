@@ -1,7 +1,7 @@
 -- `yield from` (#109): `around` yields 0, then everything `two` yields, then what `two` finished
--- with. `x <- yield from g; N` is `gen_bind` (`lib/gen.bc`) of `g` and a continuation that binds
--- `x` to what `g` finishes with and is the generator of `N`; the generator's first observation is
--- the bind's. `gen-from.core.bc` is the program written by hand in core.
+-- with. `x <- yield from g; N` is a state of the generator's machine (SPEC §15) that holds `g`:
+-- each observation there observes `g`, and when `g` finishes, binds `x` to what it finishes with
+-- and runs `N`. `gen-from.core.bc` is the program written by hand in core.
 -- Answer: i32[1256]: the elements 0, 1, 2, 5 read as digits, then `around`'s value 6.
 
 gen fn two() -> i32, i32 =

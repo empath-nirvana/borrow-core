@@ -1,6 +1,6 @@
 -- A callback an earlier call returned (SPEC §14, docs/typed-elaboration.md §2.4). `pick`'s type
 -- says it returns a div function, so `g`'s type is known and `twice (g, 5)` is specialized at
--- it. `hof-returned.core.bc` is the program written by hand in core.
+-- it. `hof-returned.core.bc` is its elaboration in core, as `bcc desugar` prints it.
 -- Answer: `inl 7`.
 -- A loop that finishes at its first observation, with `n + 1`.
 def once : i32 => U (loop i32 1) =

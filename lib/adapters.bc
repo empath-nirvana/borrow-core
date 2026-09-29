@@ -1,10 +1,8 @@
 -- Generator adapters (#109). Each is a generic `gen fn`, written once and instantiated at the
 -- types of each call (SPEC §15, generic generators): the instance is ordinary code at those
 -- types, so an adapter over a pure source, one over an input and one over a source that fails are
--- three instances of one definition. A pipeline of single-loop adapters whose functions are known
--- makes no allocation and no dispatched call; `chain`, `zip`, `chunks`, `lines` and `batch`
--- sequence two parts of their body with `gen_bind` (`lib/gen.bc`) and dispatch once per
--- observation.
+-- three instances of one definition. Each body is one state machine (SPEC §15), so a pipeline of
+-- adapters whose functions are known makes no allocation and no dispatched call.
 --
 -- A source is a generator `U (gen A K R)`: it yields `A`, finishes with `K`, and, closed early,
 -- hands back `R`. An adapter that runs its source to the end finishes with the source's `K`, and

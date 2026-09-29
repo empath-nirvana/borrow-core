@@ -1,7 +1,7 @@
 -- A `let mut` variable assigned in a `for` body but not read there is threaded through the loop.
 -- The first `for` keeps the last byte of the input in `last` and never reads it; the second
--- `for` loops, so what follows the first is sequenced by the delay bind (SPEC §14), with the
--- first loop's variables handed on. The second loop finds the input at its end.
+-- `for` is another state of `main`'s machine (SPEC §15), and the first loop's variables are
+-- handed on to it. The second loop finds the input at its end.
 --
 -- Answer: on the input `AB`, i32[66]: the last byte, `B`, and no byte left for the second loop.
 -- A loop that threaded only the variables its body reads hands `last` on as 0 and gives i32[0].

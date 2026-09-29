@@ -1,8 +1,9 @@
 -- Two div helpers sequenced (SPEC §14). `line_length` is a loop written out in core: its type,
 -- `In => U (loop (In * i32) (In * 1))`, says it is div. `count_lines` has a `for`, so it is div
 -- too, though nothing marks it. `sections` calls one and then the other in direct style, and
--- `main` calls `sections` and then writes: each call is a delay bind, so the loops run one after
--- the other and the input is read once, in order.
+-- `main` calls `sections` and then writes: each call is a state of the caller's machine holding
+-- the callee's loop (SPEC §15), so the loops run one after the other and the input is read once,
+-- in order.
 --
 -- Answer: `6 3` and the result `(i32[6], i32[3])`: the header `header` has six bytes, and three
 -- lines follow it. A loop that ran the second helper first, or read a byte twice, changes a

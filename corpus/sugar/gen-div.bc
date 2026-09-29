@@ -1,8 +1,8 @@
 -- A call of a div function in direct style inside a generator (#109): `collatz` is a loop (its
 -- type says so), and `steps` calls it in direct style. In a generator the loop runs inside the
--- generator, each of its turns a skip (`gen_bind_loop`, `lib/gen.bc`), so every observation of
--- `steps` stays total; when it finishes, the rest of the body runs with its result.
--- `gen-div.core.bc` is the program written by hand in core.
+-- generator, held in a state of its machine (SPEC §15), each of its turns a skip, so every
+-- observation of `steps` stays total; when it finishes, the rest of the body runs with its result.
+-- `gen-div.core.bc` is its elaboration in core, as `bcc desugar` prints it.
 -- Answer: i32[111], the Collatz steps from 27.
 
 -- One step from `(n, k)`: `k` steps so far.
