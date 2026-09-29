@@ -8,8 +8,10 @@ import Backend.Driver
     lake exe bcc parse <file>   parse, and check that printing and re-parsing gives the same AST
     lake exe bcc print <file>   parse and print in the canonical ASCII spelling
     lake exe bcc check <file>   parse and type-check: print each declaration's type, or the error
-    lake exe bcc compile <file> -o <out.wat>
-                                compile a closed `main` to WebAssembly text (`Backend/`)
+    lake exe bcc compile [--timings] <file> -o <out.wat>
+                                compile a closed `main` to WebAssembly text (`Backend/`); with
+                                `--timings`, write each stage's time and output size to
+                                standard error
     lake exe bcc run <file>     compile, and run under `wasmtime`: `main`'s value, then the number
                                 of live objects after it is dropped
     lake exe bcc interp [--stage S] <file>
@@ -100,6 +102,13 @@ def compile (file out : String) : IO UInt32 := do
   | .ok wat => IO.FS.writeFile out wat; return 0
   | .error e => IO.eprintln e; return 1
 
+/-- Write `file`'s WAT to `out`, writing each stage's time to standard error. -/
+def compileTimed (file out : String) : IO UInt32 := do
+  let src ← IO.FS.readFile file
+  match ← Backend.compileWatTimed file src with
+  | .ok wat => IO.FS.writeFile out wat; return 0
+  | .error e => IO.eprintln e; return 1
+
 /-- Compile `file` and run it under `wasmtime` (with tail calls), with this process's standard
 input, output and error. -/
 def run (file : String) : IO UInt32 := do
@@ -129,6 +138,7 @@ def roundTrip (p : Program) : Except String Unit := do
 def main (argv : List String) : IO UInt32 := do
   match argv with
   | ["compile", file, "-o", out] => compile file out
+  | ["compile", "--timings", file, "-o", out] => compileTimed file out
   | ["run", file] => run file
   | ["interp", file] => interp "source" file
   | ["interp", "--stage", stage, file] => interp stage file

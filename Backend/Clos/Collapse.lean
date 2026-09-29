@@ -174,13 +174,14 @@ def Tm.renameCodes (f : Nat → Nat) : Tm → Tm
 
 /-- Merge equal codes of the same layout type, with captured values of the same layout types,
 into the first of them, until none are equal. Layout types are monomorphic, so equal codes at
-different types (`λx. x` at two types) stay apart. -/
-def Prog.mergeCodes (p : Prog) : Prog := Id.run do
+different types (`λx. x` at two types) stay apart. The layout types of the result, when they were
+found: the last round's, in which nothing merges. -/
+def Prog.mergeCodesT (p : Prog) : Prog × Option Types := Id.run do
   let mut p := p
   -- The codes merged into another: nothing refers to them any more, so they are not keyed again.
   let mut merged : Std.HashSet Nat := {}
   for _ in [0:p.codes.size + 1] do
-    let .ok T := p.types | return p
+    let .ok T := p.types | return (p, none)
     let mut first : Std.HashMap String Nat := {}
     let mut to : Std.HashMap Nat Nat := {}
     for (c, k) in p.codes.toList.zipIdx do
@@ -189,24 +190,30 @@ def Prog.mergeCodes (p : Prog) : Prog := Id.run do
       match first[key]? with
       | some k₀ => to := to.insert k k₀; merged := merged.insert k
       | none => first := first.insert key k
-    if to.isEmpty then break
+    if to.isEmpty then return (p, some T)
     let f (c : Nat) : Nat := to.getD c c
     p := { p with
       codes := p.codes.map fun (c : Code) => { c with body := c.body.renameCodes f }
       main := p.main.renameCodes f
       fin := p.fin.map f }
-  return p
+  return (p, none)
 
-/-- Build the collapsing codata thunks eagerly. -/
-def Prog.collapse (p : Prog) : Prog := Id.run do
+def Prog.mergeCodes (p : Prog) : Prog := p.mergeCodesT.1
+
+/-- Build the collapsing codata thunks eagerly; and the result's layout types, when they were
+found. -/
+def Prog.collapseT (p : Prog) : Prog × Option Types := Id.run do
   let flow := p.flow
   let mut cs : Std.HashMap Nat Collapse := {}
   for (c, k) in p.codes.toList.zipIdx do
     if let some r := collapse? p.codes flow c then cs := cs.insert k r
-  if cs.isEmpty then return p.mergeCodes
+  if cs.isEmpty then return p.mergeCodesT
   let q : Prog := { p with
     codes := p.codes.map fun (c : Code) => { c with body := c.body.collapse cs }
     main := p.main.collapse cs }
-  return q.mergeCodes
+  return q.mergeCodesT
+
+/-- Build the collapsing codata thunks eagerly. -/
+def Prog.collapse (p : Prog) : Prog := p.collapseT.1
 
 end Backend.Clos

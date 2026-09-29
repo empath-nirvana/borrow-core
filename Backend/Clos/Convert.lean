@@ -1,3 +1,5 @@
+import Std.Data.HashSet
+import Std.Data.TreeMap
 import Paper.S1_Syntax.Definitions
 import Backend.Clos.Syntax
 
@@ -53,10 +55,88 @@ def fvsRaw : Expr → Nat → List Nat
 /-- The free indices, each once, in order of first occurrence. -/
 def fvs (e : Expr) (d : Nat) : List Nat := (fvsRaw e d).eraseDups
 
+/-! ### Free indices of every subterm
+
+`conv` asks for the free indices of the parts of each term it converts. Computed on demand, that
+is a walk of each part at each node above it, quadratic in the depth of the term; instead they are
+computed once, bottom-up, for every subterm, numbered in pre-order (a term, then its parts left
+to right: `a` and `b` of `pair`, `seq`, `app` and `letpair`, the scrutinee and the two arms of
+`case`). A part's number is its parent's plus one, plus the sizes of the parts before it. -/
+
+/-- `a`, then the indices of `b` not in `a`: the free indices of two parts in order of first
+occurrence. -/
+def fvUnion (a b : Array Nat) : Array Nat :=
+  if b.isEmpty then a else if a.isEmpty then b else
+  let s : Std.HashSet Nat := a.foldl (·.insert ·) {}
+  b.foldl (fun acc x => if s.contains x then acc else acc.push x) a
+
+/-- The free indices under `k` binders, relative to the outside. -/
+def fvUnder (k : Nat) (a : Array Nat) : Array Nat :=
+  if k == 0 then a else a.filterMap fun x => if x < k then none else some (x - k)
+
+/-- Every subterm's size and free indices (`fvs · 0`), by its pre-order number. -/
+structure Pre where
+  size : Array Nat := #[]
+  fv : Array (Array Nat) := #[]
+
+def Pre.enter : StateM Pre Nat :=
+  modifyGet fun p => (p.size.size, { size := p.size.push 0, fv := p.fv.push #[] })
+
+def Pre.leave (id : Nat) (fv : Array Nat) : StateM Pre (Array Nat) :=
+  modifyGet fun p => (fv, { size := p.size.set! id (p.size.size - id), fv := p.fv.set! id fv })
+
+/-- Number `e` and its subterms from `pre.size.size` on; `e`'s free indices. -/
+def Pre.add : Expr → StateM Pre (Array Nat)
+  | .var i => do leave (← enter) #[i]
+  | .unit | .loc _ | .prim _ => do leave (← enter) #[]
+  | .pair a b | .seq a b | .app a b => do
+    let id ← enter
+    let fa ← Pre.add a
+    let fb ← Pre.add b
+    leave id (fvUnion fa fb)
+  | .inj₁ a | .inj₂ a => do
+    let id ← enter
+    leave id (← Pre.add a)
+  | .lam b => do
+    let id ← enter
+    leave id (fvUnder 1 (← Pre.add b))
+  | .letpair a b => do
+    let id ← enter
+    let fa ← Pre.add a
+    let fb ← Pre.add b
+    leave id (fvUnion fa (fvUnder 2 fb))
+  | .case a b c => do
+    let id ← enter
+    let fa ← Pre.add a
+    let fb ← Pre.add b
+    let fc ← Pre.add c
+    leave id (fvUnion (fvUnion fa (fvUnder 1 fb)) (fvUnder 1 fc))
+
+def Pre.of (e : Expr) : Pre := (Pre.add e).run {} |>.2
+
+/-- A context: the variable of each de Bruijn index, by its level (the index `i` of a context of
+`depth` binders is level `depth - 1 - i`). A level with no variable is one a closure body cannot
+refer to. -/
+structure Ctx where
+  depth : Nat := 0
+  vars : Std.TreeMap Nat Var := {}
+
+def Ctx.push (c : Ctx) (x : Var) : Ctx := { depth := c.depth + 1, vars := c.vars.insert c.depth x }
+
+def Ctx.get? (c : Ctx) (i : Nat) : Option (Option Var) :=
+  if i < c.depth then some c.vars[c.depth - 1 - i]? else none
+
+def Ctx.set (c : Ctx) (i : Nat) (x : Var) : Ctx :=
+  if i < c.depth then { c with vars := c.vars.insert (c.depth - 1 - i) x } else c
+
+/-- The context of the variables `xs`, the first at index 0. -/
+def Ctx.ofList (xs : List Var) : Ctx := xs.foldr (fun x c => c.push x) {}
+
 structure CState where
   next : Nat
   codes : Array Code
   folds : List FoldCode := []
+  pre : Pre := {}
 
 abbrev CM := StateT CState (Except String)
 
@@ -75,10 +155,17 @@ def fresh : CM Var := modifyGet fun s => (s.next, { s with next := s.next + 1 })
 def register (c : Code) : CM Nat :=
   modifyGet fun s => (s.codes.size, { s with codes := s.codes.push c })
 
-def lookup (ctx : List Var) (i : Nat) : CM Var :=
-  match ctx[i]? with
-  | some x => if x == dummy then throw s!"index {i} is not captured" else pure x
+def lookup (ctx : Ctx) (i : Nat) : CM Var :=
+  match ctx.get? i with
+  | some (some x) => pure x
+  | some none => throw s!"index {i} is not captured"
   | none => throw s!"unbound index {i}"
+
+/-- The size of subterm `id`. -/
+def sizeAt (id : Nat) : CM Nat := return (← get).pre.size[id]?.getD 0
+
+/-- `fvs e d` of the subterm `e` numbered `id`. -/
+def fvsAt (id : Nat) (d : Nat) : CM (List Nat) := return (fvUnder d (← get).pre.fv[id]!).toList
 
 def wrapCopies (cs : List (Var × Var)) (t : Tm) : Tm :=
   cs.foldr (fun (x, x') t => .copy x x' t) t
@@ -88,20 +175,21 @@ def wrapDrops (xs : List Var) (t : Tm) : Tm :=
 
 /-- Copies for two sequential parts using the indices `f₁` and `f₂`: every index in both is
     copied for the first part. The contexts the two parts are converted in. -/
-def plan2 (ctx : List Var) (f₁ f₂ : List Nat) : CM (List (Var × Var) × List Var × List Var) := do
-  let shared := f₁.filter (· ∈ f₂)
-  let mut cs : List (Var × Var) := []
+def plan2 (ctx : Ctx) (f₁ f₂ : List Nat) : CM (List (Var × Var) × Ctx × Ctx) := do
+  let in₂ : Std.HashSet Nat := f₂.foldl (·.insert ·) {}
+  let shared := f₁.filter in₂.contains
+  let mut cs : Array (Var × Var) := #[]
   let mut ctx₁ := ctx
   for i in shared do
     let x ← lookup ctx i
     if x.isSelf then continue
     let x' ← fresh
-    cs := cs ++ [(x, x')]
+    cs := cs.push (x, x')
     ctx₁ := ctx₁.set i x'
-  return (cs, ctx₁, ctx)
+  return (cs.toList, ctx₁, ctx)
 
 /-- The variables of the indices `is` in `ctx`, but for the fixed points' `self`s. -/
-def vars (ctx : List Var) (is : List Nat) : CM (List Var) :=
+def vars (ctx : Ctx) (is : List Nat) : CM (List Var) :=
   return (← is.mapM (lookup ctx)).filter (!·.isSelf)
 
 def Op.ofPrim? : Prim → Option Op
@@ -196,7 +284,12 @@ def reserve : CM Nat := register ⟨[], dummy, .unit⟩
 def setCode (c : Nat) (code : Code) : CM Unit :=
   modify fun s => { s with codes := s.codes.set! c code }
 
-def conv (ctx : List Var) : Expr → CM Tm
+/-- Convert the subterm `e`, numbered `id` (`Pre`), in the context `ctx`. -/
+def conv (ctx : Ctx) (e : Expr) (id : Nat) : CM Tm := do
+  -- The numbers of `e`'s parts.
+  let k₁ := id + 1
+  let k₂ := k₁ + (← sizeAt k₁)
+  match e with
   | .var i => do
       let x ← lookup ctx i
       return if x.isSelf then .clos (x - selfBase) [] else .var x
@@ -205,77 +298,84 @@ def conv (ctx : List Var) : Expr → CM Tm
   | .prim p => primValue p
   | .inj₁ e => do
       let a ← fresh
-      return .letv a (← conv ctx e) (.inj false a)
+      return .letv a (← conv ctx e k₁) (.inj false a)
   | .inj₂ e => do
       let a ← fresh
-      return .letv a (← conv ctx e) (.inj true a)
+      return .letv a (← conv ctx e k₁) (.inj true a)
   | .pair e₁ e₂ => do
-      let (cs, c₁, c₂) ← plan2 ctx (fvs e₁ 0) (fvs e₂ 0)
+      let (cs, c₁, c₂) ← plan2 ctx (← fvsAt k₁ 0) (← fvsAt k₂ 0)
       let a ← fresh; let b ← fresh
-      let t₁ ← conv c₁ e₁
-      let t₂ ← conv c₂ e₂
+      let t₁ ← conv c₁ e₁ k₁
+      let t₂ ← conv c₂ e₂ k₂
       return wrapCopies cs (.letv a t₁ (.letv b t₂ (.pair a b)))
   | .seq e₁ e₂ => do
-      let (cs, c₁, c₂) ← plan2 ctx (fvs e₁ 0) (fvs e₂ 0)
+      let (cs, c₁, c₂) ← plan2 ctx (← fvsAt k₁ 0) (← fvsAt k₂ 0)
       let u ← fresh
-      let t₁ ← conv c₁ e₁
-      let t₂ ← conv c₂ e₂
+      let t₁ ← conv c₁ e₁ k₁
+      let t₂ ← conv c₂ e₂ k₂
       return wrapCopies cs (.letv u t₁ (.drop u t₂))
   | .letpair e₁ e₂ => do
-      let (cs, c₁, c₂) ← plan2 ctx (fvs e₁ 0) (fvs e₂ 2)
+      let (cs, c₁, c₂) ← plan2 ctx (← fvsAt k₁ 0) (← fvsAt k₂ 2)
       let p ← fresh; let x ← fresh; let y ← fresh
-      let t₁ ← conv c₁ e₁
-      let t₂ ← conv (y :: x :: c₂) e₂
-      let used := fvs e₂ 0
+      let t₁ ← conv c₁ e₁ k₁
+      let t₂ ← conv ((c₂.push x).push y) e₂ k₂
+      let used ← fvsAt k₂ 0
       let unused := (if 1 ∈ used then [] else [x]) ++ (if 0 ∈ used then [] else [y])
       return wrapCopies cs (.letv p t₁ (.letpair x y p (wrapDrops unused t₂)))
   | .case e e₁ e₂ => do
-      let f₁ := fvs e₁ 1; let f₂ := fvs e₂ 1
-      let (cs, c₀, c₁) ← plan2 ctx (fvs e 0) (f₁ ++ f₂)
+      let k₃ := k₂ + (← sizeAt k₂)
+      let f₁ ← fvsAt k₂ 1; let f₂ ← fvsAt k₃ 1
+      let (cs, c₀, c₁) ← plan2 ctx (← fvsAt k₁ 0) (f₁ ++ f₂)
       let s ← fresh; let x ← fresh; let y ← fresh
-      let t₀ ← conv c₀ e
-      let t₁ ← conv (x :: c₁) e₁
-      let t₂ ← conv (y :: c₁) e₂
-      let only₁ ← vars c₁ (f₁.filter (· ∉ f₂))
-      let only₂ ← vars c₁ (f₂.filter (· ∉ f₁))
-      let d₁ := (if 0 ∈ fvs e₁ 0 then [] else [x]) ++ only₂
-      let d₂ := (if 0 ∈ fvs e₂ 0 then [] else [y]) ++ only₁
+      let t₀ ← conv c₀ e k₁
+      let t₁ ← conv (c₁.push x) e₁ k₂
+      let t₂ ← conv (c₁.push y) e₂ k₃
+      let in₁ : Std.HashSet Nat := f₁.foldl (·.insert ·) {}
+      let in₂ : Std.HashSet Nat := f₂.foldl (·.insert ·) {}
+      let only₁ ← vars c₁ (f₁.filter (!in₂.contains ·))
+      let only₂ ← vars c₁ (f₂.filter (!in₁.contains ·))
+      let d₁ := (if 0 ∈ (← fvsAt k₂ 0) then [] else [x]) ++ only₂
+      let d₂ := (if 0 ∈ (← fvsAt k₃ 0) then [] else [y]) ++ only₁
       return wrapCopies cs (.letv s t₀ (.case s x (wrapDrops d₁ t₁) y (wrapDrops d₂ t₂)))
   | .app (.app (.prim .store) l) v => do
-      let (cs, cv, cl) ← plan2 ctx (fvs v 0) (fvs l 0)
+      -- `l` is part 2 of `app (prim store) l`, `v` part 2 of the whole.
+      let kl := k₁ + 2
+      let (cs, cv, cl) ← plan2 ctx (← fvsAt k₂ 0) (← fvsAt kl 0)
       let vv ← fresh; let lv ← fresh
-      let tv ← conv cv v
-      let tl ← conv cl l
+      let tv ← conv cv v k₂
+      let tl ← conv cl l kl
       return wrapCopies cs (.letv vv tv (.letv lv tl (.prim .store [lv, vv])))
   | .app f a => do
       match f with
       | .app sw l =>
         if isSwap sw then
           -- `swap l a`, saturated: `a`, then `l`, as the machine evaluates them.
-          let (cs, cv, cl) ← plan2 ctx (fvs a 0) (fvs l 0)
+          let kl := k₁ + 1 + (← sizeAt (k₁ + 1))
+          let (cs, cv, cl) ← plan2 ctx (← fvsAt k₂ 0) (← fvsAt kl 0)
           let vv ← fresh; let lv ← fresh
-          let tv ← conv cv a
-          let tl ← conv cl l
+          let tv ← conv cv a k₂
+          let tl ← conv cl l kl
           return wrapCopies cs (.letv vv tv (.letv lv tl (.prim .swap [lv, vv])))
       | .lam b =>
         if !isSwap f && (fixBody? f).isNone then
           -- `(λx. b) a`, the erasure's `let`: `a` is bound to `x` and no closure is made.
-          let (cs, ca, cb) ← plan2 ctx (fvs a 0) (fvs b 1)
+          let kb := k₁ + 1
+          let (cs, ca, cb) ← plan2 ctx (← fvsAt k₂ 0) (← fvsAt kb 1)
           let x ← fresh
-          let ta ← conv ca a
-          let tb ← conv (x :: cb) b
-          let tb := if 0 ∈ fvs b 0 then tb else .drop x tb
+          let ta ← conv ca a k₂
+          let tb ← conv (cb.push x) b kb
+          let tb := if 0 ∈ (← fvsAt kb 0) then tb else .drop x tb
           return wrapCopies cs (.letv x ta tb)
       | _ => pure ()
       match f, Op.ofPrim? (match f with | .prim p => p | _ => .store) with
       | .prim _, some op =>
         let av ← fresh
-        return .letv av (← conv ctx a) (.prim op [av])
+        return .letv av (← conv ctx a k₂) (.prim op [av])
       | _, _ =>
-        let (cs, ca, cf) ← plan2 ctx (fvs a 0) (fvs f 0)
+        let (cs, ca, cf) ← plan2 ctx (← fvsAt k₂ 0) (← fvsAt k₁ 0)
         let av ← fresh; let fv ← fresh
-        let ta ← conv ca a
-        let tf ← conv cf f
+        let ta ← conv ca a k₂
+        let tf ← conv cf f k₁
         return wrapCopies cs (.letv av ta (.letv fv tf (.app fv av)))
   | .lam b => do
       if isSwap (.lam b) then return ← swapValue
@@ -288,35 +388,36 @@ def conv (ctx : List Var) : Expr → CM Tm
         if (fixBody? (.lam b)).isSome then
           -- The native fixed point: code `c` is `λx. B[self := clos c []]`; it captures
           -- nothing and calls itself through a closure of its own code, built where `self`
-          -- is used.
+          -- is used. `B` is six parts down from `b`, each the first.
+          let kB := k₁ + 6
           let c ← reserve
           let x ← fresh
-          let body ← conv [x, selfBase + c] B
+          let body ← conv (Ctx.ofList [x, selfBase + c]) B kB
           if let (some (reuse, shape), .clos cu xs) := (foldShape? B, body) then
             if let some i := xs.idxOf? x then
               modify fun st => { st with folds := ⟨cu, reuse, shape, i⟩ :: st.folds }
-          let body := if 0 ∈ fvs B 0 then body else .drop x body
+          let body := if 0 ∈ (← fvsAt kB 0) then body else .drop x body
           setCode c ⟨[], x, body⟩
           return .clos c []
       | _ => pure ()
-      let fvAll := fvs b 1
+      let fvAll ← fvsAt k₁ 1
       let selfs ← fvAll.filterM fun i => return (← lookup ctx i).isSelf
       let fv := fvAll.filter (· ∉ selfs)
       let xs ← vars ctx fv
       let es ← fv.mapM fun _ => fresh
       let p ← fresh
-      let inner := (List.range ctx.length).map fun i =>
-        match fv.idxOf? i with
-        | some k => es.getD k dummy
-        | none => if i ∈ selfs then ctx.getD i dummy else dummy
-      let body ← conv (p :: inner) b
-      let body := if 0 ∈ fvs b 0 then body else .drop p body
+      -- The body sees the captured variables, and the `self`s, at their indices.
+      let inner : Ctx := { depth := ctx.depth }
+      let inner := (fv.zip es).foldl (fun c (i, x) => c.set i x) inner
+      let inner ← selfs.foldlM (fun c i => return c.set i (← lookup ctx i)) inner
+      let body ← conv (inner.push p) b k₁
+      let body := if 0 ∈ (← fvsAt k₁ 0) then body else .drop p body
       let c ← register ⟨es, p, body⟩
       return .clos c xs
 
 /-- Closure-convert a closed term. -/
 def convert (e : Expr) : Except String Prog := do
-  let (t, s) ← (conv [] e).run ⟨dummy + 1, #[], []⟩
+  let (t, s) ← (conv {} e 0).run { next := dummy + 1, codes := #[], pre := .of e }
   pure { codes := s.codes, main := t, folds := s.folds }
 
 /-! ### Externs  `[spec §11]` -/
@@ -366,9 +467,9 @@ def convertMain (exts : List ExtImpl) (loops : Bool) (e : Expr) : Except String 
   let act : CM (Tm × Option Nat) := do
     let xs ← exts.mapM fun _ => fresh
     let ctx := xs.reverse
-    let used := fvs e 0
+    let used ← fvsAt 0 0
     let r ← fresh
-    let t ← conv ctx e
+    let t ← conv (Ctx.ofList ctx) e 0
     let ep ← epilogue r ncaps
     let (main, fin) ← if loops then do
         let c ← register ⟨[], r, ep⟩
@@ -384,7 +485,7 @@ def convertMain (exts : List ExtImpl) (loops : Bool) (e : Expr) : Except String 
         body := .letv l (.lit (.i32 fd.toUInt32)) (.letv x (.prim .alloc [l]) body)
       | .io k => body := .letv x (← ioValue k) body
     return (body, fin)
-  let ((t, fin), s) ← act.run ⟨dummy + 1, #[], []⟩
+  let ((t, fin), s) ← act.run { next := dummy + 1, codes := #[], pre := .of e }
   pure { codes := s.codes, main := t, fin, folds := s.folds }
 
 end Backend.Clos
