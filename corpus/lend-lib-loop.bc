@@ -1,0 +1,62 @@
+-- The per-observation lend as library code (`lib/lend.bc`, SPEC §14): `loop_lend_imm` and
+-- `loop_lend_mut` build a loop whose state holds the owner of a cell, and whose every
+-- observation borrows it for that observation only. Each loop here is driven by `div_fuel`.
+--
+-- The `imm` loop sums a table at the indices 4, 3, 2, 1, reading it through the borrow at each
+-- step. The `mut` loop counts a cell up to a bound through the borrow at each step. Each hands
+-- its owner back when it finishes.
+--
+-- Answer: (i32[100], i32[7]): the table holds 10 * i, and 40 + 30 + 20 + 10 = 100; the cell goes
+-- from 3 to 7 in 4 steps, and comes back holding 7. A loop that lent the owner once and lost it
+-- could not return it; a step that dropped its state gives 40; a `mut` step that did not store
+-- gives 3.
+
+include lend
+
+fn tab(i: i32) -> i32 = i * 10
+
+def get : !(all 'a < top. imm 'a (array i32) * i32 => i32) =
+  !thunkv Fun 'a < top. return (thunkv fun (p : imm 'a (array i32) * i32) ->
+    let (b, i) = p;
+    withload['a, 'z, array i32, i32] b (thunkv Fun 'z < dom. return (thunkv fun (xs : array_imm 'z i32) ->
+      match array_get['z, i32] (xs, i) { inl e -> let v = *e; boxed['z] v | inr _ -> boxed['z] 0 })))
+
+-- One step over `(n, acc)`: finish with `acc` at `n = 0`, else add the entry at `n`.
+def sum_step : !(all 'x < top. imm 'x (array i32) * (i32 * i32) => i32 + i32 * i32) =
+  !thunkv Fun 'x < top. return (thunkv fun (p : imm 'x (array i32) * (i32 * i32)) ->
+    let (b, s) = p;
+    let (n, acc) = s;
+    if n == 0 { inl acc } else { inr (n - 1, acc + get(b, n)) })
+
+def sum_stop : !(all 'x < top. imm 'x (array i32) * (i32 * i32) => 1) =
+  !thunkv Fun 'x < top. return (thunkv fun (p : imm 'x (array i32) * (i32 * i32)) ->
+    let (b, s) = p; ())
+
+-- One step toward the bound `k`: finish when the cell has reached it, else add one to the cell.
+def count_step : !(all 'x < top. mut 'x i32 * i32 => 1 + i32) =
+  !thunkv Fun 'x < top. return (thunkv fun (p : mut 'x i32 * i32) ->
+    let (m, k) = p;
+    let v = modify m { v -> (v, v) };
+    if k <= v { inl () } else { modify m { v -> v + 1 }; inr k })
+
+def count_stop : !(all 'x < top. mut 'x i32 * i32 => 1) =
+  !thunkv Fun 'x < top. return (thunkv fun (p : mut 'x i32 * i32) -> let (m, k) = p; ())
+
+type T = array i32
+
+main -> i32 * i32 =
+  let t = alloc(array_new[i32] (10, tab));
+  let l : U (loop (ref T * i32) (ref T * 1)) =
+    loop_lend_imm[T, i32 * i32, i32, 1] ((sum_step, sum_stop), (t, (4, 0)));
+  let n = match div_fuel[ref T * i32, ref T * 1] (l, 100) {
+    inl (t, n) -> n
+  | inr (t, u) -> 0
+  };
+  let c = alloc(3);
+  let m : U (loop (ref i32 * 1) (ref i32 * 1)) =
+    loop_lend_mut[i32, i32, 1, 1] ((count_step, count_stop), (c, 7));
+  let k = match div_fuel[ref i32 * 1, ref i32 * 1] (m, 100) {
+    inl (c, u) -> free(c)
+  | inr (c, u) -> free(c)
+  };
+  (n, k)

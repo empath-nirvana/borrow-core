@@ -1,0 +1,24 @@
+-- The lending loop in push form (`lib/lend.bc`, SPEC §14): `array_each_imm` lends each entry of
+-- an array, as a view `imm 'z i32` borrowed inside one observation, to a body that runs inside
+-- that observation, with a running state. The element is never handed out of the observation:
+-- the body is the loop's input. The loop is driven by `div_fuel` and hands the array back.
+--
+-- Answer: i32[460]: the table holds 10 * i + 1 for i < 10, and the entries sum to 450 + 10. A
+-- loop that skipped the first entry gives 459; one that stopped one early gives 369; a body that
+-- ignored the view gives 0.
+
+include lend
+
+fn tab(i: i32) -> i32 = i * 10 + 1
+
+def body : !(all 'z < top. imm 'z i32 * i32 => i32) =
+  !thunkv Fun 'z < top. return (thunkv fun (p : imm 'z i32 * i32) ->
+    let (e, acc) = p; acc + *e)
+
+main -> i32 =
+  let t = alloc(array_new[i32] (10, tab));
+  let l : U (loop (ref (array i32) * i32) (ref (array i32) * 1)) = array_each_imm[i32, i32] (body, (t, 0));
+  match div_fuel[ref (array i32) * i32, ref (array i32) * 1] (l, 100) {
+    inl (t, n) -> n
+  | inr (t, u) -> 0
+  }

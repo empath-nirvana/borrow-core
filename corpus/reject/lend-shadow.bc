@@ -1,0 +1,24 @@
+-- expect: 19:20: `acc` is bound inside this borrow block, which loops, and read after it: the block is lent per observation in the enclosing body, where its bindings would reach the code after it. Rename `acc` inside the block, or read it there (SPEC §14, borrow scopes over loops)
+-- A name bound inside a borrow block over a loop and read after it (SPEC §14, borrow scopes over
+-- loops). The block's `let mut acc` shadows `main`'s `acc`. The block is lent per observation in
+-- `main`'s body, where its loop and its bindings are, so the `acc` read after the block would be
+-- the block's: the program is rejected rather than changed in meaning.
+
+fn tab(i: i32) -> i32 = i * 10
+
+-- The entry at `i`, or 0 out of range.
+def get : !(all 'a < top. imm 'a (array i32) * i32 => i32) =
+  !thunkv Fun 'a < top. return (thunkv fun (p : imm 'a (array i32) * i32) ->
+    let (b, i) = p;
+    withload['a, 'z, array i32, i32] b (thunkv Fun 'z < dom. return (thunkv fun (xs : array_imm 'z i32) ->
+      match array_get['z, i32] (xs, i) { inl e -> let v = *e; boxed['z] v | inr _ -> boxed['z] 0 })))
+
+main -> i32 =
+  let t = alloc(array_new[i32] (10, tab));
+  let acc = 5;
+  let (stdin, r) = borrow imm t { b ->
+    let mut acc = 0;
+    for c in bytes(&mut stdin) { acc = acc + get(b, c - 48) };
+    (stdin, acc)
+  };
+  acc + r

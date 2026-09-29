@@ -20,3 +20,4 @@ import Frontend.Elab.Infer
 import Frontend.Elab.Meta
 import Frontend.Elab.Pipeline
 import Frontend.Elab.Copies
+import Frontend.Elab.LoopLend

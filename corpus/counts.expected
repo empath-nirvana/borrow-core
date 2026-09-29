@@ -6,6 +6,7 @@ array-get 2 0 0
 array-refs 5 0 0
 array-replace 2 0 0
 array-sum 1 0 0
+axes/borrow-across-loop 3 0 0
 axes/codata-coeffects 2 0 0
 axes/codata-effects 1 0 0
 axes/codata-generic 1 0 0
@@ -52,6 +53,14 @@ io-upper 2 0 0
 io-wc 2 0 0
 iter-close 2 0 0
 iter-range 0 0 0
+lend-config 2 0 0
+lend-div 2 11 0
+lend-lib-each 299 11 0
+lend-lib-gen 1 0 0
+lend-lib-loop 597 10 0
+lend-mut 2 0 0
+lend-pipeline 2 0 0
+lend-server 2 0 0
 map-reuse 7 0 0
 nats-sum 0 0 0
 sum-i32 7 0 0

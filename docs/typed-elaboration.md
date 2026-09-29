@@ -876,6 +876,14 @@ tracks the `let mut` variables in scope and those each arm assigns. `lib/prelude
 its `main` is the scoped cell) and `array-sum.bc` (16 against 25), each with the same answer and
 counts. Pairs: `corpus/sugar/surface-mut.bc`, `surface-lend.bc`, `surface-bool.bc`.
 
+**Borrow scopes over loops, as built** (SPEC §14; decision 40 of `docs/decisions.md`).
+`Frontend/Elab/LoopLend.lean` runs inside `surfC`, on the program as written: a binding whose head
+is a borrow block whose body loops, or a `let r = &x`, is rewritten so that each stretch of the
+body that uses the borrow is a borrow block of its own and each `for`'s body borrows per step; the
+result is elaborated as any surface code. A `def` over a borrow whose body loops is rewritten to
+take the owner before `surfDecl` (`lentDef`). Pairs: `corpus/sugar/lend-block.bc`, `lend-let.bc`,
+`lend-div.bc`.
+
 Stages 1–4 retire the #54 shortcuts and change no surface syntax, except that `&c` stays until
 stage 6. Stages 5–9 are the rest of step 2. After stage 9, step 3 of #54 (rewriting 6–10 corpus
 programs and measuring) can start.

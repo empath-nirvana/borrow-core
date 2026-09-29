@@ -122,6 +122,7 @@ judgment, for the derived forms of syntax-core §9), so what the checker returns
 | `Elab/Tir.lean` | the typed IR: one node per node of the program, with its type, binders (identity, type, class) and effect (`docs/typed-elaboration.md` §1.1) |
 | `Elab/Infer.lean` | inference: the typed IR of each declaration, bidirectionally, in the environment the checker uses; the checker's synthesis answers for the core's substitutions |
 | `Elab/Pipeline.lean` | the pipeline `checkProgram` runs: the sugar, inference, lowering (the identity on core at stage 1), and errors in generated code named by their sugar (`renderError`); `bcc tir` |
+| `Elab/LoopLend.lean` | borrow scopes over loops, per observation (SPEC §14): a borrow block whose body loops, `let r = &x` over a loop, and a div function over a borrow, rewritten so that each step borrows the owner again (`hook`, `lentDef`); a call of a function with a lifetime parameter at its argument's lifetime (`instLife`) |
 | `Elab/Copies.lean` | the check `checkProgram` runs last: a use that the compiled program copies deep (a persistent variable of recursive data, used again later) must be written `clone(x)` (`implicitCopy`, SPEC §10, decision 39) |
 | `Check/Externs.lean` | the standard externs with their roles, models and assurance levels; the `run_io` wrapper; `IORun` (SPEC §11) |
 

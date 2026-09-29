@@ -1,0 +1,20 @@
+-- expect: 16:12: `t` is lent to `tb` for the rest of the block, so it cannot be used after `let tb = &t`
+-- `let r = &x` lends `x` for the rest of the block (SPEC §14, borrow scopes over loops), so `x`
+-- cannot be used after it: here `free(t)` while `tb` borrows `t`.
+
+fn tab(i: i32) -> i32 = i * 10
+
+-- The entry at `i`, or 0 out of range.
+def get : !(all 'a < top. imm 'a (array i32) * i32 => i32) =
+  !thunkv Fun 'a < top. return (thunkv fun (p : imm 'a (array i32) * i32) ->
+    let (b, i) = p;
+    withload['a, 'z, array i32, i32] b (thunkv Fun 'z < dom. return (thunkv fun (xs : array_imm 'z i32) ->
+      match array_get['z, i32] (xs, i) { inl e -> let v = *e; boxed['z] v | inr _ -> boxed['z] 0 })))
+
+main -> i32 =
+  let t = alloc(array_new[i32] (10, tab));
+  let tb = &t;
+  let mut acc = 0;
+  for c in bytes(&mut stdin) { acc = acc + get(tb, c - 48) };
+  let a = free(t);
+  acc

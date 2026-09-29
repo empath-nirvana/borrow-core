@@ -3,6 +3,7 @@ import Frontend.Print
 import Frontend.Check.Steps
 import Frontend.Elab.Respan
 import Frontend.Elab.Meta
+import Frontend.Elab.LoopLend
 
 /-!
 # Frontend — the sugar  `[spec §11, §14]`
@@ -44,13 +45,17 @@ def divLibrary : String := include_str "../lib/div.bc"
 /-- The generator library, `lib/gen.bc`: `gen_bind`. -/
 def genLibrary : String := include_str "../lib/gen.bc"
 
+/-- The per-observation lend, `lib/lend.bc`: loops and generators that lend their owner at each
+observation. -/
+def lendLibrary : String := include_str "../lib/lend.bc"
+
 /-- The prelude, `lib/prelude.bc`: `true`, `false`, `not`. -/
 def preludeLibrary : String := include_str "../lib/prelude.bc"
 
 /-- The library modules, by the name `include` gives them (#59). A module is a file of `lib/`,
 embedded in the compiler; adding one is adding its line here. -/
 def libModules : List (String × String) :=
-  [("io", ioLibrary), ("div", divLibrary), ("prelude", preludeLibrary)]
+  [("io", ioLibrary), ("div", divLibrary), ("prelude", preludeLibrary), ("lend", lendLibrary)]
 
 def capNames : List String := ["stdin", "stdout", "stderr"]
 
@@ -1705,6 +1710,8 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
         let Tb : CVTy := if k == .imm then .imm (.var v) A else .mut (.var v) A
         let S' ← surfC n (c₁.push b.name (some Tb)) none S
         let B ← need tsp "the block's result" (resultOfC ((c₁.push b.name (some Tb)).tyC S'))
+        if BoCa.Fig16.LogRel.Core.Check.vfreeB v B then
+          throw (Frontend.Elab.LoopLend.escapeError tsp x (Frontend.Check.ppV c₁.E.lenv 0 0 B))
         let As ← c.surface ksp A
         let Bs ← c.surface ksp B
         let xi : Ident := ⟨x, ksp⟩
@@ -1719,6 +1726,8 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
         let Tb : CVTy := .tensor (.mut (.var v) A) (.mut (.var v) B)
         let S' ← surfC n (c₁.push b.name (some Tb)) none S
         let T ← need tsp "the block's result" (resultOfC ((c₁.push b.name (some Tb)).tyC S'))
+        if BoCa.Fig16.LogRel.Core.Check.vfreeB v T then
+          throw (Frontend.Elab.LoopLend.escapeError tsp x (Frontend.Check.ppV c₁.E.lenv 0 0 T))
         let As ← c.surface ksp A
         let Bs ← c.surface ksp B
         let Ts ← c.surface ksp T
@@ -1742,6 +1751,12 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
       let f' ← surfV n c none f
       if W.lends then
         if let some V' ← lendCall c sp f' (← surfV n c none W) then return V'
+      -- A function with a lifetime parameter, called without it: at the argument's lifetime.
+      let f' ← if !Frontend.Elab.LoopLend.hasLifeParam c f' then pure f' else
+        match ← (Frontend.Elab.LoopLend.instLife c sp f' (← surfV n c none W) :
+            Except Error (Option Val)) with
+        | some g => pure g
+        | none => pure f'
       let tf := c.tyV f'
       let (f', pW) := match tf with
         | some (.bang (.thunk (.arr A _))) => (Val.unbang f.span f', some A)
@@ -1804,6 +1819,9 @@ def surfC : Nat → TCx → Option CCTy → Comp → DM Comp
     | .ret sp V => do pure (.ret sp (← surfV n c (match exp with | some (.ret A) => some A | _ => none) V))
     | .absurd sp V => do pure (.absurd sp (← surfV n c (some .zero) V))
     | .bind sp x A M N lin => do
+      -- A borrow block over a loop, or a `let r = &x`: lent per observation (`LoopLend`).
+      if let some L ← (Frontend.Elab.LoopLend.hook c sp x A M N lin : Except Error (Option Comp)) then
+        return (← surfC n c exp L)
       let M' ← surfC n c ((A.bind c.elabV).map .ret) M
       let N' ← surfC n (c.push x.name (bindTy c A M')) exp N
       pure (.bind sp x A M' N' lin)
@@ -1867,6 +1885,9 @@ def elabDecl : Nat → DivSt → Decl → SM DivSt
   | 0, _, d => throw ⟨(match d with | .def_ sp .. | .main sp .. => sp | _ => Span.none),
       "specialization at callback types does not terminate"⟩
   | fuel + 1, st, d => do
+    -- A div function taking a borrow takes the owner, lent at each step (`LoopLend.lentDef`).
+    let d := (← (Frontend.Elab.LoopLend.lentDef (TCx.ofScope (st.lib ++ st.out) false) d :
+      Except Error (Option Decl))).getD d
     let (d, st) ← (surfDecl divFuel d).run st
     let (d, st) ← (specDecl fuel d).run st
     if let .def_ _ _ _ _ _ (.gen _) := d then

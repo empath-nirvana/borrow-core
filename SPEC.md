@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 0.17 · 2026-09-29
+Version 0.18 · 2026-09-29
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -1248,6 +1248,64 @@ generator (`yield from`, a `gen_bind` of the call); `return` from inside a loop;
 block; a `for` that binds the finishing value; a total consumer (a `for` over a generator is
 div). Generators are not yet a case of §14's specialization (a callback that yields).
 
+### Borrow scopes over loops, per observation
+
+A borrow block's body is the callback of `withbor`, one computation that returns before the block
+ends; a loop is codata, observed one step at a time. So no borrow stays open while a loop runs:
+`↭` brackets every borrow cell inside one run, and a lend that spans observations needs a model
+change that is not verified (`experiments/LoopBorrow`). What works with no new rule is to **lend
+again at each observation**: the owner lives in the loop's state, and each step borrows it by an
+ordinary `withbor` inside that step, so the state between steps holds the owner, never a borrow.
+
+**The library** (`lib/lend.bc`, `include lend`) has the per-observation lend as code over
+`unfold`: `loop_lend_imm` and `loop_lend_mut` (a loop whose steps take `imm 'x A` or `mut 'x A`
+with the state), `gen_lend_imm` and `gen_lend_mut` (a generator), and `array_each_imm`, the
+lending loop in push form: each observation lends one array entry, a view `imm 'z E` borrowed
+inside the observation, to a body that runs inside it. Each takes its steps and the first state
+`(owner, s)`, and hands the owner back when the codata finishes or is closed.
+
+**The elaboration** (`Frontend/Elab/LoopLend.lean`) puts the surface's borrow scopes into that
+form, before the other sugar, with no kernel or checker change:
+
+- **A borrow block whose body loops** (`borrow imm t { 'x, b -> S }`, `borrow mut`, a family),
+  where `S` has on its spine a `for` or a call of a div function in direct style, is rewritten in
+  the enclosing body: each stretch of `S` that uses the borrow is a borrow block of the same place
+  handing on the variables that later code reads; the body of each `for` that uses it is a borrow
+  block of its own, per step; stretches that do not use it are left outside any block. The `for`
+  is then on the enclosing spine and threads the place, which each step rebinds. This is
+  `loop_lend_*` written inline, so each step is known code.
+- **`let r = &x; S`** (or `&mut x`) is `borrow imm x { r -> S }` over the rest of the body; `x` is
+  not used in `S`. A loop-invariant borrow is thus lent per observation.
+- **A div function over a borrow**: a `def f : !(all 'a < b. P => Q)` whose body loops, with one
+  component `imm 'a A` (or `mut 'a A`) of `P`, is elaborated to take the owner `ref A` there and
+  hand it back first, `!(P' => ref A * Q)`, its body a borrow block of the owner. A call lends
+  the place, `f(&t)`, as a capability is lent (§11); inside a borrow block, the block's borrow
+  passed to `f` is the place lent instead.
+- **A call of a function with a lifetime parameter**, `f(W)` with `f : !(all 'a < b. P => Q)` and
+  no lend in `W`, is `(unbang f) ['l] W` with `'l` the lifetime `W`'s type gives `'a` in `P`.
+
+It applies when what the loop holds between steps outlives `'x`. Otherwise it reports where it
+does not: an iterator that holds the borrow; a stretch before the loop that hands on something
+with `'x` in its type; a div call that takes the borrow other than as its own argument; a div
+function with more than one borrow at its lifetime; a name the block binds again and that is read
+after it (the rewrite puts the block's bindings in the enclosing body).
+
+**Not covered** (each needs the spanning lend, or a construct not built): a pipeline whose source
+holds the borrow, `for x in map(filter(iter(xs), p), f)` inside `borrow imm v { xs -> … }`. The
+source could be rewritten to hold the owner, but the owner would come back only through the
+pipeline's finishing value and residual: each adapter would pass them on, the `for` would bind
+the finishing value, and the residual would have to hand back an owner that has a destructor. A
+`yield` inside a borrow block (a generator's observation boundary) is still rejected. A div
+function called with a borrow that is not lent from a place (a view, a field, a second borrow)
+holds it across its loop. `|>` is not provided (§11 Open).
+
+Programs: `corpus/axes/borrow-across-loop.bc`, `corpus/lend-mut.bc`, `lend-config.bc`,
+`lend-pipeline.bc` (0 allocations, dispatched calls and copies beyond the table's own),
+`lend-server.bc`, `lend-div.bc`, and the library's `lend-lib-loop.bc`, `lend-lib-gen.bc`,
+`lend-lib-each.bc`; pairs `corpus/sugar/lend-block.bc`, `lend-let.bc`, `lend-div.bc`; rejects
+`corpus/reject/lend-*.bc`. Every elaborated program is checked core, so `fundamentalC` and
+`adequacyC` cover it.
+
 ### The totality theorem
 
 A closed div-free program terminates on every run (`Core/Totality.lean`). For
@@ -1303,12 +1361,18 @@ typed world, the model and the end-to-end theorems in `Core/Stdio.lean`, the che
 `output`, the `run_io` wrapper) and the backend (`Backend/Clos`, `Backend/Flat`, WASI imports). Entry 11 (§12) is implemented in
 `Core/Dtor.lean` and the checker (`Frontend/Check/`), with no change to `CDerives`. Entry 12
 (§13) is implemented in `Core/Alloc.lean`, `Core/World.lean`, `Core/Demonic.lean` and
-`Core/Stale.lean`. Entry 13 (§14) is implemented in `lib/div.bc`, `Frontend/Sugar.lean` and
-`Core/Totality.lean`, with no change to `CDerives`.
+`Core/Stale.lean`. Entry 13 (§14) is implemented in `lib/div.bc`, `lib/lend.bc`, `Frontend/Sugar.lean`,
+`Frontend/Elab/LoopLend.lean` and `Core/Totality.lean`, with no change to `CDerives`.
 
 ---
 
 ## Changelog
+
+- **0.18** (2026-09-29) — §14: borrow scopes over loops, per observation (O1, step 1). A
+  borrow block whose body loops, `let r = &x` over a loop, and a div function over a borrow are
+  elaborated so that each observation borrows the owner again; `lib/lend.bc` has the combinators;
+  a call of a function with a lifetime parameter takes the lifetime from its argument. No kernel,
+  rule or checker change.
 
 - **0.17** (2026-09-29) — §10: a use that copies recursive data is written `clone(x)`, and an
   unwritten one is an error at that use (#108, decision 39); a generator's loop hands on, at a
