@@ -2,6 +2,7 @@ import Frontend.Parser
 import Frontend.Print
 import Frontend.Check.Steps
 import Frontend.Elab.Respan
+import Frontend.Elab.Subst
 import Frontend.Elab.Meta
 import Frontend.Elab.LoopLend
 
@@ -48,6 +49,8 @@ def genLibrary : String := include_str "../lib/gen.bc"
 /-- The per-observation lend, `lib/lend.bc`: loops and generators that lend their owner at each
 observation. -/
 def lendLibrary : String := include_str "../lib/lend.bc"
+/-- The generator adapters, `lib/adapters.bc`: `map`, `filter`, `take`, … (`include adapters`). -/
+def adaptersLibrary : String := include_str "../lib/adapters.bc"
 
 /-- The prelude, `lib/prelude.bc`: `true`, `false`, `not`. -/
 def preludeLibrary : String := include_str "../lib/prelude.bc"
@@ -55,7 +58,8 @@ def preludeLibrary : String := include_str "../lib/prelude.bc"
 /-- The library modules, by the name `include` gives them (#59). A module is a file of `lib/`,
 embedded in the compiler; adding one is adding its line here. -/
 def libModules : List (String × String) :=
-  [("io", ioLibrary), ("div", divLibrary), ("prelude", preludeLibrary), ("lend", lendLibrary)]
+  [("io", ioLibrary), ("div", divLibrary), ("prelude", preludeLibrary), ("lend", lendLibrary),
+   ("adapters", adaptersLibrary)]
 
 def capNames : List String := ["stdin", "stdout", "stderr"]
 
@@ -462,12 +466,14 @@ def termParts (parts : List CVTy) : Comp → Option (List (List (String × CVTy)
   | _ => none
 
 /-- What a div body is elaborated at: its result `B`, its residual `R = K * 1` (or `1`), `K`, and
-the variables holding each component of `K`. -/
+the variables holding each component of `K`. A generator's residual is `K` itself (`tail1`
+false): a generator that finishes with what it holds hands back the same when it is closed. -/
 structure LoopCx where
   B : CVTy
   R : CVTy
   K : CVTy
   parts : List (List (String × CVTy))
+  tail1 : Bool := true
 
 def LoopCx.caps (cx : LoopCx) : List (String × CVTy) := cx.parts.flatten
 
@@ -477,7 +483,7 @@ def LoopCx.kSrc (cx : LoopCx) : String := tupleSrc (cx.parts.map fun p => tupleS
 
 /-- The residual built from the capabilities in scope. -/
 def LoopCx.rSrc (cx : LoopCx) : String :=
-  if cx.parts.isEmpty then "()" else s!"({cx.kSrc}, ())"
+  if cx.parts.isEmpty then "()" else if cx.tail1 then s!"({cx.kSrc}, ())" else cx.kSrc
 
 /-- Bind the variables of each component of `K`, held in `v`. -/
 def destructParts (v : String) (parts : List (List (String × CVTy))) : String :=
@@ -487,14 +493,15 @@ def destructParts (v : String) (parts : List (List (String × CVTy))) : String :
     let ns := (List.range ps.length).map (s!"{v}_p{·}")
     destructSrc v ns ++ String.join ((ns.zip ps).map fun (n, p) => destructSrc n (p.map (·.1)))
 
-/-- The context a div function with result `B` and body `M` is elaborated at.  `[spec §14]` -/
-def loopCxOf (sp : Span) (B : CVTy) (M : Comp) : Except Error LoopCx := do
+/-- The context a div function with result `B` and body `M` is elaborated at, or a generator
+(`gen`), whose residual is `K`.  `[spec §14]` -/
+def loopCxOf (sp : Span) (B : CVTy) (M : Comp) (gen : Bool := false) : Except Error LoopCx := do
   let parts := spineT B
   let lin := parts.filter isLinear
-  if lin.isEmpty then return ⟨B, .unit, .unit, []⟩
+  if lin.isEmpty then return ⟨B, .unit, .unit, [], true⟩
   let K := tupleT lin
   match termParts parts M with
-  | some ps => pure ⟨B, .tensor K .unit, K, ps⟩
+  | some ps => pure (if gen then ⟨B, K, K, ps, false⟩ else ⟨B, .tensor K .unit, K, ps, true⟩)
   | none => throw ⟨sp, s!"a div function whose result holds `{ppT K}`, which has no destructor, " ++
       "must hand it back by name: `return (c, …)` (SPEC §14)"⟩
 
@@ -1191,7 +1198,6 @@ def genLoopPlan (g : GenCx) (c : TCx) (sp : Span) (x : Ident) (V : Val) (M N : C
   let outs := ws.filter fun (y, T) => isLinear T || mentionsC y N
   -- What the loop finishes with: the capabilities, the variables what follows reads, and the
   -- loop's value when it is bound.
-  let bv := (th ++ outs ++ keep.toList).map (·.1)
   let bvT := tupleT ((th ++ outs ++ keep.toList).map (·.2))
   let bvs := (th ++ outs).map (·.1)
   -- The body: a generator of `A` finishing with the threaded variables, `inl` to go on and `inr`
@@ -1205,8 +1211,8 @@ def genLoopPlan (g : GenCx) (c : TCx) (sp : Span) (x : Ident) (V : Val) (M N : C
       throw ⟨sp, s!"a `return` inside this loop leaves `{y}` behind, which has no destructor: " ++
         "the generator's result must hand it back"⟩
   let Bb : CVTy := if hasRet then .sum svT (.sum bvT g.R0) else .sum svT bvT
-  let bcx : LoopCx := if lin.isEmpty then ⟨Bb, .unit, .unit, []⟩ else
-    ⟨Bb, .tensor (tupleT (lin.map (·.2))) .unit, tupleT (lin.map (·.2)), lin.map ([·])⟩
+  let bcx : LoopCx := if lin.isEmpty then ⟨Bb, .unit, .unit, [], true⟩ else
+    ⟨Bb, .tensor (tupleT (lin.map (·.2))) .unit, tupleT (lin.map (·.2)), lin.map ([·]), true⟩
   let brkV (tsp : Span) (w : Val) : Val := if hasRet then .inr tsp (.inl tsp w) else .inr tsp w
   let brkVal (tsp : Span) (e : Val) : Val :=
     brkV tsp (tupleVals tsp (bvs.map (Val.var tsp ·) ++ (if keep.isSome then [e] else [])))
@@ -1406,6 +1412,11 @@ def genDelegate (g : GenCx) (c cN : TCx) (sp : Span) (x : Ident) (A : Option VTy
         pure s!"let ({l.name}, io_u) = io_r; {drops}return {cx.rSrc}"
       else throw ⟨sp, s!"the call lends `{l.name}`, which is not among what this generator " ++
           "hands back"⟩
+    | _, some l =>
+      -- A generator lent the capability hands it back as its residual.
+      if cx.capNames.contains l.name then pure s!"{l.name} <- return io_r; {drops}return {cx.rSrc}"
+      else throw ⟨sp, s!"the call lends `{l.name}`, which is not among what this generator " ++
+          "hands back"⟩
     | _, _ =>
       if Rf = cx.R then pure s!"{drops}return io_r" else
       throw ⟨sp, s!"a call whose {if isGen then "generator" else "loop"} hands back `{ppT Rf}` " ++
@@ -1442,7 +1453,7 @@ def genBody (g : GenCx) : Nat → TCx → Comp → SM Comp
     let rest := Comp.bind sp x A (.ret ysp (.unit ysp)) N' lin
     pure (L.fill (fun v => if v == "io_hole_e" then some e else none)
       (fun v => if v == "io_hole_rest" then some rest else none))
-  | n + 1, c, .bind sp x A (.ret ysp (.app _ (.sugar _ .yieldFrom) e)) N lin => do
+  | n + 1, c, .bind sp x A (.ret ysp (.app _ (.sugar _ .yieldFrom) e)) N _ => do
     -- `x <- yield from e; N`: the generator `e` runs first, and `x` is what it finishes with.
     if e.hasYield then throw (yieldOffSpine (e.yieldAt.getD e.span))
     let (e', lends) := e.takeLends
@@ -1570,6 +1581,37 @@ def genLoop (g : GenCx) : Nat → TCx → Span → Ident → Val → Comp → Co
     genLoopSrc g c sp x P body P.rest N'
 end
 
+/-- The names a `fn`'s body binds from its parameter before the rest (`paramPrefix`), with their
+types. -/
+def paramsOf : Nat → TCx → Comp → List (String × Option CVTy)
+  | 0, _, _ => []
+  | n + 1, c, .letPair _ x y V@(.var ..) M =>
+    let (Ax, Ay) := pairTys c V
+    (x.name, Ax) :: (y.name, Ay) :: paramsOf n ((c.push x.name Ax).push y.name Ay) M
+  | n + 1, c, .bind _ x A M@(.ret _ (.var ..)) N _ =>
+    let T := bindTy c A M
+    (x.name, T) :: paramsOf n (c.push x.name T) N
+  | n + 1, c, .letUnit _ _ M => paramsOf n c M
+  | _, _, _ => []
+
+/-- Closing a generator before it starts: it closes the generators and iterators it was given
+(`gs`, with their types), to hand back what they hold. Each variable of the residual that is not
+among `gs` is bound from the residual of the first of them that hands back its type. The code,
+and the generators it closes. -/
+def closeGiven (cx : LoopCx) (gs : List (String × Option CVTy)) : String × List String := Id.run do
+  let names := gs.map (·.1)
+  let mut used : List String := []
+  let mut out := ""
+  for (p, T) in cx.caps do
+    if names.contains p then continue
+    let hands (g : String) (Tg : Option CVTy) : Bool := !used.contains g && match Tg with
+      | some Tg => (((genOf Tg).map (·.2.2)).orElse fun _ => (iterOf Tg).map (·.2.2)) == some T
+      | none => false
+    match gs.find? (fun (g, Tg) => hands g Tg) with
+    | some (g, _) => used := g :: used; out := out ++ s!"{p} <- (nu_out (force {g})).2;\n"
+    | none => pure ()
+  pure (out, used)
+
 /-! ### Blocks and callbacks that yield -/
 
 /-- The type of the first element a body yields: of its first `yield e`, or the element type of
@@ -1631,11 +1673,12 @@ def genValue (c : TCx) (sp : Span) (M : Comp) (A B : Option CVTy) (what : String
         "it yields has no type here"⟩
   let some B := B.orElse fun _ => lastTy divFuel c M
     | throw ⟨sp, s!"what {what} finishes with is not determined here"⟩
-  let cx ← loopCxOf sp B M
+  let cx ← loopCxOf sp B M (gen := true)
   let g : GenCx := { A := A, L := cx, pp := fun T => Frontend.Check.ppV c.E.lenv 0 0 T }
   let M' ← genBody g divFuel c M
+  let (closes, closed) := closeGiven cx ((latest c.locals).filter (mentionsC ·.1 M))
   let ab ← template sp s!"the `close` of {what} before it starts"
-    s!"{dropsFor c cx.capNames M}return {cx.rSrc}"
+    s!"{closes}{dropsFor c (cx.capNames ++ closed) M}return {cx.rSrc}"
   let G : CVTy := .thunk (Frontend.Check.genTy A B cx.R)
   -- Ascribed its type, so that inference types it where it is used.
   let Gs ← (c.surface sp G : Except Error VTy)
@@ -1714,7 +1757,7 @@ def ambientMain (c : TCx) (cs : List String) (sp : Span) (C : CTy) (M : Comp) :
   if (loopsAt c Ac M).isNone then return (.ret sp B, M')
   let some Ac := Ac | throw ⟨A.span, "internal error: `main`'s result type"⟩
   let K := tupleT (cs.map capTyC)
-  let cx : LoopCx := ⟨.tensor K Ac, .tensor K .unit, K, [cs.map fun n => (n, capTyC n)]⟩
+  let cx : LoopCx := ⟨.tensor K Ac, .tensor K .unit, K, [cs.map fun n => (n, capTyC n)], true⟩
   pure (.ret sp (.thunk sp (.loop sp B (.tensor sp capsT (.unit sp)))), ← loopBody cx divFuel c M')
 
 /-- The result `B` of a function type `A => B` or `!(A => B)`. -/
@@ -1729,24 +1772,42 @@ def need' {α} (sp : Span) (what : String) : Option α → SM α
 
 /-- A generator body that is straight-line code, then one loop, then code with no `yield` and no
 loop: the code before the loop (as a function of what replaces the loop), the typing context at
-the loop, and the loop. -/
-def splitLoop : Nat → TCx → Comp →
-    Option ((Comp → Comp) × TCx × Span × Ident × Val × Comp × Comp)
+the loop, the loop, and whether the code before it has a `match` or `if` whose other arm finishes
+the generator without looping (`fin` elaborates that arm's terminals as the generator's finish). -/
+def splitLoop (fin : Comp → Comp) : Nat → TCx → Comp →
+    Option ((Comp → Comp) × TCx × Span × Ident × Val × Comp × Comp × Bool)
   | 0, _, _ => none
   | n + 1, c, .bind sp x A M N lin =>
     if M.hasYield || M.hasFor || (headLoops c (A.bind c.elabV) M).isSome then none else
-    (splitLoop n (c.push x.name (bindTy c A M)) N).map fun (pre, r) =>
+    (splitLoop fin n (c.push x.name (bindTy c A M)) N).map fun (pre, r) =>
       (fun T => .bind sp x A M (pre T) lin, r)
   | n + 1, c, .letUnit sp V M =>
     if V.hasYield || (callIn c divFuel (some .unit) V).isSome then none else
-    (splitLoop n c M).map fun (pre, r) => (fun T => .letUnit sp V (pre T), r)
+    (splitLoop fin n c M).map fun (pre, r) => (fun T => .letUnit sp V (pre T), r)
   | n + 1, c, .letPair sp x y V M =>
     if V.hasYield || (callIn c divFuel none V).isSome then none else
     let (Ax, Ay) := pairTys c V
-    (splitLoop n ((c.push x.name Ax).push y.name Ay) M).map fun (pre, r) =>
+    (splitLoop fin n ((c.push x.name Ax).push y.name Ay) M).map fun (pre, r) =>
       (fun T => .letPair sp x y V (pre T), r)
+  | n + 1, c, .case sp V x M y N =>
+    if V.hasYield || (callIn c divFuel none V).isSome then none else
+    let (Ax, Ay) := sumTys c V
+    -- An arm that finishes: no yield, loop, `break` or call of a div function.
+    let plain (c : TCx) (N : Comp) : Bool := !N.yieldsOrLoops && N.spineBreaks.isEmpty &&
+      (loopsAt c none N).isNone && (N.sugarAt (· == .yieldFrom)).isNone
+    match splitLoop fin n (c.push x.name Ax) M, splitLoop fin n (c.push y.name Ay) N with
+    | some (pre, cm, r), none =>
+      if plain (c.push y.name Ay) N then
+        some (fun T => .case sp V x (pre T) y (fin N), cm, r.1, r.2.1, r.2.2.1, r.2.2.2.1, r.2.2.2.2.1, true)
+      else none
+    | none, some (pre, cm, r) =>
+      if plain (c.push x.name Ax) M then
+        some (fun T => .case sp V x (fin M) y (pre T), cm, r.1, r.2.1, r.2.2.1, r.2.2.2.1, r.2.2.2.2.1, true)
+      else none
+    | _, _ => none
   | _ + 1, c, .for_ sp x V M N =>
-    if N.hasYield || N.hasFor || (loopsAt c none N).isSome then none else some (id, c, sp, x, V, M, N)
+    if N.hasYield || N.hasFor || (loopsAt c none N).isSome then none
+    else some (id, c, sp, x, V, M, N, false)
   | _, _, _ => none
 
 /-- A `gen fn`, elaborated: `gen[E] def f : !(P => B) = !thunkv fun (x : P) -> M` becomes
@@ -1779,24 +1840,32 @@ def genDef (scope : List Decl) : Decl → SM Decl
       | throw ⟨B.span, s!"the result type of `{n.name}` does not elaborate"⟩
     let some Ec := cl.elabV E
       | throw ⟨E.span, s!"the element type of `{n.name}` does not elaborate"⟩
-    let cx ← loopCxOf sp Bc M
+    let cx ← loopCxOf sp Bc M (gen := true)
     let c₀ := cl.push x.name (cl.elabV Ax)
     let g : GenCx := { A := Ec, L := cx, pp := fun T => Frontend.Check.ppV cl.E.lenv 0 0 T }
-    let ab ← template sp "a generator's `close` before it starts" s!"return {cx.rSrc}"
+    let (closes, _) := closeGiven cx (paramsOf divFuel c₀ M)
+    let ab ← template sp "a generator's `close` before it starts" s!"{closes}return {cx.rSrc}"
     let abort := paramPrefix M ab
     let Rs ← toSurface sp cx.R
     let G := VTy.thunk B.span (.gen B.span E B Rs)
     let F := VTy.lolli A.span Ar G
-    let body ← match splitLoop divFuel c₀ M with
-      | some (pre, cm, lsp, lx, LV, LM, LN) => do
+    -- An arm before the loop that finishes the generator, as the start's observation.
+    let Bs ← cl.surface sp Bc
+    let fin (T : Comp) : Comp := wrapTail (fun T => .bind T.span ⟨"io_v", T.span⟩ (some Bs) T
+      (.ret T.span (.inr T.span (.inl T.span (.var T.span "io_v")))) false) (stripRet T)
+    let whole : SM Comp := do
+      let M' ← genBody g divFuel c₀ M
+      pure (Comp.ret sp (.thunkv sp (.nuIn sp (.with_ sp M' abort))))
+    let body ← match splitLoop fin divFuel c₀ M with
+      | some (pre, cm, lsp, lx, LV, LM, LN, arm) => do
         -- One loop: the generator is that loop's `unfold`, with a first state that runs the code
-        -- before it. Every observation is then a call of one known code.
+        -- before it. Every observation is then a call of one known code. An arm before it that
+        -- finishes is the start's observation when the loop finishes with the generator's result.
         let P ← genLoopPlan g cm lsp lx LV LM LN
+        if arm && P.direct.isNone then whole else
         let bodyL ← genBody { g with L := P.bcx, inLoop := true } divFuel P.cb P.bodyW
         genLoopSrc g cm lsp lx P bodyL P.rest P.rest (some (x.name, Ax.pp, pre, abort))
-      | none => do
-        let M' ← genBody g divFuel c₀ M
-        pure (Comp.ret sp (.thunkv sp (.nuIn sp (.with_ sp M' abort))))
+      | none => whole
     let lam := Comp.lam sp x Ax body
     match life with
     | none =>
@@ -1947,6 +2016,11 @@ structure DivSt where
   genCopies : List (String × List CVTy) := []
   /-- The capabilities in scope of the declaration being elaborated (`main`'s), for typing. -/
   caps : List Decl := []
+  /-- The generic generators (`gen fn f[A, …]`), as written: each is instantiated at the types of
+  a call, on first use. -/
+  templates : List Decl := []
+  /-- The instances made, by generator and type arguments. -/
+  insts : List ((String × List VTy) × String) := []
 
 /-- Elaboration with the state of the declarations. -/
 abbrev DM := StateT DivSt SM
@@ -2140,6 +2214,125 @@ def lendCall (c : TCx) (sp : Span) (f W : Val) : DM (Option Val) := do
   some <$> lendBorrow c sp x m A Q fun l mv =>
     boxedResult sp l (.ret sp (.app sp (.inst sp f' (.var sp l)) (replaceLend mv W)))
 
+/-- The typing context `c` with the declarations made so far in scope (the instances and copies
+made while elaborating the declaration it is in). -/
+def refresh (c : TCx) : DM TCx := do
+  let st ← get
+  let ds := (st.lib ++ st.out ++ st.caps).toArray
+  pure { c with E := { c.E with scope := ⟨ds, ds.size⟩ } }
+
+/-! #### Generic generators
+
+A `gen fn f[A, …](…)` is a template: it is not elaborated as written, and a call of it is a call
+of its instance at the types of the call, the template with the types substituted for its
+parameters (`Frontend/Elab/Subst.lean`), made and elaborated on first use (whole-program
+monomorphization, as Rust's generics). The type arguments are written, `f[T, …](…)`, or read off
+the argument's type by matching the parameter's type, in which each type parameter is a
+placeholder. A closure argument whose parameter type is a hole is typed last, from the
+parameter's type with what the other arguments determined. -/
+
+/-- The placeholders of type parameters in a pattern: type variables no type of a program has. -/
+def phBase : Nat := 1 <<< 24
+
+mutual
+/-- `t` matches the pattern `p`, whose placeholders are bound in `σ`, under `d` binders of type
+variables (`μ`, `ν`), which shift a placeholder's index by `d`. -/
+def matchV (σ : Array (Option CVTy)) (d : Nat) : CVTy → CVTy → Option (Array (Option CVTy))
+  | .tvar i, t =>
+    if i ≥ phBase + d then match σ[i - phBase - d]? with
+      | some (some u) => if u = t then some σ else none
+      | some none => some (σ.set! (i - phBase - d) (some t))
+      | none => none
+    else if t = .tvar i then some σ else none
+  | .tensor A B, .tensor A' B' | .sum A B, .sum A' B' => (matchV σ d A A').bind (matchV · d B B')
+  | .thunk C, .thunk C' => matchC σ d C C'
+  | .mu A, .mu A' => matchV σ (d + 1) A A'
+  | .ref A, .ref A' | .bang A, .bang A' | .fam A, .fam A' => matchV σ d A A'
+  | .imm a A, .imm a' A' | .mut a A, .mut a' A' | .box a A, .box a' A' =>
+    if a = a' then matchV σ d A A' else none
+  | p, t => if p = t then some σ else none
+
+/-- `t` matches the computation-type pattern `p`. -/
+def matchC (σ : Array (Option CVTy)) (d : Nat) : CCTy → CCTy → Option (Array (Option CVTy))
+  | .ret A, .ret A' => matchV σ d A A'
+  | .arr A C, .arr A' C' => (matchV σ d A A').bind (matchC · d C C')
+  | .amp C D, .amp C' D' => (matchC σ d C C').bind (matchC · d D D')
+  | .nu C, .nu C' => matchC σ (d + 1) C C'
+  | .all v b C, .all v' b' C' => if v = v' ∧ b = b' then matchC σ d C C' else none
+  | p, t => if p = t then some σ else none
+end
+
+mutual
+/-- A pattern with placeholders. -/
+def hasPhV : CVTy → Bool
+  | .tvar i => i ≥ phBase
+  | .tensor A B | .sum A B => hasPhV A || hasPhV B
+  | .thunk C => hasPhC C
+  | .ref A | .bang A | .mu A | .fam A | .imm _ A | .mut _ A | .box _ A => hasPhV A
+  | _ => false
+
+def hasPhC : CCTy → Bool
+  | .ret A => hasPhV A
+  | .arr A C => hasPhV A || hasPhC C
+  | .amp C D => hasPhC C || hasPhC D
+  | .nu C | .all _ _ C => hasPhC C
+  | .top => false
+end
+
+mutual
+/-- A pattern with its solved placeholders replaced, under `d` binders of type variables. The
+types solved are closed, so they need no shift. -/
+def solvedV (σ : Array (Option CVTy)) (d : Nat) : CVTy → CVTy
+  | .tvar i => if i ≥ phBase + d then ((σ[i - phBase - d]?).join).getD (.tvar i) else .tvar i
+  | .tensor A B => .tensor (solvedV σ d A) (solvedV σ d B)
+  | .sum A B => .sum (solvedV σ d A) (solvedV σ d B)
+  | .thunk C => .thunk (solvedC σ d C)
+  | .ref A => .ref (solvedV σ d A)
+  | .bang A => .bang (solvedV σ d A)
+  | .mu A => .mu (solvedV σ (d + 1) A)
+  | .fam A => .fam (solvedV σ d A)
+  | .imm a A => .imm a (solvedV σ d A)
+  | .mut a A => .mut a (solvedV σ d A)
+  | .box a A => .box a (solvedV σ d A)
+  | t => t
+
+def solvedC (σ : Array (Option CVTy)) (d : Nat) : CCTy → CCTy
+  | .ret A => .ret (solvedV σ d A)
+  | .arr A C => .arr (solvedV σ d A) (solvedC σ d C)
+  | .amp C D => .amp (solvedC σ d C) (solvedC σ d D)
+  | .nu C => .nu (solvedC σ (d + 1) C)
+  | .all v b C => .all v b (solvedC σ d C)
+  | .top => .top
+end
+
+/-- A parameter's type as a pattern: the type parameters `ps` as placeholders. -/
+def patOf (c : TCx) (ps : List String) (P : VTy) : Option CVTy :=
+  ({ c.E with tps := ps.zipIdx.map fun (x, k) => (x, .tvar (phBase + k)) }.elabV c.Δ P).toOption
+
+/-- The components of an argument against a parameter's: along the right-nested tuple of the
+call's arguments. -/
+def argComps : VTy → Val → List (VTy × Val)
+  | .tensor _ P Q, .pair _ V W => (P, V) :: argComps Q W
+  | P, W => [(P, W)]
+
+/-- The argument rebuilt from its components (as `argComps` split it). -/
+def argOf : Val → List Val → Val
+  | .pair sp _ W, V :: Vs => .pair sp V (argOf W Vs)
+  | _, [V] => V
+  | W, _ => W
+
+/-- A closure whose parameter's type is left to the context. -/
+def holeClosure : Val → Bool
+  | .thunkv _ (.lam _ _ A _) | .bangThunkv _ (.lam _ _ A _) => isHoleTy A
+  | _ => false
+
+/-- The function a call applies when it may be a generic generator: its name, and its type
+arguments when written. -/
+def genericCallee : Val → Option (String × Option (List VTy))
+  | .var _ h => some (h, none)
+  | .defApp _ h args => some (h, some args)
+  | _ => none
+
 mutual
 /-- A value with its surface forms elaborated; `exp` is the type expected of it, when known. -/
 def surfV : Nat → TCx → Option CVTy → Val → DM Val
@@ -2299,6 +2492,11 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
       | _, _ => throw ⟨P.span, s!"this borrow block's place has type `{ppT tP}`: `borrow imm`/" ++
           "`borrow mut` take a cell `ref A` (a pair of cells for a family), `modify` a `mut` borrow"⟩
     | .app sp f W => do
+      -- A call of a generic generator: a call of its instance at the argument's types.
+      if let some (h, targs) := genericCallee f then
+        if let some t := (← get).templates.find? (fun | .def_ _ m _ _ _ _ => m.name == h | _ => false) then
+          let (name, W') ← instOf n c sp t targs W
+          return .app sp (.unbang f.span (.var f.span name)) W'
       let f' ← surfV n c none f
       if W.lends then
         if let some V' ← lendCall c sp f' (← surfV n c none W) then return V'
@@ -2374,6 +2572,7 @@ def surfC : Nat → TCx → Option CCTy → Comp → DM Comp
       if let some L ← (Frontend.Elab.LoopLend.hook c sp x A M N lin : Except Error (Option Comp)) then
         return (← surfC n c exp L)
       let M' ← surfC n c ((A.bind c.elabV).map .ret) M
+      let c ← refresh c
       let N' ← surfC n (c.push x.name (bindTy c A M')) exp N
       pure (.bind sp x A M' N' lin)
     | .lam sp x A M => do
@@ -2392,10 +2591,12 @@ def surfC : Nat → TCx → Option CCTy → Comp → DM Comp
     | .letUnit sp V M => do pure (.letUnit sp (← surfV n c (some .unit) V) (← surfC n c exp M))
     | .letPair sp x y V M => do
       let V' ← surfV n c none V
+      let c ← refresh c
       let (Ax, Ay) := pairTys c V'
       pure (.letPair sp x y V' (← surfC n ((c.push x.name Ax).push y.name Ay) exp M))
     | .case sp V x M y N => do
       let V' ← surfV n c none V
+      let c ← refresh c
       let (Ax, Ay) := sumTys c V'
       pure (.case sp V' x (← surfC n (c.push x.name Ax) exp M) y (← surfC n (c.push y.name Ay) exp N))
     | .lamL sp x b M => do
@@ -2408,6 +2609,7 @@ def surfC : Nat → TCx → Option CCTy → Comp → DM Comp
     | .ascribe sp M C => do pure (.ascribe sp (← surfC n c (c.E.elabC c.Δ C).toOption M) C)
     | .for_ sp x V M N => do
       let V' ← surfV n c none V
+      let c ← refresh c
       let el := (c.tyV V').bind elemOf
       let M' ← surfC n (c.push x.name el) none M
       -- `let r = for …; N`: `r` has the type the iterator finishes with.
@@ -2418,35 +2620,127 @@ def surfC : Nat → TCx → Option CCTy → Comp → DM Comp
         pure (.for_ sp x V' M' (.bind N.span r A (.ret r.span (.sugar r.span .forRes)) N₀' false))
       | none => pure (.for_ sp x V' M' (← surfC n c exp N))
     | M => pure M
-end
 
 /-- A declaration with its surface forms elaborated, in the context the checker checks it in. -/
 def surfDecl : Nat → Decl → DM Decl
-  | n, .def_ sp nm ps A V mk => do
+  | 0, d => pure d
+  | n + 1, .def_ sp nm ps A V mk => do
     let st ← get
     let c := TCx.ofScope (st.lib ++ st.out) false
     pure (.def_ sp nm ps A (← surfV n c (c.elabV A) V) mk)
-  | n, .main sp C M => do
+  | n + 1, .main sp C M => do
     let st ← get
     let caps := capNames.map fun x => Decl.extern Span.none ⟨x, Span.none⟩ (capTy Span.none x)
     let c := TCx.ofScope (st.lib ++ st.out ++ caps) true
     let exp := match (c.E.elabC c.Δ C).toOption with
       | some (.ret A) => some (BoCa.Fig16.LogRel.Core.CTy.ret A)
       | e => e
-    pure (.main sp C (← surfC n c exp M))
+    set { st with caps := caps }
+    let M' ← surfC n c exp M
+    modify fun st => { st with caps := [] }
+    pure (.main sp C M')
   | _, d => pure d
 
-mutual
+/-- The instance of the generic generator `t` at the types of a call's argument `W`, or at the
+type arguments `targs` written: its name, made and elaborated on first use; and the argument, its
+components elaborated.  `[spec §14]` -/
+def instOf : Nat → TCx → Span → Decl → Option (List VTy) → Val → DM (String × Val)
+  | 0, _, sp, _, _, _ => throw ⟨sp, "instantiation of generic generators does not terminate"⟩
+  | n + 1, c, sp, t, targs, W => do
+    let .def_ tsp tn ps A V mk := t | throw ⟨sp, "internal error: a generic generator"⟩
+    let names := ps.map (·.name)
+    let P ← match A with
+      | .bang _ (.lolli _ P _) | .bang _ (.all _ _ _ (.lolli _ P _)) => pure P
+      | _ => throw ⟨tsp, "internal error: a generic generator's type"⟩
+    let comps := argComps P W
+    -- The type arguments: written, or matched against the argument's components' types, the
+    -- closures whose parameter's type is a hole last.
+    let mut σ : Array (Option CVTy) := Array.replicate names.length none
+    if let some as := targs then
+      if as.length != names.length then
+        throw ⟨sp, s!"`{tn.name}` takes {names.length} type arguments"⟩
+      for (a, k) in as.zipIdx do
+        σ := σ.set! k (c.elabV a)
+    let mut args : Array (Option Val) := Array.replicate comps.length none
+    for pass in [0, 1] do
+      for ((Pi, Wi), k) in comps.zipIdx do
+        if args[k]!.isSome then continue
+        let some pat := patOf c names Pi
+          | throw ⟨Wi.span, s!"the parameter's type `{Pi.pp}` of `{tn.name}` does not elaborate"⟩
+        if pass == 0 && holeClosure Wi && hasPhV pat then continue
+        -- The pattern with what is solved so far.
+        let pat' := solvedV σ 0 pat
+        let Wi ← match Wi, pat' with
+          | .bangThunkv wsp (.lam lsp x Ax M), .bang (.thunk (.arr X _))
+          | .thunkv wsp (.lam lsp x Ax M), .thunk (.arr X _) =>
+            if isHoleTy Ax then
+              if hasPhV X then throw ⟨lsp, s!"the type of the closure's parameter `{x.name}` is " ++
+                s!"not determined by the other arguments of `{tn.name}`: write it"⟩
+              let Xs ← c.surface lsp X
+              pure (match Wi with
+                | .bangThunkv .. => Val.bangThunkv wsp (.lam lsp x Xs M)
+                | _ => Val.thunkv wsp (.lam lsp x Xs M))
+            else pure Wi
+          | Wi, _ => pure Wi
+        let Wi' ← surfV n c (if hasPhV pat' then none else some pat') Wi
+        let c ← refresh c
+        let some T := c.tyV Wi'
+          | throw ⟨Wi.span, s!"the type of this argument of `{tn.name}` is not determined here"⟩
+        -- A callback that loops or yields where a function is expected: its result is what its
+        -- loop or generator finishes with (it is specialized at its own type, `specV`), unless
+        -- the parameter's result is itself a loop or a generator.
+        let T := if (matchV σ 0 pat T).isSome then T else match pat, T with
+          | .thunk (.arr _ (.ret Q)), .thunk (.arr A' (.ret L))
+          | .bang (.thunk (.arr _ (.ret Q))), .bang (.thunk (.arr A' (.ret L))) =>
+            if !hasPhV Q then T else
+            match ((loopOf L).map (·.1)).orElse fun _ => (genOf L).map (·.2.1) with
+            | some B' => match T with
+              | .bang _ => .bang (.thunk (.arr A' (.ret B')))
+              | _ => .thunk (.arr A' (.ret B'))
+            | none => T
+          | _, _ => T
+        match matchV σ 0 pat T with
+        | some σ' => σ := σ'
+        | none => throw ⟨Wi.span, s!"this argument of `{tn.name}` has type `{ppT T}`, which is " ++
+            s!"not `{Pi.pp}`"⟩
+        args := args.set! k (some Wi')
+    let mut σs : TySubst := []
+    for (x, t) in names.zip σ.toList do
+      let some t := t
+        | throw ⟨sp, s!"the type `{x}` of `{tn.name}` is not determined by its arguments: " ++
+            s!"write them, `{tn.name}[…](…)`"⟩
+      let ts ← c.surface sp t
+      if ts.pp.contains '\'' then
+        throw ⟨sp, s!"`{tn.name}` is instantiated at `{ts.pp}`, which has a lifetime: a generic " ++
+          "generator is instantiated at types without one"⟩
+      σs := σs ++ [(x, ts)]
+    let W' := argOf W (args.toList.filterMap id)
+    let key := (tn.name, σs.map (·.2.strip))
+    let st ← get
+    if let some name := st.insts.lookup key then return (name, W')
+    let name := s!"{tn.name}__g{st.insts.length}"
+    let mk' := match mk with
+      | .gen E => Mark.gen (E.subst σs)
+      | mk => mk
+    let inst := Decl.def_ tsp ⟨name, tn.span⟩ [] (A.subst σs) (V.subst σs) mk'
+    let inst := Elab.fillDecl (st.lib ++ st.out) st.caps inst
+    let st' ← (elabDecl n { st with insts := (key, name) :: st.insts } inst : SM DivSt)
+    set st'
+    return (name, W')
+
 /-- Elaborate one declaration: first the copies its calls need (each elaborated the same way),
 then its own divergence, with its calls renamed to the copies.  `[spec §14]` -/
 def elabDecl : Nat → DivSt → Decl → SM DivSt
   | 0, _, d => throw ⟨(match d with | .def_ sp .. | .main sp .. => sp | _ => Span.none),
       "specialization at callback types does not terminate"⟩
   | fuel + 1, st, d => do
+    -- A generic generator is a template, instantiated where it is called.
+    if let .def_ _ _ (_ :: _) _ _ (.gen _) := d then
+      return { st with templates := st.templates ++ [d] }
     -- A div function taking a borrow takes the owner, lent at each step (`LoopLend.lentDef`).
     let d := (← (Frontend.Elab.LoopLend.lentDef (TCx.ofScope (st.lib ++ st.out) false) d :
       Except Error (Option Decl))).getD d
-    let (d, st) ← (surfDecl divFuel d).run st
+    let (d, st) ← (surfDecl fuel d).run st
     let (d, st) ← (specDecl fuel d).run st
     -- In a copy made at a callback that yields, the calls through the callback delegate to it.
     let d := match d with
@@ -2669,9 +2963,13 @@ def elaborateS (p : Program) : SM (Program × Nat) := do
   let preludeNames := ["true", "false", "not"]
   let mayPrelude := !incl.contains "prelude" && preludeNames.any (usesName · p)
   let ioAll ← if mayIO && !incl.contains "io" then libOf "lib/io.bc" ioLibrary else pure []
+  -- The generator library is in scope for typing when the program names it (`gen_pull` in
+  -- `lib/adapters.bc`).
+  let mayGen := ["gen_bind", "gen_bind_loop", "gen_pull"].any (usesName · p)
+  let genAll ← if mayGen && !incl.contains "gen" then libOf "lib/gen.bc" genLibrary else pure []
   let divAll ← if mayDiv && !incl.contains "div" then libOf "lib/div.bc" divLibrary else pure []
   let preludeAll ← if mayPrelude then libOf "lib/prelude.bc" preludeLibrary else pure []
-  let typing := preludeAll ++ ioAll ++ divAll
+  let typing := preludeAll ++ ioAll ++ divAll ++ genAll
   let capDecls := if mayIO then capNames.map fun c =>
       Decl.extern Span.none ⟨c, Span.none⟩ (capTy Span.none c) else []
   -- Bindings whose type only their uses determine (an injection) are annotated first.
@@ -2698,12 +2996,12 @@ def elaborateS (p : Program) : SM (Program × Nat) := do
     | _ => pure none
   -- The generator library when an elaborated generator sequences with `gen_bind`.
   -- (A program that defines them itself, a core form written by hand, uses its own.)
-  let genNames := ["gen_bind", "gen_bind_loop"].filter fun n =>
+  let genNames := ["gen_bind", "gen_bind_loop", "gen_pull"].filter fun n =>
     !(p.decls.any fun | .def_ _ m _ _ _ _ => m.name == n | _ => false)
   let usesBind := (rest ++ mains).any fun
     | .def_ _ _ _ _ V _ => genNames.any V.names | .main _ _ M => genNames.any M.names | _ => false
   let genLib ← if usesBind && !incl.contains "gen" then
-    libOf "lib/gen.bc" genLibrary else pure []
+    (if mayGen then pure genAll else libOf "lib/gen.bc" genLibrary) else pure []
   let lib := preludeAll ++ ioLib ++ divLib ++ genLib
   let decls ← (lib ++ rest ++ exts ++ mains).mapM fun
     | .def_ sp n ps A V mk => return .def_ sp n ps A (← V.elab false) mk

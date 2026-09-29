@@ -1531,6 +1531,13 @@ where
   `fn` of result `B` (`1` when left out) marked as a generator of `A`. -/
   genRest (st : Pos) : P Decl := do
     let x ← ident "a `gen fn` name"
+    -- `gen fn f[A, …](…)`: a generator generic in types, instantiated at each call.
+    let tps ← if ← isSym "[" then do
+        discard bump
+        let ps ← uidents n
+        expectSym "]"
+        pure ps
+      else pure []
     -- `gen fn f<'a>(…)`: a generator with a lifetime parameter, bounded by `top`.
     let life ← if ← isSym "<" then do
         discard bump
@@ -1553,9 +1560,9 @@ where
     let body ← bindParams sp pn (ps.map (·.1)) M
     let lam := Comp.lam sp ⟨pn, sp⟩ P body
     match life with
-    | none => pure (.def_ sp x [] (.bang sp (.lolli sp P B)) (.bangThunkv sp lam) (.gen A))
+    | none => pure (.def_ sp x tps (.bang sp (.lolli sp P B)) (.bangThunkv sp lam) (.gen A))
     | some a =>
-      pure (.def_ sp x [] (.bang sp (.all sp a (.top sp) (.lolli sp P B)))
+      pure (.def_ sp x tps (.bang sp (.all sp a (.top sp) (.lolli sp P B)))
         (.bangThunkv sp (.lamL sp a (.top sp) (.ret sp (.thunkv sp lam)))) (.gen A))
   /-- `x₁: A₁, …, xₙ: Aₙ`, at least one. -/
   params : Nat → P (List (Ident × VTy))

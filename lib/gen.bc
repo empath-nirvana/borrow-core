@@ -120,3 +120,27 @@ def gen_bind_loop[A, B1, R1, B, R] :
     s0 : (U (loop B1 R1) * U ((B1 -o F (U (gen A B R))) & (R1 -o F R))) + U (gen A B R) <-
       return (inl p);
     return (thunkv nu_in < (nu_out (force f s0)).1, (nu_out (force f s0)).2 >)
+
+-- One element of a generator, pulled from another generator's body (`yield from gen_pull[E, A, B,
+-- R] g`): a generator of `E` that yields nothing, and finishes with `g`'s next element and its
+-- rest, or with what `g` finishes with. Each skip of `g` is a skip of it, so a body that pulls
+-- from two generators at once (`zip`) stays total. Closed, it closes `g`.
+def gen_pull_step[E, A, B, R] :
+    !U (U (gen A B R) -o F (E * U (gen A B R) + (((A * U (gen A B R)) + B) + U (gen A B R))) & F R) =
+  !thunkv fun (g : U (gen A B R)) ->
+    < o <- (nu_out (force g)).1;
+      case o {
+        inl y -> return (inr (inl (inl y)))
+      | inr d ->
+          case d {
+            inl b -> return (inr (inl (inr b)))
+          | inr g2 -> return (inr (inr g2))
+          }
+      },
+      (nu_out (force g)).2 >
+
+def gen_pull[E, A, B, R] : U (gen A B R) => U (gen E ((A * U (gen A B R)) + B) R) =
+  thunkv fun (g : U (gen A B R)) ->
+    f <- return (unbang (unfold[gen E ((A * U (gen A B R)) + B) R, U (gen A B R)]
+           gen_pull_step[E, A, B, R]));
+    return (thunkv nu_in < (nu_out (force f g)).1, (nu_out (force f g)).2 >)
