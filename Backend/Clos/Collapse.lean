@@ -177,14 +177,17 @@ into the first of them, until none are equal. Layout types are monomorphic, so e
 different types (`λx. x` at two types) stay apart. -/
 def Prog.mergeCodes (p : Prog) : Prog := Id.run do
   let mut p := p
+  -- The codes merged into another: nothing refers to them any more, so they are not keyed again.
+  let mut merged : Std.HashSet Nat := {}
   for _ in [0:p.codes.size + 1] do
     let .ok T := p.types | return p
     let mut first : Std.HashMap String Nat := {}
     let mut to : Std.HashMap Nat Nat := {}
     for (c, k) in p.codes.toList.zipIdx do
+      if merged.contains k then continue
       let key := s!"{T.codeType k} {T.env k} {c.key}"
       match first[key]? with
-      | some k₀ => to := to.insert k k₀
+      | some k₀ => to := to.insert k k₀; merged := merged.insert k
       | none => first := first.insert key k
     if to.isEmpty then break
     let f (c : Nat) : Nat := to.getD c c
