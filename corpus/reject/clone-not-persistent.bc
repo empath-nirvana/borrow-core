@@ -1,0 +1,6 @@
+-- `clone` copies a persistent value; a cell is not one, and has no copy.
+main -> i32 =
+  let c = alloc(1);
+  let d = clone(c);
+  free(c) + free(d)
+-- expect: 4:11: `clone` copies a persistent value, and `ref i32` is not persistent

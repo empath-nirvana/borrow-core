@@ -1,8 +1,9 @@
 -- Closing a generator early frees its state. `elems` owns a list and yields its elements; its
 -- state between observations is the rest of the list. `take(2, …)` stops after two elements and
 -- closes it: `close` drops the state, so the two nodes still in it are freed by the list's
--- destructor (SPEC §12) and nothing is left live. The `break` arm sets `l` to `nil`: a list of
--- `i32` is persistent data, and naming the list after `unroll` took it apart would copy it.
+-- destructor (SPEC §12) and nothing is left live. The `break` arm does not name `l`: nothing after
+-- the loop reads it, so the loop does not hand it on, and the list `unroll` took apart is not
+-- copied (`copies 0`).
 --
 -- Answer: i32[3], 1 + 2, and `live 0`. A `close` that forgot the state leaves objects live; a
 -- `take` that ran one more step gives 6.
@@ -16,7 +17,7 @@ gen fn elems(l: List) -> i32 =
   let mut l = l;
   while true {
     match unroll l {
-      inl u -> l = nil; break
+      inl u -> break
     | inr (x, t) -> l = t; yield x
     }
   };

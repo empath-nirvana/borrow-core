@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 0.16 · 2026-09-28
+Version 0.17 · 2026-09-29
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -585,10 +585,24 @@ Soundness (`vCE_empty_of_persistent`): at a persistent type the value relation h
 and `∅ = ∅ ⋆ ∅`. The paper's `Ctx.Split` is unchanged, and every paper relation converts into its
 extension, so the embedding (§3) still applies.
 
+### Surface: deep copies are written
+
+The core rule is unchanged: a persistent variable may be used any number of times. The compiled
+program keeps each object owned by one word, so a variable used by two sequential parts is
+copied for the earlier one (`Backend/README.md`, Memory discipline), and at a persistent type
+that holds recursive data (a `μ`, also under `⊗`, `⊕`, `[@a]`, `!`) that copy allocates every
+node. Such a use is written `clone(x)` at the surface; a checked program that would copy
+recursive data at an unwritten use is rejected at that use (`Frontend/Elab/Copies.lean`,
+decision 39). `clone(x)` elaborates to `x`. A copy at a type that copies as words (`I32`, `1 + 1`,
+their products) stays implicit. The check runs on the elaborated program after the checker, so
+it only rejects more programs: `checkProgram_sound` and every theorem are unchanged.
+
 ### Open
 
 - The promotion premise `!Γ` (every live slot at `!A`) is not widened to "every live slot
   persistent".
+- A persistent closure (`!(A ⇒ B)`) that captures recursive data is copied deep too; its type
+  does not say what it captures, so that copy is not checked (`bcc-counts` counts it).
 
 ---
 
@@ -1295,6 +1309,11 @@ typed world, the model and the end-to-end theorems in `Core/Stdio.lean`, the che
 ---
 
 ## Changelog
+
+- **0.17** (2026-09-29) — §10: a use that copies recursive data is written `clone(x)`, and an
+  unwritten one is an error at that use (#108, decision 39); a generator's loop hands on, at a
+  `break`, only the variables what follows it reads. `bcc-counts` reports the deep copies a run
+  makes. No kernel, rule or checker change.
 
 - **0.16** (2026-09-28) — The surface's places and conditions (#54, stages 6–7 of
   `docs/typed-elaboration.md`): `&mut x` and `&x` lend a place, by type a move handed back, a

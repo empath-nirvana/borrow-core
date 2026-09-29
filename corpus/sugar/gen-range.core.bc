@@ -1,11 +1,11 @@
 -- `gen-range.bc` written by hand in core. `Vars` are the loop's variables `(hi, i)`; `Body` is
 -- the body's generator, which finishes with the variables, `inl` to go on (`inr` would be a
--- `break`); a state `St` is the parameters, the variables before an iteration, or the body's
+-- `break`, with the variables what follows the loop reads: none here); a state `St` is the parameters, the variables before an iteration, or the body's
 -- rest. `head` starts an iteration; the step's `next` runs the code before the loop in the first
 -- state, and the head again when the body's rest finishes an iteration.
 
 type Vars = i32 * i32
-type Body = U (gen i32 (Vars + Vars) 1)
+type Body = U (gen i32 (Vars + 1) 1)
 type St = i32 * i32 + (Vars + Body)
 
 def range : !(i32 * i32 => U (gen i32 1 1)) =
@@ -17,12 +17,12 @@ def range : !(i32 * i32 => U (gen i32 1 1)) =
         case (unbang host[lt_s32]) (i, hi) {
           inl f -> v : 1 <- return (); return (inr (inl v))
         | inr t ->
-            b : i32 * Body + ((Vars + Vars) + Body) <-
+            b : i32 * Body + ((Vars + 1) + Body) <-
               return (inl (i, thunkv nu_in <
                 y <- return ();
                 i <- return ((unbang host[add32]) (i, i32[1]));
                 u <- return ();
-                v : Vars + Vars <- return (inl (hi, i));
+                v : Vars + 1 <- return (inl (hi, i));
                 return (inr (inl v)),
                 dhi <- return hi;
                 di <- return i;
@@ -34,7 +34,7 @@ def range : !(i32 * i32 => U (gen i32 1 1)) =
                   inl r ->
                     case r {
                       inl sv -> return (inr (inr (inr (inl sv))))
-                    | inr sv -> let (hi, i) = sv; v : 1 <- return (); return (inr (inl v))
+                    | inr sv -> let () = sv; v : 1 <- return (); return (inr (inl v))
                     }
                 | inr g -> return (inr (inr (inr (inr g))))
                 }
@@ -61,7 +61,7 @@ def range : !(i32 * i32 => U (gen i32 1 1)) =
                         inl r ->
                           case r {
                             inl sv -> return ((unbang head) sv)
-                          | inr sv -> let (hi, i) = sv; v : 1 <- return (); return (inr (inl v))
+                          | inr sv -> let () = sv; v : 1 <- return (); return (inr (inl v))
                           }
                       | inr g2 -> return (inr (inr (inr (inr g2))))
                       }

@@ -6,6 +6,43 @@ A type is **persistent** when its values hold no resource: `1`, `0`, `i32`, `i64
 pairs, sums, `box` and `mu` types built from persistent types. A variable of a persistent type
 can be used any number of times, or not at all.
 
+Using a persistent value again copies it, in compiled code, for every use but the last. For
+`i32`, `bool` and their pairs that copy is a few words and is never written. For recursive data
+(a `mu` type, or anything holding one) the copy allocates every node, so a use that copies is
+written `clone(x)`:
+
+```bc
+type List = mu X. 1 + (i32 * X)
+
+def nil : List = roll inl ()
+fn cons(x: i32, t: List) -> List = roll inr (x, t)
+fn sum_alg(r: 1 + i32 * i32) -> i32 = match r { inl u -> 0 | inr (x, n) -> n + x }
+def sum : !(List => i32) = fold_own[1 + i32 * X, i32] sum_alg
+
+main -> i32 * i32 =
+  let l = cons(1, cons(2, nil));
+  (sum(clone(l)), sum(l))
+-- answer: (i32[3], i32[3])
+```
+
+Without `clone`, the use that would copy is an error, which names the use after it:
+
+```bc,reject
+type List = mu X. 1 + (i32 * X)
+
+def nil : List = roll inl ()
+fn cons(x: i32, t: List) -> List = roll inr (x, t)
+fn sum_alg(r: 1 + i32 * i32) -> i32 = match r { inl u -> 0 | inr (x, n) -> n + x }
+def sum : !(List => i32) = fold_own[1 + i32 * X, i32] sum_alg
+
+main -> i32 * i32 =
+  let l = cons(1, cons(2, nil));
+  (sum(l), sum(l))
+-- expect: 10:8: `l` is used again at 10:16, so this use copies it, and its type `mu X. 1 + i32 * X` holds recursive data: the copy allocates every node. Write `clone(l)` to copy it here, or do not use `l` after this
+```
+
+The last use takes the value itself, and one only read through a borrow is not copied at all.
+
 Every other value is **owned**, and its variable is used exactly once. Cells (`ref A`), borrows
 (`imm 'a A`, `mut 'a A`) and thunks (`U C`) are owned. Using an owned variable twice is an
 error:

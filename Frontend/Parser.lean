@@ -648,7 +648,7 @@ def bracketless : List String := ["alloc", "free", "swap"]
 as the block of a keyword (`case V {`, `for x in V {`). -/
 def startsValAtom (t : Tok) : Bool :=
   match t with
-  | .ident _ | .sym "(" | .sym "&" | .int _ => true
+  | .ident _ | .sym "(" | .sym "&" | .int _ | .kw "clone" => true
   | _ => (constKw? t).isSome
 
 /-- Tokens that begin a computation, as against a value statement. -/
@@ -936,6 +936,7 @@ def valAtom : Nat → P Val
       else pure (.var t.span s)
     | .int k => discard bump; pure (.sugar t.span (.lit k))
     | .kw "break" => discard bump; pure (.sugar t.span .brk)
+    | .kw "clone" => discard bump; pure (.sugar t.span (.call "clone"))
     | .sym "(" =>
       discard bump
       if ← isSym ")" then

@@ -7,11 +7,13 @@ import Backend.Driver
     lake exe bcc-counts --sites <file>
 
 Run the program at the flat IR (`Backend/Flat/Interp.lean`) and under `wasmtime`, each built to
-count, and print `allocs N indirect M`: the objects the run allocates and the indirect calls it
-makes. The two stages must agree. A program that declares `stdin` reads all of standard input
+count, and print `allocs N indirect M copies K`: the objects the run allocates, the indirect calls
+it makes, and the copies of a variable at a non-trivial type it makes. The two stages must agree. A program that declares `stdin` reads all of standard input
 first and gives it to both. `scripts/compile-corpus.sh` compares the counts with
 `corpus/counts.expected`. An indirect call is a dispatched one: a closure call whose code a
-`switch` on the closure's tag chooses at run time.
+`switch` on the closure's tag chooses at run time. A copy is one that the ownership discipline
+inserts where a variable is used by two sequential parts (`Backend/README.md`, Memory discipline)
+at a type whose copy is not the words themselves: each is a deep copy that allocates.
 
 With `--sites`, print the program's closure calls instead (`Flat.callSites`): how many there
 are, how many are direct because their type's union has one code, how many more because the flow
@@ -27,12 +29,12 @@ def readAllIn (h : IO.FS.Stream) : Nat → ByteArray → IO ByteArray
     let b ← h.read 65536
     if b.isEmpty then return acc else readAllIn h n (acc ++ b)
 
-/-- The counts a counting run writes after its report: its last two lines. -/
-def countsOf (out : String) : Option (String × String) :=
+/-- The counts a counting run writes after its report: its last three lines. -/
+def countsOf (out : String) : Option (String × String × String) :=
   match (out.splitOn "\n").reverse with
-  | "" :: i :: a :: _ =>
-    if a.startsWith "allocs " && i.startsWith "indirect " then
-      some ((a.drop 7).toString, (i.drop 9).toString)
+  | "" :: c :: i :: a :: _ =>
+    if a.startsWith "allocs " && i.startsWith "indirect " && c.startsWith "copies " then
+      some ((a.drop 7).toString, (i.drop 9).toString, (c.drop 7).toString)
     else none
   | _ => none
 
@@ -69,11 +71,12 @@ def main (argv : List String) : IO UInt32 := do
       args := #["-c", s!"wasmtime run -W tail-call=y '{dir / "main.wat"}' < '{dir / "in"}'"] }
   IO.FS.removeDirAll dir
   match countsOf flat, countsOf r.stdout with
-  | some (a, i), some (a', i') =>
-    if a == a' && i == i' then
-      IO.println s!"allocs {a} indirect {i}"; return 0
+  | some (a, i, c), some (a', i', c') =>
+    if a == a' && i == i' && c == c' then
+      IO.println s!"allocs {a} indirect {i} copies {c}"; return 0
     else
-      IO.eprintln s!"{file}: the flat IR counts allocs {a} indirect {i}, wasm allocs {a'} indirect {i'}"
+      IO.eprintln (s!"{file}: the flat IR counts allocs {a} indirect {i} copies {c}, " ++
+        s!"wasm allocs {a'} indirect {i'} copies {c'}")
       return 1
   | none, _ => IO.eprintln s!"{file}: the flat IR wrote no counts"; return 1
   | _, none => IO.eprintln s!"{file}: wasm wrote no counts: {r.stderr}"; return 1

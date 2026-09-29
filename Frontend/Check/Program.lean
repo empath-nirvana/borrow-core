@@ -1,5 +1,6 @@
 import Frontend.Check.Checker
 import Frontend.Elab.Pipeline
+import Frontend.Elab.Copies
 
 /-!
 # Frontend — Check — programs
@@ -100,8 +101,11 @@ def checkDecl (ds : Array Decl) (k : Nat) : Decl → Except Error (String × Opt
 /-- Check a program, after elaborating it (`Frontend.Elab.elaborate`: the sugar of SPEC §11 and
 §14, then the typed IR and its lowering): the checker sees only the elaborated program. The lines
 of the libraries, when they are included, are not reported. An error in code generated for a
-sugar names the sugar (`Frontend.Elab.renderError`). -/
-def checkProgram (p : Program) : Except Error Report := do
+sugar names the sugar (`Frontend.Elab.renderError`). A checked program is then rejected if it
+copies recursive data implicitly (`Frontend.Elab.implicitCopy`): such a use is written
+`clone(x)`. With `copies := false` that check is skipped: for a program rebuilt from the printed
+core of one already checked with it, where `clone(x)` is `x` (`run_io`'s wrapper). -/
+def checkProgram (p : Program) (copies : Bool := true) : Except Error Report := do
   let el ← Frontend.Elab.elaborate p
   let ds := el.prog.decls.toArray
   let lib := el.lib
@@ -111,7 +115,12 @@ def checkProgram (p : Program) : Except Error Report := do
           let (line, m) ← checkDecl ds k d
           pure (⟨if k < lib then acc.lines else acc.lines ++ [line], m <|> acc.main⟩ : Report)
       | none => pure acc
-  r.mapError (Frontend.Elab.renderError el.origins)
+  let rep ← r.mapError (Frontend.Elab.renderError el.origins)
+  if !copies then return rep
+  let marked := (el.origins.filter (·.2 == Frontend.Sugar.cloneOrigin)).map (·.1)
+  match Frontend.Elab.implicitCopy el.tir marked with
+  | some e => throw (Frontend.Elab.renderError el.origins e)
+  | none => pure rep
 
 /-! ### Soundness -/
 

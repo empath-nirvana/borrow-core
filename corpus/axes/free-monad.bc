@@ -7,7 +7,8 @@
 -- `i` and a newline, then returns 7; building it performs nothing. A handler is a fold of it
 -- (`fold_own`, the unique algebra map): `run_out` interprets `write` by `putb` on the output
 -- capability, and `count` interprets it as `+ 1`. `Prog` holds no cell, so it is persistent and
--- `p` is used twice with no copy written (SPEC §10). The operation has a finite arity; one with
+-- `p` may be used twice (SPEC §10); it is recursive data, so the use that copies it is written
+-- `clone(p)` (the copy allocates its nodes: `copies 1`). The operation has a finite arity; one with
 -- an input (`read`, whose continuation is a function) needs `X` under `U`, which is
 -- `corpus/pending/fold-under-u.bc`.
 --
@@ -38,7 +39,7 @@ def count : !(Prog => i32) = fold_own[i32 + i32 * X, i32] count_alg
 
 main -> i32 * i32 =
   let p = greet(7);
-  let w = count(p);
+  let w = count(clone(p));
   let h = run_out(p);
   r <- h!(stdout);
   let (stdout, n) = r;

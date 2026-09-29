@@ -73,6 +73,8 @@ def printInstr (d : Nat) : Instr → List String
   | .globalGet g => [indent d ++ s!"global.get {g}"]
   | .countInd => [indent d ++ "global.get $indirect", indent d ++ "i64.const 1",
       indent d ++ "i64.add", indent d ++ "global.set $indirect"]
+  | .countCopy => [indent d ++ "global.get $copies", indent d ++ "i64.const 1",
+      indent d ++ "i64.add", indent d ++ "global.set $copies"]
 where
   printBody (d : Nat) : List Instr → List String
     | [] => []

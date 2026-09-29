@@ -27,7 +27,7 @@ def lowerExp : Flat.Exp → List Instr
   | .alloc w => lowerExp w ++ [.call "$alloc"]
   | .live => [.call "$live"]
   | .getc fd => lowerExp fd ++ [.call "$getc"]
-  | .stat k => [.globalGet (if k == 0 then "$allocs" else "$indirect")]
+  | .stat k => [.globalGet (if k == 0 then "$allocs" else if k == 1 then "$indirect" else "$copies")]
 where
   lowerArgs : List Flat.Exp → List Instr
     | [] => []
@@ -72,6 +72,7 @@ def lowerStmt (cnt : Bool) : Flat.Stmt → List Instr
   | .ret es => lowerExp.lowerArgs es ++ [.ret]
   | .tailCall f args => lowerExp.lowerArgs args ++ [.returnCall (fname f)]
   | .tick => if cnt then [.countInd] else []
+  | .tickCopy => if cnt then [.countCopy] else []
   | .trap => [.unreachable]
 where
   lowerBlock : List Flat.Stmt → List Instr

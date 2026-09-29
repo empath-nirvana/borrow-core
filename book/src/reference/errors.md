@@ -31,6 +31,10 @@ main : F (i32 * i32) =
 -- expect: 3:10: `r` is used twice here, and its type `ref i32` is not persistent
 ```
 
+**Implicit deep copy.** A persistent variable of a type that holds recursive data is used again
+after a use that would therefore copy it; that use is written `clone(x)` (see [Ownership and
+borrows](../guide/ownership-and-borrows.md)). The message names the use after it.
+
 **Not consumed.** A variable is left unused and cannot be dropped: its type has no destructor,
 it is declared `linear`, or it cannot be dropped where its scope ends (inside a value, where no
 drop is inserted).

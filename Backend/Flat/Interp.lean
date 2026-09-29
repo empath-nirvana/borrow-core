@@ -32,6 +32,8 @@ structure FState where
   allocs : Nat := 0
   /-- Dispatched calls so far. -/
   indirect : Nat := 0
+  /-- Copies of a variable at a non-trivial type so far. -/
+  copies : Nat := 0
 
 abbrev FM := StateT FState (Except String)
 
@@ -124,7 +126,8 @@ def evalExp (p : Prog) : Nat → Array UInt64 → Exp → FM UInt64
         | [] => pure 0xFFFFFFFFFFFFFFFF
         | b :: bs => do set { s with input := bs }; pure b.toUInt64
     | .stat 0 => do pure (← get).allocs.toUInt64
-    | .stat _ => do pure (← get).indirect.toUInt64
+    | .stat 1 => do pure (← get).indirect.toUInt64
+    | .stat _ => do pure (← get).copies.toUInt64
 
 def evalArgs (p : Prog) : Nat → Array UInt64 → List Exp → FM (List UInt64)
   | 0, _, _ => throw "flat IR: out of fuel"
@@ -197,6 +200,9 @@ def execStmt (p : Prog) : Nat → Array UInt64 → Stmt → FM (Array UInt64 × 
     | .tailCall f args => do pure (fr, some (← callFn p n f (← evalArgs p n fr args) none))
     | .tick => do
         modify fun st => { st with indirect := st.indirect + 1 }
+        pure (fr, none)
+    | .tickCopy => do
+        modify fun st => { st with copies := st.copies + 1 }
         pure (fr, none)
     | .trap => throw "flat IR: trap"
 end

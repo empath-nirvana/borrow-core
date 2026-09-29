@@ -449,7 +449,8 @@ def lowerTm : Tm → Dest → LM (List Stmt)
   | .copy x x' b, d => do
       let (s, ls) ← copyVals (← vty x) (← vals x)
       bindVals x' ls
-      return s ++ (← lowerTm b d)
+      let tk : List Stmt := if s.isEmpty then [] else [.tickCopy]
+      return tk ++ s ++ (← lowerTm b d)
   | .drop x b, d => do
       let s ← dropVals (← vty x) (← vals x)
       return s ++ (← lowerTm b d)
@@ -725,11 +726,12 @@ def lowerMain (t : Tm) : LM Fn := do
     pure ((← lowerTm t (.ret k)) ++ [.trap])
   pure { name := "main", params := 0, results := k, locals := nloc, body }
 
-/-- The counts of a run, written after the report when they are asked for: allocations and
-indirect (dispatched) calls. -/
+/-- The counts of a run, written after the report when they are asked for: allocations,
+indirect (dispatched) calls, and copies of a variable at a non-trivial type. -/
 def countsReport : List Stmt :=
   outStr "allocs " ++ [.call [] fPrintDec [.stat 0]] ++ outStr "\nindirect " ++
-    [.call [] fPrintDec [.stat 1]] ++ outStr "\n"
+    [.call [] fPrintDec [.stat 1]] ++ outStr "\ncopies " ++
+    [.call [] fPrintDec [.stat 2]] ++ outStr "\n"
 
 /-- Run `main` (driving it and running the code `fin` on what it finishes with, when it returns
 a loop), print the value, drop it, print the live count, and with `counts` the run's counts. -/

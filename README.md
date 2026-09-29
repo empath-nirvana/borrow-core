@@ -114,7 +114,7 @@ scripts/ci-local.sh             # the gate: build, hygiene and axioms, corpus, s
 | `tir <file>` | print the typed IR |
 | `trusted <file>` | list the externs a program depends on |
 
-`lake exe bcc-counts <file>` reports a program's allocations and indirect calls.
+`lake exe bcc-counts <file>` reports a program's allocations, indirect calls and deep copies.
 
 ## How work happens
 
