@@ -1,6 +1,7 @@
 -- Calls of div functions in direct style inside generators (#109). A generator's observations
--- are total, so a loop it calls runs inside it one turn per observation, each turn a skip
--- (`gen_bind_loop`, `lib/gen.bc`); when the loop finishes, the body goes on with its result.
+-- are total, so a loop it calls runs inside it one turn per observation, each turn a skip: the
+-- loop is held in a state of the generator's machine (SPEC §15); when it finishes, the body goes
+-- on with its result.
 --
 -- `collatz` is a loop written in core. `steps` calls it inside its own loop, once per element;
 -- `two` calls it in the element of a `yield`, in a `let`, and as its result. `line_len` is div

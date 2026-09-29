@@ -5,7 +5,7 @@
 --
 -- The `for` inside `lines` iterates `bytes(c)`, which may not end: in a generator that loop is a
 -- state machine (a state of the generator), so each observation of `lines` stays total. What
--- follows the loop yields too, so it is sequenced by `gen_bind` (`lib/gen.bc`).
+-- follows the loop yields too: it is another state of the same machine (SPEC §15).
 --
 -- Answer: on the input `stressed`, `level`, `live on` (no final newline), the lines `desserts`,
 -- `level`, `no evil`, and i32[3]. A splitter that lost the last line prints two lines and gives

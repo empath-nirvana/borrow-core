@@ -5,9 +5,8 @@
 -- `below` leaves two loops with `return` once `i * j` passes `lim`, and leaves the outer loop
 -- with a `break` in the middle of its body. `upto` writes each number it yields through the output
 -- capability it holds, and `return`s the capability from inside its loop: the loop threads `o`,
--- so the returned value hands it back. What follows its loop yields again, so the loop is
--- sequenced by `gen_bind`: a `return` skips what follows (`upto(…, 2, 9)`), and a `break` runs it
--- (`upto(…, 9, 3)` yields the `99`).
+-- so the returned value hands it back. What follows its loop yields again: a `return` skips it
+-- (`upto(…, 2, 9)`), and a `break` runs it (`upto(…, 9, 3)` yields the `99`).
 --
 -- Answer: the lines `0`, `1`, `0`, `1`, `2`, then i32[116]: `below(10, 12)` yields 0, 0 1, 0 1 2,
 -- 0 1 2 3, 0 1 2 (13); `upto(o, 2, 9)` 0 1 (1); `upto(o, 9, 3)` 0 1 2 then 99 (102). A `return`

@@ -2,10 +2,9 @@
 -- Every adapter of the library (#109, `lib/adapters.bc`) over pure sources: `range` finishes with
 -- `()` and, closed, hands back `()`. Each adapter is a generic `gen fn` written once; each call
 -- makes its instance at the types of its arguments (`i32`, pairs, lists). The adapters are
--- composed, a few to a loop, since each loop of a `main` is one more delay bind (SPEC §14). The
--- source interpreter takes over a minute over it (`check: no-source`); the other stages run it. The
--- I/O sources are `corpus/gen-adapters-io.bc` and `corpus/gen-adapters-io2.bc`, the failing ones
--- `corpus/gen-adapters-fail.bc`.
+-- composed, a few to a loop. The source interpreter takes about a minute over it (`check:
+-- no-source`); the other stages run it. The I/O sources are `corpus/gen-adapters-io.bc`, the
+-- failing ones `corpus/gen-adapters-fail.bc`.
 --
 -- Answer: i32[110051049], read as 110, 051 and 049:
 --   take 3 of skip 2 of filter above 5 of map squares of 0 … 9:
