@@ -35,6 +35,29 @@ also decides what the handler may touch:
 - a suspended computation holding resources for the fourth (see `experiments/LoopBorrow`, O1);
 - persistent data only for the fifth.
 
+## A second slogan: control effects are value effects with a shift
+
+> **A control effect is a value effect whose continuation is shifted to a value; the grade on that
+> value says which control effect it is.**
+
+- **Value effects (rows 1–2).** The operation returns a value and the computation continues; the
+  continuation is never reified.
+- **Control effects (rows 3–5).** At the operation, the rest of the computation becomes a value
+  `U k` (CBPV's `U` shift, which CPS makes explicit; a generator's rest `U X` is one). What
+  distinguishes the rows is only how `U k` may be used:
+
+| row | `U k` is | grade |
+|---|---|---|
+| exceptions, early exit | dropped (destructors run) | 0 |
+| generators, async | used once, possibly later | 1 |
+| backtracking | used many times; only if `k` is persistent | ω |
+
+**Caveats:**
+- Row 2 (a runner with finalisation) wraps code around the continuation without reifying it, so it
+  belongs on the value side.
+- Exceptions also read with no shift at all, as a positive `A + E` result (data). The grade-0
+  reading and the sum reading are two views of the same thing.
+
 ## Status
 
 Untested. It came out of the effects/coeffects discussion: Andrew Wagner's remark that
