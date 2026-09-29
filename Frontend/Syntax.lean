@@ -218,6 +218,8 @@ inductive Const where
   | sliceBorrowImm (x : Ident) (b : Life) (A B : VTy)
   | sliceGetMut (a : Life) (A : VTy)
   | sliceLenMut (a : Life) (A : VTy)
+  /-- `count_fold[S]`: the counted loop of SPEC §16. -/
+  | countFold (S : VTy)
   deriving DecidableEq, Repr
 
 /-- A binary operator of the surface (draft 0 §2.12), resolved by the width of its operands. -/
@@ -490,6 +492,7 @@ def Const.strip : Const → Const
   | .sliceBorrowImm x b A B => .sliceBorrowImm x.strip b.strip A.strip B.strip
   | .sliceGetMut a A => .sliceGetMut a.strip A.strip
   | .sliceLenMut a A => .sliceLenMut a.strip A.strip
+  | .countFold S => .countFold S.strip
 
 mutual
 def Val.strip : Val → Val

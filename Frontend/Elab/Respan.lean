@@ -111,6 +111,7 @@ def Const.respan (sp : Span) : Const → Const
       .sliceBorrowImm (x.respan sp) (b.respan sp) (A.respan sp) (B.respan sp)
   | .sliceGetMut a A => .sliceGetMut (a.respan sp) (A.respan sp)
   | .sliceLenMut a A => .sliceLenMut (a.respan sp) (A.respan sp)
+  | .countFold S => .countFold (S.respan sp)
 
 mutual
 def Val.respan (sp : Span) : Val → Val

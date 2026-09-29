@@ -56,6 +56,7 @@ import Core.ArrayWp
 import Core.Arrays
 import Core.SliceFrames
 import Core.Slices
+import Core.CountFold
 import Core.ArrayPrograms
 import Core.Demonic
 import Core.Totality

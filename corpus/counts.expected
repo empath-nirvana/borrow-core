@@ -24,6 +24,7 @@ block-swap 2 0 0
 clone-reuse 6 0 1
 count-down 0 0 0
 count-down-exact 6 0 0
+count-fold 0 0 0
 deep-list 100000 0 0
 div-hof 0 0 0
 family-swap 2 0 0
@@ -53,7 +54,7 @@ io-break 2 0 0
 io-cat 2 0 0
 io-for-assign 1 0 0
 io-for-then 2 0 0
-io-fuel 3746 174 0
+io-fuel 1 0 0
 io-guess 3 0 0
 io-head 2 0 0
 io-hex 2 0 0
@@ -62,12 +63,13 @@ io-sections 2 0 0
 io-upper 2 0 0
 io-wc 2 0 0
 iter-close 2 0 0
+iter-mut-count 1 0 0
 iter-range 0 0 0
 lend-config 2 0 0
 lend-div 2 0 0
-lend-lib-each 299 11 0
+lend-lib-each 2 0 0
 lend-lib-gen 1 0 0
-lend-lib-loop 597 10 0
+lend-lib-loop 3 0 0
 lend-mut 2 0 0
 lend-pipeline 2 0 0
 lend-server 2 0 0

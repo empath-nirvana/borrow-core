@@ -459,6 +459,16 @@ typed at `!(A => B)`:
   borrows at `@b = top` (draft 0's borrow blocks).
 <!-- ANCHOR_END: arrays -->
 
+## 8c. Counted loops
+
+<!-- ANCHOR: counted -->
+`count_fold[S] : !(!(i32 * S => S) * (i32 * (i32 * S)) => S)` (`SPEC.md` §16, rule
+`countFold`, erasure the primitive `count`): `(unbang count_fold[S]) (f, (n, (i, s)))` runs `f`
+at `i, …, n − 1`, threading the state, and answers the last state. A negative `n` is the empty
+loop, as a negative array length is. At the surface it is called as any constant:
+`count_fold[i32] (step, n, 0, acc)`.
+<!-- ANCHOR_END: counted -->
+
 ## 9. Derived forms
 
 <!-- ANCHOR: derived -->

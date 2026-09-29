@@ -97,8 +97,8 @@ closure type's union has one code, or the flow analysis finds one code of it at 
 loop driver's call too), and otherwise a call of the type's dispatcher `apply`, a `switch` on the closure's tag whose cases
 tail-call the codes. A call in return position whose callee answers the caller's words is a tail
 call. `case` is an `if` on the tag word. Copy, drop, the
-printer, the array primitives and the loop driver are flat-IR functions generated per layout
-type; host operations are inline.
+printer, the array primitives, the counted loop and the loop driver are flat-IR functions
+generated per layout type; host operations are inline.
 
 **Wasm** (`Wasm/Lower.lean`). One Wasm function per flat-IR function, `i64` locals, several
 results as a multi-value function, tail calls as `return_call`, a `switch` as `br_table` over
@@ -165,14 +165,14 @@ words then zeros; a projection's caller takes the first `|C|` or `|D|`.
 
 **Open.** With fixed points native, a recursive closure type is one the program builds as
 data: a closure that captures a closure of its own type, as a fold whose result is a function
-does (`add` of `13-2-sum-prog` and `sum-prog-exact`, one type; `div_fuel`'s handler in
-`lib/div.bc`, used by `io-fuel`, four). `bcc-counts --sites` lists them. They keep the heap
+does (`add` of `13-2-sum-prog` and `sum-prog-exact`, one type). `bcc-counts --sites` lists
+them. They keep the heap
 representation until the source can say `box` (#54). Placement of the objects that remain
 (stack, frame arena or heap, by escape analysis) is also open.
 
 The dispatched calls that remain are calls of those closures: a chain of functions built by
-a fold, whose links are different codes (`13-2-sum-prog`'s and `sum-prog-exact`'s `add`,
-`io-fuel`'s fuel handler). Every other call of the corpus is direct.
+a fold, whose links are different codes (`13-2-sum-prog`'s and `sum-prog-exact`'s `add`).
+Every other call of the corpus is direct.
 
 ## Stack
 
@@ -182,7 +182,9 @@ callee answers the caller's words. What runs in constant stack:
 - **Loops.** Every `ν`-type program, `unfold`, `fixd`, `div_bind` and the `for` loop: an
   observation runs the step once and returns the next state inside the rest, so the depth does
   not grow with the number of observations. The loop driver (`drive`) calls the loop and then
-  tail-calls itself; `div_fuel`'s handler ends each observation with a tail call of the next.
+  tail-calls itself.
+- **Counted loops.** `count_fold` (SPEC §16) is a generated loop of tail calls (`count_loop`),
+  one call of the step per count, allocating nothing; `div_fuel` is one.
   A left fold is written as a loop whose state is the rest of the structure and the accumulator
   (`corpus/deep-list.bc`); this is the only left-fold shape the core has.
 - **A self-call in tail position**, of the native fixed point: its code is known, so the call is

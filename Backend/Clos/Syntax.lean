@@ -56,6 +56,8 @@ inductive Op where
   | idx
   /-- `drop (f, (ℓ, n))`: each slot's contents to `f`, in order, then the array freed (§9). -/
   | drop
+  /-- `count (f, (n, (i, s)))`: `f` at `i, …, len(n) − 1`, threading `s` (§16). -/
+  | count
   /-- A standard I/O operation (§11). -/
   | io (k : IOOp)
   deriving Repr, DecidableEq

@@ -1158,8 +1158,9 @@ div body does not nest delay binds: the whole body is one `unfold` whose states 
 and calls (below, and §15's *One state machine per body*).
 
 **The fuel handler.** `div_fuel[A, Q] : U(Loop A Q) ⊗ I32 ⇒ A ⊕ Q` observes a loop at most `n`
-times and closes it if it has not finished: `driveE n` (§7) with the count a value (a fold over
-the unary count of `n`, `div_nat`). Div code under it is total: `collatz_within` of
+times and closes it if it has not finished: `driveE n` (§7) with the count a value, counted by
+`count_fold` (§16), whose state is the loop or, once it has finished, its result. A count of
+`2³¹` or more (a negative `i32`) observes nothing. Div code under it is total: `collatz_within` of
 `corpus/io-fuel.bc` is `total`, and a loop cut off hands its capabilities back.
 
 **Deferring a loop.** `div_defer[B, R] : U(F(U(Loop B R)) & F R) ⇒ U(Loop B R)` is the loop
@@ -1605,6 +1606,78 @@ preserved: every construct of this entry is elaborated into core before checking
   adapters: an adapter's result is one variable `k`, and the residual is handed back by name.
   Stopping a failing source (`take` over `U (gen A (1 + E) 1)`) is not provided.
 - **Generic `fn`s**: only generators are generic; a generic instance's types have no lifetimes.
+
+---
+
+## 16. Entry 15 — counted loops
+
+### Motivation
+
+Every total loop over a count or a view needs a loop whose bound is known when it starts. The
+only total loops were folds over data, so a counted loop folded over the unary count
+`μX. 1 ⊕ X` (`div_nat`, #95), and a loop of `n` steps allocated `n` objects. A counted loop
+is K0 of `docs/strings-slices-design.md`.
+
+### The constant
+
+    count_fold : !(!(I32 ⊗ S ⇒ S) ⊗ (I32 ⊗ (I32 ⊗ S)) ⇒ S)        (CDerives.countFold S)
+
+`count_fold (f, (n, (i, s)))` runs `f` at `i, i + 1, …, len(n) − 1`, threading the state, and
+answers the last state; `s` itself when `i ≥ len(n)`. `len(n)` is `tab`'s (§9): `n` when
+`n < 2³¹`, else `0`, so a negative bound is the empty loop. The step is persistent: what it
+changes is the state, which may hold anything (an array, a capability).
+
+### Machine
+
+One primitive, `Prim.count`, with one head step that allocates nothing:
+
+    (μ, count (f, (n, (i, s)))) ↦ (μ, count (f, (n, (i + 1, f (i, s)))))   if i < len(n)
+                                ↦ (μ, s)                                   otherwise
+
+(`countNext`, `Support/Dynamics/Arrays.lean`). The comparison and the increment are the
+machine's, on `UInt32`, not host operations.
+
+**Why a step, and not a Z-combinator loop over the host's `add` and `lt_u`.** Every theorem
+holds at every host (§8), and `wpTS` asks that every run reach a value. A loop that counts with
+the host's operations terminates only at hosts whose operations count: at the host whose
+`add32` answers its first argument and whose `lt_u32` answers true, the loop from `0` steps
+back to itself and never ends, so no such term is in the relation at every host. The machine's
+own counter is what makes the loop total at every host. This is the one change the design's K0
+did not foresee: it adds a machine step, as §9's `tab`, `idx` and `drop` did.
+
+### Semantics
+
+`countLoop_wp` is the induction on `len(n) − i`: one `count` step, then `f (i, s)` by the
+step's validity (`bang_app`), then the loop from `i + 1`. `countFold_compatX` is the constant,
+at every host (`Core/CountFold.lean`). The step is deterministic and allocates nothing, so
+determinism (`head_det`), allocator runs (§13) and the totality theorem (§14) take it with no
+new argument.
+
+### Lowering
+
+A generated loop of tail calls per step and state type (`count_loop`, `Backend/Flat/Lower.lean`):
+compare, call the step on a copy of the closure, tail-call with `i + 1`. It allocates nothing
+(`corpus/count-fold.bc`: allocs 0).
+
+### Uses
+
+- `div_fuel` (§14) counts its observations with it, in place of the unary count: `io-fuel`
+  went from 3746 allocations and 174 dispatched calls to 1 and 0.
+- A counted loop over an array's indices, each index lent as a `mut` leaf
+  (`corpus/iter-mut-count.bc`).
+
+### Baseline
+
+`fundamentalC`, `adequacyC`, `adequacyD` and the totality theorem keep their statements; the
+machine gains one head step, parametric in the host as before.
+
+### Open
+
+- The surface's total `for` over a count (`for i in range(n)`, stage 9 of typed elaboration)
+  elaborated to `count_fold`, with the `let mut` variables the body assigns as the state. Today
+  the constant is called directly, with the step a function or a closure.
+- Stopping early: a finished state is carried to the bound (`div_fuel` does), which costs a
+  test per remaining count.
 
 ---
 

@@ -268,6 +268,12 @@ def primTy : Op → List Var → TM Nat
       let f ← newNode (.fn a r r)
       unify (← tyVar v) (← newNode (.pair f (← newNode (.pair (← newLoc a) (← int32)))))
       unitT
+  | .count, [v] => do
+      let s ← newNode .any
+      let f ← newNode (.fn (← newNode (.pair (← int32) s)) s s)
+      unify (← tyVar v)
+        (← newNode (.pair f (← newNode (.pair (← int32) (← newNode (.pair (← int32) s))))))
+      pure s
   | .io .readByte, [m] => do
       let l ← newLoc (← int32)
       unify (← tyVar m) l

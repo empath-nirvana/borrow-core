@@ -57,6 +57,9 @@ inductive Helper where
   /-- `drop` of an array and its loop, at element location type `a` and consumer type `f`. -/
   | arrDrop (a f : Nat)
   | arrDropLoop (a f : Nat)
+  /-- `count` and its loop, at step type `f` and state type `s` (SPEC §16). -/
+  | count (f s : Nat)
+  | countLoop (f s : Nat)
   /-- Drive a loop of type `n` (SPEC §11). -/
   | drive (n : Nat)
   /-- The dispatcher of the closure type `n`: the closure's words and the argument's, answering
@@ -135,6 +138,7 @@ def helper (h : Helper) : LM Nat := do
     | .copy n => .copy (T.r n) | .drop n => .drop (T.r n) | .print n => .print (T.r n)
     | .tab a f => .tab (T.r a) (T.r f) | .tabLoop a f => .tabLoop (T.r a) (T.r f)
     | .arrDrop a f => .arrDrop (T.r a) (T.r f) | .arrDropLoop a f => .arrDropLoop (T.r a) (T.r f)
+    | .count f s => .count (T.r f) (T.r s) | .countLoop f s => .countLoop (T.r f) (T.r s)
     | .drive n => .drive (T.r n) | .apply n => .apply (T.r n)
     | h => h
   match (← get).helpers[h]? with
@@ -383,6 +387,13 @@ def lowerPrim : Op → List Var → Dest → LM (List Stmt)
       let f := (T.field n 0).1
       let l := (T.field (T.field n 1).1 0).1
       return [.call [] (← helper (.arrDrop l f)) (locs (← vals v))] ++ (← emit d [])
+  | .count, [v], d => do
+      let T ← T
+      let n ← vty v
+      let f := (T.field n 0).1
+      let s := (T.field (T.field (T.field n 1).1 1).1 1).1
+      let ts ← fresh (T.words s)
+      return [.call ts (← helper (.count f s)) (locs (← vals v))] ++ (← emit d (locs ts))
   | .io .readByte, [m], d => do
       let m := (← vals m).headD 0
       let b ← fresh1
@@ -977,6 +988,38 @@ def genHelper (h : Helper) : LM Fn := do
           [.tailCall (← helper (.arrDropLoop a f)) ([.loc 0] ++ locs fls ++ [add64 i (.c64 1), n])])
         [], .ret []]
     pure { name := "array_drop_loop", params := 3 + fw, results := 0, locals := nloc, body }
+  | .count f s =>
+    -- `count (f, (n, (i, s)))`: `len(n)`, the loop, then `f` dropped.
+    let fw := T.words f
+    let sw := T.words s
+    let (body, nloc) ← inFn (fw + 2 + sw) do
+      let fls := List.range fw
+      let n := Exp.loc fw
+      let rs ← fresh sw
+      pure ([.ite (ltu64 n (.c64 0x80000000)) [] [.set fw (.c64 0)],
+        .call rs (← helper (.countLoop f s)) (locs (List.range (fw + 2 + sw)))] ++
+        (← dropVals f fls) ++ [.ret (locs rs)])
+    pure { name := "count", params := fw + 2 + sw, results := sw, locals := nloc, body }
+  | .countLoop f s =>
+    -- `f n i s`: while `i < n`, the state goes to a copy of `f` with `i`.
+    let (a, _, k) ← fnParts f
+    let fw := T.words f
+    let sw := T.words s
+    let fls := List.range fw
+    let n := Exp.loc fw
+    let i := Exp.loc (fw + 1)
+    let sls := List.range' (fw + 2) sw
+    let (body, nloc) ← inFn (fw + 2 + sw) do
+      let (cs, fc) ← copyVals f fls
+      let (ps, arg) ← mkPair a [i] (locs sls)
+      let rs ← fresh k
+      pure [.ite (ltu64 i n)
+        (cs ++ ps ++ (← callClosure rs f fc arg) ++
+          [.tailCall (← helper (.countLoop f s))
+            (locs fls ++ [n, add64 i (.c64 1)] ++ locs (rs.take sw))])
+        [.ret (locs sls)]]
+    pure { name := "count_loop", params := fw + 2 + sw, results := sw, locals := nloc,
+           body := body ++ [.trap] }
   | .drive n =>
     -- `d`: call `d` on `inl ()` until it answers `inl r`; `inr d'` goes on with `d'`.
     let (a, c, k) ← fnParts n

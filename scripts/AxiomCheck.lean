@@ -82,6 +82,10 @@ import Frontend.Check.Externs
 #print axioms BoCa.Fig16.LogRel.Core.reborrow_vShape
 #print axioms BoCa.Fig16.LogRel.Core.arrProg_runs
 #print axioms BoCa.Fig16.LogRel.Core.arrProg_eval
+-- SPEC §16: counted loops
+#print axioms BoCa.Fig16.LogRel.Core.wpTS_count
+#print axioms BoCa.Fig16.LogRel.Core.countLoop_wp
+#print axioms BoCa.Fig16.LogRel.Core.countFold_compatX
 -- SPEC §9: the length bound, and slice borrows
 #print axioms BoCa.Fig16.LogRel.Core.arrLen_of_bound
 #print axioms BoCa.Fig16.LogRel.Core.arrLen_bound

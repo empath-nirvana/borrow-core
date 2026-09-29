@@ -286,6 +286,9 @@ def synConst (E : Env) (Δ : LifeCtx) (T : List CVTy) (sp : Span) :
       let a ← E.elabL Δ a
       let A ← E.elabV Δ A
       pure (cDead _ fun hd => CDerives.arrForget a A hd)
+  | .countFold S => do
+      let S ← E.elabV Δ S
+      pure (cDead _ fun hd => CDerives.countFold S hd)
   | .sliceBorrowMut _ b A B => do
       let b ← E.elabL Δ b
       let A ← E.elabV Δ A

@@ -5,11 +5,12 @@
 -- Axes: codata × effects × scope. The iterator is codata whose state holds `mut` borrows of the
 -- remaining elements (scope); each observation hands one out.
 --
--- Blocked by: the kernel. An array borrowed `mut` is a borrow of the cell holding its handle,
--- mutated through `withswap`, which owns the whole array for one callback (SPEC §9); there is
--- no family of leaf `mut` borrows `[Mut 'c A]` to hand out one at a time (SPEC §9 Open: "mutable
--- families `[Mut 'c A]` (a leaf `Mut` view, `iter_mut`)", semantically each leaf framed by its
--- own 6.64/6.65 frame, not built), and no `iter`/`iter_mut` over a family (SPEC §9 Open, #57).
+-- Blocked by: an iterator over a `mut` family. The family exists: `borrow mut a { 'x, v -> … }`
+-- lends an array as `array_mut 'x A` with no cell (SPEC §9, slice borrows), and
+-- `corpus/iter-mut-count.bc` updates every element through a counted loop that lends one leaf
+-- per index. `iter_mut` as codata whose state is the rest of the family needs a run-time split
+-- of a `mut` family (K3, `slice_split`), and the `for` over it a total `for` (S4); neither is
+-- built (SPEC §9 Open, #57).
 -- The `imm` counterpart is expressible today: `corpus/axes/codata-coeffects.bc` iterates a
 -- family of leaf views, and `corpus/axes/scope-boxed-iter.bc` carries such an iterator across a
 -- scope. Also not provided, in the surface: `for` over a finite source (stage 9 of
@@ -42,4 +43,4 @@ main -> i32 =
   let (a, v) = add_at(a, 2, v);
   let (a, v) = add_at(a, 3, v);
   v
--- now: 39:38: this borrow block's place has type `1`: `borrow imm`/`borrow mut` take a cell `ref A` (a pair of cells for a family), `modify` a `mut` borrow
+-- now: 40:38: this borrow block's place has type `1`: `borrow imm`/`borrow mut` take a cell `ref A` or an array (a pair of cells for a family), `modify` a `mut` borrow

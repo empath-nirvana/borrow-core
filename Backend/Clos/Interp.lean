@@ -226,6 +226,16 @@ def tabFill (codes : Array Code) : Nat → CV → Nat → Nat → Nat → IM Uni
     setObj (a + i) (.cell r)
     tabFill codes n f a (i + 1) k
 
+/-- `count`'s loop: while `i < len(n)`, the state goes to a copy of `f` with the index. -/
+def countLoop (codes : Array Code) : Nat → CV → UInt32 → UInt32 → CV → IM CV
+  | 0, _, _, _, _ => throw "closure IR: out of fuel"
+  | n + 1, f, len, i, s => do
+    if i < arrLen len then
+      let fc ← deepCopy objFuel f
+      let s' ← callClos codes n fc (← allocObj (.pair (.i32 i) s))
+      countLoop codes n f len (i + 1) s'
+    else pure s
+
 /-- `drop`'s drain: cell `a + i` is freed and its contents handed to a copy of `f`. -/
 def dropFill (codes : Array Code) : Nat → CV → Nat → Nat → Nat → IM Unit
   | 0, _, _, _, _ => throw "closure IR: out of fuel"
@@ -267,6 +277,16 @@ def eval (codes : Array Code) : Nat → Env → Tm → IM (CV × Env)
         tabFill codes n f base 0 len
         deepDrop objFuel f
         pure (← allocObj (.pair (.ptr base) (.i32 (arrLen c))), env)
+    | .prim .count [x] => do
+        let (v, env) ← take env x
+        let (f, r) ← unpair v
+        let (len, r) ← unpair r
+        let (i, s) ← unpair r
+        let .i32 len := len | throw "closure IR: count of a non-length"
+        let .i32 i := i | throw "closure IR: count from a non-index"
+        let s ← countLoop codes n f len i s
+        deepDrop objFuel f
+        pure (s, env)
     | .prim .drop [x] => do
         let (v, env) ← take env x
         let (f, arr) ← unpair v
