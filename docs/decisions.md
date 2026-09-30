@@ -480,3 +480,52 @@ Each entry: the decision, and why. Newest last.
       no expected type whose first arm determines it) is not done; instances are at types
       without lifetimes (decision 41).
 
+
+46. **The `for` loop (strings stage S4, revised; SPEC §16). The user's decisions, and the
+    spellings, which are provisional.**
+    - **Desugaring: Rust's, pull.** `for x in y { M }` turns `y` into an iterator by `y`'s
+      type (Rust's `IntoIterator`) and calls its `next` at each step, with `break`,
+      `continue` and `return`. Push stays library functions (`count_fold`, the folds) with no
+      syntax. Not taken: PR #132's table of library names with a bound each (a finite source
+      recognised by its name, and a loop run for a bound nothing proved), and the push
+      recommendation of `docs/iteration-design.md` §10.
+    - **Totality from data.** A source whose type holds the data it came from is sized, and the
+      loop is K0′, `count_try`, over the length of that data, computed when the loop starts: a
+      count `a..b` (`b − a`), a view (`array_imm`, `array_mut`: its length), `&a`/`&mut a` of an
+      owned array (lent as its view around the loop), an owned array of a persistent element
+      (copied), and a sized iterator `sized D S A` (`len(D)`). No bound is a number the program
+      gives: a free number would truncate the loop silently. Any other source (a generator, an
+      iterator, the input) is a drain, and div. `total` rejects a drain (`corpus/reject/
+      for-free-bound.bc`: `take(g, 10)` of a generator is a generator).
+    - **K0′ sits beside K0.** `count_try : !(!(I32 ⊗ S ⇒ S ⊕ E) ⊗ (I32 ⊗ (I32 ⊗ S)) ⇒ S ⊕ E)`
+      is a machine step, as `count` is (every theorem holds at every host); `count_fold`
+      stays. Replacing `count_fold` by it (decision 20) is not done: a loop that never stops
+      would test an exit it does not have.
+    - **Exits live in the step's result**, not in handlers: the end of the body and `continue`
+      go on (`inl`), `break e` and `return e` leave (`inr`) with the threaded variables and
+      the way out. `return e` in a loop's body returns from the function (in a surface `fn` or
+      `main ->`; a core `def`'s `return V` is the core's), through every counted loop around
+      it; the body's loop is moved onto the function's spine first. Effects in a body are the
+      function's: a capability the body uses is threaded through the loop and handed back.
+    - **The loop's value.** A source that can end: `for … { … break v … } else { d }`, the
+      value `v` or `d` (Zig's `else`; `break v` without `else` is rejected over a sized
+      source). A source that cannot end (a generator finishing with `0`, whose body is a
+      `loop { … }`): the loop's value is `break`'s alone, and with no `break` its type is `0`
+      and `bcc check` reports the code after it as unreachable. A `for` with no value is `()`.
+      A drain keeps its value (what the source finishes with, or `break e`); `else` is
+      allowed on it too.
+    - **No syntax at the loop for a drain.** Precision is in types and reports: `bcc check`
+      prints, per loop, `total, bounded by len(…)` or `div: its source … is unbounded (a
+      drain)`, and unreachable code after a loop that never ends.
+    - **Sized iterators** are values of `sized D S A = D * (S * !(D * S => (D * S) * (A + (1 +
+      1))))` (`lib/iters.bc`, `include iters`): the data, the iterator's own state, and a step
+      answering an element, a skip or the end. `elems`, `elems_mut`, `copied`, `map`,
+      `filter`, `take`, `enumerate`, `zip`. Each step takes at most one element of the data,
+      so `len(D)` steps see every element; `zip`'s data is the pair and its bound the sum
+      (a step may pull only one side, when the other skipped; its elements are at most the
+      shorter side's). Names shared with the pull adapters (`map`, …) are chosen by the
+      argument's type.
+    - **Spellings (provisional):** `a..b`; `continue`; `for … else { d }`; `loop { … }` (a
+      `while` that never fails); `sized D S A`; `elems`/`elems_mut`/`copied`; the module
+      `iters` (`iter` and `sized` are keywords).
+    - **Out of scope:** `for` over `μ` data (lists); handlers and layers (#18); push lowering.

@@ -1,0 +1,16 @@
+-- A total `for` over a count (SPEC §16): `a..b` is data, so `for i in a..b { M }` is `count_try`
+-- over its length `b − a`, computed first, from index `0`, and the element at index `k` is
+-- `a + k`. The loop's state is the variables the body reads or assigns, here `acc` and `n`, with
+-- the count's start; after the loop they are bound again from its result. The inner `for` is a
+-- counted loop inside the outer one's step, and `tri` is `total`. `for-count.core.bc` writes the
+-- loops as `count_try` by hand.
+-- Answer: i32[20]: the sum of `j` over 0 ≤ i ≤ j < 4, 0 + 1·2 + 2·3 + 3·4.
+
+total fn tri(n: i32) -> i32 =
+  let mut acc = 0;
+  for i in 0..n {
+    for j in i..n { acc = acc + j }
+  };
+  acc
+
+main -> i32 = tri(4)

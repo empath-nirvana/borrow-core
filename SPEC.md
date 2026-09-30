@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 0.23 · 2026-09-29
+Version 0.24 · 2026-09-30
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -583,6 +583,15 @@ act on it, and `lib/slice.bc` (`include slice`) is the slice library over them a
 and `iter_mut`, codata whose state is the rest of the view. Its functions are generic in the
 element type and take the view's lifetime; a comparison is an argument (`eq_u8`, `cmp_i32`, …).
 
+**Lending an array to one call.** `&mut a` (or `&a`) of an owned array `a : array A`, passed at
+a parameter `array_mut 'a A` (or `array_imm 'a A`) of a function with the lifetime parameter
+`'a`, is `slice_borrow_mut` (or `slice_borrow_imm`) around the call, at a fresh lifetime, and
+`a` is rebound from the pair, as the lend of a cell is (typed elaboration §5.1): `reverse(&mut a)`,
+`at(&buf, i, d)`. A view the call hands back, as its result or its result's first component, is
+dropped inside the lend (its destructor, §12), so `reverse(&mut a)` is `()`; a result that holds
+anything else at `'a` is rejected (`corpus/reject/lend-array-result.bc`). `for x in &mut a` lends
+the array around the whole loop (§16). Pair: `corpus/sugar/lend-array.bc`.
+
 **Lowering.** `split` is an unsigned compare and pointer and length arithmetic: `(p, i)` and
 `(p + i·s, n − i)`, with no allocation. The empty family's base is the null word `0`.
 
@@ -671,8 +680,6 @@ lemma of the typed world proved by induction on types or on positions has its `[
 
 - An `imm` reborrow of a `mut` family (K2′). Reading an element through a `mut` view is
   `peek`, a replace-and-restore that needs an element to put in the slot meanwhile.
-- A total `for` over a view's iterator (stage S4), and `&mut a`/`&a` at an array lending its
-  view to one call (the design's §4.3 lend row); `iter_mut` is driven by a counted loop today.
 - A generic function of `lib/slice.bc` is called with its element type written
   (`reverse[u8](v)`), and one with two lifetimes (`copy_from`, `eq`, `cmp`, …) with both
   written (`(unbang eq[u8]) ['x] ['y] (…)`): the surface infers one lifetime from the argument.
@@ -965,7 +972,8 @@ elaborate to the same term.
   name, and the loop goes on; at the end of the stream the capability it hands back is bound to
   `c`, and the loop finishes with the capabilities and the threaded variables. Its `close`
   closes the stream and hands the capabilities back. The rest of the body, `N`, runs at the
-  loop's end, in the body's one state machine (§14, §15). A `for` in a total function over a finite source is not provided.
+  loop's end, in the body's one state machine (§14, §15). A `for` over data (a count, a view,
+  an array) is a counted loop instead, and total (§16, *The `for` loop over data*).
 
 ### Designed, not built
 
@@ -1418,17 +1426,16 @@ preserved. The runtime's obligation for a looping `main` is §11's.
 
 ### Open
 
-- **`for` over a finite source in a total function** is not provided: `for` iterates only over
-  `bytes c`, which may not end, so a `for` always makes its function div. A finite consumer
-  (#59's `for_each` over a list or an array) would be total.
-- **Loop bodies are total**: a `for` body has no `for` and no div call. A nested loop is written
-  as a div helper called after the loop, or in core.
+- **Loop bodies are total**: the body of a drain has no drain and no div call. A nested drain is
+  written as a div helper called after the loop, or in core. A `for` over data (§16) is a counted
+  loop, total, and nests anywhere.
 - **A call lends at most one capability** with `&mut c`, and a div call whose residual differs
   from the caller's must hand back, in its residual, the capability it was lent (it is matched
   to the lent `&mut c`), or nothing.
-- **Specialization** is of named functions without type parameters, at parameter types only;
-  a callback stored in data or a cell keeps the effect its type says. A div function has no type
-  parameters.
+- **Specialization** is at parameter types only; a callback stored in data or a cell keeps the
+  effect its type says. A generic function is instantiated at its types first (§15, *Generic
+  functions*), and its instance is specialized as any function is, so a div function may be
+  generic (a `fn f[A](g: U (gen A 1 1)) -> …` that drains `g`).
 - **`div_fuel` is `driveE`** by construction, not by a proved equation.
 - The model interpreter (`bcc interp`) copies the remaining input on every read.
 
@@ -1621,8 +1628,13 @@ calls at the same types (whole-program monomorphization, as Rust's generics; the
 named `f__gN`). The body is elaborated at the instance's types, so what it may do with an `A`
 (copy it with `*g`, compare it with an operator) is decided there. An instance is ordinary code
 at its types, checked by the unchanged checker, so an adapter over a pure source, one over an
-input and one over a failing source are three instances of one definition. Instances are at
-types without lifetimes.
+input and one over a failing source are three instances of one definition. A lifetime that a
+type argument mentions (the data `array_imm 'x i32` of a sized iterator, §16) is a lifetime
+parameter of the instance, `all 'gl0 < top.` outside the template's own: the instance is shared by
+every use at the same types up to those lifetimes, and each use applies it to its own
+(`corpus/for-adapters.bc`). Templates of one name from two modules (`map` of `lib/adapters.bc` and
+of `lib/iters.bc`) are one name chosen by the arguments' types: the first whose parameters the
+arguments match.
 
 Each lifetime parameter `'a` (bounded by `top`, or `'a < @`) is an `all 'a < @.` around the
 function type and a `Fun 'a < @.` around its body, outermost first (draft 0 §2.5), for a `fn`
@@ -1674,8 +1686,8 @@ preserved: every construct of this entry is elaborated into core before checking
 
 ### Open
 
-- **A total consumer.** A `for` over a generator is div, even over a finite one (stage 9 of
-  `docs/typed-elaboration.md`).
+- **A total consumer of a generator.** A `for` over a generator is div, even over a finite one:
+  its skips are unbounded. A finite source written as data, or a sized iterator (§16), is total.
 - **The source interpreter** (`bcc interp`, `Support`'s substitution machine) substitutes into
   the whole step at each observation, so its time per observation grows with the size of the
   body's machine, and a body with more loops has more observations: its run grows about as the
@@ -1686,7 +1698,11 @@ preserved: every construct of this entry is elaborated into core before checking
 - **A source that both holds a capability and fails** (`B = In ⊗ E`) is not an instance of the
   adapters: an adapter's result is one variable `k`, and the residual is handed back by name.
   Stopping a failing source (`take` over `U (gen A (1 + E) 1)`) is not provided.
-- **Generic `fn`s**: only generators are generic; a generic instance's types have no lifetimes.
+- **Generic instances at types with lifetimes**: an instance whose type arguments mention lifetimes
+  (`map` over `sized (array_imm 'x A) …`) takes them as lifetime parameters of its own, `'gl0`,
+  `'gl1`, …, around its type and body, and is shared by every use at the same types up to them.
+  A written type argument with a lifetime (`f[imm 'x A]`) is not provided: the types of such an
+  instance are read off its arguments.
 
 ---
 
@@ -1771,25 +1787,122 @@ generated loop of tail calls per step and state type (`count_try_loop`): compare
 on a copy of the closure, test the answer's tag, tail-call with `i + 1` on `inl`, return on
 `inr`. It allocates nothing (`corpus/count-try.bc`: allocs 0).
 
+### The `for` loop over data
+
+`for x in y { M }` is Rust's desugaring: `y` is turned into an iterator by its **type** (Rust's
+`IntoIterator`), and the loop calls its `next` at each step, with `break`, `continue` and
+`return`. It is pull. A source whose type holds the data it came from is **sized**: the loop is
+`count_try` over the length of that data, computed when the loop starts, calling `next` at each
+step, and it is total (`forData`, `Frontend/Sugar.lean`; all of it elaboration into core):
+
+| source, by type | the bound | the element at step `i` |
+|---|---|---|
+| a count `a..b` (syntax; `i32`s) | `b − a` | `a + i` |
+| a view `array_imm @a A` | its length, `array_len` | the leaf `i`, by `idx` (`array_get`) |
+| a view `array_mut @a A` | its length, `slice_len_mut` | the first leaf of the rest, by `split` at `1` |
+| `&a`, `&mut a` of `a : array A` | as the view `slice_borrow_imm`/`_mut` lends around the loop (§9) | as the view's |
+| an owned array `array A`, `A` persistent | as `&a` | the leaf's content, copied; the array is dropped after the loop |
+| a sized iterator `sized D S A` (below) | `len(D)` | what its step answers |
+
+No bound is a number the program gives: it is the length of the data the source's type holds, so
+nothing truncates a loop. Any other source (a generator, an iterator, the input) is a **drain**,
+the loop of §14 and §15, and div. `total` rejects a function that drains
+(`corpus/reject/for-free-bound.bc`: `take(g, 10)` of a generator `g` is a generator).
+
+**The step and its exits.** The loop's state is the source's cursor and the variables the body
+reads or assigns (a capability the body uses included: an effect of the body is the function's,
+and the loop hands the capability back). The step answers `inl` of the next state at the end of
+the body and at `continue`; `break e` and `return e` answer `inr` of the threaded variables and
+the way out. After the loop the threaded variables are rebound and the loop's value is `e`, or
+the `else` value when the source ended. `return e` in the body of a loop of a surface `fn` (or
+`main ->`) returns from the function from any depth of its loops: each counted loop leaves by its
+exit, and the loop around it by its own (`DivSt.exits`); the loop is first moved onto the
+function's spine (`normExits`). A core `def`'s `return V` is the core's.
+
+**The loop's value.** Over a source that can end, `for … { … break v … } else { d }` has the value
+`v`, or `d` when the source ends (Zig's `else`, provisional); `break v` without `else` is rejected
+there. A source that cannot end, a generator that finishes with `0` (whose body ends in a
+`loop { … }`, a `while` that never fails), has no `else`: its loop's value is `break`'s alone, and
+with no `break` its type is `0` and nothing after it runs. A `for` with no value is `()`. A drain
+keeps its value, what the source finishes with or `break e`, and takes `else` too.
+
+**Reports.** `bcc check` reports each loop: `total, bounded by len(…)`, or `div: its source … is
+unbounded (a drain)`, and code after a loop that never ends as `unreachable`. There is no syntax
+at the loop for either.
+
+**Sized iterators** (`lib/iters.bc`, `include iters`) are the data's iterators as values that
+adapters compose:
+
+    sized D S A  ≜  D ⊗ (S ⊗ !(D ⊗ S ⇒ (D ⊗ S) ⊗ (A ⊕ (1 ⊕ 1))))          (VTy.sized, frontend only)
+
+the data `D` it came from (a view, a count `I32 ⊗ I32`, or a pair of data), its own state `S`,
+and its step, which answers the next data and state with an element, a skip (`inr (inl ())`) or
+the end (`inr (inr ())`). `len(D)` is a view's length, a count's `b − a`, and a pair's sum
+(at most `2³¹ − 1`). `elems`, `elems_mut` (the elements of a view), `copied`, `map`, `filter`,
+`take`, `enumerate` and `zip`; `a..b` as a value is the count's. Each step takes at most one
+element of the data, so `len(D)` steps see every element: `map` and `enumerate` keep the bound,
+`filter` answers at most one element per element, `take(k)` ends after `k`, and `zip` pulls one
+side, then the other (holding the first's element when the second skips), so its data is the
+pair and its bound the sum, and its elements are at most the shorter side's. An adapter that
+takes a generator is a pull adapter (`lib/adapters.bc`, §15), and adapters of one name are chosen
+by the argument's type. The abbreviation is the frontend's, like `gen` (§15): no former, rule or
+relation clause.
+
+**Completeness** (`Support/Dynamics/Completeness.lean`, on the step relation). The relation
+proves the loop total; that it sees every element is a fact about the steps:
+
+- `countTry_runs`: when the step answers `inl` at each index, `count_try (f, (n, (i, s)))` runs
+  it at `i, i + 1, …, len(n) − 1`, in order, once each, and answers `inl` of the last state;
+  `countTry_exit`: its first `inr` is the answer;
+- `arrLen_eq_of_lt`: a family of the relation has `len(n) = n` (§9's length bound);
+- `idxAns_lt`, `idxAns_ge`, `idxAns_count`: `idx` answers the leaf `ℓ + i` exactly at the
+  `n` indices `i < n`;
+- `splitFirst_lt`, `splitFirst_end`: the rest after `i` steps is `(ℓ + i, n − i)`; its split
+  answers the leaf `ℓ + i` while `i < n`, and the end exactly at `n`.
+
+So the bound equals the number of elements: every element is visited and none is dropped. Their
+axioms are within `[propext, Classical.choice, Quot.sound]`.
+
+**Borrowing.** A counted loop is one computation, so a borrow block around it keeps its borrow for
+the whole loop (§9's lend of `&a`/`&mut a` is such a block); the per-observation lend (§14)
+applies to drains only (`LoopLend`, whose test of a loop reads the source's type in the block's
+context).
+
+**Programs.** `corpus/for-finite.bc` (a `total fn` over a count), `iter-mut.bc` (`&mut a`),
+`for-data.bc` (an owned array, `&a`, a view; `break`, `break`'s value and `else`, `continue`,
+`stdout` in the body), `for-return.bc`, `for-never.bc`, `for-adapters.bc` (a total chain, no
+allocation), `io-for-after.bc` (a drain of the input's lines, code after it). Every loop over data
+in the corpus allocates nothing (`corpus/counts.expected`).
+
 ### Uses
 
-- `div_fuel` (§14) counts its observations with it, in place of the unary count: `io-fuel`
-  went from 3746 allocations and 174 dispatched calls to 1 and 0.
+- `div_fuel` (§14) counts its observations with `count_fold`, in place of the unary count:
+  `io-fuel` went from 3746 allocations and 174 dispatched calls to 1 and 0.
 - A counted loop over an array's indices, each index lent as a `mut` leaf
   (`corpus/iter-mut-count.bc`).
+- The `for` loop over data, above.
 
 ### Baseline
 
 `fundamentalC`, `adequacyC`, `adequacyD` and the totality theorem keep their statements; the
-machine gains one head step, parametric in the host as before.
+machine gains two head steps (`count`, `countTry`), parametric in the host as before. Everything
+the `for` loop adds is elaboration into core, checked by the checker, which gains the constant
+`count_try`. The erasure of `absurd V` is `case V {inj₁ x. x | inj₂ y. y}` (it was
+`case V {inj₁ _. () | inj₂ _. ()}`): no arm runs either way (`zeroE_compatC`), and the new arms give
+the backend's layout inference no type of their own.
 
 ### Open
 
-- The surface's total `for` over a count (`for i in range(n)`, stage 9 of typed elaboration)
-  elaborated to `count_fold`, with the `let mut` variables the body assigns as the state. Today
-  the constant is called directly, with the step a function or a closure.
-- Stopping early: a finished state is carried to the bound (`div_fuel` does), which costs a
-  test per remaining count.
+- `for` over `μ` data (lists): a borrowed list in order is open (§7 Open; #57), and an owned list's
+  rest is a cursor but its drain to the end has no count.
+- A `for` over data whose body `yield`s or loops (a drain or a div call in the body) is rejected:
+  the step of `count_try` is total. A generator over a view pulls it with `iter_imm`/`iter_mut`
+  (§9), a drain.
+- `zip`'s bound is the sum of its sides' lengths, at most `2³¹ − 1`: a zip of views whose lengths
+  add up to more would be cut there. Arrays of the backend are far smaller.
+- The imm leaf a view lends is not copied implicitly: a body that reads an element twice binds
+  it first, `let v = *x`.
+- Push stages (`docs/iteration-design.md` §7.2) and the boundary adapters are not provided.
 
 ---
 
@@ -1817,11 +1930,29 @@ the checker (`slice_borrow_*`, `slice_*_mut`, `array_mut`) and the borrow blocks
 `Frontend/Sugar.lean`; §8's byte is `Width.w8` throughout. §9's splits and writes are
 `Core/SliceOps.lean`, the step `split` in `Paper/` and `Support/`, the checker
 (`slice_split_*`, `slice_empty_*`, `slice_replace_mut`, `slice_swap_mut`), the backend, and the
-library `lib/slice.bc`.
+library `lib/slice.bc`. §16's K0′ is the step `countTry` in `Paper/` and `Support/`,
+`Core/CountFold.lean` (`countTry_compatX`), the checker (`count_try`) and the backend
+(`count_try_loop`); its `for` loop over data is `forData` in `Frontend/Sugar.lean`, the parser's
+`a..b`, `continue`, `else`, `loop` and `sized`, and `lib/iters.bc`; its completeness lemma is
+`Support/Dynamics/Completeness.lean`.
 
 ---
 
 ## Changelog
+
+- **0.24** (2026-09-30) — Strings S4, revised: the `for` loop (§16). K0′, `count_try`, the
+  counted loop with an exit, is a machine step beside `count_fold` (`countTry_compatX`), in the
+  checker and the backend. `for x in y { M }` is Rust's pull desugaring, the source turned into an
+  iterator by its type: over data (a count `a..b`, a view, `&a`/`&mut a`, an owned array, a sized
+  iterator `sized D S A`) it is `count_try` over the length of the data, computed when the loop
+  starts, and total; any other source is a drain, div. `break`, `continue` and `return` are the
+  step's exits; `for … else { d }` gives the loop's value when the source ends; a generator that
+  finishes with `0` never ends, and a loop over it has `break`'s value alone. The completeness
+  lemma: the bound equals the number of elements (`Support/Dynamics/Completeness.lean`). Sized
+  iterators and their adapters (`lib/iters.bc`); adapters of one name chosen by type; generic
+  instances at types with lifetimes; `&a`/`&mut a` at a view parameter (§9). `bcc check` reports
+  each loop: total and its bound, or div. `absurd V` erases to `case V {inj₁ x. x | inj₂ y. y}`.
+  §14 and §15 Open: the stale lines on generic and div functions corrected.
 
 - **0.23** (2026-09-29) — §15, *Generic functions*: `fn f[A, …]` with a surface body is a
   template instantiated at each use, as generic generators are; `fn f<'a, 'b, …>` declares

@@ -87,6 +87,7 @@ lend-pipeline 2 0 0
 lend-server 2 0 0
 map-reuse 7 0 0
 nats-sum 0 0 0
+print-borrowed-array 2 0 0
 reverse-bytes 3 0 0
 slice-imm 1 0 0
 slice-lib 3 0 0

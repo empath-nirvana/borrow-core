@@ -444,8 +444,13 @@ def lentDef (c : TCx) (fin' : TCx → Finite) : Decl → Except Error (Option De
     let c' := c.pushLife y.name bl
     let ps := spineTy P
     -- The parameters, bound in the context a `for` of the body is read in.
-    let cP := match (if ps.length == 1 then some ([x], M) else spinePattern fuel ps.length x.name M) with
-      | some (names, _) => (names.zip ps).foldl (fun c (nm, T) => c.push nm.name (c.elabV T)) c'
+    let one : List Ident := match M with
+      | .bind _ y _ (.ret _ (.var _ z)) _ _ => if z == x.name then [x, y] else [x]
+      | _ => [x]
+    let cP := match (if ps.length == 1 then some (one, M) else spinePattern fuel ps.length x.name M) with
+      | some (names, _) =>
+        if ps.length == 1 then names.foldl (fun c nm => c.push nm.name (c.elabV P)) c'
+        else (names.zip ps).foldl (fun c (nm, T) => c.push nm.name (c.elabV T)) c'
       | none => c'
     if !loopsOnSpine (divCallIn c') (fin' cP) fuel M then return none
     -- The one component borrowed at the parameter's lifetime.
