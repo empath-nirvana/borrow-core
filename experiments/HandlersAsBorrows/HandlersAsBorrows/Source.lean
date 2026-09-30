@@ -65,6 +65,8 @@ inductive Stmt where
   | ret (e : VExp)
   /-- `val x = s₀; s₁` (Ξ `[Val]`). -/
   | val (s₀ s₁ : Stmt)
+  /-- `e; s` at `e : 1`: data elimination. -/
+  | drop (e : VExp) (s : Stmt)
   /-- `let (x, y) = e; s`: data elimination. -/
   | split (e : VExp) (s : Stmt)
   /-- `case e {x ⇒ s₁ | y ⇒ s₂}`: data elimination. -/
@@ -96,6 +98,8 @@ inductive XDerives : List Entry → Ctx VTy → Stmt → VTy → Prop where
   | ret {K Γ e A} : VDerives Γ e A → XDerives K Γ (.ret e) A
   | val {K Γ Γ₁ Γ₂ s₀ s₁ A B} : Ctx.Split Γ Γ₁ Γ₂ → XDerives K Γ₁ s₀ A →
       XDerives K (⟨A, true⟩ :: pad :: Γ₂) s₁ B → XDerives K Γ (.val s₀ s₁) B
+  | drop {K Γ Γ₁ Γ₂ e s B} : Ctx.Split Γ Γ₁ Γ₂ → VDerives Γ₁ e .unit → XDerives K Γ₂ s B →
+      XDerives K Γ (.drop e s) B
   | split {K Γ Γ₁ Γ₂ e s A₁ A₂ B} : Ctx.Split Γ Γ₁ Γ₂ → VDerives Γ₁ e (.pair A₁ A₂) →
       XDerives K (⟨A₂, true⟩ :: ⟨A₁, true⟩ :: pad :: Γ₂) s B → XDerives K Γ (.split e s) B
   | case {K Γ Γ₁ Γ₂ e s₁ s₂ A₁ A₂ B} : Ctx.Split Γ Γ₁ Γ₂ → VDerives Γ₁ e (.sum A₁ A₂) →

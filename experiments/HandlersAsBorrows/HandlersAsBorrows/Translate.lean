@@ -9,9 +9,13 @@ and the value context.  Under `K; Γ ⊢ s : C` it has type `C ⊗ EnvTy n K`
 
     ⟦e⟧                  = (⟦e⟧ᵥ, env)
     ⟦val x = s₀; s₁⟧     = let (x, env) = ⟦s₀⟧; ⟦s₁⟧
+    ⟦e; s⟧               = ⟦e⟧ᵥ; ⟦s⟧
+    ⟦let (x, y) = e; s⟧  = let (x, y) = ⟦e⟧ᵥ; (λenv. ⟦s⟧) env
+    ⟦case e {x ⇒ s₁ | y ⇒ s₂}⟧ = case ⟦e⟧ᵥ {x ⇒ (λenv. ⟦s₁⟧) env | y ⇒ (λenv. ⟦s₂⟧) env}
     ⟦F_j(e)⟧             = opAt j (⟦e⟧ᵥ, env)
     ⟦f_j(e)⟧             = blockAt j (⟦e⟧ᵥ, env)
-    ⟦def f = {x ⇒ b}; s⟧ = (λenv′. ⟦s⟧) (!λp. let (x, env) = p; ⟦b⟧, env)
+    ⟦def f = {x ⇒ b}; s⟧ = let (y, env′) = (λenv′. ⟦s⟧) (!λp. let (x, env) = p; ⟦b⟧, env);
+                           let (f, env) = env′; forget f; (y, env)
     ⟦handle_S {F ⇒ s} with e₀, cl⟧ =
         let (c, r) = withbor (alloc ⟦e₀⟧ᵥ) (Λ. λm.
                        let (y, env′) = (λenv′. ⟦s⟧) ((m, clause), env);
@@ -169,6 +173,7 @@ def defnFin : Expr :=
 def tr : Stmt → Expr
   | .ret e => .pair (trV e) (.var 0)
   | .val s₀ s₁ => .letpair (tr s₀) (tr s₁)
+  | .drop e s => .seq (trV e) (tr s)
   | .split e s => .letpair (trV e) (.app (lam (tr s)) (.var 2))
   | .case e s₁ s₂ => .case (trV e) (.app (lam (tr s₁)) (.var 1)) (.app (lam (tr s₂)) (.var 1))
   | .op j e => .app (opAt j) (.pair (trV e) (.var 0))
@@ -194,6 +199,9 @@ theorem translate_typed {K : List Entry} {Γ : Ctx VTy} {s : Stmt} {C : VTy}
       exact .tensorE (T₁ := A.tr) (T₂ := EnvTy n K) (.left (emb_split hs))
         (by simp [Ty.scopedB, hG.scoped]) (ih₀ n Δ hG)
         ((ih₁ n Δ hG).dwk (.live (.live (.dead (DWk.refl _)))))
+  | drop hs hv _ ih =>
+      intro n Δ hG
+      exact .unitE (.right (emb_split hs)) (d_trV hv _) (ih n Δ hG)
   | @split K Γ Γ₁ Γ₂ e s A₁ A₂ B hs hv _ ih =>
       intro n Δ hG
       exact .tensorE (T₁ := A₁.tr) (T₂ := A₂.tr) (.right (emb_split hs))
