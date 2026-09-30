@@ -1,0 +1,52 @@
+-- `lend-array.bc` written by hand in core: each lend is a slice borrow around the one call, at a
+-- fresh lifetime; the view `double` hands back is bound and dropped inside the callback, whose
+-- result is `()`, and `a` is bound again from the pair.
+def three : !(i32 => i32) =
+  !thunkv fun (p : i32) ->
+    i <- return p;
+    return i32[3]
+
+def double : !(all 'a < top. array_mut 'a i32 => array_mut 'a i32) =
+  !thunkv Fun 'a < top. return (thunkv fun (p : array_mut 'a i32) ->
+    v <- return p;
+    case (unbang slice_get_mut['a, i32]) (v, i32[0]) {
+      inl m ->
+        r <- return withswap['a, i32, 1] m (thunkv fun (c : i32) ->
+          return ((unbang host[add32]) (c, c), ()));
+        let (m, u) = r;
+        return slice_empty_mut['a, i32]
+    | inr u -> return slice_empty_mut['a, i32]
+    })
+
+def first : !(all 'a < top. array_imm 'a i32 => i32) =
+  !thunkv Fun 'a < top. return (thunkv fun (p : array_imm 'a i32) ->
+    v <- return p;
+    case (unbang array_get['a, i32]) (v, i32[0]) {
+      inl g -> withload['a, 'y, i32, i32] g (thunkv Fun 'y < dom. return (thunkv fun (d : view 'y i32) ->
+          return boxed['y] d))
+    | inr u -> return i32[0]
+    })
+
+main : F i32 =
+  a <- return (unbang array_new[i32]) (i32[2], three);
+  r1 <- return slice_borrow_mut['l1, top, i32, 1] a (thunkv Fun 'l1 < dom.
+    return (thunkv fun (w : array_mut 'l1 i32) ->
+      v <- return (unbang double) ['l1] w;
+      return boxed['l1] ()));
+  let (a, u1) = r1;
+  r2 <- return slice_borrow_imm['l2, top, i32, i32] a (thunkv Fun 'l2 < dom.
+    return (thunkv fun (w : array_imm 'l2 i32) ->
+      f <- return (unbang first) ['l2] w;
+      return boxed['l2] f));
+  let (a, x) = r2;
+  r3 <- return slice_borrow_mut['l3, top, i32, 1] a (thunkv Fun 'l3 < dom.
+    return (thunkv fun (w : array_mut 'l3 i32) ->
+      v <- return (unbang double) ['l3] w;
+      return boxed['l3] ()));
+  let (a, u3) = r3;
+  r4 <- return slice_borrow_imm['l4, top, i32, i32] a (thunkv Fun 'l4 < dom.
+    return (thunkv fun (w : array_imm 'l4 i32) ->
+      f <- return (unbang first) ['l4] w;
+      return boxed['l4] f));
+  let (a, y) = r4;
+  return (unbang host[add32]) (x, y)

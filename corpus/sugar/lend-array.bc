@@ -1,0 +1,27 @@
+-- An owned array lent as its view to one call (SPEC §9; typed elaboration §5.1, the array row):
+-- `&mut a` at a parameter `array_mut 'a A` is `slice_borrow_mut` around the call, `&a` at
+-- `array_imm 'a A` is `slice_borrow_imm`, with no cell, and `a` is bound again from the pair. The
+-- view a call hands back is dropped there, so `double(&mut a)` is `()`, and `first(&a)` keeps its
+-- `i32`. `lend-array.core.bc` writes the borrows by hand.
+-- Answer: i32[18]: the first element doubled, 6, and doubled again, 12.
+
+fn three(i: i32) -> i32 = 3
+
+-- The first element doubled; the view handed back.
+fn double<'a>(v: array_mut 'a i32) -> array_mut 'a i32 =
+  match slice_get_mut['a, i32] (v, 0) {
+    inl m -> modify m { c -> c + c }; slice_empty_mut['a, i32]
+  | inr u -> slice_empty_mut['a, i32]
+  }
+
+-- The first element, or 0.
+fn first<'a>(v: array_imm 'a i32) -> i32 =
+  match array_get['a, i32] (v, 0) { inl g -> *g | inr u -> 0 }
+
+main -> i32 =
+  let mut a = array_new[i32] (2, three);
+  double(&mut a);
+  let x = first(&a);
+  double(&mut a);
+  let y = first(&a);
+  x + y

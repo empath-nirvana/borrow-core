@@ -1,0 +1,15 @@
+-- A total `for` over a count (SPEC §16, the total `for`): `range(a, b)` is a bounded source, so
+-- `for i in range(a, b) { M }` is `count_fold` from `a` to `b − 1` (the bounds computed once,
+-- first), whose state is the variables the body reads or assigns, here `acc` and `n`; after the
+-- loop they are bound again from its result. The inner `for` is a counted loop inside the outer
+-- one's step, and `tri` is `total`. `for-range.core.bc` writes the loops as `count_fold` by hand.
+-- Answer: i32[20]: the sum of `j` over 0 ≤ i ≤ j < 4, 0 + 1·2 + 2·3 + 3·4.
+
+total fn tri(n: i32) -> i32 =
+  let mut acc = 0;
+  for i in range(n) {
+    for j in range(i, n) { acc = acc + j }
+  };
+  acc
+
+main -> i32 = tri(4)

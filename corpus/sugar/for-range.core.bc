@@ -1,0 +1,29 @@
+-- `for-range.bc` written by hand in core: each `for` over `range(a, b)` is `count_fold (step,
+-- (b, (a, s)))` with the bounds bound first; the step takes the index and the state (the
+-- variables the body reads or assigns), runs the body, and returns the state; after the loop the
+-- variables are bound again from the result.
+total def tri : !(i32 => i32) =
+  !thunkv fun (p : i32) ->
+    n <- return p;
+    acc <- return i32[0];
+    lo <- return i32[0];
+    hi <- return n;
+    r <- return (unbang count_fold[i32 * i32]) (!thunkv fun (q : i32 * i32 * i32) ->
+        let (i, s) = q;
+        let (n, acc) = s;
+        lo2 <- return i;
+        hi2 <- return n;
+        r2 <- return (unbang count_fold[i32]) (!thunkv fun (q2 : i32 * i32) ->
+            let (j, acc) = q2;
+            acc <- return acc;
+            acc <- return (unbang host[add32]) (acc, j);
+            u <- return ();
+            return acc, (hi2, (lo2, acc)));
+        acc <- return r2;
+        u <- return ();
+        return (n, acc), (hi, (lo, (n, acc))));
+    let (n, acc) = r;
+    return acc
+
+main : F i32 =
+  return (unbang tri) i32[4]

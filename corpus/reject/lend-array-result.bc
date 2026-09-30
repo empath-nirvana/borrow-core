@@ -1,0 +1,14 @@
+-- expect: 13:11: the call's result mentions the lifetime of the lent array other than as the view it hands back, so the array cannot be handed back after it
+-- An owned array lent to one call as its view (`&mut a`, SPEC §9) is handed back after the call;
+-- the view the call hands back is dropped there. A result that holds anything else at the view's
+-- lifetime (here the two halves of a split) would outlive the lend, so it is rejected: cut the
+-- view inside a borrow block, `borrow mut a { 'x, v -> … split_at_mut(v, 2) … }`.
+
+include slice
+
+fn one(i: i32) -> i32 = 1
+
+main -> i32 =
+  let mut a = array_new[i32] (4, one);
+  let h = split_at_mut(&mut a, 2);
+  0

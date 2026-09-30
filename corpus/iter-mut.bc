@@ -1,0 +1,32 @@
+-- P12 of `docs/strings-slices-design.md` (§1), as written: a `for` over the elements of an owned
+-- array, each one lent `mut`, updating them in place (#57). `iter_mut(&mut a)` lends `a`'s view
+-- for the whole loop, with no cell (`slice_borrow_mut`, SPEC §9), and `iter_mut` (`lib/slice.bc`)
+-- is a generator whose state is the rest of the view, each observation splitting off one `mut`
+-- leaf. The source is bounded (the view's length and one more observation), so the `for` is a
+-- counted loop inside the lend (SPEC §16, the total `for`), and `modify` writes each element
+-- through its leaf.
+--
+-- Answer: i32[100]: [1, 2, 3, 4] becomes [10, 20, 30, 40], and `main` returns its sum. An
+-- element skipped or written twice gives 91 or 190. One allocation, the array: the lend, the
+-- iterator and its observations allocate nothing, and make no dispatched call.
+
+include slice
+
+fn tab(i: i32) -> i32 = i + 1
+
+-- The element at `i` added to `acc`, read by taking it out of its slot and putting it back.
+fn add_at(a: array i32, i: i32, acc: i32) -> array i32 * i32 =
+  let (a, o) = array_replace[i32] (a, i, 0);
+  match o {
+    inl x -> let (a, _) = array_replace[i32] (a, i, x); (a, acc + x)
+  | inr _ -> (a, acc)
+  }
+
+main -> i32 =
+  let mut a = array_new[i32] (4, tab);
+  for x in iter_mut(&mut a) { modify x { v -> v * 10 } };
+  let (a, v) = add_at(a, 0, 0);
+  let (a, v) = add_at(a, 1, v);
+  let (a, v) = add_at(a, 2, v);
+  let (a, v) = add_at(a, 3, v);
+  v

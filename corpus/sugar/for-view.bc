@@ -1,0 +1,18 @@
+-- A total `for` over a view's iterator, the view lent from an owned array for the whole loop
+-- (SPEC §16, the total `for`; SPEC §9): `for x in iter_mut(&mut a) { M }` is a `borrow mut a`
+-- block around the loop, handing on what the body assigns (`n`); inside it, the view's length is
+-- read (`len_mut`), the iterator made, and `count_fold` observes it at most that many times and
+-- one more, with the state the iterator (or what it finished with) and `n`. After the bound an
+-- iterator that has not finished is closed. `for-view.core.bc` writes `main` by hand; its
+-- library functions are the instances of `lib/slice.bc` as `bcc desugar` prints them.
+-- Answer: i32[3]: one step per element of [1, 2, 3].
+
+include slice
+
+fn tab(i: i32) -> i32 = i + 1
+
+main -> i32 =
+  let mut a = array_new[i32] (3, tab);
+  let mut n = 0;
+  for x in iter_mut(&mut a) { modify x { v -> v * 10 }; n = n + 1 };
+  n

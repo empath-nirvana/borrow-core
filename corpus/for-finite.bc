@@ -1,0 +1,21 @@
+-- A total function with a `for` over a count: the sum of the first `n` squares (SPEC §16, the
+-- total `for`; stage 9 of `docs/typed-elaboration.md`). `range(n)` is a bounded source, so the
+-- `for` is the counted loop `count_fold` from 0 to `n − 1`, with the `let mut` variable the body
+-- assigns, `acc`, as its state: `sum_squares` is `total`, and `main` is not a loop.
+-- `corpus/count-fold.bc` is the same program with the loop written as a call of `count_fold`.
+--
+-- Answer: (i32[285], (i32[280], i32[7])): 0 + 1 + 4 + … + 81; `range(3, 10)`, which skips
+-- 0 + 1 + 4; and the empty `range(5, 2)`, which runs nothing and leaves the start 7. A loop that
+-- ran to `n` inclusive gives 385 and 344.
+
+total fn sum_squares(n: i32) -> i32 =
+  let mut acc = 0;
+  for i in range(n) { acc = acc + i * i };
+  acc
+
+total fn from(a: i32, b: i32, s: i32) -> i32 =
+  let mut acc = s;
+  for i in range(a, b) { acc = acc + i * i };
+  acc
+
+main -> i32 * (i32 * i32) = (sum_squares(10), (from(3, 10, 0), from(5, 2, 7)))

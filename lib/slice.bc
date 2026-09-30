@@ -35,6 +35,11 @@ fn cmp_i32(x: i32, y: i32) -> i32 = if x < y { 0 - 1 } else { if y < x { 1 } els
 -- The length of a shared view.
 fn len[A]<'a>(v: array_imm 'a A) -> i32 = array_len['a, A](v)
 
+-- The length of a shared view, and the view back.
+fn len_imm[A]<'a>(v: array_imm 'a A) -> array_imm 'a A * i32 =
+  let (v, w) = array_copy['a, A](v);
+  (v, array_len['a, A](w))
+
 -- The length of an exclusive view, and the view back.
 fn len_mut[A]<'a>(v: array_mut 'a A) -> array_mut 'a A * i32 = slice_len_mut['a, A](v)
 
@@ -316,18 +321,29 @@ fn sort[A]<'a>(v: array_mut 'a A, c: !(A * A => i32), d: A) -> array_mut 'a A =
 
 -- ### Iteration
 
--- An iterator over the elements of a view, each lent at the view's lifetime: its state is the
--- rest of the view, and `next` splits off the first element (`split_first`). Closed early, it
--- gives the rest up. A `for` over it waits for the total `for` of stage S4; it is driven here by
--- `nu_out`, as any codata.
-fn iter_imm[A]<'a>(v: array_imm 'a A) -> U (iter (imm 'a A) 1 1) =
-  f <- return (unbang (unfold[iter (imm 'a A) 1 1, array_imm 'a A]
-    (!thunkv fun (v : array_imm 'a A) -> < split_first(v), array_forget['a, A](v) >)));
-  thunkv nu_in < (nu_out (force f v)).1, (nu_out (force f v)).2 >
+-- A generator over the elements of a view, each lent at the view's lifetime: its state is the
+-- rest of the view, and each observation splits off the first element (`split_first`) and yields
+-- it. Every observation yields an element but the last, which finishes, so a view of `n`
+-- elements is done after `n + 1` observations: a `for` over it is total (SPEC §16, the total
+-- `for`). Closed early, it gives the rest up.
+gen fn iter_imm[A]<'a>(v: array_imm 'a A) -> imm 'a A =
+  let mut rest = v;
+  while true {
+    match split_first(rest) {
+      inl (e, t) -> rest = t; yield e
+    | inr u -> rest = empty[A]['a](); break
+    }
+  };
+  ()
 
 -- The same over an exclusive view: each element is lent `mut`, one at a time, and the rest of
 -- the view is the state.
-fn iter_mut[A]<'a>(v: array_mut 'a A) -> U (iter (mut 'a A) 1 1) =
-  f <- return (unbang (unfold[iter (mut 'a A) 1 1, array_mut 'a A]
-    (!thunkv fun (v : array_mut 'a A) -> < split_first_mut(v), discard_mut(v) >)));
-  thunkv nu_in < (nu_out (force f v)).1, (nu_out (force f v)).2 >
+gen fn iter_mut[A]<'a>(v: array_mut 'a A) -> mut 'a A =
+  let mut rest = v;
+  while true {
+    match split_first_mut(rest) {
+      inl (e, t) -> rest = t; yield e
+    | inr u -> rest = empty_mut[A]['a](); break
+    }
+  };
+  ()

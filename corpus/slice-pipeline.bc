@@ -1,0 +1,30 @@
+-- A pipeline of adapters over a view (SPEC §15, the adapter library; SPEC §16, the total `for`):
+-- the elements of an array, each read out of its `imm` leaf, the even ones kept and squared, and
+-- summed. `iter_imm` (`lib/slice.bc`) is a generator of `imm 'x i32` leaves; `map` is instantiated
+-- at that element type, with the view's lifetime a parameter of the instance, and `filter` and
+-- the second `map` at `i32`. The adapters observe their source once per observation, so the
+-- pipeline is a bounded source (the view's length and one more observation): the `for` is a
+-- counted loop, `sum_even_squares` is `total`, and `&a` lends the array's view for the whole loop.
+--
+-- Answer: i32[220]: 2² + 4² + 6² + 8² + 10² of 1, 2, …, 10. A filter that let the odd elements
+-- through gives 385; a loop that stopped one observation early misses 10² and gives 120. One
+-- allocation, the array: the pipeline and its loop allocate nothing, make no dispatched call and
+-- copy nothing (`corpus/counts.expected`: 1, 0, 0).
+
+include slice
+include adapters
+
+fn tab(i: i32) -> i32 = i + 1
+fn even(x: i32) -> bool = host[and32] (x, 1) == 0
+fn sq(x: i32) -> i32 = x * x
+
+total fn sum_even_squares(a: array i32) -> array i32 * i32 =
+  let mut a = a;
+  let mut acc = 0;
+  for y in map(filter(map(iter_imm(&a), !{ x -> *x }), even), sq) { acc = acc + y };
+  (a, acc)
+
+main -> i32 =
+  let a = array_new[i32] (10, tab);
+  let (a, s) = sum_even_squares(a);
+  s

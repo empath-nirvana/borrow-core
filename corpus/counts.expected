@@ -31,6 +31,7 @@ div-hof 0 0 0
 family-swap 2 0 0
 find-bytes 2 0 0
 fn-lifetime 7 0 0
+for-finite 0 0 0
 gen-adapters 5 0 0 # chain, zip over batch and chunks, and main's three loops: each body one state machine (#109 item 8)
 gen-adapters-fail 8 0 0 # chain, chunks, batch and lines, and main's ten loops, each one state machine (#109 item 8)
 gen-adapters-io 13 0 0 # main's six loops over every adapter, one state machine (#109 item 8)
@@ -66,6 +67,7 @@ io-sections 2 0 0
 io-upper 2 0 0
 io-wc 2 0 0
 iter-close 2 0 0
+iter-mut 1 0 0
 iter-mut-count 1 0 0
 iter-mut-slice 1 0 0
 iter-range 0 0 0
@@ -79,11 +81,14 @@ lend-pipeline 2 0 0
 lend-server 2 0 0
 map-reuse 7 0 0
 nats-sum 0 0 0
+print-borrowed-array 2 0 0
 reverse-bytes 3 0 0
 slice-imm 1 0 0
 slice-lib 3 0 0
 slice-mut 1 0 0
+slice-pipeline 1 0 0 # the array; the pipeline of three adapters over iter_imm, a counted loop, allocates nothing
 slice-split 1 0 0
+slice-total 1 0 0
 sort-numbers 2 0 0
 split-at-mut 3 0 0
 sum-i32 7 0 0
@@ -93,3 +98,4 @@ surface/family-swap 2 0 0
 surface/io-upper 2 0 0
 surface/io-wc 2 0 0
 surface/map-reuse 7 0 0
+take-bytes 1 0 0

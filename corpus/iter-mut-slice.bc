@@ -1,40 +1,26 @@
--- P12 (`corpus/pending/iter-mut.bc`) with the iterator of `lib/slice.bc`: `iter_mut` over the
--- `mut` view an array lends (`borrow mut`, SPEC §9) is codata whose state is the rest of the
--- view; each observation splits off the first element (`slice_split_mut`) and lends it `mut`,
--- and closing it gives the rest up. The `for` over it waits for stage S4's total `for`, so a
--- counted loop (SPEC §16) observes it once per element, plus one to see it finish, and `modify`
--- writes each element through its leaf. The sum is a counted loop over `imm` leaves.
+-- P12 (`corpus/iter-mut.bc`) with the view lent by a borrow block: `iter_mut` over the `mut`
+-- view `borrow mut a` lends (SPEC §9) is a generator whose state is the rest of the view; each
+-- observation splits off the first element (`slice_split_mut`) and lends it `mut`, and closing
+-- it gives the rest up. The view's iterator is a bounded source, so each `for` is a counted loop
+-- of the view's length and one more observation (SPEC §16, the total `for`), inside the block:
+-- the borrow stays open for the whole loop. `modify` writes each element through its leaf, and
+-- the sum is a second `for`, over the `imm` leaves of `borrow imm a`, reading each with `*x`.
 --
 -- Answer: i32[100]: [1, 2, 3, 4] becomes [10, 20, 30, 40]. An element skipped or written twice
--- gives 91 or 190; an iterator that did not finish would be closed at the end, and the sum would
--- miss the last element. One allocation, the array: the iterator and its observations allocate
--- nothing, and each observation is a direct call.
+-- gives 91 or 190; a loop one observation short of the bound would miss the last element. One
+-- allocation, the array: the iterators and their observations allocate nothing, and each
+-- observation is a direct call.
 
 include slice
 
 fn tab(i: i32) -> i32 = i + 1
 
--- One observation: the element lent is multiplied by 10 in place.
-def times10 : !(all 'x < top. !(i32 * (U (iter (mut 'x i32) 1 1) + 1) => U (iter (mut 'x i32) 1 1) + 1)) =
-  !thunkv Fun 'x < top. return (!thunkv fun (p : i32 * (U (iter (mut 'x i32) 1 1) + 1)) ->
-    let (i, s) = p;
-    match s {
-      inl it -> o <- (nu_out (force it)).1;
-                match o { inl (m, it) -> modify m { c -> c * 10 }; inl it | inr u -> inr () }
-    | inr u -> inr ()
-    })
-
-fn add_at(i: i32, s: array i32 * i32) -> array i32 * i32 =
-  let (a, acc) = s;
-  let acc = borrow imm a { 'x, v -> acc + at(v, i, 0) };
-  (a, acc)
-
 main -> i32 =
   let mut a = array_new[i32] (4, tab);
-  borrow mut a { 'x, v ->
-    let (v, n) = len_mut(v);
-    let r = count_fold[U (iter (mut 'x i32) 1 1) + 1] ((unbang times10) ['x], n + 1, 0, inl iter_mut(v));
-    match r { inl it -> u <- (nu_out (force it)).2; u | inr u -> u }
+  borrow mut a { 'x, v -> for x in iter_mut(v) { modify x { c -> c * 10 } } };
+  let s = borrow imm a { 'x, v ->
+    let mut acc = 0;
+    for x in iter_imm(v) { acc = acc + *x };
+    acc
   };
-  let (_, v) = count_fold[array i32 * i32] (add_at, 4, 0, (a, 0));
-  v
+  s

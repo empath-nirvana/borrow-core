@@ -2616,6 +2616,9 @@ structure DivSt where
   templates : List Decl := []
   /-- The instances made, by template and type arguments. -/
   insts : List ((String × List VTy) × String) := []
+  /-- The bounded sources in scope, by name: the library's (`iter_imm`, `iter_mut`, the adapters,
+  `range`) that the program does not define itself (`boundedFor`). -/
+  bounded : List String := []
 
 /-- Elaboration with the state of the declarations. -/
 abbrev DM := StateT DivSt SM
@@ -2797,6 +2800,45 @@ def lendBorrow (c : TCx) (sp : Span) (x : Ident) (m : Mode) (A B : CVTy)
 def boxedResult (sp : Span) (l : String) (M : Comp) : Comp :=
   .bind sp ⟨"io_lr", sp⟩ none M (.ret sp (.boxed sp (.var sp l) (.var sp "io_lr"))) false
 
+/-- An owned array `x : array A` lent as its view (`array_mut 'l A` with `&mut x`, `array_imm 'l A`
+with `&x`) to the call `call l v`, whose result has type `Q` with the parameter's lifetime `v`:
+`slice_borrow_mut` or `slice_borrow_imm` around it, with no cell (SPEC §9), the array rebound
+from the pair. A view the call hands back, as its result or its result's first component, is
+dropped there: the lend's result is the rest (`()` for a function that hands back only the view,
+`reverse(&mut a)`).  `[spec §9]` -/
+def lendSlice (c : TCx) (sp : Span) (x : Ident) (m : Mode) (A : CVTy) (v : BoCa.Lifetime.LifeVar)
+    (Q : CVTy) (call : String → String → Comp) : DM Val := do
+  let isView : CVTy → Bool
+    | .fam (.mut (.var w) _) | .fam (.imm (.var w) _) => w == v
+    | _ => false
+  let vfree := BoCa.Fig16.LogRel.Core.Check.vfreeB v
+  let (B, proj) : CVTy × Option Bool :=
+    if isView Q then (.unit, some false) else match Q with
+      | .tensor V B => if isView V && !vfree B then (B, some true) else (Q, none)
+      | _ => (Q, none)
+  if proj.isNone && vfree Q then
+    throw ⟨sp, "the call's result mentions the lifetime of the lent array other than as the view " ++
+      "it hands back, so the array cannot be handed back after it"⟩
+  let l := s!"io_lb{sp.start.line}_{sp.start.col}"
+  let mv := s!"io_lm{sp.start.line}_{sp.start.col}"
+  let As ← (c.surface sp A : Except Error VTy)
+  let Bs ← (c.surface sp B : Except Error VTy)
+  let li : Ident := ⟨l, sp⟩
+  let Tm : VTy := if m == .mut then .arrayMut sp (.var sp l) As else .arrayImm sp (.var sp l) As
+  let r : Ident := ⟨"io_lr", sp⟩
+  let boxR := Comp.ret sp (.boxed sp (.var sp l) (.var sp r.name))
+  let body : Comp := match proj with
+    | some false => .bind sp ⟨"io_lv", sp⟩ none (call l mv)
+        (.ret sp (.boxed sp (.var sp l) (.unit sp))) false
+    | some true => .bind sp ⟨"io_lp", sp⟩ none (call l mv)
+        (.letPair sp ⟨"io_lv", sp⟩ r (.var sp "io_lp") boxR) false
+    | none => .bind sp r none (call l mv) boxR false
+  let cb : Val := .thunkv sp (.lamL sp li (.dom sp) (.ret sp (.thunkv sp
+    (.lam sp ⟨mv, sp⟩ Tm body))))
+  let C : Const := if m == .mut then .sliceBorrowMut li (.top sp) As Bs
+    else .sliceBorrowImm li (.top sp) As Bs
+  pure (.app sp (.app sp (.const sp C) (.lend sp x m)) cb)
+
 /-- A call `f W` whose argument lends a place at a borrow parameter of `f`: the borrow around
 the call. `none` when it does not. -/
 def lendCall (c : TCx) (sp : Span) (f W : Val) : DM (Option Val) := do
@@ -2806,17 +2848,21 @@ def lendCall (c : TCx) (sp : Span) (f W : Val) : DM (Option Val) := do
     | some (.thunk (.all v _ (.ret (.thunk (.arr P (.ret Q)))))) => pure (false, v, P, Q)
     | _ => return none
   let some (x, m, Px) := lendParam P W | return none
-  let (pm, A) ← match Px with
-    | .mut (.var w) A => if w == v then pure (Mode.mut, A) else return none
-    | .imm (.var w) A => if w == v then pure (Mode.imm, A) else return none
+  let (pm, A, fam) ← match Px with
+    | .mut (.var w) A => if w == v then pure (Mode.mut, A, false) else return none
+    | .imm (.var w) A => if w == v then pure (Mode.imm, A, false) else return none
+    | .fam (.mut (.var w) A) => if w == v then pure (Mode.mut, A, true) else return none
+    | .fam (.imm (.var w) A) => if w == v then pure (Mode.imm, A, true) else return none
     | _ => return none
   if pm != m then
     throw ⟨x.span, s!"the parameter here is {if pm == .mut then "a `mut`" else "an `imm`"} borrow: " ++
       s!"lend `{x.name}` as `{if pm == .mut then "&mut " else "&"}{x.name}`"⟩
+  let f' := if bang then Val.unbang f.span f else f
+  if fam then return some (← lendSlice c sp x m A v Q fun l mv =>
+    .ret sp (.app sp (.inst sp f' (.var sp l)) (replaceLend mv W)))
   if BoCa.Fig16.LogRel.Core.Check.vfreeB v Q then
     throw ⟨sp, "the call's result mentions the lifetime of the lent place, so the place cannot " ++
       "be handed back after it"⟩
-  let f' := if bang then Val.unbang f.span f else f
   some <$> lendBorrow c sp x m A Q fun l mv =>
     boxedResult sp l (.ret sp (.app sp (.inst sp f' (.var sp l)) (replaceLend mv W)))
 
@@ -2826,6 +2872,169 @@ def refresh (c : TCx) : DM TCx := do
   let st ← get
   let ds := (st.lib ++ st.out ++ st.caps).toArray
   pure { c with E := { c.E with scope := ⟨ds, ds.size⟩ } }
+
+/-! #### The total `for`  `[spec §16]`
+
+A `for` whose source is **bounded** finishes within a number of observations known when it
+starts, so it is a counted loop, `count_fold` (SPEC §16), not a loop of the body's machine: the
+enclosing function stays total, and a borrow block around it keeps its borrow open for the whole
+loop (it is one computation). The bound is read off the source:
+
+* `range(n)`, `range(a, b)`: the count itself, with no iterator (`a` to `b − 1`, from `0` when
+  `a` is left out);
+* `iter_imm(v)`, `iter_mut(v)` of `lib/slice.bc`: `len(v) + 1` observations, one per element and
+  the last that finishes;
+* an adapter of `lib/adapters.bc` that observes its source once per observation (`map`, `filter`,
+  `enumerate`, `skip`, `scan`, `from_iter`) over a bounded source: the source's bound;
+* `take(s, n)`: `n + 1` when `s` never skips (an iterator, `U (iter A R R')`, or an adapter that
+  yields whenever its source does, over one); else the bound of `s` plus one.
+
+The loop's state is the source (or nothing, for `range`), and the variables the body reads or
+assigns, as a `for` of a div body threads them (SPEC §14); after the bound, a source that has not
+finished is closed. The names are the library's: a program that defines one of them itself gets its
+own, and a `for` over it is a loop as before. A source not listed, or a body that yields, breaks or
+returns, is a loop (SPEC §14, §15). -/
+
+/-- The bounded sources and the module each comes from (`""`: none, elaboration alone). -/
+def boundedNames : List (String × String) :=
+  [("range", ""), ("iter_imm", "slice"), ("iter_mut", "slice"), ("map", "adapters"),
+   ("filter", "adapters"), ("enumerate", "adapters"), ("skip", "adapters"), ("scan", "adapters"),
+   ("from_iter", "adapters"), ("take", "adapters")]
+
+/-- The adapters that observe their source once per observation: their arity, and whether they
+yield whenever their source yields (so they never skip if it never does). -/
+def passAdapters : List (String × Nat × Bool) :=
+  [("map", 2, true), ("filter", 2, false), ("enumerate", 1, true), ("skip", 2, false),
+   ("scan", 3, true), ("from_iter", 1, true)]
+
+/-- A call `f(W)` of a named function: the name and the argument. -/
+def callOf : Val → Option (String × Val)
+  | .app _ (.var _ f) W | .app _ (.unbang _ (.var _ f)) W => some (f, W)
+  | _ => none
+
+/-- A call's argument of `k` components: the first, and the rest (`none` for one). -/
+def firstArg (k : Nat) (W : Val) : Option (Val × Option Val) :=
+  if k == 1 then some (W, none) else match W with
+    | .pair _ s r => some (s, some r)
+    | _ => none
+
+/-- A function whose result is an iterator, `U (iter A R R')`, as its type is written. -/
+def iterResult : VTy → Bool
+  | .bang _ A => iterResult A
+  | .all _ _ _ A => iterResult A
+  | .lolli _ _ (.thunk _ (.iter ..)) => true
+  | _ => false
+
+/-- A source that never skips: an iterator made by a function, or an adapter that yields whenever
+its source does, over one. `iterFn f` says that `f` returns an iterator. -/
+def neverSkips (bs : List String) (iterFn : String → Bool) : Nat → Val → Bool
+  | 0, _ => false
+  | n + 1, V => match callOf V with
+    | some (f, W) =>
+      if bs.contains f then
+        if f == "iter_imm" || f == "iter_mut" then true
+        else if f == "take" then match W with
+          | .pair _ s _ => neverSkips bs iterFn n s
+          | _ => false
+        else match passAdapters.lookup f with
+          | some (k, true) => match firstArg k W with
+            | some (s, _) => neverSkips bs iterFn n s
+            | none => false
+          | _ => false
+      else iterFn f
+    | none => false
+
+/-- A source whose observations are bounded when the loop starts (the section's list). -/
+def boundedSrc (bs : List String) (iterFn : String → Bool) : Nat → Val → Bool
+  | 0, _ => false
+  | n + 1, V => match callOf V with
+    | some (f, W) =>
+      if !bs.contains f then false
+      else if f == "range" || f == "iter_imm" || f == "iter_mut" then true
+      else if f == "take" then match W with
+        | .pair _ s _ => boundedSrc bs iterFn n s || neverSkips bs iterFn n s
+        | _ => false
+      else match passAdapters.lookup f with
+        | some (k, _) => match firstArg k W with
+          | some (s, _) => boundedSrc bs iterFn n s
+          | none => false
+        | none => false
+    | none => false
+
+/-- The functions in scope of `c` that return an iterator. -/
+def iterFnIn (c : TCx) (f : String) : Bool :=
+  !c.locals.any (·.1 == f) && ((c.E.scope.findDef f).map (iterResult ·.ty)).getD false
+
+/-- `for x in V { M }; N` is total: its source is bounded, its body neither yields, breaks nor
+returns, and its value is not kept. -/
+def boundedFor (bs : List String) (c : TCx) (V : Val) (M N : Comp) : Bool :=
+  let bs := bs.filter fun f => !c.locals.any (·.1 == f)
+  !bs.isEmpty && N.forRes?.isNone && !M.hasYield && !M.hasRet &&
+    boundedSrc bs (iterFnIn c) divFuel V
+
+/-- The view a bounded source iterates: the argument of its `iter_imm`/`iter_mut`. -/
+def viewOf : Nat → Val → Option Val
+  | 0, _ => none
+  | n + 1, V => match callOf V with
+    | some (f, W) =>
+      if f == "iter_imm" || f == "iter_mut" then some W
+      else if f == "take" then match W with
+        | .pair _ s _ => viewOf n s
+        | _ => none
+      else match passAdapters.lookup f with
+        | some (k, _) => (firstArg k W).bind fun (s, _) => viewOf n s
+        | none => none
+    | none => none
+
+/-- The source with its view replaced by `w`. -/
+def withView (w : Val) : Nat → Val → Val
+  | 0, V => V
+  | n + 1, V => match V with
+    | .app sp f W => match callOf V with
+      | some (g, _) =>
+        if g == "iter_imm" || g == "iter_mut" then .app sp f w
+        else if g == "take" then match W with
+          | .pair psp s r => .app sp f (.pair psp (withView w n s) r)
+          | W => .app sp f W
+        else match passAdapters.lookup g, W with
+          | some (1, _), W => .app sp f (withView w n W)
+          | some _, .pair psp s r => .app sp f (.pair psp (withView w n s) r)
+          | _, W => .app sp f W
+      | none => V
+    | V => V
+
+/-- A bounded source as code that computes it once, and its bound: the bindings before the loop
+(source text with value holes `io_hole_a<k>`), the source, the bound, and the holes' values. The
+bound is the number of observations after which the source has finished. -/
+def boundedPlan (bs : List String) (iterFn : String → Bool) (sfx : String) :
+    Nat → Nat → Val → Option (String × String × String × List (String × Val))
+  | 0, _, _ => none
+  | n + 1, k, V => do
+    let (f, W) ← callOf V
+    let hole := s!"io_hole_a{k}{sfx}"
+    if f == "iter_imm" || f == "iter_mut" then
+      let v := s!"io_fv{k}{sfx}"
+      let m := s!"io_fn{k}{sfx}"
+      let len := if f == "iter_imm" then "len_imm" else "len_mut"
+      pure (s!"{v} <- return {hole};\nlet ({v}, {m}) = {len}({v});\n", s!"{f}({v})",
+        s!"{m} + 1", [(hole, W)])
+    else if f == "take" then
+      let .pair _ s t := W | none
+      let m := s!"io_fn{k}{sfx}"
+      let (pre, src, bound, hs) ← if boundedSrc bs iterFn n s then boundedPlan bs iterFn sfx n (k + 1) s
+        else
+          let h := s!"io_hole_a{k + 1}{sfx}"
+          pure ("", h, "", [(h, s.takeLends.1)])
+      let pre := pre ++ s!"{m} <- return {hole};\n"
+      let bound := if neverSkips bs iterFn n s then s!"{m} + 1" else s!"({bound}) + 1"
+      pure (pre, s!"take({src}, {m})", bound, hs ++ [(hole, t)])
+    else
+      let (ar, _) ← passAdapters.lookup f
+      let (s, r) ← firstArg ar W
+      let (pre, src, bound, hs) ← boundedPlan bs iterFn sfx n (k + 1) s
+      match r with
+      | some r => pure (pre, s!"{f}({src}, {hole})", bound, hs ++ [(hole, r)])
+      | none => pure (pre, s!"{f}({src})", bound, hs)
 
 /-! #### Generic calls
 
@@ -3288,7 +3497,12 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
     | .defApp sp h args => do
       -- A template at written type arguments: its instance.
       match (← get).templates.find? (fun | .def_ _ m _ _ _ _ => m.name == h | _ => false) with
-      | some t => pure (.var sp (← makeInst n c sp t (args.map c.elabV).toArray))
+      | some t =>
+        let (name, lives) ← makeInst n c sp t (args.map c.elabV).toArray
+        if !lives.isEmpty then
+          throw ⟨sp, s!"`{h}` is written at types with a lifetime: call it, and its types are " ++
+            "read off the arguments"⟩
+        pure (.var sp name)
       | none => pure V
     | .shorten sp m σ l V => do pure (.shorten sp m σ l (← surfV n c none V))
     | .thunk sp M => do
@@ -3310,7 +3524,8 @@ def surfC : Nat → TCx → Option CCTy → Comp → DM Comp
     | .absurd sp V => do pure (.absurd sp (← surfV n c (some .zero) V))
     | .bind sp x A M N lin => do
       -- A borrow block over a loop, or a `let r = &x`: lent per observation (`LoopLend`).
-      if let some L ← (Frontend.Elab.LoopLend.hook c sp x A M N lin : Except Error (Option Comp)) then
+      if let some L ← (Frontend.Elab.LoopLend.hook c (boundedFor (← get).bounded c) sp x A M N lin :
+          Except Error (Option Comp)) then
         return (← surfC n c exp L)
       let M' ← surfC n c ((A.bind c.elabV).map .ret) M
       let c ← refresh c
@@ -3349,6 +3564,8 @@ def surfC : Nat → TCx → Option CCTy → Comp → DM Comp
     | .nuOut sp M => do pure (.nuOut sp (← surfC n c none M))
     | .ascribe sp M C => do pure (.ascribe sp (← surfC n c (c.E.elabC c.Δ C).toOption M) C)
     | .for_ sp x V M N => do
+      -- Over a bounded source: a counted loop, total (SPEC §16).
+      if let some L ← forTotal n c exp sp x V M N then return L
       let V' ← surfV n c none V
       let c ← refresh c
       let el := ((← refresh c).tyV V').bind elemOf
@@ -3361,6 +3578,120 @@ def surfC : Nat → TCx → Option CCTy → Comp → DM Comp
         pure (.for_ sp x V' M' (.bind N.span r A (.ret r.span (.sugar r.span .forRes)) N₀' false))
       | none => pure (.for_ sp x V' M' (← surfC n c exp N))
     | M => pure M
+
+/-- `for x in V { M }; N` over a bounded source (`boundedFor`), elaborated to a counted loop:
+`none` when the source is not bounded. A view lent from an owned array, `iter_mut(&mut a)`, is
+lent for the whole loop by a borrow block around it (SPEC §9), which hands on the variables the
+body changes. Otherwise the source is computed once with its bound, and `count_fold` observes it
+at most that many times, threading it with the variables the body reads or assigns; a source
+that has not finished at the bound is closed, and what it finishes with is dropped, or rebinds
+the capability it was lent.  `[spec §16]` -/
+def forTotal : Nat → TCx → Option CCTy → Span → Ident → Val → Comp → Comp → DM (Option Comp)
+  | 0, _, _, _, _, _, _, _ => pure none
+  | n + 1, c, exp, sp, x, V, M, N => do
+    let bs := (← get).bounded
+    if !boundedFor bs c V M N then return none
+    let sfx := s!"_{sp.start.line}_{sp.start.col}"
+    -- The variables the loop threads: those the body reads or assigns, locals and externs.
+    let threaded (body : Comp) (after : Option Comp) : DM (List (String × CVTy)) := do
+      let locals ← (latest c.locals).filterMapM fun (y, T) =>
+        if y == x.name || !(mentionsC y body || body.rebinds y) ||
+            (after.map (!mentionsC y ·)).getD false then pure none
+        else match T with
+          | some T => pure (some (y, T))
+          | none => throw ⟨sp, s!"the loop threads `{y}`, whose type is not determined: ascribe it"⟩
+      let exts := (mExterns c).filter fun (y, T) =>
+        !T.persistent && mentionsC y body && !c.locals.any (·.1 == y) &&
+          (after.map (mentionsC y ·)).getD true
+      pure (locals ++ exts)
+    -- `iter_mut(&mut a)` of an owned array: the loop in a borrow block of `a`.
+    if let some (.lend lsp a m) := viewOf divFuel V then
+      if let some (.fam (.ref _)) := c.tyV (.var lsp a.name) then
+        let ws := (← threaded M (some N)).map (·.1) |>.filter (· != a.name)
+        let w := s!"io_fw{sfx}"
+        let blk := s!"io_fb{sfx}"
+        let r := s!"io_fr{sfx}"
+        let k : BorrowKind := if m == .mut then .mut else .imm
+        let body := Comp.for_ sp x (withView (.var lsp w) divFuel V) M (.ret sp (tupleVal sp ws))
+        let B := Val.app sp (.app sp (.sugar lsp (.borrow k s!"io_fl{sfx}")) (.var a.span a.name))
+          (.thunkv sp (.lam sp ⟨w, lsp⟩ (.name sp "_") body))
+        let L := Comp.bind sp ⟨blk, sp⟩ none (.ret sp B)
+          (.letPair sp a ⟨r, sp⟩ (.var sp blk) (Frontend.Elab.LoopLend.destruct sp r ws N)) false
+        return some (← surfC n c exp L)
+    let ws ← threaded M none
+    let wv := tupleSrc (ws.map (·.1))
+    let wty := tupleTySrc (← ws.mapM fun (_, T) => do pure (← c.surface sp T).pp)
+    let hc (body : Comp) : String → Option Comp := fun h =>
+      if h == "io_hole_body" then some body else if h == "io_hole_rest" then some N else none
+    let stateV (sp : Span) (it : Option Val) : Val := match it with
+      | some it => .pair sp (.inl sp it) (tupleVal sp (ws.map (·.1)))
+      | none => tupleVal sp (ws.map (·.1))
+    -- `range(a, b)`: the count, with no iterator.
+    if let some ("range", W) := callOf V then
+      let (lo, hi) := match W with
+        | .pair _ a b => (a, b)
+        | W => (Val.sugar sp (.lit 0), W)
+      let src := s!"io_ra{sfx} <- return io_hole_lo;
+io_rb{sfx} <- return io_hole_hi;
+io_rs{sfx} <- return count_fold[{wty}](!\{ ({x.name}, io_rw{sfx}) ->
+  {destructSrc s!"io_rw{sfx}" (ws.map (·.1))}  force io_hole_body }, io_rb{sfx}, io_ra{sfx}, {wv});
+{destructSrc s!"io_rs{sfx}" (ws.map (·.1))}force io_hole_rest"
+      let L ← (template sp "`for` over a range" src : SM Comp)
+      let body := wrapTail (fun T => .bind T.span ⟨"io_u", T.span⟩ none T (.ret T.span (stateV T.span none)) false) M
+      let L := L.fill (fun h => if h == "io_hole_lo" then some lo else if h == "io_hole_hi" then some hi else none)
+        (hc body)
+      return some (← surfC n c exp L)
+    -- A view's iterator, or an adapter over a bounded source.
+    let some (pre, src, bound, holes) := boundedPlan bs (iterFnIn c) sfx divFuel 0 V
+      | return none
+    let hv (h : String) : Option Val := holes.lookup h
+    -- The source's type: its code elaborated once to read it.
+    let probe ← (template sp "`for` over a bounded source" s!"{pre}return {src}" : SM Comp)
+    let probe ← surfC n c none (probe.fill hv (fun _ => none))
+    let some T := resultOfC ((← refresh c).tyC probe)
+      | throw ⟨V.span, "the type of the source of this `for` is not determined"⟩
+    let (isGen, B, R) ← match iterOf T, genOf T with
+      | some (_, Q, Q'), _ => pure (false, Q, Q')
+      | none, some (_, Q, Q') => pure (true, Q, Q')
+      | none, none => throw ⟨V.span, s!"`for` iterates over an iterator `U (iter A R R')` or a " ++
+          s!"generator `U (gen A B R)`, but this has type `{ppT T}`"⟩
+    if B != R then return none
+    -- What the source finishes with: dropped, or the capability it was lent.
+    let caps := V.takeLends.2
+    let capBind ← match Class.of B, caps with
+      | .persistent, _ | .dtor, [] => pure ""
+      | _, [cap] => pure s!"{cap.name} <- return io_fz{sfx};\n"
+      | _, _ => return none
+    let Ts := (← c.surface sp T).pp
+    let Bs := (← c.surface sp B).pp
+    let st := s!"(({Ts}) + ({Bs})) * {wty}"
+    let ended := if isGen then s!"case io_d{sfx} \{
+          inl io_r{sfx} -> return (inr io_r{sfx}, {wv})
+        | inr io_it{sfx} -> return (inl io_it{sfx}, {wv})
+        }" else s!"return (inr io_d{sfx}, {wv})"
+    let src := s!"{pre}io_fi{sfx} <- return {src};
+io_fs{sfx} <- return count_fold[{st}](!\{ (io_fk{sfx}, io_fp{sfx}) ->
+  let (io_fs{sfx}, io_fw{sfx}) = io_fp{sfx};
+  {destructSrc s!"io_fw{sfx}" (ws.map (·.1))}  case io_fs{sfx} \{
+    inl io_it{sfx} ->
+      io_o{sfx} <- (nu_out (force io_it{sfx})).1;
+      case io_o{sfx} \{
+        inl io_e{sfx} -> let ({x.name}, io_it{sfx}) = io_e{sfx}; force io_hole_body
+      | inr io_d{sfx} -> {ended}
+      }
+  | inr io_r{sfx} -> return (inr io_r{sfx}, {wv})
+  } }, {bound}, 0, (inl io_fi{sfx}, {wv}));
+let (io_fs{sfx}, io_fw{sfx}) = io_fs{sfx};
+{destructSrc s!"io_fw{sfx}" (ws.map (·.1))}io_fz{sfx} <- case io_fs{sfx} \{
+  inl io_it{sfx} -> (nu_out (force io_it{sfx})).2
+| inr io_r{sfx} -> return io_r{sfx}
+};
+{capBind}force io_hole_rest"
+    let L ← (template sp "`for` over a bounded source" src : SM Comp)
+    let it := Val.var sp s!"io_it{sfx}"
+    let body := wrapTail (fun T => .bind T.span ⟨"io_u", T.span⟩ none T
+      (.ret T.span (stateV T.span (some it))) false) M
+    return some (← surfC n c exp (L.fill hv (hc body)))
 
 /-- A declaration with its surface forms elaborated, in the context the checker checks it in. -/
 def surfDecl : Nat → Decl → DM Decl
@@ -3383,35 +3714,50 @@ def surfDecl : Nat → Decl → DM Decl
   | _, d => pure d
 
 /-- The instance of the template `t` at the type arguments `σ` (one per type parameter, each
-known): its name, made and elaborated on first use.  `[spec §15]` -/
-def makeInst : Nat → TCx → Span → Decl → Array (Option CVTy) → DM String
+known): its name, made and elaborated on first use, and the lifetimes it is applied to. A
+lifetime the type arguments mention (an element `imm 'x A` of a view's iterator) is a lifetime
+parameter of the instance, `'gl0`, `'gl1`, …, outside the template's own: the instance is
+`!(all 'gl0 < top. …)`, shared by every use at the same types up to those lifetimes, and a use
+applies it to its own.  `[spec §15]` -/
+def makeInst : Nat → TCx → Span → Decl → Array (Option CVTy) → DM (String × List Frontend.Life)
   | 0, _, sp, _, _ => throw ⟨sp, "instantiation of generic functions does not terminate"⟩
   | n + 1, c, sp, t, σ => do
     let .def_ tsp tn ps A V mk := t | throw ⟨sp, "internal error: a generic function"⟩
     let names := ps.map (·.name)
+    let known := σ.toList.filterMap id
+    -- The lifetimes the type arguments mention, in the order of the context, each once.
+    let lvs := (c.E.lenv.map (·.2)).eraseDups.filter fun v =>
+      known.any (BoCa.Fig16.LogRel.Core.Check.vfreeB v)
+    let ren := lvs.zipIdx.map fun (v, k) => (s!"gl{k}", v)
+    let cg : TCx := { c with E := { c.E with lenv := ren ++ c.E.lenv } }
     let mut σs : TySubst := []
     for (x, t) in names.zip σ.toList do
       let some t := t
         | throw ⟨sp, s!"the type `{x}` of `{tn.name}` is not determined by its arguments: " ++
             s!"write them, `{tn.name}[…](…)`"⟩
-      let ts ← c.surface sp t
-      if ts.pp.contains '\'' then
-        throw ⟨sp, s!"`{tn.name}` is instantiated at `{ts.pp}`, which has a lifetime: a generic " ++
-          "function is instantiated at types without one"⟩
-      σs := σs ++ [(x, ts)]
+      σs := σs ++ [(x, ← cg.surface sp t)]
+    let lives ← lvs.mapM fun v => (c.surfaceL sp (.var v) : Except Error Frontend.Life)
     let key := (tn.name, σs.map (·.2.strip))
     let st ← get
-    if let some name := st.insts.lookup key then return name
+    if let some name := st.insts.lookup key then return (name, lives)
     let name := s!"{tn.name}__g{st.insts.length}"
     let mk' := match mk with
       | .gen E => Mark.gen (E.subst σs)
       | .template m => m
       | mk => mk
-    let inst := Decl.def_ tsp ⟨name, tn.span⟩ [] (A.subst σs) (V.subst σs) mk'
+    -- The instance's own lifetime parameters, outermost first, around its type and body.
+    let (A', V') ← ren.foldrM (init := (A.subst σs, V.subst σs)) fun (g, _) (A, V) =>
+      match A, V with
+      | .bang asp T, .bangThunkv vsp X =>
+        pure (VTy.bang asp (.all asp ⟨g, asp⟩ (.top asp) T),
+          Val.bangThunkv vsp (.lamL vsp ⟨g, vsp⟩ (.top vsp) (.ret vsp (.thunkv vsp X))))
+      | _, _ => throw ⟨sp, s!"`{tn.name}` is instantiated at a type with a lifetime, which a " ++
+          "generic function of this form does not take"⟩
+    let inst := Decl.def_ tsp ⟨name, tn.span⟩ [] A' V' mk'
     let inst := Elab.fillDecl (st.lib ++ st.out) st.caps inst
     let st' ← (elabDecl n { st with insts := (key, name) :: st.insts } inst : SM DivSt)
     set st'
-    return name
+    return (name, lives)
 
 /-- A call `f W` of a generic callee (a template, a core `def` with type parameters, or a
 function with lifetime parameters), with the type and lifetime arguments it leaves out filled and
@@ -3482,6 +3828,8 @@ def genericCall : Nat → TCx → Span → Option CVTy → Val → Val → DM (O
         -- A lent place: its content matches the borrow's, and `lendCall` lends it.
         if let .lend _ x _ := Wi then
           match pat', c.tyV (.var x.span x.name) with
+          | .fam (.imm _ A), some (.fam (.ref A')) | .fam (.mut _ A), some (.fam (.ref A')) =>
+            if let some m' := matchV m 0 A A' then m := m'
           | .imm _ A, some (.ref A') | .mut _ A, some (.ref A') =>
             if let some m' := matchV m 0 A A' then m := m'
           | .imm _ A, some A' | .mut _ A, some A' =>
@@ -3545,8 +3893,12 @@ def genericCall : Nat → TCx → Span → Option CVTy → Val → Val → DM (O
         throw ⟨sp, s!"the lifetime `{lname v}` of `{fname}` is not determined by its arguments " ++
           s!"here: write it, `{writeLives fname}"⟩
     -- The callee at its type arguments.
+    let mut extra : List Frontend.Life := []
     let base ← match head with
-      | .tmpl t _ => do pure (Val.var f.span (← makeInst n c sp t m.ty))
+      | .tmpl t _ => do
+        let (name, lives) ← makeInst n c sp t m.ty
+        extra := lives
+        pure (Val.var f.span name)
       | .gdef h tps _ => do
         let mut ts : List VTy := []
         for (x, t) in tps.zip m.ty.toList do
@@ -3559,13 +3911,15 @@ def genericCall : Nat → TCx → Span → Option CVTy → Val → Val → DM (O
     c ← refresh c
     let argsL := args.toList.filterMap id
     if lends then
-      if sig.binders.length != 1 then
+      if sig.binders.length != 1 || !extra.isEmpty then
         throw ⟨sp, s!"`{fname}` has several lifetime parameters: a lend `&x` in its call is " ++
           "not provided; borrow in a block and pass the borrow"⟩
       match ← lendCall c sp base (argOf W argsL) with
       | some V => return some V
       | none => throw ⟨sp, s!"the lend in this call of `{fname}` is not at a borrow parameter"⟩
     let mut g := if sig.bang then Val.unbang f.span base else base
+    for l in extra do
+      g := .inst sp g l
     for (v, _) in sig.binders do
       let some l := m.life.lookup v | throw ⟨sp, "internal error: a lifetime parameter"⟩
       g := .inst sp g (← c.surfaceL sp l)
@@ -3602,7 +3956,8 @@ def elabDecl : Nat → DivSt → Decl → SM DivSt
     if let .def_ _ _ (_ :: _) _ _ (.template _) := d then
       return { st with templates := st.templates ++ [d] }
     -- A div function taking a borrow takes the owner, lent at each step (`LoopLend.lentDef`).
-    let d := (← (Frontend.Elab.LoopLend.lentDef (TCx.ofScope (st.lib ++ st.out) false) d :
+    let c₀ := TCx.ofScope (st.lib ++ st.out) false
+    let d := (← (Frontend.Elab.LoopLend.lentDef c₀ (boundedFor st.bounded c₀) d :
       Except Error (Option Decl))).getD d
     let (d, st) ← (surfDecl fuel d).run st
     let (d, st) ← (specDecl fuel d).run st
@@ -3772,8 +4127,8 @@ end
 
 /-- The declarations with divergence inferred, in order (copies before their first use), and
 whether any body was elaborated as a loop. -/
-def elabDivs (lib decls : List Decl) : SM (List Decl × Bool) := do
-  let st ← decls.foldlM (init := ({ lib } : DivSt)) (elabDecl divFuel)
+def elabDivs (lib decls : List Decl) (bounded : List String) : SM (List Decl × Bool) := do
+  let st ← decls.foldlM (init := ({ lib, bounded } : DivSt)) (elabDecl divFuel)
   pure (st.out, st.any)
 
 /-- A `main` that is not ambient, elaborated as a loop when its body loops. `c` is the typing
@@ -3839,7 +4194,12 @@ def elaborateS (p : Program) : SM (Program × Nat) := do
   -- Bindings whose type only their uses determine (an injection) are annotated first.
   let p := Elab.fillProgram typing capDecls p
   -- Divergence of the user's definitions, before the libraries (which do not loop) come in.
-  let (decls, anyDiv) ← elabDivs typing p.decls
+  -- The bounded sources: the library's, from the modules included, unless the program defines
+  -- the name itself; `range` unless the program defines it.
+  let own := p₀.decls.filterMap fun | .def_ _ m _ _ _ _ => some m.name | _ => none
+  let bounded := boundedNames.filter fun (f, m) =>
+    !own.contains f && (m == "" || incl.contains m)
+  let (decls, anyDiv) ← elabDivs typing p.decls (bounded.map (·.1))
   let rest := decls.filter fun | .main .. => false | _ => true
   let mc := TCx.ofScope (typing ++ rest ++ capDecls) true
   let mainLoops := match decls.findSome? (fun | .main _ C M => some (C, M) | _ => none) with

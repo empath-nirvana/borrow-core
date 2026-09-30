@@ -1,0 +1,19 @@
+-- A total `for` over an input, bounded by `take` (SPEC §16, the total `for`): `bytes(&mut c)` is
+-- an iterator, which never skips, and `from_iter` yields each of its bytes in one observation, so
+-- `take(…, 3)` finishes within four observations whatever the input. The `for` is a counted loop,
+-- `head3` is `total`, and the iterator hands `c` back when it finishes or is closed.
+--
+-- Answer: i32[6382179], `0x616263`, the first three bytes `abc` of the input `abcdef`. A loop that
+-- stopped one short gives `0x6162`; one that read the whole input would not be total.
+
+include adapters
+
+total fn head3(c: In) -> In * i32 =
+  let mut c = c;
+  let mut n = 0;
+  for b in take(from_iter(bytes(&mut c)), 3) { n = n * 256 + b };
+  (c, n)
+
+main -> i32 =
+  let (stdin, n) = head3(stdin);
+  n

@@ -1,0 +1,17 @@
+-- expect: 14:3: `sum_all` is declared `total`, but it has a `for` (SPEC §14)
+-- A `for` is total only over a bounded source (SPEC §16, the total `for`): a count, a view's
+-- iterator, or an adapter over one. `naturals` is a generator the program defines, whose
+-- observations nothing bounds, so a `for` over it is a loop, and a function with one is div.
+
+gen fn naturals() -> i32 =
+  let mut i = 0;
+  while true { yield i; i = i + 1 };
+  ()
+
+total fn sum_all() -> i32 =
+  let mut acc = 0;
+  -- never ends
+  for x in naturals() { acc = acc + x };
+  acc
+
+main -> i32 = sum_all()

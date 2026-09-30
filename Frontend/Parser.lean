@@ -1098,9 +1098,14 @@ def compG : Nat → Bool → P Comp
       expectSym "{"
       let M ← comp n
       expectSym "}"
-      expectSym ";"
-      let N ← comp n
-      pure (.for_ (← spanFrom st) x V M N)
+      -- A `for` last in a body is a statement: what follows it is `()`.
+      if ← isSym ";" then
+        discard bump
+        let N ← comp n
+        pure (.for_ (← spanFrom st) x V M N)
+      else
+        let sp ← spanFrom st
+        pure (.for_ sp x V M (.ret sp (.unit sp)))
     | .kw "while", _ =>
       -- `while c { M }; N`: a `for` whose iterator is the condition (a generator's loop).
       discard bump
