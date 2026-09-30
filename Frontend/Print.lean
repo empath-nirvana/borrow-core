@@ -189,6 +189,10 @@ def Val.pp (V : Val) (lvl : Nat := 0) (k : Nat := 0) : String :=
     | .app _ (.sugar _ .brace) (.thunk _ M) => "{ " ++ M.pp 0 (k + 2) ++ " }"
     | .app _ (.sugar _ .genBlock) (.thunk _ M) => "gen { " ++ M.pp 0 (k + 2) ++ " }"
     | .app _ (.sugar _ .brace) (.bangThunk _ M) => "!{ " ++ M.pp 0 (k + 2) ++ " }"
+    | .app _ (.sugar _ .try_) (.thunk _ M) => "try { " ++ M.pp 0 (k + 2) ++ " }"
+    | .app _ (.app _ (.sugar _ h) (.thunk _ M)) (.thunkv _ (.lam _ e _ N)) =>
+      (if h == .catch_ then "catch { " else "map_err { ") ++ M.pp 0 (k + 2) ++ " } { " ++ e.name ++
+        " -> " ++ N.pp 0 (k + 2) ++ " }"
     | .app _ (.app _ (.sugar _ (.borrow bk x)) P) (.thunkv _ (.lam _ b _ M)) =>
       let kw := match bk with
         | .imm => "borrow imm " | .mut | .famMut => "borrow mut " | .modify => "modify "
@@ -273,6 +277,9 @@ def Decl.pp : Decl → String
     let rec mk : Mark → String
       | .none => "" | .total => "total " | .div => "div " | .gen E => "gen[" ++ E.pp ++ "] "
       | .template m => mk m ++ "fn "
+      | .row es m => "with[" ++ ", ".intercalate (es.map fun (e, As) =>
+          e.name ++ (if As.isEmpty then "" else "[" ++ ", ".intercalate (As.map (VTy.pp · 0)) ++ "]")) ++
+          "] " ++ mk m
     let mk := mk m
     mk ++ "def " ++ n.name ++ params ++ " : " ++ A.pp ++ " =" ++ nl 2 ++ V.pp 0 2
   | .extern _ n A => "extern " ++ n.name ++ " : " ++ A.pp

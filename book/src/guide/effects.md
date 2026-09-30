@@ -62,8 +62,47 @@ main -> i32 * i32 =
 block. `walk` is copied twice, `walk__count` and `walk__summed`, each calling its handler's
 clause directly.
 
+## Errors: `Fail`
+
+`raise(e)` aborts with the error `e`; a handler of `Fail` catches it. `try { … }` answers `inl`
+the value or `inr` the error; `catch { … } { e -> … }` answers the handler's value on an error;
+`map_err { … } { e -> … }` raises a different error. A function that raises writes its error
+type in its row, `with Fail[E]`, unless it gets it from a function it calls. There is no `?`: a
+call of a function that raises propagates the error by itself.
+
+```bc
+-- answer: (inl i32[60], (inr i32[2], i32[0]))
+include slice
+
+-- The sum of the elements; a negative one raises its index.
+fn checked<'a>(v: array_imm 'a i32) -> i32 with Fail[i32] =
+  let mut s = 0;
+  let mut i = 0;
+  for p in v { let x = *p; if x < 0 { raise(i) } else { () }; s = s + x; i = i + 1 };
+  s
+
+-- A function that calls one that raises raises too: its row is inferred.
+fn twice<'a>(v: array_imm 'a i32) -> i32 = checked(v) * 2
+
+fn good(i: i32) -> i32 = i * 10
+fn bad(i: i32) -> i32 = if i == 2 { 0 - 1 } else { i }
+
+main -> (i32 + i32) * ((i32 + i32) * i32) =
+  let a = array_new[i32] (3, good);
+  let b = array_new[i32] (3, bad);
+  let x: i32 + i32 = borrow imm a { v -> try { twice(v) } };
+  let y: i32 + i32 = borrow imm b { v -> try { twice(v) } };
+  let z: i32 = borrow imm b { v -> catch { twice(v) } { e -> 0 } };
+  (x, (y, z))
+```
+
+A function that raises answers a sum, and a call of it is followed by a branch, which is the
+code you would write by hand; a `raise` in a loop's body leaves the loop by its own exit. What
+the aborted code owned is dropped on the way out by its destructors. A value with no destructor
+(a thunk, a capability) cannot be live where a `raise` leaves: the checker says which abort.
+
 ## Not yet
 
-An operation inside a closure (a callback passed or stored), named instances when two handlers
-of one effect are in scope, and operations that answer a borrow into the handler's state are
-later stages (SPEC §18 *Open*).
+An operation or a `raise` inside a closure (a callback passed or stored, or a fold's algebra),
+named instances when two handlers of one effect are in scope, and operations that answer a borrow
+into the handler's state are later stages (SPEC §18 *Open*).

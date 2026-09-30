@@ -1006,6 +1006,7 @@ def valPrefix : Nat → P Val
       pure (.shorten (← spanFrom st) m σ a V)
     | .kw "borrow" | .kw "modify" => borrowBlock n
     | .kw "with" => withBlock n
+    | .kw "try" | .kw "catch" | .kw "map_err" => failBlock n
     | .kw "gen" =>
       -- `gen { S }`: a generator whose body is `S`. (`return` in it is the core's.)
       discard bump
@@ -1146,6 +1147,47 @@ def withBlock : Nat → P Val
                              assigned := s.assigned ++ thr.filter s₀.muts.contains }
     pure (.app sp (.app sp (.sugar t.span (.handle h.name x)) place)
       (.thunkv sp (.lam sp b (holeTy sp) M)))
+
+/-- `try { S }`, `catch { S } { e -> S₂ }` and `map_err { S } { e -> S₂ }` (SPEC §18): the
+handlers of `Fail`. A body runs in place; a `let mut` variable declared outside it may not be
+assigned in it. -/
+def failBlock : Nat → P Val
+  | 0 => outOfFuel
+  | n + 1 => do
+    withGen false do
+    let st ← startPos
+    let t ← bump
+    let body : P Comp := do
+      expectSym "{"
+      let s₀ ← get
+      set { s₀ with assigned := [] }
+      let M ← comp n
+      let a := (← get).assigned
+      modify fun s => { s with muts := s₀.muts, assigned := s₀.assigned }
+      expectSym "}"
+      if let some x := (s₀.muts.filter a.contains).head? then
+        failAt t.span (s!"`{x}` is declared outside this block and assigned in it: bind what " ++
+          "the block answers instead (a handler of `Fail` does not hand back `let mut` variables)")
+      pure M
+    let M ← body
+    let sp₁ ← spanFrom st
+    if t.tok == .kw "try" then
+      return .app sp₁ (.sugar t.span .try_) (.thunk sp₁ M)
+    expectSym "{"
+    let e ← ident "the error's name"
+    expectSym "->"
+    let s₀ ← get
+    set { s₀ with assigned := [] }
+    let N ← comp n
+    let a := (← get).assigned
+    modify fun s => { s with muts := s₀.muts, assigned := s₀.assigned }
+    expectSym "}"
+    if let some x := (s₀.muts.filter a.contains).head? then
+      failAt t.span (s!"`{x}` is declared outside this handler and assigned in it: bind what " ++
+        "the block answers instead (a handler of `Fail` does not hand back `let mut` variables)")
+    let sp ← spanFrom st
+    let k := if t.tok == .kw "catch" then VSugar.catch_ else .mapErr
+    pure (.app sp (.app sp₁ (.sugar t.span k) (.thunk sp₁ M)) (.thunkv sp (.lam sp e (holeTy sp) N)))
 
 /-- The suffixes of a value spine, associating to the left: argument atoms and `[@]`. -/
 def valSuffixes : Nat → Pos → Val → P Val
@@ -1879,6 +1921,8 @@ where
     expectSym ")"
     expectSym "->"
     let T ← rty n
+    -- `with E₁, E₂[A]`: a written row (SPEC §18).
+    let es ← if ← isKw "with" then do discard bump; rowList n else pure []
     expectSym "="
     modify fun s => { s with muts := [], assigned := [], surf := true }
     let M ← comp n
@@ -1892,7 +1936,23 @@ where
       | .ok B => pure (VTy.lolli sp A B)
       | .error _ => do let C ← liftSort T.toC; pure (VTy.thunk sp (.arr sp A C))
     let (ty, V) := withLives sp lives fnTy lam
-    pure (.def_ sp x tps ty V (if tps.isEmpty then mk else .template mk))
+    let mk := if tps.isEmpty then mk else .template mk
+    pure (.def_ sp x tps ty V (if es.isEmpty then mk else .row es mk))
+  /-- `E₁, E₂[A, …], …`: the effects of a written row, at least one. -/
+  rowList : Nat → P (List (Ident × List VTy))
+    | 0 => outOfFuel
+    | m + 1 => do
+      let e ← uident "an effect name"
+      let As ← if ← isSym "[" then do
+          discard bump
+          let As ← tyList n (fuelPerToken * ((← get).toks.size + 1))
+          expectSym "]"
+          pure As
+        else pure []
+      if ← isSym "," then
+        discard bump
+        return (e, As) :: (← rowList m)
+      else pure [(e, As)]
   /-- `[P₁, …]` after a name: type parameters, or none. -/
   typeParams : P (List Ident) := do
     if ← isSym "[" then
@@ -1985,13 +2045,23 @@ where
         return p :: (← uidents m)
       else pure [p]
 
+/-- `with[E₁, E₂[A]] def …`: a definition with a written row, as it is printed (SPEC §18). -/
+def rowDecl (n : Nat) : P Decl := do
+  let t ← bump
+  expectSym "["
+  let es ← decl.rowList n n
+  expectSym "]"
+  match ← decl n with
+  | .def_ sp x ps A V mk => pure (.def_ sp x ps A V (.row es mk))
+  | _ => failAt t.span "a written row is on a function"
+
 /-- Declarations until the end of input. -/
 def decls (n : Nat) : Nat → List Decl → P (List Decl)
   | 0, _ => outOfFuel
   | m + 1, acc => do
     if (← peek).tok == .eof then pure acc.reverse
     else
-      let d ← decl n
+      let d ← if (← peek).tok == .kw "with" then rowDecl n else decl n
       decls n m (d :: acc)
 
 /-! ### Entry points -/

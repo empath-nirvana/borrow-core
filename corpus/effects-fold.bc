@@ -1,0 +1,74 @@
+-- Errors as an effect (SPEC §18; target 2 of #18): a fold over fallible elements, written with
+-- `raise`, with no `try_fold` and no sum threaded by hand. `checked_sum` adds the elements of a
+-- view, raising the index of the first negative one, and `inr ()` when the sum passes `i32`
+-- (`add_checked` raises its own `()`, which `map_err` raises as this error). Its row, `Fail[Bad]`,
+-- is written; `summed` and `summed_or` run it under two handlers of `Fail` from the one source: `try`
+-- answers the sum, and `catch` substitutes a default.
+--
+-- The loop is a counted `for` over the view (`count_try`, SPEC §16): a `raise` in its body leaves
+-- it by the loop's exit, and the function answers `inr e` after it. `corpus/effects-fold-sum.bc`
+-- is the same program with the sums written by hand; the counts are equal.
+--
+-- `doubled` builds a buffer and raises halfway: the buffer is dropped on the abort path by its
+-- destructor (SPEC §12), and `live 0` after the run says so.
+--
+-- Answer: `(inl i32[100], (inr (inl i32[3]), (inr (inr ()), (i32[4294967295], (i32[4294967295],
+-- i32[10])))))`: the sum 0 + 10 + … + 40; element 3 of `bad` is negative; three times 2·10⁹
+-- overflows; `catch` gives the default −1 for `bad`; `doubled` aborts on `bad` (−1), and on `good`
+-- builds five elements (twice that, 10). A buffer not dropped on the abort would leave `live 1`.
+
+include buf
+include text
+
+-- The index of a negative element, or `inr ()` for an overflow.
+type Bad = i32 + 1
+
+-- The sum of the elements, none negative.
+fn checked_sum<'a>(xs: array_imm 'a i32) -> i32 with Fail[Bad] =
+  let mut s = 0;
+  let mut i = 0;
+  for p in xs {
+    let x = *p;
+    if x < 0 { raise(inl i) } else { () };
+    s = map_err { add_checked(s, x) } { u -> inr () };
+    i = i + 1
+  };
+  s
+
+-- The sum, or the error.
+fn summed<'a>(xs: array_imm 'a i32) -> i32 + Bad = try { checked_sum(xs) }
+
+-- The sum, or `d` on an error.
+fn summed_or<'a>(xs: array_imm 'a i32, d: i32) -> i32 = catch { checked_sum(xs) } { e -> d }
+
+-- The elements doubled, into a new buffer; a negative element raises its index.
+fn doubled<'a>(xs: array_imm 'a i32) -> buf i32 with Fail[Bad] =
+  let mut b = box buf[i32](2);
+  let mut i = 0;
+  for p in xs {
+    let x = *p;
+    if x < 0 { raise(inl i) } else { () };
+    push(&mut b, x * 2);
+    i = i + 1
+  };
+  b
+
+-- The length of the doubled buffer, or −1.
+fn doubled_len<'a>(xs: array_imm 'a i32) -> i32 =
+  match try { doubled(xs) } { inl b -> let (b, n) = len_of(b); n * 2 | inr e -> 0 - 1 }
+
+fn tens(i: i32) -> i32 = i * 10
+fn dip(i: i32) -> i32 = if i == 3 { 0 - 1 } else { i }
+fn huge(i: i32) -> i32 = 2000000000
+
+main -> (i32 + Bad) * ((i32 + Bad) * ((i32 + Bad) * (i32 * (i32 * i32)))) =
+  let good = array_new[i32] (5, tens);
+  let bad = array_new[i32] (5, dip);
+  let big = array_new[i32] (3, huge);
+  let a: i32 + Bad = borrow imm good { v -> summed(v) };
+  let b: i32 + Bad = borrow imm bad { v -> summed(v) };
+  let c: i32 + Bad = borrow imm big { v -> summed(v) };
+  let d: i32 = borrow imm bad { v -> summed_or(v, 0 - 1) };
+  let e = borrow imm bad { v -> let n: i32 = doubled_len(v); n };
+  let f = borrow imm good { v -> let n: i32 = doubled_len(v); n };
+  (a, (b, (c, (d, (e, f)))))

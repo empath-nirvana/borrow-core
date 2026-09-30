@@ -640,3 +640,20 @@ Each entry: the decision, and why. Newest last.
     - **Not in S1a**: written rows; effectful callbacks (#161); an operation inside a clause;
       a lend in the arguments of an effectful call; effectful functions whose result is a loop
       or a generator.
+52. **Provisional (effects S1b, SPEC §18, #153; to be confirmed by the user).**
+    - **Spellings**: `raise(e)`; `try { M }` answering `inl v` or `inr e`; `catch { M } { e -> N }`
+      answering `N` on an error; `map_err { M } { e -> N }` raising `N`. `try` is the primary form
+      (the handler to a sum); `catch` and `map_err` are a branch on it. There is no `?`: a call of
+      a function that raises propagates by itself.
+    - **Written rows**: `fn f(…) -> T with E₁, Fail[X] = …`, a promise checked against the inferred
+      row. `Fail[X]` gives the error type; a function that raises directly writes it, and one that
+      only calls raising functions gets it from them. Rows stay otherwise unwritten.
+    - **`Fail` is a computation type, not a capability**: a function that raises answers `T + X`,
+      a call of it is a branch, and an abort in a loop's body is the loop's exit. `try` of a call
+      in tail position is the call's own sum. So a fallible program is the sum program a user
+      would write by hand (`corpus/effects-fold.bc`, `effects-fold-sum.bc`).
+    - **An abort cannot abandon a value with no destructor**; the checker's error names the
+      abort (SPEC §12's class 3). The residual form, handing it to the handler, is later (E9).
+    - **Errors are raised** in the library: decision 46's "errors are sums (provisional until the
+      error effect)" is withdrawn for errors; a search that finds nothing still answers a sum.
+    - **K4 is open**: a `raise` in a kernel fold's algebra is rejected where the algebra is passed.

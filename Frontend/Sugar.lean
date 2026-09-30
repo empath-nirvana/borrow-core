@@ -3104,6 +3104,10 @@ def reportTag : String := "report: "
 clauses. -/
 def effectsTag : String := "effects: "
 
+/-- The tag of an abort point (SPEC §18): a `raise` or a raising call, and the binders in scope
+there, for the message when one of them has no destructor. -/
+def abortTag : String := "abort: "
+
 /-- Record a report on the loop at `sp`. -/
 def report (sp : Span) (msg : String) : SM Unit :=
   note sp s!"{reportTag}{sp.start.render}: {msg}"
@@ -4564,8 +4568,10 @@ def elaborateS (p : Program) : SM (Program × Nat) := do
   let (decls₀, incl) ← expandIncludes libModules.length p.decls ([], [])
   -- Effects and handlers (SPEC §18), before the rest of the sugar: the clauses become functions,
   -- the functions with a row their copies, and each `with` a borrow block.
-  let (decls, fx) ← (Elab.Effects.elaborate decls₀ : Except Error _)
+  let (decls, fx, aborts) ← (Elab.Effects.elaborate decls₀ : Except Error _)
   for (sp, m) in fx do note sp s!"{effectsTag}{sp.start.render}: {m}"
+  for (sp, bs) in aborts do
+    note sp s!"{abortTag}{sp.start.render}|{",".intercalate (bs.map (·.start.render))}"
   let p : Program := ⟨decls⟩
   let mayDiv := usesName "div_fuel" p || usesName "div_bind" p || usesName "div_defer" p
   -- The prelude is in scope when the program names one of its declarations.

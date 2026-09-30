@@ -67,11 +67,38 @@ def elaborate (p : Program) : Except Error Elaborated := do
 /-- An error, with a note naming the sugar whose generated code it is in, when its span is the
 span of one. -/
 def renderError (os : Sugar.Origins) (e : Error) : Error :=
+  let e := abandoned os e
   match os.find? (fun (s, w) => s == e.span && !w.startsWith Sugar.reportTag &&
-      !w.startsWith Sugar.effectsTag) with
+      !w.startsWith Sugar.effectsTag && !w.startsWith Sugar.abortTag) with
   | some (_, what) =>
     { e with msg := s!"{e.msg}\n  in the core generated for {what} here (`bcc desugar` shows it)" }
   | none => e
+where
+  /-- A value with no destructor left live by an abort (SPEC §18): the `raise` or raising call
+  whose abort path leaves it, when the error is at a binder in scope there, or at a `case` one of
+  whose arms aborts without consuming it. -/
+  abandoned (os : Sugar.Origins) (e : Error) : Error :=
+    let unconsumed := (e.msg.splitOn "is not consumed in its scope").length > 1
+    let unbalanced := (e.msg.splitOn "but not in the").length > 1 &&
+      (e.msg.splitOn "has no destructor").length > 1
+    if !unconsumed && !unbalanced then e else
+    let at_ := e.span.start.render
+    let within (p : Pos) : Bool := !e.span.start.later p && !p.later e.span.stop
+    let pos (r : String) : Option Pos := match r.splitOn ":" with
+      | [l, c] => do pure ⟨← l.toNat?, ← c.toNat?⟩
+      | _ => none
+    match os.findSome? (fun (_, w) =>
+        if !w.startsWith Sugar.abortTag then none else
+        match (w.drop Sugar.abortTag.length).toString.splitOn "|" with
+        | [r, bs] =>
+          if unconsumed && (bs.splitOn ",").contains at_ then some r
+          else if unbalanced && ((pos r).map within).getD false then some r
+          else none
+        | _ => none) with
+    | some r =>
+      { e with msg := s!"{e.msg}; an abort at {r} leaves it (a `raise` cannot abandon a value " ++
+          "with no destructor, SPEC §18)" }
+    | none => e
 
 /-! ### Inspection (`bcc tir`) -/
 

@@ -1,0 +1,66 @@
+-- `corpus/effects-fold.bc` with its errors written as sums, by hand, as the library wrote them
+-- before the error effect (SPEC §18): `add_sum` answers `i32 + 1`, each loop leaves by `break`
+-- with the error, and each function matches on what it calls and hands an error on. The
+-- elaboration of `raise` and `try` is this program, so the two have the same value and the same
+-- counts (`corpus/counts.expected`).
+--
+-- Answer: as `corpus/effects-fold.bc`'s.
+
+include buf
+include slice
+
+type Bad = i32 + 1
+
+-- `a + b`, or `inr ()` when it overflows `i32`.
+fn add_sum(a: i32, b: i32) -> i32 + 1 =
+  let s = host[extend_s](a) + host[extend_s](b);
+  let lo : i64 = 0 - 2147483648;
+  if lo <= s && s <= 2147483647 { inl host[wrap](s) } else { inr () }
+
+-- The sum of the elements, none negative, or the error.
+fn checked_sum<'a>(xs: array_imm 'a i32) -> i32 + Bad =
+  let mut s = 0;
+  let mut i = 0;
+  let r: 1 + Bad = for p in xs {
+    let x = *p;
+    if x < 0 { break inr (inl i) } else { () };
+    match add_sum(s, x) { inl v -> s = v | inr u -> break inr (inr ()) };
+    i = i + 1
+  } else { inl () };
+  match r { inl u -> inl s | inr e -> inr e }
+
+fn summed<'a>(xs: array_imm 'a i32) -> i32 + Bad = checked_sum(xs)
+
+fn summed_or<'a>(xs: array_imm 'a i32, d: i32) -> i32 = match checked_sum(xs) { inl v -> v | inr e -> d }
+
+-- The elements doubled, into a new buffer, or the error; the buffer is dropped on the error.
+fn doubled<'a>(xs: array_imm 'a i32) -> buf i32 + Bad =
+  let mut b = box buf[i32](2);
+  let mut i = 0;
+  let r: 1 + Bad = for p in xs {
+    let x = *p;
+    if x < 0 { break inr (inl i) } else { () };
+    push(&mut b, x * 2);
+    i = i + 1
+  } else { inl () };
+  match r { inl u -> inl b | inr e -> inr e }
+
+fn doubled_len<'a>(xs: array_imm 'a i32) -> i32 =
+  let r: buf i32 + Bad = doubled(xs);
+  match r { inl b -> let (b, n) = len_of(b); n * 2 | inr e -> 0 - 1 }
+
+fn tens(i: i32) -> i32 = i * 10
+fn dip(i: i32) -> i32 = if i == 3 { 0 - 1 } else { i }
+fn huge(i: i32) -> i32 = 2000000000
+
+main -> (i32 + Bad) * ((i32 + Bad) * ((i32 + Bad) * (i32 * (i32 * i32)))) =
+  let good = array_new[i32] (5, tens);
+  let bad = array_new[i32] (5, dip);
+  let big = array_new[i32] (3, huge);
+  let a: i32 + Bad = borrow imm good { v -> summed(v) };
+  let b: i32 + Bad = borrow imm bad { v -> summed(v) };
+  let c: i32 + Bad = borrow imm big { v -> summed(v) };
+  let d: i32 = borrow imm bad { v -> summed_or(v, 0 - 1) };
+  let e = borrow imm bad { v -> let n: i32 = doubled_len(v); n };
+  let f = borrow imm good { v -> let n: i32 = doubled_len(v); n };
+  (a, (b, (c, (d, (e, f)))))

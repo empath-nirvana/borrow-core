@@ -55,7 +55,7 @@ fn line_out<'a, 'b, 'c>(l: text 'a, st: Out * (text 'b * (text 'c * i32))) -> Ou
 
 main -> i32 =
   let inp = read_all(&mut stdin);
-  match from_utf8(inp) {
+  match try { from_utf8(inp) } {
     inl text ->
       borrow imm text { 't, t ->
         borrow imm "cat" { 'f, from ->

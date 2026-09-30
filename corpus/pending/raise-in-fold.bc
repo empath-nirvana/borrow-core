@@ -1,4 +1,4 @@
--- pending: #18, and open design questions (effect polymorphism of the folds; unwinding)
+-- pending: K4 (an early exit from a kernel fold, SPEC §18 Open), and open design questions (effect polymorphism of the folds; unwinding)
 -- Errors as an effect: the ordinary `fold_own` and `fold_imm`, with algebras that `raise` on a
 -- byte that is not a digit, and a `try` at each call that turns the effect into `i32 + i32`.
 -- Nothing fold-specific handles the error: if the algebra raises, the fold raises.
@@ -41,8 +41,9 @@
 -- Spelling (a hypothesis): `raise(e)` as an operation, and `try { … }` as the handler that turns
 -- it into `inl` the value or `inr` the error, as the user settled for errors.
 --
--- Today: the parser stops at `try {`: `try` is read as a name, and a block cannot follow it.
--- (`raise` would next be an unknown name.)
+-- Today (effects S1b, SPEC §18): `raise`, `try` and `Fail` rows exist, and a raise inside a
+-- fold's algebra is rejected where the algebra is passed to the fold: an algebra is `!` code, and
+-- an early exit from `fold_own`/`fold_imm` (K4) is open.
 --
 -- Once it lands: `123` sums to 6 by either fold; `1x3y` raises at `y` (byte 121: the last
 -- non-digit, the first one the fold reaches); after the failing `fold_imm`, `bad` still has its
@@ -59,7 +60,7 @@ fn cons(x: i32, t: List) -> List = roll inr alloc_s[Node] (x, t)
 fn is_digit(b: i32) -> bool = host[lt_u32] (b - 48, 10)
 
 -- Owned: each cell freed, and its digit added; a non-digit raises.
-fn sum_alg(r: 1 + ref i32 * i32) -> i32 =
+fn sum_alg(r: 1 + ref i32 * i32) -> i32 with Fail[i32] =
   match r {
     inl _ -> 0
   | inr (c, s) -> let b = free(c); if is_digit(b) { b - 48 + s } else { raise(b) }
@@ -89,4 +90,4 @@ main -> (i32 + i32) * ((i32 + i32) * ((i32 + i32) * ((i32 + i32) * i32))) =
   let d = try { view_sum(&bad) };
   let n = len(&bad);
   (a, (b, (c, (d, n))))
--- now: 84:15: expected `;`, found `{`
+-- now: 68:69: `sum_alg` raises (`Fail`) and is passed as a value: a fold whose algebra raises needs an early exit from a kernel fold (K4), which is open; an effectful callback is S4's (#161)

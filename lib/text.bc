@@ -13,8 +13,10 @@
 -- lifetime and costs no allocation. `include text` puts the library in scope, with `buf` and
 -- `slice`.
 --
--- A search or a parse that can fail answers a sum; a character is an `i32` scalar value. Loops
--- are `count_fold`s over a view's length, so every function here is total.
+-- A search that can find nothing answers a sum; a validation or a parse that can fail raises its
+-- error (`Fail`, SPEC §18), which a caller handles with `try`, `catch` or `map_err`. A character
+-- is an `i32` scalar value. Loops are counted over a view's length, so every function here is
+-- total.
 
 include buf
 include slice
@@ -168,16 +170,20 @@ fn utf8_error<'a>(t: text 'a) -> i32 + 1 =
   array_forget['a, u8](t);
   r
 
--- The bytes as text, if they are UTF-8; else the index of the first byte that is not. No copy.
-fn str_from_utf8<'a>(v: array_imm 'a u8) -> text 'a + i32 =
+-- The bytes as text, if they are UTF-8; else it raises the index of the first byte that is not.
+-- No copy.
+fn str_from_utf8<'a>(v: array_imm 'a u8) -> text 'a with Fail[i32] =
   let (v, w) = array_copy['a, u8] v;
-  match utf8_error(w) { inl e -> array_forget['a, u8](v); inr e | inr u -> inl v }
+  match utf8_error(w) { inl e -> array_forget['a, u8](v); raise(e) | inr u -> v }
 
--- A buffer of bytes as a string, in place, if they are UTF-8; else the buffer back and the index
--- of the first byte that is not.
-fn from_utf8(b: buf u8) -> string + (buf u8 * i32) =
+-- The error of `from_utf8`: the buffer back, and the index of the first byte that is not UTF-8.
+type Utf8Error = buf u8 * i32
+
+-- A buffer of bytes as a string, in place, if they are UTF-8; else it raises the buffer and the
+-- index of the first byte that is not.
+fn from_utf8(b: buf u8) -> string with Fail[Utf8Error] =
   let r = borrow imm b { v -> match utf8_error(v) { inl e -> e | inr u -> 0 - 1 } };
-  if r < 0 { inl b } else { inr (b, r) }
+  if r < 0 { b } else { raise((b, r)) }
 
 -- The scalar value at byte `i` and the length of its sequence; a byte that does not start a valid
 -- sequence is U+FFFD, of length 1.
@@ -353,47 +359,40 @@ fn find_str<'a, 'b>(t: text 'a, p: text 'b) -> i32 + 1 =
 
 -- ### Parsing
 
--- `a + b`, or `inr ()` when it overflows `i32`.
-fn add_checked(a: i32, b: i32) -> i32 + 1 =
+-- `a + b`; it raises `()` when that overflows `i32`.
+fn add_checked(a: i32, b: i32) -> i32 with Fail[1] =
   let s = host[extend_s](a) + host[extend_s](b);
   let lo : i64 = 0 - 2147483648;
-  if lo <= s && s <= 2147483647 { inl host[wrap](s) } else { inr () }
+  if lo <= s && s <= 2147483647 { host[wrap](s) } else { raise(()) }
 
--- `a * b`, or `inr ()` when it overflows `i32`.
-fn mul_checked(a: i32, b: i32) -> i32 + 1 =
+-- `a * b`; it raises `()` when that overflows `i32`.
+fn mul_checked(a: i32, b: i32) -> i32 with Fail[1] =
   let s = host[extend_s](a) * host[extend_s](b);
   let lo : i64 = 0 - 2147483648;
-  if lo <= s && s <= 2147483647 { inl host[wrap](s) } else { inr () }
+  if lo <= s && s <= 2147483647 { host[wrap](s) } else { raise(()) }
 
--- A parse error (provisional, #18: an error effect will replace the sum): `inl ()` for no digits,
--- `inr (inl b)` for the byte `b` that is not a digit, `inr (inr ())` for a value past `i32`.
-fn parse_digit(acc: i32 + (1 + (u8 + 1)), d: u8) -> i32 + (1 + (u8 + 1)) =
-  match acc {
-    inl n ->
-      if d < b'0' || b'9' < d { inr (inr (inl d)) } else {
-        match mul_checked(n, 10) {
-          inl m -> match add_checked(m, to_i32(d) - 48) { inl r -> inl r | inr u -> inr (inr (inr ())) }
-        | inr u -> inr (inr (inr ()))
-        } }
-  | inr e -> inr e
-  }
+-- A parse error: `inl ()` for no digits, `inr (inl b)` for the byte `b` that is not a digit,
+-- `inr (inr ())` for a value past `i32`.
+type ParseError = 1 + (u8 + 1)
 
--- A decimal integer, with an optional leading `-`.
-fn parse_i32<'a>(t: text 'a) -> i32 + (1 + (u8 + 1)) =
+-- A decimal integer, with an optional leading `-`; it raises a `ParseError`. The digits are a
+-- counted loop over the view (`for`, SPEC §16), and an overflow of `mul_checked` or `add_checked`
+-- is raised as the parse's own error (`map_err`).
+fn parse_i32<'a>(t: text 'a) -> i32 with Fail[ParseError] =
   let (t, u) = array_copy['a, u8] t;
   let neg = at(u, 0, 0) == b'-';
   let t = if neg { match split_at(t, 1) { inl (h, r) -> array_forget['a, u8](h); r | inr t -> t } }
     else { t };
   let (t, w) = array_copy['a, u8] t;
-  let m = len(w);
-  if m == 0 { array_forget['a, u8](t); inr (inl ()) } else {
-    let (t, acc) = count_fold[text 'a * (i32 + (1 + (u8 + 1)))](
-      !{ (i, (t, acc)) ->
-        let (t, x) = array_copy['a, u8] t;
-        (t, parse_digit(acc, at(x, i, 0))) },
-      m, 0, (t, inl 0));
-    array_forget['a, u8](t);
-    match acc { inl n -> let v = if neg { 0 - n } else { n }; inl v | inr e -> inr e }
+  if len(w) == 0 { array_forget['a, u8](t); raise(inl ()) } else {
+    let mut n = 0;
+    for x in t {
+      let d = *x;
+      if d < b'0' || b'9' < d { raise(inr (inl d)) } else { () };
+      let m = map_err { mul_checked(n, 10) } { u -> inr (inr ()) };
+      n = map_err { add_checked(m, to_i32(d) - 48) } { u -> inr (inr ()) }
+    };
+    if neg { 0 - n } else { n }
   }
 
 -- ### Buffers of views
