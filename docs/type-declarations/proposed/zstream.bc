@@ -1,0 +1,54 @@
+-- Target 7 (design §9.7): a C struct for FFI, zlib's `z_stream`, in the proposed surface. Does
+-- not parse today, and nothing here can run: there is no FFI and no byte-level record layout.
+--
+-- zlib.h (madler/zlib, `typedef struct z_stream_s`):
+--   z_const Bytef *next_in; uInt avail_in; uLong total_in;
+--   Bytef *next_out; uInt avail_out; uLong total_out;
+--   z_const char *msg; struct internal_state FAR *state;
+--   alloc_func zalloc; free_func zfree; voidpf opaque;
+--   int data_type; uLong adler; uLong reserved;
+--
+-- `layout C` is a keyword clause, not an attribute or a comment: it changes what the backend
+-- does, so the grammar owns it. Its field types must be C-representable (design §5.4), checked
+-- at the declaration: `c_uint`, `c_ulong`, `c_int` are the platform's C integer types, and
+-- `cptr`, `cfn` are the raw pointer and function-pointer types of the platform design (branch
+-- `platform-design`), usable only in extern contracts and `layout C` declarations.
+
+data ZStream layout C = {
+  next_in:   cptr u8,
+  avail_in:  c_uint,
+  total_in:  c_ulong,
+  next_out:  cptr u8,
+  avail_out: c_uint,
+  total_out: c_ulong,
+  msg:       cptr u8,
+  state:     cptr opaque,
+  zalloc:    cfn,
+  zfree:     cfn,
+  opaque:    cptr opaque,
+  data_type: c_int,
+  adler:     c_ulong,
+  reserved:  c_ulong,
+}
+
+-- Decision 27: raw pointers never flow into safe code. So `ZStream` is declared in the binding
+-- package, which is the trusted boundary (an extern whose body we compile), and exported
+-- *abstract*: safe code holds a `box ZStream` and lends it, but has no iso, so it can neither
+-- read `next_in` nor set it. The binding's own functions set `next_in`/`avail_in` from a
+-- borrowed slice for the length of one call (`inflate_slice` below).
+--
+-- A `layout C` value lives in a block: `box ZStream::zeroed()` allocates one contiguous
+-- allocation of the C size (112 bytes on LP64: see the design's offset table), each field a
+-- separately borrowable place at its C offset. zlib keeps a pointer back to the stream
+-- (`inflateStateCheck` rejects `state->strm != strm`), so the stream must stay at one address
+-- for its whole life: it is never copied into and out of a C buffer at each call.
+extern inflate_init : !(all 'a < top. mut 'a ZStream => mut 'a ZStream * c_int)
+extern inflate      : !(all 'a < top. mut 'a ZStream * c_int => mut 'a ZStream * c_int)
+-- The safe entry point, in the binding package: the slices are lent for the one call.
+extern inflate_slice : !(all 'a 'b 'c < top. mut 'a ZStream * (slice 'b u8 * slice mut 'c u8)
+                         => mut 'a ZStream * (c_int * (i32 * i32)))    -- status, bytes in, bytes out
+extern inflate_end  : !(ZStreamBox => c_int)
+
+-- The owned stream is a linear handle: it has no implicit destructor, because ending it is
+-- `inflate_end`, an extern that can fail (SPEC §12 Open).
+data ZStreamBox linear = ZStreamBox(box ZStream)

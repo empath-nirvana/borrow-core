@@ -1,0 +1,43 @@
+-- Target 6 of docs/type-declarations-design.md §9.6: a record holding views into a buffer, with
+-- a lifetime parameter, hand-lowered. `proposed/views.bc` declares
+--
+--   data Field<'a> = { name: slice 'a u8, value: slice 'a u8 }
+--
+-- which elaborates to `array_imm 'a u8 * array_imm 'a u8`, with `'a` substituted at each use.
+-- The record is a value of four words (two `(ptr, len)` views); it lives only inside the borrow
+-- of the buffer, because its type mentions `'x` and a borrow block's result must outlive it.
+--
+-- Answer: the line `8080`, then i32[4] * i32[4] (the name `port` and the value's length).
+
+include slice
+
+fn text(i: i32) -> u8 =
+  if i == 0 { b'p' } else { if i == 1 { b'o' } else { if i == 2 { b'r' } else { if i == 3 { b't' }
+  else { if i == 4 { b'=' } else { if i == 5 { b'8' } else { if i == 6 { b'0' } else { if i == 7 { b'8' }
+  else { b'0' } } } } } } } }
+
+-- `key=value` as a `Field`, or `inr ()` without an `=`.
+fn parse<'a>(line: array_imm 'a u8) -> (array_imm 'a u8 * array_imm 'a u8) + 1 =
+  let (line, l2) = array_copy['a, u8](line);
+  match find(l2, b'=', eq_u8) {
+    inl i -> match split_at(line, i) {
+      inl (name, rest) -> match split_first(rest) {
+        inl (eq, value) -> inl (name, value)
+      | inr _ -> inr () }
+    | inr _ -> inr () }
+  | inr _ -> inr () }
+
+main -> i32 * i32 =
+  let buf = array_new[u8] (9, text);
+  let (stdout, r) = borrow imm buf { 'x, v ->
+    match parse(v) {
+      inl (name, value) ->
+        let (value, value2) = array_copy['x, u8](value);
+        let n = len(value2);
+        let (stdout, value) = count_fold[Out * array_imm 'x u8] (
+          !{ (i, (o, v)) -> let (v, w) = array_copy['x, u8](v); let (o, _) = putb(o, to_i32(at(w, i, b'?'))); (o, v) },
+          n, 0, (stdout, value));
+        (stdout, (len(name), len(value)))
+    | inr _ -> (stdout, (0, 0)) } };
+  putb(&mut stdout, 10);
+  r

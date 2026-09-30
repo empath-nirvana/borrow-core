@@ -1,0 +1,34 @@
+-- Target 9 of docs/type-declarations-design.md §9.9: a linear handle type with a destructor,
+-- hand-lowered. `proposed/handle.bc` declares
+--
+--   data Session = { id: box i32, uses: i32 } drop end_session
+--
+-- `drop end_session` names the destructor: where a `Session` goes unused on a path, the
+-- elaborator inserts `end_session(s)` at the end of that path, with SPEC §12's placement (after
+-- every effect of the path, most recently bound first), in place of the structural destructor
+-- of `box i32 * i32`. The checker then sees a consumed variable, and inserts nothing.
+--
+-- Below, `run_session` has two paths; neither uses `s` at its end, so each ends with the inserted
+-- call. Written by hand, those two calls are what the declaration saves.
+--
+-- Answer: i32[7] (the second path: 3 + 4), with `live 0`: every session's cell is freed, by
+-- the declared destructor on both paths.
+
+type Session = ref i32 * i32
+
+fn open_session(id: i32) -> Session = (alloc(id), 0)
+
+-- The declared destructor: it must consume the session and return `()`.
+fn end_session(s: Session) -> 1 = let (c, n) = s; let id = free(c); ()
+
+fn touch(s: Session) -> Session = let (c, n) = s; (c, n + 1)
+
+fn run_session(s: Session, k: i32) -> i32 =
+  let s = touch(s);
+  if k < 3 { let r = k * 2; let () = end_session(s); r }      -- inserted
+  else { let r = k + 4; let () = end_session(s); r }            -- inserted
+
+main -> i32 =
+  let a = run_session(open_session(1), 1);
+  let b = run_session(open_session(2), 3);
+  b

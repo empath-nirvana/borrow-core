@@ -1,0 +1,51 @@
+-- Target 4 of docs/type-declarations-design.md §9.4: a graph with node ids, hand-lowered.
+-- `proposed/graph.bc` declares
+--
+--   data NodeId = NodeId(i32)                     -- one field: a newtype, its iso the identity
+--   data Edge = { from: NodeId, to: NodeId }
+--   data Graph = { nodes: i32, edges: array Edge }
+--
+-- In the core a `NodeId` is an `i32` and an `Edge` is `i32 * i32`: the name costs nothing. What
+-- the name buys is at elaboration: `NodeId(3)` and a plain `3` do not unify, so an index into
+-- `edges` cannot be passed where a node is expected. This file, being core, cannot show that
+-- rejection; `proposed/graph.bc` marks it.
+--
+-- Answer: the out-degrees `2 1 1 0` of the graph 0→1, 0→2, 1→2, 2→0, then i32[4].
+
+include slice
+
+type NodeId = i32
+type Edge = i32 * i32
+type Graph = i32 * array Edge
+
+fn edge(i: i32) -> Edge =
+  if i == 0 { (0, 1) } else { if i == 1 { (0, 2) } else { if i == 2 { (1, 2) } else { (2, 0) } } }
+
+fn zero(i: i32) -> i32 = 0
+
+-- One edge: the degree of its source goes up by one.
+fn count(i: i32, s: Graph * array i32) -> Graph * array i32 =
+  let (g, deg) = s;
+  let (n, edges) = g;
+  let none : Edge = (0 - 1, 0 - 1);
+  let e = borrow imm edges { 'x, v -> at(v, i, none) };
+  let (from, to) = e;
+  let d = borrow imm deg { 'x, v -> at(v, from, 0) };
+  borrow mut deg { 'x, v -> let v = set(v, from, d + 1); () };
+  ((n, edges), deg)
+
+fn emit(i: i32, s: Out * array i32) -> Out * array i32 =
+  let (o, deg) = s;
+  let d = borrow imm deg { 'x, v -> at(v, i, 0) };
+  let (o, _) = put_dec(o, d);
+  let (o, _) = putb(o, 32);
+  (o, deg)
+
+main -> i32 =
+  let g = (4, array_new[Edge] (4, edge));
+  let deg = array_new[i32] (4, zero);
+  let (g, deg) = count_fold[Graph * array i32] (count, 4, 0, (g, deg));
+  let (stdout, deg) = count_fold[Out * array i32] (emit, 4, 0, (stdout, deg));
+  putb(&mut stdout, 10);
+  let (n, edges) = g;
+  n

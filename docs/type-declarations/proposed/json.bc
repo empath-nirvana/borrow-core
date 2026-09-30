@@ -1,0 +1,32 @@
+-- Target 2 (design §9.2): the JSON value type, in the proposed surface. Does not parse today.
+-- The hand-lowered form, `../lowered/json.bc`, uses the one-`mu` encoding that exists today.
+
+data Json derives eq, clone, debug =
+    Null
+  | Bool(bool)
+  | Num(f64)                     -- `f64` is SPEC §8 Open; the lowering uses i32
+  | Str(string)                  -- `string` is strings stage S5
+  | Arr(Vec[Json])               -- recursion nested under `Vec`: see below
+  | Obj(Vec[Member])
+
+data Member derives eq, clone, debug = { key: string, value: Json }
+
+-- `Json` provides its own encoder, decoder and schema, since it *is* the data model:
+impl encode[Json] = encode_value            -- written by hand in the json library
+impl decode[Json] = decode_value            -- a pull parser with an explicit stack (design §6.4)
+impl schema[Json] = schema_any              -- {"x-kubernetes-preserve-unknown-fields": true}
+
+-- Elaboration: `Json` and `Member` are mutually recursive through `Vec`, so their `mu` is
+--   mu X. 1 + (bool + (f64 + (string + (Vec[X] + Vec[string * X]))))       (with `Member` inlined)
+-- and `Vec[X]` puts `X` under an array (`[Ref X]` in `buf`). SPEC §6's `FShape` allows `X`
+-- only under `Ref`, `⊗`, `⊕` and at the head, with closed leaves, so this `mu` has no fold and
+-- no destructor (class 3, SPEC §12). Design §9.2 recommends extending `FShape` with arrays of
+-- recursive positions (a kernel entry), and, until then, the sibling encoding of the lowering:
+--
+--   data Node = { key: Option[string], kind: Kind, next: Option[box Node] }
+--   data Kind = Null | Bool(bool) | Num(f64) | Str(string)
+--             | Arr(first: Option[box Node]) | Obj(first: Option[box Node])
+--
+-- Layout (design §5), once `FShape` covers arrays: a `Json` is a tag word and the widest payload
+-- (`Str`: a `buf u8`, three words), four words, unboxed; an array element or object member is a
+-- slot of that width in one allocation. No `box` per node.

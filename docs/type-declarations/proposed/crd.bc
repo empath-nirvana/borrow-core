@@ -1,0 +1,49 @@
+-- Target 1 (design §9.1): a CRD spec and status for a toy operator, in the proposed surface.
+-- Does not parse today. The hand-lowered form, which runs, is `../lowered/crd.bc`.
+--
+-- Every piece of metadata is checked syntax: `derives` and `@kube(…)` name declarations
+-- (`poly encode`, `attr kube`), and a misspelling (`@jsn`, `minimun`) is an unknown-name error.
+
+include json          -- poly encode, decode, present; attr json
+include schema        -- poly schema; attr schema
+include kube          -- attr kube; the Resource functions
+
+-- A C-like enum: every constructor is nullary. JSON: its constructor's name as a string;
+-- schema: {"type": "string", "enum": ["Pending", "Running", "Failed"]}.
+data Phase derives encode, decode, schema = Pending | Running | Failed
+
+data MemcachedSpec derives encode, decode, schema = {
+  size: i32 @schema(minimum = 1, maximum = 3),
+  container_port: i32 @json(rename = "containerPort"),
+  version: Option[i32],                               -- optional: omitted when None
+}
+
+data MemcachedStatus derives encode, decode, schema = {
+  phase: Phase @default(Pending),
+  ready_replicas: Option[i32] @json(rename = "readyReplicas"),
+}
+
+-- The root object. `@kube` is a typed attribute declared by the `kube` library:
+--   attr kube on data = { group: lit, version: lit, kind: lit, plural: lit, namespaced: bool = true }
+-- so a missing `kind` or a `version = 1` is an error at this line, not at `kubectl apply`.
+data Memcached derives encode, decode, schema, resource
+  @kube(group = "cache.example.com", version = "v1alpha1", kind = "Memcached", plural = "memcacheds") = {
+  metadata: ObjectMeta,
+  spec: MemcachedSpec,
+  status: Option[MemcachedStatus],
+}
+
+-- What the derivations produce (design §9.1):
+--
+-- encode[Memcached] on { spec = { size = 2, container_port = 11211, version = None },
+--                        status = Some({ phase = Running, ready_replicas = Some(2) }) }:
+--   {"spec":{"size":2,"containerPort":11211},"status":{"phase":"Running","readyReplicas":2}}
+--
+-- schema[MemcachedSpec] (inlined: a CRD schema may not use `$ref`):
+--   {"type":"object","required":["size","containerPort"],
+--    "properties":{"size":{"type":"integer","format":"int32","minimum":1,"maximum":3},
+--                  "containerPort":{"type":"integer","format":"int32"},
+--                  "version":{"type":"integer","format":"int32"}}}
+--
+-- decode[MemcachedSpec] rejects {"size": 7, …} with `Invalid("size", Maximum(3))`: the same
+-- `@schema` value that the schema publishes is checked on decode.

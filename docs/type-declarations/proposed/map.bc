@@ -1,0 +1,31 @@
+-- Target 5 (design §9.5): a generic `Map[K, V]`, the declaration side only, in the proposed
+-- surface. Does not parse today. `../lowered/map.bc` runs the association-list instance at
+-- `K = V = i32`.
+--
+-- The package exports the name and the functions, not the iso: outside it, `Map[K, V]` has no
+-- constructors, no patterns and no fields, so no code outside can build or inspect one except
+-- through these functions. That is the whole of abstraction here (design §2.4).
+
+package map
+
+export data Map[K, V]                    -- abstract: the name is exported, the iso is not
+
+export fn empty[K, V]() -> Map[K, V]
+export fn insert[K, V](m: Map[K, V], k: K, v: V, cmp: !(imm K * imm K => Ordering)) -> Map[K, V] * Option[V]
+export fn get[K, V]<'a>(m: imm 'a Map[K, V], k: imm 'a K, cmp: …) -> Option[imm 'a V]
+export fn remove[K, V](m: Map[K, V], k: K, cmp: …) -> Map[K, V] * Option[V]
+export fn len[K, V]<'a>(m: imm 'a Map[K, V]) -> i32
+export fn iter[K, V]<'a>(m: imm 'a Map[K, V]) -> Iter[imm 'a K * imm 'a V]
+
+-- The representation, private to the package: sorted parallel buffers.
+data Map[K, V] = { keys: buf K, vals: buf V }
+
+-- The package may export instances built from the private structure, so outside code can
+-- encode a map without seeing its fields (design §7):
+export impl encode[Map[K, V]] = encode_map[K, V]     -- a JSON object when `K = string`
+export impl eq[Map[K, V]] = eq_map[K, V]
+
+-- Checking (decision 45): `Map[string, Json]` is the template instantiated, so the checker sees
+-- `buf string ⊗ buf Json` at each use; the hiding is the elaborator's, not the kernel's.
+-- Monomorphization needs the representation at the use site, as Rust's and C++'s generics do
+-- (#63 names this): the iso is not exported, but the representation's layout is.

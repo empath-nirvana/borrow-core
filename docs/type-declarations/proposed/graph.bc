@@ -1,0 +1,27 @@
+-- Target 4 (design §9.4): a graph with node ids, in the proposed surface. Does not parse today.
+-- The hand-lowered form, `../lowered/graph.bc`, runs.
+
+-- One field: a newtype. Its iso is the identity in the core, so a `NodeId` is an `i32` at run
+-- time (Haskell's `newtype`, Rust's `#[repr(transparent)]`), but not at elaboration: a plain
+-- `i32` does not unify with it.
+data NodeId derives eq, ord, hash, encode, decode = NodeId(i32)
+data EdgeId derives eq, ord = EdgeId(i32)
+
+data Edge derives eq, debug = { from: NodeId, to: NodeId }
+
+data Graph = {
+  nodes: i32,
+  edges: array Edge,              -- an `Edge` is two words; the array is one allocation
+  out: array (array EdgeId),      -- adjacency: per node, the ids of its edges
+}
+
+fn out_degree<'a>(g: imm 'a Graph, n: NodeId) -> i32 =
+  let NodeId(i) = n;              -- the iso, used explicitly
+  match get(&g.out, i) { Some(es) -> len(es) | None -> 0 }
+
+-- Rejected at elaboration:
+--   out_degree(&g, EdgeId(3))    -- "expected `NodeId`, found `EdgeId`": both are `i32` in the core
+--   out_degree(&g, 3)            -- "expected `NodeId`, found `i32`"
+--
+-- `derives encode` on a newtype encodes the field alone (`3`, not `{"0":3}`): the `newtype`
+-- case of the structure view (design §6.2), as serde's `newtype_struct`.

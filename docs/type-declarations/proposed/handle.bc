@@ -1,0 +1,28 @@
+-- Target 9 (design §9.9): linear handle types, with and without a destructor, in the proposed
+-- surface. Does not parse today. `../lowered/handle.bc` runs the destructor case with the
+-- inserted calls written out.
+
+-- A declared destructor. Where a `Session` goes unused on a path, the elaborator inserts
+-- `end_session(s)` at the end of the path (SPEC §12's placement), not the structural
+-- destructor of the representation. `end_session` must have type `!(Session => 1)` and be
+-- total; it may use the iso, since it is in the declaring package.
+data Session drop end_session = { id: box i32, uses: i32 }
+
+fn end_session(s: Session) -> 1 = let Session { id, uses } = s; free(id); ()
+
+-- No implicit destructor at all: every path must consume a `Tx` explicitly, by `commit` or
+-- `abort`; an unused one is an error that names the type (SPEC §12's class 3, and its `linear`
+-- binder made a property of the type).
+data Tx linear = { log: buf Op }
+
+fn commit(t: Tx, db: &mut Db) -> 1 = …
+fn abort(t: Tx) -> 1 = …
+
+-- A host resource: its representation is an opaque host type (SPEC §11, `VTy.opq k`, a new `k`
+-- per resource, from the platform design), which has no destructor; the declaration names the
+-- extern that ends it. Closing a file can fail and needs no capability beyond the handle; a
+-- destructor that can fail is SPEC §12 Open, so this one returns `1` and drops the error, as
+-- Rust's `Drop for File` does; `close(f)` is the explicit form that reports it.
+data File drop close_quietly = File(fd)      -- `fd`: an opaque host type
+extern close : !(File => 1 + IoError)
+fn close_quietly(f: File) -> 1 = match close(f) { inl _ -> () | inr _ -> () }

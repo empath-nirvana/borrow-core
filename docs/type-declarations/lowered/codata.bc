@@ -1,0 +1,52 @@
+-- Target 8 of docs/type-declarations-design.md §9.8: a declared codata iterator, hand-lowered.
+-- `proposed/codata.bc` declares
+--
+--   codata Countdown {
+--     next      : F (i32 * Self + 1)      -- the next number and the rest, or the end
+--     remaining : F (i32 * Self)          -- how many are left, and the rest (unchanged)
+--     close     : F 1
+--   }
+--
+-- A codata declaration is a name for a `nu` whose observations are labelled: three observations
+-- are a `&` of two observation trees (SPEC §7, `NuOk`), here `(next & remaining) & close`, and
+-- `Self` is `U X`. `c.next` is the projection path `.1.1`, `c.remaining` is `.1.2`, `c.close` is
+-- `.2`. `unfold` builds one from a state and a step with one arm per observation; the step's
+-- arms are what the proposed `unfold n { next -> … | remaining -> … | close -> … }` elaborates to.
+--
+-- Answer: (i32[3], (i32[2], i32[1])): the first `next` gives 3, `remaining` is then 2, and the
+-- second `next` gives 2, returned less one so that an observation read from the wrong
+-- projection (`remaining` twice, or `next` not advancing) gives a different triple.
+
+def count_step : !U (i32 -o (F (i32 * i32 + 1) & F (i32 * i32)) & F 1) =
+  !thunkv fun (s : i32) ->
+    < < case (unbang host[eqz32]) s {
+          inl u -> return (inl (s, (unbang host[sub32]) (s, i32[1])))
+        | inr u -> return (inr ())
+        },
+        return (s, s) >,
+      return () >
+
+def countdown : i32 => U (nu X. (F (i32 * U X + 1) & F (i32 * U X)) & F 1) =
+  thunkv fun (n : i32) ->
+    f <- return (unbang (unfold[nu X. (F (i32 * U X + 1) & F (i32 * U X)) & F 1, i32] count_step));
+    return (thunkv nu_in < < (nu_out (force f n)).1.1, (nu_out (force f n)).1.2 >, (nu_out (force f n)).2 >)
+
+main : F (i32 * (i32 * i32)) =
+  c <- return (countdown i32[3]);
+  o1 <- (nu_out (force c)).1.1;
+  case o1 {
+    inl p ->
+      let (a, c2) = p;
+      o2 <- (nu_out (force c2)).1.2;
+      let (left, c3) = o2;
+      o3 <- (nu_out (force c3)).1.1;
+      case o3 {
+        inl q ->
+          let (b, c4) = q;
+          u <- (nu_out (force c4)).2;
+          let () = u;
+          return (a, (left, (unbang host[sub32]) (b, i32[1])))
+      | inr u -> return (a, (left, i32[0]))
+      }
+  | inr u -> return (i32[0], (i32[0], i32[0]))
+  }

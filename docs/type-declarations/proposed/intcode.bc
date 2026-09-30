@@ -1,0 +1,41 @@
+-- Target 3 (design §9.3): an Intcode-style instruction type, in the proposed surface. Does not
+-- parse today. The hand-lowered form, `../lowered/intcode.bc`, runs.
+
+data Param derives eq, debug = Pos(i32) | Imm(i32) | Rel(i32)
+
+data Instr derives eq, debug =
+    Add(a: Param, b: Param, to: Param)
+  | Mul(a: Param, b: Param, to: Param)
+  | Input(to: Param)
+  | Output(a: Param)
+  | JumpIfTrue(c: Param, to: Param)
+  | JumpIfFalse(c: Param, to: Param)
+  | Less(a: Param, b: Param, to: Param)
+  | Equals(a: Param, b: Param, to: Param)
+  | AdjustBase(a: Param)
+  | Halt
+
+fn exec(m: Machine, i: Instr) -> Machine =
+  match i {
+    Add(a, b, to) -> store(m, to, load(m, a) + load(m, b))
+  | Mul(a, b, to) -> store(m, to, load(m, a) * load(m, b))
+  | Halt -> halt(m)
+  | _ -> …
+  }
+
+-- Elaboration: `Param` is `i32 + (i32 + i32)`, `Instr` a right-nested `+` of ten summands whose
+-- payloads are right-nested `*` of `Param`s (the last, `Halt`, is `1`). No `mu`, no `box`: an
+-- `Instr` is a value.
+--
+-- Layout (design §5.2):
+--   today's backend (`Backend/README.md`, `|A ⊕ B| = 1 + max |A| |B|`): nested sums nest tag
+--   words, so `Param` is 1 + max(1, 1 + max(1, 1)) = 3 words and `Instr` is
+--   1 + max(9, 1 + max(9, 1 + max(3, …))) = 17 words (the ninth summand's payload sits under
+--   nine tag words);
+--   with the recommended n-ary tag (one word per maximal `+` nest): `Param` is 2 words and
+--   `Instr` 1 + 3 × 2 = 7;
+--   with a tag packed beside a 32-bit payload in one word (design §5.3): `Param` is 1 word and
+--   `Instr` 1 + 3 = 4.
+--
+-- `debug[Instr]` prints `Mul(Pos(4), Imm(3), Pos(4))`: the constructor name, then the fields.
+-- `eq[Instr]` compares tags, then payloads field by field.

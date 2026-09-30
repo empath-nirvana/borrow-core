@@ -1,0 +1,89 @@
+-- Target 2 of docs/type-declarations-design.md §9.2: the JSON value type, hand-lowered.
+--
+-- `proposed/json.bc` declares `Json` with `Arr(Vec[Json])` and `Obj(Vec[Member])`: recursion
+-- *nested* under another recursive type. That is outside `FShape` (SPEC §6: a leaf must be
+-- closed), so the declared type would have no fold and no destructor. This file uses the
+-- encoding available today, one `mu` in `FShape`: every node carries its key (inside an object)
+-- and its next sibling, and an array or an object points at its first child ("left child,
+-- right sibling"). §9.2 of the design weighs this against extending `FShape`.
+--
+-- The encoder is what `encode[Json]` specialises to at a borrowed value: a `fold_imm` whose
+-- algebra is the encoder of the unrolled node, with the encoding of the children in place. The
+-- result type of a `fold_imm` must outlive every lifetime, and a thunk does not (`VOutlives`
+-- has no `U` case), so the fold cannot return a writer (`Out -o F Out`); it returns the text,
+-- as a list of bytes, which `main` then writes. §6.4 of the design records this.
+--
+-- Answer: the line `{"a":[1,true,"hi"],"b":null,"c":{}}` and i32[0].
+
+-- The text of a string, and the encoder's result: bytes, first byte first.
+type Txt = mu X. 1 + (i32 * X)
+
+-- One node: (key inside an object, (kind, next sibling)); a kind is
+-- Null | Bool(bool) | Num(i32) | Str(Txt) | Arr(first child) | Obj(first child).
+type J = mu X. (1 + i32) * ((1 + ((1 + 1) + (i32 + (Txt + ((1 + ref X) + (1 + ref X)))))) * (1 + ref X))
+
+def nil : Txt = roll inl ()
+fn cons(x: i32, t: Txt) -> Txt = roll inr (x, t)
+
+-- `a ++ b`, by an owned fold into a function of the tail.
+type App = U (Txt -o F Txt)
+fn app_alg(r: 1 + i32 * App) -> App =
+  match r { inl _ -> { b -> b } | inr (x, k) -> { b -> t <- k!(b); cons(x, t) } }
+def app_fold : !(Txt => App) = fold_own[1 + i32 * X, App] app_alg
+fn app(a: Txt, b: Txt) -> Txt = let k = app_fold(a); k!(b)
+
+-- A number from 0 to 99, in decimal, before `t`.
+fn num(n: i32, t: Txt) -> Txt =
+  if n < 10 { cons(48 + n, t) }
+  else { match host[div_u32] (n, 10) {
+           inl q -> match host[rem_u32] (n, 10) { inl r -> cons(48 + q, cons(48 + r, t)) | inr _ -> t }
+         | inr _ -> t } }
+
+-- The algebra: one node, with its first child's and its sibling's encodings in place.
+fn enc_alg<'y>(r: (1 + i32) * ((1 + ((1 + 1) + (i32 + (Txt + ((1 + Txt) + (1 + Txt)))))) * (1 + Txt))) -> Txt =
+  let (key, rest) = r;
+  let (kind, sib) = rest;
+  let after = match sib { inl _ -> nil | inr s -> cons(44, s) };
+  let body = match kind {
+    inl _ -> cons(110, cons(117, cons(108, cons(108, after))))
+  | inr k1 -> match k1 {
+      inl b -> match b { inl _ -> cons(102, cons(97, cons(108, cons(115, cons(101, after)))))
+                       | inr _ -> cons(116, cons(114, cons(117, cons(101, after)))) }
+    | inr k2 -> match k2 {
+        inl n -> num(n, after)
+      | inr k3 -> match k3 {
+          inl s -> cons(34, app(s, cons(34, after)))
+        | inr k4 -> match k4 {
+            inl a -> match a { inl _ -> cons(91, cons(93, after)) | inr c -> cons(91, app(c, cons(93, after))) }
+          | inr o -> match o { inl _ -> cons(123, cons(125, after)) | inr c -> cons(123, app(c, cons(125, after))) } } } } } };
+  match key { inl _ -> body | inr c -> cons(34, cons(c, cons(34, cons(58, body)))) }
+
+def encode : !(all 'a < top. imm 'a J => Txt) =
+  fold_imm[(1 + i32) * ((1 + ((1 + 1) + (i32 + (Txt + ((1 + ref X) + (1 + ref X)))))) * (1 + ref X)), 'b, top, Txt] enc_alg
+
+-- The constructors, as the declaration's elaboration would name them.
+fn mk(k: 1 + i32, kind: 1 + ((1 + 1) + (i32 + (Txt + ((1 + ref J) + (1 + ref J))))), sib: 1 + ref J) -> J =
+  roll (k, (kind, sib))
+
+-- Writing text: an owned fold into a function of the output (`corpus/gen-lines.bc`).
+type Run = U (Out -o F (Out * 1))
+fn run_alg(r: 1 + i32 * Run) -> Run =
+  match r { inl _ -> { o -> (o, ()) } | inr (x, k) -> { o -> let (o, _) = putb(o, x); k!(o) } }
+def run_txt : !(Txt => Run) = fold_own[1 + i32 * X, Run] run_alg
+
+main -> i32 =
+  -- {"a":[1,true,"hi"],"b":null,"c":{}}
+  let hi = mk(inl (), inr (inr (inr (inl (cons(104, cons(105, nil)))))), inl ());
+  let t = mk(inl (), inr (inl (inr ())), inr (alloc(hi)));
+  let one = mk(inl (), inr (inr (inl 1)), inr (alloc(t)));
+  let c = mk(inr 99, inr (inr (inr (inr (inr (inl ()))))), inl ());
+  let b = mk(inr 98, inl (), inr (alloc(c)));
+  let a = mk(inr 97, inr (inr (inr (inr (inl (inr (alloc(one))))))), inr (alloc(b)));
+  let root = mk(inl (), inr (inr (inr (inr (inr (inr (alloc(a))))))), inl ());
+  let cell = alloc(root);
+  let txt = borrow imm cell { 'x, v -> encode(v) };
+  let w = run_txt(txt);
+  r <- w!(stdout);
+  let (stdout, _) = r;
+  putb(&mut stdout, 10);
+  0

@@ -1,0 +1,31 @@
+-- Target 6 (design §9.6): a record holding views into a buffer, with a lifetime parameter, in
+-- the proposed surface. Does not parse today. `../lowered/views.bc` runs.
+
+data Field<'a> derives debug = { name: slice 'a u8, value: slice 'a u8 }
+
+data Tok<'a> derives debug =                  -- strings design P8
+    Punct(u8)
+  | Str(slice 'a u8)
+  | Num(i32)
+  | Word(slice 'a u8)
+  | End
+
+fn parse<'a>(line: slice 'a u8) -> Option[Field<'a>] =
+  match find(line, b'=') {
+    None -> None
+  | Some(i) -> let (name, rest) = split_at(line, i);
+               Some(Field { name, value: drop_first(rest) })
+  }
+
+-- Elaboration: `Field<'a>` is `array_imm 'a u8 * array_imm 'a u8` with `'a` substituted; a
+-- lifetime parameter is substituted like a type parameter, and the outlives facts come from
+-- the substituted structure: `Field<'x> ⊐ @b` iff `'x ⊐ @b` (SPEC §9's `[L]` rule at each
+-- field). No variance is declared.
+--
+-- Shortening: `Field<'x>` to `Field<'y>` with `'y < 'x` is not a core rule (`:>` is on one
+-- borrow). A derived `shorten` would destructure, shorten each leaf, and rebuild, erasing to
+-- nothing (design §3.3). Here every leaf is a family (`array_imm`), which has no shortening
+-- today (decision 45), so a call that needs `Field<'x>` at a shorter lifetime is rejected, with
+-- a request to write the lifetime, until families can be shortened.
+--
+-- Layout: two `(ptr, len)` views, four words, unboxed.

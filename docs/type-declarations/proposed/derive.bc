@@ -1,0 +1,115 @@
+-- The derivation machinery of design §6, in the proposed surface: attribute declarations, the
+-- structure view, and polytypic functions written once by cases on it. Does not parse today.
+-- Everything here is library code in `lib/json.bc` and `lib/schema.bc`; the only language
+-- parts are the forms `attr`, `poly`, `impl` and `derives`.
+
+-- ---------------------------------------------------------------------------------------------
+-- Attributes: declared, typed, and checked where they are used.
+-- ---------------------------------------------------------------------------------------------
+
+-- The metadata the elaborator builds for every declaration: ordinary persistent data.
+data DataMeta  = { name: lit, package: lit, params: i32 }
+data FieldMeta = { label: lit, index: i32 }
+data ConMeta   = { name: lit, index: i32, arity: i32 }
+
+-- An attribute declaration: a name, the targets it may be written on, and a record of
+-- parameters with defaults. `@json(rename = "x")` on a field is checked against it: the name
+-- must resolve, each parameter must exist and have the declared type, and a parameter with no
+-- default must be given. A misspelled attribute or parameter is an unknown-name error.
+data Case    = Keep | Camel | Snake | Kebab
+data Tagging = External | Internal(tag: lit) | Adjacent(tag: lit, content: lit) | Untagged
+
+attr json on field = { rename: Option[lit] = None, skip: bool = false, flatten: bool = false }
+attr json on con   = { rename: Option[lit] = None }
+attr json on data  = { rename_all: Case = Keep, tagging: Tagging = External, deny_unknown: bool = false }
+
+-- A parameter whose type is the target's own type: `@default(3)` on an `i32` field is checked
+-- at `i32`, on a `Phase` field at `Phase`.
+attr default on field of T = T
+
+-- A parameter whose type is a function type: `@json_with(encode_rfc3339)` must name a function
+-- of `encode`'s signature at the field's type.
+attr json_with on field of T = poly encode at T
+
+attr schema on field, data = {
+  minimum: Option[i64] = None, maximum: Option[i64] = None,
+  min_length: Option[i32] = None, max_length: Option[i32] = None,
+  pattern: Option[lit] = None, format: Option[lit] = None, description: Option[lit] = None,
+}
+
+-- ---------------------------------------------------------------------------------------------
+-- A polytypic function: one definition by cases on the structure view (design §6.2).
+-- ---------------------------------------------------------------------------------------------
+--
+-- The cases are the core's formers plus the declaration's labels:
+--   data(d) A       a declared type `N`, with its metadata `d`; `A` is its structure (the iso)
+--   record F        a labelled product: `F` is a `*`-spine of `field(f) A`
+--   variant C       a labelled sum: `C` is a `+`-spine of `con(c) F`
+--   A * B, A + B    the spines themselves
+--   i32, i64, u8, 1, lit, slice 'a A, array A, box A, …   leaves
+--   rec             a recursive occurrence of the type being folded (the carrier `R`)
+-- `v` is a view (`view 'a T`, SPEC §5's fieldwise `Imm̲`), so a record's view is the tuple of
+-- its fields' views and destructuring it is free.
+
+poly encode[T]<'a>(o: Out, v: view 'a T) -> Out {
+  i32              -> put_dec(o, v)
+  bool             -> if v { write(o, "true") } else { write(o, "false") }
+  lit              -> write_quoted(o, v)
+  data(d) A        -> encode[A](o, v)                         -- the iso is the identity
+  record F         -> let o = write(o, "{"); let (o, _) = members[F](o, v, true); write(o, "}")
+  variant C        -> if nullary[C] { write_quoted(o, con_name[C](v)) }   -- a C-like enum
+                      else { tagged[C](o, v) }                            -- by `@json(tagging)`
+  A + B            -> match v { inl a -> encode[A](o, a) | inr b -> encode[B](o, b) }
+  slice 'b A       -> write_array[A](o, v)
+}
+
+poly members[F]<'a>(o: Out, v: view 'a F, first: bool) -> Out * bool {
+  A * B            -> let (a, b) = v; let (o, first) = members[A](o, a, first); members[B](o, b, first)
+  field(f) A       -> if json(f).skip || !present[A](v) { (o, first) }
+                      else { let o = if first { o } else { write(o, ",") };
+                             let o = write_key(o, json(f).rename.or(f.label));
+                             (encode_field[A](f, o, v), false) }
+}
+
+-- Presence: every value is present, except the ones an override says are not.
+poly present[T]<'a>(v: view 'a T) -> bool { _ -> true }
+impl present[Option[A]] = is_some[A]
+
+-- A field's encoder: the `@json_with` function if the field has one, `encode[A]` otherwise.
+-- (`json_with(f)` is `Option[…]` of a function known at elaboration: the match is resolved there.)
+fn encode_field[A]<'a>(f: FieldMeta, o: Out, v: view 'a A) -> Out =
+  match json_with(f) { Some(g) -> g(o, v) | None -> encode[A](o, v) }
+
+-- Schema: no value argument; the result is text, built at elaboration or at run time.
+poly schema[T](o: Out) -> Out {
+  i32              -> write(o, "{\"type\":\"integer\",\"format\":\"int32\"}")
+  data(d) A        -> schema[A](o)                            -- inlined: a CRD may not use `$ref`
+  record F         -> …  "properties" from `field`, "required" from the fields where
+                          `!optional[A] && default(f) == None`, and each field's `@schema` values
+  variant C        -> if nullary[C] { … "enum": [con names] … } else { … "oneOf" … }
+  rec              -> error "a recursive type has no CRD schema: give `schema` an override"
+}
+
+-- Equality: by cases, for every type whose leaves have it.
+poly eq[T]<'a, 'b>(x: view 'a T, y: view 'b T) -> bool {
+  i32 -> x == y   u8 -> x == y   1 -> true
+  A * B -> let (a1, b1) = x; let (a2, b2) = y; eq[A](a1, a2) && eq[B](b1, b2)
+  A + B -> match (x, y) { (inl a, inl b) -> eq[A](a, b) | (inr a, inr b) -> eq[B](a, b) | _ -> false }
+  data(d) A -> eq[A](x, y)
+  rec -> …    -- a recursive type: a fold over the pair (design §6.4, open)
+}
+
+-- ---------------------------------------------------------------------------------------------
+-- Overrides and derivation.
+-- ---------------------------------------------------------------------------------------------
+
+-- A type provides its own instance: at most one `impl` per (poly, type) in a program, written
+-- in the package of the type or of the poly. The function must have the poly's signature at
+-- the type.
+data Duration = { nanos: i64 }
+impl encode[Duration] = encode_duration          -- "30s", not {"nanos":30000000000}
+impl schema[Duration] = schema_duration          -- {"type":"string","format":"duration"}
+
+-- `derives encode` on a declaration is `impl encode[N] = <the structural instance>`, exported
+-- with `N`. Outside `N`'s package there is no other way to get `encode[N]`: the structural
+-- cases need the iso, which an abstract type does not export.

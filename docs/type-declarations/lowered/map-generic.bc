@@ -1,0 +1,48 @@
+-- EXPECTED TO BE REJECTED today. `map.bc` with `empty` and `insert` generic in `K, V`, as the
+-- template `Map[K, V]` would elaborate them: a generic `fn` whose signature has a type
+-- parameter inside a `mu` does not elaborate at its call (design §3.1). Kept as the evidence.
+--
+-- Target 5 of docs/type-declarations-design.md §9.5: the declaration side of a generic
+-- `Map[K, V]`, hand-lowered. `proposed/map.bc` declares an interface that exports the name
+-- `Map[K, V]` and its functions but not its iso, and an implementation whose representation
+-- here is an association list, newest first:
+--
+--   data Map[K, V] = Empty | Entry(key: K, value: V, rest: Map[K, V])      -- (unboxed)
+--
+-- A parameterised declaration is a template, as a generic `fn` is (decision 45): `Map[i32, i32]`
+-- is the `mu` below with `K := i32, V := i32`. There are no `type` parameters today, so every
+-- signature writes the `mu` out; that repetition is what §3.1 of the design removes.
+--
+-- `get` is a borrowed fold whose result is a function of the key. The result of a `fold_imm`
+-- must outlive every lifetime, and a thunk does not, but a `!` closure does (`VOutlives.bang`);
+-- a `!` closure may capture only persistent values, so this `get` is for persistent `K` and `V`.
+--
+-- Answer: i32[3] (entries) * (i32[20] (the newest value of key 1) * i32[0] (key 9 absent)).
+
+fn empty[K, V]() -> mu X. 1 + ((K * V) * X) = roll inl ()
+
+fn insert[K, V](m: mu X. 1 + ((K * V) * X), k: K, v: V) -> mu X. 1 + ((K * V) * X) =
+  roll inr ((k, v), m)
+
+fn size_alg<'y>(r: 1 + ((i32 * i32) * i32)) -> i32 = match r { inl _ -> 0 | inr (e, n) -> n + 1 }
+def size : !(all 'a < top. imm 'a (mu X. 1 + ((i32 * i32) * X)) => i32) =
+  fold_imm[1 + ((i32 * i32) * X), 'b, top, i32] size_alg
+
+fn get_alg<'y>(r: 1 + ((i32 * i32) * !(i32 => i32 + 1))) -> !(i32 => i32 + 1) =
+  match r {
+    inl _ -> !{ q -> inr () }
+  | inr (e, rest) -> let (k, v) = e; !{ q -> if q == k { inl v } else { (unbang rest)(q) } }
+  }
+def get : !(all 'a < top. imm 'a (mu X. 1 + ((i32 * i32) * X)) => !(i32 => i32 + 1)) =
+  fold_imm[1 + ((i32 * i32) * X), 'b, top, !(i32 => i32 + 1)] get_alg
+
+main -> i32 * (i32 * i32) =
+  let m = insert(insert(insert(empty[i32, i32](), 1, 10), 2, 5), 1, 20);
+  let cell = alloc(m);
+  borrow imm cell { 'x, v ->
+    let (v, w) = copy['x, mu X. 1 + ((i32 * i32) * X)](v);
+    let n = size(v);
+    let f = get(w);
+    let a = match (unbang f)(1) { inl x -> x | inr _ -> 0 - 1 };
+    let b = match (unbang f)(9) { inl x -> x | inr _ -> 0 };
+    (n, (a, b)) }

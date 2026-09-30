@@ -1,0 +1,54 @@
+-- Target 5 of docs/type-declarations-design.md §9.5: the declaration side of a generic
+-- `Map[K, V]`, hand-lowered. `proposed/map.bc` declares an interface that exports the name
+-- `Map[K, V]` and its functions but not its iso, and an implementation whose representation
+-- here is an association list, newest first:
+--
+--   data Map[K, V] = Empty | Entry(key: K, value: V, rest: Map[K, V])      -- (unboxed)
+--
+-- A parameterised declaration is a template, as a generic `fn` is (decision 45): `Map[i32, i32]`
+-- is the `mu` below with `K := i32, V := i32`. There are no `type` parameters today, so every
+-- signature writes the `mu` out; that repetition is what §3.1 of the design removes. The
+-- functions are written at `i32` by hand: the generic form, `map-generic.bc`, is rejected
+-- today, because a generic `fn` whose signature has a type parameter inside a `mu` does not
+-- elaborate (design §3.1).
+--
+-- `size` is a borrowed fold with a data carrier. A borrowed `get` would need a carrier that is a
+-- function of the key: a thunk does not outlive (`VOutlives` has no `U` case), and a `!`
+-- closure may capture only `!`-typed variables (SPEC §2's `!Γ`), not the keys (the checker
+-- rejects it: "`!thunk` promotes only over `!` types, but `v`, of type `i32`, is used inside").
+-- So `get` folds an owned copy, whose carrier may be a thunk (design §6.4).
+--
+-- Answer: i32[3] (entries) * (i32[20] (the newest value of key 1) * i32[0] (key 9 absent)).
+
+def empty : mu X. 1 + ((i32 * i32) * X) = roll inl ()
+
+fn insert(m: mu X. 1 + ((i32 * i32) * X), k: i32, v: i32) -> mu X. 1 + ((i32 * i32) * X) =
+  roll inr ((k, v), m)
+
+fn size_alg<'y>(r: 1 + ((i32 * i32) * i32)) -> i32 = match r { inl _ -> 0 | inr (e, n) -> n + 1 }
+def size : !(all 'a < top. imm 'a (mu X. 1 + ((i32 * i32) * X)) => i32) =
+  fold_imm[1 + ((i32 * i32) * X), 'b, top, i32] size_alg
+
+-- `get` over an owned map: `fold_own` has no outlives condition, so its carrier may be a
+-- function of the key. The map is persistent here (no cells), so `clone(m)` copies it first. A
+-- thunk has no destructor, so each entry's function runs the rest of the chain even when it
+-- has found the key: the carrier is linear.
+type Look = U (i32 -o F (i32 + 1))
+fn get_alg(r: 1 + ((i32 * i32) * Look)) -> Look =
+  match r {
+    inl u -> { q -> inr () }
+  | inr (e, rest) -> let (k, v) = e; { q -> r <- rest!(q); if q == k { inl v } else { r } }
+  }
+def get : !((mu X. 1 + ((i32 * i32) * X)) => Look) = fold_own[1 + ((i32 * i32) * X), Look] get_alg
+
+main -> i32 * (i32 * i32) =
+  let m = insert(insert(insert(empty, 1, 10), 2, 5), 1, 20);
+  let f = get(clone(m));
+  a <- f!(1);
+  let a = match a { inl x -> x | inr _ -> 0 - 1 };
+  let g = get(clone(m));
+  b <- g!(9);
+  let b = match b { inl x -> x | inr _ -> 0 };
+  let cell = alloc(m);
+  let n = borrow imm cell { 'x, v -> size(v) };
+  (n, (a, b))

@@ -1,0 +1,117 @@
+-- Target 1 of docs/type-declarations-design.md §9.1: a CRD spec and status, hand-lowered to
+-- today's language. `proposed/crd.bc` is the declaration in the proposed surface; this file
+-- is what its elaboration would produce: the types as structural aliases, and the specialised
+-- `encode`, `present` and `validate` of §6 written out, one function per declared type.
+--
+-- The generated code is ordinary core over the capability `Out`. Keys are written byte by byte
+-- because text literals are strings stage S5; the elaborated form writes a literal view.
+--
+-- Answer: the line
+--   {"spec":{"size":2,"containerPort":11211},"status":{"phase":"Running","readyReplicas":2}}
+-- then the line `{"spec":{"size":7,"containerPort":80,"version":3}}`, then i32[1]: the first
+-- object is valid, the second is rejected by the `minimum`/`maximum` check on `size` (field
+-- 1), and its absent `status` and present `version` show the optional-field rule.
+
+-- data Phase = Pending | Running | Failed                      (a C-like enum)
+type Phase = 1 + (1 + 1)
+-- data Spec = { size: i32 @schema(minimum = 1, maximum = 3),
+--               container_port: i32 @json(rename = "containerPort"),
+--               version: Option[i32] }
+type Spec = i32 * (i32 * (1 + i32))
+-- data Status = { phase: Phase, ready_replicas: Option[i32] @json(rename = "readyReplicas") }
+type Status = Phase * (1 + i32)
+-- data Memcached = { spec: Spec, status: Option[Status] }
+type Memcached = Spec * (1 + Status)
+
+-- One byte out.
+fn pc(o: Out, c: u8) -> Out = let (o, _) = putb(o, to_i32(c)); o
+
+-- encode[i32]: a signed number in decimal.
+fn enc_i32(o: Out, x: i32) -> Out =
+  if x < 0 { let (o, _) = putb(o, 45); let (o, _) = put_dec(o, 0 - x); o }
+  else { let (o, _) = put_dec(o, x); o }
+
+-- The record case: `{`, and `,` before every field but the first present one.
+fn sep(o: Out, first: bool) -> Out = if first { o } else { pc(o, b',') }
+
+-- A key, quoted, and its colon. One function per label (a literal view once S5 lands).
+fn k_size(o: Out) -> Out =
+  pc(pc(pc(pc(pc(pc(pc(o, b'"'), b's'), b'i'), b'z'), b'e'), b'"'), b':')
+fn k_port(o: Out) -> Out =
+  let o = pc(pc(pc(pc(pc(pc(pc(o, b'"'), b'c'), b'o'), b'n'), b't'), b'a'), b'i');
+  let o = pc(pc(pc(pc(pc(pc(o, b'n'), b'e'), b'r'), b'P'), b'o'), b'r');
+  pc(pc(pc(o, b't'), b'"'), b':')
+fn k_version(o: Out) -> Out =
+  let o = pc(pc(pc(pc(pc(o, b'"'), b'v'), b'e'), b'r'), b's');
+  pc(pc(pc(pc(pc(o, b'i'), b'o'), b'n'), b'"'), b':')
+fn k_phase(o: Out) -> Out =
+  pc(pc(pc(pc(pc(pc(pc(pc(o, b'"'), b'p'), b'h'), b'a'), b's'), b'e'), b'"'), b':')
+fn k_ready(o: Out) -> Out =
+  let o = pc(pc(pc(pc(pc(pc(pc(o, b'"'), b'r'), b'e'), b'a'), b'd'), b'y'), b'R');
+  let o = pc(pc(pc(pc(pc(pc(o, b'e'), b'p'), b'l'), b'i'), b'c'), b'a');
+  pc(pc(pc(o, b's'), b'"'), b':')
+fn k_spec(o: Out) -> Out =
+  pc(pc(pc(pc(pc(pc(pc(o, b'"'), b's'), b'p'), b'e'), b'c'), b'"'), b':')
+fn k_status(o: Out) -> Out =
+  let o = pc(pc(pc(pc(pc(o, b'"'), b's'), b't'), b'a'), b't');
+  pc(pc(pc(pc(o, b'u'), b's'), b'"'), b':')
+
+-- encode[Phase]: a C-like enum is its constructor's name, as a JSON string.
+fn enc_phase(o: Out, p: Phase) -> Out =
+  let o = pc(o, b'"');
+  let o = match p {
+    inl _ -> pc(pc(pc(pc(pc(pc(pc(o, b'P'), b'e'), b'n'), b'd'), b'i'), b'n'), b'g')
+  | inr q -> match q {
+      inl _ -> pc(pc(pc(pc(pc(pc(pc(o, b'R'), b'u'), b'n'), b'n'), b'i'), b'n'), b'g')
+    | inr _ -> pc(pc(pc(pc(pc(pc(o, b'F'), b'a'), b'i'), b'l'), b'e'), b'd') }
+  };
+  pc(o, b'"')
+
+-- encode[Spec]: the record case over three fields; `version` is written only when present
+-- (`present[Option[A]]` is `is_some`, §6.3).
+fn enc_spec(o: Out, s: Spec) -> Out =
+  let (size, r) = s;
+  let (port, version) = r;
+  let o = pc(o, b'{');
+  let o = enc_i32(k_size(sep(o, true)), size);
+  let o = enc_i32(k_port(sep(o, false)), port);
+  let o = match version { inl _ -> o | inr v -> enc_i32(k_version(sep(o, false)), v) };
+  pc(o, b'}')
+
+-- encode[Status]
+fn enc_status(o: Out, s: Status) -> Out =
+  let (phase, ready) = s;
+  let o = pc(o, b'{');
+  let o = enc_phase(k_phase(sep(o, true)), phase);
+  let o = match ready { inl _ -> o | inr n -> enc_i32(k_ready(sep(o, false)), n) };
+  pc(o, b'}')
+
+-- encode[Memcached]
+fn enc_memcached(o: Out, m: Memcached) -> Out =
+  let (spec, status) = m;
+  let o = pc(o, b'{');
+  let o = enc_spec(k_spec(sep(o, true)), spec);
+  let o = match status { inl _ -> o | inr st -> enc_status(k_status(sep(o, false)), st) };
+  pc(o, b'}')
+
+-- validate[Spec]: the typed `@schema` constraints, checked on decode as well as published in
+-- the schema. `inl ()` is valid; `inr i` names the first failing field, counting from 1.
+fn validate_spec(s: Spec) -> 1 + i32 =
+  let (size, r) = s;
+  if size < 1 || 3 < size { inr 1 } else { inl () }
+
+fn spec_of(m: Memcached) -> Memcached * Spec =
+  let (spec, status) = m;
+  let (size, r) = spec;
+  let (port, version) = r;
+  (((size, (port, version)), status), (size, (port, version)))
+
+main -> i32 =
+  let good : Memcached = ((2, (11211, inl ())), inr (inr (inl ()), inr 2));
+  let bad : Memcached = ((7, (80, inr 3)), inl ());
+  let good = enc_memcached(stdout, good);
+  let stdout = pc(good, b'\n');
+  let (bad, spec) = spec_of(bad);
+  let stdout = enc_memcached(stdout, bad);
+  let stdout = pc(stdout, b'\n');
+  match validate_spec(spec) { inl _ -> 0 | inr i -> i }
