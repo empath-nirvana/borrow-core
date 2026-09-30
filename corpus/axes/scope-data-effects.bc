@@ -5,7 +5,7 @@
 -- list for a moment, and `map_inc` rebuilds it in place with `fold_reuse` (each node's cells are
 -- reused). The second block borrows the cell `imm`, folds the list with `fold_imm`, and writes
 -- the sum to standard output inside the borrow: the capability is not borrowed, so it is
--- passed into the block and handed back out with the block's result.
+-- passed into the block and handed back beside the block's result.
 --
 -- Answer: the line `126`, and `i32[126]`: [100, 20, 3] incremented is [101, 21, 4]. A
 -- `fold_reuse` that lost the new content gives 123; one that incremented a node twice gives 127,
@@ -37,10 +37,10 @@ def sum : !(all 'a < top. imm 'a List => i32) = fold_imm[1 + (ref i32 * ref X), 
 main -> i32 =
   let r = alloc(cons(100, cons(20, cons(3, nil))));
   borrow mut r { m -> modify m { l -> map_inc(l) } };
-  let (stdout, n) = borrow imm r { 'x, b ->
+  let n = borrow imm r { 'x, b ->
     let n = (unbang sum) ['x] b;
     let (stdout, _) = put_dec(stdout, n);
     let (stdout, _) = putb(stdout, 10);
-    (stdout, n)
+    n
   };
   n

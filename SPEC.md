@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 0.23 · 2026-09-29
+Version 0.24 · 2026-09-30
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -442,8 +442,6 @@ between engines is tested on the corpus, not proved.
 
 - Floats (`F32`, `F64`) by the same scheme; Wasm's NaN bit patterns are nondeterministic.
 - Checked (non-wrapping) arithmetic is derivable from the operations above.
-- `read_byte`/`write_byte` (§11) still take and return `I32`; moving them and the byte list
-  `Bytes` to `U8` changes every I/O program's types, and is left to the text library (S5).
 - `plainV` excludes the integer types, so they cannot yet be `withborS` leaves.
 - The backend's layout is type-directed (`Backend/README.md`, Representation): `I32` and `I64`
   are each one unboxed word.
@@ -756,7 +754,7 @@ dropped. Each opaque type `k` has a **model**, a predicate `k.Holds` on values, 
     𝒱⟦k⟧δ(v) ≜ ⌜k.Holds v⌝                                      (in both modes)
     Imm̲ 'b k ≜ Unk          Δ ⊢ k ⊐ @a (at every @a)          not persistent, no destructor
 
-- `Input.Holds v`: `v` is a byte list `Bytes = μX. 1 ⊕ (I32 ⊗ X)`, the input not yet read.
+- `Input.Holds v`: `v` is a byte list `Bytes = μX. 1 ⊕ (U8 ⊗ X)`, the input not yet read.
 - `Output.Holds v`: `v = (fd, bs)` with `fd : I32` the stream and `bs : Bytes` the bytes written
   to it, most recent first. The stream travels with the content: whichever cell holds it, a
   write goes to `fd`.
@@ -784,8 +782,10 @@ and hand it back:
 
 | extern | type |
 |---|---|
-| `read_byte` | `!(all 'a < top. mut 'a input => mut 'a input * (i32 + 1))` — the next byte, or `inr ()` at the end of the input |
-| `write_byte` | `!(all 'a < top. mut 'a output * i32 => mut 'a output)` — the low 8 bits of the integer |
+| `read_byte` | `!(all 'a < top. mut 'a input => mut 'a input * (u8 + 1))` — the next byte, or `inr ()` at the end of the input |
+| `write_byte` | `!(all 'a < top. mut 'a output * u8 => mut 'a output)` — one byte |
+| `write_all` | `!(all 'a < top. all 'b < top. mut 'a output * array_imm 'b u8 => mut 'a output)` — every byte of the view, in order |
+| `read_into` | `!(all 'a < top. all 'b < top. mut 'a input * array_mut 'b u8 => mut 'a input * (array_mut 'b u8 * i32))` — bytes of the input into the view from its start, until it is full or the input ends, and how many; fewer than its length only at the end |
 
 So a function's type shows which capabilities it can use: a helper that writes takes
 `mut 'a output` (or the cell, `ref output`), one that reads takes `mut 'a input`, and one that
@@ -799,13 +799,13 @@ is its caller's choice. The bundle is split and lent with the existing machinery
 destructures it, borrows one capability with `withbor2` and passes `mut 'a output` to a helper,
 or passes the whole cell.
 
-**Why two operations.** Bytes are the unit of both streams, and end of input is the `inr ()` of
-a sum. Everything else a command-line tool needs — reading a line or a chunk into a borrowed
-array (§9), writing a string from a borrowed array, parsing and printing numbers, hex — is a
-loop over these two, written as library code (`corpus/io-aoc.bc` reads each line into one
-borrowed array; `corpus/io-wc.bc` prints decimal). A chunk primitive would change only the cost of a
-call, and the runtime may buffer below the interface. A new primitive is added when a loop over
-these two cannot express it.
+**Why these operations.** Bytes are the unit of both streams, and end of input is the `inr ()`
+of a sum. Everything else a command-line tool needs — reading a line into a buffer, writing a
+string, parsing and printing numbers, hex — is a loop over `read_byte` and `write_byte`, written
+as library code. `write_all` and `read_into` are such loops too, and their models are exactly
+that (below); they exist for cost, one system call per view where the loop makes one per byte,
+which a loop over the byte operations cannot express. A new primitive is added when a loop over
+the existing ones cannot express it, or cannot at an acceptable cost.
 
 **`main`.** A program with capability externs has `main : F (Caps ⊗ A)`, where `Caps` is its
 capability externs in declaration order (one alone, several as a right-nested tuple). The
@@ -821,7 +821,11 @@ the end of the input does nothing. The bound is part of the program.
 In the model the capabilities are cells holding the remaining input and the accumulated output,
 and the operations are ordinary core terms over the transparent representation
 (`Core/Stdio.lean`): `read_byte` is `withswap` popping the head of the byte list, and
-`write_byte` is `withswap` consing onto it. Four more externs construct and read capabilities;
+`write_byte` is `withswap` consing onto it. `write_all` is a counted loop (`count_fold`, §16)
+over the view's length whose step reads the byte at the index (`array_get`, `withload`) and
+writes it by `write_byte`'s term; `read_into` is a counted loop over the view's length whose
+step, while every step so far has read a byte, reads one by `read_byte`'s term and puts it in
+the slot (`slice_replace_mut`), and counts it. Four more externs construct and read capabilities;
 they are the model's harness, a handler that serves the streams from memory:
 
 | extern | type | model |
@@ -842,8 +846,8 @@ operation externs; `bcc interp` runs it with the model implementations.
 ### Theorems
 
 - **The model meets the contracts** (`Core/Stdio.lean`). Each model implementation is in the
-  relation at its extern's type, at `∅`: `readByte_meets`, `writeByte_meets`, `mkInput_meets`,
-  `mkOutput_meets`, `takeInput_meets`, `takeOutput_meets`. Each is the Fundamental Property of the
+  relation at its extern's type, at `∅`: `readByte_meets`, `writeByte_meets`, `writeAll_meets`,
+  `readInto_meets`, `mkInput_meets`, `mkOutput_meets`, `takeInput_meets`, `takeOutput_meets`. Each is the Fundamental Property of the
   term at the transparent type, and the transparency of the relation at `Input`/`Output`
   (`vC_bytes`, `vC_outRep`: the relation at the representation is the model).
 - **End to end, every implementation** (`externs_every_run`, `externs_safe`). If `run_io`'s
@@ -881,6 +885,7 @@ the program's trusted base.
 |---|---|---|
 | `stdin`, `stdout`, `stderr` | proved (7): cells with the model content | runtime cells holding the fd; assumed (1), checked against the model on the corpus |
 | `read_byte`, `write_byte` | proved (7) | WASI `fd_read`/`fd_write`; interpreter-checked (2): the flat-IR interpreter runs the lowering against scripted streams |
+| `write_all`, `read_into` | proved (7) | WASI `fd_write` of the view, again after a short write; `fd_read` into the view until it is full or the input ends; interpreter-checked (2) |
 | `mk_input`, `mk_output`, `take_input`, `take_output` | proved (7) | none: the model's harness, not compiled |
 
 An extern the compiler has no implementation for is reported as assumed and not compiled.
@@ -889,7 +894,9 @@ An extern the compiler has no implementation for is reported as assumed and not 
 
 The runtime allocates the three cells holding file descriptors 0, 1 and 2, runs `main`, frees
 the cells `main` returns and prints the result. `read_byte` is WASI `fd_read` of one byte from
-the cell's descriptor (end of input, or an error, is `inr ()`); `write_byte` is `fd_write` of one
+the cell's descriptor (end of input, or an error, is `inr ()`); `write_all` is `fd_write` of the
+view's bytes, called again after a short write; `read_into` is `fd_read` into the view, called
+again until it is full or a read answers nothing; `write_byte` is `fd_write` of one
 byte. Both are unbuffered, so a prompt appears before the next read. The plain LLVM/libc
 counterpart is `read(2)`/`write(2)` on the same descriptors (or `getc`/`putc` on a `FILE *`): no
 WASI-only feature is part of the semantics (decision 25).
@@ -921,14 +928,18 @@ uses the capabilities ambiently (below):
 
 | name | type | |
 |---|---|---|
-| `getb` | `ref input => ref input * (i32 + 1)` | one byte, the capability handed back |
-| `putb` | `ref output * i32 => ref output * 1` | one byte out |
+| `getb` | `ref input => ref input * (u8 + 1)` | one byte, the capability handed back |
+| `putb` | `ref output * u8 => ref output * 1` | one byte out |
 | `put_dec` | `ref output * i32 => ref output * 1` | a number in decimal |
-| `bytes` | `ref input => U (iter i32 (ref input) (ref input))` | the input as a stream of bytes, finishing, or closing early, with the capability |
+| `write_bytes` | `all 'b < top. ref output * array_imm 'b u8 => ref output * 1` | a byte view, in one write (`write_all`) |
+| `read_bytes` | `all 'b < top. ref input * array_mut 'b u8 => ref input * (array_mut 'b u8 * i32)` | bytes into a view (`read_into`), and how many |
+| `bytes` | `ref input => U (iter u8 (ref input) (ref input))` | the input as a stream of bytes, finishing, or closing early, with the capability |
 
 Each hides the borrow: it lends the capability to one operation and hands it back. A line
 reader is not provided: an observation must terminate, so a line of unbounded length is a loop
-of its own; programs consume `bytes` and keep the line in their state.
+of its own; programs consume `bytes` and keep the line in their state, or read the whole input
+(`read_all`, §17). Text over the streams (`write_str`, `write_string`, `write_lit`,
+`read_all`) is `lib/textio.bc` (§17).
 
 ### Sugar
 
@@ -1760,6 +1771,141 @@ machine gains one head step, parametric in the host as before.
 - Stopping early: a finished state is carried to the bound (`div_fuel` does), which costs a
   test per remaining count.
 
+## 17. Entry 16 — buffers, text and literals
+
+### Motivation
+
+Strings stage S5 of `docs/strings-slices-design.md`: a growable buffer, text over byte views, and
+literals, as library code over §9's arrays and families, §16's counted loop and §11's externs.
+Nothing in the kernel changes: no constant, rule, former or machine step. What is new is
+library code, surface forms that elaborate into core terms, and a lowering of literals.
+
+### Buffers (stage A)
+
+    buf A ≜ Array A ⊗ I32                          (surface `buf A`, `array A * i32`)
+
+The array's length is the capacity and the `I32` the length; the slots at or past the length
+hold a **filler**, chosen by the element type (`filler[A]`, elaboration): `0` at an integer, the
+empty family at a borrowed family (`slice_empty_*`), an empty array at an owned one (which
+allocates nothing), `!(λ_. filler)` at a `!` function, and componentwise at `⊗` and `⊕`. A type
+with no filler (a cell, a capability) is not buffered. `lib/buf.bc` (`include buf`): `buf_new`,
+`push`, `pop`, `take`, `reserve`, `truncate`, `clear`, `len_of`, `cap_of`, `grow`,
+`buf_of_array`, `array_tab`. `push` on a full buffer grows it to twice its capacity (at least
+8): a new array of fillers (`tab`), each element moved by `array_replace`, and the old array
+dropped with the fillers left in it. Every operation is `tab`, `array_replace`, `array_size`,
+`count` and `drop`, so buffers are sound under every allocator by §9 and §13 with nothing new.
+
+**No view across growth.** A view of a buffer exists only inside a borrow block (below), whose
+callback does not hold the buffer: a function that grows a buffer takes it and hands it back,
+and cannot be given it while a view of it is live. This is linearity, with no new check.
+
+### Text
+
+    string ≜ buf U8      text 'a ≜ [Imm 'a U8]      text_mut 'a ≜ [Mut 'a U8]
+    lit ≜ I32 ⊗ !(I32 ⇒ U8)
+
+Text is UTF-8. The types are abbreviations of the byte types, so the invariant is kept by the
+library, not enforced by typing (stage T2, with opaque types, #63): text is made from bytes only
+by validation (`str_from_utf8`, in place `from_utf8`) or by appends that write whole characters
+(`push_char`, `push_str`, `push_lit`), and an in-place change keeps it (`make_ascii_uppercase`).
+Every function is safe on any bytes: indexing is checked, and a byte that does not start a valid
+sequence decodes to U+FFFD. `lib/text.bc` (`include text`, which includes `buf` and `slice`)
+has appends, UTF-8 validation and decoding, character iteration (`chars`, codata over the rest
+of the view), lines as sub-views (`next_line`, `lines`, `fold_lines`: no allocation per line),
+`split_once`, `trim`, `find_str`, `eq_lit`, checked parsing (`parse_i32`, its error a sum,
+provisional until #18), and buffers of views (`view_at`, `sort_views`). Every loop is a
+`count_fold` bounded by a length, so the library is total. `lib/textio.bc` (`include textio`)
+writes and reads text over the standard streams: `write_str`, `write_string` and `write_lit` in
+one `write_all`, and `read_all`, which reads the input in chunks into the string's spare
+capacity (`read_into`) and runs until the input ends (a div function, §14).
+
+### Literals
+
+A string literal `"…"` is the persistent value `(n, t)` of `lit`: `n` its length in bytes and `t`
+a `!` function with no captures from an index to its byte (`0` past the end). The elaborator
+writes `t` as a compare of the index with the length, then a search on the index down to one
+byte (`Frontend.Sugar.litValue`): an ordinary core term, typed by the checker. A literal holds no
+resource, so it is copied and dropped freely, and an array or a buffer holds literals with no
+lifetime. `'c'` is a character, the `i32` scalar value.
+
+**Literal views.** `borrow imm "…" { v -> S }` (or on a `lit` variable) lends the literal's bytes
+as a `text 'x`: the elaboration tabulates them into an array (`tab`), lends it (`slice_borrow_imm`)
+to a callback that first copies the family (`array_copy`), and drops the array after. It is a
+scoped lend, like any view (design §5.7, Q4); a literal view cannot be stored past its block.
+
+### Surface
+
+Each is elaborated before checking into core terms the unchanged checker checks.
+
+- The type abbreviations above, read by the parser in type positions only.
+- `box buf[A](cap)`, `box string(cap)`, `box array(n, f)`: `buf_new[A](cap)`, `string_new(cap)`,
+  `array_tab(n, f)`.
+- `borrow imm b { v -> S }` and `borrow mut b { v -> S }` on a buffer lend its initialised
+  prefix: its array lent as a family (`slice_borrow_*`, §9) and cut at the length
+  (`slice_split_*`); the buffer is handed back. The side conditions' bound is `⊓Δ`, so a
+  buffer's elements may be views.
+- **A borrow block hands back** the enclosing `let mut` variables it assigns, the places it lends
+  that it does not bind, and the standard capabilities it uses, beside its result, as `for`
+  does (§11): `borrow imm line { v -> write_str(&mut stdout, v) }` leaves `stdout` in scope.
+- A template (§15) is instantiated at a type with lifetimes, a buffer of views: the instance
+  takes a lifetime parameter of its own for each, outermost, and a call passes the call's.
+- A lend `&x` at a generic function's parameter of `x`'s own type moves `x` and rebinds it, with
+  any number of lifetime parameters.
+
+### Lowering
+
+- **Literals in read-only data.** A literal's `t` (the shape above) becomes a closure of one
+  shared code over the address and length of its bytes (`Backend/Clos/Convert.lean`,
+  `litTable?`, `litClosure`), whose body is a load (`litByte`). The bytes are emitted once, as a
+  Wasm data segment from `16384`, before the heap. Every literal is one code, so a call of one is
+  direct.
+- **Literal views point into the data.** The erased shape of a literal view — the array lent by
+  `withbor`'s term to a callback that first copies the family, then dropped — is recognised
+  (`litView?`), and its `tab` is `litTab`: when the tabulator is the literal code's closure and
+  the length at most the literal's, the array is `(address, n)` in the data and nothing is
+  allocated; otherwise it is `tab`. Copying the family is typable only at an `imm` family, so no
+  write reaches the array; `$free` skips addresses below the heap.
+- **Buffers** are `(ptr, cap, len)`: an array's two words and the length. Growth allocates the
+  new block, moves the elements one by one and frees the old block.
+
+That the lowering of literals is the model's run up to locations is a lowering claim, tested on
+the corpus (design §5.7, §11 Assurance), not proved.
+
+### Programs
+
+The design's P1–P9, P11 and P13 run at every stage (`corpus/fields.bc`, `parse-int.bc`,
+`trim-replace.bc`, `format.bc`, `utf8-count.bc`, `key-value.bc`, `sort-lines.bc`,
+`json-tokens.bc`, `http-request.bc`, `ascii-upper.bc`, `labels-json.bc`), with their counts in
+`corpus/counts.expected`. Each is written with what exists: `count_fold` where the design writes
+a total `for` (S4), sums where it writes `data` (S6), borrow blocks where it writes a lend of a
+buffer at a view parameter (the design's §4.3 row, S4).
+
+### Baseline
+
+No change to `CDerives`, the relation, the machine or the checker's rules; §11 gains two externs
+whose models are proved to meet their contracts. `fundamentalC`, `adequacyC`, `adequacyD` and the
+end-to-end I/O theorems keep their statements.
+
+### Open
+
+- **A `mut` view of a buffer of views inside the views' block.** `slice_borrow_mut`'s side
+  condition asks the element type to outlive a lifetime of the context; for `buf (text 't)` at
+  `'t` there is none strictly below `'t` (an `imm` borrow at `'t` outlives only lifetimes below
+  `'t`), so `borrow mut` of such a buffer is rejected (`cannot show that array_imm 't u8 outlives
+  …`). `sort_views` works on the owned buffer instead. Whether the side condition is needed is
+  §9's open question.
+- The sugar's type inference types a call of a function with lifetime parameters whose body
+  lends a place (`push_lit(&mut r, …)`) as `1`; `corpus/http-request.bc` writes that function
+  with the appends' results bound instead.
+- The design's lend row (§4.3: `&s` of a string at a `text` parameter), the total `for` over a
+  view's iterator, and `*e` of a copyable view are S4's; `data` values and `data` with lifetime
+  parameters are S6's; the typed text types (T2) and zero-cost growth (a `buf` former, F) are
+  later stages.
+- `write_lossy`, `char_indices`, `split_at_str`, `sub_str`, `push_hex` and `parse_i64` of the
+  design's list are not provided.
+- P14 (`args`) waits for the `Args` capability (§11, designed, not built).
+- The literal lowering's claim is tested, not proved.
+
 ---
 
 ## Status
@@ -1786,11 +1932,25 @@ the checker (`slice_borrow_*`, `slice_*_mut`, `array_mut`) and the borrow blocks
 `Frontend/Sugar.lean`; §8's byte is `Width.w8` throughout. §9's splits and writes are
 `Core/SliceOps.lean`, the step `split` in `Paper/` and `Support/`, the checker
 (`slice_split_*`, `slice_empty_*`, `slice_replace_mut`, `slice_swap_mut`), the backend, and the
-library `lib/slice.bc`.
+library `lib/slice.bc`. Entry 16 (§17) is implemented in `lib/buf.bc`, `lib/text.bc`,
+`lib/textio.bc`, `Frontend/Lexer.lean`, `Frontend/Parser.lean` and `Frontend/Sugar.lean`, and the
+literal lowering in `Backend/Clos/Convert.lean`, `Backend/Flat/Lower.lean` and the Wasm
+runtime, with no change to `CDerives`; §11's `write_all` and `read_into` are `Core/Stdio.lean`.
 
 ---
 
 ## Changelog
+
+- **0.24** (2026-09-30) — Strings S5 (`docs/strings-slices-design.md`). §11: bytes are `U8`
+  (`read_byte`, `write_byte`, the byte list `μX. 1 ⊕ (U8 ⊗ X)`), and two bulk externs,
+  `write_all` and `read_into`, whose models are counted loops of the byte operations'
+  (`writeAll_meets`, `readInto_meets`); their host implementations are one `fd_write` or
+  `fd_read` per view. Entry 16 (§17): buffers (`lib/buf.bc`, stage A, a filler by type), text
+  (`lib/text.bc`, `lib/textio.bc`), string and character literals, `box buf/string/array`,
+  borrow blocks on buffers and literals, borrow blocks that hand back what they assign, lend and
+  the capabilities they use, and template instances at types with lifetimes; literals are
+  lowered to read-only data and literal views to pointers into it. No kernel, rule or checker
+  change.
 
 - **0.23** (2026-09-29) — §15, *Generic functions*: `fn f[A, …]` with a surface body is a
   template instantiated at each use, as generic generators are; `fn f<'a, 'b, …>` declares

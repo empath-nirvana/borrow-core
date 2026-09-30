@@ -175,6 +175,18 @@ The only objects are:
   a pointer to an object of the field's own layout. `μX. 1 + (A ⊗ X)` is a tag and a payload
   `A ⊗ X` whose `X` is a pointer: `nil` allocates nothing, each `cons` one object.
 
+- **Literals** (SPEC §17). A string literal's tabulator, the λ the elaborator writes for `"…"`
+  (a compare with the length, then a search on the index down to one byte), is recognised by
+  its shape (`Clos/Convert.lean`, `litTable?`) and converted to a closure of one shared code,
+  `litCode`, capturing the address and length of the literal's bytes; its body is `litByte`, a
+  compare and a byte load. The bytes are the program's read-only data (`Prog.data`), a Wasm data
+  segment from `16384`, each literal once; the heap starts past them. A literal is then two
+  words and no object, and every literal is one code, so a call of one is direct. A literal
+  view's array (the borrow block on a literal: `tab` of the literal, lent to a callback that
+  first copies the family, then dropped; `litView?`) is `litTab`: `(address, n)` in the data when
+  the tabulator is `litCode`'s closure and `n` at most the literal's length, with nothing
+  allocated, and `tab` otherwise. `$free` skips an address below the heap.
+
 The printer is generated per type and writes the text of `Backend.PV.render`: the type says
 whether a word is an integer, a tag, a closure (`<fun>`) or a location (`<loc>`).
 
@@ -309,7 +321,7 @@ construction; Wasm agreeing with `wasmHost` is tested, not proved (SPEC §8).
 
 A `main` may declare the standard externs (`Frontend/Check/Externs.lean`): the capabilities
 `stdin`, `stdout`, `stderr` (`ref input`, `ref output`) and the operations `read_byte`,
-`write_byte`. Its type is then `F (Caps ⊗ A)`, handing the capabilities back after `A`, or
+`write_byte`, `write_all`, `read_into`. Its type is then `F (Caps ⊗ A)`, handing the capabilities back after `A`, or
 `F (U (loop (Caps ⊗ A) (Caps ⊗ B)))` for a program that runs until its input ends.
 
 - **Compiled stages.** `Clos.convertMain` binds each extern before `main` runs: a capability to a
@@ -319,7 +331,10 @@ A `main` may declare the standard externs (`Frontend/Check/Externs.lean`): the c
   freed, and `a` is the program's value. In the flat IR the operations are inline, over the
   statements `getc fd` and `putc fd b`, and `read_byte`'s answer `(m, inl b)` or `(m, inr ())` is
   three words; in Wasm those statements are `$getc` and `$putfd`, WASI `fd_read` and `fd_write`
-  of one byte. They are unbuffered, so a
+  of one byte. `write_all` and `read_into` (`Λ. Λ. λp. op p`) take a byte view `(p, n)`: the
+  flat IR's `putv fd p n` and `getv fd p n`, in Wasm `$putv` (`fd_write` of the `n` bytes, again
+  after a short write) and `$getv` (`fd_read` into them until they are full or a read answers
+  nothing, answering the count). They are unbuffered, so a
   prompt is out before the next read. The plain LLVM/libc counterpart is `read(2)`/`write(2)`
   on the same descriptors; nothing WASI-specific is part of the semantics.
 - **Loops.** When `main` returns a loop, every stage drives it: it calls the loop on `inl ()`
