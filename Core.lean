@@ -12,6 +12,7 @@ import Core.RelationFacts
 import Core.ReborrowShapes
 import Core.Reborrow
 import Core.FrameRules
+import Core.EffWp
 import Core.Persistent
 import Core.Compatibility
 import Core.NuRel
