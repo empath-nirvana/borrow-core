@@ -1,0 +1,9 @@
+effect 7:1: Log: note
+row 11:1: swap_noted: Log
+lowering 9:1: handler count (Log): call — each clause resumes once, in tail position (fun): a direct call on the lent state (withswap), with no allocation and no dispatch
+lowering 11:1: copy `swap_noted__count`: `swap_noted` for count
+lowering 15:11: with count (Log): a borrow block of its state (lent from `c`); its operations are calls of the clauses on the capability
+call 11:41: note (Log) → `count__note`, on the state of `count`
+call 11:50: note (Log) → `count__note`, on the state of `count`
+call 16:18: swap_noted (Log) → `swap_noted__count`, passing the capabilities
+call 17:18: swap_noted (Log) → `swap_noted__count`, passing the capabilities

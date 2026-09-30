@@ -29,6 +29,18 @@ to the proofs of its premises. `checkProgram_sound` in
 `checked_runs` apply the two theorems above to the checked program. The drops that the checker
 inserts ([Implicit destructors](guide/implicit-destructors.md)) are part of the derivation.
 
+**Handlers mean what their clauses say.** A handler is defined by its elaboration into core
+terms ([Effects and handlers](guide/effects.md)), so a handled program is safe by the theorems
+above with no new case. What could still be wrong is what a handler *means*, and each class of
+clause has its law, about the machine's runs of the terms the elaboration emits
+([`Core/Handlers.lean`](https://github.com/empath-nirvana/borrow-core/blob/main/Core/Handlers.lean)).
+An answering operation is its clause run on the handler's state in place, the rest of the body
+resumed once with the answer (`op_tail`, `op_answer`), and a handled body that performs
+operations runs the clauses one after the other on the threaded state (`handle_fold`). An abort
+passes every branch around it, running none of the rest, and reaches the handler as `inr e`
+(`abort_passes`), also from inside a loop, whose exit it takes (`loop_abort`); a value runs the
+rest (`return_resumes`).
+
 **Arithmetic is a parameter.** The machine performs integer operations through a *host*, and
 every theorem above holds for every host. Nothing about arithmetic is assumed.
 

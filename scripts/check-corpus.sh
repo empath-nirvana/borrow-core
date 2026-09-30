@@ -5,6 +5,10 @@
 # on its `-- expect:` line (`line:col: message`), continued by any `-- expect| ` lines for a
 # message of several lines.
 #
+# Reports. For every corpus/reports/<name>.txt, the effects lines `bcc check corpus/<name>.bc` prints
+# (`effect`, `row`, `lowering`, `call`: SPEC §18) must be exactly that file: the rows, the lowering
+# shape of each handler and each call site's elaboration are pinned.
+#
 # Pending programs. Every `corpus/pending/*.bc` is a program we cannot write yet, named by its
 # `-- pending: <issue or limit>` line. It is an expected failure: `bcc check` (which parses first)
 # must reject it with the message on its `-- now:` line, continued by `-- now| ` lines, so the
@@ -37,6 +41,13 @@ for f in corpus/reject/*.bc; do
   else
     echo "$f: rejected as expected"
   fi
+done
+for g in corpus/reports/*.txt; do
+  [ -e "$g" ] || continue
+  f=corpus/$(basename "${g%.txt}").bc
+  if ! diff -u "$g" <("$bcc" check "$f" 2>&1 | grep -E '^(effect|row|lowering|call) '); then
+    echo "$g: the reports differ"; bad=$((bad + 1))
+  else echo "$g: reports match"; fi
 done
 pending=0
 for f in corpus/pending/*.bc; do

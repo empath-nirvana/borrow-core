@@ -126,8 +126,7 @@ def checkProgram (p : Program) (copies : Bool := true) : Except Error Report := 
   -- What the elaboration of effects reports (SPEC §18): each function's row, each handler's
   -- shape, and each operation's call.
   let fx := el.origins.filterMap fun (_, w) =>
-    if w.startsWith Frontend.Sugar.effectsTag then
-      some ("effects " ++ w.drop Frontend.Sugar.effectsTag.length)
+    if w.startsWith Frontend.Sugar.effectsTag then some (w.drop Frontend.Sugar.effectsTag.length).toString
     else none
   let rep := { rep with lines := rep.lines ++ loops.eraseDups ++ fx.eraseDups }
   if !copies then return rep

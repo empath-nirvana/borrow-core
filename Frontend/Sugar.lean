@@ -4568,8 +4568,20 @@ def elaborateS (p : Program) : SM (Program × Nat) := do
   let (decls₀, incl) ← expandIncludes libModules.length p.decls ([], [])
   -- Effects and handlers (SPEC §18), before the rest of the sugar: the clauses become functions,
   -- the functions with a row their copies, and each `with` a borrow block.
-  let (decls, fx, aborts) ← (Elab.Effects.elaborate decls₀ : Except Error _)
-  for (sp, m) in fx do note sp s!"{effectsTag}{sp.start.render}: {m}"
+  let libFns := (decls₀.filter fun d => !p₀.decls.contains d).filterMap fun
+    | .def_ _ m _ _ _ _ => some m.name
+    | _ => none
+  let (decls, fx, aborts) ← (Elab.Effects.elaborate decls₀ libFns : Except Error _)
+  -- Effects, then rows, lowering shapes and calls, each in source order.
+  let kindOf (m : String) : Nat := match (m.splitOn " ").head? with
+    | some "effect" => 0 | some "row" => 1 | some "lowering" => 2 | _ => 3
+  let fx := (fx.eraseDups.toArray.qsort fun (a, m) (b, n) =>
+    kindOf m < kindOf n || (kindOf m == kindOf n && b.start.later a.start)).toList
+  for (sp, m) in fx do
+    let (k, rest) := match m.splitOn " " with
+      | k :: r => (k, " ".intercalate r)
+      | [] => ("", m)
+    note sp s!"{effectsTag}{k} {sp.start.render}: {rest}"
   for (sp, bs) in aborts do
     note sp s!"{abortTag}{sp.start.render}|{",".intercalate (bs.map (·.start.render))}"
   let p : Program := ⟨decls⟩

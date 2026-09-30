@@ -83,6 +83,8 @@ def raiseOp : String := "raise"
 /-- What the elaboration knows: the operations, the handlers and the functions with a row, each
 declared before the point being elaborated. -/
 structure Env where
+  /-- The functions of the libraries included, whose elaboration is not reported. -/
+  lib : List String := []
   ops : List OpSig := []
   handlers : List HSig := []
   fns : List FSig := []
@@ -105,14 +107,18 @@ structure St where
   /-- The abort points made so far: the span of each `raise` or raising call, and the binders in
   scope there, for the message when one of them has no destructor. -/
   aborts : Array (Span × List Span) := #[]
+  /-- Elaborating a library declaration: nothing is reported. -/
+  quiet : Bool := false
 
 abbrev EM := StateT St (Except Error)
 
 def fresh (pre : String) : EM String :=
   modifyGet fun s => (s!"{pre}{s.fresh}", { s with fresh := s.fresh + 1 })
 
-def report (sp : Span) (msg : String) : EM Unit :=
-  modify fun s => { s with reports := s.reports.push (sp, msg) }
+/-- A report for `bcc check` (SPEC §18, #126): its kind (`effect`, `row`, `lowering`, `call`) and
+its text, at `sp`. -/
+def report (sp : Span) (kind : String) (msg : String) : EM Unit :=
+  modify fun s => if s.quiet then s else { s with reports := s.reports.push (sp, kind ++ " " ++ msg) }
 
 /-- The depth bound for the traversals below. -/
 def fuel : Nat := 1 <<< 16
@@ -405,6 +411,8 @@ def fnParts (sp : Span) (name : String) (A : VTy) (V : Val) : Except Error FnPar
 a call's result, whatever the call's lifetimes. -/
 def closedResult (g : Decl) : Option VTy :=
   match g with
+  -- A template's result may mention its type parameters: its instance's is not known here.
+  | .def_ _ _ (_ :: _) _ _ _ => none
   | .def_ sp n _ A V _ => match fnParts sp n.name A V with
     | .ok f => if f.T.lifeVars.any (f.lives.map (·.1.name)).contains then none else some f.T
     | .error _ => none
@@ -475,6 +483,16 @@ def liftPlain (cx : Cx) : Nat → Val → StateT (List Bind) EM Val
     | .boxed sp l V => do pure (.boxed sp l (← liftPlain cx k V))
     | .unbox sp V => do pure (.unbox sp (← liftPlain cx k V))
     | V => pure V
+
+/-- A place lent, or a standard capability used, in the body of a handler of `Fail` and declared
+outside it is not provided: the body is a computation of its own, which does not hand it back. -/
+def noLentIn (sp : Span) (M : Comp) : EM Unit := do
+  let bound := M.boundNames
+  let lent := (M.lentNames.filter (!bound.contains ·)) ++
+    (["stdin", "stdout", "stderr"].filter fun c => (M.lentNames true).contains c && !bound.contains c)
+  if let some x := lent.head? then
+    throw ⟨sp, s!"`{x}` is lent or used in this block and declared outside it: a handler of " ++
+      "`Fail` does not hand back the places its body lends; lend it outside the block"⟩
 
 /-- A lend in the arguments of a call that threads a capability is not provided. -/
 def noLend (sp : Span) (what : String) (W : Val) : EM Unit := do
@@ -582,8 +600,8 @@ def trC : Nat → Cx → List Cap → Bool → Bool → Comp → EM Comp
             let f' : Val := match f with
               | .defApp fsp _ As => .defApp fsp name As
               | _ => .var f.span name
-            report sp (s!"{x} ({", ".intercalate g.row}): a call of `{name}` in tail position, " ++
-              "its answer this one's")
+            report sp "call" (s!"{x} ({", ".intercalate g.row}) → `{name}`, in tail position: its " ++
+              "answer is this one's")
             return ← chain bs (.ret sp (.app sp f' (capsTuple sp used W')))
           else trRet n cx cs wrap r sp V
         | none => trRet n cx cs wrap r sp V
@@ -663,7 +681,7 @@ def trC : Nat → Cx → List Cap → Bool → Bool → Comp → EM Comp
           pure (.bind sp ⟨lr, sp⟩ (cx.err.map (VTy.sum sp (.unit sp)))
             (.ret sp (.app sp (.sugar sp .forRes) (.thunk sp (.ret sp (.inl sp (.unit sp))))))
             (.case sp (.var sp lr) ⟨u, sp⟩ N' ⟨e, sp⟩ abort) false)
-      report sp "for: its body raises; an abort leaves it with `break`, the loop's exit, and after it"
+      report sp "lowering" "for (Fail): an abort in its body is the loop's exit (`break`), then a branch"
       chain bs (.for_ sp x V' M' after)
     | .absurd sp V =>
       let (bs, V') ← trV n cx cs V
@@ -726,9 +744,11 @@ def goV : Nat → Cx → List Cap → Val → EM (List Bind × Val)
       blockResult k cx cs sp blk csM rM
     | .app sp (.sugar ksp .try_) (.thunk tsp M) => do
       -- `try { M }`: `M` answers `inl` its value or `inr` the error it raised.
+      noLentIn ksp M
       let csM := cx.needC M
       let M' ← trC k { cx with fail := some false } csM true true M
-      report ksp "try: an abort in its body is a sum exit, `inr e`, and the rest of the body is not run"
+      report ksp "lowering" ("try (Fail): branch — an abort never resumes (final ctl): a sum exit, " ++
+        "its answer `inl v` or `inr e`")
       let t ← fresh "fx_b"
       let r ← if csM.isEmpty then pure t else fresh "fx_v"
       let ann := tailSumTy cx csM M
@@ -745,6 +765,7 @@ def goV : Nat → Cx → List Cap → Val → EM (List Bind × Val)
       if h == .mapErr && cx.fail.isNone then
         throw ⟨ksp, "this `map_err` raises, and nothing handles it here: put it inside `try`, `catch`, " ++
           "or a function that can raise"⟩
+      noLentIn ksp M
       let csM := cx.needC M
       let M' ← trC k { cx with fail := some false } csM true true M
       let N' ← trC k { cx with caps := [], fnCaps := [] } [] false false N
@@ -756,12 +777,12 @@ def goV : Nat → Cx → List Cap → Val → EM (List Bind × Val)
       let tryBind : Bind := fun K => do
         pure (bindFlat sp t ann M' (← if csM.isEmpty then pure K else unpack sp csM r t K))
       if h == .catch_ then
-        report ksp "catch: a branch on the body's answer; its handler runs in place on an error"
+        report ksp "lowering" "catch (Fail): branch — on `inr e` its handler runs in place"
         let x ← fresh "fx_x"
         let bind : Bind := fun K => do
           pure (.bind sp ⟨x, sp⟩ none (.case sp (.var sp r) ⟨v, sp⟩ (.ret sp (.var sp v)) e N') K false)
         return ([tryBind, bind], .var sp x)
-      report ksp "map_err: a branch on the body's answer; its handler's value is raised in turn"
+      report ksp "lowering" "map_err (Fail): branch — on `inr e` its handler's value is raised"
       modify fun s => { s with aborts := s.aborts.push (ksp, cx.scope) }
       let w ← fresh "fx_w"
       let bind : Bind := fun K => do
@@ -866,7 +887,8 @@ def raiseCall : Nat → Cx → List Cap → Span → Val → EM (List Bind × Va
       throw ⟨sp, "this `raise` is not handled: no `try`, `catch` or `map_err` is around it, and " ++
         "it is not in a function that can raise (a clause, a closure or `main`)"⟩
     let (b, W') ← goV k cx cs W
-    report sp "raise: an abort, a sum exit to the innermost `try` or to the caller"
+    report sp "call" ("raise (Fail) → an abort (final ctl): `inr e` to the innermost handler, " ++
+      "or `break` out of the loop it is in")
     modify fun s => { s with aborts := s.aborts.push (sp, cx.scope) }
     let bind : Bind := fun _ => pure (cx.abort cs sp W')
     pure (b ++ [bind], .unit sp)
@@ -883,7 +905,7 @@ def opCall : Nat → Cx → List Cap → Span → String → OpSig → Val → E
     let t ← fresh "fx_b"
     let r ← fresh "fx_v"
     let call := Val.app sp (.var sp (clauseName c.h.name x)) (.pair sp (.var sp c.var) W')
-    report sp s!"{x} ({o.eff}): a call of `{clauseName c.h.name x}` on the state of `{c.h.name}`"
+    report sp "call" s!"{x} ({o.eff}) → `{clauseName c.h.name x}`, on the state of `{c.h.name}`"
     let bind : Bind := fun N => do
       pure (.bind sp ⟨t, sp⟩ (some (capsTy sp [c] o.decl.res)) (.ret sp call)
         (← unpack sp [c] r t N) false)
@@ -915,9 +937,9 @@ def fnCall : Nat → Cx → List Cap → Span → Val → String → FSig → Va
     let t ← fresh "fx_b"
     let r ← fresh "fx_v"
     if raises then modify fun s => { s with aborts := s.aborts.push (sp, cx.scope) }
-    report sp (s!"{x} ({", ".intercalate g.row}): a call of `{name}`" ++
+    report sp "call" (s!"{x} ({", ".intercalate g.row}) → `{name}`" ++
       (if usedL.isEmpty then "" else ", passing the capabilities") ++
-      (if raises then "; a branch on its answer, an error aborting here" else ""))
+      (if raises then "; then a branch on its answer, an error aborting here" else ""))
     -- The binding is annotated when the result's type is known here, so that what follows is
     -- typed whatever the call's lifetimes.
     let res := (closedResult g.decl).map fun T =>
@@ -925,9 +947,15 @@ def fnCall : Nat → Cx → List Cap → Span → Val → String → FSig → Va
       | some E, true => VTy.sum sp T E
       | _, _ => T
     let ann := res.map (capsTy sp usedL)
+    -- When the result's type is not known here (a template's instance), the capabilities are
+    -- bound again at their own types, which are.
+    let N' (N : Comp) : Comp := if ann.isSome then N else
+      usedL.foldr (fun c K => .bind sp ⟨c.var, sp⟩ (some (capsTy sp [c] (.unit sp) |> fun
+        | .tensor _ T _ => T
+        | T => T)) (.ret sp (.var sp c.var)) K false) N
     let bind : Bind := fun N => do
-      let rest ← if raises then splitSum sp usedL t r N (cx.abort cs sp)
-        else unpack sp usedL r t N
+      let rest ← if raises then splitSum sp usedL t r (N' N) (cx.abort cs sp)
+        else unpack sp usedL r t (N' N)
       pure (.bind sp ⟨t, sp⟩ ann (.ret sp (.app sp f' (capsTuple sp usedL W'))) rest false)
     pure (b ++ [bind], .var sp r)
 
@@ -953,8 +981,8 @@ def withBlk : Nat → Cx → List Cap → Span → Span → Span → String → 
     let where_ := match P' with
       | .lend _ x _ => s!"lent from `{x.name}`"
       | _ => "in a cell scoped to the block"
-    report ksp (s!"with {h} ({hs.eff}): a borrow block of its state ({where_}); each operation a " ++
-      "call of its clause")
+    report ksp "lowering" (s!"with {h} ({hs.eff}): a borrow block of its state ({where_}); its " ++
+      "operations are calls of the clauses on the capability")
     -- The body hands back the enclosing capabilities it uses; its own is dropped at its end.
     let body ← trC k cx' outer true rM M
     let blk := Val.app sp (.app sp₂ (.sugar ksp (.borrow .mut l)) place)
@@ -974,8 +1002,11 @@ def copyOf : Nat → Env → Span → FSig → List HSig → EM String
     modify fun s => { s with started := name :: s.started }
     let .def_ dsp n ps A V mk := g.decl
       | throw ⟨sp, s!"internal error: `{g.name}` is not a function"⟩
+    let q := (← get).quiet
+    if env.lib.contains g.name then modify fun s => { s with quiet := true }
     let (A', V') ← fnCopy k env dsp n.name A V (g.row.filter (· != failEff)) hs g.err
-    report dsp s!"{g.name} under {", ".intercalate (hs.map (·.name))}: the copy `{name}`"
+    modify fun s => { s with quiet := q }
+    report dsp "lowering" s!"copy `{name}`: `{g.name}` for {", ".intercalate (hs.map (·.name))}"
     modify fun s => { s with made := s.made.push (name, .def_ dsp ⟨name, n.span⟩ ps A' V' mk) }
     pure name
 
@@ -1119,7 +1150,7 @@ def hasEffects (ds : List Decl) : Bool :=
 declarations are removed, each handler's clauses become functions, each function with a row of
 answering effects is replaced by its copies under the handlers it is called under, each function
 that raises answers a sum, and each `with` becomes a borrow block.  `[spec §18]` -/
-def elaborate (ds : List Decl) :
+def elaborate (ds : List Decl) (lib : List String := []) :
     Except Error (List Decl × List (Span × String) × List (Span × List Span)) := do
   if !hasEffects ds then return (ds, [], [])
   let names := ds.filterMap Decl.defName
@@ -1127,7 +1158,7 @@ def elaborate (ds : List Decl) :
     throw ⟨match d with | .def_ _ n .. => n.span | _ => Span.none,
       "`raise` is the operation of `Fail`: a function cannot be named so"⟩
   let go : EM (List Decl) := do
-    let mut env : Env := {}
+    let mut env : Env := { lib }
     let mut out : Array Decl := #[]
     for d in ds do
       match d with
@@ -1139,7 +1170,7 @@ def elaborate (ds : List Decl) :
               o.name.name == raiseOp then
             throw ⟨o.name.span, s!"`{o.name.name}` is already declared: an operation's name is its own"⟩
         env := { env with ops := env.ops ++ ops.map (⟨e.name, ·⟩) }
-        report sp (s!"effect {e.name}: " ++ ", ".intercalate (ops.map (·.name.name)))
+        report sp "effect" (s!"{e.name}: " ++ ", ".intercalate (ops.map (·.name.name)))
       | .handler sp h st S e cs =>
         let ops := env.ops.filter (·.eff == e.name)
         if ops.isEmpty then throw ⟨e.span, s!"no effect `{e.name}` is declared before this handler"⟩
@@ -1152,9 +1183,11 @@ def elaborate (ds : List Decl) :
             | throw ⟨c.name.span, s!"`{c.name.name}` is not an operation of `{e.name}`"⟩
           out := out.push (← clauseDef env hs o.decl c)
         env := { env with handlers := env.handlers ++ [hs] }
-        report sp (s!"handler {h.name} ({e.name}): each clause answers once, in tail position: a " ++
-          "direct call on the lent state (withswap), with no allocation and no dispatch")
+        report sp "lowering" (s!"handler {h.name} ({e.name}): call — each clause resumes once, in " ++
+          "tail position (fun): a direct call on the lent state (withswap), with no allocation and " ++
+          "no dispatch")
       | .def_ sp n ps A V mk =>
+        modify fun s => { s with quiet := lib.contains n.name }
         let (written, mk) := splitRow mk
         let row := rowV env fuel V
         if !written.isEmpty then
@@ -1178,7 +1211,7 @@ def elaborate (ds : List Decl) :
           if e == failEff then s!"Fail[{(err.map (VTy.pp · 0)).getD "?"}]" else e)
         if !answering.isEmpty then
           env := { env with fns := env.fns ++ [⟨n.name, row, err, d₀⟩] }
-          report sp s!"effects {n.name}: {rowTxt}"
+          report sp "row" s!"{n.name}: {rowTxt}"
         else if err.isSome then
           -- Only `Fail`: the function itself answers a sum.
           let before := (← get).made.size
@@ -1186,12 +1219,13 @@ def elaborate (ds : List Decl) :
           out := out ++ ((← get).made.extract before).map (·.2)
           out := out.push (.def_ sp n ps A' V' mk)
           env := { env with fns := env.fns ++ [⟨n.name, row, err, d₀⟩] }
-          report sp s!"effects {n.name}: {rowTxt}; it answers `inl` its value or `inr` the error"
+          report sp "row" s!"{n.name}: {rowTxt}; it answers `inl` its value or `inr` the error"
         else
           let (V', copies) ← elabDef env V
           out := out ++ copies
           out := out.push (.def_ sp n ps A V' mk)
       | .main sp C M =>
+        modify fun s => { s with quiet := false }
         let before := (← get).made.size
         let M' ← trC fuel { env, caps := [] } [] false false M
         out := out ++ ((← get).made.extract before).map (·.2)

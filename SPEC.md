@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 0.27 · 2026-09-30
+Version 0.28 · 2026-09-30
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -2151,12 +2151,19 @@ performs an effect.
 
 ### Reports
 
-`bcc check` prints, after the declarations' types: each effect and its operations; each handler
-and the shape its clauses are lowered to (a direct call on the lent state, with no allocation and
-no dispatch); each function's row, with `Fail`'s error type; each `with`, and where its state
-lives; each copy made; each `try`, `catch` and `map_err` (a branch on the sum); each loop left by
-an abort; and, per call site, which clause or copy an operation or effectful call calls and
-whether a branch follows it (decision 49).
+`bcc check` prints, after the declarations' types, what the elaboration did (#126), in four kinds,
+each in source order; the library's own are not printed:
+
+| line | says |
+|---|---|
+| `effect L:C: E: op, …` | an effect and its operations |
+| `row L:C: f: E, Fail[X]` | a function's inferred row, with `Fail`'s error type |
+| `lowering L:C: …` | the shape each handler is lowered to, in Koka's cost vocabulary: a handler of answering clauses is a **call** (`fun`: each clause resumes once, in tail position, a direct call on the lent state, with no allocation and no dispatch); `try`, `catch` and `map_err` are a **branch** (`final ctl`: an abort never resumes; a sum exit); a loop left by an abort; each `with` and where its state lives; each copy made for a handler |
+| `call L:C: …` | per call site (decision 49): which clause or copy an operation or an effectful call calls, whether a branch follows it, and each `raise` |
+
+The shapes S1 has are call and branch; a state machine (a suspending handler) and a dispatch (a
+handler not known where it is used) are later stages'. `corpus/reports/*.txt` pin the reports of
+the effect programs, and the gate compares them (`scripts/check-corpus.sh`).
 
 ### Laws
 
@@ -2168,10 +2175,20 @@ whether a branch follows it (decision 49).
   memory to the clause run on `(s, v)`; and when that run answers `(s', r)`, the call reaches
   `K[(ℓ, r)]` with `s'` in the cell. This is `handle E[op v] = handle E[clause v]`: the
   continuation is resumed once, in place, with the answer; nothing is captured or allocated.
-- **Abort** (`abort_passes`, `return_resumes`). An abort `inr e` passes every branch around it,
+- **Handling is the fold of the clauses** (`handle_fold`). A handled body that performs the
+  operations `(g₁, v₁), …, (gₙ, vₙ)` in order and goes on with `k` runs, when the clauses run one
+  after the other on the threaded state, to `k` at the memory the last one left: the handler is
+  the state-passing fold of its clauses over the operations performed, as a deep handler is the
+  fold of its free model (`experiments/CoeffectsStrict`'s `Handler.lean`).
+- **Abort** (`abort_passes`, `return_resumes`, `loop_abort`). An abort `inr e` passes every branch around it,
   `case [·] { inl x -> K | inr e -> inr e }`, running none of their continuations, and reaches
   the handler as `inr e`: `try { E[raise e] } ↦* inr e`. A value `inl v` runs the innermost
-  continuation `K[v/x]`. In a loop's body the abort is `count_try`'s exit (`countTry_exit`, §16).
+  continuation `K[v/x]`. In a loop's body the abort is `count_try`'s exit (`countTry_exit`, §16),
+  and the branches after the loop hand it on (`loop_abort`).
+
+These laws, the counts against the programs written by hand (*Programs*) and the reports are the
+acceptance of #18 in place of an erasure theorem, which elaboration makes true by definition
+(decision 48). All are within `[propext, Classical.choice, Quot.sound]`.
 
 ### Programs
 
@@ -2196,6 +2213,9 @@ byte) and `from_utf8` (`Fail[Utf8Error]`, the buffer back with the index). `corp
 `ascii-upper.bc`, `sort-lines.bc`, `key-value.bc`, `trim-replace.bc` and `utf8-count.bc` handle
 them with `try`; their counts are unchanged. A search that finds nothing still answers a sum.
 
+`corpus/effects-generic.bc` runs a generic function with a row: copied for its handler, then
+instantiated at each type (decision 45).
+
 Rejects: `corpus/reject/effect-*.bc`.
 
 ### Baseline
@@ -2214,7 +2234,8 @@ No change to `CDerives`, the relation, the machine or the checker. `fundamentalC
   the fold to stop, a constant with a machine step (`docs/effects-scoping.md` §1.2 item 4). It is
   open: such an algebra is rejected where it is passed to the fold
   (`corpus/pending/raise-in-fold.bc`).
-- A `try`, `catch` or `map_err` that hands back the `let mut` variables its body assigns.
+- A `try`, `catch` or `map_err` that hands back the `let mut` variables its body assigns or the
+  places it lends (each rejected with a message).
 - A `raise` in the body of a loop whose value is what its source finishes with (a drain with no
   `else`).
 - A capability threaded through a `for` over `&a` of an owned array: the lend around the loop
@@ -2262,6 +2283,13 @@ and `Frontend/Elab/Effects.lean`, its laws in `Core/Handlers.lean`, with no chan
 ---
 
 ## Changelog
+
+- **0.28** (2026-09-30) — Effects S1c (§18, #154): the laws `handle_fold` (a handler is the
+  state-passing fold of its clauses over the operations performed) and `loop_abort`; the
+  acceptance of #18 restated as the laws, the counts and the reports. `bcc check`'s effects
+  reports in four kinds (`effect`, `row`, `lowering`, `call`), the lowering shape in Koka's cost
+  vocabulary, pinned by `corpus/reports/`. Generic functions with a row; a lend in a `Fail`
+  handler's body rejected with a message.
 
 - **0.27** (2026-09-30) — Effects S1b (§18, #153): `Fail`, the error effect: `raise`, `try`,
   `catch`, `map_err`, and written rows `with …, Fail[X]`. A function that raises answers a sum,

@@ -1,5 +1,6 @@
 import Core.Fix
 import Core.Steps
+import Support.Dynamics.Completeness
 
 /-!
 # Core — the laws of the handler schemas  `[spec §18]`
@@ -19,7 +20,12 @@ the clause answers the new state `s'` and the result `r`, the call reaches `K[(�
 in the cell (`op_answer`). The continuation is resumed once, in place, with the answer: nothing
 is captured or allocated, and `K` is never inspected.
 
-**Abort (`abort_passes`, `return_resumes`).** A call that can raise is followed by the branch
+**Handling is the fold of the clauses (`handle_fold`).** A handled body that performs the
+operations `(g₁, v₁), …, (gₙ, vₙ)` and goes on with `k` runs the clauses one after the other on the
+threaded state, and then `k`: the tail-resumptive handler is the state-passing fold of its clauses
+over the operations performed, as a deep handler is the fold of its free model.
+
+**Abort (`abort_passes`, `return_resumes`, `loop_abort`).** A call that can raise is followed by the branch
 `case t { inl x -> K | inr e -> inr e }`: the rest of the body `K` on a value, the error handed on.
 An abort `inr e` passes every such branch around it and reaches the handler unchanged, running
 none of their continuations (`abort_passes`); this is `handle E[raise e] = handler(e)` for the
@@ -161,6 +167,70 @@ theorem abort_passes (Ks : List Expr) (μ : Heap) (e : Val) :
 theorem return_resumes (K : Expr) (μ : Heap) (v : Val) :
     Steps (ℍ := ℍ) μ (.case (.val (.inj₁ v)) K abortArm) μ (K.subst 0 v) :=
   steps_head_in .hole (Head.case₁ μ v K abortArm)
+
+/-! ### Handling is the fold of the clauses -/
+
+/-- A straight run of operation calls on the capability `ℓ`, then `k`: each call's answer
+`(ℓ, r)` bound, and the next call made. The elaborated form of a handled body that performs the
+operations `(g₁, v₁), …, (gₙ, vₙ)` in order and goes on with `k`. -/
+def seqCalls (ℓ : Loc) : List (Val × Val) → Expr → Expr
+  | [], k => k
+  | (g, v) :: cs, k => .letpair (opCall ℓ g v) (seqCalls ℓ cs k)
+
+/-- The clauses run one after the other on the state in `ℓ`, each on the state the one before it
+left, from `μ` to `μ'`: the fold of the handler's clauses over the operations performed, into
+the state it threads. -/
+inductive ClauseRuns (ℓ : Loc) : List (Val × Val) → Heap → Heap → Prop
+  | nil (μ : Heap) : ClauseRuns ℓ [] μ μ
+  | cons {g v s s' r w : Val} {μ μ₁ μ' : Heap} {cs : List (Val × Val)} (hs : μ ℓ = some s)
+      (hrun : Steps (ℍ := ℍ) μ (.app (.val g) (.val (.pair s v))) μ₁ (.val (.pair s' r)))
+      (hw : μ₁ ℓ = some w) (hr : closedAt 0 r.1 = true)
+      (rest : ClauseRuns ℓ cs (μ₁.upd ℓ s') μ') : ClauseRuns ℓ ((g, v) :: cs) μ μ'
+
+theorem opCall_closed (ℓ : Loc) {g v : Val} (hg : closedAt 0 g.1 = true)
+    (hv : closedAt 0 v.1 = true) : closedAt 0 (opCall ℓ g v) = true := by
+  simp [opCall, clauseCb, withswap, lam2, closedAt, v0, v1, v3, load', store',
+    closedAt_mono _ hg (Nat.zero_le 1), closedAt_mono _ hv (Nat.zero_le 1)]
+
+theorem seqCalls_closed (ℓ : Loc) (k : Expr) (hk : closedAt 0 k = true) :
+    ∀ cs : List (Val × Val), (∀ p ∈ cs, closedAt 0 p.1.1 = true ∧ closedAt 0 p.2.1 = true) →
+      closedAt 0 (seqCalls ℓ cs k) = true
+  | [], _ => hk
+  | (g, v) :: cs, h => by
+    have hgv := h (g, v) (List.mem_cons_self ..)
+    simp only [seqCalls, closedAt, Bool.and_eq_true]
+    exact ⟨opCall_closed ℓ hgv.1 hgv.2,
+      closedAt_mono _ (seqCalls_closed ℓ k hk cs fun p hp => h p (List.mem_cons_of_mem _ hp))
+        (Nat.zero_le 2)⟩
+
+/-- **Handling is the fold of the clauses.** A handled body that performs the operations
+`(g₁, v₁), …, (gₙ, vₙ)` and goes on with `k` runs, when the clauses run one after the other on
+the threaded state (`ClauseRuns`), to `k` at the memory the last one left: the tail-resumptive
+handler is the state-passing fold of its clauses over the operations, as a deep handler is the
+fold of its free model (`experiments/CoeffectsStrict`'s `Handler.lean`). -/
+theorem handle_fold {ℓ : Loc} {k : Expr} (hk : closedAt 0 k = true) {cs : List (Val × Val)}
+    (hcs : ∀ p ∈ cs, closedAt 0 p.1.1 = true ∧ closedAt 0 p.2.1 = true) {μ μ' : Heap}
+    (h : ClauseRuns (ℍ := ℍ) ℓ cs μ μ') : Steps (ℍ := ℍ) μ (seqCalls ℓ cs k) μ' k := by
+  induction h with
+  | nil => exact .refl _ _
+  | @cons g v s s' r w μ μ₁ μ' cs hs hrun hw hr rest ih =>
+    have hgv := hcs (g, v) (List.mem_cons_self ..)
+    have hrest := seqCalls_closed ℓ k hk cs fun p hp => hcs p (List.mem_cons_of_mem _ hp)
+    have h₁ := op_answer (ℍ := ℍ) (Kont.letpair .hole (seqCalls ℓ cs k)) hs hgv.1 hgv.2 hr hrun hw
+    have h₂ : Steps (ℍ := ℍ) (μ₁.upd ℓ s') (.letpair (.val (.pair (.loc ℓ) r)) (seqCalls ℓ cs k))
+        (μ₁.upd ℓ s') (seqCalls ℓ cs k) := by
+      have := steps_head_in (ℍ := ℍ) .hole (Head.letpair (μ₁.upd ℓ s') (.loc ℓ) r (seqCalls ℓ cs k))
+      simpa [Kont.plug, subst_closedAt _ _ hrest (Nat.zero_le _)] using this
+    exact (h₁.trans h₂).trans (ih fun p hp => hcs p (List.mem_cons_of_mem _ hp))
+
+/-- **The abort law in a loop.** A step of `count_try` that answers `inr e` ends the loop with
+`inr e` (`countTry_exit`), and the branches after it hand the error on: an abort in a loop's body
+reaches the handler, running none of the rest. -/
+theorem loop_abort (Ks : List Expr) (f : Val) (n i : UInt32) (s e : Val) (μ μ' : Heap)
+    (hi : i < arrLen n)
+    (hf : Steps (ℍ := ℍ) μ (.app (.val f) (.val (Val.pair (Val.i32 i) s))) μ' (.val (Val.inj₂ e))) :
+    Steps (ℍ := ℍ) μ ((branches Ks).plug (BoCa.BoLo.countTryE f n i s)) μ' (.val (.inj₂ e)) :=
+  ((BoCa.BoLo.countTry_exit f n i s e μ μ' hi hf).plug (branches Ks)).trans (abort_passes Ks μ' e)
 
 end BoCa.Fig16.LogRel.Core.Handlers
 

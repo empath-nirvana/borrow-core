@@ -1,0 +1,10 @@
+row 18:1: record: Fail[i32], Map
+lowering 18:1: copy `record__table`: `record` for table
+lowering 19:3: for (Fail): an abort in its body is the loop's exit (`break`), then a branch
+lowering 25:23: with table (Map): a borrow block of its state (in a cell scoped to the block); its operations are calls of the clauses on the capability
+lowering 26:13: try (Fail): branch — an abort never resumes (final ctl): a sum exit, its answer `inl v` or `inr e`
+call 19:49: raise (Fail) → an abort (final ctl): `inr e` to the innermost handler, or `break` out of the loop it is in
+call 19:73: insert (Map) → `table__insert`, on the state of `table`
+call 26:19: record (Fail, Map) → `record__table`, in tail position: its answer is this one's
+call 27:21: lookup (Map) → `table__lookup`, on the state of `table`
+call 28:22: lookup (Map) → `table__lookup`, on the state of `table`
