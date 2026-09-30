@@ -2251,7 +2251,7 @@ No change to `CDerives`, the relation, the machine or the checker. `fundamentalC
 ### Motivation
 
 §18 defines handlers by elaboration. That covers answering operations (a call on a capability)
-and aborts (a sum exit), but not a handler that captures the rest of the computation (#186). The
+and S1b's aborts, but not a handler that captures the rest of the computation (#186). The
 spikes #184 and #185 (`experiments/HandlersAsBorrows`, `experiments/HandlersControl`) found
 three things:
 
@@ -2262,46 +2262,75 @@ three things:
 - **A continuation's mode is its capture's persistence.** A continuation may be copied only if
   what it captures is persistent (`lam_bang_persistent`).
 
-This entry adds one delimiter, one operation and one effectful returner type to the kernel.
-Several effects run at once, each handled by its own handler, and a handler passes the rest
-outward.
+This entry adds handlers, control operations, unwinding and one effectful returner type to the
+kernel. Several effects run at once, each handled by its own handler, and a handler passes the
+rest outward. A handler can unwind any continuation it holds.
 
-**Acceptance.** Three everyday programs, each typed and safe in the kernel:
+**Acceptance.** Six everyday programs, each typed and safe in the kernel (*Programs*):
 
 1. **Two effects at once.** A function that logs and can fail, run under a `Log` handler nested
-   with a `Fail` handler, in both nesting orders, with each order's observable result.
+   with a `Fail` handler, in both nesting orders, with each order's observable result. `Fail` is
+   an ordinary effect: `raise` is an unwind-mode operation.
 2. **Logging inside a borrow.** `borrow mut buf { … log(x) … }`, with the `Log` handler outside
    the borrow.
-3. **An infinite loop that logs.**
+3. **Raising inside a borrow.** `borrow mut buf { … raise(e) … }`, with the `Fail` handler
+   outside the borrow: the lend ends, the buffer goes back to its owner, and the handler receives
+   the error.
+4. **An infinite loop that logs.**
+5. **Early exit.** `take(n)` stops a producer that holds a resource, and the resource is
+   finalised.
+6. **Cancelling a suspended computation.** A stored continuation is unwound, and what it holds
+   is finalised.
 
 Beyond those: the reconciler chain `timeout |> retry |> log |> kube`, and the #184/#185
-examples (shared stateful capability, `memo`, multi-shot, abort, resume-later).
+examples (shared stateful capability, `memo`, multi-shot, resume-later).
 
-### Two kinds of operation
+### Kinds of operation, and the modes of a continuation
 
-An effect declares each operation as **answering** or **control**, as Koka's `fun` and `ctl` do
-(decision 48's cost vocabulary). The kinds differ in what the handler may do with the rest of
-the computation, and that decides whether the operation may cross a borrow's scope.
+An effect declares each operation as **answering** or **control**, as Koka's `fun` and `ctl`
+do (decision 48's cost vocabulary). A control operation also declares its continuation's
+**mode**. What the handler may do with the rest of the computation decides whether the operation
+may cross a borrow's scope.
 
-- **An answering operation** resumes at once, in place, with the clause's answer, and reifies
-  nothing. It is a call of the handler's clause on the handler's state. The handler's
-  **capability** is a value: the clause, as `!` code, beside the state, threaded as a `Mut`
-  borrow (§18, #184) or shared as an `Imm` view. A call is typed by §3's rules. So an answering
-  operation crosses a borrow's scope, as any call does: `borrow mut buf { … log(x) … }` with the
-  handler outside is the callback capturing the `log` capability, an outer borrow that outlives
-  the callback's lifetime. This is acceptance (2), and it needs no new rule and no new proof.
-- **A control operation** captures the rest of the computation up to its handler as a
-  continuation `κ`, which the clause may resume once, several times, later, or not at all. It is
-  this entry's new construct. A control operation may **not** cross a borrow's scope, because
-  every borrow constant takes a pure callback (*Typing*, below). Letting it cross would be a lend
-  held across a suspension, which is T1 (#172).
+| kind, mode | the handler … | crosses a borrow's scope |
+|---|---|---|
+| answering | resumes at once, in place, with the clause's answer; nothing is reified | yes: it is a call |
+| control, `↯` (unwind) | never resumes: the rest of the computation up to the handler is **unwound**, each frame finalising, innermost first | yes: unwinding ends each lend it passes (below) |
+| control, `1` | holds `κ` and resumes it once, now or later | no (T1) |
+| control, `!` | holds `κ` and resumes it any number of times; `κ` captures only persistent values | no (T1) |
 
-  I have not derived a sound rule for a control operation crossing a borrow, and I have not
-  verified that any obstruction is real. The answering kind covers the everyday case.
+- **An answering operation** is a call of the handler's clause on the handler's state. The
+  handler's **capability** is a value: the clause, as `!` code, beside the state, threaded as a
+  `Mut` borrow (§18, #184) or shared as an `Imm` view. A call is typed by §3's rules. So
+  `borrow mut buf { … log(x) … }` with the handler outside is the callback capturing the outer
+  `log` capability, an outer borrow that outlives the callback's lifetime. This is acceptance (2),
+  and it needs no new rule and no new proof.
+- **An unwind-mode operation** is how an error is raised. `Fail[E]` is an ordinary effect,
+  `raise : E ↠^↯ 0`, handled by ordinary handlers: `to_result`, `default`, `retry`, `map_err`.
+  There is no sum for failure and no special case (#168). Unwinding closes scopes innermost
+  first, which is BoLo's nesting order:
+  - when an unwind passes a borrow, that borrow's callback returns, by its unwind path;
+  - the lend ends, and the lender regains the place;
+  - the frame's finaliser (§12's destructors) runs, and the unwind continues outward.
 
-`Fail` is neither: it stays §18's sum exit. An abort runs each frame's destructors on the way
-out (§12), which a dropped continuation could not. A control operation whose clause drops `κ`
-needs `κ` persistent (mode `!`, below).
+  Nothing is kept alive across a lend: this is not T1, which needs a continuation held while a
+  borrow is out. The obligation is stated under *Theorems*.
+- **A capture-mode operation** (`1` or `!`) captures the rest of the computation up to its
+  handler as a continuation `κ`, which the clause may resume now, later, or several times. It may
+  **not** cross a borrow's scope, since a stored `κ` would hold a lend across a suspension. That
+  is T1 (#172), and it stays behind T1.
+- **Any continuation a handler holds can be unwound instead of resumed.** `κ` has two entries,
+  `resume w` and `cancel ()`. Cancelling runs `κ`'s frames' finalisers innermost first, ends every
+  lend inside `κ`, and answers `()`. This covers every cancellation:
+  - a timeout cancelling its body;
+  - a scheduler cancelling a parked task;
+  - `take(n)` closing a producer early;
+  - `break` out of a loop, and `return` from inside a fold;
+  - `requeue` abandoning a reconcile attempt;
+  - shutdown.
+
+  A linear `κ` is consumed by exactly one of its two entries. So "linear continuations cannot be
+  dropped" (#185, `forget_not_lolli`) is answered by the eliminator `cancel`, not by a `forget`.
 
 ### Names: which handler handles an operation
 
@@ -2343,19 +2372,43 @@ resolution.
 
 ### Terms and machine
 
-Two primitives, and no new `Expr` constructor:
+Five primitives (the fifth, `ccatch`, below), and no new `Expr` constructor:
 
-    perform_n V      ≜  perform (n, V)                    (`.app (.prim .perform) …`)
-    handle_n e with H ≜  hnd (n, H) e                      (`.app (.app (.prim .hnd) …) e`)
+    perform_n V          ≜  perform (n, V)                  (`.app (.prim .perform) …`)   capture modes
+    raise_n V            ≜  raise (n, V)                    (`.app (.prim .raise) …`)     unwind mode
+    handle_n e with H    ≜  hnd (n, H) e                    (`.app (.app (.prim .hnd) …) e`)
+    M then x. N unwind D ≜  ubind (λx. N, λ_. D) M          (`.app (.app (.prim .ubind) …) M`)
+
+`ubind` is `M to x. N` with a finaliser `D`, which runs instead of `N` when `M` unwinds.
 
 `H = (h_ret, h_op)` is a pair of values, and `n` a literal. Evaluation is argument-first, so `e`
 runs under the frame `hnd (n, H) [·]`. A context `K` is **free of `n`** (`Kont.NoHnd n K`) when
-none of its frames is `hnd (n, H′) [·]`. It may hold handlers of other names. There are two head
-steps, and neither allocates:
+none of its frames is `hnd (n, H′) [·]`. It may hold handlers of other names. A context is
+**unwind-clear** (`Kont.NoUbind K`) when none of its frames is `ubind _ [·]`. There are five head
+steps, and none allocates:
 
-    (μ, hnd (n, H) v)                ↦  (μ, h_ret v)                                      [ret]
-    (μ, hnd (n, H) K[perform (n, v)])  ↦  (μ, h_op (v, κ))    K free of n, where           [op]
+    (μ, hnd (n, H) v)                  ↦  (μ, h_ret v)                                     [ret]
+    (μ, hnd (n, H) K[perform (n, v)])  ↦  (μ, h_op (v, κ))     K free of n, where          [op]
           κ = λy. hnd (n, H) K[y]
+    (μ, hnd (n, H) K[raise (n, v)])    ↦  (μ, h_op v)          K free of n, unwind-clear   [unwind]
+    (μ, ubind (N, D) v)                ↦  (μ, N v)                                         [then]
+    (μ, ubind (N, D) K[raise (m, v)])  ↦  (μ, D (); raise (m, v))   K unwind-clear         [finalise]
+
+- **The continuation.** The `[op]` step's `κ` is the pair of its entries:
+
+      κ = ⟨ λy. hnd (n, H) K[y] ,  λ_. ccatch (hnd (n, H) K[raise (⊥, ())]) ⟩
+
+  - `⊥` is a reserved name that no program uses.
+  - `ccatch e` is a fifth primitive, a delimiter that catches only `⊥`:
+    `(μ, ccatch K[raise (⊥, ())]) ↦ (μ, ())` for `K` unwind-clear and free of `⊥` [cancel].
+  - So cancelling resumes `κ` at the operation with an unwind. The unwind runs `K`'s finalisers
+    and the unwinding forms of the borrows in `K`, passes the reinstalled `hnd (n, H)`, and stops
+    at `ccatch`.
+- **Unwinding runs innermost first.** A `raise` goes to the nearest `ubind` (its finaliser runs,
+  then it raises again from there) or to its handler, whichever is nearer.
+- **Other handlers' frames are transparent to it.** They are dropped, which is sound because
+  their clauses are `!`, at `∅`.
+- **Capture passes `ubind` frames**, which `κ` keeps.
 
 - **The handler is deep**, and `κ` reinstalls it together with every other handler frame in `K`.
   That is the forwarding: an operation of name `m ≠ n` inside `hnd (n, H)` is not a redex there,
@@ -2369,7 +2422,7 @@ steps, and neither allocates:
 
 ### Types
 
-    C ::= … | F_Σ A            Σ = {n₁ : E₁, …, n_k : E_k},   E = {op_i : A_i ↠^{m_i} B_i}_i,   m ∈ {1, !}
+    C ::= … | F_Σ A            Σ = {n₁ : E₁, …, n_k : E_k},   E = {op_i : A_i ↠^{m_i} B_i}_i,   m ∈ {↯, 1, !}
 
 - **`F_Σ A`** (`CTy.eff Σ A`) is a computation of `A` that may perform the control operations of
   the names in `Σ`. `F A = F_∅ A` stays the pure returner, with its own constructor.
@@ -2382,17 +2435,26 @@ steps, and neither allocates:
 
 ### Typing
 
-Four rules, over `CDerives` with its context premises (§10):
+Six rules, over `CDerives` with its context premises (§10):
 
     Δ; Γ ⊢ M : F_Σ A        Σ ⊆ Σ′
     ──────────────────────────── [sub]          (F A = F_∅ A)
     Δ; Γ ⊢ M : F_Σ′ A
 
-    Δ; Γ ⊢ V : A_i        n : E ∈ Σ,   op_i : A_i ↠^{m} B_i ∈ E
+    Δ; Γ ⊢ V : A_i        n : E ∈ Σ,   op_i : A_i ↠^{m} B_i ∈ E,   m ∈ {1, !}
     ──────────────────────────────────────────── [perform]
     Δ; Γ ⊢ perform_{n,i} V : F_Σ B_i
 
-    Γ = Γ₁, Γ₂    Δ; Γ₁ ⊢ M : F_Σ A    Δ; x : A, Γ₂ ⊢ N : F_Σ B    (Σ has a mode-! operation ⇒ !Γ₂)
+    Δ; Γ ⊢ V : A_i        n : E ∈ Σ,   op_i : A_i ↠^{↯} B_i ∈ E
+    ──────────────────────────────────────────── [raise]
+    Δ; Γ ⊢ raise_{n,i} V : F_Σ B          (any B)
+
+    Γ = Γ₁, Γ₂    Δ; Γ₁ ⊢ M : F_Σ A    Δ; x : A, Γ₂ ⊢ N : F_Σ B    Δ; Γ₂ ⊢ D : F_Σ 1
+    ──────────────────────────────────────────────────────────── [then]
+    Δ; Γ ⊢ M then x. N unwind D : F_Σ B
+
+    Γ = Γ₁, Γ₂    Δ; Γ₁ ⊢ M : F_Σ A    Δ; x : A, Γ₂ ⊢ N : F_Σ B
+    (Σ has a mode-! operation ⇒ !Γ₂)    (Σ has a mode-↯ operation ⇒ Γ₂ drops: NoOwn)
     ──────────────────────────────────────────────────────────────────────── [let]
     Δ; Γ ⊢ (λx. N) M : F_Σ B
 
@@ -2400,7 +2462,8 @@ Four rules, over `CDerives` with its context premises (§10):
     ──────────────────────────────────────────────────────────────────────── [handle]
     Δ; Γ ⊢ hnd (n, H) e : F_Σ R          (n ∉ Σ)
 
-    K_i = U(B_i ⊸ F_Σ R) at m_i = 1,    K_i = !U(B_i ⊸ F_Σ R) at m_i = !
+    K_i = U((B_i ⊸ F_Σ R) & F_Σ 1) at m_i = 1,    K_i = !U((B_i ⊸ F_Σ R) & F_Σ 1) at m_i = !
+    the clause at m_i = ↯ is !U(A_i ⊸ F_Σ R): no continuation
 
 - **Rows.** `[handle]` removes its name and passes the rest outward. Its clauses and its answer
   are at `Σ`, so a clause may perform the outer handlers' operations. That is how two handlers
@@ -2411,9 +2474,19 @@ Four rules, over `CDerives` with its context premises (§10):
 - **Every other rule is §3's at any computation type**, and holds at `F_Σ A` unchanged:
   - `case`, `let (x, y)`, `;`, `λ` and application (an effectful function is `A ⊸ F_Σ B`);
   - `&`, `∀`, and thunks of λ-values (a block `!U(A ⊸ F_Σ B)`).
-- **Borrows are pure.** Every borrow constant (`withbor` 1–3, `withload`, the slice borrows)
-  takes a callback of a pure returner `F(['x] B)`. So a control operation performed in a
-  borrow's scope is handled inside that scope. Answering operations are calls, and they cross.
+- **Unwinding contexts.** `[then]` is `[let]` with a finaliser. `D` runs in the same `Γ₂` as `N`,
+  additively, and disposes it (§12's destructors). A plain `[let]` at a row with a `↯`
+  operation needs `Γ₂` to drop with nothing owned (borrows, `!`, data), since an unwind abandons
+  it.
+- **Borrows.** Each borrow constant (`withbor` 1–3, `withload`, the slice borrows) keeps its
+  pure form, and gains an **unwinding form** at a callback `F_Σ(['x] B)` whose row has only `↯`
+  operations. The unwinding form's term is the pure one's with `ubind`: when the callback
+  unwinds, the lend ends, the source goes back to the lender, and the lender's finaliser runs:
+  - `forget` for a `Mut`/`Imm` source;
+  - the destructor for an owned `Ref A`, at `HasDtor A` (§12).
+
+  Then the unwind continues outward. Capture-mode operations stay inside a borrow's scope: every
+  borrow callback's row is unwind-only.
 
 ### Semantics
 
@@ -2426,7 +2499,13 @@ Four rules, over `CDerives` with its context premises (§10):
       Π_Σ n i ls v Φ  ≜  𝒱⟦A_i⟧(ls)δ(v) ⋆ (λρ_k. (m_i = ! → ρ_k = ∅) ∧
                             ∀ ls′, Ext ls ls′ ρ_k → ∀ w, (𝒱⟦B_i⟧(ls′)δ(w) ─⋆ Φ ls′ w) ρ_k)
 
-  for `n : E ∈ Σ`, and `False` otherwise.
+  for `n : E ∈ Σ` at a capture mode. At `↯` the continuation is abandoned, so it must hold
+  nothing owned:
+
+      Π_Σ n i ls v Φ  ≜  𝒱⟦A_i⟧(ls)δ(v) ⋆ (λρ_k. NoOwn ρ_k)
+
+  Otherwise the table is `False`. Final configurations include `K[raise (n, v)]`, with `K` free
+  of `n` and unwind-clear.
   - The resource splits into the argument and the continuation's share, which is `∅` at mode
     `!`.
   - The continuation is owed at every `Ext`-extension of the list: this is where protocols meet
@@ -2441,6 +2520,29 @@ Four rules, over `CDerives` with its context premises (§10):
   it answers: total correctness, as `wpTS`.
 - **The relation.** `cC (F_Σ A) ls δ e ≜ ewpTS ls e Π_Σ (λ ls″. 𝒱⟦A⟧(ls″)δ)`, and `cC (F A) = wpTS`
   is unchanged.
+
+### Finalisers that perform operations (K3, #162)
+
+A finaliser is a computation `D : F_Σ 1`, run where its `ubind` stands, so its operations reach
+the handlers outside that point:
+
+- it may call answering operations (flush a log, close a socket through its capability);
+- it may perform capture-mode operations, which capture a continuation that goes on unwinding
+  when resumed;
+- it may raise.
+
+If a finaliser raises during an unwind, the new unwind **supersedes** the pending one: the
+pending `raise (m, v)` is in the finaliser's continuation and is abandoned. So an operation that
+raises must have an argument that drops with nothing owned (a `NoOwn` value: data, borrows,
+`!`). The machine and the semantics need nothing else. The protocol's `NoOwn` share covers the
+abandoned argument.
+
+Richer policies are K3 (#162), and *Open*:
+
+- keeping both errors (suppressed errors), or a finaliser that must not fail (a row with no `↯`
+  operation);
+- a finaliser that hands a residual to the handler (§14's `close` residual);
+- retrying a failed flush.
 
 ### Divergence: an infinite loop that performs operations
 
@@ -2467,24 +2569,51 @@ Four rules, over `CDerives` with its context premises (§10):
 
 ### Theorems (the obligations of #186)
 
-1. **Compatibility of the four rules.**
+1. **Compatibility of the new rules.**
    - `sub_compatC`, from `ewpTS` monotone in `Π` (`ewp_mono`), with `ewp_of_wp` at `F A = F_∅ A`.
-   - `perform_compatC`, from `ewp_perform`.
+   - `perform_compatC` and `raise_compatC`, from `ewp_perform`.
    - `let_compatC`, from `ewp_bind`: `ewpTS e Π (λ v. ewpTS K[v] Π Q) ⊢ ewpTS K[e] Π Q` for `K`
      free of every name. The mode `!` case uses `vP_empty_of_persistent` on `Γ₂`.
    - `handle_compatC`, by induction on the least fixed point, in three cases:
      - `[ret]`, then `h_ret`'s relation;
      - `[op]` at its own name, then `h_op`'s relation at `(v, κ)`, where `κ`'s relation is the
        induction hypothesis under the protocol's wand (at mode `!` `κ` is at `∅`, so it is `!`);
+     - `[unwind]` at its own name, then `h_op`'s relation at `v`. The abandoned continuation is
+       `NoOwn`, and it joins `wpTS`'s leftover.
      - an operation of another name passing outward, where the stop configuration of the whole
-       is `(hnd (n, H) K)[perform (m, v)]` and the continuation's obligation is the induction
-       hypothesis. This case is the forwarding.
+       is `(hnd (n, H) K)[perform (m, v)]` or `(hnd (n, H) K)[raise (m, v)]`, and the
+       continuation's obligation is the induction hypothesis. This case is the forwarding.
 2. **Every existing rule's compatibility at `F_Σ A`**, through `cC_head`, `cC_step` and `cC_bind`
    at `F_Σ` (`ewp_head`, `ewp_step`, `ewp_bind_pure`). Every lemma at `F A` is unchanged, and
    `ewpTS Π_∅ = wpTS` (`ewp_bot`).
-3. **Frames** ([TR] 6.64–6.66) wrap only a borrow constant's callback, which is pure. They are
-   frames over `ewpTS` at the empty table, which is `wpTS` (`ewp_bot`), so they are unchanged.
-   Answering operations inside a borrow are calls inside the pure callback, under the same frames.
+3. **Frames.**
+   - **Pure callbacks** keep [TR] 6.64–6.66 unchanged: at the empty table `ewpTS = wpTS`
+     (`ewp_bot`). Answering operations inside a borrow are calls inside the callback, under the
+     same frames.
+   - **Unwinding callbacks: the LIFO frame lemmas** `wpTS_I_frameU`, `wpTS_M_frameU` and
+     `wpTS_M_antiFrameU`. They are the frames over `ewpTS` at an unwind-only table.
+     - At a stop `K[raise (n, v)]` of the callback, the continuation's share is `NoOwn`. It holds
+       at most borrows at the frame's lifetime and below, and it is abandoned as `wpTS`'s leftover
+       `ρ⁺` is.
+     - The frame then ends exactly as at a return: 6.64's `immEnd`, and 6.65/6.66's unfold of the
+       `mut` cell, whose value and predicate the world keeps whether or not the borrow was
+       forgotten.
+     - The argument `v : A_i` outlives the frame, because operation types are closed data.
+     - So the unwinding form's `ubind` gets the source back, runs its finaliser, and raises
+       again.
+
+     These are the new semantic obligations of unwinding, and they are what "an unwind crosses a
+     borrow without T1" means. If one does not hold, the stage stops with a machine-checked
+     obstruction, and the unwinding forms are withdrawn.
+   - **Cancelling a continuation** (`cancel_compatC`) is resuming it into `raise (⊥, ())`. Its
+     obligations are the resumption's and the frame lemmas above; `ccatch`'s compatibility is
+     `[unwind]`'s. So cancelling a stored continuation needs nothing beyond what storing it
+     needed. A continuation stored while it captures borrows is T1 (#172). Once T1 makes that
+     storage sound, the lends it holds are ended by the same LIFO frame lemmas that end them at a
+     `raise`. Within this entry, capture-mode operations cannot cross a borrow, so no stored `κ`
+     captures a lend, and `cancel` needs only the unwinding forms of the borrows *inside* `κ`.
+   - **`ubind`**: `then_compatC`, from `ewp_ubind`. The finaliser's context is framed off while
+     `M` runs, and consumed by `D` at an unwind.
 4. **Adequacy.**
    - `fundamentalC` and `fundamentalD` cover the extended judgment.
    - `adequacyD` holds for every closed `F 1`, handled programs included.
@@ -2495,21 +2624,29 @@ Four rules, over `CDerives` with its context premises (§10):
 
 `cC (F A)`, `wpTS`, every existing rule and every existing compatibility lemma keep their
 statements. `fundamentalC`, `adequacyC`, `fundamentalD` and `adequacyD` keep theirs, over the
-extended judgment. §18's elaborated handlers are unchanged, and are the answering kind and
-`Fail` above.
+extended judgment. §18's elaborated handlers are unchanged. They are the answering kind, and
+S1b's sum-based `Fail` is superseded by the unwind mode (#168) when §18 is replaced.
 
 ### Programs
 
 Primary, each typed, safe and run:
 
-1. **`Log` + `Fail`:**
-   - a function that logs and may fail;
-   - the `Log` handler inside and outside the `Fail` handler: the logs are kept when `Log` is
-     outside, and lost when `Fail` is outside;
-   - once with `Log` answering and `Fail` a sum, and once with both native control effects
-     (mode 1 `log`, mode `!` `fail`), to exercise rows and forwarding.
-2. **`borrow mut buf { … log(x) … }`** with the answering `Log` handler outside.
-3. **`loop { log("tick") }`**, a `Loop` with the `Log` state in its state.
+1. **`Log` + `Fail`**, both ordinary effects: `log` answering, `raise` at `↯`.
+   - A function that logs and may raise.
+   - The `Log` handler inside and outside the `Fail` handler (`to_result`). The logs are kept
+     when `Log` is outside. They are lost when `Fail` is outside: the unwind ends `Log`'s
+     `with`, whose finaliser drops its state.
+   - Once more with `log` a native capture-mode operation, to exercise rows and forwarding.
+2. **`borrow mut buf { … log(x) … }`** with the `Log` handler outside.
+3. **`borrow mut buf { … raise(e) … }`** with the `Fail` handler outside. Unwinding ends the lend
+   (the unwinding `withbor`'s `ubind`), the buffer goes back to its owner (the owner's finaliser,
+   or its enclosing borrow, which continues), and the handler receives `e`. Memory ends empty.
+4. **`loop { log("tick") }`**, a `Loop` with the `Log` state in its state.
+5. **Early exit.** `take(n)` stops a producer that holds a resource (an owned cell). The producer
+   yields by a capture-mode operation; after `n` elements, the consumer's handler cancels the
+   stored continuation. The producer's finaliser frees the cell, and memory ends empty.
+6. **Cancelling a suspended computation.** A handler stores `κ` and then cancels it instead of
+   resuming it. The resource `κ` captured is finalised, and memory ends empty.
 
 Secondary:
 
@@ -2523,7 +2660,9 @@ Secondary:
 
 - Generative handler names (Ξ's runtime labels), behind a continuation confined to its handler's
   scope (T2, #173).
-- A control operation crossing a borrow's scope (T1, #172).
+- A capture-mode control operation (`1`, `!`) crossing a borrow's scope (T1, #172). Cancelling
+  such a stored continuation then needs nothing more.
+- Finaliser policies beyond "a new unwind supersedes" (K3, #162).
 - Parameterized handlers are written with a state-passing answer type
   `F R = F(U(S ⊸ F (A ⊗ S)))`; a native parameter is not provided.
 - **Shallow handlers:** covered by `ν` codata (generators) for step-wise handling; not a separate
@@ -2581,9 +2720,13 @@ Entry 18 (§19) is specified; its implementation proceeds in the stages of #186.
     `[perform]`, `[let]` (control-flow linearity at mode `!`) and `[handle]`.
   - **Semantics:** the effectful `wp` `ewpTS` over protocol tables, with `wpTS = ewpTS` at the
     empty table.
+  - **Unwinding:** the mode `↯`, used for errors (#168); `ubind` finalisers; unwinding forms of
+    the borrow constants (an unwind crosses a borrow, LIFO, without T1). Every held continuation
+    has a `cancel` entry, and a finaliser that raises supersedes the pending unwind (K3 otherwise
+    Open).
   - **Divergent effectful programs** are `ν` codata with effectful observations.
-  - **Acceptance:** `Log` + `Fail` in both orders, logging inside a borrow, an infinite logging
-    loop.
+  - **Acceptance:** `Log` + `Fail` in both orders, logging and raising inside a borrow, an
+    infinite logging loop, `take(n)` early exit, and cancelling a stored continuation.
   - Stated here; the library follows stage by stage.
 
 - **0.28** (2026-09-30) — Effects S1c (§18, #154): the laws `handle_fold` (a handler is the
