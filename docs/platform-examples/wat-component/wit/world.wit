@@ -1,0 +1,10 @@
+package bcore:probe;  // `borrow` is a WIT keyword
+
+// The imports a compiled program of ours would name: only what it uses.
+world probe {
+  import wasi:cli/stdout@0.2.12;
+  import wasi:clocks/monotonic-clock@0.2.12;
+  import wasi:io/poll@0.2.12;
+  import wasi:io/streams@0.2.12;
+  export wasi:cli/run@0.2.12;
+}
