@@ -43,6 +43,8 @@ structure St where
   input : List UInt8
   out : ByteArray
   err : ByteArray
+  /-- The program's read-only data, from `dataBase`. -/
+  data : Array UInt8 := #[]
 
 abbrev IM := StateT St (Except String)
 
@@ -205,6 +207,15 @@ def applyOp : Op → List CV → IM CV
         else allocObj (.inj true (← allocObj (.pair (.ptr a) (.i32 n))))
       | _, _, _ => throw "closure IR: split of a non-array"
   | .nullLoc, [] => pure (.ptr 0)
+  | .litByte, [a, n, i] => do
+      match a, n, i with
+      | .i32 a, .i32 n, .i32 i =>
+        if i < n then
+          match (← get).data[a.toNat - dataBase + i.toNat]? with
+          | some b => pure (.u8 b)
+          | none => throw "closure IR: a literal's byte outside the read-only data"
+        else pure (.u8 0)
+      | _, _, _ => throw "closure IR: litByte of a non-literal"
   | .io .readByte, [m] => do
       let (_, c) ← cellOf m
       let .i32 _ := c | throw "closure IR: read_byte on a cell that holds no stream"
@@ -320,7 +331,7 @@ def eval (codes : Array Code) : Nat → Env → Tm → IM (CV × Env)
     | .clos c xs => do
         let (vs, env) ← takeAll env xs
         pure (← allocObj (.clos c vs), env)
-    | .prim .tab [x] => do
+    | .prim .tab [x] | .prim .litTab [x] => do
         let (v, env) ← take env x
         let (c, f) ← unpair v
         let .i32 c := c | throw "closure IR: tab of a non-length"
@@ -433,7 +444,7 @@ def interp (fuel : Nat) (p : Prog) (input : List UInt8) : Except String Output :
     let pv ← observe objFuel v
     deepDrop objFuel v
     pure (report pv (← get).heap.size)
-  let (r, s) ← act.run ⟨{}, 1, input, .empty, .empty⟩
+  let (r, s) ← act.run ⟨{}, 1, input, .empty, .empty, p.data⟩
   pure (.mk' s.out s.err r)
 
 end Backend.Clos

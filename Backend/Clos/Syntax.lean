@@ -75,6 +75,13 @@ inductive Op where
   | count
   /-- A standard I/O operation (§11). -/
   | io (k : IOOp)
+  /-- `litByte (a, n, i)`: byte `i` of the literal whose `n` bytes are at `a` in the program's
+  read-only data (`Prog.data`), or `0` when `i ≥ n`, unsigned. -/
+  | litByte
+  /-- `litTab (n, t)`: `tab (n, t)` of a literal's tabulator where the array is only read and
+  then dropped (`Convert.litView?`): the array is the literal's own bytes in the read-only data
+  when `t` is a literal's closure and `n` its length at most, and `tab`'s array otherwise. -/
+  | litTab
   deriving Repr, DecidableEq
 
 inductive Tm where
@@ -139,6 +146,15 @@ structure Prog where
   /-- For a `main` that returns a loop (SPEC §11): the code run on the value the loop finishes
   with, once the stage has driven it. -/
   fin : Option Nat := none
+  /-- The literals' bytes, in read-only data from address `dataBase`. -/
+  data : Array UInt8 := #[]
+  /-- The code of a literal's tabulator, `λi. litByte (a, n, i)` over its captured `(a, n)`,
+  when the program has a literal. -/
+  litCode : Option Nat := none
   deriving Repr, Inhabited
+
+/-- The address of the read-only data: after the runtime's own memory, before the heap
+(`Backend/Wasm/Runtime.lean`). -/
+def dataBase : Nat := 16384
 
 end Backend.Clos

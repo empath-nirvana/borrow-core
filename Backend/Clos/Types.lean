@@ -255,7 +255,12 @@ def primTy : Op → List Var → TM Nat
       | .int w => newNode (.int w)
       | .test => do newNode (.sum (← unitT) (← unitT))
       | .trapping w => do newNode (.sum (← newNode (.int w)) (← unitT))
-  | .tab, [v] => do
+  | .litByte, [a, n, i] => do
+      unify (← tyVar a) (← int32)
+      unify (← tyVar n) (← int32)
+      unify (← tyVar i) (← int32)
+      newNode (.int .w8)
+  | .tab, [v] | .litTab, [v] => do
       let a ← newNode .any
       let f ← newNode (.fn (← int32) a a)
       unify (← tyVar v) (← newNode (.pair (← int32) f))

@@ -1,0 +1,26 @@
+punct {
+str name
+punct :
+str op\\\"x
+punct ,
+str n
+punct :
+punct [
+num 1
+punct ,
+num -23
+punct ,
+num 450
+punct ]
+punct ,
+str ok
+punct :
+word true
+punct ,
+str v
+punct :
+word null
+punct }
+bad 64
+i32[24]
+live 0

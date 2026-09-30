@@ -98,5 +98,6 @@ def lowerProg (p : Flat.Prog) (cnt : Bool := false) : Module where
   funcs := p.fns.toList.zipIdx.map (fun (f, k) => lowerFn cnt k f) ++
     [{ name := "$start", params := 0, results := 0, locals := 0,
        body := [.call (fname p.entry)], export? := some "_start" }]
+  data := p.data
 
 end Backend.Wasm

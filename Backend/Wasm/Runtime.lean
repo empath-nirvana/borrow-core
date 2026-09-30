@@ -8,7 +8,8 @@ in `Backend/README.md`:
   `[a, a + 8n)` is disjoint from every live range and from the runtime's own memory
   (`[0, 16384)` and each range's size word at `a - 8`), and adds one to the live count.
 - `$free a`, for `a` returned by `$alloc` and not freed since, ends that range's life and
-  subtracts one from the live count.
+  subtracts one from the live count. An address below the heap, in the program's read-only data
+  (a literal's view), is not freed.
 - `$live` is the live count, and is exported as `live_objects`.
 - `$allocs` counts the calls of `$alloc`, `$indirect` the dispatched calls (closure calls
   whose code a switch chooses at run time), and `$copies` the copies of a variable at a
@@ -25,8 +26,8 @@ in `Backend/README.md`:
 
 Layout: bytes `0–31` hold `$putfd`'s and `$putv`'s I/O vector and byte, bytes `32–63` `$getc`'s
 and `$getv`'s; `1024 + 4s` holds the head of the
-free list of ranges of `s` words, for `s < 1024`; ranges start at `16384`, each preceded by a
-word holding its size. `$alloc` pops the free list of its size, or else bumps `$heap`, growing
+free list of ranges of `s` words, for `s < 1024`; the program's read-only data (its literals'
+bytes) starts at `16384`, and ranges start after it, each preceded by a word holding its size. `$alloc` pops the free list of its size, or else bumps `$heap`, growing
 memory as needed. A freed range of `s < 1024` words is pushed onto its free list (its first
 word links the list); a larger one is not reused.
 -/
@@ -76,6 +77,7 @@ def runtimeWat : String := "
   (func $free (param $a i64)
     (local $p i32) (local $s i32) (local $head i32)
     (local.set $p (i32.wrap_i64 (local.get $a)))
+    (if (i32.lt_u (local.get $p) (i32.const STATIC_END)) (then return))
     (local.set $s (i32.wrap_i64 (i64.load (i32.sub (local.get $p) (i32.const 8)))))
     (global.set $live (i64.sub (global.get $live) (i64.const 1)))
     (if (i32.lt_u (local.get $s) (i32.const 1024))

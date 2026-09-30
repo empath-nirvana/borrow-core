@@ -88,7 +88,15 @@ structure Prog where
   fns : Array Fn
   /-- Runs `main`, prints its value, drops it, and prints the live count. -/
   entry : Nat
+  /-- The literals' bytes, read-only data at `dataBase` (`Backend.Clos.Prog.data`). -/
+  data : Array UInt8 := #[]
   deriving Repr, Inhabited
+
+/-- The address of the read-only data. -/
+def dataBase : Nat := 16384
+
+/-- The end of the read-only data, rounded up to a word: the heap starts past it. -/
+def staticEnd (len : Nat) : Nat := dataBase + (len + 7) / 8 * 8
 
 /-! ### Words -/
 

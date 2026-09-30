@@ -109,7 +109,7 @@ def genPrim : Op → List Var → GM Key
       emit (.load (.var l) old)
       emit (.store (.var l) (.var v))
       holding (.pair (.var l) old)
-  | .tab, [v] => do
+  | .tab, [v] | .litTab, [v] => do
       let f ← freshKey
       emit (.proj (.var v) 1 f)
       let c ← freshKey

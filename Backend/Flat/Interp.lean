@@ -34,6 +34,8 @@ structure FState where
   indirect : Nat := 0
   /-- Copies of a variable at a non-trivial type so far. -/
   copies : Nat := 0
+  /-- The end of the read-only data: an address below it is not freed. -/
+  staticEnd : Nat := 0
 
 abbrev FM := StateT FState (Except String)
 
@@ -108,7 +110,10 @@ def freeRange (a : Nat) : FM Unit := do
   | some n =>
     let mem := (List.range n).foldl (fun m i => m.erase (a + 8 * i)) s.mem
     set { s with mem, ranges := s.ranges.erase a }
-  | none => throw s!"flat IR: free of {a}, not the start of a live range"
+  | none =>
+    -- The read-only data is not freed (a literal's view, `litTab`).
+    if a < s.staticEnd then pure ()
+    else throw s!"flat IR: free of {a}, not the start of a live range"
 
 def setLocal (fr : Array UInt64) (i : Nat) (v : UInt64) : FM (Array UInt64) :=
   if i < fr.size then pure (fr.set! i v) else throw s!"flat IR: no local {i}"
@@ -252,7 +257,16 @@ end
 
 /-- Run the entry function on the standard input `input`: what it writes. -/
 def interp (fuel : Nat) (p : Prog) (input : List UInt8) : Except String Output := do
-  let (_, s) ← (callFn p fuel p.entry [] (some 0)).run { mem := {}, ranges := {}, next := 8, input, out := .empty, err := .empty }
+  -- The read-only data, word by word, little-endian; the heap past it.
+  let L := p.data.size
+  let mem : Std.HashMap Nat (Option UInt64) := (List.range ((L + 7) / 8)).foldl (fun m k =>
+    let w := (List.range 8).foldl (fun acc j =>
+      acc ||| ((p.data.getD (8 * k + j) 0).toUInt64 <<< (8 * j).toUInt64)) (0 : UInt64)
+    m.insert (dataBase + 8 * k) (some w)) {}
+  let next := if L == 0 then 8 else staticEnd L + 8
+  let (_, s) ← (callFn p fuel p.entry [] (some 0)).run
+    { mem, ranges := {}, next, input, out := .empty, err := .empty,
+      staticEnd := if L == 0 then 0 else staticEnd L }
   pure ⟨s.out, s.err⟩
 
 end Backend.Flat
