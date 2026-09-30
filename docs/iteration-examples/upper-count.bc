@@ -1,0 +1,24 @@
+-- T3 / P12 in candidate D's style today: the counted loop called directly, each index lent as a
+-- `mut` leaf and then read back (`corpus/iter-mut-count.bc`'s pattern with the slice library).
+-- Total; the index bound is the array's length, written by hand.
+include slice
+
+fn tab(i: i32) -> i32 = i + 1
+
+fn times10(i: i32, a: array i32) -> array i32 =
+  borrow mut a { 'x, v ->
+    match get_mut(v, i) { inl m -> modify m { c -> c * 10 } | inr _ -> () } };
+  a
+
+fn add_at(i: i32, s: array i32 * i32) -> array i32 * i32 =
+  let (a, acc) = s;
+  let acc = borrow imm a { 'x, v -> acc + at(v, i, 0) };
+  (a, acc)
+
+total fn solve() -> i32 =
+  let a = array_new[i32] (4, tab);
+  let a = count_fold[array i32] (times10, 4, 0, a);
+  let (_, v) = count_fold[array i32 * i32] (add_at, 4, 0, (a, 0));
+  v
+
+main -> i32 = solve()

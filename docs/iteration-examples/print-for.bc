@@ -1,0 +1,11 @@
+-- T10 (R8) with today's `for` over a generator: the body names `stdout` and the loop threads it
+-- with no word from the program. The loop is div (its source is a generator).
+gen fn range(lo: i32, hi: i32) -> i32 =
+  let mut i = lo;
+  while i < hi { yield i; i = i + 1 };
+  ()
+
+main -> i32 =
+  for i in range(1, 6) { put_dec(&mut stdout, i); putb(&mut stdout, 32) };
+  putb(&mut stdout, 10);
+  5

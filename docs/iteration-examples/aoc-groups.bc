@@ -1,0 +1,18 @@
+-- T6b (Advent of Code 2022, day 1): the largest sum of a group of numbers, groups separated by
+-- blank lines. With today's `for` over the input: five `let mut` variables, threaded. Div (the
+-- input is codata). Answer: 24000.
+main -> i32 =
+  let mut cur = 0;
+  let mut num = 0;
+  let mut best = 0;
+  let mut nl = false;
+  for b in bytes(&mut stdin) {
+    if b == 10 {
+      if nl { if cur > best { best = cur }; cur = 0 } else { cur = cur + num; num = 0 };
+      nl = true
+    } else { num = num * 10 + (b - 48); nl = false }
+  };
+  let cur = cur + num;
+  let best = if cur > best { cur } else { best };
+  put_dec(&mut stdout, best); putb(&mut stdout, 10);
+  best

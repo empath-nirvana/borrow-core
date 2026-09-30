@@ -1,0 +1,18 @@
+-- T10 (R8): a body that only performs I/O, over finite data, in candidate D's style today: the
+-- counted loop threads the capability `stdout` in its state by hand (`corpus/split-at-mut.bc`'s
+-- `emit`). Total. Output: `1 2 3 4 5 `.
+include slice
+
+fn tab(i: i32) -> i32 = i + 1
+
+fn emit(i: i32, s: Out * array i32) -> Out * array i32 =
+  let (o, a) = s;
+  let x = borrow imm a { 'x, v -> at(v, i, 0) };
+  put_dec(&mut o, x); putb(&mut o, 32);
+  (o, a)
+
+main -> i32 =
+  let a = array_new[i32] (5, tab);
+  let (stdout, a) = count_fold[Out * array i32] (emit, 5, 0, (stdout, a));
+  putb(&mut stdout, 10);
+  5

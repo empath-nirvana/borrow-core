@@ -1,0 +1,17 @@
+-- T7, pull × pull: two generators zipped (`lib/adapters.bc`'s `zip` pulls its second source with
+-- `gen_pull`). Push × pull and push × push are `experiments/LoopBorrow/bc/zip-push-pull.bc` and
+-- `zip-push-push.bc` (state + step, with the owners in the loop's state).
+include adapters
+
+gen fn range(lo: i32, hi: i32) -> i32 =
+  let mut i = lo;
+  while i < hi { yield i; i = i + 1 };
+  ()
+
+main -> i32 =
+  let mut acc = 0;
+  for p in zip(range(0, 5), filter(range(0, 100), !{ x -> x > 10 })) {
+    let (x, y) = p;
+    acc = acc + x * y
+  };
+  acc

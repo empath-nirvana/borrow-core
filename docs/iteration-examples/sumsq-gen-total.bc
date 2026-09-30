@@ -1,0 +1,14 @@
+-- `sumsq-gen.bc` with `total`: rejected today (expected).
+-- div: the `for` does not know the generator is finite. Adding `total` to `sum_squares` is
+-- rejected ("it has a `for`"): this is the gap PR #132 tried to close by name.
+gen fn range(lo: i32, hi: i32) -> i32 =
+  let mut i = lo;
+  while i < hi { yield i; i = i + 1 };
+  ()
+
+total fn sum_squares(n: i32) -> i32 =
+  let mut acc = 0;
+  for i in range(0, n) { acc = acc + i * i };
+  acc
+
+main -> i32 = sum_squares(10)

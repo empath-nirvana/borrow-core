@@ -1,0 +1,17 @@
+-- T3 / P12 with today's `for` over a view's iterator, inside the lend. `iter_mut` is codata, so
+-- the `for` is a div loop, and a div loop cannot run inside a borrow block whose borrow the
+-- iterator holds (SPEC §14, borrow scopes over loops: "an iterator that holds the borrow").
+-- Expected: rejected. This is the case the data/codata split is about (R1, R4).
+include slice
+
+fn tab(i: i32) -> i32 = i + 1
+
+main -> i32 =
+  let a = array_new[i32] (4, tab);
+  borrow mut a { 'x, v ->
+    for c in iter_mut(v) { modify c { x -> x * 10 } };
+    ()
+  };
+  let (_, s) = count_fold[array i32 * i32] (!{ (i, (a, s)) ->
+      let s = borrow imm a { 'x, v -> s + at(v, i, 0) }; (a, s) }, 4, 0, (a, 0));
+  s

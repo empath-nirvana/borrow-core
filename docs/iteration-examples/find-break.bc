@@ -1,0 +1,23 @@
+-- T9: early exit with a value. Today's `for` over a generator keeps its value with `break e`
+-- (decision 41); the loop is div. The same search as the slice library's `find` below, which
+-- is total but carries a "found" state to the end of the count (SPEC §16 Open).
+include slice
+
+gen fn upto(n: i32) -> i32, i32 =
+  let mut i = 0;
+  while i < n { yield i; i = i + 1 };
+  0 - 1
+
+fn tab(i: i32) -> i32 = if i == 6 { 3 } else { i + 10 }
+
+fn first_over(lim: i32) -> i32 =
+  let r = for x in upto(100) { if x * x > lim { break x } else { () } };
+  r
+
+total fn index_of_3() -> i32 + 1 =
+  let a = array_new[i32] (10, tab);
+  borrow imm a { 'x, v -> find(v, 3, eq_i32) }
+
+main -> i32 * i32 =
+  let f = match index_of_3() { inl i -> i | inr _ -> 0 - 1 };
+  (first_over(50), f)

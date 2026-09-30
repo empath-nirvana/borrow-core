@@ -1,0 +1,31 @@
+-- T1 `io-wc` in candidate D's style (no `for`): a fold of the byte stream with an explicit
+-- accumulator. The step is a `!` closure, which captures nothing (#9), so every piece of state
+-- is a component of the accumulator.
+--
+-- `fold_bytes` stands for D's library `fold` over codata. It is written here, once, with the
+-- loop the library would use. It is written at the stream's types so that it can take the
+-- capability and hand it back; a generic `fold[A, S]` over a generator that holds nothing also
+-- checks today (`fold-generic.bc`). User code below it uses no loop.
+fn fold_bytes(c: In, s: i32 * (i32 * (i32 * bool)),
+              f: !((i32 * (i32 * (i32 * bool))) * i32 => i32 * (i32 * (i32 * bool))))
+    -> In * (i32 * (i32 * (i32 * bool))) =
+  let mut s = s;
+  for b in bytes(&mut c) { s = f(s, b) };
+  (c, s)
+
+fn is_space(b: i32) -> bool = b == 32 || b == 10 || b == 9
+
+-- One byte into (lines, (words, (chars, in_word))).
+fn wc_step(p: (i32 * (i32 * (i32 * bool))) * i32) -> i32 * (i32 * (i32 * bool)) =
+  let ((lines, (words, (chars, in_word))), b) = p;
+  let lines = if b == 10 { lines + 1 } else { lines };
+  if is_space(b) { (lines, (words, (chars + 1, false))) }
+  else { if in_word { (lines, (words, (chars + 1, true))) }
+         else { (lines, (words + 1, (chars + 1, true))) } }
+
+main -> i32 * (i32 * i32) =
+  let (lines, (words, (chars, _))) = fold_bytes(&mut stdin, (0, (0, (0, false))), wc_step);
+  put_dec(&mut stdout, lines); putb(&mut stdout, 32);
+  put_dec(&mut stdout, words); putb(&mut stdout, 32);
+  put_dec(&mut stdout, chars); putb(&mut stdout, 10);
+  (lines, (words, chars))

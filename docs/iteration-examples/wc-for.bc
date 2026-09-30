@@ -1,0 +1,24 @@
+-- T1 `io-wc`, with today's `for` (every `for` candidate: A, B, C). Lines, words and bytes of
+-- the input. The loop threads four `let mut` variables; `count` is div because its source,
+-- `bytes(&mut c)`, is codata.
+fn is_space(b: i32) -> bool = b == 32 || b == 10 || b == 9
+
+fn count(c: In) -> In * (i32 * (i32 * i32)) =
+  let mut lines = 0;
+  let mut words = 0;
+  let mut chars = 0;
+  let mut in_word = false;
+  for b in bytes(&mut c) {
+    chars = chars + 1;
+    if b == 10 { lines = lines + 1 };
+    if is_space(b) { in_word = false }
+    else { if not(in_word) { words = words + 1 }; in_word = true }
+  };
+  (c, (lines, (words, chars)))
+
+main -> i32 * (i32 * i32) =
+  let (lines, (words, chars)) = count(&mut stdin);
+  put_dec(&mut stdout, lines); putb(&mut stdout, 32);
+  put_dec(&mut stdout, words); putb(&mut stdout, 32);
+  put_dec(&mut stdout, chars); putb(&mut stdout, 10);
+  (lines, (words, chars))

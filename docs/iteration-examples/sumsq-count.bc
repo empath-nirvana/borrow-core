@@ -1,0 +1,8 @@
+-- T9-adjacent: a total counted loop, written as a direct call of K0 (`count_fold`, SPEC §16):
+-- candidate D's form of `for i in range(n)`. The state is the accumulator; the step is a named
+-- function, since a `!` closure could not capture anything else it needed.
+fn sq(i: i32, acc: i32) -> i32 = acc + i * i
+
+total fn sum_squares(n: i32) -> i32 = count_fold[i32] (sq, n, 0, 0)
+
+main -> i32 = sum_squares(10)

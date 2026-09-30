@@ -1,0 +1,29 @@
+-- T6b in a pipeline style (candidate D, with generators): lines, each parsed by a fold, grouped
+-- by `batch` at the blank lines, and the maximum taken by a fold of the groups. `max_groups`
+-- runs the pipeline with one `for` (D's library fold over codata would take its place).
+-- A line is a list of its bytes, last first (`lines`), so its value is a right fold.
+include adapters
+
+type Line = mu X. 1 + (i32 * X)
+
+-- (length, value) of a line.
+fn line_alg(r: 1 + i32 * (i32 * i32)) -> i32 * i32 =
+  match r { inl _ -> (0, 0) | inr (d, (n, v)) -> (n + 1, (d - 48) + v * 10) }
+def parse : !(Line => i32 * i32) = fold_own[1 + i32 * X, i32 * i32] line_alg
+
+-- A group's running sum; an empty line closes it.
+fn add_line(p: i32 * (i32 * i32)) -> i32 * bool =
+  let (s, (n, v)) = p;
+  if n == 0 { (s, true) } else { (s + v, false) }
+
+fn max_groups(c: In) -> In * i32 =
+  let mut best = 0;
+  let c = for s in batch(map(lines(from_iter(bytes(c))), parse), 0, add_line) {
+    if s > best { best = s } else { () }
+  };
+  (c, best)
+
+main -> i32 =
+  let best = max_groups(&mut stdin);
+  put_dec(&mut stdout, best); putb(&mut stdout, 10);
+  best

@@ -1,0 +1,13 @@
+-- Candidate D's library `fold`, generic, over a generator that holds nothing. It is div (its
+-- source is codata) even when the generator is finite. Answer: 6.
+gen fn range(lo: i32, hi: i32) -> i32 =
+  let mut i = lo;
+  while i < hi { yield i; i = i + 1 };
+  ()
+
+fn fold[A, S](g: U (gen A 1 1), s: S, f: !(S * A => S)) -> S =
+  let mut s = s;
+  for x in g { s = f(s, x) };
+  s
+
+main -> i32 = fold(range(0, 4), 0, !{ (s, x) -> s + x })

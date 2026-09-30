@@ -1,0 +1,15 @@
+-- T8: an infinite generator, cut by `take` (`lib/adapters.bc`). The `for` is div: `take` over a
+-- generator is codata, whatever its count. (In candidates A–C, `take` over a source that never
+-- skips, an `iter`, can be total by type; `fib` here is a `gen`, which may skip.)
+include adapters
+
+gen fn fib() -> i32 =
+  let mut a = 0;
+  let mut b = 1;
+  while true { yield a; let c = a + b; a = b; b = c };
+  ()
+
+main -> i32 =
+  let mut acc = 0;
+  for x in take(fib(), 10) { acc = acc + x };
+  acc
