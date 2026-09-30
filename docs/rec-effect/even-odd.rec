@@ -1,0 +1,37 @@
+-- Mutual recursion, plain and with a separate cache per member. Provisional spellings (README
+-- §2). Hand-lowered: 16-even-odd.bc, 17-even-odd-memo.bc.
+
+fn even(n: i32) -> bool = n == 0 || odd(n - 1)
+fn odd(n: i32) -> bool  = n != 0 && even(n - 1)
+
+main =
+  let a = even(100_000);                                   -- the group's default: fix, a loop
+  let mut ce = array(10_001, none);
+  let mut co = array(10_001, none);
+  let ev = group(even |> memo(&mut ce), odd |> memo(&mut co)) |> fix;
+  let b = ev.even(10_000);
+  let c = ev.even(9_998);                                  -- a hit in ce
+  …
+
+-- ELABORATION
+--   {even, odd} is one group, one `rec`; a request is `even n` or `odd n`. Every `rec` is in
+--   tail position (`||` and `&&` short-circuit: the call is the last thing), so the group is a
+--   loop: no frame (16: 0 allocations at n = 100 000).
+--   A layer on one member intercepts only that member's requests: `even |> memo(ce)` sees
+--   `even n`, `odd |> memo(co)` sees `odd n`. Lowered as one memo layer whose look-up and store
+--   dispatch on the member (17).
+--   Memo breaks tail position: a miss must store when the answer comes back, so each miss
+--   leaves a store frame, and the loop becomes a recursion as deep as the chain of misses (17:
+--   one allocation per store frame: 20 004 at n = 10 000, two chains of 10 001 misses and the two
+--   arrays). This is only for definitions that were tail-recursive;
+--   fib has no tail call to lose.
+--   Ambiguity: where a per-member layer attaches (at the definition, `fn even … with memo`, or at
+--   the group's use site, as here), and how the closed group is named (`ev.even`) — README §6.
+--
+-- DRIVER, TOTALITY, STACK
+--   fix: div. Without memo: constant stack. With memo: stack as deep as the misses (deep
+--   driver: heap).
+--
+-- CHECKER REPORTS (intended)
+--   {even, odd}: recursive group; tail `rec` only: a loop
+--   memo on a tail-recursive group: tail calls become non-tail (one pending store per miss)

@@ -1,0 +1,25 @@
+-- `for` over an I/O stream that may end, with code after it (for-stdin.rec): the sum of the
+-- numbers on the lines of the input, and how many lines, then a line written after the loop.
+-- As today's language writes it: `lines` (lib/adapters.bc) over the input's bytes. The source
+-- can end, so the loop has an "ended" value (here `()`, the adapters' finishing value, and the
+-- capability, which comes back to `stdin`); what follows the loop runs after the input ends.
+-- A drain: div. `next` is effect-polymorphic: `lines` is the same code over a pure source.
+--
+-- Answer: the line `2024`, then (i32[4], i32[2024]) for the input 1000, 900, 100, 24.
+include adapters
+
+fn digit_alg(r: 1 + (i32 * i32)) -> i32 = match r { inl u -> 0 | inr xt -> let (x, t) = xt; t * 10 + (x - 48) }
+def value : !(Bytes => i32) = fold_own[1 + (i32 * X), i32] digit_alg
+
+-- The input as a generator of bytes that hands the capability back when it ends.
+gen fn in_bytes(c: In) -> i32, In =
+  for b in bytes(&mut c) { yield b };
+  c
+
+main -> i32 * i32 =
+  let mut n = 0;
+  let mut acc = 0;
+  for l in lines(in_bytes(stdin)) { n = n + 1; acc = acc + value(l) };
+  put_dec(&mut stdout, acc);
+  putb(&mut stdout, 10);
+  (n, acc)

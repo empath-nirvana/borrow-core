@@ -1,0 +1,31 @@
+-- uses: rec.bc
+-- expect: rejected
+-- `26-fuel.bc`'s `ack |> fuel(n) |> deep` marked `total`. The fuel layer bounds the calls, but the
+-- driver is a loop and the checker infers div from it; a layer does not make a definition total
+-- by type, a fuelled driver does (`26-fuel.bc`'s `ack_total`).
+type Out = i32 + (((i32 * i32) * (i32 + 1)) + 1)
+
+fn ack_start(p: 1 * (i32 * i32)) -> 1 * Out =
+  let (s, mn) = p;
+  let (m, n) = mn;
+  if m == 0 { (s, inl (n + 1)) } else {
+    if n == 0 { (s, inr (inl ((m - 1, 1), (inr () : i32 + 1)))) }
+    else { (s, inr (inl ((m, n - 1), (inl (m - 1) : i32 + 1)))) }
+  }
+
+fn ack_resume(p: 1 * (i32 * i32)) -> 1 * Out =
+  let (s, kb) = p;
+  let (m1, b) = kb;
+  (s, inr (inl ((m1, b), (inr () : i32 + 1))))
+
+type FOut = i32 + (((i32 * i32) * (i32 + 1)) + (1 + 1))
+
+fn fstart(p: (i32 * 1) * (i32 * i32)) -> (i32 * 1) * FOut = fuel_start(ack_start, p)
+fn fresume(p: (i32 * 1) * (i32 * i32)) -> (i32 * 1) * FOut = fuel_resume(ack_resume, p)
+
+-- ack |> fuel(n) |> deep: "ran out" visible, div by type.
+total fn ack_fuel(m: i32, k: i32, n: i32) -> i32 + (1 + 1) =
+  let (s, r) = deep[i32 * i32, i32, i32, i32 * 1, 1 + 1](fstart, (fresume, ((n, ()), (m, k))));
+  r
+
+main -> i32 + (1 + 1) = ack_fuel(2, 3, 1000)

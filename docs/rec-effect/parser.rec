@@ -1,0 +1,47 @@
+-- A recursive-descent parser and evaluator, mutually recursive, with an error effect escaping
+-- the recursion. Provisional spellings (README §2). Hand-lowered: 14-parser.bc.
+
+fn expr(s: &Src, e: Fail<i32>) -> i32 =
+  let mut acc = term(s, e);
+  while s.peek() == b'+' { s.bump(); acc = acc + term(s, e) };
+  acc
+
+fn term(s: &Src, e: Fail<i32>) -> i32 =
+  let mut acc = factor(s, e);
+  while s.peek() == b'*' { s.bump(); acc = acc * factor(s, e) };
+  acc
+
+fn factor(s: &Src, e: Fail<i32>) -> i32 =
+  let c = s.peek();
+  if is_digit(c) { s.bump(); c - b'0' }
+  else if c == b'(' { s.bump(); let v = expr(s, e); if s.peek() == b')' { s.bump(); v } else { e.fail(s.pos) } }
+  else { e.fail(s.pos) }                          -- an operation: a call on the capability `e`
+
+main -> (i32 + i32) * (i32 + i32) =
+  let a = try { e -> expr(&src("2*(3+4)+5*6"), e) };    -- inl 44
+  let b = try { e -> expr(&src("2*(3+4"), e) };         -- inr 6
+  (a, b)
+
+-- ELABORATION
+--   expr, term and factor are one group (each reaches the others): one `rec`, whose request is
+--   a member and its arguments. A `rec` inside a `while` body has the loop's state live across
+--   it, so the loop's accumulator is the frame ("in expr's loop, acc so far"). The group's
+--   calls are not in tail position (the loops continue after them).
+--   `e.fail(p)` is an operation of the `Fail` capability, handled by `try` outside the
+--   recursion: it does not resume, so the machine stops, its pending frames are dropped, and
+--   the error comes out through `fix` to `try`. Layers between (memo, fuel) pass it on
+--   (rec.bc's `memo_wrap`, `fuel_wrap`).
+--   Implicit `rec` is ambiguous here in one way: whether `term` called from `expr` is the
+--   group's `rec` or a call of `term`'s own closed default (term |> fix). Same answer, different
+--   stack: the group is one machine with one stack only if the elaborator groups them (README §6).
+--
+-- DRIVER, TOTALITY, STACK
+--   fix: div. The recursion does terminate on every input (each `rec` either follows a consumed
+--   byte or is the first call of a member at the same position, and the grammar has no left
+--   recursion), but the position is a value in the state, so there is no decreasing argument
+--   for a checker to see. Host stack as deep as the nesting of parentheses. Lowered under
+--   `deep`: 21 allocations, 0 dispatched calls.
+--
+-- CHECKER REPORTS (intended)
+--   {expr, term, factor}: one recursive group; 3 non-tail `rec` sites inside `while` bodies
+--   Fail<i32>: escapes the group; handled by `try` in main

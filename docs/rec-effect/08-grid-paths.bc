@@ -1,0 +1,76 @@
+-- uses: rec.bc
+-- AoC-style DP: the number of paths from the top-left to the bottom-right cell of a 12 x 12 grid,
+-- moving right or down, avoiding walls (grid-paths.rec). paths |> memo(cache) |> deep.
+--
+-- The grid is a parameter every call passes unchanged. The machine's steps are `!` and cannot
+-- capture it (F5), so it is the inner machine's state `S`, an owned array lent `imm` inside each
+-- step: the per-observation lend (SPEC §14) written by hand. The memo key is the cell only, not
+-- the grid: the layer is told which argument is the key (README §6, "memo keys").
+--
+-- Frames: `inl cell` after the call below (the call to the right is still to make), `inr d`
+-- after the call to the right (`d + _` is still to do).
+--
+-- Answer: i32[7977]. Div.
+include slice
+
+fn rem(a: i32, b: i32) -> i32 = match host[rem_u32] (a, b) { inl r -> r | inr u -> 0 }
+fn quot(a: i32, b: i32) -> i32 = match host[div_u32] (a, b) { inl r -> r | inr u -> 0 }
+
+-- 1 for a wall: (3 row + 5 col) divisible by 7, except the two ends.
+fn wall_at(i: i32) -> i32 =
+  if i == 0 || i == 143 { 0 } else { if rem(quot(i, 12) * 3 + rem(i, 12) * 5, 7) == 0 { 1 } else { 0 } }
+
+fn is_wall(g: array i32, i: i32) -> array i32 * bool =
+  let w = borrow imm g { 'x, v -> at(v, i, 1) };
+  (g, w == 1)
+
+fn go_right(g: array i32, cell: i32, acc: i32)
+    -> array i32 * (i32 + ((i32 * ((i32 + i32) + 1)) + 1)) =
+  if rem(cell, 12) + 1 < 12 { (g, inr (inl (cell + 1, inl (inr acc : i32 + i32)))) }
+  else { (g, inl acc) }
+
+fn paths_start(p: array i32 * i32) -> array i32 * (i32 + ((i32 * ((i32 + i32) + 1)) + 1)) =
+  let (g, cell) = p;
+  let (g, w) = is_wall(g, cell);
+  if w { (g, inl 0) } else {
+    if cell == 143 { (g, inl 1) } else {
+      if quot(cell, 12) + 1 < 12 { (g, inr (inl (cell + 12, inl (inl cell : i32 + i32)))) }
+      else { go_right(g, cell, 0) }
+    }
+  }
+
+fn paths_resume(p: array i32 * ((i32 + i32) * i32))
+    -> array i32 * (i32 + ((i32 * ((i32 + i32) + 1)) + 1)) =
+  let (g, kb) = p;
+  let (k, b) = kb;
+  match k {
+    inl cell -> go_right(g, cell, b)
+  | inr acc -> (g, inl (acc + b))
+  }
+
+fn empty(i: i32) -> i32 = 0 - 1
+
+fn cache_get(p: array i32 * i32) -> array i32 * (i32 + 1) =
+  let (c, n) = p;
+  let v = borrow imm c { 'x, w -> at(w, n, 0 - 1) };
+  if v < 0 { (c, inr ()) } else { (c, inl v) }
+
+fn cache_put(p: array i32 * (i32 * i32)) -> array i32 =
+  let (c, nv) = p;
+  let (n, v) = nv;
+  borrow mut c { 'x, w -> discard_mut(set(w, n, v)) };
+  c
+
+fn mstart(p: (array i32 * array i32) * (i32 + i32))
+    -> (array i32 * array i32) * (i32 + (((i32 + i32) * (((i32 + i32) + i32) + 1)) + 1)) =
+  memo_start(paths_start, cache_get, p)
+
+fn mresume(p: (array i32 * array i32) * (((i32 + i32) + i32) * i32))
+    -> (array i32 * array i32) * (i32 + (((i32 + i32) * (((i32 + i32) + i32) + 1)) + 1)) =
+  memo_resume(paths_resume, cache_put, p)
+
+main -> i32 =
+  let g = array_new[i32] (144, wall_at);
+  let c = array_new[i32] (144, empty);
+  let (s, r) = deep(mstart, (mresume, ((c, g), (inl 0 : i32 + i32))));
+  match r { inl v -> v | inr z -> 0 - 1 }

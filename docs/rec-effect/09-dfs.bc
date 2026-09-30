@@ -1,0 +1,72 @@
+-- uses: rec.bc
+-- Recursive DFS over a graph with a visited set (dfs.rec): the number of nodes reached from 0,
+-- and the order they are first visited in. dfs |> deep.
+--
+-- The graph is in CSR form: `off[v] .. off[v + 1]` indexes `edges`. Edges: 0→1 0→2 1→3 2→3 3→4
+-- 4→1 5→6 6→5 7→7. The visited set is an array indexed by node (dense ids, as C would do it).
+--
+-- The surface's `for w in neighbours(v) { n = n + dfs(w) }` has `rec` inside a `for` body, in
+-- non-tail position. So the loop's cursor lives in the frame: `(v, (i, n))` is "in the loop over
+-- v's edges, at edge i, with n so far". The `for` and the recursion are one machine.
+--
+-- State: the graph (`off`, `edges`, lent `imm` inside each step), the visited set (lent `mut`),
+-- and the visit order so far, as decimal digits.
+--
+-- Answer: (i32[5], i32[1342]): nodes 0 1 3 4 2 are reached, in that order (0 is the leading
+-- digit). Div.
+include slice
+
+fn off_at(i: i32) -> i32 = if i == 0 { 0 } else { if i == 1 { 2 } else { i + 1 } }
+fn edge_at(i: i32) -> i32 =
+  if i == 0 { 1 } else { if i == 1 { 2 } else { if i == 2 { 3 } else { if i == 3 { 3 } else {
+  if i == 4 { 4 } else { if i == 5 { 1 } else { if i == 6 { 6 } else { if i == 7 { 5 } else { 7 } } } } } } } }
+fn zero(i: i32) -> i32 = 0
+
+fn aget(a: array i32, i: i32) -> array i32 * i32 =
+  let x = borrow imm a { 'x, v -> at(v, i, 0) };
+  (a, x)
+
+fn aput(a: array i32, i: i32, x: i32) -> array i32 =
+  borrow mut a { 'x, v -> discard_mut(set(v, i, x)) };
+  a
+
+-- The state: off, edges, seen, order.
+type G = array i32 * (array i32 * (array i32 * i32))
+type Out = i32 + ((i32 * ((i32 * (i32 * i32)) + 1)) + 1)
+
+-- The loop over v's edges from edge i, with n nodes so far.
+fn scan(g: G, v: i32, i: i32, n: i32) -> G * Out =
+  let (off, r) = g;
+  let (off, hi) = aget(off, v + 1);
+  if i < hi {
+    let (edges, r2) = r;
+    let (edges, w) = aget(edges, i);
+    ((off, (edges, r2)), inr (inl (w, inl ((v, (i + 1, n)) : i32 * (i32 * i32)))))
+  } else { ((off, r), inl n) }
+
+fn dfs_start(p: G * i32) -> G * Out =
+  let (g, v) = p;
+  let (off, r) = g;
+  let (edges, r2) = r;
+  let (seen, order) = r2;
+  let (seen, s) = aget(seen, v);
+  if s == 1 { ((off, (edges, (seen, order))), inl 0) } else {
+    let seen = aput(seen, v, 1);
+    let (off, lo) = aget(off, v);
+    scan((off, (edges, (seen, order * 10 + v))), v, lo, 1)
+  }
+
+fn dfs_resume(p: G * ((i32 * (i32 * i32)) * i32)) -> G * Out =
+  let (g, kb) = p;
+  let (k, b) = kb;
+  let (v, r) = k;
+  let (i, n) = r;
+  scan(g, v, i, n + b)
+
+main -> i32 * i32 =
+  let g = (array_new[i32] (9, off_at), (array_new[i32] (9, edge_at), (array_new[i32] (8, zero), 0)));
+  let (g, r) = deep(dfs_start, (dfs_resume, (g, 0)));
+  let (off, r2) = g;
+  let (edges, r3) = r2;
+  let (seen, order) = r3;
+  match r { inl n -> (n, order) | inr z -> (0 - 1, order) }

@@ -1,0 +1,61 @@
+-- expect: fails
+-- fib |> memo(cache) |> fix on the host stack, as `04-fib-memo-host.bc`, at n = 1 000 000. The
+-- recursion is a million native calls deep, and the run exhausts wasmtime's call stack. The same
+-- definition under the deep driver (`03-fib-memo-deep.bc`) or the tabulating one
+-- (`06-fib-tabulate.bc`) runs. Stack behaviour is a property of the driver.
+include slice
+
+fn addp(x: i32, y: i32) -> i32 = let s = x + y; if s >= 1000000007 { s - 1000000007 } else { s }
+
+-- The open step, generic in the state it threads.
+fn fib_step[S](rec: !(S * i32 => S * (i32 + 1)), p: S * i32) -> S * (i32 + 1) =
+  let (s, n) = p;
+  if n < 2 { (s, inl n) } else {
+    let (s, r1) = rec(s, n - 1);
+    match r1 {
+      inl a ->
+        let (s, r2) = rec(s, n - 2);
+        match r2 { inl b -> (s, inl (addp(a, b))) | inr u -> (s, inr u) }
+    | inr u -> (s, inr u)
+    }
+  }
+
+fn empty(i: i32) -> i32 = 0 - 1
+
+fn cache_get(c: array i32, n: i32) -> array i32 * (i32 + 1) =
+  let v = borrow imm c { 'x, w -> at(w, n, 0 - 1) };
+  if v < 0 { (c, inr ()) } else { (c, inl v) }
+
+fn cache_put(c: array i32, n: i32, v: i32) -> array i32 =
+  borrow mut c { 'x, w -> discard_mut(set(w, n, v)) };
+  c
+
+-- The memo layer, step to step: a hit answers; a miss runs the inner step, whose `rec` is the
+-- whole layered function, then stores.
+fn memo_open(inner: !(!(array i32 * i32 => array i32 * (i32 + 1)) * (array i32 * i32)
+                      => array i32 * (i32 + 1)),
+             rec: !(array i32 * i32 => array i32 * (i32 + 1)),
+             p: array i32 * i32) -> array i32 * (i32 + 1) =
+  let (c, n) = p;
+  let (c, h) = cache_get(c, n);
+  match h {
+    inl v -> (c, inl v)
+  | inr u ->
+      let (c, r) = inner(rec, (c, n));
+      match r { inl v -> (cache_put(c, n, v), inl v) | inr u -> (c, inr u) }
+  }
+
+fn bottom(p: array i32 * i32) -> array i32 * (i32 + 1) = let (c, n) = p; (c, inr ())
+
+fn tie(f: !(array i32 * i32 => array i32 * (i32 + 1))) -> !(array i32 * i32 => array i32 * (i32 + 1)) =
+  !{ p -> memo_open(fib_step[array i32], f, p) }
+
+fn unroll_once(i: i32, f: !(array i32 * i32 => array i32 * (i32 + 1)))
+    -> !(array i32 * i32 => array i32 * (i32 + 1)) = tie(f)
+
+total fn fib_memo(n: i32) -> i32 + 1 =
+  let f = count_fold[!(array i32 * i32 => array i32 * (i32 + 1))] (unroll_once, n + 1, 0, bottom);
+  let (c, r) = f(array_new[i32] (n + 1, empty), n);
+  r
+
+main -> i32 + 1 = fib_memo(1000000)

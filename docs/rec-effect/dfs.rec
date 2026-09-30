@@ -1,0 +1,33 @@
+-- Recursive DFS with a visited set. Provisional spellings (README §2). Hand-lowered: 09-dfs.bc.
+
+fn dfs(g: &Graph, seen: &mut array bool, order: &mut Vec<i32>, v: i32) -> i32 =
+  if seen[v] { 0 } else {
+    seen[v] = true;
+    order.push(v);
+    let mut n = 1;
+    for w in g.neighbours(v) { n = n + dfs(g, seen, order, w) };
+    n
+  }
+
+main -> i32 =
+  let g = graph(8, [(0,1), (0,2), (1,3), (2,3), (3,4), (4,1), (5,6), (6,5), (7,7)]);
+  let mut seen = array(8, false);
+  let mut order = vec();
+  dfs(&g, &mut seen, &mut order, 0)
+
+-- ELABORATION
+--   One `rec`, inside a `for` body, not in tail position (n + _). The `for` over v's
+--   neighbours is a loop over data (a view of `edges`, bounded by off[v + 1]); with a `rec` in
+--   its body, the loop's cursor and its state `n` are live across the `rec`, so they are the
+--   frame: (v, next edge, n). The loop and the recursion are one machine.
+--   `seen` and `order` are `&mut` arguments passed unchanged to every `rec`: threaded through
+--   the machine's state (lent `mut` per step). `g` is lent `imm` per step.
+--
+-- DRIVER, TOTALITY, STACK
+--   fix: div; host stack, depth up to the longest DFS path. Lowered under `deep`: 9 allocations
+--   (the arrays and frames), 0 dispatched calls.
+--   Today's `for` body must be total and may not call a div function (SPEC §14 Open, F8); here
+--   the body performs `rec`, which is exactly the case the machine absorbs.
+--
+-- CHECKER REPORTS (intended)
+--   dfs: recursive, 1 non-tail `rec` inside `for w in g.neighbours(v)`; frame holds the cursor

@@ -1,0 +1,74 @@
+-- uses: rec.bc
+-- A DP that needs a map (collatz-map.rec): the longest Collatz chain from a start below 30,
+-- memoised. clen(n) = 0 at 1, else 1 + clen(next(n)): not in tail position (frame: `1 + _`).
+-- The keys are the values the chains pass through (up to 9232 from 27): sparse, so the cache is
+-- a map. The surface writes it against a map effect (`get`/`insert`, provisional); there is no
+-- map type or effect today, so the cache here is an association list, the cheapest map there is.
+--
+-- A look-up must not consume the list. `fold_own` rebuilds it, but its algebra is `!` and cannot
+-- capture the key (F5, #9: `!thunk` promotes only over `!` types), so the list is folded into a
+-- function of the key, a closure per entry: every look-up allocates one closure per entry.
+--
+-- Each start is one recursion, driven by `deep_fuel` so that the loop over the starts (a
+-- `count_fold`) can call it: total. A start that ran out would lose the cache (the driver's
+-- residual drops the state); 100 000 observations is far more than any chain here needs.
+--
+-- Answer: (i32[27], i32[111]).
+
+type AList = mu X. 1 + ((i32 * i32) * X)
+
+fn anil() -> AList = roll inl ()
+fn acons(kv: i32 * i32, t: AList) -> AList = roll inr (kv, t)
+
+type Look = U (i32 -o F (AList * (i32 + 1)))
+
+fn look_alg(r: 1 + ((i32 * i32) * Look)) -> Look =
+  match r {
+    inl u -> { key -> (anil(), inr ()) }
+  | inr e -> let (kv, rest) = e; let (k, v) = kv;
+      { key -> q <- rest!(key); let (t, f) = q; if k == key { (acons((k, v), t), inl v) } else { (acons((k, v), t), f) } }
+  }
+def lookup : !(AList => Look) = fold_own[1 + ((i32 * i32) * X), Look] look_alg
+
+fn get(p: AList * i32) -> AList * (i32 + 1) =
+  let (c, key) = p;
+  let f = lookup(c);
+  r <- f!(key);
+  r
+
+fn put(p: AList * (i32 * i32)) -> AList = let (c, kv) = p; acons(kv, c)
+
+fn next(n: i32) -> i32 =
+  match host[rem_u32] (n, 2) {
+    inl r -> if r == 0 { match host[div_u32] (n, 2) { inl q -> q | inr u -> 0 } } else { 3 * n + 1 }
+  | inr u -> 0
+  }
+
+type Out = i32 + ((i32 * (1 + 1)) + 1)
+
+fn clen_start(p: 1 * i32) -> 1 * Out =
+  let (s, n) = p;
+  if n == 1 { (s, inl 0) } else { (s, inr (inl (next(n), (inl () : 1 + 1)))) }
+
+fn clen_resume(p: 1 * (1 * i32)) -> 1 * Out = let (s, kb) = p; let (k, b) = kb; (s, inl (b + 1))
+
+type MOut = i32 + (((i32 + i32) * ((1 + i32) + 1)) + 1)
+
+fn mstart(p: (AList * 1) * (i32 + i32)) -> (AList * 1) * MOut = memo_start(clen_start, get, p)
+fn mresume(p: (AList * 1) * ((1 + i32) * i32)) -> (AList * 1) * MOut = memo_resume(clen_resume, put, p)
+
+-- One start: its chain length, the cache handed on.
+fn try_start(i: i32, s: AList * (i32 * i32)) -> AList * (i32 * i32) =
+  let (c, best) = s;
+  let (bi, bl) = best;
+  match deep_fuel[i32 + i32, i32, 1 + i32, AList * 1, 1](mstart, (mresume, (((c, ()), (inl (i + 1) : i32 + i32)), 100000))) {
+    inl sr -> let (cs, r) = sr; let (c, u) = cs;
+      match r { inl l -> if l > bl { (c, (i + 1, l)) } else { (c, (bi, bl)) } | inr z -> (c, (bi, bl)) }
+  | inr u -> (anil(), (bi, bl))
+  }
+
+total fn longest(n: i32) -> i32 * i32 =
+  let (c, best) = count_fold[AList * (i32 * i32)] (try_start, n - 1, 0, (anil(), (0, 0)));
+  best
+
+main -> i32 * i32 = longest(30)

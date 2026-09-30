@@ -1,0 +1,181 @@
+-- rec.bc: the recursion effect, hand-lowered (docs/rec-effect/README.md §3). Not a library
+-- module: `run.sh` puts it in front of each program whose first line says `-- uses: rec.bc`,
+-- since `include` names only the modules of `lib/`.
+--
+-- A recursive definition, its recursive calls read as the effect `rec`, is lowered to a
+-- MACHINE: two persistent functions over a state `S`,
+--
+--   start  : !(S * A => S * Out)          run a call on the argument `a`
+--   resume : !(S * (K * B) => S * Out)    resume a pending frame `k` with the answer `b`
+--
+--   Out = B + ((A * (K + 1)) + Z)
+--     inl b                  the call answers `b`
+--     inr inl (a, inl k)     the call performs `rec(a)` in non-tail position; `k`, a frame, is
+--                            its continuation as data
+--     inr inl (a, inr ())    the call performs `rec(a)` in tail position: its answer is `a`'s
+--     inr inr z              the call stops the whole recursion with `z` (an error, "ran out")
+--
+-- `K` is the defunctionalised continuation: one variant per `rec` site not in tail position,
+-- holding what is live there. It cannot be a closure `U (B -o F Out)`: `Out` would occur under
+-- `U` in its own definition, and the checker refuses a type variable under `U` (README §5).
+--
+-- Drivers (each is the one handler that runs the machine):
+--   `deep`       a loop (SPEC §14) whose state is the machine's state, what to do next (a call,
+--                or an answer to give back) and the pending frames, an owned list. Each
+--                observation is one `start` or one `resume`; a tail call pushes nothing. Div.
+--                Stack-safe: the frames are on the heap, one allocation per non-tail call.
+--   `deep_fuel`  `deep` under `div_fuel`: total, "ran out" is `inr ()`.
+-- The host-stack driver needs the open form of the step instead (README §3.2): `fib-host.bc`.
+--
+-- Layers are machine transformers: each takes the inner machine and answers one with its own
+-- state, frames and requests added. None drives.
+--   `memo`  state `C * S`, requests `A + A` (`inl` look up; `inr` run the inner machine), frames
+--           `K + A` (`inl` the inner's; `inr a`: store the answer for `a`, then give it back).
+--   `fuel`  state `i32 * S`, stops `1 + Z` (`inl ()`: ran out).
+
+-- ### The deep driver
+
+def deep_handle[A, B, K, S, Z] :
+    !(S * ((B + ((A * (K + 1)) + Z)) * (mu X. 1 + (K * X)))
+      => (S * (B + Z)) + (S * ((A + B) * (mu X. 1 + (K * X))))) =
+  !thunkv fun (p : S * ((B + ((A * (K + 1)) + Z)) * (mu X. 1 + (K * X)))) ->
+    let (s, q) = p;
+    let (o, st) = q;
+    case o {
+      inl b -> return (inr (s, ((inr b : A + B), st)))
+    | inr c ->
+        case c {
+          inl ak ->
+            let (a, fk) = ak;
+            case fk {
+              inl k -> return (inr (s, ((inl a : A + B), (roll (inr (k, st)) : mu X. 1 + (K * X)))))
+            | inr u -> return (inr (s, ((inl a : A + B), st)))
+            }
+        | inr z -> return (inl (s, (inr z : B + Z)))
+        }
+    }
+
+def deep_obs[A, B, K, S, Z] :
+    !(!(S * A => S * (B + ((A * (K + 1)) + Z)))
+      * (!(S * (K * B) => S * (B + ((A * (K + 1)) + Z))) * (S * ((A + B) * (mu X. 1 + (K * X)))))
+      => (S * (B + Z)) + (S * ((A + B) * (mu X. 1 + (K * X))))) =
+  !thunkv fun (p : !(S * A => S * (B + ((A * (K + 1)) + Z)))
+      * (!(S * (K * B) => S * (B + ((A * (K + 1)) + Z))) * (S * ((A + B) * (mu X. 1 + (K * X)))))) ->
+    let (start, q) = p;
+    let (resume, m) = q;
+    let (s, r) = m;
+    let (mode, st) = r;
+    case mode {
+      inl a ->
+        so <- return ((unbang start) (s, a));
+        let (s2, o) = so;
+        return ((unbang deep_handle[A, B, K, S, Z]) (s2, (o, st)))
+    | inr b ->
+        case (unroll st) {
+          inl u -> return (inl (s, (inl b : B + Z)))
+        | inr kt ->
+            let (k, rest) = kt;
+            so <- return ((unbang resume) (s, (k, b)));
+            let (s2, o) = so;
+            return ((unbang deep_handle[A, B, K, S, Z]) (s2, (o, rest)))
+        }
+    }
+
+-- Closed early, it drops the state and the pending frames.
+def deep[A, B, K, S, Z] :
+    !(S * A => S * (B + ((A * (K + 1)) + Z)))
+      * (!(S * (K * B) => S * (B + ((A * (K + 1)) + Z))) * (S * A))
+    => U (loop (S * (B + Z)) 1) =
+  thunkv fun (p : !(S * A => S * (B + ((A * (K + 1)) + Z)))
+                  * (!(S * (K * B) => S * (B + ((A * (K + 1)) + Z))) * (S * A))) ->
+    let (start, q) = p;
+    let (resume, sa) = q;
+    let (s, a) = sa;
+    f <- return (unbang (unfold[loop (S * (B + Z)) 1, S * ((A + B) * (mu X. 1 + (K * X)))]
+           (!thunkv fun (m : S * ((A + B) * (mu X. 1 + (K * X)))) ->
+              < return ((unbang deep_obs[A, B, K, S, Z]) (start, (resume, m))), return () >)));
+    s0 : S * ((A + B) * (mu X. 1 + (K * X))) <-
+      return (s, ((inl a : A + B), (roll (inl ()) : mu X. 1 + (K * X))));
+    return (thunkv nu_in < (nu_out (force f s0)).1, (nu_out (force f s0)).2 >)
+
+-- At most `n` observations; `inr ()` if the recursion has not finished by then.
+def deep_fuel[A, B, K, S, Z] :
+    !(S * A => S * (B + ((A * (K + 1)) + Z)))
+      * (!(S * (K * B) => S * (B + ((A * (K + 1)) + Z))) * ((S * A) * i32))
+    => (S * (B + Z)) + 1 =
+  thunkv fun (p : !(S * A => S * (B + ((A * (K + 1)) + Z)))
+                  * (!(S * (K * B) => S * (B + ((A * (K + 1)) + Z))) * ((S * A) * i32))) ->
+    let (start, q) = p;
+    let (resume, r) = q;
+    let (sa, n) = r;
+    return (div_fuel[S * (B + Z), 1] (deep[A, B, K, S, Z] (start, (resume, sa)), n))
+
+-- ### The memo layer
+
+fn memo_wrap[A, B, K, Z](o: B + ((A * (K + 1)) + Z)) -> B + (((A + A) * ((K + A) + 1)) + Z) =
+  match o {
+    inl b -> inl b
+  | inr c -> match c {
+      inl ak -> let (a, fk) = ak;
+        match fk {
+          inl k -> inr (inl ((inl a : A + A), (inl (inl k : K + A) : (K + A) + 1)))
+        | inr u -> inr (inl ((inl a : A + A), (inr () : (K + A) + 1)))
+        }
+    | inr z -> inr (inr z)
+    }
+  }
+
+-- A look-up that hits answers at once; one that misses runs the inner machine on `a` with a
+-- frame that stores the answer when it comes back.
+fn memo_start[A, B, K, S, Z, C](start: !(S * A => S * (B + ((A * (K + 1)) + Z))),
+                                get: !(C * A => C * (B + 1)),
+                                p: (C * S) * (A + A))
+    -> (C * S) * (B + (((A + A) * ((K + A) + 1)) + Z)) =
+  let (cs, r) = p;
+  let (c, s) = cs;
+  match r {
+    inl a ->
+      let (c, h) = get(c, a);
+      match h {
+        inl b -> ((c, s), inl b)
+      | inr u -> ((c, s), inr (inl ((inr a : A + A), (inl (inr a : K + A) : (K + A) + 1))))
+      }
+  | inr a -> let (s, o) = start(s, a); ((c, s), memo_wrap[A, B, K, Z](o))
+  }
+
+fn memo_resume[A, B, K, S, Z, C](resume: !(S * (K * B) => S * (B + ((A * (K + 1)) + Z))),
+                                 put: !(C * (A * B) => C),
+                                 p: (C * S) * ((K + A) * B))
+    -> (C * S) * (B + (((A + A) * ((K + A) + 1)) + Z)) =
+  let (cs, kb) = p;
+  let (c, s) = cs;
+  let (k, b) = kb;
+  match k {
+    inl k0 -> let (s, o) = resume(s, (k0, b)); ((c, s), memo_wrap[A, B, K, Z](o))
+  | inr a -> let c = put(c, (a, b)); ((c, s), inl b)
+  }
+
+-- ### The fuel layer
+
+fn fuel_wrap[A, B, K, Z](o: B + ((A * (K + 1)) + Z)) -> B + ((A * (K + 1)) + (1 + Z)) =
+  match o {
+    inl b -> inl b
+  | inr c -> match c { inl ak -> inr (inl ak) | inr z -> inr (inr (inr z : 1 + Z)) }
+  }
+
+-- Each call costs one unit; at zero the recursion stops with `inl ()`.
+fn fuel_start[A, B, K, S, Z](start: !(S * A => S * (B + ((A * (K + 1)) + Z))),
+                             p: (i32 * S) * A)
+    -> (i32 * S) * (B + ((A * (K + 1)) + (1 + Z))) =
+  let (ns, a) = p;
+  let (n, s) = ns;
+  if n == 0 { ((n, s), inr (inr (inl () : 1 + Z))) }
+  else { let (s, o) = start(s, a); ((n - 1, s), fuel_wrap[A, B, K, Z](o)) }
+
+fn fuel_resume[A, B, K, S, Z](resume: !(S * (K * B) => S * (B + ((A * (K + 1)) + Z))),
+                              p: (i32 * S) * (K * B))
+    -> (i32 * S) * (B + ((A * (K + 1)) + (1 + Z))) =
+  let (ns, kb) = p;
+  let (n, s) = ns;
+  let (s, o) = resume(s, kb);
+  ((n, s), fuel_wrap[A, B, K, Z](o))

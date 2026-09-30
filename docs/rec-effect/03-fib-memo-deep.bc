@@ -1,0 +1,55 @@
+-- uses: rec.bc
+-- counts-at: s/fib_memo(1000000)/fib_memo(10000)/
+-- fib |> memo(cache) |> deep, at n = 1 000 000, modulo 1 000 000 007 (fib.rec). The deep driver
+-- keeps the pending frames on the heap, so a recursion a million calls deep runs in constant host
+-- stack; each non-tail call costs one allocation (the frame), the price of the driver.
+--
+-- The cache is an array indexed by `n` (-1 is empty), dense, as C would do it. It is the memo
+-- layer's state, threaded by the machine: `memo_start` and `memo_resume` take it and hand it
+-- back. A layer cannot capture it (`07-memo-capture.bc`).
+--
+-- Answer: i32[918091266], fib(1 000 000) mod 1 000 000 007. Div.
+
+include slice
+
+fn addp(x: i32, y: i32) -> i32 = let s = x + y; if s >= 1000000007 { s - 1000000007 } else { s }
+
+fn fib_start(p: 1 * i32) -> 1 * (i32 + ((i32 * ((i32 + i32) + 1)) + 1)) =
+  let (s, n) = p;
+  if n < 2 { (s, inl n) } else { (s, inr (inl (n - 1, inl (inl n : i32 + i32)))) }
+
+fn fib_resume(p: 1 * ((i32 + i32) * i32)) -> 1 * (i32 + ((i32 * ((i32 + i32) + 1)) + 1)) =
+  let (s, kb) = p;
+  let (k, b) = kb;
+  match k {
+    inl n -> (s, inr (inl (n - 2, inl (inr b : i32 + i32))))
+  | inr x -> (s, inl (addp(x, b)))
+  }
+
+fn empty(i: i32) -> i32 = 0 - 1
+
+fn cache_get(p: array i32 * i32) -> array i32 * (i32 + 1) =
+  let (c, n) = p;
+  let v = borrow imm c { 'x, w -> at(w, n, 0 - 1) };
+  if v < 0 { (c, inr ()) } else { (c, inl v) }
+
+fn cache_put(p: array i32 * (i32 * i32)) -> array i32 =
+  let (c, nv) = p;
+  let (n, v) = nv;
+  borrow mut c { 'x, w -> discard_mut(set(w, n, v)) };
+  c
+
+fn mstart(p: (array i32 * 1) * (i32 + i32))
+    -> (array i32 * 1) * (i32 + (((i32 + i32) * (((i32 + i32) + i32) + 1)) + 1)) =
+  memo_start(fib_start, cache_get, p)
+
+fn mresume(p: (array i32 * 1) * (((i32 + i32) + i32) * i32))
+    -> (array i32 * 1) * (i32 + (((i32 + i32) * (((i32 + i32) + i32) + 1)) + 1)) =
+  memo_resume(fib_resume, cache_put, p)
+
+fn fib_memo(n: i32) -> i32 =
+  let c = array_new[i32] (n + 1, empty);
+  let (s, r) = deep(mstart, (mresume, ((c, ()), (inl n : i32 + i32))));
+  match r { inl v -> v | inr z -> 0 - 1 }
+
+main -> i32 = fib_memo(1000000)

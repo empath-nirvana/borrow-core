@@ -1,0 +1,67 @@
+-- counts-at: s/fib_tab(1000000)/fib_tab(10000)/
+-- fib |> memo(cache), driven by tabulation: `for i in 0..=n { fib(i) }`, then fib(n) (fib.rec).
+-- The same open step and memo layer as `04-fib-memo-host.bc`; the driver fills the cache bottom
+-- up, so when fib(i) runs, fib(i - 1) and fib(i - 2) are hits and no call is more than two deep.
+-- The fixed point is unrolled to depth 3 once, and a `count_fold` over 0..=n calls it at each i:
+-- total, host stack of depth at most 3, at n = 1 000 000.
+--
+-- Answer: inl i32[918091266], fib(1 000 000) mod 1 000 000 007 (as `03-fib-memo-deep.bc`). Total.
+include slice
+
+fn addp(x: i32, y: i32) -> i32 = let s = x + y; if s >= 1000000007 { s - 1000000007 } else { s }
+
+fn fib_step[S](rec: !(S * i32 => S * (i32 + 1)), p: S * i32) -> S * (i32 + 1) =
+  let (s, n) = p;
+  if n < 2 { (s, inl n) } else {
+    let (s, r1) = rec(s, n - 1);
+    match r1 {
+      inl a ->
+        let (s, r2) = rec(s, n - 2);
+        match r2 { inl b -> (s, inl (addp(a, b))) | inr u -> (s, inr u) }
+    | inr u -> (s, inr u)
+    }
+  }
+
+fn empty(i: i32) -> i32 = 0 - 1
+
+fn cache_get(c: array i32, n: i32) -> array i32 * (i32 + 1) =
+  let v = borrow imm c { 'x, w -> at(w, n, 0 - 1) };
+  if v < 0 { (c, inr ()) } else { (c, inl v) }
+
+fn cache_put(c: array i32, n: i32, v: i32) -> array i32 =
+  borrow mut c { 'x, w -> discard_mut(set(w, n, v)) };
+  c
+
+fn memo_open(inner: !(!(array i32 * i32 => array i32 * (i32 + 1)) * (array i32 * i32)
+                      => array i32 * (i32 + 1)),
+             rec: !(array i32 * i32 => array i32 * (i32 + 1)),
+             p: array i32 * i32) -> array i32 * (i32 + 1) =
+  let (c, n) = p;
+  let (c, h) = cache_get(c, n);
+  match h {
+    inl v -> (c, inl v)
+  | inr u ->
+      let (c, r) = inner(rec, (c, n));
+      match r { inl v -> (cache_put(c, n, v), inl v) | inr u -> (c, inr u) }
+  }
+
+fn bottom(p: array i32 * i32) -> array i32 * (i32 + 1) = let (c, n) = p; (c, inr ())
+
+fn tie(f: !(array i32 * i32 => array i32 * (i32 + 1))) -> !(array i32 * i32 => array i32 * (i32 + 1)) =
+  !{ p -> memo_open(fib_step[array i32], f, p) }
+
+-- Depth 3: a call, and its two calls, which hit.
+fn fix3() -> !(array i32 * i32 => array i32 * (i32 + 1)) = tie(tie(tie(bottom)))
+
+-- One turn of the tabulation: fib(i), stored by the layer; the answer is dropped.
+fn tab_at(i: i32, c: array i32) -> array i32 =
+  let f = fix3();
+  let (c, r) = f(c, i);
+  c
+
+total fn fib_tab(n: i32) -> i32 + 1 =
+  let c = count_fold[array i32] (tab_at, n + 1, 0, array_new[i32] (n + 1, empty));
+  let (c, h) = cache_get(c, n);
+  h
+
+main -> i32 + 1 = fib_tab(1000000)

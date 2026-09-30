@@ -1,0 +1,76 @@
+-- uses: rec.bc
+-- An Intcode-like interpreter loop (intcode.rec): `run(pc)` executes one instruction and goes on
+-- with `run(pc')` in tail position. A loop is `rec` in tail position: no frame is ever pushed
+-- (the frame type is `1`, and never used), so the deep driver's stack stays empty, one
+-- observation per instruction and no allocation per instruction. An unknown opcode performs
+-- `raise(pc)`.
+--
+-- Instructions (position mode): 1 add, 2 mul, 7 less-than, 5 jump-if-true, 99 halt (answer
+-- m[0]). The program computes 5! with a loop:
+--    0: m[20] = m[20] * m[21]      4: m[21] = m[21] + m[22]      8: m[24] = m[21] < m[23]
+--   12: if m[24] jump m[25] (= 0)  15: m[0] = m[20] + m[26]      19: halt
+-- The memory is an array in the state, lent per step.
+--
+-- Driven three ways: `deep` (div: a program need not halt); `deep_fuel` with 100 observations,
+-- total, which finishes; and with 10, which runs out, `inr ()`.
+--
+-- Answer: (inl i32[120], (inl (inl i32[120]), inr ())). The fuelled forms are total.
+include slice
+
+fn prog(i: i32) -> i32 = if i == 0 { 2 } else { if i == 1 { 20 } else { if i == 2 { 21 } else { if i == 3 { 20 } else { if i == 4 { 1 } else { if i == 5 { 21 } else { if i == 6 { 22 } else { if i == 7 { 21 } else { if i == 8 { 7 } else { if i == 9 { 21 } else { if i == 10 { 23 } else { if i == 11 { 24 } else { if i == 12 { 5 } else { if i == 13 { 24 } else { if i == 14 { 25 } else { if i == 15 { 1 } else { if i == 16 { 20 } else { if i == 17 { 26 } else { if i == 18 { 0 } else { if i == 19 { 99 } else { if i == 20 { 1 } else { if i == 21 { 1 } else { if i == 22 { 1 } else { if i == 23 { 6 } else { if i == 24 { 0 } else { if i == 25 { 0 } else { if i == 26 { 0 } else { 0 } } } } } } } } } } } } } } } } } } } } } } } } } } }
+
+fn rd(m: array i32, i: i32) -> array i32 * i32 =
+  let x = borrow imm m { 'x, v -> at(v, i, 0) };
+  (m, x)
+
+fn wr(m: array i32, i: i32, x: i32) -> array i32 =
+  borrow mut m { 'x, v -> discard_mut(set(v, i, x)) };
+  m
+
+type Out = i32 + ((i32 * (1 + 1)) + i32)
+
+fn goto(pc: i32) -> Out = inr (inl (pc, (inr () : 1 + 1)))
+
+-- m[c] = f(m[a], m[b]) for the instruction at pc.
+fn arith(m: array i32, pc: i32, op: i32) -> array i32 * Out =
+  let (m, a) = rd(m, pc + 1);
+  let (m, b) = rd(m, pc + 2);
+  let (m, c) = rd(m, pc + 3);
+  let (m, x) = rd(m, a);
+  let (m, y) = rd(m, b);
+  let r = if op == 1 { x + y } else { if op == 2 { x * y } else { if x < y { 1 } else { 0 } } };
+  (wr(m, c, r), goto(pc + 4))
+
+fn step(p: array i32 * i32) -> array i32 * Out =
+  let (m, pc) = p;
+  let (m, op) = rd(m, pc);
+  if op == 1 || op == 2 || op == 7 { arith(m, pc, op) } else {
+    if op == 5 {
+      let (m, a) = rd(m, pc + 1);
+      let (m, b) = rd(m, pc + 2);
+      let (m, t) = rd(m, a);
+      let (m, j) = rd(m, b);
+      if t == 0 { (m, goto(pc + 3)) } else { (m, goto(j)) }
+    } else {
+      if op == 99 { let (m, r) = rd(m, 0); (m, inl r) } else { (m, inr (inr pc)) }
+    }
+  }
+
+-- Never called: the machine has no non-tail `rec`.
+fn no_frame(p: array i32 * (1 * i32)) -> array i32 * Out =
+  let (m, kb) = p;
+  let (k, b) = kb;
+  (m, inl b)
+
+fn exec() -> i32 + i32 =
+  let (m, r) = deep(step, (no_frame, (array_new[i32] (27, prog), 0)));
+  r
+
+total fn run_within(n: i32) -> (i32 + i32) + 1 =
+  match deep_fuel(step, (no_frame, ((array_new[i32] (27, prog), 0), n))) {
+    inl mr -> let (m, r) = mr; inl r
+  | inr u -> inr u
+  }
+
+main -> (i32 + i32) * (((i32 + i32) + 1) * ((i32 + i32) + 1)) =
+  (exec(), (run_within(100), run_within(10)))

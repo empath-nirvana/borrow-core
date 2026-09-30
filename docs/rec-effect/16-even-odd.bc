@@ -1,0 +1,27 @@
+-- uses: rec.bc
+-- Mutual recursion, plain (even-odd.rec): even(n) = n == 0 || odd(n - 1), and odd likewise.
+-- One `rec` for the group: a request is `inl n` (even) or `inr n` (odd). Every `rec` is in tail
+-- position, so the group is a loop: under the deep driver no frame is pushed, whatever n.
+--
+-- Answer: (inr (), inl ()): even(100000) is true, odd(100000) false; and the machine
+-- allocated no frame (the counts: `allocs 0`). `17-even-odd-memo.bc` is the same group with a
+-- cache per member. Div.
+
+type Out = bool + (((i32 + i32) * (1 + 1)) + 1)
+
+fn tail(a: i32 + i32) -> Out = inr (inl (a, (inr () : 1 + 1)))
+
+fn eo_start(p: 1 * (i32 + i32)) -> 1 * Out =
+  let (s, a) = p;
+  match a {
+    inl n -> if n == 0 { (s, inl true) } else { (s, tail(inr (n - 1))) }
+  | inr n -> if n == 0 { (s, inl false) } else { (s, tail(inl (n - 1))) }
+  }
+
+fn no_frame(p: 1 * (1 * bool)) -> 1 * Out = let (s, kb) = p; let (k, b) = kb; (s, inl b)
+
+fn ask(a: i32 + i32) -> bool =
+  let (s, r) = deep(eo_start, (no_frame, ((), a)));
+  match r { inl b -> b | inr z -> false }
+
+main -> bool * bool = (ask(inl 100000), ask(inr 100000))

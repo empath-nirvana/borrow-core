@@ -1,0 +1,39 @@
+-- A walk over an owned tree and over a borrowed tree. Provisional spellings (README §2).
+-- Hand-lowered: 11-tree-owned.bc, 12-tree-borrowed-fold.bc, 13-tree-borrowed-rec.bc.
+
+data Tree = Leaf | Node(Tree, i32, Tree)
+
+fn sum_own(t: Tree) -> i32 =                      -- consumes the tree
+  match t { Leaf -> 0 | Node(l, v, r) -> sum_own(l) + v + sum_own(r) }
+
+fn sum(t: &Tree) -> i32 =                         -- borrows it
+  match *t { Leaf -> 0 | Node(l, v, r) -> sum(l) + *v + sum(r) }
+
+main -> i32 * i32 =
+  let t = build(100_000);                         -- 100 000 deep down the left spine
+  let a = sum(&t);                                -- the tree is still owned
+  let b = (sum_own |> deep)(t);                   -- deep: heap frames
+  (a, b)
+
+-- ELABORATION
+--   sum_own: two `rec`s on strict subterms of an owned argument (structural). Frames: after the
+--   left subtree (holds v and the right subtree, owned: frames hold linear data), after the
+--   right one (holds the partial sum).
+--   sum: the same over a view. A request is `&Tree` at the borrow's lifetime, and a frame holds
+--   the view of the right subtree. The step must take the view of a node to the views of its
+--   children at the same lifetime: descent with a fixed state type (prior-art matrix gap (b)).
+--
+-- DRIVER, TOTALITY, STACK
+--   sum_own |> fix: div by the driver, though structural recursion on owned data is total by
+--   the tree's size (the kernel's `fold_own` is that). A checker that sees every `rec` is on a
+--   strict subterm could drive it with the size as fuel: total (README §6).
+--   Lowered (11): under `deep` at depth 100 000, constant host stack. `fold_own` on this tree
+--   recurses natively (pointer reversal covers linear shapes only) and exhausts the stack at
+--   depth 100 000; it runs at 1000.
+--   sum: today only `fold_imm` (12): total, but one native frame per level, and its result must
+--   outlive every lifetime. By `rec` (13): refused at the first step, "`unroll V` needs
+--   `V : mu X. A`, but `V : imm 'x (mu X. 1 + X * i32 * X)`".
+--
+-- CHECKER REPORTS (intended)
+--   sum_own: structural recursion on `t` (owned): total by size; stack: deep driver chosen
+--   sum: structural recursion on `t` (borrowed): total by size; needs the view's children at 'a
