@@ -31,6 +31,15 @@ open BoCa
 open BoCa.Fig16
 open BoCa.Lifetime (LSub LifeCtx LifeVar LSubst)
 
+/-- The structural qualifier of a control operation's continuation: linear (resumed exactly
+once), affine (resumed at most once, or cancelled), unrestricted (resumed any number of times, or
+cancelled).  `[spec §19]` -/
+inductive Qual where
+  | lin
+  | aff
+  | unr
+  deriving DecidableEq, Repr
+
 mutual
 /-- Value types.  `[spec §3]` -/
 inductive VTy where
@@ -78,6 +87,9 @@ inductive CTy where
   | all (x : LifeVar) (b : Lifetime.Life) (C : CTy)
   /-- `νX. C`: the greatest fixed point, with `U X` the type variable `0` in `C`.  `[spec §7]` -/
   | nu (C : CTy)
+  /-- One operation of an effect row: `C` extended by the operation `i` of the name `n`,
+  `A ↠^q B`.  `F_Σ R` is a stack of these over `F R` (`CTy.effOf`).  `[spec §19]` -/
+  | eff (n i : UInt32) (q : Qual) (A B : VTy) (C : CTy)
 end
 
 /-- The value-type eliminator with `U C` a leaf. -/
@@ -118,6 +130,32 @@ theorem VTy.recV {motive : VTy → Prop}
   | .tvar n => tvar n
   | .mu A => mu A (VTy.recV unit tensor zero sum thunk ref imm «mut» box bang unk tvar mu int fam opq A)
 
+/-- `A` is `0`. -/
+def VTy.isZero : VTy → Bool
+  | .zero => true
+  | _ => false
+
+/-- `C` has no effect row anywhere a stack reaches: the stack semantics (`cC_iff_stacks`) is
+`wpTS` at its end.  `[spec §19]` -/
+def CTy.EffFree : CTy → Prop
+  | .ret _ | .top | .nu _ => True
+  | .arr _ C | .all _ _ C => C.EffFree
+  | .amp C D => C.EffFree ∧ D.EffFree
+  | .eff _ _ _ _ _ _ => False
+
+/-- An operation of an effect row: the operation `i` of the name `n`, `A ↠^q B`.  `[spec §19]` -/
+structure OpSig where
+  n : UInt32
+  i : UInt32
+  q : Qual
+  A : VTy
+  B : VTy
+
+/-- `F_Σ R`: the row's operations stacked over `F R`; `F_∅ R = F R`.  `[spec §19]` -/
+def CTy.effOf : List OpSig → VTy → CTy
+  | [], R => .ret R
+  | o :: os, R => .eff o.n o.i o.q o.A o.B (CTy.effOf os R)
+
 /-- `A ⊸ B` at value type: `U (A ⊸ F B)`, BoLo's arrow read call-by-value. -/
 abbrev VTy.lolli (A B : VTy) : VTy := .thunk (.arr A (.ret B))
 
@@ -153,6 +191,7 @@ def CFree (x : LifeVar) : CTy → Prop
   | .top => False
   | .all y b C => b.mentions x = true ∨ (x ≠ y ∧ CFree x C)
   | .nu C => CFree x C
+  | .eff _ _ _ A B C => VFree x A ∨ VFree x B ∨ CFree x C
 end
 
 /-! ### Type variables: renaming, substitution, closedness
@@ -1455,6 +1494,7 @@ def CTy.lifeBound : CTy → Nat
   | .top => 0
   | .all x b C => max (x + 1) (max b.varBound C.lifeBound)
   | .nu C => C.lifeBound
+  | .eff _ _ _ A B C => max A.lifeBound (max B.lifeBound C.lifeBound)
 end
 
 mutual
@@ -1491,6 +1531,7 @@ def CTy.applyLSub (σ : LSubst) : CTy → CTy
       else
         .all y (b.applySub σ) (C.applyLSub (lsubDrop σ y))
   | .nu C => .nu (C.applyLSub σ)
+  | .eff n i q A B C => .eff n i q (A.applyLSub σ) (B.applyLSub σ) (C.applyLSub σ)
 end
 
 /-- `A[@a/'x]`. -/
@@ -1565,6 +1606,13 @@ theorem lt_cLifeBound {x : LifeVar} : ∀ {C : CTy}, CFree x C → x < C.lifeBou
       · exact Nat.lt_of_lt_of_le (lt_cLifeBound h)
           (Nat.le_trans (Nat.le_max_right _ _) (Nat.le_max_right _ _))
   | .nu C, h => lt_cLifeBound (C := C) h
+  | .eff _ _ _ A B C, h => by
+      rcases h with h | h | h
+      · exact Nat.lt_of_lt_of_le (lt_vLifeBound h) (Nat.le_max_left _ _)
+      · exact Nat.lt_of_lt_of_le (lt_vLifeBound h)
+          (Nat.le_trans (Nat.le_max_left _ _) (Nat.le_max_right _ _))
+      · exact Nat.lt_of_lt_of_le (lt_cLifeBound h)
+          (Nat.le_trans (Nat.le_max_right _ _) (Nat.le_max_right _ _))
 end
 
 /-- `Imm̲` introduces only its index. -/

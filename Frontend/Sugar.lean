@@ -3244,6 +3244,7 @@ def hasPhC : CCTy → Bool
   | .amp C D => hasPhC C || hasPhC D
   | .nu C | .all _ _ C => hasPhC C
   | .top => false
+  | .eff _ _ _ A B C => hasPhV A || hasPhV B || hasPhC C
 end
 
 mutual
@@ -3270,6 +3271,7 @@ def solvedC (σ : Array (Option CVTy)) (d : Nat) : CCTy → CCTy
   | .nu C => .nu (solvedC σ (d + 1) C)
   | .all v b C => .all v b (solvedC σ d C)
   | .top => .top
+  | .eff n i q A B C => .eff n i q (solvedV σ d A) (solvedV σ d B) (solvedC σ d C)
 end
 
 /-- A pattern with what matching found: its placeholders and its lifetime parameters solved. -/

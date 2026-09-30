@@ -1,4 +1,5 @@
 import Core.FrameRules
+import Core.EffDefs
 
 /-!
 # Core — the effectful `wp`  `[spec §19]`
@@ -37,27 +38,6 @@ open BoCa.Fig16
 open BoCa.Fig16.BoLo
 open BoCa.BoLo (Heap Steps Step1 Head Kont eLoad eStore Alloc ARun Step1N)
 open BoCa.Lifetime (LSub LifeCtx LifeVar)
-
-/-- `wpTS` with its run ending at an arbitrary term, and the postcondition over that term.
-Every other conjunct is `wpTS`'s verbatim.  `[spec §19]` -/
-def wpG (ls : List SRec) (e : Expr) (Q : List SRec → Expr → WProp) : WProp := fun ρ =>
-  ∀ (ρf fρ : WRes) (ps : List FrameRec), ResU.Hash ρf ρ → ResU.CompS ρf ρ fρ →
-    TW fρ ps (rsOf ls) → Tagged fρ ps ls → ∀ (A : Alloc) (k : Nat),
-    ∃ (ρ' ρp fρ' fρ'p π : WRes) (v : Expr) (μ μ' : Heap) (ps' : List FrameRec)
-      (ls' : List SRec),
-      ResU.Hash ρ' ρf ∧
-      ResU.CompS ρf ρ' fρ' ∧ ResU.Hash ρp fρ' ∧
-      ResU.Lower fρ μ ∧
-      ResU.CompS fρ' ρp fρ'p ∧ ResU.Lower fρ'p μ' ∧
-      (∃ k', ARun A k μ e k' μ' v) ∧
-      ResU.CompS ρ' ρp π ∧ ResU.UpdV ρ π ∧
-      NoOwn ρp ∧
-      TW fρ'p ps' (rsOf ls') ∧ Tagged fρ'p ps' ls' ∧
-      (∀ p, p ∈ ps' ↔ p ∈ ps) ∧ (∀ x, x ∈ ls' ↔ x ∈ ls) ∧ Q ls' v ρ'
-
-/-- The postcondition over terms that admits only values. -/
-def valPost (Q : List SRec → Val → WProp) : List SRec → Expr → WProp :=
-  fun ls t ρ => ∃ v : Val, t = .val v ∧ Q ls v ρ
 
 /-- `wpTS` is `wpG` at a postcondition over values. -/
 theorem wpTS_iff_wpG (ls : List SRec) (e : Expr) (Q : List SRec → Val → WProp) (ρ : WRes) :
@@ -765,36 +745,6 @@ theorem wpG_garbage {ls : List SRec} {e : Expr} {Q : List SRec → Expr → WPro
 
 /-! ### The effectful `wp` -/
 
-/-- A protocol table: which stopped terms are allowed, and what they owe their continuations
-(`SPEC.md` §19).  `Π ls t Φ` reads: the configuration stopped at `t`, over the list `ls`, is
-allowed, with every continuation it owes in `Φ`.  `[spec §19]` -/
-abbrev Table := List SRec → Expr → (List SRec → Expr → WProp) → WProp
-
-/-- A table is monotone in the continuations it owes. -/
-def Table.Mono (Tb : Table) : Prop :=
-  ∀ ls t (Φ Φ' : List SRec → Expr → WProp) ρ, (∀ ls e ρ, Φ ls e ρ → Φ' ls e ρ) →
-    Tb ls t Φ ρ → Tb ls t Φ' ρ
-
-/-- A table is abortive when it owes no continuation: its stops are final. -/
-def Table.Abortive (Tb : Table) : Prop :=
-  ∀ ls t (Φ Φ' : List SRec → Expr → WProp) ρ, Tb ls t Φ ρ → Tb ls t Φ' ρ
-
-theorem Table.Abortive.mono {Tb : Table} (h : Tb.Abortive) : Tb.Mono :=
-  fun ls t Φ Φ' ρ _ hp => h ls t Φ Φ' ρ hp
-
-/-- The empty table: nothing may stop. -/
-def Table.bot : Table := fun _ _ _ _ => False
-
-/-- One unfolding: run to a value in `Q`, or to a stop `Π` allows, owing `P`. -/
-def ewpStep (Tb : Table) (Q : List SRec → Val → WProp) (P : List SRec → Expr → WProp) :
-    List SRec → Expr → WProp :=
-  fun ls e => wpG ls e (fun ls' t ρ => valPost Q ls' t ρ ∨ Tb ls' t P ρ)
-
-/-- `ewpTS ls e Π Q`: the least fixed point of `ewpStep`, written in `Prop`.  `[spec §19]` -/
-def ewpTS (ls : List SRec) (e : Expr) (Tb : Table) (Q : List SRec → Val → WProp) : WProp :=
-  fun ρ => ∀ P : List SRec → Expr → WProp,
-    (∀ ls e ρ, ewpStep Tb Q P ls e ρ → P ls e ρ) → P ls e ρ
-
 theorem ewpStep_mono {Tb : Table} (hTb : Tb.Mono) {Q : List SRec → Val → WProp}
     {P P' : List SRec → Expr → WProp} (hP : ∀ ls e ρ, P ls e ρ → P' ls e ρ)
     {ls : List SRec} {e : Expr} {ρ : WRes} (h : ewpStep Tb Q P ls e ρ) : ewpStep Tb Q P' ls e ρ :=
@@ -911,6 +861,106 @@ theorem ewpTS_M_antiFrameU (Tb : Table) (hTb : Tb.Abortive) (l : BoCa.Loc) (α :
               (ptoMutS l α ls'' (fun ls₀ => vC true T ls₀ δ) ─⋆ ewpPost Tb Q ls'' t)))))
       (ewpTS ls e Tb Q) :=
   fun ρ h => (ewp_abortive hTb).mpr (wpG_M_antiFrameX l α T δ e ls (ewpPost Tb Q) ρ h)
+
+/-! ### Steps and bind at `wpG` and `ewpTS` -/
+
+/-- One pure step in front of a `wpG`. -/
+theorem wpG_step {e e' : Expr} (h : ∀ μ : Heap, Step1N μ e μ e') (ls : List SRec)
+    (Q : List SRec → Expr → WProp) : Entails (wpG ls e' Q) (wpG ls e Q) := by
+  intro ρ hw ρf fρ ps hf hc hT htg A k
+  obtain ⟨ρ', ρp, fρ', fρ'p, π, v, μ, μ', ps', ls', h₁, h₂, h₃, h₅, h₆, h₇, ⟨j, h₈⟩, h₉, hA, hB,
+    hT', htg', hps, hls, hC⟩ := hw ρf fρ ps hf hc hT htg A k
+  exact ⟨ρ', ρp, fρ', fρ'p, π, v, μ, μ', ps', ls', h₁, h₂, h₃, h₅, h₆, h₇,
+    ⟨j, ARun.cons (h μ) h₈⟩, h₉, hA, hB, hT', htg', hps, hls, hC⟩
+
+/-- `[TR]` 6.135 (`wp-bind`) at `wpG`: a run to any term `t`, then the continuation from `K[t]`.
+`wpTS_bind`'s proof, which never inspects the term the first run ends at. -/
+theorem wpG_bind (K : Kont) (e : Expr) (ls : List SRec) (Q : List SRec → Expr → WProp) :
+    Entails (wpG ls e fun ls' t => wpG ls' (K.plug t) Q) (wpG ls (K.plug e) Q) := by
+  intro ρ hw ρf fρ ps hf h₄ hT htg A k
+  obtain ⟨ρ', ρp, fρ', fρ'p, π, v, μ, μ', ps', ls', h₁, h₂, h₃, h₅, h₆, h₇, ⟨j₁, h₈⟩, h₉,
+    hA, hB, hT', htg', hps', hls', hC⟩ := hw ρf fρ ps hf h₄ hT htg A k
+  obtain ⟨z, hzp, hz⟩ := (hash_shift ρp ρf ρ').mp ⟨fρ', h₂, h₃⟩
+  have hfz : ResU.CompS ρf ρp z := ResU.CompS.comm hzp
+  obtain ⟨z₀, hz₀, hY⟩ := compS_exch h₂ h₆
+  have hzY : ResU.CompS z ρ' fρ'p := by rwa [ResU.CompS.functional hz₀ hfz] at hY
+  obtain ⟨ρ'', ρpp, Y'', Y''p, π'', v', ν, ν', ps'', ls'', k₁, k₂, k₃, k₅, k₆, k₇, ⟨j₂, k₈⟩,
+    k₉, kA, kB, kT, ktg, kps, kls, kC⟩ := hC z fρ'p ps' hz hzY hT' htg' A j₁
+  obtain ⟨hfρ'', -⟩ := ResU.Hash.split hfz (ResU.hash_symm k₁)
+  obtain ⟨F, hF, hFp⟩ := compS_exch hfz k₂
+  obtain ⟨ZZ, hZZ, hZF⟩ := (hash_shift ρpp ρp F).mp ⟨Y'', ResU.CompS.comm hFp, k₃⟩
+  have hZZ' : ResU.CompS ρp ρpp ZZ := ResU.CompS.comm hZZ
+  obtain ⟨ZZ₀, hZZ₀, hFZ₀⟩ := compS_reassoc hFp k₆
+  have hFZ : ResU.CompS F ZZ Y''p := by
+    rwa [ResU.CompS.functional hZZ₀ hZZ'] at hFZ₀
+  have hν : ν = μ' := ResU.Lower.functional k₅ h₇
+  obtain ⟨-, hpρ'⟩ := ResU.Hash.split h₂ (ResU.hash_symm h₃)
+  obtain ⟨d, hd, hfd⟩ := compS_reassoc hfz k₂
+  obtain ⟨-, hdp⟩ := ResU.Hash.split hfd (ResU.hash_symm k₃)
+  obtain ⟨π₀, hπ₀, hpπ₀⟩ := (hash_shift ρp ρ'' ρpp).mpr ⟨d, hd, hdp⟩
+  have hpπ : ResU.Hash ρp π'' := by rwa [ResU.CompS.functional hπ₀ k₉] at hpπ₀
+  obtain ⟨Yn, hYn, -⟩ := hpπ.2
+  obtain ⟨ZZ₁, hZZ₁, hρ''Z₀⟩ := compS_lcomm k₉ hYn
+  have hρ''Z : ResU.CompS ρ'' ZZ Yn := by
+    rwa [ResU.CompS.functional hZZ₁ hZZ'] at hρ''Z₀
+  refine ⟨ρ'', ZZ, F, Y''p, Yn, v', μ, ν', ps'', ls'', ResU.hash_symm hfρ'', hF, hZF,
+    h₅, hFZ, k₇, ⟨j₂, (h₈.plug K).trans (hν ▸ k₈)⟩, hρ''Z, ?_,
+    noOwn_compS hZZ' hB kB, kT, ktg, fun p => (kps p).trans (hps' p),
+    fun x => (kls x).trans (hls' x), kC⟩
+  exact ResU.UpdV.trans hA
+    (updV_frame (ResU.CompS.comm h₉) hYn (ResU.hash_symm hpρ') hpπ kA)
+
+/-- Bind a pure prefix in front of a `wpG`. -/
+theorem wpG_bind_pure (K : Kont) (e : Expr) (ls : List SRec) (Q : List SRec → Expr → WProp) :
+    Entails (wpTS ls e fun ls' v => wpG ls' (K.plug (.val v)) Q) (wpG ls (K.plug e) Q) := by
+  intro ρ h
+  refine wpG_bind K e ls Q ρ (wpG_mono (fun ls' t ρ' ht => ?_) ((wpTS_iff_wpG _ _ _ _).mp h))
+  obtain ⟨v, rfl, hv⟩ := ht
+  exact hv
+
+/-- A pure prefix in front of a `wpG`, framing `R` through its run: `wpTS_bind_frame` at `wpG`. -/
+theorem wpG_bind_frame (K : Kont) (e : Expr) (ls : List SRec) (P : List SRec → Val → WProp)
+    (R : List SRec → WProp) (Q : List SRec → Expr → WProp)
+    (hR : ∀ ls', (∀ x, x ∈ ls' ↔ x ∈ ls) → Entails (R ls) (R ls'))
+    (h : ∀ ls', (∀ x, x ∈ ls' ↔ x ∈ ls) → ∀ v,
+      Entails ((P ls' v) ⋆ R ls') (wpG ls' (K.plug (.val v)) Q)) :
+    Entails ((wpTS ls e P) ⋆ R ls) (wpG ls (K.plug e) Q) := by
+  rintro ρ ⟨ρ₁, ρ₂, hc, hwp, hRρ⟩
+  refine wpG_bind_pure K e ls Q ρ
+    (wpTS_ramify ls e P (fun ls' v => wpG ls' (K.plug (.val v)) Q) ρ ?_)
+  refine ⟨ρ₁, ρ₂, hc, hwp, ?_⟩
+  intro ls' hls v σ₁ σ₂ hP hcs
+  exact h ls' hls v σ₂ ⟨σ₁, ρ₂, ResU.CompS.comm hcs, hP, hR ls' hls ρ₂ hRρ⟩
+
+/-- One pure step in front of an `ewpTS`. -/
+theorem ewp_step {Tb : Table} (hTb : Tb.Mono) {e e' : Expr} (h : ∀ μ : Heap, Step1N μ e μ e')
+    (ls : List SRec) (Q : List SRec → Val → WProp) : Entails (ewpTS ls e' Tb Q) (ewpTS ls e Tb Q) :=
+  fun ρ h' => ewp_fold hTb (wpG_step h ls _ ρ (ewp_unfold hTb h'))
+
+/-- A pure prefix in front of an `ewpTS`, framing `R` through its run.  `[spec §19]` -/
+theorem ewp_bind_pure_frame {Tb : Table} (hTb : Tb.Mono) (K : Kont) (e : Expr) (ls : List SRec)
+    (P : List SRec → Val → WProp) (R : List SRec → WProp) (Q : List SRec → Val → WProp)
+    (hR : ∀ ls', (∀ x, x ∈ ls' ↔ x ∈ ls) → Entails (R ls) (R ls'))
+    (h : ∀ ls', (∀ x, x ∈ ls' ↔ x ∈ ls) → ∀ v,
+      Entails ((P ls' v) ⋆ R ls') (ewpTS ls' (K.plug (.val v)) Tb Q)) :
+    Entails ((wpTS ls e P) ⋆ R ls) (ewpTS ls (K.plug e) Tb Q) :=
+  fun ρ h' => ewp_fold hTb (wpG_bind_frame K e ls P R _ hR
+    (fun ls' hls v σ hσ => ewp_unfold hTb (h ls' hls v σ hσ)) ρ h')
+
+/-- The protocol table of an operation table is monotone in the continuations it owes. -/
+theorem opTable_mono (T : OpTab) : (opTable T).Mono := by
+  intro ls t Φ Φ' ρ hΦ h
+  rcases h with ⟨K, n, i, v, en, h⟩ | h
+  · obtain ⟨hp, h⟩ := pure_sep_iff.mp h
+    refine Or.inl ⟨K, n, i, v, en, pure_sep_mk hp ?_⟩
+    obtain ⟨ρ₁, ρ₂, hc, hA, hk, hK⟩ := h
+    refine ⟨ρ₁, ρ₂, hc, hA, hk, fun ls' hext => ⟨fun w σ₁ σ₂ hB hcσ => ?_, (hK ls' hext).2⟩⟩
+    exact hΦ _ _ _ ((hK ls' hext).1 w σ₁ σ₂ hB hcσ)
+  · exact Or.inr h
+
+/-- The table of a cancel run owes no continuation. -/
+theorem cancelTab_abortive (T : OpTab) : (cancelTab T).Abortive :=
+  fun _ _ _ _ _ h => h
 
 end BoCa.Fig16.LogRel.Core
 

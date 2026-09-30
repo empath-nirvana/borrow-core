@@ -9,6 +9,7 @@ import Support.Statics.Contexts
 import Core.Types
 import Core.FrameRecords
 import Core.World
+import Core.EffDefs
 
 /-!
 # Core — Relation  `[spec §3, §6, §7]`
@@ -159,6 +160,21 @@ def cC : CTy → List SRec → LSub → Expr → WProp
       ∀ α, (⌜LtLife δ c α⌝ ─⋆ cC C ls (δ.extend x α) (.app e (.val .unit))) ρ
   | .nu C, ls, δ, e => fun ρ => C.NuOk →
       ∃ R : CPred, R.Le (fun ls' e' => cB (some (nuEnv C R)) C ls' δ e') ∧ R ls e ρ
+  | .eff n i q A B C, ls, δ, e =>
+      ewpTS ls e (opTable (OpTab.ext n i
+        ⟨q, B.isZero && q != .lin, fun ls v => vCE none true A ls δ v,
+          fun ls v => vCE none true B ls δ v⟩ (effTab C δ))) (effRet C δ)
+/-- The operation table of a row `F_Σ R`'s layers.  `[spec §19]` -/
+def effTab : CTy → LSub → OpTab
+  | .eff n i q A B C, δ => OpTab.ext n i
+      ⟨q, B.isZero && q != .lin, fun ls v => vCE none true A ls δ v,
+        fun ls v => vCE none true B ls δ v⟩ (effTab C δ)
+  | _, _ => OpTab.empty
+/-- The answer relation of a row `F_Σ R`: `𝒱⟦R⟧`.  `[spec §19]` -/
+def effRet : CTy → LSub → List SRec → Val → WProp
+  | .ret A, δ => fun ls v => vCE none true A ls δ v
+  | .eff _ _ _ _ _ C, δ => effRet C δ
+  | _, _ => fun _ _ _ => False
 /-- One unfolding of an observation tree under a type-variable environment: `cC`'s `F` and `&`
 clauses with `vCE η` at `F`.  Other formers are not observation trees (`CTy.NuLeaf`) and hold
 trivially.  `[spec §7]` -/
@@ -166,8 +182,8 @@ def cB : Option (Nat → TEnt) → CTy → List SRec → LSub → Expr → WProp
   | η, .ret A, ls, δ, e => wpTS ls e (fun ls'' => vCE η true A ls'' δ)
   | η, .amp C D, ls, δ, e => fun ρ =>
       cB η C ls δ (.app e (.val (.inj₁ .unit))) ρ ∧ cB η D ls δ (.app e (.val (.inj₂ .unit))) ρ
-  | _, .arr _ _, _, _, _ | _, .top, _, _, _ | _, .all _ _ _, _, _, _ | _, .nu _, _, _, _ =>
-      fun _ => True
+  | _, .arr _ _, _, _, _ | _, .top, _, _, _ | _, .all _ _ _, _, _, _ | _, .nu _, _, _, _
+  | _, .eff _ _ _ _ _ _, _, _, _ => fun _ => True
 end
 
 /-- `𝒱⟦A⟧(ls)δ(v)`: the relation at a type read with no environment. -/
