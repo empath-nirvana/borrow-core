@@ -229,6 +229,8 @@ inductive Const where
   | sliceSwapMut (a : Life) (A : VTy)
   /-- `count_fold[S]`: the counted loop of SPEC §16. -/
   | countFold (S : VTy)
+  /-- `count_try[S, E]`: the counted loop with an exit of SPEC §16. -/
+  | countTry (S E : VTy)
   deriving DecidableEq, Repr
 
 /-- A binary operator of the surface (draft 0 §2.12), resolved by the width of its operands. -/
@@ -511,6 +513,7 @@ def Const.strip : Const → Const
   | .sliceReplaceMut a A => .sliceReplaceMut a.strip A.strip
   | .sliceSwapMut a A => .sliceSwapMut a.strip A.strip
   | .countFold S => .countFold S.strip
+  | .countTry S E => .countTry S.strip E.strip
 
 mutual
 def Val.strip : Val → Val

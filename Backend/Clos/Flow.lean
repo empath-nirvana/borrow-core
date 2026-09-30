@@ -156,6 +156,25 @@ def genPrim : Op → List Var → GM Key
       emit (.app f (← holding (.pair .none st)) r none)
       emit (.sub r st)
       pure st
+  | .countTry, [v] => do
+      -- The state is the initial one or the `inl` of an answer of `f`; the loop answers `inl` of
+      -- a state, or an answer of `f`.
+      let f ← freshKey
+      emit (.proj (.var v) 0 f)
+      let r₁ ← freshKey
+      emit (.proj (.var v) 1 r₁)
+      let r₂ ← freshKey
+      emit (.proj r₁ 1 r₂)
+      let s₀ ← freshKey
+      emit (.proj r₂ 1 s₀)
+      let st ← freshKey
+      emit (.sub s₀ st)
+      let r ← freshKey
+      emit (.app f (← holding (.pair .none st)) r none)
+      emit (.out r false st)
+      let res ← holding (.inj false st)
+      emit (.sub r res)
+      pure res
   | .io .readByte, [m] => holding (.pair (.var m) .none)
   | .io .writeByte, [p] => do
       let m ← freshKey

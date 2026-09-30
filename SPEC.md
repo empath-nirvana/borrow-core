@@ -1740,6 +1740,37 @@ A generated loop of tail calls per step and state type (`count_loop`, `Backend/F
 compare, call the step on a copy of the closure, tail-call with `i + 1`. It allocates nothing
 (`corpus/count-fold.bc`: allocs 0).
 
+### The loop with an exit (K0′)
+
+    count_try : !(!(I32 ⊗ S ⇒ S ⊕ E) ⊗ (I32 ⊗ (I32 ⊗ S)) ⇒ S ⊕ E)     (CDerives.countTry S E)
+
+`count_try (f, (n, (i, s)))` is `count_fold` whose step may stop the loop: it answers `inl` of
+the next state, and the loop goes on, or `inr e`, and the loop answers `inr e` at once. At the
+bound it answers `inl` of the last state (`inl s` when `i ≥ len(n)`). It sits beside
+`count_fold`, which stays: a loop that never stops early has no exit to test.
+
+One primitive, `Prim.countTry`, with one head step that allocates nothing:
+
+    (μ, count_try (f, (n, (i, s))))
+      ↦ (μ, case f (i, s) { inl s′ → count_try (f, (n, (i + 1, s′))) | inr e → inr e })   if i < len(n)
+      ↦ (μ, inl s)                                                                      otherwise
+
+(`countTryNext`, `Support/Dynamics/Arrays.lean`; the branches bind the step's answer, so `f` is
+shifted past the binder). It is a step for the reason `count` is (*Why a step*, above): the
+counter is the machine's, so the loop is total at every host.
+
+**Semantics.** `countTryLoop_wp` is `countLoop_wp`'s induction on `len(n) − i` with one more
+case: after `f (i, s)`, an `inl s′` continues by the induction hypothesis at `i + 1`
+(`countTry_cont_subst` undoes the shift), and an `inr e` is a value of `𝒱⟦S ⊕ E⟧`.
+`countTry_compatX` is the constant, at every host (`Core/CountFold.lean`); its axioms are
+`[propext, Classical.choice, Quot.sound]`. The step is deterministic and allocates nothing, so
+`head_det`, allocator runs (§13) and the totality theorem (§14) take it with no new argument.
+
+**Checker and lowering.** The checker reads `count_try[S, E]`. The backend lowers it to a
+generated loop of tail calls per step and state type (`count_try_loop`): compare, call the step
+on a copy of the closure, test the answer's tag, tail-call with `i + 1` on `inl`, return on
+`inr`. It allocates nothing (`corpus/count-try.bc`: allocs 0).
+
 ### Uses
 
 - `div_fuel` (§14) counts its observations with it, in place of the unary count: `io-fuel`

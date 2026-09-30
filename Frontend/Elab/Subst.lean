@@ -109,6 +109,7 @@ def Const.subst (σ : TySubst) : Const → Const
   | .sliceReplaceMut a A => .sliceReplaceMut a (A.subst σ)
   | .sliceSwapMut a A => .sliceSwapMut a (A.subst σ)
   | .countFold S => .countFold (S.subst σ)
+  | .countTry S E => .countTry (S.subst σ) (E.subst σ)
 
 mutual
 def Val.subst (σ : TySubst) : Val → Val

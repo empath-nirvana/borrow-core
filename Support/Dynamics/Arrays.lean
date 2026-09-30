@@ -58,6 +58,18 @@ def countNext (f : Val) (n i : UInt32) (s : Val) : Expr :=
       (.pair (.val (.i32 (i + 1))) (.app (.val f) (.val (.pair (.i32 i) s))))))
   else .val s
 
+/-- One step of `count_try (f, (n, (i, s)))`: while `i < len(n)`, apply `f` to `(i, s)`; on
+    `inj₁ s′` count on from `i + 1` with `s′`, on `inj₂ e` answer `inj₂ e`; at the bound answer
+    `inj₁ s`. The branches bind the step's answer, so `f` is shifted past that binder. The counter
+    is the machine's, as `count`'s.  `[spec §16]` -/
+def countTryNext (f : Val) (n i : UInt32) (s : Val) : Expr :=
+  if i < arrLen n then
+    .case (.app (.val f) (.val (.pair (.i32 i) s)))
+      (.app (.val (.prim .countTry)) (.pair (.val (f.shift 1 0)) (.pair (.val (.i32 n))
+        (.pair (.val (.i32 (i + 1))) (.var 0)))))
+      (.inj₂ (.var 0))
+  else .val (.inj₁ s)
+
 /-- The answer of `idx ((ℓ, n), i)`: the `i`-th leaf when `i < n`, unsigned; else `inj₂ ()`.
     `[spec §9]` -/
 def idxAns (ℓ : Loc) (n i : UInt32) : Val :=

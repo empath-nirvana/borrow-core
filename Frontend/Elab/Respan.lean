@@ -118,6 +118,7 @@ def Const.respan (sp : Span) : Const → Const
   | .sliceReplaceMut a A => .sliceReplaceMut (a.respan sp) (A.respan sp)
   | .sliceSwapMut a A => .sliceSwapMut (a.respan sp) (A.respan sp)
   | .countFold S => .countFold (S.respan sp)
+  | .countTry S E => .countTry (S.respan sp) (E.respan sp)
 
 mutual
 def Val.respan (sp : Span) : Val → Val

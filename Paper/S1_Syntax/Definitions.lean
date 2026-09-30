@@ -42,7 +42,8 @@ abbrev Loc := Nat
 -/
 /-- The four nullary productions of `[TR]` p. 1's `Prim`; `store v` is row 1.15.
     `lit` and `host` are the integer constants of `SPEC.md` §8; `tab`, `idx` and `drop` the
-    array primitives of §9 with the split `split`; `count` the counted loop of §16. -/
+    array primitives of §9 with the split `split`; `count` the counted loop of §16 and
+    `countTry` the counted loop with an exit. -/
 inductive Prim where
   | alloc | free | load | store
   /-- An integer literal.  `[spec §8]` -/
@@ -62,6 +63,9 @@ inductive Prim where
   /-- The counted loop: `count (f, (n, (i, s)))` runs `f` at `i, …, len(n) − 1`, threading `s`.
       `[spec §16]` -/
   | count
+  /-- The counted loop with an exit: `count_try (f, (n, (i, s)))` runs `f` at `i, …, len(n) − 1`
+      while it answers `inj₁` of the next state, and stops at its first `inj₂`.  `[spec §16]` -/
+  | countTry
   deriving DecidableEq, Repr
 
 /-!

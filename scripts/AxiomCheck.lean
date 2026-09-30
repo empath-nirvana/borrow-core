@@ -88,6 +88,8 @@ import Frontend.Check.Externs
 #print axioms BoCa.Fig16.LogRel.Core.wpTS_count
 #print axioms BoCa.Fig16.LogRel.Core.countLoop_wp
 #print axioms BoCa.Fig16.LogRel.Core.countFold_compatX
+#print axioms BoCa.Fig16.LogRel.Core.countTry_compatX
+#print axioms BoCa.Fig16.LogRel.Core.countTryLoop_wp
 -- SPEC §9: the length bound, and slice borrows
 #print axioms BoCa.Fig16.LogRel.Core.arrLen_of_bound
 #print axioms BoCa.Fig16.LogRel.Core.arrLen_bound

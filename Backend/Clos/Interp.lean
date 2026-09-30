@@ -256,6 +256,22 @@ def countLoop (codes : Array Code) : Nat → CV → UInt32 → UInt32 → CV →
       countLoop codes n f len (i + 1) s'
     else pure s
 
+/-- `count_try (f, (len, (i, s)))`: `f` on a copy, from `i`, until it answers `inr` or the bound;
+    at the bound the state is answered as `inl`. -/
+def countTryLoop (codes : Array Code) : Nat → CV → UInt32 → UInt32 → CV → IM CV
+  | 0, _, _, _, _ => throw "closure IR: out of fuel"
+  | n + 1, f, len, i, s => do
+    if i < arrLen len then
+      let fc ← deepCopy objFuel f
+      let r ← callClos codes n fc (← allocObj (.pair (.i32 i) s))
+      match r with
+      | .ptr a => match ← getObj a with
+        | .inj false s' => do freeObj a; countTryLoop codes n f len (i + 1) s'
+        | .inj true _ => pure r
+        | _ => throw "closure IR: count_try's step answered a non-sum"
+      | _ => throw "closure IR: count_try's step answered a non-sum"
+    else allocObj (.inj false s)
+
 /-- `drop`'s drain: cell `a + i` is freed and its contents handed to a copy of `f`. -/
 def dropFill (codes : Array Code) : Nat → CV → Nat → Nat → Nat → IM Unit
   | 0, _, _, _, _ => throw "closure IR: out of fuel"
@@ -306,6 +322,16 @@ def eval (codes : Array Code) : Nat → Env → Tm → IM (CV × Env)
         let .i32 len := len | throw "closure IR: count of a non-length"
         let .i32 i := i | throw "closure IR: count from a non-index"
         let s ← countLoop codes n f len i s
+        deepDrop objFuel f
+        pure (s, env)
+    | .prim .countTry [x] => do
+        let (v, env) ← take env x
+        let (f, r) ← unpair v
+        let (len, r) ← unpair r
+        let (i, s) ← unpair r
+        let .i32 len := len | throw "closure IR: count_try of a non-length"
+        let .i32 i := i | throw "closure IR: count_try from a non-index"
+        let s ← countTryLoop codes n f len i s
         deepDrop objFuel f
         pure (s, env)
     | .prim .drop [x] => do

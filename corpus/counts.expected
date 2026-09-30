@@ -26,6 +26,7 @@ clone-reuse 6 0 1
 count-down 0 0 0
 count-down-exact 6 0 0
 count-fold 0 0 0
+count-try 0 0 0
 deep-list 100000 0 0
 div-hof 0 0 0
 family-swap 2 0 0

@@ -183,6 +183,10 @@ inductive CDerives : LifeCtx → Ctx VTy → Expr → Jdg → Prop where
   loop, total at every host.  `[spec §16]` -/
   | countFold {Δ Γ} (S : VTy) (hΓ : Ctx.DeadP Γ) :
       CDerives Δ Γ (.val (.prim .count)) (.val (countFoldTy S))
+  /-- `count_try : !(!(I32 ⊗ S ⇒ S ⊕ E) ⊗ (I32 ⊗ (I32 ⊗ S)) ⇒ S ⊕ E)`, the step `countTry`: the
+  counted loop with an exit, total at every host.  `[spec §16]` -/
+  | countTry {Δ Γ} (S E : VTy) (hΓ : Ctx.DeadP Γ) :
+      CDerives Δ Γ (.val (.prim .countTry)) (.val (countTryTy S E))
   /-- `slice_borrow_mut : Array A ⊸ (∀'x ⊏ ⊓Δ. [Mut 'x A] ⊸ ['x] B) ⊸ Array A ⊗ B`, the term
   `withbor`'s: an owned array lent as a family of `mut` leaves, with no cell.  `[spec §9]` -/
   | sliceBorrowM {Δ Γ A B} (x : LifeVar) (hΓ : Ctx.DeadP Γ)
@@ -397,6 +401,7 @@ theorem fundamentalC {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg}
   | arrCopy _ _ hΓ => exact arrCopy_compatX hΓ
   | arrForget _ _ hΓ => exact arrForget_compatX hΓ
   | countFold _ hΓ => exact countFold_compatX hΓ
+  | countTry _ _ hΓ => exact countTry_compatX hΓ
   | sliceBorrowM x hΓ hA hB hf₁ hf₂ => exact sliceBorrowM_compatX x hΓ hA hB hf₁ hf₂
   | sliceBorrowI x hΓ hsc hA hB hf₁ hf₂ => exact sliceBorrowI_compatX x hΓ hsc hA hB hf₁ hf₂
   | sliceGetM _ _ hΓ => exact sliceGetM_compatX hΓ
