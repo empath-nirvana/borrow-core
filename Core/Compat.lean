@@ -91,9 +91,9 @@ theorem sumI₂_compatC {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {A B : VTy}
     (wpTS_mono (fun ls' v σ hv => ?_) ρ (h δ γ ls ρ hδ hg))
   exact wpTS_val ls' (.inj₂ v) _ σ (Or.inr ⟨v, pure_sep_mk rfl hv⟩)
 
-/-- `C` is an `F A`. -/
+/-- `C` is an `F A` or an `F_Σ A`: its thunks are `λ_. M`. -/
 def CTy.isRet : CTy → Bool
-  | .ret _ => true
+  | .ret _ | .eff _ _ _ _ _ _ => true
   | _ => false
 
 theorem forceE_of_not_ret {C : CTy} (h : C.isRet = false) (e : Expr) : forceE C e = e := by
@@ -134,6 +134,9 @@ private theorem substAll_forceE {γ : List Val} {i : Nat} {v : Val} (hv : γ[i]?
     (C : CTy) : substAll γ (forceE C (.var i)) = forceE C (.val v) := by
   cases C with
   | ret A =>
+      show Expr.app (Expr.psub 0 γ (.var i)) (Expr.psub 0 γ Expr.unit) = _
+      rw [← substAll, substAll_var hv]; rfl
+  | eff n j q A B C =>
       show Expr.app (Expr.psub 0 γ (.var i)) (Expr.psub 0 γ Expr.unit) = _
       rw [← substAll, substAll_var hv]; rfl
   | _ => exact substAll_var hv

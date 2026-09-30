@@ -59,9 +59,11 @@ def CohE (rs : List FrameRec) (m : Loc) (S : VTy) (δ : LSub) : Prop :=
 
 /-- `force`, at the computation type forced.  A thunk of `F A` is `λ_. M` and is forced by
 applying it to `()`; a thunk of any other computation type is the λ-value that computation
-already is, and is forced by using it as it stands. -/
+already is, and is forced by using it as it stands.  A thunk of `F_Σ A` is forced as one of
+`F A`. -/
 def forceE : CTy → Expr → Expr
   | .ret _, e => .app e (.val .unit)
+  | .eff _ _ _ _ _ _, e => .app e (.val .unit)
   | _, e => e
 
 /-- An entry of the relation's type-variable environment: the closed type the variable stands
