@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 0.28 · 2026-09-30
+Version 0.29 · 2026-09-30
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -2246,6 +2246,186 @@ No change to `CDerives`, the relation, the machine or the checker. `fundamentalC
 
 ---
 
+## 19. Entry 18 — native capture: `handle` and `perform`
+
+### Motivation
+
+§18 defines handlers by elaboration. That covers answering handlers (a borrow) and aborts (a sum
+exit), but not a handler that captures the rest of the computation (#186). The spikes #184 and
+#185 (`experiments/HandlersAsBorrows`, `experiments/HandlersControl`) found three things:
+
+- **State behind control needs capture.** Without capture it can be written only with explicit
+  requests, at a bounded depth (`no_uniform_comp`).
+- **The reentry rule is admissible.** It is the linearity of the state token
+  (`not_borrowSpansForward`).
+- **A continuation's mode is its capture's persistence.** A continuation may be copied only if
+  what it captures is persistent (`lam_bang_persistent`).
+
+This entry adds one delimiter, one operation and one effectful returner type to the kernel, with
+their semantics: an effectful weakest precondition in the shape of de Vilhena and Pottier's
+protocols, as used by van Rooij and Krebbers' *Affect* (POPL 2025). Control-flow linearity is
+Tang, Hillerström, Lindley and Morris' (*Soundly Handling Linearity*, POPL 2024): their
+`T-Seq`/`T-Handler` premises, read per continuation.
+
+### Terms and machine
+
+Two primitives, `perform` and `hnd`, with no new `Expr` constructor:
+
+    perform V      ≜  perform V                 (the application `.app (.prim .perform) V`)
+    handle e with H ≜  hnd H e                   (the application `.app (.app (.prim .hnd) H) e`)
+
+`H` is a pair `(h_ret, h_op)` of values. Evaluation is argument-first, so `e` runs first, under
+the frame `hnd H [·]`. A context `K` is **handler-free** (`Kont.NoHnd K`) when none of its frames
+is `hnd H' [·]`. There are two head steps, and neither allocates:
+
+    (μ, hnd (h_ret, h_op) v)            ↦  (μ, h_ret v)                                   [ret]
+    (μ, hnd (h_ret, h_op) K[perform v]) ↦  (μ, h_op (v, κ))    K handler-free, where       [op]
+          κ = λy. hnd (h_ret, h_op) K[y]
+
+The handler is **deep**: `κ` reinstalls it. `perform v` alone takes no step. A term
+`K[perform v]` with `K` handler-free is **final** but not a value; nothing reduces it until an
+enclosing `hnd` does. In `κ` the context and the handler are shifted past the binder
+(`Kont.shift`), so that `κ y` substitutes back to `hnd H K[y]` (`kappa_subst`).
+
+**Unique decomposition** (`plug_decomp`, `head_plug`) is kept. The `[op]` redex has `K[perform v]`
+under `hnd H [·]`, and a handler-free `K` around `perform v` holds no head redex, so the only
+decomposition of the configuration is the whole redex. **Determinism** (`AStep1.deterministic`,
+§13) gains the two cases.
+
+### Types
+
+    C ::= … | F_ε A        ε = (A_op ↠^m B_op),  m ∈ {1, !}
+
+`F_ε A` (`CTy.eff A_op B_op m A`) is a computation of `A` that may perform one operation,
+answering `B_op` for an argument `A_op`, in mode `m`. `F A` is the pure returner. Every function
+over `CTy` treats `F_ε A` like `F A` on its three value types (scoping, substitution, `TyEq`,
+`VFree`, `NuOk`). `U(F_ε A)` has no outlives rule and is not persistent: it is §3's `U C`. `F_ε A`
+is not an observation tree (`NuLeaf`).
+
+A computation performs one operation type. Rows, several operations, and forwarding an
+unhandled operation to an outer handler are *Open*.
+
+### Typing
+
+Four rules, over `CDerives` with its context premises `SplitP`, `DeadP` and `SoloP` (§10):
+
+    Δ; Γ ⊢ M : F A
+    ───────────────── [pure]
+    Δ; Γ ⊢ M : F_ε A
+
+    Δ; Γ ⊢ V : A_op
+    ─────────────────────────────── [perform]
+    Δ; Γ ⊢ perform V : F_ε B_op
+
+    Γ = Γ₁, Γ₂    Δ; Γ₁ ⊢ M : F_ε A    Δ; x : A, Γ₂ ⊢ N : F_ε B    (m = ! ⇒ !Γ₂)
+    ───────────────────────────────────────────────────────────────────── [let]
+    Δ; Γ ⊢ (λx. N) M : F_ε B
+
+    Γ = Γ₁, Γ₂    Δ; Γ₁ ⊢ H : !U(A ⊸ F R) ⊗ !U(A_op ⊗ K_m ⊸ F R)    Δ; Γ₂ ⊢ e : F_ε A
+    ───────────────────────────────────────────────────────────────────── [handle]
+    Δ; Γ ⊢ hnd H e : F R
+
+    K₁ = U(B_op ⊸ F R)          K_! = !U(B_op ⊸ F R)
+
+- **The [let] side condition is control-flow linearity.** At mode `!` the continuation of an
+  operation in `M` holds `N`'s context, so that context must be persistent. This is
+  Tang et al.'s `T-Seq` (`Δ ⊢ Γ₂ : •`), with persistence for unlimitedness.
+- **The clauses are `!`**, because a deep handler runs them once per operation. This is
+  Tang et al.'s `T-Handler` premise `Δ ⊢ Γ : •`.
+- **The continuation is linear at mode 1, and `!` at mode `!`.**
+- **Every other rule is §3's at any computation type**, so it holds at `F_ε A` unchanged:
+  - `case`, `let (x, y)`, `;`, `λ` and application (an effectful function is `A ⊸ F_ε B`);
+  - `&`, `∀`, and `thunk`/`force` of a λ-value (`thunkV`), with the block `!U(A ⊸ F_ε B)` by
+    `bangThunkV`.
+
+**The scope side condition holds by construction.** Every borrow constant (`withbor` 1–3,
+`withload`, the slice borrows) takes a callback of a *pure* returner `F(['x] B)`. So an operation
+performed in a borrow's scope is handled inside that scope. An effectful callback would let a
+continuation span a lend: that is T1 (#172), and it is not provided.
+
+### Semantics
+
+**Final configurations.** `wpG ls e Q` is `wpTS` with the run ending at a final term `t`, a value
+or a handler-free `K[perform v]`, and the postcondition `Q ls′ t` over that term. Every other
+conjunct is `wpTS`'s verbatim. So
+
+    wpTS ls e Q  =  wpG ls e (λ ls′ t. ∃ v, t = v ∧ Q ls′ v)          (wpTS_eq_wpG)
+
+**Protocols.** A protocol `Ψ : List SRec → Val → (List SRec → Val → WProp) → WProp` says which
+operations may be performed and what their continuations are owed. The protocol of `ε` at `δ`:
+
+    Ψ_ε ls v Φ  ≜  𝒱⟦A_op⟧(ls)δ(v) ⋆ (λρ_k. (m = ! → ρ_k = ∅) ∧
+                     ∀ ls′, Ext ls ls′ ρ_k → ∀ w, (𝒱⟦B_op⟧(ls′)δ(w) ─⋆ Φ ls′ w) ρ_k)
+
+The resource splits into the argument and the continuation's share `ρ_k`, which is `∅` at mode
+`!`. The continuation is owed at every `Ext`-extension of the list: this is where protocols meet
+the Kripke order, as a thunk's clause does. `Ψ` is monotone in `Φ` (`Protocol.Mono`).
+
+**The effectful `wp`.** `ewpTS ls e Ψ Q` is the least `P` closed under
+
+    wpG ls e (λ ls′ t. (t = v ∧ Q ls′ v) ∨ (t = K[perform v], K handler-free, ∧ Ψ ls′ v (λ ls″ w. P ls″ K[w])))
+
+That is, it runs `e` to a value in `Q`, or to an operation the protocol allows and whose every
+resumption is again in `ewpTS`. It is a least fixed point (written in `Prop`, as §6's `μ`), so a
+program performs finitely many operations before it answers: total correctness, as `wpTS`.
+
+    cC (F_ε A) ls δ e  ≜  ewpTS ls e (Ψ_ε at δ) (λ ls″. 𝒱⟦A⟧(ls″)δ)
+
+`F A` keeps `cC (F A) = wpTS`: the relation at every existing type is unchanged.
+
+### Theorems (the obligations of #186)
+
+1. **Compatibility** of the four rules:
+   - `pure_compatC`, from `wpTS ⊢ ewpTS Ψ` (`ewp_of_wp`);
+   - `perform_compatC`, from `ewp_perform`: `Ψ ls v Q ⊢ ewpTS ls (perform v) Ψ Q`;
+   - `let_compatC`, from `ewp_bind`: for handler-free `K`,
+     `ewpTS e Ψ (λ v. ewpTS K[v] Ψ Q) ⊢ ewpTS K[e] Ψ Q`, with the mode `!` case from
+     `vP_empty_of_persistent` on `Γ₂`;
+   - `handle_compatC`, by induction on the least fixed point: the `[ret]` step, then `h_ret`'s
+     relation; the `[op]` step, then `h_op`'s relation at `(v, κ)`. Here `κ`'s relation is the
+     induction hypothesis under `Ψ_ε`'s wand. At mode `!`, `κ` is at `∅`, so it is `!`.
+2. **Every existing rule's compatibility at `F_ε A`:**
+   - for the generic rules, through `cC_head`, `cC_step` and `cC_bind` at `F_ε`
+     (`ewp_head`, `ewp_step`, `ewp_bind_pure`);
+   - every lemma at `F A` is unchanged, since `cC (F A) = wpTS`, and `ewpTS ⊥ = wpTS`
+     (`ewp_bot`).
+3. **Frames** ([TR] 6.64–6.66) are used only around a borrow constant's callback, which is pure.
+   So they are frames over `ewpTS` at the empty protocol, which is `wpTS` (`ewp_bot`), and they
+   are unchanged.
+4. **Adequacy.**
+   - `fundamentalC` and `fundamentalD` cover the extended judgment.
+   - `adequacyD` holds for every closed program `F 1`, handled ones included: every run, under
+     every allocator, from empty memory continues to `()` at empty memory.
+   - A closed program with an unhandled operation is not typed at `F 1`, only at `F_ε 1`.
+
+### Baseline
+
+`cC (F A)`, `wpTS`, every existing rule and every existing compatibility lemma keep their
+statements. `fundamentalC`, `adequacyC`, `fundamentalD` and `adequacyD` keep theirs, over the
+extended judgment. §18's elaborated handlers are unchanged.
+
+### Programs
+
+The examples of #184 and #185, in direct style, each typed, safe by `adequacyD`, and run:
+
+- **two blocks sharing one stateful handler** (state behind control, at any depth);
+- **`memo`**, with a re-entrant forward;
+- **multi-shot `choose`**, at mode `!`;
+- **abort**, with the continuation dropped through a finaliser;
+- **resume-later.**
+
+### Open
+
+- Rows: several operations per computation, forwarding an unhandled operation to an outer
+  handler, and named instances (§18's S2).
+- Parameterized handlers are written with a state-passing answer type
+  `F R = F(U(S ⊸ F (A ⊗ S)))`; a native parameter is not provided.
+- A shallow handler.
+- An effectful borrow callback (T1, #172), and μ with `X` under `⊸` (T15, #182).
+- Replacing §18's elaborated handlers with this construct.
+
+---
+
 ## Status
 
 Entries 2–6 are implemented in the library directory `Core/`, with one `fundamentalC` and
@@ -2279,10 +2459,17 @@ runtime, with no change to `CDerives`; §11's `write_all` and `read_into` are `C
 `a..b`, `continue`, `else`, `loop` and `sized`, and `lib/iters.bc`; its completeness lemma is
 `Support/Dynamics/Completeness.lean`. Entry 17 (§18) is implemented in `Frontend/Parser.lean`
 and `Frontend/Elab/Effects.lean`, its laws in `Core/Handlers.lean`, with no change to `CDerives`.
+Entry 18 (§19) is specified; its implementation proceeds in the stages of #186.
 
 ---
 
 ## Changelog
+
+- **0.29** (2026-09-30) — Entry 18 (§19, #186): native capture. The primitives `perform` and
+  `hnd`, the machine steps `[ret]` and `[op]` (deep, with a handler-free context), the returner
+  `F_ε A`, the rules `[pure]`, `[perform]`, `[let]` (control-flow linearity at mode `!`) and
+  `[handle]`, and the effectful `wp` `ewpTS` with protocols, `wpTS = ewpTS ⊥`. Stated here; the
+  library follows stage by stage.
 
 - **0.28** (2026-09-30) — Effects S1c (§18, #154): the laws `handle_fold` (a handler is the
   state-passing fold of its clauses over the operations performed) and `loop_abort`; the
