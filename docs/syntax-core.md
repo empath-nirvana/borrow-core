@@ -464,6 +464,22 @@ typed at `!(A => B)`:
 - `slice_get_mut` forgets the rest of the family; `slice_len_mut` hands it back.
 - `borrow imm a { 'x, v -> S }` / `borrow mut a { 'x, v -> S }` on an array `a` are these
   borrows at `@b = top` (draft 0's borrow blocks).
+
+The splits and writes on a borrowed family (`SPEC.md` §9, `Core/SliceOps.lean`):
+
+| constant | type | rule |
+|---|---|---|
+| `slice_split_imm[@a, A]` | `!(array_imm @a A * i32 => array_imm @a A * array_imm @a A + array_imm @a A)` | `sliceSplitI` |
+| `slice_split_mut[@a, A]` | `!(array_mut @a A * i32 => array_mut @a A * array_mut @a A + array_mut @a A)` | `sliceSplitM` |
+| `slice_empty_imm[@a, A]` | `array_imm @a A` | `sliceEmptyI` |
+| `slice_empty_mut[@a, A]` | `array_mut @a A` | `sliceEmptyM` |
+| `slice_replace_mut[@a, A]` | `!(array_mut @a A * (i32 * A) => array_mut @a A * (A + A))` | `sliceReplaceM` |
+| `slice_swap_mut[@a, A]` | `!(array_mut @a A * (i32 * i32) => array_mut @a A)` | `sliceSwapM` |
+
+- A split past the length hands the family back (`inr`); the erasure of both splits is the
+  primitive `split`, of both empties the value `(0, 0)`, of `slice_replace_mut` `replaceV`.
+- `slice_swap_mut` past the length changes nothing; its erasure is the closed λ-term `swapV`.
+- `array_mut @a A` has a destructor (SPEC §12), so an unused part of a split is dropped.
 <!-- ANCHOR_END: arrays -->
 
 ## 8c. Counted loops

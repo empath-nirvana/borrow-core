@@ -163,7 +163,10 @@ The only objects are:
   `Types.byteCell`) has one byte per slot, at `base + i`, in `⌈n/8⌉` words, read and written by
   `load8_u`/`store8` (`loadCell`, `storeCell`); every access to a location of that class is a
   byte access, so a cell of the class is one byte too. An empty array, or one whose slots take
-  no words, allocates nothing: its base is `0`, and `drop` frees nothing.
+  no words, allocates nothing: its base is `0`, and `drop` frees nothing. `split` on a
+  borrowed family `(p, n)` at `i` is an unsigned compare and `(p, i)`, `(p + s·i, n − i)`, with
+  no allocation; the empty family `slice_empty_*` is `(0, 0)`, its base the null word (the
+  source term's location `0`, which the closure IR's interpreter never allocates).
 - **Closures of a recursive closure type that capture.** An object: the tag `t`, then the
   captured values' words. A code that captures nothing is the word `2t + 1` (objects are
   8-aligned, so bit 0 tells the two apart) and allocates nothing.

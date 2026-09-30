@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 0.19 · 2026-09-29
+Version 0.22 · 2026-09-29
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -534,7 +534,7 @@ counterparts:
 | `slice_len_mut` | `!(ArrayMut @a A ⇒ ArrayMut @a A ⊗ I32)` — the family handed back beside its length |
 
 A family `[L]` is split at a run-time index, and two adjacent ones joined, at every leaf type
-(`vP_fam_split`, `vP_fam_join`); no constant exposes that yet.
+(`vP_fam_split`, `vP_fam_join`); the split is exposed on borrowed families below.
 
 **Surface.** `borrow imm a { 'x, v -> S }` and `borrow mut a { 'x, v -> S }` on an array `a`
 elaborate to `slice_borrow_imm['x, top, A, B]` and `slice_borrow_mut['x, top, A, B]`, `v` at
@@ -542,9 +542,53 @@ elaborate to `slice_borrow_imm['x, top, A, B]` and `slice_borrow_mut['x, top, A,
 The lowering is the term's: the handle is passed, and there is no cell (`corpus/slice-imm.bc`,
 `corpus/slice-mut.bc`).
 
+### Splits and writes on a borrowed family
+
+A borrowed family is cut at a run-time index into two families at the same lifetime, and a
+`mut` family is written at an index while the rest of it is kept (`Core/SliceOps.lean`, K3 and
+K5 of `docs/strings-slices-design.md`). With `L` either `Imm @a A` or `Mut @a A`:
+
+| constant | type | term |
+|---|---|---|
+| `slice_split_imm`, `slice_split_mut` | `!([L] ⊗ I32 ⇒ ([L] ⊗ [L]) ⊕ [L])` | `split` |
+| `slice_empty_imm`, `slice_empty_mut` | `[L]` | `(0, 0)` |
+| `slice_replace_mut` | `!(ArrayMut @a A ⊗ (I32 ⊗ A) ⇒ ArrayMut @a A ⊗ (A ⊕ A))` | `array_replace`'s |
+| `slice_swap_mut` | `!(ArrayMut @a A ⊗ (I32 ⊗ I32) ⇒ ArrayMut @a A)` | `swapV` |
+
+- **`split`** at `i ≤ n` answers `inj₁` of the first `i` leaves and the other `n − i`, both at the
+  family's lifetime; past the length it hands the family back. It is a machine step (below), not a
+  term over the host's `le_u` and `sub`: such a term would be sound only at hosts whose
+  subtraction subtracts, and every theorem holds at every host (as `count`, §16). Its soundness is
+  `vP_fam_split` at the step (`famSplit_compatX`, at every leaf; the two constants are its
+  instances). Owned families are not split: the model allows it, but a block is freed once
+  (design §5.4).
+- **The empty family** has no leaves and no resource (`famEmpty_compatX`). It is a value, not a
+  `!` value: a constant at a dead context is already used at will.
+- **`slice_replace_mut`** opens the leaf at the index by Mut Anti-Frame (`[TR]` 6.66,
+  `wpTS_M_antiFrameX`), as `withswap` opens its cell, reads and writes it, and puts it back into
+  the family (`sliceReplaceM_compatX`). Past the length it hands the new element back.
+- **`slice_swap_mut`** `λp. let (f, (i, j)) = p in case idx (f, i) {inj₁ c. case idx (f, j)
+  {inj₁ d. (λx. (λy. store c y; store d x; f) (load d)) (load c) | inj₂ _. f} | inj₂ _. f}`
+  exchanges two slots; if either index is past the length nothing changes. At `i ≠ j` the two
+  leaves are opened by two nested Anti-Frames (`sepRange_pick2N`); at `i = j` the one leaf is read
+  and written twice (`sliceSwapM_compatX`).
+
+A `mut` family has a destructor (§12), so a part a program does not use is dropped.
+
+**Surface and library.** `borrow mut a { 'x, v -> … }` lends `v : array_mut 'x A`; the constants
+act on it, and `lib/slice.bc` (`include slice`) is the slice library over them and `count_fold`
+(§16): `len`, `get`, `at`, `peek`, `set`, `replace`, `swap_at`, `split_at`, `split_first`,
+`split_last` (and their `_mut` forms), `reverse`, `fill`, `copy_from`, `find`, `contains`,
+`starts_with`, `ends_with`, `eq`, `cmp`, `sort`, `binary_search`, and the iterators `iter_imm`
+and `iter_mut`, codata whose state is the rest of the view. Its functions are generic in the
+element type and take the view's lifetime; a comparison is an argument (`eq_u8`, `cmp_i32`, …).
+
+**Lowering.** `split` is an unsigned compare and pointer and length arithmetic: `(p, i)` and
+`(p + i·s, n − i)`, with no allocation. The empty family's base is the null word `0`.
+
 ### Machine
 
-Three primitives, `Prim.tab`, `Prim.idx` and `Prim.drop`, each with one head step. With
+Four primitives, `Prim.tab`, `Prim.idx`, `Prim.split` and `Prim.drop`, each with one head step. With
 `len(c) = c` when `c < 2³¹` and `0` otherwise (a negative length is the empty array):
 
     (μ, tab (c, f))       ↦ (μ ⊎ {ℓ+i ↦ () | i < n},
@@ -552,6 +596,8 @@ Three primitives, `Prim.tab`, `Prim.idx` and `Prim.drop`, each with one head ste
                             where n = len(c) and ℓ, …, ℓ+n−1 are fresh
     (μ, idx ((ℓ, n), i))  ↦ (μ, inj₁ (ℓ + i))   if i < n, unsigned
                           ↦ (μ, inj₂ ())        otherwise
+    (μ, split ((ℓ, n), i)) ↦ (μ, inj₁ ((ℓ, i), (ℓ + i, n − i)))   if i ≤ n, unsigned
+                           ↦ (μ, inj₂ (ℓ, n))                     otherwise
     (μ, drop (f, (ℓ, n))) ↦ (μ, f (free (ℓ+0)); …; f (free (ℓ+n−1)); ())
 
 `tab` places the cells, then runs the ordinary term that fills them; `drop` is a pure step to the
@@ -592,7 +638,8 @@ The constants, at a dead context; `A ⇒ B` is `U(A ⊸ F B)`:
 `array_replace` on `Mut @a (Array A)` is `withswap` with `array_replace` in its callback.
 
 Implicit destructors (§12): `Array A` has one when `A` does, `array_free` with the destructor of
-`A` as the consumer; `ArrayImm @a A` is forgettable, by `array_forget`.
+`A` as the consumer; `ArrayImm @a A` is forgettable, by `array_forget`, and `ArrayMut @a A` by
+`slice_get_mut` past every length and `forget` of the leaf it would hand out.
 
 ### Lowering
 
@@ -608,7 +655,7 @@ empty array allocates nothing.
 ### Baseline
 
 `fundamentalC` covers the new constants and `adequacyC` is unchanged in statement; the machine
-gains three head steps, parametric in the host as before. `[L]` is one `VTy` former, and every
+gains four head steps, parametric in the host as before; none of them allocates but `tab`. `[L]` is one `VTy` former, and every
 lemma of the typed world proved by induction on types or on positions has its `[L]` case (6.131,
 6.60, the images and invariants of reborrowing), which is what makes `withload` sound at arrays.
 
@@ -622,14 +669,16 @@ lemma of the typed world proved by induction on types or on positions has its `[
 
 ### Open
 
-- `split_at` at a run-time index, returning two disjoint sub-families at the borrow's lifetime
-  (K3; the relation's content is `vP_fam_split`), and writes that keep the rest of a `mut`
-  family (K5: `slice_replace`, `slice_swap`).
-- An `imm` reborrow of a `mut` family (K2′), and a destructor for `ArrayMut @a A` (a forget, as
-  `array_forget` is for `ArrayImm`).
+- An `imm` reborrow of a `mut` family (K2′). Reading an element through a `mut` view is
+  `peek`, a replace-and-restore that needs an element to put in the slot meanwhile.
+- A total `for` over a view's iterator (stage S4), and `&mut a`/`&a` at an array lending its
+  view to one call (the design's §4.3 lend row); `iter_mut` is driven by a counted loop today.
+- A generic function of `lib/slice.bc` is called with its element type written
+  (`reverse[u8](v)`), and one with two lifetimes (`copy_from`, `eq`, `cmp`, …) with both
+  written (`(unbang eq[u8]) ['x] ['y] (…)`): the surface infers one lifetime from the argument.
+- Bounds checks at a dynamic index are not eliminated statically.
 - Whether `slice_borrow`'s side conditions on `A` and `B` can be dropped: they are used by the
   proof, and not known to be needed.
-- `iter`/`iter_mut` over the leaf family, as a lifetime-indexed `Iter` (§7).
 - `replicate` for persistent `A` without a tabulator; creation from a list.
 - Uninitialised leaves (`Uninit`), and sized types (#72).
 - Buffers and strings as externs (the previous §9) are withdrawn in favour of the library forms
@@ -1713,11 +1762,24 @@ state machine (§15). Entry 15 (§16) is implemented in
 `Paper/` and `Support/` (the step), `Core/CountFold.lean`, the checker (`count_fold`) and the
 backend (`count_loop`). §9's slice borrows are `Core/SliceFrames.lean` and `Core/Slices.lean`,
 the checker (`slice_borrow_*`, `slice_*_mut`, `array_mut`) and the borrow blocks of
-`Frontend/Sugar.lean`; §8's byte is `Width.w8` throughout.
+`Frontend/Sugar.lean`; §8's byte is `Width.w8` throughout. §9's splits and writes are
+`Core/SliceOps.lean`, the step `split` in `Paper/` and `Support/`, the checker
+(`slice_split_*`, `slice_empty_*`, `slice_replace_mut`, `slice_swap_mut`), the backend, and the
+library `lib/slice.bc`.
 
 ---
 
 ## Changelog
+
+- **0.22** (2026-09-29) — Strings S3 (`docs/strings-slices-design.md`). §9: a borrowed family
+  is split at a run-time index into two families at its lifetime (`slice_split_imm`,
+  `slice_split_mut`, the machine step `split`, K3), the empty family `slice_empty_imm`/`_mut`,
+  and a `mut` family is written at an index keeping the rest (`slice_replace_mut`,
+  `slice_swap_mut`, by Mut Anti-Frame, K5). §12: `ArrayMut @a A` has a destructor, derived from
+  `slice_get_mut` and `forget`. The slice library `lib/slice.bc` (`include slice`), generic in
+  the element type, with `sort`, `binary_search`, searches, comparisons and the iterators
+  `iter_imm`/`iter_mut`. The backend lowers `split` to a compare and pointer and length
+  arithmetic.
 
 - **0.21** (2026-09-29) — Strings S1–S2 (`docs/strings-slices-design.md`). §9: the family
   relation carries the length bound `c < 2³¹`; slice borrows `slice_borrow_mut` and
