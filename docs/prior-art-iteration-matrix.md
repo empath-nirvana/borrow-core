@@ -1102,7 +1102,8 @@ leaf views at one lifetime.
 
 **Cost.**
 - (a): a new view type former (or an abbreviation over an address type, which BoCa does not
-  have), its relation clause, and a frame-list proof over a linked spine.
+  have), its relation clause, and a frame-list proof over a linked spine. A `VTy` former costs
+  about 100 match arms across `Core/` (`CLAUDE.md`, growth discipline).
 - (b): a kernel change to `Imm̲` at `μ`, plus 6.131 at the new clause
   (`docs/scope-recursion.md` §2.4 names that proof as the main risk of `μ`).
 - Either route must first be checked against `experiments/FrameEnd`. **This is the one candidate
