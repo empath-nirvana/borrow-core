@@ -418,6 +418,13 @@ Integer literals and operations are constants (`SPEC.md` §8, `Core/Integers.lea
   `8` (`add8`, …) take `0`. At the surface an operator at `u8` widens its operands and works at
   `i32`, narrowing an arithmetic result back; the prelude's `to_i32` and `to_u8` are the
   conversions.
+- **Characters and strings** (`SPEC.md` §17): `'c'` (one character, or `'\n'`, `'\t'`,
+  `'\r'`, `'\0'`, `'\\'`, `'\''`) is its scalar value, which the lexer reads as `i32[n]`; a
+  lifetime `'x` is never followed by `'`. `"…"` is a string literal, its bytes UTF-8 with the
+  escapes `\n`, `\t`, `\r`, `\0`, `\\`, `\"` and `\xNN`, on one line; it is a value of `lit`,
+  `i32 * !(i32 => u8)`, elaborated before checking. In type positions `buf A` is
+  `array A * i32`, `string` is `array u8 * i32`, `text @a` and `text_mut @a` are
+  `array_imm @a u8` and `array_mut @a u8`, and `lit` is `i32 * !(i32 => u8)`, read by the parser.
 <!-- ANCHOR_END: integers -->
 
 ## 8b. Arrays

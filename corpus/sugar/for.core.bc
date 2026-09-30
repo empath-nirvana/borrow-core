@@ -2,26 +2,30 @@
 -- program, with the I/O library the sugar brings in, whose `main` is one state machine (SPEC §15).
 -- `scripts/check-sugar.sh` checks that both erase to one term.
 
-extern read_byte : !(all 'a < top. mut 'a input => mut 'a input * (i32 + 1))
+extern read_byte : !(all 'a < top. mut 'a input => mut 'a input * (u8 + 1))
 
-extern write_byte : !(all 'a < top. mut 'a output * i32 => mut 'a output)
+extern write_byte : !(all 'a < top. mut 'a output * u8 => mut 'a output)
+
+extern write_all : !(all 'a < top. all 'b < top. mut 'a output * array_imm 'b u8 => mut 'a output)
+
+extern read_into : !(all 'a < top. all 'b < top. mut 'a input * array_mut 'b u8 => mut 'a input * array_mut 'b u8 * i32)
 
 type In = ref input
 
 type Out = ref output
 
-type Bytes = mu X. 1 + i32 * X
+type Bytes = mu X. 1 + u8 * X
 
-def getb : In => In * (i32 + 1) =
+def getb : In => In * (u8 + 1) =
   thunkv fun (c : In) ->
-      return withbor2['x, top, input, i32 + 1] c (thunkv Fun 'x < dom.
+      return withbor2['x, top, input, u8 + 1] c (thunkv Fun 'x < dom.
           return (thunkv fun (m : mut 'x input) ->
               r <- return (unbang read_byte) ['x] m;
               let (m2, b) = r;
               return boxed['x] b))
 
-def putb : Out * i32 => Out * 1 =
-  thunkv fun (p : Out * i32) ->
+def putb : Out * u8 => Out * 1 =
+  thunkv fun (p : Out * u8) ->
       let (c, b) = p;
       return withbor2['x, top, output, 1] c (thunkv Fun 'x < dom.
           return (thunkv fun (m : mut 'x output) ->
@@ -49,7 +53,7 @@ def io_dec_step : !(Out * i32 * i32 * (1 + 1) => Out * i32 * i32 * (1 + 1)) =
             };
           o2 : Out <- case show {
               inl u -> return o
-            | inr u -> q2 <- return putb (o, (unbang host[add32]) (digit, i32[48]));
+            | inr u -> q2 <- return putb (o, (unbang host[wrap8]) ((unbang host[add32]) (digit, i32[48])));
                 let (o3, v) = q2;
                 return o3
             };
@@ -74,7 +78,26 @@ def put_dec : Out * i32 => Out * 1 =
       let (o2, r) = s;
       return (o2, ())
 
-def io_bytes_step : !U (In -o F (i32 * In + In) & F In) =
+def write_bytes : all 'b < top. Out * array_imm 'b u8 => Out * 1 =
+  thunkv Fun 'b < top.
+      return (thunkv fun (p : Out * array_imm 'b u8) ->
+          let (c, v) = p;
+          return withbor2['x, top, output, 1] c (thunkv Fun 'x < dom.
+              return (thunkv fun (m : mut 'x output) ->
+                  m2 <- return (unbang write_all) ['x] ['b] (m, v);
+                  return boxed['x] ())))
+
+def read_bytes : all 'b < top. In * array_mut 'b u8 => In * array_mut 'b u8 * i32 =
+  thunkv Fun 'b < top.
+      return (thunkv fun (p : In * array_mut 'b u8) ->
+          let (c, v) = p;
+          return withbor2['x, top, input, array_mut 'b u8 * i32] c (thunkv Fun 'x < dom.
+              return (thunkv fun (m : mut 'x input) ->
+                  q <- return (unbang read_into) ['x] ['b] (m, v);
+                  let (m2, r) = q;
+                  return boxed['x] r)))
+
+def io_bytes_step : !U (In -o F (u8 * In + In) & F In) =
   !thunkv fun (c : In) ->
       < q <- return getb c;
         let (c2, x) = q;
@@ -84,9 +107,9 @@ def io_bytes_step : !U (In -o F (i32 * In + In) & F In) =
         },
         return c >
 
-def bytes : In => U iter i32 In In =
+def bytes : In => U iter u8 In In =
   thunkv fun (c : In) ->
-      f <- return unbang unfold[iter i32 In In, In] io_bytes_step;
+      f <- return unbang unfold[iter u8 In In, In] io_bytes_step;
       return (thunkv nu_in < (nu_out force f c).1,
           (nu_out force f c).2 >)
 
@@ -95,7 +118,7 @@ extern stdin : ref input
 extern stdout : ref output
 
 main : F U loop ((ref input * ref output) * i32) ((ref input * ref output) * 1) =
-  io_run_0 : !(U iter i32 (ref input) (ref input) * ref output * i32 => (ref input * ref output) * i32 + U iter i32 (ref input) (ref input) * ref output * i32) <- return (!thunkv fun (io_a : U iter i32 (ref input) (ref input) * ref output * i32) ->
+  io_run_0 : !(U iter u8 (ref input) (ref input) * ref output * i32 => (ref input * ref output) * i32 + U iter u8 (ref input) (ref input) * ref output * i32) <- return (!thunkv fun (io_a : U iter u8 (ref input) (ref input) * ref output * i32) ->
         let (io_it0, io_a_t) = io_a;
         let (stdout, n) = io_a_t;
         io_o <- (nu_out force io_it0).1;
@@ -110,15 +133,15 @@ main : F U loop ((ref input * ref output) * i32) ((ref input * ref output) * 1) 
             io_v : (ref input * ref output) * i32 <- return ((stdin, stdout), n);
             return inl io_v
         });
-  io_step : !U (U iter i32 (ref input) (ref input) * ref output * i32 -o F ((ref input * ref output) * i32 + U iter i32 (ref input) (ref input) * ref output * i32) & F ((ref input * ref output) * 1)) <- return (!thunkv fun (io_a : U iter i32 (ref input) (ref input) * ref output * i32) ->
+  io_step : !U (U iter u8 (ref input) (ref input) * ref output * i32 -o F ((ref input * ref output) * i32 + U iter u8 (ref input) (ref input) * ref output * i32) & F ((ref input * ref output) * 1)) <- return (!thunkv fun (io_a : U iter u8 (ref input) (ref input) * ref output * i32) ->
         < return (unbang io_run_0) io_a,
           let (io_it0, io_a_t) = io_a;
           let (stdout, n) = io_a_t;
           io_c <- (nu_out force io_it0).2;
           stdin <- return io_c;
           return ((stdin, stdout), ()) >);
-  io_mk : !(U iter i32 (ref input) (ref input) * ref output * i32 => U loop ((ref input * ref output) * i32) ((ref input * ref output) * 1)) <- return (!thunkv fun (io_s0 : U iter i32 (ref input) (ref input) * ref output * i32) ->
-        io_f <- return unbang unfold[loop ((ref input * ref output) * i32) ((ref input * ref output) * 1), U iter i32 (ref input) (ref input) * ref output * i32] io_step;
+  io_mk : !(U iter u8 (ref input) (ref input) * ref output * i32 => U loop ((ref input * ref output) * i32) ((ref input * ref output) * 1)) <- return (!thunkv fun (io_s0 : U iter u8 (ref input) (ref input) * ref output * i32) ->
+        io_f <- return unbang unfold[loop ((ref input * ref output) * i32) ((ref input * ref output) * 1), U iter u8 (ref input) (ref input) * ref output * i32] io_step;
         return (thunkv nu_in < (nu_out force io_f io_s0).1,
             (nu_out force io_f io_s0).2 >));
   n : i32 <- return i32[0];

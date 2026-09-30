@@ -54,6 +54,8 @@ def extImpls (m : Frontend.Check.IOMain) : Except String (List Clos.ExtImpl) :=
     | .cap fd => pure (.cap fd)
     | .readByte => pure (.io .readByte)
     | .writeByte => pure (.io .writeByte)
+    | .writeAll => pure (.io .writeAll)
+    | .readInto => pure (.io .readInto)
     | .harness => throw s!"extern `{x.name}` is the model's harness and is not compiled"
 
 /-- The program reads standard input. -/

@@ -6,13 +6,13 @@
 -- machine. `div-nested.core.bc` is its elaboration in core, as `bcc desugar` prints it.
 -- their loop types, each call a `div_bind`. Both erase to one term.
 extern stdin : ref input
-extern read_byte : !(all 'a < top. mut 'a input => mut 'a input * (i32 + 1))
+extern read_byte : !(all 'a < top. mut 'a input => mut 'a input * (u8 + 1))
 
 type In = ref input
 
-def getb : In => In * (i32 + 1) =
+def getb : In => In * (u8 + 1) =
   thunkv fun (c : In) ->
-    return (withbor2['x, top, input, i32 + 1] c
+    return (withbor2['x, top, input, u8 + 1] c
       (thunkv Fun 'x < dom. return (thunkv fun (m : mut 'x input) ->
          r <- return ((unbang read_byte) ['x] m);
          let (m2, b) = r;
@@ -26,7 +26,7 @@ def ll_step : !U (In * i32 -o F ((In * i32) + (In * i32)) & F (In * 1)) =
       let (c2, x) = q;
       case x {
         inl b ->
-          case (unbang host[eq32]) (b, i32[10]) {
+          case (unbang host[eq32]) ((unbang host[extend8_u]) b, i32[10]) {
             inl u -> return (inr (c2, (unbang host[add32]) (n, i32[1])))
           | inr u -> return (inl (c2, n))
           }

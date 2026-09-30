@@ -28,6 +28,7 @@ def lowerExp : Flat.Exp → List Instr
   | .alloc w => lowerExp w ++ [.call "$alloc"]
   | .live => [.call "$live"]
   | .getc fd => lowerExp fd ++ [.call "$getc"]
+  | .getv fd a k => lowerExp fd ++ lowerExp a ++ lowerExp k ++ [.call "$getv"]
   | .stat k => [.globalGet (if k == 0 then "$allocs" else if k == 1 then "$indirect" else "$copies")]
 where
   lowerArgs : List Flat.Exp → List Instr
@@ -68,6 +69,7 @@ def lowerStmt (cnt : Bool) : Flat.Stmt → List Instr
   | .free a => lowerExp a ++ [.call "$free"]
   | .out b => lowerExp b ++ [.call "$putc"]
   | .putc fd b => lowerExp fd ++ lowerExp b ++ [.call "$putfd"]
+  | .putv fd a k => lowerExp fd ++ lowerExp a ++ lowerExp k ++ [.call "$putv"]
   | .ite c t e => lowerExp c ++ [.ifElse (lowerBlock t) (lowerBlock e)]
   | .call ds f args => lowerExp.lowerArgs args ++ [.call (fname f)] ++ popInto ds
   | .switch e cs d => switchCode (lowerExp e) (lowerCases cs) (lowerBlock d)
@@ -96,5 +98,6 @@ def lowerProg (p : Flat.Prog) (cnt : Bool := false) : Module where
   funcs := p.fns.toList.zipIdx.map (fun (f, k) => lowerFn cnt k f) ++
     [{ name := "$start", params := 0, results := 0, locals := 0,
        body := [.call (fname p.entry)], export? := some "_start" }]
+  data := p.data
 
 end Backend.Wasm

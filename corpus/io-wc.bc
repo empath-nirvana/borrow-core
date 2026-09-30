@@ -13,12 +13,12 @@ type B = 1 + 1
 def inc : i32 => i32 = thunkv fun (n : i32) -> return ((unbang host[add32]) (n, i32[1]))
 
 -- Space, tab or newline.
-def is_space : i32 => B =
-  thunkv fun (b : i32) ->
-    case (unbang host[eq32]) (b, i32[32]) {
+def is_space : u8 => B =
+  thunkv fun (b : u8) ->
+    case (unbang host[eq32]) ((unbang host[extend8_u]) b, i32[32]) {
       inl u ->
-        case (unbang host[eq32]) (b, i32[10]) {
-          inl u2 -> return ((unbang host[eq32]) (b, i32[9]))
+        case (unbang host[eq32]) ((unbang host[extend8_u]) b, i32[10]) {
+          inl u2 -> return ((unbang host[eq32]) ((unbang host[extend8_u]) b, i32[9]))
         | inr u2 -> return (inr () : B)
         }
     | inr u -> return (inr () : B)
@@ -32,7 +32,7 @@ def count : In => In * (i32 * (i32 * i32)) =
     in_word : B <- return (inl () : B);
     for b in bytes c {
       chars : i32 <- return (inc chars);
-      lines : i32 <- case (unbang host[eq32]) (b, i32[10]) {
+      lines : i32 <- case (unbang host[eq32]) ((unbang host[extend8_u]) b, i32[10]) {
         inl u -> return lines
       | inr u -> return (inc lines)
       };
@@ -53,9 +53,9 @@ main : F (i32 * (i32 * i32)) =
   let (lines, r2) = r;
   let (words, chars) = r2;
   _ <- return (put_dec (&mut stdout, lines));
-  _ <- return (putb (&mut stdout, i32[32]));
+  _ <- return (putb (&mut stdout, u8[32]));
   _ <- return (put_dec (&mut stdout, words));
-  _ <- return (putb (&mut stdout, i32[32]));
+  _ <- return (putb (&mut stdout, u8[32]));
   _ <- return (put_dec (&mut stdout, chars));
-  _ <- return (putb (&mut stdout, i32[10]));
+  _ <- return (putb (&mut stdout, u8[10]));
   return (lines, (words, chars))

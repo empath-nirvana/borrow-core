@@ -63,11 +63,21 @@ def iterLibrary : String := include_str "../lib/iters.bc"
 /-- The prelude, `lib/prelude.bc`: `true`, `false`, `not`, `to_i32`, `to_u8`. -/
 def preludeLibrary : String := include_str "../lib/prelude.bc"
 
+/-- The buffer library, `lib/buf.bc`: growable arrays, `buf A` (`include buf`). -/
+def bufLibrary : String := include_str "../lib/buf.bc"
+
+/-- The text library, `lib/text.bc`: strings, text views and literals (`include text`). -/
+def textLibrary : String := include_str "../lib/text.bc"
+
+/-- Text over the standard streams, `lib/textio.bc`: `write_string`, `read_all` (`include textio`). -/
+def textioLibrary : String := include_str "../lib/textio.bc"
+
 /-- The library modules, by the name `include` gives them (#59). A module is a file of `lib/`,
 embedded in the compiler; adding one is adding its line here. -/
 def libModules : List (String × String) :=
   [("io", ioLibrary), ("div", divLibrary), ("prelude", preludeLibrary), ("lend", lendLibrary),
-   ("adapters", adaptersLibrary), ("slice", sliceLibrary), ("iters", iterLibrary)]
+   ("adapters", adaptersLibrary), ("slice", sliceLibrary), ("buf", bufLibrary),
+   ("text", textLibrary), ("textio", textioLibrary), ("iters", iterLibrary)]
 
 def capNames : List String := ["stdin", "stdout", "stderr"]
 
@@ -2789,6 +2799,60 @@ def need {α} (sp : Span) (what : String) : Option α → DM α
   | some a => pure a
   | none => throw ⟨sp, s!"the type of {what} is not determined here: ascribe it"⟩
 
+/-- The literal `"…"` of the bytes `bs`: the persistent value `(n, t)` of `lit`, `n` its length
+and `t` the `!` function from an index to its byte, `0` past the end. `t` compares the index with
+the length, then halves the range of indices down to one byte (design §5.7). -/
+def litValue (sp : Span) (bs : List Nat) : Val :=
+  let arr := bs.toArray
+  let u : Ident := ⟨"io_lu", sp⟩
+  let lt (k : Nat) : Val := .app sp (.unbang sp (.const sp (.host (.rel .w32 .lt_u))))
+    (.pair sp (.var sp "io_li") (litAt sp .w32 k))
+  let byte (k : Nat) : Comp := .ret sp (litAt sp .w8 (arr.getD k 0))
+  -- `lt` answers `inr ()` for true: the lower half is the `inr` arm.
+  let rec tree : Nat → Nat → Nat → Comp
+    | 0, lo, _ => byte lo
+    | f + 1, lo, hi =>
+      if hi ≤ lo + 1 then byte lo
+      else
+        let mid := (lo + hi) / 2
+        .case sp (lt mid) u (tree f mid hi) u (tree f lo mid)
+  let n := bs.length
+  let body := if n == 0 then .ret sp (litAt sp .w8 0)
+    else .case sp (lt n) u (.ret sp (litAt sp .w8 0)) u (tree n 0 n)
+  .pair sp (litAt sp .w32 n) (.bangThunkv sp (.lam sp ⟨"io_li", sp⟩ (.int sp .w32) body))
+
+/-- The filler of a buffer's unused slots at the element type `A` (design §5.4): `0` at an
+integer width, the empty view at a borrowed family, an empty array at an owned one (which
+allocates nothing), the empty literal's function at `!(A => B)`, `()`, and componentwise at `*`
+and `+`. `none` at a type with no filler (a cell, a capability). -/
+def fillerOf (c : TCx) (sp : Span) : Nat → CVTy → Except Error (Option Val)
+  | 0, _ => pure none
+  | n + 1, A => match A with
+    | .unit => pure (some (.unit sp))
+    | .int w => pure (some (litAt sp w 0))
+    | .tensor A B => do
+      match ← fillerOf c sp n A, ← fillerOf c sp n B with
+      | some a, some b => pure (some (.pair sp a b))
+      | _, _ => pure none
+    | .sum A _ => do pure ((← fillerOf c sp n A).map (.inl sp ·))
+    | .fam (.imm a B) => do
+      pure (some (.const sp (.sliceEmptyImm (← c.surfaceL sp a) (← c.surface sp B))))
+    | .fam (.mut a B) => do
+      pure (some (.const sp (.sliceEmptyMut (← c.surfaceL sp a) (← c.surface sp B))))
+    | .fam (.ref B) => do
+      match ← fillerOf c sp n B with
+      | some b =>
+        let Bs ← c.surface sp B
+        pure (some (.app sp (.unbang sp (.const sp (.arrayNew Bs))) (.pair sp (litAt sp .w32 0)
+          (.bangThunkv sp (.lam sp ⟨"io_fi", sp⟩ (.int sp .w32) (.ret sp b))))))
+      | none => pure none
+    | .bang (.thunk (.arr X (.ret B))) => do
+      match ← fillerOf c sp n B with
+      | some b =>
+        pure (some (.bangThunkv sp (.lam sp ⟨"io_fx", sp⟩ (← c.surface sp X) (.ret sp b))))
+      | none => pure none
+    | _ => pure none
+
 /-- The body `S` of a block with its tail values boxed at `'x`: a tail value is bound first, so
 that what it computes from the borrow is not inside the box (`boxI`'s context outlives `'x`). -/
 def boxTail (x : String) (S : Comp) : Comp :=
@@ -3297,6 +3361,14 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
   | 0, _, _, V => pure V
   | n + 1, c, exp, V => match V with
     | .sugar sp (.lit k) => pure (litAt sp ((widthOf exp).getD .w32) k)
+    | .sugar sp (.str bs) => pure (litValue sp bs)
+    | .defApp sp "filler" [A] => do
+      -- `filler[A]`: the filler of a buffer's unused slots, by the type (design §5.4).
+      let A' ← need sp "`filler`'s type" (c.elabV A)
+      match ← (fillerOf c sp 64 A' : Except Error (Option Val)) with
+      | some v => pure v
+      | none => throw ⟨sp, s!"`{ppT A'}` has no filler: a buffer holds elements that have one " ++
+          "(integers, views, arrays, and pairs and sums of them)"⟩
     | .app sp (.sugar _ .count) (.pair _ a b) => do
       -- `a..b` as a value: the sized iterator of the count, its data `(a, b)` and its step
       -- (SPEC §16). A `for` over `a..b` itself is elaborated by `forData`.
@@ -3312,11 +3384,14 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
       surfV n c exp (.run sp L)
     | .app sp (.sugar osp (.op o)) (.pair psp a b) => do
       let arith := match o with | .add | .sub | .mul => true | _ => false
-      -- The width: expected of an arithmetic result, or an operand's; `i32` by default.
+      -- The width: expected of an arithmetic result, or an operand's other than a literal's
+      -- (a literal takes the width of the other operand); `i32` by default.
       let a₀ ← surfV n c none a
       let b₀ ← surfV n c none b
+      let isLit : Val → Bool := fun | .sugar _ (.lit _) => true | _ => false
+      let wOf (v v₀ : Val) : Option BoCa.Width := if isLit v then none else widthOf (c.tyV v₀)
       let w := ((if arith then widthOf exp else none).orElse fun _ =>
-        (widthOf (c.tyV a₀)).orElse fun _ => widthOf (c.tyV b₀)).getD .w32
+        (wOf a a₀).orElse fun _ => wOf b b₀).getD .w32
       let a' ← surfV n c (some (.int w)) a
       let b' ← surfV n c (some (.int w)) b
       if w == .w8 then return byteOp sp osp psp o a' b'
@@ -3463,6 +3538,78 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
         let Tbs := if k == .imm then VTy.arrayImm lsp (.var lsp x) As else .arrayMut lsp (.var lsp x) As
         pure (.app sp (.app sp₂ (.const ksp C) P') (.thunkv tsp (.lamL lsp xi (.dom lsp)
           (.ret lsp (.thunkv lsp (.lam lsp b Tbs (boxTail x S')))))))
+      | .imm, .tensor (.fam (.ref A)) (.int .w32) | .mut, .tensor (.fam (.ref A)) (.int .w32) => do
+        -- A buffer `buf A = array A * i32`: its array lent as a family (`slice_borrow_*`, SPEC
+        -- §9), cut at the length (`slice_split_*`), and the initialised prefix lent to the block;
+        -- the rest is dropped. The buffer is handed back whole.
+        let imm := k == .imm
+        let dom ← need lsp "the block's bound" (c.elabL (.dom lsp))
+        let c₁ := c.pushLife x dom
+        let some v := c₁.E.lenv.lookup x | throw ⟨lsp, "internal error: a borrow block"⟩
+        let Tb : CVTy := .fam (if imm then .imm (.var v) A else .mut (.var v) A)
+        let S' ← surfC n (c₁.push b.name (some Tb)) none S
+        let B ← need tsp "the block's result" (resultOfC (((← refresh c₁).push b.name (some Tb)).tyC S'))
+        if BoCa.Fig16.LogRel.Core.Check.vfreeB v B then
+          throw (Frontend.Elab.LoopLend.escapeError tsp x (Frontend.Check.ppV c₁.E.lenv 0 0 B))
+        let As ← c.surface ksp A
+        let Bs ← c.surface ksp B
+        let xi : Ident := ⟨x, ksp⟩
+        -- The side conditions' bound is `dom`: the elements (views, say) may have lifetimes.
+        let C := if imm then Const.sliceBorrowImm xi (.dom ksp) As Bs else .sliceBorrowMut xi (.dom ksp) As Bs
+        let Tbs := if imm then VTy.arrayImm lsp (.var lsp x) As else .arrayMut lsp (.var lsp x) As
+        let splitC := if imm then Const.sliceSplitImm (.var lsp x) As else .sliceSplitMut (.var lsp x) As
+        let id (s : String) : Ident := ⟨s, lsp⟩
+        let body : Comp := .bind lsp b none
+          (.case lsp (.app lsp (.unbang lsp (.const lsp splitC))
+              (.pair lsp (.var lsp "io_bw") (.var lsp "io_bn")))
+            (id "io_bp") (.letPair lsp (id "io_bv") (id "io_bq") (.var lsp "io_bp") (.ret lsp (.var lsp "io_bv")))
+            (id "io_bo") (.ret lsp (.var lsp "io_bo")))
+          (boxTail x S') false
+        let cb : Val := .thunkv tsp (.lamL lsp xi (.dom lsp) (.ret lsp (.thunkv lsp
+          (.lam lsp (id "io_bw") Tbs body))))
+        let ids (s : String) : Ident := ⟨s, sp⟩
+        -- Ascribed its type, which the typing of what follows it reads.
+        let bufTy : VTy := .tensor sp (.array sp As) (.int sp .w32)
+        pure <| (fun v => Val.ascribe sp v (.tensor sp bufTy Bs)) <| (.run sp (.letPair sp (ids "io_ba") (ids "io_bn") P'
+          (.bind sp (ids "io_br") none (.ret sp (.app sp (.app sp₂ (.const ksp C) (.var sp "io_ba")) cb))
+            (.letPair sp (ids "io_ba2") (ids "io_bv2") (.var sp "io_br")
+              (.ret sp (.pair sp (.pair sp (.var sp "io_ba2") (.var sp "io_bn")) (.var sp "io_bv2"))))
+            false)))
+      | .imm, .tensor (.int .w32) (.bang (.thunk (.arr (.int .w32) (.ret (.int .w8))))) => do
+        -- A literal `lit = i32 * !(i32 => u8)`: its bytes tabulated into an array, lent as a
+        -- family, and the array freed (`lit_view`, design §5.7). The callback first copies the
+        -- family (`array_copy`, only at an `imm` family), which the backend reads as the
+        -- promise that the array is not written: it points the view at the literal's read-only
+        -- data (`Backend/README.md`, Literals). The literal is handed back.
+        let dom ← need lsp "the block's bound" (c.elabL (.dom lsp))
+        let c₁ := c.pushLife x dom
+        let some v := c₁.E.lenv.lookup x | throw ⟨lsp, "internal error: a borrow block"⟩
+        let U8 : CVTy := .int .w8
+        let Tb : CVTy := .fam (.imm (.var v) U8)
+        let S' ← surfC n (c₁.push b.name (some Tb)) none S
+        let B ← need tsp "the block's result" (resultOfC (((← refresh c₁).push b.name (some Tb)).tyC S'))
+        if BoCa.Fig16.LogRel.Core.Check.vfreeB v B then
+          throw (Frontend.Elab.LoopLend.escapeError tsp x (Frontend.Check.ppV c₁.E.lenv 0 0 B))
+        let U8s : VTy := .int ksp .w8
+        let Bs ← c.surface ksp B
+        let xi : Ident := ⟨x, ksp⟩
+        let id (s : String) : Ident := ⟨s, lsp⟩
+        let body : Comp := .letPair lsp (id "io_lc") (id "io_ld")
+          (.app lsp (.unbang lsp (.const lsp (.arrayCopy (.var lsp x) U8s))) (.var lsp "io_lw"))
+          (.bind lsp b none (.ret lsp (.var lsp "io_lc")) (boxTail x S') false)
+        let cb : Val := .thunkv tsp (.lamL lsp xi (.dom lsp) (.ret lsp (.thunkv lsp
+          (.lam lsp (id "io_lw") (.arrayImm lsp (.var lsp x) U8s) body))))
+        let ids (s : String) : Ident := ⟨s, sp⟩
+        let litTy : VTy := .tensor sp (.int sp .w32) (.bang sp (.lolli sp (.int sp .w32) U8s))
+        pure <| (fun v => Val.ascribe sp v (.tensor sp litTy Bs)) <| (.run sp (.bind sp (ids "io_lp") none (.ret sp P')
+          (.letPair sp (ids "io_ln") (ids "io_lt") (.var sp "io_lp")
+            (.bind sp (ids "io_la") none (.ret sp (.app sp (.unbang sp (.const sp (.arrayNew U8s)))
+                (.pair sp (.var sp "io_ln") (.var sp "io_lt"))))
+              (.bind sp (ids "io_lr") none
+                (.ret sp (.app sp (.app sp₂ (.const ksp (.sliceBorrowImm xi (.dom ksp) U8s Bs))
+                  (.var sp "io_la")) cb))
+                (.letPair sp (ids "io_la2") (ids "io_lv") (.var sp "io_lr")
+                  (.ret sp (.pair sp (.var sp "io_lp") (.var sp "io_lv")))) false) false)) false))
       | .famMut, .tensor (.ref A) (.ref B) => do
         let dom ← need lsp "the block's bound" (c.elabL (.dom lsp))
         let c₁ := c.pushLife x dom
@@ -3549,12 +3696,13 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
     | .defApp sp h args => do
       -- A template at written type arguments: its instance.
       match (← get).templates.find? (fun | .def_ _ m _ _ _ _ => m.name == h | _ => false) with
-      | some t =>
-        let (name, lives) ← makeInst n c sp t (args.map c.elabV).toArray
-        if !lives.isEmpty then
-          throw ⟨sp, s!"`{h}` is written at types with a lifetime: call it, and its types are " ++
-            "read off the arguments"⟩
-        pure (.var sp name)
+      | some t => do
+        let (nm, extras) ← makeInst n c sp t (args.map c.elabV).toArray
+        if extras.isEmpty then pure (.var sp nm) else
+          -- The instance's own lifetimes at the call's.
+          let mut g : Val := .unbang sp (.var sp nm)
+          for v in extras do g := .inst sp g (← c.surfaceL sp (.var v))
+          pure g
       | none => pure V
     | .shorten sp m σ l V => do pure (.shorten sp m σ l (← surfV n c none V))
     | .thunk sp M => do
@@ -3804,8 +3952,13 @@ io_j{sfx} : {Jt} <- case io_r{sfx} \{
       {destructSrc s!"io_w{sfx}" wsN}{jExit}
   };
 "
+    -- Around a borrow block (a lent array), the loop's result is the block's: the body binds
+    -- `io_bt`, so the parser does not add the variables it hands back (`Parser.borrowBlock`),
+    -- and the loop's threaded variables, capabilities included, come out in its result.
+    let outN := wsN
+    let reshape := s!"io_bt <- return io_j{sfx};\nreturn io_bt"
     let loopSrc := match wrap with
-      | some (open_, back) => s!"{outerPre}io_bl{sfx} <- return ({open_}{core}return io_j{sfx} });
+      | some (open_, back) => s!"{outerPre}io_bl{sfx} <- return ({open_}{core}{reshape} });
 let ({back}, io_j{sfx}) = io_bl{sfx};
 "
       | none => core
@@ -3819,9 +3972,9 @@ let ({back}, io_j{sfx}) = io_bl{sfx};
     let after := if hasRet then
         s!"case io_j{sfx} \{
   inl io_jv{sfx} -> let (io_jw{sfx}, io_ob{sfx}) = io_jv{sfx};
-    {destructSrc s!"io_jw{sfx}" wsN}{value}force io_hole_rest
+    {destructSrc s!"io_jw{sfx}" outN}{value}force io_hole_rest
 | inr io_rv{sfx} -> force io_hole_ret }"
-      else s!"let (io_jw{sfx}, io_ob{sfx}) = io_j{sfx};\n{destructSrc s!"io_jw{sfx}" wsN}{value}force io_hole_rest"
+      else s!"let (io_jw{sfx}, io_ob{sfx}) = io_j{sfx};\n{destructSrc s!"io_jw{sfx}" outN}{value}force io_hole_rest"
     let what := "a `for` over data (a counted loop)"
     let L ← (template sp what (loopSrc ++ after) : SM Comp)
     -- The body: its terminals go on, and its exits leave with the threaded variables.
@@ -3887,51 +4040,61 @@ def surfDecl : Nat → Decl → DM Decl
   | _, d => pure d
 
 /-- The instance of the template `t` at the type arguments `σ` (one per type parameter, each
-known): its name, made and elaborated on first use, and the lifetimes it is applied to. A
-lifetime the type arguments mention (an element `imm 'x A` of a view's iterator) is a lifetime
-parameter of the instance, `'gl0`, `'gl1`, …, outside the template's own: the instance is
-`!(all 'gl0 < top. …)`, shared by every use at the same types up to those lifetimes, and a use
-applies it to its own.  `[spec §15]` -/
-def makeInst : Nat → TCx → Span → Decl → Array (Option CVTy) → DM (String × List Frontend.Life)
+known): its name, made and elaborated on first use, and the lifetimes of the call that it takes
+first. A type argument with lifetimes (a view, `array_imm 'x u8`) makes an instance with a
+lifetime parameter of its own for each, outside the template's: `!(all 'io_q0 < top. …)`, and a
+call instantiates them at the call's lifetimes.  `[spec §15]` -/
+def makeInst : Nat → TCx → Span → Decl → Array (Option CVTy) →
+    DM (String × List BoCa.Lifetime.LifeVar)
   | 0, _, sp, _, _ => throw ⟨sp, "instantiation of generic functions does not terminate"⟩
   | n + 1, c, sp, t, σ => do
     let .def_ tsp tn ps A V mk := t | throw ⟨sp, "internal error: a generic function"⟩
     let names := ps.map (·.name)
-    let known := σ.toList.filterMap id
-    -- The lifetimes the type arguments mention, in the order of the context, each once.
-    let lvs := (c.E.lenv.map (·.2)).eraseDups.filter fun v =>
-      known.any (BoCa.Fig16.LogRel.Core.Check.vfreeB v)
-    let ren := lvs.zipIdx.map fun (v, k) => (s!"gl{k}", v)
-    let cg : TCx := { c with E := { c.E with lenv := ren ++ c.E.lenv } }
-    let mut σs : TySubst := []
+    let mut ts₀ : List CVTy := []
     for (x, t) in names.zip σ.toList do
       let some t := t
         | throw ⟨sp, s!"the type `{x}` of `{tn.name}` is not determined by its arguments: " ++
             s!"write them, `{tn.name}[…](…)`"⟩
-      σs := σs ++ [(x, ← cg.surface sp t)]
-    let lives ← lvs.mapM fun v => (c.surfaceL sp (.var v) : Except Error Frontend.Life)
+      ts₀ := ts₀ ++ [t]
+    -- The lifetimes of the type arguments, in the order of the context, renamed `'io_qk`.
+    let extras := (c.E.lenv.map (·.2)).eraseDups.reverse.filter fun v =>
+      ts₀.any (BoCa.Fig16.LogRel.Core.Check.vfreeB v)
+    let fresh (v : BoCa.Lifetime.LifeVar) : Option String :=
+      (extras.idxOf? v).map (s!"io_q{·}")
+    let c' := { c with E := { c.E with lenv := c.E.lenv.map fun (nm, v) =>
+      ((fresh v).getD nm, v) } }
+    let mut σs : TySubst := []
+    for (x, t) in names.zip ts₀ do
+      σs := σs ++ [(x, ← c'.surface sp t)]
+    let isGen := match mk with | .gen _ => true | _ => false
+    if !extras.isEmpty && isGen then
+      throw ⟨sp, s!"`{tn.name}` is instantiated at a type with a lifetime: a generic generator " ++
+        "is instantiated at types without one"⟩
     let key := (tn.name, σs.map (·.2.strip))
     let st ← get
-    if let some name := st.insts.lookup key then return (name, lives)
+    if let some name := st.insts.lookup key then return (name, extras)
     let name := s!"{tn.name}__g{st.insts.length}"
     let mk' := match mk with
       | .gen E => Mark.gen (E.subst σs)
       | .template m => m
       | mk => mk
-    -- The instance's own lifetime parameters, outermost first, around its type and body.
-    let (A', V') ← ren.foldrM (init := (A.subst σs, V.subst σs)) fun (g, _) (A, V) =>
-      match A, V with
-      | .bang asp T, .bangThunkv vsp X =>
-        pure (VTy.bang asp (.all asp ⟨g, asp⟩ (.top asp) T),
-          Val.bangThunkv vsp (.lamL vsp ⟨g, vsp⟩ (.top vsp) (.ret vsp (.thunkv vsp X))))
-      | _, _ => throw ⟨sp, s!"`{tn.name}` is instantiated at a type with a lifetime, which a " ++
-          "generic function of this form does not take"⟩
+    let binders := (List.range extras.length).map fun k => (⟨s!"io_q{k}", tsp⟩ : Ident)
+    let A' := A.subst σs
+    let V' := V.subst σs
+    let (A', V') ← if extras.isEmpty then pure (A', V') else
+      match A', V' with
+      | .bang asp X, .bangThunkv vsp N =>
+        pure (VTy.bang asp (binders.foldr (fun b X => .all asp b (.top asp) X) X),
+          Val.bangThunkv vsp (binders.foldr
+            (fun b N => .lamL vsp b (.top vsp) (.ret vsp (.thunkv vsp N))) N))
+      | _, _ => throw ⟨sp, s!"`{tn.name}` is instantiated at a type with a lifetime, and is " ++
+          "not a function: a generic function is instantiated at types without one"⟩
     let inst := Decl.def_ tsp ⟨name, tn.span⟩ [] A' V' mk'
     let inst := Elab.fillDecl (st.lib ++ st.out) st.caps inst
     let libNames := if st.libNames.contains tn.name then name :: st.libNames else st.libNames
     let st' ← (elabDecl n { st with insts := (key, name) :: st.insts, libNames } inst : SM DivSt)
     set { st' with quiet := st.quiet }
-    return (name, lives)
+    return (name, extras)
 
 /-- A call `f W` of a generic callee (a template, a core `def` with type parameters, or a
 function with lifetime parameters), with the type and lifetime arguments it leaves out filled and
@@ -4084,12 +4247,12 @@ def genericCall : Nat → TCx → Span → Option CVTy → Val → Val → Optio
         throw ⟨sp, s!"the lifetime `{lname v}` of `{fname}` is not determined by its arguments " ++
           s!"here: write it, `{writeLives fname}"⟩
     -- The callee at its type arguments.
-    let mut extra : List Frontend.Life := []
+    let mut extras : List BoCa.Lifetime.LifeVar := []
     let base ← match head with
       | .tmpl t _ => do
-        let (name, lives) ← makeInst n c sp t m.ty
-        extra := lives
-        pure (Val.var f.span name)
+        let (nm, ex) ← makeInst n c sp t m.ty
+        extras := ex
+        pure (Val.var f.span nm)
       | .gdef h tps _ => do
         let mut ts : List VTy := []
         for (x, t) in tps.zip m.ty.toList do
@@ -4102,15 +4265,23 @@ def genericCall : Nat → TCx → Span → Option CVTy → Val → Val → Optio
     c ← refresh c
     let argsL := args.toList.filterMap id
     if lends then
-      if sig.binders.length != 1 || !extra.isEmpty then
-        throw ⟨sp, s!"`{fname}` has several lifetime parameters: a lend `&x` in its call is " ++
-          "not provided; borrow in a block and pass the borrow"⟩
-      match ← lendCall c sp base (argOf W argsL) with
-      | some V => return some V
-      | none => throw ⟨sp, s!"the lend in this call of `{fname}` is not at a borrow parameter"⟩
+      -- A lend at a borrow parameter is a borrow around the call (`lendCall`); a lend at a
+      -- parameter of the place's own type moves the place and rebinds it (`Comp.elab`).
+      let atBorrow := match lendParam sig.P W with
+        | some (_, _, .mut ..) | some (_, _, .imm ..) => true
+        -- An owned array lent at a view parameter (`lendSlice`, SPEC §9).
+        | some (_, _, .fam (.mut ..)) | some (_, _, .fam (.imm ..)) => true
+        | _ => false
+      if atBorrow then
+        if sig.binders.length != 1 then
+          throw ⟨sp, s!"`{fname}` has several lifetime parameters: a lend `&x` in its call is " ++
+            "not provided; borrow in a block and pass the borrow"⟩
+        match ← lendCall c sp base (argOf W argsL) with
+        | some V => return some V
+        | none => throw ⟨sp, s!"the lend in this call of `{fname}` is not at a borrow parameter"⟩
     let mut g := if sig.bang then Val.unbang f.span base else base
-    for l in extra do
-      g := .inst sp g l
+    -- An instance at types with lifetimes takes the call's lifetimes first (`makeInst`).
+    for v in extras do g := .inst sp g (← c.surfaceL sp (.var v))
     for (v, _) in sig.binders do
       let some l := m.life.lookup v | throw ⟨sp, "internal error: a lifetime parameter"⟩
       g := .inst sp g (← c.surfaceL sp l)
@@ -4346,6 +4517,26 @@ def usesName (n : String) (p : Program) : Bool :=
   p.decls.any (fun | .def_ _ _ _ _ V _ => V.names n | .main _ _ M => M.names n | _ => false) &&
     !(p.decls.any fun | .def_ _ m _ _ _ _ => m.name == n | _ => false)
 
+/-- The declarations `ds` with each `include m` replaced by the module's declarations, at most
+once each, a module's own `include`s first; `inc` the modules included so far. -/
+def expandIncludes : Nat → List Decl → List Decl × List String →
+    Except Error (List Decl × List String)
+  | fuel, ds, st => ds.foldlM (init := st) fun (acc, inc) d =>
+    match d with
+    | .include sp m =>
+      if inc.contains m.name then pure (acc, inc) else
+      match libModules.lookup m.name with
+      | some src => do
+        let l ← match parseProgram src with
+          | .ok l => pure l.decls
+          | .error e => throw ⟨e.span, s!"lib/{m.name}.bc: {e.msg}"⟩
+        match fuel with
+        | 0 => throw ⟨sp, s!"the modules include each other: `{m.name}`"⟩
+        | fuel + 1 => expandIncludes fuel l (acc, m.name :: inc)
+      | none => throw ⟨sp, s!"no library module `{m.name}`: the modules are " ++
+          ", ".intercalate (libModules.map (·.1))⟩
+    | d => pure (acc ++ [d], inc)
+
 /-- The program with its sugar elaborated, and the number of library declarations it begins
 with, recording the origins of generated code.  `[spec §11, §14]` -/
 def elaborateS (p : Program) : SM (Program × Nat) := do
@@ -4361,16 +4552,9 @@ def elaborateS (p : Program) : SM (Program × Nat) := do
   -- module's externs (`include io`) do not make them declared.
   let p₀ := p
   let mayIO := !(ambientCaps p₀).isEmpty
-  -- `include m`: the module's declarations, in place (at most once each).
-  let (decls, incl) ← p.decls.foldlM (init := (([] : List Decl), ([] : List String))) fun (acc, inc) d =>
-    match d with
-    | .include sp m =>
-      if inc.contains m.name then pure (acc, inc) else
-      match libModules.lookup m.name with
-      | some src => do pure (acc ++ (← libOf s!"lib/{m.name}.bc" src), m.name :: inc)
-      | none => throw ⟨sp, s!"no library module `{m.name}`: the modules are " ++
-          ", ".intercalate (libModules.map (·.1))⟩
-    | d => pure (acc ++ [d], inc)
+  -- `include m`: the module's declarations, in place (at most once each); a module's own
+  -- `include`s come in first.
+  let (decls, incl) ← expandIncludes libModules.length p.decls ([], [])
   let p : Program := ⟨decls⟩
   let mayDiv := usesName "div_fuel" p || usesName "div_bind" p || usesName "div_defer" p
   -- The prelude is in scope when the program names one of its declarations.

@@ -153,6 +153,16 @@ def linKw (lin : Bool) : String := if lin then "linear " else ""
 /-- A newline followed by `k` spaces. -/
 def nl (k : Nat) : String := "\n" ++ "".pushn ' ' k
 
+/-- A string literal: printable ASCII as itself, the escapes `\n`, `\t`, `\r`, `\0`, `\\` and
+`\"`, and any other byte as `\xNN`. The lexer reads it back to the same bytes. -/
+def strLit (bs : List Nat) : String :=
+  let hex (d : Nat) : Char := if d < 10 then Char.ofNat (48 + d) else Char.ofNat (87 + d)
+  "\"" ++ String.join (bs.map fun b =>
+    if b == 10 then "\\n" else if b == 9 then "\\t" else if b == 13 then "\\r"
+    else if b == 0 then "\\0" else if b == 92 then "\\\\" else if b == 34 then "\\\""
+    else if 32 ≤ b && b < 127 then (Char.ofNat b).toString
+    else "\\x" ++ (hex (b / 16 % 16)).toString ++ (hex (b % 16)).toString) ++ "\""
+
 mutual
 /-- A value-judged expression at level `lvl`, indented by `k` after each line break. -/
 def Val.pp (V : Val) (lvl : Nat := 0) (k : Nat := 0) : String :=
@@ -203,6 +213,7 @@ def Val.pp (V : Val) (lvl : Nat := 0) (k : Nat := 0) : String :=
       "shorten_" ++ m.pp ++ "[" ++ σ.pp ++ ", " ++ a.pp ++ "] " ++ V.pp 1 k
     | .lend _ x m => (if m == .mut then "&mut " else "&") ++ x.name
     | .sugar _ (.lit n) => toString n
+    | .sugar _ (.str bs) => strLit bs
     | .sugar _ .brk => "break"
     | .sugar _ .cont => "continue"
     | .sugar _ s => s!"<{reprStr s}>"

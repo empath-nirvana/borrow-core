@@ -1,5 +1,6 @@
 import Backend.Wasm.Syntax
 import Backend.Wasm.Runtime
+import Backend.Flat.Syntax
 
 /-!
 # Backend — WAT printer
@@ -93,9 +94,22 @@ def printFunc (f : Func) : List String :=
   [indent 1 ++ s!"(func {f.name}{exp}{sig}"] ++ locals ++ printInstr.printBody 2 f.body ++
     [indent 1 ++ ")"]
 
-/-- The module's text. -/
+/-- The read-only data segment: the literals' bytes at `Flat.dataBase`, each as `\xx`. -/
+def printData (bs : Array UInt8) : List String :=
+  if bs.isEmpty then [] else
+  let hex (d : Nat) : Char := if d < 10 then Char.ofNat (48 + d) else Char.ofNat (87 + d)
+  let esc := String.join (bs.toList.map fun b =>
+    "\\" ++ (hex (b.toNat / 16)).toString ++ (hex (b.toNat % 16)).toString)
+  [indent 1 ++ s!"(data (i32.const {Flat.dataBase}) \"{esc}\")"]
+
+/-- The module's text. The heap starts past the read-only data. -/
 def printModule (m : Module) : String :=
-  let lines := ["(module", runtimeWat] ++ (m.funcs.flatMap printFunc) ++ [")"]
+  let L := m.data.size
+  let heap := if L == 0 then 16376 else Flat.staticEnd L
+  let rt := (runtimeWat.replace "(global $heap (mut i32) (i32.const 16376))"
+    s!"(global $heap (mut i32) (i32.const {heap}))").replace "STATIC_END"
+    (toString (if L == 0 then 16384 else Flat.staticEnd L))
+  let lines := ["(module", rt] ++ printData m.data ++ (m.funcs.flatMap printFunc) ++ [")"]
   "\n".intercalate lines ++ "\n"
 
 end Backend.Wasm

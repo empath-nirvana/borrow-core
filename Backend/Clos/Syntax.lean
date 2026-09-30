@@ -24,15 +24,26 @@ open BoCa
 abbrev Var := Nat
 
 /-- The standard I/O operations of SPEC §11, the host implementations of the externs
-`read_byte` and `write_byte`. -/
+`read_byte`, `write_byte`, `write_all` and `read_into`. -/
 inductive IOOp where
-  /-- `read_byte m`: `(m, inl i32[b])` with the next byte of the stream in the cell `m`, or
+  /-- `read_byte m`: `(m, inl u8[b])` with the next byte of the stream in the cell `m`, or
   `(m, inr ())` at its end. -/
   | readByte
-  /-- `write_byte (m, i32[b])`: the low byte of `b` written to the stream in the cell `m`;
-  the result is `m`. -/
+  /-- `write_byte (m, u8[b])`: the byte `b` written to the stream in the cell `m`; the result is
+  `m`. -/
   | writeByte
+  /-- `write_all (m, (p, n))`: the `n` bytes of the view at `p` written to the stream in the cell
+  `m`; the result is `m`. -/
+  | writeAll
+  /-- `read_into (m, (p, n))`: bytes of the stream in the cell `m` read into the view at `p` until
+  it is full or the stream ends; the result is `(m, ((p, n), k))`, `k` the bytes read. -/
+  | readInto
   deriving Repr, DecidableEq
+
+/-- The lifetime parameters of an operation's extern: the `Λ`s before its argument. -/
+def IOOp.lifes : IOOp → Nat
+  | .readByte | .writeByte => 1
+  | .writeAll | .readInto => 2
 
 /-- The primitives of `[TR]` §1, §8 and §9, saturated, and the I/O operations of §11. -/
 inductive Op where
@@ -67,6 +78,13 @@ inductive Op where
   | countTry
   /-- A standard I/O operation (§11). -/
   | io (k : IOOp)
+  /-- `litByte (a, n, i)`: byte `i` of the literal whose `n` bytes are at `a` in the program's
+  read-only data (`Prog.data`), or `0` when `i ≥ n`, unsigned. -/
+  | litByte
+  /-- `litTab (n, t)`: `tab (n, t)` of a literal's tabulator where the array is only read and
+  then dropped (`Convert.litView?`): the array is the literal's own bytes in the read-only data
+  when `t` is a literal's closure and `n` its length at most, and `tab`'s array otherwise. -/
+  | litTab
   deriving Repr, DecidableEq
 
 inductive Tm where
@@ -131,6 +149,15 @@ structure Prog where
   /-- For a `main` that returns a loop (SPEC §11): the code run on the value the loop finishes
   with, once the stage has driven it. -/
   fin : Option Nat := none
+  /-- The literals' bytes, in read-only data from address `dataBase`. -/
+  data : Array UInt8 := #[]
+  /-- The code of a literal's tabulator, `λi. litByte (a, n, i)` over its captured `(a, n)`,
+  when the program has a literal. -/
+  litCode : Option Nat := none
   deriving Repr, Inhabited
+
+/-- The address of the read-only data: after the runtime's own memory, before the heap
+(`Backend/Wasm/Runtime.lean`). -/
+def dataBase : Nat := 16384
 
 end Backend.Clos

@@ -23,6 +23,9 @@ inductive Tok where
   /-- A lifetime variable `'x`, held without the `'`. -/
   | life (s : String)
   | int (n : Nat)
+  /-- A string literal `"…"`, held as its bytes: UTF-8 for the characters written, and the
+  escapes' bytes. -/
+  | str (bs : List Nat)
   | kw (s : String)
   | sym (s : String)
   | eof
@@ -78,6 +81,7 @@ def Tok.describe : Tok → String
   | .uident s => s!"name `{s}`"
   | .life s => s!"lifetime `'{s}`"
   | .int n => s!"integer `{n}`"
+  | .str _ => "a string literal"
   | .kw s => s!"`{s}`"
   | .sym s => s!"`{s}`"
   | .eof => "end of input"
@@ -124,6 +128,31 @@ def byteEscape : Char → Option Nat
   | 'n' => some 10 | 't' => some 9 | 'r' => some 13 | '0' => some 0
   | '\\' => some 92 | '\'' => some 39 | _ => none
 
+/-- The byte of an escape in a string literal `"…\e…"`: `\n`, `\t`, `\r`, `\0`, `\\`, `\"`. -/
+def strEscape : Char → Option Nat
+  | 'n' => some 10 | 't' => some 9 | 'r' => some 13 | '0' => some 0
+  | '\\' => some 92 | '"' => some 34 | _ => none
+
+/-- The bytes of a string literal's body, up to its closing `"`: the bytes, the number of
+characters consumed with the closing quote, and the rest; `none` if it is not closed on its line
+or has an unknown escape. `\xNN` is the byte `NN`, two hexadecimal digits. -/
+def lexStr : Nat → List Char → List Nat → Option (List Nat × Nat × List Char)
+  | 0, _, _ => none
+  | fuel + 1, cs, acc => match cs with
+    | '"' :: r => some (acc.reverse, 1, r)
+    | '\\' :: 'x' :: h :: l :: r =>
+      if isHex h && isHex l then
+        (lexStr fuel r ((hexVal h * 16 + hexVal l) :: acc)).map fun (b, k, r) => (b, k + 4, r)
+      else none
+    | '\\' :: e :: r => match strEscape e with
+      | some b => (lexStr fuel r (b :: acc)).map fun (bs, k, r) => (bs, k + 2, r)
+      | none => none
+    | '\n' :: _ => none
+    | c :: r =>
+      let bytes := (String.singleton c).toUTF8.toList.map (·.toNat)
+      (lexStr fuel r (bytes.reverse ++ acc)).map fun (bs, k, r) => (bs, k + 1, r)
+    | [] => none
+
 /-- The lexer loop. `pos` is the position of the head of `cs`; `spaced` records whether
     whitespace was skipped since the last token. A byte literal `b'c'` is read as the tokens of
     `u8[n]`, `n` the ASCII code of `c` (strings S1, `docs/decisions.md` 43). -/
@@ -156,6 +185,28 @@ def lexGo : Nat → List Char → Pos → Bool → Array Token → Except Error 
           |>.push ⟨.int c.toNat, sp, false⟩ |>.push ⟨.sym "]", sp, false⟩)
       else .error ⟨⟨pos, advance pos 4⟩, "a byte literal `b'c'` holds a printable ASCII character"⟩
     | 'I' :: 'm' :: 'm' :: '̲' :: r => push (.kw "view") 4 r
+    -- A character literal `'c'` or `'\e'`: the tokens of `i32[n]`, `n` the scalar value
+    -- (strings S5, `docs/decisions.md`). A lifetime `'x` is never followed by `'`.
+    | '\'' :: '\\' :: e :: '\'' :: r =>
+      match byteEscape e with
+      | some n =>
+        let stop := advance pos 4
+        let sp : Span := ⟨pos, stop⟩
+        lexGo fuel r stop false (acc.push ⟨.kw "i32", sp, spaced⟩ |>.push ⟨.sym "[", sp, false⟩
+          |>.push ⟨.int n, sp, false⟩ |>.push ⟨.sym "]", sp, false⟩)
+      | none => .error ⟨⟨pos, advance pos 4⟩, s!"unknown escape `\\{e}` in a character literal"⟩
+    | '\'' :: c :: '\'' :: r =>
+      if c != '\\' && c != '\'' && c.toNat ≥ 32 then
+        let stop := advance pos 3
+        let sp : Span := ⟨pos, stop⟩
+        lexGo fuel r stop false (acc.push ⟨.kw "i32", sp, spaced⟩ |>.push ⟨.sym "[", sp, false⟩
+          |>.push ⟨.int c.toNat, sp, false⟩ |>.push ⟨.sym "]", sp, false⟩)
+      else .error ⟨⟨pos, advance pos 3⟩, "a character literal `'c'` holds one character"⟩
+    | '"' :: r =>
+      match lexStr (r.length + 1) r [] with
+      | some (bs, k, r') => push (.str bs) (k + 1) r'
+      | none => .error ⟨⟨pos, advance pos 1⟩,
+          "a string literal ends with `\"` on its line; its escapes are `\\n`, `\\t`, `\\r`, `\\0`, `\\\\`, `\\\"` and `\\xNN`"⟩
     | c :: r =>
       if c == ' ' || c == '\t' || c == '\r' then lexGo fuel r (advance pos 1) true acc
       else match r, twoCharSyms.find? (fun (a, b, _) => a == c && r.head? == some b) with

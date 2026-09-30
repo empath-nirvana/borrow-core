@@ -27,7 +27,7 @@ main -> i32 =
   let mut buf = array_new[u8] (64, dot);
   let mut n = 0;
   for b in bytes(&mut stdin) {
-    let (a, _) = array_replace[u8] (buf, n, to_u8(b));
+    let (a, _) = array_replace[u8] (buf, n, b);
     buf = a;
     if n < 64 { n = n + 1 }
   };
@@ -41,5 +41,5 @@ main -> i32 =
     | inr v -> ()
     }
   };
-  for i in 0..n { let c = at(&buf, i, b'?'); putb(&mut stdout, to_i32(c)) };
+  for i in 0..n { let c = at(&buf, i, b'?'); putb(&mut stdout, c) };
   n

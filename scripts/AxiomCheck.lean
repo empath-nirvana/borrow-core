@@ -134,6 +134,8 @@ import Frontend.Check.Externs
 #print axioms BoCa.Fig16.LogRel.Core.vC_outRep
 #print axioms BoCa.Fig16.LogRel.Core.readByte_meets
 #print axioms BoCa.Fig16.LogRel.Core.writeByte_meets
+#print axioms BoCa.Fig16.LogRel.Core.writeAll_meets
+#print axioms BoCa.Fig16.LogRel.Core.readInto_meets
 #print axioms BoCa.Fig16.LogRel.Core.mkInput_meets
 #print axioms BoCa.Fig16.LogRel.Core.mkOutput_meets
 #print axioms BoCa.Fig16.LogRel.Core.takeInput_meets

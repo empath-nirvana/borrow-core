@@ -1,0 +1,32 @@
+-- P5 of `docs/strings-slices-design.md` (§1), `utf8-count`: characters against bytes, with
+-- validation. Each input line is read into a reused buffer and lent as a byte view; checked
+-- construction (`str_from_utf8`, O(n), no copy) either makes it text, whose bytes (`len`) and
+-- characters (`count_chars`) are written, or names the first byte that is not UTF-8, and the
+-- line's number goes to standard error. Text and bytes are distinct views only by convention
+-- until stage T2: the checked conversion is the one way the program makes text.
+--
+-- Answer: on `utf8-count.in`, `bytes chars` for each valid line; the fourth line has a stray
+-- continuation byte, so standard error says `invalid UTF-8 on line 4`; and `i32[6]`, the next
+-- line number. A decoder that counted bytes, or a validator that accepted the stray byte,
+-- changes a line.
+
+include textio
+
+main -> i32 =
+  let mut line = box buf[u8](64);
+  let mut no = 1;
+  for b in bytes(&mut stdin) {
+    if b == b'\n' {
+      borrow imm line { 'x, v ->
+        match str_from_utf8(v) {
+          inl t -> let (t, u) = array_copy['x, u8] t;
+                   put_dec(&mut stdout, len(u)); putb(&mut stdout, b' ');
+                   put_dec(&mut stdout, count_chars(t)); putb(&mut stdout, b'\n')
+        | inr e -> write_lit(&mut stderr, "invalid UTF-8 on line "); put_dec(&mut stderr, no);
+                   putb(&mut stderr, b'\n')
+        } };
+      line = clear_str(line);
+      no = no + 1
+    } else { push(&mut line, b) }
+  };
+  no

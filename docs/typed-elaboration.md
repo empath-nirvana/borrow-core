@@ -923,7 +923,7 @@ written in these forms, its loop steps closures; the corpus calls it as `reverse
 `eq(a, b, eq_u8)`, with the same outputs and counts, and `corpus/slice-lib.bc` calls the rest.
 Pairs: `corpus/sugar/generic-fn.bc`, `generic-infer.bc`, `generic-lifetimes.bc`.
 
-**Stage 9, as built** (SPEC §16; strings stage S4, revised; decision 46 of `docs/decisions.md`).
+**Stage 9, as built** (SPEC §16; strings stage S4, revised; decision 47 of `docs/decisions.md`).
 `for x in V { M }` is Rust's pull desugaring, the source turned into an iterator by its type, and
 `forData` in `Sugar.lean` elaborates it in `surfC`, before divergence is inferred, when the source
 is data (`dataSrcOf`): a count `a..b`, a view, `&a`/`&mut a` of an owned array (lent as its view

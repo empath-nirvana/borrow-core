@@ -6,6 +6,7 @@ array-get 2 0 0
 array-refs 5 0 0
 array-replace 2 0 0
 array-sum 1 0 0
+ascii-upper 3 0 0 # the stdin and stdout cells, and the string the input is read into
 axes/borrow-across-loop 3 0 0
 axes/codata-coeffects 2 0 0
 axes/codata-effects 1 0 0
@@ -30,6 +31,7 @@ count-try 0 0 0
 deep-list 100000 0 0
 div-hof 0 0 0
 family-swap 2 0 0
+fields 5 0 0 # the stdin and stdout cells, the line buffer and its two growths at the long line; fields are views
 find-bytes 2 0 0
 fn-lifetime 7 0 0
 for-adapters 1 0 0
@@ -37,6 +39,7 @@ for-data 2 0 0
 for-finite 0 0 0
 for-never 0 0 0
 for-return 1 0 0
+format 2 0 0 # the stdout cell and the string, built at its capacity
 gen-adapters 5 0 0 # chain, zip over batch and chunks, and main's three loops: each body one state machine (#109 item 8)
 gen-adapters-fail 8 0 0 # chain, chunks, batch and lines, and main's ten loops, each one state machine (#109 item 8)
 gen-adapters-io 13 0 0 # main's six loops over every adapter, one state machine (#109 item 8)
@@ -55,6 +58,8 @@ gen-pipeline-adapters 0 0 0
 gen-produce 0 0 0
 gen-return 1 0 0
 gen-value 0 0 0
+hello 1 0 0 # the output capability cell; the literal is read-only data
+http-request 3 0 0 # the stdout cell, the array of header literals and the request string; literal views point into read-only data
 implicit-drops 9 0 0
 int-arith 0 0 0
 int-ops 0 0 0
@@ -77,6 +82,9 @@ iter-mut 1 0 0
 iter-mut-count 1 0 0
 iter-mut-slice 1 0 0
 iter-range 0 0 0
+json-tokens 3 0 0 # the stdin and stdout cells and the input string; tokens are views, literal views read-only data
+key-value 4 0 0 # the stdin and stdout cells, the input string and the buffer of view pairs
+labels-json 3 0 0 # the stdout cell, the output string and the one escaped string (the owned side of the sum)
 lend-config 2 0 0
 lend-div 2 0 0
 lend-lib-each 2 0 0
@@ -87,12 +95,15 @@ lend-pipeline 2 0 0
 lend-server 2 0 0
 map-reuse 7 0 0
 nats-sum 0 0 0
+parse-int 3 0 0 # the stdin and stdout cells and the line buffer, reused; literal views read-only data
 print-borrowed-array 2 0 0
+quicksort 3 0 0 # the data, the range stack, the output capability
 reverse-bytes 3 0 0
 slice-imm 1 0 0
 slice-lib 3 0 0
 slice-mut 1 0 0
 slice-split 1 0 0
+sort-lines 4 0 0 # the stdin and stdout cells, the input string and the buffer of line views
 sort-numbers 2 0 0
 split-at-mut 3 0 0
 sum-i32 7 0 0
@@ -102,3 +113,5 @@ surface/family-swap 2 0 0
 surface/io-upper 2 0 0
 surface/io-wc 2 0 0
 surface/map-reuse 7 0 0
+trim-replace 7 0 0 # the stdin and stdout cells, the input string, and one replaced string per line (four)
+utf8-count 4 0 0 # the stdin, stdout and stderr cells and the line buffer, reused

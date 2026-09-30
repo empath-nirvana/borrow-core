@@ -481,7 +481,69 @@ Each entry: the decision, and why. Newest last.
       without lifetimes (decision 41).
 
 
-46. **The `for` loop (strings stage S4, revised; SPEC §16). The user's decisions, and the
+46. **Provisional (strings S5, buffers and text, SPEC §11 and §17; to be confirmed by the user).**
+    - **Bytes at `u8` in I/O.** `read_byte` answers `u8 + 1` and `write_byte` takes a `u8`; the
+      byte list is `μX. 1 ⊕ (U8 ⊗ X)`. This withdraws decision 32's bytes as `I32`. A program
+      that computes on a byte widens it (`to_i32(b)`); a literal operand takes the other
+      operand's width, so `b == 10` and `47 < b` compare at `u8`.
+    - **Two bulk externs**, `write_all` (an `imm` byte view to an output) and `read_into` (a
+      `mut` byte view filled from an input, answering the count, short only at the end), each
+      with two lifetime parameters (the capability's and the view's). The library lends a
+      capability to them: `write_bytes(&mut stdout, v)`, `read_bytes(&mut stdin, v)`.
+      Alternative not taken: calling the externs with `&mut stdout` directly, which a lend at a
+      function with two lifetime parameters does not provide (decision 45).
+    - **Type spellings**, abbreviations the parser expands: `buf A` is `array A * i32`,
+      `string` is `buf u8`, `text 'a` and `text_mut 'a` are `array_imm 'a u8` and
+      `array_mut 'a u8`, and `lit` is `i32 * !(i32 => u8)`. The design's `str 'a` is not used:
+      `str` is already the stream former's short spelling (syntax-core §4). They are names
+      only in type positions, so `text`, `string` and `buf` remain usable as variables.
+    - **Literals.** `"…"` is a `lit`, UTF-8 for the characters written, with the escapes
+      `\n`, `\t`, `\r`, `\0`, `\\`, `\"` and `\xNN`; `'c'` is a character, the `i32` scalar value
+      (read as `i32[n]`, as `b'c'` is `u8[n]`). A lifetime `'x` is never followed by `'`, which
+      tells them apart.
+    - **Allocation**: `box buf[A](cap)`, `box string(cap)` and `box array(n, f)` are
+      `buf_new[A](cap)`, `string_new(cap)` and `array_tab(n, f)`, read by the parser. Growth
+      inside `push` allocates without a `box` (the design's Q2, left as Rust has it).
+    - **The filler** of a buffer's unused slots is chosen by type: `filler[A]` elaborates to
+      `0`, the empty view, an empty array (which allocates nothing), or componentwise at `*`
+      and `+`. A type with none (a cell, a capability) cannot be buffered, as the design says of
+      stage A.
+    - **Borrow blocks** on a buffer lend its initialised prefix (the array lent as a family, cut
+      at the length); on a literal, its bytes. A borrow block hands back, beside its result, the
+      enclosing `let mut` variables it assigns, the places it lends that it does not bind, and
+      the standard capabilities it uses, as `for` does: `borrow imm line { v ->
+      write_str(&mut stdout, v) }` needs no `(stdout, …)` in its result. Programs that returned
+      the capability themselves are rewritten (`lend-mut`, `borrow-across-loop`,
+      `scope-data-effects`, two rejects).
+    - **Library names** (`lib/buf.bc`, `lib/text.bc`, `lib/textio.bc`): `buf_new`, `push`,
+      `pop`, `take`, `reserve`, `truncate`, `clear`, `len_of`, `cap_of`, `grow`,
+      `buf_of_array`, `array_tab`; `string_new`, `clear_str` (length 0 without dropping bytes),
+      `push_str`, `push_lit`, `push_byte`, `push_char`, `push_dec`, `to_string`,
+      `string_of_lit`, `lit_len`, `eq_lit`, `str_from_utf8`, `from_utf8`, `utf8_error`,
+      `seq_len`, `char_at`, `count_chars`, `split_char`, `chars`, `split_once`, `next_line`,
+      `lines`, `fold_lines`, `is_space`, `skip_while`, `rskip_while`, `trim`, `find_str`,
+      `add_checked`, `mul_checked`, `parse_i32`, `view_at`, `swap_views`, `sort_views`,
+      `make_ascii_uppercase`, `make_ascii_lowercase`; `write_str`, `write_string`, `write_lit`,
+      `read_all`. `lib/textio.bc` is its own module because it names `Out` and `In`, which are
+      in scope only with the I/O library. A module includes the modules it uses.
+    - **Errors are sums** (provisional until the error effect, #18): `parse_i32` answers
+      `i32 + (1 + (u8 + 1))` (no digits, a byte that is not a digit, overflow); the decoders and
+      validators answer the index of the first bad byte.
+    - **Total loops over text are `count_fold`s**, bounded by the view's length (plus one);
+      `fold_lines` folds a state over the lines, each a sub-view. `lines` and `chars` are codata
+      over the rest of the view, for S4's total `for`. No mechanism infers finiteness from a
+      name.
+    - **A template is instantiated at a type with lifetimes** (a buffer of views): the instance
+      takes a lifetime parameter of its own for each, `!(all 'io_q0 < top. …)`, and a call
+      passes the call's lifetimes. This revises decision 45's "instances are at types without
+      lifetimes".
+    - **Literal lowering.** A literal's tabulator is recognised by its shape and becomes one
+      shared code over the address and length of its bytes in read-only data; a literal view is
+      recognised by its erased shape (the array lent to a callback that first copies the family,
+      then dropped) and points into the data. The recognition is of the terms the elaborator
+      emits; it is tested on the corpus, not proved (design §5.7).
+
+47. **The `for` loop (strings stage S4, revised; SPEC §16). The user's decisions, and the
     spellings, which are provisional.**
     - **Desugaring: Rust's, pull.** `for x in y { M }` turns `y` into an iterator by `y`'s
       type (Rust's `IntoIterator`) and calls its `next` at each step, with `break`,

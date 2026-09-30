@@ -15,7 +15,7 @@ def count_lines : In => In * i32 =
   thunkv fun (c : In) ->
     n : i32 <- return i32[0];
     for b in bytes c {
-      n : i32 <- case (unbang host[eq32]) (b, i32[10]) {
+      n : i32 <- case (unbang host[eq32]) ((unbang host[extend8_u]) b, i32[10]) {
         inl other -> return n
       | inr newline -> return ((unbang host[add32]) (n, i32[1]))
       };
@@ -26,7 +26,7 @@ def count_lines : In => In * i32 =
 main : F i32 =
   n <- return (count_lines (&mut stdin));
   _ <- return (put_dec (&mut stdout, n));
-  _ <- return (putb (&mut stdout, i32[10]));
+  _ <- return (putb (&mut stdout, u8[10]));
   return n
 -- stdin: one
 -- stdin: two
@@ -139,7 +139,7 @@ main -> i32 =
   let t = alloc(array_new[i32] (10, tab));
   let tb = &t;
   let mut acc = 0;
-  for c in bytes(&mut stdin) { acc = acc + get(tb, c - 48) };
+  for c in bytes(&mut stdin) { acc = acc + get(tb, to_i32(c) - 48) };
   acc
 -- stdin: 1203
 -- answer: i32[60]

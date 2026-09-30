@@ -305,6 +305,9 @@ inductive VSugar where
   | yieldFrom
   /-- `gen { S }`: a generator whose body is `S`, applied to the thunk it marks. -/
   | genBlock
+  /-- A string literal `"…"`, its bytes: a `lit`, the persistent value `(n, t)` of its length and
+  the function from an index to its byte. -/
+  | str (bs : List Nat)
   deriving DecidableEq, Repr, Inhabited
 
 mutual

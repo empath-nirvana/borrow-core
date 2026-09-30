@@ -10,9 +10,9 @@
 include adapters
 
 -- The length of a line (a list of its bytes, last first).
-type List = mu X. 1 + (i32 * X)
-fn len_alg(r: 1 + i32 * i32) -> i32 = match r { inl _ -> 0 | inr (x, n) -> n + 1 }
-def len : !(List => i32) = fold_own[1 + i32 * X, i32] len_alg
+type List = mu X. 1 + (u8 * X)
+fn len_alg(r: 1 + u8 * i32) -> i32 = match r { inl _ -> 0 | inr (x, n) -> n + 1 }
+def len : !(List => i32) = fold_own[1 + u8 * X, i32] len_alg
 
 main -> i32 =
   let mut n = 0;

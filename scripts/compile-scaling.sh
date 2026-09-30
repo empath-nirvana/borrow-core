@@ -44,7 +44,7 @@ cat <<'H'
 include adapters
 
 gen fn line(c: In) -> i32, In =
-  for b in bytes(&mut c) { if b == 10 { break } else { yield b - 48 } };
+  for b in bytes(&mut c) { if b == 10 { break } else { yield to_i32(b) - 48 } };
   c
 
 type List = mu X. 1 + (i32 * X)
@@ -72,6 +72,10 @@ def get : !(all 'a < top. imm 'a (array i32) * i32 => i32) =
 
 fn len_alg(r: 1 + i32 * i32) -> i32 = match r { inl _ -> 0 | inr (x, n) -> n + 1 }
 def len : !(List => i32) = fold_own[1 + i32 * X, i32] len_alg
+
+type Line = mu X. 1 + (u8 * X)
+fn len8_alg(r: 1 + u8 * i32) -> i32 = match r { inl _ -> 0 | inr (x, n) -> n + 1 }
+def len8 : !(Line => i32) = fold_own[1 + u8 * X, i32] len8_alg
 
 fn add_up(p: i32 * i32) -> i32 * bool =
   let (s, x) = p;
@@ -133,7 +137,7 @@ for ((i = 0; i < k; i++)); do
   echo "  for y in take(skip(filter(map(line(stdin), !{ x -> x * x }), !{ x -> x > 5 }), 1), 2) { t = t + y };"
   echo "  t = pd$i(pc$i(pb$i(pa$i(t))));"
 done
-echo "  for l in lines(from_iter(bytes(stdin))) { m = m + len(l) };"
+echo "  for l in lines(from_iter(bytes(stdin))) { m = m + len8(l) };"
 echo "  (t, m)"
 }
 

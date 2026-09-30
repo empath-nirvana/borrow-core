@@ -255,7 +255,12 @@ def primTy : Op → List Var → TM Nat
       | .int w => newNode (.int w)
       | .test => do newNode (.sum (← unitT) (← unitT))
       | .trapping w => do newNode (.sum (← newNode (.int w)) (← unitT))
-  | .tab, [v] => do
+  | .litByte, [a, n, i] => do
+      unify (← tyVar a) (← int32)
+      unify (← tyVar n) (← int32)
+      unify (← tyVar i) (← int32)
+      newNode (.int .w8)
+  | .tab, [v] | .litTab, [v] => do
       let a ← newNode .any
       let f ← newNode (.fn (← int32) a a)
       unify (← tyVar v) (← newNode (.pair (← int32) f))
@@ -298,11 +303,21 @@ def primTy : Op → List Var → TM Nat
   | .io .readByte, [m] => do
       let l ← newLoc (← int32)
       unify (← tyVar m) l
-      newNode (.pair l (← newNode (.sum (← int32) (← unitT))))
+      newNode (.pair l (← newNode (.sum (← newNode (.int .w8)) (← unitT))))
   | .io .writeByte, [p] => do
       let l ← newLoc (← int32)
-      unify (← tyVar p) (← newNode (.pair l (← int32)))
+      unify (← tyVar p) (← newNode (.pair l (← newNode (.int .w8))))
       pure l
+  | .io .writeAll, [p] => do
+      let l ← newLoc (← int32)
+      let f ← newNode (.pair (← newLoc (← newNode (.int .w8))) (← int32))
+      unify (← tyVar p) (← newNode (.pair l f))
+      pure l
+  | .io .readInto, [p] => do
+      let l ← newLoc (← int32)
+      let f ← newNode (.pair (← newLoc (← newNode (.int .w8))) (← int32))
+      unify (← tyVar p) (← newNode (.pair l f))
+      newNode (.pair l (← newNode (.pair f (← int32))))
   | _, _ => throw "layout types: primitive arity"
 
 /-- The type of a term, constraining its variables. `codeTy c` is code `c`'s type. -/

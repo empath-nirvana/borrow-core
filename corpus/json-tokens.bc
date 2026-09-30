@@ -1,0 +1,146 @@
+-- P8 of `docs/strings-slices-design.md` (§1), `json-tokens`: a tokenizer whose tokens are views
+-- into the input. The input is read whole and lent once as bytes at `'t` (JSON's structure is
+-- ASCII, so it is scanned as bytes). `token` skips white space and reads one token at a
+-- run-time index: punctuation, a string (its body up to the closing quote, honouring `\"` and
+-- `\\`), a number, a word, the end, or a bad byte. A string or a word is a sub-view of the input
+-- (`sub`, clamped to the view, so total): no token allocates. The token is a sum, one summand per
+-- kind (`data` with a lifetime parameter waits for stage S6). The tokens are read by a counted
+-- loop bounded by the input's length plus one: each step ends or consumes a byte.
+--
+-- Answer: on `json-tokens.in`, one line per token, and `i32[24]`, the tokens before the end. A
+-- string cut at an escaped quote, a number misread or a view at the wrong bytes changes a line.
+
+include textio
+
+-- The byte at `i`, or `inr ()` past the end.
+fn get_byte<'a>(t: text 'a, i: i32) -> u8 + 1 = match get(t, i) { inl g -> inl *g | inr u -> inr () }
+
+-- The view of the bytes `[i, j)` of `t`, clamped to it.
+fn sub<'a>(t: text 'a, i: i32, j: i32) -> text 'a =
+  let left = match split_at(t, j) { inl (l, r) -> array_forget['a, u8](r); l | inr t -> t };
+  match split_at(left, i) { inl (l, r) -> array_forget['a, u8](l); r | inr l -> array_forget['a, u8](l); slice_empty_imm['a, u8] }
+
+-- The index of the first byte at or after `i` that is not white space.
+fn skip_ws<'a>(t: text 'a, i: i32) -> i32 =
+  let (t, u) = array_copy['a, u8] t;
+  let (t, (j, _)) = count_fold[text 'a * (i32 * bool)](
+    !{ (k, (t, (j, go))) ->
+      let (t, w) = array_copy['a, u8] t;
+      let sp = is_space(at(w, k, b'x'));
+      if go && sp { (t, (k + 1, true)) } else { (t, (j, false)) } },
+    len(u), i, (t, (i, true)));
+  array_forget['a, u8](t);
+  j
+
+-- The index of the quote closing a string whose body starts at `i`, or `inr` of the length when
+-- there is none. A backslash escapes the byte after it.
+fn scan_string<'a>(t: text 'a, i: i32) -> i32 + i32 =
+  let (t, u) = array_copy['a, u8] t;
+  let n = len(u);
+  let (t, (_, r)) = count_fold[text 'a * (bool * (i32 + 1))](
+    !{ (k, (t, (esc, r))) ->
+      match r {
+        inl j -> (t, (esc, inl j))
+      | inr u ->
+          let (t, w) = array_copy['a, u8] t;
+          let c = at(w, k, b'x');
+          if esc { (t, (false, inr ())) }
+          else { if c == b'\\' { (t, (true, inr ())) }
+          else { if c == b'"' { (t, (false, inl k)) } else { (t, (false, inr ())) } } }
+      } },
+    n, i, (t, (false, inr ())));
+  array_forget['a, u8](t);
+  match r { inl j -> inl j | inr u -> inr n }
+
+-- A number at `i`, an optional `-` and its digits, and the index after it.
+fn scan_int<'a>(t: text 'a, i: i32) -> i32 * i32 =
+  let (t, u) = array_copy['a, u8] t;
+  let neg = at(u, i, b'x') == b'-';
+  let start = if neg { i + 1 } else { i };
+  let (t, w) = array_copy['a, u8] t;
+  let (t, (v, (j, _))) = count_fold[text 'a * (i32 * (i32 * bool))](
+    !{ (k, (t, (v, (j, go)))) ->
+      let (t, x) = array_copy['a, u8] t;
+      let c = at(x, k, b'x');
+      if go && b'0' <= c && c <= b'9' { (t, (v * 10 + to_i32(c) - 48, (k + 1, true))) }
+      else { (t, (v, (j, false))) } },
+    len(w), start, (t, (0, (start, true))));
+  array_forget['a, u8](t);
+  let v = if neg { 0 - v } else { v };
+  (v, j)
+
+-- The index after a word of letters starting at `i`.
+fn scan_word<'a>(t: text 'a, i: i32) -> i32 =
+  let (t, u) = array_copy['a, u8] t;
+  let (t, (j, _)) = count_fold[text 'a * (i32 * bool)](
+    !{ (k, (t, (j, go))) ->
+      let (t, w) = array_copy['a, u8] t;
+      let c = at(w, k, b'0');
+      if go && b'a' <= c && c <= b'z' { (t, (k + 1, true)) } else { (t, (j, false)) } },
+    len(u), i, (t, (i, true)));
+  array_forget['a, u8](t);
+  j
+
+-- The token at byte `i` of `t` and the index after it: `Punct(c)`, `Str(view)`, `Num(n)`,
+-- `Word(view)`, `End`, `Bad(i)`, in that order as summands.
+fn token<'a>(t: text 'a, i: i32) -> (u8 + (text 'a + (i32 + (text 'a + (1 + i32))))) * i32 =
+  let (t, u) = array_copy['a, u8] t;
+  let i = skip_ws(u, i);
+  let (t, w) = array_copy['a, u8] t;
+  match get_byte(w, i) {
+    inl c ->
+      if c == b'{' || c == b'}' || c == b'[' || c == b']' || c == b':' || c == b',' {
+        array_forget['a, u8](t); (inl c, i + 1) }
+      else { if c == b'"' {
+        let (t, x) = array_copy['a, u8] t;
+        match scan_string(x, i + 1) {
+          inl j -> (inr (inl (sub(t, i + 1, j))), j + 1)
+        | inr j -> array_forget['a, u8](t); (inr (inr (inr (inr (inr i)))), j)
+        } }
+      else { if (b'0' <= c && c <= b'9') || c == b'-' {
+        let (n, j) = scan_int(t, i); (inr (inr (inl n)), j) }
+      else { if b'a' <= c && c <= b'z' {
+        let (t, x) = array_copy['a, u8] t;
+        let j = scan_word(x, i);
+        (inr (inr (inr (inl (sub(t, i, j))))), j) }
+      else { array_forget['a, u8](t); (inr (inr (inr (inr (inr i)))), i + 1) } } } }
+  | inr u -> array_forget['a, u8](t); (inr (inr (inr (inr (inl ())))), i)
+  }
+
+-- One token written on a line; the state is the view, the index, the output and the count.
+fn step<'a>(k: i32, st: text 'a * (i32 * (Out * (i32 * bool)))) -> text 'a * (i32 * (Out * (i32 * bool))) =
+  let (t, (i, (o, (n, go)))) = st;
+  if go {
+    let (t, u) = array_copy['a, u8] t;
+    let (tok, j) = token(u, i);
+    match tok {
+      inl c -> let (o, _) = write_lit(o, "punct "); let (o, _) = putb(o, c); let (o, _) = putb(o, b'\n');
+               (t, (j, (o, (n + 1, true))))
+    | inr r -> match r {
+        inl s -> let (o, _) = write_lit(o, "str "); let (o, _) = write_str(o, s); let (o, _) = putb(o, b'\n');
+                 (t, (j, (o, (n + 1, true))))
+      | inr r -> match r {
+          inl v -> let (o, _) = write_lit(o, "num ");
+                   let o = if v < 0 { let (o, _) = putb(o, b'-'); let (o, _) = put_dec(o, 0 - v); o }
+                     else { let (o, _) = put_dec(o, v); o };
+                   let (o, _) = putb(o, b'\n');
+                   (t, (j, (o, (n + 1, true))))
+        | inr r -> match r {
+            inl w -> let (o, _) = write_lit(o, "word "); let (o, _) = write_str(o, w); let (o, _) = putb(o, b'\n');
+                     (t, (j, (o, (n + 1, true))))
+          | inr r -> match r {
+              inl u -> (t, (j, (o, (n, false))))
+            | inr b -> let (o, _) = write_lit(o, "bad "); let (o, _) = put_dec(o, b); let (o, _) = putb(o, b'\n');
+                       (t, (j, (o, (n + 1, true))))
+            } } } }
+    }
+  } else { (t, (i, (o, (n, go)))) }
+
+main -> i32 =
+  let inp = read_all(&mut stdin);
+  let (inp, m) = len_of(inp);
+  borrow imm inp { 't, t ->
+    let (t, (_, (stdout, (n, _)))) = count_fold[text 't * (i32 * (Out * (i32 * bool)))](
+      !{ (k, st) -> step(k, st) }, m + 1, 0, (t, (0, (stdout, (0, true)))));
+    array_forget['t, u8](t);
+    n }

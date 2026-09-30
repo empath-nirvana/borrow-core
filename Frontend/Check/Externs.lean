@@ -10,8 +10,8 @@ The standard externs, each with its type, its role, its model and its assurance 
 (decision 27), and the `run_io` wrapper a program with capability externs is run through.
 
 * **The table** (`stdExterns`). `stdin`, `stdout`, `stderr` are capabilities: cells whose content
-  is the stream (file descriptor `0`, `1`, `2` in compiled code). `read_byte` and `write_byte`
-  are the operations, lowered to WASI `fd_read`/`fd_write`. `mk_input`, `mk_output`,
+  is the stream (file descriptor `0`, `1`, `2` in compiled code). `read_byte`, `write_byte`,
+  `write_all` and `read_into` are the operations, lowered to WASI `fd_read`/`fd_write`. `mk_input`, `mk_output`,
   `take_input`, `take_output` are the model's harness and are not compiled. `checkExterns`
   checks a program's extern declarations against the table, by name and by type.
 * **`run_io`** (`ioWrapper`). A `main : F (Caps ⊗ A)` whose externs include capabilities is
@@ -26,7 +26,8 @@ The standard externs, each with its type, its role, its model and its assurance 
 
 namespace Frontend.Check
 open BoCa BoCa.Lifetime
-open BoCa.Fig16.LogRel.Core (Opaque BytesV bytesTy outRep externTy readByteC writeByteC mkInputC
+open BoCa.Fig16.LogRel.Core (Opaque BytesV bytesTy outRep externTy readByteC writeByteC writeAllC
+  readIntoC mkInputC
   mkOutputC takeInputC takeOutputC readByteV writeByteV mkInputV mkOutputV takeCapV stdModel
   io_every_run io_loop_every_run ioLoopE bytesVal bytesVal_bytes)
 
@@ -69,6 +70,8 @@ inductive ExternRole where
   | cap (fd : Nat)
   | readByte
   | writeByte
+  | writeAll
+  | readInto
   /-- The model's harness: no host implementation. -/
   | harness
   deriving DecidableEq, Repr
@@ -100,6 +103,11 @@ def stdExterns : List ExternSpec :=
       some ("WASI fd_read of one byte (libc read(2))", .interpChecked)⟩,
     ⟨"write_byte", externTy (writeByteC (.opq .output)), .writeByte, "writeByte_meets",
       some ("WASI fd_write of one byte (libc write(2))", .interpChecked)⟩,
+    ⟨"write_all", externTy (writeAllC (.opq .output)), .writeAll, "writeAll_meets",
+      some ("WASI fd_write of the view (libc write(2))", .interpChecked)⟩,
+    ⟨"read_into", externTy (readIntoC (.opq .input)), .readInto, "readInto_meets",
+      some ("WASI fd_read into the view until it is full or the input ends (libc read(2))",
+        .interpChecked)⟩,
     ⟨"mk_input", externTy (mkInputC (.opq .input)), .harness, "mkInput_meets", none⟩,
     ⟨"mk_output", externTy (mkOutputC (.opq .output)), .harness, "mkOutput_meets", none⟩,
     ⟨"take_input", externTy (takeInputC (.opq .input)), .harness, "takeInput_meets", none⟩,
@@ -142,7 +150,7 @@ def capsTy : List ExternSpec → CVTy
 
 /-! ### The wrapper -/
 
-def bytesSrc : String := "(mu X. 1 + (i32 * X))"
+def bytesSrc : String := "(mu X. 1 + (u8 * X))"
 
 /-- Rebind the returned capabilities to their names: `let (c₁, r) = …; …`. -/
 def rebindCaps : List String → String → String
