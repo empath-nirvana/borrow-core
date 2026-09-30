@@ -686,4 +686,281 @@ theorem ewp_handle (Tin Tout : OpTab) (n : UInt32) (hn0 : n ≠ 0)
           ⟨ρa, ρn, hcan, ⟨hPA, hnA⟩, hnn⟩⟩))
       rw [catches_comp, hndK_catches, hK₁]; simpa using Ne.symm hm
 
+/-! ### The typing rules' types  `[spec §19]` -/
+
+theorem ext_empty' (ls ls' : List SRec) : Ext ls ls' PMap.empty :=
+  ⟨fun _ _ hr => by obtain ⟨m, ψ, e, -⟩ := hr; simp at e,
+   fun _ hb => by obtain ⟨m, ψ, e, -⟩ := hb; simp at e⟩
+
+/-- The payload expression `(n, (i, V))`. -/
+def opArgE (n i : UInt32) (V : Expr) : Expr := .pair (.val (Val.i32 n)) (.pair (.val (Val.i32 i)) V)
+
+/-- `S ⊆ S′` as rows: every operation of `S` is `S′`'s. -/
+def RowLe (S S' : Row) : Prop := ∀ n i o, Row.find S n i = some o → Row.find S' n i = some o
+
+/-- A row's names are not the reserved `0`. -/
+def Row.NZ (S : Row) : Prop := ∀ o ∈ S, o.n ≠ 0
+
+/-- A row has an operation with weakening: an abortive, affine or unrestricted one. -/
+def Row.Weak (S : Row) : Prop := ∃ o ∈ S, o.q ≠ .lin
+
+/-- A row has an unrestricted operation. -/
+def Row.Unr (S : Row) : Prop := ∃ o ∈ S, o.q = .unr
+
+/-- A row's abortive operations. -/
+def Row.abortOnly (S : Row) : Row := S.filter OpSig.abort
+
+theorem Row.find_mem {S : Row} {n i : UInt32} {o : OpSig} (h : Row.find S n i = some o) :
+    o ∈ S ∧ o.n = n ∧ o.i = i := by
+  unfold Row.find at h
+  have hm := List.mem_of_find?_eq_some h
+  have hp := List.find?_some h
+  simp only [decide_eq_true_eq] at hp
+  exact ⟨hm, hp.1.symm, hp.2.symm⟩
+
+theorem Row.tab_some {S : Row} {δ : LSub} {n i : UInt32} {en : OpEnt}
+    (h : Row.tab S δ n i = some en) : ∃ o, Row.find S n i = some o ∧ en = o.ent δ := by
+  unfold Row.tab at h
+  cases hf : Row.find S n i with
+  | none => rw [hf] at h; cases h
+  | some o => rw [hf] at h; exact ⟨o, rfl, (Option.some.inj h).symm⟩
+
+theorem Row.tab_le {S S' : Row} (δ : LSub) (h : RowLe S S') : (Row.tab S δ).Le (Row.tab S' δ) := by
+  intro n i en hT
+  obtain ⟨o, hf, rfl⟩ := Row.tab_some hT
+  simp [Row.tab, h n i o hf]
+
+theorem Row.tab_local (S : Row) (δ : LSub) : (Row.tab S δ).Local := by
+  intro n i en hT ls ls' v ρ he
+  obtain ⟨o, -, rfl⟩ := Row.tab_some hT
+  exact ⟨vC_local true o.A he, vC_local true o.B he⟩
+
+theorem Row.tab_zero {S : Row} (hS : S.NZ) (δ : LSub) (i : UInt32) : Row.tab S δ 0 i = none := by
+  cases hf : Row.find S 0 i with
+  | none => simp [Row.tab, hf]
+  | some o =>
+      obtain ⟨hm, hn, -⟩ := Row.find_mem hf
+      exact absurd hn (hS o hm)
+
+/-- A row's operations have distinct keys `(n, i)`. -/
+def Row.Uniq (S : Row) : Prop := S.Pairwise fun o o' => ¬ (o.n = o'.n ∧ o.i = o'.i)
+
+theorem Row.find_of_mem : ∀ {S : Row}, S.Uniq → ∀ {o : OpSig}, o ∈ S → Row.find S o.n o.i = some o
+  | [], _, _, h => by simp at h
+  | o' :: S, hU, o, hm => by
+      unfold Row.find
+      rw [List.find?_cons]
+      rcases List.mem_cons.mp hm with rfl | hm'
+      · simp
+      · have hne : ¬ (o.n = o'.n ∧ o.i = o'.i) := fun h =>
+          (List.pairwise_cons.mp hU).1 o hm' ⟨h.1.symm, h.2.symm⟩
+        simp only [hne]
+        exact Row.find_of_mem (List.pairwise_cons.mp hU).2 hm'
+
+theorem Row.abortOnly_le {S : Row} (hU : S.Uniq) : RowLe S.abortOnly S := by
+  intro n i o hf
+  obtain ⟨hm, rfl, rfl⟩ := Row.find_mem hf
+  exact Row.find_of_mem hU (List.mem_filter.mp hm).1
+
+theorem Row.abortOnly_abort (S : Row) (δ : LSub) : (Row.tab S.abortOnly δ).AbortOnly := by
+  intro n i en hT
+  obtain ⟨o, hf, rfl⟩ := Row.tab_some hT
+  obtain ⟨hm, -, -⟩ := Row.find_mem hf
+  exact (List.mem_filter.mp hm).2
+
+/-! ### Compatibility of `[sub]`, `[perform]`, `[raise]` -/
+
+/-- `[sub]`: a row may grow.  `[spec §19]` -/
+theorem sub_compatC {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {S S' : Row} {A : VTy}
+    (hle : RowLe S S') (h : SemC Δ Γ e (CTy.effOf S A)) : SemC Δ Γ e (CTy.effOf S' A) := by
+  intro δ γ ls ρ hδ hg
+  exact (cC_effOf S' A ls δ _ ρ).mpr (ewp_sub (Row.tab_le δ hle)
+    ((cC_effOf S A ls δ _ ρ).mp (h δ γ ls ρ hδ hg)))
+
+/-- `[perform]`.  `[spec §19]` -/
+theorem perform_compatC {Δ : LifeCtx} {Γ : Ctx VTy} {V : Expr} {S : Row} {o : OpSig}
+    (hf : Row.find S o.n o.i = some o) (hna : o.abort = false) (h : SemV Δ Γ V o.A) :
+    SemC Δ Γ (performE (opArgE o.n o.i V)) (CTy.effOf S o.B) := by
+  intro δ γ ls ρ hδ hg
+  refine (cC_effOf S o.B ls δ _ ρ).mpr ?_
+  change ewpTS ls ((Kont.appR (.val (.prim .perform))
+    (.pairR (Val.i32 o.n) (.pairR (Val.i32 o.i) .hole))).plug (substAll γ V)) _ _ ρ
+  refine ewp_bind_pure_frame (opTable_mono _) _ _ ls (fun ls v => vC true o.A ls δ v)
+    (fun _ => emp) _ (fun _ _ _ h => h) ?_ ρ
+    ⟨ρ, PMap.empty, ResU.comp_empty_right ρ, h δ γ ls ρ hδ hg, ⟨rfl, trivial⟩⟩
+  rintro ls' - v σ ⟨σ₁, σ₂, hc, hv, rfl, -⟩
+  rw [ResU.CompS.functional hc (ResU.comp_empty_right σ₁)]
+  exact ewp_perform_here (en := o.ent δ) (by simp [Row.tab, hf]) hna (fun _ _ _ h => h) hv
+
+/-- `[raise]`: an abortive operation, at any answer type, its argument holding nothing owned.
+`[spec §19]` -/
+theorem raise_compatC {Δ : LifeCtx} {Γ : Ctx VTy} {V : Expr} {S : Row} {o : OpSig} {B : VTy}
+    (hf : Row.find S o.n o.i = some o) (ha : o.abort = true)
+    (hd : ∀ ls δ v ρ, vC true o.A ls δ v ρ → NoOwn ρ) (h : SemV Δ Γ V o.A) :
+    SemC Δ Γ (raiseE (opArgE o.n o.i V)) (CTy.effOf S B) := by
+  intro δ γ ls ρ hδ hg
+  refine (cC_effOf S B ls δ _ ρ).mpr ?_
+  change ewpTS ls ((Kont.appR (.val (.prim .raise))
+    (.pairR (Val.i32 o.n) (.pairR (Val.i32 o.i) .hole))).plug (substAll γ V)) _ _ ρ
+  refine ewp_bind_pure_frame (opTable_mono _) _ _ ls (fun ls v => vC true o.A ls δ v)
+    (fun _ => emp) _ (fun _ _ _ h => h) ?_ ρ
+    ⟨ρ, PMap.empty, ResU.comp_empty_right ρ, h δ γ ls ρ hδ hg, ⟨rfl, trivial⟩⟩
+  rintro ls' - v σ ⟨σ₁, σ₂, hc, hv, rfl, -⟩
+  rw [ResU.CompS.functional hc (ResU.comp_empty_right σ₁)]
+  exact ewp_raise_here (en := o.ent δ) (by simp [Row.tab, hf]) ha hv (hd _ _ _ _ hv)
+
+/-! ### Contexts that drop -/
+
+/-- A type whose values hold no `own` cell: data, borrows, `!`.  `[spec §19]` -/
+inductive _root_.BoCa.Fig16.LogRel.Core.VTy.Drop : VTy → Prop where
+  | unit : VTy.Drop .unit
+  | zero : VTy.Drop .zero
+  | int (w : Width) : VTy.Drop (.int w)
+  | unk : VTy.Drop .unk
+  | opq (k : Opaque) : VTy.Drop (.opq k)
+  | bang (A : VTy) : VTy.Drop (.bang A)
+  | imm (a : Lifetime.Life) (A : VTy) : VTy.Drop (.imm a A)
+  | «mut» (a : Lifetime.Life) (A : VTy) : VTy.Drop (.mut a A)
+  | tensor {A B : VTy} : VTy.Drop A → VTy.Drop B → VTy.Drop (.tensor A B)
+  | sum {A B : VTy} : VTy.Drop A → VTy.Drop B → VTy.Drop (.sum A B)
+
+theorem vC_noOwn_of_drop {A : VTy} (hA : A.Drop) :
+    ∀ {ls : List SRec} {δ : LSub} {v : Val} {ρ : WRes}, vC true A ls δ v ρ → NoOwn ρ := by
+  induction hA with
+  | unit => intro ls δ v ρ h; rw [h.1]; exact noOwn_empty
+  | zero => intro ls δ v ρ h; exact h.elim
+  | int w => intro ls δ v ρ h; rw [h.1]; exact noOwn_empty
+  | unk => intro ls δ v ρ h; rw [h.1]; exact noOwn_empty
+  | opq k => intro ls δ v ρ h; rw [h.1]; exact noOwn_empty
+  | bang A => intro ls δ v ρ h; rw [h.1]; exact noOwn_empty
+  | imm a A =>
+      intro ls δ v ρ h
+      obtain ⟨α, -, ℓ, hs⟩ := h
+      obtain ⟨-, s, u, σ, hσ, ls₀, rfl, -⟩ := pure_sep_iff.mp hs
+      exact ResU.restrict_single_other (by simp)
+  | «mut» a A =>
+      intro ls δ v ρ h
+      obtain ⟨α, -, ℓ, hs⟩ := h
+      obtain ⟨-, b, u, σ, hσ, Q, hw, ls₀, -, rfl, -⟩ := pure_sep_iff.mp hs
+      exact ResU.restrict_single_other (by simp)
+  | tensor _ _ ihA ihB =>
+      intro ls δ v ρ h
+      obtain ⟨v₁, v₂, h⟩ := h
+      obtain ⟨-, ρ₁, ρ₂, hc, h₁, h₂⟩ := pure_sep_iff.mp h
+      exact noOwn_compS hc (ihA h₁) (ihB h₂)
+  | sum _ _ ihA ihB =>
+      intro ls δ v ρ h
+      rcases h with ⟨v₁, h⟩ | ⟨v₂, h⟩
+      · exact ihA (pure_sep_iff.mp h).2
+      · exact ihB (pure_sep_iff.mp h).2
+
+/-- Every live slot of `Γ` is at a type that drops. -/
+def _root_.BoCa.Ctx.Drops (Γ : Ctx VTy) : Prop := ∀ s ∈ Γ, s.live = true → s.ty.Drop
+
+theorem gSepC_noOwn {ls : List SRec} {δ : LSub} : ∀ {Γ : Ctx VTy} {γ : List Val} {ρ : WRes},
+    Γ.Drops → gSepC ls δ Γ γ ρ → NoOwn ρ
+  | [], _, _, _, h => by rw [h.1]; exact noOwn_empty
+  | _ :: _, [], _, _, h => by rw [h.1]; exact noOwn_empty
+  | s :: Γ, v :: γ, ρ, hd, h => by
+      unfold gSepC at h
+      split at h
+      · rename_i hl
+        obtain ⟨ρ₁, ρ₂, hc, h₁, h₂⟩ := h
+        exact noOwn_compS hc (vC_noOwn_of_drop (hd s (by simp) hl) h₁)
+          (gSepC_noOwn (fun s' hs' => hd s' (List.mem_cons_of_mem _ hs')) h₂)
+      · exact gSepC_noOwn (fun s' hs' => hd s' (List.mem_cons_of_mem _ hs')) h
+
+theorem gDenC_noOwn {ls : List SRec} {δ : LSub} {Γ : Ctx VTy} {γ : List Val} {ρ : WRes}
+    (hd : Γ.Drops) (h : gDenC ls δ Γ γ ρ) : NoOwn ρ :=
+  gSepC_noOwn hd (gDenC_iff.mp h).2
+
+theorem gDenC_persistent {ls : List SRec} {δ : LSub} {Γ : Ctx VTy} {γ : List Val} {ρ : WRes}
+    (hp : Persistent Γ) (h : gDenC ls δ Γ γ ρ) : ρ = PMap.empty :=
+  gSepC_persistent hp (gDenC_iff.mp h).2
+
+/-! ### Compatibility of `[let]` and `[then]` -/
+
+private theorem substAll_cons' (v : Val) (γ : List Val) (e : Expr) :
+    substAll (v :: γ) e = Expr.subst 0 v (Expr.psub 1 γ e) := by
+  show Expr.psub 0 (v :: γ) e = _
+  rw [Expr.psub_cons 0 v γ e, Val.shift_zero]
+
+theorem OpSig.weak_of_ent {o : OpSig} {δ : LSub} (h : (o.ent δ).q ≠ .lin ∨ (o.ent δ).abort = true) :
+    o.q ≠ .lin := by
+  rcases h with h | h
+  · exact h
+  · simp only [OpSig.ent, OpSig.abort, Bool.and_eq_true, bne_iff_ne, ne_eq] at h; exact h.2
+
+/-- `[let]` at a row: `M to x. N`, the context of `N` dropping at a row with weakening and
+persistent at an unrestricted row.  `[spec §19]` -/
+theorem let_compatC {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {M N : Expr} {A B : VTy} {S : Row}
+    (hsp : Ctx.SplitP Γ Γ₁ Γ₂) (hW : S.Weak → Γ₂.Drops) (hU : S.Unr → Persistent Γ₂)
+    (hM : SemC Δ Γ₁ M (CTy.effOf S A)) (hN : SemC Δ (⟨A, true⟩ :: Γ₂) N (CTy.effOf S B)) :
+    SemC Δ Γ (.app (.val (.lam N)) M) (CTy.effOf S B) := by
+  intro δ γ ls ρ hδ hg
+  obtain ⟨ρ₁, ρ₂, hc, hg₁, hg₂⟩ := gDenC_split hsp hg
+  refine (cC_effOf S B ls δ _ ρ).mpr ?_
+  refine ewp_frame_plain (Row.tab S δ) (.appR (.val (.lam (Expr.psub 1 γ N))) .hole)
+    (fun n => by simp [Kont.HasHnd]) (fun n => by simp [Kont.Catches]) (by simp [Kont.hndNames])
+    (fun ls => gDenC ls δ Γ₂ γ) (fun _ _ hs σ h => gDenC_same hs h)
+    (fun _ _ _ he h => gDenC_local he h) ?_ ?_ (fun ls v => vC true A ls δ v) _ ?_
+    ((cC_effOf S A ls δ _ ρ₁).mp (hM δ γ ls ρ₁ hδ hg₁)) hg₂ hc
+  · intro n i en hT hq ls' σ h
+    obtain ⟨o, hf, rfl⟩ := Row.tab_some hT
+    exact gDenC_noOwn (hW ⟨o, (Row.find_mem hf).1, OpSig.weak_of_ent hq⟩) h
+  · intro n i en hT hq ls' σ h
+    obtain ⟨o, hf, rfl⟩ := Row.tab_some hT
+    exact gDenC_persistent (hU ⟨o, (Row.find_mem hf).1, hq⟩) h
+  · rintro ls' v σ ⟨σ₁, σ₂, hcσ, hv, hg₂'⟩
+    obtain ⟨hlen, hgs⟩ := gDenC_iff.mp hg₂'
+    refine ewp_step (opTable_mono _)
+      (fun μ => Step1N.head (Head.beta μ (Expr.psub 1 γ N) v) rfl) ls' _ σ ?_
+    rw [← substAll_cons']
+    exact (cC_effOf S B ls' δ _ σ).mp
+      (hN δ (v :: γ) ls' σ hδ (gDenC_mk (by simpa using hlen) ⟨σ₁, σ₂, hcσ, hv, hgs⟩))
+
+/-- `M then x. N unwind D`: `ubind (λx. N, λ_. D) M`. -/
+def thenE (N D M : Expr) : Expr :=
+  .app (.app (.val (.prim .ubind)) (.pair (.val (.lam N)) (.val (.lam D)))) M
+
+/-- `[then]` at a row: the finaliser `D`, at the row's abortive operations, runs on the context of
+`N` at a cancel and at an abortive stop.  `[spec §19]` -/
+theorem then_compatC {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {M N D : Expr} {A B : VTy} {S : Row}
+    (hsp : Ctx.SplitP Γ Γ₁ Γ₂) (hNZ : S.NZ) (hUq : S.Uniq) (hU : S.Unr → Persistent Γ₂)
+    (hM : SemC Δ Γ₁ M (CTy.effOf S A)) (hN : SemC Δ (⟨A, true⟩ :: Γ₂) N (CTy.effOf S B))
+    (hD : SemC Δ (⟨.unit, false⟩ :: Γ₂) D (CTy.effOf S.abortOnly .unit)) :
+    SemC Δ Γ (thenE N D M) (CTy.effOf S B) := by
+  intro δ γ ls ρ hδ hg
+  obtain ⟨ρ₁, ρ₂, hc, hg₁, hg₂⟩ := gDenC_split hsp hg
+  refine (cC_effOf S B ls δ _ ρ).mpr ?_
+  change ewpTS ls ((ubindK (Val.lam (Expr.psub 1 γ N)) (Val.lam (Expr.psub 1 γ D))).plug
+    (substAll γ M)) _ _ ρ
+  refine ewp_frame_then (Row.tab S δ) (Row.tab S.abortOnly δ) (Row.abortOnly_abort S δ)
+    (Row.tab_le δ (Row.abortOnly_le hUq)) (Row.tab_local S δ) (Row.tab_zero hNZ δ) _ _
+    (fun ls => gDenC ls δ Γ₂ γ) (fun _ _ hs σ h => gDenC_same hs h)
+    (fun _ _ _ he h => gDenC_local he h) ?_ (Qd := fun ls v => vC true .unit ls δ v) ?_ ?_
+    (fun ls v => vC true A ls δ v) _ ?_
+    ((cC_effOf S A ls δ _ ρ₁).mp (hM δ γ ls ρ₁ hδ hg₁)) hg₂ hc
+  · intro n i en hT hq ls' σ h
+    obtain ⟨o, hf, rfl⟩ := Row.tab_some hT
+    exact gDenC_persistent (hU ⟨o, (Row.find_mem hf).1, hq⟩) h
+  · intro ls' v σ h
+    obtain ⟨rfl, rfl⟩ := h
+    exact ⟨rfl, noOwn_empty⟩
+  · intro ls' σ h
+    refine ewp_step (opTable_mono _)
+      (fun μ => Step1N.head (Head.beta μ (Expr.psub 1 γ D) Val.unit) rfl) ls' _ σ ?_
+    rw [← substAll_cons']
+    exact (cC_effOf S.abortOnly .unit ls' δ _ σ).mp
+      (hD δ (Val.unit :: γ) ls' σ hδ (gDenC_dead_cons .unit Val.unit h))
+  · rintro ls' v σ ⟨σ₁, σ₂, hcσ, hv, hg₂'⟩
+    obtain ⟨hlen, hgs⟩ := gDenC_iff.mp hg₂'
+    refine ewp_step (opTable_mono _)
+      (fun μ => Step1N.head (Head.uthen μ _ _ v) rfl) ls' _ σ ?_
+    refine ewp_step (opTable_mono _)
+      (fun μ => Step1N.head (Head.beta μ (Expr.psub 1 γ N) v) rfl) ls' _ σ ?_
+    rw [← substAll_cons']
+    exact (cC_effOf S B ls' δ _ σ).mp
+      (hN δ (v :: γ) ls' σ hδ (gDenC_mk (by simpa using hlen) ⟨σ₁, σ₂, hcσ, hv, hgs⟩))
+
 end BoCa.Fig16.LogRel.Core
