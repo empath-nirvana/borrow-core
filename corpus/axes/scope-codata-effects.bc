@@ -14,8 +14,8 @@
 def tick_step : !(all 'y < top. !U (mut 'y output * i32 -o F (i32 * (mut 'y output * i32) + 1) & F 1)) =
   !thunkv Fun 'y < top. return (!thunkv fun (s : mut 'y output * i32) ->
     < let (o, i) = s;
-      let o = (unbang write_byte) ['y] (o, i + 48);
-      let o = (unbang write_byte) ['y] (o, 10);
+      let o = (unbang write_byte) ['y] (o, (unbang host[wrap8]) (i + 48));
+      let o = (unbang write_byte) ['y] (o, u8[10]);
       inl (i, (o, i + 1)),
       let (o, i) = s;
       () >)

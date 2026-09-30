@@ -157,6 +157,13 @@ def unpair (v : CV) : IM (CV × CV) := do
     `(base, i32[n])`. The extra cell of an empty array keeps the base an object. -/
 def arrSlots (n : Nat) : Nat := max n 1
 
+/-- Bytes written to the stream `fd`: `1` standard output, `2` standard error. -/
+def emitBytes (fd : UInt32) (bs : List UInt8) : IM Unit :=
+  match fd with
+  | 1 => modify fun s => { s with out := bs.foldl ByteArray.push s.out }
+  | 2 => modify fun s => { s with err := bs.foldl ByteArray.push s.err }
+  | _ => throw "closure IR: a write to a stream that is not an output"
+
 def applyOp : Op → List CV → IM CV
   | .alloc, [v] => allocObj (.cell v)
   | .free, [l] => do let (a, c) ← cellOf l; freeObj a; pure c
@@ -206,14 +213,39 @@ def applyOp : Op → List CV → IM CV
       | [] => do allocObj (.pair m (← allocObj (.inj true .unit)))
       | b :: bs => do
         set { s with input := bs }
-        allocObj (.pair m (← allocObj (.inj false (.i32 b.toUInt32))))
+        allocObj (.pair m (← allocObj (.inj false (.u8 b))))
   | .io .writeByte, [p] => do
       let (m, w) ← unpair p
       let (_, c) ← cellOf m
       match c, w with
-      | .i32 1, .i32 b => do modify fun s => { s with out := s.out.push b.toUInt8 }; pure m
-      | .i32 2, .i32 b => do modify fun s => { s with err := s.err.push b.toUInt8 }; pure m
+      | .i32 fd, .u8 b => do emitBytes fd [b]; pure m
       | _, _ => throw "closure IR: write_byte on a cell that holds no output stream"
+  | .io .writeAll, [p] => do
+      let (m, v) ← unpair p
+      let (_, c) ← cellOf m
+      let (base, n) ← unpair v
+      match c, base, n with
+      | .i32 fd, .ptr a, .i32 n => do
+        let bs ← (List.range n.toNat).mapM fun i => do
+          match ← cellOf (.ptr (a + i)) with
+          | (_, .u8 b) => pure b
+          | _ => throw "closure IR: write_all of a view whose slots are not bytes"
+        emitBytes fd bs
+        pure m
+      | _, _, _ => throw "closure IR: write_all on a cell that holds no output stream"
+  | .io .readInto, [p] => do
+      let (m, v) ← unpair p
+      let (_, c) ← cellOf m
+      let (base, n) ← unpair v
+      match c, base, n with
+      | .i32 _, .ptr a, .i32 n => do
+        let s ← get
+        let bs := s.input.take n.toNat
+        set { s with input := s.input.drop n.toNat }
+        for (b, i) in bs.zipIdx do setObj (a + i) (.cell (.u8 b))
+        let f ← allocObj (.pair (.ptr a) (.i32 n))
+        allocObj (.pair m (← allocObj (.pair f (.i32 bs.length.toUInt32))))
+      | _, _, _ => throw "closure IR: read_into on a cell that holds no stream"
   | _, _ => throw "closure IR: primitive arity"
 
 mutual

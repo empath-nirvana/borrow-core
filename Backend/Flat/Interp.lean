@@ -143,6 +143,16 @@ def evalExp (p : Prog) : Nat → Array UInt64 → Exp → FM UInt64
         match s.input with
         | [] => pure 0xFFFFFFFFFFFFFFFF
         | b :: bs => do set { s with input := bs }; pure b.toUInt64
+    | .getv fd a k => do
+        let fd ← evalExp p n fr fd
+        let a ← evalExp p n fr a
+        let k ← evalExp p n fr k
+        if fd != 0 then throw s!"flat IR: read from fd {fd}"
+        let s ← get
+        let bs := s.input.take k.toNat
+        set { s with input := s.input.drop k.toNat }
+        for (b, i) in bs.zipIdx do writeByte (a.toNat + i) b.toUInt64
+        pure bs.length.toUInt64
     | .stat 0 => do pure (← get).allocs.toUInt64
     | .stat 1 => do pure (← get).indirect.toUInt64
     | .stat _ => do pure (← get).copies.toUInt64
@@ -201,6 +211,16 @@ def execStmt (p : Prog) : Nat → Array UInt64 → Stmt → FM (Array UInt64 × 
     | .out b => do
         let b ← evalExp p n fr b
         modify fun st => { st with out := st.out.push b.toUInt8 }
+        pure (fr, none)
+    | .putv fd a k => do
+        let fd ← evalExp p n fr fd
+        let a ← evalExp p n fr a
+        let k ← evalExp p n fr k
+        let bs ← (List.range k.toNat).mapM fun i => readByte (a.toNat + i)
+        match fd with
+        | 1 => modify fun st => { st with out := bs.foldl (fun o b => o.push b.toUInt8) st.out }
+        | 2 => modify fun st => { st with err := bs.foldl (fun o b => o.push b.toUInt8) st.err }
+        | _ => throw s!"flat IR: write to fd {fd}"
         pure (fr, none)
     | .putc fd b => do
         let fd ← evalExp p n fr fd

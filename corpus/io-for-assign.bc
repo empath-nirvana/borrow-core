@@ -8,7 +8,7 @@
 
 main -> i32 =
   let mut last = 0;
-  for b in bytes(&mut stdin) { last = b };
+  for b in bytes(&mut stdin) { last = to_i32(b) };
   let mut n = 0;
   for c in bytes(&mut stdin) { n = n + 1 };
   last + n

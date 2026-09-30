@@ -18,7 +18,7 @@ def ll_step : !U (In * i32 -o F ((In * i32) + (In * i32)) & F (In * 1)) =
       let (c2, x) = q;
       case x {
         inl b ->
-          case (unbang host[eq32]) (b, i32[10]) {
+          case (unbang host[eq32]) ((unbang host[extend8_u]) b, i32[10]) {
             inl u -> return (inr (c2, (unbang host[add32]) (n, i32[1])))
           | inr u -> return (inl (c2, n))
           }
@@ -39,7 +39,7 @@ def count_lines : In => In * i32 =
   thunkv fun (c : In) ->
     n : i32 <- return i32[0];
     for b in bytes c {
-      n : i32 <- case (unbang host[eq32]) (b, i32[10]) {
+      n : i32 <- case (unbang host[eq32]) ((unbang host[extend8_u]) b, i32[10]) {
         inl u -> return n
       | inr u -> return ((unbang host[add32]) (n, i32[1]))
       };
@@ -57,7 +57,7 @@ main : F (i32 * i32) =
   r <- return (sections (&mut stdin));
   let (h, n) = r;
   _ <- return (put_dec (&mut stdout, h));
-  _ <- return (putb (&mut stdout, i32[32]));
+  _ <- return (putb (&mut stdout, u8[32]));
   _ <- return (put_dec (&mut stdout, n));
-  _ <- return (putb (&mut stdout, i32[10]));
+  _ <- return (putb (&mut stdout, u8[10]));
   return (h, n)

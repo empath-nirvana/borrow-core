@@ -34,14 +34,14 @@ def upper_step : !(all 'x < top. !(i32 * (U (iter (mut 'x u8) 1 1) + 1) => U (it
 fn emit(i: i32, s: Out * array u8) -> Out * array u8 =
   let (o, a) = s;
   let c = borrow imm a { 'x, v -> at(v, i, b'?') };
-  putb(&mut o, to_i32(c));
+  putb(&mut o, c);
   (o, a)
 
 main -> i32 =
   let mut buf = array_new[u8] (64, dot);
   let mut n = 0;
   for b in bytes(&mut stdin) {
-    let (a, _) = array_replace[u8] (buf, n, to_u8(b));
+    let (a, _) = array_replace[u8] (buf, n, b);
     buf = a;
     if n < 64 { n = n + 1 }
   };

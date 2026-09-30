@@ -29,7 +29,7 @@ def serve : !(all 'a < top. imm 'a Cfg * ref input => ref input * i32) =
   !thunkv Fun 'a < top. return (thunkv fun (p : imm 'a Cfg * ref input) ->
     let (cfg, i) = p;
     let mut acc = 0;
-    for c in bytes(&mut i) { acc = handle(cfg, (acc, c - 48)) };
+    for c in bytes(&mut i) { acc = handle(cfg, (acc, to_i32(c) - 48)) };
     (i, acc))
 
 main -> i32 =

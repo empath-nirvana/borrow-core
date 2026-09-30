@@ -470,6 +470,23 @@ def lowerPrim : Op → List Var → Dest → LM (List Stmt)
       match ← vals p with
       | [m, b] => return [.putc (.load (.loc m) 0) (.loc b)] ++ (← emit d [.loc m])
       | _ => throw "flat IR: write_byte of a non-pair"
+  | .io .writeAll, [p], d => do
+      let T ← T
+      let f := (T.field (← vty p) 1).1
+      unless T.byteCell (T.field f 0).1 do throw "flat IR: write_all of a view whose slots are not bytes"
+      match ← vals p with
+      | [m, a, k] => return [.putv (.load (.loc m) 0) (.loc a) (.loc k)] ++ (← emit d [.loc m])
+      | _ => throw "flat IR: write_all of a non-pair"
+  | .io .readInto, [p], d => do
+      let T ← T
+      let f := (T.field (← vty p) 1).1
+      unless T.byteCell (T.field f 0).1 do throw "flat IR: read_into of a view whose slots are not bytes"
+      match ← vals p with
+      | [m, a, k] =>
+        let r ← fresh1
+        return [.set r (.getv (.load (.loc m) 0) (.loc a) (.loc k))] ++
+          (← emit d [.loc m, .loc a, .loc k, .loc r])
+      | _ => throw "flat IR: read_into of a non-pair"
   | _, _, _ => throw "flat IR: primitive arity"
 
 /-- Call the closure `f` on `a`, answering `k` words, of which the first `w` are the result. -/

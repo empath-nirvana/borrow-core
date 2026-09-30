@@ -430,13 +430,15 @@ inductive ExtImpl where
   | cap (fd : Nat)
   | io (k : IOOp)
 
-/-- An operation's closure, as the extern's value: `Λ. λm. op m` (the lifetime argument is
-`()`, and is dropped). -/
+/-- An operation's closure, as the extern's value: `Λ. λm. op m`, with one `Λ` per lifetime
+parameter (each argument is `()`, and is dropped). -/
 def ioValue (k : IOOp) : CM Tm := do
-  let u ← fresh; let m ← fresh
-  let c₂ ← register ⟨[], m, .prim (.io k) [m]⟩
-  let c₁ ← register ⟨[], u, .drop u (.clos c₂ [])⟩
-  pure (.clos c₁ [])
+  let m ← fresh
+  let mut c ← register ⟨[], m, .prim (.io k) [m]⟩
+  for _ in [0:k.lifes] do
+    let u ← fresh
+    c ← register ⟨[], u, .drop u (.clos c [])⟩
+  pure (.clos c [])
 
 /-- Take the capabilities back from `main`'s result `(caps, a)`: each cell is freed with its
 content, and the result is `a`. -/

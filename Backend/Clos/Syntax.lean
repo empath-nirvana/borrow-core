@@ -24,15 +24,26 @@ open BoCa
 abbrev Var := Nat
 
 /-- The standard I/O operations of SPEC §11, the host implementations of the externs
-`read_byte` and `write_byte`. -/
+`read_byte`, `write_byte`, `write_all` and `read_into`. -/
 inductive IOOp where
-  /-- `read_byte m`: `(m, inl i32[b])` with the next byte of the stream in the cell `m`, or
+  /-- `read_byte m`: `(m, inl u8[b])` with the next byte of the stream in the cell `m`, or
   `(m, inr ())` at its end. -/
   | readByte
-  /-- `write_byte (m, i32[b])`: the low byte of `b` written to the stream in the cell `m`;
-  the result is `m`. -/
+  /-- `write_byte (m, u8[b])`: the byte `b` written to the stream in the cell `m`; the result is
+  `m`. -/
   | writeByte
+  /-- `write_all (m, (p, n))`: the `n` bytes of the view at `p` written to the stream in the cell
+  `m`; the result is `m`. -/
+  | writeAll
+  /-- `read_into (m, (p, n))`: bytes of the stream in the cell `m` read into the view at `p` until
+  it is full or the stream ends; the result is `(m, ((p, n), k))`, `k` the bytes read. -/
+  | readInto
   deriving Repr, DecidableEq
+
+/-- The lifetime parameters of an operation's extern: the `Λ`s before its argument. -/
+def IOOp.lifes : IOOp → Nat
+  | .readByte | .writeByte => 1
+  | .writeAll | .readInto => 2
 
 /-- The primitives of `[TR]` §1, §8 and §9, saturated, and the I/O operations of §11. -/
 inductive Op where

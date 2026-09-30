@@ -25,6 +25,7 @@
 include adapters
 
 type List = mu X. 1 + (i32 * X)
+type Line = mu X. 1 + (u8 * X)
 
 gen fn upto(lo: i32, hi: i32, bad: i32) -> i32, i32 + 1 =
   let mut i = lo;
@@ -40,6 +41,9 @@ fn err(e: i32 + 1) -> i32 = match e { inl b -> b | inr u -> 0 }
 
 fn len_alg(r: 1 + i32 * i32) -> i32 = match r { inl _ -> 0 | inr (x, n) -> n + 1 }
 def len : !(List => i32) = fold_own[1 + i32 * X, i32] len_alg
+
+fn len8_alg(r: 1 + u8 * i32) -> i32 = match r { inl _ -> 0 | inr (x, n) -> n + 1 }
+def len8 : !(Line => i32) = fold_own[1 + u8 * X, i32] len8_alg
 
 fn add_up(p: i32 * i32) -> i32 * bool =
   let (s, x) = p;
@@ -68,6 +72,6 @@ main -> i32 =
   es = es + err(e);
   let mut n = 0;
   let mut m = 0;
-  let e = for l in lines(upto(8, 14, 12)) { n = n + 1; m = m + len(l) };
+  let e = for l in lines(map(upto(8, 14, 12), !{ x -> to_u8(x) })) { n = n + 1; m = m + len8(l) };
   es = es + err(e);
   (t + n * 10 + m) * 1000 + es

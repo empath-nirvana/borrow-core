@@ -30,12 +30,12 @@ def report : !(all 'a < top. mut 'a output * (mut 'a output * i32) => 1) =
   !thunkv Fun 'a < top. return (thunkv fun (p : mut 'a output * (mut 'a output * i32)) ->
     let (log, r) = p;
     let (out, n) = r;
-    let log = (unbang write_byte) ['a] (log, 76);
-    let log = (unbang write_byte) ['a] (log, n + 48);
-    let log = (unbang write_byte) ['a] (log, 10);
-    let out = (unbang write_byte) ['a] (out, 68);
-    let out = (unbang write_byte) ['a] (out, n + 48);
-    let out = (unbang write_byte) ['a] (out, 10);
+    let log = (unbang write_byte) ['a] (log, u8[76]);
+    let log = (unbang write_byte) ['a] (log, (unbang host[wrap8]) (n + 48));
+    let log = (unbang write_byte) ['a] (log, u8[10]);
+    let out = (unbang write_byte) ['a] (out, u8[68]);
+    let out = (unbang write_byte) ['a] (out, (unbang host[wrap8]) (n + 48));
+    let out = (unbang write_byte) ['a] (out, u8[10]);
     ())
 
 main -> 1 =

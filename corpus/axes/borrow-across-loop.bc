@@ -27,7 +27,7 @@ main -> i32 =
   let t = alloc(array_new[i32] (10, tab));
   let (stdin, n) = borrow imm t { 'x, b ->
     let mut acc = 0;
-    for c in bytes(&mut stdin) { acc = acc + (unbang get) ['x] (b, c - 48) };
+    for c in bytes(&mut stdin) { acc = acc + (unbang get) ['x] (b, to_i32(c) - 48) };
     (stdin, acc)
   };
   n

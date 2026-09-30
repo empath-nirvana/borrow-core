@@ -11,10 +11,10 @@
 -- `level`, `no evil`, and i32[3]. A splitter that lost the last line prints two lines and gives
 -- 2; one that kept the newline in a line prints an empty line first.
 
-type List = mu X. 1 + (i32 * X)
+type List = mu X. 1 + (u8 * X)
 
 def nil : List = roll inl ()
-fn cons(x: i32, t: List) -> List = roll inr (x, t)
+fn cons(x: u8, t: List) -> List = roll inr (x, t)
 
 gen fn lines(c: In) -> List, In =
   let mut line = nil;
@@ -28,12 +28,12 @@ gen fn lines(c: In) -> List, In =
 -- A list written head first: a fold into a function of the output (`corpus/axes/data-effects.bc`).
 type Run = U (Out -o F (Out * 1))
 
-fn run_alg(r: 1 + i32 * Run) -> Run =
+fn run_alg(r: 1 + u8 * Run) -> Run =
   match r {
     inl _ -> { o -> (o, ()) }
   | inr (x, k) -> { o -> let (o, _) = putb(o, x); k!(o) }
   }
-def run_list : !(List => Run) = fold_own[1 + i32 * X, Run] run_alg
+def run_list : !(List => Run) = fold_own[1 + u8 * X, Run] run_alg
 
 main -> i32 =
   let mut n = 0;

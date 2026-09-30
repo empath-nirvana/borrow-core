@@ -3051,11 +3051,14 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
     | .sugar sp (.lit k) => pure (litAt sp ((widthOf exp).getD .w32) k)
     | .app sp (.sugar osp (.op o)) (.pair psp a b) => do
       let arith := match o with | .add | .sub | .mul => true | _ => false
-      -- The width: expected of an arithmetic result, or an operand's; `i32` by default.
+      -- The width: expected of an arithmetic result, or an operand's other than a literal's
+      -- (a literal takes the width of the other operand); `i32` by default.
       let a₀ ← surfV n c none a
       let b₀ ← surfV n c none b
+      let isLit : Val → Bool := fun | .sugar _ (.lit _) => true | _ => false
+      let wOf (v v₀ : Val) : Option BoCa.Width := if isLit v then none else widthOf (c.tyV v₀)
       let w := ((if arith then widthOf exp else none).orElse fun _ =>
-        (widthOf (c.tyV a₀)).orElse fun _ => widthOf (c.tyV b₀)).getD .w32
+        (wOf a a₀).orElse fun _ => wOf b b₀).getD .w32
       let a' ← surfV n c (some (.int w)) a
       let b' ← surfV n c (some (.int w)) b
       if w == .w8 then return byteOp sp osp psp o a' b'

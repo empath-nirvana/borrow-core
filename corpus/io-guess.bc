@@ -15,55 +15,55 @@ def inc : i32 => i32 = thunkv fun (n : i32) -> return ((unbang host[add32]) (n, 
 
 def say_prompt : Out => Out * 1 =
   thunkv fun (o : Out) ->
-    _ <- return (putb (&mut o, i32[103]));
-    _ <- return (putb (&mut o, i32[117]));
-    _ <- return (putb (&mut o, i32[101]));
-    _ <- return (putb (&mut o, i32[115]));
-    _ <- return (putb (&mut o, i32[115]));
-    _ <- return (putb (&mut o, i32[63]));
-    return (putb (o, i32[32]))
+    _ <- return (putb (&mut o, u8[103]));
+    _ <- return (putb (&mut o, u8[117]));
+    _ <- return (putb (&mut o, u8[101]));
+    _ <- return (putb (&mut o, u8[115]));
+    _ <- return (putb (&mut o, u8[115]));
+    _ <- return (putb (&mut o, u8[63]));
+    return (putb (o, u8[32]))
 
 def say_low : Out => Out * 1 =
   thunkv fun (o : Out) ->
-    _ <- return (putb (&mut o, i32[116]));
-    _ <- return (putb (&mut o, i32[111]));
-    _ <- return (putb (&mut o, i32[111]));
-    _ <- return (putb (&mut o, i32[32]));
-    _ <- return (putb (&mut o, i32[108]));
-    _ <- return (putb (&mut o, i32[111]));
-    _ <- return (putb (&mut o, i32[119]));
-    return (putb (o, i32[10]))
+    _ <- return (putb (&mut o, u8[116]));
+    _ <- return (putb (&mut o, u8[111]));
+    _ <- return (putb (&mut o, u8[111]));
+    _ <- return (putb (&mut o, u8[32]));
+    _ <- return (putb (&mut o, u8[108]));
+    _ <- return (putb (&mut o, u8[111]));
+    _ <- return (putb (&mut o, u8[119]));
+    return (putb (o, u8[10]))
 
 def say_high : Out => Out * 1 =
   thunkv fun (o : Out) ->
-    _ <- return (putb (&mut o, i32[116]));
-    _ <- return (putb (&mut o, i32[111]));
-    _ <- return (putb (&mut o, i32[111]));
-    _ <- return (putb (&mut o, i32[32]));
-    _ <- return (putb (&mut o, i32[104]));
-    _ <- return (putb (&mut o, i32[105]));
-    _ <- return (putb (&mut o, i32[103]));
-    _ <- return (putb (&mut o, i32[104]));
-    return (putb (o, i32[10]))
+    _ <- return (putb (&mut o, u8[116]));
+    _ <- return (putb (&mut o, u8[111]));
+    _ <- return (putb (&mut o, u8[111]));
+    _ <- return (putb (&mut o, u8[32]));
+    _ <- return (putb (&mut o, u8[104]));
+    _ <- return (putb (&mut o, u8[105]));
+    _ <- return (putb (&mut o, u8[103]));
+    _ <- return (putb (&mut o, u8[104]));
+    return (putb (o, u8[10]))
 
 def say_right : Out => Out * 1 =
   thunkv fun (o : Out) ->
-    _ <- return (putb (&mut o, i32[99]));
-    _ <- return (putb (&mut o, i32[111]));
-    _ <- return (putb (&mut o, i32[114]));
-    _ <- return (putb (&mut o, i32[114]));
-    _ <- return (putb (&mut o, i32[101]));
-    _ <- return (putb (&mut o, i32[99]));
-    _ <- return (putb (&mut o, i32[116]));
-    _ <- return (putb (&mut o, i32[33]));
-    return (putb (o, i32[10]))
+    _ <- return (putb (&mut o, u8[99]));
+    _ <- return (putb (&mut o, u8[111]));
+    _ <- return (putb (&mut o, u8[114]));
+    _ <- return (putb (&mut o, u8[114]));
+    _ <- return (putb (&mut o, u8[101]));
+    _ <- return (putb (&mut o, u8[99]));
+    _ <- return (putb (&mut o, u8[116]));
+    _ <- return (putb (&mut o, u8[33]));
+    return (putb (o, u8[10]))
 
 def say_bye : Out => Out * 1 =
   thunkv fun (o : Out) ->
-    _ <- return (putb (&mut o, i32[98]));
-    _ <- return (putb (&mut o, i32[121]));
-    _ <- return (putb (&mut o, i32[101]));
-    return (putb (o, i32[10]))
+    _ <- return (putb (&mut o, u8[98]));
+    _ <- return (putb (&mut o, u8[121]));
+    _ <- return (putb (&mut o, u8[101]));
+    return (putb (o, u8[10]))
 
 -- `too high` or `too low`.
 def say_wrong : Out * i32 => Out * 1 =
@@ -88,7 +88,8 @@ main : F i32 =
   guesses : i32 <- return i32[0];
   done : B <- return (inl () : B);
   _ <- return (say_prompt &mut stdout);
-  for b in bytes stdin {
+  for b8 in bytes stdin {
+    b : i32 <- return ((unbang host[extend8_u]) b8);
     case done {
       inl playing ->
         case (unbang host[eq32]) (b, i32[10]) {
@@ -119,5 +120,5 @@ main : F i32 =
   };
   _ <- return (say_bye_if (&mut stdout, done));
   _ <- return (put_dec (&mut stderr, guesses));
-  _ <- return (putb (&mut stderr, i32[10]));
+  _ <- return (putb (&mut stderr, u8[10]));
   return guesses

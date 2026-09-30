@@ -18,20 +18,20 @@
 -- Once it lands: as `corpus/axes/data-effects.bc`. Golden, on the input `stressed`: the lines
 -- `stressed` and `desserts`, then `i32[8]`, `live 0`.
 
-type List = mu X. 1 + (ref i32 * ref X)
-shape Node = node (leaf i32) (leaf List)
+type List = mu X. 1 + (ref u8 * ref X)
+shape Node = node (leaf u8) (leaf List)
 
 def nil : List = roll inl ()
-fn cons(x: i32, t: List) -> List = roll inr alloc_s[Node] (x, t)
+fn cons(x: u8, t: List) -> List = roll inr alloc_s[Node] (x, t)
 
 type Run = U (Out -o F (Out * 1))
 
-fn run_alg(r: 1 + ref i32 * Run) -> Run =
+fn run_alg(r: 1 + ref u8 * Run) -> Run =
   match r {
     inl _ -> { o -> (o, ()) }
   | inr (c, k) -> let x = free(c); { o -> let (o, _) = putb(o, x); k!(o) }
   }
-def run_list : !(List => Run) = fold_own[1 + ref i32 * ref X, Run] run_alg
+def run_list : !(List => Run) = fold_own[1 + ref u8 * ref X, Run] run_alg
 
 main -> i32 =
   let mut l = nil;

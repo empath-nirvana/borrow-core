@@ -18,8 +18,13 @@ in `Backend/README.md`:
   `fd` (WASI `fd_write`; `write(2)` in libc).
 - `$getc fd` reads one byte of the stream `fd`, or answers `-1` at its end or on an error
   (WASI `fd_read`; `read(2)` in libc).
+- `$putv fd p n` writes the `n` bytes at `p` to the stream `fd`, calling `fd_write` again after a
+  short write (`write_all`).
+- `$getv fd p n` reads bytes of the stream `fd` into the `n` bytes at `p` until they are full or
+  the stream ends or fails, and answers how many it read (`read_into`).
 
-Layout: bytes `0–31` hold `$putfd`'s I/O vector and byte, bytes `32–63` `$getc`'s; `1024 + 4s` holds the head of the
+Layout: bytes `0–31` hold `$putfd`'s and `$putv`'s I/O vector and byte, bytes `32–63` `$getc`'s
+and `$getv`'s; `1024 + 4s` holds the head of the
 free list of ranges of `s` words, for `s < 1024`; ranges start at `16384`, each preceded by a
 word holding its size. `$alloc` pops the free list of its size, or else bumps `$heap`, growing
 memory as needed. A freed range of `s < 1024` words is pushed onto its free list (its first
@@ -101,6 +106,43 @@ def runtimeWat : String := "
           (i32.eqz (i32.load (i32.const 40))))
       (then (return (i64.const -1))))
     (i64.load8_u (i32.const 48)))
+
+  (func $putv (param $fd i64) (param $p i64) (param $n i64)
+    (local $a i32) (local $k i32) (local $w i32)
+    (local.set $a (i32.wrap_i64 (local.get $p)))
+    (local.set $k (i32.wrap_i64 (local.get $n)))
+    (block $done
+      (loop $again
+        (br_if $done (i32.eqz (local.get $k)))
+        (i32.store (i32.const 0) (local.get $a))
+        (i32.store (i32.const 4) (local.get $k))
+        (br_if $done (call $fd_write (i32.wrap_i64 (local.get $fd))
+          (i32.const 0) (i32.const 1) (i32.const 24)))
+        (local.set $w (i32.load (i32.const 24)))
+        (br_if $done (i32.eqz (local.get $w)))
+        (local.set $a (i32.add (local.get $a) (local.get $w)))
+        (local.set $k (i32.sub (local.get $k) (local.get $w)))
+        (br $again))))
+
+  (func $getv (param $fd i64) (param $p i64) (param $n i64) (result i64)
+    (local $a i32) (local $k i32) (local $r i32) (local $got i32)
+    (local.set $a (i32.wrap_i64 (local.get $p)))
+    (local.set $k (i32.wrap_i64 (local.get $n)))
+    (block $done
+      (loop $again
+        (br_if $done (i32.eqz (local.get $k)))
+        (i32.store (i32.const 32) (local.get $a))
+        (i32.store (i32.const 36) (local.get $k))
+        (i32.store (i32.const 40) (i32.const 0))
+        (br_if $done (call $fd_read (i32.wrap_i64 (local.get $fd))
+          (i32.const 32) (i32.const 1) (i32.const 40)))
+        (local.set $r (i32.load (i32.const 40)))
+        (br_if $done (i32.eqz (local.get $r)))
+        (local.set $a (i32.add (local.get $a) (local.get $r)))
+        (local.set $k (i32.sub (local.get $k) (local.get $r)))
+        (local.set $got (i32.add (local.get $got) (local.get $r)))
+        (br $again)))
+    (i64.extend_i32_u (local.get $got)))
 "
 
 end Backend.Wasm

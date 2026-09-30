@@ -5,21 +5,21 @@
 -- the type, not recognized by the names `In`, `Out`, `ref input` or `ref output`.
 -- `residual-alias.core.bc` is its elaboration in core, as `bcc desugar` prints it.
 extern stdin : ref input
-extern read_byte : !(all 'a < top. mut 'a input => mut 'a input * (i32 + 1))
+extern read_byte : !(all 'a < top. mut 'a input => mut 'a input * (u8 + 1))
 
 -- The input under a name of this program's own.
 type Src = ref input
 
-def getb : Src => Src * (i32 + 1) =
+def getb : Src => Src * (u8 + 1) =
   thunkv fun (c : Src) ->
-    return (withbor2['x, top, input, i32 + 1] c
+    return (withbor2['x, top, input, u8 + 1] c
       (thunkv Fun 'x < dom. return (thunkv fun (m : mut 'x input) ->
          r <- return ((unbang read_byte) ['x] m);
          let (m2, b) = r;
          return (boxed['x] b))))
 
 -- The input as a stream of bytes, finishing (or closed) with the capability.
-def src_step : !U (Src -o F (i32 * Src + Src) & F Src) =
+def src_step : !U (Src -o F (u8 * Src + Src) & F Src) =
   !thunkv fun (c : Src) ->
     < q <- return (getb c);
       let (c2, x) = q;
@@ -29,9 +29,9 @@ def src_step : !U (Src -o F (i32 * Src + Src) & F Src) =
       },
       return c >
 
-def src_bytes : Src => U (iter i32 Src Src) =
+def src_bytes : Src => U (iter u8 Src Src) =
   thunkv fun (c : Src) ->
-    f <- return (unbang (unfold[iter i32 Src Src, Src] src_step));
+    f <- return (unbang (unfold[iter u8 Src Src, Src] src_step));
     return (thunkv nu_in < (nu_out (force f c)).1, (nu_out (force f c)).2 >)
 
 def count : Src => Src * i32 =

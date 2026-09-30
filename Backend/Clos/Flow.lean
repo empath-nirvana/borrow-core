@@ -157,10 +157,16 @@ def genPrim : Op → List Var → GM Key
       emit (.sub r st)
       pure st
   | .io .readByte, [m] => holding (.pair (.var m) .none)
-  | .io .writeByte, [p] => do
+  | .io .writeByte, [p] | .io .writeAll, [p] => do
       let m ← freshKey
       emit (.proj (.var p) 0 m)
       pure m
+  | .io .readInto, [p] => do
+      let m ← freshKey
+      emit (.proj (.var p) 0 m)
+      let f ← freshKey
+      emit (.proj (.var p) 1 f)
+      holding (.pair m (← holding (.pair f .none)))
   | _, _ => pure .none
 
 /-- The injection a term ends in, when it is a literal one (`Backend/Clos/Types.lean`,

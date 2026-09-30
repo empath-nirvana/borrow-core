@@ -38,6 +38,9 @@ inductive Exp where
   | live
   /-- The next byte of the stream `fd`, or `2⁶⁴ - 1` at its end (SPEC §11). -/
   | getc (fd : Exp)
+  /-- Bytes of the stream `fd` read into the `len` bytes at `addr`, until they are full or the
+  stream ends; the number read (SPEC §11, `read_into`). -/
+  | getv (fd addr len : Exp)
   /-- A run's counter: `0` the allocations so far, `1` the dispatched calls so far, `2` the
   copies of a variable at a non-trivial type so far. -/
   | stat (k : Nat)
@@ -54,6 +57,8 @@ inductive Stmt where
   | out (b : Exp)
   /-- Write the low byte of `b` to the stream `fd` (SPEC §11). -/
   | putc (fd b : Exp)
+  /-- Write the `len` bytes at `addr` to the stream `fd` (SPEC §11, `write_all`). -/
+  | putv (fd addr len : Exp)
   /-- `c` is a 32-bit test. -/
   | ite (c : Exp) (t e : List Stmt)
   /-- `cases[k]` when `e` is `k < cases.length`, else `dflt`. -/

@@ -15,7 +15,7 @@ main -> i32 =
   let c = alloc(0);
   let (stdin, k) = borrow mut c { m ->
     let mut k = 0;
-    for b in bytes(&mut stdin) { modify m { v -> v + b - 48 }; k = k + 1 };
+    for b in bytes(&mut stdin) { modify m { v -> v + to_i32(b) - 48 }; k = k + 1 };
     (stdin, k)
   };
   free(c) * 100 + k

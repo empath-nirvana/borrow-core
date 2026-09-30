@@ -25,9 +25,10 @@
 include adapters
 
 type List = mu X. 1 + (i32 * X)
+type Line = mu X. 1 + (u8 * X)
 
 gen fn line(c: In) -> i32, In =
-  for b in bytes(&mut c) { if b == 10 { break } else { yield b - 48 } };
+  for b in bytes(&mut c) { if b == 10 { break } else { yield to_i32(b) - 48 } };
   c
 
 gen fn range(lo: i32, hi: i32) -> i32 =
@@ -37,6 +38,9 @@ gen fn range(lo: i32, hi: i32) -> i32 =
 
 fn len_alg(r: 1 + i32 * i32) -> i32 = match r { inl _ -> 0 | inr (x, n) -> n + 1 }
 def len : !(List => i32) = fold_own[1 + i32 * X, i32] len_alg
+
+fn len8_alg(r: 1 + u8 * i32) -> i32 = match r { inl _ -> 0 | inr (x, n) -> n + 1 }
+def len8 : !(Line => i32) = fold_own[1 + u8 * X, i32] len8_alg
 
 fn add_up(p: i32 * i32) -> i32 * bool =
   let (s, x) = p;
@@ -66,5 +70,5 @@ main -> i32 * i32 =
   u = u * 100;
   let mut n = 0;
   let mut m = 0;
-  for l in lines(from_iter(bytes(stdin))) { n = n + 1; m = m + len(l) };
+  for l in lines(from_iter(bytes(stdin))) { n = n + 1; m = m + len8(l) };
   (t, u + n * 10 + m)
