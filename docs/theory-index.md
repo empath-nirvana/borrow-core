@@ -630,6 +630,30 @@ Deduplicated across every source above and every `### Open` of `SPEC.md`. Each p
 issue; related issues are named. "Not derived" means no proof and no machine-checked
 obstruction exist unless a Lean name is given.
 
+| # | Problem | Issue |
+|---|---|---|
+| T1 | The spanning lend (K1) | [#172] |
+| T2 | An outlives rule for thunks `U C` | [#173] |
+| T3 | Lending a `Mut` as an `Imm` (strings K2′) | [#174] |
+| T4 | Same-lifetime views through a pointer | [#175] |
+| T5 | L2 over a dynamic-length structure | [#176] |
+| T6 | Widening promotion | [#9] |
+| T7 | Conservative extension, agreement of the worlds | [#177] |
+| T8 | Observations that take input (K2) | [#96] |
+| T9 | Destructors that perform I/O or fail (K3) | [#162] |
+| T10 | Early exit from a kernel fold (K4) | [#178] |
+| T11 | Structural and borrowed descent for `rec` (K5) | [#179] |
+| T12 | Non-tail recursion, a direct `fix` | [#12] |
+| T13 | Delay approximations, codata adequacy | [#180] |
+| T14 | Codata positions of `X` beyond `NuOk` | [#181] |
+| T15 | Recursive types and folds beyond `FShape` | [#182] |
+| T16 | Read footprint and two-run laws | [#41] |
+| T17 | Side conditions of family borrows | [#183] |
+| T18 | `Affine` at recursive types | [#10] |
+| T19 | Tasks holding borrows at different lifetimes | [#52] |
+| T20 | Lexically scoped handlers as borrows | [#170] |
+| T21 | The derived type of projection operations | [#160] |
+
 ### T1. The spanning lend (K1)
 
 - **Statement.** A rule that lends a place across observations of codata, e.g. `withborLoop :
@@ -648,7 +672,7 @@ obstruction exist unless a Lean name is given.
   callee with a borrow parameter ("For 'no function coloring' that is the case that matters"),
   async tasks that borrow ([#52] phase 5), effects S4/S5, external iteration over linked data
   per [#57]'s reframe.
-- **Issue:** #T1. Related: [#162], [#52], [#170], [#57].
+- **Issue:** [#172]. Related: [#162], [#52], [#170], [#57].
 
 ### T2. An outlives rule for thunks `U C`
 
@@ -668,7 +692,7 @@ obstruction exist unless a Lean name is given.
   and `withborS` exclude thunk results; `foldImm`'s result must outlive every lifetime; lens ∘
   linear prism is not built; two opaque lending sources cannot be zipped (LoopBorrow). [#170]'s
   comment names it as the rule a continuation capturing borrows needs.
-- **Issue:** #T2. Related: [#170], [T1](#t1-the-spanning-lend-k1).
+- **Issue:** [#173]. Related: [#170], [T1](#t1-the-spanning-lend-k1).
 
 ### T3. Lending a `Mut` as an `Imm`
 
@@ -684,7 +708,7 @@ obstruction exist unless a Lean name is given.
   per leaf, and was not attempted". Neither derived; no obstruction verified.
 - **Why it matters.** `peek` and `sort` in `lib/slice.bc` take a filler meanwhile; `imm` access
   through `mut` capabilities and handler state.
-- **Issue:** #T3.
+- **Issue:** [#174].
 
 ### T4. Same-lifetime views through a pointer
 
@@ -703,7 +727,7 @@ obstruction exist unless a Lean name is given.
   `FrameLife` "for later same-lifetime views".
 - **Why it matters.** `&'a self.field` through a `Box`; external iterators over borrowed boxed
   structures (`docs/scope-recursion.md` §7); operations returning a borrow into handler state.
-- **Issue:** #T4. Related: [#57], [#160].
+- **Issue:** [#175]. Related: [#57], [#160].
 
 ### T5. L2: borrowing a dynamic-length structure at one lifetime
 
@@ -718,7 +742,7 @@ obstruction exist unless a Lean name is given.
   `iterMut_shape`). **(inferred)** The array proof's list induction over places is the candidate
   technique, with the places found by a fold.
 - **Why it matters.** `IterMut` over linked data at one lifetime; the proposed way around T4.
-- **Issue:** #T5.
+- **Issue:** [#176].
 
 ### T6. Widening promotion
 
@@ -744,7 +768,7 @@ obstruction exist unless a Lean name is given.
   CBPVSplit/CBPVCore (by construction). Agreement "would first need a translation of worlds and
   record lists along `cbv`".
 - **Why it matters.** It is what "extends BoLo" means as a theorem.
-- **Issue:** #T7.
+- **Issue:** [#177].
 
 ### T8. Observations that take input (K2)
 
@@ -773,7 +797,7 @@ obstruction exist unless a Lean name is given.
 - **Known partial results.** Such an algebra is rejected today; the propagating form (a sum to
   the end of the fold) needs nothing new.
 - **Why it matters.** Fallible folds over `μ` data; [#168] (errors as a control effect).
-- **Issue:** #T10.
+- **Issue:** [#178].
 
 ### T11. Structural and borrowed descent for `rec` (K5)
 
@@ -783,7 +807,7 @@ obstruction exist unless a Lean name is given.
 - **Known partial results.** Borrowed descent as a fold exists: `foldImm` terminates by witness
   size (`withload_sized`). [#72] (sized types) would "surface the borrowed fold's witness-size
   measure". Meanwhile `fuel` and data-sized drivers give totality.
-- **Issue:** #T11. Related: [#158], [#72].
+- **Issue:** [#179]. Related: [#158], [#72].
 
 ### T12. Non-tail recursion and a direct `fix`
 
@@ -805,7 +829,7 @@ obstruction exist unless a Lean name is given.
   hypothesis; "Over a finite witness type a decreasing chain commutes with `∃`
   (`exists_forall_of_finite`); over `ℕ` it does not (`not_exists_forall`)". Not derived; no
   obstruction verified. Only `take_runs` at `Stream 1`.
-- **Issue:** #T13.
+- **Issue:** [#180].
 
 ### T14. Codata: positions of `X` beyond `NuOk`
 
@@ -815,7 +839,7 @@ obstruction exist unless a Lean name is given.
   missing is coiteration's map at those positions"); `experiments/LoopBorrow` (two opaque lending
   sources need "`X` under `[@a]` in an observation result").
 - **Known partial results.** Monotonicity is available; the map is not built.
-- **Issue:** #T14. Related: [T8](#t8-observations-that-take-input-k2).
+- **Issue:** [#181]. Related: [T8](#t8-observations-that-take-input-k2).
 
 ### T15. Recursive types and folds beyond `FShape`
 
@@ -829,7 +853,7 @@ obstruction exist unless a Lean name is given.
 - **Known partial results.** `foldImm`, `foldOwn`, `foldReuse` at `FShape`; `MapMut`'s `mapInc`
   over `L′` by hand; the block view puts the common list in `FShape`. Not derived for (b):
   "I have not derived such a rule and have not verified that any obstruction is real."
-- **Issue:** #T15. Related: [#32], [#18].
+- **Issue:** [#182]. Related: [#32], [#18].
 
 ### T16. Read footprint and two-run laws
 
@@ -857,7 +881,7 @@ obstruction exist unless a Lean name is given.
   to be needed" (SPEC §9); "not derived, not known to be blocked" (SPEC §5).
 - **Why it matters.** `borrow mut` of a `buf (text 't)` inside the views' block is rejected
   (SPEC §17 Open).
-- **Issue:** #T17. Related: [#11].
+- **Issue:** [#183]. Related: [#11].
 
 ### T18. `Affine` at recursive types
 
@@ -997,3 +1021,15 @@ Results later work can rely on. Each is machine-checked unless marked.
 [#162]: https://github.com/empath-nirvana/borrow-core/issues/162
 [#168]: https://github.com/empath-nirvana/borrow-core/issues/168
 [#170]: https://github.com/empath-nirvana/borrow-core/issues/170
+[#172]: https://github.com/empath-nirvana/borrow-core/issues/172
+[#173]: https://github.com/empath-nirvana/borrow-core/issues/173
+[#174]: https://github.com/empath-nirvana/borrow-core/issues/174
+[#175]: https://github.com/empath-nirvana/borrow-core/issues/175
+[#176]: https://github.com/empath-nirvana/borrow-core/issues/176
+[#177]: https://github.com/empath-nirvana/borrow-core/issues/177
+[#178]: https://github.com/empath-nirvana/borrow-core/issues/178
+[#179]: https://github.com/empath-nirvana/borrow-core/issues/179
+[#180]: https://github.com/empath-nirvana/borrow-core/issues/180
+[#181]: https://github.com/empath-nirvana/borrow-core/issues/181
+[#182]: https://github.com/empath-nirvana/borrow-core/issues/182
+[#183]: https://github.com/empath-nirvana/borrow-core/issues/183
