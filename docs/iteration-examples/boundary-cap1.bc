@@ -1,0 +1,68 @@
+-- §4.2, §4.3, §9: a capacity-1 direction change, which fuses. A Mealy stage (one element in,
+-- at most one out) is written once, as a step into a local `B + 1`; it runs on both sides:
+--
+--   * push: lifted to an `rf -> rf` stage over a count, total (`distinct_push`);
+--   * pull: stepped inline by a generator (`through`), whose slot for the one output is the
+--     step's own `B + 1`. There is no buffer: the generator pulls its source, steps the stage and
+--     yields or skips (`distinct_pull`, div because its source is a generator).
+--
+-- Surface forms (none of `a..b`, `|>`, the push adapters or `through` exist; `through` is written
+-- here as a `gen fn`, which is what the pull side of a capacity-1 change elaborates to):
+--
+--   total fn distinct_push() -> i32 = (0..10 |> map(big) |> distinct |> count)
+--   fn distinct_pull() -> i32 = let mut s = 0; for y in twice(5) |> distinct { s = s + y }; s
+--
+-- `distinct` drops an element equal to the one before it; its state is the one before.
+-- Push: big(0..10) = 0 0 0 0 0 1 1 1 1 1, distinct 0 1, count 2.
+-- Pull: 0 0 1 1 2 2 3 3 4 4, distinct 0 1 2 3 4, sum 10.
+
+-- The stage, once.
+fn distinct(p: (i32 + 1) * i32) -> (i32 + 1) * (i32 + 1) =
+  let (prev, x) = p;
+  match prev {
+    inl q -> if q == x { ((inl x : i32 + 1), (inr () : i32 + 1)) } else { ((inl x : i32 + 1), (inl x : i32 + 1)) }
+  | inr u -> ((inl x : i32 + 1), (inl x : i32 + 1))
+  }
+
+-- Push side: a Mealy step as an `rf -> rf` stage; its state is paired with the downstream's.
+fn mealy_rf[T, S, A, B](step: !(T * A => T * (B + 1)), rf: !(S * B => S)) -> !((T * S) * A => T * S) =
+  !{ (ts, x) ->
+       let (t, s) = ts;
+       let (t2, o) = step(t, x);
+       match o { inl y -> (t2, rf(s, y)) | inr u -> (t2, s) } }
+
+fn map_rf[S, A, B](f: !(A => B), rf: !(S * B => S)) -> !(S * A => S) =
+  !{ (s, x) -> rf(s, f(x)) }
+
+fn push_count[S](n: i32, s: S, rf: !(S * i32 => S)) -> S =
+  count_fold[S] (!{ (i, s) -> rf(s, i) }, n, 0, s)
+
+fn big(x: i32) -> i32 = if x > 4 { 1 } else { 0 }
+fn count1(p: i32 * i32) -> i32 = let (s, y) = p; s + 1
+
+total fn distinct_push() -> i32 =
+  let st = map_rf(big, mealy_rf[i32 + 1, i32, i32, i32](distinct, count1));
+  let (_, n) = push_count(10, ((inr () : i32 + 1), 0), st);
+  n
+
+-- Pull side: the same step, stepped inline by a generator. The capacity-1 slot is `o`.
+gen fn through[A, B, T, K, R](it: U (gen A K R), t: T, step: !(T * A => T * (B + 1))) -> B, K =
+  let mut t = t;
+  let k = for x in it {
+    let (t2, o) = step(t, x);
+    t = t2;
+    match o { inl y -> yield y | inr u -> () }
+  };
+  k
+
+gen fn twice(n: i32) -> i32 =
+  let mut i = 0;
+  while i < n { yield i; yield i; i = i + 1 };
+  ()
+
+fn distinct_pull() -> i32 =
+  let mut s = 0;
+  for y in through(twice(5), (inr () : i32 + 1), distinct) { s = s + y };
+  s
+
+main -> i32 * i32 = (distinct_push(), distinct_pull())

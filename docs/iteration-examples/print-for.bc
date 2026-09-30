@@ -1,4 +1,4 @@
--- T10 (R8) with today's `for` over a generator: the body names `stdout` and the loop threads it
+-- T10 (R10) with today's `for` over a generator: the body names `stdout` and the loop threads it
 -- with no word from the program. The loop is div (its source is a generator).
 gen fn range(lo: i32, hi: i32) -> i32 =
   let mut i = lo;

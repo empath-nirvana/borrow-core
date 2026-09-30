@@ -1,0 +1,57 @@
+-- T7 (§9): `zip` of a push side and a pull side. Hand-lowered: the surface form is
+--
+--   total fn f() -> i32 =
+--     let mut acc = 0;
+--     for (x, y) in zip(0..6 |> map(ten), pows()) { acc = acc + x * y };
+--     acc
+--
+-- where `pows` is an `iter` (it never skips). None of `a..b`, `|>`, the push adapters or `zip` of
+-- a push and a pull side exist. The push side owns the loop (`count_fold`); `zip` is a push stage
+-- whose state holds the pull side, observed once per pushed element. An `iter` answers an element
+-- or its end at each observation, so each step is one observation and the whole is total. Over a
+-- `gen` (which may skip) a step would have to observe until an element came, a loop with no bound
+-- by its type: the same `zip` over a `gen` is div. The pull side's end stops `zip` (it carries a
+-- finished state to the end of the count, since there is no K0′), and what is left of it is
+-- closed after the loop.
+--
+-- x: 0 10 20 30 40 50; y: 1 2 4 8 16 32. Sum of products: 0 + 20 + 80 + 240 + 640 + 1600 = 2580.
+
+-- The pull side: 1, 2, 4, … without end, an `iter` built by `unfold` (SPEC §7).
+def pows_step : !U (i32 -o F (i32 * i32 + 1) & F 1) =
+  !thunkv fun (s : i32) -> < inl (s, s + s), () >
+
+fn pows() -> U (iter i32 1 1) =
+  let f = unbang (unfold[iter i32 1 1, i32] pows_step);
+  let s = 1;
+  thunkv nu_in < (nu_out (force f s)).1, (nu_out (force f s)).2 >
+
+fn map_rf[S, A, B](f: !(A => B), rf: !(S * B => S)) -> !(S * A => S) =
+  !{ (s, x) -> rf(s, f(x)) }
+
+-- The zip stage: its state is the pull side (or `inr ()` once it has ended) with the downstream
+-- state. One observation per pushed element.
+fn zip_iter_rf[S, A, B](rf: !(S * (A * B) => S)) -> !(((U (iter B 1 1) + 1) * S) * A => (U (iter B 1 1) + 1) * S) =
+  !{ (ps, x) ->
+       let (p, s) = ps;
+       match p {
+         inl it ->
+           o <- (nu_out (force it)).1;
+           match o {
+             inl (y, it2) -> ((inl it2 : U (iter B 1 1) + 1), rf(s, (x, y)))
+           | inr u -> ((inr u : U (iter B 1 1) + 1), s)
+           }
+       | inr u -> ((inr u : U (iter B 1 1) + 1), s)
+       } }
+
+fn push_count[S](n: i32, s: S, rf: !(S * i32 => S)) -> S =
+  count_fold[S] (!{ (i, s) -> rf(s, i) }, n, 0, s)
+
+fn ten(x: i32) -> i32 = x * 10
+fn dot(p: i32 * (i32 * i32)) -> i32 = let (s, (x, y)) = p; s + x * y
+
+total fn f() -> i32 =
+  let st = map_rf(ten, zip_iter_rf[i32, i32, i32](dot));
+  let (rest, acc) = push_count(6, ((inl pows() : U (iter i32 1 1) + 1), 0), st);
+  match rest { inl it -> u <- (nu_out (force it)).2; acc | inr u -> acc }
+
+main -> i32 = f()

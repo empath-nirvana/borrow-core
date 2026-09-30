@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Runs the examples of docs/iteration-design.md §11: each is checked, run by the source
+# Runs the examples of docs/iteration-design.md §13: each is checked, run by the source
 # interpreter and compiled to WebAssembly, and counted (allocations, dispatched calls, copies).
 # A program the checker rejects is reported as rejected (some are expected to be, as marked in
 # their first comment). Not part of the CI gate.

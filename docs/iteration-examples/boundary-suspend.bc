@@ -1,0 +1,23 @@
+-- T12 (§4.2, §9): the other way across an unbounded push → pull change: no buffer, the producer
+-- suspended as a generator. `boundary-collect.bc`'s producer is written as a pull pipeline of
+-- today's adapters (`flat_map` delegates with `yield from`, a state of the machine), and zipped.
+-- It allocates nothing and reads in order, but it is codata: the loop is div, where the
+-- collected form is total. Runs today, as written.
+--
+-- y: 0 | 0 1 | 0 1 2 | 0 1 2 3; x: 0 10 … 90. Sum: 10 × (2·1 + 4·1 + 5·2 + 7·1 + 8·2 + 9·3) = 660.
+include adapters
+
+gen fn range(lo: i32, hi: i32) -> i32 =
+  let mut i = lo;
+  while i < hi { yield i; i = i + 1 };
+  ()
+
+fn ten(x: i32) -> i32 = x * 10
+
+main -> i32 =
+  let mut acc = 0;
+  for p in zip(map(range(0, 20), ten), flat_map(range(0, 5), !{ i -> range(0, i) })) {
+    let (x, y) = p;
+    acc = acc + x * y
+  };
+  acc

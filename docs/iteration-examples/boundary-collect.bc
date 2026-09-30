@@ -1,0 +1,54 @@
+-- T12 (§4.2, §9): an unbounded push → pull change, made by an explicit collect. `flat_map` emits
+-- `i` elements for the input `i`, with no bound in its type, so a pull consumer of it needs a
+-- buffer as large as the whole output, or the producer suspended as a generator. Here the
+-- buffer: the push pipeline is collected into a list, one heap node per element (the
+-- allocation is written: the collecting step is `cons`), and the list is then pulled as data
+-- with a cursor (its rest), one `unroll` per element, by a `zip` that another push source
+-- drives. Everything is total. Hand-lowered: the surface form is
+--
+--   total fn f() -> i32 =
+--     let ys = 0..5 |> flat_map(i -> 0..i) |> collect;        -- the boundary, spelled
+--     let mut acc = 0;
+--     for (x, y) in zip(0..20 |> map(ten), ys) { acc = acc + x * y };
+--     acc
+--
+-- A list collected by `cons` holds its elements last first (as `lib/adapters.bc`'s `chunks` and
+-- `lines` do); an in-order growable array (a `Vec`) does not exist, so the pull here reads them
+-- last first: 3 2 1 0 2 1 0 1 0 0.
+-- x: 0 10 20 … 90 (the zip ends with the list). Sum: 10 × (0·3 + 1·2 + 2·1 + 3·0 + 4·2 + 5·1 +
+-- 6·0 + 7·1 + 8·0 + 9·0) = 240. Allocations: 10, one per collected element.
+
+type List = mu X. 1 + (i32 * X)
+
+fn map_rf[S, A, B](f: !(A => B), rf: !(S * B => S)) -> !(S * A => S) =
+  !{ (s, x) -> rf(s, f(x)) }
+
+fn flat_map_count_rf[S, A](f: !(A => i32), rf: !(S * i32 => S)) -> !(S * A => S) =
+  !{ (s, x) -> count_fold[S] (!{ (j, s) -> rf(s, j) }, f(x), 0, s) }
+
+fn push_count[S](n: i32, s: S, rf: !(S * i32 => S)) -> S =
+  count_fold[S] (!{ (i, s) -> rf(s, i) }, n, 0, s)
+
+-- The collecting step: the boundary's buffer, one node per element.
+fn cons(p: List * i32) -> List = let (l, x) = p; (roll inr (x, l) : List)
+
+-- The zip stage over a list pulled by its cursor: one `unroll` per pushed element.
+fn zip_list_rf[S, A](rf: !(S * (A * i32) => S)) -> !((List * S) * A => List * S) =
+  !{ (ls, x) ->
+       let (l, s) = ls;
+       match unroll l {
+         inl u -> ((roll inl () : List), s)
+       | inr (y, t) -> (t, rf(s, (x, y)))
+       } }
+
+fn id(x: i32) -> i32 = x
+fn ten(x: i32) -> i32 = x * 10
+fn dot(p: i32 * (i32 * i32)) -> i32 = let (s, (x, y)) = p; s + x * y
+
+total fn f() -> i32 =
+  let ys = push_count(5, (roll inl () : List), flat_map_count_rf(id, cons));
+  let st = map_rf(ten, zip_list_rf[i32, i32](dot));
+  let (_, acc) = push_count(20, (ys, 0), st);
+  acc
+
+main -> i32 = f()

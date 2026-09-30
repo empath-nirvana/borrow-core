@@ -1,0 +1,52 @@
+-- T11 (§4.3, §7.2): a push pipeline over data, with `flat_map`, total. Hand-lowered: the
+-- surface form is
+--
+--   total fn f() -> i32 =
+--     let mut acc = 0;
+--     for y in 0..5 |> flat_map(i -> 0..i) |> filter(pos) |> map(sq) |> take(3) { acc = acc + y };
+--     acc
+--
+-- with `a..b`, `|>`, the push adapters and `for` over a push pipeline, none of which exist.
+-- Each push adapter is an `rf -> rf` transducer: it takes the downstream step and answers the
+-- upstream one. The steps are `!` closures that capture only `!` values (the downstream step and
+-- the adapter's function argument), which today's closures allow (F5): what a stage keeps from
+-- element to element is in the state type, as `take`'s counter is. The source owns the loop:
+-- `count_fold` over the count, and `flat_map`'s inner source is a nested `count_fold` inside the
+-- step, so the whole pipeline is total. `take` cannot stop the count early (no K0′): it carries
+-- its counter to the end and ignores what follows.
+--
+-- Pushed: 1 → 0; 2 → 0 1; 3 → 0 1 2; 4 → 0 1 2 3. Positive: 1, 1 2, 1 2 3. Squares: 1 1 4 1 4 9;
+-- the first three sum to 6.
+
+fn map_rf[S, A, B](f: !(A => B), rf: !(S * B => S)) -> !(S * A => S) =
+  !{ (s, x) -> rf(s, f(x)) }
+
+fn filter_rf[S, A](p: !(A => bool), rf: !(S * A => S)) -> !(S * A => S) =
+  !{ (s, x) -> if p(x) { rf(s, x) } else { s } }
+
+-- The inner source of each element is a count, `0..f(x)`, pushed by its own counted loop.
+fn flat_map_count_rf[S, A](f: !(A => i32), rf: !(S * i32 => S)) -> !(S * A => S) =
+  !{ (s, x) -> count_fold[S] (!{ (j, s) -> rf(s, j) }, f(x), 0, s) }
+
+-- `take`'s counter is its state, a component of the pipeline's state.
+-- A `!` closure cannot capture the `i32` `n` (F5, #9), so `n` is not an argument here: the
+-- count still to take is the stage's state, and the pipeline's first state holds `n`.
+fn take_rf[S, A](rf: !(S * A => S)) -> !((i32 * S) * A => i32 * S) =
+  !{ (ks, x) -> let (k, s) = ks; if k > 0 { (k - 1, rf(s, x)) } else { (k, s) } }
+
+-- The source: a count, which owns the loop.
+fn push_count[S](n: i32, s: S, rf: !(S * i32 => S)) -> S =
+  count_fold[S] (!{ (i, s) -> rf(s, i) }, n, 0, s)
+
+fn id(x: i32) -> i32 = x
+fn pos(x: i32) -> bool = x > 0
+fn sq(x: i32) -> i32 = x * x
+fn add(p: i32 * i32) -> i32 = let (s, y) = p; s + y
+
+total fn f() -> i32 =
+  let body = take_rf[i32, i32](map_rf(sq, add));
+  let st = flat_map_count_rf(id, filter_rf(pos, body));
+  let (_, acc) = push_count(5, (3, 0), st);
+  acc
+
+main -> i32 = f()

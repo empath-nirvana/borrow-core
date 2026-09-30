@@ -1,5 +1,5 @@
 -- T8: an infinite generator, cut by `take` (`lib/adapters.bc`). The `for` is div: `take` over a
--- generator is codata, whatever its count. (In candidates A–C, `take` over a source that never
+-- generator is codata, whatever its count. (Under the design, `take` over a source that never
 -- skips, an `iter`, can be total by type; `fib` here is a `gen`, which may skip.)
 include adapters
 

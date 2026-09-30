@@ -1,6 +1,6 @@
--- T1 `io-wc`, with today's `for` (every `for` candidate: A, B, C). Lines, words and bytes of
--- the input. The loop threads four `let mut` variables; `count` is div because its source,
--- `bytes(&mut c)`, is codata.
+-- T1 `io-wc`, with today's `for`: a drain, unchanged under §8's answer (i). Lines, words and
+-- bytes of the input. The loop threads four `let mut` variables; `count` is div because its
+-- source, `bytes(&mut c)`, is codata.
 fn is_space(b: i32) -> bool = b == 32 || b == 10 || b == 9
 
 fn count(c: In) -> In * (i32 * (i32 * i32)) =

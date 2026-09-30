@@ -1,4 +1,4 @@
--- T10 (R8): a body that only performs I/O, over finite data, in candidate D's style today: the
+-- T10 (R10): a body that only performs I/O, over finite data, in candidate D's style today: the
 -- counted loop threads the capability `stdout` in its state by hand (`corpus/split-at-mut.bc`'s
 -- `emit`). Total. Output: `1 2 3 4 5 `.
 include slice
