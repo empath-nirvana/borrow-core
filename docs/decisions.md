@@ -657,3 +657,12 @@ Each entry: the decision, and why. Newest last.
     - **Errors are raised** in the library: decision 46's "errors are sums (provisional until the
       error effect)" is withdrawn for errors; a search that finds nothing still answers a sum.
     - **K4 is open**: a `raise` in a kernel fold's algebra is rejected where the algebra is passed.
+53. **Provisional (effects S1c, SPEC §18, #154; to be confirmed by the user).**
+    - **Acceptance of #18** is the per-class laws on the elaborated terms (`op_tail`, `op_answer`,
+      `handle_fold` for answering handlers; `abort_passes`, `return_resumes`, `loop_abort` for
+      `Fail`), the counts against the programs written by hand, and the reports; no erasure
+      theorem.
+    - **Report lines** (`bcc check`, #126): `effect`, `row`, `lowering`, `call`, each with its
+      position. A lowering shape is named by #18's table (call, branch; state machine and
+      dispatch later) with Koka's class in brackets (`fun`, `final ctl`). The spelling of the
+      lines is provisional; `corpus/reports/` pins them.

@@ -32,6 +32,7 @@ deep-list 100000 0 0
 div-hof 0 0 0
 effects-fold 7 0 0 # equal to effects-fold-sum: an abort is the loop's exit and a branch, as the sums by hand
 effects-fold-sum 7 0 0
+effects-generic 1 0 0
 effects-map 11 0 0 # equal to effects-map-hand: the handled program is the capability-passing one
 effects-map-fail 3 0 0
 effects-map-hand 11 0 0

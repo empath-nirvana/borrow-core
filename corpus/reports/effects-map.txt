@@ -1,0 +1,19 @@
+row 48:1: census: Map
+lowering 36:1: handler assoc (Map): call — each clause resumes once, in tail position (fun): a direct call on the lent state (withswap), with no allocation and no dispatch
+lowering 42:1: handler table (Map): call — each clause resumes once, in tail position (fun): a direct call on the lent state (withswap), with no allocation and no dispatch
+lowering 48:1: copy `census__assoc`: `census` for assoc
+lowering 48:1: copy `census__table`: `census` for table
+lowering 65:32: with assoc (Map): a borrow block of its state (in a cell scoped to the block); its operations are calls of the clauses on the capability
+lowering 66:32: with table (Map): a borrow block of its state (in a cell scoped to the block); its operations are calls of the clauses on the capability
+lowering 68:32: with assoc (Map): a borrow block of its state (lent from `c`); its operations are calls of the clauses on the capability
+call 52:19: lookup (Map) → `table__lookup`, on the state of `table`
+call 52:19: lookup (Map) → `assoc__lookup`, on the state of `assoc`
+call 54:5: insert (Map) → `assoc__insert`, on the state of `assoc`
+call 54:5: insert (Map) → `table__insert`, on the state of `table`
+call 56:18: lookup (Map) → `assoc__lookup`, on the state of `assoc`
+call 56:18: lookup (Map) → `table__lookup`, on the state of `table`
+call 57:18: lookup (Map) → `table__lookup`, on the state of `table`
+call 57:18: lookup (Map) → `assoc__lookup`, on the state of `assoc`
+call 65:68: census (Map) → `census__assoc`, passing the capabilities
+call 66:78: census (Map) → `census__table`, passing the capabilities
+call 68:53: census (Map) → `census__assoc`, passing the capabilities

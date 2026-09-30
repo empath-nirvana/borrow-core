@@ -1,0 +1,20 @@
+-- A generic function with a row (SPEC §18, decision 45): `swap_noted` is generic in `A` and
+-- performs `Log`, so it is copied once for the handler it runs under and then instantiated at each
+-- type it is called at (`swap_noted__count__g0`, `…__g1`), each a direct call of the clause.
+--
+-- Answer: `(i32[4321], i32[4])`: both pairs swapped (4 3 and 2 1), and four notes counted in the
+-- cell whose state the handler was lent.
+effect Log { fn note(x: i32) }
+
+handler count(n: i32) for Log { note(x) -> { n = n + 1; () } }
+
+fn swap_noted[A](a: A, b: A) -> A * A = note(1); note(2); (b, a)
+
+main -> i32 * i32 =
+  let c = alloc(0);
+  let r = with count(&mut c) {
+    let (a, b) = swap_noted(3, 4);
+    let (x, y) = swap_noted(u8[1], u8[2]);
+    a * 1000 + b * 100 + to_i32(x) * 10 + to_i32(y)
+  };
+  (r, free(c))

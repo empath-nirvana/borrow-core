@@ -1,0 +1,7 @@
+-- A place lent inside a handler of `Fail` (SPEC §18): the body of `try` is elaborated as a
+-- computation of its own, which does not hand back `stdout` when it lends it, so the lend is
+-- rejected; the program lends it outside the block instead.
+-- expect: 7:21: `stdout` is lent or used in this block and declared outside it: a handler of `Fail` does not hand back the places its body lends; lend it outside the block
+fn half(n: i32) -> i32 with Fail[i32] = if n < 0 { raise(n) } else { n }
+
+main -> i32 + i32 = try { putb(&mut stdout, 10); half(3) }
