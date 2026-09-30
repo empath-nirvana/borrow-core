@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 0.22 · 2026-09-29
+Version 0.23 · 2026-09-29
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -1366,8 +1366,9 @@ form, before the other sugar, with no kernel or checker change:
   hand it back first, `!(P' => ref A * Q)`, its body a borrow block of the owner. A call lends
   the place, `f(&t)`, as a capability is lent (§11); inside a borrow block, the block's borrow
   passed to `f` is the place lent instead.
-- **A call of a function with a lifetime parameter**, `f(W)` with `f : !(all 'a < b. P => Q)` and
-  no lend in `W`, is `(unbang f) ['l] W` with `'l` the lifetime `W`'s type gives `'a` in `P`.
+- **A call of a function with lifetime parameters**, `f(W)` with
+  `f : !(all 'a < b. all 'b < c. … P => Q)` and no lend in `W`, is `(unbang f) ['l] ['m] … W`
+  with each lifetime the one `W`'s type gives its parameter in `P` (§15, *Generic functions*).
 
 It applies when what the loop holds between steps outlives `'x`. Otherwise it reports where it
 does not: an iterator that holds the borrow; a stretch before the loop that hands on something
@@ -1466,7 +1467,7 @@ closed, so `gen A K K` is a source that can be stopped (below).
 
 ### Declarations and elaboration
 
-`gen fn f(x₁: A₁, …) -> A, B = S` (`-> A` finishes with `1`; `gen fn f<'a>(…)` takes a lifetime)
+`gen fn f(x₁: A₁, …) -> A, B = S` (`-> A` finishes with `1`; `gen fn f<'a, …>(…)` takes lifetimes)
 elaborates, in `Frontend/Sugar.lean`, to `f : !(A₁ * … => U (gen A B R))`. The body is one
 state machine (*One state machine per body*, below); on its spine:
 
@@ -1610,19 +1611,39 @@ data cannot leave that borrow's scope, by the same rule (`corpus/reject/gen-esca
 allowed is to own the cell in the generator's state and borrow it anew at each step
 (`corpus/gen-cell.bc`).
 
-### Generic generators
+### Generic functions
 
-`gen fn f[A, …](x₁: A₁, …) -> E, B = S` is generic in the types `A, …`. It is a template: it is
-not elaborated as written, and a call of it is a call of its instance at the types of the call,
-the template with the types substituted for its parameters (`Frontend/Elab/Subst.lean`), made
-and elaborated on first use and shared by later calls at the same types (whole-program
-monomorphization, as Rust's generics; the instance is named `f__gN`). The type arguments are
-written, `f[T, …](…)`, or read off the arguments' types by matching each parameter's type with
-the type parameters as placeholders; a closure whose parameter's type is left out is typed last,
-from its parameter's type with what the other arguments determined. An instance is ordinary
-code at its types, checked by the unchanged checker, so an adapter over a pure source, one over
-an input and one over a failing source are three instances of one definition. Instances are at
+`fn f[A, …]<'a, …>(x₁: A₁, …) -> B = S` and `gen fn f[A, …]<'a, …>(…) -> E, B = S` are generic
+in the types `A, …`. Each is a template: it is not elaborated as written, and a call of it is a
+call of its instance at the types of the call, the template with the types substituted for its
+parameters (`Frontend/Elab/Subst.lean`), made and elaborated on first use and shared by later
+calls at the same types (whole-program monomorphization, as Rust's generics; the instance is
+named `f__gN`). The body is elaborated at the instance's types, so what it may do with an `A`
+(copy it with `*g`, compare it with an operator) is decided there. An instance is ordinary code
+at its types, checked by the unchanged checker, so an adapter over a pure source, one over an
+input and one over a failing source are three instances of one definition. Instances are at
 types without lifetimes.
+
+Each lifetime parameter `'a` (bounded by `top`, or `'a < @`) is an `all 'a < @.` around the
+function type and a `Fun 'a < @.` around its body, outermost first (draft 0 §2.5), for a `fn`
+with or without type parameters.
+
+At a call `f(W)`, what the call leaves out is filled (typed elaboration §2.2–§2.3), and nothing
+else:
+
+- **Type arguments** are written, `f[T, …](…)`, or read off the arguments' types by first-order
+  matching of each parameter's type, with the type parameters as placeholders; what the
+  arguments leave open is matched against the type expected of the result. This covers a core
+  `def f[A, …]` too, whose call becomes `f[T, …]`. A closure whose parameter's type is left out,
+  and an injection, are typed last, from the parameter's type with what the other arguments
+  determined.
+- **Lifetime arguments** are read off the argument whose type mentions each parameter, one each
+  (`eq(a, b, e)` at `['x] ['y]`), or written after the type arguments, `f[T]['x](…)`. When two
+  arguments give one parameter different lifetimes, it is their meet, and an argument that is a
+  borrow is shortened to it with `:>`; there is no other solving.
+- **`unbang`** is inserted, before the lifetimes, as for any persistent function.
+
+A type or lifetime that is not determined is an error at the call that names it.
 
 ### The adapter library
 
@@ -1770,6 +1791,13 @@ library `lib/slice.bc`.
 ---
 
 ## Changelog
+
+- **0.23** (2026-09-29) — §15, *Generic functions*: `fn f[A, …]` with a surface body is a
+  template instantiated at each use, as generic generators are; `fn f<'a, 'b, …>` declares
+  lifetime parameters; at a call, type arguments are inferred by first-order matching against
+  the arguments and the expected result, each lifetime parameter from its own argument (the meet
+  when two disagree), and `unbang` is inserted. `lib/slice.bc` is written in the surface, and
+  its calls write neither types nor lifetimes. No kernel, rule or checker change.
 
 - **0.22** (2026-09-29) — Strings S3 (`docs/strings-slices-design.md`). §9: a borrowed family
   is split at a run-time index into two families at its lifetime (`slice_split_imm`,

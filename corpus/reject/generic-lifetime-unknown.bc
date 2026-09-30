@@ -1,0 +1,13 @@
+-- expect: 12:26: the lifetime `'a` of `empty` is not determined by its arguments here: write it, `empty[…]['x](…)`, the types and then the lifetimes
+-- A lifetime parameter that only the result mentions, called where no result type is expected:
+-- the error is at the call, naming the lifetime. `let e : array_imm 'x i32 = empty()` gives it.
+
+include slice
+
+fn one(i: i32) -> i32 = 1
+
+main -> i32 =
+  let a = array_new[i32] (2, one);
+  borrow imm a { 'x, v ->
+    let n = len(v) + len(empty[i32]());
+    n }

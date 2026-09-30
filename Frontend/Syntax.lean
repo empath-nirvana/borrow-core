@@ -384,6 +384,9 @@ inductive Mark where
   | div
   /-- `gen fn`: a generator yielding `A` (`lib/gen.bc`). -/
   | gen (A : VTy)
+  /-- `fn f[A, …](…)`: a function generic in types, marked `m` (`none`, `total` or `div`). It is a
+  template: each use is a call of its instance at that use's types, elaborated as a `fn`. -/
+  | template (m : Mark)
   deriving DecidableEq, Repr, Inhabited
 
 /-- Declarations (syntax-core §10). -/
@@ -559,6 +562,7 @@ end
 
 def Mark.strip : Mark → Mark
   | .gen A => .gen A.strip
+  | .template m => .template m.strip
   | m => m
 
 def Decl.strip : Decl → Decl

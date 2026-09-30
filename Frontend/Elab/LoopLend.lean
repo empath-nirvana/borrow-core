@@ -40,8 +40,9 @@ The same rewrite serves three more forms:
   `P`, takes the owner `ref A` there instead and hands it back first; its body is a borrow block
   of the owner (`lentDef`). A call lends the place, `f(&t)`; inside a borrow block, the block's
   borrow passed to it is the place lent instead (`Env.lendCall`).
-* A call `f(W)` of a function with a lifetime parameter, written without the lifetime, is applied
-  to the lifetime `W`'s type gives it (`instLife`), so a borrow is passed as `f(b, …)`.
+* A call `f(W)` of a function with lifetime parameters, written without them, is applied to the
+  lifetimes `W`'s type gives them (`genericCall` in `Frontend/Sugar.lean`), so a borrow is passed
+  as `f(b, …)`.
 -/
 
 namespace Frontend.Elab.LoopLend
@@ -365,40 +366,6 @@ def lendLet (sp : Span) (r : Ident) (A : Option VTy) (M N : Comp) : Except Error
   let res := s!"io_lr{lsp.start.line}_{lsp.start.col}"
   pure (some (.bind sp ⟨v, sp⟩ none (.ret sp B)
     (.letPair sp x ⟨res, sp⟩ (.var sp v) (.ret sp (.var sp res))) false))
-
-/-! ### Lifetimes at calls -/
-
-/-- The lifetime the variable `v` of a parameter type `P` stands for in an argument's type `T`. -/
-def matchLife (v : BoCa.Lifetime.LifeVar) :
-    BoCa.Fig16.LogRel.Core.VTy → BoCa.Fig16.LogRel.Core.VTy → Option BoCa.Lifetime.Life
-  | .imm (.var w) A, .imm a B | .mut (.var w) A, .mut a B | .box (.var w) A, .box a B =>
-    if w == v then some a else matchLife v A B
-  | .imm _ A, .imm _ B | .mut _ A, .mut _ B | .box _ A, .box _ B => matchLife v A B
-  | .tensor A B, .tensor C D | .sum A B, .sum C D =>
-    (matchLife v A C).orElse fun _ => matchLife v B D
-  | .ref A, .ref B | .bang A, .bang B | .fam A, .fam B => matchLife v A B
-  | _, _ => none
-
-/-- `f` is a function with a lifetime parameter. -/
-def hasLifeParam (c : TCx) (f : Val) : Bool :=
-  match c.tyV f with
-  | some (.bang (.thunk (.all _ _ (.ret (.thunk (.arr ..)))))) => true
-  | some (.thunk (.all _ _ (.ret (.thunk (.arr ..))))) => true
-  | _ => false
-
-/-- A call `f W` of a function with a lifetime parameter, `f : !(all 'a < b. P => Q)` (or
-`all 'a < b. P => Q`), written without its lifetime: `f` applied to the lifetime that `W`'s type
-gives `'a` in `P`, `(unbang f) ['l]`. `none` when `f` has no such parameter or `W` does not
-determine it. -/
-def instLife (c : TCx) (sp : Span) (f W : Val) : Except Error (Option Val) := do
-  let (bang, v, P) ← match c.tyV f with
-    | some (.bang (.thunk (.all v _ (.ret (.thunk (.arr P _)))))) => pure (true, v, P)
-    | some (.thunk (.all v _ (.ret (.thunk (.arr P _))))) => pure (false, v, P)
-    | _ => return none
-  let some T := c.tyV W | return none
-  let some a := matchLife v P T | return none
-  let l ← c.surfaceL sp a
-  pure (some (.inst sp (if bang then .unbang f.span f else f) l))
 
 /-- A call of a div function: its callee's result is a loop, with or without a lifetime binder. -/
 def divCallIn (c : TCx) : Val → Bool

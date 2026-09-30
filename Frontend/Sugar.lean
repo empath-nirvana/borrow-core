@@ -2611,10 +2611,10 @@ structure DivSt where
   genCopies : List (String × List CVTy) := []
   /-- The capabilities in scope of the declaration being elaborated (`main`'s), for typing. -/
   caps : List Decl := []
-  /-- The generic generators (`gen fn f[A, …]`), as written: each is instantiated at the types of
-  a call, on first use. -/
+  /-- The templates (`gen fn f[A, …]`, `fn f[A, …]`), as written: each is instantiated at the
+  types of a call, on first use. -/
   templates : List Decl := []
-  /-- The instances made, by generator and type arguments. -/
+  /-- The instances made, by template and type arguments. -/
   insts : List ((String × List VTy) × String) := []
 
 /-- Elaboration with the state of the declarations. -/
@@ -2827,45 +2827,85 @@ def refresh (c : TCx) : DM TCx := do
   let ds := (st.lib ++ st.out ++ st.caps).toArray
   pure { c with E := { c.E with scope := ⟨ds, ds.size⟩ } }
 
-/-! #### Generic generators
+/-! #### Generic calls
 
-A `gen fn f[A, …](…)` is a template: it is not elaborated as written, and a call of it is a call
-of its instance at the types of the call, the template with the types substituted for its
-parameters (`Frontend/Elab/Subst.lean`), made and elaborated on first use (whole-program
-monomorphization, as Rust's generics). The type arguments are written, `f[T, …](…)`, or read off
-the argument's type by matching the parameter's type, in which each type parameter is a
-placeholder. A closure argument whose parameter type is a hole is typed last, from the
-parameter's type with what the other arguments determined. -/
+A call's callee may be generic in three ways, and the elaborator fills what the call leaves out
+(typed elaboration §2.2–§2.3):
+
+* **A template**: a `gen fn f[A, …](…)` or a `fn f[A, …](…)`. It is not elaborated as written, and
+  a call of it is a call of its instance at the types of the call, the template with the types
+  substituted for its parameters (`Frontend/Elab/Subst.lean`), made and elaborated on first use
+  (whole-program monomorphization, as Rust's generics). Its body is elaborated at the instance's
+  types, so an operation that needs a persistent element (`*g`) is accepted at `u8` and rejected
+  at a type that is not.
+* **A `def` with type parameters** written in core, `def f[A, …] : …`: its call is `f[T, …]`,
+  checked at each use by the checker.
+* **Lifetime parameters**, `!(all 'a < @. all 'b < @'. P => Q)`: its call is
+  `(unbang f) ['x] ['y]`.
+
+The type arguments are written, `f[T, …](…)`, or read off the arguments' types by first-order
+matching against the parameter's type, in which each type parameter is a placeholder; what the
+arguments leave open is matched against the type expected of the call's result. Each lifetime
+parameter is read off the argument whose type mentions it; when two arguments give it different
+lifetimes, it is their meet, and an argument that is a borrow is shortened to it with `:>` (§2.3;
+there is no other solving). A closure argument whose parameter's type is a hole, and an
+injection, are typed last, from the parameter's type with what the other arguments determined. -/
 
 /-- The placeholders of type parameters in a pattern: type variables no type of a program has. -/
 def phBase : Nat := 1 <<< 24
 
+/-- What matching has found: the type parameters, by placeholder; the lifetime parameters of the
+call (`binders`), with the lifetime each is matched with; and those matched with two lifetimes. -/
+structure MatchSt where
+  ty : Array (Option CVTy)
+  binders : List BoCa.Lifetime.LifeVar := []
+  life : List (BoCa.Lifetime.LifeVar × BoCa.Lifetime.Life) := []
+  conflicts : List BoCa.Lifetime.LifeVar := []
+
+/-- `l` is `a`, or one of the lifetimes `a` is the meet of. -/
+def inMeet (l : BoCa.Lifetime.Life) : BoCa.Lifetime.Life → Bool
+  | .meet a b => l == .meet a b || inMeet l a || inMeet l b
+  | a => l == a
+
+/-- The lifetime `a'` of an argument where the pattern has `a`: a lifetime parameter of the call is
+matched with it, or with the meet of it and what it was matched with before. -/
+def matchLife (m : MatchSt) (a a' : BoCa.Lifetime.Life) : MatchSt :=
+  match a with
+  | .var v =>
+    if !m.binders.contains v then m else
+    match m.life.lookup v with
+    | none => { m with life := (v, a') :: m.life }
+    | some l => if inMeet a' l then m else
+      { m with life := (v, .meet l a') :: m.life.filter (·.1 != v), conflicts := v :: m.conflicts }
+  | _ => m
+
 mutual
-/-- `t` matches the pattern `p`, whose placeholders are bound in `σ`, under `d` binders of type
-variables (`μ`, `ν`), which shift a placeholder's index by `d`. -/
-def matchV (σ : Array (Option CVTy)) (d : Nat) : CVTy → CVTy → Option (Array (Option CVTy))
+/-- `t` matches the pattern `p`, whose placeholders are bound in `m`, under `d` binders of type
+variables (`μ`, `ν`), which shift a placeholder's index by `d`. A lifetime of the pattern that is
+not a lifetime parameter of the call matches any lifetime: the checker decides it. -/
+def matchV (m : MatchSt) (d : Nat) : CVTy → CVTy → Option MatchSt
   | .tvar i, t =>
-    if i ≥ phBase + d then match σ[i - phBase - d]? with
-      | some (some u) => if u = t then some σ else none
-      | some none => some (σ.set! (i - phBase - d) (some t))
+    if i ≥ phBase + d then match m.ty[i - phBase - d]? with
+      | some (some u) => if u = t then some m else none
+      | some none => some { m with ty := m.ty.set! (i - phBase - d) (some t) }
       | none => none
-    else if t = .tvar i then some σ else none
-  | .tensor A B, .tensor A' B' | .sum A B, .sum A' B' => (matchV σ d A A').bind (matchV · d B B')
-  | .thunk C, .thunk C' => matchC σ d C C'
-  | .mu A, .mu A' => matchV σ (d + 1) A A'
-  | .ref A, .ref A' | .bang A, .bang A' | .fam A, .fam A' => matchV σ d A A'
+    else if t = .tvar i then some m else none
+  | .tensor A B, .tensor A' B' | .sum A B, .sum A' B' => (matchV m d A A').bind (matchV · d B B')
+  | .thunk C, .thunk C' => matchC m d C C'
+  | .mu A, .mu A' => matchV m (d + 1) A A'
+  | .ref A, .ref A' | .bang A, .bang A' | .fam A, .fam A' => matchV m d A A'
   | .imm a A, .imm a' A' | .mut a A, .mut a' A' | .box a A, .box a' A' =>
-    if a = a' then matchV σ d A A' else none
-  | p, t => if p = t then some σ else none
+    matchV (matchLife m a a') d A A'
+  | p, t => if p = t then some m else none
 
 /-- `t` matches the computation-type pattern `p`. -/
-def matchC (σ : Array (Option CVTy)) (d : Nat) : CCTy → CCTy → Option (Array (Option CVTy))
-  | .ret A, .ret A' => matchV σ d A A'
-  | .arr A C, .arr A' C' => (matchV σ d A A').bind (matchC · d C C')
-  | .amp C D, .amp C' D' => (matchC σ d C C').bind (matchC · d D D')
-  | .nu C, .nu C' => matchC σ (d + 1) C C'
-  | .all v b C, .all v' b' C' => if v = v' ∧ b = b' then matchC σ d C C' else none
-  | p, t => if p = t then some σ else none
+def matchC (m : MatchSt) (d : Nat) : CCTy → CCTy → Option MatchSt
+  | .ret A, .ret A' => matchV m d A A'
+  | .arr A C, .arr A' C' => (matchV m d A A').bind (matchC · d C C')
+  | .amp C D, .amp C' D' => (matchC m d C C').bind (matchC · d D D')
+  | .nu C, .nu C' => matchC m (d + 1) C C'
+  | .all _ _ C, .all _ _ C' => matchC m d C C'
+  | p, t => if p = t then some m else none
 end
 
 mutual
@@ -2911,17 +2951,63 @@ def solvedC (σ : Array (Option CVTy)) (d : Nat) : CCTy → CCTy
   | .top => .top
 end
 
-/-- A parameter's type as a pattern: the type parameters `ps` as placeholders. -/
-def patOf (c : TCx) (ps : List String) (P : VTy) : Option CVTy :=
-  ({ c.E with tps := ps.zipIdx.map fun (x, k) => (x, .tvar (phBase + k)) }.elabV c.Δ P).toOption
+/-- A pattern with what matching found: its placeholders and its lifetime parameters solved. -/
+def MatchSt.solved (m : MatchSt) (P : CVTy) : CVTy := (solvedV m.ty 0 P).applyLSub m.life
 
-/-- The components of an argument against a parameter's: along the right-nested tuple of the
-call's arguments. -/
+/-- The pattern, solved as far as matching has gone, still has an unknown: a placeholder, or a
+lifetime parameter not yet matched. -/
+def MatchSt.isOpen (m : MatchSt) (P : CVTy) : Bool :=
+  let P' := m.solved P
+  hasPhV P' || m.binders.any fun v => BoCa.Fig16.LogRel.Core.Check.vfreeB v P'
+
+/-- The parameter type of a written function type, `!(all 'a < @. … P => Q)`. -/
+def paramTy : VTy → Option VTy
+  | .bang _ A | .all _ _ _ A => paramTy A
+  | .lolli _ P _ | .thunk _ (.arr _ P _) => some P
+  | _ => none
+
+/-- The components of an argument against a written parameter type, as `compsC`. -/
 def argComps : VTy → Val → List (VTy × Val)
   | .tensor _ P Q, .pair _ V W => (P, V) :: argComps Q W
   | P, W => [(P, W)]
 
-/-- The argument rebuilt from its components (as `argComps` split it). -/
+/-- A type as a pattern: the type parameters `ps` as placeholders. -/
+def patOf (c : TCx) (ps : List String) (P : VTy) : Option CVTy :=
+  ({ c.E with tps := ps.zipIdx.map fun (x, k) => (x, .tvar (phBase + k)) }.elabV c.Δ P).toOption
+
+/-- A function's signature: whether it is persistent (`!`), its lifetime parameters with their
+bounds, outermost first, its parameter type and its result. -/
+structure Sig where
+  bang : Bool
+  binders : List (BoCa.Lifetime.LifeVar × BoCa.Lifetime.Life)
+  P : CVTy
+  R : CCTy
+
+/-- The lifetime parameters, parameter type and result of `all 'a < @. … P => Q`. -/
+def sigGo : Nat → CVTy → Option (List (BoCa.Lifetime.LifeVar × BoCa.Lifetime.Life) × CVTy × CCTy)
+  | 0, _ => none
+  | k + 1, .thunk (.all v b (.ret X)) => do let (bs, P, R) ← sigGo k X; pure ((v, b) :: bs, P, R)
+  | _, .thunk (.arr P R) => some ([], P, R)
+  | _, _ => none
+
+/-- The signature of a function type, `!(all 'a < @. … P => Q)` or without `!`. -/
+def sigOf : CVTy → Option Sig
+  | .bang T => (sigGo 64 T).map fun (bs, P, R) => ⟨true, bs, P, R⟩
+  | T => (sigGo 64 T).map fun (bs, P, R) => ⟨false, bs, P, R⟩
+
+/-- The names of a written function type's lifetime parameters, outermost first. -/
+def lifeNames : VTy → List String
+  | .bang _ A => lifeNames A
+  | .all _ x _ A => x.name :: lifeNames A
+  | _ => []
+
+/-- The components of an argument against a parameter's type: along the right-nested tuple of
+the call's arguments. -/
+def compsC : CVTy → Val → List (CVTy × Val)
+  | .tensor P Q, .pair _ V W => (P, V) :: compsC Q W
+  | P, W => [(P, W)]
+
+/-- The argument rebuilt from its components (as `compsC` split it). -/
 def argOf : Val → List Val → Val
   | .pair sp _ W, V :: Vs => .pair sp V (argOf W Vs)
   | _, [V] => V
@@ -2932,12 +3018,30 @@ def holeClosure : Val → Bool
   | .thunkv _ (.lam _ _ A _) | .bangThunkv _ (.lam _ _ A _) => isHoleTy A
   | _ => false
 
-/-- The function a call applies when it may be a generic generator: its name, and its type
+/-- An argument whose type only the context gives: a closure with a hole, or an injection. -/
+def checkOnly : Val → Bool
+  | .inl .. | .inr .. | .roll .. => true
+  | V => holeClosure V
+
+/-- The function a call applies when it may be generic by name: its name, and its type
 arguments when written. -/
 def genericCallee : Val → Option (String × Option (List VTy))
   | .var _ h => some (h, none)
   | .defApp _ h args => some (h, some args)
   | _ => none
+
+/-- The written type of the `def` a callee names, for the names of its lifetime parameters. -/
+def calleeTy (c : TCx) : Val → Option VTy
+  | .var _ h | .defApp _ h _ => (c.E.scope.findDef h).map (·.ty)
+  | .unbang _ f | .inst _ f _ => calleeTy c f
+  | _ => none
+
+/-- A callee: a template, with its type arguments when written; a core `def` with type
+parameters; or any function, elaborated, with the written type of the `def` it names. -/
+inductive Head where
+  | tmpl (t : Decl) (targs : Option (List VTy))
+  | gdef (name : String) (ps : List String) (ty : VTy)
+  | plain (f : Val) (ty : Option VTy)
 
 mutual
 /-- A value with its surface forms elaborated; `exp` is the type expected of it, when known. -/
@@ -2960,10 +3064,10 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
       let W' ← surfV n c none W
       match k, W' with
       | "alloc", W' => do
-        let A ← need W.span "`alloc`'s argument" (c.tyV W')
+        let A ← need W.span "`alloc`'s argument" ((← refresh c).tyV W')
         pure (.app sp (.const ksp (.alloc (← c.surface ksp A))) W')
       | "free", W' => do
-        let A ← match c.tyV W' with
+        let A ← match (← refresh c).tyV W' with
           | some (.ref A) => pure A
           | _ => throw ⟨W.span, "`free` takes a cell, `ref A`"⟩
         pure (.app sp (.const ksp (.free (← c.surface ksp A))) W')
@@ -2976,7 +3080,7 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
       | "clone", .var _ x => do
         -- An explicit copy: the variable itself, at the span of `clone(x)`, recorded so that
         -- the check of implicit copies knows it is written (decision 39).
-        let A ← need W.span "`clone`'s argument" (c.tyV W')
+        let A ← need W.span "`clone`'s argument" ((← refresh c).tyV W')
         unless Class.of A == .persistent do
           throw ⟨ksp, s!"`clone` copies a persistent value, and `{ppT A}` is not persistent"⟩
         note sp cloneOrigin
@@ -2993,7 +3097,7 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
       -- A block whose body loops: the loop that runs it at its first observation.
       let B ← match exp.bind loopOf with
         | some (B, _) => pure B
-        | none => need sp "the block's result" ((resultOfC (c.tyC M')).map Frontend.Elab.direct)
+        | none => need sp "the block's result" ((resultOfC ((← refresh c).tyC M')).map Frontend.Elab.direct)
       let cx ← (loopCxOf sp B M' : Except Error LoopCx)
       let M'' ← (divBody cx c M' : SM Comp)
       let abort ← (template sp "a block that loops (`div_defer`)" s!"return {cx.rSrc}" : SM Comp)
@@ -3015,7 +3119,7 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
         unless Class.of A == .persistent do
           throw ⟨dsp, s!"`*` copies the content, and `{ppT A}` is not persistent"⟩
         (c.surface dsp A : Except Error VTy)
-      match c.tyV V', V' with
+      match (← refresh c).tyV V', V' with
       | some (.imm a A), _ =>
         pure (load (← (c.surfaceL dsp a : Except Error Frontend.Life)) (← content A) V')
       | some (.ref A), .var vsp x => do
@@ -3038,7 +3142,7 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
         | some A => pure A
         | none => throw ⟨psp, s!"the type of `{px.name}` is not determined here: ascribe it"⟩
       let S' ← surfC n (c.push b.name (some A)) none S
-      let X ← need tsp "`modify`'s body" (resultOfC ((c.push b.name (some A)).tyC S'))
+      let X ← need tsp "`modify`'s body" (resultOfC (((← refresh c).push b.name (some A)).tyC S'))
       let (S'', B) := match X with
         | .tensor A' B => if A' = A then (S', B) else (unitTail S', .unit)
         | _ => (unitTail S', .unit)
@@ -3069,7 +3173,7 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
               "the generator of a borrow block that yields" : SM (Val × CVTy))
             pure (Comp.ret rsp g)
           | S' => pure S'
-        let B ← need tsp "the block's result" (resultOfC ((c₁.push b.name (some Tb)).tyC S'))
+        let B ← need tsp "the block's result" (resultOfC (((← refresh c₁).push b.name (some Tb)).tyC S'))
         if BoCa.Fig16.LogRel.Core.Check.vfreeB v B then
           throw (Frontend.Elab.LoopLend.escapeError tsp x (Frontend.Check.ppV c₁.E.lenv 0 0 B))
         let As ← c.surface ksp A
@@ -3087,7 +3191,7 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
         let some v := c₁.E.lenv.lookup x | throw ⟨lsp, "internal error: a borrow block"⟩
         let Tb : CVTy := .fam (if k == .imm then .imm (.var v) A else .mut (.var v) A)
         let S' ← surfC n (c₁.push b.name (some Tb)) none S
-        let B ← need tsp "the block's result" (resultOfC ((c₁.push b.name (some Tb)).tyC S'))
+        let B ← need tsp "the block's result" (resultOfC (((← refresh c₁).push b.name (some Tb)).tyC S'))
         if BoCa.Fig16.LogRel.Core.Check.vfreeB v B then
           throw (Frontend.Elab.LoopLend.escapeError tsp x (Frontend.Check.ppV c₁.E.lenv 0 0 B))
         let As ← c.surface ksp A
@@ -3104,7 +3208,7 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
         let some v := c₁.E.lenv.lookup x | throw ⟨lsp, "internal error: a borrow block"⟩
         let Tb : CVTy := .tensor (.mut (.var v) A) (.mut (.var v) B)
         let S' ← surfC n (c₁.push b.name (some Tb)) none S
-        let T ← need tsp "the block's result" (resultOfC ((c₁.push b.name (some Tb)).tyC S'))
+        let T ← need tsp "the block's result" (resultOfC (((← refresh c₁).push b.name (some Tb)).tyC S'))
         if BoCa.Fig16.LogRel.Core.Check.vfreeB v T then
           throw (Frontend.Elab.LoopLend.escapeError tsp x (Frontend.Check.ppV c₁.E.lenv 0 0 T))
         let As ← c.surface ksp A
@@ -3117,7 +3221,7 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
           (.ret lsp (.thunkv lsp (.lam lsp b Tbs (boxTail x S')))))))
       | .modify, .mut a A => do
         let S' ← surfC n (c.push b.name (some A)) none S
-        let X ← need tsp "`modify`'s body" (resultOfC ((c.push b.name (some A)).tyC S'))
+        let X ← need tsp "`modify`'s body" (resultOfC (((← refresh c).push b.name (some A)).tyC S'))
         let (S'', B) := match X with
           | .tensor A' B => if A' = A then (S', B) else (unitTail S', .unit)
           | _ => (unitTail S', .unit)
@@ -3128,20 +3232,11 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
           "`borrow mut` take a cell `ref A` or an array (a pair of cells for a family), `modify` a `mut` " ++
           "borrow"⟩
     | .app sp f W => do
-      -- A call of a generic generator: a call of its instance at the argument's types.
-      if let some (h, targs) := genericCallee f then
-        if let some t := (← get).templates.find? (fun | .def_ _ m _ _ _ _ => m.name == h | _ => false) then
-          let (name, W') ← instOf n c sp t targs W
-          return .app sp (.unbang f.span (.var f.span name)) W'
+      -- A call of a generic function: its type and lifetime arguments filled.
+      if let some V' ← genericCall n c sp exp f W then return V'
       let f' ← surfV n c none f
       if W.lends then
         if let some V' ← lendCall c sp f' (← surfV n c none W) then return V'
-      -- A function with a lifetime parameter, called without it: at the argument's lifetime.
-      let f' ← if !Frontend.Elab.LoopLend.hasLifeParam c f' then pure f' else
-        match ← (Frontend.Elab.LoopLend.instLife c sp f' (← surfV n c none W) :
-            Except Error (Option Val)) with
-        | some g => pure g
-        | none => pure f'
       let tf := c.tyV f'
       let (f', pW) := match tf with
         | some (.bang (.thunk (.arr A _))) => (Val.unbang f.span f', some A)
@@ -3184,7 +3279,17 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
         | _ => none
       pure (.roll sp (← surfV n c e V))
     | .unroll sp V => do pure (.unroll sp (← surfV n c none V))
-    | .inst sp V l => do pure (.inst sp (← surfV n c none V) l)
+    | .inst sp V l => do
+      -- A persistent function with lifetime parameters is instantiated through `unbang`.
+      let V' ← surfV n c none V
+      match (← refresh c).tyV V' with
+      | some (.bang (.thunk (.all ..))) => pure (.inst sp (.unbang V.span V') l)
+      | _ => pure (.inst sp V' l)
+    | .defApp sp h args => do
+      -- A template at written type arguments: its instance.
+      match (← get).templates.find? (fun | .def_ _ m _ _ _ _ => m.name == h | _ => false) with
+      | some t => pure (.var sp (← makeInst n c sp t (args.map c.elabV).toArray))
+      | none => pure V
     | .shorten sp m σ l V => do pure (.shorten sp m σ l (← surfV n c none V))
     | .thunk sp M => do
       pure (.thunk sp (← surfC n c.pushDead (exp.bind fun | .thunk C => some C | _ => none) M))
@@ -3246,7 +3351,7 @@ def surfC : Nat → TCx → Option CCTy → Comp → DM Comp
     | .for_ sp x V M N => do
       let V' ← surfV n c none V
       let c ← refresh c
-      let el := (c.tyV V').bind elemOf
+      let el := ((← refresh c).tyV V').bind elemOf
       let M' ← surfC n (c.push x.name el) none M
       -- `let r = for …; N`: `r` has the type the iterator finishes with.
       match N.forRes? with
@@ -3277,55 +3382,139 @@ def surfDecl : Nat → Decl → DM Decl
     pure (.main sp C M')
   | _, d => pure d
 
-/-- The instance of the generic generator `t` at the types of a call's argument `W`, or at the
-type arguments `targs` written: its name, made and elaborated on first use; and the argument, its
-components elaborated.  `[spec §15]` -/
-def instOf : Nat → TCx → Span → Decl → Option (List VTy) → Val → DM (String × Val)
-  | 0, _, sp, _, _, _ => throw ⟨sp, "instantiation of generic generators does not terminate"⟩
-  | n + 1, c, sp, t, targs, W => do
-    let .def_ tsp tn ps A V mk := t | throw ⟨sp, "internal error: a generic generator"⟩
+/-- The instance of the template `t` at the type arguments `σ` (one per type parameter, each
+known): its name, made and elaborated on first use.  `[spec §15]` -/
+def makeInst : Nat → TCx → Span → Decl → Array (Option CVTy) → DM String
+  | 0, _, sp, _, _ => throw ⟨sp, "instantiation of generic functions does not terminate"⟩
+  | n + 1, c, sp, t, σ => do
+    let .def_ tsp tn ps A V mk := t | throw ⟨sp, "internal error: a generic function"⟩
     let names := ps.map (·.name)
-    let P ← match A with
-      | .bang _ (.lolli _ P _) | .bang _ (.all _ _ _ (.lolli _ P _)) => pure P
-      | _ => throw ⟨tsp, "internal error: a generic generator's type"⟩
-    let comps := argComps P W
-    -- The type arguments: written, or matched against the argument's components' types, the
-    -- closures whose parameter's type is a hole last.
-    let mut σ : Array (Option CVTy) := Array.replicate names.length none
-    if let some as := targs then
-      if as.length != names.length then
-        throw ⟨sp, s!"`{tn.name}` takes {names.length} type arguments"⟩
+    let mut σs : TySubst := []
+    for (x, t) in names.zip σ.toList do
+      let some t := t
+        | throw ⟨sp, s!"the type `{x}` of `{tn.name}` is not determined by its arguments: " ++
+            s!"write them, `{tn.name}[…](…)`"⟩
+      let ts ← c.surface sp t
+      if ts.pp.contains '\'' then
+        throw ⟨sp, s!"`{tn.name}` is instantiated at `{ts.pp}`, which has a lifetime: a generic " ++
+          "function is instantiated at types without one"⟩
+      σs := σs ++ [(x, ts)]
+    let key := (tn.name, σs.map (·.2.strip))
+    let st ← get
+    if let some name := st.insts.lookup key then return name
+    let name := s!"{tn.name}__g{st.insts.length}"
+    let mk' := match mk with
+      | .gen E => Mark.gen (E.subst σs)
+      | .template m => m
+      | mk => mk
+    let inst := Decl.def_ tsp ⟨name, tn.span⟩ [] (A.subst σs) (V.subst σs) mk'
+    let inst := Elab.fillDecl (st.lib ++ st.out) st.caps inst
+    let st' ← (elabDecl n { st with insts := (key, name) :: st.insts } inst : SM DivSt)
+    set st'
+    return name
+
+/-- A call `f W` of a generic callee (a template, a core `def` with type parameters, or a
+function with lifetime parameters), with the type and lifetime arguments it leaves out filled and
+`unbang` inserted; `none` when the callee is none of these. `exp` is the type expected of the
+call's result. -/
+def genericCall : Nat → TCx → Span → Option CVTy → Val → Val → DM (Option Val)
+  | 0, _, _, _, _, _ => pure none
+  | n + 1, c, sp, exp, f, W => do
+    let st ← get
+    let isLocal (h : String) : Bool := c.locals.any (·.1 == h)
+    let head ← match genericCallee f with
+      | some (h, targs) =>
+        match (if isLocal h then none else
+            st.templates.find? (fun | .def_ _ m _ _ _ _ => m.name == h | _ => false)) with
+        | some t => pure (Head.tmpl t targs)
+        | none => match targs, (if isLocal h then none else c.E.scope.findDef h) with
+          | none, some d =>
+            if d.params.isEmpty then pure (Head.plain f (some d.ty))
+            else pure (Head.gdef h (d.params.map (·.name)) d.ty)
+          | _, _ => do
+            let f' ← surfV n c none f
+            pure (Head.plain f' (calleeTy c f'))
+      | none => do
+        let f' ← surfV n c none f
+        pure (Head.plain f' (calleeTy c f'))
+    let (fname, ps, pat?, tyW) : String × List String × Option CVTy × Option VTy := match head with
+      | .tmpl (.def_ _ tn tps A _ _) _ =>
+        (tn.name, tps.map (·.name), patOf c (tps.map (·.name)) A, some A)
+      | .tmpl _ _ => ("?", [], none, none)
+      | .gdef h tps A => (h, tps, patOf c tps A, some A)
+      | .plain f' ty =>
+        ((genericCallee f).map (·.1) |>.getD "the function", [], c.tyV f', ty)
+    let generic := !ps.isEmpty
+    let some pat := pat?
+      | if generic then throw ⟨f.span, s!"the type of `{fname}` does not elaborate here"⟩
+        else return none
+    let some sig := sigOf pat
+      | if generic then throw ⟨f.span, s!"`{fname}` is not a function"⟩ else return none
+    if !generic && sig.binders.isEmpty then return none
+    -- The names of the lifetime parameters, for errors.
+    let lnames := (tyW.map lifeNames).getD []
+    let lnames := lnames.drop (lnames.length - sig.binders.length)
+    let lname (v : BoCa.Lifetime.LifeVar) : String :=
+      match (sig.binders.map (·.1)).idxOf? v with
+      | some k => let x := lnames.getD k "?"; if x.startsWith "'" then x else "'" ++ x
+      | none => "'?"
+    -- How the lifetimes are written at a call: after the type arguments, which are then written.
+    let writeLives (h : String) : String :=
+      let ls := String.intercalate "" (sig.binders.map fun _ => "['x]")
+      if generic then s!"{h}[…]{ls}(…)`, the types and then the lifetimes"
+      else s!"{h}{ls}(…)`, one lifetime per parameter"
+    let comps := compsC sig.P W
+    let mut m : MatchSt := { ty := Array.replicate ps.length none, binders := sig.binders.map (·.1) }
+    if let .tmpl _ (some as) := head then
+      if as.length != ps.length then
+        throw ⟨sp, s!"`{fname}` takes {ps.length} type arguments"⟩
       for (a, k) in as.zipIdx do
-        σ := σ.set! k (c.elabV a)
+        m := { m with ty := m.ty.set! k (c.elabV a) }
     let mut args : Array (Option Val) := Array.replicate comps.length none
+    let mut tys : Array (Option CVTy) := Array.replicate comps.length none
+    let mut c := c
     for pass in [0, 1] do
       for ((Pi, Wi), k) in comps.zipIdx do
         if args[k]!.isSome then continue
-        let some pat := patOf c names Pi
-          | throw ⟨Wi.span, s!"the parameter's type `{Pi.pp}` of `{tn.name}` does not elaborate"⟩
-        if pass == 0 && holeClosure Wi && hasPhV pat then continue
-        -- The pattern with what is solved so far.
-        let pat' := solvedV σ 0 pat
+        if pass == 0 && checkOnly Wi && m.isOpen Pi then continue
+        let pat' := m.solved Pi
+        let opn := m.isOpen Pi
+        -- A lent place: its content matches the borrow's, and `lendCall` lends it.
+        if let .lend _ x _ := Wi then
+          match pat', c.tyV (.var x.span x.name) with
+          | .imm _ A, some (.ref A') | .mut _ A, some (.ref A') =>
+            if let some m' := matchV m 0 A A' then m := m'
+          | .imm _ A, some A' | .mut _ A, some A' =>
+            if let some m' := matchV m 0 A A' then m := m'
+          | _, _ => pure ()
+          args := args.set! k (some Wi)
+          continue
+        -- A closure whose parameter's type is a hole: the parameter's, as solved.
         let Wi ← match Wi, pat' with
           | .bangThunkv wsp (.lam lsp x Ax M), .bang (.thunk (.arr X _))
           | .thunkv wsp (.lam lsp x Ax M), .thunk (.arr X _) =>
             if isHoleTy Ax then
-              if hasPhV X then throw ⟨lsp, s!"the type of the closure's parameter `{x.name}` is " ++
-                s!"not determined by the other arguments of `{tn.name}`: write it"⟩
+              if hasPhV X || m.binders.any (BoCa.Fig16.LogRel.Core.Check.vfreeB · X) then
+                throw ⟨lsp, s!"the type of the closure's parameter `{x.name}` is not determined " ++
+                  s!"by the other arguments of `{fname}`: write it"⟩
               let Xs ← c.surface lsp X
               pure (match Wi with
                 | .bangThunkv .. => Val.bangThunkv wsp (.lam lsp x Xs M)
                 | _ => Val.thunkv wsp (.lam lsp x Xs M))
             else pure Wi
           | Wi, _ => pure Wi
-        let Wi' ← surfV n c (if hasPhV pat' then none else some pat') Wi
-        let c ← refresh c
+        let Wi' ← surfV n c (if opn then none else some pat') Wi
+        c ← refresh c
         let some T := c.tyV Wi'
-          | throw ⟨Wi.span, s!"the type of this argument of `{tn.name}` is not determined here"⟩
+          | if !opn then
+              args := args.set! k (some Wi')
+              continue
+            else if pass == 0 then continue
+            else throw ⟨Wi.span, s!"the type of this argument of `{fname}` is not determined here"⟩
         -- A callback that loops or yields where a function is expected: its result is what its
         -- loop or generator finishes with (it is specialized at its own type, `specV`), unless
         -- the parameter's result is itself a loop or a generator.
-        let T := if (matchV σ 0 pat T).isSome then T else match pat, T with
+        let T := if (matchV m 0 Pi T).isSome then T else match Pi, T with
           | .thunk (.arr _ (.ret Q)), .thunk (.arr A' (.ret L))
           | .bang (.thunk (.arr _ (.ret Q))), .bang (.thunk (.arr A' (.ret L))) =>
             if !hasPhV Q then T else
@@ -3335,34 +3524,71 @@ def instOf : Nat → TCx → Span → Decl → Option (List VTy) → Val → DM 
               | _ => .thunk (.arr A' (.ret B'))
             | none => T
           | _, _ => T
-        match matchV σ 0 pat T with
-        | some σ' => σ := σ'
-        | none => throw ⟨Wi.span, s!"this argument of `{tn.name}` has type `{ppT T}`, which is " ++
-            s!"not `{Pi.pp}`"⟩
+        match matchV m 0 Pi T with
+        | some m' => m := m'
+        | none =>
+          if generic then
+            let written : String := match (tyW.bind paramTy).map (argComps · W) with
+              | some cs => ((cs[k]?).map fun (q : VTy × Val) => q.1.pp).getD (ppT (m.solved Pi))
+              | none => ppT (m.solved Pi)
+            throw ⟨Wi.span, s!"this argument of `{fname}` has type `{ppT T}`, which is not " ++
+              s!"`{written}`"⟩
         args := args.set! k (some Wi')
-    let mut σs : TySubst := []
-    for (x, t) in names.zip σ.toList do
-      let some t := t
-        | throw ⟨sp, s!"the type `{x}` of `{tn.name}` is not determined by its arguments: " ++
-            s!"write them, `{tn.name}[…](…)`"⟩
-      let ts ← c.surface sp t
-      if ts.pp.contains '\'' then
-        throw ⟨sp, s!"`{tn.name}` is instantiated at `{ts.pp}`, which has a lifetime: a generic " ++
-          "generator is instantiated at types without one"⟩
-      σs := σs ++ [(x, ts)]
-    let W' := argOf W (args.toList.filterMap id)
-    let key := (tn.name, σs.map (·.2.strip))
-    let st ← get
-    if let some name := st.insts.lookup key then return (name, W')
-    let name := s!"{tn.name}__g{st.insts.length}"
-    let mk' := match mk with
-      | .gen E => Mark.gen (E.subst σs)
-      | mk => mk
-    let inst := Decl.def_ tsp ⟨name, tn.span⟩ [] (A.subst σs) (V.subst σs) mk'
-    let inst := Elab.fillDecl (st.lib ++ st.out) st.caps inst
-    let st' ← (elabDecl n { st with insts := (key, name) :: st.insts } inst : SM DivSt)
-    set st'
-    return (name, W')
+        tys := tys.set! k (some T)
+    -- What the arguments leave open, from the type expected of the result.
+    if let (some e, .ret Q) := (exp, sig.R) then
+      if m.isOpen Q then
+        if let some m' := matchV m 0 Q e then m := m'
+    let lends := W.lends
+    for (v, _) in sig.binders do
+      if (m.life.lookup v).isNone && !(lends && sig.binders.length == 1) then
+        throw ⟨sp, s!"the lifetime `{lname v}` of `{fname}` is not determined by its arguments " ++
+          s!"here: write it, `{writeLives fname}"⟩
+    -- The callee at its type arguments.
+    let base ← match head with
+      | .tmpl t _ => do pure (Val.var f.span (← makeInst n c sp t m.ty))
+      | .gdef h tps _ => do
+        let mut ts : List VTy := []
+        for (x, t) in tps.zip m.ty.toList do
+          let some t := t
+            | throw ⟨sp, s!"the type `{x}` of `{h}` is not determined by its arguments: " ++
+                s!"write them, `{h}[…](…)`"⟩
+          ts := ts ++ [← c.surface sp t]
+        pure (Val.defApp f.span h ts)
+      | .plain f' _ => pure f'
+    c ← refresh c
+    let argsL := args.toList.filterMap id
+    if lends then
+      if sig.binders.length != 1 then
+        throw ⟨sp, s!"`{fname}` has several lifetime parameters: a lend `&x` in its call is " ++
+          "not provided; borrow in a block and pass the borrow"⟩
+      match ← lendCall c sp base (argOf W argsL) with
+      | some V => return some V
+      | none => throw ⟨sp, s!"the lend in this call of `{fname}` is not at a borrow parameter"⟩
+    let mut g := if sig.bang then Val.unbang f.span base else base
+    for (v, _) in sig.binders do
+      let some l := m.life.lookup v | throw ⟨sp, "internal error: a lifetime parameter"⟩
+      g := .inst sp g (← c.surfaceL sp l)
+    -- An argument that gave a lifetime parameter a longer lifetime than the meet is shortened.
+    let mut args' : List Val := []
+    for (((Pi, _), Wi'), k) in (comps.zip argsL).zipIdx do
+      if m.conflicts.isEmpty then args' := args' ++ [Wi']; continue
+      let Pf := m.solved Pi
+      match tys[k]!, Pf with
+      | some (.imm a _), .imm a' _ | some (.mut a _), .mut a' _ =>
+        if a == a' then args' := args' ++ [Wi']
+        else args' := args' ++ [.sub Wi'.span Wi' (← c.surfaceL sp a')]
+      | some T, _ =>
+        match m.conflicts.find? (BoCa.Fig16.LogRel.Core.Check.vfreeB · Pi) with
+        | some v =>
+          if T != Pf then
+            throw ⟨Wi'.span, s!"the lifetime `{lname v}` of `{fname}` is given different lifetimes " ++
+              "by its arguments, and this one cannot be shortened to their meet: write it, " ++
+              s!"`{writeLives fname}"⟩
+          args' := args' ++ [Wi']
+        | none => args' := args' ++ [Wi']
+      | none, _ => args' := args' ++ [Wi']
+    return some (.app sp g (argOf W args'))
 
 /-- Elaborate one declaration: first the copies its calls need (each elaborated the same way),
 then its own divergence, with its calls renamed to the copies.  `[spec §14]` -/
@@ -3370,8 +3596,10 @@ def elabDecl : Nat → DivSt → Decl → SM DivSt
   | 0, _, d => throw ⟨(match d with | .def_ sp .. | .main sp .. => sp | _ => Span.none),
       "specialization at callback types does not terminate"⟩
   | fuel + 1, st, d => do
-    -- A generic generator is a template, instantiated where it is called.
+    -- A generic generator or function is a template, instantiated where it is called.
     if let .def_ _ _ (_ :: _) _ _ (.gen _) := d then
+      return { st with templates := st.templates ++ [d] }
+    if let .def_ _ _ (_ :: _) _ _ (.template _) := d then
       return { st with templates := st.templates ++ [d] }
     -- A div function taking a borrow takes the owner, lent at each step (`LoopLend.lentDef`).
     let d := (← (Frontend.Elab.LoopLend.lentDef (TCx.ofScope (st.lib ++ st.out) false) d :

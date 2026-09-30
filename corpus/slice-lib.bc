@@ -1,0 +1,61 @@
+-- The functions of `lib/slice.bc` that the other corpus programs do not call, each called as a
+-- `fn` with neither its element type nor its lifetimes written (typed elaboration §7, generic
+-- functions): the element type and each lifetime are read off the arguments, or off the type
+-- expected of the result (`empty`).
+--
+-- The array `a` is [1, 2, 3, 4, 5] and `b` three zeros. `copy_from` copies the first three of `a`
+-- into `b` (two lifetimes, one per view); `fill`, `replace`, `set`, `peek`, `split_last_mut` and
+-- `get_mut` then write `b` through a `mut` view: 7 everywhere, 9 in slot 1, 4 in slot 2, and the
+-- 7 read by `peek` added to the last slot, then slot 0 doubled.
+--
+-- Answer: (i32[123], (i32[14], (i32[11], (i32[1501], i32[1])))): `b` after the copy reads 123;
+-- the first element of `a` and the length of the rest, as `split_first` gives them, 14; the last
+-- element of `a` by `split_last` less the length of the rest, then the first by `get`, 11; `b`
+-- after the writes, [14, 9, 11], read as 14·100 + 9·10 + 11 = 1501; the length of the empty view
+-- and the first element `iter_imm` lends, 0 and 1. A write at the wrong slot or a copy of the
+-- wrong length would change a digit.
+
+include slice
+
+fn tab(i: i32) -> i32 = i + 1
+
+fn zero(i: i32) -> i32 = 0
+
+-- Three slots of a view, read as a number.
+fn digits<'x>(v: array_imm 'x i32) -> i32 =
+  let (v, u) = array_copy['x, i32] v;
+  let (v, w) = array_copy['x, i32] v;
+  at(v, 0, 0) * 100 + at(u, 1, 0) * 10 + at(w, 2, 0)
+
+main -> i32 * (i32 * (i32 * (i32 * i32))) =
+  let a = array_new[i32] (5, tab);
+  let b = array_new[i32] (3, zero);
+  borrow mut b { 'y, w ->
+    let s = array_new[i32] (5, tab);
+    borrow imm s { 'x, v -> discard_mut(copy_from(w, v)) };
+    () };
+  let copied = borrow imm b { 'x, v -> digits(v) };
+  let first = borrow imm a { 'x, v ->
+    match split_first(v) { inl (e, t) -> read(e) * 10 + len(t) | inr u -> 0 } };
+  let last = borrow imm a { 'x, v ->
+    let (v, u) = array_copy['x, i32] v;
+    let l = match split_last(v) { inl (e, t) -> read(e) - len(t) | inr u -> 0 };
+    match get(u, 0) { inl g -> l * 10 + *g | inr u -> l } };
+  borrow mut b { 'y, w ->
+    let w = fill(w, 7);
+    let (w, _) = replace(w, 1, 9);
+    let w = set(w, 2, 4);
+    let (w, x) = peek(w, 0, 0);
+    let w : array_mut 'y i32 = match split_last_mut(w) {
+      inl (m, rest) -> modify m { c -> c + x }; rest
+    | inr u -> empty_mut()
+    };
+    match get_mut(w, 0) { inl m -> modify m { c -> c * 2 } | inr u -> u }
+  };
+  let written = borrow imm b { 'x, v -> digits(v) };
+  let none = borrow imm a { 'x, v -> let e : array_imm 'x i32 = empty(); len(e) };
+  let next = borrow imm a { 'x, v ->
+    let it = iter_imm(v);
+    o <- (nu_out (force it)).1;
+    match o { inl (g, it) -> u <- (nu_out (force it)).2; read(g) | inr u -> 0 } };
+  (copied, (first, (last, (written, none * 10 + next))))

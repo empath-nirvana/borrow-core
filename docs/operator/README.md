@@ -458,7 +458,7 @@ behind it.
 | a capability lent per step inside a loop | the sequential operator's `&cfg` per reconcile | **(a)** | `corpus/axes/scope-loop-lend.bc` |
 | an iterator holding a borrow across a scope | body and parser views | **(a)** in core | `corpus/axes/scope-boxed-iter.bc` |
 | `data` with named fields, constructors, patterns, `box` | every type | **(b)** stage 8 | also needed: type parameters (`Option<T>`, `Api<K>`), values without `box` (strings design Q5), lifetime parameters (`DeploymentApply<'a>`) |
-| `fn f<'a>` | `desired<'a>`, `parse_config<'a>` | **(b)** #54 | `pending/fn-lifetime.bc` |
+| `fn f<'a>` | `desired<'a>`, `parse_config<'a>` | **(a)** surface | `corpus/fn-lifetime.bc` |
 | finite `for`, total | `for (k, v) in p.iter()` in `merge_patch` | **(b)** stage 9 / strings S4 | `pending/for-finite.bc` |
 | `u8`, slices, `buf`, `string`, `str 'a`, `lit`, `write_all` | text, JSON, HTTP, logs | **(b)** strings S1–S5 | `docs/strings-slices-design.md` |
 | `i64`, `f64`, duration literals | `Duration`, histogram values | **(b)** i64 exists (#80); **(c)** `f64` and literal suffixes | small |

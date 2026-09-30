@@ -538,7 +538,7 @@ Forces:
 | literals as unowned data, and their views | P4, P6, P9, P13 | library, backend |
 | bulk read and write of a view | P1, P9, P10 | externs (not kernel) |
 | `data` values without `box`, and with a lifetime parameter | P2, P8 | surface (stage 8) |
-| `fn f<'a>` | nearly all | surface (`pending/fn-lifetime.bc`) |
+| `fn f<'a>` | nearly all | surface: done (`corpus/fn-lifetime.bc`, SPEC §15 *Generic functions*) |
 | a borrow block that threads capabilities | P1, P5, P6 | surface |
 | a sum in place of `Cow` | P13 | nothing new |
 | the NUL-terminated C boundary | P15 | extern marshalling |
@@ -853,7 +853,7 @@ lemma, as the §9 constants are (`Core/Arrays.lean`). K1 also adds a `Width` cas
 - **`*e` of a copyable payload.** Today `*e` reads only a persistent payload. It extends to a
   payload `A` with `Imm̲ 'b A = A`, such as an `imm` view, which `withload` copies out at its own
   lifetime (P6, P7).
-- **`fn f<'a>(…)` and `data T<'a>`** (`pending/fn-lifetime.bc`, stage 8).
+- **`data T<'a>`** (stage 8); `fn f<'a>(…)` is done (`corpus/fn-lifetime.bc`).
 
 ## 5. The memory model this forces
 

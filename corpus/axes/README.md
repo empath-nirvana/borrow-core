@@ -75,7 +75,6 @@ the options and their trade-offs and settles none of them.
 | `raise-in-fold.bc` | data × effects (failure) × scope | `raise`/`try`; the folds are not polymorphic in their algebra's effect; unwinding of the abandoned rest | surface, kernel; open design questions | pending (#18) |
 | `print-borrowed-list.bc` | data × effects × coeffects × scope | `fold_imm`'s result must outlive every lifetime, so it cannot be a writer; no borrowed list iterator | kernel | pending (#57) |
 | `closure-captures-int.bc` | coeffects × data | a `!` closure may capture only `!` values, not an `i32` | kernel | pending (#9, SPEC §10 Open) |
-| `fn-lifetime.bc` | coeffects × scope | `fn f<'a>(…)` is not provided; functions over borrows are core `def`s | surface | pending (#54, decision 37) |
 | `for-finite.bc` | codata × effects (div) | `for` over a count, total | surface | pending (#54, stage 9) |
 | `lend-nested.bc` | coeffects × scope | a lend inside an operator's operand | surface | pending (#54, decision 38) |
 | `lend-two.bc` | effects × coeffects × scope | two lends in one call | surface | pending (#54, SPEC §14 Open) |
@@ -93,21 +92,19 @@ SPEC §14's specialization; `generator-handler.bc` and `async-borrow.bc` follow 
 
 Judged by how natural the program is, and how often a user would write it:
 
-1. **`fn-lifetime.bc`**: every function over a borrow is a core `def` with a `Fun` body today,
-   and called inside a borrow block with its lifetime written. Every borrowed program pays.
-2. **`data-box-tree.bc`** (stage 8): `data` and `box` replace hand-written `mu`, `shape` and
+1. **`data-box-tree.bc`** (stage 8): `data` and `box` replace hand-written `mu`, `shape` and
    `roll` in every program with a list or a tree.
-3. **`print-borrowed-list.bc` and `iter-mut.bc`** (#57): iterating a borrowed collection, reading
+2. **`print-borrowed-list.bc` and `iter-mut.bc`** (#57): iterating a borrowed collection, reading
    or updating each element, is the most common loop in systems code. Arrays can be read today
    (`codata-coeffects.bc`); lists and `mut` elements cannot.
-4. **`for-finite.bc`** (stage 9): a `for` over a count in a total function.
-5. **`closure-captures-int.bc`** (#9): a fold or callback that uses a parameter, as
+3. **`for-finite.bc`** (stage 9): a `for` over a count in a total function.
+4. **`closure-captures-int.bc`** (#9): a fold or callback that uses a parameter, as
    `map(|x| x + n)` does. The model already validates it (`vCE_empty_of_persistent`).
-6. **`lend-nested.bc`, `lend-two.bc`, `closure-lend.bc`**: small surface gaps, each met in the
+5. **`lend-nested.bc`, `lend-two.bc`, `closure-lend.bc`**: small surface gaps, each met in the
    first programs written here, and each reported with a message that does not mention the lend.
-7. **`raise-in-fold.bc`, `generator-handler.bc`** (#18): errors and generators are the first
+6. **`raise-in-fold.bc`, `generator-handler.bc`** (#18): errors and generators are the first
    control effects users will reach for.
-8. **`map-div-fold.bc`, `callbacks-in-data.bc`**: div callbacks in folds and in data.
+7. **`map-div-fold.bc`, `callbacks-in-data.bc`**: div callbacks in folds and in data.
 
 Less natural, each needed mostly through generic code or in niche programs: `dig-bang.bc`,
 `box-dup.bc` (the model validates both; each is one lemma), `noalloc.bc`, `two-writers.bc`

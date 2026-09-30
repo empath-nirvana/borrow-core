@@ -179,8 +179,8 @@ and neither does `is_space` returning `true`.
 
 A metavariable `?n` stands for a value type the expected type did not provide, such as
 `let x = inl ();` with no annotation. Unification is first-order over the `CVTy` mirror. There
-is no generalization: definitions are monomorphic (decision 8), and generic `def`s keep their
-explicit type parameters. Metavariables are local to one declaration and are zonked when it
+is no generalization: definitions are monomorphic (decision 8); a generic `fn` is a template
+instantiated per use, and its type arguments at a call are matched (§7, *Generic functions*). Metavariables are local to one declaration and are zonked when it
 ends. An unsolved metavariable is an error that names the hole and its span ("the type of this
 `inl` is not determined; ascribe it").
 
@@ -904,6 +904,24 @@ the elaboration rejects, is elaborated by `genBody` and `loopBody` as before. Th
 `corpus/sugar/gen-from.bc` and `for-value.bc` are written by hand as machines; those of the other
 pairs whose elaboration changed are the elaboration as `bcc desugar` prints it. The divergence library is emitted only when the
 elaborated program names it.
+
+**Generic functions and inferred arguments, as built** (#130; SPEC §15, *Generic functions*;
+decision 45 of `docs/decisions.md`). `fn f[A, …]<'a, …>(…)` is parsed as a template
+(`Mark.template`) and, like a generic generator, instantiated per use at the call's types
+(`makeInst`), its body elaborated at those types; `fn f<'a, 'b>` declares lifetime parameters
+(`all 'a < top. all 'b < top.`, a `Fun` for each around the body). Every call whose callee is
+generic goes through one function, `genericCall` in `Sugar.lean`: the callee's type is a pattern
+whose type parameters are placeholders and whose lifetime parameters are unknowns; each argument
+is elaborated once, against the pattern solved so far, and its type matched against it
+(`matchV`, first-order, §2.2), closures with a hole and injections last; what is still open is
+matched against the expected result; each lifetime parameter is the lifetime its argument gives
+it, or the meet of two, the argument shortened with `:>` (§2.3). The call is then
+`(unbang f__gN) ['x] ['y] W`, `f[T] …` for a core `def f[A]`. This replaces `instLife`, which
+found one lifetime. An open type or lifetime is an error at the call that names it
+(`corpus/reject/generic-type-unknown.bc`, `generic-lifetime-unknown.bc`). `lib/slice.bc` is
+written in these forms, its loop steps closures; the corpus calls it as `reverse(v)`,
+`eq(a, b, eq_u8)`, with the same outputs and counts, and `corpus/slice-lib.bc` calls the rest.
+Pairs: `corpus/sugar/generic-fn.bc`, `generic-infer.bc`, `generic-lifetimes.bc`.
 
 Stages 1–4 retire the #54 shortcuts and change no surface syntax, except that `&c` stays until
 stage 6. Stages 5–9 are the rest of step 2. After stage 9, step 3 of #54 (rewriting 6–10 corpus

@@ -1,0 +1,23 @@
+-- `generic-infer.bc` written by hand in core: the call `(unbang last[u8]) ['x] (v, u8[0])`.
+def tab : !(i32 => u8) =
+  !thunkv fun (p : i32) ->
+    i <- return p;
+    return ((unbang host[wrap8]) ((unbang host[add32]) (i, i32[65])))
+
+def last[A] : !(all 'a < top. array_imm 'a A * A => A) =
+  !thunkv Fun 'a < top. return (thunkv fun (p : array_imm 'a A * A) ->
+    let (v, d) = p;
+    let (v, w) = (unbang array_copy['a, A]) v;
+    case (unbang array_get['a, A]) (v, (unbang host[sub32]) ((unbang array_len['a, A]) w, i32[1])) {
+      inl g -> return (withload['a, 'y, A, A] g (thunkv Fun 'y < dom. return (thunkv fun (e : view 'y A) ->
+                 return (boxed['y] e))))
+    | inr u -> return d
+    })
+
+main : F i32 =
+  a <- return ((unbang array_new[u8]) (i32[3], tab));
+  r <- return (slice_borrow_imm['x, top, u8, u8] a (thunkv Fun 'x < dom. return (thunkv fun (v : array_imm 'x u8) ->
+         c <- return ((unbang last[u8]) ['x] (v, u8[0]));
+         return (boxed['x] c))));
+  let (a, b) = r;
+  return ((unbang host[extend8_u]) b)

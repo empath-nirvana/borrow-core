@@ -1,0 +1,23 @@
+-- `generic-lifetimes.bc` written by hand in core: each lifetime parameter an `all` around the
+-- function and a `Fun` around its body, the call `(unbang lens) ['x] ['y] (v, w)`.
+def one : !(i32 => i32) =
+  !thunkv fun (p : i32) ->
+    i <- return p;
+    return i32[1]
+
+def lens : !(all 'a < top. all 'b < top. array_imm 'a i32 * array_imm 'b i32 => i32) =
+  !thunkv Fun 'a < top. return (thunkv Fun 'b < top. return (thunkv fun (p : array_imm 'a i32 * array_imm 'b i32) ->
+    let (v, w) = p;
+    return ((unbang host[add32]) ((unbang array_len['a, i32]) v, (unbang array_len['b, i32]) w))))
+
+main : F i32 =
+  a <- return ((unbang array_new[i32]) (i32[3], one));
+  b <- return ((unbang array_new[i32]) (i32[4], one));
+  r <- return (slice_borrow_imm['x, top, i32, i32] a (thunkv Fun 'x < dom. return (thunkv fun (v : array_imm 'x i32) ->
+         s <- return (slice_borrow_imm['y, top, i32, i32] b (thunkv Fun 'y < dom. return (thunkv fun (w : array_imm 'y i32) ->
+                t <- return ((unbang lens) ['x] ['y] (v, w));
+                return (boxed['y] t))));
+         let (b, m) = s;
+         return (boxed['x] m))));
+  let (a, n) = r;
+  return n
