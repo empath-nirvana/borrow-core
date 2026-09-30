@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 0.26 · 2026-09-30
+Version 0.27 · 2026-09-30
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -1954,8 +1954,8 @@ Every function is safe on any bytes: indexing is checked, and a byte that does n
 sequence decodes to U+FFFD. `lib/text.bc` (`include text`, which includes `buf` and `slice`)
 has appends, UTF-8 validation and decoding, character iteration (`chars`, codata over the rest
 of the view), lines as sub-views (`next_line`, `lines`, `fold_lines`: no allocation per line),
-`split_once`, `trim`, `find_str`, `eq_lit`, checked parsing (`parse_i32`, its error a sum,
-provisional until #18), and buffers of views (`view_at`, `sort_views`). Every loop is a
+`split_once`, `trim`, `find_str`, `eq_lit`, checked parsing (`parse_i32`, which raises its error,
+§18), and buffers of views (`view_at`, `sort_views`). Every loop is a
 `count_fold` bounded by a length, so the library is total. `lib/textio.bc` (`include textio`)
 writes and reads text over the standard streams: `write_str`, `write_string` and `write_lit` in
 one `write_all`, and `read_all`, which reads the input in chunks into the string's spare
@@ -2054,7 +2054,8 @@ end-to-end I/O theorems keep their statements.
 
 ### Motivation
 
-Effects stage S1 of `docs/effects-scoping.md` (#18, #152–#154). A handler's meaning is its
+Effects stage S1 of `docs/effects-scoping.md` (#18, #152–#154): answering effects and `Fail`.
+A handler's meaning is its
 elaboration into core terms the checker already derives (decision 48): a capability is a value
 lent by `withbor`, an answering operation is a call on it, abort is a sum exit, and finalisation
 is §12's destructors. Effect safety is then `fundamentalC` and `adequacyC` on the elaborated
@@ -2069,13 +2070,22 @@ emits (*Laws*, below), and the cost of each is measured against the program writ
     handler h(s: S) for E { op(x₁, …) -> e; op(x₁, …) -> { M }; … }
     with h(e) { M }          with h(&mut c) { M }
 
+    raise(e)      try { M }      catch { M } { e -> N }      map_err { M } { e -> N }
+    fn f(…) -> T with E₁, Fail[X] = …                          (a written row)
+
 An **effect** declares its operations' types. A **handler** of `E` has a state `s : S` and one
 clause per operation; in a clause, `s` is a `let mut` variable, which the clause may assign, and
 the clause's value is the operation's answer. `with h(e) { M }` runs `M` with `h` handling `E`,
 its state first `e`; `with h(&mut c) { M }` lends the state from the cell `c : ref S`, which holds
 the final state after the block. An operation is called like a function, `op(v)`: there is no
-`perform` token (decision 49). An operation's name is its own: no function may share it. All
-spellings are provisional (decision 51).
+`perform` token (decision 49). An operation's name is its own: no function may share it.
+
+**`Fail`** is the error effect, built in: `raise(e)` aborts with the error `e`. `try { M }`
+answers `inl` the value of `M` or `inr` the error it raised; `catch { M } { e -> N }` answers
+`N` on an error; `map_err { M } { e -> N }` raises `N`'s value. A **written row** after a
+function's result type is a promise that its inferred row is within it, checked; `Fail[X]` gives
+the error type `X`, which a function that raises directly must have written or get from a
+function it calls. All spellings are provisional (decisions 51, 52).
 
 ### Elaboration
 
@@ -2109,19 +2119,44 @@ a block may hand back a capability of an enclosing `with`. A block that contains
 `with h(&mut c)` for a cell `c` it does not bind hands `c` back beside its result, as it hands
 back the places it lends.
 
-**Not provided**, each rejected with a message that says so: an operation inside a closure or
-block that is not run in place, and a function with a row passed as a value (effectful
-callbacks, #161); a lend `&mut x` in the arguments of an effectful call; an operation inside a
-clause; a function with a row whose result is a computation (a loop or a generator); a second
-instance of an effect in scope (named instances, #155); type parameters on an effect; a written
-row.
+**`Fail` is a control effect** (`docs/effects-scoping.md` §7.5): no capability, no state, and
+no copy per handler. It changes the type of what performs it: a function whose row has
+`Fail[X]` answers `T + X` (beside its capabilities, when it has some), each normal answer
+`inl v` and each `raise(e)` `inr e`. A call of it is followed by a branch,
+
+    let t = f(v); case t { inl x -> N | inr e -> abort(e) }
+
+which goes on with `N` or aborts in turn; `abort(e)` is `inr e` as the answer of the computation
+it is in, and, inside a loop's body, `break (inr e)`: the loop's exit (`count_try`'s, §16), after
+which the loop is such a branch (its value `inl` on a normal end or `break`). A `raise` in an
+arm of `if`/`match` that is not the whole arm's value leaves by that arm, and the other arm goes
+on, so no sum is made there. A raising call in tail position whose capabilities are the ones
+handed back answers as it is: `try { f(v) }` is `f(v)`'s sum. `try { M }` is `M` elaborated with
+its terminals `inl v`; `catch` and `map_err` are a branch on it.
+
+**Destructors on the abort path.** An abort path is an ordinary path of the elaborated program,
+so §12's destructors run on it: what is owed there is dropped, most recently bound first. A
+value with no destructor (§12, class 3) cannot be abandoned: the checker's error at such a value
+names the abort that leaves it. Handing it to the handler with the error, as `close` hands back a
+residual, is not provided.
+
+**Not provided**, each rejected with a message that says so: an operation or a `raise` inside a
+closure or block that is not run in place, and a function with a row passed as a value
+(effectful callbacks, #161; for a fold's algebra that raises, K4 below); a lend `&mut x` in the
+arguments of an effectful call; an operation or a `raise` inside a clause; a function with a row
+whose result is a computation (a loop or a generator); a second instance of an effect in scope
+(named instances, #155); type parameters on an effect other than `Fail`; a `let mut` declared
+outside a `try`, `catch` or `map_err` and assigned in it; a handler body (`N` of `catch`) that
+performs an effect.
 
 ### Reports
 
 `bcc check` prints, after the declarations' types: each effect and its operations; each handler
 and the shape its clauses are lowered to (a direct call on the lent state, with no allocation and
-no dispatch); each function's row; each `with`, and where its state lives; each copy made; and,
-per call site, which clause or copy an operation or effectful call calls (decision 49).
+no dispatch); each function's row, with `Fail`'s error type; each `with`, and where its state
+lives; each copy made; each `try`, `catch` and `map_err` (a branch on the sum); each loop left by
+an abort; and, per call site, which clause or copy an operation or effectful call calls and
+whether a branch follows it (decision 49).
 
 ### Laws
 
@@ -2133,6 +2168,10 @@ per call site, which clause or copy an operation or effectful call calls (decisi
   memory to the clause run on `(s, v)`; and when that run answers `(s', r)`, the call reaches
   `K[(ℓ, r)]` with `s'` in the cell. This is `handle E[op v] = handle E[clause v]`: the
   continuation is resumed once, in place, with the answer; nothing is captured or allocated.
+- **Abort** (`abort_passes`, `return_resumes`). An abort `inr e` passes every branch around it,
+  `case [·] { inl x -> K | inr e -> inr e }`, running none of their continuations, and reaches
+  the handler as `inr e`: `try { E[raise e] } ↦* inr e`. A value `inl v` runs the innermost
+  continuation `K[v/x]`. In a loop's body the abort is `count_try`'s exit (`countTry_exit`, §16).
 
 ### Programs
 
@@ -2142,12 +2181,28 @@ under each, from one source, and once with its state lent from a cell. `corpus/e
 is the same program written by hand in capability-passing style; both run to the same value, and
 their counts are equal (`corpus/counts.expected`: 11 allocations, no dispatched call, no copy).
 `corpus/sugar/effects-counter.bc` pairs a handled counter with its core form written by hand.
+
+`corpus/effects-fold.bc` is target 2 of #18: a fold over fallible elements, written with `raise`
+and `map_err`, no `try_fold` and no sum threaded by hand, run under `try` and under `catch` from
+one source; a buffer built halfway is dropped on the abort path. `corpus/effects-fold-sum.bc` is
+the same program with the sums written by hand: the same value, and the same counts (7
+allocations, no dispatched call, no copy). `corpus/effects-map-fail.bc` combines `Map` and `Fail`:
+the capability is handed back on the abort path, and the handler's state is used after it.
+
+**The library** raises instead of answering an error sum: `add_checked` and `mul_checked`
+(`Fail[1]`), `parse_i32` (`Fail[ParseError]`, over a counted `for`, the checked operations'
+overflow raised as its own by `map_err`), `str_from_utf8` (`Fail[i32]`, the index of the first bad
+byte) and `from_utf8` (`Fail[Utf8Error]`, the buffer back with the index). `corpus/parse-int.bc`,
+`ascii-upper.bc`, `sort-lines.bc`, `key-value.bc`, `trim-replace.bc` and `utf8-count.bc` handle
+them with `try`; their counts are unchanged. A search that finds nothing still answers a sum.
+
 Rejects: `corpus/reject/effect-*.bc`.
 
 ### Baseline
 
 No change to `CDerives`, the relation, the machine or the checker. `fundamentalC`, `adequacyC`,
 `fundamentalD` and `adequacyD` keep their statements and cover every elaborated program.
+`Fail` adds no constant: its sums, branches and loop exits are §3's and §16's.
 
 ### Open
 
@@ -2155,6 +2210,13 @@ No change to `CDerives`, the relation, the machine or the checker. `fundamentalC
   written rows and bundles (#156).
 - Effectful callbacks, stored or passed (S4, #161).
 - An operation that answers a borrow into the handler's state (S4, #160); `lookup` answers a copy.
+- **K4: an early exit from a kernel fold.** A `raise` in the algebra of `fold_own`/`fold_imm` needs
+  the fold to stop, a constant with a machine step (`docs/effects-scoping.md` §1.2 item 4). It is
+  open: such an algebra is rejected where it is passed to the fold
+  (`corpus/pending/raise-in-fold.bc`).
+- A `try`, `catch` or `map_err` that hands back the `let mut` variables its body assigns.
+- A `raise` in the body of a loop whose value is what its source finishes with (a drain with no
+  `else`).
 - A capability threaded through a `for` over `&a` of an owned array: the lend around the loop
   takes `top` as its bound, so the loop's state cannot hold a borrow (`corpus/effects-map.bc`
   passes a view instead).
@@ -2200,6 +2262,14 @@ and `Frontend/Elab/Effects.lean`, its laws in `Core/Handlers.lean`, with no chan
 ---
 
 ## Changelog
+
+- **0.27** (2026-09-30) — Effects S1b (§18, #153): `Fail`, the error effect: `raise`, `try`,
+  `catch`, `map_err`, and written rows `with …, Fail[X]`. A function that raises answers a sum,
+  a call of it is a branch, and an abort in a loop's body is the loop's exit (`count_try`). The
+  abort law (`abort_passes`, `return_resumes`). Destructors run on abort paths; a value with no
+  destructor cannot be abandoned. The library raises (`parse_i32`, `add_checked`, `mul_checked`,
+  `str_from_utf8`, `from_utf8`); a fallible fold has the counts of its sum version. K4 recorded as
+  open. No kernel, rule or checker change.
 
 - **0.26** (2026-09-30) — Effects S1a (§18, #152): `effect` and `handler` declarations and
   `with h(e) { M }`, defined by elaboration: a clause is `!` code over a `mut` borrow of the

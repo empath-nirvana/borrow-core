@@ -155,3 +155,5 @@ import Frontend.Check.Externs
 #print axioms BoCa.Fig16.LogRel.Core.Handlers.op_tail
 #print axioms BoCa.Fig16.LogRel.Core.Handlers.clauseRun_answers
 #print axioms BoCa.Fig16.LogRel.Core.Handlers.op_answer
+#print axioms BoCa.Fig16.LogRel.Core.Handlers.abort_passes
+#print axioms BoCa.Fig16.LogRel.Core.Handlers.return_resumes

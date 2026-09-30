@@ -1,0 +1,14 @@
+-- An abort while a value with no destructor is live (SPEC §18): the thunk `k` can be disposed of
+-- only by running it (SPEC §12, class 3), and the `raise` leaves its scope on the path where `n`
+-- is negative, so that path cannot drop it. Handing such a value to the handler with the error
+-- is not provided.
+-- expect: 10:3: in this `case`, `k` is consumed in the `inl` arm but not in the `inr` arm, and its type `U (F (1 + 1))` has no destructor; an abort at 10:14 leaves it (a `raise` cannot abandon a value with no destructor, SPEC §18)
+type B = 1 + 1
+
+fn check(n: i32) -> i32 with Fail[i32] =
+  let k = (thunk (return (inl () : B)));
+  if n < 0 { raise(n) } else { () };
+  b <- force k;
+  return n
+
+main -> i32 + i32 = try { check(3) }

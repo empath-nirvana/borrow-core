@@ -18,6 +18,15 @@ rest of the handled body, the continuation) and at every memory whose cell `ℓ`
 the clause answers the new state `s'` and the result `r`, the call reaches `K[(ℓ, r)]` with `s'`
 in the cell (`op_answer`). The continuation is resumed once, in place, with the answer: nothing
 is captured or allocated, and `K` is never inspected.
+
+**Abort (`abort_passes`, `return_resumes`).** A call that can raise is followed by the branch
+`case t { inl x -> K | inr e -> inr e }`: the rest of the body `K` on a value, the error handed on.
+An abort `inr e` passes every such branch around it and reaches the handler unchanged, running
+none of their continuations (`abort_passes`); this is `handle E[raise e] = handler(e)` for the
+`try` handler, whose answer is the sum. A value `inl v` runs the innermost continuation with it
+(`return_resumes`), which is `handle (return v) = return v`. Inside a loop's body the abort is the
+loop's own exit: a step that answers `inr e` ends `count_try` with `inr e` at once
+(`countTry_exit`, SPEC §16), after which the loop is such a branch.
 -/
 
 noncomputable section
@@ -121,6 +130,37 @@ theorem op_answer (K : Kont) {μ μ₁ : Heap} {ℓ : Loc} {g s v s' r w : Val} 
     (hw : μ₁ ℓ = some w) :
     Steps (ℍ := ℍ) μ (K.plug (opCall ℓ g v)) (μ₁.upd ℓ s') (K.plug (.val (.pair (.loc ℓ) r))) :=
   (op_tail K hs g v hg hv).trans ((clauseRun_answers hrun hw hr).plug K)
+
+/-! ### The abort class -/
+
+/-- The error arm of the branch after a call that can raise: `inr e`, handed on. -/
+def abortArm : Expr := .inj₂ (.var 0)
+
+/-- The branches around an abort point, outermost first: each `case [·] { inl x -> K | inr e ->
+inr e }`, the continuation `K` still to run above it. -/
+def branches : List Expr → Kont
+  | [] => .hole
+  | K :: Ks => .case (branches Ks) K abortArm
+
+/-- **The abort law.** An abort `inr e` passes every branch around it, running none of their
+continuations, and reaches the handler as `inr e`: `try { E[raise e] } ↦* inr e`. -/
+theorem abort_passes (Ks : List Expr) (μ : Heap) (e : Val) :
+    Steps (ℍ := ℍ) μ ((branches Ks).plug (.val (.inj₂ e))) μ (.val (.inj₂ e)) := by
+  induction Ks with
+  | nil => exact .refl _ _
+  | cons K Ks ih =>
+    have h₁ : Steps (ℍ := ℍ) μ ((branches (K :: Ks)).plug (.val (.inj₂ e))) μ
+        (.case (.val (.inj₂ e)) K abortArm) :=
+      ih.plug (Kont.case .hole K abortArm)
+    have h₂ : Steps (ℍ := ℍ) μ (.case (.val (.inj₂ e)) K abortArm) μ (.val (.inj₂ e)) :=
+      steps_head_in .hole (Head.case₂ μ e K abortArm)
+    exact h₁.trans h₂
+
+/-- **The return law.** A value `inl v` runs the innermost continuation with it: the branch
+`case (inl v) { inl x -> K | inr e -> inr e }` reduces to `K[v/x]`. -/
+theorem return_resumes (K : Expr) (μ : Heap) (v : Val) :
+    Steps (ℍ := ℍ) μ (.case (.val (.inj₁ v)) K abortArm) μ (K.subst 0 v) :=
+  steps_head_in .hole (Head.case₁ μ v K abortArm)
 
 end BoCa.Fig16.LogRel.Core.Handlers
 

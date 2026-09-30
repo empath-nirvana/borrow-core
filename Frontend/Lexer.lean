@@ -54,7 +54,7 @@ def keywords : List String :=
     "with",
     -- terms
     "return", "force", "fun", "let", "linear", "case", "match", "borrow", "modify", "inl", "inr",
-    "if", "else", "gen", "yield", "while", "break", "continue", "clone",
+    "if", "else", "gen", "yield", "while", "break", "continue", "clone", "try", "catch", "map_err",
     "thunk", "thunkv", "unbang",
     "boxed", "unbox", "roll", "unroll", "run", "absurd",
     "nu_in", "nu_out", "delay_in", "delay_out", "stream_in", "stream_out",

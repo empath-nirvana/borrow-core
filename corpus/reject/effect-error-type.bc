@@ -1,0 +1,6 @@
+-- A function that raises with its error type not determined (SPEC §18): `check` raises directly
+-- and calls nothing that raises, so its row's `Fail[E]` has no `E`; `with Fail[i32]` would give it.
+-- expect: 4:4: `check` raises, and the type of its error is not determined: write it, `with Fail[E]`
+fn check(n: i32) -> i32 = if n < 0 { raise(n) } else { n }
+
+main -> i32 + i32 = try { check(3) }

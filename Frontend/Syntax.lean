@@ -313,6 +313,15 @@ inductive VSugar where
   whose parameter is the capability `S` performs its operations on. Elaborated away by
   `Frontend.Elab.Effects` before the rest of the sugar. -/
   | handle (h : String) (x : String)
+  /-- `try { S }` (SPEC §18): the `Fail` handler that answers `inl` the body's value or `inr` the
+  error it raised, applied to the thunk it marks. -/
+  | try_
+  /-- `catch { S } { e -> S₂ }`: the `Fail` handler that answers the body's value, or `S₂` on the
+  error it raised, applied to the body's thunk and then to the handler's callback. -/
+  | catch_
+  /-- `map_err { S } { e -> S₂ }`: the `Fail` handler that raises `S₂` on the error the body
+  raised, applied as `catch_` is. -/
+  | mapErr
   deriving DecidableEq, Repr, Inhabited
 
 mutual
@@ -413,6 +422,9 @@ inductive Mark where
   /-- `fn f[A, …](…)`: a function generic in types, marked `m` (`none`, `total` or `div`). It is a
   template: each use is a call of its instance at that use's types, elaborated as a `fn`. -/
   | template (m : Mark)
+  /-- `fn f(…) -> T with E₁, E₂[A] = …`: a written row (SPEC §18), a promise that the inferred
+  row is within it; `Fail[E]` gives the error type. The function is marked `m` besides. -/
+  | row (effs : List (Ident × List VTy)) (m : Mark)
   deriving DecidableEq, Repr, Inhabited
 
 /-- An operation of an `effect` declaration: `fn op(x₁: A₁, …) -> B` (SPEC §18). -/
@@ -611,6 +623,7 @@ end
 def Mark.strip : Mark → Mark
   | .gen A => .gen A.strip
   | .template m => .template m.strip
+  | .row es m => .row (es.map fun (e, As) => (e.strip, As.map VTy.strip)) m.strip
   | m => m
 
 def Decl.strip : Decl → Decl
