@@ -42,14 +42,15 @@ open BoCa.Lifetime (LSub LifeCtx LifeVar)
 
 /-! ### Determinism -/
 
-theorem _root_.BoCa.BoLo.Kont.comp_hole (K : Kont) : K.comp .hole = K := by
-  induction K <;> simp_all [BoCa.BoLo.Kont.comp]
-
 /-- A head step that allocates nothing is a function of the memory and the redex. -/
 theorem head_det {μ μ₁ μ₂ : Heap} {a a₁ a₂ : Expr} (h₁ : Head μ a μ₁ a₁)
     (hn : a.allocs = false) : ∀ {x : Expr}, Head μ x μ₂ a₂ → a = x → μ₁ = μ₂ ∧ a₁ = a₂ := by
   intro x h₂ hx
-  cases h₁ <;> cases h₂ <;> simp [Expr.allocs] at hn hx ⊢
+  by_cases hE : EffRedex a
+  · exact head_det_eff h₁ hE h₂ hx
+  cases h₁ <;> (try (exfalso; apply hE; first
+    | exact .inl ⟨_, _, rfl⟩ | exact .inr (.inl ⟨_, _, rfl⟩) | exact .inr (.inr ⟨_, rfl⟩))) <;>
+    cases h₂ <;> simp [Expr.allocs] at hn hx ⊢
   all_goals (try simp only [Expr.val, ← Subtype.ext_iff] at hx)
   all_goals (try simp only [Expr.val, ← Subtype.ext_iff])
   all_goals (try obtain ⟨hx₁, hx₂⟩ := hx)
@@ -112,12 +113,7 @@ theorem _root_.BoCa.BoLo.AStep1.deterministic {A : Alloc} {k k₁ k₂ : Nat} {�
     k₁ = k₂ ∧ μ₁ = μ₂ ∧ e₁ = e₂ := by
   obtain ⟨K₁, a₁, a₁', rfl, rfl, hh₁⟩ := h₁
   obtain ⟨K₂, a₂, a₂', he, rfl, hh₂⟩ := h₂
-  obtain ⟨K'', ha, hK⟩ := plug_decomp hh₂.toHead K₁ K₂ hh₁.toHead.not_isVal he
-  obtain rfl : K'' = .hole := head_plug hh₁.toHead K'' hh₂.toHead.not_isVal ha
-  simp only [BoCa.BoLo.Kont.plug] at ha
-  subst ha
-  rw [Kont.comp_hole] at hK
-  subst hK
+  obtain ⟨rfl, rfl⟩ := plug_decomp hh₂.toHead K₁ K₂ hh₁.toHead he
   obtain ⟨rfl, rfl, rfl⟩ := AHead.deterministic hh₁ hh₂
   exact ⟨rfl, rfl, rfl⟩
 
@@ -195,7 +191,7 @@ theorem steps_replay {μ μ' : Heap} {e e' : Expr} (hs : Steps μ e μ' e') :
                 exact ⟨K, _, _, rfl, rfl, this⟩
               have := ARun.more hstep (hcs A (i + 1) hA.tail)
               rwa [show i + 1 + cs.length = i + (ℓ :: cs).length by simp; omega] at this
-          | _ => simp [Expr.allocs] at hal
+          | _ => simp [Expr.allocs, BoLo.hndE, BoLo.ubindE, BoLo.ccatchE] at hal
 
 open Classical in
 /-- The allocator that answers the choices `cs` in order, wherever they are free, and the

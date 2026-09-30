@@ -210,6 +210,8 @@ def Op.ofPrim? : Prim → Option Op
   | .countTry => some .countTry
   | .store => none
   | .lit _ => none
+  -- The capture primitives of spec §19 have no closure-converted form; `primValue` rejects them.
+  | .perform | .raise | .hnd | .ubind | .ccatch => none
 
 /-- A primitive as a value: η-expanded closure code. -/
 def primValue : Prim → CM Tm

@@ -220,12 +220,10 @@ theorem staleStuck_no_step {A : Alloc} {k k' : Nat} {μ μ' : Heap} {e' : Expr} 
   have hE' : (Kont.seq (.appR (.val (.lam unit')) .hole)
       (.case (stFree (.val (.loc 1))) unit' unit')).plug (stLoad (.val (.loc 0))) = K'.plug a :=
     hE
-  obtain ⟨K'', hb, -⟩ := plug_decomp hh.toHead _ K' h₀.not_isVal hE'
-  obtain rfl : K'' = .hole := head_plug h₀ K'' hh.toHead.not_isVal hb
-  simp only [BoCa.BoLo.Kont.plug] at hb
+  obtain ⟨hb, -⟩ := plug_decomp hh.toHead _ K' h₀ hE'
   have hh' := hh.toHead
   generalize hx : a = x at hh'
-  cases hh' <;> simp [stLoad, Expr.val, Val.prim, Val.loc, ← hb] at hx
+  cases hh' <;> simp [stLoad, Expr.val, Val.prim, Val.loc, ← hb, BoLo.hndE, BoLo.ubindE, BoLo.ccatchE] at hx
   case load ℓ v hv =>
     subst hx
     rw [h0] at hv
