@@ -963,4 +963,194 @@ theorem then_compatC {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {M N D : Expr} {A
     exact (cC_effOf S B ls' δ _ σ).mp
       (hN δ (v :: γ) ls' σ hδ (gDenC_mk (by simpa using hlen) ⟨σ₁, σ₂, hcσ, hv, hgs⟩))
 
+/-! ### Compatibility of `[handle]` -/
+
+/-- An effect's operations, as a row of the name `n`: the `j`-th at index `k + j`. -/
+def Row.ofEff (n : UInt32) : List (Qual × VTy × VTy) → Nat → Row
+  | [], _ => []
+  | (q, A, B) :: E, k => ⟨n, UInt32.ofNat k, q, A, B⟩ :: Row.ofEff n E (k + 1)
+
+/-- `κ`'s type at an operation `A ↠^q B` of a handler answering `F_Σ R`: `U((B ⊸ F_Σ R) & ⊤)`
+(linear: resumed), `U((B ⊸ F_Σ R) & F_Σ 1)` (affine: resumed or cancelled), and its `!`
+(unrestricted).  `[spec §19]` -/
+def kTy (S : Row) (R : VTy) (q : Qual) (B : VTy) : VTy :=
+  match q with
+  | .lin => .thunk (.amp (.arr B (CTy.effOf S R)) .top)
+  | .aff => .thunk (.amp (.arr B (CTy.effOf S R)) (CTy.effOf S .unit))
+  | .unr => .bang (.thunk (.amp (.arr B (CTy.effOf S R)) (CTy.effOf S .unit)))
+
+/-- A clause's type: `!U(A ⊗ K ⊸ F_Σ R)`, or `!U(A ⊸ F_Σ R)` at an abortive operation.
+`[spec §19]` -/
+def clauseTy (S : Row) (R : VTy) : Qual × VTy × VTy → VTy
+  | (q, A, B) => if (B.isZero && q != .lin) then .bang (.thunk (.arr A (CTy.effOf S R)))
+      else .bang (.thunk (.arr (.tensor A (kTy S R q B)) (CTy.effOf S R)))
+
+/-- The clauses' type: a right-nested tuple, the `j`-th clause at index `j`. -/
+def clausesTy (S : Row) (R : VTy) : List (Qual × VTy × VTy) → VTy
+  | [] => .unit
+  | o :: E => .tensor (clauseTy S R o) (clausesTy S R E)
+
+/-- `h_ret`'s type: `!U(A ⊸ F_Σ R)`. -/
+def retTy (S : Row) (A R : VTy) : VTy := .bang (.thunk (.arr A (CTy.effOf S R)))
+
+/-- `handle_n e with (h_ret, hs)`, `h_ret` and `hs` variables. -/
+def hndTerm (n : UInt32) (ir ic : Nat) (e : Expr) : Expr :=
+  .app (.app (.val (.prim .hnd)) (.pair (.val (Val.i32 n)) (.pair (.var ir) (.var ic)))) e
+
+theorem Row.find_ofEff (n : UInt32) : ∀ (E : List (Qual × VTy × VTy)) (k : Nat) (m i : UInt32)
+    (o : OpSig), Row.find (Row.ofEff n E k) m i = some o →
+      m = n ∧ ∃ j, ∃ h : j < E.length, i = UInt32.ofNat (k + j) ∧
+        o = ⟨n, UInt32.ofNat (k + j), E[j].1, E[j].2.1, E[j].2.2⟩
+  | [], _, _, _, _, h => by simp [Row.ofEff, Row.find] at h
+  | (q, A, B) :: E, k, m, i, o, h => by
+      unfold Row.find at h
+      simp only [Row.ofEff, List.find?_cons] at h
+      split at h
+      · rename_i hk
+        simp only [decide_eq_true_eq] at hk
+        obtain ⟨rfl, rfl⟩ := hk
+        cases h
+        exact ⟨rfl, 0, by simp, by simp, by simp⟩
+      · obtain ⟨hm, j, hj, hi, ho⟩ := Row.find_ofEff n E (k + 1) m i o h
+        exact ⟨hm, j + 1, by simp; omega, by rw [hi]; congr 1; omega,
+          by rw [ho]; simp [show k + 1 + j = k + (j + 1) by omega]⟩
+
+theorem Row.find_ofEff_ne (n : UInt32) : ∀ (E : List (Qual × VTy × VTy)) (k : Nat) (m i : UInt32),
+    m ≠ n → Row.find (Row.ofEff n E k) m i = none
+  | [], _, _, _, _ => by simp [Row.ofEff, Row.find]
+  | (q, A, B) :: E, k, m, i, hm => by
+      unfold Row.find
+      simp only [Row.ofEff, List.find?_cons]
+      have hd : decide (m = n ∧ i = UInt32.ofNat k) = false := by simp [hm]
+      rw [hd]
+      exact Row.find_ofEff_ne n E (k + 1) m i hm
+
+theorem Row.find_append (S S' : Row) (m i : UInt32) :
+    Row.find (S ++ S') m i = (Row.find S m i).or (Row.find S' m i) := by
+  unfold Row.find; rw [List.find?_append]
+
+theorem clausesTy_at {S : Row} {R : VTy} {ls : List SRec} {δ : LSub} :
+    ∀ (E : List (Qual × VTy × VTy)) {hs : Val} {ρ : WRes}, vC true (clausesTy S R E) ls δ hs ρ →
+      ∀ j (h : j < E.length), ∃ c, clauseAt hs.1 j = some c ∧
+        vC true (clauseTy S R E[j]) ls δ c PMap.empty
+  | [], _, _, _, j, h => by simp at h
+  | o :: E, hs, ρ, h, j, hj => by
+      obtain ⟨c, rest, h⟩ := h
+      obtain ⟨rfl, ρ₁, ρ₂, hc, hc₁, hr⟩ := pure_sep_iff.mp h
+      have hc₁' := hc₁
+      obtain ⟨q, A, B⟩ := o
+      have he : ρ₁ = PMap.empty := by
+        simp only [clauseTy] at hc₁'; split at hc₁' <;> exact hc₁'.1
+      cases j with
+      | zero =>
+          refine ⟨c, ?_, he ▸ hc₁⟩
+          simp [clauseAt, Val.pair, c.2]
+      | succ j =>
+          obtain ⟨c', hc', hv⟩ := clausesTy_at E hr j (by simpa using hj)
+          exact ⟨c', by simpa [clauseAt, Val.pair] using hc', by simpa using hv⟩
+
+/-- `κ`'s relation gives `κ`'s type. -/
+theorem vC_kTy_of_kapRel {S : Row} {R B : VTy} {q : Qual} {δ : LSub} {ls : List SRec} {κ : Val}
+    {ρ : WRes} (A : VTy) (n i : UInt32)
+    (h : KapRel (Row.tab S δ) (fun ls v => vC true R ls δ v)
+      (OpSig.ent δ ⟨n, i, q, A, B⟩) ls κ ρ) :
+    vC true (kTy S R q B) ls δ κ ρ := by
+  obtain ⟨hu, hk⟩ := h
+  have hres : ∀ ls', Ext ls ls' ρ →
+      cC (.arr B (CTy.effOf S R)) ls' δ (.app κ.1 (.val (Val.inj₁ .unit))) ρ := by
+    intro ls' he w σ₁ σ₂ hB hc
+    exact (cC_effOf S R ls' δ _ σ₂).mpr ((hk ls' he).1 w σ₁ σ₂ hB hc)
+  have hcan : q ≠ .lin → ∀ ls', Ext ls ls' ρ →
+      cC (CTy.effOf S .unit) ls' δ (.app κ.1 (.val (Val.inj₂ .unit))) ρ := by
+    intro hq ls' he
+    exact (cC_effOf S .unit ls' δ _ ρ).mpr ((hk ls' he).2 hq)
+  cases q with
+  | lin => exact fun ls' he => ⟨hres ls' he, trivial⟩
+  | aff => exact fun ls' he => ⟨hres ls' he, hcan (by simp) ls' he⟩
+  | unr => exact ⟨hu rfl, fun ls' he => ⟨hres ls' he, hcan (by simp) ls' he⟩⟩
+
+/-- The clauses hold nothing. -/
+theorem clausesTy_empty {S : Row} {R : VTy} {ls : List SRec} {δ : LSub} :
+    ∀ (E : List (Qual × VTy × VTy)) {hs : Val} {ρ : WRes}, vC true (clausesTy S R E) ls δ hs ρ →
+      ρ = PMap.empty
+  | [], _, _, h => h.1
+  | (q, A, B) :: E, hs, ρ, h => by
+      obtain ⟨c, rest, h⟩ := h
+      obtain ⟨-, ρ₁, ρ₂, hc, hc₁, hr⟩ := pure_sep_iff.mp h
+      have he : ρ₁ = PMap.empty := by
+        simp only [clauseTy] at hc₁; split at hc₁ <;> exact hc₁.1
+      rw [he, clausesTy_empty E hr] at hc
+      exact eq_of_compS_empty_left hc
+
+private theorem substAll_var' {γ : List Val} {i : Nat} {v : Val} (hv : γ[i]? = some v) :
+    substAll γ (.var i) = .val v := by
+  show Expr.psub 0 γ (.var i) = _
+  simp only [Expr.psub, if_neg (Nat.not_lt_zero i), Nat.sub_zero, hv, Val.shift_zero]
+
+/-- `[handle]`: the clauses and `h_ret` at `Σ`, the handled computation at `Σ` extended by the
+handler's name, which `Σ` does not hold.  `[spec §19]` -/
+theorem handle_compatC {Δ : LifeCtx} {Γ Γ₁ Γ₂ Γr Γc : Ctx VTy} {e : Expr} {S : Row}
+    {E : List (Qual × VTy × VTy)} {n : UInt32} {A R : VTy} {ir ic : Nat}
+    (hsp : Ctx.SplitP Γ Γ₁ Γ₂) (hsp₁ : Ctx.SplitP Γ₁ Γr Γc)
+    (hr : Ctx.SoloP Γr ir (retTy S A R)) (hc : Ctx.SoloP Γc ic (clausesTy S R E))
+    (hn0 : n ≠ 0) (hnS : ∀ o ∈ S, o.n ≠ n) (hlen : E.length ≤ 2 ^ 32)
+    (he : SemC Δ Γ₂ e (CTy.effOf (Row.ofEff n E 0 ++ S) A)) :
+    SemC Δ Γ (hndTerm n ir ic e) (CTy.effOf S R) := by
+  intro δ γ ls ρ hδ hg
+  obtain ⟨ρ₁, ρ₂, hc12, hg₁, hg₂⟩ := gDenC_split hsp hg
+  obtain ⟨ρr, ρcl, hcrc, hgr, hgc⟩ := gDenC_split hsp₁ hg₁
+  obtain ⟨hlr, hsr⟩ := gDenC_iff.mp hgr
+  obtain ⟨vr, hvr, hVr⟩ := gSepC_soloP hr (hr.lt_of_liveWithin hlr) hsr
+  obtain ⟨hlc, hsc⟩ := gDenC_iff.mp hgc
+  obtain ⟨vc, hvc, hVc⟩ := gSepC_soloP hc (hc.lt_of_liveWithin hlc) hsc
+  have hρr : ρr = PMap.empty := hVr.1
+  have hρc : ρcl = PMap.empty := clausesTy_empty E hVc
+  subst hρr hρc
+  rw [eq_of_compS_empty_left hcrc] at hc12
+  rw [eq_of_compS_empty_left hc12]
+  show cC _ ls δ (Expr.app (Expr.app (.val (.prim .hnd)) (.pair (.val (Val.i32 n))
+    (.pair (substAll γ (.var ir)) (substAll γ (.var ic))))) (substAll γ e)) ρ₂
+  rw [substAll_var' hvr, substAll_var' hvc]
+  refine (cC_effOf S R ls δ _ ρ₂).mpr ?_
+  refine ewp_handle (Row.tab (Row.ofEff n E 0 ++ S) δ) (Row.tab S δ) n hn0 ?_ vr vc
+    (fun ls v => vC true A ls δ v) (fun ls v => vC true R ls δ v) ?_ ?_
+    ((cC_effOf _ A ls δ _ ρ₂).mp (he δ γ ls ρ₂ hδ hg₂))
+  · intro m i hm
+    simp [Row.tab, Row.find_append, Row.find_ofEff_ne n E 0 m i hm]
+  · intro ls' v σ hv
+    have hf := (hVr.2 ls' (ext_empty' ls ls')) v σ σ hv (compS_empty_left σ)
+    exact (cC_effOf S R ls' δ _ σ).mp hf
+  · intro i en hT
+    obtain ⟨o, hf, rfl⟩ := Row.tab_some hT
+    have hfo : Row.find (Row.ofEff n E 0) n i = some o := by
+      rw [Row.find_append] at hf
+      cases h₁ : Row.find (Row.ofEff n E 0) n i with
+      | some o' => rw [h₁] at hf; exact hf
+      | none =>
+          rw [h₁] at hf
+          obtain ⟨hm, hn, -⟩ := Row.find_mem hf
+          exact absurd hn (hnS o hm)
+    obtain ⟨-, j, hj, rfl, rfl⟩ := Row.find_ofEff n E 0 n i o hfo
+    have hjn : (UInt32.ofNat (0 + j)).toNat = j := by
+      rw [Nat.zero_add]; exact UInt32.toNat_ofNat_of_lt' (by simp [UInt32.size]; omega)
+    obtain ⟨c, hcl, hVcl⟩ := clausesTy_at E hVc j hj
+    refine ⟨c, by rw [hjn]; exact hcl, ?_, ?_⟩
+    · intro hna ls' v κ σ hσ
+      generalize hEj : E[j] = t at hVcl hna hσ
+      obtain ⟨q, A', B'⟩ := t
+      simp only [OpSig.ent, OpSig.abort] at hna
+      simp only [clauseTy, hna] at hVcl
+      obtain ⟨σa, σk, hck, hA', hK⟩ := hσ
+      have hκ := vC_kTy_of_kapRel (S := S) (R := R) (B := B') (q := q) A' n (UInt32.ofNat (0 + j)) hK
+      have hf := (hVcl.2 ls' (ext_empty' ls ls')) (Val.pair v κ) σ σ
+        ⟨v, κ, pure_sep_mk rfl ⟨σa, σk, hck, hA', hκ⟩⟩ (compS_empty_left σ)
+      exact (cC_effOf S R ls' δ _ σ).mp hf
+    · intro ha ls' v σ hσ
+      generalize hEj : E[j] = t at hVcl ha hσ
+      obtain ⟨q, A', B'⟩ := t
+      simp only [OpSig.ent, OpSig.abort] at ha hσ
+      simp only [clauseTy, ha] at hVcl
+      have hf := (hVcl.2 ls' (ext_empty' ls ls')) v σ σ hσ (compS_empty_left σ)
+      exact (cC_effOf S R ls' δ _ σ).mp hf
+
 end BoCa.Fig16.LogRel.Core
