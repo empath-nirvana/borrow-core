@@ -412,7 +412,7 @@ generated-code error to pin the rendering.
 | **Narrow direct-style div calls**: only a head `return (f V)` or `return ((unbang f) V)`, at most one `&c` | `callee`, `divCall`, `loopBody` | Every call is typed. In a div body, lowering puts nested div calls in A-normal form, left to right, and `div_bind`s each. `{ f(x) }` takes the loop as a value (§2.4). | Several lends per call are allowed (§5). |
 | **Narrow HOF specialization**: named functions without type parameters, the callback a named div function in a tuple component | `specParamN`, `hofOf`, `elabDecl` | Callback parameters have effect variables, instantiated by the argument's *type* at each call: closures, locals, returned callbacks (§2.4). Keyed by (function, instantiation). | A div function still has no type parameters. |
 | **`stdout` injected into a looping `main` without capabilities** (decision 36) | `ambientCaps` | Not sugar: the `run_io` loop wrapper (`Frontend/Check/Externs.lean`, `ioMainOf`, `loopWrapperSrc`) accepts `main : F (U (Loop A B))` with no capability, as the instance `Caps = 1`. It makes all three streams itself, as it already does for the undeclared ones. SPEC §11's "Programs that run until their input ends" is restated for `Caps = 1`. `externs_loop_every_run` and `IORun.loop_every_run` are stated at the checked `run_io`, so they cover it with no new lemma. This must be confirmed when implementing: if a statement fixes `Caps ≠ 1`, it gets a `Caps = 1` instance. The backend already drives the checked `run_io` term, so it should need no change; if it does, that is coordinated with #80. | The one change outside elaboration. It is a runtime obligation, not a rule. |
-| **Finite `for`**: `for` only over `bytes c`, always div | `forLoop` (`bytes` pattern) | Chosen by the source's type. Codata (`U (iter …)`): a loop by `unfold`, div. An array borrow `array_imm 'a A`, or a count `range(n)`: a **total** index loop bounded by the length, a `fold_own` over the unary count as `div_nat` does, with the loop state as the fold's result. It is library code in the prelude, picked by type (decision 26's "choosing `fold_imm`/`fold_own` from a type"). | Lists: see below. |
+| **Finite `for`**: `for` only over `bytes c`, always div | `forLoop` (`bytes` pattern) | (As built, §7 stage 9: a bounded source, by name, is `count_fold` with the source's bound.) Chosen by the source's type. Codata (`U (iter …)`): a loop by `unfold`, div. An array borrow `array_imm 'a A`, or a count `range(n)`: a **total** index loop bounded by the length, a `fold_own` over the unary count as `div_nat` does, with the loop state as the fold's result. It is library code in the prelude, picked by type (decision 26's "choosing `fold_imm`/`fold_own` from a type"). | Lists: see below. |
 
 **Lists and finite `for`.** A left-to-right `for` over a `μ` list needs one of three things:
 
@@ -445,6 +445,8 @@ lowering is chosen by the types of `x` and of the parameter it is passed to (dec
 | `imm 'b A` | `imm 'a A` | `copy`, keeping one copy |
 | `ref A` or `A` | owned `ref A`/`A`, where the callee hands it back first (`… => A * B`) | move and rebind: `let (x, v) = f(x, …)`. This is §11's `&c`, the case a div callee needs, because a borrow cannot outlive a call that returns a loop. |
 | `ref A`, iterator source | `bytes(&mut c)` in `for` | move; at the iterator's finish or close, the handed-back `A` rebinds `c` |
+| `array A` (owned) | `array_mut 'a A` (`&mut x`) / `array_imm 'a A` (`&x`) | `slice_borrow_mut`/`slice_borrow_imm` around the call, fresh `'x`, no cell; a view the call hands back dropped inside; `x` rebound from the pair (SPEC §9) |
+| `array A`, source of a total `for` | `iter_mut(&mut x)` | a `borrow mut x` block around the whole loop (SPEC §16) |
 
 To the reader, all rows mean the same thing: "lent here, back afterwards". Which core
 mechanism implements it is a cost detail that types decide. The rule on surviving shifts is
@@ -922,6 +924,26 @@ found one lifetime. An open type or lifetime is an error at the call that names 
 written in these forms, its loop steps closures; the corpus calls it as `reverse(v)`,
 `eq(a, b, eq_u8)`, with the same outputs and counts, and `corpus/slice-lib.bc` calls the rest.
 Pairs: `corpus/sugar/generic-fn.bc`, `generic-infer.bc`, `generic-lifetimes.bc`.
+
+**Stage 9, as built** (strings S4; SPEC §16, *The total `for`*; decision 46 of
+`docs/decisions.md`). `forTotal` in `Sugar.lean` runs in `surfC` at a `for` whose source is
+bounded (`boundedFor`: `range`, a view's `iter_imm`/`iter_mut`, an adapter that observes its
+source once per observation over one, `take` over a bounded or never-skipping source) and whose
+body neither yields, breaks nor returns. It writes the loop as surface code around the body, a
+template: the source computed once with its bound (`boundedPlan`), and `count_fold[S]` whose `!`
+step observes it and runs the body, with `S` the source (or what it finished with) and the
+variables the body reads or assigns at their inferred types; the source's type is read by
+elaborating its code once first. Over `range` there is no iterator. The result is elaborated as
+any surface code, so the body's own sugar, an inner total `for` included, is elaborated in the
+step. The per-observation lend (`LoopLend`) treats such a `for` as a statement, so a borrow block
+around it stays one block. A lend of an owned array in the source is a borrow block around the
+loop, and `lendCall` lends an array at a view parameter for one call (`lendSlice`, the §5.1
+row). The divergence inference never sees these loops: `sum_squares` of
+`corpus/for-finite.bc` is `total`. Generic instances take the lifetimes their type arguments
+mention as lifetime parameters (`makeInst`), so the adapters take `iter_imm`'s `imm 'x A`.
+Pairs: `corpus/sugar/for-range.bc`, `for-view.bc`, `lend-array.bc`; reject
+`corpus/reject/total-for-unbounded.bc`. Not done: a total `for` whose body breaks or whose value
+is kept, and a bound read off a type (a program's own finite source is a loop).
 
 Stages 1–4 retire the #54 shortcuts and change no surface syntax, except that `&c` stays until
 stage 6. Stages 5–9 are the rest of step 2. After stage 9, step 3 of #54 (rewriting 6–10 corpus

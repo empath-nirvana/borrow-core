@@ -242,8 +242,8 @@ and nothing is claimed about them.
 ## Not yet
 
 - A `for` has no early exit; `io-guess.bc` keeps a flag instead, and `io-sections.bc` writes its
-  line reader as a loop in core. A `for` over a finite source, allowed in total code, is not
-  provided (#59); neither are `|>` pipelines.
+  line reader as a loop in core. A `for` over a bounded source (a count, a view's iterator,
+  `take` of the input) is allowed in total code (SPEC §16); `|>` pipelines are not provided.
 - A line reader: an observation must terminate, so a line of unbounded length is a loop of its
   own. Keep the line in the loop's state, as `io-aoc.bc` does.
 - I/O errors are not modeled: a read error is the end of the input.

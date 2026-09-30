@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 0.23 · 2026-09-29
+Version 0.24 · 2026-09-30
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -577,11 +577,26 @@ A `mut` family has a destructor (§12), so a part a program does not use is drop
 
 **Surface and library.** `borrow mut a { 'x, v -> … }` lends `v : array_mut 'x A`; the constants
 act on it, and `lib/slice.bc` (`include slice`) is the slice library over them and `count_fold`
-(§16): `len`, `get`, `at`, `peek`, `set`, `replace`, `swap_at`, `split_at`, `split_first`,
-`split_last` (and their `_mut` forms), `reverse`, `fill`, `copy_from`, `find`, `contains`,
-`starts_with`, `ends_with`, `eq`, `cmp`, `sort`, `binary_search`, and the iterators `iter_imm`
-and `iter_mut`, codata whose state is the rest of the view. Its functions are generic in the
-element type and take the view's lifetime; a comparison is an argument (`eq_u8`, `cmp_i32`, …).
+(§16): `len`, `len_imm`, `get`, `at`, `peek`, `set`, `replace`, `swap_at`, `split_at`,
+`split_first`, `split_last` (and their `_mut` forms), `reverse`, `fill`, `copy_from`, `find`,
+`contains`, `starts_with`, `ends_with`, `eq`, `cmp`, `sort`, `binary_search`, and the iterators
+`iter_imm` and `iter_mut`, generators (§15) whose state is the rest of the view: each
+observation splits off the first leaf and yields it, and the last finishes, so a view of `n`
+elements is done after `n + 1` observations, and a `for` over one is total (§16, *The total
+`for`*). They compose with the adapters of §15 (`corpus/slice-pipeline.bc`). Its functions are
+generic in the element type and take the view's lifetime; a comparison is an argument (`eq_u8`,
+`cmp_i32`, …).
+
+**Lending an array to one call.** `&mut a` (or `&a`) of an owned array `a : array A`, passed at
+a parameter `array_mut 'a A` (or `array_imm 'a A`) of a function with the lifetime parameter
+`'a`, is `slice_borrow_mut` (or `slice_borrow_imm`) around the call, at a fresh lifetime, and
+`a` is rebound from the pair, as the lend of a cell is (typed elaboration §5.1): `sort(&mut a,
+cmp_i32, 0)`, `reverse(&mut a)`, `contains(&a, 3, eq_i32)`. A view the call hands back, as its
+result or its result's first component, is dropped inside the lend (its destructor, §12), so
+`reverse(&mut a)` is `()`; a result that holds anything else at `'a` is rejected
+(`corpus/reject/lend-array-result.bc`). A lend in the source of a total `for`,
+`for x in iter_mut(&mut a) { … }`, is a borrow block of `a` around the whole loop, which hands
+on the variables the body assigns (`corpus/iter-mut.bc`). Pair: `corpus/sugar/lend-array.bc`.
 
 **Lowering.** `split` is an unsigned compare and pointer and length arithmetic: `(p, i)` and
 `(p + i·s, n − i)`, with no allocation. The empty family's base is the null word `0`.
@@ -671,11 +686,8 @@ lemma of the typed world proved by induction on types or on positions has its `[
 
 - An `imm` reborrow of a `mut` family (K2′). Reading an element through a `mut` view is
   `peek`, a replace-and-restore that needs an element to put in the slot meanwhile.
-- A total `for` over a view's iterator (stage S4), and `&mut a`/`&a` at an array lending its
-  view to one call (the design's §4.3 lend row); `iter_mut` is driven by a counted loop today.
-- A generic function of `lib/slice.bc` is called with its element type written
-  (`reverse[u8](v)`), and one with two lifetimes (`copy_from`, `eq`, `cmp`, …) with both
-  written (`(unbang eq[u8]) ['x] ['y] (…)`): the surface infers one lifetime from the argument.
+- A lend `&a` of an array at a function with two lifetime parameters (`eq(&a, &b, eq_i32)`):
+  each view is lent by a borrow block and passed.
 - Bounds checks at a dynamic index are not eliminated statically.
 - Whether `slice_borrow`'s side conditions on `A` and `B` can be dropped: they are used by the
   proof, and not known to be needed.
@@ -965,7 +977,9 @@ elaborate to the same term.
   name, and the loop goes on; at the end of the stream the capability it hands back is bound to
   `c`, and the loop finishes with the capabilities and the threaded variables. Its `close`
   closes the stream and hands the capabilities back. The rest of the body, `N`, runs at the
-  loop's end, in the body's one state machine (§14, §15). A `for` in a total function over a finite source is not provided.
+  loop's end, in the body's one state machine (§14, §15). A `for` over a bounded source is a
+  counted loop instead, and total (§16, *The total `for`*): `take(from_iter(bytes(&mut c)), n)`
+  reads at most `n` bytes in total code (`corpus/take-bytes.bc`).
 
 ### Designed, not built
 
@@ -1418,9 +1432,10 @@ preserved. The runtime's obligation for a looping `main` is §11's.
 
 ### Open
 
-- **`for` over a finite source in a total function** is not provided: `for` iterates only over
-  `bytes c`, which may not end, so a `for` always makes its function div. A finite consumer
-  (#59's `for_each` over a list or an array) would be total.
+- **`for` over a finite source in a total function** is provided over a bounded source (§16,
+  *The total `for`*): a count, a view's iterator, or an adapter over one. A `for` over any other
+  source makes its function div, even when the source is finite (a list, a generator the
+  program defines), and so does a `for` over a bounded source whose body breaks.
 - **Loop bodies are total**: a `for` body has no `for` and no div call. A nested loop is written
   as a div helper called after the loop, or in core.
 - **A call lends at most one capability** with `&mut c`, and a div call whose residual differs
@@ -1621,8 +1636,11 @@ calls at the same types (whole-program monomorphization, as Rust's generics; the
 named `f__gN`). The body is elaborated at the instance's types, so what it may do with an `A`
 (copy it with `*g`, compare it with an operator) is decided there. An instance is ordinary code
 at its types, checked by the unchanged checker, so an adapter over a pure source, one over an
-input and one over a failing source are three instances of one definition. Instances are at
-types without lifetimes.
+input and one over a failing source are three instances of one definition. A lifetime that a
+type argument mentions (the element `imm 'x i32` of a view's iterator) is a lifetime parameter
+of the instance, `all 'gl0 < top.` outside the template's own: the instance is shared by every
+use at the same types up to those lifetimes, and each use applies it to its own
+(`corpus/slice-pipeline.bc`, `map` at `imm 'x i32`).
 
 Each lifetime parameter `'a` (bounded by `top`, or `'a < @`) is an `all 'a < @.` around the
 function type and a `Fun 'a < @.` around its body, outermost first (draft 0 §2.5), for a `fn`
@@ -1674,8 +1692,9 @@ preserved: every construct of this entry is elaborated into core before checking
 
 ### Open
 
-- **A total consumer.** A `for` over a generator is div, even over a finite one (stage 9 of
-  `docs/typed-elaboration.md`).
+- **A total consumer** of a generator is a `for` over a bounded one (§16, *The total `for`*): a
+  view's iterator and the adapters that observe their source once per observation. A generator
+  the program defines is not bounded, whatever it yields: its observations are not counted.
 - **The source interpreter** (`bcc interp`, `Support`'s substitution machine) substitutes into
   the whole step at each observation, so its time per observation grows with the size of the
   body's machine, and a body with more loops has more observations: its run grows about as the
@@ -1686,7 +1705,8 @@ preserved: every construct of this entry is elaborated into core before checking
 - **A source that both holds a capability and fails** (`B = In ⊗ E`) is not an instance of the
   adapters: an adapter's result is one variable `k`, and the residual is handed back by name.
   Stopping a failing source (`take` over `U (gen A (1 + E) 1)`) is not provided.
-- **Generic `fn`s**: only generators are generic; a generic instance's types have no lifetimes.
+- A generic function written at types with a lifetime as a value, `f[imm 'x A]`, is not
+  provided: the instance takes the lifetime as a parameter, which a call applies.
 
 ---
 
@@ -1746,6 +1766,51 @@ compare, call the step on a copy of the closure, tail-call with `i + 1`. It allo
   went from 3746 allocations and 174 dispatched calls to 1 and 0.
 - A counted loop over an array's indices, each index lent as a `mut` leaf
   (`corpus/iter-mut-count.bc`).
+- The total `for`, below.
+
+### The total `for`
+
+A `for x in V { M }; N` whose source `V` is **bounded**, whose body neither yields, breaks nor
+returns, and whose value is not kept, is a counted loop (`Frontend/Sugar.lean`, `forTotal`),
+elaborated in the surface pass before divergence is inferred: it is one computation, so the
+enclosing function stays total (§14), and a borrow block around it keeps its borrow for the whole
+loop (it is not lent per observation). A bounded source finishes within a number of observations
+known when the loop starts:
+
+| source | observations |
+|---|---|
+| `range(n)`, `range(a, b)` | the count, `a` to `b − 1` (from `0`): no iterator |
+| `iter_imm(v)`, `iter_mut(v)` (`lib/slice.bc`) | `len(v) + 1` |
+| `map`, `filter`, `enumerate`, `skip`, `scan`, `from_iter` (`lib/adapters.bc`) of a bounded `s` | those of `s`: each observes its source once per observation |
+| `take(s, n)` | `n + 1` when `s` never skips (an iterator `U (iter A R R')`, or `map`, `enumerate`, `scan`, `from_iter`, `take` of one); else those of `s` plus one |
+
+The names are the library's: they are bounded when their module is included and the program does
+not define them (`range` needs no module); a program's own `range` is a generator like any other.
+
+**Elaboration.** `for i in range(a, b) { M }; N` is `count_fold (f, (b, (a, s)))` with the bounds
+computed once, where `s` is the variables in scope that `M` reads or assigns (locals, and the
+externs such as `stdout` that `M` uses), `f` binds them from its state, runs `M` and returns
+them, and `N` runs with them bound again from the result. Over any other bounded source the
+source is computed once (with its view's length, `len_imm`/`len_mut`, bound before it), and the
+state is the source or what it finished with, `U (gen A B B) + B` (an iterator's `U (iter A B B)
++ B`), beside `s`: the step observes the source, runs `M` on an element, goes on after a skip,
+and keeps a finish; after the bound a source that has not finished is closed. What the source
+finishes with is dropped, or, when the source was made from a capability `&mut c`, bound to `c`.
+A source that finishes with something other than what it hands back when closed is not bounded.
+The step is a closure that captures nothing (a `!` value), so the loop allocates nothing and calls
+it directly (`count_loop`, *Lowering*).
+
+A bound that is too large costs a test per remaining count; one too small would close the
+source early. The bounds of the table are the library's own, each checked by a program: an
+iterator one observation short misses the last element (`corpus/iter-mut-slice.bc`,
+`slice-total.bc`, `slice-pipeline.bc`), and `take` one short reads one byte less
+(`corpus/take-bytes.bc`). They are not proved: the elaboration is checked core, so a wrong bound
+is a wrong answer, never an unsafe run.
+
+Programs: `corpus/for-finite.bc`, `iter-mut.bc` (P12 as written), `iter-mut-slice.bc`,
+`split-at-mut.bc` (P10 in direct style), `slice-total.bc`, `slice-pipeline.bc` (1 allocation,
+the array; 0 dispatched calls), `print-borrowed-array.bc`, `take-bytes.bc`; pairs
+`corpus/sugar/for-range.bc`, `for-view.bc`; reject `corpus/reject/total-for-unbounded.bc`.
 
 ### Baseline
 
@@ -1754,9 +1819,12 @@ machine gains one head step, parametric in the host as before.
 
 ### Open
 
-- The surface's total `for` over a count (`for i in range(n)`, stage 9 of typed elaboration)
-  elaborated to `count_fold`, with the `let mut` variables the body assigns as the state. Today
-  the constant is called directly, with the step a function or a closure.
+- **A total `for` whose body breaks**, or whose value is kept (`let r = for …`), is a loop:
+  `break` would need a finished state for `range` and the iterator closed for the others.
+- **Bounds by type.** A bounded source is recognized by the library's names, not by its type:
+  a program's own finite generator, a list's iterator, or a `chain` of two bounded sources is not
+  bounded. An iterator type that carries its bound would make the rule a type's.
+- A bound past `2³¹ − 1` (`take(s, 2147483647)`) is the empty count (`len`, §9).
 - Stopping early: a finished state is carried to the bound (`div_fuel` does), which costs a
   test per remaining count.
 
@@ -1781,16 +1849,28 @@ typed world, the model and the end-to-end theorems in `Core/Stdio.lean`, the che
 `Frontend/Elab/Subst.lean`, with no change to `CDerives`; each generator and div body is one
 state machine (§15). Entry 15 (§16) is implemented in
 `Paper/` and `Support/` (the step), `Core/CountFold.lean`, the checker (`count_fold`) and the
-backend (`count_loop`). §9's slice borrows are `Core/SliceFrames.lean` and `Core/Slices.lean`,
+backend (`count_loop`); its total `for` is elaborated in `Frontend/Sugar.lean` (`forTotal`), with
+no change to `CDerives`. §9's slice borrows are `Core/SliceFrames.lean` and `Core/Slices.lean`,
 the checker (`slice_borrow_*`, `slice_*_mut`, `array_mut`) and the borrow blocks of
 `Frontend/Sugar.lean`; §8's byte is `Width.w8` throughout. §9's splits and writes are
 `Core/SliceOps.lean`, the step `split` in `Paper/` and `Support/`, the checker
 (`slice_split_*`, `slice_empty_*`, `slice_replace_mut`, `slice_swap_mut`), the backend, and the
-library `lib/slice.bc`.
+library `lib/slice.bc`; the lend of an array to one call is `lendSlice` in `Frontend/Sugar.lean`.
 
 ---
 
 ## Changelog
+
+- **0.24** (2026-09-30) — Strings S4 (`docs/strings-slices-design.md`). §16, *The total `for`*: a
+  `for` over a bounded source (`range(n)`, `range(a, b)`, a view's `iter_imm`/`iter_mut`, an
+  adapter that observes its source once per observation over one, `take` over a bounded or a
+  never-skipping source) is a counted loop, `count_fold`, so its function stays total and a borrow
+  block around it keeps its borrow for the whole loop; a `for` last in a body is a statement.
+  §9: `&mut a`/`&a` of an owned array at a view parameter is `slice_borrow_mut`/`_imm` around the
+  call, dropping a view the call hands back, and a lend in a total `for`'s source is a borrow
+  block around the loop; `iter_imm`/`iter_mut` are generators, and `len_imm` is new. §15: a
+  lifetime in a generic function's type arguments is a lifetime parameter of the instance. No
+  kernel, rule or checker change.
 
 - **0.23** (2026-09-29) — §15, *Generic functions*: `fn f[A, …]` with a surface body is a
   template instantiated at each use, as generic generators are; `fn f<'a, 'b, …>` declares

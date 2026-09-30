@@ -190,8 +190,9 @@ one prefix at a time: every finite part of its run is safe.
 
 ## Not yet
 
-- `for` runs over the input, which may not end; a `for` over a finite source, allowed in total
-  code, is not provided.
+- A `for` over the input may not end, so it is a loop; a `for` over a bounded source (`range(n)`,
+  a view's `iter_imm`/`iter_mut`, `take(s, n)` over the input) is a counted loop and allowed in
+  total code (SPEC §16, *The total `for`*). A program's own finite generator is not bounded.
 - A `for` body is one step of its loop and must be total: no `for` or div call inside it.
 - Specialization covers a named function given a named callback; a callback held in a closure or
   a variable of the caller is not specialized.

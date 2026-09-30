@@ -1,6 +1,6 @@
 # Strings and slices, end to end — design
 
-Status: a design. Stages S1, S2 and S3 are built (below, *Stage status*); the rest is proposed. It
+Status: a design. Stages S1 to S4 are built (below, *Stage status*); the rest is proposed. It
 proposes spec entries, and names the theorems each needs.
 
 **Stage status.**
@@ -12,18 +12,23 @@ proposes spec entries, and names the theorems each needs.
 | S1 K1 | built: `u8`, `b'c'`, `wrap8`/`extend8_u`, surface operators at `u8` through `i32`, `to_i32`/`to_u8` | SPEC §8, `corpus/bytes-upper.bc` |
 | S1 backend | built: byte slots for `u8`, `tab 0` allocates nothing | `Backend/README.md`, Representation |
 | S1 `read_byte`/`write_byte` at `u8` | not done: it changes every I/O program's types; left to S5 | SPEC §8 Open |
-| S1 total `for` | not done: typed elaboration's stage 9; `count_fold` is called directly | SPEC §16 Open, `corpus/pending/for-finite.bc` |
+| S1 total `for` | built with S4: `for i in range(n)` is `count_fold` | SPEC §16, `corpus/for-finite.bc` |
 | S2 K2 | built at `Mut` and `Imm`, with the side conditions of `experiments/PositiveArrays`; `borrow mut a { 'x, v -> … }` on an array | SPEC §9, `Core/Slices.lean`, `corpus/slice-mut.bc`, `corpus/slice-imm.bc` |
 | S2 K4 | built with S2: `slice_get_mut`, `slice_len_mut` (a `mut` family is unusable without them) | `Core/Slices.lean` |
 | S3 K3 | built, **as a machine step** `split`, not a term over the host's `le_u`/`sub` (as K0); `slice_split_imm`/`_mut`, and `slice_empty_imm`/`_mut` typed `[L]` (not `![L]`) | SPEC §9, `Core/SliceOps.lean` (`famSplit_compatX`, `famEmpty_compatX`), `corpus/slice-split.bc` |
 | S3 K5 | built: `slice_replace_mut` (Mut Anti-Frame on the leaf), `slice_swap_mut` (two nested Anti-Frames, `sepRange_pick2N`; one leaf at `i = j`) | `Core/SliceOps.lean` (`sliceReplaceM_compatX`, `sliceSwapM_compatX`) |
 | S3 destructor | built: `array_mut @a A` has one, derived from `slice_get_mut` and `forget` (no kernel change) | SPEC §9, §12, `Core/Dtor.lean` |
 | S3 backend | built: `split` is a compare and pointer and length arithmetic, no allocation; the empty family's base is `0` | `Backend/Flat/Lower.lean`, `Backend/Clos/` |
-| S3 library | built: `lib/slice.bc`, generic in the element type, comparisons as arguments; `sort` is an insertion sort; `iter_imm`/`iter_mut` are codata over the rest of the view | SPEC §9, `docs/decisions.md` 44 |
-| P10 | as written but for `read_all` (a 64-byte buffer filled from the input) and `iter_mut` driven by a counted loop (no total `for` yet) | `corpus/split-at-mut.bc` |
+| S3 library | built: `lib/slice.bc`, generic in the element type, comparisons as arguments; `sort` is an insertion sort | SPEC §9, `docs/decisions.md` 44 |
+| S4 total `for` | built: a `for` over a bounded source (`range`, `iter_imm`/`iter_mut`, the adapters that observe their source once per observation over one, `take` over a bounded or never-skipping source) is `count_fold` with the source's bound, and its function stays total; bounded by the library's names, not by type | SPEC §16 *The total `for`*, `docs/decisions.md` 46, `corpus/slice-total.bc`, `corpus/take-bytes.bc` |
+| S4 lend row | built: `&mut a`/`&a` of an owned array at a view parameter is `slice_borrow_*` around the call (a view handed back is dropped); in a total `for`'s source, a borrow block around the loop | SPEC §9, `corpus/sugar/lend-array.bc`, `corpus/iter-mut.bc` |
+| S4 iterators | built: `iter_imm`/`iter_mut` are generators over the rest of the view, `len + 1` observations; they compose with the adapters (an instance takes the element's lifetime as a parameter) | SPEC §9, §15, `corpus/slice-pipeline.bc` (1 allocation, the array; 0 dispatched calls) |
+| P10 | in direct style but for `read_all` (a 64-byte buffer filled from the input): `upper` is a `total fn` over `for c in iter_mut(v)` | `corpus/split-at-mut.bc` |
 | P7 (numbers) | an `array i32` sorted in place and binary-searched | `corpus/sort-numbers.bc` |
 | search, reverse | `find`/`contains`/`starts_with`/`ends_with`/`eq`/`cmp` over bytes; `rev` in place | `corpus/find-bytes.bc`, `corpus/reverse-bytes.bc` |
-| P12 | `iter_mut` from the library, driven by a counted loop; the program as written (`for x in iter_mut(&mut a)`) waits for S4's total `for` and the array lend row | `corpus/iter-mut-slice.bc`, `corpus/iter-mut-count.bc`, `corpus/pending/iter-mut.bc` |
+| P12 | as written: `for x in iter_mut(&mut a) { modify x { … } }` | `corpus/iter-mut.bc`, `corpus/iter-mut-slice.bc` (a borrow block), `corpus/iter-mut-count.bc` (indices) |
+| array analogue of `print-borrowed-list` | built: a `total fn` printing each element of `&a` through `iter_imm` | `corpus/print-borrowed-array.bc` |
+| S4 left | `bytes`, `chars`, `lines` over views (S5, with text); a total `for` whose body breaks; a bound read off a type; a lend of an array at a function with two lifetime parameters | SPEC §16 Open, §9 Open |
 | S3 left | an `imm` reborrow of a `mut` family (K2′: `peek` and `sort` take a filler meanwhile); lifetime inference for two lifetimes (`copy_from`, `eq`, `cmp` take them written); static bounds-check elimination | SPEC §9 Open |
 | `div_fuel` over K0 | built: `io-fuel` from 3746 allocations and 174 dispatched calls to 1 and 0 | `lib/div.bc` |
 
@@ -1268,7 +1273,7 @@ exists.
   - `data` with lifetime parameters (P8).
 
   Q5 asks which.
-- **Stage 9 (finite `for`)** is revised by S4: the bound is K0, not a unary fold.
+- **Stage 9 (finite `for`)** is revised by S4: the bound is K0, not a unary fold. Built.
 - **#9** (a `!` closure capturing an `i32`) is not needed. K0's step and every `for` thread their
   state instead of capturing it.
 - **#63** (modules and opaque types) is where the UTF-8 invariant becomes enforced (T2).

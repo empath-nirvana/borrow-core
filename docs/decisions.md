@@ -480,3 +480,47 @@ Each entry: the decision, and why. Newest last.
       no expected type whose first arm determines it) is not done; instances are at types
       without lifetimes (decision 41).
 
+
+46. **Provisional (strings S4, SPEC §9, §15, §16; stage 9 of typed elaboration; to be confirmed by
+    the user).**
+    - **A `for` over a bounded source is total.** It is `count_fold` with the source's bound,
+      elaborated in the surface pass, so the function it is in stays total and a borrow block
+      around it keeps its borrow for the loop: `for x in iter_mut(v) { … }` inside `borrow mut`
+      and in a `total fn`. Revises decision 43's "`count_fold` is called directly for now".
+      Alternative not taken: the design's unary fold (typed elaboration §4), which allocates per
+      step.
+    - **Bounded by name, not by type.** The bounded sources are `range`, `iter_imm`, `iter_mut`
+      and the adapters `map`, `filter`, `enumerate`, `skip`, `scan`, `from_iter`, `take`, when
+      their module is included and the program does not define the name; each bound is the
+      library's (SPEC §16's table), checked by a program whose answer changes if it is one short.
+      Alternative not taken: an iterator type carrying its bound (`iter_n A R R'` or a count in
+      the state's type), which would make the rule a type's and cover a program's own finite
+      sources, at the cost of a new abbreviation and of every adapter's signature.
+    - **`take(s, n)` over a source that never skips is bounded by `n + 1`** whatever `s` is:
+      `take(from_iter(bytes(&mut c)), n)` reads at most `n` bytes in total code, and the
+      capability comes back when the iterator finishes or is closed.
+    - **What falls back to a loop.** A body that breaks, yields or returns, and a `for` whose
+      value is kept (`let r = for …`), are loops as before (SPEC §14, §15); in a `total fn` they
+      are rejected as today. `break` in a counted loop is left for when a program needs it.
+    - **`range(n)` and `range(a, b)`** are the elaboration's, not a library function: `range`
+      exists only as the source of a `for`, and a program's own `range` (a generator) takes
+      precedence. `range` from `a` to `b − 1`, Rust's `a..b`.
+    - **`&mut a`/`&a` of an owned array at a view parameter** lends the view for the one call
+      with `slice_borrow_*` (the design's §4.3 row), and a view the call hands back is dropped
+      there, so `reverse(&mut a)` and `sort(&mut a, cmp_i32, 0)` read as Rust's
+      `a.reverse()`. A result that holds anything else at the view's lifetime is rejected.
+      Alternative not taken: handing the view back as the lend's result, which cannot leave the
+      lend.
+    - **A lend in a total `for`'s source**, `for x in iter_mut(&mut a)`, is a borrow block of `a`
+      around the loop, which hands on the variables the body assigns and the enclosing code
+      reads.
+    - **`iter_imm`/`iter_mut` are generators** (`gen fn`, `while true` with `break`), yielding one
+      leaf per observation and finishing at the next, so they compose with the adapters.
+      `len_imm` (the length of a shared view, and the view back) is new, beside `len_mut`.
+    - **A generic instance may take lifetimes.** A lifetime in a type argument is a lifetime
+      parameter of the instance, `'gl0`, `'gl1`, …, outermost: `map` over `iter_imm(v)` is
+      `(unbang map__gN) ['x] (…)`. Revises decisions 41 and 45's "instances are at types without
+      lifetimes". Alternative not taken: yielding copies from a separate `values(v)` generator,
+      which works only for persistent elements and leaves `iter_imm` outside the adapters.
+    - **A `for` last in a body is a statement**: `fn upper<'a>(v: …) -> 1 = for c in iter_mut(v)
+      { … }` needs no `; ()`.

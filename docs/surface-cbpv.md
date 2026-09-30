@@ -226,8 +226,8 @@ become one `out`, and observation names come from the codata declaration (`Iter`
   so it is static code: no closure, and after `for_each` is specialized (defs are macros, §10),
   one loop.
 - A `for` over a source that may not end (the input, `bytes c`) is a loop: it makes the enclosing
-  function div (SPEC §14), and may appear in any function. A `for` over a finite source is total
-  (not yet provided).
+  function div (SPEC §14), and may appear in any function. A `for` over a bounded source is total
+  (SPEC §16, *The total `for`*).
 - A body that consumes a threaded variable (a `mut` borrow passed away, an owned value freed) is
   rejected, because it cannot hand it back. Borrowed variables are threaded by reborrowing; see
   open question Q3 for `imm`.
