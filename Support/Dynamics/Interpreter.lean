@@ -92,6 +92,8 @@ def delta (H : Host) (μ : Mem) : Expr → Val → Step
       .next μ' (tabFill ⟨f, h.pair_right⟩ ℓ (arrLen c) 0 (arrLen c).toNat)
   | .prim .idx, ⟨.pair (.pair (.loc ℓ) (.prim (.lit (.i32 n)))) (.prim (.lit (.i32 i))), _⟩ =>
       .next μ (idxAns ℓ n i).val
+  | .prim .split, ⟨.pair (.pair (.loc ℓ) (.prim (.lit (.i32 n)))) (.prim (.lit (.i32 i))), _⟩ =>
+      .next μ (splitAns ℓ n i).val
   | .prim .drop, ⟨.pair f (.pair (.loc ℓ) (.prim (.lit (.i32 n)))), h⟩ =>
       .next μ (dropFill ⟨f, h.pair_left⟩ ℓ 0 n.toNat)
   | .prim .count, ⟨.pair f (.pair (.prim (.lit (.i32 n))) (.pair (.prim (.lit (.i32 i))) s)), h⟩ =>

@@ -1,0 +1,37 @@
+-- `rev` for one line: the input's bytes, reversed in place. The input is read into a byte
+-- buffer (an `array u8` of 64 slots), which is lent `mut` once with no cell (`borrow mut`, SPEC
+-- §9) and cut at the length read (`split_at_mut`). The filled part is reversed by `reverse`
+-- (`lib/slice.bc`): a counted loop of `n / 2` exchanges through the view (`slice_swap_mut`).
+-- The buffer is then written out, and a newline after it.
+--
+-- Answer: `!dlrow ,olleH` and a newline for the input `Hello, world!` (no newline), and
+-- `i32[13]`, the bytes reversed. An exchange past the middle would undo itself and print the
+-- input; an off-by-one bound would leave the middle pair or the ends in place. The reversal
+-- allocates nothing and makes no dispatched call: the three allocations are the buffer and the
+-- cells of the two capabilities, the same for any input.
+
+include slice
+
+fn dot(i: i32) -> u8 = b'.'
+
+-- Byte `i` of the buffer, written out.
+fn emit(i: i32, s: Out * array u8) -> Out * array u8 =
+  let (o, a) = s;
+  let c = borrow imm a { 'x, v -> at[u8](v, i, b'?') };
+  let (o, _) = putb(o, to_i32(c));
+  (o, a)
+
+main -> i32 =
+  let mut buf = array_new[u8] (64, dot);
+  let mut n = 0;
+  for b in bytes(&mut stdin) {
+    let (a, _) = array_replace[u8] (buf, n, to_u8(b));
+    buf = a;
+    if n < 64 { n = n + 1 }
+  };
+  borrow mut buf { 'x, v ->
+    match split_at_mut[u8](v, n) { inl (text, rest) -> let text = reverse[u8](text); () | inr v -> () }
+  };
+  let (stdout, buf) = count_fold[Out * array u8] (emit, n, 0, (stdout, buf));
+  putb(&mut stdout, 10);
+  n

@@ -1,6 +1,6 @@
 # Strings and slices, end to end — design
 
-Status: a design. Stages S1 and S2 are built (below, *Stage status*); the rest is proposed. It
+Status: a design. Stages S1, S2 and S3 are built (below, *Stage status*); the rest is proposed. It
 proposes spec entries, and names the theorems each needs.
 
 **Stage status.**
@@ -15,7 +15,16 @@ proposes spec entries, and names the theorems each needs.
 | S1 total `for` | not done: typed elaboration's stage 9; `count_fold` is called directly | SPEC §16 Open, `corpus/pending/for-finite.bc` |
 | S2 K2 | built at `Mut` and `Imm`, with the side conditions of `experiments/PositiveArrays`; `borrow mut a { 'x, v -> … }` on an array | SPEC §9, `Core/Slices.lean`, `corpus/slice-mut.bc`, `corpus/slice-imm.bc` |
 | S2 K4 | built with S2: `slice_get_mut`, `slice_len_mut` (a `mut` family is unusable without them) | `Core/Slices.lean` |
-| P12 | as a counted loop lending one `mut` leaf per index; `iter_mut` itself waits for K3 and S4 | `corpus/iter-mut-count.bc`, `corpus/pending/iter-mut.bc` |
+| S3 K3 | built, **as a machine step** `split`, not a term over the host's `le_u`/`sub` (as K0); `slice_split_imm`/`_mut`, and `slice_empty_imm`/`_mut` typed `[L]` (not `![L]`) | SPEC §9, `Core/SliceOps.lean` (`famSplit_compatX`, `famEmpty_compatX`), `corpus/slice-split.bc` |
+| S3 K5 | built: `slice_replace_mut` (Mut Anti-Frame on the leaf), `slice_swap_mut` (two nested Anti-Frames, `sepRange_pick2N`; one leaf at `i = j`) | `Core/SliceOps.lean` (`sliceReplaceM_compatX`, `sliceSwapM_compatX`) |
+| S3 destructor | built: `array_mut @a A` has one, derived from `slice_get_mut` and `forget` (no kernel change) | SPEC §9, §12, `Core/Dtor.lean` |
+| S3 backend | built: `split` is a compare and pointer and length arithmetic, no allocation; the empty family's base is `0` | `Backend/Flat/Lower.lean`, `Backend/Clos/` |
+| S3 library | built: `lib/slice.bc`, generic in the element type, comparisons as arguments; `sort` is an insertion sort; `iter_imm`/`iter_mut` are codata over the rest of the view | SPEC §9, `docs/decisions.md` 44 |
+| P10 | as written but for `read_all` (a 64-byte buffer filled from the input) and `iter_mut` driven by a counted loop (no total `for` yet) | `corpus/split-at-mut.bc` |
+| P7 (numbers) | an `array i32` sorted in place and binary-searched | `corpus/sort-numbers.bc` |
+| search, reverse | `find`/`contains`/`starts_with`/`ends_with`/`eq`/`cmp` over bytes; `rev` in place | `corpus/find-bytes.bc`, `corpus/reverse-bytes.bc` |
+| P12 | `iter_mut` from the library, driven by a counted loop; the program as written (`for x in iter_mut(&mut a)`) waits for S4's total `for` and the array lend row | `corpus/iter-mut-slice.bc`, `corpus/iter-mut-count.bc`, `corpus/pending/iter-mut.bc` |
+| S3 left | an `imm` reborrow of a `mut` family (K2′: `peek` and `sort` take a filler meanwhile); lifetime inference for two lifetimes (`copy_from`, `eq`, `cmp` take them written); static bounds-check elimination | SPEC §9 Open |
 | `div_fuel` over K0 | built: `io-fuel` from 3746 allocations and 174 dispatched calls to 1 and 0 | `lib/div.bc` |
 
 The method follows the user's direction. The programs come first (§1), then the types they need

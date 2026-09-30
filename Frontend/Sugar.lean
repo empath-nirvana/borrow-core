@@ -53,6 +53,9 @@ def lendLibrary : String := include_str "../lib/lend.bc"
 /-- The generator adapters, `lib/adapters.bc`: `map`, `filter`, `take`, … (`include adapters`). -/
 def adaptersLibrary : String := include_str "../lib/adapters.bc"
 
+/-- The slice library, `lib/slice.bc`: functions on the views an array lends (`include slice`). -/
+def sliceLibrary : String := include_str "../lib/slice.bc"
+
 /-- The prelude, `lib/prelude.bc`: `true`, `false`, `not`, `to_i32`, `to_u8`. -/
 def preludeLibrary : String := include_str "../lib/prelude.bc"
 
@@ -60,7 +63,7 @@ def preludeLibrary : String := include_str "../lib/prelude.bc"
 embedded in the compiler; adding one is adding its line here. -/
 def libModules : List (String × String) :=
   [("io", ioLibrary), ("div", divLibrary), ("prelude", preludeLibrary), ("lend", lendLibrary),
-   ("adapters", adaptersLibrary)]
+   ("adapters", adaptersLibrary), ("slice", sliceLibrary)]
 
 def capNames : List String := ["stdin", "stdout", "stderr"]
 

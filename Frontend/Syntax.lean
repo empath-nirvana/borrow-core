@@ -218,6 +218,15 @@ inductive Const where
   | sliceBorrowImm (x : Ident) (b : Life) (A B : VTy)
   | sliceGetMut (a : Life) (A : VTy)
   | sliceLenMut (a : Life) (A : VTy)
+  /-- The splits and writes of SPEC §9: `slice_split_imm[@, A]`, `slice_split_mut[@, A]`,
+      `slice_empty_imm[@, A]`, `slice_empty_mut[@, A]`, and on a `mut` family
+      `slice_replace_mut[@, A]`, `slice_swap_mut[@, A]`. -/
+  | sliceSplitImm (a : Life) (A : VTy)
+  | sliceSplitMut (a : Life) (A : VTy)
+  | sliceEmptyImm (a : Life) (A : VTy)
+  | sliceEmptyMut (a : Life) (A : VTy)
+  | sliceReplaceMut (a : Life) (A : VTy)
+  | sliceSwapMut (a : Life) (A : VTy)
   /-- `count_fold[S]`: the counted loop of SPEC §16. -/
   | countFold (S : VTy)
   deriving DecidableEq, Repr
@@ -492,6 +501,12 @@ def Const.strip : Const → Const
   | .sliceBorrowImm x b A B => .sliceBorrowImm x.strip b.strip A.strip B.strip
   | .sliceGetMut a A => .sliceGetMut a.strip A.strip
   | .sliceLenMut a A => .sliceLenMut a.strip A.strip
+  | .sliceSplitImm a A => .sliceSplitImm a.strip A.strip
+  | .sliceSplitMut a A => .sliceSplitMut a.strip A.strip
+  | .sliceEmptyImm a A => .sliceEmptyImm a.strip A.strip
+  | .sliceEmptyMut a A => .sliceEmptyMut a.strip A.strip
+  | .sliceReplaceMut a A => .sliceReplaceMut a.strip A.strip
+  | .sliceSwapMut a A => .sliceSwapMut a.strip A.strip
   | .countFold S => .countFold S.strip
 
 mutual

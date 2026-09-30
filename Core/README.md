@@ -99,7 +99,7 @@ The machine's steps `tab`, `idx`, `drop` (`Paper/S3_Dynamics/Definitions.lean`,
 allocator's block, `alloc_block`), `wpTS_idx` and `wpTS_dropStep` (`ArrayWp.lean`). The constants and
 their compatibility lemmas are `Arrays.lean`: `array_new` (`tabFill_wp`), `array_free`
 (`dropFill_wp`), `array_size`, `array_replace`, and on families `array_len`, `array_get`,
-`array_copy`, `array_forget`. `HasDtor` has `Array A` and `ArrayImm @a A` (`Dtor.lean`).
+`array_copy`, `array_forget`. `HasDtor` has `Array A`, `ArrayImm @a A` and `ArrayMut @a A` (`Dtor.lean`).
 `ArrayPrograms.lean` runs one program by adequacy and by the interpreter. The relation's
 clause carries the length bound `c < 2³¹`, so a family has `tab`'s length (`arrLen_of_bound`).
 
@@ -107,7 +107,12 @@ An owned array is lent as a family of leaf borrows with no cell by `slice_borrow
 `slice_borrow_imm` (`Slices.lean`, `withbor`'s term): one Mut or Imm Frame per leaf around the
 one callback, by induction on the list of places (`wpTS_M_frameList`, `wpTS_I_frameList`,
 `SliceFrames.lean`, with the split `vP_fam_split`/`vP_fam_join`). On `[Mut @a A]`,
-`slice_get_mut` (`idx`) and `slice_len_mut` (`array_size`'s term).
+`slice_get_mut` (`idx`) and `slice_len_mut` (`array_size`'s term). `SliceOps.lean`: a
+borrowed family is split at a run-time index by the step `split` (`famSplit_compatX`, from
+`vP_fam_split`), `(0, 0)` is the empty family (`famEmpty_compatX`), and a `mut` family is
+written at an index by Mut Anti-Frame on the leaf (`sliceReplaceM_compatX`,
+`sliceSwapM_compatX`, two leaves by `sepRange_pick2N`). `HasDtor` has `ArrayMut @a A`, derived
+from `slice_get_mut` and `forget`.
 
 ### Standard I/O  `[spec §11]`
 

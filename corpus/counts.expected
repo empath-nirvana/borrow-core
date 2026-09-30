@@ -29,6 +29,7 @@ count-fold 0 0 0
 deep-list 100000 0 0
 div-hof 0 0 0
 family-swap 2 0 0
+find-bytes 2 0 0
 gen-adapters 5 0 0 # chain, zip over batch and chunks, and main's three loops: each body one state machine (#109 item 8)
 gen-adapters-fail 8 0 0 # chain, chunks, batch and lines, and main's ten loops, each one state machine (#109 item 8)
 gen-adapters-io 13 0 0 # main's six loops over every adapter, one state machine (#109 item 8)
@@ -65,6 +66,7 @@ io-upper 2 0 0
 io-wc 2 0 0
 iter-close 2 0 0
 iter-mut-count 1 0 0
+iter-mut-slice 1 0 0
 iter-range 0 0 0
 lend-config 2 0 0
 lend-div 2 0 0
@@ -76,8 +78,12 @@ lend-pipeline 2 0 0
 lend-server 2 0 0
 map-reuse 7 0 0
 nats-sum 0 0 0
+reverse-bytes 3 0 0
 slice-imm 1 0 0
 slice-mut 1 0 0
+slice-split 1 0 0
+sort-numbers 2 0 0
+split-at-mut 3 0 0
 sum-i32 7 0 0
 sum-prog-exact 37 9 0
 surface/array-sum 1 0 0

@@ -495,6 +495,7 @@ theorem step_beta_inv {μ μ' : Heap} {b : Expr} {v : Val} {e' : Expr}
     | host => simp at hE
     | tab => simp at hE
     | idx => simp at hE
+    | split => simp at hE
     | drop => simp at hE
     | count => simp at hE
   · exact absurd ha (no_step_isVal v.2)
@@ -522,6 +523,7 @@ theorem step_load_inv {μ μ' : Heap} {ℓ : Loc} {e' : Expr}
     | host => simp at hE
     | tab => simp at hE
     | idx => simp at hE
+    | split => simp at hE
     | drop => simp at hE
     | count => simp at hE
   · exact absurd ha (no_step_isVal .loc)
@@ -550,6 +552,7 @@ theorem step_store_inv {μ μ' : Heap} {ℓ : Loc} {v : Val} {e' : Expr}
     | host => simp at hE
     | tab => simp at hE
     | idx => simp at hE
+    | split => simp at hE
     | drop => simp at hE
     | count => simp at hE
   · exact absurd ha (no_step_isVal v.2)

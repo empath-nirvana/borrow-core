@@ -105,6 +105,19 @@ import Frontend.Check.Externs
 #print axioms BoCa.Fig16.LogRel.Core.famSize_compatX
 #print axioms BoCa.Fig16.LogRel.Core.sliceGetM_compatX
 #print axioms BoCa.Fig16.LogRel.Core.sliceLenM_compatX
+#print axioms BoCa.Fig16.LogRel.Core.splitAns_cases
+#print axioms BoCa.Fig16.LogRel.Core.famSplit_compatX
+#print axioms BoCa.Fig16.LogRel.Core.sliceSplitI_compatX
+#print axioms BoCa.Fig16.LogRel.Core.sliceSplitM_compatX
+#print axioms BoCa.Fig16.LogRel.Core.famEmpty_compatX
+#print axioms BoCa.Fig16.LogRel.Core.sliceEmptyI_compatX
+#print axioms BoCa.Fig16.LogRel.Core.sliceEmptyM_compatX
+#print axioms BoCa.Fig16.LogRel.Core.vP_mut_leaf
+#print axioms BoCa.Fig16.LogRel.Core.vP_mut_leaf_mk
+#print axioms BoCa.Fig16.LogRel.Core.sliceReplaceM_compatX
+#print axioms BoCa.Fig16.LogRel.Core.sepRange_pick2R
+#print axioms BoCa.Fig16.LogRel.Core.sepRange_pick2N
+#print axioms BoCa.Fig16.LogRel.Core.sliceSwapM_compatX
 -- SPEC §11: externs and standard I/O
 #print axioms BoCa.Fig16.LogRel.Core.vC_bytes
 #print axioms BoCa.Fig16.LogRel.Core.vC_outRep

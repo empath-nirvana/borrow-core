@@ -415,3 +415,31 @@ Each entry: the decision, and why. Newest last.
       a family, with no cell, rather than rejecting a place that is not a cell. Alternative not
       taken: a new keyword (`borrow slice`), since the place's type already says which lend is
       meant, as `&x` does (typed elaboration §5.1).
+
+44. **Provisional (strings S3, SPEC §9, to be confirmed by the user).**
+    - **K3 is a machine step**, `split`, as K0 is (`count`): the design's term over the host's
+      `le_u` and `sub` would be sound only at hosts whose subtraction subtracts. The
+      alternative, a term over `idx` alone, cannot compute the length of the right part.
+    - **`slice_split_imm[@a, A]`/`slice_split_mut[@a, A]`**, **`slice_empty_imm[@a, A]`/
+      `slice_empty_mut[@a, A]`**, **`slice_replace_mut[@a, A]`**, **`slice_swap_mut[@a, A]`**
+      are the core constants. The empty family is typed `[L]`, not the design's `![L]`: a
+      constant at a dead context is already used at will.
+    - **`array_mut @a A` has a destructor**, derived (`slice_get_mut` past every length, then
+      `forget`), so it needs no new constant; the alternative, a `slice_forget_mut` constant, is
+      a kernel change for the same effect.
+    - **The library `lib/slice.bc`** (`include slice`) is generic in the element type, called
+      with it written: `reverse[u8](v)`, `sort[i32](v, cmp_i32, 0)`. Its names:
+      `len`/`len_mut`, `get`/`get_mut`, `at` (a copy through an `imm` view), `peek` (a copy
+      through a `mut` view, by replace-and-restore), `set`, `replace`, `swap_at`, `discard_mut`,
+      `empty`/`empty_mut`, `split_at`/`split_at_mut`, `split_first`/`split_first_mut`,
+      `split_last`/`split_last_mut`, `read`, `reverse`, `fill`, `copy_from`, `find` (Rust's
+      `position`), `contains`, `binary_search` (`inl` found, `inr` the insertion point), `eq`,
+      `cmp`, `starts_with`, `ends_with`, `sort` (insertion, stable), `iter_imm`, `iter_mut`.
+      `swap`, `iter` and `forget_mut` are keywords, hence `swap_at`, `iter_imm` and
+      `discard_mut`.
+    - **A comparison is an argument**: `find[u8](v, x, eq_u8)`, `sort[i32](v, cmp_i32, 0)`, with
+      `eq_u8`, `cmp_u8`, `eq_i32`, `cmp_i32` in the library. There are no traits; the element
+      functions are called directly in the loops (0-CFA finds one code), so this costs no
+      dispatched call. An order answers `-1`, `0` or `1`.
+    - **`sort` and `peek` take a filler** of the element type, held in a slot while its element
+      is read through the `mut` view; K2′ (an `imm` reborrow of a `mut` family) would remove it.

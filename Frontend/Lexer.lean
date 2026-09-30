@@ -66,6 +66,8 @@ def keywords : List String :=
     "alloc_s", "free_s", "withbor_s_mut", "withbor_s_imm", "withbor_f2_mut", "withbor_f2_imm",
     "shorten_mut", "shorten_imm", "array_new", "array_free", "array_size", "array_replace",
     "slice_borrow_mut", "slice_borrow_imm", "slice_get_mut", "slice_len_mut", "count_fold",
+    "slice_split_imm", "slice_split_mut", "slice_empty_imm", "slice_empty_mut",
+    "slice_replace_mut", "slice_swap_mut",
     "array_len", "array_get", "array_copy", "array_forget" ]
 
 /-- The reserved upper-case words. -/

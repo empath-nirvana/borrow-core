@@ -5,22 +5,21 @@
 -- Axes: codata × effects × scope. The iterator is codata whose state holds `mut` borrows of the
 -- remaining elements (scope); each observation hands one out.
 --
--- Blocked by: an iterator over a `mut` family. The family exists: `borrow mut a { 'x, v -> … }`
--- lends an array as `array_mut 'x A` with no cell (SPEC §9, slice borrows), and
--- `corpus/iter-mut-count.bc` updates every element through a counted loop that lends one leaf
--- per index. `iter_mut` as codata whose state is the rest of the family needs a run-time split
--- of a `mut` family (K3, `slice_split`), and the `for` over it a total `for` (S4); neither is
--- built (SPEC §9 Open, #57).
+-- Blocked by: the surface. The iterator exists: `iter_mut` in `lib/slice.bc` is codata over the
+-- `mut` view `borrow mut a { 'x, v -> … }` lends (SPEC §9), each observation splitting off one
+-- `mut` leaf (`slice_split_mut`), and `corpus/iter-mut-slice.bc` drives it with a counted loop.
+-- What is not built is the `for` over it, which must be total inside the lend (stage S4 of
+-- `docs/strings-slices-design.md`, stage 9 of `docs/typed-elaboration.md`), and `&mut a` at an
+-- array lending its view to one call (the lend row of the design's §4.3).
 -- The `imm` counterpart is expressible today: `corpus/axes/codata-coeffects.bc` iterates a
 -- family of leaf views, and `corpus/axes/scope-boxed-iter.bc` carries such an iterator across a
--- scope. Also not provided, in the surface: `for` over a finite source (stage 9 of
--- `docs/typed-elaboration.md`), and `fn` with a lifetime parameter.
+-- scope. Also not provided, in the surface: `fn` with a lifetime parameter.
 --
 -- Spelling (a hypothesis): Rust's `iter_mut`, with `modify` for the write through a `mut`
 -- borrow (`*x = …` through a `mut` borrow is not provided either, decision 38).
 --
--- Today: there is no `iter_mut`. The checker reports the `modify` first: the loop variable's
--- type is not determined, and is taken as `1`.
+-- Today: `iter_mut` is `lib/slice.bc`'s, not included here, and `for` takes no view. The checker
+-- reports the `modify` first: the loop variable's type is not determined, and is taken as `1`.
 --
 -- Once it lands: the array [1, 2, 3, 4] becomes [10, 20, 30, 40], and `main` returns its sum.
 -- Golden: `i32[100]`, `live 0`.
@@ -43,4 +42,4 @@ main -> i32 =
   let (a, v) = add_at(a, 2, v);
   let (a, v) = add_at(a, 3, v);
   v
--- now: 40:38: this borrow block's place has type `1`: `borrow imm`/`borrow mut` take a cell `ref A` or an array (a pair of cells for a family), `modify` a `mut` borrow
+-- now: 39:38: this borrow block's place has type `1`: `borrow imm`/`borrow mut` take a cell `ref A` or an array (a pair of cells for a family), `modify` a `mut` borrow

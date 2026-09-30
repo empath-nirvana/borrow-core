@@ -121,6 +121,14 @@ def genPrim : Op → List Var → GM Key
       let l ← freshKey
       emit (.proj h 0 l)
       holding (.inj false l)
+  | .split, [v] => do
+      -- Both parts, and the family handed back, are the family's abstract values.
+      let h ← freshKey
+      emit (.proj (.var v) 0 h)
+      let r ← holding (.inj false (← holding (.pair h h)))
+      emit (.elem (.inj true h) r)
+      pure r
+  | .nullLoc, [] => do holding (.loc (← freshKey))
   | .drop, [v] => do
       let f ← freshKey
       emit (.proj (.var v) 0 f)

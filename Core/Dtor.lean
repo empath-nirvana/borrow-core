@@ -115,6 +115,9 @@ def dtorAt : Bool → VTy → Expr
   | _, .thunk _ => .val (.lam (.app (.var 0) (.val (.inj₂ .unit))))
   | _, .fam (.ref A) => .val (.lam (.app (.val (.prim .drop))
       (.pair (.val (.lam (.app (dtorAt false A) (.var 0)))) (.var 0))))
+  | _, .fam (.mut _ _) => .val (.lam (elet
+      (.app (.val (.prim .idx)) (.pair (.var 0) (.val (Val.i32 0xFFFFFFFF))))
+      (.case (.var 0) (.app forget (.var 0)) (.var 0))))
   | _, _ => forget
 
 /-- At a thunk the destructor does not depend on the mode. -/
@@ -196,6 +199,9 @@ inductive HasDtor : VTy → Prop where
   | array {A} (h : HasDtor A) : HasDtor (.fam (.ref A))
   /-- A family of leaf views, forgotten (`array_forget`).  `[spec §9, §12]` -/
   | arrayImm {a A} : HasDtor (.fam (.imm a A))
+  /-- A family of `mut` leaves, forgotten: `slice_get_mut` at an index past every family's
+  length (`2³² − 1`) consumes it, and `forget` ends the leaf it would hand out.  `[spec §9, §12]` -/
+  | arrayMut {a A} : HasDtor (.fam (.mut a A))
 
 theorem hasDtor_of_affine {A : VTy} (h : Affine A) : HasDtor A := by
   induction h with
@@ -292,6 +298,18 @@ theorem dtor_wf {Δ : LifeCtx} {T : VTy} (hT : HasDtor T) :
           (.var (.here hΓ.toP)))
         (.bangE (.arrFree _ (Ctx.Dead.cons hΓ).toP)))
   | arrayImm => intro Γ hΓ; exact .bangE (.arrForget _ _ hΓ.toP)
+  | arrayMut =>
+      intro Γ hΓ
+      exact .lamV (.eletV (.left (deadSplit hΓ))
+        (.lolliE (.left (deadSplit hΓ))
+          (.tensorI (.left (deadSplit hΓ)) (.var (.here hΓ.toP))
+            (.lit (.i32 0xFFFFFFFF) (Ctx.Dead.cons hΓ).toP))
+          (.bangE (.sliceGetM _ _ (Ctx.Dead.cons hΓ).toP)))
+        (.caseV (.left (deadSplit (Ctx.Dead.cons hΓ))) (.var (.here (Ctx.Dead.cons hΓ).toP))
+          (.lolliE (.left (.dead (deadSplit (Ctx.Dead.cons hΓ))))
+            (.var (.here (Ctx.Dead.cons (Ctx.Dead.cons hΓ)).toP))
+            (.forgetMut (Ctx.Dead.cons (Ctx.Dead.cons (Ctx.Dead.cons hΓ))).toP))
+          (.var (.here (Ctx.Dead.cons (Ctx.Dead.cons hΓ)).toP))))
 
 /-! ### A borrow's destructor frees nothing -/
 
