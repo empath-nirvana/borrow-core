@@ -134,3 +134,8 @@ roots = ["LoopBorrow"]
 name = "PositiveArrays"
 srcDir = "experiments/PositiveArrays"
 roots = ["PositiveArrays"]
+
+[[lean_lib]]
+name = "HandlersAsBorrows"
+srcDir = "experiments/HandlersAsBorrows"
+roots = ["HandlersAsBorrows"]
