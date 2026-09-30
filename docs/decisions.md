@@ -443,3 +443,40 @@ Each entry: the decision, and why. Newest last.
       dispatched call. An order answers `-1`, `0` or `1`.
     - **`sort` and `peek` take a filler** of the element type, held in a slot while its element
       is read through the `mut` view; K2′ (an `imm` reborrow of a `mut` family) would remove it.
+
+45. **Provisional (surface generics, #130; to be confirmed by the user).**
+    - **`fn f[A, …]<'a, …>(…)`**: type parameters in brackets, then lifetime parameters in
+      angle brackets (draft 0 §2.5's order), each lifetime `top`-bounded unless written
+      `'b < @`. Lifetimes are `all 'a < @.` around the function, outermost first. A `fn` with
+      type parameters is a template (`Mark.template`, printed `fn def f[A] : … = …`).
+    - **Monomorphization at the surface, not an opaque body.** A generic `fn`'s body is
+      elaborated per instance, at the instance's types, as generic generators are (decision 41);
+      the call's inference treats each type parameter as a placeholder to be matched. Alternative
+      not taken: inferring the body once with `A` opaque and emitting a core `def f[A]` that the
+      checker instantiates at each use. The elaborator's types have no opaque type: a free
+      type variable standing for `A` is rejected inside a `μ` (`elabV` requires a `μ` closed),
+      and what a body may do with an `A` (`*g`, which needs `A` persistent; an operator)
+      is decided by its type, which there are no traits to state. A consequence: an error in a
+      generic body is reported at the first use that instantiates it, and a generic `fn` never
+      called is not elaborated (as a core `def f[A]` is checked only at its uses).
+    - **Type arguments are inferred** by first-order matching of each parameter's type against
+      its argument's, left to right, then of the result against the expected type; a closure
+      whose parameter's type is a hole, and an injection, go last. A core `def f[A]` is covered
+      too (`f(W)` becomes `f[T](W)`). A type argument that is not determined is an error at the
+      call naming the parameter. Explicit `f[T, …](…)` stays.
+    - **Lifetime arguments** are read off each parameter's own argument; written, they follow
+      the type arguments, `f[T]['x](…)`. Two arguments that give one lifetime different
+      lifetimes meet, and a borrow argument is shortened with `:>`; an argument that is not a
+      borrow (a family `array_imm`) cannot be, and the call is rejected with a request to write
+      the lifetime. A lend `&x` is at a function with one lifetime parameter only, as before.
+    - **`unbang` is never written at a call**: a call of a `!` function with lifetime
+      parameters is `(unbang f) ['x] …`, and `f['x]` of a `!` function inserts `unbang`.
+    - **Loop steps are closures.** `lib/slice.bc`'s `count_fold` steps are `!{ … }` closures
+      that capture nothing, in place of the generic `!(all 'a. !(…))` step `def`s: a `fn` with a
+      lifetime parameter has type `!(all 'a. P => Q)`, and its instance at `'a` is not `!`. The
+      closures erase to the same code, and the corpus counts are unchanged.
+    - Not provided: bracket arguments of core constants (`array_get['a, A]`, `count_fold[S]`)
+      are still written; inference of a type parameter from the arms of a `match` (a `let` with
+      no expected type whose first arm determines it) is not done; instances are at types
+      without lifetimes (decision 41).
+

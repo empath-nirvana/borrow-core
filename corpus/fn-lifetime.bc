@@ -1,0 +1,23 @@
+-- A function over a borrowed argument, declared with a lifetime parameter (`fn sum<'a>`, draft 0
+-- §2.5: `all 'a < top` around the function, `Fun 'a < top` around its body) and called with a
+-- lend, `sum(&l)`: the call borrows `l` for the call and applies `sum` at the borrow's lifetime.
+--
+-- Axes: coeffects × scope: the `imm` demand in a signature, which is where every function over a
+-- borrow starts.
+--
+-- Answer: the list [100, 20, 3], read through a borrow: i32[123], `live 0`.
+
+type List = mu X. 1 + (ref i32 * ref X)
+shape Node = node (leaf i32) (leaf List)
+
+def nil : List = roll inl ()
+fn cons(x: i32, t: List) -> List = roll inr alloc_s[Node] (x, t)
+
+fn sum_alg<'y>(r: 1 + imm 'y i32 * i32) -> i32 = match r { inl _ -> 0 | inr (b, s) -> *b + s }
+
+fn sum<'a>(l: imm 'a List) -> i32 = (unbang (fold_imm[1 + ref i32 * ref X, 'b, top, i32] sum_alg)) ['a] l
+
+main -> i32 =
+  let l = alloc(cons(100, cons(20, cons(3, nil))));
+  let n = sum(&l);
+  n

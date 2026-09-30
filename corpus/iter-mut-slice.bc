@@ -26,14 +26,14 @@ def times10 : !(all 'x < top. !(i32 * (U (iter (mut 'x i32) 1 1) + 1) => U (iter
 
 fn add_at(i: i32, s: array i32 * i32) -> array i32 * i32 =
   let (a, acc) = s;
-  let acc = borrow imm a { 'x, v -> acc + at[i32](v, i, 0) };
+  let acc = borrow imm a { 'x, v -> acc + at(v, i, 0) };
   (a, acc)
 
 main -> i32 =
   let mut a = array_new[i32] (4, tab);
   borrow mut a { 'x, v ->
-    let (v, n) = len_mut[i32](v);
-    let r = count_fold[U (iter (mut 'x i32) 1 1) + 1] ((unbang times10) ['x], n + 1, 0, inl iter_mut[i32](v));
+    let (v, n) = len_mut(v);
+    let r = count_fold[U (iter (mut 'x i32) 1 1) + 1] ((unbang times10) ['x], n + 1, 0, inl iter_mut(v));
     match r { inl it -> u <- (nu_out (force it)).2; u | inr u -> u }
   };
   let (_, v) = count_fold[array i32 * i32] (add_at, 4, 0, (a, 0));

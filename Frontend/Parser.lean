@@ -1535,12 +1535,22 @@ where
     expectSym "="
     let V ← val n
     pure (.def_ (← spanFrom st) x ps A V mk)
-  /-- A `fn` after its keyword (draft 0 §2.5): `name(x₁: A₁, …, xₙ: Aₙ) -> T = S`. It is the
-  persistent `def name : !(A₁ * … * Aₙ => T) = !thunkv fun (p : A₁ * … * Aₙ) -> …`, the
-  parameters bound from `p` and the body `S` a statement sequence; with no parameter, `p : 1`.
-  When `T` is a computation type `C`, the result is `C` itself: `!U (A -o C)`. -/
+  /-- A `fn` after its keyword (draft 0 §2.5): `name[P₁, …]<'a, …>(x₁: A₁, …, xₙ: Aₙ) -> T = S`,
+  the type parameters and the lifetime parameters each optional. It is the persistent
+  `def name : !(A₁ * … * Aₙ => T) = !thunkv fun (p : A₁ * … * Aₙ) -> …`, the parameters bound
+  from `p` and the body `S` a statement sequence; with no parameter, `p : 1`. When `T` is a
+  computation type `C`, the result is `C` itself: `!U (A -o C)`. Each lifetime parameter `'a`
+  (bounded by `top`, or by `@` when written `'a < @`) is an `all 'a < @.` around the function,
+  outermost first, and a `Fun 'a < @.` around its body. With type parameters, the `fn` is a
+  template, instantiated at each use (`Mark.template`), printed `fn def name[P₁, …] : A = V`. -/
   fnRest (st : Pos) (mk : Mark) : P Decl := do
+    -- `fn def f[A, …] : T = V`: a template's printed form (`Decl.pp`).
+    if ← isKw "def" then
+      discard bump
+      return ← defRest st (.template mk)
     let x ← ident "a `fn` name"
+    let tps ← typeParams
+    let lives ← lifeParams
     expectSym "("
     let ps ← if ← isSym ")" then pure [] else params n
     expectSym ")"
@@ -1554,28 +1564,53 @@ where
     let pn ← freshName "io_p"
     let body ← bindParams sp pn (ps.map (·.1)) M
     let lam := Comp.lam sp ⟨pn, sp⟩ A body
-    let ty ← match T.toV with
-      | .ok B => pure (VTy.bang sp (.lolli sp A B))
-      | .error _ => do let C ← liftSort T.toC; pure (VTy.bang sp (.thunk sp (.arr sp A C)))
-    pure (.def_ sp x [] ty (.bangThunkv sp lam) mk)
+    let fnTy ← match T.toV with
+      | .ok B => pure (VTy.lolli sp A B)
+      | .error _ => do let C ← liftSort T.toC; pure (VTy.thunk sp (.arr sp A C))
+    let (ty, V) := withLives sp lives fnTy lam
+    pure (.def_ sp x tps ty V (if tps.isEmpty then mk else .template mk))
+  /-- `[P₁, …]` after a name: type parameters, or none. -/
+  typeParams : P (List Ident) := do
+    if ← isSym "[" then
+      discard bump
+      let ps ← uidents n
+      expectSym "]"
+      pure ps
+    else pure []
+  /-- `<'a, 'b < @, …>` after a name: lifetime parameters with their bounds (`top` when not
+  written), or none. -/
+  lifeParams : P (List (Ident × Life)) := do
+    if !(← isSym "<") then return []
+    discard bump
+    let mut acc : Array (Ident × Life) := #[]
+    for _ in [0:n] do
+      let a ← lifeVar
+      let b ← if ← isSym "<" then do discard bump; life n else pure (.top a.span)
+      acc := acc.push (a, b)
+      if ← isSym "," then discard bump else break
+    expectSym ">"
+    pure acc.toList
+  /-- The persistent function of type `F` (`A => T` or `U (A -o C)`) whose code is `lam`, generic
+  in the lifetimes `lives`: `!(all 'a < @. … F)` and `!thunkv Fun 'a < @. return (thunkv …)`. -/
+  withLives (sp : Span) (lives : List (Ident × Life)) (F : VTy) (lam : Comp) : VTy × Val :=
+    match lives with
+    | [] => (.bang sp F, .bangThunkv sp lam)
+    | (a, b) :: ls =>
+      let rec inner : List (Ident × Life) → VTy × Comp
+        | [] => (F, lam)
+        | (a, b) :: ls =>
+          let (T, M) := inner ls
+          (.all sp a b T, .lamL sp a b (.ret sp (.thunkv sp M)))
+      let (T, M) := inner ls
+      (.bang sp (.all sp a b T), .bangThunkv sp (.lamL sp a b (.ret sp (.thunkv sp M))))
   /-- A `gen fn` after its keywords: `name(x₁: A₁, …) -> A = S` or `-> A, B = S`. It is the
   `fn` of result `B` (`1` when left out) marked as a generator of `A`. -/
   genRest (st : Pos) : P Decl := do
     let x ← ident "a `gen fn` name"
     -- `gen fn f[A, …](…)`: a generator generic in types, instantiated at each call.
-    let tps ← if ← isSym "[" then do
-        discard bump
-        let ps ← uidents n
-        expectSym "]"
-        pure ps
-      else pure []
-    -- `gen fn f<'a>(…)`: a generator with a lifetime parameter, bounded by `top`.
-    let life ← if ← isSym "<" then do
-        discard bump
-        let a ← lifeVar
-        expectSym ">"
-        pure (some a)
-      else pure none
+    let tps ← typeParams
+    -- `gen fn f<'a>(…)`: a generator with lifetime parameters.
+    let lives ← lifeParams
     expectSym "("
     let ps ← if ← isSym ")" then pure [] else params n
     expectSym ")"
@@ -1590,11 +1625,8 @@ where
     let pn ← freshName "io_p"
     let body ← bindParams sp pn (ps.map (·.1)) M
     let lam := Comp.lam sp ⟨pn, sp⟩ P body
-    match life with
-    | none => pure (.def_ sp x tps (.bang sp (.lolli sp P B)) (.bangThunkv sp lam) (.gen A))
-    | some a =>
-      pure (.def_ sp x tps (.bang sp (.all sp a (.top sp) (.lolli sp P B)))
-        (.bangThunkv sp (.lamL sp a (.top sp) (.ret sp (.thunkv sp lam)))) (.gen A))
+    let (ty, V) := withLives sp lives (.lolli sp P B) lam
+    pure (.def_ sp x tps ty V (.gen A))
   /-- `x₁: A₁, …, xₙ: Aₙ`, at least one. -/
   params : Nat → P (List (Ident × VTy))
     | 0 => outOfFuel

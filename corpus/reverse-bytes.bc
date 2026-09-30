@@ -17,7 +17,7 @@ fn dot(i: i32) -> u8 = b'.'
 -- Byte `i` of the buffer, written out.
 fn emit(i: i32, s: Out * array u8) -> Out * array u8 =
   let (o, a) = s;
-  let c = borrow imm a { 'x, v -> at[u8](v, i, b'?') };
+  let c = borrow imm a { 'x, v -> at(v, i, b'?') };
   let (o, _) = putb(o, to_i32(c));
   (o, a)
 
@@ -30,7 +30,7 @@ main -> i32 =
     if n < 64 { n = n + 1 }
   };
   borrow mut buf { 'x, v ->
-    match split_at_mut[u8](v, n) { inl (text, rest) -> let text = reverse[u8](text); () | inr v -> () }
+    match split_at_mut(v, n) { inl (text, rest) -> let text = reverse(text); () | inr v -> () }
   };
   let (stdout, buf) = count_fold[Out * array u8] (emit, n, 0, (stdout, buf));
   putb(&mut stdout, 10);

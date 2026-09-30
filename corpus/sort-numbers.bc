@@ -27,19 +27,19 @@ fn put_signed(o: Out, x: i32) -> Out =
 -- Element `i` of the array, written out after a space (none before the first).
 fn emit(i: i32, s: Out * array i32) -> Out * array i32 =
   let (o, a) = s;
-  let x = borrow imm a { 'x, v -> at[i32](v, i, 0) };
+  let x = borrow imm a { 'x, v -> at(v, i, 0) };
   let o = if 0 < i { let (o, _) = putb(o, 32); o } else { o };
   (put_signed(o, x), a)
 
 main -> i32 * i32 =
   let mut a = array_new[i32] (8, data);
-  borrow mut a { 'x, v -> let v = sort[i32](v, cmp_i32, 0); () };
+  borrow mut a { 'x, v -> let v = sort(v, cmp_i32, 0); () };
   let (stdout, a) = count_fold[Out * array i32] (emit, 8, 0, (stdout, a));
   putb(&mut stdout, 10);
   let r = borrow imm a { 'x, v ->
     let (v, w) = array_copy['x, i32] v;
-    let p = match binary_search[i32](v, 7, cmp_i32) { inl i -> i | inr j -> 0 - 1 };
-    let q = match binary_search[i32](w, 5, cmp_i32) { inl i -> 0 - 1 | inr j -> j };
+    let p = match binary_search(v, 7, cmp_i32) { inl i -> i | inr j -> 0 - 1 };
+    let q = match binary_search(w, 5, cmp_i32) { inl i -> 0 - 1 | inr j -> j };
     (p, q)
   };
   r

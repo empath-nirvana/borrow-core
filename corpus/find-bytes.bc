@@ -37,22 +37,22 @@ main -> i32 * (i32 * (i32 * (i32 * i32))) =
     let (w, w1) = array_copy['y, u8] w;
     let (w, w2) = array_copy['y, u8] w;
     let (w, w3) = array_copy['y, u8] w;
-    let at_eq = match find[u8](v1, b'=', eq_u8) { inl i -> i | inr _ -> 0 - 1 };
-    let semi = bit(contains[u8](v2, b';', eq_u8));
-    let vee = bit(contains[u8](v3, b'v', eq_u8));
-    let sw = bit((unbang starts_with[u8]) ['x] ['y] (v4, (w1, eq_u8)));
-    let ew = bit((unbang ends_with[u8]) ['x] ['y] (v5, (w2, eq_u8)));
-    let same = bit((unbang eq[u8]) ['y] ['x] (w3, (v6, eq_u8)));
-    let order = (unbang cmp[u8]) ['y] ['x] (w, (v, cmp_u8)) + 1;
+    let at_eq = match find(v1, b'=', eq_u8) { inl i -> i | inr _ -> 0 - 1 };
+    let semi = bit(contains(v2, b';', eq_u8));
+    let vee = bit(contains(v3, b'v', eq_u8));
+    let sw = bit(starts_with(v4, w1, eq_u8));
+    let ew = bit(ends_with(v5, w2, eq_u8));
+    let same = bit(eq(w3, v6, eq_u8));
+    let order = cmp(w, v, cmp_u8) + 1;
     (at_eq, (semi * 10 + vee, (sw * 10 + ew, same * 10 + order)))
   } };
   let (a, (b, (c, d))) = r;
   let f = borrow imm t { 'x, v ->
     let (v, u) = array_copy['x, u8] v;
-    match split_at[u8](v, a + 1) {
-      inl (pre, field) -> match split_at[u8](u, 3) {
-        inl (p2, rest) -> match split_at[u8](rest, 1) {
-          inl (eqs, value) -> bit((unbang eq[u8]) ['x] ['x] (field, (value, eq_u8)))
+    match split_at(v, a + 1) {
+      inl (pre, field) -> match split_at(u, 3) {
+        inl (p2, rest) -> match split_at(rest, 1) {
+          inl (eqs, value) -> bit(eq(field, value, eq_u8))
         | inr r -> 0 }
       | inr r -> 0 }
     | inr r -> 0 } };

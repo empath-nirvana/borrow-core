@@ -33,7 +33,7 @@ def upper_step : !(all 'x < top. !(i32 * (U (iter (mut 'x u8) 1 1) + 1) => U (it
 -- Byte `i` of the buffer, written out.
 fn emit(i: i32, s: Out * array u8) -> Out * array u8 =
   let (o, a) = s;
-  let c = borrow imm a { 'x, v -> at[u8](v, i, b'?') };
+  let c = borrow imm a { 'x, v -> at(v, i, b'?') };
   putb(&mut o, to_i32(c));
   (o, a)
 
@@ -46,12 +46,12 @@ main -> i32 =
     if n < 64 { n = n + 1 }
   };
   borrow mut buf { 'x, v ->
-    match split_at_mut[u8](v, n) {
+    match split_at_mut(v, n) {
       inl (text, rest) ->
-        match split_at_mut[u8](text, (unbang host[shr_u32]) (n, 1)) {
+        match split_at_mut(text, (unbang host[shr_u32]) (n, 1)) {
           inl (l, r) ->
-            let l = reverse[u8](l);
-            let s = count_fold[U (iter (mut 'x u8) 1 1) + 1] ((unbang upper_step) ['x], n, 0, inl iter_mut[u8](r));
+            let l = reverse(l);
+            let s = count_fold[U (iter (mut 'x u8) 1 1) + 1] ((unbang upper_step) ['x], n, 0, inl iter_mut(r));
             match s { inl it -> u <- (nu_out (force it)).2; u | inr u -> u }
         | inr t -> ()
         }

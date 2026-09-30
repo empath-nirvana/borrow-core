@@ -246,8 +246,10 @@ def Decl.pp : Decl → String
   | .shape _ n σ => "shape " ++ n.name ++ " = " ++ σ.pp
   | .def_ _ n ps A V m =>
     let params := if ps.isEmpty then "" else "[" ++ ", ".intercalate (ps.map (·.name)) ++ "]"
-    let mk := match m with
+    let rec mk : Mark → String
       | .none => "" | .total => "total " | .div => "div " | .gen E => "gen[" ++ E.pp ++ "] "
+      | .template m => mk m ++ "fn "
+    let mk := mk m
     mk ++ "def " ++ n.name ++ params ++ " : " ++ A.pp ++ " =" ++ nl 2 ++ V.pp 0 2
   | .extern _ n A => "extern " ++ n.name ++ " : " ++ A.pp
   | .main _ C M => "main : " ++ C.pp ++ " =" ++ nl 2 ++ M.pp 0 2

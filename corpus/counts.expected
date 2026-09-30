@@ -30,6 +30,7 @@ deep-list 100000 0 0
 div-hof 0 0 0
 family-swap 2 0 0
 find-bytes 2 0 0
+fn-lifetime 7 0 0
 gen-adapters 5 0 0 # chain, zip over batch and chunks, and main's three loops: each body one state machine (#109 item 8)
 gen-adapters-fail 8 0 0 # chain, chunks, batch and lines, and main's ten loops, each one state machine (#109 item 8)
 gen-adapters-io 13 0 0 # main's six loops over every adapter, one state machine (#109 item 8)
@@ -80,6 +81,7 @@ map-reuse 7 0 0
 nats-sum 0 0 0
 reverse-bytes 3 0 0
 slice-imm 1 0 0
+slice-lib 3 0 0
 slice-mut 1 0 0
 slice-split 1 0 0
 sort-numbers 2 0 0

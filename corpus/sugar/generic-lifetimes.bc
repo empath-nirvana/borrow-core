@@ -1,0 +1,15 @@
+-- A call of a function with two lifetime parameters (typed elaboration §2.3, §7): `fn
+-- lens<'a, 'b>` is `!(all 'a < top. all 'b < top. …)`, and `lens(v, w)` is applied at `'x`
+-- and `'y`, each read off its own argument. `generic-lifetimes.core.bc` writes `['x] ['y]` and
+-- `unbang`.
+-- Answer: 7.
+fn one(i: i32) -> i32 = i32[1]
+
+fn lens<'a, 'b>(v: array_imm 'a i32, w: array_imm 'b i32) -> i32 =
+  host[add32] (array_len['a, i32](v), array_len['b, i32](w))
+
+main -> i32 =
+  let a = array_new[i32] (i32[3], one);
+  let b = array_new[i32] (i32[4], one);
+  let n = borrow imm a { 'x, v -> borrow imm b { 'y, w -> lens(v, w) } };
+  n
