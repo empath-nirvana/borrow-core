@@ -1,0 +1,79 @@
+-- The buffer library (`docs/strings-slices-design.md` §4.2, §5.4, stage A): a growable array,
+-- `buf A`, which is `array A * i32`. The array's length is the capacity and the `i32` is the
+-- length; the slots at or past the length hold a filler (`filler[A]`: `0` at an integer, the empty
+-- view at a view, an empty array at an array, componentwise at pairs and sums). `include buf`
+-- puts it in scope.
+--
+-- `box buf[A](cap)` is `buf_new[A](cap)`. A function that may grow a buffer takes it and hands it
+-- back first, so `push(&mut b, x)` moves `b` in and rebinds it. `borrow imm b { v -> … }` and
+-- `borrow mut b { v -> … }` lend the initialised prefix as a view, with no cell; the buffer
+-- itself is not in scope in the block, so it cannot grow while a view of it is live.
+--
+-- Growth is a new array of fillers (`array_new`), the elements moved into it one by one
+-- (`array_replace`), and the old array freed with the fillers left in it: one allocation, and a
+-- fill of the new capacity. Every loop is a `count_fold`.
+
+-- A buffer of capacity `cap` and length 0.
+fn buf_new[A](cap: i32) -> buf A = (array_new[A] (cap, !{ i -> filler[A] }), 0)
+
+-- An array as a buffer whose length is its capacity.
+fn buf_of_array[A](a: array A) -> buf A = array_size[A](a)
+
+-- The length, and the buffer back.
+fn len_of[A](b: buf A) -> buf A * i32 = let (a, n) = b; ((a, n), n)
+
+-- The capacity, and the buffer back.
+fn cap_of[A](b: buf A) -> buf A * i32 =
+  let (a, n) = b;
+  let (a, c) = array_size[A](a);
+  ((a, n), c)
+
+-- The elements moved into a new array of capacity `cap`, which is at least the length.
+fn grow[A](b: buf A, cap: i32) -> buf A =
+  let (old, n) = b;
+  let fresh = array_new[A] (cap, !{ i -> filler[A] });
+  let (old, fresh) = count_fold[array A * array A](
+    !{ (i, (old, fresh)) ->
+      let (old, x) = array_replace[A] (old, i, filler[A]);
+      match x {
+        inl e -> let (fresh, _) = array_replace[A] (fresh, i, e); (old, fresh)
+      | inr e -> (old, fresh)
+      } },
+    n, 0, (old, fresh));
+  (fresh, n)
+
+-- Room for `extra` more elements: the capacity doubles, or grows to fit, when it is short.
+fn reserve[A](b: buf A, extra: i32) -> buf A =
+  let (a, n) = b;
+  let (a, c) = array_size[A](a);
+  let want = if n + extra <= c * 2 { c * 2 } else { n + extra };
+  if n + extra <= c { (a, n) } else { grow((a, n), want) }
+
+-- `x` at the end. A full buffer grows first, to twice its capacity and at least 8.
+fn push[A](b: buf A, x: A) -> buf A * 1 =
+  let (a, n) = b;
+  let (a, c) = array_size[A](a);
+  let want = if c < 4 { 8 } else { c * 2 };
+  let (a, n) = if n < c { (a, n) } else { grow((a, n), want) };
+  let (a, _) = array_replace[A] (a, n, x);
+  ((a, n + 1), ())
+
+-- The last element taken out, or `inr ()` for the empty buffer.
+fn pop[A](b: buf A) -> buf A * (A + 1) =
+  let (a, n) = b;
+  if n == 0 { ((a, n), inr ()) } else {
+    let (a, x) = array_replace[A] (a, n - 1, filler[A]);
+    match x { inl e -> ((a, n - 1), inl e) | inr e -> ((a, n), inr ()) }
+  }
+
+-- The first `k` elements kept, and the rest dropped, their slots filled.
+fn truncate[A](b: buf A, k: i32) -> buf A =
+  let (a, n) = b;
+  if n <= k { (a, n) } else {
+    let a = count_fold[array A](
+      !{ (i, a) -> let (a, _) = array_replace[A] (a, i, filler[A]); a }, n, k, a);
+    (a, k)
+  }
+
+-- Length 0, with the capacity kept: every element dropped, its slot filled.
+fn clear[A](b: buf A) -> buf A = truncate(b, 0)
