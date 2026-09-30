@@ -2344,7 +2344,9 @@ questions:
 
 - **An answering operation** is a call of the handler's clause on the handler's state. The
   handler's **capability** is a value: the clause, as `!` code, beside the state, threaded as a
-  `Mut` borrow (§18, #184) or shared as an `Imm` view. A call is typed by §3's rules. So
+  `Mut` borrow (§18, #184), shared as an `Imm` view, or absent (a stateless, persistent `!`
+  provider). Nothing in this entry assumes that a provider of answering operations is a lexical
+  handler with linear state. A call is typed by §3's rules. So
   `borrow mut buf { … log(x) … }` with the handler outside is the callback capturing the outer
   `log` capability, an outer borrow that outlives the callback's lifetime. This is acceptance (2),
   and it needs no new rule and no new proof.
@@ -2721,6 +2723,10 @@ Secondary:
   construct unless a target needs it.
 - μ with `X` under `⊸` (T15, #182).
 - Replacing §18's elaborated handlers with this construct.
+- Type-keyed provision of answering-only signatures (interfaces): reserved; designed after #186's
+  core (#169). The signature form above is the interface form. A signature whose operations are
+  all answering may later be implemented for a type by a persistent provider, resolved and
+  specialised at compile time. Control operations stay lexical.
 
 ---
 
