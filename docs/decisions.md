@@ -666,7 +666,7 @@ Each entry: the decision, and why. Newest last.
       position. A lowering shape is named by #18's table (call, branch; state machine and
       dispatch later) with Koka's class in brackets (`fun`, `final ctl`). The spelling of the
       lines is provisional; `corpus/reports/` pins them.
-54. **No traits (the user's decision; to be revisited only if a concrete case breaks).**
+54. **Tentative: no traits (the user's working decision, open to change; revisit when a concrete case breaks or a better design appears).**
     - **Iteration** (generators, coroutines, async) is one mechanism: `Yield`/`await`-style operations with continuation qualifiers, handled lexically (§19, #186). There is no iterator interface; `for` handles `Yield`; an implicit `for x in &v` is optional later sugar.
     - **What type classes would do otherwise:**
       - structural defaults (`eq`, `hash`, `cmp`, `display`, `clone`, `encode`) as polytypic functions over a type's structure (derive);
