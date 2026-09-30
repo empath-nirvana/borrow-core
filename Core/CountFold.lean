@@ -124,20 +124,6 @@ theorem wpTS_countTry (ls : List SRec) (f : Val) (n i : UInt32) (s : Val)
         (.val (Val.pair f (Val.pair (Val.i32 n) (Val.pair (Val.i32 i) s))))) Q) :=
   wpTS_head (fun μ => Head.countTry μ f n i s) rfl ls Q
 
-/-- The continuation of `countTryNext` after the step, at `inj₁ s′`: the loop from `i + 1`. The
-shifted step is the step again once the binder is filled. -/
-theorem countTry_cont_subst (f : Val) (n i : UInt32) (s' : Val) :
-    Expr.subst 0 s' (.app (.val (.prim .countTry)) (.pair (.val (f.shift 1 0)) (.pair (.val (.i32 n))
-        (.pair (.val (.i32 i)) (.var 0)))))
-      = .app (.val (.prim .countTry))
-          (.val (Val.pair f (Val.pair (Val.i32 n) (Val.pair (Val.i32 i) s')))) := by
-  have hf : Expr.subst 0 s' ((f.shift 1 0).val) = f.val := by
-    rw [Val.val_shift, Expr.subst_shift 0 0 0 s' f.val (Nat.le_refl 0) (Nat.zero_le _),
-      Expr.shift_zero]
-  simp only [Expr.val, Expr.subst, if_pos, Val.i32] at hf ⊢
-  rw [hf]
-  rfl
-
 /-- **The loop with an exit.** From `i`, with the state `s` in `𝒱⟦S⟧`, the loop answers a value
 in `𝒱⟦S ⊕ E⟧`: `inj₁` of the state at the bound, or the step's first `inj₂`. By induction on
 `len(n) − i`.  `[spec §16]` -/

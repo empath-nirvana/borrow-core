@@ -1,3 +1,4 @@
+import Support.Dynamics.Completeness
 import Support.Dynamics.Interpreter
 import Support.Dynamics.Machine
 import Support.Dynamics.PrintedWp

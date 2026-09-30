@@ -90,6 +90,15 @@ import Frontend.Check.Externs
 #print axioms BoCa.Fig16.LogRel.Core.countFold_compatX
 #print axioms BoCa.Fig16.LogRel.Core.countTry_compatX
 #print axioms BoCa.Fig16.LogRel.Core.countTryLoop_wp
+-- SPEC §16: the counted loop over data visits every element
+#print axioms BoCa.BoLo.countTry_runs
+#print axioms BoCa.BoLo.countTry_exit
+#print axioms BoCa.arrLen_eq_of_lt
+#print axioms BoCa.idxAns_lt
+#print axioms BoCa.idxAns_ge
+#print axioms BoCa.idxAns_count
+#print axioms BoCa.splitFirst_lt
+#print axioms BoCa.splitFirst_end
 -- SPEC §9: the length bound, and slice borrows
 #print axioms BoCa.Fig16.LogRel.Core.arrLen_of_bound
 #print axioms BoCa.Fig16.LogRel.Core.arrLen_bound
