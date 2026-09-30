@@ -666,3 +666,13 @@ Each entry: the decision, and why. Newest last.
       position. A lowering shape is named by #18's table (call, branch; state machine and
       dispatch later) with Koka's class in brackets (`fun`, `final ctl`). The spelling of the
       lines is provisional; `corpus/reports/` pins them.
+54. **No traits (the user's decision; to be revisited only if a concrete case breaks).**
+    - **Iteration** (generators, coroutines, async) is one mechanism: `Yield`/`await`-style operations with continuation qualifiers, handled lexically (§19, #186). There is no iterator interface; `for` handles `Yield`; an implicit `for x in &v` is optional later sugar.
+    - **What type classes would do otherwise:**
+      - structural defaults (`eq`, `hash`, `cmp`, `display`, `clone`, `encode`) as polytypic functions over a type's structure (derive);
+      - explicit function arguments for custom semantics (the `lib/slice.bc` convention);
+      - lexical handlers for scoped choices;
+      - invariant-bearing structures (hash maps, sorted sets) that capture their provider at construction, so no global coherence rule is needed.
+    - **Operators** perform a `Num[T]` effect. The ambient, outermost platform handler provides the primitive widths and erases to the machine instruction; this is the host parameter `∀ ℍ, [HostIs ℍ]` made explicit. User numeric types bring a handler into scope.
+    - **Receiverless functions** (`default`, `parse`) are plain named functions.
+    - **Watch-point:** row inference choosing `Num[T]` from operand types (untyped integer literals). The interfaces research (`docs/prior-art-interfaces.md`, #169) stays as background.
