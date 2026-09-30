@@ -262,6 +262,19 @@ fn lines<'a>(t: text 'a) -> U (iter (text 'a) 1 1) =
     (!thunkv fun (v : text 'a) -> < next_line(v), array_forget['a, u8](v) >)));
   thunkv nu_in < (nu_out (force f t)).1, (nu_out (force f t)).2 >
 
+-- The lines of `t` folded into a state by `f`, in order: a counted loop over the view's length,
+-- each step splitting off the next line, a sub-view (`next_line`); nothing is allocated.
+fn fold_lines[S]<'a>(t: text 'a, f: !(text 'a * S => S), s: S) -> S =
+  let (t, u) = array_copy['a, u8] t;
+  let (_, (_, s)) = count_fold[text 'a * (!(text 'a * S => S) * S)](
+    !{ (i, (t, (f, s))) ->
+      match next_line(t) {
+        inl (l, r) -> (r, (f, f(l, s)))
+      | inr u -> (slice_empty_imm['a, u8], (f, s))
+      } },
+    len(u) + 1, 0, (t, (f, s)));
+  s
+
 -- Space, tab, carriage return or newline.
 fn is_space(b: u8) -> bool = b == 32 || b == 9 || b == 13 || b == 10
 
@@ -382,6 +395,49 @@ fn parse_i32<'a>(t: text 'a) -> i32 + (1 + (u8 + 1)) =
     array_forget['a, u8](t);
     match acc { inl n -> let v = if neg { 0 - n } else { n }; inl v | inr e -> inr e }
   }
+
+-- ### Buffers of views
+
+-- A copy of the view at `i` of a buffer of views, which keeps it: taken out (`take`), copied
+-- (`array_copy`) and put back. The empty view past the length.
+fn view_at<'a>(b: buf (text 'a), i: i32) -> buf (text 'a) * text 'a =
+  let (a, n) = b;
+  let (a, o) = array_replace[text 'a] (a, i, slice_empty_imm['a, u8]);
+  match o {
+    inl x -> let (x, y) = array_copy['a, u8] x;
+             let (a, _) = array_replace[text 'a] (a, i, x);
+             ((a, n), y)
+  | inr e -> ((a, n), e)
+  }
+
+-- The views at `i` and `j` exchanged.
+fn swap_views<'a>(b: buf (text 'a), i: i32, j: i32) -> buf (text 'a) =
+  let (a, n) = b;
+  let (a, x) = array_replace[text 'a] (a, i, slice_empty_imm['a, u8]);
+  match x {
+    inl x -> let (a, y) = array_replace[text 'a] (a, j, x);
+             match y { inl y -> let (a, _) = array_replace[text 'a] (a, i, y); (a, n)
+                     | inr y -> let (a, _) = array_replace[text 'a] (a, i, y); (a, n) }
+  | inr x -> (a, n)
+  }
+
+-- The views of a buffer in byte order (`cmp` of `u8`), in place: an insertion sort, stable. It
+-- works on the owned buffer (`array_replace`), with no borrow of it.
+fn sort_views<'a>(b: buf (text 'a)) -> buf (text 'a) =
+  let (b, n) = len_of(b);
+  count_fold[buf (text 'a)](
+    !{ (i, b) ->
+      let (b, _) = count_fold[buf (text 'a) * (i32 * bool)](
+        !{ (k, (b, (i, go))) ->
+          if go {
+            let j = i - k;
+            let (b, x) = view_at(b, j - 1);
+            let (b, y) = view_at(b, j);
+            if 0 < cmp(x, y, cmp_u8) { (swap_views(b, j - 1, j), (i, true)) } else { (b, (i, false)) }
+          } else { (b, (i, go)) } },
+        i, 0, (b, (i, true)));
+      b },
+    n, 1, b)
 
 -- ### In place
 

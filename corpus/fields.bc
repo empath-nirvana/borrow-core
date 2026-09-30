@@ -1,0 +1,44 @@
+-- P1 of `docs/strings-slices-design.md` (§1), `fields`: the second comma-separated field of every
+-- input line, with no copy. Each line is read byte by byte into one buffer (`box buf[u8](64)`),
+-- which is cleared and reused (`clear_str` keeps the capacity). At each newline the buffer lends
+-- its initialised prefix, `borrow imm line { v -> … }`, with no cell; `nth_field` cuts the view at
+-- run-time indices (`split_once`), and the field it answers is a sub-view of the same line at the
+-- same lifetime, written in one call (`write_str`, the `write_all` extern). The block hands back
+-- `stdout`, which it lends. The field loop is a counted loop (`count_fold`) of `k + 1` cuts.
+--
+-- Answer: the second field of each line of `fields.in` (a line with one field prints nothing),
+-- and `i32[4]`, the lines read. A cut at the wrong index, or a field that ran past its comma,
+-- would print other bytes. The buffer grows twice, at the long line, and is reused for every
+-- other line: the allocations are the buffer, its two growths and the two capabilities' cells.
+
+include textio
+
+-- The field `k` (from 0) of `line`, cut at `sep`, or `inr ()` past the last field.
+fn nth_field<'a>(line: text 'a, sep: u8, k: i32) -> text 'a + 1 =
+  let (_, (_, (_, found))) = count_fold[(text 'a + 1) * (u8 * (i32 * (text 'a + 1)))](
+    !{ (i, (rest, (sep, (k, found)))) ->
+      match rest {
+        inl rest -> match split_once(rest, sep) {
+            inl (f, r) -> if i == k { (inl r, (sep, (k, inl f))) } else { (inl r, (sep, (k, found))) }
+          | inr r -> if i == k { (inr (), (sep, (k, inl r))) } else { (inr (), (sep, (k, found))) }
+          }
+      | inr u -> (inr (), (sep, (k, found)))
+      } },
+    k + 1, 0, (inl line, (sep, (k, inr ()))));
+  found
+
+main -> i32 =
+  let mut line = box buf[u8](16);
+  let mut n = 0;
+  for b in bytes(&mut stdin) {
+    if b == b'\n' {
+      borrow imm line { v ->
+        match nth_field(v, b',', 1) {
+          inl f -> write_str(&mut stdout, f); putb(&mut stdout, b'\n')
+        | inr u -> ()
+        } };
+      line = clear_str(line);
+      n = n + 1
+    } else { push(&mut line, b) }
+  };
+  n

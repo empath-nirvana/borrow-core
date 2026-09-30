@@ -1,0 +1,78 @@
+-- P13 of `docs/strings-slices-design.md` (§1), `labels-json`: escaping with a borrowed-or-owned
+-- result, without a `Cow` type. `escape` answers the text itself when nothing in it needs
+-- escaping, and a new, escaped string otherwise: the sum `text 'a + string`. `push_json_str`
+-- matches on it: the view side is appended and forgotten, and the owned side is lent to the
+-- append and freed by its destructor (§12), which is the componentwise destructor Rust's `Cow`
+-- has. The escaped string is built character by character (`char_at`, UTF-8 decoding, and
+-- `push_char`), a counted loop over the view's length. Labels and values are literal views.
+--
+-- Answer: `{"app":"op","note":"say \"hi\" \\ now","name":"café"}` and a newline, and `i32[55]`,
+-- its length in bytes. A quote not escaped, a backslash doubled twice or `é` split changes it.
+-- One label needs escaping, so there is one escaped string beside the output string.
+
+include textio
+
+-- A byte that JSON needs escaped in a string.
+fn needs_escape(b: u8) -> bool = b == b'"' || b == b'\\'
+
+-- Whether some byte of `t` satisfies `p`.
+fn any_byte<'a>(t: text 'a, p: !(u8 => bool)) -> bool =
+  let (t, u) = array_copy['a, u8] t;
+  let (t, (_, r)) = count_fold[text 'a * (!(u8 => bool) * bool)](
+    !{ (i, (t, (p, r))) ->
+      let (t, w) = array_copy['a, u8] t;
+      let h = p(at(w, i, 0));
+      (t, (p, r || h)) },
+    len(u), 0, (t, (p, false)));
+  array_forget['a, u8](t);
+  r
+
+-- The text itself when it needs no escaping; otherwise a new, escaped string.
+fn escape<'a>(t: text 'a) -> text 'a + string =
+  let (t, u) = array_copy['a, u8] t;
+  if not(any_byte(u, needs_escape)) { inl t } else {
+    let (t, w) = array_copy['a, u8] t;
+    let n = len(w);
+    let (s, (t, _)) = count_fold[string * (text 'a * (i32 * i32))](
+      !{ (k, (s, (t, (i, n)))) ->
+        if i < n {
+          let (t, x) = array_copy['a, u8] t;
+          let (c, w) = char_at(x, i);
+          let s = if c == '"' || c == '\\' { let (s, _) = push_char(s, '\\'); s } else { s };
+          let (s, _) = push_char(s, c);
+          (s, (t, (i + w, n)))
+        } else { (s, (t, (i, n))) } },
+      n, 0, (box string(n + 8), (t, (0, n))));
+    array_forget['a, u8](t);
+    inr s
+  }
+
+-- `t` appended as a JSON string: quoted, escaped when it must be.
+fn push_json_str<'a>(out: string, t: text 'a) -> string =
+  let (out, _) = push_char(out, '"');
+  let out = match escape(t) {
+      inl v -> let (out, _) = push_str(out, v); out
+    | inr s -> borrow imm s { v -> let (out, _) = push_str(out, v); out }
+    };
+  let (out, _) = push_char(out, '"');
+  out
+
+-- `"k":"v"` appended, after a comma unless it is the first.
+fn push_label<'a, 'b>(out: string, k: text 'a, v: text 'b, first: bool) -> string =
+  let out = if first { out } else { let (out, _) = push_char(out, ','); out };
+  let out = push_json_str(out, k);
+  let (out, _) = push_char(out, ':');
+  push_json_str(out, v)
+
+main -> i32 =
+  let out = box string(64);
+  let (out, _) = push_char(out, '{');
+  let out = borrow imm "app" { k -> borrow imm "op" { v -> push_label(out, k, v, true) } };
+  let out = borrow imm "note" { k ->
+    borrow imm "say \"hi\" \\ now" { v -> push_label(out, k, v, false) } };
+  let out = borrow imm "name" { k -> borrow imm "café" { v -> push_label(out, k, v, false) } };
+  let (out, _) = push_char(out, '}');
+  let (out, _) = push_char(out, '\n');
+  let out = write_string(&mut stdout, out);
+  let (out, n) = len_of(out);
+  n

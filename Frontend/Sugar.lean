@@ -65,12 +65,15 @@ def bufLibrary : String := include_str "../lib/buf.bc"
 /-- The text library, `lib/text.bc`: strings, text views and literals (`include text`). -/
 def textLibrary : String := include_str "../lib/text.bc"
 
+/-- Text over the standard streams, `lib/textio.bc`: `write_string`, `read_all` (`include textio`). -/
+def textioLibrary : String := include_str "../lib/textio.bc"
+
 /-- The library modules, by the name `include` gives them (#59). A module is a file of `lib/`,
 embedded in the compiler; adding one is adding its line here. -/
 def libModules : List (String × String) :=
   [("io", ioLibrary), ("div", divLibrary), ("prelude", preludeLibrary), ("lend", lendLibrary),
    ("adapters", adaptersLibrary), ("slice", sliceLibrary), ("buf", bufLibrary),
-   ("text", textLibrary)]
+   ("text", textLibrary), ("textio", textioLibrary)]
 
 def capNames : List String := ["stdin", "stdout", "stderr"]
 
@@ -3290,7 +3293,8 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
         let As ← c.surface ksp A
         let Bs ← c.surface ksp B
         let xi : Ident := ⟨x, ksp⟩
-        let C := if imm then Const.sliceBorrowImm xi (.top ksp) As Bs else .sliceBorrowMut xi (.top ksp) As Bs
+        -- The side conditions' bound is `dom`: the elements (views, say) may have lifetimes.
+        let C := if imm then Const.sliceBorrowImm xi (.dom ksp) As Bs else .sliceBorrowMut xi (.dom ksp) As Bs
         let Tbs := if imm then VTy.arrayImm lsp (.var lsp x) As else .arrayMut lsp (.var lsp x) As
         let splitC := if imm then Const.sliceSplitImm (.var lsp x) As else .sliceSplitMut (.var lsp x) As
         let id (s : String) : Ident := ⟨s, lsp⟩
@@ -3303,7 +3307,9 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
         let cb : Val := .thunkv tsp (.lamL lsp xi (.dom lsp) (.ret lsp (.thunkv lsp
           (.lam lsp (id "io_bw") Tbs body))))
         let ids (s : String) : Ident := ⟨s, sp⟩
-        pure (.run sp (.letPair sp (ids "io_ba") (ids "io_bn") P'
+        -- Ascribed its type, which the typing of what follows it reads.
+        let bufTy : VTy := .tensor sp (.array sp As) (.int sp .w32)
+        pure <| (fun v => Val.ascribe sp v (.tensor sp bufTy Bs)) <| (.run sp (.letPair sp (ids "io_ba") (ids "io_bn") P'
           (.bind sp (ids "io_br") none (.ret sp (.app sp (.app sp₂ (.const ksp C) (.var sp "io_ba")) cb))
             (.letPair sp (ids "io_ba2") (ids "io_bv2") (.var sp "io_br")
               (.ret sp (.pair sp (.pair sp (.var sp "io_ba2") (.var sp "io_bn")) (.var sp "io_bv2"))))
@@ -3333,12 +3339,13 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
         let cb : Val := .thunkv tsp (.lamL lsp xi (.dom lsp) (.ret lsp (.thunkv lsp
           (.lam lsp (id "io_lw") (.arrayImm lsp (.var lsp x) U8s) body))))
         let ids (s : String) : Ident := ⟨s, sp⟩
-        pure (.run sp (.bind sp (ids "io_lp") none (.ret sp P')
+        let litTy : VTy := .tensor sp (.int sp .w32) (.bang sp (.lolli sp (.int sp .w32) U8s))
+        pure <| (fun v => Val.ascribe sp v (.tensor sp litTy Bs)) <| (.run sp (.bind sp (ids "io_lp") none (.ret sp P')
           (.letPair sp (ids "io_ln") (ids "io_lt") (.var sp "io_lp")
             (.bind sp (ids "io_la") none (.ret sp (.app sp (.unbang sp (.const sp (.arrayNew U8s)))
                 (.pair sp (.var sp "io_ln") (.var sp "io_lt"))))
               (.bind sp (ids "io_lr") none
-                (.ret sp (.app sp (.app sp₂ (.const ksp (.sliceBorrowImm xi (.top ksp) U8s Bs))
+                (.ret sp (.app sp (.app sp₂ (.const ksp (.sliceBorrowImm xi (.dom ksp) U8s Bs))
                   (.var sp "io_la")) cb))
                 (.letPair sp (ids "io_la2") (ids "io_lv") (.var sp "io_lr")
                   (.ret sp (.pair sp (.var sp "io_lp") (.var sp "io_lv")))) false) false)) false))
@@ -3428,7 +3435,13 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
     | .defApp sp h args => do
       -- A template at written type arguments: its instance.
       match (← get).templates.find? (fun | .def_ _ m _ _ _ _ => m.name == h | _ => false) with
-      | some t => pure (.var sp (← makeInst n c sp t (args.map c.elabV).toArray))
+      | some t => do
+        let (nm, extras) ← makeInst n c sp t (args.map c.elabV).toArray
+        if extras.isEmpty then pure (.var sp nm) else
+          -- The instance's own lifetimes at the call's.
+          let mut g : Val := .unbang sp (.var sp nm)
+          for v in extras do g := .inst sp g (← c.surfaceL sp (.var v))
+          pure g
       | none => pure V
     | .shorten sp m σ l V => do pure (.shorten sp m σ l (← surfV n c none V))
     | .thunk sp M => do
@@ -3523,35 +3536,60 @@ def surfDecl : Nat → Decl → DM Decl
   | _, d => pure d
 
 /-- The instance of the template `t` at the type arguments `σ` (one per type parameter, each
-known): its name, made and elaborated on first use.  `[spec §15]` -/
-def makeInst : Nat → TCx → Span → Decl → Array (Option CVTy) → DM String
+known): its name, made and elaborated on first use, and the lifetimes of the call that it takes
+first. A type argument with lifetimes (a view, `array_imm 'x u8`) makes an instance with a
+lifetime parameter of its own for each, outside the template's: `!(all 'io_q0 < top. …)`, and a
+call instantiates them at the call's lifetimes.  `[spec §15]` -/
+def makeInst : Nat → TCx → Span → Decl → Array (Option CVTy) →
+    DM (String × List BoCa.Lifetime.LifeVar)
   | 0, _, sp, _, _ => throw ⟨sp, "instantiation of generic functions does not terminate"⟩
   | n + 1, c, sp, t, σ => do
     let .def_ tsp tn ps A V mk := t | throw ⟨sp, "internal error: a generic function"⟩
     let names := ps.map (·.name)
-    let mut σs : TySubst := []
+    let mut ts₀ : List CVTy := []
     for (x, t) in names.zip σ.toList do
       let some t := t
         | throw ⟨sp, s!"the type `{x}` of `{tn.name}` is not determined by its arguments: " ++
             s!"write them, `{tn.name}[…](…)`"⟩
-      let ts ← c.surface sp t
-      if ts.pp.contains '\'' then
-        throw ⟨sp, s!"`{tn.name}` is instantiated at `{ts.pp}`, which has a lifetime: a generic " ++
-          "function is instantiated at types without one"⟩
-      σs := σs ++ [(x, ts)]
+      ts₀ := ts₀ ++ [t]
+    -- The lifetimes of the type arguments, in the order of the context, renamed `'io_qk`.
+    let extras := (c.E.lenv.map (·.2)).eraseDups.reverse.filter fun v =>
+      ts₀.any (BoCa.Fig16.LogRel.Core.Check.vfreeB v)
+    let fresh (v : BoCa.Lifetime.LifeVar) : Option String :=
+      (extras.idxOf? v).map (s!"io_q{·}")
+    let c' := { c with E := { c.E with lenv := c.E.lenv.map fun (nm, v) =>
+      ((fresh v).getD nm, v) } }
+    let mut σs : TySubst := []
+    for (x, t) in names.zip ts₀ do
+      σs := σs ++ [(x, ← c'.surface sp t)]
+    let isGen := match mk with | .gen _ => true | _ => false
+    if !extras.isEmpty && isGen then
+      throw ⟨sp, s!"`{tn.name}` is instantiated at a type with a lifetime: a generic generator " ++
+        "is instantiated at types without one"⟩
     let key := (tn.name, σs.map (·.2.strip))
     let st ← get
-    if let some name := st.insts.lookup key then return name
+    if let some name := st.insts.lookup key then return (name, extras)
     let name := s!"{tn.name}__g{st.insts.length}"
     let mk' := match mk with
       | .gen E => Mark.gen (E.subst σs)
       | .template m => m
       | mk => mk
-    let inst := Decl.def_ tsp ⟨name, tn.span⟩ [] (A.subst σs) (V.subst σs) mk'
+    let binders := (List.range extras.length).map fun k => (⟨s!"io_q{k}", tsp⟩ : Ident)
+    let A' := A.subst σs
+    let V' := V.subst σs
+    let (A', V') ← if extras.isEmpty then pure (A', V') else
+      match A', V' with
+      | .bang asp X, .bangThunkv vsp N =>
+        pure (VTy.bang asp (binders.foldr (fun b X => .all asp b (.top asp) X) X),
+          Val.bangThunkv vsp (binders.foldr
+            (fun b N => .lamL vsp b (.top vsp) (.ret vsp (.thunkv vsp N))) N))
+      | _, _ => throw ⟨sp, s!"`{tn.name}` is instantiated at a type with a lifetime, and is " ++
+          "not a function: a generic function is instantiated at types without one"⟩
+    let inst := Decl.def_ tsp ⟨name, tn.span⟩ [] A' V' mk'
     let inst := Elab.fillDecl (st.lib ++ st.out) st.caps inst
     let st' ← (elabDecl n { st with insts := (key, name) :: st.insts } inst : SM DivSt)
     set st'
-    return name
+    return (name, extras)
 
 /-- A call `f W` of a generic callee (a template, a core `def` with type parameters, or a
 function with lifetime parameters), with the type and lifetime arguments it leaves out filled and
@@ -3685,8 +3723,12 @@ def genericCall : Nat → TCx → Span → Option CVTy → Val → Val → DM (O
         throw ⟨sp, s!"the lifetime `{lname v}` of `{fname}` is not determined by its arguments " ++
           s!"here: write it, `{writeLives fname}"⟩
     -- The callee at its type arguments.
+    let mut extras : List BoCa.Lifetime.LifeVar := []
     let base ← match head with
-      | .tmpl t _ => do pure (Val.var f.span (← makeInst n c sp t m.ty))
+      | .tmpl t _ => do
+        let (nm, ex) ← makeInst n c sp t m.ty
+        extras := ex
+        pure (Val.var f.span nm)
       | .gdef h tps _ => do
         let mut ts : List VTy := []
         for (x, t) in tps.zip m.ty.toList do
@@ -3712,6 +3754,8 @@ def genericCall : Nat → TCx → Span → Option CVTy → Val → Val → DM (O
         | some V => return some V
         | none => throw ⟨sp, s!"the lend in this call of `{fname}` is not at a borrow parameter"⟩
     let mut g := if sig.bang then Val.unbang f.span base else base
+    -- An instance at types with lifetimes takes the call's lifetimes first (`makeInst`).
+    for v in extras do g := .inst sp g (← c.surfaceL sp (.var v))
     for (v, _) in sig.binders do
       let some l := m.life.lookup v | throw ⟨sp, "internal error: a lifetime parameter"⟩
       g := .inst sp g (← c.surfaceL sp l)

@@ -185,6 +185,23 @@ def lexGo : Nat → List Char → Pos → Bool → Array Token → Except Error 
           |>.push ⟨.int c.toNat, sp, false⟩ |>.push ⟨.sym "]", sp, false⟩)
       else .error ⟨⟨pos, advance pos 4⟩, "a byte literal `b'c'` holds a printable ASCII character"⟩
     | 'I' :: 'm' :: 'm' :: '̲' :: r => push (.kw "view") 4 r
+    -- A character literal `'c'` or `'\e'`: the tokens of `i32[n]`, `n` the scalar value
+    -- (strings S5, `docs/decisions.md`). A lifetime `'x` is never followed by `'`.
+    | '\'' :: '\\' :: e :: '\'' :: r =>
+      match byteEscape e with
+      | some n =>
+        let stop := advance pos 4
+        let sp : Span := ⟨pos, stop⟩
+        lexGo fuel r stop false (acc.push ⟨.kw "i32", sp, spaced⟩ |>.push ⟨.sym "[", sp, false⟩
+          |>.push ⟨.int n, sp, false⟩ |>.push ⟨.sym "]", sp, false⟩)
+      | none => .error ⟨⟨pos, advance pos 4⟩, s!"unknown escape `\\{e}` in a character literal"⟩
+    | '\'' :: c :: '\'' :: r =>
+      if c != '\\' && c != '\'' && c.toNat ≥ 32 then
+        let stop := advance pos 3
+        let sp : Span := ⟨pos, stop⟩
+        lexGo fuel r stop false (acc.push ⟨.kw "i32", sp, spaced⟩ |>.push ⟨.sym "[", sp, false⟩
+          |>.push ⟨.int c.toNat, sp, false⟩ |>.push ⟨.sym "]", sp, false⟩)
+      else .error ⟨⟨pos, advance pos 3⟩, "a character literal `'c'` holds one character"⟩
     | '"' :: r =>
       match lexStr (r.length + 1) r [] with
       | some (bs, k, r') => push (.str bs) (k + 1) r'

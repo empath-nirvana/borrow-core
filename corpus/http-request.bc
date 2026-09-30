@@ -1,0 +1,49 @@
+-- P9 of `docs/strings-slices-design.md` (§1), `http-request`: a request line and headers built
+-- into one buffer. The capacity is given up front (`box string(256)`); literals (`push_lit`), text
+-- views (`push_str`) and a number (`push_dec`) are appended (each append takes the string and
+-- hands it back), and the request is written in one
+-- call (`write_string`, the `write_all` extern), not a system call per byte. The headers are an
+-- array of literal pairs (`box array(2, header_at)`): literals are persistent, so an array holds
+-- them with no lifetime, and `at` copies one out. The server and the path are literal views, lent
+-- to one call by borrow blocks (`borrow imm "…" { v -> … }`), at two lifetimes.
+--
+-- Answer: the request, with `\r\n` line ends and a blank line at the end, and `i32[128]`, its
+-- length. A header out of order, a lost `\r` or a view at the wrong bytes changes it. The string
+-- does not grow: its allocation, the array of headers and the capability's cell are the ones a
+-- C program would make, besides the literal views.
+
+include textio
+
+fn request<'a, 'b, 'c>(server: text 'a, path: text 'b, hs: array_imm 'c (lit * lit), lim: i32) -> string =
+  let r = box string(256);
+  let (r, _) = push_lit(r, "GET "); let (r, _) = push_str(r, path);
+  let (r, _) = push_lit(r, "?limit="); let (r, _) = push_dec(r, lim);
+  let (r, _) = push_lit(r, " HTTP/1.1\r\nHost: "); let (r, _) = push_str(r, server);
+  let (r, _) = push_lit(r, "\r\n");
+  let (hs, h0) = array_copy['c, lit * lit] hs;
+  let r = count_fold[string * array_imm 'c (lit * lit)](
+    !{ (i, (r, hs)) ->
+      let (hs, h) = array_copy['c, lit * lit] hs;
+      let none = ("", "");
+      let (k, v) = at(h, i, none);
+      let (r, _) = push_lit(r, k); let (r, _) = push_lit(r, ": ");
+      let (r, _) = push_lit(r, v); let (r, _) = push_lit(r, "\r\n");
+      (r, hs) },
+    len(h0), 0, (r, hs));
+  let (r, hs) = r;
+  array_forget['c, lit * lit](hs);
+  let (r, _) = push_lit(r, "\r\n");
+  r
+
+-- The fixed headers, by index.
+fn header_at(i: i32) -> lit * lit =
+  if i == 0 { ("Accept", "application/json") } else { ("User-Agent", "op/0.1") }
+
+main -> i32 =
+  let hs = box array(2, header_at);
+  let req = borrow imm hs { 'h, v ->
+    borrow imm "api.cluster.local" { 'x, server ->
+      borrow imm "/api/v1/namespaces/default/pods" { 'y, path -> request(server, path, v, 10) } } };
+  let req = write_string(&mut stdout, req);
+  let (req, n) = len_of(req);
+  n

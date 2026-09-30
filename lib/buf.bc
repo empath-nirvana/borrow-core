@@ -16,6 +16,9 @@
 -- A buffer of capacity `cap` and length 0.
 fn buf_new[A](cap: i32) -> buf A = (array_new[A] (cap, !{ i -> filler[A] }), 0)
 
+-- An array of `n` elements, element `i` being `f(i)`: `box array(n, f)`.
+fn array_tab[A](n: i32, f: !(i32 => A)) -> array A = array_new[A] (n, f)
+
 -- An array as a buffer whose length is its capacity.
 fn buf_of_array[A](a: array A) -> buf A = array_size[A](a)
 
@@ -65,6 +68,14 @@ fn pop[A](b: buf A) -> buf A * (A + 1) =
     let (a, x) = array_replace[A] (a, n - 1, filler[A]);
     match x { inl e -> ((a, n - 1), inl e) | inr e -> ((a, n), inr ()) }
   }
+
+-- The element at `i` taken out, a filler put in its place; `inr ()` past the length.
+fn take[A](b: buf A, i: i32) -> buf A * (A + 1) =
+  let (a, n) = b;
+  if i < n {
+    let (a, x) = array_replace[A] (a, i, filler[A]);
+    match x { inl e -> ((a, n), inl e) | inr e -> ((a, n), inr ()) }
+  } else { ((a, n), inr ()) }
 
 -- The first `k` elements kept, and the rest dropped, their slots filled.
 fn truncate[A](b: buf A, k: i32) -> buf A =

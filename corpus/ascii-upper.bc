@@ -1,0 +1,23 @@
+-- P11 of `docs/strings-slices-design.md` (§1), `ascii-upper`: an in-place transform that keeps
+-- UTF-8. The input is read whole (`read_all`: chunks read into the string's spare capacity by the
+-- `read_into` extern) and validated in place (`from_utf8`, no copy). The string lends its bytes
+-- as an exclusive view, `borrow mut s { v -> … }`, with no cell, and `make_ascii_uppercase`
+-- changes `a`–`z` only, so every multi-byte sequence is kept and the text stays UTF-8. The
+-- string is written in one call.
+--
+-- Answer: on `ascii-upper.in`, the text upper-cased with `é`, `ö` and `✓` kept, and `i32[31]`,
+-- its length in bytes. A transform that touched a continuation byte would break a character.
+-- The only allocation beyond the capabilities' cells is the string.
+
+include textio
+
+main -> i32 =
+  let inp = read_all(&mut stdin);
+  match from_utf8(inp) {
+    inl s ->
+      borrow mut s { v -> let v = make_ascii_uppercase(v); () };
+      let s = write_string(&mut stdout, s);
+      let (s, n) = len_of(s);
+      n
+  | inr (b, e) -> 0
+  }

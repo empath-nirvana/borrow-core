@@ -1,0 +1,46 @@
+-- P6 of `docs/strings-slices-design.md` (§1), `key-value`: views stored in a buffer, under one
+-- borrow of the whole input. The input is read whole (`read_all`) before the borrow, validated in
+-- place (`from_utf8`), and lent once as text at `'t`. Each line of it (`fold_lines`, a sub-view)
+-- is cut at its first `=` (`split_once`), and the trimmed key and value, two sub-views, are pushed
+-- as a pair onto a buffer of views, `buf (text 't * text 't)`: its element type holds the
+-- lifetime, so the buffer lives inside the borrow, and its unused slots hold the empty view (the
+-- filler). The pairs are then taken out in order (`take`), and the value of every key `name`
+-- (`eq_lit`, against the literal's bytes) is written.
+--
+-- Answer: on `key-value.in`, `alice` and `bob`, each on a line, and `i32[4]`, the pairs stored
+-- (the line without `=` is skipped). A cut at the wrong byte, an untrimmed key or a pair taken
+-- out of order changes the output.
+
+include textio
+
+
+-- One line: its key and value, trimmed, pushed onto the buffer when it has a `=`.
+fn add_pair<'t>(l: text 't, ps: buf (text 't * text 't)) -> buf (text 't * text 't) =
+  match split_once(l, b'=') {
+    inl (k, v) -> let kv = (trim(k), trim(v)); let (ps, _) = push(ps, kv); ps
+  | inr l -> ps
+  }
+
+-- Pair `i` taken out; its value written when its key is `name`.
+fn emit<'t>(i: i32, st: Out * buf (text 't * text 't)) -> Out * buf (text 't * text 't) =
+  let (o, ps) = st;
+  let (ps, p) = take(ps, i);
+  match p {
+    inl (k, v) ->
+      if eq_lit(k, "name") { let (o, _) = write_str(o, v); let (o, _) = putb(o, b'\n'); (o, ps) }
+      else { (o, ps) }
+  | inr u -> (o, ps)
+  }
+
+main -> i32 =
+  let inp = read_all(&mut stdin);
+  match from_utf8(inp) {
+    inl text ->
+      borrow imm text { 't, t ->
+        let ps = fold_lines(t, !{ (l, ps) -> add_pair(l, ps) }, box buf[text 't * text 't](8));
+        let (ps, n) = len_of(ps);
+        let (stdout, ps) = count_fold[Out * buf (text 't * text 't)](
+          !{ (i, st) -> emit(i, st) }, n, 0, (stdout, ps));
+        n }
+  | inr (b, e) -> 0
+  }

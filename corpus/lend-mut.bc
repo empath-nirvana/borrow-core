@@ -4,8 +4,8 @@
 --
 -- The block's body loops, so the cell `c` moves into the loop's state and each step borrows it
 -- `mut` again for that step (`withbor2` around the step's `modify`). What the body binds before
--- the loop (`k`) does not use the borrow and stays outside any block; what follows the loop,
--- `(stdin, k)`, runs in the loop's last step.
+-- the loop (`k`) does not use the borrow and stays outside any block; what follows the loop, `k`,
+-- runs in the loop's last step, and the block hands back `stdin`, which it lends.
 --
 -- Answer: i32[604] on the input `1203`: the cell ends at 1 + 2 + 0 + 3 = 6, times 100, plus the
 -- 4 bytes counted. A step whose store did not reach the cell gives 4; a loop that lost `k` gives
@@ -13,9 +13,9 @@
 
 main -> i32 =
   let c = alloc(0);
-  let (stdin, k) = borrow mut c { m ->
+  let k = borrow mut c { m ->
     let mut k = 0;
     for b in bytes(&mut stdin) { modify m { v -> v + to_i32(b) - 48 }; k = k + 1 };
-    (stdin, k)
+    k
   };
   free(c) * 100 + k

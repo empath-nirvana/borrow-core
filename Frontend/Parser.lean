@@ -646,22 +646,28 @@ def Val.lends : Val → Bool
   | _ => false
 
 mutual
-/-- The places lent in a value, outside nested computations. -/
-def Val.lentNames : Val → List String
+/-- The places lent in a value, outside nested computations; with `vars`, the variables it names
+too. -/
+def Val.lentNames (vars : Bool := false) : Val → List String
   | .lend _ x _ => [x.name]
-  | .pair _ V W | .app _ V W => V.lentNames ++ W.lentNames
+  | .var _ x => if vars then [x] else []
+  -- A borrow block's body runs in place: what it lends and names is the block's.
+  | .app _ (.app _ (.sugar _ (.borrow _ _)) P) (.thunkv _ (.lam _ _ _ M)) =>
+    P.lentNames vars ++ M.lentNames vars
+  | .pair _ V W | .app _ V W => V.lentNames vars ++ W.lentNames vars
   | .inl _ V | .inr _ V | .unbang _ V | .boxed _ _ V | .unbox _ V | .sub _ V _ | .roll _ V
-  | .unroll _ V | .inst _ V _ | .ascribe _ V _ | .shorten _ _ _ _ V => V.lentNames
-  | .run _ M => M.lentNames
+  | .unroll _ V | .inst _ V _ | .ascribe _ V _ | .shorten _ _ _ _ V => V.lentNames vars
+  | .run _ M => M.lentNames vars
   | _ => []
 
-/-- The places lent in a computation, outside nested closures. -/
-def Comp.lentNames : Comp → List String
-  | .ret _ V | .absurd _ V => V.lentNames
-  | .bind _ _ _ M N _ => M.lentNames ++ N.lentNames
-  | .letUnit _ V M | .letPair _ _ _ V M => V.lentNames ++ M.lentNames
-  | .case _ V _ M _ N | .for_ _ _ V M N => V.lentNames ++ M.lentNames ++ N.lentNames
-  | .app _ M _ | .proj _ _ M | .inst _ M _ | .ascribe _ M _ | .nuOut _ M => M.lentNames
+/-- The places lent in a computation, outside nested closures; with `vars`, the variables it
+names too. -/
+def Comp.lentNames (vars : Bool := false) : Comp → List String
+  | .ret _ V | .absurd _ V => V.lentNames vars
+  | .bind _ _ _ M N _ => M.lentNames vars ++ N.lentNames vars
+  | .letUnit _ V M | .letPair _ _ _ V M => V.lentNames vars ++ M.lentNames vars
+  | .case _ V _ M _ N | .for_ _ _ V M N => V.lentNames vars ++ M.lentNames vars ++ N.lentNames vars
+  | .app _ M _ | .proj _ _ M | .inst _ M _ | .ascribe _ M _ | .nuOut _ M => M.lentNames vars
   | _ => []
 end
 
@@ -994,12 +1000,15 @@ def borrowBlock : Nat → P Val
     expectSym "}"
     let sp ← spanFrom st
     -- The variables the block hands back beside its result, as a `for` hands back what its body
-    -- assigns: the enclosing `let mut` variables it assigns, and the places it lends that it does
-    -- not bind itself (a capability lent with `&mut stdout`, a buffer lent to `push`).
+    -- assigns: the enclosing `let mut` variables it assigns, the places it lends that it does not
+    -- bind itself (a capability lent with `&mut stdout`, a buffer lent to `push`), and the
+    -- standard capabilities it uses.
     let bound := M.boundNames ++ (match p with | .var b => [b.name] | _ => [])
+    let caps := ["stdin", "stdout", "stderr"].filter (M.lentNames true).contains
     let thr := ((s₀.muts.filter assigned.contains).reverse ++
-      M.lentNames.filter (fun x => !bound.contains x)).eraseDups
-    let thr := if k == .modify || (yields && inGen) then [] else thr
+      (M.lentNames.filter (fun x => !bound.contains x)) ++ caps).eraseDups
+    -- A body already handing its variables back (a printed program read again) is kept.
+    let thr := if k == .modify || (yields && inGen) || bound.contains "io_bt" then [] else thr
     let M := if thr.isEmpty then M else
       wrapTerms (fun T => .bind T.span ⟨"io_bt", T.span⟩ none T
         (.ret T.span (.pair T.span (.var T.span "io_bt") (varTuple T.span thr))) false) M
@@ -1008,7 +1017,9 @@ def borrowBlock : Nat → P Val
     -- typing of the block, whose result is boxed at its lifetime, says so.  `[spec §15]`
     let yields := yields && inGen
     let M := if yields then Comp.ret sp (.app sp (.sugar t.span .genBlock) (.thunk sp M)) else M
-    modify fun s => { s with blockYields := yields, blockThreads := thr }
+    -- The `let mut` variables the block hands back are assigned where the block is.
+    modify fun s => { s with blockYields := yields, blockThreads := thr, joined := [],
+                             assigned := s.assigned ++ thr.filter s₀.muts.contains }
     let (b, M) ← match p with
       | .var b => pure (b, M)
       | p => do
