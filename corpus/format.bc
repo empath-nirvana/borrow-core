@@ -1,0 +1,27 @@
+-- P4 of `docs/strings-slices-design.md` (§1), `format`: a string built from literals and numbers.
+-- `point` allocates one string with the capacity given up front (`box string(16)`) and appends
+-- literals (`push_lit`: a literal is persistent data, its bytes read from the program), numbers
+-- in decimal (`push_dec`), and a character encoded as UTF-8 (`push_char`, `'\n'` and `'é'`).
+-- The string is written in one call (`write_string`, the `write_all` extern), and freed by its
+-- destructor at the end.
+--
+-- Answer: `x=12, y=-7 é` and a newline, and `i32[14]`, its length in bytes (`é` is two). A
+-- digit in the wrong order, a lost sign or a character encoded in the wrong number of bytes
+-- changes the text or the length. The string does not grow: its one allocation is the only one
+-- beside the capability's cell.
+
+include textio
+
+fn point(x: i32, y: i32) -> string =
+  let mut s = box string(16);
+  push_lit(&mut s, "x="); push_dec(&mut s, x);
+  push_lit(&mut s, ", y="); push_dec(&mut s, y);
+  push_char(&mut s, ' '); push_char(&mut s, 'é');
+  push_char(&mut s, '\n');
+  s
+
+main -> i32 =
+  let s = point(12, 0 - 7);
+  let s = write_string(&mut stdout, s);
+  let (s, n) = len_of(s);
+  n

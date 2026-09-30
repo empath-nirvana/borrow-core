@@ -27,7 +27,7 @@ gen fn both(a: i32, b: i32) -> i32, i32 =
   n * 10 + m
 
 gen fn echo(c: In) -> i32, In =
-  for b in bytes(c) { yield b };
+  for b in bytes(c) { yield to_i32(b) };
   c
 
 gen fn framed(c: In) -> i32, In =

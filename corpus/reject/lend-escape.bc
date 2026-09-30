@@ -1,4 +1,4 @@
--- expect: 19:20: this borrow block's result has type `imm 'x array i32 * i32`, which has the block's lifetime `'x`: nothing borrowed at `'x` outlives the block. When the body loops, each step borrows the place again, so the loop cannot keep what is borrowed before it (SPEC §14, borrow scopes over loops)
+-- expect: 19:11: this borrow block's result has type `imm 'x array i32 * i32`, which has the block's lifetime `'x`: nothing borrowed at `'x` outlives the block. When the body loops, each step borrows the place again, so the loop cannot keep what is borrowed before it (SPEC §14, borrow scopes over loops)
 -- A borrow block over a loop whose loop keeps something borrowed before it (SPEC §14, borrow
 -- scopes over loops). The block is lent per observation: the stretch before the loop borrows the
 -- table for itself, and hands on to the loop what it binds, here `b2`, the borrow itself. Nothing
@@ -16,10 +16,10 @@ def get : !(all 'a < top. imm 'a (array i32) * i32 => i32) =
 
 main -> i32 =
   let t = alloc(array_new[i32] (10, tab));
-  let (stdin, n) = borrow imm t { 'x, b ->
+  let n = borrow imm t { 'x, b ->
     let b2 = b;
     let mut acc = 0;
     for c in bytes(&mut stdin) { acc = acc + get(b2, c - 48) };
-    (stdin, acc)
+    acc
   };
   n

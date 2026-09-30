@@ -77,9 +77,9 @@ main : F i32 =
   len : i32 <- return i32[0];
   sum : i32 <- return i32[0];
   for b in bytes stdin {
-    case (unbang host[eq32]) (b, i32[10]) {
+    case (unbang host[eq32]) ((unbang host[extend8_u]) b, i32[10]) {
       inl digit ->
-        _ <- return (push (&mut buf, (len, b)));
+        _ <- return (push (&mut buf, (len, (unbang host[extend8_u]) b)));
         len : i32 <- return (inc len);
         return ()
     | inr newline ->
@@ -92,5 +92,5 @@ main : F i32 =
   x <- return (parse (&mut buf, len));
   sum : i32 <- return ((unbang host[add32]) (sum, x));
   _ <- return (put_dec (&mut stdout, sum));
-  _ <- return (putb (&mut stdout, i32[10]));
+  _ <- return (putb (&mut stdout, u8[10]));
   return sum

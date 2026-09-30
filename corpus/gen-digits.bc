@@ -8,9 +8,9 @@
 -- read as a number. A generator that went on past the error gives i32[123456]; one that did not
 -- skip the newline prints `!` and a newline and stops at 12.
 
-gen fn digits(c: In) -> i32 + i32, In =
+gen fn digits(c: In) -> i32 + u8, In =
   for b in bytes(c) {
-    if 47 < b && b < 58 { yield inl (b - 48) }
+    if 47 < b && b < 58 { yield inl (to_i32(b) - 48) }
     else { if b == 10 { () } else { yield inr b; break } }
   };
   c

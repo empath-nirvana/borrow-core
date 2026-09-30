@@ -1,0 +1,461 @@
+-- The text library (`docs/strings-slices-design.md` §2.2, §4.2, §5.7): `string` is `buf u8`, a
+-- growable byte buffer; `text 'a` and `text_mut 'a` are `array_imm 'a u8` and `array_mut 'a u8`,
+-- shared and exclusive views; `lit`, a string literal `"…"`, is `i32 * !(i32 => u8)`, its length
+-- and its bytes, persistent data that no one owns. Text is UTF-8. The invariant is kept by the
+-- functions that build text from bytes (`str_from_utf8`, `from_utf8` validate, and every append
+-- writes whole characters); the types are abbreviations of the byte types, so it is not yet
+-- enforced (stage T2). Every function is safe on any bytes: a character that does not decode is
+-- U+FFFD.
+--
+-- A view is lent from a string by `borrow imm s { v -> … }` (its initialised prefix, no cell),
+-- and from a literal by `borrow imm "…" { v -> … }` (the literal's bytes, read-only data in the
+-- compiled program). A sub-view (`split_at`, `split_once`, `trim`, a line) is at the view's own
+-- lifetime and costs no allocation. `include text` puts the library in scope, with `buf` and
+-- `slice`.
+--
+-- A search or a parse that can fail answers a sum; a character is an `i32` scalar value. Loops
+-- are `count_fold`s over a view's length, so every function here is total.
+
+include buf
+include slice
+
+-- ### Building
+
+-- An empty string of capacity `cap`: `box string(cap)`.
+fn string_new(cap: i32) -> string = buf_new[u8](cap)
+
+-- Length 0, the capacity kept. The unused bytes of a string need no filler.
+fn clear_str(s: string) -> string = let (a, n) = s; (a, 0)
+
+-- The bytes of `t` appended: the string grows once, to fit.
+fn push_str<'a>(s: string, t: text 'a) -> string * 1 =
+  let (t, u) = array_copy['a, u8] t;
+  let m = len(u);
+  let (a, n) = reserve(s, m);
+  let (a, (t, _)) = count_fold[array u8 * (text 'a * i32)](
+    !{ (i, (a, (t, n))) ->
+      let (t, w) = array_copy['a, u8] t;
+      let (a, _) = array_replace[u8] (a, n + i, at(w, i, 0));
+      (a, (t, n)) },
+    m, 0, (a, (t, n)));
+  array_forget['a, u8](t);
+  ((a, n + m), ())
+
+-- The bytes of a literal appended.
+fn push_lit(s: string, l: lit) -> string * 1 =
+  let (m, f) = l;
+  let (a, n) = reserve(s, m);
+  let (a, _) = count_fold[array u8 * (i32 * !(i32 => u8))](
+    !{ (i, (a, (n, f))) -> let (a, _) = array_replace[u8] (a, n + i, f(i)); (a, (n, f)) },
+    m, 0, (a, (n, f)));
+  ((a, n + m), ())
+
+-- A byte appended.
+fn push_byte(s: string, x: u8) -> string * 1 = push(s, x)
+
+-- The character `c` (a scalar value) appended as UTF-8: one to four bytes. A value that is not a
+-- scalar value (a surrogate, or past U+10FFFF) is appended as U+FFFD.
+fn push_char(s: string, c: i32) -> string * 1 =
+  let c = if host[lt_u32](c, 1114112) && not(55296 <= c && c < 57344) { c } else { 65533 };
+  let b = host[and32](c, 63);
+  if host[lt_u32](c, 128) { push(s, to_u8(c)) }
+  else { if host[lt_u32](c, 2048) {
+    let (s, _) = push(s, to_u8(192 + host[shr_u32](c, 6)));
+    push(s, to_u8(128 + b)) }
+  else { if host[lt_u32](c, 65536) {
+    let (s, _) = push(s, to_u8(224 + host[shr_u32](c, 12)));
+    let (s, _) = push(s, to_u8(128 + host[and32](host[shr_u32](c, 6), 63)));
+    push(s, to_u8(128 + b)) }
+  else {
+    let (s, _) = push(s, to_u8(240 + host[shr_u32](c, 18)));
+    let (s, _) = push(s, to_u8(128 + host[and32](host[shr_u32](c, 12), 63)));
+    let (s, _) = push(s, to_u8(128 + host[and32](host[shr_u32](c, 6), 63)));
+    push(s, to_u8(128 + b)) } } }
+
+-- One decimal digit step: `d` runs over 10^9, 10^8, …, 1; the digit `n / d` is appended once a
+-- nonzero digit has been, or at `d = 1`.
+fn dec_step(k: i32, st: string * (i32 * (i32 * bool))) -> string * (i32 * (i32 * bool)) =
+  let (s, (n, (d, started))) = st;
+  let q = match host[div_u32](n, d) { inl x -> x | inr u -> 0 };
+  let show = started || q != 0 || d == 1;
+  let s = if show { let (s, _) = push(s, to_u8(q + 48)); s } else { s };
+  let d2 = match host[div_u32](d, 10) { inl x -> x | inr u -> 1 };
+  (s, (n - q * d, (d2, show)))
+
+-- `x` in decimal, with a `-` when it is negative.
+fn push_dec(s: string, x: i32) -> string * 1 =
+  let (s, n) = if x < 0 { let (s, _) = push(s, b'-'); (s, 0 - x) } else { (s, x) };
+  let (s, _) = count_fold[string * (i32 * (i32 * bool))](
+    !{ (k, st) -> dec_step(k, st) }, 10, 0, (s, (n, (1000000000, false))));
+  (s, ())
+
+-- A copy of `t` as a new string of capacity its length.
+fn to_string<'a>(t: text 'a) -> string =
+  let (t, u) = array_copy['a, u8] t;
+  let s = string_new(len(u));
+  let (s, _) = push_str(s, t);
+  s
+
+-- A literal as a new string.
+fn string_of_lit(l: lit) -> string =
+  let (m, f) = l;
+  let s = string_new(m);
+  let (s, _) = push_lit(s, (m, f));
+  s
+
+-- ### Literals
+
+-- A literal's length in bytes.
+fn lit_len(l: lit) -> i32 = let (m, f) = l; m
+
+-- Whether `t` has the bytes of the literal `l`.
+fn eq_lit<'a>(t: text 'a, l: lit) -> bool =
+  let (m, f) = l;
+  let (t, u) = array_copy['a, u8] t;
+  if len(u) == m {
+    let (t, (_, r)) = count_fold[text 'a * (!(i32 => u8) * bool)](
+      !{ (i, (t, (f, r))) ->
+        let (t, w) = array_copy['a, u8] t;
+        let same = at(w, i, 0) == f(i);
+        (t, (f, r && same)) },
+      m, 0, (t, (f, true)));
+    array_forget['a, u8](t);
+    r
+  } else { array_forget['a, u8](t); false }
+
+-- ### UTF-8
+
+-- A continuation byte, `10xxxxxx`.
+fn is_cont(b: u8) -> bool = 128 <= b && b < 192
+
+-- The length of the valid UTF-8 sequence at byte `i` of `t`, or 0 if none starts there: the lead
+-- byte, and the ranges the Unicode standard gives its continuation bytes (no overlong form, no
+-- surrogate, nothing past U+10FFFF).
+fn seq_len<'a>(t: text 'a, i: i32) -> i32 =
+  let (t, u) = array_copy['a, u8] t;
+  let (t, w) = array_copy['a, u8] t;
+  let b0 = at(u, i, 0);
+  let b1 = at(w, i + 1, 0);
+  let (t, x) = array_copy['a, u8] t;
+  let b2 = at(x, i + 2, 0);
+  let b3 = at(t, i + 3, 0);
+  let lo1 : u8 = if b0 == 224 { 160 } else { if b0 == 240 { 144 } else { 128 } };
+  let hi1 : u8 = if b0 == 237 { 159 } else { if b0 == 244 { 143 } else { 191 } };
+  let ok1 = lo1 <= b1 && b1 <= hi1;
+  if b0 < 128 { 1 }
+  else { if b0 < 194 { 0 }
+  else { if b0 < 224 { if is_cont(b1) { 2 } else { 0 } }
+  else { if b0 < 240 { if ok1 && is_cont(b2) { 3 } else { 0 } }
+  else { if b0 < 245 { if ok1 && is_cont(b2) && is_cont(b3) { 4 } else { 0 } }
+  else { 0 } } } } }
+
+-- The index of the first byte that does not start a valid sequence, or `inr ()` when all of `t`
+-- is UTF-8. The state is the view, the index of the next sequence, and what was found.
+fn utf8_error<'a>(t: text 'a) -> i32 + 1 =
+  let (t, u) = array_copy['a, u8] t;
+  let (t, (_, r)) = count_fold[text 'a * (i32 * (i32 + 1))](
+    !{ (i, (t, (next, r))) ->
+      match r {
+        inl e -> (t, (next, inl e))
+      | inr u ->
+          if i == next {
+            let (t, w) = array_copy['a, u8] t;
+            let k = seq_len(w, i);
+            if k == 0 { (t, (next, inl i)) } else { (t, (next + k, inr ())) }
+          } else { (t, (next, inr ())) }
+      } },
+    len(u), 0, (t, (0, inr ())));
+  array_forget['a, u8](t);
+  r
+
+-- The bytes as text, if they are UTF-8; else the index of the first byte that is not. No copy.
+fn str_from_utf8<'a>(v: array_imm 'a u8) -> text 'a + i32 =
+  let (v, w) = array_copy['a, u8] v;
+  match utf8_error(w) { inl e -> array_forget['a, u8](v); inr e | inr u -> inl v }
+
+-- A buffer of bytes as a string, in place, if they are UTF-8; else the buffer back and the index
+-- of the first byte that is not.
+fn from_utf8(b: buf u8) -> string + (buf u8 * i32) =
+  let r = borrow imm b { v -> match utf8_error(v) { inl e -> e | inr u -> 0 - 1 } };
+  if r < 0 { inl b } else { inr (b, r) }
+
+-- The scalar value at byte `i` and the length of its sequence; a byte that does not start a valid
+-- sequence is U+FFFD, of length 1.
+fn char_at<'a>(t: text 'a, i: i32) -> i32 * i32 =
+  let (t, u) = array_copy['a, u8] t;
+  let k = seq_len(u, i);
+  let (t, w) = array_copy['a, u8] t;
+  let b0 = to_i32(at(w, i, 0));
+  let (t, x) = array_copy['a, u8] t;
+  let b1 = host[and32](to_i32(at(x, i + 1, 0)), 63);
+  let (t, y) = array_copy['a, u8] t;
+  let b2 = host[and32](to_i32(at(y, i + 2, 0)), 63);
+  let b3 = host[and32](to_i32(at(t, i + 3, 0)), 63);
+  if k == 1 { (b0, 1) }
+  else { if k == 2 { (host[and32](b0, 31) * 64 + b1, 2) }
+  else { if k == 3 { (host[and32](b0, 15) * 4096 + b1 * 64 + b2, 3) }
+  else { if k == 4 { (host[and32](b0, 7) * 262144 + b1 * 4096 + b2 * 64 + b3, 4) }
+  else { (65533, 1) } } } }
+
+-- The number of characters: the bytes that are not continuation bytes.
+fn count_chars<'a>(t: text 'a) -> i32 =
+  let (t, u) = array_copy['a, u8] t;
+  let (t, n) = count_fold[text 'a * i32](
+    !{ (i, (t, n)) ->
+      let (t, w) = array_copy['a, u8] t;
+      let n = if is_cont(at(w, i, 0)) { n } else { n + 1 };
+      (t, n) },
+    len(u), 0, (t, 0));
+  array_forget['a, u8](t);
+  n
+
+-- The first character and the rest of the view, or `inr ()` for the empty view.
+fn split_char<'a>(t: text 'a) -> i32 * text 'a + 1 =
+  let (t, u) = array_copy['a, u8] t;
+  if len(u) == 0 { array_forget['a, u8](t); inr () } else {
+    let (t, w) = array_copy['a, u8] t;
+    let (c, k) = char_at(w, 0);
+    match split_at(t, k) {
+      inl (h, r) -> array_forget['a, u8](h); inl (c, r)
+    | inr r -> array_forget['a, u8](r); inr ()
+    }
+  }
+
+-- The characters of a view, as scalar values: codata whose state is the rest of the view. Each
+-- observation decodes one character; a view of `n` bytes finishes within `n + 1` observations.
+fn chars<'a>(t: text 'a) -> U (iter i32 1 1) =
+  f <- return (unbang (unfold[iter i32 1 1, text 'a]
+    (!thunkv fun (v : text 'a) -> < split_char(v), array_forget['a, u8](v) >)));
+  thunkv nu_in < (nu_out (force f t)).1, (nu_out (force f t)).2 >
+
+-- ### Splitting and searching
+
+-- The view before the first `sep` and the view after it, both sub-views of `t`; or `t` itself
+-- when there is no `sep`.
+fn split_once<'a>(t: text 'a, sep: u8) -> text 'a * text 'a + text 'a =
+  let (t, u) = array_copy['a, u8] t;
+  match find(u, sep, eq_u8) {
+    inl k -> match split_at(t, k) {
+               inl (h, r) -> match split_at(r, 1) {
+                               inl (s, r) -> array_forget['a, u8](s); inl (h, r)
+                             | inr r -> inl (h, r) }
+             | inr t -> inr t }
+  | inr u -> inr t
+  }
+
+-- The first line of `t` and the rest after its newline, or `inr ()` for the empty view. A last
+-- line without a newline is a line.
+fn next_line<'a>(t: text 'a) -> text 'a * text 'a + 1 =
+  let (t, u) = array_copy['a, u8] t;
+  if len(u) == 0 { array_forget['a, u8](t); inr () } else {
+    match split_once(t, b'\n') {
+      inl (l, r) -> inl (l, r)
+    | inr t -> inl (t, slice_empty_imm['a, u8])
+    }
+  }
+
+-- The lines of a view, each a sub-view with no newline: codata whose state is the rest of the
+-- view. Nothing is copied and nothing allocated per line; a view of `n` bytes finishes within
+-- `n + 1` observations.
+fn lines<'a>(t: text 'a) -> U (iter (text 'a) 1 1) =
+  f <- return (unbang (unfold[iter (text 'a) 1 1, text 'a]
+    (!thunkv fun (v : text 'a) -> < next_line(v), array_forget['a, u8](v) >)));
+  thunkv nu_in < (nu_out (force f t)).1, (nu_out (force f t)).2 >
+
+-- The lines of `t` folded into a state by `f`, in order: a counted loop over the view's length,
+-- each step splitting off the next line, a sub-view (`next_line`); nothing is allocated.
+fn fold_lines[S]<'a>(t: text 'a, f: !(text 'a * S => S), s: S) -> S =
+  let (t, u) = array_copy['a, u8] t;
+  let (_, (_, s)) = count_fold[text 'a * (!(text 'a * S => S) * S)](
+    !{ (i, (t, (f, s))) ->
+      match next_line(t) {
+        inl (l, r) -> (r, (f, f(l, s)))
+      | inr u -> (slice_empty_imm['a, u8], (f, s))
+      } },
+    len(u) + 1, 0, (t, (f, s)));
+  s
+
+-- Space, tab, carriage return or newline.
+fn is_space(b: u8) -> bool = b == 32 || b == 9 || b == 13 || b == 10
+
+-- The number of leading bytes of `t` that `p` holds of.
+fn prefix_len<'a>(t: text 'a, p: !(u8 => bool)) -> i32 =
+  let (t, u) = array_copy['a, u8] t;
+  let (t, (_, (k, _))) = count_fold[text 'a * (!(u8 => bool) * (i32 * bool))](
+    !{ (i, (t, (p, (k, go)))) ->
+      let (t, w) = array_copy['a, u8] t;
+      let holds = p(at(w, i, 0));
+      if go && holds { (t, (p, (k + 1, true))) } else { (t, (p, (k, false))) } },
+    len(u), 0, (t, (p, (0, true))));
+  array_forget['a, u8](t);
+  k
+
+-- The number of trailing bytes of `t` that `p` holds of.
+fn suffix_len<'a>(t: text 'a, p: !(u8 => bool)) -> i32 =
+  let (t, u) = array_copy['a, u8] t;
+  let n = len(u);
+  let (t, (_, (_, (k, _)))) = count_fold[text 'a * (!(u8 => bool) * (i32 * (i32 * bool)))](
+    !{ (i, (t, (p, (n, (k, go))))) ->
+      let (t, w) = array_copy['a, u8] t;
+      let holds = p(at(w, n - 1 - i, 0));
+      if go && holds { (t, (p, (n, (k + 1, true)))) }
+      else { (t, (p, (n, (k, false)))) } },
+    n, 0, (t, (p, (n, (0, true)))));
+  array_forget['a, u8](t);
+  k
+
+-- `t` without its leading bytes that `p` holds of: a sub-view.
+fn skip_while<'a>(t: text 'a, p: !(u8 => bool)) -> text 'a =
+  let (t, u) = array_copy['a, u8] t;
+  match split_at(t, prefix_len(u, p)) {
+    inl (h, r) -> array_forget['a, u8](h); r
+  | inr t -> t
+  }
+
+-- `t` without its trailing bytes that `p` holds of: a sub-view.
+fn rskip_while<'a>(t: text 'a, p: !(u8 => bool)) -> text 'a =
+  let (t, u) = array_copy['a, u8] t;
+  let (t, w) = array_copy['a, u8] t;
+  match split_at(t, len(u) - suffix_len(w, p)) {
+    inl (h, r) -> array_forget['a, u8](r); h
+  | inr t -> t
+  }
+
+-- `t` without leading and trailing white space: a sub-view.
+fn trim<'a>(t: text 'a) -> text 'a =
+  let s = skip_while(t, is_space);
+  rskip_while(s, is_space)
+
+-- The index of the first occurrence of `p` in `t`, or `inr ()`; the empty `p` is at 0.
+fn find_str<'a, 'b>(t: text 'a, p: text 'b) -> i32 + 1 =
+  let (t, u) = array_copy['a, u8] t;
+  let (p, q) = array_copy['b, u8] p;
+  let n = len(u);
+  let m = len(q);
+  let starts = if m <= n { n - m + 1 } else { 0 };
+  let (t, (p, r)) = count_fold[text 'a * (text 'b * (i32 + 1))](
+    !{ (i, (t, (p, r))) ->
+      match r {
+        inl k -> (t, (p, inl k))
+      | inr u ->
+          let (t, w) = array_copy['a, u8] t;
+          let (p, x) = array_copy['b, u8] p;
+          match split_at(w, i) {
+            inl (h, rest) -> array_forget['a, u8](h);
+                             if starts_with(rest, x, eq_u8) { (t, (p, inl i)) } else { (t, (p, inr ())) }
+          | inr w -> array_forget['a, u8](w); array_forget['b, u8](x); (t, (p, inr ()))
+          }
+      } },
+    starts, 0, (t, (p, inr ())));
+  array_forget['a, u8](t);
+  array_forget['b, u8](p);
+  r
+
+-- ### Parsing
+
+-- `a + b`, or `inr ()` when it overflows `i32`.
+fn add_checked(a: i32, b: i32) -> i32 + 1 =
+  let s = host[extend_s](a) + host[extend_s](b);
+  let lo : i64 = 0 - 2147483648;
+  if lo <= s && s <= 2147483647 { inl host[wrap](s) } else { inr () }
+
+-- `a * b`, or `inr ()` when it overflows `i32`.
+fn mul_checked(a: i32, b: i32) -> i32 + 1 =
+  let s = host[extend_s](a) * host[extend_s](b);
+  let lo : i64 = 0 - 2147483648;
+  if lo <= s && s <= 2147483647 { inl host[wrap](s) } else { inr () }
+
+-- A parse error (provisional, #18: an error effect will replace the sum): `inl ()` for no digits,
+-- `inr (inl b)` for the byte `b` that is not a digit, `inr (inr ())` for a value past `i32`.
+fn parse_digit(acc: i32 + (1 + (u8 + 1)), d: u8) -> i32 + (1 + (u8 + 1)) =
+  match acc {
+    inl n ->
+      if d < b'0' || b'9' < d { inr (inr (inl d)) } else {
+        match mul_checked(n, 10) {
+          inl m -> match add_checked(m, to_i32(d) - 48) { inl r -> inl r | inr u -> inr (inr (inr ())) }
+        | inr u -> inr (inr (inr ()))
+        } }
+  | inr e -> inr e
+  }
+
+-- A decimal integer, with an optional leading `-`.
+fn parse_i32<'a>(t: text 'a) -> i32 + (1 + (u8 + 1)) =
+  let (t, u) = array_copy['a, u8] t;
+  let neg = at(u, 0, 0) == b'-';
+  let t = if neg { match split_at(t, 1) { inl (h, r) -> array_forget['a, u8](h); r | inr t -> t } }
+    else { t };
+  let (t, w) = array_copy['a, u8] t;
+  let m = len(w);
+  if m == 0 { array_forget['a, u8](t); inr (inl ()) } else {
+    let (t, acc) = count_fold[text 'a * (i32 + (1 + (u8 + 1)))](
+      !{ (i, (t, acc)) ->
+        let (t, x) = array_copy['a, u8] t;
+        (t, parse_digit(acc, at(x, i, 0))) },
+      m, 0, (t, inl 0));
+    array_forget['a, u8](t);
+    match acc { inl n -> let v = if neg { 0 - n } else { n }; inl v | inr e -> inr e }
+  }
+
+-- ### Buffers of views
+
+-- A copy of the view at `i` of a buffer of views, which keeps it: taken out (`take`), copied
+-- (`array_copy`) and put back. The empty view past the length.
+fn view_at<'a>(b: buf (text 'a), i: i32) -> buf (text 'a) * text 'a =
+  let (a, n) = b;
+  let (a, o) = array_replace[text 'a] (a, i, slice_empty_imm['a, u8]);
+  match o {
+    inl x -> let (x, y) = array_copy['a, u8] x;
+             let (a, _) = array_replace[text 'a] (a, i, x);
+             ((a, n), y)
+  | inr e -> ((a, n), e)
+  }
+
+-- The views at `i` and `j` exchanged.
+fn swap_views<'a>(b: buf (text 'a), i: i32, j: i32) -> buf (text 'a) =
+  let (a, n) = b;
+  let (a, x) = array_replace[text 'a] (a, i, slice_empty_imm['a, u8]);
+  match x {
+    inl x -> let (a, y) = array_replace[text 'a] (a, j, x);
+             match y { inl y -> let (a, _) = array_replace[text 'a] (a, i, y); (a, n)
+                     | inr y -> let (a, _) = array_replace[text 'a] (a, i, y); (a, n) }
+  | inr x -> (a, n)
+  }
+
+-- The views of a buffer in byte order (`cmp` of `u8`), in place: an insertion sort, stable. It
+-- works on the owned buffer (`array_replace`), with no borrow of it.
+fn sort_views<'a>(b: buf (text 'a)) -> buf (text 'a) =
+  let (b, n) = len_of(b);
+  count_fold[buf (text 'a)](
+    !{ (i, b) ->
+      let (b, _) = count_fold[buf (text 'a) * (i32 * bool)](
+        !{ (k, (b, (i, go))) ->
+          if go {
+            let j = i - k;
+            let (b, x) = view_at(b, j - 1);
+            let (b, y) = view_at(b, j);
+            if 0 < cmp(x, y, cmp_u8) { (swap_views(b, j - 1, j), (i, true)) } else { (b, (i, false)) }
+          } else { (b, (i, go)) } },
+        i, 0, (b, (i, true)));
+      b },
+    n, 1, b)
+
+-- ### In place
+
+-- `a`–`z` to `A`–`Z`, in place. Every other byte, and so every multi-byte sequence, is kept: the
+-- result is UTF-8 when `v` is.
+fn make_ascii_uppercase<'a>(v: text_mut 'a) -> text_mut 'a =
+  let (v, n) = len_mut(v);
+  count_fold[text_mut 'a](
+    !{ (i, v) ->
+      let (v, c) = peek(v, i, 0);
+      if b'a' <= c && c <= b'z' { set(v, i, c - 32) } else { v } },
+    n, 0, v)
+
+-- `A`–`Z` to `a`–`z`, in place.
+fn make_ascii_lowercase<'a>(v: text_mut 'a) -> text_mut 'a =
+  let (v, n) = len_mut(v);
+  count_fold[text_mut 'a](
+    !{ (i, v) ->
+      let (v, c) = peek(v, i, 0);
+      if b'A' <= c && c <= b'Z' { set(v, i, c + 32) } else { v } },
+    n, 0, v)

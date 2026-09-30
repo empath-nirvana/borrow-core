@@ -24,7 +24,7 @@ def emit : !(all 'a < top. imm 'a i32 * (Out * i32) => Out * 1) =
     let (o, n) = r;
     let (o, _) = put_dec(o, n);
     let s = *sep;
-    putb(o, s))
+    putb(o, to_u8(s)))
 
 main -> i32 =
   let sep = alloc(44);

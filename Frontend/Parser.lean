@@ -159,6 +159,9 @@ structure PState where
   yielded : Bool := false
   /-- The borrow block just read yields: its body is a generator. -/
   blockYields : Bool := false
+  /-- The variables the borrow block just read hands back beside its result: the `let mut`
+  variables it assigns and the places it lends (`borrowBlock`). -/
+  blockThreads : List String := []
 
 abbrev P := StateT PState (Except Error)
 
@@ -404,6 +407,14 @@ def rtyPrefix : Nat → P RTy
       pure (.gen (← spanFrom st) A B R)
     | .kw "imm" => withLife .imm
     | .kw "mut" => withLife .mut
+    -- The buffer and text abbreviations (`docs/strings-slices-design.md` §2.2): `buf A` is
+    -- `array A * i32`, `text 'a` is `array_imm 'a u8` and `text_mut 'a` is `array_mut 'a u8`.
+    | .ident "buf" => unary fun sp A => .tensor sp (.array sp A) (.int sp .w32)
+    | .ident "text" | .ident "text_mut" =>
+      discard bump
+      let a ← lifeAtom n
+      let sp ← spanFrom st
+      pure (if t.tok == .ident "text" then .arrayImm sp a (.int sp .w8) else .arrayMut sp a (.int sp .w8))
     | .kw "box" => withLife .box
     | .kw "view" => withLife .view
     | .kw "block" =>
@@ -441,6 +452,13 @@ def rtyAtom : Nat → P RTy
     | .kw "top" => discard bump; pure (.top t.span)
     -- `bool` is `1 + 1`, `inr ()` for true (the prelude, typed elaboration §5.4).
     | .ident "bool" => discard bump; pure (.sum t.span (.unit t.span) (.unit t.span))
+    -- `string` is `buf u8`, and `lit`, a literal, is `i32 * !(i32 => u8)` (design §2.2, §5.7).
+    | .ident "string" => discard bump
+                         let sp := t.span
+                         pure (.tensor sp (.array sp (.int sp .w8)) (.int sp .w32))
+    | .ident "lit" => discard bump
+                      let sp := t.span
+                      pure (.tensor sp (.int sp .w32) (.bang sp (.lolli sp (.int sp .w32) (.int sp .w8))))
     | .uident s => discard bump; pure (.name t.span s)
     | .sym "(" =>
       discard bump
@@ -627,6 +645,43 @@ def Val.lends : Val → Bool
   | .unroll _ V | .inst _ V _ | .ascribe _ V _ | .shorten _ _ _ _ V => V.lends
   | _ => false
 
+mutual
+/-- The places lent in a value, outside nested computations; with `vars`, the variables it names
+too. -/
+def Val.lentNames (vars : Bool := false) : Val → List String
+  | .lend _ x _ => [x.name]
+  | .var _ x => if vars then [x] else []
+  -- A borrow block's body runs in place: what it lends and names is the block's.
+  | .app _ (.app _ (.sugar _ (.borrow _ _)) P) (.thunkv _ (.lam _ _ _ M)) =>
+    P.lentNames vars ++ M.lentNames vars
+  | .pair _ V W | .app _ V W => V.lentNames vars ++ W.lentNames vars
+  | .inl _ V | .inr _ V | .unbang _ V | .boxed _ _ V | .unbox _ V | .sub _ V _ | .roll _ V
+  | .unroll _ V | .inst _ V _ | .ascribe _ V _ | .shorten _ _ _ _ V => V.lentNames vars
+  | .run _ M => M.lentNames vars
+  | _ => []
+
+/-- The places lent in a computation, outside nested closures; with `vars`, the variables it
+names too. -/
+def Comp.lentNames (vars : Bool := false) : Comp → List String
+  | .ret _ V | .absurd _ V => V.lentNames vars
+  | .bind _ _ _ M N _ => M.lentNames vars ++ N.lentNames vars
+  | .letUnit _ V M | .letPair _ _ _ V M => V.lentNames vars ++ M.lentNames vars
+  | .case _ V _ M _ N | .for_ _ _ V M N => V.lentNames vars ++ M.lentNames vars ++ N.lentNames vars
+  | .app _ M _ | .proj _ _ M | .inst _ M _ | .ascribe _ M _ | .nuOut _ M => M.lentNames vars
+  | _ => []
+end
+
+/-- The names a computation binds, outside nested closures. -/
+def Comp.boundNames : Comp → List String
+  | .bind _ x _ M N _ => x.name :: (M.boundNames ++ N.boundNames)
+  | .letPair _ x y _ M => x.name :: y.name :: M.boundNames
+  | .case _ _ x M y N => x.name :: y.name :: (M.boundNames ++ N.boundNames)
+  | .for_ _ x _ M N => x.name :: (M.boundNames ++ N.boundNames)
+  | .lam _ x _ M => x.name :: M.boundNames
+  | .letUnit _ _ M | .app _ M _ | .proj _ _ M | .inst _ M _ | .ascribe _ M _ | .nuOut _ M =>
+    M.boundNames
+  | _ => []
+
 /-- A borrow block or `modify` on a place that is a name (or, for a family, a pair of names): the
 names it rebinds. -/
 def Val.rebinds : Val → Option Pat
@@ -636,14 +691,25 @@ where
   placeNames : Val → Option Pat
     | .var sp x => some (.var ⟨x, sp⟩)
     | .pair sp (.var s₁ x) (.var s₂ y) => some (.pair sp (.var ⟨x, s₁⟩) (.var ⟨y, s₂⟩))
+    -- A literal lent by a borrow block is handed back, and dropped.
+    | .sugar sp (.str _) => some (.wild sp)
     | _ => none
+
+/-- The pattern of the variables `xs`. -/
+def varPat (sp : Span) : List String → Pat
+  | [] => .unit sp
+  | [x] => .var ⟨x, sp⟩
+  | x :: xs => .pair sp (.var ⟨x, sp⟩) (varPat sp xs)
 
 /-- `p = V; M` for a value `V`: a borrow block or `modify` on a place rebinds the place, which the
 block hands back first; a value with a lent capability is bound first; the core forms
 `let () = V` and `let (x, y) = V` are kept. -/
-def letVal (sp : Span) (n : Nat) (p : Pat) (A : Option VTy) (V : Val) (M : Comp) : P Comp := do
+def letVal (sp : Span) (n : Nat) (p : Pat) (A : Option VTy) (V : Val) (M : Comp)
+    (thr : List String := []) : P Comp := do
   if let some place := V.rebinds then
     let b ← freshName "io_b"
+    -- The variables the block hands back beside its result are rebound too.
+    let p := if thr.isEmpty then p else .pair sp p (varPat sp thr)
     return .bind sp ⟨b, sp⟩ none (.ret sp V) (← bindPat sp n (.pair sp place p) (.var sp b) M) false
   match p, A with
   | .var x, _ => pure (.bind sp x A (.ret sp V) M false)
@@ -668,7 +734,7 @@ def bracketless : List String := ["alloc", "free", "swap"]
 as the block of a keyword (`case V {`, `for x in V {`). -/
 def startsValAtom (t : Tok) : Bool :=
   match t with
-  | .ident _ | .sym "(" | .sym "&" | .int _ | .kw "clone" => true
+  | .ident _ | .sym "(" | .sym "&" | .int _ | .str _ | .kw "clone" | .kw "box" => true
   | _ => (constKw? t).isSome
 
 /-- Tokens that begin a computation, as against a value statement. -/
@@ -725,12 +791,6 @@ def varTuple (sp : Span) : List String → Val
   | [] => .unit sp
   | [x] => .var sp x
   | x :: xs => .pair sp (.var sp x) (varTuple sp xs)
-
-/-- The pattern of the variables `xs`. -/
-def varPat (sp : Span) : List String → Pat
-  | [] => .unit sp
-  | [x] => .var ⟨x, sp⟩
-  | x :: xs => .pair sp (.var ⟨x, sp⟩) (varPat sp xs)
 
 /-- A `match` or `if` whose arms assign the `let mut` variables `xs`: each arm ends by handing
 them on (the join; typed elaboration §5.2). -/
@@ -930,17 +990,36 @@ def borrowBlock : Nat → P Val
     expectSym "->"
     let y₀ := (← get).yielded
     modify fun s => { s with yielded := false }
-    let M ← blockBody n
+    let s₀ ← get
+    set { s₀ with assigned := [] }
+    let M ← comp n
+    let assigned := (← get).assigned
+    modify fun s => { s with muts := s₀.muts, assigned := s₀.assigned }
     let yields := (← get).yielded
     modify fun s => { s with yielded := y₀ || yields }
     expectSym "}"
     let sp ← spanFrom st
+    -- The variables the block hands back beside its result, as a `for` hands back what its body
+    -- assigns: the enclosing `let mut` variables it assigns, the places it lends that it does not
+    -- bind itself (a capability lent with `&mut stdout`, a buffer lent to `push`), and the
+    -- standard capabilities it uses.
+    let bound := M.boundNames ++ (match p with | .var b => [b.name] | _ => [])
+    let caps := ["stdin", "stdout", "stderr"].filter (M.lentNames true).contains
+    let thr := ((s₀.muts.filter assigned.contains).reverse ++
+      (M.lentNames.filter (fun x => !bound.contains x)) ++ caps).eraseDups
+    -- A body already handing its variables back (a printed program read again) is kept.
+    let thr := if k == .modify || (yields && inGen) || bound.contains "io_bt" then [] else thr
+    let M := if thr.isEmpty then M else
+      wrapTerms (fun T => .bind T.span ⟨"io_bt", T.span⟩ none T
+        (.ret T.span (.pair T.span (.var T.span "io_bt") (varTuple T.span thr))) false) M
     -- A body that yields is a generator made in the block, which the statement delegates to
     -- (`statement`): a generator cannot hold a borrow of its own local across a `yield`, and the
     -- typing of the block, whose result is boxed at its lifetime, says so.  `[spec §15]`
     let yields := yields && inGen
     let M := if yields then Comp.ret sp (.app sp (.sugar t.span .genBlock) (.thunk sp M)) else M
-    modify fun s => { s with blockYields := yields }
+    -- The `let mut` variables the block hands back are assigned where the block is.
+    modify fun s => { s with blockYields := yields, blockThreads := thr, joined := [],
+                             assigned := s.assigned ++ thr.filter s₀.muts.contains }
     let (b, M) ← match p with
       | .var b => pure (b, M)
       | p => do
@@ -982,6 +1061,24 @@ def valAtom : Nat → P Val
         pure (.defApp (← spanFrom st) s As)
       else pure (.var t.span s)
     | .int k => discard bump; pure (.sugar t.span (.lit k))
+    | .str bs => discard bump; pure (.sugar t.span (.str bs))
+    -- `box buf[A](cap)`, `box string(cap)`, `box array(n, f)`: the allocating constructors of the
+    -- buffer and text libraries (`buf_new[A]`, `string_new`, `array_tab`).
+    | .kw "box" =>
+      discard bump
+      let k ← peek
+      let callee : Val ← match k.tok with
+        | .ident "buf" =>
+          discard bump
+          expectSym "["
+          let As ← tyList n (fuelPerToken * ((← get).toks.size + 1))
+          expectSym "]"
+          pure (.defApp (← spanFrom st) "buf_new" As)
+        | .ident "string" => discard bump; pure (.var (← spanFrom st) "string_new")
+        | .kw "array" => discard bump; pure (.var (← spanFrom st) "array_tab")
+        | _ => expected "`buf[A]`, `string` or `array` after `box`"
+      let W ← valAtom n
+      pure (.app (← spanFrom st) callee W)
     | .kw "break" => discard bump; pure (.sugar t.span .brk)
     | .kw "clone" => discard bump; pure (.sugar t.span (.call "clone"))
     | .sym "(" =>
@@ -1149,10 +1246,12 @@ def compG : Nat → Bool → P Comp
         | p =>
           let tv ← freshName "io_t"
           return .bind sp ⟨tv, sp⟩ A M (← bindPat sp n p (.var sp tv) N) false
+      modify fun s => { s with blockThreads := [] }
       let V ← val n
+      let thr := (← get).blockThreads
       expectSym ";"
       let N ← comp n
-      letVal (← spanFrom st) n p A V N
+      letVal (← spanFrom st) n p A V N thr
     | .kw "fun", _ =>
       discard bump
       expectSym "("
@@ -1181,7 +1280,7 @@ def statement : Nat → Pos → Bool → P Comp
   | n + 1, st, head => do
     let t ← peek
     let t1 ← peekAt 1
-    modify fun s => { s with joined := [], blockYields := false }
+    modify fun s => { s with joined := [], blockYields := false, blockThreads := [] }
     -- A statement expression, and the place it rebinds.
     let (S, rebind) ← match t.tok, t1.tok with
       | .kw "return", _ =>
@@ -1221,6 +1320,7 @@ def statement : Nat → Pos → Bool → P Comp
           let V ← val n
           pure (Comp.ret (← spanFrom st) V, V.rebinds)
     let joined := (← get).joined
+    let thr := (← get).blockThreads
     if !head && (← isSym ";") then
       discard bump
       let N ← comp n
@@ -1238,7 +1338,7 @@ def statement : Nat → Pos → Bool → P Comp
           let d ← freshName "io_d"
           letVal sp n (.var ⟨g, sp⟩) none V
             (.bind sp ⟨d, sp⟩ none (.ret sp (.app sp (.sugar sp .yieldFrom) (.var sp g))) N false)
-        else letVal sp n (.wild sp) none V N
+        else letVal sp n (.wild sp) none V N thr
       | S, _ =>
         let d ← freshName "io_s"
         pure (.bind sp ⟨d, sp⟩ none S N false)
@@ -1250,7 +1350,7 @@ def statement : Nat → Pos → Bool → P Comp
         let v ← freshName "io_v"
         if (← get).blockYields then
           letVal sp n (.var ⟨v, sp⟩) none V (.ret sp (.app sp (.sugar sp .yieldFrom) (.var sp v)))
-        else letVal sp n (.var ⟨v, sp⟩) none V (.ret sp (.var sp v))
+        else letVal sp n (.var ⟨v, sp⟩) none V (.ret sp (.var sp v)) thr
       | S, _ => pure S
 
 /-- A prefix keyword applied to its operand, or a spine. -/

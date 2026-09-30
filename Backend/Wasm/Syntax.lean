@@ -57,6 +57,8 @@ structure Func where
 
 structure Module where
   funcs : List Func
+  /-- The read-only data, at `Flat.dataBase`. -/
+  data : Array UInt8 := #[]
   deriving Repr, Inhabited
 
 end Backend.Wasm

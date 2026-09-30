@@ -29,7 +29,7 @@ type Run = U (Out -o F (Out * i32))
 fn run_alg(r: i32 + i32 * Run) -> Run =
   match r {
     inl n -> { o -> (o, n) }
-  | inr (b, k) -> { o -> let (o, _) = putb(o, b); k!(o) }
+  | inr (b, k) -> { o -> let (o, _) = putb(o, to_u8(b)); k!(o) }
   }
 def run_out : !(Prog => Run) = fold_own[i32 + i32 * X, Run] run_alg
 

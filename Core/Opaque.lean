@@ -11,8 +11,8 @@ modes (`Relation.lean`).
 * `Input`: the input not yet read, a byte list.
 * `Output`: `(fd, bs)`, the stream `fd` and the bytes written to it, most recent first.
 
-A byte list is a value of `Bytes = μX. 1 ⊕ (I32 ⊗ X)` (`Stdio.lean`): `inj₁ ()`, or
-`inj₂ (b, rest)` with `b` a 32-bit literal.
+A byte list is a value of `Bytes = μX. 1 ⊕ (U8 ⊗ X)` (`Stdio.lean`): `inj₁ ()`, or
+`inj₂ (b, rest)` with `b` a byte literal.
 -/
 
 namespace BoCa.Fig16.LogRel.Core
@@ -26,11 +26,11 @@ inductive Opaque where
   | output
   deriving DecidableEq, Repr
 
-/-- `v` is a byte list: `inj₁ ()`, or `inj₂ (i32[b], rest)` with `rest` a byte list.
+/-- `v` is a byte list: `inj₁ ()`, or `inj₂ (u8[b], rest)` with `rest` a byte list.
 `[spec §11]` -/
 inductive BytesV : Val → Prop where
   | nil : BytesV (.inj₁ .unit)
-  | cons (b : UInt32) {r : Val} : BytesV r → BytesV (.inj₂ (.pair (.i32 b) r))
+  | cons (b : UInt8) {r : Val} : BytesV r → BytesV (.inj₂ (.pair (.u8 b) r))
 
 /-- The model of an opaque type.  `[spec §11]` -/
 def Opaque.Holds : Opaque → Val → Prop

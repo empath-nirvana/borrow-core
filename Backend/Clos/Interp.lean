@@ -43,6 +43,8 @@ structure St where
   input : List UInt8
   out : ByteArray
   err : ByteArray
+  /-- The program's read-only data, from `dataBase`. -/
+  data : Array UInt8 := #[]
 
 abbrev IM := StateT St (Except String)
 
@@ -157,6 +159,13 @@ def unpair (v : CV) : IM (CV × CV) := do
     `(base, i32[n])`. The extra cell of an empty array keeps the base an object. -/
 def arrSlots (n : Nat) : Nat := max n 1
 
+/-- Bytes written to the stream `fd`: `1` standard output, `2` standard error. -/
+def emitBytes (fd : UInt32) (bs : List UInt8) : IM Unit :=
+  match fd with
+  | 1 => modify fun s => { s with out := bs.foldl ByteArray.push s.out }
+  | 2 => modify fun s => { s with err := bs.foldl ByteArray.push s.err }
+  | _ => throw "closure IR: a write to a stream that is not an output"
+
 def applyOp : Op → List CV → IM CV
   | .alloc, [v] => allocObj (.cell v)
   | .free, [l] => do let (a, c) ← cellOf l; freeObj a; pure c
@@ -198,6 +207,15 @@ def applyOp : Op → List CV → IM CV
         else allocObj (.inj true (← allocObj (.pair (.ptr a) (.i32 n))))
       | _, _, _ => throw "closure IR: split of a non-array"
   | .nullLoc, [] => pure (.ptr 0)
+  | .litByte, [a, n, i] => do
+      match a, n, i with
+      | .i32 a, .i32 n, .i32 i =>
+        if i < n then
+          match (← get).data[a.toNat - dataBase + i.toNat]? with
+          | some b => pure (.u8 b)
+          | none => throw "closure IR: a literal's byte outside the read-only data"
+        else pure (.u8 0)
+      | _, _, _ => throw "closure IR: litByte of a non-literal"
   | .io .readByte, [m] => do
       let (_, c) ← cellOf m
       let .i32 _ := c | throw "closure IR: read_byte on a cell that holds no stream"
@@ -206,14 +224,39 @@ def applyOp : Op → List CV → IM CV
       | [] => do allocObj (.pair m (← allocObj (.inj true .unit)))
       | b :: bs => do
         set { s with input := bs }
-        allocObj (.pair m (← allocObj (.inj false (.i32 b.toUInt32))))
+        allocObj (.pair m (← allocObj (.inj false (.u8 b))))
   | .io .writeByte, [p] => do
       let (m, w) ← unpair p
       let (_, c) ← cellOf m
       match c, w with
-      | .i32 1, .i32 b => do modify fun s => { s with out := s.out.push b.toUInt8 }; pure m
-      | .i32 2, .i32 b => do modify fun s => { s with err := s.err.push b.toUInt8 }; pure m
+      | .i32 fd, .u8 b => do emitBytes fd [b]; pure m
       | _, _ => throw "closure IR: write_byte on a cell that holds no output stream"
+  | .io .writeAll, [p] => do
+      let (m, v) ← unpair p
+      let (_, c) ← cellOf m
+      let (base, n) ← unpair v
+      match c, base, n with
+      | .i32 fd, .ptr a, .i32 n => do
+        let bs ← (List.range n.toNat).mapM fun i => do
+          match ← cellOf (.ptr (a + i)) with
+          | (_, .u8 b) => pure b
+          | _ => throw "closure IR: write_all of a view whose slots are not bytes"
+        emitBytes fd bs
+        pure m
+      | _, _, _ => throw "closure IR: write_all on a cell that holds no output stream"
+  | .io .readInto, [p] => do
+      let (m, v) ← unpair p
+      let (_, c) ← cellOf m
+      let (base, n) ← unpair v
+      match c, base, n with
+      | .i32 _, .ptr a, .i32 n => do
+        let s ← get
+        let bs := s.input.take n.toNat
+        set { s with input := s.input.drop n.toNat }
+        for (b, i) in bs.zipIdx do setObj (a + i) (.cell (.u8 b))
+        let f ← allocObj (.pair (.ptr a) (.i32 n))
+        allocObj (.pair m (← allocObj (.pair f (.i32 bs.length.toUInt32))))
+      | _, _, _ => throw "closure IR: read_into on a cell that holds no stream"
   | _, _ => throw "closure IR: primitive arity"
 
 mutual
@@ -288,7 +331,7 @@ def eval (codes : Array Code) : Nat → Env → Tm → IM (CV × Env)
     | .clos c xs => do
         let (vs, env) ← takeAll env xs
         pure (← allocObj (.clos c vs), env)
-    | .prim .tab [x] => do
+    | .prim .tab [x] | .prim .litTab [x] => do
         let (v, env) ← take env x
         let (c, f) ← unpair v
         let .i32 c := c | throw "closure IR: tab of a non-length"
@@ -401,7 +444,7 @@ def interp (fuel : Nat) (p : Prog) (input : List UInt8) : Except String Output :
     let pv ← observe objFuel v
     deepDrop objFuel v
     pure (report pv (← get).heap.size)
-  let (r, s) ← act.run ⟨{}, 1, input, .empty, .empty⟩
+  let (r, s) ← act.run ⟨{}, 1, input, .empty, .empty, p.data⟩
   pure (.mk' s.out s.err r)
 
 end Backend.Clos

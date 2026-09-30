@@ -1,0 +1,67 @@
+-- P3 of `docs/strings-slices-design.md` (§1), `trim-find-replace`: sub-views and building. The
+-- input is read whole into a string (`read_all`, the `read_into` extern, in chunks), validated
+-- in place (`from_utf8`), and lent as one view. Each line (`fold_lines`, a sub-view per line, no
+-- allocation) is trimmed (`trim`: two sub-views, pointer and length) and has every `cat` replaced
+-- by `dog`: `replace_all` searches the rest of the line (`find_str` compares windows), cuts it at
+-- the match (`split_at`), appends the part before and the replacement to a new string
+-- (`push_str`, which grows it), and goes on after the match. The loop is counted, bounded by the
+-- line's length plus one: each step ends or consumes a match. The two patterns are literal views
+-- (`borrow imm "cat" { … }`), lent to the whole program.
+--
+-- Answer: on `trim-replace.in`, each line trimmed, with `cat` replaced, between `[` and `]`, and
+-- `i32[4]`, the lines. A trim that cut into the text, a match missed or a replacement written at
+-- the wrong place changes a line.
+
+include textio
+
+-- `t` with every `from` replaced by `to`, as a new string. An empty `from` matches everywhere,
+-- and the bound ends the loop.
+fn replace_all<'a, 'b, 'c>(t: text 'a, from: text 'b, to: text 'c) -> string =
+  let (t, u) = array_copy['a, u8] t;
+  let (from, f) = array_copy['b, u8] from;
+  let n = len(f);
+  let m = len(u);
+  let steps = m + 1;
+  let (out, (rest, (from, (to, _)))) = count_fold[string * (text 'a * (text 'b * (text 'c * i32)))](
+    !{ (i, (out, (rest, (from, (to, n))))) ->
+      let (rest, r) = array_copy['a, u8] rest;
+      let (from, f) = array_copy['b, u8] from;
+      match find_str(r, f) {
+        inl k -> match split_at(rest, k) {
+                   inl (pre, post) ->
+                     let (out, _) = push_str(out, pre);
+                     let (to, t2) = array_copy['c, u8] to;
+                     let (out, _) = push_str(out, t2);
+                     let post = match split_at(post, n) { inl (m, p) -> array_forget['a, u8](m); p | inr p -> p };
+                     (out, (post, (from, (to, n))))
+                 | inr rest -> (out, (rest, (from, (to, n))))
+                 }
+      | inr u -> let (out, _) = push_str(out, rest); (out, (slice_empty_imm['a, u8], (from, (to, n))))
+      } },
+    steps, 0, (string_new(m), (t, (from, (to, n)))));
+  out
+
+-- One line: trimmed, replaced, written between brackets.
+fn line_out<'a, 'b, 'c>(l: text 'a, st: Out * (text 'b * (text 'c * i32))) -> Out * (text 'b * (text 'c * i32)) =
+  let (o, (from, (to, k))) = st;
+  let (from, f) = array_copy['b, u8] from;
+  let (to, t) = array_copy['c, u8] to;
+  let s = replace_all(trim(l), f, t);
+  let (o, _) = putb(o, b'[');
+  let (o, s) = write_string(o, s);
+  let (o, _) = putb(o, b']');
+  let (o, _) = putb(o, b'\n');
+  (o, (from, (to, k + 1)))
+
+main -> i32 =
+  let inp = read_all(&mut stdin);
+  match from_utf8(inp) {
+    inl text ->
+      borrow imm text { 't, t ->
+        borrow imm "cat" { 'f, from ->
+          borrow imm "dog" { 'g, to ->
+            let st = (stdout, (from, (to, 0)));
+            let (stdout, (from, (to, n))) = fold_lines(t, !{ (l, st) -> line_out(l, st) }, st);
+            n } } }
+  | inr (b, e) -> 0
+  }

@@ -1,7 +1,7 @@
 # Strings and slices, end to end — design
 
-Status: a design. Stages S1, S2 and S3 are built (below, *Stage status*); the rest is proposed. It
-proposes spec entries, and names the theorems each needs.
+Status: a design. Stages S1, S2, S3 and S5 are built (below, *Stage status*); S4 is in review
+(#132); the rest is proposed. It proposes spec entries, and names the theorems each needs.
 
 **Stage status.**
 
@@ -11,7 +11,7 @@ proposes spec entries, and names the theorems each needs.
 | S1 K0 | built, **as a machine step** `count`, not a Z-combinator loop: a loop that counts with the host's `add`/`lt_u` is total only at hosts whose operations count, and every theorem holds at every host (SPEC §16, *Why a step*). The constant takes a start index: `count_fold (f, (n, (i, s)))` | SPEC §16, `Core/CountFold.lean` (`countFold_compatX`), `corpus/count-fold.bc` |
 | S1 K1 | built: `u8`, `b'c'`, `wrap8`/`extend8_u`, surface operators at `u8` through `i32`, `to_i32`/`to_u8` | SPEC §8, `corpus/bytes-upper.bc` |
 | S1 backend | built: byte slots for `u8`, `tab 0` allocates nothing | `Backend/README.md`, Representation |
-| S1 `read_byte`/`write_byte` at `u8` | not done: it changes every I/O program's types; left to S5 | SPEC §8 Open |
+| S1 `read_byte`/`write_byte` at `u8` | built with S5: the byte list is `μX. 1 ⊕ (U8 ⊗ X)`, and the I/O corpus widens bytes where it computes on them | SPEC §11, `Core/Stdio.lean` |
 | S1 total `for` | not done: typed elaboration's stage 9; `count_fold` is called directly | SPEC §16 Open, `corpus/pending/for-finite.bc` |
 | S2 K2 | built at `Mut` and `Imm`, with the side conditions of `experiments/PositiveArrays`; `borrow mut a { 'x, v -> … }` on an array | SPEC §9, `Core/Slices.lean`, `corpus/slice-mut.bc`, `corpus/slice-imm.bc` |
 | S2 K4 | built with S2: `slice_get_mut`, `slice_len_mut` (a `mut` family is unusable without them) | `Core/Slices.lean` |
@@ -26,6 +26,13 @@ proposes spec entries, and names the theorems each needs.
 | P12 | `iter_mut` from the library, driven by a counted loop; the program as written (`for x in iter_mut(&mut a)`) waits for S4's total `for` and the array lend row | `corpus/iter-mut-slice.bc`, `corpus/iter-mut-count.bc`, `corpus/pending/iter-mut.bc` |
 | S3 left | an `imm` reborrow of a `mut` family (K2′: `peek` and `sort` take a filler meanwhile); lifetime inference for two lifetimes (`copy_from`, `eq`, `cmp` take them written); static bounds-check elimination | SPEC §9 Open |
 | `div_fuel` over K0 | built: `io-fuel` from 3746 allocations and 174 dispatched calls to 1 and 0 | `lib/div.bc` |
+| S5 externs | built: `write_all` (an `imm` byte view to an output) and `read_into` (a `mut` byte view from an input, and the count); models are counted loops of the byte operations', proved to meet their contracts; host code is one `fd_write`/`fd_read` per view | SPEC §11, `Core/Stdio.lean` (`writeAll_meets`, `readInto_meets`) |
+| S5 buffers | built, stage A: `buf A = array A * i32`, the unused slots holding a filler chosen by type (`filler[A]`); `push` grows to twice; `box buf[A](cap)` | SPEC §17, `lib/buf.bc` |
+| S5 text | built: `string`, `text 'a`, `text_mut 'a`, `lit` as abbreviations; validation, decoding, appends, lines and splits as sub-views (no allocation per line), `parse_i32` with a sum error, `make_ascii_uppercase`; `read_all` in chunks | SPEC §17, `lib/text.bc`, `lib/textio.bc` |
+| S5 literals | built: `"…"` is `(n, t)`, `t` a search on the index; `'c'` an `i32` scalar value; the lowering puts the bytes in read-only data (one shared code, no dispatch) and a literal view points into it, with no allocation | SPEC §17, `Backend/Clos/Convert.lean`, `Backend/Wasm/Runtime.lean` |
+| S5 surface | built: borrow blocks on buffers (the initialised prefix, no cell) and on literals; a borrow block hands back the `let mut`s it assigns, the places it lends and the capabilities it uses; `box string/array`; template instances at types with lifetimes | SPEC §17, `Frontend/Parser.lean`, `Frontend/Sugar.lean` |
+| S5 programs | P1–P9, P11, P13 run at every stage: allocations are the capabilities' cells, the buffers and strings the program makes (and their growth), and nothing per line, token or literal view | `corpus/fields.bc`, `parse-int.bc`, `trim-replace.bc`, `format.bc`, `utf8-count.bc`, `key-value.bc`, `sort-lines.bc`, `json-tokens.bc`, `http-request.bc`, `ascii-upper.bc`, `labels-json.bc`; `corpus/counts.expected` |
+| S5 left | a `mut` borrow of a buffer of views inside the views' block (K2's side condition; `sort_views` works on the owned buffer); the sugar's typing of calls of lifetime-generic functions whose body lends; P14 (`Args` not built); the §4.3 lend row and total `for` (S4); `data` values (S6) | SPEC §17 Open |
 
 The method follows the user's direction. The programs come first (§1), then the types they need
 (§2, §3), then the API (§4), and then the memory model that API forces (§5). Arrays and buffers
@@ -1234,7 +1241,7 @@ added with goldens.
 | S2 | **Cell-free borrows**: K2 at `Mut`, then at `Imm`; the §5.1 lend row for arrays | §9 (the Open item) | K2 | P12 (`pending/iter-mut.bc`, with a core iterator until S4) |
 | S3 | **Split and writes**: K3, K4, K5; `lib/slice.bc` | §9 | K3–K5 | P10 (with `iter_mut` in core), a sort of `array i32` (P7's shape) |
 | S4 | **Iterators and total `for`** over views: `iter`, `iter_mut`, `bytes`, `range`; `for` over a bounded source is K0 (typed elaboration stage 9, revised) | §7 (instances), §14 (bounded `for` is total) | none | P12 as written, P10 as written, `pending/print-borrowed-list.bc`'s array analogue |
-| S5 | **Buffers and text**: `lib/buf.bc` (stage A), `lib/text.bc`, literals (`lit`, `lit_view`, backend read-only data), `write_all`/`read_into` externs; `box buf/string/array`; capability-threading borrow blocks | a new entry: text library, and the literal lowering; §11 (two externs) | none | P1–P9, P11, P13 |
+| S5 | **Buffers and text** (built): `lib/buf.bc` (stage A), `lib/text.bc`, literals (`lit`, `lit_view`, backend read-only data), `write_all`/`read_into` externs; `box buf/string/array`; capability-threading borrow blocks; `read_byte`/`write_byte` at `u8` | §17 (text library, literal lowering); §11 (two externs) | none | P1–P9, P11, P13 |
 | S6 | **Surface prerequisites** used throughout, from typed elaboration: `fn f<'a>`, `data` values without `box` and with lifetime parameters | typed elaboration §5.3 | none | P2, P8 with `data` |
 | T2 | **Enforced text**: `string`, `str`, `str mut`, `char` as opaque types (#63); optionally a Lean statement that the text library preserves `Utf8Valid` | module entry (#63) | none | a reject: bytes passed as `str` |
 | F | **Zero-cost growth**, when a program or the counts need it: `array_realloc`, then a `buf` former with an uninitialised tail | §9 | step, former | a `buf (box T)` program; allocation and fill counts |

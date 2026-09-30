@@ -10,7 +10,7 @@ def count_lines : In => In * i32 =
   thunkv fun (c : In) ->
     n : i32 <- return i32[0];
     for b in bytes c {
-      n : i32 <- case (unbang host[eq32]) (b, i32[10]) {
+      n : i32 <- case (unbang host[eq32]) ((unbang host[extend8_u]) b, i32[10]) {
         inl u -> return n
       | inr u -> return ((unbang host[add32]) (n, i32[1]))
       };
@@ -26,5 +26,5 @@ main : F (i32 * i32) =
   };
   m <- return (count_lines (&mut stdin));
   _ <- return (put_dec (&mut stdout, n));
-  _ <- return (putb (&mut stdout, i32[10]));
+  _ <- return (putb (&mut stdout, u8[10]));
   return (n, m)

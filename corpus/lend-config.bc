@@ -37,5 +37,5 @@ main -> i32 =
   let config = alloc((10, (100, 2)));
   let cfg = &config;
   let mut acc = 0;
-  for c in bytes(&mut stdin) { acc = scale(cfg, (acc, c - 48)) };
+  for c in bytes(&mut stdin) { acc = scale(cfg, (acc, to_i32(c) - 48)) };
   cap(cfg, acc)

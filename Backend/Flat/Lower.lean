@@ -83,6 +83,8 @@ structure Ctx where
   /-- The code of the loops the entry drives, when the flow analysis finds one. -/
   driveKnown : Option Nat := none
   helperBase : Nat
+  /-- The literals' code (`Backend.Clos.Prog.litCode`). -/
+  litCode : Option Nat := none
 
 structure LState where
   vars : Std.HashMap Var (List Nat) := {}
@@ -413,6 +415,35 @@ def lowerPrim : Op → List Var → Dest → LM (List Stmt)
       let l := (T.field n 0).1
       let ts ← fresh 2
       return [.call ts (← helper (.tab l f)) (locs (← vals v))] ++ (← emit d (locs ts))
+  | .litTab, [v], d => do
+      -- A literal's view: when the tabulator is the literal code's closure (its tag) and the
+      -- length at most the literal's, the array is `(a, n)` in the read-only data, and nothing
+      -- is allocated; otherwise `tab`.
+      let T ← T
+      let f := (T.field (← vty v) 1).1
+      let some n := T.cons[v]? | throw "flat IR: an untyped array"
+      let l := (T.field n 0).1
+      let ts ← fresh 2
+      let ws ← vals v
+      let tabCall : List Stmt := [.call ts (← helper (.tab l f)) (locs ws)]
+      let static? := match (← read).litCode with
+        | some c => if (T.union f).contains c && !T.isRec f && T.byteCell l && T.envWords c == 2
+            then some c else none
+        | none => none
+      match static?, ws with
+      | some c, len :: tag :: ea :: en :: _ =>
+        let fits := and32 (eq64 (.loc tag) (.c64 (T.tag c).toUInt64))
+          (.op (.eqz .w32) [ltu64 (.loc en) (.loc len)])
+        return [.ite fits [.set (ts.headD 0) (.loc ea), .set (ts.getD 1 0) (.loc len)] tabCall] ++
+          (← emit d (locs ts))
+      | _, _ => return tabCall ++ (← emit d (locs ts))
+  | .litByte, [a, n, i], d => do
+      let a := (← vals a).headD 0
+      let n := (← vals n).headD 0
+      let i := (← vals i).headD 0
+      let r ← fresh1
+      return [.ite (ltu64 (.loc i) (.loc n)) [.set r (.load8 (add64 (.loc a) (.loc i)))]
+        [.set r (.c64 0)]] ++ (← emit d [.loc r])
   | .idx, [v], d => do
       let T ← T
       let h := (T.field (← vty v) 0).1
@@ -470,6 +501,23 @@ def lowerPrim : Op → List Var → Dest → LM (List Stmt)
       match ← vals p with
       | [m, b] => return [.putc (.load (.loc m) 0) (.loc b)] ++ (← emit d [.loc m])
       | _ => throw "flat IR: write_byte of a non-pair"
+  | .io .writeAll, [p], d => do
+      let T ← T
+      let f := (T.field (← vty p) 1).1
+      unless T.byteCell (T.field f 0).1 do throw "flat IR: write_all of a view whose slots are not bytes"
+      match ← vals p with
+      | [m, a, k] => return [.putv (.load (.loc m) 0) (.loc a) (.loc k)] ++ (← emit d [.loc m])
+      | _ => throw "flat IR: write_all of a non-pair"
+  | .io .readInto, [p], d => do
+      let T ← T
+      let f := (T.field (← vty p) 1).1
+      unless T.byteCell (T.field f 0).1 do throw "flat IR: read_into of a view whose slots are not bytes"
+      match ← vals p with
+      | [m, a, k] =>
+        let r ← fresh1
+        return [.set r (.getv (.load (.loc m) 0) (.loc a) (.loc k))] ++
+          (← emit d [.loc m, .loc a, .loc k, .loc r])
+      | _ => throw "flat IR: read_into of a non-pair"
   | _, _, _ => throw "flat IR: primitive arity"
 
 /-- Call the closure `f` on `a`, answering `k` words, of which the first `w` are the result. -/
@@ -1200,7 +1248,8 @@ def lower (p : Clos.Prog) (counts : Bool := false) (types : Option Types := none
                      live := p.liveCodes,
                      driveKnown := match drive with
                        | some #[c] => some c
-                       | _ => none }
+                       | _ => none,
+                     litCode := p.litCode }
   let act : LM (List Fn) := do
     let codes ← p.codes.toList.zipIdx.mapM fun (c, k) => lowerCode k c
     let main ← lowerMain p.main
@@ -1213,6 +1262,6 @@ def lower (p : Clos.Prog) (counts : Bool := false) (types : Option Types := none
       | none => break
     pure ([printDecFn] ++ codes ++ [main, entry] ++ gen.toList)
   let (fns, _) ← (act.run ctx).run {}
-  pure { fns := fns.toArray, entry := fMain + 1 }
+  pure { fns := fns.toArray, entry := fMain + 1, data := p.data }
 
 end Backend.Flat

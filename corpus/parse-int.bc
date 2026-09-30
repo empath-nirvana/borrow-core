@@ -1,0 +1,69 @@
+-- P2 of `docs/strings-slices-design.md` (§1), `parse-int`: integers from text, checked. Each input
+-- line is read into a reused buffer and lent as a view; `parse_int` walks its bytes with a counted
+-- loop, widening each digit (`to_i32`) and multiplying and adding with overflow checks
+-- (`mul_checked`, `add_checked`, over `i64`). An error is a sum (provisional until the error
+-- effect, #18): `inl ()` for no digits, `inr (inl b)` for the byte `b` that is not a digit,
+-- `inr (inr ())` for a value past `i32`. `data` with a payload waits for stage S6, so the error
+-- is the sum itself.
+--
+-- Answer: on `parse-int.in`, each line's number or error (`empty`, `bad` and the byte, `overflow`),
+-- and `i32[158]`, the sum of the numbers parsed. A digit not widened, an overflow not caught or a
+-- sign dropped changes a line.
+
+include textio
+
+type Err = 1 + (u8 + 1)
+
+-- One digit into the number so far, or the error.
+fn digit(acc: i32 + Err, d: u8) -> i32 + Err =
+  match acc {
+    inl n ->
+      if d < b'0' || b'9' < d { inr (inr (inl d)) } else {
+        match mul_checked(n, 10) {
+          inl m -> match add_checked(m, to_i32(d) - 48) { inl r -> inl r | inr u -> inr (inr (inr ())) }
+        | inr u -> inr (inr (inr ()))
+        } }
+  | inr e -> inr e
+  }
+
+-- A decimal integer with an optional leading `-`.
+fn parse_int<'a>(t: text 'a) -> i32 + Err =
+  let (t, u) = array_copy['a, u8] t;
+  let neg = at(u, 0, b' ') == b'-';
+  let t = if neg { match split_at(t, 1) { inl (h, r) -> array_forget['a, u8](h); r | inr t -> t } }
+    else { t };
+  let (t, w) = array_copy['a, u8] t;
+  let m = len(w);
+  if m == 0 { array_forget['a, u8](t); inr (inl ()) } else {
+    let (t, acc) = count_fold[text 'a * (i32 + Err)](
+      !{ (i, (t, acc)) -> let (t, x) = array_copy['a, u8] t; (t, digit(acc, at(x, i, 0))) },
+      m, 0, (t, inl 0));
+    array_forget['a, u8](t);
+    match acc { inl n -> let v = if neg { 0 - n } else { n }; inl v | inr e -> inr e }
+  }
+
+-- A number in decimal, with a `-` when it is negative.
+fn put_int(o: Out, n: i32) -> Out =
+  if n < 0 { let (o, _) = putb(o, b'-'); let (o, _) = put_dec(o, 0 - n); o }
+  else { let (o, _) = put_dec(o, n); o }
+
+main -> i32 =
+  let mut line = box buf[u8](32);
+  let mut sum = 0;
+  for b in bytes(&mut stdin) {
+    if b == b'\n' {
+      borrow imm line { v ->
+        match parse_int(v) {
+          inl n -> let stdout = put_int(stdout, n); sum = sum + n
+        | inr e -> match e {
+            inl u -> write_lit(&mut stdout, "empty")
+          | inr e -> match e {
+              inl c -> write_lit(&mut stdout, "bad "); putb(&mut stdout, c)
+            | inr u -> write_lit(&mut stdout, "overflow")
+            } }
+        } };
+      putb(&mut stdout, b'\n');
+      line = clear_str(line)
+    } else { push(&mut line, b) }
+  };
+  sum

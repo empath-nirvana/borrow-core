@@ -1,0 +1,43 @@
+-- P7 of `docs/strings-slices-design.md` (§1), `sort-lines`: views compared and sorted in place.
+-- The input is read whole and validated, and lent once at `'t`; its lines (sub-views, no copy)
+-- are pushed onto a buffer of views, `buf (text 't)`, sorted in byte order (`sort_views`, an
+-- insertion sort comparing views lexicographically with `cmp`), and taken out in order and
+-- written.
+--
+-- The sort works on the owned buffer with `array_replace`, not through a `mut` view: lending
+-- the buffer's array as a `mut` family (`borrow mut`) needs its element type to outlive a
+-- lifetime of the context below `'t` (the side condition of `slice_borrow_mut`, SPEC §9), and
+-- inside the borrow at `'t` there is none.
+--
+-- Answer: on `sort-lines.in`, its five lines in byte order (`apple` before `apple pie`), and
+-- `i32[5]`. A comparison of the wrong length, an unstable exchange or a lost line changes the
+-- output.
+
+include textio
+
+-- One line pushed onto the buffer.
+fn collect<'t>(l: text 't, ls: buf (text 't)) -> buf (text 't) =
+  let (ls, _) = push(ls, l);
+  ls
+
+-- Line `i` taken out and written.
+fn emit<'t>(i: i32, st: Out * buf (text 't)) -> Out * buf (text 't) =
+  let (o, ls) = st;
+  let (ls, l) = take(ls, i);
+  match l {
+    inl v -> let (o, _) = write_str(o, v); let (o, _) = putb(o, b'\n'); (o, ls)
+  | inr u -> (o, ls)
+  }
+
+main -> i32 =
+  let inp = read_all(&mut stdin);
+  match from_utf8(inp) {
+    inl text ->
+      borrow imm text { 't, t ->
+        let ls = fold_lines(t, !{ (l, ls) -> collect(l, ls) }, box buf[text 't](16));
+        let ls = sort_views(ls);
+        let (ls, n) = len_of(ls);
+        let (stdout, ls) = count_fold[Out * buf (text 't)](!{ (i, st) -> emit(i, st) }, n, 0, (stdout, ls));
+        n }
+  | inr (b, e) -> 0
+  }

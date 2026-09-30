@@ -2,8 +2,8 @@
 -- `stdout` by name. It elaborates to the I/O library, `extern stdout`, and `main : F (ref output
 -- * A)` handing the capability back; `ambient.core.bc` is that program, as `bcc desugar` prints it.
 main : F i32 =
-  q <- return (putb (stdout, i32[104]));
+  q <- return (putb (stdout, u8[104]));
   let (stdout, u) = q;
-  q2 <- return (putb (stdout, i32[10]));
+  q2 <- return (putb (stdout, u8[10]));
   let (stdout, v) = q2;
   return i32[7]

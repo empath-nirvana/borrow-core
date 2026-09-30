@@ -100,16 +100,16 @@ gen fn chunks[A, K, R](it: U (gen A K R), n: i32) -> mu X. 1 + (A * X), K =
 
 -- A source of bytes split into lines, each a list of its bytes, last first, without its newline;
 -- a last line without a newline is yielded too.
-gen fn lines[K, R](it: U (gen i32 K R)) -> mu X. 1 + (i32 * X), K =
-  let mut line = (roll inl () : mu X. 1 + (i32 * X));
+gen fn lines[K, R](it: U (gen u8 K R)) -> mu X. 1 + (u8 * X), K =
+  let mut line = (roll inl () : mu X. 1 + (u8 * X));
   let mut any = false;
   let k = for b in it {
     if b == 10 {
       yield line;
-      line = (roll inl () : mu X. 1 + (i32 * X));
+      line = (roll inl () : mu X. 1 + (u8 * X));
       any = false
     } else {
-      line = (roll inr (b, line) : mu X. 1 + (i32 * X));
+      line = (roll inr (b, line) : mu X. 1 + (u8 * X));
       any = true
     }
   };

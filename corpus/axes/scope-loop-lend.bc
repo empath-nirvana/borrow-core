@@ -24,5 +24,5 @@ def get : !(all 'a < top. imm 'a (array i32) * i32 => i32) =
 main -> i32 =
   let t = alloc(array_new[i32] (10, tab));
   let mut acc = 0;
-  for c in bytes stdin { let v = get(&t, c - 48); acc = acc + v };
+  for c in bytes stdin { let v = get(&t, to_i32(c) - 48); acc = acc + v };
   acc

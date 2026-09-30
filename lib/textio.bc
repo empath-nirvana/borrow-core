@@ -1,0 +1,47 @@
+-- Text over the standard streams (`docs/strings-slices-design.md` §4.2): writing a string, a view
+-- or a literal in one write (`write_all`), and reading the whole input into a string in chunks
+-- (`read_into`). It uses the I/O library, so it is for a program whose `main` uses the
+-- capabilities (SPEC §11); `include textio` puts it in scope, with `text`.
+
+include text
+
+-- The bytes of a view, in one write.
+fn write_str<'a>(o: Out, t: text 'a) -> Out * 1 = write_bytes(o, t)
+
+-- The bytes of a string, in one write, and the string back.
+fn write_string(o: Out, s: string) -> Out * string =
+  borrow imm s { v -> write_bytes(&mut o, v) };
+  (o, s)
+
+-- The bytes of a literal, in one write.
+fn write_lit(o: Out, l: lit) -> Out * 1 =
+  borrow imm l { v -> write_bytes(&mut o, v) };
+  (o, ())
+
+-- A source that never ends: the loop of `read_all` runs until it breaks.
+gen fn forever(u: 1) -> 1 = while true { yield () }; ()
+
+-- One chunk read into the string's spare capacity, after making room for 4096 bytes: the input,
+-- the string, and whether the chunk filled the room (so that the input may have more).
+fn read_chunk(c: In, s: string) -> In * (string * bool) =
+  let (a, n) = reserve(s, 4096);
+  let (a, room) = array_size[u8](a);
+  let k = borrow mut a { v ->
+    match split_at_mut(v, n) {
+      inl (h, t) -> let (t, k) = read_bytes(&mut c, t); k
+    | inr v -> 0
+    } };
+  (c, ((a, n + k), n + k == room))
+
+-- The whole input, into a string: chunks read into its spare capacity (`read_into`), which
+-- doubles when it is full, until a read comes back short. It runs until the input ends.
+fn read_all(c: In) -> In * string =
+  let mut c = c;
+  let mut s = string_new(4096);
+  for u in forever(()) {
+    let (c2, (s2, more)) = read_chunk(c, s);
+    c = c2;
+    s = s2;
+    if more { () } else { break }
+  };
+  (c, s)

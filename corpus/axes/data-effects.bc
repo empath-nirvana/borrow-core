@@ -13,22 +13,22 @@
 -- head would print `stressed` twice; a loop that did not thread the list or the count gives an
 -- empty second line or `i32[0]`; a fold that skipped a `free` leaves objects live.
 
-type List = mu X. 1 + (ref i32 * ref X)
-shape Node = node (leaf i32) (leaf List)
+type List = mu X. 1 + (ref u8 * ref X)
+shape Node = node (leaf u8) (leaf List)
 
 def nil : List = roll inl ()
-fn cons(x: i32, t: List) -> List = roll inr alloc_s[Node] (x, t)
+fn cons(x: u8, t: List) -> List = roll inr alloc_s[Node] (x, t)
 
 -- A computation that writes to an output it is given, and hands it back.
 type Run = U (Out -o F (Out * 1))
 
 -- The algebra: the empty list writes nothing; a node writes its byte, then runs the tail's.
-fn run_alg(r: 1 + ref i32 * Run) -> Run =
+fn run_alg(r: 1 + ref u8 * Run) -> Run =
   match r {
     inl _ -> { o -> (o, ()) }
   | inr (c, k) -> let x = free(c); { o -> let (o, _) = putb(o, x); k!(o) }
   }
-def run_list : !(List => Run) = fold_own[1 + ref i32 * ref X, Run] run_alg
+def run_list : !(List => Run) = fold_own[1 + ref u8 * ref X, Run] run_alg
 
 main -> i32 =
   let mut l = nil;

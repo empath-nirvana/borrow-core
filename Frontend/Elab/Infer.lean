@@ -81,6 +81,14 @@ def defAppTy (E : Env) (Δ : LifeCtx) (T : List CVTy) (x : String) (args : List 
 /-- A slot's type, `1` when it is not known (a node whose type is not known). -/
 def slot (A : Option CVTy) : CVTy := A.getD .unit
 
+/-- A `&c` in a value, outside nested computations (`Parser`'s `Val.lends`). -/
+def valLends : Val → Bool
+  | .lend .. => true
+  | .pair _ V W | .app _ V W => valLends V || valLends W
+  | .inl _ V | .inr _ V | .unbang _ V | .boxed _ _ V | .unbox _ V | .sub _ V _ | .roll _ V
+  | .unroll _ V | .inst _ V _ | .ascribe _ V _ | .shorten _ _ _ _ V => valLends V
+  | _ => false
+
 mutual
 /-- The typed IR of a value, checked against `exp` when it is given. -/
 def inferV : Nat → Env → LifeCtx → List CVTy → Option CVTy → Val → IM TNode
@@ -185,6 +193,11 @@ def inferC : Nat → Env → LifeCtx → List CVTy → Option CCTy → Comp → 
       let A' := oA.bind fun A => (E.elabV Δ A).toOption
       let hd ← inferC n E Δ T (A'.map .ret) M
       let A := A' <|> (match hd.ty.c? with | some (.ret A) => some A | _ => none)
+      -- A head that lends a place hands it back first: `x` is the second component (SPEC §11).
+      let headLends := match M with | .ret _ V => valLends V | _ => false
+      let A := if oA.isSome || !headLends then A else match A with
+        | some (.tensor _ B) => some B
+        | _ => none
       let b ← mkBinder x.name A
       let rest ← inferC n (E.push (some x.name)) Δ (slot A :: T) exp N
       pure (node rest.ty.c? [hd, rest] [b])

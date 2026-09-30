@@ -32,14 +32,18 @@ These come with every program whose `main` uses the capabilities. They are ordin
 
 | name | type | |
 |---|---|---|
-| `getb` | `ref input => ref input * (i32 + 1)` | the next byte, or `inr ()` at the end |
-| `putb` | `ref output * i32 => ref output * 1` | write a byte |
+| `getb` | `ref input => ref input * (u8 + 1)` | the next byte, or `inr ()` at the end |
+| `putb` | `ref output * u8 => ref output * 1` | write a byte |
 | `put_dec` | `ref output * i32 => ref output * 1` | write a number in decimal |
-| `bytes` | `ref input => U (iter i32 (ref input) (ref input))` | the input as a stream |
+| `write_bytes` | `ref output * array_imm 'b u8 => ref output * 1` | write a byte view in one call |
+| `read_bytes` | `ref input * array_mut 'b u8 => ref input * (array_mut 'b u8 * i32)` | read into a byte view, and how many |
+| `bytes` | `ref input => U (iter u8 (ref input) (ref input))` | the input as a stream |
 
 Each helper takes a capability and hands it back first, which is what `&mut c` expects. Underneath
-are two operations, `read_byte` and `write_byte`, on `mut` borrows of the capabilities; the
-helpers do the borrowing so programs do not.
+are the operations `read_byte`, `write_byte`, `write_all` and `read_into`, on `mut` borrows of
+the capabilities; the helpers do the borrowing so programs do not. A byte is a `u8`: compare it
+with a literal (`b == 10`, `b == b'\n'`), and widen it with `to_i32(b)` to compute with it.
+Text, buffers and literals are libraries of their own (`include textio`, SPEC §17).
 
 ## State across a loop
 
@@ -54,14 +58,14 @@ def inc : i32 => i32 = thunkv fun (n : i32) -> return ((unbang host[add32]) (n, 
 main : F 1 =
   lines : i32 <- return i32[0];
   for b in bytes stdin {
-    lines : i32 <- case (unbang host[eq32]) (b, i32[10]) {
+    lines : i32 <- case (unbang host[eq32]) ((unbang host[extend8_u]) b, i32[10]) {
       inl other -> return lines
     | inr newline -> return (inc lines)
     };
     return ()
   };
   _ <- return (put_dec (&mut stdout, lines));
-  return (putb (&mut stdout, i32[10]))
+  return (putb (&mut stdout, u8[10]))
 -- stdin: one
 -- stdin: two
 -- stdin: three
@@ -90,7 +94,7 @@ def count_bytes : In => In * i32 =
 main : F 1 =
   n <- return (count_bytes (&mut stdin));
   _ <- return (put_dec (&mut stdout, n));
-  return (putb (&mut stdout, i32[10]))
+  return (putb (&mut stdout, u8[10]))
 -- stdin: hello
 -- output: 6
 -- answer: ()
@@ -106,17 +110,18 @@ A helper names the capabilities it uses in its type. This one can write to an ou
 nothing else:
 
 ```bc
-def hexd : i32 => i32 =
+def hexd : i32 => u8 =
   thunkv fun (n : i32) ->
     case (unbang host[lt_u32]) (n, i32[10]) {
-      inl u -> return ((unbang host[add32]) (n, i32[87]))
-    | inr u -> return ((unbang host[add32]) (n, i32[48]))
+      inl u -> return ((unbang host[wrap8]) ((unbang host[add32]) (n, i32[87])))
+    | inr u -> return ((unbang host[wrap8]) ((unbang host[add32]) (n, i32[48])))
     }
 
 -- A byte as two hex digits.
-def put_hex : Out * i32 => Out * 1 =
-  thunkv fun (p : Out * i32) ->
-    let (o, b) = p;
+def put_hex : Out * u8 => Out * 1 =
+  thunkv fun (p : Out * u8) ->
+    let (o, c) = p;
+    b <- return ((unbang host[extend8_u]) c);
     _ <- return (putb (&mut o, hexd ((unbang host[shr_u32]) (b, i32[4]))));
     return (putb (o, hexd ((unbang host[and32]) (b, i32[15]))))
 
@@ -124,7 +129,7 @@ main : F 1 =
   for b in bytes stdin {
     return (put_hex (&mut stdout, b))
   };
-  return (putb (&mut stdout, i32[10]))
+  return (putb (&mut stdout, u8[10]))
 -- stdin: Hi
 -- output: 48690a
 -- answer: ()
@@ -221,10 +226,40 @@ runs the *model*: streams are byte lists in memory, and the operations are ordin
 It is slow: each step of the model walks the whole term, so it takes about ten milliseconds a
 byte on `io-cat.bc`.
 
+## Text
+
+`include textio` brings in buffers, text and literals (SPEC §17). A string is a growable byte
+buffer, `box string(cap)` allocates one, and appends take it and hand it back. A literal `"…"` is
+data the program owns no copy of; `'c'` is a character. `write_string` writes a string in one
+call:
+
+```bc
+include textio
+
+fn point(x: i32, y: i32) -> string =
+  let mut s = box string(16);
+  push_lit(&mut s, "x="); push_dec(&mut s, x);
+  push_lit(&mut s, ", y="); push_dec(&mut s, y);
+  push_char(&mut s, '\n');
+  s
+
+main -> i32 =
+  let s = write_string(&mut stdout, point(12, 0 - 7));
+  let (s, n) = len_of(s);
+  n
+-- output: x=12, y=-7
+-- answer: i32[11]
+```
+
+A string lends its bytes as a view, with no copy: `borrow imm s { v -> … }`. A view is cut at
+run-time indices into views of the same bytes (`split_once`, `trim`, the lines of `fold_lines`),
+so reading lines, fields and tokens allocates nothing per line. The block hands back what it
+lends, so `write_str(&mut stdout, v)` inside it leaves `stdout` in scope after it.
+
 ## What is proved, and what is trusted
 
-- The model of each operation meets its extern's type (`readByte_meets`, `writeByte_meets`),
-  proved in Lean.
+- The model of each operation meets its extern's type (`readByte_meets`, `writeByte_meets`,
+  `writeAll_meets`, `readInto_meets`), proved in Lean.
 - For every implementation of the externs that meets their types, every run of the program's
   `run_io` wrapper from empty memory, under every allocator, continues to its outputs at empty
   memory (`externs_every_run`). A program that runs until its input ends is covered one prefix
@@ -244,8 +279,9 @@ and nothing is claimed about them.
 - A `for` has no early exit; `io-guess.bc` keeps a flag instead, and `io-sections.bc` writes its
   line reader as a loop in core. A `for` over a finite source, allowed in total code, is not
   provided (#59); neither are `|>` pipelines.
-- A line reader: an observation must terminate, so a line of unbounded length is a loop of its
-  own. Keep the line in the loop's state, as `io-aoc.bc` does.
+- A line reader over the stream: an observation must terminate, so a line of unbounded length is
+  a loop of its own. Keep the line in a buffer in the loop's state (`corpus/fields.bc`), or read
+  the whole input with `read_all` and split it into line views.
 - I/O errors are not modeled: a read error is the end of the input.
 - Command-line arguments, environment variables, the exit status, files and the network are
   designed as more capabilities of the same kind (SPEC §11) but not built.

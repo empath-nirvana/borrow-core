@@ -42,7 +42,7 @@ def interpSource (fuel : Nat) (e : Expr) : Except String Output := do
 /-- The bytes of a byte list, most recent first as an output stream holds them. -/
 def bytesOf : Expr → Option (List UInt8)
   | .inj₁ .unit => some []
-  | .inj₂ (.pair (.prim (.lit (.i32 b))) r) => (bytesOf r).map (b.toUInt8 :: ·)
+  | .inj₂ (.pair (.prim (.lit (.u8 b))) r) => (bytesOf r).map (b :: ·)
   | _ => none
 
 /-- The output of a finished model run: `((fd, out), ((fd', err), a))` holds the bytes written to

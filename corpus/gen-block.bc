@@ -42,6 +42,6 @@ main -> i32 =
   for x in gen { twice(!{ y -> yield y; yield y * 100 }, 5) } { acc = acc + x };
   let upper = gen { for c in bytes(&mut stdin) { yield c + 1 }; stdin };
   let mut s = 0;
-  let stdin = for b in upper { putb(&mut stdout, b); s = s + b };
+  let stdin = for b in upper { putb(&mut stdout, b); s = s + to_i32(b) };
   putb(&mut stdout, 10);
   acc + s * 1000

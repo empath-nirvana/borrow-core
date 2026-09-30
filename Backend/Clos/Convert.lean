@@ -137,6 +137,11 @@ structure CState where
   codes : Array Code
   folds : List FoldCode := []
   pre : Pre := {}
+  /-- The literals' bytes so far, each literal once. -/
+  data : Array UInt8 := #[]
+  /-- The address of each literal's bytes, by its bytes. -/
+  lits : List (List UInt8 × Nat) := []
+  litCode : Option Nat := none
 
 abbrev CM := StateT CState (Except String)
 
@@ -282,6 +287,107 @@ def foldShape? : Expr → Option (Bool × FSh)
 /-- Reserve a code index, filled by `setCode`. -/
 def reserve : CM Nat := register ⟨[], dummy, .unit⟩
 
+/-! ### Literals
+
+A string literal `"…"` is the value `(n, t)`, `t` the `!` function from an index to its byte
+(`Frontend.Sugar.litValue`): a compare with the length, then a search on the index down to one
+byte. A λ of that shape is converted to a closure of one shared code, `litCode`, capturing the
+address of the literal's bytes in the read-only data and its length; its body is `litByte`, a
+load. So every literal is the same code, a call of one is direct, and its bytes are emitted once.
+The shape is semantic: a λ of it computes exactly its table, however it was written. -/
+
+/-- The bytes a search over the index (the variable at depth `d`) answers on the indices
+`[lo, hi)`: a `case` on `lt_u (i, mid)` whose `inl` arm is `[mid, hi)` and whose `inr` arm is
+`[lo, mid)`, down to a byte literal. -/
+def litTree : Nat → Nat → Nat → Nat → Expr → Option (List UInt8)
+  | 0, _, _, _, _ => none
+  | f + 1, d, lo, hi, e =>
+    if hi ≤ lo + 1 then
+      match e with
+      | .prim (.lit (.u8 b)) => some [b]
+      | _ => none
+    else
+      let mid := (lo + hi) / 2
+      match e with
+      | .case (.app (.prim (.host (.rel .w32 .lt_u))) (.pair (.var i) (.prim (.lit (.i32 m))))) a b =>
+        if i == d && m.toNat == mid then do
+          let up ← litTree f (d + 1) mid hi a
+          let down ← litTree f (d + 1) lo mid b
+          pure (down ++ up)
+        else none
+      | _ => none
+
+/-- The bytes of a literal's tabulator `λi. body`, when `body` has the literal's shape. -/
+def litTable? (body : Expr) : Option (List UInt8) :=
+  match body with
+  | .prim (.lit (.u8 0)) => some []
+  | .case (.app (.prim (.host (.rel .w32 .lt_u))) (.pair (.var 0) (.prim (.lit (.i32 n)))))
+      (.prim (.lit (.u8 0))) t =>
+    if n.toNat == 0 then none else litTree (n.toNat + 1) 1 0 n.toNat t
+  | _ => none
+
+/-- A literal's closure: `litCode` over the address of its bytes and its length. -/
+def litClosure (bs : List UInt8) : CM Tm := do
+  let st ← get
+  let addr ← match st.lits.lookup bs with
+    | some a => pure a
+    | none => do
+      let a := dataBase + st.data.size
+      modify fun s => { s with data := s.data ++ bs.toArray, lits := (bs, a) :: s.lits }
+      pure a
+  let c ← match (← get).litCode with
+    | some c => pure c
+    | none => do
+      let ea ← fresh; let en ← fresh; let i ← fresh
+      let c ← register ⟨[ea, en], i, .prim .litByte [ea, en, i]⟩
+      modify fun s => { s with litCode := some c }
+      pure c
+  let a ← fresh; let n ← fresh
+  return .letv a (.lit (.i32 addr.toUInt32)) (.letv n (.lit (.i32 bs.length.toUInt32))
+    (.clos c [a, n]))
+
+/-- `x` occurs free in `e`. -/
+def occurs (x : Nat) (e : Expr) : Bool := (fvsRaw e 0).contains x
+
+/-- The body `b` of `(λa. b) (tab (n, t))` is a literal view (`Frontend.Sugar`, the borrow block
+on a literal): `a` is lent by `withbor`'s term to a callback that first copies the family (only
+an `imm` family can be copied, so nothing writes the array), and the array handed back is
+dropped next, with `a` used nowhere else. Then the array may be the literal's read-only bytes. -/
+def litView? (b : Expr) : Bool :=
+  match b with
+  | .app (.lam b₂) (.app (.app wb (.var 0)) cb) =>
+    let withborOk := wb == .lam (.lam (.pair (.var 1) (.app (.app (.var 0) .unit) (.var 1))))
+    let cbOk := match cb with
+      | .lam (.lam (.letpair (.app (.lam (.pair (.var 0) (.var 0))) (.var 0)) k)) => !occurs 4 k
+      | _ => false
+    let dropOk := match b₂ with
+      | .letpair (.var 0) (.seq (.app (.lam (.app (.prim .drop) (.pair _ (.var 0)))) (.var 1)) rest) =>
+        !occurs 1 rest && !occurs 3 rest
+      | _ => false
+    withborOk && cbOk && dropOk && !occurs 1 b₂
+  | _ => false
+
+/-- The mark of a literal view's `tab`: its argument paired with this `i64`, which no checked
+term has there (`tab` takes an `i32` length). -/
+def litViewMark : UInt64 := 0x4C49545649455753
+
+/-- The term with each literal view's `tab` marked (`litView?`), before conversion. -/
+def markLitViews : Expr → Expr
+  | .app (.lam b) (.app (.prim .tab) arg) =>
+    let b' := markLitViews b
+    let arg' := markLitViews arg
+    if litView? b then .app (.lam b') (.app (.prim .tab) (.pair (.prim (.lit (.i64 litViewMark))) arg'))
+    else .app (.lam b') (.app (.prim .tab) arg')
+  | .pair a b => .pair (markLitViews a) (markLitViews b)
+  | .seq a b => .seq (markLitViews a) (markLitViews b)
+  | .app a b => .app (markLitViews a) (markLitViews b)
+  | .inj₁ a => .inj₁ (markLitViews a)
+  | .inj₂ a => .inj₂ (markLitViews a)
+  | .lam b => .lam (markLitViews b)
+  | .letpair a b => .letpair (markLitViews a) (markLitViews b)
+  | .case a b c => .case (markLitViews a) (markLitViews b) (markLitViews c)
+  | e => e
+
 def setCode (c : Nat) (code : Code) : CM Unit :=
   modify fun s => { s with codes := s.codes.set! c code }
 
@@ -339,6 +445,12 @@ def conv (ctx : Ctx) (e : Expr) (id : Nat) : CM Tm := do
       let d₁ := (if 0 ∈ (← fvsAt k₂ 0) then [] else [x]) ++ only₂
       let d₂ := (if 0 ∈ (← fvsAt k₃ 0) then [] else [y]) ++ only₁
       return wrapCopies cs (.letv s t₀ (.case s x (wrapDrops d₁ t₁) y (wrapDrops d₂ t₂)))
+  | .app (.prim .tab) (.pair (.prim (.lit (.i64 m))) arg) => do
+      -- A literal view's `tab`, marked by `markLitViews`: `litTab`.
+      if m != litViewMark then throw "a `tab` of a non-length"
+      let kArg := (k₂ + 1) + (← sizeAt (k₂ + 1))
+      let av ← fresh
+      return .letv av (← conv ctx arg kArg) (.prim .litTab [av])
   | .app (.app (.prim .store) l) v => do
       -- `l` is part 2 of `app (prim store) l`, `v` part 2 of the whole.
       let kl := k₁ + 2
@@ -381,6 +493,7 @@ def conv (ctx : Ctx) (e : Expr) (id : Nat) : CM Tm := do
         return wrapCopies cs (.letv av ta (.letv fv tf (.app fv av)))
   | .lam b => do
       if isSwap (.lam b) then return ← swapValue
+      if let some bs := litTable? b then return ← litClosure bs
       match b with
       | .app (.var (k + 1)) (.var 0) =>
         -- `λv. y v` of a variable `y` is `y` (η): no closure wraps a closure of its own type.
@@ -419,8 +532,9 @@ def conv (ctx : Ctx) (e : Expr) (id : Nat) : CM Tm := do
 
 /-- Closure-convert a closed term. -/
 def convert (e : Expr) : Except String Prog := do
+  let e := markLitViews e
   let (t, s) ← (conv {} e 0).run { next := dummy + 1, codes := #[], pre := .of e }
-  pure { codes := s.codes, main := t, folds := s.folds }
+  pure { codes := s.codes, main := t, folds := s.folds, data := s.data, litCode := s.litCode }
 
 /-! ### Externs  `[spec §11]` -/
 
@@ -430,13 +544,15 @@ inductive ExtImpl where
   | cap (fd : Nat)
   | io (k : IOOp)
 
-/-- An operation's closure, as the extern's value: `Λ. λm. op m` (the lifetime argument is
-`()`, and is dropped). -/
+/-- An operation's closure, as the extern's value: `Λ. λm. op m`, with one `Λ` per lifetime
+parameter (each argument is `()`, and is dropped). -/
 def ioValue (k : IOOp) : CM Tm := do
-  let u ← fresh; let m ← fresh
-  let c₂ ← register ⟨[], m, .prim (.io k) [m]⟩
-  let c₁ ← register ⟨[], u, .drop u (.clos c₂ [])⟩
-  pure (.clos c₁ [])
+  let m ← fresh
+  let mut c ← register ⟨[], m, .prim (.io k) [m]⟩
+  for _ in [0:k.lifes] do
+    let u ← fresh
+    c ← register ⟨[], u, .drop u (.clos c [])⟩
+  pure (.clos c [])
 
 /-- Take the capabilities back from `main`'s result `(caps, a)`: each cell is freed with its
 content, and the result is `a`. -/
@@ -465,6 +581,7 @@ operation's closure), an extern `main` does not use is dropped, and when there a
 loop (`loops`), its value is the loop, and the taking back is the code `fin`, run on the value
 the loop finishes with.  `[spec §11]` -/
 def convertMain (exts : List ExtImpl) (loops : Bool) (e : Expr) : Except String Prog := do
+  let e := markLitViews e
   let ncaps := (exts.filter fun | .cap _ => true | _ => false).length
   let act : CM (Tm × Option Nat) := do
     let xs ← exts.mapM fun _ => fresh
@@ -488,6 +605,6 @@ def convertMain (exts : List ExtImpl) (loops : Bool) (e : Expr) : Except String 
       | .io k => body := .letv x (← ioValue k) body
     return (body, fin)
   let ((t, fin), s) ← act.run { next := dummy + 1, codes := #[], pre := .of e }
-  pure { codes := s.codes, main := t, fin, folds := s.folds }
+  pure { codes := s.codes, main := t, fin, folds := s.folds, data := s.data, litCode := s.litCode }
 
 end Backend.Clos
