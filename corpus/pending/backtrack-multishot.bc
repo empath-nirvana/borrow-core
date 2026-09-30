@@ -42,4 +42,4 @@ main -> i32 =
   handle Choose {
     choose(k) -> let x = k!(true); if x == 0 { k!(false) } else { x }
   } in { c -> search(c) }
--- now: 34:1: expected a declaration (`type`, `shape`, `def`, `extern` or `main`), found name `cap`
+-- now: 34:1: expected a declaration (`type`, `shape`, `def`, `fn`, `extern`, `effect`, `handler` or `main`), found name `cap`

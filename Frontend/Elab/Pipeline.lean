@@ -67,7 +67,8 @@ def elaborate (p : Program) : Except Error Elaborated := do
 /-- An error, with a note naming the sugar whose generated code it is in, when its span is the
 span of one. -/
 def renderError (os : Sugar.Origins) (e : Error) : Error :=
-  match os.find? (fun (s, w) => s == e.span && !w.startsWith Sugar.reportTag) with
+  match os.find? (fun (s, w) => s == e.span && !w.startsWith Sugar.reportTag &&
+      !w.startsWith Sugar.effectsTag) with
   | some (_, what) =>
     { e with msg := s!"{e.msg}\n  in the core generated for {what} here (`bcc desugar` shows it)" }
   | none => e
@@ -90,6 +91,8 @@ def TDecl.name : TDecl → String
     | .extern _ n _ => s!"extern {n.name}"
     | .main .. => "main"
     | .include _ n => s!"include {n.name}"
+    | .effect _ n _ => s!"effect {n.name}"
+    | .handler _ n _ _ _ _ => s!"handler {n.name}"
 
 /-- What `bcc tir` prints for a declaration with a body: its name, effect, node count, the
 nodes whose type is not known, and its binders. The library declarations (the first `lib`) are

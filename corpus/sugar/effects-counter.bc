@@ -1,0 +1,11 @@
+-- An effect, a handler and `with` (SPEC §18): `effects-counter.core.bc` is the program written by
+-- hand in core. The clause `tick` is a function over a `mut` borrow of the handler's state, run by
+-- `withswap`, which hands the borrow back; `with count(0) { … }` is a `withbor2` of a cell holding
+-- the state, whose callback's parameter is the capability; each `tick()` is a call of the clause
+-- on it.
+-- Answer: i32[12].
+effect Counter { fn tick() -> i32 }
+
+handler count(n: i32) for Counter { tick() -> { n = n + 1; n } }
+
+main -> i32 = with count(0) { let a = tick(); let b = tick(); a * 10 + b }

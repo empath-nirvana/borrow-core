@@ -12,7 +12,7 @@ The parser rejects programs outside the grammar before any checking. Examples, f
 
 | program | error |
 |---|---|
-| `main : F 1 = force f (g x)` | ``expected a declaration (`type`, `shape`, `def`, `extern` or `main`), found `(` `` (application takes variables only) |
+| `main : F 1 = force f (g x)` | ``expected a declaration (`type`, `shape`, `def`, `fn`, `extern`, `effect`, `handler` or `main`), found `(` `` (application takes variables only) |
 | `main : F 1 = return (); return ()` | ``expected a declaration …, found `;` `` (no free-standing sequencing) |
 | `def f : 1 => 1 = fun (x : 1) -> return x` | ``expected a value, found `fun` `` (a function value is `thunkv fun …`) |
 | `def t : 1 = ((), (), ())` | ``expected `)`, found `,` `` (tuples are pairs) |

@@ -1,0 +1,28 @@
+-- `effects-counter.bc` written by hand in core: the clause of `tick` over a `mut` borrow of the
+-- state, and the handled body as the callback of a `withbor2` of the state's cell.
+-- Answer: i32[12].
+def count__tick : !(all 'l < top. mut 'l i32 * 1 => mut 'l i32 * i32) =
+  !thunkv Fun 'l < top.
+      return (thunkv fun (p : mut 'l i32 * 1) ->
+          let (c, u) = p;
+          let () = u;
+          w <- return withswap['l, i32, i32] c (thunkv fun (n : i32) ->
+                n <- return (unbang host[add32]) (n, i32[1]);
+                r : i32 <- return n;
+                return (n, r));
+          let (c, r) = w;
+          return (c, r))
+
+main : F i32 =
+  q <- return withbor2['h, dom, i32, i32] (alloc[i32] i32[0]) (thunkv Fun 'h < dom.
+        return (thunkv fun (c : mut 'h i32) ->
+            t : mut 'h i32 * i32 <- return (unbang count__tick) ['h] (c, ());
+            let (c, r) = t;
+            a <- return r;
+            t : mut 'h i32 * i32 <- return (unbang count__tick) ['h] (c, ());
+            let (c, r) = t;
+            b <- return r;
+            x <- return (unbang host[add32]) ((unbang host[mul32]) (a, i32[10]), b);
+            return boxed['h] x));
+  let (s, v) = q;
+  return v

@@ -1,7 +1,8 @@
 # Effects and handlers (#18): scoping
 
-Status: a scoping pass, not the design. Nothing here is built, and no SPEC entry is written. Every
-surface spelling is provisional unless §6 marks it as a one-way door. It answers the user's
+Status: a scoping pass, not the design. Stage S1 is being built from it: S1a (effect signatures,
+stateful handlers, `with`) is SPEC §18. Every surface spelling is provisional unless §6 marks it
+as a one-way door. It answers the user's
 "let's do a scoping pass first and see if we need to break it down further", and grounds the
 syntax and semantics in prior art (§4, §5).
 

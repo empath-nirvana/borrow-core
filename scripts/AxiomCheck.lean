@@ -151,3 +151,7 @@ import Frontend.Check.Externs
 #print axioms BoCa.Fig16.LogRel.Core.io_loop_every_run
 #print axioms Frontend.Check.IORun.every_run
 #print axioms Frontend.Check.IORun.loop_every_run
+-- SPEC §18: effects and handlers, the laws of the elaboration schemas
+#print axioms BoCa.Fig16.LogRel.Core.Handlers.op_tail
+#print axioms BoCa.Fig16.LogRel.Core.Handlers.clauseRun_answers
+#print axioms BoCa.Fig16.LogRel.Core.Handlers.op_answer

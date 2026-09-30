@@ -620,3 +620,23 @@ Each entry: the decision, and why. Newest last.
     `f`'s first parameter is a computation, `e` is suspended (thunked), which is type-directed as
     decision 26 allows. A chain is applied innermost first, and its order is semantics. This
     settles #17 and #59; draft 0's piped-last rule is withdrawn.
+51. **Provisional (effects S1a, SPEC §18, #152; to be confirmed by the user).**
+    - **Spellings**: `effect E { fn op(x: A) -> B; … }`; `handler h(s: S) for E { op(x) -> e;
+      op(x) -> { M }; … }`, the state a `let mut` variable of each clause and the clause's value
+      the answer; `with h(e) { M }` for a state made at the block and dropped after it, and
+      `with h(&mut c) { M }` for a state lent from a cell, which holds the final state. An
+      operation is called as a function; its name is its own.
+    - **A clause is a function over the lent state**, `h__op(c: mut 'l S, x) -> mut 'l S * B`,
+      whose body is `modify` (`withswap`) of the state; a `with` is a `borrow mut` of the
+      state's cell. So a handled program is the capability-passing program a user would write
+      by hand, and its counts are that program's (`corpus/effects-map.bc`,
+      `effects-map-hand.bc`).
+    - **A function with a row is copied per handler** (`f__h`), as a generic function is per
+      instance: no dispatch, and a function never called under a handler is not elaborated.
+      The copy takes the capabilities first and hands them back first.
+    - **One instance per effect** in scope; the innermost `with` of an effect handles it. Names
+      are S2 (#155). Effects take no type parameters yet; `Fail[E]` (S1b) is the first that
+      needs one.
+    - **Not in S1a**: written rows; effectful callbacks (#161); an operation inside a clause;
+      a lend in the arguments of an effectful call; effectful functions whose result is a loop
+      or a generator.
