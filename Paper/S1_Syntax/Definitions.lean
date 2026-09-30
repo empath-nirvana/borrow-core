@@ -78,6 +78,9 @@ inductive Prim where
   | ubind
   /-- The cancel delimiter `ccatch e`, which catches only the reserved name `0`.  `[spec §19]` -/
   | ccatch
+  /-- The cancel-mode finaliser frame `cfin s e`: `e` is a finaliser running under a cancel whose
+      state is `s`; every `raise` escaping `e` is caught here.  `[spec §19]` -/
+  | cfin
   deriving DecidableEq, Repr
 
 /-!

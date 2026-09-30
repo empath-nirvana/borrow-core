@@ -108,7 +108,7 @@ theorem step1_case₁_inv {μ μ₁ : Heap} {e₁ e₂ e' : Expr} {v : Val}
       obtain ⟨hv, rfl, rfl⟩ := hE
       have : v = v' := Subtype.ext (by injection hv)
       subst this; exact ⟨rfl, rfl⟩
-  | _ => simp_all [BoLo.hndE, BoLo.ubindE, BoLo.ccatchE]
+  | _ => simp_all [BoLo.hndE, BoLo.ubindE, BoLo.ccatchE, BoLo.cfinE]
 
 theorem step1_case₂_inv {μ μ₁ : Heap} {e₁ e₂ e' : Expr} {v : Val}
     (h : Step1 μ (.case (.inj₂ v.1) e₁ e₂) μ₁ e') : μ₁ = μ ∧ e' = e₂.subst 0 v := by
@@ -126,7 +126,7 @@ theorem step1_case₂_inv {μ μ₁ : Heap} {e₁ e₂ e' : Expr} {v : Val}
       obtain ⟨hv, rfl, rfl⟩ := hE
       have : v = v' := Subtype.ext (by injection hv)
       subst this; exact ⟨rfl, rfl⟩
-  | _ => simp_all [BoLo.hndE, BoLo.ubindE, BoLo.ccatchE]
+  | _ => simp_all [BoLo.hndE, BoLo.ubindE, BoLo.ccatchE, BoLo.cfinE]
 
 theorem step1_seq_inv {μ μ₁ : Heap} {e e' : Expr} (h : Step1 μ (.seq .unit e) μ₁ e') :
     μ₁ = μ ∧ e' = e := by
@@ -143,7 +143,7 @@ theorem step1_seq_inv {μ μ₁ : Heap} {e e' : Expr} (h : Step1 μ (.seq .unit 
       simp only [Expr.seq.injEq] at hE
       obtain ⟨-, rfl⟩ := hE
       exact ⟨rfl, rfl⟩
-  | _ => simp_all [BoLo.hndE, BoLo.ubindE, BoLo.ccatchE]
+  | _ => simp_all [BoLo.hndE, BoLo.ubindE, BoLo.ccatchE, BoLo.cfinE]
 
 /-- A redex in a context steps only by its head step. -/
 theorem det_beta (K : Kont) (b : Expr) (v : Val) {μ μ₁ : Heap} {e₁ : Expr}

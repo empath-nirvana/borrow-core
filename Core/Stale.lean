@@ -223,7 +223,7 @@ theorem staleStuck_no_step {A : Alloc} {k k' : Nat} {μ μ' : Heap} {e' : Expr} 
   obtain ⟨hb, -⟩ := plug_decomp hh.toHead _ K' h₀ hE'
   have hh' := hh.toHead
   generalize hx : a = x at hh'
-  cases hh' <;> simp [stLoad, Expr.val, Val.prim, Val.loc, ← hb, BoLo.hndE, BoLo.ubindE, BoLo.ccatchE] at hx
+  cases hh' <;> simp [stLoad, Expr.val, Val.prim, Val.loc, ← hb, BoLo.hndE, BoLo.ubindE, BoLo.ccatchE, BoLo.cfinE] at hx
   case load ℓ v hv =>
     subst hx
     rw [h0] at hv

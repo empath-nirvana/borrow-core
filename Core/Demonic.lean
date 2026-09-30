@@ -49,7 +49,8 @@ theorem head_det {μ μ₁ μ₂ : Heap} {a a₁ a₂ : Expr} (h₁ : Head μ a 
   by_cases hE : EffRedex a
   · exact head_det_eff h₁ hE h₂ hx
   cases h₁ <;> (try (exfalso; apply hE; first
-    | exact .inl ⟨_, _, rfl⟩ | exact .inr (.inl ⟨_, _, rfl⟩) | exact .inr (.inr ⟨_, rfl⟩))) <;>
+    | exact .inl ⟨_, _, rfl⟩ | exact .inr (.inl ⟨_, _, rfl⟩) | exact .inr (.inr (.inl ⟨_, rfl⟩))
+    | exact .inr (.inr (.inr ⟨_, _, rfl⟩)))) <;>
     cases h₂ <;> simp [Expr.allocs] at hn hx ⊢
   all_goals (try simp only [Expr.val, ← Subtype.ext_iff] at hx)
   all_goals (try simp only [Expr.val, ← Subtype.ext_iff])
@@ -191,7 +192,7 @@ theorem steps_replay {μ μ' : Heap} {e e' : Expr} (hs : Steps μ e μ' e') :
                 exact ⟨K, _, _, rfl, rfl, this⟩
               have := ARun.more hstep (hcs A (i + 1) hA.tail)
               rwa [show i + 1 + cs.length = i + (ℓ :: cs).length by simp; omega] at this
-          | _ => simp [Expr.allocs, BoLo.hndE, BoLo.ubindE, BoLo.ccatchE] at hal
+          | _ => simp [Expr.allocs, BoLo.hndE, BoLo.ubindE, BoLo.ccatchE, BoLo.cfinE] at hal
 
 open Classical in
 /-- The allocator that answers the choices `cs` in order, wherever they are free, and the
