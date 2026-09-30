@@ -32,6 +32,11 @@ div-hof 0 0 0
 family-swap 2 0 0
 find-bytes 2 0 0
 fn-lifetime 7 0 0
+for-adapters 1 0 0
+for-data 2 0 0
+for-finite 0 0 0
+for-never 0 0 0
+for-return 1 0 0
 gen-adapters 5 0 0 # chain, zip over batch and chunks, and main's three loops: each body one state machine (#109 item 8)
 gen-adapters-fail 8 0 0 # chain, chunks, batch and lines, and main's ten loops, each one state machine (#109 item 8)
 gen-adapters-io 13 0 0 # main's six loops over every adapter, one state machine (#109 item 8)
@@ -56,6 +61,7 @@ int-ops 0 0 0
 io-aoc 4 0 0
 io-break 2 0 0
 io-cat 2 0 0
+io-for-after 22 0 0
 io-for-assign 1 0 0
 io-for-then 2 0 0
 io-fuel 1 0 0
@@ -67,6 +73,7 @@ io-sections 2 0 0
 io-upper 2 0 0
 io-wc 2 0 0
 iter-close 2 0 0
+iter-mut 1 0 0
 iter-mut-count 1 0 0
 iter-mut-slice 1 0 0
 iter-range 0 0 0

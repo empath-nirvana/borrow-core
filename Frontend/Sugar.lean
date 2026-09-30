@@ -3494,7 +3494,7 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
           "borrow"⟩
     | .app sp f W => do
       -- A call of a generic function: its type and lifetime arguments filled.
-      if let some V' ← genericCall n c sp exp f W then return V'
+      if let some V' ← genericCall n c sp exp f W none then return V'
       let f' ← surfV n c none f
       if W.lends then
         if let some V' ← lendCall c sp f' (← surfV n c none W) then return V'
@@ -3937,14 +3937,31 @@ def makeInst : Nat → TCx → Span → Decl → Array (Option CVTy) → DM (Str
 function with lifetime parameters), with the type and lifetime arguments it leaves out filled and
 `unbang` inserted; `none` when the callee is none of these. `exp` is the type expected of the
 call's result. -/
-def genericCall : Nat → TCx → Span → Option CVTy → Val → Val → DM (Option Val)
-  | 0, _, _, _, _, _ => pure none
-  | n + 1, c, sp, exp, f, W => do
+def genericCall : Nat → TCx → Span → Option CVTy → Val → Val → Option Decl → DM (Option Val)
+  | 0, _, _, _, _, _, _ => pure none
+  | n + 1, c, sp, exp, f, W, pick => do
     let st ← get
     let isLocal (h : String) : Bool := c.locals.any (·.1 == h)
+    -- Several templates of one name (a pull adapter of `lib/adapters.bc` and a sized one of
+    -- `lib/iters.bc`): the first whose parameters the arguments' types match, as Rust chooses an
+    -- iterator's `map` by the iterator's type.
+    if pick.isNone then
+      if let some (h, _) := genericCallee f then
+        if !isLocal h then
+          let cands := st.templates.filter fun | .def_ _ m _ _ _ _ => m.name == h | _ => false
+          if cands.length ≥ 2 then
+            let mut err : Option Error := none
+            for t in cands do
+              try
+                return ← genericCall n c sp exp f W (some t)
+              catch e =>
+                if err.isNone then err := some e
+            match err with
+            | some e => throw e
+            | none => return none
     let head ← match genericCallee f with
       | some (h, targs) =>
-        match (if isLocal h then none else
+        match (if isLocal h then none else if pick.isSome then pick else
             st.templates.find? (fun | .def_ _ m _ _ _ _ => m.name == h | _ => false)) with
         | some t => pure (Head.tmpl t targs)
         | none => match targs, (if isLocal h then none else c.E.scope.findDef h) with

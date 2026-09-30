@@ -1,0 +1,32 @@
+-- `return` from inside loops (SPEC §16): in the body of a `for` of a function, `return e`
+-- returns from the function, from any depth of its loops. Each counted loop leaves by its exit
+-- with the threaded variables and the returned value; the loop around it leaves by its own, and
+-- after the outermost the function returns. What follows the loops runs only when no `return`
+-- did.
+--
+-- Answer: ((i32[2], i32[6]), ((i32[4294967295], i32[4294967295]), i32[3])): the first pair
+-- i < j < 10 with i · j = 12; none below 3 (-1, printed unsigned); and the index of 40 in a view
+-- of the array [10, 20, 30, 40, 50].
+
+-- The first pair (i, j), i < j < n, with i · j = t, or (-1, -1).
+fn find_pair(n: i32, t: i32) -> i32 * i32 =
+  for i in 0..n {
+    for j in (i + 1)..n {
+      if i * j == t { return (i, j) } else { () }
+    }
+  };
+  (0 - 1, 0 - 1)
+
+-- The index of `y` in a view, or -1.
+fn index_of<'a>(v: array_imm 'a i32, y: i32) -> i32 =
+  let mut i = 0;
+  for x in v { if *x == y { return i } else { () }; i = i + 1 };
+  0 - 1
+
+fn tab(i: i32) -> i32 = (i + 1) * 10
+
+main -> (i32 * i32) * ((i32 * i32) * i32) =
+  let a = array_new[i32] (5, tab);
+  let k = borrow imm a { 'x, w -> index_of(w, 40) };
+  let _ = a;
+  (find_pair(10, 12), (find_pair(3, 12), k))

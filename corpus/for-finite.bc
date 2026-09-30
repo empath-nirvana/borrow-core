@@ -1,0 +1,13 @@
+-- A total function with a `for` over a count (SPEC §16): the sum of the first `n` squares. The
+-- count `0..n` is data, so the loop is `count_try` over its length, `n − 0`, computed when the
+-- loop starts, with the `let mut` variable the body assigns as the loop's state. The function is
+-- `total`, and the loop allocates nothing.
+--
+-- Answer: 0 + 1 + 4 + … + 81 = i32[285]; `sum_squares` is total, so `main` is not a loop.
+
+total fn sum_squares(n: i32) -> i32 =
+  let mut acc = 0;
+  for i in 0..n { acc = acc + i * i };
+  acc
+
+main -> i32 = sum_squares(10)

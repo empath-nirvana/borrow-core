@@ -1,0 +1,27 @@
+-- A `for` over the lines of the standard input, with code after it (SPEC §14–§16). The source is
+-- a generator made from `stdin` (the pull adapters `lines` and `from_iter` over `bytes`), which
+-- may not end: the `for` is a drain, div, as it is over a pure generator, since `next` does not
+-- care where its elements come from. After the loop, `stdin` is handed back and the count is
+-- written; the body writes each line's length as it goes.
+--
+-- Answer: on the input `stressed`, `level`, `live on`: the lengths `8 5 7`, then `3`, and the
+-- result i32[3].
+
+include adapters
+
+-- The length of a line (a list of its bytes, last first).
+type List = mu X. 1 + (i32 * X)
+fn len_alg(r: 1 + i32 * i32) -> i32 = match r { inl _ -> 0 | inr (x, n) -> n + 1 }
+def len : !(List => i32) = fold_own[1 + i32 * X, i32] len_alg
+
+main -> i32 =
+  let mut n = 0;
+  for l in lines(from_iter(bytes(stdin))) {
+    n = n + 1;
+    put_dec(&mut stdout, len(l));
+    putb(&mut stdout, 32)
+  };
+  putb(&mut stdout, 10);
+  put_dec(&mut stdout, n);
+  putb(&mut stdout, 10);
+  n

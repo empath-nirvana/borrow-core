@@ -442,8 +442,12 @@ def lentDef (c : TCx) (fin' : TCx → Finite) : Decl → Except Error (Option De
     if let .gen _ := mk then return none
     let some bl := c.elabL bd | return none
     let c' := c.pushLife y.name bl
-    if !loopsOnSpine (divCallIn c') (fin' c') fuel M then return none
     let ps := spineTy P
+    -- The parameters, bound in the context a `for` of the body is read in.
+    let cP := match (if ps.length == 1 then some ([x], M) else spinePattern fuel ps.length x.name M) with
+      | some (names, _) => (names.zip ps).foldl (fun c (nm, T) => c.push nm.name (c.elabV T)) c'
+      | none => c'
+    if !loopsOnSpine (divCallIn c') (fin' cP) fuel M then return none
     -- The one component borrowed at the parameter's lifetime.
     let borrowed := (ps.zip (List.range ps.length)).filterMap fun
       | (.imm _ (.var _ a) A, i) => if a == y.name then some (i, BorrowKind.imm, A) else none
