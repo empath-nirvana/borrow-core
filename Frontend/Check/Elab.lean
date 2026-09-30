@@ -265,6 +265,7 @@ def elabV : Nat → TyEnv → VTy → Except Error CVTy
     | .array _ A => do pure (.fam (.ref (← elabV n E A)))
     | .arrayImm _ a A => do pure (.fam (.imm (← elabLife E.Δ E.lenv a) (← elabV n E A)))
     | .arrayMut _ a A => do pure (.fam (.mut (← elabLife E.Δ E.lenv a) (← elabV n E A)))
+    | .sized sp D S A => elabV n E (VTy.sizedExpand sp D S A)
 /-- A computation type. -/
 def elabC : Nat → TyEnv → CTy → Except Error CCTy
   | 0, _, C => err C.span "type abbreviations nested too deeply"

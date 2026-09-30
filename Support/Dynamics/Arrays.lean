@@ -58,6 +58,32 @@ def countNext (f : Val) (n i : UInt32) (s : Val) : Expr :=
       (.pair (.val (.i32 (i + 1))) (.app (.val f) (.val (.pair (.i32 i) s))))))
   else .val s
 
+/-- One step of `count_try (f, (n, (i, s)))`: while `i < len(n)`, apply `f` to `(i, s)`; on
+    `inj₁ s′` count on from `i + 1` with `s′`, on `inj₂ e` answer `inj₂ e`; at the bound answer
+    `inj₁ s`. The branches bind the step's answer, so `f` is shifted past that binder. The counter
+    is the machine's, as `count`'s.  `[spec §16]` -/
+def countTryNext (f : Val) (n i : UInt32) (s : Val) : Expr :=
+  if i < arrLen n then
+    .case (.app (.val f) (.val (.pair (.i32 i) s)))
+      (.app (.val (.prim .countTry)) (.pair (.val (f.shift 1 0)) (.pair (.val (.i32 n))
+        (.pair (.val (.i32 (i + 1))) (.var 0)))))
+      (.inj₂ (.var 0))
+  else .val (.inj₁ s)
+
+/-- The continuation of `countTryNext` after the step, at `inj₁ s′`: the loop from `i + 1`. The
+shifted step is the step again once the binder is filled. -/
+theorem countTry_cont_subst (f : Val) (n i : UInt32) (s' : Val) :
+    Expr.subst 0 s' (.app (.val (.prim .countTry)) (.pair (.val (f.shift 1 0)) (.pair (.val (.i32 n))
+        (.pair (.val (.i32 i)) (.var 0)))))
+      = .app (.val (.prim .countTry))
+          (.val (Val.pair f (Val.pair (Val.i32 n) (Val.pair (Val.i32 i) s')))) := by
+  have hf : Expr.subst 0 s' ((f.shift 1 0).val) = f.val := by
+    rw [Val.val_shift, Expr.subst_shift 0 0 0 s' f.val (Nat.le_refl 0) (Nat.zero_le _),
+      Expr.shift_zero]
+  simp only [Expr.val, Expr.subst, if_pos, Val.i32] at hf ⊢
+  rw [hf]
+  rfl
+
 /-- The answer of `idx ((ℓ, n), i)`: the `i`-th leaf when `i < n`, unsigned; else `inj₂ ()`.
     `[spec §9]` -/
 def idxAns (ℓ : Loc) (n i : UInt32) : Val :=

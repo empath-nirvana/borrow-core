@@ -56,6 +56,10 @@ def adaptersLibrary : String := include_str "../lib/adapters.bc"
 /-- The slice library, `lib/slice.bc`: functions on the views an array lends (`include slice`). -/
 def sliceLibrary : String := include_str "../lib/slice.bc"
 
+/-- The sized iterators, `lib/iters.bc`: `elems`, `map`, `filter`, `take`, `zip`, … over data
+(`include iters`). -/
+def iterLibrary : String := include_str "../lib/iters.bc"
+
 /-- The prelude, `lib/prelude.bc`: `true`, `false`, `not`, `to_i32`, `to_u8`. -/
 def preludeLibrary : String := include_str "../lib/prelude.bc"
 
@@ -73,7 +77,7 @@ embedded in the compiler; adding one is adding its line here. -/
 def libModules : List (String × String) :=
   [("io", ioLibrary), ("div", divLibrary), ("prelude", preludeLibrary), ("lend", lendLibrary),
    ("adapters", adaptersLibrary), ("slice", sliceLibrary), ("buf", bufLibrary),
-   ("text", textLibrary), ("textio", textioLibrary)]
+   ("text", textLibrary), ("textio", textioLibrary), ("iters", iterLibrary)]
 
 def capNames : List String := ["stdin", "stdout", "stderr"]
 
@@ -425,7 +429,7 @@ def loopsAt (c : TCx) (B : Option CVTy) : Comp → Option (Span × String)
     let (Ax, Ay) := sumTys c V
     ((callIn c divFuel none V).map fun (sp, f) => callMsg sp f).orElse fun _ =>
       (loopsAt (c.push x.name Ax) B M).orElse fun _ => loopsAt (c.push y.name Ay) B N
-  | .for_ sp .. => some (sp, "it has a `for`")
+  | .for_ sp .. => some (sp, "it has a `for` over an unbounded source (a drain)")
   | T => headLoops c B T
 
 mutual
@@ -555,7 +559,7 @@ def _root_.Frontend.Comp.hasFor : Comp → Bool
 mutual
 /-- The first `yield`, `break` or `return e` (of a generator) in a value. -/
 def _root_.Frontend.Val.yieldAt : Val → Option Span
-  | .app sp (.sugar _ .yield_) _ | .sugar sp .brk | .app sp (.sugar _ .retE) _
+  | .app sp (.sugar _ .yield_) _ | .sugar sp .brk | .sugar sp .cont | .app sp (.sugar _ .retE) _
   | .app sp (.sugar _ .yieldFrom) _ => some sp
   | .pair _ V W | .app _ V W => V.yieldAt.orElse fun _ => W.yieldAt
   | .inl _ V | .inr _ V | .unbang _ V | .boxed _ _ V | .unbox _ V | .sub _ V _ | .roll _ V
@@ -638,7 +642,8 @@ def _root_.Frontend.Comp.yieldsOrLoops (M : Comp) : Bool :=
 
 /-- A terminal that leaves: `break`, `break e` or a generator's `return e`. -/
 def _root_.Frontend.Comp.isExit : Comp → Bool
-  | .ret _ (.sugar _ .brk) | .ret _ (.app _ (.sugar _ .brk) _) | .ret _ (.app _ (.sugar _ .retE) _) =>
+  | .ret _ (.sugar _ .brk) | .ret _ (.app _ (.sugar _ .brk) _) | .ret _ (.app _ (.sugar _ .retE) _)
+  | .ret _ (.sugar _ .cont) =>
     true
   | _ => false
 
@@ -656,6 +661,12 @@ def _root_.Frontend.Comp.spineBreaks : Comp → List (Span × Option Val)
   | .ret sp (.sugar _ .brk) => [(sp, none)]
   | .ret sp (.app _ (.sugar _ .brk) e) => [(sp, some e)]
   | _ => []
+
+/-- What follows a loop whose value is bound with an `else` (`let r = for … else { d }; N`):
+`r`, its written type, `d`, and `N`. -/
+def _root_.Frontend.Comp.forElse? : Comp → Option (Ident × Option VTy × Comp × Comp)
+  | .bind _ r A (.ret _ (.app _ (.sugar _ .forRes) (.thunk _ d))) N _ => some (r, A, d, N)
+  | _ => none
 
 /-- What follows a loop whose value is bound (`let r = for …; N`): `r`, its written type, and
 `N`. -/
@@ -1137,6 +1148,11 @@ structure GenLoop where
   keep : Option (String × CVTy) := none
   /-- What follows the loop (without the binding of `r`). -/
   rest : Comp
+  /-- `for … else { d }`: the loop's value when its source ends (SPEC §16). -/
+  els : Option Comp := none
+  /-- The source never ends (a generator that finishes with `0`, or `loop { … }`): what follows
+  the loop runs only after `break`. -/
+  never : Bool := false
 
 /-- `for x in V { M }; N` or `while c { M }; N` in a generator body: a generator by `unfold` over
 the loop's state, then `gen_bind` of what follows. -/
@@ -1151,9 +1167,10 @@ def genLoopPlan (g : GenCx) (c : TCx) (sp : Span) (x : Ident) (V : Val) (M N : C
   let hasRet := M.hasRet
   let V := V.takeLends.1
   -- `let r = for …; N`: the loop's value is bound to `r` in `N`.
-  let (keep₀, N) := match N.forRes? with
-    | some (r, _, N₀) => (some r, N₀)
-    | none => (none, N)
+  let (keep₀, keepA, els, N) := match N.forElse?, N.forRes? with
+    | some (r, A, d, N₀), _ => (some r, A, some d, N₀)
+    | none, some (r, A, N₀) => (some r, A, none, N₀)
+    | none, none => (none, none, none, N)
   -- The iterator: its type, whether it is a generator, and what it finishes and closes with.
   let it ← match cond with
     | some _ => pure none
@@ -1184,11 +1201,25 @@ def genLoopPlan (g : GenCx) (c : TCx) (sp : Span) (x : Ident) (V : Val) (M N : C
     | none => (cap, keep₀)
   let keep : Option (String × CVTy) ← match keep₀, it with
     | none, _ => pure none
-    | some r, some (_, _, _, Q, _) => do
-      if let some c := cap then
+    | some r, some (_, E, _, Q, _) => do
+      if let some c := cap then if els.isNone then
         throw ⟨r.span, s!"the iterator of this `for` is made from `{c}`, which it hands back " ++
           "when it finishes: the loop's value is not bound"⟩
-      pure (some (r.name, Q))
+      -- The loop's value: written, or the `else` value's type, or what the source finishes with;
+      -- a source that never ends (`0`) gives only `break e`'s.
+      match keepA.bind c.elabV, els with
+      | some T, _ => pure (some (r.name, T))
+      | none, some d => match c.tyC d with
+        | some (.ret T) => pure (some (r.name, T))
+        | _ => throw ⟨d.span, "the type of the `else` value is not determined here"⟩
+      | none, none =>
+        if Q != .zero then pure (some (r.name, Q)) else
+        match (M.spineBreaks.filterMap (·.2)).head? with
+        | some e => match (c.push x.name (some E)).tyV e with
+          | some T => pure (some (r.name, T))
+          | none => throw ⟨e.span, s!"the type of this loop's value is not determined: write it, " ++
+              s!"`let {r.name} : T = for …`"⟩
+        | none => pure (some (r.name, .zero))
     | some r, none => throw ⟨r.span, "a `while` has no value"⟩
   checkBreaks M (keep.map (·.2))
   -- What follows runs in the loop's last step when it neither yields nor loops (a `for`, or a
@@ -1238,7 +1269,11 @@ def genLoopPlan (g : GenCx) (c : TCx) (sp : Span) (x : Ident) (V : Val) (M N : C
     | .ret tsp (.app _ (.sugar _ .retE) v) => .ret tsp (.inr tsp (.inr tsp v))
     | T => .bind T.span ⟨"io_u", T.span⟩ none T (.ret T.span (.inl T.span (tupleVal T.span sv))) false) M
   let cb := xs.foldl (fun c (y, E) => c.push y (some E)) (svs.foldl (fun c (y, T) => c.push y (some T)) c)
-  pure ⟨cond, V, it, cap, svs, ws, outs, bcx, bodyW, cb, direct, hasRet, keep, N⟩
+  let never := match cond, it with
+    | some (.sugar _ .forever), _ => true
+    | _, some (_, _, _, Q, _) => Q == .zero
+    | _, _ => false
+  pure ⟨cond, V, it, cap, svs, ws, outs, bcx, bodyW, cb, direct, hasRet, keep, N, els, never⟩
 
 /-- The core of a generator's loop, around its elaborated body and what follows it. -/
 def genLoopSrc (g : GenCx) (c : TCx) (sp : Span) (x : Ident) (P : GenLoop) (body N N' : Comp)
@@ -1248,7 +1283,7 @@ def genLoopSrc (g : GenCx) (c : TCx) (sp : Span) (x : Ident) (P : GenLoop) (body
   -- A loop that starts a generator's body has a state before it, the parameter, whose
   -- observation runs the code before the loop (`start`): the loop's own states are `inr`.
   let stv (v : String) : String := if start.isSome then s!"(inr {v})" else v
-  let ⟨cond, V, it, cap, svs, ws, outs, bcx, _, _, direct, hasRet, keep, _⟩ := P
+  let ⟨cond, V, it, cap, svs, ws, outs, bcx, _, _, direct, hasRet, keep, _, _, _⟩ := P
   let bg : GenCx := { g with L := bcx, inLoop := true }
   let sv := svs.map (·.1)
   let svT := tupleT (svs.map (·.2))
@@ -1931,6 +1966,10 @@ def mWalk (m : MCx) : Nat → TCx → Comp → MM Comp
     mTemplate sp "`return`" (String.join (m.held.map (·.closeSrc)) ++
       s!"io_v : {m.pp m.L.B} <- return io_hole_rv;\nreturn (inr (inl io_v))") [("io_hole_rv", v)] []
   | _ + 1, _, .ret sp (.sugar _ .brk) => mBreak m sp (.unit sp)
+  | _ + 1, _, .ret sp (.sugar _ .cont) => do
+    -- `continue`: back to the head of the innermost loop.
+    let some l := m.loops.head? | throw ⟨sp, "`continue` is outside every loop"⟩
+    mGoto m sp l.head
   | _ + 1, _, .ret sp (.app _ (.sugar _ .brk) e) => mBreak m sp e
   | n + 1, c, T => do
     if T.hasYield then throw (yieldOffSpine (T.yieldAt.getD T.span))
@@ -2037,18 +2076,25 @@ def mLoop (m : MCx) : Nat → TCx → Span → Ident → Val → Comp → Comp �
         let jc ← mWalk { m with cur := some pj.pos, pre := false } n cr N
         mSet j jc (.top sp)
         mGoto { m with cur := some ph.pos, pre := false } sp j
-      | none => mWalk { m with cur := some ph.pos, pre := false } n cr N
+      -- A loop that never ends, with no `break`: what follows it does not run.
+      | none => if P.never then pure (.top sp) else mWalk { m with cur := some ph.pos, pre := false } n cr N
     let skip := m.skip sp (mInj sp h vars)
     let code ← match P.it, P.cond with
       | some (_, _, isGen, Q, _), _ => do
         let v := s!"io_it{k}"
-        let ended := match P.keep with
-          | some (r, _) => s!"{r} <- return io_q;\nforce io_hole_after"
-          | none => s!"{bindCap P.cap Q "io_q"}force io_hole_after"
+        let ended := if Q == .zero then "absurd io_q" else match P.keep, P.els with
+          | some (r, _), some _ =>
+            let drop := if P.cap.isSome then bindCap P.cap Q "io_q" else "io_dq <- return io_q;\n"
+            s!"{drop}{r} <- force io_hole_else;\nforce io_hole_after"
+          | some (r, _), none => s!"{r} <- return io_q;\nforce io_hole_after"
+          | none, _ => s!"{bindCap P.cap Q "io_q"}force io_hole_after"
         let fin := if isGen then s!"case io_d \{ inl io_q -> {ended} | inr {v} -> return io_hole_k }"
           else s!"io_q <- return io_d;\n{ended}"
         let src := s!"io_o <- (nu_out (force {v})).1;\ncase io_o \{ inl io_p -> let ({x.name}, {v}) = io_p; force io_hole_body | inr io_d -> {fin} }"
-        mTemplate sp what src [("io_hole_k", skip)] [("io_hole_body", body), ("io_hole_after", after)]
+        mTemplate sp what src [("io_hole_k", skip)]
+          ([("io_hole_body", body), ("io_hole_after", after)] ++ (P.els.map ("io_hole_else", ·)).toList)
+      | none, some (.sugar _ .forever) => do
+        mTemplate sp what "force io_hole_body" [] [("io_hole_body", body)]
       | none, some cnd => do
         mTemplate sp what "case io_hole_c { inl io_f -> force io_hole_after | inr io_t -> force io_hole_body }"
           [("io_hole_c", cnd)] [("io_hole_body", body), ("io_hole_after", after)]
@@ -2607,6 +2653,13 @@ def genCallbacks : CVTy → List CVTy
     | some _, F => [F]
     | none, _ => []
 
+/-- A loop around the code being elaborated, for a `return` in the body of a counted loop inside
+it: a counted loop leaves through its exit (`ret`, of type `Rt`); a drain passes the `return` on
+as its own (`VSugar.retE`).  `[spec §16]` -/
+inductive LoopExit where
+  | total (Rt : CVTy) (ret : Span → Val → Comp)
+  | drain
+
 /-- The elaboration so far: the libraries (in scope for typing); the source declarations in
 scope, newest first; the elaborated ones, in order; whether any body became a loop; and the
 copies made, by function and parameter type. -/
@@ -2626,6 +2679,16 @@ structure DivSt where
   templates : List Decl := []
   /-- The instances made, by template and type arguments. -/
   insts : List ((String × List VTy) × String) := []
+  /-- The loops around the code being elaborated, innermost first: how a `return` in the body of
+  a counted loop inside them leaves (`forData`).  `[spec §16]` -/
+  exits : List LoopExit := []
+  /-- The body being elaborated is a generator's. -/
+  inGen : Bool := false
+  /-- The declarations of the included library modules, and the instances of their templates:
+  their loops are not reported. -/
+  libNames : List String := []
+  /-- The declaration being elaborated is one of `libNames`. -/
+  quiet : Bool := false
 
 /-- Elaboration with the state of the declarations. -/
 abbrev DM := StateT DivSt SM
@@ -2861,6 +2924,45 @@ def lendBorrow (c : TCx) (sp : Span) (x : Ident) (m : Mode) (A B : CVTy)
 def boxedResult (sp : Span) (l : String) (M : Comp) : Comp :=
   .bind sp ⟨"io_lr", sp⟩ none M (.ret sp (.boxed sp (.var sp l) (.var sp "io_lr"))) false
 
+/-- An owned array `x : array A` lent as its view (`array_mut 'l A` with `&mut x`, `array_imm 'l A`
+with `&x`) to the call `call l v`, whose result has type `Q` with the parameter's lifetime `v`:
+`slice_borrow_mut` or `slice_borrow_imm` around it, with no cell (SPEC §9), the array rebound
+from the pair. A view the call hands back, as its result or its result's first component, is
+dropped there: the lend's result is the rest (`()` for a function that hands back only the view,
+`reverse(&mut a)`).  `[spec §9]` -/
+def lendSlice (c : TCx) (sp : Span) (x : Ident) (m : Mode) (A : CVTy) (v : BoCa.Lifetime.LifeVar)
+    (Q : CVTy) (call : String → String → Comp) : DM Val := do
+  let isView : CVTy → Bool
+    | .fam (.mut (.var w) _) | .fam (.imm (.var w) _) => w == v
+    | _ => false
+  let vfree := BoCa.Fig16.LogRel.Core.Check.vfreeB v
+  let (B, proj) : CVTy × Option Bool :=
+    if isView Q then (.unit, some false) else match Q with
+      | .tensor V B => if isView V && !vfree B then (B, some true) else (Q, none)
+      | _ => (Q, none)
+  if proj.isNone && vfree Q then
+    throw ⟨sp, "the call's result mentions the lifetime of the lent array other than as the view " ++
+      "it hands back, so the array cannot be handed back after it"⟩
+  let l := s!"io_lb{sp.start.line}_{sp.start.col}"
+  let mv := s!"io_lm{sp.start.line}_{sp.start.col}"
+  let As ← (c.surface sp A : Except Error VTy)
+  let Bs ← (c.surface sp B : Except Error VTy)
+  let li : Ident := ⟨l, sp⟩
+  let Tm : VTy := if m == .mut then .arrayMut sp (.var sp l) As else .arrayImm sp (.var sp l) As
+  let r : Ident := ⟨"io_lr", sp⟩
+  let boxR := Comp.ret sp (.boxed sp (.var sp l) (.var sp r.name))
+  let body : Comp := match proj with
+    | some false => .bind sp ⟨"io_lv", sp⟩ none (call l mv)
+        (.ret sp (.boxed sp (.var sp l) (.unit sp))) false
+    | some true => .bind sp ⟨"io_lp", sp⟩ none (call l mv)
+        (.letPair sp ⟨"io_lv", sp⟩ r (.var sp "io_lp") boxR) false
+    | none => .bind sp r none (call l mv) boxR false
+  let cb : Val := .thunkv sp (.lamL sp li (.dom sp) (.ret sp (.thunkv sp
+    (.lam sp ⟨mv, sp⟩ Tm body))))
+  let C : Const := if m == .mut then .sliceBorrowMut li (.top sp) As Bs
+    else .sliceBorrowImm li (.top sp) As Bs
+  pure (.app sp (.app sp (.const sp C) (.lend sp x m)) cb)
+
 /-- A call `f W` whose argument lends a place at a borrow parameter of `f`: the borrow around
 the call. `none` when it does not. -/
 def lendCall (c : TCx) (sp : Span) (f W : Val) : DM (Option Val) := do
@@ -2870,17 +2972,21 @@ def lendCall (c : TCx) (sp : Span) (f W : Val) : DM (Option Val) := do
     | some (.thunk (.all v _ (.ret (.thunk (.arr P (.ret Q)))))) => pure (false, v, P, Q)
     | _ => return none
   let some (x, m, Px) := lendParam P W | return none
-  let (pm, A) ← match Px with
-    | .mut (.var w) A => if w == v then pure (Mode.mut, A) else return none
-    | .imm (.var w) A => if w == v then pure (Mode.imm, A) else return none
+  let (pm, A, fam) ← match Px with
+    | .mut (.var w) A => if w == v then pure (Mode.mut, A, false) else return none
+    | .imm (.var w) A => if w == v then pure (Mode.imm, A, false) else return none
+    | .fam (.mut (.var w) A) => if w == v then pure (Mode.mut, A, true) else return none
+    | .fam (.imm (.var w) A) => if w == v then pure (Mode.imm, A, true) else return none
     | _ => return none
   if pm != m then
     throw ⟨x.span, s!"the parameter here is {if pm == .mut then "a `mut`" else "an `imm`"} borrow: " ++
       s!"lend `{x.name}` as `{if pm == .mut then "&mut " else "&"}{x.name}`"⟩
+  let f' := if bang then Val.unbang f.span f else f
+  if fam then return some (← lendSlice c sp x m A v Q fun l mv =>
+    .ret sp (.app sp (.inst sp f' (.var sp l)) (replaceLend mv W)))
   if BoCa.Fig16.LogRel.Core.Check.vfreeB v Q then
     throw ⟨sp, "the call's result mentions the lifetime of the lent place, so the place cannot " ++
       "be handed back after it"⟩
-  let f' := if bang then Val.unbang f.span f else f
   some <$> lendBorrow c sp x m A Q fun l mv =>
     boxedResult sp l (.ret sp (.app sp (.inst sp f' (.var sp l)) (replaceLend mv W)))
 
@@ -2890,6 +2996,148 @@ def refresh (c : TCx) : DM TCx := do
   let st ← get
   let ds := (st.lib ++ st.out ++ st.caps).toArray
   pure { c with E := { c.E with scope := ⟨ds, ds.size⟩ } }
+
+/-! #### The total `for` over data  `[spec §16]`
+
+`for x in V { M }` is Rust's: the source is turned into an iterator by its **type**, and the loop
+calls its `next`. A source that is data, or an iterator made from data, is **sized**: its bound is
+the length of that data, computed when the loop starts, so the loop is `count_try` (K0′, SPEC §16)
+over the bound, calling `next` at each step, and it is total. The kinds of sized source, by type:
+
+* a count `a..b` (`VSugar.count`): the bound is `b − a`, and the element at step `i` is `a + i`;
+* a view `array_imm 'a A` or `array_mut 'a A`: the bound is its length, and the element at step `i`
+  is the leaf at `i` (`array_get`), or the first leaf of the rest (`slice_split_mut`);
+* `&a` or `&mut a` of an owned array `a : array A`: the array lent as its view around the loop
+  (`slice_borrow_imm`/`_mut`, SPEC §9), then as a view;
+* an owned array `array A` of a persistent `A`: lent `imm` around the loop, each element copied,
+  and the array dropped after it;
+* a sized iterator `sized D S A` (`lib/iter.bc`): its data `D` (a view, a count, or a pair of
+  them), its state `S`, and its step. The bound is `len(D)`: a view's length, a count's `b − a`,
+  and a pair's sum. Each step of the loop calls the step once, which answers an element, a skip, or
+  the end.
+
+No bound is a number the program gives: it is the length of the data the source's type holds.
+Any other source (a generator, an iterator) is a drain, and div (SPEC §14, §15).
+
+The loop's state is the source's cursor (for a sized iterator, its data, state and step) and the
+variables the body reads or assigns; the step answers `inl` of the next state, or `inr` of the
+threaded variables with the way out: `inl ()` when the source ended early, the value of `break e`,
+or the value of `return e`. After the loop, the threaded variables are rebound, and the loop's
+value is `e`, or the `else { d }` value when the source ended; `return e` returns from the function,
+or leaves the counted loop around it by that loop's exit (`DivSt.exits`). -/
+
+/-- A type of data whose length a sized iterator counts: a view, a count `i32 * i32`, or a pair of
+data (a `zip`).  `[spec §16]` -/
+def dataTy : Nat → CVTy → Bool
+  | 0, _ => false
+  | _ + 1, .fam (.imm _ _) | _ + 1, .fam (.mut _ _) => true
+  | _ + 1, .tensor (.int .w32) (.int .w32) => true
+  | n + 1, .tensor D₁ D₂ => dataTy n D₁ && dataTy n D₂
+  | _ + 1, _ => false
+
+/-- `sized D S A` (`D * (S * !(D * S => (D * S) * (A + (1 + 1))))`): its data, state and element
+type, when `D` is data.  `[spec §16]` -/
+def sizedOf : CVTy → Option (CVTy × CVTy × CVTy)
+  | .tensor D (.tensor S (.bang (.thunk (.arr (.tensor D₁ S₁)
+      (.ret (.tensor (.tensor D₂ S₂) (.sum A (.sum .unit .unit)))))))) =>
+    if D == D₁ && D == D₂ && S == S₁ && S == S₂ && dataTy 64 D then some (D, S, A) else none
+  | _ => none
+
+/-- The source of a `for` that is sized, by its type (or its form, for `a..b` and `&a`).
+`[spec §16]` -/
+inductive DataSrc where
+  /-- `a..b`. -/
+  | count (lo hi : Val)
+  /-- A view `array_imm @a A` (`m = false`) or `array_mut @a A`. -/
+  | view (m : Bool) (a : BoCa.Lifetime.Life) (A : CVTy)
+  /-- `&a` or `&mut a` (`m`) of an owned array `a : array A`. -/
+  | lend (x : Ident) (m : Bool) (A : CVTy)
+  /-- An owned array `array A`. -/
+  | owned (A : CVTy)
+  /-- A sized iterator `sized D S A`. -/
+  | sized (D S A : CVTy)
+
+/-- The sized source `V` is, in the context `c`: `none` when it is not data.  `[spec §16]` -/
+def dataSrcOf (c : TCx) (V : Val) : Option DataSrc :=
+  match V with
+  | .app _ (.sugar _ .count) (.pair _ a b) => some (.count a b)
+  | .lend _ x m => match c.tyV (.var x.span x.name) with
+    | some (.fam (.ref A)) => some (.lend x (m == .mut) A)
+    | _ => none
+  | V => match c.tyV V with
+    | some (.fam (.imm a A)) => some (.view false a A)
+    | some (.fam (.mut a A)) => some (.view true a A)
+    | some (.fam (.ref A)) => some (.owned A)
+    | some T => (sizedOf T).map fun (D, S, A) => .sized D S A
+    | none => none
+
+/-- A written function type whose result is a sized iterator: `… => sized D S A`, under `!` and
+lifetime binders. -/
+def _root_.Frontend.VTy.sizedResult : VTy → Bool
+  | .bang _ A | .all _ _ _ A => A.sizedResult
+  | .lolli _ _ (.sized ..) => true
+  | _ => false
+
+/-- A `for x in V { M }; N` whose source is sized and whose body does not yield: a counted loop,
+one computation (`forData`). A borrow block around it keeps its borrow for the whole loop
+(`LoopLend`). A source not yet elaborated, a call of a generic function (a template, named in
+`sized`) whose written result is a sized iterator, is sized too.  `[spec §16]` -/
+def dataFor (sized : List String) (c : TCx) (V : Val) (M _N : Comp) : Bool :=
+  let call := match V with
+    | .app _ (.var _ h) _ | .app _ (.unbang _ (.var _ h)) _ | .app _ (.defApp _ h _) _ =>
+      sized.contains h
+    | _ => false
+  ((dataSrcOf c V).isSome || call) && (M.sugarAt isYieldKw).isNone
+
+/-- The templates whose written result is a sized iterator (`dataFor`). -/
+def DivSt.sizedFns (st : DivSt) : List String :=
+  st.templates.filterMap fun
+    | .def_ _ m _ A _ _ => if A.sizedResult then some m.name else none
+    | _ => none
+
+
+/-- The tag of a report on a loop, among the origins (`Frontend/Check/Program.lean` prints them). -/
+def reportTag : String := "report: "
+
+/-- Record a report on the loop at `sp`. -/
+def report (sp : Span) (msg : String) : SM Unit :=
+  note sp s!"{reportTag}{sp.start.render}: {msg}"
+
+/-- The code that computes `len(D)` of the data held in `v` (a sized iterator's), handing `v`
+back: the bindings, and the variable holding the length. A count's is `b − a`; a pair's is the sum
+of its parts', at most `2³¹ − 1`.  `[spec §16]` -/
+def boundSrc (c : TCx) (sp : Span) : Nat → String → CVTy → Except Error (String × String)
+  | 0, _, _ => throw ⟨sp, "internal error: data nested too deeply"⟩
+  | _ + 1, v, .fam (.imm a A) => do
+    let a ← c.surfaceL sp a
+    let A ← c.surface sp A
+    pure (s!"let ({v}, {v}_c) = array_copy[{a.pp}, {A.pp}]({v});\n" ++
+      s!"{v}_n <- return array_len[{a.pp}, {A.pp}]({v}_c);\n", s!"{v}_n")
+  | _ + 1, v, .fam (.mut a A) => do
+    let a ← c.surfaceL sp a
+    let A ← c.surface sp A
+    pure (s!"let ({v}, {v}_n) = slice_len_mut[{a.pp}, {A.pp}]({v});\n", s!"{v}_n")
+  | _ + 1, v, .tensor (.int .w32) (.int .w32) =>
+    pure (s!"let ({v}_lo, {v}_hi) = {v};\n{v}_n <- return ({v}_hi - {v}_lo);\n" ++
+      s!"{v} <- return ({v}_lo, {v}_hi);\n", s!"{v}_n")
+  | n + 1, v, .tensor D₁ D₂ => do
+    let (s₁, n₁) ← boundSrc c sp n s!"{v}_a" D₁
+    let (s₂, n₂) ← boundSrc c sp n s!"{v}_b" D₂
+    pure (s!"let ({v}_a, {v}_b) = {v};\n{s₁}{s₂}{v}_s <- return ({n₁} + {n₂});\n" ++
+      s!"{v}_n <- if {v}_s < 0 \{ 2147483647 } else \{ {v}_s };\n{v} <- return ({v}_a, {v}_b);\n",
+      s!"{v}_n")
+  | _ + 1, _, D => throw ⟨sp, s!"internal error: `{ppT D}` is not data"⟩
+
+/-- A function's body under its `fun`s and lifetime binders, rewritten by `f`. -/
+def mapFnBody (f : Comp → Except Error Comp) : Val → Except Error Val
+  | .bangThunkv sp M => do pure (.bangThunkv sp (← mapLam M))
+  | .thunkv sp M => do pure (.thunkv sp (← mapLam M))
+  | V => pure V
+where
+  mapLam : Comp → Except Error Comp
+    | .lam sp x A M => do pure (.lam sp x A (← f M))
+    | .lamL sp x b (.ret rsp V) => do pure (.lamL sp x b (.ret rsp (← mapFnBody f V)))
+    | M => pure M
 
 /-! #### Generic calls
 
@@ -3121,6 +3369,19 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
       | some v => pure v
       | none => throw ⟨sp, s!"`{ppT A'}` has no filler: a buffer holds elements that have one " ++
           "(integers, views, arrays, and pairs and sums of them)"⟩
+    | .app sp (.sugar _ .count) (.pair _ a b) => do
+      -- `a..b` as a value: the sized iterator of the count, its data `(a, b)` and its step
+      -- (SPEC §16). A `for` over `a..b` itself is elaborated by `forData`.
+      let T := "((i32 * i32) * 1) * (i32 + (1 + 1))"
+      let L ← (template sp "a count `a..b`" s!"return ((io_hole_a, io_hole_b), ((), (!thunkv fun (io_cp : (i32 * i32) * 1) ->
+  let (io_cd, io_cu) = io_cp;
+  let (io_clo, io_chi) = io_cd;
+  io_cr : {T} <- if io_clo < io_chi \{ return (((io_clo + 1, io_chi), io_cu), inl io_clo) }
+    else \{ return (((io_clo, io_chi), io_cu), inr (inr ())) };
+  return io_cr)))" : SM Comp)
+      let L := L.fill (fun h => if h == "io_hole_a" then some a else if h == "io_hole_b" then some b
+        else none) (fun _ => none)
+      surfV n c exp (.run sp L)
     | .app sp (.sugar osp (.op o)) (.pair psp a b) => do
       let arith := match o with | .add | .sub | .mul => true | _ => false
       -- The width: expected of an arithmetic result, or an operand's other than a literal's
@@ -3380,7 +3641,7 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
           "borrow"⟩
     | .app sp f W => do
       -- A call of a generic function: its type and lifetime arguments filled.
-      if let some V' ← genericCall n c sp exp f W then return V'
+      if let some V' ← genericCall n c sp exp f W none then return V'
       let f' ← surfV n c none f
       if W.lends then
         if let some V' ← lendCall c sp f' (← surfV n c none W) then return V'
@@ -3463,7 +3724,8 @@ def surfC : Nat → TCx → Option CCTy → Comp → DM Comp
     | .absurd sp V => do pure (.absurd sp (← surfV n c (some .zero) V))
     | .bind sp x A M N lin => do
       -- A borrow block over a loop, or a `let r = &x`: lent per observation (`LoopLend`).
-      if let some L ← (Frontend.Elab.LoopLend.hook c sp x A M N lin : Except Error (Option Comp)) then
+      if let some L ← (Frontend.Elab.LoopLend.hook c (dataFor (← get).sizedFns) sp x A M N lin :
+          Except Error (Option Comp)) then
         return (← surfC n c exp L)
       let M' ← surfC n c ((A.bind c.elabV).map .ret) M
       let c ← refresh c
@@ -3502,18 +3764,248 @@ def surfC : Nat → TCx → Option CCTy → Comp → DM Comp
     | .nuOut sp M => do pure (.nuOut sp (← surfC n c none M))
     | .ascribe sp M C => do pure (.ascribe sp (← surfC n c (c.E.elabC c.Δ C).toOption M) C)
     | .for_ sp x V M N => do
-      let V' ← surfV n c none V
+      let V' ← match V with
+        | .app _ (.sugar _ .count) _ | .lend .. => pure V
+        | _ => surfV n c none V
       let c ← refresh c
-      let el := ((← refresh c).tyV V').bind elemOf
+      -- Over data: a counted loop, total (SPEC §16).
+      if let some L ← forData n c exp sp x V V' M N then return L
+      -- Otherwise a drain of a generator or an iterator, div (SPEC §14, §15).
+      let T := c.tyV V'.takeLends.1
+      if let .app _ (.sugar _ .while_) _ := V then pure () else if (← get).quiet then pure () else
+        report sp (s!"`for` is div: its source{(T.map fun T => s!", of type `{ppT T}`,").getD ""} " ++
+          "is unbounded (a drain)")
+      let el := T.bind elemOf
+      modify fun s => { s with exits := .drain :: s.exits }
       let M' ← surfC n (c.push x.name el) none M
-      -- `let r = for …; N`: `r` has the type the iterator finishes with.
-      match N.forRes? with
-      | some (r, A, N₀) =>
-        let rT := (A.bind c.elabV).orElse fun _ => (c.tyV V'.takeLends.1).bind finOf
+      modify fun s => { s with exits := s.exits.drop 1 }
+      -- A source that never ends (it finishes with `0`): what follows runs only after `break`.
+      if (T.bind finOf) == some .zero && M.spineBreaks.isEmpty then
+        let N₀ := match N.forElse?, N.forRes? with
+          | some (_, _, _, N₀), _ => N₀
+          | none, some (_, _, N₀) => N₀
+          | none, none => N
+        if N₀ != .ret N₀.span (.unit N₀.span) && !(← get).quiet then
+          report N₀.span ("unreachable: the loop before this never ends (its source never ends, " ++
+            "and its body does not `break`)")
+      -- `let r = for …; N`: `r` has the type the iterator finishes with, or, with `else { d }`,
+      -- the `else` value's.
+      match N.forElse?, N.forRes? with
+      | some (r, A, d, N₀), _ =>
+        let d' ← surfC n c none d
+        let c' ← refresh c
+        let rT := (A.bind c.elabV).orElse fun _ => resultOfC (c'.tyC d')
+        let N₀' ← surfC n (c.push r.name rT) exp N₀
+        pure (.for_ sp x V' M' (.bind N.span r A (.ret r.span (.app r.span (.sugar r.span .forRes)
+          (.thunk d.span d'))) N₀' false))
+      | none, some (r, A, N₀) =>
+        let rT := (A.bind c.elabV).orElse fun _ => (T.bind finOf).bind fun B =>
+          -- A source that never ends: the loop's value is `break e`'s.
+          if B == .zero then none else some B
         let N₀' ← surfC n (c.push r.name rT) exp N₀
         pure (.for_ sp x V' M' (.bind N.span r A (.ret r.span (.sugar r.span .forRes)) N₀' false))
-      | none => pure (.for_ sp x V' M' (← surfC n c exp N))
+      | none, none => pure (.for_ sp x V' M' (← surfC n c exp N))
     | M => pure M
+
+/-- `for x in V' { M }; N` over a sized source (`dataSrcOf`), `V'` elaborated: a counted loop,
+`count_try` over the length of the source's data (the section *The total `for` over data*);
+`none` when the source is not sized. `V` is the source as written.  `[spec §16]` -/
+def forData : Nat → TCx → Option CCTy → Span → Ident → Val → Val → Comp → Comp → DM (Option Comp)
+  | 0, _, _, _, _, _, _, _, _ => pure none
+  | n + 1, c, exp, sp, x, V, V', M, N => do
+    let some src := dataSrcOf c V' | return none
+    if let some ysp := M.sugarAt isYieldKw then
+      throw ⟨ysp, "the body of a `for` over data does not `yield`: the loop is a counted loop " ++
+        "(SPEC §16), one computation"⟩
+    let st ← get
+    if M.hasRet && st.inGen then
+      throw ⟨sp, "a `return` in the body of a `for` over data in a generator is not provided: " ++
+        "`break`, and `return` after the loop"⟩
+    let sfx := s!"{sp.start.line}_{sp.start.col}"
+    let M ← (normExits divFuel M : Except Error Comp)
+    let pp (T : CVTy) : DM String := do pure (← (c.surface sp T : Except Error VTy)).pp
+    -- The loop's value: `let r = for …` with or without `else { d }`, or `for … else { d }`.
+    let (keep, els, N) : Option (Ident × Option VTy) × Option Comp × Comp :=
+      match N.forElse?, N.forRes? with
+      | some (r, A, d, N₀), _ => (some (r, A), some d, N₀)
+      | none, some (r, A, N₀) => (some (r, A), none, N₀)
+      | none, none => (none, none, N)
+    -- The type of the loop's value: the `else` value's (or the written one), else `1`.
+    let breaks := M.spineBreaks
+    let B ← match keep.bind (·.2), els with
+      | some A, _ => need sp "the loop's value" (c.elabV A)
+      | none, some d => do
+        let d' ← surfC n c none d
+        need d.span "the `else` value" (resultOfC ((← refresh c).tyC d'))
+      | none, none => pure .unit
+    for (bsp, e) in breaks do
+      if e.isSome && els.isNone then
+        throw ⟨bsp, "this `for`'s source can end, so its value is `break e`'s or, when the " ++
+          "source ends, the `else` value: `for … { … } else { d }` (SPEC §16)"⟩
+      if e.isNone && B != .unit then
+        throw ⟨bsp, s!"this `for`'s value, of type `{ppT B}`, is bound: `break e` gives it"⟩
+    -- A `return`: the type it returns, and where it goes after the loop.
+    let hasRet := M.hasRet
+    let outer := st.exits.head?
+    let Rt : CVTy ← if !hasRet then pure .unit else match outer with
+      | some (.total Rt _) => pure Rt
+      | _ => match exp with
+        | some (.ret Q) => pure Q
+        | _ => throw ⟨sp, "the type of the function's result, which a `return` in this loop " ++
+            "returns, is not determined here"⟩
+    let retOut (rsp : Span) (v : Val) : Comp := match outer with
+      | some (.total _ f) => f rsp v
+      | some .drain => .ret rsp (.app rsp (.sugar rsp .retE) v)
+      | none => .ret rsp v
+    -- The variables the loop threads: those the body reads or assigns, locals and capabilities.
+    let lent := match src with
+      | .lend a .. => [a.name]
+      | _ => []
+    for a in lent do
+      if mentionsC a M then
+        throw ⟨sp, s!"`{a}` is lent to this loop, so its body does not use it: it uses the elements"⟩
+    let locals ← (latest c.locals).filterMapM fun (y, T) =>
+      if y == x.name || lent.contains y || !(mentionsC y M || M.rebinds y) then pure none
+      else match T with
+        | some T => pure (some (y, T))
+        | none => throw ⟨sp, s!"the loop threads `{y}`, whose type is not determined: ascribe it"⟩
+    let exts := (mExterns c).filter fun (y, T) =>
+      !T.persistent && mentionsC y M && !c.locals.any (·.1 == y)
+    let ws := exts ++ locals
+    let wsN := ws.map (·.1)
+    let Wt := tupleTySrc (← ws.mapM fun (_, T) => pp T)
+    let Bt ← pp B
+    let Ot ← if hasRet then do pure s!"1 + (({Bt}) + ({← pp Rt}))" else pure s!"1 + ({Bt})"
+    let Et := s!"({Wt}) * ({Ot})"
+    let Rts ← pp Rt
+    let Jt := if hasRet then s!"(({Wt}) * (1 + ({Bt}))) + ({Rts})" else s!"({Wt}) * (1 + ({Bt}))"
+    -- The source: code before the loop, the cursor it threads, the bound, the first index, and
+    -- the element at a step (which binds `x` and runs the body, or goes on or ends).
+    let lv := s!"'io_l{sfx}"
+    let view (m : Bool) (a A : String) (src : String) (el : String) :
+        String × List (String × String) × String × String :=
+      let v := s!"io_v{sfx}"
+      if m then
+        (s!"let ({v}, io_n{sfx}) = slice_len_mut[{a}, {A}]({src});\n",
+          [(v, s!"array_mut {a} ({A})")], s!"io_n{sfx}",
+          s!"case slice_split_mut[{a}, {A}]({v}, 1) \{
+  inl io_vp{sfx} -> let (io_vh{sfx}, {v}) = io_vp{sfx};
+    case slice_get_mut[{a}, {A}](io_vh{sfx}, 0) \{ inl {x.name} -> force io_hole_body | inr io_vu{sfx} -> io_hole_cont }
+| inr {v} -> io_hole_cont }")
+      else
+        (s!"{v} <- return {src};\nlet ({v}, io_vc{sfx}) = array_copy[{a}, {A}]({v});\n" ++
+          s!"io_n{sfx} <- return array_len[{a}, {A}](io_vc{sfx});\n",
+          [(v, s!"array_imm {a} ({A})")], s!"io_n{sfx}",
+          s!"let ({v}, io_vg{sfx}) = array_copy[{a}, {A}]({v});
+case array_get[{a}, {A}](io_vg{sfx}, io_i{sfx}) \{ inl io_ve{sfx} -> {el}force io_hole_body | inr io_vu{sfx} -> io_hole_cont }")
+    let (outerPre, wrap, pre, cur, bound, i0, elem, desc) ← match src with
+      | .count _ _ =>
+        pure ("", none, s!"io_lo{sfx} <- return io_hole_lo;\nio_hi{sfx} <- return io_hole_hi;\n" ++
+            s!"io_n{sfx} <- return (io_hi{sfx} - io_lo{sfx});\n",
+          [(s!"io_lo{sfx}", "i32")], s!"io_n{sfx}", "0",
+          s!"{x.name} <- return (io_lo{sfx} + io_i{sfx});\nforce io_hole_body",
+          match src with
+          | .count a b => s!"len({a.pp 2}..{b.pp 2})"
+          | _ => s!"len({V.pp})")
+      | .view m a A => do
+        let a' ← c.surfaceL sp a
+        let (p, cu, b, e) := view m a'.pp (← pp A) "io_hole_src" s!"{x.name} <- return io_ve{sfx};\n"
+        pure ("", none, p, cu, b, "0", e, s!"len({V.pp})")
+      | .lend a m A => do
+        let (p, cu, b, e) := view m lv (← pp A) s!"io_lv{sfx}" s!"{x.name} <- return io_ve{sfx};\n"
+        pure ("", some (s!"borrow {if m then "mut" else "imm"} {a.name} \{ {lv}, io_lv{sfx} -> ",
+            a.name), p, cu, b, "0", e, s!"len({a.name})")
+      | .owned A => do
+        unless Class.of A == .persistent do
+          throw ⟨V.span, s!"a `for` over an owned array copies each element, and `{ppT A}` is " ++
+            "not persistent: iterate `&a` or `&mut a`"⟩
+        let (p, cu, b, e) := view false lv (← pp A) s!"io_lv{sfx}" s!"{x.name} <- return *io_ve{sfx};\n"
+        pure (s!"io_oa{sfx} <- return io_hole_src;\n", some (s!"borrow imm io_oa{sfx} \{ {lv}, io_lv{sfx} -> ",
+            s!"io_oa{sfx}"), p, cu, b, "0", e, s!"len({V.pp})")
+      | .sized D S A => do
+        let stepT ← pp (.bang (.thunk (.arr (.tensor D S)
+          (.ret (.tensor (.tensor D S) (.sum A (.sum .unit .unit)))))))
+        let (bs, bn) ← (boundSrc c sp 64 s!"io_sd{sfx}" D : Except Error _)
+        pure ("", none, s!"let (io_sd{sfx}, io_st{sfx}) = io_hole_src;\nlet (io_ss{sfx}, io_sf{sfx}) = io_st{sfx};\n{bs}",
+          [(s!"io_sd{sfx}", ← pp D), (s!"io_ss{sfx}", ← pp S), (s!"io_sf{sfx}", stepT)], bn, "0",
+          s!"let (io_sp{sfx}, io_so{sfx}) = io_sf{sfx}((io_sd{sfx}, io_ss{sfx}));
+let (io_sd{sfx}, io_ss{sfx}) = io_sp{sfx};
+case io_so{sfx} \{
+  inl {x.name} -> force io_hole_body
+| inr io_sq{sfx} -> case io_sq{sfx} \{ inl io_su{sfx} -> io_hole_cont | inr io_su{sfx} -> return (inr ({tupleSrc wsN}, inl ())) } }",
+          s!"len of the data of {V.pp}")
+    let curN := cur.map (·.1)
+    let St := tupleTySrc (cur.map (·.2) ++ (← ws.mapM fun (_, T) => pp T))
+    let stateS := tupleSrc (curN ++ wsN)
+    let elem := elem.replace "io_hole_cont" s!"return (inl {stateS})"
+    let jEnded := if hasRet then s!"inl ({tupleSrc wsN}, inl ())" else s!"({tupleSrc wsN}, inl ())"
+    let jExit := if hasRet then
+        s!"case io_o{sfx} \{ inl io_q{sfx} -> return (inl ({tupleSrc wsN}, inl io_q{sfx}))
+    | inr io_b{sfx} -> case io_b{sfx} \{ inl io_bv{sfx} -> return (inl ({tupleSrc wsN}, inr io_bv{sfx}))
+      | inr io_rv{sfx} -> return (inr io_rv{sfx}) } }"
+      else s!"return ({tupleSrc wsN}, io_o{sfx})"
+    let core := s!"{pre}io_r{sfx} <- return count_try[{St}, {Et}](!\{ (io_i{sfx}, io_s{sfx}) ->
+  {destructSrc s!"io_s{sfx}" (curN ++ wsN)}{elem} }, {bound}, {i0}, {stateS});
+io_j{sfx} : {Jt} <- case io_r{sfx} \{
+    inl io_s{sfx} -> {destructSrc s!"io_s{sfx}" (curN ++ wsN)}return ({jEnded})
+  | inr io_e{sfx} -> let (io_w{sfx}, io_o{sfx}) = io_e{sfx};
+      {destructSrc s!"io_w{sfx}" wsN}{jExit}
+  };
+"
+    -- Around a borrow block (a lent array), the loop's result is the block's: the body binds
+    -- `io_bt`, so the parser does not add the variables it hands back (`Parser.borrowBlock`),
+    -- and the loop's threaded variables, capabilities included, come out in its result.
+    let outN := wsN
+    let reshape := s!"io_bt <- return io_j{sfx};\nreturn io_bt"
+    let loopSrc := match wrap with
+      | some (open_, back) => s!"{outerPre}io_bl{sfx} <- return ({open_}{core}{reshape} });
+let ({back}, io_j{sfx}) = io_bl{sfx};
+"
+      | none => core
+    -- After the loop: the threaded variables rebound, then the value, then what follows.
+    let r := match keep with
+      | some (r, _) => some r.name
+      | none => if els.isSome then some s!"io_fv{sfx}" else none
+    let value := match r with
+      | some r => s!"{r} : {Bt} <- case io_ob{sfx} \{ inl io_q{sfx} -> {if els.isSome then "force io_hole_else" else "return ()"} | inr io_bv{sfx} -> return io_bv{sfx} };\n"
+      | none => ""
+    let after := if hasRet then
+        s!"case io_j{sfx} \{
+  inl io_jv{sfx} -> let (io_jw{sfx}, io_ob{sfx}) = io_jv{sfx};
+    {destructSrc s!"io_jw{sfx}" outN}{value}force io_hole_rest
+| inr io_rv{sfx} -> force io_hole_ret }"
+      else s!"let (io_jw{sfx}, io_ob{sfx}) = io_j{sfx};\n{destructSrc s!"io_jw{sfx}" outN}{value}force io_hole_rest"
+    let what := "a `for` over data (a counted loop)"
+    let L ← (template sp what (loopSrc ++ after) : SM Comp)
+    -- The body: its terminals go on, and its exits leave with the threaded variables.
+    let st (tsp : Span) : Val := tupleVal tsp (curN ++ wsN)
+    let exitV (tsp : Span) (o : Val) : Val := .inr tsp (.pair tsp (tupleVal tsp wsN) o)
+    let brk (tsp : Span) (e : Val) : Val := if hasRet then .inr tsp (.inl tsp e) else .inr tsp e
+    let body := wrapTail (fun
+      | .ret tsp (.sugar _ .brk) => .ret tsp (exitV tsp (brk tsp (.unit tsp)))
+      | .ret tsp (.app _ (.sugar _ .brk) e) => .ret tsp (exitV tsp (brk tsp e))
+      | .ret tsp (.sugar _ .cont) => .ret tsp (.inl tsp (st tsp))
+      | .ret tsp (.app _ (.sugar _ .retE) v) => .ret tsp (exitV tsp (.inr tsp (.inr tsp v)))
+      | T => .bind T.span ⟨"io_u", T.span⟩ none T (.ret T.span (.inl T.span (st T.span))) false) M
+    let (lo, hi) := match src with
+      | .count a b => (some a, some b)
+      | _ => (none, none)
+    let hv (h : String) : Option Val :=
+      if h == "io_hole_src" then some V else if h == "io_hole_lo" then lo
+      else if h == "io_hole_hi" then hi else none
+    let rsp := sp
+    let hc (h : String) : Option Comp :=
+      if h == "io_hole_body" then some body else if h == "io_hole_rest" then some N
+      else if h == "io_hole_else" then els
+      else if h == "io_hole_ret" then some (retOut rsp (.var rsp s!"io_rv{sfx}")) else none
+    let L := L.fill hv hc
+    if !(← get).quiet then report sp s!"`for` is total, bounded by {desc}"
+    -- The loops inside the body leave by this loop's exit on `return`.
+    let ret (tsp : Span) (v : Val) : Comp := .ret tsp (exitV tsp (.inr tsp (.inr tsp v)))
+    modify fun s => { s with exits := .total Rt ret :: s.exits }
+    let L' ← surfC n c exp L
+    modify fun s => { s with exits := s.exits.drop 1 }
+    return some L'
 
 /-- A declaration with its surface forms elaborated, in the context the checker checks it in. -/
 def surfDecl : Nat → Decl → DM Decl
@@ -3521,9 +4013,21 @@ def surfDecl : Nat → Decl → DM Decl
   | n + 1, .def_ sp nm ps A V mk => do
     let st ← get
     let c := TCx.ofScope (st.lib ++ st.out) false
-    pure (.def_ sp nm ps A (← surfV n c (c.elabV A) V) mk)
+    let gen := match mk with
+      | .gen _ => true
+      | _ => false
+    -- A `return` in a loop's body returns from the function: its loop is moved onto the body's
+    -- spine, so that what follows the loop is the rest of the body (`forData`).
+    let V ← if gen then pure V else
+      (mapFnBody (fun M => if M.hasRet then normExits divFuel M else pure M) V : Except Error Val)
+    set { st with inGen := gen, exits := [] }
+    let V' ← surfV n c (c.elabV A) V
+    modify fun st => { st with inGen := false }
+    pure (.def_ sp nm ps A V' mk)
   | n + 1, .main sp C M => do
     let st ← get
+    let M ← (if M.hasRet then normExits divFuel M else pure M : Except Error Comp)
+    let st := { st with inGen := false, exits := [] }
     let caps := capNames.map fun x => Decl.extern Span.none ⟨x, Span.none⟩ (capTy Span.none x)
     let c := TCx.ofScope (st.lib ++ st.out ++ caps) true
     let exp := match (c.E.elabC c.Δ C).toOption with
@@ -3587,22 +4091,40 @@ def makeInst : Nat → TCx → Span → Decl → Array (Option CVTy) →
           "not a function: a generic function is instantiated at types without one"⟩
     let inst := Decl.def_ tsp ⟨name, tn.span⟩ [] A' V' mk'
     let inst := Elab.fillDecl (st.lib ++ st.out) st.caps inst
-    let st' ← (elabDecl n { st with insts := (key, name) :: st.insts } inst : SM DivSt)
-    set st'
+    let libNames := if st.libNames.contains tn.name then name :: st.libNames else st.libNames
+    let st' ← (elabDecl n { st with insts := (key, name) :: st.insts, libNames } inst : SM DivSt)
+    set { st' with quiet := st.quiet }
     return (name, extras)
 
 /-- A call `f W` of a generic callee (a template, a core `def` with type parameters, or a
 function with lifetime parameters), with the type and lifetime arguments it leaves out filled and
 `unbang` inserted; `none` when the callee is none of these. `exp` is the type expected of the
 call's result. -/
-def genericCall : Nat → TCx → Span → Option CVTy → Val → Val → DM (Option Val)
-  | 0, _, _, _, _, _ => pure none
-  | n + 1, c, sp, exp, f, W => do
+def genericCall : Nat → TCx → Span → Option CVTy → Val → Val → Option Decl → DM (Option Val)
+  | 0, _, _, _, _, _, _ => pure none
+  | n + 1, c, sp, exp, f, W, pick => do
     let st ← get
     let isLocal (h : String) : Bool := c.locals.any (·.1 == h)
+    -- Several templates of one name (a pull adapter of `lib/adapters.bc` and a sized one of
+    -- `lib/iters.bc`): the first whose parameters the arguments' types match, as Rust chooses an
+    -- iterator's `map` by the iterator's type.
+    if pick.isNone then
+      if let some (h, _) := genericCallee f then
+        if !isLocal h then
+          let cands := st.templates.filter fun | .def_ _ m _ _ _ _ => m.name == h | _ => false
+          if cands.length ≥ 2 then
+            let mut err : Option Error := none
+            for t in cands do
+              try
+                return ← genericCall n c sp exp f W (some t)
+              catch e =>
+                if err.isNone then err := some e
+            match err with
+            | some e => throw e
+            | none => return none
     let head ← match genericCallee f with
       | some (h, targs) =>
-        match (if isLocal h then none else
+        match (if isLocal h then none else if pick.isSome then pick else
             st.templates.find? (fun | .def_ _ m _ _ _ _ => m.name == h | _ => false)) with
         | some t => pure (Head.tmpl t targs)
         | none => match targs, (if isLocal h then none else c.E.scope.findDef h) with
@@ -3660,6 +4182,8 @@ def genericCall : Nat → TCx → Span → Option CVTy → Val → Val → DM (O
         -- A lent place: its content matches the borrow's, and `lendCall` lends it.
         if let .lend _ x _ := Wi then
           match pat', c.tyV (.var x.span x.name) with
+          | .fam (.imm _ A), some (.fam (.ref A')) | .fam (.mut _ A), some (.fam (.ref A')) =>
+            if let some m' := matchV m 0 A A' then m := m'
           | .imm _ A, some (.ref A') | .mut _ A, some (.ref A') =>
             if let some m' := matchV m 0 A A' then m := m'
           | .imm _ A, some A' | .mut _ A, some A' =>
@@ -3745,6 +4269,8 @@ def genericCall : Nat → TCx → Span → Option CVTy → Val → Val → DM (O
       -- parameter of the place's own type moves the place and rebinds it (`Comp.elab`).
       let atBorrow := match lendParam sig.P W with
         | some (_, _, .mut ..) | some (_, _, .imm ..) => true
+        -- An owned array lent at a view parameter (`lendSlice`, SPEC §9).
+        | some (_, _, .fam (.mut ..)) | some (_, _, .fam (.imm ..)) => true
         | _ => false
       if atBorrow then
         if sig.binders.length != 1 then
@@ -3791,8 +4317,13 @@ def elabDecl : Nat → DivSt → Decl → SM DivSt
       return { st with templates := st.templates ++ [d] }
     if let .def_ _ _ (_ :: _) _ _ (.template _) := d then
       return { st with templates := st.templates ++ [d] }
+    -- The loops of a library's declarations are not reported.
+    let st := { st with quiet := match d with
+      | .def_ _ nm _ _ _ _ => st.libNames.contains nm.name
+      | _ => false }
     -- A div function taking a borrow takes the owner, lent at each step (`LoopLend.lentDef`).
-    let d := (← (Frontend.Elab.LoopLend.lentDef (TCx.ofScope (st.lib ++ st.out) false) d :
+    let c₀ := TCx.ofScope (st.lib ++ st.out) false
+    let d := (← (Frontend.Elab.LoopLend.lentDef c₀ (dataFor st.sizedFns) d :
       Except Error (Option Decl))).getD d
     let (d, st) ← (surfDecl fuel d).run st
     let (d, st) ← (specDecl fuel d).run st
@@ -3962,8 +4493,8 @@ end
 
 /-- The declarations with divergence inferred, in order (copies before their first use), and
 whether any body was elaborated as a loop. -/
-def elabDivs (lib decls : List Decl) : SM (List Decl × Bool) := do
-  let st ← decls.foldlM (init := ({ lib } : DivSt)) (elabDecl divFuel)
+def elabDivs (lib decls : List Decl) (libNames : List String) : SM (List Decl × Bool) := do
+  let st ← decls.foldlM (init := ({ lib, libNames } : DivSt)) (elabDecl divFuel)
   pure (st.out, st.any)
 
 /-- A `main` that is not ambient, elaborated as a loop when its body loops. `c` is the typing
@@ -4042,7 +4573,10 @@ def elaborateS (p : Program) : SM (Program × Nat) := do
   -- Bindings whose type only their uses determine (an injection) are annotated first.
   let p := Elab.fillProgram typing capDecls p
   -- Divergence of the user's definitions, before the libraries (which do not loop) come in.
-  let (decls, anyDiv) ← elabDivs typing p.decls
+  let libNames := (decls.filter fun d => !p₀.decls.contains d).filterMap fun
+    | .def_ _ m _ _ _ _ => some m.name
+    | _ => none
+  let (decls, anyDiv) ← elabDivs typing p.decls libNames
   let rest := decls.filter fun | .main .. => false | _ => true
   let mc := TCx.ofScope (typing ++ rest ++ capDecls) true
   let mainLoops := match decls.findSome? (fun | .main _ C M => some (C, M) | _ => none) with

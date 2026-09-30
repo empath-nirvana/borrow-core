@@ -53,13 +53,13 @@ def keywords : List String :=
     "type", "shape", "def", "extern", "main", "total", "div", "fn", "include",
     -- terms
     "return", "force", "fun", "let", "linear", "case", "match", "borrow", "modify", "inl", "inr",
-    "if", "else", "gen", "yield", "while", "break", "clone",
+    "if", "else", "gen", "yield", "while", "break", "continue", "clone",
     "thunk", "thunkv", "unbang",
     "boxed", "unbox", "roll", "unroll", "run", "absurd",
     "nu_in", "nu_out", "delay_in", "delay_out", "stream_in", "stream_out",
     -- types, lifetimes, shapes
     "ref", "imm", "mut", "box", "unk", "i32", "i64", "u8", "input", "output", "mu", "all", "forall", "top", "dom",
-    "block", "val", "fam", "view", "nu", "delay", "loop", "stream", "str", "iter", "leaf",
+    "block", "val", "fam", "view", "nu", "delay", "loop", "stream", "str", "iter", "leaf", "sized",
     "for", "in",
     "node", "array", "array_imm", "array_mut",
     -- constants and derived forms
@@ -68,7 +68,7 @@ def keywords : List String :=
     "fold_imm", "fold_own", "fold_reuse", "fixd", "unfold_s", "unfold", "host",
     "alloc_s", "free_s", "withbor_s_mut", "withbor_s_imm", "withbor_f2_mut", "withbor_f2_imm",
     "shorten_mut", "shorten_imm", "array_new", "array_free", "array_size", "array_replace",
-    "slice_borrow_mut", "slice_borrow_imm", "slice_get_mut", "slice_len_mut", "count_fold",
+    "slice_borrow_mut", "slice_borrow_imm", "slice_get_mut", "slice_len_mut", "count_fold", "count_try",
     "slice_split_imm", "slice_split_mut", "slice_empty_imm", "slice_empty_mut",
     "slice_replace_mut", "slice_swap_mut",
     "array_len", "array_get", "array_copy", "array_forget" ]

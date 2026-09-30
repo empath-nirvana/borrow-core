@@ -1,0 +1,48 @@
+-- `for` over data (SPEC §16): an owned array, `&a`, and a view, each a counted loop over the
+-- data's length (`count_try`), total. The source's type chooses how it is iterated, as Rust's
+-- `IntoIterator` does: an owned array's elements are copied and the array is dropped after the
+-- loop; `&a` lends each element `imm` for the whole loop and hands the array back; a view lends
+-- each of its elements. The bodies use `break` (bare, and with the loop's value, which `else`
+-- gives when the source ends), `continue`, and the capability `stdout`, which the loop threads
+-- and hands back: an effect in a body is the enclosing function's.
+--
+-- Answer: the elements 10, 20, 30, 40, 50 printed on one line; then (i32[150], (i32[30],
+-- (i32[90], (i32[40], i32[0])))): the sum of an owned array, the first element over 25, the sum
+-- of the elements at even positions, the first over 35 (from a view), and 0 for none over 99.
+
+fn tab(i: i32) -> i32 = (i + 1) * 10
+
+-- The first element over `lim`, or 0 when there is none: the loop's value.
+fn first_over(a: array i32, lim: i32) -> array i32 * i32 =
+  let r = for x in &a { let v = *x; if v > lim { break v } else { () } } else { 0 };
+  (a, r)
+
+-- The sum of the elements at even positions: `continue` skips the others.
+fn sum_even_pos(a: array i32) -> array i32 * i32 =
+  let mut s = 0;
+  let mut k = 0;
+  for x in &a {
+    k = k + 1;
+    if k == 2 { k = 0; continue } else { () };
+    s = s + *x
+  };
+  (a, s)
+
+main -> i32 * (i32 * (i32 * (i32 * i32))) =
+  let a = array_new[i32] (5, tab);
+  -- Each element printed: the body writes to `stdout`, which the loop threads.
+  for x in &a { put_dec(&mut stdout, *x); putb(&mut stdout, 32) };
+  putb(&mut stdout, 10);
+  let (a, over) = first_over(a, 25);
+  let (a, even) = sum_even_pos(a);
+  -- The first element over 35 from a view the block lends, and a bare `break`.
+  let v = borrow imm a { 'x, w ->
+    let mut found = 0;
+    for x in w { let e = *x; if e > 35 { found = e; break } else { () } };
+    found
+  };
+  let (a, none) = first_over(a, 99);
+  -- An owned array: its elements are copied, and it is dropped after the loop.
+  let mut sum = 0;
+  for x in a { sum = sum + x };
+  (sum, (over, (even, (v, none))))

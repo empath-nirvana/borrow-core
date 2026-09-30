@@ -112,6 +112,9 @@ inductive VTy where
   | arrayImm (sp : Span) (a : Life) (A : VTy)
   /-- `array_mut @ A`: the family of `mut` leaf borrows of an array (SPEC §9). -/
   | arrayMut (sp : Span) (a : Life) (A : VTy)
+  /-- `sized D S A`: a sized iterator over the data `D` with its own state `S`, yielding `A`
+  (SPEC §16), the abbreviation `D * (S * !(D * S => (D * S) * (A + (1 + 1))))`. -/
+  | sized (sp : Span) (D S A : VTy)
 
 /-- Computation types (syntax-core §4). -/
 inductive CTy where
@@ -146,6 +149,12 @@ inductive Shape where
 end
 
 deriving instance DecidableEq for VTy, CTy, Shape
+
+/-- The expansion of `sized D S A` (SPEC §16): the data, the state, and the step, which answers
+the next data and state with an element, a skip (`inr (inl ())`) or the end (`inr (inr ())`). -/
+def VTy.sizedExpand (sp : Span) (D S A : VTy) : VTy :=
+  .tensor sp D (.tensor sp S (.bang sp (.lolli sp (.tensor sp D S)
+    (.tensor sp (.tensor sp D S) (.sum sp A (.sum sp (.unit sp) (.unit sp)))))))
 deriving instance Repr for VTy, CTy, Shape
 
 /-- One bracket argument of a constant or derived form. -/
@@ -229,6 +238,8 @@ inductive Const where
   | sliceSwapMut (a : Life) (A : VTy)
   /-- `count_fold[S]`: the counted loop of SPEC §16. -/
   | countFold (S : VTy)
+  /-- `count_try[S, E]`: the counted loop with an exit of SPEC §16. -/
+  | countTry (S E : VTy)
   deriving DecidableEq, Repr
 
 /-- A binary operator of the surface (draft 0 §2.12), resolved by the width of its operands. -/
@@ -276,6 +287,13 @@ inductive VSugar where
   | while_
   /-- `break` in the body of a generator's loop: the loop ends. -/
   | brk
+  /-- `continue` in a loop's body: the rest of the body is skipped, and the loop goes on. -/
+  | cont
+  /-- `a..b`, applied to the pair of its ends: the count `a, a + 1, …, b − 1`, a source of `for`
+  (SPEC §16). -/
+  | count
+  /-- `loop { M }`: the condition of a `while` that never fails. -/
+  | forever
   /-- `return e` in a generator's body, applied to the value: the generator finishes with it,
   from any depth of its loops. -/
   | retE
@@ -445,6 +463,7 @@ def VTy.strip : VTy → VTy
   | .array _ A => .array .none A.strip
   | .arrayImm _ a A => .arrayImm .none a.strip A.strip
   | .arrayMut _ a A => .arrayMut .none a.strip A.strip
+  | .sized _ D S A => .sized .none D.strip S.strip A.strip
 
 def CTy.strip : CTy → CTy
   | .ret _ A => .ret .none A.strip
@@ -514,6 +533,7 @@ def Const.strip : Const → Const
   | .sliceReplaceMut a A => .sliceReplaceMut a.strip A.strip
   | .sliceSwapMut a A => .sliceSwapMut a.strip A.strip
   | .countFold S => .countFold S.strip
+  | .countTry S E => .countTry S.strip E.strip
 
 mutual
 def Val.strip : Val → Val
@@ -600,7 +620,7 @@ def VTy.span : VTy → Span
   | .unit sp | .zero sp | .tensor sp _ _ | .sum sp _ _ | .thunk sp _ | .ref sp _ | .imm sp _ _
   | .mut sp _ _ | .box sp _ _ | .bang sp _ | .unk sp | .int sp _ | .handle sp _ | .mu sp _ _ | .name sp _
   | .lolli sp _ _ | .all sp _ _ _ | .block sp _ | .val sp _ | .fam sp _ _ _ | .view sp _ _
-  | .array sp _ | .arrayImm sp _ _ | .arrayMut sp _ _ => sp
+  | .array sp _ | .arrayImm sp _ _ | .arrayMut sp _ _ | .sized sp _ _ _ => sp
 
 def CTy.span : CTy → Span
   | .ret sp _ | .arr sp _ _ | .amp sp _ _ | .top sp | .all sp _ _ _ | .nu sp _ _ | .name sp _

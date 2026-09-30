@@ -412,7 +412,7 @@ generated-code error to pin the rendering.
 | **Narrow direct-style div calls**: only a head `return (f V)` or `return ((unbang f) V)`, at most one `&c` | `callee`, `divCall`, `loopBody` | Every call is typed. In a div body, lowering puts nested div calls in A-normal form, left to right, and `div_bind`s each. `{ f(x) }` takes the loop as a value (§2.4). | Several lends per call are allowed (§5). |
 | **Narrow HOF specialization**: named functions without type parameters, the callback a named div function in a tuple component | `specParamN`, `hofOf`, `elabDecl` | Callback parameters have effect variables, instantiated by the argument's *type* at each call: closures, locals, returned callbacks (§2.4). Keyed by (function, instantiation). | A div function still has no type parameters. |
 | **`stdout` injected into a looping `main` without capabilities** (decision 36) | `ambientCaps` | Not sugar: the `run_io` loop wrapper (`Frontend/Check/Externs.lean`, `ioMainOf`, `loopWrapperSrc`) accepts `main : F (U (Loop A B))` with no capability, as the instance `Caps = 1`. It makes all three streams itself, as it already does for the undeclared ones. SPEC §11's "Programs that run until their input ends" is restated for `Caps = 1`. `externs_loop_every_run` and `IORun.loop_every_run` are stated at the checked `run_io`, so they cover it with no new lemma. This must be confirmed when implementing: if a statement fixes `Caps ≠ 1`, it gets a `Caps = 1` instance. The backend already drives the checked `run_io` term, so it should need no change; if it does, that is coordinated with #80. | The one change outside elaboration. It is a runtime obligation, not a rule. |
-| **Finite `for`**: `for` only over `bytes c`, always div | `forLoop` (`bytes` pattern) | Chosen by the source's type. Codata (`U (iter …)`): a loop by `unfold`, div. An array borrow `array_imm 'a A`, or a count `range(n)`: a **total** index loop bounded by the length, a `fold_own` over the unary count as `div_nat` does, with the loop state as the fold's result. It is library code in the prelude, picked by type (decision 26's "choosing `fold_imm`/`fold_own` from a type"). | Lists: see below. |
+| **Finite `for`**: `for` only over `bytes c`, always div | `forLoop` (`bytes` pattern) | Chosen by the source's type (stage 9, as built, below). Codata (`U (iter …)`, `U (gen …)`): a drain, div. Data (a count `a..b`, a view, `&a`/`&mut a`, an owned array, a sized iterator): a **total** counted loop, K0′ `count_try` over the data's length, with the loop state the variables the body reads or assigns. | Lists: see below. |
 
 **Lists and finite `for`.** A left-to-right `for` over a `μ` list needs one of three things:
 
@@ -802,7 +802,7 @@ A stage that generalizes a sugar deletes the narrow version in the same change (
 | 6 | **Lends and places**: `&x`/`&mut x` (§5.1) replacing `&c`, `*r`, `modify`, `let mut` (rebinding, joins, threading, scoped cells). | `&c` | `lend.bc` and `io-*` rewritten; a scoped-cell pair; a double-use reject |
 | 7 | **Prelude and `include`** (#59), with `bool`/`true`/`false`/`if`/`&&`/`||`/`not`. | per-file `List`/`plus`/`getb` | `is_space` pair; an include-cycle reject |
 | 8 | **`data` and `box`**: constructors, block constructors, patterns, fold arms. | hand-written `μ`/`shape`/`roll` | `map-reuse`, `sum-i32` as pairs; an unboxed-recursion reject |
-| 9 | **Finite `for`** over arrays and counts (total), in the prelude. | "`for` over `bytes c` only" | `array-sum` with `for`; a total function with `for` |
+| 9 | **Finite `for`** over data (total): counts, views, lent and owned arrays, sized iterators; K0′ (SPEC §16). | "`for` over `bytes c` only" | a total function with `for` (`corpus/for-finite.bc`); `for` over `&mut a` (`corpus/iter-mut.bc`); a free number as a bound rejected |
 
 **Stage 1, as built.** `Frontend/Elab/` holds the typed IR (`Tir.lean`), inference
 (`Infer.lean`) and the pipeline (`Pipeline.lean`), which `checkProgram` and `bcc desugar` run.
@@ -922,6 +922,26 @@ found one lifetime. An open type or lifetime is an error at the call that names 
 written in these forms, its loop steps closures; the corpus calls it as `reverse(v)`,
 `eq(a, b, eq_u8)`, with the same outputs and counts, and `corpus/slice-lib.bc` calls the rest.
 Pairs: `corpus/sugar/generic-fn.bc`, `generic-infer.bc`, `generic-lifetimes.bc`.
+
+**Stage 9, as built** (SPEC §16; strings stage S4, revised; decision 47 of `docs/decisions.md`).
+`for x in V { M }` is Rust's pull desugaring, the source turned into an iterator by its type, and
+`forData` in `Sugar.lean` elaborates it in `surfC`, before divergence is inferred, when the source
+is data (`dataSrcOf`): a count `a..b`, a view, `&a`/`&mut a` of an owned array (lent as its view
+around the loop), an owned array of a persistent element, or a sized iterator `sized D S A`
+(`lib/iters.bc`). The loop is K0′, `count_try` (SPEC §16), over the length of the data, computed
+when the loop starts; its state is the source's cursor and the variables the body reads or
+assigns, capabilities included. The body's terminals and `continue` go on, `break e` and `return e`
+leave with the threaded variables and the way out; a `return` returns from the function through
+every counted loop around it (`DivSt.exits`), the loop moved onto the function's spine first. The
+loop's value is `break`'s, or the `else { d }` value when the source ends. Every other source is a
+drain, elaborated as before (§14, §15), which now takes `else` and `continue`, and a generator that
+finishes with `0` (its body a `loop { … }`) never ends: the loop's value is `break`'s, and code
+after a loop with no `break` is reported unreachable. `bcc check` reports each loop, total with
+its bound or div. The per-observation lend (`LoopLend`) leaves a counted loop inside a borrow block
+alone, reading its source's type in the block's context. From PR #132: the lend of an array at a
+view parameter for one call (`lendSlice`), and generic instances at types with lifetimes; its
+table of bounded sources by name is not taken. Pairs: `corpus/sugar/lend-array.bc`,
+`corpus/sugar/for-count.bc`.
 
 Stages 1–4 retire the #54 shortcuts and change no surface syntax, except that `&c` stays until
 stage 6. Stages 5–9 are the rest of step 2. After stage 9, step 3 of #54 (rewriting 6–10 corpus

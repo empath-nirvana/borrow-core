@@ -41,6 +41,7 @@ def VTy.subst (σ : TySubst) : VTy → VTy
   | .array sp A => .array sp (A.subst σ)
   | .arrayImm sp a A => .arrayImm sp a (A.subst σ)
   | .arrayMut sp a A => .arrayMut sp a (A.subst σ)
+  | .sized sp D S A => .sized sp (D.subst σ) (S.subst σ) (A.subst σ)
 
 def CTy.subst (σ : TySubst) : CTy → CTy
   | .ret sp A => .ret sp (A.subst σ)
@@ -109,6 +110,7 @@ def Const.subst (σ : TySubst) : Const → Const
   | .sliceReplaceMut a A => .sliceReplaceMut a (A.subst σ)
   | .sliceSwapMut a A => .sliceSwapMut a (A.subst σ)
   | .countFold S => .countFold (S.subst σ)
+  | .countTry S E => .countTry (S.subst σ) (E.subst σ)
 
 mutual
 def Val.subst (σ : TySubst) : Val → Val

@@ -1,7 +1,7 @@
 # Strings and slices, end to end — design
 
-Status: a design. Stages S1, S2, S3 and S5 are built (below, *Stage status*); S4 is in review
-(#132); the rest is proposed. It proposes spec entries, and names the theorems each needs.
+Status: a design. Stages S1 to S5 are built (below, *Stage status*); the rest is proposed. It
+proposes spec entries, and names the theorems each needs.
 
 **Stage status.**
 
@@ -12,7 +12,7 @@ Status: a design. Stages S1, S2, S3 and S5 are built (below, *Stage status*); S4
 | S1 K1 | built: `u8`, `b'c'`, `wrap8`/`extend8_u`, surface operators at `u8` through `i32`, `to_i32`/`to_u8` | SPEC §8, `corpus/bytes-upper.bc` |
 | S1 backend | built: byte slots for `u8`, `tab 0` allocates nothing | `Backend/README.md`, Representation |
 | S1 `read_byte`/`write_byte` at `u8` | built with S5: the byte list is `μX. 1 ⊕ (U8 ⊗ X)`, and the I/O corpus widens bytes where it computes on them | SPEC §11, `Core/Stdio.lean` |
-| S1 total `for` | not done: typed elaboration's stage 9; `count_fold` is called directly | SPEC §16 Open, `corpus/pending/for-finite.bc` |
+| S1 total `for` | built with S4: `for i in 0..n` is K0′ over the count | SPEC §16, `corpus/for-finite.bc` |
 | S2 K2 | built at `Mut` and `Imm`, with the side conditions of `experiments/PositiveArrays`; `borrow mut a { 'x, v -> … }` on an array | SPEC §9, `Core/Slices.lean`, `corpus/slice-mut.bc`, `corpus/slice-imm.bc` |
 | S2 K4 | built with S2: `slice_get_mut`, `slice_len_mut` (a `mut` family is unusable without them) | `Core/Slices.lean` |
 | S3 K3 | built, **as a machine step** `split`, not a term over the host's `le_u`/`sub` (as K0); `slice_split_imm`/`_mut`, and `slice_empty_imm`/`_mut` typed `[L]` (not `![L]`) | SPEC §9, `Core/SliceOps.lean` (`famSplit_compatX`, `famEmpty_compatX`), `corpus/slice-split.bc` |
@@ -23,7 +23,8 @@ Status: a design. Stages S1, S2, S3 and S5 are built (below, *Stage status*); S4
 | P10 | as written but for `read_all` (a 64-byte buffer filled from the input) and `iter_mut` driven by a counted loop (no total `for` yet) | `corpus/split-at-mut.bc` |
 | P7 (numbers) | an `array i32` sorted in place and binary-searched | `corpus/sort-numbers.bc` |
 | search, reverse | `find`/`contains`/`starts_with`/`ends_with`/`eq`/`cmp` over bytes; `rev` in place | `corpus/find-bytes.bc`, `corpus/reverse-bytes.bc` |
-| P12 | `iter_mut` from the library, driven by a counted loop; the program as written (`for x in iter_mut(&mut a)`) waits for S4's total `for` and the array lend row | `corpus/iter-mut-slice.bc`, `corpus/iter-mut-count.bc`, `corpus/pending/iter-mut.bc` |
+| P12 | as written, `for x in &mut a { modify x { … } }`: the array lent as its view for the loop, total; `iter_mut` from the library (codata over a view) stays the pull form | `corpus/iter-mut.bc`, `corpus/iter-mut-slice.bc`, `corpus/iter-mut-count.bc` |
+| S4 | built, revised (the user's decisions, `docs/decisions.md` 47): `for` is Rust's pull desugaring, the source turned into an iterator by its type; over data (a count `a..b`, a view, `&a`/`&mut a`, an owned array, a sized iterator of `lib/iters.bc`) it is K0′ `count_try` over the data's length, total, and elsewhere a drain, div; `break`/`continue`/`return` and `else`; the completeness lemma. PR #132's table of bounded names is not taken | SPEC §16, `Core/CountFold.lean`, `Support/Dynamics/Completeness.lean`, `lib/iters.bc`, `corpus/for-*.bc` |
 | S3 left | an `imm` reborrow of a `mut` family (K2′: `peek` and `sort` take a filler meanwhile); lifetime inference for two lifetimes (`copy_from`, `eq`, `cmp` take them written); static bounds-check elimination | SPEC §9 Open |
 | `div_fuel` over K0 | built: `io-fuel` from 3746 allocations and 174 dispatched calls to 1 and 0 | `lib/div.bc` |
 | S5 externs | built: `write_all` (an `imm` byte view to an output) and `read_into` (a `mut` byte view from an input, and the count); models are counted loops of the byte operations', proved to meet their contracts; host code is one `fd_write`/`fd_read` per view | SPEC §11, `Core/Stdio.lean` (`writeAll_meets`, `readInto_meets`) |
@@ -1240,7 +1241,7 @@ added with goldens.
 | S1 | **Counted loops and bytes**: K0, K1; backend byte slots and `tab 0`; `read_byte`/`write_byte` at `u8` | §8 (a width), a new entry for K0 | K0, K1 | `pending/for-finite.bc` (total `range`), P2's digit loop over an `array u8`; `io-upper` at `u8` |
 | S2 | **Cell-free borrows**: K2 at `Mut`, then at `Imm`; the §5.1 lend row for arrays | §9 (the Open item) | K2 | P12 (`pending/iter-mut.bc`, with a core iterator until S4) |
 | S3 | **Split and writes**: K3, K4, K5; `lib/slice.bc` | §9 | K3–K5 | P10 (with `iter_mut` in core), a sort of `array i32` (P7's shape) |
-| S4 | **Iterators and total `for`** over views: `iter`, `iter_mut`, `bytes`, `range`; `for` over a bounded source is K0 (typed elaboration stage 9, revised) | §7 (instances), §14 (bounded `for` is total) | none | P12 as written, P10 as written, `pending/print-borrowed-list.bc`'s array analogue |
+| S4 | **Total `for` over data** (built, revised): the source's type chooses its iterator; over data the loop is K0′ `count_try` over the data's length (typed elaboration stage 9, revised); sized iterators `lib/iters.bc` | §16 (K0′, the `for` loop over data) | K0′ | P12 as written, P10 as written, `print-borrowed-array.bc` (the array analogue of `pending/print-borrowed-list.bc`) |
 | S5 | **Buffers and text** (built): `lib/buf.bc` (stage A), `lib/text.bc`, literals (`lit`, `lit_view`, backend read-only data), `write_all`/`read_into` externs; `box buf/string/array`; capability-threading borrow blocks; `read_byte`/`write_byte` at `u8` | §17 (text library, literal lowering); §11 (two externs) | none | P1–P9, P11, P13 |
 | S6 | **Surface prerequisites** used throughout, from typed elaboration: `fn f<'a>`, `data` values without `box` and with lifetime parameters | typed elaboration §5.3 | none | P2, P8 with `data` |
 | T2 | **Enforced text**: `string`, `str`, `str mut`, `char` as opaque types (#63); optionally a Lean statement that the text library preserves `Utf8Valid` | module entry (#63) | none | a reject: bytes passed as `str` |

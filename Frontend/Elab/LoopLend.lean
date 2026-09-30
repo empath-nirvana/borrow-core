@@ -113,14 +113,19 @@ def isLoopHead (divCall : Val → Bool) : Comp → Bool
   | .ret _ V => divCall V
   | _ => false
 
-/-- A computation loops on its spine: a `for`, or a call of a div function in the head of a
-binding or at a terminal. -/
-def loopsOnSpine (divCall : Val → Bool) : Nat → Comp → Bool
+/-- A `for x in V { M }; N` that is total: over a bounded source, elaborated to a counted loop
+(SPEC §16, the total `for`; `boundedFor` in `Frontend/Sugar.lean`). It is one computation, not a
+loop: a borrow block around it keeps its borrow open for the whole loop. -/
+abbrev Finite := Val → Comp → Comp → Bool
+
+/-- A computation loops on its spine: a `for` that is not total, or a call of a div function in
+the head of a binding or at a terminal. -/
+def loopsOnSpine (divCall : Val → Bool) (fin : Finite) : Nat → Comp → Bool
   | 0, _ => false
-  | n + 1, .bind _ _ _ M N _ => isLoopHead divCall M || loopsOnSpine divCall n N
-  | n + 1, .letUnit _ _ M | n + 1, .letPair _ _ _ _ M => loopsOnSpine divCall n M
-  | n + 1, .case _ _ _ M _ N => loopsOnSpine divCall n M || loopsOnSpine divCall n N
-  | _ + 1, .for_ .. => true
+  | n + 1, .bind _ _ _ M N _ => isLoopHead divCall M || loopsOnSpine divCall fin n N
+  | n + 1, .letUnit _ _ M | n + 1, .letPair _ _ _ _ M => loopsOnSpine divCall fin n M
+  | n + 1, .case _ _ _ M _ N => loopsOnSpine divCall fin n M || loopsOnSpine divCall fin n N
+  | n + 1, .for_ _ _ V M N => !fin V M N || loopsOnSpine divCall fin n N
   | _ + 1, T => isLoopHead divCall T
 
 /-- What the rewrite of one block works with. -/
@@ -136,6 +141,8 @@ structure Env where
   pre : Comp → Comp
   /-- A call of a div function. -/
   divCall : Val → Bool
+  /-- A total `for`. -/
+  fin : Finite
 
 /-- Fresh names, by the block's position and a counter. -/
 abbrev LM := StateT Nat (Except Error)
@@ -269,14 +276,20 @@ def Env.walk (E : Env) : Nat → List String → Seg → Comp → LM Comp
   | n + 1, scope, s, .letPair sp y z V M =>
     E.walk n (scope ++ [y.name, z.name])
       (s.push (fun K => .letPair sp y z V K) [y.name, z.name] (E.usesV V)) M
-  | n + 1, scope, s, S@(.for_ sp y V M N) => do
-    if E.usesV V then throw (iterError E V.span)
-    let pre ← E.flush sp s S
-    let scope' := scope ++ s.names
-    let M' ← E.forBody scope' sp y.name M
-    pure (pre (.for_ sp y V M' (← E.walk n scope' {} N)))
+  | n + 1, scope, s, .for_ sp y V M N =>
+    if E.fin V M N then
+      -- A total `for` is one computation: a statement of the stretch it is in.
+      E.walk n scope (s.push (fun K => .for_ sp y V M K) (spineNames fuel M)
+        (E.usesV V || E.usesC M)) N
+    else do
+      if E.usesV V then throw (iterError E V.span)
+      let S := Comp.for_ sp y V M N
+      let pre ← E.flush sp s S
+      let scope' := scope ++ s.names
+      let M' ← E.forBody scope' sp y.name M
+      pure (pre (.for_ sp y V M' (← E.walk n scope' {} N)))
   | n + 1, scope, s, S@(.case sp V y M z N) => do
-    if !(loopsOnSpine E.divCall fuel M || loopsOnSpine E.divCall fuel N) then
+    if !(loopsOnSpine E.divCall E.fin fuel M || loopsOnSpine E.divCall E.fin fuel N) then
       return (← E.terminal s S)
     -- The scrutinee is computed in the stretch before the arms, which are rewritten on their own.
     let (s, V) ← if E.usesV V then do
@@ -316,10 +329,27 @@ def patternPrefix : Nat → List String → Comp → List String × (Comp → Co
 /-- `x <- return B; N` where `B` is a borrow block whose body loops, rewritten per observation and
 spliced into the enclosing body: `none` when `B` is not such a block. `c` is the typing context at
 the binding.  `[spec §14]` -/
-def lendBind (c : TCx) (divCall : Val → Bool) (sp : Span) (x : Ident) (A : Option VTy) (V : Val)
-    (N : Comp) (lin : Bool) : Except Error (Option Comp) := do
+def lendBind (c : TCx) (divCall : Val → Bool) (fin' : TCx → Finite) (sp : Span) (x : Ident)
+    (A : Option VTy) (V : Val) (N : Comp) (lin : Bool) : Except Error (Option Comp) := do
   let some B := Block.of? V | return none
-  if !loopsOnSpine divCall fuel B.S then return none
+  -- A `for` in the block's body is read in the body's context, where the block's borrow is bound:
+  -- on an owned array it is a view, and a `for` over it a counted loop (SPEC §16).
+  let cB : TCx := match c.tyV B.P, c.elabL (.dom B.lsp) with
+    | some T, some dom =>
+      let c₁ := c.pushLife B.x dom
+      match c₁.E.lenv.lookup B.x with
+      | some v =>
+        let Tb : Option Frontend.Check.CVTy := match B.k, T with
+          | .imm, .fam (.ref A) => some (.fam (.imm (.var v) A))
+          | .mut, .fam (.ref A) => some (.fam (.mut (.var v) A))
+          | .imm, .ref A => some (.imm (.var v) A)
+          | .mut, .ref A => some (.mut (.var v) A)
+          | _, _ => none
+        c₁.push B.b.name Tb
+      | none => c
+    | _, _ => c
+  let fin := fin' cB
+  if !loopsOnSpine divCall fin fuel B.S then return none
   -- The place: a name, a pair of names (a family), or a value bound to a name first.
   let (bindP, place, placeNames) : (Comp → Comp) × Val × List String := match B.P with
     | .var vsp t => (id, .var vsp t, [t])
@@ -338,7 +368,7 @@ def lendBind (c : TCx) (divCall : Val → Bool) (sp : Span) (x : Ident) (A : Opt
         "the block is lent per observation in the enclosing body, where its bindings would " ++
         s!"reach the code after it. Rename `{y}` inside the block, or read it there (SPEC §14, " ++
         "borrow scopes over loops)"⟩
-  let E : Env := ⟨B, place, placeNames, aliases, pre, divCall⟩
+  let E : Env := ⟨B, place, placeNames, aliases, pre, divCall, fin⟩
   let (L, _) ← (E.walk fuel outer {} S).run 0
   -- `x <- B; return x` is `B`'s rewrite itself.
   let rest : Comp → Comp := match N, A with
@@ -405,15 +435,24 @@ the owner, which the per-observation lend then rewrites (`lendBind`). A call len
 `f(&t)`. So a div function over a borrow is called in direct style from a borrow scope with no
 spanning lend: each step of its loop borrows the owner for that step. `none` when the `def` is
 not of that form.  `[spec §14]` -/
-def lentDef (c : TCx) : Decl → Except Error (Option Decl)
+def lentDef (c : TCx) (fin' : TCx → Finite) : Decl → Except Error (Option Decl)
   | .def_ sp n [] (.bang asp (.all lsp y bd (.lolli fsp P Q)))
       (.bangThunkv vsp (.lamL _ y' _ (.ret _ (.thunkv _ (.lam lamsp x _ M))))) mk => do
     if y.name != y'.name then return none
     if let .gen _ := mk then return none
     let some bl := c.elabL bd | return none
     let c' := c.pushLife y.name bl
-    if !loopsOnSpine (divCallIn c') fuel M then return none
     let ps := spineTy P
+    -- The parameters, bound in the context a `for` of the body is read in.
+    let one : List Ident := match M with
+      | .bind _ y _ (.ret _ (.var _ z)) _ _ => if z == x.name then [x, y] else [x]
+      | _ => [x]
+    let cP := match (if ps.length == 1 then some (one, M) else spinePattern fuel ps.length x.name M) with
+      | some (names, _) =>
+        if ps.length == 1 then names.foldl (fun c nm => c.push nm.name (c.elabV P)) c'
+        else (names.zip ps).foldl (fun c (nm, T) => c.push nm.name (c.elabV T)) c'
+      | none => c'
+    if !loopsOnSpine (divCallIn c') (fin' cP) fuel M then return none
     -- The one component borrowed at the parameter's lifetime.
     let borrowed := (ps.zip (List.range ps.length)).filterMap fun
       | (.imm _ (.var _ a) A, i) => if a == y.name then some (i, BorrowKind.imm, A) else none
@@ -444,11 +483,11 @@ def lentDef (c : TCx) : Decl → Except Error (Option Decl)
 
 /-- The binding `x <- M; N` of a body, rewritten when `M` is a borrow block over a loop or
 `N` follows a `let r = &x`.  `[spec §14]` -/
-def hook (c : TCx) (sp : Span) (x : Ident) (A : Option VTy) (M N : Comp) (lin : Bool) :
-    Except Error (Option Comp) := do
+def hook (c : TCx) (fin : TCx → Finite) (sp : Span) (x : Ident) (A : Option VTy) (M N : Comp)
+    (lin : Bool) : Except Error (Option Comp) := do
   if let some L ← lendLet sp x A M N then return some L
   match M with
-  | .ret _ V => lendBind c (divCallIn c) sp x A V N lin
+  | .ret _ V => lendBind c (divCallIn c) fin sp x A V N lin
   | _ => pure none
 
 end Frontend.Elab.LoopLend

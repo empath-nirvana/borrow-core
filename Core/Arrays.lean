@@ -1,6 +1,7 @@
 import Core.Integers
 import Core.Fix
 import Core.ArrayWp
+import Support.Dynamics.Completeness
 
 /-!
 # Core — Arrays  `[spec §9]`
@@ -70,9 +71,7 @@ theorem vP_fam_mk {L : VTy} {ls : List SRec} {δ : LSub} {ℓ : Loc} {n : UInt32
   vP_fam_iff.mpr ⟨ℓ, n, rfl, hn, hs⟩
 
 /-- A family in the relation has `tab`'s length: `arrLen n = n`.  `[spec §9]` -/
-theorem arrLen_of_bound {n : UInt32} (hn : n.toNat < 2 ^ 31) : arrLen n = n := by
-  unfold arrLen
-  rw [if_pos (UInt32.lt_iff_toNat_lt.mpr (by simpa using hn))]
+theorem arrLen_of_bound {n : UInt32} (hn : n.toNat < 2 ^ 31) : arrLen n = n := arrLen_eq_of_lt hn
 
 /-- `tab`'s length is below `2³¹`. -/
 theorem arrLen_bound (c : UInt32) : (arrLen c).toNat < 2 ^ 31 := by

@@ -319,15 +319,16 @@ theorem sumE_compatC {Δ : LifeCtx} {Γ Γs Γb : Ctx VTy} {V M₁ M₂ : Expr} 
     rw [← substAll_cons]
     exact h₂ δ (w :: γ) ls' _ hδ (gDenC_mk (by simpa using hlen) ⟨σ₁, σ₂, hcσ, hw, hgs⟩)
 
-/-- `absurd V : C` for `V : 0`, written `case V {inj₁ _. () | inj₂ _. ()}`; the rest of the
-context is absorbed. -/
-def absurdE (V : Expr) : Expr := .case V (.val .unit) (.val .unit)
+/-- `absurd V : C` for `V : 0`, written `case V {inj₁ x. x | inj₂ y. y}`: no arm runs, and each
+answers its payload, so a backend that gives each arm the type of the whole reads no type off it.
+The rest of the context is absorbed. -/
+def absurdE (V : Expr) : Expr := .case V (.var 0) (.var 0)
 
 theorem zeroE_compatC {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {V : Expr} {C : CTy}
     (hsp : Ctx.SplitP Γ Γ₁ Γ₂) (hV : SemV Δ Γ₁ V .zero) : SemC Δ Γ (absurdE V) C := by
   intro δ γ ls ρ hδ hg
   obtain ⟨ρ₁, ρ₂, hc, hg₁, hg₂⟩ := gDenC_split hsp hg
-  refine cC_bind C (.case .hole (.val .unit) (.val .unit)) (substAll γ V) ls δ
+  refine cC_bind C (.case .hole (.var 0) (.var 0)) (substAll γ V) ls δ
     (fun ls' => vC true .zero ls' δ) (fun ls' => gDenC ls' δ Γ₂ γ)
     (fun ls' hls σ h => gDenC_same hls h) ?_ ρ ⟨ρ₁, ρ₂, hc, hV δ γ ls ρ₁ hδ hg₁, hg₂⟩
   rintro ls' - v σ ⟨σ₁, σ₂, -, hv, -⟩

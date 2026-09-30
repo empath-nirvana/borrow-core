@@ -207,6 +207,7 @@ def Op.ofPrim? : Prim → Option Op
   | .split => some .split
   | .drop => some .drop
   | .count => some .count
+  | .countTry => some .countTry
   | .store => none
   | .lit _ => none
 

@@ -1,0 +1,28 @@
+-- The array analogue of `corpus/pending/print-borrowed-list.bc`: each element of a borrowed
+-- array printed, in order, then the sum returned (S4 of `docs/strings-slices-design.md`). `&a`
+-- lends the array as its view for the whole loop, which lends one `imm` leaf per element, and
+-- the body writes to the output capability it is given: `print_sum` takes `Out` and hands it
+-- back, and is `total`, since its `for` is over data (SPEC §16). The list version waits for a
+-- borrowed list iterator (#57).
+--
+-- Answer: the line `100 20 3 `, then `i32[123]`. One allocation besides the capability's cell:
+-- the array.
+
+fn tab(i: i32) -> i32 = if i == 0 { 100 } else { if i == 1 { 20 } else { 3 } }
+
+total fn print_sum(o: Out, a: array i32) -> Out * (array i32 * i32) =
+  let mut o = o;
+  let mut acc = 0;
+  for x in &a {
+    let e = *x;
+    put_dec(&mut o, e);
+    putb(&mut o, 32);
+    acc = acc + e
+  };
+  putb(&mut o, 10);
+  (o, (a, acc))
+
+main -> i32 =
+  let a = array_new[i32] (3, tab);
+  let (stdout, (a, s)) = print_sum(stdout, a);
+  s

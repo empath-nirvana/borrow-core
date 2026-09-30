@@ -73,6 +73,9 @@ inductive Op where
   | drop
   /-- `count (f, (n, (i, s)))`: `f` at `i, …, len(n) − 1`, threading `s` (§16). -/
   | count
+  /-- `count_try (f, (n, (i, s)))`: `f` at `i, …, len(n) − 1` while it answers `inl` of the next
+  state; its first `inr` is the answer, else `inl` of the last state (§16). -/
+  | countTry
   /-- A standard I/O operation (§11). -/
   | io (k : IOOp)
   /-- `litByte (a, n, i)`: byte `i` of the literal whose `n` bytes are at `a` in the program's

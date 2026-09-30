@@ -1,0 +1,25 @@
+-- A source that never ends (SPEC §16): `naturals` is a generator that finishes with `0`, the
+-- empty type, so its body is a `loop` that nothing follows. A `for` over it is a drain, div, and
+-- its value is exactly `break`'s type: there is no `else`, since the source cannot end. A loop
+-- over it with no `break` never ends either, and `bcc check` reports the code after it as
+-- unreachable (`count_forever`, which `main` does not call).
+--
+-- Answer: i32[1035], the first triangular number over 1000 (1 + 2 + … + 45).
+
+gen fn naturals() -> i32, 0 =
+  let mut i = 1;
+  loop { yield i; i = i + 1 }
+
+-- The first triangular number over `lim`.
+fn first_triangle_over(lim: i32) -> i32 =
+  let mut t = 0;
+  let r = for i in naturals() { t = t + i; if t > lim { break t } else { () } };
+  r
+
+-- A loop with no `break` over a source that never ends: what follows it does not run.
+fn count_forever(k: i32) -> i32 =
+  let mut s = 0;
+  for i in naturals() { s = s + i };
+  s + k
+
+main -> i32 = first_triangle_over(1000)

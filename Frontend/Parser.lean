@@ -59,6 +59,7 @@ inductive RTy where
   | array (sp : Span) (A : RTy)
   | arrayImm (sp : Span) (a : Life) (A : RTy)
   | arrayMut (sp : Span) (a : Life) (A : RTy)
+  | sized (sp : Span) (D S A : RTy)
   | nu (sp : Span) (X : Ident) (C : RTy)
   | delay (sp : Span) (A : RTy)
   | stream (sp : Span) (A : RTy)
@@ -72,7 +73,7 @@ def RTy.span : RTy → Span
   | .name sp _ | .lolli sp _ _ | .arr sp _ _ | .all sp _ _ _ | .forall_ sp _ _ _ | .amp sp _ _
   | .top sp | .block sp _ | .val sp _ | .fam sp _ _ _ | .view sp _ _ | .nu sp _ _ | .delay sp _
   | .stream sp _ | .iter sp _ _ _ | .loop sp _ _ | .gen sp _ _ _ | .array sp _ | .arrayImm sp _ _
-  | .arrayMut sp _ _ => sp
+  | .arrayMut sp _ _ | .sized sp _ _ _ => sp
 
 /-- What a raw type is, for sort errors. -/
 def RTy.former : RTy → String
@@ -116,6 +117,7 @@ def RTy.toV : RTy → Except Error VTy
   | .array sp A => return .array sp (← A.toV)
   | .arrayImm sp a A => return .arrayImm sp a (← A.toV)
   | .arrayMut sp a A => return .arrayMut sp a (← A.toV)
+  | .sized sp D S A => return .sized sp (← D.toV) (← S.toV) (← A.toV)
   | t@(.F ..) | t@(.arr ..) | t@(.forall_ ..) | t@(.amp ..) | t@(.top ..) | t@(.nu ..)
   | t@(.delay ..) | t@(.stream ..) | t@(.iter ..) | t@(.loop ..) | t@(.gen ..) => sortErr t true
 
@@ -155,6 +157,12 @@ structure PState where
   /-- Inside a generator's body (and not inside a closure, block or borrow block in it), where a
   statement `return e` finishes the generator from any depth (`VSugar.retE`). -/
   inGen : Bool := false
+  /-- Inside the body of a loop of a function's body (and not inside a closure or block in it),
+  where a statement `return e` returns from the function from any depth of its loops. -/
+  inLoop : Bool := false
+  /-- In the body of a surface `fn` or `main ->` (not a core `def`), where a loop's body may
+  `return` from the function. -/
+  surf : Bool := false
   /-- A `yield` was read (reset around a borrow block's body, to see whether it yields). -/
   yielded : Bool := false
   /-- The borrow block just read yields: its body is a generator. -/
@@ -168,9 +176,19 @@ abbrev P := StateT PState (Except Error)
 /-- Parse with `inGen` set to `g`, restored after. -/
 def withGen {α} (g : Bool) (p : P α) : P α := do
   let g₀ := (← get).inGen
-  modify fun s => { s with inGen := g }
+  let l₀ := (← get).inLoop
+  modify fun s => { s with inGen := g, inLoop := false }
   let r ← p
-  modify fun s => { s with inGen := g₀ }
+  modify fun s => { s with inGen := g₀, inLoop := l₀ }
+  pure r
+
+/-- Parse a loop's body: in a function's body (not a generator's), a statement `return e` in it
+returns from the function (`VSugar.retE`). -/
+def withLoop {α} (p : P α) : P α := do
+  let l₀ := (← get).inLoop
+  modify fun s => { s with inLoop := s.surf && !s.inGen }
+  let r ← p
+  modify fun s => { s with inLoop := l₀ }
   pure r
 
 def fuelPerToken : Nat := 16
@@ -405,6 +423,12 @@ def rtyPrefix : Nat → P RTy
       let B ← rtyPrefix n
       let R ← rtyPrefix n
       pure (.gen (← spanFrom st) A B R)
+    | .kw "sized" =>
+      discard bump
+      let D ← rtyPrefix n
+      let S ← rtyPrefix n
+      let A ← rtyPrefix n
+      pure (.sized (← spanFrom st) D S A)
     | .kw "imm" => withLife .imm
     | .kw "mut" => withLife .mut
     -- The buffer and text abbreviations (`docs/strings-slices-design.md` §2.2): `buf A` is
@@ -801,6 +825,12 @@ def joinArms (xs : List String) : Comp → Comp
     .case sp V x (wrapTerms hand M) y (wrapTerms hand N)
   | M => M
 
+/-- The loop's value, bound after it (`let r = for …`): `forRes`, applied to the thunk of the
+`else` value when there is one. -/
+def forResOf (sp : Span) : Option Comp → Val
+  | some d => .app sp (.sugar sp .forRes) (.thunk sp d)
+  | none => .sugar sp .forRes
+
 /-- A binder type to be filled by the elaborator (a closure's, a borrow callback's). -/
 def holeTy (sp : Span) : VTy := .name sp "_"
 
@@ -824,7 +854,17 @@ def val : Nat → P Val
       else if ← isSym "{" then brace n st true
       else expected "`thunk`, `thunkv` or `{` after `!`"
     | .sym "{" => brace n st false
-    | _ => valOps n 0
+    | _ => do
+      let a ← valOps n 0
+      -- `a..b`: a count (`VSugar.count`).
+      let d₁ ← peek
+      let d₂ ← peekAt 1
+      if d₁.tok == .sym "." && d₂.tok == .sym "." && !d₂.spaced then
+        discard bump; discard bump
+        let b ← valOps n 0
+        let sp ← spanFrom st
+        return .app sp (.sugar d₁.span .count) (.pair sp a b)
+      pure a
 
 /-- Operators, by precedence `lvl` and above, associating to the left. -/
 def valOps : Nat → Nat → P Val
@@ -1079,7 +1119,18 @@ def valAtom : Nat → P Val
         | _ => expected "`buf[A]`, `string` or `array` after `box`"
       let W ← valAtom n
       pure (.app (← spanFrom st) callee W)
-    | .kw "break" => discard bump; pure (.sugar t.span .brk)
+    | .kw "break" =>
+      -- `break e`: the whole expression after it is the loop's value.
+      discard bump
+      let nx ← peek
+      let ends := match nx.tok with
+        | .sym ";" | .sym "}" | .sym "|" | .sym ")" | .sym "," | .kw "else" | .eof => true
+        | _ => false
+      if ends then pure (.sugar t.span .brk)
+      else
+        let V ← val n
+        pure (.app (← spanFrom st) (.sugar t.span .brk) V)
+    | .kw "continue" => discard bump; pure (.sugar t.span .cont)
     | .kw "clone" => discard bump; pure (.sugar t.span (.call "clone"))
     | .sym "(" =>
       discard bump
@@ -1193,22 +1244,46 @@ def compG : Nat → Bool → P Comp
       expectKw "in"
       let V ← val n
       expectSym "{"
-      let M ← comp n
+      let M ← withLoop (comp n)
       expectSym "}"
-      expectSym ";"
-      let N ← comp n
-      pure (.for_ (← spanFrom st) x V M N)
+      -- `else { d }`: the loop's value when its source ends (`VSugar.forRes`).
+      let els ← forElse n
+      let sp₀ ← spanFrom st
+      -- A `for` last in a body is a statement: what follows it is `()`, or, with `else`, the
+      -- loop's value.
+      let r ← if els.isSome then freshName "io_fr" else pure ""
+      if ← isSym ";" then
+        discard bump
+        let N ← comp n
+        let sp ← spanFrom st
+        pure (.for_ sp x V M (match els with
+          | some d => .bind sp ⟨r, sp⟩ none (.ret sp (forResOf sp (some d))) N false
+          | none => N))
+      else
+        pure (.for_ sp₀ x V M (match els with
+          | some d => .bind sp₀ ⟨r, sp₀⟩ none (.ret sp₀ (forResOf sp₀ (some d))) (.ret sp₀ (.var sp₀ r)) false
+          | none => .ret sp₀ (.unit sp₀)))
     | .kw "while", _ =>
       -- `while c { M }; N`: a `for` whose iterator is the condition (a generator's loop).
       discard bump
       let c ← val n
       expectSym "{"
-      let M ← comp n
+      let M ← withLoop (comp n)
       expectSym "}"
-      expectSym ";"
-      let N ← comp n
+      -- Last in a body, what follows it is `()`.
+      let N ← if ← isSym ";" then do discard bump; comp n else pure (.ret t.span (.unit t.span))
       let sp ← spanFrom st
       pure (.for_ sp ⟨"io_while", t.span⟩ (.app c.span (.sugar t.span .while_) c) M N)
+    | .kw "loop", .sym "{" =>
+      -- `loop { M }`: a `while` whose condition never fails (`VSugar.forever`). What follows it
+      -- runs only after a `break`.
+      discard bump
+      expectSym "{"
+      let M ← withLoop (comp n)
+      expectSym "}"
+      let N ← if ← isSym ";" then do discard bump; comp n else pure (.ret t.span (.unit t.span))
+      let sp ← spanFrom st
+      pure (.for_ sp ⟨"io_while", t.span⟩ (.app t.span (.sugar t.span .while_) (.sugar t.span .forever)) M N)
     | .kw "let", _ =>
       discard bump
       let isMut ← if ← isKw "mut" then do discard bump; pure true else pure false
@@ -1230,12 +1305,13 @@ def compG : Nat → Bool → P Comp
         expectKw "in"
         let V ← val n
         expectSym "{"
-        let M ← comp n
+        let M ← withLoop (comp n)
         expectSym "}"
+        let els ← forElse n
         expectSym ";"
         let N ← comp n
         let sp ← spanFrom st
-        return .for_ sp x V M (.bind sp r A (.ret sp (.sugar sp .forRes)) N false)
+        return .for_ sp x V M (.bind sp r A (.ret sp (forResOf sp els)) N false)
       if (← peek).tok == .kw "match" || (← peek).tok == .kw "if" then
         let M ← compPrefix n
         expectSym ";"
@@ -1284,7 +1360,7 @@ def statement : Nat → Pos → Bool → P Comp
     -- A statement expression, and the place it rebinds.
     let (S, rebind) ← match t.tok, t1.tok with
       | .kw "return", _ =>
-        if (← get).inGen && !head then
+        if ((← get).inGen || (← get).inLoop) && !head then
           -- `return e` in a generator's body: the generator finishes with `e`.
           discard bump
           let V ← if t1.tok == .sym "}" || t1.tok == .sym ";" then pure (Val.unit t.span)
@@ -1440,6 +1516,17 @@ def blockBody : Nat → P Comp
     let M ← comp n
     modify fun s => { s with muts := s₀.muts, assigned := s₀.assigned }
     pure M
+
+/-- A loop's `else { d }`, when it has one: the loop's value when its source ends. -/
+def forElse : Nat → P (Option Comp)
+  | 0 => outOfFuel
+  | n + 1 => do
+    unless ← isKw "else" do return none
+    discard bump
+    expectSym "{"
+    let d ← withGen false (blockBody n)
+    expectSym "}"
+    pure (some d)
 
 /-- A computation atom: `force x`, `<>`, `<M, N>`, `case V { … }`, `match V { … }`, `if`,
     `(M)`, `(M : C)`. -/
@@ -1612,7 +1699,9 @@ def decl (n : Nat) : P Decl := do
         | .ok A => pure (CTy.ret A.span A)
         | .error _ => liftSort T.toC
       expectSym "="
+      modify fun s => { s with surf := true }
       let M ← comp n
+      modify fun s => { s with surf := false }
       return .main (← spanFrom st) C M
     expectSym ":"
     let C ← cty n
@@ -1657,8 +1746,9 @@ where
     expectSym "->"
     let T ← rty n
     expectSym "="
-    modify fun s => { s with muts := [], assigned := [] }
+    modify fun s => { s with muts := [], assigned := [], surf := true }
     let M ← comp n
+    modify fun s => { s with surf := false }
     let sp ← spanFrom st
     let A := tupleTy sp (ps.map (·.2))
     let pn ← freshName "io_p"

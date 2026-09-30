@@ -1,11 +1,12 @@
--- P10 of `docs/strings-slices-design.md` (§1): two exclusive views at a run-time index. The
--- input is read into a byte buffer (an `array u8` of 64 slots, `n` of them filled), lent `mut`
--- once with no cell (`borrow mut`, SPEC §9), and the view cut at `n` and again at `n / 2`
--- (`split_at_mut`, the machine's `split`): two `mut` views at the one lifetime `'x`, used in the
--- same scope. The first half is reversed in place (`reverse`, a counted loop of `slice_swap_mut`)
--- and the second upper-cased through `iter_mut`, whose state is the rest of its view and which
--- lends one `mut` leaf per observation. `lib/slice.bc` (`include slice`) has both. The buffer is
--- then written out. The buffer holds the first 64 bytes of the input; growth is stage S5's `buf`.
+-- P10 of `docs/strings-slices-design.md` (§1), in direct style: two exclusive views at a run-time
+-- index. The input is read into a byte buffer (an `array u8` of 64 slots, `n` of them filled),
+-- lent `mut` once with no cell (`borrow mut`, SPEC §9), and the view cut at `n` and again at
+-- `n / 2` (`split_at_mut`, the machine's `split`): two `mut` views at the one lifetime `'x`, used
+-- in the same scope. The first half is reversed in place (`reverse`, `lib/slice.bc`) and the
+-- second upper-cased by `upper`, a `for` over the view, which lends one `mut` leaf per element.
+-- That `for` is over data, so it is a counted loop and `upper` is `total` (SPEC §16); so is the
+-- `for` over `0..n` that writes the buffer out, each byte read through `&buf` lent to `at` for one
+-- call. The buffer holds the first 64 bytes of the input; growth is stage S5's `buf`.
 --
 -- Answer: ` ollehWORLD!` and a newline for the input `hello world!` and a newline, and `i32[13]`,
 -- the bytes written: the 13 bytes are split at 6, `hello ` is reversed and `world!` is
@@ -18,24 +19,9 @@ include slice
 
 fn dot(i: i32) -> u8 = b'.'
 
-fn upper(c: u8) -> u8 = if b'a' <= c && c <= b'z' { c - 32 } else { c }
-
--- One observation of the iterator: the element it lends upper-cased in place.
-def upper_step : !(all 'x < top. !(i32 * (U (iter (mut 'x u8) 1 1) + 1) => U (iter (mut 'x u8) 1 1) + 1)) =
-  !thunkv Fun 'x < top. return (!thunkv fun (p : i32 * (U (iter (mut 'x u8) 1 1) + 1)) ->
-    let (i, s) = p;
-    match s {
-      inl it -> o <- (nu_out (force it)).1;
-                match o { inl (m, it) -> modify m { c -> upper(c) }; inl it | inr u -> inr () }
-    | inr u -> inr ()
-    })
-
--- Byte `i` of the buffer, written out.
-fn emit(i: i32, s: Out * array u8) -> Out * array u8 =
-  let (o, a) = s;
-  let c = borrow imm a { 'x, v -> at(v, i, b'?') };
-  putb(&mut o, c);
-  (o, a)
+-- The letters of a view upper-cased in place, one `mut` leaf at a time.
+total fn upper<'a>(v: array_mut 'a u8) -> 1 =
+  for c in v { modify c { b -> if b'a' <= b && b <= b'z' { b - 32 } else { b } } }
 
 main -> i32 =
   let mut buf = array_new[u8] (64, dot);
@@ -48,15 +34,12 @@ main -> i32 =
   borrow mut buf { 'x, v ->
     match split_at_mut(v, n) {
       inl (text, rest) ->
-        match split_at_mut(text, (unbang host[shr_u32]) (n, 1)) {
-          inl (l, r) ->
-            let l = reverse(l);
-            let s = count_fold[U (iter (mut 'x u8) 1 1) + 1] ((unbang upper_step) ['x], n, 0, inl iter_mut(r));
-            match s { inl it -> u <- (nu_out (force it)).2; u | inr u -> u }
+        match split_at_mut(text, host[shr_u32] (n, 1)) {
+          inl (l, r) -> let l = reverse(l); upper(r)
         | inr t -> ()
         }
     | inr v -> ()
     }
   };
-  let (stdout, buf) = count_fold[Out * array u8] (emit, n, 0, (stdout, buf));
+  for i in 0..n { let c = at(&buf, i, b'?'); putb(&mut stdout, c) };
   n

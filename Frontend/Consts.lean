@@ -27,7 +27,7 @@ inductive CKw where
   | arrayNew | arrayFree | arraySize | arrayReplace | arrayLen | arrayGet | arrayCopy
   | arrayForget | sliceBorrowMut | sliceBorrowImm | sliceGetMut | sliceLenMut
   | sliceSplitImm | sliceSplitMut | sliceEmptyImm | sliceEmptyMut | sliceReplaceMut | sliceSwapMut
-  | countFold
+  | countFold | countTry
   deriving DecidableEq, Repr
 
 /-- A constant keyword's spelling. -/
@@ -51,7 +51,7 @@ def CKw.str : CKw → String
   | .sliceSplitImm => "slice_split_imm" | .sliceSplitMut => "slice_split_mut"
   | .sliceEmptyImm => "slice_empty_imm" | .sliceEmptyMut => "slice_empty_mut"
   | .sliceReplaceMut => "slice_replace_mut" | .sliceSwapMut => "slice_swap_mut"
-  | .countFold => "count_fold"
+  | .countFold => "count_fold" | .countTry => "count_try"
 
 def CKw.all : List CKw :=
   [.alloc, .free, .swap, .copy, .copyBang, .forgetImm, .forgetMut, .forgetUnk, .forgetBang,
@@ -62,7 +62,7 @@ def CKw.all : List CKw :=
    .arrayForget, .sliceBorrowMut, .sliceBorrowImm, .sliceGetMut, .sliceLenMut,
    .sliceSplitImm, .sliceSplitMut, .sliceEmptyImm, .sliceEmptyMut, .sliceReplaceMut,
    .sliceSwapMut,
-   .countFold]
+   .countFold, .countTry]
 
 def CKw.ofString? (s : String) : Option CKw := CKw.all.find? (·.str == s)
 
@@ -77,7 +77,7 @@ def CKw.sig : CKw → List ArgKind
   | .sliceSplitImm | .sliceSplitMut | .sliceEmptyImm | .sliceEmptyMut | .sliceReplaceMut
   | .sliceSwapMut => [life, ty]
   | .sliceBorrowMut | .sliceBorrowImm => [binder, life, ty, ty]
-  | .swap | .foldOwn | .foldReuse | .fixd | .unfoldS => [ty, ty]
+  | .swap | .foldOwn | .foldReuse | .fixd | .unfoldS | .countTry => [ty, ty]
   | .unfold => [cty, ty]
   | .copy | .forgetImm | .forgetMut => [life, ty]
   | .forgetUnk => []
@@ -146,6 +146,7 @@ def Const.ofArgs : CKw → List Arg → Option Const
   | .sliceReplaceMut, [.life a, .ty A] => some (.sliceReplaceMut a A)
   | .sliceSwapMut, [.life a, .ty A] => some (.sliceSwapMut a A)
   | .countFold, [.ty S] => some (.countFold S)
+  | .countTry, [.ty S, .ty E] => some (.countTry S E)
   | _, _ => none
 
 /-- A constant's keyword and bracket arguments. -/
@@ -201,6 +202,7 @@ def Const.toArgs : Const → CKw × List Arg
   | .sliceReplaceMut a A => (.sliceReplaceMut, [.life a, .ty A])
   | .sliceSwapMut a A => (.sliceSwapMut, [.life a, .ty A])
   | .countFold S => (.countFold, [.ty S])
+  | .countTry S E => (.countTry, [.ty S, .ty E])
 
 theorem Const.ofArgs_toArgs (c : Const) : Const.ofArgs c.toArgs.1 c.toArgs.2 = some c := by
   cases c with
