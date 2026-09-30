@@ -1,0 +1,498 @@
+-- The slice library (SPEC §9, `docs/strings-slices-design.md` §4.2): functions on the views an
+-- array lends, `array_imm 'a A` (shared) and `array_mut 'a A` (exclusive), written over the
+-- family constants of SPEC §9 (`slice_split_*`, `slice_empty_*`, `slice_replace_mut`,
+-- `slice_swap_mut`, `slice_get_mut`, `slice_len_mut`, `array_get`, `array_len`, …) and the
+-- counted loop `count_fold` (SPEC §16). `include slice` puts them in scope.
+--
+-- Every function is generic in the element type `A` and takes the view's lifetime `'a`, so a
+-- call names the element type (`reverse[u8](v)`) and the lifetime is the view's. A generic
+-- function is checked at each use, at the types of that use: the functions that copy an element
+-- (`at`, `peek`, `set`, `fill`, `copy_from`, and every search and comparison) need a persistent
+-- `A`, such as `u8` or `i32`, and are rejected at any other. A search or a comparison takes the
+-- element comparison as an argument (`eq_u8`, `cmp_i32`, …, below): there are no traits.
+--
+-- A view is not copied or dropped by these functions without saying so: an exclusive view is
+-- handed back, and a shared one is copied with `array_copy` where it is read twice. Loops are
+-- `count_fold`s whose step is a generic `!` function of the loop's state, instantiated at the
+-- view's lifetime, so a loop allocates nothing and calls its step directly. An index is
+-- checked where it is dynamic: out of range, a read answers its default and a write does
+-- nothing.
+
+-- ### Element comparisons
+
+-- Equality and order of bytes (unsigned) and of `i32`s (signed). An order answers `-1`, `0` or
+-- `1`.
+fn eq_u8(x: u8, y: u8) -> bool = x == y
+
+fn cmp_u8(x: u8, y: u8) -> i32 = if x < y { 0 - 1 } else { if y < x { 1 } else { 0 } }
+
+fn eq_i32(x: i32, y: i32) -> bool = x == y
+
+fn cmp_i32(x: i32, y: i32) -> i32 = if x < y { 0 - 1 } else { if y < x { 1 } else { 0 } }
+
+-- ### Access
+
+-- The length of a shared view.
+def len[A] : !(all 'a < top. array_imm 'a A => i32) =
+  !thunkv Fun 'a < top. return (thunkv fun (v : array_imm 'a A) -> (unbang array_len['a, A]) v)
+
+-- The length of an exclusive view, and the view back.
+def len_mut[A] : !(all 'a < top. array_mut 'a A => array_mut 'a A * i32) =
+  !thunkv Fun 'a < top. return (thunkv fun (v : array_mut 'a A) -> (unbang slice_len_mut['a, A]) v)
+
+-- The element at `i` as a shared borrow, or `inr ()` past the end.
+def get[A] : !(all 'a < top. array_imm 'a A * i32 => imm 'a A + 1) =
+  !thunkv Fun 'a < top. return (thunkv fun (p : array_imm 'a A * i32) -> (unbang array_get['a, A]) p)
+
+-- The element at `i` as an exclusive borrow, or `inr ()` past the end. The rest of the view is
+-- given up.
+def get_mut[A] : !(all 'a < top. array_mut 'a A * i32 => mut 'a A + 1) =
+  !thunkv Fun 'a < top. return (thunkv fun (p : array_mut 'a A * i32) -> (unbang slice_get_mut['a, A]) p)
+
+-- A copy of the element at `i`, or `d` past the end.
+def at[A] : !(all 'a < top. array_imm 'a A * i32 * A => A) =
+  !thunkv Fun 'a < top. return (thunkv fun (p : array_imm 'a A * i32 * A) ->
+    let (v, q) = p;
+    let (i, d) = q;
+    match (unbang array_get['a, A]) (v, i) {
+      inl g -> withload['a, 'y, A, A] g (thunkv Fun 'y < dom. return (thunkv fun (e : view 'y A) ->
+                 return (boxed['y] e)))
+    | inr u -> d
+    })
+
+-- `x` in slot `i`, and what was there: `inl old`, or `inr x` past the end.
+def replace[A] : !(all 'a < top. array_mut 'a A * i32 * A => array_mut 'a A * (A + A)) =
+  !thunkv Fun 'a < top. return (thunkv fun (p : array_mut 'a A * i32 * A) ->
+    let (v, q) = p;
+    (unbang slice_replace_mut['a, A]) (v, q))
+
+-- A copy of the element at `i` read through an exclusive view, or `d` past the end: the element
+-- is taken out with `d` in its place and put back.
+def peek[A] : !(all 'a < top. array_mut 'a A * i32 * A => array_mut 'a A * A) =
+  !thunkv Fun 'a < top. return (thunkv fun (p : array_mut 'a A * i32 * A) ->
+    let (v, q) = p;
+    let (i, d) = q;
+    let (v, o) = (unbang slice_replace_mut['a, A]) (v, (i, d));
+    match o {
+      inl x -> let (v, b) = (unbang slice_replace_mut['a, A]) (v, (i, x)); (v, x)
+    | inr y -> (v, d)
+    })
+
+-- `x` in slot `i`; the element that was there is dropped. Past the end, nothing changes.
+def set[A] : !(all 'a < top. array_mut 'a A * i32 * A => array_mut 'a A) =
+  !thunkv Fun 'a < top. return (thunkv fun (p : array_mut 'a A * i32 * A) ->
+    let (v, q) = p;
+    let (v, o) = (unbang slice_replace_mut['a, A]) (v, q);
+    v)
+
+-- Slots `i` and `j` exchanged. If either is past the end, nothing changes.
+def swap_at[A] : !(all 'a < top. array_mut 'a A * i32 * i32 => array_mut 'a A) =
+  !thunkv Fun 'a < top. return (thunkv fun (p : array_mut 'a A * i32 * i32) ->
+    (unbang slice_swap_mut['a, A]) p)
+
+-- The view given up.
+def discard_mut[A] : !(all 'a < top. array_mut 'a A => 1) =
+  !thunkv Fun 'a < top. return (thunkv fun (v : array_mut 'a A) ->
+    match (unbang slice_get_mut['a, A]) (v, 0 - 1) {
+      inl m -> forget_mut['a, A] m
+    | inr u -> u
+    })
+
+-- ### Splitting
+
+-- The empty views.
+def empty[A] : !(all 'a < top. 1 => array_imm 'a A) =
+  !thunkv Fun 'a < top. return (thunkv fun (u : 1) -> slice_empty_imm['a, A])
+
+def empty_mut[A] : !(all 'a < top. 1 => array_mut 'a A) =
+  !thunkv Fun 'a < top. return (thunkv fun (u : 1) -> slice_empty_mut['a, A])
+
+-- The view cut at `i`: `inl` of the first `i` elements and the rest, both at the view's
+-- lifetime, or `inr` of the view itself when `i` is past its length.
+def split_at[A] : !(all 'a < top. array_imm 'a A * i32 => array_imm 'a A * array_imm 'a A + array_imm 'a A) =
+  !thunkv Fun 'a < top. return (thunkv fun (p : array_imm 'a A * i32) -> (unbang slice_split_imm['a, A]) p)
+
+def split_at_mut[A] : !(all 'a < top. array_mut 'a A * i32 => array_mut 'a A * array_mut 'a A + array_mut 'a A) =
+  !thunkv Fun 'a < top. return (thunkv fun (p : array_mut 'a A * i32) -> (unbang slice_split_mut['a, A]) p)
+
+-- The first element and the rest, or `inr ()` for the empty view.
+def split_first[A] : !(all 'a < top. array_imm 'a A => imm 'a A * array_imm 'a A + 1) =
+  !thunkv Fun 'a < top. return (thunkv fun (v : array_imm 'a A) ->
+    match (unbang slice_split_imm['a, A]) (v, 1) {
+      inl q -> let (h, t) = q;
+               match (unbang array_get['a, A]) (h, 0) {
+                 inl e -> inl (e, t)
+               | inr u -> (unbang array_forget['a, A]) t; inr u
+               }
+    | inr w -> (unbang array_forget['a, A]) w; inr ()
+    })
+
+def split_first_mut[A] : !(all 'a < top. array_mut 'a A => mut 'a A * array_mut 'a A + 1) =
+  !thunkv Fun 'a < top. return (thunkv fun (v : array_mut 'a A) ->
+    match (unbang slice_split_mut['a, A]) (v, 1) {
+      inl q -> let (h, t) = q;
+               match (unbang slice_get_mut['a, A]) (h, 0) {
+                 inl e -> inl (e, t)
+               | inr u -> (unbang discard_mut[A]) ['a] t; inr u
+               }
+    | inr w -> (unbang discard_mut[A]) ['a] w; inr ()
+    })
+
+-- The last element and the rest, or `inr ()` for the empty view.
+def split_last[A] : !(all 'a < top. array_imm 'a A => imm 'a A * array_imm 'a A + 1) =
+  !thunkv Fun 'a < top. return (thunkv fun (v : array_imm 'a A) ->
+    let (v, w) = (unbang array_copy['a, A]) v;
+    let n = (unbang array_len['a, A]) w;
+    match (unbang slice_split_imm['a, A]) (v, n - 1) {
+      inl q -> let (t, h) = q;
+               match (unbang array_get['a, A]) (h, 0) {
+                 inl e -> inl (e, t)
+               | inr u -> (unbang array_forget['a, A]) t; inr u
+               }
+    | inr w -> (unbang array_forget['a, A]) w; inr ()
+    })
+
+def split_last_mut[A] : !(all 'a < top. array_mut 'a A => mut 'a A * array_mut 'a A + 1) =
+  !thunkv Fun 'a < top. return (thunkv fun (v : array_mut 'a A) ->
+    let (v, n) = (unbang slice_len_mut['a, A]) v;
+    match (unbang slice_split_mut['a, A]) (v, n - 1) {
+      inl q -> let (t, h) = q;
+               match (unbang slice_get_mut['a, A]) (h, 0) {
+                 inl e -> inl (e, t)
+               | inr u -> (unbang discard_mut[A]) ['a] t; inr u
+               }
+    | inr w -> (unbang discard_mut[A]) ['a] w; inr ()
+    })
+
+-- ### Writes
+
+def reverse_step[A] : !(all 'a < top. !(i32 * (array_mut 'a A * i32) => array_mut 'a A * i32)) =
+  !thunkv Fun 'a < top. return (!thunkv fun (p : i32 * (array_mut 'a A * i32)) ->
+    let (i, s) = p;
+    let (v, n) = s;
+    ((unbang slice_swap_mut['a, A]) (v, (i, n - 1 - i)), n))
+
+-- The elements in reverse order, in place: `n / 2` swaps.
+def reverse[A] : !(all 'a < top. array_mut 'a A => array_mut 'a A) =
+  !thunkv Fun 'a < top. return (thunkv fun (v : array_mut 'a A) ->
+    let (v, n) = (unbang slice_len_mut['a, A]) v;
+    let (v, m) = (unbang count_fold[array_mut 'a A * i32])
+      ((unbang reverse_step[A]) ['a], ((unbang host[shr_u32]) (n, 1), (0, (v, n))));
+    v)
+
+def fill_step[A] : !(all 'a < top. !(i32 * (array_mut 'a A * A) => array_mut 'a A * A)) =
+  !thunkv Fun 'a < top. return (!thunkv fun (p : i32 * (array_mut 'a A * A)) ->
+    let (i, s) = p;
+    let (v, x) = s;
+    let (v, o) = (unbang slice_replace_mut['a, A]) (v, (i, x));
+    (v, x))
+
+-- `x` in every slot.
+def fill[A] : !(all 'a < top. array_mut 'a A * A => array_mut 'a A) =
+  !thunkv Fun 'a < top. return (thunkv fun (p : array_mut 'a A * A) ->
+    let (v, x) = p;
+    let (v, n) = (unbang slice_len_mut['a, A]) v;
+    let (v, y) = (unbang count_fold[array_mut 'a A * A]) ((unbang fill_step[A]) ['a], (n, (0, (v, x))));
+    v)
+
+def copy_step[A] : !(all 'a < top. all 'b < top. !(i32 * (array_mut 'a A * array_imm 'b A) => array_mut 'a A * array_imm 'b A)) =
+  !thunkv Fun 'a < top. return (thunkv Fun 'b < top. return (!thunkv fun (p : i32 * (array_mut 'a A * array_imm 'b A)) ->
+    let (i, s) = p;
+    let (v, w) = s;
+    let (w, r) = (unbang array_copy['b, A]) w;
+    match (unbang array_get['b, A]) (r, i) {
+      inl g -> let x = withload['b, 'y, A, A] g (thunkv Fun 'y < dom. return (thunkv fun (e : view 'y A) ->
+                         return (boxed['y] e)));
+               let (v, o) = (unbang slice_replace_mut['a, A]) (v, (i, x));
+               (v, w)
+    | inr u -> (v, w)
+    }))
+
+-- The elements of `src` copied into `dst`, slot by slot, as far as the shorter of the two.
+def copy_from[A] : !(all 'a < top. all 'b < top. array_mut 'a A * array_imm 'b A => array_mut 'a A) =
+  !thunkv Fun 'a < top. return (thunkv Fun 'b < top. return (thunkv fun (p : array_mut 'a A * array_imm 'b A) ->
+    let (v, w) = p;
+    let (v, n) = (unbang slice_len_mut['a, A]) v;
+    let (w, r) = (unbang array_copy['b, A]) w;
+    let m = (unbang array_len['b, A]) r;
+    let k = if n < m { n } else { m };
+    let (v, w) = (unbang count_fold[array_mut 'a A * array_imm 'b A])
+      ((unbang copy_step[A]) ['a] ['b], (k, (0, (v, w))));
+    (unbang array_forget['b, A]) w;
+    v))
+
+-- ### Reading
+
+-- A copy of the element a shared borrow points at.
+def read[A] : !(all 'a < top. imm 'a A => A) =
+  !thunkv Fun 'a < top. return (thunkv fun (g : imm 'a A) ->
+    withload['a, 'y, A, A] g (thunkv Fun 'y < dom. return (thunkv fun (e : view 'y A) ->
+      return (boxed['y] e))))
+
+-- ### Searching
+
+-- The loop state of `find`: the view, the element sought, the equality, and the index found.
+def find_step[A] : !(all 'a < top. !(i32 * (array_imm 'a A * (A * (!(A * A => bool) * (i32 + 1))))
+    => array_imm 'a A * (A * (!(A * A => bool) * (i32 + 1))))) =
+  !thunkv Fun 'a < top. return (!thunkv fun (p : i32 * (array_imm 'a A * (A * (!(A * A => bool) * (i32 + 1))))) ->
+    let (i, s) = p;
+    let (v, t) = s;
+    let (x, u) = t;
+    let (eq, r) = u;
+    match r {
+      inl k -> (v, (x, (eq, inl k)))
+    | inr n ->
+        let (v, w) = (unbang array_copy['a, A]) v;
+        match (unbang array_get['a, A]) (w, i) {
+          inl g -> if (unbang eq) ((unbang read[A]) ['a] g, x) { (v, (x, (eq, inl i))) }
+                   else { (v, (x, (eq, inr n))) }
+        | inr m -> (v, (x, (eq, inr m)))
+        }
+    })
+
+-- The index of the first element equal to `x` under `eq`, or `inr ()`.
+def find[A] : !(all 'a < top. array_imm 'a A * A * !(A * A => bool) => i32 + 1) =
+  !thunkv Fun 'a < top. return (thunkv fun (p : array_imm 'a A * A * !(A * A => bool)) ->
+    let (v, q) = p;
+    let (x, eq) = q;
+    let (v, w) = (unbang array_copy['a, A]) v;
+    let n = (unbang array_len['a, A]) w;
+    let (v, t) = (unbang count_fold[array_imm 'a A * (A * (!(A * A => bool) * (i32 + 1)))])
+      ((unbang find_step[A]) ['a], (n, (0, (v, (x, (eq, inr ()))))));
+    let (x, u) = t;
+    let (eq, r) = u;
+    (unbang array_forget['a, A]) v;
+    r)
+
+-- Whether an element equals `x` under `eq`.
+def contains[A] : !(all 'a < top. array_imm 'a A * A * !(A * A => bool) => bool) =
+  !thunkv Fun 'a < top. return (thunkv fun (p : array_imm 'a A * A * !(A * A => bool)) ->
+    match (unbang find[A]) ['a] p { inl i -> inr () | inr u -> inl () })
+
+-- The loop state of `binary_search`: the view, the element sought, the order, the bounds of
+-- the range left `[lo, hi)`, and the index found.
+def search_step[A] : !(all 'a < top. !(i32 * (array_imm 'a A * (A * (!(A * A => i32) * (i32 * (i32 * (i32 + 1))))))
+    => array_imm 'a A * (A * (!(A * A => i32) * (i32 * (i32 * (i32 + 1))))))) =
+  !thunkv Fun 'a < top. return (!thunkv fun (p : i32 * (array_imm 'a A * (A * (!(A * A => i32) * (i32 * (i32 * (i32 + 1))))))) ->
+    let (k, s) = p;
+    let (v, t) = s;
+    let (x, u) = t;
+    let (c, w) = u;
+    let (lo, y) = w;
+    let (hi, r) = y;
+    match r {
+      inl f -> (v, (x, (c, (lo, (hi, inl f)))))
+    | inr n ->
+        if lo < hi {
+          let mid = lo + (unbang host[shr_u32]) (hi - lo, 1);
+          let (v, z) = (unbang array_copy['a, A]) v;
+          match (unbang array_get['a, A]) (z, mid) {
+            inl g -> let o = (unbang c) ((unbang read[A]) ['a] g, x);
+                     if o < 0 { (v, (x, (c, (mid + 1, (hi, inr n))))) }
+                     else { if 0 < o { (v, (x, (c, (lo, (mid, inr n))))) }
+                            else { (v, (x, (c, (lo, (hi, inl mid))))) } }
+          | inr m -> (v, (x, (c, (lo, (lo, inr m)))))
+          }
+        } else { (v, (x, (c, (lo, (hi, inr n))))) }
+    })
+
+-- In a view sorted by `cmp`: `inl i` for an index of an element equal to `x`, or `inr i` for
+-- the index where `x` would be inserted to keep it sorted. The range halves at each of at
+-- most 32 steps.
+def binary_search[A] : !(all 'a < top. array_imm 'a A * A * !(A * A => i32) => i32 + i32) =
+  !thunkv Fun 'a < top. return (thunkv fun (p : array_imm 'a A * A * !(A * A => i32)) ->
+    let (v, q) = p;
+    let (x, c) = q;
+    let (v, w) = (unbang array_copy['a, A]) v;
+    let n = (unbang array_len['a, A]) w;
+    let (v, t) = (unbang count_fold[array_imm 'a A * (A * (!(A * A => i32) * (i32 * (i32 * (i32 + 1)))))])
+      ((unbang search_step[A]) ['a], (32, (0, (v, (x, (c, (0, (n, inr ()))))))));
+    let (x, u) = t;
+    let (c, w) = u;
+    let (lo, y) = w;
+    let (hi, r) = y;
+    (unbang array_forget['a, A]) v;
+    match r { inl i -> inl i | inr m -> inr lo })
+
+-- ### Comparing
+
+-- The loop state of `cmp`: both views, the order, and the order of the prefixes compared so
+-- far (`0` while they are equal).
+def cmp_step[A] : !(all 'a < top. all 'b < top. !(i32 * (array_imm 'a A * (array_imm 'b A * (!(A * A => i32) * i32)))
+    => array_imm 'a A * (array_imm 'b A * (!(A * A => i32) * i32)))) =
+  !thunkv Fun 'a < top. return (thunkv Fun 'b < top. return (!thunkv fun (p : i32 * (array_imm 'a A * (array_imm 'b A * (!(A * A => i32) * i32)))) ->
+    let (i, s) = p;
+    let (v, t) = s;
+    let (w, u) = t;
+    let (c, r) = u;
+    if r == 0 {
+      let (v, v2) = (unbang array_copy['a, A]) v;
+      let (w, w2) = (unbang array_copy['b, A]) w;
+      match (unbang array_get['a, A]) (v2, i) {
+        inl g -> match (unbang array_get['b, A]) (w2, i) {
+                   inl h -> (v, (w, (c, (unbang c) ((unbang read[A]) ['a] g, (unbang read[A]) ['b] h))))
+                 | inr m -> (v, (w, (c, r)))
+                 }
+      | inr m -> (v, (w, (c, r)))
+      }
+    } else { (v, (w, (c, r))) }))
+
+-- The lexicographic order of two views under the element order `cmp`: `-1`, `0` or `1`.
+def cmp[A] : !(all 'a < top. all 'b < top. array_imm 'a A * array_imm 'b A * !(A * A => i32) => i32) =
+  !thunkv Fun 'a < top. return (thunkv Fun 'b < top. return (thunkv fun (p : array_imm 'a A * array_imm 'b A * !(A * A => i32)) ->
+    let (v, q) = p;
+    let (w, c) = q;
+    let (v, v2) = (unbang array_copy['a, A]) v;
+    let (w, w2) = (unbang array_copy['b, A]) w;
+    let n = (unbang array_len['a, A]) v2;
+    let m = (unbang array_len['b, A]) w2;
+    let k = if n < m { n } else { m };
+    let (v, t) = (unbang count_fold[array_imm 'a A * (array_imm 'b A * (!(A * A => i32) * i32))])
+      ((unbang cmp_step[A]) ['a] ['b], (k, (0, (v, (w, (c, 0))))));
+    let (w, u) = t;
+    let (c, r) = u;
+    (unbang array_forget['a, A]) v;
+    (unbang array_forget['b, A]) w;
+    if r == 0 { if n < m { 0 - 1 } else { if m < n { 1 } else { 0 } } } else { r }))
+
+-- Whether two views have the same elements under `eq`.
+def eq_step[A] : !(all 'a < top. all 'b < top. !(i32 * (array_imm 'a A * (array_imm 'b A * (!(A * A => bool) * bool)))
+    => array_imm 'a A * (array_imm 'b A * (!(A * A => bool) * bool)))) =
+  !thunkv Fun 'a < top. return (thunkv Fun 'b < top. return (!thunkv fun (p : i32 * (array_imm 'a A * (array_imm 'b A * (!(A * A => bool) * bool)))) ->
+    let (i, s) = p;
+    let (v, t) = s;
+    let (w, u) = t;
+    let (e, r) = u;
+    if r {
+      let (v, v2) = (unbang array_copy['a, A]) v;
+      let (w, w2) = (unbang array_copy['b, A]) w;
+      match (unbang array_get['a, A]) (v2, i) {
+        inl g -> match (unbang array_get['b, A]) (w2, i) {
+                   inl h -> (v, (w, (e, (unbang e) ((unbang read[A]) ['a] g, (unbang read[A]) ['b] h))))
+                 | inr m -> (v, (w, (e, inl ())))
+                 }
+      | inr m -> (v, (w, (e, inl ())))
+      }
+    } else { (v, (w, (e, r))) }))
+
+def eq[A] : !(all 'a < top. all 'b < top. array_imm 'a A * array_imm 'b A * !(A * A => bool) => bool) =
+  !thunkv Fun 'a < top. return (thunkv Fun 'b < top. return (thunkv fun (p : array_imm 'a A * array_imm 'b A * !(A * A => bool)) ->
+    let (v, q) = p;
+    let (w, e) = q;
+    let (v, v2) = (unbang array_copy['a, A]) v;
+    let (w, w2) = (unbang array_copy['b, A]) w;
+    let n = (unbang array_len['a, A]) v2;
+    let m = (unbang array_len['b, A]) w2;
+    if n == m {
+      let (v, t) = (unbang count_fold[array_imm 'a A * (array_imm 'b A * (!(A * A => bool) * bool))])
+        ((unbang eq_step[A]) ['a] ['b], (n, (0, (v, (w, (e, inr ()))))));
+      let (w, u) = t;
+      let (e, r) = u;
+      (unbang array_forget['a, A]) v;
+      (unbang array_forget['b, A]) w;
+      r
+    } else { (unbang array_forget['a, A]) v; (unbang array_forget['b, A]) w; inl () }))
+
+-- Whether `v` begins with the elements of `p` under `eq`.
+def starts_with[A] : !(all 'a < top. all 'b < top. array_imm 'a A * array_imm 'b A * !(A * A => bool) => bool) =
+  !thunkv Fun 'a < top. return (thunkv Fun 'b < top. return (thunkv fun (q : array_imm 'a A * array_imm 'b A * !(A * A => bool)) ->
+    let (v, r) = q;
+    let (p, e) = r;
+    let (p, p2) = (unbang array_copy['b, A]) p;
+    let m = (unbang array_len['b, A]) p2;
+    match (unbang slice_split_imm['a, A]) (v, m) {
+      inl s -> let (h, t) = s;
+               (unbang array_forget['a, A]) t;
+               (unbang eq[A]) ['a] ['b] (h, (p, e))
+    | inr w -> (unbang array_forget['a, A]) w; (unbang array_forget['b, A]) p; inl ()
+    }))
+
+-- Whether `v` ends with the elements of `p` under `eq`.
+def ends_with[A] : !(all 'a < top. all 'b < top. array_imm 'a A * array_imm 'b A * !(A * A => bool) => bool) =
+  !thunkv Fun 'a < top. return (thunkv Fun 'b < top. return (thunkv fun (q : array_imm 'a A * array_imm 'b A * !(A * A => bool)) ->
+    let (v, r) = q;
+    let (p, e) = r;
+    let (p, p2) = (unbang array_copy['b, A]) p;
+    let m = (unbang array_len['b, A]) p2;
+    let (v, v2) = (unbang array_copy['a, A]) v;
+    let n = (unbang array_len['a, A]) v2;
+    if m <= n {
+      match (unbang slice_split_imm['a, A]) (v, n - m) {
+        inl s -> let (h, t) = s;
+                 (unbang array_forget['a, A]) h;
+                 (unbang eq[A]) ['a] ['b] (t, (p, e))
+      | inr w -> (unbang array_forget['a, A]) w; (unbang array_forget['b, A]) p; inl ()
+      }
+    } else { (unbang array_forget['a, A]) v; (unbang array_forget['b, A]) p; inl () }))
+
+-- ### Sorting
+
+-- One step of the insertion of element `i`: at `j = i − k`, the pair `(j − 1, j)` is exchanged
+-- when it is out of order, and the insertion stops at the first pair in order.
+def insert_step[A] : !(all 'a < top. !(i32 * (array_mut 'a A * (!(A * A => i32) * (A * (i32 * bool))))
+    => array_mut 'a A * (!(A * A => i32) * (A * (i32 * bool))))) =
+  !thunkv Fun 'a < top. return (!thunkv fun (p : i32 * (array_mut 'a A * (!(A * A => i32) * (A * (i32 * bool))))) ->
+    let (k, s) = p;
+    let (v, t) = s;
+    let (c, u) = t;
+    let (d, w) = u;
+    let (i, go) = w;
+    if go {
+      let j = i - k;
+      let (v, x) = (unbang peek[A]) ['a] (v, (j - 1, d));
+      let (v, y) = (unbang peek[A]) ['a] (v, (j, d));
+      if 0 < (unbang c) (x, y) {
+        ((unbang slice_swap_mut['a, A]) (v, (j - 1, j)), (c, (d, (i, inr ()))))
+      } else { (v, (c, (d, (i, inl ())))) }
+    } else { (v, (c, (d, (i, go)))) })
+
+def sort_step[A] : !(all 'a < top. !(i32 * (array_mut 'a A * (!(A * A => i32) * A))
+    => array_mut 'a A * (!(A * A => i32) * A))) =
+  !thunkv Fun 'a < top. return (!thunkv fun (p : i32 * (array_mut 'a A * (!(A * A => i32) * A))) ->
+    let (i, s) = p;
+    let (v, t) = s;
+    let (c, d) = t;
+    let (v, u) = (unbang count_fold[array_mut 'a A * (!(A * A => i32) * (A * (i32 * bool)))])
+      ((unbang insert_step[A]) ['a], (i, (0, (v, (c, (d, (i, inr ())))))));
+    let (c, w) = u;
+    let (d, z) = w;
+    (v, (c, d)))
+
+-- The elements in the order `cmp`, in place: an insertion sort, stable. `d` is any element,
+-- put in a slot while its element is read.
+def sort[A] : !(all 'a < top. array_mut 'a A * !(A * A => i32) * A => array_mut 'a A) =
+  !thunkv Fun 'a < top. return (thunkv fun (p : array_mut 'a A * !(A * A => i32) * A) ->
+    let (v, q) = p;
+    let (c, d) = q;
+    let (v, n) = (unbang slice_len_mut['a, A]) v;
+    let (v, t) = (unbang count_fold[array_mut 'a A * (!(A * A => i32) * A)])
+      ((unbang sort_step[A]) ['a], (n, (1, (v, (c, d)))));
+    v)
+
+-- ### Iteration
+
+-- An iterator over the elements of a view, each lent at the view's lifetime: its state is the
+-- rest of the view, and `next` splits off the first element (`split_first`). Closed early, it
+-- gives the rest up. A `for` over it waits for the total `for` of stage S4; it is driven here by
+-- `nu_out`, as any codata.
+def iter_step[A] : !(all 'a < top. !U (array_imm 'a A -o F (imm 'a A * array_imm 'a A + 1) & F 1)) =
+  !thunkv Fun 'a < top. return (!thunkv fun (v : array_imm 'a A) ->
+    < (unbang split_first[A]) ['a] v,
+      (unbang array_forget['a, A]) v >)
+
+def iter_imm[A] : !(all 'a < top. array_imm 'a A => U (iter (imm 'a A) 1 1)) =
+  !thunkv Fun 'a < top. return (thunkv fun (v : array_imm 'a A) ->
+    f <- return (unbang (unfold[iter (imm 'a A) 1 1, array_imm 'a A] ((unbang iter_step[A]) ['a])));
+    return (thunkv nu_in < (nu_out (force f v)).1, (nu_out (force f v)).2 >))
+
+-- The same over an exclusive view: each element is lent `mut`, one at a time, and the rest of
+-- the view is the state.
+def iter_mut_step[A] : !(all 'a < top. !U (array_mut 'a A -o F (mut 'a A * array_mut 'a A + 1) & F 1)) =
+  !thunkv Fun 'a < top. return (!thunkv fun (v : array_mut 'a A) ->
+    < (unbang split_first_mut[A]) ['a] v,
+      (unbang discard_mut[A]) ['a] v >)
+
+def iter_mut[A] : !(all 'a < top. array_mut 'a A => U (iter (mut 'a A) 1 1)) =
+  !thunkv Fun 'a < top. return (thunkv fun (v : array_mut 'a A) ->
+    f <- return (unbang (unfold[iter (mut 'a A) 1 1, array_mut 'a A] ((unbang iter_mut_step[A]) ['a])));
+    return (thunkv nu_in < (nu_out (force f v)).1, (nu_out (force f v)).2 >))

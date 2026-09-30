@@ -1,0 +1,55 @@
+-- The splits and writes of SPEC §9 on borrowed families, called directly. `slice_split_mut`
+-- cuts a `mut` view at a run-time index into two `mut` views at the same lifetime, and hands
+-- the view back when the index is past its length; `slice_swap_mut` exchanges two slots of one
+-- view (one slot with itself when `i = j`); `slice_replace_mut` writes a slot and hands the old
+-- element back; `slice_empty_imm`/`slice_empty_mut` are views of nothing. A view left unused is
+-- dropped: a `mut` family's destructor gives it up (SPEC §12). On an `imm` view, `slice_split_imm`
+-- cuts it the same way.
+--
+-- Answer: (i32[21354], (i32[4], (i32[0], (i32[1], i32[3])))). The array [1, 2, 3, 4, 5] is cut
+-- at 2 into [1, 2] and [3, 4, 5]. The left part's two slots are exchanged; the right part's slot
+-- 2 takes 50 and hands back 5, its slot 0 is exchanged with itself, slot 2 takes the 5 back, and
+-- slots 1 and 2 are exchanged: 2 1 3 5 4. A lost write shows as a 50, a split that ignored the
+-- index as other digits. Then an `imm` view of it cut at 4: the left part has length 4, the empty
+-- view length 0, the right part's one element is 4 (shown as 4 − 3), and a cut at 9 hands the
+-- view back (3).
+
+fn tab(i: i32) -> i32 = i + 1
+
+fn digit_at(i: i32, s: array i32 * i32) -> array i32 * i32 =
+  let (a, acc) = s;
+  let acc = borrow imm a { 'x, v ->
+    match array_get['x, i32] (v, i) { inl g -> acc * 10 + *g | inr _ -> acc } };
+  (a, acc)
+
+main -> i32 * (i32 * (i32 * (i32 * i32))) =
+  let mut a = array_new[i32] (5, tab);
+  borrow mut a { 'x, v ->
+    match slice_split_mut['x, i32] (v, 2) {
+      inl (l, r) ->
+        let l = slice_swap_mut['x, i32] (l, 0, 1);
+        let (r, o) = slice_replace_mut['x, i32] (r, 2, 50);
+        let r = slice_swap_mut['x, i32] (r, 0, 0);
+        let old = match o { inl x -> x | inr y -> 0 };
+        let (r, _) = slice_replace_mut['x, i32] (r, 2, old);
+        let r = slice_swap_mut['x, i32] (r, 1, 2);
+        let e = slice_empty_mut['x, i32];
+        ()
+    | inr v -> ()
+    }
+  };
+  let (a, d) = count_fold[array i32 * i32] (digit_at, 5, 0, (a, 0));
+  let r = borrow imm a { 'x, v ->
+    let (v, w) = array_copy['x, i32] v;
+    let q = match slice_split_imm['x, i32] (v, 4) {
+      inl (l, r) ->
+        let e = slice_empty_imm['x, i32];
+        let x = match array_get['x, i32] (r, 0) { inl g -> *g - 3 | inr _ -> 0 };
+        (array_len['x, i32] l, (array_len['x, i32] e, x))
+    | inr v -> (0, (0, 0))
+    };
+    let z = match slice_split_imm['x, i32] (w, 9) { inl (l, r) -> 0 | inr v -> 3 };
+    (q, z)
+  };
+  let ((n, (m, x)), z) = r;
+  (d, (n, (m, (x, z))))

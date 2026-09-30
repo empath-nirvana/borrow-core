@@ -1,0 +1,59 @@
+-- Searching and comparing byte views (`lib/slice.bc`): the text `key=value` and the pattern
+-- `key`, each an `array u8` lent `imm` (SPEC §9), and every search a counted loop over the view
+-- (SPEC §16) with the byte equality or order as an argument (`eq_u8`, `cmp_u8`). `find` answers
+-- the index of the first match, `contains` whether there is one, `starts_with`/`ends_with`
+-- compare a prefix or a suffix (cut off by `split_at`), `eq` two whole views, and `cmp` orders
+-- them lexicographically. The value after `=` is cut out at the index `find` gave, and again
+-- after the key and the `=`, with `split_at`s at run-time indices, and the two cuts compared.
+--
+-- Answer: (i32[3], (i32[1], (i32[10], (i32[0], i32[1])))): `=` is at index 3; `;` is not in the
+-- text and `v` is (0 and 1); the text starts with `key` and does not end with it (1 and 0); `key`
+-- is not the text (0), and orders before it (`-1`, shown plus one: 0); the two cuts are the same
+-- `value` (1). A search that ran past the end or stopped early, or a comparison of the wrong
+-- lengths, would change a digit. The searches allocate nothing and make no dispatched call: the
+-- two allocations are the arrays.
+
+include slice
+
+fn text(i: i32) -> u8 =
+  if i < 3 { if i == 0 { b'k' } else { if i == 1 { b'e' } else { b'y' } } }
+  else { if i == 3 { b'=' } else { if i == 4 { b'v' } else { if i == 5 { b'a' }
+  else { if i == 6 { b'l' } else { if i == 7 { b'u' } else { b'e' } } } } } }
+
+fn key(i: i32) -> u8 = if i == 0 { b'k' } else { if i == 1 { b'e' } else { b'y' } }
+
+fn bit(b: bool) -> i32 = if b { 1 } else { 0 }
+
+main -> i32 * (i32 * (i32 * (i32 * i32))) =
+  let t = array_new[u8] (9, text);
+  let k = array_new[u8] (3, key);
+  let r = borrow imm t { 'x, v -> borrow imm k { 'y, w ->
+    let (v, v1) = array_copy['x, u8] v;
+    let (v, v2) = array_copy['x, u8] v;
+    let (v, v3) = array_copy['x, u8] v;
+    let (v, v4) = array_copy['x, u8] v;
+    let (v, v5) = array_copy['x, u8] v;
+    let (v, v6) = array_copy['x, u8] v;
+    let (w, w1) = array_copy['y, u8] w;
+    let (w, w2) = array_copy['y, u8] w;
+    let (w, w3) = array_copy['y, u8] w;
+    let at_eq = match find[u8](v1, b'=', eq_u8) { inl i -> i | inr _ -> 0 - 1 };
+    let semi = bit(contains[u8](v2, b';', eq_u8));
+    let vee = bit(contains[u8](v3, b'v', eq_u8));
+    let sw = bit((unbang starts_with[u8]) ['x] ['y] (v4, (w1, eq_u8)));
+    let ew = bit((unbang ends_with[u8]) ['x] ['y] (v5, (w2, eq_u8)));
+    let same = bit((unbang eq[u8]) ['y] ['x] (w3, (v6, eq_u8)));
+    let order = (unbang cmp[u8]) ['y] ['x] (w, (v, cmp_u8)) + 1;
+    (at_eq, (semi * 10 + vee, (sw * 10 + ew, same * 10 + order)))
+  } };
+  let (a, (b, (c, d))) = r;
+  let f = borrow imm t { 'x, v ->
+    let (v, u) = array_copy['x, u8] v;
+    match split_at[u8](v, a + 1) {
+      inl (pre, field) -> match split_at[u8](u, 3) {
+        inl (p2, rest) -> match split_at[u8](rest, 1) {
+          inl (eqs, value) -> bit((unbang eq[u8]) ['x] ['x] (field, (value, eq_u8)))
+        | inr r -> 0 }
+      | inr r -> 0 }
+    | inr r -> 0 } };
+  (a, (b, (c, (d, f))))
