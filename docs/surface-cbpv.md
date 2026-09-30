@@ -63,7 +63,7 @@ later.
 | `force x` of a local thunk (a closure call) | only after specialization | **visible**: `x!`, `f!(e)` |
 | codata construction (`fixd`/`unfold_s` and the in/out eta) | never: it allocates the object's state | **visible**: `loop f from s`, `unfold f from s` |
 | codata observation `(out (force d)).i` | never: it runs the object's step | **visible**: `d.poll`, `s.next`, `d.close`, bound with `<-` |
-| an operation whose handler receives the continuation | never: the continuation is reified | **visible**: `suspend c.op(e)` |
+| an operation whose handler receives the continuation | never: the continuation is reified | **visible** in the inferred effect row and `bcc check`'s per-call-site report, and as the explicit `k` in the handler; no token at the call (decision 49; draft 0 wrote `suspend c.op(e)`) |
 | turning codata into data | never: it allocates the data | **visible**: a call of `collect`; no sugar produces one |
 
 Two consequences shape the whole surface:
