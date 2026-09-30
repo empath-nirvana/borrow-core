@@ -199,6 +199,7 @@ def Op.ofPrim? : Prim → Option Op
   | .host op => some (.host op)
   | .tab => some .tab
   | .idx => some .idx
+  | .split => some .split
   | .drop => some .drop
   | .count => some .count
   | .store => none
@@ -294,6 +295,7 @@ def conv (ctx : Ctx) (e : Expr) (id : Nat) : CM Tm := do
       let x ← lookup ctx i
       return if x.isSelf then .clos (x - selfBase) [] else .var x
   | .unit => return .unit
+  | .loc 0 => return .prim .nullLoc []
   | .loc _ => throw "a location in the source term"
   | .prim p => primValue p
   | .inj₁ e => do

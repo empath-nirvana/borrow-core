@@ -1,7 +1,7 @@
 import Core.Compat
 import Core.Integers
 import Core.Arrays
-import Core.Slices
+import Core.SliceOps
 import Core.CountFold
 import Core.FoldReuse
 import Core.Nu
@@ -201,6 +201,27 @@ inductive CDerives : LifeCtx → Ctx VTy → Expr → Jdg → Prop where
   /-- `slice_len_mut : !([Mut @a A] ⇒ [Mut @a A] ⊗ I32)`.  `[spec §9]` -/
   | sliceLenM {Δ Γ} (a : Lifetime.Life) (A : VTy) (hΓ : Ctx.DeadP Γ) :
       CDerives Δ Γ (.val sizeV) (.val (sliceLenMTy a A))
+  /-- `slice_split_imm : !([Imm @a A] ⊗ I32 ⇒ ([Imm @a A] ⊗ [Imm @a A]) ⊕ [Imm @a A])`, the step
+  `split`.  `[spec §9]` -/
+  | sliceSplitI {Δ Γ} (a : Lifetime.Life) (A : VTy) (hΓ : Ctx.DeadP Γ) :
+      CDerives Δ Γ (.val (.prim .split)) (.val (sliceSplitITy a A))
+  /-- `slice_split_mut : !([Mut @a A] ⊗ I32 ⇒ ([Mut @a A] ⊗ [Mut @a A]) ⊕ [Mut @a A])`, the step
+  `split`.  `[spec §9]` -/
+  | sliceSplitM {Δ Γ} (a : Lifetime.Life) (A : VTy) (hΓ : Ctx.DeadP Γ) :
+      CDerives Δ Γ (.val (.prim .split)) (.val (sliceSplitMTy a A))
+  /-- `slice_empty_imm : [Imm @a A]`, the family `(0, 0)`.  `[spec §9]` -/
+  | sliceEmptyI {Δ Γ} (a : Lifetime.Life) (A : VTy) (hΓ : Ctx.DeadP Γ) :
+      CDerives Δ Γ (.val emptyFamV) (.val (.arrayImm a A))
+  /-- `slice_empty_mut : [Mut @a A]`, the family `(0, 0)`.  `[spec §9]` -/
+  | sliceEmptyM {Δ Γ} (a : Lifetime.Life) (A : VTy) (hΓ : Ctx.DeadP Γ) :
+      CDerives Δ Γ (.val emptyFamV) (.val (.sliceMut a A))
+  /-- `slice_replace_mut : !([Mut @a A] ⊗ (I32 ⊗ A) ⇒ [Mut @a A] ⊗ (A ⊕ A))`, `array_replace`'s
+  term.  `[spec §9]` -/
+  | sliceReplaceM {Δ Γ} (a : Lifetime.Life) (A : VTy) (hΓ : Ctx.DeadP Γ) :
+      CDerives Δ Γ (.val replaceV) (.val (sliceReplaceMTy a A))
+  /-- `slice_swap_mut : !([Mut @a A] ⊗ (I32 ⊗ I32) ⇒ [Mut @a A])`.  `[spec §9]` -/
+  | sliceSwapM {Δ Γ} (a : Lifetime.Life) (A : VTy) (hΓ : Ctx.DeadP Γ) :
+      CDerives Δ Γ (.val swapV) (.val (sliceSwapMTy a A))
   | withbor1 {Δ Γ A B} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hx : Δ.find? x = none)
       (hsc₁ : VScoped Δ A) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) :
       CDerives Δ Γ withbor (.val (axWithbor1Ty x Δ.meetOfDom A B))
@@ -380,6 +401,12 @@ theorem fundamentalC {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg}
   | sliceBorrowI x hΓ hsc hA hB hf₁ hf₂ => exact sliceBorrowI_compatX x hΓ hsc hA hB hf₁ hf₂
   | sliceGetM _ _ hΓ => exact sliceGetM_compatX hΓ
   | sliceLenM _ _ hΓ => exact sliceLenM_compatX hΓ
+  | sliceSplitI _ _ hΓ => exact sliceSplitI_compatX hΓ
+  | sliceSplitM _ _ hΓ => exact sliceSplitM_compatX hΓ
+  | sliceEmptyI _ _ hΓ => exact sliceEmptyI_compatX hΓ
+  | sliceEmptyM _ _ hΓ => exact sliceEmptyM_compatX hΓ
+  | sliceReplaceM _ _ hΓ => exact sliceReplaceM_compatX hΓ
+  | sliceSwapM _ _ hΓ => exact sliceSwapM_compatX hΓ
   | withbor1 x hΓ hx hsc₁ hf₁ hf₂ => exact withbor1_compatX x hΓ hx hsc₁ hf₁ hf₂
   | withbor2 x hΓ hx hside hf₁ hf₂ => exact withbor2_compatX x hΓ hx hside hf₁ hf₂
   | withbor3 x hΓ hx hf₁ hf₂ => exact withbor3_compatX x hΓ hx hf₁ hf₂

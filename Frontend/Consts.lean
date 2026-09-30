@@ -26,6 +26,7 @@ inductive CKw where
   | allocS | freeS | withborSMut | withborSImm | withborF2Mut | withborF2Imm
   | arrayNew | arrayFree | arraySize | arrayReplace | arrayLen | arrayGet | arrayCopy
   | arrayForget | sliceBorrowMut | sliceBorrowImm | sliceGetMut | sliceLenMut
+  | sliceSplitImm | sliceSplitMut | sliceEmptyImm | sliceEmptyMut | sliceReplaceMut | sliceSwapMut
   | countFold
   deriving DecidableEq, Repr
 
@@ -47,6 +48,9 @@ def CKw.str : CKw → String
   | .arrayCopy => "array_copy" | .arrayForget => "array_forget"
   | .sliceBorrowMut => "slice_borrow_mut" | .sliceBorrowImm => "slice_borrow_imm"
   | .sliceGetMut => "slice_get_mut" | .sliceLenMut => "slice_len_mut"
+  | .sliceSplitImm => "slice_split_imm" | .sliceSplitMut => "slice_split_mut"
+  | .sliceEmptyImm => "slice_empty_imm" | .sliceEmptyMut => "slice_empty_mut"
+  | .sliceReplaceMut => "slice_replace_mut" | .sliceSwapMut => "slice_swap_mut"
   | .countFold => "count_fold"
 
 def CKw.all : List CKw :=
@@ -56,6 +60,8 @@ def CKw.all : List CKw :=
    .allocS, .freeS, .withborSMut, .withborSImm, .withborF2Mut, .withborF2Imm,
    .arrayNew, .arrayFree, .arraySize, .arrayReplace, .arrayLen, .arrayGet, .arrayCopy,
    .arrayForget, .sliceBorrowMut, .sliceBorrowImm, .sliceGetMut, .sliceLenMut,
+   .sliceSplitImm, .sliceSplitMut, .sliceEmptyImm, .sliceEmptyMut, .sliceReplaceMut,
+   .sliceSwapMut,
    .countFold]
 
 def CKw.ofString? (s : String) : Option CKw := CKw.all.find? (·.str == s)
@@ -68,6 +74,8 @@ def CKw.sig : CKw → List ArgKind
   | .arrayNew | .arrayFree | .arraySize | .arrayReplace | .countFold => [ty]
   | .arrayLen | .arrayGet | .arrayCopy | .arrayForget => [life, ty]
   | .sliceGetMut | .sliceLenMut => [life, ty]
+  | .sliceSplitImm | .sliceSplitMut | .sliceEmptyImm | .sliceEmptyMut | .sliceReplaceMut
+  | .sliceSwapMut => [life, ty]
   | .sliceBorrowMut | .sliceBorrowImm => [binder, life, ty, ty]
   | .swap | .foldOwn | .foldReuse | .fixd | .unfoldS => [ty, ty]
   | .unfold => [cty, ty]
@@ -131,6 +139,12 @@ def Const.ofArgs : CKw → List Arg → Option Const
   | .sliceBorrowImm, [.binder x, .life b, .ty A, .ty B] => some (.sliceBorrowImm x b A B)
   | .sliceGetMut, [.life a, .ty A] => some (.sliceGetMut a A)
   | .sliceLenMut, [.life a, .ty A] => some (.sliceLenMut a A)
+  | .sliceSplitImm, [.life a, .ty A] => some (.sliceSplitImm a A)
+  | .sliceSplitMut, [.life a, .ty A] => some (.sliceSplitMut a A)
+  | .sliceEmptyImm, [.life a, .ty A] => some (.sliceEmptyImm a A)
+  | .sliceEmptyMut, [.life a, .ty A] => some (.sliceEmptyMut a A)
+  | .sliceReplaceMut, [.life a, .ty A] => some (.sliceReplaceMut a A)
+  | .sliceSwapMut, [.life a, .ty A] => some (.sliceSwapMut a A)
   | .countFold, [.ty S] => some (.countFold S)
   | _, _ => none
 
@@ -180,6 +194,12 @@ def Const.toArgs : Const → CKw × List Arg
   | .sliceBorrowImm x b A B => (.sliceBorrowImm, [.binder x, .life b, .ty A, .ty B])
   | .sliceGetMut a A => (.sliceGetMut, [.life a, .ty A])
   | .sliceLenMut a A => (.sliceLenMut, [.life a, .ty A])
+  | .sliceSplitImm a A => (.sliceSplitImm, [.life a, .ty A])
+  | .sliceSplitMut a A => (.sliceSplitMut, [.life a, .ty A])
+  | .sliceEmptyImm a A => (.sliceEmptyImm, [.life a, .ty A])
+  | .sliceEmptyMut a A => (.sliceEmptyMut, [.life a, .ty A])
+  | .sliceReplaceMut a A => (.sliceReplaceMut, [.life a, .ty A])
+  | .sliceSwapMut a A => (.sliceSwapMut, [.life a, .ty A])
   | .countFold S => (.countFold, [.ty S])
 
 theorem Const.ofArgs_toArgs (c : Const) : Const.ofArgs c.toArgs.1 c.toArgs.2 = some c := by

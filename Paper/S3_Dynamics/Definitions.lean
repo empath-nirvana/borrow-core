@@ -292,7 +292,8 @@ locations.
 ### — no printed counterpart — the array steps · `[spec §9]`
 
 `tab` places `len(c)` cells at fresh consecutive locations and continues as `tabFill`; `idx`
-answers `idxAns`; `drop` continues as `dropFill` (`Support/Dynamics/Arrays.lean`).
+answers `idxAns`; `split` answers `splitAns`; `drop` continues as `dropFill`
+(`Support/Dynamics/Arrays.lean`).
 
 ### — no printed counterpart — the counted loop · `[spec §16]`
 
@@ -335,6 +336,10 @@ inductive Head {ℍ : Host} [HostIs ℍ] : Heap → Expr → Heap → Expr → P
   | idx (μ : Heap) (ℓ : Loc) (n i : UInt32) :
       Head μ (.app (.val (.prim .idx)) (.val (.pair (.arr ℓ n) (.i32 i)))) μ
         (.val (idxAns ℓ n i))
+  /-- `(μ, split ((ℓ, n), i)) ↦ (μ, splitAns ℓ n i)`.  `[spec §9]` -/
+  | split (μ : Heap) (ℓ : Loc) (n i : UInt32) :
+      Head μ (.app (.val (.prim .split)) (.val (.pair (.arr ℓ n) (.i32 i)))) μ
+        (.val (splitAns ℓ n i))
   /-- `(μ, drop (f, (ℓ, n))) ↦ (μ, dropFill f ℓ 0 n)`.  `[spec §9]` -/
   | drop (μ : Heap) (f : Val) (ℓ : Loc) (n : UInt32) :
       Head μ (.app (.val (.prim .drop)) (.val (.pair f (.arr ℓ n)))) μ (dropFill f ℓ 0 n.toNat)

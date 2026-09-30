@@ -78,11 +78,13 @@ def takeAll (env : Env) : List Var → IM (List CV × Env)
     let (vs, env) ← takeAll env xs
     pure (v :: vs, env)
 
-/-- Deep copy: structure is copied, cells are shared (a location is copied as a word). -/
+/-- Deep copy: structure is copied, cells are shared (a location is copied as a word). Address
+    `0` is never an object: it is the null base of the empty family. -/
 def deepCopy : Nat → CV → IM CV
   | 0, _ => throw "closure IR: out of fuel"
   | n + 1, v => do
     match v with
+    | .ptr 0 => pure v
     | .ptr a =>
       match ← getObj a with
       | .pair x y => do let x ← deepCopy n x; let y ← deepCopy n y; allocObj (.pair x y)
@@ -97,6 +99,7 @@ def deepDrop : Nat → CV → IM Unit
   | 0, _ => throw "closure IR: out of fuel"
   | n + 1, v => do
     match v with
+    | .ptr 0 => pure ()
     | .ptr a =>
       match ← getObj a with
       | .pair x y => do deepDrop n x; deepDrop n y; freeObj a
@@ -181,6 +184,20 @@ def applyOp : Op → List CV → IM CV
         if i < n then allocObj (.inj false (.ptr (a + i.toNat)))
         else allocObj (.inj true .unit)
       | _, _, _ => throw "closure IR: idx of a non-array"
+  | .split, [v] => do
+      let (arr, i) ← unpair v
+      let (base, n) ← unpair arr
+      match base, n, i with
+      | .ptr a, .i32 n, .i32 i =>
+        if i ≤ n then
+          -- An empty right part keeps the family's base, which is live or null.
+          let r := if i < n then a + i.toNat else a
+          let pl ← allocObj (.pair (.ptr a) (.i32 i))
+          let pr ← allocObj (.pair (.ptr r) (.i32 (n - i)))
+          allocObj (.inj false (← allocObj (.pair pl pr)))
+        else allocObj (.inj true (← allocObj (.pair (.ptr a) (.i32 n))))
+      | _, _, _ => throw "closure IR: split of a non-array"
+  | .nullLoc, [] => pure (.ptr 0)
   | .io .readByte, [m] => do
       let (_, c) ← cellOf m
       let .i32 _ := c | throw "closure IR: read_byte on a cell that holds no stream"
@@ -346,6 +363,7 @@ def observe : Nat → CV → IM PV
     | .unit => pure .unit
     | .i32 k => pure (.i32 k)
     | .u8 k => pure (.u8 k)
+    | .ptr 0 => pure .loc
     | .ptr a =>
       match ← getObj a with
       | .pair x y => do pure (.pair (← observe n x) (← observe n y))

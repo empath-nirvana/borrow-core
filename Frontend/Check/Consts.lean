@@ -316,6 +316,30 @@ def synConst (E : Env) (Δ : LifeCtx) (T : List CVTy) (sp : Span) :
       let a ← E.elabL Δ a
       let A ← E.elabV Δ A
       pure (cDead _ fun hd => CDerives.sliceLenM a A hd)
+  | .sliceSplitImm a A => do
+      let a ← E.elabL Δ a
+      let A ← E.elabV Δ A
+      pure (cDead _ fun hd => CDerives.sliceSplitI a A hd)
+  | .sliceSplitMut a A => do
+      let a ← E.elabL Δ a
+      let A ← E.elabV Δ A
+      pure (cDead _ fun hd => CDerives.sliceSplitM a A hd)
+  | .sliceEmptyImm a A => do
+      let a ← E.elabL Δ a
+      let A ← E.elabV Δ A
+      pure (cDead _ fun hd => CDerives.sliceEmptyI a A hd)
+  | .sliceEmptyMut a A => do
+      let a ← E.elabL Δ a
+      let A ← E.elabV Δ A
+      pure (cDead _ fun hd => CDerives.sliceEmptyM a A hd)
+  | .sliceReplaceMut a A => do
+      let a ← E.elabL Δ a
+      let A ← E.elabV Δ A
+      pure (cDead _ fun hd => CDerives.sliceReplaceM a A hd)
+  | .sliceSwapMut a A => do
+      let a ← E.elabL Δ a
+      let A ← E.elabV Δ A
+      pure (cDead _ fun hd => CDerives.sliceSwapM a A hd)
   | .withborF2Imm _ _ _ A B T' => do
       let A ← E.elabV Δ A
       let B ← E.elabV Δ B

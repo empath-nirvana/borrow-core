@@ -102,6 +102,12 @@ def Const.subst (σ : TySubst) : Const → Const
   | .sliceBorrowImm x b A B => .sliceBorrowImm x b (A.subst σ) (B.subst σ)
   | .sliceGetMut a A => .sliceGetMut a (A.subst σ)
   | .sliceLenMut a A => .sliceLenMut a (A.subst σ)
+  | .sliceSplitImm a A => .sliceSplitImm a (A.subst σ)
+  | .sliceSplitMut a A => .sliceSplitMut a (A.subst σ)
+  | .sliceEmptyImm a A => .sliceEmptyImm a (A.subst σ)
+  | .sliceEmptyMut a A => .sliceEmptyMut a (A.subst σ)
+  | .sliceReplaceMut a A => .sliceReplaceMut a (A.subst σ)
+  | .sliceSwapMut a A => .sliceSwapMut a (A.subst σ)
   | .countFold S => .countFold (S.subst σ)
 
 mutual

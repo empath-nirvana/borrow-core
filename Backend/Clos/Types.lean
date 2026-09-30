@@ -267,6 +267,14 @@ def primTy : Op → List Var → TM Nat
       let l ← newLoc a
       unify (← tyVar v) (← newNode (.pair (← newNode (.pair l (← int32))) (← int32)))
       newNode (.sum l (← unitT))
+  | .split, [v] => do
+      let a ← newNode .any
+      let f ← newNode (.pair (← newLoc a) (← int32))
+      unify (← tyVar v) (← newNode (.pair f (← int32)))
+      let r ← newNode (.sum (← newNode (.pair f f)) f)
+      modify fun s => { s with cons := s.cons.insert v r }
+      pure r
+  | .nullLoc, [] => do newLoc (← newNode .any)
   | .drop, [v] => do
       let a ← newNode .any
       let r ← newNode .any

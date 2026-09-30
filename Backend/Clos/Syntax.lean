@@ -54,6 +54,10 @@ inductive Op where
   | tab
   /-- `idx ((ℓ, n), i)`: `inl` of the `i`-th slot's location when `i < n`, else `inr ()` (§9). -/
   | idx
+  /-- `split ((ℓ, n), i)`: `inl ((ℓ, i), (ℓ + i, n − i))` when `i ≤ n`, else `inr (ℓ, n)` (§9). -/
+  | split
+  /-- The base of the empty family `(0, 0)`: a location that holds nothing (§9). -/
+  | nullLoc
   /-- `drop (f, (ℓ, n))`: each slot's contents to `f`, in order, then the array freed (§9). -/
   | drop
   /-- `count (f, (n, (i, s)))`: `f` at `i, …, len(n) − 1`, threading `s` (§16). -/

@@ -11,6 +11,8 @@ location and a length `n : I32`; its `i`-th leaf is the location `ℓ + i`.
 - `tab (c, f)` places `len(c)` cells holding `()` at fresh consecutive locations and continues
   as `tabFill`, which stores `f i` in the `i`-th cell and returns the array.
 - `idx ((ℓ, n), i)` answers `idxAns ℓ n i`: `inj₁ (ℓ + i)` when `i < n` (unsigned), else `inj₂ ()`.
+- `split ((ℓ, n), i)` answers `splitAns ℓ n i`: `inj₁ ((ℓ, i), (ℓ + i, n − i))` when `i ≤ n`
+  (unsigned), else `inj₂ (ℓ, n)`. The machine subtracts, so every host splits alike.
 - `drop (f, (ℓ, n))` continues as `dropFill`, which frees each cell in index order and hands its
   contents to `f`.
 
@@ -60,5 +62,10 @@ def countNext (f : Val) (n i : UInt32) (s : Val) : Expr :=
     `[spec §9]` -/
 def idxAns (ℓ : Loc) (n i : UInt32) : Val :=
   if i < n then .inj₁ (.loc (ℓ + i.toNat)) else .inj₂ .unit
+
+/-- The answer of `split ((ℓ, n), i)`: the parts `(ℓ, i)` and `(ℓ + i, n − i)` when `i ≤ n`,
+    unsigned; else the family back.  `[spec §9]` -/
+def splitAns (ℓ : Loc) (n i : UInt32) : Val :=
+  if i ≤ n then .inj₁ (.pair (Val.arr ℓ i) (Val.arr (ℓ + i.toNat) (n - i))) else .inj₂ (Val.arr ℓ n)
 
 end BoCa

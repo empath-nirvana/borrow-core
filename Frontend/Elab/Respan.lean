@@ -111,6 +111,12 @@ def Const.respan (sp : Span) : Const → Const
       .sliceBorrowImm (x.respan sp) (b.respan sp) (A.respan sp) (B.respan sp)
   | .sliceGetMut a A => .sliceGetMut (a.respan sp) (A.respan sp)
   | .sliceLenMut a A => .sliceLenMut (a.respan sp) (A.respan sp)
+  | .sliceSplitImm a A => .sliceSplitImm (a.respan sp) (A.respan sp)
+  | .sliceSplitMut a A => .sliceSplitMut (a.respan sp) (A.respan sp)
+  | .sliceEmptyImm a A => .sliceEmptyImm (a.respan sp) (A.respan sp)
+  | .sliceEmptyMut a A => .sliceEmptyMut (a.respan sp) (A.respan sp)
+  | .sliceReplaceMut a A => .sliceReplaceMut (a.respan sp) (A.respan sp)
+  | .sliceSwapMut a A => .sliceSwapMut (a.respan sp) (A.respan sp)
   | .countFold S => .countFold (S.respan sp)
 
 mutual

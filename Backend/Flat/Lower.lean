@@ -425,6 +425,25 @@ def lowerPrim : Op → List Var → Dest → LM (List Stmt)
             [.set t₀ (.c64 0), .set t₁ (add64 (.loc b) (mul64 (.loc i) (.c64 w.toUInt64)))]
             [.set t₀ (.c64 1), .set t₁ (.c64 0)]] ++ (← emit d [.loc t₀, .loc t₁])
       | _ => throw "flat IR: idx of a non-array"
+  | .split, [v], d => do
+      -- `inl ((b, i), (b + i·s, n − i))` when `i ≤ n`, else `inr (b, n)`: no allocation.
+      let T ← T
+      let some r := T.cons[v]? | throw "flat IR: an untyped split"
+      let h := (T.field (← vty v) 0).1
+      let w := slotBytes T (T.field h 0).1
+      match ← vals v with
+      | [b, n, i] =>
+        let p := (T.field r 0).1
+        let (s₁, vp) ← mkPair p [.loc b, .loc i]
+          [add64 (.loc b) (mul64 (.loc i) (.c64 w.toUInt64)), .op (.bin .w64 .sub) [.loc n, .loc i]]
+        let (s₂, vl) ← mkInj r false vp
+        let (s₃, vr) ← mkInj r true [.loc b, .loc n]
+        let ts ← fresh (vl.length)
+        let sets (vs : List Exp) : List Stmt := (ts.zip vs).map fun (t, e) => .set t e
+        return [.ite (ltu64 (.loc n) (.loc i)) (s₃ ++ sets vr) (s₁ ++ s₂ ++ sets vl)] ++
+          (← emit d (locs ts))
+      | _ => throw "flat IR: split of a non-array"
+  | .nullLoc, [], d => emit d [.c64 0]
   | .drop, [v], d => do
       let T ← T
       let n ← vty v
