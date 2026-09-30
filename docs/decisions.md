@@ -62,13 +62,15 @@ Each entry: the decision, and why. Newest last.
     does nothing, are affine. A destructor that frees or closes is an action whose placement can
     be observed. It goes at the end of each path, never earlier than an effect, and the opt-out is
     a `linear` binder rather than a grade on types. Types without a destructor stay linear.
-24. **Recursion is always structured; users are expected to know map and fold.** There is no
-    general direct recursion on the surface: it is a source of stack overflows, accidental
-    non-termination and invisible cost. Finite data is folded, iteration is a loop over explicit
-    state, streams are codata. The one concession is `for x in it { … }`, sugar for a
-    `for_each` consumer. Stack safety is a compiler property of each structured form, established
-    once: loops run in constant stack, owned right folds can use pointer reversal (sound because
-    linearity gives exclusive ownership), borrowed folds use an explicit stack.
+24. **Recursion is an effect (revised; the original read "recursion is always structured, no
+    general direct recursion").** A recursive function is written as ordinary self-calls, and the
+    elaborator turns each self-reference into the `rec` operation, one `rec` per mutually recursive
+    group. A driver runs it: `fix` (div, the default), fuel from a source's bound or `fuel(n)`
+    (total), `deep` (pending frames on its own stack) or tabulation. Layers (`memo`, `fuel`)
+    intercept `rec` and never drive it, and compose with `|>` (decision 50). Loops are the
+    tail-position case of the same mechanism. Stack behaviour is a choice of driver, and deep
+    non-tail recursion is a lowering matter (#123), not a reason to forbid recursion. Design:
+    `docs/rec-effect/` (#133), effects stage S3b.
 25. **Every lowering has a plain LLVM counterpart.** Wasm is the verified target, but no
     semantics may depend on a Wasm-only feature: stack switching (WasmFX), `resume_throw`, Wasm
     exceptions and Wasm GC may appear only as optimizations with a portable fallback. Async,
@@ -81,7 +83,8 @@ Each entry: the decision, and why. Newest last.
     may use types (filling type holes `_`, choosing `fold_imm`/`fold_own` from a type, inserting
     copies or drops). It stays outside the trusted base anyway, because its output is a core program
     that the checker must derive, returning a `CDerives` proof. What sugar may not do is hide a
-    surviving polarity shift (`docs/surface-cbpv.md`).
+    surviving polarity shift (`docs/surface-cbpv.md`); decision 49 amends how the shift is made
+    visible.
 27. **`unsafe` is an extern whose body we compile.** Safe code meets unchecked code only at a
     trusted boundary with a semantic-type contract (the logical relation at the declared type). The
     body may be host code (FFI) or low-level code of our own that the compiler compiles; the
@@ -591,3 +594,29 @@ Each entry: the decision, and why. Newest last.
       `while` that never fails); `sized D S A`; `elems`/`elems_mut`/`copied`; the module
       `iters` (`iter` and `sized` are keywords).
     - **Out of scope:** `for` over `μ` data (lists); handlers and layers (#18); push lowering.
+48. **Effects: the scoping of #18 (`docs/effects-scoping.md`, #151). The user's decisions.**
+    - **Handlers are defined by elaboration** into existing core terms: a capability lent by
+      `withbor`, a handler as state plus `!` clauses, resume-once as a call, abort as a sum exit,
+      suspension as `ν` codata, finalisation as the §12 destructors. Effect rows never enter the
+      core, and effect safety follows from the Fundamental Property.
+    - **Acceptance** is per-class handler laws on the elaboration schemas, cost-parity counts and
+      per-handler lowering reports (#126), in place of "an erasure theorem", which elaboration
+      makes true by definition.
+    - **Staging:**
+      - S1: answering operations and `Fail`, erased, rows inferred;
+      - S2: named capabilities and platform bundles;
+      - S3: `rec`, drivers, layers and `|>`;
+      - S4: `Yield`, projections and stored callbacks;
+      - S5: with #52, suspension with input and cancellation (K1–K3).
+    - **Syntax (provisional):** Effekt's semantics with a `with` clause. Capabilities are implicit
+      and lexical, and a name is required only when two instances are in scope. The cost
+      vocabulary is Koka's (`fun`, `ctl`, `final ctl`), plus `finally`.
+49. **The governing rule's visible shift, amended (revises decision 26 and `docs/surface-cbpv.md`
+    §1).** There is no `perform` or `suspend` token at a call site. A suspending operation is made
+    visible by the function's inferred effect row and by `bcc check`'s report per call site
+    (#126). The continuation stays visible in the handler, as an explicit linear `k`. Sugar still
+    may not hide a surviving shift from the types or the reports.
+50. **`|>` (one-way door).** `e |> f(a, …)` is `f(e, a, …)`: the piped value goes FIRST. When
+    `f`'s first parameter is a computation, `e` is suspended (thunked), which is type-directed as
+    decision 26 allows. A chain is applied innermost first, and its order is semantics. This
+    settles #17 and #59; draft 0's piped-last rule is withdrawn.
