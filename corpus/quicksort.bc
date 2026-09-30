@@ -1,0 +1,121 @@
+-- Quicksort in place, the real algorithm: an array of `i32` partitioned through a `mut` view by
+-- exchanging elements (`swap_at`, `slice_swap_mut`), with no allocation per element and no
+-- recursion on the host stack. The ranges still to sort are kept on an explicit stack, an owned
+-- `array i32` of pairs `(lo, hi)`. After a partition the larger side is pushed first and the
+-- smaller second, so the smaller is sorted next and the stack never holds more than about
+-- log₂ n ranges: 70 slots cover any `n` below 2³¹.
+--
+-- Totality comes from the counted loop, not from an argument about partitions. Each step pops
+-- one range of at least two elements, and its pivot lands in its final place and is never in a
+-- range again, so there are at most `n` steps with work. The outer loop is a `count_fold` over
+-- `n` (SPEC §16), and a step that finds the stack empty does nothing. Each partition is a
+-- `count_fold` over the range (Lomuto's scheme). The pivot is the middle element, moved to `hi`
+-- first, so input that is already sorted takes n log n steps rather than n².
+--
+-- The input is 2000 numbers from a linear congruential generator, in −16384 … 16383, with
+-- repeats. Answer: the smallest three and the largest, the number of adjacent pairs out of
+-- order (0), and the sum of the elements before and after the sort, which must agree. A sort
+-- that lost or duplicated an element would change the second sum; one that compared unsigned
+-- would put the negative numbers last.
+
+include slice
+
+-- Element `i` of the input: bits 16…30 of an LCG step, centred on 0.
+fn data(i: i32) -> i32 =
+  let x = host[and32](host[add32](host[mul32](i, 1103515245), 12345), 2147483647);
+  host[shr_u32](x, 16) - 16384
+
+-- The top pair of the range stack, taken off: `(lo, hi)` and the new stack pointer.
+fn pop(s: array i32, sp: i32) -> array i32 * (i32 * (i32 * i32)) =
+  let (s, h) = array_replace[i32](s, sp - 1, 0);
+  let (s, l) = array_replace[i32](s, sp - 2, 0);
+  let hi = match h { inl x -> x | inr x -> x };
+  let lo = match l { inl x -> x | inr x -> x };
+  (s, (lo, (hi, sp - 2)))
+
+-- The range `[lo, hi]` pushed, if it holds at least two elements.
+fn push(s: array i32, sp: i32, lo: i32, hi: i32) -> array i32 * i32 =
+  if lo < hi {
+    let (s, _) = array_replace[i32](s, sp, lo);
+    let (s, _) = array_replace[i32](s, sp + 1, hi);
+    (s, sp + 2)
+  } else { (s, sp) }
+
+-- Lomuto's partition of `[lo, hi]` around the element at `hi`: every element below it is moved
+-- to the front, and the pivot then goes to the first slot after them, which is returned.
+fn partition<'a>(v: array_mut 'a i32, lo: i32, hi: i32) -> array_mut 'a i32 * i32 =
+  let v = swap_at(v, lo + host[shr_u32](hi - lo, 1), hi);
+  let (v, p) = peek(v, hi, 0);
+  let (v, (i, _)) = count_fold[array_mut 'a i32 * (i32 * i32)](
+    !{ (j, (v, (i, p))) ->
+      let (v, x) = peek(v, j, 0);
+      if x < p { (swap_at(v, i, j), (i + 1, p)) } else { (v, (i, p)) } },
+    hi, lo, (v, (lo, p)));
+  (swap_at(v, i, hi), i)
+
+-- The view sorted in place.
+fn quicksort<'a>(v: array_mut 'a i32) -> array_mut 'a i32 =
+  let (v, n) = len_mut(v);
+  let s = array_new[i32] (70, !{ i -> 0 });
+  let (s, sp) = push(s, 0, 0, n - 1);
+  let (v, (s, _)) = count_fold[array_mut 'a i32 * (array i32 * i32)](
+    !{ (k, (v, (s, sp))) ->
+      if sp == 0 { (v, (s, sp)) } else {
+        let (s, (lo, (hi, sp))) = pop(s, sp);
+        let (v, p) = partition(v, lo, hi);
+        if p - lo < hi - p {
+          let (s, sp) = push(s, sp, p + 1, hi);
+          (v, push(s, sp, lo, p - 1))
+        } else {
+          let (s, sp) = push(s, sp, lo, p - 1);
+          (v, push(s, sp, p + 1, hi))
+        }
+      } },
+    n, 0, (v, (s, sp)));
+  array_free[i32](!{ x -> () }, s);
+  v
+
+-- The sum of the elements, and the number of adjacent pairs out of order.
+fn survey<'a>(v: array_imm 'a i32) -> i32 * i32 =
+  let (v, w) = array_copy['a, i32] v;
+  let n = len(w);
+  let (v, (sum, bad)) = count_fold[array_imm 'a i32 * (i32 * i32)](
+    !{ (i, (v, (sum, bad))) ->
+      let (v, w) = array_copy['a, i32] v;
+      let x = at(w, i, 0);
+      let (v, w) = array_copy['a, i32] v;
+      let bad = if 0 < i { if x < at(w, i - 1, 0) { bad + 1 } else { bad } } else { bad };
+      (v, (sum + x, bad)) },
+    n, 0, (v, (0, 0)));
+  array_forget['a, i32](v);
+  (sum, bad)
+
+-- A signed number in decimal, then a space.
+fn put_signed(o: Out, x: i32) -> Out =
+  let o = if x < 0 { let (o, _) = putb(o, 45); let (o, _) = put_dec(o, 0 - x); o }
+          else { let (o, _) = put_dec(o, x); o };
+  let (o, _) = putb(o, 32);
+  o
+
+main -> i32 =
+  let mut a = array_new[i32] (2000, data);
+  let s0: i32 * i32 = borrow imm a { 'x, v -> survey(v) };
+  let (before, _) = s0;
+  borrow mut a { 'x, v -> let v = quicksort(v); () };
+  let s1: i32 * i32 = borrow imm a { 'x, v -> survey(v) };
+  let (after, bad) = s1;
+  let xs: i32 * (i32 * (i32 * i32)) = borrow imm a { 'x, v ->
+    let (v, w) = array_copy['x, i32] v;
+    let (v, u) = array_copy['x, i32] v;
+    let (v, t) = array_copy['x, i32] v;
+    (at(v, 0, 0), (at(w, 1, 0), (at(u, 2, 0), at(t, 1999, 0)))) };
+  let (x0, (x1, (x2, xl))) = xs;
+  let stdout = put_signed(stdout, x0);
+  let stdout = put_signed(stdout, x1);
+  let stdout = put_signed(stdout, x2);
+  let stdout = put_signed(stdout, xl);
+  let stdout = put_signed(stdout, bad);
+  let stdout = put_signed(stdout, before);
+  let stdout = put_signed(stdout, after);
+  putb(&mut stdout, 10);
+  bad

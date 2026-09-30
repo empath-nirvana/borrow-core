@@ -85,6 +85,7 @@ slice-lib 3 0 0
 slice-mut 1 0 0
 slice-split 1 0 0
 sort-numbers 2 0 0
+quicksort 3 0 0 # the data, the range stack, the output capability
 split-at-mut 3 0 0
 sum-i32 7 0 0
 sum-prog-exact 37 9 0
