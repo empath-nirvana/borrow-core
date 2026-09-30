@@ -1,0 +1,11 @@
+-- A function with a row passed as a value (SPEC §18): `step` performs `Counter`, so it is
+-- elaborated once per handler it is called under, and has no value of its own to pass.
+-- Effectful callbacks are S4 (#161).
+-- expect: 11:47: `step` performs `Counter` and is passed as a value: it can only be called (effectful callbacks, #161)
+effect Counter { fn tick() -> i32 }
+
+handler count(n: i32) for Counter { tick() -> { n = n + 1; n } }
+
+fn step(i: i32, s: i32) -> i32 = s + tick()
+
+main -> i32 = with count(0) { count_fold[i32](step, 3, 0, 0) }

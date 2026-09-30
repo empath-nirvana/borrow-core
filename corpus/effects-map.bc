@@ -1,0 +1,71 @@
+-- Effects (SPEC §18): a `Map` effect with two handlers, and one client run under both from one
+-- source. `lookup` answers a copy of the value (an answer that borrows into the handler's state
+-- is S4's); `insert` stores a pair. The `assoc` handler keeps a buffer of pairs and finds the last
+-- one with the key; the `table` handler keeps an array indexed by the key, `0` for a key not
+-- present. `census` counts, for each element of a view, how often it was seen before, then asks
+-- for the counts of 0 and 3.
+--
+-- Nothing is dispatched: `census` has the row `Map`, so it is elaborated once per handler it runs
+-- under (`census__assoc`, `census__table`), each a direct call of its clauses on the capability,
+-- the `mut` borrow of the handler's state. `corpus/effects-map-hand.bc` is this program written
+-- by hand in capability-passing style: the same value, and the same counts.
+--
+-- Answer: `((i32[4], (i32[2], i32[1])), ((i32[4], (i32[2], i32[1])), ((i32[4], (i32[2], i32[1])),
+-- i32[12])))`: the elements `0 7 6 5 4 3 2 1 0 7 6 5` repeat four times, 0 twice and 3 once, under
+-- either handler; and the third run, whose state is lent from the cell `c`, leaves its twelve
+-- pairs there. A handler whose `lookup` missed a stored key would change the counts; a `with`
+-- that did not hand the state back would lose the twelve.
+
+include buf
+include slice
+
+type Assoc = buf (i32 * i32)
+
+effect Map {
+  fn lookup(k: i32) -> i32 + 1;
+  fn insert(k: i32, v: i32)
+}
+
+-- The value last put at `k` in a buffer of pairs, or `inr ()`.
+fn assoc_find<'a>(v: array_imm 'a (i32 * i32), k: i32) -> i32 + 1 =
+  let mut r = 0 - 1;
+  for p in v { let (kk, x) = *p; if kk == k { r = x } else { () } };
+  if r < 0 { inr () } else { inl r }
+
+-- A buffer of pairs: `insert` appends, `lookup` finds the last pair with the key.
+handler assoc(s: Assoc) for Map {
+  lookup(k) -> borrow imm s { v -> assoc_find(v, k) };
+  insert(k, v) -> { let e = (k, v); push(&mut s, e) }
+}
+
+-- An array indexed by the key: `0` is a key not present.
+handler table(t: array i32) for Map {
+  lookup(k) -> { let x = borrow imm t { v -> at(v, k, 0) }; if x == 0 { inr () } else { inl x } };
+  insert(k, v) -> { let (t, _) = array_replace[i32](t, k, v); () }
+}
+
+-- For each element, how often it was seen before, summed; then the counts of 0 and 3.
+fn census<'a>(xs: array_imm 'a i32) -> i32 * (i32 * i32) =
+  let mut repeats = 0;
+  for p in xs {
+    let x = *p;
+    let n = match lookup(x) { inl m -> m | inr u -> 0 };
+    repeats = repeats + n;
+    insert(x, n + 1)
+  };
+  let c0 = match lookup(0) { inl m -> m | inr u -> 0 };
+  let c3 = match lookup(3) { inl m -> m | inr u -> 0 };
+  (repeats, (c0, c3))
+
+-- The elements `0 7 6 5 4 3 2 1 0 7 6 5`.
+fn data(i: i32) -> i32 = host[and32](i * 7, 7)
+
+main -> (i32 * (i32 * i32)) * ((i32 * (i32 * i32)) * ((i32 * (i32 * i32)) * i32)) =
+  let a = array_new[i32] (12, data);
+  let r1 = borrow imm a { v -> with assoc(box buf[i32 * i32](4)) { census(v) } };
+  let r2 = borrow imm a { v -> with table(array_new[i32] (8, !{ i -> 0 })) { census(v) } };
+  let c = alloc(box buf[i32 * i32](4));
+  let r3 = borrow imm a { v -> with assoc(&mut c) { census(v) } };
+  let (b, n) = free(c);
+  array_free[i32 * i32](!{ x -> () }, b);
+  (r1, (r2, (r3, n)))

@@ -1,0 +1,9 @@
+-- An operation inside a closure (SPEC §18): the step of `count_fold` is `!` code, which cannot
+-- capture the capability of the enclosing `with`. Effectful callbacks are S4 (#161); a `for` over
+-- the count threads the capability instead.
+-- expect: 9:47: an operation of `Counter` is performed inside a closure or block that is not run in place: it cannot capture the capability (effectful callbacks, #161)
+effect Counter { fn tick() -> i32 }
+
+handler count(n: i32) for Counter { tick() -> { n = n + 1; n } }
+
+main -> i32 = with count(0) { count_fold[i32](!{ (i, s) -> s + tick() }, 3, 0, 0) }

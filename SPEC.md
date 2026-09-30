@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 0.25 · 2026-09-30
+Version 0.26 · 2026-09-30
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -2050,6 +2050,119 @@ end-to-end I/O theorems keep their statements.
 
 ---
 
+## 18. Entry 17 — effects and handlers
+
+### Motivation
+
+Effects stage S1 of `docs/effects-scoping.md` (#18, #152–#154). A handler's meaning is its
+elaboration into core terms the checker already derives (decision 48): a capability is a value
+lent by `withbor`, an answering operation is a call on it, abort is a sum exit, and finalisation
+is §12's destructors. Effect safety is then `fundamentalC` and `adequacyC` on the elaborated
+program, with no new case; effect rows never enter the core. What the elaboration can still get
+wrong is what a handler means, so each class of clause has a law about the runs of the terms it
+emits (*Laws*, below), and the cost of each is measured against the program written by hand
+(*Programs*).
+
+### Declarations
+
+    effect E { fn op(x₁: A₁, …) -> B; … }                     (`-> B` left out is `-> 1`)
+    handler h(s: S) for E { op(x₁, …) -> e; op(x₁, …) -> { M }; … }
+    with h(e) { M }          with h(&mut c) { M }
+
+An **effect** declares its operations' types. A **handler** of `E` has a state `s : S` and one
+clause per operation; in a clause, `s` is a `let mut` variable, which the clause may assign, and
+the clause's value is the operation's answer. `with h(e) { M }` runs `M` with `h` handling `E`,
+its state first `e`; `with h(&mut c) { M }` lends the state from the cell `c : ref S`, which holds
+the final state after the block. An operation is called like a function, `op(v)`: there is no
+`perform` token (decision 49). An operation's name is its own: no function may share it. All
+spellings are provisional (decision 51).
+
+### Elaboration
+
+All of it is in `Frontend/Elab/Effects.lean`, before the rest of the sugar; the checker sees only
+core. With the capability `c : Mut 'l S`:
+
+| form | elaborates to |
+|---|---|
+| a clause `op(x) -> M` of `h` | `fn h__op<'l>(c: mut 'l S, x: A) -> mut 'l S * B = let r = modify c { s -> M; (s, r) }; (c, r)`: `!` code run on the lent state by `withswap`, the `FnMut` row of §2 |
+| `with h(e) { M }` | `borrow mut (alloc(e)) { 'l, c -> M' }`: a `withbor` of the state's cell whose callback's parameter is the capability; the cell is dropped after (`free`, then the state's destructor) |
+| `with h(&mut c₀) { M }` | `borrow mut c₀ { 'l, c -> M' }`, and `c₀` is rebound |
+| `op(v)` in `M` | `let (c, r) = h__op(c, v)`, `h` the innermost handler of `E`: the answer is `r`, and the capability is bound again |
+| a call `f(v)` of a function with `E` in its row | `let (c, r) = f__h(c, v)` |
+
+**Threading.** The capability is threaded as a `let mut` variable is: bound again after each
+call, handed out of each arm of a `match` or `if` that uses it, out of a borrow block, and
+through a `for`'s body, which the loop threads (§16). The plain calls a value makes before an
+effectful one are bound first, in order, so the calls keep their order.
+
+**Rows.** A function's **row** is the set of effects it performs: those of the operations it
+calls and of the functions it calls, less those a `with` inside it handles. It is inferred in
+declaration order and never written. A function with a non-empty row is elaborated once per
+handler it runs under, as a generic function is once per instance (decision 45): the copy `f__h`
+takes the capability first and hands it back first. A function with a row that is never called
+under a handler is not elaborated. Resolution is lexical: an operation goes to the innermost
+`with` of its effect around it, or to the capability the enclosing function's copy was given.
+
+**Two changes to the sugar.** A borrow block of a cell (`withbor2`) or of an owned array
+(`slice_borrow_*`) takes `⊓Δ` as its side conditions' bound, as a buffer's already did (§17), so
+a block may hand back a capability of an enclosing `with`. A block that contains
+`with h(&mut c)` for a cell `c` it does not bind hands `c` back beside its result, as it hands
+back the places it lends.
+
+**Not provided**, each rejected with a message that says so: an operation inside a closure or
+block that is not run in place, and a function with a row passed as a value (effectful
+callbacks, #161); a lend `&mut x` in the arguments of an effectful call; an operation inside a
+clause; a function with a row whose result is a computation (a loop or a generator); a second
+instance of an effect in scope (named instances, #155); type parameters on an effect; a written
+row.
+
+### Reports
+
+`bcc check` prints, after the declarations' types: each effect and its operations; each handler
+and the shape its clauses are lowered to (a direct call on the lent state, with no allocation and
+no dispatch); each function's row; each `with`, and where its state lives; each copy made; and,
+per call site, which clause or copy an operation or effectful call calls (decision 49).
+
+### Laws
+
+`Core/Handlers.lean`, on the terms the elaboration emits, at every host:
+
+- **Tail-resumptive** (`op_tail`, `op_answer`). An operation call on the capability `ℓ` is
+  `withswap ℓ (λs. g (s, v))`, `g` the clause's code. In any evaluation context `K` (the rest of
+  the handled body), at a memory whose cell `ℓ` holds `s`, the call reduces with no change to
+  memory to the clause run on `(s, v)`; and when that run answers `(s', r)`, the call reaches
+  `K[(ℓ, r)]` with `s'` in the cell. This is `handle E[op v] = handle E[clause v]`: the
+  continuation is resumed once, in place, with the answer; nothing is captured or allocated.
+
+### Programs
+
+`corpus/effects-map.bc` declares a `Map` effect (`lookup` answers a copy; `insert`) with two
+handlers, an association buffer and an array indexed by the key, and runs one client, `census`,
+under each, from one source, and once with its state lent from a cell. `corpus/effects-map-hand.bc`
+is the same program written by hand in capability-passing style; both run to the same value, and
+their counts are equal (`corpus/counts.expected`: 11 allocations, no dispatched call, no copy).
+`corpus/sugar/effects-counter.bc` pairs a handled counter with its core form written by hand.
+Rejects: `corpus/reject/effect-*.bc`.
+
+### Baseline
+
+No change to `CDerives`, the relation, the machine or the checker. `fundamentalC`, `adequacyC`,
+`fundamentalD` and `adequacyD` keep their statements and cover every elaborated program.
+
+### Open
+
+- Named instances and lexical resolution between two instances of an effect (S2, #155);
+  written rows and bundles (#156).
+- Effectful callbacks, stored or passed (S4, #161).
+- An operation that answers a borrow into the handler's state (S4, #160); `lookup` answers a copy.
+- A capability threaded through a `for` over `&a` of an owned array: the lend around the loop
+  takes `top` as its bound, so the loop's state cannot hold a borrow (`corpus/effects-map.bc`
+  passes a view instead).
+- The laws are proved on the schemas; that the elaboration emits exactly these schemas is by
+  construction of `Frontend/Elab/Effects.lean`, checked on the sugar pair, not proved.
+
+---
+
 ## Status
 
 Entries 2–6 are implemented in the library directory `Core/`, with one `fundamentalC` and
@@ -2081,11 +2194,20 @@ runtime, with no change to `CDerives`; §11's `write_all` and `read_into` are `C
 `Core/CountFold.lean` (`countTry_compatX`), the checker (`count_try`) and the backend
 (`count_try_loop`); its `for` loop over data is `forData` in `Frontend/Sugar.lean`, the parser's
 `a..b`, `continue`, `else`, `loop` and `sized`, and `lib/iters.bc`; its completeness lemma is
-`Support/Dynamics/Completeness.lean`.
+`Support/Dynamics/Completeness.lean`. Entry 17 (§18) is implemented in `Frontend/Parser.lean`
+and `Frontend/Elab/Effects.lean`, its laws in `Core/Handlers.lean`, with no change to `CDerives`.
 
 ---
 
 ## Changelog
+
+- **0.26** (2026-09-30) — Effects S1a (§18, #152): `effect` and `handler` declarations and
+  `with h(e) { M }`, defined by elaboration: a clause is `!` code over a `mut` borrow of the
+  handler's state run by `withswap`, a `with` is a `withbor` of the state's cell, an operation a
+  call of its clause on the capability; rows inferred, a function with a row elaborated once per
+  handler. The tail-resumptive law on the elaborated terms (`Core/Handlers.lean`). Borrow blocks
+  of a cell or an owned array take `⊓Δ` as their bound, and hand back a cell lent to a nested
+  `with`. No kernel, rule or checker change.
 
 - **0.25** (2026-09-30) — Strings S4, revised: the `for` loop (§16). K0′, `count_try`, the
   counted loop with an exit, is a machine step beside `count_fold` (`countTry_compatX`), in the

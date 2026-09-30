@@ -91,6 +91,8 @@ def checkDecl (ds : Array Decl) (k : Nat) : Decl → Except Error (String × Opt
       else
         pure (s!"def {n.name}[{", ".intercalate (ps.map (·.name))}] : checked at each use", none)
   | .include sp n => throw ⟨sp, s!"internal error: `include {n.name}` was not resolved"⟩
+  | .effect sp n _ => throw ⟨sp, s!"internal error: `effect {n.name}` was not elaborated"⟩
+  | .handler sp n _ _ _ _ => throw ⟨sp, s!"internal error: `handler {n.name}` was not elaborated"⟩
   | .extern _ n A => do
       let A' ← (Env.top ds k).elabV LifeCtx.empty A
       pure (s!"extern {n.name} : {ppVTy A'}", none)
@@ -121,7 +123,13 @@ def checkProgram (p : Program) (copies : Bool := true) : Except Error Report := 
   let loops := el.origins.filterMap fun (_, w) =>
     if w.startsWith Frontend.Sugar.reportTag then some ("loop " ++ w.drop Frontend.Sugar.reportTag.length)
     else none
-  let rep := { rep with lines := rep.lines ++ loops.eraseDups }
+  -- What the elaboration of effects reports (SPEC §18): each function's row, each handler's
+  -- shape, and each operation's call.
+  let fx := el.origins.filterMap fun (_, w) =>
+    if w.startsWith Frontend.Sugar.effectsTag then
+      some ("effects " ++ w.drop Frontend.Sugar.effectsTag.length)
+    else none
+  let rep := { rep with lines := rep.lines ++ loops.eraseDups ++ fx.eraseDups }
   if !copies then return rep
   let marked := (el.origins.filter (·.2 == Frontend.Sugar.cloneOrigin)).map (·.1)
   match Frontend.Elab.implicitCopy el.tir marked with

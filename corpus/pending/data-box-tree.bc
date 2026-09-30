@@ -31,4 +31,4 @@ main -> i32 =
   let t = branch(branch(Leaf, 1, Leaf), 2, branch(Leaf, 3, Leaf));
   let n = sum(&t);
   n
--- now: 23:1: expected a declaration (`type`, `shape`, `def`, `extern` or `main`), found name `data`
+-- now: 23:1: expected a declaration (`type`, `shape`, `def`, `fn`, `extern`, `effect`, `handler` or `main`), found name `data`

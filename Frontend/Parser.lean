@@ -676,7 +676,8 @@ def Val.lentNames (vars : Bool := false) : Val → List String
   | .lend _ x _ => [x.name]
   | .var _ x => if vars then [x] else []
   -- A borrow block's body runs in place: what it lends and names is the block's.
-  | .app _ (.app _ (.sugar _ (.borrow _ _)) P) (.thunkv _ (.lam _ _ _ M)) =>
+  | .app _ (.app _ (.sugar _ (.borrow _ _)) P) (.thunkv _ (.lam _ _ _ M))
+  | .app _ (.app _ (.sugar _ (.handle _ _)) P) (.thunkv _ (.lam _ _ _ M)) =>
     P.lentNames vars ++ M.lentNames vars
   | .pair _ V W | .app _ V W => V.lentNames vars ++ W.lentNames vars
   | .inl _ V | .inr _ V | .unbang _ V | .boxed _ _ V | .unbox _ V | .sub _ V _ | .roll _ V
@@ -695,6 +696,35 @@ def Comp.lentNames (vars : Bool := false) : Comp → List String
   | _ => []
 end
 
+mutual
+/-- The cells lent to a `with h(&mut c)` in a value, outside nested closures, that are not bound
+in `local`: an enclosing block hands them back (SPEC §18). -/
+def Val.withPlaces (loc : List String) : Val → List String
+  | .app _ (.app _ (.sugar _ (.handle _ _)) P) (.thunkv _ (.lam _ b _ M)) =>
+    (match P with
+      | .lend _ x _ => if loc.contains x.name then [] else [x.name]
+      | _ => []) ++ M.withPlaces (b.name :: loc)
+  | .app _ (.app _ (.sugar _ (.borrow _ _)) P) (.thunkv _ (.lam _ b _ M)) =>
+    P.withPlaces loc ++ M.withPlaces (b.name :: loc)
+  | .pair _ V W | .app _ V W => V.withPlaces loc ++ W.withPlaces loc
+  | .inl _ V | .inr _ V | .unbang _ V | .boxed _ _ V | .unbox _ V | .sub _ V _ | .roll _ V
+  | .unroll _ V | .inst _ V _ | .ascribe _ V _ | .shorten _ _ _ _ V => V.withPlaces loc
+  | .run _ M => M.withPlaces loc
+  | _ => []
+
+/-- `Val.withPlaces` of a computation. -/
+def Comp.withPlaces (loc : List String) : Comp → List String
+  | .ret _ V | .absurd _ V => V.withPlaces loc
+  | .bind _ x _ M N _ => M.withPlaces loc ++ N.withPlaces (x.name :: loc)
+  | .letUnit _ V M => V.withPlaces loc ++ M.withPlaces loc
+  | .letPair _ x y V M => V.withPlaces loc ++ M.withPlaces (x.name :: y.name :: loc)
+  | .case _ V x M y N =>
+    V.withPlaces loc ++ M.withPlaces (x.name :: loc) ++ N.withPlaces (y.name :: loc)
+  | .for_ _ x V M N => V.withPlaces loc ++ M.withPlaces (x.name :: loc) ++ N.withPlaces loc
+  | .app _ M _ | .proj _ _ M | .inst _ M _ | .ascribe _ M _ | .nuOut _ M => M.withPlaces loc
+  | _ => []
+end
+
 /-- The names a computation binds, outside nested closures. -/
 def Comp.boundNames : Comp → List String
   | .bind _ x _ M N _ => x.name :: (M.boundNames ++ N.boundNames)
@@ -710,6 +740,11 @@ def Comp.boundNames : Comp → List String
 names it rebinds. -/
 def Val.rebinds : Val → Option Pat
   | .app _ (.app _ (.sugar _ (.borrow _ _)) P) _ => placeNames P
+  -- `with h(&mut c) { … }` hands the cell `c` back; `with h(e) { … }` hands back the cell scoped
+  -- to the block, which is dropped.
+  | .app sp (.app _ (.sugar _ (.handle _ _)) P) _ => match P with
+    | .lend _ x _ => some (.var x)
+    | _ => some (.wild sp)
   | _ => none
 where
   placeNames : Val → Option Pat
@@ -970,6 +1005,7 @@ def valPrefix : Nat → P Val
       let m := if t.tok == .kw "shorten_mut" then Mode.mut else Mode.imm
       pure (.shorten (← spanFrom st) m σ a V)
     | .kw "borrow" | .kw "modify" => borrowBlock n
+    | .kw "with" => withBlock n
     | .kw "gen" =>
       -- `gen { S }`: a generator whose body is `S`. (`return` in it is the core's.)
       discard bump
@@ -1046,7 +1082,7 @@ def borrowBlock : Nat → P Val
     let bound := M.boundNames ++ (match p with | .var b => [b.name] | _ => [])
     let caps := ["stdin", "stdout", "stderr"].filter (M.lentNames true).contains
     let thr := ((s₀.muts.filter assigned.contains).reverse ++
-      (M.lentNames.filter (fun x => !bound.contains x)) ++ caps).eraseDups
+      (M.lentNames.filter (fun x => !bound.contains x)) ++ M.withPlaces (match p with | .var b => [b.name] | _ => []) ++ caps).eraseDups
     -- A body already handing its variables back (a printed program read again) is kept.
     let thr := if k == .modify || (yields && inGen) || bound.contains "io_bt" then [] else thr
     let M := if thr.isEmpty then M else
@@ -1066,6 +1102,49 @@ def borrowBlock : Nat → P Val
         let b : Ident := ⟨← freshName "io_c", sp⟩
         pure (b, ← bindPat sp n p (.var sp b.name) M)
     pure (.app sp (.app sp (.sugar t.span (.borrow k x)) place)
+      (.thunkv sp (.lam sp b (holeTy sp) M)))
+
+/-- `with h(e) { S }` (SPEC §18): the handler `h` installed over `S`, its state the value `e`, or
+`&mut c` for a state lent from the cell `c`. It is read as a borrow block is: the enclosing
+`let mut` variables the body assigns and the places it lends are handed back beside its result,
+and `&mut c` rebinds `c`. The printed form names the lifetime and the capability,
+`with h(e) { 'x, c -> S }`. -/
+def withBlock : Nat → P Val
+  | 0 => outOfFuel
+  | n + 1 => do
+    withGen false do
+    let st ← startPos
+    let t ← bump
+    let h ← ident "a handler name"
+    expectSym "("
+    let place ← val n
+    expectSym ")"
+    expectSym "{"
+    let (x, b) ← if (match (← peek).tok with | .life _ => true | _ => false) then do
+        let x ← lifeVar
+        expectSym ","
+        let b ← ident "the capability's name"
+        expectSym "->"
+        pure (x.name, b)
+      else pure (← freshName "fx_l", (⟨← freshName "fx_c", t.span⟩ : Ident))
+    let s₀ ← get
+    set { s₀ with assigned := [] }
+    let M ← comp n
+    let assigned := (← get).assigned
+    modify fun s => { s with muts := s₀.muts, assigned := s₀.assigned }
+    expectSym "}"
+    let sp ← spanFrom st
+    let bound := b.name :: M.boundNames
+    let caps := ["stdin", "stdout", "stderr"].filter (M.lentNames true).contains
+    let thr := ((s₀.muts.filter assigned.contains).reverse ++
+      (M.lentNames.filter (fun x => !bound.contains x)) ++ M.withPlaces [b.name] ++ caps).eraseDups
+    let thr := if bound.contains "io_bt" then [] else thr
+    let M := if thr.isEmpty then M else
+      wrapTerms (fun T => .bind T.span ⟨"io_bt", T.span⟩ none T
+        (.ret T.span (.pair T.span (.var T.span "io_bt") (varTuple T.span thr))) false) M
+    modify fun s => { s with blockYields := false, blockThreads := thr, joined := [],
+                             assigned := s.assigned ++ thr.filter s₀.muts.contains }
+    pure (.app sp (.app sp (.sugar t.span (.handle h.name x)) place)
       (.thunkv sp (.lam sp b (holeTy sp) M)))
 
 /-- The suffixes of a value spine, associating to the left: argument atoms and `[@]`. -/
@@ -1680,6 +1759,61 @@ def decl (n : Nat) : P Decl := do
     discard bump
     let x ← ident "the name of a library module"
     pure (.include (← spanFrom st) x)
+  | .kw "effect" =>
+    -- `effect E { fn op(x: A, …) -> B; … }` (SPEC §18); `-> B` left out is `-> 1`.
+    discard bump
+    let x ← uident "an effect name"
+    expectSym "{"
+    let mut ops : Array OpDecl := #[]
+    for _ in [0:n] do
+      if ← isSym "}" then break
+      expectKw "fn"
+      let o ← ident "an operation name"
+      expectSym "("
+      let ps ← if ← isSym ")" then pure [] else params n
+      expectSym ")"
+      let B ← if ← isSym "->" then do discard bump; vty n else pure (VTy.unit o.span)
+      ops := ops.push ⟨o, ps, B⟩
+      if ← isSym ";" then discard bump
+    expectSym "}"
+    pure (.effect (← spanFrom st) x ops.toList)
+  | .kw "handler" =>
+    -- `handler h(s: S) for E { op(x, …) -> e; op(x, …) -> { S }; … }` (SPEC §18). The state `s`
+    -- is a `let mut` variable in each clause, which may assign it.
+    discard bump
+    let h ← ident "a handler name"
+    expectSym "("
+    let sv ← ident "the name of the handler's state"
+    expectSym ":"
+    let S ← vty n
+    expectSym ")"
+    expectKw "for"
+    let e ← uident "an effect name"
+    expectSym "{"
+    let mut cs : Array Clause := #[]
+    for _ in [0:n] do
+      if ← isSym "}" then break
+      let o ← ident "an operation name"
+      expectSym "("
+      let mut xs : Array Ident := #[]
+      for _ in [0:n] do
+        if ← isSym ")" then break
+        xs := xs.push (← ident "a parameter name")
+        if ← isSym "," then discard bump
+      expectSym ")"
+      expectSym "->"
+      modify fun s => { s with muts := [sv.name], assigned := [], surf := true }
+      let M ← if ← isSym "{" then do
+          discard bump
+          let M ← comp n
+          expectSym "}"
+          pure M
+        else compG n true
+      modify fun s => { s with muts := [], assigned := [], surf := false }
+      cs := cs.push ⟨o, xs.toList, M⟩
+      if ← isSym ";" then discard bump
+    expectSym "}"
+    pure (.handler (← spanFrom st) h sv S e cs.toList)
   | .kw "def" =>
     discard bump
     defRest st .none
@@ -1708,7 +1842,7 @@ def decl (n : Nat) : P Decl := do
     expectSym "="
     let M ← comp n
     pure (.main (← spanFrom st) C M)
-  | _ => expected "a declaration (`type`, `shape`, `def`, `extern` or `main`)"
+  | _ => expected "a declaration (`type`, `shape`, `def`, `fn`, `extern`, `effect`, `handler` or `main`)"
 where
   /-- A `def` after its keyword: `name[P₁, …] : A = V`. -/
   defRest (st : Pos) (mk : Mark) : P Decl := do

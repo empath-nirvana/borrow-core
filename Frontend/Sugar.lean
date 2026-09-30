@@ -5,6 +5,7 @@ import Frontend.Elab.Respan
 import Frontend.Elab.Subst
 import Frontend.Elab.Meta
 import Frontend.Elab.LoopLend
+import Frontend.Elab.Effects
 
 /-!
 # Frontend — the sugar  `[spec §11, §14]`
@@ -3099,6 +3100,10 @@ def DivSt.sizedFns (st : DivSt) : List String :=
 /-- The tag of a report on a loop, among the origins (`Frontend/Check/Program.lean` prints them). -/
 def reportTag : String := "report: "
 
+/-- The tag of a report on the program's effects (SPEC §18): rows, handlers and the calls of their
+clauses. -/
+def effectsTag : String := "effects: "
+
 /-- Record a report on the loop at `sp`. -/
 def report (sp : Span) (msg : String) : SM Unit :=
   note sp s!"{reportTag}{sp.start.render}: {msg}"
@@ -3515,7 +3520,9 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
         let As ← c.surface ksp A
         let Bs ← c.surface ksp B
         let xi : Ident := ⟨x, ksp⟩
-        let C := if k == .imm then Const.withbor1 xi As Bs else .withbor2 xi (.top ksp) As Bs
+        -- The side conditions' bound is `dom`: the result may hold a borrow of an enclosing
+        -- block (a handler's capability, SPEC §18).
+        let C := if k == .imm then Const.withbor1 xi As Bs else .withbor2 xi (.dom ksp) As Bs
         let Tbs := if k == .imm then VTy.imm lsp (.var lsp x) As else .mut lsp (.var lsp x) As
         pure (.app sp (.app sp₂ (.const ksp C) P') (.thunkv tsp (.lamL lsp xi (.dom lsp)
           (.ret lsp (.thunkv lsp (.lam lsp b Tbs (boxTail x S')))))))
@@ -3533,8 +3540,8 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
         let As ← c.surface ksp A
         let Bs ← c.surface ksp B
         let xi : Ident := ⟨x, ksp⟩
-        let C := if k == .imm then Const.sliceBorrowImm xi (.top ksp) As Bs
-          else .sliceBorrowMut xi (.top ksp) As Bs
+        let C := if k == .imm then Const.sliceBorrowImm xi (.dom ksp) As Bs
+          else .sliceBorrowMut xi (.dom ksp) As Bs
         let Tbs := if k == .imm then VTy.arrayImm lsp (.var lsp x) As else .arrayMut lsp (.var lsp x) As
         pure (.app sp (.app sp₂ (.const ksp C) P') (.thunkv tsp (.lamL lsp xi (.dom lsp)
           (.ret lsp (.thunkv lsp (.lam lsp b Tbs (boxTail x S')))))))
@@ -4554,7 +4561,11 @@ def elaborateS (p : Program) : SM (Program × Nat) := do
   let mayIO := !(ambientCaps p₀).isEmpty
   -- `include m`: the module's declarations, in place (at most once each); a module's own
   -- `include`s come in first.
-  let (decls, incl) ← expandIncludes libModules.length p.decls ([], [])
+  let (decls₀, incl) ← expandIncludes libModules.length p.decls ([], [])
+  -- Effects and handlers (SPEC §18), before the rest of the sugar: the clauses become functions,
+  -- the functions with a row their copies, and each `with` a borrow block.
+  let (decls, fx) ← (Elab.Effects.elaborate decls₀ : Except Error _)
+  for (sp, m) in fx do note sp s!"{effectsTag}{sp.start.render}: {m}"
   let p : Program := ⟨decls⟩
   let mayDiv := usesName "div_fuel" p || usesName "div_bind" p || usesName "div_defer" p
   -- The prelude is in scope when the program names one of its declarations.
@@ -4573,7 +4584,7 @@ def elaborateS (p : Program) : SM (Program × Nat) := do
   -- Bindings whose type only their uses determine (an injection) are annotated first.
   let p := Elab.fillProgram typing capDecls p
   -- Divergence of the user's definitions, before the libraries (which do not loop) come in.
-  let libNames := (decls.filter fun d => !p₀.decls.contains d).filterMap fun
+  let libNames := (decls₀.filter fun d => !p₀.decls.contains d).filterMap fun
     | .def_ _ m _ _ _ _ => some m.name
     | _ => none
   let (decls, anyDiv) ← elabDivs typing p.decls libNames

@@ -37,4 +37,4 @@ main -> i32 =
   let mut acc = 0;
   for x in generate { gen -> produce(gen) } { acc = acc + x };
   acc
--- now: 29:1: expected a declaration (`type`, `shape`, `def`, `extern` or `main`), found name `cap`
+-- now: 29:1: expected a declaration (`type`, `shape`, `def`, `fn`, `extern`, `effect`, `handler` or `main`), found name `cap`

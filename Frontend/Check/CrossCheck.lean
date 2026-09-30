@@ -45,6 +45,8 @@ deriving instance ToExpr for Frontend.BorrowKind
 deriving instance ToExpr for Frontend.VSugar
 deriving instance ToExpr for Frontend.Val, Frontend.Comp
 deriving instance ToExpr for Frontend.Mark
+deriving instance ToExpr for Frontend.OpDecl
+deriving instance ToExpr for Frontend.Clause
 deriving instance ToExpr for Frontend.Decl
 deriving instance ToExpr for Frontend.Program
 

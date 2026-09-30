@@ -30,6 +30,8 @@ count-fold 0 0 0
 count-try 0 0 0
 deep-list 100000 0 0
 div-hof 0 0 0
+effects-map 11 0 0 # equal to effects-map-hand: the handled program is the capability-passing one
+effects-map-hand 11 0 0
 family-swap 2 0 0
 fields 5 0 0 # the stdin and stdout cells, the line buffer and its two growths at the long line; fields are views
 find-bytes 2 0 0

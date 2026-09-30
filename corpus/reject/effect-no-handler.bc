@@ -1,0 +1,8 @@
+-- An operation with no handler of its effect in scope (SPEC §18): `tick` is called in `main`,
+-- outside every `with count(…)`, so there is no capability to call its clause on.
+-- expect: 8:15: the operation `tick` of `Counter` is performed here, but no handler of `Counter` is in scope
+effect Counter { fn tick() -> i32 }
+
+handler count(n: i32) for Counter { tick() -> { n = n + 1; n } }
+
+main -> i32 = tick()

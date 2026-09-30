@@ -308,6 +308,11 @@ inductive VSugar where
   /-- A string literal `"…"`, its bytes: a `lit`, the persistent value `(n, t)` of its length and
   the function from an index to its byte. -/
   | str (bs : List Nat)
+  /-- `with h(e) { S }`: the handler `h` installed over `S` (SPEC §18), at the lifetime `'x`,
+  applied to its state (a value, or `&mut c`, the cell it is lent from) and then to the callback
+  whose parameter is the capability `S` performs its operations on. Elaborated away by
+  `Frontend.Elab.Effects` before the rest of the sugar. -/
+  | handle (h : String) (x : String)
   deriving DecidableEq, Repr, Inhabited
 
 mutual
@@ -410,6 +415,21 @@ inductive Mark where
   | template (m : Mark)
   deriving DecidableEq, Repr, Inhabited
 
+/-- An operation of an `effect` declaration: `fn op(x₁: A₁, …) -> B` (SPEC §18). -/
+structure OpDecl where
+  name : Ident
+  params : List (Ident × VTy)
+  res : VTy
+  deriving DecidableEq, Repr
+
+/-- A clause of a `handler` declaration: `op(x₁, …) -> { S }`, with the handler's state in scope
+in `S` as a `let mut` variable (SPEC §18). -/
+structure Clause where
+  name : Ident
+  params : List Ident
+  body : Comp
+  deriving DecidableEq, Repr
+
 /-- Declarations (syntax-core §10). -/
 inductive Decl where
   | type (sp : Span) (n : Ident) (A : VTy)
@@ -421,6 +441,11 @@ inductive Decl where
   | main (sp : Span) (C : CTy) (M : Comp)
   /-- `include name`: the declarations of the library module `name` (`lib/name.bc`). -/
   | include (sp : Span) (name : Ident)
+  /-- `effect E { fn op(x: A, …) -> B; … }`: an effect and its operations (SPEC §18). -/
+  | effect (sp : Span) (n : Ident) (ops : List OpDecl)
+  /-- `handler h(s: S) for E { op(x, …) -> { M }; … }`: a handler of `E` whose state is `s : S`
+  (SPEC §18). -/
+  | handler (sp : Span) (n : Ident) (st : Ident) (S : VTy) (eff : Ident) (clauses : List Clause)
   deriving DecidableEq, Repr
 
 /-- A source file: its declarations in order. -/
@@ -595,6 +620,10 @@ def Decl.strip : Decl → Decl
   | .extern _ n A => .extern .none n.strip A.strip
   | .main _ C M => .main .none C.strip M.strip
   | .include _ n => .include .none n.strip
+  | .effect _ n ops => .effect .none n.strip (ops.map fun o =>
+      ⟨o.name.strip, o.params.map (fun (x, A) => (x.strip, A.strip)), o.res.strip⟩)
+  | .handler _ n st S e cs => .handler .none n.strip st.strip S.strip e.strip (cs.map fun c =>
+      ⟨c.name.strip, c.params.map Ident.strip, c.body.strip⟩)
 
 def Program.strip (p : Program) : Program := ⟨p.decls.map Decl.strip⟩
 

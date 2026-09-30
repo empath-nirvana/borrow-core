@@ -194,6 +194,9 @@ def Val.pp (V : Val) (lvl : Nat := 0) (k : Nat := 0) : String :=
         | .imm => "borrow imm " | .mut | .famMut => "borrow mut " | .modify => "modify "
       let lt := if x == "" then "" else "'" ++ x ++ ", "
       kw ++ P.pp 3 k ++ " { " ++ lt ++ b.name ++ " ->" ++ nl (k + 2) ++ M.pp 0 (k + 2) ++ " }"
+    | .app _ (.app _ (.sugar _ (.handle h x)) P) (.thunkv _ (.lam _ b _ M)) =>
+      "with " ++ h ++ "(" ++ P.pp 0 k ++ ") { '" ++ x ++ ", " ++ b.name ++ " ->" ++ nl (k + 2) ++
+        M.pp 0 (k + 2) ++ " }"
     | .thunk _ M => "thunk " ++ M.pp 0 (k + 2)
     | .thunkv _ M => "thunkv " ++ M.pp 0 (k + 2)
     | .bangThunk _ M => "!thunk " ++ M.pp 0 (k + 2)
@@ -275,6 +278,17 @@ def Decl.pp : Decl → String
   | .extern _ n A => "extern " ++ n.name ++ " : " ++ A.pp
   | .main _ C M => "main : " ++ C.pp ++ " =" ++ nl 2 ++ M.pp 0 2
   | .include _ n => "include " ++ n.name
+  | .effect _ n ops =>
+    let op (o : OpDecl) : String :=
+      "fn " ++ o.name.name ++ "(" ++ ", ".intercalate (o.params.map fun (x, A) => x.name ++ ": " ++ A.pp) ++
+        ") -> " ++ o.res.pp
+    "effect " ++ n.name ++ " {" ++ String.join (ops.map fun o => nl 2 ++ op o ++ ";") ++ nl 0 ++ "}"
+  | .handler _ n st S e cs =>
+    let cl (c : Clause) : String :=
+      c.name.name ++ "(" ++ ", ".intercalate (c.params.map (·.name)) ++ ") -> {" ++ nl 4 ++
+        c.body.pp 0 4 ++ nl 2 ++ "}"
+    "handler " ++ n.name ++ "(" ++ st.name ++ ": " ++ S.pp ++ ") for " ++ e.name ++ " {" ++
+      String.join (cs.map fun c => nl 2 ++ cl c ++ ";") ++ nl 0 ++ "}"
 
 def Program.pp (p : Program) : String :=
   "\n\n".intercalate (p.decls.map Decl.pp) ++ "\n"
