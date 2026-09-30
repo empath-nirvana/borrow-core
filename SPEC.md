@@ -2250,9 +2250,10 @@ No change to `CDerives`, the relation, the machine or the checker. `fundamentalC
 
 ### Motivation
 
-§18 defines handlers by elaboration. That covers answering handlers (a borrow) and aborts (a sum
-exit), but not a handler that captures the rest of the computation (#186). The spikes #184 and
-#185 (`experiments/HandlersAsBorrows`, `experiments/HandlersControl`) found three things:
+§18 defines handlers by elaboration. That covers answering operations (a call on a capability)
+and aborts (a sum exit), but not a handler that captures the rest of the computation (#186). The
+spikes #184 and #185 (`experiments/HandlersAsBorrows`, `experiments/HandlersControl`) found
+three things:
 
 - **State behind control needs capture.** Without capture it can be written only with explicit
   requests, at a bounded depth (`no_uniform_comp`).
@@ -2261,167 +2262,273 @@ exit), but not a handler that captures the rest of the computation (#186). The s
 - **A continuation's mode is its capture's persistence.** A continuation may be copied only if
   what it captures is persistent (`lam_bang_persistent`).
 
-This entry adds one delimiter, one operation and one effectful returner type to the kernel, with
-their semantics: an effectful weakest precondition in the shape of de Vilhena and Pottier's
-protocols, as used by van Rooij and Krebbers' *Affect* (POPL 2025). Control-flow linearity is
-Tang, Hillerström, Lindley and Morris' (*Soundly Handling Linearity*, POPL 2024): their
-`T-Seq`/`T-Handler` premises, read per continuation.
+This entry adds one delimiter, one operation and one effectful returner type to the kernel.
+Several effects run at once, each handled by its own handler, and a handler passes the rest
+outward.
+
+**Acceptance.** Three everyday programs, each typed and safe in the kernel:
+
+1. **Two effects at once.** A function that logs and can fail, run under a `Log` handler nested
+   with a `Fail` handler, in both nesting orders, with each order's observable result.
+2. **Logging inside a borrow.** `borrow mut buf { … log(x) … }`, with the `Log` handler outside
+   the borrow.
+3. **An infinite loop that logs.**
+
+Beyond those: the reconciler chain `timeout |> retry |> log |> kube`, and the #184/#185
+examples (shared stateful capability, `memo`, multi-shot, abort, resume-later).
+
+### Two kinds of operation
+
+An effect declares each operation as **answering** or **control**, as Koka's `fun` and `ctl` do
+(decision 48's cost vocabulary). The kinds differ in what the handler may do with the rest of
+the computation, and that decides whether the operation may cross a borrow's scope.
+
+- **An answering operation** resumes at once, in place, with the clause's answer, and reifies
+  nothing. It is a call of the handler's clause on the handler's state. The handler's
+  **capability** is a value: the clause, as `!` code, beside the state, threaded as a `Mut`
+  borrow (§18, #184) or shared as an `Imm` view. A call is typed by §3's rules. So an answering
+  operation crosses a borrow's scope, as any call does: `borrow mut buf { … log(x) … }` with the
+  handler outside is the callback capturing the `log` capability, an outer borrow that outlives
+  the callback's lifetime. This is acceptance (2), and it needs no new rule and no new proof.
+- **A control operation** captures the rest of the computation up to its handler as a
+  continuation `κ`, which the clause may resume once, several times, later, or not at all. It is
+  this entry's new construct. A control operation may **not** cross a borrow's scope, because
+  every borrow constant takes a pure callback (*Typing*, below). Letting it cross would be a lend
+  held across a suspension, which is T1 (#172).
+
+  I have not derived a sound rule for a control operation crossing a borrow, and I have not
+  verified that any obstruction is real. The answering kind covers the everyday case.
+
+`Fail` is neither: it stays §18's sum exit. An abort runs each frame's destructors on the way
+out (§12), which a dropped continuation could not. A control operation whose clause drops `κ`
+needs `κ` persistent (mode `!`, below).
+
+### Names: which handler handles an operation
+
+A control operation names its handler: `perform_n v` is handled by the nearest enclosing
+`handle_n`. A name `n` is **static**: each `handle` site of the program has its own name, given
+by elaboration, and `perform_n` is resolved lexically to the site whose capability is in scope.
+Rows `Σ` are finite sets of names, each with its operations' types. So:
+
+- **Distinct instances are distinguished lexically, as in Effekt's System Ξ.** Two `Kube`
+  handlers are two sites, two names, and two row entries; an operation reaches the one whose
+  name it carries, whatever handlers lie between. A higher-order function that handles its own
+  instance of an effect cannot capture its callback's operations (no accidental handling).
+  **Named instances fall out.**
+- **Re-entry of one site** (`memo` running itself under itself) meets the nearest enclosing
+  instance of that name, as Koka's dynamic handlers do. That instance has the same operation
+  types, so this is sound. Operation types are closed in lifetimes, so every instance of a site
+  has one protocol.
+
+**Why not generative names (Ξ's runtime labels).**
+
+- A generative label must never meet a stale copy of itself. The heap is leak-free (§13, every
+  run from empty memory to empty memory), so a label cell is freed when its handler ends.
+- A continuation that escapes its handler can then be resumed after the label is reused, inside
+  a handler that took the reused label. An operation on the old capability would then reach the
+  wrong handler, with the wrong types.
+- Preventing this needs a continuation confined to its handler's scope: a scope-indexed thunk
+  with no elimination to plain `U`. The box `[@c] U C` is not enough, since `[]E` removes it. That
+  is a T2 (#173) former the kernel does not have.
+- Static names need neither the label nor the confinement.
+
+I have not built this scenario in Lean. It is the reason for the choice, not a claimed
+obstruction; generative labels are *Open*, behind T2.
+
+**Why not operation names with dynamic forwarding alone (Koka, Links, Tang et al.).** Resolution
+by operation name makes two instances of one effect indistinguishable without a mask or lift,
+and it gives accidental handling across a higher-order function. Static per-site names keep
+forwarding (an operation passes every handler of another name) and add lexical instance
+resolution.
 
 ### Terms and machine
 
-Two primitives, `perform` and `hnd`, with no new `Expr` constructor:
+Two primitives, and no new `Expr` constructor:
 
-    perform V      ≜  perform V                 (the application `.app (.prim .perform) V`)
-    handle e with H ≜  hnd H e                   (the application `.app (.app (.prim .hnd) H) e`)
+    perform_n V      ≜  perform (n, V)                    (`.app (.prim .perform) …`)
+    handle_n e with H ≜  hnd (n, H) e                      (`.app (.app (.prim .hnd) …) e`)
 
-`H` is a pair `(h_ret, h_op)` of values. Evaluation is argument-first, so `e` runs first, under
-the frame `hnd H [·]`. A context `K` is **handler-free** (`Kont.NoHnd K`) when none of its frames
-is `hnd H' [·]`. There are two head steps, and neither allocates:
+`H = (h_ret, h_op)` is a pair of values, and `n` a literal. Evaluation is argument-first, so `e`
+runs under the frame `hnd (n, H) [·]`. A context `K` is **free of `n`** (`Kont.NoHnd n K`) when
+none of its frames is `hnd (n, H′) [·]`. It may hold handlers of other names. There are two head
+steps, and neither allocates:
 
-    (μ, hnd (h_ret, h_op) v)            ↦  (μ, h_ret v)                                   [ret]
-    (μ, hnd (h_ret, h_op) K[perform v]) ↦  (μ, h_op (v, κ))    K handler-free, where       [op]
-          κ = λy. hnd (h_ret, h_op) K[y]
+    (μ, hnd (n, H) v)                ↦  (μ, h_ret v)                                      [ret]
+    (μ, hnd (n, H) K[perform (n, v)])  ↦  (μ, h_op (v, κ))    K free of n, where           [op]
+          κ = λy. hnd (n, H) K[y]
 
-The handler is **deep**: `κ` reinstalls it. `perform v` alone takes no step. A term
-`K[perform v]` with `K` handler-free is **final** but not a value; nothing reduces it until an
-enclosing `hnd` does. In `κ` the context and the handler are shifted past the binder
-(`Kont.shift`), so that `κ y` substitutes back to `hnd H K[y]` (`kappa_subst`).
-
-**Unique decomposition** (`plug_decomp`, `head_plug`) is kept. The `[op]` redex has `K[perform v]`
-under `hnd H [·]`, and a handler-free `K` around `perform v` holds no head redex, so the only
-decomposition of the configuration is the whole redex. **Determinism** (`AStep1.deterministic`,
-§13) gains the two cases.
+- **The handler is deep**, and `κ` reinstalls it together with every other handler frame in `K`.
+  That is the forwarding: an operation of name `m ≠ n` inside `hnd (n, H)` is not a redex there,
+  and it is handled further out with `hnd (n, H)` inside its continuation.
+- **`K[perform (n, v)]` is final**, with `K` free of `n`: not a value, and not reducible until an
+  enclosing `hnd (n, _)` reduces it.
+- **Substitution.** `Kont.shift` makes `κ y` substitute back to `hnd (n, H) K[y]`.
+- **Unique decomposition** holds: a redex holds no other redex (`head_plug`, restated). The `[op]`
+  redex holds `perform (n, v)`, which is not a redex, under frames free of `n`. §13's
+  determinism gains the two cases.
 
 ### Types
 
-    C ::= … | F_ε A        ε = (A_op ↠^m B_op),  m ∈ {1, !}
+    C ::= … | F_Σ A            Σ = {n₁ : E₁, …, n_k : E_k},   E = {op_i : A_i ↠^{m_i} B_i}_i,   m ∈ {1, !}
 
-`F_ε A` (`CTy.eff A_op B_op m A`) is a computation of `A` that may perform one operation,
-answering `B_op` for an argument `A_op`, in mode `m`. `F A` is the pure returner. Every function
-over `CTy` treats `F_ε A` like `F A` on its three value types (scoping, substitution, `TyEq`,
-`VFree`, `NuOk`). `U(F_ε A)` has no outlives rule and is not persistent: it is §3's `U C`. `F_ε A`
-is not an observation tree (`NuLeaf`).
-
-A computation performs one operation type. Rows, several operations, and forwarding an
-unhandled operation to an outer handler are *Open*.
+- **`F_Σ A`** (`CTy.eff Σ A`) is a computation of `A` that may perform the control operations of
+  the names in `Σ`. `F A = F_∅ A` stays the pure returner, with its own constructor.
+- **Row weakening:** `F_Σ A ≤ F_Σ′ A` for `Σ ⊆ Σ′`.
+- **Operation types are closed in lifetimes.**
+- **The other functions over `CTy`** treat `F_Σ A` like `F A` on its value types.
+- **`U(F_Σ A)`** has no outlives rule and is not persistent.
+- **`F_Σ A` is an observation-tree leaf** (`cB`, §7), so a `ν` computation may observe to an
+  effectful step (*Divergence*, below).
 
 ### Typing
 
-Four rules, over `CDerives` with its context premises `SplitP`, `DeadP` and `SoloP` (§10):
+Four rules, over `CDerives` with its context premises (§10):
 
-    Δ; Γ ⊢ M : F A
-    ───────────────── [pure]
-    Δ; Γ ⊢ M : F_ε A
+    Δ; Γ ⊢ M : F_Σ A        Σ ⊆ Σ′
+    ──────────────────────────── [sub]          (F A = F_∅ A)
+    Δ; Γ ⊢ M : F_Σ′ A
 
-    Δ; Γ ⊢ V : A_op
-    ─────────────────────────────── [perform]
-    Δ; Γ ⊢ perform V : F_ε B_op
+    Δ; Γ ⊢ V : A_i        n : E ∈ Σ,   op_i : A_i ↠^{m} B_i ∈ E
+    ──────────────────────────────────────────── [perform]
+    Δ; Γ ⊢ perform_{n,i} V : F_Σ B_i
 
-    Γ = Γ₁, Γ₂    Δ; Γ₁ ⊢ M : F_ε A    Δ; x : A, Γ₂ ⊢ N : F_ε B    (m = ! ⇒ !Γ₂)
-    ───────────────────────────────────────────────────────────────────── [let]
-    Δ; Γ ⊢ (λx. N) M : F_ε B
+    Γ = Γ₁, Γ₂    Δ; Γ₁ ⊢ M : F_Σ A    Δ; x : A, Γ₂ ⊢ N : F_Σ B    (Σ has a mode-! operation ⇒ !Γ₂)
+    ──────────────────────────────────────────────────────────────────────── [let]
+    Δ; Γ ⊢ (λx. N) M : F_Σ B
 
-    Γ = Γ₁, Γ₂    Δ; Γ₁ ⊢ H : !U(A ⊸ F R) ⊗ !U(A_op ⊗ K_m ⊸ F R)    Δ; Γ₂ ⊢ e : F_ε A
-    ───────────────────────────────────────────────────────────────────── [handle]
-    Δ; Γ ⊢ hnd H e : F R
+    Γ = Γ₁, Γ₂    Δ; Γ₁ ⊢ H : !U(A ⊸ F_Σ R) ⊗ ⊗_i !U(A_i ⊗ K_i ⊸ F_Σ R)    Δ; Γ₂ ⊢ e : F_{Σ, n : E} A
+    ──────────────────────────────────────────────────────────────────────── [handle]
+    Δ; Γ ⊢ hnd (n, H) e : F_Σ R          (n ∉ Σ)
 
-    K₁ = U(B_op ⊸ F R)          K_! = !U(B_op ⊸ F R)
+    K_i = U(B_i ⊸ F_Σ R) at m_i = 1,    K_i = !U(B_i ⊸ F_Σ R) at m_i = !
 
-- **The [let] side condition is control-flow linearity.** At mode `!` the continuation of an
-  operation in `M` holds `N`'s context, so that context must be persistent. This is
-  Tang et al.'s `T-Seq` (`Δ ⊢ Γ₂ : •`), with persistence for unlimitedness.
-- **The clauses are `!`**, because a deep handler runs them once per operation. This is
-  Tang et al.'s `T-Handler` premise `Δ ⊢ Γ : •`.
-- **The continuation is linear at mode 1, and `!` at mode `!`.**
-- **Every other rule is §3's at any computation type**, so it holds at `F_ε A` unchanged:
-  - `case`, `let (x, y)`, `;`, `λ` and application (an effectful function is `A ⊸ F_ε B`);
-  - `&`, `∀`, and `thunk`/`force` of a λ-value (`thunkV`), with the block `!U(A ⊸ F_ε B)` by
-    `bangThunkV`.
-
-**The scope side condition holds by construction.** Every borrow constant (`withbor` 1–3,
-`withload`, the slice borrows) takes a callback of a *pure* returner `F(['x] B)`. So an operation
-performed in a borrow's scope is handled inside that scope. An effectful callback would let a
-continuation span a lend: that is T1 (#172), and it is not provided.
+- **Rows.** `[handle]` removes its name and passes the rest outward. Its clauses and its answer
+  are at `Σ`, so a clause may perform the outer handlers' operations. That is how two handlers
+  nest.
+- **The [let] side condition is Tang et al.'s `T-Seq`, read at the row.** At mode `!`, the
+  continuation of an operation in `M` holds `N`'s context.
+- **The clauses are `!`**, as their `T-Handler` requires of a deep handler.
+- **Every other rule is §3's at any computation type**, and holds at `F_Σ A` unchanged:
+  - `case`, `let (x, y)`, `;`, `λ` and application (an effectful function is `A ⊸ F_Σ B`);
+  - `&`, `∀`, and thunks of λ-values (a block `!U(A ⊸ F_Σ B)`).
+- **Borrows are pure.** Every borrow constant (`withbor` 1–3, `withload`, the slice borrows)
+  takes a callback of a pure returner `F(['x] B)`. So a control operation performed in a
+  borrow's scope is handled inside that scope. Answering operations are calls, and they cross.
 
 ### Semantics
 
-**Final configurations.** `wpG ls e Q` is `wpTS` with the run ending at a final term `t`, a value
-or a handler-free `K[perform v]`, and the postcondition `Q ls′ t` over that term. Every other
-conjunct is `wpTS`'s verbatim. So
+- **Final configurations.** `wpG ls e Q` is `wpTS` with the run ending at a final term `t` (a
+  value, or `K[perform (n, v)]` with `K` free of `n`), and the postcondition `Q ls′ t` over it.
+  Every other conjunct is `wpTS`'s verbatim, and `wpTS ls e Q = wpG ls e (λ ls′ t. ∃ v, t = v ∧ Q ls′ v)`.
+- **Protocols.** A protocol table maps a name and an operation to a protocol,
+  `Π : Nm → ℕ → List SRec → Val → (List SRec → Val → WProp) → WProp`. The table of `Σ` at `δ`:
 
-    wpTS ls e Q  =  wpG ls e (λ ls′ t. ∃ v, t = v ∧ Q ls′ v)          (wpTS_eq_wpG)
+      Π_Σ n i ls v Φ  ≜  𝒱⟦A_i⟧(ls)δ(v) ⋆ (λρ_k. (m_i = ! → ρ_k = ∅) ∧
+                            ∀ ls′, Ext ls ls′ ρ_k → ∀ w, (𝒱⟦B_i⟧(ls′)δ(w) ─⋆ Φ ls′ w) ρ_k)
 
-**Protocols.** A protocol `Ψ : List SRec → Val → (List SRec → Val → WProp) → WProp` says which
-operations may be performed and what their continuations are owed. The protocol of `ε` at `δ`:
+  for `n : E ∈ Σ`, and `False` otherwise.
+  - The resource splits into the argument and the continuation's share, which is `∅` at mode
+    `!`.
+  - The continuation is owed at every `Ext`-extension of the list: this is where protocols meet
+    the Kripke order.
+  - Each protocol is monotone in `Φ`.
+- **The effectful `wp`.** `ewpTS ls e Π Q` is the least `P` closed under
 
-    Ψ_ε ls v Φ  ≜  𝒱⟦A_op⟧(ls)δ(v) ⋆ (λρ_k. (m = ! → ρ_k = ∅) ∧
-                     ∀ ls′, Ext ls ls′ ρ_k → ∀ w, (𝒱⟦B_op⟧(ls′)δ(w) ─⋆ Φ ls′ w) ρ_k)
+      wpG ls e (λ ls′ t. (t = v ∧ Q ls′ v)
+                        ∨ (t = K[perform (n, (i, v))], K free of n, ∧ Π n i ls′ v (λ ls″ w. P ls″ K[w])))
 
-The resource splits into the argument and the continuation's share `ρ_k`, which is `∅` at mode
-`!`. The continuation is owed at every `Ext`-extension of the list: this is where protocols meet
-the Kripke order, as a thunk's clause does. `Ψ` is monotone in `Φ` (`Protocol.Mono`).
+  It is written in `Prop`, as §6's `μ`. A computation performs finitely many operations before
+  it answers: total correctness, as `wpTS`.
+- **The relation.** `cC (F_Σ A) ls δ e ≜ ewpTS ls e Π_Σ (λ ls″. 𝒱⟦A⟧(ls″)δ)`, and `cC (F A) = wpTS`
+  is unchanged.
 
-**The effectful `wp`.** `ewpTS ls e Ψ Q` is the least `P` closed under
+### Divergence: an infinite loop that performs operations
 
-    wpG ls e (λ ls′ t. (t = v ∧ Q ls′ v) ∨ (t = K[perform v], K handler-free, ∧ Ψ ls′ v (λ ls″ w. P ls″ K[w])))
+`ewpTS` is a least fixed point. A computation that performs operations forever is typed as
+§14's divergence: `ν` codata whose observation is a finite effectful step,
 
-That is, it runs `e` to a value in `Q`, or to an operation the protocol allows and whose every
-resumption is again in `ewpTS`. It is a least fixed point (written in `Prop`, as §6's `μ`), so a
-program performs finitely many operations before it answers: total correctness, as `wpTS`.
+    Loop_Σ A B ≜ νX. F_Σ(A ⊕ U X) & F_Σ B
 
-    cC (F_ε A) ls δ e  ≜  ewpTS ls e (Ψ_ε at δ) (λ ls″. 𝒱⟦A⟧(ls″)δ)
+- **The observations.** Each observation performs finitely many operations and answers the next
+  state or a result.
+- **Handling per observation.** A handler is installed per observation, with the handler's
+  state carried in the loop's state, as `experiments/LoopBorrow` lends per observation.
+- **Answering operations** are calls on a capability the loop's state owns, lent by each
+  observation.
+- **Adequacy is §13/§14's:**
+  - every run of a divergent program, under every allocator, is safe (never stuck);
+  - each observation terminates;
+  - a run that reaches a value reaches it at empty memory.
 
-`F A` keeps `cC (F A) = wpTS`: the relation at every existing type is unchanged.
+  There is no second fixed point: a greatest-fixed-point `ewp` would be a second mechanism for
+  what `ν` already is.
+- **Acceptance (3)** is a `Loop` whose observation logs by an answering call, with the `Log`
+  state in the loop's state.
 
 ### Theorems (the obligations of #186)
 
-1. **Compatibility** of the four rules:
-   - `pure_compatC`, from `wpTS ⊢ ewpTS Ψ` (`ewp_of_wp`);
-   - `perform_compatC`, from `ewp_perform`: `Ψ ls v Q ⊢ ewpTS ls (perform v) Ψ Q`;
-   - `let_compatC`, from `ewp_bind`: for handler-free `K`,
-     `ewpTS e Ψ (λ v. ewpTS K[v] Ψ Q) ⊢ ewpTS K[e] Ψ Q`, with the mode `!` case from
-     `vP_empty_of_persistent` on `Γ₂`;
-   - `handle_compatC`, by induction on the least fixed point: the `[ret]` step, then `h_ret`'s
-     relation; the `[op]` step, then `h_op`'s relation at `(v, κ)`. Here `κ`'s relation is the
-     induction hypothesis under `Ψ_ε`'s wand. At mode `!`, `κ` is at `∅`, so it is `!`.
-2. **Every existing rule's compatibility at `F_ε A`:**
-   - for the generic rules, through `cC_head`, `cC_step` and `cC_bind` at `F_ε`
-     (`ewp_head`, `ewp_step`, `ewp_bind_pure`);
-   - every lemma at `F A` is unchanged, since `cC (F A) = wpTS`, and `ewpTS ⊥ = wpTS`
-     (`ewp_bot`).
-3. **Frames** ([TR] 6.64–6.66) are used only around a borrow constant's callback, which is pure.
-   So they are frames over `ewpTS` at the empty protocol, which is `wpTS` (`ewp_bot`), and they
-   are unchanged.
+1. **Compatibility of the four rules.**
+   - `sub_compatC`, from `ewpTS` monotone in `Π` (`ewp_mono`), with `ewp_of_wp` at `F A = F_∅ A`.
+   - `perform_compatC`, from `ewp_perform`.
+   - `let_compatC`, from `ewp_bind`: `ewpTS e Π (λ v. ewpTS K[v] Π Q) ⊢ ewpTS K[e] Π Q` for `K`
+     free of every name. The mode `!` case uses `vP_empty_of_persistent` on `Γ₂`.
+   - `handle_compatC`, by induction on the least fixed point, in three cases:
+     - `[ret]`, then `h_ret`'s relation;
+     - `[op]` at its own name, then `h_op`'s relation at `(v, κ)`, where `κ`'s relation is the
+       induction hypothesis under the protocol's wand (at mode `!` `κ` is at `∅`, so it is `!`);
+     - an operation of another name passing outward, where the stop configuration of the whole
+       is `(hnd (n, H) K)[perform (m, v)]` and the continuation's obligation is the induction
+       hypothesis. This case is the forwarding.
+2. **Every existing rule's compatibility at `F_Σ A`**, through `cC_head`, `cC_step` and `cC_bind`
+   at `F_Σ` (`ewp_head`, `ewp_step`, `ewp_bind_pure`). Every lemma at `F A` is unchanged, and
+   `ewpTS Π_∅ = wpTS` (`ewp_bot`).
+3. **Frames** ([TR] 6.64–6.66) wrap only a borrow constant's callback, which is pure. They are
+   frames over `ewpTS` at the empty table, which is `wpTS` (`ewp_bot`), so they are unchanged.
+   Answering operations inside a borrow are calls inside the pure callback, under the same frames.
 4. **Adequacy.**
    - `fundamentalC` and `fundamentalD` cover the extended judgment.
-   - `adequacyD` holds for every closed program `F 1`, handled ones included: every run, under
-     every allocator, from empty memory continues to `()` at empty memory.
-   - A closed program with an unhandled operation is not typed at `F 1`, only at `F_ε 1`.
+   - `adequacyD` holds for every closed `F 1`, handled programs included.
+   - §14's adequacy holds for divergent programs whose observations are effectful.
+   - A closed program with an unhandled operation is not typed at `F 1`.
 
 ### Baseline
 
 `cC (F A)`, `wpTS`, every existing rule and every existing compatibility lemma keep their
 statements. `fundamentalC`, `adequacyC`, `fundamentalD` and `adequacyD` keep theirs, over the
-extended judgment. §18's elaborated handlers are unchanged.
+extended judgment. §18's elaborated handlers are unchanged, and are the answering kind and
+`Fail` above.
 
 ### Programs
 
-The examples of #184 and #185, in direct style, each typed, safe by `adequacyD`, and run:
+Primary, each typed, safe and run:
 
-- **two blocks sharing one stateful handler** (state behind control, at any depth);
-- **`memo`**, with a re-entrant forward;
-- **multi-shot `choose`**, at mode `!`;
-- **abort**, with the continuation dropped through a finaliser;
-- **resume-later.**
+1. **`Log` + `Fail`:**
+   - a function that logs and may fail;
+   - the `Log` handler inside and outside the `Fail` handler: the logs are kept when `Log` is
+     outside, and lost when `Fail` is outside;
+   - once with `Log` answering and `Fail` a sum, and once with both native control effects
+     (mode 1 `log`, mode `!` `fail`), to exercise rows and forwarding.
+2. **`borrow mut buf { … log(x) … }`** with the answering `Log` handler outside.
+3. **`loop { log("tick") }`**, a `Loop` with the `Log` state in its state.
+
+Secondary:
+
+- the reconciler chain `timeout |> retry |> log |> kube`;
+- two blocks sharing one stateful handler, at any depth;
+- `memo` with a re-entrant forward;
+- multi-shot `choose`;
+- resume-later.
 
 ### Open
 
-- Rows: several operations per computation, forwarding an unhandled operation to an outer
-  handler, and named instances (§18's S2).
+- Generative handler names (Ξ's runtime labels), behind a continuation confined to its handler's
+  scope (T2, #173).
+- A control operation crossing a borrow's scope (T1, #172).
 - Parameterized handlers are written with a state-passing answer type
   `F R = F(U(S ⊸ F (A ⊗ S)))`; a native parameter is not provided.
-- A shallow handler.
-- An effectful borrow callback (T1, #172), and μ with `X` under `⊸` (T15, #182).
+- **Shallow handlers:** covered by `ν` codata (generators) for step-wise handling; not a separate
+  construct unless a target needs it.
+- μ with `X` under `⊸` (T15, #182).
 - Replacing §18's elaborated handlers with this construct.
 
 ---
@@ -2465,11 +2572,19 @@ Entry 18 (§19) is specified; its implementation proceeds in the stages of #186.
 
 ## Changelog
 
-- **0.29** (2026-09-30) — Entry 18 (§19, #186): native capture. The primitives `perform` and
-  `hnd`, the machine steps `[ret]` and `[op]` (deep, with a handler-free context), the returner
-  `F_ε A`, the rules `[pure]`, `[perform]`, `[let]` (control-flow linearity at mode `!`) and
-  `[handle]`, and the effectful `wp` `ewpTS` with protocols, `wpTS = ewpTS ⊥`. Stated here; the
-  library follows stage by stage.
+- **0.29** (2026-09-30) — Entry 18 (§19, #186): native capture.
+  - **Operations** are answering (a call on a capability, §18) or control (captured).
+  - **Control operations are named per handler site**: static names, rows of names, and the
+    nearest enclosing handler of the name; forwarding and named instances follow.
+  - **Kernel additions:** the primitives `perform` and `hnd`; the machine steps `[ret]` and
+    `[op]` (deep, over a context free of the name); the returner `F_Σ A`; the rules `[sub]`,
+    `[perform]`, `[let]` (control-flow linearity at mode `!`) and `[handle]`.
+  - **Semantics:** the effectful `wp` `ewpTS` over protocol tables, with `wpTS = ewpTS` at the
+    empty table.
+  - **Divergent effectful programs** are `ν` codata with effectful observations.
+  - **Acceptance:** `Log` + `Fail` in both orders, logging inside a borrow, an infinite logging
+    loop.
+  - Stated here; the library follows stage by stage.
 
 - **0.28** (2026-09-30) — Effects S1c (§18, #154): the laws `handle_fold` (a handler is the
   state-passing fold of its clauses over the operations performed) and `loop_abort`; the
