@@ -105,3 +105,4 @@ surface/io-wc 2 0 0
 surface/map-reuse 7 0 0
 trim-replace 7 0 0 # the stdin and stdout cells, the input string, and one replaced string per line (four)
 utf8-count 4 0 0 # the stdin, stdout and stderr cells and the line buffer, reused
+hello 1 0 0 # the output capability cell; the literal is read-only data
