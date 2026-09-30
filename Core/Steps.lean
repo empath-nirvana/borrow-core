@@ -199,22 +199,6 @@ def opE (isRaise : Bool) (p : Val) : Expr :=
 theorem opE_not_isVal (r : Bool) (p : Val) : ¬ IsVal (opE r p) := by
   cases r <;> simp [opE, raiseE, performE] <;> intro h <;> cases h
 
-theorem hasHnd_comp (n : UInt32) : ∀ (K K' : Kont),
-    (K.comp K').HasHnd n = (K.HasHnd n || K'.HasHnd n) := by
-  intro K K'
-  induction K with
-  | hole => simp [Kont.comp, Kont.HasHnd]
-  | appR f K ih => simp only [Kont.comp, Kont.HasHnd, ih, Bool.or_assoc]
-  | _ => simp_all [Kont.comp, Kont.HasHnd]
-
-theorem catches_comp (n : UInt32) : ∀ (K K' : Kont),
-    (K.comp K').Catches n = (K.Catches n || K'.Catches n) := by
-  intro K K'
-  induction K with
-  | hole => simp [Kont.comp, Kont.Catches]
-  | appR f K ih => simp only [Kont.comp, Kont.Catches, ih, Bool.or_assoc]
-  | _ => simp_all [Kont.comp, Kont.Catches]
-
 theorem opFree_right {r : Bool} {n : UInt32} {K K' : Kont} (h : OpFree r n (K.comp K')) :
     OpFree r n K' := by
   cases r <;> simp_all [OpFree, hasHnd_comp, catches_comp]

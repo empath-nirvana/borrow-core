@@ -74,6 +74,29 @@ def ewpTS (ls : List SRec) (e : Expr) (Tb : Table) (Q : List SRec → Val → WP
   fun ρ => ∀ P : List SRec → Expr → WProp,
     (∀ ls e ρ, ewpStep Tb Q P ls e ρ → P ls e ρ) → P ls e ρ
 
+theorem hasHnd_comp (n : UInt32) : ∀ (K K' : Kont),
+    (K.comp K').HasHnd n = (K.HasHnd n || K'.HasHnd n) := by
+  intro K K'
+  induction K with
+  | hole => simp [Kont.comp, Kont.HasHnd]
+  | appR f K ih => simp only [Kont.comp, Kont.HasHnd, ih, Bool.or_assoc]
+  | _ => simp_all [Kont.comp, Kont.HasHnd]
+
+theorem catches_comp (n : UInt32) : ∀ (K K' : Kont),
+    (K.comp K').Catches n = (K.Catches n || K'.Catches n) := by
+  intro K K'
+  induction K with
+  | hole => simp [Kont.comp, Kont.Catches]
+  | appR f K ih => simp only [Kont.comp, Kont.Catches, ih, Bool.or_assoc]
+  | _ => simp_all [Kont.comp, Kont.Catches]
+
+theorem hndNames_comp : ∀ (K K' : Kont), (K.comp K').hndNames = K.hndNames ++ K'.hndNames := by
+  intro K K'
+  induction K with
+  | hole => simp [Kont.comp, Kont.hndNames]
+  | appR f K ih => simp only [Kont.comp, Kont.hndNames, ih, List.append_assoc]
+  | _ => simp_all [Kont.comp, Kont.hndNames]
+
 /-! ### Operation tables  `[spec §19]` -/
 
 /-- An operation's entry: its continuation's qualifier, whether it is abortive (answer `0` at a
@@ -100,12 +123,13 @@ def errOk (T : OpTab) (N : List UInt32) (ls : List SRec) : Option Val → WProp
   | none => emp
   | some E => ex fun (m : UInt32) => ex fun (j : UInt32) => ex fun (w : Val) =>
       ex fun (en : OpEnt) =>
-        ⌜E = opPayload m j w ∧ m ∉ N ∧ T m j = some en ∧ en.abort = true⌝ ⋆ en.PA ls w
+        ⌜E = opPayload m j w ∧ m ∉ N ∧ T m j = some en ∧ en.abort = true⌝ ⋆
+          fun ρ => en.PA ls w ρ ∧ NoOwn ρ
 
-/-- The table of a cancel run: it stops only at the cancel itself, having unwound every frame
-that catches it, with an admissible error and nothing owned left behind. -/
-def cancelTab (T : OpTab) : Table := fun ls t _ =>
-  ex fun (K : Kont) => ex fun (N : List UInt32) => ex fun (err : Option Val) =>
+/-- The table of a cancel run over the region `N`: it stops only at the cancel itself, having
+unwound every frame that catches it, with an admissible error and nothing owned left behind. -/
+def cancelTab (T : OpTab) (N : List UInt32) : Table := fun ls t _ =>
+  ex fun (K : Kont) => ex fun (err : Option Val) =>
     ⌜t = K.plug (raiseE (.val (cancelVal N err))) ∧ K.Catches 0 = false⌝ ⋆
       (errOk T N ls err ⋆ fun ρ => NoOwn ρ)
 
@@ -113,7 +137,7 @@ def cancelTab (T : OpTab) : Table := fun ls t _ =>
 end at every region `N` holding `n` and `K`'s handlers.  `[spec §19]` -/
 def cancelOwed (T : OpTab) (n : UInt32) (ls : List SRec) (K : Kont) : WProp := fun ρ =>
   ∀ N : List UInt32, n ∈ N → (∀ m ∈ K.hndNames, m ∈ N) →
-    ewpTS ls (K.plug (raiseE (.val (cancelVal N none)))) (cancelTab T) (fun _ _ _ => False) ρ
+    ewpTS ls (K.plug (raiseE (.val (cancelVal N none)))) (cancelTab T N) (fun _ _ _ => False) ρ
 
 /-- The continuation's share at a stopped operation: `∅` at `unr`; at every extension of the
 list, resumed at every answer in `PB`; and, with weakening, cancelled.  `[spec §19]` -/
@@ -127,8 +151,9 @@ def contShare (T : OpTab) (en : OpEnt) (n : UInt32) (ls : List SRec) (K : Kont)
 /-- The protocol table of an operation table.  `[spec §19]`
 * a non-abortive `perform (n, (i, v))` under a context free of `n`: the argument, and the
   continuation's share;
-* an abortive `raise (n, (i, v))` under a context catching nothing of `n`: the argument, and the
-  abandoned continuation, which holds nothing owned. -/
+* an abortive `raise (n, (i, v))` under a context catching nothing of `n`: the argument, which
+  holds nothing owned (an abandoned error is dropped), and the abandoned continuation, which holds
+  nothing owned either. -/
 def opTable (T : OpTab) : Table := fun ls t Φ =>
   BoLo.or
     (ex fun (K : Kont) => ex fun (n : UInt32) => ex fun (i : UInt32) => ex fun (v : Val) =>
@@ -138,6 +163,7 @@ def opTable (T : OpTab) : Table := fun ls t Φ =>
     (ex fun (K : Kont) => ex fun (n : UInt32) => ex fun (i : UInt32) => ex fun (v : Val) =>
       ex fun (en : OpEnt) =>
         ⌜t = K.plug (raiseE (.val (opPayload n i v))) ∧ K.Catches n = false ∧
-          T n i = some en ∧ en.abort = true⌝ ⋆ (en.PA ls v ⋆ fun ρ => NoOwn ρ))
+          T n i = some en ∧ en.abort = true⌝ ⋆
+          ((fun ρ => en.PA ls v ρ ∧ NoOwn ρ) ⋆ fun ρ => NoOwn ρ))
 
 end BoCa.Fig16.LogRel.Core

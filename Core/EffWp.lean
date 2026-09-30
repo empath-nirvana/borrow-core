@@ -958,8 +958,59 @@ theorem opTable_mono (T : OpTab) : (opTable T).Mono := by
     exact hΦ _ _ _ ((hK ls' hext).1 w σ₁ σ₂ hB hcσ)
   · exact Or.inr h
 
+/-- A run of no steps: the term is where `wpG` ends.  `wpTS_val`'s proof at any term. -/
+theorem wpG_here (ls : List SRec) (e : Expr) (Q : List SRec → Expr → WProp) :
+    Entails (Q ls e) (wpG ls e Q) := by
+  intro ρ hQ ρf fρ ps hf hc hT htg A k
+  obtain ⟨μ, hμ⟩ := lower_of_hash hf hc
+  exact ⟨ρ, PMap.empty, fρ, fρ, ρ, e, μ, μ, ps, ls, ResU.hash_symm hf, hc,
+    ResU.hash_symm (ResU.hash_empty_right (hash_valid_comp hf hc)), hμ,
+    ResU.comp_empty_right fρ, hμ, ⟨k, .refl _ _ _⟩, ResU.comp_empty_right ρ,
+    (ResU.updV_self_iff ρ).mpr (hash_valid hf).2, noOwn_empty, hT, htg,
+    fun _ => Iff.rfl, fun _ => Iff.rfl, hQ⟩
+
+/-- One head step in front of a `wpG`. -/
+theorem wpG_head {e e' : Expr} (h : ∀ μ : Heap, Head μ e μ e') (hn : e.allocs = false)
+    (ls : List SRec) (Q : List SRec → Expr → WProp) : Entails (wpG ls e' Q) (wpG ls e Q) :=
+  wpG_step (fun μ => Step1N.head (h μ) hn) ls Q
+
+/-- `[TR]` 6.146 (`wp-ramify`) at `wpG`: `wpTS_ramify`'s proof. -/
+theorem wpG_ramify (ls : List SRec) (e : Expr) (P Q : List SRec → Expr → WProp) :
+    Entails (sep (wpG ls e P)
+      (fun ρ => ∀ ls', (∀ x, x ∈ ls' ↔ x ∈ ls) → ∀ t, wand (P ls' t) (Q ls' t) ρ))
+      (wpG ls e Q) := by
+  rintro ρ ⟨ρ₁, ρ₂, hcρ, hwp, hwand⟩ ρf fρ ps hf hc hT htg A k
+  obtain ⟨y, hy, hy₁⟩ := (hash_shift ρf ρ₂ ρ₁).mp ⟨ρ, ResU.CompS.comm hcρ, hf⟩
+  obtain ⟨y', hy', hyfρ⟩ := compS_reassoc' (ResU.CompS.comm hcρ) hc
+  cases ResU.CompS.functional hy' hy
+  obtain ⟨ρ', ρp, Y', Y'p, π', v, μ, μ', ps', ls', g₁, g₂, g₃, g₅, g₆, g₇, g₈, g₉,
+    gA, gB, gT, gtg, gps, gls, gC⟩ := hwp y fρ ps hy₁ hyfρ hT htg A k
+  obtain ⟨W, hW, hfW⟩ := compS_reassoc hy g₂
+  obtain ⟨W₀, hW₀, hWf₀⟩ := (hash_shift ρ' ρ₂ ρf).mp ⟨y, ResU.CompS.comm hy, g₁⟩
+  have hWf : ResU.Hash W ρf := by
+    rwa [ResU.CompS.functional (ResU.CompS.comm hW₀) hW] at hWf₀
+  obtain ⟨-, hWp⟩ := ResU.Hash.split hfW (ResU.hash_symm g₃)
+  obtain ⟨πW, hπW, h₂π₀⟩ := (hash_shift ρ₂ ρ' ρp).mpr ⟨W, hW, hWp⟩
+  have h₂π : ResU.Hash ρ₂ π' := by rwa [ResU.CompS.functional hπW g₉] at h₂π₀
+  obtain ⟨πn, hπn, -⟩ := h₂π.2
+  obtain ⟨Wn, hWn, hWπ₀⟩ := compS_reassoc' g₉ hπn
+  have hWπ : ResU.CompS W ρp πn := by
+    rwa [ResU.CompS.functional hWn hW] at hWπ₀
+  refine ⟨W, ρp, Y', Y'p, πn, v, μ, μ', ps', ls', hWf, hfW, g₃, g₅, g₆, g₇, g₈,
+    hWπ, ?_, gB, gT, gtg, gps, gls, hwand ls' gls v ρ' W gC hW⟩
+  exact updV_frame (ResU.CompS.comm hcρ) hπn
+    ⟨(ResU.CompS.comm hcρ).1, ρ, ResU.CompS.comm hcρ, (hash_valid hf).2⟩ h₂π gA
+
+/-- A frame through a `wpG`, carried to the returned list by `hR`. -/
+theorem wpG_frame {ls : List SRec} {e : Expr} {Q : List SRec → Expr → WProp} (R : List SRec → WProp)
+    (hR : ∀ ls', (∀ x, x ∈ ls' ↔ x ∈ ls) → Entails (R ls) (R ls')) :
+    Entails (wpG ls e Q ⋆ R ls) (wpG ls e fun ls' t => Q ls' t ⋆ R ls') := by
+  rintro ρ ⟨ρ₁, ρ₂, hc, hw, hr⟩
+  refine wpG_ramify ls e Q _ ρ ⟨ρ₁, ρ₂, hc, hw, fun ls' hls t σ₁ σ₂ hq hcσ => ?_⟩
+  exact ⟨σ₁, ρ₂, ResU.CompS.comm hcσ, hq, hR ls' hls ρ₂ hr⟩
+
 /-- The table of a cancel run owes no continuation. -/
-theorem cancelTab_abortive (T : OpTab) : (cancelTab T).Abortive :=
+theorem cancelTab_abortive (T : OpTab) (N : List UInt32) : (cancelTab T N).Abortive :=
   fun _ _ _ _ _ h => h
 
 end BoCa.Fig16.LogRel.Core
