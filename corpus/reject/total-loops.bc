@@ -1,4 +1,4 @@
--- expect: 7:5: `count` is declared `total`, but it has a `for` (SPEC §14)
+-- expect: 7:5: `count` is declared `total`, but it has a `for` over an unbounded source (a drain) (SPEC §14)
 -- A function declared `total` must not loop: a `for` over the input may never end.
 total def count : In => In * i32 =
   thunkv fun (c : In) ->

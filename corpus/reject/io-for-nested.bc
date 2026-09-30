@@ -1,4 +1,4 @@
--- expect: 6:5: the body of a `for` is one step of its loop and must be total, but it has a `for` (SPEC §14)
+-- expect: 6:5: the body of a `for` is one step of its loop and must be total, but it has a `for` over an unbounded source (a drain) (SPEC §14)
 -- A `for` body runs inside one observation of its loop, so it cannot loop itself.
 main : F 1 =
   n : i32 <- return i32[0];

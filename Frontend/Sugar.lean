@@ -56,6 +56,10 @@ def adaptersLibrary : String := include_str "../lib/adapters.bc"
 /-- The slice library, `lib/slice.bc`: functions on the views an array lends (`include slice`). -/
 def sliceLibrary : String := include_str "../lib/slice.bc"
 
+/-- The sized iterators, `lib/iters.bc`: `elems`, `map`, `filter`, `take`, `zip`, … over data
+(`include iters`). -/
+def iterLibrary : String := include_str "../lib/iters.bc"
+
 /-- The prelude, `lib/prelude.bc`: `true`, `false`, `not`, `to_i32`, `to_u8`. -/
 def preludeLibrary : String := include_str "../lib/prelude.bc"
 
@@ -63,7 +67,7 @@ def preludeLibrary : String := include_str "../lib/prelude.bc"
 embedded in the compiler; adding one is adding its line here. -/
 def libModules : List (String × String) :=
   [("io", ioLibrary), ("div", divLibrary), ("prelude", preludeLibrary), ("lend", lendLibrary),
-   ("adapters", adaptersLibrary), ("slice", sliceLibrary)]
+   ("adapters", adaptersLibrary), ("slice", sliceLibrary), ("iters", iterLibrary)]
 
 def capNames : List String := ["stdin", "stdout", "stderr"]
 
@@ -415,7 +419,7 @@ def loopsAt (c : TCx) (B : Option CVTy) : Comp → Option (Span × String)
     let (Ax, Ay) := sumTys c V
     ((callIn c divFuel none V).map fun (sp, f) => callMsg sp f).orElse fun _ =>
       (loopsAt (c.push x.name Ax) B M).orElse fun _ => loopsAt (c.push y.name Ay) B N
-  | .for_ sp .. => some (sp, "it has a `for`")
+  | .for_ sp .. => some (sp, "it has a `for` over an unbounded source (a drain)")
   | T => headLoops c B T
 
 mutual
@@ -1134,6 +1138,11 @@ structure GenLoop where
   keep : Option (String × CVTy) := none
   /-- What follows the loop (without the binding of `r`). -/
   rest : Comp
+  /-- `for … else { d }`: the loop's value when its source ends (SPEC §16). -/
+  els : Option Comp := none
+  /-- The source never ends (a generator that finishes with `0`, or `loop { … }`): what follows
+  the loop runs only after `break`. -/
+  never : Bool := false
 
 /-- `for x in V { M }; N` or `while c { M }; N` in a generator body: a generator by `unfold` over
 the loop's state, then `gen_bind` of what follows. -/
@@ -1148,9 +1157,10 @@ def genLoopPlan (g : GenCx) (c : TCx) (sp : Span) (x : Ident) (V : Val) (M N : C
   let hasRet := M.hasRet
   let V := V.takeLends.1
   -- `let r = for …; N`: the loop's value is bound to `r` in `N`.
-  let (keep₀, N) := match N.forRes? with
-    | some (r, _, N₀) => (some r, N₀)
-    | none => (none, N)
+  let (keep₀, keepA, els, N) := match N.forElse?, N.forRes? with
+    | some (r, A, d, N₀), _ => (some r, A, some d, N₀)
+    | none, some (r, A, N₀) => (some r, A, none, N₀)
+    | none, none => (none, none, none, N)
   -- The iterator: its type, whether it is a generator, and what it finishes and closes with.
   let it ← match cond with
     | some _ => pure none
@@ -1181,11 +1191,25 @@ def genLoopPlan (g : GenCx) (c : TCx) (sp : Span) (x : Ident) (V : Val) (M N : C
     | none => (cap, keep₀)
   let keep : Option (String × CVTy) ← match keep₀, it with
     | none, _ => pure none
-    | some r, some (_, _, _, Q, _) => do
-      if let some c := cap then
+    | some r, some (_, E, _, Q, _) => do
+      if let some c := cap then if els.isNone then
         throw ⟨r.span, s!"the iterator of this `for` is made from `{c}`, which it hands back " ++
           "when it finishes: the loop's value is not bound"⟩
-      pure (some (r.name, Q))
+      -- The loop's value: written, or the `else` value's type, or what the source finishes with;
+      -- a source that never ends (`0`) gives only `break e`'s.
+      match keepA.bind c.elabV, els with
+      | some T, _ => pure (some (r.name, T))
+      | none, some d => match c.tyC d with
+        | some (.ret T) => pure (some (r.name, T))
+        | _ => throw ⟨d.span, "the type of the `else` value is not determined here"⟩
+      | none, none =>
+        if Q != .zero then pure (some (r.name, Q)) else
+        match (M.spineBreaks.filterMap (·.2)).head? with
+        | some e => match (c.push x.name (some E)).tyV e with
+          | some T => pure (some (r.name, T))
+          | none => throw ⟨e.span, s!"the type of this loop's value is not determined: write it, " ++
+              s!"`let {r.name} : T = for …`"⟩
+        | none => pure (some (r.name, .zero))
     | some r, none => throw ⟨r.span, "a `while` has no value"⟩
   checkBreaks M (keep.map (·.2))
   -- What follows runs in the loop's last step when it neither yields nor loops (a `for`, or a
@@ -1235,7 +1259,11 @@ def genLoopPlan (g : GenCx) (c : TCx) (sp : Span) (x : Ident) (V : Val) (M N : C
     | .ret tsp (.app _ (.sugar _ .retE) v) => .ret tsp (.inr tsp (.inr tsp v))
     | T => .bind T.span ⟨"io_u", T.span⟩ none T (.ret T.span (.inl T.span (tupleVal T.span sv))) false) M
   let cb := xs.foldl (fun c (y, E) => c.push y (some E)) (svs.foldl (fun c (y, T) => c.push y (some T)) c)
-  pure ⟨cond, V, it, cap, svs, ws, outs, bcx, bodyW, cb, direct, hasRet, keep, N⟩
+  let never := match cond, it with
+    | some (.sugar _ .forever), _ => true
+    | _, some (_, _, _, Q, _) => Q == .zero
+    | _, _ => false
+  pure ⟨cond, V, it, cap, svs, ws, outs, bcx, bodyW, cb, direct, hasRet, keep, N, els, never⟩
 
 /-- The core of a generator's loop, around its elaborated body and what follows it. -/
 def genLoopSrc (g : GenCx) (c : TCx) (sp : Span) (x : Ident) (P : GenLoop) (body N N' : Comp)
@@ -1245,7 +1273,7 @@ def genLoopSrc (g : GenCx) (c : TCx) (sp : Span) (x : Ident) (P : GenLoop) (body
   -- A loop that starts a generator's body has a state before it, the parameter, whose
   -- observation runs the code before the loop (`start`): the loop's own states are `inr`.
   let stv (v : String) : String := if start.isSome then s!"(inr {v})" else v
-  let ⟨cond, V, it, cap, svs, ws, outs, bcx, _, _, direct, hasRet, keep, _⟩ := P
+  let ⟨cond, V, it, cap, svs, ws, outs, bcx, _, _, direct, hasRet, keep, _, _, _⟩ := P
   let bg : GenCx := { g with L := bcx, inLoop := true }
   let sv := svs.map (·.1)
   let svT := tupleT (svs.map (·.2))
@@ -1928,6 +1956,10 @@ def mWalk (m : MCx) : Nat → TCx → Comp → MM Comp
     mTemplate sp "`return`" (String.join (m.held.map (·.closeSrc)) ++
       s!"io_v : {m.pp m.L.B} <- return io_hole_rv;\nreturn (inr (inl io_v))") [("io_hole_rv", v)] []
   | _ + 1, _, .ret sp (.sugar _ .brk) => mBreak m sp (.unit sp)
+  | _ + 1, _, .ret sp (.sugar _ .cont) => do
+    -- `continue`: back to the head of the innermost loop.
+    let some l := m.loops.head? | throw ⟨sp, "`continue` is outside every loop"⟩
+    mGoto m sp l.head
   | _ + 1, _, .ret sp (.app _ (.sugar _ .brk) e) => mBreak m sp e
   | n + 1, c, T => do
     if T.hasYield then throw (yieldOffSpine (T.yieldAt.getD T.span))
@@ -2034,18 +2066,25 @@ def mLoop (m : MCx) : Nat → TCx → Span → Ident → Val → Comp → Comp �
         let jc ← mWalk { m with cur := some pj.pos, pre := false } n cr N
         mSet j jc (.top sp)
         mGoto { m with cur := some ph.pos, pre := false } sp j
-      | none => mWalk { m with cur := some ph.pos, pre := false } n cr N
+      -- A loop that never ends, with no `break`: what follows it does not run.
+      | none => if P.never then pure (.top sp) else mWalk { m with cur := some ph.pos, pre := false } n cr N
     let skip := m.skip sp (mInj sp h vars)
     let code ← match P.it, P.cond with
       | some (_, _, isGen, Q, _), _ => do
         let v := s!"io_it{k}"
-        let ended := match P.keep with
-          | some (r, _) => s!"{r} <- return io_q;\nforce io_hole_after"
-          | none => s!"{bindCap P.cap Q "io_q"}force io_hole_after"
+        let ended := if Q == .zero then "absurd io_q" else match P.keep, P.els with
+          | some (r, _), some _ =>
+            let drop := if P.cap.isSome then bindCap P.cap Q "io_q" else "io_dq <- return io_q;\n"
+            s!"{drop}{r} <- force io_hole_else;\nforce io_hole_after"
+          | some (r, _), none => s!"{r} <- return io_q;\nforce io_hole_after"
+          | none, _ => s!"{bindCap P.cap Q "io_q"}force io_hole_after"
         let fin := if isGen then s!"case io_d \{ inl io_q -> {ended} | inr {v} -> return io_hole_k }"
           else s!"io_q <- return io_d;\n{ended}"
         let src := s!"io_o <- (nu_out (force {v})).1;\ncase io_o \{ inl io_p -> let ({x.name}, {v}) = io_p; force io_hole_body | inr io_d -> {fin} }"
-        mTemplate sp what src [("io_hole_k", skip)] [("io_hole_body", body), ("io_hole_after", after)]
+        mTemplate sp what src [("io_hole_k", skip)]
+          ([("io_hole_body", body), ("io_hole_after", after)] ++ (P.els.map ("io_hole_else", ·)).toList)
+      | none, some (.sugar _ .forever) => do
+        mTemplate sp what "force io_hole_body" [] [("io_hole_body", body)]
       | none, some cnd => do
         mTemplate sp what "case io_hole_c { inl io_f -> force io_hole_after | inr io_t -> force io_hole_body }"
           [("io_hole_c", cnd)] [("io_hole_body", body), ("io_hole_after", after)]
@@ -2968,11 +3007,30 @@ def dataSrcOf (c : TCx) (V : Val) : Option DataSrc :=
     | some T => (sizedOf T).map fun (D, S, A) => .sized D S A
     | none => none
 
+/-- A written function type whose result is a sized iterator: `… => sized D S A`, under `!` and
+lifetime binders. -/
+def _root_.Frontend.VTy.sizedResult : VTy → Bool
+  | .bang _ A | .all _ _ _ A => A.sizedResult
+  | .lolli _ _ (.sized ..) => true
+  | _ => false
+
 /-- A `for x in V { M }; N` whose source is sized and whose body does not yield: a counted loop,
 one computation (`forData`). A borrow block around it keeps its borrow for the whole loop
-(`LoopLend`).  `[spec §16]` -/
-def dataFor (c : TCx) (V : Val) (M _N : Comp) : Bool :=
-  (dataSrcOf c V).isSome && (M.sugarAt isYieldKw).isNone
+(`LoopLend`). A source not yet elaborated, a call of a generic function (a template, named in
+`sized`) whose written result is a sized iterator, is sized too.  `[spec §16]` -/
+def dataFor (sized : List String) (c : TCx) (V : Val) (M _N : Comp) : Bool :=
+  let call := match V with
+    | .app _ (.var _ h) _ | .app _ (.unbang _ (.var _ h)) _ | .app _ (.defApp _ h _) _ =>
+      sized.contains h
+    | _ => false
+  ((dataSrcOf c V).isSome || call) && (M.sugarAt isYieldKw).isNone
+
+/-- The templates whose written result is a sized iterator (`dataFor`). -/
+def DivSt.sizedFns (st : DivSt) : List String :=
+  st.templates.filterMap fun
+    | .def_ _ m _ A _ _ => if A.sizedResult then some m.name else none
+    | _ => none
+
 
 /-- The tag of a report on a loop, among the origins (`Frontend/Check/Program.lean` prints them). -/
 def reportTag : String := "report: "
@@ -3239,6 +3297,19 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
   | 0, _, _, V => pure V
   | n + 1, c, exp, V => match V with
     | .sugar sp (.lit k) => pure (litAt sp ((widthOf exp).getD .w32) k)
+    | .app sp (.sugar _ .count) (.pair _ a b) => do
+      -- `a..b` as a value: the sized iterator of the count, its data `(a, b)` and its step
+      -- (SPEC §16). A `for` over `a..b` itself is elaborated by `forData`.
+      let T := "((i32 * i32) * 1) * (i32 + (1 + 1))"
+      let L ← (template sp "a count `a..b`" s!"return ((io_hole_a, io_hole_b), ((), (!thunkv fun (io_cp : (i32 * i32) * 1) ->
+  let (io_cd, io_cu) = io_cp;
+  let (io_clo, io_chi) = io_cd;
+  io_cr : {T} <- if io_clo < io_chi \{ return (((io_clo + 1, io_chi), io_cu), inl io_clo) }
+    else \{ return (((io_clo, io_chi), io_cu), inr (inr ())) };
+  return io_cr)))" : SM Comp)
+      let L := L.fill (fun h => if h == "io_hole_a" then some a else if h == "io_hole_b" then some b
+        else none) (fun _ => none)
+      surfV n c exp (.run sp L)
     | .app sp (.sugar osp (.op o)) (.pair psp a b) => do
       let arith := match o with | .add | .sub | .mul => true | _ => false
       -- The width: expected of an arithmetic result, or an operand's; `i32` by default.
@@ -3505,7 +3576,7 @@ def surfC : Nat → TCx → Option CCTy → Comp → DM Comp
     | .absurd sp V => do pure (.absurd sp (← surfV n c (some .zero) V))
     | .bind sp x A M N lin => do
       -- A borrow block over a loop, or a `let r = &x`: lent per observation (`LoopLend`).
-      if let some L ← (Frontend.Elab.LoopLend.hook c (dataFor c) sp x A M N lin :
+      if let some L ← (Frontend.Elab.LoopLend.hook c (dataFor (← get).sizedFns) sp x A M N lin :
           Except Error (Option Comp)) then
         return (← surfC n c exp L)
       let M' ← surfC n c ((A.bind c.elabV).map .ret) M
@@ -4064,7 +4135,7 @@ def elabDecl : Nat → DivSt → Decl → SM DivSt
       | _ => false }
     -- A div function taking a borrow takes the owner, lent at each step (`LoopLend.lentDef`).
     let c₀ := TCx.ofScope (st.lib ++ st.out) false
-    let d := (← (Frontend.Elab.LoopLend.lentDef c₀ (dataFor c₀) d :
+    let d := (← (Frontend.Elab.LoopLend.lentDef c₀ (dataFor st.sizedFns) d :
       Except Error (Option Decl))).getD d
     let (d, st) ← (surfDecl fuel d).run st
     let (d, st) ← (specDecl fuel d).run st

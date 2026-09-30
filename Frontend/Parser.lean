@@ -1173,8 +1173,8 @@ def compG : Nat → Bool → P Comp
       expectSym "{"
       let M ← withLoop (comp n)
       expectSym "}"
-      expectSym ";"
-      let N ← comp n
+      -- Last in a body, what follows it is `()`.
+      let N ← if ← isSym ";" then do discard bump; comp n else pure (.ret t.span (.unit t.span))
       let sp ← spanFrom st
       pure (.for_ sp ⟨"io_while", t.span⟩ (.app c.span (.sugar t.span .while_) c) M N)
     | .kw "loop", .sym "{" =>

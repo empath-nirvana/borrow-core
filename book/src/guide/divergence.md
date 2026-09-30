@@ -58,7 +58,7 @@ main : F i32 =
   r <- return (count (&mut stdin));
   let (stdin, n) = r;
   return n
--- expect: 4:5: `count` is declared `total`, but it has a `for` (SPEC §14)
+-- expect: 4:5: `count` is declared `total`, but it has a `for` over an unbounded source (a drain) (SPEC §14)
 ```
 
 `div def` is allowed too, for documentation, but inference never needs it.

@@ -1,0 +1,128 @@
+-- Sized iterators (SPEC §16). `for x in V { … }` turns its source into an iterator by the source's
+-- type, as Rust's `IntoIterator` does, and calls its `next`. A count `a..b`, a view, `&a`,
+-- `&mut a` and an owned array are data, iterated by the elaboration itself. This module gives the
+-- same data as values that adapters compose: a **sized iterator**
+--
+--     sized D S A  =  D * (S * !(D * S => (D * S) * (A + (1 + 1))))
+--
+-- is the data `D` it came from (a view, a count `i32 * i32`, or a pair of data), its own state
+-- `S`, and its step, which answers the next data and state with an element (`inl a`), a skip
+-- (`inr (inl ())`) or the end (`inr (inr ())`). A `for` over one is `count_try` over `len(D)`, the
+-- length of the data, computed when the loop starts: no bound is a number the program gives.
+--
+-- Every step here takes at most one element of the data, so no more than `len(D)` steps are
+-- needed to see every element. The adapters keep the data, and so the bound: `map` and
+-- `enumerate` answer one element per element, `filter` at most one, and `take(k)` ends after `k`.
+-- `zip` pulls one side or the other at each step, so its data is the pair of the two and its
+-- bound their sum; it ends when either side ends. An unbounded source (a generator) is not
+-- sized, and no adapter here takes one.
+--
+-- `include iters` puts them in scope; only those a program calls are elaborated.
+
+-- The elements of a shared view, each lent at the view's lifetime. The state is the index.
+fn elems[A]<'a>(v: array_imm 'a A) -> sized (array_imm 'a A) i32 (imm 'a A) =
+  (v, (0, !{ (w, i) ->
+    let (w, w2) = array_copy['a, A](w);
+    match array_get['a, A](w2, i) {
+      inl g -> ((w, i + 1), inl g)
+    | inr u -> ((w, i), inr (inr ()))
+    } }))
+
+-- The elements of an exclusive view, each lent `mut`, one at a time: the data is the rest of the
+-- view, from which each step splits the first element.
+fn elems_mut[A]<'a>(v: array_mut 'a A) -> sized (array_mut 'a A) 1 (mut 'a A) =
+  (v, ((), !{ (w, u) ->
+    match slice_split_mut['a, A](w, 1) {
+      inl (h, t) -> match slice_get_mut['a, A](h, 0) {
+                      inl e -> ((t, u), inl e)
+                    | inr z -> ((t, u), inr (inr ()))
+                    }
+    | inr w -> ((w, u), inr (inr ()))
+    } }))
+
+-- The elements of a sized iterator of shared borrows, each copied: `A` is persistent.
+fn copied[D, S, A]<'a>(it: sized D S (imm 'a A)) ->
+    sized D (S * !(D * S => (D * S) * (imm 'a A + (1 + 1)))) A =
+  let (d, (s, step)) = it;
+  (d, ((s, step), !{ (d, (s, step)) ->
+    let ((d, s), o) = step(d, s);
+    match o {
+      inl g -> ((d, (s, step)), inl *g)
+    | inr q -> ((d, (s, step)), inr q)
+    } }))
+
+-- Each element `x` as `f(x)`.
+fn map[D, S, A, B](it: sized D S A, f: !(A => B)) ->
+    sized D (S * (!(D * S => (D * S) * (A + (1 + 1))) * !(A => B))) B =
+  let (d, (s, step)) = it;
+  (d, ((s, (step, f)), !{ (d, (s, (step, f))) ->
+    let ((d, s), o) = step(d, s);
+    match o {
+      inl a -> ((d, (s, (step, f))), inl f(a))
+    | inr q -> ((d, (s, (step, f))), inr q)
+    } }))
+
+-- The elements for which `p` holds; the others are skipped. `p` takes the element and `filter`
+-- answers it after, so the element is copied: an `i32`, a `bool` or a tuple of them.
+fn filter[D, S, A](it: sized D S A, p: !(A => bool)) ->
+    sized D (S * (!(D * S => (D * S) * (A + (1 + 1))) * !(A => bool))) A =
+  let (d, (s, step)) = it;
+  (d, ((s, (step, p)), !{ (d, (s, (step, p))) ->
+    let ((d, s), o) = step(d, s);
+    match o {
+      inl a -> if p(a) { ((d, (s, (step, p))), inl a) } else { ((d, (s, (step, p))), inr (inl ())) }
+    | inr q -> ((d, (s, (step, p))), inr q)
+    } }))
+
+-- The first `k` elements; after them, the end.
+fn take[D, S, A](it: sized D S A, k: i32) ->
+    sized D (S * (!(D * S => (D * S) * (A + (1 + 1))) * i32)) A =
+  let (d, (s, step)) = it;
+  (d, ((s, (step, k)), !{ (d, (s, (step, k))) ->
+    if k <= 0 { ((d, (s, (step, k))), inr (inr ())) } else {
+      let ((d, s), o) = step(d, s);
+      match o {
+        inl a -> ((d, (s, (step, k - 1))), inl a)
+      | inr q -> ((d, (s, (step, k))), inr q)
+      }
+    } }))
+
+-- Each element with its position among the elements, from 0.
+fn enumerate[D, S, A](it: sized D S A) ->
+    sized D (S * (!(D * S => (D * S) * (A + (1 + 1))) * i32)) (i32 * A) =
+  let (d, (s, step)) = it;
+  (d, ((s, (step, 0)), !{ (d, (s, (step, i))) ->
+    let ((d, s), o) = step(d, s);
+    match o {
+      inl a -> ((d, (s, (step, i + 1))), inl (i, a))
+    | inr q -> ((d, (s, (step, i))), inr q)
+    } }))
+
+-- Pairs of an element of `a` and one of `b`, until either ends. A step pulls `a` and then `b`;
+-- when `b` skips, the element of `a` is held (the last component of the state) and the next step
+-- pulls only `b`. Each step takes at least one element of the data `D * E`.
+fn zip[D, S, A, E, T, B](a: sized D S A, b: sized E T B) ->
+    sized (D * E) ((S * !(D * S => (D * S) * (A + (1 + 1))))
+      * ((T * !(E * T => (E * T) * (B + (1 + 1)))) * (A + 1))) (A * B) =
+  let (d, (s, f)) = a;
+  let (e, (t, g)) = b;
+  ((d, e), (((s, f), ((t, g), inr ())), !{ ((d, e), ((s, f), ((t, g), p))) ->
+    match p {
+      inl x ->
+        let ((e, t), q) = g(e, t);
+        match q {
+          inl y -> (((d, e), ((s, f), ((t, g), inr ()))), inl (x, y))
+        | inr r -> (((d, e), ((s, f), ((t, g), inl x))), inr r)
+        }
+    | inr u ->
+        let ((d, s), o) = f(d, s);
+        match o {
+          inl x ->
+            let ((e, t), q) = g(e, t);
+            match q {
+              inl y -> (((d, e), ((s, f), ((t, g), inr ()))), inl (x, y))
+            | inr r -> (((d, e), ((s, f), ((t, g), inl x))), inr r)
+            }
+        | inr r -> (((d, e), ((s, f), ((t, g), inr ()))), inr r)
+        }
+    } }))

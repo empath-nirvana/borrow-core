@@ -329,17 +329,26 @@ def patternPrefix : Nat → List String → Comp → List String × (Comp → Co
 /-- `x <- return B; N` where `B` is a borrow block whose body loops, rewritten per observation and
 spliced into the enclosing body: `none` when `B` is not such a block. `c` is the typing context at
 the binding.  `[spec §14]` -/
-def lendBind (c : TCx) (divCall : Val → Bool) (fin : Finite) (sp : Span) (x : Ident) (A : Option VTy) (V : Val)
-    (N : Comp) (lin : Bool) : Except Error (Option Comp) := do
+def lendBind (c : TCx) (divCall : Val → Bool) (fin' : TCx → Finite) (sp : Span) (x : Ident)
+    (A : Option VTy) (V : Val) (N : Comp) (lin : Bool) : Except Error (Option Comp) := do
   let some B := Block.of? V | return none
-  -- On an owned array, the block's borrow is a view: a `for` over it is a counted loop (SPEC §16).
-  let fin : Finite := match c.tyV B.P with
-    | some (.fam (.ref _)) =>
-      let vs := (patternPrefix fuel [B.b.name] B.S).1
-      fun V M N => fin V M N || match V with
-        | .var _ y => vs.contains y
-        | _ => false
-    | _ => fin
+  -- A `for` in the block's body is read in the body's context, where the block's borrow is bound:
+  -- on an owned array it is a view, and a `for` over it a counted loop (SPEC §16).
+  let cB : TCx := match c.tyV B.P, c.elabL (.dom B.lsp) with
+    | some T, some dom =>
+      let c₁ := c.pushLife B.x dom
+      match c₁.E.lenv.lookup B.x with
+      | some v =>
+        let Tb : Option Frontend.Check.CVTy := match B.k, T with
+          | .imm, .fam (.ref A) => some (.fam (.imm (.var v) A))
+          | .mut, .fam (.ref A) => some (.fam (.mut (.var v) A))
+          | .imm, .ref A => some (.imm (.var v) A)
+          | .mut, .ref A => some (.mut (.var v) A)
+          | _, _ => none
+        c₁.push B.b.name Tb
+      | none => c
+    | _, _ => c
+  let fin := fin' cB
   if !loopsOnSpine divCall fin fuel B.S then return none
   -- The place: a name, a pair of names (a family), or a value bound to a name first.
   let (bindP, place, placeNames) : (Comp → Comp) × Val × List String := match B.P with
@@ -426,14 +435,14 @@ the owner, which the per-observation lend then rewrites (`lendBind`). A call len
 `f(&t)`. So a div function over a borrow is called in direct style from a borrow scope with no
 spanning lend: each step of its loop borrows the owner for that step. `none` when the `def` is
 not of that form.  `[spec §14]` -/
-def lentDef (c : TCx) (fin : Finite) : Decl → Except Error (Option Decl)
+def lentDef (c : TCx) (fin' : TCx → Finite) : Decl → Except Error (Option Decl)
   | .def_ sp n [] (.bang asp (.all lsp y bd (.lolli fsp P Q)))
       (.bangThunkv vsp (.lamL _ y' _ (.ret _ (.thunkv _ (.lam lamsp x _ M))))) mk => do
     if y.name != y'.name then return none
     if let .gen _ := mk then return none
     let some bl := c.elabL bd | return none
     let c' := c.pushLife y.name bl
-    if !loopsOnSpine (divCallIn c') fin fuel M then return none
+    if !loopsOnSpine (divCallIn c') (fin' c') fuel M then return none
     let ps := spineTy P
     -- The one component borrowed at the parameter's lifetime.
     let borrowed := (ps.zip (List.range ps.length)).filterMap fun
@@ -465,7 +474,7 @@ def lentDef (c : TCx) (fin : Finite) : Decl → Except Error (Option Decl)
 
 /-- The binding `x <- M; N` of a body, rewritten when `M` is a borrow block over a loop or
 `N` follows a `let r = &x`.  `[spec §14]` -/
-def hook (c : TCx) (fin : Finite) (sp : Span) (x : Ident) (A : Option VTy) (M N : Comp)
+def hook (c : TCx) (fin : TCx → Finite) (sp : Span) (x : Ident) (A : Option VTy) (M N : Comp)
     (lin : Bool) : Except Error (Option Comp) := do
   if let some L ← lendLet sp x A M N then return some L
   match M with
