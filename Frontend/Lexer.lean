@@ -50,13 +50,13 @@ def keywords : List String :=
     "type", "shape", "def", "extern", "main", "total", "div", "fn", "include",
     -- terms
     "return", "force", "fun", "let", "linear", "case", "match", "borrow", "modify", "inl", "inr",
-    "if", "else", "gen", "yield", "while", "break", "clone",
+    "if", "else", "gen", "yield", "while", "break", "continue", "clone",
     "thunk", "thunkv", "unbang",
     "boxed", "unbox", "roll", "unroll", "run", "absurd",
     "nu_in", "nu_out", "delay_in", "delay_out", "stream_in", "stream_out",
     -- types, lifetimes, shapes
     "ref", "imm", "mut", "box", "unk", "i32", "i64", "u8", "input", "output", "mu", "all", "forall", "top", "dom",
-    "block", "val", "fam", "view", "nu", "delay", "loop", "stream", "str", "iter", "leaf",
+    "block", "val", "fam", "view", "nu", "delay", "loop", "stream", "str", "iter", "leaf", "sized",
     "for", "in",
     "node", "array", "array_imm", "array_mut",
     -- constants and derived forms

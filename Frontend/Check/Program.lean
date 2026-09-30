@@ -116,6 +116,12 @@ def checkProgram (p : Program) (copies : Bool := true) : Except Error Report := 
           pure (⟨if k < lib then acc.lines else acc.lines ++ [line], m <|> acc.main⟩ : Report)
       | none => pure acc
   let rep ← r.mapError (Frontend.Elab.renderError el.origins)
+  -- What the elaboration reports about the program's loops (SPEC §16): total or div, and code
+  -- that does not run after a loop that never ends.
+  let loops := el.origins.filterMap fun (_, w) =>
+    if w.startsWith Frontend.Sugar.reportTag then some ("loop " ++ w.drop Frontend.Sugar.reportTag.length)
+    else none
+  let rep := { rep with lines := rep.lines ++ loops.eraseDups }
   if !copies then return rep
   let marked := (el.origins.filter (·.2 == Frontend.Sugar.cloneOrigin)).map (·.1)
   match Frontend.Elab.implicitCopy el.tir marked with

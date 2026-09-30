@@ -38,7 +38,7 @@ def VTy.level : VTy → Nat
   | .sum .. => 2
   | .tensor .. => 3
   | .thunk .. | .ref .. | .imm .. | .mut .. | .box .. | .bang .. | .block .. | .val ..
-  | .fam .. | .view .. | .array .. | .arrayImm .. | .arrayMut .. => 4
+  | .fam .. | .view .. | .array .. | .arrayImm .. | .arrayMut .. | .sized .. => 4
   | _ => 5
 
 def CTy.level : CTy → Nat
@@ -85,6 +85,7 @@ def VTy.pp (A : VTy) (lvl : Nat := 0) : String :=
     | .array _ A => "array " ++ A.pp 4
     | .arrayImm _ a A => "array_imm " ++ a.pp 2 ++ " " ++ A.pp 4
     | .arrayMut _ a A => "array_mut " ++ a.pp 2 ++ " " ++ A.pp 4
+    | .sized _ D S A => "sized " ++ D.pp 5 ++ " " ++ S.pp 5 ++ " " ++ A.pp 5
 
 def CTy.pp (C : CTy) (lvl : Nat := 0) : String :=
   paren (C.level < lvl) <| match C with
@@ -170,6 +171,7 @@ def Val.pp (V : Val) (lvl : Nat := 0) (k : Nat := 0) : String :=
       else "!thunkv fun (" ++ x.name ++ " : " ++ A.pp ++ ") ->" ++ nl (k + 4) ++ M.pp 0 (k + 4)
     | .app _ (.sugar _ (.op o)) (.pair _ a b) => "(" ++ a.pp 2 k ++ " " ++ o.str ++ " " ++ b.pp 2 k ++ ")"
     | .app _ (.sugar _ (.call c)) W => c ++ "(" ++ W.pp 0 k ++ ")"
+    | .app _ (.sugar _ .count) (.pair _ a b) => "(" ++ a.pp 2 k ++ ".." ++ b.pp 2 k ++ ")"
     | .app _ (.sugar _ .deref) V => "*" ++ V.pp 3 k
     | .app _ (.sugar _ .yield_) V => "yield " ++ V.pp 1 k
     | .app _ (.sugar _ .retE) V => "return " ++ V.pp 1 k
@@ -202,6 +204,7 @@ def Val.pp (V : Val) (lvl : Nat := 0) (k : Nat := 0) : String :=
     | .lend _ x m => (if m == .mut then "&mut " else "&") ++ x.name
     | .sugar _ (.lit n) => toString n
     | .sugar _ .brk => "break"
+    | .sugar _ .cont => "continue"
     | .sugar _ s => s!"<{reprStr s}>"
 
 /-- A computation at level `lvl`, indented by `k` after each line break. -/
@@ -229,9 +232,16 @@ def Comp.pp (M : Comp) (lvl : Nat := 0) (k : Nat := 0) : String :=
     | .nuIn _ M => "nu_in " ++ M.pp 1 k
     | .nuOut _ M => "nu_out " ++ M.pp 1 k
     | .ascribe _ M C => "(" ++ M.pp 1 k ++ " : " ++ C.pp ++ ")"
+    | .for_ _ _ (.app _ (.sugar _ .while_) (.sugar _ .forever)) M N =>
+      "loop {" ++ nl (k + 2) ++ M.pp 0 (k + 2) ++ nl k ++ "};" ++ nl k ++ N.pp 0 k
     | .for_ _ _ (.app _ (.sugar _ .while_) c) M N =>
       "while " ++ c.pp 1 k ++ " {" ++ nl (k + 2) ++
         M.pp 0 (k + 2) ++ nl k ++ "};" ++ nl k ++ N.pp 0 k
+    | .for_ _ x V M (.bind _ r A (.ret _ (.app _ (.sugar _ .forRes) (.thunk _ d))) N _) =>
+      "let " ++ r.name ++ (match A with | some A => " : " ++ A.pp | none => "") ++ " = for " ++
+        x.name ++ " in " ++ V.pp 1 k ++ " {" ++ nl (k + 2) ++
+        M.pp 0 (k + 2) ++ nl k ++ "} else {" ++ nl (k + 2) ++ d.pp 0 (k + 2) ++ nl k ++ "};" ++
+        nl k ++ N.pp 0 k
     | .for_ _ x V M (.bind _ r A (.ret _ (.sugar _ .forRes)) N _) =>
       "let " ++ r.name ++ (match A with | some A => " : " ++ A.pp | none => "") ++ " = for " ++
         x.name ++ " in " ++ V.pp 1 k ++ " {" ++ nl (k + 2) ++
