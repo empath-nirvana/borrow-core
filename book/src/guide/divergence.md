@@ -152,11 +152,13 @@ and so is a div function that takes a borrow: it takes the cell instead, and a c
 holds it must be taken again at each step. An iterator that holds the borrow is rejected:
 
 ```bc,reject
+include yield
+
 fn tab(i: i32) -> i32 = i * 10
 
-gen fn over<'a>(b: imm 'a (array i32), n: i32) -> i32 =
+fn over<'a>(b: imm 'a (array i32), n: i32) -> 1 with Yield[i32] =
   let mut i = 0;
-  while i < n { yield i; i = i + 1 };
+  while i < n { yield(i); i = i + 1 };
   ()
 
 main -> i32 =
@@ -167,11 +169,11 @@ main -> i32 =
     acc
   };
   n
--- expect: 12:14: the iterator of this `for` holds the borrow of `b`: a borrow block over a loop lends its place again at each step, so what the loop holds between steps must not hold the borrow (SPEC §14, borrow scopes over loops)
+-- expect: 14:5: the iterator of this `for` holds the borrow of `b`: a borrow block over a loop lends its place again at each step, so what the loop holds between steps must not hold the borrow (SPEC §14, borrow scopes over loops)
 ```
 
-The same form is library code for loops and generators written by hand: `loop_lend_imm`,
-`gen_lend_mut` and the rest of `lib/lend.bc` (`include lend`).
+The same form is library code for loops and stored generators written by hand:
+`loop_lend_imm`, `pull_lend_mut` and the rest of `lib/lend.bc` (`include lend`).
 
 ## What it means in core
 
