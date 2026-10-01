@@ -42,12 +42,19 @@ and `inr mask` to cancel, and switches on the state:
 So a caller's state holds its callee's `k` at a call point: **suspension through calls nests**,
 and `κ` is a value of statically known size. Which codes may suspend is the least solution of the
 operations their bodies and callees may perform (the closure flow, `Backend/Clos/Flow.lean`), with
-nothing written by the programmer. Codes called at one site, and a code and the codes it calls in
-tail position, share their convention: a tail call of a code that may suspend passes its outcome
-on unchanged, so a loop of tail calls stays one, and so does a handler that resumes in tail
-position. A call that may reach two codes that suspend dispatches at its resume as it did at its
-call; a code that suspends through a call of itself has a state that holds its own `k`, which the
-layout types make a recursive closure type, one heap object per level (`Backend/README.md`).
+nothing written by the programmer. Codes called at one site share their convention, and so do a
+code and a code it calls in tail position when the call closes a loop of tail calls, or when the
+caller has no resumption point of its own: such a tail call passes its callee's outcome on, so a
+loop of tail calls stays one, and a handler that resumes in tail position runs in constant stack.
+Any other tail call is a resumption point. A call that may reach two codes that suspend
+dispatches at its resume as it did at its call; a code that suspends through a call of itself has
+a state that holds its own `k`, which the layout types make a recursive closure type, one heap
+object per level (`Backend/README.md`).
+
+**Tail-resumptive operations.** When every handler of a name has the same closed clause for an
+operation, and the clause resumes `κ` once, in tail position, and neither suspends nor raises,
+the operation is a direct call of the clause, its resume removed: the handler is the one known
+statically, and nothing is suspended or resumed.
 
 **Cancels.** `κ`'s cancel entry cancels `k` with the mask of the names of the handlers its region
 may hold, then answers `()` or re-raises the kept error (`reraise`). The mask is the handler
@@ -300,8 +307,13 @@ structure SFacts where
   poll : Array Bool
   /-- The codes that may raise. -/
   raises : Array Bool
+  /-- `Unwind`'s facts: the keys each code and term may raise. -/
+  U : UFacts
   /-- `drive`'s code's handler. -/
   drvOf : Std.HashMap Nat HInfo
+  /-- Every code's convention class, by its representative: codes of one class answer the same
+  outcome type. -/
+  cls : Array Nat := #[]
 
 /-- The codes of the closures `x` may hold; none for a variable the analysis has not seen. -/
 def SFacts.codesOf (F : SFacts) (x : Var) : List Nat :=
@@ -326,6 +338,31 @@ def sKeysOf (O : Ops) (F : SFacts) (self : Nat) : Tm → List Nat
   | .case _ _ b₁ _ b₂ | .when _ _ _ _ b₁ b₂ => unionKeys (sKeysOf O F self b₁) (sKeysOf O F self b₂)
   | _ => []
 
+/-- A term of the code `self`, in tail position when `tail`, has a resumption point that is not a
+tail call: a `perform`, a live forwarding, or a call of a code that may suspend. -/
+def ownPoints (O : Ops) (F : SFacts) (self : Nat) (tail : Bool) : Tm → Bool
+  | .perform _ => true
+  | .await _ _ => !(sKeysOf O F self (.await 0 0)).isEmpty
+  | .app f _ => !tail && (F.codesOf f).any fun c => !(F.skeys[c]?.getD []).isEmpty
+  | .letv _ e b => ownPoints O F self false e || ownPoints O F self tail b
+  | .letpair _ _ _ b | .copy _ _ b | .drop _ b => ownPoints O F self tail b
+  | .case _ _ b₁ _ b₂ | .when _ _ _ _ b₁ b₂ =>
+    ownPoints O F self tail b₁ || ownPoints O F self tail b₂
+  | .catch _ b | .fin _ _ b | .catchAll b => ownPoints O F self false b
+  | _ => false
+
+/-- `b` reaches `a` in the graph `succ`. -/
+def reaches (succ : Array (List Nat)) (b a : Nat) : Bool := Id.run do
+  let mut seen : Std.HashSet Nat := ({} : Std.HashSet Nat).insert b
+  let mut work := [b]
+  for _ in [0:succ.size + 1] do
+    if work.contains a then return true
+    let new := (work.flatMap fun c => succ[c]?.getD []).filter (!seen.contains ·) |>.eraseDups
+    if new.isEmpty then return false
+    seen := new.foldl (·.insert ·) seen
+    work := new
+  return false
+
 /-- The analysis: the flow, the operations each code may suspend with (the least solution, by
 iteration), and the convention: the classes of codes called at one site, joined with the codes a
 code calls in tail position, answer outcomes when one of them suspends. -/
@@ -333,20 +370,29 @@ def SFacts.of (O : Ops) (p : Prog) (hs : Array HInfo) : Except String SFacts := 
   let cs := p.constraints
   let some S := solve p.codes cs (1 <<< 40) | throw "capture: the flow analysis did not finish"
   let drvOf : Std.HashMap Nat HInfo := hs.foldl (fun m h => m.insert h.drv h) {}
-  let mut F : SFacts := ⟨S, .replicate p.codes.size [], .replicate p.codes.size false,
-    .replicate p.codes.size false, drvOf⟩
+  let n := p.codes.size
+  let mut F : SFacts :=
+    { S := S, skeys := .replicate n [], poll := .replicate n false, raises := .replicate n false,
+      U := ⟨O.defs, S, #[], some []⟩, drvOf := drvOf }
   for _ in [0:(p.codes.size + 1) * (O.keys.size + 1) + 1] do
     let sk := p.codes.toList.zipIdx.map fun (c, k) => sKeysOf O F k c.body
     let same := (sk.zip F.skeys.toList).all fun (a, b) => a.length == b.length
     F := { F with skeys := sk.toArray }
     if same then break
+  let tailSucc := p.codes.map fun c => (c.body.tailCalls.flatMap F.codesOf).eraseDups
   let mut parent : Array Nat := (List.range p.codes.size).toArray
   for (c, k) in p.codes.toList.zipIdx do
     for f in c.body.calls do
       if let c₀ :: rest := F.codesOf f then
         for c' in rest do parent := ufUnion parent c₀ c'
+    -- A tail call shares the caller's convention when it closes a loop of tail calls, which then
+    -- passes its outcome on and runs in constant stack, or when the caller has no resumption
+    -- point of its own, so that it adds nothing to the outcome's continuation. Any other tail
+    -- call is a resumption point.
+    let own := ownPoints O F k true c.body
     for f in c.body.tailCalls do
-      for c' in F.codesOf f do parent := ufUnion parent k c'
+      for c' in F.codesOf f do
+        if !own || reaches tailSucc c' k then parent := ufUnion parent k c'
   for f in p.main.calls do
     if let c₀ :: rest := F.codesOf f then
       for c' in rest do parent := ufUnion parent c₀ c'
@@ -357,7 +403,177 @@ def SFacts.of (O : Ops) (p : Prog) (hs : Array HInfo) : Except String SFacts := 
   -- Which codes may raise: `Unwind`'s analysis.
   let U := UFacts.solve O.defs S p
   let raises := U.rc.map (!Raises.isEmpty ·)
-  return { F with poll, raises }
+  let cls := (List.range p.codes.size).toArray.map (ufFind parent)
+  return { F with poll, raises, U, cls }
+
+/-! ### Tail-resumptive operations
+
+A clause that resumes `κ` once, in tail position, with an answer it computes without `κ`
+(`λ(w, k). …; k.resume y`) is *tail-resumptive*. When every handler of a name has one closed
+tail-resumptive clause for an operation, and the clause neither suspends nor raises, a `perform`
+of that operation is a direct call of the clause's code with its resume removed: the handler is
+the one known statically, and no continuation is materialised. -/
+
+/-- `x`, and the variables a `let y = z` of `t` binds to one of them, transitively. -/
+def aliasesIn (t : Tm) (x : Var) : List Var := Id.run do
+  let defs := (defsOf {} t).toList
+  let mut out := [x]
+  for _ in [0:defs.length + 1] do
+    let new := defs.filterMap fun (y, e) => match e with
+      | .var z => if out.contains z && !out.contains y then some y else none
+      | _ => none
+    if new.isEmpty then break
+    out := out ++ new.eraseDups
+  return out
+
+/-- Every variable a term uses as an operand, bound in it or not, once per use. -/
+def Tm.operands : Tm → List Var
+  | .var x | .raise x | .reraise x _ | .perform x | .absurd x | .inj _ x | .con _ _ x => [x]
+  | .unit | .lit _ => []
+  | .pair a b | .app a b | .run a b | .await a b => [a, b]
+  | .clos _ xs | .prim _ xs => xs
+  | .letv _ e b => e.operands ++ b.operands
+  | .letpair _ _ p b => p :: b.operands
+  | .case s _ b₁ _ b₂ | .when s _ _ _ b₁ b₂ => s :: b₁.operands ++ b₂.operands
+  | .copy x _ b | .drop x b | .fin _ x b => x :: b.operands
+  | .hnd _ hr cls b | .ubind hr cls b => hr :: cls :: b.operands
+  | .catch _ b | .catchAll b => b.operands
+
+/-- The uses of the variables `xs` in `t`. -/
+def occurrences (t : Tm) (xs : List Var) : Nat := (t.operands.filter xs.contains).length
+
+/-- A `let f = E` of `t` whose value is the resume projection `kk s` of `κ` (`kk` among `ks`, `s`
+an `inl`): `f`, `kk` and `s`. -/
+def findResume (defs : Std.HashMap Var Tm) (ks : List Var) : Tm → Option (Var × Var × Var)
+  | .letv f e b =>
+    match e.tail with
+    | .app kk s =>
+      if ks.contains kk && (match defs[s]?.map Tm.tail with | some (.inj false _) => true | _ => false)
+      then some (f, kk, s) else findResume defs ks e <|> findResume defs ks b
+    | _ => findResume defs ks e <|> findResume defs ks b
+  | .letpair _ _ _ b | .copy _ _ b | .drop _ b => findResume defs ks b
+  | .case _ _ b₁ _ b₂ => findResume defs ks b₁ <|> findResume defs ks b₂
+  | _ => none
+
+/-- `t` with the resume projection `kk s` replaced by `()` and the resume `ff y` by `y`, the
+variables they consumed dropped. -/
+def Tm.dropResume (kk s ff y : Var) : Tm → Tm
+  | .app a b =>
+    if a == kk && b == s then .drop kk (.drop s .unit)
+    else if a == ff && b == y then .drop ff (.var y) else .app a b
+  | .letv x e b => .letv x (e.dropResume kk s ff y) (b.dropResume kk s ff y)
+  | .letpair x z p b => .letpair x z p (b.dropResume kk s ff y)
+  | .case s' x b₁ z b₂ => .case s' x (b₁.dropResume kk s ff y) z (b₂.dropResume kk s ff y)
+  | .copy x x' b => .copy x x' (b.dropResume kk s ff y)
+  | .drop x b => .drop x (b.dropResume kk s ff y)
+  | t => t
+
+/-- The clause code `λp. let (w, k) = p; B` without its resume, when it is tail-resumptive: `B`
+uses `κ` once, as `k.resume y` in tail position. Its argument is still the pair, with `()` for
+`κ`. -/
+def tailClause? (c : Code) : Option Code := do
+  let .letv p' (.var p) (.letpair w k p'' B) := c.body | none
+  guard (p == c.param && p' == p'' && c.env.isEmpty)
+  let defs := defsOf {} B
+  let ka := aliasesIn B k
+  let (f, kk, s) ← findResume defs ka B
+  let fa := aliasesIn B f
+  let .app ff y := B.tail | none
+  guard (fa.contains ff && occurrences B ka == ka.length && occurrences B fa == fa.length)
+  return { c with body := .letv p' (.var p) (.letpair w k p' (B.dropResume kk s ff y)) }
+
+/-- The codes of the clauses at index `j` of the clause tuples a key holds. -/
+def Solver.clausesAt (S : Solver) (k : Nat) : Nat → List Nat
+  | 0 => ((S.set[k]?.getD #[]).toList.flatMap fun v => match S.vals[v]! with
+    | .pair a _ => S.closuresAt a
+    | _ => []).eraseDups
+  | j + 1 => ((S.set[k]?.getD #[]).toList.flatMap fun v => match S.vals[v]! with
+    | .pair _ b => S.clausesAt b j
+    | _ => []).eraseDups
+
+/-- Every variable of a term, bound in it or not. -/
+def Tm.allVars : Tm → List Var
+  | .letv x e b => x :: e.allVars ++ b.allVars
+  | .letpair x y p b => x :: y :: p :: b.allVars
+  | .case s x b₁ y b₂ => s :: x :: y :: b₁.allVars ++ b₂.allVars
+  | .when s _ _ x b r => s :: x :: b.allVars ++ r.allVars
+  | .copy x x' b => x :: x' :: b.allVars
+  | .drop x b => x :: b.allVars
+  | .fin _ dd b => dd :: b.allVars
+  | .catch _ b | .catchAll b => b.allVars
+  | t => t.operands
+
+/-- `t` with each variable renamed by `σ`. -/
+def Tm.rename (σ : Std.HashMap Var Var) : Tm → Tm
+  | .var x => .var (σ.getD x x)
+  | .pair a b => .pair (σ.getD a a) (σ.getD b b)
+  | .inj r a => .inj r (σ.getD a a)
+  | .con k n a => .con k n (σ.getD a a)
+  | .clos c xs => .clos c (xs.map fun x => σ.getD x x)
+  | .prim op xs => .prim op (xs.map fun x => σ.getD x x)
+  | .app f a => .app (σ.getD f f) (σ.getD a a)
+  | .letv x e b => .letv (σ.getD x x) (e.rename σ) (b.rename σ)
+  | .letpair x y p b => .letpair (σ.getD x x) (σ.getD y y) (σ.getD p p) (b.rename σ)
+  | .case s x b₁ y b₂ => .case (σ.getD s s) (σ.getD x x) (b₁.rename σ) (σ.getD y y) (b₂.rename σ)
+  | .when s k n x b r => .when (σ.getD s s) k n (σ.getD x x) (b.rename σ) (r.rename σ)
+  | .absurd s => .absurd (σ.getD s s)
+  | .copy x x' b => .copy (σ.getD x x) (σ.getD x' x') (b.rename σ)
+  | .drop x b => .drop (σ.getD x x) (b.rename σ)
+  | .raise p => .raise (σ.getD p p)
+  | .reraise p m => .reraise (σ.getD p p) m
+  | .perform p => .perform (σ.getD p p)
+  | .catch n b => .catch n (b.rename σ)
+  | .fin q dd b => .fin q (σ.getD dd dd) (b.rename σ)
+  | .catchAll b => .catchAll (b.rename σ)
+  | .run f a => .run (σ.getD f f) (σ.getD a a)
+  | .await p k => .await (σ.getD p p) (σ.getD k k)
+  | .hnd n hr cls b => .hnd n (σ.getD hr hr) (σ.getD cls cls) (b.rename σ)
+  | .ubind nn dd b => .ubind (σ.getD nn nn) (σ.getD dd dd) (b.rename σ)
+  | t => t
+
+/-- A closed code with its variables renamed afresh: a copy whose variables may take other
+layout types than the original's. -/
+def freshCopy (c : Code) : KM Code := do
+  let xs := (c.param :: c.body.allVars).eraseDups
+  let mut σ : Std.HashMap Var Var := {}
+  for x in xs do σ := σ.insert x (← kfresh)
+  return ⟨[], σ.getD c.param c.param, c.body.rename σ⟩
+
+/-- `perform p` of a direct operation as a call of its clause's code. -/
+def directCalls (O : Ops) (direct : Std.HashMap OpKey Nat) : Tm → KM Tm
+  | .perform p => do
+    let some key := payloadKey O.defs p | return .perform p
+    let some tc := direct[key]? | return .perform p
+    let a ← kfresh; let b ← kfresh; let i ← kfresh; let w ← kfresh; let u ← kfresh
+    let arg ← kfresh; let f ← kfresh
+    return .letpair a b p (.letpair i w b (.drop a (.drop i (.letv u .unit
+      (.letv arg (.pair w u) (.letv f (.clos tc []) (.app f arg)))))))
+  | .letv x e b => return .letv x (← directCalls O direct e) (← directCalls O direct b)
+  | .letpair x y p b => return .letpair x y p (← directCalls O direct b)
+  | .case s x b₁ y b₂ => return .case s x (← directCalls O direct b₁) y (← directCalls O direct b₂)
+  | .when s k n x b r => return .when s k n x (← directCalls O direct b) (← directCalls O direct r)
+  | .copy x x' b => return .copy x x' (← directCalls O direct b)
+  | .drop x b => return .drop x (← directCalls O direct b)
+  | .catch n b => return .catch n (← directCalls O direct b)
+  | .fin p dd b => return .fin p dd (← directCalls O direct b)
+  | t => pure t
+
+/-- The operations whose clause, at every handler of their name, is one closed tail-resumptive
+code that neither suspends nor raises: each with that code without its resume. -/
+def tailResumptive (O : Ops) (F : SFacts) (codes : Array Code) (hs : Array HInfo) :
+    List (OpKey × Code) := Id.run do
+  let mut out := []
+  for n in O.ctl do
+    let sites := hs.toList.filter (·.n == n)
+    for (_, j) in O.keysOf n do
+      let cs := (sites.flatMap fun h =>
+        F.S.clausesAt (F.S.num.idx (.var h.dVars[1]!)) j).eraseDups
+      let [c] := cs | continue
+      let some tc := codes[c]?.bind tailClause? | continue
+      if !(sKeysOf O F c tc.body).isEmpty then continue
+      if !Raises.isEmpty (F.U.raises tc.body) then continue
+      out := out ++ [((n, j.toUInt32), tc)]
+  return out
 
 /-! ### Machines -/
 
@@ -404,6 +620,8 @@ structure Point where
 structure MEnv where
   O : Ops
   F : SFacts
+  /-- The code lowered. -/
+  self : Nat
   /-- The live `await`s: those whose handler's body may suspend with another name's operation. -/
   liveAwait : Bool
   /-- Each point's group and position, by `PKind.key`. -/
@@ -412,17 +630,26 @@ structure MEnv where
   /-- Each group's resume code, and its number of points. -/
   groups : Array (Nat × Nat)
 
-/-- The resumption points of a term at the frames `fs`, in group `g`. -/
-def collectPoints (F : SFacts) (liveAwait : Bool) (g : Nat) (fs : List Frame) : Tm → List Point
-  | .letv x e b => collectPoints F liveAwait g (.let_ x b :: fs) e ++ collectPoints F liveAwait g fs b
-  | .letpair _ _ _ b | .copy _ _ b | .drop _ b => collectPoints F liveAwait g fs b
+/-- A tail call of `f` in the code `self` passes its outcome on: `f`'s codes share `self`'s
+convention, as the codes of a loop of tail calls do. -/
+def SFacts.passes (F : SFacts) (self : Nat) (f : Var) : Bool :=
+  (F.codesOf f).all fun c => F.cls[c]? == F.cls[self]?
+
+/-- The resumption points of a term of the code `self` at the frames `fs`, in group `g`. -/
+def collectPoints (F : SFacts) (self : Nat) (liveAwait : Bool) (g : Nat) (fs : List Frame) :
+    Tm → List Point
+  | .letv x e b =>
+    collectPoints F self liveAwait g (.let_ x b :: fs) e ++ collectPoints F self liveAwait g fs b
+  | .letpair _ _ _ b | .copy _ _ b | .drop _ b => collectPoints F self liveAwait g fs b
   | .case _ _ b₁ _ b₂ | .when _ _ _ _ b₁ b₂ =>
-    collectPoints F liveAwait g fs b₁ ++ collectPoints F liveAwait g fs b₂
-  | .catch n b => collectPoints F liveAwait g (.catch_ n :: fs) b
-  | .fin _ dd b => collectPoints F liveAwait g (.fin_ dd :: fs) b
+    collectPoints F self liveAwait g fs b₁ ++ collectPoints F self liveAwait g fs b₂
+  | .catch n b => collectPoints F self liveAwait g (.catch_ n :: fs) b
+  | .fin _ dd b => collectPoints F self liveAwait g (.fin_ dd :: fs) b
   | .perform p => [⟨.perf p, fs, g, framesLive fs⟩]
   | .await p k => if liveAwait then [⟨.await p k, fs, g, framesLive fs⟩] else []
-  | .app f a => if F.pollAt f && !fs.isEmpty then [⟨.call f a, fs, g, framesLive fs⟩] else []
+  | .app f a =>
+    if F.pollAt f && (!fs.isEmpty || !F.passes self f) then [⟨.call f a, fs, g, framesLive fs⟩]
+    else []
   | _ => []
 
 /-- The term may suspend: a `perform`, a live `await`, or a call of a code that may. -/
@@ -539,8 +766,8 @@ def MEnv.outcome (E : MEnv) (fs : List Frame) : Tm → KM Tm
     E.suspend j p (some k)
   | .app f a => do
     if !E.F.pollAt f then return ← mkInl (.app f a)
-    -- In tail position the callee's outcome is the code's.
-    if fs.isEmpty then return .app f a
+    -- A tail call that closes a loop of tail calls passes the callee's outcome on.
+    if fs.isEmpty && E.F.passes E.self f then return .app f a
     E.callPoint (← E.pointIdx f) (.app f a)
   | t => mkInl t.plain
 
@@ -644,8 +871,8 @@ def machine (O : Ops) (F : SFacts) (k : Nat) (c : Code) : KM Code := do
     | none => false
   let pts := match c.selShape? with
     | some (_, _, b₁, _, b₂) =>
-      collectPoints F liveAwait 0 [] b₁ ++ collectPoints F liveAwait 1 [] b₂
-    | none => collectPoints F liveAwait 0 [] c.body
+      collectPoints F k liveAwait 0 [] b₁ ++ collectPoints F k liveAwait 1 [] b₂
+    | none => collectPoints F k liveAwait 0 [] c.body
   let mut pointOf : Std.HashMap Var (Nat × Nat) := {}
   let mut counts : Array Nat := #[0, 0]
   for pt in pts do
@@ -656,7 +883,7 @@ def machine (O : Ops) (F : SFacts) (k : Nat) (c : Code) : KM Code := do
   for g in [0:2] do
     let r ← if counts[g]! > 0 then kregister default else pure 0
     groups := groups.push (r, counts[g]!)
-  let E : MEnv := { O, F, liveAwait, pointOf, points := pts.toArray, groups }
+  let E : MEnv := { O, F, self := k, liveAwait, pointOf, points := pts.toArray, groups }
   let body ← E.outcome [] c.body
   for g in [0:2] do
     if counts[g]! > 0 then kset groups[g]!.1 (← E.resumeCode g)
@@ -719,7 +946,18 @@ def Prog.capture (p : Prog) : Except String Prog := do
     modify fun s => { s with codes := codes ++ s.codes.extract p.codes.size s.codes.size }
     let q₀ : Prog := { p with main, codes := (← get).codes }
     let hs := (← get).hs
-    let F ← liftE (SFacts.of O q₀ hs)
+    let F₀ ← liftE (SFacts.of O q₀ hs)
+    -- Tail-resumptive operations become direct calls; then the analysis again.
+    let direct := tailResumptive O F₀ q₀.codes hs
+    let (main, q₀, F) ← if direct.isEmpty then pure (main, q₀, F₀) else do
+      let mut tcs : Std.HashMap OpKey Nat := {}
+      for (key, tc) in direct do tcs := tcs.insert key (← kregister (← freshCopy tc))
+      let cs := (← get).codes
+      for k in [0:cs.size] do
+        kset k { cs[k]! with body := ← directCalls O tcs cs[k]!.body }
+      let main ← directCalls O tcs main
+      let q₁ : Prog := { p with main, codes := (← get).codes }
+      pure (main, q₁, ← liftE (SFacts.of O q₁ hs))
     -- `drive`'s forwarding, where its body suspends with another name's operation; `κ`'s mask and
     -- re-raise, where a finaliser may raise.
     let anyRaise := q₀.codes.toList.any fun c => c.body.finalisers.any fun dd =>

@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 0.33 · 2026-09-30
+Version 0.34 · 2026-09-30
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -2856,12 +2856,21 @@ code).
 - **Which codes suspend** is the least solution of the operations each code's body and callees
   may perform, over the closure flow: the rows' information, recovered after erasure, and
   resolved per code as the codes are monomorphic. Nothing is written by the programmer.
-- **Tail calls.** The codes called at one site, and a code and the codes it calls in tail
-  position, share their convention, and a tail call of a code that may suspend passes its
-  outcome on. So a loop of tail calls through a suspension stays a loop, and a clause that
-  resumes in tail position runs the handler in constant stack (#123).
+- **Tail calls.** The codes called at one site share their convention, and so do a code and a
+  code it calls in tail position when the call closes a loop of tail calls, or when the caller has
+  no resumption point of its own (a wrapper). Such a tail call passes its callee's outcome on, so
+  a loop of tail calls through a suspension stays a loop, and a clause that resumes in tail
+  position runs the handler in constant stack (#123). Any other tail call is a resumption point.
 - **`κ`** is a closure over the handler and the body's `k`: its resume entry is a closure that
   resumes `k` and drives again; its cancel entry cancels `k`.
+
+**A tail-resumptive operation is a direct call.** When every handler of a name has the same
+closed clause for an operation (the specialisation: the handler is known statically), the clause
+resumes `κ` once, in tail position, with an answer computed without `κ`, and it neither suspends nor
+raises, a `perform` of the operation calls the clause's code with its resume removed. Nothing
+suspends or resumes, and no continuation is materialised. A clause that captures values, or
+whose handlers differ, is a state machine like any other: resumed in tail position, it still
+runs in constant stack.
 
 **Cancel** is the state's destructor. The resume code takes `inr mask` and switches on the state:
 the callee's `k` is cancelled first (innermost), then the point's finalisers run innermost first,
@@ -2876,7 +2885,11 @@ its own body, which is checked when a finaliser may raise.
 - **Recursion through a resumption point.** A code whose state holds its own `k` has a recursive
   closure type, kept in a heap object (`Backend/README.md`): one allocation per level, as Rust
   needs `Box::pin` for a recursive `async fn`. A resumed level that suspends again is built in its
-  own object, updated in place, so the count stays one per level (`recursive-yield`).
+  own object, updated in place, so the count stays one per level (`recursive-yield`). Recursion
+  through several codes costs one object per code of the cycle at each level: a clause that
+  resumes in non-tail position inside a handler that forwards recurses through the driver and
+  the clause, two per level (`forward`). One per level would box one edge of the cycle of
+  closure types only, as a recursive data type's back edge is (#54).
 - **A call that may reach several codes that suspend** dispatches, at the call and at each resume
   of its continuation, as `Box<dyn Future>` does; the state is the union of the callees', unboxed,
   so nothing is allocated (`two-callees`).
@@ -2891,9 +2904,10 @@ handler named `64` or more.
 **As built** (`Backend/Kernel.lean`, `bcc kernel`, `scripts/compile-kernel.sh`). Every
 acceptance program, with its native variants, `Core/EffExamples.lean`'s two handled programs and
 `Core/EffCancel.lean`'s two cancels, compiles through every stage with the same answer and
-`live 0`, as do terms for the shapes above (a loop of 100000 suspensions in constant stack,
-recursion through a resumption point, two possible callees, forwarding with and without a cancel,
-a continuation resumed twice). The counts (`corpus/kernel-counts.expected`) and the hand-written
+`live 0`, as do terms for the shapes above (100000 operations of a loop as direct calls, and as
+suspensions resumed in tail position, both in constant stack; recursion through a resumption
+point; two possible callees; forwarding with and without a cancel; a continuation resumed
+twice). The counts (`corpus/kernel-counts.expected`) and the hand-written
 equivalents (`corpus/capture-*-hand.bc`):
 
 | program | allocations | dispatched calls | hand-written |
@@ -2910,8 +2924,8 @@ own: its handler answers one of two closures. The lowering adds neither.
 
 - Generative handler names (Ξ's runtime labels), behind a continuation confined to its handler's
   scope (T2, #173).
-- A tail-resumptive clause compiled as a direct call at the operation, with the handler as
-  evidence and no continuation materialised (*Lowering*).
+- A tail-resumptive clause that captures values, compiled as a direct call with its captures
+  passed to the operation as evidence (*Lowering*); it is a state machine now.
 - A non-abortive control operation crossing a borrow's scope (T1, #172). Cancelling
   such a stored continuation then needs nothing more.
 - Finaliser policies beyond "a new unwind supersedes" and "a cancel keeps the first error"
@@ -2994,6 +3008,12 @@ with every kernel program at every stage (*Lowering*).
 ---
 
 ## Changelog
+
+- **0.34** (2026-09-30) — §19, *Lowering* (#205): a tail-resumptive operation, whose handlers
+  all have one closed clause that resumes in tail position and neither suspends nor raises, is a
+  direct call of the clause. A tail call shares its caller's convention only when it closes a
+  loop of tail calls or the caller has no resumption point of its own; any other tail call is a
+  resumption point, so a call reaches one resume code and does not dispatch.
 
 - **0.33** (2026-09-30) — §19, *Lowering* (#205): control operations are lowered to state
   machines. A code that may suspend answers its outcome; its state is a flat `n`-ary sum per

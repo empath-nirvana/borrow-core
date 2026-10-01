@@ -14,8 +14,10 @@ cancel-now 0 0 0
 cancel-suppressed 0 0 0
 cancel-reraised 0 0 0
 loop-tail 0 0 0
+loop-captured 0 0 0
 recursive-yield 20 0 0 # recursion through a resumption point: one frame object per level, reused at each resume
 two-callees 0 3 0 # h is one of two codes that suspend: the call and each resume of its continuation dispatch
-forward 0 0 0
+two-callees-tail 0 1 0 # the call of h; its operations are direct calls, so nothing is resumed
+forward 4 0 0 # the inner clause resumes non-tail while its handler forwards: recursion through the driver and the clause, one frame object each per level
 forward-cancel 1 0 0 # the cell, freed by the cancel
 multi-shot 0 0 0
