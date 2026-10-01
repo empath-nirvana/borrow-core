@@ -129,6 +129,23 @@ structure Ops where
 
 def Ops.keyIdx (O : Ops) (k : OpKey) : Nat := (O.keys.toList.idxOf? k).getD 0
 
+/-- The abortive operations' arguments are carried as a variant per operation, so that a code that
+raises several of them, of different argument types, answers one payload type: when the program
+has more than one. -/
+def Ops.wrapsAborts (O : Ops) : Bool := O.aborts.length > 1
+
+/-- `raise p` with the argument of `p = (n, (i, v))` put in its variant of the abortive
+operations (`wrapsAborts`). -/
+def wrapRaise (O : Ops) (p : Var) : KM Tm := do
+  let some key := payloadKey O.defs p | return .raise p
+  let some k := O.aborts.idxOf? key | return .raise p
+  let a ← kfresh; let b ← kfresh; let i ← kfresh; let v ← kfresh; let v' ← kfresh
+  let b' ← kfresh; let p' ← kfresh; let a' ← kfresh; let i' ← kfresh
+  -- The name and the operation as literals again, so that the key stays known (`payloadKey`).
+  return .letpair a b p (.drop a (.letpair i v b (.drop i (.letv v' (.con k O.aborts.length v)
+    (.letv i' (.lit (.i32 key.2)) (.letv b' (.pair i' v') (.letv a' (.lit (.i32 key.1))
+      (.letv p' (.pair a' b') (.raise p')))))))))
+
 /-- The variants of the control operations of `n`, with their operation indices. -/
 def Ops.keysOf (O : Ops) (n : UInt32) : List (Nat × Nat) :=
   O.keys.toList.zipIdx.filterMap fun ((m, i), j) => if m == n then some (j, i.toNat) else none
@@ -180,7 +197,12 @@ def abortiveSite (O : Ops) (n : UInt32) (hr cls : Var) (b : Tm) : KM Tm := do
   let v ← kfresh
   if ops.isEmpty then return .letv v b (.drop cls (.app hr v))
   let r ← kfresh; let q ← kfresh; let m ← kfresh; let qi ← kfresh; let i ← kfresh; let w ← kfresh
-  let onRaise ← dispatchOp i (fun j => withClause cls j fun c => pure (.app c w)) ops
+  let onRaise ← dispatchOp i (fun j => withClause cls j fun c => do
+    if !O.wrapsAborts then return .app c w
+    -- The argument out of its variant.
+    let some k := O.aborts.idxOf? (n, j.toUInt32) | return .app c w
+    let x ← kfresh
+    return .when w k O.aborts.length x (.app c x) (.absurd w)) ops
   return .letv r (.catch n b) (.case r v (.drop cls (.app hr v)) q
     (.drop hr (.letpair m qi q (.drop m (.letpair i w qi onRaise)))))
 
@@ -246,6 +268,7 @@ where
 
 /-- Lower the handlers and finaliser frames of a term. -/
 def handlers (O : Ops) : Tm → KM Tm
+  | .raise p => if O.wrapsAborts then wrapRaise O p else pure (.raise p)
   | .hnd n hr cls b => do
     let b ← handlers O b
     if O.ctl.contains n then controlSite O n hr cls b else abortiveSite O n hr cls b

@@ -186,6 +186,7 @@ def _root_.Frontend.Comp.fill (hv : String → Option Val) (hc : String → Opti
   | .abort sp k i V => .abort sp k i (V.fill hv hc)
   | .handle sp k hr hc' M => .handle sp k hr hc' (M.fill hv hc)
   | .unwind sp x A M D N => .unwind sp x A (M.fill hv hc) (D.fill hv hc) (N.fill hv hc)
+  | .for_ sp x V M N => .for_ sp x (V.fill hv hc) (M.fill hv hc) (N.fill hv hc)
   | M => M
 end
 
@@ -3209,6 +3210,12 @@ def forData : Nat → TCx → Option CCTy → Span → Ident → Val → Val →
     let sfx := s!"{sp.start.line}_{sp.start.col}"
     let M ← (normExits divFuel M : Except Error Comp)
     let pp (T : CVTy) : DM String := do pure (← (c.surface sp T : Except Error VTy)).pp
+    -- A body whose row has an operation that resumes: the loop is a div loop (SPEC §16).
+    let S₀ := c.E.row.getD []
+    let resumes := (opsC c divFuel M).find? fun (k, i) =>
+      S₀.any fun o => o.n.toNat == k && o.i.toNat == i && !o.abort
+    if let some (k, i) := resumes then
+      return some (← forDataDiv n c exp sp x V src M N k i)
     -- The loop's value: `let r = for …` with or without `else { d }`, or `for … else { d }`.
     let (keep, els, N) : Option (Ident × Option VTy) × Option Comp × Comp :=
       match N.forElse?, N.forRes? with
@@ -3436,6 +3443,108 @@ let ({back}, io_j{sfx}) = io_bl{sfx};
     let L' ← surfC n c exp L
     modify fun s => { s with exits := s.exits.drop 1 }
     return some L'
+
+/-- `for x in V { M }; N` over data whose body performs an operation that resumes (the operation
+`k.i`): a div loop (SPEC §16). A counted loop's step is one total computation and cannot hold the
+continuation of such an operation, so the loop is a `while` over the source's cursor, a loop of
+the body's machine (SPEC §14, §15), one turn per element: a count's index, a view's index or rest,
+an owned array's index (each element copied out under a borrow of one turn), a sized iterator's
+data and state. `&a` and `&mut a` lend `a` around the whole loop, and an operation that resumes
+cannot cross a borrow (T1, #172): they are rejected. The loop has no value (`else`, `break e`). -/
+def forDataDiv : Nat → TCx → Option CCTy → Span → Ident → Val → DataSrc → Comp → Comp → Nat → Nat →
+    DM Comp
+  | 0, _, _, sp, _, _, _, _, _, _, _ => throw ⟨sp, "internal error: a loop nested too deeply"⟩
+  | n + 1, c, exp, sp, x, V, src, M, N, k, i => do
+    let sfx := s!"{sp.start.line}_{sp.start.col}"
+    let pp (T : CVTy) : DM String := do pure (← (c.surface sp T : Except Error VTy)).pp
+    if N.forElse?.isSome || N.forRes?.isSome || M.spineBreaks.any (·.2.isSome) then
+      throw ⟨sp, s!"the body of this `for` performs an operation that resumes (the operation " ++
+        s!"{k}.{i}), so the loop is div (a `while` over its source), and it has no value: " ++
+        "`break e` and `else` are not provided there"⟩
+    let x' := x.name
+    let w := s!"io_w{sfx}"
+    let src ← match src with
+      | .count _ _ => pure s!"{w}l <- return io_hole_lo;
+{w}h <- return io_hole_hi;
+while ({w}l < {w}h) \{
+  {x'} <- return {w}l;
+  {w}l <- return ({w}l + 1);
+  force io_hole_body
+};
+force io_hole_rest"
+      | .view false a A => do
+        let a ← (c.surfaceL sp a : Except Error Frontend.Life)
+        let At ← pp A
+        pure s!"{w}v <- return io_hole_src;
+let ({w}v, {w}c) = array_copy[{a.pp}, {At}]({w}v);
+{w}n <- return array_len[{a.pp}, {At}]({w}c);
+{w}i <- return 0;
+while ({w}i < {w}n) \{
+  let ({w}v, {w}g) = array_copy[{a.pp}, {At}]({w}v);
+  {w}k <- return {w}i;
+  {w}i <- return ({w}i + 1);
+  case array_get[{a.pp}, {At}]({w}g, {w}k) \{ inl {x'} -> force io_hole_body | inr {w}u -> return () }
+};
+force io_hole_rest"
+      | .view true a A => do
+        let a ← (c.surfaceL sp a : Except Error Frontend.Life)
+        let At ← pp A
+        pure s!"{w}v <- return io_hole_src;
+{w}m <- return (inr () : 1 + 1);
+while ({w}m) \{
+  case slice_split_mut[{a.pp}, {At}]({w}v, 1) \{
+    inl {w}p -> let ({w}h, {w}v) = {w}p;
+      case slice_get_mut[{a.pp}, {At}]({w}h, 0) \{ inl {x'} -> force io_hole_body | inr {w}u -> return () }
+  | inr {w}v -> {w}m <- return (inl () : 1 + 1); return ()
+  }
+};
+force io_hole_rest"
+      | .owned A => do
+        unless Class.of A == .persistent do
+          throw ⟨V.span, s!"a `for` over an owned array copies each element, and `{ppT A}` is " ++
+            "not persistent: iterate a view of it"⟩
+        let At ← pp A
+        pure s!"{w}a <- return io_hole_src;
+let ({w}a, {w}n) = array_size[{At}]({w}a);
+{w}i <- return 0;
+while ({w}i < {w}n) \{
+  {w}k <- return {w}i;
+  {w}i <- return ({w}i + 1);
+  {w}b <- return borrow imm {w}a \{ 'io_wl, {w}lv -> case array_get['io_wl, {At}]({w}lv, {w}k) \{
+      inl {w}e -> return (inl *{w}e : {At} + 1) | inr {w}u -> return (inr () : {At} + 1) } };
+  let ({w}a, {w}r) = {w}b;
+  case {w}r \{ inl {x'} -> force io_hole_body | inr {w}u -> return () }
+};
+force io_hole_rest"
+      | .sized _ _ _ => pure s!"let ({w}d, {w}t) = io_hole_src;
+let ({w}s, {w}f) = {w}t;
+{w}m <- return (inr () : 1 + 1);
+while ({w}m) \{
+  let ({w}p, {w}o) = {w}f(({w}d, {w}s));
+  let ({w}d, {w}s) = {w}p;
+  case {w}o \{
+    inl {x'} -> force io_hole_body
+  | inr {w}q -> case {w}q \{ inl {w}u -> return () | inr {w}u -> {w}m <- return (inl () : 1 + 1); return () }
+  }
+};
+force io_hole_rest"
+      | .lend a m _ => throw ⟨sp, s!"the body of this `for` performs an operation that resumes " ++
+          s!"(the operation {k}.{i}), and its source `&{if m then "mut " else ""}{a.name}` lends " ++
+          s!"`{a.name}` around the whole loop: an operation that resumes cannot cross a borrow " ++
+          "(T1, #172). Iterate an owned array, or a view the function is given"⟩
+    let (lo, hi) := match V with
+      | .app _ (.sugar _ .count) (.pair _ a b) => (some a, some b)
+      | _ => (none, none)
+    let hv (h : String) : Option Val :=
+      if h == "io_hole_src" then some V else if h == "io_hole_lo" then lo
+      else if h == "io_hole_hi" then hi else none
+    let hc (h : String) : Option Comp :=
+      if h == "io_hole_body" then some M else if h == "io_hole_rest" then some N else none
+    let L ← (template sp "a `for` over data whose body performs an operation that resumes (a div loop)"
+      src : SM Comp)
+    if !(← get).quiet then
+      report sp s!"`for` is div: its body performs an operation that resumes ({k}.{i}), so it is a loop over the source's cursor"
+    surfC n c exp (L.fill hv hc)
 
 /-- `for x in g(e) { M }; N`, `g` performing an iteration effect (SPEC §15): the handler site
 `Frontend.Elab.Effects` left (`VSugar.forSite`), assembled. The variables the body reads or

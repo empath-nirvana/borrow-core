@@ -116,6 +116,8 @@ structure RSelf where
   C : CTy
   /-- The group's argument, the sum of its members' parameter types. -/
   A : VTy
+  /-- The sites the copy serves its row's control effects at, by effect. -/
+  served : List (String × Nat)
 
 /-- What the elaboration knows, each declared before the point being elaborated. -/
 structure Env where
@@ -1008,6 +1010,14 @@ it is in. -/
 def selfCall : Nat → Cx → List Cap → Span → RSelf → String → Nat → Val → EM (List Bind × Val)
   | 0, _, _, sp, _, _, _, _ => throw ⟨sp, "internal error: a value nested too deeply"⟩
   | k + 1, cx, cs, sp, rs, x, j, W => do
+    -- A call of itself inside a handler of an effect its row performs: each level would need a
+    -- copy whose sites are the level's own, without end (decision 57).
+    for (e, n) in rs.served do
+      if let some s := cx.siteOf e then
+        if s.n != n then
+          throw ⟨sp, s!"`{x}` calls itself inside a handler of `{e}`, an effect its recursion " ++
+            s!"performs: each level's `{e}` would go to the level's own handler, a site per level " ++
+            "without end (recursion through a site, decision 57; generative labels, #173)"⟩
     let (b, W') ← goV k cx cs W
     let r ← fresh "fx_v"
     let u ← fresh "fx_u"
@@ -1419,7 +1429,7 @@ def groupCopy : Nat → Env → Span → String → List Site → List String �
     let selfT : VTy := .sum gsp (.unit gsp) selfFn
     let self := "fx_self"
     let rs : RSelf := ⟨G.members.map (·.1), m, e.n, self,
-      .eff gsp (.cons m 0 .aff (.tensor gsp selfFn A) B rowR) B, A⟩
+      .eff gsp (.cons m 0 .aff (.tensor gsp selfFn A) B rowR) B, A, ss.map fun s => (s.eff, s.n)⟩
     let cx : Cx := { env, caps := [], sites := ss, recSelf := some rs }
     -- The members' bodies, dispatched on the member's tag.
     let mut bodies : List (Ident × Comp) := []
@@ -1587,6 +1597,18 @@ def refsC : Nat → Comp → List String
     | .force .. | .top _ => []
 end
 
+/-- A computation has a `while` or a `loop` outside nested closures. -/
+def hasWhile : Nat → Comp → Bool
+  | 0, _ => false
+  | k + 1, M => match M with
+    | .for_ _ _ (.app _ (.sugar _ .while_) _) _ _ => true
+    | .for_ _ _ _ B N => hasWhile k B || hasWhile k N
+    | .bind _ _ _ M N _ | .with_ _ M N => hasWhile k M || hasWhile k N
+    | .letUnit _ _ M | .letPair _ _ _ _ M | .lam _ _ _ M | .lamL _ _ _ M => hasWhile k M
+    | .case _ _ _ M _ N => hasWhile k M || hasWhile k N
+    | .unwind _ _ _ M D N => hasWhile k M || hasWhile k D || hasWhile k N
+    | _ => false
+
 /-- The recursive groups of the definitions `ds` (SPEC §20): each strongly connected component of
 the calls among them that has a call in it (a function that calls itself, or functions that call
 one another), its members in declaration order. -/
@@ -1651,6 +1673,10 @@ def defineGroup (env : Env) (ms : List (Span × Ident × VTy × Val × Mark)) : 
       throw ⟨n.span, s!"`{n.name}` is recursive and takes lifetime parameters: not provided"⟩
     unless f.bang do
       throw ⟨n.span, s!"`{n.name}` is recursive and is not a persistent function"⟩
+    if hasWhile fuel f.body then
+      throw ⟨n.span, s!"`{n.name}` is recursive and its body has a `while` or a `loop`: a loop " ++
+        "inside a recursion is not provided; write the loop as a recursion, or in a function of " ++
+        "its own"⟩
     if let some (_, B) := parts.head? then
       unless B.T.strip == f.T.strip do
         throw ⟨n.span, s!"`{n.name}` is in a recursive group with `{(parts.head?.map (·.1)).getD "?"}`, and its result " ++
@@ -1671,6 +1697,9 @@ def defineGroup (env : Env) (ms : List (Span × Ident × VTy × Val × Mark)) : 
           throw ⟨n.span, s!"`{n.name}` is recursive and performs `{i.eff}`, whose operations " ++
             "resume: a recursion's continuation is cancelled at an abortive row only (not provided)"⟩
       row := addInst row i
+    unless written.isEmpty || written.any (·.1.name == exh.name) do
+      throw ⟨n.span, s!"`{n.name}` is recursive, so it performs `{exh.name}` when its depth runs out, " ++
+        "which its written row does not list"⟩
     parts := parts ++ [(n.name, f)]
   row := addInst row ⟨exh.name, some []⟩
   let some (_, f₀) := parts.head? | throw ⟨sp₀, "internal error: an empty group"⟩
