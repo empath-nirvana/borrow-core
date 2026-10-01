@@ -57,7 +57,7 @@ def TCx.ofScope (scope : List Decl) (all : Bool) : TCx :=
   let ds := scope.toArray
   let xs := externsBefore ds ds.size
   let vars := (xs.map (fun (x, B) => if all || B.persistent then some x else none)).reverse
-  { E := Env.mk ⟨ds, ds.size⟩ vars [] [] [] xs.length, T := (xs.map (·.2)).reverse }
+  { E := Env.mk ⟨ds, ds.size⟩ vars [] [] [] xs.length none, T := (xs.map (·.2)).reverse }
 
 /-- A written type, elaborated. -/
 def TCx.elabV (c : TCx) (A : VTy) : Option CVTy := (c.E.elabV c.Δ A).toOption
@@ -180,6 +180,8 @@ def _root_.Frontend.Comp.takeLends : Comp → Comp × List Ident
   | .nuOut sp M => let (M', a) := M.takeLends; (.nuOut sp M', a)
   | .ascribe sp M C => let (M', a) := M.takeLends; (.ascribe sp M' C, a)
   | .letPair sp x y V M => let (V', a) := V.takeLends; (.letPair sp x y V' M, a)
+  | .perform sp k i V => let (V', a) := V.takeLends; (.perform sp k i V', a)
+  | .abort sp k i V => let (V', a) := V.takeLends; (.abort sp k i V', a)
   | M => (M, [])
 end
 
@@ -346,8 +348,8 @@ def synCM : Nat → MCx → Comp → MM MTy
       let el := (c.tc.tyV V).bind elemOf
       let _ ← synCM n (← c.push x.name (← ofOpt el)) M
       synCM n c N
-    | m => match c.tc.tyC m with
-      | some (.ret A) => pure (.known A)
+    | m => match (c.tc.tyC m).bind effRow? with
+      | some (_, A) => pure (.known A)
       | _ => freshM
 
 /-- Check the value type a computation returns. -/
@@ -365,6 +367,8 @@ def _root_.Frontend.Comp.annotate (ann : List (Span × VTy)) : Comp → Comp
   | .letPair sp x y V M => .letPair sp x y V (M.annotate ann)
   | .case sp V x M y N => .case sp V x (M.annotate ann) y (N.annotate ann)
   | .for_ sp x V M N => .for_ sp x V (M.annotate ann) (N.annotate ann)
+  | .handle sp k hr hc M => .handle sp k hr hc (M.annotate ann)
+  | .unwind sp x A M D N => .unwind sp x A (M.annotate ann) (D.annotate ann) (N.annotate ann)
   | M => M
 
 /-- An unannotated binding whose head has an injection in a synthesized position. -/
@@ -372,6 +376,8 @@ def _root_.Frontend.Comp.needsFill : Comp → Bool
   | .bind _ _ A M N _ => (A.isNone && M.synthInj) || M.needsFill || N.needsFill
   | .letUnit _ _ M | .letPair _ _ _ _ M => M.needsFill
   | .case _ _ _ M _ N | .for_ _ _ _ M N => M.needsFill || N.needsFill
+  | .handle _ _ _ _ M => M.needsFill
+  | .unwind _ _ _ M D N => M.needsFill || D.needsFill || N.needsFill
   | _ => false
 
 /-- The bindings of a body that need their type, with the type metavariables solve for them. -/

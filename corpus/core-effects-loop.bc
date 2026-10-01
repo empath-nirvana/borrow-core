@@ -1,0 +1,46 @@
+-- SPEC §19's `Loop_Σ A B = nu X. F[Σ] (A + U X) & F[Σ] B` in the core text: a loop whose
+-- observation performs the control operation `3.0 lin 1 ~> i32` (an `ask`). Each step adds the
+-- answer to the state, and finishes once the state reaches `10`. The loop is built by `unfold` at
+-- the `nu` type (positive: its observations are `F_Σ` leaves, `nuLeafB`), and observed twice
+-- under a handler whose clause resumes with `5`.
+--
+-- Answer: i32[11]: from `1`, the first step gives `6` and goes on, the second gives `11` and
+-- finishes.
+
+def plus : i32 * i32 => i32 = unbang host[add32]
+
+def step : !U (i32 -o F[3.0 lin 1 ~> i32] (i32 + i32) & F[3.0 lin 1 ~> i32] 1) =
+  !thunkv fun (s : i32) ->
+    < d <- perform[3.0] ();
+      n <- return (plus (s, d));
+      c <- return ((unbang host[lt_s32]) (n, i32[10]));
+      case c {
+        inl ge -> return (inl n)
+      | inr lt -> return (inr n)
+      },
+      return () >
+
+main : F i32 =
+  hr : !U (i32 -o F i32) <- return (!thunkv fun (v : i32) -> return v);
+  hc : !U (1 * U ((i32 -o F i32) & top) -o F i32) * 1 <- return
+    ((!thunkv fun (p : 1 * U ((i32 -o F i32) & top)) ->
+        let (u, k) = p;
+        let () = u;
+        x <- return i32[5];
+        (force k).1 x), ());
+  f <- return (unbang (unfold[nu X. F[3.0 lin 1 ~> i32] (i32 + U X) & F[3.0 lin 1 ~> i32] 1, i32] step));
+  z <- return i32[1];
+  t0 <- return (thunkv nu_in < (nu_out (force f z)).1, (nu_out (force f z)).2 >);
+  handle_with[3](hr, hc) (
+    o1 <- (nu_out (force t0)).1;
+    case o1 {
+      inl a -> return a
+    | inr t1 ->
+        o2 <- (nu_out (force t1)).1;
+        case o2 {
+          inl b -> return b
+        | inr t2 ->
+            u <- (nu_out (force t2)).2;
+            return i32[0]
+        }
+    })

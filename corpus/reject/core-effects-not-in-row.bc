@@ -1,0 +1,7 @@
+-- SPEC §19: `perform[n.i] V` performs an operation of the current row, the row of the type the
+-- computation is checked at. The operation 2.0 is not in `ask`'s row.
+-- expect: 5:26: the operation 2.0 is not in the row `[1.0 lin 1 ~> i32]`
+def ask : !U (1 -o F[1.0 lin 1 ~> i32] i32) =
+  !thunkv fun (u : 1) -> perform[2.0] u
+
+main : F 1 = return ()

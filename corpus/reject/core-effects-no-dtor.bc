@@ -1,0 +1,16 @@
+-- SPEC §19's drop glue: a variable live across a call that may abort must have a destructor, which
+-- the finaliser runs when the call aborts. `g`, a thunk with no `close`, has none: an abort of the
+-- call would abandon it.
+-- expect: 12:5: `g`, of type `1 => i32`, is live across a computation that may abort, and its type has no destructor: an abortive operation of the bound computation would abandon it
+def check : !U (i32 -o F[1.0 aff i32 ~> 0] i32) =
+  !thunkv fun (x : i32) -> abort[1.0] x
+
+def use_thunk : !U (i32 -o F[1.0 aff i32 ~> 0] i32) =
+  !thunkv fun (a : i32) ->
+    g <- return (thunkv fun (u : 1) -> return i32[1]);
+    f <- return (unbang check);
+    v <- force f a;
+    u <- return ();
+    force g u
+
+main : F 1 = return ()

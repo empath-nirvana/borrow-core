@@ -14,7 +14,7 @@ open BoCa (Width IntLit HostOp BinOp DivOp UnOp RelOp)
 
 /-- The kind of one bracket argument. -/
 inductive ArgKind where
-  | ty | cty | life | binder | shape | nat | op
+  | ty | cty | life | binder | shape | nat | op | row
   deriving DecidableEq, Repr
 
 /-- The keywords of constants. -/
@@ -28,6 +28,7 @@ inductive CKw where
   | arrayForget | sliceBorrowMut | sliceBorrowImm | sliceGetMut | sliceLenMut
   | sliceSplitImm | sliceSplitMut | sliceEmptyImm | sliceEmptyMut | sliceReplaceMut | sliceSwapMut
   | countFold | countTry
+  | withbor1U | withbor2U | withbor3U | withloadU | sliceBorrowMutU | sliceBorrowImmU
   deriving DecidableEq, Repr
 
 /-- A constant keyword's spelling. -/
@@ -52,6 +53,9 @@ def CKw.str : CKw → String
   | .sliceEmptyImm => "slice_empty_imm" | .sliceEmptyMut => "slice_empty_mut"
   | .sliceReplaceMut => "slice_replace_mut" | .sliceSwapMut => "slice_swap_mut"
   | .countFold => "count_fold" | .countTry => "count_try"
+  | .withbor1U => "withbor1u" | .withbor2U => "withbor2u" | .withbor3U => "withbor3u"
+  | .withloadU => "withloadu" | .sliceBorrowMutU => "slice_borrow_mut_u"
+  | .sliceBorrowImmU => "slice_borrow_imm_u"
 
 def CKw.all : List CKw :=
   [.alloc, .free, .swap, .copy, .copyBang, .forgetImm, .forgetMut, .forgetUnk, .forgetBang,
@@ -62,7 +66,8 @@ def CKw.all : List CKw :=
    .arrayForget, .sliceBorrowMut, .sliceBorrowImm, .sliceGetMut, .sliceLenMut,
    .sliceSplitImm, .sliceSplitMut, .sliceEmptyImm, .sliceEmptyMut, .sliceReplaceMut,
    .sliceSwapMut,
-   .countFold, .countTry]
+   .countFold, .countTry,
+   .withbor1U, .withbor2U, .withbor3U, .withloadU, .sliceBorrowMutU, .sliceBorrowImmU]
 
 def CKw.ofString? (s : String) : Option CKw := CKw.all.find? (·.str == s)
 
@@ -92,6 +97,9 @@ def CKw.sig : CKw → List ArgKind
   | .withborSMut | .withborSImm => [shape, binder, ty]
   | .withborF2Mut => [binder, binder, binder, life, ty, ty, ty]
   | .withborF2Imm => [binder, binder, binder, ty, ty, ty]
+  | .withbor1U => [binder, ty, ty, row]
+  | .withbor2U | .sliceBorrowMutU | .sliceBorrowImmU => [binder, life, ty, ty, row]
+  | .withbor3U | .withloadU => [life, binder, ty, ty, row]
 
 /-- A constant from its keyword and arguments; `none` when they do not fit its signature. -/
 def Const.ofArgs : CKw → List Arg → Option Const
@@ -147,6 +155,14 @@ def Const.ofArgs : CKw → List Arg → Option Const
   | .sliceSwapMut, [.life a, .ty A] => some (.sliceSwapMut a A)
   | .countFold, [.ty S] => some (.countFold S)
   | .countTry, [.ty S, .ty E] => some (.countTry S E)
+  | .withbor1U, [.binder x, .ty A, .ty B, .row r] => some (.withbor1U x A B r)
+  | .withbor2U, [.binder x, .life b, .ty A, .ty B, .row r] => some (.withbor2U x b A B r)
+  | .withbor3U, [.life a, .binder x, .ty A, .ty B, .row r] => some (.withbor3U a x A B r)
+  | .withloadU, [.life a, .binder x, .ty A, .ty B, .row r] => some (.withloadU a x A B r)
+  | .sliceBorrowMutU, [.binder x, .life b, .ty A, .ty B, .row r] =>
+      some (.sliceBorrowMutU x b A B r)
+  | .sliceBorrowImmU, [.binder x, .life b, .ty A, .ty B, .row r] =>
+      some (.sliceBorrowImmU x b A B r)
   | _, _ => none
 
 /-- A constant's keyword and bracket arguments. -/
@@ -203,10 +219,19 @@ def Const.toArgs : Const → CKw × List Arg
   | .sliceSwapMut a A => (.sliceSwapMut, [.life a, .ty A])
   | .countFold S => (.countFold, [.ty S])
   | .countTry S E => (.countTry, [.ty S, .ty E])
+  | .withbor1U x A B r => (.withbor1U, [.binder x, .ty A, .ty B, .row r])
+  | .withbor2U x b A B r => (.withbor2U, [.binder x, .life b, .ty A, .ty B, .row r])
+  | .withbor3U a x A B r => (.withbor3U, [.life a, .binder x, .ty A, .ty B, .row r])
+  | .withloadU a x A B r => (.withloadU, [.life a, .binder x, .ty A, .ty B, .row r])
+  | .sliceBorrowMutU x b A B r => (.sliceBorrowMutU, [.binder x, .life b, .ty A, .ty B, .row r])
+  | .sliceBorrowImmU x b A B r => (.sliceBorrowImmU, [.binder x, .life b, .ty A, .ty B, .row r])
 
 theorem Const.ofArgs_toArgs (c : Const) : Const.ofArgs c.toArgs.1 c.toArgs.2 = some c := by
   cases c with
-  | lit l => cases l <;> simp [toArgs, ofArgs]
+  | lit l => cases l with
+    | i32 n => show some (Const.lit (.i32 (UInt32.ofNat n.toNat))) = _; simp
+    | i64 n => show some (Const.lit (.i64 (UInt64.ofNat n.toNat))) = _; simp
+    | u8 n => show some (Const.lit (.u8 (UInt8.ofNat n.toNat))) = _; simp
   | withborS m => cases m <;> rfl
   | _ => rfl
 

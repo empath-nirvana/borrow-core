@@ -56,6 +56,11 @@ def CTy.subst (σ : TySubst) : CTy → CTy
   | .iter sp A R R' => .iter sp (A.subst σ) (R.subst σ) (R'.subst σ)
   | .loop sp A B => .loop sp (A.subst σ) (B.subst σ)
   | .gen sp A B R => .gen sp (A.subst σ) (B.subst σ) (R.subst σ)
+  | .eff sp r A => .eff sp (r.subst σ) (A.subst σ)
+
+def Row.subst (σ : TySubst) : Row → Row
+  | .nil => .nil
+  | .cons n i q A B r => .cons n i q (A.subst σ) (B.subst σ) (r.subst σ)
 
 def Shape.subst (σ : TySubst) : Shape → Shape
   | .leaf sp A => .leaf sp (A.subst σ)
@@ -111,6 +116,12 @@ def Const.subst (σ : TySubst) : Const → Const
   | .sliceSwapMut a A => .sliceSwapMut a (A.subst σ)
   | .countFold S => .countFold (S.subst σ)
   | .countTry S E => .countTry (S.subst σ) (E.subst σ)
+  | .withbor1U x A B r => .withbor1U x (A.subst σ) (B.subst σ) (r.subst σ)
+  | .withbor2U x b A B r => .withbor2U x b (A.subst σ) (B.subst σ) (r.subst σ)
+  | .withbor3U a x A B r => .withbor3U a x (A.subst σ) (B.subst σ) (r.subst σ)
+  | .withloadU a x A B r => .withloadU a x (A.subst σ) (B.subst σ) (r.subst σ)
+  | .sliceBorrowMutU x b A B r => .sliceBorrowMutU x b (A.subst σ) (B.subst σ) (r.subst σ)
+  | .sliceBorrowImmU x b A B r => .sliceBorrowImmU x b (A.subst σ) (B.subst σ) (r.subst σ)
 
 mutual
 def Val.subst (σ : TySubst) : Val → Val
@@ -158,6 +169,10 @@ def Comp.subst (σ : TySubst) : Comp → Comp
   | .nuOut sp M => .nuOut sp (M.subst σ)
   | .ascribe sp M C => .ascribe sp (M.subst σ) (C.subst σ)
   | .for_ sp x V M N => .for_ sp x (V.subst σ) (M.subst σ) (N.subst σ)
+  | .perform sp n i V => .perform sp n i (V.subst σ)
+  | .abort sp n i V => .abort sp n i (V.subst σ)
+  | .handle sp n hr hc M => .handle sp n hr hc (M.subst σ)
+  | .unwind sp x A M D N => .unwind sp x (A.map (VTy.subst σ)) (M.subst σ) (D.subst σ) (N.subst σ)
 end
 
 end Frontend

@@ -44,7 +44,7 @@ def VTy.level : VTy → Nat
 def CTy.level : CTy → Nat
   | .arr .. | .all .. | .nu .. => 0
   | .amp .. => 1
-  | .ret .. | .delay .. | .stream .. | .iter .. | .loop .. | .gen .. => 4
+  | .ret .. | .delay .. | .stream .. | .iter .. | .loop .. | .gen .. | .eff .. => 4
   | .top .. | .name .. => 5
 
 def widthName : BoCa.Width → String
@@ -101,6 +101,14 @@ def CTy.pp (C : CTy) (lvl : Nat := 0) : String :=
     | .iter _ A R R' => "iter " ++ A.pp 5 ++ " " ++ R.pp 5 ++ " " ++ R'.pp 5
     | .loop _ A B => "loop " ++ A.pp 5 ++ " " ++ B.pp 5
     | .gen _ A B R => "gen " ++ A.pp 5 ++ " " ++ B.pp 5 ++ " " ++ R.pp 5
+    | .eff _ .nil A => "F " ++ A.pp 4
+    | .eff _ r A => "F[" ++ r.pp ++ "] " ++ A.pp 4
+
+/-- A row's entries, `n.i q A ~> B, …`, without the brackets. -/
+def Row.pp : Row → String
+  | .nil => ""
+  | .cons n i q A B .nil => s!"{n}.{i} {q.str} " ++ A.pp ++ " ~> " ++ B.pp
+  | .cons n i q A B r => s!"{n}.{i} {q.str} " ++ A.pp ++ " ~> " ++ B.pp ++ ", " ++ r.pp
 
 def Shape.pp : Shape → String
   | .leaf _ A => "leaf " ++ A.pp 4
@@ -116,6 +124,7 @@ def Arg.pp : Arg → String
   | .shape σ => σ.pp
   | .nat n => toString n
   | .op o => hostOpName o
+  | .row r => "[" ++ r.pp ++ "]"
 
 def Const.pp (c : Const) : String :=
   let (k, as) := c.toArgs
@@ -143,7 +152,8 @@ def Val.level : Val → Nat
 
 def Comp.level : Comp → Nat
   | .bind .. | .letUnit .. | .letPair .. | .lam .. | .lamL .. | .for_ .. => 0
-  | .ret .. | .absurd .. | .nuIn .. | .nuOut .. => 1
+  | .unwind .. => 0
+  | .ret .. | .absurd .. | .nuIn .. | .nuOut .. | .perform .. | .abort .. | .handle .. => 1
   | .app .. | .proj .. | .inst .. => 2
   | _ => 3
 
@@ -232,6 +242,12 @@ def Comp.pp (M : Comp) (lvl : Nat := 0) (k : Nat := 0) : String :=
     | .bind _ x none M N lin => linKw lin ++ x.name ++ " <- " ++ M.pp 1 (k + 2) ++ ";" ++ nl k ++ N.pp 0 k
     | .bind _ x (some A) M N lin =>
       linKw lin ++ x.name ++ " : " ++ A.pp ++ " <- " ++ M.pp 1 (k + 2) ++ ";" ++ nl k ++ N.pp 0 k
+    | .unwind _ x A M D N =>
+      x.name ++ (match A with | some A => " : " ++ A.pp | none => "") ++ " <- " ++ M.pp 1 (k + 2) ++
+        " unwind (" ++ D.pp 0 (k + 2) ++ ");" ++ nl k ++ N.pp 0 k
+    | .perform _ n i V => s!"perform[{n}.{i}] " ++ V.pp 1 k
+    | .abort _ n i V => s!"abort[{n}.{i}] " ++ V.pp 1 k
+    | .handle _ n hr hc M => s!"handle_with[{n}]({hr.name}, {hc.name}) " ++ M.pp 1 k
     | .force _ x => "force " ++ x.name
     | .lam _ x A M => "fun (" ++ x.name ++ " : " ++ A.pp ++ ") ->" ++ nl (k + 2) ++ M.pp 0 (k + 2)
     | .app _ M x => M.pp 2 k ++ " " ++ x.name

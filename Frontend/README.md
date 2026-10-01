@@ -94,6 +94,18 @@ Where draft 1 is silent or ambiguous about parsing, the parser does the followin
 17. **Lexical details.** `-o` is one token even before a letter; `--` starts a comment
     everywhere; `⊓Δ` is `dom` and `⊓` alone is `/\`; `Imm̲` (with U+0332) is `view`. Only the
     Unicode spellings of the §2 table are accepted (no `→`, `⇒`).
+18. **Effects (SPEC §19).** A row is written after `F`: `F[3.0 aff A ~> B, 3.1 lin 1 ~> i32] T`,
+    each entry the operation `i` of the name `n` (`n.i`), its qualifier and `A ~> B`; `F[] T` is
+    read as `F T`, and the printer writes an empty row so. `lin`, `aff` and `unr` are read as
+    qualifiers inside a row only, and are not reserved; `~>` is a token. The computations are
+    `perform[n.i] V` and `abort[n.i] V` (prefix forms, operands as `return`'s),
+    `handle_with[n](hr, hc) M` (`M` an operand: a binding form is parenthesized) and the binding
+    `x <- M unwind (D); N` (also `x : A <- M unwind (D); N`). The unwinding borrows take the
+    callback's row as their last bracket argument, `[n.i q A ~> B, …]`: `withbor1u['x, A, B, [ROW]]`,
+    `withbor2u['x, @b, A, B, [ROW]]`, `withbor3u[@a, 'x, A, B, [ROW]]`,
+    `withloadu[@a, 'x, A, B, [ROW]]`, `slice_borrow_mut_u['x, @b, A, B, [ROW]]`,
+    `slice_borrow_imm_u['x, @b, A, B, [ROW]]`. `perform`, `abort`, `handle_with`, `unwind` and the
+    six constants are reserved (`handle` is not: the corpus names a `def` so).
 
 ## The checker (`Frontend/Check/`)
 
@@ -215,6 +227,39 @@ of the search; none is a change to `CDerives`.
    part of a terminal computation, so a `case` there must balance its arms by itself.
 9. **Externs are not owed.** `main` must consume every non-persistent extern, with or without a
    destructor.
+
+### Effects (SPEC §19)
+
+The checker applies §19's rules (`Core/Fundamental.lean`) through the builders `rEffSub`,
+`rPerform`, `rRaise`, `rEffLet`, `rEffThen` and `rEffHandle` (`Rules.lean`) and the six unwinding
+borrows (`synConstU`, `Consts.lean`); their side conditions are decided by `rowLeB`, `Row.nzB`,
+`Row.uniqB`, `Row.weakB`, `Row.unrB`, `Row.unwindB`, `dropB` and `CTy.effLeafB`
+(`Decide.lean`), each with its soundness lemma.
+
+* **The current row.** `Env.row` is the row of the returner chain `F_Σ B` a computation is checked
+  against (`Env.atC`); `perform[n.i] V` and `abort[n.i] V` look their operation up in it
+  (`findOp`). A value has no row (`Env.forVal`), so a computation synthesized inside a value
+  (`thunkv fun …` with no type expected) cannot perform: ascribe it.
+* **Conversion.** Where a synthesized type meets an expected one (`convC`), `F_Σ′ A` is accepted at
+  `F_Σ A` when `Σ′ ⊆ Σ` (`rowLeB`), by `[sub]`; `return V` checks at `F_Σ A` the same way.
+* **Effectful binds.** `x <- M; N` whose head synthesizes `F_Σ′ A` with `Σ′` nonempty is at the
+  current row `Σ` (or `Σ′`, when none is set), `M` lifted by `[sub]`. At a row with no weakening
+  (every operation `lin`) it is `[let]`; when every slot `N` uses drops (`dropB`), and is a `!`
+  type at an unrestricted row, `[let]` with the family restricted to those slots; otherwise
+  `[then]`, with the finaliser `finalOf`: the destructors (SPEC §12, `rDrop`) of the
+  non-persistent slots `N` uses, lifted to `F_{Σ.abortOnly} 1`. A slot with no destructor there is
+  an error naming it. An annotated head `x : A <- M` at a nonempty row is checked at `F A` first,
+  and at `F_Σ A` only when that fails. `x <- M unwind (D); N` is `[then]` with the `D` written;
+  both `N` and `D` are owed what the binding is owed.
+* **Handlers.** `handle_with[n](hr, hc) M` reads `A`, `Σ` and `R` off `hr : !U(A -o F_Σ R)`
+  (`retRead`) and the operations `E` off the clauses' type (`clausesRead`, checked equal to
+  `clausesTy Σ R E`); an abortive clause `!U(A -o F_Σ R)` is read as the affine operation
+  `A ↠^aff 0` (`aff` and `unr` give it the same clause type). `M` is checked at
+  `F_{ofEff n E 0 ++ Σ} A`.
+* **Unwinding borrows.** The finaliser is the source's destructor `dtorE` (`forget` at a `mut`
+  source, the cell's and the array's otherwise), closed by evaluation; the derivation is
+  `dtor_wf` at a dead context, so these constants absorb no slot (as item 5 of the
+  incompleteness).
 
 ### Standard I/O (SPEC §11)
 

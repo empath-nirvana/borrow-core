@@ -225,6 +225,59 @@ def rNuIn {C : CCTy} (hC : C.NuOk) (r : Res Δ T (.comp C.unroll)) : Res Δ T (.
 def rNuOut {C : CCTy} (hC : C.NuOk) (r : Res Δ T (.comp (.nu C))) : Res Δ T (.comp C.unroll) :=
   ⟨r.e, r.F.map fun _ h => .nuOut hC h⟩
 
+/-! ### Effects  `[spec §19]` -/
+
+/-- `[sub]`: `F_Σ A ≤ F_Σ′ A` at `Σ ⊆ Σ′`. -/
+def rEffSub {S S' : CRow} {A : CVTy} (hle : rowLeB S S' = true) (r : Res Δ T (.comp (effOf S A))) :
+    Res Δ T (.comp (effOf S' A)) :=
+  ⟨r.e, r.F.map fun _ h => .effSub (rowLeB_sound hle) h⟩
+
+/-- `[perform]`: a non-abortive operation of the row, at its argument. -/
+def rPerform {S : CRow} {o : COpSig} (hf : BoCa.Fig16.LogRel.Core.Row.find S o.n o.i = some o)
+    (hna : o.abort = false) (r : Res Δ T (.val o.A)) : Res Δ T (.comp (effOf S o.B)) :=
+  ⟨BoCa.BoLo.performE (BoCa.Fig16.LogRel.Core.opArgE o.n o.i r.e),
+    r.F.map fun _ h => .effPerform hf hna h⟩
+
+/-- `[raise]`: an abortive operation of the row, at any answer `B`; its argument drops. -/
+def rRaise {S : CRow} {o : COpSig} (B : CVTy)
+    (hf : BoCa.Fig16.LogRel.Core.Row.find S o.n o.i = some o) (ha : o.abort = true)
+    (hd : dropB o.A = true) (r : Res Δ T (.val o.A)) : Res Δ T (.comp (effOf S B)) :=
+  ⟨BoCa.BoLo.raiseE (BoCa.Fig16.LogRel.Core.opArgE o.n o.i r.e),
+    r.F.map fun _ h => .effRaise hf ha (dropB_sound _ hd) h⟩
+
+/-- `[let]`: `M to x. N` at a row, `N`'s context dropping at a row with weakening and persistent
+at an unrestricted row. -/
+def rEffLet {S : CRow} {A B : CVTy} (rM : Res Δ T (.comp (effOf S A)))
+    (FN : Fam T (fun L => CDerives Δ (mkCtx (A :: T) (true :: L)) eN (.comp (effOf S B)) ∧
+      (S.Weak → (mkCtx T L).Drops) ∧ (S.Unr → Persistent (mkCtx T L))))
+    (h : overlapOK T rM.F.u FN.u = true) : Res Δ T (.comp (effOf S B)) :=
+  ⟨.app (Expr.val (BoCa.Val.lam eN)) rM.e, (rM.F.split FN h).map
+    fun _ ⟨_, _, hs, h₁, h₂, hW, hU⟩ => .effLet hs hW hU h₁ h₂⟩
+
+/-- `[then]`: `M then x. N unwind D`, `N` and the finaliser `D` at one context. -/
+def rEffThen {S : CRow} {A B : CVTy} (hNZ : S.NZ) (hUq : S.Uniq)
+    (rM : Res Δ T (.comp (effOf S A)))
+    (F : Fam T (fun L => (CDerives Δ (mkCtx (A :: T) (true :: L)) eN (.comp (effOf S B)) ∧
+      CDerives Δ (mkCtx (.unit :: T) (false :: L)) eD
+        (.comp (effOf (BoCa.Fig16.LogRel.Core.Row.abortOnly S) .unit))) ∧
+      (S.Unr → Persistent (mkCtx T L))))
+    (h : overlapOK T rM.F.u F.u = true) : Res Δ T (.comp (effOf S B)) :=
+  ⟨BoCa.Fig16.LogRel.Core.thenE eN eD rM.e, (rM.F.split F h).map
+    fun _ ⟨_, _, hs, h₁, ⟨hN, hD⟩, hU⟩ => .effThen hs hNZ hUq hU h₁ hN hD⟩
+
+/-- `[handle]`: `handle_n e with (h_ret, hs)`, the answer clause and the clauses the slots `ir`
+and `ic`. -/
+def rEffHandle {S : CRow} {E : List (CQual × CVTy × CVTy)} {n : UInt32} {A R : CVTy}
+    (ir ic : Nat) (hir : T[ir]? = some (BoCa.Fig16.LogRel.Core.retTy S A R))
+    (hic : T[ic]? = some (BoCa.Fig16.LogRel.Core.clausesTy S R E)) (hn0 : n ≠ 0)
+    (hnS : ∀ o ∈ S, o.n ≠ n) (hlen : E.length ≤ 2 ^ 32)
+    (rM : Res Δ T (.comp (effOf (BoCa.Fig16.LogRel.Core.Row.ofEff n E 0 ++ S) A)))
+    (h₁ : overlapOK T (oneL T ir) (oneL T ic) = true)
+    (h₂ : overlapOK T (orL (oneL T ir) (oneL T ic)) rM.F.u = true) : Res Δ T (.comp (effOf S R)) :=
+  ⟨BoCa.Fig16.LogRel.Core.hndTerm n ir ic rM.e,
+    (((Fam.var T ir _ hir).split (Fam.var T ic _ hic) h₁).split rM.F h₂).map
+      fun _ ⟨_, _, hs, ⟨_, _, hs₁, hr, hc⟩, he⟩ => .effHandle hs hs₁ hr hc hn0 hnS hlen he⟩
+
 end
 
 end Frontend.Check

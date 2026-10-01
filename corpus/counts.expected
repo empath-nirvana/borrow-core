@@ -28,6 +28,13 @@ capture-store-cancel-hand 2 0 0 # equal to the kernel program store-cancel
 capture-take-hand 1 0 0 # the producer's cell; the kernel program take adds its count's node and its handler's two closures
 capture-tick-hand 0 0 0 # equal to the kernel program tick-native
 clone-reuse 6 0 1
+core-effects-borrow-abort 1 0 0 # the cell, freed by the finaliser on the unwind
+core-effects-borrows 2 0 0
+core-effects-drop-glue 2 0 0
+core-effects-loop 0 0 0
+core-effects-reborrows 3 0 0
+core-effects-result 0 0 0
+core-effects-tail 0 0 0
 count-down 0 0 0
 count-down-exact 6 0 0
 count-fold 0 0 0

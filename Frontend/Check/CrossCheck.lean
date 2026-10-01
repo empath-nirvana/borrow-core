@@ -38,7 +38,8 @@ deriving instance ToExpr for Frontend.Span
 deriving instance ToExpr for Frontend.Ident
 deriving instance ToExpr for Frontend.Life
 deriving instance ToExpr for Frontend.Mode
-deriving instance ToExpr for Frontend.VTy, Frontend.CTy, Frontend.Shape
+deriving instance ToExpr for Frontend.Qual
+deriving instance ToExpr for Frontend.VTy, Frontend.CTy, Frontend.Row, Frontend.Shape
 deriving instance ToExpr for Frontend.Const
 deriving instance ToExpr for Frontend.SurfOp
 deriving instance ToExpr for Frontend.BorrowKind

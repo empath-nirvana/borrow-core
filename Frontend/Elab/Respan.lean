@@ -62,6 +62,11 @@ def CTy.respan (sp : Span) : CTy → CTy
   | .iter _ A R R' => .iter sp (A.respan sp) (R.respan sp) (R'.respan sp)
   | .loop _ A B => .loop sp (A.respan sp) (B.respan sp)
   | .gen _ A B R => .gen sp (A.respan sp) (B.respan sp) (R.respan sp)
+  | .eff _ r A => .eff sp (r.respan sp) (A.respan sp)
+
+def Row.respan (sp : Span) : Row → Row
+  | .nil => .nil
+  | .cons n i q A B r => .cons n i q (A.respan sp) (B.respan sp) (r.respan sp)
 
 def Shape.respan (sp : Span) : Shape → Shape
   | .leaf _ A => .leaf sp (A.respan sp)
@@ -120,6 +125,17 @@ def Const.respan (sp : Span) : Const → Const
   | .sliceSwapMut a A => .sliceSwapMut (a.respan sp) (A.respan sp)
   | .countFold S => .countFold (S.respan sp)
   | .countTry S E => .countTry (S.respan sp) (E.respan sp)
+  | .withbor1U x A B r => .withbor1U (x.respan sp) (A.respan sp) (B.respan sp) (r.respan sp)
+  | .withbor2U x b A B r =>
+      .withbor2U (x.respan sp) (b.respan sp) (A.respan sp) (B.respan sp) (r.respan sp)
+  | .withbor3U a x A B r =>
+      .withbor3U (a.respan sp) (x.respan sp) (A.respan sp) (B.respan sp) (r.respan sp)
+  | .withloadU a x A B r =>
+      .withloadU (a.respan sp) (x.respan sp) (A.respan sp) (B.respan sp) (r.respan sp)
+  | .sliceBorrowMutU x b A B r =>
+      .sliceBorrowMutU (x.respan sp) (b.respan sp) (A.respan sp) (B.respan sp) (r.respan sp)
+  | .sliceBorrowImmU x b A B r =>
+      .sliceBorrowImmU (x.respan sp) (b.respan sp) (A.respan sp) (B.respan sp) (r.respan sp)
 
 mutual
 def Val.respan (sp : Span) : Val → Val
@@ -167,6 +183,11 @@ def Comp.respan (sp : Span) : Comp → Comp
   | .nuOut _ M => .nuOut sp (M.respan sp)
   | .ascribe _ M C => .ascribe sp (M.respan sp) (C.respan sp)
   | .for_ _ x V M N => .for_ sp (x.respan sp) (V.respan sp) (M.respan sp) (N.respan sp)
+  | .perform _ n i V => .perform sp n i (V.respan sp)
+  | .abort _ n i V => .abort sp n i (V.respan sp)
+  | .handle _ n hr hc M => .handle sp n (hr.respan sp) (hc.respan sp) (M.respan sp)
+  | .unwind _ x A M D N =>
+      .unwind sp (x.respan sp) (A.map (VTy.respan sp)) (M.respan sp) (D.respan sp) (N.respan sp)
 end
 
 end Frontend

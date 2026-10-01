@@ -31,6 +31,24 @@ abbrev CVTy := BoCa.Fig16.LogRel.Core.VTy
 abbrev CCTy := BoCa.Fig16.LogRel.Core.CTy
 abbrev CShape := BoCa.Fig16.LogRel.Core.Shape
 abbrev CLife := BoCa.Lifetime.Life
+abbrev CQual := BoCa.Fig16.LogRel.Core.Qual
+abbrev COpSig := BoCa.Fig16.LogRel.Core.OpSig
+/-- A row of the kernel, `List OpSig`.  `[spec §19]` -/
+abbrev CRow := BoCa.Fig16.LogRel.Core.Row
+
+/-- `F_Σ A`: the row's operations over `F A`.  `[spec §19]` -/
+abbrev effOf : CRow → CVTy → CCTy := BoCa.Fig16.LogRel.Core.CTy.effOf
+
+/-- A qualifier of the surface as the kernel's. -/
+def _root_.Frontend.Qual.toCore : Frontend.Qual → CQual
+  | .lin => .lin
+  | .aff => .aff
+  | .unr => .unr
+
+def qualStr : CQual → String
+  | .lin => "lin"
+  | .aff => "aff"
+  | .unr => "unr"
 
 /-- `gen A B R = νX. F((A ⊗ U X) ⊕ (B ⊕ U X)) & F R`: a generator (`lib/gen.bc`). It is an
 abbreviation of the frontend over `ν` (SPEC §7: a new codata shape is a new abbreviation), with no
@@ -159,8 +177,17 @@ def ppC (nm : List (String × LifeVar)) (p : Nat) : CCTy → String
   | .nu (.amp (.ret (.sum (.tensor A (.tvar 0)) R)) (.ret R')) =>
       parenIf (p > 5) s!"iter {ppV nm 0 6 A} {ppV nm 0 6 R} {ppV nm 0 6 R'}"
   | .nu C => parenIf (p > 0) s!"nu {tvName 0}. {ppC nm 0 C}"
-  | .eff n i _ A B C =>
-      parenIf (p > 5) s!"eff {n}.{i} ({ppV nm 0 2 A} ~> {ppV nm 0 2 B}) {ppC nm 6 C}"
+  | .eff n i q A B C =>
+      let (es, r) := ppEff nm C
+      parenIf (p > 5)
+        s!"F[{", ".intercalate (s!"{n}.{i} {qualStr q} {ppV nm 0 0 A} ~> {ppV nm 0 0 B}" :: es)}] {r}"
+/-- The entries of a row's layers `F_Σ`, and what is under them. -/
+def ppEff (nm : List (String × LifeVar)) : CCTy → List String × String
+  | .eff n i q A B C =>
+      let (es, r) := ppEff nm C
+      (s!"{n}.{i} {qualStr q} {ppV nm 0 0 A} ~> {ppV nm 0 0 B}" :: es, r)
+  | .ret A => ([], ppV nm 0 6 A)
+  | C => ([], ppC nm 6 C)
 end
 
 def ppLife (a : CLife) : String := ppLifeP [] 1 a
@@ -291,6 +318,19 @@ def elabC : Nat → TyEnv → CTy → Except Error CCTy
     | .iter _ A R R' => do pure (.iter (← elabV n E A) (← elabV n E R) (← elabV n E R'))
     | .loop _ A B => do pure (.loop (← elabV n E A) (← elabV n E B))
     | .gen _ A B R => do pure (genTy (← elabV n E A) (← elabV n E B) (← elabV n E R))
+    | .eff sp r A => do
+        let S ← elabRow n E sp r
+        pure (BoCa.Fig16.LogRel.Core.CTy.effOf S (← elabV n E A))
+/-- A row: each operation's name and index below `2^32`.  `[spec §19]` -/
+def elabRow : Nat → TyEnv → Span → Row → Except Error CRow
+  | 0, _, sp, _ => err sp "type abbreviations nested too deeply"
+  | n + 1, E, sp, r => match r with
+    | .nil => pure []
+    | .cons k i q A B r => do
+        if k < 2 ^ 32 ∧ i < 2 ^ 32 then
+          let o : COpSig := ⟨UInt32.ofNat k, UInt32.ofNat i, q.toCore, ← elabV n E A, ← elabV n E B⟩
+          pure (o :: (← elabRow n E sp r))
+        else err sp s!"the operation {k}.{i}: a name and an index are below 2^32"
 /-- A shape. -/
 def elabS : Nat → TyEnv → Shape → Except Error CShape
   | 0, _, σ => err σ.span "shape abbreviations nested too deeply"

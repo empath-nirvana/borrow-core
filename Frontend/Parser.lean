@@ -66,6 +66,8 @@ inductive RTy where
   | iter (sp : Span) (A R R' : RTy)
   | loop (sp : Span) (A B : RTy)
   | gen (sp : Span) (A B R : RTy)
+  /-- `F[…] A`, the row's types already sorted. -/
+  | eff (sp : Span) (r : Row) (A : RTy)
 
 def RTy.span : RTy → Span
   | .unit sp | .zero sp | .tensor sp _ _ | .sum sp _ _ | .U sp _ | .F sp _ | .ref sp _
@@ -73,14 +75,14 @@ def RTy.span : RTy → Span
   | .name sp _ | .lolli sp _ _ | .arr sp _ _ | .all sp _ _ _ | .forall_ sp _ _ _ | .amp sp _ _
   | .top sp | .block sp _ | .val sp _ | .fam sp _ _ _ | .view sp _ _ | .nu sp _ _ | .delay sp _
   | .stream sp _ | .iter sp _ _ _ | .loop sp _ _ | .gen sp _ _ _ | .array sp _ | .arrayImm sp _ _
-  | .arrayMut sp _ _ | .sized sp _ _ _ => sp
+  | .arrayMut sp _ _ | .sized sp _ _ _ | .eff sp _ _ => sp
 
 /-- What a raw type is, for sort errors. -/
 def RTy.former : RTy → String
   | .F .. => "`F A`" | .arr .. => "`A -o C`" | .forall_ .. => "`forall 'x < @. C`"
   | .amp .. => "`C & D`" | .top .. => "`top`" | .nu .. => "`nu X. C`" | .delay .. => "`delay A`"
   | .stream .. => "`stream A`" | .iter .. => "`iter A R R'`" | .loop .. => "`loop A B`"
-  | .gen .. => "`gen A B R`"
+  | .gen .. => "`gen A B R`" | .eff .. => "`F[…] A`"
   | _ => "this type"
 
 private def sortErr (t : RTy) (isComp : Bool) : Except Error α :=
@@ -119,7 +121,8 @@ def RTy.toV : RTy → Except Error VTy
   | .arrayMut sp a A => return .arrayMut sp a (← A.toV)
   | .sized sp D S A => return .sized sp (← D.toV) (← S.toV) (← A.toV)
   | t@(.F ..) | t@(.arr ..) | t@(.forall_ ..) | t@(.amp ..) | t@(.top ..) | t@(.nu ..)
-  | t@(.delay ..) | t@(.stream ..) | t@(.iter ..) | t@(.loop ..) | t@(.gen ..) => sortErr t true
+  | t@(.delay ..) | t@(.stream ..) | t@(.iter ..) | t@(.loop ..) | t@(.gen ..)
+  | t@(.eff ..) => sortErr t true
 
 /-- Sort a raw type as a computation type. -/
 def RTy.toC : RTy → Except Error CTy
@@ -134,6 +137,7 @@ def RTy.toC : RTy → Except Error CTy
   | .iter sp A R R' => return .iter sp (← A.toV) (← R.toV) (← R'.toV)
   | .loop sp A B => return .loop sp (← A.toV) (← B.toV)
   | .gen sp A B R => return .gen sp (← A.toV) (← B.toV) (← R.toV)
+  | .eff sp r A => return .eff sp r (← A.toV)
   | t => sortErr t false
 end
 
@@ -398,7 +402,19 @@ def rtyPrefix : Nat → P RTy
       pure (k (← spanFrom st) a A)
     match t.tok with
     | .kw "U" => unary .U
-    | .kw "F" => unary .F
+    | .kw "F" =>
+      if (← peekAt 1).tok == .sym "[" then
+        -- `F[…] A`: a row (SPEC §19); `F[] A` is `F A`.
+        discard bump
+        discard bump
+        let r ← rowEntries n
+        expectSym "]"
+        let A ← rtyPrefix n
+        let sp ← spanFrom st
+        pure (match r with
+          | .nil => .F sp A
+          | r => .eff sp r A)
+      else unary .F
     | .kw "ref" => unary .ref
     | .kw "array" => unary .array
     | .kw "array_imm" => withLife .arrayImm
@@ -491,6 +507,43 @@ def rtyAtom : Nat → P RTy
       pure A
     | _ => expected "a type"
 
+/-- A value type, sorted where it is read. -/
+def rvty : Nat → P VTy
+  | 0 => outOfFuel
+  | n + 1 => do
+    match (← rty n).toV with
+    | .ok A => pure A
+    | .error e => throw e
+
+/-- The entries of a row up to its `]`: `n.i q A ~> B`, separated by `,`; `q` is `lin`, `aff` or
+`unr`, read as a name here and nowhere else. -/
+def rowEntries : Nat → P Row
+  | 0 => outOfFuel
+  | n + 1 => do
+    if ← isSym "]" then return .nil
+    let t ← peek
+    let k ← match t.tok with
+      | .int k => discard bump; pure k
+      | _ => expected "an operation `n.i` of a row"
+    expectSym "."
+    let t' ← peek
+    let i ← match t'.tok with
+      | .int i => discard bump; pure i
+      | _ => expected "the index `i` of an operation `n.i`"
+    let tq ← peek
+    let q ← match tq.tok with
+      | .ident "lin" => discard bump; pure Qual.lin
+      | .ident "aff" => discard bump; pure Qual.aff
+      | .ident "unr" => discard bump; pure Qual.unr
+      | _ => expected "a qualifier `lin`, `aff` or `unr`"
+    let A ← rvty n
+    expectSym "~>"
+    let B ← rvty n
+    if ← isSym "," then
+      discard bump
+      return .cons k i q A B (← rowEntries n)
+    pure (.cons k i q A B .nil)
+
 /-- A shape: `leaf A`, `node σ τ`, or a shape atom. -/
 def shape : Nat → P Shape
   | 0 => outOfFuel
@@ -542,6 +595,11 @@ def arg (n : Nat) : ArgKind → P Arg
   | .life => .life <$> life n
   | .binder => .binder <$> lifeVar
   | .shape => .shape <$> shape n
+  | .row => do
+    expectSym "["
+    let r ← rowEntries n
+    expectSym "]"
+    pure (.row r)
   | .nat => do
     let t ← peek
     match t.tok with
@@ -693,6 +751,9 @@ def Comp.lentNames (vars : Bool := false) : Comp → List String
   | .letUnit _ V M | .letPair _ _ _ V M => V.lentNames vars ++ M.lentNames vars
   | .case _ V _ M _ N | .for_ _ _ V M N => V.lentNames vars ++ M.lentNames vars ++ N.lentNames vars
   | .app _ M _ | .proj _ _ M | .inst _ M _ | .ascribe _ M _ | .nuOut _ M => M.lentNames vars
+  | .perform _ _ _ V | .abort _ _ _ V => V.lentNames vars
+  | .handle _ _ _ _ M => M.lentNames vars
+  | .unwind _ _ _ M D N => M.lentNames vars ++ D.lentNames vars ++ N.lentNames vars
   | _ => []
 end
 
@@ -722,6 +783,9 @@ def Comp.withPlaces (loc : List String) : Comp → List String
     V.withPlaces loc ++ M.withPlaces (x.name :: loc) ++ N.withPlaces (y.name :: loc)
   | .for_ _ x V M N => V.withPlaces loc ++ M.withPlaces (x.name :: loc) ++ N.withPlaces loc
   | .app _ M _ | .proj _ _ M | .inst _ M _ | .ascribe _ M _ | .nuOut _ M => M.withPlaces loc
+  | .perform _ _ _ V | .abort _ _ _ V => V.withPlaces loc
+  | .handle _ _ _ _ M => M.withPlaces loc
+  | .unwind _ x _ M D N => M.withPlaces loc ++ D.withPlaces loc ++ N.withPlaces (x.name :: loc)
   | _ => []
 end
 
@@ -734,6 +798,8 @@ def Comp.boundNames : Comp → List String
   | .lam _ x _ M => x.name :: M.boundNames
   | .letUnit _ _ M | .app _ M _ | .proj _ _ M | .inst _ M _ | .ascribe _ M _ | .nuOut _ M =>
     M.boundNames
+  | .handle _ _ _ _ M => M.boundNames
+  | .unwind _ x _ M D N => x.name :: (M.boundNames ++ D.boundNames ++ N.boundNames)
   | _ => []
 
 /-- A borrow block or `modify` on a place that is a name (or, for a family, a pair of names): the
@@ -801,7 +867,7 @@ def startsComp (t : Tok) : Bool :=
   match t with
   | .kw "return" | .kw "absurd" | .kw "nu_in" | .kw "delay_in" | .kw "stream_in" | .kw "nu_out"
   | .kw "delay_out" | .kw "stream_out" | .kw "force" | .sym "<" | .kw "case" | .kw "match"
-  | .kw "if" => true
+  | .kw "if" | .kw "perform" | .kw "abort" | .kw "handle_with" => true
   | _ => false
 
 /-- A binary operator: one of the surface's arithmetic and comparisons, or `&&`/`||`, which are
@@ -1325,17 +1391,26 @@ def compG : Nat → Bool → P Comp
     | .ident x, .sym "<-" =>
       discard bump; discard bump
       let M ← compG n true
+      -- `x <- M unwind (D); N` (SPEC §19).
+      let D ← unwindOf n
       expectSym ";"
       let N ← comp n
-      pure (.bind (← spanFrom st) ⟨x, t.span⟩ none M N false)
+      let sp ← spanFrom st
+      pure (match D with
+        | some D => .unwind sp ⟨x, t.span⟩ none M D N
+        | none => .bind sp ⟨x, t.span⟩ none M N false)
     | .ident x, .sym ":" =>
       discard bump; discard bump
       let A ← vty n
       expectSym "<-"
       let M ← compG n true
+      let D ← unwindOf n
       expectSym ";"
       let N ← comp n
-      pure (.bind (← spanFrom st) ⟨x, t.span⟩ (some A) M N false)
+      let sp ← spanFrom st
+      pure (match D with
+        | some D => .unwind sp ⟨x, t.span⟩ (some A) M D N
+        | none => .bind sp ⟨x, t.span⟩ (some A) M N false)
     | .ident x, .sym "=" =>
       -- `x = e`: a `let mut` variable rebound (typed elaboration §5.2).
       discard bump; discard bump
@@ -1578,6 +1653,36 @@ def compPrefix : Nat → P Comp
       pure (.absurd (← spanFrom st) V)
     | .kw "nu_in" | .kw "delay_in" | .kw "stream_in" => unary .nuIn
     | .kw "nu_out" | .kw "delay_out" | .kw "stream_out" => unary .nuOut
+    | .kw "perform" | .kw "abort" =>
+      -- `perform[n.i] V`, `abort[n.i] V` (SPEC §19).
+      discard bump
+      expectSym "["
+      let k ← match (← peek).tok with
+        | .int k => discard bump; pure k
+        | _ => expected "the name `n` of an operation `n.i`"
+      expectSym "."
+      let i ← match (← peek).tok with
+        | .int i => discard bump; pure i
+        | _ => expected "the index `i` of an operation `n.i`"
+      expectSym "]"
+      let V ← valPrefix n
+      let sp ← spanFrom st
+      pure (if t.tok == .kw "perform" then .perform sp k i V else .abort sp k i V)
+    | .kw "handle_with" =>
+      -- `handle_with[n](hr, hc) M` (SPEC §19).
+      discard bump
+      expectSym "["
+      let k ← match (← peek).tok with
+        | .int k => discard bump; pure k
+        | _ => expected "the name `n` of a handler"
+      expectSym "]"
+      expectSym "("
+      let hr ← ident "the variable of the answer clause"
+      expectSym ","
+      let hc ← ident "the variable of the clauses"
+      expectSym ")"
+      let M ← compPrefix n
+      pure (.handle (← spanFrom st) k hr hc M)
     | _ =>
       let M ← compAtom n
       compSuffixes n st M
@@ -1637,6 +1742,17 @@ def blockBody : Nat → P Comp
     let M ← comp n
     modify fun s => { s with muts := s₀.muts, assigned := s₀.assigned }
     pure M
+
+/-- The finaliser `unwind (D)` after the head of a binding, when it has one (SPEC §19). -/
+def unwindOf : Nat → P (Option Comp)
+  | 0 => outOfFuel
+  | n + 1 => do
+    unless ← isKw "unwind" do return none
+    discard bump
+    expectSym "("
+    let D ← comp n
+    expectSym ")"
+    pure (some D)
 
 /-- A loop's `else { d }`, when it has one: the loop's value when its source ends. -/
 def forElse : Nat → P (Option Comp)

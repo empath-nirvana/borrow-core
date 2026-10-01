@@ -29,7 +29,7 @@ mutual
 def synV : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Val →
     Except Error (Σ A : CVTy, Res Δ T (.val A))
   | 0, _, _, _, v => err v.span "expression nested too deeply"
-  | n + 1, E, Δ, T, v => let E := E.clearOwn; match v with
+  | n + 1, E, Δ, T, v => let E := E.forVal; match v with
     | .var sp x =>
       match lookupVar x E.vars with
       | some i =>
@@ -167,7 +167,7 @@ def synV : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Val →
 def chkV : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Val → (A : CVTy) →
     Except Error (Res Δ T (.val A))
   | 0, _, _, _, v, _ => err v.span "expression nested too deeply"
-  | n + 1, E, Δ, T, v, A => let E := E.clearOwn; match v with
+  | n + 1, E, Δ, T, v, A => let E := E.forVal; match v with
     | .pair sp V W =>
       match A with
       | .tensor A B => do
@@ -255,11 +255,71 @@ def synC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp →
       let ⟨_, r⟩ ← synV n E Δ T V
       pure ⟨_, rRet r⟩
     | .bind sp x oA M N lin => do
-      let ⟨A, rM⟩ ← bindHead n (E.ownIn (mentionsC · M)) Δ T sp oA M
-      let ⟨C, rN⟩ ← synC n ((E.minus rM.F.u).pushOwn x.name A lin) Δ (A :: T) N
-      let FN ← popL E x.span x.name rN.F lin
-      if h : overlapOK T rM.F.u FN.u = true then pure ⟨C, rBind rM FN h⟩
-      else throw (splitErr E T sp rM.F.u FN.u)
+      let ⟨A, S', rM⟩ ← bindHead n (E.ownIn (mentionsC · M)) Δ T sp oA M
+      match S', rM with
+      | [], rM =>
+        let ⟨C, rN⟩ ← synC n ((E.minus rM.F.u).pushOwn x.name A lin) Δ (A :: T) N
+        let FN ← popL E x.span x.name rN.F lin
+        if h : overlapOK T rM.F.u FN.u = true then pure ⟨C, rBind rM FN h⟩
+        else throw (splitErr E T sp rM.F.u FN.u)
+      | o :: os, rM =>
+        -- The head performs operations (SPEC §19): the binding is at the current row.
+        let S := E.row.getD (o :: os)
+        let rM' ← liftRow E M.span S rM
+        let ⟨_, rN⟩ ← atRow E N.span S
+          (← synC n { (E.minus rM.F.u).pushOwn x.name A lin with row := some S } Δ (A :: T) N)
+        pure ⟨_, ← effBind E sp x lin rM' rN⟩
+    | .unwind sp x oA M D N => do
+      let ⟨A, S', rM⟩ ← bindHead n (E.ownIn (mentionsC · M)) Δ T sp oA M
+      let S := E.row.getD S'
+      let rM' ← liftRow E M.span S rM
+      let ⟨_, rN⟩ ← atRow E N.span S
+        (← synC n { (E.minus rM.F.u).pushOwn x.name A with row := some S } Δ (A :: T) N)
+      let rD ← chkC n ((E.minus rM.F.u).push none) Δ (.unit :: T) D
+        (effOf (BoCa.Fig16.LogRel.Core.Row.abortOnly S) .unit)
+      let FN ← popL E x.span x.name rN.F
+      pure ⟨_, ← thenIt E sp rM' FN rD⟩
+    | .perform sp k i V => do
+      let ⟨_, o, hf⟩ ← findOp E sp "perform" k i
+      if hna : o.abort = false then
+        let rV ← chkV n E Δ T V o.A
+        pure ⟨_, rPerform hf hna rV⟩
+      else err sp s!"the operation {k}.{i} is abortive: write `abort[{k}.{i}]`"
+    | .abort sp k i V => do
+      let ⟨_, r⟩ ← abortIt n E Δ T sp k i V .zero
+      pure ⟨_, r⟩
+    | .handle sp k hr hc M => do
+      let some ir := lookupVar hr.name E.vars
+        | err hr.span s!"`{hr.name}` is not a variable in scope"
+      let some ic := lookupVar hc.name E.vars
+        | err hc.span s!"`{hc.name}` is not a variable in scope"
+      match hTr : T[ir]?, hTc : T[ic]? with
+      | some Tr, some Tc =>
+        match retRead Tr with
+        | none => err hr.span (s!"the answer clause `{hr.name}` must have a type " ++
+            s!"`!U(A -o F[…] R)`, but it has type `{E.ppV Tr}`")
+        | some ⟨S, A, R, hr'⟩ =>
+          match clausesRead S R Tc with
+          | none => err hc.span (s!"the clauses `{hc.name}` must have the type of a handler's " ++
+              s!"clauses at `F{ppRow E S} {E.ppV R}`, but they have type `{E.ppV Tc}`")
+          | some ⟨Es, hc'⟩ =>
+            if k < 2 ^ 32 ∧ k ≠ 0 then
+              let nm := UInt32.ofNat k
+              if hn0 : nm ≠ 0 then
+                if hnS : ∀ o ∈ S, o.n ≠ nm then
+                  if hlen : Es.length ≤ 2 ^ 32 then
+                    let rM ← chkC n E Δ T M
+                      (effOf (BoCa.Fig16.LogRel.Core.Row.ofEff nm Es 0 ++ S) A)
+                    if h₁ : overlapOK T (oneL T ir) (oneL T ic) = true then
+                      if h₂ : overlapOK T (orL (oneL T ir) (oneL T ic)) rM.F.u = true then
+                        pure ⟨_, rEffHandle ir ic (hr' ▸ hTr) (hc' ▸ hTc) hn0 hnS hlen rM h₁ h₂⟩
+                      else throw (splitErr E T sp (orL (oneL T ir) (oneL T ic)) rM.F.u)
+                    else throw (splitErr E T sp (oneL T ir) (oneL T ic))
+                  else err sp "a handler has at most 2^32 operations"
+                else err sp s!"the name {k} is already in the row `{ppRow E S}` of the handler's answer"
+              else err sp "a handler's name is not 0"
+            else err sp s!"a handler's name is between 1 and 2^32 - 1, not {k}"
+      | _, _ => err sp "internal error: variable out of range"
     | .force sp x =>
       match lookupVar x.name E.vars with
       | some i =>
@@ -350,25 +410,51 @@ def synC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp →
       let r ← chkC n E Δ T M C'
       pure ⟨C', r⟩
 
-/-- The head `M` of `x <- M; N` (`x : A <- M; N` checks it at `F A`). -/
+/-- The head `M` of `x <- M; N`, at a row: `[]` when it is pure (SPEC §19). `x : A <- M; N`
+checks it at `F A`, or, at a row that has operations and when it does not check at `F A`, at
+`F_Σ A`. -/
 def bindHead : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Span → Option VTy → Comp →
-    Except Error (Σ A : CVTy, Res Δ T (.comp (.ret A)))
+    Except Error (Σ A : CVTy, Σ S : CRow, Res Δ T (.comp (effOf S A)))
   | 0, _, _, _, sp, _, _ => err sp "expression nested too deeply"
   | n + 1, E, Δ, T, _, some A, M => do
     let A' ← E.elabV Δ A
-    let r ← chkC n E Δ T M (.ret A')
-    pure ⟨A', r⟩
+    match E.row with
+    | some (o :: os) =>
+      match chkC n E Δ T M (.ret A') with
+      | .ok r => pure ⟨A', [], r⟩
+      | .error _ =>
+        let r ← chkC n E Δ T M (effOf (o :: os) A')
+        pure ⟨A', o :: os, r⟩
+    | _ =>
+      let r ← chkC n E Δ T M (.ret A')
+      pure ⟨A', [], r⟩
   | n + 1, E, Δ, T, _, none, M => do
     let ⟨C, r⟩ ← synC n E Δ T M
-    match C, r with
-    | .ret _, r => pure ⟨_, r⟩
-    | C, _ => err M.span s!"a bound computation must have a type `F A`, but this has type `{E.ppC C}`"
+    match effRow? C with
+    | some (S, A) =>
+      if h : effOf S A = C then pure ⟨A, S, h ▸ r⟩
+      else err M.span "internal error: a returner chain"
+    | none => err M.span s!"a bound computation must have a type `F A`, but this has type `{E.ppC C}`"
+
+/-- `abort[k.i] V` at the answer `B`: an abortive operation of the current row (`[raise]`). -/
+def abortIt : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Span → Nat → Nat → Val → (B : CVTy) →
+    Except Error (Σ S : CRow, Res Δ T (.comp (effOf S B)))
+  | 0, _, _, _, sp, _, _, _, _ => err sp "expression nested too deeply"
+  | n + 1, E, Δ, T, sp, k, i, V, B => do
+    let ⟨S, o, hf⟩ ← findOp E sp "abort" k i
+    if ha : o.abort = true then
+      if hd : dropB o.A = true then
+        let rV ← chkV n E Δ T V o.A
+        pure ⟨S, rRaise B hf ha hd rV⟩
+      else err sp s!"the argument of the abortive operation {k}.{i}, of type `{E.ppV o.A}`, does not drop"
+    else err sp s!"the operation {k}.{i} is not abortive: write `perform[{k}.{i}]`"
 
 /-- Check a computation against a type. -/
 def chkC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp → (C : CCTy) →
     Except Error (Res Δ T (.comp C))
   | 0, _, _, _, m, _ => err m.span "expression nested too deeply"
   | n + 1, E, Δ, T, m, C =>
+    let E := E.atC C
     if m.terminal && E.own.any id then do
       let r ← chkC n E.clearOwn Δ T m C
       dropOwed E m.span r
@@ -376,13 +462,53 @@ def chkC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp → (C : 
     | .ret sp V =>
       match C with
       | .ret A => do pure (rRet (← chkV n E Δ T V A))
-      | C => err sp s!"`return V` is checked against `{E.ppC C}`, which is not an `F` type"
+      | C =>
+        match effRow? C with
+        | some (S, A) =>
+          if hC : effOf S A = C then do
+            let r : Res Δ T (.comp (effOf [] A)) := rRet (← chkV n E Δ T V A)
+            pure (hC ▸ rEffSub (S := []) rfl r)
+          else err sp "internal error: a returner chain"
+        | none => err sp s!"`return V` is checked against `{E.ppC C}`, which is not an `F` type"
     | .bind sp x oA M N lin => do
-      let ⟨A, rM⟩ ← bindHead n (E.ownIn (mentionsC · M)) Δ T sp oA M
-      let rN ← chkC n ((E.minus rM.F.u).pushOwn x.name A lin) Δ (A :: T) N C
-      let FN ← popL E x.span x.name rN.F lin
-      if h : overlapOK T rM.F.u FN.u = true then pure (rBind rM FN h)
-      else throw (splitErr E T sp rM.F.u FN.u)
+      let ⟨A, S', rM⟩ ← bindHead n (E.ownIn (mentionsC · M)) Δ T sp oA M
+      match S', rM with
+      | [], rM =>
+        let rN ← chkC n ((E.minus rM.F.u).pushOwn x.name A lin) Δ (A :: T) N C
+        let FN ← popL E x.span x.name rN.F lin
+        if h : overlapOK T rM.F.u FN.u = true then pure (rBind rM FN h)
+        else throw (splitErr E T sp rM.F.u FN.u)
+      | o :: os, rM =>
+        -- The head performs operations (SPEC §19): the binding is at the row of `C`.
+        match effRow? C with
+        | some (S, B) =>
+          if hC : effOf S B = C then do
+            let rM' ← liftRow E M.span S rM
+            let rN ← chkC n ((E.minus rM.F.u).pushOwn x.name A lin) Δ (A :: T) N (effOf S B)
+            pure (hC ▸ (← effBind E sp x lin rM' rN))
+          else err sp "internal error: a returner chain"
+        | none => err sp (s!"the bound computation performs the operations " ++
+            s!"`{ppRow E (o :: os)}`, so this must have a type `F[…] B`, but `{E.ppC C}` is expected")
+    | .unwind sp x oA M D N =>
+      match effRow? C with
+      | some (S, B) =>
+        if hC : effOf S B = C then do
+          let ⟨A, _, rM⟩ ← bindHead n (E.ownIn (mentionsC · M)) Δ T sp oA M
+          let rM' ← liftRow E M.span S rM
+          let rN ← chkC n ((E.minus rM.F.u).pushOwn x.name A) Δ (A :: T) N (effOf S B)
+          let rD ← chkC n ((E.minus rM.F.u).push none) Δ (.unit :: T) D
+            (effOf (BoCa.Fig16.LogRel.Core.Row.abortOnly S) .unit)
+          let FN ← popL E x.span x.name rN.F
+          pure (hC ▸ (← thenIt E sp rM' FN rD))
+        else err sp "internal error: a returner chain"
+      | none => err sp s!"`x <- M unwind (D); N` is checked against `{E.ppC C}`, which is not `F[…] B`"
+    | .abort sp k i V =>
+      match effRow? C with
+      | some (_, B) => do
+        let ⟨S', r⟩ ← abortIt n E Δ T sp k i V B
+        if hC : effOf S' B = C then pure (hC ▸ r)
+        else err sp s!"internal error: the row of `{E.ppC C}`"
+      | none => err sp s!"`abort[{k}.{i}] V` is checked against `{E.ppC C}`, which is not `F[…] B`"
     | .lam sp x A M =>
       match C with
       | .arr A₀ C => do

@@ -38,7 +38,7 @@ structure Report where
 /-- The depth bound for checking a term. -/
 def checkFuel : Nat := 1 <<< 20
 
-def Env.top (ds : Array Decl) (k : Nat) : Env := ⟨⟨ds, k⟩, [], [], [], [], 0⟩
+def Env.top (ds : Array Decl) (k : Nat) : Env := ⟨⟨ds, k⟩, [], [], [], [], 0, none⟩
 
 /-- The externs, in declaration order, each elaborated in the declarations before it. -/
 def externs (ds : Array Decl) : Except Error (List (String × CVTy)) :=

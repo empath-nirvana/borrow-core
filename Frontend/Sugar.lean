@@ -146,6 +146,10 @@ def _root_.Frontend.Comp.elab (lend : Bool) : Comp → Except Error Comp
   | .for_ sp _ _ _ _ => throw ⟨sp, "`for` may appear only on the spine of a function's body " ++
       "or of `main`: not inside a value, the head of `x <- M; N`, or the body of another `for` " ++
       "(SPEC §14)"⟩
+  | .perform sp k i V => return .perform sp k i (← V.elab lend)
+  | .abort sp k i V => return .abort sp k i (← V.elab lend)
+  | .handle sp k hr hc M => return .handle sp k hr hc (← M.elab false)
+  | .unwind sp x A M D N => return .unwind sp x A (← M.elab false) (← D.elab false) (← N.elab false)
 end
 
 /-! ### Filling a template's holes -/
@@ -190,6 +194,10 @@ def _root_.Frontend.Comp.fill (hv : String → Option Val) (hc : String → Opti
   | .nuIn sp M => .nuIn sp (M.fill hv hc)
   | .nuOut sp M => .nuOut sp (M.fill hv hc)
   | .ascribe sp M C => .ascribe sp (M.fill hv hc) C
+  | .perform sp k i V => .perform sp k i (V.fill hv hc)
+  | .abort sp k i V => .abort sp k i (V.fill hv hc)
+  | .handle sp k hr hc' M => .handle sp k hr hc' (M.fill hv hc)
+  | .unwind sp x A M D N => .unwind sp x A (M.fill hv hc) (D.fill hv hc) (N.fill hv hc)
   | M => M
 end
 
@@ -203,6 +211,7 @@ def wrapTail (f : Comp → Comp) : Comp → Comp
   | .letPair sp x y V M => .letPair sp x y V (wrapTail f M)
   | .case sp V x M y N => .case sp V x (wrapTail f M) y (wrapTail f N)
   | .for_ sp x V M N => .for_ sp x V M (wrapTail f N)
+  | .unwind sp x A M D N => .unwind sp x A M D (wrapTail f N)
   | T => f T
 
 /-- A right-nested tuple of variables (`()` when empty). -/
@@ -382,8 +391,8 @@ def bindTy (c : TCx) (A : Option VTy) (M : Comp) : Option CVTy :=
       | .ret _ V => match directCall c none V with
         | some (B, _) => some B
         | none => c.tyV V
-      | M => match c.tyC M with
-        | some (.ret A) => some A
+      | M => match (c.tyC M).bind Frontend.Check.effRow? with
+        | some (_, A) => some A
         | _ => none
     if M.takeLends.2.isEmpty then t else match t with
       | some (.tensor _ B) => some B
@@ -452,6 +461,9 @@ def _root_.Frontend.Comp.names (n : String) : Comp → Bool
   | .letUnit _ V M | .letPair _ _ _ V M => V.names n || M.names n
   | .case _ V _ M _ N => V.names n || M.names n || N.names n
   | .for_ _ _ V M N => V.names n || M.names n || N.names n
+  | .perform _ _ _ V | .abort _ _ _ V => V.names n
+  | .handle _ _ hr hc M => hr.name == n || hc.name == n || M.names n
+  | .unwind _ _ _ M D N => M.names n || D.names n || N.names n
   | .force .. | .top _ => false
 end
 
@@ -554,6 +566,8 @@ def _root_.Frontend.Comp.hasFor : Comp → Bool
   | .lam _ _ _ M | .app _ M _ | .proj _ _ M | .lamL _ _ _ M | .inst _ M _ | .nuIn _ M
   | .nuOut _ M | .ascribe _ M _ | .letUnit _ _ M | .letPair _ _ _ _ M => M.hasFor
   | .case _ _ _ M _ N => M.hasFor || N.hasFor
+  | .handle _ _ _ _ M => M.hasFor
+  | .unwind _ _ _ M D N => M.hasFor || D.hasFor || N.hasFor
   | .for_ .. => true
   | _ => false
 
@@ -577,6 +591,9 @@ def _root_.Frontend.Comp.yieldAt : Comp → Option Span
   | .letUnit _ V M | .letPair _ _ _ V M => V.yieldAt.orElse fun _ => M.yieldAt
   | .case _ V _ M _ N => V.yieldAt.orElse fun _ => M.yieldAt.orElse fun _ => N.yieldAt
   | .for_ _ _ V M N => V.yieldAt.orElse fun _ => M.yieldAt.orElse fun _ => N.yieldAt
+  | .perform _ _ _ V | .abort _ _ _ V => V.yieldAt
+  | .handle _ _ _ _ M => M.yieldAt
+  | .unwind _ _ _ M D N => M.yieldAt.orElse fun _ => D.yieldAt.orElse fun _ => N.yieldAt
   | .force .. | .top _ => none
 end
 
@@ -605,6 +622,9 @@ def _root_.Frontend.Comp.anySugar (p : VSugar → Bool) : Comp → Bool
   | .letUnit _ V M | .letPair _ _ _ V M => V.anySugar p || M.anySugar p
   | .case _ V _ M _ N => V.anySugar p || M.anySugar p || N.anySugar p
   | .for_ _ _ V M N => V.anySugar p || M.anySugar p || N.anySugar p
+  | .perform _ _ _ V | .abort _ _ _ V => V.anySugar p
+  | .handle _ _ _ _ M => M.anySugar p
+  | .unwind _ _ _ M D N => M.anySugar p || D.anySugar p || N.anySugar p
   | .force .. | .top _ => false
 end
 
@@ -627,6 +647,9 @@ def _root_.Frontend.Comp.sugarAt (p : VSugar → Bool) : Comp → Option Span
   | .letUnit _ V M | .letPair _ _ _ V M => (V.sugarAt p).orElse fun _ => M.sugarAt p
   | .case _ V _ M _ N => ((V.sugarAt p).orElse fun _ => M.sugarAt p).orElse fun _ => N.sugarAt p
   | .for_ _ _ V M N => ((V.sugarAt p).orElse fun _ => M.sugarAt p).orElse fun _ => N.sugarAt p
+  | .perform _ _ _ V | .abort _ _ _ V => V.sugarAt p
+  | .handle _ _ _ _ M => M.sugarAt p
+  | .unwind _ _ _ M D N => ((M.sugarAt p).orElse fun _ => D.sugarAt p).orElse fun _ => N.sugarAt p
   | .force .. | .top _ => none
 end
 
@@ -2155,6 +2178,10 @@ def mResC (inj : Nat → Option (Nat × Nat)) : Comp → Comp
   | .nuOut sp M => .nuOut sp (mResC inj M)
   | .ascribe sp M C => .ascribe sp (mResC inj M) C
   | .for_ sp x V M N => .for_ sp x (mResV inj V) (mResC inj M) (mResC inj N)
+  | .perform sp k i V => .perform sp k i (mResV inj V)
+  | .abort sp k i V => .abort sp k i (mResV inj V)
+  | .handle sp k hr hc M => .handle sp k hr hc (mResC inj M)
+  | .unwind sp x A M D N => .unwind sp x A (mResC inj M) (mResC inj D) (mResC inj N)
   | M => M
 end
 
@@ -3732,8 +3759,16 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
 /-- A computation with its surface forms elaborated; `exp` is its type, when known. -/
 def surfC : Nat → TCx → Option CCTy → Comp → DM Comp
   | 0, _, _, M => pure M
-  | n + 1, c, exp, M => match M with
-    | .ret sp V => do pure (.ret sp (← surfV n c (match exp with | some (.ret A) => some A | _ => none) V))
+  | n + 1, c, exp, M =>
+    -- The row of the expected type, as the checker sets it (SPEC §19).
+    let c := match exp with
+      | some C => { c with E := c.E.atC C }
+      | none => c
+    match M with
+    | .ret sp V => do
+      pure (.ret sp (← surfV n c (match exp.bind Frontend.Check.effRow? with
+        | some (_, A) => some A
+        | _ => none) V))
     | .absurd sp V => do pure (.absurd sp (← surfV n c (some .zero) V))
     | .bind sp x A M N lin => do
       -- A borrow block over a loop, or a `let r = &x`: lent per observation (`LoopLend`).
@@ -3818,6 +3853,30 @@ def surfC : Nat → TCx → Option CCTy → Comp → DM Comp
         let N₀' ← surfC n (c.push r.name rT) exp N₀
         pure (.for_ sp x V' M' (.bind N.span r A (.ret r.span (.sugar r.span .forRes)) N₀' false))
       | none, none => pure (.for_ sp x V' M' (← surfC n c exp N))
+    | .perform sp k i V => do
+      let e := (Frontend.Check.findOp c.E sp "perform" k i).toOption.map (·.2.1.A)
+      pure (.perform sp k i (← surfV n c e V))
+    | .abort sp k i V => do
+      let e := (Frontend.Check.findOp c.E sp "abort" k i).toOption.map (·.2.1.A)
+      pure (.abort sp k i (← surfV n c e V))
+    | .handle sp k hr hc M => do
+      let ty (x : Ident) : Option CVTy := (Frontend.Check.lookupVar x.name c.E.vars).bind (c.T[·]?)
+      let e : Option CCTy := do
+        let ⟨S, A, R, _⟩ ← Frontend.Check.retRead (← ty hr)
+        let ⟨Es, _⟩ ← Frontend.Check.clausesRead S R (← ty hc)
+        pure (Frontend.Check.effOf
+          (BoCa.Fig16.LogRel.Core.Row.ofEff (UInt32.ofNat k) Es 0 ++ S) A)
+      pure (.handle sp k hr hc (← surfC n c e M))
+    | .unwind sp x A M D N => do
+      let M' ← surfC n c ((A.bind c.elabV).map (Frontend.Check.effOf (c.E.row.getD []))) M
+      let c ← refresh c
+      let hd := (c.tyC M').bind Frontend.Check.effRow?
+      let S := c.E.row <|> hd.map (·.1)
+      let c := { c with E := { c.E with row := S } }
+      let D' ← surfC n c.pushDead
+        (S.map fun S => Frontend.Check.effOf (BoCa.Fig16.LogRel.Core.Row.abortOnly S) .unit) D
+      let N' ← surfC n (c.push x.name ((A.bind c.elabV) <|> hd.map (·.2))) exp N
+      pure (.unwind sp x A M' D' N')
     | M => pure M
 
 /-- `for x in V' { M }; N` over a sized source (`dataSrcOf`), `V'` elaborated: a counted loop,
@@ -4501,6 +4560,12 @@ def specC : Nat → TCx → Comp → DM Comp
         let N₀' ← specC n (c.push r.name rT) N₀
         pure (.for_ sp x (← specV n c V) M' (.bind N.span r A (.ret r.span (.sugar r.span .forRes)) N₀' false))
       | none => pure (.for_ sp x (← specV n c V) M' (← specC n c N))
+    | .perform sp k i V => do pure (.perform sp k i (← specV n c V))
+    | .abort sp k i V => do pure (.abort sp k i (← specV n c V))
+    | .handle sp k hr hc M => do pure (.handle sp k hr hc (← specC n c M))
+    | .unwind sp x A M D N => do
+      let t := bindTy c A M
+      pure (.unwind sp x A (← specC n c M) (← specC n c.pushDead D) (← specC n (c.push x.name t) N))
     | M => pure M
 end
 
