@@ -895,20 +895,18 @@ result is elaborated as any surface code. A `def` over a borrow whose body loops
 take the owner before `surfDecl` (`lentDef`). Pairs: `corpus/sugar/lend-block.bc`, `lend-let.bc`,
 `lend-div.bc`.
 
-**Whole-body state machines, as built** (SPEC §15, *One state machine per body*; #109 item 8;
-decision 42 of `docs/decisions.md`). `mWalk` in `Sugar.lean` walks a generator or div body once,
-on the same typing context as the rest of the elaboration, and records a point for each `yield`'s
-continuation, loop head, `yield from`, call of a div function in direct style, and loop join,
-with the variables live there (their inferred types; the capabilities of the residual by name).
+**Whole-body state machines, as built** (SPEC §14, *One state machine per body*; #109 item 8;
+decisions 42 and 56 of `docs/decisions.md`). `mWalk` in `Sugar.lean` walks a div body once, on
+the same typing context as the rest of the elaboration, and records a point for each loop head,
+call of a div function in direct style, and loop join, with the variables live there (their inferred types; the capabilities of the residual by name).
 The code between points is the program's own, with each transition replaced by a move: a call of
 the point's `!` function, or its state returned as a skip. `mAssemble` builds the sum type of the
 states, the functions (last point first), the step with a `case` on the state for `next` and for
 `close`, and the `unfold`; each point's code is a template at the span of the sugar it comes
-from, so an error in it is reported there. `genDef`, `genValue` (blocks and callbacks) and every
-div body (`divBody`: `def`s, `main`, closures, `{ … }`) use it; a body it does not cover, and one
-the elaboration rejects, is elaborated by `genBody` and `loopBody` as before. The core forms of
-`corpus/sugar/gen-from.bc` and `for-value.bc` are written by hand as machines; those of the other
-pairs whose elaboration changed are the elaboration as `bcc desugar` prints it. The divergence library is emitted only when the
+from, so an error in it is reported there. Every div body (`divBody`: `def`s, `main`, closures,
+`{ … }`) uses it, and a generator's body at its row (`divMachine`, SPEC §15); a body it does not
+cover is an error that names it. The core forms of the pairs whose elaboration changed are the
+elaboration as `bcc desugar` prints it. The divergence library is emitted only when the
 elaborated program names it.
 
 **Generic functions and inferred arguments, as built** (#130; SPEC §15, *Generic functions*;
