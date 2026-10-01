@@ -1,13 +1,13 @@
--- pending: K4 (an early exit from a kernel fold, SPEC §18 Open), and open design questions (effect polymorphism of the folds; unwinding)
+-- pending: K4 (an early exit from a kernel fold, SPEC §18 Open, §19), and open design questions (effect polymorphism of the folds; unwinding)
 -- Errors as an effect: the ordinary `fold_own` and `fold_imm`, with algebras that `raise` on a
--- byte that is not a digit, and a `try` at each call that turns the effect into `i32 + i32`.
+-- byte that is not a digit, and a `to_result` at each call that turns the effect into `i32 + i32`.
 -- Nothing fold-specific handles the error: if the algebra raises, the fold raises.
 --
 -- Axes: data × effects (failure, handled without resuming) × scope (the owned nodes and the
 -- borrow that a raise abandons). The same folds with the error written as data run today:
 -- `corpus/axes/result-fold-own.bc` and `result-fold-imm.bc` (the hand-threaded `Result`).
 --
--- Blocked by: #18 (no `raise` or `try` in the surface), and two open design questions, which
+-- Blocked by: K4 (an early exit from a kernel fold), and two open design questions, which
 -- this program tests.
 --
 -- (a) Effect polymorphism of the kernel's fold rules. The algebra's type is fixed:
@@ -38,7 +38,7 @@
 -- one is live, or the handler would receive it back with the error, as a div loop's `close`
 -- hands back its residual (SPEC §14). Which, is open.
 --
--- Spelling (a hypothesis): `raise(e)` as an operation, and `try { … }` as the handler that turns
+-- Spelling (a hypothesis): `raise(e)` as an operation, and `with to_result { … }` as the handler that turns
 -- it into `inl` the value or `inr` the error, as the user settled for errors.
 --
 -- Today (effects S1b, SPEC §18): `raise`, `try` and `Fail` rows exist, and a raise inside a
@@ -57,6 +57,8 @@ shape Node = node (leaf i32) (leaf List)
 def nil : List = roll inl ()
 fn cons(x: i32, t: List) -> List = roll inr alloc_s[Node] (x, t)
 
+include fail
+
 fn is_digit(b: i32) -> bool = host[lt_u32] (b - 48, 10)
 
 -- Owned: each cell freed, and its digit added; a non-digit raises.
@@ -68,12 +70,11 @@ fn sum_alg(r: 1 + ref i32 * i32) -> i32 with Fail[i32] =
 def digit_sum : !(List => i32) = fold_own[1 + ref i32 * ref X, i32] sum_alg
 
 -- Borrowed: each byte read through its view.
-def view_alg : !(all 'y < top. 1 + (imm 'y i32 * i32) => i32) =
-  !thunkv Fun 'y < top. return (thunkv fun (r : 1 + (imm 'y i32 * i32)) ->
-    match r {
-      inl _ -> 0
-    | inr (v, s) -> let b = *v; if is_digit(b) { b - 48 + s } else { raise(b) }
-    })
+fn view_alg<'y>(r: 1 + (imm 'y i32 * i32)) -> i32 with Fail[i32] =
+  match r {
+    inl _ -> 0
+  | inr (v, s) -> let b = *v; if is_digit(b) { b - 48 + s } else { raise(b) }
+  }
 def view_sum : !(all 'a < top. imm 'a List => i32) = fold_imm[1 + (ref i32 * ref X), 'a, top, i32] view_alg
 
 def len_alg : !(all 'y < top. 1 + (imm 'y i32 * i32) => i32) =
@@ -82,12 +83,12 @@ def len_alg : !(all 'y < top. 1 + (imm 'y i32 * i32) => i32) =
 def len : !(all 'a < top. imm 'a List => i32) = fold_imm[1 + (ref i32 * ref X), 'a, top, i32] len_alg
 
 main -> (i32 + i32) * ((i32 + i32) * ((i32 + i32) * ((i32 + i32) * i32))) =
-  let a = try { digit_sum(cons(49, cons(50, cons(51, nil)))) };
-  let b = try { digit_sum(cons(49, cons(120, cons(51, cons(121, nil))))) };
+  let a = with to_result { digit_sum(cons(49, cons(50, cons(51, nil)))) };
+  let b = with to_result { digit_sum(cons(49, cons(120, cons(51, cons(121, nil))))) };
   let good = alloc(cons(49, cons(50, cons(51, nil))));
   let bad = alloc(cons(49, cons(120, cons(51, cons(121, nil)))));
-  let c = try { view_sum(&good) };
-  let d = try { view_sum(&bad) };
+  let c = with to_result { view_sum(&good) };
+  let d = with to_result { view_sum(&bad) };
   let n = len(&bad);
   (a, (b, (c, (d, n))))
--- now: 68:69: `sum_alg` raises (`Fail`) and is passed as a value: a fold whose algebra raises needs an early exit from a kernel fold (K4), which is open; an effectful callback is S4's (#161)
+-- now: 70:69: `sum_alg` performs `Fail` and is passed as a value: it can only be called (effectful callbacks, #161)

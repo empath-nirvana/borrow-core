@@ -687,7 +687,9 @@ def trV : Nat → Cx → List Cap → Val → EM (List Bind × Val)
   | n + 1, cx, cs, V => do
     let row := rowV cx.env fuel V
     let needs := !(cx.need row).isEmpty || !(cx.ctl row).isEmpty
-    if !needs && !withInV fuel V then return ([], V)
+    -- An effect with no handler in scope is reported where it is performed (`goV`).
+    let unhandled := row.any fun i => (cx.capOf i.eff).isNone && (cx.siteOf i.eff).isNone
+    if !needs && !unhandled && !withInV fuel V then return ([], V)
     let (V, pre) ← if needs then (liftPlain cx fuel V).run [] else pure (V, [])
     let (bs, V') ← goV n cx cs V
     pure (pre ++ bs, V')
@@ -1054,9 +1056,9 @@ def copyOf : Nat → Env → Span → FSig → List HSig → List Site → Strin
     let body ← trC k cx cs true f.body
     let f' ← if cs.isEmpty then pure { f with body } else takeCaps dsp cs f body
     let (A', V') := f'.build dsp (env.rowOf ss)
-    modify fun s => { s with quiet := q }
     report dsp "lowering" (s!"copy `{name}`: `{g.name}` for " ++ ", ".intercalate
       ((hs.map (·.name)) ++ ss.map fun s => s!"the site {s.n} of `{s.eff}`"))
+    modify fun s => { s with quiet := q }
     modify fun s => { s with made := s.made.push (name, .def_ dsp ⟨name, n.span⟩ ps A' V' mk) }
     pure name
 end
@@ -1204,6 +1206,10 @@ def elaborate (ds : List Decl) (lib : List String := []) :
             | none => throw ⟨n.span, s!"`{n.name}` performs `{i.eff}`, and its type arguments are " ++
                 s!"not determined: write them, `with {i.eff}[…]`"⟩
         let d₀ : Decl := .def_ sp n ps A V mk
+        -- A row on a value that is not a function: a function with a row used as a value, which
+        -- is reported as such.
+        if !row'.isEmpty && (fnParts sp n.name A V).toOption.isNone then
+          discard (trV fuel { env, caps := [] } [] V)
         if !row'.isEmpty then
           env := { env with fns := env.fns ++ [⟨n.name, row', d₀⟩] }
           report sp "row" (s!"{n.name}: " ++ ", ".intercalate (row'.map fun i =>

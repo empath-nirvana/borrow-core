@@ -1,14 +1,17 @@
--- An abort while a value with no destructor is live (SPEC §18): the thunk `k` can be disposed of
--- only by running it (SPEC §12, class 3), and the `raise` leaves its scope on the path where `n`
--- is negative, so that path cannot drop it. Handing such a value to the handler with the error
+-- An abort while a value with no destructor is live (SPEC §19): the thunk `k` can be disposed of
+-- only by running it (SPEC §12, class 3), and the call of `fail_if` may abort while it is live, so
+-- the finaliser of that abort cannot drop it. Handing such a value to the handler with the error
 -- is not provided.
--- expect: 10:3: in this `case`, `k` is consumed in the `inl` arm but not in the `inr` arm, and its type `U (F (1 + 1))` has no destructor; an abort at 10:14 leaves it (a `raise` cannot abandon a value with no destructor, SPEC §18)
+-- expect: 13:11: `k`, of type `U (F (1 + 1))`, is live across a computation that may abort, and its type has no destructor: an abortive operation of the bound computation would abandon it
+include fail
 type B = 1 + 1
+
+fn fail_if(n: i32) -> i32 with Fail[i32] = if n < 0 { raise(n) } else { n }
 
 fn check(n: i32) -> i32 with Fail[i32] =
   let k = (thunk (return (inl () : B)));
-  if n < 0 { raise(n) } else { () };
+  let m = fail_if(n);
   b <- force k;
-  return n
+  return m
 
-main -> i32 + i32 = try { check(3) }
+main -> i32 + i32 = with to_result { check(3) }

@@ -14,6 +14,6 @@ call 56:18: lookup (Map) → `assoc__lookup`, on the state of `assoc`
 call 56:18: lookup (Map) → `table__lookup`, on the state of `table`
 call 57:18: lookup (Map) → `table__lookup`, on the state of `table`
 call 57:18: lookup (Map) → `assoc__lookup`, on the state of `assoc`
-call 65:68: census (Map) → `census__assoc`, passing the capabilities
-call 66:78: census (Map) → `census__table`, passing the capabilities
-call 68:53: census (Map) → `census__assoc`, passing the capabilities
+call 65:68: census → `census__assoc`, passing the capabilities
+call 66:78: census → `census__table`, passing the capabilities
+call 68:53: census → `census__assoc`, passing the capabilities

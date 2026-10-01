@@ -1,14 +1,20 @@
-row 27:1: checked_sum: Fail[Bad]; it answers `inl` its value or `inr` the error
-row 45:1: doubled: Fail[Bad]; it answers `inl` its value or `inr` the error
-lowering 30:3: for (Fail): an abort in its body is the loop's exit (`break`), then a branch
-lowering 33:9: map_err (Fail): branch — on `inr e` its handler's value is raised
-lowering 39:52: try (Fail): branch — an abort never resumes (final ctl): a sum exit, its answer `inl v` or `inr e`
-lowering 42:57: catch (Fail): branch — on `inr e` its handler runs in place
-lowering 48:3: for (Fail): an abort in its body is the loop's exit (`break`), then a branch
-lowering 58:9: try (Fail): branch — an abort never resumes (final ctl): a sum exit, its answer `inl v` or `inr e`
-call 32:16: raise (Fail) → an abort (final ctl): `inr e` to the innermost handler, or `break` out of the loop it is in
-call 33:19: add_checked (Fail) → `add_checked`, in tail position: its answer is this one's
-call 39:58: checked_sum (Fail) → `checked_sum`, in tail position: its answer is this one's
-call 42:65: checked_sum (Fail) → `checked_sum`, in tail position: its answer is this one's
-call 50:16: raise (Fail) → an abort (final ctl): `inr e` to the innermost handler, or `break` out of the loop it is in
-call 58:15: doubled (Fail) → `doubled`, in tail position: its answer is this one's
+row 27:1: checked_sum: Fail[Bad]
+row 45:1: doubled: Fail[Bad]
+lowering 27:1: copy `checked_sum__n3`: `checked_sum` for the site 3 of `Fail`
+lowering 27:1: copy `checked_sum__n1`: `checked_sum` for the site 1 of `Fail`
+lowering 33:9: with map_err (Fail): a handler, the static name 4; raise abortive: a branch per call (final ctl)
+lowering 33:9: with map_err (Fail): a handler, the static name 2; raise abortive: a branch per call (final ctl)
+lowering 39:52: with to_result (Fail): a handler, the static name 1; raise abortive: a branch per call (final ctl)
+lowering 42:49: with default (Fail): a handler, the static name 3; raise abortive: a branch per call (final ctl)
+lowering 45:1: copy `doubled__n5`: `doubled` for the site 5 of `Fail`
+lowering 58:9: with to_result (Fail): a handler, the static name 5; raise abortive: a branch per call (final ctl)
+call 30:14: raise (Fail) → abort[3.0], handled by the caller at 27:1: abortive, it never resumes
+call 30:14: raise (Fail) → abort[1.0], handled by the caller at 27:1: abortive, it never resumes
+call 32:16: raise (Fail) → abort[1.0], handled by the caller at 27:1: abortive, it never resumes
+call 32:16: raise (Fail) → abort[3.0], handled by the caller at 27:1: abortive, it never resumes
+call 33:42: add_checked → `add_checked__n4`
+call 33:42: add_checked → `add_checked__n2`
+call 39:69: checked_sum → `checked_sum__n1`
+call 42:81: checked_sum → `checked_sum__n3`
+call 50:16: raise (Fail) → abort[5.0], handled by the caller at 45:1: abortive, it never resumes
+call 58:26: doubled → `doubled__n5`

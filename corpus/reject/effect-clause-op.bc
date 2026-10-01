@@ -1,6 +1,6 @@
 -- A clause that performs an operation (SPEC §18): a clause is code over the handler's state,
 -- answering once in tail position, and performs none itself.
--- expect: 6:37: the clause `tick` of `count` performs an operation of `Counter`: a clause is code over the handler's state, and performs no operation
+-- expect: 6:40: the clause `tick` of `count` performs an operation of `Counter`: a clause of an answering handler is code over the handler's state, and performs no operation
 effect Counter { fn tick() -> i32 }
 
 handler count(mut n: i32): Counter = { tick() = { n = n + tick(); n } }
