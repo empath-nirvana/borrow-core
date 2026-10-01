@@ -2095,7 +2095,8 @@ All spellings are provisional (decisions 51, 55).
 **Errors** are the library effect `Fail[E]` (`lib/fail.bc`), `ctl raise(e: E) -> never`, handled
 by ordinary handlers: `to_result` (`inl` the value or `inr` the error), `default(d)` (the value,
 or `d(())`) and `map_err(f)` (the error `f(e)` raised to the handler around the `with`). Nothing in
-the elaborator knows them.
+the elaborator knows them. `default` takes a `!` function, provisionally: it should take an
+ordinary owned fallback once a clause's captures follow its multiplicity (#216).
 
 ### Elaboration
 
@@ -2212,7 +2213,8 @@ acceptance programs 1 and 3 at the surface.
 **The library** raises: `add_checked` and `mul_checked` (`Fail[1]`), `parse_i32`
 (`Fail[ParseError]`, over a counted `for`, the checked operations' overflow raised as its own by
 `map_err`), `str_from_utf8` and `from_utf8` (`Fail[i32]`, the index of the first bad byte;
-`from_utf8`'s buffer is dropped on the error, since an error holds nothing owned).
+`from_utf8`'s buffer is dropped on the error, since an error holds nothing owned; provisionally:
+the error should hand the buffer back once an abortive payload may be linear, #215).
 `corpus/parse-int.bc`, `ascii-upper.bc`, `sort-lines.bc`, `key-value.bc`, `trim-replace.bc` and
 `utf8-count.bc` handle them with `to_result`; their counts are unchanged. A search that finds
 nothing still answers a sum.

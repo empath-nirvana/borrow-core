@@ -8,7 +8,8 @@
 --
 -- * `to_result`: the body's value `inl a`, or the error `inr e`;
 -- * `default(d)`: the body's value, or `d(())`. A clause is `!` code (SPEC §19), so what a handler
---   is given is `!`: here a function, `with default(!{ u -> 0 }) { … }`;
+--   is given is `!`: here a function, `with default(!{ u -> 0 }) { … }`. Provisional: it should
+--   take an ordinary owned fallback once a clause's captures follow its multiplicity (#216);
 -- * `map_err(f)`: the body's value, or the error `f(e)` raised to the handler around the `with`.
 --
 -- A search that can find nothing answers a sum; a validation or a parse that can fail raises.
