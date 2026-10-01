@@ -5,6 +5,7 @@ import Core.SliceOps
 import Core.CountFold
 import Core.FoldReuse
 import Core.Nu
+import Core.EffRules
 import Support.LogicalRelation.Adequacy
 
 /-!
@@ -287,6 +288,40 @@ inductive CDerives : LifeCtx → Ctx VTy → Expr → Jdg → Prop where
   positive `C`.  `[spec §7]` -/
   | unfoldN {Δ Γ} (C : CTy) (S : VTy) (hC : C.NuOk) (hΓ : Ctx.DeadP Γ) :
       CDerives Δ Γ (.val (unfoldV C)) (.val (unfoldTy C S))
+  /-- `[sub]`: `F_Σ A ≤ F_Σ′ A` for `Σ ⊆ Σ′`; `F A = F_∅ A`.  `[spec §19]` -/
+  | effSub {Δ Γ e} {S S' : Row} {A : VTy} (hle : RowLe S S')
+      (h : CDerives Δ Γ e (.comp (CTy.effOf S A))) : CDerives Δ Γ e (.comp (CTy.effOf S' A))
+  /-- `[perform]`: a non-abortive operation of the row.  `[spec §19]` -/
+  | effPerform {Δ Γ V} {S : Row} {o : OpSig} (hf : Row.find S o.n o.i = some o)
+      (hna : o.abort = false) (h : CDerives Δ Γ V (.val o.A)) :
+      CDerives Δ Γ (BoCa.BoLo.performE (opArgE o.n o.i V)) (.comp (CTy.effOf S o.B))
+  /-- `[raise]`: an abortive operation of the row, at any answer, its argument dropping.
+  `[spec §19]` -/
+  | effRaise {Δ Γ V} {S : Row} {o : OpSig} {B : VTy} (hf : Row.find S o.n o.i = some o)
+      (ha : o.abort = true) (hd : o.A.Drop) (h : CDerives Δ Γ V (.val o.A)) :
+      CDerives Δ Γ (BoCa.BoLo.raiseE (opArgE o.n o.i V)) (.comp (CTy.effOf S B))
+  /-- `[let]`: `M to x. N` at a row; `N`'s context drops at a row with weakening and is
+  persistent at an unrestricted row.  `[spec §19]` -/
+  | effLet {Δ Γ Γ₁ Γ₂ M N A B} {S : Row} (hs : Ctx.SplitP Γ Γ₁ Γ₂)
+      (hW : S.Weak → Γ₂.Drops) (hU : S.Unr → Persistent Γ₂)
+      (hM : CDerives Δ Γ₁ M (.comp (CTy.effOf S A)))
+      (hN : CDerives Δ (⟨A, true⟩ :: Γ₂) N (.comp (CTy.effOf S B))) :
+      CDerives Δ Γ (.app (.val (.lam N)) M) (.comp (CTy.effOf S B))
+  /-- `[then]`: `M then x. N unwind D`, the finaliser at the row's abortive operations.
+  `[spec §19]` -/
+  | effThen {Δ Γ Γ₁ Γ₂ M N D A B} {S : Row} (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hNZ : S.NZ)
+      (hUq : S.Uniq) (hU : S.Unr → Persistent Γ₂)
+      (hM : CDerives Δ Γ₁ M (.comp (CTy.effOf S A)))
+      (hN : CDerives Δ (⟨A, true⟩ :: Γ₂) N (.comp (CTy.effOf S B)))
+      (hD : CDerives Δ (⟨.unit, false⟩ :: Γ₂) D (.comp (CTy.effOf S.abortOnly .unit))) :
+      CDerives Δ Γ (thenE N D M) (.comp (CTy.effOf S B))
+  /-- `[handle]`: `handle_n e with (h_ret, hs)`, `n` not in `Σ`.  `[spec §19]` -/
+  | effHandle {Δ Γ Γ₁ Γ₂ Γr Γc e} {S : Row} {E : List (Qual × VTy × VTy)} {n : UInt32}
+      {A R : VTy} {ir ic : Nat} (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hs₁ : Ctx.SplitP Γ₁ Γr Γc)
+      (hr : Ctx.SoloP Γr ir (retTy S A R)) (hc : Ctx.SoloP Γc ic (clausesTy S R E))
+      (hn0 : n ≠ 0) (hnS : ∀ o ∈ S, o.n ≠ n) (hlen : E.length ≤ 2 ^ 32)
+      (he : CDerives Δ Γ₂ e (.comp (CTy.effOf (Row.ofEff n E 0 ++ S) A))) :
+      CDerives Δ Γ (hndTerm n ir ic e) (.comp (CTy.effOf S R))
 
 /-! ### The delay, stream and finite iterator instances  `[spec §7]`
 
@@ -428,6 +463,12 @@ theorem fundamentalC {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg}
   | nuIn hC _ ih => exact nuIn_compatX hC ih
   | nuOut hC _ ih => exact nuOut_compatX hC ih
   | unfoldN C S hC hΓ => exact unfold_compatX hC S hΓ
+  | effSub hle _ ih => exact sub_compatC hle ih
+  | effPerform hf hna _ ih => exact perform_compatC hf hna ih
+  | effRaise hf ha hd _ ih => exact raise_compatC hf ha (fun _ _ _ _ h => vC_noOwn_of_drop hd h) ih
+  | effLet hs hW hU _ _ ihM ihN => exact let_compatC hs hW hU ihM ihN
+  | effThen hs hNZ hUq hU _ _ _ ihM ihN ihD => exact then_compatC hs hNZ hUq hU ihM ihN ihD
+  | effHandle hs hs₁ hr hc hn0 hnS hlen _ ih => exact handle_compatC hs hs₁ hr hc hn0 hnS hlen ih
 
 /-! ### Adequacy -/
 

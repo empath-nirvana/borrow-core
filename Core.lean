@@ -19,6 +19,7 @@ import Core.Compatibility
 import Core.NuRel
 import Core.Computation
 import Core.Compat
+import Core.EffRules
 import Core.Sized
 import Core.FoldImm
 import Core.FoldOwn
