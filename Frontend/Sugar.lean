@@ -39,50 +39,34 @@ reported at the sugar, with a note naming it (`Frontend.Elab.renderError`).
 namespace Frontend.Sugar
 open Frontend.Check (mentionsV mentionsC)
 
-/-- The I/O library, `lib/io.bc`. -/
-def ioLibrary : String := include_str "../lib/io.bc"
+/-- The library modules, by the name `include` gives them (#59). A module `m` is the file
+`lib/m.bc`, read when `bcc` starts (`libSources`), so editing one rebuilds no Lean (#113); adding
+one is adding its name here. The elaboration brings in `io`, `div` and `prelude` by itself
+(`elaborateS`); `include m` brings in any of them. -/
+def libNames : List String :=
+  ["io", "div", "prelude", "lend", "adapters", "slice", "buf", "text", "textio", "iters", "fail",
+   "yield"]
 
-/-- The divergence library, `lib/div.bc`: the delay bind and the fuel handler. -/
-def divLibrary : String := include_str "../lib/div.bc"
+/-- The directory of the library: `$BCC_LIB` when it is set; otherwise `lib/` of the checkout
+whose `.lake/build/bin/` holds the running `bcc`; otherwise `lib/` of the working directory. -/
+def libDir : IO System.FilePath := do
+  if let some d ← IO.getEnv "BCC_LIB" then return d
+  let app ← IO.appPath
+  match app.parent.bind (·.parent) |>.bind (·.parent) |>.bind (·.parent) with
+  | some root => if ← (root / "lib" / "prelude.bc").pathExists then return root / "lib" else return "lib"
+  | none => return "lib"
 
-/-- The per-observation lend, `lib/lend.bc`: loops and generators that lend their owner at each
-observation. -/
-def lendLibrary : String := include_str "../lib/lend.bc"
-/-- The iteration effect and its declaration, a library module like the others. -/
-def yieldLibrary : String := include_str "../lib/yield.bc"
+/-- Each library module's source, or why it could not be read: read once, when the program
+starts. (A failure surfaces only when a program needs the module.) -/
+initialize libSources : List (String × Except String String) ← do
+  let dir ← try libDir catch _ => pure "lib"
+  libNames.mapM fun m => do
+    let f := dir / s!"{m}.bc"
+    try pure (m, .ok (← IO.FS.readFile f)) catch e => pure (m, .error s!"cannot read {f}: {e}")
 
-/-- The generator adapters, `lib/adapters.bc`: `map`, `filter`, `take`, … (`include adapters`). -/
-def adaptersLibrary : String := include_str "../lib/adapters.bc"
-
-/-- The slice library, `lib/slice.bc`: functions on the views an array lends (`include slice`). -/
-def sliceLibrary : String := include_str "../lib/slice.bc"
-
-/-- The sized iterators, `lib/iters.bc`: `elems`, `map`, `filter`, `take`, `zip`, … over data
-(`include iters`). -/
-def iterLibrary : String := include_str "../lib/iters.bc"
-
-/-- The prelude, `lib/prelude.bc`: `true`, `false`, `not`, `to_i32`, `to_u8`. -/
-def preludeLibrary : String := include_str "../lib/prelude.bc"
-
-/-- The buffer library, `lib/buf.bc`: growable arrays, `buf A` (`include buf`). -/
-def bufLibrary : String := include_str "../lib/buf.bc"
-
-/-- The text library, `lib/text.bc`: strings, text views and literals (`include text`). -/
-def textLibrary : String := include_str "../lib/text.bc"
-
-/-- Text over the standard streams, `lib/textio.bc`: `write_string`, `read_all` (`include textio`). -/
-def textioLibrary : String := include_str "../lib/textio.bc"
-
-/-- The error effect and its handlers (SPEC §19). -/
-def failLibrary : String := include_str "../lib/fail.bc"
-
-/-- The library modules, by the name `include` gives them (#59). A module is a file of `lib/`,
-embedded in the compiler; adding one is adding its line here. -/
-def libModules : List (String × String) :=
-  [("io", ioLibrary), ("div", divLibrary), ("prelude", preludeLibrary), ("lend", lendLibrary),
-   ("adapters", adaptersLibrary), ("slice", sliceLibrary), ("buf", bufLibrary),
-   ("text", textLibrary), ("textio", textioLibrary), ("iters", iterLibrary), ("fail", failLibrary),
-   ("yield", yieldLibrary)]
+/-- The library module `m`'s source (`lib/m.bc`), or why it could not be read; `none` when there
+is no module `m`. -/
+def library (m : String) : Option (Except String String) := libSources.lookup m
 
 def capNames : List String := ["stdin", "stdout", "stderr"]
 
@@ -4243,8 +4227,9 @@ def expandIncludes : Nat → List Decl → List Decl × List String →
     match d with
     | .include sp m =>
       if inc.contains m.name then pure (acc, inc) else
-      match libModules.lookup m.name with
-      | some src => do
+      match library m.name with
+      | some (.error e) => throw ⟨sp, e⟩
+      | some (.ok src) => do
         let l ← match parseProgram src with
           | .ok l => pure l.decls
           | .error e => throw ⟨e.span, s!"lib/{m.name}.bc: {e.msg}"⟩
@@ -4252,16 +4237,19 @@ def expandIncludes : Nat → List Decl → List Decl × List String →
         | 0 => throw ⟨sp, s!"the modules include each other: `{m.name}`"⟩
         | fuel + 1 => expandIncludes fuel l (acc, m.name :: inc)
       | none => throw ⟨sp, s!"no library module `{m.name}`: the modules are " ++
-          ", ".intercalate (libModules.map (·.1))⟩
+          ", ".intercalate libNames⟩
     | d => pure (acc ++ [d], inc)
 
 /-- The program with its sugar elaborated, and the number of library declarations it begins
 with, recording the origins of generated code.  `[spec §11, §14]` -/
 def elaborateS (p : Program) : SM (Program × Nat) := do
-  let libOf (name src : String) : Except Error (List Decl) :=
-    match parseProgram src with
-    | .ok l => pure l.decls
-    | .error e => throw ⟨e.span, s!"{name}: {e.msg}"⟩
+  let libOf (m : String) : Except Error (List Decl) :=
+    match library m with
+    | some (.ok src) => match parseProgram src with
+      | .ok l => pure l.decls
+      | .error e => throw ⟨e.span, s!"lib/{m}.bc: {e.msg}"⟩
+    | some (.error e) => throw ⟨Span.none, e⟩
+    | none => throw ⟨Span.none, s!"no library module `{m}`"⟩
   -- The libraries are in scope for typing when the program may use them: the I/O library when
   -- `main` may use the capabilities ambiently, the divergence library when the program names
   -- its functions. They are emitted below only when the program uses them. The capabilities are
@@ -4272,7 +4260,7 @@ def elaborateS (p : Program) : SM (Program × Nat) := do
   let mayIO := !(ambientCaps p₀).isEmpty
   -- `include m`: the module's declarations, in place (at most once each); a module's own
   -- `include`s come in first.
-  let (decls₀, incl) ← expandIncludes libModules.length p.decls ([], [])
+  let (decls₀, incl) ← expandIncludes libNames.length p.decls ([], [])
   -- Effects and handlers (SPEC §18), before the rest of the sugar: the clauses become functions,
   -- the functions with a row their copies, and each `with` a borrow block.
   let libFns := (decls₀.filter fun d => !p₀.decls.contains d).filterMap fun
@@ -4294,9 +4282,9 @@ def elaborateS (p : Program) : SM (Program × Nat) := do
   -- The prelude is in scope when the program names one of its declarations.
   let preludeNames := ["true", "false", "not", "to_i32", "to_u8"]
   let mayPrelude := !incl.contains "prelude" && preludeNames.any (usesName · p)
-  let ioAll ← if mayIO && !incl.contains "io" then libOf "lib/io.bc" ioLibrary else pure []
-  let divAll ← if mayDiv && !incl.contains "div" then libOf "lib/div.bc" divLibrary else pure []
-  let preludeAll ← if mayPrelude then libOf "lib/prelude.bc" preludeLibrary else pure []
+  let ioAll ← if mayIO && !incl.contains "io" then libOf "io" else pure []
+  let divAll ← if mayDiv && !incl.contains "div" then libOf "div" else pure []
+  let preludeAll ← if mayPrelude then libOf "prelude" else pure []
   let typing := preludeAll ++ ioAll ++ divAll
   let capDecls := if mayIO then capNames.map fun c =>
       Decl.extern Span.none ⟨c, Span.none⟩ (capTy Span.none c) else []
@@ -4314,7 +4302,7 @@ def elaborateS (p : Program) : SM (Program × Nat) := do
     | _ => false
   let cs := ambientCaps p₀
   let ioLib ← if cs.isEmpty || incl.contains "io" then pure [] else
-    if mayIO then pure ioAll else libOf "lib/io.bc" ioLibrary
+    if mayIO then pure ioAll else libOf "io"
   let exts := cs.map fun c => Decl.extern Span.none ⟨c, Span.none⟩ (capTy Span.none c)
   let mains ← decls.filterMapM fun
     | .main sp C M => do
@@ -4327,7 +4315,7 @@ def elaborateS (p : Program) : SM (Program × Nat) := do
     | .def_ _ _ _ _ V _ => ns.any V.names | .main _ _ M => ns.any M.names | _ => false
   let needDiv := (anyDiv || mainLoops || mayDiv) && uses ["div_bind", "div_fuel", "div_defer"]
   let divLib ← if !needDiv || incl.contains "div" then pure [] else
-    if mayDiv then pure divAll else libOf "lib/div.bc" divLibrary
+    if mayDiv then pure divAll else libOf "div"
   let lib := preludeAll ++ ioLib ++ divLib
   let decls ← (lib ++ rest ++ exts ++ mains).mapM fun
     | .def_ sp n ps A V mk => return .def_ sp n ps A (← V.elab false) mk
