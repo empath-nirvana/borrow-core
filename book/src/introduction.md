@@ -51,9 +51,16 @@ still growing (#54), and its spellings are provisional.
   handlers that capture the continuation, unwinding through borrows, and cancelling a stored
   continuation (SPEC §19); these are not yet reachable from the surface (#188).
 
-There is no direct recursion: a function cannot call itself, and recursion is written with folds,
-codata and loops. Making recursion an effect, a `rec` operation run by a driver, is decided
-(decision 24) but not implemented.
+The surface has no direct recursion: a function cannot call itself, and recursion is written with
+folds, codata and loops. Decision 24 makes recursion an effect: a self-call is a `rec` operation,
+run by a driver. The kernel has the pieces it needs. A self-call can be a `perform` of a `rec`
+operation (SPEC §19), and a driver is a handler, over `Loop_Σ` (`CTy.loopEff`) or `fixD` (§7, §14)
+for the unbounded `fix`. The scoping
+([`docs/effects-scoping.md`](https://github.com/empath-nirvana/borrow-core/blob/main/docs/effects-scoping.md),
+E10) asks no new kernel rule for it, except K5 for total structural descent. Pending: the `rec`
+operation itself, with its drivers (`fix`, fuel, `deep`, tabulation) and layers (`memo`, `fuel`)
+(#158), and the surface elaboration of self-calls into `rec` (#188). Until both land, the surface
+has no direct recursion.
 
 ## What is proved, and what is trusted
 
