@@ -37,12 +37,37 @@ compatibility lemma.
 ## The gate: local CI
 
 GitHub Actions does not run for this repository (the workflow is manual-only). The gate for every
-PR is `scripts/ci-local.sh`, which runs every check CI would. Run it before opening or merging a
-PR and paste its final summary into the PR body. Never report a PR as passing without it.
+PR is `make gate` (`scripts/ci-local.sh`), which runs every check CI would. Run it before opening
+or merging a PR and paste its final summary into the PR body. Never report a PR as passing
+without it.
 
-While iterating, `scripts/ci-local.sh --changed` runs only the steps the changes since origin/main
-reach: a change to no `.lean` file skips the build of the library, the hygiene and the axioms.
-It is for the edit loop only; the full gate is the merge requirement.
+Goldens are the oracle. Every corpus program has a `<name>.out` and every book `bc` block an
+`-- answer:`: the output of `Support`'s interpreter (`bcc interp`), the reference semantics.
+`make gate` checks the build, hygiene, axioms, parse, check, sugar, typed IR, kernel programs,
+counts, `live 0`, and the clos, flat and wasm stages against every golden; it runs the
+interpreter itself (minutes on the largest programs) only on the corpus programs and book blocks
+that are new or changed since the merge base with origin/main. `make gate-full`
+(`scripts/ci-local.sh --source`) runs it on every one, re-verifying every golden. `make gate-full`
+is required, and `make gate` turns it on by itself, when `Paper/`, `Support/` (the interpreter and
+the machine) or `Backend/` changed. Run it by hand too after a `Frontend/` or `lib/` change that
+changes what programs mean. `make goldens` (`scripts/compile-corpus.sh --write-goldens [file…]`)
+writes corpus goldens, only ever from the interpreter.
+
+While iterating, `make gate-fast` (`scripts/ci-local.sh --changed`) runs only the steps the
+changes since origin/main reach: a change to no `.lean` file skips the build of the library, the
+hygiene and the axioms. It never runs the interpreter. It is for the edit loop only; the full gate
+is the merge requirement.
+
+## Working loop
+
+- While iterating, check only what you touched: `lake build <Module>`; `bcc check`,
+  `bcc interp --stage clos|flat` or `bcc run` on the one program; the one script on the one file
+  (`scripts/compile-corpus.sh corpus/foo.bc`, `scripts/check-corpus.sh corpus/foo.bc`,
+  `scripts/book-doctest.sh book/src/guide/foo.md[:line]`).
+- At milestones, `make gate-fast`.
+- Run `make gate` when the PR is ready, or whenever you judge you need it, as for a change whose
+  reach you cannot scope to a few files. Never run it out of habit after each edit.
+- Run long commands in the background and keep working meanwhile.
 
 Start a worktree with `scripts/new-worktree.sh <branch>`: it branches from origin/main and clones
 the main checkout's `.lake` copy-on-write, so the first build is incremental, not cold. The

@@ -601,7 +601,7 @@ Drivers such as `driveE n` (`Core/DelayPrograms.lean:37`) are Lean meta-level re
 `ℕ`. The syntax has no meta-recursion, so a driver is written out to the depth wanted.
 
 A closed `main`, or one with standard I/O externs, is compiled and run by `bcc run`; `scripts/compile-corpus.sh` compares every
-corpus `main` against the interpreter (`Backend/README.md`).
+corpus `main` against its golden, the interpreter's output (`Backend/README.md`).
 <!-- ANCHOR_END: declarations -->
 
 ## 11. Checking

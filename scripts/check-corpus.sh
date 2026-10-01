@@ -14,6 +14,12 @@
 # must reject it with the message on its `-- now:` line, continued by `-- now| ` lines, so the
 # failure it documents is the current one. When a pending program checks, the feature it waits
 # for has landed: the gate fails and says to move it into the corpus with its golden output.
+#
+#     scripts/check-corpus.sh [file…]
+#
+# checks every file above, or only the files named, each as its directory says (a corpus program
+# with its reports file, if it has one; a `corpus/reject/`, `corpus/pending/` or `corpus/reports/`
+# file).
 set -euo pipefail
 cd "$(dirname "$0")/.."
 [ -n "${CI_LOCAL_BUILT:-}" ] || lake build bcc >/dev/null
@@ -68,6 +74,22 @@ pending() {
   fi
 }
 export -f checks rejects reports pending
+if [ $# -gt 0 ]; then
+  for f in "$@"; do [ -f "$f" ] || { echo "$f: no such file"; exit 2; }; done
+  for f in "$@"; do
+    case "$f" in
+      corpus/reject/*) par rejects "$f" ;;
+      corpus/pending/*) par pending "$f" ;;
+      corpus/reports/*.txt) par reports "$f" ;;
+      *) par checks "$f"; r=corpus/reports/$(basename "${f%.bc}").txt
+         if [ "$par_failed" = 0 ] && [ "$f" = "corpus/$(basename "$f")" ] && [ -f "$r" ]; then par reports "$r"; fi ;;
+    esac
+    bad=$((bad + par_failed))
+  done
+  echo "$bad failure(s)."
+  [ "$bad" -eq 0 ]
+  exit
+fi
 par checks corpus/*.bc corpus/surface/*.bc corpus/axes/*.bc; bad=$((bad + par_failed))
 shopt -s nullglob
 par rejects corpus/reject/*.bc; bad=$((bad + par_failed))

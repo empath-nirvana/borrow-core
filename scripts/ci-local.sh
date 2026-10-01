@@ -3,9 +3,22 @@
 # and paste the final summary into the PR. Needs elan and wasmtime; mdbook is optional (skipped
 # with a notice if absent).
 #
-#     scripts/ci-local.sh             the full gate: the merge requirement
+#     scripts/ci-local.sh             the full gate: the merge requirement (`make gate`)
+#     scripts/ci-local.sh --source    the full gate with the source stage on every program
+#                                     (`make gate-full`)
 #     scripts/ci-local.sh --changed   for iteration only: the steps the changes since origin/main
 #                                     can affect (below); it does not replace the full gate
+#                                     (`make gate-fast`)
+#
+# The source stage. A corpus program's `.out` and a book block's `-- answer:` are goldens: the
+# output of `Support`'s interpreter (`bcc interp`), the reference semantics. Every compiled stage
+# (clos, flat, wasm) is always checked against the golden. The interpreter itself is slow (minutes
+# on the largest programs), so by default it runs only where a golden is unverified: on the corpus
+# programs and book blocks that are new or changed since the merge base (scripts/source-stage.sh).
+# With `--source`, it runs on every program and book block, and every golden is re-verified.
+# The full gate turns `--source` on by itself when Paper/, Support/ (the interpreter and the
+# machine) or Backend/ changed since the merge base. `--changed` never runs the interpreter: it
+# lists the unverified programs instead.
 #
 # The full gate builds everything (`lake build`), then runs the compile-time guard alone (it
 # measures time), then every other step at once, each one's output printed in order as it
@@ -21,15 +34,29 @@
 #   * otherwise no Lean step runs (no `lake build` of the library, no hygiene, no axioms): only
 #     `lake build bcc bcc-counts`, and the steps whose inputs changed: corpus/ for the corpus
 #     steps, lib/ for every step that elaborates a program, book/ for the book, a script for its
-#     own step, and ci-local.sh or par.sh for all of them. Documentation alone runs nothing.
+#     own step (source-stage.sh for the corpus and the book), and ci-local.sh or par.sh for all
+#     of them. Documentation alone runs nothing.
 set -uo pipefail
 cd "$(dirname "$0")/.."
 changed=0
+[ $# -le 1 ] || { echo "usage: scripts/ci-local.sh [--source | --changed]"; exit 2; }
 case "${1:-}" in
-  --changed) changed=1 ;;
+  --changed) changed=1; export BCC_SOURCE=0 ;;
+  --source) export BCC_SOURCE=1 ;;
   "") ;;
-  *) echo "usage: scripts/ci-local.sh [--changed]"; exit 2 ;;
+  *) echo "usage: scripts/ci-local.sh [--source | --changed]"; exit 2 ;;
 esac
+# The full gate runs the source stage everywhere when a change reaches the reference semantics or
+# the compiler.
+if [ "$changed" = 0 ] && [ "${BCC_SOURCE:-}" != 1 ]; then
+  if base=${CI_LOCAL_BASE:-$(git merge-base origin/main HEAD 2>/dev/null)}; then
+    reach=$({ git diff --name-only "$base"; git ls-files --others --exclude-standard; } | grep -E '^(Paper|Support|Backend)/' | head -1 || true)
+    if [ -n "$reach" ]; then
+      export BCC_SOURCE=1
+      echo "ci-local: $reach (and perhaps more of Paper/, Support/, Backend/) changed since $(git rev-parse --short "$base"): the source stage runs on every program, as with --source"
+    fi
+  fi
+fi
 out=$(mktemp -d)
 trap 'rm -rf "$out"' EXIT
 fail=0
@@ -87,6 +114,7 @@ if [ "$changed" = 1 ]; then
         scripts/check-sugar.sh) add "sugar pairs" ;;
         scripts/check-elab.sh) add "typed IR" ;;
         scripts/book-doctest.sh) add "book doc-tests" ;;
+        scripts/source-stage.sh) add "compile corpus" "book doc-tests" ;;
       esac
     done
   fi
@@ -134,7 +162,8 @@ if [ "$all" = 0 ]; then
 fi
 
 echo
-tag="ci-local"; [ "$changed" = 1 ] && tag="ci-local --changed"
+tag="ci-local"; [ "$changed" = 1 ] && tag="ci-local --changed"; [ "${BCC_SOURCE:-}" = 1 ] && tag="ci-local --source"
 if [ "$fail" -eq 0 ]; then echo "$tag: ALL PASSED"; else echo "$tag: FAILURES (see above)"; fi
 [ "$changed" = 1 ] && echo "(--changed is for iteration only: the full gate, scripts/ci-local.sh, is the merge requirement)"
+[ -z "${BCC_SOURCE:-}" ] && echo "(the source stage ran on the unverified goldens only: \`make gate-full\` re-verifies every golden)"
 exit "$fail"
