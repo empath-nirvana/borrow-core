@@ -43,13 +43,15 @@ CI (`.github/workflows/ci.yml`) runs on every push and pull request:
 | `scripts/check-hygiene.sh` | forbidden keywords and axioms |
 | `scripts/parse-corpus.sh` | every corpus file parses and round-trips; each `corpus/fail/` file fails with its expected message |
 | `scripts/check-corpus.sh` | every corpus file checks; each `corpus/reject/` file is rejected with its expected message |
-| `scripts/compile-corpus.sh` | every corpus `main` gives the same value compiled and interpreted, with `live 0` |
+| `scripts/compile-corpus.sh` | every corpus `main` prints its golden `.out`, the interpreter's output, at every compiled stage, with `live 0` |
 | `scripts/book-doctest.sh` | every program in this book, as below |
 | `mdbook build book` | this book |
 
 A corpus program's `main` should have a **falsifier observable**: an answer that plausible wrong
 implementations cannot produce. `a - b` with `a ≠ b` catches swapped operands, and two stores read
-back in order catch a store that ignores its index.
+back in order catch a store that ignores its index. Its golden is written from the interpreter
+by `scripts/compile-corpus.sh --write-goldens corpus/<name>.bc`. The gate runs the interpreter
+itself only on new or changed programs and blocks; `make gate-full` runs it on all of them.
 
 ## Doc-tests
 

@@ -101,7 +101,8 @@ All in Lean, with no axioms beyond `propext`, `Classical.choice` and `Quot.sound
 ## What is trusted, and what is tested
 
 - **The compiler is tested, not yet proved.** Every corpus program gives the same answer compiled
-  as in the Lean interpreter, and ends with no live objects (`scripts/compile-corpus.sh`). Every
+  as in the Lean interpreter (its golden `.out`, re-verified against the interpreter by
+  `make gate-full`), and ends with no live objects (`scripts/compile-corpus.sh`). Every
   kernel program gives the same answer at every stage (`scripts/compile-kernel.sh`).
 - **The handler lowering is tested, not verified.** There is no runtime handler stack and no
   handler search. An abortive operation is a branch after each call that may raise

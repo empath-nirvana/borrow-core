@@ -145,10 +145,21 @@ You need Lean (installed with `elan`) and `wasmtime`. `mdbook` is optional, for 
 ```sh
 lake exe cache get
 lake build
-scripts/ci-local.sh             # the gate: build, hygiene and axioms, corpus, kernel programs, sugar, book
-scripts/ci-local.sh --changed   # while iterating: only the steps the changes since origin/main reach
+make gate        # the gate (scripts/ci-local.sh): build, hygiene and axioms, corpus, kernel programs, sugar, book
+make gate-full   # the gate, re-verifying every golden against the reference interpreter (--source)
+make gate-fast   # while iterating: only the steps the changes since origin/main reach (--changed)
+make goldens     # rewrite the corpus goldens (`.out`) from the reference interpreter
 scripts/new-worktree.sh <branch>  # a worktree from origin/main, its build cloned from this checkout's
 ```
+
+Every corpus program's `.out` and every book block's `-- answer:` is a golden: what the reference
+interpreter (`bcc interp`, `Support`'s) prints. `make gate` checks every compiled stage (the
+closure IR, the flat IR and WebAssembly) against the goldens, with `live 0` and the counts, and
+runs the reference interpreter, which takes minutes on the largest programs, only on the programs
+and blocks that are new or changed since the merge base with origin/main. `make gate-full` runs
+it on all of them. It is required, and `make gate` turns it on by itself, when `Paper/`,
+`Support/` or `Backend/` changed; run it by hand after a `Frontend/` or `lib/` change that changes
+what programs mean.
 
 `bcc` reads the library modules (`lib/*.bc`) when it starts, from the `lib/` of the checkout it
 was built in (or `$BCC_LIB`), so editing the library needs no rebuild.
@@ -175,7 +186,7 @@ was built in (or `$BCC_LIB`), so editing the library needs no rebuild.
 ## How work happens
 
 Work is tracked in GitHub issues and merged by pull request. There is no hosted CI: the gate is
-`scripts/ci-local.sh` passing. New language features follow the growth discipline in
+`make gate` (`scripts/ci-local.sh`) passing. New language features follow the growth discipline in
 [`CLAUDE.md`](CLAUDE.md), in this order:
 
 1. a probe in `experiments/`;

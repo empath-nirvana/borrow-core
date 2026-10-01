@@ -15,7 +15,7 @@ ifeq (run,$(firstword $(MAKECMDGOALS)))
   $(eval $(RUN_ARGS):;@:)
 endif
 
-.PHONY: bcc run tools
+.PHONY: bcc run tools gate gate-full gate-fast goldens
 
 # Build the `bcc` compiler.
 bcc: $(CACHE_STAMP) | tools
@@ -25,6 +25,23 @@ bcc: $(CACHE_STAMP) | tools
 # Compile a program to WebAssembly and run it under wasmtime.
 run: bcc
 	$(BCC) run $(RUN_ARGS)
+
+# The gate (scripts/ci-local.sh): every check, the source stage only on unverified goldens.
+gate: | tools
+	scripts/ci-local.sh
+
+# The gate with the source stage on every program: re-verifies every golden against `Support`'s
+# interpreter. The gate turns it on by itself when Paper/, Support/ or Backend/ changed.
+gate-full: | tools
+	scripts/ci-local.sh --source
+
+# While iterating: the steps the changes since origin/main reach, never the source stage.
+gate-fast: | tools
+	scripts/ci-local.sh --changed
+
+# Rewrite every corpus golden (`.out`, `.err`) from `Support`'s interpreter.
+goldens: | tools
+	scripts/compile-corpus.sh --write-goldens
 
 # The required tools are on PATH.
 tools:

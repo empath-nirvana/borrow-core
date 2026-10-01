@@ -87,6 +87,7 @@ the details.
 ## How this book is tested
 
 Every program in this book is checked by the gate, `scripts/ci-local.sh`. A block marked `bc` is
-checked by `bcc check`, run by the interpreter and by the compiled WebAssembly, and its output is
-compared with the `-- answer:` line in the block. Blocks that show errors are rejected by the
+checked by `bcc check`, run by the compiled WebAssembly, and its output is compared with the
+`-- answer:` line in the block, the interpreter's output (checked again by the interpreter
+whenever the block changes, and by `make gate-full`). Blocks that show errors are rejected by the
 checker with exactly the message on their `-- expect:` line. See [Contributing](contributing.md#doc-tests).
