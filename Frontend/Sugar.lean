@@ -1561,11 +1561,14 @@ def resultOf : Option CVTy → Option CVTy
 
 /-- The row and the result of a function type `A ⇒ F[Σ] B` or its `!` form (`Σ` empty for
 `A => B`), under its lifetime parameters. -/
-def resultRowOf : Option CVTy → Option (Frontend.Check.CRow × CVTy)
-  | some (.thunk (.arr _ C)) => Frontend.Check.effRow? C
-  | some (.bang A) => resultRowOf (some A)
-  | some (.thunk (.all _ _ (.ret A))) => resultRowOf (some A)
-  | _ => none
+def resultRowOf (A : Option CVTy) : Option (Frontend.Check.CRow × CVTy) :=
+  -- By fuel, so that the kernel evaluates it (`Frontend/Check/CrossCheck.lean`).
+  let rec go : Nat → CVTy → Option (Frontend.Check.CRow × CVTy)
+    | _ + 1, .thunk (.arr _ C) => Frontend.Check.effRow? C
+    | k + 1, .bang A => go k A
+    | k + 1, .thunk (.all _ _ (.ret A)) => go k A
+    | _, _ => none
+  A.bind (go divFuel)
 
 /-- A value that must be known here. -/
 def need' {α} (sp : Span) (what : String) : Option α → SM α
@@ -2592,6 +2595,14 @@ def clauseList : Val → List Val
   | .pair _ V W => V :: clauseList W
   | _ => []
 
+/-- The marker binding around what follows a loop whose body is elaborated under the loop's exit
+(`DivSt.exits`): `surfC` elaborates what it binds around without that exit, and drops it. -/
+def restScope : String := "io_rest_scope"
+
+/-- `N`, what follows a loop, marked as outside it (`restScope`). -/
+def restOf (N : Comp) : Comp :=
+  .bind N.span ⟨restScope, N.span⟩ none (.ret N.span (.unit N.span)) N false
+
 mutual
 /-- A value with its surface forms elaborated; `exp` is the type expected of it, when known. -/
 def surfV : Nat → TCx → Option CVTy → Val → DM Val
@@ -3012,6 +3023,13 @@ def surfC : Nat → TCx → Option CCTy → Comp → DM Comp
       | none => pure (.ret sp V')
     | .absurd sp V => do pure (.absurd sp (← surfV n c (some .zero) V))
     | .bind sp x A M N lin => do
+      -- What follows a loop (`restScope`): outside the loop, so the loop's exit is not its.
+      if x.name == restScope then
+        let saved := (← get).exits
+        modify fun s => { s with exits := s.exits.drop 1 }
+        let N' ← surfC n c exp N
+        modify fun s => { s with exits := saved }
+        return N'
       -- A borrow block over a loop, or a `let r = &x`: lent per observation (`LoopLend`).
       if let some L ← (Frontend.Elab.LoopLend.hook c (dataFor (← get).sizedFns) sp x A M N lin :
           Except Error (Option Comp)) then
@@ -3423,8 +3441,8 @@ let ({back}, io_j{sfx}) = io_bl{sfx};
       else if h == "io_hole_hi" then hi else none
     let rsp := sp
     let hc (h : String) : Option Comp :=
-      if h == "io_hole_body" then some body else if h == "io_hole_rest" then some N
-      else if h == "io_hole_else" then els
+      if h == "io_hole_body" then some body else if h == "io_hole_rest" then some (restOf N)
+      else if h == "io_hole_else" then els.map restOf
       else if h == "io_hole_ret" then some (retOut rsp (.var rsp s!"io_rv{sfx}")) else none
     let L := L.fill hv hc
     if !(← get).quiet then report sp s!"`for` is total, bounded by {desc}"
@@ -3624,7 +3642,7 @@ io_j{sfx} : {Jt} <- return ((unbang io_hwf{sfx}) io_l{sfx});
     let what := "a `for` over a generator"
     let L ← (template sp what (core ++ join ++ after) : SM Comp)
     let hc (h : String) : Option Comp :=
-      if h == "io_hole_body" then some body else if h == "io_hole_rest" then some N
+      if h == "io_hole_body" then some body else if h == "io_hole_rest" then some (restOf N)
       else if h == "io_hole_call" then some (.ret sp call')
       else if h == "io_hole_ret" then some (retOut sp (.var sp s!"io_rv{sfx}")) else none
     let L := L.fill (fun _ => none) hc
