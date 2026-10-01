@@ -35,6 +35,8 @@ core-effects-loop 0 0 0
 core-effects-reborrows 3 0 0
 core-effects-result 0 0 0
 core-effects-tail 0 0 0
+core-yield-loop 0 0 0 # its clause resumes or cancels: a state machine, with no allocation and no dispatched call
+core-yield-pull 0 0 0 # equal to corpus/gen-fib.bc, its surface form
 count-down 0 0 0
 count-down-exact 6 0 0
 count-fold 0 0 0
@@ -59,19 +61,15 @@ for-finite 0 0 0
 for-never 0 0 0
 for-return 1 0 0
 format 2 0 0 # the stdout cell and the string, built at its capacity
-gen-adapters 5 0 0 # chain, zip over batch and chunks, and main's three loops: each body one state machine (#109 item 8)
-gen-adapters-fail 8 0 0 # chain, chunks, batch and lines, and main's ten loops, each one state machine (#109 item 8)
-gen-adapters-io 13 0 0 # main's six loops over every adapter, one state machine (#109 item 8)
-gen-block 2 0 0
+gen-adapters 5 0 0 # the nodes of the lists `chunks` builds; each generator one state machine, each stored generator one handler site, each `yield` to a `for` a direct call
+gen-adapters-fail 8 0 0 # the nodes of the lists `chunks` and `lines` build
 gen-borrowed 2 0 0
 gen-cell 1 0 0
-gen-close 4 0 0
-gen-digits 2 0 0
-gen-div 1 0 0
+gen-close 4 0 0 # the list; the drop glue across each yield shares it with the rest (a finaliser frame's clauses one code, SPEC §19), so it is not copied
+gen-div 0 0 0 # the generator that read the input (the stdin cell) is in corpus/pending/ (a capability across a yield, SPEC §15 Open)
 gen-fib 0 0 0
-gen-from 1 0 0
-gen-lazy 1 4 0
-gen-lines 42 23 0 # run_list folds each line into closures over the output (as axes/data-effects): one dispatched call per byte written and per line
+gen-from 0 0 0 # the generator that echoed the input (the stdin cell) is in corpus/pending/ (a capability across a yield, SPEC §15 Open)
+gen-nested 0 0 0
 gen-pipeline 0 0 0
 gen-pipeline-adapters 0 0 0
 gen-produce 0 0 0
@@ -85,7 +83,7 @@ int-ops 0 0 0
 io-aoc 4 0 0
 io-break 2 0 0
 io-cat 2 0 0
-io-for-after 22 0 0
+io-for-after 2 0 0 # the stdin and stdout cells: the lines are counted in the loop over the bytes, with no list per line
 io-for-assign 1 0 0
 io-for-then 2 0 0
 io-fuel 1 0 0
