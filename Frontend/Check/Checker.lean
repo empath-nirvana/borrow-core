@@ -370,8 +370,29 @@ def synC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp →
       | .sum A B, rV => do
         let E' := E.minus rV.F.u
         let ⟨C, r₁⟩ ← synC n (E'.pushOwn x.name A) Δ (A :: T) M
-        let r₂ ← chkC n (E'.pushOwn y.name B) Δ (B :: T) N C
-        pure ⟨_, ← caseIt E T sp x y rV r₁ r₂⟩
+        let plain : Except Error (Σ C : CCTy, Res Δ T (.comp C)) := do
+          let r₂ ← chkC n (E'.pushOwn y.name B) Δ (B :: T) N C
+          pure ⟨_, ← caseIt E T sp x y rV r₁ r₂⟩
+        match plain, E.row with
+        | .ok r, _ => pure r
+        | .error e, some S@(_ :: _) =>
+          -- Inside a computation at the row `S`: the arms at `F[S] B`, the first arm's value
+          -- type `B`, or else the second's (the first may be an abort, of any type).
+          let first : Except Error (Σ C : CCTy, Res Δ T (.comp C)) := do
+            let ⟨B₁, r₁'⟩ ← atRow E M.span S ⟨C, r₁⟩
+            let r₂ ← chkC n (E'.pushOwn y.name B) Δ (B :: T) N (effOf S B₁)
+            pure ⟨_, ← caseIt E T sp x y rV r₁' r₂⟩
+          match first with
+          | .ok r => pure r
+          | .error _ =>
+            let second : Except Error (Σ C : CCTy, Res Δ T (.comp C)) := do
+              let ⟨B₂, r₂⟩ ← atRow E N.span S (← synC n (E'.pushOwn y.name B) Δ (B :: T) N)
+              let r₁' ← chkC n (E'.pushOwn x.name A) Δ (A :: T) M (effOf S B₂)
+              pure ⟨_, ← caseIt E T sp x y rV r₁' r₂⟩
+            match second with
+            | .ok r => pure r
+            | .error _ => throw e
+        | .error e, _ => throw e
       | A, _ => err V.span s!"`case V` needs a `+` type, but `V : {E.ppV A}`"
     | .absurd sp _ => err sp "the type of `absurd V` cannot be synthesized: ascribe it, `(absurd V : C)`"
     | .for_ sp _ _ _ _ => err sp ("`for` is elaborated before checking, on the spine of a " ++

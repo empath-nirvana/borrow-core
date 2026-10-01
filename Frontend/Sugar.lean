@@ -3433,6 +3433,57 @@ def tupleArgs : Nat → Val → List Val
   | k + 1, .pair _ V W => V :: tupleArgs k W
   | _, V => [V]
 
+/-- Two types equal once elaborated (abbreviations expanded), or as written. -/
+def sameTy (c : TCx) (A B : VTy) : Bool :=
+  match c.elabV A, c.elabV B with
+  | some A', some B' => A' == B'
+  | _, _ => A.strip == B.strip
+
+/-- The row a function type's result performs: `F[S]` under its `!`, `∀`s and arrow. -/
+def fnRowOf : CVTy → List BoCa.Fig16.LogRel.Core.OpSig
+  | .bang A => fnRowOf A
+  | .thunk (.all _ _ (.ret A)) => fnRowOf A
+  | .thunk (.arr _ C) => ((rowRes? C).map (·.1)).getD []
+  | _ => []
+
+mutual
+/-- The operations `(n, i)` a computation performs, outside closures, by name: its `perform`s and
+`abort`s and those of the functions it calls (read off their types), less those of the handler
+sites inside it. -/
+def opsC (c : TCx) : Nat → Comp → List (Nat × Nat)
+  | 0, _ => []
+  | k + 1, M => match M with
+    | .perform _ n i V | .abort _ n i V => (n, i) :: opsV c k V
+    | .handle _ n _ _ M => (opsC c k M).filter (·.1 != n)
+    | .ret _ V | .absurd _ V => opsV c k V
+    | .bind _ _ _ M N _ | .with_ _ M N => opsC c k M ++ opsC c k N
+    | .unwind _ _ _ M D N => opsC c k M ++ opsC c k D ++ opsC c k N
+    | .letUnit _ V M | .letPair _ _ _ V M => opsV c k V ++ opsC c k M
+    | .case _ V _ M _ N | .for_ _ _ V M N => opsV c k V ++ opsC c k M ++ opsC c k N
+    | .app _ M _ | .proj _ _ M | .inst _ M _ | .nuIn _ M | .nuOut _ M | .ascribe _ M _ | .lamL _ _ _ M
+    | .lam _ _ _ M => opsC c k M
+    | _ => []
+
+/-- `opsC` of a value. -/
+def opsV (c : TCx) : Nat → Val → List (Nat × Nat)
+  | 0, _ => []
+  | k + 1, V => match hndCtl? V with
+    | some (i, P, R, cls, B) =>
+      opsV c k P ++ opsV c k R ++ opsV c k cls ++ (opsC c k B).filter (·.1 != i.n)
+    | none => match V with
+      | .app _ f W =>
+        let own := match f with
+          | .var _ g | .defApp _ g _ | .unbang _ (.var _ g) =>
+            ((c.tyV (.var .none g)).map fun T => (fnRowOf T).map fun o => (o.n.toNat, o.i.toNat)).getD []
+          | _ => []
+        own ++ opsV c k f ++ opsV c k W
+      | .pair _ V W => opsV c k V ++ opsV c k W
+      | .inl _ V | .inr _ V | .unbang _ V | .boxed _ _ V | .unbox _ V | .sub _ V _ | .roll _ V
+      | .unroll _ V | .inst _ V _ | .ascribe _ V _ | .shorten _ _ _ _ V => opsV c k V
+      | .run _ M | .thunkv _ M => opsC c k M
+      | _ => []
+end
+
 /-- The components of a `()`-terminated tuple. -/
 def clauseList : Val → List Val
   | .pair _ V W => V :: clauseList W
@@ -3943,17 +3994,18 @@ def hndCtlC : Nat → TCx → Span → HInfo → Val → Val → Val → Comp �
     -- The arguments, bound to the parameters' names.
     let mut σ : TySubst := i.known
     let mut cP := c
-    let mut binds : List (Ident × Val) := []
+    let mut binds : List (Ident × VTy × Val) := []
     for ((x, Pt), a) in i.params.zip (tupleArgs i.params.length P) do
       let Pt' := Pt.subst σ
       let exp := if Elab.Effects.mentions i.tps Pt' then none else cP.elabV Pt'
       let a' ← surfV n cP exp a
-      let T ← need a.span s!"the argument `{x}` of `{i.name}`" ((← refresh cP).tyV a')
+      let T ← need a.span s!"the argument `{x}` of `{i.name}`"
+        (exp.orElse fun _ => cP.tyV a' |>.orElse fun _ => none)
       let Ts ← (cP.surface sp T : Except Error VTy)
-      match Elab.Effects.matchTy i.tps σ Pt Ts with
+      match Elab.Effects.matchTyBy (sameTy cP) i.tps σ Pt' Ts with
       | some σ' => σ := σ'
       | none => throw (mismatch s!"the argument `{x}`")
-      binds := binds ++ [(⟨x, sp⟩, a')]
+      binds := binds ++ [(⟨x, sp⟩, Ts, a')]
       cP := cP.push x (some T)
     -- The body, with the site's operations innermost.
     let ops ← i.ents.mapM fun (q, A, B) => do
@@ -3965,7 +4017,7 @@ def hndCtlC : Nat → TCx → Span → HInfo → Val → Val → Val → Comp �
     let CM ← need M.span s!"the type of the body `{i.name}` handles" ((← refresh cB).tyC M')
     let (_, A) ← need M.span s!"the type of the body `{i.name}` handles" (rowRes? CM)
     let As ← (cP.surface sp A : Except Error VTy)
-    match Elab.Effects.matchTy i.tps σ i.retA As with
+    match Elab.Effects.matchTyBy (sameTy cP) i.tps σ i.retA As with
     | some σ' => σ := σ'
     | none => throw (mismatch "the body it handles")
     if let some x := i.tps.find? (fun x => (σ.lookup x).isNone) then
@@ -3997,7 +4049,7 @@ def hndCtlC : Nat → TCx → Span → HInfo → Val → Val → Val → Comp �
     let hcN : Ident := ⟨s!"io_hc{i.n}", sp⟩
     let core : Comp := .bind sp hrN (some hrTy) (.ret sp hr)
       (.bind sp hcN (some hcTy) (.ret sp hcV) (.handle sp i.n hrN hcN M') false) false
-    pure (binds.foldr (fun (x, a) K => Comp.bind sp x none (.ret sp a) K false) core)
+    pure (binds.foldr (fun (x, T, a) K => Comp.bind sp x (some T) (.ret sp a) K false) core)
 
 /-- `for x in V' { M }; N` over a sized source (`dataSrcOf`), `V'` elaborated: a counted loop,
 `count_try` over the length of the source's data (the section *The total `for` over data*);
@@ -4136,9 +4188,54 @@ case io_so{sfx} \{
     | inr io_b{sfx} -> case io_b{sfx} \{ inl io_bv{sfx} -> return (inl ({tupleSrc wsN}, inr io_bv{sfx}))
       | inr io_rv{sfx} -> return (inr io_rv{sfx}) } }"
       else s!"return ({tupleSrc wsN}, io_o{sfx})"
-    let core := s!"{pre}io_r{sfx} <- return count_try[{St}, {Et}](!\{ (io_i{sfx}, io_s{sfx}) ->
-  {destructSrc s!"io_s{sfx}" (curN ++ wsN)}{elem} }, {bound}, {i0}, {stateS});
-io_j{sfx} : {Jt} <- case io_r{sfx} \{
+    -- An abortive operation in the body (SPEC §19): `count_try`'s step is pure, so the step
+    -- handles the operations of their site itself, each leaving the loop by its exit, and after
+    -- the loop the operation is performed again.
+    let S := c.E.row.getD []
+    let used := (opsC c divFuel M).eraseDups.filter fun (k, _) => S.any (·.n.toNat == k)
+    let names := (used.map (·.1)).eraseDups
+    let (stepT, wrapStep, reabort) ← match names with
+      | [] => pure (Et, fun (e : String) => e, "")
+      | [k] => do
+        let ops := S.filter (·.n.toNat == k)
+        if let some o := ops.find? (fun o => !o.abort) then
+          throw ⟨sp, s!"the body of this `for` performs a control operation that resumes " ++
+            s!"(the operation {o.n}.{o.i}): the loop is a counted loop, whose step is pure " ++
+            "(SPEC §16), and only an abortive operation may leave it"⟩
+        let As ← ops.mapM fun o => pp o.A
+        let P := " + ".intercalate (As.map fun a => s!"({a})")
+        let m := As.length
+        let inj (j : Nat) (v : String) : String :=
+          (List.range j).foldr (fun _ t => s!"inr ({t})") (if j + 1 == m then v else s!"inl ({v})")
+        let Et' := s!"({Et}) + ({P})"
+        let T := s!"({St}) + ({Et})"
+        let R := s!"({St}) + ({Et'})"
+        let cls := (As.zipIdx.map fun (a, j) =>
+          s!"!thunkv fun (io_ae{sfx} : {a}) -> return (inr (inr ({inj j s!"io_ae{sfx}"})))")
+        let clsV := cls.foldr (fun c t => s!"({c}, {t})") "()"
+        let clsT := (As.map fun a => s!"!(({a}) => {R})").foldr (fun c t => s!"({c}) * ({t})") "1"
+        let wrap (e : String) : String :=
+          s!"io_ahr{sfx} : !({T} => {R}) <- return (!thunkv fun (io_av{sfx} : {T}) ->
+    case io_av{sfx} \{ inl io_ax{sfx} -> return (inl io_ax{sfx}) | inr io_ax{sfx} -> return (inr (inl io_ax{sfx})) });
+  io_ahc{sfx} : {clsT} <- return {clsV};
+  handle_with[{k}](io_ahr{sfx}, io_ahc{sfx}) ({e})"
+        let rec reab : List (Nat × String) → String → String
+          | [], _ => "absurd ()"
+          | [(i, _)], v => s!"abort[{k}.{i}] {v}"
+          | (i, _) :: rest, v =>
+            s!"case {v} \{ inl io_aq{i}{sfx} -> abort[{k}.{i}] io_aq{i}{sfx} | inr io_ar{i}{sfx} -> {reab rest s!"io_ar{i}{sfx}"} }"
+        let re := reab ((ops.map (·.i.toNat)).zip As) s!"io_ap{sfx}"
+        if !(← get).quiet then
+          report sp s!"an abortive operation in its body leaves the loop by its exit, handled at the step and performed again after it"
+        pure (Et', wrap, s!"io_r{sfx} : ({St}) + ({Et}) <- case io_rr{sfx} \{
+    inl io_aq{sfx} -> return (inl io_aq{sfx})
+  | inr io_aq{sfx} -> case io_aq{sfx} \{ inl io_ae{sfx} -> return (inr io_ae{sfx}) | inr io_ap{sfx} -> {re} } };
+")
+      | _ => throw ⟨sp, "the body of this `for` performs abortive operations of two handlers: not provided"⟩
+    let rname := if reabort.isEmpty then s!"io_r{sfx}" else s!"io_rr{sfx}"
+    let core := s!"{pre}{rname} <- return count_try[{St}, {stepT}](!\{ (io_i{sfx}, io_s{sfx}) ->
+  {destructSrc s!"io_s{sfx}" (curN ++ wsN)}{wrapStep elem} }, {bound}, {i0}, {stateS});
+{reabort}io_j{sfx} : {Jt} <- case io_r{sfx} \{
     inl io_s{sfx} -> {destructSrc s!"io_s{sfx}" (curN ++ wsN)}return ({jEnded})
   | inr io_e{sfx} -> let (io_w{sfx}, io_o{sfx}) = io_e{sfx};
       {destructSrc s!"io_w{sfx}" wsN}{jExit}

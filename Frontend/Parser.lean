@@ -808,11 +808,12 @@ def Comp.boundNames : Comp → List String
 names it rebinds. -/
 def Val.rebinds : Val → Option Pat
   | .app _ (.app _ (.sugar _ (.borrow _ _)) P) _ => placeNames P
-  -- `with h(&mut c) { … }` hands the cell `c` back; `with h(e) { … }` hands back the cell scoped
-  -- to the block, which is dropped.
-  | .app sp (.app _ (.sugar _ (.handle _ _ _)) P) _ => match P with
+  -- `with h(&mut c) { … }` hands the cell `c` back; a `with` whose body hands back the
+  -- variables it assigns hands back its place beside them, which is dropped. Any other `with`
+  -- answers its result alone.
+  | .app sp (.app _ (.sugar _ (.handle _ _ _)) P) (.thunkv _ (.lam _ _ _ M)) => match P with
     | .lend _ x _ => some (.var x)
-    | _ => some (.wild sp)
+    | _ => if M.boundNames.contains "io_bt" then some (.wild sp) else none
   | _ => none
 where
   placeNames : Val → Option Pat
@@ -1394,14 +1395,19 @@ def compG : Nat → Bool → P Comp
       discard bump; discard bump
       unless (← get).muts.contains x do
         failAt t.span s!"`{x}` is assigned, but it is not declared `let mut`"
-      modify fun s => { s with assigned := x :: s.assigned }
+      modify fun s => { s with assigned := x :: s.assigned, blockThreads := [] }
       let V ← val n
+      let thr := (← get).blockThreads
       if !head && (← isSym ";") then
         discard bump
         let N ← comp n
-        pure (.bind (← spanFrom st) ⟨x, t.span⟩ none (.ret V.span V) N false)
+        let sp ← spanFrom st
+        -- A block's value is rebound as `let x = …` binds it (`letVal`).
+        if V.rebinds.isSome then return ← letVal sp n (.var ⟨x, t.span⟩) none V N thr
+        pure (.bind sp ⟨x, t.span⟩ none (.ret V.span V) N false)
       else
         let sp ← spanFrom st
+        if V.rebinds.isSome then return ← letVal sp n (.var ⟨x, t.span⟩) none V (.ret sp (.unit sp)) thr
         pure (.bind sp ⟨x, t.span⟩ none (.ret V.span V) (.ret sp (.unit sp)) false)
     | .kw "linear", .ident x =>
       discard bump

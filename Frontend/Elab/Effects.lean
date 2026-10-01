@@ -187,34 +187,41 @@ def Env.rowOf (env : Env) (ss : List Site) : Row :=
 
 /-! ### Type arguments -/
 
-/-- First-order matching of a type `P` whose names `tps` are unknowns against `A`. -/
-partial def matchTy (tps : List String) (σ : TySubst) (P A : VTy) : Option TySubst :=
+/-- First-order matching of a type `P` whose names `tps` are unknowns against `A`; `same` decides
+two types without unknowns equal (expanding abbreviations, when it can). -/
+partial def matchTyBy (same : VTy → VTy → Bool) (tps : List String) (σ : TySubst) (P A : VTy) :
+    Option TySubst :=
+  let go := matchTyBy same tps
   match P with
   | .name _ x =>
     if tps.contains x then
       match σ.lookup x with
-      | some B => if B.strip == A.strip then some σ else none
+      | some B => if same B A then some σ else none
       | none => some ((x, A) :: σ)
-    else if P.strip == A.strip then some σ else none
+    else if same P A then some σ else none
   | .tensor _ P₁ P₂ => match A with
-    | .tensor _ A₁ A₂ => do matchTy tps (← matchTy tps σ P₁ A₁) P₂ A₂
-    | _ => none
+    | .tensor _ A₁ A₂ => do go (← go σ P₁ A₁) P₂ A₂
+    | _ => if same P A then some σ else none
   | .sum _ P₁ P₂ => match A with
-    | .sum _ A₁ A₂ => do matchTy tps (← matchTy tps σ P₁ A₁) P₂ A₂
-    | _ => none
+    | .sum _ A₁ A₂ => do go (← go σ P₁ A₁) P₂ A₂
+    | _ => if same P A then some σ else none
   | .lolli _ P₁ P₂ => match A with
-    | .lolli _ A₁ A₂ => do matchTy tps (← matchTy tps σ P₁ A₁) P₂ A₂
-    | _ => none
-  | .bang _ P => match A with
-    | .bang _ A => matchTy tps σ P A
-    | _ => none
-  | .ref _ P => match A with
-    | .ref _ A => matchTy tps σ P A
-    | _ => none
-  | .array _ P => match A with
-    | .array _ A => matchTy tps σ P A
-    | _ => none
-  | P => if P.strip == A.strip then some σ else none
+    | .lolli _ A₁ A₂ => do go (← go σ P₁ A₁) P₂ A₂
+    | _ => if same P A then some σ else none
+  | .bang _ P' => match A with
+    | .bang _ A' => go σ P' A'
+    | _ => if same P A then some σ else none
+  | .ref _ P' => match A with
+    | .ref _ A' => go σ P' A'
+    | _ => if same P A then some σ else none
+  | .array _ P' => match A with
+    | .array _ A' => go σ P' A'
+    | _ => if same P A then some σ else none
+  | P => if same P A then some σ else none
+
+/-- `matchTyBy` with types compared as written. -/
+def matchTy (tps : List String) (σ : TySubst) (P A : VTy) : Option TySubst :=
+  matchTyBy (fun a b => a.strip == b.strip) tps σ P A
 
 /-- The type names `A` mentions among `tps`. -/
 def mentions (tps : List String) (A : VTy) : Bool :=
@@ -876,9 +883,14 @@ def withBlk : Nat → Cx → List Cap → Span → Span → Span → HSig → St
     let body ← trC k cx' outer true M
     let blk := Val.app sp (.app sp₂ (.sugar ksp (.borrow .mut l)) place)
       (.thunkv tsp (.lam lsp b A body))
-    if outer.isEmpty && !cx.ctlC M then return (bsP, blk)
+    -- The block answers its result alone, the scoped cell dropped, unless it is lent from a
+    -- place or hands back the variables its body assigns (`Val.rebinds`).
+    let alone := (match P' with | .lend .. => false | _ => true) && !M.boundNames.contains "io_bt"
+    if outer.isEmpty && !cx.ctlC M && !alone then return (bsP, blk)
     let (bs, V') ← blockResult k cx sp blk outer
-    pure (bsP ++ bs, V')
+    match alone, V' with
+    | true, .pair _ _ r => pure (bsP ++ bs, r)
+    | _, _ => pure (bsP ++ bs, V')
 
 /-- `with h[As](P) { M }` of a control handler: a handler site with a static name of its own. The
 handled effect's type arguments are the ones written, or the ones the body performs; the
@@ -976,9 +988,7 @@ def withCtl : Nat → Cx → List Cap → Span → Span → CHandler → List VT
       (.thunkv sp (.lam sp rx rA rM'))) clsV) (.thunk sp M')
     let r ← fresh "fx_v"
     let bind : Bind := fun N => pure (.bind sp ⟨r, sp⟩ none (.ret sp hnd) N false)
-    -- A `with` is read as a block handing back its place beside its result (`Val.rebinds`); a
-    -- control handler's has none.
-    pure (bsP ++ [bind], .pair sp (.unit sp) (.var sp r))
+    pure (bsP ++ [bind], .var sp r)
 
 /-- The copy of `g` for what serves its effects at a call in `cx`, made once. -/
 def copyFor : Nat → Cx → Span → String → FSig → EM String

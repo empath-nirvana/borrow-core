@@ -14,12 +14,14 @@
 -- `slice`.
 --
 -- A search that can find nothing answers a sum; a validation or a parse that can fail raises its
--- error (`Fail`, SPEC §18), which a caller handles with `try`, `catch` or `map_err`. A character
+-- error (`Fail`, `lib/fail.bc`), which a caller handles with a handler of `Fail` (`with
+-- to_result { … }`, `with default(d) { … }`, `with map_err(f) { … }`). A character
 -- is an `i32` scalar value. Loops are counted over a view's length, so every function here is
 -- total.
 
 include buf
 include slice
+include fail
 
 -- ### Building
 
@@ -176,14 +178,11 @@ fn str_from_utf8<'a>(v: array_imm 'a u8) -> text 'a with Fail[i32] =
   let (v, w) = array_copy['a, u8] v;
   match utf8_error(w) { inl e -> array_forget['a, u8](v); raise(e) | inr u -> v }
 
--- The error of `from_utf8`: the buffer back, and the index of the first byte that is not UTF-8.
-type Utf8Error = buf u8 * i32
-
--- A buffer of bytes as a string, in place, if they are UTF-8; else it raises the buffer and the
--- index of the first byte that is not.
-fn from_utf8(b: buf u8) -> string with Fail[Utf8Error] =
+-- A buffer of bytes as a string, in place, if they are UTF-8; else it raises the index of the
+-- first byte that is not, and the buffer is dropped (an error holds nothing owned, SPEC §19).
+fn from_utf8(b: buf u8) -> string with Fail[i32] =
   let r = borrow imm b { v -> match utf8_error(v) { inl e -> e | inr u -> 0 - 1 } };
-  if r < 0 { b } else { raise((b, r)) }
+  if r < 0 { b } else { raise(r) }
 
 -- The scalar value at byte `i` and the length of its sequence; a byte that does not start a valid
 -- sequence is U+FFFD, of length 1.
@@ -389,8 +388,8 @@ fn parse_i32<'a>(t: text 'a) -> i32 with Fail[ParseError] =
     for x in t {
       let d = *x;
       if d < b'0' || b'9' < d { raise(inr (inl d)) } else { () };
-      let m = map_err { mul_checked(n, 10) } { u -> inr (inr ()) };
-      n = map_err { add_checked(m, to_i32(d) - 48) } { u -> inr (inr ()) }
+      let m = with map_err(!{ u -> inr (inr ()) }) { mul_checked(n, 10) };
+      n = with map_err(!{ u -> inr (inr ()) }) { add_checked(m, to_i32(d) - 48) }
     };
     if neg { 0 - n } else { n }
   }
