@@ -39,6 +39,7 @@
 set -uo pipefail
 cd "$(dirname "$0")/.."
 changed=0
+[ $# -le 1 ] || { echo "usage: scripts/ci-local.sh [--source | --changed]"; exit 2; }
 case "${1:-}" in
   --changed) changed=1; export BCC_SOURCE=0 ;;
   --source) export BCC_SOURCE=1 ;;
