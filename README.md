@@ -146,7 +146,12 @@ You need Lean (installed with `elan`) and `wasmtime`. `mdbook` is optional, for 
 lake exe cache get
 lake build
 scripts/ci-local.sh             # the gate: build, hygiene and axioms, corpus, kernel programs, sugar, book
+scripts/ci-local.sh --changed   # while iterating: only the steps the changes since origin/main reach
+scripts/new-worktree.sh <branch>  # a worktree from origin/main, its build cloned from this checkout's
 ```
+
+`bcc` reads the library modules (`lib/*.bc`) when it starts, from the `lib/` of the checkout it
+was built in (or `$BCC_LIB`), so editing the library needs no rebuild.
 
 `lake exe bcc <command>` runs the compiler:
 
