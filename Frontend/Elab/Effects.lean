@@ -189,35 +189,28 @@ def Env.rowOf (env : Env) (ss : List Site) : Row :=
 
 /-- First-order matching of a type `P` whose names `tps` are unknowns against `A`; `same` decides
 two types without unknowns equal (expanding abbreviations, when it can). -/
-partial def matchTyBy (same : VTy → VTy → Bool) (tps : List String) (σ : TySubst) (P A : VTy) :
+def matchTyBy (same : VTy → VTy → Bool) (tps : List String) (σ : TySubst) (P A : VTy) :
     Option TySubst :=
-  let go := matchTyBy same tps
-  match P with
-  | .name _ x =>
-    if tps.contains x then
-      match σ.lookup x with
-      | some B => if same B A then some σ else none
-      | none => some ((x, A) :: σ)
-    else if same P A then some σ else none
-  | .tensor _ P₁ P₂ => match A with
-    | .tensor _ A₁ A₂ => do go (← go σ P₁ A₁) P₂ A₂
-    | _ => if same P A then some σ else none
-  | .sum _ P₁ P₂ => match A with
-    | .sum _ A₁ A₂ => do go (← go σ P₁ A₁) P₂ A₂
-    | _ => if same P A then some σ else none
-  | .lolli _ P₁ P₂ => match A with
-    | .lolli _ A₁ A₂ => do go (← go σ P₁ A₁) P₂ A₂
-    | _ => if same P A then some σ else none
-  | .bang _ P' => match A with
-    | .bang _ A' => go σ P' A'
-    | _ => if same P A then some σ else none
-  | .ref _ P' => match A with
-    | .ref _ A' => go σ P' A'
-    | _ => if same P A then some σ else none
-  | .array _ P' => match A with
-    | .array _ A' => go σ P' A'
-    | _ => if same P A then some σ else none
-  | P => if same P A then some σ else none
+  go fuel σ P A
+where
+  go : Nat → TySubst → VTy → VTy → Option TySubst
+    | 0, _, _, _ => none
+    | k + 1, σ, P, A =>
+      let both (P₁ A₁ P₂ A₂ : VTy) : Option TySubst := do go k (← go k σ P₁ A₁) P₂ A₂
+      match P, A with
+      | .name _ x, A =>
+        if tps.contains x then
+          match σ.lookup x with
+          | some B => if same B A then some σ else none
+          | none => some ((x, A) :: σ)
+        else if same P A then some σ else none
+      | .tensor _ P₁ P₂, .tensor _ A₁ A₂ => both P₁ A₁ P₂ A₂
+      | .sum _ P₁ P₂, .sum _ A₁ A₂ => both P₁ A₁ P₂ A₂
+      | .lolli _ P₁ P₂, .lolli _ A₁ A₂ => both P₁ A₁ P₂ A₂
+      | .bang _ P', .bang _ A' => go k σ P' A'
+      | .ref _ P', .ref _ A' => go k σ P' A'
+      | .array _ P', .array _ A' => go k σ P' A'
+      | P, A => if same P A then some σ else none
 
 /-- `matchTyBy` with types compared as written. -/
 def matchTy (tps : List String) (σ : TySubst) (P A : VTy) : Option TySubst :=
