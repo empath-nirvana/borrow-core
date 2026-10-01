@@ -1,28 +1,30 @@
--- A `for` that keeps the finishing value (#109). `let r = for x in V { M }; N` binds `r` to what
--- the generator finishes with, or to `e` after `break e`, in a generator and in `main`.
+-- A `for` that keeps the finishing value. `let r = for x in V { M }; N` binds `r` to what the
+-- generator returns, or to `e` after `break e`, over a call and over a stored generator.
 --
--- `upto(n, stop)` yields `0, 1, …` and finishes with `n`, or with `100 * stop` when it reaches
--- `stop` (a `return` inside its loop). `firstbig` passes on the elements of the generator it is
--- given up to the first above `lim`, and finishes with that element plus 1000 (`break x`), or
--- with what the generator finished with plus 1000.
+-- `upto(n, stop)` yields `0, 1, …` and returns `n`, or `100 * stop` when it reaches `stop` (a
+-- `return` inside its loop). `firstbig` passes on the elements of the stored generator it is
+-- given up to the first above `lim`, and returns that element plus 1000 (`break x`), or what the
+-- generator returned plus 1000.
 --
 -- Answer: i32[71427]: the first loop sums 0 1 2 3 (6) and keeps 400; the second sums 0 … 5
 -- (15) and keeps 1006, `firstbig` having left at 6; the third keeps 70000 from its `break`. A
 -- `for` that lost the finishing value gives 70021; one that kept the generator's value after a
 -- `break` gives 1010 in place of 1006, or 10 in place of 70000.
 
-gen fn upto(n: i32, stop: i32) -> i32, i32 =
+include yield
+
+fn upto(n: i32, stop: i32) -> i32 with Yield[i32] =
   let mut i = 0;
   while i < n {
     if i == stop { return i * 100 } else { () };
-    yield i;
+    yield(i);
     i = i + 1
   };
   n
 
-gen fn firstbig(it: U (gen i32 i32 1), lim: i32) -> i32, i32 =
+fn firstbig(it: U (pull i32 i32 1), lim: i32) -> i32 with Yield[i32] =
   let r = for x in it {
-    if x > lim { break x } else { yield x }
+    if x > lim { break x } else { yield(x) }
   };
   r + 1000
 

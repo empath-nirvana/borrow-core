@@ -1,25 +1,28 @@
--- `return` and `break` anywhere in a generator's body (#109). A `return e` finishes the whole
--- generator with `e` from any depth of its loops, closing each loop's iterator on the way out; a
+-- `return` and `break` anywhere in a generator's body. A `return e` returns from the whole
+-- generator with `e` from any depth of its loops, closing each loop's source on the way out; a
 -- `break` leaves the innermost loop from any position, not only its tail.
 --
 -- `below` leaves two loops with `return` once `i * j` passes `lim`, and leaves the outer loop
--- with a `break` in the middle of its body. `upto` writes each number it yields through the output
--- capability it holds, and `return`s the capability from inside its loop: the loop threads `o`,
--- so the returned value hands it back. What follows its loop yields again: a `return` skips it
--- (`upto(…, 2, 9)`), and a `break` runs it (`upto(…, 9, 3)` yields the `99`).
+-- with a `break` in the middle of its body. `upto` returns how far it got from inside its loop,
+-- and what follows its loop yields again: a `return` skips it (`upto(2, 9)`), and a `break` runs
+-- it (`upto(9, 3)` yields the `99`). `main` writes what `upto` yields: the output capability is
+-- one of the loop's variables, threaded through `yield` with the others.
 --
--- Answer: the lines `0`, `1`, `0`, `1`, `2`, then i32[116]: `below(10, 12)` yields 0, 0 1, 0 1 2,
--- 0 1 2 3, 0 1 2 (13); `upto(o, 2, 9)` 0 1 (1); `upto(o, 9, 3)` 0 1 2 then 99 (102). A `return`
--- that fell through to what follows the loop gives 99 more; a `break` that only ended the
--- iteration never stops `below`'s outer loop; a `return` that left only the inner loop gives 18.
+-- Answer: the lines `0`, `1`, `0`, `1`, `2`, `99`, then i32[1118]: `below(10, 12)` yields 0, 0 1,
+-- 0 1 2, 0 1 2 3, 0 1 2 (13); `upto(2, 9)` 0 1 (1) and returns 2; `upto(9, 3)` 0 1 2 then 99
+-- (102) and returns 1000. A `return` that fell through to what follows the loop gives 99 more; a
+-- `break` that only ended the iteration never stops `below`'s outer loop; a `return` that left
+-- only the inner loop gives 18.
 
-gen fn below(n: i32, lim: i32) -> i32 =
+include yield
+
+fn below(n: i32, lim: i32) -> 1 with Yield[i32] =
   let mut i = 0;
   while true {
     let mut j = 0;
     while j < i {
       if i * j > lim { return } else { () };
-      yield j;
+      yield(j);
       j = j + 1
     };
     if i == n { break } else { () };
@@ -27,22 +30,28 @@ gen fn below(n: i32, lim: i32) -> i32 =
   };
   ()
 
-gen fn upto(o: Out, stop: i32, brk: i32) -> i32, Out =
+fn upto(stop: i32, brk: i32) -> i32 with Yield[i32] =
   let mut i = 0;
   while true {
-    if i == stop { return o } else { () };
+    if i == stop { return i } else { () };
     if i == brk { break } else { () };
-    put_dec(&mut o, i);
-    putb(&mut o, 10);
-    yield i;
+    yield(i);
     i = i + 1
   };
-  yield 99;
-  o
+  yield(99);
+  1000
 
 main -> i32 =
   let mut acc = 0;
   for x in below(10, 12) { acc = acc + x };
-  for x in upto(&mut stdout, 2, 9) { acc = acc + x };
-  for x in upto(&mut stdout, 9, 3) { acc = acc + x };
-  acc
+  let r = for x in upto(2, 9) {
+    put_dec(&mut stdout, x);
+    putb(&mut stdout, 10);
+    acc = acc + x
+  };
+  let s = for x in upto(9, 3) {
+    put_dec(&mut stdout, x);
+    putb(&mut stdout, 10);
+    acc = acc + x
+  };
+  acc + r + s

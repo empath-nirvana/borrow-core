@@ -627,6 +627,15 @@ where
       | .nuOut _ M | .ascribe _ M _ => withInC k M
       | _ => false
 
+/-- A `return e` of a loop's body in a value, outside nested computations. -/
+def retIn : Nat → Val → Bool
+  | 0, _ => false
+  | k + 1, V => match V with
+    | .app _ (.sugar _ .retE) _ => true
+    | .app _ f W | .pair _ f W => retIn k f || retIn k W
+    | .inl _ V | .inr _ V | .ascribe _ V _ => retIn k V
+    | _ => false
+
 /-- The plain calls of `V` that perform no effect, lifted (`liftCalls`), in the order its
 evaluation runs them in; an effectful call stays, its arguments' plain calls lifted. -/
 def liftPlain (cx : Cx) : Nat → Val → StateT (List Bind) EM Val
@@ -810,7 +819,9 @@ def trV : Nat → Cx → List Cap → Val → EM (List Bind × Val)
     let needs := !(cx.need row).isEmpty || !(cx.ctl row).isEmpty
     -- An effect with no handler in scope is reported where it is performed (`goV`).
     let unhandled := row.any fun i => (cx.capOf i.eff).isNone && (cx.siteOf i.eff).isNone
-    if !needs && !unhandled && !withInV cx.env fuel V then return ([], V)
+    -- A `return e` from a loop's body hands the copy's capabilities back too (`plainApp`).
+    let ret := !cx.fnCaps.isEmpty && retIn fuel V
+    if !needs && !unhandled && !ret && !withInV cx.env fuel V then return ([], V)
     let (V, pre) ← if needs then (liftPlain cx fuel V).run [] else pure (V, [])
     let (bs, V') ← goV n cx cs V
     pure (pre ++ bs, V')

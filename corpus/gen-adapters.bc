@@ -1,10 +1,11 @@
 -- check: no-source
--- Every adapter of the library (#109, `lib/adapters.bc`) over pure sources: `range` finishes with
--- `()` and, closed, hands back `()`. Each adapter is a generic `gen fn` written once; each call
+-- Every adapter of the library (`lib/adapters.bc`) over pure sources: `range` returns `()` and,
+-- stored and closed, hands back `()`. Each adapter is a generic generator written once; each call
 -- makes its instance at the types of its arguments (`i32`, pairs, lists). The adapters are
--- composed, a few to a loop. The source interpreter takes about a minute over it (`check:
--- no-source`); the other stages run it. The I/O sources are `corpus/gen-adapters-io.bc`, the
--- failing ones `corpus/gen-adapters-fail.bc`.
+-- composed, a few to a loop, each call at an adapter's parameter stored. `flat_map`'s function
+-- stores the generator it makes (`let g : U (pull i32 1 1) = …`). The source interpreter takes
+-- about a minute over it (`check: no-source`); the other stages run it. The failing sources are
+-- `corpus/gen-adapters-fail.bc`.
 --
 -- Answer: i32[110051049], read as 110, 051 and 049:
 --   take 3 of skip 2 of filter above 5 of map squares of 0 … 9:
@@ -22,9 +23,9 @@ include adapters
 
 type List = mu X. 1 + (i32 * X)
 
-gen fn range(lo: i32, hi: i32) -> i32 =
+fn range(lo: i32, hi: i32) -> 1 with Yield[i32] =
   let mut i = lo;
-  while i < hi { yield i; i = i + 1 };
+  while i < hi { yield(i); i = i + 1 };
   ()
 
 fn len_alg(r: 1 + i32 * i32) -> i32 = match r { inl _ -> 0 | inr (x, n) -> n + 1 }
@@ -41,7 +42,7 @@ main -> i32 =
   };
   let mut b = 0;
   for p in enumerate(chain(scan(range(1, 5), 0, !{ (s, x) -> s + x }),
-                           flat_map(range(0, 3), !{ n -> range(0, n) }))) {
+                           flat_map(range(0, 3), !{ n -> let g : U (pull i32 1 1) = range(0, n); g }))) {
     let (i, x) = p;
     b = b + i * x
   };

@@ -1,0 +1,25 @@
+-- pending: a continuation that holds a capability across an affine operation (SPEC §19, kernel)
+-- A generator over the input: `digits` reads the bytes of the input it is given and yields each
+-- decimal digit, then hands the input back. `main` reads the number.
+--
+-- Blocked by the kernel: `yield` is affine (`ctl`), so its continuation may be cancelled, and
+-- what is live across it must drop (§19's `[let]` side condition, or a `[then]` finaliser). The
+-- input's iterator holds the input capability, `ref input`, which has no destructor (§12): it must
+-- be handed back, and a cancel answers `()`, with no residual. A `linear ctl` operation would
+-- allow it, without `break` (its continuation cannot be cancelled). What is missing is a
+-- continuation whose cancel hands back a residual, or a capability with a destructor.
+--
+-- now: 18:27: `io_it1`, of type `U (iter u8 (ref input) (ref input))`, is live across a computation that may abort, and its type has no destructor: an abortive operation of the bound computation would abandon it
+
+include yield
+
+fn digits(c: In) -> In with Yield[i32] =
+  for b in bytes(c) {
+    if 47 < b && b < 58 { yield(to_i32(b) - 48) } else { () }
+  };
+  c
+
+main -> i32 =
+  let mut n = 0;
+  let stdin = for d in digits(stdin) { n = n * 10 + d };
+  n

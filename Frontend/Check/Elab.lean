@@ -259,7 +259,10 @@ def elabV : Nat → TyEnv → VTy → Except Error CVTy
     | .handle _ o => pure (.opq (if o then .output else .input))
     | .mu sp X A => do
         let B ← elabV n { E with mu := X.name :: E.mu } A
-        if VTy.clB 1 B = false then
+        -- A template's type, elaborated with its type parameters as placeholders to match a call
+        -- against (`Frontend/Sugar.lean`), is checked at each instance instead.
+        let pattern := E.tps.any fun (_, T) => match T with | .tvar i => i ≥ 2 ^ 24 | _ => false
+        if VTy.clB 1 B = false && !pattern then
           err sp s!"`mu {X.name}. …` must be closed: it mentions an enclosing type variable"
         else if VTy.noMutB 0 B = false then
           err sp s!"in `mu {X.name}. …`, `{X.name}` occurs under `mut`"

@@ -395,6 +395,8 @@ def bindTy (c : TCx) (A : Option VTy) (M : Comp) : Option CVTy :=
       | .ret _ V => match directCall c none V with
         | some (B, _) => some B
         | none => c.tyV V
+      -- An operation answers its result type in the row (SPEC §19).
+      | .perform sp k i _ => (Frontend.Check.findOp c.E sp "perform" k i).toOption.map (·.2.1.B)
       | M => match (c.tyC M).bind Frontend.Check.effRow? with
         | some (_, A) => some A
         | _ => none
@@ -1095,7 +1097,13 @@ def mGoto (m : MCx) (sp : Span) (q : Nat) : MM Comp := do
   let p ← mPt q
   if m.pre then
     return .ret sp (.app sp (.unbang sp (.var sp "io_mk")) (mInj sp q p.vars))
-  let call := p.fn && !p.summand
+  -- At a row, a move forward runs in the same observation (from the step's own code, or to a
+  -- later point), so that an observation reaches the next operation; a move back to a loop's
+  -- head is a skip. At the empty row every move to a summand is a skip.
+  let later := match m.cur with
+    | none => true
+    | some k => k < p.pos
+  let call := p.fn && (!p.summand || (!m.row.isEmpty && later))
   if call then
     let f : Val := .unbang sp (.var sp s!"io_run_{q}")
     let a := tupleVal sp (p.vars.map (·.1))
@@ -1122,6 +1130,19 @@ def mFinish (m : MCx) (T : Comp) : MM Comp := do
   | _, .bind sp x _ M N lin => pure (.bind sp x none M N lin)
   | _, L => pure L
 
+/-- Bind the components of `v`, of type `T`, at each leaf of its tensors however they nest: a
+leaf `name` names, or a fresh variable. The code, and each leaf's name (when `name` gave it) and
+type. -/
+def destructLeaves : Nat → String → CVTy → (CVTy → Option String) →
+    String × List (Option String × CVTy)
+  | k + 1, v, .tensor A B, name =>
+    let (s₁, l₁) := destructLeaves k s!"{v}a" A name
+    let (s₂, l₂) := destructLeaves k s!"{v}b" B name
+    (s!"let ({v}a, {v}b) = {v};\n" ++ s₁ ++ s₂, l₁ ++ l₂)
+  | _, v, T, name => match name T with
+    | some p => (s!"{p} <- return {v};\n", [(some p, T)])
+    | none => ("", [(none, T)])
+
 /-- The residual `io_r` of a delegate or a call closed early (`Rf`), bound by name: the lent
 capability, nothing, or the body's own residual; and the capabilities it holds. -/
 def mAbort (m : MCx) (sp : Span) (lend : Option Ident) (Rf : CVTy) : MM (String × List String) := do
@@ -1136,10 +1157,18 @@ def mAbort (m : MCx) (sp : Span) (lend : Option Ident) (Rf : CVTy) : MM (String 
     if Rf == .unit then pure ("let () = io_r;\n", [])
     else if Rf == cx.R && !cx.parts.isEmpty then
       pure ((if cx.tail1 then destructR "io_r" cx.parts else destructParts "io_r" cx.parts), cx.capNames)
-    else match cx.caps.filter (·.2 == Rf) with
-      -- The loop hands back the one capability of the body of its type, which it was given.
-      | [(p, _)] => pure (s!"{p} <- return io_r;\n", [p])
-      | _ => throw ⟨sp, s!"a call whose loop hands back `{ppT Rf}` when closed, which is neither " ++
+    else
+      -- The loop hands back, by their types, capabilities of the body it was given (the variables
+      -- a `for` over a generator threads, say); what else it hands back is dropped.
+      let capOf (T : CVTy) : Option String := match cx.caps.filter (·.2 == T) with
+        | [(p, _)] => some p
+        | _ => none
+      let (src, leaves) := destructLeaves divFuel "io_r" Rf capOf
+      let caps := leaves.filterMap (·.1)
+      if !caps.isEmpty && caps.eraseDups.length == caps.length &&
+          leaves.all (fun (p, T) => !isLinear T || p.isSome) then
+        pure (src, caps)
+      else throw ⟨sp, s!"a call whose loop hands back `{ppT Rf}` when closed, which is neither " ++
           s!"nothing, a capability it was lent, one capability of the body, nor what the body " ++
           s!"hands back (`{ppT cx.R}`)"⟩
 
@@ -1468,12 +1497,14 @@ there. At a row: the machine, whose first state holds `start` (the parameter), w
 observation runs the body `M` from the top; `close0` is the `close` there.  `[spec §14, §19]` -/
 def divMachine (cx : LoopCx) (row : Frontend.Check.CRow) (c : TCx) (start : List (String × CVTy))
     (close0 : Comp) (M : Comp) : SM Comp := do
+  -- Types are printed with the context's lifetimes by their names.
+  let pp : CVTy → String := fun T => Frontend.Check.ppV c.E.lenv 0 0 T
   if row.isEmpty then
-    let m : MCx := { L := cx, pp := ppT, pre := true }
+    let m : MCx := { L := cx, pp, pre := true }
     let (pre, st) ← (mWalk m divFuel c M).run {}
     mAssemble m M.span st none (some pre)
   else
-    let m : MCx := { L := cx, row, pp := ppT }
+    let m : MCx := { L := cx, row, pp }
     let go : MM Unit := do
       let s ← mNew M.span "a div body" true false start
       let code ← mWalk m divFuel c M
@@ -1526,15 +1557,27 @@ def resultOf : Option CVTy → Option CVTy
   | _ => none
 
 /-- The row and the result of a function type `A ⇒ F[Σ] B` or its `!` form (`Σ` empty for
-`A => B`). -/
+`A => B`), under its lifetime parameters. -/
 def resultRowOf : Option CVTy → Option (Frontend.Check.CRow × CVTy)
-  | some (.thunk (.arr _ C)) | some (.bang (.thunk (.arr _ C))) => Frontend.Check.effRow? C
+  | some (.thunk (.arr _ C)) => Frontend.Check.effRow? C
+  | some (.bang A) => resultRowOf (some A)
+  | some (.thunk (.all _ _ (.ret A))) => resultRowOf (some A)
   | _ => none
 
 /-- A value that must be known here. -/
 def need' {α} (sp : Span) (what : String) : Option α → SM α
   | some a => pure a
   | none => throw ⟨sp, s!"{what} is not determined here"⟩
+
+/-- A function's type and code with its lifetime parameters peeled, outermost first, as
+`fn f<'a, …>` writes them (`all 'a < b. …` around `Fun 'a < b. return (thunkv …)`). -/
+def peelLives : Nat → VTy → Comp → List (Ident × Frontend.Life) × VTy × Comp
+  | k + 1, .all _ y b A, .lamL _ y' _ (.ret _ (.thunkv _ M)) =>
+    if y.name == y'.name then
+      let (ls, A', M') := peelLives k A M
+      ((y, b) :: ls, A', M')
+    else ([], .all .none y b A, .lamL .none y' b (.ret .none (.thunkv .none M)))
+  | _, A, M => ([], A, M)
 
 /-- A written function type whose result may be a loop: a thunk or a name there. -/
 def _root_.Frontend.VTy.mayReturnLoop : VTy → Bool
@@ -1553,11 +1596,27 @@ def elabDef (scope : List Decl) : Decl → SM (Decl × Option (String × VTy))
     let c := TCx.ofScope scope false
     if (loopSig A).isSome || (A.mayReturnLoop && ((c.elabV A).bind loopFnOf).isSome) then
       return (d, some (n.name, A))
-    let lam := match V with
-      | .thunkv _ (.lam _ x Ax M) | .bangThunkv _ (.lam _ x Ax M) => some (x, Ax, M)
+    -- `fn f<'a, …>`: the lifetime parameters, outermost first, then the function.
+    let (bang, A₀, M₀) : Bool × VTy × Option Comp := match A, V with
+      | .bang _ A, .bangThunkv _ M => (true, A, some M)
+      | A, .thunkv _ M => (false, A, some M)
+      | A, _ => (false, A, none)
+    let (lives, Ai, Mi) := match M₀ with
+      | some M => peelLives divFuel A₀ M
+      | none => ([], A₀, .top sp)
+    let mut cl := c
+    for (y, b) in lives do
+      let some bl := c.elabL b | return (d, none)
+      cl := cl.pushLife y.name bl
+    let lam := match Mi with
+      | .lam _ x Ax M => some (x, Ax, M)
       | _ => none
+    let ty := cl.elabV (.thunk sp (match Ai with
+      | .lolli _ Ar B => .arr sp Ar (.ret sp B)
+      | .thunk _ C => C
+      | T => .ret sp T))
     let why := lam.bind fun (x, Ax, M) =>
-      loopsAt (c.push x.name (c.elabV Ax)) ((resultRowOf (c.elabV A)).map (·.2)) M
+      loopsAt (cl.push x.name (cl.elabV Ax)) ((resultRowOf ty).map (·.2)) M
     match mk, why with
     | .total, some (sp', what) =>
       throw ⟨sp', s!"`{n.name}` is declared `total`, but {what} (SPEC §14)"⟩
@@ -1567,35 +1626,37 @@ def elabDef (scope : List Decl) : Decl → SM (Decl × Option (String × VTy))
         | throw ⟨sp, s!"a div function is written `thunkv fun (x : A) -> M` (SPEC §14)"⟩
       -- At a row (`A ⇒ F[Σ] B`, a copy for the handlers of its control effects), the loop's
       -- observations perform the row's operations (SPEC §19).
-      let (bang, Ar, B, row) ← match A, V with
-        | .lolli _ Ar B, .thunkv .. => pure (false, Ar, B, Row.nil)
-        | .bang _ (.lolli _ Ar B), .bangThunkv .. => pure (true, Ar, B, .nil)
-        | .thunk _ (.arr _ Ar (.eff _ r B)), .thunkv .. => pure (false, Ar, B, r)
-        | .bang _ (.thunk _ (.arr _ Ar (.eff _ r B))), .bangThunkv .. => pure (true, Ar, B, r)
-        | _, _ => throw ⟨A.span, "a div function has type `A => B` or `!(A => B)` (SPEC §14)"⟩
+      let (Ar, B, row) ← match Ai with
+        | .lolli _ Ar B => pure (Ar, B, Row.nil)
+        | .thunk _ (.arr _ Ar (.eff _ r B)) => pure (Ar, B, r)
+        | _ => throw ⟨A.span, "a div function has type `A => B` or `!(A => B)` (SPEC §14)"⟩
       if !ps.isEmpty then
         throw ⟨sp, "a div function has no type parameters (SPEC §14)"⟩
-      let some (S, Bc) := resultRowOf (c.elabV A)
+      let some (S, Bc) := resultRowOf ty
         | throw ⟨A.span, s!"the type of `{n.name}` does not elaborate"⟩
       let cx ← loopCxOf sp Bc M (bare := !S.isEmpty)
-      let cP := c.push x.name (c.elabV Ax)
+      let cP₀ := cl.push x.name (cl.elabV Ax)
+      let cP := { cP₀ with E := { cP₀.E with row := if S.isEmpty then none else some S } }
       let M' ← if S.isEmpty then divBody cx cP M else do
         -- At a row, the body runs nothing when called: its first state holds the parameter, and
         -- closed there it closes the sources it was given and hands back the residual.
-        let some Pc := c.elabV Ax | throw ⟨Ax.span, s!"the parameter type of `{n.name}` does not elaborate"⟩
+        let some Pc := cl.elabV Ax | throw ⟨Ax.span, s!"the parameter type of `{n.name}` does not elaborate"⟩
         let (closes, _) := closeGiven cx (paramsOf divFuel cP M)
         let ab ← template sp "a div body's `close` before it starts" s!"{closes}return {cx.rSrc}"
         divMachine cx S cP [(x.name, Pc)] (paramPrefix M ab) M
-      let Rs ← toSurface sp cx.R
+      let Rs ← (cl.surface sp cx.R : Except Error VTy)
       let L : CTy := match row with
         | .nil => .loop B.span B Rs
         | r => .nu B.span ⟨"X", B.span⟩ (.amp B.span (.eff B.span r (.sum B.span B (.thunk B.span (.name B.span "X"))))
             (.eff B.span r Rs))
       let F := VTy.lolli A.span Ar (.thunk B.span L)
+      let lamC := Comp.lam (match Mi with | .lam lsp .. => lsp | _ => sp) x Ax M'
+      let (F, body) := lives.foldr (fun (y, b) (T, Mb) =>
+        (VTy.all sp y b T, Comp.lamL sp y b (.ret sp (.thunkv sp Mb)))) (F, lamC)
       let A' := if bang then VTy.bang A.span F else F
       let V' := match V with
-        | .thunkv vsp (.lam lsp _ _ _) => Val.thunkv vsp (.lam lsp x Ax M')
-        | .bangThunkv vsp (.lam lsp _ _ _) => Val.bangThunkv vsp (.lam lsp x Ax M')
+        | .thunkv vsp _ => Val.thunkv vsp body
+        | .bangThunkv vsp _ => Val.bangThunkv vsp body
         | V => V
       return (.def_ sp n ps A' V' mk, some (n.name, A'))
   | d => pure (d, none)
@@ -2293,6 +2354,12 @@ def argComps : VTy → Val → List (VTy × Val)
 /-- A type as a pattern: the type parameters `ps` as placeholders. -/
 def patOf (c : TCx) (ps : List String) (P : VTy) : Option CVTy :=
   ({ c.E with tps := ps.zipIdx.map fun (x, k) => (x, .tvar (phBase + k)) }.elabV c.Δ P).toOption
+
+/-- Why `patOf` fails, for messages. -/
+def patErr (c : TCx) (ps : List String) (P : VTy) : String :=
+  match ({ c.E with tps := ps.zipIdx.map fun (x, k) => (x, .tvar (phBase + k)) }.elabV c.Δ P) with
+  | .error e => s!": {e.msg}"
+  | .ok _ => ""
 
 /-- A function's signature: whether it is persistent (`!`), its lifetime parameters with their
 bounds, outermost first, its parameter type and its result. -/
@@ -3396,8 +3463,6 @@ def forYield : Nat → TCx → Option CCTy → Span → Ident → ItInfo → Val
     if let some (_, _, d, _) := N.forElse? then
       throw ⟨d.span, "a `for` over a generator ends when the generator returns, with its result: " ++
         "it has no `else`"⟩
-    let some Tc := c.elabV i.T
-      | throw ⟨sp, s!"the type of what `{i.callee}` yields is not determined here"⟩
     -- A `return`: the type it returns, and where it goes after the loop.
     let hasRet := M.hasRet
     let outer := st.exits.head?
@@ -3434,11 +3499,16 @@ def forYield : Nat → TCx → Option CCTy → Span → Ident → ItInfo → Val
       | throw ⟨sp, "internal error: the call of a `for` over a generator"⟩
     let some Gt := cw.tyV (.var .none g)
       | throw ⟨sp, s!"the type of `{i.callee}` is not determined here"⟩
-    let some (_, Res) := resultRowOf (some Gt)
+    let some (S0, Res) := resultRowOf (some Gt)
       | throw ⟨sp, s!"`{i.callee}`'s type is not a function's"⟩
-    let (looping, Bw) := match loopRowOf Res with
-      | some (_, B, _) => (true, B)
-      | none => (false, Res)
+    let (looping, Bw, rowG) := match loopRowOf Res with
+      | some (S', B, _) => (true, B, S')
+      | none => (false, Res, S0)
+    -- What it yields: the operation's argument at the site, beside the threaded tuple.
+    let some Tc := (rowG.find? (·.n.toNat == i.n)).bind fun o => match o.A with
+        | .tensor T _ => some T
+        | _ => none
+      | throw ⟨sp, s!"the type of what `{i.callee}` yields is not determined here"⟩
     let Bg ← match Bw with
       | .tensor _ B => pure B
       | _ => throw ⟨sp, "internal error: a generator's copy for a `for` hands its variables back"⟩
@@ -3553,6 +3623,10 @@ io_j{sfx} : {Jt} <- return ((unbang io_hwf{sfx}) io_l{sfx});
     if !(← get).quiet then
       report sp (if looping then s!"`for` is div: `{i.callee}` loops" else
         s!"`for` is total: `{i.callee}` does not loop")
+      -- A generator that never returns (`0`): what follows runs only after `break`.
+      if Bg == .zero && M.spineBreaks.isEmpty && N != .ret N.span (.unit N.span) then
+        report N.span ("unreachable: the loop before this never ends (its generator never " ++
+          "returns, and its body does not `break`)")
     -- The loops inside the body leave by this loop's exit on `return`.
     let ret (tsp : Span) (v : Val) : Comp := leave tsp (.inr tsp v)
     modify fun s => { s with exits := .total Rt ret :: s.exits }
@@ -3586,7 +3660,7 @@ def pullView : Nat → TCx → Span → ItInfo → Val → DM Comp
     if row.any (·.n.toNat != i.n) then
       throw ⟨sp, s!"`{i.callee}` performs operations besides what it yields: its stored generator " ++
         "is not provided"⟩
-    let some Tc := c.elabV i.T
+    let some Tc := (row.find? (·.n.toNat == i.n)).map (·.A)
       | throw ⟨sp, s!"the type of what `{i.callee}` yields is not determined here"⟩
     let Tt ← pp Tc
     let Bt ← pp Bg
@@ -3622,14 +3696,27 @@ return (thunkv nu_in < (nu_out (force io_pf{sfx} io_pq{sfx})).1, (nu_out (force 
       pure s!"io_pl{sfx} <- force io_hole_call;
 io_ps{sfx} : {St} <- return (inl io_pl{sfx});
 io_pf{sfx} <- return (unbang (unfold[pull ({Tt}) ({Bt}) 1, {St}] (!thunkv fun (io_pa{sfx} : {St}) ->
-  < io_po{sfx} : {R} <- case io_pa{sfx} \{
-        inl io_pg{sfx} ->
-          io_phr{sfx} : !(({Bt}) + {Lg} => {R}) <- return (!thunkv fun (io_pv{sfx} : ({Bt}) + {Lg}) -> return (inr io_pv{sfx}));
-          io_phc{sfx} : (!(({Tt}) * {K} => {R})) * 1 <- return ((!thunkv fun (io_pp{sfx} : ({Tt}) * {K}) ->
-            let (io_px{sfx}, io_pk{sfx}) = io_pp{sfx};
-            return (inl (io_px{sfx}, thunkv nu_in < io_pu{sfx} <- return (); (force io_pk{sfx}).1 io_pu{sfx}, (force io_pk{sfx}).2 >))), ());
-          handle_with[{i.n}](io_phr{sfx}, io_phc{sfx}) ((nu_out (force io_pg{sfx})).1)
-      | inr io_pq{sfx} -> (nu_out (force io_pq{sfx})).1
+  < -- One turn of the generator's loop, handled: one handler site, so that the continuation it
+    -- keeps is of one code.
+    io_pob{sfx} : !({Lg} => {R}) <- return (!thunkv fun (io_pl{sfx} : {Lg}) ->
+      io_phr{sfx} : !(({Bt}) + {Lg} => {R}) <- return (!thunkv fun (io_pv{sfx} : ({Bt}) + {Lg}) -> return (inr io_pv{sfx}));
+      io_phc{sfx} : (!(({Tt}) * {K} => {R})) * 1 <- return ((!thunkv fun (io_pp{sfx} : ({Tt}) * {K}) ->
+        let (io_px{sfx}, io_pk{sfx}) = io_pp{sfx};
+        return (inl (io_px{sfx}, thunkv nu_in < io_pu{sfx} <- return (); (force io_pk{sfx}).1 io_pu{sfx}, (force io_pk{sfx}).2 >))), ());
+      handle_with[{i.n}](io_phr{sfx}, io_phc{sfx}) ((nu_out (force io_pl{sfx})).1));
+    io_po{sfx} : {R} <- case io_pa{sfx} \{
+        inl io_pg{sfx} -> return ((unbang io_pob{sfx}) io_pg{sfx})
+      | inr io_pq{sfx} ->
+          -- The rest after a `yield`: when it ends the turn, the next turn runs at once, so
+          -- that an observation that yields once per turn gives an element each time.
+          io_pr{sfx} <- (nu_out (force io_pq{sfx})).1;
+          case io_pr{sfx} \{
+            inl io_py{sfx} -> return (inl io_py{sfx})
+          | inr io_pd{sfx} -> case io_pd{sfx} \{
+              inl io_pb{sfx} -> return (inr (inl io_pb{sfx}))
+            | inr io_pn{sfx} -> return ((unbang io_pob{sfx}) io_pn{sfx})
+            }
+          }
       };
     case io_po{sfx} \{
       inl io_px{sfx} -> let (io_pe{sfx}, io_pr{sfx}) = io_px{sfx}; return (inl (io_pe{sfx}, inr io_pr{sfx}))
@@ -3783,7 +3870,12 @@ def genericCall : Nat → TCx → Span → Option CVTy → Val → Val → Optio
         ((genericCallee f).map (·.1) |>.getD "the function", [], c.tyV f', ty)
     let generic := !ps.isEmpty
     let some pat := pat?
-      | if generic then throw ⟨f.span, s!"the type of `{fname}` does not elaborate here"⟩
+      | if generic then
+          let why := match head with
+            | .tmpl (.def_ _ _ tps A _ _) _ =>
+              patErr c (tps.map Ident.name) A
+            | _ => ""
+          throw ⟨f.span, s!"the type of `{fname}` does not elaborate here{why}"⟩
         else return none
     let some sig := sigOf pat
       | if generic then throw ⟨f.span, s!"`{fname}` is not a function"⟩ else return none
