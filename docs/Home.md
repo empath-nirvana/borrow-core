@@ -31,6 +31,9 @@ below are design and research notes.
 
 - [Effects and handlers: scoping](effects-scoping.md) — the staging of effects (#18): answering
   operations, `Fail`, control operations, and what each stage needs.
+- [Effect polymorphism](effect-polymorphism.md) — functions over effectful computations (#161):
+  copies over static names, provided and tunneled rows, site freshness, stored callbacks. A design;
+  nothing is built.
 - [Strings and slices](strings-slices-design.md) — slices, buffers, UTF-8 text and literals, end
   to end, with the status of each stage.
 - [A Kubernetes operator](operator/README.md) — a design-down sketch of a target program in the
