@@ -4,8 +4,8 @@ import Frontend.Syntax
 # Frontend — Elab — substituting type parameters  `[#109]`
 
 `subst σ` replaces each type name `X` bound by `σ` with its type, in every type, bracket argument
-and annotation of a term. It instantiates a template (`fn f[A, …]` or `gen fn f[A, …]`, SPEC §15)
-at the types of one call: the copy is an ordinary `fn` or `gen fn` at those types. A `mu X. …` binds `X` in its
+and annotation of a term. It instantiates a template (`fn f[A, …]`, SPEC §15) at the types of
+one call: the copy is an ordinary `fn` at those types. A `mu X. …` binds `X` in its
 body, so a name it binds is not substituted there. The functions follow `respan`
 (`Frontend/Elab/Respan.lean`).
 -/

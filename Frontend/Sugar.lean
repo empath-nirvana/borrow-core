@@ -48,7 +48,7 @@ def divLibrary : String := include_str "../lib/div.bc"
 /-- The per-observation lend, `lib/lend.bc`: loops and generators that lend their owner at each
 observation. -/
 def lendLibrary : String := include_str "../lib/lend.bc"
-/-- The iteration effect, `lib/yield.bc`: `Yield[T]` (`include yield`). -/
+/-- The iteration effect and its declaration, a library module like the others. -/
 def yieldLibrary : String := include_str "../lib/yield.bc"
 
 /-- The generator adapters, `lib/adapters.bc`: `map`, `filter`, `take`, … (`include adapters`). -/
@@ -2213,7 +2213,7 @@ where
 A call's callee may be generic in three ways, and the elaborator fills what the call leaves out
 (typed elaboration §2.2–§2.3):
 
-* **A template**: a `gen fn f[A, …](…)` or a `fn f[A, …](…)`. It is not elaborated as written, and
+* **A template**: a `fn f[A, …](…)`. It is not elaborated as written, and
   a call of it is a call of its instance at the types of the call, the template with the types
   substituted for its parameters (`Frontend/Elab/Subst.lean`), made and elaborated on first use
   (whole-program monomorphization, as Rust's generics). Its body is elaborated at the instance's
@@ -3438,7 +3438,7 @@ let ({back}, io_j{sfx}) = io_bl{sfx};
 /-- `for x in g(e) { M }; N`, `g` performing an iteration effect (SPEC §15): the handler site
 `Frontend.Elab.Effects` left (`VSugar.forSite`), assembled. The variables the body reads or
 assigns, `ws`, are threaded through the operation: the copy of `g` for the site takes their tuple
-first and hands it back first, and its `yield(v)` is `w <- perform[n.0] (v, w)`. The body is the
+first and hands it back first, and its operation `op(v)` is `w <- perform[n.0] (v, w)`. The body is the
 operation's clause, at the row around the `for`: it binds `x` and `ws`, and resumes with them at
 its end and at `continue`; `break` and `return` cancel the continuation, which runs what the
 generator must finalise, and leave with them. When `g`'s body does not loop, the `for` is one
@@ -3642,8 +3642,8 @@ site `Frontend.Elab.Effects` left (`VSugar.pullSite`), assembled into `U (pull A
 does not resume: it answers the element with the continuation as the rest, `nu_in < resume,
 cancel >`, so the next observation resumes `g` where it yielded, and `close` cancels it. Nothing
 runs until the first observation. When `g`'s body loops, the stored generator's state is `g`'s
-loop, each of whose observations is handled (one that ends without yielding is a skip), or the
-rest after a `yield`. -/
+loop, each of whose observations is handled (one that ends without performing the operation is a
+skip), or the rest after the operation. -/
 def pullView : Nat → TCx → Span → ItInfo → Val → DM Comp
   | 0, _, sp, _, _ => throw ⟨sp, "internal error: a stored generator nested too deeply"⟩
   | n + 1, c, sp, i, call => do
@@ -3710,8 +3710,8 @@ io_pf{sfx} <- return (unbang (unfold[pull ({Tt}) ({Bt}) 1, {St}] (!thunkv fun (i
     io_po{sfx} : {R} <- case io_pa{sfx} \{
         inl io_pg{sfx} -> return ((unbang io_pob{sfx}) io_pg{sfx})
       | inr io_pq{sfx} ->
-          -- The rest after a `yield`: when it ends the turn, the next turn runs at once, so
-          -- that an observation that yields once per turn gives an element each time.
+          -- The rest after the operation: when it ends the turn, the next turn runs at once, so
+          -- that an observation that performs it once per turn gives an element each time.
           io_pr{sfx} <- (nu_out (force io_pq{sfx})).1;
           case io_pr{sfx} \{
             inl io_py{sfx} -> return (inl io_py{sfx})

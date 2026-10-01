@@ -173,8 +173,8 @@ def Env.chandler? (env : Env) (x : String) : Option CHandler :=
 def Env.answering (env : Env) (e : String) : Bool := ((env.eff? e).map (·.answering)).getD false
 
 /-- The effect is an **iteration effect** (SPEC §15): its one operation is control, resumes, and
-answers `()`, as `yield(x: T)` does. A `for` over a call of a function that performs one handles
-it, and a stored generator is such a call's pull view. -/
+answers `()`. A `for` over a call of a function that performs one handles it, and a stored
+generator is such a call's pull view. The structure decides it, not the effect's name. -/
 def Env.iterEff (env : Env) (e : String) : Bool :=
   match env.eff? e with
   | some sig => match sig.ops with

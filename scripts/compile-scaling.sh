@@ -9,9 +9,9 @@
 # generators and adapters, a longer `main`. Each copy adds a generator, and four functions, each
 # a loop: over a pipeline of the adapters of `lib/adapters.bc` (`corpus/gen-adapters.bc`), over
 # a pipeline of generators read through an `imm` borrow of an array (`corpus/lend-pipeline.bc`),
-# and writing a cell through a `mut` borrow (`corpus/lend-mut.bc`). `main` gets a loop over the
-# input (`corpus/gen-adapters-io.bc`) and a call of the four functions, each a div call in
-# direct style, so `main`'s state machine (SPEC §15) grows by five points per copy.
+# and writing a cell through a `mut` borrow (`corpus/lend-mut.bc`). `main` gets a loop over a
+# pipeline and a call of the four functions, each a div call in direct style, so `main`'s state
+# machine (SPEC §14) grows by five points per copy, and a loop over the input at its end.
 #
 #     scripts/compile-scaling.sh             the table and the fitted growth
 #     scripts/compile-scaling.sh 1 2 4       other scales
@@ -43,23 +43,19 @@ local k=$1 i
 cat <<'H'
 include adapters
 
-gen fn line(c: In) -> i32, In =
-  for b in bytes(&mut c) { if b == 10 { break } else { yield to_i32(b) - 48 } };
-  c
-
 type List = mu X. 1 + (i32 * X)
 
-gen fn range(lo: i32, hi: i32) -> i32 =
+fn range(lo: i32, hi: i32) -> 1 with Yield[i32] =
   let mut i = lo;
-  while i < hi { yield i; i = i + 1 };
+  while i < hi { yield(i); i = i + 1 };
   ()
 
-gen fn squares(it: U (gen i32 1 1)) -> i32 =
-  for x in it { yield x * x };
+fn squares(it: U (pull i32 1 1)) -> 1 with Yield[i32] =
+  for x in it { yield(x * x) };
   ()
 
-gen fn above(n: i32, it: U (gen i32 1 1)) -> i32 =
-  for x in it { if n < x { yield x } else { () } };
+fn above(n: i32, it: U (pull i32 1 1)) -> 1 with Yield[i32] =
+  for x in it { if n < x { yield(x) } else { () } };
   ()
 
 fn tab(i: i32) -> i32 = i + 1
@@ -84,8 +80,8 @@ H
 for ((i = 0; i < k; i++)); do
 cat <<B
 
-gen fn evens$i(n: i32) -> i32 =
-  for x in range(0, n) { if x > $i { yield x + 1 } else { () } };
+fn evens$i(n: i32) -> 1 with Yield[i32] =
+  for x in range(0, n) { if x > $i { yield(x + 1) } else { () } };
   ()
 
 fn pa$i(k: i32) -> i32 =
@@ -98,7 +94,7 @@ fn pa$i(k: i32) -> i32 =
 fn pb$i(k: i32) -> i32 =
   let mut b = k;
   for p in enumerate(chain(scan(range(1, 5), 0, !{ (s, x) -> s + x }),
-                           flat_map(range(0, 3), !{ n -> range(0, n) }))) {
+                           flat_map(range(0, 3), !{ n -> let g : U (pull i32 1 1) = range(0, n); g }))) {
     let (i, x) = p;
     b = b + i * x + $i
   };
@@ -134,10 +130,10 @@ echo "main -> i32 * i32 ="
 echo "  let mut t = 0;"
 echo "  let mut m = 0;"
 for ((i = 0; i < k; i++)); do
-  echo "  for y in take(skip(filter(map(line(stdin), !{ x -> x * x }), !{ x -> x > 5 }), 1), 2) { t = t + y };"
+  echo "  for y in take(skip(filter(map(range(0, 20), !{ x -> x * x }), !{ x -> x > 5 }), 1), 2) { t = t + y };"
   echo "  t = pd$i(pc$i(pb$i(pa$i(t))));"
 done
-echo "  for l in lines(from_iter(bytes(stdin))) { m = m + len8(l) };"
+echo "  for b in bytes(&mut stdin) { m = m + to_i32(b) };"
 echo "  (t, m)"
 }
 
