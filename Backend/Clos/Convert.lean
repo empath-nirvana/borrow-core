@@ -32,9 +32,10 @@ IR. One pass does three things:
   nothing; applied, `selfV B a` is a call of it. When `B` is the step of `fold_own` or
   `fold_reuse`, the step's code is recorded (`Prog.folds`) for the flat IR's pointer reversal.
 - **η.** `λv. y v` of a variable `y` is `y`.
-- **Abortive operations** (spec §19). `raise p`, a handler `hnd (n, (hr, cls)) e` and a finaliser
-  frame `ubind (N, D) M` are closure-IR nodes, which `Unwind` lowers. A `perform`, which captures
-  its continuation, and the cancel frames `ccatch` and `cfin` are rejected.
+- **Operations** (spec §19). `raise p`, `perform p`, a handler `hnd (n, (hr, cls)) e` and a
+  finaliser frame `ubind (N, D) M` are closure-IR nodes, which `Capture` and `Unwind` lower. The
+  cancel frames `ccatch` and `cfin` occur only in the continuations the machine builds, and are
+  rejected.
 -/
 
 namespace Backend.Clos
@@ -462,9 +463,12 @@ def conv (ctx : Ctx) (e : Expr) (id : Nat) : CM Tm := do
       -- `raise p` (§19): `p`, then the abortive stop.
       let pv ← fresh
       return .letv pv (← conv ctx p k₂) (.raise pv)
-  | .app (.prim .perform) _ => throw "a control operation (`perform`) is not lowered"
-  | .app (.prim .ccatch) _ => throw "a cancel (`ccatch`) is not lowered"
-  | .app (.app (.prim .cfin) _) _ => throw "a cancel (`cfin`) is not lowered"
+  | .app (.prim .perform) p => do
+      -- `perform p` (§19): `p`, then the control operation, which `Capture` lowers.
+      let pv ← fresh
+      return .letv pv (← conv ctx p k₂) (.perform pv)
+  | .app (.prim .ccatch) _ | .app (.app (.prim .cfin) _) _ =>
+      throw "a cancel frame (`ccatch`, `cfin`) is a frame of the machine's continuations, not a term of a program"
   | .app (.app (.prim .hnd) (.pair (.prim (.lit (.i32 n))) (.pair hr cls))) e => do
       -- `hnd (n, (hr, cls)) e` (§19): the clauses' parts, then the handled body. The parts are
       -- values, so the order is the machine's.

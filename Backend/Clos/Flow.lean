@@ -45,6 +45,10 @@ inductive Key where
   | drive
   /-- The payloads of every `raise` (§19). -/
   | raised
+  /-- The payloads of every `perform` (§19). -/
+  | performed
+  /-- The answers every `perform` may be resumed with: what a `run` passes in an `inl`. -/
+  | answered
   deriving BEq, Hashable, Repr, Inhabited
 
 /-- An abstract value. -/
@@ -52,6 +56,8 @@ inductive AVal where
   | clos (c : Nat)
   | pair (a b : Key)
   | inj (right : Bool) (a : Key)
+  /-- Variant `t` of an `n`-ary sum. -/
+  | con (t : Nat) (a : Key)
   /-- A location whose contents are `k`. -/
   | loc (k : Key)
   deriving BEq, Hashable, Repr
@@ -63,6 +69,8 @@ inductive Con where
   | proj (k : Key) (i : Nat) (k' : Key)
   /-- The payload of the injections `right` of `k` is in `k'`. -/
   | out (k : Key) (right : Bool) (k' : Key)
+  /-- The payload of the variants `t` of `k` is in `k'`. -/
+  | outN (k : Key) (t : Nat) (k' : Key)
   /-- The closures of `f` are called on `a`, answering into `r`: on `inl ()` or `inr ()`
   (`side`), or on an argument not known at the call. -/
   | app (f a r : Key) (side : Option Bool)
@@ -77,8 +85,6 @@ inductive Con where
 structure GState where
   next : Nat := 1
   cons : Array Con := #[]
-  /-- The clauses a handler may call: one past the largest operation index a `raise` carries. -/
-  ops : Nat := 0
   /-- Variables bound to a literal injection: `true` for `inr` (`Backend/Clos/Types.lean`,
   `TState.sel`). -/
   sel : Std.HashMap Var Bool := {}
@@ -240,33 +246,48 @@ def gen (codes : Array Code) : Tm → GM Key
   | .raise p => do
       emit (.sub (.var p) .raised)
       pure .none
-  | .hnd _ hr cls b => do
-      -- The answer clause on the body's answers; each clause on any payload's argument.
+  | .con t _ a => holding (.con t (.var a))
+  | .when s t _ x b r => do
+      emit (.outN (.var s) t (.var x))
+      let k₁ ← gen codes b
+      let k₂ ← gen codes r
+      let k ← freshKey
+      emit (.sub k₁ k)
+      emit (.sub k₂ k)
+      pure k
+  | .absurd _ => pure .none
+  | .catch _ b | .catchAll b => do
+      -- `inl` of the body's value, or `inr` of a payload it raises.
       let kb ← gen codes b
-      let r ← freshKey
-      emit (.app (.var hr) kb r none)
-      let t ← freshKey
-      emit (.proj .raised 1 t)
-      let w ← freshKey
-      emit (.proj t 1 w)
-      let mut rest := Key.var cls
-      for _ in [0:(← get).ops] do
-        let c ← freshKey
-        emit (.proj rest 0 c)
-        emit (.app c w r none)
-        let rest' ← freshKey
-        emit (.proj rest 1 rest')
-        rest := rest'
-      pure r
-  | .ubind nn dd b => do
+      let k ← holding (.inj false kb)
+      emit (.elem (.inj true .raised) k)
+      pure k
+  | .fin _ dd b => do
       let kb ← gen codes b
-      let r ← freshKey
-      emit (.app (.var nn) kb r none)
       emit (.app (.var dd) .none (← freshKey) none)
-      pure r
+      pure kb
+  | .reraise p _ => do
+      emit (.sub (.var p) .raised)
+      pure .none
+  | .perform p => do
+      -- A `perform` answers what its handler resumes it with.
+      emit (.sub (.var p) .performed)
+      pure .answered
+  | .run f a => do
+      -- The outcome of a code that may suspend: `inl` of its answer, or `inr` of a payload and
+      -- a continuation; an `inl` it is passed is an operation's answer.
+      emit (.out (.var a) false .answered)
+      let r ← freshKey
+      emit (.app (.var f) (.var a) r none)
+      let k ← holding (.inj false r)
+      emit (.elem (.inj true (← holding (.pair .performed .none))) k)
+      pure k
+  | .await _ _ => pure .none
+  | .hnd .. | .ubind .. => pure .none
 
-/-- The program's constraints, a handler calling `ops` clauses. -/
-def Prog.constraints (p : Prog) (ops : Nat := 0) : Array Con := Id.run do
+/-- The program's constraints. `Capture` lowers handlers and finaliser frames (`hnd`, `ubind`)
+before any analysis, into calls of their clauses. -/
+def Prog.constraints (p : Prog) : Array Con := Id.run do
   let act : GM Unit := do
     for (c, k) in p.codes.toList.zipIdx do
       match c.selShape?, c.fwdShape? with
@@ -295,7 +316,7 @@ def Prog.constraints (p : Prog) (ops : Nat := 0) : Array Con := Id.run do
       emit (.app loop .none r none)
       emit (.out r true loop)
       if let some code := p.codes[fin]? then emit (.out r false (.var code.param))
-  let ((), s) := act.run { ops }
+  let ((), s) := act.run {}
   return s.cons
 
 /-! ### The solver
@@ -315,6 +336,8 @@ inductive Use where
   | proj (i : Nat) (k' : Nat)
   /-- The payload of each injection `right` is in `k'`. -/
   | out (right : Bool) (k' : Nat)
+  /-- The payload of each variant `t` is in `k'`. -/
+  | outN (t : Nat) (k' : Nat)
   /-- Each closure is called on `a`, answering into `r` on `side`, or on either. -/
   | app (a r : Nat) (side : Option Bool)
   /-- Each closure is called on `a`, answering into the `fwd` code `c`'s answers. -/
@@ -329,6 +352,7 @@ inductive NVal where
   | clos (c : Nat)
   | pair (a b : Nat)
   | inj (right : Bool) (a : Nat)
+  | con (t : Nat) (a : Nat)
   | loc (k : Nat)
   deriving BEq, Hashable, Inhabited
 
@@ -339,7 +363,7 @@ structure KeyNum where
   syns : Nat
   codes : Nat
 
-def KeyNum.size (n : KeyNum) : Nat := n.vars + n.syns + 2 * n.codes + 2
+def KeyNum.size (n : KeyNum) : Nat := n.vars + n.syns + 2 * n.codes + 4
 
 def KeyNum.idx (n : KeyNum) : Key → Nat
   | .var x => x
@@ -347,6 +371,8 @@ def KeyNum.idx (n : KeyNum) : Key → Nat
   | .res c r => n.vars + n.syns + 2 * c + (if r then 1 else 0)
   | .drive => n.vars + n.syns + 2 * n.codes
   | .raised => n.vars + n.syns + 2 * n.codes + 1
+  | .performed => n.vars + n.syns + 2 * n.codes + 2
+  | .answered => n.vars + n.syns + 2 * n.codes + 3
 
 /-- The numbering of the keys of the constraints `cs` of a program of `codes` codes. -/
 def KeyNum.of (codes : Nat) (cs : Array Con) : KeyNum := Id.run do
@@ -357,16 +383,17 @@ def KeyNum.of (codes : Nat) (cs : Array Con) : KeyNum := Id.run do
     | .var x => (max b.1 (x + 1), b.2)
     | .syn m => (b.1, max b.2.1 (m + 1), b.2.2)
     | .res c _ => (b.1, b.2.1, max b.2.2 (c + 1))
-    | .drive | .raised => b
+    | .drive | .raised | .performed | .answered => b
   let seeV (b : Nat × Nat × Nat) : AVal → Nat × Nat × Nat
     | .clos _ => b
     | .pair a c => see (see b a) c
-    | .inj _ a | .loc a => see b a
+    | .inj _ a | .con _ a | .loc a => see b a
   for c in cs do
     let b := (vars, syns, codes)
     let b := match c with
       | .elem v k => see (seeV b v) k
-      | .sub k k' | .proj k _ k' | .out k _ k' | .load k k' | .store k k' => see (see b k) k'
+      | .sub k k' | .proj k _ k' | .out k _ k' | .outN k _ k' | .load k k' | .store k k' =>
+        see (see b k) k'
       | .app f a r _ => see (see (see b f) a) r
       | .fwd f a c => see (see (see b f) a) (.res c false)
     (vars, syns, codes) := b
@@ -425,6 +452,7 @@ def NVal.ofAVal : AVal → SM NVal
   | .clos c => pure (.clos c)
   | .pair a b => return .pair (← keyOf a) (← keyOf b)
   | .inj r a => return .inj r (← keyOf a)
+  | .con t a => return .con t (← keyOf a)
   | .loc k => return .loc (← keyOf k)
 
 /-- Add value `v` to key `k`. -/
@@ -450,6 +478,7 @@ def fire (codes : Array Code) (u : Use) (v : Nat) : SM Unit := do
   match u, (← get).vals[v]! with
   | .proj i k', .pair a b => addEdge (if i == 0 then a else b) k'
   | .out r k', .inj r' a => if r == r' then addEdge a k'
+  | .outN t k', .con t' a => if t == t' then addEdge a k'
   | .app a r side, .clos c =>
     if let some code := codes[c]? then addEdge a (← keyOf (.var code.param))
     match side with
@@ -475,6 +504,7 @@ def addCon (codes : Array Code) : Con → SM Unit
   | .sub k k' => do addEdge (← keyOf k) (← keyOf k')
   | .proj k i k' => do addUse codes (← keyOf k) (.proj i (← keyOf k'))
   | .out k r k' => do addUse codes (← keyOf k) (.out r (← keyOf k'))
+  | .outN k t k' => do addUse codes (← keyOf k) (.outN t (← keyOf k'))
   | .app f a r side => do addUse codes (← keyOf f) (.app (← keyOf a) (← keyOf r) side)
   | .fwd f a k => do addUse codes (← keyOf f) (.fwd (← keyOf a) k)
   | .load l r => do addUse codes (← keyOf l) (.load (← keyOf r))

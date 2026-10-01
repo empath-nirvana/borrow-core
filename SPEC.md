@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 0.32 · 2026-09-30
+Version 0.33 · 2026-09-30
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -2817,33 +2817,101 @@ interpreter has §19's steps, and `eval` gives each program's answer by `decide`
 
 ### Lowering
 
-The backend lowers the abortive operations (`Backend/Clos/Unwind.lean`) to branch-per-call
-propagation, the representation of `Result` and `?`. There is no handler stack and no search.
+The backend lowers §19 in two passes over the closure IR (`Backend/Clos/Capture.lean`, then
+`Backend/Clos/Unwind.lean`). There is no handler stack and no search, and nothing beyond calls,
+branches and the program's own memory is used: no stack switching or other target feature is
+part of the semantics.
+
+**Abortive operations** are branch-per-call propagation, the representation of `Result` and `?`.
 - **What raises.** A code raises the keys `(n, i)` (static names) its body may raise and no
-  handler of it catches, by the closure flow.
+  frame of it catches, by the closure flow.
 - **The convention.** A code that raises answers `inl v` or `inr p`. The codes called at one site
   share a convention.
 - **Branches.** A call branches exactly when its callee may raise, and a tail call passes the sum
   on.
-- **Handlers and finalisers.** A handler cases on its body's sum. A finaliser frame runs `D` on
-  `inr p` and raises again.
+- **Handlers and finalisers.** A handler of a name whose operations are all abortive is a `catch`
+  of its name, then the answer clause or the caught operation's clause. A finaliser frame
+  `M then x. N unwind D` is `fin D M`, then `N`: `fin` runs `D` on `inr p` and raises again.
 
 Answering operations are calls on a capability, compiled as calls (direct when the flow finds one
-code). The kernel programs whose operations are lowered (`Backend/Kernel.lean`: programs 1, 2 and
-3, and program 4 as stated) run at every stage with equal answers and `live 0`, with no
-dispatched call (`scripts/compile-kernel.sh`).
+code).
 
-Not lowered: `perform`, whose continuation is captured, and the cancel frames `ccatch` and `cfin`.
-That covers programs 1 with a native `log`, 4 with a native `log`, 5 and 6. Their lowering is
-*Open*:
-- direct calls at a tail-resumptive clause, with the handler passed as evidence;
-- state machines where `κ` is stored.
+**Control operations** become state machines, as Rust's `async` does.
+- **A handler** of a name with control operations runs its body as a code of its own, and
+  *drives* its outcome: a value goes to the answer clause; an operation of the name to its
+  clause, with `κ`; any other operation passes outward (forwarding), and when it is resumed the
+  driver resumes the body and drives again, which reinstalls the deep handler.
+- **A code that may suspend** answers its *outcome*: `inl v`, or `inr (p, k)` when it suspends
+  with the payload `p`. The payload is a variant per operation of the program, so operations of
+  any argument types share it. `k` is the suspended computation: a closure of the code's resume
+  code over its *state*.
+- **The state** is an `n`-ary sum with one flat tag word, one variant per resumption point of the
+  body: a `perform`, a call of a code that may suspend in non-tail position, a forwarding. It
+  holds the variables live there, the finalisers of the `then` frames among them. At a call
+  point it holds the callee's `k`: **suspension through calls nests**, a caller's state contains
+  its callee's, and `κ` is a value of statically known size.
+- **The resume code** takes `inl y` and switches on the state: the point's continuation, its
+  frames rebuilt around `y`. A call point resumes its callee's `k` first, and suspends again at
+  the same point when the callee does.
+- **Which codes suspend** is the least solution of the operations each code's body and callees
+  may perform, over the closure flow: the rows' information, recovered after erasure, and
+  resolved per code as the codes are monomorphic. Nothing is written by the programmer.
+- **Tail calls.** The codes called at one site, and a code and the codes it calls in tail
+  position, share their convention, and a tail call of a code that may suspend passes its
+  outcome on. So a loop of tail calls through a suspension stays a loop, and a clause that
+  resumes in tail position runs the handler in constant stack (#123).
+- **`κ`** is a closure over the handler and the body's `k`: its resume entry is a closure that
+  resumes `k` and drives again; its cancel entry cancels `k`.
+
+**Cancel** is the state's destructor. The resume code takes `inr mask` and switches on the state:
+the callee's `k` is cancelled first (innermost), then the point's finalisers run innermost first,
+and every other variable is dropped; borrows' unwinding forms are finaliser frames, so their
+lends end here. A finaliser's error is caught (`catchAll`), and the first error whose name is not
+in the mask is kept: the canceller re-raises it (`reraise`), and every other one is suppressed,
+decision (C) of *Cancels*. The mask is the names of the handler sites reachable from the cancelled
+handler's body; it is the region's names `N` exactly when no handler site is reached again from
+its own body, which is checked when a finaliser may raise.
+
+**What the representation costs**, as Rust does:
+- **Recursion through a resumption point.** A code whose state holds its own `k` has a recursive
+  closure type, kept in a heap object (`Backend/README.md`): one allocation per level, as Rust
+  needs `Box::pin` for a recursive `async fn`. A resumed level that suspends again is built in its
+  own object, updated in place, so the count stays one per level (`recursive-yield`).
+- **A call that may reach several codes that suspend** dispatches, at the call and at each resume
+  of its continuation, as `Box<dyn Future>` does; the state is the union of the callees', unboxed,
+  so nothing is allocated (`two-callees`).
+- **An unrestricted `κ` resumed several times** is copied by the closure IR's ordinary copy: its
+  state is duplicated, counted in `copies` when it holds a non-trivial value. The typing makes
+  its captures persistent, so the copy duplicates no resource (`multi-shot`).
+
+**Not lowered**, rejected with a message: a name that has both control and abortive operations; a
+cancel whose finalisers may raise under a handler site reached from its own body, or under a
+handler named `64` or more.
+
+**As built** (`Backend/Kernel.lean`, `bcc kernel`, `scripts/compile-kernel.sh`). Every
+acceptance program, with its native variants, `Core/EffExamples.lean`'s two handled programs and
+`Core/EffCancel.lean`'s two cancels, compiles through every stage with the same answer and
+`live 0`, as do terms for the shapes above (a loop of 100000 suspensions in constant stack,
+recursion through a resumption point, two possible callees, forwarding with and without a cancel,
+a continuation resumed twice). The counts (`corpus/kernel-counts.expected`) and the hand-written
+equivalents (`corpus/capture-*-hand.bc`):
+
+| program | allocations | dispatched calls | hand-written |
+|---|---|---|---|
+| `log-outside-native`, `fail-outside-native` | 0 | 0 | 0, 0: the flag passed by hand |
+| `tick-native` | 0 | 0 | 0, 0: a loop over the flag |
+| `take` | 2 | 2 | 1, 0: a generator (§15) owning the cell |
+| `store-cancel` | 2 | 0 | 2, 0 |
+
+`take`'s extra allocation is its count's node (a unary number), and its dispatched calls are its
+own: its handler answers one of two closures. The lowering adds neither.
 
 ### Open
 
 - Generative handler names (Ξ's runtime labels), behind a continuation confined to its handler's
   scope (T2, #173).
-- The backend lowering of control operations (`perform`) and cancels (*Lowering*).
+- A tail-resumptive clause compiled as a direct call at the operation, with the handler as
+  evidence and no continuation materialised (*Lowering*).
 - A non-abortive control operation crossing a borrow's scope (T1, #172). Cancelling
   such a stored continuation then needs nothing more.
 - Finaliser policies beyond "a new unwind supersedes" and "a cancel keeps the first error"
@@ -2920,11 +2988,21 @@ Stage 5 is implemented:
 - the kernel programs at every stage: `Backend/Kernel.lean`, `bcc kernel`,
   `scripts/compile-kernel.sh`.
 
-The lowering of control operations remains (*Lowering*).
+The lowering of control operations and cancels is implemented (#205): `Backend/Clos/Capture.lean`,
+with every kernel program at every stage (*Lowering*).
 
 ---
 
 ## Changelog
+
+- **0.33** (2026-09-30) — §19, *Lowering* (#205): control operations are lowered to state
+  machines. A code that may suspend answers its outcome; its state is a flat `n`-ary sum per
+  resumption point, a caller's holding its callee's suspended computation; a handler drives its
+  body; `κ` resumes or cancels, and a cancel runs the state's finalisers innermost first, keeping
+  the first finaliser error of a name outside the region (decision C). Recursion through a
+  resumption point allocates one frame object per level, a call of several suspending codes
+  dispatches, and an unrestricted `κ` is copied. Every acceptance program compiles at every
+  stage; the lowering adds no allocation or dispatched call to its hand-written equivalent's.
 
 - **0.32** (2026-09-30) — §19, stage 5 (#186): the six acceptance programs, typed, run by
   `adequacyD` and observed by `Support`'s interpreter (which gains §19's steps). The backend

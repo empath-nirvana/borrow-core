@@ -5,6 +5,7 @@ import Backend.Source
 import Backend.Clos.Convert
 import Backend.Clos.Collapse
 import Backend.Clos.Unwind
+import Backend.Clos.Capture
 import Backend.Kernel
 import Backend.Clos.Interp
 import Backend.Flat.Lower
@@ -74,7 +75,7 @@ def closTypesOf (file src : String) : Except String (Clos.Prog × Option Clos.Ty
   let p ← match k.io with
     | none => Clos.convert k.main.e
     | some m => Clos.convertMain (← extImpls m) m.loopB.isSome k.main.e
-  pure (← p.unwind).collapseT
+  pure (← (← p.capture).unwind).collapseT
 
 def closOf (file src : String) : Except String Clos.Prog := return (← closTypesOf file src).1
 
@@ -166,6 +167,8 @@ def compileWatTimed (file src : String) : IO (Except String String) := do
         s!"{q.codes.size} codes, {q.size} nodes") fun _ => match io with
       | none => Clos.convert c.e
       | some m => do Clos.convertMain (← extImpls m) m.loopB.isSome c.e
+    let clos ← ExceptT.mk <| stage "effects" (fun (q : Clos.Prog) =>
+        s!"{q.codes.size} codes, {q.size} nodes") fun _ => do (← clos.capture).unwind
     let _ ← ExceptT.mk <| analysis "  flow (converted)" flowSize fun _ =>
       pure (Clos.solve clos.codes clos.constraints (1 <<< 40))
     let _ ← ExceptT.mk <| analysis "  types (converted)" (fun (T : Clos.Types) =>
@@ -222,7 +225,7 @@ as `main`'s erasure is. -/
 
 /-- A kernel program's closure IR and layout types. -/
 def closTypesOfExpr (e : BoCa.Expr) : Except String (Clos.Prog × Option Clos.Types) := do
-  pure (← (← Clos.convert e).unwind).collapseT
+  pure (← (← (← Clos.convert e).capture).unwind).collapseT
 
 /-- A kernel program's WAT. -/
 def compileWatExpr (e : BoCa.Expr) (counts : Bool := false) : Except String String := do

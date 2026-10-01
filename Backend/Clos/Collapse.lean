@@ -51,7 +51,7 @@ def armHead? (bound : Var) : Tm → Option (Var ⊕ (Var × Var))
 
 /-- A term that builds a value from variables and literals, with no call, primitive or case. -/
 def Tm.pureValue : Tm → Bool
-  | .var _ | .unit | .lit _ | .pair .. | .inj .. | .clos .. => true
+  | .var _ | .unit | .lit _ | .pair .. | .inj .. | .con .. | .clos .. => true
   | .letv _ e b => e.pureValue && b.pureValue
   | _ => false
 
@@ -104,6 +104,7 @@ def Tm.collapse (cs : Std.HashMap Nat Collapse) : Tm → Tm
   | .letv x e b => .letv x (e.collapse cs) (b.collapse cs)
   | .letpair x y p b => .letpair x y p (b.collapse cs)
   | .case s x b₁ y b₂ => .case s x (b₁.collapse cs) y (b₂.collapse cs)
+  | .when s k n x b r => .when s k n x (b.collapse cs) (r.collapse cs)
   | .copy x x' b => .copy x x' (b.collapse cs)
   | .drop x b => .drop x (b.collapse cs)
   | t => t
@@ -133,6 +134,9 @@ def Tm.canon : Tm → RM Tm
   | .letv x e b => return .letv (← rn x) (← e.canon) (← b.canon)
   | .letpair x y p b => return .letpair (← rn x) (← rn y) (← rn p) (← b.canon)
   | .case s x b₁ y b₂ => return .case (← rn s) (← rn x) (← b₁.canon) (← rn y) (← b₂.canon)
+  | .con k n a => return .con k n (← rn a)
+  | .when s k n x b r => return .when (← rn s) k n (← rn x) (← b.canon) (← r.canon)
+  | .absurd s => return .absurd (← rn s)
   | .copy x x' b => return .copy (← rn x) (← rn x') (← b.canon)
   | .drop x b => return .drop (← rn x) (← b.canon)
   | t => pure t
@@ -156,6 +160,16 @@ def Tm.keyStr : Tm → String
   | .raise p => s!"R({p})"
   | .hnd n hr cls b => s!"H({n},{hr},{cls},{b.keyStr})"
   | .ubind nn dd b => s!"U({nn},{dd},{b.keyStr})"
+  | .perform p => s!"F({p})"
+  | .con k n a => s!"N({k},{n},{a})"
+  | .when s k n x b r => s!"W({s},{k},{n},{x},{b.keyStr},{r.keyStr})"
+  | .absurd s => s!"Z({s})"
+  | .catch n b => s!"T({n},{b.keyStr})"
+  | .fin p dd b => s!"I({p},{dd},{b.keyStr})"
+  | .catchAll b => s!"A({b.keyStr})"
+  | .reraise p m => s!"E({p},{m})"
+  | .run f a => s!"G({f},{a})"
+  | .await p k => s!"Y({p},{k})"
 
 /-- A code's text with its variables numbered in order of appearance. -/
 def Code.key (c : Code) : String :=
@@ -171,6 +185,7 @@ def Tm.renameCodes (f : Nat → Nat) : Tm → Tm
   | .letv x e b => .letv x (e.renameCodes f) (b.renameCodes f)
   | .letpair x y p b => .letpair x y p (b.renameCodes f)
   | .case s x b₁ y b₂ => .case s x (b₁.renameCodes f) y (b₂.renameCodes f)
+  | .when s k n x b r => .when s k n x (b.renameCodes f) (r.renameCodes f)
   | .copy x x' b => .copy x x' (b.renameCodes f)
   | .drop x b => .drop x (b.renameCodes f)
   | t => t

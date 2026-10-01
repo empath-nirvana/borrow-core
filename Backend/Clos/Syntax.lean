@@ -109,12 +109,44 @@ inductive Tm where
   | drop (x : Var) (body : Tm)
   /-- `raise p`: the abortive operation of spec §19, `p = (n, (i, v))`. `Unwind` lowers it. -/
   | raise (p : Var)
-  /-- `hnd n (hr, cls) body`: a handler of the name `n` for abortive operations (§19), `hr` its
-  answer clause and `cls` its operations' clauses. `Unwind` lowers it. -/
+  /-- `hnd n (hr, cls) body`: a handler of the name `n` (§19), `hr` its answer clause and `cls`
+  its operations' clauses. `Capture` lowers it. -/
   | hnd (n : UInt32) (hr cls : Var) (body : Tm)
   /-- `ubind (nn, dd) body`: `body` then `nn`, or the finaliser `dd` when `body` unwinds (§19).
-  `Unwind` lowers it. -/
+  `Capture` lowers it. -/
   | ubind (nn dd : Var) (body : Tm)
+  /-- `perform p`: a control operation of spec §19, `p = (n, (i, v))`, whose continuation is
+  captured. `Capture` lowers it. -/
+  | perform (p : Var)
+  /-- Variant `k` of an `n`-ary sum, its payload `a`: one tag word and the payload. -/
+  | con (k n : Nat) (a : Var)
+  /-- `when s is k ⇒ x. b else r`: when the `n`-ary sum `s` is variant `k`, `b` with its payload
+  bound to `x` (which frees `s`); otherwise `r`, with `s` still owned. A chain of `when`s on one
+  `s` is one `switch` on its tag. -/
+  | when (s : Var) (k n : Nat) (x : Var) (b r : Tm)
+  /-- Unreachable: `s` cannot occur here (a variant no enclosing `when` names, or an error no
+  name of which a `reraise` may raise). -/
+  | absurd (s : Var)
+  /-- `catch n body`: `inl v` when `body` returns `v`, `inr p` when it raises `p` of the name
+  `n`; a raise of another name passes on. `Unwind` lowers it. -/
+  | catch (n : UInt32) (body : Tm)
+  /-- `fin poll dd body`: `body`; when it unwinds, the finaliser `dd` on `()`, then the raise
+  again. When it returns, `dd` is dropped; with `poll`, `body` answers a suspension's outcome
+  (`Capture`), and `dd` is dropped only at its `inl`, since a suspension has moved `dd` into its
+  state. `Unwind` lowers it. -/
+  | fin (poll : Bool) (dd : Var) (body : Tm)
+  /-- `catchAll body`: `inl v` when `body` returns `v`, `inr p` when it raises `p` of any name.
+  `Unwind` lowers it. -/
+  | catchAll (body : Tm)
+  /-- `reraise p mask`: raise the payload `p`, an error a finaliser raised during a cancel whose
+  name is not in the bitmask `mask` of the cancelled region's names. `Unwind` lowers it. -/
+  | reraise (p : Var) (mask : UInt64)
+  /-- `run f a`: call `f` on `a`, a code that may suspend, and answer its outcome (`inl v`, or
+  `inr (payload, κ)`) as a value. `Capture` introduces and lowers it. -/
+  | run (f a : Var)
+  /-- `await p k`: suspend with the payload `p`, the suspended computation `k` held in the
+  state; resumed at `y`, answer `run k (inl y)`. `Capture` introduces and lowers it. -/
+  | await (p k : Var)
   deriving Repr, Inhabited
 
 /-- Closure code: on entry the environment record is unpacked into `env` and freed. -/

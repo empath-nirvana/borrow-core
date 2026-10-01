@@ -31,6 +31,8 @@ inductive CV where
 inductive Obj where
   | pair (a b : CV)
   | inj (right : Bool) (a : CV)
+  /-- Variant `t` of an `n`-ary sum. -/
+  | con (t : Nat) (a : CV)
   | clos (code : Nat) (env : List CV)
   | i64 (n : UInt64)
   | cell (v : CV)
@@ -45,6 +47,9 @@ structure St where
   err : ByteArray
   /-- The program's read-only data, from `dataBase`. -/
   data : Array UInt8 := #[]
+  /-- The cells freed so far. A location is a word that may be copied, so a location to a freed
+  cell may still be held, and dropped or copied; any other address that is not live is a fault. -/
+  freedCells : Std.HashSet Nat := {}
 
 abbrev IM := StateT St (Except String)
 
@@ -63,6 +68,14 @@ def getObj (a : Nat) : IM Obj := do
 def freeObj (a : Nat) : IM Unit := do
   let _ ← getObj a
   modify fun s => { s with heap := s.heap.erase a }
+
+/-- Free the cell at `a`. -/
+def freeCell (a : Nat) : IM Unit := do
+  freeObj a
+  modify fun s => { s with freedCells := s.freedCells.insert a }
+
+/-- The address is a cell that has been freed. -/
+def freedCell (a : Nat) : IM Bool := return (← get).freedCells.contains a
 
 def setObj (a : Nat) (o : Obj) : IM Unit :=
   modify fun s => { s with heap := s.heap.insert a o }
@@ -88,9 +101,11 @@ def deepCopy : Nat → CV → IM CV
     match v with
     | .ptr 0 => pure v
     | .ptr a =>
+      if ← freedCell a then return v
       match ← getObj a with
       | .pair x y => do let x ← deepCopy n x; let y ← deepCopy n y; allocObj (.pair x y)
       | .inj r x => do let x ← deepCopy n x; allocObj (.inj r x)
+      | .con t x => do let x ← deepCopy n x; allocObj (.con t x)
       | .clos c xs => do let xs ← xs.mapM (deepCopy n); allocObj (.clos c xs)
       | .i64 k => allocObj (.i64 k)
       | .cell _ => pure v
@@ -103,9 +118,10 @@ def deepDrop : Nat → CV → IM Unit
     match v with
     | .ptr 0 => pure ()
     | .ptr a =>
+      if ← freedCell a then return
       match ← getObj a with
       | .pair x y => do deepDrop n x; deepDrop n y; freeObj a
-      | .inj _ x => do deepDrop n x; freeObj a
+      | .inj _ x | .con _ x => do deepDrop n x; freeObj a
       | .clos _ xs => do xs.forM (deepDrop n); freeObj a
       | .i64 _ => freeObj a
       | .cell _ => pure ()
@@ -168,7 +184,7 @@ def emitBytes (fd : UInt32) (bs : List UInt8) : IM Unit :=
 
 def applyOp : Op → List CV → IM CV
   | .alloc, [v] => allocObj (.cell v)
-  | .free, [l] => do let (a, c) ← cellOf l; freeObj a; pure c
+  | .free, [l] => do let (a, c) ← cellOf l; freeCell a; pure c
   | .load, [l] => do let (_, c) ← cellOf l; deepCopy objFuel c
   | .store, [l, v] => do
       let (a, c) ← cellOf l
@@ -321,7 +337,7 @@ def dropFill (codes : Array Code) : Nat → CV → Nat → Nat → Nat → IM Un
   | _ + 1, _, _, _, 0 => pure ()
   | n + 1, f, a, i, k + 1 => do
     let (_, c) ← cellOf (.ptr (a + i))
-    freeObj (a + i)
+    freeCell (a + i)
     let fc ← deepCopy objFuel f
     let r ← callClos codes n fc c
     deepDrop objFuel r
@@ -385,7 +401,7 @@ def eval (codes : Array Code) : Nat → Env → Tm → IM (CV × Env)
         let .i32 len := len | throw "closure IR: drop of a non-array"
         dropFill codes n f a 0 len.toNat
         deepDrop objFuel f
-        if len.toNat = 0 then freeObj a
+        if len.toNat = 0 then freeCell a
         pure (.unit, env)
     | .prim op xs => do
         let (vs, env) ← takeAll env xs
@@ -422,7 +438,26 @@ def eval (codes : Array Code) : Nat → Env → Tm → IM (CV × Env)
         let (v, env) ← take env x
         deepDrop objFuel v
         eval codes n env b
-    | .raise _ | .hnd .. | .ubind .. => throw "closure IR: an effect not lowered (`Unwind`)"
+    | .con t _ a => do
+        let (va, env) ← take env a
+        pure (← allocObj (.con t va), env)
+    | .when s t _ x b r => do
+        let some vs := env.lookup s | throw s!"closure IR: variable {s} used after it was consumed, or unbound"
+        match vs with
+        | .ptr a =>
+          match ← getObj a with
+          | .con t' v =>
+            if t == t' then do
+              let (_, env) ← take env s
+              freeObj a
+              eval codes n ((x, v) :: env) b
+            else eval codes n env r
+          | _ => throw "closure IR: `when` of a non-variant"
+        | _ => throw "closure IR: `when` of a non-variant"
+    | .absurd _ => throw "closure IR: a variant no `when` names"
+    | .raise _ | .hnd .. | .ubind .. | .perform _ | .catch .. | .fin .. | .catchAll _
+    | .reraise .. | .run .. | .await .. =>
+        throw "closure IR: an effect not lowered (`Capture`, `Unwind`)"
 end
 
 /-- The observable form of a word. -/
@@ -435,9 +470,11 @@ def observe : Nat → CV → IM PV
     | .u8 k => pure (.u8 k)
     | .ptr 0 => pure .loc
     | .ptr a =>
+      if ← freedCell a then return .loc
       match ← getObj a with
       | .pair x y => do pure (.pair (← observe n x) (← observe n y))
       | .inj r x => do pure (.inj r (← observe n x))
+      | .con _ _ => throw "closure IR: a suspended state as the program's value"
       | .clos _ _ => pure .fn
       | .i64 k => pure (.i64 k)
       | .cell _ => pure .loc
@@ -471,7 +508,7 @@ def interp (fuel : Nat) (p : Prog) (input : List UInt8) : Except String Output :
     let pv ← observe objFuel v
     deepDrop objFuel v
     pure (report pv (← get).heap.size)
-  let (r, s) ← act.run ⟨{}, 1, input, .empty, .empty, p.data⟩
+  let (r, s) ← act.run { heap := {}, next := 1, input, out := .empty, err := .empty, data := p.data }
   pure (.mk' s.out s.err r)
 
 end Backend.Clos

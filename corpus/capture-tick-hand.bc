@@ -1,0 +1,11 @@
+-- Spec §19's program 4 with a native `log` (`tickProg 3`, `bcc kernel run tick-native`) written
+-- by hand: three iterations of a loop that logs, the log flag passed through each, then a close
+-- that drops it. The kernel program's lowering (`Backend/Clos/Capture.lean`) has the same counts:
+-- no allocation and no dispatched call.
+--
+-- Answer: ().
+main -> 1 =
+  let mut flag: 1 + 1 = inl ();
+  for i in 0..3 { flag = (inr () : 1 + 1) };
+  let _ = flag;
+  ()

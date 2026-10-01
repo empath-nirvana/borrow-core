@@ -1,0 +1,12 @@
+-- Spec §19's program 1 with a native `log` (`nLogOutside`, `bcc kernel run log-outside-native`)
+-- written by hand in state-passing style: the log state is a flag passed through the function
+-- that logs and fails, and the failure is the sum it answers. The kernel program's lowering
+-- (`Backend/Clos/Capture.lean`) has the same counts: no allocation and no dispatched call.
+--
+-- Answer: (inr (), inr ()): the error, beside the flag that records the log.
+fn log_raise(flag: 1 + 1) -> (1 + 1) * (1 + 1) =
+  let _ = flag;
+  let flag: 1 + 1 = inr ();
+  (inr (), flag)
+
+main -> (1 + 1) * (1 + 1) = log_raise(inl ())

@@ -29,7 +29,7 @@ and `nu_out` erase, and `unfold` is a closed λ-term.
 | stage | file | what it is | interpreter |
 |---|---|---|---|
 | source | `Source.lean` | `main`'s erasure | `Support`'s `step` at `wasmHost` |
-| closure IR | `Clos/Syntax.lean`, `Clos/Convert.lean`, `Clos/Unwind.lean`, `Clos/Collapse.lean` | named A-normal form, explicit environments and ownership; §19's abortive operations lowered | `Clos/Interp.lean` |
+| closure IR | `Clos/Syntax.lean`, `Clos/Convert.lean`, `Clos/Capture.lean`, `Clos/Unwind.lean`, `Clos/Collapse.lean` | named A-normal form, explicit environments and ownership; §19's handlers, operations and cancels lowered | `Clos/Interp.lean` |
 | layout types | `Clos/Types.lean` | a layout type for every closure-IR variable, code and constructor; each type's layout; each closure type's union of codes | — |
 | closure flow | `Clos/Flow.lean` | a 0-CFA: the codes each call may call | — |
 | flat IR | `Flat/Syntax.lean`, `Flat/Lower.lean` | functions over words, locals, allocation, calls and tail calls of several results, `ite` | `Flat/Interp.lean` |
@@ -63,33 +63,56 @@ iterators) and the programs of `Core/`. **η** `λv. y v` of a variable `y` is `
 of its own type. A term of neither shape is converted as any other λ; the combinator written
 some other way (a bare `X X`, as `Core/DelayNaive.lean` does) stays the λ-terms it is.
 
-**Abortive operations** (`Clos/Unwind.lean`, SPEC §19). `Convert` keeps `raise p`, a handler
-`hnd n (hr, cls) e` and a finaliser frame `ubind (N, D) M` as closure-IR nodes, and `Unwind`
-lowers them to **branch-per-call propagation**, the representation of Rust's `Result` and `?`:
+**Handlers and control operations** (`Clos/Capture.lean`, SPEC §19). `Convert` keeps `perform p`,
+a handler `hnd n (hr, cls) e` and a finaliser frame `ubind (N, D) M` as closure-IR nodes, and
+`Capture` lowers them, as Rust lowers `async`, to state machines, with no handler stack and no
+search:
+
+- A finaliser frame is `let r = fin D M in N r`, and a handler of a name with no control
+  operation is `catch n e`, then a `case` that calls the answer clause or the caught operation's
+  clause: both are then `Unwind`'s.
+- A handler of a name with control operations runs its body as a code of its own and *drives*
+  its outcome: a value to the answer clause, an operation of its name to that operation's clause
+  with `κ`, any other operation outward (forwarding), resuming the body and driving again when
+  it is resumed.
+- A code that may suspend answers its *outcome*: `inl v`, or `inr (p, k)` with the payload `p`,
+  a variant per operation of the program, and `k` the suspended computation, a closure of the
+  code's *resume code* over its *state*. The state is an `n`-ary sum, one variant per resumption
+  point (a `perform`, a non-tail call of a code that may suspend, a forwarding), holding the
+  variables live there and, at a call point, the callee's `k`. So a caller's state contains its
+  callee's, and `κ` has a size known statically. At a point the code builds its state and returns
+  `inr`, and each frame it suspends through passes the `inr` on.
+- The resume code takes `inl y` to resume: a switch on the state, then the point's continuation
+  with its frames rebuilt around `y`. It takes `inr mask` to cancel: the callee's `k` first, then
+  the point's finalisers, innermost first, every other variable dropped; the first error a
+  finaliser raises whose name is not in `mask` is kept, and `κ`'s cancel re-raises it (`reraise`).
+- Which codes may suspend is the least solution of the operations their bodies and callees may
+  perform, over the closure flow. Codes called at one site, and a code and the codes it calls in
+  tail position, share a convention, and a tail call passes its callee's outcome on (Stack).
+
+**Abortive operations** (`Clos/Unwind.lean`, SPEC §19). `Unwind` lowers `raise p` and the frames
+`Capture` leaves (`catch`, `fin`, `catchAll`, `reraise`) to **branch-per-call propagation**, the
+representation of Rust's `Result` and `?`:
 
 - A `raise` carries its name and operation as literals (§19's names are static). A code *raises*
-  the keys `(n, i)` its body may raise and no handler of it catches: a `raise`'s, those of the
-  codes a call may call (the closure flow, below, run with the nodes' constraints: a handler calls
-  its answer clause on the body's answers and each clause on any raise's argument), a handler's
-  body less its name's keys, and the clauses a handler or a finaliser frame calls. The least
-  solution is found by iteration.
+  the keys `(n, i)` its body may raise and no frame of it catches: a `raise`'s, those of the codes
+  a call may call (the closure flow, below), a `catch n`'s body less its name's keys, and a
+  finaliser frame's body and finaliser. The least solution is found by iteration.
 - A code that raises answers a sum: `inl v` when it returns `v`, `inr p` when it raises `p`. The
   codes called at one site share a convention: a class with a raising code answers sums.
 - A term that may raise is computed as such a sum. `let x = e in b`, `e` raising, is
   `case e {inl x ⇒ b | inr p ⇒ drop (b's variables); inr p}`; a term that cannot raise is not
   touched, so a call branches exactly when its callee may raise, and a tail call passes the sum
-  on with no branch. A handler cases on its body's sum: `inl v` to its answer clause, `inr` of its
-  name to the clause of the operation (a compare when it catches several), any other name on
-  outward. A finaliser frame runs its finaliser on `inr p` and raises `p` again, or the
-  finaliser's own error, which supersedes it.
+  on with no branch. A `catch n` cases on its body's sum (a compare of the name when the body
+  raises more than one), and passes any other name on. A finaliser frame runs its finaliser on
+  `inr p` and raises `p` again, or the finaliser's own error, which supersedes it.
 
-There is no handler stack and no search: a `raise`'s sum arrives at the `case` of the handler
-that catches it. The answering operations of §18 and §19 are calls on a capability, which the
-pipeline already compiles as calls, direct when the flow finds one code. The kernel programs that
-exercise both (`Backend/Kernel.lean`, `bcc kernel`) are compiled and run at every stage by
-`scripts/compile-kernel.sh`; their counts are `corpus/kernel-counts.expected`. Not lowered:
-control operations that capture their continuation (`perform`) and the cancel frames
-(`ccatch`, `cfin`), which only a captured continuation's cancel produces (Scope).
+There is no handler stack and no search: a `raise`'s sum arrives at the `case` of the frame that
+catches it. The answering operations of §18 and §19 are calls on a capability, which the
+pipeline already compiles as calls, direct when the flow finds one code. The kernel programs
+(`Backend/Kernel.lean`, `bcc kernel`) are compiled and run at every stage by
+`scripts/compile-kernel.sh`; their counts are `corpus/kernel-counts.expected`, and
+`corpus/capture-*-hand.bc` are their hand-written equivalents.
 
 **Codata thunks and equal codes** (`Clos/Collapse.lean`). A loop, stream or iterator is first
 the thunk `nu_in ⟨(nu_out (force f s₀)).1, (nu_out (force f s₀)).2⟩` the program builds, and
@@ -103,7 +126,7 @@ type and with captured values of the same types, are merged: `unfold`'s first st
 closure of which is built (from `main`, transitively) is in no union and is compiled as a stub.
 
 **Layout types** (`Clos/Types.lean`). Unification over the closure IR gives every variable a
-layout type `1 | i32 | i64 | A ⊗ B | A ⊕ B | fn(A; C, D) | loc A` (see Representation).
+layout type `1 | i32 | i64 | A ⊗ B | A ⊕ B | ⊕[A, …] | fn(A; C, D) | loc A` (see Representation).
 Value types are monomorphic: a definition is substituted at each use, and polymorphism is over
 lifetimes only, whose arguments are `()`. Unification has no occurs check, since `μ` and `ν`
 leave regular trees. Two code shapes carry the typing of `&`: a code that cases on its parameter
@@ -159,6 +182,7 @@ word is an `i64` local; `|A|` is the number of words of `A`.
 | `i32`, `i64`, `u8` | 1 | the integer (an `i32` or a `u8` zero-extended) |
 | `A ⊗ B` | `\|A\| + \|B\|` | `A`'s words, then `B`'s |
 | `A ⊕ B` | `1 + max \|A\| \|B\|` | a tag word (`0` for `inl`), then the payload's words, padded |
+| `⊕[A₀, …, Aₙ₋₁]` | `1 + maxᵢ \|Aᵢ\|` | a tag word `i`, then variant `i`'s payload's words, padded: a suspended computation's state, an operation's payload |
 | `loc A` | 1 | the address of the cell's contents |
 | `fn(A; C, D)` | `1 + max_c \|env c\|` | a closure: its code's tag in the type's union, then the captured values' words, padded |
 | `fn(A; C, D)`, recursive | 1 | a closure: the word `2t + 1`, or the address of a heap environment object |
@@ -197,7 +221,11 @@ The only objects are:
   source term's location `0`, which the closure IR's interpreter never allocates).
 - **Closures of a recursive closure type that capture.** An object: the tag `t`, then the
   captured values' words. A code that captures nothing is the word `2t + 1` (objects are
-  8-aligned, so bit 0 tells the two apart) and allocates nothing.
+  8-aligned, so bit 0 tells the two apart) and allocates nothing. A code of such a type keeps the
+  object it is called with until it returns, and builds the first closure of the same width in
+  it, in place; a path that builds none frees it. So a suspended computation that holds its own
+  continuation (recursion through a resumption point, SPEC §19) has one object per level, updated
+  each time the level is resumed and suspends again, as a pinned `async` frame is.
 - **Boxed fields.** A recursive type would be infinitely wide, so the fields that close a cycle
   of pair and sum edges (the back edges of one depth-first search over the types) are stored as
   a pointer to an object of the field's own layout. `μX. 1 + (A ⊗ X)` is a tag and a payload
@@ -248,6 +276,10 @@ callee answers the caller's words. What runs in constant stack:
   (`corpus/deep-list.bc`); this is the only left-fold shape the core has.
 - **A self-call in tail position**, of the native fixed point: its code is known, so the call is
   a direct tail call of the code itself.
+- **Loops through a suspension** (SPEC §19). A tail call of a code that may suspend passes its
+  outcome on, so a loop that performs an operation at each turn stays a loop of tail calls; a
+  handler whose clause resumes in tail position drives it in constant stack, its driver, clause
+  and resume closure tail-calling one another (`loop-tail`: 100000 operations).
 - **Arrays.** `tab` and an array's `drop` are loops of tail calls.
 - **Owned folds by pointer reversal** (Deutsch–Schorr–Waite). The step of `fold_own` or
   `fold_reuse` (`λu. trav T (λw. self g w) u to r. g r`, recognized as the conversion recognizes
@@ -306,7 +338,10 @@ typed layouts:
 - **Cells.** `alloc v` allocates a cell holding `v`'s words; `load` copies the contents (the
   source copies the value out); `store` drops the old contents; `free` moves them out and frees
   the cell; `swap` moves the old contents out and the new in. A copy copies a location as a
-  word, and a drop leaves cells alone: cells are freed only by `free`.
+  word, and a drop leaves cells alone: cells are freed only by `free`. So a location to a freed
+  cell may still be held, copied and dropped (a finaliser frees a cell a dropped closure still
+  names); the closure-IR interpreter records the freed cells, and any other address that is not
+  live is a fault.
 
 So each variable is consumed exactly once on every path, as substitution does in the source;
 the closure-IR interpreter, which keeps the uniform boxed objects, checks this as it runs, and the
@@ -448,6 +483,14 @@ projection would consume them, and a thunk that is dropped unobserved drops the 
 Removing unbuilt codes from the unions needs the reachability argument (a closure is built only
 by a `clos` of a code whose closure is built, or by `main`).
 
+**State machines** (`Clos/Capture.lean`) are an obligation of their own: a code's outcome
+simulates the source's run of its body to a value or to a stop `K[perform (n, v)]`, the state
+relating to `K` frame by frame (its variant to the point, its fields to the values `K`'s frames
+hold, its callee's `k` to the inner frames), and the resume code's entry at `y` to `K[y]`; its
+cancel entry simulates the cancel run `K[raise (⊥, s)]` to `ccatch`, the mask standing for `N`
+(exactly, when no handler site is reached from its own body). The handler's driver simulates
+`[ret]`, `[op]` and forwarding. Nothing checks these at run time beyond the interpreters agreeing.
+
 **Native fixed points** are an obligation of their own: the code `λx. B[self := clos c []]`
 simulates the combinator's `selfV B`. The source side is `Core/Fix.lean`'s unrolling
 (`selfV_steps_in`: `selfV w` reaches `fixV w = B[selfV/self][w/x]` by three pure β-steps, in any
@@ -497,11 +540,12 @@ merging finds the layout types of its result, which the flat IR reuses.
 ## Scope
 
 No optimizations beyond the layouts, defunctionalization, direct calls of known codes, native
-fixed points and pointer reversal; no stack switching. Of SPEC §19's primitives, the abortive
-ones are lowered (`raise`, `hnd` at abortive operations, `ubind`); a `perform`, which captures
-its continuation `κ`, and the cancel frames `ccatch` and `cfin` are rejected by `Convert`. Their
-lowering, to direct calls at a tail-resumptive clause and to state machines where `κ` is stored,
-is open (#186). The only externs compiled are the
+fixed points, pointer reversal and building a closure in its code's own environment object; no
+stack switching. SPEC §19's handlers, operations and cancels are lowered, but for a name with both
+control and abortive operations and a cancel whose finalisers may raise under a handler reached
+from its own body (rejected). A tail-resumptive clause is a state machine like any other: its
+lowering to a direct call, with the handler as evidence, is open. The cancel frames `ccatch` and
+`cfin` occur only in the source machine's continuations and are rejected by `Convert`. The only externs compiled are the
 standard I/O ones; the model's harness (`mk_input`, …) is not compiled. `fold_imm` and the owned
 folds that pointer reversal does not cover recurse on the Wasm stack (Stack). Closures of
 recursive closure types keep an environment object (Representation, Open), and unboxed recursive
