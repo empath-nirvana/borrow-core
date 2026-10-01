@@ -33,6 +33,26 @@ A generator's `while` and `loop` are loops of a div body (see [Divergence](diver
 whose every turn may yield: one turn per observation, so every observation terminates. A `for`
 over a generator that loops is div; over one that does not, it is total.
 
+A `for` over data whose body yields is such a loop too: a counted loop's step is one total
+computation, which cannot hold the generator's continuation, so the loop goes over the source's
+cursor one turn per element, and it is div:
+
+```bc
+-- answer: i32[30]
+include yield
+
+fn squares(n: i32) -> 1 with Yield[i32] =
+  for i in 0..n { yield(i * i) };
+  ()
+
+main -> i32 =
+  let mut acc = 0;
+  for x in squares(5) { acc = acc + x };
+  acc
+```
+
+Over `&a` it is rejected: the lend of `a` would be held across a `yield` (#172).
+
 ## Leaving early: `break` and `return`
 
 `break` in a `for`'s body stops the generator: what it holds is finalised, its owned values
