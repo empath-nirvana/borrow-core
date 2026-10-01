@@ -20,7 +20,7 @@
 #     scripts/compile-scaling.sh --keep DIR  leave the generated programs in DIR
 set -euo pipefail
 cd "$(dirname "$0")/.."
-lake build bcc >/dev/null
+[ -n "${CI_LOCAL_BUILT:-}" ] || lake build bcc >/dev/null
 bcc=.lake/build/bin/bcc
 guard=0; keep=""
 scales=()
