@@ -457,7 +457,7 @@ def bindHead : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Span → O
       else err M.span "internal error: a returner chain"
     | none => err M.span s!"a bound computation must have a type `F A`, but this has type `{E.ppC C}`"
 
-/-- `abort[k.i] V` at the answer `B`: an abortive operation of the current row (`[raise]`). -/
+/-- `abort[k.i] V` at the answer `B`: an abortive operation of the current row (SPEC §19's abortive rule). -/
 def abortIt : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Span → Nat → Nat → Val → (B : CVTy) →
     Except Error (Σ S : CRow, Res Δ T (.comp (effOf S B)))
   | 0, _, _, _, sp, _, _, _, _ => err sp "expression nested too deeply"

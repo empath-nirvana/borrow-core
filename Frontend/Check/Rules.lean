@@ -238,7 +238,7 @@ def rPerform {S : CRow} {o : COpSig} (hf : BoCa.Fig16.LogRel.Core.Row.find S o.n
   ⟨BoCa.BoLo.performE (BoCa.Fig16.LogRel.Core.opArgE o.n o.i r.e),
     r.F.map fun _ h => .effPerform hf hna h⟩
 
-/-- `[raise]`: an abortive operation of the row, at any answer `B`; its argument drops. -/
+/-- The abortive rule (SPEC §19): an abortive operation of the row, at any answer `B`; its argument drops. -/
 def rRaise {S : CRow} {o : COpSig} (B : CVTy)
     (hf : BoCa.Fig16.LogRel.Core.Row.find S o.n o.i = some o) (ha : o.abort = true)
     (hd : dropB o.A = true) (r : Res Δ T (.val o.A)) : Res Δ T (.comp (effOf S B)) :=

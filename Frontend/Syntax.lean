@@ -455,7 +455,7 @@ inductive Comp where
   /-- `perform[n.i] V`: the non-abortive operation `i` of the name `n` of the current row
   (`[perform]`).  `[spec §19]` -/
   | perform (sp : Span) (n i : Nat) (V : Val)
-  /-- `abort[n.i] V`: the abortive operation `i` of the name `n` (`[raise]`).  `[spec §19]` -/
+  /-- `abort[n.i] V`: the abortive operation `i` of the name `n` (SPEC §19's abortive rule).  `[spec §19]` -/
   | abort (sp : Span) (n i : Nat) (V : Val)
   /-- `handle_with[n](hr, hc) M`: `M` under the handler of the name `n` whose answer clause is
   the variable `hr` and whose clauses are the tuple `hc` (`[handle]`).  `[spec §19]` -/
@@ -480,7 +480,8 @@ inductive Mark where
   template: each use is a call of its instance at that use's types, elaborated as a `fn`. -/
   | template (m : Mark)
   /-- `fn f(…) -> T with E₁, E₂[A] = …`: a written row (SPEC §18), a promise that the inferred
-  row is within it; `Fail[E]` gives the error type. The function is marked `m` besides. -/
+  row is within it, and gives the type arguments of an effect it performs directly. The function
+  is marked `m` besides. -/
   | row (effs : List (Ident × List VTy)) (m : Mark)
   deriving DecidableEq, Repr, Inhabited
 
