@@ -18,7 +18,7 @@ main -> i32 =
   for b in bytes(&mut stdin) {
     if b == b'\n' {
       borrow imm line { 'x, v ->
-        match try { str_from_utf8(v) } {
+        match with to_result { str_from_utf8(v) } {
           inl t -> let (t, u) = array_copy['x, u8] t;
                    put_dec(&mut stdout, len(u)); putb(&mut stdout, b' ');
                    put_dec(&mut stdout, count_chars(t)); putb(&mut stdout, b'\n')

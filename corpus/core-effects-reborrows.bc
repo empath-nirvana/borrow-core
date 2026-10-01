@@ -1,0 +1,40 @@
+-- SPEC §19's other unwinding borrows in the core text: `slice_borrow_imm_u` lends an array as a
+-- family of views; inside `borrow mut` and `borrow imm` blocks, `withbor3u` reborrows a `mut`
+-- borrow and `withloadu` lends a view of an `imm` one. Each callback aborts, caught at the
+-- borrow it is lent from: the array is freed by the finaliser, the reborrow is forgotten, and the
+-- loaded view ends.
+--
+-- Answer: (inr i32[43], (inr i32[44], inr i32[45])), and `live 0`.
+
+main : F ((i32 + i32) * ((i32 + i32) * (i32 + i32))) =
+  hc : !U (i32 -o F (i32 + i32)) * 1 <- return ((!thunkv fun (e : i32) -> return (inr e)), ());
+  hr2 : !U (array i32 * i32 -o F (i32 + i32)) <- return
+    (!thunkv fun (p : array i32 * i32) -> let (r, v) = p; return (inl v));
+  a <- return (array_new[i32] (i32[2], !thunkv fun (i : i32) -> return i));
+  r1 <- handle_with[1](hr2, hc) (
+    w <- return slice_borrow_imm_u['x, top, i32, i32, [1.0 aff i32 ~> 0]];
+    cb : U (forall 'x < dom. array_imm 'x i32 -o F[1.0 aff i32 ~> 0] (box 'x i32)) <- return
+      (thunkv Fun 'x < dom. fun (m : array_imm 'x i32) -> abort[1.0] i32[43]);
+    force w a cb);
+  c <- return (alloc[i32] i32[1]);
+  r2 <- return (withbor2['y, top, i32, i32 + i32] c (thunkv Fun 'y < dom. return (thunkv fun (m : mut 'y i32) ->
+    hr3 : !U (mut 'y i32 * i32 -o F (i32 + i32)) <- return
+      (!thunkv fun (p : mut 'y i32 * i32) -> let (r, v) = p; return (inl v));
+    q <- handle_with[1](hr3, hc) (
+      w <- return withbor3u['y, 'x, i32, i32, [1.0 aff i32 ~> 0]];
+      cb : U (forall 'x < dom. mut 'x i32 -o F[1.0 aff i32 ~> 0] (box 'x i32)) <- return
+        (thunkv Fun 'x < dom. fun (n : mut 'x i32) -> abort[1.0] i32[44]);
+      force w m cb);
+    return (boxed['y] q))));
+  let (c2, q2) = r2;
+  d <- return (alloc[i32] i32[5]);
+  r3 <- return (withbor1['z, i32, i32 + i32] d (thunkv Fun 'z < dom. return (thunkv fun (m : imm 'z i32) ->
+    hr4 : !U (i32 -o F (i32 + i32)) <- return (!thunkv fun (v : i32) -> return (inl v));
+    q <- handle_with[1](hr4, hc) (
+      w <- return withloadu['z, 'x, i32, i32, [1.0 aff i32 ~> 0]];
+      cb : U (forall 'x < dom. view 'x i32 -o F[1.0 aff i32 ~> 0] (box 'x i32)) <- return
+        (thunkv Fun 'x < dom. fun (n : view 'x i32) -> abort[1.0] i32[45]);
+      force w m cb);
+    return (boxed['z] q))));
+  let (d2, q3) = r3;
+  return (r1, (q2, q3))

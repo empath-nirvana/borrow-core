@@ -23,6 +23,8 @@ namespace BoCa.Fig16.LogRel.Core
 
 deriving instance DecidableEq for VTy, CTy
 
+deriving instance DecidableEq for OpSig
+
 end BoCa.Fig16.LogRel.Core
 
 namespace BoCa
@@ -184,10 +186,24 @@ theorem VTy.polyB_sound : ∀ A : VTy, VTy.polyB A = true → A.Poly
   | .mut _ _, h | .box _ _, h | .bang _, h | .mu _, h | .fam _, h =>
       VTy.not_occ_of_occB 0 _ (by simpa [VTy.polyB] using h)
 
+/-- `CTy.EffLeaf`, decided: `F_Σ A`, the operation types closed.  `[spec §19]` -/
+def CTy.effLeafB : CTy → Bool
+  | .ret A => VTy.polyB A
+  | .eff _ _ _ A B C => VTy.clB 0 A && VTy.clB 0 B && CTy.effLeafB C
+  | _ => false
+
+theorem CTy.effLeafB_sound : ∀ C : CTy, CTy.effLeafB C = true → C.EffLeaf
+  | .ret A, h => VTy.polyB_sound A h
+  | .eff _ _ _ A B C, h => by
+      simp only [CTy.effLeafB, Bool.and_eq_true] at h
+      exact ⟨VTy.clB_sound 0 A h.1.1, VTy.clB_sound 0 B h.1.2, effLeafB_sound C h.2⟩
+  | .arr _ _, h | .amp _ _, h | .top, h | .all _ _ _, h | .nu _, h => by simp [CTy.effLeafB] at h
+
 /-- `CTy.NuLeaf`, decided. -/
 def CTy.nuLeafB : CTy → Bool
   | .ret A => VTy.polyB A
   | .amp C D => CTy.nuLeafB C && CTy.nuLeafB D
+  | .eff n i q A B C => CTy.effLeafB (.eff n i q A B C)
   | _ => false
 
 theorem CTy.nuLeafB_sound : ∀ C : CTy, CTy.nuLeafB C = true → C.NuLeaf
@@ -195,6 +211,7 @@ theorem CTy.nuLeafB_sound : ∀ C : CTy, CTy.nuLeafB C = true → C.NuLeaf
   | .amp C D, h => by
       simp only [CTy.nuLeafB, Bool.and_eq_true] at h
       exact ⟨nuLeafB_sound C h.1, nuLeafB_sound D h.2⟩
+  | .eff n i q A B C, h => CTy.effLeafB_sound (.eff n i q A B C) h
   | .arr _ _, h | .top, h | .all _ _ _, h | .nu _, h => by simp [CTy.nuLeafB] at h
 
 /-- `CTy.NuOk`, decided. -/
@@ -206,7 +223,8 @@ theorem CTy.nuOkB_sound : ∀ C : CTy, CTy.nuOkB C = true → C.NuOk
   | .amp C D, h => by
       simp only [CTy.nuOkB, Bool.and_eq_true] at h
       exact ⟨CTy.nuLeafB_sound C h.1, CTy.nuLeafB_sound D h.2⟩
-  | .ret _, h | .arr _ _, h | .top, h | .all _ _ _, h | .nu _, h => by simp [CTy.nuOkB] at h
+  | .ret _, h | .arr _ _, h | .top, h | .all _ _ _, h | .nu _, h | .eff _ _ _ _ _ _, h => by
+      simp [CTy.nuOkB] at h
 
 /-- The bodies `C` of the thunks `U(νX. C)` in a value type: where `nu_in` looks for the type
 whose unrolling its body has. -/
@@ -220,6 +238,7 @@ def VTy.nuThunks : VTy → List CTy
 def CTy.nuThunks : CTy → List CTy
   | .ret A => VTy.nuThunks A
   | .amp C D => CTy.nuThunks C ++ CTy.nuThunks D
+  | .eff _ _ _ _ _ C => CTy.nuThunks C
   | _ => []
 
 /-! ### Free lifetime variables -/
@@ -663,5 +682,76 @@ theorem boundsAvoidB_sound {Δ : LifeCtx} {x : LifeVar} (h : boundsAvoidB Δ x =
   obtain ⟨z, hz⟩ := assocFind_mem hu
   have := List.all_eq_true.mp h _ hz
   simpa using this
+
+/-! ### Rows  `[spec §19]` -/
+
+/-- `VTy.Drop`, decided: data, borrows and `!`, under `⊗` and `⊕`. -/
+def dropB : VTy → Bool
+  | .unit | .zero | .int _ | .unk | .opq _ | .bang _ | .imm _ _ | .mut _ _ => true
+  | .tensor A B | .sum A B => dropB A && dropB B
+  | _ => false
+
+theorem dropB_sound : ∀ A : VTy, dropB A = true → A.Drop
+  | .unit, _ => .unit
+  | .zero, _ => .zero
+  | .int w, _ => .int w
+  | .unk, _ => .unk
+  | .opq k, _ => .opq k
+  | .bang A, _ => .bang A
+  | .imm a A, _ => .imm a A
+  | .mut a A, _ => .mut a A
+  | .tensor A B, h => by
+      simp only [dropB, Bool.and_eq_true] at h
+      exact .tensor (dropB_sound A h.1) (dropB_sound B h.2)
+  | .sum A B, h => by
+      simp only [dropB, Bool.and_eq_true] at h
+      exact .sum (dropB_sound A h.1) (dropB_sound B h.2)
+  | .thunk _, h | .ref _, h | .box _ _, h | .tvar _, h | .mu _, h | .fam _, h => by
+      simp [dropB] at h
+
+/-- `RowLe S S'`, decided: every operation of `S` is found in `S'` as itself. -/
+def rowLeB (S S' : Row) : Bool := S.all fun o => Row.find S' o.n o.i == some o
+
+theorem rowLeB_sound {S S' : Row} (h : rowLeB S S' = true) : RowLe S S' := by
+  intro n i o hf
+  obtain ⟨hm, rfl, rfl⟩ := Row.find_mem hf
+  have := List.all_eq_true.mp h o hm
+  simpa using this
+
+/-- `Row.NZ`, decided. -/
+def Row.nzB (S : Row) : Bool := S.all fun o => o.n != 0
+
+theorem Row.nzB_sound {S : Row} (h : Row.nzB S = true) : S.NZ := fun o ho => by
+  have := List.all_eq_true.mp h o ho
+  simpa using this
+
+/-- `Row.Uniq`, decided. -/
+def Row.uniqB (S : Row) : Bool := decide (S.Pairwise fun o o' => ¬ (o.n = o'.n ∧ o.i = o'.i))
+
+theorem Row.uniqB_sound {S : Row} (h : Row.uniqB S = true) : S.Uniq :=
+  (of_decide_eq_true h : S.Pairwise fun o o' => ¬ (o.n = o'.n ∧ o.i = o'.i))
+
+/-- `Row.Weak`, decided. -/
+def Row.weakB (S : Row) : Bool := S.any fun o => o.q != .lin
+
+theorem Row.weakB_iff {S : Row} : Row.weakB S = true ↔ S.Weak := by
+  simp [Row.weakB, Row.Weak]
+
+/-- `Row.Unr`, decided. -/
+def Row.unrB (S : Row) : Bool := S.any fun o => o.q == .unr
+
+theorem Row.unrB_iff {S : Row} : Row.unrB S = true ↔ S.Unr := by
+  simp [Row.unrB, Row.Unr]
+
+/-- `Row.Unwind S x`, decided: every operation abortive, named, its argument free of `'x` and
+outliving every lifetime (`outlivesAllB`). -/
+def Row.unwindB (S : Row) (x : LifeVar) : Bool :=
+  S.all fun o => o.abort && o.n != 0 && !vfreeB x o.A && outlivesAllB o.A
+
+theorem Row.unwindB_sound {S : Row} {x : LifeVar} (h : Row.unwindB S x = true) : S.Unwind x := by
+  intro o ho
+  have := List.all_eq_true.mp h o ho
+  simp only [Bool.and_eq_true, bne_iff_ne, ne_eq, Bool.not_eq_true'] at this
+  exact ⟨this.1.1.1, this.1.1.2, not_vfree_of_vfreeB this.1.2, outlivesAllB_sound _ this.2⟩
 
 end BoCa.Fig16.LogRel.Core.Check

@@ -44,7 +44,7 @@ def VTy.level : VTy → Nat
 def CTy.level : CTy → Nat
   | .arr .. | .all .. | .nu .. => 0
   | .amp .. => 1
-  | .ret .. | .delay .. | .stream .. | .iter .. | .loop .. | .gen .. => 4
+  | .ret .. | .delay .. | .stream .. | .iter .. | .loop .. | .gen .. | .eff .. => 4
   | .top .. | .name .. => 5
 
 def widthName : BoCa.Width → String
@@ -101,6 +101,14 @@ def CTy.pp (C : CTy) (lvl : Nat := 0) : String :=
     | .iter _ A R R' => "iter " ++ A.pp 5 ++ " " ++ R.pp 5 ++ " " ++ R'.pp 5
     | .loop _ A B => "loop " ++ A.pp 5 ++ " " ++ B.pp 5
     | .gen _ A B R => "gen " ++ A.pp 5 ++ " " ++ B.pp 5 ++ " " ++ R.pp 5
+    | .eff _ .nil A => "F " ++ A.pp 4
+    | .eff _ r A => "F[" ++ r.pp ++ "] " ++ A.pp 4
+
+/-- A row's entries, `n.i q A ~> B, …`, without the brackets. -/
+def Row.pp : Row → String
+  | .nil => ""
+  | .cons n i q A B .nil => s!"{n}.{i} {q.str} " ++ A.pp ++ " ~> " ++ B.pp
+  | .cons n i q A B r => s!"{n}.{i} {q.str} " ++ A.pp ++ " ~> " ++ B.pp ++ ", " ++ r.pp
 
 def Shape.pp : Shape → String
   | .leaf _ A => "leaf " ++ A.pp 4
@@ -116,6 +124,7 @@ def Arg.pp : Arg → String
   | .shape σ => σ.pp
   | .nat n => toString n
   | .op o => hostOpName o
+  | .row r => "[" ++ r.pp ++ "]"
 
 def Const.pp (c : Const) : String :=
   let (k, as) := c.toArgs
@@ -143,7 +152,8 @@ def Val.level : Val → Nat
 
 def Comp.level : Comp → Nat
   | .bind .. | .letUnit .. | .letPair .. | .lam .. | .lamL .. | .for_ .. => 0
-  | .ret .. | .absurd .. | .nuIn .. | .nuOut .. => 1
+  | .unwind .. => 0
+  | .ret .. | .absurd .. | .nuIn .. | .nuOut .. | .perform .. | .abort .. | .handle .. => 1
   | .app .. | .proj .. | .inst .. => 2
   | _ => 3
 
@@ -189,17 +199,14 @@ def Val.pp (V : Val) (lvl : Nat := 0) (k : Nat := 0) : String :=
     | .app _ (.sugar _ .brace) (.thunk _ M) => "{ " ++ M.pp 0 (k + 2) ++ " }"
     | .app _ (.sugar _ .genBlock) (.thunk _ M) => "gen { " ++ M.pp 0 (k + 2) ++ " }"
     | .app _ (.sugar _ .brace) (.bangThunk _ M) => "!{ " ++ M.pp 0 (k + 2) ++ " }"
-    | .app _ (.sugar _ .try_) (.thunk _ M) => "try { " ++ M.pp 0 (k + 2) ++ " }"
-    | .app _ (.app _ (.sugar _ h) (.thunk _ M)) (.thunkv _ (.lam _ e _ N)) =>
-      (if h == .catch_ then "catch { " else "map_err { ") ++ M.pp 0 (k + 2) ++ " } { " ++ e.name ++
-        " -> " ++ N.pp 0 (k + 2) ++ " }"
     | .app _ (.app _ (.sugar _ (.borrow bk x)) P) (.thunkv _ (.lam _ b _ M)) =>
       let kw := match bk with
         | .imm => "borrow imm " | .mut | .famMut => "borrow mut " | .modify => "modify "
       let lt := if x == "" then "" else "'" ++ x ++ ", "
       kw ++ P.pp 3 k ++ " { " ++ lt ++ b.name ++ " ->" ++ nl (k + 2) ++ M.pp 0 (k + 2) ++ " }"
-    | .app _ (.app _ (.sugar _ (.handle h x)) P) (.thunkv _ (.lam _ b _ M)) =>
-      "with " ++ h ++ "(" ++ P.pp 0 k ++ ") { '" ++ x ++ ", " ++ b.name ++ " ->" ++ nl (k + 2) ++
+    | .app _ (.app _ (.sugar _ (.handle h x As)) P) (.thunkv _ (.lam _ b _ M)) =>
+      "with " ++ h ++ (if As.isEmpty then "" else "[" ++ ", ".intercalate (As.map (VTy.pp · 0)) ++ "]") ++
+        "(" ++ P.pp 0 k ++ ") { '" ++ x ++ ", " ++ b.name ++ " ->" ++ nl (k + 2) ++
         M.pp 0 (k + 2) ++ " }"
     | .thunk _ M => "thunk " ++ M.pp 0 (k + 2)
     | .thunkv _ M => "thunkv " ++ M.pp 0 (k + 2)
@@ -232,6 +239,12 @@ def Comp.pp (M : Comp) (lvl : Nat := 0) (k : Nat := 0) : String :=
     | .bind _ x none M N lin => linKw lin ++ x.name ++ " <- " ++ M.pp 1 (k + 2) ++ ";" ++ nl k ++ N.pp 0 k
     | .bind _ x (some A) M N lin =>
       linKw lin ++ x.name ++ " : " ++ A.pp ++ " <- " ++ M.pp 1 (k + 2) ++ ";" ++ nl k ++ N.pp 0 k
+    | .unwind _ x A M D N =>
+      x.name ++ (match A with | some A => " : " ++ A.pp | none => "") ++ " <- " ++ M.pp 1 (k + 2) ++
+        " unwind (" ++ D.pp 0 (k + 2) ++ ");" ++ nl k ++ N.pp 0 k
+    | .perform _ n i V => s!"perform[{n}.{i}] " ++ V.pp 1 k
+    | .abort _ n i V => s!"abort[{n}.{i}] " ++ V.pp 1 k
+    | .handle _ n hr hc M => s!"handle_with[{n}]({hr.name}, {hc.name}) " ++ M.pp 1 k
     | .force _ x => "force " ++ x.name
     | .lam _ x A M => "fun (" ++ x.name ++ " : " ++ A.pp ++ ") ->" ++ nl (k + 2) ++ M.pp 0 (k + 2)
     | .app _ M x => M.pp 2 k ++ " " ++ x.name
@@ -285,17 +298,37 @@ def Decl.pp : Decl → String
   | .extern _ n A => "extern " ++ n.name ++ " : " ++ A.pp
   | .main _ C M => "main : " ++ C.pp ++ " =" ++ nl 2 ++ M.pp 0 2
   | .include _ n => "include " ++ n.name
-  | .effect _ n ops =>
+  | .effect _ n tps ops =>
     let op (o : OpDecl) : String :=
-      "fn " ++ o.name.name ++ "(" ++ ", ".intercalate (o.params.map fun (x, A) => x.name ++ ": " ++ A.pp) ++
+      (match o.kind with
+        | .fn => "fn "
+        | .ctl .lin => "linear ctl "
+        | .ctl .aff => "ctl "
+        | .ctl .unr => "multi ctl ") ++
+      o.name.name ++ "(" ++ ", ".intercalate (o.params.map fun (x, A) => x.name ++ ": " ++ A.pp) ++
         ") -> " ++ o.res.pp
-    "effect " ++ n.name ++ " {" ++ String.join (ops.map fun o => nl 2 ++ op o ++ ";") ++ nl 0 ++ "}"
+    "effect " ++ n.name ++ (if tps.isEmpty then "" else "[" ++ ", ".intercalate (tps.map (·.name)) ++ "]") ++
+      " {" ++ String.join (ops.map fun o => nl 2 ++ op o ++ ";") ++ nl 0 ++ "}"
   | .handler _ n st S e cs =>
     let cl (c : Clause) : String :=
-      c.name.name ++ "(" ++ ", ".intercalate (c.params.map (·.name)) ++ ") -> {" ++ nl 4 ++
+      c.name.name ++ "(" ++ ", ".intercalate (c.params.map (·.name)) ++ ") = {" ++ nl 4 ++
         c.body.pp 0 4 ++ nl 2 ++ "}"
-    "handler " ++ n.name ++ "(" ++ st.name ++ ": " ++ S.pp ++ ") for " ++ e.name ++ " {" ++
+    "handler " ++ n.name ++ "(mut " ++ st.name ++ ": " ++ S.pp ++ "): " ++ e.name ++ " = {" ++
       String.join (cs.map fun c => nl 2 ++ cl c ++ ";") ++ nl 0 ++ "}"
+  | .chandler _ h =>
+    let tys (As : List VTy) : String :=
+      if As.isEmpty then "" else "[" ++ ", ".intercalate (As.map (VTy.pp · 0)) ++ "]"
+    let cl (x : String) (xs : List Ident) (M : Comp) : String :=
+      x ++ "(" ++ ", ".intercalate (xs.map (·.name)) ++ ") = {" ++ nl 4 ++ M.pp 0 4 ++ nl 2 ++ "}"
+    let (rx, rA, rM) := h.ret
+    "handler " ++ h.name.name ++
+      (if h.tps.isEmpty then "" else "[" ++ ", ".intercalate (h.tps.map (·.name)) ++ "]") ++
+      (if h.params.isEmpty then "" else
+        "(" ++ ", ".intercalate (h.params.map fun (x, A) => x.name ++ ": " ++ A.pp) ++ ")") ++
+      ": " ++ h.eff.name ++ tys h.effArgs ++ ", " ++ rA.pp ++ " -> " ++ h.res.pp ++
+      (if h.row.isEmpty then "" else " with " ++ ", ".intercalate (h.row.map fun (e, As) => e.name ++ tys As)) ++
+      " = {" ++ nl 2 ++ cl "return" [rx] rM ++ ";" ++
+      String.join (h.clauses.map fun c => nl 2 ++ cl c.name.name c.params c.body ++ ";") ++ nl 0 ++ "}"
 
 def Program.pp (p : Program) : String :=
   "\n\n".intercalate (p.decls.map Decl.pp) ++ "\n"

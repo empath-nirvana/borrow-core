@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 0.34 · 2026-09-30
+Version 0.35 · 2026-10-01
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -2054,100 +2054,109 @@ end-to-end I/O theorems keep their statements.
 
 ### Motivation
 
-Effects stage S1 of `docs/effects-scoping.md` (#18, #152–#154): answering effects and `Fail`.
-A handler's meaning is its
-elaboration into core terms the checker already derives (decision 48): a capability is a value
-lent by `withbor`, an answering operation is a call on it, abort is a sum exit, and finalisation
-is §12's destructors. Effect safety is then `fundamentalC` and `adequacyC` on the elaborated
-program, with no new case; effect rows never enter the core. What the elaboration can still get
-wrong is what a handler means, so each class of clause has a law about the runs of the terms it
-emits (*Laws*, below), and the cost of each is measured against the program written by hand
+The surface of effects (#18, #152–#154, #188): declarations, handlers, `with` and rows. Answering
+effects are capabilities, by elaboration into core terms the checker already derives (decision
+48): a capability is a value lent by `withbor`, an answering operation is a call on it. Control
+effects, errors among them, are the kernel's (§19): each `with` of a control handler is a
+`handle` with a static name, and an operation is a `perform` or an `abort` at that name. Effect
+safety is `fundamentalC` and `adequacyC` on the elaborated program. What the elaboration can still
+get wrong is what a handler means, so the answering clauses have laws about the runs of the terms
+they emit (*Laws*, below), and the cost of each is measured against the program written by hand
 (*Programs*).
 
 ### Declarations
 
-    effect E { fn op(x₁: A₁, …) -> B; … }                     (`-> B` left out is `-> 1`)
-    handler h(s: S) for E { op(x₁, …) -> e; op(x₁, …) -> { M }; … }
-    with h(e) { M }          with h(&mut c) { M }
+    effect E[T, …] { fn op(x₁: A₁, …) -> B; ctl op(…) -> B; linear ctl …; multi ctl …; … }
+    handler h(mut s: S): E = { op(x₁, …) = e; … }                                   (answering)
+    handler h[T, …](p: A, …): E[A, …], A -> R with E₂[…] = { return(x) = M; op(x, …, k) = N; … }
+    with h[A, …](e, …) { M }          with h(&mut c) { M }
+    fn f(…) -> T with E₁, E₂[A] = …                                       (a written row)
 
-    raise(e)      try { M }      catch { M } { e -> N }      map_err { M } { e -> N }
-    fn f(…) -> T with E₁, Fail[X] = …                          (a written row)
+An **effect** declares its operations, each **answering** (`fn`, Koka's `fun`) or **control**
+(`ctl`, with the structural qualifier of §19: affine by default, `linear ctl`, `multi ctl` for
+unrestricted). An effect is one kind or the other. A control operation whose answer is `never`
+(the type `0`) at a qualifier with weakening is **abortive** (§19). An effect may take type
+parameters (a control effect only).
 
-An **effect** declares its operations' types. A **handler** of `E` has a state `s : S` and one
-clause per operation; in a clause, `s` is a `let mut` variable, which the clause may assign, and
-the clause's value is the operation's answer. `with h(e) { M }` runs `M` with `h` handling `E`,
-its state first `e`; `with h(&mut c) { M }` lends the state from the cell `c : ref S`, which holds
-the final state after the block. An operation is called like a function, `op(v)`: there is no
-`perform` token (decision 49). An operation's name is its own: no function may share it.
+A **handler** is a value implementing an effect. An answering handler has a state, its `mut`
+parameter, a `let mut` variable in each clause, which the clause may assign; the clause's value is
+the operation's answer. A control handler names the type `A` of the body it handles and its
+answer `R`; its return clause receives the body's value, and an operation's clause receives the
+operation's arguments and, unless the operation is abortive, its continuation `k`. Its clauses are
+`!` code (§19's `[handle]`), so its parameters are `!` values. `with E₂[…]` lists what its clauses
+perform, served around the `with`.
 
-**`Fail`** is the error effect, built in: `raise(e)` aborts with the error `e`. `try { M }`
-answers `inl` the value of `M` or `inr` the error it raised; `catch { M } { e -> N }` answers
-`N` on an error; `map_err { M } { e -> N }` raises `N`'s value. A **written row** after a
-function's result type is a promise that its inferred row is within it, checked; `Fail[X]` gives
-the error type `X`, which a function that raises directly must have written or get from a
-function it calls. All spellings are provisional (decisions 51, 52).
+`with h(…) { M }` runs `M` with `h` handling its effect. An operation is called like a function,
+`op(v)`: there is no `perform` token (decision 49). An operation's name is its own: no function may
+share it. A **written row** after a function's result type is a promise that its inferred row is
+within it, checked, and gives the type arguments of an effect the function performs directly.
+All spellings are provisional (decisions 51, 55).
+
+**Errors** are the library effect `Fail[E]` (`lib/fail.bc`), `ctl raise(e: E) -> never`, handled
+by ordinary handlers: `to_result` (`inl` the value or `inr` the error), `default(d)` (the value,
+or `d(())`) and `map_err(f)` (the error `f(e)` raised to the handler around the `with`). Nothing in
+the elaborator knows them.
 
 ### Elaboration
 
-All of it is in `Frontend/Elab/Effects.lean`, before the rest of the sugar; the checker sees only
-core. With the capability `c : Mut 'l S`:
+All of it is in `Frontend/Elab/Effects.lean` (resolution, before the rest of the sugar) and
+`Frontend/Sugar.lean` (assembly, where types are known); the checker sees only core.
+
+**Answering effects** are capabilities. With the capability `c : Mut 'l S`:
 
 | form | elaborates to |
 |---|---|
-| a clause `op(x) -> M` of `h` | `fn h__op<'l>(c: mut 'l S, x: A) -> mut 'l S * B = let r = modify c { s -> M; (s, r) }; (c, r)`: `!` code run on the lent state by `withswap`, the `FnMut` row of §2 |
-| `with h(e) { M }` | `borrow mut (alloc(e)) { 'l, c -> M' }`: a `withbor` of the state's cell whose callback's parameter is the capability; the cell is dropped after (`free`, then the state's destructor) |
+| a clause `op(x) = M` of `h` | `fn h__op<'l>(c: mut 'l S, x: A) -> mut 'l S * B = let r = modify c { s -> M; (s, r) }; (c, r)`: `!` code run on the lent state by `withswap`, the `FnMut` row of §2 |
+| `with h(e) { M }` | `borrow mut (alloc(e)) { 'l, c -> M' }`: a `withbor` of the state's cell whose callback's parameter is the capability; the cell is dropped after |
 | `with h(&mut c₀) { M }` | `borrow mut c₀ { 'l, c -> M' }`, and `c₀` is rebound |
-| `op(v)` in `M` | `let (c, r) = h__op(c, v)`, `h` the innermost handler of `E`: the answer is `r`, and the capability is bound again |
-| a call `f(v)` of a function with `E` in its row | `let (c, r) = f__h(c, v)` |
+| `op(v)` in `M` | `let (c, r) = h__op(c, v)`, `h` the innermost handler of `E` |
 
-**Threading.** The capability is threaded as a `let mut` variable is: bound again after each
-call, handed out of each arm of a `match` or `if` that uses it, out of a borrow block, and
-through a `for`'s body, which the loop threads (§16). The plain calls a value makes before an
-effectful one are bound first, in order, so the calls keep their order.
+The capability is threaded as a `let mut` variable is: bound again after each call, handed out of
+each arm of a `match` or `if` that uses it, out of a borrow block, and through a `for`'s body.
 
-**Rows.** A function's **row** is the set of effects it performs: those of the operations it
-calls and of the functions it calls, less those a `with` inside it handles. It is inferred in
-declaration order and never written. A function with a non-empty row is elaborated once per
-handler it runs under, as a generic function is once per instance (decision 45): the copy `f__h`
-takes the capability first and hands it back first. A function with a row that is never called
-under a handler is not elaborated. Resolution is lexical: an operation goes to the innermost
-`with` of its effect around it, or to the capability the enclosing function's copy was given.
+**Control effects** are §19's. Each `with` of a control handler is a **handler site** with a
+static name `n` of its own, and an operation is resolved lexically to the innermost site of its
+effect: `perform[n.i](v)`, or `abort[n.i](v)` for an abortive operation. The site is
+`handle_with[n](hr, hc) M`: the return clause and the operation clauses as `!` closures, at the
+types `[handle]` gives them, the handler's type parameters matched against the body's type and its
+arguments' types. The clauses run outside the site: their operations go to the sites around the
+`with`.
 
-**Two changes to the sugar.** A borrow block of a cell (`withbor2`) or of an owned array
-(`slice_borrow_*`) takes `⊓Δ` as its side conditions' bound, as a buffer's already did (§17), so
-a block may hand back a capability of an enclosing `with`. A block that contains
-`with h(&mut c)` for a cell `c` it does not bind hands `c` back beside its result, as it hands
-back the places it lends.
+**Rows.** A function's **row** is the set of effect instances it performs: those of the operations
+it calls and of the functions it calls, less those a `with` inside it handles. It is inferred in
+declaration order. A function with a row is elaborated once per assignment of its effects to what
+serves them in scope (the handlers of its answering effects, the sites of its control effects), as
+a generic function is once per instance (decision 45): the copy `f__…` takes the capabilities
+first and hands them back first, and its type has the sites' operations as its row,
+`A ⇒ F[n.i …] B`. A call of `f` is a call of that copy, a computation of its own:
+`g <- return f; a <- return v; (force g) a`. A function with a row that is never called is not
+elaborated. Resolution is lexical: an operation goes to the innermost handler of its effect around
+it, or to what the enclosing function's copy was given.
 
-**`Fail` is a control effect** (`docs/effects-scoping.md` §7.5): no capability, no state, and
-no copy per handler. It changes the type of what performs it: a function whose row has
-`Fail[X]` answers `T + X` (beside its capabilities, when it has some), each normal answer
-`inl v` and each `raise(e)` `inr e`. A call of it is followed by a branch,
+**Where an abortive operation may stand.**
+- *In a counted loop's body* (`for` over data, §16): `count_try`'s step is pure, so the step
+  handles the operations of the names its body performs itself, each leaving the loop by its exit,
+  and after the loop the operation is performed again at the same name. A control operation that
+  resumes cannot stand there.
+- *In a borrow block's body*: the block is the unwinding form of its borrow (§19), at the
+  operations its body performs, which must be abortive (a resuming one is T1, #172); its callback
+  is ascribed its row. An unwind ends the lend, and the lender's finaliser runs.
+- *With answering capabilities in use*: the body of a control `with` is given a reborrow of each
+  capability it uses (`withbor3`), so that the capability comes back when the body is abandoned.
 
-    let t = f(v); case t { inl x -> N | inr e -> abort(e) }
+**Drop glue** is the checker's (§19): a binding whose head may abort, at a row with weakening,
+puts the destructors of the slots the rest uses in a `[then]` finaliser. A value with no
+destructor (§12, class 3) live across such a binding is rejected, naming it.
 
-which goes on with `N` or aborts in turn; `abort(e)` is `inr e` as the answer of the computation
-it is in, and, inside a loop's body, `break (inr e)`: the loop's exit (`count_try`'s, §16), after
-which the loop is such a branch (its value `inl` on a normal end or `break`). A `raise` in an
-arm of `if`/`match` that is not the whole arm's value leaves by that arm, and the other arm goes
-on, so no sum is made there. A raising call in tail position whose capabilities are the ones
-handed back answers as it is: `try { f(v) }` is `f(v)`'s sum. `try { M }` is `M` elaborated with
-its terminals `inl v`; `catch` and `map_err` are a branch on it.
-
-**Destructors on the abort path.** An abort path is an ordinary path of the elaborated program,
-so §12's destructors run on it: what is owed there is dropped, most recently bound first. A
-value with no destructor (§12, class 3) cannot be abandoned: the checker's error at such a value
-names the abort that leaves it. Handing it to the handler with the error, as `close` hands back a
-residual, is not provided.
-
-**Not provided**, each rejected with a message that says so: an operation or a `raise` inside a
-closure or block that is not run in place, and a function with a row passed as a value
-(effectful callbacks, #161; for a fold's algebra that raises, K4 below); a lend `&mut x` in the
-arguments of an effectful call; an operation or a `raise` inside a clause; a function with a row
-whose result is a computation (a loop or a generator); a second instance of an effect in scope
-(named instances, #155); type parameters on an effect other than `Fail`; a `let mut` declared
-outside a `try`, `catch` or `map_err` and assigned in it; a handler body (`N` of `catch`) that
-performs an effect.
+**Not provided**, each rejected with a message that says so: an operation inside a closure or
+block that is not run in place, and a function with a row passed as a value (effectful callbacks,
+#161; for a fold's algebra that raises, K4 below); a lend `&mut x` in the arguments of a call that
+threads a capability; an operation of an answering effect inside a clause of an answering handler;
+a function with a row whose result is a computation (a loop or a generator); a second instance of
+an effect in a row; type parameters on an answering effect; an effect with both kinds of operation;
+a `let mut` declared outside a control `with` and assigned in it, or a place lent in it; abortive
+operations of two sites in one counted loop's body; a borrow of a buffer or a literal crossed by
+an abort.
 
 ### Reports
 
@@ -2156,62 +2165,57 @@ each in source order; the library's own are not printed:
 
 | line | says |
 |---|---|
-| `effect L:C: E: op, …` | an effect and its operations |
-| `row L:C: f: E, Fail[X]` | a function's inferred row, with `Fail`'s error type |
-| `lowering L:C: …` | the shape each handler is lowered to, in Koka's cost vocabulary: a handler of answering clauses is a **call** (`fun`: each clause resumes once, in tail position, a direct call on the lent state, with no allocation and no dispatch); `try`, `catch` and `map_err` are a **branch** (`final ctl`: an abort never resumes; a sum exit); a loop left by an abort; each `with` and where its state lives; each copy made for a handler |
-| `call L:C: …` | per call site (decision 49): which clause or copy an operation or an effectful call calls, whether a branch follows it, and each `raise` |
+| `effect L:C: E: op, …` | an effect and its operations, with their kind and qualifier |
+| `row L:C: f: E, Fail[X]` | a function's inferred row, with the instances' type arguments |
+| `lowering L:C: …` | each handler: an answering handler is a **call** (`fun`); a control `with` is a handler site with its static name, each operation abortive (a branch per call, `final ctl`), linear, affine or unrestricted; each copy made for a handler or site |
+| `call L:C: …` | per call site (decision 49): which clause or copy an operation or an effectful call calls, and each control operation's name and site |
 
-The shapes S1 has are call and branch; a state machine (a suspending handler) and a dispatch (a
-handler not known where it is used) are later stages'. `corpus/reports/*.txt` pin the reports of
-the effect programs, and the gate compares them (`scripts/check-corpus.sh`).
+`corpus/reports/*.txt` pin the reports of the effect programs, and the gate compares them
+(`scripts/check-corpus.sh`).
 
 ### Laws
 
-`Core/Handlers.lean`, on the terms the elaboration emits, at every host:
+`Core/Handlers.lean`, on the terms the elaboration emits for answering handlers, at every host:
 
 - **Tail-resumptive** (`op_tail`, `op_answer`). An operation call on the capability `ℓ` is
   `withswap ℓ (λs. g (s, v))`, `g` the clause's code. In any evaluation context `K` (the rest of
   the handled body), at a memory whose cell `ℓ` holds `s`, the call reduces with no change to
   memory to the clause run on `(s, v)`; and when that run answers `(s', r)`, the call reaches
-  `K[(ℓ, r)]` with `s'` in the cell. This is `handle E[op v] = handle E[clause v]`: the
-  continuation is resumed once, in place, with the answer; nothing is captured or allocated.
-- **Handling is the fold of the clauses** (`handle_fold`). A handled body that performs the
-  operations `(g₁, v₁), …, (gₙ, vₙ)` in order and goes on with `k` runs, when the clauses run one
-  after the other on the threaded state, to `k` at the memory the last one left: the handler is
-  the state-passing fold of its clauses over the operations performed, as a deep handler is the
-  fold of its free model (`experiments/CoeffectsStrict`'s `Handler.lean`).
-- **Abort** (`abort_passes`, `return_resumes`, `loop_abort`). An abort `inr e` passes every branch around it,
-  `case [·] { inl x -> K | inr e -> inr e }`, running none of their continuations, and reaches
-  the handler as `inr e`: `try { E[raise e] } ↦* inr e`. A value `inl v` runs the innermost
-  continuation `K[v/x]`. In a loop's body the abort is `count_try`'s exit (`countTry_exit`, §16),
-  and the branches after the loop hand it on (`loop_abort`).
+  `K[(ℓ, r)]` with `s'` in the cell.
+- **Handling is the fold of the clauses** (`handle_fold`): the handler is the state-passing fold
+  of its clauses over the operations performed.
 
-These laws, the counts against the programs written by hand (*Programs*) and the reports are the
-acceptance of #18 in place of an erasure theorem, which elaboration makes true by definition
-(decision 48). All are within `[propext, Classical.choice, Quot.sound]`.
+The file's abort laws (`abort_passes`, `return_resumes`, `loop_abort`) are about the sum schema
+that errors elaborated to before §19; errors are now §19's abortive operations, whose meaning is
+the kernel's (`handle_compatC`, `then_compatC`, adequacy).
 
 ### Programs
 
-`corpus/effects-map.bc` declares a `Map` effect (`lookup` answers a copy; `insert`) with two
-handlers, an association buffer and an array indexed by the key, and runs one client, `census`,
-under each, from one source, and once with its state lent from a cell. `corpus/effects-map-hand.bc`
-is the same program written by hand in capability-passing style; both run to the same value, and
-their counts are equal (`corpus/counts.expected`: 11 allocations, no dispatched call, no copy).
-`corpus/sugar/effects-counter.bc` pairs a handled counter with its core form written by hand.
+`corpus/effects-map.bc` declares a `Map` effect with two handlers, an association buffer and an
+array indexed by the key, and runs one client, `census`, under each, from one source, and once
+with its state lent from a cell. `corpus/effects-map-hand.bc` is the same program written by hand
+in capability-passing style; both run to the same value, and their counts are equal (11
+allocations, no dispatched call, no copy). `corpus/sugar/effects-counter.bc` pairs a handled
+counter with its core form written by hand.
 
 `corpus/effects-fold.bc` is target 2 of #18: a fold over fallible elements, written with `raise`
-and `map_err`, no `try_fold` and no sum threaded by hand, run under `try` and under `catch` from
-one source; a buffer built halfway is dropped on the abort path. `corpus/effects-fold-sum.bc` is
-the same program with the sums written by hand: the same value, and the same counts (7
-allocations, no dispatched call, no copy). `corpus/effects-map-fail.bc` combines `Map` and `Fail`:
-the capability is handed back on the abort path, and the handler's state is used after it.
+and `map_err`, no `try_fold` and no sum threaded by hand, run under `to_result` and under
+`default` from one source; a buffer built halfway is dropped when the abort unwinds.
+`corpus/effects-fold-sum.bc` is the same program with the sums written by hand: the same value, and
+the same counts (7 allocations, no dispatched call, no copy). `corpus/effects-map-fail.bc` combines
+`Map` and `Fail`: the capability is reborrowed for the body of `to_result`, and the handler's state
+is used after the abort. `corpus/effects-log-fail.bc` runs a function that logs and raises with
+`Log` outside `Fail` (the logs kept) and inside it (the log's cell freed by the unwind), and
+`corpus/effects-borrow-raise.bc` raises inside `borrow mut c { … }` with the handler outside: §19's
+acceptance programs 1 and 3 at the surface.
 
-**The library** raises instead of answering an error sum: `add_checked` and `mul_checked`
-(`Fail[1]`), `parse_i32` (`Fail[ParseError]`, over a counted `for`, the checked operations'
-overflow raised as its own by `map_err`), `str_from_utf8` (`Fail[i32]`, the index of the first bad
-byte) and `from_utf8` (`Fail[Utf8Error]`, the buffer back with the index). `corpus/parse-int.bc`,
-`ascii-upper.bc`, `sort-lines.bc`, `key-value.bc`, `trim-replace.bc` and `utf8-count.bc` handle
-them with `try`; their counts are unchanged. A search that finds nothing still answers a sum.
+**The library** raises: `add_checked` and `mul_checked` (`Fail[1]`), `parse_i32`
+(`Fail[ParseError]`, over a counted `for`, the checked operations' overflow raised as its own by
+`map_err`), `str_from_utf8` and `from_utf8` (`Fail[i32]`, the index of the first bad byte;
+`from_utf8`'s buffer is dropped on the error, since an error holds nothing owned).
+`corpus/parse-int.bc`, `ascii-upper.bc`, `sort-lines.bc`, `key-value.bc`, `trim-replace.bc` and
+`utf8-count.bc` handle them with `to_result`; their counts are unchanged. A search that finds
+nothing still answers a sum.
 
 `corpus/effects-generic.bc` runs a generic function with a row: copied for its handler, then
 instantiated at each type (decision 45).
@@ -2220,29 +2224,26 @@ Rejects: `corpus/reject/effect-*.bc`.
 
 ### Baseline
 
-No change to `CDerives`, the relation, the machine or the checker. `fundamentalC`, `adequacyC`,
+No change to `CDerives`, the relation, the machine or the checker's rules: control effects are
+§19's, checked by the certifying checker's §19 builders. `fundamentalC`, `adequacyC`,
 `fundamentalD` and `adequacyD` keep their statements and cover every elaborated program.
-`Fail` adds no constant: its sums, branches and loop exits are §3's and §16's.
 
 ### Open
 
-- Named instances and lexical resolution between two instances of an effect (S2, #155);
-  written rows and bundles (#156).
-- Effectful callbacks, stored or passed (S4, #161).
-- An operation that answers a borrow into the handler's state (S4, #160); `lookup` answers a copy.
+- Named instances and lexical resolution between two instances of an effect (S2, #155); bundles
+  (#156).
+- Effectful callbacks, stored or passed (#161), and with them functions over computations
+  (`retry`, a handler that re-runs its body, and `|>` at a computation parameter).
+- An operation that answers a borrow into the handler's state (#160); `lookup` answers a copy.
+- A handler parameter that is not `!`: a state-passing answer type (§19 *Open*).
 - **K4: an early exit from a kernel fold.** A `raise` in the algebra of `fold_own`/`fold_imm` needs
-  the fold to stop, a constant with a machine step (`docs/effects-scoping.md` §1.2 item 4). It is
-  open: such an algebra is rejected where it is passed to the fold
-  (`corpus/pending/raise-in-fold.bc`).
-- A `try`, `catch` or `map_err` that hands back the `let mut` variables its body assigns or the
-  places it lends (each rejected with a message).
-- A `raise` in the body of a loop whose value is what its source finishes with (a drain with no
-  `else`).
+  the fold to stop (`corpus/pending/raise-in-fold.bc`).
+- An error that holds an owned value: §19's `[raise]` asks its argument to drop.
+- A control `with` that hands back the `let mut` variables its body assigns or the places it
+  lends.
 - A capability threaded through a `for` over `&a` of an owned array: the lend around the loop
   takes `top` as its bound, so the loop's state cannot hold a borrow (`corpus/effects-map.bc`
   passes a view instead).
-- The laws are proved on the schemas; that the elaboration emits exactly these schemas is by
-  construction of `Frontend/Elab/Effects.lean`, checked on the sugar pair, not proved.
 
 ---
 
@@ -2760,8 +2761,8 @@ Richer policies are K3 (#162), and *Open*:
 
 `cC (F A)`, `wpTS`, every existing rule and every existing compatibility lemma keep their
 statements. `fundamentalC`, `adequacyC`, `fundamentalD` and `adequacyD` keep theirs, over the
-extended judgment. §18's elaborated handlers are unchanged. They are the answering kind, and
-S1b's sum-based `Fail` is superseded by abortive operations (#168) when §18 is replaced.
+extended judgment. §18's answering handlers are capabilities, unchanged; its control effects,
+`Fail` among them, elaborate to this entry's `handle`, `perform` and `abort` (#188).
 
 ### Programs
 
@@ -2936,7 +2937,6 @@ own: its handler answers one of two closures. The lowering adds neither.
 - **Shallow handlers:** covered by `ν` codata (generators) for step-wise handling; not a separate
   construct unless a target needs it.
 - μ with `X` under `⊸` (T15, #182).
-- Replacing §18's elaborated handlers with this construct.
 - Type-keyed provision of answering-only signatures (interfaces): reserved; designed after #186's
   core (#169). The signature form above is the interface form. A signature whose operations are
   all answering may later be implemented for a type by a persistent provider, resolved and
@@ -3008,6 +3008,18 @@ with every kernel program at every stage (*Lowering*).
 ---
 
 ## Changelog
+
+- **0.35** (2026-10-01) — §18 (#188, stage 1): control effects at the surface are §19's. An
+  effect's operations are answering (`fn`) or control (`ctl`, `linear ctl`, `multi ctl`); a
+  control handler names its body's type and its answer, and each `with` of one is a `handle` with
+  a static name of its own, resolved lexically; a function with a row is copied per assignment of
+  its effects to the handlers and sites in scope, with the sites' operations as its row. Errors
+  are the library effect `Fail[E]` (`lib/fail.bc`) with `to_result`, `default` and `map_err`;
+  the built-in `Fail`, `try`, `catch` and `map_err` forms and the sum schema are removed. An
+  abortive operation in a counted loop's body is handled at the step and performed again after
+  the loop; in a borrow block's body, the block is the unwinding borrow. The textual core reads
+  `F[…] A`, `perform[n.i]`, `abort[n.i]`, `handle_with[n]`, `unwind` and the unwinding borrows,
+  and the certifying checker builds §19's derivations, inserting the drop glue.
 
 - **0.34** (2026-09-30) — §19, *Lowering* (#205): a tail-resumptive operation, whose handlers
   all have one closed clause that resumes in tail position and neither suspends nor raises, is a

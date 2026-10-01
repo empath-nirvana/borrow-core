@@ -1,6 +1,7 @@
--- A `raise` that nothing handles (SPEC §18): `main` is not a function that can raise, and no
--- `try`, `catch` or `map_err` is around the call, so the abort has nowhere to go.
--- expect: 6:15: `half` raises (`Fail`), and nothing handles it here: call it inside `try`, `catch` or `map_err`, or from a function that can raise
+-- A `raise` that nothing handles (SPEC §19): `main` performs no effect, and no handler of `Fail`
+-- is around the call, so the abort has nowhere to go.
+-- expect: 7:15: `half` performs `Fail`, but no handler of `Fail` is in scope here
+include fail
 fn half(n: i32) -> i32 with Fail[i32] = if n < 0 { raise(n) } else { n }
 
 main -> i32 = half(3)

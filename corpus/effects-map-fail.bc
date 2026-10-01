@@ -1,18 +1,20 @@
--- An answering effect and `Fail` together (SPEC §18): `record` performs `Map` and raises, so its row,
--- written, is `Map, Fail[i32]`, and its copy under `table` takes the capability first and answers
--- it beside `1 + i32`. A key outside the table raises it; `try` catches the abort inside the
--- `with`, and the capability is handed back on the abort path too, so the handler's state, with
--- what was recorded before the abort, is still there for the `lookup`s after it.
+-- An answering effect and `Fail` together (SPEC §18, §19): `record` performs `Map` and raises, so
+-- its row, written, is `Map, Fail[i32]`, and its copy under `table` takes the capability first. A
+-- key outside the table raises it; `to_result` catches the abort inside the `with table`. The body
+-- of `to_result` is given a reborrow of the capability, which comes back when the abort abandons
+-- the body, so the handler's state, with what was recorded before the abort, is still there for
+-- the `lookup`s after it.
 --
 -- Answer: `(inr i32[9], i32[10])`: the keys are `0 1 2 9 4`; `9` raises after `0 1 2` were
 -- recorded, so key 1 is there (1, times 10) and key 4 is not (0).
 
 include slice
+include fail
 effect Map { fn lookup(k: i32) -> i32 + 1; fn insert(k: i32, v: i32) }
 -- An array indexed by the key: `0` is a key not present.
-handler table(t: array i32) for Map {
-  lookup(k) -> { let x = borrow imm t { v -> at(v, k, 0) }; if x == 0 { inr () } else { inl x } };
-  insert(k, v) -> { let (t, _) = array_replace[i32](t, k, v); () }
+handler table(mut t: array i32): Map = {
+  lookup(k) = { let x = borrow imm t { v -> at(v, k, 0) }; if x == 0 { inr () } else { inl x } };
+  insert(k, v) = { let (t, _) = array_replace[i32](t, k, v); () }
 }
 -- Each element recorded as a key; a key outside the table raises it.
 fn record<'a>(xs: array_imm 'a i32) -> 1 with Map, Fail[i32] =
@@ -23,7 +25,7 @@ fn keys(i: i32) -> i32 = if i == 3 { 9 } else { i }
 main -> (1 + i32) * i32 =
   let a = array_new[i32] (5, keys);
   borrow imm a { v -> with table(array_new[i32] (8, !{ i -> 0 })) {
-    let r = try { record(v) };
+    let r = with to_result { record(v) };
     let one = match lookup(1) { inl c -> c | inr u -> 0 };
     let four = match lookup(4) { inl c -> c | inr u -> 0 };
     (r, one * 10 + four)

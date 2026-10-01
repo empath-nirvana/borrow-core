@@ -65,6 +65,19 @@ inductive Mode where
   | imm
   deriving DecidableEq, Repr, Inhabited
 
+/-- The qualifier of an operation's continuation in a row (SPEC §19): linear, affine or
+unrestricted. -/
+inductive Qual where
+  | lin
+  | aff
+  | unr
+  deriving DecidableEq, Repr, Inhabited
+
+def Qual.str : Qual → String
+  | .lin => "lin"
+  | .aff => "aff"
+  | .unr => "unr"
+
 mutual
 /-- Value types (syntax-core §4), with the built-in abbreviations as nodes of their own:
     the checker expands them. -/
@@ -140,6 +153,14 @@ inductive CTy where
   /-- `gen A B R`: `nu X. F (A * U X + (B + U X)) & F R`, a generator: `next` yields an `A`,
   finishes with `B`, or skips a step; `close` hands back `R` (`lib/gen.bc`). -/
   | gen (sp : Span) (A B R : VTy)
+  /-- `F[n.i q A ~> B, …] R`: `F_Σ R`, the row's operations stacked over `F R`.  `[spec §19]` -/
+  | eff (sp : Span) (row : Row) (A : VTy)
+
+/-- An effect row (SPEC §19): each entry the operation `i` of the handler name `n`, `A ↠^q B`.
+`[spec §19]` -/
+inductive Row where
+  | nil
+  | cons (n i : Nat) (q : Qual) (A B : VTy) (rest : Row)
 
 /-- Shapes `σ ::= leaf A | node σ σ | Name` (syntax-core §5). -/
 inductive Shape where
@@ -148,14 +169,14 @@ inductive Shape where
   | name (sp : Span) (n : String)
 end
 
-deriving instance DecidableEq for VTy, CTy, Shape
+deriving instance DecidableEq for VTy, CTy, Row, Shape
 
 /-- The expansion of `sized D S A` (SPEC §16): the data, the state, and the step, which answers
 the next data and state with an element, a skip (`inr (inl ())`) or the end (`inr (inr ())`). -/
 def VTy.sizedExpand (sp : Span) (D S A : VTy) : VTy :=
   .tensor sp D (.tensor sp S (.bang sp (.lolli sp (.tensor sp D S)
     (.tensor sp (.tensor sp D S) (.sum sp A (.sum sp (.unit sp) (.unit sp)))))))
-deriving instance Repr for VTy, CTy, Shape
+deriving instance Repr for VTy, CTy, Row, Shape
 
 /-- One bracket argument of a constant or derived form. -/
 inductive Arg where
@@ -170,6 +191,8 @@ inductive Arg where
   | op (o : HostOp)
   /-- A computation type, the `nu` type of `unfold[C, S]`. -/
   | cty (C : CTy)
+  /-- A row `[n.i q A ~> B, …]`, of an unwinding borrow constant (SPEC §19). -/
+  | row (r : Row)
   deriving DecidableEq, Repr
 
 /-- The constants of syntax-core §8 and §8a, and the derived forms of §9 that are typed
@@ -240,6 +263,16 @@ inductive Const where
   | countFold (S : VTy)
   /-- `count_try[S, E]`: the counted loop with an exit of SPEC §16. -/
   | countTry (S E : VTy)
+  /-- The unwinding borrows of SPEC §19, each at the row `r` of its callback:
+  `withbor1u['x, A, B, [r]]`, `withbor2u['x, @b, A, B, [r]]`, `withbor3u[@a, 'x, A, B, [r]]`,
+  `withloadu[@a, 'x, A, B, [r]]`, `slice_borrow_mut_u['x, @b, A, B, [r]]`,
+  `slice_borrow_imm_u['x, @b, A, B, [r]]`.  `[spec §19]` -/
+  | withbor1U (x : Ident) (A B : VTy) (r : Row)
+  | withbor2U (x : Ident) (b : Life) (A B : VTy) (r : Row)
+  | withbor3U (a : Life) (x : Ident) (A B : VTy) (r : Row)
+  | withloadU (a : Life) (x : Ident) (A B : VTy) (r : Row)
+  | sliceBorrowMutU (x : Ident) (b : Life) (A B : VTy) (r : Row)
+  | sliceBorrowImmU (x : Ident) (b : Life) (A B : VTy) (r : Row)
   deriving DecidableEq, Repr
 
 /-- A binary operator of the surface (draft 0 §2.12), resolved by the width of its operands. -/
@@ -262,6 +295,22 @@ inductive BorrowKind where
   /-- `modify m { … }`: `withswap`. -/
   | modify
   deriving DecidableEq, Repr, Inhabited
+
+/-- A handler site of a control effect, as `Frontend.Elab.Effects` leaves it for the typed
+elaboration (SPEC §19): the handler, the site's static name, its operations `(q, A, B)` in order
+(closed), the handler's type parameters still to be determined and those already known, its
+parameters, the type of its return clause's binder and its answer type (each over the type
+parameters). -/
+structure HInfo where
+  name : String
+  n : Nat
+  ents : List (Qual × VTy × VTy)
+  tps : List String
+  known : List (String × VTy)
+  params : List (String × VTy)
+  retA : VTy
+  res : VTy
+  deriving DecidableEq, Repr
 
 /-- A surface form that needs types to elaborate (docs/typed-elaboration.md §5): a leaf, applied
 to its operands as values, and elaborated to core by the typed pass of `Frontend/Sugar.lean`. -/
@@ -308,20 +357,17 @@ inductive VSugar where
   /-- A string literal `"…"`, its bytes: a `lit`, the persistent value `(n, t)` of its length and
   the function from an index to its byte. -/
   | str (bs : List Nat)
-  /-- `with h(e) { S }`: the handler `h` installed over `S` (SPEC §18), at the lifetime `'x`,
-  applied to its state (a value, or `&mut c`, the cell it is lent from) and then to the callback
-  whose parameter is the capability `S` performs its operations on. Elaborated away by
-  `Frontend.Elab.Effects` before the rest of the sugar. -/
-  | handle (h : String) (x : String)
-  /-- `try { S }` (SPEC §18): the `Fail` handler that answers `inl` the body's value or `inr` the
-  error it raised, applied to the thunk it marks. -/
-  | try_
-  /-- `catch { S } { e -> S₂ }`: the `Fail` handler that answers the body's value, or `S₂` on the
-  error it raised, applied to the body's thunk and then to the handler's callback. -/
-  | catch_
-  /-- `map_err { S } { e -> S₂ }`: the `Fail` handler that raises `S₂` on the error the body
-  raised, applied as `catch_` is. -/
-  | mapErr
+  /-- `with h[A, …](e, …) { S }`: the handler `h` installed over `S` (SPEC §18, §19), with its
+  written type arguments, applied to its arguments (a tuple, `()` with none; an answering
+  handler's one argument is its state, a value or `&mut c`) and then to the callback whose
+  parameter is the capability an answering handler's operations are performed on (`'x` its
+  lifetime). Elaborated away by `Frontend.Elab.Effects` before the rest of the sugar. -/
+  | handle (h : String) (x : String) (targs : List VTy)
+  /-- A handler site of a control effect (SPEC §19), resolved by `Frontend.Elab.Effects` and
+  assembled with its clauses where the types are known (`Frontend.Sugar`): applied to the
+  handler's arguments, its return clause, the tuple of its operation clauses and the thunk of its
+  body. -/
+  | hndCtl (info : HInfo)
   deriving DecidableEq, Repr, Inhabited
 
 mutual
@@ -406,6 +452,17 @@ inductive Comp where
   /-- `for x in V { M }; N`, at the end of a `main` with ambient capabilities, elaborated away
   before checking (SPEC §11). -/
   | for_ (sp : Span) (x : Ident) (V : Val) (M N : Comp)
+  /-- `perform[n.i] V`: the non-abortive operation `i` of the name `n` of the current row
+  (`[perform]`).  `[spec §19]` -/
+  | perform (sp : Span) (n i : Nat) (V : Val)
+  /-- `abort[n.i] V`: the abortive operation `i` of the name `n` (SPEC §19's abortive rule).  `[spec §19]` -/
+  | abort (sp : Span) (n i : Nat) (V : Val)
+  /-- `handle_with[n](hr, hc) M`: `M` under the handler of the name `n` whose answer clause is
+  the variable `hr` and whose clauses are the tuple `hc` (`[handle]`).  `[spec §19]` -/
+  | handle (sp : Span) (n : Nat) (hr hc : Ident) (M : Comp)
+  /-- `x <- M unwind (D); N` (`x : A <- …` with the annotation): `M then x. N unwind D`, the
+  finaliser `D` under one dead binder (`[then]`).  `[spec §19]` -/
+  | unwind (sp : Span) (x : Ident) (A : Option VTy) (M D N : Comp)
 end
 
 deriving instance DecidableEq for Val, Comp
@@ -423,15 +480,25 @@ inductive Mark where
   template: each use is a call of its instance at that use's types, elaborated as a `fn`. -/
   | template (m : Mark)
   /-- `fn f(…) -> T with E₁, E₂[A] = …`: a written row (SPEC §18), a promise that the inferred
-  row is within it; `Fail[E]` gives the error type. The function is marked `m` besides. -/
+  row is within it, and gives the type arguments of an effect it performs directly. The function
+  is marked `m` besides. -/
   | row (effs : List (Ident × List VTy)) (m : Mark)
   deriving DecidableEq, Repr, Inhabited
 
-/-- An operation of an `effect` declaration: `fn op(x₁: A₁, …) -> B` (SPEC §18). -/
+/-- The kind of an operation (SPEC §19): answering (`fn`), or control (`ctl`) with the structural
+qualifier of its continuation (`ctl` affine, `linear ctl`, `multi ctl` unrestricted). -/
+inductive OpKind where
+  | fn
+  | ctl (q : Qual)
+  deriving DecidableEq, Repr, Inhabited
+
+/-- An operation of an `effect` declaration: `fn op(x₁: A₁, …) -> B` or `ctl op(…) -> B`
+(SPEC §18, §19). -/
 structure OpDecl where
   name : Ident
   params : List (Ident × VTy)
   res : VTy
+  kind : OpKind
   deriving DecidableEq, Repr
 
 /-- A clause of a `handler` declaration: `op(x₁, …) -> { S }`, with the handler's state in scope
@@ -440,6 +507,23 @@ structure Clause where
   name : Ident
   params : List Ident
   body : Comp
+  deriving DecidableEq, Repr
+
+/-- A handler of a control effect (SPEC §19):
+`handler h[T, …](p: A, …) for E[A, …] with E₂[…], … -> R { return(x: A) -> M; op(x, …, k) -> N; … }`.
+`k` is the continuation of a non-abortive operation; the handler may perform the operations of
+its row `with …`. -/
+structure CHandler where
+  name : Ident
+  tps : List Ident
+  params : List (Ident × VTy)
+  eff : Ident
+  effArgs : List VTy
+  row : List (Ident × List VTy)
+  res : VTy
+  /-- The return clause: its binder, the binder's type, and its body. -/
+  ret : Ident × VTy × Comp
+  clauses : List Clause
   deriving DecidableEq, Repr
 
 /-- Declarations (syntax-core §10). -/
@@ -453,11 +537,14 @@ inductive Decl where
   | main (sp : Span) (C : CTy) (M : Comp)
   /-- `include name`: the declarations of the library module `name` (`lib/name.bc`). -/
   | include (sp : Span) (name : Ident)
-  /-- `effect E { fn op(x: A, …) -> B; … }`: an effect and its operations (SPEC §18). -/
-  | effect (sp : Span) (n : Ident) (ops : List OpDecl)
+  /-- `effect E[T, …] { fn op(x: A, …) -> B; ctl op(…) -> B; … }`: an effect, its type
+  parameters and its operations (SPEC §18, §19). -/
+  | effect (sp : Span) (n : Ident) (tps : List Ident) (ops : List OpDecl)
   /-- `handler h(s: S) for E { op(x, …) -> { M }; … }`: a handler of `E` whose state is `s : S`
   (SPEC §18). -/
   | handler (sp : Span) (n : Ident) (st : Ident) (S : VTy) (eff : Ident) (clauses : List Clause)
+  /-- A handler of a control effect (SPEC §19). -/
+  | chandler (sp : Span) (h : CHandler)
   deriving DecidableEq, Repr
 
 /-- A source file: its declarations in order. -/
@@ -515,6 +602,11 @@ def CTy.strip : CTy → CTy
   | .iter _ A R R' => .iter .none A.strip R.strip R'.strip
   | .loop _ A B => .loop .none A.strip B.strip
   | .gen _ A B R => .gen .none A.strip B.strip R.strip
+  | .eff _ r A => .eff .none r.strip A.strip
+
+def Row.strip : Row → Row
+  | .nil => .nil
+  | .cons n i q A B r => .cons n i q A.strip B.strip r.strip
 
 def Shape.strip : Shape → Shape
   | .leaf _ A => .leaf .none A.strip
@@ -571,6 +663,21 @@ def Const.strip : Const → Const
   | .sliceSwapMut a A => .sliceSwapMut a.strip A.strip
   | .countFold S => .countFold S.strip
   | .countTry S E => .countTry S.strip E.strip
+  | .withbor1U x A B r => .withbor1U x.strip A.strip B.strip r.strip
+  | .withbor2U x b A B r => .withbor2U x.strip b.strip A.strip B.strip r.strip
+  | .withbor3U a x A B r => .withbor3U a.strip x.strip A.strip B.strip r.strip
+  | .withloadU a x A B r => .withloadU a.strip x.strip A.strip B.strip r.strip
+  | .sliceBorrowMutU x b A B r => .sliceBorrowMutU x.strip b.strip A.strip B.strip r.strip
+  | .sliceBorrowImmU x b A B r => .sliceBorrowImmU x.strip b.strip A.strip B.strip r.strip
+
+/-- A surface form with the spans of its types erased. -/
+def VSugar.strip : VSugar → VSugar
+  | .handle h x As => .handle h x (As.map VTy.strip)
+  | .hndCtl i => .hndCtl { i with
+      ents := i.ents.map (fun (q, A, B) => (q, A.strip, B.strip)),
+      known := i.known.map (fun (x, A) => (x, A.strip)),
+      params := i.params.map (fun (x, A) => (x, A.strip)), retA := i.retA.strip, res := i.res.strip }
+  | s => s
 
 mutual
 def Val.strip : Val → Val
@@ -597,7 +704,7 @@ def Val.strip : Val → Val
   | .const _ c => .const .none c.strip
   | .shorten _ m σ a V => .shorten .none m σ.strip a.strip V.strip
   | .lend _ x m => .lend .none x.strip m
-  | .sugar _ s => .sugar .none s
+  | .sugar _ s => .sugar .none s.strip
 
 def Comp.strip : Comp → Comp
   | .ret _ V => .ret .none V.strip
@@ -618,6 +725,10 @@ def Comp.strip : Comp → Comp
   | .nuOut _ M => .nuOut .none M.strip
   | .ascribe _ M C => .ascribe .none M.strip C.strip
   | .for_ _ x V M N => .for_ .none x.strip V.strip M.strip N.strip
+  | .perform _ n i V => .perform .none n i V.strip
+  | .abort _ n i V => .abort .none n i V.strip
+  | .handle _ n hr hc M => .handle .none n hr.strip hc.strip M.strip
+  | .unwind _ x A M D N => .unwind .none x.strip (A.map VTy.strip) M.strip D.strip N.strip
 end
 
 def Mark.strip : Mark → Mark
@@ -633,10 +744,16 @@ def Decl.strip : Decl → Decl
   | .extern _ n A => .extern .none n.strip A.strip
   | .main _ C M => .main .none C.strip M.strip
   | .include _ n => .include .none n.strip
-  | .effect _ n ops => .effect .none n.strip (ops.map fun o =>
-      ⟨o.name.strip, o.params.map (fun (x, A) => (x.strip, A.strip)), o.res.strip⟩)
+  | .effect _ n tps ops => .effect .none n.strip (tps.map Ident.strip) (ops.map fun o =>
+      ⟨o.name.strip, o.params.map (fun (x, A) => (x.strip, A.strip)), o.res.strip, o.kind⟩)
   | .handler _ n st S e cs => .handler .none n.strip st.strip S.strip e.strip (cs.map fun c =>
       ⟨c.name.strip, c.params.map Ident.strip, c.body.strip⟩)
+  | .chandler _ h => .chandler .none
+      { name := h.name.strip, tps := h.tps.map Ident.strip,
+        params := h.params.map (fun (x, A) => (x.strip, A.strip)), eff := h.eff.strip,
+        effArgs := h.effArgs.map VTy.strip, row := h.row.map (fun (e, As) => (e.strip, As.map VTy.strip)),
+        res := h.res.strip, ret := (h.ret.1.strip, h.ret.2.1.strip, h.ret.2.2.strip),
+        clauses := h.clauses.map fun c => ⟨c.name.strip, c.params.map Ident.strip, c.body.strip⟩ }
 
 def Program.strip (p : Program) : Program := ⟨p.decls.map Decl.strip⟩
 
@@ -653,7 +770,8 @@ def Comp.span : Comp → Span
   | .ret sp _ | .bind sp _ _ _ _ _ | .force sp _ | .lam sp _ _ _ | .app sp _ _ | .with_ sp _ _
   | .proj sp _ _ | .top sp | .letUnit sp _ _ | .letPair sp _ _ _ _ | .case sp _ _ _ _ _
   | .absurd sp _ | .lamL sp _ _ _ | .inst sp _ _ | .nuIn sp _ | .nuOut sp _
-  | .ascribe sp _ _ | .for_ sp _ _ _ _ => sp
+  | .ascribe sp _ _ | .for_ sp _ _ _ _ | .perform sp _ _ _ | .abort sp _ _ _ | .handle sp _ _ _ _
+  | .unwind sp _ _ _ _ _ => sp
 
 def Life.span : Life → Span
   | .var sp _ | .top sp | .dom sp | .meet sp _ _ | .join sp _ _ => sp
@@ -666,7 +784,7 @@ def VTy.span : VTy → Span
 
 def CTy.span : CTy → Span
   | .ret sp _ | .arr sp _ _ | .amp sp _ _ | .top sp | .all sp _ _ _ | .nu sp _ _ | .name sp _
-  | .delay sp _ | .stream sp _ | .iter sp _ _ _ | .loop sp _ _ | .gen sp _ _ _ => sp
+  | .delay sp _ | .stream sp _ | .iter sp _ _ _ | .loop sp _ _ | .gen sp _ _ _ | .eff sp _ _ => sp
 
 def Shape.span : Shape → Span
   | .leaf sp _ | .node sp _ _ | .name sp _ => sp

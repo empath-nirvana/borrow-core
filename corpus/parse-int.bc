@@ -1,11 +1,11 @@
 -- P2 of `docs/strings-slices-design.md` (§1), `parse-int`: integers from text, checked. Each input
 -- line is read into a reused buffer and lent as a view; `parse_int` walks its bytes with a counted
 -- loop, widening each digit (`to_i32`) and multiplying and adding with overflow checks
--- (`mul_checked`, `add_checked`, over `i64`). An error is raised (`Fail`, SPEC §18): `inl ()` for
+-- (`mul_checked`, `add_checked`, over `i64`). An error is raised (`Fail`, `lib/fail.bc`): `inl ()` for
 -- no digits, `inr (inl b)` for the byte `b` that is not a digit, `inr (inr ())` for a value past
 -- `i32`, and an overflow of the checked operations is raised as that last (`map_err`). The loop
 -- over the digits is a counted `for` over the view; a `raise` in it leaves it by its exit. `main`
--- branches on `try`. `data` with a payload waits for stage S6, so the error is the sum itself.
+-- branches on `to_result`. `data` with a payload waits for stage S6, so the error is the sum itself.
 --
 -- Answer: on `parse-int.in`, each line's number or error (`empty`, `bad` and the byte, `overflow`),
 -- and `i32[158]`, the sum of the numbers parsed. A digit not widened, an overflow not caught or a
@@ -27,8 +27,8 @@ fn parse_int<'a>(t: text 'a) -> i32 with Fail[Err] =
     for x in t {
       let d = *x;
       if d < b'0' || b'9' < d { raise(inr (inl d)) } else { () };
-      let m = map_err { mul_checked(n, 10) } { u -> inr (inr ()) };
-      n = map_err { add_checked(m, to_i32(d) - 48) } { u -> inr (inr ()) }
+      let m = with map_err(!{ u -> inr (inr ()) }) { mul_checked(n, 10) };
+      n = with map_err(!{ u -> inr (inr ()) }) { add_checked(m, to_i32(d) - 48) }
     };
     if neg { 0 - n } else { n }
   }
@@ -44,7 +44,7 @@ main -> i32 =
   for b in bytes(&mut stdin) {
     if b == b'\n' {
       borrow imm line { v ->
-        match try { parse_int(v) } {
+        match with to_result { parse_int(v) } {
           inl n -> let stdout = put_int(stdout, n); sum = sum + n
         | inr e -> match e {
             inl u -> write_lit(&mut stdout, "empty")

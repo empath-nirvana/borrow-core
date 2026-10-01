@@ -94,6 +94,8 @@ mutual
 def inferV : Nat → Env → LifeCtx → List CVTy → Option CVTy → Val → IM TNode
   | 0, _, _, _, exp, v => pure (.mk (.val v) (tyV exp) [] [])
   | n + 1, E, Δ, T, exp, v => do
+    -- A value performs no operation: its computations are at no row, as the checker has them.
+    let E := { E with row := none }
     let node (A : Option CVTy) (ks : List TNode) : TNode := .mk (.val v) (tyV (exp <|> A)) [] ks
     match v with
     | .var _ x => pure (node (varTy E Δ T x) [])
@@ -167,9 +169,14 @@ def inferV : Nat → Env → LifeCtx → List CVTy → Option CVTy → Val → I
         | _ => (none, none)
       let w ← inferV n E Δ T eW W
       pure (node res [f, w])
-    | .inst _ V _ => do
+    | .inst _ V l => do
       let a ← inferV n E Δ T none V
-      pure (node (askV E Δ T v) [a])
+      -- `V [@]` at `all 'x < @b. A`: `A` at `@`, read off `V`'s type (the checker's synthesis
+      -- re-checks a `def`'s body at each use).
+      let direct : Option CVTy := match a.ty.v?, (E.elabL Δ l).toOption with
+        | some (.thunk (.all x _ (.ret A))), some al => some (A.instLife x al)
+        | _, _ => none
+      pure (node (direct <|> askV E Δ T v) [a])
     | .ascribe _ V A => do
       let A' := (E.elabV Δ A).toOption
       let a ← inferV n E Δ T A' V
@@ -182,17 +189,24 @@ def inferV : Nat → Env → LifeCtx → List CVTy → Option CVTy → Val → I
 def inferC : Nat → Env → LifeCtx → List CVTy → Option CCTy → Comp → IM TNode
   | 0, _, _, _, exp, m => pure (.mk (.comp m) (tyC exp) [] [])
   | n + 1, E, Δ, T, exp, m => do
+    let E := match exp with
+      | some C => E.atC C
+      | none => E
     let node (C : Option CCTy) (ks : List TNode) (bs : List Binder := []) : TNode :=
       .mk (.comp m) (tyC (exp <|> C)) bs ks
     match m with
     | .ret _ V => do
-      let e := match exp with | some (.ret A) => some A | _ => none
+      let e := match exp.bind effRow? with | some (_, A) => some A | _ => none
       let a ← inferV n E Δ T e V
       pure (node (a.ty.v?.map .ret) [a])
     | .bind _ x oA M N _ => do
       let A' := oA.bind fun A => (E.elabV Δ A).toOption
-      let hd ← inferC n E Δ T (A'.map .ret) M
-      let A := A' <|> (match hd.ty.c? with | some (.ret A) => some A | _ => none)
+      let hd ← inferC n E Δ T (A'.map (effOf (E.row.getD []))) M
+      let A := A' <|> (match hd.ty.c?.bind effRow? with | some (_, A) => some A | _ => none)
+      -- A head that performs operations puts the rest at the row (SPEC §19).
+      let E := match hd.ty.c?.bind effRow? with
+        | some (o :: os, _) => if E.row.isNone then { E with row := some (o :: os) } else E
+        | _ => E
       -- A head that lends a place hands it back first: `x` is the second component (SPEC §11).
       let headLends := match M with | .ret _ V => valLends V | _ => false
       let A := if oA.isSome || !headLends then A else match A with
@@ -251,7 +265,11 @@ def inferC : Nat → Env → LifeCtx → List CVTy → Option CCTy → Comp → 
         | _ => (none, none)
       let bx ← mkBinder x.name A
       let m₁ ← inferC n (E.push (some x.name)) Δ (slot A :: T) exp M
-      let C := exp <|> m₁.ty.c?
+      -- At a row (SPEC §19), the second arm is at the row too: the first may be pure, or an abort.
+      let lift (C : CCTy) : CCTy := match effRow? C, E.row with
+        | some (_, A), some S@(_ :: _) => effOf S A
+        | _, _ => C
+      let C := exp <|> m₁.ty.c?.map lift
       let byy ← mkBinder y.name B
       let m₂ ← inferC n (E.push (some y.name)) Δ (slot B :: T) C N
       pure (node (C <|> m₂.ty.c?) [a, m₁, m₂] [bx, byy])
@@ -286,6 +304,36 @@ def inferC : Nat → Env → LifeCtx → List CVTy → Option CCTy → Comp → 
       let body ← inferC n (E.push (some x.name)) Δ (.unit :: T) none M
       let rest ← inferC n E Δ T exp N
       pure (node none [a, body, rest] [bx])
+    | .perform sp k i V => do
+      let o := (findOp E sp "perform" k i).toOption
+      let a ← inferV n E Δ T (o.map (·.2.1.A)) V
+      pure (node (o.map fun ⟨S, o, _⟩ => effOf S o.B) [a])
+    | .abort sp k i V => do
+      let o := (findOp E sp "abort" k i).toOption
+      let a ← inferV n E Δ T (o.map (·.2.1.A)) V
+      pure (node (o.map fun ⟨S, _, _⟩ => effOf S .zero) [a])
+    | .handle _ k hr hc M => do
+      let ty (x : Ident) : Option CVTy := (lookupVar x.name E.vars).bind (T[·]?)
+      let sig : Option (CRow × CVTy × CVTy × List (CQual × CVTy × CVTy)) := do
+        let ⟨S, A, R, _⟩ ← retRead (← ty hr)
+        let ⟨Es, _⟩ ← clausesRead S R (← ty hc)
+        pure (S, A, R, Es)
+      let e := sig.map fun (S, A, _, Es) =>
+        effOf (BoCa.Fig16.LogRel.Core.Row.ofEff (UInt32.ofNat k) Es 0 ++ S) A
+      let a ← inferC n E Δ T e M
+      pure (node (sig.map fun (S, _, R, _) => effOf S R) [a])
+    | .unwind _ x oA M D N => do
+      let A' := oA.bind fun A => (E.elabV Δ A).toOption
+      let hd ← inferC n E Δ T (A'.map (effOf (E.row.getD []))) M
+      let hr := hd.ty.c?.bind effRow?
+      let A := A' <|> hr.map (·.2)
+      let S := E.row <|> hr.map (·.1)
+      let E := { E with row := S }
+      let b ← mkBinder x.name A
+      let d ← inferC n (E.push none) Δ (.unit :: T)
+        (S.map fun S => effOf (BoCa.Fig16.LogRel.Core.Row.abortOnly S) .unit) D
+      let rest ← inferC n (E.push (some x.name)) Δ (slot A :: T) exp N
+      pure (node rest.ty.c? [hd, d, rest] [b])
 end
 
 /-! ### Programs -/
@@ -296,7 +344,7 @@ def externsBefore (ds : Array Decl) (upto : Nat) : List (String × CVTy) :=
   (List.range upto).foldl (init := []) fun acc k =>
     match (ds[k]? : Option Decl) with
     | some (.extern _ n A) =>
-      match (⟨⟨ds, k⟩, [], [], [], [], 0⟩ : Env).elabV LifeCtx.empty A with
+      match (⟨⟨ds, k⟩, [], [], [], [], 0, none⟩ : Env).elabV LifeCtx.empty A with
       | .ok A' => acc ++ [(n.name, A')]
       | .error _ => acc
     | _ => acc
@@ -308,13 +356,13 @@ def inferDecl (ds : Array Decl) (k : Nat) : Decl → IM TDecl
     let xs := externsBefore ds k
     let T := (xs.map (·.2)).reverse
     let vars := (xs.map (fun (x, B) => if B.persistent then some x else none)).reverse
-    let E : Env := Env.mk ⟨ds, k⟩ vars [] [] [] xs.length
+    let E : Env := Env.mk ⟨ds, k⟩ vars [] [] [] xs.length none
     let A' := (E.elabV LifeCtx.empty A).toOption
     pure (.def_ sp n A (← inferV inferFuel E LifeCtx.empty T A' V) mk)
   | .main sp C M => do
     let xs := externsBefore ds ds.size
     let T := (xs.map (·.2)).reverse
-    let E : Env := Env.mk ⟨ds, k⟩ (xs.map (some ·.1)).reverse [] [] [] xs.length
+    let E : Env := Env.mk ⟨ds, k⟩ (xs.map (some ·.1)).reverse [] [] [] xs.length none
     let C' := (E.elabC LifeCtx.empty C).toOption
     pure (.main sp C (← inferC inferFuel E LifeCtx.empty T C' M))
   | d => pure (.plain d)

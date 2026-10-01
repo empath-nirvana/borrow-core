@@ -169,6 +169,10 @@ structure Env where
   own : List Bool
   /-- The number of extern slots, at the end of `vars` (SPEC §11). -/
   nExt : Nat
+  /-- The current row (SPEC §19): the row of the returner chain `F_Σ B` the computation being
+  checked has, set where a computation is checked against one; `none` in a value, where a
+  computation is synthesized with no type expected. `[spec §19]` -/
+  row : Option CRow
 
 /-- The depth bound for elaborating a type. -/
 def tyFuel : Nat := 65536
@@ -179,11 +183,100 @@ def Env.elabC (E : Env) (Δ : LifeCtx) (C : CTy) : Except Error CCTy := Frontend
 def Env.elabS (E : Env) (Δ : LifeCtx) (σ : Shape) : Except Error CShape :=
   Frontend.Check.elabS tyFuel (E.tyEnv Δ) σ
 def Env.elabL (E : Env) (Δ : LifeCtx) (a : Life) : Except Error CLife := elabLife Δ E.lenv a
+def Env.elabRow (E : Env) (Δ : LifeCtx) (sp : Span) (r : Row) : Except Error CRow :=
+  Frontend.Check.elabRow tyFuel (E.tyEnv Δ) sp r
 
 /-- Types and lifetimes in messages, with the lifetime names in scope. -/
 def Env.ppV (E : Env) (A : CVTy) : String := Frontend.Check.ppV E.lenv 0 0 A
 def Env.ppC (E : Env) (C : CCTy) : String := Frontend.Check.ppC E.lenv 0 C
 def Env.ppL (E : Env) (a : CLife) : String := ppLifeP E.lenv 1 a
+
+/-! ### Rows  `[spec §19]` -/
+
+/-- `C` as a returner chain `F_Σ A`: its row and answer. -/
+def effRow? : CCTy → Option (CRow × CVTy)
+  | .ret A => some ([], A)
+  | .eff n i q A B C => (effRow? C).map fun (S, R) => (⟨n, i, q, A, B⟩ :: S, R)
+  | _ => none
+
+/-- The environment of a computation checked against `C`: the row of `C` when it is a returner
+chain.  `[spec §19]` -/
+def Env.atC (E : Env) (C : CCTy) : Env :=
+  match effRow? C with
+  | some (S, _) => { E with row := some S }
+  | none => E
+
+/-- A value: nothing owed, and no row. -/
+def Env.forVal (E : Env) : Env := { E with own := [], row := none }
+
+def ppRow (E : Env) (S : CRow) : String :=
+  "[" ++ ", ".intercalate (S.map fun o =>
+    s!"{o.n}.{o.i} {qualStr o.q} {E.ppV o.A} ~> {E.ppV o.B}") ++ "]"
+
+theorem Row.weak_of_unr {S : CRow} (h : S.Unr) : S.Weak := by
+  obtain ⟨o, ho, hq⟩ := h
+  exact ⟨o, ho, by rw [hq]; decide⟩
+
+/-- The operation `k.i` of the current row, found as itself. -/
+def findOp (E : Env) (sp : Span) (what : String) (k i : Nat) :
+    Except Error (Σ S : CRow, {o : COpSig // BoCa.Fig16.LogRel.Core.Row.find S o.n o.i = some o}) :=
+  match E.row with
+  | none => throw ⟨sp, s!"`{what}[{k}.{i}]` is not checked at a row: its type is not known " ++
+      "to be `F[…] A`; ascribe the computation"⟩
+  | some S =>
+    if k < 2 ^ 32 ∧ i < 2 ^ 32 then
+      match h : BoCa.Fig16.LogRel.Core.Row.find S (UInt32.ofNat k) (UInt32.ofNat i) with
+      | some o =>
+        have hm := BoCa.Fig16.LogRel.Core.Row.find_mem h
+        pure ⟨S, o, by rw [hm.2.1, hm.2.2]; exact h⟩
+      | none => throw ⟨sp, s!"the operation {k}.{i} is not in the row `{ppRow E S}`"⟩
+    else throw ⟨sp, s!"the operation {k}.{i}: a name and an index are below 2^32"⟩
+
+/-- `κ`'s type `kTy S R q B`, read back: the qualifier and the operation's answer. -/
+def kRead : CVTy → Option (CQual × CVTy)
+  | .thunk (.amp (.arr B _) .top) => some (.lin, B)
+  | .thunk (.amp (.arr B _) _) => some (.aff, B)
+  | .bang (.thunk (.amp (.arr B _) _)) => some (.unr, B)
+  | _ => none
+
+/-- The operations a clause's type may be the type of: a control operation `A ↠^q B` (its
+argument `A ⊗ κ`), then an abortive one `A ↠^aff 0`. -/
+def clauseCands : CVTy → List (CQual × CVTy × CVTy)
+  | .bang (.thunk (.arr (.tensor A K) _)) =>
+      (match kRead K with | some (q, B) => [(q, A, B)] | none => []) ++
+        [(.aff, .tensor A K, .zero)]
+  | .bang (.thunk (.arr A _)) => [(.aff, A, .zero)]
+  | _ => []
+
+/-- The first candidate whose clause type is `c`. -/
+def firstClause (S : CRow) (R c : CVTy) :
+    List (CQual × CVTy × CVTy) → Option {e // BoCa.Fig16.LogRel.Core.clauseTy S R e = c}
+  | [] => none
+  | e :: es => if h : BoCa.Fig16.LogRel.Core.clauseTy S R e = c then some ⟨e, h⟩
+      else firstClause S R c es
+
+/-- The operations `E` of a handler read back from the type of its clauses' tuple, with
+`clausesTy S R E` that type. An abortive operation is read as affine: `aff` and `unr` give it
+the same clause type. -/
+def clausesRead (S : CRow) (R : CVTy) :
+    (Tc : CVTy) → Option {E // BoCa.Fig16.LogRel.Core.clausesTy S R E = Tc}
+  | .unit => some ⟨[], rfl⟩
+  | .tensor c rest => do
+    let ⟨e, he⟩ ← firstClause S R c (clauseCands c)
+    let ⟨E, hE⟩ ← clausesRead S R rest
+    pure ⟨e :: E, by simp only [BoCa.Fig16.LogRel.Core.clausesTy, he, hE]⟩
+  | _ => none
+
+/-- `h_ret`'s type `!U(A -o F_S R)` read back. -/
+def retRead (Tr : CVTy) :
+    Option (Σ' (S : CRow) (A R : CVTy), BoCa.Fig16.LogRel.Core.retTy S A R = Tr) :=
+  match Tr with
+  | .bang (.thunk (.arr A C)) =>
+    match effRow? C with
+    | some (S, R) =>
+      if h : BoCa.Fig16.LogRel.Core.retTy S A R = .bang (.thunk (.arr A C)) then some ⟨S, A, R, h⟩ else none
+    | none => none
+  | _ => none
 
 /-! ### Messages -/
 
@@ -245,8 +338,20 @@ variable {Δ : LifeCtx} {T : List CVTy}
 def convV (E : Env) (sp : Span) (A : CVTy) : (Σ B : CVTy, Res Δ T (.val B)) → Except Error (Res Δ T (.val A))
   | ⟨B, r⟩ => if h : B = A then pure (h ▸ r) else throw (mismatch sp (E.ppV A) (E.ppV B))
 
+/-- A computation of `D` at `C`: equal, or `F_Σ′ A` within `F_Σ A` by `[sub]` (SPEC §19). -/
 def convC (E : Env) (sp : Span) (C : CCTy) : (Σ D : CCTy, Res Δ T (.comp D)) → Except Error (Res Δ T (.comp C))
-  | ⟨D, r⟩ => if h : D = C then pure (h ▸ r) else throw (mismatch sp (E.ppC C) (E.ppC D))
+  | ⟨D, r⟩ =>
+    if h : D = C then pure (h ▸ r) else
+    match effRow? D, effRow? C with
+    | some (S', A'), some (S, _) =>
+      if hD : effOf S' A' = D then
+        if hC : effOf S A' = C then
+          if hle : rowLeB S' S = true then pure (hC ▸ rEffSub hle (hD ▸ r))
+          else throw ⟨sp, s!"type mismatch: expected `{E.ppC C}`, but this has type " ++
+            s!"`{E.ppC D}`: its row `{ppRow E S'}` is not within `{ppRow E S}`"⟩
+        else throw (mismatch sp (E.ppC C) (E.ppC D))
+      else throw (mismatch sp (E.ppC C) (E.ppC D))
+    | _, _ => throw (mismatch sp (E.ppC C) (E.ppC D))
 
 def popL {A : CVTy} {P : List Bool → Prop} (E : Env) (sp : Span) (x : String) (F : Fam (A :: T) P)
     (lin : Bool := false) : Except Error (Fam T (fun L => P (true :: L))) :=
@@ -285,6 +390,8 @@ def Env.pushOwn (E : Env) (x : String) (A : CVTy) (lin : Bool := false) : Env :=
 /-- Nothing owed: a value, or a computation that is not in tail position. -/
 def Env.clearOwn (E : Env) : Env := { E with own := [] }
 
+
+
 /-- What is still owed after the slots `u` are consumed. -/
 def Env.minus (E : Env) (u : List Bool) : Env := { E with own := andL E.own (u.map (! ·)) }
 
@@ -302,7 +409,7 @@ def Env.forDef (E : Env) (T : List CVTy) (d : DefInfo) (tps : List (String × CV
   let n := E.vars.length
   let vars := (List.range n).map fun i =>
     if n ≤ i + E.nExt && (T[i]?.map (·.persistent)).getD false then E.vars.getD i none else none
-  ⟨d.scope, vars, [], tps, [], E.nExt⟩
+  ⟨d.scope, vars, [], tps, [], E.nExt, none⟩
 
 def inDef (x : String) (sp : Span) (e : Error) : Error :=
   { e with msg := s!"{e.msg}\n  in the body of `{x}`, used at {sp.start.render}" }
@@ -349,13 +456,16 @@ def mentionsC (x : String) : Comp → Bool
   | .case _ V y M z N => mentionsV x V || (y.name != x && mentionsC x M) ||
       (z.name != x && mentionsC x N)
   | .for_ _ y V M N => mentionsV x V || (y.name != x && mentionsC x M) || mentionsC x N
+  | .perform _ _ _ V | .abort _ _ _ V => mentionsV x V
+  | .handle _ _ hr hc M => hr.name == x || hc.name == x || mentionsC x M
+  | .unwind _ y _ M D N => mentionsC x M || mentionsC x D || (y.name != x && mentionsC x N)
 end
 
 /-- A path's terminal computation: every form except those that pass what is owed on to a tail
 position (`x <- M; N`, `let`, `case`, `<M, N>`, `fun`, `Fun`, `nu_in`, an ascription). -/
 def _root_.Frontend.Comp.terminal : Comp → Bool
   | .bind .. | .letUnit .. | .letPair .. | .case .. | .with_ .. | .lam .. | .lamL ..
-  | .nuIn .. | .ascribe .. => false
+  | .nuIn .. | .ascribe .. | .unwind .. => false
   | _ => true
 
 /-- The slots to drop before a terminal computation: owed, and neither used nor absorbed by it. -/
@@ -448,6 +558,117 @@ def funIt {v : LifeVar} {bl : CLife} {C : CCTy} (E : Env) (T : List CVTy) (sp : 
         | none => throw ⟨sp, "internal error: Fun"⟩
     else throw ⟨sp, s!"`Fun '{name}`: its number {ppLVar v} occurs in a bound of the lifetime context"⟩
   else throw ⟨sp, s!"`Fun '{name}`: its bound mentions its own number {ppLVar v}"⟩
+
+/-! ### Effectful bindings  `[spec §19]` -/
+
+/-- A computation at the row `S′`, at the row `S` by `[sub]`. -/
+def liftRow (E : Env) (sp : Span) {S' : CRow} {A : CVTy} (S : CRow)
+    (r : Res Δ T (.comp (effOf S' A))) : Except Error (Res Δ T (.comp (effOf S A))) :=
+  if hle : rowLeB S' S = true then pure (rEffSub hle r)
+  else throw ⟨sp, s!"this computation performs the operations `{ppRow E S'}`, which are not " ++
+    s!"within the row `{ppRow E S}` here"⟩
+
+/-- A synthesized computation at the row `S`: a returner chain within it. -/
+def atRow (E : Env) (sp : Span) (S : CRow) :
+    (Σ C : CCTy, Res Δ T (.comp C)) → Except Error (Σ B : CVTy, Res Δ T (.comp (effOf S B)))
+  | ⟨C, r⟩ =>
+    match effRow? C with
+    | some (S', B) =>
+      if hC : effOf S' B = C then do pure ⟨B, ← liftRow E sp S (hC ▸ r)⟩
+      else throw ⟨sp, "internal error: a returner chain"⟩
+    | none => throw ⟨sp, s!"after a computation that performs operations, this must have a " ++
+        s!"type `F[…] B`, but it has type `{E.ppC C}`"⟩
+
+/-- The finaliser of an effectful binding: the destructors of the non-persistent slots `u` (the
+slots the rest of the computation uses), under the binder's dead slot, at the row's abortive
+operations. It runs when an abortive operation of the bound computation stops the rest.
+SPEC §19's drop glue: `[then]`'s `D`, inserted as SPEC §12 inserts destructors. -/
+def finalOf (E : Env) (sp : Span) (S : CRow) (u : List Bool) :
+    Except Error (Res Δ (.unit :: T) (.comp (effOf (BoCa.Fig16.LogRel.Core.Row.abortOnly S) .unit))) := do
+  let idx := (List.range T.length).filter fun i =>
+    u.getD i false && !((T[i]?.map (·.persistent)).getD true)
+  let r0 : Res Δ (.unit :: T) (.comp (.ret .unit)) := rRet rUnit
+  let r ← idx.foldlM (init := r0) fun r i => do
+    match T[i]? with
+    | some A =>
+      if hasDtorB A then dropOne sp (i + 1) r
+      else throw ⟨sp, s!"{E.slotName i}, of type `{E.ppV A}`, is live across a computation " ++
+        "that may abort, and its type has no destructor: an abortive operation of the bound " ++
+        "computation would abandon it"⟩
+    | none => throw ⟨sp, "internal error: a slot is out of range"⟩
+  pure (rEffSub (S := []) rfl r)
+
+/-- `[then]` at the row `S`: `N` (its binder closed) and the finaliser `D` at one context. -/
+def thenIt (E : Env) (sp : Span) {S : CRow} {A B : CVTy} {eN : CExpr}
+    (rM : Res Δ T (.comp (effOf S A)))
+    (FN : Fam T (fun L => CDerives Δ (mkCtx (A :: T) (true :: L)) eN (.comp (effOf S B))))
+    (rD : Res Δ (.unit :: T) (.comp (effOf (BoCa.Fig16.LogRel.Core.Row.abortOnly S) .unit))) :
+    Except Error (Res Δ T (.comp (effOf S B))) := do
+  if hNZ : Row.nzB S = true then
+    if hUq : Row.uniqB S = true then
+      let FD ← popD sp rD.F
+      if s₁ : subL FN.u (orL FD.u FD.w) = true then
+        if s₂ : subL FD.u (orL FN.u FN.w) = true then
+          let F := FN.merge FD s₁ s₂
+          let F' : Fam T (fun L => (CDerives Δ (mkCtx (A :: T) (true :: L)) eN (.comp (effOf S B)) ∧
+              CDerives Δ (mkCtx (.unit :: T) (false :: L)) rD.e
+                (.comp (effOf (BoCa.Fig16.LogRel.Core.Row.abortOnly S) .unit))) ∧
+              (S.Unr → BoCa.Fig16.LogRel.Core.Persistent (mkCtx T L))) ←
+            if hu : Row.unrB S = true then
+              if hs : usedSat isBangB T F.u = true then
+                pure ((F.restrict isBangB hs).map fun _ ⟨h, hp⟩ => ⟨h, fun _ => persistent_of hp⟩)
+              else match firstBad isBangB T F.u with
+                | some i => throw ⟨sp, s!"{E.slotName i}, of type `{E.slotTy T i}`, is used " ++
+                    s!"after an operation of the row `{ppRow E S}`, which may resume more than " ++
+                    "once: it must be a `!` type"⟩
+                | none => throw ⟨sp, "internal error: an unrestricted row"⟩
+            else pure (F.map fun _ h => ⟨h, fun hU => absurd (Row.unrB_iff.mpr hU) (by simp [hu])⟩)
+          if h : overlapOK T rM.F.u F'.u = true then
+            pure (rEffThen (Row.nzB_sound hNZ) (Row.uniqB_sound hUq) rM F' h)
+          else throw (splitErr E T sp rM.F.u F'.u)
+        else throw (mergeErr E T sp "the finaliser" "the rest" "after this computation, "
+          FD.u FD.w FN.u FN.w)
+      else throw (mergeErr E T sp "the rest" "the finaliser" "after this computation, "
+        FN.u FN.w FD.u FD.w)
+    else throw ⟨sp, s!"the row `{ppRow E S}` has an operation twice"⟩
+  else throw ⟨sp, s!"the row `{ppRow E S}` has an operation of the reserved name 0"⟩
+
+/-- `x <- M; N` whose head `M` performs operations, at the row `S` (SPEC §19). At a row with no
+weakening, or when every slot `N` uses drops (and is `!` at an unrestricted row), `[let]`;
+otherwise `[then]`, with the finaliser `finalOf`: the destructors of the slots `N` uses. -/
+def effBind (E : Env) (sp : Span) (x : Ident) (lin : Bool) {S : CRow} {A B : CVTy}
+    (rM : Res Δ T (.comp (effOf S A))) (rN : Res Δ (A :: T) (.comp (effOf S B))) :
+    Except Error (Res Δ T (.comp (effOf S B))) := do
+  let FN ← popL E x.span x.name rN.F lin
+  if hw : Row.weakB S = true then
+    let p : CVTy → Bool := fun A => dropB A && (!Row.unrB S || isBangB A)
+    if hs : usedSat p T FN.u = true then
+      let FN' := (FN.restrict p hs).map fun _ ⟨h, hp⟩ =>
+        (⟨h, fun _ s hsm hl => dropB_sound _ (by
+            have := hp s hsm hl
+            simp only [p, Bool.and_eq_true] at this
+            exact this.1),
+          fun hU s hsm hl => isBangB_sound (by
+            have := hp s hsm hl
+            simp only [p, Bool.and_eq_true, Bool.or_eq_true, Bool.not_eq_true'] at this
+            rcases this.2 with h' | h'
+            · exact absurd (Row.unrB_iff.mpr hU) (by simp [h'])
+            · exact h')⟩ :
+          CDerives Δ (mkCtx (A :: T) (true :: _)) rN.e (.comp (effOf S B)) ∧
+            (S.Weak → (mkCtx T _).Drops) ∧ (S.Unr → BoCa.Fig16.LogRel.Core.Persistent (mkCtx T _)))
+      if h : overlapOK T rM.F.u FN'.u = true then pure (rEffLet rM FN' h)
+      else throw (splitErr E T sp rM.F.u FN'.u)
+    else
+      let rD ← finalOf E sp S FN.u
+      thenIt E sp rM FN rD
+  else
+    let FN' := FN.map fun _ h =>
+      (⟨h, fun hW => absurd (Row.weakB_iff.mpr hW) (by simp [hw]),
+        fun hU => absurd (Row.weakB_iff.mpr (Row.weak_of_unr hU)) (by simp [hw])⟩ :
+        CDerives Δ (mkCtx (A :: T) (true :: _)) rN.e (.comp (effOf S B)) ∧
+          (S.Weak → (mkCtx T _).Drops) ∧ (S.Unr → BoCa.Fig16.LogRel.Core.Persistent (mkCtx T _)))
+    if h : overlapOK T rM.F.u FN'.u = true then pure (rEffLet rM FN' h)
+    else throw (splitErr E T sp rM.F.u FN'.u)
 
 end
 

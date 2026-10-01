@@ -54,10 +54,11 @@ def keywords : List String :=
     "with",
     -- terms
     "return", "force", "fun", "let", "linear", "case", "match", "borrow", "modify", "inl", "inr",
-    "if", "else", "gen", "yield", "while", "break", "continue", "clone", "try", "catch", "map_err",
+    "if", "else", "gen", "yield", "while", "break", "continue", "clone",
     "thunk", "thunkv", "unbang",
     "boxed", "unbox", "roll", "unroll", "run", "absurd",
     "nu_in", "nu_out", "delay_in", "delay_out", "stream_in", "stream_out",
+    "perform", "abort", "handle_with", "unwind",
     -- types, lifetimes, shapes
     "ref", "imm", "mut", "box", "unk", "i32", "i64", "u8", "input", "output", "mu", "all", "forall", "top", "dom",
     "block", "val", "fam", "view", "nu", "delay", "loop", "stream", "str", "iter", "leaf", "sized",
@@ -72,7 +73,8 @@ def keywords : List String :=
     "slice_borrow_mut", "slice_borrow_imm", "slice_get_mut", "slice_len_mut", "count_fold", "count_try",
     "slice_split_imm", "slice_split_mut", "slice_empty_imm", "slice_empty_mut",
     "slice_replace_mut", "slice_swap_mut",
-    "array_len", "array_get", "array_copy", "array_forget" ]
+    "array_len", "array_get", "array_copy", "array_forget",
+    "withbor1u", "withbor2u", "withbor3u", "withloadu", "slice_borrow_mut_u", "slice_borrow_imm_u" ]
 
 /-- The reserved upper-case words. -/
 def upperKeywords : List String := ["U", "F", "Fun"]
@@ -106,7 +108,7 @@ def spanChars (p : Char → Bool) : List Char → List Char × List Char
 private def twoCharSyms : List (Char × Char × String) :=
   [('-', 'o', "-o"), ('-', '>', "->"), ('<', '-', "<-"), (':', '>', ":>"), ('=', '>', "=>"),
    ('/', '\\', "/\\"), ('\\', '/', "\\/"), ('=', '=', "=="), ('!', '=', "!="), ('<', '=', "<="),
-   ('>', '=', ">="), ('&', '&', "&&"), ('|', '|', "||")]
+   ('>', '=', ">="), ('&', '&', "&&"), ('|', '|', "||"), ('~', '>', "~>")]
 
 /-- One-character symbols. -/
 private def oneCharSyms : List Char :=

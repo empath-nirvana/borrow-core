@@ -38,7 +38,7 @@ structure Report where
 /-- The depth bound for checking a term. -/
 def checkFuel : Nat := 1 <<< 20
 
-def Env.top (ds : Array Decl) (k : Nat) : Env := ⟨⟨ds, k⟩, [], [], [], [], 0⟩
+def Env.top (ds : Array Decl) (k : Nat) : Env := ⟨⟨ds, k⟩, [], [], [], [], 0, none⟩
 
 /-- The externs, in declaration order, each elaborated in the declarations before it. -/
 def externs (ds : Array Decl) : Except Error (List (String × CVTy)) :=
@@ -91,8 +91,9 @@ def checkDecl (ds : Array Decl) (k : Nat) : Decl → Except Error (String × Opt
       else
         pure (s!"def {n.name}[{", ".intercalate (ps.map (·.name))}] : checked at each use", none)
   | .include sp n => throw ⟨sp, s!"internal error: `include {n.name}` was not resolved"⟩
-  | .effect sp n _ => throw ⟨sp, s!"internal error: `effect {n.name}` was not elaborated"⟩
+  | .effect sp n _ _ => throw ⟨sp, s!"internal error: `effect {n.name}` was not elaborated"⟩
   | .handler sp n _ _ _ _ => throw ⟨sp, s!"internal error: `handler {n.name}` was not elaborated"⟩
+  | .chandler sp h => throw ⟨sp, s!"internal error: `handler {h.name.name}` was not elaborated"⟩
   | .extern _ n A => do
       let A' ← (Env.top ds k).elabV LifeCtx.empty A
       pure (s!"extern {n.name} : {ppVTy A'}", none)

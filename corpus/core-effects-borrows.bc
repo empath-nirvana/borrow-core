@@ -1,0 +1,25 @@
+-- SPEC §19's unwinding borrows of an owned source in the core text: `withbor1u` lends a cell
+-- `imm`, `slice_borrow_mut_u` lends an array as a family of `mut` leaves; each callback aborts.
+-- The finaliser of each, the source's destructor, frees the cell and the array on the unwind.
+--
+-- Answer: (inr i32[42], inr i32[43]), and `live 0`.
+
+main : F ((i32 + i32) * (i32 + i32)) =
+  hr : !U (ref i32 * i32 -o F (i32 + i32)) <- return
+    (!thunkv fun (p : ref i32 * i32) -> let (r, v) = p; return (inl v));
+  hc : !U (i32 -o F (i32 + i32)) * 1 <- return ((!thunkv fun (e : i32) -> return (inr e)), ());
+  c <- return (alloc[i32] i32[1]);
+  r1 <- handle_with[1](hr, hc) (
+    w <- return withbor1u['x, i32, i32, [1.0 aff i32 ~> 0]];
+    cb : U (forall 'x < dom. imm 'x i32 -o F[1.0 aff i32 ~> 0] (box 'x i32)) <- return
+      (thunkv Fun 'x < dom. fun (m : imm 'x i32) -> abort[1.0] i32[42]);
+    force w c cb);
+  hr2 : !U (array i32 * i32 -o F (i32 + i32)) <- return
+    (!thunkv fun (p : array i32 * i32) -> let (r, v) = p; return (inl v));
+  a <- return (array_new[i32] (i32[2], !thunkv fun (i : i32) -> return i));
+  r2 <- handle_with[1](hr2, hc) (
+    w <- return slice_borrow_mut_u['x, top, i32, i32, [1.0 aff i32 ~> 0]];
+    cb : U (forall 'x < dom. array_mut 'x i32 -o F[1.0 aff i32 ~> 0] (box 'x i32)) <- return
+      (thunkv Fun 'x < dom. fun (m : array_mut 'x i32) -> abort[1.0] i32[43]);
+    force w a cb);
+  return (r1, r2)

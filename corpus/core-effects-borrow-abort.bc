@@ -1,0 +1,17 @@
+-- SPEC §19 in the core text: an abort inside a `borrow mut` callback, caught outside. The cell `c`
+-- is lent by the unwinding borrow `withbor2u` to a callback at the row `1.0 aff i32 ~> 0`; the
+-- callback drops its borrow and aborts with `42`. The borrow ends on the way out: the finaliser,
+-- the cell's destructor, frees `c`, and `to_result` answers the error.
+--
+-- Answer: inr i32[42], and `live 0`: the cell is freed by the unwind.
+
+main : F (i32 + i32) =
+  hr : !U (ref i32 * i32 -o F (i32 + i32)) <- return
+    (!thunkv fun (p : ref i32 * i32) -> let (r, v) = p; return (inl v));
+  hc : !U (i32 -o F (i32 + i32)) * 1 <- return ((!thunkv fun (e : i32) -> return (inr e)), ());
+  c <- return (alloc[i32] i32[1]);
+  handle_with[1](hr, hc) (
+    w <- return withbor2u['x, top, i32, i32, [1.0 aff i32 ~> 0]];
+    cb : U (forall 'x < dom. mut 'x i32 -o F[1.0 aff i32 ~> 0] (box 'x i32)) <- return
+      (thunkv Fun 'x < dom. fun (m : mut 'x i32) -> abort[1.0] i32[42]);
+    force w c cb)

@@ -6,7 +6,7 @@
 -- cell whose state the handler was lent.
 effect Log { fn note(x: i32) }
 
-handler count(n: i32) for Log { note(x) -> { n = n + 1; () } }
+handler count(mut n: i32): Log = { note(x) = { n = n + 1; () } }
 
 fn swap_noted[A](a: A, b: A) -> A * A = note(1); note(2); (b, a)
 

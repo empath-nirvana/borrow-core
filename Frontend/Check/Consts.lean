@@ -20,7 +20,8 @@ open BoCa BoCa.Lifetime
 open BoCa.Fig16.LogRel.Core.Check
 open BoCa.Fig16.LogRel.Core (CDerives Jdg VFree VOutlives FShape FD₁ mutM immM formerMut formerImm d_allocS
   d_freeS withborSM_wf withborSI_wf withborM2_wf withborI2_wf shortenE_wf FamSide cbTy2 famTy2
-  plainV)
+  plainV HasDtor dtorE dtor_wf withborUE withbor1UTy withbor2UTy withbor3UTy withloadUTy
+  sliceBorrowMUTy sliceBorrowIUTy closedAt)
 
 /-! ### Fold shapes -/
 
@@ -111,12 +112,106 @@ def famSide (sp : Span) (M : CLife → CVTy → CVTy) (c x y : LifeVar) (A B T' 
       by simpa using hxy, hAx, hBx, hTx, hAy, hBy, hTy, hcbx, hcby, hinst⟩⟩
   else err sp "the callback's family is not generic in its lifetime"
 
+/-- The finaliser of an unwinding borrow: the destructor of its source, closed.  `[spec §19]` -/
+def finaliser (sp : Span) (src : CVTy) :
+    Except Error (PLift (HasDtor src ∧ closedAt 0 (dtorE src) = true)) :=
+  if h : hasDtorB src = true then
+    if hc : closedAt 0 (dtorE src) = true then pure ⟨hasDtorB_sound h, hc⟩
+    else err sp "internal error: a destructor is not closed"
+  else err sp (s!"the source `{ppVTy src}` has no destructor, so it cannot be finalised when " ++
+    "the callback aborts")
+
+/-- The row of an unwinding callback: `Row.Unwind`.  `[spec §19]` -/
+def unwindRow (sp : Span) (x : LifeVar) (S : CRow) : Except Error (PLift (S.Unwind x)) :=
+  if h : Row.unwindB S x = true then pure ⟨Row.unwindB_sound h⟩
+  else err sp ("the row of an unwinding borrow's callback has only abortive operations, of " ++
+    "names other than 0, whose arguments outlive every lifetime and do not mention its lifetime")
+
 /-- A shape all of whose leaves are plain. -/
 def plainShape (sp : Span) (s : CShape) : Except Error (PLift (s.plain = true)) :=
   if h : s.plain = true then pure ⟨h⟩
   else err sp "a block borrow needs a shape whose leaves are plain (no lifetime, no `U`)"
 
 /-! ### Constants -/
+
+/-- The unwinding borrows: each at a consumed context, its finaliser the destructor of its
+source.  `[spec §19]` -/
+def synConstU (E : Env) (Δ : LifeCtx) (T : List CVTy) (sp : Span) :
+    Const → Except Error (Σ A : CVTy, Res Δ T (.val A))
+  | .withbor1U _ A B r => do
+      let A ← E.elabV Δ A
+      let B ← E.elabV Δ B
+      let S ← E.elabRow Δ sp r
+      let x := Δ.freshVar
+      let ⟨⟨hx, h₁, h₂⟩⟩ ← freshFor sp x A B
+      let ⟨hsc⟩ ← needB sp (scopedB Δ A) s!"`{ppVTy A}` mentions a lifetime not in scope"
+      let ⟨hS⟩ ← unwindRow sp x S
+      let ⟨hdt, hdc⟩ ← finaliser sp (.ref A)
+      pure (cStrict (A := withbor1UTy x Δ.meetOfDom A B S) _ fun hd =>
+        CDerives.withbor1U x hd.toP hx (scopedB_sound hsc) h₁ h₂ hS hdc (dtor_wf hdt hd))
+  | .withbor2U _ b A B r => do
+      let b ← E.elabL Δ b
+      let A ← E.elabV Δ A
+      let B ← E.elabV Δ B
+      let S ← E.elabRow Δ sp r
+      let x := Δ.freshVar
+      let ⟨⟨hx, h₁, h₂⟩⟩ ← freshFor sp x A B
+      let ⟨hside⟩ ← outlivesWitness sp b A
+      let ⟨hS⟩ ← unwindRow sp x S
+      let ⟨hdt, hdc⟩ ← finaliser sp (.ref A)
+      pure (cStrict (A := withbor2UTy x Δ.meetOfDom A B S) _ fun hd =>
+        CDerives.withbor2U x hd.toP hx hside h₁ h₂ hS hdc (dtor_wf hdt hd))
+  | .withbor3U a _ A B r => do
+      let a ← E.elabL Δ a
+      let A ← E.elabV Δ A
+      let B ← E.elabV Δ B
+      let S ← E.elabRow Δ sp r
+      let x := Δ.freshVar
+      let ⟨⟨hx, h₁, h₂⟩⟩ ← freshFor sp x A B
+      let ⟨hS⟩ ← unwindRow sp x S
+      let ⟨hdt, hdc⟩ ← finaliser sp (.mut a A)
+      pure (cStrict (A := withbor3UTy a x Δ.meetOfDom A B S) _ fun hd =>
+        CDerives.withbor3U x hd.toP hx h₁ h₂ hS hdc (dtor_wf hdt hd))
+  | .withloadU a _ A B r => do
+      let a ← E.elabL Δ a
+      let A ← E.elabV Δ A
+      let B ← E.elabV Δ B
+      let S ← E.elabRow Δ sp r
+      let x := Δ.freshVar
+      let ⟨⟨hx, h₁, h₂⟩⟩ ← freshFor sp x A B
+      let ⟨hS⟩ ← unwindRow sp x S
+      pure (cDead (A := withloadUTy a x Δ.meetOfDom A B S) _ fun hd =>
+        CDerives.withloadU x hd hx h₁ h₂ hS)
+  | .sliceBorrowMutU _ b A B r => do
+      let b ← E.elabL Δ b
+      let A ← E.elabV Δ A
+      let B ← E.elabV Δ B
+      let S ← E.elabRow Δ sp r
+      let x := Δ.freshVar
+      let ⟨⟨_, h₁, h₂⟩⟩ ← freshFor (Δ := Δ) sp x A B
+      let ⟨hA⟩ ← outlivesWitness sp b A
+      let ⟨hB⟩ ← outlivesWitness sp b B
+      let ⟨hS⟩ ← unwindRow sp x S
+      let ⟨hdt, hdc⟩ ← finaliser sp (.fam (.ref A))
+      pure (cStrict (A := sliceBorrowMUTy x Δ.meetOfDom A B S) _ fun hd =>
+        CDerives.sliceBorrowMU x hd.toP hA hB h₁ h₂ hS hdc (dtor_wf hdt hd))
+  | .sliceBorrowImmU _ b A B r => do
+      let b ← E.elabL Δ b
+      let A ← E.elabV Δ A
+      let B ← E.elabV Δ B
+      let S ← E.elabRow Δ sp r
+      let x := Δ.freshVar
+      let ⟨⟨_, h₁, h₂⟩⟩ ← freshFor (Δ := Δ) sp x A B
+      let ⟨hsc⟩ ← needB sp (scopedB Δ A) s!"`{ppVTy A}` mentions a lifetime not in scope"
+      let ⟨hA⟩ ← outlivesWitness sp b A
+      let ⟨hB⟩ ← outlivesWitness sp b B
+      let ⟨hS⟩ ← unwindRow sp x S
+      let ⟨hdt, hdc⟩ ← finaliser sp (.fam (.ref A))
+      pure (cStrict (A := sliceBorrowIUTy x Δ.meetOfDom A B S) _ fun hd =>
+        CDerives.sliceBorrowIU x hd.toP (scopedB_sound hsc) hA hB h₁ h₂ hS hdc (dtor_wf hdt hd))
+  | _ => err sp "internal error: not an unwinding borrow"
+
+
 
 /-- The type and derivations of a constant or derived form (syntax-core §8, §8a, §9). -/
 def synConst (E : Env) (Δ : LifeCtx) (T : List CVTy) (sp : Span) :
@@ -360,6 +455,8 @@ def synConst (E : Env) (Δ : LifeCtx) (T : List CVTy) (sp : Span) :
         s!"`{ppVTy T'}` must outlive the family's outer borrow"
       pure (cStrict _ fun hd => withborI2_wf s (scopedB_sound hA) (scopedB_sound hB)
         (outlivesB_sound _ _ _ hBo) (outlivesB_sound _ _ _ hTo) hd)
+  | c@(.withbor1U ..) | c@(.withbor2U ..) | c@(.withbor3U ..) | c@(.withloadU ..)
+  | c@(.sliceBorrowMutU ..) | c@(.sliceBorrowImmU ..) => synConstU E Δ T sp c
 
 /-- The lifetime of a family at a shape: the lifetime of its first leaf. -/
 def famLife (M : Mode) : CShape → CVTy → Option CLife

@@ -3,6 +3,6 @@
 -- expect: 8:15: the operation `tick` of `Counter` is performed here, but no handler of `Counter` is in scope
 effect Counter { fn tick() -> i32 }
 
-handler count(n: i32) for Counter { tick() -> { n = n + 1; n } }
+handler count(mut n: i32): Counter = { tick() = { n = n + 1; n } }
 
 main -> i32 = tick()
