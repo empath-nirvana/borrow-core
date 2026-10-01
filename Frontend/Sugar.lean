@@ -45,7 +45,7 @@ one is adding its name here. The elaboration brings in `io`, `div` and `prelude`
 (`elaborateS`); `include m` brings in any of them. -/
 def libNames : List String :=
   ["io", "div", "prelude", "lend", "adapters", "slice", "buf", "text", "textio", "iters", "fail",
-   "yield"]
+   "yield", "rec"]
 
 /-- The directory of the library: `$BCC_LIB` when it is set; otherwise `lib/` of the checkout
 whose `.lake/build/bin/` holds the running `bcc`; otherwise `lib/` of the working directory. -/

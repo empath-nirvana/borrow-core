@@ -1,0 +1,27 @@
+-- Recursion (SPEC §20). A function that calls itself, or functions that call one another, is a
+-- recursive group: its calls of itself are its `rec` operation, which a driver handles. The
+-- default driver is `bounded`: the kernel's `bounded_fix`, a native recursion that carries a
+-- budget of depth, each call with one less. A recursion that spends the budget performs
+-- `exhausted()`, an abortive operation: it unwinds as any error does, running the finalisers of
+-- what it abandons, and a handler of `Exhausted` receives it.
+--
+-- A recursive function's row has `Exhausted` where a loop's has `div`: running it is total, and
+-- what it does at the end of its budget is the handler's choice:
+--
+-- * `on_exhausted(d)`: the body's value, or `d(())` when a recursion in it ran out;
+-- * `exhausted_to_option`: `inl` the body's value, or `inr ()`.
+--
+-- A platform with no handler of `Exhausted` around `main` rejects a recursion it does not
+-- handle, as it rejects any unhandled operation.
+
+effect Exhausted { ctl exhausted() -> never }
+
+handler on_exhausted[A](d: !(1 => A)): Exhausted, A -> A = {
+  return(a) = a;
+  exhausted() = d(())
+}
+
+handler exhausted_to_option[A]: Exhausted, A -> A + 1 = {
+  return(a) = inl a;
+  exhausted() = inr ()
+}
