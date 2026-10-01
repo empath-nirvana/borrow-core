@@ -1,0 +1,47 @@
+-- Probe P7: one depth budget shared by nested recursions, with no new constant. Each step
+-- carries a copy of its driver's remaining budget in its argument (`A = i32 * i32`, the budget
+-- first), counted down with each call of itself, as `bounded_fix` counts its own. The outer
+-- recursion drives the inner one at its own remaining budget, so the depths of the two add up to
+-- at most the outer driver's budget. A spent budget answers 1000 here (it would raise
+-- `exhausted`). `outer n` is the sum over i = n..1 of `inner i`, and `inner m = m`.
+-- Answer at budget 20, n = 4: 4+3+2+1 = 10, and the same at any budget of at least 5 (the
+-- outer level at n = 4 uses 1, its inner recursion 4). At budget 4 every inner recursion runs
+-- out one level early, and the answer is 1003 + 1002 + 1001 + 1000 = 4006.
+def inner : !U ((1 + !U (i32 * i32 -o F i32)) * (i32 * i32) -o F i32) =
+  !thunkv fun (p : (1 + !U (i32 * i32 -o F i32)) * (i32 * i32)) ->
+    let (self, bm) = p;
+    let (b, m) = bm;
+    case (unbang host[lt_s32]) (m, i32[1]) {
+      inl no -> case self {
+          inl e -> return i32[1000]
+        | inr g -> (f <- return unbang g;
+            x <- return (((unbang host[sub32]) (b, i32[1]) : i32), ((unbang host[sub32]) (m, i32[1]) : i32));
+            r <- force f x;
+            return (unbang host[add32]) (r, i32[1]))
+        }
+    | inr yes -> return i32[0]
+    }
+
+def outer : !U ((1 + !U (i32 * i32 -o F i32)) * (i32 * i32) -o F i32) =
+  !thunkv fun (p : (1 + !U (i32 * i32 -o F i32)) * (i32 * i32)) ->
+    let (self, bn) = p;
+    let (b, n) = bn;
+    case (unbang host[lt_s32]) (n, i32[1]) {
+      inl no -> case self {
+          inl e -> return i32[1000]
+        | inr g -> (bf <- return unbang bounded_fix[i32 * i32, F i32];
+            b1 <- return ((unbang host[sub32]) (b, i32[1]) : i32);
+            ia <- return (inner, (b1, (b1, n)));
+            r1 <- force bf ia;
+            f <- return unbang g;
+            x <- return (b1, ((unbang host[sub32]) (n, i32[1]) : i32));
+            r2 <- force f x;
+            return (unbang host[add32]) (r1, r2))
+        }
+    | inr yes -> return i32[0]
+    }
+
+main : F i32 =
+  bf <- return unbang bounded_fix[i32 * i32, F i32];
+  a <- return (outer, (i32[20], (i32[20], i32[4])));
+  force bf a

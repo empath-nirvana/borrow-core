@@ -1,0 +1,62 @@
+-- Probe P8: a layer as a generator transformer (Cook and Palsberg's mixin). `sum` is the
+-- generator of `sum n = n + sum (n - 1)`; it knows nothing of counting. `count_layer` maps a
+-- generator over the environment `mut 'h i32` to one that ticks the counter at every call of
+-- itself, by wrapping the self-reference before the base generator sees it. The layer is applied
+-- before the fixed point is taken, and the counter is the environment, passed to each level.
+-- Answer: sum 5 = 15, and 5 calls counted: 15 * 100 + 5 = 1505.
+def count__tick : !(all 'l < top. mut 'l i32 * 1 => mut 'l i32 * i32) =
+  !thunkv Fun 'l < top.
+      return (thunkv fun (p : mut 'l i32 * 1) ->
+          let (c, u) = p;
+          let () = u;
+          w <- return withswap['l, i32, i32] c (thunkv fun (n : i32) ->
+                n <- return (unbang host[add32]) (n, i32[1]);
+                r : i32 <- return n;
+                return (n, r));
+          let (c, r) = w;
+          return (c, r))
+
+main : F i32 =
+  q <- return withbor2['h, dom, i32, i32] (alloc[i32] i32[0]) (thunkv Fun 'h < dom.
+        return (thunkv fun (c : mut 'h i32) ->
+            base : !U ((1 + !U (mut 'h i32 * i32 -o F (mut 'h i32 * i32))) * (mut 'h i32 * i32) -o F (mut 'h i32 * i32)) <- return (!thunkv fun (p : (1 + !U (mut 'h i32 * i32 -o F (mut 'h i32 * i32))) * (mut 'h i32 * i32)) ->
+                let (self, cn) = p;
+                let (c, n) = cn;
+                case (unbang host[lt_s32]) (n, i32[1]) {
+                  inl no -> case self {
+                      inl e -> return (c, i32[0])
+                    | inr g -> (f <- return unbang g;
+                        x <- return (c, ((unbang host[sub32]) (n, i32[1]) : i32));
+                        r <- force f x;
+                        let (c, s) = r;
+                        return (c, ((unbang host[add32]) (s, n) : i32)))
+                    }
+                | inr yes -> return (c, i32[0])
+                });
+            layer : !U (!U ((1 + !U (mut 'h i32 * i32 -o F (mut 'h i32 * i32))) * (mut 'h i32 * i32) -o F (mut 'h i32 * i32)) -o F (!U ((1 + !U (mut 'h i32 * i32 -o F (mut 'h i32 * i32))) * (mut 'h i32 * i32) -o F (mut 'h i32 * i32)))) <- return (!thunkv fun (s : !U ((1 + !U (mut 'h i32 * i32 -o F (mut 'h i32 * i32))) * (mut 'h i32 * i32) -o F (mut 'h i32 * i32))) ->
+                return (!thunkv fun (p : (1 + !U (mut 'h i32 * i32 -o F (mut 'h i32 * i32))) * (mut 'h i32 * i32)) ->
+                    let (self, a) = p;
+                    self2 : 1 + !U (mut 'h i32 * i32 -o F (mut 'h i32 * i32)) <- case self {
+                        inl e -> return inl e
+                      | inr g -> return inr (!thunkv fun (cn : mut 'h i32 * i32) ->
+                            let (c, n) = cn;
+                            t : mut 'h i32 * i32 <- return (unbang count__tick) ['h] (c, ());
+                            let (c, k) = t;
+                            f <- return unbang g;
+                            x <- return (c, n);
+                            force f x)
+                      };
+                    sf <- return unbang s;
+                    y <- return (self2, a);
+                    force sf y));
+            lf <- return unbang layer;
+            st <- force lf base;
+            bf <- return unbang bounded_fix[mut 'h i32 * i32, F (mut 'h i32 * i32)];
+            a <- return (st, (i32[100], (c, i32[5])));
+            res <- force bf a;
+            let (c, s) = res;
+            t : mut 'h i32 * i32 <- return (unbang count__tick) ['h] (c, ());
+            let (c, k) = t;
+            return boxed['h] ((unbang host[add32]) ((unbang host[mul32]) (s, i32[100]), (unbang host[sub32]) (k, i32[1])) : i32)));
+  let (s, v) = q;
+  return v

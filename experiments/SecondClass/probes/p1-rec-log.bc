@@ -1,0 +1,41 @@
+-- Probe P1: a recursion that uses an answering capability. The capability (`mut 'h i32`, a
+-- counter handler's state lent by `withbor2`, SPEC §18) is not captured by the step, which is `!`
+-- code: it is a component of the argument, `A = mut 'h i32 * i32`, and of the answer, so each
+-- level receives it and hands it back (`bounded_fix[mut 'h i32 * i32, F (mut 'h i32 * i32)]`).
+-- Each level calls the operation `tick` once; the call of itself is direct (no `rec` site).
+-- `SecondClass/RecLog.lean` types the same shape at the judgment.
+-- Answer: i32[6], the count after levels n = 5, 4, 3, 2, 1, 0.
+def count__tick : !(all 'l < top. mut 'l i32 * 1 => mut 'l i32 * i32) =
+  !thunkv Fun 'l < top.
+      return (thunkv fun (p : mut 'l i32 * 1) ->
+          let (c, u) = p;
+          let () = u;
+          w <- return withswap['l, i32, i32] c (thunkv fun (n : i32) ->
+                n <- return (unbang host[add32]) (n, i32[1]);
+                r : i32 <- return n;
+                return (n, r));
+          let (c, r) = w;
+          return (c, r))
+
+main : F i32 =
+  q <- return withbor2['h, dom, i32, i32] (alloc[i32] i32[0]) (thunkv Fun 'h < dom.
+        return (thunkv fun (c : mut 'h i32) ->
+            st : !U ((1 + !U (mut 'h i32 * i32 -o F (mut 'h i32 * i32))) * (mut 'h i32 * i32) -o F (mut 'h i32 * i32)) <- return (!thunkv fun (p : (1 + !U (mut 'h i32 * i32 -o F (mut 'h i32 * i32))) * (mut 'h i32 * i32)) ->
+                let (self, ca) = p;
+                let (c, n) = ca;
+                t : mut 'h i32 * i32 <- return (unbang count__tick) ['h] (c, ());
+                let (c, r) = t;
+                case (unbang host[lt_s32]) (n, i32[1]) {
+                  inl no -> case self {
+                      inl u -> return (c, r)
+                    | inr g -> (f <- return unbang g; x <- return (c, ((unbang host[sub32]) (n, i32[1]) : i32)); force f x)
+                    }
+                | inr yes -> return (c, r)
+                });
+            bf <- return unbang bounded_fix[mut 'h i32 * i32, F (mut 'h i32 * i32)];
+            a <- return (st, (i32[100], (c, i32[5])));
+            res <- force bf a;
+            let (c, r) = res;
+            return boxed['h] r));
+  let (s, v) = q;
+  return v
