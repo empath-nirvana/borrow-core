@@ -1,12 +1,16 @@
--- expect: 9:14: this generator yields `i64`, and the one it is delegated from yields `i32`
--- `yield from g` yields what `g` yields, so the two generators yield the same type.
-gen fn wide() -> i64 =
+-- expect: 12:3: `wide` performs `Yield[i64]`, but the handler of `Yield` in scope is at `Yield[i32]`
+-- A generator that calls another passes on what it yields: the callee's `yield` reaches the
+-- handler the caller's reaches, at one type. `narrow` yields `i32`, and `wide` `i64`.
+
+include yield
+
+fn wide() -> 1 with Yield[i64] =
   let x : i64 = 1;
-  yield x;
+  yield(x);
   ()
 
-gen fn narrow() -> i32 =
-  yield from wide();
+fn narrow() -> 1 with Yield[i32] =
+  wide();
   ()
 
 main -> i32 =

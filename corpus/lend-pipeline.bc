@@ -12,6 +12,8 @@
 -- 64, 81, 100, so the sum is 355 + 6. A filter that kept everything gives 395; a body that read
 -- the table at the element before squaring gives 51.
 
+include yield
+
 fn tab(i: i32) -> i32 = i + 1
 
 -- The entry at `i`, or 0 out of range.
@@ -21,17 +23,17 @@ def get : !(all 'a < top. imm 'a (array i32) * i32 => i32) =
     withload['a, 'z, array i32, i32] b (thunkv Fun 'z < dom. return (thunkv fun (xs : array_imm 'z i32) ->
       match array_get['z, i32] (xs, i) { inl e -> let v = *e; boxed['z] v | inr _ -> boxed['z] 0 })))
 
-gen fn range(lo: i32, hi: i32) -> i32 =
+fn range(lo: i32, hi: i32) -> 1 with Yield[i32] =
   let mut i = lo;
-  while i < hi { yield i; i = i + 1 };
+  while i < hi { yield(i); i = i + 1 };
   ()
 
-gen fn squares(it: U (gen i32 1 1)) -> i32 =
-  for x in it { yield x * x };
+fn squares(it: U (pull i32 1 1)) -> 1 with Yield[i32] =
+  for x in it { yield(x * x) };
   ()
 
-gen fn above(n: i32, it: U (gen i32 1 1)) -> i32 =
-  for x in it { if n < x { yield x } else { () } };
+fn above(n: i32, it: U (pull i32 1 1)) -> 1 with Yield[i32] =
+  for x in it { if n < x { yield(x) } else { () } };
   ()
 
 main -> i32 =

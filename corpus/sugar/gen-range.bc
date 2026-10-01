@@ -1,16 +1,17 @@
--- A generator that is one loop (SPEC §15): `range` is the `unfold` of one step function,
--- whose first state is the parameters and whose other states are the loop's variables before
--- an iteration, or the body's rest after a `yield`, with the loop's variables inside it.
--- Observing the first state runs the code before the loop and the loop's head (`head`): the
--- condition, then the body up to its first observation. When the body's rest finishes an
--- iteration without yielding, the next observation starts the next one at once, so every
--- observation yields until the loop ends. `gen-range.core.bc` is its elaboration in core, as
--- `bcc desugar` prints it.
+-- A generator that is one loop (SPEC §14, §15): `range`'s body is a div body at the row of
+-- `Yield`, one `unfold` whose first state is the parameters and whose other state is the loop's
+-- head, holding its variables. An observation runs one turn of the loop, which performs `yield`.
+-- The `for` over `range(1, 11)` is a handler site whose operation threads `acc`, and whose clause
+-- is the loop's body: since `range` loops, the `for` runs the loop that handles each of
+-- `range`'s observations. `gen-range.core.bc` is its elaboration in core, as `bcc desugar`
+-- prints it.
 -- Answer: i32[55].
 
-gen fn range(lo: i32, hi: i32) -> i32 =
+include yield
+
+fn range(lo: i32, hi: i32) -> 1 with Yield[i32] =
   let mut i = lo;
-  while i < hi { yield i; i = i + 1 };
+  while i < hi { yield(i); i = i + 1 };
   ()
 
 main -> i32 =

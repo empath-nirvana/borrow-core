@@ -1,10 +1,11 @@
 -- check: no-source
--- Every adapter of the library (#109, `lib/adapters.bc`) that runs its source to the end, over a
--- source that fails: `upto(lo, hi, bad)` yields `lo`, `lo + 1`, … and finishes with `inl bad`
--- when it reaches `bad` (`inr ()` at `hi`), handing back `()` when closed. Each adapter finishes
--- with its source's error, bound by `let e = for …`. The adapters that stop their source
--- (`take`, `take_until`, `zip`) take one that finishes with what it hands back when closed, which
--- a failing source does not (`corpus/reject/take-failing.bc`).
+-- Every adapter of the library (`lib/adapters.bc`) that runs its source to the end, over a
+-- source that fails: `upto(lo, hi, bad)` yields `lo`, `lo + 1`, … and returns `inl bad` when it
+-- reaches `bad` (`inr ()` at `hi`), handing back `()` when stored and closed. Each adapter returns
+-- its source's error, bound by `let e = for …`. The adapters that stop their source (`take`,
+-- `take_until`, `zip`) take one that returns what it hands back when closed, which a failing
+-- source does not (`corpus/reject/take-failing.bc`). `flat_map`'s function stores the generator
+-- it makes.
 --
 -- Answer: i32[118052]: the elements, 118, and the errors, 52, one adapter per line:
 --   map, squares of upto(0, 10, 4)             0 1 4 9                 14    error 4
@@ -27,14 +28,14 @@ include adapters
 type List = mu X. 1 + (i32 * X)
 type Line = mu X. 1 + (u8 * X)
 
-gen fn upto(lo: i32, hi: i32, bad: i32) -> i32, i32 + 1 =
+fn upto(lo: i32, hi: i32, bad: i32) -> i32 + 1 with Yield[i32] =
   let mut i = lo;
-  while i < hi && i != bad { yield i; i = i + 1 };
+  while i < hi && i != bad { yield(i); i = i + 1 };
   if i == bad { (inl i : i32 + 1) } else { (inr () : i32 + 1) }
 
-gen fn range(lo: i32, hi: i32) -> i32 =
+fn range(lo: i32, hi: i32) -> 1 with Yield[i32] =
   let mut i = lo;
-  while i < hi { yield i; i = i + 1 };
+  while i < hi { yield(i); i = i + 1 };
   ()
 
 fn err(e: i32 + 1) -> i32 = match e { inl b -> b | inr u -> 0 }
@@ -62,7 +63,7 @@ main -> i32 =
   es = es + err(e);
   let e = for y in chain(upto(0, 10, 3), range(10, 12)) { t = t + y };
   es = es + err(e);
-  let e = for y in flat_map(upto(0, 10, 3), !{ n -> range(0, n) }) { t = t + y };
+  let e = for y in flat_map(upto(0, 10, 3), !{ n -> let g : U (pull i32 1 1) = range(0, n); g }) { t = t + y };
   es = es + err(e);
   let e = for y in scan(upto(1, 10, 4), 0, !{ (s, x) -> s + x }) { t = t + y };
   es = es + err(e);

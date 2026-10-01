@@ -56,16 +56,16 @@ def loop_lend_mut[A, S, B, R] :
             return (boxed['x] o))) >)));
     return (thunkv nu_in < (nu_out (force f s0)).1, (nu_out (force f s0)).2 >)
 
--- A generator lending its owner `imm` at each observation: `next` maps the borrow and the state
--- to an element with the next state, a result, or a skip with the next state.
-def gen_lend_imm[A, S, E, B, R] :
+-- A stored generator lending its owner `imm` at each observation: `next` maps the borrow and the
+-- state to an element with the next state, a result, or a skip with the next state.
+def pull_lend_imm[A, S, E, B, R] :
     (!(all 'x < top. imm 'x A * S => E * S + (B + S)) * !(all 'x < top. imm 'x A * S => R))
-    * (ref A * S) => U (gen E (ref A * B) (ref A * R)) =
+    * (ref A * S) => U (pull E (ref A * B) (ref A * R)) =
   thunkv fun (q : (!(all 'x < top. imm 'x A * S => E * S + (B + S))
                   * !(all 'x < top. imm 'x A * S => R)) * (ref A * S)) ->
     let (st, s0) = q;
     let (nx, cl) = st;
-    f <- return (unbang (unfold[gen E (ref A * B) (ref A * R), ref A * S]
+    f <- return (unbang (unfold[pull E (ref A * B) (ref A * R), ref A * S]
       (!thunkv fun (p : ref A * S) ->
         < let (r, s) = p;
           q <- return (withbor1['x, A, E * S + (B + S)] r (thunkv Fun 'x < dom. return (thunkv fun (b : imm 'x A) ->
@@ -82,15 +82,15 @@ def gen_lend_imm[A, S, E, B, R] :
             return (boxed['x] o))) >)));
     return (thunkv nu_in < (nu_out (force f s0)).1, (nu_out (force f s0)).2 >)
 
--- A generator lending its owner `mut` at each observation.
-def gen_lend_mut[A, S, E, B, R] :
+-- A stored generator lending its owner `mut` at each observation.
+def pull_lend_mut[A, S, E, B, R] :
     (!(all 'x < top. mut 'x A * S => E * S + (B + S)) * !(all 'x < top. mut 'x A * S => R))
-    * (ref A * S) => U (gen E (ref A * B) (ref A * R)) =
+    * (ref A * S) => U (pull E (ref A * B) (ref A * R)) =
   thunkv fun (q : (!(all 'x < top. mut 'x A * S => E * S + (B + S))
                   * !(all 'x < top. mut 'x A * S => R)) * (ref A * S)) ->
     let (st, s0) = q;
     let (nx, cl) = st;
-    f <- return (unbang (unfold[gen E (ref A * B) (ref A * R), ref A * S]
+    f <- return (unbang (unfold[pull E (ref A * B) (ref A * R), ref A * S]
       (!thunkv fun (p : ref A * S) ->
         < let (r, s) = p;
           q <- return (withbor2['x, top, A, E * S + (B + S)] r (thunkv Fun 'x < dom. return (thunkv fun (m : mut 'x A) ->

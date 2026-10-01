@@ -1,9 +1,11 @@
--- expect: 5:23: `break` is outside every loop
--- `break` leaves the innermost loop; outside every loop of a generator's body there is none.
--- `return` finishes the generator from anywhere.
-gen fn first(n: i32) -> i32 =
-  if n < 0 { yield 0; break } else { () };
-  yield n
+-- expect: 6:24: `break` is outside every loop
+-- `break` leaves the innermost loop; outside every loop of a function's body there is none.
+
+include yield
+
+fn first(n: i32) -> 1 with Yield[i32] =
+  if n < 0 { yield(0); break } else { () };
+  yield(n)
 
 main -> i32 =
   let mut acc = 0;

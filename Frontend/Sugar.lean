@@ -418,7 +418,10 @@ def sumTys (c : TCx) (V : Val) : Option CVTy × Option CVTy :=
 
 /-- A call found in a value, described. -/
 def callMsg (sp : Span) : Option String → Span × String
-  | some f => (sp, s!"it calls the div function `{f}`")
+  | some f =>
+    -- The loop a `for` over a generator whose body loops runs (`forYield`).
+    if f.startsWith "io_hwf" then (sp, "it has a `for` over a generator whose body loops")
+    else (sp, s!"it calls the div function `{(f.splitOn "__").headD f}`")
   | none => (sp, "it calls a div function")
 
 /-- A call run in direct style in a bound or returned value: at its top (reported at the
@@ -3750,6 +3753,11 @@ def surfDecl : Nat → Decl → DM Decl
     -- A `return` in a loop's body returns from the function: its loop is moved onto the body's
     -- spine, so that what follows the loop is the rest of the body (`forData`).
     let V ← (mapFnBody (fun M => if M.hasRet then normExits divFuel M else pure M) V : Except Error Val)
+    -- A `break` on the body's spine, outside every loop.
+    discard <| (mapFnBody (fun M => do
+      let M ← normExits divFuel M
+      if let some bsp := M.spineBreak then throw ⟨bsp, "`break` is outside every loop"⟩
+      pure M) V : Except Error Val)
     set { st with exits := [] }
     let V' ← surfV n c (c.elabV A) V
     pure (.def_ sp nm ps A V' mk)
@@ -3962,7 +3970,9 @@ def genericCall : Nat → TCx → Span → Option CVTy → Val → Val → Optio
             let written : String := match (tyW.bind paramTy).map (argComps · W) with
               | some cs => ((cs[k]?).map fun (q : VTy × Val) => q.1.pp).getD (ppT (m.solved Pi))
               | none => ppT (m.solved Pi)
-            throw ⟨Wi.span, s!"this argument of `{fname}` has type `{ppT T}`, which is not " ++
+            -- A copy made for the handlers of its effects is named for the function it copies.
+            let shown := (fname.splitOn "__").headD fname
+            throw ⟨Wi.span, s!"this argument of `{shown}` has type `{ppT T}`, which is not " ++
               s!"`{written}`"⟩
         args := args.set! k (some Wi')
         tys := tys.set! k (some T)

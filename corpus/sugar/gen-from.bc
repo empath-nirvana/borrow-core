@@ -1,18 +1,19 @@
--- `yield from` (#109): `around` yields 0, then everything `two` yields, then what `two` finished
--- with. `x <- yield from g; N` is a state of the generator's machine (SPEC §15) that holds `g`:
--- each observation there observes `g`, and when `g` finishes, binds `x` to what it finishes with
--- and runs `N`. `gen-from.core.bc` is the program written by hand in core.
+-- Delegation: `around` yields 0, then everything `two` yields, then what `two` returned. A call
+-- of a generator passes on what it yields: `two`'s copy is made for the site `around`'s is.
+-- `gen-from.core.bc` is its elaboration in core, as `bcc desugar` prints it.
 -- Answer: i32[1256]: the elements 0, 1, 2, 5 read as digits, then `around`'s value 6.
 
-gen fn two() -> i32, i32 =
-  yield 1;
-  yield 2;
+include yield
+
+fn two() -> i32 with Yield[i32] =
+  yield(1);
+  yield(2);
   5
 
-gen fn around() -> i32, i32 =
-  yield 0;
-  let n = yield from two();
-  yield n;
+fn around() -> i32 with Yield[i32] =
+  yield(0);
+  let n = two();
+  yield(n);
   n + 1
 
 main -> i32 =

@@ -1,8 +1,11 @@
--- expect: 10:34: `break e` gives the value of a `for` whose value is bound: `let r = for x in … { … }; …`
+-- expect: 12:34: `break e` gives the value of a `for` whose value is bound: `let r = for x in … { … }; …`
 -- `break e` gives a value to the loop it leaves; a `for` that is a statement has none to give.
-gen fn upto(n: i32) -> i32, i32 =
+
+include yield
+
+fn upto(n: i32) -> i32 with Yield[i32] =
   let mut i = 0;
-  while i < n { yield i; i = i + 1 };
+  while i < n { yield(i); i = i + 1 };
   n
 
 main -> i32 =

@@ -1,9 +1,11 @@
--- A call of a div function in direct style inside a generator (#109): `collatz` is a loop (its
--- type says so), and `steps` calls it in direct style. In a generator the loop runs inside the
--- generator, held in a state of its machine (SPEC §15), each of its turns a skip, so every
--- observation of `steps` stays total; when it finishes, the rest of the body runs with its result.
+-- A call of a div function in direct style inside a generator: `collatz` is a loop (its type says
+-- so), and `steps` calls it in direct style. The generator's body is a div body at the row of
+-- `Yield`: the loop runs inside it, held in a state of its machine (SPEC §14), one turn per
+-- observation; when it finishes, the rest of the body runs with its result.
 -- `gen-div.core.bc` is its elaboration in core, as `bcc desugar` prints it.
 -- Answer: i32[111], the Collatz steps from 27.
+
+include yield
 
 -- One step from `(n, k)`: `k` steps so far.
 def collatz_step : !U (i32 * i32 -o F (i32 + (i32 * i32)) & F 1) =
@@ -28,9 +30,9 @@ def collatz : i32 => U (loop i32 1) =
     s0 : i32 * i32 <- return (n, i32[0]);
     return (thunkv nu_in < (nu_out (force f s0)).1, (nu_out (force f s0)).2 >)
 
-gen fn steps(n: i32) -> i32 =
+fn steps(n: i32) -> 1 with Yield[i32] =
   let k = collatz(n);
-  yield k;
+  yield(k);
   ()
 
 main -> i32 =
