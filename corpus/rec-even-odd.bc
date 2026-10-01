@@ -1,0 +1,13 @@
+-- Mutual recursion (SPEC §20): `even` and `odd` call one another, so they are one recursive
+-- group with one `rec`, its argument tagged by the member called. Each call is in tail position,
+-- and each runs as a native call at one less of the budget.
+--
+-- Answer: (inr (), inl ()): `even(100)` is true and `odd(8)` is false (`bool` is `1 + 1`, `inr ()`
+-- true). A group that called the wrong member gives the opposite.
+
+include rec
+
+fn even(n: i32) -> bool = if n == 0 { true } else { odd(n - 1) }
+fn odd(n: i32) -> bool = if n == 0 { false } else { even(n - 1) }
+
+main -> bool * bool = with on_exhausted(!{ u -> (false, false) }) { (even(100), odd(8)) }

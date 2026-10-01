@@ -1,0 +1,9 @@
+-- expect: 9:15: `fib` performs `Exhausted`, but no handler of `Exhausted` is in scope here
+-- A recursion's row has `Exhausted` (SPEC §20), and a platform with no handler of it around
+-- `main` rejects a recursion it does not handle, as it rejects any unhandled operation.
+
+include rec
+
+fn fib(n: i32) -> i32 = if n < 2 { n } else { fib(n - 1) + fib(n - 2) }
+
+main -> i32 = fib(10)

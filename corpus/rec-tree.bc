@@ -1,0 +1,27 @@
+-- A recursive walk of a `mu` type (SPEC §20): `build` makes a complete tree, `sum` adds its
+-- values, each by calling itself on the subtrees. Both are driven by `bounded`, natively: the
+-- run allocates the tree's own objects and nothing else, two per node (the node and the boxed
+-- empty subtree beside it, SPEC §6's boxed fields) less the root's, and dispatches no call.
+--
+-- Answer: i32[8128]: the 127 nodes of a tree of depth 7, numbered 1 to 127 as a heap numbers
+-- them, sum to 127 * 128 / 2. A walk that skipped a subtree gives less; one that visited a node
+-- twice gives more.
+
+include rec
+
+type Tree = mu X. 1 + (X * (i32 * X))
+
+def empty : Tree = roll inl ()
+fn mk(l: Tree, v: i32, r: Tree) -> Tree = roll inr (l, (v, r))
+
+-- A complete tree of depth `d` whose root is `k`, its children `2k` and `2k + 1`.
+fn build(d: i32, k: i32) -> Tree =
+  if d == 0 { empty } else { mk(build(d - 1, 2 * k), k, build(d - 1, 2 * k + 1)) }
+
+fn sum(t: Tree) -> i32 =
+  match unroll t {
+    inl u -> 0
+  | inr (l, p) -> let (v, r) = p; sum(l) + v + sum(r)
+  }
+
+main -> i32 = with on_exhausted(!{ u -> 0 - 1 }) { sum(build(7, 1)) }

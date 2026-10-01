@@ -577,14 +577,23 @@ def resumeOrCancel? (c : Code) : Bool := Id.run do
     | _ => false
   return resOk && canOk
 
-/-- `t` with the binding `let cv = clos _ _` removed and the frame `ubind cv cv M` replaced by `M`. -/
-def Tm.dropUbind (cv : Var) : Tm → Tm
-  | .letv x e b =>
-    if x == cv then b.dropUbind cv else .letv x (e.dropUbind cv) (b.dropUbind cv)
-  | .ubind nn dd m => if nn == cv && dd == cv then m else .ubind nn dd m
-  | .letpair x z p b => .letpair x z p (b.dropUbind cv)
-  | .copy x x' b => .copy x x' (b.dropUbind cv)
-  | .drop x b => .drop x (b.dropUbind cv)
+/-- The finaliser frame `let cv = clos sc [k']; let r = fin cv M; let i = inj₁ r; cv i` at the tail
+of `t`, as `handlers` leaves `M then b. N unwind D` with its clauses one code (`markUbinds`):
+`cv`, `sc`, `k'` and `M`. -/
+def finTail? : Tm → Option (Var × Nat × Var × Tm)
+  | .letv cv (.clos sc [k']) (.letv r (.fin false dd M) (.letv i (.inj false r') (.letv d' (.var dd') (.app d'' i')))) =>
+    if dd == cv && dd' == cv && r' == r && d'' == d' && i' == i then some (cv, sc, k', M) else none
+  | .letv _ _ b | .letpair _ _ _ b | .copy _ _ b | .drop _ b => finTail? b
+  | _ => none
+
+/-- `t` with its tail frame (`finTail?`) replaced by its body `M`. -/
+def Tm.dropFin : Tm → Tm
+  | t@(.letv cv (.clos _ [_]) (.letv _ (.fin false _ M) _)) =>
+    if (finTail? t).isSome then M else t
+  | .letv x e b => .letv x e b.dropFin
+  | .letpair x z p b => .letpair x z p b.dropFin
+  | .copy x x' b => .copy x x' b.dropFin
+  | .drop x b => .drop x b.dropFin
   | t => t
 
 /-- The clause code `λp. let (w, k) = p; B` without `κ`, when `B` ends in the frame
@@ -595,15 +604,12 @@ own frames, which is what the cancel runs. Its argument is still the pair, with 
 def unwindClause? (codes : Array Code) (c : Code) : Option Code := do
   let .letv p' (.var p) (.letpair w k p'' B) := c.body | none
   guard (p == c.param && p' == p'' && c.env.isEmpty)
-  let .ubind nn dd _ := B.tail | none
-  guard (nn == dd)
-  let defs := defsOf {} B
-  let some (.clos sc [k']) := defs[nn]?.map Tm.tail | none
+  let (_, sc, k', _) ← finTail? B
   let ka := aliasesIn B k
   guard (ka.contains k' && occurrences B ka == ka.length)
   let some sel := codes[sc]? | none
   guard (resumeOrCancel? sel)
-  return { c with body := .letv p' (.var p) (.letpair w k p'' (.drop k (B.dropUbind nn))) }
+  return { c with body := .letv p' (.var p) (.letpair w k p'' (.drop k B.dropFin)) }
 
 /-- The codes of the clauses at index `j` of the clause tuples a key holds. -/
 def Solver.clausesAt (S : Solver) (k : Nat) : Nat → List Nat
@@ -684,8 +690,9 @@ def directCalls (O : Ops) (direct : Std.HashMap OpKey Nat) : Tm → KM Tm
 /-- The operations whose clause, at every handler of their name, is one closed tail-resumptive
 code that neither suspends nor raises: each with that code without its resume. -/
 def tailResumptive (O : Ops) (F : SFacts) (codes : Array Code) (hs : Array HInfo) :
-    List (OpKey × Code) := Id.run do
+    List (OpKey × Code) × List Nat := Id.run do
   let mut out := []
+  let mut sels := []
   for n in O.ctl do
     let sites := hs.toList.filter (·.n == n)
     for (idx, j) in O.keysOf n do
@@ -703,7 +710,9 @@ def tailResumptive (O : Ops) (F : SFacts) (codes : Array Code) (hs : Array HInfo
         -- performing code's frames, as the cancel of `κ` does.
         if !(sKeysOf O F c [] tc.body).isEmpty then continue
         out := out ++ [((n, j.toUInt32), tc)]
-  return out
+        if let some (Tm.letv _ _ (Tm.letpair _ _ _ B)) := codes[c]?.map (·.body) then
+          if let some (_, sc, _, _) := finTail? B then sels := sc :: sels
+  return (out, sels)
 
 /-! ### Machines -/
 
@@ -1080,7 +1089,7 @@ def Prog.capture (p : Prog) : Except String Prog := do
     let hs := (← get).hs
     let F₀ ← liftE (SFacts.of O q₀ hs)
     -- Tail-resumptive operations become direct calls; then the analysis again.
-    let direct := tailResumptive O F₀ q₀.codes hs
+    let (direct, sels) := tailResumptive O F₀ q₀.codes hs
     let (main, q₀, F) ← if direct.isEmpty then pure (main, q₀, F₀) else do
       let mut tcs : Std.HashMap OpKey Nat := {}
       for (key, tc) in direct do tcs := tcs.insert key (← kregister (← freshCopy tc))
@@ -1092,8 +1101,15 @@ def Prog.capture (p : Prog) : Except String Prog := do
       pure (main, q₁, ← liftE (SFacts.of O q₁ hs))
     -- `drive`'s forwarding, where its body suspends with another name's operation; `κ`'s mask and
     -- re-raise, where a finaliser may raise.
+    -- The cancel of a clause made a direct call (`unwindClause?`) runs no more.
+    -- A finaliser frame's clauses as one code (`markUbinds`) may raise in its continuing arm; only
+    -- its finalising arm runs at a cancel.
+    let finRaises (d : Nat) : Bool := match q₀.codes[d]?.map (·.body) with
+      | some (Tm.letv s' (Tm.var _) (Tm.case s'' _ _ _ D)) =>
+        if s' == s'' then !Raises.isEmpty (F.U.raises D) else F.raises[d]?.getD false
+      | _ => F.raises[d]?.getD false
     let anyRaise := q₀.codes.toList.any fun c => c.body.finalisers.any fun dd =>
-      (F.codesOf dd).any (F.raises[·]?.getD false)
+      (F.codesOf dd).any (fun d => !sels.contains d && finRaises d)
     let ms ← if anyRaise then liftE (masks F q₀.codes hs) else pure (hs.map fun _ => 0)
     if anyRaise then
       let succ := q₀.codes.map fun c => (c.body.callees.flatMap F.codesOf).eraseDups

@@ -1,0 +1,22 @@
+-- expect: 17:83: `nested` calls itself inside a handler of `Fail`, an effect its recursion performs: each level's `Fail` would go to the level's own handler, a site per level without end (recursion through a site, decision 57; generative labels, #173)
+-- Decision 57's pattern: a recursive-descent parser with a per-level error handler whose clause
+-- raises to the handler around it. Each level of `nested` parses inside `with map_err(…)`, and
+-- an error of the level inside is reported to this level's handler, which raises it again,
+-- counted up by one, to the level around. Statically, each level's `Fail` is a different site,
+-- so the recursion would need a copy of `nested` per level (renamed instances, without end).
+-- Handler sites are static names (SPEC §19); generative labels are #173.
+
+include rec
+include fail
+
+type Toks = mu X. 1 + (i32 * X)
+
+fn nested(ts: Toks) -> i32 * Toks with Fail[i32], Exhausted =
+  match unroll ts {
+    inl u -> raise(0)
+  | inr (t, rest) -> if t == 12 { let (v, rest) = with map_err(!{ e -> e + 1 }) { nested(rest) }; (v + 1, rest) } else { (0, roll inr (t, rest)) }
+  }
+
+main -> i32 + i32 = with on_exhausted(!{ u -> inr 0 }) {
+  with to_result { let (v, r) = nested(roll inr (12, roll inr (12, roll inl ()))); v }
+}

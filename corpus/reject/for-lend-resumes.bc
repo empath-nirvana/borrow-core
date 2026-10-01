@@ -1,0 +1,20 @@
+-- expect: 14:3: the body of this `for` performs an operation that resumes (the operation 1.0), and its source `&a` lends `a` around the whole loop: an operation that resumes cannot cross a borrow (T1, #172). Iterate an owned array, or a view the function is given
+-- A `for` over `&a`, whose body performs `yield`. `&a` lends `a` for the whole loop (SPEC §9,
+-- §16), and the loop is div because its body performs an operation that resumes: the
+-- continuation of `yield` would hold the lend across a suspension, which is T1 (#172). Over the
+-- owned array, or over a view the generator is given, the same loop runs
+-- (`corpus/for-data-div.bc`).
+
+include yield
+
+fn tab(i: i32) -> i32 = i + 1
+
+fn elems_of() -> 1 with Yield[i32] =
+  let a = array_new[i32] (3, tab);
+  for x in &a { yield(*x) };
+  ()
+
+main -> i32 =
+  let mut acc = 0;
+  for x in elems_of() { acc = acc + x };
+  acc

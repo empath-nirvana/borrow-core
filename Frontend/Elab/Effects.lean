@@ -1801,9 +1801,9 @@ def defineGroup (env : Env) (ms : List (Span × Ident × VTy × Val × Mark)) : 
   row := addInst row ⟨exh.name, some []⟩
   let some (_, f₀) := parts.head? | throw ⟨sp₀, "internal error: an empty group"⟩
   let G : RGroup := ⟨n₀.name, parts, f₀.T, sp₀⟩
-  report sp₀ "rec" (s!"{", ".intercalate (parts.map (·.1))}: a recursive group; its calls of itself " ++
-    s!"are its `rec`, driven by bounded_fix at the budget {recBudget}; " ++
-    s!"row {", ".intercalate (row.map (·.eff))}")
+  report sp₀ "row" (s!"{", ".intercalate (parts.map (·.1))}: " ++
+    ", ".intercalate (row.map (·.eff)) ++ s!" (a recursive group: its calls of itself are its " ++
+    s!"`rec`, driven by `bounded` at the budget {recBudget})")
   let mut env := { env with groups := env.groups ++ [G] }
   for ((x, _), (sp, n, A, V, mk)) in parts.zip ms do
     env := { env with fns := env.fns ++ [{ name := x, row, decl := .def_ sp n [] A V mk,

@@ -46,15 +46,12 @@ mechanization of Wagner, Gierczak, Marshall, Li and Ahmed, *From Linearity to Bo
   *Cancels*: the canceller re-raises the first finaliser error that names a handler outside the
   cancelled region) (§19).
 
-The surface has no direct recursion: a function cannot call itself, and recursion is written with
-folds, codata and loops. Decision 24 makes recursion an effect: a self-call is a `rec` operation,
-run by a driver. The kernel has the pieces it needs. A self-call can be a `perform` of a `rec`
-operation (SPEC §19), and a driver is a handler, over `Loop_Σ` (`CTy.loopEff`) or `fixD` (§7, §14)
-for the unbounded `fix`. The scoping ([`effects-scoping.md`](effects-scoping.md), E10) asks no new
-kernel rule for it, except K5 for total structural descent. Pending: the `rec` operation itself,
-with its drivers (`fix`, fuel, `deep`, tabulation) and layers (`memo`, `fuel`) (#158), and the
-surface elaboration of self-calls into `rec` (#188). Until both land, the surface has no direct
-recursion.
+Recursion is an effect (decision 24, SPEC §20): a function calls itself, and functions call one
+another, as written; the calls are the group's `rec` operation, run by a driver chosen at the call
+site. The default, `bounded`, is the kernel's `bounded_fix`: a native recursion with a budget of
+depth whose end performs `Exhausted` (`lib/rec.bc`), an abortive effect a handler catches. The
+heap driver `deep` keeps the pending calls as first-order frames in one growable buffer and is
+div. Pending: the layer `memo`, which needs a map (#211).
 
 The kernel's effects are written as Lean terms (`Core/EffPrograms.lean`) and compiled with
 `bcc kernel`; the surface does not reach them yet. Work in progress: the surface onto kernel

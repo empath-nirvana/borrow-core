@@ -1,0 +1,67 @@
+-- A recursive-descent parser and evaluator (SPEC §20): `expr`, `expr_rest`, `term`, `term_rest`
+-- and `factor` call one another, so they are one recursive group, driven by `bounded`. The tokens
+-- are an owned list: a digit is itself, `+` is 10, `*` 11, `(` 12 and `)` 13. A malformed input
+-- raises `Fail[i32]`, whose handler is outside the recursion (`to_result` in `main`): the raise
+-- unwinds every level, dropping the tokens each holds, and the error leaves the group as any
+-- error leaves a call.
+--
+-- Answer: (inl i32[44], inr i32[2]): 2*(3+4)+5*6 is 44, and 2*(3+4 is missing its `)` (error 2).
+-- A parser that bound `*` looser than `+` gives 56; one that lost the error gives `inl`.
+
+include rec
+include fail
+
+type Toks = mu X. 1 + (i32 * X)
+
+def nil : Toks = roll inl ()
+fn cons(x: i32, t: Toks) -> Toks = roll inr (x, t)
+
+fn expr(ts: Toks) -> i32 * Toks with Fail[i32], Exhausted =
+  let (v, ts) = term(ts);
+  expr_rest(v, ts)
+
+fn expr_rest(acc: i32, ts: Toks) -> i32 * Toks with Fail[i32], Exhausted =
+  match unroll ts {
+    inl u -> (acc, nil)
+  | inr (t, rest) ->
+      if t == 10 { let (v, ts) = term(rest); expr_rest(acc + v, ts) } else { (acc, cons(t, rest)) }
+  }
+
+fn term(ts: Toks) -> i32 * Toks with Fail[i32], Exhausted =
+  let (v, ts) = factor(ts);
+  term_rest(v, ts)
+
+fn term_rest(acc: i32, ts: Toks) -> i32 * Toks with Fail[i32], Exhausted =
+  match unroll ts {
+    inl u -> (acc, nil)
+  | inr (t, rest) ->
+      if t == 11 { let (v, ts) = factor(rest); term_rest(acc * v, ts) } else { (acc, cons(t, rest)) }
+  }
+
+fn factor(ts: Toks) -> i32 * Toks with Fail[i32], Exhausted =
+  match unroll ts {
+    inl u -> raise(1)
+  | inr (t, rest) ->
+      if t < 10 { (t, rest) } else {
+        if t == 12 {
+          let (v, ts) = expr(rest);
+          match unroll ts {
+            inl u -> raise(2)
+          | inr (c, rest) -> if c == 13 { (v, rest) } else { raise(3) }
+          }
+        } else { raise(4) }
+      }
+  }
+
+fn value(ts: Toks) -> i32 with Fail[i32], Exhausted = let (v, rest) = expr(ts); v
+
+-- 2*(3+4)+5*6, and 2*(3+4 without its `)`.
+fn good() -> Toks =
+  cons(2, cons(11, cons(12, cons(3, cons(10, cons(4, cons(13, cons(10, cons(5, cons(11, cons(6, nil)))))))))))
+fn bad() -> Toks = cons(2, cons(11, cons(12, cons(3, cons(10, cons(4, nil))))))
+
+main -> (i32 + i32) * (i32 + i32) = with on_exhausted(!{ u -> (inr 0, inr 0) }) {
+  let a = with to_result { value(good()) };
+  let b = with to_result { value(bad()) };
+  (a, b)
+}

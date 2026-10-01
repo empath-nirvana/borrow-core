@@ -1,0 +1,27 @@
+-- check: no-source
+-- A recursion far past its budget (SPEC §20). `down(n)` holds a cell across its call of itself and
+-- frees it after; at the depth of a million it spends `bounded`'s budget, so `exhausted()` is
+-- performed at the bottom. It is an abortive operation: it unwinds, and each level's cell is freed
+-- by the finaliser the checker inserted around the level's call (SPEC §19's drop glue), from the
+-- innermost out, before `on_exhausted` answers. Nothing is left live: the `live 0` after the
+-- value is the test. The shallow call first runs to the end.
+--
+-- The source interpreter is too slow at this depth (`-- check: no-source`); the golden is the
+-- closed form: 1 + … + 100, then -1 (printed unsigned).
+--
+-- Answer: (i32[5050], i32[4294967295]), and `live 0`. A budget that did not run out gives the sum
+-- of a million cells' values (or a stack trap); an unwind that missed a cell leaves it live.
+
+include rec
+
+fn down(n: i32) -> i32 =
+  if n == 0 { 0 } else {
+    let c = alloc(n);
+    let r = down(n - 1);
+    r + free(c)
+  }
+
+main -> i32 * i32 =
+  let small = with on_exhausted(!{ u -> 0 - 1 }) { down(100) };
+  let big = with on_exhausted(!{ u -> 0 - 1 }) { down(1000000) };
+  (small, big)
