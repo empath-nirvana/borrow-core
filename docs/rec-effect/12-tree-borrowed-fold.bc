@@ -1,0 +1,32 @@
+-- A walk over a borrowed tree (tree.rec, `sum(&t)`), as it runs today: `fold_imm`, the kernel's
+-- structural fold of a borrowed `mu`. Total. Its result must outlive every lifetime (SPEC §6),
+-- which an `i32` does; a result that mentions the borrow (the view of the largest element, say)
+-- is refused. It keeps a native frame per level (Backend/README.md, Stack), so it is the
+-- host-stack driver, with its depth limit. The tree is still owned afterwards: its second use,
+-- `count`, borrows it again.
+--
+-- Answer: (i32[1001000], i32[2000]): `11-tree-owned.bc`'s tree at depth 1000, and its 2000 nodes.
+
+type Tree = mu X. 1 + (X * (i32 * X))
+
+fn tleaf() -> Tree = roll inl ()
+fn tnode(l: Tree, v: i32, r: Tree) -> Tree = roll inr (l, (v, r))
+
+fn grow(i: i32, t: Tree) -> Tree = tnode(t, i + 1, tnode(tleaf(), i + 1, tleaf()))
+fn build(n: i32) -> Tree = count_fold[Tree] (grow, n, 0, tleaf())
+
+def sum_alg : !(all 'y < top. 1 + (i32 * (i32 * i32)) => i32) =
+  !thunkv Fun 'y < top. return (thunkv fun (r : 1 + (i32 * (i32 * i32))) ->
+    match r { inl u -> 0 | inr n -> let (l, vr) = n; let (v, rr) = vr; l + v + rr })
+def sum : !(all 'a < top. imm 'a Tree => i32) = fold_imm[1 + (X * (i32 * X)), 'a, top, i32] sum_alg
+
+def count_alg : !(all 'y < top. 1 + (i32 * (i32 * i32)) => i32) =
+  !thunkv Fun 'y < top. return (thunkv fun (r : 1 + (i32 * (i32 * i32))) ->
+    match r { inl u -> 0 | inr n -> let (l, vr) = n; let (v, rr) = vr; l + 1 + rr })
+def count : !(all 'a < top. imm 'a Tree => i32) = fold_imm[1 + (X * (i32 * X)), 'a, top, i32] count_alg
+
+main -> i32 * i32 =
+  let t = alloc(build(1000));
+  let s = sum(&t);
+  let n = count(&t);
+  (s, n)

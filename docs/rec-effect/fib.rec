@@ -1,0 +1,48 @@
+-- fib, and fib memoised, under each driver. Intended surface; every spelling is provisional
+-- (README §2). Hand-lowered: 01-fib-deep.bc, 02-fib-host.bc, 03-fib-memo-deep.bc,
+-- 04-fib-memo-host.bc, 05-fib-memo-host-deep.bc, 06-fib-tabulate.bc, 07-memo-capture.bc.
+
+fn fib(n: i32) -> i32 =
+  if n < 2 { n } else { fib(n - 1) + fib(n - 2) }
+
+main -> i32 =
+  let a = fib(25);                                      -- (1) the default: fib |> fix
+
+  let mut cache = array(1_000_001, none);               -- dense key: an array, -1 / none empty
+  let b = (fib |> memo(&mut cache) |> deep)(1_000_000); -- (2) heap frames: stack-safe
+  let c = (fib |> memo(&mut cache) |> fix)(3_000);      -- (3) host stack: fast, depth-limited
+
+  let mut table = array(1_000_001, none);
+  let f = fib |> memo(&mut table) |> fix;
+  for i in 0..=1_000_000 { f(i) };                      -- (4) tabulation: every call depth <= 2
+  let d = f(1_000_000);
+  a + b + c + d
+
+-- ELABORATION
+--   `fib` is one definition with two uses of itself; both are `rec` (implicit: a self-reference
+--   in the body). The definition yields
+--     fib.step : open step, `rec` as a capability         (for layering: `fib |> …`)
+--     fib      : fib.step |> fix, the closed default      (for a plain call: `fib(25)`)
+--   Neither `rec` is in tail position; the continuations are the two frames
+--     after rec(n - 1): holds n        (rec(n - 2) still to run)
+--     after rec(n - 2): holds x        (x + _ still to run)
+--   `memo(c)` intercepts `rec(a)`: hit → answer; miss → forward to the outer handler with the
+--   frame "store for a, then answer", which is its own continuation. It never drives.
+--
+-- DRIVERS, TOTALITY, STACK
+--   (1) fix:      div. Host stack, one native frame per level; depth-limited (about 3000 levels
+--                 for this step on wasmtime's default stack, 04 / 05).
+--   (2) deep:     div. Frames on the heap (one allocation per non-tail call: the driver's alloc
+--                 effect); constant host stack at depth 10^6 (03).
+--   (3) fix+memo: div. Depth n on the host stack: 3000 runs, 3500 and 10^6 exhaust it (04, 05).
+--   (4) tabulate: the `for` over 0..=n is data with a bound: total if `f` is. With the table
+--                 filled bottom-up each call is <= 2 deep, so `fix` never goes deep; as lowered
+--                 (06) the fixed point is unrolled to depth 3, total, 0 dispatched calls.
+--
+-- CHECKER REPORTS (intended)
+--   fib: recursive (2 non-tail `rec`); default driver fix: div; host stack, depth = n
+--   (2): driver deep: heap frames, allocates per non-tail call
+--   (3): memo does not change fib's stack shape (fib has no tail call to lose)
+--   (4): `for i in 0..=n`: total over the count; `f(i)` under fix: div unless depth is bounded
+--        (the checker cannot know the table makes it <= 2; as lowered, the bound is written)
+--   memo(&mut cache): the cache is threaded through the machine's state, not captured (F5)

@@ -1,0 +1,10 @@
+-- expect: rejected
+-- A machine whose continuation is a closure instead of a frame: a step answers `done b`, or
+-- `rec(a)` with the rest of the computation as a function of the answer. The type of what a
+-- step answers occurs in its own continuation's result, under `U`, which the checker refuses. So
+-- the continuations of `rec` are defunctionalised: frames, data (`rec.bc`). The same refusal
+-- blocks `mu X. !(X => i32)`, the self-applicable type a knot-tying `fix` would need.
+
+type Out = mu X. i32 + (i32 * U (i32 -o F X))
+
+main -> i32 = 0

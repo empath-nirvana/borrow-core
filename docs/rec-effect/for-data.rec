@@ -1,0 +1,33 @@
+-- `for` over data: a count, an owned array, a view, a `mut` view, and a search with early exit.
+-- Provisional spellings (README §2). Hand-lowered: 20-for-data.bc.
+
+total fn every() -> …=
+  let mut sq = 0;
+  for i in 0..10 { sq = sq + i * i };                          -- a count
+  let mut a = array(5, |i| i + 1);
+  let mut s = 0;
+  for x in &a { s = s + *x };                                  -- an owned array, lent imm
+  let m = borrow a { v -> let mut best = 0; for x in v { best = max(best, *x) }; best };  -- a view
+  let f = for (i, x) in &a { if *x > 3 { break some(i) } } else { none };                -- early exit
+  for x in &mut a { *x = *x * 10 };                            -- a `mut` view
+  …
+
+-- ELABORATION (Rust's desugaring, with the design's driver)
+--   for x in y { M }  =  let it = into_iter(y); loop { match next(it) { some x -> M | none -> break } }
+--   and the loop is `rec` in tail position over (it, the variables M assigns). A source whose
+--   type has a size computed from the data (a count's `b - a`, a view's length) gives the loop
+--   fuel from that bound: the driver is fuel(len), so the loop is total, with no "ran out" case
+--   (the bound is exact: `next` answers `none` exactly when the fuel is spent). `break e` is the
+--   step answering "done" (S ⊗ A → S ⊕ R); `else` gives the value on exhaustion.
+--   The element is lent to the body for one step (`&a`, `&mut a`), so the borrow lives inside
+--   one observation.
+--
+-- DRIVER, TOTALITY, STACK
+--   fuel from the bound: total, constant stack. Lowered with `count_fold` over the length (1
+--   allocation, the array; 0 dispatched calls). `count_fold` cannot stop early (F6): the search
+--   carries "found" to the end. A lifetime-generic step (`max_step<'x>`) is not accepted as
+--   `count_fold`'s argument directly ("expected `!(i32 * array_imm 'x i32 * i32 => …)`, but
+--   this has type `!(all 'l1 < top. …)`"); it is wrapped in a closure.
+--
+-- CHECKER REPORTS (intended)
+--   every: total: each `for` over sized data

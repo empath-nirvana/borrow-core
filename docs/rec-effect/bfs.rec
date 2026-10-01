@@ -1,0 +1,35 @@
+-- BFS with a visited set and a queue. Provisional spellings (README §2). Hand-lowered: 10-bfs.bc.
+
+fn bfs(g: &Graph, src: i32) -> array i32 =
+  let mut dist = array(g.n, -1);
+  let mut q = queue(g.n);                     -- fixed capacity: each node is pushed at most once
+  dist[src] = 0; q.push(src);
+  while let v = q.pop() {                     -- (a) div: `while` is `rec` in tail position, fix
+    for w in g.neighbours(v) {
+      if dist[w] < 0 { dist[w] = dist[v] + 1; q.push(w) }
+    }
+  };
+  dist
+
+total fn bfs_total(g: &Graph, src: i32) -> array i32 =
+  …
+  for _ in 0..g.n {                           -- (b) total: fuel from the data's bound
+    match q.pop() { some v -> for w in g.neighbours(v) { … } | none -> break }
+  };
+  dist
+
+-- ELABORATION
+--   No recursion: the outer loop is `rec` in tail position (no frame, no stack). The inner `for`
+--   is over data (the edge range). The dense node ids make `dist` and the queue arrays; no map.
+--   (a) is div; (b) is total because `0..g.n` is data and each node is dequeued at most once.
+--   The bound is the programmer's, but it is a bound from the data (never a guessed number):
+--   if it were too small the loop would stop early, visibly (the queue not empty after it).
+--
+-- DRIVER, TOTALITY, STACK
+--   (a) fix, div, constant stack. (b) fuel from `0..g.n`, total. Lowered as (b) with
+--   `count_fold` (no `break`: a turn with an empty queue does nothing, F6): 4 allocations, the
+--   arrays; 0 dispatched calls.
+--
+-- CHECKER REPORTS (intended)
+--   (a) while: tail `rec` only, loop, div
+--   (b) for over 0..g.n: total; `break` exits early

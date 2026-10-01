@@ -1,0 +1,76 @@
+-- uses: rec.bc
+-- Mutual recursion with a separate cache per member (even-odd.rec):
+--   (even |> memo(ce), odd |> memo(co)) |> deep
+-- The group has one `rec`; a per-member layer is one layer whose look-up and store dispatch on
+-- the member: `even`'s requests go to `ce`, `odd`'s to `co` (two arrays, indexed by n; 0
+-- unknown, 1 false, 2 true).
+--
+-- The group's calls are all in tail position (`16-even-odd.bc` pushes no frame). Under memo they
+-- are not: a miss must store the answer when it comes back, so each miss leaves a store frame,
+-- and the stack is as deep as the chain of misses. Memo breaks tail position for a definition
+-- that was tail-recursive; fib, which is not, loses nothing.
+--
+-- Answer: ((inr (), inl ()), inr ()): even(10000) true, odd(10000) false, then even(9998)
+-- true, answered by `ce` at once. The counts show one allocation per store frame
+-- (`16-even-odd.bc` has none). Div.
+include slice
+
+type Out = bool + (((i32 + i32) * (1 + 1)) + 1)
+
+fn tail(a: i32 + i32) -> Out = inr (inl (a, (inr () : 1 + 1)))
+
+fn eo_start(p: 1 * (i32 + i32)) -> 1 * Out =
+  let (s, a) = p;
+  match a {
+    inl n -> if n == 0 { (s, inl true) } else { (s, tail(inr (n - 1))) }
+  | inr n -> if n == 0 { (s, inl false) } else { (s, tail(inl (n - 1))) }
+  }
+
+fn no_frame(p: 1 * (1 * bool)) -> 1 * Out = let (s, kb) = p; let (k, b) = kb; (s, inl b)
+
+fn unknown(i: i32) -> i32 = 0
+
+fn look(c: array i32, n: i32) -> array i32 * (bool + 1) =
+  let v = borrow imm c { 'x, w -> at(w, n, 0) };
+  if v == 0 { (c, inr ()) } else { if v == 2 { (c, inl true) } else { (c, inl false) } }
+
+fn store(c: array i32, n: i32, b: bool) -> array i32 =
+  let v = if b { 2 } else { 1 };
+  borrow mut c { 'x, w -> discard_mut(set(w, n, v)) };
+  c
+
+-- One cache per member.
+fn get2(p: (array i32 * array i32) * (i32 + i32)) -> (array i32 * array i32) * (bool + 1) =
+  let (cc, a) = p;
+  let (ce, co) = cc;
+  match a {
+    inl n -> let (ce, h) = look(ce, n); ((ce, co), h)
+  | inr n -> let (co, h) = look(co, n); ((ce, co), h)
+  }
+
+fn put2(p: (array i32 * array i32) * ((i32 + i32) * bool)) -> array i32 * array i32 =
+  let (cc, ab) = p;
+  let (ce, co) = cc;
+  let (a, b) = ab;
+  match a { inl n -> (store(ce, n, b), co) | inr n -> (ce, store(co, n, b)) }
+
+type C = array i32 * array i32
+type MOut = bool + ((((i32 + i32) + (i32 + i32)) * ((1 + (i32 + i32)) + 1)) + 1)
+
+fn mstart(p: (C * 1) * ((i32 + i32) + (i32 + i32))) -> (C * 1) * MOut =
+  memo_start(eo_start, get2, p)
+
+fn mresume(p: (C * 1) * ((1 + (i32 + i32)) * bool)) -> (C * 1) * MOut =
+  memo_resume(no_frame, put2, p)
+
+fn ask(c: C, a: i32 + i32) -> C * bool =
+  let (s, r) = deep(mstart, (mresume, ((c, ()), (inl a : (i32 + i32) + (i32 + i32)))));
+  let (c, u) = s;
+  match r { inl b -> (c, b) | inr z -> (c, false) }
+
+main -> (bool * bool) * bool =
+  let c = (array_new[i32] (10001, unknown), array_new[i32] (10001, unknown));
+  let (c, e) = ask(c, inl 10000);
+  let (c, o) = ask(c, inr 10000);
+  let (c, e2) = ask(c, inl 9998);
+  ((e, o), e2)

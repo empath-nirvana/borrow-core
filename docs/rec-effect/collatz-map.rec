@@ -1,0 +1,30 @@
+-- A memoised DP whose key is sparse, so its cache is a map: the longest Collatz chain from a
+-- start below 30. Provisional spellings (README §2); the map effect especially. Hand-lowered:
+-- 28-collatz-map.bc (an association list).
+
+fn clen(n: i32) -> i32 = if n == 1 { 0 } else { 1 + clen(next(n)) }
+
+total fn longest(lim: i32) -> i32 * i32 =
+  handle_map { cache ->                          -- a map handler: get / insert, provisional
+    let f = clen |> memo(cache) |> fuel(100_000) |> fix;
+    let mut best = (0, 0);
+    for i in 1..lim { match f(i) { ok l -> if l > best.1 { best = (i, l) } | ran_out -> () } };
+    best
+  }
+
+-- ELABORATION
+--   One non-tail `rec` (frame: `1 + _`). The keys are the values the chains pass through (up to
+--   9232 from 27), not dense: `memo(cache)` takes a map. A map as an effect: `cache.get(k)`,
+--   `cache.insert(k, v)` are operations of a capability; the handler owns the storage (a hash
+--   table, a sorted array, an association list) and chooses the representation.
+--   As lowered (28): the cache is an association list threaded through the machine's state. A
+--   look-up must not consume the list; `fold_own`'s algebra cannot capture the key (F5, #9), so
+--   the list is folded into a function of the key, one closure per entry per look-up: 12 617
+--   allocations and 6267 dispatched calls, the cost of that representation.
+--
+-- DRIVER, TOTALITY, STACK
+--   fuel |> fix per start: total; the loop over starts is over a count: total. As lowered:
+--   `deep_fuel` inside a `count_fold`.
+--
+-- CHECKER REPORTS (intended)
+--   longest: total; memo(cache): cache is a map capability (sparse key)

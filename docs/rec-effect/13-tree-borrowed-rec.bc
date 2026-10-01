@@ -1,0 +1,22 @@
+-- uses: rec.bc
+-- expect: rejected
+-- A walk over a borrowed tree by `rec` (tree.rec, `sum(&t)` with the recursion as an effect):
+-- the machine's request is a view of a subtree, `imm 'x Tree`, and a frame holds the view of the
+-- right subtree. This needs a step that takes a view of a node to the views of its children at
+-- the same lifetime (descent with a fixed state type, prior-art matrix gap (b), C3). The first
+-- thing the step does is look inside the view; that is refused.
+
+type Tree = mu X. 1 + (X * (i32 * X))
+
+fn tleaf() -> Tree = roll inl ()
+fn tnode(l: Tree, v: i32, r: Tree) -> Tree = roll inr (l, (v, r))
+
+
+fn sum_start<'x>(p: 1 * imm 'x Tree) -> 1 * (i32 + ((imm 'x Tree * (((i32 * imm 'x Tree) + i32) + 1)) + 1)) =
+  let (s, t) = p;
+  match unroll t {
+    inl u -> (s, inl 0)
+  | inr n -> let (l, vr) = n; (s, inr (inl (l, inl (inl vr : (i32 * imm 'x Tree) + i32))))
+  }
+
+main -> i32 = 0

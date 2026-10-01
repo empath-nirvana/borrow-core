@@ -1,0 +1,24 @@
+-- `for` over a generator with `break`. Provisional spellings (README §2); this one is today's
+-- language as it stands. Hand-lowered: 22-for-gen-break.bc, 22b-break-arith.bc.
+
+gen fn digits(n: i32) -> i32, i32 =          -- yields digits, finishes with their count
+  let mut n = n; let mut k = 0;
+  while n > 0 { yield n % 10; n = n / 10; k = k + 1 };
+  k
+
+fn zero_or_len(n: i32) -> i32 =
+  let mut i = 0;
+  for d in digits(n) { i = i + 1; if d == 0 { break -(1 + i) } }   -- value: count, or break's
+
+-- ELABORATION
+--   A generator is pulled: `next` is one observation; the `for` is `rec` in tail position over
+--   (the generator, i). A generator has no size in its type (it may skip, F4), so the driver is
+--   `fix`: div. The loop's value is the source's "ended" value or the `break` value.
+--
+-- DRIVER, TOTALITY, STACK
+--   fix: div, constant stack. Runs today as written, 0 allocations. `break -(1 + i)` written in
+--   place stops the elaborator: "internal error: a surface form was not elaborated before
+--   checking" (22b); bound by `let` first, it checks (22).
+--
+-- CHECKER REPORTS (intended)
+--   zero_or_len: div (drains a generator)

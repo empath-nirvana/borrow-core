@@ -1,0 +1,8 @@
+-- expect: rejected
+-- fib as the surface writes it (fib.rec): a self-call. Under the design the self-reference is
+-- `rec`, implicit, and the plain call is fib's closed default, driven by `fix`. Today a `fn`
+-- does not see its own name (recursion is structured, decision 24).
+
+fn fib(n: i32) -> i32 = if n < 2 { n } else { fib(n - 1) + fib(n - 2) }
+
+main -> i32 = fib(10)

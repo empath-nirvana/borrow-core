@@ -1,0 +1,35 @@
+-- AoC-style DP: paths through a grid, moving right or down, avoiding walls. Provisional
+-- spellings (README §2). Hand-lowered: 08-grid-paths.bc.
+
+struct Grid { w: i32, h: i32, cells: array u8 }
+
+fn paths(g: &Grid, cell: i32) -> i32 =
+  if g.cells[cell] == b'#' { 0 }
+  else if cell == g.w * g.h - 1 { 1 }
+  else {
+    let down  = if cell / g.w + 1 < g.h { paths(g, cell + g.w) } else { 0 };
+    let right = if cell % g.w + 1 < g.w { paths(g, cell + 1) } else { 0 };
+    down + right
+  }
+
+main -> i32 =
+  let g = read_grid(&mut stdin);
+  let mut cache = array(g.w * g.h, none);
+  (paths |> memo(&mut cache, key = cell) |> fix)(&g, 0)
+
+-- ELABORATION
+--   Two `rec`s, neither in tail position; frames: after `down` (holds cell), after `right`
+--   (holds down). `g` is passed unchanged to every `rec`: a loop-invariant borrowed argument.
+--   The machine's steps are `!` and cannot capture `g` (F5); as lowered, the grid is the inner
+--   machine's state, an owned array lent `imm` inside each step (the per-observation lend, SPEC
+--   §14). The elaborator could do this for any argument every `rec` passes unchanged.
+--   memo's key is `cell`, not `(g, cell)`: a borrowed argument is not a key. Which arguments are
+--   keys has to be said or inferred (README §6, "memo keys").
+--
+-- DRIVER, TOTALITY, STACK
+--   fix: div; host stack, depth up to w + h. Lowered under `deep` (heap frames). 350
+--   allocations in all (frames), 0 dispatched calls.
+--
+-- CHECKER REPORTS (intended)
+--   paths: recursive, 2 non-tail `rec`; `g` invariant across `rec` (lent per step)
+--   memo(&mut cache, key = cell): dense key → array

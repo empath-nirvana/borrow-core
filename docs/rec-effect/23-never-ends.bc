@@ -1,0 +1,20 @@
+-- A never-ending source with `break value` (never-ends.rec): the first triangular number over
+-- 1000. The source never finishes, so under the design the loop's value is exactly the break
+-- type. Today the loop's value is the generator's finishing value or the break value, one type,
+-- so the generator must name a finishing value it never reaches: the `0 - 1` after its
+-- `while true`. With the empty finishing type `0`, nothing can be
+-- written there (`24-never-ends-empty.bc`).
+--
+-- Answer: i32[1035] (1 + … + 45). Div.
+
+gen fn naturals() -> i32, i32 =
+  let mut i = 1;
+  while true { yield i; i = i + 1 };
+  0 - 1
+
+fn first_triangle_over(lim: i32) -> i32 =
+  let mut t = 0;
+  let r = for i in naturals() { t = t + i; if t > lim { let v = t; break v } else { () } };
+  r
+
+main -> i32 = first_triangle_over(1000)

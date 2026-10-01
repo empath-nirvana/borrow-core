@@ -1,0 +1,22 @@
+-- `for` over an owned list, in order. Provisional spellings (README §2). Hand-lowered:
+-- 21-for-list.bc.
+
+fn digits(l: List<i32>) -> i32 =
+  let mut acc = 0;
+  for x in l { acc = acc * 10 + x };           -- consumes l, in order
+  acc
+
+-- ELABORATION
+--   `into_iter(l)` for an owned list is the list itself; `next` unrolls a node. The loop is
+--   `rec` in tail position on the rest of the list. The list is data with a size, so the
+--   design's driver is fuel from the size: total. The kernel has no in-order descent over `mu`
+--   (prior-art matrix C2), so today the choices are (21):
+--     (a) the loop under `deep`: in order, no allocation per element, div;
+--     (b) `fold_own`: total, but a right fold, so the order is reversed (4321, not 1234);
+--     (c) `fold_own` into a function of the accumulator: total and in order, one closure per
+--         element (4 allocations and 5 dispatched calls for 4 elements).
+--   Over a borrowed list, `for x in &l`, nothing runs today (`corpus/pending/print-borrowed-list.bc`;
+--   `fold_imm`'s result must outlive every lifetime, so it cannot fold into a function).
+--
+-- CHECKER REPORTS (intended)
+--   digits: total (for over a sized owned list)

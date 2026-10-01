@@ -1,0 +1,53 @@
+-- `for` over data (for-data.rec): a count, an owned array lent `imm`, a view, and a `mut` view,
+-- and a search with early exit. Under the design each is `for` driven by fuel from the data's
+-- own bound (its length): total, with no stack. Today each is `count_fold` over that bound,
+-- written by hand: the state is what the body assigns, and the element is lent inside each step.
+-- `count_fold` cannot stop early (F6), so the search carries "found" to the end of the count.
+--
+-- Answer: (i32[285], (i32[15], (i32[5], (i32[150], inl i32[3])))): the squares of 0 … 9; the
+-- sum of [1, 2, 3, 4, 5]; its largest element through a view; the sum after multiplying each
+-- slot by 10 through a `mut` view; the index of the first element over 3. Total.
+include slice
+
+fn tab(i: i32) -> i32 = i + 1
+
+-- for i in 0..10 { acc = acc + i * i }
+fn sq_step(i: i32, acc: i32) -> i32 = acc + i * i
+
+-- for x in &a { acc = acc + *x }: the array is in the state, lent inside the step.
+fn sum_step(i: i32, s: array i32 * i32) -> array i32 * i32 =
+  let (a, acc) = s;
+  let acc = borrow imm a { 'x, v -> acc + at(v, i, 0) };
+  (a, acc)
+
+-- for x in v { best = max(best, *x) }, inside a borrow block: the view is copied for each step.
+fn max_step<'x>(i: i32, s: array_imm 'x i32 * i32) -> array_imm 'x i32 * i32 =
+  let (v, best) = s;
+  let (v, w) = array_copy['x, i32] v;
+  let x = at(w, i, 0);
+  if x > best { (v, x) } else { (v, best) }
+
+-- for x in &mut a { *x = *x * 10 }
+fn times10(i: i32, a: array i32) -> array i32 =
+  borrow mut a { 'x, v -> match get_mut(v, i) { inl m -> modify m { c -> c * 10 } | inr u -> () } };
+  a
+
+-- for (i, x) in &a { if *x > 3 { return inl i } }; inr (): "found" is carried to the end.
+fn find_step(i: i32, s: array i32 * (i32 + 1)) -> array i32 * (i32 + 1) =
+  let (a, found) = s;
+  match found {
+    inl j -> (a, inl j)
+  | inr u -> let x = borrow imm a { 'x, v -> at(v, i, 0) }; if x > 3 { (a, inl i) } else { (a, inr ()) }
+  }
+
+total fn every() -> i32 * (i32 * (i32 * (i32 * (i32 + 1)))) =
+  let squares = count_fold[i32] (sq_step, 10, 0, 0);
+  let a = array_new[i32] (5, tab);
+  let (a, s) = count_fold[array i32 * i32] (sum_step, 5, 0, (a, 0));
+  let m = borrow imm a { 'x, v -> let (v, best) = count_fold[array_imm 'x i32 * i32] (!{ (i, s) -> max_step(i, s) }, 5, 0, (v, 0)); best };
+  let (a, f) = count_fold[array i32 * (i32 + 1)] (find_step, 5, 0, (a, inr ()));
+  let a = count_fold[array i32] (times10, 5, 0, a);
+  let (a, s10) = count_fold[array i32 * i32] (sum_step, 5, 0, (a, 0));
+  (squares, (s, (m, (s10, f))))
+
+main -> i32 * (i32 * (i32 * (i32 * (i32 + 1)))) = every()

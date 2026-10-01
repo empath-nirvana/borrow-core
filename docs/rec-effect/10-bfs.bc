@@ -1,0 +1,82 @@
+-- BFS with a visited set and a queue (bfs.rec): distances from node 0 in `09-dfs.bc`'s graph.
+-- No recursion: a loop, `rec` in tail position only, so no frame and no stack.
+--
+-- The surface writes `while let v = q.pop() { for w in neighbours(v) { … } }`, which is div
+-- (the `while` is driven by `fix`). Each node enters the queue at most once, so the loop turns
+-- at most `n` times: the total form is `for _ in 0..n` over that bound, from the data, and is
+-- what is lowered here, with `count_fold`. A turn with an empty queue does nothing: `count_fold`
+-- cannot stop early (F6), and `break` would need K0′.
+--
+-- The queue is an array of n slots with head and tail indices (each node is pushed at most once,
+-- so it never wraps); the distances are an array indexed by node, -1 unvisited. No map.
+--
+-- Answer: (i32[5], i32[7]): five nodes reached, and their distances 0 1 1 2 3 sum to 7. Total.
+include slice
+
+fn off_at(i: i32) -> i32 = if i == 0 { 0 } else { if i == 1 { 2 } else { i + 1 } }
+fn edge_at(i: i32) -> i32 =
+  if i == 0 { 1 } else { if i == 1 { 2 } else { if i == 2 { 3 } else { if i == 3 { 3 } else {
+  if i == 4 { 4 } else { if i == 5 { 1 } else { if i == 6 { 6 } else { if i == 7 { 5 } else { 7 } } } } } } } }
+fn unseen(i: i32) -> i32 = if i == 0 { 0 } else { 0 - 1 }
+fn zero(i: i32) -> i32 = 0
+
+fn aget(a: array i32, i: i32) -> array i32 * i32 =
+  let x = borrow imm a { 'x, v -> at(v, i, 0) };
+  (a, x)
+
+fn aput(a: array i32, i: i32, x: i32) -> array i32 =
+  borrow mut a { 'x, v -> discard_mut(set(v, i, x)) };
+  a
+
+-- The loop's state: the graph, the distances, the queue with head and tail, and the node being
+-- expanded with its distance.
+type Q = (array i32 * array i32) * (array i32 * ((array i32 * (i32 * i32)) * (i32 * i32)))
+
+-- One edge of the node being expanded.
+fn relax(i: i32, s: Q) -> Q =
+  let (gr, r) = s;
+  let (off, edges) = gr;
+  let (dist, r2) = r;
+  let (qh, vd) = r2;
+  let (q, ht) = qh;
+  let (h, t) = ht;
+  let (v, d) = vd;
+  let (edges, w) = aget(edges, i);
+  let (dist, dw) = aget(dist, w);
+  if dw < 0 {
+    let dist = aput(dist, w, d + 1);
+    let q = aput(q, t, w);
+    ((off, edges), (dist, ((q, (h, t + 1)), (v, d))))
+  } else { ((off, edges), (dist, ((q, (h, t)), (v, d)))) }
+
+-- One turn: pop a node and relax its edges, or nothing if the queue is empty.
+fn turn(k: i32, s: Q) -> Q =
+  let (gr, r) = s;
+  let (off, edges) = gr;
+  let (dist, r2) = r;
+  let (qh, vd) = r2;
+  let (q, ht) = qh;
+  let (h, t) = ht;
+  if h < t {
+    let (q, v) = aget(q, h);
+    let (dist, d) = aget(dist, v);
+    let (off, lo) = aget(off, v);
+    let (off, hi) = aget(off, v + 1);
+    count_fold[Q] (relax, hi, lo, ((off, edges), (dist, ((q, (h + 1, t)), (v, d)))))
+  } else { ((off, edges), (dist, ((q, (h, t)), vd))) }
+
+fn add_reached(i: i32, s: array i32 * (i32 * i32)) -> array i32 * (i32 * i32) =
+  let (dist, nt) = s;
+  let (n, tot) = nt;
+  let (dist, d) = aget(dist, i);
+  if d < 0 { (dist, (n, tot)) } else { (dist, (n + 1, tot + d)) }
+
+total fn bfs() -> i32 * i32 =
+  let g = (array_new[i32] (9, off_at), array_new[i32] (9, edge_at));
+  let s0 = (g, (array_new[i32] (8, unseen), ((array_new[i32] (8, zero), (0, 1)), (0, 0))));
+  let (g, r) = count_fold[Q] (turn, 8, 0, s0);
+  let (dist, rest) = r;
+  let (dist, nt) = count_fold[array i32 * (i32 * i32)] (add_reached, 8, 0, (dist, (0, 0)));
+  nt
+
+main -> i32 * i32 = bfs()

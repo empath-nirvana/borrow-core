@@ -1,0 +1,23 @@
+-- uses: rec.bc
+-- fib, plain, under the deep driver (fib.rec). The definition's two recursive calls are `rec`;
+-- neither is in tail position, so each leaves a frame: `inl n` after the first (`fib(n - 2)` is
+-- still to run), `inr x` after the second (`x + _` is still to run). No layer.
+--
+-- Answer: i32[610], fib(15). Div (the driver is a loop); the frames are on the heap, one
+-- allocation per non-tail call.
+
+fn fib_start(p: 1 * i32) -> 1 * (i32 + ((i32 * ((i32 + i32) + 1)) + 1)) =
+  let (s, n) = p;
+  if n < 2 { (s, inl n) } else { (s, inr (inl (n - 1, inl (inl n : i32 + i32)))) }
+
+fn fib_resume(p: 1 * ((i32 + i32) * i32)) -> 1 * (i32 + ((i32 * ((i32 + i32) + 1)) + 1)) =
+  let (s, kb) = p;
+  let (k, b) = kb;
+  match k {
+    inl n -> (s, inr (inl (n - 2, inl (inr b : i32 + i32))))
+  | inr x -> (s, inl (x + b))
+  }
+
+main -> i32 =
+  let (u, r) = deep(fib_start, (fib_resume, ((), 15)));
+  match r { inl v -> v | inr z -> 0 - 1 }

@@ -1,0 +1,35 @@
+-- fib, plain, on the host stack (fib.rec, README §3.2). The open form of the definition: `rec`
+-- is an argument, a persistent function, and `fib_step` calls it where the surface calls `fib`.
+-- "Ran out" is `inr ()`, which each call site passes on by hand (no exit effect).
+--
+-- `fix` cannot tie the knot: a `fn` cannot name itself ("unknown variable `fib`"), and a
+-- self-applicable type `mu X. !(X => i32)` is refused ("the type variable `X` occurs under
+-- `U`"). What can be built is the fixed point UNROLLED to a depth `d`: `count_fold` applies the
+-- step `d` times to a bottom that always runs out. Each level is a `!` closure capturing the level
+-- below (F9 allows capturing `!` values). So this `fix` is total, with depth as its fuel, and runs
+-- each `rec` as a native call: the host stack is as deep as the recursion.
+--
+-- Answer: (inl i32[610], inr ()): fib(15) at depth 16; and fib(15) at depth 5, which runs out.
+
+fn fib_step(rec: !(i32 => i32 + 1), n: i32) -> i32 + 1 =
+  if n < 2 { inl n } else {
+    match rec(n - 1) {
+      inl a -> match rec(n - 2) { inl b -> inl (a + b) | inr u -> inr u }
+    | inr u -> inr u
+    }
+  }
+
+fn bottom(n: i32) -> i32 + 1 = inr ()
+
+-- The promotion is in its own function: in `unroll_once` the counter `i : i32` is live, and a
+-- `!` closure may not be promoted over it (#9).
+fn tie(f: !(i32 => i32 + 1)) -> !(i32 => i32 + 1) = !{ n -> fib_step(f, n) }
+
+fn unroll_once(i: i32, f: !(i32 => i32 + 1)) -> !(i32 => i32 + 1) = tie(f)
+
+fn fix_depth(d: i32) -> !(i32 => i32 + 1) =
+  count_fold[!(i32 => i32 + 1)] (unroll_once, d, 0, bottom)
+
+total fn fib(n: i32) -> i32 + 1 = let f = fix_depth(n + 1); f(n)
+
+main -> (i32 + 1) * (i32 + 1) = (fib(15), (fix_depth(5))(15))
