@@ -94,6 +94,9 @@ structure LState where
   next : Nat := 0
   helpers : Std.HashMap Helper Nat := {}
   queue : Array Helper := #[]
+  /-- In a code of a recursive closure type, the local holding its environment object (`0` once
+  it is reused), and the object's words. -/
+  reuse : Option (Nat × Nat) := none
 
 abbrev LM := ReaderT Ctx (StateT LState (Except String))
 
@@ -159,11 +162,35 @@ def helper (h : Helper) : LM Nat := do
 number of locals beyond the parameters. -/
 def inFn (params : Nat) (act : LM α) : LM (α × Nat) := do
   let saved ← get
-  set { saved with vars := {}, next := params }
+  set { saved with vars := {}, next := params, reuse := none }
   let a ← act
   let n := (← get).next
-  modify fun s => { s with vars := saved.vars, next := saved.next }
+  modify fun s => { s with vars := saved.vars, next := saved.next, reuse := saved.reuse }
   pure (a, n - params)
+
+/-! ### Reusing a code's environment object
+
+A code of a recursive closure type receives its closure as an object (Representation). It keeps
+the object until it returns, and the first closure of the same width it builds is built in it:
+the object is updated in place, as a suspended computation's frame is when it is resumed and
+suspends again. The local holding the object is set to `0` once it is reused, and a return frees
+it when it is not `0`. -/
+
+/-- The words of a closure of `size` words, built in the environment object when it is still
+held, or in a fresh object: the statements that leave its address in `p`. -/
+def reuseOrAlloc (size p : Nat) : LM (List Stmt) := do
+  let fresh : List Stmt := [.set p (.alloc (.c64 size.toUInt64))]
+  match (← get).reuse with
+  | some (l, sz) =>
+    if sz != size then return fresh
+    return [.ite (.op (.eqz .w64) [.loc l]) fresh [.set p (.loc l), .set l (.c64 0)]]
+  | none => return fresh
+
+/-- Free the environment object where a path returns, when it is still held. -/
+def releaseReuse : LM (List Stmt) := do
+  match (← get).reuse with
+  | some (l, _) => return [.ite (.op (.eqz .w64) [.loc l]) [] [.free (.loc l)]]
+  | none => return []
 
 /-! ### Fields -/
 
@@ -219,6 +246,12 @@ def mkInj (n : Nat) (r : Bool) (a : List Exp) : LM (List Stmt × List Exp) := do
   let pw := (← words n) - 1
   pure (s, [.c64 (if r then 1 else 0)] ++ v ++ zeros (pw - v.length))
 
+/-- Variant `k` of the `n`-ary sum `n`: its tag, then the payload, padded. -/
+def mkCon (n k : Nat) (a : List Exp) : LM (List Stmt × List Exp) := do
+  let (s, v) ← putField n k a
+  let pw := (← words n) - 1
+  pure (s, [.c64 k.toUInt64] ++ v ++ zeros (pw - v.length))
+
 /-- The fields of a pair's or injection's locals. -/
 def fieldLocals (n i : Nat) (ls : List Nat) : LM (List Nat) := do
   let T ← T
@@ -242,6 +275,10 @@ def payload (n : Nat) (r : Bool) (ls : List Nat) (consume : Bool) : LM (List Stm
   let i := if r then 1 else 0
   getField n i ((ls.drop 1).take ((← T).fieldWords n i)) consume
 
+/-- The payload of an `n`-ary sum's locals, read as variant `k`. -/
+def payloadN (n k : Nat) (ls : List Nat) (consume : Bool) : LM (List Stmt × List Nat) := do
+  getField n k ((ls.drop 1).take ((← T).fieldWords n k)) consume
+
 /-! ### Closures -/
 
 /-- The words of a closure of code `c` whose captured values are the words `env`: the tag, then
@@ -254,7 +291,7 @@ def closVals (c : Nat) (env : List Exp) : LM (List Stmt × List Exp) := do
   if T.isRec n then
     if env.isEmpty then return ([], [.c64 (2 * t + 1).toUInt64])
     let p ← fresh1
-    return ([.set p (.alloc (.c64 (1 + env.length).toUInt64)), .store (.loc p) 0 (.c64 t.toUInt64)] ++
+    return ((← reuseOrAlloc (1 + env.length) p) ++ [.store (.loc p) 0 (.c64 t.toUInt64)] ++
       storeAt (.loc p) 1 env, [.loc p])
   return ([], [.c64 t.toUInt64] ++ env ++ zeros (T.words n - 1 - env.length))
 
@@ -320,7 +357,7 @@ def emitTo (ls : List Nat) (vs : List Exp) : LM (List Stmt) := do
 
 def emit : Dest → List Exp → LM (List Stmt)
   | .to ls, vs => emitTo ls vs
-  | .ret k, vs => pure [.ret (vs ++ zeros (k - vs.length))]
+  | .ret k, vs => return (← releaseReuse) ++ [.ret (vs ++ zeros (k - vs.length))]
   | .bind x, vs => do
     -- A word already in a local is held there: every local is set once, where it is made, and
     -- what it held is consumed here. Any other word is set in a fresh local.
@@ -539,7 +576,7 @@ def lowerPrim : Op → List Var → Dest → LM (List Stmt)
 def lowerCall (f a : Var) (k w : Nat) (d : Dest) : LM (List Stmt) := do
   let (g, args) ← callTarget (← vty f) (← vals f) (locs (← vals a)) ((← read).known[f]?)
   match d with
-  | .ret k' => if k' == k then return [.tailCall g args] else pure ()
+  | .ret k' => if k' == k then return (← releaseReuse) ++ [.tailCall g args] else pure ()
   | .to ls => if ls.length == k then return [.call ls g args] else pure ()
   | .bind _ => pure ()
   let ts ← fresh k
@@ -558,6 +595,10 @@ def lowerTm : Tm → Dest → LM (List Stmt)
   | .inj r a, d => do
       let some n := (← T).cons[a]? | throw "flat IR: an untyped injection"
       let (s, vs) ← mkInj n r (locs (← vals a))
+      return s ++ (← emit d vs)
+  | .con k _ a, d => do
+      let some n := (← T).cons[a]? | throw "flat IR: an untyped variant"
+      let (s, vs) ← mkCon n k (locs (← vals a))
       return s ++ (← emit d vs)
   | .clos c xs, d => do
       let (s, vs) ← closVals c (locs (← xs.mapM vals).flatten)
@@ -589,6 +630,31 @@ def lowerTm : Tm → Dest → LM (List Stmt)
       bindVals y v₂
       let t₂ ← lowerTm b₂ d
       return [.ite (eqz64 (.loc (ls.headD 0))) (s₁ ++ t₁) (s₂ ++ t₂)]
+  | .when s k _ x b r, d => do
+      -- A chain of `when`s on `s` ending in `absurd` is a `switch` on its tag; one ending in
+      -- another term is a compare of the tag per arm, then that term.
+      let d ← match d with
+        | .bind z => pure (.to (← bindFresh z))
+        | d => pure d
+      let n ← vty s
+      let ls ← vals s
+      let tag := Exp.loc (ls.headD 0)
+      let (s₁, v) ← payloadN n k ls true
+      bindVals x v
+      let arm := s₁ ++ (← lowerTm b d)
+      let rest ← lowerTm r d
+      match r, rest with
+      | .absurd _, _ =>
+        return [.switch tag ((List.range (k + 1)).map fun j => if j == k then arm else [.trap]) [.trap]]
+      | .when s' .., [.switch _ cases _] =>
+        if s' == s then
+          let cases := cases ++ List.replicate (k + 1 - cases.length) [.trap]
+          return [.switch tag (cases.set k arm) [.trap]]
+        else return [.ite (eq64 tag (.c64 k.toUInt64)) arm rest]
+      | _, _ => return [.ite (eq64 tag (.c64 k.toUInt64)) arm rest]
+  | .absurd _, d => do
+      if let .bind z := d then discard (bindFresh z)
+      return [.trap]
   | .copy x x' b, d => do
       let (s, ls) ← copyVals (← vty x) (← vals x)
       bindVals x' ls
@@ -597,7 +663,9 @@ def lowerTm : Tm → Dest → LM (List Stmt)
   | .drop x b, d => do
       let s ← dropVals (← vty x) (← vals x)
       return s ++ (← lowerTm b d)
-  | .raise _, _ | .hnd .., _ | .ubind .., _ => throw "flat IR: an effect not lowered (`Unwind`)"
+  | .raise _, _ | .hnd .., _ | .ubind .., _ | .perform _, _ | .catch .., _ | .fin .., _
+  | .catchAll _, _ | .reraise .., _ | .run .., _ | .await .., _ =>
+      throw "flat IR: an effect not lowered (`Capture`, `Unwind`)"
 
 /-! ### Owned folds by pointer reversal
 
@@ -850,8 +918,10 @@ def lowerCode (k : Nat) (c : Code) : LM Fn := do
         bindVals x ls
         unpack := unpack ++ s
         off := off + ls.length
+      -- The environment object is reused or freed on each path (`reuseOrAlloc`).
+      if !c.env.isEmpty then modify fun st => { st with reuse := some (0, off) }
       let body ← lowerTm c.body (.ret ans)
-      pure (unpack ++ (if c.env.isEmpty then [] else [.free (.loc 0)]) ++ body ++ [.trap])
+      pure (unpack ++ body ++ [.trap])
     return { name := s!"code{k}", params := 1 + pw, results := ans, locals := nloc, body }
   let ew := T.envWords k
   let (body, nloc) ← inFn (ew + pw) do
@@ -984,6 +1054,11 @@ def genHelper (h : Helper) : LM Fn := do
         pure [.ite (eqz64 (.loc 0))
           (s₁ ++ [.ret ([.c64 0] ++ a ++ zeros (w - 1 - a.length))])
           (s₂ ++ [.ret ([.c64 1] ++ b ++ zeros (w - 1 - b.length))])]
+      | .sumN fs => do
+        let cases ← (List.range fs.length).mapM fun k => do
+          let (s₁, a) ← copyField n k (← fieldLocals n k ps)
+          pure (s₁ ++ [.ret ([.c64 k.toUInt64] ++ a ++ zeros (w - 1 - a.length))])
+        pure [.switch (.loc 0) cases [.trap]]
       | _ => pure [.ret (locs ps)]
     pure { name := "copy", params := w, results := w, locals := nloc, body := body ++ [.trap] }
   | .drop n =>
@@ -1009,6 +1084,9 @@ def genHelper (h : Helper) : LM Fn := do
       | .sum .. => do
         pure [.ite (eqz64 (.loc 0)) (← dropField n 0 (← fieldLocals n 0 ps))
           (← dropField n 1 (← fieldLocals n 1 ps)), .ret []]
+      | .sumN fs => do
+        let cases ← (List.range fs.length).mapM fun k => do dropField n k (← fieldLocals n k ps)
+        pure [.switch (.loc 0) cases [.trap], .ret []]
       | _ => pure [.ret []]
     pure { name := "drop", params := w, results := 0, locals := nloc, body }
   | .print n =>
@@ -1029,6 +1107,8 @@ def genHelper (h : Helper) : LM Fn := do
       | .sum .. => do
         pure [.ite (eqz64 (.loc 0)) (outStr "inl " ++ (← printField n 0 (← fieldLocals n 0 ps) true))
           (outStr "inr " ++ (← printField n 1 (← fieldLocals n 1 ps) true))]
+      -- A suspended computation's state or an operation's payload is never a program's value.
+      | .sumN _ => pure [.trap]
     pure { name := "print", params := w, results := 0, locals := nloc, body := body ++ [.ret []] }
   | .closCopy c =>
     let some code := (← read).codes[c]? | throw "flat IR: no code"
@@ -1244,7 +1324,7 @@ def callsOf : Tm → List Var
   | .app f _ => [f]
   | .letv _ e b => callsOf e ++ callsOf b
   | .letpair _ _ _ b | .copy _ _ b | .drop _ b => callsOf b
-  | .case _ _ b₁ _ b₂ => callsOf b₁ ++ callsOf b₂
+  | .case _ _ b₁ _ b₂ | .when _ _ _ _ b₁ b₂ => callsOf b₁ ++ callsOf b₂
   | _ => []
 
 /-- The calls whose code is known, by their function variable: the flow analysis's codes there

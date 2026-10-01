@@ -1,0 +1,14 @@
+-- Spec §19's program 6 (`storeCancel`, `bcc kernel run store-cancel`) written by hand: the
+-- suspended computation's state, the performer's cell, is stored in a cell, taken back, and
+-- cancelled, which runs the performer's finaliser and frees the cell. The kernel program's
+-- lowering (`Backend/Clos/Capture.lean`) has the same counts: the performer's cell and the cell
+-- the handler stores `κ` in, and no dispatched call.
+--
+-- Answer: (), with both cells freed (`live 0`); two allocations.
+main -> 1 =
+  let v: 1 + 1 = inl ();
+  let r = alloc(v);
+  let k = alloc(r);
+  let r = free(k);
+  let _ = free(r);
+  ()

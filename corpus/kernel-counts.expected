@@ -3,3 +3,19 @@ fail-outside 1 0 0
 reborrow-raise 1 0 0
 log-in-borrow 2 0 0
 tick-answering 1 0 0
+log-outside-native 0 0 0
+fail-outside-native 0 0 0
+tick-native 0 0 0
+take 2 2 0 # the producer's cell and the count's node; take's answer is one of two closures (the clauses'), called twice
+take-all 6 4 0 # the cell and the count's five nodes; take's answer closures, called four times
+store-cancel 2 0 0 # the producer's cell and the cell the clause stores κ in
+resume-tail 0 0 0
+cancel-now 0 0 0
+cancel-suppressed 0 0 0
+cancel-reraised 0 0 0
+loop-tail 0 0 0
+recursive-yield 20 0 0 # recursion through a resumption point: one frame object per level, reused at each resume
+two-callees 0 3 0 # h is one of two codes that suspend: the call and each resume of its continuation dispatch
+forward 0 0 0
+forward-cancel 1 0 0 # the cell, freed by the cancel
+multi-shot 0 0 0

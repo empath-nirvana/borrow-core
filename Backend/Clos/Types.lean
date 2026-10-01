@@ -9,12 +9,15 @@ The typed erasure: every closure-IR variable, closure code and constructor gets 
 the value type as far as its machine representation depends on it, and every layout type gets a
 layout (`Backend/README.md`, Representation).
 
-    L ::= any | 1 | i32 | i64 | L ⊗ L | L ⊕ L | fn(L; L, L) | loc L
+    L ::= any | 1 | i32 | i64 | L ⊗ L | L ⊕ L | ⊕[L, …, L] | fn(L; L, L) | loc L
 
 `fn(A; C, D)` is a closure taking `A`; called on `inl ()` it answers `C`, on `inr ()` `D`, and on
 an argument not known at the call `C = D`. This is how a thunk of `C & D` (erased by `withPair`
 to `λs. case s {…}`) answers its two projections at two types. `loc A` is a location holding an
-`A`: a cell, or an element of an array. `any` is a type no value is built at.
+`A`: a cell, or an element of an array. `any` is a type no value is built at. `⊕[L₀, …, Lₙ₋₁]` is an `n`-ary sum
+(`Tm.con`, `Tm.when`): a suspended computation's state, one variant per resumption point, and
+an operation's payload, one variant per operation (`Backend/Clos/Capture.lean`), eliminated by a chain
+of `when`s.
 
 A location's contents change type at `swap` (`Ref A ⊸ B ⊸ Ref B ⊗ A`), so a `loc` type also
 names a *cell class*: the locations that may be the same cell, as `swap`'s argument and result
@@ -36,7 +39,8 @@ answers the arm's type. The source's typing derivation guarantees that the erasu
 types; a program for which unification fails is reported, not compiled.
 
 **Layout.** `1` and `any` are no words; `i32`, `i64` and `loc` one; a pair is its two
-components side by side; a sum is a tag word and the larger of its two payloads. A recursive type
+components side by side; a sum is a tag word and the larger of its two payloads; an `n`-ary sum, one tag word and the largest of
+its payloads. A recursive type
 would be infinitely wide, so the fields that close a cycle (the back edges of one depth-first
 search over the pair and sum edges) are stored behind a pointer to a heap object of the field's
 own layout.
@@ -96,6 +100,8 @@ inductive LTy where
   | int (w : Width)
   | pair (a b : Nat)
   | sum (a b : Nat)
+  /-- An `n`-ary sum, its variants' payloads. -/
+  | sumN (fs : List Nat)
   /-- `fn(A; C, D)`. -/
   | fn (a c d : Nat)
   /-- A location holding an `a`, of cell class `cls`. -/
@@ -105,6 +111,7 @@ inductive LTy where
 /-- The pair and sum edges of a type, in field order. -/
 def LTy.fields : LTy → List Nat
   | .pair a b | .sum a b => [a, b]
+  | .sumN fs => fs
   | _ => []
 
 /-- How a code's body is typed. -/
@@ -179,6 +186,7 @@ def describe (k : Nat) (n : Nat) : TM String := do
     | .int .w8 => pure "u8"
     | .pair a b => pure s!"({← describe k a} * {← describe k b})"
     | .sum a b => pure s!"({← describe k a} + {← describe k b})"
+    | .sumN fs => pure s!"+[{", ".intercalate (← fs.mapM (describe k))}]"
     | .fn a c d => pure s!"fn({← describe k a}; {← describe k c}, {← describe k d})"
     | .loc a _ => pure s!"loc {← describe k a}"
 
@@ -204,6 +212,10 @@ def unify (a b : Nat) : TM Unit := do
           else throw s!"layout types: {← describe 4 x} and {← describe 4 y} differ"
         | .pair a b, .pair a' b' => link x y; work := (a, a') :: (b, b') :: work
         | .sum a b, .sum a' b' => link x y; work := (a, a') :: (b, b') :: work
+        | .sumN fs, .sumN fs' =>
+          if fs.length != fs'.length then
+            throw s!"layout types: {← describe 4 x} and {← describe 4 y} differ"
+          link x y; work := fs.zip fs' ++ work
         | .fn a c d, .fn a' c' d' => link x y; work := (a, a') :: (c, c') :: (d, d') :: work
         | .loc a c, .loc a' c' => link x y; joinClass c c'; work := (a, a') :: work
         | _, _ => throw s!"layout types: {← describe 4 x} and {← describe 4 y} differ"
@@ -372,7 +384,21 @@ def infer (codeTy : Array Nat) (codes : Array Code) : Tm → TM Nat
       if let some r := (← get).sel[x]? then modify fun s => { s with sel := s.sel.insert x' r }
       infer codeTy codes b
   | .drop _ b => infer codeTy codes b
-  | .raise _ | .hnd .. | .ubind .. => throw "layout types: an effect not lowered (`Unwind`)"
+  | .con k n a => do
+      let fs ← (List.range n).mapM fun i => if i == k then tyVar a else newNode .any
+      let t ← newNode (.sumN fs)
+      modify fun s => { s with cons := s.cons.insert a t }
+      pure t
+  | .when s k n x b r => do
+      let fs ← (List.range n).mapM fun i => if i == k then tyVar x else newNode .any
+      unify (← tyVar s) (← newNode (.sumN fs))
+      let t₁ ← infer codeTy codes b
+      let t₂ ← infer codeTy codes r
+      unify t₁ t₂
+      pure t₁
+  | .absurd _ => newNode .any
+  | .raise _ | .hnd .. | .ubind .. | .perform _ | .catch .. | .fin .. | .catchAll _ | .reraise ..
+  | .run .. | .await .. => throw "layout types: an effect not lowered (`Capture`, `Unwind`)"
 
 /-- A code of kind `sel`: the scrutinee, and the arms. -/
 def Code.selShape? (c : Code) : Option (Var × Var × Tm × Var × Tm) :=
@@ -564,6 +590,7 @@ def resolve (s : TState) (codeTy : Array Nat) (codeEnv : Array (List Nat)) (main
     match s.nodes[rep[i]!]! with
     | .pair a b => LTy.pair rep[a]! rep[b]!
     | .sum a b => .sum rep[a]! rep[b]!
+    | .sumN fs => .sumN (fs.map (rep[·]!))
     | .fn a c d => .fn rep[a]! rep[c]! rep[d]!
     | .loc a c => .loc rep[a]! (findIn s.classes c)
     | t => t
@@ -575,6 +602,7 @@ def resolve (s : TState) (codeTy : Array Nat) (codeEnv : Array (List Nat)) (main
   let succ := (Array.range n).map fun v =>
     if rep[v]! != v then [] else match shape[v]! with
       | .pair a b | .sum a b => [a, b]
+      | .sumN fs => fs
       | .fn .. => envOf v
       | _ => []
   let cyc := onCycle succ
@@ -618,6 +646,8 @@ def resolve (s : TState) (codeTy : Array Nat) (codeEnv : Array (List Nat)) (main
                cs.all fun c => (codeEnv[c]!).all (trivial[·]!))
             | .pair a b => (fw 0 a + fw 1 b, ft 0 a && ft 1 b)
             | .sum a b => (1 + max (fw 0 a) (fw 1 b), ft 0 a && ft 1 b)
+            | .sumN fs => (1 + fs.zipIdx.foldl (fun m (c, j) => max m (fw j c)) 0,
+                fs.zipIdx.all fun (c, j) => ft j c)
           width := width.set! v w
           trivial := trivial.set! v t
           color := color.set! v 2
@@ -639,8 +669,10 @@ def resolve (s : TState) (codeTy : Array Nat) (codeEnv : Array (List Nat)) (main
 def Tm.builds : Tm → List Nat
   | .clos c _ => [c]
   | .letv _ e b => e.builds ++ b.builds
-  | .letpair _ _ _ b | .copy _ _ b | .drop _ b => b.builds
+  | .letpair _ _ _ b | .copy _ _ b | .drop _ b | .hnd _ _ _ b | .ubind _ _ b | .catch _ b
+  | .fin _ _ b | .catchAll b => b.builds
   | .case _ _ b₁ _ b₂ => b₁.builds ++ b₂.builds
+  | .when _ _ _ _ b r => b.builds ++ r.builds
   | _ => []
 
 /-- The codes whose closures the program builds, from `main` and the codes it builds, and

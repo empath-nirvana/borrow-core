@@ -133,7 +133,7 @@ def run (file : String) : IO UInt32 := do
 
 /-- A kernel program by name (`Backend.kernelPrograms`). -/
 def kernelProg (name : String) : Option BoCa.Expr :=
-  ((Backend.kernelPrograms ++ Backend.kernelProgramsControl).lookup name)
+  (Backend.kernelPrograms.lookup name)
 
 /-- Write a kernel program's stage output, or its error. -/
 def kernelReport (r : Except String Backend.Output) : IO UInt32 := do
