@@ -6,6 +6,6 @@
 -- Answer: i32[12].
 effect Counter { fn tick() -> i32 }
 
-handler count(n: i32) for Counter { tick() -> { n = n + 1; n } }
+handler count(mut n: i32): Counter = { tick() = { n = n + 1; n } }
 
 main -> i32 = with count(0) { let a = tick(); let b = tick(); a * 10 + b }

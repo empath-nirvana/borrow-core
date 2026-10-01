@@ -3661,6 +3661,23 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
         let Tbs := if k == .imm then VTy.imm lsp (.var lsp x) As else .mut lsp (.var lsp x) As
         pure (.app sp (.app sp₂ (.const ksp C) P') (.thunkv tsp (.lamL lsp xi (.dom lsp)
           (.ret lsp (.thunkv lsp (.lam lsp b Tbs (boxTail x S')))))))
+      | .mut, .mut a A => do
+        -- A `mut` borrow reborrowed for the block (`withbor3`): the place gets it back after.
+        let dom ← need lsp "the block's bound" (c.elabL (.dom lsp))
+        let c₁ := c.pushLife x dom
+        let some v := c₁.E.lenv.lookup x | throw ⟨lsp, "internal error: a borrow block"⟩
+        let Tb : CVTy := .mut (.var v) A
+        let S' ← surfC n (c₁.push b.name (some Tb)) none S
+        let B ← need tsp "the block's result" (resultOfC (((← refresh c₁).push b.name (some Tb)).tyC S'))
+        if BoCa.Fig16.LogRel.Core.Check.vfreeB v B then
+          throw (Frontend.Elab.LoopLend.escapeError tsp x (Frontend.Check.ppV c₁.E.lenv 0 0 B))
+        let As ← c.surface ksp A
+        let Bs ← c.surface ksp B
+        let xi : Ident := ⟨x, ksp⟩
+        let C := Const.withbor3 (← c.surfaceL ksp a) xi As Bs
+        let Tbs := VTy.mut lsp (.var lsp x) As
+        pure (.app sp (.app sp₂ (.const ksp C) P') (.thunkv tsp (.lamL lsp xi (.dom lsp)
+          (.ret lsp (.thunkv lsp (.lam lsp b Tbs (boxTail x S')))))))
       | .imm, .fam (.ref A) | .mut, .fam (.ref A) => do
         -- An owned array lent as a family of leaf borrows, with no cell (`slice_borrow_*`,
         -- SPEC §9).

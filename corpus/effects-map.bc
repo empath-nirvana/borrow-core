@@ -33,15 +33,15 @@ fn assoc_find<'a>(v: array_imm 'a (i32 * i32), k: i32) -> i32 + 1 =
   if r < 0 { inr () } else { inl r }
 
 -- A buffer of pairs: `insert` appends, `lookup` finds the last pair with the key.
-handler assoc(s: Assoc) for Map {
-  lookup(k) -> borrow imm s { v -> assoc_find(v, k) };
-  insert(k, v) -> { let e = (k, v); push(&mut s, e) }
+handler assoc(mut s: Assoc): Map = {
+  lookup(k) = borrow imm s { v -> assoc_find(v, k) };
+  insert(k, v) = { let e = (k, v); push(&mut s, e) }
 }
 
 -- An array indexed by the key: `0` is a key not present.
-handler table(t: array i32) for Map {
-  lookup(k) -> { let x = borrow imm t { v -> at(v, k, 0) }; if x == 0 { inr () } else { inl x } };
-  insert(k, v) -> { let (t, _) = array_replace[i32](t, k, v); () }
+handler table(mut t: array i32): Map = {
+  lookup(k) = { let x = borrow imm t { v -> at(v, k, 0) }; if x == 0 { inr () } else { inl x } };
+  insert(k, v) = { let (t, _) = array_replace[i32](t, k, v); () }
 }
 
 -- For each element, how often it was seen before, summed; then the counts of 0 and 3.

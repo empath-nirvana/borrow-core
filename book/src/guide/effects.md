@@ -8,7 +8,7 @@ a function. Spellings are provisional (SPEC §18, decision 51).
 -- answer: i32[12]
 effect Counter { fn tick() -> i32 }
 
-handler count(n: i32) for Counter { tick() -> { n = n + 1; n } }
+handler count(mut n: i32): Counter = { tick() = { n = n + 1; n } }
 
 main -> i32 = with count(0) { let a = tick(); let b = tick(); a * 10 + b }
 ```
@@ -42,8 +42,8 @@ include slice
 
 effect Log { fn note(x: i32) }
 
-handler summed(s: i32) for Log { note(x) -> { s = s + x; () } }
-handler count(n: i32) for Log { note(x) -> { n = n + 1; () } }
+handler summed(mut s: i32): Log = { note(x) = { s = s + x; () } }
+handler count(mut n: i32): Log = { note(x) = { n = n + 1; () } }
 
 fn walk<'a>(v: array_imm 'a i32) -> 1 =
   for p in v { note(*p) };

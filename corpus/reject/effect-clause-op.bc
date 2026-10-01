@@ -3,6 +3,6 @@
 -- expect: 6:37: the clause `tick` of `count` performs an operation of `Counter`: a clause is code over the handler's state, and performs no operation
 effect Counter { fn tick() -> i32 }
 
-handler count(n: i32) for Counter { tick() -> { n = n + tick(); n } }
+handler count(mut n: i32): Counter = { tick() = { n = n + tick(); n } }
 
 main -> i32 = with count(0) { tick() }

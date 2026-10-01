@@ -906,9 +906,10 @@ def withCtl : Nat → Cx → List Cap → Span → Span → CHandler → List VT
       throw ⟨ksp, s!"the body of `with {ch.name.name}` assigns a `let mut` variable declared " ++
         "outside it, or lends a place declared outside it: a control handler's body may be " ++
         "abandoned, and does not hand them back; bind what the block answers instead"⟩
-    unless (cx.needC M).isEmpty do
-      throw ⟨ksp, s!"the body of `with {ch.name.name}` performs an answering effect handled " ++
-        "outside it: not provided (the capability would be lost when the body is abandoned)"⟩
+    -- The capabilities the body uses are reborrowed for it, each at a lifetime of its own, so that
+    -- they come back when the body is abandoned.
+    let mut csM : List Cap := []
+    for c in cx.needC M do csM := csM ++ [{ c with life := ← fresh "fx_rl" }]
     -- Written type arguments, in the order of the handler's type parameters.
     if As.length > tps.length then
       throw ⟨ksp, s!"`{ch.name.name}` takes {tps.length} type argument(s)"⟩
@@ -951,7 +952,8 @@ def withCtl : Nat → Cx → List Cap → Span → Span → CHandler → List VT
             | .aff => "affine: resumed or cancelled"
             | .unr => "unrestricted: its continuation copied"}"))
     -- The body, with this site innermost for `e`.
-    let cxB : Cx := { cx with sites := site :: cx.sites.filter (·.eff != e) }
+    let cxB : Cx := { cx with sites := site :: cx.sites.filter (·.eff != e),
+                              caps := cx.caps.map fun c => (csM.find? (·.var == c.var)).getD c }
     let M' ← trC k cxB [] false M
     -- The clauses run outside the handler: their operations go to the sites of the handler's row.
     let cxH : Cx := { env := cx.env, caps := [], sites := outer }
@@ -987,7 +989,29 @@ def withCtl : Nat → Cx → List Cap → Span → Span → CHandler → List VT
     let hnd : Val := .app sp (.app sp (.app sp (.app sp (.sugar ksp (.hndCtl info)) P')
       (.thunkv sp (.lam sp rx rA rM'))) clsV) (.thunk sp M')
     let r ← fresh "fx_v"
-    let bind : Bind := fun N => pure (.bind sp ⟨r, sp⟩ none (.ret sp hnd) N false)
+    if csM.isEmpty then
+      let bind : Bind := fun N => pure (.bind sp ⟨r, sp⟩ none (.ret sp hnd) N false)
+      return (bsP ++ [bind], .var sp r)
+    -- `borrow mut c { 'l, c -> HND }` for each capability `c`, innermost last; each block hands
+    -- the capability back beside the result.
+    let mut blk : Comp := .ret sp hnd
+    for c in csM.reverse do
+      let l := c.life
+      let t ← fresh "fx_rb"
+      let inner : Comp := .bind sp ⟨t, sp⟩ none blk (.ret sp (.var sp t)) false
+      blk := .ret sp (.app sp (.app sp (.sugar ksp (.borrow .mut l)) (.var sp c.var))
+        (.thunkv sp (.lam sp ⟨c.var, sp⟩ (holeTy sp) inner)))
+    let bind : Bind := fun N => do
+      -- The capabilities bound again from the nested pairs `(c₁, (c₂, … r))`.
+      let rec unwrap : List Cap → String → Comp → EM Comp
+        | [], v, K => pure (.bind sp ⟨r, sp⟩ none (.ret sp (.var sp v)) K false)
+        | c :: cs, v, K => do
+          let w ← fresh "fx_rw"
+          pure (.letPair sp ⟨c.var, sp⟩ ⟨w, sp⟩ (.var sp v) (← unwrap cs w K))
+      let t ← fresh "fx_rt"
+      match blk with
+      | .ret _ V => pure (.bind sp ⟨t, sp⟩ none (.ret sp V) (← unwrap csM t N) false)
+      | B => pure (.bind sp ⟨t, sp⟩ none B (← unwrap csM t N) false)
     pure (bsP ++ [bind], .var sp r)
 
 /-- The copy of `g` for what serves its effects at a call in `cx`, made once. -/
