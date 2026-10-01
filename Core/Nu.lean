@@ -86,7 +86,7 @@ theorem nodeV_closed : ∀ C : CTy, closedAt 0 (nodeV C).1 = true
   | .amp C D => by
       simp [nodeV, closedAt, closedAt_mono _ (nodeV_closed C) (Nat.zero_le _),
         closedAt_mono _ (nodeV_closed D) (Nat.zero_le _)]
-  | .arr _ _ | .top | .all _ _ _ | .nu _ => rfl
+  | .arr _ _ | .top | .all _ _ _ | .nu _ | .eff _ _ _ _ _ _ => rfl
 
 /-- The body of `unfold_C = Z (λself. λg. λs. node_C (λs′. λo. self g s′ o) (λ_. g s))`. -/
 def fBN (C : CTy) : Expr :=

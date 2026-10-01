@@ -546,6 +546,10 @@ theorem cTyEq_symm : ∀ (C : CTy) {C' : CTy} {δ δ' : LSub}, CTyEq C δ C' δ'
   | .nu C, C', _, _, h => by
       cases C' <;> simp only [CTyEq] at h ⊢
       exact cTyEq_symm C h
+  | .eff _ _ _ A B C, C', _, _, h => by
+      cases C' <;> simp only [CTyEq] at h ⊢
+      exact ⟨h.1.symm, h.2.1.symm, h.2.2.1.symm, tyEq_symm A h.2.2.2.1, tyEq_symm B h.2.2.2.2.1,
+        cTyEq_symm C h.2.2.2.2.2⟩
 end
 
 theorem TyEq.symm {S S' : VTy} {δ δ' : LSub} (h : TyEq S δ S' δ') : TyEq S' δ' S δ :=
@@ -626,6 +630,12 @@ theorem cTyEq_trans : ∀ (C : CTy) {C' C'' : CTy} {δ δ' δ'' : LSub}, CTyEq C
       cases C' <;> simp only [CTyEq] at h
       cases C'' <;> simp only [CTyEq] at h' ⊢
       exact cTyEq_trans C h h'
+  | .eff _ _ _ A B C, C', C'', _, _, _, h, h' => by
+      cases C' <;> simp only [CTyEq] at h
+      cases C'' <;> simp only [CTyEq] at h' ⊢
+      exact ⟨h.1.trans h'.1, h.2.1.trans h'.2.1, h.2.2.1.trans h'.2.2.1,
+        tyEq_trans A h.2.2.2.1 h'.2.2.2.1, tyEq_trans B h.2.2.2.2.1 h'.2.2.2.2.1,
+        cTyEq_trans C h.2.2.2.2.2 h'.2.2.2.2.2⟩
 end
 
 theorem TyEq.trans {S S' S'' : VTy} {δ δ' δ'' : LSub} (h : TyEq S δ S' δ')
@@ -674,6 +684,9 @@ theorem CTyEq.of_agree : ∀ (C : CTy) {δ₁ δ₂ : LSub},
       · rw [find?_extend_ne _ _ hxy, find?_extend_ne _ _ hxy]
         exact h y (Or.inr ⟨Ne.symm hxy, hy⟩)
   | .nu C, _, _, h => CTyEq.of_agree C h
+  | .eff _ _ _ A B C, _, _, h => ⟨rfl, rfl, rfl, TyEq.of_agree A (fun y hy => h y (Or.inl hy)),
+      TyEq.of_agree B (fun y hy => h y (Or.inr (Or.inl hy))),
+      CTyEq.of_agree C (fun y hy => h y (Or.inr (Or.inr hy)))⟩
 end
 
 theorem TyEq.refl (T : VTy) (δ : LSub) : TyEq T δ T δ := TyEq.of_agree T (fun _ _ => rfl)

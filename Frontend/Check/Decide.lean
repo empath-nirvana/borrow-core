@@ -251,6 +251,7 @@ def cfreeB (x : LifeVar) : CTy → Bool
   | .top => false
   | .all y b C => b.mentions x || (x != y && cfreeB x C)
   | .nu C => cfreeB x C
+  | .eff _ _ _ A B C => vfreeB x A || vfreeB x B || cfreeB x C
 end
 
 mutual
@@ -278,6 +279,8 @@ theorem cfreeB_iff (x : LifeVar) : ∀ C : CTy, cfreeB x C = true ↔ CFree x C
   | .top => by simp [cfreeB, CFree]
   | .all y b C => by simp [cfreeB, CFree, cfreeB_iff x C]
   | .nu C => by simp [cfreeB, CFree, cfreeB_iff x C]
+  | .eff _ _ _ A B C => by
+      simp [cfreeB, CFree, vfreeB_iff x A, vfreeB_iff x B, cfreeB_iff x C, or_assoc]
 end
 
 theorem not_vfree_of_vfreeB {x : LifeVar} {A : VTy} (h : vfreeB x A = false) : ¬ VFree x A :=
@@ -561,6 +564,7 @@ def cScopedB (Δ : LifeCtx) (ex : List LifeVar) : CTy → Bool
   | .top => true
   | .all y b C => lifeScopedB Δ ex b && cScopedB Δ (y :: ex) C
   | .nu C => cScopedB Δ ex C
+  | .eff _ _ _ A B C => vScopedB Δ ex A && vScopedB Δ ex B && cScopedB Δ ex C
 end
 
 mutual
@@ -612,6 +616,12 @@ theorem cScopedB_sound {Δ : LifeCtx} {y : LifeVar} : ∀ {ex : List LifeVar} (C
           · exact Or.inl hm
         · exact Or.inr hs
   | _, .nu C, h, hf => cScopedB_sound C h hf
+  | _, .eff _ _ _ A B C, h, hf => by
+      simp only [cScopedB, Bool.and_eq_true] at h
+      rcases hf with hf | hf | hf
+      · exact vScopedB_sound A h.1.1 hf
+      · exact vScopedB_sound B h.1.2 hf
+      · exact cScopedB_sound C h.2 hf
 end
 
 /-- `VScoped Δ A`, decided soundly (and completely). -/

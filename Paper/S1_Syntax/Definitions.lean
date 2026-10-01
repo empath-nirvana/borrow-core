@@ -66,6 +66,21 @@ inductive Prim where
   /-- The counted loop with an exit: `count_try (f, (n, (i, s)))` runs `f` at `i, …, len(n) − 1`
       while it answers `inj₁` of the next state, and stops at its first `inj₂`.  `[spec §16]` -/
   | countTry
+  /-- A control operation: `perform (n, (i, v))` asks the nearest handler named `n` for its
+      operation `i` at `v`, and is resumed with its answer.  `[spec §19]` -/
+  | perform
+  /-- An abortive operation: `raise (n, (i, v))` unwinds to the nearest handler named `n`, each
+      finaliser on the way running innermost first.  `[spec §19]` -/
+  | raise
+  /-- The handler frame `hnd (n, (h_ret, hs)) e`.  `[spec §19]` -/
+  | hnd
+  /-- The finaliser frame `ubind (N, D) M`: `M` then `N`, or `D` when `M` unwinds.  `[spec §19]` -/
+  | ubind
+  /-- The cancel delimiter `ccatch e`, which catches only the reserved name `0`.  `[spec §19]` -/
+  | ccatch
+  /-- The cancel-mode finaliser frame `cfin s e`: `e` is a finaliser running under a cancel whose
+      state is `s`; every `raise` escaping `e` is caught here.  `[spec §19]` -/
+  | cfin
   deriving DecidableEq, Repr
 
 /-!

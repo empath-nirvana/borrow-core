@@ -108,7 +108,7 @@ theorem step1_case₁_inv {μ μ₁ : Heap} {e₁ e₂ e' : Expr} {v : Val}
       obtain ⟨hv, rfl, rfl⟩ := hE
       have : v = v' := Subtype.ext (by injection hv)
       subst this; exact ⟨rfl, rfl⟩
-  | _ => simp_all
+  | _ => simp_all [BoLo.hndE, BoLo.ubindE, BoLo.ccatchE, BoLo.cfinE]
 
 theorem step1_case₂_inv {μ μ₁ : Heap} {e₁ e₂ e' : Expr} {v : Val}
     (h : Step1 μ (.case (.inj₂ v.1) e₁ e₂) μ₁ e') : μ₁ = μ ∧ e' = e₂.subst 0 v := by
@@ -126,7 +126,7 @@ theorem step1_case₂_inv {μ μ₁ : Heap} {e₁ e₂ e' : Expr} {v : Val}
       obtain ⟨hv, rfl, rfl⟩ := hE
       have : v = v' := Subtype.ext (by injection hv)
       subst this; exact ⟨rfl, rfl⟩
-  | _ => simp_all
+  | _ => simp_all [BoLo.hndE, BoLo.ubindE, BoLo.ccatchE, BoLo.cfinE]
 
 theorem step1_seq_inv {μ μ₁ : Heap} {e e' : Expr} (h : Step1 μ (.seq .unit e) μ₁ e') :
     μ₁ = μ ∧ e' = e := by
@@ -143,27 +143,27 @@ theorem step1_seq_inv {μ μ₁ : Heap} {e e' : Expr} (h : Step1 μ (.seq .unit 
       simp only [Expr.seq.injEq] at hE
       obtain ⟨-, rfl⟩ := hE
       exact ⟨rfl, rfl⟩
-  | _ => simp_all
+  | _ => simp_all [BoLo.hndE, BoLo.ubindE, BoLo.ccatchE, BoLo.cfinE]
 
 /-- A redex in a context steps only by its head step. -/
 theorem det_beta (K : Kont) (b : Expr) (v : Val) {μ μ₁ : Heap} {e₁ : Expr}
     (h : Step1 μ (K.plug (.app (.val (.lam b)) (.val v))) μ₁ e₁) : e₁ = K.plug (b.subst 0 v) := by
-  obtain ⟨e', rfl, h'⟩ := step1_plug_inv K (by intro h; cases h) h
+  obtain ⟨e', rfl, h'⟩ := step1_plug_inv_active K .hole rfl (Head.beta μ b v) h
   rw [(step1_beta_inv h').2]
 
 theorem det_case₁ (K : Kont) (v : Val) (e₁ e₂ : Expr) {μ μ₁ : Heap} {e' : Expr}
     (h : Step1 μ (K.plug (.case (.val (.inj₁ v)) e₁ e₂)) μ₁ e') : e' = K.plug (e₁.subst 0 v) := by
-  obtain ⟨e'', rfl, h'⟩ := step1_plug_inv K not_isVal_case h
+  obtain ⟨e'', rfl, h'⟩ := step1_plug_inv_active K .hole rfl (Head.case₁ μ v e₁ e₂) h
   rw [(step1_case₁_inv h').2]
 
 theorem det_case₂ (K : Kont) (v : Val) (e₁ e₂ : Expr) {μ μ₁ : Heap} {e' : Expr}
     (h : Step1 μ (K.plug (.case (.val (.inj₂ v)) e₁ e₂)) μ₁ e') : e' = K.plug (e₂.subst 0 v) := by
-  obtain ⟨e'', rfl, h'⟩ := step1_plug_inv K not_isVal_case h
+  obtain ⟨e'', rfl, h'⟩ := step1_plug_inv_active K .hole rfl (Head.case₂ μ v e₁ e₂) h
   rw [(step1_case₂_inv h').2]
 
 theorem det_seq (K : Kont) (e : Expr) {μ μ₁ : Heap} {e' : Expr}
     (h : Step1 μ (K.plug (.seq (.val .unit) e)) μ₁ e') : e' = K.plug e := by
-  obtain ⟨e'', rfl, h'⟩ := step1_plug_inv K not_isVal_seq h
+  obtain ⟨e'', rfl, h'⟩ := step1_plug_inv_active K .hole rfl (Head.seq μ e) h
   rw [(step1_seq_inv h').2]
 
 /-! ### The cycle -/

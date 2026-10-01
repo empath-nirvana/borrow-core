@@ -102,7 +102,7 @@ theorem inner_ret (s₁ : Shape) {g m₁ m₂ t : Val} {μ μ' : Heap} (hg : clA
   have h := steps_app2_lam2 (a := Val.unit) (b := m₂)
     (X := app2 g.1 unit' (.pair (shortenE s₁ m₁.1) (.var 0))) hs
   simp [app2, Expr.subst, cl_subst hg, shortenE_subst, cl_subst hm₁, unit', Val.unit] at h
-  obtain ⟨μm, a, h₁, h₂⟩ := steps_appR_inv h
+  obtain ⟨μm, a, h₁, h₂⟩ := steps_appR_inv (by simp [Kont.Plain]) h
   obtain ⟨u₁, u₂, rfl, μa, μb, r₁, r₂⟩ := steps_pair_inv h₁
   rw [shortenE_run s₁ r₁] at h₂
   obtain ⟨-, rfl⟩ := steps_from_val (v := m₂) r₂

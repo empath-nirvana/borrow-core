@@ -12,11 +12,14 @@ import Core.RelationFacts
 import Core.ReborrowShapes
 import Core.Reborrow
 import Core.FrameRules
+import Core.EffWp
+import Core.EffCancel
 import Core.Persistent
 import Core.Compatibility
 import Core.NuRel
 import Core.Computation
 import Core.Compat
+import Core.EffRules
 import Core.Sized
 import Core.FoldImm
 import Core.FoldOwn
@@ -59,6 +62,7 @@ import Core.Slices
 import Core.CountFold
 import Core.ArrayPrograms
 import Core.Demonic
+import Core.EffExamples
 import Core.Totality
 import Core.Stale
 import Core.Stdio

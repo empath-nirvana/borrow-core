@@ -159,6 +159,8 @@ def ppC (nm : List (String × LifeVar)) (p : Nat) : CCTy → String
   | .nu (.amp (.ret (.sum (.tensor A (.tvar 0)) R)) (.ret R')) =>
       parenIf (p > 5) s!"iter {ppV nm 0 6 A} {ppV nm 0 6 R} {ppV nm 0 6 R'}"
   | .nu C => parenIf (p > 0) s!"nu {tvName 0}. {ppC nm 0 C}"
+  | .eff n i _ A B C =>
+      parenIf (p > 5) s!"eff {n}.{i} ({ppV nm 0 2 A} ~> {ppV nm 0 2 B}) {ppC nm 6 C}"
 end
 
 def ppLife (a : CLife) : String := ppLifeP [] 1 a

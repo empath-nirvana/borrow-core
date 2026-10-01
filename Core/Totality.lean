@@ -106,7 +106,7 @@ theorem Head.allocAt {μ μ' : Heap} {a a' : Expr} (hh : Head (ℍ := ℍ) μ a 
       exact ⟨ℓ, 1, .inl ⟨v, rfl, rfl, hl, rfl, rfl⟩⟩
   | tab c f ℓ hl =>
       exact ⟨ℓ, _, .inr ⟨c, f, rfl, rfl, hl, rfl, rfl⟩⟩
-  | _ => simp [Expr.allocs] at hal
+  | _ => simp [Expr.allocs, BoLo.hndE, BoLo.ubindE, BoLo.ccatchE, BoLo.cfinE] at hal
 
 /-- An infinite run of the machine. -/
 def InfRun (f : ℕ → Heap × Expr) : Prop :=
