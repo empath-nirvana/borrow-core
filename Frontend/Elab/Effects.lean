@@ -118,6 +118,9 @@ structure RSelf where
   A : VTy
   /-- The sites the copy serves its row's control effects at, by effect. -/
   served : List (String × Nat)
+  /-- Under a heap driver: a call of itself is a call of the self-reference `fx_rself{j}` of the
+  group's machine source, which the typed elaboration turns into a request (`recMachine`). -/
+  deep : Bool := false
 
 /-- What the elaboration knows, each declared before the point being elaborated. -/
 structure Env where
@@ -230,6 +233,16 @@ def Env.exhEff? (env : Env) : Option EffSig :=
     | [o] => (match o.res with | .zero _ => true | _ => false) && o.kind != .ctl .lin &&
         o.kind != .fn && o.params.isEmpty
     | _ => false
+
+/-- The function `x` is a **heap driver** of recursion (SPEC §20): its written type is
+`!(!(A => B + A * (K + 1)) * (!(K * B => B + A * (K + 1)) * A) => U (loop B 1))`, a loop over a
+group's machine, its `start` and `resume` (`deep` of `lib/rec.bc`). `with x { M }` drives the
+recursive groups `M` calls by it. The structure decides it, not the name. -/
+def Env.driver? (env : Env) (x : String) : Bool :=
+  match env.sigs.lookup x with
+  | some (.bang _ (.lolli _ (.tensor _ (.bang _ (.lolli _ _ (.sum _ _ (.tensor _ _ (.sum _ _ (.unit _))))))
+      (.tensor _ (.bang _ (.lolli _ (.tensor _ _ _) (.sum _ _ _))) _)) (.thunk _ (.loop _ _ (.unit _))))) => true
+  | _ => false
 
 /-- The budget of depth `bounded` gives a recursion (SPEC §20): calibrated against the wasm stack
 `wasmtime` is run with (`Backend.wasmStackBytes`, 64 MiB), so that a recursion at the budget leaves
@@ -381,7 +394,11 @@ def rowV (env : Env) : Nat → Val → List Inst
       let inner := match env.handler? h, env.chandler? h with
         | some hs, _ => without inner hs.eff
         | none, some ch => union (without inner ch.eff.name) (handlerRow ch)
-        | none, none => inner
+        | none, none =>
+          if env.driver? h then match env.exhEff? with
+            | some e => without inner e.name
+            | none => inner
+          else inner
       union (rowV env n P) inner
     | .app _ f W =>
       let head := match headName f with
@@ -569,6 +586,9 @@ structure Cx where
   `rec` site and of the site of the exhaustion effect, and the variable holding the
   self-reference. -/
   recSelf : Option RSelf := none
+  /-- Inside `with d { … }` of a heap driver `d` (SPEC §20): the recursive groups called are driven
+  by it. -/
+  driver : Option String := none
 
 /-- The capabilities of `cx` for the effects `row`, in the order of `cx.caps`. -/
 def Cx.need (cx : Cx) (row : List Inst) : List Cap := cx.caps.filter (fun c => row.any (·.eff == c.eff))
@@ -910,7 +930,15 @@ def goV : Nat → Cx → List Cap → Val → EM (List Bind × Val)
       match cx.env.handler? h, cx.env.chandler? h with
       | some hs, _ => withBlk k cx cs sp sp₂ ksp hs l P tsp lsp b A M
       | none, some ch => withCtl k cx cs sp ksp ch As P M
-      | none, none => throw ⟨ksp, s!"no handler `{h}` is declared before this `with`"⟩
+      | none, none =>
+        if cx.env.driver? h then do
+          -- `with d { M }` of a heap driver: `M`, its recursive groups driven by `d`.
+          report ksp "lowering" s!"with {h}: the recursive groups called in its body are driven by `{h}`"
+          let M' ← trC k { cx with driver := some h } [] false M
+          let r ← fresh "fx_v"
+          let bind : Bind := fun N => pure (bindFlat sp r none M' N)
+          pure ([bind], .var sp r)
+        else throw ⟨ksp, s!"no handler `{h}` is declared before this `with`"⟩
     | .app sp (.app sp₂ (.sugar ksp k'@(.borrow ..)) P) (.thunkv tsp (.lam lsp b A M)) => do
       let (bsP, P') ← goV k cx cs P
       let csM := cx.needC M
@@ -1010,6 +1038,10 @@ it is in. -/
 def selfCall : Nat → Cx → List Cap → Span → RSelf → String → Nat → Val → EM (List Bind × Val)
   | 0, _, _, sp, _, _, _, _ => throw ⟨sp, "internal error: a value nested too deeply"⟩
   | k + 1, cx, cs, sp, rs, x, j, W => do
+    if rs.deep then
+      let (b, W') ← goV k cx cs W
+      report sp "call" s!"{x} → a request of the group's machine, driven by the heap driver"
+      return (b, .app sp (.var sp s!"fx_rself{j}") W')
     -- A call of itself inside a handler of an effect its row performs: each level would need a
     -- copy whose sites are the level's own, without end (decision 57).
     for (e, n) in rs.served do
@@ -1380,6 +1412,8 @@ def pullArgsV : Nat → Cx → List Cap → String → Val → EM (List Bind × 
 def copyFor : Nat → Cx → Span → String → FSig → EM String
   | 0, _, sp, _, _ => throw ⟨sp, "internal error: copies nested too deeply"⟩
   | k + 1, cx, sp, x, g => do
+    if let (some (gn, _), some d) := (g.group, cx.driver) then
+      return ← deepCopy k cx.env sp gn d x
     let mut hs : List HSig := []
     let mut ss : List Site := []
     let mut keys : List String := []
@@ -1429,7 +1463,7 @@ def groupCopy : Nat → Env → Span → String → List Site → List String �
     let selfT : VTy := .sum gsp (.unit gsp) selfFn
     let self := "fx_self"
     let rs : RSelf := ⟨G.members.map (·.1), m, e.n, self,
-      .eff gsp (.cons m 0 .aff (.tensor gsp selfFn A) B rowR) B, A, ss.map fun s => (s.eff, s.n)⟩
+      .eff gsp (.cons m 0 .aff (.tensor gsp selfFn A) B rowR) B, A, ss.map (fun s => (s.eff, s.n)), false⟩
     let cx : Cx := { env, caps := [], sites := ss, recSelf := some rs }
     -- The members' bodies, dispatched on the member's tag.
     let mut bodies : List (Ident × Comp) := []
@@ -1485,6 +1519,69 @@ def groupCopy : Nat → Env → Span → String → List Site → List String �
       let drv : FnParts := ⟨true, [], f.P, B, ⟨p, gsp⟩, body⟩
       let (dA, dV) := drv.build gsp rowR
       let dn := copyName mn keys
+      modify fun s => { s with made := s.made.push (dn, .def_ gsp ⟨dn, gsp⟩ [] dA dV .none) }
+    pure name
+
+/-- The copy of the recursive group `gn` driven by the heap driver `d`, made once (SPEC §20): the
+machine's source `gn__mach_src`, a function of the members' self-references whose result runs a
+member's body on its tagged argument (the typed elaboration turns it into the machine
+`gn__mach`, `recMachine`), and per member `x__d`, `d` of the machine on the member's argument, a
+loop. Answers the copy of `x`. -/
+def deepCopy : Nat → Env → Span → String → String → String → EM String
+  | 0, _, sp, _, _, _ => throw ⟨sp, "internal error: copies nested too deeply"⟩
+  | k + 1, env, sp, gn, d, x => do
+    let name := s!"{x}__{d}"
+    let src := s!"{gn}__mach_src"
+    let mach := s!"{gn}__mach"
+    let st ← get
+    if st.made.any (·.1 == src) || st.started.contains src then return name
+    modify fun s => { s with started := src :: s.started }
+    let some G := env.groups.find? (·.name == gn) | throw ⟨sp, s!"internal error: the group `{gn}`"⟩
+    let some exh := env.exhEff? | throw ⟨sp, s!"internal error: the exhaustion effect"⟩
+    let gsp := G.sp
+    let some g₀ := env.fn? x | throw ⟨sp, s!"internal error: `{x}`"⟩
+    if let some i := g₀.row.find? (·.eff != exh.name) then
+      throw ⟨sp, s!"`{x}` performs `{i.eff}`: a recursion that performs an effect is not provided " ++
+        s!"under the heap driver `{d}`"⟩
+    let A := sumTys gsp (G.members.map (·.2.P))
+    let B := G.B
+    let rs : RSelf := ⟨G.members.map (·.1), 0, 0, "", .ret gsp B, A, [], true⟩
+    let cx : Cx := { env, caps := [], recSelf := some rs }
+    let mut bodies : List (Ident × Comp) := []
+    for (_, f) in G.members do
+      let body ← trC k cx [] true f.body
+      let xi ← fresh "fx_ra"
+      bodies := bodies ++ [(⟨xi, gsp⟩, .bind gsp f.p none (.ret gsp (.var gsp xi)) body false)]
+    let fa ← fresh "fx_rarg"
+    let rec dispatch : Nat → String → List (Ident × Comp) → EM Comp
+      | _, _, [] => throw ⟨gsp, "internal error: an empty group"⟩
+      | _, v, [(xi, B₁)] => pure (.bind gsp xi none (.ret gsp (.var gsp v)) B₁ false)
+      | 0, _, _ => throw ⟨gsp, "internal error: a group nested too deeply"⟩
+      | n + 1, v, (xi, B₁) :: rest => do
+        let y ← fresh "fx_rq"
+        pure (.case gsp (.var gsp v) xi B₁ ⟨y, gsp⟩ (← dispatch n y rest))
+    let body ← dispatch (G.members.length + 1) fa bodies
+    -- `fx_rs ↦ (fx_rself0, …) bound; return !thunkv fun (fx_rarg : A) -> body`.
+    let selfTy (f : FnParts) : VTy := .bang gsp (.lolli gsp f.P B)
+    let selfs := G.members.zipIdx.map fun ((_, f), j) => (s!"fx_rself{j}", selfTy f)
+    let ps ← fresh "fx_rs"
+    let inner : Val := .bangThunkv gsp (.lam gsp ⟨fa, gsp⟩ A body)
+    let srcBody ← bindParams gsp ps (selfs.map fun (y, _) => ⟨y, gsp⟩) (.ret gsp inner)
+    let srcF : FnParts := ⟨true, [], tupleTy gsp (selfs.map (·.2)), .bang gsp (.lolli gsp A B),
+      ⟨ps, gsp⟩, srcBody⟩
+    let (sA, sV) := srcF.build gsp
+    report gsp "lowering" (s!"recursive group {", ".intercalate (G.members.map (·.1))} under `{d}`: " ++
+      s!"the machine `{mach}`, its pending calls frames in `{d}`'s buffer")
+    modify fun s => { s with made := s.made.push (src, .def_ gsp ⟨src, gsp⟩ [] sA sV .none) }
+    for ((mn, f), j) in G.members.zipIdx do
+      let p ← fresh "fx_dp"
+      let ms ← fresh "fx_ms"; let mr ← fresh "fx_mr"
+      let call : Val := .app gsp (.var gsp d) (.pair gsp (.var gsp ms) (.pair gsp (.var gsp mr)
+        (.ascribe gsp (injAt gsp j G.members.length (.var gsp p)) A)))
+      let body : Comp := .letPair gsp ⟨ms, gsp⟩ ⟨mr, gsp⟩ (.var gsp mach) (.ret gsp call)
+      let drv : FnParts := ⟨true, [], f.P, B, ⟨p, gsp⟩, body⟩
+      let (dA, dV) := drv.build gsp
+      let dn := s!"{mn}__{d}"
       modify fun s => { s with made := s.made.push (dn, .def_ gsp ⟨dn, gsp⟩ [] dA dV .none) }
     pure name
 
