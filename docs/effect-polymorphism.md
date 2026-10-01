@@ -72,7 +72,7 @@ The user's decisions on §11 are recorded there and in `docs/decisions.md` entry
 
 | term | meaning |
 |---|---|
-| **computation parameter** | a parameter whose argument is code to run: an argument of computation type `A ⊸ F_Σ B` in CBPV |
+| **computation parameter** | a parameter whose argument is code to run: an argument of type `U C` in CBPV, where `C` is a computation type. The function `A ⊸ F_Σ B` is the one-observation case of codata, and §5.9 states the rules per observation |
 | **provided row** `P` | the effects the callee serves for the argument; written in the parameter's type |
 | **port** `p_E` | the static name at which a closure passed or stored at a given parameter or type performs its provided effect `E`; fixed by that declaration (per instance of a generic one) |
 | **tunneled row** `T` | the effects the argument performs that the callee does not serve; resolved where the argument was written; never written |
@@ -555,6 +555,63 @@ code cost. It is three separate things.
 **(3) Answering effects: no copies.** A capability is an argument (R2d). Typing instances per
 state type remain, as a typing artefact.
 
+### 5.9 Codata: the rules are over computation types, and a function is one observation
+
+Rows attach to computation types, not to functions. A function `A ⊸ F_Σ B` is codata with one
+observation (apply) whose result is effectful. A codata type `C₁ & … & C_k`, or `νX. C` with `C`
+a `&`-tree of observations, has an effectful leaf at each observation that has one. The kernel
+admits this today: an observation's leaf may be `F_Σ A` with closed operation types (`EffLeaf`,
+`NuLeaf`, `NuOk` in `Core/Types.lean`). `Loop_Σ` and stored generators (`pull A B R`) are
+instances. R1–R6 are therefore stated per observation, and a function is the one-observation
+case. This is a reading of the rules above, and is not yet checked against an implementation.
+
+- **R1, per observation.** A parameter of type `U C`, where `C` is a codata type, is a
+  computation parameter. Each observation `o` of `C` has its own provided row `P_o`, and its own
+  port `p_{o,E}` for each control effect `E` in `P_o`. So two observations providing the same
+  effect have two ports (*Open* below). Answering effects in any `P_o` are capability arguments
+  (R2d), passed at the observation that uses them.
+- **Profile and instance key.** The profile of a codata argument is the tuple of its
+  observations' profiles. The instance key is (function, that tuple).
+- **The closure value.** One environment `Mut 'l Env` shared by all the observations, plus one
+  code per observation. This is the defunctionalised object: a `switch` on the closure's tag
+  selects the code, as for functions today.
+- **R5, second class.** Unchanged. Each observation's call borrows the environment in turn, so
+  two observations may use one stateful capability. That is the `sharedUnit_safe` shape again,
+  now across observations.
+- **R6, stored.**
+  - Unchanged per observation: persistent captures only for many-use values, boxed at `@c`, no
+    captured stateful capability, ports fixed by the stored type.
+  - For `ν`, the row of each observation is fixed by the type and is the same at every unfolding.
+    The operation types are closed (`EffLeaf`), so a row cannot change from one step to the next.
+- **Recursion through observations.** An observation of a `ν` value that returns the next state
+  is not a self-call. §6.3's restriction applies only if the observation's code tunnels a site
+  that encloses its own unfolding. That case is not analysed here.
+- **Stored generators over a row** (§8; SPEC §15 *Open*) are R6 applied to `pull`'s observations.
+  Under this section they need no further design. This is a hypothesis until built.
+
+**Target 6 (test program).** An object with two effectful observations, passed second class and
+also stored:
+
+    reader : U ({ next : F_{Log} (A ⊕ 1),  close : F_{Fail[E]} 1 })
+
+A function that drains it calls `next` under its caller's `Log` and `close` under its own
+`to_result`. Run it both ways: passed (R5), and stored in a record and drained later (R6). It
+checks the following:
+
+- the per-observation ports;
+- the shared environment;
+- that `close`'s `Fail` is served by the drainer, while `next`'s `Log` tunnels to the caller.
+
+Stage 3 or the type-declarations work should add it to the corpus once object types have a
+surface (#141).
+
+**Open.**
+
+- Two observations providing the same control effect under one site. This is §5.6's
+  two-ports-under-one-site rejection, now arising inside a single value. `rename` would admit it.
+- Whether an observation's provided row may mention the value's own state type. This is
+  `Loop_Σ`'s closed-operation-type condition, and applies only to `ν`.
+
 ## 6. Accidental handling
 
 ### 6.1 The claim
@@ -653,8 +710,8 @@ Each scoping construct is a function over a passed computation that installs ord
     with persistent captures (`lam_bang_persistent`'s rule, now on the instance).
 - **Divergence and generators.**
   - A callback that loops makes `h`'s profile suspending (a `Loop_Σ` body).
-  - Stored generators over a row (SPEC §15 Open) would be R6 applied to `pull`'s observations.
-    Not designed here.
+  - Stored generators over a row (SPEC §15 Open) are R6 applied to `pull`'s observations
+    (§5.9).
 - **Answering effects inside clauses** (SPEC §18 *Not provided*): unchanged.
 
 ## 9. What the proofs need
@@ -785,6 +842,10 @@ re-lent to an aborting site.
    hidden state is deferred until a heterogeneous registry needs it.
 6. **Operations that take computations are out of scope.**
 7. **Spellings stay provisional.**
+
+**Amendment (the user's, 2026-10-01).** The rules are stated over computation types and
+observations, with a function as the one-observation case (§5.9). Target 6 is an object with two
+effectful observations.
 
 **Still open** (not decided):
 
