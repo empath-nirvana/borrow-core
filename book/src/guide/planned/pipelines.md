@@ -1,17 +1,20 @@
-# Pipelines and `for`
+# Pipelines
 
-**Planned: #59** (with #48 and #17).
+**Planned: #17** (with #59 and #48).
 
-Today a chain of stream or iterator operations is written as nested applications, and consuming
-an iterator is written as an explicit sequence of `.1` observations (see
-[Codata](../codata.md)). The plan:
+What exists today:
 
-- `|>` pipelines for chains of iterator and stream operations.
-- `for x in it { … }`, sugar for a `for_each` consumer over an iterator. This is the one
-  concession to loop syntax: recursion stays structured (folds, `delay` loops, codata), and
-  there is no general direct recursion ([Design decisions](../../decisions.md), 24).
-- A minimal `include`/prelude, so programs can share a standard library written in the core
-  syntax: the iterator adapters (`map`, `filter`, `take`, …) as library code over `iter`, not new
-  type formers.
+- `for x in V { … }` over counts, arrays, views, sized iterators and generators, with `break`,
+  `continue`, `return` and `else` (SPEC §16; see [Generators](../generators.md) and
+  [Divergence](../divergence.md)).
+- Iterator adapters as library code, not new type formers: `map`, `filter`, `take`, `skip`,
+  `enumerate`, `chain`, `flat_map`, `zip`, `scan` and others are generic generators in
+  `lib/adapters.bc` (SPEC §15), and sized iterators are in `lib/iters.bc`.
+- A prelude in scope in every program, and `include` for the other library modules
+  (`include buf`, `include text`, …).
 
-Sugar desugars to the core syntax before checking, so it adds nothing to the trusted base.
+A chain of adapters is written today as nested applications, such as `take(map(it, f), 3)`. The
+plan is a `|>` pipeline for such chains, read left to right, as syntactic sugar over those
+applications. The spelling is not final.
+
+Sugar desugars to core before checking, so it adds nothing to the trusted base.

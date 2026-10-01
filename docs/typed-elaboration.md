@@ -1,6 +1,12 @@
 # Typed elaboration — design
 
-Status: design only (issue #54, step 2, first item). Nothing here is implemented. It builds on
+Status: implemented in part (issue #54, step 2). Stages 1–7 and 9 of the staging plan (§7) are
+built, each with an *as built* note there: the typed IR, inference and the pipeline in
+`Frontend/Elab/`, the surface elaboration in `Frontend/Sugar.lean` and `Frontend/Parser.lean`,
+with sugar pairs in `corpus/sugar/` and surface programs in `corpus/surface/`. Stage 8 is still
+design: `data` declarations, `box` of a constructor, constructor patterns and fold blocks
+(§5.3; `corpus/pending/data-box-tree.bc`). Lowering from the typed IR is still the identity on
+core. Sections 0–6 are the design as written before the stages were built. It builds on
 draft 0 of the surface ([`surface-cbpv.md`](surface-cbpv.md)), the core syntax
 ([`syntax-core.md`](syntax-core.md)), SPEC §11 (externs, `&c`, `for`) and SPEC §14 (divergence),
 and on decisions 13, 16, 26 and 33–36 ([`decisions.md`](decisions.md)).
