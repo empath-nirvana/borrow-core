@@ -44,7 +44,10 @@ one.
 | `scripts/AxiomCheck.lean` | prints the axioms of the theorems `SPEC.md` names (`lake env lean scripts/AxiomCheck.lean`) |
 
 `scripts/ci-local.sh` runs all of them, after `lake build`, and `mdbook build book` when `mdbook`
-is installed. It is the gate: run it before opening or merging a pull request. There is no hosted
+is installed, the independent ones at once. It is the gate: run it before opening or merging a
+pull request. `scripts/ci-local.sh --changed` runs only the steps that the changes since
+origin/main reach (none of the Lean steps unless a `.lean` file changed): it is for iteration,
+and does not replace the full gate. There is no hosted
 CI; `.github/workflows/ci.yml` runs only when started by hand.
 
 ## Writing a corpus program

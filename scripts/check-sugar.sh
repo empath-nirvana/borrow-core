@@ -6,7 +6,7 @@
 # `-- core: <other>.core.bc` is compared with that core form instead.
 set -euo pipefail
 cd "$(dirname "$0")/.."
-lake build bcc >/dev/null
+[ -n "${CI_LOCAL_BUILT:-}" ] || lake build bcc >/dev/null
 bcc=.lake/build/bin/bcc
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT

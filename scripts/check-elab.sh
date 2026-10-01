@@ -6,7 +6,7 @@
 # prints exactly that file: the binders' types and classes are pinned.
 set -euo pipefail
 cd "$(dirname "$0")/.."
-lake build bcc >/dev/null
+[ -n "${CI_LOCAL_BUILT:-}" ] || lake build bcc >/dev/null
 bcc=.lake/build/bin/bcc
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT

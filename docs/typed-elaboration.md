@@ -882,7 +882,7 @@ with a mode; `lendCall` wraps a call whose parameter at the lent place is a borr
 borrow's place so that `Comp.elab`'s lend rebinding hands it back. `*e` and `modify &mut x` are
 elaborated the same way. `let mut`, assignments and joins are desugared by the parser, which
 tracks the `let mut` variables in scope and those each arm assigns. `lib/prelude.bc` holds
-`true`, `false`, `not`; `include` resolves against `libModules`. Surface versions:
+`true`, `false`, `not`; `include` resolves against `libNames`. Surface versions:
 `corpus/surface/io-wc.bc` is §6.1's program (19 lines against 46), `map-reuse.bc` (20 against 44;
 its `main` is the scoped cell) and `array-sum.bc` (16 against 25), each with the same answer and
 counts. Pairs: `corpus/sugar/surface-mut.bc`, `surface-lend.bc`, `surface-bool.bc`.

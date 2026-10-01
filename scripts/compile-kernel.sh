@@ -9,7 +9,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 command -v wasmtime >/dev/null || { echo "wasmtime is not on PATH"; exit 1; }
-lake build bcc bcc-counts >/dev/null
+[ -n "${CI_LOCAL_BUILT:-}" ] || lake build bcc bcc-counts >/dev/null
 bcc=.lake/build/bin/bcc
 bccCounts=.lake/build/bin/bcc-counts
 expected=corpus/kernel-counts.expected

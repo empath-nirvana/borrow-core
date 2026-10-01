@@ -264,7 +264,7 @@ borrows (`synConstU`, `Consts.lean`); their side conditions are decided by `rowL
 ### Standard I/O (SPEC §11)
 
 `checkProgram` first elaborates the program (`Elab.elaborate`, which runs `Sugar.elaborate` and
-then the typed IR). In the sugar, a program that declares no externs and whose `main` names a capability gets `lib/io.bc` (embedded by `include_str`), the
+then the typed IR). In the sugar, a program that declares no externs and whose `main` names a capability gets `lib/io.bc` (read when `bcc` starts: `Sugar.library`), the
 capability externs, and a `main` that hands them back at every terminal; `for x in bytes c { M };
 N` becomes a loop by `unfold` built from a template whose holes are filled with the program's own
 syntax, and whose own nodes carry the span of the `for`; `&mut c` becomes a binding that rebinds

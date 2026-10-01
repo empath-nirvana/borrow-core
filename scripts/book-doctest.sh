@@ -20,6 +20,7 @@ bcc=${BCC:-.lake/build/bin/bcc}
 [ -x "$bcc" ] || { echo "no bcc at $bcc: run \`lake build bcc\`, or set BCC"; exit 1; }
 if command -v wasmtime >/dev/null; then wasm=1; else wasm=0; echo "wasmtime is not on PATH: \`bc\` blocks run under the interpreter only"; fi
 
+. scripts/par.sh
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 
@@ -42,17 +43,18 @@ find book/src -name '*.md' | sort | xargs awk -v dir="$tmp" '
 '
 [ -f "$tmp/manifest" ] || { echo "no \`bc\` blocks found"; exit 1; }
 
-bad=0; total=0; ran=0; ignored=0
-fail() { echo "$1: $2"; shift 2; for l in "$@"; do echo "  $l"; done; bad=$((bad + 1)); }
-while IFS=$'\t' read -r n attrs md line; do
-  total=$((total + 1))
+fail() { echo "$1: $2"; shift 2; for l in "$@"; do echo "  $l"; done; }
+# Block $1 of the manifest: exit 0 if it passes (or is ignored), 1 if not. Run in parallel by `par`.
+block() {
+  local n attrs md line f at want out in outl expect got
+  IFS=$'\t' read -r n attrs md line < <(awk -F'\t' -v n="$1" '$1 == n' "$tmp/manifest")
   f="$tmp/$n.bc"; at="$md:$line"
   case "$attrs" in
-    ignore) ignored=$((ignored + 1)); continue ;;
+    ignore) return 0 ;;
     run)
       want=$(sed -n 's/^-- answer: //p' "$f" | head -1)
-      if [ -z "$want" ]; then fail "$at" "a \`bc\` block needs an \`-- answer:\` line (or mark it \`bc,check\`)"; continue; fi
-      if ! out=$("$bcc" check "$f" 2>&1); then fail "$at" "rejected, but must check" "${out#"$f:"}"; continue; fi
+      if [ -z "$want" ]; then fail "$at" "a \`bc\` block needs an \`-- answer:\` line (or mark it \`bc,check\`)"; return 1; fi
+      if ! out=$("$bcc" check "$f" 2>&1); then fail "$at" "rejected, but must check" "${out#"$f:"}"; return 1; fi
       in="$tmp/$n.in"; : > "$in"
       sed -n 's/^-- stdin: \{0,1\}//p' "$f" | while IFS= read -r l; do printf '%s\n' "$l"; done > "$in"
       outl=$(sed -n 's/^-- output: \{0,1\}//p' "$f" | while IFS= read -r l; do printf '%s\n' "$l"; done)
@@ -60,28 +62,34 @@ while IFS=$'\t' read -r n attrs md line; do
       else expect=$(printf '%s\nlive 0' "$want"); fi
       got=$("$bcc" interp "$f" < "$in" 2>&1) || true
       if [ "$got" != "$expect" ]; then
-        fail "$at" "interpreter output differs" "want: $(echo "$expect" | tr '\n' ' ')" "got:  $(echo "$got" | tr '\n' ' ')"; continue
+        fail "$at" "interpreter output differs" "want: $(echo "$expect" | tr '\n' ' ')" "got:  $(echo "$got" | tr '\n' ' ')"; return 1
       fi
       if [ "$wasm" = 1 ]; then
         got=$("$bcc" run "$f" < "$in" 2>&1) || true
         if [ "$got" != "$expect" ]; then
-          fail "$at" "compiled output differs" "want: $(echo "$expect" | tr '\n' ' ')" "got:  $(echo "$got" | tr '\n' ' ')"; continue
+          fail "$at" "compiled output differs" "want: $(echo "$expect" | tr '\n' ' ')" "got:  $(echo "$got" | tr '\n' ' ')"; return 1
         fi
       fi
       ;;
     check)
-      if ! out=$("$bcc" check "$f" 2>&1); then fail "$at" "rejected, but must check" "${out#"$f:"}"; continue; fi
+      if ! out=$("$bcc" check "$f" 2>&1); then fail "$at" "rejected, but must check" "${out#"$f:"}"; return 1; fi
       ;;
     reject)
       want=$(sed -n 's/^-- expect: //p' "$f" | head -1)
-      if [ -z "$want" ]; then fail "$at" "a \`bc,reject\` block needs an \`-- expect:\` line"; continue; fi
-      if ! out=$("$bcc" parse "$f" 2>&1); then fail "$at" "does not parse, so it does not test the checker" "${out#"$f:"}"; continue; fi
-      if out=$("$bcc" check "$f" 2>&1); then fail "$at" "accepted, but must be rejected"; continue; fi
-      if [ "$out" != "$f:$want" ]; then fail "$at" "wrong error" "want: $want" "got:  ${out#"$f:"}"; continue; fi
+      if [ -z "$want" ]; then fail "$at" "a \`bc,reject\` block needs an \`-- expect:\` line"; return 1; fi
+      if ! out=$("$bcc" parse "$f" 2>&1); then fail "$at" "does not parse, so it does not test the checker" "${out#"$f:"}"; return 1; fi
+      if out=$("$bcc" check "$f" 2>&1); then fail "$at" "accepted, but must be rejected"; return 1; fi
+      if [ "$out" != "$f:$want" ]; then fail "$at" "wrong error" "want: $want" "got:  ${out#"$f:"}"; return 1; fi
       ;;
-    *) fail "$at" "unknown attributes \`bc,$attrs\` (use bc, bc,check, bc,reject or bc,ignore)"; continue ;;
+    *) fail "$at" "unknown attributes \`bc,$attrs\` (use bc, bc,check, bc,reject or bc,ignore)"; return 1 ;;
   esac
-  ran=$((ran + 1))
-done < "$tmp/manifest"
+}
+export tmp bcc wasm
+export -f fail block
+total=$(wc -l < "$tmp/manifest" | tr -d ' ')
+ignored=$(awk -F'\t' '$2 == "ignore"' "$tmp/manifest" | wc -l | tr -d ' ')
+par block $(cut -f1 "$tmp/manifest")
+bad=$par_failed
+ran=$((total - ignored - bad))
 echo "$total block(s): $ran passed, $ignored ignored, $bad failure(s)."
 [ "$bad" -eq 0 ]

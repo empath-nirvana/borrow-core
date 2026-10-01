@@ -29,12 +29,13 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 command -v wasmtime >/dev/null || { echo "wasmtime is not on PATH"; exit 1; }
-lake build bcc bcc-counts >/dev/null
-bcc=.lake/build/bin/bcc
-bccCounts=.lake/build/bin/bcc-counts
-expected=corpus/counts.expected
-write=0; [ "${1:-}" = "--write-counts" ] && write=1
-tmp=$(mktemp -d)
+[ -n "${CI_LOCAL_BUILT:-}" ] || lake build bcc bcc-counts >/dev/null
+. scripts/par.sh
+export bcc=.lake/build/bin/bcc
+export bccCounts=.lake/build/bin/bcc-counts
+export expected=corpus/counts.expected
+export write=0; [ "${1:-}" = "--write-counts" ] && write=1
+export tmp; tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 bad=0
 : > "$tmp/counts"
@@ -67,14 +68,17 @@ agree() {
     { [ "$(echo "$1" | tail -1)" = "live 0" ] && [ "$(echo "$2" | tail -1)" = "live 0" ] ||
       { [ "$(echo "$1" | tail -1)" != "live 0" ] && [ "$(echo "$2" | tail -1)" != "live 0" ]; }; }
 }
-# Run stage $1 of file $2 on input $3 into $tmp/out and $tmp/err.
+# Run stage $1 of file $2 on input $3 into $w/out and $w/err.
 runStage() {
-  if [ "$1" = wasm ]; then "$bcc" run "$2" < "$3" > "$tmp/out" 2> "$tmp/err"
-  else "$bcc" interp --stage "$1" "$2" < "$3" > "$tmp/out" 2> "$tmp/err"; fi
+  if [ "$1" = wasm ]; then "$bcc" run "$2" < "$3" > "$w/out" 2> "$w/err"
+  else "$bcc" interp --stage "$1" "$2" < "$3" > "$w/out" 2> "$w/err"; fi
 }
-for f in corpus/*.bc corpus/surface/*.bc corpus/axes/*.bc; do
-  if grep -q '^-- check: parse-only' "$f"; then echo "$f: parse-only, skipped"; continue; fi
-  if ! grep -q '^main' "$f"; then echo "$f: no main, skipped"; continue; fi
+# One corpus program, run at every stage and counted (in parallel, by `par`; its scratch
+# directory is $PAR_TMP).
+program() {
+  local f=$1 w=${PAR_TMP:-$tmp} base in err ok stages st want got out stage s cnt
+  if grep -q '^-- check: parse-only' "$f"; then echo "$f: parse-only, skipped"; return 0; fi
+  if ! grep -q '^main' "$f"; then echo "$f: no main, skipped"; return 0; fi
   base=${f%.bc}
   if [ -f "$base.out" ]; then
     in=/dev/null; [ -f "$base.in" ] && in="$base.in"
@@ -84,11 +88,11 @@ for f in corpus/*.bc corpus/surface/*.bc corpus/axes/*.bc; do
     grep -q '^-- check: no-source' "$f" && stages="clos flat wasm"
     for st in $stages; do
       if ! runStage "$st" "$f" "$in"; then
-        echo "$f: stage $st fails: $(head -3 "$tmp/err")"; ok=0; break
+        echo "$f: stage $st fails: $(head -3 "$w/err")"; ok=0; break
       fi
-      if ! cmp -s "$tmp/out" "$base.out" || ! cmp -s "$tmp/err" "$err"; then
+      if ! cmp -s "$w/out" "$base.out" || ! cmp -s "$w/err" "$err"; then
         echo "$f: stage $st differs from $base.out or from its standard error"
-        diff "$tmp/out" "$base.out" | head -6 | sed 's/^/  /' || true; ok=0; break
+        diff "$w/out" "$base.out" | head -6 | sed 's/^/  /' || true; ok=0; break
       fi
     done
     if [ "$ok" = 1 ] && [ "$(tail -1 "$base.out")" != "live 0" ]; then
@@ -96,11 +100,11 @@ for f in corpus/*.bc corpus/surface/*.bc corpus/axes/*.bc; do
     fi
     if [ "$ok" = 1 ] && ! counts "$f" "$in"; then ok=0; fi
     if [ "$ok" = 1 ]; then echo "$f: $(wc -c < "$base.out" | tr -d ' ') bytes as $base.out at every stage | live 0 | $cnt"
-    else bad=$((bad + 1)); fi
-    continue
+    else return 1; fi
+    return 0
   fi
   if ! want=$("$bcc" interp "$f" 2>&1 < /dev/null); then
-    echo "$f: the source interpreter fails: $want"; bad=$((bad + 1)); continue
+    echo "$f: the source interpreter fails: $want"; return 1
   fi
   got=$("$bcc" run "$f" 2>&1 < /dev/null) || true
   if ! agree "$want" "$got"; then
@@ -112,25 +116,35 @@ for f in corpus/*.bc corpus/surface/*.bc corpus/axes/*.bc; do
     echo "$f: differs, first at stage $stage"
     echo "  interpreter: $(echo "$want" | tr '\n' ' ')"
     echo "  wasm:        $(echo "$got" | tr '\n' ' ')"
-    bad=$((bad + 1))
+    return 1
   elif [ "$(echo "$got" | tail -1)" != "live 0" ]; then
-    echo "$f: agrees, but leaves objects live: $(echo "$got" | tr '\n' ' ')"; bad=$((bad + 1))
+    echo "$f: agrees, but leaves objects live: $(echo "$got" | tr '\n' ' ')"; return 1
   elif ! counts "$f" /dev/null; then
-    bad=$((bad + 1))
+    return 1
   else
     echo "$f: $(echo "$got" | head -1) | $(echo "$got" | tail -1) | $cnt"
   fi
-done
-# An input past any fixed bound: 4860 bytes, copied whole at every stage.
-awk 'BEGIN { for (i = 0; i < 90; i++) printf "line %02d of a long input, copied byte for byte by cat.\n", i }' \
-  > "$tmp/big.in"
-printf '()\nlive 0\n' | cat "$tmp/big.in" - > "$tmp/big.out"
-bigok=1
-for st in source clos flat wasm; do
-  runStage "$st" corpus/io-cat.bc "$tmp/big.in" || true
-  if ! cmp -s "$tmp/out" "$tmp/big.out"; then echo "corpus/io-cat.bc: stage $st differs on a $(wc -c < "$tmp/big.in" | tr -d ' ')-byte input"; bigok=0; fi
-done
-if [ "$bigok" = 1 ]; then echo "corpus/io-cat.bc: a $(wc -c < "$tmp/big.in" | tr -d ' ')-byte input copied whole at every stage"; else bad=$((bad + 1)); fi
+}
+# An input past any fixed bound: 4860 bytes, copied whole at every stage. (The source
+# interpreter takes about a minute on it, so it runs beside the corpus.)
+bigcat() {
+  local w=$tmp/bigcat st ok=1
+  mkdir -p "$w"
+  awk 'BEGIN { for (i = 0; i < 90; i++) printf "line %02d of a long input, copied byte for byte by cat.\n", i }' \
+    > "$w/big.in"
+  printf '()\nlive 0\n' | cat "$w/big.in" - > "$w/big.out"
+  for st in source clos flat wasm; do
+    runStage "$st" corpus/io-cat.bc "$w/big.in" || true
+    if ! cmp -s "$w/out" "$w/big.out"; then echo "corpus/io-cat.bc: stage $st differs on a $(wc -c < "$w/big.in" | tr -d ' ')-byte input"; ok=0; fi
+  done
+  if [ "$ok" = 1 ]; then echo "corpus/io-cat.bc: a $(wc -c < "$w/big.in" | tr -d ' ')-byte input copied whole at every stage"; else return 1; fi
+}
+export -f counts agree runStage program
+bigcat > "$tmp/bigcat.log" 2>&1 &
+bigpid=$!
+par program corpus/*.bc corpus/surface/*.bc corpus/axes/*.bc
+bad=$par_failed
+if wait "$bigpid"; then cat "$tmp/bigcat.log"; else cat "$tmp/bigcat.log"; bad=$((bad + 1)); fi
 if [ "$write" = 1 ]; then
   { echo "# Allocations, indirect (dispatched) calls and copies at a non-trivial type per run of each corpus program (scripts/compile-corpus.sh)."
     echo "# name allocs indirect copies"

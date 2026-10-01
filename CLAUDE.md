@@ -40,6 +40,14 @@ GitHub Actions does not run for this repository (the workflow is manual-only). T
 PR is `scripts/ci-local.sh`, which runs every check CI would. Run it before opening or merging a
 PR and paste its final summary into the PR body. Never report a PR as passing without it.
 
+While iterating, `scripts/ci-local.sh --changed` runs only the steps the changes since origin/main
+reach: a change to no `.lean` file skips the build of the library, the hygiene and the axioms.
+It is for the edit loop only; the full gate is the merge requirement.
+
+Start a worktree with `scripts/new-worktree.sh <branch>`: it branches from origin/main and clones
+the main checkout's `.lake` copy-on-write, so the first build is incremental, not cold. The
+library modules `lib/*.bc` are read when `bcc` starts, so editing them rebuilds no Lean.
+
 ## Hygiene
 
 - No `sorry`, `axiom`, `native_decide`, `implemented_by`, `opaque`, `partial`, `unsafe` in
