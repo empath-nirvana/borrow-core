@@ -73,12 +73,15 @@ def textLibrary : String := include_str "../lib/text.bc"
 /-- Text over the standard streams, `lib/textio.bc`: `write_string`, `read_all` (`include textio`). -/
 def textioLibrary : String := include_str "../lib/textio.bc"
 
+/-- The error effect and its handlers (SPEC §19). -/
+def failLibrary : String := include_str "../lib/fail.bc"
+
 /-- The library modules, by the name `include` gives them (#59). A module is a file of `lib/`,
 embedded in the compiler; adding one is adding its line here. -/
 def libModules : List (String × String) :=
   [("io", ioLibrary), ("div", divLibrary), ("prelude", preludeLibrary), ("lend", lendLibrary),
    ("adapters", adaptersLibrary), ("slice", sliceLibrary), ("buf", bufLibrary),
-   ("text", textLibrary), ("textio", textioLibrary), ("iters", iterLibrary)]
+   ("text", textLibrary), ("textio", textioLibrary), ("iters", iterLibrary), ("fail", failLibrary)]
 
 def capNames : List String := ["stdin", "stdout", "stderr"]
 
@@ -3131,10 +3134,6 @@ def reportTag : String := "report: "
 clauses. -/
 def effectsTag : String := "effects: "
 
-/-- The tag of an abort point (SPEC §18): a `raise` or a raising call, and the binders in scope
-there, for the message when one of them has no destructor. -/
-def abortTag : String := "abort: "
-
 /-- Record a report on the loop at `sp`. -/
 def report (sp : Span) (msg : String) : SM Unit :=
   note sp s!"{reportTag}{sp.start.render}: {msg}"
@@ -3392,6 +3391,52 @@ inductive Head where
   | tmpl (t : Decl) (targs : Option (List VTy))
   | gdef (name : String) (ps : List String) (ty : VTy)
   | plain (f : Val) (ty : Option VTy)
+
+/-! #### Effects: handler sites and effectful calls  `[spec §19]` -/
+
+/-- The kernel's qualifier. -/
+def coreQual : Qual → BoCa.Fig16.LogRel.Core.Qual
+  | .lin => .lin
+  | .aff => .aff
+  | .unr => .unr
+
+/-- The type of the computation `C` when it is a returner chain `F[S] A`: `S` and `A`. -/
+def rowRes? (C : CCTy) : Option (Frontend.Check.CRow × CVTy) := Frontend.Check.effRow? C
+
+/-- A call of a function whose result is effectful (`U(A ⊸ F[S] B)`, `S` not empty), as
+elaborated in a value: the function and the argument. -/
+def effCall? (c : TCx) : Val → Option (Val × Val)
+  | .app _ f W => match c.tyV f with
+    | some (.thunk (.arr _ C)) => match rowRes? C with
+      | some (_ :: _, _) => some (f, W)
+      | _ => none
+    | _ => none
+  | _ => none
+
+/-- An effectful call as the computation it is: `g <- return f; a <- return W; (force g) a`. -/
+def effCallC (sp : Span) (f W : Val) : Comp :=
+  let sfx := s!"{sp.start.line}_{sp.start.col}"
+  let g : Ident := ⟨s!"io_fg{sfx}", sp⟩
+  let a : Ident := ⟨s!"io_fa{sfx}", sp⟩
+  .bind sp g none (.ret sp f) (.bind sp a none (.ret sp W) (.app sp (.force sp g) a) false) false
+
+/-- A handler site of a control effect, as `Frontend.Elab.Effects` leaves it: the info, the
+arguments, the return clause, the operation clauses and the body. -/
+def hndCtl? : Val → Option (HInfo × Val × Val × Val × Comp)
+  | .app _ (.app _ (.app _ (.app _ (.sugar _ (.hndCtl i)) P) R) cls) (.thunk _ M) => some (i, P, R, cls, M)
+  | _ => none
+
+/-- The components of a right-nested tuple of `k` values (`()` and one value for `k ≤ 1`). -/
+def tupleArgs : Nat → Val → List Val
+  | 0, _ => []
+  | 1, V => [V]
+  | k + 1, .pair _ V W => V :: tupleArgs k W
+  | _, V => [V]
+
+/-- The components of a `()`-terminated tuple. -/
+def clauseList : Val → List Val
+  | .pair _ V W => V :: clauseList W
+  | _ => []
 
 mutual
 /-- A value with its surface forms elaborated; `exp` is the type expected of it, when known. -/
@@ -3766,16 +3811,22 @@ def surfC : Nat → TCx → Option CCTy → Comp → DM Comp
       | none => c
     match M with
     | .ret sp V => do
-      pure (.ret sp (← surfV n c (match exp.bind Frontend.Check.effRow? with
-        | some (_, A) => some A
-        | _ => none) V))
+      if let some (i, P, R, cls, B) := hndCtl? V then return ← hndCtlC n c sp i P R cls B
+      let V' ← surfV n c (match exp.bind rowRes? with | some (_, A) => some A | _ => none) V
+      match effCall? (← refresh c) V' with
+      | some (f, W) => pure (effCallC sp f W)
+      | none => pure (.ret sp V')
     | .absurd sp V => do pure (.absurd sp (← surfV n c (some .zero) V))
     | .bind sp x A M N lin => do
       -- A borrow block over a loop, or a `let r = &x`: lent per observation (`LoopLend`).
       if let some L ← (Frontend.Elab.LoopLend.hook c (dataFor (← get).sizedFns) sp x A M N lin :
           Except Error (Option Comp)) then
         return (← surfC n c exp L)
-      let M' ← surfC n c ((A.bind c.elabV).map .ret) M
+      let M' ← match M with
+        | .ret rsp V => match hndCtl? V with
+          | some (i, P, R, cls, B) => hndCtlC n c rsp i P R cls B
+          | none => surfC n c ((A.bind c.elabV).map .ret) M
+        | _ => surfC n c ((A.bind c.elabV).map .ret) M
       let c ← refresh c
       let N' ← surfC n (c.push x.name (bindTy c A M')) exp N
       pure (.bind sp x A M' N' lin)
@@ -3878,6 +3929,75 @@ def surfC : Nat → TCx → Option CCTy → Comp → DM Comp
       let N' ← surfC n (c.push x.name ((A.bind c.elabV) <|> hd.map (·.2))) exp N
       pure (.unwind sp x A M' D' N')
     | M => pure M
+
+/-- A handler site of a control effect (SPEC §19): its arguments bound, its body elaborated
+with the site's operations innermost in the row, the handler's type parameters matched against
+its arguments' types and the body's, and its clauses as `!` closures at the types `[handle]`
+gives them; then `handle_with[n](hr, hc) M`. -/
+def hndCtlC : Nat → TCx → Span → HInfo → Val → Val → Val → Comp → DM Comp
+  | 0, _, sp, _, _, _, _, _ => throw ⟨sp, "internal error: a handler nested too deeply"⟩
+  | n + 1, c, sp, i, P, R, cls, M => do
+    let S := c.E.row.getD []
+    let mismatch (what : String) : Error :=
+      ⟨sp, s!"the handler `{i.name}`: {what} does not have the type its declaration gives it"⟩
+    -- The arguments, bound to the parameters' names.
+    let mut σ : TySubst := i.known
+    let mut cP := c
+    let mut binds : List (Ident × Val) := []
+    for ((x, Pt), a) in i.params.zip (tupleArgs i.params.length P) do
+      let Pt' := Pt.subst σ
+      let exp := if Elab.Effects.mentions i.tps Pt' then none else cP.elabV Pt'
+      let a' ← surfV n cP exp a
+      let T ← need a.span s!"the argument `{x}` of `{i.name}`" ((← refresh cP).tyV a')
+      let Ts ← (cP.surface sp T : Except Error VTy)
+      match Elab.Effects.matchTy i.tps σ Pt Ts with
+      | some σ' => σ := σ'
+      | none => throw (mismatch s!"the argument `{x}`")
+      binds := binds ++ [(⟨x, sp⟩, a')]
+      cP := cP.push x (some T)
+    -- The body, with the site's operations innermost.
+    let ops ← i.ents.mapM fun (q, A, B) => do
+      pure (coreQual q, ← need sp "an operation's type" (cP.elabV A),
+        ← need sp "an operation's type" (cP.elabV B))
+    let rowB := BoCa.Fig16.LogRel.Core.Row.ofEff (UInt32.ofNat i.n) ops 0 ++ S
+    let cB : TCx := { cP with E := { cP.E with row := some rowB } }
+    let M' ← surfC n cB none M
+    let CM ← need M.span s!"the type of the body `{i.name}` handles" ((← refresh cB).tyC M')
+    let (_, A) ← need M.span s!"the type of the body `{i.name}` handles" (rowRes? CM)
+    let As ← (cP.surface sp A : Except Error VTy)
+    match Elab.Effects.matchTy i.tps σ i.retA As with
+    | some σ' => σ := σ'
+    | none => throw (mismatch "the body it handles")
+    if let some x := i.tps.find? (fun x => (σ.lookup x).isNone) then
+      throw ⟨sp, s!"the type parameter `{x}` of `{i.name}` is not determined here: write it, " ++
+        s!"`with {i.name}[…]`"⟩
+    let Rc ← need sp s!"the answer type of `{i.name}`" (cP.elabV (i.res.subst σ))
+    let cS : TCx := { cP with E := { cP.E with row := some S } }
+    let ans : CCTy := BoCa.Fig16.LogRel.Core.CTy.effOf S Rc
+    -- The return clause.
+    let hr ← match R with
+      | .thunkv _ (.lam lsp x _ body) => do
+        let body' ← surfC n (cS.push x.name (some A)) (some ans) (body.subst σ)
+        pure (Val.bangThunkv sp (.lam lsp x As body'))
+      | _ => throw ⟨sp, "internal error: a handler's return clause"⟩
+    -- The operation clauses, each at its type.
+    let mut hcs : List Val := []
+    for (cl, (q, Ai, Bi)) in (clauseList cls).zip ops do
+      match cl with
+      | .thunkv csp (.lam lsp x _ body) =>
+        let T : CVTy := if Bi.isZero && q != .lin then Ai
+          else .tensor Ai (BoCa.Fig16.LogRel.Core.kTy S Rc q Bi)
+        let body' ← surfC n (cS.push x.name (some T)) (some ans) (body.subst σ)
+        hcs := hcs ++ [.bangThunkv csp (.lam lsp x (← (cP.surface lsp T : Except Error VTy)) body')]
+      | _ => throw ⟨sp, "internal error: a handler's clause"⟩
+    let hcV := hcs.foldr (fun v t => Val.pair sp v t) (.unit sp)
+    let hrTy ← (cP.surface sp (BoCa.Fig16.LogRel.Core.retTy S A Rc) : Except Error VTy)
+    let hcTy ← (cP.surface sp (BoCa.Fig16.LogRel.Core.clausesTy S Rc ops) : Except Error VTy)
+    let hrN : Ident := ⟨s!"io_hr{i.n}", sp⟩
+    let hcN : Ident := ⟨s!"io_hc{i.n}", sp⟩
+    let core : Comp := .bind sp hrN (some hrTy) (.ret sp hr)
+      (.bind sp hcN (some hcTy) (.ret sp hcV) (.handle sp i.n hrN hcN M') false) false
+    pure (binds.foldr (fun (x, a) K => Comp.bind sp x none (.ret sp a) K false) core)
 
 /-- `for x in V' { M }; N` over a sized source (`dataSrcOf`), `V'` elaborated: a counted loop,
 `count_try` over the length of the source's data (the section *The total `for` over data*);
@@ -4638,7 +4758,7 @@ def elaborateS (p : Program) : SM (Program × Nat) := do
   let libFns := (decls₀.filter fun d => !p₀.decls.contains d).filterMap fun
     | .def_ _ m _ _ _ _ => some m.name
     | _ => none
-  let (decls, fx, aborts) ← (Elab.Effects.elaborate decls₀ libFns : Except Error _)
+  let (decls, fx) ← (Elab.Effects.elaborate decls₀ libFns : Except Error _)
   -- Effects, then rows, lowering shapes and calls, each in source order.
   let kindOf (m : String) : Nat := match (m.splitOn " ").head? with
     | some "effect" => 0 | some "row" => 1 | some "lowering" => 2 | _ => 3
@@ -4649,8 +4769,6 @@ def elaborateS (p : Program) : SM (Program × Nat) := do
       | k :: r => (k, " ".intercalate r)
       | [] => ("", m)
     note sp s!"{effectsTag}{k} {sp.start.render}: {rest}"
-  for (sp, bs) in aborts do
-    note sp s!"{abortTag}{sp.start.render}|{",".intercalate (bs.map (·.start.render))}"
   let p : Program := ⟨decls⟩
   let mayDiv := usesName "div_fuel" p || usesName "div_bind" p || usesName "div_defer" p
   -- The prelude is in scope when the program names one of its declarations.

@@ -483,6 +483,8 @@ def rtyAtom : Nat → P RTy
     match t.tok with
     | .int 1 => discard bump; pure (.unit t.span)
     | .int 0 => discard bump; pure (.zero t.span)
+    -- `never`, the empty type `0` (an abortive operation's answer, SPEC §19).
+    | .ident "never" => discard bump; pure (.zero t.span)
     | .kw "unk" => discard bump; pure (.unk t.span)
     | .kw "i32" => discard bump; pure (.int t.span .w32)
     | .kw "i64" => discard bump; pure (.int t.span .w64)
@@ -735,7 +737,7 @@ def Val.lentNames (vars : Bool := false) : Val → List String
   | .var _ x => if vars then [x] else []
   -- A borrow block's body runs in place: what it lends and names is the block's.
   | .app _ (.app _ (.sugar _ (.borrow _ _)) P) (.thunkv _ (.lam _ _ _ M))
-  | .app _ (.app _ (.sugar _ (.handle _ _)) P) (.thunkv _ (.lam _ _ _ M)) =>
+  | .app _ (.app _ (.sugar _ (.handle _ _ _)) P) (.thunkv _ (.lam _ _ _ M)) =>
     P.lentNames vars ++ M.lentNames vars
   | .pair _ V W | .app _ V W => V.lentNames vars ++ W.lentNames vars
   | .inl _ V | .inr _ V | .unbang _ V | .boxed _ _ V | .unbox _ V | .sub _ V _ | .roll _ V
@@ -761,7 +763,7 @@ mutual
 /-- The cells lent to a `with h(&mut c)` in a value, outside nested closures, that are not bound
 in `local`: an enclosing block hands them back (SPEC §18). -/
 def Val.withPlaces (loc : List String) : Val → List String
-  | .app _ (.app _ (.sugar _ (.handle _ _)) P) (.thunkv _ (.lam _ b _ M)) =>
+  | .app _ (.app _ (.sugar _ (.handle _ _ _)) P) (.thunkv _ (.lam _ b _ M)) =>
     (match P with
       | .lend _ x _ => if loc.contains x.name then [] else [x.name]
       | _ => []) ++ M.withPlaces (b.name :: loc)
@@ -808,7 +810,7 @@ def Val.rebinds : Val → Option Pat
   | .app _ (.app _ (.sugar _ (.borrow _ _)) P) _ => placeNames P
   -- `with h(&mut c) { … }` hands the cell `c` back; `with h(e) { … }` hands back the cell scoped
   -- to the block, which is dropped.
-  | .app sp (.app _ (.sugar _ (.handle _ _)) P) _ => match P with
+  | .app sp (.app _ (.sugar _ (.handle _ _ _)) P) _ => match P with
     | .lend _ x _ => some (.var x)
     | _ => some (.wild sp)
   | _ => none
@@ -1072,7 +1074,6 @@ def valPrefix : Nat → P Val
       pure (.shorten (← spanFrom st) m σ a V)
     | .kw "borrow" | .kw "modify" => borrowBlock n
     | .kw "with" => withBlock n
-    | .kw "try" | .kw "catch" | .kw "map_err" => failBlock n
     | .kw "gen" =>
       -- `gen { S }`: a generator whose body is `S`. (`return` in it is the core's.)
       discard bump
@@ -1183,9 +1184,27 @@ def withBlock : Nat → P Val
     let st ← startPos
     let t ← bump
     let h ← ident "a handler name"
-    expectSym "("
-    let place ← val n
-    expectSym ")"
+    -- `with h[A, …](e, …) { S }`: written type arguments, then the arguments (none: `()`).
+    let As ← if ← isSym "[" then do
+        discard bump
+        let As ← tyList n (fuelPerToken * ((← get).toks.size + 1))
+        expectSym "]"
+        pure As
+      else pure []
+    let place ← if ← isSym "(" then do
+        let psp ← startPos
+        discard bump
+        let mut vs : Array Val := #[]
+        for _ in [0:n] do
+          if ← isSym ")" then break
+          vs := vs.push (← val n)
+          if ← isSym "," then discard bump
+        expectSym ")"
+        let sp ← spanFrom psp
+        pure (vs.toList.foldr (fun v acc => match acc with
+          | none => some v
+          | some w => some (Val.pair sp v w)) none |>.getD (Val.unit sp))
+      else pure (Val.unit t.span)
     expectSym "{"
     let (x, b) ← if (match (← peek).tok with | .life _ => true | _ => false) then do
         let x ← lifeVar
@@ -1211,49 +1230,8 @@ def withBlock : Nat → P Val
         (.ret T.span (.pair T.span (.var T.span "io_bt") (varTuple T.span thr))) false) M
     modify fun s => { s with blockYields := false, blockThreads := thr, joined := [],
                              assigned := s.assigned ++ thr.filter s₀.muts.contains }
-    pure (.app sp (.app sp (.sugar t.span (.handle h.name x)) place)
+    pure (.app sp (.app sp (.sugar t.span (.handle h.name x As)) place)
       (.thunkv sp (.lam sp b (holeTy sp) M)))
-
-/-- `try { S }`, `catch { S } { e -> S₂ }` and `map_err { S } { e -> S₂ }` (SPEC §18): the
-handlers of `Fail`. A body runs in place; a `let mut` variable declared outside it may not be
-assigned in it. -/
-def failBlock : Nat → P Val
-  | 0 => outOfFuel
-  | n + 1 => do
-    withGen false do
-    let st ← startPos
-    let t ← bump
-    let body : P Comp := do
-      expectSym "{"
-      let s₀ ← get
-      set { s₀ with assigned := [] }
-      let M ← comp n
-      let a := (← get).assigned
-      modify fun s => { s with muts := s₀.muts, assigned := s₀.assigned }
-      expectSym "}"
-      if let some x := (s₀.muts.filter a.contains).head? then
-        failAt t.span (s!"`{x}` is declared outside this block and assigned in it: bind what " ++
-          "the block answers instead (a handler of `Fail` does not hand back `let mut` variables)")
-      pure M
-    let M ← body
-    let sp₁ ← spanFrom st
-    if t.tok == .kw "try" then
-      return .app sp₁ (.sugar t.span .try_) (.thunk sp₁ M)
-    expectSym "{"
-    let e ← ident "the error's name"
-    expectSym "->"
-    let s₀ ← get
-    set { s₀ with assigned := [] }
-    let N ← comp n
-    let a := (← get).assigned
-    modify fun s => { s with muts := s₀.muts, assigned := s₀.assigned }
-    expectSym "}"
-    if let some x := (s₀.muts.filter a.contains).head? then
-      failAt t.span (s!"`{x}` is declared outside this handler and assigned in it: bind what " ++
-        "the block answers instead (a handler of `Fail` does not hand back `let mut` variables)")
-    let sp ← spanFrom st
-    let k := if t.tok == .kw "catch" then VSugar.catch_ else .mapErr
-    pure (.app sp (.app sp₁ (.sugar t.span k) (.thunk sp₁ M)) (.thunkv sp (.lam sp e (holeTy sp) N)))
 
 /-- The suffixes of a value spine, associating to the left: argument atoms and `[@]`. -/
 def valSuffixes : Nat → Pos → Val → P Val
@@ -1918,40 +1896,96 @@ def decl (n : Nat) : P Decl := do
     let x ← ident "the name of a library module"
     pure (.include (← spanFrom st) x)
   | .kw "effect" =>
-    -- `effect E { fn op(x: A, …) -> B; … }` (SPEC §18); `-> B` left out is `-> 1`.
+    -- `effect E[T, …] { fn op(x: A, …) -> B; ctl op(…) -> B; … }` (SPEC §18, §19); `-> B` left
+    -- out is `-> 1`. `ctl` is affine; `linear ctl` linear, `multi ctl` unrestricted.
     discard bump
     let x ← uident "an effect name"
+    let tps ← if ← isSym "[" then do
+        discard bump
+        let ps ← uidents n
+        expectSym "]"
+        pure ps
+      else pure []
     expectSym "{"
     let mut ops : Array OpDecl := #[]
     for _ in [0:n] do
       if ← isSym "}" then break
-      expectKw "fn"
+      let kind ← if ← isKw "fn" then do discard bump; pure OpKind.fn
+        else do
+          let q ← if ← isKw "linear" then do discard bump; pure Qual.lin
+            else match (← peek).tok with
+              | .ident "multi" => do discard bump; pure Qual.unr
+              | _ => pure Qual.aff
+          match (← peek).tok with
+          | .ident "ctl" => do discard bump; pure (OpKind.ctl q)
+          | _ => expected "`fn` or `ctl` (an operation)"
       let o ← ident "an operation name"
       expectSym "("
       let ps ← if ← isSym ")" then pure [] else params n
       expectSym ")"
       let B ← if ← isSym "->" then do discard bump; vty n else pure (VTy.unit o.span)
-      ops := ops.push ⟨o, ps, B⟩
+      ops := ops.push ⟨o, ps, B, kind⟩
       if ← isSym ";" then discard bump
     expectSym "}"
-    pure (.effect (← spanFrom st) x ops.toList)
+    pure (.effect (← spanFrom st) x tps ops.toList)
   | .kw "handler" =>
-    -- `handler h(s: S) for E { op(x, …) -> e; op(x, …) -> { S }; … }` (SPEC §18). The state `s`
-    -- is a `let mut` variable in each clause, which may assign it.
+    -- A handler is a value implementing an effect (SPEC §18, §19). An answering handler,
+    -- `handler h(mut s: S): E = { op(x, …) = e; … }`, has its state as a `mut` parameter, a
+    -- `let mut` variable in each clause. A control handler,
+    -- `handler h[T, …](p: A, …): E[A, …], A -> R with E₂[…] = { return(x) = M; op(x, …, k) = N; … }`,
+    -- names the type `A` of the body it handles and its answer `R`; `k` is the continuation of
+    -- a non-abortive operation; `with E₂[…]` is what its clauses perform.
     discard bump
     let h ← ident "a handler name"
-    expectSym "("
-    let sv ← ident "the name of the handler's state"
+    let tps ← if ← isSym "[" then do
+        discard bump
+        let ps ← uidents n
+        expectSym "]"
+        pure ps
+      else pure []
+    let mut ps : Array (Ident × VTy) := #[]
+    let mut mutPs : List String := []
+    if ← isSym "(" then
+      discard bump
+      for _ in [0:n] do
+        if ← isSym ")" then break
+        if ← isKw "mut" then
+          discard bump
+          let x ← ident "a parameter name"
+          mutPs := mutPs ++ [x.name]
+          expectSym ":"
+          ps := ps.push (x, ← vty n)
+        else
+          let x ← ident "a parameter name"
+          expectSym ":"
+          ps := ps.push (x, ← vty n)
+        if ← isSym "," then discard bump
+      expectSym ")"
     expectSym ":"
-    let S ← vty n
-    expectSym ")"
-    expectKw "for"
     let e ← uident "an effect name"
+    let As ← if ← isSym "[" then do
+        discard bump
+        let As ← tyList n (fuelPerToken * ((← get).toks.size + 1))
+        expectSym "]"
+        pure As
+      else pure []
+    let sig ← if ← isSym "," then do
+        discard bump
+        let A ← vty n
+        expectSym "->"
+        let R ← vty n
+        pure (some (A, R))
+      else pure none
+    let row ← if ← isKw "with" then do discard bump; rowList n else pure []
+    expectSym "="
     expectSym "{"
     let mut cs : Array Clause := #[]
+    let mut ret : Option (Ident × Comp) := none
     for _ in [0:n] do
       if ← isSym "}" then break
-      let o ← ident "an operation name"
+      let isRet ← isKw "return"
+      let o ← if isRet then do let t ← bump; pure (⟨"return", t.span⟩ : Ident)
+        else ident "an operation name"
       expectSym "("
       let mut xs : Array Ident := #[]
       for _ in [0:n] do
@@ -1959,8 +1993,8 @@ def decl (n : Nat) : P Decl := do
         xs := xs.push (← ident "a parameter name")
         if ← isSym "," then discard bump
       expectSym ")"
-      expectSym "->"
-      modify fun s => { s with muts := [sv.name], assigned := [], surf := true }
+      expectSym "="
+      modify fun s => { s with muts := mutPs, assigned := [], surf := true }
       let M ← if ← isSym "{" then do
           discard bump
           let M ← comp n
@@ -1968,10 +2002,25 @@ def decl (n : Nat) : P Decl := do
           pure M
         else compG n true
       modify fun s => { s with muts := [], assigned := [], surf := false }
-      cs := cs.push ⟨o, xs.toList, M⟩
+      if isRet then
+        let some x := xs[0]? | failAt o.span "`return(x) = M`: the return clause binds the body's value"
+        ret := some (x, M)
+      else cs := cs.push ⟨o, xs.toList, M⟩
       if ← isSym ";" then discard bump
     expectSym "}"
-    pure (.handler (← spanFrom st) h sv S e cs.toList)
+    let sp ← spanFrom st
+    match sig with
+    | some (A, R) =>
+      unless mutPs.isEmpty do
+        failAt h.span s!"the control handler `{h.name}` has a `mut` parameter: a clause is `!` code, and keeps no state"
+      let some (x, M) := ret | failAt h.span s!"the control handler `{h.name}` has no return clause, `return(x) = M`"
+      pure (.chandler sp ⟨h, tps, ps.toList, e, As, row, R, (x, A, M), cs.toList⟩)
+    | none =>
+      match ps.toList, mutPs, tps, As, row, ret with
+      | [(sv, S)], [_], [], [], [], none => pure (.handler sp h sv S e cs.toList)
+      | _, _, _, _, _, _ => failAt h.span (s!"`{h.name}`: an answering handler is `handler h(mut s: S): E = " ++
+          "{ op(x) = e; … }`, and a control handler names its body's type and its answer, " ++
+          "`handler h[…](…): E[…], A -> R = { return(x) = M; op(x, k) = N; … }`")
   | .kw "def" =>
     discard bump
     defRest st .none

@@ -1,63 +1,67 @@
 import Frontend.Parser
 import Frontend.Print
+import Frontend.Elab.Subst
 
 /-!
-# Frontend — Elab — effects and handlers  `[spec §18]`
+# Frontend — Elab — effects and handlers  `[spec §18, §19]`
 
-An effect is a set of operations, and a handler gives each a clause over the handler's state. A
-handler's meaning is its elaboration into core terms the checker already derives (decision 48):
-nothing here reaches the kernel, the checker or the proofs.
+An effect declares operations, each **answering** (`fn`) or **control** (`ctl`, with the
+structural qualifier of its continuation: affine by default, `linear ctl`, `multi ctl`). An effect
+is one or the other. This pass resolves every operation to the handler that serves it, before the
+rest of the sugar; it knows no effect by name.
 
-* **A handler's clauses** are functions over a `mut` borrow of its state:
-  `handler h(s: S) for E { op(x) -> M }` gives
+* **Answering effects** are capabilities (§18): `handler h(s: S) for E { op(x) -> e }` gives each
+  clause as a function over a `mut` borrow of the state,
 
       fn h__op<'l>(c: mut 'l S, x: A) -> mut 'l S * B = let r = modify c { s -> M; (s, r) }; (c, r)
 
-  the `FnMut` row of SPEC §2: the clause is `!` code run by `withswap` on the lent state, and
-  the borrow is handed back for the next operation.
-* **`with h(e) { S }`** is a borrow block of the state's cell, `borrow mut (alloc(e)) { 'l, c -> S }`
-  (or `borrow mut x { … }` for `with h(&mut x)`), whose callback's parameter `c` is the
-  capability: the handled body is the callback of a `withbor`.
-* **An operation call** `op(v)` in `S` is a call of the innermost handler's clause on the
-  capability, which hands it back: `let (c, r) = h__op(c, v)`. The capability is threaded
-  through the body as a `let mut` variable is: bound again after each call, handed out of a
-  `match`, a borrow block and a `for`'s body.
-* **A function that performs an operation**, directly or by calling one that does, has the
-  effect in its **row**, which is inferred in declaration order and never written. It is
-  elaborated once per handler it runs under, as a generic function is once per instance
-  (decision 45): the copy `f__h` takes the capability first and hands it back first, and a call
-  of `f` under `h` is a call of `f__h`. A function with a row that is never called under a
-  handler is not elaborated.
+  `with h(e) { S }` is a borrow block of the state's cell whose callback's parameter is the
+  capability, and an operation call `op(v)` is a call of the innermost handler's clause on it,
+  which hands it back. The capability is threaded as a `let mut` variable is.
+* **Control effects** are the kernel's (§19). Each `with h(args) { S }` of a control handler is a
+  handler site with a static name `n` of its own, and an operation is resolved lexically to the
+  innermost site of its effect: `perform[n.i](v)`, or `abort[n.i](v)` for an abortive operation
+  (answer `0` at a qualifier with weakening). The site becomes the kernel's `handle[n]` with the
+  handler's clauses, assembled where the types are known (`VSugar.hndCtl`, `Frontend/Sugar.lean`).
+  A handler may perform the operations of its own row (`with E₂[…]` after `for`), which resolve to
+  the sites around its `with`.
+* **A function's row** is the set of effect instances it performs: the operations it calls, and
+  the rows of the functions it calls, less those a `with` inside it handles. It is inferred in
+  declaration order; a written row (`fn f(…) -> T with E[A]`) is a promise that the inferred row is
+  within it, and gives the type arguments of an effect the function performs directly. A function
+  with a row is elaborated once per assignment of its effects to what serves them in scope (the
+  handlers of its answering effects, the sites of its control effects), as a generic function is
+  once per instance (decision 45): the copy `f__…` takes the capabilities first and hands them back
+  first, and its type has the sites' operations as its row, `A ⇒ F[n.i …] B`. A call of `f` is a
+  call of that copy, bound before the value it is in, so that it is a computation of its own.
 
-**`Fail`**, the error effect, is a control effect: it has no capability and no state, and it
-changes the type of what performs it (decision 48; `docs/effects-scoping.md` §7.5). `raise(e)`
-aborts: a function whose row has `Fail[E]` answers `A + E` (beside its capabilities), each
-normal answer `inl v` and each abort `inr e`, and a call of it is followed by a branch that goes
-on with `v` or aborts in turn; inside a loop's body an abort is `break` with `inr e`, the loop's
-own exit (`count_try`'s, SPEC §16), followed by the same branch after the loop. `try { S }` is the
-handler that answers the sum; `catch { S } { e -> S₂ }` answers `S₂` on an error, and
-`map_err { S } { e -> S₂ }` raises `S₂`'s value. Destructors run on each abort path, which is an
-ordinary path of the elaborated program (SPEC §12), and a value that has none cannot be live
-where a `raise` abandons it.
-
-Resolution is lexical: an operation goes to the innermost `with` of its effect around it, or to
-the capability the enclosing function was given; a `raise` goes to the innermost `try` around it,
-or to the enclosing function's caller.
-
-What is not provided, with the message that says so: an operation inside a closure or block
-that is not run in place (a callback stored or passed, #161), a function with a row passed as a
-value, a lend `&mut x` in the arguments of an effectful call, an operation inside a handler's
-clause, and a function with a row whose result is a computation (a loop or a generator).
+What is not provided, with the message that says so: an operation inside a closure or block that
+is not run in place, and a function with a row passed as a value (effectful callbacks, #161); a
+lend `&mut x` in the arguments of a call that threads a capability; an operation of an answering
+effect inside a clause; an effect with both kinds of operation; type parameters on an answering
+effect; a function with a row whose result is a computation (a loop or a generator).
 -/
 
 namespace Frontend.Elab.Effects
 
-/-- The operation `decl` of the effect `eff`. -/
+/-! ### What is declared -/
+
+/-- An effect: its type parameters and its operations. -/
+structure EffSig where
+  name : String
+  tps : List String
+  ops : List OpDecl
+
+/-- The effect's operations are answering. -/
+def EffSig.answering (e : EffSig) : Bool := e.ops.all (·.kind == .fn)
+
+/-- The operation `decl`, the `idx`-th of the effect `eff`. -/
 structure OpSig where
   eff : String
+  idx : Nat
   decl : OpDecl
 
-/-- A handler: its name, its effect, its state and its clauses. -/
+/-- An answering handler: its name, its effect, its state and its clauses. -/
 structure HSig where
   name : String
   eff : String
@@ -66,47 +70,55 @@ structure HSig where
   clauses : List Clause
   sp : Span
 
-/-- A function with a non-empty row: its declaration, the effects it performs, and the error type
-of its `Fail`. -/
+/-- An instance of an effect: its type arguments, when they are determined. -/
+structure Inst where
+  eff : String
+  args : Option (List VTy)
+  deriving BEq
+
+/-- A function with a non-empty row: its declaration and the effect instances it performs. -/
 structure FSig where
   name : String
-  row : List String
-  err : Option VTy := none
+  row : List Inst
   decl : Decl
 
-/-- The error effect (SPEC §18). -/
-def failEff : String := "Fail"
-
-/-- The operation of `Fail`. -/
-def raiseOp : String := "raise"
-
-/-- What the elaboration knows: the operations, the handlers and the functions with a row, each
-declared before the point being elaborated. -/
+/-- What the elaboration knows, each declared before the point being elaborated. -/
 structure Env where
   /-- The functions of the libraries included, whose elaboration is not reported. -/
   lib : List String := []
+  effs : List EffSig := []
   ops : List OpSig := []
   handlers : List HSig := []
+  chandlers : List CHandler := []
   fns : List FSig := []
 
-/-- A capability in scope: the effect it serves, the variable holding its `mut 'l S` borrow, the
-lifetime `'l`, and the handler. -/
+/-- A capability in scope: the answering effect it serves, the variable holding its `mut 'l S`
+borrow, the lifetime `'l`, and the handler. -/
 structure Cap where
   eff : String
   var : String
   life : String
   h : HSig
 
-/-- The state of the elaboration: a counter for fresh names, the reports for `bcc check`, and the
-copies made at each handler (finished ones in `made`, in the order they were finished). -/
+/-- A handler site of a control effect in scope: the effect, the site's static name, and the
+effect's type arguments there. -/
+structure Site where
+  eff : String
+  n : Nat
+  args : List VTy
+  /-- The `with`, or the function whose copy was given the site. -/
+  sp : Span
+  /-- What serves it, for the reports: the handler's name, or `the caller`. -/
+  what : String
+
+/-- The state of the elaboration: counters for fresh names and site names, the reports for
+`bcc check`, and the copies made (finished ones in `made`, in the order they were finished). -/
 structure St where
   fresh : Nat := 0
+  site : Nat := 1
   reports : Array (Span × String) := #[]
   made : Array (String × Decl) := #[]
   started : List String := []
-  /-- The abort points made so far: the span of each `raise` or raising call, and the binders in
-  scope there, for the message when one of them has no destructor. -/
-  aborts : Array (Span × List Span) := #[]
   /-- Elaborating a library declaration: nothing is reported. -/
   quiet : Bool := false
 
@@ -114,6 +126,9 @@ abbrev EM := StateT St (Except Error)
 
 def fresh (pre : String) : EM String :=
   modifyGet fun s => (s!"{pre}{s.fresh}", { s with fresh := s.fresh + 1 })
+
+/-- A fresh static name for a handler site. -/
+def freshSite : EM Nat := modifyGet fun s => (s.site, { s with site := s.site + 1 })
 
 /-- A report for `bcc check` (SPEC §18, #126): its kind (`effect`, `row`, `lowering`, `call`) and
 its text, at `sp`. -/
@@ -123,19 +138,89 @@ def report (sp : Span) (kind : String) (msg : String) : EM Unit :=
 /-- The depth bound for the traversals below. -/
 def fuel : Nat := 1 <<< 16
 
-/-- The name of a handler's clause for `op`. -/
+/-- The name of an answering handler's clause for `op`. -/
 def clauseName (h op : String) : String := h ++ "__" ++ op
 
-/-- The name of the copy of `f` under the handlers `hs`. -/
-def copyName (f : String) (hs : List String) : String := f ++ "__" ++ "_".intercalate hs
+/-- The name of the copy of `f` for the keys `ks` (handlers and site names). -/
+def copyName (f : String) (ks : List String) : String := f ++ "__" ++ "_".intercalate ks
+
+def Env.eff? (env : Env) (x : String) : Option EffSig := env.effs.find? (·.name == x)
+def Env.op? (env : Env) (x : String) : Option OpSig := env.ops.find? (·.decl.name.name == x)
+def Env.fn? (env : Env) (x : String) : Option FSig := env.fns.find? (·.name == x)
+def Env.handler? (env : Env) (x : String) : Option HSig := env.handlers.find? (·.name == x)
+def Env.chandler? (env : Env) (x : String) : Option CHandler :=
+  env.chandlers.find? (·.name.name == x)
+
+/-- The effect is answering. -/
+def Env.answering (env : Env) (e : String) : Bool := ((env.eff? e).map (·.answering)).getD false
+
+/-- An operation's parameter tuple type (`1` with no parameters). -/
+def tupleTy (sp : Span) : List VTy → VTy
+  | [] => .unit sp
+  | [A] => A
+  | A :: As => .tensor sp A (tupleTy sp As)
+
+/-- The operation is abortive: answer `0` at a qualifier with weakening. -/
+def _root_.Frontend.OpDecl.abortive (o : OpDecl) : Bool :=
+  (match o.res with | .zero _ => true | _ => false) && (match o.kind with
+    | .ctl .lin => false
+    | .ctl _ => true
+    | .fn => false)
+
+/-- The qualifier of a control operation. -/
+def _root_.Frontend.OpDecl.qual (o : OpDecl) : Qual := match o.kind with
+  | .ctl q => q
+  | .fn => .aff
+
+/-- The operations of a site, at its type arguments: `(q, A, B)` per operation, in order. -/
+def Env.siteOps (env : Env) (s : Site) : List (Qual × VTy × VTy) :=
+  match env.eff? s.eff with
+  | none => []
+  | some e =>
+    let σ : TySubst := e.tps.zip s.args
+    e.ops.map fun o => (o.qual, (tupleTy o.name.span (o.params.map (·.2))).subst σ, o.res.subst σ)
+
+/-- The row entries of the sites `ss`, in order: `n.i q A ~> B`. -/
+def Env.rowOf (env : Env) (ss : List Site) : Row :=
+  ss.foldr (fun s r =>
+    ((env.siteOps s).zipIdx).foldr (fun ((q, A, B), i) r => .cons s.n i q A B r) r) .nil
+
+/-! ### Type arguments -/
+
+/-- First-order matching of a type `P` whose names `tps` are unknowns against `A`. -/
+partial def matchTy (tps : List String) (σ : TySubst) (P A : VTy) : Option TySubst :=
+  match P with
+  | .name _ x =>
+    if tps.contains x then
+      match σ.lookup x with
+      | some B => if B.strip == A.strip then some σ else none
+      | none => some ((x, A) :: σ)
+    else if P.strip == A.strip then some σ else none
+  | .tensor _ P₁ P₂ => match A with
+    | .tensor _ A₁ A₂ => do matchTy tps (← matchTy tps σ P₁ A₁) P₂ A₂
+    | _ => none
+  | .sum _ P₁ P₂ => match A with
+    | .sum _ A₁ A₂ => do matchTy tps (← matchTy tps σ P₁ A₁) P₂ A₂
+    | _ => none
+  | .lolli _ P₁ P₂ => match A with
+    | .lolli _ A₁ A₂ => do matchTy tps (← matchTy tps σ P₁ A₁) P₂ A₂
+    | _ => none
+  | .bang _ P => match A with
+    | .bang _ A => matchTy tps σ P A
+    | _ => none
+  | .ref _ P => match A with
+    | .ref _ A => matchTy tps σ P A
+    | _ => none
+  | .array _ P => match A with
+    | .array _ A => matchTy tps σ P A
+    | _ => none
+  | P => if P.strip == A.strip then some σ else none
+
+/-- The type names `A` mentions among `tps`. -/
+def mentions (tps : List String) (A : VTy) : Bool :=
+  tps.any fun x => (A.subst [(x, .unk .none)]).strip != A.strip
 
 /-! ### Rows -/
-
-def Env.op? (env : Env) (x : String) : Option OpSig := env.ops.find? (·.decl.name.name == x)
-
-def Env.fn? (env : Env) (x : String) : Option FSig := env.fns.find? (·.name == x)
-
-def Env.handler? (env : Env) (x : String) : Option HSig := env.handlers.find? (·.name == x)
 
 /-- The name a call applies: `f(…)`, `f[A](…)`, `f ['x](…)`. -/
 def headName : Val → Option String
@@ -143,28 +228,45 @@ def headName : Val → Option String
   | .inst _ V _ | .unbang _ V => headName V
   | _ => none
 
-def union (a b : List String) : List String := (a ++ b).eraseDups
+/-- An instance of `e` added to a row: one instance per effect, a determined one winning. -/
+def addInst (r : List Inst) (i : Inst) : List Inst :=
+  match r.find? (·.eff == i.eff) with
+  | none => r ++ [i]
+  | some j => if j.args.isNone && i.args.isSome then r.map (fun k => if k.eff == i.eff then i else k)
+    else r
+
+def union (a b : List Inst) : List Inst := b.foldl addInst a
+
+def without (r : List Inst) (e : String) : List Inst := r.filter (·.eff != e)
+
+/-- The instance an operation call of `o` performs: determined when its effect takes no type. -/
+def Env.opInst (env : Env) (o : OpSig) : Inst :=
+  ⟨o.eff, match env.eff? o.eff with
+    | some e => if e.tps.isEmpty then some [] else none
+    | none => none⟩
+
+/-- The instances a control handler's own row adds at a `with`: determined when its patterns
+mention none of the handler's type parameters. -/
+def handlerRow (h : CHandler) : List Inst :=
+  let tps := h.tps.map (·.name)
+  h.row.map fun (e, As) => ⟨e.name, if As.any (mentions tps) then none else some As⟩
 
 mutual
 /-- The effects a value performs, outside the `with`s that handle them. -/
-def rowV (env : Env) : Nat → Val → List String
+def rowV (env : Env) : Nat → Val → List Inst
   | 0, _ => []
   | n + 1, V => match V with
-    | .app _ (.app _ (.sugar _ (.handle h _)) P) (.thunkv _ (.lam _ _ _ M)) =>
+    | .app _ (.app _ (.sugar _ (.handle h _ _)) P) (.thunkv _ (.lam _ _ _ M)) =>
       let inner := rowC env n M
-      let inner := match env.handler? h with
-        | some hs => inner.filter (· != hs.eff)
-        | none => inner
+      let inner := match env.handler? h, env.chandler? h with
+        | some hs, _ => without inner hs.eff
+        | none, some ch => union (without inner ch.eff.name) (handlerRow ch)
+        | none, none => inner
       union (rowV env n P) inner
-    | .app _ (.sugar _ .try_) (.thunk _ M) => (rowC env n M).filter (· != failEff)
-    | .app _ (.app _ (.sugar _ .catch_) (.thunk _ M)) (.thunkv _ (.lam _ _ _ N)) =>
-      union ((rowC env n M).filter (· != failEff)) (rowC env n N)
-    | .app _ (.app _ (.sugar _ .mapErr) (.thunk _ M)) (.thunkv _ (.lam _ _ _ N)) =>
-      union ((rowC env n M).filter (· != failEff)) (union (rowC env n N) [failEff])
     | .app _ f W =>
       let head := match headName f with
-        | some x => if x == raiseOp then [failEff] else match env.op? x, env.fn? x with
-          | some o, _ => [o.eff]
+        | some x => match env.op? x, env.fn? x with
+          | some o, _ => [env.opInst o]
           | none, some g => g.row
           | none, none => rowV env n f
         | none => rowV env n f
@@ -179,7 +281,7 @@ def rowV (env : Env) : Nat → Val → List String
     | _ => []
 
 /-- The effects a computation performs, outside the `with`s that handle them. -/
-def rowC (env : Env) : Nat → Comp → List String
+def rowC (env : Env) : Nat → Comp → List Inst
   | 0, _ => []
   | n + 1, M => match M with
     | .ret _ V | .absurd _ V => rowV env n V
@@ -190,40 +292,6 @@ def rowC (env : Env) : Nat → Comp → List String
     | .lam _ _ _ M | .app _ M _ | .proj _ _ M | .lamL _ _ _ M | .inst _ M _ | .nuIn _ M
     | .nuOut _ M | .ascribe _ M _ => rowC env n M
     | _ => []
-end
-
-mutual
-/-- The error type of the first function with `Fail` a value calls, outside the `try`s that
-handle it. -/
-def errV (env : Env) : Nat → Val → Option VTy
-  | 0, _ => none
-  | n + 1, V => match V with
-    | .app _ (.sugar _ .try_) _ => none
-    | .app _ (.app _ (.sugar _ .catch_) _) (.thunkv _ (.lam _ _ _ N)) => errC env n N
-    | .app _ (.app _ (.sugar _ .mapErr) _) (.thunkv _ (.lam _ _ _ N)) => errC env n N
-    | .app _ f W =>
-      let head := match headName f with
-        | some x => (env.fn? x).bind (·.err)
-        | none => errV env n f
-      head.orElse fun _ => errV env n W
-    | .pair _ V W => (errV env n V).orElse fun _ => errV env n W
-    | .inl _ V | .inr _ V | .unbang _ V | .boxed _ _ V | .unbox _ V | .sub _ V _ | .roll _ V
-    | .unroll _ V | .inst _ V _ | .ascribe _ V _ | .shorten _ _ _ _ V => errV env n V
-    | .thunk _ M | .thunkv _ M | .bangThunk _ M | .bangThunkv _ M | .run _ M => errC env n M
-    | _ => none
-
-/-- `errV` of a computation. -/
-def errC (env : Env) : Nat → Comp → Option VTy
-  | 0, _ => none
-  | n + 1, M => match M with
-    | .ret _ V | .absurd _ V => errV env n V
-    | .bind _ _ _ M N _ | .with_ _ M N => (errC env n M).orElse fun _ => errC env n N
-    | .letUnit _ V M | .letPair _ _ _ V M => (errV env n V).orElse fun _ => errC env n M
-    | .case _ V _ M _ N | .for_ _ _ V M N =>
-      ((errV env n V).orElse fun _ => errC env n M).orElse fun _ => errC env n N
-    | .lam _ _ _ M | .app _ M _ | .proj _ _ M | .lamL _ _ _ M | .inst _ M _ | .nuIn _ M
-    | .nuOut _ M | .ascribe _ M _ => errC env n M
-    | _ => none
 end
 
 /-! ### Building terms -/
@@ -254,9 +322,9 @@ def _root_.Frontend.CTy.lifeVars : CTy → List String
   | .nu _ _ C => C.lifeVars
   | .iter _ A R R' | .gen _ A R R' => A.lifeVars ++ R.lifeVars ++ R'.lifeVars
   | .loop _ A B => A.lifeVars ++ B.lifeVars
+  | .eff _ _ A => A.lifeVars
   | _ => []
 end
-
 
 /-- `(c₁, (…, (cₙ, V)))`. -/
 def capsTuple (sp : Span) (cs : List Cap) (V : Val) : Val :=
@@ -274,16 +342,6 @@ def unpack (sp : Span) : List Cap → String → String → Comp → EM Comp
   | c :: cs, x, t, N => do
     let r ← fresh "fx_r"
     pure (.letPair sp ⟨c.var, sp⟩ ⟨r, sp⟩ (.var sp t) (← unpack sp cs x r N))
-
-/-- `case` on the sum in `t` after the capabilities `cs` are bound again from it:
-`let (c₁, (…, s)) = t; case s { inl x -> N | inr e -> A(e) }`. -/
-def splitSum (sp : Span) (cs : List Cap) (t x : String) (N : Comp) (onErr : Val → Comp) :
-    EM Comp := do
-  let e ← fresh "fx_e"
-  let arms (s : String) : Comp := .case sp (.var sp s) ⟨x, sp⟩ N ⟨e, sp⟩ (onErr (.var sp e))
-  if cs.isEmpty then return arms t
-  let s ← fresh "fx_s"
-  unpack sp cs s t (arms s)
 
 /-- `t <- M; K`, with the bindings `M` begins with moved before it (they bind fresh names, or
 capabilities that `K` binds again), so that the head of the binding is one statement. -/
@@ -334,50 +392,46 @@ def liftCalls : Nat → Val → StateT (List Bind) EM Val
 
 /-! ### Elaborating a body -/
 
-/-- The context of an elaboration: what is declared, the capabilities in scope, and, in a
-function's copy, the capabilities its `return e` from inside a loop hands back. -/
+/-- The context of an elaboration: what is declared, the capabilities and handler sites in scope,
+and, in a function's copy, the capabilities its `return e` from inside a loop hands back. -/
 structure Cx where
   env : Env
   caps : List Cap
+  sites : List Site := []
   fnCaps : List Cap := []
-  /-- A `raise` here is handled (by a `try`, or by the caller of a function with `Fail`); `loop`:
-  inside the body of a loop, where an abort leaves the loop with `break (inr e)`. -/
-  fail : Option Bool := none
-  /-- In a function whose result is a sum: `return e` from a loop's body answers `inl e`. -/
-  fnFail : Bool := false
-  /-- The type of the error the innermost handler of `Fail` receives, when it is known here. -/
-  err : Option VTy := none
-  /-- The binders in scope, for the message when a `raise` abandons one with no destructor. -/
-  scope : List Span := []
 
 /-- The capabilities of `cx` for the effects `row`, in the order of `cx.caps`. -/
-def Cx.need (cx : Cx) (row : List String) : List Cap := cx.caps.filter (row.contains ·.eff)
+def Cx.need (cx : Cx) (row : List Inst) : List Cap := cx.caps.filter (fun c => row.any (·.eff == c.eff))
 
 def Cx.needV (cx : Cx) (V : Val) : List Cap := cx.need (rowV cx.env fuel V)
 def Cx.needC (cx : Cx) (M : Comp) : List Cap := cx.need (rowC cx.env fuel M)
 
-/-- The computation raises, and a handler of `Fail` is in scope. -/
-def Cx.raisesC (cx : Cx) (M : Comp) : Bool := cx.fail.isSome && (rowC cx.env fuel M).contains failEff
+/-- The control effects of `row`. -/
+def Cx.ctl (cx : Cx) (row : List Inst) : List Inst := row.filter (!cx.env.answering ·.eff)
 
-/-- The value raises, and a handler of `Fail` is in scope. -/
-def Cx.raisesV (cx : Cx) (V : Val) : Bool := cx.fail.isSome && (rowV cx.env fuel V).contains failEff
-
-/-- `cx` for a computation that answers its own value: an abort in it is its answer `inr e`. -/
-def Cx.sub (cx : Cx) : Cx := { cx with fail := cx.fail.map fun _ => false }
-
-/-- An abort with the error `e`, from a computation handing back the capabilities `cs`: `break`
-with `inr e` in a loop's body, and `(c₁, (…, inr e))` elsewhere. -/
-def Cx.abort (cx : Cx) (cs : List Cap) (sp : Span) (e : Val) : Comp :=
-  match cx.fail with
-  | some true => .ret sp (.app sp (.sugar sp .brk) (.inr sp e))
-  | _ => .ret sp (capsTuple sp cs (.inr sp e))
+def Cx.ctlV (cx : Cx) (V : Val) : Bool := !(cx.ctl (rowV cx.env fuel V)).isEmpty
+def Cx.ctlC (cx : Cx) (M : Comp) : Bool := !(cx.ctl (rowC cx.env fuel M)).isEmpty
 
 /-- The capability of the effect `e` in scope. -/
 def Cx.capOf (cx : Cx) (e : String) : Option Cap := cx.caps.find? (·.eff == e)
 
+/-- The site of the control effect `e` in scope. -/
+def Cx.siteOf (cx : Cx) (e : String) : Option Site := cx.sites.find? (·.eff == e)
+
 def notInClosure (sp : Span) (e : String) : Error :=
   ⟨sp, s!"an operation of `{e}` is performed inside a closure or block that is not run in place: " ++
-    "it cannot capture the capability (effectful callbacks, #161)"⟩
+    "it cannot reach its handler (effectful callbacks, #161)"⟩
+
+/-- The site serving the control instance `i` here, its type arguments checked against the
+instance's when both are determined. -/
+def Cx.serve (cx : Cx) (sp : Span) (what : String) (i : Inst) : Except Error Site := do
+  let some s := cx.siteOf i.eff
+    | throw ⟨sp, s!"{what} performs `{i.eff}`, but no handler of `{i.eff}` is in scope here"⟩
+  if let some As := i.args then
+    unless As.map VTy.strip == s.args.map VTy.strip do
+      throw ⟨sp, s!"{what} performs `{i.eff}[{", ".intercalate (As.map (VTy.pp · 0))}]`, but the " ++
+        s!"handler of `{i.eff}` in scope is at `{i.eff}[{", ".intercalate (s.args.map (VTy.pp · 0))}]`"⟩
+  pure s
 
 /-- A function's type and value taken apart: its lifetime parameters (outermost first), its
 parameter's type, its result type, its parameter's name and its body. `!` or not. -/
@@ -418,19 +472,23 @@ def closedResult (g : Decl) : Option VTy :=
     | .error _ => none
   | _ => none
 
-/-- A function type and value put together from its parts. -/
-def FnParts.build (sp : Span) (f : FnParts) : VTy × Val :=
+/-- A function type and value put together from its parts; its result at the row `row` (`F[row]`)
+when the row is not empty. -/
+def FnParts.build (sp : Span) (f : FnParts) (row : Row := .nil) : VTy × Val :=
+  let arrow : VTy := match row with
+    | .nil => .lolli sp f.P f.T
+    | row => .thunk sp (.arr sp f.P (.eff sp row f.T))
   let rec inner : List (Ident × Life) → VTy × Comp
-    | [] => (.lolli sp f.P f.T, .lam sp f.p f.P f.body)
+    | [] => (arrow, .lam sp f.p f.P f.body)
     | (a, b) :: ls =>
       let (T, M) := inner ls
       (.all sp a b T, .lamL sp a b (.ret sp (.thunkv sp M)))
   let (T, M) := inner f.lives
   if f.bang then (.bang sp T, .bangThunkv sp M) else (T, .thunkv sp M)
 
-/-- The capabilities of a copy made for the handlers `hs`, one per effect of `row`. -/
-def copyCaps (row : List String) (hs : List HSig) : List Cap :=
-  (row.zip hs).map fun (e, h) => ⟨e, "fx_c_" ++ e.toLower, "fx_l_" ++ e.toLower, h⟩
+/-- The capabilities of a copy made for the handlers `hs`, one per answering effect of `effs`. -/
+def copyCaps (effs : List String) (hs : List HSig) : List Cap :=
+  (effs.zip hs).map fun (e, h) => ⟨e, "fx_c_" ++ e.toLower, "fx_l_" ++ e.toLower, h⟩
 
 /-- A body taking the capabilities `cs` first: `fx_pp : mut 'l₁ S₁ * (… * P)`, taken apart into
 the capabilities and the original parameter `p`. -/
@@ -463,7 +521,7 @@ where
       | .nuOut _ M | .ascribe _ M _ => withInC k M
       | _ => false
 
-/-- The plain calls of `V` that perform no effect of `cx`, lifted (`liftCalls`), in the order its
+/-- The plain calls of `V` that perform no effect, lifted (`liftCalls`), in the order its
 evaluation runs them in; an effectful call stays, its arguments' plain calls lifted. -/
 def liftPlain (cx : Cx) : Nat → Val → StateT (List Bind) EM Val
   | 0, V => pure V
@@ -472,7 +530,7 @@ def liftPlain (cx : Cx) : Nat → Val → StateT (List Bind) EM Val
       match f with
       | .sugar .. | .app _ (.sugar ..) _ => do pure (.app sp f (← liftPlain cx k W))
       | _ =>
-        if !(cx.needV V).isEmpty || cx.raisesV V then do pure (.app sp f (← liftPlain cx k W))
+        if !(cx.needV V).isEmpty || cx.ctlV V then do pure (.app sp f (← liftPlain cx k W))
         else liftCalls k V
     | .pair sp V W => do pure (.pair sp (← liftPlain cx k V) (← liftPlain cx k W))
     | .inl sp V => do pure (.inl sp (← liftPlain cx k V))
@@ -484,244 +542,145 @@ def liftPlain (cx : Cx) : Nat → Val → StateT (List Bind) EM Val
     | .unbox sp V => do pure (.unbox sp (← liftPlain cx k V))
     | V => pure V
 
-/-- A place lent, or a standard capability used, in the body of a handler of `Fail` and declared
-outside it is not provided: the body is a computation of its own, which does not hand it back. -/
-def noLentIn (sp : Span) (M : Comp) : EM Unit := do
-  let bound := M.boundNames
-  let lent := (M.lentNames.filter (!bound.contains ·)) ++
-    (["stdin", "stdout", "stderr"].filter fun c => (M.lentNames true).contains c && !bound.contains c)
-  if let some x := lent.head? then
-    throw ⟨sp, s!"`{x}` is lent or used in this block and declared outside it: a handler of " ++
-      "`Fail` does not hand back the places its body lends; lend it outside the block"⟩
-
 /-- A lend in the arguments of a call that threads a capability is not provided. -/
 def noLend (sp : Span) (what : String) (W : Val) : EM Unit := do
   if W.lends then
     throw ⟨sp, s!"a place is lent (`&mut x`) in the arguments of {what}, which also threads a " ++
       "capability: lend it in a call of its own"⟩
 
-/-- A `raise` or a `try` in a value, outside closures: the elaboration must reach it. -/
-def failIn : Nat → Val → Bool
-  | 0, _ => false
-  | k + 1, V => match V with
-    | .app _ (.sugar _ .try_) _ | .app _ (.app _ (.sugar _ .catch_) _) _
-    | .app _ (.app _ (.sugar _ .mapErr) _) _ => true
-    | .app _ (.var _ x) _ => x == raiseOp
-    | .app _ f W | .pair _ f W => failIn k f || failIn k W
-    | .inl _ V | .inr _ V | .ascribe _ V _ | .roll _ V | .unroll _ V | .boxed _ _ V
-    | .unbox _ V | .unbang _ V | .inst _ V _ | .sub _ V _ | .shorten _ _ _ _ V => failIn k V
-    | .run _ M | .thunk _ M | .thunkv _ M | .bangThunk _ M | .bangThunkv _ M => failInC k M
-    | _ => false
-where
-  failInC : Nat → Comp → Bool
-    | 0, _ => false
-    | k + 1, M => match M with
-      | .ret _ V | .absurd _ V => failIn k V
-      | .bind _ _ _ M N _ | .with_ _ M N => failInC k M || failInC k N
-      | .letUnit _ V M | .letPair _ _ _ V M => failIn k V || failInC k M
-      | .case _ V _ M _ N | .for_ _ _ V M N => failIn k V || failInC k M || failInC k N
-      | .lam _ _ _ M | .app _ M _ | .proj _ _ M | .lamL _ _ _ M | .inst _ M _ | .nuIn _ M
-      | .nuOut _ M | .ascribe _ M _ => failInC k M
-      | _ => false
+/-- `bindParams`: the parameters `xs` bound from the tuple `p`. -/
+def bindParams (sp : Span) (p : String) : List Ident → Comp → EM Comp
+  | [], M => pure (.letUnit sp (.var sp p) M)
+  | [x], M => pure (.bind sp x none (.ret sp (.var sp p)) M false)
+  | [x, y], M => pure (.letPair sp x y (.var sp p) M)
+  | x :: xs, M => do
+    let r ← fresh "fx_p"
+    pure (.letPair sp x ⟨r, sp⟩ (.var sp p) (← bindParams sp r xs M))
 
-/-- The type of a `try` whose body is one call of a function that only raises: its result type
-and its error type, when the result mentions none of its lifetimes. The call's answer is the
-`try`'s, so the binding of it is annotated. -/
-def tailSumTy (cx : Cx) (cs : List Cap) : Comp → Option VTy
-  | .ret sp (.app _ f _) => do
-    let g ← cx.env.fn? (← headName f)
-    unless g.row.contains failEff do none
-    unless (cx.need (g.row.filter (· != failEff))).map (·.var) == cs.map (·.var) do none
-    pure (capsTy sp cs (.sum sp (← closedResult g.decl) (← g.err)))
-  | _ => none
-
-/-- The `break`s of a loop's body, outside its inner loops, with their values made `inl v` (a bare
-`break`, `inl ()`): the loop's value is a sum when its body raises. -/
-def inlBreaks : Nat → Comp → Comp
-  | 0, M => M
-  | n + 1, M => match M with
-    | .ret sp (.sugar ksp .brk) => .ret sp (.app sp (.sugar ksp .brk) (.inl sp (.unit sp)))
-    | .ret sp (.app asp (.sugar ksp .brk) v) => .ret sp (.app asp (.sugar ksp .brk) (.inl sp v))
-    | .bind sp x A M N lin => .bind sp x A M (inlBreaks n N) lin
-    | .letUnit sp V M => .letUnit sp V (inlBreaks n M)
-    | .letPair sp x y V M => .letPair sp x y V (inlBreaks n M)
-    | .case sp V x M y N => .case sp V x (inlBreaks n M) y (inlBreaks n N)
-    | .for_ sp x V M N => .for_ sp x V M (inlBreaks n N)
-    | M => M
-
-/-- The terminals of a computation reached through tail positions, `ret V` made `ret (inl V)`. -/
-def inlTerms : Nat → Comp → Comp
-  | 0, M => M
-  | n + 1, M => match M with
-    | .ret sp V => .ret sp (.inl sp V)
-    | .bind sp x A M N lin => .bind sp x A M (inlTerms n N) lin
-    | .letUnit sp V M => .letUnit sp V (inlTerms n M)
-    | .letPair sp x y V M => .letPair sp x y V (inlTerms n M)
-    | .case sp V x M y N => .case sp V x (inlTerms n M) y (inlTerms n N)
-    | .for_ sp x V M N => .for_ sp x V M (inlTerms n N)
-    | T => .bind T.span ⟨"fx_ti", T.span⟩ none T (.ret T.span (.inl T.span (.var T.span "fx_ti"))) false
-
-/-- A computation that raises before anything else: `raise(e)`, or a binding whose head does. -/
-def abortsAtHead : Comp → Bool
-  | .ret _ (.app _ (.var _ x) _) => x == raiseOp
-  | .bind _ _ _ M _ _ => abortsAtHead M
-  | _ => false
-
-/-- The binder spans a pattern of the computation binds at its head, for `Cx.scope`. -/
-def headBinders : Comp → List Span
-  | .bind _ x _ _ _ _ => [x.span]
-  | .letPair _ x y _ _ => [x.span, y.span]
-  | _ => []
+/-- A computation with `f` applied at each terminal reached through tail positions. -/
+def wrapTerms (f : Comp → Comp) : Comp → Comp
+  | .bind sp x A M N lin => .bind sp x A M (wrapTerms f N) lin
+  | .letUnit sp V M => .letUnit sp V (wrapTerms f M)
+  | .letPair sp x y V M => .letPair sp x y V (wrapTerms f M)
+  | .case sp V x M y N => .case sp V x (wrapTerms f M) y (wrapTerms f N)
+  | .for_ sp x V M N => .for_ sp x V M (wrapTerms f N)
+  | T => f T
 
 mutual
-/-- `M` with its operations made calls on the capabilities `cs`, handing them back beside its
-result: each terminal answering `v` answers `(c₁, (…, (cₙ, v)))`, and `(c₁, (…, (cₙ, inl v)))`
-when `r` (the computation raises: an abort answers `inr e` there). With `wrap := false` (the body
-of a loop, which threads the capabilities by name), the terminals are kept, and the capabilities
-are only bound again. A `with` inside is elaborated either way. -/
-def trC : Nat → Cx → List Cap → Bool → Bool → Comp → EM Comp
-  | 0, _, _, _, _, M => throw ⟨M.span, "internal error: a body nested too deeply"⟩
-  | n + 1, cx, cs, wrap, r, M => do
-    let cxN (bs : List Span) : Cx := { cx with scope := bs ++ cx.scope }
+/-- `M` with its operations resolved, handing the capabilities `cs` back beside its result: each
+terminal answering `v` answers `(c₁, (…, (cₙ, v)))`. With `wrap := false` (the body of a loop,
+which threads the capabilities by name), the terminals are kept, and the capabilities are only
+bound again. A `with` inside is elaborated either way. -/
+def trC : Nat → Cx → List Cap → Bool → Comp → EM Comp
+  | 0, _, _, _, M => throw ⟨M.span, "internal error: a body nested too deeply"⟩
+  | n + 1, cx, cs, wrap, M => do
     match M with
     | .ret sp V@(.app _ f W) =>
-      -- A call of a function that raises, in tail position, whose capabilities are the ones
-      -- this computation hands back: its answer is already this one's, and is answered as it is.
-      match headName f, wrap && r with
+      -- A call of a function with a row in tail position, whose capabilities are the ones this
+      -- computation hands back: its answer is this one's, and is answered as it is.
+      match headName f, wrap with
       | some x, true =>
         match cx.env.fn? x with
         | some g =>
-          let own := g.row.filter (· != failEff)
-          let used := cx.need own
-          if g.row.contains failEff && !W.lends && used.map (·.var) == cs.map (·.var) &&
-              used.length == own.length then
+          let used := cx.need g.row
+          if !W.lends && used.map (·.var) == cs.map (·.var) then
             let (bs, W') ← trV n cx cs W
-            let name ← if used.isEmpty then pure x else copyOf n cx.env sp g (used.map (·.h))
+            let name ← copyFor n cx sp x g
             let f' : Val := match f with
               | .defApp fsp _ As => .defApp fsp name As
               | _ => .var f.span name
-            report sp "call" (s!"{x} ({", ".intercalate g.row}) → `{name}`, in tail position: its " ++
-              "answer is this one's")
+            report sp "call" (s!"{x} → `{name}`, in tail position: its answer is this one's")
             return ← chain bs (.ret sp (.app sp f' (capsTuple sp used W')))
-          else trRet n cx cs wrap r sp V
-        | none => trRet n cx cs wrap r sp V
-      | _, _ => trRet n cx cs wrap r sp V
-    | .ret sp V => trRet n cx cs wrap r sp V
+          else trRet n cx cs wrap sp V
+        | none => trRet n cx cs wrap sp V
+      | _, _ => trRet n cx cs wrap sp V
+    | .ret sp V => trRet n cx cs wrap sp V
     | .bind sp x A M N lin =>
       let csM := cx.needC M
-      let rM := cx.raisesC M
-      -- `if c { raise(e) } else { M₂ }; N`: the arm that aborts leaves, and the other goes on
-      -- with `N`, so no sum is made.
-      if let .case csp V y M₁ z M₂ := M then
-        if rM && abortsAtHead M₁ && !cx.raisesC M₂ then
-          let (bs, V') ← trV n cx cs V
-          return ← chain bs (.case csp V' y (← trC n (cxN [y.span]) cs wrap r M₁) z
-            (← trC n (cxN [z.span]) cs wrap r (.bind sp x A M₂ N lin)))
-        if rM && abortsAtHead M₂ && !cx.raisesC M₁ then
-          let (bs, V') ← trV n cx cs V
-          return ← chain bs (.case csp V' y (← trC n (cxN [y.span]) cs wrap r (.bind sp x A M₁ N lin))
-            z (← trC n (cxN [z.span]) cs wrap r M₂))
-      let N' ← trC n (cxN [x.span]) cs wrap r N
-      if csM.isEmpty && !rM then
-        pure (.bind sp x A (← trC n cx [] false false M) N' lin)
+      let N' ← trC n cx cs wrap N
+      if csM.isEmpty then
+        if let .ret rsp V := M then
+          -- A value: its effectful calls bound before the binding, which keeps its form.
+          let (bs, V') ← trV n cx [] V
+          chain bs (.bind sp x A (.ret rsp V') N' lin)
+        else pure (.bind sp x A (← trC n cx [] false M) N' lin)
       else if let .ret rsp V := M then
-        -- A value: its effectful calls bound before the binding, which keeps its form.
         let (bs, V') ← trV n cx cs V
         chain bs (.bind sp x A (.ret rsp V') N' lin)
       else
-        -- `M` hands back the capabilities it uses, which are bound again for `N`; when it
-        -- raises, its answer is a sum, and an error aborts here in turn.
+        -- `M` hands back the capabilities it uses, which are bound again for `N`.
         let t ← fresh "fx_b"
-        let M' ← trC n cx.sub csM true rM M
+        let M' ← trC n cx csM true M
         let v ← fresh "fx_v"
-        let N'' := if lin || rM then .bind sp x none (.ret sp (.var sp v)) N' lin else N'
-        let body ← if rM then splitSum sp csM t v N'' (cx.abort cs sp)
-          else if lin then unpack sp csM v t N''
-          else unpack sp csM x.name t N'
-        let ann := if rM then none else A.map (capsTy sp csM)
-        pure (bindFlat sp t ann M' body)
+        let N'' := if lin then .bind sp x none (.ret sp (.var sp v)) N' lin else N'
+        let body ← if lin then unpack sp csM v t N'' else unpack sp csM x.name t N'
+        pure (bindFlat sp t (A.map (capsTy sp csM)) M' body)
     | .letUnit sp V M =>
       let (bs, V') ← trV n cx cs V
-      chain bs (.letUnit sp V' (← trC n cx cs wrap r M))
+      chain bs (.letUnit sp V' (← trC n cx cs wrap M))
     | .letPair sp x y V M =>
       let (bs, V') ← trV n cx cs V
-      chain bs (.letPair sp x y V' (← trC n (cxN [x.span, y.span]) cs wrap r M))
+      chain bs (.letPair sp x y V' (← trC n cx cs wrap M))
     | .case sp V x M y N =>
       let (bs, V') ← trV n cx cs V
-      chain bs (.case sp V' x (← trC n (cxN [x.span]) cs wrap r M) y (← trC n (cxN [y.span]) cs wrap r N))
+      chain bs (.case sp V' x (← trC n cx cs wrap M) y (← trC n cx cs wrap N))
     | .for_ sp x V M N =>
       let (bs, V') ← trV n cx cs V
-      if !cx.raisesC M then
-        -- The body rebinds the capabilities it uses by name, and the loop threads them.
-        return ← chain bs (.for_ sp x V' (← trC n (cxN [x.span]) [] false false M)
-          (← trC n cx cs wrap r N))
-      -- The body raises: an abort leaves the loop with `break (inr e)`, its `break`s answer
-      -- `inl`, and after the loop an error aborts here in turn.
-      let M' ← trC n { cxN [x.span] with fail := some true } [] false false (inlBreaks fuel M)
-      let lr ← fresh "fx_lr"
-      let e ← fresh "fx_e"
-      let abort := cx.abort cs sp (.var sp e)
-      let after ← match N with
-        | .bind bsp rv A (.ret rsp (.app asp (.sugar fsp .forRes) (.thunk tsp d))) N₂ lin => do
-          let N₂' ← trC n (cxN [rv.span]) cs wrap r N₂
-          let v ← fresh "fx_v"
-          let ann := match A, cx.err with
-            | some A, some E => some (VTy.sum bsp A E)
-            | _, _ => none
-          pure (.bind bsp ⟨lr, bsp⟩ ann
-            (.ret rsp (.app asp (.sugar fsp .forRes) (.thunk tsp (inlTerms fuel d))))
-            (.case bsp (.var bsp lr) ⟨v, bsp⟩ (.bind bsp rv A (.ret bsp (.var bsp v)) N₂' lin)
-              ⟨e, bsp⟩ abort) false)
-        | .bind bsp _ _ (.ret _ (.sugar _ .forRes)) _ _ =>
-          throw ⟨bsp, "a `raise` in the body of a loop whose value is what its source finishes " ++
-            "with is not provided: give the loop an `else`"⟩
-        | N => do
-          let N' ← trC n cx cs wrap r N
-          let u ← fresh "fx_u"
-          pure (.bind sp ⟨lr, sp⟩ (cx.err.map (VTy.sum sp (.unit sp)))
-            (.ret sp (.app sp (.sugar sp .forRes) (.thunk sp (.ret sp (.inl sp (.unit sp))))))
-            (.case sp (.var sp lr) ⟨u, sp⟩ N' ⟨e, sp⟩ abort) false)
-      report sp "lowering" "for (Fail): an abort in its body is the loop's exit (`break`), then a branch"
-      chain bs (.for_ sp x V' M' after)
+      -- The body rebinds the capabilities it uses by name, and the loop threads them.
+      chain bs (.for_ sp x V' (← trC n cx [] false M) (← trC n cx cs wrap N))
     | .absurd sp V =>
       let (bs, V') ← trV n cx cs V
       chain bs (.absurd sp V')
-    -- A function's code: a `with` or a handler of `Fail` inside it is elaborated.
-    | .lam sp x A M => pure (.lam sp x A (← trC n (cxN [x.span]) cs wrap r M))
-    | .lamL sp x b M => pure (.lamL sp x b (← trC n cx cs wrap r M))
+    -- A function's code: a `with` inside it is elaborated.
+    | .lam sp x A M => pure (.lam sp x A (← trC n cx cs wrap M))
+    | .lamL sp x b M => pure (.lamL sp x b (← trC n cx cs wrap M))
+    | .with_ sp M N =>
+      if let some c := (cx.needC M ++ cx.needC N).head? then
+        throw ⟨sp, s!"an operation of `{c.eff}` is performed here, in a form that does not " ++
+          "thread its capability"⟩
+      pure (.with_ sp (← trC n cx [] false M) (← trC n cx [] false N))
+    | .proj sp i M => do pure (.proj sp i (← trInner n cx M))
+    | .app sp M y => do pure (.app sp (← trInner n cx M) y)
+    | .inst sp M a => do pure (.inst sp (← trInner n cx M) a)
+    | .nuIn sp M => do pure (.nuIn sp (← trInner n cx M))
+    | .nuOut sp M => do pure (.nuOut sp (← trInner n cx M))
+    | .ascribe sp M C => do pure (.ascribe sp (← trInner n cx M) C)
     | T =>
       if let some c := (cx.needC T).head? then
         throw ⟨T.span, s!"an operation of `{c.eff}` is performed here, in a form that does not " ++
           "thread its capability"⟩
-      if cx.raisesC T then
-        throw ⟨T.span, "a `raise` here is in a form that cannot abort (a closure, a `<M, N>` or " ++
-          "a computation type): not provided"⟩
-      if !wrap || (cs.isEmpty && !r) then return T
+      if !wrap || cs.isEmpty then return T
       let rv ← fresh "fx_t"
-      pure (.bind T.span ⟨rv, T.span⟩ none T (.ret T.span (capsTuple T.span cs
-        (if r then .inl T.span (.var T.span rv) else .var T.span rv))) false)
+      pure (.bind T.span ⟨rv, T.span⟩ none T
+        (.ret T.span (capsTuple T.span cs (.var T.span rv))) false)
+
+/-- A computation under a form that does not thread capabilities: its control operations
+resolved; an answering one is not provided there. -/
+def trInner : Nat → Cx → Comp → EM Comp
+  | 0, _, M => throw ⟨M.span, "internal error: a body nested too deeply"⟩
+  | n + 1, cx, M => do
+    if let some c := (cx.needC M).head? then
+      throw ⟨M.span, s!"an operation of `{c.eff}` is performed here, in a form that does not " ++
+        "thread its capability"⟩
+    trC n cx [] false M
 
 /-- A terminal `return V` of `trC`. -/
-def trRet : Nat → Cx → List Cap → Bool → Bool → Span → Val → EM Comp
-  | 0, _, _, _, _, sp, _ => throw ⟨sp, "internal error: a body nested too deeply"⟩
-  | n + 1, cx, cs, wrap, r, sp, V => do
+def trRet : Nat → Cx → List Cap → Bool → Span → Val → EM Comp
+  | 0, _, _, _, sp, _ => throw ⟨sp, "internal error: a body nested too deeply"⟩
+  | n + 1, cx, cs, wrap, sp, V => do
     let (bs, V') ← trV n cx cs V
-    let T := if isExit V' || !wrap then Comp.ret sp V'
-      else .ret sp (capsTuple sp cs (if r then .inl sp V' else V'))
+    let T := if isExit V' || !wrap then Comp.ret sp V' else .ret sp (capsTuple sp cs V')
     chain bs T
 
-/-- A value with its effectful calls lifted out before it, as bindings that thread the
-capabilities `cs` (and branch on an error, when a call raises); the value refers to their
-results. Every plain call evaluated before an effectful one is lifted too, so the calls keep
-their order. -/
+/-- A value with its effectful calls lifted out before it, as bindings (that thread the
+capabilities `cs` when they use them); the value refers to their results. Every plain call
+evaluated before an effectful one is lifted too, so the calls keep their order. -/
 def trV : Nat → Cx → List Cap → Val → EM (List Bind × Val)
   | 0, _, _, V => throw ⟨V.span, "internal error: a value nested too deeply"⟩
   | n + 1, cx, cs, V => do
     let row := rowV cx.env fuel V
-    let needs := !(cx.need row).isEmpty || (cx.fail.isSome && row.contains failEff)
-    -- An effect with no handler in scope is reported where it is performed (`goV`).
-    let unhandled := row.any fun e => if e == failEff then cx.fail.isNone else (cx.capOf e).isNone
-    if !needs && !unhandled && !withInV fuel V && !failIn fuel V then return ([], V)
+    let needs := !(cx.need row).isEmpty || !(cx.ctl row).isEmpty
+    if !needs && !withInV fuel V then return ([], V)
     let (V, pre) ← if needs then (liftPlain cx fuel V).run [] else pure (V, [])
     let (bs, V') ← goV n cx cs V
     pure (pre ++ bs, V')
@@ -730,83 +689,34 @@ def trV : Nat → Cx → List Cap → Val → EM (List Bind × Val)
 def goV : Nat → Cx → List Cap → Val → EM (List Bind × Val)
   | 0, _, _, V => throw ⟨V.span, "internal error: a value nested too deeply"⟩
   | k + 1, cx, cs, V => match V with
-    | .app sp (.app sp₂ (.sugar ksp (.handle h l)) P) (.thunkv tsp (.lam lsp b A M)) =>
-      withBlk k cx cs sp sp₂ ksp h l P tsp lsp b A M
+    | .app sp (.app sp₂ (.sugar ksp (.handle h l As)) P) (.thunkv tsp (.lam lsp b A M)) =>
+      match cx.env.handler? h, cx.env.chandler? h with
+      | some hs, _ => withBlk k cx cs sp sp₂ ksp hs l P tsp lsp b A M
+      | none, some ch => withCtl k cx cs sp ksp ch As P M
+      | none, none => throw ⟨ksp, s!"no handler `{h}` is declared before this `with`"⟩
     | .app sp (.app sp₂ (.sugar ksp k'@(.borrow ..)) P) (.thunkv tsp (.lam lsp b A M)) => do
       let (bsP, P') ← goV k cx cs P
       let csM := cx.needC M
-      let rM := cx.raisesC M
-      if csM.isEmpty && !rM then
-        let M' ← trC k cx [] false false M
+      let ctl := cx.ctlC M
+      if csM.isEmpty && !ctl then
+        let M' ← trC k cx [] false M
         return (bsP, .app sp (.app sp₂ (.sugar ksp k') P') (.thunkv tsp (.lam lsp b A M')))
-      let M' ← trC k { cx.sub with scope := b.span :: cx.scope } csM true rM M
+      let M' ← trC k cx csM true M
       let blk := Val.app sp (.app sp₂ (.sugar ksp k') P') (.thunkv tsp (.lam lsp b A M'))
-      blockResult k cx cs sp blk csM rM
-    | .app sp (.sugar ksp .try_) (.thunk tsp M) => do
-      -- `try { M }`: `M` answers `inl` its value or `inr` the error it raised.
-      noLentIn ksp M
-      let csM := cx.needC M
-      let M' ← trC k { cx with fail := some false } csM true true M
-      report ksp "lowering" ("try (Fail): branch — an abort never resumes (final ctl): a sum exit, " ++
-        "its answer `inl v` or `inr e`")
-      let t ← fresh "fx_b"
-      let r ← if csM.isEmpty then pure t else fresh "fx_v"
-      let ann := tailSumTy cx csM M
-      let bind : Bind := fun N => do
-        pure (bindFlat sp t ann M' (← if csM.isEmpty then pure N else unpack sp csM r t N))
-      pure ([bind], .var sp r)
-    | .app sp (.app _ (.sugar ksp h@(.catch_)) (.thunk _ M)) (.thunkv lsp (.lam _ e _ N))
-    | .app sp (.app _ (.sugar ksp h@(.mapErr)) (.thunk _ M)) (.thunkv lsp (.lam _ e _ N)) => do
-      -- `catch { M } { e -> N }`: a branch on `try { M }`, `N` on its error. `map_err`: `N` is
-      -- raised in turn.
-      if !(cx.needC N).isEmpty || cx.raisesC N then
-        throw ⟨lsp, "the handler's body performs an effect or raises: not provided (bind the error, " ++
-          "and handle it after the block)"⟩
-      if h == .mapErr && cx.fail.isNone then
-        throw ⟨ksp, "this `map_err` raises, and nothing handles it here: put it inside `try`, `catch`, " ++
-          "or a function that can raise"⟩
-      noLentIn ksp M
-      let csM := cx.needC M
-      let M' ← trC k { cx with fail := some false } csM true true M
-      let N' ← trC k { cx with caps := [], fnCaps := [] } [] false false N
-      let t ← fresh "fx_b"
-      let r ← fresh "fx_v"
-      let v ← fresh "fx_v"
-      let r := if csM.isEmpty then t else r
-      let ann := tailSumTy cx csM M
-      let tryBind : Bind := fun K => do
-        pure (bindFlat sp t ann M' (← if csM.isEmpty then pure K else unpack sp csM r t K))
-      if h == .catch_ then
-        report ksp "lowering" "catch (Fail): branch — on `inr e` its handler runs in place"
-        let x ← fresh "fx_x"
-        let bind : Bind := fun K => do
-          pure (.bind sp ⟨x, sp⟩ none (.case sp (.var sp r) ⟨v, sp⟩ (.ret sp (.var sp v)) e N') K false)
-        return ([tryBind, bind], .var sp x)
-      report ksp "lowering" "map_err (Fail): branch — on `inr e` its handler's value is raised"
-      modify fun s => { s with aborts := s.aborts.push (ksp, cx.scope) }
-      let w ← fresh "fx_w"
-      let bind : Bind := fun K => do
-        pure (.case sp (.var sp r) ⟨v, sp⟩ K e
-          (.bind lsp ⟨w, lsp⟩ cx.err N' (cx.abort cs sp (.var lsp w)) false))
-      pure ([tryBind, bind], .var sp v)
+      blockResult k cx sp blk csM
     | .app sp f W => do
       match headName f with
       | some x =>
-        if x == raiseOp then raiseCall k cx cs sp W else
         match cx.env.op? x, cx.env.fn? x with
-        | some o, _ => opCall k cx cs sp x o W
+        | some o, _ => if cx.env.answering o.eff then opCall k cx cs sp x o W else ctlCall k cx cs sp x o W
         | none, some g => fnCall k cx cs sp f x g W
         | none, none => plainApp k cx cs sp f W
       | none => plainApp k cx cs sp f W
     | .var sp x => do
       match cx.env.fn? x with
       | some g =>
-        if g.row.contains failEff then
-          throw ⟨sp, s!"`{x}` raises (`Fail`) and is passed as a value: a fold whose algebra " ++
-            "raises needs an early exit from a kernel fold (K4), which is open; an effectful " ++
-            "callback is S4's (#161)"⟩
-        throw ⟨sp, s!"`{x}` performs `{", ".intercalate g.row}` and is passed as a value: it can " ++
-          "only be called (effectful callbacks, #161)"⟩
+        throw ⟨sp, s!"`{x}` performs `{", ".intercalate (g.row.map (·.eff))}` and is passed as a " ++
+          "value: it can only be called (effectful callbacks, #161)"⟩
       | none => pure ([], V)
     | .pair sp V W => do
       let (b₁, V') ← goV k cx cs V
@@ -825,75 +735,58 @@ def goV : Nat → Cx → List Cap → Val → EM (List Bind × Val)
     | .shorten sp m σ l V => do let (b, V') ← goV k cx cs V; pure (b, .shorten sp m σ l V')
     | .run sp M => do
       let csM := cx.needC M
-      let rM := cx.raisesC M
-      if csM.isEmpty && !rM then return ([], .run sp (← trC k cx [] false false M))
-      let M' ← trC k cx.sub csM true rM M
+      if csM.isEmpty && !cx.ctlC M then return ([], .run sp (← trC k cx [] false M))
+      let M' ← trC k cx csM true M
       let t ← fresh "fx_b"
       let r ← fresh "fx_v"
-      let bind : Bind := fun N => do
-        if rM then pure (bindFlat sp t none M' (← splitSum sp csM t r N (cx.abort cs sp)))
-        else pure (bindFlat sp t none M' (← unpack sp csM r t N))
+      let bind : Bind := fun N => do pure (bindFlat sp t none M' (← unpack sp csM r t N))
       pure ([bind], .var sp r)
     | .thunk sp M | .thunkv sp M | .bangThunk sp M | .bangThunkv sp M => do
-      match (cx.needC M).head? with
-      | some c => throw (notInClosure sp c.eff)
-      | none =>
-        if cx.raisesC M then
-          throw ⟨sp, "a `raise` inside a closure or block that is not run in place: the closure " ++
-            "cannot abort its caller (a fold whose algebra raises needs K4, an early exit from a " ++
-            "kernel fold, which is open)"⟩
-        -- A closure sees no capability of the enclosing body, and no handler of `Fail`; a `with`
-        -- or a `try` inside it is its own.
-        let M' ← trC k { cx with caps := [], fnCaps := [], fail := none, fnFail := false } [] false
-          false M
+      let row := rowC cx.env fuel M
+      match (cx.need row).head?, (cx.ctl row).head? with
+      | some c, _ => throw (notInClosure sp c.eff)
+      | none, some i => if (cx.siteOf i.eff).isSome then throw (notInClosure sp i.eff) else
+          throw ⟨sp, s!"an operation of `{i.eff}` is performed inside a closure or block that is " ++
+            s!"not run in place, and no handler of `{i.eff}` is in scope"⟩
+      | none, none =>
+        -- A closure sees no capability and no site of the enclosing body; a `with` inside it is
+        -- its own.
+        let M' ← trC k { cx with caps := [], sites := [], fnCaps := [] } [] false M
         pure ([], match V with
           | .thunk .. => .thunk sp M' | .thunkv .. => .thunkv sp M'
           | .bangThunk .. => .bangThunk sp M' | _ => .bangThunkv sp M')
     | V => pure ([], V)
 
-/-- The value of a borrow or `with` block whose body hands back the capabilities `csM` beside its
-result, and answers a sum when `rM`: the capabilities bound again after it, and an error aborts
-there in turn; the block's value is `(place, result)` again. -/
-def blockResult : Nat → Cx → List Cap → Span → Val → List Cap → Bool → EM (List Bind × Val)
-  | 0, _, _, sp, _, _, _ => throw ⟨sp, "internal error: a value nested too deeply"⟩
-  | _ + 1, cx, cs, sp, blk, csM, rM => do
+/-- The value of a borrow block whose body hands back the capabilities `csM` beside its result:
+the capabilities bound again after it; the block's value is `(place, result)` again. A block
+whose body performs a control operation is bound before the value it is in, so that its
+elaboration may make it a computation (an unwinding borrow, SPEC §19). -/
+def blockResult : Nat → Cx → Span → Val → List Cap → EM (List Bind × Val)
+  | 0, _, sp, _, _ => throw ⟨sp, "internal error: a value nested too deeply"⟩
+  | _ + 1, _, sp, blk, csM => do
     let t ← fresh "fx_b"
     let pl ← fresh "fx_pl"
     let q ← fresh "fx_q"
     let r ← fresh "fx_v"
     let bind : Bind := fun N => do
-      let rest ← if rM then splitSum sp csM q r N (cx.abort cs sp) else unpack sp csM r q N
+      let rest ← unpack sp csM r q N
       pure (.bind sp ⟨t, sp⟩ none (.ret sp blk) (.letPair sp ⟨pl, sp⟩ ⟨q, sp⟩ (.var sp t) rest) false)
     pure ([bind], .pair sp (.var sp pl) (.var sp r))
 
 /-- A plain application, its parts elaborated. `return e` from a loop's body in a copy hands the
-capabilities back too, and answers `inl e` in a function whose result is a sum. -/
+capabilities back too. -/
 def plainApp : Nat → Cx → List Cap → Span → Val → Val → EM (List Bind × Val)
   | 0, _, _, sp, _, _ => throw ⟨sp, "internal error: a value nested too deeply"⟩
   | k + 1, cx, cs, sp, f, W => do
     if let .sugar _ .retE := f then
       let (b, W') ← goV k cx cs W
-      let W'' := if cx.fnFail then Val.inl sp W' else W'
-      return (b, .app sp f (capsTuple sp cx.fnCaps W''))
+      return (b, .app sp f (capsTuple sp cx.fnCaps W'))
     let (b₁, f') ← goV k cx cs f
     let (b₂, W') ← goV k cx cs W
     pure (b₁ ++ b₂, .app sp f' W')
 
-/-- `raise(W)`: an abort; what follows it is not run. -/
-def raiseCall : Nat → Cx → List Cap → Span → Val → EM (List Bind × Val)
-  | 0, _, _, sp, _ => throw ⟨sp, "internal error: a value nested too deeply"⟩
-  | k + 1, cx, cs, sp, W => do
-    if cx.fail.isNone then
-      throw ⟨sp, "this `raise` is not handled: no `try`, `catch` or `map_err` is around it, and " ++
-        "it is not in a function that can raise (a clause, a closure or `main`)"⟩
-    let (b, W') ← goV k cx cs W
-    report sp "call" ("raise (Fail) → an abort (final ctl): `inr e` to the innermost handler, " ++
-      "or `break` out of the loop it is in")
-    modify fun s => { s with aborts := s.aborts.push (sp, cx.scope) }
-    let bind : Bind := fun _ => pure (cx.abort cs sp W')
-    pure (b ++ [bind], .unit sp)
-
-/-- `op(W)`: a call of the innermost handler's clause on the capability, which hands it back. -/
+/-- `op(W)` of an answering effect: a call of the innermost handler's clause on the capability,
+which hands it back. -/
 def opCall : Nat → Cx → List Cap → Span → String → OpSig → Val → EM (List Bind × Val)
   | 0, _, _, sp, _, _, _ => throw ⟨sp, "internal error: a value nested too deeply"⟩
   | k + 1, cx, cs, sp, x, o, W => do
@@ -911,92 +804,207 @@ def opCall : Nat → Cx → List Cap → Span → String → OpSig → Val → E
         (← unpack sp [c] r t N) false)
     pure (b ++ [bind], .var sp r)
 
-/-- `f(W)` of a function with a row: a call of its copy under the handlers in scope, which takes
-their capabilities first and hands them back first; when it raises, a branch on its answer. -/
+/-- `op(W)` of a control effect: the kernel's operation, at the static name of the innermost site
+of its effect, bound before the value it is in. -/
+def ctlCall : Nat → Cx → List Cap → Span → String → OpSig → Val → EM (List Bind × Val)
+  | 0, _, _, sp, _, _, _ => throw ⟨sp, "internal error: a value nested too deeply"⟩
+  | k + 1, cx, cs, sp, x, o, W => do
+    let s ← (cx.serve sp s!"the operation `{x}`" (cx.env.opInst o) : Except Error Site)
+    let (b, W') ← goV k cx cs W
+    let r ← fresh "fx_v"
+    let abortive := o.decl.abortive
+    report sp "call" (s!"{x} ({o.eff}) → {if abortive then "abort" else "perform"}[{s.n}.{o.idx}], " ++
+      s!"handled by {s.what} at {s.sp.start.render}" ++
+      (if abortive then ": abortive, it never resumes" else ""))
+    if abortive then
+      -- What follows an abort does not run.
+      return (b ++ [fun _ => pure (.abort sp s.n o.idx W')], .unit sp)
+    let bind : Bind := fun N => pure (.bind sp ⟨r, sp⟩ none (.perform sp s.n o.idx W') N false)
+    pure (b ++ [bind], .var sp r)
+
+/-- `f(W)` of a function with a row: a call of its copy for what serves its effects in scope,
+which takes the capabilities first and hands them back first, bound before the value it is in. -/
 def fnCall : Nat → Cx → List Cap → Span → Val → String → FSig → Val → EM (List Bind × Val)
   | 0, _, _, sp, _, _, _, _ => throw ⟨sp, "internal error: a value nested too deeply"⟩
   | k + 1, cx, cs, sp, f, x, g, W => do
-    let mut used : Array Cap := #[]
-    for e in g.row do
-      if e == failEff then
-        if cx.fail.isNone then
-          throw ⟨sp, s!"`{x}` raises (`Fail`), and nothing handles it here: call it inside `try`, " ++
-            "`catch` or `map_err`, or from a function that can raise"⟩
-      else match cx.capOf e with
-        | some c => used := used.push c
-        | none => throw ⟨sp, s!"`{x}` performs `{e}`, but no handler of `{e}` is in scope here"⟩
-    let raises := g.row.contains failEff
-    let usedL := used.toList
-    if usedL.isEmpty && !raises then return ← plainApp k cx cs sp f W
+    let used := cx.need g.row
+    if used.isEmpty && (cx.ctl g.row).isEmpty then return ← plainApp k cx cs sp f W
     noLend sp s!"`{x}`" W
     let (b, W') ← goV k cx cs W
-    let name ← if usedL.isEmpty then pure x else copyOf k cx.env sp g (usedL.map (·.h))
+    let name ← copyFor k cx sp x g
     let f' : Val := match f with
       | .defApp fsp _ As => .defApp fsp name As
       | _ => .var f.span name
     let t ← fresh "fx_b"
     let r ← fresh "fx_v"
-    if raises then modify fun s => { s with aborts := s.aborts.push (sp, cx.scope) }
-    report sp "call" (s!"{x} ({", ".intercalate g.row}) → `{name}`" ++
-      (if usedL.isEmpty then "" else ", passing the capabilities") ++
-      (if raises then "; then a branch on its answer, an error aborting here" else ""))
+    report sp "call" (s!"{x} → `{name}`" ++
+      (if used.isEmpty then "" else ", passing the capabilities"))
     -- The binding is annotated when the result's type is known here, so that what follows is
     -- typed whatever the call's lifetimes.
-    let res := (closedResult g.decl).map fun T =>
-      match g.err, raises with
-      | some E, true => VTy.sum sp T E
-      | _, _ => T
-    let ann := res.map (capsTy sp usedL)
+    let ann := if used.isEmpty then none else (closedResult g.decl).map (capsTy sp used)
     -- When the result's type is not known here (a template's instance), the capabilities are
     -- bound again at their own types, which are.
-    let N' (N : Comp) : Comp := if ann.isSome then N else
-      usedL.foldr (fun c K => .bind sp ⟨c.var, sp⟩ (some (capsTy sp [c] (.unit sp) |> fun
-        | .tensor _ T _ => T
-        | T => T)) (.ret sp (.var sp c.var)) K false) N
+    let N' (N : Comp) : Comp := if ann.isSome || used.isEmpty then N else
+      used.foldr (fun c K => .bind sp ⟨c.var, sp⟩ (some (.mut sp (.var sp c.life) c.h.S))
+        (.ret sp (.var sp c.var)) K false) N
     let bind : Bind := fun N => do
-      let rest ← if raises then splitSum sp usedL t r (N' N) (cx.abort cs sp)
-        else unpack sp usedL r t (N' N)
-      pure (.bind sp ⟨t, sp⟩ ann (.ret sp (.app sp f' (capsTuple sp usedL W'))) rest false)
+      pure (.bind sp ⟨t, sp⟩ ann (.ret sp (.app sp f' (capsTuple sp used W')))
+        (← unpack sp used r t (N' N)) false)
     pure (b ++ [bind], .var sp r)
 
-/-- `with h(P) { 'l, c -> M }`: a borrow block of the state's cell whose callback's parameter
-`c` is the capability. -/
-def withBlk : Nat → Cx → List Cap → Span → Span → Span → String → String → Val → Span → Span →
+/-- `with h(P) { 'l, c -> M }` of an answering handler: a borrow block of the state's cell whose
+callback's parameter `c` is the capability. -/
+def withBlk : Nat → Cx → List Cap → Span → Span → Span → HSig → String → Val → Span → Span →
     Ident → VTy → Comp → EM (List Bind × Val)
   | 0, _, _, sp, _, _, _, _, _, _, _, _, _, _ => throw ⟨sp, "internal error: a value nested too deeply"⟩
-  | k + 1, cx, cs, sp, sp₂, ksp, h, l, P, tsp, lsp, b, A, M => do
-    let some hs := cx.env.handler? h
-      | throw ⟨ksp, s!"no handler `{h}` is declared before this `with`"⟩
+  | k + 1, cx, cs, sp, sp₂, ksp, hs, l, P, tsp, lsp, b, A, M => do
     let (bsP, P') ← goV k cx cs P
     let place ← match P' with
       | .lend _ x .mut => pure (Val.var x.span x.name)
       | .lend lsp' _ .imm => throw ⟨lsp', "a handler's state is lent `&mut`"⟩
       | V => pure (.app V.span (.sugar V.span (.call "alloc")) V)
     let cap : Cap := ⟨hs.eff, b.name, l, hs⟩
-    let cx' : Cx := { cx.sub with caps := cap :: cx.caps.filter (·.eff != hs.eff),
-                                  scope := b.span :: cx.scope }
+    let cx' : Cx := { cx with caps := cap :: cx.caps.filter (·.eff != hs.eff) }
     let csM := cx'.needC M
     let outer := csM.filter (·.eff != hs.eff)
-    let rM := cx.raisesC M
     let where_ := match P' with
       | .lend _ x _ => s!"lent from `{x.name}`"
       | _ => "in a cell scoped to the block"
-    report ksp "lowering" (s!"with {h} ({hs.eff}): a borrow block of its state ({where_}); its " ++
+    report ksp "lowering" (s!"with {hs.name} ({hs.eff}): a borrow block of its state ({where_}); its " ++
       "operations are calls of the clauses on the capability")
     -- The body hands back the enclosing capabilities it uses; its own is dropped at its end.
-    let body ← trC k cx' outer true rM M
+    let body ← trC k cx' outer true M
     let blk := Val.app sp (.app sp₂ (.sugar ksp (.borrow .mut l)) place)
       (.thunkv tsp (.lam lsp b A body))
-    if outer.isEmpty && !rM then return (bsP, blk)
-    let (bs, V') ← blockResult k cx cs sp blk outer rM
+    if outer.isEmpty && !cx.ctlC M then return (bsP, blk)
+    let (bs, V') ← blockResult k cx sp blk outer
     pure (bsP ++ bs, V')
 
-/-- The copy of `g` under the handlers `hs`, made once: its body elaborated with their
-capabilities as parameters. -/
-def copyOf : Nat → Env → Span → FSig → List HSig → EM String
+/-- `with h[As](P) { M }` of a control handler: a handler site with a static name of its own. The
+handled effect's type arguments are the ones written, or the ones the body performs; the
+handler's own row is resolved to the sites around the `with`. The site is assembled with its
+clauses where the types are known (`VSugar.hndCtl`). -/
+def withCtl : Nat → Cx → List Cap → Span → Span → CHandler → List VTy → Val → Comp →
+    EM (List Bind × Val)
+  | 0, _, _, sp, _, _, _, _, _ => throw ⟨sp, "internal error: a value nested too deeply"⟩
+  | k + 1, cx, cs, sp, ksp, ch, As, P, M => do
+    let tps := ch.tps.map (·.name)
+    let e := ch.eff.name
+    if M.boundNames.contains "io_bt" then
+      throw ⟨ksp, s!"the body of `with {ch.name.name}` assigns a `let mut` variable declared " ++
+        "outside it, or lends a place declared outside it: a control handler's body may be " ++
+        "abandoned, and does not hand them back; bind what the block answers instead"⟩
+    unless (cx.needC M).isEmpty do
+      throw ⟨ksp, s!"the body of `with {ch.name.name}` performs an answering effect handled " ++
+        "outside it: not provided (the capability would be lost when the body is abandoned)"⟩
+    -- Written type arguments, in the order of the handler's type parameters.
+    if As.length > tps.length then
+      throw ⟨ksp, s!"`{ch.name.name}` takes {tps.length} type argument(s)"⟩
+    let mut σ : TySubst := tps.zip As
+    -- The handled effect's type arguments from what the body performs.
+    let n ← freshSite
+    if let some i := (rowC cx.env fuel M).find? (·.eff == e) then
+      if let some Bs := i.args then
+        unless Bs.length == ch.effArgs.length do
+          throw ⟨ksp, s!"internal error: `{e}`'s type arguments"⟩
+        for (Pt, B) in ch.effArgs.zip Bs do
+          match matchTy tps σ Pt B with
+          | some σ' => σ := σ'
+          | none => throw ⟨ksp, s!"`with {ch.name.name}` handles `{e}[{", ".intercalate
+              (ch.effArgs.map (VTy.pp · 0))}]`, but its body performs `{e}[{", ".intercalate
+              (Bs.map (VTy.pp · 0))}]`"⟩
+    -- The handler's own row, at the sites around the `with`.
+    let mut outer : List Site := []
+    for (e₂, Ps) in ch.row do
+      let some s := cx.siteOf e₂.name
+        | throw ⟨ksp, s!"`{ch.name.name}` performs `{e₂.name}`, and no handler of `{e₂.name}` is " ++
+            "in scope at this `with`"⟩
+      for (Pt, B) in Ps.zip s.args do
+        match matchTy tps σ Pt B with
+        | some σ' => σ := σ'
+        | none => throw ⟨ksp, s!"`{ch.name.name}` performs `{e₂.name}` at a type other than the " ++
+            s!"handler of `{e₂.name}` in scope here"⟩
+      outer := outer ++ [s]
+    let effArgs := ch.effArgs.map (·.subst σ)
+    if effArgs.any (mentions tps) then
+      throw ⟨ksp, s!"the type arguments of `{e}` at this `with` are not determined: write them, " ++
+        s!"`with {ch.name.name}[{", ".intercalate tps}](…)`"⟩
+    let site : Site := ⟨e, n, effArgs, ksp, s!"`with {ch.name.name}`"⟩
+    let ents := cx.env.siteOps site
+    report ksp "lowering" (s!"with {ch.name.name} ({e}): a handler, the static name {n}; " ++
+      ", ".intercalate (((cx.env.eff? e).map (·.ops)).getD [] |>.map fun o =>
+        s!"{o.name.name} {if o.abortive then "abortive: a branch per call (final ctl)"
+          else match o.qual with
+            | .lin => "linear: resumed exactly once"
+            | .aff => "affine: resumed or cancelled"
+            | .unr => "unrestricted: its continuation copied"}"))
+    -- The body, with this site innermost for `e`.
+    let cxB : Cx := { cx with sites := site :: cx.sites.filter (·.eff != e) }
+    let M' ← trC k cxB [] false M
+    -- The clauses run outside the handler: their operations go to the sites of the handler's row.
+    let cxH : Cx := { env := cx.env, caps := [], sites := outer }
+    let some eff := cx.env.eff? e | throw ⟨ksp, s!"internal error: the effect `{e}`"⟩
+    let (rx, rA, rM) := ch.ret
+    let rM' ← trC k cxH [] false (rM.subst σ)
+    let mut cls : List Val := []
+    for o in eff.ops do
+      let some c := ch.clauses.find? (·.name.name == o.name.name)
+        | throw ⟨ch.name.span, s!"the handler `{ch.name.name}` has no clause for `{o.name.name}`"⟩
+      let abortive := o.abortive
+      let want := o.params.length + (if abortive then 0 else 1)
+      unless c.params.length == want do
+        throw ⟨c.name.span, s!"the clause `{c.name.name}` of `{ch.name.name}` takes {want} " ++
+          s!"name(s): the operation's parameters{if abortive then "" else ", then its continuation"}"⟩
+      let body ← trC k cxH [] false (c.body.subst σ)
+      let csp := c.name.span
+      let p ← fresh "fx_p"
+      let body ← if abortive then bindParams csp p c.params body else do
+        let xs := c.params.dropLast
+        let kv := c.params.getLast!
+        let q ← fresh "fx_q"
+        pure (.letPair csp ⟨q, csp⟩ kv (.var csp p) (← bindParams csp q xs body))
+      cls := cls ++ [.thunkv csp (.lam csp ⟨p, csp⟩ (holeTy csp) body)]
+    for c in ch.clauses do
+      unless eff.ops.any (·.name.name == c.name.name) do
+        throw ⟨c.name.span, s!"`{c.name.name}` is not an operation of `{e}`"⟩
+    let rest := tps.filter fun x => (σ.lookup x).isNone
+    let info : HInfo := ⟨ch.name.name, n, ents, rest, σ,
+      ch.params.map fun (x, A) => (x.name, A.subst σ), rA.subst σ, ch.res.subst σ⟩
+    let (bsP, P') ← goV k cx cs P
+    let clsV := cls.foldr (fun c t => Val.pair sp c t) (.unit sp)
+    let hnd : Val := .app sp (.app sp (.app sp (.app sp (.sugar ksp (.hndCtl info)) P')
+      (.thunkv sp (.lam sp rx rA rM'))) clsV) (.thunk sp M')
+    let r ← fresh "fx_v"
+    let bind : Bind := fun N => pure (.bind sp ⟨r, sp⟩ none (.ret sp hnd) N false)
+    -- A `with` is read as a block handing back its place beside its result (`Val.rebinds`); a
+    -- control handler's has none.
+    pure (bsP ++ [bind], .pair sp (.unit sp) (.var sp r))
+
+/-- The copy of `g` for what serves its effects at a call in `cx`, made once. -/
+def copyFor : Nat → Cx → Span → String → FSig → EM String
   | 0, _, sp, _, _ => throw ⟨sp, "internal error: copies nested too deeply"⟩
-  | k + 1, env, sp, g, hs => do
-    let name := copyName g.name (hs.map (·.name))
+  | k + 1, cx, sp, x, g => do
+    let mut hs : List HSig := []
+    let mut ss : List Site := []
+    let mut keys : List String := []
+    for i in g.row do
+      if cx.env.answering i.eff then
+        let some c := cx.capOf i.eff
+          | throw ⟨sp, s!"`{x}` performs `{i.eff}`, but no handler of `{i.eff}` is in scope here"⟩
+        hs := hs ++ [c.h]
+        keys := keys ++ [c.h.name]
+      else
+        let s ← (cx.serve sp s!"`{x}`" i : Except Error Site)
+        ss := ss ++ [s]
+        keys := keys ++ [s!"n{s.n}"]
+    if keys.isEmpty then return x
+    copyOf k cx.env sp g hs ss (copyName x keys)
+
+/-- The copy `name` of `g` for the answering handlers `hs` and the sites `ss`, made once: its body
+elaborated with their capabilities as parameters and their operations as its row. -/
+def copyOf : Nat → Env → Span → FSig → List HSig → List Site → String → EM String
+  | 0, _, sp, _, _, _, _ => throw ⟨sp, "internal error: copies nested too deeply"⟩
+  | k + 1, env, sp, g, hs, ss, name => do
     let st ← get
     if st.made.any (·.1 == name) || st.started.contains name then return name
     modify fun s => { s with started := name :: s.started }
@@ -1004,67 +1012,34 @@ def copyOf : Nat → Env → Span → FSig → List HSig → EM String
       | throw ⟨sp, s!"internal error: `{g.name}` is not a function"⟩
     let q := (← get).quiet
     if env.lib.contains g.name then modify fun s => { s with quiet := true }
-    let (A', V') ← fnCopy k env dsp n.name A V (g.row.filter (· != failEff)) hs g.err
+    let f ← (fnParts dsp n.name A V : Except Error FnParts)
+    let answering := (g.row.filter (env.answering ·.eff)).map (·.eff)
+    let cs := copyCaps answering hs
+    let ss := ss.map fun s => { s with sp := dsp, what := "the caller" }
+    let cx : Cx := { env, caps := cs, sites := ss, fnCaps := cs }
+    let body ← trC k cx cs true f.body
+    let f' ← if cs.isEmpty then pure { f with body } else takeCaps dsp cs f body
+    let (A', V') := f'.build dsp (env.rowOf ss)
     modify fun s => { s with quiet := q }
-    report dsp "lowering" s!"copy `{name}`: `{g.name}` for {", ".intercalate (hs.map (·.name))}"
+    report dsp "lowering" (s!"copy `{name}`: `{g.name}` for " ++ ", ".intercalate
+      ((hs.map (·.name)) ++ ss.map fun s => s!"the site {s.n} of `{s.eff}`"))
     modify fun s => { s with made := s.made.push (name, .def_ dsp ⟨name, n.span⟩ ps A' V' mk) }
     pure name
-
-/-- A function's type and value with its body elaborated: taking the capabilities of `row`
-(served by `hs`) first, and answering `T + E` when it raises `Fail[E]`. -/
-def fnCopy : Nat → Env → Span → String → VTy → Val → List String → List HSig → Option VTy →
-    EM (VTy × Val)
-  | 0, _, sp, _, _, _, _, _, _ => throw ⟨sp, "internal error: copies nested too deeply"⟩
-  | k + 1, env, sp, name, A, V, row, hs, err => do
-    let f ← (fnParts sp name A V : Except Error FnParts)
-    let cs := copyCaps row hs
-    let raises := err.isSome
-    let cx : Cx := { env, caps := cs, fnCaps := cs, fail := if raises then some false else none,
-                     fnFail := raises, err }
-    let body ← trC k cx cs true raises f.body
-    let f := match err with
-      | some E => { f with T := .sum sp f.T E }
-      | none => f
-    let f' ← if cs.isEmpty then pure { f with body } else takeCaps sp cs f body
-    pure (f'.build sp)
 end
 
-/-! ### Handlers -/
+/-! ### Answering handlers -/
 
-/-- `bindParams`: the parameters `xs` bound from the tuple `p`. -/
-def bindParams (sp : Span) (p : String) : List Ident → Comp → EM Comp
-  | [], M => pure (.letUnit sp (.var sp p) M)
-  | [x], M => pure (.bind sp x none (.ret sp (.var sp p)) M false)
-  | [x, y], M => pure (.letPair sp x y (.var sp p) M)
-  | x :: xs, M => do
-    let r ← fresh "fx_p"
-    pure (.letPair sp x ⟨r, sp⟩ (.var sp p) (← bindParams sp r xs M))
-
-/-- The parameter tuple's type (`1` with no parameters). -/
-def tupleTy (sp : Span) : List VTy → VTy
-  | [] => .unit sp
-  | [A] => A
-  | A :: As => .tensor sp A (tupleTy sp As)
-
-/-- A computation with `f` applied at each terminal reached through tail positions. -/
-def wrapTerms (f : Comp → Comp) : Comp → Comp
-  | .bind sp x A M N lin => .bind sp x A M (wrapTerms f N) lin
-  | .letUnit sp V M => .letUnit sp V (wrapTerms f M)
-  | .letPair sp x y V M => .letPair sp x y V (wrapTerms f M)
-  | .case sp V x M y N => .case sp V x (wrapTerms f M) y (wrapTerms f N)
-  | .for_ sp x V M N => .for_ sp x V M (wrapTerms f N)
-  | T => f T
-
-/-- The clause of `h` for the operation `o`: `fn h__op<'l>(c: mut 'l S, x: A, …) -> mut 'l S * B`,
-whose body runs the clause on the state by `modify` (`withswap`) and hands the borrow back. -/
+/-- The clause of the answering handler `h` for the operation `o`:
+`fn h__op<'l>(c: mut 'l S, x: A, …) -> mut 'l S * B`, whose body runs the clause on the state by
+`modify` (`withswap`) and hands the borrow back. -/
 def clauseDef (env : Env) (h : HSig) (o : OpDecl) (c : Clause) : EM Decl := do
   let sp := c.name.span
   unless c.params.length == o.params.length do
     throw ⟨sp, s!"the clause `{c.name.name}` of `{h.name}` takes {c.params.length} parameters, " ++
       s!"and the operation {o.params.length}"⟩
   if let some e := (rowC env fuel c.body).head? then
-    throw ⟨sp, s!"the clause `{c.name.name}` of `{h.name}` performs an operation of `{e}`: a clause " ++
-      "is code over the handler's state, and performs no operation"⟩
+    throw ⟨sp, s!"the clause `{c.name.name}` of `{h.name}` performs an operation of `{e.eff}`: a " ++
+      "clause of an answering handler is code over the handler's state, and performs no operation"⟩
   let l := "fx_l"
   let cv := "fx_c"
   let st := h.st.name
@@ -1103,144 +1078,120 @@ def Decl.defName : Decl → Option String
   | .def_ _ n _ _ _ _ => some n.name
   | _ => none
 
-mutual
-/-- A function with a row named in a value other than as the head of a call. -/
-def valueUse (env : Env) : Nat → Val → Bool
-  | 0, _ => false
-  | n + 1, V => match V with
-    | .var _ x => (env.fn? x).isSome
-    | .app _ f W => (match headName f with
-        | some x => (env.fn? x).isNone && valueUse env n f
-        | none => valueUse env n f) || valueUse env n W
-    | .pair _ V W => valueUse env n V || valueUse env n W
-    | .inl _ V | .inr _ V | .unbang _ V | .boxed _ _ V | .unbox _ V | .sub _ V _ | .roll _ V
-    | .unroll _ V | .inst _ V _ | .ascribe _ V _ | .shorten _ _ _ _ V => valueUse env n V
-    | .thunk _ M | .thunkv _ M | .bangThunk _ M | .bangThunkv _ M | .run _ M => valueUseC env n M
-    | _ => false
-
-/-- `valueUse` of a computation. -/
-def valueUseC (env : Env) : Nat → Comp → Bool
-  | 0, _ => false
-  | n + 1, M => match M with
-    | .ret _ V | .absurd _ V => valueUse env n V
-    | .bind _ _ _ M N _ | .with_ _ M N => valueUseC env n M || valueUseC env n N
-    | .letUnit _ V M | .letPair _ _ _ V M => valueUse env n V || valueUseC env n M
-    | .case _ V _ M _ N | .for_ _ _ V M N =>
-      valueUse env n V || valueUseC env n M || valueUseC env n N
-    | .lam _ _ _ M | .app _ M _ | .proj _ _ M | .lamL _ _ _ M | .inst _ M _ | .nuIn _ M
-    | .nuOut _ M | .ascribe _ M _ => valueUseC env n M
-    | _ => false
-end
-
 /-- The mark of a definition without its written row, and the row. -/
 def splitRow : Mark → List (Ident × List VTy) × Mark
   | .row es m => (es, m)
   | m => ([], m)
 
-/-- Anything for this pass to do: an effect, a handler, a written row, a `raise` or a `try`. -/
+/-- Anything for this pass to do: an effect, a handler or a written row. -/
 def hasEffects (ds : List Decl) : Bool :=
   ds.any fun
-    | .effect .. | .handler .. => true
-    | .def_ _ _ _ _ V mk => (match mk with | .row .. => true | _ => false) || failIn fuel V
-    | .main _ _ M => failIn.failInC fuel M
+    | .effect .. | .handler .. | .chandler .. => true
+    | .def_ _ _ _ _ _ mk => (match mk with | .row .. => true | _ => false)
     | _ => false
 
-/-- The program with its effects elaborated, the reports for `bcc check`, and the abort points
-(each `raise` or raising call, with the binders in scope there): the effect and handler
-declarations are removed, each handler's clauses become functions, each function with a row of
-answering effects is replaced by its copies under the handlers it is called under, each function
-that raises answers a sum, and each `with` becomes a borrow block.  `[spec §18]` -/
+/-- The program with its effects elaborated, and the reports for `bcc check`: the effect and
+handler declarations are removed, each answering handler's clauses become functions, each
+function with a row is replaced by its copies for what serves it where it is called, each `with`
+of an answering handler becomes a borrow block, and each of a control handler a handler site.
+`[spec §18, §19]` -/
 def elaborate (ds : List Decl) (lib : List String := []) :
-    Except Error (List Decl × List (Span × String) × List (Span × List Span)) := do
-  if !hasEffects ds then return (ds, [], [])
+    Except Error (List Decl × List (Span × String)) := do
+  if !hasEffects ds then return (ds, [])
   let names := ds.filterMap Decl.defName
-  if let some d := ds.find? (fun d => Decl.defName d == some raiseOp) then
-    throw ⟨match d with | .def_ _ n .. => n.span | _ => Span.none,
-      "`raise` is the operation of `Fail`: a function cannot be named so"⟩
   let go : EM (List Decl) := do
     let mut env : Env := { lib }
     let mut out : Array Decl := #[]
     for d in ds do
       match d with
-      | .effect sp e ops =>
-        if e.name == failEff then throw ⟨e.span, "`Fail` is the error effect, declared already"⟩
-        if env.ops.any (·.eff == e.name) then throw ⟨e.span, s!"the effect `{e.name}` is declared twice"⟩
+      | .effect sp e tps ops =>
+        if (env.eff? e.name).isSome then throw ⟨e.span, s!"the effect `{e.name}` is declared twice"⟩
         for o in ops do
-          if env.ops.any (·.decl.name.name == o.name.name) || names.contains o.name.name ||
-              o.name.name == raiseOp then
+          if (env.op? o.name.name).isSome || names.contains o.name.name then
             throw ⟨o.name.span, s!"`{o.name.name}` is already declared: an operation's name is its own"⟩
-        env := { env with ops := env.ops ++ ops.map (⟨e.name, ·⟩) }
-        report sp "effect" (s!"{e.name}: " ++ ", ".intercalate (ops.map (·.name.name)))
+        let sig : EffSig := ⟨e.name, tps.map (·.name), ops⟩
+        unless sig.answering || ops.all (·.kind != .fn) do
+          throw ⟨e.span, s!"`{e.name}` has both answering (`fn`) and control (`ctl`) operations: " ++
+            "an effect has one kind"⟩
+        if sig.answering && !tps.isEmpty then
+          throw ⟨e.span, s!"`{e.name}` is answering and takes type parameters: not provided"⟩
+        env := { env with effs := env.effs ++ [sig],
+                          ops := env.ops ++ (ops.zipIdx.map fun (o, i) => ⟨e.name, i, o⟩) }
+        report sp "effect" (s!"{e.name}: " ++ ", ".intercalate (ops.map fun o =>
+          s!"{o.name.name}{match o.kind with
+            | .fn => ""
+            | .ctl q => s!" (ctl, {match q with | .lin => "linear" | .aff => "affine" | .unr => "unrestricted"}{
+                if o.abortive then ", abortive" else ""})"}"))
       | .handler sp h st S e cs =>
-        let ops := env.ops.filter (·.eff == e.name)
-        if ops.isEmpty then throw ⟨e.span, s!"no effect `{e.name}` is declared before this handler"⟩
+        let some eff := env.eff? e.name
+          | throw ⟨e.span, s!"no effect `{e.name}` is declared before this handler"⟩
+        unless eff.answering do
+          throw ⟨e.span, s!"`{e.name}` has control operations: its handler is written " ++
+            s!"`handler {h.name}[…](…) for {e.name}[…] -> R \{ return(x: A) -> …; op(…) -> … }`"⟩
         let hs : HSig := ⟨h.name, e.name, st, S, cs, sp⟩
-        for o in ops do
-          unless cs.any (·.name.name == o.decl.name.name) do
-            throw ⟨sp, s!"the handler `{h.name}` has no clause for `{o.decl.name.name}`"⟩
+        for o in eff.ops do
+          unless cs.any (·.name.name == o.name.name) do
+            throw ⟨sp, s!"the handler `{h.name}` has no clause for `{o.name.name}`"⟩
         for c in cs do
-          let some o := ops.find? (·.decl.name.name == c.name.name)
+          let some o := eff.ops.find? (·.name.name == c.name.name)
             | throw ⟨c.name.span, s!"`{c.name.name}` is not an operation of `{e.name}`"⟩
-          out := out.push (← clauseDef env hs o.decl c)
+          out := out.push (← clauseDef env hs o c)
         env := { env with handlers := env.handlers ++ [hs] }
         report sp "lowering" (s!"handler {h.name} ({e.name}): call — each clause resumes once, in " ++
           "tail position (fun): a direct call on the lent state (withswap), with no allocation and " ++
           "no dispatch")
+      | .chandler _ ch =>
+        let some eff := env.eff? ch.eff.name
+          | throw ⟨ch.eff.span, s!"no effect `{ch.eff.name}` is declared before this handler"⟩
+        if eff.answering then
+          throw ⟨ch.eff.span, s!"`{ch.eff.name}` is answering: its handler is written " ++
+            s!"`handler {ch.name.name}(s: S) for {ch.eff.name} \{ op(x) -> … }`"⟩
+        unless ch.effArgs.length == eff.tps.length do
+          throw ⟨ch.eff.span, s!"`{ch.eff.name}` takes {eff.tps.length} type argument(s)"⟩
+        env := { env with chandlers := env.chandlers ++ [ch] }
       | .def_ sp n ps A V mk =>
         modify fun s => { s with quiet := lib.contains n.name }
         let (written, mk) := splitRow mk
         let row := rowV env fuel V
-        if !written.isEmpty then
-          if let some e := row.find? (fun e => !written.any (·.1.name == e)) then
-            throw ⟨n.span, s!"`{n.name}` performs `{e}`, which its written row does not list"⟩
-        let err ← if row.contains failEff then
-            match written.find? (·.1.name == failEff) with
-            | some (_, [E]) => pure (some E)
-            | some (fe, _) => throw ⟨fe.span, "`Fail` takes one type, the error's: `Fail[E]`"⟩
-            | none => match errV env fuel V with
-              | some E => pure (some E)
-              | none =>
-                -- A function with `Fail` passed as a value is reported as such first.
-                if valueUse env fuel V then discard (elabDef env V)
-                throw ⟨n.span, s!"`{n.name}` raises, and the type of its error is not " ++
-                  "determined: write it, `with Fail[E]`"⟩
-          else pure none
-        let answering := row.filter (· != failEff)
+        for i in row do
+          unless written.isEmpty || written.any (·.1.name == i.eff) do
+            throw ⟨n.span, s!"`{n.name}` performs `{i.eff}`, which its written row does not list"⟩
+        -- Each instance's type arguments: written, or from what the function calls.
+        let mut row' : List Inst := []
+        for i in row do
+          match written.find? (·.1.name == i.eff) with
+          | some (_, As) =>
+            let k := ((env.eff? i.eff).map (·.tps.length)).getD 0
+            unless As.length == k do
+              throw ⟨n.span, s!"`{i.eff}` takes {k} type argument(s)"⟩
+            row' := row' ++ [⟨i.eff, some As⟩]
+          | none => match i.args with
+            | some _ => row' := row' ++ [i]
+            | none => throw ⟨n.span, s!"`{n.name}` performs `{i.eff}`, and its type arguments are " ++
+                s!"not determined: write them, `with {i.eff}[…]`"⟩
         let d₀ : Decl := .def_ sp n ps A V mk
-        let rowTxt := ", ".intercalate (row.map fun e =>
-          if e == failEff then s!"Fail[{(err.map (VTy.pp · 0)).getD "?"}]" else e)
-        if !answering.isEmpty then
-          env := { env with fns := env.fns ++ [⟨n.name, row, err, d₀⟩] }
-          report sp "row" s!"{n.name}: {rowTxt}"
-        else if err.isSome then
-          -- Only `Fail`: the function itself answers a sum.
-          let before := (← get).made.size
-          let (A', V') ← fnCopy fuel env sp n.name A V [] [] err
-          out := out ++ ((← get).made.extract before).map (·.2)
-          out := out.push (.def_ sp n ps A' V' mk)
-          env := { env with fns := env.fns ++ [⟨n.name, row, err, d₀⟩] }
-          report sp "row" s!"{n.name}: {rowTxt}; it answers `inl` its value or `inr` the error"
+        if !row'.isEmpty then
+          env := { env with fns := env.fns ++ [⟨n.name, row', d₀⟩] }
+          report sp "row" (s!"{n.name}: " ++ ", ".intercalate (row'.map fun i =>
+            match i.args with
+            | some (_ :: _) => s!"{i.eff}[{", ".intercalate ((i.args.getD []).map (VTy.pp · 0))}]"
+            | _ => i.eff))
         else
-          let (V', copies) ← elabDef env V
-          out := out ++ copies
+          let before := (← get).made.size
+          let (bs, V') ← trV fuel { env, caps := [] } [] V
+          unless bs.isEmpty do throw ⟨V.span, "internal error: a definition's value was taken apart"⟩
+          out := out ++ ((← get).made.extract before).map (·.2)
           out := out.push (.def_ sp n ps A V' mk)
       | .main sp C M =>
         modify fun s => { s with quiet := false }
         let before := (← get).made.size
-        let M' ← trC fuel { env, caps := [] } [] false false M
+        let M' ← trC fuel { env, caps := [] } [] false M
         out := out ++ ((← get).made.extract before).map (·.2)
         out := out.push (.main sp C M')
       | d => out := out.push d
     pure out.toList
   match go.run {} with
-  | .ok (ds, st) => pure (ds, st.reports.toList, st.aborts.toList)
+  | .ok (ds, st) => pure (ds, st.reports.toList)
   | .error e => throw e
-where
-  /-- A function with no row: its `with`s and `try`s elaborated, and the copies they made. -/
-  elabDef (env : Env) (V : Val) : EM (Val × Array Decl) := do
-    let before := (← get).made.size
-    let (bs, V') ← trV fuel { env, caps := [] } [] V
-    unless bs.isEmpty do throw ⟨V.span, "internal error: a definition's value was taken apart"⟩
-    pure (V', ((← get).made.extract before).map (·.2))
 
 end Frontend.Elab.Effects

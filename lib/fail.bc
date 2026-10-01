@@ -1,0 +1,30 @@
+-- Errors (SPEC §19): `Fail[E]` is an ordinary control effect. Its one operation, `raise`, answers
+-- `never` (the empty type `0`), so it never resumes: it is abortive, and its handler receives the
+-- error with nothing to resume. Unwinding runs the destructors of what the abandoned computation
+-- owned and ends the borrows it was inside. An error holds nothing owned: data, borrows or `!`
+-- values.
+--
+-- The handlers are ordinary handlers, installed with `with`:
+--
+-- * `to_result`: the body's value `inl a`, or the error `inr e`;
+-- * `default(d)`: the body's value, or `d` (persistent: a clause is `!` code);
+-- * `map_err(f)`: the body's value, or the error `f(e)` raised to the handler around the `with`.
+--
+-- A search that can find nothing answers a sum; a validation or a parse that can fail raises.
+
+effect Fail[E] { ctl raise(e: E) -> never }
+
+handler to_result[E, A]: Fail[E], A -> A + E = {
+  return(a) = inl a;
+  raise(e) = inr e
+}
+
+handler default[E, A](d: A): Fail[E], A -> A = {
+  return(a) = a;
+  raise(e) = d
+}
+
+handler map_err[E, E2, A](f: !(E => E2)): Fail[E], A -> A with Fail[E2] = {
+  return(a) = a;
+  raise(e) = raise(f(e))
+}

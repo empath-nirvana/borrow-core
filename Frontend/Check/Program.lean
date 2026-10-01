@@ -91,8 +91,9 @@ def checkDecl (ds : Array Decl) (k : Nat) : Decl → Except Error (String × Opt
       else
         pure (s!"def {n.name}[{", ".intercalate (ps.map (·.name))}] : checked at each use", none)
   | .include sp n => throw ⟨sp, s!"internal error: `include {n.name}` was not resolved"⟩
-  | .effect sp n _ => throw ⟨sp, s!"internal error: `effect {n.name}` was not elaborated"⟩
+  | .effect sp n _ _ => throw ⟨sp, s!"internal error: `effect {n.name}` was not elaborated"⟩
   | .handler sp n _ _ _ _ => throw ⟨sp, s!"internal error: `handler {n.name}` was not elaborated"⟩
+  | .chandler sp h => throw ⟨sp, s!"internal error: `handler {h.name.name}` was not elaborated"⟩
   | .extern _ n A => do
       let A' ← (Env.top ds k).elabV LifeCtx.empty A
       pure (s!"extern {n.name} : {ppVTy A'}", none)

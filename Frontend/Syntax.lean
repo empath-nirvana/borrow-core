@@ -296,6 +296,22 @@ inductive BorrowKind where
   | modify
   deriving DecidableEq, Repr, Inhabited
 
+/-- A handler site of a control effect, as `Frontend.Elab.Effects` leaves it for the typed
+elaboration (SPEC §19): the handler, the site's static name, its operations `(q, A, B)` in order
+(closed), the handler's type parameters still to be determined and those already known, its
+parameters, the type of its return clause's binder and its answer type (each over the type
+parameters). -/
+structure HInfo where
+  name : String
+  n : Nat
+  ents : List (Qual × VTy × VTy)
+  tps : List String
+  known : List (String × VTy)
+  params : List (String × VTy)
+  retA : VTy
+  res : VTy
+  deriving DecidableEq, Repr
+
 /-- A surface form that needs types to elaborate (docs/typed-elaboration.md §5): a leaf, applied
 to its operands as values, and elaborated to core by the typed pass of `Frontend/Sugar.lean`. -/
 inductive VSugar where
@@ -341,20 +357,17 @@ inductive VSugar where
   /-- A string literal `"…"`, its bytes: a `lit`, the persistent value `(n, t)` of its length and
   the function from an index to its byte. -/
   | str (bs : List Nat)
-  /-- `with h(e) { S }`: the handler `h` installed over `S` (SPEC §18), at the lifetime `'x`,
-  applied to its state (a value, or `&mut c`, the cell it is lent from) and then to the callback
-  whose parameter is the capability `S` performs its operations on. Elaborated away by
-  `Frontend.Elab.Effects` before the rest of the sugar. -/
-  | handle (h : String) (x : String)
-  /-- `try { S }` (SPEC §18): the `Fail` handler that answers `inl` the body's value or `inr` the
-  error it raised, applied to the thunk it marks. -/
-  | try_
-  /-- `catch { S } { e -> S₂ }`: the `Fail` handler that answers the body's value, or `S₂` on the
-  error it raised, applied to the body's thunk and then to the handler's callback. -/
-  | catch_
-  /-- `map_err { S } { e -> S₂ }`: the `Fail` handler that raises `S₂` on the error the body
-  raised, applied as `catch_` is. -/
-  | mapErr
+  /-- `with h[A, …](e, …) { S }`: the handler `h` installed over `S` (SPEC §18, §19), with its
+  written type arguments, applied to its arguments (a tuple, `()` with none; an answering
+  handler's one argument is its state, a value or `&mut c`) and then to the callback whose
+  parameter is the capability an answering handler's operations are performed on (`'x` its
+  lifetime). Elaborated away by `Frontend.Elab.Effects` before the rest of the sugar. -/
+  | handle (h : String) (x : String) (targs : List VTy)
+  /-- A handler site of a control effect (SPEC §19), resolved by `Frontend.Elab.Effects` and
+  assembled with its clauses where the types are known (`Frontend.Sugar`): applied to the
+  handler's arguments, its return clause, the tuple of its operation clauses and the thunk of its
+  body. -/
+  | hndCtl (info : HInfo)
   deriving DecidableEq, Repr, Inhabited
 
 mutual
@@ -471,11 +484,20 @@ inductive Mark where
   | row (effs : List (Ident × List VTy)) (m : Mark)
   deriving DecidableEq, Repr, Inhabited
 
-/-- An operation of an `effect` declaration: `fn op(x₁: A₁, …) -> B` (SPEC §18). -/
+/-- The kind of an operation (SPEC §19): answering (`fn`), or control (`ctl`) with the structural
+qualifier of its continuation (`ctl` affine, `linear ctl`, `multi ctl` unrestricted). -/
+inductive OpKind where
+  | fn
+  | ctl (q : Qual)
+  deriving DecidableEq, Repr, Inhabited
+
+/-- An operation of an `effect` declaration: `fn op(x₁: A₁, …) -> B` or `ctl op(…) -> B`
+(SPEC §18, §19). -/
 structure OpDecl where
   name : Ident
   params : List (Ident × VTy)
   res : VTy
+  kind : OpKind
   deriving DecidableEq, Repr
 
 /-- A clause of a `handler` declaration: `op(x₁, …) -> { S }`, with the handler's state in scope
@@ -484,6 +506,23 @@ structure Clause where
   name : Ident
   params : List Ident
   body : Comp
+  deriving DecidableEq, Repr
+
+/-- A handler of a control effect (SPEC §19):
+`handler h[T, …](p: A, …) for E[A, …] with E₂[…], … -> R { return(x: A) -> M; op(x, …, k) -> N; … }`.
+`k` is the continuation of a non-abortive operation; the handler may perform the operations of
+its row `with …`. -/
+structure CHandler where
+  name : Ident
+  tps : List Ident
+  params : List (Ident × VTy)
+  eff : Ident
+  effArgs : List VTy
+  row : List (Ident × List VTy)
+  res : VTy
+  /-- The return clause: its binder, the binder's type, and its body. -/
+  ret : Ident × VTy × Comp
+  clauses : List Clause
   deriving DecidableEq, Repr
 
 /-- Declarations (syntax-core §10). -/
@@ -497,11 +536,14 @@ inductive Decl where
   | main (sp : Span) (C : CTy) (M : Comp)
   /-- `include name`: the declarations of the library module `name` (`lib/name.bc`). -/
   | include (sp : Span) (name : Ident)
-  /-- `effect E { fn op(x: A, …) -> B; … }`: an effect and its operations (SPEC §18). -/
-  | effect (sp : Span) (n : Ident) (ops : List OpDecl)
+  /-- `effect E[T, …] { fn op(x: A, …) -> B; ctl op(…) -> B; … }`: an effect, its type
+  parameters and its operations (SPEC §18, §19). -/
+  | effect (sp : Span) (n : Ident) (tps : List Ident) (ops : List OpDecl)
   /-- `handler h(s: S) for E { op(x, …) -> { M }; … }`: a handler of `E` whose state is `s : S`
   (SPEC §18). -/
   | handler (sp : Span) (n : Ident) (st : Ident) (S : VTy) (eff : Ident) (clauses : List Clause)
+  /-- A handler of a control effect (SPEC §19). -/
+  | chandler (sp : Span) (h : CHandler)
   deriving DecidableEq, Repr
 
 /-- A source file: its declarations in order. -/
@@ -627,6 +669,15 @@ def Const.strip : Const → Const
   | .sliceBorrowMutU x b A B r => .sliceBorrowMutU x.strip b.strip A.strip B.strip r.strip
   | .sliceBorrowImmU x b A B r => .sliceBorrowImmU x.strip b.strip A.strip B.strip r.strip
 
+/-- A surface form with the spans of its types erased. -/
+def VSugar.strip : VSugar → VSugar
+  | .handle h x As => .handle h x (As.map VTy.strip)
+  | .hndCtl i => .hndCtl { i with
+      ents := i.ents.map (fun (q, A, B) => (q, A.strip, B.strip)),
+      known := i.known.map (fun (x, A) => (x, A.strip)),
+      params := i.params.map (fun (x, A) => (x, A.strip)), retA := i.retA.strip, res := i.res.strip }
+  | s => s
+
 mutual
 def Val.strip : Val → Val
   | .var _ x => .var .none x
@@ -652,7 +703,7 @@ def Val.strip : Val → Val
   | .const _ c => .const .none c.strip
   | .shorten _ m σ a V => .shorten .none m σ.strip a.strip V.strip
   | .lend _ x m => .lend .none x.strip m
-  | .sugar _ s => .sugar .none s
+  | .sugar _ s => .sugar .none s.strip
 
 def Comp.strip : Comp → Comp
   | .ret _ V => .ret .none V.strip
@@ -692,10 +743,16 @@ def Decl.strip : Decl → Decl
   | .extern _ n A => .extern .none n.strip A.strip
   | .main _ C M => .main .none C.strip M.strip
   | .include _ n => .include .none n.strip
-  | .effect _ n ops => .effect .none n.strip (ops.map fun o =>
-      ⟨o.name.strip, o.params.map (fun (x, A) => (x.strip, A.strip)), o.res.strip⟩)
+  | .effect _ n tps ops => .effect .none n.strip (tps.map Ident.strip) (ops.map fun o =>
+      ⟨o.name.strip, o.params.map (fun (x, A) => (x.strip, A.strip)), o.res.strip, o.kind⟩)
   | .handler _ n st S e cs => .handler .none n.strip st.strip S.strip e.strip (cs.map fun c =>
       ⟨c.name.strip, c.params.map Ident.strip, c.body.strip⟩)
+  | .chandler _ h => .chandler .none
+      { name := h.name.strip, tps := h.tps.map Ident.strip,
+        params := h.params.map (fun (x, A) => (x.strip, A.strip)), eff := h.eff.strip,
+        effArgs := h.effArgs.map VTy.strip, row := h.row.map (fun (e, As) => (e.strip, As.map VTy.strip)),
+        res := h.res.strip, ret := (h.ret.1.strip, h.ret.2.1.strip, h.ret.2.2.strip),
+        clauses := h.clauses.map fun c => ⟨c.name.strip, c.params.map Ident.strip, c.body.strip⟩ }
 
 def Program.strip (p : Program) : Program := ⟨p.decls.map Decl.strip⟩
 
