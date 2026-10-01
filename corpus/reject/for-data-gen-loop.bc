@@ -1,4 +1,4 @@
--- expect: 14:19: `range` loops, so a `for` over it is div, and it is inside the body of a loop that is one total step (a `for` over data, SPEC §16, or the clause of a `for` over a generator): store the generator and loop over it after, or loop over it in a function
+-- expect: 15:19: `range` loops, so a `for` over it is div, and it is inside the body of a loop that is one total step (a `for` over data, SPEC §16, or the clause of a `for` over a generator): store the generator and loop over it after, or loop over it in a function
 -- A `for` over data is a counted loop, whose step is one total computation (SPEC §16). Its body
 -- has a `for` over `range`, a generator whose body loops, which is div: it cannot run inside one
 -- step. A `for` over a generator that does not loop is total, and may stand there.
