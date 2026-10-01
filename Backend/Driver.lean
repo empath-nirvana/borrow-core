@@ -24,6 +24,16 @@ model of each extern.
 
 namespace Backend
 
+/-- The wasm stack `wasmtime` is run with, in bytes: 64 MiB. A recursion under `bounded`
+(SPEC §20) has a budget of depth (`lib/rec.bc`, `rec_budget`) calibrated against it: at the
+budget, a recursion's frames must fit with room left for the finalisers an unwind runs.
+Provisional: the calibration is by measurement (`docs/rec-effect/bounded-deep.md`). -/
+def wasmStackBytes : Nat := 67108864
+
+/-- The arguments `wasmtime run` is given before the module: tail calls, and the stack. -/
+def wasmtimeArgs : Array String :=
+  #["run", "-W", "tail-call=y", "-W", s!"max-wasm-stack={wasmStackBytes}"]
+
 /-- The fuel of every interpreter. -/
 def runFuel : Nat := 100000000
 

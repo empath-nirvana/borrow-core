@@ -84,6 +84,31 @@ theorem countTry_cont_subst (f : Val) (n i : UInt32) (s' : Val) :
   rw [hf]
   rfl
 
+/-- The self-reference `bounded_fix` hands its step at the budget `k`: `inj₁ ()` when the budget
+    is spent, else `inj₂ (λx. bounded_fix (s, (k − 1, x)))`.  `[spec §20]` -/
+def fixSelf (s : Val) (k : UInt32) : Val :=
+  if k = 0 then Val.inj₁ Val.unit
+  else Val.inj₂ (Val.lam (.app (.val (.prim .boundedFix)) (.pair (.val (s.shift 1 0))
+    (.pair (.val (.i32 (k - 1))) (.var 0)))))
+
+/-- One step of `bounded_fix (s, (k, a))`: the step `s` on its self-reference at the budget `k`
+    and the argument. The budget is counted down by the machine, as `count`'s counter is counted
+    up.  `[spec §20]` -/
+def boundedFixNext (s : Val) (k : UInt32) (a : Val) : Expr :=
+  .app (.val s) (.val (.pair (fixSelf s k) a))
+
+/-- `self x` is the fixed point at `x`: the β-step's substitution. -/
+theorem fixSelf_body_subst (s : Val) (j : UInt32) (x : Val) :
+    Expr.subst 0 x (.app (.val (.prim .boundedFix)) (.pair (.val (s.shift 1 0))
+        (.pair (.val (.i32 j)) (.var 0))))
+      = .app (.val (.prim .boundedFix)) (.val (Val.pair s (Val.pair (Val.i32 j) x))) := by
+  have hs : Expr.subst 0 x ((s.shift 1 0).val) = s.val := by
+    rw [Val.val_shift, Expr.subst_shift 0 0 0 x s.val (Nat.le_refl 0) (Nat.zero_le _),
+      Expr.shift_zero]
+  simp only [Expr.val, Expr.subst, if_pos, Val.i32] at hs ⊢
+  rw [hs]
+  rfl
+
 /-- The answer of `idx ((ℓ, n), i)`: the `i`-th leaf when `i < n`, unsigned; else `inj₂ ()`.
     `[spec §9]` -/
 def idxAns (ℓ : Loc) (n i : UInt32) : Val :=

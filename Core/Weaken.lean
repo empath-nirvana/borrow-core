@@ -114,6 +114,7 @@ theorem CDerives.append_dead (h' : Ctx.Dead Γ') {Δ : LifeCtx} {Γ : Ctx VTy} {
   | arrForget a A hΓ => exact .arrForget a A (deadP_append h' hΓ)
   | countFold S hΓ => exact .countFold S (deadP_append h' hΓ)
   | countTry S E hΓ => exact .countTry S E (deadP_append h' hΓ)
+  | boundedFix A C hΓ => exact .boundedFix A C (deadP_append h' hΓ)
   | sliceBorrowM x hΓ hA hB hf₁ hf₂ => exact .sliceBorrowM x (deadP_append h' hΓ) hA hB hf₁ hf₂
   | sliceBorrowI x hΓ hsc hA hB hf₁ hf₂ =>
       exact .sliceBorrowI x (deadP_append h' hΓ) hsc hA hB hf₁ hf₂

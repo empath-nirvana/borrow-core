@@ -54,7 +54,10 @@ object per level (`Backend/README.md`).
 **Tail-resumptive operations.** When every handler of a name has the same closed clause for an
 operation, and the clause resumes `κ` once, in tail position, and neither suspends nor raises,
 the operation is a direct call of the clause, its resume removed: the handler is the one known
-statically, and nothing is suspended or resumed.
+statically, and nothing is suspended or resumed. So is a clause whose answer is computed by a
+term that may raise, under a finaliser frame that resumes `κ` with the answer and cancels `κ` on
+an unwind (`unwindClause?`): as a direct call, the unwind passes through the performing code's
+own frames, which is what the cancel runs.
 
 **Cancels.** `κ`'s cancel entry cancels `k` with the mask of the names of the handlers its region
 may hold, then answers `()` or re-raises the kept error (`reraise`). The mask is the handler
@@ -527,6 +530,58 @@ def tailClause? (c : Code) : Option Code := do
   guard (fa.contains ff && occurrences B ka == ka.length && occurrences B fa == fa.length)
   return { c with body := .letv p' (.var p) (.letpair w k p' (B.dropResume kk s ff y)) }
 
+/-- The code of a finaliser frame's clauses (`markUbinds`) that resumes `κ` with the answer and
+cancels it on an unwind: `λs. case s {inl b. k.resume b | inr _. k.cancel}`, `k` its one captured
+value. -/
+def resumeOrCancel? (c : Code) : Bool := Id.run do
+  let [ke] := c.env | return false
+  let .letv s' (.var s) (.case s'' b r u x) := c.body | return false
+  if !(s == c.param && s' == s'') then return false
+  let ka := aliasesIn r ke ++ aliasesIn x ke
+  -- The resume: `(k (inl ())) b`, `k` used once.
+  let resOk := match r.tail with
+    | .app t b' =>
+      (aliasesIn r b).contains b' && occurrences r (aliasesIn r ke) == (aliasesIn r ke).length &&
+        (match (defsOf {} r)[t]?.map Tm.tail with
+          | some (.app kk sv) => ka.contains kk &&
+              (match (defsOf {} r)[sv]?.map Tm.tail with | some (.inj false _) => true | _ => false)
+          | _ => false)
+    | _ => false
+  -- The cancel: `k (inr ())`.
+  let canOk := match x.tail with
+    | .app kk sv => ka.contains kk && !(aliasesIn x u).contains kk &&
+        (match (defsOf {} x)[sv]?.map Tm.tail with | some (.inj true _) => true | _ => false)
+    | _ => false
+  return resOk && canOk
+
+/-- `t` with the binding `let cv = clos _ _` removed and the frame `ubind cv cv M` replaced by `M`. -/
+def Tm.dropUbind (cv : Var) : Tm → Tm
+  | .letv x e b =>
+    if x == cv then b.dropUbind cv else .letv x (e.dropUbind cv) (b.dropUbind cv)
+  | .ubind nn dd m => if nn == cv && dd == cv then m else .ubind nn dd m
+  | .letpair x z p b => .letpair x z p (b.dropUbind cv)
+  | .copy x x' b => .copy x x' (b.dropUbind cv)
+  | .drop x b => .drop x (b.dropUbind cv)
+  | t => t
+
+/-- The clause code `λp. let (w, k) = p; B` without `κ`, when `B` ends in the frame
+`M then b. k.resume b unwind k.cancel` and uses `κ` nowhere else: the answer is computed by `M`,
+which may raise, and `κ` is resumed with it in tail position, or cancelled when `M` unwinds. As a
+direct call the clause answers `M`'s answer, and an unwind of `M` unwinds the performing code's
+own frames, which is what the cancel runs. Its argument is still the pair, with `()` for `κ`. -/
+def unwindClause? (codes : Array Code) (c : Code) : Option Code := do
+  let .letv p' (.var p) (.letpair w k p'' B) := c.body | none
+  guard (p == c.param && p' == p'' && c.env.isEmpty)
+  let .ubind nn dd _ := B.tail | none
+  guard (nn == dd)
+  let defs := defsOf {} B
+  let some (.clos sc [k']) := defs[nn]?.map Tm.tail | none
+  let ka := aliasesIn B k
+  guard (ka.contains k' && occurrences B ka == ka.length)
+  let some sel := codes[sc]? | none
+  guard (resumeOrCancel? sel)
+  return { c with body := .letv p' (.var p) (.letpair w k p'' (.drop k (B.dropUbind nn))) }
+
 /-- The codes of the clauses at index `j` of the clause tuples a key holds. -/
 def Solver.clausesAt (S : Solver) (k : Nat) : Nat → List Nat
   | 0 => ((S.set[k]?.getD #[]).toList.flatMap fun v => match S.vals[v]! with
@@ -616,10 +671,15 @@ def tailResumptive (O : Ops) (F : SFacts) (codes : Array Code) (hs : Array HInfo
       let cs := (sites.flatMap fun h =>
         F.S.clausesAt (F.S.num.idx (.var h.dVars[1]!)) j).eraseDups
       let [c] := cs | continue
-      let some tc := codes[c]?.bind tailClause? | continue
-      if !(sKeysOf O F c [] tc.body).isEmpty then continue
-      if !Raises.isEmpty (F.U.raises tc.body) then continue
-      out := out ++ [((n, j.toUInt32), tc)]
+      if let some tc := codes[c]?.bind tailClause? then
+        if !(sKeysOf O F c [] tc.body).isEmpty then continue
+        if !Raises.isEmpty (F.U.raises tc.body) then continue
+        out := out ++ [((n, j.toUInt32), tc)]
+      else if let some tc := codes[c]?.bind (unwindClause? codes) then
+        -- The answer's computation may raise: an unwind of the direct call unwinds the
+        -- performing code's frames, as the cancel of `κ` does.
+        if !(sKeysOf O F c [] tc.body).isEmpty then continue
+        out := out ++ [((n, j.toUInt32), tc)]
   return out
 
 /-! ### Machines -/

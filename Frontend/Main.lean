@@ -123,7 +123,7 @@ def run (file : String) : IO UInt32 := do
     let out := dir / "main.wat"
     IO.FS.writeFile out wat
     let child ← IO.Process.spawn
-      { cmd := "wasmtime", args := #["run", "-W", "tail-call=y", out.toString],
+      { cmd := "wasmtime", args := Backend.wasmtimeArgs.push out.toString,
         stdin := .inherit, stdout := .inherit, stderr := .inherit }
     let code ← child.wait
     IO.FS.removeDirAll dir
@@ -160,7 +160,7 @@ def kernelRun (e : BoCa.Expr) : IO UInt32 := do
     let out := dir / "main.wat"
     IO.FS.writeFile out wat
     let child ← IO.Process.spawn
-      { cmd := "wasmtime", args := #["run", "-W", "tail-call=y", out.toString],
+      { cmd := "wasmtime", args := Backend.wasmtimeArgs.push out.toString,
         stdin := .inherit, stdout := .inherit, stderr := .inherit }
     let code ← child.wait
     IO.FS.removeDirAll dir

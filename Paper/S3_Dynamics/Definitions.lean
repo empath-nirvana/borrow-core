@@ -300,6 +300,13 @@ answers `idxAns`; `split` answers `splitAns`; `drop` continues as `dropFill`
 `count (f, (n, (i, s)))` continues as `countNext`: `f (i, s)` and `count` from `i + 1` while
 `i < len(n)`, else `s`. `count_try (f, (n, (i, s)))` continues as `countTryNext`: `f (i, s)`, then
 `count_try` from `i + 1` on its `inj₁`, or its `inj₂` as the answer; at the bound `inj₁ s`.
+
+### — no printed counterpart — the fuelled fixed point · `[spec §20]`
+
+`bounded_fix (s, (k, a))` continues as `boundedFixNext`: `s (self, a)`, where `self` is
+`inj₁ ()` at `k = 0` (the budget is spent) and `inj₂ (λx. bounded_fix (s, (k − 1, x)))` otherwise.
+The budget is the machine's, counted down by the machine, so the recursion is total at every
+host.
 -/
 /-!
 ### — no printed counterpart — handlers, operations and finalisers · `[spec §19]`
@@ -484,6 +491,10 @@ inductive Head {ℍ : Host} [HostIs ℍ] : Heap → Expr → Heap → Expr → P
   | countTry (μ : Heap) (f : Val) (n i : UInt32) (s : Val) :
       Head μ (.app (.val (.prim .countTry)) (.val (.pair f (.pair (.i32 n) (.pair (.i32 i) s))))) μ
         (countTryNext f n i s)
+  /-- `(μ, bounded_fix (s, (k, a))) ↦ (μ, boundedFixNext s k a)`.  `[spec §20]` -/
+  | boundedFix (μ : Heap) (s : Val) (k : UInt32) (a : Val) :
+      Head μ (.app (.val (.prim .boundedFix)) (.val (.pair s (.pair (.i32 k) a)))) μ
+        (boundedFixNext s k a)
   /-- `[ret]`: `hnd (n, (h_ret, hs)) v ↦ h_ret v`.  `[spec §19]` -/
   | hret (μ : Heap) (n : UInt32) (hr hs w : Val) :
       Head μ (hndE (hndVal n hr hs) (.val w)) μ (.app (.val hr) (.val w))

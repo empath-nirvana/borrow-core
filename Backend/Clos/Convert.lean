@@ -212,15 +212,45 @@ def Op.ofPrim? : Prim → Option Op
   | .drop => some .drop
   | .count => some .count
   | .countTry => some .countTry
+  -- `bounded_fix` is converted to codes of its own (`fixValue`).
+  | .boundedFix => none
   | .store => none
   | .lit _ => none
   -- The primitives of spec §19 are converted by their shapes in `conv`; as values `primValue`
   -- rejects them.
   | .perform | .raise | .hnd | .ubind | .ccatch | .cfin => none
 
+/-- `bounded_fix` (spec §20) as two codes: `fix (s, (k, a))` calls `s` on `(self, a)`, `self`
+`inj₁ ()` at `k = 0` and otherwise `inj₂` of a closure of `self` over `s` and `k − 1`, whose call
+`self x` calls `fix (s, (k − 1, x))`. The recursion is ordinary calls of known codes: the budget is
+a word passed down, the self-reference a closure of `s`'s words and the budget, a stack value, and
+nothing is allocated. Each occurrence has codes of its own, at its own types. -/
+def fixValue : CM Tm := do
+  let cF ← register ⟨[], dummy, .unit⟩
+  -- `self x = fix (s, (j, x))`.
+  let es ← fresh; let ej ← fresh; let x ← fresh
+  let r₁ ← fresh; let r₂ ← fresh; let f ← fresh
+  let cS ← register ⟨[es, ej], x,
+    .letv r₁ (.pair ej x) (.letv r₂ (.pair es r₁) (.letv f (.clos cF []) (.app f r₂)))⟩
+  -- `fix (s, (k, a)) = s (self, a)`.
+  let p ← fresh; let sv ← fresh; let r ← fresh; let k ← fresh; let a ← fresh
+  let k' ← fresh; let b ← fresh; let u₁ ← fresh; let u₂ ← fresh
+  let s' ← fresh; let one ← fresh; let q ← fresh; let j ← fresh; let cl ← fresh
+  let sf₁ ← fresh; let pr₁ ← fresh; let un ← fresh; let sf₂ ← fresh; let pr₂ ← fresh
+  let more : Tm := .drop u₁ (.copy sv s' (.letv one (.lit (.i32 1)) (.letv q (.pair k one)
+    (.letv j (.prim (.host (.bin .w32 .sub)) [q]) (.letv cl (.clos cS [s', j])
+      (.letv sf₁ (.inj true cl) (.letv pr₁ (.pair sf₁ a) (.app sv pr₁))))))))
+  let spent : Tm := .drop u₂ (.drop k (.letv un .unit (.letv sf₂ (.inj false un)
+    (.letv pr₂ (.pair sf₂ a) (.app sv pr₂)))))
+  let body : Tm := .letpair sv r p (.letpair k a r (.copy k k'
+    (.letv b (.prim (.host (.eqz .w32)) [k']) (.case b u₁ more u₂ spent))))
+  modify fun st => { st with codes := st.codes.set! cF ⟨[], p, body⟩ }
+  return .clos cF []
+
 /-- A primitive as a value: η-expanded closure code. -/
 def primValue : Prim → CM Tm
   | .lit c => pure (.lit c)
+  | .boundedFix => fixValue
   | .store => do
       let l ← fresh; let l' ← fresh; let v ← fresh
       let c₂ ← register ⟨[l'], v, .prim .store [l', v]⟩
