@@ -20,6 +20,7 @@ import Core.NuRel
 import Core.Computation
 import Core.Compat
 import Core.EffRules
+import Core.EffBorrow
 import Core.Sized
 import Core.FoldImm
 import Core.FoldOwn
