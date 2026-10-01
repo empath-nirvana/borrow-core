@@ -29,6 +29,7 @@ import Core.Relation
 import Core.RelationFacts
 import Core.World
 import Core.Wp
+import Core.EffWp
 
 /-!
 # Core — Reborrow  `[spec §3, §4]`
@@ -218,22 +219,23 @@ theorem rebChooseTW_deep {ls : List SRec} {r : FrameRec} {p₀ : Option Loc} {l�
     exact ⟨TW.rebEndDeep r hTp hr' hch hc'' hreb hcomp hβ'', tagged_rebEnd hTp hcomp htgp⟩
 
 /-! ### Theorem 6.150 (↺ rule) at the typed world; record in `Paper/S6_7_WeakestPreconditionRules/Lemmas.lean` -/
-/-- `[TR]` Theorem 6.150 (`↺` rule, p. 39) at the tagged `wpTS`:
+/-- `[TR]` Theorem 6.150 (`↺` rule, p. 39) at `wpG`, the run ending at any final term:
 
     ℓ ↦ Imm α (R ∧ Иβ. ↺_β P̂₀) ⋆ (Иβ. ∀v. P̂(v) ─⋆ wp_{ls}(e){[β]Q̂}) ⊧ wp_{ls}(e){Q̂}
 
 `Fig16.BoLo.wp_reborrow`'s proof, H1–H33, with the list carried (the inner run's list is the
 outer one; `ps′ ≡ ps`, `ls′ ≡ ls` pass through) and the typed world stepped by the chooser's
-entry and exit.  `[variant: the chooser `RebChooseTW` in place of `RebEscrow`; `β` also below
-the world's stratum (H11); `P̂₀` for the handed image, `P̂` for the chosen one; `R` on the
-cell's payload]` -/
-theorem wpTS_reborrow (ls : List SRec) (l : BoCa.Loc) (α : Life) (R : Val → WRes → Prop)
-    (P₀ P : Life → BoCa.Val → WProp) (e : Expr) (Q : List SRec → BoCa.Val → WProp)
+entry and exit.  The proof never inspects the term the inner run ends at, so a reborrow ends at
+a stopped operation as at a return (`SPEC.md` §19, *Theorems* 3).  `[variant: the chooser
+`RebChooseTW` in place of `RebEscrow`; `β` also below the world's stratum (H11); `P̂₀` for the
+handed image, `P̂` for the chosen one; `R` on the cell's payload]` -/
+theorem wpG_reborrow (ls : List SRec) (l : BoCa.Loc) (α : Life) (R : Val → WRes → Prop)
+    (P₀ P : Life → BoCa.Val → WProp) (e : Expr) (Q : List SRec → Expr → WProp)
     (hesc : RebChooseTW ls l R P₀ P) :
     Entails
       (ptoImm l α (fun v σ => R v σ ∧ fresh (fun b => reborrow b (P₀ b v)) σ) ⋆
-        (fresh fun b => all fun v => P b v ─⋆ wpTS ls e (fun ls' v' => box b (Q ls' v'))))
-      (wpTS ls e Q) := by
+        (fresh fun b => all fun v => P b v ─⋆ wpG ls e (fun ls' t => box b (Q ls' t))))
+      (wpG ls e Q) := by
   rintro ρ ⟨ρi, ρb, hc, hpi, hpb⟩ ρf fρ ps hf hcf hT htg alc kc
   -- H4 unfolded: `ρᵢ = ℓ ↦ imm(ᾱ, v′, ρ′)`, H7 and H8.
   obtain ⟨s, v', σ, hs, hρi, ⟨hRv, hP7⟩, hα⟩ := hpi
@@ -287,7 +289,7 @@ theorem wpTS_reborrow (ls : List SRec) (l : BoCa.Loc) (α : Life) (R : Val → W
     rwa [ResU.CompS.functional hab hFb] at hab'
   obtain ⟨hTin, htgin⟩ := hentry Win hfχ hvWin
   -- H21: by the definition of `─⋆`.
-  have h21 : wpTS ls e (fun ls' v'' => box β (Q ls' v'')) ρbχ := hwand χ ρbχ hPχ hbχ
+  have h21 : wpG ls e (fun ls' t => box β (Q ls' t)) ρbχ := hwand χ ρbχ hPχ hbχ
   obtain ⟨ρQ, ρp, fρ', fρ'p, π, v, μ, μ', ps', ls', g1, g2, g3, g5, g6, g7, g8, g9, gA, gB,
     gT, gtg, gps, gls, gC⟩ := h21 ρF Win ps hFbχ hWin hTin htgin alc kc
   have g4 : ResU.CompS ρF ρbχ Win := hWin
@@ -382,6 +384,22 @@ theorem wpTS_reborrow (ls : List SRec) (l : BoCa.Loc) (α : Life) (R : Val → W
   · exact ResU.hash_symm
       (ResU.hash_of_pairwise ht3i (ResU.hash_symm hψi) (ResU.hash_symm hψt3) hρpG)
   · exact noOwn_compS hρpG (noOwn_single_imm l s v' σ hs) (noOwn_subKeep hsubK gB)
+
+/-- `[TR]` Theorem 6.150 (`↺` rule, p. 39) at the tagged `wpTS`: `wpG_reborrow` at a
+postcondition over values.  `[variant: as `wpG_reborrow`]` -/
+theorem wpTS_reborrow (ls : List SRec) (l : BoCa.Loc) (α : Life) (R : Val → WRes → Prop)
+    (P₀ P : Life → BoCa.Val → WProp) (e : Expr) (Q : List SRec → BoCa.Val → WProp)
+    (hesc : RebChooseTW ls l R P₀ P) :
+    Entails
+      (ptoImm l α (fun v σ => R v σ ∧ fresh (fun b => reborrow b (P₀ b v)) σ) ⋆
+        (fresh fun b => all fun v => P b v ─⋆ wpTS ls e (fun ls' v' => box b (Q ls' v'))))
+      (wpTS ls e Q) := by
+  rintro ρ ⟨ρi, ρb, hc, hpi, gb, hb⟩
+  refine (wpTS_iff_wpG ls e Q ρ).mpr (wpG_reborrow ls l α R P₀ P e (valPost Q) hesc ρ
+    ⟨ρi, ρb, hc, hpi, gb, fun β hβ => ⟨fun v σ₁ σ₂ hP hcσ => ?_, (hb β hβ).2⟩⟩)
+  refine wpG_mono (fun ls' t ρ' ht => ?_) ((wpTS_iff_wpG ls e _ σ₂).mp ((hb β hβ).1 v σ₁ σ₂ hP hcσ))
+  obtain ⟨v', rfl, hQ, hout⟩ := ht
+  exact ⟨⟨v', rfl, hQ⟩, hout⟩
 
 end BoCa.Fig16.LogRel.Core
 

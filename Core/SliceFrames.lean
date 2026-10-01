@@ -1,5 +1,6 @@
 import Core.Arrays
 import Core.FrameRules
+import Core.EffWp
 
 /-!
 # Core — frames over a family of places  `[spec §9]`
@@ -156,23 +157,24 @@ theorem ownList_outlives {T : Loc → VTy} {δ : LSub} {β α : Life} (hαβ : �
   sepList_closed (ResU.inStratum_empty α) (outlives_compS_closed α)
     (fun _ _ h => ownLeaf_outlives hαβ hP h) h
 
-/-- **One Mut Frame per place, around one expression.** The leaves may differ in type. -/
-theorem wpTS_M_frameList (T : Loc → VTy) (δ : LSub) (β : Life)
+/-- **One Mut Frame per place, around one expression**, the run ending at any final term.  The
+leaves may differ in type. -/
+theorem wpG_M_frameList (T : Loc → VTy) (δ : LSub) (β : Life)
     (hP : ∀ m ls w σ, vC true (T m) ls δ w σ → σ.InStratum β) (e : Expr) (ls : List SRec)
-    (Φ : List SRec → Val → WProp) (β' : Life) (hΦ : ∀ ls v ρ, Φ ls v ρ → BoLo.Outlives ρ β') :
-    ∀ (I : List Loc) (Q : List SRec → Val → WProp),
+    (Φ : List SRec → Expr → WProp) (β' : Life) (hΦ : ∀ ls v ρ, Φ ls v ρ → BoLo.Outlives ρ β') :
+    ∀ (I : List Loc) (Q : List SRec → Expr → WProp),
       (∀ ls' v, Entails (sepList (ownLeafH T ls' δ) I ⋆ Φ ls' v) (Q ls' v)) →
       Entails
         (sepList (ownLeafH T ls δ) I ⋆
-          fresh (fun α => sepList (mutLeafH T ls δ α) I ─⋆ wpTS ls e Φ))
-        (wpTS ls e Q)
+          fresh (fun α => sepList (mutLeafH T ls δ α) I ─⋆ wpG ls e Φ))
+        (wpG ls e Q)
   | [], Q, hQ => by
       rintro ρ ⟨ρo, ρH, hc, ⟨rfl, -⟩, γH, hH⟩
       rw [eq_of_compS_empty_left hc]
       obtain ⟨hw, -⟩ := hH (↓γH) (Life.down_sqsubset γH)
       have hwp := hw PMap.empty ρH ⟨rfl, trivial⟩ (ResU.comp_empty_right ρH)
-      exact wpTS_mono (fun ls' v σ h => hQ ls' v σ
-        ⟨PMap.empty, σ, compS_empty_left σ, ⟨rfl, trivial⟩, h⟩) ρH hwp
+      exact wpG_mono (fun ls' v σ h => hQ ls' v σ
+        ⟨PMap.empty, σ, compS_empty_left σ, ⟨rfl, trivial⟩, h⟩) hwp
   | ℓ :: I, Q, hQ => by
       rintro ρ ⟨ρo, ρH, hc, ⟨ρ0, ρr, hc0, hleaf, hrest⟩, γH, hH⟩
       obtain ⟨ℓ', v, hk⟩ := hleaf
@@ -183,7 +185,7 @@ theorem wpTS_M_frameList (T : Loc → VTy) (δ : LSub) (β : Life)
       -- `ρ = c ● (p ● (ρr ● ρH))`
       obtain ⟨F, hF, hρ⟩ := compS_reassoc hc0 hc
       obtain ⟨G, hG, hρ'⟩ := compS_reassoc hcp hρ
-      refine wpTS_M_frameX ℓ' (T ℓ') δ β (hP ℓ') v e ls Q ρ ⟨c, G, hρ', hcell, p, F, hG, hpv, ?_⟩
+      refine wpG_M_frameX ℓ' (T ℓ') δ β (hP ℓ') v e ls Q ρ ⟨c, G, hρ', hcell, p, F, hG, hpv, ?_⟩
       -- the outer frame's lifetime `α₁`, below `@F`, `β′` and `β`
       obtain ⟨aF, haF⟩ := F.exists_atLife
       refine ⟨aF ⊓ β' ⊓ β, fun α₁ hα₁ => ⟨?_, outlives_of_atLife haF
@@ -194,7 +196,7 @@ theorem wpTS_M_frameList (T : Loc → VTy) (δ : LSub) (β : Life)
       -- `ρ′ = ρr ● (ρH ● ρm)`
       obtain ⟨R, hR, hρ''⟩ := compS_reassoc hF hcm
       -- the remaining places, framed by the induction hypothesis
-      refine wpTS_M_frameList T δ β hP e ls Φ β' hΦ I _ ?_ ρ'
+      refine wpG_M_frameList T δ β hP e ls Φ β' hΦ I _ ?_ ρ'
         ⟨ρr, R, hρ'', hrest, ?_⟩
       · -- the outer frame's postcondition from the inner ones'
         intro ls' v' σ ⟨σo, σΦ, hσ, ho, hφ⟩
@@ -218,11 +220,43 @@ theorem wpTS_M_frameList (T : Loc → VTy) (δ : LSub) (β : Life)
         obtain ⟨X, hX, hρ₃⟩ := compS_reassoc hR hcm₂
         exact (hH α₂ hα₂H).1 X ρ₃ ⟨ρm, ρm₂, hX, ptoMutS_antitone hα₂α₁ hm, hm₂⟩ hρ₃
 
+/-- **One Mut Frame per place, around one expression**: `wpG_M_frameList` at postconditions over
+values.  The leaves may differ in type. -/
+theorem wpTS_M_frameList (T : Loc → VTy) (δ : LSub) (β : Life)
+    (hP : ∀ m ls w σ, vC true (T m) ls δ w σ → σ.InStratum β) (e : Expr) (ls : List SRec)
+    (Φ : List SRec → Val → WProp) (β' : Life) (hΦ : ∀ ls v ρ, Φ ls v ρ → BoLo.Outlives ρ β')
+    (I : List Loc) (Q : List SRec → Val → WProp)
+    (hQ : ∀ ls' v, Entails (sepList (ownLeafH T ls' δ) I ⋆ Φ ls' v) (Q ls' v)) :
+    Entails
+      (sepList (ownLeafH T ls δ) I ⋆
+        fresh (fun α => sepList (mutLeafH T ls δ α) I ─⋆ wpTS ls e Φ))
+      (wpTS ls e Q) := by
+  rintro ρ ⟨ρo, ρH, hc, ho, γH, hH⟩
+  refine (wpTS_iff_wpG ls e Q ρ).mpr (wpG_M_frameList T δ β hP e ls (valPost Φ) β'
+    (fun ls t ρ ⟨v, _, hv⟩ => hΦ ls v ρ hv) I (valPost Q) ?_ ρ
+    ⟨ρo, ρH, hc, ho, γH, fun α hα => ⟨fun σ₁ σ₂ hm hcm =>
+      (wpTS_iff_wpG ls e Φ σ₂).mp ((hH α hα).1 σ₁ σ₂ hm hcm), (hH α hα).2⟩⟩)
+  rintro ls' t σ ⟨σo, σΦ, hσ, ho', v, rfl, hφ⟩
+  exact ⟨v, rfl, hQ ls' v σ ⟨σo, σΦ, hσ, ho', hφ⟩⟩
+
 /-- A range of owned leaves is in `Res_α`. -/
 theorem ownRange_outlives {T : VTy} {δ : LSub} {β α : Life} (hαβ : α ⊑ β)
     (hP : ∀ ls w σ, vC true T ls δ w σ → σ.InStratum β) {ls : List SRec} {ℓ : Loc} {n : Nat}
     {ρ : WRes} (h : sepRange (ownLeaf T ls δ) ℓ n ρ) : BoLo.Outlives ρ α := by
   rw [sepRange_eq_sepList] at h; exact ownList_outlives (T := fun _ => T) hαβ (fun _ => hP) h
+
+/-- **`n` Mut Frames around one expression**, the run ending at any final term: the family is an owned array's range. -/
+theorem wpG_M_frameFam (T : VTy) (δ : LSub) (β : Life)
+    (hP : ∀ ls w σ, vC true T ls δ w σ → σ.InStratum β) (e : Expr) (ls : List SRec)
+    (Φ : List SRec → Expr → WProp) (β' : Life) (hΦ : ∀ ls v ρ, Φ ls v ρ → BoLo.Outlives ρ β')
+    (n : Nat) (ℓ : Loc) (Q : List SRec → Expr → WProp)
+    (hQ : ∀ ls' v, Entails (sepRange (ownLeaf T ls' δ) ℓ n ⋆ Φ ls' v) (Q ls' v)) :
+    Entails
+      (sepRange (ownLeaf T ls δ) ℓ n ⋆
+        fresh (fun α => sepRange (mutLeaf T ls δ α) ℓ n ─⋆ wpG ls e Φ))
+      (wpG ls e Q) := by
+  simp only [sepRange_eq_sepList] at hQ ⊢
+  exact wpG_M_frameList (fun _ => T) δ β (fun _ => hP) e ls Φ β' hΦ _ Q hQ
 
 /-- **`n` Mut Frames around one expression**: the family is an owned array's range. -/
 theorem wpTS_M_frameFam (T : VTy) (δ : LSub) (β : Life)
@@ -279,25 +313,26 @@ theorem ownList_ext {T : Loc → VTy} {δ : LSub} {ls ls' : List SRec} {I : List
     sepList (ownLeafH T ls' δ) I ρ :=
   sepList_ext (P := fun ls => ownLeafH T ls δ) (fun _ _ _ _ hk' h => vC_local true _ hk' h) hk h
 
-/-- **One Imm Frame per place, around one expression.** The leaves may differ in type. -/
-theorem wpTS_I_frameList (T : Loc → VTy) (δ : LSub) (β : Life)
+/-- **One Imm Frame per place, around one expression**, the run ending at any final term.  The
+leaves may differ in type. -/
+theorem wpG_I_frameList (T : Loc → VTy) (δ : LSub) (β : Life)
     (hP : ∀ m ls w σ, vC true (T m) ls δ w σ → σ.InStratum β) (hadm : ∀ m, AdmWf (T m) δ)
     (e : Expr)
-    (Φ : List SRec → Val → WProp) (β' : Life) (hΦ : ∀ ls v ρ, Φ ls v ρ → BoLo.Outlives ρ β')
+    (Φ : List SRec → Expr → WProp) (β' : Life) (hΦ : ∀ ls v ρ, Φ ls v ρ → BoLo.Outlives ρ β')
     (hΦext : ∀ ls₁ ls₂ w ρ, Ext ls₁ ls₂ ρ → Φ ls₁ w ρ → Φ ls₂ w ρ) :
     ∀ (I : List Loc) (ls : List SRec),
       Entails
         (sepList (ownLeafH T ls δ) I ⋆
           fresh (fun α ρ => ∀ ls', Ext ls ls' ρ →
-            (sepList (immLeafH T ls' δ α) I ─⋆ wpTS ls' e Φ) ρ))
-        (wpTS ls e (fun ls' v => sepList (ownLeafH T ls' δ) I ⋆ Φ ls' v))
+            (sepList (immLeafH T ls' δ α) I ─⋆ wpG ls' e Φ) ρ))
+        (wpG ls e (fun ls' v => sepList (ownLeafH T ls' δ) I ⋆ Φ ls' v))
   | [], ls => by
       rintro ρ ⟨ρo, ρH, hc, ⟨rfl, -⟩, γH, hH⟩
       rw [eq_of_compS_empty_left hc]
       obtain ⟨hw, -⟩ := hH (↓γH) (Life.down_sqsubset γH)
       have hwp := hw ls (Ext.refl _ _) PMap.empty ρH ⟨rfl, trivial⟩ (ResU.comp_empty_right ρH)
-      exact wpTS_mono (fun ls' v σ h =>
-        ⟨PMap.empty, σ, compS_empty_left σ, ⟨rfl, trivial⟩, h⟩) ρH hwp
+      exact wpG_mono (fun ls' v σ h =>
+        ⟨PMap.empty, σ, compS_empty_left σ, ⟨rfl, trivial⟩, h⟩) hwp
   | ℓ :: I, ls => by
       rintro ρ ⟨ρo, ρH, hc, ⟨ρ0, ρr, hc0, hleaf, hrest⟩, γH, hH⟩
       obtain ⟨ℓ', v, hk⟩ := hleaf
@@ -313,7 +348,7 @@ theorem wpTS_I_frameList (T : Loc → VTy) (δ : LSub) (β : Life)
           (sepList (ownLeafH T ls₂ δ) (ℓ' :: I) ⋆ Φ ls₂ w) σ := by
         rintro ls₁ ls₂ w σ hk ⟨σo, σΦ, hσ, ho, hφ⟩
         exact ⟨σo, σΦ, hσ, ownList_ext (hk.left hσ) ho, hΦext _ _ _ _ (hk.right hσ) hφ⟩
-      refine wpTS_I_frameX ℓ' (T ℓ') δ (hadm ℓ') v e ls _ hQext ρ
+      refine wpG_I_frameX ℓ' (T ℓ') δ (hadm ℓ') v e ls _ hQext ρ
         ⟨c, G, hρ', hcell, p, F, hG, hpv, ?_⟩
       obtain ⟨aF, haF⟩ := F.exists_atLife
       have houtF : ∀ α₁, α₁ ⊏ aF ⊓ β' ⊓ β → F.InStratum α₁ := fun α₁ hα₁ =>
@@ -324,9 +359,9 @@ theorem wpTS_I_frameList (T : Loc → VTy) (δ : LSub) (β : Life)
       intro ls₁ hadd hrec ρm ρ' hm hcm
       have hkF : Ext ls ls₁ F := ext_add hadd (houtF α₁ hα₁)
       obtain ⟨R, hR, hρ''⟩ := compS_reassoc hF hcm
-      refine wpTS_mono (Q := fun ls'' v' => box α₁ (ptoOwn ℓ' v ─⋆
+      refine wpG_mono (Q' := fun ls'' v' => box α₁ (ptoOwn ℓ' v ─⋆
           (vC true (T ℓ') ls'' δ v ─⋆ (sepList (ownLeafH T ls'' δ) (ℓ' :: I) ⋆ Φ ls'' v'))))
-        ?_ ρ' (wpTS_I_frameList T δ β hP hadm e Φ β' hΦ hΦext I ls₁ ρ'
+        ?_ (wpG_I_frameList T δ β hP hadm e Φ β' hΦ hΦext I ls₁ ρ'
           ⟨ρr, R, hρ'', ownList_ext (hkF.left hF) hrest, ?_⟩)
       · -- the outer frame's postcondition from the inner ones'
         intro ls' v' σ ⟨σo, σΦ, hσ, ho, hφ⟩
@@ -352,6 +387,42 @@ theorem wpTS_I_frameList (T : Loc → VTy) (δ : LSub) (β : Life)
           immLeaf_ext (hext.right hR) (immLeaf_antitone hα₂α₁ ⟨hrec, hm⟩)
         obtain ⟨X, hX, hρ₃⟩ := compS_reassoc hR hcm₂
         exact (hH α₂ hα₂H).1 ls' hkH X ρ₃ ⟨ρm, ρm₂, hX, hlead, hm₂⟩ hρ₃
+
+/-- **One Imm Frame per place, around one expression**: `wpG_I_frameList` at postconditions over
+values.  The leaves may differ in type. -/
+theorem wpTS_I_frameList (T : Loc → VTy) (δ : LSub) (β : Life)
+    (hP : ∀ m ls w σ, vC true (T m) ls δ w σ → σ.InStratum β) (hadm : ∀ m, AdmWf (T m) δ)
+    (e : Expr)
+    (Φ : List SRec → Val → WProp) (β' : Life) (hΦ : ∀ ls v ρ, Φ ls v ρ → BoLo.Outlives ρ β')
+    (hΦext : ∀ ls₁ ls₂ w ρ, Ext ls₁ ls₂ ρ → Φ ls₁ w ρ → Φ ls₂ w ρ) (I : List Loc)
+    (ls : List SRec) :
+    Entails
+      (sepList (ownLeafH T ls δ) I ⋆
+        fresh (fun α ρ => ∀ ls', Ext ls ls' ρ →
+          (sepList (immLeafH T ls' δ α) I ─⋆ wpTS ls' e Φ) ρ))
+      (wpTS ls e (fun ls' v => sepList (ownLeafH T ls' δ) I ⋆ Φ ls' v)) := by
+  rintro ρ ⟨ρo, ρH, hc, ho, γH, hH⟩
+  refine (wpTS_iff_wpG ls e _ ρ).mpr (wpG_mono (fun ls' t σ ht => ?_)
+    (wpG_I_frameList T δ β hP hadm e (valPost Φ) β' (fun ls t ρ ⟨v, _, hv⟩ => hΦ ls v ρ hv)
+      (fun ls₁ ls₂ t ρ hk ⟨v, ht, hv⟩ => ⟨v, ht, hΦext ls₁ ls₂ v ρ hk hv⟩) I ls ρ
+      ⟨ρo, ρH, hc, ho, γH, fun α hα => ⟨fun ls' hk σ₁ σ₂ hm hcm =>
+        (wpTS_iff_wpG ls' e Φ σ₂).mp ((hH α hα).1 ls' hk σ₁ σ₂ hm hcm), (hH α hα).2⟩⟩))
+  obtain ⟨σo, σΦ, hσ, ho', v, rfl, hφ⟩ := ht
+  exact ⟨v, rfl, σo, σΦ, hσ, ho', hφ⟩
+
+/-- **`n` Imm Frames around one expression**, the run ending at any final term: the family is an owned array's range. -/
+theorem wpG_I_frameFam (T : VTy) (δ : LSub) (β : Life)
+    (hP : ∀ ls w σ, vC true T ls δ w σ → σ.InStratum β) (hadm : AdmWf T δ) (e : Expr)
+    (Φ : List SRec → Expr → WProp) (β' : Life) (hΦ : ∀ ls v ρ, Φ ls v ρ → BoLo.Outlives ρ β')
+    (hΦext : ∀ ls₁ ls₂ w ρ, Ext ls₁ ls₂ ρ → Φ ls₁ w ρ → Φ ls₂ w ρ)
+    (n : Nat) (ℓ : Loc) (ls : List SRec) :
+    Entails
+      (sepRange (ownLeaf T ls δ) ℓ n ⋆
+        fresh (fun α ρ => ∀ ls', Ext ls ls' ρ →
+          (sepRange (immLeaf T ls' δ α) ℓ n ─⋆ wpG ls' e Φ) ρ))
+      (wpG ls e (fun ls' v => sepRange (ownLeaf T ls' δ) ℓ n ⋆ Φ ls' v)) := by
+  simp only [sepRange_eq_sepList]
+  exact wpG_I_frameList (fun _ => T) δ β (fun _ => hP) (fun _ => hadm) e Φ β' hΦ hΦext _ ls
 
 /-- **`n` Imm Frames around one expression**: the family is an owned array's range. -/
 theorem wpTS_I_frameFam (T : VTy) (δ : LSub) (β : Life)
