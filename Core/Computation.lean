@@ -50,11 +50,12 @@ def sS : CTy → List SRec → LSub → List Val → (List SRec → Val → WPro
       C.NuOk ∧ sSB (some (nuEnv C (fun ls e => cC (.nu C) ls δ e))) C ls δ S Q ρ
   | _, _, _, _, _ => fun _ => False
 
-/-- One unfolding of an observation tree is its stack semantics. -/
-theorem cB_iff_stacks (η : Option (Nat → TEnt)) : ∀ (C : CTy) (ls : List SRec) (δ : LSub)
-    (e : Expr) (ρ : WRes),
+/-- One unfolding of an observation tree with no effect row is its stack semantics. -/
+theorem cB_iff_stacks (η : Option (Nat → TEnt)) : ∀ (C : CTy), C.EffFree → ∀ (ls : List SRec)
+    (δ : LSub) (e : Expr) (ρ : WRes),
     cB η C ls δ e ρ ↔ ∀ S Q, (sSB η C ls δ S Q ─⋆ wpTS ls (plugS S e) Q) ρ
-  | .ret A, ls, δ, e, ρ => by
+  | .eff _ _ _ _ _ _, hC, _, _, _, _ => hC.elim
+  | .ret A, _, ls, δ, e, ρ => by
       constructor
       · intro hw S Q ρ₁ ρ₂ hs hc
         cases S with
@@ -65,7 +66,7 @@ theorem cB_iff_stacks (η : Option (Nat → TEnt)) : ∀ (C : CTy) (ls : List SR
         | cons v S => exact hs.elim
       · intro h
         exact h [] _ PMap.empty ρ ⟨rfl, rfl⟩ (ResU.comp_empty_right ρ)
-  | .amp C D, ls, δ, e, ρ => by
+  | .amp C D, hE, ls, δ, e, ρ => by
       constructor
       · rintro ⟨h₁, h₂⟩ S Q ρ₁ ρ₂ hs hc
         cases S with
@@ -73,17 +74,17 @@ theorem cB_iff_stacks (η : Option (Nat → TEnt)) : ∀ (C : CTy) (ls : List SR
         | cons v S =>
             rcases hs with hs | hs
             · obtain ⟨rfl, hs'⟩ := pure_sep_iff.mp hs
-              exact (cB_iff_stacks η C ls δ _ ρ).mp h₁ S Q ρ₁ ρ₂ hs' hc
+              exact (cB_iff_stacks η C hE.1 ls δ _ ρ).mp h₁ S Q ρ₁ ρ₂ hs' hc
             · obtain ⟨rfl, hs'⟩ := pure_sep_iff.mp hs
-              exact (cB_iff_stacks η D ls δ _ ρ).mp h₂ S Q ρ₁ ρ₂ hs' hc
+              exact (cB_iff_stacks η D hE.2 ls δ _ ρ).mp h₂ S Q ρ₁ ρ₂ hs' hc
       · intro h
-        refine ⟨(cB_iff_stacks η C ls δ _ ρ).mpr ?_, (cB_iff_stacks η D ls δ _ ρ).mpr ?_⟩
+        refine ⟨(cB_iff_stacks η C hE.1 ls δ _ ρ).mpr ?_, (cB_iff_stacks η D hE.2 ls δ _ ρ).mpr ?_⟩
         · intro S Q ρ₁ ρ₂ hs hc
           exact h (_ :: S) Q ρ₁ ρ₂ (Or.inl (pure_sep_mk rfl hs)) hc
         · intro S Q ρ₁ ρ₂ hs hc
           exact h (_ :: S) Q ρ₁ ρ₂ (Or.inr (pure_sep_mk rfl hs)) hc
-  | .arr _ _, _, _, _, _ | .top, _, _, _, _ | .all _ _ _, _, _, _, _ | .nu _, _, _, _, _
-  | .eff _ _ _ _ _ _, _, _, _, _ =>
+  | .arr _ _, _, _, _, _, _ | .top, _, _, _, _, _ | .all _ _ _, _, _, _, _, _
+  | .nu _, _, _, _, _, _ =>
       ⟨fun _ S _ _ _ hs => by cases S <;> exact hs.elim, fun _ => trivial⟩
 
 /-- `cC` is the stack semantics, at a type with no effect row. -/
@@ -154,9 +155,9 @@ theorem cC_iff_stacks : ∀ (C : CTy), C.EffFree → ∀ (ls : List SRec) (δ : 
         intro S Q ρ₁ ρ₂ hs hc
         exact h (.unit :: S) Q ρ₁ ρ₂ ⟨α, pure_sep_mk ⟨rfl, hlt⟩ hs⟩ hc
 
-  | .nu C, _, ls, δ, e, ρ => by
+  | .nu C, hE, ls, δ, e, ρ => by
       by_cases hC : C.NuOk
-      · refine (cC_nu_unfold hC ls δ e ρ).trans ((cB_iff_stacks _ C ls δ e ρ).trans ?_)
+      · refine (cC_nu_unfold hC ls δ e ρ).trans ((cB_iff_stacks _ C hE ls δ e ρ).trans ?_)
         exact ⟨fun h S Q ρ₁ ρ₂ hs hc => h S Q ρ₁ ρ₂ hs.2 hc,
           fun h S Q ρ₁ ρ₂ hs hc => h S Q ρ₁ ρ₂ ⟨hC, hs⟩ hc⟩
       · exact ⟨fun _ _ _ _ _ hs => absurd hs.1 hC, fun _ h => absurd h hC⟩
@@ -186,8 +187,9 @@ theorem cB_step (η : Option (Nat → TEnt)) : ∀ (C : CTy) {e e' : Expr},
   | .amp C D, _, _, h, ls, δ => fun _ ⟨h₁, h₂⟩ =>
       ⟨cB_step η C (fun μ => (h μ).plug (Kont.appL .hole _)) ls δ _ h₁,
        cB_step η D (fun μ => (h μ).plug (Kont.appL .hole _)) ls δ _ h₂⟩
+  | .eff _ _ _ _ _ _, _, _, h, ls, _ => ewp_step (opTable_mono _) h ls _
   | .arr _ _, _, _, _, _, _ | .top, _, _, _, _, _ | .all _ _ _, _, _, _, _, _
-  | .nu _, _, _, _, _, _ | .eff _ _ _ _ _ _, _, _, _, _, _ => fun _ _ => trivial
+  | .nu _, _, _, _, _, _ => fun _ _ => trivial
 
 /-- `𝒞⟦C⟧` is closed under a pure step in front. -/
 theorem cC_step : ∀ (C : CTy) {e e' : Expr}, (∀ μ : Heap, Step1N μ e μ e') →
@@ -223,9 +225,10 @@ theorem cB_bind (η : Option (Nat → TEnt)) : ∀ (C : CTy) (K : Kont) (M : Exp
   | .amp C D, K, M, ls, δ, P, R, hR, h => fun ρ hρ =>
       ⟨cB_bind η C (.appL K _) M ls δ P R hR (fun ls' hls w σ hσ => (h ls' hls w σ hσ).1) ρ hρ,
        cB_bind η D (.appL K _) M ls δ P R hR (fun ls' hls w σ hσ => (h ls' hls w σ hσ).2) ρ hρ⟩
+  | .eff _ _ _ _ _ _, K, M, ls, _, P, R, hR, h =>
+      ewp_bind_pure_frame (opTable_mono _) K M ls P R _ hR h
   | .arr _ _, _, _, _, _, _, _, _, _ | .top, _, _, _, _, _, _, _, _
-  | .all _ _ _, _, _, _, _, _, _, _, _ | .nu _, _, _, _, _, _, _, _, _
-  | .eff _ _ _ _ _ _, _, _, _, _, _, _, _, _ => fun _ _ => trivial
+  | .all _ _ _, _, _, _, _, _, _, _, _ | .nu _, _, _, _, _, _, _, _, _ => fun _ _ => trivial
 
 /-- **Bind at `𝒞⟦C⟧`.**  Run `M` in the hole of `K`, framing `R` through the run; the rest of
 the computation — `K` and the stack `C` is eliminated by — continues at the list `M` returns.

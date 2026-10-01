@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 0.30 · 2026-09-30
+Version 0.31 · 2026-09-30
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -2594,6 +2594,19 @@ Six rules, over `CDerives` with its context premises (§10):
   Then the unwind continues outward. Non-abortive control operations stay inside a borrow's scope: every
   borrow callback's row is unwind-only.
 
+  **As built** (`Core/EffBorrow.lean`, `CDerives.withbor1U` … `sliceBorrowIU`):
+  - the unwinding constant is `U(src ⊸ U(∀'x ⊏ ⊓Δ. L ⊸ F_Σ(['x] B)) ⊸ F_Σ R)`, with the pure
+    form's source `src`, lend `L` and result `R`;
+  - its term is `withborU d = λr. λf. (f [] r) then b. (r, b) unwind d r`, with a closed finaliser
+    `d : src ⊸ F 1` typed by a premise. The elaborator passes the source's destructor `dtorE src`
+    (§12), which is `forget` at `Mut`/`Imm`;
+  - `withload`'s source is consumed by its load, so nothing goes back to the lender: its unwinding
+    form is `withload`'s own term at the effectful type;
+  - the callback's row is `Row.Unwind 'x`: every operation abortive and of a nonzero name, and its
+    argument type closed data, free of `'x` and outliving every lifetime;
+  - `withswap` is not a borrow: its callback takes the payload by value, and an unwind would
+    abandon it. It has no unwinding form.
+
 ### Semantics
 
 - **Final configurations.** `wpG ls e Q` is `wpTS` with the run ending at a final term `t` (a
@@ -2678,6 +2691,16 @@ Richer policies are K3 (#162), and *Open*:
   what `ν` already is.
 - **Acceptance (3)** is a `Loop` whose observation logs by an answering call, with the `Log`
   state in the loop's state.
+- **As built** (`Core/Types.lean`, `Core/Relation.lean`, `Core/NuRel.lean`, `Core/Nu.lean`):
+  - an observation tree's leaf is `F A` or `F_Σ A` (`CTy.EffLeaf`): a row's layers with closed
+    operation types over `F A`, `A` polynomial in `X`;
+  - `cB` at `F_Σ A` is `ewpTS` at the row's table, with the answer at the candidate (`effRetE`);
+  - `instT` passes through a row's layers, so `unfold` coiterates an effectful step, mapped
+    through the `[let]` frame (`node_ok`);
+  - `Loop_Σ A B` is `CTy.loopEff`, positive at a row of closed operation types
+    (`loopEffBody_nuOk`);
+  - the stack semantics (`cB_iff_stacks`, `cC_iff_stacks`) is stated at effect-free types, `ν`
+    included.
 
 ### Theorems (the obligations of #186)
 
@@ -2837,12 +2860,23 @@ Entry 18 (§19) is in progress (#186). Stages 1–3 are implemented:
 - cancels: `Core/EffCancel.lean`;
 - typed handled programs: `Core/EffExamples.lean`.
 
-The unwinding forms of the borrows (stage 4) and the programs (stage 5) remain.
+Stage 4 is implemented:
+- the unwinding forms of the borrows: `Core/EffBorrow.lean`, with `[TR]` 6.150 and the family
+  frames at `wpG` (`Core/Reborrow.lean`, `Core/SliceFrames.lean`);
+- `F_Σ A` as an observation leaf: `Core/Types.lean`, `Core/Relation.lean`, `Core/NuRel.lean`,
+  `Core/Nu.lean`, `Core/Computation.lean`.
+
+The programs (stage 5) remain.
 
 ---
 
 ## Changelog
 
+- **0.31** (2026-09-30) — §19, stage 4 (#186): the unwinding forms of `withbor` 1–3, `withload`
+  and the slice borrows, at a callback row of abortive operations with closed argument types
+  (`Row.Unwind`); the finaliser is a closed term at `src ⊸ F 1`, the source's destructor at the
+  elaborator; `withswap` has none. `F_Σ A` is an observation leaf of `ν` codata, and
+  `Loop_Σ A B` is positive.
 - **0.30** (2026-09-30) — §19, *Cancels* (#186): a cancel is not interceptable. The region's
   handlers are dying and catch nothing. A finaliser's error during a cancel is re-raised at the
   canceller (the first, of a name outside the region; the rest are suppressed). Machine:

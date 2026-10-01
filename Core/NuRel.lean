@@ -39,6 +39,19 @@ theorem nuP_mono {R R' : CPred} (h : R.Le R') :
   | true, _, _, _, hv => fun ls' hk => h _ _ _ (hv ls' hk)
   | false, _, _, _, _ => trivial
 
+/-- The answer relation of an effectful observation is monotone in the candidate. -/
+theorem effRetE_mono (C : CTy) {R R' : CPred} (h : R.Le R') :
+    ∀ {D : CTy}, D.EffLeaf → ∀ (δ : LSub) (ls : List SRec) (v : Val),
+      Entails (effRetE (some (nuEnv C R)) D δ ls v) (effRetE (some (nuEnv C R')) D δ ls v)
+  | .ret A, hA, δ, ls, v =>
+      vCE_mono_at A 0 _ _ (VTy.noMut_of_poly hA) (fun n => by cases n <;> rfl)
+        (fun n hn => by
+          cases n with
+          | zero => exact absurd rfl hn
+          | succ n => rfl)
+        (nuP_mono h) true ls δ v
+  | .eff _ _ _ _ _ D, hD, δ, ls, v => effRetE_mono C h (D := D) hD.2.2 δ ls v
+
 /-- One unfolding of an observation tree is monotone in the candidate. -/
 theorem cB_mono (C : CTy) {R R' : CPred} (h : R.Le R') :
     ∀ {D : CTy}, D.NuLeaf → ∀ (ls : List SRec) (δ : LSub) (e : Expr),
@@ -52,6 +65,9 @@ theorem cB_mono (C : CTy) {R R' : CPred} (h : R.Le R') :
         (nuP_mono h) true ls' δ w)
   | .amp D₁ D₂, hD, ls, δ, e => fun ρ ⟨h₁, h₂⟩ =>
       ⟨cB_mono C h hD.1 ls δ _ ρ h₁, cB_mono C h hD.2 ls δ _ ρ h₂⟩
+  | .eff n i q A B D, hD, ls, δ, e => fun ρ h' =>
+      ewp_mono (opTable_mono _) (fun _ _ _ _ h => h)
+        (fun ls' v σ hv => effRetE_mono C h (D := D) hD.2.2 δ ls' v σ hv) h'
 
 theorem nuF_mono {C : CTy} (hC : C.NuOk) (δ : LSub) {R R' : CPred} (h : R.Le R') :
     (nuF C δ R).Le (nuF C δ R') := by
@@ -94,6 +110,21 @@ theorem vCE_nuEnv (C : CTy) (δ : LSub) (b : Bool) (A : VTy) (ls : List SRec) :
       cases b <;> rfl
   | succ n => rfl
 
+theorem effTab_instT (S : VTy) (δ : LSub) : ∀ D : CTy, effTab (D.instT S) δ = effTab D δ
+  | .eff n i q A B D => by simp only [CTy.instT, effTab, effTab_instT S δ D]
+  | .ret _ | .amp _ _ | .arr _ _ | .top | .all _ _ _ | .nu _ => by simp [CTy.instT, effTab]
+
+/-- The answer of an effectful observation at `cC (νX. C)` is `𝒱⟦·⟧` at the unrolling. -/
+theorem effRetE_unroll (C : CTy) (δ : LSub) : ∀ {D : CTy}, D.EffLeaf →
+    effRetE (some (nuEnv C (fun ls e => cC (.nu C) ls δ e))) D δ
+      = effRet (D.instT (.thunk (.nu C))) δ
+  | .ret A, _ => by
+      funext ls v
+      simp only [effRetE, effRet, CTy.instT, vCE_nuEnv]
+  | .eff _ _ _ _ _ D, hD => by
+      simp only [effRetE, effRet, CTy.instT]
+      exact effRetE_unroll C δ (D := D) hD.2.2
+
 /-- **One unfolding at `cC (νX. C)` is `cC` at the unrolling.** -/
 theorem cB_unroll (C : CTy) (δ : LSub) : ∀ {D : CTy}, D.NuLeaf → ∀ (ls : List SRec),
     cB (some (nuEnv C (fun ls e => cC (.nu C) ls δ e))) D ls δ
@@ -108,6 +139,10 @@ theorem cB_unroll (C : CTy) (δ : LSub) : ∀ {D : CTy}, D.NuLeaf → ∀ (ls : 
       show (cB _ D₁ ls δ _ ρ ∧ cB _ D₂ ls δ _ ρ)
         = (cC (D₁.instT _) ls δ _ ρ ∧ cC (D₂.instT _) ls δ _ ρ)
       rw [cB_unroll C δ hD.1, cB_unroll C δ hD.2]
+  | .eff n i q A B D, hD, ls => by
+      funext e
+      show ewpTS ls e _ _ = ewpTS ls e _ _
+      rw [effRetE_unroll C δ (D := D) hD.2.2, ← effTab_instT (.thunk (.nu C)) δ D]
 
 /-- **`νX. C` is its unrolling**: `𝒞⟦νX. C⟧ = 𝒞⟦C[U(νX. C)/X]⟧`.  `[spec §7]` -/
 theorem cC_nu_iff {C : CTy} (hC : C.NuOk) (ls : List SRec) (δ : LSub) (e : Expr) (ρ : WRes) :

@@ -177,16 +177,32 @@ def effRet : CTy → LSub → List SRec → Val → WProp
   | .ret A, δ => fun ls v => vCE none true A ls δ v
   | .eff _ _ _ _ _ C, δ => effRet C δ
   | _, _ => fun _ _ _ => False
-/-- One unfolding of an observation tree under a type-variable environment: `cC`'s `F` and `&`
-clauses with `vCE η` at `F`.  Other formers are not observation trees (`CTy.NuLeaf`) and hold
-trivially.  `[spec §7]` -/
+/-- The answer relation of a row `F_Σ R` under a type-variable environment: `𝒱⟦R⟧` at `η`.
+`[spec §19]` -/
+def effRetE : Option (Nat → TEnt) → CTy → LSub → List SRec → Val → WProp
+  | η, .ret A, δ => fun ls v => vCE η true A ls δ v
+  | η, .eff _ _ _ _ _ C, δ => effRetE η C δ
+  | _, _, _ => fun _ _ _ => False
+/-- One unfolding of an observation tree under a type-variable environment: `cC`'s `F`, `&` and
+`F_Σ` clauses with `vCE η` at the answer; a row's operation types are closed and read without
+`η`.  Other formers are not observation trees (`CTy.NuLeaf`) and hold trivially.
+`[spec §7, §19]` -/
 def cB : Option (Nat → TEnt) → CTy → List SRec → LSub → Expr → WProp
   | η, .ret A, ls, δ, e => wpTS ls e (fun ls'' => vCE η true A ls'' δ)
   | η, .amp C D, ls, δ, e => fun ρ =>
       cB η C ls δ (.app e (.val (.inj₁ .unit))) ρ ∧ cB η D ls δ (.app e (.val (.inj₂ .unit))) ρ
-  | _, .arr _ _, _, _, _ | _, .top, _, _, _ | _, .all _ _ _, _, _, _ | _, .nu _, _, _, _
-  | _, .eff _ _ _ _ _ _, _, _, _ => fun _ => True
+  | η, .eff n i q A B C, ls, δ, e =>
+      ewpTS ls e (opTable (OpTab.ext n i
+        ⟨q, B.isZero && q != .lin, fun ls v => vCE none true A ls δ v,
+          fun ls v => vCE none true B ls δ v⟩ (effTab C δ))) (effRetE η C δ)
+  | _, .arr _ _, _, _, _ | _, .top, _, _, _ | _, .all _ _ _, _, _, _ | _, .nu _, _, _, _ =>
+      fun _ => True
 end
+
+theorem effRetE_none : ∀ (C : CTy) (δ : LSub), effRetE none C δ = effRet C δ
+  | .ret _, _ => rfl
+  | .eff _ _ _ _ _ C, δ => effRetE_none C δ
+  | .arr _ _, _ | .amp _ _, _ | .top, _ | .all _ _ _, _ | .nu _, _ => rfl
 
 /-- `𝒱⟦A⟧(ls)δ(v)`: the relation at a type read with no environment. -/
 notation "vC" => vCE none

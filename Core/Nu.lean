@@ -1,5 +1,6 @@
 import Core.FoldImm
 import Core.NuRel
+import Core.EffRules
 
 /-!
 # Core — coiteration on `νX. C`  `[spec §7]`
@@ -68,12 +69,21 @@ theorem mapV_closed : ∀ A : VTy, closedAt 0 (mapV A).1 = true
 /-- `λ_. c () o`: the step's computation at the child `o` of the node `c` runs. -/
 def childV (c o : Val) : Val := .lam (.app (.app (.val (c.shift 1 0)) (.val .unit)) (.val o))
 
+/-- The answer type of an effectful observation `F_Σ A`: `A`.  `[spec §19]` -/
+def effAns : CTy → VTy
+  | .ret A => A
+  | .eff _ _ _ _ _ C => effAns C
+  | _ => .unit
+
 /-- `node_C wr c`: the answer of the observation tree `C` to its observations, with `c ()` the
-step's computation at the node.  At `F A`: run `c ()` and map its result with `wr`.  At `C & D`:
+step's computation at the node.  At `F A` and `F_Σ A`: run `c ()` and map its result with `wr`.
+At `C & D`:
 `λo. case o {inj₁ _. node_C wr (childV c (inj₁ ())) | inj₂ _. node_D wr (childV c (inj₂ ()))}`. -/
 def nodeV : CTy → Val
   | .ret A => .lam (.val (.lam
       (bindE (.app (.var 0) (.val .unit)) (.app (.app (.val (mapV A)) (.var 2)) (.var 0)))))
+  | .eff _ _ _ _ _ C => .lam (.val (.lam
+      (bindE (.app (.var 0) (.val .unit)) (.app (.app (.val (mapV (effAns C))) (.var 2)) (.var 0)))))
   | .amp C D => .lam (.val (.lam (.val (.lam (.case (.var 0)
       (.app (.app (.val (nodeV C)) (.var 3))
         (.val (.lam (.app (.app (.var 3) (.val .unit)) (.val (.inj₁ .unit))))))
@@ -86,7 +96,9 @@ theorem nodeV_closed : ∀ C : CTy, closedAt 0 (nodeV C).1 = true
   | .amp C D => by
       simp [nodeV, closedAt, closedAt_mono _ (nodeV_closed C) (Nat.zero_le _),
         closedAt_mono _ (nodeV_closed D) (Nat.zero_le _)]
-  | .arr _ _ | .top | .all _ _ _ | .nu _ | .eff _ _ _ _ _ _ => rfl
+  | .eff _ _ _ _ _ C => by
+      simp [nodeV, bindE, closedAt, closedAt_mono _ (mapV_closed (effAns C)) (Nat.zero_le _)]
+  | .arr _ _ | .top | .all _ _ _ | .nu _ => rfl
 
 /-- The body of `unfold_C = Z (λself. λg. λs. node_C (λs′. λo. self g s′ o) (λ_. g s))`. -/
 def fBN (C : CTy) : Expr :=
@@ -229,6 +241,16 @@ theorem nodeV_ret_steps (A : VTy) (wr c : Val) :
   simp [bindE, closed_subst (mapV_closed A), subst_shift_succ]
   exact .refl
 
+/-- `node_{F_Σ A} wr c ↦ c () to w. map_A wr w`. -/
+theorem nodeV_eff_steps (n i : UInt32) (q : Qual) (A B : VTy) (C : CTy) (wr c : Val) :
+    PureSteps (.app (.app (.val (nodeV (.eff n i q A B C))) (.val wr)) (.val c))
+      (bindE (.app (.val c) (.val .unit)) (.app (.app (.val (mapV (effAns C)))
+        (.val (wr.shift 1 0))) (.var 0))) := by
+  refine (PureSteps.beta_in (.appL .hole _) _ wr).trans ?_
+  refine (PureSteps.beta _ _).trans ?_
+  simp [bindE, closed_subst (mapV_closed (effAns C)), subst_shift_succ]
+  exact .refl
+
 /-- `node_{C & D} wr c (inj₁ ()) ↦ node_C wr (childV c (inj₁ ()))`. -/
 theorem nodeV_amp₁_steps (C D : CTy) (wr c : Val) :
     PureSteps (.app (.app (.app (.val (nodeV (.amp C D))) (.val wr)) (.val c)) (.val (.inj₁ .unit)))
@@ -331,6 +353,27 @@ theorem map_ok (C : CTy) (g : Val) (S : VTy) (δ : LSub) :
   | .fam _, hP, _, w, _, hw =>
       ⟨w, mapV_id_steps rfl _ w, by rw [← vCE_envS_nuEnv hP]; exact hw⟩
 
+/-- Pure steps in front of an `ewpTS`. -/
+theorem ewp_pureSteps {Tb : Table} (hTb : Tb.Mono) {e e' : Expr} (h : PureSteps e e')
+    (ls : List SRec) (Q : List SRec → Val → WProp) : Entails (ewpTS ls e' Tb Q) (ewpTS ls e Tb Q) := by
+  induction h with
+  | refl => exact fun _ h => h
+  | tail _ hs ih => exact fun ρ h => ih ρ (ewp_step hTb hs ls Q ρ h)
+
+theorem EffLeaf.ans_poly : ∀ {C : CTy}, C.EffLeaf → (effAns C).Poly
+  | .ret _, h => h
+  | .eff _ _ _ _ _ C, h => EffLeaf.ans_poly (C := C) h.2.2
+
+theorem effRetE_ans (η : Option (Nat → TEnt)) (δ : LSub) : ∀ {C : CTy}, C.EffLeaf →
+    effRetE η C δ = fun ls v => vCE η true (effAns C) ls δ v
+  | .ret _, _ => rfl
+  | .eff _ _ _ _ _ C, h => effRetE_ans η δ (C := C) h.2.2
+
+theorem effRet_instT_ans (S : VTy) (δ : LSub) : ∀ {C : CTy}, C.EffLeaf →
+    effRet (C.instT S) δ = fun ls v => vC true (VTy.inst S (effAns C)) ls δ v
+  | .ret _, _ => rfl
+  | .eff _ _ _ _ _ C, h => effRet_instT_ans S δ (C := C) h.2.2
+
 /-- **The node lemma**: when `c ()` runs a computation of `D[S/X]`, `node_D (unfold step) c` is
 one unfolding of `D` at the candidate. -/
 theorem node_ok (C : CTy) (g : Val) (S : VTy) (δ : LSub) :
@@ -359,6 +402,34 @@ theorem node_ok (C : CTy) (g : Val) (S : VTy) (δ : LSub) :
        cB_pureSteps _ D₂ (nodeV_amp₂_steps D₁ D₂ _ c) ls δ ρ
         (node_ok C g S δ D₂ hD.2 _ (.app M (.val (.inj₂ .unit))) ls ρ
           ((childV_steps c _ rfl).trans (PureSteps.plug (.appL .hole _) hc)) hM.2)⟩
+  | .eff n i q A B D, hD, c, M, ls, ρ, hc, hM => by
+      have hR := EffLeaf.ans_poly (C := D) hD.2.2
+      show ewpTS ls _ _ (effRetE _ D δ) ρ
+      have hM' : ewpTS ls M (opTable (OpTab.ext n i
+          ⟨q, B.isZero && q != .lin, fun ls v => vC true A ls δ v, fun ls v => vC true B ls δ v⟩
+            (effTab D δ))) (fun ls v => vC true (VTy.inst S (effAns D)) ls δ v) ρ := by
+        have h' := hM
+        simp only [CTy.instT, cC, effTab_instT, effRet_instT_ans S δ hD.2.2] at h'
+        exact h'
+      rw [effRetE_ans _ δ hD.2.2]
+      refine ewp_pureSteps (opTable_mono _) (nodeV_eff_steps n i q A B D _ c) ls _ ρ ?_
+      refine ewp_pureSteps (opTable_mono _) (PureSteps.plug (.appR (.val (.lam _)) .hole) hc)
+        ls _ ρ ?_
+      refine ewp_frame_plain _ (.appR (.val (.lam _)) .hole) (fun n => by simp [Kont.HasHnd])
+        (fun n => by simp [Kont.Catches]) (by simp [Kont.hndNames]) (fun _ => emp)
+        (fun _ _ _ _ h => h) (fun _ _ _ _ h => h) (fun _ _ _ _ _ _ _ h => by rw [h.1]; exact noOwn_empty)
+        (fun _ _ _ _ _ _ _ h => h.1) _ _ ?_ hM' ⟨rfl, trivial⟩ (ResU.comp_empty_right ρ)
+      rintro ls' w σ ⟨σ₁, σ₂, hcσ, hw, hemp, -⟩
+      rw [hemp] at hcσ
+      obtain rfl := eq_of_compS_empty_left (ResU.CompS.comm hcσ)
+      refine ewp_pureSteps (opTable_mono _) (PureSteps.beta _ w) ls' _ _ ?_
+      have e : Expr.subst 0 w (.app (.app (.val (mapV (effAns D))) (.val ((hN C g).shift 1 0)))
+          (.var 0)) = .app (.app (.val (mapV (effAns D))) (.val (hN C g))) (.val w) := by
+        simp [closed_subst (mapV_closed (effAns D)), subst_shift_succ]
+      rw [e]
+      rw [vC_inst_envS] at hw
+      obtain ⟨w', hs, h'⟩ := map_ok C g S δ (effAns D) hR ls' w _ hw
+      exact ewp_pureSteps (opTable_mono _) hs ls' _ _ (ewp_val (opTable_mono _) h')
 
 /-- The candidate is a post-fixed point of `νX. C`'s functor: each observation path runs the
 same path of the step and returns its result with every state `s′` replaced by

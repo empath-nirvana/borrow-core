@@ -138,8 +138,8 @@ def VTy.isZero : VTy → Bool
 /-- `C` has no effect row anywhere a stack reaches: the stack semantics (`cC_iff_stacks`) is
 `wpTS` at its end.  `[spec §19]` -/
 def CTy.EffFree : CTy → Prop
-  | .ret _ | .top | .nu _ => True
-  | .arr _ C | .all _ _ C => C.EffFree
+  | .ret _ | .top => True
+  | .arr _ C | .all _ _ C | .nu C => C.EffFree
   | .amp C D => C.EffFree ∧ D.EffFree
   | .eff _ _ _ _ _ _ => False
 
@@ -1124,16 +1124,26 @@ theorem VTy.noMut_of_poly : ∀ {A : VTy}, A.Poly → A.NoMut 0
 
 namespace CTy
 
-/-- `C[S/X]` at the observations of a `&`-tree: `F A[S/X]` at each `F A`. -/
+/-- `C[S/X]` at the observations of a `&`-tree: `F A[S/X]` at each `F A`, and `F_Σ A[S/X]` at
+each `F_Σ A`, whose operation types are closed.  `[spec §7, §19]` -/
 def instT (S : VTy) : CTy → CTy
   | .ret A => .ret (VTy.inst S A)
   | .amp C D => .amp (instT S C) (instT S D)
+  | .eff n i q A B C => .eff n i q A B (instT S C)
   | C => C
 
-/-- A `&`-tree of observations `F A`, each `A` polynomial in `X`. -/
+/-- An effectful observation `F_Σ A`: a row's layers over `F A`, the operation types closed and
+`A` polynomial in `X`.  `[spec §19]` -/
+def EffLeaf : CTy → Prop
+  | .ret A => A.Poly
+  | .eff _ _ _ A B C => A.Cl 0 ∧ B.Cl 0 ∧ EffLeaf C
+  | _ => False
+
+/-- A `&`-tree of observations `F A` and `F_Σ A`, each `A` polynomial in `X`.  `[spec §7, §19]` -/
 def NuLeaf : CTy → Prop
   | .ret A => A.Poly
   | .amp C D => NuLeaf C ∧ NuLeaf D
+  | .eff n i q A B C => EffLeaf (.eff n i q A B C)
   | _ => False
 
 /-- **Positivity** of `νX. C`: `C` is a `&` of two observation trees. -/
@@ -1150,6 +1160,14 @@ abbrev loopBody (A B : VTy) : CTy :=
 
 /-- The body of `D A = Loop A 1`. -/
 abbrev delayBody (A : VTy) : CTy := loopBody A .unit
+
+/-- The body of `Loop_Σ A B = νX. F_Σ(A ⊕ U X) & F_Σ B`: a loop whose observations perform the
+operations of `Σ`.  `[spec §19]` -/
+abbrev loopEffBody (S : List OpSig) (A B : VTy) : CTy :=
+  .amp (CTy.effOf S (.sum (A.rename Nat.succ) (.tvar 0))) (CTy.effOf S (B.rename Nat.succ))
+
+/-- `Loop_Σ A B`.  `[spec §19]` -/
+abbrev loopEff (S : List OpSig) (A B : VTy) : CTy := .nu (loopEffBody S A B)
 
 /-- The body of `Stream A = νX. F(A ⊗ U X) & F 1`. -/
 abbrev streamBody (A : VTy) : CTy :=
@@ -1224,6 +1242,33 @@ theorem loopBody_nuOk (A B : VTy) : (loopBody A B).NuOk :=
    VTy.poly_of_not_occ (VTy.not_occ_rename_succ B)⟩
 
 theorem delayBody_nuOk (A : VTy) : (delayBody A).NuOk := loopBody_nuOk A .unit
+
+theorem instT_effOf (S' : VTy) : ∀ (S : List OpSig) (R : VTy),
+    instT S' (CTy.effOf S R) = CTy.effOf S (VTy.inst S' R)
+  | [], _ => rfl
+  | o :: S, R => by simp only [CTy.effOf, instT, instT_effOf S' S R]
+
+theorem effLeaf_effOf {S : List OpSig} (hS : ∀ o ∈ S, o.A.Cl 0 ∧ o.B.Cl 0) {R : VTy}
+    (hR : R.Poly) : EffLeaf (CTy.effOf S R) := by
+  induction S with
+  | nil => exact hR
+  | cons o S ih =>
+      exact ⟨(hS o (by simp)).1, (hS o (by simp)).2, ih fun o' h => hS o' (by simp [h])⟩
+
+theorem nuLeaf_effOf {S : List OpSig} (hS : ∀ o ∈ S, o.A.Cl 0 ∧ o.B.Cl 0) {R : VTy}
+    (hR : R.Poly) : NuLeaf (CTy.effOf S R) := by
+  cases S with
+  | nil => exact hR
+  | cons o S => exact effLeaf_effOf hS hR
+
+theorem loopEffBody_nuOk {S : List OpSig} (hS : ∀ o ∈ S, o.A.Cl 0 ∧ o.B.Cl 0) (A B : VTy) :
+    (loopEffBody S A B).NuOk :=
+  ⟨nuLeaf_effOf hS ⟨VTy.poly_of_not_occ (VTy.not_occ_rename_succ A), trivial⟩,
+   nuLeaf_effOf hS (VTy.poly_of_not_occ (VTy.not_occ_rename_succ B))⟩
+
+theorem loopEffBody_instT (S : List OpSig) (A B S' : VTy) :
+    (loopEffBody S A B).instT S' = .amp (CTy.effOf S (.sum A S')) (CTy.effOf S B) := by
+  simp only [instT, instT_effOf, inst_sum_var, VTy.inst_rename_succ]
 
 theorem streamBody_nuOk (A : VTy) : (streamBody A).NuOk :=
   ⟨⟨VTy.poly_of_not_occ (VTy.not_occ_rename_succ A), trivial⟩, fun h => h⟩
