@@ -41,9 +41,11 @@ count-fold 0 0 0
 count-try 0 0 0
 deep-list 100000 0 0
 div-hof 0 0 0
+effects-borrow-raise 2 0 0 # the cell of each run; freed by the unwinding borrow on the abort
 effects-fold 7 0 0 # equal to effects-fold-sum: an abort is the loop's exit and a branch, as the sums by hand
 effects-fold-sum 7 0 0
 effects-generic 1 0 0
+effects-log-fail 3 0 0 # the log cell of each run
 effects-map 11 0 0 # equal to effects-map-hand: the handled program is the capability-passing one
 effects-map-fail 3 0 0
 effects-map-hand 11 0 0

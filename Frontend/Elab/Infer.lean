@@ -94,6 +94,8 @@ mutual
 def inferV : Nat → Env → LifeCtx → List CVTy → Option CVTy → Val → IM TNode
   | 0, _, _, _, exp, v => pure (.mk (.val v) (tyV exp) [] [])
   | n + 1, E, Δ, T, exp, v => do
+    -- A value performs no operation: its computations are at no row, as the checker has them.
+    let E := { E with row := none }
     let node (A : Option CVTy) (ks : List TNode) : TNode := .mk (.val v) (tyV (exp <|> A)) [] ks
     match v with
     | .var _ x => pure (node (varTy E Δ T x) [])
@@ -263,7 +265,11 @@ def inferC : Nat → Env → LifeCtx → List CVTy → Option CCTy → Comp → 
         | _ => (none, none)
       let bx ← mkBinder x.name A
       let m₁ ← inferC n (E.push (some x.name)) Δ (slot A :: T) exp M
-      let C := exp <|> m₁.ty.c?
+      -- At a row (SPEC §19), the second arm is at the row too: the first may be pure, or an abort.
+      let lift (C : CCTy) : CCTy := match effRow? C, E.row with
+        | some (_, A), some S@(_ :: _) => effOf S A
+        | _, _ => C
+      let C := exp <|> m₁.ty.c?.map lift
       let byy ← mkBinder y.name B
       let m₂ ← inferC n (E.push (some y.name)) Δ (slot B :: T) C N
       pure (node (C <|> m₂.ty.c?) [a, m₁, m₂] [bx, byy])

@@ -1,0 +1,31 @@
+-- Two effects at once (SPEC §19, acceptance 1 at the surface): `step` logs (an answering effect, a
+-- call on the handler's state) and may raise (`Fail`, abortive). Run under both nesting orders:
+--
+-- * `Log` outside `Fail`: the abort is caught inside the `with`, and the log is kept beside the
+--   error;
+-- * `Fail` outside `Log`: the abort unwinds the `with tally(0)`, a borrow of the log's cell (its
+--   unwinding form): the lend ends and the cell's finaliser frees it, so the log is lost.
+--
+-- Answer: `((i32[2], inr i32[7]), (inr i32[7], inl i32[3]))`: two notes before the error when
+-- `Log` is outside; with `Fail` outside, the error, and for 3 the value.
+include fail
+
+effect Log { fn note(x: i32) }
+
+handler tally(mut n: i32): Log = { note(x) = { n = n + 1; () } }
+
+fn step(x: i32) -> i32 with Log, Fail[i32] =
+  note(x);
+  note(x);
+  if x == 7 { raise(x) } else { x }
+
+fn log_outside(x: i32) -> i32 * (i32 + i32) =
+  let mut c = alloc(0);
+  let r = with tally(&mut c) { with to_result { step(x) } };
+  let n = free(c);
+  (n, r)
+
+fn fail_outside(x: i32) -> i32 + i32 = with to_result { with tally(0) { step(x) } }
+
+main -> (i32 * (i32 + i32)) * ((i32 + i32) * (i32 + i32)) =
+  (log_outside(7), (fail_outside(7), fail_outside(3)))

@@ -2720,6 +2720,9 @@ structure DivSt where
   libNames : List String := []
   /-- The declaration being elaborated is one of `libNames`. -/
   quiet : Bool := false
+  /-- The row of the callback of the borrow block being elaborated, when its body performs
+  operations: the block is the unwinding form of its borrow (SPEC §19). -/
+  cbRow : Option Frontend.Check.CRow := none
 
 /-- Elaboration with the state of the declarations. -/
 abbrev DM := StateT DivSt SM
@@ -2901,8 +2904,8 @@ def unitTail (S : Comp) : Comp :=
 
 /-- The result type of a computation, as its tail gives it. -/
 def resultOfC : Option CCTy → Option CVTy
-  | some (.ret A) => some A
-  | _ => none
+  | some C => (Frontend.Check.effRow? C).map (·.2)
+  | none => none
 
 /-! #### Lending a place: `&mut x` and `&x`  (typed elaboration §5.1)
 
@@ -3490,6 +3493,63 @@ def opsV (c : TCx) : Nat → Val → List (Nat × Nat)
       | _ => []
 end
 
+/-- A callback's context at the row of the borrow block being elaborated, when it has one. -/
+def cbRowed (r : Option Frontend.Check.CRow) (c : TCx) : TCx :=
+  match r with
+  | some S => { c with E := { c.E with row := some S } }
+  | none => c
+
+/-- A core row as surface syntax. -/
+def surfRow (c : TCx) (sp : Span) : Frontend.Check.CRow → Except Error Frontend.Row
+  | [] => pure .nil
+  | o :: os => do
+    let q : Qual := match o.q with | .lin => .lin | .aff => .aff | .unr => .unr
+    pure (.cons o.n.toNat o.i.toNat q (← c.surface sp o.A) (← c.surface sp o.B) (← surfRow c sp os))
+
+/-- A borrow block's constant in its unwinding form, at the row `r` (SPEC §19). -/
+def Const.unwinding (r : Frontend.Row) : Const → Option Const
+  | .withbor1 x A B => some (.withbor1U x A B r)
+  | .withbor2 x b A B => some (.withbor2U x b A B r)
+  | .withbor3 a x A B => some (.withbor3U a x A B r)
+  | .sliceBorrowMut x b A B => some (.sliceBorrowMutU x b A B r)
+  | .sliceBorrowImm x b A B => some (.sliceBorrowImmU x b A B r)
+  | _ => none
+
+/-- A borrow block whose constant is an unwinding form, as the computation it is:
+`k <- return CONST; p <- return P; f <- return CB; ((force k) p) f`. -/
+def unwindingC? (sp : Span) : Val → Option Comp
+  | .app _ (.app _ (.const ksp C) P) cb => match C with
+    | .withbor1U .. | .withbor2U .. | .withbor3U .. | .sliceBorrowMutU .. | .sliceBorrowImmU .. =>
+      let sfx := s!"{sp.start.line}_{sp.start.col}"
+      let k : Ident := ⟨s!"io_uk{sfx}", sp⟩
+      let p : Ident := ⟨s!"io_up{sfx}", sp⟩
+      let f : Ident := ⟨s!"io_uf{sfx}", sp⟩
+      -- The callback is ascribed its type: a computation synthesized in a value performs
+      -- nothing, and the callback's body performs the row's operations.
+      let cbTy : Option VTy := match C with
+        | .withbor1U x A B r => some (ty x (.imm sp (.var sp x.name) A) B r)
+        | .withbor2U x _ A B r | .withbor3U _ x A B r => some (ty x (.mut sp (.var sp x.name) A) B r)
+        | .sliceBorrowMutU x _ A B r => some (ty x (.arrayMut sp (.var sp x.name) A) B r)
+        | .sliceBorrowImmU x _ A B r => some (ty x (.arrayImm sp (.var sp x.name) A) B r)
+        | _ => none
+      -- Its `∀` is over the computation `L ⊸ F[S] (['x] B)` itself, not over a returned thunk.
+      let cb := match cb with
+        | .thunkv tsp (.lamL lsp xi b (.ret _ (.thunkv _ L))) => Val.thunkv tsp (.lamL lsp xi b L)
+        | cb => cb
+      some (.bind sp k none (.ret sp (.const ksp C)) (.bind sp p none (.ret sp P)
+        (.bind sp f cbTy (.ret sp cb) (.app sp (.app sp (.force sp k) p) f) false) false) false)
+    | _ => none
+  | _ => none
+where
+  ty (x : Ident) (L B : VTy) (r : Frontend.Row) : VTy :=
+    .thunk sp (.all sp x (.dom sp) (.arr sp L (.eff sp r (.box sp (.var sp x.name) B))))
+
+/-- A borrow block, as written. -/
+def borrowBlock? : Val → Option Comp
+  | .app _ (.app _ (.sugar _ (.borrow k _)) _) (.thunkv _ (.lam _ _ _ M)) =>
+    if k == .modify then none else some M
+  | _ => none
+
 /-- The components of a `()`-terminated tuple. -/
 def clauseList : Val → List Val
   | .pair _ V W => V :: clauseList W
@@ -3499,7 +3559,10 @@ mutual
 /-- A value with its surface forms elaborated; `exp` is the type expected of it, when known. -/
 def surfV : Nat → TCx → Option CVTy → Val → DM Val
   | 0, _, _, V => pure V
-  | n + 1, c, exp, V => match V with
+  | n + 1, c, exp, V =>
+    -- A value performs no operation: its computations are at no row, as the checker has them.
+    let c := { c with E := { c.E with row := none } }
+    match V with
     | .sugar sp (.lit k) => pure (litAt sp ((widthOf exp).getD .w32) k)
     | .sugar sp (.str bs) => pure (litValue sp bs)
     | .defApp sp "filler" [A] => do
@@ -3631,6 +3694,9 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
           (.letPair sp ⟨"io_mm", sp⟩ ⟨"io_mr", sp⟩ (.var sp "io_mw")
             (.ret sp (.boxed sp (.var sp l) (.var sp "io_mr")))) false
     | .app sp (.app sp₂ (.sugar ksp (.borrow k x)) P) (.thunkv tsp (.lam lsp b _ S)) => do
+      -- The callback's row, when this block is an unwinding borrow; blocks inside are not.
+      let cbr := (← get).cbRow
+      modify fun st => { st with cbRow := none }
       let P' ← surfV n c none P
       let tP ← need P.span "the borrowed place" (c.tyV P')
       match k, tP with
@@ -3639,7 +3705,7 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
         let c₁ := c.pushLife x dom
         let some v := c₁.E.lenv.lookup x | throw ⟨lsp, "internal error: a borrow block"⟩
         let Tb : CVTy := if k == .imm then .imm (.var v) A else .mut (.var v) A
-        let S' ← surfC n (c₁.push b.name (some Tb)) none S
+        let S' ← surfC n (cbRowed cbr (c₁.push b.name (some Tb))) none S
         -- A body that yields is a generator made in the block (`Parser.borrowBlock`), elaborated
         -- here, where the borrow is in scope: the typing of the block then rejects it, since its
         -- result is boxed at `'x` and a thunk has no outlives rule.  `[spec §15]`
@@ -3649,7 +3715,7 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
               "the generator of a borrow block that yields" : SM (Val × CVTy))
             pure (Comp.ret rsp g)
           | S' => pure S'
-        let B ← need tsp "the block's result" (resultOfC (((← refresh c₁).push b.name (some Tb)).tyC S'))
+        let B ← need tsp "the block's result" (resultOfC (cbRowed cbr ((← refresh c₁).push b.name (some Tb)) |>.tyC S'))
         if BoCa.Fig16.LogRel.Core.Check.vfreeB v B then
           throw (Frontend.Elab.LoopLend.escapeError tsp x (Frontend.Check.ppV c₁.E.lenv 0 0 B))
         let As ← c.surface ksp A
@@ -3658,6 +3724,9 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
         -- The side conditions' bound is `dom`: the result may hold a borrow of an enclosing
         -- block (a handler's capability, SPEC §18).
         let C := if k == .imm then Const.withbor1 xi As Bs else .withbor2 xi (.dom ksp) As Bs
+        let C ← match cbr with
+          | some r => do pure ((Const.unwinding (← (surfRow c ksp r : Except Error Frontend.Row)) C).getD C)
+          | none => pure C
         let Tbs := if k == .imm then VTy.imm lsp (.var lsp x) As else .mut lsp (.var lsp x) As
         pure (.app sp (.app sp₂ (.const ksp C) P') (.thunkv tsp (.lamL lsp xi (.dom lsp)
           (.ret lsp (.thunkv lsp (.lam lsp b Tbs (boxTail x S')))))))
@@ -3667,14 +3736,17 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
         let c₁ := c.pushLife x dom
         let some v := c₁.E.lenv.lookup x | throw ⟨lsp, "internal error: a borrow block"⟩
         let Tb : CVTy := .mut (.var v) A
-        let S' ← surfC n (c₁.push b.name (some Tb)) none S
-        let B ← need tsp "the block's result" (resultOfC (((← refresh c₁).push b.name (some Tb)).tyC S'))
+        let S' ← surfC n (cbRowed cbr (c₁.push b.name (some Tb))) none S
+        let B ← need tsp "the block's result" (resultOfC (cbRowed cbr ((← refresh c₁).push b.name (some Tb)) |>.tyC S'))
         if BoCa.Fig16.LogRel.Core.Check.vfreeB v B then
           throw (Frontend.Elab.LoopLend.escapeError tsp x (Frontend.Check.ppV c₁.E.lenv 0 0 B))
         let As ← c.surface ksp A
         let Bs ← c.surface ksp B
         let xi : Ident := ⟨x, ksp⟩
         let C := Const.withbor3 (← c.surfaceL ksp a) xi As Bs
+        let C ← match cbr with
+          | some r => do pure ((Const.unwinding (← (surfRow c ksp r : Except Error Frontend.Row)) C).getD C)
+          | none => pure C
         let Tbs := VTy.mut lsp (.var lsp x) As
         pure (.app sp (.app sp₂ (.const ksp C) P') (.thunkv tsp (.lamL lsp xi (.dom lsp)
           (.ret lsp (.thunkv lsp (.lam lsp b Tbs (boxTail x S')))))))
@@ -3685,8 +3757,8 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
         let c₁ := c.pushLife x dom
         let some v := c₁.E.lenv.lookup x | throw ⟨lsp, "internal error: a borrow block"⟩
         let Tb : CVTy := .fam (if k == .imm then .imm (.var v) A else .mut (.var v) A)
-        let S' ← surfC n (c₁.push b.name (some Tb)) none S
-        let B ← need tsp "the block's result" (resultOfC (((← refresh c₁).push b.name (some Tb)).tyC S'))
+        let S' ← surfC n (cbRowed cbr (c₁.push b.name (some Tb))) none S
+        let B ← need tsp "the block's result" (resultOfC (cbRowed cbr ((← refresh c₁).push b.name (some Tb)) |>.tyC S'))
         if BoCa.Fig16.LogRel.Core.Check.vfreeB v B then
           throw (Frontend.Elab.LoopLend.escapeError tsp x (Frontend.Check.ppV c₁.E.lenv 0 0 B))
         let As ← c.surface ksp A
@@ -3694,6 +3766,9 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
         let xi : Ident := ⟨x, ksp⟩
         let C := if k == .imm then Const.sliceBorrowImm xi (.dom ksp) As Bs
           else .sliceBorrowMut xi (.dom ksp) As Bs
+        let C ← match cbr with
+          | some r => do pure ((Const.unwinding (← (surfRow c ksp r : Except Error Frontend.Row)) C).getD C)
+          | none => pure C
         let Tbs := if k == .imm then VTy.arrayImm lsp (.var lsp x) As else .arrayMut lsp (.var lsp x) As
         pure (.app sp (.app sp₂ (.const ksp C) P') (.thunkv tsp (.lamL lsp xi (.dom lsp)
           (.ret lsp (.thunkv lsp (.lam lsp b Tbs (boxTail x S')))))))
@@ -3706,8 +3781,8 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
         let c₁ := c.pushLife x dom
         let some v := c₁.E.lenv.lookup x | throw ⟨lsp, "internal error: a borrow block"⟩
         let Tb : CVTy := .fam (if imm then .imm (.var v) A else .mut (.var v) A)
-        let S' ← surfC n (c₁.push b.name (some Tb)) none S
-        let B ← need tsp "the block's result" (resultOfC (((← refresh c₁).push b.name (some Tb)).tyC S'))
+        let S' ← surfC n (cbRowed cbr (c₁.push b.name (some Tb))) none S
+        let B ← need tsp "the block's result" (resultOfC (cbRowed cbr ((← refresh c₁).push b.name (some Tb)) |>.tyC S'))
         if BoCa.Fig16.LogRel.Core.Check.vfreeB v B then
           throw (Frontend.Elab.LoopLend.escapeError tsp x (Frontend.Check.ppV c₁.E.lenv 0 0 B))
         let As ← c.surface ksp A
@@ -3745,8 +3820,8 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
         let some v := c₁.E.lenv.lookup x | throw ⟨lsp, "internal error: a borrow block"⟩
         let U8 : CVTy := .int .w8
         let Tb : CVTy := .fam (.imm (.var v) U8)
-        let S' ← surfC n (c₁.push b.name (some Tb)) none S
-        let B ← need tsp "the block's result" (resultOfC (((← refresh c₁).push b.name (some Tb)).tyC S'))
+        let S' ← surfC n (cbRowed cbr (c₁.push b.name (some Tb))) none S
+        let B ← need tsp "the block's result" (resultOfC (cbRowed cbr ((← refresh c₁).push b.name (some Tb)) |>.tyC S'))
         if BoCa.Fig16.LogRel.Core.Check.vfreeB v B then
           throw (Frontend.Elab.LoopLend.escapeError tsp x (Frontend.Check.ppV c₁.E.lenv 0 0 B))
         let U8s : VTy := .int ksp .w8
@@ -3774,8 +3849,8 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
         let c₁ := c.pushLife x dom
         let some v := c₁.E.lenv.lookup x | throw ⟨lsp, "internal error: a borrow block"⟩
         let Tb : CVTy := .tensor (.mut (.var v) A) (.mut (.var v) B)
-        let S' ← surfC n (c₁.push b.name (some Tb)) none S
-        let T ← need tsp "the block's result" (resultOfC (((← refresh c₁).push b.name (some Tb)).tyC S'))
+        let S' ← surfC n (cbRowed cbr (c₁.push b.name (some Tb))) none S
+        let T ← need tsp "the block's result" (resultOfC (cbRowed cbr ((← refresh c₁).push b.name (some Tb)) |>.tyC S'))
         if BoCa.Fig16.LogRel.Core.Check.vfreeB v T then
           throw (Frontend.Elab.LoopLend.escapeError tsp x (Frontend.Check.ppV c₁.E.lenv 0 0 T))
         let As ← c.surface ksp A
@@ -3886,6 +3961,25 @@ def surfC : Nat → TCx → Option CCTy → Comp → DM Comp
     match M with
     | .ret sp V => do
       if let some (i, P, R, cls, B) := hndCtl? V then return ← hndCtlC n c sp i P R cls B
+      if let some B := borrowBlock? V then
+        if let some S := c.E.row then
+          -- A borrow block whose body performs operations: the unwinding form of its borrow, at
+          -- the operations of the names the body performs (SPEC §19).
+          let used := (opsC c divFuel B).map (·.1)
+          let r := S.filter fun o => used.contains o.n.toNat
+          if !r.isEmpty then
+            if let some o := r.find? (fun o => !o.abort) then
+              throw ⟨V.span, s!"this borrow block's body performs the operation {o.n}.{o.i}, which " ++
+                "resumes: only an abortive operation crosses a borrow's scope (a continuation " ++
+                "held across a lend is T1, #172)"⟩
+            let saved := (← get).cbRow
+            modify fun st => { st with cbRow := some r }
+            let V' ← surfV n c none V
+            modify fun st => { st with cbRow := saved }
+            match unwindingC? sp V' with
+            | some M' => return M'
+            | none => throw ⟨V.span, "this borrow block's body performs an abortive operation, and " ++
+                "its place (a buffer or a literal) has no unwinding form here: not provided"⟩
       let V' ← surfV n c (match exp.bind rowRes? with | some (_, A) => some A | _ => none) V
       match effCall? (← refresh c) V' with
       | some (f, W) => pure (effCallC sp f W)

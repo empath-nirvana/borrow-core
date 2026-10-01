@@ -1,0 +1,17 @@
+-- An abort inside a borrow (SPEC §19, acceptance 3 at the surface): `bump` raises inside
+-- `borrow mut c { … }`, and the handler of `Fail` is outside the borrow. The borrow is the unwinding
+-- form of `withbor2`: when the abort unwinds its callback, the lend ends, the cell goes back, and
+-- its finaliser frees it, so `live 0` holds on the abort path too.
+--
+-- Answer: `(inl i32[15], inr i32[4294967294])`: 10 + 5, and the error −2.
+include fail
+
+fn bump(c: ref i32, k: i32) -> ref i32 with Fail[i32] =
+  borrow mut c { m -> if k < 0 { raise(k) } else { () }; modify m { x -> x + k } };
+  c
+
+fn go(k: i32) -> i32 + i32 =
+  let c = alloc(10);
+  with to_result { let c = bump(c, k); free(c) }
+
+main -> (i32 + i32) * (i32 + i32) = (go(5), go(0 - 2))

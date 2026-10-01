@@ -777,6 +777,10 @@ def blockResult : Nat → Cx → Span → Val → List Cap → EM (List Bind × 
     let pl ← fresh "fx_pl"
     let q ← fresh "fx_q"
     let r ← fresh "fx_v"
+    if csM.isEmpty then
+      let bind : Bind := fun N =>
+        pure (.bind sp ⟨t, sp⟩ none (.ret sp blk) (.letPair sp ⟨pl, sp⟩ ⟨q, sp⟩ (.var sp t) N) false)
+      return ([bind], .pair sp (.var sp pl) (.var sp q))
     let bind : Bind := fun N => do
       let rest ← unpack sp csM r q N
       pure (.bind sp ⟨t, sp⟩ none (.ret sp blk) (.letPair sp ⟨pl, sp⟩ ⟨q, sp⟩ (.var sp t) rest) false)
