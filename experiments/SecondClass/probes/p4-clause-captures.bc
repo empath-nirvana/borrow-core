@@ -1,0 +1,71 @@
+-- Probe P4: handler clauses that use an owned value (a cell, `ref i32`) and an answering
+-- capability (`mut 'h i32`, the state of a counter handler), with every clause `!` code.
+-- (a) A resuming operation `ask : 1 ~> i32`: a parameterized handler. The environment
+--     `S = ref i32 * mut 'h i32` is not captured; it is the handler's parameter, passed to each
+--     clause through the state-passing answer `U (S -o F (i32 * S))` and handed to `k`'s result.
+--     The clause reads the cell (free, re-alloc with one more) and ticks the counter.
+-- (b) An abortive operation `raise : 1 ~> 0`: the clause runs at most once and never resumes, so
+--     its captures stay outside the handler: `to_result`, then a `case` whose error arm is the
+--     clause and whose value arm drops what the clause would have used.
+-- Answer: (a) asks twice and answers 5*10 + 6 = 56; the cell then holds 7, and one more tick
+-- makes the counter 3: 56 + 7 + 3 = 66. Then (b) raises: the error arm frees a second cell
+-- holding 100 and ticks the counter to 4: 66 + 100 + 4 = 170.
+
+def count__tick : !(all 'l < top. mut 'l i32 * 1 => mut 'l i32 * i32) =
+  !thunkv Fun 'l < top.
+      return (thunkv fun (p : mut 'l i32 * 1) ->
+          let (c, u) = p;
+          let () = u;
+          w <- return withswap['l, i32, i32] c (thunkv fun (n : i32) ->
+                n <- return (unbang host[add32]) (n, i32[1]);
+                r : i32 <- return n;
+                return (n, r));
+          let (c, r) = w;
+          return (c, r))
+
+main : F i32 =
+  q <- return withbor2['h, dom, i32, i32] (alloc[i32] i32[0]) (thunkv Fun 'h < dom.
+        return (thunkv fun (c : mut 'h i32) ->
+            hr : !U (i32 -o F (U (ref i32 * mut 'h i32 -o F (i32 * (ref i32 * mut 'h i32))))) <- return (!thunkv fun (a : i32) ->
+                  return (thunkv fun (s : ref i32 * mut 'h i32) -> return (a, s)));
+            hc : !U ((1 * U ((i32 -o F (U (ref i32 * mut 'h i32 -o F (i32 * (ref i32 * mut 'h i32))))) & F 1)) -o F (U (ref i32 * mut 'h i32 -o F (i32 * (ref i32 * mut 'h i32))))) * 1 <- return (!thunkv fun (qk : 1 * U ((i32 -o F (U (ref i32 * mut 'h i32 -o F (i32 * (ref i32 * mut 'h i32))))) & F 1)) ->
+                  let (u, k) = qk;
+                  let () = u;
+                  return (thunkv fun (s : ref i32 * mut 'h i32) ->
+                      let (cell, c) = s;
+                      v <- return free[i32] cell;
+                      cell <- return alloc[i32] ((unbang host[add32]) (v, i32[1]) : i32);
+                      t : mut 'h i32 * i32 <- return (unbang count__tick) ['h] (c, ());
+                      let (c, n) = t;
+                      g <- force k.1 v;
+                      s2 <- return (cell, c);
+                      force g s2), ());
+            g : U (ref i32 * mut 'h i32 -o F (i32 * (ref i32 * mut 'h i32))) <- handle_with[1](hr, hc) (
+                a <- perform[1.0] ();
+                b <- perform[1.0] ();
+                return ((unbang host[add32]) ((unbang host[mul32]) (a, i32[10]), b) : i32));
+            cell <- return alloc[i32] i32[5];
+            s0 <- return (cell, c);
+            res <- force g s0;
+            let (r, s) = res;
+            let (cell, c) = s;
+            v <- return free[i32] cell;
+            t : mut 'h i32 * i32 <- return (unbang count__tick) ['h] (c, ());
+            let (c, n) = t;
+            ra <- return ((unbang host[add32]) ((unbang host[add32]) (r, v), n) : i32);
+            er : !U (i32 -o F (i32 + 1)) <- return (!thunkv fun (a : i32) -> return inl a);
+            ec : !U (1 -o F (i32 + 1)) * 1 <- return (!thunkv fun (e : 1) -> return inr e, ());
+            cell2 <- return alloc[i32] i32[100];
+            o : i32 + 1 <- handle_with[2](er, ec) (
+                z <- (abort[2.0] () : F[2.0 aff 1 ~> 0] i32);
+                return z);
+            rb <- case o {
+                inl x -> (w <- return free[i32] cell2; return x)
+              | inr e -> (w <- return free[i32] cell2;
+                    t : mut 'h i32 * i32 <- return (unbang count__tick) ['h] (c, ());
+                    let (c, n) = t;
+                    return ((unbang host[add32]) ((unbang host[add32]) (ra, w), n) : i32))
+              };
+            return boxed['h] rb));
+  let (s, v) = q;
+  return v

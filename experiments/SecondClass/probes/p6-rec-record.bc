@@ -1,0 +1,42 @@
+-- Probe P6: a recursive group whose members answer different types, as one `bounded_fix` at a
+-- record of functions, `C = (i32 -o F (1 + 1)) & (i32 -o F i32)`, `A = 1` (Bekič: the group is a
+-- recursive object, its step the generator). `ev n` is whether `n` is even; `od n` is 1 when `n`
+-- is odd and 0 otherwise. A member's call of the other forces the self-reference and projects.
+-- Answer: od 7 + 10 * (ev 7 = false ? 0 : 1) = 1.
+def step : !U ((1 + !U (1 -o ((i32 -o F (1 + 1)) & (i32 -o F i32)))) * 1 -o ((i32 -o F (1 + 1)) & (i32 -o F i32))) =
+  !thunkv fun (p : (1 + !U (1 -o ((i32 -o F (1 + 1)) & (i32 -o F i32)))) * 1) ->
+    let (self, u) = p;
+    let () = u;
+    < fun (n : i32) -> case (unbang host[lt_s32]) (n, i32[1]) {
+          inl no -> case self {
+              inl e -> return inl ()
+            | inr g -> (f <- return unbang g; x <- return ();
+                m <- return ((unbang host[sub32]) (n, i32[1]) : i32);
+                o <- (force f x).2 m;
+                case (unbang host[eq32]) (o, i32[0]) { inl ne -> return inr () | inr eq -> return inl () })
+            }
+        | inr yes -> return inr ()
+        },
+      fun (n : i32) -> case (unbang host[lt_s32]) (n, i32[1]) {
+          inl no -> case self {
+              inl e -> return i32[0]
+            | inr g -> (f <- return unbang g; x <- return ();
+                m <- return ((unbang host[sub32]) (n, i32[1]) : i32);
+                b <- (force f x).1 m;
+                case b { inl no -> return i32[0] | inr yes -> return i32[1] })
+            }
+        | inr yes -> return i32[0]
+        } >
+
+main : F i32 =
+  n <- return i32[7];
+  bf <- return unbang bounded_fix[1, (i32 -o F (1 + 1)) & (i32 -o F i32)];
+  a <- return (step, (i32[100], ()));
+  o <- (force bf a).2 n;
+  bf <- return unbang bounded_fix[1, (i32 -o F (1 + 1)) & (i32 -o F i32)];
+  a <- return (step, (i32[100], ()));
+  e <- (force bf a).1 n;
+  case e {
+    inl no -> return o
+  | inr yes -> return (unbang host[add32]) (o, i32[10])
+  }

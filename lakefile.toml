@@ -144,3 +144,8 @@ roots = ["HandlersAsBorrows"]
 name = "HandlersControl"
 srcDir = "experiments/HandlersControl"
 roots = ["HandlersControl"]
+
+[[lean_lib]]
+name = "SecondClass"
+srcDir = "experiments/SecondClass"
+roots = ["SecondClass"]

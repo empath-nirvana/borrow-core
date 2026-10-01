@@ -1,0 +1,117 @@
+-- Probe P3: a recursion whose body contains a div loop. `bounded_fix` at `C = F (U (loop i32 1))`:
+-- the step is a div function of `i32` (SPEC §14), so each level runs `spin n`, a loop of `n`
+-- observations, and then, by the delay bind, the next level's loop. The recursion's depth is
+-- bounded by the budget; the loop it builds may run without bound, and `div_fuel` drives it.
+-- The divergence library's `div_bind` is copied in from `lib/div.bc`.
+-- Answer: i32[0]. The whole loop takes 15 observations: at a fuel of 14, `div_fuel` closes it
+-- and the answer is 77.
+
+def div_bind_step[A, B, R1, R] :
+    !U ((U (loop A R1) * U ((A -o F (U (loop B R))) & (R1 -o F R))) + U (loop B R)
+        -o F (B + ((U (loop A R1) * U ((A -o F (U (loop B R))) & (R1 -o F R))) + U (loop B R)))
+         & F R) =
+  !thunkv fun (s : (U (loop A R1) * U ((A -o F (U (loop B R))) & (R1 -o F R))) + U (loop B R)) ->
+    < case s {
+        inl p ->
+          let (m, k) = p;
+          o <- (nu_out (force m)).1;
+          case o {
+            inl a ->
+              l <- (force k).1 a;
+              return (inr (inr l))
+          | inr m2 -> return (inr (inl (m2, k)))
+          }
+      | inr l ->
+          o <- (nu_out (force l)).1;
+          case o {
+            inl b -> return (inl b)
+          | inr l2 -> return (inr (inr l2))
+          }
+      },
+      case s {
+        inl p ->
+          let (m, k) = p;
+          r1 <- (nu_out (force m)).2;
+          (force k).2 r1
+      | inr l -> (nu_out (force l)).2
+      } >
+
+-- The delay bind: run the first loop, then the continuation on its result. If either never
+-- finishes, neither does the whole.
+def div_bind[A, B, R1, R] :
+    U (loop A R1) * U ((A -o F (U (loop B R))) & (R1 -o F R)) => U (loop B R) =
+  thunkv fun (p : U (loop A R1) * U ((A -o F (U (loop B R))) & (R1 -o F R))) ->
+    f <- return (unbang (unfold[loop B R,
+           (U (loop A R1) * U ((A -o F (U (loop B R))) & (R1 -o F R))) + U (loop B R)]
+           div_bind_step[A, B, R1, R]));
+    s0 : (U (loop A R1) * U ((A -o F (U (loop B R))) & (R1 -o F R))) + U (loop B R) <-
+      return (inl p);
+    return (thunkv nu_in < (nu_out (force f s0)).1, (nu_out (force f s0)).2 >)
+
+def div_fuel_step[A, Q] : !(i32 * (U (loop A Q) + (A + Q)) => U (loop A Q) + (A + Q)) =
+  !thunkv fun (p : i32 * (U (loop A Q) + (A + Q))) ->
+    let (i, s) = p;
+    case s {
+      inl l ->
+        o <- (nu_out (force l)).1;
+        case o {
+          inl a -> return (inr (inl a))
+        | inr l2 -> return (inl l2)
+        }
+    | inr r -> return (inr r)
+    }
+
+-- The fuel handler: observe a loop at most `n` times, and close it if it has not finished.
+-- It is `driveE n` (SPEC §7) with the count a value, counted by `count_fold` (SPEC §16): div
+-- code under it is total, and the count allocates nothing.
+def div_fuel[A, Q] : U (loop A Q) * i32 => A + Q =
+  thunkv fun (p : U (loop A Q) * i32) ->
+    let (l, n) = p;
+    s <- return ((unbang count_fold[U (loop A Q) + (A + Q)])
+           (div_fuel_step[A, Q], (n, (i32[0], inl l))));
+    case s {
+      inl l2 ->
+        q <- (nu_out (force l2)).2;
+        return (inr q)
+    | inr r -> return r
+    }
+
+def spin_step : !U (i32 -o F (i32 + i32) & F 1) =
+  !thunkv fun (s : i32) ->
+    < case (unbang host[lt_s32]) (s, i32[1]) {
+        inl no -> return inr ((unbang host[sub32]) (s, i32[1]) : i32)
+      | inr yes -> return inl i32[1]
+      },
+      return () >
+
+def spin : !(i32 => U (loop i32 1)) =
+  !thunkv fun (n : i32) ->
+    f <- return (unbang (unfold[loop i32 1, i32] spin_step));
+    return (thunkv nu_in < (nu_out (force f n)).1, (nu_out (force f n)).2 >)
+
+def step : !U ((1 + !U (i32 -o F (U (loop i32 1)))) * i32 -o F (U (loop i32 1))) =
+  !thunkv fun (p : (1 + !U (i32 -o F (U (loop i32 1)))) * i32) ->
+    let (self, n) = p;
+    case (unbang host[lt_s32]) (n, i32[1]) {
+      inl no ->
+        l1 : U (loop i32 1) <- return (unbang spin) n;
+        k : U ((i32 -o F (U (loop i32 1))) & (1 -o F 1)) <- return (thunkv <
+              fun (a : i32) -> case self {
+                  inl e -> return (thunkv nu_in < return inl a, return () >)
+                | inr g -> (f <- return unbang g; x <- return ((unbang host[sub32]) (n, i32[1]) : i32); force f x)
+                },
+              fun (r : 1) -> return r >);
+        lb : U (loop i32 1) <- return div_bind[i32, i32, 1, 1] (l1, k);
+        return lb
+    | inr yes -> return (thunkv nu_in < return inl i32[0], return () >)
+    }
+
+main : F i32 =
+  bf <- return unbang bounded_fix[i32, F (U (loop i32 1))];
+  a <- return (step, (i32[100], i32[4]));
+  l <- force bf a;
+  r <- return div_fuel[i32, 1] (l, i32[1000]);
+  case r {
+    inl v -> return v
+  | inr u -> return i32[77]
+  }
