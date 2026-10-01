@@ -71,6 +71,11 @@ theorem head_det {μ μ₁ μ₂ : Heap} {a a₁ a₂ : Expr} (h₁ : Head μ a 
        simp only [Val.i32, Expr.prim.injEq, Prim.lit.injEq, IntLit.i32.injEq] at hn' hi'
        subst hn' hi'
        rfl)
+    | (obtain ⟨hk, rfl⟩ := hx₂
+       have hk' := congrArg Subtype.val hk
+       simp only [Val.i32, Expr.prim.injEq, Prim.lit.injEq, IntLit.i32.injEq] at hk'
+       subst hk'
+       rfl)
     | simp_all
 
 theorem _root_.BoCa.BoLo.AHead.det_aux {A : Alloc} {k k₁ k₂ : Nat} {μ μ₁ μ₂ : Heap} {a a₁ a₂ x : Expr}

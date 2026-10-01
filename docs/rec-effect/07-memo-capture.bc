@@ -1,0 +1,14 @@
+-- expect: rejected
+-- The memo layer written the way Cook-style mixins are: a function from a step to a step that
+-- closes over its cache. The layered function must be persistent (`!`), since `rec` calls it
+-- more than once, and a `!` closure captures only `!` values (F5), so it cannot hold the owned
+-- array. A linear closure could hold it, but could be called only once. The cache is threaded
+-- through the state instead (`04-fib-memo-host.bc`, `rec.bc`'s `memo`).
+include slice
+
+fn empty(i: i32) -> i32 = 0 - 1
+
+fn memo(c: array i32, rec: !(i32 => i32)) -> !(i32 => i32) =
+  !{ n -> let v = borrow imm c { 'x, w -> at(w, n, 0 - 1) }; if v < 0 { rec(n) } else { v } }
+
+main -> i32 = let f = memo(array_new[i32] (10, empty), !{ n -> n }); f(3)

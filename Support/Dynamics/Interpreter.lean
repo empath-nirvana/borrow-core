@@ -106,6 +106,8 @@ def delta (H : Host) (μ : Mem) : Expr → Val → Step
       .next μ (countNext ⟨f, h.pair_left⟩ n i ⟨s, h.pair_right.pair_right.pair_right⟩)
   | .prim .countTry, ⟨.pair f (.pair (.prim (.lit (.i32 n))) (.pair (.prim (.lit (.i32 i))) s)), h⟩ =>
       .next μ (countTryNext ⟨f, h.pair_left⟩ n i ⟨s, h.pair_right.pair_right.pair_right⟩)
+  | .prim .boundedFix, ⟨.pair s (.pair (.prim (.lit (.i32 k))) a), h⟩ =>
+      .next μ (boundedFixNext ⟨s, h.pair_left⟩ k ⟨a, h.pair_right.pair_right⟩)
   | _, _ => .stuck .badPrimArg
 
 /-! ### Handlers, operations and finalisers  `[spec §19]`
@@ -141,7 +143,8 @@ theorem isVal_of_isValB : ∀ e : Expr, isValB e = true → IsVal e
   | .app (.prim .alloc) _, h | .app (.prim .free) _, h | .app (.prim .load) _, h
   | .app (.prim (.host _)) _, h | .app (.prim (.lit _)) _, h | .app (.prim .tab) _, h
   | .app (.prim .idx) _, h | .app (.prim .split) _, h | .app (.prim .drop) _, h
-  | .app (.prim .count) _, h | .app (.prim .countTry) _, h | .app (.prim .perform) _, h
+  | .app (.prim .count) _, h | .app (.prim .countTry) _, h | .app (.prim .boundedFix) _, h
+  | .app (.prim .perform) _, h
   | .app (.prim .raise) _, h | .app (.prim .hnd) _, h | .app (.prim .ubind) _, h
   | .app (.prim .ccatch) _, h | .app (.prim .cfin) _, h => by simp [isValB] at h
 

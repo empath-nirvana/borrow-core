@@ -24,15 +24,54 @@ def cons : i32 * List => List =
   thunkv fun (p : i32 * List) -> return (roll (inr (alloc_s[Node] p)))
 ```
 
-## No direct recursion
+## Recursion
 
-A `def` may not refer to itself or to a later `def`:
+A function may call itself, and functions may call one another. The calls are the group's
+`rec` operation, and a **driver** runs it (SPEC §20). The default, `bounded`, needs nothing
+written: it runs the recursion as native calls, carrying a budget of depth, and when the budget
+is spent it performs `exhausted()`, an error like any other (`include rec`). So a recursive
+function's row has `Exhausted`, and something handles it:
+
+```bc
+include rec
+
+type Tree = mu X. 1 + (X * (i32 * X))
+
+def empty : Tree = roll inl ()
+fn mk(l: Tree, v: i32, r: Tree) -> Tree = roll inr (l, (v, r))
+
+fn build(d: i32) -> Tree = if d == 0 { empty } else { mk(build(d - 1), d, build(d - 1)) }
+
+fn sum(t: Tree) -> i32 =
+  match unroll t {
+    inl u -> 0
+  | inr (l, p) -> let (v, r) = p; sum(l) + v + sum(r)
+  }
+
+fn down(n: i32) -> i32 = if n == 0 { 0 } else { 1 + down(n - 1) }
+
+main -> i32 * i32 =
+  let s = with on_exhausted(!{ u -> 0 - 1 }) { sum(build(4)) };
+  let d = with on_exhausted(!{ u -> 0 - 1 }) { down(20000) };
+  (s, d)
+-- answer: (i32[26], i32[4294967295])
+```
+
+`down(20000)` is deeper than the budget, so it performs `exhausted()`, which unwinds every level
+(running what each level must finalise) and reaches `on_exhausted`. A recursion that must go
+deeper runs under the heap driver, `with deep { down(20000) }`, which keeps its pending calls in
+a buffer instead of on the stack, and is div.
+
+A `def` written in the core text is not a recursion: its body is code over a fixed point the
+kernel provides (`unfold`, the folds, `bounded_fix`), and a name it uses is declared before it:
 
 ```bc,reject
-def spin : i32 => i32 = thunkv fun (x : i32) -> return (spin x)
+def twice : i32 => i32 = thunkv fun (x : i32) -> return (inc (inc x))
 
-main : F i32 = return (spin i32[0])
--- expect: 1:57: unknown variable `spin`
+def inc : i32 => i32 = thunkv fun (x : i32) -> return x
+
+main : F i32 = return (twice i32[0])
+-- expect: 1:58: unknown variable `inc`
 ```
 
 Recursion over data is a **fold**, and a loop that may not terminate is a `delay` (see

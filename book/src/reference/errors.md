@@ -149,14 +149,16 @@ main : F i32 =
 -- expect: 3:16: `thunkv N` needs `N` not of type `F A`, but `N : F i32`; use `thunk`
 ```
 
-**Names.** A variable or `def` is not in scope. A `def` cannot refer to itself or to a later
-`def`.
+**Names.** A variable or `def` is not in scope. A `def` cannot refer to a later `def`
+(a function that calls itself is a recursion, SPEC §20).
 
 ```bc,reject
-def spin : i32 => i32 = thunkv fun (x : i32) -> return (spin x)
+def twice : i32 => i32 = thunkv fun (x : i32) -> return (inc (inc x))
 
-main : F i32 = return (spin i32[0])
--- expect: 1:57: unknown variable `spin`
+def inc : i32 => i32 = thunkv fun (x : i32) -> return x
+
+main : F i32 = return (twice i32[0])
+-- expect: 1:58: unknown variable `inc`
 ```
 
 **Type restrictions.** A `mu` type must be closed, with its variable not under `mut` and not

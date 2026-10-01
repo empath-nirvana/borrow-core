@@ -1,0 +1,66 @@
+-- Recursion (SPEC §20). A function that calls itself, or functions that call one another, is a
+-- recursive group: its calls of itself are its `rec` operation, which a driver handles. The
+-- default driver is `bounded`: the kernel's `bounded_fix`, a native recursion that carries a
+-- budget of depth, each call with one less. A recursion that spends the budget performs
+-- `exhausted()`, an abortive operation: it unwinds as any error does, running the finalisers of
+-- what it abandons, and a handler of `Exhausted` receives it.
+--
+-- A recursive function's row has `Exhausted` where a loop's has `div`: running it is total, and
+-- what it does at the end of its budget is the handler's choice:
+--
+-- * `on_exhausted(d)`: the body's value, or `d(())` when a recursion in it ran out;
+-- * `exhausted_to_option`: `inl` the body's value, or `inr ()`.
+--
+-- A platform with no handler of `Exhausted` around `main` rejects a recursion it does not
+-- handle, as it rejects any unhandled operation.
+
+effect Exhausted { ctl exhausted() -> never }
+
+handler on_exhausted[A](d: !(1 => A)): Exhausted, A -> A = {
+  return(a) = a;
+  exhausted() = d(())
+}
+
+handler exhausted_to_option[A]: Exhausted, A -> A + 1 = {
+  return(a) = inl a;
+  exhausted() = inr ()
+}
+
+-- The heap driver (SPEC §20). A recursion under `deep` keeps its pending calls in one growable
+-- buffer of first-order frames instead of on the native stack: it never runs out of depth, and
+-- is div. The elaborator gives a recursive group as a machine: `start` runs a member on its
+-- argument until it answers (`inl b`) or calls the group (`inr (a, f)`), `f` the frame to resume
+-- with the answer (`inl k`) or none when the call is in tail position (`inr ()`); `resume`
+-- continues a frame with the answer. `deep` drives it: a call pushes its frame and starts the
+-- callee, an answer pops a frame and resumes it, one observation each.
+include buf
+
+fn deep_settle[A, B, K](st: buf (1 + K), o: B + A * (K + 1)) -> B + buf (1 + K) * (A + B) =
+  match o {
+    inl b -> inr (st, inr b)
+  | inr (a, f) -> match f {
+      inl k -> let (st, u) = push(st, inr k); inr (st, inl a)
+    | inr u -> inr (st, inl a)
+    }
+  }
+
+fn deep[A, B, K](start: !(A => B + A * (K + 1)), resume: !(K * B => B + A * (K + 1)), a: A)
+    -> U (loop B 1) =
+  f <- return (unbang (unfold[loop B 1, buf (1 + K) * (A + B)] (!thunkv fun (s : buf (1 + K) * (A + B)) ->
+    < let (st, act) = s;
+      case act {
+        inl a -> return deep_settle(st, start(a))
+      | inr b ->
+          let (st, tp) = pop(st);
+          case tp {
+            inl kk -> case kk {
+                inl u -> return (inl b)
+              | inr k -> return deep_settle(st, resume((k, b)))
+              }
+          | inr u -> return (inl b)
+          }
+      },
+      let (st, act) = s;
+      return () >)));
+  s0 : buf (1 + K) * (A + B) <- return (buf_new[1 + K](8), inl a);
+  return (thunkv nu_in < (nu_out (force f s0)).1, (nu_out (force f s0)).2 >)

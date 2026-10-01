@@ -125,6 +125,7 @@ def Const.respan (sp : Span) : Const → Const
   | .sliceSwapMut a A => .sliceSwapMut (a.respan sp) (A.respan sp)
   | .countFold S => .countFold (S.respan sp)
   | .countTry S E => .countTry (S.respan sp) (E.respan sp)
+  | .boundedFix A C => .boundedFix (A.respan sp) (C.respan sp)
   | .withbor1U x A B r => .withbor1U (x.respan sp) (A.respan sp) (B.respan sp) (r.respan sp)
   | .withbor2U x b A B r =>
       .withbor2U (x.respan sp) (b.respan sp) (A.respan sp) (B.respan sp) (r.respan sp)

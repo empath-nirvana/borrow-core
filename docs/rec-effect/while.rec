@@ -1,0 +1,26 @@
+-- A `while` loop that may not end, and its fuelled total form. Provisional spellings (README
+-- §2). Hand-lowered: 18-while.bc, 19-while-in-fn.bc.
+
+fn collatz(n: i32) -> i32 =
+  let mut n = n;
+  let mut k = 0;
+  while n != 1 { n = if n % 2 == 0 { n / 2 } else { 3 * n + 1 }; k = k + 1 };
+  k
+
+total fn collatz_within(n: i32, f: i32) -> i32 + RanOut = (collatz |> fuel(f))(n)
+
+-- ELABORATION
+--   `while c { M }` is `rec` in tail position over the loop's state (the variables `M`
+--   assigns): the loop's step runs `M` and performs `rec(state')`, or answers when `c` fails.
+--   Driven by `fix`: a jump, no frame; div. `fuel(f)` adjacent to the driver makes it total.
+--   Today `while` exists only in a generator (19: "`while` is a generator's loop: it may
+--   appear only in the body of a `gen fn`"); lowered (18) as a drain of a generator that never
+--   ends, with `break`, and the fuelled form as `div_fuel` over the call.
+--
+-- DRIVER, TOTALITY, STACK
+--   fix: div, constant stack. fuel: total, "ran out" visible (18: within 200 → 111; within 50
+--   → ran out). 0 allocations, 0 dispatched calls.
+--
+-- CHECKER REPORTS (intended)
+--   collatz: loop (tail `rec` only); div
+--   collatz_within: total (fuel)

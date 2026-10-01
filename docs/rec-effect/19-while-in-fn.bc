@@ -1,0 +1,18 @@
+-- expect: rejected
+-- `18-while.bc` as the surface writes it: a `while` in a `fn`. Today `while` is a generator's
+-- loop only. Under the design it is `rec` in tail position driven by `fix`, and allowed in any
+-- body (div, inferred).
+
+fn rem2(n: i32) -> i32 = match host[rem_u32] (n, 2) { inl r -> r | inr u -> 0 }
+fn half(n: i32) -> i32 = match host[div_u32] (n, 2) { inl r -> r | inr u -> 0 }
+
+fn collatz(n: i32) -> i32 =
+  let mut n = n;
+  let mut k = 0;
+  while n != 1 {
+    if rem2(n) == 0 { n = half(n) } else { n = 3 * n + 1 };
+    k = k + 1
+  };
+  k
+
+main -> i32 = collatz(27)

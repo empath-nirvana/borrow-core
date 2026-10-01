@@ -77,7 +77,7 @@ def kernelMain (sitesOnly : Bool) (name : String) : IO UInt32 := do
   let dir ← IO.FS.createTempDir
   IO.FS.writeFile (dir / "main.wat") wat
   let r ← IO.Process.output
-    { cmd := "wasmtime", args := #["run", "-W", "tail-call=y", (dir / "main.wat").toString] }
+    { cmd := "wasmtime", args := Backend.wasmtimeArgs.push (dir / "main.wat").toString }
   IO.FS.removeDirAll dir
   match countsOf flat, countsOf r.stdout with
   | some (a, i, c), some (a', i', c') =>
@@ -111,7 +111,7 @@ def main (argv : List String) : IO UInt32 := do
   IO.FS.writeBinFile (dir / "in") input
   let r ← IO.Process.output
     { cmd := "sh",
-      args := #["-c", s!"wasmtime run -W tail-call=y '{dir / "main.wat"}' < '{dir / "in"}'"] }
+      args := #["-c", s!"wasmtime {" ".intercalate Backend.wasmtimeArgs.toList} '{dir / "main.wat"}' < '{dir / "in"}'"] }
   IO.FS.removeDirAll dir
   match countsOf flat, countsOf r.stdout with
   | some (a, i, c), some (a', i', c') =>

@@ -45,7 +45,7 @@ one is adding its name here. The elaboration brings in `io`, `div` and `prelude`
 (`elaborateS`); `include m` brings in any of them. -/
 def libNames : List String :=
   ["io", "div", "prelude", "lend", "adapters", "slice", "buf", "text", "textio", "iters", "fail",
-   "yield"]
+   "yield", "rec"]
 
 /-- The directory of the library: `$BCC_LIB` when it is set; otherwise `lib/` of the checkout
 whose `.lake/build/bin/` holds the running `bcc`; otherwise `lib/` of the working directory. -/
@@ -186,6 +186,7 @@ def _root_.Frontend.Comp.fill (hv : String → Option Val) (hc : String → Opti
   | .abort sp k i V => .abort sp k i (V.fill hv hc)
   | .handle sp k hr hc' M => .handle sp k hr hc' (M.fill hv hc)
   | .unwind sp x A M D N => .unwind sp x A (M.fill hv hc) (D.fill hv hc) (N.fill hv hc)
+  | .for_ sp x V M N => .for_ sp x (V.fill hv hc) (M.fill hv hc) (N.fill hv hc)
   | M => M
 end
 
@@ -2587,6 +2588,260 @@ def restScope : String := "io_rest_scope"
 def restOf (N : Comp) : Comp :=
   .bind N.span ⟨restScope, N.span⟩ none (.ret N.span (.unit N.span)) N false
 
+/-! ### The machine of a recursion under a heap driver  `[spec §20]`
+
+A recursive group driven by a heap driver (`with deep { … }`, `Frontend.Elab.Effects.deepCopy`)
+is given as a machine: `start : !(A => Out)` runs a member's body on its tagged argument until it
+answers `b` (`inl b`) or calls the group (`inr (a, f)`), and `resume : !(K * B => Out)` continues
+a pending call's frame with the answer, `Out = B + A * (K + 1)`. The frames are first-order:
+`K` has a variant per call of the group that is not in tail position, holding the variables the
+rest of the body uses there, with their types; a call in tail position pushes none (`f = inr ()`).
+
+The machine is made from the group's source `g__mach_src` after its sugar is elaborated: a
+function of the members' self-references `fx_rself{j}` whose result is the body. A call of a
+self-reference is lifted out of the value it is in, in the order its evaluation runs it, and the
+rest of the body is moved into it (`x <- case …; N` into each arm), so that every call stands at a
+binding `x <- return fx_rself{j}(W); N`. There the code answers the request, and the resume arm of
+its frame binds the frame's variables and `x`, and goes on with `N`. -/
+
+/-- The member a self-reference calls, and the argument: `(unbang fx_rself{j}) W`. -/
+def rmSelfApp? : Val → Option (Nat × Val)
+  | .app _ (.unbang _ (.var _ x)) W | .app _ (.var _ x) W =>
+    if x.startsWith "fx_rself" then (x.drop 8).toNat?.map (·, W) else none
+  | _ => none
+
+mutual
+/-- A value calls a self-reference. -/
+def rmSelfIn : Val → Bool
+  | V@(.app _ f W) => (rmSelfApp? V).isSome || rmSelfIn f || rmSelfIn W
+  | .pair _ V W => rmSelfIn V || rmSelfIn W
+  | .inl _ V | .inr _ V | .unbang _ V | .boxed _ _ V | .unbox _ V | .sub _ V _ | .roll _ V
+  | .unroll _ V | .inst _ V _ | .ascribe _ V _ | .shorten _ _ _ _ V => rmSelfIn V
+  | .thunk _ M | .thunkv _ M | .bangThunk _ M | .bangThunkv _ M | .run _ M => rmSelfInC M
+  | _ => false
+
+/-- A computation calls a self-reference. -/
+def rmSelfInC : Comp → Bool
+  | .ret _ V | .absurd _ V | .perform _ _ _ V | .abort _ _ _ V => rmSelfIn V
+  | .bind _ _ _ M N _ | .with_ _ M N => rmSelfInC M || rmSelfInC N
+  | .letUnit _ V M | .letPair _ _ _ V M => rmSelfIn V || rmSelfInC M
+  | .case _ V _ M _ N | .for_ _ _ V M N => rmSelfIn V || rmSelfInC M || rmSelfInC N
+  | .lam _ _ _ M | .app _ M _ | .proj _ _ M | .lamL _ _ _ M | .inst _ M _ | .nuIn _ M
+  | .nuOut _ M | .ascribe _ M _ | .handle _ _ _ _ M => rmSelfInC M
+  | .unwind _ _ _ M D N => rmSelfInC M || rmSelfInC D || rmSelfInC N
+  | _ => false
+end
+
+/-- The first call of a self-reference `V` runs (its argument calls none), replaced by `y`: the
+member, its argument, and `V` with the call replaced. -/
+def rmTake (y : String) : Nat → Val → Option (Nat × Val × Val)
+  | 0, _ => none
+  | n + 1, V => match V with
+    | .app sp f W =>
+      -- The argument runs before the function.
+      match rmTake y n W with
+      | some (j, a, W') => some (j, a, .app sp f W')
+      | none => match rmSelfApp? V with
+        | some (j, a) => some (j, a, .var sp y)
+        | none => (rmTake y n f).map fun (j, a, f') => (j, a, .app sp f' W)
+    | .pair sp V W => match rmTake y n V with
+      | some (j, a, V') => some (j, a, .pair sp V' W)
+      | none => (rmTake y n W).map fun (j, a, W') => (j, a, .pair sp V W')
+    | .inl sp V => (rmTake y n V).map fun (j, a, V') => (j, a, .inl sp V')
+    | .inr sp V => (rmTake y n V).map fun (j, a, V') => (j, a, .inr sp V')
+    | .ascribe sp V A => (rmTake y n V).map fun (j, a, V') => (j, a, .ascribe sp V' A)
+    | .roll sp V => (rmTake y n V).map fun (j, a, V') => (j, a, .roll sp V')
+    | .unroll sp V => (rmTake y n V).map fun (j, a, V') => (j, a, .unroll sp V')
+    | .unbang sp V => (rmTake y n V).map fun (j, a, V') => (j, a, .unbang sp V')
+    | _ => none
+
+/-- What the machine's construction knows: the group's argument type and its member count, the
+answer type, the number of frames (known on the second pass), and the context of a resume arm. -/
+structure RMInfo where
+  A : VTy
+  members : Nat
+  B : VTy
+  B' : CVTy
+  nf : Nat
+  base : TCx
+
+structure RMSt where
+  frames : Array (List (String × CVTy)) := #[]
+  /-- Each frame's resume arm: the variable its payload is bound to, and the code. -/
+  arms : Array (String × Comp) := #[]
+  fresh : Nat := 0
+
+abbrev RMM := StateT RMSt SM
+
+def rmFresh (pre : String) : RMM String :=
+  modifyGet fun s => (s!"{pre}{s.fresh}", { s with fresh := s.fresh + 1 })
+
+/-- The placeholder of `Out`, filled when the frames are known. -/
+def rmOut (sp : Span) : VTy := .name sp "FX_REC_OUT"
+
+/-- A value of `Out`, written. -/
+def rmAns (sp : Span) (V : Val) : Comp := .ret sp (.ascribe sp V (rmOut sp))
+
+/-- The variables bound from the tuple `v` of `vars`, then `M`. -/
+def rmUnpack (sp : Span) (v : String) : List String → Comp → RMM Comp
+  | [], M => pure (.letUnit sp (.var sp v) M)
+  | [x], M => pure (.bind sp ⟨x, sp⟩ none (.ret sp (.var sp v)) M false)
+  | x :: xs, M => do
+    let r ← rmFresh "fx_rmr"
+    pure (.letPair sp ⟨x, sp⟩ ⟨r, sp⟩ (.var sp v) (← rmUnpack sp r xs M))
+
+mutual
+/-- The machine's code for `M`: it answers `inl` of each value `M` finishes with, and a request
+at each call of a self-reference. -/
+def rmWalk (I : RMInfo) : Nat → TCx → Comp → RMM Comp
+  | 0, _, M => throw ⟨M.span, "internal error: a body nested too deeply"⟩
+  | n + 1, c, M => match M with
+    | .bind sp x A (.ret rsp V) N lin =>
+      match rmSelfApp? V with
+      | some (j, W) =>
+        if rmSelfIn W then do
+          let y ← rmFresh "fx_rmy"
+          let some (j', a, W') := rmTake y divFuel W | throw ⟨sp, "internal error: a call of the group"⟩
+          rmWalk I n c (.bind sp ⟨y, sp⟩ none (.ret rsp (.app rsp (.var rsp s!"fx_rself{j'}") a))
+            (.bind sp x A (.ret rsp (.app rsp (.var rsp s!"fx_rself{j}") W')) N lin) false)
+        else rmCall I n c sp x j W N
+      | none =>
+        if rmSelfIn V then do
+          let y ← rmFresh "fx_rmy"
+          let some (j, a, V') := rmTake y divFuel V | throw ⟨sp, "internal error: a call of the group"⟩
+          rmWalk I n c (.bind sp ⟨y, sp⟩ none (.ret rsp (.app rsp (.var rsp s!"fx_rself{j}") a))
+            (.bind sp x A (.ret rsp V') N lin) false)
+        else do
+          pure (.bind sp x A (.ret rsp V) (← rmWalk I n (c.push x.name (bindTy c A (.ret rsp V))) N) lin)
+    | .bind sp x A M₁ N lin =>
+      if !rmSelfInC M₁ then do
+        pure (.bind sp x A M₁ (← rmWalk I n (c.push x.name (bindTy c A M₁)) N) lin)
+      else
+        let shadow (ys : List String) : RMM Unit := do
+          if ys.any (mentionsC · N) then
+            throw ⟨sp, "a recursion under a heap driver binds a name the rest of its body uses: rename it"⟩
+        match M₁ with
+        | .bind bsp y B M₁₁ M₁₂ lin' => do
+          shadow [y.name]
+          rmWalk I n c (.bind bsp y B M₁₁ (.bind sp x A M₁₂ N lin) lin')
+        | .case csp V y P z Q => do
+          shadow [y.name, z.name]
+          rmWalk I n c (.case csp V y (.bind sp x A P N lin) z (.bind sp x A Q N lin))
+        | .letPair lsp y z V P => do
+          shadow [y.name, z.name]
+          rmWalk I n c (.letPair lsp y z V (.bind sp x A P N lin))
+        | .letUnit lsp V P => rmWalk I n c (.letUnit lsp V (.bind sp x A P N lin))
+        | _ => throw ⟨M₁.span, "a recursion under a heap driver calls itself in a form that is not provided here"⟩
+    | .ret sp V =>
+      if rmSelfIn V then do
+        let y ← rmFresh "fx_rmy"
+        let some (j, a, V') := rmTake y divFuel V | throw ⟨sp, "internal error: a call of the group"⟩
+        rmWalk I n c (.bind sp ⟨y, sp⟩ none (.ret sp (.app sp (.var sp s!"fx_rself{j}") a))
+          (.ret sp V') false)
+      else pure (rmAns sp (.inl sp V))
+    | .case sp V x M₁ y M₂ =>
+      if rmSelfIn V then do
+        let t ← rmFresh "fx_rmt"
+        rmWalk I n c (.bind sp ⟨t, sp⟩ none (.ret sp V) (.case sp (.var sp t) x M₁ y M₂) false)
+      else do
+        let (Ax, Ay) := sumTys c V
+        pure (.case sp V x (← rmWalk I n (c.push x.name Ax) M₁) y (← rmWalk I n (c.push y.name Ay) M₂))
+    | .letPair sp x y V M₁ =>
+      if rmSelfIn V then do
+        let t ← rmFresh "fx_rmt"
+        rmWalk I n c (.bind sp ⟨t, sp⟩ none (.ret sp V) (.letPair sp x y (.var sp t) M₁) false)
+      else do
+        let (Ax, Ay) := pairTys c V
+        pure (.letPair sp x y V (← rmWalk I n ((c.push x.name Ax).push y.name Ay) M₁))
+    | .letUnit sp V M₁ =>
+      if rmSelfIn V then do
+        let t ← rmFresh "fx_rmt"
+        rmWalk I n c (.bind sp ⟨t, sp⟩ none (.ret sp V) (.letUnit sp (.var sp t) M₁) false)
+      else do pure (.letUnit sp V (← rmWalk I n c M₁))
+    | T => do
+      if rmSelfInC T then
+        throw ⟨T.span, "a recursion under a heap driver calls itself in a form that is not provided here"⟩
+      let t ← rmFresh "fx_rmt"
+      pure (.bind T.span ⟨t, T.span⟩ none T (rmAns T.span (.inl T.span (.var T.span t))) false)
+
+/-- `x <- return fx_rself{j}(W); N`: the request `inr (inj_j W, f)`, with the frame `f` of what
+`N` uses (none when `N` answers `x`), and the frame's resume arm. -/
+def rmCall (I : RMInfo) : Nat → TCx → Span → Ident → Nat → Val → Comp → RMM Comp
+  | 0, _, sp, _, _, _, _ => throw ⟨sp, "internal error: a body nested too deeply"⟩
+  | n + 1, c, sp, x, j, W, N => do
+    let arg : Val := .ascribe sp (Elab.Effects.injAt sp j I.members W) I.A
+    let tail := match N with
+      | .ret _ (.var _ y) => y == x.name
+      | _ => false
+    if tail then return rmAns sp (.inr sp (.pair sp arg (.inr sp (.unit sp))))
+    let mut vars : List (String × CVTy) := []
+    for (y, T) in latest c.locals do
+      if y == x.name || y.startsWith "fx_rself" || !mentionsC y N then continue
+      match T with
+      | some T => vars := vars ++ [(y, T)]
+      | none => throw ⟨sp, s!"`{y}` is held across a call of the recursion, and its type is not determined: ascribe it"⟩
+    let f := (← get).frames.size
+    modify fun s => { s with frames := s.frames.push vars, arms := s.arms.push ("", .top sp) }
+    -- The resume arm: the frame's variables, `x` the answer, then `N`.
+    let cR := (vars.foldl (fun c (y, T) => c.push y (some T)) I.base).push x.name (some I.B')
+    let rest ← rmWalk I n cR N
+    let kv ← rmFresh "fx_rmk"
+    let arm ← rmUnpack sp kv (vars.map (·.1)) (.bind sp x none (.ret sp (.var sp "fx_rmb")) rest false)
+    modify fun s => { s with arms := s.arms.set! f (kv, arm) }
+    let frame : Val := Elab.Effects.injAt sp f I.nf (tupleVal sp (vars.map (·.1)))
+    pure (rmAns sp (.inr sp (.pair sp arg (.inl sp frame))))
+end
+
+/-- The machine `g__mach : !(A => Out) * !(K * B => Out)` of a recursive group's source
+`g__mach_src` whose sugar is elaborated (SPEC §20, `rmWalk`): `start` on the tagged argument, and
+`resume` on a frame and the answer. -/
+def recMachine (scope : List Decl) (d : Decl) : SM Decl := do
+  let .def_ sp n _ Ty V _ := d | return d
+  let g := (n.name.dropEnd "__mach_src".length).toString
+  let err (what : String) : Error := ⟨sp, s!"internal error: the machine of `{g}`: {what}"⟩
+  let .bangThunkv _ (.lam _ p Pt M₀) := V | throw (err "its source")
+  let .bang _ (.lolli _ _ (.bang _ (.lolli _ _ B))) := Ty | throw (err "its type")
+  let c₀ := TCx.ofScope scope false
+  let some Pc := c₀.elabV Pt | throw (err "the self-references' type")
+  let some Bc := c₀.elabV B | throw (err "the answer type")
+  let rec peel : Nat → TCx → Comp → Except Error (TCx × Ident × VTy × Comp)
+    | k + 1, c, .bind _ x A M N _ => peel k (c.push x.name (bindTy c A M)) N
+    | k + 1, c, .letPair _ x y W N =>
+      let (Ax, Ay) := pairTys c W
+      peel k ((c.push x.name Ax).push y.name Ay) N
+    | k + 1, c, .letUnit _ _ N => peel k c N
+    | _, c, .ret _ (.bangThunkv _ (.lam _ a A D)) => pure (c, a, A, D)
+    | _, _, _ => throw (err "its body")
+  let (c₁, a, A, D) ← peel 64 (c₀.push p.name (some Pc)) M₀
+  let some Ac := c₁.elabV A | throw (err "the argument type")
+  let c₂ := c₁.push a.name (some Ac)
+  let members := (c₁.locals.filter (·.1.startsWith "fx_rself")).length
+  let I : RMInfo := ⟨A, members, B, Bc, 0, c₀⟩
+  let (_, st₁) ← (rmWalk I divFuel c₂ D).run {}
+  let I := { I with nf := st₁.frames.size }
+  let (S₀, st) ← (rmWalk I divFuel c₂ D).run {}
+  let mut ks : List VTy := []
+  for vs in st.frames do
+    ks := ks ++ [tupleTy sp (← vs.mapM fun (_, T) => (c₀.surface sp T : Except Error VTy))]
+  let K := Elab.Effects.sumTys sp ks
+  let Out : VTy := .sum sp B (.tensor sp A (.sum sp K (.unit sp)))
+  let σ : TySubst := [("FX_REC_OUT", Out)]
+  let start : Val := .bangThunkv sp (.lam sp a A (S₀.subst σ))
+  -- The resume: the frame's variant, then its arm.
+  let rec dispatch : Nat → String → List (String × Comp) → Comp
+    | _, v, [] => .absurd sp (.var sp v)
+    | _, v, [(kv, arm)] => .bind sp ⟨kv, sp⟩ none (.ret sp (.var sp v)) (arm.subst σ) false
+    | 0, v, _ => .absurd sp (.var sp v)
+    | k + 1, v, (kv, arm) :: rest =>
+      .case sp (.var sp v) ⟨kv, sp⟩ (arm.subst σ) ⟨s!"{v}r", sp⟩ (dispatch k s!"{v}r" rest)
+  let resume : Val := .bangThunkv sp (.lam sp ⟨"fx_rmkb", sp⟩ (.tensor sp K B)
+    (.letPair sp ⟨"fx_rmk", sp⟩ ⟨"fx_rmb", sp⟩ (.var sp "fx_rmkb")
+      (dispatch (st.arms.size + 1) "fx_rmk" st.arms.toList)))
+  report sp s!"recursion `{g}` under a heap driver: {st.frames.size} frame(s), each a variant of one buffer slot"
+  pure (.def_ sp ⟨s!"{g}__mach", n.span⟩ []
+    (.tensor sp (.bang sp (.lolli sp A Out)) (.bang sp (.lolli sp (.tensor sp K B) Out)))
+    (.pair sp start resume) .none)
+
 mutual
 /-- A value with its surface forms elaborated; `exp` is the type expected of it, when known. -/
 def surfV : Nat → TCx → Option CVTy → Val → DM Val
@@ -3209,6 +3464,12 @@ def forData : Nat → TCx → Option CCTy → Span → Ident → Val → Val →
     let sfx := s!"{sp.start.line}_{sp.start.col}"
     let M ← (normExits divFuel M : Except Error Comp)
     let pp (T : CVTy) : DM String := do pure (← (c.surface sp T : Except Error VTy)).pp
+    -- A body whose row has an operation that resumes: the loop is a div loop (SPEC §16).
+    let S₀ := c.E.row.getD []
+    let resumes := (opsC c divFuel M).find? fun (k, i) =>
+      S₀.any fun o => o.n.toNat == k && o.i.toNat == i && !o.abort
+    if let some (k, i) := resumes then
+      return some (← forDataDiv n c exp sp x V src M N k i)
     -- The loop's value: `let r = for …` with or without `else { d }`, or `for … else { d }`.
     let (keep, els, N) : Option (Ident × Option VTy) × Option Comp × Comp :=
       match N.forElse?, N.forRes? with
@@ -3436,6 +3697,108 @@ let ({back}, io_j{sfx}) = io_bl{sfx};
     let L' ← surfC n c exp L
     modify fun s => { s with exits := s.exits.drop 1 }
     return some L'
+
+/-- `for x in V { M }; N` over data whose body performs an operation that resumes (the operation
+`k.i`): a div loop (SPEC §16). A counted loop's step is one total computation and cannot hold the
+continuation of such an operation, so the loop is a `while` over the source's cursor, a loop of
+the body's machine (SPEC §14, §15), one turn per element: a count's index, a view's index or rest,
+an owned array's index (each element copied out under a borrow of one turn), a sized iterator's
+data and state. `&a` and `&mut a` lend `a` around the whole loop, and an operation that resumes
+cannot cross a borrow (T1, #172): they are rejected. The loop has no value (`else`, `break e`). -/
+def forDataDiv : Nat → TCx → Option CCTy → Span → Ident → Val → DataSrc → Comp → Comp → Nat → Nat →
+    DM Comp
+  | 0, _, _, sp, _, _, _, _, _, _, _ => throw ⟨sp, "internal error: a loop nested too deeply"⟩
+  | n + 1, c, exp, sp, x, V, src, M, N, k, i => do
+    let sfx := s!"{sp.start.line}_{sp.start.col}"
+    let pp (T : CVTy) : DM String := do pure (← (c.surface sp T : Except Error VTy)).pp
+    if N.forElse?.isSome || N.forRes?.isSome || M.spineBreaks.any (·.2.isSome) then
+      throw ⟨sp, s!"the body of this `for` performs an operation that resumes (the operation " ++
+        s!"{k}.{i}), so the loop is div (a `while` over its source), and it has no value: " ++
+        "`break e` and `else` are not provided there"⟩
+    let x' := x.name
+    let w := s!"io_w{sfx}"
+    let src ← match src with
+      | .count _ _ => pure s!"{w}l <- return io_hole_lo;
+{w}h <- return io_hole_hi;
+while ({w}l < {w}h) \{
+  {x'} <- return {w}l;
+  {w}l <- return ({w}l + 1);
+  force io_hole_body
+};
+force io_hole_rest"
+      | .view false a A => do
+        let a ← (c.surfaceL sp a : Except Error Frontend.Life)
+        let At ← pp A
+        pure s!"{w}v <- return io_hole_src;
+let ({w}v, {w}c) = array_copy[{a.pp}, {At}]({w}v);
+{w}n <- return array_len[{a.pp}, {At}]({w}c);
+{w}i <- return 0;
+while ({w}i < {w}n) \{
+  let ({w}v, {w}g) = array_copy[{a.pp}, {At}]({w}v);
+  {w}k <- return {w}i;
+  {w}i <- return ({w}i + 1);
+  case array_get[{a.pp}, {At}]({w}g, {w}k) \{ inl {x'} -> force io_hole_body | inr {w}u -> return () }
+};
+force io_hole_rest"
+      | .view true a A => do
+        let a ← (c.surfaceL sp a : Except Error Frontend.Life)
+        let At ← pp A
+        pure s!"{w}v <- return io_hole_src;
+{w}m <- return (inr () : 1 + 1);
+while ({w}m) \{
+  case slice_split_mut[{a.pp}, {At}]({w}v, 1) \{
+    inl {w}p -> let ({w}h, {w}v) = {w}p;
+      case slice_get_mut[{a.pp}, {At}]({w}h, 0) \{ inl {x'} -> force io_hole_body | inr {w}u -> return () }
+  | inr {w}v -> {w}m <- return (inl () : 1 + 1); return ()
+  }
+};
+force io_hole_rest"
+      | .owned A => do
+        unless Class.of A == .persistent do
+          throw ⟨V.span, s!"a `for` over an owned array copies each element, and `{ppT A}` is " ++
+            "not persistent: iterate a view of it"⟩
+        let At ← pp A
+        pure s!"{w}a <- return io_hole_src;
+let ({w}a, {w}n) = array_size[{At}]({w}a);
+{w}i <- return 0;
+while ({w}i < {w}n) \{
+  {w}k <- return {w}i;
+  {w}i <- return ({w}i + 1);
+  {w}b <- return borrow imm {w}a \{ 'io_wl, {w}lv -> case array_get['io_wl, {At}]({w}lv, {w}k) \{
+      inl {w}e -> return (inl *{w}e : {At} + 1) | inr {w}u -> return (inr () : {At} + 1) } };
+  let ({w}a, {w}r) = {w}b;
+  case {w}r \{ inl {x'} -> force io_hole_body | inr {w}u -> return () }
+};
+force io_hole_rest"
+      | .sized _ _ _ => pure s!"let ({w}d, {w}t) = io_hole_src;
+let ({w}s, {w}f) = {w}t;
+{w}m <- return (inr () : 1 + 1);
+while ({w}m) \{
+  let ({w}p, {w}o) = {w}f(({w}d, {w}s));
+  let ({w}d, {w}s) = {w}p;
+  case {w}o \{
+    inl {x'} -> force io_hole_body
+  | inr {w}q -> case {w}q \{ inl {w}u -> return () | inr {w}u -> {w}m <- return (inl () : 1 + 1); return () }
+  }
+};
+force io_hole_rest"
+      | .lend a m _ => throw ⟨sp, s!"the body of this `for` performs an operation that resumes " ++
+          s!"(the operation {k}.{i}), and its source `&{if m then "mut " else ""}{a.name}` lends " ++
+          s!"`{a.name}` around the whole loop: an operation that resumes cannot cross a borrow " ++
+          "(T1, #172). Iterate an owned array, or a view the function is given"⟩
+    let (lo, hi) := match V with
+      | .app _ (.sugar _ .count) (.pair _ a b) => (some a, some b)
+      | _ => (none, none)
+    let hv (h : String) : Option Val :=
+      if h == "io_hole_src" then some V else if h == "io_hole_lo" then lo
+      else if h == "io_hole_hi" then hi else none
+    let hc (h : String) : Option Comp :=
+      if h == "io_hole_body" then some M else if h == "io_hole_rest" then some N else none
+    let L ← (template sp "a `for` over data whose body performs an operation that resumes (a div loop)"
+      src : SM Comp)
+    if !(← get).quiet then
+      report sp s!"`for` is div: its body performs an operation that resumes ({k}.{i}), so it is a loop over the source's cursor"
+    surfC n c exp (L.fill hv hc)
 
 /-- `for x in g(e) { M }; N`, `g` performing an iteration effect (SPEC §15): the handler site
 `Frontend.Elab.Effects` left (`VSugar.forSite`), assembled. The variables the body reads or
@@ -4052,6 +4415,7 @@ def genericCall : Nat → TCx → Span → Option CVTy → Val → Val → Optio
       | none, _ => args' := args' ++ [Wi']
     return some (.app sp g (argOf W args'))
 
+
 /-- Elaborate one declaration: first the copies its calls need (each elaborated the same way),
 then its own divergence, with its calls renamed to the copies.  `[spec §14]` -/
 def elabDecl : Nat → DivSt → Decl → SM DivSt
@@ -4070,6 +4434,11 @@ def elabDecl : Nat → DivSt → Decl → SM DivSt
     let d := (← (Frontend.Elab.LoopLend.lentDef c₀ (dataFor st.sizedFns) d :
       Except Error (Option Decl))).getD d
     let (d, st) ← (surfDecl fuel d).run st
+    -- A recursive group's source under a heap driver: its machine (SPEC §20).
+    let d ← match d with
+      | .def_ _ nm _ _ _ _ =>
+        if nm.name.endsWith "__mach_src" then recMachine (st.lib ++ st.out) d else pure d
+      | d => pure d
     let (d, st) ← (specDecl fuel d).run st
     let (d', e) ← elabDef (st.lib ++ st.out) d
     let elaborated := e.isSome && decide (d' ≠ d)

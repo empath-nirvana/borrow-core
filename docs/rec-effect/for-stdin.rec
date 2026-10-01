@@ -1,0 +1,22 @@
+-- `for` over an I/O stream that may end, with code after it. Provisional spellings (README §2).
+-- Hand-lowered: 25-for-stdin.bc.
+
+main -> i32 * i32 =
+  let mut n = 0;
+  let mut sum = 0;
+  for l in lines(&mut stdin) { n = n + 1; sum = sum + parse_int(&l) };
+  print(sum);                                 -- runs after the input ends
+  (n, sum)
+
+-- ELABORATION
+--   `lines(&mut stdin)` is a pull source whose `next` performs I/O through the capability: the
+--   same `next` as a pure source's, effect-polymorphic, specialised at the capability. The loop
+--   is `rec` in tail position over (the source, n, sum), driven by fix: div. At the end of the
+--   input `next` answers `none` and hands the capability back; `print` then runs.
+--
+-- DRIVER, TOTALITY, STACK
+--   fix: div, constant stack. Runs today with `lines` over a byte generator: 14 allocations
+--   (the line lists), 0 dispatched calls.
+--
+-- CHECKER REPORTS (intended)
+--   main: div (drains stdin); the loop can end ("ended" value `()` and the capability back)

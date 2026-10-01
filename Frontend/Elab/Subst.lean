@@ -116,6 +116,7 @@ def Const.subst (σ : TySubst) : Const → Const
   | .sliceSwapMut a A => .sliceSwapMut a (A.subst σ)
   | .countFold S => .countFold (S.subst σ)
   | .countTry S E => .countTry (S.subst σ) (E.subst σ)
+  | .boundedFix A C => .boundedFix (A.subst σ) (C.subst σ)
   | .withbor1U x A B r => .withbor1U x (A.subst σ) (B.subst σ) (r.subst σ)
   | .withbor2U x b A B r => .withbor2U x b (A.subst σ) (B.subst σ) (r.subst σ)
   | .withbor3U a x A B r => .withbor3U a x (A.subst σ) (B.subst σ) (r.subst σ)

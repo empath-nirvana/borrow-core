@@ -1,0 +1,13 @@
+-- expect: rejected
+-- `23-never-ends.bc` with the generator's finishing type empty, `0`, so that the loop's value is
+-- exactly the break type and no unreachable value is written. The type `0` exists; what is
+-- missing is a way to end the body: `while true { … }` must be followed by a value of the
+-- finishing type, and I have not found a term of type `0` to write there. Under the design the
+-- elaborator knows that `while true` without `break` does not fall through, so nothing follows.
+
+gen fn naturals() -> i32, 0 =
+  let mut i = 1;
+  while true { yield i; i = i + 1 };
+  0 - 1
+
+main -> i32 = 0

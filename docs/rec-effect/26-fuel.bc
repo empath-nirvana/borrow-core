@@ -1,0 +1,51 @@
+-- uses: rec.bc
+-- A fuelled recursive function that reports "ran out" (fuel.rec): Ackermann's function under
+-- `ack |> fuel(n) |> fix`. A(0, n) = n + 1; A(m, 0) = A(m - 1, 1); A(m, n) = A(m - 1, A(m, n - 1)).
+-- The inner call is not in tail position (frame: m - 1); the others are.
+--
+-- The fuel layer counts calls and stops the recursion with `inl ()` when it has none left,
+-- visibly: the result type gains the case. It does not make the function total by type: a layer
+-- is not a driver, and `deep` under it is still a loop (`27-fuel-layer-not-total.bc`: `total` is
+-- refused). What makes it total is fuel in the driver: `deep_fuel`, `div_fuel` over the loop.
+-- Each call is at most two observations (its start, and the resume of the frame it answers), so
+-- `deep_fuel` with 2n + 2 observations never cuts off before the layer's n calls run out: the
+-- layer's "ran out" is the one the caller sees, and the driver's `inr ()` is unreachable, but
+-- present in the type.
+--
+-- Answer: ((inl i32[9], inr (inl ())), inl (inl i32[9])): A(2, 3) = 9 within 1000 calls; A(3, 3)
+-- runs out of 1000 calls; A(2, 3) again under the total form.
+
+type Out = i32 + (((i32 * i32) * (i32 + 1)) + 1)
+
+fn ack_start(p: 1 * (i32 * i32)) -> 1 * Out =
+  let (s, mn) = p;
+  let (m, n) = mn;
+  if m == 0 { (s, inl (n + 1)) } else {
+    if n == 0 { (s, inr (inl ((m - 1, 1), (inr () : i32 + 1)))) }
+    else { (s, inr (inl ((m, n - 1), (inl (m - 1) : i32 + 1)))) }
+  }
+
+fn ack_resume(p: 1 * (i32 * i32)) -> 1 * Out =
+  let (s, kb) = p;
+  let (m1, b) = kb;
+  (s, inr (inl ((m1, b), (inr () : i32 + 1))))
+
+type FOut = i32 + (((i32 * i32) * (i32 + 1)) + (1 + 1))
+
+fn fstart(p: (i32 * 1) * (i32 * i32)) -> (i32 * 1) * FOut = fuel_start(ack_start, p)
+fn fresume(p: (i32 * 1) * (i32 * i32)) -> (i32 * 1) * FOut = fuel_resume(ack_resume, p)
+
+-- ack |> fuel(n) |> deep: "ran out" visible, div by type.
+fn ack_fuel(m: i32, k: i32, n: i32) -> i32 + (1 + 1) =
+  let (s, r) = deep[i32 * i32, i32, i32, i32 * 1, 1 + 1](fstart, (fresume, ((n, ()), (m, k))));
+  r
+
+-- The same under a fuelled driver: total.
+total fn ack_total(m: i32, k: i32, n: i32) -> (i32 + (1 + 1)) + 1 =
+  match deep_fuel[i32 * i32, i32, i32, i32 * 1, 1 + 1](fstart, (fresume, (((n, ()), (m, k)), 2 * n + 2))) {
+    inl sr -> let (s, r) = sr; inl r
+  | inr u -> inr u
+  }
+
+main -> ((i32 + (1 + 1)) * (i32 + (1 + 1))) * ((i32 + (1 + 1)) + 1) =
+  ((ack_fuel(2, 3, 1000), ack_fuel(3, 3, 1000)), ack_total(2, 3, 1000))

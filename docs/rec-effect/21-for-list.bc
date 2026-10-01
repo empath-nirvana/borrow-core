@@ -1,0 +1,53 @@
+-- uses: rec.bc
+-- `for x in l { acc = acc * 10 + x }` over an owned list, in order (for-list.rec). Three
+-- lowerings, since the kernel has no in-order descent over `mu` (prior-art matrix C2):
+--   (a) a loop: `rec` in tail position on the rest of the list, under `deep`. In order, no
+--       frame, no allocation per element; div (the driver does not know the list shrinks);
+--   (b) `fold_own`, a right fold: total, but the order is reversed;
+--   (c) `fold_own` into a function of the accumulator (a closure per node): total and in order,
+--       one allocation per node for the closure.
+--
+-- Answer: (i32[1234], (i32[4321], i32[1234])) for the list [1, 2, 3, 4].
+
+type List = mu X. 1 + (i32 * X)
+
+fn nil() -> List = roll inl ()
+fn cons(x: i32, t: List) -> List = roll inr (x, t)
+fn push_front(i: i32, l: List) -> List = cons(4 - i, l)
+fn build() -> List = count_fold[List] (push_front, 4, 0, nil())
+
+-- (a) The loop: the state is the accumulator; a request is the rest of the list.
+type Out = 1 + ((List * (1 + 1)) + 1)
+
+fn loop_start(p: i32 * List) -> i32 * Out =
+  let (acc, l) = p;
+  match unroll l {
+    inl u -> (acc, inl ())
+  | inr xt -> let (x, t) = xt; (acc * 10 + x, inr (inl (t, (inr () : 1 + 1))))
+  }
+
+fn no_frame(p: i32 * (1 * 1)) -> i32 * Out = let (acc, kb) = p; (acc, inl ())
+
+fn in_order_loop(l: List) -> i32 =
+  let (acc, r) = deep(loop_start, (no_frame, (0, l)));
+  acc
+
+-- (b) The right fold.
+fn digits_alg(r: 1 + (i32 * i32)) -> i32 = match r { inl u -> 0 | inr xt -> let (x, t) = xt; t * 10 + x }
+def reversed : !(List => i32) = fold_own[1 + (i32 * X), i32] digits_alg
+
+-- (c) The right fold into a function of the accumulator.
+type Acc = U (i32 -o F i32)
+fn cont_alg(r: 1 + (i32 * Acc)) -> Acc =
+  match r {
+    inl u -> { acc -> acc }
+  | inr xk -> let (x, k) = xk; { acc -> k!(acc * 10 + x) }
+  }
+def as_function : !(List => Acc) = fold_own[1 + (i32 * X), Acc] cont_alg
+
+fn in_order_fold(l: List) -> i32 =
+  let k = as_function(l);
+  r <- k!(0);
+  r
+
+main -> i32 * (i32 * i32) = (in_order_loop(build()), (reversed(build()), in_order_fold(build())))

@@ -1,0 +1,7 @@
+-- expect: rejected
+-- The type a knot-tying `fix` would need for open recursion on the host stack: a function that
+-- takes itself. Refused, so `02-fib-host.bc` unrolls the fixed point to a depth instead.
+
+type Self = mu X. !(X => i32)
+
+main -> i32 = 0

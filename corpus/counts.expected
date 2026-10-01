@@ -57,6 +57,7 @@ find-bytes 2 0 0
 fn-lifetime 7 0 0
 for-adapters 1 0 0
 for-data 2 0 0
+for-data-div 3 0 0 # the two arrays and the cell the views are lent from
 for-finite 0 0 0
 for-never 0 0 0
 for-return 1 0 0
@@ -115,6 +116,12 @@ nats-sum 0 0 0
 parse-int 3 0 0 # the stdin and stdout cells and the line buffer, reused; literal views read-only data
 print-borrowed-array 2 0 0
 quicksort 3 0 0 # the data, the range stack, the output capability
+rec-deep 60040 0 0 # the tree, two objects per node, and each group's buffer of frames growing by doubling
+rec-even-odd 0 0 0
+rec-fib 0 0 0 # the recursion runs on the native stack: no frame is allocated
+rec-overflow 10101 0 0 # the cells, one per level: 100, and 10001 before the budget is spent
+rec-parser 22 0 0 # the token lists and the tokens put back
+rec-tree 254 0 0 # the tree only, two objects per node less the root
 reverse-bytes 3 0 0
 slice-imm 1 0 0
 slice-lib 3 0 0

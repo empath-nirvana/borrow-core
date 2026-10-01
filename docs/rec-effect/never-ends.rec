@@ -1,0 +1,23 @@
+-- A never-ending source with `break value`. Provisional spellings (README §2). Hand-lowered:
+-- 23-never-ends.bc, 24-never-ends-empty.bc.
+
+gen fn naturals() -> i32, never =
+  let mut i = 1;
+  loop { yield i; i = i + 1 }                 -- does not fall through: nothing follows
+
+fn first_triangle_over(lim: i32) -> i32 =
+  let mut t = 0;
+  for i in naturals() { t = t + i; if t > lim { break t } }   -- value: exactly the break type
+
+-- ELABORATION
+--   The source cannot end, so its "ended" value is `never` (empty), and the loop's value is
+--   `break`'s type alone: `i32 + never` is `i32`. Driven by fix: div.
+--   Today (23) the generator must name a finishing value after its `while true` (`0 - 1`), and
+--   the loop's type is that value's. With the finishing type `0`, the body has nothing to end
+--   with (24: "type mismatch: expected `0`, but this has type `i32`").
+--
+-- DRIVER, TOTALITY, STACK
+--   fix: div, constant stack. 0 allocations.
+--
+-- CHECKER REPORTS (intended)
+--   naturals: never finishes; first_triangle_over: div, value `i32`

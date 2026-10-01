@@ -1263,7 +1263,8 @@ a call of a div function in **direct style**: an application whose type is a loo
 type expected of it is not that loop, at any depth of a bound or returned value, a `case`
 scrutinee or a `let`'s value. A
 function written with a plain result `A ⇒ B` whose body loops is elaborated to
-`A ⇒ U(Loop B R)`. Definitions are in dependency order (recursion is structured, decision 24),
+`A ⇒ U(Loop B R)`. Definitions are in dependency order (a recursive group is declared at its last
+member, §20),
 so one pass in declaration order infers this; there is no fixed point.
 
 - `total def f : A = V` asserts that `f` does not loop: inference that finds a loop in its body
@@ -1475,7 +1476,8 @@ preserved. The runtime's obligation for a looping `main` is §11's.
 - **Some loop bodies are total**: the body of a counted loop (§16) and the clause of a `for` over
   a generator (§15) are one step, and have no drain and no div call. The body of any other loop
   may loop: its states nest in the body's machine (`corpus/gen-nested.bc`). A `for` over data is a
-  counted loop, total, and nests anywhere.
+  counted loop, total, and nests anywhere, unless its body performs an operation that resumes
+  (§16, *Effectful bodies*).
 - **A call lends at most one capability** with `&mut c`, and a div call whose residual differs
   from the caller's must hand back, in its residual, the capability it was lent (it is matched
   to the lent `&mut c`), or nothing.
@@ -1859,6 +1861,26 @@ the whole loop (§9's lend of `&a`/`&mut a` is such a block); the per-observatio
 applies to drains only (`LoopLend`, whose test of a loop reads the source's type in the block's
 context).
 
+**Effectful bodies.** A counted loop's step is one total computation, so it cannot hold the
+continuation of a control operation that resumes. When the body's row has one (`opsC` finds a
+`perform` of a non-abortive operation of the row, the rule keyed on the row, no effect named),
+the `for` is a **div loop** over the source's cursor instead: a `while`, a loop of the body's
+machine (§14, §15), one turn per element (`forDataDiv`, `Frontend/Sugar.lean`):
+
+| source | the loop |
+|---|---|
+| a count `a..b` | the index from `a`, the element the index |
+| a view `array_imm @a A` | the index, the leaf by `array_get` |
+| a view `array_mut @a A` | the rest of the view, split at `1` each turn |
+| an owned array `array A`, `A` persistent | the index, the element copied out under a borrow of one turn |
+| a sized iterator | its data and state, one step each turn |
+| `&a`, `&mut a` | rejected: the lend spans the loop, and an operation that resumes cannot cross a borrow (T1, #172) |
+
+The loop has no value there (`break e`, `else`). `corpus/for-data-div.bc` runs each source that
+a program can reach; `corpus/reject/for-lend-resumes.bc` is the lend. A `mut` view reaches such a
+body only through a borrow block (§9), which a resuming operation cannot cross, so its row is not
+exercised.
+
 **Programs.** `corpus/for-finite.bc` (a `total fn` over a count), `iter-mut.bc` (`&mut a`),
 `for-data.bc` (an owned array, `&a`, a view; `break`, `break`'s value and `else`, `continue`,
 `stdout` in the body), `for-return.bc`, `for-never.bc`, `for-adapters.bc` (a total chain, no
@@ -2125,8 +2147,8 @@ it, or to what the enclosing function's copy was given.
 **Where an abortive operation may stand.**
 - *In a counted loop's body* (`for` over data, §16): `count_try`'s step is pure, so the step
   handles the operations of the names its body performs itself, each leaving the loop by its exit,
-  and after the loop the operation is performed again at the same name. A control operation that
-  resumes cannot stand there.
+  and after the loop the operation is performed again at the same name. A body with a control
+  operation that resumes makes the loop a div loop instead (§16, *Effectful bodies*).
 - *In a borrow block's body*: the block is the unwinding form of its borrow (§19), at the
   operations its body performs, which must be abortive (a resuming one is T1, #172); its callback
   is ascribed its row. An unwind ends the lend, and the lender's finaliser runs.
@@ -2867,7 +2889,16 @@ resumes `κ` once, in tail position, with an answer computed without `κ`, and i
 raises, a `perform` of the operation calls the clause's code with its resume removed. Nothing
 suspends or resumes, and no continuation is materialised. A clause that captures values, or
 whose handlers differ, is a state machine like any other: resumed in tail position, it still
-runs in constant stack.
+runs in constant stack. A closed clause whose answer is computed by a term that may raise, under
+a finaliser that resumes `κ` with the answer and cancels `κ` when the term unwinds
+(`b ← M unwind κ.cancel; κ.resume b`), is a direct call too (`unwindClause?`): as a direct call
+the unwind passes through the performing code's own frames, which is what the cancel runs. They
+differ only when a finaliser of those frames raises, which a cancel suppresses or keeps and an
+unwind lets supersede (*Cancels*). This is how `rec`'s clause runs (§20).
+
+**Abortive payloads.** A `raise`'s argument is carried as a variant of the program's abortive
+operations when it has more than one (`wrapRaise`), and a handler's clause takes it out of its
+variant: a code that raises two operations of different argument types answers one payload type.
 
 **Cancel** is the state's destructor. The resume code takes `inr mask` and switches on the state:
 the callee's `k` is cancelled first (innermost), then the point's finalisers run innermost first,
@@ -2946,6 +2977,173 @@ own: its handler answers one of two closures. The lowering adds neither.
 
 ---
 
+## 20. Entry 19 — recursion as an effect
+
+### Motivation
+
+Decision 24 (revised): a recursive function is written as ordinary calls of itself. A function
+that calls itself, or functions that call one another, is a **recursive group**; its calls of
+itself are the group's `rec` operation, and a **driver** runs it, chosen at the call site. Two
+drivers are provided:
+
+- **`bounded`**, the default: a native recursion that carries a **budget of depth**, each call
+  with one less. Bounded depth and finite branching make the recursion total, so it runs inside
+  one computation, as an ordinary native recursion. When the budget is spent the recursion
+  performs **`exhausted()`**, an abortive library effect: it unwinds as any error does, running
+  the finalisers of what it abandons, and a handler receives it. `Exhausted` stands in a
+  recursion's row where `div` stands in a loop's.
+- **`deep`**, the heap driver: the pending calls are first-order frames in one growable buffer.
+  It is limited only by memory, and it is div.
+
+The budget is a conservative reading of a stack check in each recursive function's entry code:
+on WebAssembly, whose stack cannot be inspected, an explicit depth counter (the budget itself,
+passed down as a word); with LLVM, a comparison of the stack pointer against a limit, as Go's
+prologue does. Design and calibration: `docs/rec-effect/bounded-deep.md`.
+
+### The kernel: `bounded_fix`
+
+    bounded_fix[A, C] : !U(!U((1 ⊕ !U(A ⊸ C)) ⊗ A ⊸ C) ⊗ (I32 ⊗ A) ⊸ C)
+
+at every computation type `C` (a row `F_Σ B` among them). From `(s, (k, a))` it runs the step `s`
+on `(self, a)`, `self` the self-reference:
+
+    (μ, bounded_fix (s, (k, a))) ↦ (μ, s (self_k, a))                          [boundedFix]
+    self_0 = inj₁ ()          self_{j+1} = inj₂ (λx. bounded_fix (s, (j, x)))
+
+The budget `k` is read unsigned and counted down by the machine, as `count`'s counter is counted
+up (§16), so the step is the same at every host. The step decides what a spent budget does:
+`self` is `inj₁ ()`.
+
+- **As built.** The primitive `Prim.boundedFix` and its head step `Head.boundedFix`
+  (`Paper/S1_Syntax`, `Paper/S3_Dynamics`; `boundedFixNext`, `fixSelf` in
+  `Support/Dynamics/Arrays.lean`), the interpreter's step, the `CDerives` rule `boundedFix`, its
+  soundness `boundedFix_compatX` (`Core/BoundedFix.lean`), and the checker's constant
+  `bounded_fix[A, C]`.
+- **The proof** is the induction on the budget at every `Σ`: the self-reference at `k` is valid
+  at `1 ⊕ !U(A ⊸ C)` (`fixSelf_valid`): `inj₁ ()` at `0`, and at `j + 1` a function whose call
+  is one `boundedFix` step to the step on the self-reference at `j`. The relation is unchanged:
+  `𝒞⟦C⟧` at a row is §19's `ewpTS`, total correctness, read only through its closure under a
+  pure step in front (`cC_head`). `fundamentalC`, `adequacyC`, `fundamentalD`, `adequacyD` and
+  the totality theorems (`total_every_alloc`, …) cover the extended judgment; their axioms are
+  within `[propext, Classical.choice, Quot.sound]`.
+
+### Recursive groups
+
+A recursive group is a strongly connected component of the calls among a program's functions
+that has a call in it (`Frontend/Elab/Effects.lean`, `recGroupsOf`); it is declared at its last
+member (`defineGroup`). Its members answer one type `B`, take no lifetime parameters, and are
+persistent functions. Its **row** is the union of its bodies' rows and the exhaustion effect.
+
+The **exhaustion effect** is the first declared effect with no type parameters whose one
+operation is abortive and takes no argument: `Exhausted` of `lib/rec.bc` (`include rec`), by its
+structure, as the iteration effect is (§15). Nothing in the elaborator names an effect.
+
+A call of a member from outside the group is a call of the group's **copy** for what serves its
+row there (§18's copies, `groupCopy`):
+
+- **The step** `g__step__…` takes the self-reference and the argument of a member, tagged by the
+  member (`A = P₁ ⊕ … ⊕ Pₙ`), and runs that member's body under a handler of the group's `rec`
+  site, a static name of its own, whose one operation is
+
+      rec : !U(A ⊸ F_Σ B) ⊗ A ↠ B            (affine)
+
+  `Σ` the group's row. A call of a member `j` inside the step is
+  `case self { inj₁ _ ⇒ exhausted () | inj₂ f ⇒ perform[rec] (f, inj_j W) }`. The clause is closed:
+
+      rec ((f, a), κ) = b ← force f a unwind (κ.cancel); κ.resume b
+
+- **The driver** of member `j` is `bounded_fix[A, F_Σ B] (step, (budget, inj_j W))`, the budget
+  `recBudget` (provisional, 10 000).
+
+The kernel has no recursive type and no recursive handler: the self-reference is a value the
+step is given (the knot is tied by `bounded_fix`), and the operation carries it, so the clause is
+closed. The rows are first order (decision 57): the self-reference's type `!U(A ⊸ F_Σ B)` names
+the row without `rec`.
+
+**Not provided**, each rejected with a message: a member whose body has a `while` or a `loop`; a
+recursion that uses an answering effect's capability, or performs an operation that resumes (its
+continuation is cancelled at an abortive row only); members with different result types; a
+generic recursive function; and a call of itself inside a handler of an effect its recursion
+performs, which would need a site per level (recursion through a site, decision 57; generative
+labels, #173; `corpus/reject/rec-through-site.bc`). A recursion with no handler of `Exhausted` in
+scope is rejected as any unhandled operation is (`corpus/reject/rec-unhandled.bc`): a platform
+that provides none rejects unbounded recursion statically.
+
+### The heap driver
+
+`with d { M }`, `d` a function of the type of a heap driver,
+
+    !(!(A ⇒ B ⊕ A ⊗ (K ⊕ 1)) ⊗ (!(K ⊗ B ⇒ B ⊕ A ⊗ (K ⊕ 1)) ⊗ A) ⇒ U(Loop B 1))
+
+(`deep` of `lib/rec.bc`, recognized by that type), drives the recursive groups `M` calls by `d`:
+`with` removes `Exhausted` from `M`'s row, and a call of a member is a call of its copy for `d`,
+`x__d`, which is `d` of the group's **machine** on the tagged argument: a call of a div function
+(§14), so the caller is div.
+
+- **The machine** `g__mach = (start, resume)` is made from the group's source, a function of the
+  members' self-references, after its sugar is elaborated (`Frontend/Sugar.lean`, `recMachine`,
+  `rmWalk`): a call of a self-reference is lifted out of the value it is in, the rest of the body
+  is moved into it (into each arm of a `case`), and at `x ← self_j W; N` the code answers the
+  request `inr (inj_j W, f)`. The frame `f` is first order: a variant of `K` per call that is not
+  in tail position, holding the variables `N` uses, with their types; a call in tail position
+  pushes none (`inr ()`). `resume (k, b)` binds the frame's variables and `x = b`, and goes on
+  with `N`.
+- **`deep`** is library code over `unfold` (§7): its state is a buffer `buf (1 ⊕ K)` (§17) of
+  pending frames and the next action; an observation starts a call or resumes the frame on top.
+  A slot holds `inl ()` when empty, the filler of `1 ⊕ K` (so a frame may hold an owned `μ` value
+  or any value with no filler of its own). The buffer doubles when it is full: a few allocations
+  per run, and none per call.
+
+A recursion under `deep` that performs an effect is not provided.
+
+### Lowering
+
+`bounded_fix` is converted to two codes (`Backend/Clos/Convert.lean`, `fixValue`): `fix (s, (k, a))`
+calls `s` on `(self, a)`, and `self`'s closure, a stack value of `s`'s words and `k − 1`, calls
+`fix` again. The `rec` site's clause resumes in tail position with an answer that may raise
+under a finaliser that cancels the continuation; such an operation is a direct call of its
+clause (`Backend/Clos/Capture.lean`, `unwindClause?`): as a direct call, an unwind passes through
+the performing code's own frames, which is what the cancel runs. So each level is a native call
+of known code, with nothing allocated and nothing dispatched (`corpus/rec-fib.bc`: 0, 0, 0;
+`corpus/rec-tree.bc`: the tree's own objects only).
+
+`wasmtime` runs with a 64 MiB stack (`Backend.wasmStackBytes`, `wasmtimeArgs`); the budget is
+calibrated against it with room for the finalisers an unwind runs (headroom): measured at about
+120 bytes of native stack per level for a linear recursion, 10 000 levels use about 1.2 MiB.
+
+The backend carries the abortive operations' arguments as a variant per operation when a
+program has more than one (`wrapRaise`), so that a code raising two of different argument types
+(`Fail[i32]` and `Exhausted`) answers one payload type.
+
+### Programs
+
+`corpus/rec-fib.bc`, `rec-tree.bc` (a recursive walk of a `mu` type), `rec-even-odd.bc` (mutual
+recursion), `rec-parser.bc` (a recursive-descent parser over five members whose errors leave the
+recursion through `Fail`), `rec-overflow.bc` (a recursion far past its budget: `Exhausted`
+caught, a cell held at every level freed by the unwind, `live 0`), `rec-deep.bc` (three groups
+under `deep` at three times the budget); rejects `corpus/reject/rec-*.bc`; reports
+`corpus/reports/rec-*.txt`.
+
+### Baseline
+
+One `CDerives` rule and one machine step are added, with their compatibility lemma; the relation,
+every other rule and every existing theorem keep their statements. `fundamentalC`, `adequacyC`,
+`fundamentalD`, `adequacyD` and §14's totality theorems cover `bounded_fix`.
+
+### Open
+
+- **`memo`**, a layer that intercepts `rec` and never drives it, needs a map (#211); deferred.
+- **The budget is per driver**: a recursion nested in another's body has a budget of its own, so
+  their native depth adds. A global check (the stack pointer, with LLVM) makes it one.
+- **Exact frame sizes** for the headroom: the calibration is a measured constant
+  (provisional).
+- A recursion whose body loops, or performs an operation that resumes; a recursion under `deep`
+  that performs an effect; a generic recursive function; recursion through a site (#173).
+- Tail recursion modulo context (Leijen and Lorenzen, POPL '23) could make some frames smaller
+  before they reach the buffer; `fold_imm`'s native depth could use the same buffer.
+
+---
+
 ## Status
 
 Entries 2–6 are implemented in the library directory `Core/`, with one `fundamentalC` and
@@ -2980,6 +3178,13 @@ runtime, with no change to `CDerives`; §11's `write_all` and `read_into` are `C
 `a..b`, `continue`, `else`, `loop` and `sized`, and `lib/iters.bc`; its completeness lemma is
 `Support/Dynamics/Completeness.lean`. Entry 17 (§18) is implemented in `Frontend/Parser.lean`
 and `Frontend/Elab/Effects.lean`, its laws in `Core/Handlers.lean`, with no change to `CDerives`.
+Entry 19 (§20) is implemented: the step `boundedFix` in `Paper/` and `Support/`,
+`Core/BoundedFix.lean` (`boundedFix_compatX`), the `CDerives` rule and the checker's
+`bounded_fix`; the groups, the steps and the heap driver's sources in `Frontend/Elab/Effects.lean`;
+the machine in `Frontend/Sugar.lean` (`recMachine`); `lib/rec.bc`; and the lowering in
+`Backend/Clos/Convert.lean` (`fixValue`) and `Backend/Clos/Capture.lean` (`unwindClause?`,
+`wrapRaise`).
+
 Entry 18 (§19) is in progress (#186). Stages 1–3 are implemented:
 - the machine: `perform`, `raise`, `hnd`, `ubind`, `ccatch` and `cfin`, and their steps, in
   `Paper/`;
@@ -3011,6 +3216,17 @@ with every kernel program at every stage (*Lowering*).
 ---
 
 ## Changelog
+
+- **0.37** (2026-10-01) — §20 (#188, stage 3; #158): recursion as an effect. A function that
+  calls itself, or functions that call one another, is a recursive group; its calls of itself are
+  its `rec` operation, and a driver chosen at the call site runs it. `bounded`, the default, is
+  the kernel's new constant `bounded_fix` (one `CDerives` rule and one machine step, sound by
+  induction on the budget at every row): a native recursion with a budget of depth whose end
+  performs `Exhausted` (`lib/rec.bc`), an abortive effect that unwinds. `deep`, the heap driver,
+  keeps first-order frames in one growable buffer and is div. §16: a `for` over data whose body
+  performs an operation that resumes is a div loop over the source's cursor. §19: a closed clause
+  that resumes with an answer computed under a finaliser that cancels the continuation is a
+  direct call; abortive payloads are variants. Decision 24 revised; decision 58.
 
 - **0.36** (2026-10-01) — §15 rewritten (#188, stage 2): generators on the iteration effect.
   `Yield[T]` (`lib/yield.bc`, `ctl yield(x: T)`) is an ordinary library effect; a generator is a

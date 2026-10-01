@@ -1,0 +1,27 @@
+-- `for` over a generator with `break` (for-gen.rec), as today's language already writes it. A
+-- generator is pulled, so the loop is a drain: div. The loop's value is what the generator
+-- finishes with (its digit count) or the `break` value, which must have the same type.
+--
+-- Answer: (i32[4], i32[4294967293]): 7531 has 4 digits and no zero; 7501's first zero, from the low
+-- end, is its second digit, reported as -(1 + 2), printed unsigned. The `break` value is bound
+-- first: `break 0 - 1 - i` stops the elaborator (`22b-break-arith.bc`).
+
+fn rem10(n: i32) -> i32 = match host[rem_u32] (n, 10) { inl r -> r | inr u -> 0 }
+fn div10(n: i32) -> i32 = match host[div_u32] (n, 10) { inl q -> q | inr u -> 0 }
+
+gen fn digits(n: i32) -> i32, i32 =
+  let mut n = n;
+  let mut k = 0;
+  while n > 0 {
+    yield rem10(n);
+    n = div10(n);
+    k = k + 1
+  };
+  k
+
+fn zero_or_len(n: i32) -> i32 =
+  let mut i = 0;
+  let r = for d in digits(n) { i = i + 1; if d == 0 { let e = 0 - 1 - i; break e } else { () } };
+  r
+
+main -> i32 * i32 = (zero_or_len(7531), zero_or_len(7501))

@@ -263,6 +263,8 @@ inductive Const where
   | countFold (S : VTy)
   /-- `count_try[S, E]`: the counted loop with an exit of SPEC §16. -/
   | countTry (S E : VTy)
+  /-- `bounded_fix[A, C]`: the fuelled fixed point of SPEC §20. -/
+  | boundedFix (A : VTy) (C : CTy)
   /-- The unwinding borrows of SPEC §19, each at the row `r` of its callback:
   `withbor1u['x, A, B, [r]]`, `withbor2u['x, @b, A, B, [r]]`, `withbor3u[@a, 'x, A, B, [r]]`,
   `withloadu[@a, 'x, A, B, [r]]`, `slice_borrow_mut_u['x, @b, A, B, [r]]`,
@@ -671,6 +673,7 @@ def Const.strip : Const → Const
   | .sliceSwapMut a A => .sliceSwapMut a.strip A.strip
   | .countFold S => .countFold S.strip
   | .countTry S E => .countTry S.strip E.strip
+  | .boundedFix A C => .boundedFix A.strip C.strip
   | .withbor1U x A B r => .withbor1U x.strip A.strip B.strip r.strip
   | .withbor2U x b A B r => .withbor2U x.strip b.strip A.strip B.strip r.strip
   | .withbor3U a x A B r => .withbor3U a.strip x.strip A.strip B.strip r.strip

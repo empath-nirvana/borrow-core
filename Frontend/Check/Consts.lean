@@ -388,6 +388,10 @@ def synConst (E : Env) (Δ : LifeCtx) (T : List CVTy) (sp : Span) :
       let S ← E.elabV Δ S
       let T ← E.elabV Δ T
       pure (cDead _ fun hd => CDerives.countTry S T hd)
+  | .boundedFix A C => do
+      let A ← E.elabV Δ A
+      let C ← E.elabC Δ C
+      pure (cDead _ fun hd => CDerives.boundedFix A C hd)
   | .sliceBorrowMut _ b A B => do
       let b ← E.elabL Δ b
       let A ← E.elabV Δ A

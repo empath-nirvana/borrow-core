@@ -1,0 +1,7 @@
+effect 17:1: Exhausted: exhausted (ctl, affine, abortive)
+row 17:1: fib: Exhausted (a recursive group: its calls of itself are its `rec`, driven by `bounded` at the budget 10000)
+lowering 17:1: recursive group fib: the step `fib__step__n1` under a handler of its `rec`, the static name 2; each member's copy is bounded_fix of it at the budget 10000, the exhaustion effect at the site 1
+lowering 19:15: with on_exhausted (Exhausted): a handler, the static name 1; exhausted abortive: a branch per call (final ctl)
+call 17:47: fib → perform[2.0], the group's `rec`; at the end of the budget abort[1.0]
+call 17:60: fib → perform[2.0], the group's `rec`; at the end of the budget abort[1.0]
+call 19:52: fib → `fib__n1`

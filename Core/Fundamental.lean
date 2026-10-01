@@ -3,6 +3,7 @@ import Core.Integers
 import Core.Arrays
 import Core.SliceOps
 import Core.CountFold
+import Core.BoundedFix
 import Core.FoldReuse
 import Core.Nu
 import Core.EffRules
@@ -189,6 +190,11 @@ inductive CDerives : LifeCtx → Ctx VTy → Expr → Jdg → Prop where
   counted loop with an exit, total at every host.  `[spec §16]` -/
   | countTry {Δ Γ} (S E : VTy) (hΓ : Ctx.DeadP Γ) :
       CDerives Δ Γ (.val (.prim .countTry)) (.val (countTryTy S E))
+  /-- `bounded_fix : !U(!U((1 ⊕ !U(A ⊸ C)) ⊗ A ⊸ C) ⊗ (I32 ⊗ A) ⊸ C)`, the step
+  `boundedFix`: the fixed point with a budget of depth, total at every host and every
+  computation type.  `[spec §20]` -/
+  | boundedFix {Δ Γ} (A : VTy) (C : CTy) (hΓ : Ctx.DeadP Γ) :
+      CDerives Δ Γ (.val (.prim .boundedFix)) (.val (boundedFixTy A C))
   /-- `slice_borrow_mut : Array A ⊸ (∀'x ⊏ ⊓Δ. [Mut 'x A] ⊸ ['x] B) ⊸ Array A ⊗ B`, the term
   `withbor`'s: an owned array lent as a family of `mut` leaves, with no cell.  `[spec §9]` -/
   | sliceBorrowM {Δ Γ A B} (x : LifeVar) (hΓ : Ctx.DeadP Γ)
@@ -474,6 +480,7 @@ theorem fundamentalC {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg}
   | arrForget _ _ hΓ => exact arrForget_compatX hΓ
   | countFold _ hΓ => exact countFold_compatX hΓ
   | countTry _ _ hΓ => exact countTry_compatX hΓ
+  | boundedFix _ _ hΓ => exact boundedFix_compatX hΓ
   | sliceBorrowM x hΓ hA hB hf₁ hf₂ => exact sliceBorrowM_compatX x hΓ hA hB hf₁ hf₂
   | sliceBorrowI x hΓ hsc hA hB hf₁ hf₂ => exact sliceBorrowI_compatX x hΓ hsc hA hB hf₁ hf₂
   | sliceGetM _ _ hΓ => exact sliceGetM_compatX hΓ

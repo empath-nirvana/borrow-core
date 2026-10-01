@@ -1,0 +1,32 @@
+-- An Intcode-like interpreter loop. Provisional spellings (README §2). Hand-lowered:
+-- 15-intcode.bc.
+
+fn run(mem: &mut array i32, pc: i32, e: Fail<i32>) -> i32 =
+  match mem[pc] {
+    1  -> mem[mem[pc+3]] = mem[mem[pc+1]] + mem[mem[pc+2]]; run(mem, pc + 4, e)
+  | 2  -> mem[mem[pc+3]] = mem[mem[pc+1]] * mem[mem[pc+2]]; run(mem, pc + 4, e)
+  | 7  -> mem[mem[pc+3]] = if mem[mem[pc+1]] < mem[mem[pc+2]] { 1 } else { 0 }; run(mem, pc + 4, e)
+  | 5  -> if mem[mem[pc+1]] != 0 { run(mem, mem[mem[pc+2]], e) } else { run(mem, pc + 3, e) }
+  | 99 -> mem[0]
+  | _  -> e.fail(pc)
+  }
+
+main =
+  let mut mem = load(&mut stdin);
+  let a = try { e -> run(&mut mem, 0, e) };                     -- div: a program need not halt
+  let b = try { e -> (run |> fuel(100) |> fix)(&mut mem2, 0, e) };   -- total, may run out
+  …
+
+-- ELABORATION
+--   Every `rec` is in tail position: `run` is a loop. No frame; one observation per
+--   instruction; `mem` is threaded through the state (lent `mut` per step). The same
+--   definition written with `loop { match … }` is the same machine.
+--
+-- DRIVER, TOTALITY, STACK
+--   fix: div, constant stack (a tail `rec` is a jump). fuel(100) |> fix: total, "ran out"
+--   visible. Lowered (15): `deep` never pushes (0 allocations per instruction; 3 in all, the
+--   memory arrays); `deep_fuel` with 100 finishes, with 10 runs out.
+--
+-- CHECKER REPORTS (intended)
+--   run: tail `rec` only: a loop; div (fix)
+--   fuel(100) |> fix: total; result gains "ran out"

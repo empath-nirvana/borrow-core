@@ -1,0 +1,23 @@
+-- expect: rejected
+-- `22-for-gen-break.bc` with the `break` value written in place, `break 0 - 1 - i`. The
+-- elaborator stops with an internal error, a bug (the same value bound by `let` first checks).
+
+fn rem10(n: i32) -> i32 = match host[rem_u32] (n, 10) { inl r -> r | inr u -> 0 }
+fn div10(n: i32) -> i32 = match host[div_u32] (n, 10) { inl q -> q | inr u -> 0 }
+
+gen fn digits(n: i32) -> i32, i32 =
+  let mut n = n;
+  let mut k = 0;
+  while n > 0 {
+    yield rem10(n);
+    n = div10(n);
+    k = k + 1
+  };
+  k
+
+fn zero_or_len(n: i32) -> i32 =
+  let mut i = 0;
+  let r = for d in digits(n) { i = i + 1; if d == 0 { break 0 - 1 - i } else { () } };
+  r
+
+main -> i32 * i32 = (zero_or_len(7531), zero_or_len(7501))

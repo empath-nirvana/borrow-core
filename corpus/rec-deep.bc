@@ -1,0 +1,39 @@
+-- check: no-source
+-- The heap driver (SPEC §20). Under `with deep { … }` the recursions are driven by `deep`
+-- (`lib/rec.bc`), which keeps their pending calls as first-order frames in one growable buffer:
+-- a call that is not in tail position pushes the variables the rest of the body uses, an answer
+-- pops them. Nothing is on the native stack, so the depth is limited only by memory, three times
+-- `bounded`'s budget here; and the run is div.
+--
+-- `tot` holds `n` in its one frame. `even` and `odd` call each other in tail position only, and
+-- push nothing. `spine` builds a tree that leans left, and `sum` walks it, its frame holding the
+-- right subtree and the value (an owned `mu` value in the buffer, whose empty slots are `inl ()`).
+-- Each group's buffer grows by doubling: a few allocations per run, beside the tree's own two per
+-- node (`corpus/counts.expected`).
+--
+-- The source interpreter is too slow at this depth (`-- check: no-source`); the golden is the
+-- closed form: 1 + … + 30000, and the same for the tree's values.
+--
+-- Answer: (i32[450015000], (inl (), i32[450015000])): `odd(30000)` is false. A frame that lost
+-- its variable gives another sum; a driver on the native stack traps.
+
+include rec
+
+fn tot(n: i32) -> i32 = if n == 0 { 0 } else { n + tot(n - 1) }
+
+fn even(n: i32) -> bool = if n == 0 { true } else { odd(n - 1) }
+fn odd(n: i32) -> bool = if n == 0 { false } else { even(n - 1) }
+
+type Tree = mu X. 1 + (X * (i32 * X))
+def empty : Tree = roll inl ()
+fn mk(l: Tree, v: i32, r: Tree) -> Tree = roll inr (l, (v, r))
+
+fn spine(d: i32) -> Tree = if d == 0 { empty } else { mk(spine(d - 1), d, empty) }
+
+fn sum(t: Tree) -> i32 =
+  match unroll t {
+    inl u -> 0
+  | inr (l, p) -> let (v, r) = p; sum(l) + v + sum(r)
+  }
+
+main -> i32 * (bool * i32) = with deep { (tot(30000), (odd(30000), sum(spine(30000)))) }

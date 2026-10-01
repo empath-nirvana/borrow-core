@@ -65,12 +65,14 @@ Each entry: the decision, and why. Newest last.
 24. **Recursion is an effect (revised; the original read "recursion is always structured, no
     general direct recursion").** A recursive function is written as ordinary self-calls, and the
     elaborator turns each self-reference into the `rec` operation, one `rec` per mutually recursive
-    group. A driver runs it: `fix` (div, the default), fuel from a source's bound or `fuel(n)`
-    (total), `deep` (pending frames on its own stack) or tabulation. Layers (`memo`, `fuel`)
-    intercept `rec` and never drive it, and compose with `|>` (decision 50). Loops are the
-    tail-position case of the same mechanism. Stack behaviour is a choice of driver, and deep
-    non-tail recursion is a lowering matter (#123), not a reason to forbid recursion. Design:
-    `docs/rec-effect/` (#133), effects stage S3b.
+    group. A driver, chosen at the call site, runs it: `bounded` (the default: a native recursion
+    with a budget of depth, total, whose end performs `Exhausted`) or `deep` (pending calls as
+    first-order frames on a heap buffer, div). Totality is not a goal of recursion: `fuel` as a
+    route to totality and structural descent (K5, #179) are not built. Layers (`memo`) intercept
+    `rec` and never drive it; `memo` waits for a map (#211). Stack behaviour is a choice of
+    driver, and deep non-tail recursion is a lowering matter (#123), not a reason to forbid
+    recursion. Design: `docs/rec-effect/` (#133), its addendum `bounded-deep.md`; SPEC §20;
+    decision 58.
 25. **Every lowering has a plain LLVM counterpart.** Wasm is the verified target, but no
     semantics may depend on a Wasm-only feature: stack switching (WasmFX), `resume_throw`, Wasm
     exceptions and Wasm GC may appear only as optimizations with a portable fallback. Async,
@@ -706,3 +708,32 @@ Each entry: the decision, and why. Newest last.
     - **Stored callbacks** use ports, with stateful capabilities passed by the caller. The `dyn` object with a hidden state is deferred until a heterogeneous registry needs it.
     - **Operations that take computations** (higher-order effects) are out of scope: scoping constructs are functions over passed computations that install ordinary handlers.
     - **Open:** the inlining heuristic; `rename` (Frank's adaptor) versus required inlining for a provided resuming effect the callee passes on; when to build the renaming lemma; a stack lowering of call-scoped cells.
+58. **Recursion as an effect, built (#188 stage 3, #158, SPEC §20; the user's decisions of 2026-10-01; spellings provisional).**
+    - **Two drivers, both chosen at the call site.** `bounded` is the default and needs nothing
+      written: the kernel's `bounded_fix`, a native recursion carrying a budget of depth. `deep` is
+      `with deep { … }`: the recursions its body calls keep their pending calls as first-order frames
+      in one growable buffer (`buf (1 + K)`), limited only by memory, and are div.
+    - **`Exhausted`** (`lib/rec.bc`, `effect Exhausted { ctl exhausted() -> never }`) is what
+      `bounded` performs when the budget is spent: abortive, it unwinds and runs finalisers. It
+      stands in a recursion's row where `div` stands in a loop's, and is handled by `on_exhausted(d)`
+      or `exhausted_to_option`. A platform with no handler of it around `main` rejects an
+      unhandled recursion statically (the embedded case); the WebAssembly platform provides none
+      yet, so a program handles it.
+    - **The budget is a conservative reading of a stack check** in each recursive function's entry
+      code: an explicit depth counter on WebAssembly (10 000 levels, against `wasmtime`'s stack of
+      64 MiB, with headroom for the finalisers an unwind runs), a stack-pointer comparison with
+      LLVM later. Its calibration is provisional (`docs/rec-effect/bounded-deep.md`).
+    - **The kernel change** is one constant, `bounded_fix[A, C]`, with its step and its soundness by
+      induction on the budget at every row (total correctness). Partial correctness and
+      refunctionalising a heap machine in the backend were considered and not taken.
+    - **No effect is named by the elaborator.** A recursive group is a strongly connected component
+      of the calls; the exhaustion effect is found by its structure (no type parameters, one
+      abortive operation with no argument), and a heap driver by its type. The group's `rec`
+      operation is made per group: its argument carries the self-reference, whose type names the
+      group's row, so it is not a declared effect (rows are first order, decision 57).
+    - **A `for` over data whose body performs an operation that resumes is a div loop** over the
+      source's cursor; `&a` and `&mut a` stay rejected there (T1, #172).
+    - **Spellings (provisional):** `include rec`; `with deep { … }`; `on_exhausted(!{ u -> d })`;
+      `exhausted_to_option`; the reports' `row … (a recursive group …)` lines. Decision 57's
+      pattern, a per-level handler around the recursive call, is rejected (recursion through a
+      site, #173).

@@ -54,7 +54,10 @@ object per level (`Backend/README.md`).
 **Tail-resumptive operations.** When every handler of a name has the same closed clause for an
 operation, and the clause resumes `κ` once, in tail position, and neither suspends nor raises,
 the operation is a direct call of the clause, its resume removed: the handler is the one known
-statically, and nothing is suspended or resumed.
+statically, and nothing is suspended or resumed. So is a clause whose answer is computed by a
+term that may raise, under a finaliser frame that resumes `κ` with the answer and cancels `κ` on
+an unwind (`unwindClause?`): as a direct call, the unwind passes through the performing code's
+own frames, which is what the cancel runs.
 
 **Cancels.** `κ`'s cancel entry cancels `k` with the mask of the names of the handlers its region
 may hold, then answers `()` or re-raises the kept error (`reraise`). The mask is the handler
@@ -126,6 +129,23 @@ structure Ops where
 
 def Ops.keyIdx (O : Ops) (k : OpKey) : Nat := (O.keys.toList.idxOf? k).getD 0
 
+/-- The abortive operations' arguments are carried as a variant per operation, so that a code that
+raises several of them, of different argument types, answers one payload type: when the program
+has more than one. -/
+def Ops.wrapsAborts (O : Ops) : Bool := O.aborts.length > 1
+
+/-- `raise p` with the argument of `p = (n, (i, v))` put in its variant of the abortive
+operations (`wrapsAborts`). -/
+def wrapRaise (O : Ops) (p : Var) : KM Tm := do
+  let some key := payloadKey O.defs p | return .raise p
+  let some k := O.aborts.idxOf? key | return .raise p
+  let a ← kfresh; let b ← kfresh; let i ← kfresh; let v ← kfresh; let v' ← kfresh
+  let b' ← kfresh; let p' ← kfresh; let a' ← kfresh; let i' ← kfresh
+  -- The name and the operation as literals again, so that the key stays known (`payloadKey`).
+  return .letpair a b p (.drop a (.letpair i v b (.drop i (.letv v' (.con k O.aborts.length v)
+    (.letv i' (.lit (.i32 key.2)) (.letv b' (.pair i' v') (.letv a' (.lit (.i32 key.1))
+      (.letv p' (.pair a' b') (.raise p')))))))))
+
 /-- The variants of the control operations of `n`, with their operation indices. -/
 def Ops.keysOf (O : Ops) (n : UInt32) : List (Nat × Nat) :=
   O.keys.toList.zipIdx.filterMap fun ((m, i), j) => if m == n then some (j, i.toNat) else none
@@ -177,7 +197,12 @@ def abortiveSite (O : Ops) (n : UInt32) (hr cls : Var) (b : Tm) : KM Tm := do
   let v ← kfresh
   if ops.isEmpty then return .letv v b (.drop cls (.app hr v))
   let r ← kfresh; let q ← kfresh; let m ← kfresh; let qi ← kfresh; let i ← kfresh; let w ← kfresh
-  let onRaise ← dispatchOp i (fun j => withClause cls j fun c => pure (.app c w)) ops
+  let onRaise ← dispatchOp i (fun j => withClause cls j fun c => do
+    if !O.wrapsAborts then return .app c w
+    -- The argument out of its variant.
+    let some k := O.aborts.idxOf? (n, j.toUInt32) | return .app c w
+    let x ← kfresh
+    return .when w k O.aborts.length x (.app c x) (.absurd w)) ops
   return .letv r (.catch n b) (.case r v (.drop cls (.app hr v)) q
     (.drop hr (.letpair m qi q (.drop m (.letpair i w qi onRaise)))))
 
@@ -243,6 +268,7 @@ where
 
 /-- Lower the handlers and finaliser frames of a term. -/
 def handlers (O : Ops) : Tm → KM Tm
+  | .raise p => if O.wrapsAborts then wrapRaise O p else pure (.raise p)
   | .hnd n hr cls b => do
     let b ← handlers O b
     if O.ctl.contains n then controlSite O n hr cls b else abortiveSite O n hr cls b
@@ -527,6 +553,64 @@ def tailClause? (c : Code) : Option Code := do
   guard (fa.contains ff && occurrences B ka == ka.length && occurrences B fa == fa.length)
   return { c with body := .letv p' (.var p) (.letpair w k p' (B.dropResume kk s ff y)) }
 
+/-- The code of a finaliser frame's clauses (`markUbinds`) that resumes `κ` with the answer and
+cancels it on an unwind: `λs. case s {inl b. k.resume b | inr _. k.cancel}`, `k` its one captured
+value. -/
+def resumeOrCancel? (c : Code) : Bool := Id.run do
+  let [ke] := c.env | return false
+  let .letv s' (.var s) (.case s'' b r u x) := c.body | return false
+  if !(s == c.param && s' == s'') then return false
+  let ka := aliasesIn r ke ++ aliasesIn x ke
+  -- The resume: `(k (inl ())) b`, `k` used once.
+  let resOk := match r.tail with
+    | .app t b' =>
+      (aliasesIn r b).contains b' && occurrences r (aliasesIn r ke) == (aliasesIn r ke).length &&
+        (match (defsOf {} r)[t]?.map Tm.tail with
+          | some (.app kk sv) => ka.contains kk &&
+              (match (defsOf {} r)[sv]?.map Tm.tail with | some (.inj false _) => true | _ => false)
+          | _ => false)
+    | _ => false
+  -- The cancel: `k (inr ())`.
+  let canOk := match x.tail with
+    | .app kk sv => ka.contains kk && !(aliasesIn x u).contains kk &&
+        (match (defsOf {} x)[sv]?.map Tm.tail with | some (.inj true _) => true | _ => false)
+    | _ => false
+  return resOk && canOk
+
+/-- The finaliser frame `let cv = clos sc [k']; let r = fin cv M; let i = inj₁ r; cv i` at the tail
+of `t`, as `handlers` leaves `M then b. N unwind D` with its clauses one code (`markUbinds`):
+`cv`, `sc`, `k'` and `M`. -/
+def finTail? : Tm → Option (Var × Nat × Var × Tm)
+  | .letv cv (.clos sc [k']) (.letv r (.fin false dd M) (.letv i (.inj false r') (.letv d' (.var dd') (.app d'' i')))) =>
+    if dd == cv && dd' == cv && r' == r && d'' == d' && i' == i then some (cv, sc, k', M) else none
+  | .letv _ _ b | .letpair _ _ _ b | .copy _ _ b | .drop _ b => finTail? b
+  | _ => none
+
+/-- `t` with its tail frame (`finTail?`) replaced by its body `M`. -/
+def Tm.dropFin : Tm → Tm
+  | t@(.letv cv (.clos _ [_]) (.letv _ (.fin false _ M) _)) =>
+    if (finTail? t).isSome then M else t
+  | .letv x e b => .letv x e b.dropFin
+  | .letpair x z p b => .letpair x z p b.dropFin
+  | .copy x x' b => .copy x x' b.dropFin
+  | .drop x b => .drop x b.dropFin
+  | t => t
+
+/-- The clause code `λp. let (w, k) = p; B` without `κ`, when `B` ends in the frame
+`M then b. k.resume b unwind k.cancel` and uses `κ` nowhere else: the answer is computed by `M`,
+which may raise, and `κ` is resumed with it in tail position, or cancelled when `M` unwinds. As a
+direct call the clause answers `M`'s answer, and an unwind of `M` unwinds the performing code's
+own frames, which is what the cancel runs. Its argument is still the pair, with `()` for `κ`. -/
+def unwindClause? (codes : Array Code) (c : Code) : Option Code := do
+  let .letv p' (.var p) (.letpair w k p'' B) := c.body | none
+  guard (p == c.param && p' == p'' && c.env.isEmpty)
+  let (_, sc, k', _) ← finTail? B
+  let ka := aliasesIn B k
+  guard (ka.contains k' && occurrences B ka == ka.length)
+  let some sel := codes[sc]? | none
+  guard (resumeOrCancel? sel)
+  return { c with body := .letv p' (.var p) (.letpair w k p'' (.drop k B.dropFin)) }
+
 /-- The codes of the clauses at index `j` of the clause tuples a key holds. -/
 def Solver.clausesAt (S : Solver) (k : Nat) : Nat → List Nat
   | 0 => ((S.set[k]?.getD #[]).toList.flatMap fun v => match S.vals[v]! with
@@ -606,8 +690,9 @@ def directCalls (O : Ops) (direct : Std.HashMap OpKey Nat) : Tm → KM Tm
 /-- The operations whose clause, at every handler of their name, is one closed tail-resumptive
 code that neither suspends nor raises: each with that code without its resume. -/
 def tailResumptive (O : Ops) (F : SFacts) (codes : Array Code) (hs : Array HInfo) :
-    List (OpKey × Code) := Id.run do
+    List (OpKey × Code) × List Nat := Id.run do
   let mut out := []
+  let mut sels := []
   for n in O.ctl do
     let sites := hs.toList.filter (·.n == n)
     for (idx, j) in O.keysOf n do
@@ -616,11 +701,18 @@ def tailResumptive (O : Ops) (F : SFacts) (codes : Array Code) (hs : Array HInfo
       let cs := (sites.flatMap fun h =>
         F.S.clausesAt (F.S.num.idx (.var h.dVars[1]!)) j).eraseDups
       let [c] := cs | continue
-      let some tc := codes[c]?.bind tailClause? | continue
-      if !(sKeysOf O F c [] tc.body).isEmpty then continue
-      if !Raises.isEmpty (F.U.raises tc.body) then continue
-      out := out ++ [((n, j.toUInt32), tc)]
-  return out
+      if let some tc := codes[c]?.bind tailClause? then
+        if !(sKeysOf O F c [] tc.body).isEmpty then continue
+        if !Raises.isEmpty (F.U.raises tc.body) then continue
+        out := out ++ [((n, j.toUInt32), tc)]
+      else if let some tc := codes[c]?.bind (unwindClause? codes) then
+        -- The answer's computation may raise: an unwind of the direct call unwinds the
+        -- performing code's frames, as the cancel of `κ` does.
+        if !(sKeysOf O F c [] tc.body).isEmpty then continue
+        out := out ++ [((n, j.toUInt32), tc)]
+        if let some (Tm.letv _ _ (Tm.letpair _ _ _ B)) := codes[c]?.map (·.body) then
+          if let some (_, sc, _, _) := finTail? B then sels := sc :: sels
+  return (out, sels)
 
 /-! ### Machines -/
 
@@ -997,7 +1089,7 @@ def Prog.capture (p : Prog) : Except String Prog := do
     let hs := (← get).hs
     let F₀ ← liftE (SFacts.of O q₀ hs)
     -- Tail-resumptive operations become direct calls; then the analysis again.
-    let direct := tailResumptive O F₀ q₀.codes hs
+    let (direct, sels) := tailResumptive O F₀ q₀.codes hs
     let (main, q₀, F) ← if direct.isEmpty then pure (main, q₀, F₀) else do
       let mut tcs : Std.HashMap OpKey Nat := {}
       for (key, tc) in direct do tcs := tcs.insert key (← kregister (← freshCopy tc))
@@ -1009,8 +1101,15 @@ def Prog.capture (p : Prog) : Except String Prog := do
       pure (main, q₁, ← liftE (SFacts.of O q₁ hs))
     -- `drive`'s forwarding, where its body suspends with another name's operation; `κ`'s mask and
     -- re-raise, where a finaliser may raise.
+    -- The cancel of a clause made a direct call (`unwindClause?`) runs no more.
+    -- A finaliser frame's clauses as one code (`markUbinds`) may raise in its continuing arm; only
+    -- its finalising arm runs at a cancel.
+    let finRaises (d : Nat) : Bool := match q₀.codes[d]?.map (·.body) with
+      | some (Tm.letv s' (Tm.var _) (Tm.case s'' _ _ _ D)) =>
+        if s' == s'' then !Raises.isEmpty (F.U.raises D) else F.raises[d]?.getD false
+      | _ => F.raises[d]?.getD false
     let anyRaise := q₀.codes.toList.any fun c => c.body.finalisers.any fun dd =>
-      (F.codesOf dd).any (F.raises[·]?.getD false)
+      (F.codesOf dd).any (fun d => !sels.contains d && finRaises d)
     let ms ← if anyRaise then liftE (masks F q₀.codes hs) else pure (hs.map fun _ => 0)
     if anyRaise then
       let succ := q₀.codes.map fun c => (c.body.callees.flatMap F.codesOf).eraseDups

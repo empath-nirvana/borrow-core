@@ -1,0 +1,55 @@
+-- uses: rec.bc
+-- counts-at: s/build(100000)/build(1000)/
+-- A walk over an owned tree (tree.rec): the sum of its values, by `rec` under the deep driver,
+-- and by `fold_own` for comparison. The tree is 100 000 nodes deep down its left spine: deep
+-- non-tail recursion. sum(l) is not in tail position (v + _ + sum(r) is still to do), so its
+-- frame holds `v` and the right subtree, which is owned: frames hold linear data.
+--
+-- The recursion is structural (each `rec` is on a strict subterm of an owned argument), so it
+-- could be total by the tree's size, as `fold_own` is. Under `deep` it is div: the driver does
+-- not know the argument shrinks (README §6, "structural recursion").
+--
+-- `fold_own` is run at depth 1000 only: over a tree (a shape with two recursive positions) it is
+-- not compiled by pointer reversal and keeps a native frame per level (`bcc-counts --sites`:
+-- "owned-folds reversed 0 recursive 1"; Backend/README.md, Stack), and at depth 100 000 the run
+-- ends with "wasm trap: call stack exhausted". The deep driver's frames are on the heap.
+--
+-- Answer: (i32[1410165408], i32[1001000]): each spine node i holds i and has a right child
+-- holding i, so the sum is 2 · (1 + … + n): 10 000 100 000 at n = 100 000, which wraps to
+-- 1410165408 in i32, and 1 001 000 at n = 1000. A walk that dropped the right subtrees gives
+-- half.
+
+type Tree = mu X. 1 + (X * (i32 * X))
+
+fn tleaf() -> Tree = roll inl ()
+fn tnode(l: Tree, v: i32, r: Tree) -> Tree = roll inr (l, (v, r))
+
+fn grow(i: i32, t: Tree) -> Tree = tnode(t, i + 1, tnode(tleaf(), i + 1, tleaf()))
+fn build(n: i32) -> Tree = count_fold[Tree] (grow, n, 0, tleaf())
+
+-- Frames: `inl (v, r)` after the left subtree; `inr x` after the right one.
+type Out = i32 + ((Tree * (((i32 * Tree) + i32) + 1)) + 1)
+
+fn sum_start(p: 1 * Tree) -> 1 * Out =
+  let (s, t) = p;
+  match unroll t {
+    inl u -> (s, inl 0)
+  | inr n -> let (l, vr) = n; (s, inr (inl (l, inl (inl vr : (i32 * Tree) + i32))))
+  }
+
+fn sum_resume(p: 1 * (((i32 * Tree) + i32) * i32)) -> 1 * Out =
+  let (s, kb) = p;
+  let (k, b) = kb;
+  match k {
+    inl vr -> let (v, r) = vr; (s, inr (inl (r, inl (inr (b + v) : (i32 * Tree) + i32))))
+  | inr x -> (s, inl (x + b))
+  }
+
+fn sum_alg(r: 1 + (i32 * (i32 * i32))) -> i32 =
+  match r { inl u -> 0 | inr n -> let (l, vr) = n; let (v, rr) = vr; l + v + rr }
+def sum_fold : !(Tree => i32) = fold_own[1 + (X * (i32 * X)), i32] sum_alg
+
+main -> i32 * i32 =
+  let (u, r) = deep(sum_start, (sum_resume, ((), build(100000))));
+  let a = match r { inl v -> v | inr z -> 0 - 1 };
+  (a, sum_fold(build(1000)))
