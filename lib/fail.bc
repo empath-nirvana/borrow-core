@@ -7,7 +7,8 @@
 -- The handlers are ordinary handlers, installed with `with`:
 --
 -- * `to_result`: the body's value `inl a`, or the error `inr e`;
--- * `default(d)`: the body's value, or `d` (persistent: a clause is `!` code);
+-- * `default(d)`: the body's value, or `d(())`. A clause is `!` code (SPEC §19), so what a handler
+--   is given is `!`: here a function, `with default(!{ u -> 0 }) { … }`;
 -- * `map_err(f)`: the body's value, or the error `f(e)` raised to the handler around the `with`.
 --
 -- A search that can find nothing answers a sum; a validation or a parse that can fail raises.
@@ -19,9 +20,9 @@ handler to_result[E, A]: Fail[E], A -> A + E = {
   raise(e) = inr e
 }
 
-handler default[E, A](d: A): Fail[E], A -> A = {
+handler default[E, A](d: !(1 => A)): Fail[E], A -> A = {
   return(a) = a;
-  raise(e) = d
+  raise(e) = d(())
 }
 
 handler map_err[E, E2, A](f: !(E => E2)): Fail[E], A -> A with Fail[E2] = {

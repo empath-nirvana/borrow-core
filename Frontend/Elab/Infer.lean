@@ -167,9 +167,14 @@ def inferV : Nat → Env → LifeCtx → List CVTy → Option CVTy → Val → I
         | _ => (none, none)
       let w ← inferV n E Δ T eW W
       pure (node res [f, w])
-    | .inst _ V _ => do
+    | .inst _ V l => do
       let a ← inferV n E Δ T none V
-      pure (node (askV E Δ T v) [a])
+      -- `V [@]` at `all 'x < @b. A`: `A` at `@`, read off `V`'s type (the checker's synthesis
+      -- re-checks a `def`'s body at each use).
+      let direct : Option CVTy := match a.ty.v?, (E.elabL Δ l).toOption with
+        | some (.thunk (.all x _ (.ret A))), some al => some (A.instLife x al)
+        | _, _ => none
+      pure (node (direct <|> askV E Δ T v) [a])
     | .ascribe _ V A => do
       let A' := (E.elabV Δ A).toOption
       let a ← inferV n E Δ T A' V

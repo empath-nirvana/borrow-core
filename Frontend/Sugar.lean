@@ -3403,14 +3403,27 @@ def coreQual : Qual → BoCa.Fig16.LogRel.Core.Qual
 /-- The type of the computation `C` when it is a returner chain `F[S] A`: `S` and `A`. -/
 def rowRes? (C : CCTy) : Option (Frontend.Check.CRow × CVTy) := Frontend.Check.effRow? C
 
-/-- A call of a function whose result is effectful (`U(A ⊸ F[S] B)`, `S` not empty), as
-elaborated in a value: the function and the argument. -/
+/-- The row a function type's result performs: `F[S]` under its `!`, `∀`s and arrow. -/
+def fnRowOf : CVTy → List BoCa.Fig16.LogRel.Core.OpSig
+  | .bang A => fnRowOf A
+  | .thunk (.all _ _ (.ret A)) => fnRowOf A
+  | .thunk (.arr _ C) => ((rowRes? C).map (·.1)).getD []
+  | _ => []
+
+/-- The name a call applies: `f(…)`, `f[A](…)`, `f ['x](…)`. -/
+def calleeHead : Val → Option String
+  | .var _ f | .defApp _ f _ => some f
+  | .inst _ V _ | .unbang _ V => calleeHead V
+  | _ => none
+
+/-- A call of a function whose result is effectful (`A ⇒ F[S] B`, `S` not empty), as
+elaborated in a value: the function and the argument. The function is known by its name. -/
 def effCall? (c : TCx) : Val → Option (Val × Val)
-  | .app _ f W => match c.tyV f with
-    | some (.thunk (.arr _ C)) => match rowRes? C with
-      | some (_ :: _, _) => some (f, W)
-      | _ => none
-    | _ => none
+  | .app _ f W => match calleeHead f with
+    | some g => match c.tyV (.var .none g) with
+      | some T => if (fnRowOf T).isEmpty then none else some (f, W)
+      | none => none
+    | none => none
   | _ => none
 
 /-- An effectful call as the computation it is: `g <- return f; a <- return W; (force g) a`. -/
@@ -3438,13 +3451,6 @@ def sameTy (c : TCx) (A B : VTy) : Bool :=
   match c.elabV A, c.elabV B with
   | some A', some B' => A' == B'
   | _, _ => A.strip == B.strip
-
-/-- The row a function type's result performs: `F[S]` under its `!`, `∀`s and arrow. -/
-def fnRowOf : CVTy → List BoCa.Fig16.LogRel.Core.OpSig
-  | .bang A => fnRowOf A
-  | .thunk (.all _ _ (.ret A)) => fnRowOf A
-  | .thunk (.arr _ C) => ((rowRes? C).map (·.1)).getD []
-  | _ => []
 
 mutual
 /-- The operations `(n, i)` a computation performs, outside closures, by name: its `perform`s and
@@ -3991,8 +3997,21 @@ def hndCtlC : Nat → TCx → Span → HInfo → Val → Val → Val → Comp �
     let S := c.E.row.getD []
     let mismatch (what : String) : Error :=
       ⟨sp, s!"the handler `{i.name}`: {what} does not have the type its declaration gives it"⟩
-    -- The arguments, bound to the parameters' names.
     let mut σ : TySubst := i.known
+    -- The body, with the site's operations innermost; its type determines the return clause's.
+    let ops ← i.ents.mapM fun (q, A, B) => do
+      pure (coreQual q, ← need sp "an operation's type" (c.elabV A),
+        ← need sp "an operation's type" (c.elabV B))
+    let rowB := BoCa.Fig16.LogRel.Core.Row.ofEff (UInt32.ofNat i.n) ops 0 ++ S
+    let cB : TCx := { c with E := { c.E with row := some rowB } }
+    let M' ← surfC n cB none M
+    let CM ← need M.span s!"the type of the body `{i.name}` handles" ((← refresh cB).tyC M')
+    let (_, A) ← need M.span s!"the type of the body `{i.name}` handles" (rowRes? CM)
+    let As ← (c.surface sp A : Except Error VTy)
+    match Elab.Effects.matchTyBy (sameTy c) i.tps σ i.retA As with
+    | some σ' => σ := σ'
+    | none => throw (mismatch "the body it handles")
+    -- The arguments, bound to the parameters' names.
     let mut cP := c
     let mut binds : List (Ident × VTy × Val) := []
     for ((x, Pt), a) in i.params.zip (tupleArgs i.params.length P) do
@@ -4007,19 +4026,6 @@ def hndCtlC : Nat → TCx → Span → HInfo → Val → Val → Val → Comp �
       | none => throw (mismatch s!"the argument `{x}`")
       binds := binds ++ [(⟨x, sp⟩, Ts, a')]
       cP := cP.push x (some T)
-    -- The body, with the site's operations innermost.
-    let ops ← i.ents.mapM fun (q, A, B) => do
-      pure (coreQual q, ← need sp "an operation's type" (cP.elabV A),
-        ← need sp "an operation's type" (cP.elabV B))
-    let rowB := BoCa.Fig16.LogRel.Core.Row.ofEff (UInt32.ofNat i.n) ops 0 ++ S
-    let cB : TCx := { cP with E := { cP.E with row := some rowB } }
-    let M' ← surfC n cB none M
-    let CM ← need M.span s!"the type of the body `{i.name}` handles" ((← refresh cB).tyC M')
-    let (_, A) ← need M.span s!"the type of the body `{i.name}` handles" (rowRes? CM)
-    let As ← (cP.surface sp A : Except Error VTy)
-    match Elab.Effects.matchTyBy (sameTy cP) i.tps σ i.retA As with
-    | some σ' => σ := σ'
-    | none => throw (mismatch "the body it handles")
     if let some x := i.tps.find? (fun x => (σ.lookup x).isNone) then
       throw ⟨sp, s!"the type parameter `{x}` of `{i.name}` is not determined here: write it, " ++
         s!"`with {i.name}[…]`"⟩
