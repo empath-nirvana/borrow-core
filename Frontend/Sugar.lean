@@ -1136,7 +1136,12 @@ def mAbort (m : MCx) (sp : Span) (lend : Option Ident) (Rf : CVTy) : MM (String 
     if Rf == .unit then pure ("let () = io_r;\n", [])
     else if Rf == cx.R && !cx.parts.isEmpty then
       pure ((if cx.tail1 then destructR "io_r" cx.parts else destructParts "io_r" cx.parts), cx.capNames)
-    else throw ⟨sp, s!"machine: a residual `{ppT Rf}` other than the body's"⟩
+    else match cx.caps.filter (·.2 == Rf) with
+      -- The loop hands back the one capability of the body of its type, which it was given.
+      | [(p, _)] => pure (s!"{p} <- return io_r;\n", [p])
+      | _ => throw ⟨sp, s!"a call whose loop hands back `{ppT Rf}` when closed, which is neither " ++
+          s!"nothing, a capability it was lent, one capability of the body, nor what the body " ++
+          s!"hands back (`{ppT cx.R}`)"⟩
 
 /-- `break` (with the loop's value `e`): the innermost loop's iterator closed, then its join. -/
 def mBreak (m : MCx) (sp : Span) (e : Val) : MM Comp := do
@@ -3437,16 +3442,24 @@ def forYield : Nat → TCx → Option CCTy → Span → Ident → ItInfo → Val
     let Bg ← match Bw with
       | .tensor _ B => pure B
       | _ => throw ⟨sp, "internal error: a generator's copy for a `for` hands its variables back"⟩
-    -- The loop's value: what the generator returns, or `break e`'s.
+    -- The loop's value: what the generator returns, or `break e`'s. A generator that never
+    -- returns (`0`) gives only `break e`'s.
     let Vt : CVTy ← match keep with
       | some (_, some A) => need sp "the loop's value" (c.elabV A)
-      | some (_, none) => pure Bg
+      | some (r, none) =>
+        if Bg != .zero then pure Bg else
+        match (M.spineBreaks.filterMap (·.2)).head? with
+        | some e => match (ws.foldl (fun c (y, T) => c.push y (some T)) (c.push x.name (some Tc))).tyV e with
+          | some T => pure T
+          | none => throw ⟨e.span, s!"the type of this loop's value is not determined: write it, " ++
+              s!"`let {r.name} : T = for …`"⟩
+        | none => pure .zero
       | none => pure .unit
     checkBreaks M (keep.map fun _ => Vt)
     if keep.isNone && Class.of Bg == .linear then
       throw ⟨sp, s!"`{i.callee}` returns `{ppT Bg}`, which has no destructor: bind the loop's value, " ++
         "`let r = for …`"⟩
-    if keep.isSome && Bg != Vt then
+    if keep.isSome && Bg != Vt && Bg != .zero then
       throw ⟨sp, s!"the loop's value has type `{ppT Vt}`, and `{i.callee}` returns `{ppT Bg}`"⟩
     let Tt ← pp Tc
     let Bt ← pp Bg
@@ -3489,11 +3502,13 @@ io_hc{sfx} : ({clT}) * 1 <- return ((!thunkv fun (io_hp{sfx} : (({Tt}) * ({Wt}))
     let valEnd := if keep.isSome then s!"io_jg{sfx}" else "()"
     let JJt := if hasRet then s!"(({Wt}) * ({Vs})) + ({Rts})" else s!"({Wt}) * ({Vs})"
     let inj (v : String) : String := if hasRet then s!"inl ({v})" else v
+    let endRet := if Bg == .zero then s!"absurd io_jg{sfx}"
+      else s!"return ({inj s!"(io_jw{sfx}, {valEnd})"})"
     let exitArm := if hasRet then
         s!"case io_jo{sfx} \{ inl io_jb{sfx} -> return (inl (io_jw{sfx}, io_jb{sfx})) | inr io_jr{sfx} -> return (inr io_jr{sfx}) }"
       else s!"return (io_jw{sfx}, io_jo{sfx})"
     let join := s!"io_jj{sfx} : {JJt} <- case io_j{sfx} \{
-    inl io_ja{sfx} -> let (io_jw{sfx}, io_jg{sfx}) = io_ja{sfx}; return ({inj s!"(io_jw{sfx}, {valEnd})"})
+    inl io_ja{sfx} -> let (io_jw{sfx}, io_jg{sfx}) = io_ja{sfx}; {endRet}
   | inr io_je{sfx} -> let (io_jw{sfx}, io_jo{sfx}) = io_je{sfx}; {exitArm}
   };
 "

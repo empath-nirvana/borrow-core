@@ -1176,7 +1176,9 @@ def forSite : Nat → Cx → List Cap → Bool → Span → Ident → String →
     let tcap := threadCap sp i.eff w Wn
     let cxF : Cx := { cx with sites := site :: cx.sites.filter (·.eff != i.eff),
                               caps := tcap :: cx.caps.filter (·.eff != i.eff) }
+    let (bP, W) ← pullArgsV k cx cs gname W
     let (bs, W') ← trV k cx cs W
+    let bs := bP ++ bs
     let name ← copyFor k cxF sp gname g
     let f' : Val := match f with
       | .defApp fsp _ Ts => .defApp fsp name Ts
@@ -1211,7 +1213,9 @@ def pullSite : Nat → Cx → List Cap → Span → String → FSig → Inst →
     let site : Site := { eff := i.eff, n, args := As, sp, what := "the stored generator" }
     let cxP : Cx := { cx with sites := site :: cx.sites.filter (·.eff != i.eff),
                               caps := cx.caps.filter (·.eff != i.eff) }
+    let (bP, W) ← pullArgsV k cx cs gname W
     let (bs, W') ← goV k cx cs W
+    let bs := bP ++ bs
     let name ← copyFor k cxP sp gname g
     let f' : Val := match f with
       | .defApp fsp _ Ts => .defApp fsp name Ts

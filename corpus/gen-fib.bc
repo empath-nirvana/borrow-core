@@ -1,31 +1,31 @@
--- An infinite generator, taken lazily: `fib` never finishes (its loop is `while true`), and
--- `take` stops after ten elements with `break`, which closes `fib`. Only the observations the
--- consumer makes run: `fib` computes eleven numbers, the last never yielded.
+-- An infinite generator, taken lazily: `fib` never finishes (its body is a `loop`), and `take`
+-- stops after ten elements with `break`, which closes the stored generator of `fib`. Only the
+-- observations the consumer makes run: `fib` computes eleven numbers, the last never yielded.
 --
--- A `gen fn` is lazy: calling it returns the generator and runs none of its body. Each
--- observation runs the body up to its next `yield`, and `close` runs none of it. A loop in a
--- generator is div (it may not end), so it is a state of the generator and never runs inside a
--- single observation: every observation terminates, and whether the whole does is up to the
--- consumer.
+-- `take`'s parameter is a stored generator (`pull i32 1 1`), so `fib()` there is the call's
+-- stored generator: nothing of `fib` runs until it is observed, each observation runs `fib`'s
+-- loop once, and closing it cancels the rest (SPEC §15). `take` itself performs `yield`, and its
+-- loop's observations are handled by `main`'s `for`.
 --
 -- Answer: i32[88], the sum of the first ten Fibonacci numbers 0, 1, 1, 2, 3, 5, 8, 13, 21, 34. A
 -- `take` that stopped one late gives 143, one early 54; a `fib` that started at 1 gives 143.
 
-gen fn fib() -> i32 =
+include yield
+
+fn fib() -> 0 with Yield[i32] =
   let mut a = 0;
   let mut b = 1;
-  while true {
-    yield a;
+  loop {
+    yield(a);
     let c = a + b;
     a = b;
     b = c
-  };
-  ()
+  }
 
-gen fn take(n: i32, it: U (gen i32 1 1)) -> i32 =
+fn take(n: i32, it: U (pull i32 0 1)) -> 1 with Yield[i32] =
   let mut i = 0;
   for x in it {
-    if i < n { yield x; i = i + 1 } else { break }
+    if i < n { yield(x); i = i + 1 } else { break }
   };
   ()
 

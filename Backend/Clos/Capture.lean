@@ -249,7 +249,11 @@ def handlers (O : Ops) : Tm → KM Tm
   | .ubind nn dd b => do
     let b ← handlers O b
     let r ← kfresh
-    return .letv r (.fin false dd b) (.app nn r)
+    if nn != dd then return .letv r (.fin false dd b) (.app nn r)
+    -- The clauses as one code (`markUbinds`): `inj₁ r` continues, `inj₂ ()` finalises. The
+    -- continuing call is through a variable of its own, so that its result type is its own.
+    let i ← kfresh; let d' ← kfresh
+    return .letv r (.fin false dd b) (.letv i (.inj false r) (.letv d' (.var dd) (.app d' i)))
   | .letv x e b => return .letv x (← handlers O e) (← handlers O b)
   | .letpair x y p b => return .letpair x y p (← handlers O b)
   | .case s x b₁ y b₂ => return .case s x (← handlers O b₁) y (← handlers O b₂)
@@ -833,10 +837,12 @@ def MEnv.cancelArm (E : MEnv) (j : Nat) (z : Var) (k : Option Var) : KM Tm := do
       let u ← kfresh; let rr ← kfresh
       if raising then
         let zc ← kfresh; let e' ← kfresh
-        return .copy z zc (.letv u .unit (.letv rr (.catchAll (.app dd u))
-          (.letv e' (← errNext e rr zc) (← go rest e'))))
+        let u₀ ← kfresh
+        return .copy z zc (.letv u₀ .unit (.letv u (.inj true u₀) (.letv rr (.catchAll (.app dd u))
+          (.letv e' (← errNext e rr zc) (← go rest e')))))
       else
-        return .letv u .unit (.letv rr (.app dd u) (.drop rr (← go rest e)))
+        let u₀ ← kfresh
+        return .letv u₀ .unit (.letv u (.inj true u₀) (.letv rr (.app dd u) (.drop rr (← go rest e))))
   let tail ← go fins e₀
   let start ← match k with
     | some k => do

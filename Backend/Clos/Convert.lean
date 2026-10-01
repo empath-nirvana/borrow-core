@@ -396,6 +396,39 @@ def markLitViews : Expr → Expr
   | .case a b c => .case (markLitViews a) (markLitViews b) (markLitViews c)
   | e => e
 
+/-- The mark of a finaliser frame whose two clauses are one code (`markUbinds`). -/
+def ubindSelMark : UInt64 := 0x55424E44534C4354
+
+/-- `e` with its free indices from `c` on raised by `d`. -/
+def shiftE (d c : Nat) : Expr → Expr
+  | .var i => if i < c then .var i else .var (i + d)
+  | .pair a b => .pair (shiftE d c a) (shiftE d c b)
+  | .inj₁ a => .inj₁ (shiftE d c a)
+  | .inj₂ a => .inj₂ (shiftE d c a)
+  | .lam b => .lam (shiftE d (c + 1) b)
+  | .seq a b => .seq (shiftE d c a) (shiftE d c b)
+  | .letpair a b => .letpair (shiftE d c a) (shiftE d (c + 2) b)
+  | .case a b e => .case (shiftE d c a) (shiftE d (c + 1) b) (shiftE d (c + 1) e)
+  | .app f a => .app (shiftE d c f) (shiftE d c a)
+  | e => e
+
+/-- Each finaliser frame `ubind (λx. N, λ_. D) M` with its two clauses made one,
+`ubind (λs. case s {inj₁ x. N | inj₂ _. D}, mark) M`: exactly one of them runs, so the variables
+they share are captured once, not copied (`conv`). -/
+def markUbinds : Expr → Expr
+  | .app (.app (.prim .ubind) (.pair (.lam N) (.lam D))) m =>
+    let sel : Expr := .lam (.case (.var 0) (shiftE 1 1 (markUbinds N)) (shiftE 1 1 (markUbinds D)))
+    .app (.app (.prim .ubind) (.pair sel (.prim (.lit (.i64 ubindSelMark))))) (markUbinds m)
+  | .pair a b => .pair (markUbinds a) (markUbinds b)
+  | .seq a b => .seq (markUbinds a) (markUbinds b)
+  | .app a b => .app (markUbinds a) (markUbinds b)
+  | .inj₁ a => .inj₁ (markUbinds a)
+  | .inj₂ a => .inj₂ (markUbinds a)
+  | .lam b => .lam (markUbinds b)
+  | .letpair a b => .letpair (markUbinds a) (markUbinds b)
+  | .case a b c => .case (markUbinds a) (markUbinds b) (markUbinds c)
+  | e => e
+
 def setCode (c : Nat) (code : Code) : CM Unit :=
   modify fun s => { s with codes := s.codes.set! c code }
 
@@ -485,6 +518,17 @@ def conv (ctx : Ctx) (e : Expr) (id : Nat) : CM Tm := do
       let tE ← conv cE e k₂
       return wrapCopies cs (wrapCopies cs' (.letv hv tHr (.letv cv tCls (.hnd n hv cv tE))))
   | .app (.app (.prim .hnd) _) _ => throw "a handler whose name is not a literal"
+  | .app (.app (.prim .ubind) (.pair sel (.prim (.lit (.i64 mk))))) m => do
+      -- `ubind (N, D) M` (§19) with its clauses one code (`markUbinds`): the code, then `M`; the
+      -- frame calls it on `inj₁ x` to continue and on `inj₂ ()` to finalise.
+      if mk != ubindSelMark then throw "a finaliser frame's clauses"
+      let kND := k₁ + 2
+      let kSel := kND + 1
+      let (cs, cS, cM) ← plan2 ctx (← fvsAt kSel 0) (← fvsAt k₂ 0)
+      let cv ← fresh
+      let tS ← conv cS sel kSel
+      let tM ← conv cM m k₂
+      return wrapCopies cs (.letv cv tS (.ubind cv cv tM))
   | .app (.app (.prim .ubind) nd) m => do
       -- `ubind (N, D) M` (§19): the pair of clauses, then `M`.
       let kND := k₁ + 2
@@ -574,7 +618,7 @@ def conv (ctx : Ctx) (e : Expr) (id : Nat) : CM Tm := do
 
 /-- Closure-convert a closed term. -/
 def convert (e : Expr) : Except String Prog := do
-  let e := markLitViews e
+  let e := markUbinds (markLitViews e)
   let (t, s) ← (conv {} e 0).run { next := dummy + 1, codes := #[], pre := .of e }
   pure { codes := s.codes, main := t, folds := s.folds, data := s.data, litCode := s.litCode }
 
@@ -623,7 +667,7 @@ operation's closure), an extern `main` does not use is dropped, and when there a
 loop (`loops`), its value is the loop, and the taking back is the code `fin`, run on the value
 the loop finishes with.  `[spec §11]` -/
 def convertMain (exts : List ExtImpl) (loops : Bool) (e : Expr) : Except String Prog := do
-  let e := markLitViews e
+  let e := markUbinds (markLitViews e)
   let ncaps := (exts.filter fun | .cap _ => true | _ => false).length
   let act : CM (Tm × Option Nat) := do
     let xs ← exts.mapM fun _ => fresh
