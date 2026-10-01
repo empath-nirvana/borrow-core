@@ -372,6 +372,7 @@ def infer (codeTy : Array Nat) (codes : Array Code) : Tm → TM Nat
       if let some r := (← get).sel[x]? then modify fun s => { s with sel := s.sel.insert x' r }
       infer codeTy codes b
   | .drop _ b => infer codeTy codes b
+  | .raise _ | .hnd .. | .ubind .. => throw "layout types: an effect not lowered (`Unwind`)"
 
 /-- A code of kind `sel`: the scrutinee, and the arms. -/
 def Code.selShape? (c : Code) : Option (Var × Var × Tm × Var × Tm) :=

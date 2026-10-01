@@ -32,6 +32,9 @@ IR. One pass does three things:
   nothing; applied, `selfV B a` is a call of it. When `B` is the step of `fold_own` or
   `fold_reuse`, the step's code is recorded (`Prog.folds`) for the flat IR's pointer reversal.
 - **η.** `λv. y v` of a variable `y` is `y`.
+- **Abortive operations** (spec §19). `raise p`, a handler `hnd (n, (hr, cls)) e` and a finaliser
+  frame `ubind (N, D) M` are closure-IR nodes, which `Unwind` lowers. A `perform`, which captures
+  its continuation, and the cancel frames `ccatch` and `cfin` are rejected.
 -/
 
 namespace Backend.Clos
@@ -210,7 +213,8 @@ def Op.ofPrim? : Prim → Option Op
   | .countTry => some .countTry
   | .store => none
   | .lit _ => none
-  -- The capture primitives of spec §19 have no closure-converted form; `primValue` rejects them.
+  -- The primitives of spec §19 are converted by their shapes in `conv`; as values `primValue`
+  -- rejects them.
   | .perform | .raise | .hnd | .ubind | .ccatch | .cfin => none
 
 /-- A primitive as a value: η-expanded closure code. -/
@@ -454,6 +458,37 @@ def conv (ctx : Ctx) (e : Expr) (id : Nat) : CM Tm := do
       let kArg := (k₂ + 1) + (← sizeAt (k₂ + 1))
       let av ← fresh
       return .letv av (← conv ctx arg kArg) (.prim .litTab [av])
+  | .app (.prim .raise) p => do
+      -- `raise p` (§19): `p`, then the abortive stop.
+      let pv ← fresh
+      return .letv pv (← conv ctx p k₂) (.raise pv)
+  | .app (.prim .perform) _ => throw "a control operation (`perform`) is not lowered"
+  | .app (.prim .ccatch) _ => throw "a cancel (`ccatch`) is not lowered"
+  | .app (.app (.prim .cfin) _) _ => throw "a cancel (`cfin`) is not lowered"
+  | .app (.app (.prim .hnd) (.pair (.prim (.lit (.i32 n))) (.pair hr cls))) e => do
+      -- `hnd (n, (hr, cls)) e` (§19): the clauses' parts, then the handled body. The parts are
+      -- values, so the order is the machine's.
+      let kH := k₁ + 2
+      let kN := kH + 1
+      let kHC := kN + (← sizeAt kN)
+      let kHr := kHC + 1
+      let kCls := kHr + (← sizeAt kHr)
+      let (cs, cH, cE) ← plan2 ctx (← fvsAt kHC 0) (← fvsAt k₂ 0)
+      let (cs', cHr, cCls) ← plan2 cH (← fvsAt kHr 0) (← fvsAt kCls 0)
+      let hv ← fresh; let cv ← fresh
+      let tHr ← conv cHr hr kHr
+      let tCls ← conv cCls cls kCls
+      let tE ← conv cE e k₂
+      return wrapCopies cs (wrapCopies cs' (.letv hv tHr (.letv cv tCls (.hnd n hv cv tE))))
+  | .app (.app (.prim .hnd) _) _ => throw "a handler whose name is not a literal"
+  | .app (.app (.prim .ubind) nd) m => do
+      -- `ubind (N, D) M` (§19): the pair of clauses, then `M`.
+      let kND := k₁ + 2
+      let (cs, cND, cM) ← plan2 ctx (← fvsAt kND 0) (← fvsAt k₂ 0)
+      let pv ← fresh; let nn ← fresh; let dd ← fresh
+      let tND ← conv cND nd kND
+      let tM ← conv cM m k₂
+      return wrapCopies cs (.letv pv tND (.letpair nn dd pv (.ubind nn dd tM)))
   | .app (.app (.prim .store) l) v => do
       -- `l` is part 2 of `app (prim store) l`, `v` part 2 of the whole.
       let kl := k₁ + 2

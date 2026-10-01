@@ -451,6 +451,7 @@ def runMem : Nat → BoCa.Mem → Expr → Option (Val × BoCa.Mem)
     | .value v => some (v, μ)
     | .next μ' e' => runMem n μ' e'
     | .stuck _ => none
+    | .op _ _ _ => none
 
 /-- The payloads of the list `e` in `μ`, when every node is at two adjacent cells `(ℓ, ℓ + 1)`
 holding the payload and the tail. -/

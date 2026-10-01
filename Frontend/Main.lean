@@ -25,6 +25,9 @@ import Backend.Driver
     lake exe bcc erase <file>   print the erasure of the checked `main`
     lake exe bcc trusted <file> list the program's externs with their contracts, host
                                 implementations and assurance levels (SPEC §11)
+    lake exe bcc kernel (list | interp [--stage S] <name> | compile <name> -o <out.wat> | run <name>)
+                                the kernel programs of `Backend/Kernel.lean`, which the surface
+                                cannot spell (SPEC §19), at a stage, compiled, or run
 
 Exit code 0 on success, 1 on a syntax error, a round-trip mismatch or a type error, 2 on bad
 usage. A successful `check` has built a `CDerives` derivation of `main`'s erasure
@@ -126,6 +129,62 @@ def run (file : String) : IO UInt32 := do
     IO.FS.removeDirAll dir
     return (if code == 0 then 0 else 1)
 
+/-! ### Kernel programs -/
+
+/-- A kernel program by name (`Backend.kernelPrograms`). -/
+def kernelProg (name : String) : Option BoCa.Expr :=
+  ((Backend.kernelPrograms ++ Backend.kernelProgramsControl).lookup name)
+
+/-- Write a kernel program's stage output, or its error. -/
+def kernelReport (r : Except String Backend.Output) : IO UInt32 := do
+  match r with
+  | .ok o =>
+    let out ← IO.getStdout
+    out.write o.out
+    out.flush
+    return 0
+  | .error e => IO.eprintln e; return 1
+
+/-- Write a kernel program's WAT to `out`. -/
+def kernelCompile (e : BoCa.Expr) (out : String) : IO UInt32 := do
+  match Backend.compileWatExpr e with
+  | .ok wat => IO.FS.writeFile out wat; return 0
+  | .error err => IO.eprintln err; return 1
+
+/-- Compile a kernel program and run it under `wasmtime`. -/
+def kernelRun (e : BoCa.Expr) : IO UInt32 := do
+  match Backend.compileWatExpr e with
+  | .error err => IO.eprintln err; return 1
+  | .ok wat =>
+    let dir ← IO.FS.createTempDir
+    let out := dir / "main.wat"
+    IO.FS.writeFile out wat
+    let child ← IO.Process.spawn
+      { cmd := "wasmtime", args := #["run", "-W", "tail-call=y", out.toString],
+        stdin := .inherit, stdout := .inherit, stderr := .inherit }
+    let code ← child.wait
+    IO.FS.removeDirAll dir
+    return (if code == 0 then 0 else 1)
+
+/-- `bcc kernel …`: list, interpret at a stage, compile, or run a kernel program. -/
+def kernel (args : List String) : IO UInt32 := do
+  let withProg (name : String) (k : BoCa.Expr → IO UInt32) : IO UInt32 :=
+    match kernelProg name with
+    | some e => k e
+    | none => do IO.eprintln s!"no kernel program `{name}`"; return 1
+  match args with
+  | ["list"] =>
+    for (n, _) in Backend.kernelPrograms do IO.println n
+    return 0
+  | ["interp", name] => withProg name (kernelReport ∘ Backend.interpStageExpr "source")
+  | ["interp", "--stage", stage, name] =>
+    withProg name (kernelReport ∘ Backend.interpStageExpr stage)
+  | ["compile", name, "-o", out] => withProg name (kernelCompile · out)
+  | ["run", name] => withProg name kernelRun
+  | _ =>
+    IO.eprintln "usage: bcc kernel (list | interp [--stage S] <name> | compile <name> -o <out.wat> | run <name>)"
+    return 2
+
 /-- Parse `src`, print it, parse the output, and compare the two ASTs up to spans. -/
 def roundTrip (p : Program) : Except String Unit := do
   let out := p.pp
@@ -137,6 +196,7 @@ def roundTrip (p : Program) : Except String Unit := do
 
 def main (argv : List String) : IO UInt32 := do
   match argv with
+  | "kernel" :: args => kernel args
   | ["compile", file, "-o", out] => compile file out
   | ["compile", "--timings", file, "-o", out] => compileTimed file out
   | ["run", file] => run file

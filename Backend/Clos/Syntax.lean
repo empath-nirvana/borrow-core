@@ -107,6 +107,14 @@ inductive Tm where
   | copy (x x' : Var) (body : Tm)
   /-- `x` is deep-freed. -/
   | drop (x : Var) (body : Tm)
+  /-- `raise p`: the abortive operation of spec §19, `p = (n, (i, v))`. `Unwind` lowers it. -/
+  | raise (p : Var)
+  /-- `hnd n (hr, cls) body`: a handler of the name `n` for abortive operations (§19), `hr` its
+  answer clause and `cls` its operations' clauses. `Unwind` lowers it. -/
+  | hnd (n : UInt32) (hr cls : Var) (body : Tm)
+  /-- `ubind (nn, dd) body`: `body` then `nn`, or the finaliser `dd` when `body` unwinds (§19).
+  `Unwind` lowers it. -/
+  | ubind (nn dd : Var) (body : Tm)
   deriving Repr, Inhabited
 
 /-- Closure code: on entry the environment record is unpacked into `env` and freed. -/

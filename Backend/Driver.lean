@@ -4,6 +4,8 @@ import Frontend.Check.Externs
 import Backend.Source
 import Backend.Clos.Convert
 import Backend.Clos.Collapse
+import Backend.Clos.Unwind
+import Backend.Kernel
 import Backend.Clos.Interp
 import Backend.Flat.Lower
 import Backend.Flat.Interp
@@ -72,7 +74,7 @@ def closTypesOf (file src : String) : Except String (Clos.Prog × Option Clos.Ty
   let p ← match k.io with
     | none => Clos.convert k.main.e
     | some m => Clos.convertMain (← extImpls m) m.loopB.isSome k.main.e
-  pure p.collapseT
+  pure (← p.unwind).collapseT
 
 def closOf (file src : String) : Except String Clos.Prog := return (← closTypesOf file src).1
 
@@ -211,6 +213,33 @@ def interpStage (stage file src : String) (input : List UInt8) : Except String O
   | "clos" => Clos.interp runFuel (← closOf file src) input
   | "flat" => Flat.interp runFuel (← flatOf file src) input
   | "flat-counts" => Flat.interp runFuel (← flatOf file src true) input
+  | _ => throw s!"unknown stage `{stage}`"
+
+/-! ### Kernel programs
+
+The programs of `Core/` that have no surface form (`Backend/Kernel.lean`): closed terms, compiled
+as `main`'s erasure is. -/
+
+/-- A kernel program's closure IR and layout types. -/
+def closTypesOfExpr (e : BoCa.Expr) : Except String (Clos.Prog × Option Clos.Types) := do
+  pure (← (← Clos.convert e).unwind).collapseT
+
+/-- A kernel program's WAT. -/
+def compileWatExpr (e : BoCa.Expr) (counts : Bool := false) : Except String String := do
+  let (p, T) ← closTypesOfExpr e
+  pure (Wasm.printModule (Wasm.lowerProg (← Flat.lower p counts T) counts))
+
+/-- A kernel program at stage `stage`'s interpreter. -/
+def interpStageExpr (stage : String) (e : BoCa.Expr) : Except String Output := do
+  match stage with
+  | "source" => interpSource runFuel e
+  | "clos" => Clos.interp runFuel (← closTypesOfExpr e).1 []
+  | "flat" => do
+    let (p, T) ← closTypesOfExpr e
+    Flat.interp runFuel (← Flat.lower p false T) []
+  | "flat-counts" => do
+    let (p, T) ← closTypesOfExpr e
+    Flat.interp runFuel (← Flat.lower p true T) []
   | _ => throw s!"unknown stage `{stage}`"
 
 /-- The program's trusted boundaries (`bcc trusted`).  `[spec §11]` -/

@@ -1008,7 +1008,7 @@ theorem effRetE_tyEq : ∀ (C : CTy) {C' : CTy} {δ δ' : LSub}, CTyEq C δ C' �
       exact effRetE_tyEq C h.2.2.2.2.2 η η' hη
   | .arr _ _, C', _, _, h, _, _, _ | .amp _ _, C', _, _, h, _, _, _ | .top, C', _, _, h, _, _, _
   | .all _ _ _, C', _, _, h, _, _, _ | .nu _, C', _, _, h, _, _, _ => by
-      cases C' <;> simp only [CTyEq] at h <;> simp only [effRetE]
+      cases C' <;> simp_all [CTyEq, effRetE]
 theorem cB_tyEq : ∀ (C : CTy) {C' : CTy} {δ δ' : LSub}, CTyEq C δ C' δ' →
     ∀ (η η' : Option (Nat → TEnt)), EnvEq η η' δ δ' →
     ∀ (ls : List SRec), cB η C ls δ = cB η' C' ls δ'

@@ -33,6 +33,7 @@ def runSource (fuel : Nat) (μ : Mem) (e : Expr) : Except String (Val × Mem) :=
     | .value v => .ok (v, μ)
     | .next μ' e' => runSource n μ' e'
     | .stuck r => .error s!"source interpreter: stuck ({repr r})"
+    | .op _ _ _ => .error "source interpreter: an operation no handler catches"
 
 /-- The source interpreter's report: the value and the number of cells left. -/
 def interpSource (fuel : Nat) (e : Expr) : Except String Output := do

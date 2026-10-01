@@ -43,6 +43,8 @@ inductive Key where
   | syn (n : Nat)
   /-- The loops the entry drives. -/
   | drive
+  /-- The payloads of every `raise` (§19). -/
+  | raised
   deriving BEq, Hashable, Repr, Inhabited
 
 /-- An abstract value. -/
@@ -75,6 +77,8 @@ inductive Con where
 structure GState where
   next : Nat := 1
   cons : Array Con := #[]
+  /-- The clauses a handler may call: one past the largest operation index a `raise` carries. -/
+  ops : Nat := 0
   /-- Variables bound to a literal injection: `true` for `inr` (`Backend/Clos/Types.lean`,
   `TState.sel`). -/
   sel : Std.HashMap Var Bool := {}
@@ -233,9 +237,36 @@ def gen (codes : Array Code) : Tm → GM Key
       if let some r := (← get).sel[x]? then modify fun s => { s with sel := s.sel.insert x' r }
       gen codes b
   | .drop _ b => gen codes b
+  | .raise p => do
+      emit (.sub (.var p) .raised)
+      pure .none
+  | .hnd _ hr cls b => do
+      -- The answer clause on the body's answers; each clause on any payload's argument.
+      let kb ← gen codes b
+      let r ← freshKey
+      emit (.app (.var hr) kb r none)
+      let t ← freshKey
+      emit (.proj .raised 1 t)
+      let w ← freshKey
+      emit (.proj t 1 w)
+      let mut rest := Key.var cls
+      for _ in [0:(← get).ops] do
+        let c ← freshKey
+        emit (.proj rest 0 c)
+        emit (.app c w r none)
+        let rest' ← freshKey
+        emit (.proj rest 1 rest')
+        rest := rest'
+      pure r
+  | .ubind nn dd b => do
+      let kb ← gen codes b
+      let r ← freshKey
+      emit (.app (.var nn) kb r none)
+      emit (.app (.var dd) .none (← freshKey) none)
+      pure r
 
-/-- The program's constraints. -/
-def Prog.constraints (p : Prog) : Array Con := Id.run do
+/-- The program's constraints, a handler calling `ops` clauses. -/
+def Prog.constraints (p : Prog) (ops : Nat := 0) : Array Con := Id.run do
   let act : GM Unit := do
     for (c, k) in p.codes.toList.zipIdx do
       match c.selShape?, c.fwdShape? with
@@ -264,7 +295,7 @@ def Prog.constraints (p : Prog) : Array Con := Id.run do
       emit (.app loop .none r none)
       emit (.out r true loop)
       if let some code := p.codes[fin]? then emit (.out r false (.var code.param))
-  let ((), s) := act.run {}
+  let ((), s) := act.run { ops }
   return s.cons
 
 /-! ### The solver
@@ -308,13 +339,14 @@ structure KeyNum where
   syns : Nat
   codes : Nat
 
-def KeyNum.size (n : KeyNum) : Nat := n.vars + n.syns + 2 * n.codes + 1
+def KeyNum.size (n : KeyNum) : Nat := n.vars + n.syns + 2 * n.codes + 2
 
 def KeyNum.idx (n : KeyNum) : Key → Nat
   | .var x => x
   | .syn m => n.vars + m
   | .res c r => n.vars + n.syns + 2 * c + (if r then 1 else 0)
   | .drive => n.vars + n.syns + 2 * n.codes
+  | .raised => n.vars + n.syns + 2 * n.codes + 1
 
 /-- The numbering of the keys of the constraints `cs` of a program of `codes` codes. -/
 def KeyNum.of (codes : Nat) (cs : Array Con) : KeyNum := Id.run do
@@ -325,7 +357,7 @@ def KeyNum.of (codes : Nat) (cs : Array Con) : KeyNum := Id.run do
     | .var x => (max b.1 (x + 1), b.2)
     | .syn m => (b.1, max b.2.1 (m + 1), b.2.2)
     | .res c _ => (b.1, b.2.1, max b.2.2 (c + 1))
-    | .drive => b
+    | .drive | .raised => b
   let seeV (b : Nat × Nat × Nat) : AVal → Nat × Nat × Nat
     | .clos _ => b
     | .pair a c => see (see b a) c

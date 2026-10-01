@@ -1,0 +1,5 @@
+log-outside 1 0 0
+fail-outside 1 0 0
+reborrow-raise 1 0 0
+log-in-borrow 2 0 0
+tick-answering 1 0 0

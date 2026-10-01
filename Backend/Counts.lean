@@ -5,6 +5,7 @@ import Backend.Driver
 
     lake exe bcc-counts <file>
     lake exe bcc-counts --sites <file>
+    lake exe bcc-counts --kernel [--sites] <name>
 
 Run the program at the flat IR (`Backend/Flat/Interp.lean`) and under `wasmtime`, each built to
 count, and print `allocs N indirect M copies K`: the objects the run allocates, the indirect calls
@@ -20,6 +21,8 @@ are, how many are direct because their type's union has one code, how many more 
 analysis finds one code, the recursive closure types, which keep heap environments, with the
 number of codes in each union, and the owned folds compiled by pointer reversal and those that
 recurse.
+
+With `--kernel`, the program is the kernel program `name` (`Backend/Kernel.lean`).
 -/
 
 /-- All of standard input, read in at most `fuel` chunks of 64 KiB. -/
@@ -48,7 +51,47 @@ def sites (file src : String) : Except String String := do
   pure (s!"calls {n} direct {ty + fl} (union {ty}, flow {fl}) dispatched {n - ty - fl} " ++
     s!"recursive-types {recs.length} {recs} owned-folds reversed {rev} recursive {rc}")
 
+/-- The call-site report of `--sites` for a closure-IR program. -/
+def sitesOfProg (p : Backend.Clos.Prog) : Except String String := do
+  let (n, ty, fl) ← Backend.Flat.callSites p
+  let T ← p.types
+  let recs := T.recFn.toList.map fun t => (T.union t).size
+  let (rev, rc) ← Backend.Flat.foldSites p
+  pure (s!"calls {n} direct {ty + fl} (union {ty}, flow {fl}) dispatched {n - ty - fl} " ++
+    s!"recursive-types {recs.length} {recs} owned-folds reversed {rev} recursive {rc}")
+
+/-- `bcc-counts --kernel [--sites] <name>`. -/
+def kernelMain (sitesOnly : Bool) (name : String) : IO UInt32 := do
+  let some e := (Backend.kernelPrograms.lookup name) |
+    IO.eprintln s!"no kernel program `{name}`"; return 1
+  if sitesOnly then
+    match Backend.closTypesOfExpr e >>= fun (p, _) => sitesOfProg p with
+    | .ok s => IO.println s; return 0
+    | .error err => IO.eprintln err; return 1
+  let flat ← match Backend.interpStageExpr "flat-counts" e with
+    | .ok o => pure (String.fromUTF8! o.out)
+    | .error err => IO.eprintln err; return 1
+  let wat ← match Backend.compileWatExpr e true with
+    | .ok w => pure w
+    | .error err => IO.eprintln err; return 1
+  let dir ← IO.FS.createTempDir
+  IO.FS.writeFile (dir / "main.wat") wat
+  let r ← IO.Process.output
+    { cmd := "wasmtime", args := #["run", "-W", "tail-call=y", (dir / "main.wat").toString] }
+  IO.FS.removeDirAll dir
+  match countsOf flat, countsOf r.stdout with
+  | some (a, i, c), some (a', i', c') =>
+    if a == a' && i == i' && c == c' then
+      IO.println s!"allocs {a} indirect {i} copies {c}"; return 0
+    else
+      IO.eprintln (s!"{name}: the flat IR counts allocs {a} indirect {i} copies {c}, " ++
+        s!"wasm allocs {a'} indirect {i'} copies {c'}")
+      return 1
+  | _, _ => IO.eprintln s!"{name}: no counts"; return 1
+
 def main (argv : List String) : IO UInt32 := do
+  if let ["--kernel", name] := argv then return ← kernelMain false name
+  if let ["--kernel", "--sites", name] := argv then return ← kernelMain true name
   if let ["--sites", file] := argv then
     match sites file (← IO.FS.readFile file) with
     | .ok s => IO.println s; return 0

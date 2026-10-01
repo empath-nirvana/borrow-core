@@ -29,7 +29,7 @@ and `nu_out` erase, and `unfold` is a closed λ-term.
 | stage | file | what it is | interpreter |
 |---|---|---|---|
 | source | `Source.lean` | `main`'s erasure | `Support`'s `step` at `wasmHost` |
-| closure IR | `Clos/Syntax.lean`, `Clos/Convert.lean`, `Clos/Collapse.lean` | named A-normal form, explicit environments and ownership | `Clos/Interp.lean` |
+| closure IR | `Clos/Syntax.lean`, `Clos/Convert.lean`, `Clos/Unwind.lean`, `Clos/Collapse.lean` | named A-normal form, explicit environments and ownership; §19's abortive operations lowered | `Clos/Interp.lean` |
 | layout types | `Clos/Types.lean` | a layout type for every closure-IR variable, code and constructor; each type's layout; each closure type's union of codes | — |
 | closure flow | `Clos/Flow.lean` | a 0-CFA: the codes each call may call | — |
 | flat IR | `Flat/Syntax.lean`, `Flat/Lower.lean` | functions over words, locals, allocation, calls and tail calls of several results, `ite` | `Flat/Interp.lean` |
@@ -62,6 +62,34 @@ iterators) and the programs of `Core/`. **η** `λv. y v` of a variable `y` is `
 `unfold`'s map at a recursive position forwards the rest of the codata: no closure wraps a closure
 of its own type. A term of neither shape is converted as any other λ; the combinator written
 some other way (a bare `X X`, as `Core/DelayNaive.lean` does) stays the λ-terms it is.
+
+**Abortive operations** (`Clos/Unwind.lean`, SPEC §19). `Convert` keeps `raise p`, a handler
+`hnd n (hr, cls) e` and a finaliser frame `ubind (N, D) M` as closure-IR nodes, and `Unwind`
+lowers them to **branch-per-call propagation**, the representation of Rust's `Result` and `?`:
+
+- A `raise` carries its name and operation as literals (§19's names are static). A code *raises*
+  the keys `(n, i)` its body may raise and no handler of it catches: a `raise`'s, those of the
+  codes a call may call (the closure flow, below, run with the nodes' constraints: a handler calls
+  its answer clause on the body's answers and each clause on any raise's argument), a handler's
+  body less its name's keys, and the clauses a handler or a finaliser frame calls. The least
+  solution is found by iteration.
+- A code that raises answers a sum: `inl v` when it returns `v`, `inr p` when it raises `p`. The
+  codes called at one site share a convention: a class with a raising code answers sums.
+- A term that may raise is computed as such a sum. `let x = e in b`, `e` raising, is
+  `case e {inl x ⇒ b | inr p ⇒ drop (b's variables); inr p}`; a term that cannot raise is not
+  touched, so a call branches exactly when its callee may raise, and a tail call passes the sum
+  on with no branch. A handler cases on its body's sum: `inl v` to its answer clause, `inr` of its
+  name to the clause of the operation (a compare when it catches several), any other name on
+  outward. A finaliser frame runs its finaliser on `inr p` and raises `p` again, or the
+  finaliser's own error, which supersedes it.
+
+There is no handler stack and no search: a `raise`'s sum arrives at the `case` of the handler
+that catches it. The answering operations of §18 and §19 are calls on a capability, which the
+pipeline already compiles as calls, direct when the flow finds one code. The kernel programs that
+exercise both (`Backend/Kernel.lean`, `bcc kernel`) are compiled and run at every stage by
+`scripts/compile-kernel.sh`; their counts are `corpus/kernel-counts.expected`. Not lowered:
+control operations that capture their continuation (`perform`) and the cancel frames
+(`ccatch`, `cfin`), which only a captured continuation's cancel produces (Scope).
 
 **Codata thunks and equal codes** (`Clos/Collapse.lean`). A loop, stream or iterator is first
 the thunk `nu_in ⟨(nu_out (force f s₀)).1, (nu_out (force f s₀)).2⟩` the program builds, and
@@ -469,7 +497,11 @@ merging finds the layout types of its result, which the flat IR reuses.
 ## Scope
 
 No optimizations beyond the layouts, defunctionalization, direct calls of known codes, native
-fixed points and pointer reversal; no stack switching. The only externs compiled are the
+fixed points and pointer reversal; no stack switching. Of SPEC §19's primitives, the abortive
+ones are lowered (`raise`, `hnd` at abortive operations, `ubind`); a `perform`, which captures
+its continuation `κ`, and the cancel frames `ccatch` and `cfin` are rejected by `Convert`. Their
+lowering, to direct calls at a tail-resumptive clause and to state machines where `κ` is stored,
+is open (#186). The only externs compiled are the
 standard I/O ones; the model's harness (`mk_input`, …) is not compiled. `fold_imm` and the owned
 folds that pointer reversal does not cover recurse on the Wasm stack (Stack). Closures of
 recursive closure types keep an environment object (Representation, Open), and unboxed recursive
