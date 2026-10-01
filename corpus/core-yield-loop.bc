@@ -1,0 +1,62 @@
+-- SPEC §15 in the core text, written by hand: a generator with a loop, `range`, whose observation
+-- performs `yield` threading the consumer's variable `w` (the operation `1.0 aff i32 * i32 ~>
+-- i32`, `(x, w)` to the next `w`), and a consumer, `main`'s loop, that handles one observation of
+-- it per turn. The clause adds `x` and resumes, or, past 10, cancels the rest of `range` and
+-- finishes with `w` (a `break`). The clause does not resume in tail position on every path, so
+-- the operation is not a direct call: the observation suspends and the clause resumes or cancels
+-- it, a state machine with no allocation and no dispatched call.
+--
+-- Answer: i32[55], 1 + … + 10.
+
+def lt : i32 * i32 => 1 + 1 = unbang host[lt_s32]
+def plus : i32 * i32 => i32 = unbang host[add32]
+
+-- state: (w, (i, hi)); observation: below hi, yield i and go on with i + 1; else finish with w.
+def range_step : !U (i32 * (i32 * i32) -o
+    F[1.0 aff i32 * i32 ~> i32] (i32 + i32 * (i32 * i32)) & F[1.0 aff i32 * i32 ~> i32] i32) =
+  !thunkv fun (s : i32 * (i32 * i32)) ->
+    < let (w, p) = s;
+      let (i, hi) = p;
+      c <- return (lt (i, hi));
+      case c {
+        inl ge -> return (inl w)
+      | inr lt -> w <- perform[1.0] (i, w); j <- return (plus (i, i32[1])); return (inr (w, (j, hi)))
+      },
+      let (w, p) = s; return w >
+
+def range : !U (i32 * (i32 * i32) -o F (U (nu X. F[1.0 aff i32 * i32 ~> i32] (i32 + U X) & F[1.0 aff i32 * i32 ~> i32] i32))) =
+  !thunkv fun (s : i32 * (i32 * i32)) ->
+    f <- return (unbang (unfold[nu X. F[1.0 aff i32 * i32 ~> i32] (i32 + U X) & F[1.0 aff i32 * i32 ~> i32] i32, i32 * (i32 * i32)] range_step));
+    return (thunkv nu_in < (nu_out (force f s)).1, (nu_out (force f s)).2 >)
+
+-- main: acc <- 0; for x in range(1, 11) { acc = acc + x }; acc
+def main_step : !U (U (nu X. F[1.0 aff i32 * i32 ~> i32] (i32 + U X) & F[1.0 aff i32 * i32 ~> i32] i32)
+    -o F (i32 + U (nu X. F[1.0 aff i32 * i32 ~> i32] (i32 + U X) & F[1.0 aff i32 * i32 ~> i32] i32)) & F 1) =
+  !thunkv fun (g : U (nu X. F[1.0 aff i32 * i32 ~> i32] (i32 + U X) & F[1.0 aff i32 * i32 ~> i32] i32)) ->
+    < hr : !U (i32 + U (nu X. F[1.0 aff i32 * i32 ~> i32] (i32 + U X) & F[1.0 aff i32 * i32 ~> i32] i32)
+               -o F (i32 + U (nu X. F[1.0 aff i32 * i32 ~> i32] (i32 + U X) & F[1.0 aff i32 * i32 ~> i32] i32))) <-
+        return (!thunkv fun (v : i32 + U (nu X. F[1.0 aff i32 * i32 ~> i32] (i32 + U X) & F[1.0 aff i32 * i32 ~> i32] i32)) -> return v);
+      hc : !U ((i32 * i32) * U ((i32 -o F (i32 + U (nu X. F[1.0 aff i32 * i32 ~> i32] (i32 + U X) & F[1.0 aff i32 * i32 ~> i32] i32))) & F 1)
+               -o F (i32 + U (nu X. F[1.0 aff i32 * i32 ~> i32] (i32 + U X) & F[1.0 aff i32 * i32 ~> i32] i32))) * 1 <-
+        return ((!thunkv fun (p : (i32 * i32) * U ((i32 -o F (i32 + U (nu X. F[1.0 aff i32 * i32 ~> i32] (i32 + U X) & F[1.0 aff i32 * i32 ~> i32] i32))) & F 1)) ->
+          let (xw, k) = p;
+          let (x, w) = xw;
+          c <- return (lt (i32[10], x));
+          case c {
+            inl le -> w <- return (plus (w, x)); (force k).1 w
+          | inr gt -> u <- (force k).2; return (inl w)
+          }), ());
+      handle_with[1](hr, hc) ((nu_out (force g)).1),
+      hr : !U (i32 -o F i32) <- return (!thunkv fun (v : i32) -> return v);
+      hc : !U ((i32 * i32) * U ((i32 -o F i32) & F 1) -o F i32) * 1 <- return
+        ((!thunkv fun (p : (i32 * i32) * U ((i32 -o F i32) & F 1)) ->
+          let (xw, k) = p; let (x, w) = xw; r <- (force k).1 w; return r), ());
+      w <- handle_with[1](hr, hc) ((nu_out (force g)).2);
+      return () >
+
+main : F (U (nu X. F (i32 + U X) & F 1)) =
+  f <- return (unbang (unfold[nu X. F (i32 + U X) & F 1, U (nu X. F[1.0 aff i32 * i32 ~> i32] (i32 + U X) & F[1.0 aff i32 * i32 ~> i32] i32)] main_step));
+  r <- return (unbang range);
+  a <- return (i32[0], (i32[1], i32[100]));
+  g <- force r a;
+  return (thunkv nu_in < (nu_out (force f g)).1, (nu_out (force f g)).2 >)

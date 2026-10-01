@@ -3515,6 +3515,11 @@ def forYield : Nat → TCx → Option CCTy → Span → Ident → ItInfo → Val
     let Bg ← match Bw with
       | .tensor _ B => pure B
       | _ => throw ⟨sp, "internal error: a generator's copy for a `for` hands its variables back"⟩
+    -- The body of a counted loop, or of a `for` over a generator, is one total step.
+    if looping then if let some (.total ..) := st.exits.head? then
+      throw ⟨sp, s!"`{i.callee}` loops, so a `for` over it is div, and it is inside the body of a " ++
+        "loop that is one total step (a `for` over data, SPEC §16, or the clause of a `for` over a " ++
+        "generator): store the generator and loop over it after, or loop over it in a function"⟩
     -- The loop's value: what the generator returns, or `break e`'s. A generator that never
     -- returns (`0`) gives only `break e`'s.
     let Vt : CVTy ← match keep with

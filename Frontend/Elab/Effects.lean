@@ -448,6 +448,18 @@ def chain : List Bind → Comp → EM Comp
   | [], M => pure M
   | b :: bs, M => do b (← chain bs M)
 
+/-- A computation may loop: it has a `while` or `loop`, or a `for` whose source is not a count
+`a..b` (a loop over a view is total too, but its source's type is not known here). -/
+def mayLoop : Nat → Comp → Bool
+  | 0, _ => true
+  | k + 1, M => match M with
+    | .for_ _ _ (.app _ (.sugar _ .count) _) B N => mayLoop k B || mayLoop k N
+    | .for_ .. => true
+    | .bind _ _ _ M N _ | .with_ _ M N => mayLoop k M || mayLoop k N
+    | .letUnit _ _ M | .letPair _ _ _ _ M | .lam _ _ _ M | .lamL _ _ _ M => mayLoop k M
+    | .case _ _ _ M _ N => mayLoop k M || mayLoop k N
+    | _ => false
+
 /-- `w <- perform[n.i] (V, w)`: an operation at a `for`'s site, which threads `w`. -/
 def threadedPerform (sp : Span) (n i : Nat) (V : Val) (w : String) : Bind := fun N =>
   pure (.bind sp ⟨w, sp⟩ none (.perform sp n i (.pair sp V (.var sp w))) N false)
@@ -723,14 +735,15 @@ def trC : Nat → Cx → List Cap → Bool → Comp → EM Comp
     | .for_ sp x V M N =>
       match cx.env.iterCall? V with
       | some (g, gs, i, f, W) =>
-        if (cx.ctl (rowC cx.env fuel M)).isEmpty then forSite n cx cs wrap sp x g gs i f W M N
+        if (cx.ctl (rowC cx.env fuel M)).isEmpty && !mayLoop fuel M then
+          forSite n cx cs wrap sp x g gs i f W M N
         else
           -- A body that performs a control operation would hold the continuation across it,
-          -- which has no destructor (its cancel performs at the site's row): the `for` drains
-          -- the stored generator instead.
+          -- which has no destructor (its cancel performs at the site's row), and one that loops
+          -- cannot be a clause, which is total: the `for` drains the stored generator instead.
           let (bs, V') ← pullSite n cx cs sp g gs i f W
-          report sp "lowering" (s!"for over {g}: its body performs a control operation, so it " ++
-            "drains the stored generator")
+          report sp "lowering" (s!"for over {g}: its body performs a control operation or " ++
+            "loops, so it drains the stored generator")
           chain bs (.for_ sp x V' (← trC n cx [] false M) (← trC n cx cs wrap N))
       | none =>
         let (bs, V') ← trV n cx cs V
