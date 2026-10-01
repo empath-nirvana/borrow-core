@@ -2298,7 +2298,7 @@ questions:
 
 | qualifier | weakening | contraction | `κ` is | the handler … |
 |---|---|---|---|---|
-| **linear** | no | no | `U(B ⊸ F_Σ R)` | resumes exactly once: a must-complete computation |
+| **linear** | no | no | `U((B ⊸ F_Σ R) & ⊤)` | resumes exactly once: a must-complete computation |
 | **affine** | yes | no | `U((B ⊸ F_Σ R) & F_Σ 1)` | resumes at most once, or cancels |
 | **relevant** | no | yes | — | *Open* (below) |
 | **unrestricted** | yes | yes | `!U((B ⊸ F_Σ R) & F_Σ 1)` | resumes any number of times, or cancels; its captures are persistent (`lam_bang_persistent`) |
@@ -2549,8 +2549,19 @@ Six rules, over `CDerives` with its context premises (§10):
     ──────────────────────────────────────────────────────────────────────── [handle]
     Δ; Γ ⊢ hnd (n, H) e : F_Σ R          (n ∉ Σ)
 
-    K_i = U(B_i ⊸ F_Σ R) (lin),   U((B_i ⊸ F_Σ R) & F_Σ 1) (aff),   !U((B_i ⊸ F_Σ R) & F_Σ 1) (unr)
+    K_i = U((B_i ⊸ F_Σ R) & ⊤) (lin),   U((B_i ⊸ F_Σ R) & F_Σ 1) (aff),   !U((B_i ⊸ F_Σ R) & F_Σ 1) (unr)
     an abortive operation's clause is !U(A_i ⊸ F_Σ R): the machine has cancelled κ
+
+- **As built** (`Core/Fundamental.lean`, `CDerives.eff*`; `Core/EffRules.lean`):
+  - a row is a list of operations `(n, i, q, A_i, B_i)`, and `F_Σ R` is `CTy.effOf Σ R`;
+  - `[sub]` is `RowLe` (every operation of `Σ` is `Σ′`'s);
+  - `[raise]`'s argument type drops (`VTy.Drop`);
+  - `[then]` asks `Σ`'s names to be nonzero and its keys unique, and `!Γ₂` at an unrestricted
+    row;
+  - `[handle]` takes `h_ret` and the clauses as variables, the clause of the `j`-th operation at
+    index `j` (`Row.ofEff`, `clausesTy`), and `n ≠ 0`.
+- **The linear `κ`** is the same `&` pair as the others: the machine builds one `κ` whatever the
+  qualifier. Its cancel branch is at `⊤`, so the clause can only resume it.
 
 - **Rows.** `[handle]` removes its name and passes the rest outward. Its clauses and its answer
   are at `Σ`, so a clause may perform the outer handlers' operations. That is how two handlers
@@ -2814,7 +2825,19 @@ runtime, with no change to `CDerives`; §11's `write_all` and `read_into` are `C
 `a..b`, `continue`, `else`, `loop` and `sized`, and `lib/iters.bc`; its completeness lemma is
 `Support/Dynamics/Completeness.lean`. Entry 17 (§18) is implemented in `Frontend/Parser.lean`
 and `Frontend/Elab/Effects.lean`, its laws in `Core/Handlers.lean`, with no change to `CDerives`.
-Entry 18 (§19) is specified; its implementation proceeds in the stages of #186.
+Entry 18 (§19) is in progress (#186). Stages 1–3 are implemented:
+- the machine: `perform`, `raise`, `hnd`, `ubind`, `ccatch` and `cfin`, and their steps, in
+  `Paper/`;
+- unique decomposition and determinism: `Core/Steps.lean` and `Core/Demonic.lean`;
+- `F_Σ A` (`CTy.eff`) and its relation: `Core/Types.lean`, `Core/Relation.lean`,
+  `Core/EffDefs.lean`;
+- the effectful `wp` and the frames at `wpG`: `Core/EffWp.lean`;
+- the six rules' compatibility: `Core/EffRules.lean`. `fundamentalC`, `fundamentalD` and
+  `adequacyD` cover the extended `CDerives`;
+- cancels: `Core/EffCancel.lean`;
+- typed handled programs: `Core/EffExamples.lean`.
+
+The unwinding forms of the borrows (stage 4) and the programs (stage 5) remain.
 
 ---
 
