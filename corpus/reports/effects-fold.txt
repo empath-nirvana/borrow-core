@@ -8,8 +8,8 @@ lowering 39:52: with to_result (Fail): a handler, the static name 1; raise abort
 lowering 42:49: with default (Fail): a handler, the static name 3; raise abortive: a branch per call (final ctl)
 lowering 45:1: copy `doubled__n5`: `doubled` for the site 5 of `Fail`
 lowering 58:9: with to_result (Fail): a handler, the static name 5; raise abortive: a branch per call (final ctl)
-call 30:14: raise (Fail) → abort[3.0], handled by the caller at 27:1: abortive, it never resumes
-call 30:14: raise (Fail) → abort[1.0], handled by the caller at 27:1: abortive, it never resumes
+call 31:14: raise (Fail) → abort[3.0], handled by the caller at 27:1: abortive, it never resumes
+call 31:14: raise (Fail) → abort[1.0], handled by the caller at 27:1: abortive, it never resumes
 call 32:16: raise (Fail) → abort[1.0], handled by the caller at 27:1: abortive, it never resumes
 call 32:16: raise (Fail) → abort[3.0], handled by the caller at 27:1: abortive, it never resumes
 call 33:42: add_checked → `add_checked__n4`

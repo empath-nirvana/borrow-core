@@ -1,4 +1,4 @@
--- expect: 30:7: `boxed['z]`: `g`, of type `U (pull i32 1 1)`, is used inside, and it cannot be shown to outlive `'z`
+-- expect: 31:7: `boxed['z]`: `g`, of type `U (pull i32 1 1)`, is used inside, and it cannot be shown to outlive `'z`
 -- A stored generator that holds a borrow cannot leave the borrow's scope. `elems` is stored over
 -- the family of an array borrowed at `'z`, and `main` tries to return it from the borrow block,
 -- to run it after the borrow ends. The block's result is boxed at `'z`, and a thunk has no

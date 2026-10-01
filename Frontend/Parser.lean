@@ -425,7 +425,8 @@ def rtyPrefix : Nat → P RTy
       let R ← rtyPrefix n
       let R' ← rtyPrefix n
       pure (.iter (← spanFrom st) A R R')
-    | .kw "pull" =>
+    -- `pull A B R`, read in a type only: `pull` is not reserved.
+    | .ident "pull" =>
       discard bump
       let A ← rtyPrefix n
       let B ← rtyPrefix n

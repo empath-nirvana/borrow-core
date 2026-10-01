@@ -1072,12 +1072,12 @@ def mLive (m : MCx) (c : TCx) (rest : Comp) (excl : List String) : MM (List (Str
   let caps := m.L.capNames
   for (y, T) in mExterns c do
     if !T.persistent && !caps.contains y && mentionsC y rest && !c.locals.any (·.1 == y) then
-      throw ⟨rest.span, s!"machine: the extern `{y}` is not a capability of the body"⟩
+      throw ⟨rest.span, s!"the extern `{y}` is used across a loop, and it is not a capability of the body"⟩
   (latest c.locals).filterMapM fun (y, T) =>
     if caps.contains y || excl.contains y || !mentionsC y rest then pure none
     else match T with
       | some T => pure (some (y, T))
-      | none => throw ⟨rest.span, s!"machine: the type of `{y}` is not determined"⟩
+      | none => throw ⟨rest.span, s!"the loop threads `{y}`, whose type is not determined: ascribe it"⟩
 
 /-- The state at a point that holds `own` besides what the loops around hold, before `rest`. -/
 def mVars (m : MCx) (c : TCx) (own : List MHeld) (rest : Comp) (excl : List String) :
@@ -1222,7 +1222,7 @@ def mWalk (m : MCx) : Nat → TCx → Comp → MM Comp
         | some l, .tensor K Vx => (c.push l.name (some K)).push x.name (exp <|> some Vx)
         | some l, _ => (c.push l.name none).push x.name exp
         | none, _ => c.push x.name (exp <|> some Bf)
-      let some Tm := c.tyV V | throw ⟨sp, "machine: the call's type"⟩
+      let some Tm := c.tyV V | throw ⟨sp, "the type of this call of a div function is not determined"⟩
       mCall m n c c' sp x A M' lend Tm Bf Rf N
     | none =>
       pure (.bind sp x A M (← mWalk m n (c.push x.name (bindTy c A M)) N) lin)
@@ -1329,7 +1329,7 @@ def mLoop (m : MCx) : Nat → TCx → Span → Ident → Val → Comp → Comp �
     let hcaps := held.flatMap (·.caps)
     let needVars ← ((latest c.locals).filter (needs.contains ·.1)).mapM fun (y, T) => match T with
       | some T => pure (y, T)
-      | none => (throw ⟨sp, s!"machine: the type of `{y}` is not determined"⟩ : MM _)
+      | none => (throw ⟨sp, s!"the loop threads `{y}`, whose type is not determined: ascribe it"⟩ : MM _)
     let vars := held.reverse.map (fun h => (h.v, h.T)) ++ m.L.caps.filter (!hcaps.contains ·.1) ++ needVars
     let what := if P.cond.isSome then "`while`" else "`for`"
     let h ← mNew sp what true true vars
@@ -1455,7 +1455,7 @@ code before the first point. -/
 def mAssemble (m : MCx) (sp : Span) (st : MSt) (s0 : Option Val) (pre : Option Comp) : SM Comp := do
   let pts := st.pts.toList
   let sums := pts.filter (·.summand)
-  if sums.isEmpty then throw ⟨sp, "machine: no point"⟩
+  if sums.isEmpty then throw ⟨sp, "internal error: a div body's machine has no state"⟩
   let tyOf (p : MPoint) : String := tupleTySrc (p.vars.map (m.pp ·.2))
   let S := sumTySrc (sums.map tyOf)
   let Obs := s!"({m.pp m.L.B}) + ({S})"

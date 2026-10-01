@@ -1,4 +1,4 @@
--- expect: 12:34: `break e` gives the value of a `for` whose value is bound: `let r = for x in … { … }; …`
+-- expect: 13:34: `break e` gives the value of a `for` whose value is bound: `let r = for x in … { … }; …`
 -- `break e` gives a value to the loop it leaves; a `for` that is a statement has none to give.
 
 include yield

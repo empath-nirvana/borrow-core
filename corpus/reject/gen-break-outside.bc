@@ -1,4 +1,4 @@
--- expect: 6:24: `break` is outside every loop
+-- expect: 7:24: `break` is outside every loop
 -- `break` leaves the innermost loop; outside every loop of a function's body there is none.
 
 include yield

@@ -1,4 +1,4 @@
--- expect: 11:3: this borrow block's body performs the operation 1.0, which resumes: only an abortive operation crosses a borrow's scope (a continuation held across a lend is T1, #172)
+-- expect: 12:3: this borrow block's body performs the operation 1.0, which resumes: only an abortive operation crosses a borrow's scope (a continuation held across a lend is T1, #172)
 -- A generator that would hold a borrow of its own local across a `yield` (a self-reference,
 -- which Rust's generators forbid and its `async` needs `Pin` for). A borrow block's body may
 -- perform only abortive operations (SPEC §19): `yield` resumes, and a continuation held across a

@@ -1,4 +1,4 @@
--- expect: 12:3: `wide` performs `Yield[i64]`, but the handler of `Yield` in scope is at `Yield[i32]`
+-- expect: 13:3: `wide` performs `Yield[i64]`, but the handler of `Yield` in scope is at `Yield[i32]`
 -- A generator that calls another passes on what it yields: the callee's `yield` reaches the
 -- handler the caller's reaches, at one type. `narrow` yields `i32`, and `wide` `i64`.
 

@@ -61,7 +61,7 @@ def keywords : List String :=
     "perform", "abort", "handle_with", "unwind",
     -- types, lifetimes, shapes
     "ref", "imm", "mut", "box", "unk", "i32", "i64", "u8", "input", "output", "mu", "all", "forall", "top", "dom",
-    "block", "val", "fam", "view", "nu", "delay", "loop", "stream", "str", "iter", "pull", "leaf", "sized",
+    "block", "val", "fam", "view", "nu", "delay", "loop", "stream", "str", "iter", "leaf", "sized",
     "for", "in",
     "node", "array", "array_imm", "array_mut",
     -- constants and derived forms

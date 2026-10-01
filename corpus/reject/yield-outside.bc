@@ -1,4 +1,4 @@
--- expect: 11:15: `f` performs `Yield`, but no handler of `Yield` is in scope here
+-- expect: 12:15: `f` performs `Yield`, but no handler of `Yield` is in scope here
 -- `yield` is an operation of `Yield` (`lib/yield.bc`), which some handler must serve: a `for`
 -- over a call of the function that performs it, or its stored generator. `main` calls `f`, which
 -- yields, outside both.
