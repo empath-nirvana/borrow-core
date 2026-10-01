@@ -1,17 +1,20 @@
 -- A generator that owns a cell: its state holds the cell between observations, and each step
 -- reads it (`*c`, a borrow for the read) and swaps a new value in. No borrow crosses a `yield`,
 -- which is what a generator may not do (`corpus/reject/gen-self-borrow.bc`); the cell is freed
--- when the loop ends.
+-- when the loop ends. Across each `yield` the cell is held by the continuation, whose cancel
+-- would free it (drop glue, SPEC §19): the finaliser and the rest share it, so it is not copied.
 --
 -- Answer: i32[10]: the cell holds 0, 0, 1, 3, 6 at the five `yield`s (each step adds `i`), and
 -- one cell is allocated (`corpus/counts.expected`). A step that yielded after the swap gives 20;
 -- a cell that was not freed leaves `live 1`.
-gen fn counter(n: i32) -> i32 =
+
+include yield
+fn counter(n: i32) -> 1 with Yield[i32] =
   let c = alloc(0);
   let mut i = 0;
   while i < n {
     let v = *c;
-    yield v;
+    yield(v);
     let (c, old) = swap(c, v + i);
     i = i + 1
   };

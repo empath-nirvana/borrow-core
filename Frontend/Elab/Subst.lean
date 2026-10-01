@@ -4,8 +4,8 @@ import Frontend.Syntax
 # Frontend — Elab — substituting type parameters  `[#109]`
 
 `subst σ` replaces each type name `X` bound by `σ` with its type, in every type, bracket argument
-and annotation of a term. It instantiates a template (`fn f[A, …]` or `gen fn f[A, …]`, SPEC §15)
-at the types of one call: the copy is an ordinary `fn` or `gen fn` at those types. A `mu X. …` binds `X` in its
+and annotation of a term. It instantiates a template (`fn f[A, …]`, SPEC §15) at the types of
+one call: the copy is an ordinary `fn` at those types. A `mu X. …` binds `X` in its
 body, so a name it binds is not substituted there. The functions follow `respan`
 (`Frontend/Elab/Respan.lean`).
 -/
@@ -55,7 +55,7 @@ def CTy.subst (σ : TySubst) : CTy → CTy
   | .stream sp A => .stream sp (A.subst σ)
   | .iter sp A R R' => .iter sp (A.subst σ) (R.subst σ) (R'.subst σ)
   | .loop sp A B => .loop sp (A.subst σ) (B.subst σ)
-  | .gen sp A B R => .gen sp (A.subst σ) (B.subst σ) (R.subst σ)
+  | .pull sp A B R => .pull sp (A.subst σ) (B.subst σ) (R.subst σ)
   | .eff sp r A => .eff sp (r.subst σ) (A.subst σ)
 
 def Row.subst (σ : TySubst) : Row → Row
@@ -148,6 +148,8 @@ def Val.subst (σ : TySubst) : Val → Val
   | .const sp c => .const sp (c.subst σ)
   | .shorten sp m s a V => .shorten sp m (s.subst σ) a (V.subst σ)
   | .lend sp x m => .lend sp x m
+  | .sugar sp (.forSite i) => .sugar sp (.forSite { i with T := i.T.subst σ })
+  | .sugar sp (.pullSite i) => .sugar sp (.pullSite { i with T := i.T.subst σ })
   | .sugar sp s => .sugar sp s
 
 def Comp.subst (σ : TySubst) : Comp → Comp

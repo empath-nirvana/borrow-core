@@ -249,7 +249,11 @@ def handlers (O : Ops) : Tm → KM Tm
   | .ubind nn dd b => do
     let b ← handlers O b
     let r ← kfresh
-    return .letv r (.fin false dd b) (.app nn r)
+    if nn != dd then return .letv r (.fin false dd b) (.app nn r)
+    -- The clauses as one code (`markUbinds`): `inj₁ r` continues, `inj₂ ()` finalises. The
+    -- continuing call is through a variable of its own, so that its result type is its own.
+    let i ← kfresh; let d' ← kfresh
+    return .letv r (.fin false dd b) (.letv i (.inj false r) (.letv d' (.var dd) (.app d' i)))
   | .letv x e b => return .letv x (← handlers O e) (← handlers O b)
   | .letpair x y p b => return .letpair x y p (← handlers O b)
   | .case s x b₁ y b₂ => return .case s x (← handlers O b₁) y (← handlers O b₂)
@@ -303,6 +307,9 @@ structure SFacts where
   S : Solver
   /-- Every code's operations, as payload variants: those it may suspend with. -/
   skeys : Array (List Nat)
+  /-- A `sel` code's operations per projection: a call whose argument is a known injection may
+  suspend only with that projection's (a loop's `close` with none, say). -/
+  skeysG : Array (Option (List Nat × List Nat)) := #[]
   /-- The codes that answer outcomes. -/
   poll : Array Bool
   /-- The codes that may raise. -/
@@ -323,27 +330,53 @@ def SFacts.pollAt (F : SFacts) (f : Var) : Bool := (F.codesOf f).any (F.poll[·]
 
 def unionKeys (a b : List Nat) : List Nat := b.foldl (fun acc k => if acc.contains k then acc else acc ++ [k]) a
 
-/-- The operations a term of the code `self` may suspend with. -/
-def sKeysOf (O : Ops) (F : SFacts) (self : Nat) : Tm → List Nat
+/-- The projection a call's argument selects, when it is a known injection. -/
+def Ops.selArg (O : Ops) (a : Var) : Option Bool :=
+  match O.defs[a]?.map Tm.tail with
+  | some (.inj b _) => some b
+  | _ => none
+
+/-- The operations a call of the code `c` on an argument that selects `b` may suspend with. -/
+def SFacts.keysAt (F : SFacts) (c : Nat) (b : Option Bool) : List Nat :=
+  match b, F.skeysG[c]?.getD none with
+  | some b, some (k₁, k₂) => if b then k₂ else k₁
+  | _, _ => F.skeys[c]?.getD []
+
+/-- The operations a term of the code `self` may suspend with. `sel` gives the injection some
+variables are known to hold (the code's parameter, at a projection): a `case` on one runs one arm,
+and a call on one runs that projection of its callee (a loop's `close`, say, which suspends with
+none of its observations' operations). -/
+def sKeysOf (O : Ops) (F : SFacts) (self : Nat) (sel : List (Var × Bool)) : Tm → List Nat
   | .perform p => match payloadKey O.defs p with
     | some k => [O.keyIdx k]
     | none => []
   | .await _ _ => match F.drvOf[self]? with
     | some h => (F.skeys[h.body]?.getD []).filter fun j => O.keys[j]!.1 != h.n
     | none => []
-  | .app f _ => (F.codesOf f).foldl (fun acc c => unionKeys acc (F.skeys[c]?.getD [])) []
-  | .letv _ e b => unionKeys (sKeysOf O F self e) (sKeysOf O F self b)
+  | .app f a =>
+    let b := (sel.lookup a).orElse fun _ => O.selArg a
+    (F.codesOf f).foldl (fun acc c => unionKeys acc (F.keysAt c b)) []
+  | .letv x e b =>
+    let sel' := match e with
+      | .var y => match sel.lookup y with | some v => (x, v) :: sel | none => sel
+      | .inj v _ => (x, v) :: sel
+      | _ => sel
+    unionKeys (sKeysOf O F self sel e) (sKeysOf O F self sel' b)
   | .letpair _ _ _ b | .copy _ _ b | .drop _ b | .catch _ b | .fin _ _ b | .catchAll b =>
-    sKeysOf O F self b
-  | .case _ _ b₁ _ b₂ | .when _ _ _ _ b₁ b₂ => unionKeys (sKeysOf O F self b₁) (sKeysOf O F self b₂)
+    sKeysOf O F self sel b
+  | .case s _ b₁ _ b₂ => match (sel.lookup s).orElse fun _ => O.selArg s with
+    | some false => sKeysOf O F self sel b₁
+    | some true => sKeysOf O F self sel b₂
+    | none => unionKeys (sKeysOf O F self sel b₁) (sKeysOf O F self sel b₂)
+  | .when _ _ _ _ b₁ b₂ => unionKeys (sKeysOf O F self sel b₁) (sKeysOf O F self sel b₂)
   | _ => []
 
 /-- A term of the code `self`, in tail position when `tail`, has a resumption point that is not a
 tail call: a `perform`, a live forwarding, or a call of a code that may suspend. -/
 def ownPoints (O : Ops) (F : SFacts) (self : Nat) (tail : Bool) : Tm → Bool
   | .perform _ => true
-  | .await _ _ => !(sKeysOf O F self (.await 0 0)).isEmpty
-  | .app f _ => !tail && (F.codesOf f).any fun c => !(F.skeys[c]?.getD []).isEmpty
+  | .await _ _ => !(sKeysOf O F self [] (.await 0 0)).isEmpty
+  | .app f a => !tail && (F.codesOf f).any fun c => !(F.keysAt c (O.selArg a)).isEmpty
   | .letv _ e b => ownPoints O F self false e || ownPoints O F self tail b
   | .letpair _ _ _ b | .copy _ _ b | .drop _ b => ownPoints O F self tail b
   | .case _ _ b₁ _ b₂ | .when _ _ _ _ b₁ b₂ =>
@@ -372,12 +405,18 @@ def SFacts.of (O : Ops) (p : Prog) (hs : Array HInfo) : Except String SFacts := 
   let drvOf : Std.HashMap Nat HInfo := hs.foldl (fun m h => m.insert h.drv h) {}
   let n := p.codes.size
   let mut F : SFacts :=
-    { S := S, skeys := .replicate n [], poll := .replicate n false, raises := .replicate n false,
+    { S := S, skeys := .replicate n [], skeysG := .replicate n none, poll := .replicate n false,
+      raises := .replicate n false,
       U := ⟨O.defs, S, #[], some []⟩, drvOf := drvOf }
   for _ in [0:(p.codes.size + 1) * (O.keys.size + 1) + 1] do
-    let sk := p.codes.toList.zipIdx.map fun (c, k) => sKeysOf O F k c.body
-    let same := (sk.zip F.skeys.toList).all fun (a, b) => a.length == b.length
-    F := { F with skeys := sk.toArray }
+    let sk := p.codes.toList.zipIdx.map fun (c, k) => sKeysOf O F k [] c.body
+    let skG := p.codes.toList.zipIdx.map fun (c, k) =>
+      some (sKeysOf O F k [(c.param, false)] c.body, sKeysOf O F k [(c.param, true)] c.body)
+    let same := (sk.zip F.skeys.toList).all (fun (a, b) => a.length == b.length) &&
+      (skG.zip F.skeysG.toList).all fun
+        | (some (a, b), some (c, d)) => a.length == c.length && b.length == d.length
+        | _ => true
+    F := { F with skeys := sk.toArray, skeysG := skG.toArray }
     if same then break
   let tailSucc := p.codes.map fun c => (c.body.tailCalls.flatMap F.codesOf).eraseDups
   let mut parent : Array Nat := (List.range p.codes.size).toArray
@@ -390,9 +429,15 @@ def SFacts.of (O : Ops) (p : Prog) (hs : Array HInfo) : Except String SFacts := 
     -- point of its own, so that it adds nothing to the outcome's continuation. Any other tail
     -- call is a resumption point.
     let own := ownPoints O F k true c.body
+    -- A wrapper that may tail-call several codes that suspend keeps its own convention: its
+    -- calls are resumption points, so a suspension's continuation is of one code, and resuming
+    -- it does not dispatch.
+    let susp := (c.body.tailCalls.flatMap F.codesOf).eraseDups.filter fun c' =>
+      !(F.skeys[c']?.getD []).isEmpty
+    let wrapper := !own && susp.length ≤ 1
     for f in c.body.tailCalls do
       for c' in F.codesOf f do
-        if !own || reaches tailSucc c' k then parent := ufUnion parent k c'
+        if wrapper || reaches tailSucc c' k then parent := ufUnion parent k c'
   for f in p.main.calls do
     if let c₀ :: rest := F.codesOf f then
       for c' in rest do parent := ufUnion parent c₀ c'
@@ -565,12 +610,14 @@ def tailResumptive (O : Ops) (F : SFacts) (codes : Array Code) (hs : Array HInfo
   let mut out := []
   for n in O.ctl do
     let sites := hs.toList.filter (·.n == n)
-    for (_, j) in O.keysOf n do
+    for (idx, j) in O.keysOf n do
+      -- The handlers whose body may perform the operation: another's clause never runs for it.
+      let sites := sites.filter fun h => (F.skeys[h.body]?.getD []).contains idx
       let cs := (sites.flatMap fun h =>
         F.S.clausesAt (F.S.num.idx (.var h.dVars[1]!)) j).eraseDups
       let [c] := cs | continue
       let some tc := codes[c]?.bind tailClause? | continue
-      if !(sKeysOf O F c tc.body).isEmpty then continue
+      if !(sKeysOf O F c [] tc.body).isEmpty then continue
       if !Raises.isEmpty (F.U.raises tc.body) then continue
       out := out ++ [((n, j.toUInt32), tc)]
   return out
@@ -833,10 +880,12 @@ def MEnv.cancelArm (E : MEnv) (j : Nat) (z : Var) (k : Option Var) : KM Tm := do
       let u ← kfresh; let rr ← kfresh
       if raising then
         let zc ← kfresh; let e' ← kfresh
-        return .copy z zc (.letv u .unit (.letv rr (.catchAll (.app dd u))
-          (.letv e' (← errNext e rr zc) (← go rest e'))))
+        let u₀ ← kfresh
+        return .copy z zc (.letv u₀ .unit (.letv u (.inj true u₀) (.letv rr (.catchAll (.app dd u))
+          (.letv e' (← errNext e rr zc) (← go rest e')))))
       else
-        return .letv u .unit (.letv rr (.app dd u) (.drop rr (← go rest e)))
+        let u₀ ← kfresh
+        return .letv u₀ .unit (.letv u (.inj true u₀) (.letv rr (.app dd u) (.drop rr (← go rest e))))
   let tail ← go fins e₀
   let start ← match k with
     | some k => do

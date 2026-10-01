@@ -1,10 +1,10 @@
 -- A generator over borrowed data. `elems<'a>` takes the family of leaf views of an array at
--- `'a` (SPEC §9) and yields its elements; `doubled` maps a generator. Inside the borrow of the
--- array, `main` makes the pipeline over the family at `'z`, pulls two elements, and closes it,
--- all before the borrow ends.
+-- `'a` (SPEC §9) and yields its elements; `doubled` maps a stored generator. Inside the borrow of
+-- the array, `main` stores the pipeline over the family at `'z`, pulls two elements, and closes
+-- it, all before the borrow ends.
 --
--- The generator holds the borrow at `'z` in its state, which is fine: the borrow outlives it.
--- It cannot leave the borrow's scope: a thunk has no outlives rule, so `boxed['z]` of it is
+-- The stored generator holds the borrow at `'z` in its state, which is fine: the borrow outlives
+-- it. It cannot leave the borrow's scope: a thunk has no outlives rule, so `boxed['z]` of it is
 -- rejected (`corpus/reject/gen-escape.bc`). And the pipeline is pulled by hand: a `for` would
 -- make the borrow block's body a loop, which cannot run inside one borrow
 -- (`corpus/pending/borrow-across-loop.bc`).
@@ -13,25 +13,27 @@
 -- two pulls give 2 + 16. A generator that started one late gives 46; one that did not double
 -- gives 9.
 
-gen fn elems<'a>(xs: array_imm 'a i32) -> i32 =
+include yield
+
+fn elems<'a>(xs: array_imm 'a i32) -> 1 with Yield[i32] =
   let mut xs = xs;
   let mut i = 0;
   while true {
     let (xs1, xs2) = array_copy['a, i32] xs;
     xs = xs1;
     match array_get['a, i32] (xs2, i) {
-      inl e -> let x = *e; i = i + 1; yield x
+      inl e -> let x = *e; i = i + 1; yield(x)
     | inr _ -> break
     }
   };
   ()
 
-gen fn doubled(it: U (gen i32 1 1)) -> i32 =
-  for x in it { yield x + x };
+fn doubled(it: U (pull i32 1 1)) -> 1 with Yield[i32] =
+  for x in it { yield(x + x) };
   ()
 
 -- The next element and the rest, or 0 once the generator has finished; a skip counts 0.
-fn pull(it: U (gen i32 1 1)) -> i32 * (U (gen i32 1 1) + 1) =
+fn next(it: U (pull i32 1 1)) -> i32 * (U (pull i32 1 1) + 1) =
   o <- (nu_out (force it)).1;
   match o {
     inl (x, it) -> (x, inl it)
@@ -44,10 +46,11 @@ main -> i32 =
   let arr = alloc(array_new[i32] (5, tab));
   let n = borrow imm arr { 'x, b ->
     withload['x, 'z, array i32, i32] b (thunkv Fun 'z < dom. return (thunkv fun (xs : array_imm 'z i32) ->
-      let (x1, r) = pull(doubled((unbang elems) ['z] xs));
+      let g : U (pull i32 1 1) = doubled(elems(xs));
+      let (x1, r) = next(g);
       match r {
         inl g ->
-          let (x2, r) = pull(g);
+          let (x2, r) = next(g);
           match r {
             inl g -> c <- (nu_out (force g)).2; boxed['z] (x1 + x2)
           | inr _ -> boxed['z] (x1 + x2)

@@ -1,17 +1,17 @@
--- expect: 9:3: a `return` inside a `for` over an iterator made from `c` cannot hand `c` back: the iterator holds it until the loop ends. `break`, and `return` after the loop
--- A `return` inside a `for` over `bytes(c)` would finish the generator handing back `c`, but the
--- iterator holds `c` until it is closed: `c` is not in scope inside the loop. The loop is left
--- with `break`, which closes the iterator and gives `c` back, and the generator returns after it
--- (`corpus/gen-return.bc`). A `return` from a loop whose variables hold the capability (a
--- `while` over `let mut` state that owns it) hands it back directly.
-gen fn upto(c: In, stop: i32) -> i32, In =
+-- expect: 10:12: a `return` inside a `for` over a source made from `c` cannot hand `c` back: the source holds it until the loop ends. `break`, and `return` after the loop
+-- A `return` inside a `for` over `bytes(c)` would return from the function handing back `c`, but
+-- the iterator holds `c` until it is closed: `c` is not in scope inside the loop. The loop is left
+-- with `break`, which closes the iterator and gives `c` back, and the function returns after it.
+-- A `return` from a loop whose variables hold the capability (a `while` over `let mut` state that
+-- owns it) hands it back directly.
+
+fn upto(c: In, stop: u8) -> In * i32 =
   let mut n = 0;
   for b in bytes(c) {
-    if b == stop { return c } else { yield b }
+    if b == stop { return (c, n) } else { n = n + 1 }
   };
-  c
+  (c, n)
 
 main -> i32 =
-  let mut n = 0;
-  for b in upto(stdin, 46) { n = n + 1 };
+  let (stdin, n) = upto(stdin, 46);
   n

@@ -12,6 +12,8 @@
 -- that saw the table empty gives 0; a block that borrowed the table once for the whole call is
 -- not expressible.
 
+include yield
+
 fn tab(i: i32) -> i32 = i * 10
 
 -- The entry at `i`, or 0 out of range.
@@ -21,9 +23,9 @@ def get : !(all 'a < top. imm 'a (array i32) * i32 => i32) =
     withload['a, 'z, array i32, i32] b (thunkv Fun 'z < dom. return (thunkv fun (xs : array_imm 'z i32) ->
       match array_get['z, i32] (xs, i) { inl e -> let v = *e; boxed['z] v | inr _ -> boxed['z] 0 })))
 
-gen fn range(lo: i32, hi: i32) -> i32 =
+fn range(lo: i32, hi: i32) -> 1 with Yield[i32] =
   let mut i = lo;
-  while i < hi { yield i; i = i + 1 };
+  while i < hi { yield(i); i = i + 1 };
   ()
 
 -- The sum of the entries at 1, 2, 3, 4.

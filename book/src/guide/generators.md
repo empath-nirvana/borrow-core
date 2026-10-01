@@ -1,50 +1,56 @@
 # Generators
 
-A generator is a function that yields a sequence of values and then finishes. `gen fn` declares
-one: its result type is what it yields, and after a comma what it finishes with (`1` when left
-out). Calling it runs nothing; each observation runs its body up to the next `yield`.
+A generator is a function that yields a sequence of values, then returns. Yielding is an
+ordinary effect, `Yield[T]`, declared in the library (`include yield`) with one operation,
+`yield(x: T)`, and a function that performs it says so in its row. A `for` over a call of such a
+function handles the effect: its body runs at each `yield`, with the yielded value.
 
 ```bc
 -- answer: i32[355]
-gen fn range(lo: i32, hi: i32) -> i32 =
+include yield
+
+fn range(lo: i32, hi: i32) -> 1 with Yield[i32] =
   let mut i = lo;
-  while i < hi { yield i; i = i + 1 };
+  while i < hi { yield(i); i = i + 1 };
   ()
 
-gen fn squares(it: U (gen i32 1 1)) -> i32 =
-  for x in it { yield x * x };
-  ()
-
-gen fn above(n: i32, it: U (gen i32 1 1)) -> i32 =
-  for x in it { if n < x { yield x } else { () } };
+fn squares(lo: i32, hi: i32) -> 1 with Yield[i32] =
+  for x in range(lo, hi) { yield(x * x) };
   ()
 
 main -> i32 =
   let mut acc = 0;
-  for x in above(20, squares(range(1, 11))) { acc = acc + x };
+  for x in squares(1, 11) { if x > 20 { acc = acc + x } else { () } };
   acc
 ```
 
-A generator is codata, `gen A B R = νX. F((A ⊗ U X) ⊕ (B ⊕ U X)) & F R` (SPEC §14): an
-observation yields an `A` with the rest, finishes with `B`, or skips a step (a turn of a loop
-that yielded nothing), and closing it early hands back `R`, what it holds that has no
-destructor. Every observation terminates; a consumer decides how many to make. There is no new
-type former: `gen` is an abbreviation over the core's one codata former.
+The `for` is a handler of `Yield` with a static name of its own (see [Effects](effects.md)):
+the loop's variables travel through the operation, so the body is the handler's clause, and it
+resumes the generator at its end. When the body does nothing else, each `yield` compiles to a
+direct call of the body: the program above allocates nothing and dispatches no call.
+
+A generator's `while` and `loop` are loops of a div body (see [Divergence](divergence.md)),
+whose every turn may yield: one turn per observation, so every observation terminates. A `for`
+over a generator that loops is div; over one that does not, it is total.
 
 ## Leaving early: `break` and `return`
 
-`break` leaves the innermost loop from anywhere in its body, and `return e` finishes the whole
-generator with `e` from any depth of its loops. Each loop that is left closes its iterator.
+`break` in a `for`'s body stops the generator: what it holds is finalised, its owned values
+dropped, as a cancelled continuation's are. `return e` returns from the function around the
+loop. Inside a generator, `break` leaves its innermost loop, and `return e` returns from the
+generator with `e` from any depth of its loops.
 
 ```bc
--- answer: i32[13]
-gen fn below(n: i32, lim: i32) -> i32 =
+-- answer: i32[67]
+include yield
+
+fn below(n: i32, lim: i32) -> 1 with Yield[i32] =
   let mut i = 0;
   while true {
     let mut j = 0;
     while j < i {
       if i * j > lim { return } else { () };
-      yield j;
+      yield(j);
       j = j + 1
     };
     if i == n { break } else { () };
@@ -52,85 +58,56 @@ gen fn below(n: i32, lim: i32) -> i32 =
   };
   ()
 
+fn first_above(k: i32) -> i32 =
+  for x in below(10, 100) { if x > k { return x * 10 } else { () } };
+  0
+
 main -> i32 =
   let mut acc = 0;
-  for x in below(10, 12) { acc = acc + x };
-  acc
+  for x in below(10, 12) { if x > 2 { break } else { acc = acc + x } };
+  acc + first_above(5)
 ```
-
-`return` is a generator's: in `fn` and `main` bodies it is the core's `return`. `break` also
-leaves a `for` in `main` or any other function.
 
 ## The value of a loop
 
-A generator finishes with a value. `let r = for x in g { … }; …` keeps it, or, after
-`break e`, keeps `e`:
+A generator returns a value. `let r = for x in g(…) { … }; …` keeps it, or, after `break e`,
+keeps `e`:
 
 ```bc
--- answer: i32[1006]
-gen fn upto(n: i32) -> i32, i32 =
+-- answer: i32[70012]
+include yield
+
+fn upto(n: i32) -> i32 with Yield[i32] =
   let mut i = 0;
-  while i < n { yield i; i = i + 1 };
+  while i < n { yield(i); i = i + 1 };
   n
 
-gen fn firstbig(it: U (gen i32 i32 1), lim: i32) -> i32, i32 =
-  let r = for x in it {
-    if x > lim { break x } else { yield x }
-  };
-  r + 1000
-
 main -> i32 =
-  let s = for x in firstbig(upto(10), 5) { () };
-  s
+  let mut acc = 0;
+  let r = for x in upto(4) { acc = acc + x };
+  let s = for x in upto(10) { if x == 7 { break 70000 } else { () } };
+  acc + r + s + 2
 ```
 
-## Calling a loop from a generator
+## Calling a generator
 
-A generator may call a function that loops (a div function, see
-[Divergence](divergence.md)) as it would call any other. The loop runs inside the generator, one
-turn per observation, so every observation still terminates: a consumer that stops early stops
-the loop too.
-
-```bc
--- stdin: abc
--- stdin: de
--- answer: i32[32]
-fn line_len(c: In) -> In * i32 =
-  let mut n = 0;
-  for b in bytes(&mut c) { if b == 10 { break } else { n = n + 1 } };
-  (c, n)
-
-gen fn lens(c: In, k: i32) -> i32, In =
-  let mut i = 0;
-  while i < k {
-    let n = line_len(&mut c);
-    yield n;
-    i = i + 1
-  };
-  c
-
-main -> i32 =
-  let mut s = 0;
-  for n in lens(&mut stdin, 2) { s = s * 10 + n };
-  s
-```
-
-## Delegating: `yield from`
-
-`yield from g` yields everything the generator `g` yields, and its value is what `g` finishes
-with:
+A generator that calls another passes on what it yields, and goes on with what it returns: the
+callee's `yield` reaches the handler the caller's reaches. A call of a function that loops runs
+its loop inside the generator, one turn per observation.
 
 ```bc
 -- answer: i32[1256]
-gen fn two() -> i32, i32 =
-  yield 1;
-  yield 2;
+include yield
+
+fn two() -> i32 with Yield[i32] =
+  yield(1);
+  yield(2);
   5
 
-gen fn around() -> i32, i32 =
-  yield 0;
-  let n = yield from two();
-  yield n;
+fn around() -> i32 with Yield[i32] =
+  yield(0);
+  let n = two();
+  yield(n);
   n + 1
 
 main -> i32 =
@@ -139,35 +116,70 @@ main -> i32 =
   acc * 10 + r
 ```
 
-## Generators in place, and callbacks that yield
+## Stored generators
 
-`gen { … }` is a generator written where it is used. It captures what it uses and runs nothing
-until it is observed:
+A call of a generator where a value of type `U (pull A B R)` is expected (an argument at a
+parameter of that type, or a binding with that type written) is the generator stored: its
+handler keeps the continuation instead of resuming it. Nothing runs until it is observed, each
+observation runs it to its next `yield`, and closing it cancels the rest. It is codata,
+`pull A B R = νX. F((A ⊗ U X) ⊕ (B ⊕ U X)) & F R`: an observation gives an `A` with the rest,
+returns `B`, or skips a turn that yielded nothing. A `for` over a stored generator observes it
+until it returns.
 
 ```bc
--- answer: i32[31]
-main -> i32 =
-  let k = 7;
-  let mut acc = 0;
-  for x in gen { yield 1; let mut i = 0; while i < 3 { yield k + i; i = i + 1 }; () } {
-    acc = acc + x
+-- answer: i32[88]
+include yield
+
+fn fib() -> 0 with Yield[i32] =
+  let mut a = 0;
+  let mut b = 1;
+  loop {
+    yield(a);
+    let c = a + b;
+    a = b;
+    b = c
+  }
+
+fn take(n: i32, it: U (pull i32 0 1)) -> 1 with Yield[i32] =
+  let mut i = 0;
+  for x in it {
+    if i < n { yield(x); i = i + 1 } else { break }
   };
-  acc + 6
-```
-
-A callback may yield. The function it is passed to was written for a callback that returns a
-value; it is specialized into a generator (as it is specialized into a loop for a callback that
-may diverge, see [Divergence](divergence.md)), and its call yields everything the callbacks
-yield. No function is written twice:
-
-```bc
--- answer: i32[1111]
-fn twice(f: !(i32 => 1), x: i32) -> 1 =
-  f(x);
-  f(x + 1)
+  ()
 
 main -> i32 =
   let mut acc = 0;
-  for x in gen { twice(!{ y -> yield y; yield y * 100 }, 5) } { acc = acc + x };
+  for x in take(10, fib()) { acc = acc + x };
   acc
 ```
+
+The adapters of `include adapters` (`map`, `filter`, `take`, `skip`, `enumerate`, `chain`,
+`flat_map`, `take_until`, `scan`, `zip`, `chunks`, `lines`, `batch`) are generic generators over
+stored generators, so a pipeline is written as calls:
+
+```bc
+-- answer: i32[320]
+include adapters
+
+fn range(lo: i32, hi: i32) -> 1 with Yield[i32] =
+  let mut i = lo;
+  while i < hi { yield(i); i = i + 1 };
+  ()
+
+fn times(p: i32 * i32) -> i32 = let (i, x) = p; i * x
+fn even(x: i32) -> bool = host[and32] (x, 1) == 0
+
+main -> i32 =
+  let mut acc = 0;
+  for y in take(filter(map(enumerate(range(10, 1000)), times), even), 5) { acc = acc + y };
+  acc
+```
+
+## What a generator cannot do yet
+
+`yield` may be cancelled (`break`, or closing a stored generator), and what a generator holds
+across it is then dropped. A capability, such as the input or the output, has no destructor and
+must be handed back, so a generator cannot hold one across a `yield`: a generator over the input
+is not provided yet. A body of a loop may use them; the loop's variables are passed through the
+operation. A closure that yields (a callback of a generator) needs effectful callbacks, which
+are not built yet.

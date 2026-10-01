@@ -1,6 +1,6 @@
--- Closing a generator early frees its state. `elems` owns a list and yields its elements; its
--- state between observations is the rest of the list. `take(2, …)` stops after two elements and
--- closes it: `close` drops the state, so the two nodes still in it are freed by the list's
+-- Closing a stored generator early frees its state. `elems` owns a list and yields its elements;
+-- its state between observations is the rest of the list. `take(2, …)` stops after two elements
+-- and closes it: `close` drops the state, so the two nodes still in it are freed by the list's
 -- destructor (SPEC §12) and nothing is left live. The `break` arm does not name `l`: nothing after
 -- the loop reads it, so the loop does not hand it on, and the list `unroll` took apart is not
 -- copied (`copies 0`).
@@ -8,25 +8,27 @@
 -- Answer: i32[3], 1 + 2, and `live 0`. A `close` that forgot the state leaves objects live; a
 -- `take` that ran one more step gives 6.
 
+include yield
+
 type List = mu X. 1 + (i32 * X)
 
 def nil : List = roll inl ()
 fn cons(x: i32, t: List) -> List = roll inr (x, t)
 
-gen fn elems(l: List) -> i32 =
+fn elems(l: List) -> 1 with Yield[i32] =
   let mut l = l;
   while true {
     match unroll l {
       inl u -> break
-    | inr (x, t) -> l = t; yield x
+    | inr (x, t) -> l = t; yield(x)
     }
   };
   ()
 
-gen fn take(n: i32, it: U (gen i32 1 1)) -> i32 =
+fn take(n: i32, it: U (pull i32 1 1)) -> 1 with Yield[i32] =
   let mut i = 0;
   for x in it {
-    if i < n { yield x; i = i + 1 } else { break }
+    if i < n { yield(x); i = i + 1 } else { break }
   };
   ()
 

@@ -1,17 +1,17 @@
--- `return` and `break` inside a generator's loop, not in tail position (#109). `upto` yields
--- `0, 1, …` up to `n` and finishes with `n`, or `return`s early with `i` when it reaches `stop`;
--- `break` leaves the loop when `i` is odd and above `skip`. The `if`s' `else` arms go on, so
--- what follows each `if` is moved into its `else` arm and the `return`/`break` are terminals of
--- the loop's body. The loop's end and `break` go on to what follows the loop, and `return v`
--- finishes the generator with `v` at once.
+-- `return` inside a generator's loop, not in tail position. `upto` yields `0, 1, …` up to `n`
+-- and returns `n`, or `return`s early with `i` when it reaches `stop`. The `if`'s `else` arm goes
+-- on, so what follows the `if` is moved into it and the `return` is a terminal of the loop's
+-- body, which finishes the generator's machine with `i` at once.
 -- `gen-return.core.bc` is its elaboration in core, as `bcc desugar` prints it.
 -- Answer: i32[6], 0 + 1 + 2 + 3 before `stop` returns at 4.
 
-gen fn upto(n: i32, stop: i32) -> i32, i32 =
+include yield
+
+fn upto(n: i32, stop: i32) -> i32 with Yield[i32] =
   let mut i = 0;
   while i < n {
     if i == stop { return i } else { () };
-    yield i;
+    yield(i);
     i = i + 1
   };
   n

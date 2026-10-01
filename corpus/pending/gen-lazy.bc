@@ -1,0 +1,30 @@
+-- pending: a continuation that holds a capability across an affine operation (SPEC §19, kernel)
+-- A generator that writes: `ticks` writes `>` before its first `yield` and each number before
+-- yielding it, through the output capability it is given, and hands it back. With it, a stored
+-- generator's laziness is observable: one stored and closed at once writes nothing, one observed
+-- once writes `>0`.
+--
+-- Blocked by the kernel, as `pending/gen-digits.bc` is: `ticks` holds the output capability
+-- (no destructor, §12) across `yield`, whose continuation may be cancelled; and a stored
+-- generator's `close` cancels the continuation, which answers `()`, so the capability could not
+-- come back.
+--
+-- now: 22:5: `o`, of type `ref output`, is live across a computation that may abort, and its type has no destructor: an abortive operation of the bound computation would abandon it
+
+include yield
+
+fn ticks(o: Out, n: i32) -> Out with Yield[i32] =
+  putb(&mut o, 62);
+  let mut i = 0;
+  while i < n {
+    put_dec(&mut o, i);
+    putb(&mut o, 10);
+    yield(i);
+    i = i + 1
+  };
+  o
+
+main -> i32 =
+  let mut acc = 0;
+  let stdout = for y in ticks(stdout, 3) { acc = acc + y };
+  acc

@@ -201,23 +201,25 @@ def byName (n : UInt32) (ks : List OpKey) (q : Var) (onName onOther : Var → UM
       (.case bo u₁ (.drop u₁ (.letv q₁ (.pair m rest) (← onOther q₁)))
         u₂ (.drop u₂ (.letv q₂ (.pair m rest) (← onName q₂))))))))
 
-/-- The finaliser `dd` on `()`, then the raise of `q` again, or the finaliser's own error. -/
+/-- The finaliser `dd` on `inj₂ ()` (a frame's clauses may be one code, `markUbinds`), then the
+raise of `q` again, or the finaliser's own error. -/
 def finalise (E : UEnv) (dd q : Var) : UM Tm := do
-  let u ← ufresh; let dr ← ufresh
+  let u₀ ← ufresh; let u ← ufresh; let dr ← ufresh
   let fin ← if E.sumOf (E.F.codesOf dd) then do
       let u₂ ← ufresh; let q₂ ← ufresh
       pure (.case dr u₂ (.drop u₂ (.inj true q)) q₂ (.drop q (.inj true q₂)))
     else pure (.drop dr (.inj true q))
-  return .letv u .unit (.letv dr (.app dd u) fin)
+  return .letv u₀ .unit (.letv u (.inj true u₀) (.letv dr (.app dd u) fin))
 
-/-- A finaliser frame's normal end on the body's value `v`: `dd` dropped; at `poll`, only at an
-`inl` of the outcome, the other having moved `dd` into a suspension's state. As a sum when
-`sumMode`. -/
-def finNormal (sumMode poll : Bool) (dd v : Var) : UM Tm := do
+/-- A finaliser frame's normal end on the body's value `v`: `dd` dropped, unless what follows
+calls it (`keep`, its clauses one code); at `poll`, only at an `inl` of the outcome, the other
+having moved `dd` into a suspension's state. As a sum when `sumMode`. -/
+def finNormal (sumMode poll keep : Bool) (dd v : Var) : UM Tm := do
   let wrap (t : Tm) : UM Tm := if sumMode then wrapInl t else pure t
-  if !poll then return .drop dd (← wrap (.var v))
+  let dropDd (t : Tm) : Tm := if keep then t else .drop dd t
+  if !poll then return dropDd (← wrap (.var v))
   let x ← ufresh; let s ← ufresh
-  return .case v x (.drop dd (← wrap (.inj false x))) s (← wrap (.inj true s))
+  return .case v x (dropDd (← wrap (.inj false x))) s (← wrap (.inj true s))
 
 mutual
 /-- `t` at a plain value: it cannot raise. -/
@@ -246,7 +248,7 @@ def lowerP (E : UEnv) (outer : List Var) : Tm → UM Tm
   | .fin poll dd b => do
     if E.mayR b then throw "unwind: a finaliser frame whose body raises, where no raise is handled"
     let v ← ufresh
-    return .letv v (← lowerP E (outer ++ [dd]) b) (← finNormal false poll dd v)
+    return .letv v (← lowerP E (outer ++ [dd]) b) (← finNormal false poll (outer.contains dd) dd v)
   | .hnd .. | .ubind .. | .perform _ | .run .. | .await .. =>
     throw "unwind: a handler or a control operation not lowered (`Capture`)"
   | t => return t
@@ -260,7 +262,9 @@ def lowerS (E : UEnv) (outer : List Var) : Tm → UM Tm
     let outer' := outer ++ own
     if E.mayR e then
       let r ← ufresh; let q ← ufresh
-      let rest := own.filter (· ∉ outer)
+      -- A finaliser frame's finaliser is consumed on the raise path, by the frame.
+      let consumed := match e with | .fin _ dd _ => [dd] | _ => []
+      let rest := own.filter fun v => v ∉ outer && v ∉ consumed
       return .letv r (← lowerS E outer' e) (.case r x (← lowerS E outer b) q (propagateOn rest q))
     else return .letv x (← lowerP E outer' e) (← lowerS E outer b)
   | .letpair x y p b => return .letpair x y p (← lowerS E outer b)
@@ -279,10 +283,10 @@ def lowerS (E : UEnv) (outer : List Var) : Tm → UM Tm
   | .fin poll dd b => do
     let v ← ufresh
     if !E.mayR b then
-      return .letv v (← lowerP E (outer ++ [dd]) b) (← finNormal true poll dd v)
+      return .letv v (← lowerP E (outer ++ [dd]) b) (← finNormal true poll (outer.contains dd) dd v)
     let r ← ufresh; let q ← ufresh
     return .letv r (← lowerS E (outer ++ [dd]) b)
-      (.case r v (← finNormal true poll dd v) q (← finalise E dd q))
+      (.case r v (← finNormal true poll (outer.contains dd) dd v) q (← finalise E dd q))
   | .absurd s => return .absurd s
   | .hnd .. | .ubind .. | .perform _ | .run .. | .await .. =>
     throw "unwind: a handler or a control operation not lowered (`Capture`)"

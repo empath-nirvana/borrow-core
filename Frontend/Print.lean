@@ -44,7 +44,7 @@ def VTy.level : VTy → Nat
 def CTy.level : CTy → Nat
   | .arr .. | .all .. | .nu .. => 0
   | .amp .. => 1
-  | .ret .. | .delay .. | .stream .. | .iter .. | .loop .. | .gen .. | .eff .. => 4
+  | .ret .. | .delay .. | .stream .. | .iter .. | .loop .. | .pull .. | .eff .. => 4
   | .top .. | .name .. => 5
 
 def widthName : BoCa.Width → String
@@ -100,7 +100,7 @@ def CTy.pp (C : CTy) (lvl : Nat := 0) : String :=
     | .stream _ A => "stream " ++ A.pp 4
     | .iter _ A R R' => "iter " ++ A.pp 5 ++ " " ++ R.pp 5 ++ " " ++ R'.pp 5
     | .loop _ A B => "loop " ++ A.pp 5 ++ " " ++ B.pp 5
-    | .gen _ A B R => "gen " ++ A.pp 5 ++ " " ++ B.pp 5 ++ " " ++ R.pp 5
+    | .pull _ A B R => "pull " ++ A.pp 5 ++ " " ++ B.pp 5 ++ " " ++ R.pp 5
     | .eff _ .nil A => "F " ++ A.pp 4
     | .eff _ r A => "F[" ++ r.pp ++ "] " ++ A.pp 4
 
@@ -141,8 +141,8 @@ def Val.level : Val → Nat
   -- `alloc(e)`, `clone(x)`: an application, parenthesized as an argument.
   | .app _ (.sugar _ (.call _)) _ => 2
   | .app _ (.sugar _ .deref) _ => 2
-  | .app _ (.sugar _ .yield_) _ | .app _ (.sugar _ .retE) _ | .app _ (.sugar _ .yieldFrom) _ => 1
-  | .app _ (.sugar _ .brace) _ | .app _ (.sugar _ .genBlock) _
+  | .app _ (.sugar _ .retE) _ | .app _ (.sugar _ (.forSite _)) _ | .app _ (.sugar _ (.pullSite _)) _ => 1
+  | .app _ (.sugar _ .brace) _
   | .app _ (.app _ (.sugar _ (.borrow ..)) _) _ => 2
   | .thunk .. | .thunkv .. | .bangThunk .. | .bangThunkv .. => 0
   | .inl .. | .inr .. | .roll .. | .unroll .. | .unbang .. | .unbox .. | .boxed .. | .run ..
@@ -193,11 +193,10 @@ def Val.pp (V : Val) (lvl : Nat := 0) (k : Nat := 0) : String :=
     | .app _ (.sugar _ (.call c)) W => c ++ "(" ++ W.pp 0 k ++ ")"
     | .app _ (.sugar _ .count) (.pair _ a b) => "(" ++ a.pp 2 k ++ ".." ++ b.pp 2 k ++ ")"
     | .app _ (.sugar _ .deref) V => "*" ++ V.pp 3 k
-    | .app _ (.sugar _ .yield_) V => "yield " ++ V.pp 1 k
     | .app _ (.sugar _ .retE) V => "return " ++ V.pp 1 k
-    | .app _ (.sugar _ .yieldFrom) V => "yield from " ++ V.pp 1 k
+    | .app _ (.sugar _ (.forSite i)) V => s!"for_site[{i.n}] " ++ V.pp 1 k
+    | .app _ (.sugar _ (.pullSite i)) V => s!"pull_site[{i.n}] " ++ V.pp 1 k
     | .app _ (.sugar _ .brace) (.thunk _ M) => "{ " ++ M.pp 0 (k + 2) ++ " }"
-    | .app _ (.sugar _ .genBlock) (.thunk _ M) => "gen { " ++ M.pp 0 (k + 2) ++ " }"
     | .app _ (.sugar _ .brace) (.bangThunk _ M) => "!{ " ++ M.pp 0 (k + 2) ++ " }"
     | .app _ (.app _ (.sugar _ (.borrow bk x)) P) (.thunkv _ (.lam _ b _ M)) =>
       let kw := match bk with
@@ -288,7 +287,7 @@ def Decl.pp : Decl → String
   | .def_ _ n ps A V m =>
     let params := if ps.isEmpty then "" else "[" ++ ", ".intercalate (ps.map (·.name)) ++ "]"
     let rec mk : Mark → String
-      | .none => "" | .total => "total " | .div => "div " | .gen E => "gen[" ++ E.pp ++ "] "
+      | .none => "" | .total => "total " | .div => "div "
       | .template m => mk m ++ "fn "
       | .row es m => "with[" ++ ", ".intercalate (es.map fun (e, As) =>
           e.name ++ (if As.isEmpty then "" else "[" ++ ", ".intercalate (As.map (VTy.pp · 0)) ++ "]")) ++

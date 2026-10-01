@@ -1,0 +1,22 @@
+-- pending: a continuation that holds a capability across an affine operation (SPEC §19, kernel)
+-- The adapters (`lib/adapters.bc`) over sources that read the input: `line(c)` yields the digits
+-- of one line of the input it holds and hands the input back, and `main` runs pipelines of
+-- adapters over it, one line each.
+--
+-- Blocked by the kernel, as `pending/gen-digits.bc` is: the input's iterator, which holds the
+-- input capability (no destructor, §12), is live across `yield`, whose continuation may be
+-- cancelled; and a stored generator's `close` cancels the continuation, which answers `()`, so
+-- the capability could not come back.
+--
+-- now: 16:56: `io_it1`, of type `U (iter u8 (ref input) (ref input))`, is live across a computation that may abort, and its type has no destructor: an abortive operation of the bound computation would abandon it
+
+include adapters
+
+fn line(c: In) -> In with Yield[i32] =
+  for b in bytes(&mut c) { if b == 10 { break } else { yield(to_i32(b) - 48) } };
+  c
+
+main -> i32 =
+  let mut t = 0;
+  let stdin = for y in map(line(stdin), !{ x -> x * x }) { t = t + y };
+  t

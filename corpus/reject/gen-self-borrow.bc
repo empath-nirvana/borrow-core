@@ -1,16 +1,16 @@
--- expect: 12:3: `boxed['x]`: `io_bx`, of type `U (gen i32 1 1)`, is used inside, and it cannot be shown to outlive `'x`
--- expect|   in the core generated for the `close` of the generator of a borrow block that yields before it starts here (`bcc desugar` shows it)
+-- expect: 12:3: this borrow block's body performs the operation 1.0, which resumes: only an abortive operation crosses a borrow's scope (a continuation held across a lend is T1, #172)
 -- A generator that would hold a borrow of its own local across a `yield` (a self-reference,
--- which Rust's generators forbid and its `async` needs `Pin` for), rejected by the borrow typing
--- (SPEC §15, Self-reference). A borrow block whose body yields is a delegation to the generator
--- its body makes, `yield from borrow imm c { 'x, b -> gen { … } }`; the block's result is boxed at
--- `'x`, and a thunk has no outlives rule, so the generator, which holds `b`, cannot leave the
--- block: the same rule as `corpus/reject/gen-escape.bc`. What is allowed is to own the cell in the
--- state and borrow it anew at each step (`corpus/gen-cell.bc`).
-gen fn selfref() -> i32 =
+-- which Rust's generators forbid and its `async` needs `Pin` for). A borrow block's body may
+-- perform only abortive operations (SPEC §19): `yield` resumes, and a continuation held across a
+-- lend is T1 (#172). What is allowed is to own the cell in the generator's state and borrow it
+-- anew at each step (`corpus/gen-cell.bc`).
+
+include yield
+
+fn selfref() -> 1 with Yield[i32] =
   let c = alloc(5);
   borrow imm c { 'x, b ->
-    yield *b;
+    yield(*b);
     ()
   };
   free(c)

@@ -18,9 +18,6 @@ fn write_lit(o: Out, l: lit) -> Out * 1 =
   borrow imm l { v -> write_bytes(&mut o, v) };
   (o, ())
 
--- A source that never ends: the loop of `read_all` runs until it breaks.
-gen fn forever(u: 1) -> 1 = while true { yield () }; ()
-
 -- One chunk read into the string's spare capacity, after making room for 4096 bytes: the input,
 -- the string, and whether the chunk filled the room (so that the input may have more).
 fn read_chunk(c: In, s: string) -> In * (string * bool) =
@@ -38,7 +35,7 @@ fn read_chunk(c: In, s: string) -> In * (string * bool) =
 fn read_all(c: In) -> In * string =
   let mut c = c;
   let mut s = string_new(4096);
-  for u in forever(()) {
+  loop {
     let (c2, (s2, more)) = read_chunk(c, s);
     c = c2;
     s = s2;

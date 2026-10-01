@@ -61,7 +61,6 @@ the options and their trade-offs and settles none of them.
 |---|---|---|---|---|
 | `map-div-fold.bc` | data × effects (div) | a div callback called inside a fold's algebra is not specialized, even in the whole program; separately compiled, it needs effect polymorphism (no variable over computation types) | surface; kernel for separate compilation | pending (SPEC §14, #63) |
 | `callbacks-in-data.bc` | data × effects (div) × coeffects | a callback stored in data keeps its written effect, so a list cannot hold a total and a div callback | surface, then kernel; open design question | pending (SPEC §14 Open) |
-| `generator-handler.bc` | codata × effects | `cap`, `suspend`, `generate`: a generator written as a handler. The `gen fn` form runs (`corpus/gen-produce.bc`) | surface | pending (#18) |
 | `async-borrow.bc` | codata × effects × scope | `async fn`, `spawn`, `.await`, a scheduler; a scheduler over tasks at different lifetimes | surface, runtime; open design question | pending (#52) |
 | `iter-mut.bc` | codata × effects × scope | no family of leaf `mut` borrows `[Mut 'c A]`, no `iter_mut` | kernel | pending (#57, SPEC §9 Open) |
 | `noalloc.bc` | effects | `F` is not graded and `alloc` is untracked, so no type says "does not allocate" | kernel; open design question | pending (the account's §8 item 5) |

@@ -418,7 +418,7 @@ generated-code error to pin the rendering.
 | **Narrow direct-style div calls**: only a head `return (f V)` or `return ((unbang f) V)`, at most one `&c` | `callee`, `divCall`, `loopBody` | Every call is typed. In a div body, lowering puts nested div calls in A-normal form, left to right, and `div_bind`s each. `{ f(x) }` takes the loop as a value (§2.4). | Several lends per call are allowed (§5). |
 | **Narrow HOF specialization**: named functions without type parameters, the callback a named div function in a tuple component | `specParamN`, `hofOf`, `elabDecl` | Callback parameters have effect variables, instantiated by the argument's *type* at each call: closures, locals, returned callbacks (§2.4). Keyed by (function, instantiation). | A div function still has no type parameters. |
 | **`stdout` injected into a looping `main` without capabilities** (decision 36) | `ambientCaps` | Not sugar: the `run_io` loop wrapper (`Frontend/Check/Externs.lean`, `ioMainOf`, `loopWrapperSrc`) accepts `main : F (U (Loop A B))` with no capability, as the instance `Caps = 1`. It makes all three streams itself, as it already does for the undeclared ones. SPEC §11's "Programs that run until their input ends" is restated for `Caps = 1`. `externs_loop_every_run` and `IORun.loop_every_run` are stated at the checked `run_io`, so they cover it with no new lemma. This must be confirmed when implementing: if a statement fixes `Caps ≠ 1`, it gets a `Caps = 1` instance. The backend already drives the checked `run_io` term, so it should need no change; if it does, that is coordinated with #80. | The one change outside elaboration. It is a runtime obligation, not a rule. |
-| **Finite `for`**: `for` only over `bytes c`, always div | `forLoop` (`bytes` pattern) | Chosen by the source's type (stage 9, as built, below). Codata (`U (iter …)`, `U (gen …)`): a drain, div. Data (a count `a..b`, a view, `&a`/`&mut a`, an owned array, a sized iterator): a **total** counted loop, K0′ `count_try` over the data's length, with the loop state the variables the body reads or assigns. | Lists: see below. |
+| **Finite `for`**: `for` only over `bytes c`, always div | `forLoop` (`bytes` pattern) | Chosen by the source's type (stage 9, as built, below). Codata (`U (iter …)`, `U (pull …)`): a drain, div. Data (a count `a..b`, a view, `&a`/`&mut a`, an owned array, a sized iterator): a **total** counted loop, K0′ `count_try` over the data's length, with the loop state the variables the body reads or assigns. | Lists: see below. |
 
 **Lists and finite `for`.** A left-to-right `for` over a `μ` list needs one of three things:
 
@@ -895,20 +895,18 @@ result is elaborated as any surface code. A `def` over a borrow whose body loops
 take the owner before `surfDecl` (`lentDef`). Pairs: `corpus/sugar/lend-block.bc`, `lend-let.bc`,
 `lend-div.bc`.
 
-**Whole-body state machines, as built** (SPEC §15, *One state machine per body*; #109 item 8;
-decision 42 of `docs/decisions.md`). `mWalk` in `Sugar.lean` walks a generator or div body once,
-on the same typing context as the rest of the elaboration, and records a point for each `yield`'s
-continuation, loop head, `yield from`, call of a div function in direct style, and loop join,
-with the variables live there (their inferred types; the capabilities of the residual by name).
+**Whole-body state machines, as built** (SPEC §14, *One state machine per body*; #109 item 8;
+decisions 42 and 56 of `docs/decisions.md`). `mWalk` in `Sugar.lean` walks a div body once, on
+the same typing context as the rest of the elaboration, and records a point for each loop head,
+call of a div function in direct style, and loop join, with the variables live there (their inferred types; the capabilities of the residual by name).
 The code between points is the program's own, with each transition replaced by a move: a call of
 the point's `!` function, or its state returned as a skip. `mAssemble` builds the sum type of the
 states, the functions (last point first), the step with a `case` on the state for `next` and for
 `close`, and the `unfold`; each point's code is a template at the span of the sugar it comes
-from, so an error in it is reported there. `genDef`, `genValue` (blocks and callbacks) and every
-div body (`divBody`: `def`s, `main`, closures, `{ … }`) use it; a body it does not cover, and one
-the elaboration rejects, is elaborated by `genBody` and `loopBody` as before. The core forms of
-`corpus/sugar/gen-from.bc` and `for-value.bc` are written by hand as machines; those of the other
-pairs whose elaboration changed are the elaboration as `bcc desugar` prints it. The divergence library is emitted only when the
+from, so an error in it is reported there. Every div body (`divBody`: `def`s, `main`, closures,
+`{ … }`) uses it, and a generator's body at its row (`divMachine`, SPEC §15); a body it does not
+cover is an error that names it. The core forms of the pairs whose elaboration changed are the
+elaboration as `bcc desugar` prints it. The divergence library is emitted only when the
 elaborated program names it.
 
 **Generic functions and inferred arguments, as built** (#130; SPEC §15, *Generic functions*;

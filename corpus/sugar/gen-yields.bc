@@ -1,14 +1,15 @@
--- A generator with three `yield`s and no loop. `gen fn` elaborates the body to one state machine
--- (SPEC §15): a state before it starts and one after each `yield`; each `next` runs to the next
--- `yield` and answers with the element and the state after it, and `close` hands back the
--- residual (`()` here) without running anything. The call runs nothing: it returns the machine at
--- its first state. `gen-yields.core.bc` is its elaboration in core, as `bcc desugar` prints it.
+-- A generator with three `yield`s and no loop: a function at the row of `Yield`, whose copy for
+-- the `for`'s site threads the loop's variable `acc` through the operation, `w <- perform (x, w)`.
+-- The `for` is one handled call, total: its clause is the loop's body, resumed at its end.
+-- `gen-yields.core.bc` is its elaboration in core, as `bcc desugar` prints it.
 -- Answer: i32[14].
 
-gen fn produce() -> i32 =
-  yield 1;
-  yield 4;
-  yield 9
+include yield
+
+fn produce() -> 1 with Yield[i32] =
+  yield(1);
+  yield(4);
+  yield(9)
 
 main -> i32 =
   let mut acc = 0;

@@ -1,19 +1,22 @@
--- Spec §19's program 5 (`takeProg 1`, `bcc kernel run take`) written by hand as a state machine:
--- a generator (§15) that owns a cell and yields three times, and a consumer that lets it run one
--- element further and then stops it. Stopping closes the generator, whose state frees the cell
--- (§12). The kernel program's lowering (`Backend/Clos/Capture.lean`) allocates the same cell and
--- adds no allocation; its other allocation and its dispatched calls are the program's own (its
--- count is a unary number, and its handler answers one of two closures; see
+-- Spec §19's program 5 (`takeProg 1`, `bcc kernel run take`) at the surface: a generator (§15)
+-- that owns a cell and yields three times, and a consumer that lets it run one element further
+-- and then stops it. Stopping cancels the generator's continuation, whose finaliser frees the
+-- cell (§12, §19). The kernel program's lowering (`Backend/Clos/Capture.lean`) allocates the same
+-- cell and adds no allocation; its other allocation and its dispatched calls are the program's
+-- own (its count is a unary number, and its handler answers one of two closures; see
 -- `corpus/kernel-counts.expected`).
 --
 -- Answer: inr (), stopped early, with the cell freed (`live 0`); one allocation, no dispatched
 -- call. A consumer that let the producer finish gives inl ().
-gen fn producer() -> 1 =
+
+include yield
+
+fn producer() -> 1 with Yield[1] =
   let v: 1 + 1 = inl ();
   let c = alloc(v);
-  yield ();
-  yield ();
-  yield ();
+  yield(());
+  yield(());
+  yield(());
   let _ = free(c);
   ()
 

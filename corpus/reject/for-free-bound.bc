@@ -1,15 +1,16 @@
--- expect: 16:3: `first_ten` is declared `total`, but it has a `for` over an unbounded source (a drain) (SPEC §14)
+-- expect: 17:3: `first_ten` is declared `total`, but it has a `for` over a generator whose body loops (SPEC §14)
 -- A number is not a bound (SPEC §16). A `for` is total when its source is data, whose length
--- bounds the loop; `take(g, 10)` of a generator is a generator (`lib/adapters.bc`), whose skips
--- are unbounded, so the loop is a drain whatever the number, and the function is div. Counting
--- the loop to 10 would cut it short when the generator skips: a free number would truncate it.
--- The sized `take` of `lib/iters.bc` takes only sized sources, and a generator is not one.
+-- bounds the loop, or a generator whose body does not loop; `take(g, 10)` of a stored generator
+-- is a generator whose body loops (`lib/adapters.bc`), its turns unbounded, so the function is
+-- div whatever the number. Counting the loop to 10 would cut it short when a turn yields
+-- nothing: a free number would truncate it. The sized `take` of `lib/iters.bc` takes only sized
+-- sources, and a stored generator is not one.
 
 include adapters
 
-gen fn up() -> i32 =
+fn up() -> 1 with Yield[i32] =
   let mut i = 0;
-  while i >= 0 { yield i; i = i + 1 }
+  while i >= 0 { yield(i); i = i + 1 }
 
 total fn first_ten() -> i32 =
   let mut s = 0;

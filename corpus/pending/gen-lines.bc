@@ -1,0 +1,47 @@
+-- pending: a continuation that holds a capability across an affine operation (SPEC §19, kernel)
+-- A generator over the input: `lines` reads the bytes of the input it is given and yields each
+-- line as a list, then hands the input back; `main` writes each line back through closures over
+-- the output that a fold builds (`axes/data-effects`).
+--
+-- Blocked by the kernel, as `pending/gen-digits.bc` is: the input's iterator, which holds the
+-- input capability (no destructor, §12), is live across `yield`, whose continuation may be
+-- cancelled.
+--
+-- now: 23:18: `io_it1`, of type `U (iter u8 (ref input) (ref input))`, is live across a computation that may abort, and its type has no destructor: an abortive operation of the bound computation would abandon it
+
+include yield
+
+type List = mu X. 1 + (u8 * X)
+
+def nil : List = roll inl ()
+fn cons(x: u8, t: List) -> List = roll inr (x, t)
+
+fn lines(c: In) -> In with Yield[List] =
+  let mut line = nil;
+  let mut any = false;
+  for b in bytes(c) {
+    if b == 10 { yield(line); line = nil; any = false } else { line = cons(b, line); any = true }
+  };
+  if any { yield(line) } else { () };
+  c
+
+-- A list written head first: a fold into a function of the output (`corpus/axes/data-effects.bc`).
+type Run = U (Out -o F (Out * 1))
+
+fn run_alg(r: 1 + u8 * Run) -> Run =
+  match r {
+    inl _ -> { o -> (o, ()) }
+  | inr (x, k) -> { o -> let (o, _) = putb(o, x); k!(o) }
+  }
+def run_list : !(List => Run) = fold_own[1 + u8 * X, Run] run_alg
+
+main -> i32 =
+  let mut n = 0;
+  let stdin = for l in lines(stdin) {
+    let w = run_list(l);
+    r <- w!(stdout);
+    let (stdout, _) = r;
+    putb(&mut stdout, 10);
+    n = n + 1
+  };
+  n

@@ -180,6 +180,8 @@ fn str_from_utf8<'a>(v: array_imm 'a u8) -> text 'a with Fail[i32] =
 
 -- A buffer of bytes as a string, in place, if they are UTF-8; else it raises the index of the
 -- first byte that is not, and the buffer is dropped (an error holds nothing owned, SPEC §19).
+-- Provisional: the error should hand the buffer back once an abortive operation's payload may
+-- be linear (#215).
 fn from_utf8(b: buf u8) -> string with Fail[i32] =
   let r = borrow imm b { v -> match utf8_error(v) { inl e -> e | inr u -> 0 - 1 } };
   if r < 0 { b } else { raise(r) }

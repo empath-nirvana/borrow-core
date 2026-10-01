@@ -1,10 +1,12 @@
--- expect: 7:3: `yield` is in the body of a generator only, a `gen fn` or a `gen { … }` block; so is a call whose callback yields, which delegates to the generator it makes
--- `yield` suspends a generator; a function's body is not one. Its result would be a generator
--- (`gen fn f() -> i32, i32`), and its caller would iterate it.
-gen fn one() -> i32 = yield 1
+-- expect: 12:15: `f` performs `Yield`, but no handler of `Yield` is in scope here
+-- `yield` is an operation of `Yield` (`lib/yield.bc`), which some handler must serve: a `for`
+-- over a call of the function that performs it, or its stored generator. `main` calls `f`, which
+-- yields, outside both.
 
-fn f() -> i32 =
-  yield 4;
+include yield
+
+fn f() -> i32 with Yield[i32] =
+  yield(4);
   3
 
 main -> i32 = f()

@@ -116,7 +116,8 @@ handler to_result[E, A]: Fail[E], A -> A + E = {
 
 `Fail[E], A -> A + E` says that it handles `Fail[E]` around a body of type `A`, and answers
 `A + E`. Its clauses are `!` code, so what a handler is given is a `!` value, such as `default`'s
-function.
+function. That is provisional: `default` should take an ordinary owned fallback once a clause's
+captures follow its multiplicity (#216).
 
 An abort unwinds: what the abandoned code owned is dropped by its destructors, and a borrow it
 was inside ends, the place going back to its owner. A value with no destructor (a thunk, a

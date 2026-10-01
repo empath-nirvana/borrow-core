@@ -1,7 +1,7 @@
 -- A pipeline of adapters from the library (#109, `lib/adapters.bc`): numbers paired with their
--- positions, squared, filtered, and the first five taken. Each adapter is a generic `gen fn`
--- instantiated at `i32`, and each instance is one loop whose generator is one `unfold`; the
--- functions passed are known. So the pipeline allocates nothing, makes no dispatched call and
+-- positions, squared, filtered, and the first five taken. Each adapter is a generic generator
+-- instantiated at `i32` over a stored generator, and each instance is one loop whose machine is
+-- one `unfold`; the functions passed are known. So the pipeline allocates nothing, makes no dispatched call and
 -- copies nothing (`corpus/counts.expected`: 0, 0, 0), and `take` closes its source after the
 -- fifth element without computing a sixth.
 --
@@ -11,9 +11,9 @@
 
 include adapters
 
-gen fn range(lo: i32, hi: i32) -> i32 =
+fn range(lo: i32, hi: i32) -> 1 with Yield[i32] =
   let mut i = lo;
-  while i < hi { yield i; i = i + 1 };
+  while i < hi { yield(i); i = i + 1 };
   ()
 
 fn times(p: i32 * i32) -> i32 = let (i, x) = p; i * x
