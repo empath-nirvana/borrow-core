@@ -26,7 +26,7 @@ annotated first (`Frontend.Elab.fillProgram`), and each decision below reads tho
 * **`for x in V { M }; N`**, `V` an iterator made from a capability, in any function or `main`
   becomes a loop by `unfold` over the state (iterator, other capabilities, threaded variables at
   their inferred types), and makes the function div (§14): a state of the body's one state
-  machine (`divMachine`, §15), or `forLoop` where the machine does not apply.
+  machine (`divMachine`, §15).
 * **`&c`** in the head of `x <- M; N` becomes `r <- M[c/&c]; let (c, x) = r; N` (`Comp.elab`).
 
 The generated code is a template, printed and parsed, whose holes are filled with the program's
