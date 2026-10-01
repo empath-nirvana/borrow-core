@@ -597,6 +597,7 @@ def lowerTm : Tm → Dest → LM (List Stmt)
   | .drop x b, d => do
       let s ← dropVals (← vty x) (← vals x)
       return s ++ (← lowerTm b d)
+  | .raise _, _ | .hnd .., _ | .ubind .., _ => throw "flat IR: an effect not lowered (`Unwind`)"
 
 /-! ### Owned folds by pointer reversal
 

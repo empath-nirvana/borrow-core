@@ -64,6 +64,7 @@ import Core.CountFold
 import Core.ArrayPrograms
 import Core.Demonic
 import Core.EffExamples
+import Core.EffPrograms
 import Core.Totality
 import Core.Stale
 import Core.Stdio

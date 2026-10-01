@@ -17,6 +17,7 @@ step "parse corpus"     scripts/parse-corpus.sh
 step "check corpus"     scripts/check-corpus.sh
 step "compile corpus"   scripts/compile-corpus.sh
 step "compile scaling"  scripts/compile-scaling.sh --guard
+step "compile kernel"   scripts/compile-kernel.sh
 step "sugar pairs"      scripts/check-sugar.sh
 step "typed IR"         scripts/check-elab.sh
 step "book doc-tests"   scripts/book-doctest.sh

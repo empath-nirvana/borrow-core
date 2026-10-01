@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 0.31 · 2026-09-30
+Version 0.32 · 2026-09-30
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -2793,10 +2793,57 @@ Secondary:
 - multi-shot `choose`;
 - resume-later.
 
+**As built** (`Core/EffPrograms.lean`). Each program is a closed `CDerives` derivation; every run,
+under every allocator, is safe and ends at the empty memory (`adequacyD`, and `adequacyD_obs` at a
+persistent answer). Where the answer type has one value, every run reaches it. `Support`'s
+interpreter has §19's steps, and `eval` gives each program's answer by `decide`.
+1. `logOutside` and `failOutside`, with `logRaise`'s answer at `0`:
+   - `Log` outside: every run answers `(f, inj₂ ())`, the log state kept beside the error, and
+     `eval` gives `(inj₂ (), inj₂ ())`;
+   - `Fail` outside: every run answers `inj₂ ()`, the log cell freed by the unwinding `withbor`.
+
+   `nLogOutside` and `nFailOutside` do the same with `log` a native affine operation and
+   `with_log` resuming `κ`.
+2. `logInBorrow`: `log` is a `withswap` on the outer borrow `l`, captured by `borrow mut b`'s
+   callback.
+3. `reborrowRaise`: `raise` inside a reborrow (`withbor3U`) inside `borrow mut r` (`withbor2U`).
+   Both lends end, `r` is freed, and every run answers `inj₂ ()`.
+4. Two versions:
+   - `tickAnsProg n`, as stated: `Loop 0 (Ref Flag)` with the log cell as the loop's state;
+   - `tickProg n`: `Loop_{Log} 0 1` with a native `log`, `with_log` around each observation,
+     for every `n`.
+5. `takeProg n`, for every `n`: `take` is a state-passing handler, `U(N ⊸ F(1 ⊕ 1))`.
+6. `storeCancel`: `κ` stored in a cell, taken back and cancelled.
+
+### Lowering
+
+The backend lowers the abortive operations (`Backend/Clos/Unwind.lean`) to branch-per-call
+propagation, the representation of `Result` and `?`. There is no handler stack and no search.
+- **What raises.** A code raises the keys `(n, i)` (static names) its body may raise and no
+  handler of it catches, by the closure flow.
+- **The convention.** A code that raises answers `inl v` or `inr p`. The codes called at one site
+  share a convention.
+- **Branches.** A call branches exactly when its callee may raise, and a tail call passes the sum
+  on.
+- **Handlers and finalisers.** A handler cases on its body's sum. A finaliser frame runs `D` on
+  `inr p` and raises again.
+
+Answering operations are calls on a capability, compiled as calls (direct when the flow finds one
+code). The kernel programs whose operations are lowered (`Backend/Kernel.lean`: programs 1, 2 and
+3, and program 4 as stated) run at every stage with equal answers and `live 0`, with no
+dispatched call (`scripts/compile-kernel.sh`).
+
+Not lowered: `perform`, whose continuation is captured, and the cancel frames `ccatch` and `cfin`.
+That covers programs 1 with a native `log`, 4 with a native `log`, 5 and 6. Their lowering is
+*Open*:
+- direct calls at a tail-resumptive clause, with the handler passed as evidence;
+- state machines where `κ` is stored.
+
 ### Open
 
 - Generative handler names (Ξ's runtime labels), behind a continuation confined to its handler's
   scope (T2, #173).
+- The backend lowering of control operations (`perform`) and cancels (*Lowering*).
 - A non-abortive control operation crossing a borrow's scope (T1, #172). Cancelling
   such a stored continuation then needs nothing more.
 - Finaliser policies beyond "a new unwind supersedes" and "a cancel keeps the first error"
@@ -2866,12 +2913,23 @@ Stage 4 is implemented:
 - `F_Σ A` as an observation leaf: `Core/Types.lean`, `Core/Relation.lean`, `Core/NuRel.lean`,
   `Core/Nu.lean`, `Core/Computation.lean`.
 
-The programs (stage 5) remain.
+Stage 5 is implemented:
+- the six programs, typed and run: `Core/EffPrograms.lean`;
+- §19's steps in `Support`'s interpreter: `Support/Dynamics/Interpreter.lean`;
+- the abortive operations' lowering: `Backend/Clos/Unwind.lean`;
+- the kernel programs at every stage: `Backend/Kernel.lean`, `bcc kernel`,
+  `scripts/compile-kernel.sh`.
+
+The lowering of control operations remains (*Lowering*).
 
 ---
 
 ## Changelog
 
+- **0.32** (2026-09-30) — §19, stage 5 (#186): the six acceptance programs, typed, run by
+  `adequacyD` and observed by `Support`'s interpreter (which gains §19's steps). The backend
+  lowers the abortive operations to branch-per-call propagation (`Unwind`). `bcc kernel` compiles
+  `Core`'s kernel programs at every stage. The lowering of control operations is *Open*.
 - **0.31** (2026-09-30) — §19, stage 4 (#186): the unwinding forms of `withbor` 1–3, `withload`
   and the slice borrows, at a callback row of abortive operations with closed argument types
   (`Row.Unwind`); the finaliser is a closed term at `src ⊸ F 1`, the source's destructor at the

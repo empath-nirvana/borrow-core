@@ -422,6 +422,7 @@ def eval (codes : Array Code) : Nat → Env → Tm → IM (CV × Env)
         let (v, env) ← take env x
         deepDrop objFuel v
         eval codes n env b
+    | .raise _ | .hnd .. | .ubind .. => throw "closure IR: an effect not lowered (`Unwind`)"
 end
 
 /-- The observable form of a word. -/

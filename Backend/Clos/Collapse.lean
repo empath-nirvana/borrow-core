@@ -153,6 +153,9 @@ def Tm.keyStr : Tm → String
   | .case s x b₁ y b₂ => s!"C({s},{x},{b₁.keyStr},{y},{b₂.keyStr})"
   | .copy x x' b => s!"K({x},{x'},{b.keyStr})"
   | .drop x b => s!"D({x},{b.keyStr})"
+  | .raise p => s!"R({p})"
+  | .hnd n hr cls b => s!"H({n},{hr},{cls},{b.keyStr})"
+  | .ubind nn dd b => s!"U({nn},{dd},{b.keyStr})"
 
 /-- A code's text with its variables numbered in order of appearance. -/
 def Code.key (c : Code) : String :=
