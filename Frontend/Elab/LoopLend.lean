@@ -439,7 +439,6 @@ def lentDef (c : TCx) (fin' : TCx → Finite) : Decl → Except Error (Option De
   | .def_ sp n [] (.bang asp (.all lsp y bd (.lolli fsp P Q)))
       (.bangThunkv vsp (.lamL _ y' _ (.ret _ (.thunkv _ (.lam lamsp x _ M))))) mk => do
     if y.name != y'.name then return none
-    if let .gen _ := mk then return none
     let some bl := c.elabL bd | return none
     let c' := c.pushLife y.name bl
     let ps := spineTy P

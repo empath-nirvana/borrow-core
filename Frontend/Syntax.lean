@@ -150,9 +150,9 @@ inductive CTy where
   | iter (sp : Span) (A R R' : VTy)
   /-- `loop A B`: `nu X. F (A + U X) & F B` (SPEC §7). -/
   | loop (sp : Span) (A B : VTy)
-  /-- `gen A B R`: `nu X. F (A * U X + (B + U X)) & F R`, a generator: `next` yields an `A`,
-  finishes with `B`, or skips a step; `close` hands back `R` (`lib/gen.bc`). -/
-  | gen (sp : Span) (A B R : VTy)
+  /-- `pull A B R`: `nu X. F (A * U X + (B + U X)) & F R`, a stored generator (SPEC §15): `next`
+  gives an `A` with the rest, finishes with `B`, or skips a step; `close` hands back `R`. -/
+  | pull (sp : Span) (A B R : VTy)
   /-- `F[n.i q A ~> B, …] R`: `F_Σ R`, the row's operations stacked over `F R`.  `[spec §19]` -/
   | eff (sp : Span) (row : Row) (A : VTy)
 
@@ -312,6 +312,17 @@ structure HInfo where
   res : VTy
   deriving DecidableEq, Repr
 
+/-- A handler site of an iteration effect (SPEC §15), as `Frontend.Elab.Effects` leaves it for the
+typed elaboration: the site's static name, the type of the element its operation passes, the
+variable a `for`'s site threads through the operation (its copy of the callee takes it first and
+hands it back first), and the callee as written, for messages. -/
+structure ItInfo where
+  n : Nat
+  T : VTy
+  w : String
+  callee : String
+  deriving DecidableEq, Repr
+
 /-- A surface form that needs types to elaborate (docs/typed-elaboration.md §5): a leaf, applied
 to its operands as values, and elaborated to core by the typed pass of `Frontend/Sugar.lean`. -/
 inductive VSugar where
@@ -329,12 +340,10 @@ inductive VSugar where
   | borrow (k : BorrowKind) (x : String)
   /-- `*e`: the content of a borrow or a cell, applied to it. -/
   | deref
-  /-- `yield e` in a generator's body, applied to the element. -/
-  | yield_
-  /-- `while c { M }; N` in a generator's body: the condition, applied to it, as the iterator
-  of a `for` (`Comp.for_`) whose variable is not used. -/
+  /-- `while c { M }; N`: the condition, applied to it, as the source of a `for` (`Comp.for_`)
+  whose variable is not used. -/
   | while_
-  /-- `break` in the body of a generator's loop: the loop ends. -/
+  /-- `break` in a loop's body: the loop ends. -/
   | brk
   /-- `continue` in a loop's body: the rest of the body is skipped, and the loop goes on. -/
   | cont
@@ -343,17 +352,12 @@ inductive VSugar where
   | count
   /-- `loop { M }`: the condition of a `while` that never fails. -/
   | forever
-  /-- `return e` in a generator's body, applied to the value: the generator finishes with it,
-  from any depth of its loops. -/
+  /-- `return e` in a loop's body, applied to the value: the function returns it, from any depth
+  of its loops. -/
   | retE
   /-- `let r = for x in V { M }; N`: the loop's value, bound in what follows it as
   `r <- return <forRes>; N` (what the iterator finishes with, or a `break e`). -/
   | forRes
-  /-- `yield from e` in a generator's body, applied to the generator it delegates to: its
-  elements are yielded, and the `yield from` finishes with what it finishes with. -/
-  | yieldFrom
-  /-- `gen { S }`: a generator whose body is `S`, applied to the thunk it marks. -/
-  | genBlock
   /-- A string literal `"…"`, its bytes: a `lit`, the persistent value `(n, t)` of its length and
   the function from an index to its byte. -/
   | str (bs : List Nat)
@@ -368,6 +372,12 @@ inductive VSugar where
   handler's arguments, its return clause, the tuple of its operation clauses and the thunk of its
   body. -/
   | hndCtl (info : HInfo)
+  /-- `for x in f(e) { M }`, `f` performing an iteration effect (SPEC §15): the `for`'s source,
+  applied to the call of `f`'s copy for the site, whose first argument is the threaded variable. -/
+  | forSite (info : ItInfo)
+  /-- The stored generator of a call of a function that performs an iteration effect (SPEC §15),
+  applied to the call of its copy for the site. -/
+  | pullSite (info : ItInfo)
   deriving DecidableEq, Repr, Inhabited
 
 mutual
@@ -474,8 +484,6 @@ inductive Mark where
   | none
   | total
   | div
-  /-- `gen fn`: a generator yielding `A` (`lib/gen.bc`). -/
-  | gen (A : VTy)
   /-- `fn f[A, …](…)`: a function generic in types, marked `m` (`none`, `total` or `div`). It is a
   template: each use is a call of its instance at that use's types, elaborated as a `fn`. -/
   | template (m : Mark)
@@ -601,7 +609,7 @@ def CTy.strip : CTy → CTy
   | .stream _ A => .stream .none A.strip
   | .iter _ A R R' => .iter .none A.strip R.strip R'.strip
   | .loop _ A B => .loop .none A.strip B.strip
-  | .gen _ A B R => .gen .none A.strip B.strip R.strip
+  | .pull _ A B R => .pull .none A.strip B.strip R.strip
   | .eff _ r A => .eff .none r.strip A.strip
 
 def Row.strip : Row → Row
@@ -732,7 +740,6 @@ def Comp.strip : Comp → Comp
 end
 
 def Mark.strip : Mark → Mark
-  | .gen A => .gen A.strip
   | .template m => .template m.strip
   | .row es m => .row (es.map fun (e, As) => (e.strip, As.map VTy.strip)) m.strip
   | m => m
@@ -784,7 +791,7 @@ def VTy.span : VTy → Span
 
 def CTy.span : CTy → Span
   | .ret sp _ | .arr sp _ _ | .amp sp _ _ | .top sp | .all sp _ _ _ | .nu sp _ _ | .name sp _
-  | .delay sp _ | .stream sp _ | .iter sp _ _ _ | .loop sp _ _ | .gen sp _ _ _ | .eff sp _ _ => sp
+  | .delay sp _ | .stream sp _ | .iter sp _ _ _ | .loop sp _ _ | .pull sp _ _ _ | .eff sp _ _ => sp
 
 def Shape.span : Shape → Span
   | .leaf sp _ | .node sp _ _ | .name sp _ => sp

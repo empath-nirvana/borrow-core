@@ -75,12 +75,21 @@ def TCx.tyC (c : TCx) (M : Comp) : Option CCTy :=
 
 /-! ### Loops and iterators -/
 
-/-- `U (loop B R)`: its `B` and `R`. -/
-def loopOf (A : CVTy) : Option (CVTy × CVTy) :=
+/-- `U (Loop_Σ B R) = U (νX. F_Σ(B ⊕ U X) & F_Σ R)` (`U (loop B R)` at the empty row, SPEC §19): its
+row, `B` and `R`. -/
+def loopRowOf (A : CVTy) : Option (CRow × CVTy × CVTy) :=
   match A with
-  | .thunk (.nu (.amp (.ret (.sum B (.tvar 0))) (.ret R))) =>
-    if A = .thunk (BoCa.Fig16.LogRel.Core.CTy.loop B R) then some (B, R) else none
+  | .thunk (.nu (.amp C D)) => do
+    let (S, O) ← effRow? C
+    let (_, R) ← effRow? D
+    match O with
+    | .sum B (.tvar 0) =>
+      if A = .thunk (BoCa.Fig16.LogRel.Core.CTy.loopEff S B R) then some (S, B, R) else none
+    | _ => none
   | _ => none
+
+/-- `U (Loop_Σ B R)`, at any row: its `B` and `R`. -/
+def loopOf (A : CVTy) : Option (CVTy × CVTy) := (loopRowOf A).map (·.2)
 
 /-- `U (iter A R R')`: its `A`, `R` and `R'`. -/
 def iterOf (V : CVTy) : Option (CVTy × CVTy × CVTy) :=
@@ -89,16 +98,16 @@ def iterOf (V : CVTy) : Option (CVTy × CVTy × CVTy) :=
     if V = .thunk (BoCa.Fig16.LogRel.Core.CTy.iter A R R') then some (A, R, R') else none
   | _ => none
 
-/-- `U (gen A B R)`: its `A`, `B` and `R`. -/
-def genOf (V : CVTy) : Option (CVTy × CVTy × CVTy) :=
+/-- `U (pull A B R)`: its `A`, `B` and `R`. -/
+def pullOf (V : CVTy) : Option (CVTy × CVTy × CVTy) :=
   match V with
   | .thunk (.nu (.amp (.ret (.sum (.tensor A (.tvar 0)) (.sum B (.tvar 0)))) (.ret R))) =>
-    if V = .thunk (Frontend.Check.genTy A B R) then some (A, B, R) else none
+    if V = .thunk (Frontend.Check.pullTy A B R) then some (A, B, R) else none
   | _ => none
 
 /-- The element type of an iterator or a generator. -/
 def elemOf (V : CVTy) : Option CVTy :=
-  ((iterOf V).map (·.1)).orElse fun _ => (genOf V).map (·.1)
+  ((iterOf V).map (·.1)).orElse fun _ => (pullOf V).map (·.1)
 
 /-- A function returning a loop, `A => U (loop B R)` or `!(A => U (loop B R))`: `B` and `R`. -/
 def loopFnOf : CVTy → Option (CVTy × CVTy)

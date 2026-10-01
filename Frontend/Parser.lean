@@ -65,7 +65,7 @@ inductive RTy where
   | stream (sp : Span) (A : RTy)
   | iter (sp : Span) (A R R' : RTy)
   | loop (sp : Span) (A B : RTy)
-  | gen (sp : Span) (A B R : RTy)
+  | pull (sp : Span) (A B R : RTy)
   /-- `F[…] A`, the row's types already sorted. -/
   | eff (sp : Span) (r : Row) (A : RTy)
 
@@ -74,7 +74,7 @@ def RTy.span : RTy → Span
   | .imm sp _ _ | .mut sp _ _ | .box sp _ _ | .bang sp _ | .unk sp | .int sp _ | .handle sp _ | .mu sp _ _
   | .name sp _ | .lolli sp _ _ | .arr sp _ _ | .all sp _ _ _ | .forall_ sp _ _ _ | .amp sp _ _
   | .top sp | .block sp _ | .val sp _ | .fam sp _ _ _ | .view sp _ _ | .nu sp _ _ | .delay sp _
-  | .stream sp _ | .iter sp _ _ _ | .loop sp _ _ | .gen sp _ _ _ | .array sp _ | .arrayImm sp _ _
+  | .stream sp _ | .iter sp _ _ _ | .loop sp _ _ | .pull sp _ _ _ | .array sp _ | .arrayImm sp _ _
   | .arrayMut sp _ _ | .sized sp _ _ _ | .eff sp _ _ => sp
 
 /-- What a raw type is, for sort errors. -/
@@ -82,7 +82,7 @@ def RTy.former : RTy → String
   | .F .. => "`F A`" | .arr .. => "`A -o C`" | .forall_ .. => "`forall 'x < @. C`"
   | .amp .. => "`C & D`" | .top .. => "`top`" | .nu .. => "`nu X. C`" | .delay .. => "`delay A`"
   | .stream .. => "`stream A`" | .iter .. => "`iter A R R'`" | .loop .. => "`loop A B`"
-  | .gen .. => "`gen A B R`" | .eff .. => "`F[…] A`"
+  | .pull .. => "`pull A B R`" | .eff .. => "`F[…] A`"
   | _ => "this type"
 
 private def sortErr (t : RTy) (isComp : Bool) : Except Error α :=
@@ -121,7 +121,7 @@ def RTy.toV : RTy → Except Error VTy
   | .arrayMut sp a A => return .arrayMut sp a (← A.toV)
   | .sized sp D S A => return .sized sp (← D.toV) (← S.toV) (← A.toV)
   | t@(.F ..) | t@(.arr ..) | t@(.forall_ ..) | t@(.amp ..) | t@(.top ..) | t@(.nu ..)
-  | t@(.delay ..) | t@(.stream ..) | t@(.iter ..) | t@(.loop ..) | t@(.gen ..)
+  | t@(.delay ..) | t@(.stream ..) | t@(.iter ..) | t@(.loop ..) | t@(.pull ..)
   | t@(.eff ..) => sortErr t true
 
 /-- Sort a raw type as a computation type. -/
@@ -136,7 +136,7 @@ def RTy.toC : RTy → Except Error CTy
   | .stream sp A => return .stream sp (← A.toV)
   | .iter sp A R R' => return .iter sp (← A.toV) (← R.toV) (← R'.toV)
   | .loop sp A B => return .loop sp (← A.toV) (← B.toV)
-  | .gen sp A B R => return .gen sp (← A.toV) (← B.toV) (← R.toV)
+  | .pull sp A B R => return .pull sp (← A.toV) (← B.toV) (← R.toV)
   | .eff sp r A => return .eff sp r (← A.toV)
   | t => sortErr t false
 end
@@ -158,39 +158,31 @@ structure PState where
   assigned : List String := []
   /-- The variables the `match` or `if` just parsed assigns, which it must hand on. -/
   joined : List String := []
-  /-- Inside a generator's body (and not inside a closure, block or borrow block in it), where a
-  statement `return e` finishes the generator from any depth (`VSugar.retE`). -/
-  inGen : Bool := false
   /-- Inside the body of a loop of a function's body (and not inside a closure or block in it),
   where a statement `return e` returns from the function from any depth of its loops. -/
   inLoop : Bool := false
   /-- In the body of a surface `fn` or `main ->` (not a core `def`), where a loop's body may
   `return` from the function. -/
   surf : Bool := false
-  /-- A `yield` was read (reset around a borrow block's body, to see whether it yields). -/
-  yielded : Bool := false
-  /-- The borrow block just read yields: its body is a generator. -/
-  blockYields : Bool := false
   /-- The variables the borrow block just read hands back beside its result: the `let mut`
   variables it assigns and the places it lends (`borrowBlock`). -/
   blockThreads : List String := []
 
 abbrev P := StateT PState (Except Error)
 
-/-- Parse with `inGen` set to `g`, restored after. -/
-def withGen {α} (g : Bool) (p : P α) : P α := do
-  let g₀ := (← get).inGen
+/-- Parse a closure, block or borrow block's body: a statement `return e` in it is the core's. -/
+def inClosure {α} (p : P α) : P α := do
   let l₀ := (← get).inLoop
-  modify fun s => { s with inGen := g, inLoop := false }
+  modify fun s => { s with inLoop := false }
   let r ← p
-  modify fun s => { s with inGen := g₀, inLoop := l₀ }
+  modify fun s => { s with inLoop := l₀ }
   pure r
 
-/-- Parse a loop's body: in a function's body (not a generator's), a statement `return e` in it
-returns from the function (`VSugar.retE`). -/
+/-- Parse a loop's body: in a function's body, a statement `return e` in it returns from the
+function (`VSugar.retE`). -/
 def withLoop {α} (p : P α) : P α := do
   let l₀ := (← get).inLoop
-  modify fun s => { s with inLoop := s.surf && !s.inGen }
+  modify fun s => { s with inLoop := s.surf }
   let r ← p
   modify fun s => { s with inLoop := l₀ }
   pure r
@@ -433,12 +425,12 @@ def rtyPrefix : Nat → P RTy
       let R ← rtyPrefix n
       let R' ← rtyPrefix n
       pure (.iter (← spanFrom st) A R R')
-    | .kw "gen" =>
+    | .kw "pull" =>
       discard bump
       let A ← rtyPrefix n
       let B ← rtyPrefix n
       let R ← rtyPrefix n
-      pure (.gen (← spanFrom st) A B R)
+      pure (.pull (← spanFrom st) A B R)
     | .kw "sized" =>
       discard bump
       let D ← rtyPrefix n
@@ -947,14 +939,14 @@ def val : Nat → P Val
     let st ← startPos
     let t ← peek
     match t.tok with
-    | .kw "thunk" => discard bump; let M ← withGen false (comp n); pure (.thunk (← spanFrom st) M)
-    | .kw "thunkv" => discard bump; let M ← withGen false (comp n); pure (.thunkv (← spanFrom st) M)
+    | .kw "thunk" => discard bump; let M ← inClosure (comp n); pure (.thunk (← spanFrom st) M)
+    | .kw "thunkv" => discard bump; let M ← inClosure (comp n); pure (.thunkv (← spanFrom st) M)
     | .sym "!" =>
       discard bump
       if ← isKw "thunk" then
-        discard bump; let M ← withGen false (comp n); pure (.bangThunk (← spanFrom st) M)
+        discard bump; let M ← inClosure (comp n); pure (.bangThunk (← spanFrom st) M)
       else if ← isKw "thunkv" then
-        discard bump; let M ← withGen false (comp n); pure (.bangThunkv (← spanFrom st) M)
+        discard bump; let M ← inClosure (comp n); pure (.bangThunkv (← spanFrom st) M)
       else if ← isSym "{" then brace n st true
       else expected "`thunk`, `thunkv` or `{` after `!`"
     | .sym "{" => brace n st false
@@ -1009,7 +1001,7 @@ def rest : Nat → P (List Val)
 /-- A block: `{ S }`, or a closure `{ p -> S }`; `!` before it makes it persistent. -/
 def brace : Nat → Pos → Bool → P Val
   | 0, _, _ => outOfFuel
-  | n + 1, st, bang => withGen false do
+  | n + 1, st, bang => inClosure do
     expectSym "{"
     -- A closure when a pattern and `->` come first.
     let saved ← get
@@ -1075,27 +1067,6 @@ def valPrefix : Nat → P Val
       pure (.shorten (← spanFrom st) m σ a V)
     | .kw "borrow" | .kw "modify" => borrowBlock n
     | .kw "with" => withBlock n
-    | .kw "gen" =>
-      -- `gen { S }`: a generator whose body is `S`. (`return` in it is the core's.)
-      discard bump
-      expectSym "{"
-      let M ← withGen false (blockBody n)
-      expectSym "}"
-      let sp ← spanFrom st
-      pure (.app sp (.sugar t.span .genBlock) (.thunk sp M))
-    | .kw "yield" =>
-      -- `yield e` takes a whole expression: `yield x * x` yields the product.
-      discard bump
-      -- `yield from e`: delegate to the generator `e`.
-      if (← peek).tok == .ident "from" then
-        discard bump
-        let V ← val n
-        let sp ← spanFrom st
-        return .app sp (.sugar t.span .yieldFrom) V
-      let V ← val n
-      let sp ← spanFrom st
-      modify fun s => { s with yielded := true }
-      pure (.app sp (.sugar t.span .yield_) V)
     | .sym "*" =>
       discard bump
       let V ← valPrefix n
@@ -1115,8 +1086,7 @@ def valPrefix : Nat → P Val
 def borrowBlock : Nat → P Val
   | 0 => outOfFuel
   | n + 1 => do
-    let inGen := (← get).inGen
-    withGen false do
+    inClosure do
     let st ← startPos
     let t ← bump
     let k ← if t.tok == .kw "modify" then pure BorrowKind.modify else
@@ -1133,15 +1103,11 @@ def borrowBlock : Nat → P Val
       else if k == .modify then pure "" else freshName "io_l"
     let p ← pat n
     expectSym "->"
-    let y₀ := (← get).yielded
-    modify fun s => { s with yielded := false }
     let s₀ ← get
     set { s₀ with assigned := [] }
     let M ← comp n
     let assigned := (← get).assigned
     modify fun s => { s with muts := s₀.muts, assigned := s₀.assigned }
-    let yields := (← get).yielded
-    modify fun s => { s with yielded := y₀ || yields }
     expectSym "}"
     let sp ← spanFrom st
     -- The variables the block hands back beside its result, as a `for` hands back what its body
@@ -1153,17 +1119,12 @@ def borrowBlock : Nat → P Val
     let thr := ((s₀.muts.filter assigned.contains).reverse ++
       (M.lentNames.filter (fun x => !bound.contains x)) ++ M.withPlaces (match p with | .var b => [b.name] | _ => []) ++ caps).eraseDups
     -- A body already handing its variables back (a printed program read again) is kept.
-    let thr := if k == .modify || (yields && inGen) || bound.contains "io_bt" then [] else thr
+    let thr := if k == .modify || bound.contains "io_bt" then [] else thr
     let M := if thr.isEmpty then M else
       wrapTerms (fun T => .bind T.span ⟨"io_bt", T.span⟩ none T
         (.ret T.span (.pair T.span (.var T.span "io_bt") (varTuple T.span thr))) false) M
-    -- A body that yields is a generator made in the block, which the statement delegates to
-    -- (`statement`): a generator cannot hold a borrow of its own local across a `yield`, and the
-    -- typing of the block, whose result is boxed at its lifetime, says so.  `[spec §15]`
-    let yields := yields && inGen
-    let M := if yields then Comp.ret sp (.app sp (.sugar t.span .genBlock) (.thunk sp M)) else M
     -- The `let mut` variables the block hands back are assigned where the block is.
-    modify fun s => { s with blockYields := yields, blockThreads := thr, joined := [],
+    modify fun s => { s with blockThreads := thr, joined := [],
                              assigned := s.assigned ++ thr.filter s₀.muts.contains }
     let (b, M) ← match p with
       | .var b => pure (b, M)
@@ -1181,7 +1142,7 @@ and `&mut c` rebinds `c`. The printed form names the lifetime and the capability
 def withBlock : Nat → P Val
   | 0 => outOfFuel
   | n + 1 => do
-    withGen false do
+    inClosure do
     let st ← startPos
     let t ← bump
     let h ← ident "a handler name"
@@ -1229,7 +1190,7 @@ def withBlock : Nat → P Val
     let M := if thr.isEmpty then M else
       wrapTerms (fun T => .bind T.span ⟨"io_bt", T.span⟩ none T
         (.ret T.span (.pair T.span (.var T.span "io_bt") (varTuple T.span thr))) false) M
-    modify fun s => { s with blockYields := false, blockThreads := thr, joined := [],
+    modify fun s => { s with blockThreads := thr, joined := [],
                              assigned := s.assigned ++ thr.filter s₀.muts.contains }
     pure (.app sp (.app sp (.sugar t.span (.handle h.name x As)) place)
       (.thunkv sp (.lam sp b (holeTy sp) M)))
@@ -1516,7 +1477,7 @@ def compG : Nat → Bool → P Comp
       let A ← vty n
       expectSym ")"
       expectSym "->"
-      let M ← withGen false (comp n)
+      let M ← inClosure (comp n)
       pure (.lam (← spanFrom st) x A M)
     | .kw "Fun", _ =>
       discard bump
@@ -1536,12 +1497,12 @@ def statement : Nat → Pos → Bool → P Comp
   | n + 1, st, head => do
     let t ← peek
     let t1 ← peekAt 1
-    modify fun s => { s with joined := [], blockYields := false, blockThreads := [] }
+    modify fun s => { s with joined := [], blockThreads := [] }
     -- A statement expression, and the place it rebinds.
     let (S, rebind) ← match t.tok, t1.tok with
       | .kw "return", _ =>
-        if ((← get).inGen || (← get).inLoop) && !head then
-          -- `return e` in a generator's body: the generator finishes with `e`.
+        if (← get).inLoop && !head then
+          -- `return e` in a loop's body: the function returns `e`.
           discard bump
           let V ← if t1.tok == .sym "}" || t1.tok == .sym ";" then pure (Val.unit t.span)
             else val n
@@ -1588,13 +1549,7 @@ def statement : Nat → Pos → Bool → P Comp
           (← bindPat sp n (varPat sp joined) (.var sp j) N) false
       match S, rebind with
       | .ret _ V, some _ =>
-        if (← get).blockYields then
-          -- A borrow block whose body yields: delegate to the generator it makes.
-          let g ← freshName "io_g"
-          let d ← freshName "io_d"
-          letVal sp n (.var ⟨g, sp⟩) none V
-            (.bind sp ⟨d, sp⟩ none (.ret sp (.app sp (.sugar sp .yieldFrom) (.var sp g))) N false)
-        else letVal sp n (.wild sp) none V N thr
+        letVal sp n (.wild sp) none V N thr
       | S, _ =>
         let d ← freshName "io_s"
         pure (.bind sp ⟨d, sp⟩ none S N false)
@@ -1604,9 +1559,7 @@ def statement : Nat → Pos → Bool → P Comp
         -- A tail borrow block hands back its result; the place is rebound, and dropped.
         let sp ← spanFrom st
         let v ← freshName "io_v"
-        if (← get).blockYields then
-          letVal sp n (.var ⟨v, sp⟩) none V (.ret sp (.app sp (.sugar sp .yieldFrom) (.var sp v)))
-        else letVal sp n (.var ⟨v, sp⟩) none V (.ret sp (.var sp v)) thr
+        letVal sp n (.var ⟨v, sp⟩) none V (.ret sp (.var sp v)) thr
       | S, _ => pure S
 
 /-- A prefix keyword applied to its operand, or a spine. -/
@@ -1745,7 +1698,7 @@ def forElse : Nat → P (Option Comp)
     unless ← isKw "else" do return none
     discard bump
     expectSym "{"
-    let d ← withGen false (blockBody n)
+    let d ← inClosure (blockBody n)
     expectSym "}"
     pure (some d)
 
@@ -1885,18 +1838,6 @@ def decl (n : Nat) : P Decl := do
   | .kw "fn" =>
     discard bump
     fnRest st .none
-  | .kw "gen" =>
-    -- `gen fn f(ps) -> A = S` or `-> A, B = S`: a generator yielding `A`, finishing with `B`
-    -- (`1` when left out). `gen[A] def` is its printed form.
-    discard bump
-    if ← isSym "[" then
-      discard bump
-      let A ← vty n
-      expectSym "]"
-      expectKw "def"
-      return ← withGen true (defRest st (.gen A))
-    expectKw "fn"
-    genRest st
   | .kw "include" =>
     discard bump
     let x ← ident "the name of a library module"
@@ -2158,30 +2099,6 @@ where
           (.all sp a b T, .lamL sp a b (.ret sp (.thunkv sp M)))
       let (T, M) := inner ls
       (.bang sp (.all sp a b T), .bangThunkv sp (.lamL sp a b (.ret sp (.thunkv sp M))))
-  /-- A `gen fn` after its keywords: `name(x₁: A₁, …) -> A = S` or `-> A, B = S`. It is the
-  `fn` of result `B` (`1` when left out) marked as a generator of `A`. -/
-  genRest (st : Pos) : P Decl := do
-    let x ← ident "a `gen fn` name"
-    -- `gen fn f[A, …](…)`: a generator generic in types, instantiated at each call.
-    let tps ← typeParams
-    -- `gen fn f<'a>(…)`: a generator with lifetime parameters.
-    let lives ← lifeParams
-    expectSym "("
-    let ps ← if ← isSym ")" then pure [] else params n
-    expectSym ")"
-    expectSym "->"
-    let A ← vty n
-    let B ← if ← isSym "," then do discard bump; vty n else pure (.unit (← spanFrom st))
-    expectSym "="
-    modify fun s => { s with muts := [], assigned := [] }
-    let M ← withGen true (comp n)
-    let sp ← spanFrom st
-    let P := tupleTy sp (ps.map (·.2))
-    let pn ← freshName "io_p"
-    let body ← bindParams sp pn (ps.map (·.1)) M
-    let lam := Comp.lam sp ⟨pn, sp⟩ P body
-    let (ty, V) := withLives sp lives (.lolli sp P B) lam
-    pure (.def_ sp x tps ty V (.gen A))
   /-- `x₁: A₁, …, xₙ: Aₙ`, at least one. -/
   params : Nat → P (List (Ident × VTy))
     | 0 => outOfFuel

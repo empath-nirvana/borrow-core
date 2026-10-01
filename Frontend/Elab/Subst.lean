@@ -55,7 +55,7 @@ def CTy.subst (σ : TySubst) : CTy → CTy
   | .stream sp A => .stream sp (A.subst σ)
   | .iter sp A R R' => .iter sp (A.subst σ) (R.subst σ) (R'.subst σ)
   | .loop sp A B => .loop sp (A.subst σ) (B.subst σ)
-  | .gen sp A B R => .gen sp (A.subst σ) (B.subst σ) (R.subst σ)
+  | .pull sp A B R => .pull sp (A.subst σ) (B.subst σ) (R.subst σ)
   | .eff sp r A => .eff sp (r.subst σ) (A.subst σ)
 
 def Row.subst (σ : TySubst) : Row → Row
@@ -148,6 +148,8 @@ def Val.subst (σ : TySubst) : Val → Val
   | .const sp c => .const sp (c.subst σ)
   | .shorten sp m s a V => .shorten sp m (s.subst σ) a (V.subst σ)
   | .lend sp x m => .lend sp x m
+  | .sugar sp (.forSite i) => .sugar sp (.forSite { i with T := i.T.subst σ })
+  | .sugar sp (.pullSite i) => .sugar sp (.pullSite { i with T := i.T.subst σ })
   | .sugar sp s => .sugar sp s
 
 def Comp.subst (σ : TySubst) : Comp → Comp

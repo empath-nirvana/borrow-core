@@ -50,10 +50,10 @@ def qualStr : CQual → String
   | .aff => "aff"
   | .unr => "unr"
 
-/-- `gen A B R = νX. F((A ⊗ U X) ⊕ (B ⊕ U X)) & F R`: a generator (`lib/gen.bc`). It is an
+/-- `pull A B R = νX. F((A ⊗ U X) ⊕ (B ⊕ U X)) & F R`: a stored generator (SPEC §15). It is an
 abbreviation of the frontend over `ν` (SPEC §7: a new codata shape is a new abbreviation), with no
 counterpart in `Core/`. -/
-def genTy (A B R : CVTy) : CCTy :=
+def pullTy (A B R : CVTy) : CCTy :=
   .nu (.amp (.ret (.sum (.tensor (A.rename Nat.succ) (.tvar 0)) (.sum (B.rename Nat.succ) (.tvar 0))))
     (.ret (R.rename Nat.succ)))
 
@@ -152,7 +152,8 @@ def ppV (nm : List (String × LifeVar)) (d p : Nat) : CVTy → String
   | .int .w8 => "u8"
   | .opq .input => "input"
   | .opq .output => "output"
-  | .tvar n => if n < d then tvName (d - 1 - n) else s!"?{n}"
+  -- The variable of the `nu` around (`ppC`), which occurs only as `U X`.
+  | .tvar n => if n < d then tvName (d - 1 - n) else if n == d then "U X" else s!"?{n}"
   | .mu A => parenIf (p > 0) s!"mu {tvName d}. {ppV nm (d + 1) 0 A}"
   | .fam (.ref A) => parenIf (p > 5) s!"array {ppV nm d 5 A}"
   | .fam (.imm a A) => parenIf (p > 5) s!"array_imm {ppLifeP nm 1 a} {ppV nm d 5 A}"
@@ -173,7 +174,7 @@ def ppC (nm : List (String × LifeVar)) (p : Nat) : CCTy → String
   | .nu (.amp (.ret (.sum A (.tvar 0))) (.ret B)) =>
       parenIf (p > 5) s!"loop {ppV nm 0 6 A} {ppV nm 0 6 B}"
   | .nu (.amp (.ret (.sum (.tensor A (.tvar 0)) (.sum B (.tvar 0)))) (.ret R)) =>
-      parenIf (p > 5) s!"gen {ppV nm 0 6 A} {ppV nm 0 6 B} {ppV nm 0 6 R}"
+      parenIf (p > 5) s!"pull {ppV nm 0 6 A} {ppV nm 0 6 B} {ppV nm 0 6 R}"
   | .nu (.amp (.ret (.sum (.tensor A (.tvar 0)) R)) (.ret R')) =>
       parenIf (p > 5) s!"iter {ppV nm 0 6 A} {ppV nm 0 6 R} {ppV nm 0 6 R'}"
   | .nu C => parenIf (p > 0) s!"nu {tvName 0}. {ppC nm 0 C}"
@@ -317,7 +318,7 @@ def elabC : Nat → TyEnv → CTy → Except Error CCTy
     | .stream _ A => do pure (.stream (← elabV n E A))
     | .iter _ A R R' => do pure (.iter (← elabV n E A) (← elabV n E R) (← elabV n E R'))
     | .loop _ A B => do pure (.loop (← elabV n E A) (← elabV n E B))
-    | .gen _ A B R => do pure (genTy (← elabV n E A) (← elabV n E B) (← elabV n E R))
+    | .pull _ A B R => do pure (pullTy (← elabV n E A) (← elabV n E B) (← elabV n E R))
     | .eff sp r A => do
         let S ← elabRow n E sp r
         pure (BoCa.Fig16.LogRel.Core.CTy.effOf S (← elabV n E A))
