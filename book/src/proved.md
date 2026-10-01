@@ -1,6 +1,7 @@
 # What is proved
 
-Everything below is a Lean theorem, checked by CI on every change. No result depends on an axiom
+Everything below is a Lean theorem, checked by the gate (`scripts/ci-local.sh`) before every
+merge. No result depends on an axiom
 beyond Lean's standard three (`propext`, `Classical.choice`, `Quot.sound`), and the library
 contains no `sorry`, `native_decide` or `partial` (`scripts/check-hygiene.sh`).
 
@@ -12,10 +13,13 @@ types describe, finishes with a result of its type and leaves memory described b
 type. The Fundamental Property says that every derivable judgment holds in this model.
 `fundamentalC` in [`Core/Fundamental.lean`](https://github.com/empath-nirvana/borrow-core/blob/main/Core/Fundamental.lean).
 
-**Closed programs run safely and leave memory empty.** A closed program of type `F 1` runs from
-empty memory to `()` and empty memory (`adequacyC`, same file). Because the run never gets
-stuck, there is no use after free or double free; because memory ends empty, there is no leak.
-`theorem32` gives the same for a program that returns a value, given that the value holds no resource.
+**Closed programs run safely and leave memory empty, on every run.** Take a closed program of
+type `F 1` and any allocator that returns free locations. No run of it from empty memory gets
+stuck, and every run continues to `()` at empty memory (`adequacyD`, `adequacyD_safe` in
+[`Core/Demonic.lean`](https://github.com/empath-nirvana/borrow-core/blob/main/Core/Demonic.lean)). Because no run gets stuck, there is no use after
+free or double free; because memory ends empty, there is no leak. `adequacyC` and `theorem32`
+are the paper's form, that some run succeeds; `adequacyD_obs` gives every run at any answer type
+that holds no resource.
 
 **Loops are covered one observation at a time.** A `delay` loop observed any number of times and
 then closed runs to a value and leaves memory empty (`drive_runs_unit`, `drive_runs_nat` in
@@ -29,8 +33,8 @@ to the proofs of its premises. `checkProgram_sound` in
 `checked_runs` apply the two theorems above to the checked program. The drops that the checker
 inserts ([Implicit destructors](guide/implicit-destructors.md)) are part of the derivation.
 
-**Handlers mean what their clauses say.** A handler is defined by its elaboration into core
-terms ([Effects and handlers](guide/effects.md)), so a handled program is safe by the theorems
+**Elaborated handlers mean what their clauses say.** A surface handler (SPEC §18) is defined by
+its elaboration into core terms ([Effects and handlers](guide/effects.md)), so a handled program is safe by the theorems
 above with no new case. What could still be wrong is what a handler *means*, and each class of
 clause has its law, about the machine's runs of the terms the elaboration emits
 ([`Core/Handlers.lean`](https://github.com/empath-nirvana/borrow-core/blob/main/Core/Handlers.lean)).
@@ -40,6 +44,31 @@ operations runs the clauses one after the other on the threaded state (`handle_f
 passes every branch around it, running none of the rest, and reaches the handler as `inr e`
 (`abort_passes`), also from inside a loop, whose exit it takes (`loop_abort`); a value runs the
 rest (`return_resumes`).
+
+**Handlers in the kernel.** SPEC §19 adds to the kernel the primitives `perform`, `raise`, `hnd`,
+`ubind` (a finaliser frame), `ccatch` and `cfin` (a cancel's catchers), and the effectful returner
+`F_Σ A`, a computation of `A` that may perform the operations of the row `Σ`. Its relation is
+`ewpTS`, a least fixed point: the computation performs finitely many operations, each at its
+protocol, and then answers. So the relation gives total correctness and safety at `F A`,
+finitely many operations at `F_Σ A`, and termination of each observation at `ν` types, including
+a loop whose observations perform operations. Each of the six rules has its compatibility lemma
+(`sub_compatC`, `perform_compatC`, `raise_compatC`, `let_compatC`, `then_compatC`,
+`handle_compatC` in [`Core/EffRules.lean`](https://github.com/empath-nirvana/borrow-core/blob/main/Core/EffRules.lean)), and
+`fundamentalC`, `fundamentalD` and `adequacyD` cover the extended judgment. An operation that
+raises crosses a borrow: each borrow has an unwinding form, which ends the lend and runs the
+source's finaliser before the unwind continues outward. Its obligations are the frame lemmas
+`ewpTS_I_frameU`, `ewpTS_M_frameU` and `ewpTS_M_antiFrameU` in
+[`Core/EffWp.lean`](https://github.com/empath-nirvana/borrow-core/blob/main/Core/EffWp.lean), used by
+[`Core/EffBorrow.lean`](https://github.com/empath-nirvana/borrow-core/blob/main/Core/EffBorrow.lean). Cancelling a stored continuation runs
+its finalisers innermost first and answers `()`, or re-raises at the canceller the first error a
+finaliser raised to a handler outside the cancelled region; both outcomes are run in
+[`Core/EffCancel.lean`](https://github.com/empath-nirvana/borrow-core/blob/main/Core/EffCancel.lean) (`prog_run`, `prog₃_run`). The six
+acceptance programs of §19 (two effects in both nesting orders, logging and raising inside a
+borrow, an infinite loop that logs, early exit from a producer that holds a cell, and
+cancelling a stored continuation) are closed derivations in
+[`Core/EffPrograms.lean`](https://github.com/empath-nirvana/borrow-core/blob/main/Core/EffPrograms.lean), each with its every-run theorem
+(`logOutside_answers`, `reborrowRaise_answers`, `tickProg_runs`, `takeProg_runs`,
+`storeCancel_runs`, …). The surface does not reach these primitives yet (#188).
 
 **Arithmetic is a parameter.** The machine performs integer operations through a *host*, and
 every theorem above holds for every host. Nothing about arithmetic is assumed.
@@ -67,8 +96,8 @@ prefix at a time, observed at most `n` times for every `n` (`externs_loop_every_
 `IORun.loop_every_run`). The I/O sugar is elaborated before checking, so these theorems are
 about the elaborated program, with no case of their own.
 
-**Code without divergence terminates.** A closed program of type `F A` terminates on every run:
-there is no infinite run of it (`total_no_infinite_run` in
+**Code without divergence terminates.** A closed program of type `F A`, including one that
+performs operations and handles them, terminates on every run: there is no infinite run of it (`total_no_infinite_run` in
 [`Core/Totality.lean`](https://github.com/empath-nirvana/borrow-core/blob/main/Core/Totality.lean)),
 and under every allocator its run reaches a value (`total_every_alloc`). Divergence shows in the
 type, as a loop the program returns ([Divergence](guide/divergence.md)); a total function that
@@ -85,6 +114,13 @@ text.
 - **The compiler is tested, not yet proved.** Each stage has an interpreter. Every corpus program
   and every runnable example in this book gives the same answer compiled as under the Lean
   interpreter, and ends with `live 0`. The plan for proving it is #15.
+- **The handler lowering is tested, not verified.** There is no runtime handler stack and no
+  handler search: an abortive operation is a branch after each call that may raise
+  (`Backend/Clos/Unwind.lean`), a tail-resumptive operation whose handler is known is a direct
+  call of its clause, and other control operations and stored continuations are state machines
+  with one flat tagged state, nested through calls (`Backend/Clos/Capture.lean`). Every kernel
+  program gives the same answer at every stage and in WebAssembly, with `live 0`
+  (`scripts/compile-kernel.sh`).
 - **The allocator** is WebAssembly text, trusted against its written specification
   ([`Backend/README.md`](https://github.com/empath-nirvana/borrow-core/blob/main/Backend/README.md)).
 - **The WAT printer and wasmtime** are trusted.
@@ -96,6 +132,10 @@ text.
 ## What is not claimed
 
 - A loop (`delay`, `loop`, a div function) is not claimed to terminate; its type says it may not.
+  The same holds for a computation that performs operations forever: it is typed as a loop whose
+  observations are effectful, not at `F_Σ A`.
+- That the elaborator emits exactly the schemas the handler laws are about is by construction of
+  `Frontend/Elab/Effects.lean`, checked on the sugar pairs, not proved.
 - The checker is not complete: a well-typed program may be rejected (`Frontend/README.md`,
   *Incompleteness*).
 - Nothing is claimed about host handles: adequacy's empty memory is the model's cells, not file
