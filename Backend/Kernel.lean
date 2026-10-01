@@ -33,8 +33,8 @@ def cancelKept : BoCa.Expr :=
 
 Each is a closed term the lowering takes a path of its own on: a loop of tail calls through a
 suspension, recursion through a suspension point, a call that may reach two codes that suspend, a
-handler inside a handler that forwards the outer one's operations (and a cancel through it), and
-a continuation resumed twice. -/
+handler inside a handler that forwards the outer one's operations (and a cancel through it), a
+continuation resumed twice, and operations whose clause resumes in tail position (direct calls). -/
 
 namespace Shapes
 open BoCa
@@ -60,6 +60,11 @@ def idE : Expr := .lam (.var 0)
 /-- The clause that resumes `κ` in tail position with the argument: `λ(x, k). k.resume x`. -/
 def resumeCl : Expr := .lam (.letpair (.var 0) (.app (.app (.var 0) (.inj₁ .unit)) (.var 1)))
 
+/-- A clause that resumes `κ` and then answers `()`: `λ(x, k). k.resume x; ()`. Its resume is not
+in tail position, so its operation is a resumption point, not a direct call. -/
+def resumeThen : Expr :=
+  .lam (.letpair (.var 0) (.seq (.app (.app (.var 0) (.inj₁ .unit)) (.var 1)) .unit))
+
 /-- The clause that cancels `κ`: `λ(x, k). x; k.cancel`. -/
 def cancelCl : Expr := .lam (.letpair (.var 0) (.seq (.var 1) (.app (.var 0) (.inj₂ .unit))))
 
@@ -68,30 +73,42 @@ def isZero (x : Nat) : Expr := hostE (.rel .w32 .eq) (.pair (.var x) (i32E 0))
 def pred (x : Nat) : Expr := hostE (.bin .w32 .sub) (.pair (.var x) (i32E 1))
 
 /-- `loop x = if x == 0 then () else (yield (); loop (x - 1))`, the recursive call in tail
-position, handled by a clause that resumes in tail position, `n` times. Constant stack. -/
-def loopTail (n : UInt32) : Expr :=
+position, `n` times. -/
+def loopE (n : UInt32) : Expr :=
   -- In the `case`'s arms, `x` is index 1 and `self` index 2.
   let B : Expr := .case (isZero 0) (.seq (performU 5) (.app (.var 2) (pred 1))) .unit
-  hndE 5 idE resumeCl (.app (.val (Fig16.LogRel.Core.selfV B)) (i32E n))
+  .app (.val (Fig16.LogRel.Core.selfV B)) (i32E n)
+
+/-- `loopE n` handled by `resumeCl`: `yield` is a direct call of the clause. -/
+def loopTail (n : UInt32) : Expr := hndE 5 idE resumeCl (loopE n)
+
+/-- `loopE n` handled by a clause that resumes in tail position and captures a value (`c`, bound
+outside the handler), so `yield` suspends and is resumed: the driver, the clause and the resume
+closure tail-call one another, in constant stack. -/
+def loopCaptured (n : UInt32) : Expr :=
+  -- In the clause, `k` is index 0, `x` 1, the pair 2 and `c` 3.
+  letE .unit (hndE 5 idE
+    (.lam (.letpair (.var 0) (.seq (.var 3) (.app (.app (.var 0) (.inj₁ .unit)) (.var 1)))))
+    (loopE n))
 
 /-- `rec x = if x == 0 then () else (rec (x - 1); yield ())`: the recursive call is a
 resumption point, so each level's state holds the next level's suspended computation. -/
 def recYield (n : UInt32) : Expr :=
   let B : Expr := .case (isZero 0) (.seq (.app (.var 2) (pred 1)) (performU 6)) .unit
-  hndE 6 idE resumeCl (.app (.val (Fig16.LogRel.Core.selfV B)) (i32E n))
+  hndE 6 idE resumeThen (.app (.val (Fig16.LogRel.Core.selfV B)) (i32E n))
 
 /-- `f () = yield ()` and `g () = yield (); yield ()`; `h` is one of them, chosen by a test the
-analysis does not decide, and `h ()` is called under the handler. -/
-def twoCallees : Expr :=
+analysis does not decide, and `h ()` is called under the handler, whose clause is `cl`. -/
+def twoCallees (cl : Expr) : Expr :=
   let f : Expr := .lam (performU 7)
   let g : Expr := .lam (.seq (performU 7) (performU 7))
-  hndE 7 idE resumeCl
+  hndE 7 idE cl
     (letE (.case (hostE (.rel .w32 .eq) (.pair (i32E 1) (i32E 1))) f g) (.app (.var 0) .unit))
 
 /-- `handle_9 (handle_10 (yield₉ (); yield₁₀ (); yield₉ ())) …`: the inner handler forwards the
 outer one's operations. -/
 def forward : Expr :=
-  hndE 9 idE resumeCl (hndE 10 idE resumeCl
+  hndE 9 idE resumeThen (hndE 10 idE resumeThen
     (.seq (performU 9) (.seq (performU 10) (performU 9))))
 
 /-- The outer handler cancels a continuation that holds the inner handler, a cell and its
@@ -132,8 +149,10 @@ def kernelPrograms : List (String × BoCa.Expr) :=
     ("cancel-suppressed", BoCa.Fig16.LogRel.Core.CancelIntercept.prog),
     ("cancel-reraised", cancelKept),
     ("loop-tail", Shapes.loopTail 100000),
+    ("loop-captured", Shapes.loopCaptured 100000),
     ("recursive-yield", Shapes.recYield 20),
-    ("two-callees", Shapes.twoCallees),
+    ("two-callees", Shapes.twoCallees Shapes.resumeThen),
+    ("two-callees-tail", Shapes.twoCallees Shapes.resumeCl),
     ("forward", Shapes.forward),
     ("forward-cancel", Shapes.forwardCancel),
     ("multi-shot", Shapes.multiShot) ]

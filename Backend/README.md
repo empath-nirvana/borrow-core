@@ -87,8 +87,13 @@ search:
   the point's finalisers, innermost first, every other variable dropped; the first error a
   finaliser raises whose name is not in `mask` is kept, and `κ`'s cancel re-raises it (`reraise`).
 - Which codes may suspend is the least solution of the operations their bodies and callees may
-  perform, over the closure flow. Codes called at one site, and a code and the codes it calls in
-  tail position, share a convention, and a tail call passes its callee's outcome on (Stack).
+  perform, over the closure flow. Codes called at one site share a convention, and so do a code
+  and a code it calls in tail position when the call closes a loop of tail calls or the caller has
+  no resumption point of its own; such a tail call passes its callee's outcome on (Stack), and any
+  other is a resumption point.
+- An operation whose handlers all have one closed clause that resumes `κ` in tail position, and
+  neither suspends nor raises, is a direct call of that clause with its resume removed: nothing
+  suspends.
 
 **Abortive operations** (`Clos/Unwind.lean`, SPEC §19). `Unwind` lowers `raise p` and the frames
 `Capture` leaves (`catch`, `fin`, `catchAll`, `reraise`) to **branch-per-call propagation**, the
@@ -276,10 +281,11 @@ callee answers the caller's words. What runs in constant stack:
   (`corpus/deep-list.bc`); this is the only left-fold shape the core has.
 - **A self-call in tail position**, of the native fixed point: its code is known, so the call is
   a direct tail call of the code itself.
-- **Loops through a suspension** (SPEC §19). A tail call of a code that may suspend passes its
-  outcome on, so a loop that performs an operation at each turn stays a loop of tail calls; a
-  handler whose clause resumes in tail position drives it in constant stack, its driver, clause
-  and resume closure tail-calling one another (`loop-tail`: 100000 operations).
+- **Loops through a suspension** (SPEC §19). A tail call that closes a loop of tail calls passes
+  its callee's outcome on, so a loop that performs an operation at each turn stays a loop of tail
+  calls. An operation whose clause resumes in tail position is a direct call (`loop-tail`: 100000
+  operations); when the clause captures values it is not, and the handler's driver, clause and
+  resume closure tail-call one another, in constant stack (`loop-captured`).
 - **Arrays.** `tab` and an array's `drop` are loops of tail calls.
 - **Owned folds by pointer reversal** (Deutsch–Schorr–Waite). The step of `fold_own` or
   `fold_reuse` (`λu. trav T (λw. self g w) u to r. g r`, recognized as the conversion recognizes
@@ -543,8 +549,9 @@ No optimizations beyond the layouts, defunctionalization, direct calls of known 
 fixed points, pointer reversal and building a closure in its code's own environment object; no
 stack switching. SPEC §19's handlers, operations and cancels are lowered, but for a name with both
 control and abortive operations and a cancel whose finalisers may raise under a handler reached
-from its own body (rejected). A tail-resumptive clause is a state machine like any other: its
-lowering to a direct call, with the handler as evidence, is open. The cancel frames `ccatch` and
+from its own body (rejected). A tail-resumptive operation is a direct call when its handlers have
+one closed clause; one whose clause captures values is a state machine (its captures passed as
+evidence is open). The cancel frames `ccatch` and
 `cfin` occur only in the source machine's continuations and are rejected by `Convert`. The only externs compiled are the
 standard I/O ones; the model's harness (`mk_input`, …) is not compiled. `fold_imm` and the owned
 folds that pointer reversal does not cover recurse on the Wasm stack (Stack). Closures of
