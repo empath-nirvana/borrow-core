@@ -1,6 +1,10 @@
 # Outlives: which strict outlives premises admit `⊑` (#241)
 
-Build: `lake build Outlives`. Programs: `./run.sh`. The findings, the inventory and the
+Landed as SPEC §23 (#243): the box rule and `withbor`'s side condition are non-strict in `Core/`,
+and `main`'s lifetime and lifetime bounds are in the elaborator. The probe states its judgments
+against `Core` as of `b1cde24`, where `VOutlives`'s box rule was strict, and builds there.
+
+Build (at `b1cde24`): `lake build Outlives`. Programs: `./run.sh`. The findings, the inventory and the
 recommendation are in `docs/outlives-strictness.md`; this README lists what is here.
 
 The library imports `Core` and changes nothing in it. Every result's axioms are within
