@@ -59,7 +59,8 @@ inductive Strm (S : Sig) (X : Type) : Type where
 
 /-- The semantics of a capability's co-operations. -/
 abbrev CoSem (S : Sig) (e : S.E) (s : G) : Type :=
-  (o : S.O e) → (S.arg e o).den → s.den → Tree S (((S.res e o).den × s.den) ⊕ (Int × s.den))
+  (o : S.O e) → (S.arg e o).den → s.den →
+    Tree S (((S.res e o).den × s.den) ⊕ ((S.errG e o).den × s.den))
 
 mutual
 def VTy.den : VTy S → Type
@@ -68,7 +69,6 @@ def VTy.den : VTy S → Type
   | .sum A B => A.den ⊕ B.den
   | .U _ _ C => C.den
   | .cap e s => Nat × CoSem S e s
-  | .res => Nat × Nat
   | .strm _ A => Strm S A.den
 def CTy.den : CTy S → Type
   | .F A => Tree S A.den
@@ -164,10 +164,11 @@ def Tree.hnd (C : CTy S) (i : Nat) (e : S.E) (hr : X → C.den)
 
 /-- After a co-operation: resume with the answer and the next state, or, on an error, cancel the
 client's continuation (its destructors `d`), write the state back and answer the error. -/
-def coK {R : Type} (sg : G) (c : Nat) (d : List Dtor) (rk : R → sg.den → Tree S (X ⊕ Int)) :
-    (R × sg.den) ⊕ (Int × sg.den) → Tree S (X ⊕ Int)
+def coK {R : Type} {b : Bool} (sg : G) (c : Nat) (d : List Dtor)
+    (rk : R → sg.den → Tree S (X ⊕ Int)) :
+    (R × sg.den) ⊕ ((if b then G.int else G.void).den × sg.den) → Tree S (X ⊕ Int)
   | .inl (y, s') => rk y s'
-  | .inr (n, s') => Tree.dtors d (.act (.wr c ⟨sg, s'⟩) (fun _ => .ret (.inr n)))
+  | .inr (n, s') => Tree.dtors d (.act (.wr c ⟨sg, s'⟩) (fun _ => .ret (.inr (errInt n))))
 
 /-- A co-operation answering an operation of `e'` on the runner of `e`, when they agree: the
 co-operation runs on the state; an answer resumes the client in place with the next state; an
@@ -195,11 +196,18 @@ def Tree.runL (i : Nat) (e : S.E) (c : Nat) (sg : G) (co : CoSem S e sg) :
   | s, .nu k => .nu (fun n => (k n).runL i e c sg co s)
   | s, .act a k => .act a (fun y => (k y).runL i e c sg co s)
 
-/-- A `using` frame owning resource `r` (label `ℓ`): free it on return, and add its destructor
-to every continuation captured inside. -/
+/-- The answer `()` of an operation of `Res`. -/
+def resAns (e : S.E) (h : e = S.Res) (o : S.O e) : (S.res e o).den := by
+  subst h; rw [S.res_unit o]; exact ()
+
+/-- A `using` frame owning resource `r` (label `ℓ`) as the instance `r` of `Res`: answer an
+operation on `r` in place with `use`, free the resource on return, and add its destructor to every
+continuation captured inside. -/
 def Tree.addFin (ℓ r : Nat) : Tree S X → Tree S X
   | .ret x => .act (.free ℓ r) (fun _ => .ret x)
-  | .op j e o v k d => .op j e o v (fun y => (k y).addFin ℓ r) (d ++ [.free ℓ r])
+  | .op j e o v k d =>
+      if h : j = r ∧ e = S.Res then .act (.use ℓ r) (fun _ => (k (resAns e h.2 o)).addFin ℓ r)
+      else .op j e o v (fun y => (k y).addFin ℓ r) (d ++ [.free ℓ r])
   | .ab j e a v d => .ab j e a v (d ++ [.free ℓ r])
   | .nu k => .nu (fun n => (k n).addFin ℓ r)
   | .act a k => .act a (fun y => (k y).addFin ℓ r)

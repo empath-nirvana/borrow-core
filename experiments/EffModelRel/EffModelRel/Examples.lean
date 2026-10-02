@@ -21,7 +21,7 @@ Every negative result is a context in which the two sides observe differently, c
 namespace EffRel
 
 inductive Eff where
-  | log | fail | ctr | yld | choose
+  | log | fail | ctr | yld | choose | rsc
   deriving DecidableEq, Repr
 
 inductive Op : Eff → Type where
@@ -30,6 +30,7 @@ inductive Op : Eff → Type where
   | get : Op .ctr
   | yield : Op .yld
   | choose : Op .choose
+  | use : Op .rsc
 
 inductive Ab : Eff → Type where
   | raise : Ab .fail
@@ -40,17 +41,25 @@ abbrev σ : Sig where
   A := Ab
   arg := fun _ o => match o with
     | .log => .int | .inc => .unit | .get => .unit | .yield => .int | .choose => .unit
+    | .use => .unit
   res := fun _ o => match o with
     | .log => .unit | .inc => .unit | .get => .int | .yield => .unit | .choose => .bool
+    | .use => .unit
   q := fun _ o => match o with
     | .log => Mode.lin | .inc => Mode.lin | .get => Mode.lin | .yield => Mode.aff
-    | .choose => Mode.unr
+    | .choose => Mode.unr | .use => Mode.lin
   aarg := fun _ _ => .unit
   bnd := fun e => match e with
     | .log => Mode.lin | .fail => Mode.aff | .ctr => Mode.lin | .yld => Mode.aff
-    | .choose => Mode.unr
+    | .choose => Mode.unr | .rsc => Mode.lin
   bnd_q := by intro e o; cases o <;> rfl
   bnd_ab := by intro e a; cases a; rfl
+  Res := .rsc
+  use := .use
+  use_arg := rfl
+  res_unit := by intro o; cases o; rfl
+  res_lin := by intro o; cases o; rfl
+  res_noab := by intro a; cases a
 
 variable {Ψ : List Eff} {Γ : List (VTy σ)}
 
@@ -68,28 +77,28 @@ def tUnit : VTy σ := .g .unit
 
 /-- `Log` printed to the world, `κ` resumed in place. -/
 def printOps {Γ : List (VTy σ)} {C : CTy σ} : (o : Op .log) →
-    M Ψ (kty (σ.q .log o) Eb.top (σ.res .log o) C :: .g (σ.arg .log o) :: Γ) C
+    M Ψ (kty (σ.q .log o) Rw.nil (σ.res .log o) C :: .g (σ.arg .log o) :: Γ) C
   | .log => .bind (.emit v1) (.app (.force v1) .unit)
 
 /-- `Log` as a writer: a handler into `int → F (A × int)`. -/
 def writerOps {Γ : List (VTy σ)} {A : VTy σ} : (o : Op .log) →
-    M Ψ (kty (σ.q .log o) Eb.top (σ.res .log o) (.arr tInt Eb.top (.F (.prod A tInt))) :: .g (σ.arg .log o) :: Γ)
-      (.arr tInt Eb.top (.F (.prod A tInt)))
+    M Ψ (kty (σ.q .log o) Rw.nil (σ.res .log o) (.arr tInt Rw.nil (.F (.prod A tInt))) :: .g (σ.arg .log o) :: Γ)
+      (.arr tInt Rw.nil (.F (.prod A tInt)))
   | .log => .lam (.bind (.prim .add v0 v2) (.app (.app (.force v2) .unit) v0))
 
-def writerRet {Γ : List (VTy σ)} {A : VTy σ} : M Ψ (A :: Γ) (.arr tInt Eb.top (.F (.prod A tInt))) :=
+def writerRet {Γ : List (VTy σ)} {A : VTy σ} : M Ψ (A :: Γ) (.arr tInt Rw.nil (.F (.prod A tInt))) :=
   .lam (.ret (.pair v1 v0))
 
 /-- Run `M` under a writer `Log` from 0: its answer and the total logged. -/
 def writer {A : VTy σ} (N : M (.log :: Ψ) Γ (.F A)) : M Ψ Γ (.F (.prod A tInt)) :=
-  .app (.handle .log Eb.top writerRet writerOps (fun a => nomatch a) N) (.int 0)
+  .app (.handle .log Rw.nil writerRet writerOps (fun a => nomatch a) N) (.int 0)
 
 /-- `Fail` to a default. -/
 def failDefault {A : VTy σ} (d : V Ψ Γ A) (N : M (.fail :: Ψ) Γ (.F A)) : M Ψ Γ (.F A) :=
-  .handle .fail Eb.top (.ret v0) (fun o => nomatch o) (fun _ => .ret (d.wk)) N
+  .handle .fail Rw.nil (.ret v0) (fun o => nomatch o) (fun _ => .ret (d.wk)) N
 
 def printLog {A : VTy σ} (N : M (.log :: Ψ) Γ (.F A)) : M Ψ Γ (.F A) :=
-  .handle .log Eb.top (.ret v0) printOps (fun a => nomatch a) N
+  .handle .log Rw.nil (.ret v0) printOps (fun a => nomatch a) N
 
 def raise (f : Var Ψ .fail) : M Ψ Γ C := .ab f .raise .unit
 def logm (l : Var Ψ .log) (m : Int) (N : M Ψ (tUnit :: Γ) C) : M Ψ Γ C := .op l .log (.int m) N
@@ -97,7 +106,7 @@ def logm (l : Var Ψ .log) (m : Int) (N : M Ψ (tUnit :: Γ) C) : M Ψ Γ C := .
 /-! ## Absorption: `log m; raise ≡ raise` inside a writer -/
 
 theorem writer_pure {Ψ : List Eff} {Γ : List (VTy σ)} {A : VTy σ} :
-    PureClause (S := σ) (Ψ := Ψ) (Γ := Γ) (e := .log) (bA := Eb.top) (bh := Eb.top) Op.log
+    PureClause (S := σ) (Ψ := Ψ) (Γ := Γ) (e := .log) (bA := Rw.nil) (bh := Rw.nil) Op.log
       (writerOps (A := A) Op.log)
       (fun _ => ()) (fun v s => (show Int from s) + (show Int from v)) := by
   intro η ρ v k d; rfl
@@ -105,7 +114,7 @@ theorem writer_pure {Ψ : List Eff} {Γ : List (VTy σ)} {A : VTy σ} :
 /-- Inside a writer `Log`, under any `Fail` handler: `log m; raise ≡ raise`. -/
 theorem absorb_writer (f : Var Ψ .fail) (m : Int) :
     CtxEq (Γ := Γ) (writer (A := tInt) (logm .z m (raise (.s f)))) (writer (raise (.s f))) :=
-  absorb_pure (S := σ) (e := .log) (f := .fail) (bh := Eb.top) (bA := Eb.top) (by decide) writerRet writerOps
+  absorb_pure (S := σ) (e := .log) (f := .fail) (bh := Rw.nil) (bA := Rw.nil) (by decide) writerRet writerOps
     (fun a => nomatch a) Op.log writer_pure m f Ab.raise () (.int 0)
 
 /-! ## Observations of closed programs -/
@@ -146,11 +155,11 @@ the borrowed state back, so the owner sees the log. -/
 theorem not_absorb_runner_inside :
     ¬ CtxEq (S := σ) (Ψ := []) (Γ := [])
       (.bind (.newcap Eff.log .int coLog (.int 0))
-        (.bind (failDefault (.inl (.int 0)) (.lend v0 (logm .z 7 (raise (.s .z)))))
-          (.bind (.getcap v1) (.bind (.emit v0) (.ret (.int 0))))))
+        (.bind (failDefault (.pair v0 (.inl (.int 0))) (.lend v0 (logm .z 7 (raise (.s .z)))))
+          (.split v0 (.bind (.getcap v1) (.bind (.emit v0) (.ret (.int 0)))))))
       (.bind (.newcap Eff.log .int coLog (.int 0))
-        (.bind (failDefault (.inl (.int 0)) (.lend v0 (raise (.s .z))))
-          (.bind (.getcap v1) (.bind (.emit v0) (.ret (.int 0)))))) :=
+        (.bind (failDefault (.pair v0 (.inl (.int 0))) (.lend v0 (raise (.s .z))))
+          (.split v0 (.bind (.getcap v1) (.bind (.emit v0) (.ret (.int 0))))))) :=
   fun h => absurd h.prog_obs (by decide)
 
 /-- **Lent state survives an abort**: `Log` run against a lent capability outside `Fail`. This is
@@ -159,10 +168,10 @@ theorem lent_state_survives :
     ¬ CtxEq (S := σ) (Ψ := []) (Γ := [])
       (.bind (.newcap Eff.log .int coLog (.int 0))
         (.bind (.lend v0 (failDefault (.int 0) (logm (.s .z) 7 (raise .z))))
-          (.bind (.getcap v1) (.bind (.emit v0) (.ret (.int 0))))))
+          (.split v0 (.bind (.getcap v1) (.bind (.emit v0) (.ret (.int 0)))))))
       (.bind (.newcap Eff.log .int coLog (.int 0))
         (.bind (.lend v0 (failDefault (.int 0) (raise .z)))
-          (.bind (.getcap v1) (.bind (.emit v0) (.ret (.int 0)))))) :=
+          (.split v0 (.bind (.getcap v1) (.bind (.emit v0) (.ret (.int 0))))))) :=
   fun h => absurd h.prog_obs (by decide)
 
 /-- Two printing `Log`s do not commute: the world sees the order. -/
@@ -180,8 +189,8 @@ resumes twice keeps the predicate of the first run and the function of the secon
 one to the other: on the left both runs share `b` (true); on the right each run has its own
 (false). -/
 
-def predT : VTy σ := .U Mode.unr Eb.top (.pi .log (.F (.g .bool)))
-def appT : VTy σ := .U Mode.unr Eb.top (.arr predT Eb.top (.F (.g .bool)))
+def predT : VTy σ := .U Mode.unr Rw.nil (.pi .log (.F (.g .bool)))
+def appT : VTy σ := .U Mode.unr Rw.nil (.arr predT Rw.nil (.F (.g .bool)))
 
 /-- The two closures over `b` (instance index 0). -/
 def twoClosures {Γ : List (VTy σ)} : M [.log, .choose] Γ (.F (.prod predT appT)) :=
@@ -196,7 +205,7 @@ def nuOpR : M [.choose] [] (.F (.prod predT appT)) :=
 
 /-- Resume twice; keep the first run's predicate and the second run's function. -/
 def chooseOps {Γ : List (VTy σ)} : (o : Op .choose) →
-    M Ψ (kty (σ.q .choose o) Eb.top (σ.res .choose o) (.F (.prod predT appT)) :: .g (σ.arg .choose o) :: Γ)
+    M Ψ (kty (σ.q .choose o) Rw.nil (σ.res .choose o) (.F (.prod predT appT)) :: .g (σ.arg .choose o) :: Γ)
       (.F (.prod predT appT))
   | .choose =>
       .bind (.app (.prj1 (.force v0)) (.bool true))
@@ -205,7 +214,7 @@ def chooseOps {Γ : List (VTy σ)} : (o : Op .choose) →
 
 /-- The context: handle the hole's instance with `chooseOps`, then apply. -/
 def nuOpCtx : Context σ [.choose] [] (.F (.prod predT appT)) .bool :=
-  .bind (.handle .choose Eb.top (.ret v0) chooseOps (fun a => nomatch a) (.iapp (.force v0) .z))
+  .bind (.handle .choose Rw.nil (.ret v0) chooseOps (fun a => nomatch a) (.iapp (.force v0) .z))
     (.split v0 (.app (.force v0) v1))
 
 theorem nuOp_obs : nuOpCtx.obs nuOpL.den = ⟨.ret (.bool true), []⟩ ∧
@@ -229,27 +238,35 @@ def coCtr : (o : Op .ctr) → Cmp σ [] [.g .int, .g (σ.arg .ctr o)] (.F (coRes
   | .get => .ret (.inl (.pair v0 v0))
 
 abbrev tA : VTy σ := .sum tInt tInt
-abbrev tStep : VTy σ := VTy.step Eb.top tA
+abbrev tStep : VTy σ := VTy.step Rw.nil tA
 
 /-- `Yield` to a stored generator: the clause returns the continuation as a stream. -/
 def streamOps {Γ : List (VTy σ)} : (o : Op .yld) →
-    M Ψ (kty (σ.q .yld o) Eb.top (σ.res .yld o) (.F tStep) :: .g (σ.arg .yld o) :: Γ) (.F tStep)
+    M Ψ (kty (σ.q .yld o) Rw.nil (σ.res .yld o) (.F tStep) :: .g (σ.arg .yld o) :: Γ) (.F tStep)
   | .yield => .ret (.inr (.pair v1 (.fold (.thunk Mode.lin
       (.rcd (.app (.prj1 (.force v0)) .unit) (.prj2 (.force v0)))))))
 
 def yieldPrintOps {Γ : List (VTy σ)} {C : CTy σ} : (o : Op .yld) →
-    M Ψ (kty (σ.q .yld o) Eb.top (σ.res .yld o) C :: .g (σ.arg .yld o) :: Γ) C
+    M Ψ (kty (σ.q .yld o) Rw.nil (σ.res .yld o) C :: .g (σ.arg .yld o) :: Γ) C
   | .yield => .bind (.emit v1) (.app (.prj1 (.force v1)) .unit)
 
 /-- Inside the lend: yield, then use the capability. -/
 def t1Body : M [.ctr, .yld] [.cap .ctr .int] (.F tInt) :=
   .op (.s .z) Op.yield (.int 1) (.op .z Op.inc .unit (.op .z Op.get .unit (.ret v0)))
 
+/-- The lend's answer without the capability it hands back: phase A's place-based lend, which
+leaves the capability with its owner. Under the owning lend the owner's later `getcap` is a second
+use of the capability, refused by grades (`docs/effects-tr` T9.1); as an unmoded program it shows
+the harm T1 prevented in phase A. -/
+def lendDrop {Ψ : List Eff} {Γ : List (VTy σ)} {e : Eff} {s : G} {A : VTy σ}
+    (v : V Ψ Γ (.cap e s)) (N : M (e :: Ψ) Γ (.F A)) : M Ψ Γ (.F (.sum A tInt)) :=
+  .bind (.lend v N) (.split v0 (.ret v0))
+
 /-- The harm: the stream escapes the lend; the owner consumes the capability; the pull resumes
 the runner, whose write-back finds no cell. -/
 def t1Harm : Prog σ .int :=
   .bind (.newcap Eff.ctr .int coCtr (.int 0))
-    (.bind (.handle .yld Eb.top (.ret (.inl v0)) streamOps (fun a => nomatch a) (.lend v0 t1Body))
+    (.bind (.handle .yld Rw.nil (.ret (.inl v0)) streamOps (fun a => nomatch a) (lendDrop v0 t1Body))
       (.bind (.getcap v1)
         (.case v1 (.ret (.int 0))
           (.split v0 (.bind (.prj1 (.unfold v0)) (.ret (.int 1)))))))
@@ -257,7 +274,7 @@ def t1Harm : Prog σ .int :=
 /-- The control: a handler that resumes in place; the lend ends before the owner consumes. -/
 def t1Control : Prog σ .int :=
   .bind (.newcap Eff.ctr .int coCtr (.int 0))
-    (.bind (.handle .yld Eb.top (.ret v0) yieldPrintOps (fun a => nomatch a) (.lend v0 t1Body))
+    (.bind (.handle .yld Rw.nil (.ret v0) yieldPrintOps (fun a => nomatch a) (lendDrop v0 t1Body))
       (.bind (.getcap v1) (.ret v0)))
 
 theorem t1Harm_stuck : t1Harm.obs.out = .stuck := by decide

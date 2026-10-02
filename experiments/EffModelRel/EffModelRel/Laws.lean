@@ -112,8 +112,8 @@ theorem alg_ab_app {e : S.E} (x : Var Ψ e) (a : S.A e) (v : Val S Ψ Γ (.g (S.
 around a sequencing frame. The left aborts carrying the frame's destructor, which its handler
 runs; the right runs it first. -/
 theorem alg_dtor {e : S.E} (ℓ : Nat) (x : Var Ψ e) (a : S.A e) (v : Val S Ψ Γ (.g (S.aarg e a)))
-    (N : Cmp S Ψ (B :: .res :: Γ) (.F A)) :
-    CtxEq (.using ℓ (.bind (.ab x a v.wk) N))
+    (N : Cmp S (S.Res :: Ψ) (B :: Γ) (.F A)) :
+    CtxEq (.using ℓ (.bind (.ab (.s x) a (v.ren Ren.wk (Ren.id Γ))) N))
       (.bind (.using ℓ (.ret .unit)) (.ab (C := .F A) x a v.wk)) := by
   apply soundness
   intro w hw η η' ρ ρ' hη hρ
@@ -122,7 +122,8 @@ theorem alg_dtor {e : S.E} (ℓ : Nat) (x : Var Ψ e) (a : S.A e) (v : Val S Ψ 
   apply CRU_F.2
   refine .nu (fun r r' hr hr' => .act (.acq (W.both_r _ _ _ _ _)) (fun _ => ?_))
   refine TreeRel.of_eq (congrArg (fun z => Tree.ab (η e x) e a z ([] ++ [Dtor.free ℓ r]))
-    ((Val.den_wk v η ρ (VTy.resv ℓ r)).trans hv)) ?_
+    ((Val.den_ren Ren.wk (Ren.id Γ) v (η.cons r) η ρ ρ (fun _ _ => rfl) (fun _ _ => rfl)).trans
+      hv)) ?_
   refine TreeRel.of_eq' (congrArg (fun z => Tree.act (Act.free ℓ r') (fun _ => Tree.ab (η' e x) e a z []))
     (Val.den_wk v η' ρ' _)) ?_
   exact TreeRel.abE (d := [Dtor.free ℓ r]) (d' := [Dtor.free ℓ r']) (f := []) (f' := [])
@@ -133,12 +134,12 @@ theorem alg_dtor {e : S.E} (ℓ : Nat) (x : Var Ψ e) (a : S.A e) (v : Val S Ψ 
 
 /-- The continuation as a value: a thunk of `resume` (and of a `cancel` that runs nothing, when
 the operation may drop it). -/
-def kVal {r : G} {C : CTy S} : (w : Bool) → (q : Mode) → (b : Eb) → Cmp S Ψ (.g r :: Γ) C →
+def kVal {r : G} {C : CTy S} : (w : Bool) → (q : Mode) → (b : Rw) → Cmp S Ψ (.g r :: Γ) C →
     Val S Ψ Γ (ktyB w q b r C)
   | true, _, _, M => .thunk _ (.rcd (.lam M) (.ret .unit))
   | false, q, _, M => .thunk q (.lam M)
 
-theorem kVal_den {r : G} {C : CTy S} (w : Bool) (q : Mode) (b : Eb) (M : Cmp S Ψ (.g r :: Γ) C)
+theorem kVal_den {r : G} {C : CTy S} (w : Bool) (q : Mode) (b : Rw) (M : Cmp S Ψ (.g r :: Γ) C)
     (η : IEnv Ψ) (ρ : Env Γ) :
     (kVal w q b M).den η ρ = mkK w q b r C (fun y => M.den η (ρ.cons (VTy.gv y))) (Tree.ret ()) := by
   cases w <;> rfl

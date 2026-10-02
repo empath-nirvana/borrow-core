@@ -18,7 +18,7 @@ variable {S : Sig}
 theorem CRU_F {A : VTy S} {w : W} {t t' : (CTy.F A).den} :
     CRU (.F A) w t t' ↔ TreeRel (fun w a a' => VR A w a a') w t t' := by simp only [CRU]
 
-theorem CRU_arr {A : VTy S} {b : Eb} {C : CTy S} {w : W} {f f' : (CTy.arr A b C).den} :
+theorem CRU_arr {A : VTy S} {b : Rw} {C : CTy S} {w : W} {f f' : (CTy.arr A b C).den} :
     CRU (.arr A b C) w f f' ↔ ∀ w', w.le w' → ∀ a a', VR A w' a a' → CRU C w' (f a) (f' a') := by
   simp only [CRU]
 
@@ -47,21 +47,18 @@ theorem VR_inl_inr {A B : VTy S} {w : W} {a : A.den} {b : B.den} :
 theorem VR_inr_inl {A B : VTy S} {w : W} {a : A.den} {b : B.den} :
     ¬ VR (.sum A B) w (.inr b) (.inl a) := by simp only [VR]; exact id
 
-theorem VR_U {m : Mode} {b : Eb} {C : CTy S} {w : W} {c c' : C.den} :
+theorem VR_U {m : Mode} {b : Rw} {C : CTy S} {w : W} {c c' : C.den} :
     VR (.U m b C) w c c' ↔ CRU C w.gcP c c' := by simp only [VR]
 
 theorem VR_cap {e : S.E} {s : G} {w : W} {c c' : (VTy.cap (S := S) e s).den} :
     VR (.cap e s) w c c' ↔ w.r c.1 c'.1 ∧ ∀ w', w.gcP.le w' → ∀ o a st,
       TreeRel (fun _ x x' => x = x') w' (c.2 o a st) (c'.2 o a st) := by simp only [VR]
 
-theorem VR_res {w : W} {x x' : (VTy.res (S := S)).den} :
-    VR .res w x x' ↔ x.1 = x'.1 ∧ w.r x.2 x'.2 := by simp only [VR]
-
-theorem VR_strm {A : VTy S} {b : Eb} {w : W} {s s' : (VTy.strm b A).den} :
+theorem VR_strm {A : VTy S} {b : Rw} {w : W} {s s' : (VTy.strm b A).den} :
     VR (.strm b A) w s s' ↔ StrmRel (fun w a a' => VR A w a a') w.gcP s s' := by simp only [VR]
 
 /-- On a world with nothing pending, a thunk's relation is its computation's. -/
-theorem VR_U_noPend {m : Mode} {b : Eb} {C : CTy S} {w : W} (hw : w.noPend) {c c' : C.den} :
+theorem VR_U_noPend {m : Mode} {b : Rw} {C : CTy S} {w : W} (hw : w.noPend) {c c' : C.den} :
     VR (.U m b C) w c c' ↔ CRU C w c c' :=
   ⟨fun h => CRU.mono C (W.gcP_le w hw) (VR_U.1 h), fun h => VR_U.2 (CRU.mono C (W.le_gcP w hw) h)⟩
 
@@ -302,7 +299,7 @@ theorem addFin_dtors (ℓ r : Nat) (d : List Dtor) (t : Tree S X) :
   | nil => rfl
   | cons δ d ih => simp only [Tree.dtors, Tree.addFin, ih]
 
-theorem dtorsA_arr {A : VTy S} {b : Eb} {C : CTy S} (d : List Dtor) (g : (CTy.arr A b C).den) :
+theorem dtorsA_arr {A : VTy S} {b : Rw} {C : CTy S} (d : List Dtor) (g : (CTy.arr A b C).den) :
     (CTy.arr A b C).dtorsA d g = fun x => C.dtorsA d (g x) := by
   induction d with
   | nil => rfl
@@ -541,8 +538,16 @@ theorem addFin_rel {R : W → X → X → Prop} {w : W} {t t' : Tree S X} (h : T
   revert hr
   induction h with
   | ret hp hx => intro hr; exact .act (.free hr) (fun _ => .ret hp hx)
-  | op hp hi hd _ ih =>
-      intro hr; exact .op hp hi (hd.append (.cons (.free hr) .nil)) (fun y => ih y hr)
+  | @op w j j' e o v k k' d d' hp hi hd _ ih =>
+      intro hr
+      simp only [Tree.addFin]
+      by_cases h : j = r ∧ e = S.Res
+      · have h' : j' = r' ∧ e = S.Res := ⟨(w.r_iff hr hi).1 h.1, h.2⟩
+        rw [dif_pos h, dif_pos h']
+        exact .act (.use hr) (fun _ => ih _ hr)
+      · have h' : ¬ (j' = r' ∧ e = S.Res) := fun h' => h ⟨(w.r_iff hr hi).2 h'.1, h'.2⟩
+        rw [dif_neg h, dif_neg h']
+        exact .op hp hi (hd.append (.cons (.free hr) .nil)) (fun y => ih y hr)
   | ab hp hi hd => intro hr; exact .ab hp hi (hd.append (.cons (.free hr) .nil))
   | abE hp hi hd hf =>
       intro hr
