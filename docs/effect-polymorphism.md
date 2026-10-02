@@ -1,7 +1,9 @@
 # Functions over effectful computations: effect polymorphism and higher-order effects (#161)
 
-Design for #161, after §19 (kernel effects) and stages 1–2 of #188 (surface effects). Nothing here
-is built. Each claim is marked as one of:
+Design for #161, after §19 (kernel effects) and stages 1–2 of #188 (surface effects). **R1, R2a,
+R2c (abortive), R2e, R4 and R5 are built: SPEC §22** (§5.10 below records how the build differs from
+this design). R2b, R2d, R3 as a check of its own, R6 and §5.9 are not. Each claim is marked as one
+of:
 
 - **established**: a Lean declaration on `main`, named after it was found by `grep`;
 - **by inspection**: read off a definition, with no theorem behind it;
@@ -339,7 +341,7 @@ All of this is elaboration into the core the checker already derives (`Frontend/
 
 At a call `h(…, c, …)`, where `c` is at a computation parameter `f : (A) -> B with P`:
 
-**R2a. The default: a closure value.**
+**R2a. The default: a closure value.** *Built: SPEC §22; see §5.10.*
 
 - **Code.** `c` is elaborated once, where it is written, into
   `code_c : !U(∀'x. Mut 'x Env_c ⊗ A ⊸ F_{ports(P) ∪ T} (Mut 'x Env_c ⊗ B))`.
@@ -446,11 +448,15 @@ type is bound, not free.
 
 ### 5.4 `|>` (R4)
 
+*Built: SPEC §22.*
+
 - `e |> g(a, …)` is `g(e, a, …)` (decision 50).
 - When `g` is a handler, it is `with g(a, …) { e }`.
 - When `g`'s first parameter is a computation parameter, `e` is that argument.
 
 ### 5.5 Second-class callbacks (R5)
+
+*Built: SPEC §22.*
 
 - **The rule.**
   - A computation parameter may be called, or passed at a computation parameter.
@@ -612,6 +618,43 @@ surface (#141).
 - Whether an observation's provided row may mention the value's own state type. This is
   `Loop_Σ`'s closed-operation-type condition, and applies only to `ν`.
 
+### 5.10 As built (SPEC §22)
+
+R2a is built as designed, with these differences (each by inspection of `Frontend/Elab/Effects.lean`
+and `Frontend/Sugar.lean`, and run by the `corpus/cb-*.bc` programs):
+
+- **The environment is passed by value, not lent from a cell.** The callback's captures are a
+  tuple passed beside its capabilities and handed back by its code, a type parameter of the copy.
+  What R2e asks of a lent environment, re-lending to each entry of an aborting site, is done for
+  the capabilities, which are the only captures that carry state across a call: a `with` of a
+  control handler lends each capability its body uses again (§18), and a callback's capabilities
+  are among them. A callback may not bind a captured variable again. So `retry` around a
+  computation, failing or not, allocates nothing of its own (`corpus/cb-retry.bc`: the program's
+  two cells), and the one cost §10 lists that Rust does not pay is not paid.
+- **Captured code is captured by the code.** A callback that calls a computation parameter
+  captures that parameter's code, `!` code, in its own `!` code, not in its environment; and a
+  computation parameter passed on is passed as it is, its code η-expanded at its lifetimes. So an
+  environment never holds a type with lifetime binders: the checker compares types by `=`, and
+  such a type, written at two depths of binders, is not equal to itself (`Frontend/README.md`,
+  Incompleteness 2). Where that cannot be avoided, the target is pending
+  (`corpus/pending/cb-recursion-caps.bc`, `cb-higher-rank.bc`).
+- **Ports are per (function, effect)**, not per parameter; a callback passed on keeps its ports
+  for the effects the callee provides it, and the callee's copy names its handlers by them (the
+  copy is keyed by the ports). Two ports of one effect under one handler are rejected. R2c's
+  relabelling of a passed-on callback is a site of its port around the call, not a wrapper.
+- **The copy's argument passes through the copy's identity**, so that the code, generic in its
+  lifetimes, is checked against the parameter's type rather than synthesized.
+- **Copies.** One body per (function, what serves its row, the profile of each callback: its
+  tunneled effects and its ports). Typing instances per environment type are the copies'
+  instances as generic functions (§15 of the SPEC); they are separate bodies today (§5.8 (1)'s
+  sharing is not built).
+- **Recursion.** A group passed a callback holds its code in its generator, made in the member's
+  copy, and its members' parameters of the same name are passed it (the parser's error callback);
+  a recursion that passes a new callback per level is rejected. Recursion through a value works
+  without answering capabilities (`corpus/cb-recursion.bc`).
+- **R3** is not a check of its own: a callback that tunnels one of its callee's ports (written
+  inside the callee's handler of it) is rejected as recursion through a site.
+
 ## 6. Accidental handling
 
 ### 6.1 The claim
@@ -649,6 +692,10 @@ configuration **N(m)**.
 was resolved to. The provable core is §9.2's uniqueness lemma.
 
 ### 6.3 Where it fails: recursion through a site (rejected, decision 57)
+
+*As built (SPEC §22):* a recursive-descent parser whose error callback is passed down through every
+level runs (`corpus/cb-parser.bc`); the pattern below, a handler per level whose clause raises to
+the level around, stays rejected (`corpus/reject/rec-through-site.bc`, #173).
 
 - **The pattern.**
   `fn walk(t, f: () -> 1) = with to_result { f(); for c in children(t) { walk(c, { raise(e) }) } }`

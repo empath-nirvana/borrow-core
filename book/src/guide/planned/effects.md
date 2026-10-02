@@ -8,8 +8,11 @@ The design is `docs/effects-scoping.md`, and its stages are decision 48's:
 - S2: named capabilities and platform bundles (#155, #156);
 - S3: recursion, drivers, layers and `|>` (#157, #158): recursion as the fixed point of a
   generator, its drivers `bounded` and `deep`, and layers as transformers of the generator have
-  landed ([Recursion](../recursive-data.md#recursion)); `memo` and `|>` are planned;
-- S4: `Yield`, projections and stored callbacks (#159, #160, #161);
+  landed ([Recursion](../recursive-data.md#recursion)), and so has `|>`
+  ([Passing computations](../effects.md#passing-computations)); `memo` is planned;
+- S4: `Yield`, projections and callbacks (#159, #160, #161): `Yield` and callbacks passed to
+  functions over computations have landed ([Generators](../generators.md),
+  [Passing computations](../effects.md#passing-computations)); stored callbacks are planned;
 - S5: with #52, suspension with input and cancellation (#162).
 
 A handler is defined by its elaboration into core terms: a capability lent by `withbor`, a

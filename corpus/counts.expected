@@ -28,9 +28,11 @@ capture-store-cancel-hand 2 0 0 # equal to the kernel program store-cancel
 capture-take-hand 1 0 0 # the producer's cell; the kernel program take adds its count's node and its handler's two closures
 capture-tick-hand 0 0 0 # equal to the kernel program tick-native
 cb-each 2 0 0 # the two cells; a callback is a closure value, its call direct
+cb-lib 5 0 0 # the two cells and the three buffers
 cb-parser 24 0 0 # the three token lists; the error callback passed down adds nothing
 cb-pass-on 3 0 0 # the three cells; a callback passed on is not wrapped
 cb-pipe 0 0 0
+cb-policy 2 0 0 # the two cells; three layers over a computation add none
 cb-recursion 2 0 0 # the two cells
 cb-retry 2 0 0 # the two cells: `retry` adds none, failing or not
 cb-shared 1 4 0 # the counter; the indirect calls are the state-passing answers of `flipper`, a handler with a state

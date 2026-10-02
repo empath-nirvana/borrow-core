@@ -1,0 +1,41 @@
+effect 17:1: Fail: raise (ctl, affine, abortive)
+effect 19:1: Log: note
+effect 21:1: Count: tick
+row 24:1: retry: Fail[E]
+row 31:1: flaky: Count, Log, Fail[i32]
+lowering 20:1: handler tally (Log): call — each clause resumes once, in tail position (fun): a direct call on the lent state (withswap), with no allocation and no dispatch
+lowering 22:1: handler count (Count): call — each clause resumes once, in tail position (fun): a direct call on the lent state (withswap), with no allocation and no dispatch
+lowering 24:1: copy `retry__n3_count_tally_i32_k0_Count_Log_p2`: `retry` for count, tally, the site 3 of `Fail`, the callback at `body` (provided Fail at its port); each callback a closure value, its environment a type parameter
+lowering 24:1: copy `retry__n1_count_i32_i32_k0_Count_p2`: `retry` for count, the site 1 of `Fail`, the callback at `body` (provided Fail at its port); each callback a closure value, its environment a type parameter
+lowering 24:1: copy `retry__n4_count_tally_i32_k0_Count_Log_p2`: `retry` for count, tally, the site 4 of `Fail`, the callback at `body` (provided Fail at its port); each callback a closure value, its environment a type parameter
+lowering 26:11: with to_result (Fail): a handler, the static name 2; raise abortive: a branch per call (final ctl)
+lowering 26:11: with to_result: every operation abortive, so its clauses run after the handler, in the scope of the `with`
+lowering 28:35: body: called outside a handler of the Fail it is provided, under a site of its port 2 whose clauses raise again at the handler around it (R2c)
+lowering 28:35: with fx_relabel_Fail: every operation abortive, so its clauses run after the handler, in the scope of the `with`
+lowering 28:35: with fx_relabel_Fail (Fail): a handler, the static name 2; raise abortive: a branch per call (final ctl)
+lowering 31:1: copy `flaky__count_tally_n2`: `flaky` for count, tally, the site 2 of `Fail`
+lowering 40:11: with count (Count): a borrow block of its state (lent from `c`); its operations are calls of the clauses on the capability
+lowering 40:32: with tally (Log): a borrow block of its state (lent from `l`); its operations are calls of the clauses on the capability
+lowering 40:53: with to_result: every operation abortive, so its clauses run after the handler, in the scope of the `with`
+lowering 40:53: with to_result (Fail): a handler, the static name 4; raise abortive: a branch per call (final ctl)
+lowering 41:11: with count (Count): a borrow block of its state (lent from `c`); its operations are calls of the clauses on the capability
+lowering 41:32: with tally (Log): a borrow block of its state (lent from `l`); its operations are calls of the clauses on the capability
+lowering 41:53: with to_result (Fail): a handler, the static name 3; raise abortive: a branch per call (final ctl)
+lowering 41:53: with to_result: every operation abortive, so its clauses run after the handler, in the scope of the `with`
+lowering 42:11: with count (Count): a borrow block of its state (lent from `c`); its operations are calls of the clauses on the capability
+lowering 42:32: with to_result (Fail): a handler, the static name 1; raise abortive: a branch per call (final ctl)
+lowering 42:32: with to_result: every operation abortive, so its clauses run after the handler, in the scope of the `with`
+call 26:11: body → the callback's code, a closure value: called with its environment and capabilities, which it hands back
+call 28:35: raise (Fail) → abort[3.0], handled by the caller at 24:1: abortive, it never resumes
+call 28:35: body → the callback's code, a closure value: called with its environment and capabilities, which it hands back
+call 28:35: raise (Fail) → abort[4.0], handled by the caller at 24:1: abortive, it never resumes
+call 28:35: raise (Fail) → abort[1.0], handled by the caller at 24:1: abortive, it never resumes
+call 32:11: tick (Count) → `count__tick`, on the state of `count`
+call 33:3: note (Log) → `tally__note`, on the state of `tally`
+call 34:14: raise (Fail) → abort[2.0], handled by the caller at 31:1: abortive, it never resumes
+call 40:70: retry → `retry__n4_count_tally_i32_k0_Count_Log_p2`, passing the capabilities; the callback at `body` a closure value (its code and its environment): one body per profile
+call 40:83: flaky → `flaky__count_tally_n2`, passing the capabilities
+call 41:70: retry → `retry__n3_count_tally_i32_k0_Count_Log_p2`, passing the capabilities; the callback at `body` a closure value (its code and its environment): one body per profile
+call 41:83: flaky → `flaky__count_tally_n2`, passing the capabilities
+call 42:49: retry → `retry__n1_count_i32_i32_k0_Count_p2`, passing the capabilities; the callback at `body` a closure value (its code and its environment): one body per profile
+call 42:72: tick (Count) → `count__tick`, on the state of `count`

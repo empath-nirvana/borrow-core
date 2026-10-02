@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 0.38 · 2026-10-01
+Version 0.39 · 2026-10-01
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -1015,7 +1015,7 @@ elaborate to the same term.
 - Destructors for host resources, which perform I/O and can fail (§12 Open).
 - `main` with borrowed capabilities (lifetime-parametric externs) is not provided.
 - `Args`, `Env`, `Exit`, `Fs` and the rest are designed only.
-- `|>` pipelines (#59) are not provided.
+- `|>` is §22's (decision 50).
 
 ---
 
@@ -1438,7 +1438,7 @@ pipeline's finishing value and residual: each adapter would pass them on, the `f
 the finishing value, and the residual would have to hand back an owner that has a destructor. A
 `yield` inside a borrow block is rejected (§15, *Self-reference*). A div
 function called with a borrow that is not lent from a place (a view, a field, a second borrow)
-holds it across its loop. `|>` is not provided (§11 Open).
+holds it across its loop.
 
 Programs: `corpus/axes/borrow-across-loop.bc`, `corpus/lend-mut.bc`, `lend-config.bc`,
 `lend-pipeline.bc` (0 allocations, dispatched calls and copies beyond the table's own),
@@ -1682,9 +1682,8 @@ and §19 is preserved: every construct of this entry is elaborated into core bef
   input, or one that writes as it yields, is rejected by the checker
   (`corpus/pending/gen-digits.bc`, `gen-lines.bc`, `gen-lazy.bc`, `gen-adapters-io.bc`). It needs
   a cancel that hands back a residual, or a `linear ctl` iteration effect (no `break`).
-- **Callbacks that yield** need effectful callbacks (#161): a closure that performs an operation
-  is a computation passed as a value (`corpus/pending/yield-callback.bc`). So do adapters as
-  handlers over a computation (`|>` at a computation parameter).
+- **Callbacks that yield** are §22's (`corpus/yield-callback.bc`). Adapters as handlers over a
+  computation, a generator passed at a computation parameter, are not written.
 - **A total consumer of a generator that loops.** A `for` over one is div: its turns are
   unbounded. A finite source written as data, or a sized iterator (§16), is total, and so is a
   generator whose body does not loop.
@@ -2161,8 +2160,9 @@ puts the destructors of the slots the rest uses in a `[then]` finaliser. A value
 destructor (§12, class 3) live across such a binding is rejected, naming it.
 
 **Not provided**, each rejected with a message that says so: an operation inside a closure or
-block that is not run in place, and a function with a row passed as a value (effectful callbacks,
-#161; for a fold's algebra that raises, K4 below); a lend `&mut x` in the arguments of a call that
+block that is not run in place nor passed at a function's computation parameter (§22), and a
+function with a row passed as a value elsewhere (a stored callback, R6 of decision 57; for a fold's
+algebra that raises, K4 below); a lend `&mut x` in the arguments of a call that
 threads a capability; an operation of an answering effect inside a clause of an answering handler;
 a function with a row whose written result is a computation (a loop); a second instance of
 an effect in a row; type parameters on an answering effect; an effect with both kinds of operation;
@@ -2245,8 +2245,8 @@ No change to `CDerives`, the relation, the machine or the checker's rules: contr
 
 - Named instances and lexical resolution between two instances of an effect (S2, #155); bundles
   (#156).
-- Effectful callbacks, stored or passed (#161), and with them functions over computations
-  (`retry`, a handler that re-runs its body, and `|>` at a computation parameter).
+- Effectful callbacks passed at a function's computation parameter, functions over computations
+  and `|>` are §22's; stored callbacks are open there.
 - An operation that answers a borrow into the handler's state (#160); `lookup` answers a copy.
 - A handler parameter that is not `!` is the handler's state (§21); its native lowering (§19
   *Open*).
@@ -3275,7 +3275,172 @@ is typed by the existing rules (`bounded_fix`, `[handle]`, `[let]`); `fundamenta
 - Effects under `deep` and generic recursion (§20 *Open*; separate, per the spike).
 - Recursion through a site (decision 57's parser, `corpus/reject/rec-through-site.bc`): a level's
   own handler is a site per level, which static names cannot give (generative names, L2, #173).
-  Recursion through values: a member passed as a value is a function with a row (#161).
+  Recursion through values is §22's, with an answering capability open there.
+
+---
+
+## 22. Entry 21 — functions over effectful computations (R2a)
+
+### Motivation
+
+A function over a computation runs code it is given: `retry` reruns a computation that raises,
+`each` calls a callback at each element, a policy wraps a reconciler in retries and logging. Until
+this entry a callback could not perform an effect: an operation inside a closure not run in place
+was rejected (§18), and the functions of a library had to be written once per effect. This is R2a
+of decision 57 (`docs/effect-polymorphism.md` §5.1–§5.5, §5.8): a callback is a closure value, its
+code and its environment, passed to one body of the function per profile of what it performs, its
+effects resolved where it was written unless the function provides them. Everything is elaboration
+into §19's `handle`, `perform` and `abort` and §2's `!` code; the kernel, the checker's rules and
+the proofs are unchanged.
+
+### Computation parameters (R1)
+
+A parameter of a `fn` whose written type is a function type, `!(A => B)` or `A => B`, is a
+**computation parameter**. Its **provided row**, written after its type, is what the function
+serves for the callback passed there:
+
+    fn retry[A, E](body: !(1 => A) with Fail[E], n: i32) -> A with Fail[E] = …
+
+Everything else the callback performs **tunnels**: it goes to the handlers where the callback was
+written, through the function. A provided effect is a control effect (an answering one is not
+provided); each has a **port**, a static name per (function, effect). A function's own row is
+inferred with each computation parameter performing its provided row: `retry`'s last attempt,
+outside its own handler, puts `Fail` in `retry`'s row.
+
+### The closure value (R2a)
+
+At a call `h(…, c, …)` that passes a callback `c` at a computation parameter `f`, where `c`
+performs an effect or `f` provides one:
+
+- **The code.** `c`, a closure (or a function with a row, as the closure that calls it), is
+  elaborated where it is written into `!` code that takes its capabilities and its environment
+  first and hands them back first:
+
+      !(∀'k₁ … 'kₙ. caps ⊗ (Env ⊗ A) ⊸ F[ports ∪ tunneled] (caps ⊗ (Env ⊗ B)))
+
+  `caps` are the capabilities of the answering effects it tunnels (a `for`'s threaded variable
+  among them), each at a lifetime of the code's own, in the order of their effects' names; its
+  row has its provided effects at `h`'s ports and its tunneled control effects at the sites where
+  it was written, in the order of their names. Its lifetimes and its parameter's type are filled
+  where the types are known (`VSugar.cbCode`).
+- **The environment** is the tuple of the variables the callback captures, rebuilt at each
+  terminal of the code and bound again after the call. The code of a computation parameter it
+  captures is `!` code, so the callback's own code captures it, and its environment does not. A
+  callback that binds a captured variable again (an assignment, or a shadowing `let`) is rejected:
+  its environment would come back from the call but not out of the blocks around it.
+- **The copy.** The call is a call of `h`'s copy for what serves its row and its callbacks'
+  tunneled rows here (as §18's copies), and for each callback's profile: its tunneled effects and
+  its ports. The copy takes the capabilities of that row and each callback's environment first,
+  and its parameter at `f` has the code's type; each environment's type is a type parameter of the
+  copy, so **one body serves every callback of the profile**, whatever it captures. The copy is
+  checked once per instance of those type parameters (§15's generic functions), as §5.8 of the
+  design says: a typing instance per environment type and per assignment of names, one body per
+  profile otherwise. A callback that performs nothing at a parameter that provides nothing is
+  passed as written, to the function as written.
+- **The argument passes through the copy's identity** (`h__…__id`, the copy's own lifetimes and
+  parameter type), so that the code, generic in its lifetimes, is checked against the parameter's
+  type as the copy states it: the checker compares types by `=` (Incompleteness 2 of
+  `Frontend/README.md`), and a binding would synthesize the code's type with binders of its own.
+
+### Calls of a computation parameter
+
+In the copy, `f(v)` calls the code on the capabilities and the environment the callback's row
+needs and `v`, and binds them again after. `with E` around a call of a computation parameter
+provided `E` is named by its port, so the callback's operations reach it; an operation of `h`
+itself inside it reaches it too, lexically. A call outside every handler of `h` for a provided
+`E` runs under a site of the port whose clauses perform each operation again at the handler
+around the call (R2c): `E`'s operations must be abortive, since a clause that resumes would hold
+its continuation across an operation (§15, *A body that performs a control operation*).
+
+**Re-lending (R2e).** A `with` of a control handler lends each capability its body uses again for
+the body (§18); a callback's capabilities are among them, so an attempt that aborts gives them
+back and the next attempt has them. A callback's environment is not lent: it is passed in, and
+holds what the callback captures, which it does not bind again.
+
+**Passing on.** A computation parameter passed at another function's computation parameter is
+passed as it is: its code (η-expanded at its lifetimes, so that it is checked against the
+parameter's type), its environment and its capabilities. The copy made for it keeps its ports for
+the effects the callee provides it, and names its handlers of them so; a port of an effect the
+callee does not provide is served, around the call, by the caller's handler of it or a site of the
+port that raises again there (R2c). Nothing is wrapped per level.
+
+### `|>` (R4)
+
+`e |> g(a, …)` is `g(e, a, …)`, the piped value first (decision 50); a chain applies innermost
+first. When `g` is a handler (answering or control), a heap driver or a layer, it is
+`with g(a, …) { e }`; when `g`'s first parameter is a computation parameter, `e` is passed
+suspended, `g({ _ -> e }, a, …)`. The pipe is resolved by `Frontend.Elab.Effects`, which knows
+which `g` is (`VSugar.pipe`).
+
+### Second class (R5)
+
+A computation parameter is called, or passed at a computation parameter; it is not returned,
+stored, or bound to a value, and a closure that calls it and is not itself passed at a computation
+parameter is rejected. A closure is a borrowed thunk: its creator owns its environment, below the
+callee on the stack, so two callbacks, and the callee, may use one stateful capability in turn
+(`sharedUnit_safe`'s shape, not `twoBlocks_refused`'s).
+
+### Recursion
+
+A recursive group (§21) whose member is passed a callback is copied for its profile: the member's
+parameters of the same name in every member are passed that callback, the generator holds its
+code (`!` code, which a `!` closure may hold) and is made in the member's copy, and the record the
+fixed point is taken at holds `()` in its place. A call of a member passes its callbacks on as they
+are; a recursion that passes a new callback at a level is rejected. A member that passes a
+callback calling the group (recursion through a value) has the generator made in its copy too:
+the callback holds the self-reference in its environment.
+
+### Lowering
+
+Nothing is lowered specially: the code is a `!` closure, a stack value of the words it captures
+(none for a closure, the code of a computation parameter for one that calls it), called directly
+when the flow finds one code at the call and through the type's dispatcher otherwise (`Backend`);
+the environment is a tuple; re-lending is §18's borrow blocks. `corpus/cb-retry.bc`: 2 allocations
+(the program's two cells), whether the computation fails or not; every program below makes no
+dispatched call beyond its handlers' own.
+
+### Programs
+
+`corpus/cb-retry.bc` (target 1 of #161), `cb-pipe.bc` (`|>`), `cb-each.bc` and `yield-callback.bc`
+(callbacks over data and generators that log, raise and yield), `cb-shared.bc` (a capability and a
+handler with a state shared with the caller), `cb-recursion.bc` (a recursion passing its callback
+on, a callback calling back into its function, recursion through a value), `cb-parser.bc`
+(decision 57's parser, its error callback passed down), `cb-pass-on.bc` (callbacks two levels
+deep), `cb-policy.bc` (policies composed), `cb-lib.bc` (`lib/callbacks.bc`: `each`, `fold`,
+`map_buf`, `filter_buf`, `attempt`, `retry`, each written once); rejects `corpus/reject/cb-*.bc`;
+pending `corpus/pending/cb-*.bc`.
+
+### Baseline
+
+No change to `CDerives`, the relation, the machine or the checker's rules. Every elaborated form
+is typed by the existing rules; `fundamentalC`, `adequacyC`, `fundamentalD` and `adequacyD` keep
+their statements and cover every elaborated program.
+
+### Open
+
+- **Stored callbacks (R6)**: a callback returned, stored in data or bound to a value
+  (`corpus/pending/cb-stored.bc`, `cb-policy-value.bc`). Its type must state its row, which the
+  surface cannot write yet, and a call of a value from data is resolved by its type, which the
+  effects pass does not have; data captures need #9.
+- **A callback whose parameter is a computation** (`corpus/pending/cb-higher-rank.bc`): the
+  inner callback's profile and environment type are known only in the callee's copy, and its code,
+  generic in its lifetimes, would be an argument of a call of a local code value.
+- **Recursion through a value with an answering capability**
+  (`corpus/pending/cb-recursion-caps.bc`): the self-reference's type is then generic in the
+  capabilities' lifetimes, and carried in an environment it is compared without α-conversion of
+  lifetime binders; #9 would let the code capture it instead.
+- **Codata with effectful observations** (§5.9 of the design; `corpus/pending/cb-codata.bc`):
+  computation parameters per observation, and object types at the surface (#141).
+- **A provided answering effect** (R2d), and **a provided effect that resumes**, called outside
+  the callee's handlers of it (R2c): `rename`, or inlining (R2b), not built.
+- **Two ports of one effect under one handler**: rejected; `rename` would serve it.
+- **A callback over a loop that drains** a stored generator, logging or raising handled outside:
+  a div function with a capability, and a handler around a div computation, are not provided for
+  any code (§14, §21 *Open*); over data, and yielding, it runs.
+- **Sharing code across typing instances** (§5.8 of the design): the copies per assignment of
+  names and per environment type are separate bodies today; the renaming lemma, and a backend that
+  shares instances that differ in types only, are not built. Inlining a known callback (R2b) is not
+  built.
 
 ---
 
@@ -3324,6 +3489,11 @@ Entry 20 (§21) is implemented in `Frontend/Elab/Effects.lean` (`groupCopy`, `se
 `withCtl`, `resumeCall`) and `Frontend/Sugar.lean` (`hndCtlC`, `HInfo.after`), with no change to
 `CDerives`; `Backend/Clos/Capture.lean` loses `unwindClause?`.
 
+Entry 21 (§22) is implemented in `Frontend/Parser.lean` (provided rows, `|>`),
+`Frontend/Elab/Effects.lean` (`cbCall`, `cbCode`, `cbCopyOf`, `cbParamCall`, `groupCopy`'s callbacks,
+`pipeOf`), `Frontend/Sugar.lean` (`cbCodeAt`, the copies' identities in `genericCall`, `matchC` over
+rows) and `lib/callbacks.bc`, with no change to `CDerives`.
+
 Entry 18 (§19) is in progress (#186). Stages 1–3 are implemented:
 - the machine: `perform`, `raise`, `hnd`, `ubind`, `ccatch` and `cfin`, and their steps, in
   `Paper/`;
@@ -3355,6 +3525,14 @@ with every kernel program at every stage (*Lowering*).
 ---
 
 ## Changelog
+
+- **0.39** (2026-10-01) — §22 (#161, R2a of decision 57): functions over effectful computations. A
+  parameter of a function type is a computation parameter, with a provided row written after its
+  type; a callback passed there is a closure value, its `!` code and its environment, given to one
+  body of the function per profile, its provided effects at the function's ports and the rest
+  resolved where it was written. `e |> g(a, …)` (decision 50). Computation parameters are second
+  class, passed on as they are, and passed down a recursion. `lib/callbacks.bc`. §14, §15, §18, §21
+  *Open* updated; a `return` in a counted loop of a function at a row.
 
 - **0.38** (2026-10-01) — §21 (#229, #216): closure conversion at the seams. A recursive group is
   the bounded fixed point of its generator, taken at the record of its members and called

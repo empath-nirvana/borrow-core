@@ -106,6 +106,13 @@ Where draft 1 is silent or ambiguous about parsing, the parser does the followin
     `withloadu[@a, 'x, A, B, [ROW]]`, `slice_borrow_mut_u['x, @b, A, B, [ROW]]`,
     `slice_borrow_imm_u['x, @b, A, B, [ROW]]`. `perform`, `abort`, `handle_with`, `unwind` and the
     six constants are reserved (`handle` is not: the corpus names a `def` so).
+19. **Computation parameters and `|>` (SPEC §22).** A `fn` parameter's type may be followed by its
+    provided row, `x: !(A => B) with E₁, E₂[T]`: the effects the function serves for the callback
+    passed there. A `with` after a parameter's type is read as one, up to a `,` followed by the
+    next parameter's name or the `)`. It is printed as a written row is, before the `def`, the
+    parameter named: `with[x: E₁, E₂[T]] fn def …` (`Mark.provides`). `e |> g(…)` is the token
+    `|>` (`VSugar.pipe`, its operands a pair), associating to the left, below every operator; the
+    effects pass resolves it (`Frontend/Elab/Effects.lean`, `pipeOf`).
 
 ## The checker (`Frontend/Check/`)
 

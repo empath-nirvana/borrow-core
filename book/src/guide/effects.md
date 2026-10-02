@@ -145,9 +145,91 @@ was inside ends, the place going back to its owner. A value with no destructor (
 capability) cannot be live where an abort may leave: the checker names it. A `raise` in the body
 of a counted `for` leaves the loop by its exit and is raised again after it.
 
+## Passing computations
+
+A function may take a computation: a parameter of a function type, `body: !(1 => A)`, is a
+**computation parameter**, and a closure or a function passed there may perform effects (SPEC §22,
+decision 57). What it performs goes to the handlers where it was written, through the function
+that runs it, unless the parameter's type says the function **provides** it: `body: !(1 => A) with
+Fail[E]` says that `retry` handles the `Fail` of what it is given.
+
+```bc
+-- answer: ((inl i32[300], inr i32[5]), i32[5])
+include fail
+
+effect Count { fn tick() -> i32 }
+handler count(mut n: i32): Count = { tick() = { n = n + 1; n } }
+
+-- Runs `body` at most `n` times, until it does not raise; the last error is raised.
+fn retry[A, E](body: !(1 => A) with Fail[E], n: i32) -> A with Fail[E] =
+  let r = for i in 1..n {
+    match body() |> to_result { inl a -> break (inl a : A + 1) | inr e -> () }
+  } else { (inr () : A + 1) };
+  match r { inl a -> a | inr u -> body() }
+
+-- Fails until its `k`-th tick.
+fn flaky(k: i32) -> i32 with Count, Fail[i32] =
+  let t = tick();
+  if t < k { raise(t) } else { t * 100 }
+
+main -> ((i32 + i32) * (i32 + i32)) * i32 =
+  let c = alloc(0);
+  let k = 3;
+  let r = with count(&mut c) {
+    let a = retry({ u -> flaky(k) }, 5) |> to_result;
+    let b = flaky(10) |> retry(2) |> to_result;
+    (a, b)
+  };
+  (r, free(c))
+```
+
+The first computation fails at ticks 1 and 2 and answers at 3; the second fails at both of its
+attempts, and its second error, at tick 5, reaches the caller.
+
+- **`|>`** puts its left side first (decision 50): `e |> retry(2)` is `retry(e, 2)`, `e` passed as
+  a computation since `retry`'s first parameter is one, and `e |> to_result` is
+  `with to_result { e }`, since `to_result` is a handler. A chain applies innermost first.
+- **The callback is a closure value**: its code, `!` code that takes its capabilities and the
+  variables it captures (`k`, its **environment**) first and hands them back, and the environment
+  itself, passed beside them. `retry` is elaborated once for each **profile** of the callbacks it
+  is given (what they perform, and what serves it), not once per callback: both calls here are
+  calls of one copy of `retry` for `Count`, its parameter the callback's code.
+- **What `retry` provides is at its port.** The callback's `raise` goes to `retry`'s
+  `to_result`, a handler named by `retry`'s port for `Fail`; the last attempt, outside it, raises
+  again at the caller's handler. The callback's `tick` goes to `count` in `main`: its capability
+  is lent again to each attempt, so an attempt that raises gives it back, and the next attempt
+  sees its ticks.
+- **A computation parameter is second class**: it is called, or passed on at another function's
+  computation parameter, and never stored, returned or bound to a value. A callback captures
+  variables it does not bind again: state it keeps belongs in a handler's capability, which it
+  may share with its caller and with other callbacks.
+
+The library's `lib/callbacks.bc` has `each`, `fold`, `map_buf` and `filter_buf` over counts, and
+`attempt` and `retry`, each written once:
+
+```bc
+-- answer: ((i32[20], i32[10]), inr i32[3])
+include callbacks
+
+effect Log { fn note(x: i32) }
+handler tally(mut n: i32): Log = { note(x) = { n = n + x; () } }
+
+fn check(x: i32) -> i32 with Fail[i32] = if x > 2 { raise(x) } else { x }
+
+main -> (i32 * i32) * (i32 + i32) =
+  let l = alloc(0);
+  let q = with tally(&mut l) { fold(5, 0, { (s, i) -> note(i); s + i * 2 }) };
+  let r = fold(5, 0, { (s, i) -> s + check(i) }) |> to_result;
+  ((q, free(l)), r)
+```
+
+`fold` logs and raises through the same source: a copy for the logging callback, one for the
+raising one, and `fold` itself for a callback that does neither.
+
 ## Not yet
 
-An operation inside a closure (a callback passed or stored, or a fold's algebra), functions over
-computations (`retry`, `|>` into a handler), named instances when two handlers of one effect are
-in scope, and operations that answer a borrow into the handler's state are later stages (SPEC §18
-*Open*).
+A callback stored in data, returned, or bound to a value (R6 of decision 57), a callback whose
+parameter is itself a computation, and codata whose observations perform effects are not built
+(`corpus/pending/cb-*.bc`); an operation inside a fold's algebra waits for K4. Named instances
+when two handlers of one effect are in scope, and operations that answer a borrow into the
+handler's state, are later stages (SPEC §18 *Open*).
