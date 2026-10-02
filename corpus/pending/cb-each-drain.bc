@@ -1,0 +1,35 @@
+-- pending: a div function with a capability (§14), and a handler around a div computation (§21 Open)
+-- A callback over a generator that it drains (target 3 of #161; SPEC §22): `each` pulls a stored
+-- generator and calls its callback at each element, and the callback logs. Over data the same
+-- callbacks log and raise (`corpus/cb-each.bc`, `cb-lib.bc`), and over a generator they yield
+-- (`corpus/yield-callback.bc`).
+--
+-- Blocked by: draining a stored generator is a loop, so `each`'s copy is div (§14), and it holds
+-- `Log`'s capability across its loop, which a div function cannot (a lend that spans observations,
+-- §14's borrow scopes over loops: here the copy's capability). A callback that raises instead hits
+-- the other limit: a handler around a div computation is not provided for any code (§21 Open).
+-- Neither is about callbacks: `for x in g { note(x) }` in a function is rejected the same way.
+--
+-- Once it lands: i32[100]: 0 + 10 + 20 + 30 + 40 noted.
+--
+-- now: 28:1: this borrow block's result has type `mut 'fx_l_log i32 * 1 * 1`, which has the block's lifetime `'fx_l_log`: nothing borrowed at `'fx_l_log` outlives the block. When the body loops, each step borrows the place again, so the loop cannot keep what is borrowed before it (SPEC §14, borrow scopes over loops)
+
+include yield
+include fail
+
+effect Log { fn note(x: i32) }
+handler tally(mut n: i32): Log = { note(x) = { n = n + x; () } }
+
+fn range(lo: i32, hi: i32) -> 1 with Yield[i32] =
+  let mut i = lo;
+  while i < hi { yield(i); i = i + 1 };
+  ()
+
+fn each(g: U (pull i32 1 1), f: !(i32 => 1)) -> 1 =
+  for x in g { f(x) };
+  ()
+
+main -> i32 =
+  let l = alloc(0);
+  with tally(&mut l) { each(range(0, 5), { x -> note(x * 10) }) };
+  free(l)

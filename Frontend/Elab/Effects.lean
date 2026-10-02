@@ -907,8 +907,6 @@ structure Cx where
   resume : Option ResumeK := none
   /-- In a copy made for callbacks (SPEC §22): its computation parameters. -/
   cbs : List CbParam := []
-  /-- In a copy made for callbacks: the ports of the function's provided effects, by effect. -/
-  ports : List (String × Nat) := []
 
 /-- What a call of `g` performs here: its row, and for a member of a recursive group the rows of
 the layers its recursion runs under. -/
@@ -2489,8 +2487,7 @@ def cbCopyOf : Nat → Env → Span → String → Decl → TySubst → List Ins
     let allCaps := caps ++ envCaps
     let effs' := envCaps.map (·.eff) ++ envMut.map (·.1) ++ env.envEffs
     let env' : Env := { env with fns := cbF ++ env.fns, inLayers := [], envEffs := effs' }
-    let portsAll := (cbps.flatMap (·.ports)).eraseDups
-    let cx : Cx := { env := env', caps := allCaps, sites := ss', fnCaps := allCaps, cbs := cbps, ports := portsAll }
+    let cx : Cx := { env := env', caps := allCaps, sites := ss', fnCaps := allCaps, cbs := cbps }
     let body ← trC k cx allCaps true f.body
     let f' ← takeCaps dsp allCaps { f with P := tupleTy dsp Ps } body
     let (A', V') := f'.build dsp (env.rowOf ss')
@@ -2669,13 +2666,12 @@ def groupCopy : Nat → Env → Span → String → List Inst → List String �
     let effs' := envCaps.map (·.eff) ++ envMut.map (·.1) ++ env.envEffs
     let env' : Env := { env with envEffs := effs' }
     let cx : Cx := { env := env', caps := csP, sites := ss, fnCaps := csP, recSelf := some rs }
-    let portsAll := (cbps.flatMap (·.ports)).eraseDups
     -- The generator's record: each member's body, taking the environment first.
     let mut fields : List Comp := []
     for ((_, f), j) in G.members.zipIdx do
       let pos := (cbOf[j]?).getD []
       let cxj : Cx := if !pos.isEmpty then
-          { cx with env := { env' with fns := cbF ++ env'.fns }, cbs := cbps, ports := portsAll }
+          { cx with env := { env' with fns := cbF ++ env'.fns }, cbs := cbps }
         else cx
       let body ← trC k cxj csP true f.body
       -- A member passed the callbacks takes `()` in their place, and its parameters are bound with
