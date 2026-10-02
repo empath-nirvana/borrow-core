@@ -4,7 +4,8 @@
 -- (`Core/AffPrograms.lean`, `d_passF`, at every depth). `outer` reborrows it at a shorter `'v`
 -- (`borrow mut m`, Rust's `&mut *m`) for one call of `middle`, then calls `middle` again through
 -- `m` itself; `middle` calls `inner` twice; `inner` calls the closure. Every call reaches the one
--- closure state: the counter from `aff-counter.bc`, which adds each argument to its cell.
+-- closure state: the counter from `aff-counter.bc`, which adds each argument to its cell, bounded
+-- by `main`'s own lifetime (SPEC §23).
 --
 -- Answer: i32[1030610], and `live 0`. The four calls add 1, 2, 3 and 4 to one counter starting
 -- at 0: through the reborrow `middle` answers 1 then 3 (`103`), and through `m` 6 then 10
@@ -14,13 +15,13 @@
 include aff
 
 fn counter<'c>(start: i32) -> box 'c Aff[i32, i32]<'c> =
-  boxed['c] aff_new[ref i32, i32, i32]['c](alloc(start), !thunkv fun (s : ref i32) ->
+  aff_new_boxed[ref i32, i32, i32]['c](alloc(start), !thunkv fun (s : ref i32) ->
     < fun (a : i32) ->
         cx <- return (swap[i32, i32] s i32[0]);
         let (c, x) = cx;
         cu <- return (swap[i32, i32] c (x + a));
         let (c1, u) = cu;
-        return (x + a, boxed['c] c1),
+        return (x + a, c1),
       n <- return (free[i32] s); return () >)
 
 fn inner<'a, 'c>(m: mut 'a (box 'c Aff[i32, i32]<'c>), k: i32) -> mut 'a (box 'c Aff[i32, i32]<'c>) * i32 =
@@ -37,14 +38,8 @@ fn outer<'a, 'c>(m: mut 'a (box 'c Aff[i32, i32]<'c>)) -> i32 =
   x * 10000 + y
 
 main -> i32 =
-  let d = alloc(0);
-  let r = borrow mut d { 'x, e ->
-    let c = alloc(counter ['x](0));
-    let (c, t) = borrow mut e { 'y, e2 ->
-      let t = borrow mut c { 'w, m -> outer(m) };
-      (c, t) };
-    let k = free(c);
-    aff_close(k);
-    t
-  };
-  free(d) + r
+  let c = alloc(counter(0));
+  let t = borrow mut c { 'w, m -> outer(m) };
+  let k = free(c);
+  aff_close(k);
+  t

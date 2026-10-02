@@ -416,9 +416,15 @@ def locElem (n : Nat) : LM Nat := do
   | .loc a _ => pure a
   | _ => throw "flat IR: not a location type"
 
+/-- The cells of the location type `n` take no words: every contents their class holds is of
+width `0` (`1`, a closure with nothing captured), and none is a byte. -/
+def zeroCell (T : Types) (n : Nat) : Bool := T.cellWords n == 0 && !T.byteCell n
+
 def lowerPrim : Op → List Var → Dest → LM (List Stmt)
   | .alloc, [v], d => do
       let some n := (← T).cons[v]? | throw "flat IR: an untyped cell"
+      -- A cell of no words allocates nothing: its address is `0`, never read or written.
+      if zeroCell (← T) n then return ← emit d [.c64 0]
       let ls ← vals v
       let t ← fresh1
       return [.set t (.alloc (.c64 (max 1 ((← T).cellWords n)).toUInt64))] ++
@@ -427,7 +433,9 @@ def lowerPrim : Op → List Var → Dest → LM (List Stmt)
       let a ← locElem (← vty l)
       let p := Exp.loc ((← vals l).headD 0)
       let (s, ls) ← loadCell (← vty l) p (← words a)
-      return s ++ [.free p] ++ (← emit d (locs ls))
+      -- A cell of no words was never allocated, so nothing is freed.
+      let fr : List Stmt := if zeroCell (← T) (← vty l) then [] else [.free p]
+      return s ++ fr ++ (← emit d (locs ls))
   | .load, [l], d => do
       let a ← locElem (← vty l)
       let p := Exp.loc ((← vals l).headD 0)

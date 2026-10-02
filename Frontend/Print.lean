@@ -309,12 +309,14 @@ def Decl.pp : Decl → String
     let params := if ps.isEmpty then "" else "[" ++ ", ".intercalate (ps.map (·.name)) ++ "]"
     let rec mk : Mark → String
       | .none => "" | .total => "total " | .div => "div "
-      | .template m => mk m ++ "fn "
+      | .template m _ => mk m ++ "fn "
       | .row es m => "with[" ++ ", ".intercalate (es.map fun (e, As) =>
           e.name ++ (if As.isEmpty then "" else "[" ++ ", ".intercalate (As.map (VTy.pp · 0)) ++ "]")) ++
           "] " ++ mk m
+    let bounds := if m.bounds.isEmpty then "" else
+      " where " ++ ", ".intercalate (m.bounds.map fun (S, c) => S.name ++ ": '" ++ c.name)
     let mk := mk m
-    mk ++ "def " ++ n.name ++ params ++ " : " ++ A.pp ++ " =" ++ nl 2 ++ V.pp 0 2
+    mk ++ "def " ++ n.name ++ params ++ bounds ++ " : " ++ A.pp ++ " =" ++ nl 2 ++ V.pp 0 2
   | .extern _ n A => "extern " ++ n.name ++ " : " ++ A.pp
   | .main _ C M => "main : " ++ C.pp ++ " =" ++ nl 2 ++ M.pp 0 2
   | .include _ n => "include " ++ n.name

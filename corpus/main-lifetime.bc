@@ -1,0 +1,17 @@
+-- `main`'s own lifetime, `'main` (SPEC §23). `main` runs under it, so a function's lifetime
+-- parameter can be given `'main` by name, and one a call leaves undetermined is `dom`, which is
+-- `'main` at `main`'s top level. `'main` is a borrow of a unit cell, and a cell of `1` takes no
+-- words, so it allocates nothing; nor does the unit cell `u` the program allocates and borrows
+-- itself. Inside a borrow block, `'main` outlives the block's lifetime.
+--
+-- Answer: i32[12], and `live 0`, with no allocation: 7 boxed at `'main` by name, 5 from the
+-- scope over `u`.
+
+fn hold<'c>(n: i32) -> box 'c i32 = boxed['c] n
+
+main -> i32 =
+  let a = hold ['main](7);
+  let u = alloc(());
+  let k = borrow mut u { 'y, m -> let b = hold ['main](5); unbox b };
+  let v = free(u);
+  unbox a + k

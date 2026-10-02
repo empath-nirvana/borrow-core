@@ -1,6 +1,8 @@
 # Strict outlives: where `⊏` costs, and where `⊑` is admissible
 
-Issue #241, a spike. The kernel is unchanged: `Core/`, `Paper/`, `Support/`, `Frontend/` and
+Issue #241, a spike. Its recommendation landed as SPEC §23 (#243): K1, E1, B1 and K2 as §6
+orders them, with K2 at every rule §2.6 lists. What follows describes the kernel before it. In the
+spike the kernel is unchanged: `Core/`, `Paper/`, `Support/`, `Frontend/` and
 `Backend/` are as on `main`. The probes are `experiments/Outlives` (`lake build Outlives`) and its
 programs (`experiments/Outlives/run.sh`).
 

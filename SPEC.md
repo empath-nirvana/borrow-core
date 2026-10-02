@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 0.39 · 2026-10-02
+Version 0.40 · 2026-10-02
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -522,8 +522,10 @@ the list of places (`wpTS_M_frameList`, `Core/SliceFrames.lean`); at `Imm`, one 
 the callback runs at a lifetime below all of them, where every leaf is a leaf of `[M 'x A]`
 because leaf cells are antitone in their lifetime (6.118, 6.114). The callback's result, and at
 `Imm` the payloads handed back, are reboxed at each outer frame's lifetime by 6.60
-(`vC_outlives`): that is what the side conditions on `A` and `B` pay for. The compatibility
-lemmas are `sliceBorrowM_compatX` and `sliceBorrowI_compatX`.
+(`vC_outlives`): that is what the side conditions on `A` and `B` pay for. The side conditions
+are non-strict (§23): 6.60 at `Δ ⊢ A ⊒ @b` gives every stratum below `@bδ`, and the frames are
+taken at `↓@bδ` (`vC_outlivesLe`). The compatibility lemmas are `sliceBorrowM_compatX` and
+`sliceBorrowI_compatX`.
 
 **On a `mut` family** (`ArrayMut @a A`), the element operations, with the terms of their `imm`
 counterparts:
@@ -1648,7 +1650,9 @@ else:
   borrow is shortened to it with `:>`; there is no other solving.
 - **`unbang`** is inserted, before the lifetimes, as for any persistent function.
 
-A type or lifetime that is not determined is an error at the call that names it.
+A type that is not determined is an error at the call that names it. A lifetime that is not
+determined is `dom`, the meet of the lifetimes in scope, or `main`'s own lifetime in `main` (§23);
+with no lifetime in scope outside `main`, it is an error at the call.
 
 ### Lowering
 
@@ -3367,8 +3371,8 @@ whose `close` must dispose of it, and there is no uniform linear ≤ affine coer
 
 **Bounds.** A closure outlives `@c` when its state does (`d_mkBox`); a closure capturing
 `Mut 'x T` is bounded by a lifetime below `'x`, never `'x` (`logState_not_outlives`), and no
-closure outlives anything except through its box (`aff_not_outlives`). Outlives is strict, so a
-closure bounded by `'x` is lent `mut` inside a scope below `'x`.
+closure outlives anything except through its box (`aff_not_outlives`). The box rule of outlives
+is non-strict (§23), so a closure bounded by `'x` is lent `mut` inside `'x`'s own scope.
 
 **Programs** (`Core/AffPrograms.lean`), each one closed `CDerives` derivation run by adequacy at
 every host and by the interpreter: a counter called twice through `Mut` (`counterProg`, 4),
@@ -3394,7 +3398,8 @@ call matches a parameter of type `Aff[A, B]<'c>`.
     type Aff[A, B]<'c> = U (nu X. (A -o F (B * box 'c U X)) & F 1)
 
 `aff_new` (a state and its step; the caller boxes it, `boxed['c] aff_new(s, step)`, at the
-state's type), `aff_call`, `aff_call_mut` (through `mut 'a (box 'c Aff[A, B]<'c>)`),
+state's type), `aff_new_boxed` (the same, boxed by the function itself under the bound `S: 'c`,
+§23), `aff_call`, `aff_call_mut` (through `mut 'a (box 'c Aff[A, B]<'c>)`),
 `aff_close`, `aff_of_fn` (persistent ≤ affine) and `aff_once` (affine ≤ linear). The name `Aff`
 is provisional (decision 60).
 
@@ -3443,16 +3448,158 @@ axioms are `[propext, Classical.choice, Quot.sound]`.
 - **An argument mentioning `X`** (a sink of the codata itself) stays outside `NuOk`.
 - **Surface closure sugar**: a closure over a context elaborated to `aff_new` with the captures as
   the state and their destructors as `close`.
-- **Strict outlives** costs a scope: a closure bounded by `'x` is lent inside a scope below `'x`,
-  and a library function's lifetime parameters are below `top`, so a closure built through
-  `aff_new` is bounded by a lifetime a scope defines.
+- **Strict outlives**: §23 relaxes the box rule and `withbor`'s side condition, gives `main` a
+  lifetime of its own, and bounds a template's lifetime by its type parameters.
 - **Polyvariant flow.** Closures built at two sites that reach one call are dispatched there
   (`aff-higher`).
 - **Linear ≤ affine** is refused by inspection of the derived rules, with `not_hasDtor_lolli` its
   mechanical part; a parametricity statement is not made.
-- A generic function's lifetime parameters are unrelated to the lifetimes in its type arguments,
-  so a template whose body needs one to outlive the other is checked at no instance; `aff_new`
-  returns the closure unboxed for that reason.
+- A generic function's lifetime parameters are unrelated to the lifetimes in its type arguments
+  unless a bound relates them (§23, `where S: 'c`); `aff_new` returns the closure unboxed, and
+  `aff_new_boxed` is the bounded constructor.
+
+---
+
+## 23. Entry 22 — non-strict outlives: the box rule and `withbor`'s side condition; lifetime bounds and `main`'s lifetime
+
+### Motivation
+
+BoLo prints `⊏` in every outlives premise ([TR] p. 2, rows 2.35–2.37). Two of those premises
+cost programs a scope each and protect nothing the model needs (`docs/outlives-strictness.md`,
+#241): the box rule of `Δ ⊢ T ⊐ @a`, and the side condition of `withbor` (Ref → Mut). Relaxing
+them to `⊑` is an **extension** of the calculus, read against the model the paper defines, as
+§4 (Entry 3) is; it is not a correction of the paper, and `Paper/` is unchanged. Two
+elaborations, with no judgment change, remove the rest of the cost in the `aff-*` programs: a
+lifetime of `main`'s own, and lifetime bounds on the type parameters of a generic function. (#243
+calls the four K1, K2, E1 and B1.)
+
+### The outlives judgment
+
+`VOutlivesR Rb Rr` (`Core/Types.lean`) is `[TR]` p. 2's outlives judgment with the box rule's
+lifetime premise `Rb @b` and the `Imm`/`Mut` rules' premise `Rr @b`. It has two instances:
+
+- `VOutlives Δ a` (`Δ ⊢ T ⊐ @a`), with `Rb = (Δ ⊨ @a ⊑ ·)` and `Rr = (Δ ⊨ @a ⊏ ·)`;
+- `VOutlivesLe Δ a` (`Δ ⊢ T ⊒ @a`), with `⊑` at all three rules.
+
+Every `VOutlives` derivation is a `VOutlivesLe` one (`VOutlives.toLe`). `rename`, `subst` and
+`unroll` are proved once, at `VOutlivesR`.
+
+### The box rule
+
+`VOutlives`'s box rule is `[@b] T ⊐ @a` from `Δ ⊨ @a ⊑ @b` (was `Δ ⊨ @a ⊏ @b`). A value of
+`[@b] T` has its resource in `Res_β`, and `Res_β ⊆ Res_α` for `α ⊑ β`, so 6.60 (`vC_outlives`,
+`Core/RelationFacts.lean`) holds with the box case at `α ⊑ β`; every other consumer of
+`VOutlives` reads it through 6.60 or passes it on. `Core/Embedding.lean` maps 2.35's strict
+premise to the non-strict one (`entailsLe_of_entailsLt`). The checker's `outlivesB` takes `leB`
+at a box (`Frontend/Check/Decide.lean`).
+
+The box modality itself stays strict: `[@x] T` is membership in `Res_x`. So `[@x] T ⊐ 'x` holds,
+and a closure bounded by `'x` is lent `mut` inside `'x`'s own scope; `Mut 'x T ⊐ 'x` stays
+refused, and a closure capturing `mut 'x T` is still bounded strictly below `'x`
+(`corpus/reject/aff-outlives.bc`).
+
+### `withbor`'s side condition
+
+The side condition of the borrows that lend a payload `mut` is `∃ @b. Δ ⊨ @b ∧ Δ ⊢ A ⊒ @b`
+(was `Δ ⊢ A ⊐ @b`), at every rule that carries one: `withbor2` and `withbor2U`, and the slice
+borrows `sliceBorrowM`, `sliceBorrowI`, `sliceBorrowMU` and `sliceBorrowIU` at both their payload
+and their result (`Core/Fundamental.lean`). The family borrows (`Family.borrowsMut`) and the
+block borrows (`BlockBorrow.formerMut`) are derived from `withbor2` and take it with it.
+
+The condition reaches each proof through 6.60, as `𝒱⟦A⟧δ ⊧ [@bδ] 𝒱⟦A⟧δ` ([TR] 6.173), and the
+frame rule uses it only to put the payload (and, at a slice, the result) in a stratum that its
+own fresh lifetime lies below. At `VOutlivesLe`, 6.60 gives every stratum strictly below `@bδ`
+(`vC_outlivesLe`), and the frame is taken at `↓@bδ` (`withbor2_compatX`, `Core/Compatibility.lean`;
+`sliceBorrowM_compatX`, `sliceBorrowI_compatX`, `Core/Slices.lean`; the unwinding forms,
+`Core/EffBorrow.lean`). The checker decides `VOutlivesLe` with `leB` at all three rules
+(`outlivesLeB`), and `outlivesWitness` uses it.
+
+### `main`'s lifetime
+
+`main` runs under a lifetime of its own, written `'main`. Its body is elaborated once, with
+`'main` in scope, inside a `mut` borrow of a unit cell allocated before it and freed after
+(`mainLife`, `Frontend/Sugar.lean`); the standard capabilities the body lends are handed back
+beside its result, as a borrow block hands back what it lends. A body whose elaboration names no
+`'main` (`Comp.mentionsLife`, `Frontend/Elab/RenameLife.lean`) is left as it is, since the borrow
+is then not observable. A body that names it has the
+type `F A`.
+
+A lifetime argument that a call of a function does not determine, from its arguments or the type
+expected of its result, is `dom`: the meet of the lifetimes in scope, so at least `'main` in
+`main`'s body. Outside `main`, a call with no lifetime in scope and a lifetime left undetermined
+is an error, as before.
+
+So a library function's lifetime parameter, bounded by `top`, is instantiated at a lifetime the
+program has without a scope of its own, and by the box rule a closure bounded by it is stored and
+lent `mut` in `main`'s body.
+
+**Cells of no words.** `'main` costs nothing at run time, and the mechanism is general: a cell
+whose cell class takes no words (every contents it holds is `1`, or a closure capturing nothing)
+is not allocated, its address is `0` and never read or written, and `free` frees nothing
+(`zeroCell`, `Backend/Flat/Lower.lean`). This is a change of representation in the backend only;
+the source semantics, the interpreter and every golden's output are unchanged.
+
+### Lifetime bounds on type parameters
+
+    fn f[S, …]<'c, …>(…) -> T with … where S: 'c, … = …
+
+A bound `S: 'c` names a type parameter and a lifetime parameter of the function. At an instance
+whose type argument for `S` mentions the lifetimes `'q₁ … 'qₙ` (each a lifetime parameter of the
+instance, §15 *Generic functions*), the instance's binder of `'c` is
+`all 'c < @ /\ 'q₁ /\ … /\ 'qₙ.` (and `Fun 'c < …` around its body), where `@` is the bound
+written for `'c` (`'q₁ /\ … /\ 'qₙ` alone when `@` is `top`). With no lifetime in `S` the bound is
+unchanged. This is a different bound at the kernel's existing `∀'c ⊏ @b`, so the instance is
+checked by the unchanged checker, and `S ⊐ 'c` is checked there, at the instance's types. A
+caller instantiates `'q̄` with its own lifetimes and `'c` with one strictly below their meet,
+which `allE` asks of it (`corpus/reject/aff-bound.bc`). The bounds are kept with the template
+(`Mark.template`) and printed with it, `fn def f[S, …] where S: 'c : A = V`. `where` is a word
+in that position, not a keyword.
+
+`lib/aff.bc` declares `aff_new_boxed[S, A, B]<'c>(s: S, step) -> box 'c Aff[A, B]<'c> where
+S: 'c`, which boxes the closure and every rest itself, and `aff_of_fn` is built on it.
+
+### Programs
+
+| program | what it shows |
+|---|---|
+| `corpus/aff-counter.bc`, `aff-depth.bc` | the closure stored and lent `mut` in `main`'s body, under `main`'s lifetime; built with `aff_new_boxed`, with no `boxed` |
+| `corpus/aff-drop.bc`, `aff-higher.bc` | a closure over a closure, bounded by the same lifetime as the closure it holds |
+| `corpus/aff-coerce.bc` | the coercions at `main`'s lifetime |
+| `corpus/aff-capture.bc` | `logger`'s `'w < 'x`, filled with `dom`, gives `aff_new_boxed`'s bound; its scope `'w` stays (the `Mut` rule) |
+| `corpus/main-lifetime.bc` | `'main` by name, and cells of `1` that allocate nothing |
+| `corpus/borrow-in-scope.bc` | a cell holding `imm 'x i32` lent `mut` inside `'x`'s own scope (the side condition) |
+| `corpus/reject/aff-outlives.bc` | still refused: a closure bounded by the lifetime of the borrow it captures |
+| `corpus/reject/aff-bound.bc` | refused: a lifetime bound's instance called at a lifetime not below the type argument's |
+| `corpus/reject/generic-lifetime-unknown.bc` | refused: a lifetime left undetermined where no lifetime is in scope, outside `main` |
+
+Across the six `aff-*` programs, the scopes opened only to name a lifetime go from 10 to 1, the
+cells written for them from 6 to 1 (`aff-capture`'s, a unit cell), and the `boxed[…]` annotations
+from 18 to 4. Each program allocates one object fewer than before (`corpus/counts.expected`).
+
+### Baseline
+
+`fundamentalC`, `adequacyC`, `fundamentalD`, `adequacyD`, the totality theorems and every result
+of entries 1–21 keep their statements; the proofs change at 6.60's box case, at the derivations
+that supply a side condition (now `.toLe`), and at the side condition's consumers. Nothing in
+`Paper/` or `Support/` changes. The axioms are `[propext, Classical.choice, Quot.sound]`.
+
+### Left as printed
+
+- The `Imm`/`Mut` rules of the outlives judgment where `[]I` reads them: 6.60 fails with them
+  non-strict, since a borrow's own cell is in the relation and not in `Res_α`
+  (`experiments/Outlives`, `not_vC_outlives_le`).
+- The model's strata and the box modality: a stratum whose `mut` cells sit at its own lifetime
+  contains its own predicates (`no_nonstrict_stratum`).
+- The fresh lifetime `'x ⊏ ⊓Δ` of `withbor` and `withload`: a hypothesis the callback receives.
+
+### Open
+
+- **A non-strict `∀` binder**, `∀'a ⊑ @b`: a second binder kind in `LifeCtx` and `Models`. A
+  lifetime bound is strict, so a closure whose state is a closure bounded by `'c` is built with
+  `aff_new` and `boxed['c]` (`aff-drop`'s `nest`, `aff-higher`'s `doubler`).
+- **A lifetime without a cell.** `main`'s lifetime, and `aff-capture`'s scope below `'x`, are
+  borrows of a unit cell, which costs nothing at run time but is written; a rule that opens a
+  lifetime without one was not probed.
 
 ---
 
@@ -3501,6 +3648,13 @@ Entry 20 (§21) is implemented in `Frontend/Elab/Effects.lean` (`groupCopy`, `se
 `withCtl`, `resumeCall`) and `Frontend/Sugar.lean` (`hndCtlC`, `HInfo.after`), with no change to
 `CDerives`; `Backend/Clos/Capture.lean` loses `unwindClause?`.
 
+Entry 22 (§23) is implemented: the outlives judgment and its 6.60 in `Core/Types.lean` and
+`Core/RelationFacts.lean`; the side condition at the borrow rules in `Core/Fundamental.lean`,
+`Core/Compatibility.lean`, `Core/Slices.lean` and `Core/EffBorrow.lean`; the checker's decisions
+in `Frontend/Check/Decide.lean` and `Frontend/Check/Consts.lean`; `main`'s lifetime and the
+lifetime bounds in `Frontend/Sugar.lean`, `Frontend/Parser.lean`, `Frontend/Syntax.lean` and
+`Frontend/Print.lean`; `lib/aff.bc`; cells of no words in `Backend/Flat/Lower.lean`. No change to `Paper/`, `Support/` or `CDerives`'s indices.
+
 Entry 21 (§22) is implemented: the positivity in `Core/Types.lean`, `Core/Relation.lean`,
 `Core/RelationFacts.lean`, `Core/NuRel.lean`, `Core/Computation.lean` and `Core/Nu.lean`; the
 closure in `Core/Aff.lean`, `Core/AffRules.lean` and `Core/AffPrograms.lean`; the checker's
@@ -3539,6 +3693,12 @@ with every kernel program at every stage (*Lowering*).
 ---
 
 ## Changelog
+
+- **0.40** (2026-10-02) — §23 (#243, from #241): non-strict outlives. The box rule of the outlives
+  judgment and the side condition of the borrows that lend a payload `mut` take `⊑`, extensions
+  read against the paper's model (`Paper/` unchanged). `main` runs under a lifetime of its own,
+  `'main`, and an undetermined lifetime argument is `dom`; a cell of no words allocates nothing; a generic function's lifetime parameter may be
+  bounded by a type parameter, `where S: 'c`. §22's *Bounds* and *Open* revised. Decision 61.
 
 - **0.39** (2026-10-02) — §22 (#239, from #236): the affine closure. §7's positivity admits an
   observation that takes a closed argument (`A ⊸ D`) and a boxed rest (`[@a] U X`), and the

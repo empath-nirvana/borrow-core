@@ -159,7 +159,8 @@ theorem vOutlives_cbv {Δ : LifeCtx} {a : Lifetime.Life} {T : Ty} (h : OutlivesR
   | sum _ _ ih₁ ih₂ => exact .sum ih₁ ih₂
   | ref _ ih => exact .ref ih
   | bang => exact .bang
-  | box h => exact .box h
+  -- 2.35's strict premise gives the non-strict one of `VOutlives.box`.  `[spec §23]`
+  | box h => exact .box (entailsLe_of_entailsLt h)
   | imm h => exact .imm h
   | «mut» h => exact .mut h
 
@@ -294,7 +295,7 @@ theorem embed {Δ : LifeCtx} {Γ : Ctx Ty} {e : Expr} {T : Ty} (h : DerivesWf Δ
       obtain ⟨h₁, h₂⟩ := BoCa.scopedB_axWithbor2Ty hwf
       obtain ⟨b, hb, ho⟩ := hs
       rw [cbv_axWithbor2Ty]
-      exact .withbor2 x (dead_cbvCtx hΓd) hx ⟨b, hb, vOutlives_cbv ho⟩ (not_vFree_cbv hx h₁)
+      exact .withbor2 x (dead_cbvCtx hΓd) hx ⟨b, hb, (vOutlives_cbv ho).toLe⟩ (not_vFree_cbv hx h₁)
         (not_vFree_cbv hx h₂)
   | withbor3Ax hΓd x hx hwf =>
       intro _ _

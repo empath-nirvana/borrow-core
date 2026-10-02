@@ -1,12 +1,12 @@
 # Allocations, indirect (dispatched) calls and copies at a non-trivial type per run of each corpus program (scripts/compile-corpus.sh).
 # name allocs indirect copies
 13-2-sum-prog 37 9 0
-aff-capture 2 0 0 # the log and the scope cell; the closure captures a borrow and allocates nothing
-aff-coerce 2 0 0 # the scope cell and the counter's cell
-aff-counter 3 0 0 # the scope cell, the cell the closure is stored in, and the counter's cell; the calls through `mut` are direct
-aff-depth 3 0 0 # as aff-counter: four calls through three functions and a reborrow, all direct
-aff-drop 4 0 0 # the scope cell and three counters' cells, each freed by its `close`
-aff-higher 3 6 0 # the scope cell and two counters' cells; the indirect calls are `runner`'s calls of its argument, which closures built at two sites reach: the flow analysis is monovariant, and the argument's code is chosen at run time, as a `dyn` call's is
+aff-capture 1 0 0 # the log; the scope cell `d` holds `1` and takes no words, and the closure captures a borrow and allocates nothing
+aff-coerce 1 0 0 # the counter's cell; `main`'s lifetime is a cell of no words
+aff-counter 2 0 0 # the cell the closure is stored in, and the counter's cell; the calls through `mut` are direct
+aff-depth 2 0 0 # as aff-counter: four calls through three functions and a reborrow, all direct
+aff-drop 3 0 0 # three counters' cells, each freed by its `close`
+aff-higher 2 6 0 # two counters' cells; the indirect calls are `runner`'s calls of its argument, which closures built at two sites reach: the flow analysis is monovariant, and the argument's code is chosen at run time, as a `dyn` call's is
 array-empty 0 0 0
 array-get 2 0 0
 array-refs 5 0 0
@@ -28,6 +28,7 @@ axes/scope-codata-effects 1 0 0
 axes/scope-data-effects 8 0 0
 axes/scope-loop-lend 3 0 0
 block-swap 2 0 0
+borrow-in-scope 2 0 0 # the borrowed cell and the cell holding the borrow
 bytes-upper 1 0 0
 capture-log-hand 0 0 0 # equal to the kernel program log-outside-native (corpus/kernel-counts.expected)
 capture-store-cancel-hand 2 0 0 # equal to the kernel program store-cancel
@@ -118,6 +119,7 @@ lend-lib-loop 3 0 0
 lend-mut 2 0 0
 lend-pipeline 2 0 0
 lend-server 2 0 0
+main-lifetime 0 0 0 # main's lifetime and the unit cell `u` are cells of no words: nothing is allocated
 map-reuse 7 0 0
 nats-sum 0 0 0
 parse-int 3 0 0 # the stdin and stdout cells and the line buffer, reused; literal views read-only data

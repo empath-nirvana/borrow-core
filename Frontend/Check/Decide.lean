@@ -455,7 +455,7 @@ theorem defines_of_wf {Δ : LifeCtx} {a : Lifetime.Life} (h : a.wf Δ = true) : 
 
 /-! ### Outlives and scoping -/
 
-/-- `Δ ⊢ A ⊐ @a`, decided through `ltB`. -/
+/-- `Δ ⊢ A ⊐ @a`, decided through `leB` at a box and `ltB` at a borrow.  `[spec §23]` -/
 def outlivesB (Δ : LifeCtx) (a : Lifetime.Life) : VTy → Bool
   | .unit => true
   | .zero => true
@@ -467,7 +467,7 @@ def outlivesB (Δ : LifeCtx) (a : Lifetime.Life) : VTy → Bool
   | .tensor A B => outlivesB Δ a A && outlivesB Δ a B
   | .sum A B => outlivesB Δ a A && outlivesB Δ a B
   | .ref A => outlivesB Δ a A
-  | .box b _ => ltB Δ a b
+  | .box b _ => leB Δ a b
   | .imm b _ => ltB Δ a b
   | .mut b _ => ltB Δ a b
   | .mu A => outlivesB Δ a A
@@ -490,12 +490,55 @@ theorem outlivesB_sound (Δ : LifeCtx) (a : Lifetime.Life) :
       simp only [outlivesB, Bool.and_eq_true] at h
       exact .sum (outlivesB_sound Δ a A h.1) (outlivesB_sound Δ a B h.2)
   | .ref A, h => .ref (outlivesB_sound Δ a A h)
-  | .box _ _, h => .box (ltB_sound h)
+  | .box _ _, h => .box (leB_sound h)
   | .imm _ _, h => .imm (ltB_sound h)
   | .mut _ _, h => .mut (ltB_sound h)
   | .mu A, h => .mu (outlivesB_sound Δ a A h)
   | .thunk _, h => by simp [outlivesB] at h
   | .unk, h => by simp [outlivesB] at h
+
+/-- `Δ ⊢ A ⊒ @a`, decided through `leB` at a box and at a borrow: the side condition of the
+borrows that lend a payload `mut`.  `[spec §23]` -/
+def outlivesLeB (Δ : LifeCtx) (a : Lifetime.Life) : VTy → Bool
+  | .unit => true
+  | .zero => true
+  | .int _ => true
+  | .opq _ => true
+  | .bang _ => true
+  | .fam A => outlivesLeB Δ a A
+  | .tvar _ => true
+  | .tensor A B => outlivesLeB Δ a A && outlivesLeB Δ a B
+  | .sum A B => outlivesLeB Δ a A && outlivesLeB Δ a B
+  | .ref A => outlivesLeB Δ a A
+  | .box b _ => leB Δ a b
+  | .imm b _ => leB Δ a b
+  | .mut b _ => leB Δ a b
+  | .mu A => outlivesLeB Δ a A
+  | .thunk _ => false
+  | .unk => false
+
+theorem outlivesLeB_sound (Δ : LifeCtx) (a : Lifetime.Life) :
+    ∀ A : VTy, outlivesLeB Δ a A = true → VOutlivesLe Δ a A
+  | .unit, _ => .unit
+  | .zero, _ => .zero
+  | .int _, _ => .int
+  | .opq _, _  => .opq
+  | .bang _, _ => .bang
+  | .fam A, h => .fam (outlivesLeB_sound Δ a A h)
+  | .tvar _, _ => .tvar
+  | .tensor A B, h => by
+      simp only [outlivesLeB, Bool.and_eq_true] at h
+      exact .tensor (outlivesLeB_sound Δ a A h.1) (outlivesLeB_sound Δ a B h.2)
+  | .sum A B, h => by
+      simp only [outlivesLeB, Bool.and_eq_true] at h
+      exact .sum (outlivesLeB_sound Δ a A h.1) (outlivesLeB_sound Δ a B h.2)
+  | .ref A, h => .ref (outlivesLeB_sound Δ a A h)
+  | .box _ _, h => .box (leB_sound h)
+  | .imm _ _, h => .imm (leB_sound h)
+  | .mut _ _, h => .mut (leB_sound h)
+  | .mu A, h => .mu (outlivesLeB_sound Δ a A h)
+  | .thunk _, h => by simp [outlivesLeB] at h
+  | .unk, h => by simp [outlivesLeB] at h
 
 /-- foldImm's `∀ Δ' a, VOutlives Δ' a R`: true at `1`, `0`, `I32`/`I64`, `!`, `X`, and `⊗`,
 `⊕`, `Ref`, `μ` over such types. It is false at `U`, `Unk`, `Imm`, `Mut` and `[@]`, where the

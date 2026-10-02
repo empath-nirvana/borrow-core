@@ -130,7 +130,7 @@ structure Borrows (M : Lifetime.Life → VTy → VTy) (side : LifeCtx → VTy �
   free : ∀ z a S, VFree z (M a S) ↔ (a.mentions z = true ∨ VFree z S)
 
 /-- Form (2) of `withbor` and `⊑Mut`. -/
-theorem borrowsMut : Borrows mutM (fun Δ S => ∃ b, Δ.Defines b ∧ VOutlives Δ b S) :=
+theorem borrowsMut : Borrows mutM (fun Δ S => ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b S) :=
   ⟨fun z hΓ hz hs hf₁ hf₂ => .withbor2 z hΓ hz hs hf₁ hf₂, fun h hle => .mutSub h hle,
     fun _ _ _ => Iff.rfl⟩
 
@@ -245,11 +245,12 @@ end
 /-- The `Mut` family.  `A` needs `withbor` form (2)'s side condition at `Δ`; `B` and `T` need to
 outlive the outer lifetime `'a`, which also gives `B` its form (2) side condition.  `[spec §5]` -/
 theorem withborM2_wf {Δ : LifeCtx} {c x y : LifeVar} {A B T : VTy}
-    (s : FamSide mutM Δ c x y A B T) (hA : ∃ b, Δ.Defines b ∧ VOutlives Δ b A)
+    (s : FamSide mutM Δ c x y A B T) (hA : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b A)
     (hBo : VOutlives (FD₁ Δ x) (.var x) B) (hTo : VOutlives (FD₁ Δ x) (.var x) T)
     {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
     CDerives Δ Γ withborF2 (.val (withborF2Ty mutM c Δ.meetOfDom A B T)) :=
-  withborF2_wf borrowsMut s hA ⟨.var x, LifeCtx.defines_of_wf (wf_var_self _ _ _), hBo⟩ hBo hTo hΓ
+  withborF2_wf borrowsMut s hA ⟨.var x, LifeCtx.defines_of_wf (wf_var_self _ _ _), hBo.toLe⟩ hBo hTo
+    hΓ
 
 /-- The `Imm` family.  `[spec §5]` -/
 theorem withborI2_wf {Δ : LifeCtx} {c x y : LifeVar} {A B T : VTy}
@@ -262,7 +263,7 @@ theorem withborI2_wf {Δ : LifeCtx} {c x y : LifeVar} {A B T : VTy}
 /-! ### Semantic typing: the Fundamental Property at the derivation -/
 
 theorem withborM2_sem {Δ : LifeCtx} {c x y : LifeVar} {A B T : VTy}
-    (s : FamSide mutM Δ c x y A B T) (hA : ∃ b, Δ.Defines b ∧ VOutlives Δ b A)
+    (s : FamSide mutM Δ c x y A B T) (hA : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b A)
     (hBo : VOutlives (FD₁ Δ x) (.var x) B) (hTo : VOutlives (FD₁ Δ x) (.var x) T) :
     SemV Δ [] withborF2 (withborF2Ty mutM c Δ.meetOfDom A B T) :=
   fundamentalC (withborM2_wf s hA hBo hTo .nil)

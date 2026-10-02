@@ -474,7 +474,8 @@ theorem ptoMutX_create {l : Loc} {α b : Life} {ls : List SRec} {S : VTy} {δ : 
   exact ⟨hw, b, u, σ, hσ, Q, hw, ls, hab, rfl, hQ, strat_fresh hfresh, hunif⟩
 
 /-- `[TR]` 6.60 at `vC`, both modes: `vDen_outlives`'s induction.  The `Imm` case reads the
-cell's bound only; the payload is not consulted. -/
+cell's bound only; the payload is not consulted.  The box case takes the stratum's
+monotonicity at `α ⊑ β`, the non-strict box rule.  `[spec §23]` -/
 theorem vC_outlives {Δ : LifeCtx} {δ : LSub} {a : Lifetime.Life} {α : Life}
     (hδ : Δ.Models δ) (ha : a.interp δ = some α) {T : VTy}
     (hT : VOutlives Δ a T) (b : Bool) :
@@ -516,12 +517,12 @@ theorem vC_outlives {Δ : LifeCtx} {δ : LSub} {a : Lifetime.Life} {α : Life}
       exact ResU.inStratum_empty α
   | box c T =>
       cases hT with
-      | box hlt =>
+      | box hle =>
           obtain ⟨β, hb, -, ho⟩ := h
-          obtain ⟨α', β', ha', hb', hlt'⟩ := hlt δ hδ
+          obtain ⟨α', β', ha', hb', hle'⟩ := hle δ hδ
           rw [ha] at ha'; cases Option.some.inj ha'
           rw [hb] at hb'; cases Option.some.inj hb'
-          exact ho.mono (le_of_lt (show (α : Life) < β from hlt'))
+          exact ho.mono (show (α : Life) ≤ β from hle')
   | imm c T =>
       cases hT with
       | imm hlt =>
@@ -557,6 +558,108 @@ theorem vC_outlives {Δ : LifeCtx} {δ : LSub} {a : Lifetime.Life} {α : Life}
           obtain ⟨-, hs⟩ := pure_sep_iff.mp hs
           exact sepRange_closed (R := fun σ => BoLo.Outlives σ α) (ResU.inStratum_empty α)
             (fun _ _ _ hc o₁ o₂ => (outlives_comp hc α).mpr ⟨o₁, o₂⟩) (fun m σ hm => hm.2 hL) hs
+
+/-- `@ρ ⊒ α`, read as membership in every stratum strictly below `α` (`StratumLe`'s shape, at a
+resource).  `[spec §23]` -/
+def OutlivesLe (ρ : WRes) (α : Life) : Prop := ∀ α', α' < α → BoLo.Outlives ρ α'
+
+theorem outlivesLe_comp {ρ₁ ρ₂ ρ : WRes} (hc : ResU.CompS ρ₁ ρ₂ ρ) {α : Life}
+    (h₁ : OutlivesLe ρ₁ α) (h₂ : OutlivesLe ρ₂ α) : OutlivesLe ρ α :=
+  fun α' h => (outlives_comp hc α').mpr ⟨h₁ α' h, h₂ α' h⟩
+
+theorem outlivesLe_of_outlives {ρ : WRes} {α : Life} (h : BoLo.Outlives ρ α) : OutlivesLe ρ α :=
+  fun _ h' => h.mono (le_of_lt h')
+
+/-- `[TR]` 6.60 at `Δ ⊢ T ⊒ @a`: every stratum strictly below `α`. `vC_outlives`'s induction,
+with each lifetime premise read at `α ⊑ β`.  `[spec §23]` -/
+theorem vC_outlivesLe {Δ : LifeCtx} {δ : LSub} {a : Lifetime.Life} {α : Life}
+    (hδ : Δ.Models δ) (ha : a.interp δ = some α) {T : VTy}
+    (hT : VOutlivesLe Δ a T) (b : Bool) :
+    ∀ (ls : List SRec) (v : Val) (ρ : WRes), vC b T ls δ v ρ → OutlivesLe ρ α := by
+  intro ls v ρ h
+  refine vC_ind δ (fun _ T _ _ ρ => VOutlivesLe Δ a T → OutlivesLe ρ α) ?_ b T ls v ρ h hT
+  intro b T ls v ρ h hT
+  cases T with
+  | unit =>
+      obtain ⟨rfl, -⟩ := h
+      exact outlivesLe_of_outlives (ResU.inStratum_empty α)
+  | int w =>
+      obtain ⟨rfl, -⟩ := h
+      exact outlivesLe_of_outlives (ResU.inStratum_empty α)
+  | opq k =>
+      obtain ⟨rfl, -⟩ := h
+      exact outlivesLe_of_outlives (ResU.inStratum_empty α)
+  | zero => exact False.elim h
+  | tensor T₁ T₂ =>
+      cases hT with
+      | tensor h₁ h₂ =>
+          obtain ⟨v₁, v₂, hs⟩ := h
+          obtain ⟨-, ρ₁, ρ₂, hc, g₁, g₂⟩ := pure_sep_iff.mp hs
+          exact outlivesLe_comp hc (g₁.2 h₁) (g₂.2 h₂)
+  | sum T₁ T₂ =>
+      cases hT with
+      | sum h₁ h₂ =>
+          rcases h with ⟨v₁, hs⟩ | ⟨v₂, hs⟩
+          · exact (pure_sep_iff.mp hs).2.2 h₁
+          · exact (pure_sep_iff.mp hs).2.2 h₂
+  | ref T =>
+      cases hT with
+      | ref h₁ =>
+          obtain ⟨ℓ, w, hs⟩ := h
+          obtain ⟨-, ρ₁, ρ₂, hc, rfl, g₂⟩ := pure_sep_iff.mp hs
+          exact outlivesLe_comp hc
+            (outlivesLe_of_outlives (ResU.inStratum_single_own α ℓ w)) (g₂.2 h₁)
+  | bang T =>
+      obtain ⟨rfl, -⟩ := h
+      exact outlivesLe_of_outlives (ResU.inStratum_empty α)
+  | box c T =>
+      cases hT with
+      | box hle =>
+          obtain ⟨β, hb, -, ho⟩ := h
+          obtain ⟨α', β', ha', hb', hle'⟩ := hle δ hδ
+          rw [ha] at ha'; cases Option.some.inj ha'
+          rw [hb] at hb'; cases Option.some.inj hb'
+          exact outlivesLe_of_outlives (ho.mono (show (α : Life) ≤ β from hle'))
+  | imm c T =>
+      cases hT with
+      | imm hle₀ =>
+          obtain ⟨β, hbi, ℓ, ρ₀, ρ₁, hc, ⟨hρ₀, -⟩, s, w, σ, hσ, _ls₀, hρ₁, -, hle, -⟩ := h
+          subst hρ₀
+          have e := eq_of_compS_empty_left hc
+          subst e; subst hρ₁
+          obtain ⟨α', β', ha', hb', hle'⟩ := hle₀ δ hδ
+          rw [ha] at ha'; cases Option.some.inj ha'
+          rw [hbi] at hb'; cases Option.some.inj hb'
+          intro γ hγ
+          exact ResU.inStratum_single ℓ
+            (lt_of_lt_of_le hγ (le_trans (show (α : Life) ≤ β from hle') hle))
+  | «mut» c T =>
+      cases hT with
+      | «mut» hle₀ =>
+          obtain ⟨β, hbi, ℓ, ρ₀, ρ₁, hc, ⟨hρ₀, -⟩, b, w, σ, hσ, Q, hw, _ls₀, hle, hρ₁, -⟩ := h.1
+          subst hρ₀
+          have e := eq_of_compS_empty_left hc
+          subst e; subst hρ₁
+          obtain ⟨α', β', ha', hb', hle'⟩ := hle₀ δ hδ
+          rw [ha] at ha'; cases Option.some.inj ha'
+          rw [hbi] at hb'; cases Option.some.inj hb'
+          intro γ hγ
+          exact ResU.inStratum_single ℓ
+            (show (CellU.mutOf b w σ hσ Q hw).InStratum γ from
+              lt_of_lt_of_le hγ (le_trans (show (α : Life) ≤ β from hle') hle))
+  | thunk _ => cases hT
+  | unk => cases hT
+  | tvar _ => exact h.elim
+  | mu A => exact h.2.2.2 hT.unroll
+  | fam L =>
+      cases hT with
+      | fam hL =>
+          obtain ⟨ℓ, n, hs⟩ := h
+          obtain ⟨-, hs⟩ := pure_sep_iff.mp hs
+          intro γ hγ
+          exact sepRange_closed (R := fun σ => BoLo.Outlives σ γ) (ResU.inStratum_empty γ)
+            (fun _ _ _ hc o₁ o₂ => (outlives_comp hc γ).mpr ⟨o₁, o₂⟩)
+            (fun m σ hm => hm.2 hL γ hγ) hs
 
 end BoCa.Fig16.LogRel.Core
 

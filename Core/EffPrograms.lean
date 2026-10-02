@@ -236,7 +236,7 @@ theorem d_logOutside :
     (.ret (appW (.sumI₁ (.unitI (by cdead))) (.alloc (by cdead)))) ?_
   refine .ret (letW (appW (d_logInCb (by cdead)) (appW (.var (by csolo))
     (.withbor2 (A := Flag) (B := .sum .zero .unit) 0 (by cdead) rfl
-      ⟨.top, LifeCtx.defines_of_wf rfl, outlives_of_dataB rfl⟩ (by simp [VFree])
+      ⟨.top, LifeCtx.defines_of_wf rfl, (outlives_of_dataB rfl).toLe⟩ (by simp [VFree])
       (by simp [VFree])))) ?_)
   exact pairW (appW (.var (by csolo)) (.free (by cdead))) (.var (by csolo))
 
@@ -285,7 +285,7 @@ theorem d_failOutsideBody :
   refine .bind (.right (.dead (.dead .nil))) (.ret (d_logRaiseCb (by cdead))) ?_
   refine .bind (.right (.right (.dead (.dead .nil))))
     (.ret (.withbor2U (A := Flag) (B := .zero) (S := Sf) 0 (by cdead) rfl
-      ⟨.top, LifeCtx.defines_of_wf rfl, outlives_of_dataB rfl⟩ (by simp [VFree]) (by simp [VFree])
+      ⟨.top, LifeCtx.defines_of_wf rfl, (outlives_of_dataB rfl).toLe⟩ (by simp [VFree]) (by simp [VFree])
       (Sf_unwind 0) dFlag_closed (dtor_wf (.ref (.sum .unit .unit)) (by cdead)))) ?_
   refine .effLet (A := .tensor (.ref Flag) .zero) (.left (.left (.left (.dead (.dead .nil)))))
     (fun _ => Ctx.Dead.drops (by cdead)) (fun h => absurd h Sf_not_unr) ?_ ?_
@@ -372,7 +372,7 @@ theorem d_reborrowRaiseBody :
   refine .bind (.right (.dead (.dead .nil))) (.ret (d_outerCb (by cdead))) ?_
   refine .bind (.right (.right (.dead (.dead .nil))))
     (.ret (.withbor2U (A := Flag) (B := .zero) (S := Sf) 0 (by cdead) rfl
-      ⟨.top, LifeCtx.defines_of_wf rfl, outlives_of_dataB rfl⟩ (by simp [VFree]) (by simp [VFree])
+      ⟨.top, LifeCtx.defines_of_wf rfl, (outlives_of_dataB rfl).toLe⟩ (by simp [VFree]) (by simp [VFree])
       (Sf_unwind 0) dFlag_closed (dtor_wf (.ref (.sum .unit .unit)) (by cdead)))) ?_
   refine .effLet (A := .tensor (.ref Flag) .zero) (.left (.left (.left (.dead (.dead .nil)))))
     (fun _ => Ctx.Dead.drops (by cdead)) (fun h => absurd h Sf_not_unr) ?_ ?_
@@ -599,7 +599,7 @@ theorem d_outerLogBody {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
       outerLogBody (.val (.box (.var 0) (.tensor (.ref Flag) .unit))) := by
   refine eletW (appW (callbackCW d1_ok rfl (fun s hs hl => ?_) (d_innerLogBody (by cdead)))
     (appW (.var (by csolo)) (.withbor2 (A := Flag) (B := .unit) 1 (by cdead) rfl
-      ⟨.top, LifeCtx.defines_of_wf rfl, outlives_of_dataB rfl⟩ (by simp [VFree])
+      ⟨.top, LifeCtx.defines_of_wf rfl, (outlives_of_dataB rfl).toLe⟩ (by simp [VFree])
       (by simp [VFree])))) ?_
   · have hs' := part_live₁ _ (part_live₁ _ hs hl) hl
     simp only [List.mem_cons] at hs'
@@ -620,7 +620,7 @@ theorem d_logInBorrow :
   refine .ret (letW (appW (callbackCW ok_empty rfl (fun s hs hl => ?_)
     (d_outerLogBody (Γ := [⟨.ref Flag, false⟩]) (by cdead)))
     (appW (.var (by csolo)) (.withbor2 (A := Flag) (B := .tensor (.ref Flag) .unit) 0 (by cdead)
-      rfl ⟨.top, LifeCtx.defines_of_wf rfl, outlives_of_dataB rfl⟩ (by simp [VFree])
+      rfl ⟨.top, LifeCtx.defines_of_wf rfl, (outlives_of_dataB rfl).toLe⟩ (by simp [VFree])
       (by simp [VFree])))) ?_)
   · have hs' := part_live₁ _ (part_live₁ _ hs hl) hl
     simp only [List.mem_cons, List.not_mem_nil, or_false] at hs'
@@ -985,7 +985,7 @@ theorem d_tickAnsStep {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
   refine .bangThunkV (persistent_dead hΓ) rfl (.lam (.withI ?_ ?_))
   · refine .ret (letW (appW (d_logCb (by cdead)) (appW (.var (by csolo))
       (.withbor2 (A := Flag) (B := .unit) 0 (by cdead) rfl
-        ⟨.top, LifeCtx.defines_of_wf rfl, outlives_of_dataB rfl⟩ (by simp [VFree])
+        ⟨.top, LifeCtx.defines_of_wf rfl, (outlives_of_dataB rfl).toLe⟩ (by simp [VFree])
         (by simp [VFree])))) ?_)
     exact seqW (.var (by csolo)) (.sumI₂ (.var (by csolo)))
   · exact .ret (.var (.there (.there (.here hΓ.toP))))

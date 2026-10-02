@@ -1022,11 +1022,12 @@ theorem withbor1_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {T₁ T₂ : VTy} (x : Li
 
 /-! ### Lemma 6.173 (withbor-compat2) at the typed world; record in `Paper/S6_8_FundamentalProperty/Lemmas.lean` -/
 /-- `[TR]` Lemma 6.173 (`withbor-compat2`, p. 46) at `SemV`: `MutFrame`'s premise is 6.60
-at `vC` at the side condition's `@bδ`, as printed.
+at `vC` at the side condition's `@bδ`, as printed, with the side condition non-strict
+(`Δ ⊢ T₁ ⊒ @b`) and `MutFrame` taken one stratum below `@bδ`.  `[spec §23]`
 `[restricted: `hfree₁`/`hfree₂`, as `withbor2_compat`]` -/
 theorem withbor2_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {T₁ T₂ : VTy} (x : LifeVar)
     (hΓ : Ctx.DeadP Γ) (_hx : Δ.find? x = none)
-    (hside : ∃ b, Δ.Defines b ∧ VOutlives Δ b T₁)
+    (hside : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b T₁)
     (hfree₁ : ¬ VFree x T₁) (hfree₂ : ¬ VFree x T₂) :
     SemV Δ Γ withbor (axWithbor2Ty x Δ.meetOfDom T₁ T₂) := by
   intro δ γ ls ρ hδ hg
@@ -1055,12 +1056,14 @@ theorem withbor2_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {T₁ T₂ : VTy} (x : Li
   refine wpTS_lolli _ _ vf _ _ ?_
   rw [hβ₂]
   have hP₂ : vP T₁ ls₂ δ vℓ ρP := vC_local true T₁ (hext₂.right hcℓ) hP
-  -- "Since `Δ ⊢ T₁ ⊐ @b`, theorem 6.60 gives `𝒱⟦T₁⟧δ ⊧ [@bδ] 𝒱⟦T₁⟧δ`, so MutFrame applies"
+  -- "Since `Δ ⊢ T₁ ⊐ @b`, theorem 6.60 gives `𝒱⟦T₁⟧δ ⊧ [@bδ] 𝒱⟦T₁⟧δ`, so MutFrame applies";
+  -- at `Δ ⊢ T₁ ⊒ @b`, 6.60 gives every stratum below `@bδ`, and MutFrame applies at `↓@bδ`
   obtain ⟨b, hdef, hO⟩ := hside
   obtain ⟨β, hb⟩ := hdef δ hδ
-  have hβ := vC_outlives hδ hb hO true
+  have hβ : ∀ ls' w σ', vC true T₁ ls' δ w σ' → σ'.InStratum (Life.down β) :=
+    fun ls' w σ' h => vC_outlivesLe hδ hb hO true ls' w σ' h _ (Life.down_sqsubset β)
   obtain ⟨σ, hcσ, hcτ⟩ := compS_reassoc hcℓ hc₂
-  refine wpTS_M_frameX ℓ T₁ δ β (fun ls' w σ' h => hβ ls' w σ' h) vℓ _ ls₂
+  refine wpTS_M_frameX ℓ T₁ δ (Life.down β) hβ vℓ _ ls₂
     (fun ls' => vP (.tensor (.ref T₁) T₂) ls' δ) τ
     ⟨ρℓ, σ, hcτ, hown, ρP, ρ₂, hcσ, hP₂, ?_⟩
   obtain ⟨a₂, ha₂⟩ := ρ₂.exists_atLife

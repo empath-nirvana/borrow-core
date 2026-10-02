@@ -138,8 +138,9 @@ structure Former (M : Lifetime.Life → VTy → VTy) (side : LifeCtx → VTy →
   lsubM : ∀ τ a S, (M a S).applyLSub τ = M (a.applySub τ) (S.applyLSub τ)
   side_plain : ∀ Δ S, plainV S = true → side Δ S
 
-theorem formerMut : Former mutM (fun Δ S => ∃ b, Δ.Defines b ∧ VOutlives Δ b S) :=
-  ⟨borrowsMut, fun _ _ _ => rfl, fun _ _ h => ⟨.top, LifeCtx.defines_of_wf rfl, plain_outlives h⟩⟩
+theorem formerMut : Former mutM (fun Δ S => ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b S) :=
+  ⟨borrowsMut, fun _ _ _ => rfl,
+    fun _ _ h => ⟨.top, LifeCtx.defines_of_wf rfl, (plain_outlives h).toLe⟩⟩
 
 theorem formerImm : Former immM (fun Δ S => VScoped Δ S) :=
   ⟨borrowsImm, fun _ _ _ => rfl, fun _ _ h y hy => absurd hy (plain_noFree h)⟩

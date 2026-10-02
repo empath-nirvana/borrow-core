@@ -2,6 +2,7 @@ import Frontend.Parser
 import Frontend.Print
 import Frontend.Check.Steps
 import Frontend.Elab.Respan
+import Frontend.Elab.RenameLife
 import Frontend.Elab.Subst
 import Frontend.Elab.Meta
 import Frontend.Elab.LoopLend
@@ -1916,6 +1917,45 @@ def boxTail (x : String) (S : Comp) : Comp :=
     | .ret sp V@(.var ..) | .ret sp V@(.unit _) => .ret sp (.boxed sp (.var sp x) V)
     | T => .bind T.span ⟨"io_bx", T.span⟩ none T
         (.ret T.span (.boxed T.span (.var T.span x) (.var T.span "io_bx"))) false) S
+
+/-- `main`'s elaborated body `M` under its lifetime `'main`: a `mut` borrow of a unit cell,
+allocated before it and freed after. A cell of `1` takes no words, so the backend allocates nothing
+for it (`Flat.zeroCell`). The standard capabilities `caps` the body lends are handed back beside
+its result, as a borrow block hands back what it lends. A body that names no `'main` is left as it
+is: the borrow is not observable.  `[spec §23]` -/
+def mainLife (sp : Span) (C : CTy) (caps : List String) (M : Comp) : Except Error Comp := do
+  if !M.mentionsLife "main" then return M
+  let .ret _ B := C
+    | throw ⟨sp, "`main` uses its lifetime `'main`, so its type is written `F A` or `-> A`"⟩
+  let x : Ident := ⟨"main", sp⟩
+  let one := VTy.unit sp
+  let rec tupTy : List String → VTy
+    | [] => one
+    | [c] => capTy sp c
+    | c :: cs => .tensor sp (capTy sp c) (tupTy cs)
+  let B' := if caps.isEmpty then B else .tensor sp B (tupTy caps)
+  let M := if caps.isEmpty then M else
+    wrapTail (fun T => .bind T.span ⟨"io_bt", T.span⟩ none T
+      (.ret T.span (.pair T.span (.var T.span "io_bt") (tupleVal T.span caps))) false) M
+  let cb : Val := .thunkv sp (.lamL sp x (.dom sp) (.ret sp (.thunkv sp
+    (.lam sp ⟨"io_mainb", sp⟩ (.mut sp (.var sp "main") one) (boxTail "main" M)))))
+  let borrow : Val :=
+    .app sp (.app sp (.const sp (.withbor2 x (.dom sp) one B')) (.var sp "io_main")) cb
+  -- `(r, caps)`, bound name by name.
+  let rec unpack (v : String) : List String → Comp → Comp
+    | [], N => N
+    | [c], N => .bind sp ⟨c, sp⟩ none (.ret sp (.var sp v)) N false
+    | c :: cs, N => .letPair sp ⟨c, sp⟩ ⟨v ++ "_", sp⟩ (.var sp v) (unpack (v ++ "_") cs N)
+  let after : Comp := .bind sp ⟨"io_mainu", sp⟩ none
+    (.ret sp (.app sp (.const sp (.free one)) (.var sp "io_main"))) (.ret sp (.var sp "io_mainr")) false
+  let rest : Comp := if caps.isEmpty then
+      .letPair sp ⟨"io_main", sp⟩ ⟨"io_mainr", sp⟩ (.var sp "io_mainp") after
+    else
+      .letPair sp ⟨"io_main", sp⟩ ⟨"io_mainq", sp⟩ (.var sp "io_mainp")
+        (.letPair sp ⟨"io_mainr", sp⟩ ⟨"io_mainc", sp⟩ (.var sp "io_mainq")
+          (unpack "io_mainc" caps after))
+  pure (.bind sp ⟨"io_main", sp⟩ none (.ret sp (.app sp (.const sp (.alloc one)) (.unit sp)))
+    (.bind sp ⟨"io_mainp", sp⟩ none (.ret sp borrow) rest false) false)
 
 /-- The body `S` of `modify` returning the new content alone, with `()` for the result. -/
 def unitTail (S : Comp) : Comp :=
@@ -4159,10 +4199,42 @@ def surfDecl : Nat → Decl → DM Decl
       | some (.ret A) => some (BoCa.Fig16.LogRel.Core.CTy.ret A)
       | e => e
     set { st with caps := caps }
-    let M' ← surfC n c exp M
+    -- `main` runs under a lifetime of its own, `'main`: its body is elaborated once, inside the
+    -- borrow `mainLife` writes out.  `[spec §23]`
+    let c₀ := c.push "io_main" (some (.ref .unit))
+    let some top := c₀.elabL (.dom sp) | throw ⟨sp, "internal error: main's lifetime"⟩
+    let c₁ := c₀.pushLife "main" top
+    let some v := c₁.E.lenv.lookup "main" | throw ⟨sp, "internal error: main's lifetime"⟩
+    let M' ← surfC n (c₁.push "io_mainb" (some (.mut (.var v) .unit))) exp M
+    let M' ← mainLife sp C (["stdin", "stdout", "stderr"].filter (M.lentNames true).contains) M'
     modify fun st => { st with caps := [] }
     pure (.main sp C M')
   | _, d => pure d
+
+/-- A lifetime bound `b` met with `q` (`q` alone when `b` is `top`). -/
+def meetBound (q : Life) : Life → Life
+  | .top _ => q
+  | b => .meet b.span b q
+
+/-- The bound of the lifetime parameter `c` of a function's type, met with `q`: `all 'c < @.`
+becomes `all 'c < @ /\ q.` (`q` alone when `@` is `top`).  `[spec §23]` -/
+def boundTyLife (c : String) (q : Life) : VTy → VTy
+  | .bang sp X => .bang sp (boundTyLife c q X)
+  | .all sp a b X =>
+    if a.name == c then .all sp a (meetBound q b) X else .all sp a b (boundTyLife c q X)
+  | T => T
+
+/-- `boundTyLife` at the function's code: its `Fun 'c < @.` binder.  `[spec §23]` -/
+def boundValLife (c : String) (q : Life) : Val → Val
+  | .bangThunkv sp N => .bangThunkv sp (go N)
+  | .thunkv sp N => .thunkv sp (go N)
+  | V => V
+where
+  go : Comp → Comp
+    | .lamL sp a b M =>
+      if a.name == c then .lamL sp a (meetBound q b) M else .lamL sp a b (go M)
+    | .ret sp V => .ret sp (boundValLife c q V)
+    | M => M
 
 /-- The instance of the template `t` at the type arguments `σ` (one per type parameter, each
 known): its name, made and elaborated on first use, and the lifetimes of the call that it takes
@@ -4196,13 +4268,23 @@ def makeInst : Nat → TCx → Span → Decl → Array (Option CVTy) →
     if let some name := st.insts.lookup key then return (name, extras)
     let name := s!"{tn.name}__g{st.insts.length}"
     let mk' := match mk with
-      | .template m => m
+      | .template m _ => m
       | mk => mk
     let binders := (List.range extras.length).map fun k => (⟨s!"io_q{k}", tsp⟩ : Ident)
-    let A' := A.subst σs
-    let V' := V.subst σs
-    let (A', V') ← if extras.isEmpty then pure (A', V') else
-      match A', V' with
+    -- A bound `S: 'c` bounds the instance's `'c` by the lifetimes of `S`'s type argument too.
+    let mut A₁ := A.subst σs
+    let mut V₁ := V.subst σs
+    for (S, cv) in mk.bounds do
+      let some k := names.idxOf? S.name | continue
+      let some t := ts₀[k]? | continue
+      let qs := (extras.zipIdx).filterMap fun (v, j) =>
+        if BoCa.Fig16.LogRel.Core.Check.vfreeB v t then some (Life.var tsp s!"io_q{j}") else none
+      if let q :: qs := qs then
+        let q := qs.foldl (Life.meet tsp) q
+        A₁ := boundTyLife cv.name q A₁
+        V₁ := boundValLife cv.name q V₁
+    let (A', V') ← if extras.isEmpty then pure (A₁, V₁) else
+      match A₁, V₁ with
       | .bang asp X, .bangThunkv vsp N =>
         pure (VTy.bang asp (binders.foldr (fun b X => .all asp b (.top asp) X) X),
           Val.bangThunkv vsp (binders.foldr
@@ -4369,10 +4451,14 @@ def genericCall : Nat → TCx → Span → Option CVTy → Val → Val → Optio
       if m.isOpen Q then
         if let some m' := matchV m 0 Q e then m := m'
     let lends := W.lends
+    -- A lifetime the call leaves undetermined is `dom`, the meet of the lifetimes in scope (in
+    -- `main`, at least `'main`).  `[spec §23]`
     for (v, _) in sig.binders do
       if (m.life.lookup v).isNone && !(lends && sig.binders.length == 1) then
-        throw ⟨sp, s!"the lifetime `{lname v}` of `{fname}` is not determined by its arguments " ++
-          s!"here: write it, `{writeLives fname}"⟩
+        if c.Δ.entries.isEmpty then
+          throw ⟨sp, s!"the lifetime `{lname v}` of `{fname}` is not determined by its arguments " ++
+            s!"here: write it, `{writeLives fname}"⟩
+        m := { m with life := (v, c.Δ.meetOfDom) :: m.life }
     -- The callee at its type arguments.
     let mut extras : List BoCa.Lifetime.LifeVar := []
     let base ← match head with
@@ -4441,7 +4527,7 @@ def elabDecl : Nat → DivSt → Decl → SM DivSt
       "specialization at callback types does not terminate"⟩
   | fuel + 1, st, d => do
     -- A generic function is a template, instantiated where it is called.
-    if let .def_ _ _ (_ :: _) _ _ (.template _) := d then
+    if let .def_ _ _ (_ :: _) _ _ (.template _ _) := d then
       return { st with templates := st.templates ++ [d] }
     -- The loops of a library's declarations are not reported.
     let st := { st with quiet := match d with

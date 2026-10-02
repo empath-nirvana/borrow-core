@@ -196,15 +196,17 @@ inductive CDerives : LifeCtx → Ctx VTy → Expr → Jdg → Prop where
   | boundedFix {Δ Γ} (A : VTy) (C : CTy) (hΓ : Ctx.DeadP Γ) :
       CDerives Δ Γ (.val (.prim .boundedFix)) (.val (boundedFixTy A C))
   /-- `slice_borrow_mut : Array A ⊸ (∀'x ⊏ ⊓Δ. [Mut 'x A] ⊸ ['x] B) ⊸ Array A ⊗ B`, the term
-  `withbor`'s: an owned array lent as a family of `mut` leaves, with no cell.  `[spec §9]` -/
+  `withbor`'s: an owned array lent as a family of `mut` leaves, with no cell; its side conditions
+  non-strict.  `[spec §9, §23]` -/
   | sliceBorrowM {Δ Γ A B} (x : LifeVar) (hΓ : Ctx.DeadP Γ)
-      (hsideA : ∃ b, Δ.Defines b ∧ VOutlives Δ b A) (hsideB : ∃ b, Δ.Defines b ∧ VOutlives Δ b B)
+      (hsideA : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b A) (hsideB : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b B)
       (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) :
       CDerives Δ Γ withbor (.val (sliceBorrowMTy x Δ.meetOfDom A B))
   /-- `slice_borrow_imm : Array A ⊸ (∀'x ⊏ ⊓Δ. [Imm 'x A] ⊸ ['x] B) ⊸ Array A ⊗ B`, the term
-  `withbor`'s: an owned array lent as a family of `imm` leaves, with no cell.  `[spec §9]` -/
+  `withbor`'s: an owned array lent as a family of `imm` leaves, with no cell; its side conditions
+  non-strict.  `[spec §9, §23]` -/
   | sliceBorrowI {Δ Γ A B} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hsc : VScoped Δ A)
-      (hsideA : ∃ b, Δ.Defines b ∧ VOutlives Δ b A) (hsideB : ∃ b, Δ.Defines b ∧ VOutlives Δ b B)
+      (hsideA : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b A) (hsideB : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b B)
       (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) :
       CDerives Δ Γ withbor (.val (sliceBorrowITy x Δ.meetOfDom A B))
   /-- `slice_get_mut : !([Mut @a A] ⊗ I32 ⇒ Mut @a A ⊕ 1)`, the step `idx`.  `[spec §9]` -/
@@ -237,8 +239,10 @@ inductive CDerives : LifeCtx → Ctx VTy → Expr → Jdg → Prop where
   | withbor1 {Δ Γ A B} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hx : Δ.find? x = none)
       (hsc₁ : VScoped Δ A) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) :
       CDerives Δ Γ withbor (.val (axWithbor1Ty x Δ.meetOfDom A B))
+  /-- `withbor` (2): `Ref A` lent as `Mut 'x A`, its side condition `Δ ⊢ A ⊒ @b` non-strict.
+  `[spec §23]` -/
   | withbor2 {Δ Γ A B} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hx : Δ.find? x = none)
-      (hside : ∃ b, Δ.Defines b ∧ VOutlives Δ b A)
+      (hside : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b A)
       (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) :
       CDerives Δ Γ withbor (.val (axWithbor2Ty x Δ.meetOfDom A B))
   | withbor3 {Δ Γ a A B} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hx : Δ.find? x = none)
@@ -255,9 +259,10 @@ inductive CDerives : LifeCtx → Ctx VTy → Expr → Jdg → Prop where
       (hsc₁ : VScoped Δ A) (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : S.Unwind x)
       (hdc : closedAt 0 d = true) (hd : CDerives Δ Γ d (.val (.lolli (.ref A) .unit))) :
       CDerives Δ Γ (withborUE d) (.val (withbor1UTy x Δ.meetOfDom A B S))
-  /-- The unwinding form of `withbor` (2): `Ref A` lent as `Mut 'x A`.  `[spec §19]` -/
+  /-- The unwinding form of `withbor` (2): `Ref A` lent as `Mut 'x A`, its side condition
+  non-strict.  `[spec §19, §23]` -/
   | withbor2U {Δ Γ A B d} {S : Row} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hx : Δ.find? x = none)
-      (hside : ∃ b, Δ.Defines b ∧ VOutlives Δ b A)
+      (hside : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b A)
       (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : S.Unwind x)
       (hdc : closedAt 0 d = true) (hd : CDerives Δ Γ d (.val (.lolli (.ref A) .unit))) :
       CDerives Δ Γ (withborUE d) (.val (withbor2UTy x Δ.meetOfDom A B S))
@@ -274,14 +279,14 @@ inductive CDerives : LifeCtx → Ctx VTy → Expr → Jdg → Prop where
   /-- The unwinding form of `slice_borrow_mut`: an owned array lent as a family of `mut` leaves.
   `[spec §19]` -/
   | sliceBorrowMU {Δ Γ A B d} {S : Row} (x : LifeVar) (hΓ : Ctx.DeadP Γ)
-      (hsideA : ∃ b, Δ.Defines b ∧ VOutlives Δ b A) (hsideB : ∃ b, Δ.Defines b ∧ VOutlives Δ b B)
+      (hsideA : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b A) (hsideB : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b B)
       (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : S.Unwind x)
       (hdc : closedAt 0 d = true) (hd : CDerives Δ Γ d (.val (.lolli (.array A) .unit))) :
       CDerives Δ Γ (withborUE d) (.val (sliceBorrowMUTy x Δ.meetOfDom A B S))
   /-- The unwinding form of `slice_borrow_imm`: an owned array lent as a family of `imm` leaves.
   `[spec §19]` -/
   | sliceBorrowIU {Δ Γ A B d} {S : Row} (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hsc : VScoped Δ A)
-      (hsideA : ∃ b, Δ.Defines b ∧ VOutlives Δ b A) (hsideB : ∃ b, Δ.Defines b ∧ VOutlives Δ b B)
+      (hsideA : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b A) (hsideB : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b B)
       (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : S.Unwind x)
       (hdc : closedAt 0 d = true) (hd : CDerives Δ Γ d (.val (.lolli (.array A) .unit))) :
       CDerives Δ Γ (withborUE d) (.val (sliceBorrowIUTy x Δ.meetOfDom A B S))

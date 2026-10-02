@@ -117,7 +117,8 @@ the function's result.
 for a shorter lifetime. The callback's type is read as follows.
 
 - `all 'x < dom. …` is a function of the lifetime `'x`, which is shorter than every lifetime in
-  scope. `dom` is the meet of those lifetimes; at the top of `main` it is `top`. A callback is
+  scope. `dom` is the meet of those lifetimes; at the top of `main` it is `top`, or `'main` in a body
+  that names `main`'s lifetime (see below). A callback is
   written `thunkv Fun 'x < top. return (…)`, where `Fun 'x < @. M` binds the lifetime.
 - `imm 'x A => box 'x B` takes the borrow and returns a `B` in a **box** for `'x`. `boxed['x] V`
   builds the box, and it checks that everything `V` uses outlives `'x`. This is what stops a
@@ -171,7 +172,7 @@ main : F i32 =
 
 `withswap` hands the borrow back as `m2`. It is not used again, so the checker discards it (a
 borrow's destructor does nothing). `withbor2`'s second bracket argument, here `top`, is a
-lifetime that the contents' type outlives.
+lifetime that the contents' type lasts at least as long as.
 
 A mutable borrow cannot be copied, so two mutable borrows of one cell are never live together:
 
@@ -207,3 +208,56 @@ main : F 1 =
 `(V :> @a)` views a borrow `imm @b A` or `mut @b A` at a shorter lifetime `@a`. The checker must
 be able to show `@a ⊑ @b` from the lifetimes in scope. Lifetimes nest: a lifetime introduced
 inside a callback for `'x` is shorter than `'x`.
+
+## Lifetime parameters, bounds, and `main`'s lifetime
+
+A function's lifetime parameter `fn f<'c>(…)` stands for a lifetime strictly shorter than `top`,
+so a call needs a lifetime to pass. `main` runs under a lifetime of its own, `'main`, which lasts
+for its whole body and can be passed by name, `f ['main](…)`. A call that does not determine a
+lifetime, from its arguments or the type expected of its result, passes `dom`, the meet of the
+lifetimes in scope: `'main` at the top of `main`.
+
+A box outlives the lifetime it is bounded by: `box 'c T` outlives `'c` itself. So a closure
+bounded by `main`'s lifetime is made, called and closed in `main` with no scope of its own:
+
+```bc
+include aff
+
+fn counter<'c>(start: i32) -> box 'c Aff[i32, i32]<'c> =
+  aff_new_boxed[ref i32, i32, i32]['c](alloc(start), !thunkv fun (s : ref i32) ->
+    < fun (a : i32) ->
+        cx <- return (swap[i32, i32] s i32[0]);
+        let (c, x) = cx;
+        cu <- return (swap[i32, i32] c (x + a));
+        let (c1, u) = cu;
+        return (x + a, c1),
+      n <- return (free[i32] s); return () >)
+
+main -> i32 =
+  let k = counter(10);
+  let (a, k) = aff_call(k, 1);
+  let (b, k) = aff_call(k, 2);
+  aff_close(k);
+  a + b
+-- answer: i32[24]
+```
+
+`'main` is a borrow of a unit cell, and a cell holding `1` takes no memory, so it costs nothing
+at run time. Outside `main`, a lifetime that a call leaves undetermined where no lifetime is in
+scope is an error. The spelling `'main` is provisional.
+
+A generic function's lifetime parameters are unrelated to the lifetimes in its type arguments,
+unless a **lifetime bound** relates them. `aff_new_boxed` is declared
+
+    fn aff_new_boxed[S, A, B]<'c>(s: S, step: …) -> box 'c Aff[A, B]<'c>
+        where S: 'c = …
+
+and `where S: 'c` makes each instance's `'c` shorter than every lifetime in the type given for
+`S` (cf. Rust's `S: 'c`). Its body can then box the state at `'c`, and the box is checked at each
+instance, at its types. At `S = mut 'x i32`, `'c` is below `'x`, so a caller passes a lifetime
+shorter than `'x`; at `S = ref i32` there is no lifetime in `S`, and `'c` is only below `top`.
+The spelling `where S: 'c` is provisional.
+
+A closure that captures `mut 'x T` is bounded by a lifetime strictly below `'x`, never by `'x`
+itself, so it is made inside a scope below `'x` (`corpus/aff-capture.bc`).
+
