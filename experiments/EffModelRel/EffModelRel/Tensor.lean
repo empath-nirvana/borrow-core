@@ -29,30 +29,31 @@ def PureCo {e : S.E} {s : G}
   ∀ o a st, ∃ r st', (co o).den IEnv.nil ((Env.nil.cons (VTy.gv a)).cons (VTy.gv st)) =
     Tree.ret (.inl (r, st'))
 
-/-- Two runners, one inside the other, each answering one operation of the client in turn. -/
-theorem runL_pair {X : Type} {e₁ e₂ : S.E} {s₁ s₂ : G} {co₁ : CoSem S e₁ s₁} {co₂ : CoSem S e₂ s₂}
+/-- Two runners, one inside the other, each answering one operation of the client in turn; the
+inner lend's answer is mapped by `f₂` (pairing it with its capability) before the outer runner. -/
+theorem runL_pair {X Y : Type} {e₁ e₂ : S.E} {s₁ s₂ : G} {co₁ : CoSem S e₁ s₁}
+    {co₂ : CoSem S e₂ s₂}
     {x₁ x₂ c₁ c₂ : Nat} (hx : x₁ ≠ x₂) (o₁ : S.O e₁) (o₂ : S.O e₂) (v₁ v₂)
     {st₁ st₁' : s₁.den} {st₂ st₂' : s₂.den} {r₁ r₂}
     (h₁ : co₁ o₁ v₁ st₁ = Tree.ret (.inl (r₁, st₁')))
     (h₂ : co₂ o₂ v₂ st₂ = Tree.ret (.inl (r₂, st₂')))
-    (k : (S.res e₁ o₁).den → (S.res e₂ o₂).den → Tree S X) :
-    ((Tree.op x₁ e₁ o₁ v₁ (fun y₁ => Tree.op x₂ e₂ o₂ v₂ (fun y₂ => k y₁ y₂) []) []).runL
-        x₂ e₂ c₂ s₂ co₂ st₂).runL x₁ e₁ c₁ s₁ co₁ st₁ =
-      ((k r₁ r₂).runL x₂ e₂ c₂ s₂ co₂ st₂').runL x₁ e₁ c₁ s₁ co₁ st₁' := by
+    (k : (S.res e₁ o₁).den → (S.res e₂ o₂).den → Tree S X) (f₂ : X ⊕ Int → Tree S Y) :
+    (((Tree.op x₁ e₁ o₁ v₁ (fun y₁ => Tree.op x₂ e₂ o₂ v₂ (fun y₂ => k y₁ y₂) []) []).runL
+        x₂ e₂ c₂ s₂ co₂ st₂).bind f₂).runL x₁ e₁ c₁ s₁ co₁ st₁ =
+      (((k r₁ r₂).runL x₂ e₂ c₂ s₂ co₂ st₂').bind f₂).runL x₁ e₁ c₁ s₁ co₁ st₁' := by
   simp only [Tree.runL, if_neg hx, ↓reduceIte, coStep_self, h₁, h₂, Tree.bind, coK]
 
-theorem runL_pair' {X : Type} {e₁ e₂ : S.E} {s₁ s₂ : G} {co₁ : CoSem S e₁ s₁}
+theorem runL_pair' {X Y : Type} {e₁ e₂ : S.E} {s₁ s₂ : G} {co₁ : CoSem S e₁ s₁}
     {co₂ : CoSem S e₂ s₂} {x₁ x₂ c₁ c₂ : Nat} (hx : x₁ ≠ x₂) (o₁ : S.O e₁) (o₂ : S.O e₂) (v₁ v₂)
     {st₁ st₁' : s₁.den} {st₂ st₂' : s₂.den} {r₁ r₂}
     (h₁ : co₁ o₁ v₁ st₁ = Tree.ret (.inl (r₁, st₁')))
     (h₂ : co₂ o₂ v₂ st₂ = Tree.ret (.inl (r₂, st₂')))
-    (k : (S.res e₂ o₂).den → (S.res e₁ o₁).den → Tree S X) :
-    ((Tree.op x₂ e₂ o₂ v₂ (fun y₂ => Tree.op x₁ e₁ o₁ v₁ (fun y₁ => k y₂ y₁) []) []).runL
-        x₂ e₂ c₂ s₂ co₂ st₂).runL x₁ e₁ c₁ s₁ co₁ st₁ =
-      ((k r₂ r₁).runL x₂ e₂ c₂ s₂ co₂ st₂').runL x₁ e₁ c₁ s₁ co₁ st₁' := by
+    (k : (S.res e₂ o₂).den → (S.res e₁ o₁).den → Tree S X) (f₂ : X ⊕ Int → Tree S Y) :
+    (((Tree.op x₂ e₂ o₂ v₂ (fun y₂ => Tree.op x₁ e₁ o₁ v₁ (fun y₁ => k y₂ y₁) []) []).runL
+        x₂ e₂ c₂ s₂ co₂ st₂).bind f₂).runL x₁ e₁ c₁ s₁ co₁ st₁ =
+      (((k r₂ r₁).runL x₂ e₂ c₂ s₂ co₂ st₂').bind f₂).runL x₁ e₁ c₁ s₁ co₁ st₁' := by
   simp only [Tree.runL, if_neg hx, ↓reduceIte, coStep_self, h₁, h₂, Tree.bind, coK,
     if_neg (Ne.symm hx)]
-
 
 /-- The semantics of a capability's closed co-operations. -/
 def coSem {e : S.E} {s : G}
@@ -125,46 +126,55 @@ theorem tensor {e₁ e₂ : S.E} {s₁ s₂ : G}
   simp only [Val.lit_den]
   obtain ⟨r₁, t₁, hco₁⟩ := h₁ o₁ v₁ st₁
   obtain ⟨r₂, t₂, hco₂⟩ := h₂ o₂ v₂ st₂
-  refine TreeRel.of_eq (runL_pair (co₁ := coSem co₁) (co₂ := coSem co₂) hx o₁ o₂ v₁ v₂ hco₁ hco₂ _) ?_
-  refine TreeRel.of_eq' (runL_pair' (co₁ := coSem co₁) (co₂ := coSem co₂) hx' o₁ o₂ v₁ v₂ hco₁ hco₂ _) ?_
+  refine TreeRel.of_eq (congrArg (fun t => Tree.bind t _)
+    (runL_pair (co₁ := coSem co₁) (co₂ := coSem co₂) hx o₁ o₂ v₁ v₂ hco₁ hco₂ _ _)) ?_
+  refine TreeRel.of_eq' (congrArg (fun t => Tree.bind t _)
+    (runL_pair' (co₁ := coSem co₁) (co₂ := coSem co₂) hx' o₁ o₂ v₁ v₂ hco₁ hco₂ _ _)) ?_
   have hw₁ := W.noPend_both hw c₁ c₁' hc₁ hc₁'
   have hw₂ := W.noPend_both hw₁ c₂ c₂' hc₂ hc₂'
   have hw₃ := W.noPend_both hw₂ x₁ x₁' hx₁ hx₁'
   have hw₄ := W.noPend_both hw₃ x₂ x₂' hx₂ hx₂'
-  have s₁ := W.sub_both w c₁ c₁' hc₁ hc₁'
-  have s₂ := W.sub_both _ c₂ c₂' hc₂ hc₂'
-  have s₃ := W.sub_both _ x₁ x₁' hx₁ hx₁'
-  have s₄ := W.sub_both _ x₂ x₂' hx₂ hx₂'
-  have s₂₄ := s₂.trans (s₃.trans s₄)
-  have s₃₄ := s₃.trans s₄
-  have s₁₄ := s₁.trans s₂₄
-  refine runL_rel (R := fun w a a' => VR (.sum A (.g .int)) w a a')
-    (R2 := fun w a a' => VR (.sum (.sum A (.g .int)) (.g .int)) w a a')
-    (fun _ _ _ _ h1 h2 => VR.mono _ h1.sub h2) (fun _ _ _ h => VR_inl.2 h)
-    (fun _ _ => VR_inr.2 (VR_g.2 rfl)) ?_ (s₄.r' (W.both_r _ x₁ x₁' hx₁ hx₁'))
-    (s₂₄.r' (W.both_r w c₁ c₁' hc₁ hc₁')) (fun w' _ hp o a st => coSem_rel co₁ hp o a st) t₁
-  refine runL_rel (R := fun w a a' => VR A w a a')
-    (R2 := fun w a a' => VR (.sum A (.g .int)) w a a')
-    (fun _ _ _ _ h1 h2 => VR.mono _ h1.sub h2) (fun _ _ _ h => VR_inl.2 h)
-    (fun _ _ => VR_inr.2 (VR_g.2 rfl)) ?_ (W.both_r _ x₂ x₂' hx₂ hx₂')
-    (s₃₄.r' (W.both_r _ c₂ c₂' hc₂ hc₂')) (fun w' _ hp o a st => coSem_rel co₂ hp o a st) t₂
-  refine TreeRel.of_eq' (Cmp.den_ren (Ren.id _) Ren.swap K _ _ _
-    ((((((ρ'.cons (VTy.capv c₁' (coSem co₁))).cons (VTy.capv c₂' (coSem co₂))).cons
-      (VTy.gv r₁)).cons (VTy.gv r₂))))
-    (fun _ _ => rfl) (fun B z => by rcases z with _ | _ | z <;> rfl)) ?_
-  refine CRU_F.1 (Cmp.fp K hw₄ ?_ ?_)
-  · intro e' z
-    rcases z with _ | _ | z
-    · exact W.both_r _ x₂ x₂' hx₂ hx₂'
-    · exact s₄.r' (W.both_r _ x₁ x₁' hx₁ hx₁')
-    · exact s₁₄.r' (hη _ z)
-  · intro B z
-    rcases z with _ | _ | _ | _ | z
-    · exact VR_g.2 rfl
-    · exact VR_g.2 rfl
-    · exact cap_rel co₂ (s₃₄.r' (W.both_r _ c₂ c₂' hc₂ hc₂'))
-    · exact cap_rel co₁ (s₂₄.r' (W.both_r w c₁ c₁' hc₁ hc₁'))
-    · exact VR.mono _ s₁₄ (hρ _ z)
+  have ws₁ := W.sub_both w c₁ c₁' hc₁ hc₁'
+  have ws₂ := W.sub_both _ c₂ c₂' hc₂ hc₂'
+  have ws₃ := W.sub_both _ x₁ x₁' hx₁ hx₁'
+  have ws₄ := W.sub_both _ x₂ x₂' hx₂ hx₂'
+  have ws₂₄ := ws₂.trans (ws₃.trans ws₄)
+  have ws₃₄ := ws₃.trans ws₄
+  have ws₁₄ := ws₁.trans ws₂₄
+  refine Tree.bind_rel (R1 := fun w a a' =>
+    VR (.sum (.prod (.cap e₂ s₂) (.sum A (.g .int))) (.g .int)) w a a') ?_ ?_
+  · refine runL_rel (R := fun w a a' => VR (.prod (.cap e₂ s₂) (.sum A (.g .int))) w a a')
+      (R2 := fun w a a' => VR (.sum (.prod (.cap e₂ s₂) (.sum A (.g .int))) (.g .int)) w a a')
+      (fun _ _ _ _ h1 h2 => VR.mono _ h1.sub h2) (fun _ _ _ h => VR_inl.2 h)
+      (fun _ _ => VR_inr.2 (VR_g.2 rfl)) ?_ (ws₄.r' (W.both_r _ x₁ x₁' hx₁ hx₁'))
+      (ws₂₄.r' (W.both_r w c₁ c₁' hc₁ hc₁')) (fun w' _ hp o a st => coSem_rel co₁ hp o a st) t₁
+    refine Tree.bind_rel (R1 := fun w a a' => VR (.sum A (.g .int)) w a a') ?_ ?_
+    · refine runL_rel (R := fun w a a' => VR A w a a')
+        (R2 := fun w a a' => VR (.sum A (.g .int)) w a a')
+        (fun _ _ _ _ h1 h2 => VR.mono _ h1.sub h2) (fun _ _ _ h => VR_inl.2 h)
+        (fun _ _ => VR_inr.2 (VR_g.2 rfl)) ?_ (W.both_r _ x₂ x₂' hx₂ hx₂')
+        (ws₃₄.r' (W.both_r _ c₂ c₂' hc₂ hc₂')) (fun w' _ hp o a st => coSem_rel co₂ hp o a st) t₂
+      refine TreeRel.of_eq' (Cmp.den_ren (Ren.id _) Ren.swap K _ _ _
+        ((((((ρ'.cons (VTy.capv c₁' (coSem co₁))).cons (VTy.capv c₂' (coSem co₂))).cons
+          (VTy.gv r₁)).cons (VTy.gv r₂))))
+        (fun _ _ => rfl) (fun B z => by rcases z with _ | _ | z <;> rfl)) ?_
+      refine CRU_F.1 (Cmp.fp K hw₄ ?_ ?_)
+      · intro e' z
+        rcases z with _ | _ | z
+        · exact W.both_r _ x₂ x₂' hx₂ hx₂'
+        · exact ws₄.r' (W.both_r _ x₁ x₁' hx₁ hx₁')
+        · exact ws₁₄.r' (hη _ z)
+      · intro B z
+        rcases z with _ | _ | _ | _ | z
+        · exact VR_g.2 rfl
+        · exact VR_g.2 rfl
+        · exact cap_rel co₂ (ws₃₄.r' (W.both_r _ c₂ c₂' hc₂ hc₂'))
+        · exact cap_rel co₁ (ws₂₄.r' (W.both_r w c₁ c₁' hc₁ hc₁'))
+        · exact VR.mono _ ws₁₄ (hρ _ z)
+    · intro w₅ h₅ hp₅ z z' hz
+      exact .ret hp₅ (VR_prod.2 ⟨cap_rel co₂ ((ws₃₄.trans h₅).r' (W.both_r _ c₂ c₂' hc₂ hc₂')), hz⟩)
+  · intro w₅ h₅ hp₅ z z' hz
+    exact .ret hp₅ (VR_prod.2 ⟨cap_rel co₁ ((ws₂₄.trans h₅).r' (W.both_r w c₁ c₁' hc₁ hc₁')), hz⟩)
 
 /-! ## Sum versus tensor: a pure model absorbs before an abort -/
 
@@ -180,7 +190,7 @@ theorem hnd_ab_other (C : CTy S) (i : Nat) {e f : S.E} (hef : f ≠ e) (hr : X �
 
 /-- A clause of a model into a state-passing type `A₀ → D` that resumes once, with an answer
 and a next state computed from the argument and the state, and does nothing else: a writer. -/
-def PureClause {e : S.E} {Ψ : List S.E} {Γ : List (VTy S)} {A₀ : VTy S} {bA bh : Eb} {D : CTy S}
+def PureClause {e : S.E} {Ψ : List S.E} {Γ : List (VTy S)} {A₀ : VTy S} {bA bh : Rw} {D : CTy S}
     (o : S.O e)
     (cl : Cmp S Ψ (kty (S.q e o) bh (S.res e o) (.arr A₀ bA D) :: .g (S.arg e o) :: Γ) (.arr A₀ bA D))
     (ans : (S.arg e o).den → (S.res e o).den) (next : (S.arg e o).den → A₀.den → A₀.den) : Prop :=
@@ -191,7 +201,7 @@ def PureClause {e : S.E} {Ψ : List S.E} {Γ : List (VTy S)} {A₀ : VTy S} {bA 
 /-- **Absorption.** Inside a pure model of `e`, an operation of `e` before an abort of another
 effect is lost with it: `h (op v; raise) s ≡ h raise s`. This is the tensor of the model's theory
 with the abort: the abort discards the model's state, which is unrecoverable. -/
-theorem absorb_pure {e f : S.E} (hef : f ≠ e) {A₀ : VTy S} {bA bh : Eb} {D : CTy S} {B : VTy S}
+theorem absorb_pure {e f : S.E} (hef : f ≠ e) {A₀ : VTy S} {bA bh : Rw} {D : CTy S} {B : VTy S}
     (hr : Cmp S Ψ (B :: Γ) (.arr A₀ bA D))
     (hop : (o : S.O e) → Cmp S Ψ (kty (S.q e o) bh (S.res e o) (.arr A₀ bA D) :: .g (S.arg e o) :: Γ)
       (.arr A₀ bA D))

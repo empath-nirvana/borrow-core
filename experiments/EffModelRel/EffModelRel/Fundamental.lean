@@ -52,7 +52,7 @@ theorem StrmRel.monoV {A : VTy S} {w w' : W} {s s' : Strm S A.den}
   StrmRel.mono (RA := fun w a a' => VR A w a a') (fun _ _ _ _ h1 h2 => VR.mono A h1.sub h2) h w' hw
 
 /-- The continuation a clause receives is related when its resumptions are. -/
-theorem mkK_rel {q : Mode} {b : Eb} {r : G} {C : CTy S} {w : W} (hw : w.noPend)
+theorem mkK_rel {q : Mode} {b : Rw} {r : G} {C : CTy S} {w : W} (hw : w.noPend)
     {k k' : r.den → C.den} (hk : ∀ y, CRU C w (k y) (k' y)) {t t' : Tree S Unit}
     (ht : TreeRel (fun w a a' => VR (S := S) (.g .unit) w a a') w t t') :
     VR (kty q b r C) w (mkK q.w q b r C k t) (mkK q.w q b r C k' t') := by
@@ -219,34 +219,33 @@ theorem Cmp.fp : (M : Cmp S Ψ Γ C) → ∀ {w : W}, w.noPend → ∀ {η η' :
       have hv := (VR_cap.1 (Val.fp v hw hη hρ)).1
       simp only [Cmp.den]
       exact CRU_F.2 (.act (.kill hv) (fun _ => .ret hw (VR_g.2 rfl)))
-  | .lend (A := A) v M, w, hw, η, η', ρ, ρ', hη, hρ => by
-      have hv := VR_cap.1 (Val.fp v hw hη hρ)
+  | .lend (A := A) (e := e) (s := sg) v M, w, hw, η, η', ρ, ρ', hη, hρ => by
+      have hvv := Val.fp v hw hη hρ
+      have hv := VR_cap.1 hvv
       simp only [Cmp.den]
       apply CRU_F.2
       refine .act (.rd hv.1) (fun st => .nu (fun i i' hi hi' => ?_))
       have hs := W.sub_both w i i' hi hi'
-      refine runL_rel (R := fun w a a' => VR A w a a')
-        (R2 := fun w a a' => VR (.sum A (.g .int)) w a a')
-        (fun _ _ _ _ h1 h2 => VR.mono _ h1.sub h2)
-        (fun _ _ _ h => VR_inl.2 h) (fun _ _ => VR_inr.2 (VR_g.2 rfl))
-        (CRU_F.1 (Cmp.fp M (W.noPend_both hw _ _ _ _)
-          (IR.cons (hη.sub hs) (W.both_r _ _ _ _ _) _) (hρ.mono hs)))
-        (W.both_r _ _ _ _ _) (hs.r' hv.1) ?_ st
-      intro w' h1 hp o a st'
-      exact hv.2 w' (le_trans_gcP hw (W.noPend_le_of_sub hw hp (hs.trans h1))) o a st'
+      refine Tree.bind_rel (R1 := fun w a a' => VR (.sum A (.g .int)) w a a') ?_ ?_
+      · refine runL_rel (R := fun w a a' => VR A w a a')
+          (R2 := fun w a a' => VR (.sum A (.g .int)) w a a')
+          (fun _ _ _ _ h1 h2 => VR.mono _ h1.sub h2)
+          (fun _ _ _ h => VR_inl.2 h) (fun _ _ => VR_inr.2 (VR_g.2 rfl))
+          (CRU_F.1 (Cmp.fp M (W.noPend_both hw _ _ _ _)
+            (IR.cons (hη.sub hs) (W.both_r _ _ _ _ _) _) (hρ.mono hs)))
+          (W.both_r _ _ _ _ _) (hs.r' hv.1) ?_ st
+        intro w' h1 hp o a st'
+        exact hv.2 w' (le_trans_gcP hw (W.noPend_le_of_sub hw hp (hs.trans h1))) o a st'
+      · intro w₂ h₂ hp₂ z z' hz
+        exact .ret hp₂ (VR_prod.2 ⟨VR.mono (.cap e sg) (hs.trans h₂) hvv, hz⟩)
   | .using ℓ M, w, hw, η, η', ρ, ρ', hη, hρ => by
       simp only [Cmp.den]
       apply CRU_F.2
       refine .nu (fun r r' hr hr' => .act (.acq (W.both_r _ _ _ _ _)) (fun _ => ?_))
       have hs := W.sub_both w r r' hr hr'
-      exact addFin_rel (CRU_F.1 (Cmp.fp M (W.noPend_both hw _ _ _ _) (hη.sub hs)
-        (ER.cons (hρ.mono hs) (VR_res (x := (ℓ, r)) (x' := (ℓ, r')).2 ⟨rfl, W.both_r _ _ _ _ _⟩))))
+      exact addFin_rel (CRU_F.1 (Cmp.fp M (W.noPend_both hw _ _ _ _)
+        (IR.cons (hη.sub hs) (W.both_r _ _ _ _ _) _) (hρ.mono hs)))
         (W.both_r _ _ _ _ _)
-  | .use v, _, hw, η, η', ρ, ρ', hη, hρ => by
-      have hv := VR_res.1 (Val.fp v hw hη hρ)
-      simp only [Cmp.den]
-      rw [hv.1]
-      exact CRU_F.2 (.act (.use hv.2) (fun _ => .ret hw (VR_g.2 rfl)))
   | .unfold (A := A) (b := b) v, w, hw, η, η', ρ, ρ', hη, hρ => by
       have hv := VR_strm.1 (Val.fp v hw hη hρ)
       simp only [Cmp.den]

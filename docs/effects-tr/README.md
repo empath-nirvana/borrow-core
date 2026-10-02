@@ -28,7 +28,15 @@ cross-check: every result it has proved is cited by name, and nothing here contr
 | 10 | [Findings](10-findings.md) | three machine-checked counterexamples to phase A's checker; ν/op |
 | 11 | [Transcription guide](11-transcription.md) | dependency order; [TR], phase B and `Core/` reuse by name; open problems |
 | 12 | [Sources and novelty](12-sources.md) | references with how each was checked; what is adapted and what is new |
-| 14 | [The `Mut` cell with a rebased continuation](14-mut-cell.md) | candidate result (#251): a cell holding a suspended continuation, closed under resume and drop; where internal lifetimes go; the spanning lend (O14.1) |
+| 13 | [The adjunction framing](13-adjunction.md) | *candidate extension (#250)*: freeze/resume as `F ⊣ U`; β, η (with cancellation), hiding, the interaction law; what follows from them |
+| 14 | [Stored continuations, borrows, proof cost](14-stored-continuations.md) | *candidate extension (#250)*: a continuation holding a borrow; capture rebasing; the `Mut` cell holding a continuation; T1 as a theorem; the verdict on proof cost |
+| 15 | [The `Mut` cell with a rebased continuation](15-mut-cell.md) | candidate result (#251): a cell holding a suspended continuation, closed under resume and drop; where internal lifetimes go; the spanning lend (O15.1) |
+
+**§§13–15 are candidate extensions, not adopted.** They test the structure proposed on #245 and
+#250 against §§1–12, which they do not change. The verdict (§14.5): the `F ⊣ U` framing removes no
+obligation. Capture rebasing, independently of it, reduces O3 to one stated lemma (O5) and makes
+T1 a theorem.
+
 
 ## Conventions
 
@@ -76,6 +84,14 @@ cross-check: every result it has proved is cited by name, and nothing here contr
 | T14.5 | the `Mut`-cell lemma: a cell holding a rebased continuation is closed under resume (`d_callMut`) and drop (`close`) | proved here (candidate, §14) |
 | T14.6 | the kernel produces rebased continuations from every body with no lend spanning a suspension | proved here (candidate, §14) |
 | O14.1, O14.2 | a lend spanning a suspension (O3 at the kernel's tables); relabelling at `U` | open; the same-lifetime route is refuted (`refoldKripke_false`) |
+
+**Mechanised since** (#249, `docs/effect-model.md` §9): the three rule fixes of §2.5 in phase B's
+Lean, each counterexample of §10 refused by the judgement; T5.1 and T5.2 on trees, with lends
+and effect safety (`CM.fp`, `safety`); T7.11 (`writers_commute`, through the relation: the
+denotations agree only where the inner fresh name differs from the outer). O1 is restated over
+moded contexts (`O1`); it is still open. A cell holding a continuation, stratified by level, is
+proved closed under resume and drop in a separate model (`Cell.lean`), with T1 as the return of a
+borrow at the drop of the place that holds it.
 
 ## Findings, in brief
 

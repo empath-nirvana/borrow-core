@@ -8,11 +8,13 @@ contextual equivalence rather than `#guard`s. Standalone: no Mathlib, imported b
 
     lake build EffModelRel
 
-The design, the theorem table and the open items are in `docs/effect-model.md` §8.
+The design, the theorem table and the open items are in `docs/effect-model.md` §8 (phase B,
+#247) and §9 (the narrow run, #249: the TR's rule fixes, rows on types, effect safety, the
+ownership fragment, and a cell holding a continuation).
 
 | file | contents |
 |---|---|
-| `Syntax.lean` | modes, effect bounds, signatures, intrinsically typed values and computations |
+| `Syntax.lean` | modes, rows, signatures with the built-in `Res`, intrinsically typed values and computations |
 | `Tree.lean` | the denotation's trees and streams; every computation type a model; handlers, lends, `finally` |
 | `Denot.lean` | environments and the denotation |
 | `Obs.lean` | the observable of a closed program, contexts, contextual equivalence `CtxEq` |
@@ -25,9 +27,14 @@ The design, the theorem table and the open items are in `docs/effect-model.md` �
 | `Laws.lean` | algebraicity (with the destructor form), the handler laws, Staton's `ν` laws, no accidental handling |
 | `Tensor.lean` | the tensor (disjoint capabilities commute), absorption inside a pure model |
 | `Examples.lean` | `Log`/`Fail` sum and absorption at concrete handlers; `ν/op` refuted at a multi-shot operation; the T1 harm |
-| `Own.lean` | ownership tokens, safe trees `TS`, the ghost run `Tree.Safe`, `adequacyU` |
-| `Unary.lean` | the unary value relation `VS`/`CS`; independence `VS.indep` |
-| `UnaryCompat.lean` | safe trees are preserved by the model operations, `bind`, handlers and `finally` |
-| `Moded.lean`, `ModedJ.lean` | the moded judgement `VM`/`CM` (no `lend`) |
-| `UnaryFP.lean` | its fundamental property, and `resource_safety` |
+| `Own.lean` | ownership tokens, safe trees `TS` over permitted instances, the ghost run `Tree.Safe`, `adequacyU` |
+| `Unary.lean` | the unary value relation `VS`/`CS`, rows read as permissions; independence `VS.indep` |
+| `UnaryCompat.lean` | safe trees are preserved by the model operations, `bind`, handlers, lends and `using` frames |
+| `Moded.lean`, `ModedJ.lean` | rows of variables, levels, scope; the moded judgement `VM`/`CM` (with `lend`) |
+| `UnaryFP.lean` | its fundamental property, `safety` (resource and effect safety) and `safety_obs` |
 | `Obstruction.lean` | why the method stops at negative recursion: `no_negative_domain` |
+| `Writers.lean` | writers commute (T7.11), through the relation |
+| `Findings.lean` | the TR's three counterexamples to phase A, refused by the judgement |
+| `Ownership.lean` | `ν/op` at a linear operation, `O1` over moded contexts, η (`fwd_id` and the syntactic clause), hiding (`hnd_sim`) |
+| `Cell.lean` | places holding generators, stratified by level; the cell lemma (`adequacy`), `cell_safety`, borrows; `no_place_store` |
+| `CellExamples.lean` | a generator holding a resource across its yields; T1 as the return of a borrow (`borProg_safe`, `harmProg_not_safe`) |

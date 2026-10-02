@@ -68,8 +68,7 @@ def Cmp.ren (ri : Ren Ψ Ψ') (r : Ren Γ Δ) : Cmp S Ψ Γ C → Cmp S Ψ' Δ C
   | .newcap e s co v => .newcap e s co (v.ren ri r)
   | .getcap v => .getcap (v.ren ri r)
   | .lend v M => .lend (v.ren ri r) (M.ren ri.lift r)
-  | .using ℓ M => .using ℓ (M.ren ri r.lift)
-  | .use v => .use (v.ren ri r)
+  | .using ℓ M => .using ℓ (M.ren ri.lift r)
   | .unfold v => .unfold (v.ren ri r)
   | .bfix x a v n M => .bfix (ri _ x) a (v.ren ri r) n (M.ren ri r.lift)
 end
@@ -221,10 +220,7 @@ theorem Cmp.den_ren (ri : Ren Ψ Ψ') (r : Ren Γ Δ) : (M : Cmp S Ψ Γ C) →
   | .using ℓ M, η, η₀, ρ, ρ₀, hη, hρ => by
       simp only [Cmp.ren, Cmp.den]
       congr 1; funext r'; congr 1; funext u
-      exact congrArg (Tree.addFin ℓ r')
-        (Cmp.den_ren ri r.lift M η η₀ _ _ hη (Env.lift_pt (A := .res) hρ (ℓ, r')))
-  | .use v, η, η₀, ρ, ρ₀, hη, hρ => by
-      simp only [Cmp.ren, Cmp.den]; rw [Val.den_ren ri r v η η₀ ρ ρ₀ hη hρ]
+      exact congrArg (Tree.addFin ℓ r') (Cmp.den_ren ri.lift r M _ _ ρ ρ₀ (IEnv.lift_pt hη r') hρ)
   | .unfold v, η, η₀, ρ, ρ₀, hη, hρ => by
       simp only [Cmp.ren, Cmp.den]; rw [Val.den_ren ri r v η η₀ ρ ρ₀ hη hρ]
   | .bfix x a v n M, η, η₀, ρ, ρ₀, hη, hρ => by

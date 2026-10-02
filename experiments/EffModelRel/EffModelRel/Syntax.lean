@@ -14,8 +14,10 @@ here holds for every term of the larger calculus, moded or not.
 - **Effects** come from a signature `Sig`. An effect has resuming operations `O e` (with a
   continuation qualifier) and abortive operations `A e` (arity 0).
 - **Instances are never data.** There is no value type of instances: an instance is a variable
-  of `Ψ`, bound by `handle`, `nu`, `lend` or an instance abstraction, and passed only as an
-  instance argument (`iapp`).
+  of `Ψ`, bound by `handle`, `nu`, `lend`, `using` or an instance abstraction, and passed only as
+  an instance argument (`iapp`). A resource handle is an instance of the built-in effect `Res`.
+- **Rows.** Thunk, function and stream types carry a row (`Rw`): the instances, by level, that
+  forcing performs on. The denotation ignores rows; the moded judgement reads them.
 -/
 
 namespace EffRel
@@ -52,7 +54,9 @@ def G.den : G → Type
 /-- A ground value with its type: the contents of a capability cell. -/
 abbrev GVal := (g : G) × g.den
 
-/-- An effect signature. -/
+/-- An effect signature. It contains one built-in effect, `Res`, whose instances are the handles of
+`using` frames: its operations answer `()` at the linear qualifier, it has no abortive operation,
+and its bound is linear (`docs/effects-tr` D1.3). -/
 structure Sig where
   E : Type
   [deq : DecidableEq E]
@@ -69,22 +73,43 @@ structure Sig where
   bnd : E → Mode := fun _ => Mode.unr
   bnd_q : ∀ e o, (bnd e).ge (q e o) = true := by intro e o; simp [Mode.ge, Mode.unr]
   bnd_ab : ∀ e (_ : A e), (bnd e).ge Mode.aff = true := by intro e _; simp [Mode.ge, Mode.unr]
+  /-- The built-in effect of resource handles. -/
+  Res : E
+  /-- Its operation: `use`. -/
+  use : O Res
+  use_arg : arg Res use = .unit
+  res_unit : ∀ o : O Res, res Res o = .unit
+  res_lin : ∀ o : O Res, q Res o = ⟨false, false⟩
+  res_noab : A Res → False
 
 attribute [instance] Sig.deq
 
-/-- The bound of a computation's effects: the structural rules a handler of any operation it
-performs may apply to the continuation (`req`), and whether such a handler may keep it past the
-operation (`susp`). Phase A's `Bound`. -/
-structure Eb where
-  req : Mode
-  susp : Bool
+/-- A **row**: the instances a computation may perform on, each paired with the lifetime it is
+performed at. Both components are de Bruijn **levels** of the instance context (the position from
+its outermost end), so a row written under some instances keeps its meaning under more. A level is
+also a lifetime: the extent of the binder of the instance at that level, the outer ones
+outliving the inner ones. A thunk's lifetime is the meet of its row's lifetimes (`Rw.life`), and
+its effect bound, the join of the bounds of its instances' effects, is recovered from the row by
+whoever knows the effects (`docs/effects-tr` D2.5). Rows replace phase B's bounds `Eb`. -/
+structure Rw where
+  ent : List (Nat × Nat)
 deriving DecidableEq, Repr
 
-namespace Eb
-/-- Nothing, or only operations whose continuation is resumed once, in place. -/
-def bot : Eb := ⟨Mode.lin, false⟩
-def top : Eb := ⟨Mode.unr, true⟩
-end Eb
+namespace Rw
+/-- The empty row: performs nothing. -/
+def nil : Rw := ⟨[]⟩
+/-- One instance, at its own lifetime. -/
+def one (n : Nat) : Rw := ⟨[(n, n)]⟩
+def union (ρ ρ' : Rw) : Rw := ⟨ρ.ent ++ ρ'.ent⟩
+/-- The instance levels of a row. -/
+def insts (ρ : Rw) : List Nat := ρ.ent.map Prod.fst
+/-- The lifetime of a row: the meet of its lifetimes, the innermost level; `none` (`'static`) for
+the empty row. -/
+def life (ρ : Rw) : Option Nat :=
+  ρ.ent.foldr (fun p acc => some (match acc with | some m => max p.2 m | none => p.2)) none
+/-- Every instance and lifetime of the row is below level `n`: in scope under `n` instances. -/
+def Sc (n : Nat) (ρ : Rw) : Prop := ∀ p ∈ ρ.ent, p.1 < n ∧ p.2 < n
+end Rw
 
 mutual
 /-- Value types. -/
@@ -92,52 +117,60 @@ inductive VTy (S : Sig) : Type where
   | g (g : G)
   | prod (A B : VTy S)
   | sum (A B : VTy S)
-  /-- `U` at mode `m`: a suspended computation; forcing it performs within `b`. -/
-  | U (m : Mode) (b : Eb) (C : CTy S)
+  /-- `U` at mode `m`: a suspended computation; forcing it performs the row `b`. -/
+  | U (m : Mode) (b : Rw) (C : CTy S)
   /-- An owned capability: a cell with state of type `s` and the co-operations of effect `e`. -/
   | cap (e : S.E) (s : G)
-  /-- A handle on a resource owned by a `using` frame. -/
-  | res
-  /-- A stored generator `μX. U(F(A + int × X) & F 1)` whose pull performs within `b`: pulled, or
+  /-- A stored generator `μX. U(F(A + int × X) & F 1)` whose pull performs the row `b`: pulled, or
   dropped. -/
-  | strm (b : Eb) (A : VTy S)
+  | strm (b : Rw) (A : VTy S)
 
 /-- Computation types. -/
 inductive CTy (S : Sig) : Type where
   | F (A : VTy S)
-  /-- `A ⇒_b C`: after receiving its argument the function performs within `b`. -/
-  | arr (A : VTy S) (b : Eb) (C : CTy S)
+  /-- `A ⇒_b C`: after receiving its argument the function performs the row `b`. -/
+  | arr (A : VTy S) (b : Rw) (C : CTy S)
   /-- A record of two methods, `C & D`. -/
   | wth (C D : CTy S)
-  /-- `Πx:e. C`: a computation abstracted over an instance of `e`. -/
+  /-- `Πx:e. C`: a computation abstracted over an instance of `e`; it may perform on the instance
+  it receives, which `C` does not mention. -/
   | pi (e : S.E) (C : CTy S)
 end
 
 variable {S : Sig}
 
 /-- The pull side of a stream: done with an `A`, or an element and the rest. -/
-abbrev VTy.step (b : Eb) (A : VTy S) : VTy S := .sum A (.prod (.g .int) (.strm b A))
+abbrev VTy.step (b : Rw) (A : VTy S) : VTy S := .sum A (.prod (.g .int) (.strm b A))
 
 /-- What a stream unfolds to: pull it, or drop it. -/
-abbrev VTy.strmBody (b : Eb) (A : VTy S) : CTy S := .wth (.F (A.step b)) (.F (.g .unit))
+abbrev VTy.strmBody (b : Rw) (A : VTy S) : CTy S := .wth (.F (A.step b)) (.F (.g .unit))
 
 /-- The type of a continuation captured at an operation of qualifier `q`, answer `r`, into
 `C`. A continuation that may be dropped (`q.w`) is the pair `⟨resume, cancel⟩`, linear unless it
 may also be duplicated; cancelling runs its destructors. One that may not be dropped is just
 `resume`, at mode `q`. -/
-def ktyB : Bool → Mode → Eb → G → CTy S → VTy S
+def ktyB : Bool → Mode → Rw → G → CTy S → VTy S
   | true, q, b, r, C =>
-      .U (if q.c then Mode.unr else Mode.lin) Eb.bot (.wth (.arr (.g r) b C) (.F (.g .unit)))
-  | false, q, b, r, C => .U q Eb.bot (.arr (.g r) b C)
+      .U (if q.c then Mode.unr else Mode.lin) Rw.nil (.wth (.arr (.g r) b C) (.F (.g .unit)))
+  | false, q, b, r, C => .U q Rw.nil (.arr (.g r) b C)
 
 /-- The continuation of an operation of qualifier `q` and answer `r`, into `C`, whose resumption
 performs within `b`. -/
-abbrev kty (q : Mode) (b : Eb) (r : G) (C : CTy S) : VTy S := ktyB q.w q b r C
+abbrev kty (q : Mode) (b : Rw) (r : G) (C : CTy S) : VTy S := ktyB q.w q b r C
+
+/-- The error a co-operation may answer: an integer code at a **fallible** operation, one whose
+qualifier admits weakening, and nothing otherwise (`docs/effects-tr` D1.9, §8.2). -/
+abbrev Sig.errG (S : Sig) (e : S.E) (o : S.O e) : G := if (S.q e o).w then .int else .void
+
+/-- An error code as an integer. -/
+def errInt : {b : Bool} → (if b then G.int else G.void).den → Int
+  | true, n => n
+  | false, x => (x : Empty).elim
 
 /-- A co-operation's answer: the operation's answer and the next state, or an error code and
 the state the capability keeps. -/
 def coRes (S : Sig) (e : S.E) (s : G) (o : S.O e) : VTy S :=
-  .sum (.prod (.g (S.res e o)) (.g s)) (.prod (.g .int) (.g s))
+  .sum (.prod (.g (S.res e o)) (.g s)) (.prod (.g (S.errG e o)) (.g s))
 
 /-- de Bruijn variables. -/
 inductive Var {α : Type} : List α → α → Type where
@@ -199,12 +232,12 @@ inductive Cmp (S : Sig) : List S.E → List (VTy S) → CTy S → Type where
   /-- `ν x. handleAt x H M`: a fresh instance of `e` and a deep handler of it into `C`. A
   resuming clause binds the argument (index 1) and the continuation (index 0); an abortive
   clause binds the argument. -/
-  | handle (e : S.E) (b : Eb) (hr : Cmp S Ψ (A :: Γ) C)
+  | handle (e : S.E) (b : Rw) (hr : Cmp S Ψ (A :: Γ) C)
       (hop : (o : S.O e) → Cmp S Ψ (kty (S.q e o) b (S.res e o) C :: .g (S.arg e o) :: Γ) C)
       (hab : (a : S.A e) → Cmp S Ψ (.g (S.aarg e a) :: Γ) C)
       (M : Cmp S (e :: Ψ) Γ (.F A)) : Cmp S Ψ Γ C
   /-- A deep handler of an instance already in scope. -/
-  | handleAt (x : Var Ψ e) (b : Eb) (hr : Cmp S Ψ (A :: Γ) C)
+  | handleAt (x : Var Ψ e) (b : Rw) (hr : Cmp S Ψ (A :: Γ) C)
       (hop : (o : S.O e) → Cmp S Ψ (kty (S.q e o) b (S.res e o) C :: .g (S.arg e o) :: Γ) C)
       (hab : (a : S.A e) → Cmp S Ψ (.g (S.aarg e a) :: Γ) C)
       (M : Cmp S Ψ Γ (.F A)) : Cmp S Ψ Γ C
@@ -221,13 +254,16 @@ inductive Cmp (S : Sig) : List S.E → List (VTy S) → CTy S → Type where
       : Val S Ψ Γ (.g s) → Cmp S Ψ Γ (.F (.cap e s))
   /-- Consume a capability; answer its final state. -/
   | getcap : Val S Ψ Γ (.cap e s) → Cmp S Ψ Γ (.F (.g s))
-  /-- Lend a capability to `M` as a fresh instance: run `M` against the comodel. The borrow
-  writes the state back when it ends, normally, by a co-operation's error (`inr`), or by a
-  cancel. -/
-  | lend : Val S Ψ Γ (.cap e s) → Cmp S (e :: Ψ) Γ (.F A) → Cmp S Ψ Γ (.F (.sum A (.g .int)))
-  /-- Acquire a resource with label `ℓ`, owned by a frame whose destructor frees it. -/
-  | using (ℓ : Nat) : Cmp S Ψ (.res :: Γ) (.F A) → Cmp S Ψ Γ (.F A)
-  | use : Val S Ψ Γ .res → Cmp S Ψ Γ (.F (.g .unit))
+  /-- Lend a capability to `M` as a fresh instance: run `M` against the comodel. The lend
+  **consumes** the capability and answers it back beside `M`'s answer or a co-operation's error
+  (BoLo's `withbor` shape, `docs/effects-tr` D1.9). The state is written back when the body ends,
+  normally, by a co-operation's error (`inr`), or by a cancel. -/
+  | lend : Val S Ψ Γ (.cap e s) → Cmp S (e :: Ψ) Γ (.F A) →
+      Cmp S Ψ Γ (.F (.prod (.cap e s) (.sum A (.g .int))))
+  /-- Acquire a resource with label `ℓ`, owned by a frame whose destructor frees it. The handle is
+  an instance of the built-in effect `Res`; `use` is an operation on it, answered in place by the
+  frame (`docs/effects-tr` D1.9). -/
+  | using (ℓ : Nat) : Cmp S (S.Res :: Ψ) Γ (.F A) → Cmp S Ψ Γ (.F A)
   /-- Unroll a stream. -/
   | unfold : Val S Ψ Γ (.strm b A) → Cmp S Ψ Γ (A.strmBody b)
   /-- Bounded recursion: `n` unrollings of `M` (the recursive thunk is index 0), then the

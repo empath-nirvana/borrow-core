@@ -1,4 +1,4 @@
-# §14 The `Mut` cell with a rebased continuation (candidate result)
+# §15 The `Mut` cell with a rebased continuation (candidate result)
 
 [← §12 Sources and novelty](12-sources.md) · [index](README.md)
 
@@ -39,7 +39,7 @@ is marked open, with its exact statement.
    witness is excluded by the *strict* stratum of `Mut_α` ([TR] p. 4). A non-strict stratum is
    exactly where the negative occurrence would come back (`no_nonstrict_stratum`, the same Cantor
    argument as phase B's `no_negative_domain`).
-5. **Corollaries** (§14.7). T1 for the *resumer* (resuming while holding a lend) is bookkeeping:
+5. **Corollaries** (§15.7). T1 for the *resumer* (resuming while holding a lend) is bookkeeping:
    it is the `withswap` discipline. Generator objects, capabilities across `yield`, task queues
    and handler state follow for bodies with no spanning lend. T1 for the *continuation* (a lend
    spanning a `yield`) is O14.1 itself. Nothing here discharges it: one route is refuted by a
@@ -383,7 +383,7 @@ where:
 `κ`'s type, gives the remainder at `α′`. The rest of 6.65's proof then runs at `α′`. Its 6.27
 needs `@(rest) ⊐ α′`, which the fresh choice gives. This is a sketch, not a proof.
 
-*What exists.* The existing relabelling (§14.5) proves O14.2's conclusion only for `imm` views at
+*What exists.* The existing relabelling (§15.5) proves O14.2's conclusion only for `imm` views at
 data types. `relabel_obs`'s `thunk` case is the observable view, `True` (`vC_obs_aff`), so it
 transports nothing at `U`.
 

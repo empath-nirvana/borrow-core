@@ -10,8 +10,9 @@ stuck on, and no fuel.
 - `handle` allocates its instance with `ν`, then folds its body into the model of its clauses.
 - A resuming clause receives the continuation as `kty`: the pair `⟨resume, cancel⟩` when the
   operation may drop it (`cancel` runs its destructors), else `resume`.
-- `lend` reads the cell, runs the body against the comodel with a fresh instance, and writes
-  the state back.
+- `lend` reads the cell, runs the body against the comodel with a fresh instance, writes the
+  state back, and answers the capability beside the body's answer.
+- `using` acquires a resource as a fresh instance of `Res`; its frame answers `use` in place.
 - `bfix` is the `n`-th iterate of its body from the exhausted computation.
 -/
 
@@ -44,8 +45,7 @@ lemmas about environments match them syntactically. -/
 
 def VTy.gv {g : G} (x : g.den) : (VTy.g (S := S) g).den := x
 def VTy.capv {e : S.E} {s : G} (c : Nat) (co : CoSem S e s) : (VTy.cap (S := S) e s).den := (c, co)
-def VTy.resv (ℓ r : Nat) : (VTy.res (S := S)).den := (ℓ, r)
-def VTy.uv {m : Mode} {b : Eb} {C : CTy S} (c : C.den) : (VTy.U m b C).den := c
+def VTy.uv {m : Mode} {b : Rw} {C : CTy S} (c : C.den) : (VTy.U m b C).den := c
 
 /-- `n`-fold iteration. -/
 def iter {X : Type} : Nat → (X → X) → X → X
@@ -61,7 +61,7 @@ def iter {X : Type} : Nat → (X → X) → X → X
     (η.cons (e := e) i) e' (.s x) = η e' x := rfl
 
 /-- The continuation a resuming clause receives. -/
-def mkK : (w : Bool) → (q : Mode) → (b : Eb) → (r : G) → (C : CTy S) → (r.den → C.den) →
+def mkK : (w : Bool) → (q : Mode) → (b : Rw) → (r : G) → (C : CTy S) → (r.den → C.den) →
     Tree S Unit → (ktyB w q b r C).den
   | true, _, _, _, _, k, t => (k, t)
   | false, _, _, _, _, k, _ => k
@@ -120,10 +120,10 @@ def Cmp.den : {C : CTy S} → Cmp S Ψ Γ C → IEnv Ψ → Env Γ → C.den
   | _, .getcap (s := s) v, η, ρ => .act (.kill (v.den η ρ).1 s) .ret
   | _, .lend (e := e) (s := s) v M, η, ρ =>
       .act (.rd (v.den η ρ).1 s) (fun st =>
-        .nu (fun i => (M.den (η.cons i) ρ).runL i e (v.den η ρ).1 s (v.den η ρ).2 st))
+        .nu (fun i => ((M.den (η.cons i) ρ).runL i e (v.den η ρ).1 s (v.den η ρ).2 st).bind
+          (fun z => .ret (v.den η ρ, z))))
   | _, .using ℓ M, η, ρ =>
-      .nu (fun r => .act (.acq ℓ r) (fun _ => (M.den η (ρ.cons (VTy.resv ℓ r))).addFin ℓ r))
-  | _, .use v, η, ρ => .act (.use (v.den η ρ).1 (v.den η ρ).2) (fun _ => .ret ())
+      .nu (fun r => .act (.acq ℓ r) (fun _ => (M.den (η.cons r) ρ).addFin ℓ r))
   | _, .unfold v, η, ρ =>
       match v.den η ρ with
       | .mk p d => (p, d)

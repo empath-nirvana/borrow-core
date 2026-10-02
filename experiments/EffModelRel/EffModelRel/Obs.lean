@@ -9,8 +9,8 @@ name erased. Labels of resources stay, so the order in which destructors run is 
 
 - An operation that reaches the top is `unhandled`. The stack unwinds first: the destructors
   `d` it carries run.
-- Reading, writing or consuming a dead cell is `stuck`. A typed program in which every lend
-  ends before its owner consumes the cell never does that (T1, `Safety.lean`).
+- Reading, writing or consuming a dead cell is `stuck`. A moded program never does that
+  (`safety_obs`, `UnaryFP.lean`).
 
 **Contextual equivalence.** A context is a closed program with one free variable, the closure
 of the hole: the hole's term abstracted over its instances and its values. Two terms are
@@ -110,7 +110,7 @@ def Prog.obs (P : Prog S g) : Obs := (P.den IEnv.nil Env.nil).obs (G.render g) W
 
 def arrs : List (VTy S) → CTy S → CTy S
   | [], C => C
-  | A :: Γ, C => .arr A Eb.top (arrs Γ C)
+  | A :: Γ, C => .arr A Rw.nil (arrs Γ C)
 
 def pis : List S.E → CTy S → CTy S
   | [], C => C
@@ -132,10 +132,10 @@ def close (f : IEnv Ψ → Env Γ → C.den) : (holeTy Ψ Γ C).den :=
 
 /-- A context: a closed program of ground type over the hole's closure. -/
 abbrev Context (S : Sig) (Ψ : List S.E) (Γ : List (VTy S)) (C : CTy S) (g : G) :=
-  Cmp S [] [.U Mode.unr Eb.top (holeTy Ψ Γ C)] (.F (.g g))
+  Cmp S [] [.U Mode.unr Rw.nil (holeTy Ψ Γ C)] (.F (.g g))
 
 def Context.obs (P : Context S Ψ Γ C g) (f : IEnv Ψ → Env Γ → C.den) : Obs :=
-  (P.den IEnv.nil (Env.nil.cons (A := .U Mode.unr Eb.top (holeTy Ψ Γ C)) (close f))).obs (G.render g)
+  (P.den IEnv.nil (Env.nil.cons (A := .U Mode.unr Rw.nil (holeTy Ψ Γ C)) (close f))).obs (G.render g)
     Wd.init
 
 /-- Contextual equivalence. -/

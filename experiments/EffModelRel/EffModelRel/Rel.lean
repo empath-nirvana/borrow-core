@@ -224,7 +224,6 @@ def VR : (A : VTy S) → W → A.den → A.den → Prop
   | .U _ _ C, w, c, c' => CRU C w.gcP c c'
   | .cap _ _, w, c, c' => w.r c.1 c'.1 ∧ ∀ w', w.gcP.le w' → ∀ o a st,
       TreeRel (fun _ x x' => x = x') w' (c.2 o a st) (c'.2 o a st)
-  | .res, w, x, x' => x.1 = x'.1 ∧ w.r x.2 x'.2
   | .strm _ A, w, s, s' => StrmRel (fun w a a' => VR A w a a') w.gcP s s'
 
 def CRU : (C : CTy S) → W → C.den → C.den → Prop
@@ -250,8 +249,6 @@ theorem VR.mono : (A : VTy S) → ∀ {w w' : W} {a a' : A.den}, w.sub w' → VR
   | .cap _ _, _, _, _, _, hw, h => by
       unfold VR at h ⊢
       exact ⟨W.gcP_r.1 (hw.r _ _ (W.gcP_r.2 h.1)), fun w'' h2 => h.2 w'' (W.le.trans hw h2)⟩
-  | .res, _, _, _, _, hw, h => by
-      unfold VR at h ⊢; exact ⟨h.1, W.gcP_r.1 (hw.r _ _ (W.gcP_r.2 h.2))⟩
   | .strm _ A, _, _, _, _, hw, h => by
       unfold VR at h ⊢
       exact StrmRel.mono (RA := fun w a a' => VR A w a a') (fun _ _ _ _ h1 h2 => VR.mono A h1.sub h2) h _ hw
