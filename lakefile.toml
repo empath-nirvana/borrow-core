@@ -149,3 +149,8 @@ roots = ["HandlersControl"]
 name = "SecondClass"
 srcDir = "experiments/SecondClass"
 roots = ["SecondClass"]
+
+[[lean_lib]]
+name = "FnMut"
+srcDir = "experiments/FnMut"
+roots = ["FnMut"]
