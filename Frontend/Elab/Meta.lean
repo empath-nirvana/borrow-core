@@ -131,14 +131,14 @@ def ppT (A : CVTy) : String := ppVTy A
 /-- A type as surface syntax. -/
 def toSurface (sp : Span) (A : CVTy) : Except Error VTy := do
   match parseProgram s!"type IoT = {ppT A}\n" with
-  | .ok ⟨[.type _ _ B]⟩ => pure B
+  | .ok ⟨[.type _ _ _ _ B]⟩ => pure B
   | _ => throw ⟨sp, s!"internal error: the type `{ppT A}` does not print as surface syntax"⟩
 
 /-- A type as surface syntax in a context, its lifetimes by the names the context gives them. -/
 def TCx.surface (c : TCx) (sp : Span) (A : CVTy) : Except Error VTy := do
   let src := ppV c.E.lenv 0 0 A
   match parseProgram s!"type IoT = {src}\n" with
-  | .ok ⟨[.type _ _ B]⟩ => pure (B.respan sp)
+  | .ok ⟨[.type _ _ _ _ B]⟩ => pure (B.respan sp)
   | _ => throw ⟨sp, s!"internal error: the type `{src}` does not print as surface syntax"⟩
 
 /-- A lifetime as surface syntax in a context. -/

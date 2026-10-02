@@ -1,0 +1,62 @@
+-- The affine closure (SPEC §7, entry 22): codata with two observations, `call`, which takes an
+-- `A`, answers a `B` and hands back the rest, and `close`, which ends it.
+--
+--     Aff[A, B]<'c>  =  U (nu X. (A -o F (B * box 'c U X)) & F 1)
+--
+-- The state the closure holds (its captures, owned cells and borrows included) is hidden by the
+-- type, so a function over closures names no environment type. `'c` is the bound: a closure that
+-- outlives `'c` is `box 'c Aff[A, B]<'c>`, the form in which one is stored, lent `mut` and
+-- returned, and the rest every call hands back is again of that form. Dropping one runs its
+-- `close` (SPEC §12, class 2). The three kinds of function (cf. Rust's `FnOnce`, `FnMut`, `Fn`):
+--
+--     linear      A => B                  called once
+--     affine      box 'c Aff[A, B]<'c>     called any number of times, then closed
+--     persistent  !(A => B)               copied and forgotten freely
+--
+-- with `aff_of_fn` (persistent ≤ affine) and `aff_once` (affine ≤ linear). The name `Aff` is
+-- provisional (decision 60). `include aff` puts these in scope.
+
+type Aff[A, B]<'c> = U (nu X. (A -o F (B * box 'c U X)) & F 1)
+
+-- A closure over the state `s`, with the persistent step: the call's code over the state, and the
+-- close's. It outlives `'c` when the state does: `boxed['c] aff_new(s, step)`, checked where it
+-- is written, at the state's type.
+fn aff_new[S, A, B]<'c>(s: S, step: !U (S -o (A -o F (B * box 'c S)) & F 1)) -> Aff[A, B]<'c> =
+  f <- return (unfold[nu X. (A -o F (B * box 'c U X)) & F 1, S] step);
+  thunkv nu_in < g <- return (unbang f); (nu_out (force g s)).1,
+                 g <- return (unbang f); (nu_out (force g s)).2 >
+
+-- One call: the answer and the rest.
+fn aff_call[A, B]<'c>(f: box 'c Aff[A, B]<'c>, x: A) -> B * box 'c Aff[A, B]<'c> =
+  g <- return (unbox f);
+  (nu_out (force g)).1 x
+
+-- One call through a `mut` borrow: the closure is taken out, called, and its rest put back, so
+-- the state persists from call to call.
+fn aff_call_mut[A, B]<'a, 'c>(m: mut 'a (box 'c Aff[A, B]<'c>), x: A) -> mut 'a (box 'c Aff[A, B]<'c>) * B =
+  withswap['a, box 'c Aff[A, B]<'c>, B] m (thunkv fun (f : box 'c Aff[A, B]<'c>) ->
+    g <- return (unbox f);
+    p <- (nu_out (force g)).1 x;
+    let (b, r) = p;
+    return (r, b))
+
+-- Close: the closure disposes of its state.
+fn aff_close[A, B]<'c>(f: box 'c Aff[A, B]<'c>) -> 1 =
+  g <- return (unbox f);
+  (nu_out (force g)).2
+
+-- Persistent ≤ affine: a `!(A => B)` as a closure whose state is the function itself.
+fn aff_of_fn[A, B]<'c>(h: !(A => B)) -> box 'c Aff[A, B]<'c> =
+  boxed['c] aff_new[!(A => B), A, B]['c](h, !thunkv fun (h : !(A => B)) ->
+    < fun (x : A) -> b <- return ((unbang h) x); return (b, boxed['c] h),
+      return () >)
+
+-- Affine ≤ linear: call once, then close the rest.
+fn aff_once[A, B]<'c>(f: box 'c Aff[A, B]<'c>) -> A => B =
+  thunkv fun (x : A) ->
+    g <- return (unbox f);
+    p <- (nu_out (force g)).1 x;
+    let (b, r) = p;
+    h <- return (unbox r);
+    u <- (nu_out (force h)).2;
+    return b

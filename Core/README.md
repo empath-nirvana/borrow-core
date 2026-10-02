@@ -35,7 +35,11 @@ bytes written), with `Imm̲ = Unk`, not persistent and with no destructor.
 `νX. C` (`[spec §7]`) has `U X` as the type variable `0` of `C`'s value types, and at a positive
 `C` (`CTy.NuOk`) is interpreted as a greatest fixed point equal to its unrolling (`NuRel.lean`,
 `cC_nu_iff`). `D A`, `Stream A` and `Iter A R R'` are abbreviations over it (`CTy.delay`,
-`CTy.stream`, `CTy.iter`).
+`CTy.stream`, `CTy.iter`). An observation may take a closed argument, `A ⊸ D`, and the rest may be
+boxed, `[@a] U X` (`[spec §22]`); the affine closure `Aff^c A B = νX. (A ⊸ F(B ⊗ [@c] U X)) & F 1`
+is the instance that uses both, with its relation clause, coinduction and observable-view facts
+in `Aff.lean`, its derived rules (introduction, call, call through `Mut`, close, the two
+coercions) in `AffRules.lean`, and its programs in `AffPrograms.lean`.
 
 ### The judgment `CDerives Δ Γ e j`
 
@@ -214,6 +218,7 @@ The `IntPrograms.lean` runs are theorems at every host; the interpreter's result
 | `Places` | `Family.lean`, `FamilyPrograms.lean`, re-derived in `CDerives` at `VTy` payloads |
 | `LeafPlaces` | `Steps.lean` (step inversions; `DelayNaive.lean` uses it too), `Weaken.lean`, `BlockBorrow.lean` (plain types, `famTy`, `shortenE`, `withborS`, typing), `BlockTrack.lean` (`withborS_ret`, `withborS_packed`, `wpTSAngelic_allocBorrow`), `BlockPrograms.lean` |
 | `Recursion` (`Nu.lean`) | `StreamPrograms.lean`; the stream former it gave became an instance of the general `νX. C` (`NuRel.lean`, `Nu.lean`) |
+| `FnMut` (#236, #239) | the positivity relaxation (`Types.lean`, `Relation.lean`, `RelationFacts.lean`, `NuRel.lean`, `Computation.lean`, `Nu.lean`); `Aff.lean`, `AffRules.lean`, `AffPrograms.lean` (the programs in the sub-namespace `Aff`) |
 
 ## Decisions taken
 

@@ -177,7 +177,7 @@ structure Env where
 /-- The depth bound for elaborating a type. -/
 def tyFuel : Nat := 65536
 
-def Env.tyEnv (E : Env) (Δ : LifeCtx) : TyEnv := ⟨E.scope, Δ, Δ, E.lenv, [], [], E.tps⟩
+def Env.tyEnv (E : Env) (Δ : LifeCtx) : TyEnv := ⟨E.scope, Δ, Δ, E.lenv, [], [], E.tps, []⟩
 def Env.elabV (E : Env) (Δ : LifeCtx) (A : VTy) : Except Error CVTy := Frontend.Check.elabV tyFuel (E.tyEnv Δ) A
 def Env.elabC (E : Env) (Δ : LifeCtx) (C : CTy) : Except Error CCTy := Frontend.Check.elabC tyFuel (E.tyEnv Δ) C
 def Env.elabS (E : Env) (Δ : LifeCtx) (σ : Shape) : Except Error CShape :=

@@ -35,6 +35,7 @@ def sSB (η : Option (Nat → TEnt)) :
   | .ret A, _, δ, [], Q => ⌜Q = fun ls'' => vCE η true A ls'' δ⌝
   | .amp C D, ls, δ, v :: S, Q =>
       BoLo.or (⌜v = .inj₁ .unit⌝ ⋆ sSB η C ls δ S Q) (⌜v = .inj₂ .unit⌝ ⋆ sSB η D ls δ S Q)
+  | .arr A C, ls, δ, v :: S, Q => vC true A ls δ v ⋆ sSB η C ls δ S Q
   | _, _, _, _, _ => fun _ => False
 
 /-- `𝒮⟦C⟧(ls)δ(S, Q)`: `S` is a stack for `C` whose final `F A` has postcondition `Q`, and the
@@ -83,7 +84,21 @@ theorem cB_iff_stacks (η : Option (Nat → TEnt)) : ∀ (C : CTy), C.EffFree �
           exact h (_ :: S) Q ρ₁ ρ₂ (Or.inl (pure_sep_mk rfl hs)) hc
         · intro S Q ρ₁ ρ₂ hs hc
           exact h (_ :: S) Q ρ₁ ρ₂ (Or.inr (pure_sep_mk rfl hs)) hc
-  | .arr _ _, _, _, _, _, _ | .top, _, _, _, _, _ | .all _ _ _, _, _, _, _, _
+  | .arr A C, hE, ls, δ, e, ρ => by
+      constructor
+      · intro h S Q ρ₁ ρ₂ hs hc
+        cases S with
+        | nil => exact hs.elim
+        | cons v S =>
+            obtain ⟨a, b, hab, ha, hb⟩ := hs
+            obtain ⟨x, hx, hxb⟩ := compS_reassoc' hab hc
+            exact (cB_iff_stacks η C hE ls δ _ x).mp (h v a x ha hx) S Q b ρ₂ hb hxb
+      · intro h v a x ha hx
+        refine (cB_iff_stacks η C hE ls δ _ x).mpr ?_
+        intro S Q b y hb hy
+        obtain ⟨z, hz, hzy⟩ := compS_reassoc hx hy
+        exact h (v :: S) Q z y ⟨a, b, hz, ha, hb⟩ hzy
+  | .top, _, _, _, _, _ | .all _ _ _, _, _, _, _, _
   | .nu _, _, _, _, _, _ =>
       ⟨fun _ S _ _ _ hs => by cases S <;> exact hs.elim, fun _ => trivial⟩
 
@@ -188,7 +203,9 @@ theorem cB_step (η : Option (Nat → TEnt)) : ∀ (C : CTy) {e e' : Expr},
       ⟨cB_step η C (fun μ => (h μ).plug (Kont.appL .hole _)) ls δ _ h₁,
        cB_step η D (fun μ => (h μ).plug (Kont.appL .hole _)) ls δ _ h₂⟩
   | .eff _ _ _ _ _ _, _, _, h, ls, _ => ewp_step (opTable_mono _) h ls _
-  | .arr _ _, _, _, _, _, _ | .top, _, _, _, _, _ | .all _ _ _, _, _, _, _, _
+  | .arr _ C, _, _, h, ls, δ => fun _ h' v ρ₁ ρ₂ hv hc =>
+      cB_step η C (fun μ => (h μ).plug (Kont.appL .hole v)) ls δ _ (h' v ρ₁ ρ₂ hv hc)
+  | .top, _, _, _, _, _ | .all _ _ _, _, _, _, _, _
   | .nu _, _, _, _, _, _ => fun _ _ => trivial
 
 /-- `𝒞⟦C⟧` is closed under a pure step in front. -/
@@ -227,7 +244,17 @@ theorem cB_bind (η : Option (Nat → TEnt)) : ∀ (C : CTy) (K : Kont) (M : Exp
        cB_bind η D (.appL K _) M ls δ P R hR (fun ls' hls w σ hσ => (h ls' hls w σ hσ).2) ρ hρ⟩
   | .eff _ _ _ _ _ _, K, M, ls, _, P, R, hR, h =>
       ewp_bind_pure_frame (opTable_mono _) K M ls P R _ hR h
-  | .arr _ _, _, _, _, _, _, _, _, _ | .top, _, _, _, _, _, _, _, _
+  | .arr A C, K, M, ls, δ, P, R, hR, h => by
+      rintro ρ ⟨ρ₁, ρ₂, hc, hw, hr⟩ v a x ha hx
+      obtain ⟨y, hy, hyx⟩ := compS_reassoc hc hx
+      refine cB_bind η C (.appL K v) M ls δ P (fun l => R l ⋆ vC true A l δ v) ?_ ?_ x
+        ⟨ρ₁, y, hyx, hw, ρ₂, a, hy, hr, ha⟩
+      · rintro ls' hls σ ⟨σ₁, σ₂, hcσ, h₁, h₂⟩
+        exact ⟨σ₁, σ₂, hcσ, hR ls' hls σ₁ h₁, vC_same hls h₂⟩
+      · rintro ls' hls w σ ⟨σ₁, σ₂, hcσ, hp, τ₁, τ₂, hcτ, hr', hv⟩
+        obtain ⟨z, hz, hzσ⟩ := compS_reassoc' hcτ hcσ
+        exact h ls' hls w z ⟨σ₁, τ₁, hz, hp, hr'⟩ v τ₂ σ hv hzσ
+  | .top, _, _, _, _, _, _, _, _
   | .all _ _ _, _, _, _, _, _, _, _, _ | .nu _, _, _, _, _, _, _, _, _ => fun _ _ => trivial
 
 /-- **Bind at `𝒞⟦C⟧`.**  Run `M` in the hole of `K`, framing `R` through the run; the rest of

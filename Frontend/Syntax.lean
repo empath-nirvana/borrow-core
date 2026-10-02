@@ -128,6 +128,11 @@ inductive VTy where
   /-- `sized D S A`: a sized iterator over the data `D` with its own state `S`, yielding `A`
   (SPEC §16), the abbreviation `D * (S * !(D * S => (D * S) * (A + (1 + 1))))`. -/
   | sized (sp : Span) (D S A : VTy)
+  /-- `N[A₁, …]`: the type arguments of a parameterised `type` declaration, curried, with `F` the
+  name or a shorter application.  `[spec §7]` -/
+  | app (sp : Span) (F A : VTy)
+  /-- `N[…]<'a, …>`: its lifetime arguments, curried after the type arguments.  `[spec §7]` -/
+  | lapp (sp : Span) (F : VTy) (a : Life)
 
 /-- Computation types (syntax-core §4). -/
 inductive CTy where
@@ -542,7 +547,10 @@ structure CHandler where
 
 /-- Declarations (syntax-core §10). -/
 inductive Decl where
-  | type (sp : Span) (n : Ident) (A : VTy)
+  /-- `type N[T, …]<'a, …> = A`: an abbreviation, with type parameters `tps` and lifetime
+  parameters `lps` (both empty for `type N = A`), instantiated by substitution at each use.
+  `[spec §7]` -/
+  | type (sp : Span) (n : Ident) (tps : List Ident) (lps : List Ident) (A : VTy)
   | shape (sp : Span) (n : Ident) (σ : Shape)
   /-- `def name[P₁, …, Pₙ] : A = V`; `params` is empty for `def name : A = V`. `mark` is the
   `total` or `div` written before `def`. -/
@@ -602,6 +610,8 @@ def VTy.strip : VTy → VTy
   | .arrayImm _ a A => .arrayImm .none a.strip A.strip
   | .arrayMut _ a A => .arrayMut .none a.strip A.strip
   | .sized _ D S A => .sized .none D.strip S.strip A.strip
+  | .app _ G A => .app .none G.strip A.strip
+  | .lapp _ G a => .lapp .none G.strip a.strip
 
 def CTy.strip : CTy → CTy
   | .ret _ A => .ret .none A.strip
@@ -752,7 +762,7 @@ def Mark.strip : Mark → Mark
   | m => m
 
 def Decl.strip : Decl → Decl
-  | .type _ n A => .type .none n.strip A.strip
+  | .type _ n ps ls A => .type .none n.strip (ps.map Ident.strip) (ls.map Ident.strip) A.strip
   | .shape _ n σ => .shape .none n.strip σ.strip
   | .def_ _ n ps A V m => .def_ .none n.strip (ps.map Ident.strip) A.strip V.strip m.strip
   | .extern _ n A => .extern .none n.strip A.strip
@@ -794,7 +804,8 @@ def VTy.span : VTy → Span
   | .unit sp | .zero sp | .tensor sp _ _ | .sum sp _ _ | .thunk sp _ | .ref sp _ | .imm sp _ _
   | .mut sp _ _ | .box sp _ _ | .bang sp _ | .unk sp | .int sp _ | .handle sp _ | .mu sp _ _ | .name sp _
   | .lolli sp _ _ | .all sp _ _ _ | .block sp _ | .val sp _ | .fam sp _ _ _ | .view sp _ _
-  | .array sp _ | .arrayImm sp _ _ | .arrayMut sp _ _ | .sized sp _ _ _ => sp
+  | .array sp _ | .arrayImm sp _ _ | .arrayMut sp _ _ | .sized sp _ _ _ | .app sp _ _
+  | .lapp sp _ _ => sp
 
 def CTy.span : CTy → Span
   | .ret sp _ | .arr sp _ _ | .amp sp _ _ | .top sp | .all sp _ _ _ | .nu sp _ _ | .name sp _

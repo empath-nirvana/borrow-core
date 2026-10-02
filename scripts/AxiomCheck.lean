@@ -159,3 +159,15 @@ import Frontend.Check.Externs
 #print axioms BoCa.Fig16.LogRel.Core.Handlers.return_resumes
 #print axioms BoCa.Fig16.LogRel.Core.Handlers.handle_fold
 #print axioms BoCa.Fig16.LogRel.Core.Handlers.loop_abort
+-- SPEC §7 (entry 22): the affine closure, an instance of `ν` with an argument and a boxed rest
+#print axioms BoCa.Fig16.LogRel.Core.cC_aff_iff
+#print axioms BoCa.Fig16.LogRel.Core.aff_coind
+#print axioms BoCa.Fig16.LogRel.Core.affEffBody_nuOk
+#print axioms BoCa.Fig16.LogRel.Core.obs_transfer_affBox
+#print axioms BoCa.Fig16.LogRel.Core.d_mkBox
+#print axioms BoCa.Fig16.LogRel.Core.d_callMut
+#print axioms BoCa.Fig16.LogRel.Core.d_ofFn
+#print axioms BoCa.Fig16.LogRel.Core.d_once
+#print axioms BoCa.Fig16.LogRel.Core.Aff.counterProg_runs
+#print axioms BoCa.Fig16.LogRel.Core.Aff.passProg_runs
+#print axioms BoCa.Fig16.LogRel.Core.Aff.logProg_runs

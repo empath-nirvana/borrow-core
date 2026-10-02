@@ -44,7 +44,8 @@ abbrev unfoldTy (C : CTy) (S : VTy) : VTy :=
 /-! ### The terms -/
 
 /-- `map_A wr w`: `w` with every state `s` at an `X` position of `A` replaced by `wr s`.  At
-`X` `wr w`; at `⊗` and `⊕` componentwise; elsewhere `w`. -/
+`X` `wr w`; at `⊗` and `⊕` componentwise; at `[@a] A` as at `A` (the box is not a term);
+elsewhere `w`. -/
 def mapV : VTy → Val
   | .tvar 0 => .lam (.val (.lam (.app (.var 1) (.var 0))))
   | .tensor A B => .lam (.val (.lam (.letpair (.var 0)
@@ -53,6 +54,7 @@ def mapV : VTy → Val
   | .sum A B => .lam (.val (.lam (.case (.var 0)
       (.inj₁ (.app (.app (.val (mapV A)) (.var 2)) (.var 0)))
       (.inj₂ (.app (.app (.val (mapV B)) (.var 2)) (.var 0))))))
+  | .box _ A => mapV A
   | _ => .lam (.val (.lam (.var 0)))
 
 theorem mapV_closed : ∀ A : VTy, closedAt 0 (mapV A).1 = true
@@ -63,7 +65,8 @@ theorem mapV_closed : ∀ A : VTy, closedAt 0 (mapV A).1 = true
   | .sum A B => by
       simp [mapV, closedAt, closedAt_mono _ (mapV_closed A) (Nat.zero_le _),
         closedAt_mono _ (mapV_closed B) (Nat.zero_le _)]
-  | .tvar (_ + 1) | .unit | .zero | .thunk _ | .ref _ | .imm _ _ | .mut _ _ | .box _ _
+  | .box _ A => mapV_closed A
+  | .tvar (_ + 1) | .unit | .zero | .thunk _ | .ref _ | .imm _ _ | .mut _ _
   | .bang _ | .unk | .mu _ | .int _ | .opq _ | .fam _ => rfl
 
 /-- `λ_. c () o`: the step's computation at the child `o` of the node `c` runs. -/
@@ -78,7 +81,9 @@ def effAns : CTy → VTy
 /-- `node_C wr c`: the answer of the observation tree `C` to its observations, with `c ()` the
 step's computation at the node.  At `F A` and `F_Σ A`: run `c ()` and map its result with `wr`.
 At `C & D`:
-`λo. case o {inj₁ _. node_C wr (childV c (inj₁ ())) | inj₂ _. node_D wr (childV c (inj₂ ()))}`. -/
+`λo. case o {inj₁ _. node_C wr (childV c (inj₁ ())) | inj₂ _. node_D wr (childV c (inj₂ ()))}`.
+At `A ⊸ D`: `λx. node_D wr (childA c x)`, the argument passed on to the step's computation.
+`[spec §7, §22]` -/
 def nodeV : CTy → Val
   | .ret A => .lam (.val (.lam
       (bindE (.app (.var 0) (.val .unit)) (.app (.app (.val (mapV A)) (.var 2)) (.var 0)))))
@@ -89,6 +94,9 @@ def nodeV : CTy → Val
         (.val (.lam (.app (.app (.var 3) (.val .unit)) (.val (.inj₁ .unit))))))
       (.app (.app (.val (nodeV D)) (.var 3))
         (.val (.lam (.app (.app (.var 3) (.val .unit)) (.val (.inj₂ .unit)))))))))))
+  | .arr _ D => .lam (.val (.lam (.val (.lam
+      (.app (.app (.val (nodeV D)) (.var 2))
+        (.val (.lam (.app (.app (.var 2) (.val .unit)) (.var 1)))))))))
   | _ => .lam (.val (.lam (.val .unit)))
 
 theorem nodeV_closed : ∀ C : CTy, closedAt 0 (nodeV C).1 = true
@@ -98,7 +106,9 @@ theorem nodeV_closed : ∀ C : CTy, closedAt 0 (nodeV C).1 = true
         closedAt_mono _ (nodeV_closed D) (Nat.zero_le _)]
   | .eff _ _ _ _ _ C => by
       simp [nodeV, bindE, closedAt, closedAt_mono _ (mapV_closed (effAns C)) (Nat.zero_le _)]
-  | .arr _ _ | .top | .all _ _ _ | .nu _ => rfl
+  | .arr _ D => by
+      simp [nodeV, closedAt, closedAt_mono _ (nodeV_closed D) (Nat.zero_le _)]
+  | .top | .all _ _ _ | .nu _ => rfl
 
 /-- The body of `unfold_C = Z (λself. λg. λs. node_C (λs′. λo. self g s′ o) (λ_. g s))`. -/
 def fBN (C : CTy) : Expr :=
@@ -273,6 +283,26 @@ theorem nodeV_amp₂_steps (C D : CTy) (wr c : Val) :
   simp [childV, closed_subst (nodeV_closed D), subst_shift_succ]
   exact .refl
 
+/-- `λ_. c () x`: the step's computation at the node `c`, applied to the argument `x`. -/
+def childA (c x : Val) : Val :=
+  .lam (.app (.app (.val (c.shift 1 0)) (.val .unit)) (.val (x.shift 1 0)))
+
+/-- `node_{A ⊸ D} wr c x ↦ node_D wr (childA c x)`. -/
+theorem nodeV_arr_steps (A : VTy) (D : CTy) (wr c x : Val) :
+    PureSteps (.app (.app (.app (.val (nodeV (.arr A D))) (.val wr)) (.val c)) (.val x))
+      (.app (.app (.val (nodeV D)) (.val wr)) (.val (childA c x))) := by
+  refine (PureSteps.beta_in (.appL (.appL .hole _) _) _ wr).trans ?_
+  refine (PureSteps.beta_in (.appL .hole _) _ _).trans ?_
+  refine (PureSteps.beta _ _).trans ?_
+  simp [childA, closed_subst (nodeV_closed D), subst_shift_succ]
+  exact .refl
+
+theorem childA_steps (c x : Val) :
+    PureSteps (.app (.val (childA c x)) (.val .unit)) (.app (.app (.val c) (.val .unit)) (.val x)) := by
+  refine (PureSteps.beta _ _).trans ?_
+  simp [subst_shift_succ]
+  exact .refl
+
 theorem childV_steps (c o : Val) (ho : closedAt 0 o.1 = true) :
     PureSteps (.app (.val (childV c o)) (.val .unit)) (.app (.app (.val c) (.val .unit)) (.val o)) := by
   refine (PureSteps.beta _ _).trans ?_
@@ -346,9 +376,13 @@ theorem map_ok (C : CTy) (g : Val) (S : VTy) (δ : LSub) :
       · obtain ⟨w', hs, h'⟩ := map_ok C g S δ B hP.2 ls v σ₃ h
         exact ⟨.inj₂ w', (mapV_sum₂_steps A B _ v).trans (inj₂_steps hs),
           Or.inr ⟨w', σ₀, σ₃, hc, ⟨hσ₀, rfl⟩, h'⟩⟩
+  | .box _ A, hP, ls, w, σ, hw => by
+      obtain ⟨α, hα, hb, ho⟩ := hw
+      obtain ⟨w', hs, h'⟩ := map_ok C g S δ A hP ls w σ hb
+      exact ⟨w', hs, α, hα, h', ho⟩
   | .unit, hP, _, w, _, hw | .zero, hP, _, w, _, hw | .thunk _, hP, _, w, _, hw
   | .ref _, hP, _, w, _, hw | .imm _ _, hP, _, w, _, hw | .mut _ _, hP, _, w, _, hw
-  | .box _ _, hP, _, w, _, hw | .bang _, hP, _, w, _, hw | .unk, hP, _, w, _, hw
+  | .bang _, hP, _, w, _, hw | .unk, hP, _, w, _, hw
   | .mu _, hP, _, w, _, hw | .int _, hP, _, w, _, hw | .opq _, hP, _, w, _, hw
   | .fam _, hP, _, w, _, hw =>
       ⟨w, mapV_id_steps rfl _ w, by rw [← vCE_envS_nuEnv hP]; exact hw⟩
@@ -402,6 +436,10 @@ theorem node_ok (C : CTy) (g : Val) (S : VTy) (δ : LSub) :
        cB_pureSteps _ D₂ (nodeV_amp₂_steps D₁ D₂ _ c) ls δ ρ
         (node_ok C g S δ D₂ hD.2 _ (.app M (.val (.inj₂ .unit))) ls ρ
           ((childV_steps c _ rfl).trans (PureSteps.plug (.appL .hole _) hc)) hM.2)⟩
+  | .arr A D, hD, c, M, ls, ρ, hc, hM => fun v ρ₁ ρ₂ hv hcomp =>
+      cB_pureSteps _ D (nodeV_arr_steps A D _ c v) ls δ ρ₂
+        (node_ok C g S δ D hD.2 (childA c v) (.app M (.val v)) ls ρ₂
+          ((childA_steps c v).trans (PureSteps.plug (.appL .hole _) hc)) (hM v ρ₁ ρ₂ hv hcomp))
   | .eff n i q A B D, hD, c, M, ls, ρ, hc, hM => by
       have hR := EffLeaf.ans_poly (C := D) hD.2.2
       show ewpTS ls _ _ (effRetE _ D δ) ρ

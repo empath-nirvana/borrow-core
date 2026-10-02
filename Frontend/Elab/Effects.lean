@@ -352,6 +352,8 @@ where
       | .bang _ P', .bang _ A' => go k σ P' A'
       | .ref _ P', .ref _ A' => go k σ P' A'
       | .array _ P', .array _ A' => go k σ P' A'
+      | .app _ P₁ P₂, .app _ A₁ A₂ => both P₁ A₁ P₂ A₂
+      | .lapp _ P' a, .lapp _ A' b => if a.strip == b.strip then go k σ P' A' else none
       | P, A => if same P A then some σ else none
 
 /-- `matchTyBy` with types compared as written. -/
@@ -495,6 +497,8 @@ def _root_.Frontend.VTy.lifeVars : VTy → List String
   | .all _ _ b A => b.vars ++ A.lifeVars
   | .sized _ D S A => D.lifeVars ++ S.lifeVars ++ A.lifeVars
   | .fam _ _ a _ => a.vars
+  | .app _ G A => G.lifeVars ++ A.lifeVars
+  | .lapp _ G a => G.lifeVars ++ a.vars
   | _ => []
 
 def _root_.Frontend.CTy.lifeVars : CTy → List String

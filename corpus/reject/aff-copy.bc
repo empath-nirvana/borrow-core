@@ -1,0 +1,16 @@
+-- An affine closure (SPEC §22) is not persistent: it may own cells and borrows, so it is not
+-- copied (cf. Rust's `FnMut`, which is not `Copy`). Using `k` twice is refused; the persistent
+-- `!(A => B)` is the kind that is copied (`corpus/aff-coerce.bc`).
+include aff
+
+main -> i32 =
+  let d = alloc(0);
+  let r = borrow mut d { 'x, e ->
+    let k = aff_of_fn[i32, i32]['x](!thunkv fun (x : i32) -> return (x + 1));
+    let (a, k1) = aff_call(k, 1);
+    let (b, k2) = aff_call(k, 2);
+    aff_close(k1);
+    aff_close(k2);
+    a + b };
+  free(d) + r
+-- expect: 10:5: `k` is used twice here, and its type `box 'x U (nu X. (i32 -o F (i32 * box 'x U X)) & F 1)` is not persistent

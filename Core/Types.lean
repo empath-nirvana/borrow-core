@@ -1103,23 +1103,26 @@ end VTy
 
 In `νX. C` the value type `U X` is the type variable `0` of `C`'s value types.  `C` is a
 `&`-tree of observations `F A` (`NuLeaf`), headed by `&` (`NuOk`), with `X` occurring in each
-`A` only under `⊗` and `⊕` (`VTy.Poly`): there the relation is monotone in `X` and coiteration
+`A` only under `⊗`, `⊕` and `[@a]` (`VTy.Poly`): there the relation is monotone in `X` and coiteration
 maps a state to the rest. -/
 
-/-- `X` occurs in `A` only under `⊗` and `⊕`: a variable, or `⊗`/`⊕` of such types, or a type
-in which `X` does not occur. -/
+/-- `X` occurs in `A` only under `⊗`, `⊕` and `[@a]`: a variable, or `⊗`/`⊕`/`[@a]` of such
+types, or a type in which `X` does not occur.  `[spec §22]`: the rest of an affine closure that
+outlives `@a` is `[@a] U X`. -/
 def VTy.Poly : VTy → Prop
   | .tensor A B => A.Poly ∧ B.Poly
   | .sum A B => A.Poly ∧ B.Poly
+  | .box _ A => A.Poly
   | .tvar _ => True
   | A => ¬ A.Occ 0
 
 theorem VTy.noMut_of_poly : ∀ {A : VTy}, A.Poly → A.NoMut 0
   | .tensor _ _, h => ⟨noMut_of_poly h.1, noMut_of_poly h.2⟩
   | .sum _ _, h => ⟨noMut_of_poly h.1, noMut_of_poly h.2⟩
+  | .box _ A, h => noMut_of_poly (A := A) h
   | .tvar _, _ => trivial
   | .unit, _ | .zero, _ | .thunk _, _ | .unk, _ | .int _, _ | .opq _, _ => trivial
-  | .ref _, h | .imm _ _, h | .mut _ _, h | .box _ _, h | .bang _, h | .fam _, h | .mu _, h =>
+  | .ref _, h | .imm _ _, h | .mut _ _, h | .bang _, h | .fam _, h | .mu _, h =>
       VTy.noMut_of_not_occ _ h
 
 namespace CTy
@@ -1130,6 +1133,7 @@ def instT (S : VTy) : CTy → CTy
   | .ret A => .ret (VTy.inst S A)
   | .amp C D => .amp (instT S C) (instT S D)
   | .eff n i q A B C => .eff n i q A B (instT S C)
+  | .arr A C => .arr A (instT S C)
   | C => C
 
 /-- An effectful observation `F_Σ A`: a row's layers over `F A`, the operation types closed and
@@ -1139,11 +1143,14 @@ def EffLeaf : CTy → Prop
   | .eff _ _ _ A B C => A.Cl 0 ∧ B.Cl 0 ∧ EffLeaf C
   | _ => False
 
-/-- A `&`-tree of observations `F A` and `F_Σ A`, each `A` polynomial in `X`.  `[spec §7, §19]` -/
+/-- A `&`-tree of observations `F A` and `F_Σ A`, each `A` polynomial in `X`, and observations
+with an argument `A ⊸ D` over such a tree, the argument type closed (the affine closure's
+`call`).  `[spec §7, §19, §22]` -/
 def NuLeaf : CTy → Prop
   | .ret A => A.Poly
   | .amp C D => NuLeaf C ∧ NuLeaf D
   | .eff n i q A B C => EffLeaf (.eff n i q A B C)
+  | .arr A D => A.Cl 0 ∧ NuLeaf D
   | _ => False
 
 /-- **Positivity** of `νX. C`: `C` is a `&` of two observation trees. -/
@@ -1204,9 +1211,10 @@ theorem VTy.poly_of_not_occ : ∀ {A : VTy}, ¬ A.Occ 0 → A.Poly
       poly_of_not_occ (fun h' => h (Or.inr h'))⟩
   | .sum _ _, h => ⟨poly_of_not_occ (fun h' => h (Or.inl h')),
       poly_of_not_occ (fun h' => h (Or.inr h'))⟩
+  | .box _ A, h => poly_of_not_occ (A := A) h
   | .tvar _, _ => trivial
   | .unit, h | .zero, h | .thunk _, h | .unk, h | .int _, h | .opq _, h => h
-  | .ref _, h | .imm _ _, h | .mut _ _, h | .box _ _, h | .bang _, h | .fam _, h | .mu _, h => h
+  | .ref _, h | .imm _ _, h | .mut _ _, h | .bang _, h | .fam _, h | .mu _, h => h
 
 theorem VTy.not_occ_rename_succ (A : VTy) : ¬ (A.rename Nat.succ).Occ 0 := fun h => by
   obtain ⟨n, hn, -⟩ := VTy.occ_rename A Nat.succ h

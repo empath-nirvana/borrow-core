@@ -540,6 +540,7 @@ keyword because each mode is a separate theorem.
 
 <!-- ANCHOR: declarations -->
     type Name = A
+    type Name[T₁, …]<'a₁, …> = A        -- type and lifetime parameters (SPEC §22)
     shape Name = σ
     def name : A = V
     def name[P₁, …, Pₙ] : A = V         -- value-type parameters, macro-expanded
@@ -549,7 +550,9 @@ keyword because each mode is a separate theorem.
     main : C = M
 
 - **`type` and `shape`** are abbreviations, expanded before checking, in declaration order,
-  and not recursive.
+  and not recursive. A `type` with parameters is used as `Name[A₁, …]<'b₁, …>`, every parameter
+  given: the arguments are elaborated at the use, and the body in the declaration's scope with
+  the parameters bound to them (SPEC §22).
 - **`def`** is a macro. Its body is a closed value-judged expression: it may mention earlier
   `def`s, constants and derived forms, but no variables or lifetimes of the use site. At each
   use, the checker substitutes the body and **re-checks it there**, at that use's Δ and at an
