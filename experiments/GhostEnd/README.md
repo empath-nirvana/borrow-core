@@ -346,7 +346,7 @@ yields again with the lend inside it. Every hypothesis is discharged.
 | rule | status |
 |---|---|
 | `[ret]` and the pure rules | routine: `fundamentalC` from the context's relation (`rbodyT_ret`, `rbodyC_ret`) |
-| `[perform]`, `[let]`, `1E`, `+E` | routine: `RBody`'s proofs, with the table and the dropped cell carried |
+| `[perform]`, `[let]`, `1E`, `+E` | routine: `RBody`'s proofs, with the table and the dropped cell carried (all four for `RBodyT`; `[perform]` and `[let]` for `RBodyC`) |
 | `[lam]`, `thunk` (pure body) | routine: the value is a typed closure (`rbodyC_thunk`) |
 | `[lam]` (effectful body) | routine given the body's `RBodyC`: `cloL_of_rbodyC` |
 | `[app]`, `[force]` of a `CloL` closure | routine: `cloL_call` |
@@ -364,8 +364,9 @@ derived this case and have not verified that any obstruction is real.
 **The T15 tripwire.** It is not reached. `TV` is an inductive predicate in which the
 environment occurs positively. `CloL` fixes the environment in the closure's resource and is
 defined over `bodyAtD`/`OpenD`, which do not mention `TV`. A frozen closure thaws by structural
-recursion on its typing derivation, not by a domain equation. The cell's payload `T` is free of
-`'x` (`hT`), so a cell cannot store a closure typed at the lend. The tripwire would be reached by
+recursion on its typing derivation, not by a domain equation. The lend's own cell cannot hold a
+closure over a view of itself: a cell's witness lies strictly above the cell's lifetime
+(`ptoMutS`'s `σ ∈ Res_b`), as §15's L14.9 uses. The tripwire would be reached by
 making `TV`'s closure case carry its body's `RBodyC`, which would put `TV` negatively inside its
 own constructor: the shape of `no_negative_domain`. `CloL` avoids it by being semantic. I have
 not stated that variant in Lean.
