@@ -159,7 +159,8 @@ theorem vOutlives_cbv {Δ : LifeCtx} {a : Lifetime.Life} {T : Ty} (h : OutlivesR
   | sum _ _ ih₁ ih₂ => exact .sum ih₁ ih₂
   | ref _ ih => exact .ref ih
   | bang => exact .bang
-  | box h => exact .box h
+  -- 2.35's strict premise gives the non-strict one of `VOutlives.box`.  `[spec §23]`
+  | box h => exact .box (entailsLe_of_entailsLt h)
   | imm h => exact .imm h
   | «mut» h => exact .mut h
 

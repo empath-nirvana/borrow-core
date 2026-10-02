@@ -173,7 +173,7 @@ theorem d_scopeBodyWith {Γ : Ctx VTy} {cb : Expr}
     (.lolliE (split_kill _).toP (hcb (kill_dead _))
       (.lolliE (split_kill' _).toP (.var (.here (.cons (.cons (.cons hΓ.toP)))))
         (.withbor2 (A := PC) (B := .i32) 1 (kill_dead _).toP rfl
-          ⟨.var 0, LifeCtx.defines_of_wf rfl, .box (BoCa.Programs.entailsLt_top rfl)⟩ (vfree_PC 1)
+          ⟨.var 0, LifeCtx.defines_of_wf rfl, .box (entailsLe_of_entailsLt (BoCa.Programs.entailsLt_top rfl))⟩ (vfree_PC 1)
           (by simp [VFree])))) ?_
   refine .bind (.right (.left (.dead (.dead (.dead (.dead (deadSplit hΓ)))))))
     (.ret (.lolliE (split_kill' _).toP
@@ -448,7 +448,7 @@ theorem outX_sound {A : VTy} (h : outX A = true) : VOutlives Δ₁ (.var 0) A :=
   cases A with
   | box b A =>
       cases b with
-      | top => exact .box (BoCa.Programs.entailsLt_top rfl)
+      | top => exact .box (entailsLe_of_entailsLt (BoCa.Programs.entailsLt_top rfl))
       | _ => exact outlives_of_dataB (by simpa [outX] using h)
   | _ => exact outlives_of_dataB (by simpa [outX] using h)
 
@@ -483,7 +483,7 @@ theorem d_nestBody : CDerives Δ₁ ΓS nestBody (.comp (.ret (.box (.var 0) .i3
   have hX : Δ₁.Defines (.var 0) := LifeCtx.defines_of_wf rfl
   refine mkBoxC trivial hT (.ref .int)
     (appP (d_i32 0 (by cdeadP)) (.alloc (by cdeadP))) (d_counterStep hT (kill_dead _)) ?_
-  refine mkBoxC trivial hX (.box (BoCa.Programs.entailsLt_top rfl)) (.var (by csoloP)) ?_ ?_
+  refine mkBoxC trivial hX (.box (entailsLe_of_entailsLt (BoCa.Programs.entailsLt_top rfl))) (.var (by csoloP)) ?_ ?_
   · -- the outer step
     refine .bangThunkV (persistent_dead (kill_dead _)) rfl (.lam (.withI (.lam ?_) ?_))
     · refine bindC (unboxC (by csoloP)

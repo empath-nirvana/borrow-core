@@ -474,7 +474,8 @@ theorem ptoMutX_create {l : Loc} {α b : Life} {ls : List SRec} {S : VTy} {δ : 
   exact ⟨hw, b, u, σ, hσ, Q, hw, ls, hab, rfl, hQ, strat_fresh hfresh, hunif⟩
 
 /-- `[TR]` 6.60 at `vC`, both modes: `vDen_outlives`'s induction.  The `Imm` case reads the
-cell's bound only; the payload is not consulted. -/
+cell's bound only; the payload is not consulted.  The box case takes the stratum's
+monotonicity at `α ⊑ β`, the non-strict box rule.  `[spec §23]` -/
 theorem vC_outlives {Δ : LifeCtx} {δ : LSub} {a : Lifetime.Life} {α : Life}
     (hδ : Δ.Models δ) (ha : a.interp δ = some α) {T : VTy}
     (hT : VOutlives Δ a T) (b : Bool) :
@@ -516,12 +517,12 @@ theorem vC_outlives {Δ : LifeCtx} {δ : LSub} {a : Lifetime.Life} {α : Life}
       exact ResU.inStratum_empty α
   | box c T =>
       cases hT with
-      | box hlt =>
+      | box hle =>
           obtain ⟨β, hb, -, ho⟩ := h
-          obtain ⟨α', β', ha', hb', hlt'⟩ := hlt δ hδ
+          obtain ⟨α', β', ha', hb', hle'⟩ := hle δ hδ
           rw [ha] at ha'; cases Option.some.inj ha'
           rw [hb] at hb'; cases Option.some.inj hb'
-          exact ho.mono (le_of_lt (show (α : Life) < β from hlt'))
+          exact ho.mono (show (α : Life) ≤ β from hle')
   | imm c T =>
       cases hT with
       | imm hlt =>

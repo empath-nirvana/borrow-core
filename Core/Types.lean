@@ -1724,7 +1724,9 @@ theorem vFree_immReborrow {x y : LifeVar} : ∀ (A : VTy),
 /-! ### Outlives and scoping -/
 
 /-- `Δ ⊢ A ⊐ @a` on value types: `[TR]` p. 2's rules (`OutlivesRules`), with `0` outliving
-every lifetime (it has no values), and `μ` checked at its body. -/
+every lifetime (it has no values), and `μ` checked at its body. The box rule is non-strict,
+`[@b] A ⊐ @a` from `Δ ⊨ @a ⊑ @b`: an extension of 2.35, sound because a `[@b] A` value's
+resource is already in `Res_β ⊆ Res_α` (`vC_outlives`).  `[spec §23]` -/
 inductive VOutlives (Δ : LifeCtx) (a : Lifetime.Life) : VTy → Prop where
   | unit : VOutlives Δ a .unit
   | tensor {A B} : VOutlives Δ a A → VOutlives Δ a B → VOutlives Δ a (.tensor A B)
@@ -1732,7 +1734,8 @@ inductive VOutlives (Δ : LifeCtx) (a : Lifetime.Life) : VTy → Prop where
   | sum {A B} : VOutlives Δ a A → VOutlives Δ a B → VOutlives Δ a (.sum A B)
   | ref {A} : VOutlives Δ a A → VOutlives Δ a (.ref A)
   | bang {A} : VOutlives Δ a (.bang A)
-  | box {b A} : Δ.EntailsLt a b → VOutlives Δ a (.box b A)
+  /-- `[@b] A ⊐ @a` from `Δ ⊨ @a ⊑ @b`.  `[spec §23]` -/
+  | box {b A} : Δ.EntailsLe a b → VOutlives Δ a (.box b A)
   | imm {b A} : Δ.EntailsLt a b → VOutlives Δ a (.imm b A)
   | «mut» {b A} : Δ.EntailsLt a b → VOutlives Δ a (.mut b A)
   /-- A type variable is read under its `μ`, whose body is checked with the variable
@@ -1746,6 +1749,13 @@ inductive VOutlives (Δ : LifeCtx) (a : Lifetime.Life) : VTy → Prop where
   | opq {k} : VOutlives Δ a (.opq k)
   /-- `Δ ⊢ [L] ⊐ @a` from `Δ ⊢ L ⊐ @a`.  `[spec §9]` -/
   | fam {L} : VOutlives Δ a L → VOutlives Δ a (.fam L)
+
+/-- `Δ ⊨ @a ⊏ @b` gives `Δ ⊨ @a ⊑ @b`. -/
+theorem entailsLe_of_entailsLt {Δ : LifeCtx} {a b : Lifetime.Life} (h : Δ.EntailsLt a b) :
+    Δ.EntailsLe a b := fun δ hδ => by
+  obtain ⟨m, n, hm, hn, hlt⟩ := h δ hδ
+  refine ⟨m, n, hm, hn, ?_⟩
+  simp only [Lifetime.SLife.Lt, Lifetime.SLife.Le] at hlt ⊢; omega
 
 theorem VOutlives.rename {Δ : LifeCtx} {a : Lifetime.Life} {A : VTy} (h : VOutlives Δ a A) :
     ∀ r : Nat → Nat, VOutlives Δ a (A.rename r) := by

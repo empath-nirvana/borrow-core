@@ -40,10 +40,8 @@ main -> i32 =
   let d = alloc(0);
   let r = borrow mut d { 'x, e ->
     let c = alloc(counter ['x](0));
-    let (c, t) = borrow mut e { 'y, e2 ->
-      let t = borrow mut c { 'w, m -> outer(m) };
-      (c, t) };
-    let k = free(c);
+    let t = borrow mut c { 'w, m -> outer(m) };
+    let k = free[box 'x Aff[i32, i32]<'x>] c;
     aff_close(k);
     t
   };

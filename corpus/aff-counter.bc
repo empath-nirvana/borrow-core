@@ -5,8 +5,8 @@
 -- second call sees the state the first one left. Then the closure is taken out of the cell and
 -- closed, which frees the counter's cell.
 --
--- The closure is bounded by `'x`, the lifetime of the outer borrow, and lent inside the inner one
--- (`'y`): BoLo's outlives is strict, so a closure bounded by `'x` is lent at a lifetime below it.
+-- The closure is bounded by `'x` and lent `mut` in `'x`'s own scope: the box rule of outlives is
+-- non-strict (SPEC §23), so `box 'x …` outlives `'x`.
 --
 -- Answer: i32[24], 11 + 13, and `live 0`. A call that did not store its total gives 11 + 12; a
 -- `close` that did not free the counter's cell leaves one cell live. The calls through the borrow
@@ -33,10 +33,8 @@ main -> i32 =
   let d = alloc(0);
   let r = borrow mut d { 'x, e ->
     let c = alloc(counter ['x](10));
-    let (c, t) = borrow mut e { 'y, e2 ->
-      let t = borrow mut c { 'w, m -> let (m, t) = twice(m); t };
-      (c, t) };
-    let k = free(c);
+    let t = borrow mut c { 'w, m -> let (m, t) = twice(m); t };
+    let k = free[box 'x Aff[i32, i32]<'x>] c;
     aff_close(k);
     t
   };

@@ -455,7 +455,7 @@ theorem defines_of_wf {Δ : LifeCtx} {a : Lifetime.Life} (h : a.wf Δ = true) : 
 
 /-! ### Outlives and scoping -/
 
-/-- `Δ ⊢ A ⊐ @a`, decided through `ltB`. -/
+/-- `Δ ⊢ A ⊐ @a`, decided through `leB` at a box and `ltB` at a borrow.  `[spec §23]` -/
 def outlivesB (Δ : LifeCtx) (a : Lifetime.Life) : VTy → Bool
   | .unit => true
   | .zero => true
@@ -467,7 +467,7 @@ def outlivesB (Δ : LifeCtx) (a : Lifetime.Life) : VTy → Bool
   | .tensor A B => outlivesB Δ a A && outlivesB Δ a B
   | .sum A B => outlivesB Δ a A && outlivesB Δ a B
   | .ref A => outlivesB Δ a A
-  | .box b _ => ltB Δ a b
+  | .box b _ => leB Δ a b
   | .imm b _ => ltB Δ a b
   | .mut b _ => ltB Δ a b
   | .mu A => outlivesB Δ a A
@@ -490,7 +490,7 @@ theorem outlivesB_sound (Δ : LifeCtx) (a : Lifetime.Life) :
       simp only [outlivesB, Bool.and_eq_true] at h
       exact .sum (outlivesB_sound Δ a A h.1) (outlivesB_sound Δ a B h.2)
   | .ref A, h => .ref (outlivesB_sound Δ a A h)
-  | .box _ _, h => .box (ltB_sound h)
+  | .box _ _, h => .box (leB_sound h)
   | .imm _ _, h => .imm (ltB_sound h)
   | .mut _ _, h => .mut (ltB_sound h)
   | .mu A, h => .mu (outlivesB_sound Δ a A h)

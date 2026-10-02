@@ -783,3 +783,17 @@ Each entry: the decision, and why. Newest last.
     - **`aff_new` returns the closure unboxed**, and the caller writes `boxed['c] aff_new(…)`: a
       template's lifetime parameters are unrelated to the lifetimes in its type arguments, so the
       outlives `[]I` needs is checked where the state's type is known.
+61. **Non-strict outlives where the model allows it; provisional spellings (SPEC §23, #243, from
+    the spike #241).**
+    - **Kernel.** The box rule of the outlives judgment and the side condition of the borrows that
+      lend a payload `mut` take `⊑` (K1, K2). They are extensions read against the paper's model,
+      as SPEC §4 is; the paper's `⊏` is kept at the `Imm`/`Mut` rules where `[]I` reads them, at
+      the strata and the box modality, and at the fresh lifetime of `withbor`/`withload`, where
+      the spike found the strict premise load-bearing.
+    - **`main`'s lifetime (E1).** An undetermined lifetime argument is `dom`; in `main`, with no
+      lifetime in scope, it is a lifetime of `main`'s own, a borrow of a unit cell made only when
+      the body needs it. Chosen over instances at `top` (one instance per function reached at
+      `top`) for its cost of one cell.
+    - **Spellings (provisional):** `where S: 'c` after a function's result type (and its row) for
+      a lifetime bound on a type parameter; the implicit lifetime has no name; `aff_new_boxed` for
+      the bounded constructor of `lib/aff.bc`. Rust's `T: 'a` is the comparison only.
