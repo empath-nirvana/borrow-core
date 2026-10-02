@@ -1,0 +1,33 @@
+-- `|>` (decision 50, SPEC §22): `e |> g(a, …)` is `g(e, a, …)`, the piped value first. When `g` is a
+-- handler, it is `with g(a, …) { e }`; when `g`'s first parameter is a computation parameter, `e`
+-- is passed suspended, as a callback. A chain applies innermost first.
+--
+-- * `attempt(x) |> to_result`: a handler applied to a computation;
+-- * `report(body)`: a function over a computation that handles it, `body() |> to_result` in its
+--   body, `Fail` provided to its callback;
+-- * `attempt(x) |> default(d)`: a handler with an argument;
+-- * `attempt(x) |> retry(3) |> to_result`: a function over a computation, then a handler.
+--
+-- Answer: ((inr i32[7], inl i32[3]), ((inr i32[7], i32[100]), (inl i32[3], inr i32[7]))): `attempt(7)`
+-- raises 7 and `attempt(3)` answers 3; `default(100)` answers 100 for the error; `retry` reruns `attempt(3)`
+-- once and answers it, and runs `attempt(7)` three times and the third error reaches `to_result`.
+include fail
+
+fn attempt(x: i32) -> i32 with Fail[i32] = if x > 5 { raise(x) } else { x }
+
+fn report[A, E](body: !(1 => A) with Fail[E]) -> A + E = body() |> to_result
+
+fn retry[A, E](body: !(1 => A) with Fail[E], n: i32) -> A with Fail[E] =
+  let r = for i in 1..n {
+    match body() |> to_result { inl a -> break (inl a : A + 1) | inr e -> () }
+  } else { (inr () : A + 1) };
+  match r { inl a -> a | inr u -> body() }
+
+main -> ((i32 + i32) * (i32 + i32)) * (((i32 + i32) * i32) * ((i32 + i32) * (i32 + i32))) =
+  let a = attempt(7) |> to_result;
+  let b = report({ u -> attempt(3) });
+  let c = report({ u -> attempt(7) });
+  let d = attempt(7) |> default(100);
+  let e = attempt(3) |> retry(3) |> to_result;
+  let f = attempt(7) |> retry(3) |> to_result;
+  ((a, b), ((c, d), (e, f)))

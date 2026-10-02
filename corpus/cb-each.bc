@@ -1,0 +1,43 @@
+-- Callbacks over data (SPEC §22): `each` calls its callback at every index of a count, and `fold`
+-- threads an accumulator through its callback. Each is written once, at a callback type with no
+-- effect, and used with callbacks that log (`Log`, an answering effect: its capability is the
+-- callback's, passed at each call), that raise (`Fail`, handled outside: the loop's step leaves at
+-- the raise, and the error is raised again after it), and that do neither. A copy is made per
+-- profile of the callback's effects, its body shared by every callback of that profile: the two
+-- logging callbacks of the second line are one body, the call of the callback a dispatch between
+-- their two codes. A callback that does nothing effectful is passed as written, to the function as
+-- written.
+--
+-- Answer: ((inr i32[300], i32[6]), ((i32[45], i32[65]), (inr i32[3], i32[16]))): `each` logs 0,
+-- 1, 2 and 3 (6) and raises at 3; the first fold sums 0..10 (45) and notes each index (45), the
+-- second notes each index of 0..5 doubled (20); the third fold raises at 3; the pure fold doubles
+-- 1 four times.
+include fail
+
+effect Log { fn note(x: i32) }
+handler tally(mut n: i32): Log = { note(x) = { n = n + x; () } }
+
+fn each(n: i32, f: !(i32 => 1)) -> 1 =
+  for i in 0..n { f(i) };
+  ()
+
+fn fold(n: i32, z: i32, f: !(i32 * i32 => i32)) -> i32 =
+  let mut acc = z;
+  for i in 0..n { acc = f(acc, i) };
+  acc
+
+fn check(x: i32) -> 1 with Fail[i32] = if x > 2 { raise(x) } else { () }
+
+main -> ((1 + i32) * i32) * ((i32 * i32) * ((i32 + i32) * i32)) =
+  let l = alloc(0);
+  let lim = 3;
+  let a = with tally(&mut l) {
+    with to_result[i32, 1] { each(10, { i -> note(i); if i == lim { raise(i * 100) } else { () } }) }
+  };
+  let n1 = free(l);
+  let m = alloc(0);
+  let s = with tally(&mut m) { fold(10, 0, { (s, i) -> note(i); s + i }) + fold(5, 0, { (s, i) -> note(i * 2); s }) };
+  let n2 = free(m);
+  let b = with to_result { fold(5, 0, { (s, i) -> check(i); s + i }) };
+  let p = fold(4, 1, !{ (s, i) -> s * 2 });
+  ((a, n1), ((s, n2), (b, p)))

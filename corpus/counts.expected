@@ -27,6 +27,13 @@ capture-log-hand 0 0 0 # equal to the kernel program log-outside-native (corpus/
 capture-store-cancel-hand 2 0 0 # equal to the kernel program store-cancel
 capture-take-hand 1 0 0 # the producer's cell; the kernel program take adds its count's node and its handler's two closures
 capture-tick-hand 0 0 0 # equal to the kernel program tick-native
+cb-each 2 0 0 # the two cells; a callback is a closure value, its call direct
+cb-parser 24 0 0 # the three token lists; the error callback passed down adds nothing
+cb-pass-on 3 0 0 # the three cells; a callback passed on is not wrapped
+cb-pipe 0 0 0
+cb-recursion 2 0 0 # the two cells
+cb-retry 2 0 0 # the two cells: `retry` adds none, failing or not
+cb-shared 1 4 0 # the counter; the indirect calls are the state-passing answers of `flipper`, a handler with a state
 clause-captures 6 3 0 # the counter and the cells; the indirect calls are the state-passing answers of `asking`, as in the probe P4(a) (a native handler parameter is not built)
 clone-reuse 6 0 1
 core-effects-borrow-abort 1 0 0 # the cell, freed by the finaliser on the unwind
@@ -145,3 +152,4 @@ surface/io-wc 2 0 0
 surface/map-reuse 7 0 0
 trim-replace 7 0 0 # the stdin and stdout cells, the input string, and one replaced string per line (four)
 utf8-count 4 0 0 # the stdin, stdout and stderr cells and the line buffer, reused
+yield-callback 0 0 0 # the callback's `yield` a direct call of the `for`'s clause

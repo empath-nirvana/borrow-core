@@ -1,0 +1,45 @@
+-- Callbacks passed on (SPEC §22): a function passes the callback it was given to another function
+-- over a computation, at any depth. The callback is passed on as it is: its code, its environment
+-- and its capabilities, with the ports of the effects it is provided. Nothing is wrapped and
+-- nothing is copied per level; each function has one body per profile.
+--
+-- * `quad` passes its callback to `twice`, twice: the callback's `Log` tunnels through both;
+-- * `retry` passes its callback to `attempt`, which provides `Fail` too: `attempt`'s copy serves
+--   the callback's `raise` at the port `retry` gave it, so a failed attempt is `attempt`'s, and the
+--   last attempt, outside both, is relabelled to the caller's handler.
+--
+-- Answer: (i32[6], ((inl i32[300], inl i32[400]), (i32[4], i32[4]))): the callback notes 1, 2, 1
+-- and 2; the first `retry` succeeds at its third attempt (tick 3), the second runs once and its
+-- one attempt succeeds (tick 4).
+include fail
+
+effect Log { fn note(x: i32) }
+handler tally(mut n: i32): Log = { note(x) = { n = n + x; () } }
+effect Count { fn tick() -> i32 }
+handler count(mut n: i32): Count = { tick() = { n = n + 1; n } }
+
+fn twice(f: !(i32 => 1)) -> 1 = f(1); f(2)
+fn quad(f: !(i32 => 1)) -> 1 = twice(f); twice(f)
+
+fn attempt[A, E](body: !(1 => A) with Fail[E]) -> A + E = body() |> to_result
+
+fn retry[A, E](body: !(1 => A) with Fail[E], n: i32) -> A with Fail[E] =
+  let r = for i in 1..n {
+    match attempt(body) { inl a -> break (inl a : A + 1) | inr e -> () }
+  } else { (inr () : A + 1) };
+  match r { inl a -> a | inr u -> body() }
+
+fn flaky(u: 1) -> i32 with Count, Log, Fail[i32] =
+  let t = tick();
+  note(1);
+  if t < 3 { raise(t) } else { t * 100 }
+
+main -> i32 * (((i32 + i32) * (i32 + i32)) * (i32 * i32)) =
+  let l = alloc(0);
+  with tally(&mut l) { quad({ x -> note(x) }) };
+  let q = free(l);
+  let c = alloc(0);
+  let m = alloc(0);
+  let r = with count(&mut c) { with tally(&mut m) { flaky(()) |> retry(5) |> to_result } };
+  let s = with count(&mut c) { with tally(&mut m) { flaky(()) |> retry(1) |> to_result } };
+  (q, ((r, s), (free(c), free(m))))

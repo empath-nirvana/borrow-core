@@ -1,0 +1,35 @@
+-- A second-class callback sharing a stateful capability with its caller (SPEC §22; R5 of
+-- decision 57; the spike's P5, `sharedUnit_safe`). `both` calls two callbacks and then performs
+-- the effect itself; the callbacks and `both` use one handler's state.
+--
+-- * `Count`, an answering effect: the capability is a borrow of the handler's cell. Neither
+--   callback captures it: each is given it at its call, and hands it back, so the two callbacks and
+--   `both` take turns with it (`x_sharedUnit`'s shape, not `twoBlocks_refused`'s).
+-- * `Flip`, a control effect whose handler has a state: the callbacks and `both` perform at the
+--   handler's static name, and the handler, which owns the state, sees each in turn.
+--
+-- Answer: ((i32[144], i32[4]), i32[123]): the callbacks tick 1 and 2 (doubled, 4), `both` ticks
+-- 3 and 4: 1·100 + 4·10 + 4, and four ticks in the cell; then the flips count 1, 2 and 3. A
+-- callback given a copy of the state instead of the state itself would see 1 again.
+effect Count { fn tick() -> i32 }
+handler count(mut n: i32): Count = { tick() = { n = n + 1; n } }
+
+effect Flip { ctl flip() -> i32 }
+handler flipper(mut s: i32): Flip, i32 -> i32 = { return(a) = a; flip(k) = { s = s + 1; k(s) } }
+
+fn both(f: !(1 => i32), g: !(1 => i32)) -> i32 =
+  let a = f(());
+  let b = g(());
+  let t = tick();
+  a * 100 + b * 10 + tick()
+
+fn both_flip(f: !(1 => i32), g: !(1 => i32)) -> i32 =
+  let a = f(());
+  let b = g(());
+  a * 100 + b * 10 + flip()
+
+main -> (i32 * i32) * i32 =
+  let c = alloc(0);
+  let r = with count(&mut c) { both({ u -> tick() }, { u -> tick() * 2 }) };
+  let s = with flipper(0) { both_flip({ u -> flip() }, { u -> flip() }) };
+  ((r, free(c)), s)

@@ -1220,7 +1220,6 @@ def cbSetup (env : Env) (dsp : Span) (x name : String) (σ : TySubst) (caps : Li
     envCaps := envCaps ++ [ec]
     let ports : List Site := c.cp.prov.filterMap fun (e, Pe) => (c.ports.lookup e.name).map fun pn =>
       ⟨e.name, pn, Pe.map (·.subst σ), none, dsp, s!"`{x}`"⟩
-    let _ := x
     let tun := c.T.filterMap fun i => if env.answering i.eff then none else ss.find? (·.eff == i.eff)
     let codeCaps := codeOrder (caps.filter fun cc => c.T.any (·.eff == cc.eff)) ++ [ec]
     let codeCaps' := codeCaps.map fun cc =>
@@ -2273,8 +2272,7 @@ def cbCall : Nat → Cx → List Cap → Span → Val → String → Val → EM 
           throw ⟨V.span, s!"`{x}` provides `{e}` at `{cp.name}`: a provided answering effect is not " ++
             "provided (SPEC §22)"⟩
       -- A computation parameter passed on.
-      if let (.var _ g, some cb) := (V, cx.cb? (headName V |>.getD "")) then
-        let _ := g
+      if let (.var _ _, some cb) := (V, cx.cb? (headName V |>.getD "")) then
         let envEff := (cb.caps.getLast?.map (·.eff)).getD ""
         let ports := cb.ports.filter fun (e, _) => prov.contains e
         let T := cb.row.filter fun i => i.eff != envEff && !ports.any (·.1 == i.eff)
@@ -2611,7 +2609,6 @@ def groupCopy : Nat → Env → Span → String → List Inst → List String �
     -- in `R` hold `()` in its place, so that `R` has no `∀` of the code's lifetimes.
     let cbPos : List Nat := cbx.map (·.cp.idx)
     let codeNames : List String := cbPos.map fun i => (pnames.getD i ⟨"?", gsp⟩).name
-    let codesTy : VTy := tupleTy gsp (cbPos.map fun i => Psx.getD i (.unit gsp))
     -- Each member's parameters named as `x`'s computation parameters are passed the same callbacks
     -- (a parser's error callback, passed down): the positions and names, by member.
     let cbOf : List (List (Nat × String)) := G.members.map fun (_, f) =>
@@ -2687,9 +2684,6 @@ def groupCopy : Nat → Env → Span → String → List Inst → List String �
     -- `!U (P -o R)`, under the capabilities' lifetimes when there are any; taking the callbacks'
     -- code first when there are any.
     let genT₀ : VTy := .bang gsp (.thunk gsp (.arr gsp P R))
-    let cv ← fresh "fx_rcodes"
-    let _ := cv
-    let _ := codesTy
     let (genT, genV) : VTy × Val := (genT₀, .bangThunkv gsp gen)
     let (sA, sV) : VTy × Val := match lives.foldr (fun (a, b) (T, V) =>
         (VTy.all gsp a b T, Val.thunkv gsp (.lamL gsp a b (.ret gsp V)))) (genT, genV) with
@@ -2723,7 +2717,6 @@ def groupCopy : Nat → Env → Span → String → List Inst → List String �
         (if lives.isEmpty then genRef else .unbang gsp genRef)
       -- With callbacks: the generator applied to their code, taken from the argument, which the
       -- recursion is entered with `()` in its place.
-      let cvs ← codeNames.mapM fun _ => fresh "fx_rc"
       let vs ← pnames.mapM fun _ => fresh "fx_rv"
       let p' ← fresh "fx_rp"
       let inst : Val := if !poly then inst₀ else genV
@@ -2753,7 +2746,6 @@ def groupCopy : Nat → Env → Span → String → List Inst → List String �
         let q ← fresh "fx_rq"
         let codesOut : List (String × String) :=
           (cbPos.zip codeNames).map fun (i, c) => (vs.getD i "?", c)
-        let _ := cvs
         let entry := capsTuple gsp cs (tupleOf gsp (vs.zipIdx.map fun (v, i) =>
           if cbPos.contains i then Val.unit gsp else .var gsp v))
         let K := codesOut.foldr (fun (v, c) K => Comp.bind gsp ⟨c, gsp⟩ none (.ret gsp (.var gsp v)) K false)

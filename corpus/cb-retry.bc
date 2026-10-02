@@ -1,0 +1,43 @@
+-- Effectful callbacks (SPEC §22, #161; R2a of decision 57): `retry` runs a computation, and runs
+-- it again when it raises, at most `n` times. The computation is a callback passed as a value:
+-- its code, `!` code that takes its environment and capabilities first and hands them back, and
+-- its environment, the variables it captures (`k`), passed beside them. One body of `retry`
+-- serves every callback of the profile. `retry` provides `Fail` to its callback (its parameter's
+-- written row): the callback's `raise` is at `retry`'s port, served by `retry`'s own `to_result`
+-- around each attempt. The callback's other effects, `Count` and `Log`, tunnel to the handlers
+-- where it was written: their capabilities are lent again to each attempt, so an attempt that
+-- raises gives them back, and the next attempt and the caller see what it did. The last attempt
+-- runs outside `retry`'s handler: its `raise` is relabelled to the caller's handler.
+--
+-- Answer: (inl i32[300], (inr i32[5], (inl i32[42], (i32[6], i32[5])))): the first computation
+-- fails twice and succeeds at its third attempt (tick 3); the second fails at both of its two
+-- attempts, and the second error (tick 5) reaches the caller; the third does not fail, and runs
+-- once (tick 6). Six ticks, and a note at each of the first five attempts. A `retry` that lost the
+-- capabilities' updates on a failure gives fewer ticks; one that caught the last error gives `inl`.
+include fail
+
+effect Log { fn note(x: i32) }
+handler tally(mut n: i32): Log = { note(x) = { n = n + 1; () } }
+effect Count { fn tick() -> i32 }
+handler count(mut n: i32): Count = { tick() = { n = n + 1; n } }
+
+fn retry[A, E](body: !(1 => A) with Fail[E], n: i32) -> A with Fail[E] =
+  let r = for i in 1..n {
+    match body() |> to_result { inl a -> break (inl a : A + 1) | inr e -> () }
+  } else { (inr () : A + 1) };
+  match r { inl a -> a | inr u -> body() }
+
+-- Fails until its `k`-th tick: a tick and a note at each attempt.
+fn flaky(k: i32) -> i32 with Count, Log, Fail[i32] =
+  let t = tick();
+  note(t);
+  if t < k { raise(t) } else { t * 100 }
+
+main -> (i32 + i32) * ((i32 + i32) * ((i32 + i32) * (i32 * i32))) =
+  let c = alloc(0);
+  let l = alloc(0);
+  let k = 3;
+  let a = with count(&mut c) { with tally(&mut l) { with to_result { retry({ u -> flaky(k) }, 5) } } };
+  let b = with count(&mut c) { with tally(&mut l) { with to_result { retry({ u -> flaky(10) }, 2) } } };
+  let d = with count(&mut c) { with to_result { retry[i32, i32]({ u -> tick() * 7 }, 3) } };
+  (a, (b, (d, (free(c), free(l)))))

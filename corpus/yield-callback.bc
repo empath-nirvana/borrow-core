@@ -1,0 +1,27 @@
+-- A callback that yields (SPEC §22, #161): `tens` passes `for_each` a closure that yields ten
+-- times each element, so that `tens` yields what the callback yields while `for_each` runs. The
+-- closure's `Yield` tunnels through `for_each` to the site of the `for` over `tens` in `main`, whose
+-- variables it threads: the callback's code takes them as a capability and hands them back.
+-- `for_each` drains a stored generator, so its copy for the callback is a generator too, at the
+-- callback's row.
+--
+-- Answer: i32[30]: 0 + 10 + 20.
+
+include yield
+
+fn range(lo: i32, hi: i32) -> 1 with Yield[i32] =
+  let mut i = lo;
+  while i < hi { yield(i); i = i + 1 };
+  ()
+
+fn for_each(it: U (pull i32 1 1), f: !(i32 => 1)) -> 1 =
+  for x in it { f(x) };
+  ()
+
+fn tens(n: i32) -> 1 with Yield[i32] =
+  for_each(range(0, n), !{ x -> yield(x * 10) })
+
+main -> i32 =
+  let mut acc = 0;
+  for x in tens(3) { acc = acc + x };
+  acc

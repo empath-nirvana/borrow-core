@@ -1,0 +1,78 @@
+-- Decision 57's parser (SPEC §21, §22): a recursive-descent parser over five members that call
+-- one another, whose error callback `on_err` is passed down through every level, unchanged. The
+-- group's copy is made for the callback's profile, and the generator holds its code: each member
+-- calls it at the capabilities and sites the copy was given. `strict` passes a callback that raises
+-- (`Fail`, handled around the parse: the raise unwinds every level, dropping the tokens each
+-- holds); `lenient` passes one that notes the error (`Log`) and goes on with 0. The pattern decision
+-- 57 rejects is the other one, a handler per level whose clause raises to the level around: a site
+-- per level (`corpus/reject/rec-through-site.bc`, #173).
+--
+-- The tokens are an owned list: a digit is itself, `+` is 10, `*` 11, `(` 12 and `)` 13.
+--
+-- Answer: ((inl i32[44], inr i32[2]), (i32[0], i32[2])): 2*(3+4)+5*6 is 44; 2*(3+4 is missing its
+-- `)`, error 2, raised by `strict` and noted by `lenient`, which answers 0 for the missing value.
+include rec
+include fail
+
+effect Log { fn note(x: i32) }
+handler tally(mut n: i32): Log = { note(x) = { n = n * 10 + x; () } }
+
+type Toks = mu X. 1 + (i32 * X)
+
+def nil : Toks = roll inl ()
+fn cons(x: i32, t: Toks) -> Toks = roll inr (x, t)
+
+fn expr(ts: Toks, on_err: !(i32 => i32)) -> i32 * Toks =
+  let (v, ts) = term(ts, on_err);
+  expr_rest(v, ts, on_err)
+
+fn expr_rest(acc: i32, ts: Toks, on_err: !(i32 => i32)) -> i32 * Toks =
+  match unroll ts {
+    inl u -> (acc, nil)
+  | inr (t, rest) ->
+      if t == 10 { let (v, ts) = term(rest, on_err); expr_rest(acc + v, ts, on_err) } else { (acc, cons(t, rest)) }
+  }
+
+fn term(ts: Toks, on_err: !(i32 => i32)) -> i32 * Toks =
+  let (v, ts) = factor(ts, on_err);
+  term_rest(v, ts, on_err)
+
+fn term_rest(acc: i32, ts: Toks, on_err: !(i32 => i32)) -> i32 * Toks =
+  match unroll ts {
+    inl u -> (acc, nil)
+  | inr (t, rest) ->
+      if t == 11 { let (v, ts) = factor(rest, on_err); term_rest(acc * v, ts, on_err) } else { (acc, cons(t, rest)) }
+  }
+
+fn factor(ts: Toks, on_err: !(i32 => i32)) -> i32 * Toks =
+  match unroll ts {
+    inl u -> (on_err(1), nil)
+  | inr (t, rest) ->
+      if t < 10 { (t, rest) } else {
+        if t == 12 {
+          let (v, ts) = expr(rest, on_err);
+          match unroll ts {
+            inl u -> (on_err(2), nil)
+          | inr (c, rest) -> if c == 13 { (v, rest) } else { (on_err(3), rest) }
+          }
+        } else { (on_err(4), rest) }
+      }
+  }
+
+fn good() -> Toks =
+  cons(2, cons(11, cons(12, cons(3, cons(10, cons(4, cons(13, cons(10, cons(5, cons(11, cons(6, nil)))))))))))
+fn bad() -> Toks = cons(2, cons(11, cons(12, cons(3, cons(10, cons(4, nil))))))
+
+fn strict(ts: Toks) -> i32 with Fail[i32], Exhausted = let (v, r) = expr(ts, { e -> raise(e) }); v
+fn lenient(ts: Toks) -> i32 with Log, Exhausted = let (v, r) = expr(ts, { e -> note(e); 0 }); v
+
+main -> ((i32 + i32) * (i32 + i32)) * (i32 * i32) =
+  let l = alloc(0);
+  let r = with tally(&mut l) { with on_exhausted(!{ u -> ((inr 0, inr 0), 0) }) {
+    let a = strict(good()) |> to_result;
+    let b = strict(bad()) |> to_result;
+    let c = lenient(bad());
+    ((a, b), c)
+  } };
+  let (ab, c) = r;
+  (ab, (c, free(l)))

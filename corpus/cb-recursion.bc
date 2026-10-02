@@ -1,0 +1,40 @@
+-- Recursion and callbacks (SPEC §21, §22). A recursive group is formed from references (§21), so
+-- each of these is a group or a call of one, with no construct of its own:
+--
+-- * `walk` calls itself and passes on its callback, unchanged: the group's copy is made for the
+--   callback's profile, and its generator holds the callback's code, which is `!` code; each
+--   level calls it with the capability it is given (`Log`);
+-- * `visit`'s callback calls back into `visit`, with a callback of its own: two calls of one copy,
+--   one body for both callbacks;
+-- * `down` passes `apply` a callback that calls `down`: the recursion runs through a value. The
+--   callback holds the group's self-reference, and calls it as the group's members do; its `raise`
+--   and the recursion's `Exhausted` are at the sites the group's copy was given.
+--
+-- Answer: ((i32[100], i32[10]), ((i32[21], i32[202]), (inl i32[50], inr i32[7]))): `walk(4)` adds
+-- 40 + 30 + 20 + 10 and notes 4 + 3 + 2 + 1; `visit` notes 100 twice and 2 (the inner callback),
+-- and answers 20 + 1; `down(5)` adds 10 at each of five levels through `apply`, and `down(9)`
+-- raises at its third level (7).
+include rec
+include fail
+
+effect Log { fn note(x: i32) }
+handler tally(mut n: i32): Log = { note(x) = { n = n + x; () } }
+
+fn walk(n: i32, f: !(i32 => i32)) -> i32 = if n == 0 { 0 } else { f(n) + walk(n - 1, f) }
+
+fn visit(n: i32, f: !(i32 => i32)) -> i32 = note(100); f(n)
+
+fn apply(n: i32, g: !(i32 => i32)) -> i32 = g(n)
+
+fn down(n: i32) -> i32 with Fail[i32], Exhausted =
+  if n == 0 { 0 } else { if n == 7 { raise(n) } else { apply(n, { m -> down(m - 1) + 10 }) } }
+
+main -> ((i32 * i32) * ((i32 * i32) * ((i32 + i32) * (i32 + i32)))) =
+  let l = alloc(0);
+  let w = with tally(&mut l) { with on_exhausted(!{ u -> 0 - 1 }) { walk(4, { k -> note(k); k * 10 }) } };
+  let nw = free(l);
+  let m = alloc(0);
+  let v = with tally(&mut m) { visit(3, { k -> visit(k - 1, { j -> note(j); j * 10 }) + 1 }) };
+  let nv = free(m);
+  let d = with on_exhausted(!{ u -> (inr 0, inr 0) }) { (down(5) |> to_result, down(9) |> to_result) };
+  ((w, nw), ((v, nv), d))
