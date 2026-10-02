@@ -199,56 +199,91 @@ theorem tvg_inStratum : ∀ {fz α Γ γ ls d ρ}, TVG Δ x b T δ l fz α Γ γ
       (outlives_comp hc _).mpr ⟨tv_inStratum h₁ hf, tvg_inStratum h₂ hf⟩
 end
 
+
+/-- A view handed is a dropped cell. -/
+theorem dropC_of_vwD {d : Bool} {α : Life} {ls : List SRec} {ρ : WRes}
+    (h : vwD l T δ d α ls ρ) : dropC l d ρ := by
+  cases d with
+  | false => exact h
+  | true => exact dropC_of_view h
+
+/-- The two views of a stop under a frame, joined: at most one is a cell. -/
+theorem vwD_join {d₁ d₂ : Bool} (hd : ¬ (d₁ = true ∧ d₂ = true)) {α : Life} {ls : List SRec}
+    {ρa ρb ρ : WRes} (ha : vwD l T δ d₁ α ls ρa) (hb : vwD l T δ d₂ α ls ρb)
+    (hc : ResU.CompS ρa ρb ρ) : vwD l T δ (d₁ || d₂) α ls ρ := by
+  cases d₁ <;> cases d₂
+  · obtain ⟨rfl, -⟩ := ha; obtain ⟨rfl, -⟩ := hb
+    exact ⟨eq_of_compS_empty_left hc, trivial⟩
+  · obtain ⟨rfl, -⟩ := ha; rw [eq_of_compS_empty_left hc]; exact hb
+  · obtain ⟨rfl, -⟩ := hb
+    rw [ResU.CompS.functional hc (ResU.comp_empty_right ρa)]; exact ha
+  · exact absurd ⟨rfl, rfl⟩ hd
+
+/-- **Freeze an atom**, the dropped cell read as the view at `α`. -/
+theorem fzAtom_freeze_view (hT : ¬ VFree x T) {α : Life}
+    (hδα : (Δ.extend x b).Models (δ.extend x α)) {A : VTy} (hA : AtomOk Δ x b T A)
+    {ls : List SRec} {v : Val} {ρ : WRes} (hv : vC true A ls (δ.extend x α) v ρ)
+    (ht : TabAt l α ρ) :
+    ∃ d ρz ρn, ResU.CompS ρz ρn ρ ∧ fzAtom x T δ l α A ls v d ρz ∧ vwD l T δ d α ls ρn := by
+  obtain ⟨d, ρz, ρn, hc, hz, hn⟩ := fzAtom_freeze hδα hA hv ht
+  cases d with
+  | false => exact ⟨false, ρz, ρn, hc, hz, hn⟩
+  | true =>
+      rcases hz with ⟨-, rfl, rfl, rfl⟩ | ⟨h, -⟩
+      · obtain rfl := eq_of_compS_empty_left hc
+        exact ⟨true, PMap.empty, ρ, hc, Or.inl ⟨rfl, rfl, rfl, rfl⟩, view_of_vC hT hv⟩
+      · exact absurd h (by decide)
+
 mutual
 /-- **Freeze a typed value** at the lend `α`: the lend's cell is dropped wherever it sits, in a
 pair or inside a closure's environment. -/
-theorem tv_freeze {α : Life} (hδα : (Δ.extend x b).Models (δ.extend x α)) :
+theorem tv_freeze (hT : ¬ VFree x T) {α : Life} (hδα : (Δ.extend x b).Models (δ.extend x α)) :
     ∀ {fz α' A ls v d ρ}, TV Δ x b T δ l fz α' A ls v d ρ → fz = false → α' = α → TabAt l α ρ →
-      ∃ d' ρz ρn, ResU.CompS ρz ρn ρ ∧ TV Δ x b T δ l true α A ls v d' ρz ∧ dropC l d' ρn
+      ∃ d' ρz ρn, ResU.CompS ρz ρn ρ ∧ TV Δ x b T δ l true α A ls v d' ρz ∧ vwD l T δ d' α ls ρn
   | _, _, _, _, _, _, _, .atomF _ _, hf, _, _ => absurd hf (by decide)
   | _, _, _, _, _, _, _, .atomL hA h, _, rfl, ht => by
-      obtain ⟨d', ρz, ρn, hc, hz, hn⟩ := fzAtom_freeze hδα hA h ht
+      obtain ⟨d', ρz, ρn, hc, hz, hn⟩ := fzAtom_freeze_view hT hδα hA h ht
       exact ⟨d', ρz, ρn, hc, .atomF hA hz, hn⟩
   | _, _, _, _, _, _, _, .pair h₁ h₂ _ hc, hf, e, ht => by
       obtain ⟨ht₁, ht₂⟩ := (tabAt_comp hc).mp ht
-      obtain ⟨d₁, ρz₁, ρn₁, hc₁, hz₁, hn₁⟩ := tv_freeze hδα h₁ hf e ht₁
-      obtain ⟨d₂, ρz₂, ρn₂, hc₂, hz₂, hn₂⟩ := tv_freeze hδα h₂ hf e ht₂
+      obtain ⟨d₁, ρz₁, ρn₁, hc₁, hz₁, hn₁⟩ := tv_freeze hT hδα h₁ hf e ht₁
+      obtain ⟨d₂, ρz₂, ρn₂, hc₂, hz₂, hn₂⟩ := tv_freeze hT hδα h₂ hf e ht₂
       have hnd : ¬ (d₁ = true ∧ d₂ = true) := by
         rintro ⟨rfl, rfl⟩
-        exact dropC_disj hn₁ hn₂ (ResU.CompS.comm hc₁) (ResU.CompS.comm hc₂) hc
+        exact dropC_disj (dropC_of_vwD hn₁) (dropC_of_vwD hn₂) (ResU.CompS.comm hc₁) (ResU.CompS.comm hc₂) hc
       obtain ⟨ρz, ρn, hcz, hcn, hcρ⟩ := compS_four hc₁ hc₂ hc
-      exact ⟨d₁ || d₂, ρz, ρn, hcρ, .pair hz₁ hz₂ hnd hcz, dropC_join hnd hn₁ hn₂ hcn⟩
+      exact ⟨d₁ || d₂, ρz, ρn, hcρ, .pair hz₁ hz₂ hnd hcz, vwD_join hnd hn₁ hn₂ hcn⟩
   | _, _, _, _, _, _, _, .inl h, hf, e, ht => by
-      obtain ⟨d', ρz, ρn, hc, hz, hn⟩ := tv_freeze hδα h hf e ht
+      obtain ⟨d', ρz, ρn, hc, hz, hn⟩ := tv_freeze hT hδα h hf e ht
       exact ⟨d', ρz, ρn, hc, .inl hz, hn⟩
   | _, _, _, _, _, _, _, .inr h, hf, e, ht => by
-      obtain ⟨d', ρz, ρn, hc, hz, hn⟩ := tv_freeze hδα h hf e ht
+      obtain ⟨d', ρz, ρn, hc, hz, hn⟩ := tv_freeze hT hδα h hf e ht
       exact ⟨d', ρz, ρn, hc, .inr hz, hn⟩
   | _, _, _, _, _, _, _, .cloF hD h, hf, e, ht => by
-      obtain ⟨d', ρz, ρn, hc, hz, hn⟩ := tvg_freeze hδα h hf e ht
+      obtain ⟨d', ρz, ρn, hc, hz, hn⟩ := tvg_freeze hT hδα h hf e ht
       exact ⟨d', ρz, ρn, hc, .cloF hD hz, hn⟩
   | _, _, _, _, _, _, _, .cloV hC hD h, hf, e, ht => by
-      obtain ⟨d', ρz, ρn, hc, hz, hn⟩ := tvg_freeze hδα h hf e ht
+      obtain ⟨d', ρz, ρn, hc, hz, hn⟩ := tvg_freeze hT hδα h hf e ht
       exact ⟨d', ρz, ρn, hc, .cloV hC hD hz, hn⟩
 /-- **Freeze a typed environment.** -/
-theorem tvg_freeze {α : Life} (hδα : (Δ.extend x b).Models (δ.extend x α)) :
+theorem tvg_freeze (hT : ¬ VFree x T) {α : Life} (hδα : (Δ.extend x b).Models (δ.extend x α)) :
     ∀ {fz α' Γ γ ls d ρ}, TVG Δ x b T δ l fz α' Γ γ ls d ρ → fz = false → α' = α →
       TabAt l α ρ →
-      ∃ d' ρz ρn, ResU.CompS ρz ρn ρ ∧ TVG Δ x b T δ l true α Γ γ ls d' ρz ∧ dropC l d' ρn
+      ∃ d' ρz ρn, ResU.CompS ρz ρn ρ ∧ TVG Δ x b T δ l true α Γ γ ls d' ρz ∧ vwD l T δ d' α ls ρn
   | _, _, _, _, _, _, _, .nil, _, _, _ =>
       ⟨false, PMap.empty, PMap.empty, compS_empty_left _, .nil, rfl, trivial⟩
   | _, _, _, _, _, _, _, .dead h, hf, e, ht => by
-      obtain ⟨d', ρz, ρn, hc, hz, hn⟩ := tvg_freeze hδα h hf e ht
+      obtain ⟨d', ρz, ρn, hc, hz, hn⟩ := tvg_freeze hT hδα h hf e ht
       exact ⟨d', ρz, ρn, hc, .dead hz, hn⟩
   | _, _, _, _, _, _, _, .live h₁ h₂ _ hc, hf, e, ht => by
       obtain ⟨ht₁, ht₂⟩ := (tabAt_comp hc).mp ht
-      obtain ⟨d₁, ρz₁, ρn₁, hc₁, hz₁, hn₁⟩ := tv_freeze hδα h₁ hf e ht₁
-      obtain ⟨d₂, ρz₂, ρn₂, hc₂, hz₂, hn₂⟩ := tvg_freeze hδα h₂ hf e ht₂
+      obtain ⟨d₁, ρz₁, ρn₁, hc₁, hz₁, hn₁⟩ := tv_freeze hT hδα h₁ hf e ht₁
+      obtain ⟨d₂, ρz₂, ρn₂, hc₂, hz₂, hn₂⟩ := tvg_freeze hT hδα h₂ hf e ht₂
       have hnd : ¬ (d₁ = true ∧ d₂ = true) := by
         rintro ⟨rfl, rfl⟩
-        exact dropC_disj hn₁ hn₂ (ResU.CompS.comm hc₁) (ResU.CompS.comm hc₂) hc
+        exact dropC_disj (dropC_of_vwD hn₁) (dropC_of_vwD hn₂) (ResU.CompS.comm hc₁) (ResU.CompS.comm hc₂) hc
       obtain ⟨ρz, ρn, hcz, hcn, hcρ⟩ := compS_four hc₁ hc₂ hc
-      exact ⟨d₁ || d₂, ρz, ρn, hcρ, .live hz₁ hz₂ hnd hcz, dropC_join hnd hn₁ hn₂ hcn⟩
+      exact ⟨d₁ || d₂, ρz, ρn, hcρ, .live hz₁ hz₂ hnd hcz, vwD_join hnd hn₁ hn₂ hcn⟩
 end
 
 mutual

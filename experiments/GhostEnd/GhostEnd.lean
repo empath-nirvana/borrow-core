@@ -23,3 +23,4 @@ import GhostEnd.Tuple
 import GhostEnd.Closures
 import GhostEnd.ClosureBody
 import GhostEnd.Capture
+import GhostEnd.Callee

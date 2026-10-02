@@ -220,8 +220,10 @@ theorem rbodyC_let (hbx : b.mentions x = false)
     fun _ _ _ _ h => tvg_inStratum h rfl
   have hfz : ∀ α', α' ⊏ β → ∀ ls ρ, Fr α' ls ρ →
       ∃ d ρz ρn, ResU.CompS ρz ρn ρ ∧ Fz α' d ls ρz ∧ dropC l d ρn :=
-    fun α' hα' ls ρ h =>
-      tvg_freeze (models_extend hδ hbx hΔx hβ hα') h.2 rfl rfl h.1
+    fun α' hα' ls ρ h => by
+      obtain ⟨d, ρz, ρn, hc, hz, hn⟩ :=
+        tvg_freeze hT (models_extend hδ hbx hΔx hβ hα') h.2 rfl rfl h.1
+      exact ⟨d, ρz, ρn, hc, hz, dropC_of_vwD hn⟩
   have hthaw : ∀ β' α' d₂ ls ρv ρz ρ, α' ⊏ β' → β' ≤ β → vwD l T δ d₂ α' ls ρv →
       Fz β' d₂ ls ρz → ResU.CompS ρv ρz ρ → Fr α' ls ρ := by
     intro β' α' d₂ ls ρv ρz ρ hα' _ hv hz hc
