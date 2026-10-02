@@ -2612,9 +2612,18 @@ def groupCopy : Nat → Env → Span → String → List Inst → List String �
     let cbPos : List Nat := cbx.map (·.cp.idx)
     let codeNames : List String := cbPos.map fun i => (pnames.getD i ⟨"?", gsp⟩).name
     let codesTy : VTy := tupleTy gsp (cbPos.map fun i => Psx.getD i (.unit gsp))
-    let Pof (j : Nat) (f : FnParts) : VTy := if j == jx && !cbx.isEmpty then
-        tupleTy gsp (Psx.zipIdx.map fun (A, i) => if cbPos.contains i then VTy.unit gsp else A)
-      else f.P
+    -- Each member's parameters named as `x`'s computation parameters are passed the same callbacks
+    -- (a parser's error callback, passed down): the positions and names, by member.
+    let cbOf : List (List (Nat × String)) := G.members.map fun (_, f) =>
+      if cbx.isEmpty then [] else
+      match paramNames f.p.name fuel f.body with
+      | some ns => ns.zipIdx.filterMap fun (y, i) => if codeNames.contains y.name then some (i, y.name) else none
+      | none => []
+    let Pof (j : Nat) (f : FnParts) : VTy :=
+      let pos := (cbOf[j]?).getD []
+      if pos.isEmpty then f.P else
+      let ns := ((paramNames f.p.name fuel f.body).getD []).length
+      tupleTy gsp ((splitTy ns f.P).zipIdx.map fun (A, i) => if pos.any (·.1 == i) then VTy.unit gsp else A)
     let tps : List Ident := (ss.filterMap (·.thr)).map (fun (_, W) => (⟨W, gsp⟩ : Ident)) ++ extraTps ++
       cbx.map fun c => (⟨s!"FX_W{c.cp.idx}", gsp⟩ : Ident)
     let tArgs : List VTy := tps.map fun t => .name gsp t.name
@@ -2638,7 +2647,7 @@ def groupCopy : Nat → Env → Span → String → List Inst → List String �
     let selfT : VTy := .sum gsp (.unit gsp) (.bang gsp (.thunk gsp (.arr gsp (.unit gsp) R)))
     let self := "fx_self"
     let rs : RSelf := ⟨G.members.map (·.1), e.n, self, Cs, cs, ss.map (fun s => (s.eff, s.n)), false,
-      if cbx.isEmpty then [] else [(jx, cbx.map fun c => (c.cp.idx, (pnames.getD c.cp.idx ⟨"?", gsp⟩).name))],
+      (cbOf.zipIdx.filterMap fun (pos, j) => if pos.isEmpty then none else some (j, pos)),
       polyL, rowR, G.members.map (·.2.T)⟩
     let effs' := envCaps.map (·.eff) ++ envMut.map (·.1) ++ env.envEffs
     let env' : Env := { env with envEffs := effs' }
@@ -2647,17 +2656,21 @@ def groupCopy : Nat → Env → Span → String → List Inst → List String �
     -- The generator's record: each member's body, taking the environment first.
     let mut fields : List Comp := []
     for ((_, f), j) in G.members.zipIdx do
-      let cxj : Cx := if j == jx && !cbx.isEmpty then
+      let pos := (cbOf[j]?).getD []
+      let cxj : Cx := if !pos.isEmpty then
           { cx with env := { env' with fns := cbF ++ env'.fns }, cbs := cbps, ports := portsAll }
         else cx
       let body ← trC k cxj csP true f.body
-      -- The member passed the callbacks takes `()` in their place, and its parameters are bound
-      -- with the code the generator captured.
-      let (pn, body) ← if j == jx && !cbx.isEmpty then do
+      -- A member passed the callbacks takes `()` in their place, and its parameters are bound with
+      -- the code the generator captured.
+      let (pn, body) ← if !pos.isEmpty then do
           let q ← fresh "fx_rq"
-          let vs ← pnames.mapM fun _ => fresh "fx_ra"
+          let pj := (paramNames f.p.name fuel f.body).getD []
+          let vs ← pj.mapM fun _ => fresh "fx_ra"
           let full := tupleOf gsp (vs.zipIdx.map fun (v, i) =>
-            if cbPos.contains i then Val.var gsp ((pnames.getD i ⟨"?", gsp⟩).name) else .var gsp v)
+            match pos.lookup i with
+            | some y => Val.var gsp y
+            | none => .var gsp v)
           let rebuilt := Comp.bind gsp f.p none (.ret gsp full) body false
           pure (q, ← bindParams gsp q (vs.map (⟨·, gsp⟩)) rebuilt)
         else pure (f.p.name, body)
@@ -2733,7 +2746,7 @@ def groupCopy : Nat → Env → Span → String → List Inst → List String �
                 (projAt gsp j n (.app gsp (.force gsp ⟨fb, gsp⟩) ⟨fa, gsp⟩))) ⟨pe, gsp⟩) false)
             false)
       let body : Comp :=
-        .bind gsp ⟨sv, gsp⟩ none (.ret gsp inst) (applied.foldr (fun (y, V) K =>
+        .bind gsp ⟨sv, gsp⟩ (if poly then some genT else none) (.ret gsp inst) (applied.foldr (fun (y, V) K =>
           .bind gsp ⟨y, gsp⟩ none (.ret gsp V) K false) fixC) false
       -- The argument taken apart: the code out, `()` in its place.
       let body ← if cbx.isEmpty then pure body else do
