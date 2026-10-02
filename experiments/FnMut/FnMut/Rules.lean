@@ -114,14 +114,13 @@ def mkE (c : Lifetime.Life) (A B : VTy) (s₀ : Expr) (step : Val) (K : Expr) : 
 /-- The two bindings in front of `pack`. -/
 theorem d_mkPrefix {Γ Γ₁ Γ₂ : Ctx VTy} {c : Lifetime.Life} {A B S : VTy} {C : CTy} {s₀ K : Expr}
     {step : Val} (hA : A.Cl 0) (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hs₀ : CDerives Δ Γ₁ s₀ (.val S))
-    (hstep : ∀ {Γ' : Ctx VTy}, Ctx.Dead Γ' →
-      CDerives Δ Γ' (.val step) (.val (.bang (.thunk (.arr S (fnStepC c A B S))))))
+    (hstep : CDerives Δ (kill (⟨S, true⟩ :: Γ₂)) (.val step)
+      (.val (.bang (.thunk (.arr S (fnStepC c A B S))))))
     (hK : CDerives Δ (⟨fnCodeT c A B S, true⟩ :: ⟨S, true⟩ :: Γ₂) (bindE packE K) (.comp C)) :
     CDerives Δ Γ (mkE c A B s₀ step K) (.comp C) :=
   .bind hs (.ret hs₀)
     (.bind (split_kill _).toP
-      (.ret (.lolliE (deadSplit (kill_dead _)) (hstep (kill_dead _))
-        (.fnUnfold hA B S (kill_dead _).toP))) hK)
+      (.ret (.lolliE (deadSplit (kill_dead _)) hstep (.fnUnfold hA B S (kill_dead _).toP))) hK)
 
 /-- **Introduction.**  A closure over the state `s₀ : S`, with `!` code `step`.  The state
 holds whatever the closure captures, linear and borrowed parts included; the type hides `S`. -/
@@ -132,7 +131,7 @@ theorem d_mk {Γ Γ₁ Γ₂ : Ctx VTy} {c : Lifetime.Life} {A B S : VTy} {C : C
     (hK : CDerives Δ (⟨fnMutT c A B, true⟩ :: ⟨fnCodeT c A B S, false⟩ :: ⟨S, false⟩ :: Γ₂) K
       (.comp C)) :
     CDerives Δ Γ (mkE c A B s₀ step K) (.comp C) :=
-  d_mkPrefix hA hs hs₀ hstep
+  d_mkPrefix hA hs hs₀ (hstep (kill_dead _))
     (.bind (.left (.left (split_kill Γ₂).toP)) (.ret (d_pack hA (kill_dead Γ₂))) hK)
 
 /-- **Introduction, outliving `@c`.**  When the state outlives `@c`, so does the closure. -/
@@ -141,6 +140,18 @@ theorem d_mkBox {Γ Γ₁ Γ₂ : Ctx VTy} {c : Lifetime.Life} {A B S : VTy} {C 
     (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hs₀ : CDerives Δ Γ₁ s₀ (.val S))
     (hstep : ∀ {Γ' : Ctx VTy}, Ctx.Dead Γ' →
       CDerives Δ Γ' (.val step) (.val (.bang (.thunk (.arr S (fnStepC c A B S))))))
+    (hK : CDerives Δ (⟨fnBox c A B, true⟩ :: ⟨fnCodeT c A B S, false⟩ :: ⟨S, false⟩ :: Γ₂) K
+      (.comp C)) :
+    CDerives Δ Γ (mkE c A B s₀ step K) (.comp C) :=
+  d_mkPrefix hA hs hs₀ (hstep (kill_dead _))
+    (.bind (.left (.left (split_kill Γ₂).toP)) (.ret (d_packBox hA (kill_dead Γ₂) hc hS)) hK)
+
+/-- `d_mkBox` with the step typed at the one context it is used in. -/
+theorem d_mkBox' {Γ Γ₁ Γ₂ : Ctx VTy} {c : Lifetime.Life} {A B S : VTy} {C : CTy} {s₀ K : Expr}
+    {step : Val} (hA : A.Cl 0) (hc : Δ.Defines c) (hS : VOutlives Δ c S)
+    (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hs₀ : CDerives Δ Γ₁ s₀ (.val S))
+    (hstep : CDerives Δ (kill (⟨S, true⟩ :: Γ₂)) (.val step)
+      (.val (.bang (.thunk (.arr S (fnStepC c A B S))))))
     (hK : CDerives Δ (⟨fnBox c A B, true⟩ :: ⟨fnCodeT c A B S, false⟩ :: ⟨S, false⟩ :: Γ₂) K
       (.comp C)) :
     CDerives Δ Γ (mkE c A B s₀ step K) (.comp C) :=
