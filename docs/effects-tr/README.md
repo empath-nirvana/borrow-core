@@ -83,7 +83,7 @@ T1 a theorem.
 | O3, O4 | an owning lend of a borrowed source under a suspending table; higher-type capability states | open |
 | T14.5 | the `Mut`-cell lemma: a cell holding a rebased continuation is closed under resume (`d_callMut`) and drop (`close`) | proved here (candidate, §14) |
 | T14.6 | the kernel produces rebased continuations from every body with no lend spanning a suspension | proved here (candidate, §14) |
-| O14.1, O14.2 | a lend spanning a suspension (O3 at the kernel's tables); relabelling at `U` | open; the same-lifetime route is refuted (`refoldKripke_false`) |
+| O15.1, O15.2 | a lend spanning a suspension (O3 at the kernel's tables); relabelling at `U` | open; the same-lifetime route is refuted (`refoldKripke_false`) |
 
 **Mechanised since** (#249, `docs/effect-model.md` §9): the three rule fixes of §2.5 in phase B's
 Lean, each counterexample of §10 refused by the judgement; T5.1 and T5.2 on trees, with lends
