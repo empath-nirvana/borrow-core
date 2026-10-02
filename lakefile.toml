@@ -154,3 +154,8 @@ roots = ["SecondClass"]
 name = "FnMut"
 srcDir = "experiments/FnMut"
 roots = ["FnMut"]
+
+[[lean_lib]]
+name = "EffModel"
+srcDir = "experiments/EffModel"
+roots = ["EffModel"]
