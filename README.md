@@ -77,6 +77,8 @@ records why it was added:
   call-by-push-value core (§1–§4);
 - records, places and family borrows (§5);
 - recursive types with folds, and general codata `νX. C` (iterators, streams, loops) (§6, §7);
+- the affine closure, codata whose `call` takes an argument: called any number of times through a
+  `mut` borrow, then closed, its captured state hidden by its type (`lib/aff.bc`, §22);
 - integers, bytes, arrays, and slice borrows that split and write a borrowed array (§8, §9);
 - persistent `!` values and implicit destructors (§10, §12);
 - stdin, stdout and stderr as linear capabilities (§11);

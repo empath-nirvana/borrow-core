@@ -1,11 +1,15 @@
 # The affine closure, Rust's `FnMut`
 
-Issue #236. Experiment: `experiments/FnMut/` (non-default library `FnMut`, imported by nothing).
-It changes nothing in `Core/`, `Frontend/`, `Backend/`, `Paper/` or `Support/`.
+Issue #236, the experiment; #239 lifted it into the kernel as SPEC §22. The kernel change of §8
+is made: the positivity relaxation is in `Core/`, the closure's lemmas and derived rules in
+`Core/Aff.lean` and `Core/AffRules.lean`, the programs in `Core/AffPrograms.lean`, and the
+library declaration is `Aff[A, B]<'c>` in `lib/aff.bc` (decision 60: the name is not Rust's).
+The Lean names below are the library's (`affT`, `affBox`, `d_callAff`, `d_ofFn`); this document
+writes the type `FnMut^c A B` as the experiment did, and SPEC §22 writes it `Aff^c A B`.
 
 **How claims are marked.**
 
-- **[Lean]**: a theorem in `experiments/FnMut/FnMut/`. Axioms are within
+- **[Lean]**: a theorem in `Core/Aff.lean`, `Core/AffRules.lean` or `Core/AffPrograms.lean`. Axioms are within
   `[propext, Classical.choice, Quot.sound]`, with no `sorry`. Each program is one closed
   `CDerives` derivation; `*_runs` is its adequacy instance at every host, and `*_eval` is the
   interpreter at Wasm's host, checked by `decide`.
@@ -263,7 +267,10 @@ closed (`nestProg`).
 
 ## 8. The kernel change it implies
 
-Described, not made.
+Made in #239 (SPEC §22), as described here, with one addition: `type` declarations take type and
+lifetime parameters, so the library can declare `Aff[A, B]<'c>`. The checker's positivity
+decision and the backend's eager codata thunks (`Backend/Clos/Collapse.lean`) admit the new
+shapes, and the corpus programs `corpus/aff-*.bc` cover the requirements of §0.
 
 - **SPEC §7.** Positivity (`CTy.NuOk`) gains two shapes:
   - an observation with a closed argument, `A ⊸ D`;

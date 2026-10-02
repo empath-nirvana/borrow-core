@@ -770,3 +770,16 @@ Each entry: the decision, and why. Newest last.
       (decision 57's parser: a site per level, L2, #173) and through values (#161).
     - **Spellings (provisional):** `with L { … }` of a layer; `call` as a layer's first parameter by
       convention only; `k(v)` to resume; `mut` parameters of a control handler.
+60. **Provisional (the affine closure, SPEC §22, #239; spellings to be confirmed by the user).**
+    - **The name `Aff`.** The affine closure is `type Aff[A, B]<'c>` in `lib/aff.bc`, after the
+      `aff` mode of the three kinds of function (linear `A => B`, affine `Aff`, persistent
+      `!(A => B)`), with operations `aff_new`, `aff_call`, `aff_call_mut`, `aff_close`,
+      `aff_of_fn` and `aff_once`. Rust's names (`FnOnce`, `FnMut`, `Fn`) appear only as
+      comparisons. The Lean names follow (`affT`, `affBox`, `d_callMut`, `d_ofFn`, `d_once`).
+    - **Parameterised `type`.** `type N[T, …]<'a, …> = A`, used as `N[A, …]<'b, …>`, is
+      substitution at each use (`docs/type-declarations-design.md` §4.1–4.2): the piece of #141's
+      stage D2 the declaration needs. No regularity check is made, since a `type` cannot mention
+      itself; `data`/`codata` declarations stay #141's.
+    - **`aff_new` returns the closure unboxed**, and the caller writes `boxed['c] aff_new(…)`: a
+      template's lifetime parameters are unrelated to the lifetimes in its type arguments, so the
+      outlives `[]I` needs is checked where the state's type is known.

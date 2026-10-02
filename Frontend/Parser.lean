@@ -68,6 +68,9 @@ inductive RTy where
   | pull (sp : Span) (A B R : RTy)
   /-- `F[…] A`, the row's types already sorted. -/
   | eff (sp : Span) (r : Row) (A : RTy)
+  /-- `N[A, …]` and `N[…]<'a, …>`, curried: the arguments of a parameterised `type`. -/
+  | app (sp : Span) (F A : RTy)
+  | lapp (sp : Span) (F : RTy) (a : Life)
 
 def RTy.span : RTy → Span
   | .unit sp | .zero sp | .tensor sp _ _ | .sum sp _ _ | .U sp _ | .F sp _ | .ref sp _
@@ -75,7 +78,7 @@ def RTy.span : RTy → Span
   | .name sp _ | .lolli sp _ _ | .arr sp _ _ | .all sp _ _ _ | .forall_ sp _ _ _ | .amp sp _ _
   | .top sp | .block sp _ | .val sp _ | .fam sp _ _ _ | .view sp _ _ | .nu sp _ _ | .delay sp _
   | .stream sp _ | .iter sp _ _ _ | .loop sp _ _ | .pull sp _ _ _ | .array sp _ | .arrayImm sp _ _
-  | .arrayMut sp _ _ | .sized sp _ _ _ | .eff sp _ _ => sp
+  | .arrayMut sp _ _ | .sized sp _ _ _ | .eff sp _ _ | .app sp _ _ | .lapp sp _ _ => sp
 
 /-- What a raw type is, for sort errors. -/
 def RTy.former : RTy → String
@@ -120,6 +123,8 @@ def RTy.toV : RTy → Except Error VTy
   | .arrayImm sp a A => return .arrayImm sp a (← A.toV)
   | .arrayMut sp a A => return .arrayMut sp a (← A.toV)
   | .sized sp D S A => return .sized sp (← D.toV) (← S.toV) (← A.toV)
+  | .app sp G A => return .app sp (← G.toV) (← A.toV)
+  | .lapp sp G a => return .lapp sp (← G.toV) a
   | t@(.F ..) | t@(.arr ..) | t@(.forall_ ..) | t@(.amp ..) | t@(.top ..) | t@(.nu ..)
   | t@(.delay ..) | t@(.stream ..) | t@(.iter ..) | t@(.loop ..) | t@(.pull ..)
   | t@(.eff ..) => sortErr t true
@@ -494,7 +499,25 @@ def rtyAtom : Nat → P RTy
     | .ident "lit" => discard bump
                       let sp := t.span
                       pure (.tensor sp (.int sp .w32) (.bang sp (.lolli sp (.int sp .w32) (.int sp .w8))))
-    | .uident s => discard bump; pure (.name t.span s)
+    | .uident s =>
+      discard bump
+      -- `N[A, …]<'a, …>`: the arguments of a parameterised `type`, curried.
+      let mut F : RTy := .name t.span s
+      if ← isSym "[" then
+        discard bump
+        repeat
+          let A ← rty n
+          F := .app (← spanFrom t.span.start) F A
+          if ← isSym "," then discard bump else break
+        expectSym "]"
+      if (← isSym "<") && (← peekAt 1).tok matches .life _ then
+        discard bump
+        repeat
+          let a ← life n
+          F := .lapp (← spanFrom t.span.start) F a
+          if ← isSym "," then discard bump else break
+        expectSym ">"
+      pure F
     | .sym "(" =>
       discard bump
       let A ← rty n
@@ -1818,11 +1841,26 @@ def decl (n : Nat) : P Decl := do
   let t ← peek
   match t.tok with
   | .kw "type" =>
+    -- `type N[T, …]<'a, …> = A` (SPEC §7): the parameters, both lists possibly absent.
     discard bump
     let x ← uident "a type name"
+    let mut tps : List Ident := []
+    if ← isSym "[" then
+      discard bump
+      repeat
+        tps := tps ++ [← uident "a type parameter"]
+        if ← isSym "," then discard bump else break
+      expectSym "]"
+    let mut lps : List Ident := []
+    if ← isSym "<" then
+      discard bump
+      repeat
+        lps := lps ++ [← lifeVar]
+        if ← isSym "," then discard bump else break
+      expectSym ">"
     expectSym "="
     let A ← vty n
-    pure (.type (← spanFrom st) x A)
+    pure (.type (← spanFrom st) x tps lps A)
   | .kw "shape" =>
     discard bump
     let x ← uident "a shape name"

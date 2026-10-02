@@ -167,10 +167,11 @@ theorem VTy.noMutB_sound : ∀ (k : Nat) (A : VTy), VTy.noMutB k A = true → A.
 
 /-! ### `νX. C`: positivity and polynomial observations -/
 
-/-- `VTy.Poly`, decided. -/
+/-- `VTy.Poly`, decided.  `[spec §7, §22]` -/
 def VTy.polyB : VTy → Bool
   | .tensor A B => VTy.polyB A && VTy.polyB B
   | .sum A B => VTy.polyB A && VTy.polyB B
+  | .box _ A => VTy.polyB A
   | .tvar _ => true
   | A => !VTy.occB 0 A
 
@@ -182,8 +183,9 @@ theorem VTy.polyB_sound : ∀ A : VTy, VTy.polyB A = true → A.Poly
       simp only [VTy.polyB, Bool.and_eq_true] at h
       exact ⟨polyB_sound A h.1, polyB_sound B h.2⟩
   | .tvar _, _ => trivial
+  | .box _ A, h => polyB_sound A (by simpa [VTy.polyB] using h)
   | .unit, h | .zero, h | .thunk _, h | .unk, h | .int _, h | .opq _, h | .ref _, h | .imm _ _, h
-  | .mut _ _, h | .box _ _, h | .bang _, h | .mu _, h | .fam _, h =>
+  | .mut _ _, h | .bang _, h | .mu _, h | .fam _, h =>
       VTy.not_occ_of_occB 0 _ (by simpa [VTy.polyB] using h)
 
 /-- `CTy.EffLeaf`, decided: `F_Σ A`, the operation types closed.  `[spec §19]` -/
@@ -199,11 +201,12 @@ theorem CTy.effLeafB_sound : ∀ C : CTy, CTy.effLeafB C = true → C.EffLeaf
       exact ⟨VTy.clB_sound 0 A h.1.1, VTy.clB_sound 0 B h.1.2, effLeafB_sound C h.2⟩
   | .arr _ _, h | .amp _ _, h | .top, h | .all _ _ _, h | .nu _, h => by simp [CTy.effLeafB] at h
 
-/-- `CTy.NuLeaf`, decided. -/
+/-- `CTy.NuLeaf`, decided.  `[spec §7, §22]` -/
 def CTy.nuLeafB : CTy → Bool
   | .ret A => VTy.polyB A
   | .amp C D => CTy.nuLeafB C && CTy.nuLeafB D
   | .eff n i q A B C => CTy.effLeafB (.eff n i q A B C)
+  | .arr A D => VTy.clB 0 A && CTy.nuLeafB D
   | _ => false
 
 theorem CTy.nuLeafB_sound : ∀ C : CTy, CTy.nuLeafB C = true → C.NuLeaf
@@ -212,7 +215,10 @@ theorem CTy.nuLeafB_sound : ∀ C : CTy, CTy.nuLeafB C = true → C.NuLeaf
       simp only [CTy.nuLeafB, Bool.and_eq_true] at h
       exact ⟨nuLeafB_sound C h.1, nuLeafB_sound D h.2⟩
   | .eff n i q A B C, h => CTy.effLeafB_sound (.eff n i q A B C) h
-  | .arr _ _, h | .top, h | .all _ _ _, h | .nu _, h => by simp [CTy.nuLeafB] at h
+  | .arr A D, h => by
+      simp only [CTy.nuLeafB, Bool.and_eq_true] at h
+      exact ⟨VTy.clB_sound 0 A h.1, nuLeafB_sound D h.2⟩
+  | .top, h | .all _ _ _, h | .nu _, h => by simp [CTy.nuLeafB] at h
 
 /-- `CTy.NuOk`, decided. -/
 def CTy.nuOkB : CTy → Bool
@@ -239,6 +245,7 @@ def CTy.nuThunks : CTy → List CTy
   | .ret A => VTy.nuThunks A
   | .amp C D => CTy.nuThunks C ++ CTy.nuThunks D
   | .eff _ _ _ _ _ C => CTy.nuThunks C
+  | .arr _ D => CTy.nuThunks D
   | _ => []
 
 /-! ### Free lifetime variables -/

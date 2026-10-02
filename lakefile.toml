@@ -151,11 +151,6 @@ srcDir = "experiments/SecondClass"
 roots = ["SecondClass"]
 
 [[lean_lib]]
-name = "FnMut"
-srcDir = "experiments/FnMut"
-roots = ["FnMut"]
-
-[[lean_lib]]
 name = "EffModel"
 srcDir = "experiments/EffModel"
 roots = ["EffModel"]

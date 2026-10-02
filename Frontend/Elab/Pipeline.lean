@@ -86,7 +86,7 @@ def TDecl.name : TDecl → String
   | .main .. => "main"
   | .plain d => match d with
     | .def_ _ n _ _ _ _ => s!"def {n.name}"
-    | .type _ n _ => s!"type {n.name}"
+    | .type _ n _ _ _ => s!"type {n.name}"
     | .shape _ n _ => s!"shape {n.name}"
     | .extern _ n _ => s!"extern {n.name}"
     | .main .. => "main"

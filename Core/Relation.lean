@@ -185,8 +185,10 @@ def effRetE : Option (Nat → TEnt) → CTy → LSub → List SRec → Val → W
   | _, _, _ => fun _ _ _ => False
 /-- One unfolding of an observation tree under a type-variable environment: `cC`'s `F`, `&` and
 `F_Σ` clauses with `vCE η` at the answer; a row's operation types are closed and read without
-`η`.  Other formers are not observation trees (`CTy.NuLeaf`) and hold trivially.
-`[spec §7, §19]` -/
+`η`; at an observation with an argument, `cC`'s `⊸` clause with the argument read without `η`
+(its type is closed).  Other formers are not observation trees (`CTy.NuLeaf`) and hold
+trivially.
+`[spec §7, §19, §22]` -/
 def cB : Option (Nat → TEnt) → CTy → List SRec → LSub → Expr → WProp
   | η, .ret A, ls, δ, e => wpTS ls e (fun ls'' => vCE η true A ls'' δ)
   | η, .amp C D, ls, δ, e => fun ρ =>
@@ -195,7 +197,9 @@ def cB : Option (Nat → TEnt) → CTy → List SRec → LSub → Expr → WProp
       ewpTS ls e (opTable (OpTab.ext n i
         ⟨q, B.isZero && q != .lin, fun ls v => vCE none true A ls δ v,
           fun ls v => vCE none true B ls δ v⟩ (effTab C δ))) (effRetE η C δ)
-  | _, .arr _ _, _, _, _ | _, .top, _, _, _ | _, .all _ _ _, _, _, _ | _, .nu _, _, _, _ =>
+  | η, .arr A D, ls, δ, e => fun ρ =>
+      ∀ v, (vCE none true A ls δ v ─⋆ cB η D ls δ (.app e (.val v))) ρ
+  | _, .top, _, _, _ | _, .all _ _ _, _, _, _ | _, .nu _, _, _, _ =>
       fun _ => True
 end
 

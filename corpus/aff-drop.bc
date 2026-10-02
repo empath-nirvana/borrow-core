@@ -1,0 +1,39 @@
+-- Dropping an affine closure (SPEC §22) runs its `close`. An affine closure has a destructor
+-- (SPEC §12, class 2): `close`, which disposes of the state. `k` is never called and `k2`'s rest
+-- is never used again, so the checker inserts their destructors at the end of the scope, and each
+-- `close` frees its counter's cell. `nest` is a closure whose state is another closure: its
+-- `close` closes the closure it holds, so dropping it frees that counter's cell too.
+--
+-- Answer: i32[3], and `live 0`. A drop that forgot a closure without running its `close` leaves
+-- its counter's cell live (`live 3` if none ran).
+
+include aff
+
+fn counter<'c>(start: i32) -> box 'c Aff[i32, i32]<'c> =
+  boxed['c] aff_new[ref i32, i32, i32]['c](alloc(start), !thunkv fun (s : ref i32) ->
+    < fun (a : i32) ->
+        cx <- return (swap[i32, i32] s i32[0]);
+        let (c, x) = cx;
+        cu <- return (swap[i32, i32] c (x + a));
+        let (c1, u) = cu;
+        return (x + a, boxed['c] c1),
+      n <- return (free[i32] s); return () >)
+
+fn nest<'c, 'd < 'c>(k: box 'c Aff[i32, i32]<'c>) -> box 'd Aff[i32, i32]<'d> =
+  boxed['d] aff_new[box 'c Aff[i32, i32]<'c>, i32, i32]['d](k, !thunkv fun (s : box 'c Aff[i32, i32]<'c>) ->
+    < fun (a : i32) ->
+        p <- return (aff_call(s, a));
+        let (b, r) = p;
+        return (b, boxed['d] r),
+      return (aff_close(s)) >)
+
+main -> i32 =
+  let d = alloc(0);
+  let r = borrow mut d { 'x, e ->
+    borrow mut e { 'y, e2 ->
+      let k = counter ['x](7);
+      let k2 = counter ['x](1);
+      let (a, k2) = aff_call(k2, 2);
+      let o = nest ['x] ['y](counter ['x](5));
+      a } };
+  free(d) + r

@@ -69,3 +69,6 @@ import Core.Totality
 import Core.Stale
 import Core.Stdio
 import Core.Handlers
+import Core.Aff
+import Core.AffRules
+import Core.AffPrograms

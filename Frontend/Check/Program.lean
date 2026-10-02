@@ -71,9 +71,14 @@ def checkMain (ds : Array Decl) (k : Nat) (sp : Span) (C : CTy) (M : Comp) :
 
 /-- Check one declaration; the line `bcc check` prints for it, and `main`'s result. -/
 def checkDecl (ds : Array Decl) (k : Nat) : Decl → Except Error (String × Option Checked)
-  | .type _ n A => do
+  | .type _ n [] [] A => do
       let A' ← (Env.top ds k).elabV LifeCtx.empty A
       pure (s!"type {n.name} = {ppVTy A'}", none)
+  | .type _ n ps ls _ =>
+      -- A parameterised abbreviation is elaborated at each use, at its arguments.
+      let tps := if ps.isEmpty then "" else s!"[{", ".intercalate (ps.map (·.name))}]"
+      let lps := if ls.isEmpty then "" else s!"<{", ".intercalate (ls.map ("'" ++ ·.name))}>"
+      pure (s!"type {n.name}{tps}{lps} : elaborated at each use", none)
   | .shape _ n σ => do
       let _ ← (Env.top ds k).elabS LifeCtx.empty σ
       pure (s!"shape {n.name}", none)

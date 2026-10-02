@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 0.38 · 2026-10-01
+Version 0.39 · 2026-10-02
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -129,7 +129,7 @@ the other literal readings in `Paper/LiteralReadings/` are kept.
 |---|---|
 | `fn` item | `!(T₁ ⊸ T₂)` |
 | `FnOnce` | `T₁ ⊸ T₂`, or `(env, code)` consumed |
-| `FnMut` | `(env, !code)` behind a `Mut` borrow, `code : !(E ⊗ T₁ ⊸ E ⊗ T₂)`, run by `withswap` |
+| `FnMut` | `[@c] U(Aff^c T₁ T₂)`, the affine closure of §22, called through a `Mut` borrow by `withswap` |
 | `Fn` | `(env, !code)` behind an `Imm` borrow, `code : !(∀'c. Imm̲ 'c E ⊗ T₁ ⊸ T₂)` |
 
 ### Why `!`, and not a closure former
@@ -290,10 +290,11 @@ rest of the codata". Every observation of a `νX. C` returns, possibly among oth
 thunk of the rest.
 
 **Positivity** (`CTy.NuOk`). `C` is a `&` of two observation trees, and an observation tree is
-an `F A` or a `&` of two observation trees. In each result `A`, `U X` occurs only under `⊗` and
-`⊕`: `A` is `U X`, `B ⊗ B'` or `B ⊕ B'` of such types, or a type in which `X` does not occur
-(`VTy.Poly`). So `X` is never under a `⊸`, a `Ref`, a borrow, a box, a `!`, a `μ` or another
-`U`, and a `νX. C` always has at least two observations.
+an `F A`, a `&` of two observation trees, or an observation that takes a closed argument,
+`A ⊸ D` with `X` not in `A` and `D` an observation tree (§22). In each result `A`, `U X` occurs
+only under `⊗`, `⊕` and `[@a]`: `A` is `U X`, `B ⊗ B'`, `B ⊕ B'` or `[@a] B` of such types, or a
+type in which `X` does not occur (`VTy.Poly`). So `X` is never in an argument, under a `Ref`, a
+borrow, a `!`, a `μ` or another `U`, and a `νX. C` always has at least two observations.
 
 **Relation.** At a positive `C`, `𝒞⟦νX. C⟧` is the greatest fixed point of one unfolding of the
 observation tree, with a candidate `R` for `U X`: `⋃{R | R ⊆ Φ_C(R)}`, written in `Prop` as
@@ -369,8 +370,9 @@ their relations and their six rules are deleted.
 ### Open
 
 - **Other positions of `X`.** `X` under a `Ref`, a borrow or `!` in an observation result, or in
-  the argument of an observation (`A ⊸ …`, a sink), is outside `NuOk`. The relation is monotone
-  wherever `X` avoids `Mut` payloads; what is missing is coiteration's map at those positions.
+  the argument of an observation (`A ⊸ …` with `X` in `A`, a sink), is outside `NuOk`. The
+  relation is monotone wherever `X` avoids `Mut` payloads; what is missing is coiteration's map at
+  those positions. An argument without `X`, and `X` under `[@a]`, are §22.
 - **Lifetime-indexed iteration.** An iterator over a borrowed list or buffer, whose state is a
   borrow and whose rest keeps it, is not yet written as a program (§9 iteration, `[@d] U(νX. C)`
   per `docs/scope-recursion.md` §3.5).
@@ -1048,7 +1050,7 @@ There are three classes of value type.
    | `Ref A` | `free`, then the destructor of `A` |
    | `μX. T`, `T` in `FShape` (§6) | `foldOwn`, whose algebra is the destructor of `T[1/X]` |
    | `U(C & F 1)` | `close`: force, then the second projection |
-   | `U(νX. C & F R)`, `R` closed with a destructor (`D A`, `Stream A`, `Iter A R₀ R`) | `close` (§7), then the destructor of `R` |
+   | `U(νX. C & F R)`, `R` closed with a destructor (`D A`, `Stream A`, `Iter A R₀ R`, `Aff^c A B`) | `close` (§7), then the destructor of `R` |
    These are linear. A value of one of these types that goes unused is consumed by its
    destructor, which the checker inserts. Because the destructor deallocates memory and, at codata,
    runs the object's `close` code, where it is inserted can be observed.
@@ -3279,6 +3281,181 @@ is typed by the existing rules (`bounded_fix`, `[handle]`, `[let]`); `fundamenta
 
 ---
 
+## 22. Entry 21 — the affine closure: observations with arguments and a boxed rest
+
+### Motivation
+
+§2 wrote an affine closure (cf. Rust's `FnMut`) as `(env, !code)` behind a `Mut` borrow, the code
+taking the environment `E` and handing it back. That form names `E`, so a function over such
+closures is written once per environment type (#233; `docs/effect-polymorphism.md` R2a). The
+experiment of #236 (`docs/fnmut.md`) found that two relaxations of §7's positivity make the affine
+closure a codata type, its environment hidden by `ν`:
+
+    Aff^c A B  ≜  νX. (A ⊸ F(B ⊗ [@c] U X)) & F 1
+
+No type former, typing rule or `CDerives` index is added. The same relaxation gives codata
+observations that take arguments, as `docs/type-declarations-design.md` (#141) asks of `codata`
+declarations.
+
+### Positivity
+
+§7's `NuOk` gains two shapes (`Core/Types.lean`):
+
+- **An observation may take a closed argument.** An observation tree may be `A ⊸ D`, with `X` not
+  in `A` (`A.Cl 0`) and `D` an observation tree (`CTy.NuLeaf`). `instT` passes through it.
+- **The rest may be boxed.** `VTy.Poly` admits `[@a] B` over a polynomial `B`.
+
+**Relation.** One unfolding at `A ⊸ D` is `cC`'s `⊸` clause, the argument read without the
+type-variable environment, since `A` is closed (`cB`, `Core/Relation.lean`). It is monotone in
+the candidate (`cB_mono`), one unfolding at the relation is the unrolling (`cB_unroll`), and it is
+closed under steps and binds and agrees with stacks (`cB_step`, `cB_bind`, `cB_iff_stacks`,
+`Core/Computation.lean`). `[@a] B` is the resource condition `@ρ ⊐ a` over `B` (`[TR]` p. 6), so
+it is monotone too.
+
+**Coiteration.** The node at `A ⊸ D` is `λx. node_D wr (λ_. c () x)`: the argument is passed on to
+the step's computation (`nodeV`, `node_ok`, `Core/Nu.lean`). The map at `[@a] B` is the map at
+`B`, because `[]I` and `[]E` are typing rules on the same term (`mapV`, `map_ok`).
+
+Every body positive before is positive after, and `nuIn`, `nuOut` and `unfold` cover the new
+shapes through these cases, with no new compatibility lemma.
+
+### The affine closure
+
+`Aff^c A B` above has two observations: `call` takes an `A` and answers a `B` with the rest of the
+closure, and `close` ends it (`Core/Aff.lean`). A closure is a value of `U(Aff^c A B)`; one that
+outlives `@c` is `[@c] U(Aff^c A B)`, the form in which it is stored, lent `mut` and returned,
+and the rest every call hands back is of that form.
+
+- **Positivity** at every closed `A` (`affBody_nuOk`), and at an argument that is itself a
+  borrowed closure (`affBody_nuOk_higher`). An effectful closure,
+  `νX. (A ⊸ F_Σ(B ⊗ [@c] U X)) & F_Σ 1`, is positive at closed operation types
+  (`affEffBody_nuOk`).
+- **Relation.** `cC_aff_iff`: a computation is an affine closure when every `call` answers a `B`
+  and a rest that is again a closure outliving `@c`, and `close` runs to `()`; coinduction is
+  `aff_coind`.
+- **Observable view.** Unchanged: the observable view relaxes `U` to `True` (`vC_obs_aff`), and
+  `Imm̲` takes the closure to `Unk` (`immReborrow_aff`, `immReborrow_affBox`), the paper's clause
+  (4). A closure behind an `Imm` borrow is only forgotten; behind a `Mut` borrow it is held at the
+  program's view and called by `withswap`. §12.69's `obs_transfer` takes its `U C` arm
+  (`obs_transfer_affBox`).
+- **Destructor.** §12's `HasDtor.nu`, class 2: dropping a closure runs its `close`
+  (`hasDtor_aff`). It is not `Affine` (`not_affine_aff`) and not persistent (`not_persistent_aff`).
+
+**Derived rules** (`Core/AffRules.lean`), each a `CDerives` derivation, so `fundamentalC` and
+`adequacyC` cover them:
+
+| rule | term | from |
+|---|---|---|
+| introduction | `mkE` over a state `s : S` and `!` code `step : S ⊸ (A ⊸ F(B ⊗ [@c] S)) & F 1` (`d_mk`) | `unfold`, `nuIn`, `&` |
+| introduction outliving `@c`, when `S` does | the same (`d_mkBox`) | and `[]I` |
+| call | `f π₁ a : F(B ⊗ [@c] U(Aff^c A B))` (`d_callAff`) | `nuOut`, `π₁` |
+| close | `f π₂ : F 1` (`d_close`, `d_closeBox`) | `nuOut`, `π₂` |
+| call through `Mut @a ([@c] U(Aff^c A B))` | `withswap` with the call as callback (`d_callMut`) | `withswap`, `[]E` |
+| persistent ≤ affine | `mkE` at the state `!U(A ⊸ F B)` (`d_ofFn`) | the above |
+| affine ≤ linear | `λa. call, then close the rest` (`d_once`) | the above |
+
+A linear function has no destructor (`not_hasDtor_lolli`), so it is not the state of a closure
+whose `close` must dispose of it, and there is no uniform linear ≤ affine coercion.
+
+**Three kinds of function**, three types (cf. Rust's `FnOnce`, `FnMut`, `Fn`):
+
+| kind | type | copy | drop | §12 class |
+|---|---|---|---|---|
+| linear | `U(A ⊸ F B)` | no | only by calling it | 3 |
+| affine | `[@c] U(Aff^c A B)` | no | `close` | 2 |
+| persistent | `!U(A ⊸ F B)` | yes | `forget` | 1 |
+
+**Bounds.** A closure outlives `@c` when its state does (`d_mkBox`); a closure capturing
+`Mut 'x T` is bounded by a lifetime below `'x`, never `'x` (`logState_not_outlives`), and no
+closure outlives anything except through its box (`aff_not_outlives`). Outlives is strict, so a
+closure bounded by `'x` is lent `mut` inside a scope below `'x`.
+
+**Programs** (`Core/AffPrograms.lean`), each one closed `CDerives` derivation run by adequacy at
+every host and by the interpreter: a counter called twice through `Mut` (`counterProg`, 4),
+passed through `n` functions with a reborrow (`d_passF` at every `n`; `passProg 3`, 13), nested
+(`nestProg`, 8), returned (`retProg`, 15), a logger capturing a borrow (`logProg`, 12), the two
+coercions (`ofFnProg`, 23; `onceProg`, 5), and a drop by the destructor (`dropProg`, 0).
+
+### The checker
+
+`CTy.nuLeafB` admits `A ⊸ D` at a closed `A`, and `VTy.polyB` admits `[@a] B`
+(`Frontend/Check/Decide.lean`, sound by `nuLeafB_sound`, `polyB_sound`); `nu_in` finds the `ν`
+type through an argument. A `type` declaration may take type and lifetime parameters,
+`type N[T, …]<'a, …> = A`, and a use `N[A, …]<'b, …>` elaborates the arguments at the use and the
+body in the declaration's scope with the parameters bound to them (`Frontend/Check/Elab.lean`):
+substitution, with no kernel change (`docs/type-declarations-design.md` §4.1–4.2, `type` with
+parameters). A template's type parameters under a `μ` or `ν` binder are shifted past it, so a
+call matches a parameter of type `Aff[A, B]<'c>`.
+
+### The library
+
+`lib/aff.bc` (`include aff`) declares the closure and its operations:
+
+    type Aff[A, B]<'c> = U (nu X. (A -o F (B * box 'c U X)) & F 1)
+
+`aff_new` (a state and its step; the caller boxes it, `boxed['c] aff_new(s, step)`, at the
+state's type), `aff_call`, `aff_call_mut` (through `mut 'a (box 'c Aff[A, B]<'c>)`),
+`aff_close`, `aff_of_fn` (persistent ≤ affine) and `aff_once` (affine ≤ linear). The name `Aff`
+is provisional (decision 60).
+
+### Lowering
+
+Nothing new: `unfold` is a closed λ-term, and its node at an argument is one more λ. A closure
+built under `boxed` keeps its unfolded code `!`, so its thunk's arms bind the code to a name
+first (`g <- return (unbang f); …`); `Backend/Clos/Collapse.lean` builds such a thunk eagerly as
+it does the unbound form, so a closure has one code and its calls through `mut` are direct calls
+(`corpus/counts.expected`, `aff-counter`, `aff-depth`: no indirect call).
+
+### Programs
+
+| program | what it shows |
+|---|---|
+| `corpus/aff-counter.bc` | a closure owning a cell, stored in a cell, called twice through `mut`; the state persists |
+| `corpus/aff-depth.bc` | the borrowed closure passed through three functions, with a reborrow |
+| `corpus/aff-higher.bc` | a closure capturing a closure, and a closure taking a closure |
+| `corpus/aff-capture.bc` | a closure capturing `mut 'x i32`, returned from its maker, bounded by `'w ⊏ 'x` |
+| `corpus/aff-drop.bc` | closures dropped by their destructors, which close them and free their cells |
+| `corpus/aff-coerce.bc` | persistent ≤ affine and affine ≤ linear |
+| `corpus/reject/aff-outlives.bc` | refused: a closure bounded by the lifetime of the borrow it captures |
+| `corpus/reject/aff-copy.bc` | refused: an affine closure used twice |
+| `corpus/reject/aff-linear-state.bc` | refused: a linear function as the state a `close` drops |
+
+### Instances
+
+`Aff^c A B` is the only abbreviation that uses the new shapes. §7's `Loop`, `D`, `Stream` and
+`Iter`, and the frontend's `delay`, `stream`, `iter`, `loop` and `pull`, were already instances of
+`νX. C` and stay as they are; replacing the frontend's five with library declarations is #141.
+§2's closure row is now the type above, and nothing replaced is left to delete: the relaxation
+generalises `NuOk` itself, whose earlier trees are its special case, and the `(env, !code)` form
+remains the derivation of `d_callMut` (a `withswap` over the closure).
+
+### Baseline
+
+`fundamentalC`, `adequacyC`, `fundamentalD`, `adequacyD`, the totality theorems and every result
+of entries 1–20 keep their statements and proofs; nothing in `Paper/` or `Support/` changes. The
+axioms are `[propext, Classical.choice, Quot.sound]`.
+
+### Open
+
+- **A lifetime-polymorphic argument**, `∀'a. Mut 'a T ⊸ F(B ⊗ [@c] U X)` (cf. Rust's
+  `FnMut(&mut T)`): `∀` in observation trees, where `cB` would change `δ` under a candidate fixed
+  at one `δ`. An argument's lifetimes are fixed when the closure's type is written.
+- **An argument mentioning `X`** (a sink of the codata itself) stays outside `NuOk`.
+- **Surface closure sugar**: a closure over a context elaborated to `aff_new` with the captures as
+  the state and their destructors as `close`.
+- **Strict outlives** costs a scope: a closure bounded by `'x` is lent inside a scope below `'x`,
+  and a library function's lifetime parameters are below `top`, so a closure built through
+  `aff_new` is bounded by a lifetime a scope defines.
+- **Polyvariant flow.** Closures built at two sites that reach one call are dispatched there
+  (`aff-higher`).
+- **Linear ≤ affine** is refused by inspection of the derived rules, with `not_hasDtor_lolli` its
+  mechanical part; a parametricity statement is not made.
+- A generic function's lifetime parameters are unrelated to the lifetimes in its type arguments,
+  so a template whose body needs one to outlive the other is checked at no instance; `aff_new`
+  returns the closure unboxed for that reason.
+
+---
+
 ## Status
 
 Entries 2–6 are implemented in the library directory `Core/`, with one `fundamentalC` and
@@ -3324,6 +3501,13 @@ Entry 20 (§21) is implemented in `Frontend/Elab/Effects.lean` (`groupCopy`, `se
 `withCtl`, `resumeCall`) and `Frontend/Sugar.lean` (`hndCtlC`, `HInfo.after`), with no change to
 `CDerives`; `Backend/Clos/Capture.lean` loses `unwindClause?`.
 
+Entry 21 (§22) is implemented: the positivity in `Core/Types.lean`, `Core/Relation.lean`,
+`Core/RelationFacts.lean`, `Core/NuRel.lean`, `Core/Computation.lean` and `Core/Nu.lean`; the
+closure in `Core/Aff.lean`, `Core/AffRules.lean` and `Core/AffPrograms.lean`; the checker's
+decision in `Frontend/Check/Decide.lean` and parameterised `type` declarations in
+`Frontend/Syntax.lean`, `Frontend/Parser.lean` and `Frontend/Check/Elab.lean`; `lib/aff.bc`; and
+`Backend/Clos/Collapse.lean`. No change to `CDerives`.
+
 Entry 18 (§19) is in progress (#186). Stages 1–3 are implemented:
 - the machine: `perform`, `raise`, `hnd`, `ubind`, `ccatch` and `cfin`, and their steps, in
   `Paper/`;
@@ -3355,6 +3539,14 @@ with every kernel program at every stage (*Lowering*).
 ---
 
 ## Changelog
+
+- **0.39** (2026-10-02) — §22 (#239, from #236): the affine closure. §7's positivity admits an
+  observation that takes a closed argument (`A ⊸ D`) and a boxed rest (`[@a] U X`), and the
+  affine closure `Aff^c A B ≜ νX. (A ⊸ F(B ⊗ [@c] U X)) & F 1`, with observations `call` and
+  `close`, is an instance: a library declaration (`lib/aff.bc`) with derived introduction, call,
+  call through `Mut`, close and coercion rules. A `type` declaration may take type and lifetime
+  parameters. §2's closure row is the new type; §7 and §12 name it. No new former, rule or index.
+  Decision 60.
 
 - **0.38** (2026-10-01) — §21 (#229, #216): closure conversion at the seams. A recursive group is
   the bounded fixed point of its generator, taken at the record of its members and called

@@ -68,6 +68,8 @@ theorem cB_mono (C : CTy) {R R' : CPred} (h : R.Le R') :
   | .eff n i q A B D, hD, ls, δ, e => fun ρ h' =>
       ewp_mono (opTable_mono _) (fun _ _ _ _ h => h)
         (fun ls' v σ hv => effRetE_mono C h (D := D) hD.2.2 δ ls' v σ hv) h'
+  | .arr _ D, hD, ls, δ, e => fun ρ h' v ρ₁ ρ₂ hv hc =>
+      cB_mono C h (D := D) hD.2 ls δ _ ρ₂ (h' v ρ₁ ρ₂ hv hc)
 
 theorem nuF_mono {C : CTy} (hC : C.NuOk) (δ : LSub) {R R' : CPred} (h : R.Le R') :
     (nuF C δ R).Le (nuF C δ R') := by
@@ -143,6 +145,11 @@ theorem cB_unroll (C : CTy) (δ : LSub) : ∀ {D : CTy}, D.NuLeaf → ∀ (ls : 
       funext e
       show ewpTS ls e _ _ = ewpTS ls e _ _
       rw [effRetE_unroll C δ (D := D) hD.2.2, ← effTab_instT (.thunk (.nu C)) δ D]
+  | .arr A D, hD, ls => by
+      funext e ρ
+      show (∀ v, (vC true A ls δ v ─⋆ cB _ D ls δ (.app e (.val v))) ρ)
+        = (∀ v, (vC true A ls δ v ─⋆ cC (D.instT _) ls δ (.app e (.val v))) ρ)
+      rw [cB_unroll C δ hD.2 ls]
 
 /-- **`νX. C` is its unrolling**: `𝒞⟦νX. C⟧ = 𝒞⟦C[U(νX. C)/X]⟧`.  `[spec §7]` -/
 theorem cC_nu_iff {C : CTy} (hC : C.NuOk) (ls : List SRec) (δ : LSub) (e : Expr) (ρ : WRes) :

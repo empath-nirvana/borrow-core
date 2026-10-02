@@ -58,6 +58,11 @@ def ppShapeAtom (σ : Shape) (printed : String) : String :=
   | .name _ n => n
   | _ => "(" ++ printed ++ ")"
 
+/-- `N[A, …]<'a, …>` from its printed parts. -/
+def ppApp (h : String) (ts ls : List String) : String :=
+  h ++ (if ts.isEmpty then "" else "[" ++ ", ".intercalate ts ++ "]") ++
+    (if ls.isEmpty then "" else "<" ++ ", ".intercalate ls ++ ">")
+
 mutual
 def VTy.pp (A : VTy) (lvl : Nat := 0) : String :=
   paren (A.level < lvl) <| match A with
@@ -86,6 +91,19 @@ def VTy.pp (A : VTy) (lvl : Nat := 0) : String :=
     | .arrayImm _ a A => "array_imm " ++ a.pp 2 ++ " " ++ A.pp 4
     | .arrayMut _ a A => "array_mut " ++ a.pp 2 ++ " " ++ A.pp 4
     | .sized _ D S A => "sized " ++ D.pp 5 ++ " " ++ S.pp 5 ++ " " ++ A.pp 5
+    | .app _ G B =>
+      let (h, ts, ls) := G.ppArgs
+      ppApp h (ts ++ [B.pp 0]) ls
+    | .lapp _ G a =>
+      let (h, ts, ls) := G.ppArgs
+      ppApp h ts (ls ++ [a.pp 0])
+
+/-- `N[A, …]<'a, …>`: the head name, the printed type arguments and lifetime arguments. -/
+def VTy.ppArgs : VTy → String × List String × List String
+  | .app _ G A => let (h, ts, ls) := G.ppArgs; (h, ts ++ [A.pp 0], ls)
+  | .lapp _ G a => let (h, ts, ls) := G.ppArgs; (h, ts, ls ++ [a.pp 0])
+  | .name _ n => (n, [], [])
+  | _ => ("_", [], [])
 
 def CTy.pp (C : CTy) (lvl : Nat := 0) : String :=
   paren (C.level < lvl) <| match C with
@@ -282,7 +300,10 @@ def Comp.pp (M : Comp) (lvl : Nat := 0) (k : Nat := 0) : String :=
 end
 
 def Decl.pp : Decl → String
-  | .type _ n A => "type " ++ n.name ++ " = " ++ A.pp
+  | .type _ n ps ls A =>
+    "type " ++ n.name ++ (if ps.isEmpty then "" else "[" ++ ", ".intercalate (ps.map (·.name)) ++ "]") ++
+      (if ls.isEmpty then "" else "<" ++ ", ".intercalate (ls.map ("'" ++ ·.name)) ++ ">") ++
+      " = " ++ A.pp
   | .shape _ n σ => "shape " ++ n.name ++ " = " ++ σ.pp
   | .def_ _ n ps A V m =>
     let params := if ps.isEmpty then "" else "[" ++ ", ".intercalate (ps.map (·.name)) ++ "]"

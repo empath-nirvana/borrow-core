@@ -9,7 +9,8 @@ A loop, stream or iterator is built by the program as the thunk
     thunkv nu_in ⟨(nu_out (force f s₀)).1, (nu_out (force f s₀)).2⟩
 
 (its erasure `λo. case o {inl _. f s₀ (inl ()) | inr _. f s₀ (inr ())}`, a closure over `f` and
-`s₀`), while every later state is the thunk `unfold`'s map builds. The two are different codes
+`s₀`; or with `f` bound to a name of its own in each arm, `g <- return (unbang f); …`, as a closure
+built under `boxed` keeps `f` persistent), while every later state is the thunk `unfold`'s map builds. The two are different codes
 of one type, so every observation would be a dispatched call. Here such a thunk is replaced by
 what forcing it computes first, when that is certain to be a value:
 
@@ -47,6 +48,13 @@ def armHead? (bound : Var) : Tm → Option (Var ⊕ (Var × Var))
     | .var y => some (.inl y)
     | .letv y (.var t) (.var y') => if y == y' then some (.inl t) else none
     | H => (callOfVars? H).map .inr
+  | .letv g (.var f) b =>
+    -- `let g = f; …`: the arm binds a captured variable to another name first, as
+    -- `g <- return (unbang f); (nu_out (force g s)).i` does.
+    let r (v : Var) : Var := if v == g then f else v
+    (armHead? bound b).map fun
+      | .inl y => .inl (r y)
+      | .inr (h, s) => .inr (r h, r s)
   | _ => none
 
 /-- A term that builds a value from variables and literals, with no call, primitive or case. -/
@@ -87,7 +95,7 @@ def collapse? (codes : Array Code) (flow : Std.HashMap Var (Array Nat)) (c : Cod
 where
   /-- The function variable of the arm's inner call `y x`. -/
   findCall : Tm → Option Var
-    | .drop _ b | .letv _ (.var _) (.drop _ b) => findCall b
+    | .drop _ b | .letv _ (.var _) (.drop _ b) | .letv _ (.var _) b => findCall b
     | .letv _ _ (.letv _ H _) => match H with
       | .letv _ (.var _) (.letv y (.var _) (.app _ _)) => some y
       | .app f _ => some f

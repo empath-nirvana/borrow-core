@@ -758,7 +758,11 @@ theorem cB_congr : ∀ (C : CTy) (η : Option (Nat → TEnt)) {δ₁ δ₂ : LSu
       have hT := effTab_congr C (fun y hy => h y (Or.inr (Or.inr hy)))
       have hR := effRetE_congr C η (fun y hy => h y (Or.inr (Or.inr hy))) hη
       funext e; simp only [cB, hA, hB, hT, hR]
-  | .arr _ _, _, _, _, _, _, _ | .top, _, _, _, _, _, _ | .all _ _ _, _, _, _, _, _, _
+  | .arr A D, η, _, _, h, hη, ls => by
+      have hA := vCE_congr A none (fun y hy => h y (Or.inl hy)) (envAgree_none _ _) true ls
+      have hD := cB_congr D η (fun y hy => h y (Or.inr hy)) hη ls
+      funext e; simp only [cB, hA, hD]
+  | .top, _, _, _, _, _, _ | .all _ _ _, _, _, _, _, _, _
   | .nu _, _, _, _, _, _, _ => rfl
 end
 
@@ -793,10 +797,14 @@ theorem TyEq.poly_iff : ∀ (A : VTy) {A' : VTy} {δ δ' : LSub}, TyEq A δ A' �
   | .tensor A B, A', _, _, h | .sum A B, A', _, _, h => by
       cases A' <;> simp only [TyEq] at h
       exact and_congr (TyEq.poly_iff A h.1) (TyEq.poly_iff B h.2)
+  | .box _ A, A', _, _, h => by
+      cases A' <;> simp only [TyEq] at h
+      simp only [VTy.Poly]
+      exact TyEq.poly_iff A h.2
   | .tvar _, A', _, _, h => by cases A' <;> simp only [TyEq] at h; subst h; exact Iff.rfl
   | .unit, A', _, _, h | .zero, A', _, _, h | .thunk _, A', _, _, h | .unk, A', _, _, h
   | .int _, A', _, _, h | .opq _, A', _, _, h | .ref _, A', _, _, h | .imm _ _, A', _, _, h | .mut _ _, A', _, _, h
-  | .box _ _, A', _, _, h | .bang _, A', _, _, h | .mu _, A', _, _, h | .fam _, A', _, _, h => by
+  | .bang _, A', _, _, h | .mu _, A', _, _, h | .fam _, A', _, _, h => by
       have ho := TyEq.occ_iff _ 0 h
       cases A' <;> simp only [TyEq] at h
       simp only [VTy.Poly, ho]
@@ -826,7 +834,10 @@ theorem CTyEq.nuLeaf_iff : ∀ (C : CTy) {C' : CTy} {δ δ' : LSub}, CTyEq C δ 
   | .eff n i q A B C, C', _, _, h => by
       cases C' <;> simp only [CTyEq] at h
       exact CTyEq.effLeaf_iff (.eff n i q A B C) (C' := .eff _ _ _ _ _ _) h
-  | .arr _ _, C', _, _, h | .top, C', _, _, h | .all _ _ _, C', _, _, h | .nu _, C', _, _, h => by
+  | .arr A D, C', _, _, h => by
+      cases C' <;> simp only [CTyEq] at h
+      exact and_congr (TyEq.Cl_iff A 0 h.1) (CTyEq.nuLeaf_iff D h.2)
+  | .top, C', _, _, h | .all _ _ _, C', _, _, h | .nu _, C', _, _, h => by
       cases C' <;> simp_all [CTyEq, CTy.NuLeaf]
 
 /-- Positivity is invariant under `CTyEq`. -/
@@ -1030,7 +1041,12 @@ theorem cB_tyEq : ∀ (C : CTy) {C' : CTy} {δ δ' : LSub}, CTyEq C δ C' δ' �
       have hR := effRetE_tyEq C hC η η' hη
       have hz := TyEq.isZero_eq B hB
       funext e; simp only [cB, ihA, ihB, hT, hR, hz]
-  | .arr _ _, C', _, _, h, _, _, _, _ | .top, C', _, _, h, _, _, _, _
+  | .arr A D, C', _, _, h, η, η', hη, ls => by
+      cases C' <;> simp only [CTyEq] at h
+      have ihA := vCE_tyEq A none none h.1 (envEq_none _ _) true ls
+      have ihD := cB_tyEq D h.2 η η' hη ls
+      funext e; simp only [cB, ihA, ihD]
+  | .top, C', _, _, h, _, _, _, _
   | .all _ _ _, C', _, _, h, _, _, _, _ | .nu _, C', _, _, h, _, _, _, _ => by
       cases C' <;> simp only [CTyEq] at h
       rfl

@@ -48,6 +48,8 @@ def VTy.respan (sp : Span) : VTy → VTy
   | .arrayImm _ a A => .arrayImm sp (a.respan sp) (A.respan sp)
   | .arrayMut _ a A => .arrayMut sp (a.respan sp) (A.respan sp)
   | .sized _ D S A => .sized sp (D.respan sp) (S.respan sp) (A.respan sp)
+  | .app _ G A => .app sp (G.respan sp) (A.respan sp)
+  | .lapp _ G a => .lapp sp (G.respan sp) (a.respan sp)
 
 def CTy.respan (sp : Span) : CTy → CTy
   | .ret _ A => .ret sp (A.respan sp)

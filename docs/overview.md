@@ -19,6 +19,9 @@ mechanization of Wagner, Gierczak, Marshall, Li and Ahmed, *From Linearity to Bo
 - **Codata:** one former `νX. C` with coiteration; the delay type for loops that may not
   terminate, streams and finite iterators are abbreviations over it, each with a mandatory
   `close` (§7).
+- **The affine closure:** `Aff[A, B]<'c>` (`lib/aff.bc`), codata whose `call` takes an argument
+  and hands back the rest: called any number of times, through a `mut` borrow, then closed; its
+  captured state is hidden by its type (§22).
 - **Integers and bytes:** `i32`/`i64` with Wasm's operations, and the byte `u8` (§8).
 - **Arrays and slices:** `array A` owns `n` cells, read through the family of leaf views; slice
   borrows lend a run of an array, which can be split, and its elements replaced or swapped (§9).

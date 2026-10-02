@@ -62,14 +62,21 @@ structure Scope where
   decls : Array Decl
   upto : Nat
 
-/-- The latest `type` declaration named `n` in scope, with its own scope. -/
-def Scope.findType (s : Scope) (n : String) : Option (VTy × Scope) :=
+/-- A `type` declaration in scope: its type and lifetime parameters, body and own scope. -/
+structure TypeInfo where
+  tps : List Ident
+  lps : List Ident
+  body : VTy
+  scope : Scope
+
+/-- The latest `type` declaration named `n` in scope. -/
+def Scope.findType (s : Scope) (n : String) : Option TypeInfo :=
   go s.upto
 where
-  go : Nat → Option (VTy × Scope)
+  go : Nat → Option TypeInfo
     | 0 => none
     | k + 1 => match s.decls[k]? with
-      | some (.type _ m A) => if m.name == n then some (A, ⟨s.decls, k⟩) else go k
+      | some (.type _ m ps ls A) => if m.name == n then some ⟨ps, ls, A, ⟨s.decls, k⟩⟩ else go k
       | _ => go k
 
 /-- The latest `shape` declaration named `n` in scope, with its own scope. -/
@@ -209,24 +216,45 @@ structure TyEnv where
   mu : List String
   /-- `μ` variables hid by an enclosing `U`. -/
   hid : List String
-  /-- A `def`'s type parameters. -/
+  /-- A `def`'s type parameters, or a parameterised `type`'s. -/
   tps : List (String × CVTy)
+  /-- A parameterised `type`'s lifetime parameters, bound to the use's lifetimes.  `[spec §7]` -/
+  lsub : List (String × CLife) := []
 
 /-- An abbreviation's body: its own scope, no names of the use site, the use's `Δ`. -/
 def TyEnv.closedAt (E : TyEnv) (sc : Scope) : TyEnv :=
-  { E with scope := sc, lenv := [], mu := [], hid := [], tps := [] }
+  { E with scope := sc, lenv := [], mu := [], hid := [], tps := [], lsub := [] }
 
 def TyEnv.enterU (E : TyEnv) : TyEnv := { E with mu := [], hid := E.mu ++ E.hid }
 
-/-- A lifetime. -/
-def elabLife (Δ : LifeCtx) (lenv : List (String × LifeVar)) : Frontend.Life → Except Error CLife
+/-- A lifetime, a name bound by `lenv` first and then by `lsub` (a parameterised `type`'s lifetime
+parameters). -/
+def elabLifeS (Δ : LifeCtx) (lenv : List (String × LifeVar)) (lsub : List (String × CLife)) :
+    Frontend.Life → Except Error CLife
   | .var sp x => match lenv.lookup x with
     | some v => pure (.var v)
-    | none => err sp s!"unbound lifetime variable '{x}"
+    | none => match lsub.lookup x with
+      | some a => pure a
+      | none => err sp s!"unbound lifetime variable '{x}"
   | .top _ => pure .top
   | .dom _ => pure Δ.meetOfDom
-  | .meet _ a b => do pure (.meet (← elabLife Δ lenv a) (← elabLife Δ lenv b))
-  | .join _ a b => do pure (.join (← elabLife Δ lenv a) (← elabLife Δ lenv b))
+  | .meet _ a b => do pure (.meet (← elabLifeS Δ lenv lsub a) (← elabLifeS Δ lenv lsub b))
+  | .join _ a b => do pure (.join (← elabLifeS Δ lenv lsub a) (← elabLifeS Δ lenv lsub b))
+
+/-- A lifetime. -/
+def elabLife (Δ : LifeCtx) (lenv : List (String × LifeVar)) : Frontend.Life → Except Error CLife :=
+  elabLifeS Δ lenv []
+
+/-- A lifetime of a type being elaborated. -/
+def TyEnv.life (E : TyEnv) : Frontend.Life → Except Error CLife := elabLifeS E.Δ E.lenv E.lsub
+
+/-- The head name of a curried application `N[A, …]<'a, …>`, its type arguments and its lifetime
+arguments, in order. -/
+def _root_.Frontend.VTy.spine : VTy → Option (String × List VTy × List Frontend.Life)
+  | .name _ n => some (n, [], [])
+  | .app _ G A => (G.spine).bind fun (n, As, ls) => if ls.isEmpty then some (n, As ++ [A], ls) else none
+  | .lapp _ G a => (G.spine).map fun (n, As, ls) => (n, As, ls ++ [a])
+  | _ => none
 
 def indexOf? (x : String) : List String → Option Nat
   | [] => none
@@ -250,9 +278,9 @@ def elabV : Nat → TyEnv → VTy → Except Error CVTy
           else err sp s!"`U {X}`: `{X}` is not a `nu` variable in scope"
     | .thunk _ C => do pure (.thunk (← elabC n E.enterU C))
     | .ref _ A => do pure (.ref (← elabV n E A))
-    | .imm _ a A => do pure (.imm (← elabLife E.Δ E.lenv a) (← elabV n E A))
-    | .mut _ a A => do pure (.mut (← elabLife E.Δ E.lenv a) (← elabV n E A))
-    | .box _ a A => do pure (.box (← elabLife E.Δ E.lenv a) (← elabV n E A))
+    | .imm _ a A => do pure (.imm (← E.life a) (← elabV n E A))
+    | .mut _ a A => do pure (.mut (← E.life a) (← elabV n E A))
+    | .box _ a A => do pure (.box (← E.life a) (← elabV n E A))
     | .bang _ A => do pure (.bang (← elabV n E A))
     | .unk _ => pure .unk
     | .int _ w => pure (.int w)
@@ -274,31 +302,52 @@ def elabV : Nat → TyEnv → VTy → Except Error CVTy
           if E.hid.contains x then
             err sp s!"the type variable `{x}` occurs under `U` (inside a computation type)"
           else match E.tps.lookup x with
-            | some B => pure B
+            -- Under the enclosing `μ`/`ν` binders: a template's placeholder is shifted past them,
+            -- as `matchV` reads it; a closed type is unchanged.
+            | some B => pure (B.rename (· + (E.mu.length + E.hid.length)))
             | none => match E.scope.findType x with
-              | some (B, sc) => elabV n (E.closedAt sc) B
+              | some ⟨[], [], B, sc⟩ => elabV n (E.closedAt sc) B
+              | some ti => err sp (s!"`{x}` takes {ti.tps.length} type and {ti.lps.length} " ++
+                  s!"lifetime arguments, written `{x}[…]<…>`")
               | none => err sp s!"unknown type `{x}`"
     | .lolli _ A B => do
         let E' := E.enterU
         pure (.thunk (.arr (← elabV n E' A) (.ret (← elabV n E' B))))
     | .all _ x b A => do
-        let bl ← elabLife E.Δ E.lenv b
+        let bl ← E.life b
         let v := E.Δn.freshVar
         let E' := { E.enterU with Δn := E.Δn.extend v bl, lenv := (x.name, v) :: E.lenv }
         pure (.thunk (.all v bl (.ret (← elabV n E' A))))
     | .block _ σ => do pure (← elabS n E σ).refTy
     | .val _ σ => do pure (← elabS n E σ).valTy
     | .fam _ m a σ => do
-        let al ← elabLife E.Δ E.lenv a
+        let al ← E.life a
         let s ← elabS n E σ
         pure (match m with
           | .mut => s.famTy BoCa.Fig16.LogRel.Core.VTy.mut al
           | .imm => s.famTy BoCa.Fig16.LogRel.Core.VTy.imm al)
-    | .view _ a A => do pure ((← elabV n E A).immReborrow (← elabLife E.Δ E.lenv a))
+    | .view _ a A => do pure ((← elabV n E A).immReborrow (← E.life a))
     | .array _ A => do pure (.fam (.ref (← elabV n E A)))
-    | .arrayImm _ a A => do pure (.fam (.imm (← elabLife E.Δ E.lenv a) (← elabV n E A)))
-    | .arrayMut _ a A => do pure (.fam (.mut (← elabLife E.Δ E.lenv a) (← elabV n E A)))
+    | .arrayImm _ a A => do pure (.fam (.imm (← E.life a) (← elabV n E A)))
+    | .arrayMut _ a A => do pure (.fam (.mut (← E.life a) (← elabV n E A)))
     | .sized sp D S A => elabV n E (VTy.sizedExpand sp D S A)
+    | A@(.app sp _ _) | A@(.lapp sp _ _) =>
+        -- `N[A, …]<'a, …>`: the arguments elaborated at the use, then `N`'s body in its own scope
+        -- with its parameters bound to them.  `[spec §7]`
+        match A.spine with
+        | none => err sp "only a parameterised `type` takes arguments `[…]<…>`"
+        | some (x, As, ls) => match E.scope.findType x with
+          | none => err sp s!"unknown type `{x}`"
+          | some ⟨ps, lps, B, sc⟩ =>
+            if ps.length != As.length || lps.length != ls.length then
+              err sp (s!"`{x}` takes {ps.length} type and {lps.length} lifetime arguments, " ++
+                s!"but has {As.length} and {ls.length}")
+            else do
+              let Bs ← As.mapM (elabV n E)
+              let ms ← ls.mapM E.life
+              let tps := (ps.map (·.name)).zip Bs
+              let lsub := (lps.map (·.name)).zip ms
+              elabV n { E.closedAt sc with tps, lsub } B
 /-- A computation type. -/
 def elabC : Nat → TyEnv → CTy → Except Error CCTy
   | 0, _, C => err C.span "type abbreviations nested too deeply"
@@ -308,14 +357,18 @@ def elabC : Nat → TyEnv → CTy → Except Error CCTy
     | .amp _ C D => do pure (.amp (← elabC n E C) (← elabC n E D))
     | .top _ => pure .top
     | .all _ x b C => do
-        let bl ← elabLife E.Δ E.lenv b
+        let bl ← E.life b
         let v := E.Δn.freshVar
         let E' := { E with Δn := E.Δn.extend v bl, lenv := (x.name, v) :: E.lenv }
         pure (.all v bl (← elabC n E' C))
     | .nu sp X C => do
         let B ← elabC n { E.enterU with mu := ["U " ++ X.name] } C
-        if CTy.nuOkB B then pure (.nu B)
-        else err sp s!"`nu {X.name}. C` needs `C` to be a `&` of observations `F A`, with `U {X.name}` only under `*` and `+`"
+        -- A template's type, elaborated with its type parameters as placeholders to match a call
+        -- against, is checked at each instance instead (as `mu`'s closedness is).
+        let pattern := E.tps.any fun (_, T) => match T with | .tvar i => i ≥ 2 ^ 24 | _ => false
+        if CTy.nuOkB B || pattern then pure (.nu B)
+        else err sp (s!"`nu {X.name}. C` needs `C` to be a `&` of observations `F A`, each " ++
+          s!"possibly taking a closed argument `A -o …`, with `U {X.name}` only under `*`, `+` and `box`")
     | .name sp X => err sp s!"the `nu` variable `{X}` occurs only as `U {X}`"
     | .delay _ A => do pure (.delay (← elabV n E A))
     | .stream _ A => do pure (.stream (← elabV n E A))

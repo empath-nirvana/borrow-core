@@ -1,0 +1,43 @@
+-- The affine closure (SPEC §22) called repeatedly through a `mut` borrow. `counter` is a closure
+-- whose state is an owned cell: each call adds its argument to the cell and answers the new
+-- total. The closure is stored in a cell `c`, and `twice` borrows it `mut` and calls it twice
+-- (`aff_call_mut`: `withswap` takes the closure out, calls it, and puts the rest back), so the
+-- second call sees the state the first one left. Then the closure is taken out of the cell and
+-- closed, which frees the counter's cell.
+--
+-- The closure is bounded by `'x`, the lifetime of the outer borrow, and lent inside the inner one
+-- (`'y`): BoLo's outlives is strict, so a closure bounded by `'x` is lent at a lifetime below it.
+--
+-- Answer: i32[24], 11 + 13, and `live 0`. A call that did not store its total gives 11 + 12; a
+-- `close` that did not free the counter's cell leaves one cell live. The calls through the borrow
+-- are direct calls of the closure's code (`indirect 0`).
+
+include aff
+
+fn counter<'c>(start: i32) -> box 'c Aff[i32, i32]<'c> =
+  boxed['c] aff_new[ref i32, i32, i32]['c](alloc(start), !thunkv fun (s : ref i32) ->
+    < fun (a : i32) ->
+        cx <- return (swap[i32, i32] s i32[0]);
+        let (c, x) = cx;
+        cu <- return (swap[i32, i32] c (x + a));
+        let (c1, u) = cu;
+        return (x + a, boxed['c] c1),
+      n <- return (free[i32] s); return () >)
+
+fn twice<'a, 'c>(m: mut 'a (box 'c Aff[i32, i32]<'c>)) -> mut 'a (box 'c Aff[i32, i32]<'c>) * i32 =
+  let (m, x) = aff_call_mut(m, 1);
+  let (m, y) = aff_call_mut(m, 2);
+  (m, x + y)
+
+main -> i32 =
+  let d = alloc(0);
+  let r = borrow mut d { 'x, e ->
+    let c = alloc(counter ['x](10));
+    let (c, t) = borrow mut e { 'y, e2 ->
+      let t = borrow mut c { 'w, m -> let (m, t) = twice(m); t };
+      (c, t) };
+    let k = free(c);
+    aff_close(k);
+    t
+  };
+  free(d) + r
