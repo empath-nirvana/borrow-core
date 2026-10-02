@@ -52,7 +52,8 @@ below are design and research notes.
   [effects, coeffects and borrowing](prior-art-effects-coeffects.md),
   [borrows as optics](prior-art-optics.md),
   [session types, par and modes](prior-art-sessions.md),
-  [what Rust's designers wish they had done](prior-art-rust-wishlists.md)
+  [what Rust's designers wish they had done](prior-art-rust-wishlists.md),
+  [borrows across suspension points](prior-art-suspension-borrows.md)
 - [Ideas: pointers, cycles, non-lexical lifetimes](ideas-pointers-and-lifetimes.md)
 - [Ideas: handlers, classified by continuation use](ideas-handlers-and-borrows.md)
 - Scoping notes: [deep freeze](scope-deep-freeze.md), [recursion](scope-recursion.md)
