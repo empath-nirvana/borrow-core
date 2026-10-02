@@ -7,8 +7,9 @@ Unary resource safety is stated with **tokens**. A `using` frame's resource and 
 capability are tokens; a computation owns a multiset of them. The tree predicate `TS` says what a
 tree does with what it owns:
 
-- acquiring and creating add a token; freeing and consuming remove one; using and reading need
-  one;
+- acquiring and creating add a token; freeing and consuming remove one; reading and writing a
+  cell need its token. A resource handle is second class: its frame owns it, and `use` checks
+  nothing;
 - an operation's continuation keeps everything owned. If a handler may drop it (`q.w`), its
   destructors `d` must free exactly what it owns (`DropOK`); if a handler may copy it (`q.c`),
   it must own nothing;
@@ -76,7 +77,7 @@ def CancelOK (q : Mode) (O : Own) (d : List Dtor) : Prop :=
 inductive ActOK : {g : G} → Act g → Own → Own → Prop where
   | out {n : Int} {O : Own} : ActOK (.out n) O O
   | free {ℓ r : Nat} {O : Own} : ActOK (.free ℓ r) (O + Own.one .res r) O
-  | use {ℓ r : Nat} {O : Own} : O .res r ≠ 0 → ActOK (.use ℓ r) O O
+  | use {ℓ r : Nat} {O : Own} : ActOK (.use ℓ r) O O
   | kill {c : Nat} {g : G} {O : Own} : ActOK (.kill c g) (O + Own.one (.cap g) c) O
   | rd {c : Nat} {g : G} {O : Own} : O (.cap g) c ≠ 0 → ActOK (.rd c g) O O
   | wr {c : Nat} {g : G} {v : g.den} {O : Own} : O (.cap g) c ≠ 0 → ActOK (.wr c ⟨g, v⟩) O O
@@ -117,7 +118,7 @@ def Act.sexec : {g : G} → Act g → SW → Option (g.den × SW)
   | _, .free ℓ r, ⟨w, L⟩ =>
       if L .res r = 0 then none else some ((), ⟨w.emit (.free ℓ), fun k n =>
         if k = .res ∧ n = r then L k n - 1 else L k n⟩)
-  | _, .use ℓ r, ⟨w, L⟩ => if L .res r = 0 then none else some ((), ⟨w.emit (.use ℓ), L⟩)
+  | _, .use ℓ _, ⟨w, L⟩ => some ((), ⟨w.emit (.use ℓ), L⟩)
   | _, .new c s, ⟨w, L⟩ => some ((), ⟨(w.set c (some s)).emit .mk, L + Own.one (.cap s.1) c⟩)
   | _, .rd c g, ⟨w, L⟩ =>
       if L (.cap g) c = 0 then none else (w.get c g).map (fun v => (v, ⟨w, L⟩))
@@ -219,8 +220,8 @@ theorem adequacyU {bnd : Nat → S.E → Mode} {P : Own → X → Prop} {O : Own
             exact ⟨by simpa [Own.one] using h1, v, by simpa [Wd.emit] using hv⟩
           · have := hf k' n (by simpa [Wd.emit] using hn)
             exact ⟨by have h2 := this.1; simp [Own.one] at h2; exact h2.1, by simpa [Wd.emit] using this.2⟩
-      | @use ℓ r _ hr =>
-          simp only [Tree.Safe, Act.sexec]; rw [if_neg hr]
+      | @use ℓ r _ =>
+          simp only [Tree.Safe, Act.sexec]
           exact ih () _ ⟨rfl, hc, fun k' n hn => by simpa [Wd.emit] using hf k' n (by simpa [Wd.emit] using hn)⟩
       | @kill c g _ =>
           simp only [Tree.Safe, Act.sexec]

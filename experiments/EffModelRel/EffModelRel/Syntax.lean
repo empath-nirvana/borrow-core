@@ -170,7 +170,7 @@ inductive Val (S : Sig) : List S.E → List (VTy S) → VTy S → Type where
   | inr : Val S Ψ Γ B → Val S Ψ Γ (.sum A B)
   | thunk (m : Mode) : Cmp S Ψ Γ C → Val S Ψ Γ (.U m b C)
   /-- Roll a stream from a linear thunk of its body. -/
-  | fold : Val S Ψ Γ (.U Mode.lin Eb.bot (A.strmBody b)) → Val S Ψ Γ (.strm b A)
+  | fold : Val S Ψ Γ (.U Mode.lin b (A.strmBody b)) → Val S Ψ Γ (.strm b A)
 
 /-- Computations. -/
 inductive Cmp (S : Sig) : List S.E → List (VTy S) → CTy S → Type where

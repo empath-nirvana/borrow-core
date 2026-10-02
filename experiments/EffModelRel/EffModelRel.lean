@@ -12,3 +12,8 @@ import EffModelRel.Laws
 import EffModelRel.Tensor
 import EffModelRel.Examples
 import EffModelRel.Own
+import EffModelRel.Unary
+import EffModelRel.UnaryCompat
+import EffModelRel.Moded
+import EffModelRel.ModedJ
+import EffModelRel.UnaryFP

@@ -216,4 +216,52 @@ theorem nu_op_fails_multishot : ¬ CtxEq nuOpL nuOpR := fun h => by
   rw [nuOp_obs.1, nuOp_obs.2] at this
   cases this
 
+/-! ## T1: a suspended continuation holding a lend
+
+A stream handler keeps the continuation of `yield`; inside a lend, that continuation holds the
+runner. The owner consumes the capability, then pulls the stream: the runner resumes, finishes,
+and writes the state back to a cell that no longer exists. T1 refuses the program; without it,
+the run is stuck. With a handler that resumes in place, the same program runs. -/
+
+/-- A counter's co-operations. -/
+def coCtr : (o : Op .ctr) → Cmp σ [] [.g .int, .g (σ.arg .ctr o)] (.F (coRes σ .ctr .int o))
+  | .inc => .bind (.prim .add v0 (.int 1)) (.ret (.inl (.pair .unit v0)))
+  | .get => .ret (.inl (.pair v0 v0))
+
+abbrev tA : VTy σ := .sum tInt tInt
+abbrev tStep : VTy σ := VTy.step Eb.top tA
+
+/-- `Yield` to a stored generator: the clause returns the continuation as a stream. -/
+def streamOps {Γ : List (VTy σ)} : (o : Op .yld) →
+    M Ψ (kty (σ.q .yld o) Eb.top (σ.res .yld o) (.F tStep) :: .g (σ.arg .yld o) :: Γ) (.F tStep)
+  | .yield => .ret (.inr (.pair v1 (.fold (.thunk Mode.lin
+      (.rcd (.app (.prj1 (.force v0)) .unit) (.prj2 (.force v0)))))))
+
+def yieldPrintOps {Γ : List (VTy σ)} {C : CTy σ} : (o : Op .yld) →
+    M Ψ (kty (σ.q .yld o) Eb.top (σ.res .yld o) C :: .g (σ.arg .yld o) :: Γ) C
+  | .yield => .bind (.emit v1) (.app (.prj1 (.force v1)) .unit)
+
+/-- Inside the lend: yield, then use the capability. -/
+def t1Body : M [.ctr, .yld] [.cap .ctr .int] (.F tInt) :=
+  .op (.s .z) Op.yield (.int 1) (.op .z Op.inc .unit (.op .z Op.get .unit (.ret v0)))
+
+/-- The harm: the stream escapes the lend; the owner consumes the capability; the pull resumes
+the runner, whose write-back finds no cell. -/
+def t1Harm : Prog σ .int :=
+  .bind (.newcap Eff.ctr .int coCtr (.int 0))
+    (.bind (.handle .yld Eb.top (.ret (.inl v0)) streamOps (fun a => nomatch a) (.lend v0 t1Body))
+      (.bind (.getcap v1)
+        (.case v1 (.ret (.int 0))
+          (.split v0 (.bind (.prj1 (.unfold v0)) (.ret (.int 1)))))))
+
+/-- The control: a handler that resumes in place; the lend ends before the owner consumes. -/
+def t1Control : Prog σ .int :=
+  .bind (.newcap Eff.ctr .int coCtr (.int 0))
+    (.bind (.handle .yld Eb.top (.ret v0) yieldPrintOps (fun a => nomatch a) (.lend v0 t1Body))
+      (.bind (.getcap v1) (.ret v0)))
+
+theorem t1Harm_stuck : t1Harm.obs.out = .stuck := by decide
+
+theorem t1Control_runs : t1Control.obs = ⟨.ret (.int 1), [.mk, .out 1, .fin]⟩ := by decide
+
 end EffRel
