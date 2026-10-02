@@ -31,6 +31,7 @@ cross-check: every result it has proved is cited by name, and nothing here contr
 | 13 | [The adjunction framing](13-adjunction.md) | *candidate extension (#250)*: freeze/resume as `F ⊣ U`; β, η (with cancellation), hiding, the interaction law; what follows from them |
 | 14 | [Stored continuations, borrows, proof cost](14-stored-continuations.md) | *candidate extension (#250)*: a continuation holding a borrow; capture rebasing; the `Mut` cell holding a continuation; T1 as a theorem; the verdict on proof cost |
 | 15 | [The `Mut` cell with a rebased continuation](15-mut-cell.md) | candidate result (#251): a cell holding a suspended continuation, closed under resume and drop; where internal lifetimes go; the spanning lend (O15.1) |
+| 16 | [Does the chain bottom out?](16-regress.md) | analysis (#269): the one failure every level of #249–#268 meets (an internal lend open at a suspension); why it regressed; the single induction (GFP) and its measures; T15's five cut-offs; restriction (i), the kernel's present rule, against route (b); the verdict |
 
 **§§13–15 are candidate extensions, not adopted.** They test the structure proposed on #245 and
 #250 against §§1–12, which they do not change. The verdict (§14.5): the `F ⊣ U` framing removes no
@@ -84,6 +85,7 @@ T1 a theorem.
 | T14.5 | the `Mut`-cell lemma: a cell holding a rebased continuation is closed under resume (`d_callMut`) and drop (`close`) | proved here (candidate, §14) |
 | T14.6 | the kernel produces rebased continuations from every body with no lend spanning a suspension | proved here (candidate, §14) |
 | O15.1, O15.2 | a lend spanning a suspension (O3 at the kernel's tables); relabelling at `U` | open; the same-lifetime route is refuted (`refoldKripke_false`) |
+| D16.2 | GFP: the fundamental property at the relation indexed by the stack of open internal lends, by induction on the derivation alone; every per-level object of `experiments/GhostEnd` is a fragment | sketch (§16.4); residue named; no recursive domain under five cut-offs (§16.5) |
 
 **Mechanised since** (#249, `docs/effect-model.md` §9): the three rule fixes of §2.5 in phase B's
 Lean, each counterexample of §10 refused by the judgement; T5.1 and T5.2 on trees, with lends
