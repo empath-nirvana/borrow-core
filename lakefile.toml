@@ -169,3 +169,8 @@ roots = ["Outlives"]
 name = "Restrat"
 srcDir = "experiments/Restrat"
 roots = ["Restrat"]
+
+[[lean_lib]]
+name = "GhostEnd"
+srcDir = "experiments/GhostEnd"
+roots = ["GhostEnd"]
