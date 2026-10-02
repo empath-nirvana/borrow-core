@@ -258,7 +258,7 @@ theorem close_rel {M N : Cmp S Ψ Γ C} (h : LR M N) {w : W} (hw : w.noPend) :
 theorem soundness {M N : Cmp S Ψ Γ C} (h : LR M N) : CtxEq M N := by
   intro g P
   unfold Context.obs
-  have hc : VR (.U Mode.unr Eb.top (holeTy Ψ Γ C)) W.init (close M.den) (close N.den) :=
+  have hc : VR (.U Mode.unr Rw.nil (holeTy Ψ Γ C)) W.init (close M.den) (close N.den) :=
     (VR_U_noPend W.init_noPend).2 (close_rel h W.init_noPend)
   have hP := Cmp.fp P W.init_noPend (IR.nil _) (ER.cons (ER.nil _) hc)
   exact adequacy (fun _ x x' _ hx => by rw [VR_g.1 hx]) (CRU_F.1 hP) Inv.init

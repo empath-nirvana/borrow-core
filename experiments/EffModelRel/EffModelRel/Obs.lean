@@ -110,7 +110,7 @@ def Prog.obs (P : Prog S g) : Obs := (P.den IEnv.nil Env.nil).obs (G.render g) W
 
 def arrs : List (VTy S) → CTy S → CTy S
   | [], C => C
-  | A :: Γ, C => .arr A Eb.top (arrs Γ C)
+  | A :: Γ, C => .arr A Rw.nil (arrs Γ C)
 
 def pis : List S.E → CTy S → CTy S
   | [], C => C
@@ -132,10 +132,10 @@ def close (f : IEnv Ψ → Env Γ → C.den) : (holeTy Ψ Γ C).den :=
 
 /-- A context: a closed program of ground type over the hole's closure. -/
 abbrev Context (S : Sig) (Ψ : List S.E) (Γ : List (VTy S)) (C : CTy S) (g : G) :=
-  Cmp S [] [.U Mode.unr Eb.top (holeTy Ψ Γ C)] (.F (.g g))
+  Cmp S [] [.U Mode.unr Rw.nil (holeTy Ψ Γ C)] (.F (.g g))
 
 def Context.obs (P : Context S Ψ Γ C g) (f : IEnv Ψ → Env Γ → C.den) : Obs :=
-  (P.den IEnv.nil (Env.nil.cons (A := .U Mode.unr Eb.top (holeTy Ψ Γ C)) (close f))).obs (G.render g)
+  (P.den IEnv.nil (Env.nil.cons (A := .U Mode.unr Rw.nil (holeTy Ψ Γ C)) (close f))).obs (G.render g)
     Wd.init
 
 /-- Contextual equivalence. -/

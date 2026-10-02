@@ -13,11 +13,15 @@ tree does with what it owns:
 - an operation's continuation keeps everything owned. If a handler may drop it (`q.w`), its
   destructors `d` must free exactly what it owns (`DropOK`); if a handler may copy it (`q.c`),
   it must own nothing;
-- an abort drops its continuation: its destructors free exactly what it owns.
+- an abort drops its continuation: its destructors free exactly what it owns;
+- **an operation or abort is permitted only on an instance the permission set `ok` names**. A
+  computation's permissions are its row; a handler adds its instance for the body. A closed
+  program has none, so it performs nothing unhandled: effect safety.
 
 `Safe` runs a tree against the world with a ghost multiset of live tokens: every free, use,
-read and consume finds its token, and a run that returns has the tokens its answer accounts for.
-For a closed program of ground type that is nothing: no leak, and every finaliser ran once.
+read and consume finds its token, no operation reaches the top, and a run that returns has the
+tokens its answer accounts for. For a closed program of ground type that is nothing: no leak,
+and every finaliser ran once.
 -/
 
 namespace EffRel
@@ -82,27 +86,31 @@ inductive ActOK : {g : G} → Act g → Own → Own → Prop where
   | rd {c : Nat} {g : G} {O : Own} : O (.cap g) c ≠ 0 → ActOK (.rd c g) O O
   | wr {c : Nat} {g : G} {v : g.den} {O : Own} : O (.cap g) c ≠ 0 → ActOK (.wr c ⟨g, v⟩) O O
 
-/-- **Safe trees.** `bnd` bounds the qualifier of every operation the tree performs, by instance
-and effect; `P` is what the leaf's value and the remaining tokens must satisfy. -/
-inductive TS (bnd : Nat → S.E → Mode) (P : Own → X → Prop) : Own → Tree S X → Prop where
-  | ret : P O x → TS bnd P O (.ret x)
+/-- The instances (by name and effect) a computation may perform on. -/
+abbrev Ok (S : Sig) := Nat → S.E → Prop
+
+/-- **Safe trees.** `ok` is the set of instances the tree may perform on; `P` is what the leaf's
+value and the remaining tokens must satisfy. An operation is within its effect's declared bound
+(`S.bnd_q`), so the qualifier alone decides what the continuation may own. -/
+inductive TS (ok : Ok S) (P : Own → X → Prop) : Own → Tree S X → Prop where
+  | ret : P O x → TS ok P O (.ret x)
   | op {i : Nat} {e : S.E} {o : S.O e} {v : (S.arg e o).den}
       {k : (S.res e o).den → Tree S X} {d : List Dtor} :
-      (bnd i e).ge (S.q e o) = true → CancelOK (S.q e o) O d → (∀ y, TS bnd P O (k y)) →
-      TS bnd P O (.op i e o v k d)
+      ok i e → CancelOK (S.q e o) O d → (∀ y, TS ok P O (k y)) →
+      TS ok P O (.op i e o v k d)
   | ab {i : Nat} {e : S.E} {a : S.A e} {v : (S.aarg e a).den} {d : List Dtor} :
-      (bnd i e).ge Mode.aff = true → DropOK O d → TS bnd P O (.ab i e a v d)
-  | nu {k : Nat → Tree S X} : (∀ n, TS bnd P O (k n)) → TS bnd P O (.nu k)
+      ok i e → DropOK O d → TS ok P O (.ab i e a v d)
+  | nu {k : Nat → Tree S X} : (∀ n, TS ok P O (k n)) → TS ok P O (.nu k)
   /-- A new capability: a fresh name and its token. -/
   | nuNew {s : Nat → GVal} {k : Nat → Unit → Tree S X} :
-      (∀ n y, TS bnd P (O + Own.one (.cap (s n).1) n) (k n y)) →
-      TS bnd P O (.nu (fun n => .act (.new n (s n)) (k n)))
+      (∀ n y, TS ok P (O + Own.one (.cap (s n).1) n) (k n y)) →
+      TS ok P O (.nu (fun n => .act (.new n (s n)) (k n)))
   /-- A new resource: a fresh name and its token. -/
   | nuAcq {ℓ : Nat} {k : Nat → Unit → Tree S X} :
-      (∀ n y, TS bnd P (O + Own.one .res n) (k n y)) →
-      TS bnd P O (.nu (fun n => .act (.acq ℓ n) (k n)))
+      (∀ n y, TS ok P (O + Own.one .res n) (k n y)) →
+      TS ok P O (.nu (fun n => .act (.acq ℓ n) (k n)))
   | act {g : G} {a : Act g} {k : g.den → Tree S X} {O' : Own} :
-      ActOK a O O' → (∀ y, TS bnd P O' (k y)) → TS bnd P O (.act a k)
+      ActOK a O O' → (∀ y, TS ok P O' (k y)) → TS ok P O (.act a k)
 
 /-! ## Running safely: the ghost run -/
 
@@ -128,12 +136,12 @@ def Act.sexec : {g : G} → Act g → SW → Option (g.den × SW)
       if L (.cap g) c = 0 then none else (w.get c g).map (fun v => (v, ⟨(w.set c none).emit .fin,
         fun k n => if k = .cap g ∧ n = c then L k n - 1 else L k n⟩))
 
-/-- A run that never fails an action; if it returns, its answer and live tokens satisfy `P`. An
-operation that reaches the top is not this predicate's business (see `docs/effect-model.md`). -/
+/-- A run that never fails an action and in which no operation reaches the top; if it returns, its
+answer and live tokens satisfy `P`. -/
 def Tree.Safe (P : Own → X → Prop) : Tree S X → SW → Prop
   | .ret x, s => P s.live x
-  | .op .., _ => True
-  | .ab .., _ => True
+  | .op .., _ => False
+  | .ab .., _ => False
   | .nu k, s => (k s.w.next).Safe P ⟨{ s.w with next := s.w.next + 1 }, s.live⟩
   | .act a k, s =>
       match a.sexec s with
@@ -159,12 +167,13 @@ theorem Own.sub_one {O' : Own} {k : Kind} {r : Nat} :
 theorem Wd.get_some {w : Wd} {c : Nat} {g : G} {v : g.den} (h : w.store c = some ⟨g, v⟩) :
     w.get c g = some v := by simp [Wd.get, h]
 
-theorem adequacyU {bnd : Nat → S.E → Mode} {P : Own → X → Prop} {O : Own} {t : Tree S X}
-    (h : TS bnd P O t) : ∀ s, SInv O s → t.Safe P s := by
+/-- Safe trees run safely. With no permissions (`ok` empty) no operation is reachable. -/
+theorem adequacyU {P : Own → X → Prop} {O : Own} {t : Tree S X}
+    (h : TS (fun _ _ => False) P O t) : ∀ s, SInv O s → t.Safe P s := by
   induction h with
   | ret hx => intro s hs; simp only [Tree.Safe]; rw [hs.live]; exact hx
-  | op => intro _ _; trivial
-  | ab => intro _ _; trivial
+  | op hok => exact hok.elim
+  | ab hok => exact hok.elim
   | @nu O k _ ih =>
       intro s hs
       apply ih
