@@ -31,6 +31,7 @@ theorem TreeRel.mapR' {R R' : W → X → X → Prop}
   | ret hp hx => exact .ret hp (hR _ _ _ hp hx)
   | op hp hi hd _ ih => exact .op hp hi hd ih
   | ab hp hi hd => exact .ab hp hi hd
+  | abE hp hi hd hf => exact .abE hp hi hd hf
   | act ha _ ih => exact .act ha ih
   | nu _ ih => exact .nu ih
   | nuL _ ih => exact .nuL ih

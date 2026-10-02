@@ -75,16 +75,25 @@ theorem AR.exec_rel {w : W} {g : G} {a a' : Act g} (ha : AR w a a') {wl wr : Wd}
       | none => exact .inl ⟨rfl, rfl⟩
       | some v => exact .inr ⟨v, _, _, rfl, rfl, (hI.set hc _).emit _⟩
 
-theorem DR.exec_rel {w : W} {d d' : List Dtor} (hd : DR w d d') {wl wr : Wd} (hI : Inv w wl wr) :
-    (wl.dtors d = none ∧ wr.dtors d' = none) ∨
-      ∃ wl' wr', wl.dtors d = some wl' ∧ wr.dtors d' = some wr' ∧ Inv w wl' wr' := by
+theorem DR.unwind_rel {w : W} {d d' : List Dtor} (hd : DR w d d') {wl wr : Wd}
+    (hI : Inv w wl wr) : wl.unwind d = wr.unwind d' := by
   induction hd generalizing wl wr with
-  | nil => exact .inr ⟨wl, wr, rfl, rfl, hI⟩
+  | nil => simp only [Wd.unwind, hI.tr]
   | cons hδ _ ih =>
+      simp only [Wd.unwind]
       rcases hδ.act.exec_rel hI with ⟨h1, h2⟩ | ⟨y, wl', wr', h1, h2, hI'⟩
-      · exact .inl ⟨by simp [Wd.dtors, h1], by simp [Wd.dtors, h2]⟩
-      · simp only [Wd.dtors, h1, h2, Option.bind_some]
-        exact ih hI'
+      · simp only [h1, h2, hI.tr]
+      · simp only [h1, h2]; exact ih hI'
+
+theorem obs_dtors_ab (render : X → GV) (d : List Dtor) (i : Nat) (e : S.E) (a : S.A e) (v) (f)
+    (w : Wd) : (Tree.dtors d (Tree.ab (X := X) i e a v f)).obs render w = w.unwind (d ++ f) := by
+  induction d generalizing w with
+  | nil => rfl
+  | cons δ d ih =>
+      simp only [Tree.dtors, Tree.obs, List.cons_append, Wd.unwind]
+      cases δ.act.exec w with
+      | none => rfl
+      | some p => exact ih p.2
 
 theorem Inv.alloc_free {w : W} {wl wr : Wd} (h : Inv w wl wr) : w.sl wl.next = .free :=
   (h.nl _).2 (Nat.le_refl _)
@@ -172,18 +181,12 @@ theorem adequacy {R : W → X → X → Prop} {render render' : X → GV}
     ∀ {wl wr : Wd}, Inv w wl wr → t.obs render wl = t'.obs render' wr := by
   induction h with
   | ret hp hx => intro wl wr hI; simp only [Tree.obs, hR _ _ _ hp hx, hI.tr]
-  | op _ _ hd _ _ =>
+  | op _ _ hd _ _ => intro wl wr hI; exact hd.unwind_rel hI
+  | ab _ _ hd => intro wl wr hI; exact hd.unwind_rel hI
+  | abE _ _ hd hf =>
       intro wl wr hI
-      simp only [Tree.obs]
-      rcases hd.exec_rel hI with ⟨h1, h2⟩ | ⟨wl', wr', h1, h2, hI'⟩
-      · simp only [h1, h2, hI.tr]
-      · simp only [h1, h2, hI'.tr]
-  | ab _ _ hd =>
-      intro wl wr hI
-      simp only [Tree.obs]
-      rcases hd.exec_rel hI with ⟨h1, h2⟩ | ⟨wl', wr', h1, h2, hI'⟩
-      · simp only [h1, h2, hI.tr]
-      · simp only [h1, h2, hI'.tr]
+      rw [obs_dtors_ab]
+      exact (hd.append hf).unwind_rel hI
   | act ha _ ih =>
       intro wl wr hI
       simp only [Tree.obs]

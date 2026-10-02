@@ -46,6 +46,11 @@ inductive TreeRel (R : W → X → X → Prop) : W → Tree S X → Tree S X →
       TreeRel R w (.op i e o v k d) (.op i' e o v k' d')
   | ab {i i' : Nat} {e : S.E} {a : S.A e} {v : (S.aarg e a).den} {d d' : List Dtor} :
       w.noPend → w.r i i' → DR w d d' → TreeRel R w (.ab i e a v d) (.ab i' e a v d')
+  /-- An abort carrying destructors is related to running some of them first: the destructor
+  form of algebraicity at arity 0. -/
+  | abE {i i' : Nat} {e : S.E} {a : S.A e} {v : (S.aarg e a).den} {d d' f f' : List Dtor} :
+      w.noPend → w.r i i' → DR w d d' → DR w f f' →
+      TreeRel R w (.ab i e a v (d ++ f)) (Tree.dtors d' (.ab i' e a v f'))
   | act {g : G} {a a' : Act g} {k k' : g.den → Tree S X} : AR w a a' →
       (∀ y, TreeRel R w (k y) (k' y)) → TreeRel R w (.act a k) (.act a' k')
   /-- Both sides allocate; the names are matched. -/
@@ -105,6 +110,8 @@ theorem TreeRel.mono {R : W → X → X → Prop}
   | op hp hi hd _ ih =>
       intro w' hw; exact .op (W.noPend_le hp hw) (hw.r _ _ hi) (hd.mono hw.r) (fun y => ih y w' hw)
   | ab hp hi hd => intro w' hw; exact .ab (W.noPend_le hp hw) (hw.r _ _ hi) (hd.mono hw.r)
+  | abE hp hi hd hf =>
+      intro w' hw; exact .abE (W.noPend_le hp hw) (hw.r _ _ hi) (hd.mono hw.r) (hf.mono hw.r)
   | act ha _ ih => intro w' hw; exact .act (ha.mono hw.r) (fun y => ih y w' hw)
   | nu _ ih =>
       intro w' hw
@@ -126,6 +133,7 @@ theorem TreeRel.mapR {R R' : W → X → X → Prop} (hR : ∀ w x x', R w x x' 
   | ret hp hx => exact .ret hp (hR _ _ _ hx)
   | op hp hi hd _ ih => exact .op hp hi hd ih
   | ab hp hi hd => exact .ab hp hi hd
+  | abE hp hi hd hf => exact .abE hp hi hd hf
   | act ha _ ih => exact .act ha ih
   | nu _ ih => exact .nu ih
   | nuL _ ih => exact .nuL ih

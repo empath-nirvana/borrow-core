@@ -251,6 +251,93 @@ theorem dtors_rel {R : W → X → X → Prop} {w : W} {d d' : List Dtor} (hd : 
   | nil => exact ht
   | cons hδ _ ih => exact .act hδ.act (fun _ => ih)
 
+/-! ## Destructors commute with the folds -/
+
+theorem dtorsA_F {A : VTy S} (d : List Dtor) (x : (CTy.F A).den) :
+    (CTy.F A).dtorsA d x = Tree.dtors d x := by
+  induction d with
+  | nil => rfl
+  | cons δ d ih => simp only [CTy.dtorsA, Tree.dtors, ih]; rfl
+
+theorem dtorsA_append (C : CTy S) (d f : List Dtor) (x : C.den) :
+    C.dtorsA (d ++ f) x = C.dtorsA d (C.dtorsA f x) := by
+  induction d with
+  | nil => rfl
+  | cons δ d ih => simp only [List.cons_append, CTy.dtorsA, ih]
+
+theorem Tree.dtors_append (d f : List Dtor) (t : Tree S X) :
+    Tree.dtors (d ++ f) t = Tree.dtors d (Tree.dtors f t) := by
+  induction d with
+  | nil => rfl
+  | cons δ d ih => simp only [List.cons_append, Tree.dtors, ih]
+
+theorem bindC_dtors (C : CTy S) (d : List Dtor) (t : Tree S X) (f : X → C.den) :
+    (Tree.dtors d t).bindC C f = C.dtorsA d (t.bindC C f) := by
+  induction d with
+  | nil => rfl
+  | cons δ d ih => simp only [Tree.dtors, Tree.bindC, CTy.dtorsA, ih]
+
+theorem bind_dtors (d : List Dtor) (t : Tree S X) (f : X → Tree S Y) :
+    (Tree.dtors d t).bind f = Tree.dtors d (t.bind f) := by
+  induction d with
+  | nil => rfl
+  | cons δ d ih => simp only [Tree.dtors, Tree.bind, ih]
+
+theorem hnd_dtors (C : CTy S) (i : Nat) (e : S.E) (hr hop hab) (d : List Dtor) (t : Tree S X) :
+    (Tree.dtors d t).hnd C i e hr hop hab = C.dtorsA d (t.hnd C i e hr hop hab) := by
+  induction d with
+  | nil => rfl
+  | cons δ d ih => simp only [Tree.dtors, Tree.hnd, CTy.dtorsA, ih]
+
+theorem runL_dtors (i : Nat) (e : S.E) (c : Nat) (sg : G) (co : CoSem S e sg) (s : sg.den)
+    (d : List Dtor) (t : Tree S X) :
+    (Tree.dtors d t).runL i e c sg co s = Tree.dtors d (t.runL i e c sg co s) := by
+  induction d with
+  | nil => rfl
+  | cons δ d ih => simp only [Tree.dtors, Tree.runL, ih]
+
+theorem addFin_dtors (ℓ r : Nat) (d : List Dtor) (t : Tree S X) :
+    (Tree.dtors d t).addFin ℓ r = Tree.dtors d (t.addFin ℓ r) := by
+  induction d with
+  | nil => rfl
+  | cons δ d ih => simp only [Tree.dtors, Tree.addFin, ih]
+
+theorem dtorsA_arr {A : VTy S} {C : CTy S} (d : List Dtor) (g : (CTy.arr A C).den) :
+    (CTy.arr A C).dtorsA d g = fun x => C.dtorsA d (g x) := by
+  induction d with
+  | nil => rfl
+  | cons δ d ih => simp only [CTy.dtorsA, CTy.actA, ih]; rfl
+
+theorem dtorsA_wth {C D : CTy S} (d : List Dtor) (g : (CTy.wth C D).den) :
+    (CTy.wth C D).dtorsA d g = (C.dtorsA d g.1, D.dtorsA d g.2) := by
+  induction d with
+  | nil => rfl
+  | cons δ d ih => simp only [CTy.dtorsA, CTy.actA, ih]; rfl
+
+theorem dtorsA_pi {e : S.E} {C : CTy S} (d : List Dtor) (g : (CTy.pi e C).den) :
+    (CTy.pi e C).dtorsA d g = fun x => C.dtorsA d (g x) := by
+  induction d with
+  | nil => rfl
+  | cons δ d ih => simp only [CTy.dtorsA, CTy.actA, ih]; rfl
+
+theorem abA_dtors_rel : (C : CTy S) → ∀ {w : W} {i i' : Nat} {e : S.E} {a : S.A e}
+    {v : (S.aarg e a).den} {d d' f f' : List Dtor},
+    w.noPend → w.r i i' → DR w d d' → DR w f f' →
+    CRU C w (C.abA i e a v (d ++ f)) (C.dtorsA d' (C.abA i' e a v f'))
+  | .F _, _, _, _, _, _, _, _, _, _, _, hp, hi, hd, hf => by
+      rw [dtorsA_F]; exact CRU_F.2 (.abE hp hi hd hf)
+  | .arr _ C, _, _, _, _, _, _, _, _, _, _, hp, hi, hd, hf => by
+      rw [dtorsA_arr]
+      refine CRU_arr.2 (fun w' hw _ _ _ => ?_)
+      exact abA_dtors_rel C (hw.noPend' hp) (hw.r _ _ hi) (hd.mono hw.r) (hf.mono hw.r)
+  | .wth C D, _, _, _, _, _, _, _, _, _, _, hp, hi, hd, hf => by
+      rw [dtorsA_wth]
+      exact CRU_wth.2 ⟨abA_dtors_rel C hp hi hd hf, abA_dtors_rel D hp hi hd hf⟩
+  | .pi _ C, _, _, _, _, _, _, _, _, _, _, hp, hi, hd, hf => by
+      rw [dtorsA_pi]
+      refine CRU_pi.2 (fun w' hw _ _ _ => ?_)
+      exact abA_dtors_rel C (hw.noPend' hp) (hw.r _ _ hi) (hd.mono hw.r) (hf.mono hw.r)
+
 /-! ## The folds preserve the relation -/
 
 theorem bindC_rel (C : CTy S) {R : W → X → X → Prop} {w : W} {t t' : Tree S X}
@@ -262,6 +349,8 @@ theorem bindC_rel (C : CTy S) {R : W → X → X → Prop} {w : W} {t t' : Tree 
   | ret hp hx => intro hf; exact hf _ (W.sub.refl _) hp _ _ hx
   | op hp hi hd _ ih => intro hf; exact opA_rel C hp hi hd (fun y => ih y hf)
   | ab hp hi hd => intro _; exact abA_rel C hp hi hd
+  | abE hp hi hd hf =>
+      intro _; simp only [Tree.bindC]; rw [bindC_dtors]; exact abA_dtors_rel C hp hi hd hf
   | act ha _ ih => intro hf; exact actA_rel C ha (fun y => ih y hf)
   | nu _ ih =>
       intro hf
@@ -297,6 +386,7 @@ theorem Tree.bind_rel {R1 : W → X → X → Prop} {R2 : W → Y → Y → Prop
   | ret hp hx => intro hf; exact hf _ (W.sub.refl _) hp _ _ hx
   | op hp hi hd _ ih => intro hf; exact .op hp hi hd (fun y => ih y hf)
   | ab hp hi hd => intro _; exact .ab hp hi hd
+  | abE hp hi hd hf => intro _; simp only [Tree.bind]; rw [bind_dtors]; exact .abE hp hi hd hf
   | act ha _ ih => intro hf; exact .act ha (fun y => ih y hf)
   | nu _ ih =>
       intro hf
@@ -378,6 +468,21 @@ theorem hnd_rel (C : CTy S) {R : W → X → X → Prop} {w : W} {t t' : Tree S 
       · have hji' : ¬ j' = i' := fun h' => hji ((w.r_iff hi hj).2 h')
         rw [if_neg hji, if_neg hji']
         exact abA_rel C hp hj hd
+  | @abE w j j' e' a v d d' f f' hp hj hd hf =>
+      intro hi _ _ hA
+      rw [hnd_dtors]
+      simp only [Tree.hnd]
+      by_cases hji : j = i
+      · have hji' : j' = i' := (w.r_iff hi hj).1 hji
+        rw [if_pos hji, if_pos hji']
+        by_cases he : e' = e
+        · subst he
+          rw [catchAb_self, catchAb_self, dtorsA_append]
+          exact dtorsA_rel C hd (dtorsA_rel C hf (hA _ (W.sub.refl _) hp a v))
+        · rw [catchAb_ne he, catchAb_ne he]; exact abA_dtors_rel C hp hj hd hf
+      · have hji' : ¬ j' = i' := fun h' => hji ((w.r_iff hi hj).2 h')
+        rw [if_neg hji, if_neg hji']
+        exact abA_dtors_rel C hp hj hd hf
   | act ha _ ih =>
       intro hi hR hO hA; exact actA_rel C ha (fun y => ih y hi hR hO hA)
   | nu _ ih =>
@@ -439,6 +544,11 @@ theorem addFin_rel {R : W → X → X → Prop} {w : W} {t t' : Tree S X} (h : T
   | op hp hi hd _ ih =>
       intro hr; exact .op hp hi (hd.append (.cons (.free hr) .nil)) (fun y => ih y hr)
   | ab hp hi hd => intro hr; exact .ab hp hi (hd.append (.cons (.free hr) .nil))
+  | abE hp hi hd hf =>
+      intro hr
+      simp only [Tree.addFin]; rw [addFin_dtors]; simp only [Tree.addFin]
+      rw [List.append_assoc]
+      exact .abE hp hi hd (hf.append (.cons (.free hr) .nil))
   | act ha _ ih => intro hr; exact .act ha (fun y => ih y hr)
   | nu _ ih => intro hr; exact .nu (fun i i' hi hi' => ih i i' hi hi' ((W.sub_both _ _ _ _ _).r' hr))
   | nuL _ ih => intro hr; exact .nuL (fun i hi => ih i hi ((W.sub_pendL _ _ _).r' hr))
@@ -500,6 +610,11 @@ theorem runL_rel {R : W → X → X → Prop} {R2 : W → (X ⊕ Int) → (X ⊕
   | ab hp hj hd =>
       intro _ hc _ s
       exact .ab hp hj (hd.append (.cons (.wb hc) .nil))
+  | abE hp hj hd hf =>
+      intro _ hc _ s
+      simp only [Tree.runL]; rw [runL_dtors]; simp only [Tree.runL]
+      rw [List.append_assoc]
+      exact .abE hp hj hd (hf.append (.cons (.wb hc) .nil))
   | act ha _ ih => intro hi hc hco s; exact .act ha (fun y => ih y hi hc hco s)
   | nu _ ih =>
       intro hi hc hco s

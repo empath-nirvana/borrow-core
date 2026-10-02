@@ -83,21 +83,18 @@ def Act.exec : {g : G} → Act g → Wd → Option (g.den × Wd)
   | _, .wr c s, w => (w.store c).map (fun _ => ((), w.set c (some s)))
   | _, .kill c g, w => (w.get c g).map (fun v => (v, (w.set c none).emit .fin))
 
-/-- Run destructors at the top, innermost first. -/
-def Wd.dtors : List Dtor → Wd → Option Wd
-  | [], w => some w
-  | δ :: d, w => (δ.act.exec w).bind (fun p => Wd.dtors d p.2)
+/-- An operation reached the top: unwind, running its destructors innermost first. -/
+def Wd.unwind : List Dtor → Wd → Obs
+  | [], w => ⟨.unhandled, w.trace.reverse⟩
+  | δ :: d, w =>
+      match δ.act.exec w with
+      | some (_, w') => Wd.unwind d w'
+      | none => ⟨.stuck, w.trace.reverse⟩
 
 def Tree.obs (render : X → GV) : Tree S X → Wd → Obs
   | .ret x, w => ⟨.ret (render x), w.trace.reverse⟩
-  | .op _ _ _ _ _ d, w =>
-      match w.dtors d with
-      | some w' => ⟨.unhandled, w'.trace.reverse⟩
-      | none => ⟨.stuck, w.trace.reverse⟩
-  | .ab _ _ _ _ d, w =>
-      match w.dtors d with
-      | some w' => ⟨.unhandled, w'.trace.reverse⟩
-      | none => ⟨.stuck, w.trace.reverse⟩
+  | .op _ _ _ _ _ d, w => w.unwind d
+  | .ab _ _ _ _ d, w => w.unwind d
   | .nu k, w => (k w.next).obs render { w with next := w.next + 1 }
   | .act a k, w =>
       match a.exec w with
