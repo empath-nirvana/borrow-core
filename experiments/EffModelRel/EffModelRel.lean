@@ -17,3 +17,4 @@ import EffModelRel.UnaryCompat
 import EffModelRel.Moded
 import EffModelRel.ModedJ
 import EffModelRel.UnaryFP
+import EffModelRel.Obstruction
