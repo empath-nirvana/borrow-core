@@ -1,6 +1,6 @@
 # §15 The `Mut` cell with a rebased continuation (candidate result)
 
-[← §12 Sources and novelty](12-sources.md) · [index](README.md)
+[← §12 Sources and novelty](12-sources.md) · [index](README.md) · next: [§16 Does the chain bottom out?](16-regress.md)
 
 Issue #251. This section attempts the central lemma of #245's brief head on: a `Mut` cell whose
 witness holds a suspended continuation, closed under resume and drop. It works in BoLo's real
