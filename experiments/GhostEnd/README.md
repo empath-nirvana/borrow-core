@@ -52,6 +52,9 @@ Build with `lake build GhostEnd`. It uses only the standard axioms and has no `s
 | 3f | the key steps of the non-routine compatibility lemmas | `force_RL`, `thunkF_RL`, `thunkF_RL_ctx`, `bind_RL`, `relendable_cont_frame`, `vRL_thunk_closed` |
 | 3f | where the single-lend relation stops: a closure under an inner borrow | `relendable_off_cell`, `thunkF_RL_fails_below`, `thunkF_RL_fails_below_at` |
 | 3f | the table as a guard; the same closure inside it | `vRLg`, `RelendableG`, `forceG`, `relendableG_thunk`, `uRelendRLg`, `thunkF_RLg`, `thunkF_RLg_below` |
+| 3g | `'x` in a borrow's payload: strictness agrees, freshness excludes it, an inner lend, no payload cell at or below the lend | `payload_strict`, `payload_strict_down`, `PayFree`, `payFree_immReborrow`, `payFree_handed`, `lend_in_scope_below`, `tabAt_wit` (`Payload.lean`) |
+| 3g | an `Imm` lend spanning a stop: subtraction, union, 6.64 at a resuming table | `imm_ghostEnd_split`, `imm_ghostEnd_empty`, `imm_relend_union`, `imm_erase_sets`, `relent_copies`, `RelendI`, `ewpTS_I_frameR`, `imm_spans_yield` (`ImmLend.lean`) |
+| 3g | a nested lend spanning a stop: the commutation lemma | `NestRelend`, `nested_relend`, `nested_spans`, `nest_yield`, `nested_spans_yield` (`Nested.lean`) |
 
 ### Step 0: the segment fundamental lemma (restated)
 
@@ -254,7 +257,7 @@ each adds:
 - **6.64 (Imm Frame)**: its premise `hQ` carries the postcondition along `Ext`, from the list with
   the frame's record to the list without it. At a resuming table the postcondition is the table's
   stop, carried by `Ext.trans` because the continuation's share is quantified over every
-  extension: `opTable_extR`, `ewpPostR_ext`. Mechanical; the lift itself is not written.
+  extension: `opTable_extR`, `ewpPostR_ext`. The lift is `ewpTS_I_frameR` (step 3g).
 - **6.66 (Anti Frame)**: the frame refolds `ℓ ↦ M_α` at a stop, the continuation is owed the
   view, and the resumption unfolds it again. `ewpTS_M_antiFrameR` is the lift, proved.
 - **6.150 (↺)**: the frame consumes `ℓ ↦ Imm α (…)`, and the next resumption needs it again. A
@@ -524,21 +527,92 @@ It costs:
 - every consumer of `vC`/`cC` in `Core/` (adequacy, every run, totality, the embedding, the
   programs) re-pointed at the empty-stack instance; mechanical if the instance is definitional;
 - the stack of lends in the table (`TabAt` for a stack) and the nested freeze;
-- 6.64 and 6.150 at resuming tables (their added steps are proved; the lifts are not written),
-  and the table of an `Imm` lend.
+- 6.150 at a resuming table (its added step is proved; the lift is not written; 6.64's is
+  `ewpTS_I_frameR`), and the table of an `Imm` lend (its set bookkeeping is step 3g's).
 
 No index is added to `CDerives` (decision 19): the stack is a parameter of the model.
 
 **Unknown, as against work.**
 
-- Unknown: a lend opened inside the borrower that spans a stop, read by the stacked relation, and
-  whether its `U` clause composes with 6.66's refold of the outer view at the stop. An `Imm` lend
-  spanning a stop. A frame value whose type has `'x` inside a borrow's payload, which `LOk` excludes
-  and which well-formedness may exclude (not checked). For each: not derived, and no obstruction
-  verified.
+- Unknown: none. The three listed here at #266 are proved in step 3g: a nested lend spanning a
+  stop (`nested_relend`), an `Imm` lend spanning a stop (`ewpTS_I_frameR`), and `'x` inside a
+  borrow's payload (`Payload.lean`).
 - Work: the clauses, the row index and the inner-stop clause; the guard; `[then]`'s cancel of a
   frozen frame; the per-type re-lendability lemma for the types `LOk` admits plus `U`
   (`relendable_*` are its cases); the restated compatibility lemmas.
+
+### Step 3g: the last unknowns (#268)
+
+Step 3f left three unknowns. Each is now proved.
+
+**1. `'x` inside a borrow's payload** (`Payload.lean`). Closed by the borrow constants and the
+table.
+
+- *Strictness.* The model's `Mut` stratum is strict: a cell `mut(α, v, σ, P̂)` holds `σ ∈ Res_α`.
+  `withbor` (2)'s side condition is non-strict, `Δ ⊢ T₁ ⊒ @b` at an `@b` defined in `Δ`. They
+  agree because the lend is strictly below `@bδ`: 6.60 at `⊒` (`vC_outlivesLe`) puts the payload
+  in `Res_α` for every `α ⊏ @bδ` (`payload_strict`), and `withbor2_compatX` applies 6.65 at
+  `↓@bδ`, whose H4 chooses the lend below it (`payload_strict_down`). The strict inequality comes
+  from the freshness of `'x`, not from the side condition.
+- *Freshness.* Every type a borrow constant hands the borrower at `'x` (`Imm 'x T₁`,
+  `Mut 'x T₁`, `Imm̲ 'x T₁`) has `'x` in no payload, from the rules' `'x ∉ T₁`
+  (`payFree_handed`). `Imm̲ 'x (Imm @a S) = Imm @a S` keeps `@a`, and `'x ∉ Imm @a S` excludes
+  `'x` from `@a` as well (`immReborrow_imm_not_free`). In general `Imm̲ 'x T₁` mentions `'x` only as
+  the lifetime of a borrow it forms (`payFree_immReborrow`, through `μ` by `immG`).
+- *Inner lends.* A borrow whose payload mentions `'x` is opened in `'x`'s scope, and a `withbor`
+  there lends at `α ⊏ ⊓(Δ, 'x)δ ⊑ δ('x)` (`lend_in_scope_below`). It is a nested lend, which is
+  item 3.
+- *The table.* Under `TabAt`, which every run keeps (`wpG_tabAt`), each borrow cell's witness is
+  in `Res_α` (`tabAt_wit`). No payload of a frozen share holds the lend's cell or any cell at or
+  below it.
+
+**2. An `Imm` lend spanning a stop** (`ImmLend.lean`). The bookkeeping is `[TR]` Definition 6.3's
+`⊟` and Lemma 6.43.
+
+- *Ghost end is subtraction.* With `t̄ ⊆ ᾱ` the internal lifetimes: if `ᾱ ∖ t̄ ≠ ∅` the cell
+  stays `imm(ᾱ ∖ t̄)`, and `imm(ᾱ) = imm(ᾱ ∖ t̄) ● imm(t̄)` (`imm_ghostEnd_split`). If it is empty,
+  `ᾱ = t̄` and `⊟` removes the cell (`imm_ghostEnd_empty`). At the lent place every lifetime is
+  internal, so 6.64's exit returns `ℓ ↦ own(v)`.
+- *Resume is union.* `imm(ᾱ ∖ t̄) ● imm({α′}) = imm((ᾱ ∖ t̄) ∪ {α′})` (`imm_relend_union`), and
+  the one re-lent view is duplicated to every position that held a copy (`relent_copies`, 6.116).
+- *The lowered heap.* Value and witness never change, so `⟦−⟧` is the same at every set
+  (`imm_erase_sets`).
+- *The key step.* `ewpTS_I_frameR` is 6.64 at a resuming table. It is proved by induction on the
+  callback's least fixed point (`RelendI`), with `wpG_I_frameX` at each unfolding. At a stop, 6.64's
+  exit is the ghost end: the garbage at `ℓ` is exactly the internal view (6.38's H28), and it is
+  removed. Each resumption re-applies the entry at a fresh lifetime with a new record.
+  `imm_spans_yield` discharges every hypothesis.
+
+**3. A nested lend spanning a stop** (`Nested.lean`). The reborrow `withbor m (Λ. λn. N)`
+(`withbor3`) lends `ℓ` again under the borrower's view. `NestRelend` is the inner piece read at
+the outer lend `α₁` current at each unfolding. At every `α₂ ⊏ α₁` it runs, hands the inner owner
+back, and leaves a share in `[α₁]`.
+
+`nested_relend` is the commutation lemma: a nested piece is re-lendable for the outer lend
+(`Relend`). At each outer lend `α₁`:
+
+1. 6.66 unfolds the view the outer lender has just handed out, at `α₁` itself (`wpG_M_antiFrameX`);
+2. 6.65 lends the content below `α₁` (`wpG_M_frameX` with the `⋔` bound `α₁`);
+3. at a return or a stop, 6.65's exit hands the owner back;
+4. 6.66 refolds it into `ℓ ↦ M_{α₁}`, which is left behind;
+5. at a stop, the outer owner joins the continuation (`opTable_absorb`).
+
+The refold is always under the outer's *new* witness. The old-lifetime refold
+(`ewpTS_M_antiFrameR`'s continuation, `refoldKripke_false`) is not used. The ordering constraint
+(inner below outer) is `nestF`'s bound, which `withbor3`'s type gives (`∀'y ⊏ ⊓Δ`, `'x ∈ Δ`).
+`nested_spans` composes the lemma with `ewpTS_M_frameR`. `nested_spans_yield` discharges every
+hypothesis on a callback that yields with both lends open. No cell is left that the refold cannot
+place.
+
+**What is work, not unknown.**
+
+- Reading `NestRelend` off the inner borrower's typing. It needs `RBody`'s rule for the borrow
+  constants, and the stop condition that the inner frames outlive the outer lend (step 3c).
+- The nested piece followed by the outer borrower's own continuation. The answer then keeps the
+  refolded view instead of dropping it, so it is `bodyAtD`'s form, and `bind_RL` composes it.
+- 6.150 at a resuming table (`withload` spanning a stop). Its exit is 6.52's subtraction, which
+  `wpG_reborrow` already runs at a stop. The lift re-instantiates the chooser `rebChooseTW_top` at
+  each resumption's list, where the record persists along `Ext`.
 
 ### Step 4: the witness
 
@@ -567,11 +641,10 @@ each re-application, and 6.60's outlives premise in `frame_outlives` and `stopSa
 
 **Printed lemmas in the run-up that are untranscribed at a resuming table.**
 
-- 6.64 (Imm Frame): its added step (`opTable_extR`) is proved; the lift is not written;
 - 6.150 (↺): its added step (`ptoImm_dup`) is proved; the lift is not written.
 
-Lifted: 6.65 (`ewpTS_M_frameR`), 6.66 (`ewpTS_M_antiFrameR`), and the unwinding form of 6.65
-(`withborR_compat`, from `ewp_then_owner`).
+Lifted: 6.64 (`ewpTS_I_frameR`), 6.65 (`ewpTS_M_frameR`), 6.66 (`ewpTS_M_antiFrameR`), and the
+unwinding form of 6.65 (`withborR_compat`, from `ewp_then_owner`).
 
 **Step 3f (#266).** No printed hypothesis is left unspent: `relendable_free` takes `ρ ∈ Res_α` as
 a hypothesis, which 6.60 (`vC_outlives`) supplies for a type outliving `'x`, as `fzAtom_freeze`
@@ -583,6 +656,21 @@ table are 6.64 and 6.150, as above.
 (`updV_outlives`, `updV_outlives_at`); 6.60 at frames (`vC_outlives`); 6.65 and 6.66 as lifted
 above. The table for an `Imm` lend (many locations, through nested references) is not built:
 nested lends spanning a stop are not in scope.
+
+**Step 3g (#268).**
+
+- *Printed hypotheses not spent.* None. `nested_relend` spends 6.65's `hP` at each inner lend, and
+  `ewpTS_I_frameR` spends 6.64's `AdmWf` and its `hQ`. 6.64's `hQ` is discharged by `hQ` on the
+  answer and by `hTL` on the table (`opTable_extR`).
+- *Uniqueness and functionality results not used.* `ResU.CompS.functional` and
+  `LSet.Diff.functional` (through `CellU.subLS_of_diff`) are used. The machine's determinism is not.
+- *Untranscribed printed lemmas in the run-up.* 6.150 at a resuming table. Its exit (6.52 at a stop)
+  is proved, inside `wpG_reborrow`; the lift is not written. 6.64 is lifted (`ewpTS_I_frameR`).
+- *Hypotheses added.* `ewpTS_I_frameR` takes `hTL`, the table carried along `Ext`, which is 6.64's
+  `hQ` at a resuming table. `opTable_extR` discharges it for `opTable` at a `Local` table, and
+  `imm_spans_yield` uses that discharge. `nested_relend` takes `LinResume`: a stop keeps the outer
+  owner in its continuation (`opTable_absorb`), which a cancelled continuation could not dispose
+  of. `relend_yield` needs the same.
 
 **Hypotheses added.** `relendOfTyped_of_rbodyOfTyped` takes `@bδ` defined, which `RelendOfTyped`
 does not carry: `Relend`'s `И` needs a bound. `rbody_letF` takes `FrameThaws` of the frame, the
