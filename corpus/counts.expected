@@ -2,11 +2,11 @@
 # name allocs indirect copies
 13-2-sum-prog 37 9 0
 aff-capture 2 0 0 # the log and the scope cell; the closure captures a borrow and allocates nothing
-aff-coerce 2 0 0 # the scope cell and the counter's cell
-aff-counter 3 0 0 # the scope cell, the cell the closure is stored in, and the counter's cell; the calls through `mut` are direct
+aff-coerce 2 0 0 # the cell of `main`'s lifetime and the counter's cell
+aff-counter 3 0 0 # the cell of `main`'s lifetime, the cell the closure is stored in, and the counter's cell; the calls through `mut` are direct
 aff-depth 3 0 0 # as aff-counter: four calls through three functions and a reborrow, all direct
-aff-drop 4 0 0 # the scope cell and three counters' cells, each freed by its `close`
-aff-higher 3 6 0 # the scope cell and two counters' cells; the indirect calls are `runner`'s calls of its argument, which closures built at two sites reach: the flow analysis is monovariant, and the argument's code is chosen at run time, as a `dyn` call's is
+aff-drop 4 0 0 # the cell of `main`'s lifetime and three counters' cells, each freed by its `close`
+aff-higher 3 6 0 # the cell of `main`'s lifetime and two counters' cells; the indirect calls are `runner`'s calls of its argument, which closures built at two sites reach: the flow analysis is monovariant, and the argument's code is chosen at run time, as a `dyn` call's is
 array-empty 0 0 0
 array-get 2 0 0
 array-refs 5 0 0

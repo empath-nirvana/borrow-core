@@ -4199,6 +4199,31 @@ def surfDecl : Nat → Decl → DM Decl
     pure (.main sp C M')
   | _, d => pure d
 
+/-- A lifetime bound `b` met with `q` (`q` alone when `b` is `top`). -/
+def meetBound (q : Life) : Life → Life
+  | .top _ => q
+  | b => .meet b.span b q
+
+/-- The bound of the lifetime parameter `c` of a function's type, met with `q`: `all 'c < @.`
+becomes `all 'c < @ /\ q.` (`q` alone when `@` is `top`).  `[spec §23]` -/
+def boundTyLife (c : String) (q : Life) : VTy → VTy
+  | .bang sp X => .bang sp (boundTyLife c q X)
+  | .all sp a b X =>
+    if a.name == c then .all sp a (meetBound q b) X else .all sp a b (boundTyLife c q X)
+  | T => T
+
+/-- `boundTyLife` at the function's code: its `Fun 'c < @.` binder.  `[spec §23]` -/
+def boundValLife (c : String) (q : Life) : Val → Val
+  | .bangThunkv sp N => .bangThunkv sp (go N)
+  | .thunkv sp N => .thunkv sp (go N)
+  | V => V
+where
+  go : Comp → Comp
+    | .lamL sp a b M =>
+      if a.name == c then .lamL sp a (meetBound q b) M else .lamL sp a b (go M)
+    | .ret sp V => .ret sp (boundValLife c q V)
+    | M => M
+
 /-- The instance of the template `t` at the type arguments `σ` (one per type parameter, each
 known): its name, made and elaborated on first use, and the lifetimes of the call that it takes
 first. A type argument with lifetimes (a view, `array_imm 'x u8`) makes an instance with a
@@ -4231,13 +4256,23 @@ def makeInst : Nat → TCx → Span → Decl → Array (Option CVTy) →
     if let some name := st.insts.lookup key then return (name, extras)
     let name := s!"{tn.name}__g{st.insts.length}"
     let mk' := match mk with
-      | .template m => m
+      | .template m _ => m
       | mk => mk
     let binders := (List.range extras.length).map fun k => (⟨s!"io_q{k}", tsp⟩ : Ident)
-    let A' := A.subst σs
-    let V' := V.subst σs
-    let (A', V') ← if extras.isEmpty then pure (A', V') else
-      match A', V' with
+    -- A bound `S: 'c` bounds the instance's `'c` by the lifetimes of `S`'s type argument too.
+    let mut A₁ := A.subst σs
+    let mut V₁ := V.subst σs
+    for (S, cv) in mk.bounds do
+      let some k := names.idxOf? S.name | continue
+      let some t := ts₀[k]? | continue
+      let qs := (extras.zipIdx).filterMap fun (v, j) =>
+        if BoCa.Fig16.LogRel.Core.Check.vfreeB v t then some (Life.var tsp s!"io_q{j}") else none
+      if let q :: qs := qs then
+        let q := qs.foldl (Life.meet tsp) q
+        A₁ := boundTyLife cv.name q A₁
+        V₁ := boundValLife cv.name q V₁
+    let (A', V') ← if extras.isEmpty then pure (A₁, V₁) else
+      match A₁, V₁ with
       | .bang asp X, .bangThunkv vsp N =>
         pure (VTy.bang asp (binders.foldr (fun b X => .all asp b (.top asp) X) X),
           Val.bangThunkv vsp (binders.foldr
@@ -4481,7 +4516,7 @@ def elabDecl : Nat → DivSt → Decl → SM DivSt
       "specialization at callback types does not terminate"⟩
   | fuel + 1, st, d => do
     -- A generic function is a template, instantiated where it is called.
-    if let .def_ _ _ (_ :: _) _ _ (.template _) := d then
+    if let .def_ _ _ (_ :: _) _ _ (.template _ _) := d then
       return { st with templates := st.templates ++ [d] }
     -- The loops of a library's declarations are not reported.
     let st := { st with quiet := match d with

@@ -20,11 +20,25 @@ type Aff[A, B]<'c> = U (nu X. (A -o F (B * box 'c U X)) & F 1)
 
 -- A closure over the state `s`, with the persistent step: the call's code over the state, and the
 -- close's. It outlives `'c` when the state does: `boxed['c] aff_new(s, step)`, checked where it
--- is written, at the state's type.
+-- is written, at the state's type. `aff_new_boxed` boxes it itself.
 fn aff_new[S, A, B]<'c>(s: S, step: !U (S -o (A -o F (B * box 'c S)) & F 1)) -> Aff[A, B]<'c> =
   f <- return (unfold[nu X. (A -o F (B * box 'c U X)) & F 1, S] step);
   thunkv nu_in < g <- return (unbang f); (nu_out (force g s)).1,
                  g <- return (unbang f); (nu_out (force g s)).2 >
+
+-- A closure over the state `s` that outlives `'c`, from a step that hands the state back as it is:
+-- the closure and each rest are boxed here. The bound `S: 'c` makes each instance's `'c` lie
+-- below the lifetimes of the state's type (SPEC §23), so the box is checked at the instance.
+fn aff_new_boxed[S, A, B]<'c>(s: S, step: !U (S -o (A -o F (B * S)) & F 1)) -> box 'c Aff[A, B]<'c>
+    where S: 'c =
+  boxed['c] aff_new[S, A, B]['c](s, !thunkv fun (s0 : S) ->
+    < fun (a : A) ->
+        g <- return (unbang step);
+        p <- (force g s0).1 a;
+        let (b, s1) = p;
+        return (b, boxed['c] s1),
+      g <- return (unbang step);
+      (force g s0).2 >)
 
 -- One call: the answer and the rest.
 fn aff_call[A, B]<'c>(f: box 'c Aff[A, B]<'c>, x: A) -> B * box 'c Aff[A, B]<'c> =
@@ -47,8 +61,8 @@ fn aff_close[A, B]<'c>(f: box 'c Aff[A, B]<'c>) -> 1 =
 
 -- Persistent ≤ affine: a `!(A => B)` as a closure whose state is the function itself.
 fn aff_of_fn[A, B]<'c>(h: !(A => B)) -> box 'c Aff[A, B]<'c> =
-  boxed['c] aff_new[!(A => B), A, B]['c](h, !thunkv fun (h : !(A => B)) ->
-    < fun (x : A) -> b <- return ((unbang h) x); return (b, boxed['c] h),
+  aff_new_boxed[!(A => B), A, B]['c](h, !thunkv fun (h : !(A => B)) ->
+    < fun (x : A) -> b <- return ((unbang h) x); return (b, h),
       return () >)
 
 -- Affine ≤ linear: call once, then close the rest.

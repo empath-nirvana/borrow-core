@@ -2044,6 +2044,11 @@ where
         expectSym "]"
         pure ps
       else pure []
+    -- `fn def f[S, …] where S: 'c : A = V`: a template's printed bounds.
+    let bs ← whereBounds ps []
+    let mk := match mk with
+      | .template m _ => .template m bs
+      | mk => mk
     expectSym ":"
     let A ← vty n
     expectSym "="
@@ -2072,6 +2077,7 @@ where
     let T ← rty n
     -- `with E₁, E₂[A]`: a written row (SPEC §18).
     let es ← if ← isKw "with" then do discard bump; rowList n else pure []
+    let bs ← whereBounds tps (lives.map (·.1.name))
     expectSym "="
     modify fun s => { s with muts := [], assigned := [], surf := true }
     let M ← comp n
@@ -2085,7 +2091,7 @@ where
       | .ok B => pure (VTy.lolli sp A B)
       | .error _ => do let C ← liftSort T.toC; pure (VTy.thunk sp (.arr sp A C))
     let (ty, V) := withLives sp lives fnTy lam
-    let mk := if tps.isEmpty then mk else .template mk
+    let mk := if tps.isEmpty then mk else .template mk bs
     pure (.def_ sp x tps ty V (if es.isEmpty then mk else .row es mk))
   /-- `E₁, E₂[A, …], …`: the effects of a written row, at least one. -/
   rowList : Nat → P (List (Ident × List VTy))
@@ -2102,6 +2108,25 @@ where
         discard bump
         return (e, As) :: (← rowList m)
       else pure [(e, As)]
+  /-- `where S: 'c, …`: lifetime bounds on the type parameters `tps`, each by a lifetime
+  parameter (one of `lives`, when they are given), or none. `where` is a word here, not a
+  keyword.  `[spec §23]` -/
+  whereBounds (tps : List Ident) (lives : List String) : P (List (Ident × Ident)) := do
+    if (← peek).tok != .ident "where" then return []
+    let w ← bump
+    if tps.isEmpty then failAt w.span "a lifetime bound `where S: 'c` is on a type parameter"
+    let mut acc : Array (Ident × Ident) := #[]
+    for _ in [0:n] do
+      let S ← uident "a type parameter"
+      unless tps.any (·.name == S.name) do
+        failAt S.span s!"`{S.name}` is not a type parameter of this function"
+      expectSym ":"
+      let c ← lifeVar
+      unless lives.isEmpty || lives.contains c.name do
+        failAt c.span s!"`'{c.name}` is not a lifetime parameter of this function"
+      acc := acc.push (S, c)
+      if ← isSym "," then discard bump else break
+    pure acc.toList
   /-- `[P₁, …]` after a name: type parameters, or none. -/
   typeParams : P (List Ident) := do
     if ← isSym "[" then

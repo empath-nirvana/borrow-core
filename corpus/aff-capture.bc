@@ -2,8 +2,11 @@
 -- and bounded by the borrow. `logger` makes a closure whose state is `ml : mut 'x i32`, a borrow
 -- of the log: each call adds its argument to the log through the borrow (`withswap`) and answers
 -- the new total, and `close` ends the borrow. The closure outlives `'w` because its state does,
--- `'w` being below `'x`; it cannot be bounded by `'x` itself (`corpus/reject/aff-outlives.bc`).
--- The owner reads the log after the borrow has ended.
+-- `'w` being below `'x`; it cannot be bounded by `'x` itself (`corpus/reject/aff-outlives.bc`),
+-- so a scope below `'x` is opened for it. `aff_new_boxed`'s bound `S: 'c` (SPEC §23) makes its
+-- instance at `S = mut 'x i32` take `'c` below `'x`, which `logger`'s `'w < 'x` gives; `logger`'s
+-- `'w` is not written at the call, and is `dom`, the meet of `'x` and `'w`. The owner reads the log
+-- after the borrow has ended.
 --
 -- Answer: i32[120512], and `live 0`: the calls answer 5 and 12 (`512`), and the log, read by its
 -- owner after the borrow has ended, holds 12 (`120000`). A call that wrote a copy of the log
@@ -11,13 +14,12 @@
 
 include aff
 
--- A closure capturing the borrow `ml`, bounded by a lifetime `'w` below the borrow's.
 fn logger<'x, 'w < 'x>(ml: mut 'x i32) -> box 'w Aff[i32, i32]<'w> =
-  boxed['w] aff_new[mut 'x i32, i32, i32]['w](ml, !thunkv fun (m : mut 'x i32) ->
+  aff_new_boxed[mut 'x i32, i32, i32]['w](ml, !thunkv fun (m : mut 'x i32) ->
     < fun (a : i32) ->
         q <- return (withswap['x, i32, i32] m (thunkv fun (v : i32) -> return (v + a, v + a)));
         let (m, t) = q;
-        return (t, boxed['w] m),
+        return (t, m),
       return (forget_mut['x, i32] m) >)
 
 main -> i32 =
@@ -25,7 +27,7 @@ main -> i32 =
   let d = alloc(0);
   let (d, r) = borrow mut log { 'x, ml ->
     let r = borrow mut d { 'w, e ->
-      let k = logger ['x] ['w](ml);
+      let k = logger(ml);
       let (a, k) = aff_call(k, 5);
       let (b, k) = aff_call(k, 7);
       aff_close(k);

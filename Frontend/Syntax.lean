@@ -496,8 +496,10 @@ inductive Mark where
   | total
   | div
   /-- `fn f[A, …](…)`: a function generic in types, marked `m` (`none`, `total` or `div`). It is a
-  template: each use is a call of its instance at that use's types, elaborated as a `fn`. -/
-  | template (m : Mark)
+  template: each use is a call of its instance at that use's types, elaborated as a `fn`.
+  `bounds` are its lifetime bounds `where S: 'c`, a type parameter and a lifetime parameter each.
+  `[spec §23]` -/
+  | template (m : Mark) (bounds : List (Ident × Ident) := [])
   /-- `fn f(…) -> T with E₁, E₂[A] = …`: a written row (SPEC §18), a promise that the inferred
   row is within it, and gives the type arguments of an effect it performs directly. The function
   is marked `m` besides. -/
@@ -756,8 +758,14 @@ def Comp.strip : Comp → Comp
   | .unwind _ x A M D N => .unwind .none x.strip (A.map VTy.strip) M.strip D.strip N.strip
 end
 
+/-- The lifetime bounds of a template, under its row.  `[spec §23]` -/
+def Mark.bounds : Mark → List (Ident × Ident)
+  | .template _ bs => bs
+  | .row _ m => m.bounds
+  | _ => []
+
 def Mark.strip : Mark → Mark
-  | .template m => .template m.strip
+  | .template m bs => .template m.strip (bs.map fun (S, c) => (S.strip, c.strip))
   | .row es m => .row (es.map fun (e, As) => (e.strip, As.map VTy.strip)) m.strip
   | m => m
 

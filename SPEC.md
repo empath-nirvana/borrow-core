@@ -3396,7 +3396,8 @@ call matches a parameter of type `Aff[A, B]<'c>`.
     type Aff[A, B]<'c> = U (nu X. (A -o F (B * box 'c U X)) & F 1)
 
 `aff_new` (a state and its step; the caller boxes it, `boxed['c] aff_new(s, step)`, at the
-state's type), `aff_call`, `aff_call_mut` (through `mut 'a (box 'c Aff[A, B]<'c>)`),
+state's type), `aff_new_boxed` (the same, boxed by the function itself under the bound `S: 'c`,
+§23), `aff_call`, `aff_call_mut` (through `mut 'a (box 'c Aff[A, B]<'c>)`),
 `aff_close`, `aff_of_fn` (persistent ≤ affine) and `aff_once` (affine ≤ linear). The name `Aff`
 is provisional (decision 60).
 
