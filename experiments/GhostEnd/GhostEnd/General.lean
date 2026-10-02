@@ -30,6 +30,14 @@ continuations are composed by `open_bind`, by induction on `Open`. Neither menti
   `Loop.lean` (`bounded_fix`) is proved directly, by induction on its budget, for that reason.
 
 I have not derived these steps and have not verified that any obstruction is real.
+
+**#262.** The first kind is closed for data in `TypedD.lean` (`RBodyT`, with `FrameThawsD` from
+`lok_thaws`), and for closures the borrower builds in `ClosureBody.lean` (`RBodyC`, by
+`tv_freeze` and `tv_thaw`, each closure re-derived by `fundamentalC`). Of the second kind,
+`[lam]` and `[app]` at an effectful arrow are `cloL_of_rbodyC` and `cloL_call` (`Callee.lean`).
+`RBodyTOfTyped` is the fundamental lemma for `RBodyT`, and `relendOfTyped_of_rbodyTOfTyped`
+reduces `RelendOfTyped` to it. `KernelInvariant` (`Kernel.lean`) is where the kernel
+invariant enters.
 -/
 
 noncomputable section

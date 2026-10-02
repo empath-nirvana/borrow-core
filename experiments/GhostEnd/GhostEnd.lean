@@ -24,3 +24,4 @@ import GhostEnd.Closures
 import GhostEnd.ClosureBody
 import GhostEnd.Capture
 import GhostEnd.Callee
+import GhostEnd.Kernel

@@ -78,12 +78,14 @@ theorem lok_of_free : ∀ (A : VTy), ¬ VFree x A → VOutlives (Δ.extend x b) 
       intro hf ho
       cases ho with
       | tensor hA hB =>
-          exact ⟨lok_of_free A (fun h => hf (Or.inl h)) hA, lok_of_free B (fun h => hf (Or.inr h)) hB⟩
+          exact ⟨lok_of_free A (fun h => hf (Or.inl h)) hA,
+            lok_of_free B (fun h => hf (Or.inr h)) hB⟩
   | sum A B =>
       intro hf ho
       cases ho with
       | sum hA hB =>
-          exact ⟨lok_of_free A (fun h => hf (Or.inl h)) hA, lok_of_free B (fun h => hf (Or.inr h)) hB⟩
+          exact ⟨lok_of_free A (fun h => hf (Or.inl h)) hA,
+            lok_of_free B (fun h => hf (Or.inr h)) hB⟩
   | _ => intro hf ho; exact Or.inr ⟨hf, ho⟩
 
 /-- A frozen atom is in `Res_α`. -/

@@ -12,8 +12,9 @@ A closure *made by the borrower* is a typed term with a closing substitution: `�
 `Δ, x ⊏ b; ·, Γ_f ⊢ M : F A`, or a λ-value `V` with `Δ, x ⊏ b; Γ_f ⊢ V : C`, at the values
 `γ_f`. That is the kernel invariant (#262, item 4) at the values the borrower builds. `TV`
 records it: a typed value is an atom in the relation (`Mut 'x T`, or data free of `'x`
-outliving it), a pair or injection of typed values, or a closure, typed by its derivation, over
-a typed environment `TVG`. `TV true` is the same with each atom frozen (`fzAtom`).
+outliving it), a pair or injection of typed values, a closure typed by its derivation over a
+typed environment `TVG`, or a fixed axiomatic constant, closed and in the relation at every
+lend. `TV true` is the same with each atom frozen (`fzAtom`).
 
 The lemmas are inductions over typed values. `Mut` is case 2 and closures recurse into their
 environments:
@@ -73,6 +74,12 @@ inductive TV (Δ : LifeCtx) (x : LifeVar) (b : Lifetime.Life) (T : VTy) (δ : LS
       (hD : CDerives (Δ.extend x b) Γf (.val (.lam N)) (.comp C))
       (h : TVG Δ x b T δ l fz α Γf γf ls d ρ) :
       TV Δ x b T δ l fz α (.thunk C) ls (Val.lam (Expr.psub 1 γf N)) d ρ
+  /-- A fixed axiomatic constant at a thunk type: closed, holding nothing, and in the relation
+  at every lend (its compatibility lemma at `δ[x ↦ α′]`). -/
+  | const {fz α C ls v}
+      (h : ∀ α', (Δ.extend x b).Models (δ.extend x α') → ∀ ls',
+        vC true (.thunk C) ls' (δ.extend x α') v PMap.empty) :
+      TV Δ x b T δ l fz α (.thunk C) ls v false PMap.empty
 /-- A typed environment, slot by slot as `gSepC` reads it. -/
 inductive TVG (Δ : LifeCtx) (x : LifeVar) (b : Lifetime.Life) (T : VTy) (δ : LSub)
     (l : BoCa.Loc) : Bool → Life → Ctx VTy → List Val → List SRec → Bool → WRes → Prop where
@@ -117,6 +124,7 @@ theorem tv_sound {α : Life} (hδα : (Δ.extend x b).Models (δ.extend x α)) :
         intro ls' hext
         rw [forceE_of_not_ret hC]
         exact (fundamentalC hD) _ γf ls' ρ hδα (gDenC_local hext (ih hf e)))
+      (fun {_ _ _ ls _} h _ _ => h α hδα ls)
       (fun _ _ => gDenC_mk trivial ⟨rfl, trivial⟩)
       (fun {_ _ A Γ v γ ls _ ρ} _ ih hf e => gDenC_dead_cons A v (ih hf e))
       (fun {_ _ A Γ v γ ls _ _ ρ₁ ρ₂ ρ} _ _ _ hc ih₁ ih₂ hf e => by
@@ -144,6 +152,7 @@ theorem tv_sound {α : Life} (hδα : (Δ.extend x b).Models (δ.extend x α)) :
         intro ls' hext
         rw [forceE_of_not_ret hC]
         exact (fundamentalC hD) _ γf ls' ρ hδα (gDenC_local hext (ih hf e)))
+      (fun {_ _ _ ls _} h _ _ => h α hδα ls)
       (fun _ _ => gDenC_mk trivial ⟨rfl, trivial⟩)
       (fun {_ _ A Γ v γ ls _ ρ} _ ih hf e => gDenC_dead_cons A v (ih hf e))
       (fun {_ _ A Γ v γ ls _ _ ρ₁ ρ₂ ρ} _ _ _ hc ih₁ ih₂ hf e => by
@@ -171,6 +180,7 @@ theorem tv_local : ∀ {fz α A ls ls' v d ρ}, Ext ls ls' ρ → TV Δ x b T δ
   | _, _, _, _, _, _, _, _, he, .inr h => .inr (tv_local he h)
   | _, _, _, _, _, _, _, _, he, .cloF hD h => .cloF hD (tvg_local he h)
   | _, _, _, _, _, _, _, _, he, .cloV hC hD h => .cloV hC hD (tvg_local he h)
+  | _, _, _, _, _, _, _, _, _, .const h => .const h
 theorem tvg_local : ∀ {fz α Γ γ ls ls' d ρ}, Ext ls ls' ρ → TVG Δ x b T δ l fz α Γ γ ls d ρ →
     TVG Δ x b T δ l fz α Γ γ ls' d ρ
   | _, _, _, _, _, _, _, _, _, .nil => .nil
@@ -191,6 +201,7 @@ theorem tv_inStratum : ∀ {fz α A ls v d ρ}, TV Δ x b T δ l fz α A ls v d 
   | _, _, _, _, _, _, _, .inr h, hf => tv_inStratum h hf
   | _, _, _, _, _, _, _, .cloF _ h, hf => tvg_inStratum h hf
   | _, _, _, _, _, _, _, .cloV _ _ h, hf => tvg_inStratum h hf
+  | _, α, _, _, _, _, _, .const _, _ => ResU.inStratum_empty α
 theorem tvg_inStratum : ∀ {fz α Γ γ ls d ρ}, TVG Δ x b T δ l fz α Γ γ ls d ρ → fz = true →
     ρ.InStratum α
   | _, α, _, _, _, _, _, .nil, _ => ResU.inStratum_empty α
@@ -250,7 +261,8 @@ theorem tv_freeze (hT : ¬ VFree x T) {α : Life} (hδα : (Δ.extend x b).Model
       obtain ⟨d₂, ρz₂, ρn₂, hc₂, hz₂, hn₂⟩ := tv_freeze hT hδα h₂ hf e ht₂
       have hnd : ¬ (d₁ = true ∧ d₂ = true) := by
         rintro ⟨rfl, rfl⟩
-        exact dropC_disj (dropC_of_vwD hn₁) (dropC_of_vwD hn₂) (ResU.CompS.comm hc₁) (ResU.CompS.comm hc₂) hc
+        exact dropC_disj (dropC_of_vwD hn₁) (dropC_of_vwD hn₂) (ResU.CompS.comm hc₁)
+          (ResU.CompS.comm hc₂) hc
       obtain ⟨ρz, ρn, hcz, hcn, hcρ⟩ := compS_four hc₁ hc₂ hc
       exact ⟨d₁ || d₂, ρz, ρn, hcρ, .pair hz₁ hz₂ hnd hcz, vwD_join hnd hn₁ hn₂ hcn⟩
   | _, _, _, _, _, _, _, .inl h, hf, e, ht => by
@@ -265,6 +277,8 @@ theorem tv_freeze (hT : ¬ VFree x T) {α : Life} (hδα : (Δ.extend x b).Model
   | _, _, _, _, _, _, _, .cloV hC hD h, hf, e, ht => by
       obtain ⟨d', ρz, ρn, hc, hz, hn⟩ := tvg_freeze hT hδα h hf e ht
       exact ⟨d', ρz, ρn, hc, .cloV hC hD hz, hn⟩
+  | _, _, _, _, _, _, _, .const h, _, rfl, _ =>
+      ⟨false, PMap.empty, PMap.empty, compS_empty_left _, .const h, rfl, trivial⟩
 /-- **Freeze a typed environment.** -/
 theorem tvg_freeze (hT : ¬ VFree x T) {α : Life} (hδα : (Δ.extend x b).Models (δ.extend x α)) :
     ∀ {fz α' Γ γ ls d ρ}, TVG Δ x b T δ l fz α' Γ γ ls d ρ → fz = false → α' = α →
@@ -281,7 +295,8 @@ theorem tvg_freeze (hT : ¬ VFree x T) {α : Life} (hδα : (Δ.extend x b).Mode
       obtain ⟨d₂, ρz₂, ρn₂, hc₂, hz₂, hn₂⟩ := tvg_freeze hT hδα h₂ hf e ht₂
       have hnd : ¬ (d₁ = true ∧ d₂ = true) := by
         rintro ⟨rfl, rfl⟩
-        exact dropC_disj (dropC_of_vwD hn₁) (dropC_of_vwD hn₂) (ResU.CompS.comm hc₁) (ResU.CompS.comm hc₂) hc
+        exact dropC_disj (dropC_of_vwD hn₁) (dropC_of_vwD hn₂) (ResU.CompS.comm hc₁)
+          (ResU.CompS.comm hc₂) hc
       obtain ⟨ρz, ρn, hcz, hcn, hcρ⟩ := compS_four hc₁ hc₂ hc
       exact ⟨d₁ || d₂, ρz, ρn, hcρ, .live hz₁ hz₂ hnd hcz, vwD_join hnd hn₁ hn₂ hcn⟩
 end
@@ -329,6 +344,10 @@ theorem tv_thaw (hT : ¬ VFree x T) {α α' : Life} (hle : α' ≤ α) :
   | _, _, _, _, _, _, _, .cloV hC hD h, hf, e, _, _, hv, hc => by
       obtain ⟨h', ht⟩ := tvg_thaw hT hle h hf e _ _ hv hc
       exact ⟨.cloV hC hD h', ht⟩
+  | _, _, _, _, _, _, _, .const h, _, _, _, _, hv, hc => by
+      obtain ⟨rfl, -⟩ := hv
+      obtain rfl := eq_of_compS_empty_left hc
+      exact ⟨.const h, tabAt_empty l α'⟩
 /-- **Thaw a typed environment.** -/
 theorem tvg_thaw (hT : ¬ VFree x T) {α α' : Life} (hle : α' ≤ α) :
     ∀ {fz α₀ Γ γ ls d ρz}, TVG Δ x b T δ l fz α₀ Γ γ ls d ρz → fz = true → α₀ = α →

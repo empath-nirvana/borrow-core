@@ -44,6 +44,7 @@ theorem tv_live_flag : ∀ {fz α A ls v d ρ}, TV Δ x b T δ l fz α A ls v d 
   | _, _, _, _, _, _, _, .inr h, hf => tv_live_flag h hf
   | _, _, _, _, _, _, _, .cloF _ h, hf => tvg_live_flag h hf
   | _, _, _, _, _, _, _, .cloV _ _ h, hf => tvg_live_flag h hf
+  | _, _, _, _, _, _, _, .const _, _ => rfl
 theorem tvg_live_flag : ∀ {fz α Γ γ ls d ρ}, TVG Δ x b T δ l fz α Γ γ ls d ρ → fz = false →
     d = false
   | _, _, _, _, _, _, _, .nil, _ => rfl
