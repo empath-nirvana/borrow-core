@@ -48,6 +48,10 @@ Build with `lake build GhostEnd`. It uses only the standard axioms and has no `s
 | 3e | the re-lendable continuation relation, positive | `KapRelR`, `kapRelR_mono` (`Bridge.lean`) |
 | 3e | the frame thaw at a `U` slot, exactly | `URelend`, `frameThawsD_thunk_iff`, `uThaw_free`, `uThaw_tv` (`Bridge.lean`) |
 | 3e | the relation re-lendable by construction; `CloL` its `U` clause | `vRL`, `cRL`, `cloL_of_vRL` (`Bridge.lean`) |
+| 3f | re-lendability, closed under `⋆`; `URelend` at `vRL` with no hypothesis | `Relendable`, `relendable_sep`, `relendable_thunk`, `uRelendRL` (`RLCompat.lean`) |
+| 3f | the key steps of the non-routine compatibility lemmas | `force_RL`, `thunkF_RL`, `thunkF_RL_ctx`, `bind_RL`, `relendable_cont_frame`, `vRL_thunk_closed` |
+| 3f | where the single-lend relation stops: a closure under an inner borrow | `relendable_off_cell`, `thunkF_RL_fails_below`, `thunkF_RL_fails_below_at` |
+| 3f | the table as a guard; the same closure inside it | `vRLg`, `RelendableG`, `forceG`, `relendableG_thunk`, `uRelendRLg`, `thunkF_RLg`, `thunkF_RLg_below` |
 
 ### Step 0: the segment fundamental lemma (restated)
 
@@ -405,6 +409,137 @@ relation negatively at `A → C`, so there is no domain equation of `no_negative
 The shape #262 named is an inductive `TV` carrying its closures' borrower readings, with `TV`
 negative in its own constructor. `CloL` and `KapRelR` are not recursive.
 
+### Step 3f: the compatibility lemmas at `vRL`/`cRL` (#266)
+
+`RLCompat.lean`. Route (b)'s cost is the fundamental lemma at `vRL`/`cRL`: one compatibility lemma
+per `CDerives` rule. Each is **routine**, the kernel's proof carrying over with a mechanical
+change, or **non-routine**, the `U` clause's re-lend entering it.
+
+**Re-lendability.** `Relendable P α` is the shape of `vRL`'s `U` clause with `P` free: the
+resource splits into the view it dropped at `α` and a part in `Res_α` that, handed the view at any
+`α′ ⊑ α`, is in `P α′`. It is monotone, Kripke and closed under `⋆` (`relendable_sep`), and these
+are re-lendable:
+
+- a `U` slot, by construction (`relendable_thunk`). So `URelend` holds at `vRL` at every
+  computation type with no hypothesis (`uRelendRL`). At the kernel's relation it is the open step
+  (`frameThawsD_thunk_iff`);
+- the borrow's own view (`relendable_view`), a slot free of `'x` in `Res_α` (`relendable_free`),
+  a pair of re-lendable components (`relendable_tensor`), and a context of re-lendable slots
+  (`relendable_gRL`).
+
+Every non-routine lemma below reduces to one of: the context re-lendable (`thunk`), the frame
+re-lendable at a stop (`[let]`), or the continuation re-lendable (`[handle]`). All three are
+`Relendable` of a separating conjunction of slots.
+
+**The classification.** "Clause" means a clause the merged definition does not have: `vRL` reads
+every value type but `U` and `⊗` at the ordinary relation (`A => vC`), and `cRL` is `True` at
+`&`, `⊤`, `∀`, `ν` and at a row's layers. The ordinary reading is not a `vRL` reading: a thunk
+that stops at `S` is in `vRL (U (F 1))` and not in `vC (U (F 1))`, so an introduction rule whose
+premise is at `vRL` cannot conclude at `vC`. "Row" means `cRL` read at each type's own row rather
+than at the one row `S`: the merged `cRL` reads every `F B` as a piece that may stop at `S`, so a
+pure callback is read as one that may stop.
+
+| rule | class | why |
+|---|---|---|
+| `var`, `unitI`, `tensorI`, `unitE`, `tensorE`, `sumE`, `zeroE`, `ret`, `ofRet` | routine | `gRL` is `gSepC` at `vRL` and splits as it does; `⊗` is componentwise in both |
+| `sumI₁`, `sumI₂`, `bangE`, `copyBang`, `forgetBang`, `boxE`, `roll`, `unroll` | routine, given the clause | with `vRL` recursing at `⊕`, `!`, `[@a]`, `μ` the proofs are the kernel's; `!` holds `∅` |
+| `immSub`, `mutSub` | routine | `Imm` and `Mut` are read at the ordinary relation at `δ[x ↦ α]` |
+| `boxI` | routine, given the clause | 6.60 at `vRL`: `VOutlives` has no `U` rule, and its `[@b]` and `!` rules carry their own stratum, so the induction is `vC_outlives`'s |
+| `withI`, `proj₁`, `proj₂`, `topI` | routine, given the clause | `cRL`'s `&`, `⊤` as `cC`'s |
+| `allI`, `allE`, `allEV` | routine, given the clause | `cRL`'s `∀` as `cC`'s, with the reading substitution a parameter apart from the lend's `δ` |
+| `nuIn`, `nuOut` | routine, given the clause | `ν`'s greatest fixed point exists because `Relendable` is monotone (`relendable_mono`). The `Aff` rules are derived (`AffRules.lean`), so they are these rows and `unfoldN` |
+| `lam`, `app` | routine | `cRL`'s `→` clause is at the same `α`, as `cC`'s; `lam` needs `cRL` closed under head steps, by induction on `C` as `cC_head` |
+| `force` | routine | `force_RL`: the clause at `α′ = α` |
+| `thunkF`, `thunkV`, `bangThunkF`, `bangThunkV` | **non-routine** | the context re-lendable: `thunkF_RL`, `thunkF_RL_ctx`. A `!` context holds `∅` (`vRL_thunk_closed`) |
+| `bind`, `effLet`, `lolliE` | **non-routine** | the frame re-lendable at a stop: `bind_RL`, at a linear resuming table |
+| `effThen` | **non-routine** | a frozen frame unwinding at a cancel, at an inner affine row. Not derived; no obstruction verified |
+| `effHandle` | **non-routine** | `cRL` needs a second kind of stop, at an operation handled inside the borrower: the lend open, the continuation re-lendable. Through a frame that is `relendable_cont_frame`. The clause and a handler frame passing the lender's stops are not built |
+| `effPerform`, `effSub` | routine | `rbodyT_perform`'s proof; table monotonicity, given the row |
+| `effRaise` | routine, through `effThen`/`effHandle` | `Row.Resume` has no aborting operation at the lender's row |
+| `alloc`, `free`, `swap`, `copy`, `forgetImm`, `forgetMut`, `forgetUnk`, `lit`, `hostOp`, the `arr*` and the `slice{Get,Len,Split,Empty,Replace,Swap}*` constants | routine | closed `U` values (`vRL_thunk_closed`) whose argument and answer types hold no `U`: the kernel's lemma at `δ[x ↦ α′]` (`bodyAtD_of_wpTS`) |
+| `countFold`, `countTry`, `foldImm`, `foldOwn`, `foldReuse` | routine, given the row | the callbacks are pure, and their answers thread through the proof unchanged |
+| `boundedFix` | routine | the self-reference is a closed `U` value (`vRL_thunk_closed`), by induction on the budget (`open_boundedFix`) |
+| `unfoldN` | **non-routine** | the coiteration builds `U X` thunks over its state, so the state must be re-lendable: the frame step again. Not written |
+| `withswap` | routine, given the row | its callback is pure; at the merged `cRL` it could stop inside the anti-frame |
+| `withbor1`, `withbor2`, `withbor3`, `withload`, `sliceBorrowM`, `sliceBorrowI` | **non-routine** | an inner lend, not spanning a stop. A closure over its view is outside `vRL` (`thunkF_RL_fails_below`) and inside `vRLg` (`thunkF_RLg_below`); the rest is the kernel's proof |
+| `withbor1U`, `withbor2U`, `withbor3U`, `withloadU`, `sliceBorrowMU`, `sliceBorrowIU` | **non-routine** | an inner lend whose callback unwinds to an inner handler: `effHandle`'s step, the lend ended at the unwind |
+| a resuming `withbor` inside the borrower (O15.1's rule, not yet in `CDerives`) | **non-routine** | a nested lend spanning a stop: the stacked relation below |
+
+**Where the single-lend relation stops.** `relendable_off_cell`: a re-lendable resource holds no
+cell off `ℓ` at or below `α`. `thunkF_RL_fails_below` is the configuration, with every hypothesis
+discharged at numerals in `thunkF_RL_fails_below_at`. Inside an inner borrow's callback
+(`y ⊏ ⊓Δ`, `'x` in `Δ`) the context holds `n : Mut 'y 1`, a cell at `αy ⊏ α`:
+
+- `thunk (return n)` is typed, and the substitution models the context;
+- the context is in `gRL`, and `thunkF_RL`'s body premise holds;
+- the context is not re-lendable, and no closure value over that resource is in `vRL`'s `U`
+  clause;
+- `TabAt` fails, so a fundamental lemma that assumes the table says nothing about the callback.
+
+The resource is an inhabitant of `ptoMutS k αy`, which 6.65's premise
+`fresh (λα. ℓ ↦ M_α P̂ ─⋆ …)` quantifies over. So it is in the domain the callback's judgment
+is asked at.
+
+**The table as a guard.** `vRLg` asks the stratum and the re-lend of a `U` value only when its
+resource is consistent with the table (`RelendableG`). A frame at a stop is consistent with it
+(`wpG_tabAt`), so stops lose nothing (`relendableG_thunk`, `uRelendRLg`). A closure over a value
+below the lend owes the reading at `α` alone (`forceG`, `thunkF_RLg`), and the configuration above
+is inside `vRLg` (`thunkF_RLg_below`). What `vRLg` does not cover is a lend opened inside the
+borrower that itself spans a stop: a value then holds a cell of each lend open at the stop and has
+to be re-lendable at each, in the nesting order (`relend_respects_nesting`). That is the relation
+indexed by the stack of open lends. I have not derived it and have not verified that any
+obstruction is real.
+
+**Verdict: go, for the generalised relation; no-go for `vRL`/`cRL` as merged.** As merged they
+read one lend at one row with catch-all clauses, and cannot carry a closure under an inner
+borrow. The relation the kernel lift can use is route (b) with four changes:
+
+1. a clause at every former (`⊕`, `!`, `[@a]`, `Ref`, `μ`, `[L]`; `&`, `⊤`, `∀`, `ν`), the reading
+   substitution apart from the lend's `δ`;
+2. each computation type read at its own row: a pure `F B` as `wpTS` into `vRL B`, an operation of
+   the lender's row as the ghost-end stop, an operation handled inside the borrower as a stop with
+   the lend open and the continuation re-lendable;
+3. the table as a guard (`vRLg`);
+4. indexed by the stack of open lends, so that at the empty stack the `U` clause is `vC`'s and the
+   computation clause is `ewpTS` at the row's table.
+
+Under decision 20 the kernel's `vC`/`cC` become the empty-stack instance in the same change, not a
+second relation beside it. That deletes:
+
+- `CloL` (the `U` clause at `U(1 → F_S B)`, `cloL_of_vRL`; `cloL_call` is `force_RL`,
+  `cloL_of_rbodyC` is `thunkF_RL`);
+- the `URelend` gap (`uRelendRL`) and route (c)'s `KapRelR`, whose role is the inner-stop clause;
+- `KernelInvariant`. A pure piece's answer is in `vRL` by the fundamental lemma at `vRL`, which
+  carries the `U` clause, so no subject reduction is needed;
+- `TV`/`TVG` and the re-derivation by `fundamentalC` (`tv_sound`, `tv_freeze`, `tv_thaw`);
+- `RBody`, `RBodyT`, `RBodyC`, their rule lemmas, `RBodyOfTyped`, `RBodyTOfTyped` and
+  `FrameThaws`/`FrameThawsD`/`StopSafe`. Their union is the fundamental lemma at `vRL`; a frame's
+  thaw is `Relendable` of the frame, and `LOk`'s atom cases survive as `relendable_view` and
+  `relendable_free`. `RelendOfTyped` follows through `relend_of_openD`.
+
+It costs:
+
+- every compatibility lemma of `fundamentalC` restated at the generalised relation, most of them
+  mechanically, the non-routine ones as above;
+- every consumer of `vC`/`cC` in `Core/` (adequacy, every run, totality, the embedding, the
+  programs) re-pointed at the empty-stack instance; mechanical if the instance is definitional;
+- the stack of lends in the table (`TabAt` for a stack) and the nested freeze;
+- 6.64 and 6.150 at resuming tables (their added steps are proved; the lifts are not written),
+  and the table of an `Imm` lend.
+
+No index is added to `CDerives` (decision 19): the stack is a parameter of the model.
+
+**Unknown, as against work.**
+
+- Unknown: a lend opened inside the borrower that spans a stop, read by the stacked relation, and
+  whether its `U` clause composes with 6.66's refold of the outer view at the stop. An `Imm` lend
+  spanning a stop. A frame value whose type has `'x` inside a borrow's payload, which `LOk` excludes
+  and which well-formedness may exclude (not checked). For each: not derived, and no obstruction
+  verified.
+- Work: the clauses, the row index and the inner-stop clause; the guard; `[then]`'s cancel of a
+  frozen frame; the per-type re-lendability lemma for the types `LOk` admits plus `U`
+  (`relendable_*` are its cases); the restated compatibility lemmas.
+
 ### Step 4: the witness
 
 `mut_not_natural`'s cell `ρ₀ = ℓ ↦ mut(2, ℓ′, ℓ′ ↦ imm({1}, (), ∅), 𝒱⟦Imm 'b 1⟧_δ)` is below the cut,
@@ -437,6 +572,12 @@ each re-application, and 6.60's outlives premise in `frame_outlives` and `stopSa
 
 Lifted: 6.65 (`ewpTS_M_frameR`), 6.66 (`ewpTS_M_antiFrameR`), and the unwinding form of 6.65
 (`withborR_compat`, from `ewp_then_owner`).
+
+**Step 3f (#266).** No printed hypothesis is left unspent: `relendable_free` takes `ρ ∈ Res_α` as
+a hypothesis, which 6.60 (`vC_outlives`) supplies for a type outliving `'x`, as `fzAtom_freeze`
+uses it. `ResU.CompS.functional` and `dropC_disj` are used; the machine's determinism is not. The
+printed lemmas in the run-up of the borrow-constant rows that are untranscribed at a resuming
+table are 6.64 and 6.150, as above.
 
 **Printed lemmas in the run-up, #262.** 6.50 is used at `↓α` and at one location
 (`updV_outlives`, `updV_outlives_at`); 6.60 at frames (`vC_outlives`); 6.65 and 6.66 as lifted
