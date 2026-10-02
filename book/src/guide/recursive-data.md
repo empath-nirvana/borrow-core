@@ -26,11 +26,13 @@ def cons : i32 * List => List =
 
 ## Recursion
 
-A function may call itself, and functions may call one another. The calls are the group's
-`rec` operation, and a **driver** runs it (SPEC §20). The default, `bounded`, needs nothing
-written: it runs the recursion as native calls, carrying a budget of depth, and when the budget
-is spent it performs `exhausted()`, an error like any other (`include rec`). So a recursive
-function's row has `Exhausted`, and something handles it:
+A function may call itself, and functions may call one another: they form a recursive group, and
+a **driver** runs it (SPEC §20, §21). The group is the fixed point of its *generator*, the members'
+bodies with their calls of the group going to a self-reference, and each of those calls is a
+direct call. The default driver, `bounded`, needs nothing written: it takes the fixed point as
+native calls, carrying a budget of depth, and when the budget is spent it performs `exhausted()`,
+an error like any other (`include rec`). So a recursive function's row has `Exhausted`, and
+something handles it:
 
 ```bc
 include rec
@@ -61,6 +63,38 @@ main -> i32 * i32 =
 (running what each level must finalise) and reaches `on_exhausted`. A recursion that must go
 deeper runs under the heap driver, `with deep { down(20000) }`, which keeps its pending calls in
 a buffer instead of on the stack, and is div.
+
+A recursion may do what any function does. It may use a handler's capability: the capability is
+passed down with each call and handed back with each answer, as to any function that uses one. It
+may yield, or perform any operation, which goes to the handler around the call from outside. Its
+members may answer different types: the fixed point is taken at the record of their functions.
+A recursion whose body has a `while` or a `loop` is not provided yet: it is div, and its
+`Exhausted` would be performed inside its loop, where no handler reaches.
+
+A **layer** runs around each call a recursion makes of itself. It is a function of the call and
+its argument, generic in their types, and `with L { … }` applies it to the recursions called in the
+block, before their fixed point is taken: it transforms the generator, and the recursion knows
+nothing of it.
+
+```bc
+include rec
+
+effect Count { fn tick() -> i32 }
+
+handler count(mut n: i32): Count = { tick() = { n = n + 1; n } }
+
+fn counted[A, B](call: !(A => B), a: A) -> B = tick(); call(a)
+
+fn fib(n: i32) -> i32 = if n < 2 { n } else { fib(n - 1) + fib(n - 2) }
+
+main -> i32 * i32 =
+  let c = alloc(0);
+  let f = with count(&mut c) { with counted { with on_exhausted(!{ u -> 0 - 1 }) { fib(10) } } };
+  (f, free(c))
+-- answer: (i32[55], i32[176])
+```
+
+`fib(10)` makes 176 calls of itself, each counted; the call from outside is not.
 
 A `def` written in the core text is not a recursion: its body is code over a fixed point the
 kernel provides (`unfold`, the folds, `bounded_fix`), and a name it uses is declared before it:

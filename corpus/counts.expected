@@ -27,6 +27,7 @@ capture-log-hand 0 0 0 # equal to the kernel program log-outside-native (corpus/
 capture-store-cancel-hand 2 0 0 # equal to the kernel program store-cancel
 capture-take-hand 1 0 0 # the producer's cell; the kernel program take adds its count's node and its handler's two closures
 capture-tick-hand 0 0 0 # equal to the kernel program tick-native
+clause-captures 6 3 0 # the counter and the cells; the indirect calls are the state-passing answers of `asking`, as in the probe P4(a) (a native handler parameter is not built)
 clone-reuse 6 0 1
 core-effects-borrow-abort 1 0 0 # the cell, freed by the finaliser on the unwind
 core-effects-borrows 2 0 0
@@ -117,11 +118,16 @@ parse-int 3 0 0 # the stdin and stdout cells and the line buffer, reused; litera
 print-borrowed-array 2 0 0
 quicksort 3 0 0 # the data, the range stack, the output capability
 rec-deep 60040 0 0 # the tree, two objects per node, and each group's buffer of frames growing by doubling
+rec-emit 6 0 0 # the frames of the continuation `summed` resumes in the middle of the recursion, as in the probe P2
 rec-even-odd 0 0 0
 rec-fib 0 0 0 # the recursion runs on the native stack: no frame is allocated
+rec-layer 2 0 0 # the two cells only: the layers wrap the self-reference with no allocation
+rec-log 1 0 0 # the log cell only
+rec-mixed 0 0 0
 rec-overflow 10101 0 0 # the cells, one per level: 100, and 10001 before the budget is spent
-rec-parser 22 0 0 # the token lists and the tokens put back
+rec-parser 17 0 0 # the token lists and the tokens put back
 rec-tree 254 0 0 # the tree only, two objects per node less the root
+rec-yield 0 0 0
 reverse-bytes 3 0 0
 slice-imm 1 0 0
 slice-lib 3 0 0

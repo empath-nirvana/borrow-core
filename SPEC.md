@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 0.35 · 2026-10-01
+Version 0.38 · 2026-10-01
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -2087,9 +2087,11 @@ A **handler** is a value implementing an effect. An answering handler has a stat
 parameter, a `let mut` variable in each clause, which the clause may assign; the clause's value is
 the operation's answer. A control handler names the type `A` of the body it handles and its
 answer `R`; its return clause receives the body's value, and an operation's clause receives the
-operation's arguments and, unless the operation is abortive, its continuation `k`. Its clauses are
-`!` code (§19's `[handle]`), so its parameters are `!` values. `with E₂[…]` lists what its clauses
-perform, served around the `with`.
+operation's arguments and, unless the operation is abortive, its continuation `k`, which `k(v)`
+resumes. Its clauses are `!` code (§19's `[handle]`); what they use besides is passed to them
+(§21): the clauses of a handler whose operations are all abortive run after it, and a handler
+whose operations resume has a state, its parameters that are not `!` and the capabilities its
+clauses use. `with E₂[…]` lists what its clauses perform, served around the `with`.
 
 `with h(…) { M }` runs `M` with `h` handling its effect. An operation is called like a function,
 `op(v)`: there is no `perform` token (decision 49). An operation's name is its own: no function may
@@ -2099,9 +2101,8 @@ All spellings are provisional (decisions 51, 55).
 
 **Errors** are the library effect `Fail[E]` (`lib/fail.bc`), `ctl raise(e: E) -> never`, handled
 by ordinary handlers: `to_result` (`inl` the value or `inr` the error), `default(d)` (the value,
-or `d(())`) and `map_err(f)` (the error `f(e)` raised to the handler around the `with`). Nothing in
-the elaborator knows them. `default` takes a `!` function, provisionally: it should take an
-ordinary owned fallback once a clause's captures follow its multiplicity (#216).
+or `d`, an owned value) and `map_err(f)` (the error `f(e)` raised to the handler around the
+`with`). Nothing in the elaborator knows them.
 
 **Iteration** is the library effect `Yield[T]` (`lib/yield.bc`), `ctl yield(x: T)`: a function that
 performs it is a generator, a `for` over a call of one handles it, and a call where a stored
@@ -2247,7 +2248,8 @@ No change to `CDerives`, the relation, the machine or the checker's rules: contr
 - Effectful callbacks, stored or passed (#161), and with them functions over computations
   (`retry`, a handler that re-runs its body, and `|>` at a computation parameter).
 - An operation that answers a borrow into the handler's state (#160); `lookup` answers a copy.
-- A handler parameter that is not `!`: a state-passing answer type (§19 *Open*).
+- A handler parameter that is not `!` is the handler's state (§21); its native lowering (§19
+  *Open*).
 - **K4: an early exit from a kernel fold.** A `raise` in the algebra of `fold_own`/`fold_imm` needs
   the fold to stop (`corpus/pending/raise-in-fold.bc`).
 - An error that holds an owned value: §19's `[raise]` asks its argument to drop.
@@ -2889,12 +2891,7 @@ resumes `κ` once, in tail position, with an answer computed without `κ`, and i
 raises, a `perform` of the operation calls the clause's code with its resume removed. Nothing
 suspends or resumes, and no continuation is materialised. A clause that captures values, or
 whose handlers differ, is a state machine like any other: resumed in tail position, it still
-runs in constant stack. A closed clause whose answer is computed by a term that may raise, under
-a finaliser that resumes `κ` with the answer and cancels `κ` when the term unwinds
-(`b ← M unwind κ.cancel; κ.resume b`), is a direct call too (`unwindClause?`): as a direct call
-the unwind passes through the performing code's own frames, which is what the cancel runs. They
-differ only when a finaliser of those frames raises, which a cancel suppresses or keeps and an
-unwind lets supersede (*Cancels*). This is how `rec`'s clause runs (§20).
+runs in constant stack.
 
 **Abortive payloads.** A `raise`'s argument is carried as a variant of the program's abortive
 operations when it has more than one (`wrapRaise`), and a handler's clause takes it out of its
@@ -2966,7 +2963,9 @@ own: its handler answers one of two closures. The lowering adds neither.
   (K3, #162): richer reporting of suppressed finaliser errors; non-abortive control operations in
   a finaliser.
 - Parameterized handlers are written with a state-passing answer type
-  `F R = F(U(S ⊸ F (A ⊗ S)))`; a native parameter is not provided.
+  `F R = F(U(S ⊸ F (A ⊗ S)))`, which the elaborator gives a handler with a state (§21); a native
+  parameter in the lowering is not provided: each resume applies a closure of the state, a
+  dispatched call.
 - **Shallow handlers:** covered by `ν` codata (stored generators, §15) for step-wise handling; not
   a separate construct unless a target needs it.
 - μ with `X` under `⊸` (T15, #182).
@@ -2979,12 +2978,16 @@ own: its handler answers one of two closures. The lowering adds neither.
 
 ## 20. Entry 19 — recursion as an effect
 
+**Revised by §21.** A recursive group is the bounded fixed point of its generator, called
+directly: there is no `rec` operation and no `rec` site, and layers are transformers of the
+generator. The kernel's `bounded_fix`, the drivers, `Exhausted`, the budget and the heap driver
+below are unchanged; *Recursive groups* and *Lowering* below are as revised there.
+
 ### Motivation
 
 Decision 24 (revised): a recursive function is written as ordinary calls of itself. A function
-that calls itself, or functions that call one another, is a **recursive group**; its calls of
-itself are the group's `rec` operation, and a **driver** runs it, chosen at the call site. Two
-drivers are provided:
+that calls itself, or functions that call one another, is a **recursive group**, and a **driver**
+runs it, chosen at the call site. Two drivers are provided:
 
 - **`bounded`**, the default: a native recursion that carries a **budget of depth**, each call
   with one less. Bounded depth and finite branching make the recursion total, so it runs inside
@@ -3031,43 +3034,24 @@ up (§16), so the step is the same at every host. The step decides what a spent 
 
 A recursive group is a strongly connected component of the calls among a program's functions
 that has a call in it (`Frontend/Elab/Effects.lean`, `recGroupsOf`); it is declared at its last
-member (`defineGroup`). Its members answer one type `B`, take no lifetime parameters, and are
-persistent functions. Its **row** is the union of its bodies' rows and the exhaustion effect.
+member (`defineGroup`). Its members take no lifetime parameters and are persistent functions. Its
+**row** is the union of its bodies' rows and the exhaustion effect.
 
 The **exhaustion effect** is the first declared effect with no type parameters whose one
 operation is abortive and takes no argument: `Exhausted` of `lib/rec.bc` (`include rec`), by its
 structure, as the iteration effect is (§15). Nothing in the elaborator names an effect.
 
 A call of a member from outside the group is a call of the group's **copy** for what serves its
-row there (§18's copies, `groupCopy`):
-
-- **The step** `g__step__…` takes the self-reference and the argument of a member, tagged by the
-  member (`A = P₁ ⊕ … ⊕ Pₙ`), and runs that member's body under a handler of the group's `rec`
-  site, a static name of its own, whose one operation is
-
-      rec : !U(A ⊸ F_Σ B) ⊗ A ↠ B            (affine)
-
-  `Σ` the group's row. A call of a member `j` inside the step is
-  `case self { inj₁ _ ⇒ exhausted () | inj₂ f ⇒ perform[rec] (f, inj_j W) }`. The clause is closed:
-
-      rec ((f, a), κ) = b ← force f a unwind (κ.cancel); κ.resume b
-
-- **The driver** of member `j` is `bounded_fix[A, F_Σ B] (step, (budget, inj_j W))`, the budget
-  `recBudget` (provisional, 10 000).
-
+row there (§18's copies, `groupCopy`): the bounded fixed point of the group's generator (§21).
 The kernel has no recursive type and no recursive handler: the self-reference is a value the
-step is given (the knot is tied by `bounded_fix`), and the operation carries it, so the clause is
-closed. The rows are first order (decision 57): the self-reference's type `!U(A ⊸ F_Σ B)` names
-the row without `rec`.
+generator is given, and the knot is tied by `bounded_fix`.
 
-**Not provided**, each rejected with a message: a member whose body has a `while` or a `loop`; a
-recursion that uses an answering effect's capability, or performs an operation that resumes (its
-continuation is cancelled at an abortive row only); members with different result types; a
-generic recursive function; and a call of itself inside a handler of an effect its recursion
-performs, which would need a site per level (recursion through a site, decision 57; generative
-labels, #173; `corpus/reject/rec-through-site.bc`). A recursion with no handler of `Exhausted` in
-scope is rejected as any unhandled operation is (`corpus/reject/rec-unhandled.bc`): a platform
-that provides none rejects unbounded recursion statically.
+**Not provided**, each rejected with a message: a member whose body has a `while` or a `loop`
+(§21 *Open*); a generic recursive function; and a call of itself inside a handler of an effect
+its recursion performs, which would need a site per level (recursion through a site, decision 57;
+generative labels, #173; `corpus/reject/rec-through-site.bc`). A recursion with no handler of
+`Exhausted` in scope is rejected as any unhandled operation is (`corpus/reject/rec-unhandled.bc`):
+a platform that provides none rejects unbounded recursion statically.
 
 ### The heap driver
 
@@ -3100,12 +3084,9 @@ A recursion under `deep` that performs an effect is not provided.
 
 `bounded_fix` is converted to two codes (`Backend/Clos/Convert.lean`, `fixValue`): `fix (s, (k, a))`
 calls `s` on `(self, a)`, and `self`'s closure, a stack value of `s`'s words and `k − 1`, calls
-`fix` again. The `rec` site's clause resumes in tail position with an answer that may raise
-under a finaliser that cancels the continuation; such an operation is a direct call of its
-clause (`Backend/Clos/Capture.lean`, `unwindClause?`): as a direct call, an unwind passes through
-the performing code's own frames, which is what the cancel runs. So each level is a native call
-of known code, with nothing allocated and nothing dispatched (`corpus/rec-fib.bc`: 0, 0, 0;
-`corpus/rec-tree.bc`: the tree's own objects only).
+`fix` again. A member's call of the group is a direct call of the self-reference (§21), so each
+level is a native call of known code, with nothing allocated and nothing dispatched
+(`corpus/rec-fib.bc`: 0, 0, 0; `corpus/rec-tree.bc`: the tree's own objects only).
 
 `wasmtime` runs with a 64 MiB stack (`Backend.wasmStackBytes`, `wasmtimeArgs`); the budget is
 calibrated against it with room for the finalisers an unwind runs (headroom): measured at about
@@ -3132,15 +3113,169 @@ every other rule and every existing theorem keep their statements. `fundamentalC
 
 ### Open
 
-- **`memo`**, a layer that intercepts `rec` and never drives it, needs a map (#211); deferred.
+- **`memo`**, a layer (§21), needs a map (#211); deferred.
 - **The budget is per driver**: a recursion nested in another's body has a budget of its own, so
   their native depth adds. A global check (the stack pointer, with LLVM) makes it one.
 - **Exact frame sizes** for the headroom: the calibration is a measured constant
   (provisional).
-- A recursion whose body loops, or performs an operation that resumes; a recursion under `deep`
-  that performs an effect; a generic recursive function; recursion through a site (#173).
+- A recursion under `deep` that performs an effect; a generic recursive function; recursion
+  through a site (#173). A recursion whose body loops: §21 *Open*.
 - Tail recursion modulo context (Leijen and Lorenzen, POPL '23) could make some frames smaller
   before they reach the buffer; `fold_imm`'s native depth could use the same buffer.
+
+---
+
+## 21. Entry 20 — recursion as the fixed point of a generator; closure conversion at the seams
+
+### Motivation
+
+§20 turned a recursive group's calls of itself into an operation, `rec`, at a site of the
+group's own, whose clause called the self-reference. The second-class spike
+(`docs/second-class-and-system-c.md`, #229) found that this site, and not the kernel, caused most
+of the gaps §20 listed:
+
+- **an operation that resumes in a recursion**: `[then]`'s finaliser is at an abortive row, and the
+  site's clause cancelled its continuation there, so the recursion's row could hold only abortive
+  operations;
+- **an answering capability in a recursion**: the group's step is `!` code, a top-level `def`, and
+  nothing passed it the capability;
+- **members with different result types**: the group was one `bounded_fix[A, C]` with the members'
+  arguments a sum and their answers one `C`.
+
+And handler clauses (#216) are `!` code, so a handler could be given only `!` values.
+
+One principle closes these at elaboration, with no kernel change: **effectful code is `!` code,
+and its environment is passed to it at each call** (closure conversion at the seams; §2's `FnMut`
+row; the environment a copy of a function with a row already takes, §18). It is not captured.
+A recursive group is the **fixed point of a generator** (Cook and Palsberg), called directly; a
+layer is a **transformer of the generator**; a clause of a handler receives its environment from
+the handler's state, or runs after the handler. Decision 59; decision 24 revised.
+
+### Recursive groups
+
+A group with members `fⱼ : Pⱼ → Tⱼ` at the row `Σ`, copied for an environment `E` (the
+capabilities its copy takes, §18: the answering effects' capabilities in the order of the row, and
+the variable a `for`'s site threads), is the bounded fixed point of its **generator** at the record
+of its members (Bekič):
+
+    R = &ⱼ (E ⊗ Pⱼ ⊸ F_Σ (E ⊗ Tⱼ))                  (one member: its function type)
+    gen : !U ((1 ⊕ !U(1 ⊸ R)) ⊗ 1 ⊸ R)               (`g__step__…`)
+
+- **The generator** answers the record of the members' bodies, each taking `E` first and handing it
+  back first, as a copy does. It is `!` code that holds nothing; when `E` has capabilities it is
+  `!(∀'l₁ … 'lₙ. !U(…))` over their lifetimes.
+- **A call of member `j` inside it** is a direct call of the self-reference:
+
+      case self { inj₁ _ ⇒ abort[e.0] () | inj₂ g ⇒ (force (unbang g) ()).j (E, W) }
+
+  with `E` bound again after, `e` the site of the exhaustion effect.
+- **A member's copy** is `(bounded_fix[1, R] (gen, (budget, ()))).j`, at the budget `recBudget`. It
+  has the type a copy of the member has, so a call of it from outside is a call of a copy.
+
+So an answering capability flows through a recursion as part of its argument and answer, an
+operation that resumes is performed by the recursion's own frames (nothing is cancelled around a
+call of itself), and members answer different types. A recursive generator under a `for` threads
+the `for`'s variables as its environment, its copy generic in their type.
+
+**The kernel.** `bounded_fix[1, R]` is §20's constant at `A = 1` and `C = R`; `boundedFix_compatX`
+is proved at every computation type, a record among them. The spike's `boundedFixEnv_compatX` and
+`boundedFixRec_compatX` (`experiments/SecondClass/SecondClass/Restated.lean`) are instances of it.
+
+### Layers: transformers of the generator
+
+A **layer** is a function whose written type is `!(!(A => B) * A => B)`, `A` and `B` its two type
+parameters (recognized by that structure, as a heap driver is by its type, §20):
+
+    fn counted[A, B](call: !(A => B), a: A) -> B = tick(); call(a)
+
+`with L { M }` drives the recursive groups `M` calls (lexically, as `with deep`) by `bounded` over
+their generator transformed by `L`, before the fixed point is taken:
+
+    T_L(gen)(self, u) = gen(wrap self, u)
+    wrap (inj₁ u) = inj₁ u
+    wrap (inj₂ g) = inj₂ (λ_. ⟨ λx. L's body at (Pⱼ, Tⱼ), its call(a) the member's call through g ⟩ⱼ)
+
+- The transformer `L__g__…` is a `def`, applied in each member's copy:
+  `bounded_fix[1, R] (T_Lₙ(… T_L₁(gen)), (budget, ()))`. Layers nest; the innermost runs first
+  around a call.
+- A call made by the recursion of itself runs the layer; the call from outside does not.
+- The layer's row joins the row of a call of the group inside `with L`, and its capabilities join
+  `E`: `call(a)` passes the environment, as any call of the group does. `call` can only be called.
+- A copy's body is outside the layers in scope at its call (lexical, as `deep`).
+
+### Handler clauses
+
+**Abortive operations: the clauses run after the handler.** When every operation of a handler is
+abortive, each clause runs at most once and never resumes, so (the derived rule
+`d_handleAbortCapture` of the spike, as an elaboration):
+
+    with h(e⃗) { M }  ≜  (p⃗, r) ← handle_n M with (λx. inl x, (λv. inr (inj_i v))ᵢ);
+                       case r { inl x ⇒ N_ret | inr e ⇒ case e { … inj_i v ⇒ N_i … } }
+
+- The site binds the arguments to the parameters `p⃗` before the body and answers them beside its
+  own answer; the `case` runs in the scope of the `with`, so the clauses use the parameters,
+  whatever their types, and the capabilities in scope, as any code there does.
+- The `case` is annotated with the handler's answer type, which the typed elaboration knows once
+  the handler's type parameters are matched: the site's `HInfo.after`, the type name `fx_res{n}`.
+- `default(d)` takes an owned value `d` (`lib/fail.bc`).
+
+**Operations that resume: the handler's state.** `k(v)` in a clause resumes its continuation:
+`(force k).1 v`. A handler whose operations resume and that has a parameter not written `!`, or
+whose clauses use a capability, has a **state** `S = S' ⊗ P`, the capabilities `S'` its clauses
+use and its parameters `P` (`mut` parameters among them):
+
+- the site answers `U(S ⊸ F_Σ (S' ⊗ R))`; the return clause and each clause answer a thunk of the
+  state, which binds `S'` and `P`;
+- `k(v)` applies the continuation's answer to the current state: the parameters are passed on, and
+  the capabilities come back with the answer;
+- after the site, its answer is applied to the initial state, the arguments and the capabilities.
+
+**Not provided**, each rejected with a message: a capability used both by a resuming handler's
+body and by its clauses (the handler holds it between operations); the continuation of a handler
+with a state passed as a value; a clause that uses a `for`'s threaded variables.
+
+### Lowering
+
+- **Recursion.** `fixValue` as in §20; there is no `rec` site, so `Capture`'s rule for a clause
+  that resumes under a cancelling finaliser (`unwindClause?`) is removed. `corpus/rec-fib.bc` stays
+  at 0, 0, 0; `rec-parser.bc` falls from 22 allocations to 17.
+- **Layers** allocate nothing (`corpus/rec-layer.bc`: the two cells only).
+- **Abortive clauses after the handler** cost what the clauses did: every corpus program of `Fail`
+  keeps its counts.
+- **A handler with a state** applies a closure of the state at the start and at each resume: a
+  dispatched call each (`corpus/clause-captures.bc`: 3, as the spike's P4(a)). A native handler
+  parameter is not built (§19 *Open*).
+
+### Programs
+
+`corpus/rec-log.bc` (an answering capability through a recursion), `rec-yield.bc` (a recursive
+generator under a `for`), `rec-emit.bc` (a clause that resumes in the middle of a recursion),
+`rec-mixed.bc` (members with different result types), `rec-layer.bc` (two layers composed),
+`clause-captures.bc` (an owned argument and a capability in abortive clauses; a handler with a
+state); `corpus/reject/rec-loop.bc`; reports `corpus/reports/rec-*.txt`,
+`clause-captures.txt`. `rec-overflow.bc` still unwinds a million-deep recursion with `live 0`.
+
+### Baseline
+
+No change to `CDerives`, the relation, the machine or the checker's rules. Every elaborated form
+is typed by the existing rules (`bounded_fix`, `[handle]`, `[let]`); `fundamentalC`, `adequacyC`,
+`fundamentalD` and `adequacyD` keep their statements and cover every elaborated program.
+
+### Open
+
+- **A recursion whose body loops.** Its members are div (§14), so the fixed point is taken at
+  loops, which `bounded_fix` types at every computation type (the spike's P3). But the budget runs
+  out inside a loop's observation, where `Exhausted` has no handler: a handler around a div
+  computation is not provided for any effect (`with to_result { f(x) }`, `f` looping and raising,
+  is rejected the same way). Rejected with that reason (`corpus/reject/rec-loop.bc`).
+- A native handler parameter (§19 *Open*).
+- **`memo`**, a layer, needs a map (#211) and a layer of its own state: an answering effect with
+  type parameters (§18 *Open*).
+- A layer over a recursion under `deep`; the heap driver's members with different result types.
+- Effects under `deep` and generic recursion (§20 *Open*; separate, per the spike).
+- Recursion through a site (decision 57's parser, `corpus/reject/rec-through-site.bc`): a level's
+  own handler is a site per level, which static names cannot give (generative names, L2, #173).
+  Recursion through values: a member passed as a value is a function with a row (#161).
 
 ---
 
@@ -3185,6 +3320,10 @@ the machine in `Frontend/Sugar.lean` (`recMachine`); `lib/rec.bc`; and the lower
 `Backend/Clos/Convert.lean` (`fixValue`) and `Backend/Clos/Capture.lean` (`unwindClause?`,
 `wrapRaise`).
 
+Entry 20 (§21) is implemented in `Frontend/Elab/Effects.lean` (`groupCopy`, `selfCall`, `layerCopy`,
+`withCtl`, `resumeCall`) and `Frontend/Sugar.lean` (`hndCtlC`, `HInfo.after`), with no change to
+`CDerives`; `Backend/Clos/Capture.lean` loses `unwindClause?`.
+
 Entry 18 (§19) is in progress (#186). Stages 1–3 are implemented:
 - the machine: `perform`, `raise`, `hnd`, `ubind`, `ccatch` and `cfin`, and their steps, in
   `Paper/`;
@@ -3216,6 +3355,16 @@ with every kernel program at every stage (*Lowering*).
 ---
 
 ## Changelog
+
+- **0.38** (2026-10-01) — §21 (#229, #216): closure conversion at the seams. A recursive group is
+  the bounded fixed point of its generator, taken at the record of its members and called
+  directly: the `rec` operation and its site are removed. A recursion may use an answering
+  capability (its environment, passed with the argument), perform an operation that resumes, and
+  have members with different result types. Layers are transformers of the generator, `with L
+  { … }`. A handler whose operations are all abortive runs its clauses after it, so they use its
+  arguments and the capabilities in scope (`default` takes an owned value); a handler whose
+  operations resume has a state, its parameters that are not `!` and the capabilities its clauses
+  use, and `k(v)` resumes. §20 revised; decision 24 revised; decision 59.
 
 - **0.37** (2026-10-01) — §20 (#188, stage 3; #158): recursion as an effect. A function that
   calls itself, or functions that call one another, is a recursive group; its calls of itself are

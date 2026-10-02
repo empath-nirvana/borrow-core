@@ -4,17 +4,21 @@ lowering 27:1: copy `checked_sum__n3`: `checked_sum` for the site 3 of `Fail`
 lowering 27:1: copy `checked_sum__n1`: `checked_sum` for the site 1 of `Fail`
 lowering 33:9: with map_err (Fail): a handler, the static name 4; raise abortive: a branch per call (final ctl)
 lowering 33:9: with map_err (Fail): a handler, the static name 2; raise abortive: a branch per call (final ctl)
+lowering 33:9: with map_err: every operation abortive, so its clauses run after the handler, in the scope of the `with`
+lowering 39:52: with to_result: every operation abortive, so its clauses run after the handler, in the scope of the `with`
 lowering 39:52: with to_result (Fail): a handler, the static name 1; raise abortive: a branch per call (final ctl)
 lowering 42:49: with default (Fail): a handler, the static name 3; raise abortive: a branch per call (final ctl)
+lowering 42:49: with default: every operation abortive, so its clauses run after the handler, in the scope of the `with`
 lowering 45:1: copy `doubled__n5`: `doubled` for the site 5 of `Fail`
+lowering 58:9: with to_result: every operation abortive, so its clauses run after the handler, in the scope of the `with`
 lowering 58:9: with to_result (Fail): a handler, the static name 5; raise abortive: a branch per call (final ctl)
-call 31:14: raise (Fail) → abort[3.0], handled by the caller at 27:1: abortive, it never resumes
 call 31:14: raise (Fail) → abort[1.0], handled by the caller at 27:1: abortive, it never resumes
+call 31:14: raise (Fail) → abort[3.0], handled by the caller at 27:1: abortive, it never resumes
 call 32:16: raise (Fail) → abort[1.0], handled by the caller at 27:1: abortive, it never resumes
 call 32:16: raise (Fail) → abort[3.0], handled by the caller at 27:1: abortive, it never resumes
 call 33:42: add_checked → `add_checked__n4`
 call 33:42: add_checked → `add_checked__n2`
 call 39:69: checked_sum → `checked_sum__n1`
-call 42:81: checked_sum → `checked_sum__n3`
+call 42:71: checked_sum → `checked_sum__n3`
 call 50:16: raise (Fail) → abort[5.0], handled by the caller at 45:1: abortive, it never resumes
 call 58:26: doubled → `doubled__n5`

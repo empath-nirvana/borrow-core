@@ -1,0 +1,27 @@
+effect 18:1: Exhausted: exhausted (ctl, affine, abortive)
+row 20:1: counted: Count
+row 22:1: traced: Log
+row 24:1: sum: Exhausted (a recursive group: the fixed point of its generator, driven by `bounded` at the budget 10000)
+lowering 24:1: layer counted for the group sum: `counted__sum__n1_count_tally_counted_traced`, a transformer of its generator, applied before the fixed point
+lowering 24:1: recursive group sum: the generator `sum__step__n2_count_counted`, the record of its members, each taking the capabilities as its environment; each member's copy is bounded_fix of it at the budget 10000, its calls of itself direct calls of the self-reference, the exhaustion effect at the site 2
+lowering 24:1: layer traced for the group sum: `traced__sum__n1_count_tally_counted_traced`, a transformer of its generator, applied before the fixed point
+lowering 24:1: recursive group sum: the generator `sum__step__n1_count_tally_counted_traced`, the record of its members, each taking the capabilities as its environment; each member's copy is bounded_fix of it at the budget 10000, its calls of itself direct calls of the self-reference, the exhaustion effect at the site 1
+lowering 24:1: layer counted for the group sum: `counted__sum__n2_count_counted`, a transformer of its generator, applied before the fixed point
+lowering 29:11: with count (Count): a borrow block of its state (lent from `c`); its operations are calls of the clauses on the capability
+lowering 29:32: with counted: a layer; the recursive groups called in its body are the fixed points of their generators transformed by `counted`
+lowering 29:47: with on_exhausted (Exhausted): a handler, the static name 2; exhausted abortive: a branch per call (final ctl)
+lowering 29:47: with on_exhausted: every operation abortive, so its clauses run after the handler, in the scope of the `with`
+lowering 30:11: with tally (Log): a borrow block of its state (lent from `l`); its operations are calls of the clauses on the capability
+lowering 30:32: with count (Count): a borrow block of its state (lent from `c`); its operations are calls of the clauses on the capability
+lowering 30:53: with traced: a layer; the recursive groups called in its body are the fixed points of their generators transformed by `traced`
+lowering 30:67: with counted: a layer; the recursive groups called in its body are the fixed points of their generators transformed by `counted`
+lowering 31:5: with on_exhausted: every operation abortive, so its clauses run after the handler, in the scope of the `with`
+lowering 31:5: with on_exhausted (Exhausted): a handler, the static name 1; exhausted abortive: a branch per call (final ctl)
+call 20:48: tick (Count) → `count__tick`, on the state of `count`
+call 20:56: call → the member's call, through the self-reference
+call 22:47: note (Log) → `tally__note`, on the state of `tally`
+call 22:56: call → the member's call, through the self-reference
+call 24:52: sum → the group's self-reference, called directly, passing the capabilities; at the end of the budget abort[2.0]
+call 24:52: sum → the group's self-reference, called directly, passing the capabilities; at the end of the budget abort[1.0]
+call 29:84: sum → `sum__n2_count_counted`, passing the capabilities
+call 31:42: sum → `sum__n1_count_tally_counted_traced`, passing the capabilities

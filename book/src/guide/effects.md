@@ -72,7 +72,7 @@ only its argument.
 
 Errors are such an effect, `Fail[E]`, declared in the library (`include fail`) with three
 handlers: `to_result` answers `inl` the value or `inr` the error, `default(d)` the value or
-`d(())`, and `map_err(f)` raises `f(e)` to the handler around it. A function that raises writes its
+`d`, and `map_err(f)` raises `f(e)` to the handler around it. A function that raises writes its
 error type in its row, `with Fail[E]`, unless it gets it from a function it calls. There is no
 `?`: a call of a function that raises propagates the error by itself.
 
@@ -99,7 +99,7 @@ main -> (i32 + i32) * ((i32 + i32) * i32) =
   let b = array_new[i32] (3, bad);
   let x: i32 + i32 = borrow imm a { v -> with to_result { twice(v) } };
   let y: i32 + i32 = borrow imm b { v -> with to_result { twice(v) } };
-  let z: i32 = borrow imm b { v -> with default(!{ u -> 0 }) { twice(v) } };
+  let z: i32 = borrow imm b { v -> with default(0) { twice(v) } };
   (x, (y, z))
 ```
 
@@ -115,9 +115,30 @@ handler to_result[E, A]: Fail[E], A -> A + E = {
 ```
 
 `Fail[E], A -> A + E` says that it handles `Fail[E]` around a body of type `A`, and answers
-`A + E`. Its clauses are `!` code, so what a handler is given is a `!` value, such as `default`'s
-function. That is provisional: `default` should take an ordinary owned fallback once a clause's
-captures follow its multiplicity (#216).
+`A + E`. Every operation of `Fail` is abortive, so a clause runs at most once, after the handler:
+what a handler is given is an ordinary value, such as `default`'s fallback, owned and dropped when
+the body answers, and a clause may use the capabilities in scope at the `with`.
+
+An operation that resumes passes its continuation `k` to its clause, and `k(v)` resumes it: the
+body goes on with `v` as the operation's answer, and `k(v)` answers what the handler answers for
+the rest of the body. Such a clause may run many times, once per operation, so what it uses is
+the handler's **state**: its parameters (`mut` ones may be assigned) and the capabilities its
+clauses use, passed to each clause and, at each resume, to the rest of the body.
+
+```bc
+effect Ask { ctl ask() -> i32 }
+
+-- Answers each `ask` with the cell's content, which it then increments.
+handler asking(mut c: ref i32): Ask, i32 -> i32 = {
+  return(a) = a + free(c);
+  ask(k) = { let v = free(c); c = alloc(v + 1); k(v) }
+}
+
+main -> i32 = with asking(alloc(5)) { let x = ask(); let y = ask(); x * 10 + y }
+-- answer: i32[63]
+```
+
+The two `ask`s read 5 and 6, and the return clause adds the cell's last content, 7.
 
 An abort unwinds: what the abandoned code owned is dropped by its destructors, and a borrow it
 was inside ends, the place going back to its owner. A value with no destructor (a thunk, a

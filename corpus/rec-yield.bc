@@ -1,0 +1,22 @@
+-- A recursion that yields (SPEC §20, §15): `walk` yields before and after its call of itself, so
+-- the operation resumes in the middle of the recursion. The call of itself is a direct call of the
+-- self-reference, not an operation, so nothing is cancelled around it; the `for`'s site threads
+-- its variables through `yield` into each level, as the environment. Nothing is allocated and
+-- nothing is dispatched: each `yield` is a direct call of the `for`'s body.
+--
+-- Answer: i32[165]: 5 + 4 + 3 + 2 + 1 + 0 on the way down and 10 * (1 + 2 + 3 + 4 + 5) on the way
+-- up. A recursion whose yields were lost gives less; one that resumed twice gives more.
+
+include rec
+include yield
+
+fn walk(n: i32) -> 1 with Yield[i32], Exhausted =
+  yield(n);
+  if n == 0 { () } else { walk(n - 1); yield(n * 10) }
+
+fn sum_walk(n: i32) -> i32 with Exhausted =
+  let mut s = 0;
+  for x in walk(n) { s = s + x };
+  s
+
+main -> i32 = with on_exhausted(!{ u -> 0 - 1 }) { sum_walk(5) }

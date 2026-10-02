@@ -46,9 +46,11 @@ mechanization of Wagner, Gierczak, Marshall, Li and Ahmed, *From Linearity to Bo
   *Cancels*: the canceller re-raises the first finaliser error that names a handler outside the
   cancelled region) (§19).
 
-Recursion is an effect (decision 24, SPEC §20): a function calls itself, and functions call one
-another, as written; the calls are the group's `rec` operation, run by a driver chosen at the call
-site. The default, `bounded`, is the kernel's `bounded_fix`: a native recursion with a budget of
+Recursion is the fixed point of a generator (decision 24, SPEC §20, §21): a function calls itself,
+and functions call one another, as written; the group is the bounded fixed point of its generator,
+each call a direct call of the self-reference, run by a driver chosen at the call site. Its
+environment (the capabilities it uses) is passed with each call, and layers (`with L { … }`) are
+transformers of the generator. The default, `bounded`, is the kernel's `bounded_fix`: a native recursion with a budget of
 depth whose end performs `Exhausted` (`lib/rec.bc`), an abortive effect a handler catches. The
 heap driver `deep` keeps the pending calls as first-order frames in one growable buffer and is
 div. Pending: the layer `memo`, which needs a map (#211).

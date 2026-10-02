@@ -3,7 +3,7 @@ import Frontend.Print
 import Frontend.Elab.Subst
 
 /-!
-# Frontend — Elab — effects and handlers  `[spec §18, §19]`
+# Frontend — Elab — effects and handlers  `[spec §18, §19, §20, §21]`
 
 An effect declares operations, each **answering** (`fn`) or **control** (`ctl`, with the
 structural qualifier of its continuation: affine by default, `linear ctl`, `multi ctl`). An effect
@@ -24,7 +24,10 @@ rest of the sugar; it knows no effect by name.
   (answer `0` at a qualifier with weakening). The site becomes the kernel's `handle[n]` with the
   handler's clauses, assembled where the types are known (`VSugar.hndCtl`, `Frontend/Sugar.lean`).
   A handler may perform the operations of its own row (`with E₂[…]` after `for`), which resolve to
-  the sites around its `with`.
+  the sites around its `with`. Its clauses are `!` code, and what they use is passed to them
+  (§21): a handler whose operations are all abortive runs its clauses after it, and one whose
+  operations resume has a state, its parameters and the capabilities its clauses use; `k(v)`
+  resumes.
 * **A function's row** is the set of effect instances it performs: the operations it calls, and
   the rows of the functions it calls, less those a `with` inside it handles. It is inferred in
   declaration order; a written row (`fn f(…) -> T with E[A]`) is a promise that the inferred row is
@@ -34,6 +37,10 @@ rest of the sugar; it knows no effect by name.
   once per instance (decision 45): the copy `f__…` takes the capabilities first and hands them back
   first, and its type has the sites' operations as its row, `A ⇒ F[n.i …] B`. A call of `f` is a
   call of that copy, bound before the value it is in, so that it is a computation of its own.
+* **A recursive group** (§20, §21) is the bounded fixed point of its generator, taken at the
+  record of its members, each taking the copy's capabilities first as any copy does; a call of a
+  member inside it is a direct call of the self-reference. A layer is a transformer of the
+  generator, applied before the fixed point.
 
 What is not provided, with the message that says so: an operation inside a closure or block that
 is not run in place, and a function with a row passed as a value (effectful callbacks, #161); a
@@ -95,32 +102,11 @@ structure FSig where
   group : Option (String × Nat) := none
 
 /-- A recursive group (SPEC §20): the functions of one strongly connected component of the calls,
-each taken apart (`FnParts`), in declaration order, and their common result type. The group is
-named by its first member. -/
+each taken apart (`FnParts`), in declaration order. The group is named by its first member. -/
 structure RGroup where
   name : String
   members : List (String × FnParts)
-  B : VTy
   sp : Span
-
-/-- The step of a recursive group being elaborated: its members, the static name `m` of its `rec`
-site, the site `e` of the exhaustion effect, and the variable `self` holding the self-reference
-`1 + !U(A ⊸ C)` (`bounded_fix`'s, SPEC §20). -/
-structure RSelf where
-  members : List String
-  m : Nat
-  e : Nat
-  self : String
-  /-- The type of a self-call inside the step, `F[m.0 …, row] B`: the type the exhaustion
-  effect's operation is ascribed there. -/
-  C : CTy
-  /-- The group's argument, the sum of its members' parameter types. -/
-  A : VTy
-  /-- The sites the copy serves its row's control effects at, by effect. -/
-  served : List (String × Nat)
-  /-- Under a heap driver: a call of itself is a call of the self-reference `fx_rself{j}` of the
-  group's machine source, which the typed elaboration turns into a request (`recMachine`). -/
-  deep : Bool := false
 
 /-- What the elaboration knows, each declared before the point being elaborated. -/
 structure Env where
@@ -135,6 +121,12 @@ structure Env where
   groups : List RGroup := []
   /-- The written type of every function declared so far, for its parameters' types. -/
   sigs : List (String × VTy) := []
+  /-- The layers declared so far (SPEC §20), each with its declaration. -/
+  layers : List (String × Decl) := []
+  /-- Inside `with L { … }` of layers (SPEC §20), innermost first: the recursive groups called are
+  driven by `bounded` over their generator transformed by them, and a call of a member performs
+  the layers' rows too. A copy's body is outside them: they apply to the calls written inside. -/
+  inLayers : List String := []
 
 /-- A capability in scope: the answering effect it serves, the variable holding its `mut 'l S`
 borrow, the lifetime `'l`, and the handler. Or the variable a `for`'s site of an iteration effect
@@ -170,6 +162,23 @@ structure Site where
 def Site.thrVar (s : Site) : Option String := match s.thr with
   | some (w, _) => some w
   | none => none
+
+/-- The generator of a recursive group being elaborated (SPEC §20): its members, the site `e` of
+the exhaustion effect, and the variable `self` holding the self-reference `1 + !U(1 ⊸ R)`
+(`bounded_fix`'s at the record `R` of the members). -/
+structure RSelf where
+  members : List String
+  e : Nat
+  self : String
+  /-- Each member's computation type in `R`, `E ⊗ Pⱼ ⊸ F_Σ (E ⊗ Tⱼ)`: the type of its self-call. -/
+  Cs : List CTy
+  /-- The environment `E`: the capabilities the group's copy takes and hands back. -/
+  env : List Cap
+  /-- The sites the copy serves its row's control effects at, by effect. -/
+  served : List (String × Nat)
+  /-- Under a heap driver: a call of itself is a call of the self-reference `fx_rself{j}` of the
+  group's machine source, which the typed elaboration turns into a request (`recMachine`). -/
+  deep : Bool := false
 
 /-- The state of the elaboration: counters for fresh names and site names, the reports for
 `bcc check`, and the copies made (finished ones in `made`, in the order they were finished). -/
@@ -243,6 +252,18 @@ def Env.driver? (env : Env) (x : String) : Bool :=
   | some (.bang _ (.lolli _ (.tensor _ (.bang _ (.lolli _ _ (.sum _ _ (.tensor _ _ (.sum _ _ (.unit _))))))
       (.tensor _ (.bang _ (.lolli _ (.tensor _ _ _) (.sum _ _ _))) _)) (.thunk _ (.loop _ _ (.unit _))))) => true
   | _ => false
+
+/-- A written type is a **layer**'s (SPEC §20): `!(!(A => B) * A => B)`, `A` and `B` its two type
+parameters. A layer is a transformer of a recursion's generator: `with x { M }` applies it to the
+recursive groups `M` calls, before their fixed point is taken; its body runs around each call a
+member makes of the group, `call(a)` the call itself. The structure decides it, not the name. -/
+def isLayerTy (tps : List String) : VTy → Bool
+  | .bang _ (.lolli _ (.tensor _ (.bang _ (.lolli _ (.name _ a) (.name _ b))) (.name _ a')) (.name _ b')) =>
+    tps == [a, b] && a == a' && b == b' && a != b
+  | _ => false
+
+/-- The layer `x`'s declaration. -/
+def Env.layer? (env : Env) (x : String) : Option Decl := env.layers.lookup x
 
 /-- The budget of depth `bounded` gives a recursion (SPEC §20): calibrated against the wasm stack
 `wasmtime` is run with (`Backend.wasmStackBytes`, 64 MiB), so that a recursion at the budget leaves
@@ -360,6 +381,12 @@ def union (a b : List Inst) : List Inst := b.foldl addInst a
 
 def without (r : List Inst) (e : String) : List Inst := r.filter (·.eff != e)
 
+/-- What a call of `g` performs: its row, and for a member of a recursive group the rows of the
+layers in scope (`inLayers`). -/
+def Env.callRow (env : Env) (g : FSig) : List Inst :=
+  if g.group.isNone then g.row
+  else env.inLayers.foldl (fun r L => union r (((env.fn? L).map (·.row)).getD [])) g.row
+
 /-- The instance an operation call of `o` performs: determined when its effect takes no type. -/
 def Env.opInst (env : Env) (o : OpSig) : Inst :=
   ⟨o.eff, match env.eff? o.eff with
@@ -398,13 +425,14 @@ def rowV (env : Env) : Nat → Val → List Inst
           if env.driver? h then match env.exhEff? with
             | some e => without inner e.name
             | none => inner
+          else if (env.layer? h).isSome then union inner ((env.fn? h).map (·.row) |>.getD [])
           else inner
       union (rowV env n P) inner
     | .app _ f W =>
       let head := match headName f with
         | some x => match env.op? x, env.fn? x with
           | some o, _ => [env.opInst o]
-          | none, some g => g.row
+          | none, some g => env.callRow g
           | none, none => rowV env n f
         | none => rowV env n f
       let args := match headName f with
@@ -412,7 +440,7 @@ def rowV (env : Env) : Nat → Val → List Inst
         | none => rowV env n W
       union head args
     | .var _ x => match env.fn? x with
-      | some g => g.row
+      | some g => env.callRow g
       | none => []
     | .pair _ V W => union (rowV env n V) (rowV env n W)
     | .inl _ V | .inr _ V | .unbang _ V | .boxed _ _ V | .unbox _ V | .sub _ V _ | .roll _ V
@@ -492,6 +520,30 @@ def injAt (sp : Span) : Nat → Nat → Val → Val
   | _, 0, V | _, 1, V => V
   | 0, _, V => .inl sp V
   | j + 1, n + 1, V => .inr sp (injAt sp j n V)
+
+/-- The right-nested record of the computation types `Cs`: `C₁ & (C₂ & (… & Cₙ))`, `C₁` alone. -/
+def ampTys (sp : Span) : List CTy → CTy
+  | [] => .top sp
+  | [C] => C
+  | C :: Cs => .amp sp C (ampTys sp Cs)
+
+/-- The right-nested record of the computations `Ms` (`ampTys`). -/
+def withAll (sp : Span) : List Comp → Comp
+  | [] => .top sp
+  | [M] => M
+  | M :: Ms => .with_ sp M (withAll sp Ms)
+
+/-- The field `j` of `M`, a right-nested record of `n` fields (`ampTys`). -/
+def projAt (sp : Span) : Nat → Nat → Comp → Comp
+  | _, 0, M | _, 1, M => M
+  | 0, _, M => .proj sp true M
+  | j + 1, n + 1, M => projAt sp j n (.proj sp false M)
+
+/-- The tuple of the variables `xs`: `()` when there are none. -/
+def paramsTuple (sp : Span) : List String → Val
+  | [] => .unit sp
+  | [x] => .var sp x
+  | x :: xs => .pair sp (.var sp x) (paramsTuple sp xs)
 
 /-- `(c₁, (…, (cₙ, V)))`. -/
 def capsTuple (sp : Span) (cs : List Cap) (V : Val) : Val :=
@@ -573,7 +625,50 @@ def liftCalls : Nat → Val → StateT (List Bind) EM Val
     | .unbox sp V => do pure (.unbox sp (← liftCalls n V))
     | V => pure V
 
+mutual
+/-- The names a value refers to, as variables or `def`s applied. -/
+def refsV : Nat → Val → List String
+  | 0, _ => []
+  | n + 1, V => match V with
+    | .var _ x | .defApp _ x _ => [x]
+    | .pair _ V W | .app _ V W => refsV n V ++ refsV n W
+    | .inl _ V | .inr _ V | .unbang _ V | .boxed _ _ V | .unbox _ V | .sub _ V _ | .roll _ V
+    | .unroll _ V | .inst _ V _ | .ascribe _ V _ | .shorten _ _ _ _ V => refsV n V
+    | .thunk _ M | .thunkv _ M | .bangThunk _ M | .bangThunkv _ M | .run _ M => refsC n M
+    | _ => []
+
+/-- The names a computation refers to. -/
+def refsC : Nat → Comp → List String
+  | 0, _ => []
+  | n + 1, M => match M with
+    | .ret _ V | .absurd _ V | .perform _ _ _ V | .abort _ _ _ V => refsV n V
+    | .bind _ _ _ M N _ | .with_ _ M N => refsC n M ++ refsC n N
+    | .lam _ _ _ M | .app _ M _ | .proj _ _ M | .lamL _ _ _ M | .inst _ M _ | .nuIn _ M
+    | .nuOut _ M | .ascribe _ M _ | .handle _ _ _ _ M => refsC n M
+    | .letUnit _ V M | .letPair _ _ _ V M => refsV n V ++ refsC n M
+    | .case _ V _ M _ N | .for_ _ _ V M N => refsV n V ++ refsC n M ++ refsC n N
+    | .unwind _ _ _ M D N => refsC n M ++ refsC n D ++ refsC n N
+    | .force .. | .top _ => []
+end
+
 /-! ### Elaborating a body -/
+
+/-- In a layer's body made for a member of a group (SPEC §20): the name of its `call` parameter,
+the variable holding the function of the self-reference, and the member's field. -/
+structure LCall where
+  name : String
+  g : String
+  j : Nat
+  rs : RSelf
+
+/-- In a clause of a control handler's operation that resumes (SPEC §19): its continuation `k`,
+which `k(v)` resumes. A handler with a state (`stateful`) answers a function of its state: the
+state is its parameters `params` and the capabilities its clauses use (`Cx.caps`), passed to the
+continuation's answer at a resume; the capabilities come back beside the answer. -/
+structure ResumeK where
+  k : String
+  params : List String
+  stateful : Bool
 
 /-- The context of an elaboration: what is declared, the capabilities and handler sites in scope,
 and, in a function's copy, the capabilities its `return e` from inside a loop hands back. -/
@@ -582,13 +677,21 @@ structure Cx where
   caps : List Cap
   sites : List Site := []
   fnCaps : List Cap := []
-  /-- In the step of a recursive group (SPEC §20): the group's members, the static name of its
-  `rec` site and of the site of the exhaustion effect, and the variable holding the
-  self-reference. -/
+  /-- In the generator of a recursive group (SPEC §20): its members, its environment, the site
+  of the exhaustion effect, and the variable holding the self-reference. -/
   recSelf : Option RSelf := none
   /-- Inside `with d { … }` of a heap driver `d` (SPEC §20): the recursive groups called are driven
   by it. -/
   driver : Option String := none
+  /-- In a layer's body made for a member: its `call`, the member's call through the
+  self-reference. -/
+  layerCall : Option LCall := none
+  /-- In a clause of an operation that resumes: its continuation. -/
+  resume : Option ResumeK := none
+
+/-- What a call of `g` performs here: its row, and for a member of a recursive group the rows of
+the layers its recursion runs under. -/
+def Cx.rowOf (cx : Cx) (g : FSig) : List Inst := cx.env.callRow g
 
 /-- The capabilities of `cx` for the effects `row`, in the order of `cx.caps`. -/
 def Cx.need (cx : Cx) (row : List Inst) : List Cap := cx.caps.filter (fun c => row.any (·.eff == c.eff))
@@ -599,6 +702,15 @@ def Cx.needIn (cx : Cx) (row : List Inst) : List Cap := row.filterMap fun i => c
 
 def Cx.needV (cx : Cx) (V : Val) : List Cap := cx.need (rowV cx.env fuel V)
 def Cx.needC (cx : Cx) (M : Comp) : List Cap := cx.need (rowC cx.env fuel M)
+
+/-- `V` calls a layer's `call` (SPEC §20), or resumes a clause's continuation (SPEC §19). -/
+def Cx.lcallV (cx : Cx) (V : Val) : Bool :=
+  (match cx.layerCall with
+    | some lc => (refsV fuel V).contains lc.name
+    | none => false) ||
+  (match cx.resume with
+    | some rk => (refsV fuel V).contains rk.k
+    | none => false)
 
 /-- The control effects of `row`. -/
 def Cx.ctl (cx : Cx) (row : List Inst) : List Inst := row.filter (!cx.env.answering ·.eff)
@@ -737,7 +849,8 @@ def liftPlain (cx : Cx) : Nat → Val → StateT (List Bind) EM Val
       match f with
       | .sugar .. | .app _ (.sugar ..) _ => do pure (.app sp f (← liftPlain cx k W))
       | _ =>
-        if !(cx.needV V).isEmpty || cx.ctlV V then do pure (.app sp f (← liftPlain cx k W))
+        if !(cx.needV V).isEmpty || cx.ctlV V || cx.lcallV V then do
+          pure (.app sp f (← liftPlain cx k W))
         else liftCalls k V
     | .pair sp V W => do pure (.pair sp (← liftPlain cx k V) (← liftPlain cx k W))
     | .inl sp V => do pure (.inl sp (← liftPlain cx k V))
@@ -792,7 +905,7 @@ def trC : Nat → Cx → List Cap → Bool → Comp → EM Comp
       | some x, true =>
         match cx.env.fn? x with
         | some g =>
-          let used := cx.need g.row
+          let used := cx.need (cx.rowOf g)
           if !W.lends && used.map (·.var) == cs.map (·.var) then
             let (bs, W') ← trV n cx cs W
             let name ← copyFor n cx sp x g
@@ -917,8 +1030,10 @@ def trV : Nat → Cx → List Cap → Val → EM (List Bind × Val)
     let unhandled := row.any fun i => (cx.capOf i.eff).isNone && (cx.siteOf i.eff).isNone
     -- A `return e` from a loop's body hands the copy's capabilities back too (`plainApp`).
     let ret := !cx.fnCaps.isEmpty && retIn fuel V
-    if !needs && !unhandled && !ret && !withInV cx.env fuel V then return ([], V)
-    let (V, pre) ← if needs then (liftPlain cx fuel V).run [] else pure (V, [])
+    -- A layer's `call` is the member's call, which threads the environment.
+    let lcall := cx.lcallV V
+    if !needs && !unhandled && !ret && !lcall && !withInV cx.env fuel V then return ([], V)
+    let (V, pre) ← if needs || lcall then (liftPlain cx fuel V).run [] else pure (V, [])
     let (bs, V') ← goV n cx cs V
     pure (pre ++ bs, V')
 
@@ -938,6 +1053,17 @@ def goV : Nat → Cx → List Cap → Val → EM (List Bind × Val)
           let r ← fresh "fx_v"
           let bind : Bind := fun N => pure (bindFlat sp r none M' N)
           pure ([bind], .var sp r)
+        else if (cx.env.layer? h).isSome then do
+          -- `with L { M }` of a layer: `M`, its recursive groups' generators transformed by `L`.
+          report ksp "lowering" (s!"with {h}: a layer; the recursive groups called in its body are " ++
+            s!"the fixed points of their generators transformed by `{h}`")
+          let cxL : Cx := { cx with env := { cx.env with inLayers := h :: cx.env.inLayers } }
+          let csM := cx.need (rowV cx.env fuel V)
+          let M' ← trC k cxL csM true M
+          let t ← fresh "fx_b"
+          let r ← fresh "fx_v"
+          let bind : Bind := fun N => do pure (bindFlat sp t none M' (← unpack sp csM r t N))
+          pure ([bind], .var sp r)
         else throw ⟨ksp, s!"no handler `{h}` is declared before this `with`"⟩
     | .app sp (.app sp₂ (.sugar ksp k'@(.borrow ..)) P) (.thunkv tsp (.lam lsp b A M)) => do
       let (bsP, P') ← goV k cx cs P
@@ -955,6 +1081,12 @@ def goV : Nat → Cx → List Cap → Val → EM (List Bind × Val)
         if let some rs := cx.recSelf then
           if let some j := rs.members.idxOf? x then
             return ← selfCall k cx cs sp rs x j W
+        if let some lc := cx.layerCall then
+          if lc.name == x then
+            return ← layerSelfCall k cx cs sp lc W
+        if let some rk := cx.resume then
+          if rk.k == x then
+            return ← resumeCall k cx cs sp rk W
         -- An argument at a stored generator's parameter: the stored generator of the call.
         let (bP, W) ← pullArgsV k cx cs x W
         let (b, V') ← match cx.env.op? x, cx.env.fn? x with
@@ -964,6 +1096,13 @@ def goV : Nat → Cx → List Cap → Val → EM (List Bind × Val)
         pure (bP ++ b, V')
       | none => plainApp k cx cs sp f W
     | .var sp x => do
+      if let some rk := cx.resume then
+        if rk.k == x && rk.stateful then
+          throw ⟨sp, s!"the continuation `{x}` of a handler with a state is passed as a value: it " ++
+            "can only be resumed, `{x}(v)`, or dropped"⟩
+      if let some lc := cx.layerCall then
+        if lc.name == x then
+          throw ⟨sp, s!"`{x}`, the call a layer runs around, is passed as a value: it can only be called"⟩
       match cx.env.fn? x with
       | some g =>
         if g.group.isSome then
@@ -1031,9 +1170,20 @@ def blockResult : Nat → Cx → Span → Val → List Cap → EM (List Bind × 
       pure (.bind sp ⟨t, sp⟩ none (.ret sp blk) (.letPair sp ⟨pl, sp⟩ ⟨q, sp⟩ (.var sp t) rest) false)
     pure ([bind], .pair sp (.var sp pl) (.var sp r))
 
-/-- `g(W)` of a member `g` of the recursive group whose step is being elaborated (SPEC §20): the
-group's `rec` operation, `perform[m.0] (self', inj_j W)` with the self-reference `self'`, or the
-exhaustion effect's operation when the budget is spent (`self` is `inl ()`). Bound before the value
+/-- The call of member `j` through the function `g` of a self-reference, on `W` with the
+environment: `f <- return unbang g; z <- return (); a <- return (E, W); (force f z).j a`. -/
+def memberCall (sp : Span) (rs : RSelf) (j : Nat) (g f z a : String) (W : Val) : Comp :=
+  .bind sp ⟨f, sp⟩ none (.ret sp (.unbang sp (.var sp g)))
+    (.bind sp ⟨z, sp⟩ none (.ret sp (.unit sp))
+      (.bind sp ⟨a, sp⟩ none (.ret sp (capsTuple sp rs.env W))
+        (.app sp (projAt sp j rs.members.length (.app sp (.force sp ⟨f, sp⟩) ⟨z, sp⟩)) ⟨a, sp⟩)
+        false) false) false
+
+/-- `g(W)` of a member `g` of the recursive group whose generator is being elaborated (SPEC §20):
+a direct call of the self-reference, `case self { inl _ ⇒ abort[e.0] () | inr f ⇒ (force f ()).j
+(E, W) }`, `j` the member's field of the record the fixed point is taken at, and `E` the
+environment, the capabilities the group threads, handed back beside the answer. When the budget
+is spent (`self` is `inl ()`) it performs the exhaustion effect's operation. Bound before the value
 it is in. -/
 def selfCall : Nat → Cx → List Cap → Span → RSelf → String → Nat → Val → EM (List Bind × Val)
   | 0, _, _, sp, _, _, _, _ => throw ⟨sp, "internal error: a value nested too deeply"⟩
@@ -1044,23 +1194,81 @@ def selfCall : Nat → Cx → List Cap → Span → RSelf → String → Nat →
       return (b, .app sp (.var sp s!"fx_rself{j}") W')
     -- A call of itself inside a handler of an effect its row performs: each level would need a
     -- copy whose sites are the level's own, without end (decision 57).
+    let through (e : String) : Error :=
+      ⟨sp, s!"`{x}` calls itself inside a handler of `{e}`, an effect its recursion " ++
+        s!"performs: each level's `{e}` would go to the level's own handler, a site per level " ++
+        "without end (recursion through a site, decision 57; generative labels, #173)"⟩
     for (e, n) in rs.served do
       if let some s := cx.siteOf e then
-        if s.n != n then
-          throw ⟨sp, s!"`{x}` calls itself inside a handler of `{e}`, an effect its recursion " ++
-            s!"performs: each level's `{e}` would go to the level's own handler, a site per level " ++
-            "without end (recursion through a site, decision 57; generative labels, #173)"⟩
+        if s.n != n then throw (through e)
+    for c in rs.env do
+      if let some c' := cx.capOf c.eff then
+        if c'.h.name != c.h.name || c'.var != c.var then throw (through c.eff)
+    noLend sp s!"`{x}`" W
     let (b, W') ← goV k cx cs W
+    let t ← fresh "fx_b"
     let r ← fresh "fx_v"
     let u ← fresh "fx_u"
     let g ← fresh "fx_g"
-    report sp "call" (s!"{x} → perform[{rs.m}.0], the group's `rec`; at the end of the budget " ++
-      s!"abort[{rs.e}.0]")
+    let f ← fresh "fx_f"
+    let z ← fresh "fx_z"
+    let a ← fresh "fx_a"
+    let n := rs.members.length
+    let C := (rs.Cs[j]?).getD (.top sp)
+    let res : CTy := match C with
+      | .arr _ _ R => R
+      | C => C
+    report sp "call" (s!"{x} → the group's self-reference, called directly" ++
+      (if rs.env.isEmpty then "" else ", passing the capabilities") ++
+      s!"; at the end of the budget abort[{rs.e}.0]")
     let call : Comp := .case sp (.var sp rs.self) ⟨u, sp⟩
-      (.ascribe sp (.abort sp rs.e 0 (.unit sp)) rs.C) ⟨g, sp⟩
-      (.perform sp rs.m 0 (.pair sp (.var sp g)
-        (.ascribe sp (injAt sp j rs.members.length W') rs.A)))
-    let bind : Bind := fun N => pure (.bind sp ⟨r, sp⟩ none call N false)
+      (.ascribe sp (.abort sp rs.e 0 (.unit sp)) res) ⟨g, sp⟩
+      (memberCall sp rs j g f z a W')
+    let bind : Bind := fun N => do
+      pure (.bind sp ⟨t, sp⟩ none call (← unpack sp rs.env r t N) false)
+    pure (b ++ [bind], .var sp r)
+
+/-- `k(W)` in a clause of an operation that resumes (SPEC §19): the continuation resumed,
+`(force k).1 W`. In a handler with a state, its answer is a function of the state, applied to the
+current state: the parameters are passed on, and the capabilities come back beside the answer. -/
+def resumeCall : Nat → Cx → List Cap → Span → ResumeK → Val → EM (List Bind × Val)
+  | 0, _, _, sp, _, _ => throw ⟨sp, "internal error: a value nested too deeply"⟩
+  | k + 1, cx, cs, sp, rk, W => do
+    let (b, W') ← goV k cx cs W
+    let a ← fresh "fx_ka"
+    let r ← fresh "fx_v"
+    let res : Comp := .app sp (.proj sp true (.force sp ⟨rk.k, sp⟩)) ⟨a, sp⟩
+    report sp "call" (s!"{rk.k} → the continuation resumed" ++
+      (if rk.stateful then ", at the handler's state" else ""))
+    if !rk.stateful then
+      let bind : Bind := fun N => pure (.bind sp ⟨a, sp⟩ none (.ret sp W') (.bind sp ⟨r, sp⟩ none res N false) false)
+      return (b ++ [bind], .var sp r)
+    let g ← fresh "fx_kg"
+    let sv ← fresh "fx_ks"
+    let t ← fresh "fx_kt"
+    let st : Val := capsTuple sp cx.caps (paramsTuple sp rk.params)
+    let bind : Bind := fun N => do
+      let after ← unpack sp cx.caps r t N
+      pure (.bind sp ⟨a, sp⟩ none (.ret sp W') (.bind sp ⟨g, sp⟩ none res
+        (.bind sp ⟨sv, sp⟩ none (.ret sp st) (.bind sp ⟨t, sp⟩ none (.app sp (.force sp ⟨g, sp⟩) ⟨sv, sp⟩)
+          after false) false) false) false)
+    pure (b ++ [bind], .var sp r)
+
+/-- `call(W)` in a layer's body made for member `j` (SPEC §20): the member's call through the
+self-reference, passing the environment and binding it again after. -/
+def layerSelfCall : Nat → Cx → List Cap → Span → LCall → Val → EM (List Bind × Val)
+  | 0, _, _, sp, _, _ => throw ⟨sp, "internal error: a value nested too deeply"⟩
+  | k + 1, cx, cs, sp, lc, W => do
+    noLend sp s!"`{lc.name}`" W
+    let (b, W') ← goV k cx cs W
+    let t ← fresh "fx_b"
+    let r ← fresh "fx_v"
+    let f ← fresh "fx_f"
+    let z ← fresh "fx_z"
+    let a ← fresh "fx_a"
+    report sp "call" s!"{lc.name} → the member's call, through the self-reference"
+    let bind : Bind := fun N => do
+      pure (.bind sp ⟨t, sp⟩ none (memberCall sp lc.rs lc.j lc.g f z a W') (← unpack sp lc.rs.env r t N) false)
     pure (b ++ [bind], .var sp r)
 
 /-- A plain application, its parts elaborated. `return e` from a loop's body in a copy hands the
@@ -1121,8 +1329,8 @@ which takes the capabilities first and hands them back first, bound before the v
 def fnCall : Nat → Cx → List Cap → Span → Val → String → FSig → Val → EM (List Bind × Val)
   | 0, _, _, sp, _, _, _, _ => throw ⟨sp, "internal error: a value nested too deeply"⟩
   | k + 1, cx, cs, sp, f, x, g, W => do
-    let used := cx.needIn g.row
-    if used.isEmpty && (cx.ctl g.row).isEmpty then return ← plainApp k cx cs sp f W
+    let used := cx.needIn (cx.rowOf g)
+    if used.isEmpty && (cx.ctl (cx.rowOf g)).isEmpty then return ← plainApp k cx cs sp f W
     noLend sp s!"`{x}`" W
     let (b, W') ← goV k cx cs W
     let name ← copyFor k cx sp x g
@@ -1193,6 +1401,7 @@ def withCtl : Nat → Cx → List Cap → Span → Span → CHandler → List VT
       throw ⟨ksp, s!"the body of `with {ch.name.name}` assigns a `let mut` variable declared " ++
         "outside it, or lends a place declared outside it: a control handler's body may be " ++
         "abandoned, and does not hand them back; bind what the block answers instead"⟩
+    let some eff := cx.env.eff? e | throw ⟨ksp, s!"internal error: the effect `{e}`"⟩
     -- The capabilities the body uses are reborrowed for it, each at a lifetime of its own, so that
     -- they come back when the body is abandoned.
     let mut csM : List Cap := []
@@ -1247,10 +1456,144 @@ def withCtl : Nat → Cx → List Cap → Span → Span → CHandler → List VT
     let cxB : Cx := { cx with sites := site :: cx.sites.filter (·.eff != e),
                               caps := cx.caps.map fun c => (csM.find? (·.var == c.var)).getD c }
     let M' ← trC k cxB [] false M
+    let (rx, rA, rM) := ch.ret
+    for c in ch.clauses do
+      unless eff.ops.any (·.name.name == c.name.name) do
+        throw ⟨c.name.span, s!"`{c.name.name}` is not an operation of `{e}`"⟩
+    let rest := tps.filter fun x => (σ.lookup x).isNone
+    -- Every operation abortive: each clause runs at most once and never resumes, so the clauses
+    -- run after the handler (SPEC §19, *Abortive clauses*). The site answers the body's value
+    -- `inl x` or an operation's argument `inr (inj_i v)`, and a `case` on that runs the return
+    -- clause or the operation's, in the scope of the `with`: they use the handler's arguments,
+    -- whatever their types, and the capabilities in scope, as any code there does.
+    if !eff.ops.isEmpty && eff.ops.all (·.abortive) then
+      let nOps := eff.ops.length
+      let pay := sumTys sp (ents.map (·.2.1))
+      let p ← fresh "fx_p"
+      let injCls : List Val := (List.range nOps).map fun j =>
+        .thunkv sp (.lam sp ⟨p, sp⟩ (holeTy sp) (.ret sp (.inr sp (injAt sp j nOps (.var sp p)))))
+      let xr ← fresh "fx_ax"
+      -- The site binds the handler's arguments to its parameters before the body runs, and answers
+      -- them beside its own answer, for the clauses after it.
+      let info : HInfo := ⟨ch.name.name, n, ents, rest, σ,
+        ch.params.map (fun (x, A) => (x.name, A.subst σ)), rA.subst σ, .sum sp (rA.subst σ) pay,
+        some (ch.res.subst σ)⟩
+      let clsV := injCls.foldr (fun c t => Val.pair sp c t) (.unit sp)
+      let (bsP, P') ← goV k cx cs P
+      let hnd : Val := .app sp (.app sp (.app sp (.app sp (.sugar ksp (.hndCtl info)) P')
+        (.thunkv sp (.lam sp ⟨xr, sp⟩ rA (.ret sp (.inl sp (.var sp xr)))))) clsV) (.thunk sp M')
+      let (bsH, hv) ← reborrowed k sp ksp hnd csM
+      let rn ← fresh "fx_ar"
+      let pv ← fresh "fx_hp"
+      let rv : Val := .var sp rn
+      let params : Bind := fun N => do
+        pure (.bind sp ⟨pv, sp⟩ none (.ret sp hv)
+          (← bindParams sp pv (ch.params.map (·.1) ++ [⟨rn, sp⟩]) N) false)
+      -- The clauses, after the handler.
+      let ev ← fresh "fx_ae"
+      let mut arms : List (String × Comp) := []
+      for o in eff.ops do
+        let some c := ch.clauses.find? (·.name.name == o.name.name)
+          | throw ⟨ch.name.span, s!"the handler `{ch.name.name}` has no clause for `{o.name.name}`"⟩
+        unless c.params.length == o.params.length do
+          throw ⟨c.name.span, s!"the clause `{c.name.name}` of `{ch.name.name}` takes " ++
+            s!"{o.params.length} name(s): the operation's parameters"⟩
+        let q ← fresh "fx_aq"
+        arms := arms ++ [(q, ← bindParams c.name.span q c.params (c.body.subst σ))]
+      let rec dispatch : Nat → String → List (String × Comp) → Comp
+        | _, v, [(q, N)] => .bind sp ⟨q, sp⟩ none (.ret sp (.var sp v)) N false
+        | m + 1, v, (q, N) :: rest =>
+          let y := v ++ "r"
+          .case sp (.var sp v) ⟨q, sp⟩ N ⟨y, sp⟩ (dispatch m y rest)
+        | _, v, _ => .absurd sp (.var sp v)
+      let after : Comp := .case sp rv rx (rM.subst σ) ⟨ev, sp⟩ (dispatch (nOps + 1) ev arms)
+      -- Its operations are the handler's row's, at the sites around the `with`.
+      let cxA : Cx := { cx with sites := outer ++ cx.sites.filter fun s => !outer.any (·.eff == s.eff) }
+      let csA := cxA.needC after
+      let after' ← trC k cxA csA true after
+      let t ← fresh "fx_b"
+      let r ← fresh "fx_v"
+      report ksp "lowering" (s!"with {ch.name.name}: every operation abortive, so its clauses run " ++
+        "after the handler, in the scope of the `with`")
+      -- Its type is the handler's answer, which the typed elaboration names `fx_res{n}`.
+      let resT : VTy := capsTy sp csA (.name sp s!"fx_res{n}")
+      let bind : Bind := fun N => do pure (bindFlat sp t (some resT) after' (← unpack sp csA r t N))
+      return (bsP ++ bsH ++ [params, bind], .var sp r)
+    -- The capabilities the clauses use: the handler holds them between operations, in its state.
+    let csCl := cx.need (ch.clauses.foldl (fun r c => union r (rowC cx.env fuel c.body))
+      (rowC cx.env fuel rM))
+    if let some c := csCl.find? (fun c => csM.any (·.var == c.var)) then
+      throw ⟨ksp, s!"the body of `with {ch.name.name}` and its clauses both use the capability of " ++
+        s!"`{c.eff}`: the handler holds it between operations, so the body cannot (not provided)"⟩
+    if let some c := csCl.find? (·.thr.isSome) then
+      throw ⟨ksp, s!"the clauses of `with {ch.name.name}` perform `{c.eff}` of an enclosing `for`: " ++
+        "not provided"⟩
+    -- A handler with a state (SPEC §19, *Handler state*): a parameter that is not `!`, or a
+    -- capability its clauses use. Its clauses run at each operation, so what they use is passed to
+    -- them: the site answers a function of the state, `U (S' ⊗ P ⊸ F (S' ⊗ R))`, each clause and
+    -- the return clause a thunk of it, and a resume `k(v)` applies the continuation's answer to the
+    -- current state. The state is the capabilities `S'` and the parameters `P`: a resume passes the
+    -- parameters on, and the capabilities come back with the answer.
+    let stateful := !csCl.isEmpty || ch.params.any fun (_, A) => !(match A with | .bang .. => true | _ => false)
+    if stateful then
+      let pNames := ch.params.map (·.1.name)
+      let Pt : VTy := tupleTy sp (ch.params.map fun (_, A) => A.subst σ)
+      let Rv := ch.res.subst σ
+      let St : VTy := capsTy sp csCl Pt
+      let rowO := cx.env.rowOf outer
+      let Ans : VTy := capsTy sp csCl Rv
+      let ansT : VTy := .thunk sp (.arr sp St (match rowO with
+        | .nil => .ret sp Ans
+        | r => .eff sp r Ans))
+      let cxS (rk : Option ResumeK) : Cx := { env := cx.env, caps := csCl, sites := outer, resume := rk }
+      let stThunk (body : Comp) : EM Val := do
+        let sv ← fresh "fx_hs"
+        let ps ← fresh "fx_hq"
+        let inner ← unpack sp csCl ps sv (← bindParams sp ps (ch.params.map (·.1)) body)
+        pure (.thunkv sp (.lam sp ⟨sv, sp⟩ St inner))
+      let rM' ← trC k (cxS none) csCl true (rM.subst σ)
+      let hr : Val := .thunkv sp (.lam sp rx rA (.ret sp (← stThunk rM')))
+      let mut cls : List Val := []
+      for o in eff.ops do
+        let some c := ch.clauses.find? (·.name.name == o.name.name)
+          | throw ⟨ch.name.span, s!"the handler `{ch.name.name}` has no clause for `{o.name.name}`"⟩
+        let abortive := o.abortive
+        let want := o.params.length + (if abortive then 0 else 1)
+        unless c.params.length == want do
+          throw ⟨c.name.span, s!"the clause `{c.name.name}` of `{ch.name.name}` takes {want} " ++
+            s!"name(s): the operation's parameters{if abortive then "" else ", then its continuation"}"⟩
+        let csp := c.name.span
+        let p ← fresh "fx_p"
+        let kv := c.params.getLast!
+        let rk : Option ResumeK := if abortive then none else some ⟨kv.name, pNames, true⟩
+        let body ← trC k (cxS rk) csCl true (c.body.subst σ)
+        let th : Comp := .ret csp (← stThunk body)
+        let body ← if abortive then bindParams csp p c.params th else do
+          let q ← fresh "fx_q"
+          pure (.letPair csp ⟨q, csp⟩ kv (.var csp p) (← bindParams csp q c.params.dropLast th))
+        cls := cls ++ [.thunkv csp (.lam csp ⟨p, csp⟩ (holeTy csp) body)]
+      let info : HInfo := ⟨ch.name.name, n, ents, rest, σ, [], rA.subst σ, ansT, none⟩
+      let (bsP, P') ← goV k cx cs P
+      let pv ← fresh "fx_hp"
+      let args : Bind := fun N => pure (.bind sp ⟨pv, sp⟩ none (.ret sp P') N false)
+      let clsV := cls.foldr (fun c t => Val.pair sp c t) (.unit sp)
+      let hnd : Val := .app sp (.app sp (.app sp (.app sp (.sugar ksp (.hndCtl info)) (.unit sp))
+        hr) clsV) (.thunk sp M')
+      let (bsH, gv) ← reborrowed k sp ksp hnd csM
+      -- The site's answer applied to the initial state; the capabilities bound again after.
+      let g ← fresh "fx_hg"; let sv ← fresh "fx_hs"; let t ← fresh "fx_ht"
+      let r ← fresh "fx_v"
+      let run : Bind := fun N => do
+        let after ← unpack sp csCl r t N
+        pure (.bind sp ⟨g, sp⟩ none (.ret sp gv)
+          (.bind sp ⟨sv, sp⟩ none (.ret sp (capsTuple sp csCl (.var sp pv)))
+            (.bind sp ⟨t, sp⟩ none (.app sp (.force sp ⟨g, sp⟩) ⟨sv, sp⟩) after false) false) false)
+      report ksp "lowering" (s!"with {ch.name.name}: a handler with a state, its parameters" ++
+        (if csCl.isEmpty then "" else " and the capabilities its clauses use") ++
+        ", passed to each clause and to the continuation at each resume")
+      return (bsP ++ [args] ++ bsH ++ [run], .var sp r)
     -- The clauses run outside the handler: their operations go to the sites of the handler's row.
     let cxH : Cx := { env := cx.env, caps := [], sites := outer }
-    let some eff := cx.env.eff? e | throw ⟨ksp, s!"internal error: the effect `{e}`"⟩
-    let (rx, rA, rM) := ch.ret
     let rM' ← trC k cxH [] false (rM.subst σ)
     let mut cls : List Val := []
     for o in eff.ops do
@@ -1261,7 +1604,8 @@ def withCtl : Nat → Cx → List Cap → Span → Span → CHandler → List VT
       unless c.params.length == want do
         throw ⟨c.name.span, s!"the clause `{c.name.name}` of `{ch.name.name}` takes {want} " ++
           s!"name(s): the operation's parameters{if abortive then "" else ", then its continuation"}"⟩
-      let body ← trC k cxH [] false (c.body.subst σ)
+      let rk : Option ResumeK := if abortive then none else some ⟨c.params.getLast!.name, [], false⟩
+      let body ← trC k { cxH with resume := rk } [] false (c.body.subst σ)
       let csp := c.name.span
       let p ← fresh "fx_p"
       let body ← if abortive then bindParams csp p c.params body else do
@@ -1270,22 +1614,25 @@ def withCtl : Nat → Cx → List Cap → Span → Span → CHandler → List VT
         let q ← fresh "fx_q"
         pure (.letPair csp ⟨q, csp⟩ kv (.var csp p) (← bindParams csp q xs body))
       cls := cls ++ [.thunkv csp (.lam csp ⟨p, csp⟩ (holeTy csp) body)]
-    for c in ch.clauses do
-      unless eff.ops.any (·.name.name == c.name.name) do
-        throw ⟨c.name.span, s!"`{c.name.name}` is not an operation of `{e}`"⟩
-    let rest := tps.filter fun x => (σ.lookup x).isNone
     let info : HInfo := ⟨ch.name.name, n, ents, rest, σ,
-      ch.params.map fun (x, A) => (x.name, A.subst σ), rA.subst σ, ch.res.subst σ⟩
+      ch.params.map fun (x, A) => (x.name, A.subst σ), rA.subst σ, ch.res.subst σ, none⟩
     let (bsP, P') ← goV k cx cs P
     let clsV := cls.foldr (fun c t => Val.pair sp c t) (.unit sp)
     let hnd : Val := .app sp (.app sp (.app sp (.app sp (.sugar ksp (.hndCtl info)) P')
       (.thunkv sp (.lam sp rx rA rM'))) clsV) (.thunk sp M')
+    let (bsH, rv) ← reborrowed k sp ksp hnd csM
+    pure (bsP ++ bsH, rv)
+
+/-- The handler site `hnd` bound before the value it is in, inside `borrow mut c { 'l, c -> … }`
+for each capability `c` of `csM` its body uses, innermost last (`withCtl`): each block hands the
+capability back beside the result, and the capabilities are bound again after it. -/
+def reborrowed : Nat → Span → Span → Val → List Cap → EM (List Bind × Val)
+  | 0, sp, _, _, _ => throw ⟨sp, "internal error: a value nested too deeply"⟩
+  | _ + 1, sp, ksp, hnd, csM => do
     let r ← fresh "fx_v"
     if csM.isEmpty then
       let bind : Bind := fun N => pure (.bind sp ⟨r, sp⟩ none (.ret sp hnd) N false)
-      return (bsP ++ [bind], .var sp r)
-    -- `borrow mut c { 'l, c -> HND }` for each capability `c`, innermost last; each block hands
-    -- the capability back beside the result.
+      return ([bind], .var sp r)
     let mut blk : Comp := .ret sp hnd
     for c in csM.reverse do
       let l := c.life
@@ -1304,7 +1651,7 @@ def withCtl : Nat → Cx → List Cap → Span → Span → CHandler → List VT
       match blk with
       | .ret _ V => pure (.bind sp ⟨t, sp⟩ none (.ret sp V) (← unwrap csM t N) false)
       | B => pure (.bind sp ⟨t, sp⟩ none B (← unwrap csM t N) false)
-    pure (bsP ++ [bind], .var sp r)
+    pure ([bind], .var sp r)
 
 /-- `for x in g(W) { M }; N`, `g` performing the iteration effect `i` (SPEC §15): a handler site
 of its own for `i`, whose operation threads a variable `w` (the copy of `g` for the site takes it
@@ -1413,11 +1760,12 @@ def copyFor : Nat → Cx → Span → String → FSig → EM String
   | 0, _, sp, _, _ => throw ⟨sp, "internal error: copies nested too deeply"⟩
   | k + 1, cx, sp, x, g => do
     if let (some (gn, _), some d) := (g.group, cx.driver) then
-      return ← deepCopy k cx.env sp gn d x
+      return ← deepCopy k { cx.env with inLayers := [] } sp gn d x
     let mut hs : List HSig := []
     let mut ss : List Site := []
     let mut keys : List String := []
-    for i in g.row do
+    let row := cx.rowOf g
+    for i in row do
       if cx.env.answering i.eff then
         let some c := cx.capOf i.eff
           | throw ⟨sp, s!"`{x}` performs `{i.eff}`, but no handler of `{i.eff}` is in scope here"⟩
@@ -1429,20 +1777,72 @@ def copyFor : Nat → Cx → Span → String → FSig → EM String
         keys := keys ++ [s!"n{s.n}"]
     if keys.isEmpty then return x
     if let some (gn, _) := g.group then
-      unless hs.isEmpty do
-        throw ⟨sp, s!"`{x}` is recursive and uses the capability of `{(hs.head?.map (·.eff)).getD "?"}`: not provided"⟩
-      return ← groupCopy k cx.env sp gn ss keys x
-    copyOf k cx.env sp g hs ss (copyName x keys)
+      let env := { cx.env with inLayers := [] }
+      return ← groupCopy k env sp gn row cx.env.inLayers hs ss (keys ++ cx.env.inLayers) x
+    copyOf k { cx.env with inLayers := [] } sp g hs ss (copyName x keys)
 
-/-- The copy of the recursive group `gn` for the sites `ss` (keys `keys`), made once (SPEC §20):
-its step and a driver per member. The step `gn__step__…` takes the self-reference and the argument
-of a member, tagged by the member, and runs that member's body under a handler of the group's
-`rec` site, whose clause calls the self-reference and resumes with its answer (or cancels the
-continuation when the call unwinds). A member's copy is `bounded_fix` of the step at the budget
-`recBudget`. Answers the copy of `x`. -/
-def groupCopy : Nat → Env → Span → String → List Site → List String → String → EM String
-  | 0, _, sp, _, _, _, _ => throw ⟨sp, "internal error: copies nested too deeply"⟩
-  | k + 1, env, sp, gn, ss, keys, x => do
+/-- The layer `L` made for the group `G` (SPEC §20): a transformer of its generator, applied before
+the fixed point (Cook and Palsberg's generator transformers). It answers the generator that runs the
+given one on the self-reference wrapped: `T(gen)(self) = gen(wrap self)`, where `wrap` keeps a
+spent budget (`inl ()`) and wraps the function `g` of a live one so that each member's call runs
+`L`'s body at the member's types, its `call(a)` the member's call through `g`. The environment `E`
+holds what `L` uses besides what the group does. -/
+def layerCopy : Nat → Env → Span → String → RGroup → List Cap → List Site → RSelf → VTy → CTy →
+    List (Ident × Life) → List Ident → List String → EM String
+  | 0, _, sp, _, _, _, _, _, _, _, _, _, _ => throw ⟨sp, "internal error: copies nested too deeply"⟩
+  | k + 1, env, gsp, L, G, cs, ss, rs, selfT, R, lives, tps, keys => do
+    let name := copyName (L ++ "__" ++ G.name) keys
+    let some (.def_ lsp ln [A, B] LT LV _) := env.layer? L
+      | throw ⟨gsp, s!"internal error: the layer `{L}`"⟩
+    let f ← (fnParts lsp ln.name LT LV : Except Error FnParts)
+    let .letPair _ callN y (.var _ p₀) M := f.body
+      | throw ⟨lsp, s!"the layer `{L}` takes its parameters as `(call, a)`"⟩
+    unless p₀ == f.p.name do throw ⟨lsp, s!"the layer `{L}` takes its parameters as `(call, a)`"⟩
+    let q := (← get).quiet
+    if env.lib.contains L then modify fun s => { s with quiet := true }
+    let gv ← fresh "fx_lg"
+    let mut fields : List Comp := []
+    for ((_, fm), j) in G.members.zipIdx do
+      let σ : TySubst := [(A.name, fm.P), (B.name, fm.T)]
+      let cxL : Cx := { env, caps := cs, sites := ss, fnCaps := cs,
+                        layerCall := some ⟨callN.name, gv, j, rs⟩ }
+      let body ← trC k cxL cs true (M.subst σ)
+      let pp ← fresh "fx_pp"
+      fields := fields ++ [.lam gsp ⟨pp, gsp⟩ (capsTy gsp cs fm.P) (← unpack gsp cs y.name pp body)]
+    let sv ← fresh "fx_ls"; let qv ← fresh "fx_lq"; let self ← fresh "fx_lself"
+    let u ← fresh "fx_lu"; let e ← fresh "fx_le"; let z ← fresh "fx_lz"; let self₂ ← fresh "fx_lself"
+    let sf ← fresh "fx_lf"; let yv ← fresh "fx_ly"
+    let P : VTy := .tensor gsp selfT (.unit gsp)
+    let genT : VTy := .bang gsp (.thunk gsp (.arr gsp P R))
+    let wrapped : Val := .inr gsp (.bangThunkv gsp (.lam gsp ⟨z, gsp⟩ (.unit gsp)
+      (.letUnit gsp (.var gsp z) (withAll gsp fields))))
+    let inner : Comp := .lam gsp ⟨qv, gsp⟩ P (.letPair gsp ⟨self, gsp⟩ ⟨u, gsp⟩ (.var gsp qv)
+      (.bind gsp ⟨self₂, gsp⟩ (some selfT)
+        (.case gsp (.var gsp self) ⟨e, gsp⟩ (.ret gsp (.inl gsp (.var gsp e))) ⟨gv, gsp⟩ (.ret gsp wrapped))
+        (.bind gsp ⟨sf, gsp⟩ none (.ret gsp (.unbang gsp (.var gsp sv)))
+          (.bind gsp ⟨yv, gsp⟩ none (.ret gsp (.pair gsp (.var gsp self₂) (.var gsp u)))
+            (.app gsp (.force gsp ⟨sf, gsp⟩) ⟨yv, gsp⟩) false) false) false))
+    let tf : FnParts := ⟨true, lives, genT, genT, ⟨sv, gsp⟩, .ret gsp (.bangThunkv gsp inner)⟩
+    let (tA, tV) := tf.build gsp
+    report gsp "lowering" (s!"layer {L} for the group {", ".intercalate rs.members}: `{name}`, a " ++
+      "transformer of its generator, applied before the fixed point")
+    modify fun s => { s with quiet := q }
+    let mk : Mark := if tps.isEmpty then .none else .template .none
+    modify fun s => { s with made := s.made.push (name, .def_ gsp ⟨name, gsp⟩ tps tA tV mk) }
+    pure name
+
+/-- The copy of the recursive group `gn` for the answering handlers `hs` and the sites `ss` (keys
+`keys`), made once (SPEC §20): the group is the bounded fixed point of its **generator**, taken at
+the record of its members, `R = &ⱼ (E ⊗ Pⱼ ⊸ F_Σ (E ⊗ Tⱼ))`. The generator `gn__step__…` takes
+the self-reference `1 + !U(1 ⊸ R)` and answers the record of the members' bodies, each taking the
+environment `E` (the capabilities the group uses, as every copy takes them) first and handing it
+back first; a call of a member inside it is a direct call of the self-reference (`selfCall`). A
+member's copy is `(bounded_fix[1, R] (gen, (budget, ()))).j`, the budget `recBudget`; it has the
+type a copy of the member has, so a call of it is a call of a copy. Answers the copy of `x`. -/
+def groupCopy : Nat → Env → Span → String → List Inst → List String → List HSig → List Site →
+    List String → String → EM String
+  | 0, _, sp, _, _, _, _, _, _, _ => throw ⟨sp, "internal error: copies nested too deeply"⟩
+  | k + 1, env, sp, gn, row, layers, hs, ss, keys, x => do
     let name := copyName x keys
     let stepName := copyName (gn ++ "__step") keys
     let st ← get
@@ -1453,73 +1853,90 @@ def groupCopy : Nat → Env → Span → String → List Site → List String �
     let some e := ss.find? (·.eff == exh.name)
       | throw ⟨sp, s!"`{x}` is recursive: its depth is bounded, and no handler of `{exh.name}` is in scope here"⟩
     let gsp := G.sp
-    let m ← freshSite
+    -- The environment: the capabilities, in the order of the row, as `copyOf` takes them.
+    let cs : List Cap := row.filterMap fun i =>
+      if env.answering i.eff then
+        (hs.find? (·.eff == i.eff)).map fun h =>
+          ⟨i.eff, "fx_c_" ++ i.eff.toLower, "fx_l_" ++ i.eff.toLower, h, none⟩
+      else (ss.find? (·.eff == i.eff)).bind fun s => s.thr.map fun (w, W) => threadCap gsp i.eff w W
+    let tps : List Ident := (ss.filterMap (·.thr)).map fun (_, W) => ⟨W, gsp⟩
+    let tArgs : List VTy := tps.map fun t => .name gsp t.name
+    let lives : List (Ident × Life) :=
+      (cs.filter (·.thr.isNone)).map fun c => ((⟨c.life, gsp⟩ : Ident), Life.top gsp)
     let ss := ss.map fun s => { s with sp := gsp, what := "the caller" }
     let rowR := env.rowOf ss
-    let A := sumTys gsp (G.members.map (·.2.P))
-    let B := G.B
-    let C : CTy := .eff gsp rowR B
-    let selfFn : VTy := .bang gsp (.thunk gsp (.arr gsp A C))
-    let selfT : VTy := .sum gsp (.unit gsp) selfFn
+    let n := G.members.length
+    let Cs : List CTy := G.members.map fun (_, f) =>
+      .arr gsp (capsTy gsp cs f.P) (.eff gsp rowR (capsTy gsp cs f.T))
+    let R := ampTys gsp Cs
+    let selfT : VTy := .sum gsp (.unit gsp) (.bang gsp (.thunk gsp (.arr gsp (.unit gsp) R)))
     let self := "fx_self"
-    let rs : RSelf := ⟨G.members.map (·.1), m, e.n, self,
-      .eff gsp (.cons m 0 .aff (.tensor gsp selfFn A) B rowR) B, A, ss.map (fun s => (s.eff, s.n)), false⟩
-    let cx : Cx := { env, caps := [], sites := ss, recSelf := some rs }
-    -- The members' bodies, dispatched on the member's tag.
-    let mut bodies : List (Ident × Comp) := []
+    let rs : RSelf := ⟨G.members.map (·.1), e.n, self, Cs, cs, ss.map (fun s => (s.eff, s.n)), false⟩
+    let cx : Cx := { env, caps := cs, sites := ss, fnCaps := cs, recSelf := some rs }
+    -- The generator's record: each member's body, taking the environment first.
+    let mut fields : List Comp := []
     for (_, f) in G.members do
-      let body ← trC k cx [] true f.body
-      let xi ← fresh "fx_ra"
-      bodies := bodies ++ [(⟨xi, gsp⟩, .bind gsp f.p none (.ret gsp (.var gsp xi)) body false)]
-    let fa ← fresh "fx_rarg"
-    let rec dispatch : Nat → String → List (Ident × Comp) → EM Comp
-      | _, _, [] => throw ⟨gsp, "internal error: an empty group"⟩
-      | _, v, [(xi, B₁)] => pure (.bind gsp xi none (.ret gsp (.var gsp v)) B₁ false)
-      | 0, _, _ => throw ⟨gsp, "internal error: a group nested too deeply"⟩
-      | n + 1, v, (xi, B₁) :: rest => do
-        let y ← fresh "fx_rq"
-        pure (.case gsp (.var gsp v) xi B₁ ⟨y, gsp⟩ (← dispatch n y rest))
-    let handled ← dispatch (G.members.length + 1) fa bodies
-    -- The clause: `rec((g, a), k) = b <- force g a unwind (k.2); k.1 b`.
-    let q ← fresh "fx_rcq"; let w ← fresh "fx_rcw"; let kk ← fresh "fx_rck"
-    let gv ← fresh "fx_rcg"; let av ← fresh "fx_rca"; let gf ← fresh "fx_rcf"; let bv ← fresh "fx_rcb"
-    let clause : Comp :=
-      .letPair gsp ⟨w, gsp⟩ ⟨kk, gsp⟩ (.var gsp q)
-        (.letPair gsp ⟨gv, gsp⟩ ⟨av, gsp⟩ (.var gsp w)
-          (.bind gsp ⟨gf, gsp⟩ none (.ret gsp (.unbang gsp (.var gsp gv)))
-            (.unwind gsp ⟨bv, gsp⟩ none (.app gsp (.force gsp ⟨gf, gsp⟩) ⟨av, gsp⟩)
-              (.proj gsp false (.force gsp ⟨kk, gsp⟩))
-              (.app gsp (.proj gsp true (.force gsp ⟨kk, gsp⟩)) ⟨bv, gsp⟩)) false))
-    let rx ← fresh "fx_rr"
-    let info : HInfo := ⟨"rec", m, [(.aff, .tensor gsp selfFn A, B)], [], [], [], B, B⟩
-    let hnd : Val := .app gsp (.app gsp (.app gsp (.app gsp (.sugar gsp (.hndCtl info)) (.unit gsp))
-      (.thunkv gsp (.lam gsp ⟨rx, gsp⟩ B (.ret gsp (.var gsp rx)))))
-      (.pair gsp (.thunkv gsp (.lam gsp ⟨q, gsp⟩ (holeTy gsp) clause)) (.unit gsp)))
-      (.thunk gsp handled)
-    let pp ← fresh "fx_rsp"
-    let step : FnParts := ⟨true, [], .tensor gsp selfT A, B, ⟨pp, gsp⟩,
-      .letPair gsp ⟨self, gsp⟩ ⟨fa, gsp⟩ (.var gsp pp) (.ret gsp hnd)⟩
-    let (sA, sV) := step.build gsp rowR
-    report gsp "lowering" (s!"recursive group {", ".intercalate (G.members.map (·.1))}: the step " ++
-      s!"`{stepName}` under a handler of its `rec`, the static name {m}; each member's copy is " ++
-      s!"bounded_fix of it at the budget {recBudget}, the exhaustion effect at the site {e.n}")
-    modify fun s => { s with made := s.made.push (stepName, .def_ gsp ⟨stepName, gsp⟩ [] sA sV .none) }
-    -- Each member's copy: `bounded_fix (step, (budget, inj_j p))`.
+      let body ← trC k cx cs true f.body
+      if cs.isEmpty then
+        fields := fields ++ [.lam gsp f.p f.P body]
+      else
+        let pp ← fresh "fx_pp"
+        fields := fields ++ [.lam gsp ⟨pp, gsp⟩ (capsTy gsp cs f.P) (← unpack gsp cs f.p.name pp body)]
+    let ps ← fresh "fx_rsp"
+    let pu ← fresh "fx_ru"
+    let P : VTy := .tensor gsp selfT (.unit gsp)
+    let gen : Comp := .lam gsp ⟨ps, gsp⟩ P
+      (.letPair gsp ⟨self, gsp⟩ ⟨pu, gsp⟩ (.var gsp ps) (.letUnit gsp (.var gsp pu) (withAll gsp fields)))
+    -- `!U (P -o R)`, under the capabilities' lifetimes when there are any.
+    let genT : VTy := .bang gsp (.thunk gsp (.arr gsp P R))
+    let genV : Val := .bangThunkv gsp gen
+    let (sA, sV) : VTy × Val := match lives.foldr (fun (a, b) (T, V) =>
+        (VTy.all gsp a b T, Val.thunkv gsp (.lamL gsp a b (.ret gsp V)))) (genT, genV) with
+      | (T@(.all ..), .thunkv _ M) => (.bang gsp T, .bangThunkv gsp M)
+      | TV => TV
+    report gsp "lowering" (s!"recursive group {", ".intercalate (G.members.map (·.1))}: the generator " ++
+      s!"`{stepName}`, the record of its members" ++
+      (if cs.isEmpty then "" else ", each taking the capabilities as its environment") ++
+      s!"; each member's copy is bounded_fix of it at the budget {recBudget}, its calls of itself " ++
+      s!"direct calls of the self-reference, the exhaustion effect at the site {e.n}")
+    let mk : Mark := if tps.isEmpty then .none else .template .none
+    modify fun s => { s with made := s.made.push (stepName, .def_ gsp ⟨stepName, gsp⟩ tps sA sV mk) }
+    -- The layers, innermost first: each a transformer of the generator.
+    let mut trs : List String := []
+    for L in layers do
+      trs := trs ++ [← layerCopy k env gsp L G cs ss rs selfT R lives tps keys]
+    -- Each member's copy: `(bounded_fix[1, R] (Lₙ(… L₁(gen))), (budget, ()))).j`.
+    let genRef : Val := if tps.isEmpty then .var gsp stepName else .defApp gsp stepName tArgs
     for ((mn, f), j) in G.members.zipIdx do
       let p ← fresh "fx_rp"
+      let sv ← fresh "fx_rst"
       let fb ← fresh "fx_rbf"
-      let fa' ← fresh "fx_rba"
-      let arg : Val := .pair gsp (.var gsp stepName)
-        (.pair gsp (.const gsp (.lit (.i32 (UInt32.ofNat recBudget))))
-          (.ascribe gsp (injAt gsp j G.members.length (.var gsp p)) A))
+      let fa ← fresh "fx_rba"
+      let inst : Val := lives.foldl (fun V (a, _) => .inst gsp V (.var gsp a.name))
+        (if lives.isEmpty then genRef else .unbang gsp genRef)
+      let mut tv := sv
+      let mut applied : List (String × Val) := []
+      for t in trs do
+        let tv' ← fresh "fx_rst"
+        let tref : Val := if tps.isEmpty then .var gsp t else .defApp gsp t tArgs
+        let tinst : Val := lives.foldl (fun V (a, _) => .inst gsp V (.var gsp a.name))
+          (if lives.isEmpty then tref else .unbang gsp tref)
+        applied := applied ++ [(tv', .app gsp tinst (.var gsp tv))]
+        tv := tv'
+      let arg : Val := .pair gsp (.var gsp tv)
+        (.pair gsp (.const gsp (.lit (.i32 (UInt32.ofNat recBudget)))) (.unit gsp))
+      let fixC : Comp :=
+          (.bind gsp ⟨fb, gsp⟩ none (.ret gsp (.unbang gsp (.const gsp (.boundedFix (.unit gsp) R))))
+            (.bind gsp ⟨fa, gsp⟩ none (.ret gsp arg)
+              (.app gsp (projAt gsp j n (.app gsp (.force gsp ⟨fb, gsp⟩) ⟨fa, gsp⟩)) ⟨p, gsp⟩) false)
+            false)
       let body : Comp :=
-        .bind gsp ⟨fb, gsp⟩ none (.ret gsp (.unbang gsp (.const gsp (.boundedFix A C))))
-          (.bind gsp ⟨fa', gsp⟩ none (.ret gsp arg) (.app gsp (.force gsp ⟨fb, gsp⟩) ⟨fa', gsp⟩) false)
-          false
-      let drv : FnParts := ⟨true, [], f.P, B, ⟨p, gsp⟩, body⟩
+        .bind gsp ⟨sv, gsp⟩ none (.ret gsp inst) (applied.foldr (fun (y, V) K =>
+          .bind gsp ⟨y, gsp⟩ none (.ret gsp V) K false) fixC) false
+      let drv : FnParts := ⟨true, lives, capsTy gsp cs f.P, capsTy gsp cs f.T, ⟨p, gsp⟩, body⟩
       let (dA, dV) := drv.build gsp rowR
       let dn := copyName mn keys
-      modify fun s => { s with made := s.made.push (dn, .def_ gsp ⟨dn, gsp⟩ [] dA dV .none) }
+      modify fun s => { s with made := s.made.push (dn, .def_ gsp ⟨dn, gsp⟩ tps dA dV mk) }
     pure name
 
 /-- The copy of the recursive group `gn` driven by the heap driver `d`, made once (SPEC §20): the
@@ -1544,8 +1961,12 @@ def deepCopy : Nat → Env → Span → String → String → String → EM Stri
       throw ⟨sp, s!"`{x}` performs `{i.eff}`: a recursion that performs an effect is not provided " ++
         s!"under the heap driver `{d}`"⟩
     let A := sumTys gsp (G.members.map (·.2.P))
-    let B := G.B
-    let rs : RSelf := ⟨G.members.map (·.1), 0, 0, "", .ret gsp B, A, [], true⟩
+    let some (_, f₀) := G.members.head? | throw ⟨gsp, "internal error: an empty group"⟩
+    let B := f₀.T
+    if let some (y, _) := G.members.find? (·.2.T.strip != B.strip) then
+      throw ⟨sp, s!"`{y}` answers a type other than `{x}`'s: members with different result types " ++
+        s!"are not provided under the heap driver `{d}`"⟩
+    let rs : RSelf := ⟨G.members.map (·.1), 0, "", [], [], [], true⟩
     let cx : Cx := { env, caps := [], recSelf := some rs }
     let mut bodies : List (Ident × Comp) := []
     for (_, f) in G.members do
@@ -1668,32 +2089,6 @@ def clauseDef (env : Env) (h : HSig) (o : OpDecl) (c : Clause) : EM Decl := do
 
 /-! ### Programs -/
 
-mutual
-/-- The names a value refers to, as variables or `def`s applied. -/
-def refsV : Nat → Val → List String
-  | 0, _ => []
-  | n + 1, V => match V with
-    | .var _ x | .defApp _ x _ => [x]
-    | .pair _ V W | .app _ V W => refsV n V ++ refsV n W
-    | .inl _ V | .inr _ V | .unbang _ V | .boxed _ _ V | .unbox _ V | .sub _ V _ | .roll _ V
-    | .unroll _ V | .inst _ V _ | .ascribe _ V _ | .shorten _ _ _ _ V => refsV n V
-    | .thunk _ M | .thunkv _ M | .bangThunk _ M | .bangThunkv _ M | .run _ M => refsC n M
-    | _ => []
-
-/-- The names a computation refers to. -/
-def refsC : Nat → Comp → List String
-  | 0, _ => []
-  | n + 1, M => match M with
-    | .ret _ V | .absurd _ V | .perform _ _ _ V | .abort _ _ _ V => refsV n V
-    | .bind _ _ _ M N _ | .with_ _ M N => refsC n M ++ refsC n N
-    | .lam _ _ _ M | .app _ M _ | .proj _ _ M | .lamL _ _ _ M | .inst _ M _ | .nuIn _ M
-    | .nuOut _ M | .ascribe _ M _ | .handle _ _ _ _ M => refsC n M
-    | .letUnit _ V M | .letPair _ _ _ V M => refsV n V ++ refsC n M
-    | .case _ V _ M _ N | .for_ _ _ V M N => refsV n V ++ refsC n M ++ refsC n N
-    | .unwind _ _ _ M D N => refsC n M ++ refsC n D ++ refsC n N
-    | .force .. | .top _ => []
-end
-
 /-- A computation has a `while` or a `loop` outside nested closures. -/
 def hasWhile : Nat → Comp → Bool
   | 0, _ => false
@@ -1771,13 +2166,9 @@ def defineGroup (env : Env) (ms : List (Span × Ident × VTy × Val × Mark)) : 
     unless f.bang do
       throw ⟨n.span, s!"`{n.name}` is recursive and is not a persistent function"⟩
     if hasWhile fuel f.body then
-      throw ⟨n.span, s!"`{n.name}` is recursive and its body has a `while` or a `loop`: a loop " ++
-        "inside a recursion is not provided; write the loop as a recursion, or in a function of " ++
-        "its own"⟩
-    if let some (_, B) := parts.head? then
-      unless B.T.strip == f.T.strip do
-        throw ⟨n.span, s!"`{n.name}` is in a recursive group with `{(parts.head?.map (·.1)).getD "?"}`, and its result " ++
-          s!"type differs from theirs: a group's members answer one type"⟩
+      throw ⟨n.span, s!"`{n.name}` is recursive and its body has a `while` or a `loop`, so it is " ++
+        "div: the `Exhausted` of its budget would be performed inside its loop, and a handler around " ++
+        "a div computation is not provided"⟩
     let (written, _) := splitRow mk
     for i in rowV env fuel V do
       unless written.isEmpty || written.any (·.1.name == i.eff) do
@@ -1787,23 +2178,16 @@ def defineGroup (env : Env) (ms : List (Span × Ident × VTy × Val × Mark)) : 
         | none, some _ => pure i
         | none, none => throw ⟨n.span, s!"`{n.name}` performs `{i.eff}`, and its type arguments " ++
             s!"are not determined: write them, `with {i.eff}[…]`"⟩
-      if env.answering i.eff then
-        throw ⟨n.span, s!"`{n.name}` is recursive and uses the capability of `{i.eff}`: not provided"⟩
-      if let some e := env.eff? i.eff then
-        if e.ops.any (!·.abortive) then
-          throw ⟨n.span, s!"`{n.name}` is recursive and performs `{i.eff}`, whose operations " ++
-            "resume: a recursion's continuation is cancelled at an abortive row only (not provided)"⟩
       row := addInst row i
     unless written.isEmpty || written.any (·.1.name == exh.name) do
       throw ⟨n.span, s!"`{n.name}` is recursive, so it performs `{exh.name}` when its depth runs out, " ++
         "which its written row does not list"⟩
     parts := parts ++ [(n.name, f)]
   row := addInst row ⟨exh.name, some []⟩
-  let some (_, f₀) := parts.head? | throw ⟨sp₀, "internal error: an empty group"⟩
-  let G : RGroup := ⟨n₀.name, parts, f₀.T, sp₀⟩
+  let G : RGroup := ⟨n₀.name, parts, sp₀⟩
   report sp₀ "row" (s!"{", ".intercalate (parts.map (·.1))}: " ++
-    ", ".intercalate (row.map (·.eff)) ++ s!" (a recursive group: its calls of itself are its " ++
-    s!"`rec`, driven by `bounded` at the budget {recBudget})")
+    ", ".intercalate (row.map (·.eff)) ++ s!" (a recursive group: the fixed point of its " ++
+    s!"generator, driven by `bounded` at the budget {recBudget})")
   let mut env := { env with groups := env.groups ++ [G] }
   for ((x, _), (sp, n, A, V, mk)) in parts.zip ms do
     env := { env with fns := env.fns ++ [{ name := x, row, decl := .def_ sp n [] A V mk,
@@ -1879,6 +2263,8 @@ def elaborate (ds : List Decl) (lib : List String := []) :
         env := { env with chandlers := env.chandlers ++ [ch] }
       | .def_ sp n ps A V mk =>
         env := { env with sigs := (n.name, A) :: env.sigs }
+        if isLayerTy (ps.map (·.name)) A then
+          env := { env with layers := (n.name, .def_ sp n ps A V mk) :: env.layers }
         modify fun s => { s with quiet := lib.contains n.name }
         if let some G := groups.find? (·.contains n.name) then
           -- A member of a recursive group: the group is declared at its last member.

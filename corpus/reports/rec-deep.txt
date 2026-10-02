@@ -1,8 +1,8 @@
-effect 17:1: Exhausted: exhausted (ctl, affine, abortive)
-row 22:1: tot: Exhausted (a recursive group: its calls of itself are its `rec`, driven by `bounded` at the budget 10000)
-row 24:1: even, odd: Exhausted (a recursive group: its calls of itself are its `rec`, driven by `bounded` at the budget 10000)
-row 31:1: spine: Exhausted (a recursive group: its calls of itself are its `rec`, driven by `bounded` at the budget 10000)
-row 33:1: sum: Exhausted (a recursive group: its calls of itself are its `rec`, driven by `bounded` at the budget 10000)
+effect 18:1: Exhausted: exhausted (ctl, affine, abortive)
+row 22:1: tot: Exhausted (a recursive group: the fixed point of its generator, driven by `bounded` at the budget 10000)
+row 24:1: even, odd: Exhausted (a recursive group: the fixed point of its generator, driven by `bounded` at the budget 10000)
+row 31:1: spine: Exhausted (a recursive group: the fixed point of its generator, driven by `bounded` at the budget 10000)
+row 33:1: sum: Exhausted (a recursive group: the fixed point of its generator, driven by `bounded` at the budget 10000)
 lowering 22:1: recursive group tot under `deep`: the machine `tot__mach`, its pending calls frames in `deep`'s buffer
 lowering 24:1: recursive group even, odd under `deep`: the machine `even__mach`, its pending calls frames in `deep`'s buffer
 lowering 31:1: recursive group spine under `deep`: the machine `spine__mach`, its pending calls frames in `deep`'s buffer

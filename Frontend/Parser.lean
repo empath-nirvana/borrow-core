@@ -1959,8 +1959,6 @@ def decl (n : Nat) : P Decl := do
     let sp ← spanFrom st
     match sig with
     | some (A, R) =>
-      unless mutPs.isEmpty do
-        failAt h.span s!"the control handler `{h.name}` has a `mut` parameter: a clause is `!` code, and keeps no state"
       let some (x, M) := ret | failAt h.span s!"the control handler `{h.name}` has no return clause, `return(x) = M`"
       pure (.chandler sp ⟨h, tps, ps.toList, e, As, row, R, (x, A, M), cs.toList⟩)
     | none =>

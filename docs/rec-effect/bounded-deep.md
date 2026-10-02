@@ -1,6 +1,8 @@
 # Addendum: `bounded` and `deep`
 
-Status: the design as built for #188 stage 3 (#158), SPEC §20, decision 58. It supersedes the
+Status: the design as built for #188 stage 3 (#158), SPEC §20, decision 58, as revised by SPEC
+§21 and decision 59: a recursive group is the bounded fixed point of its generator, called
+directly, with no `rec` operation; layers are transformers of the generator. It supersedes the
 README's drivers (`fix` on the host stack, `fuel`, tabulation) where they differ; the README's
 corpus and requirements stand as the record of what was explored.
 
@@ -51,7 +53,7 @@ code.
 **Headroom.** The check must leave enough stack for unwinding: the worst-case stack use of the
 finalisers an unwind runs. Decision C (SPEC §19) limits a finaliser to abortive and answering
 operations; a finaliser that is recursion-free has a bound computed from the call graph with
-`rec` removed, which is a DAG. Frame sizes are not computed yet, so the headroom is the margin
+the recursive groups' self-calls removed, which is a DAG. Frame sizes are not computed yet, so the headroom is the margin
 of the measured constant above (provisional).
 
 **Not exact.** The budget is per driver: a recursion running inside another's body has a budget of
@@ -104,10 +106,14 @@ not take yet).
 
 ## 6. What is not provided
 
-- `memo`: it needs a map (#211).
-- A recursion whose body has a `while` or a `loop`; one that performs an operation that resumes;
-  one that uses an answering effect's capability; a recursion under `deep` that performs any
-  effect; a generic recursive function; members of one group answering different types.
+- `memo`: it needs a map (#211). Layers are built (SPEC §21): `with L { … }` transforms the
+  generator of each recursion its body calls.
+- A recursion whose body has a `while` or a `loop`: it is div, and its `Exhausted` would be
+  performed inside a loop, where a handler around a div computation is not provided (SPEC §21
+  *Open*). A recursion under `deep` that performs any effect, or whose members answer different
+  types; a generic recursive function. (A recursion that performs an operation that resumes, that
+  uses an answering effect's capability, or whose members answer different types under `bounded`
+  is provided since SPEC §21.)
 - Recursion through a site (decision 57): a call of itself inside a handler of an effect its
   recursion performs needs a site per level (`corpus/reject/rec-through-site.bc`). Decision 57's
   exact pattern, a callback that raises passed down the recursion, is rejected earlier: a

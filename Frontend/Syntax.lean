@@ -302,7 +302,10 @@ inductive BorrowKind where
 elaboration (SPEC §19): the handler, the site's static name, its operations `(q, A, B)` in order
 (closed), the handler's type parameters still to be determined and those already known, its
 parameters, the type of its return clause's binder and its answer type (each over the type
-parameters). -/
+parameters). A site whose operations are all abortive answers `inl` the body's value or `inr` an
+operation's argument, and its clauses run after it (SPEC §19): `after` is then the handler's own
+answer type, which the typed elaboration gives the type name `fx_res{n}` once its type parameters
+are determined. -/
 structure HInfo where
   name : String
   n : Nat
@@ -312,6 +315,7 @@ structure HInfo where
   params : List (String × VTy)
   retA : VTy
   res : VTy
+  after : Option VTy := none
   deriving DecidableEq, Repr
 
 /-- A handler site of an iteration effect (SPEC §15), as `Frontend.Elab.Effects` leaves it for the

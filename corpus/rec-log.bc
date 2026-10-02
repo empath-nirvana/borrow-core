@@ -1,0 +1,23 @@
+-- A recursion that uses an answering capability (SPEC §20). `depth` notes each level on `Log`, an
+-- answering effect whose handler's state is a cell lent by `with tally(&mut c)`. The group is the
+-- fixed point of its generator, and its environment is that capability: the generator is `!`
+-- code that holds nothing, so each level receives the capability with its argument and hands it
+-- back with its answer, as a call of any function with a row does (closure conversion at the
+-- seam). Each call of itself is a direct call of the self-reference; nothing is allocated but the
+-- cell, and nothing is dispatched.
+--
+-- Answer: (i32[6], i32[15]): six levels, `n` from 5 down to 0, and the notes 5 + 4 + 3 + 2 + 1 + 0.
+-- A level that lost the capability does not type; one that noted twice gives more than 15.
+
+include rec
+
+effect Log { fn note(x: i32) }
+
+handler tally(mut n: i32): Log = { note(x) = { n = n + x; () } }
+
+fn depth(n: i32) -> i32 = note(n); if n == 0 { 1 } else { 1 + depth(n - 1) }
+
+main -> i32 * i32 =
+  let c = alloc(0);
+  let r = with tally(&mut c) { with on_exhausted(!{ u -> 0 - 1 }) { depth(5) } };
+  (r, free(c))

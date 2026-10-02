@@ -1,6 +1,7 @@
--- Mutual recursion (SPEC §20): `even` and `odd` call one another, so they are one recursive
--- group with one `rec`, its argument tagged by the member called. Each call is in tail position,
--- and each runs as a native call at one less of the budget.
+-- Mutual recursion (SPEC §20, §21): `even` and `odd` call one another, so they are one recursive
+-- group, the fixed point of one generator taken at the record of the two functions; a call of a
+-- member projects its field from the self-reference. Each call is in tail position, and each runs
+-- as a native call at one less of the budget.
 --
 -- Answer: (inr (), inl ()): `even(100)` is true and `odd(8)` is false (`bool` is `1 + 1`, `inr ()`
 -- true). A group that called the wrong member gives the opposite.
