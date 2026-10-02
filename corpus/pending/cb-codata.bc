@@ -1,0 +1,28 @@
+-- pending: #141 (object types at the surface), and R1 per observation (§5.9)
+-- Codata with effectful observations (target 11 of #161; `docs/effect-polymorphism.md` §5.9):
+-- `drain` takes a reader whose `next` logs and whose `close` raises, `U (F (i32 + 1) & F 1)`.
+--
+-- Blocked by: a computation parameter is a parameter of a function type; one of a codata type,
+-- each observation a computation with its own provided row and the environment shared by the
+-- observations, is the reading of §5.9, not built. An object written at the surface needs #141.
+-- Two callbacks that share a capability do run (`corpus/cb-shared.bc`), and so does a
+-- computation passed per observation as a function.
+--
+-- Once it lands: (inl i32[5], i32[5]).
+--
+-- now: 27:65: an operation of `Log` is performed inside a closure or block that is not run in place, nor passed at a function's computation parameter (SPEC §22): it cannot reach its handler (a stored callback, R6 of decision 57, is not built)
+
+include fail
+
+effect Log { fn note(x: i32) }
+handler tally(mut n: i32): Log = { note(x) = { n = n + x; () } }
+
+-- A reader: `next` gives the next element or ends, and logs; `close` may fail.
+fn drain(reader: U (F (i32 + 1) & F 1)) -> i32 with Fail[i32] =
+  o <- (force reader).1;
+  match o { inl x -> x | inr u -> 0 }
+
+main -> (i32 + i32) * i32 =
+  let l = alloc(0);
+  let r = with tally(&mut l) { with to_result[i32, i32] { drain(thunk < (note(5); inl 5), raise(1) >) } };
+  (r, free(l))

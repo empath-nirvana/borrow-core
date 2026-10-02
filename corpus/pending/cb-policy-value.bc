@@ -1,0 +1,24 @@
+-- pending: R6 of decision 57 (a function over a computation as a value)
+-- A policy as a value (target 10 of #161): `let policy = !{ body -> retry(body, 3) }`, then
+-- `policy(computation)`. A policy written as a function composes (`corpus/cb-policy.bc`); bound
+-- to a variable, it is a stored callback (R6, not built) whose parameter is a computation (rank
+-- 2, `corpus/pending/cb-higher-rank.bc`).
+--
+-- Once it lands: (inl i32[103], i32[3]): two failed attempts and a third at tick 3.
+--
+-- now: 22:12: an operation of `Count` is performed inside a closure or block that is not run in place, nor passed at a function's computation parameter (SPEC §22): it cannot reach its handler (a stored callback, R6 of decision 57, is not built)
+
+include callbacks
+
+effect Count { fn tick() -> i32 }
+handler count(mut n: i32): Count = { tick() = { n = n + 1; n } }
+
+fn reconcile(id: i32) -> i32 with Count, Fail[i32] = let t = tick(); if t < 3 { raise(t) } else { id + t }
+
+main -> (i32 + i32) * i32 =
+  let c = alloc(0);
+  let r = with count(&mut c) { with to_result[i32, i32] {
+    let policy = !{ body -> retry[i32, i32](body, 3) };
+    policy({ u -> reconcile(100) })
+  } };
+  (r, free(c))

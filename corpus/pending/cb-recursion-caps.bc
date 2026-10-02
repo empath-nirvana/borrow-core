@@ -1,0 +1,34 @@
+-- pending: #9 (promotion over persistent slots), or α-conversion of lifetime binders in the checker
+-- Recursion through a callback value, with an answering capability (target 5 of #161; SPEC §22).
+-- `down` passes `apply` a callback that calls `down`. Without a capability this runs
+-- (`corpus/cb-recursion.bc`): the callback holds the group's self-reference in its environment and
+-- calls it as the members do. With `Log`, the callback's call holds the capability at the
+-- lifetime `apply` gives it, so the record the group's fixed point is taken at has fields generic
+-- in the capabilities' lifetimes, and the self-reference's type, `1 + !U(1 -o R)`, has `∀`s inside.
+--
+-- Blocked by: carried in the callback's environment, a type parameter of `apply`'s copy, that type
+-- is written at two depths of lifetime binders (the environment's parameter, and inside the code's
+-- `∀`), and the checker compares types by `=`, with no α-conversion of lifetime binders
+-- (`Frontend/README.md`, Incompleteness 2). The code of a computation parameter is captured by the
+-- callback's own `!` code instead, which keeps its environment free of `∀`; the self-reference is
+-- persistent but not of a `!` type, so the code cannot capture it (#9: promotion over persistent
+-- slots, SPEC §10 Open). Either #9, or α-conversion in the checker (a lemma that a derivation is
+-- one at every type α-equivalent to its own), or an η-expansion of the reference where the types
+-- meet, would let it run.
+--
+-- Once it lands: (i32[50], i32[6]): five levels of 10, and six notes.
+--
+-- now: 27:45: type mismatch: expected `mut 'fx_l_log i32 * (1 + !U (1 -o (forall 'l2 < top. mut 'l2 i32 * i32 -o F[1.0 aff 1 ~> 0] (mut 'l2 i32 * i32)))) * i32`, but this has type `mut 'fx_l_log i32 * (1 + !U (1 -o (forall 'l1 < top. mut 'l1 i32 * i32 -o F[1.0 aff 1 ~> 0] (mut 'l1 i32 * i32)))) * i32`
+
+include rec
+effect Log { fn note(x: i32) }
+handler tally(mut n: i32): Log = { note(x) = { n = n + x; () } }
+
+fn apply(n: i32, g: !(i32 => i32)) -> i32 = g(n)
+
+fn down(n: i32) -> i32 = note(1); if n == 0 { 0 } else { apply(n, { m -> down(m - 1) + 10 }) }
+
+main -> i32 * i32 =
+  let l = alloc(0);
+  let r = with tally(&mut l) { with on_exhausted(!{ u -> 0 - 1 }) { down(5) } };
+  (r, free(l))

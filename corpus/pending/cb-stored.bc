@@ -1,0 +1,34 @@
+-- pending: R6 of decision 57 (stored callbacks), and #9 for their captures
+-- A function that returns an effectful computation (target 9 of #161; R6 of decision 57):
+-- `make_reconciler` returns a closure that raises and performs `Kube`, and `main` runs it twice.
+--
+-- Blocked by: R6, stored callbacks, is not built. A stored callback is a closure value whose code is
+-- `!` and whose control effects are at ports fixed by its type, with the capabilities of its
+-- answering effects passed at each call (decision 57). Its type must say so (a function type with
+-- a row, `!(i32 => i32) with Kube, Fail[i32]`, which the surface has no type for yet), and a call
+-- of a value from data or a binding must be resolved by its type: the effects pass that resolves
+-- computation parameters is untyped and knows them by declaration. A stored closure that captures
+-- data (an `i32`, a view) needs #9 (promotion over persistent slots), since nothing it was given
+-- outlives the storing: here it captures only `base`, a `!` function.
+--
+-- Once it lands: (inl i32[8], i32[6]): `apply(2)` and `apply(4)` add 2 and 4 to the cluster, and
+-- answer 2 and 6.
+--
+-- now: 24:81: an operation of `Kube` is performed inside a closure or block that is not run in place, nor passed at a function's computation parameter (SPEC §22): it cannot reach its handler (a stored callback, R6 of decision 57, is not built)
+
+include fail
+
+effect Kube { fn apply(x: i32) -> i32 }
+handler cluster(mut n: i32): Kube = { apply(x) = { n = n + x; n } }
+
+fn make_reconciler(base: !(i32 => i32)) -> !(i32 => i32) with Fail[i32], Kube = !{ ev -> if ev < 0 { raise(ev) } else { apply(base(ev)) } }
+
+fn twice(x: i32) -> i32 = x + x
+
+main -> (i32 + i32) * i32 =
+  let c = alloc(0);
+  let r = with cluster(&mut c) { with to_result {
+    let rec = make_reconciler(twice);
+    rec(1) + rec(2)
+  } };
+  (r, free(c))

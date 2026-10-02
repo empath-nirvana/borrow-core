@@ -1,0 +1,38 @@
+-- Policies composed (SPEC §22): a policy is a function over a computation, and policies compose as
+-- functions do, by passing the computation on. `retrying` reruns a computation that raises;
+-- `logged` notes each run of it; `policy` is `logged` around `retrying` around the computation,
+-- written once and applied to two reconcilers with `|>`. Each layer is a function with a
+-- computation parameter: the computation is passed on as it is, its effects tunnelling through
+-- every layer to the handlers in `main`, and a layer's own effects (`retrying`'s `Fail`) are
+-- provided at its port.
+--
+-- Answer: ((inl i32[203], inr i32[106]), (i32[8], i32[6])): the first reconciler fails at its
+-- first two runs and succeeds at the third (tick 3); the second fails at all three (ticks 4, 5 and
+-- 6), the third's error reaching `to_result`. Eight notes: one per `policy`, one per run.
+include callbacks
+
+effect Log { fn note(x: i32) }
+handler tally(mut n: i32): Log = { note(x) = { n = n + 1; () } }
+effect Count { fn tick() -> i32 }
+handler count(mut n: i32): Count = { tick() = { n = n + 1; n } }
+
+fn logged[A](body: !(1 => A)) -> A = note(0); body()
+
+fn retrying[A, E](body: !(1 => A) with Fail[E]) -> A with Fail[E], Log = retry({ u -> note(1); body() }, 3)
+
+fn policy[A, E](body: !(1 => A) with Fail[E]) -> A with Fail[E], Log =
+  logged({ u -> retrying(body) })
+
+fn reconcile(id: i32) -> i32 with Count, Fail[i32] =
+  let t = tick();
+  if t < 3 || t > 3 { raise(id * 100 + t) } else { id * 100 + t }
+
+main -> ((i32 + i32) * (i32 + i32)) * (i32 * i32) =
+  let c = alloc(0);
+  let l = alloc(0);
+  let r = with count(&mut c) { with tally(&mut l) {
+    let a = reconcile(2) |> policy |> to_result;
+    let b = reconcile(1) |> policy |> to_result;
+    (a, b)
+  } };
+  (r, (free(l), free(c)))

@@ -2303,7 +2303,10 @@ def cbCall : Nat → Cx → List Cap → Span → Val → String → Val → EM 
       if written && prov.isEmpty && T.isEmpty then continue
       let globals := cx.env.sigs.map (·.1) ++ cx.env.ops.map (·.decl.name.name) ++ cx.env.externs
       let fv := (fvC fuel [y.name] M).eraseDups
-      let vars := fv.filter fun v => !globals.contains v && !cx.caps.any (·.var == v)
+      -- The code of a computation parameter it calls is `!` code: the callback's own code, which is
+      -- `!` code too, captures it, and its environment holds the rest.
+      let vars := fv.filter fun v => !globals.contains v && !cx.caps.any (·.var == v) &&
+        (cx.cb? v).isNone
       -- A callback that calls the recursive group being elaborated takes its self-reference.
       let vars := match cx.recSelf with
         | some rs => if fv.any rs.members.contains && !rs.deep then vars ++ [rs.self] else vars
