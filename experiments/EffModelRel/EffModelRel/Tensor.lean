@@ -166,4 +166,46 @@ theorem tensor {e₁ e₂ : S.E} {s₁ s₂ : G}
     · exact cap_rel co₁ (s₂₄.r' (W.both_r w c₁ c₁' hc₁ hc₁'))
     · exact VR.mono _ s₁₄ (hρ _ z)
 
+/-! ## Sum versus tensor: a pure model absorbs before an abort -/
+
+theorem hnd_op_self (C : CTy S) (i : Nat) (e : S.E) (hr : X → C.den) (hop) (hab) (o : S.O e) (v)
+    (k : (S.res e o).den → Tree S X) (d : List Dtor) :
+    (Tree.op i e o v k d).hnd C i e hr hop hab = hop o v (fun y => (k y).hnd C i e hr hop hab) d := by
+  simp only [Tree.hnd, ↓reduceIte, catchOp_self]
+
+theorem hnd_ab_other (C : CTy S) (i : Nat) {e f : S.E} (hef : f ≠ e) (hr : X → C.den) (hop) (hab)
+    (j : Nat) (a : S.A f) (v) (d : List Dtor) :
+    (Tree.ab j f a v d).hnd C i e hr hop hab = C.abA j f a v d := by
+  simp only [Tree.hnd, catchAb_ne hef, ite_self]
+
+/-- A clause of a model into a state-passing type `A₀ → D` that resumes once, with an answer
+and a next state computed from the argument and the state, and does nothing else: a writer. -/
+def PureClause {e : S.E} {Ψ : List S.E} {Γ : List (VTy S)} {A₀ : VTy S} {D : CTy S} (o : S.O e)
+    (cl : Cmp S Ψ (kty (S.q e o) (S.res e o) (.arr A₀ D) :: .g (S.arg e o) :: Γ) (.arr A₀ D))
+    (ans : (S.arg e o).den → (S.res e o).den) (next : (S.arg e o).den → A₀.den → A₀.den) : Prop :=
+  ∀ (η : IEnv Ψ) (ρ : Env Γ) (v : (S.arg e o).den) (k : (S.res e o).den → (CTy.arr A₀ D).den)
+    (d : List Dtor), cl.den η ((ρ.cons (VTy.gv v)).cons (mkK (S.q e o).w (S.q e o) (S.res e o)
+      (.arr A₀ D) k (dtorsT d))) = fun s => k (ans v) (next v s)
+
+/-- **Absorption.** Inside a pure model of `e`, an operation of `e` before an abort of another
+effect is lost with it: `h (op v; raise) s ≡ h raise s`. This is the tensor of the model's theory
+with the abort: the abort discards the model's state, which is unrecoverable. -/
+theorem absorb_pure {e f : S.E} (hef : f ≠ e) {A₀ : VTy S} {D : CTy S} {B : VTy S}
+    (hr : Cmp S Ψ (B :: Γ) (.arr A₀ D))
+    (hop : (o : S.O e) → Cmp S Ψ (kty (S.q e o) (S.res e o) (.arr A₀ D) :: .g (S.arg e o) :: Γ)
+      (.arr A₀ D))
+    (hab : (a : S.A e) → Cmp S Ψ (.g (S.aarg e a) :: Γ) (.arr A₀ D)) (o : S.O e)
+    {ans next} (hP : PureClause o (hop o) ans next)
+    (v : (S.arg e o).den) (x : Var Ψ f) (a : S.A f) (u : (S.aarg f a).den) (s : Val S Ψ Γ A₀) :
+    CtxEq (.app (.handle e hr hop hab (.op .z o (.lit _ v) (.ab (.s x) a (.lit _ u)))) s)
+      (.app (.handle e hr hop hab (.ab (C := .F B) (.s x) a (.lit _ u))) s) := by
+  apply CtxEq.of_den; intro η ρ
+  simp only [Cmp.den, CTy.opA, CTy.abA, CTy.nuA, Val.lit_den, IEnv.cons_z, IEnv.cons_s]
+  congr 1; funext l
+  refine (congrFun (hnd_op_self _ _ _ _ _ _ _ _ _ _) _).trans ?_
+  refine (congrFun (hP η ρ v _ []) _).trans ?_
+  refine (congrFun (hnd_ab_other _ _ hef _ _ _ _ _ _ _) _).trans ?_
+  refine Eq.trans ?_ (congrFun (hnd_ab_other (.arr A₀ D) l hef _ _ _ (η f x) a u []) (s.den η ρ)).symm
+  rfl
+
 end EffRel

@@ -52,6 +52,14 @@ def iter {X : Type} : Nat → (X → X) → X → X
   | 0, _, x => x
   | n + 1, f, x => f (iter n f x)
 
+@[simp] theorem Env.cons_z {A : VTy S} (a : A.den) (ρ : Env Γ) : (ρ.cons a) A .z = a := rfl
+@[simp] theorem Env.cons_s {A B : VTy S} (a : A.den) (ρ : Env Γ) (x : Var Γ B) :
+    (ρ.cons a) B (.s x) = ρ B x := rfl
+@[simp] theorem IEnv.cons_z {e : S.E} (i : Nat) (η : IEnv (S := S) Ψ) : (η.cons (e := e) i) e .z = i :=
+  rfl
+@[simp] theorem IEnv.cons_s {e e' : S.E} (i : Nat) (η : IEnv (S := S) Ψ) (x : Var Ψ e') :
+    (η.cons (e := e) i) e' (.s x) = η e' x := rfl
+
 /-- The continuation a resuming clause receives. -/
 def mkK : (b : Bool) → (q : Mode) → (r : G) → (C : CTy S) → (r.den → C.den) → Tree S Unit →
     (ktyB b q r C).den

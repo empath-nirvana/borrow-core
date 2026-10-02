@@ -10,3 +10,4 @@ import EffModelRel.Adequacy
 import EffModelRel.Rename
 import EffModelRel.Laws
 import EffModelRel.Tensor
+import EffModelRel.Examples
