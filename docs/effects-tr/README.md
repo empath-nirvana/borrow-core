@@ -28,6 +28,13 @@ cross-check: every result it has proved is cited by name, and nothing here contr
 | 10 | [Findings](10-findings.md) | three machine-checked counterexamples to phase A's checker; ν/op |
 | 11 | [Transcription guide](11-transcription.md) | dependency order; [TR], phase B and `Core/` reuse by name; open problems |
 | 12 | [Sources and novelty](12-sources.md) | references with how each was checked; what is adapted and what is new |
+| 13 | [The adjunction framing](13-adjunction.md) | *candidate extension (#250)*: freeze/resume as `F ⊣ U`; β, η (with cancellation), hiding, the interaction law; what follows from them |
+| 14 | [Stored continuations, borrows, proof cost](14-stored-continuations.md) | *candidate extension (#250)*: a continuation holding a borrow; capture rebasing; the `Mut` cell holding a continuation; T1 as a theorem; the verdict on proof cost |
+
+**§§13–14 are a candidate extension, not adopted.** They test the structure proposed on #245 and
+#250 against §§1–12, which they do not change. The verdict (§14.5): the `F ⊣ U` framing removes no
+obligation. Capture rebasing, independently of it, reduces O3 to one stated lemma (O5) and makes
+T1 a theorem.
 
 ## Conventions
 
