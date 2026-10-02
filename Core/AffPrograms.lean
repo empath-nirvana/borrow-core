@@ -843,7 +843,7 @@ theorem logProg_derives : CDerives LifeCtx.empty [] logProg (.comp (.ret .i32)) 
   refine bindC (.ret (appP (d_i32 0 (by cdeadP)) (.alloc (by cdeadP)))) ?_
   refine letC (appP (weak0 d_logCb (by cdead)) (appP (.var (by csoloP))
     (.withbor2 (A := .i32) (B := .i32) 0 (by cdeadP) rfl
-      ⟨.top, LifeCtx.defines_of_wf rfl, outlives_of_dataB rfl⟩ (by simp [VFree])
+      ⟨.top, LifeCtx.defines_of_wf rfl, (outlives_of_dataB rfl).toLe⟩ (by simp [VFree])
       (by simp [VFree])))) ?_
   refine bindC (.ret (appP (.var (by csoloP)) (.free (by cdeadP)))) ?_
   exact .ret (.var (by csoloP))

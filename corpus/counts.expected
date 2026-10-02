@@ -28,6 +28,7 @@ axes/scope-codata-effects 1 0 0
 axes/scope-data-effects 8 0 0
 axes/scope-loop-lend 3 0 0
 block-swap 2 0 0
+borrow-in-scope 2 0 0 # the borrowed cell and the cell holding the borrow
 bytes-upper 1 0 0
 capture-log-hand 0 0 0 # equal to the kernel program log-outside-native (corpus/kernel-counts.expected)
 capture-store-cancel-hand 2 0 0 # equal to the kernel program store-cancel

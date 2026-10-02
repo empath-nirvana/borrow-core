@@ -56,10 +56,10 @@ def sliceBorrowMTy (x : LifeVar) (bnd : Lifetime.Life) (A B : VTy) : VTy :=
     (.lolli (.all x bnd (.lolli (VTy.sliceMut (.var x) A) (.box (.var x) B)))
       (.tensor (.array A) B))
 
-/-- **K2 at `Mut`.** -/
+/-- **K2 at `Mut`.**  Its side conditions are non-strict, read at `↓@bδ`.  `[spec §23]` -/
 theorem sliceBorrowM_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {A B : VTy} (x : LifeVar)
-    (hΓ : Ctx.DeadP Γ) (hsideA : ∃ b, Δ.Defines b ∧ VOutlives Δ b A)
-    (hsideB : ∃ b, Δ.Defines b ∧ VOutlives Δ b B)
+    (hΓ : Ctx.DeadP Γ) (hsideA : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b A)
+    (hsideB : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b B)
     (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) :
     SemV Δ Γ withbor (sliceBorrowMTy x Δ.meetOfDom A B) := by
   intro δ γ ls ρ hδ hg
@@ -92,10 +92,18 @@ theorem sliceBorrowM_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {A B : VTy} (x : Life
   -- `MutFrame`'s premise from `A`'s side condition, and the rebox bound from `B`'s (6.60)
   obtain ⟨a, hdefa, hOa⟩ := hsideA
   obtain ⟨βA, hβA⟩ := hdefa δ hδ
-  have hA := vC_outlives hδ hβA hOa true
+  -- 6.60 at the non-strict side condition: every stratum below `βA`; the frame is
+  -- taken at `↓βA`  `[spec §23]`
+  have hA := fun ls' w σ' h =>
+    vC_outlivesLe hδ hβA hOa true ls' w σ' h _ (Life.down_sqsubset βA)
+  generalize Life.down βA = βA at hA
   obtain ⟨b, hdefb, hOb⟩ := hsideB
   obtain ⟨βB, hβB⟩ := hdefb δ hδ
-  have hB := vC_outlives hδ hβB hOb true
+  -- 6.60 at the non-strict side condition: every stratum below `βB`; the frame is
+  -- taken at `↓βB`  `[spec §23]`
+  have hB := fun ls' w σ' h =>
+    vC_outlivesLe hδ hβB hOb true ls' w σ' h _ (Life.down_sqsubset βB)
+  generalize Life.down βB = βB at hB
   -- the frames' postcondition: the handle beside a result of `B`
   let Φ : List SRec → Val → WProp := fun ls' v =>
     ex fun v'' => ⌜v = Val.pair (Val.arr ℓ n) v''⌝ ⋆ vP B ls' δ v''
@@ -164,10 +172,10 @@ theorem immLeaf_to_vP {A : VTy} {x : LifeVar} (hfree : ¬ VFree x A) {ls : List 
   · exact ptoImmS_mono (fun ls₀ u σ h => by
       rw [vC_extend_of_not_free hfree]; exact vO_obs A h) hm
 
-/-- **K2 at `Imm`.** -/
+/-- **K2 at `Imm`.**  Its side conditions are non-strict, read at `↓@bδ`.  `[spec §23]` -/
 theorem sliceBorrowI_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {A B : VTy} (x : LifeVar)
-    (hΓ : Ctx.DeadP Γ) (hsc : VScoped Δ A) (hsideA : ∃ b, Δ.Defines b ∧ VOutlives Δ b A)
-    (hsideB : ∃ b, Δ.Defines b ∧ VOutlives Δ b B)
+    (hΓ : Ctx.DeadP Γ) (hsc : VScoped Δ A) (hsideA : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b A)
+    (hsideB : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b B)
     (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) :
     SemV Δ Γ withbor (sliceBorrowITy x Δ.meetOfDom A B) := by
   intro δ γ ls ρ hδ hg
@@ -198,10 +206,18 @@ theorem sliceBorrowI_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {A B : VTy} (x : Life
   obtain ⟨rfl, rfl⟩ := Val.arr_inj he
   obtain ⟨a, hdefa, hOa⟩ := hsideA
   obtain ⟨βA, hβA⟩ := hdefa δ hδ
-  have hA := vC_outlives hδ hβA hOa true
+  -- 6.60 at the non-strict side condition: every stratum below `βA`; the frame is
+  -- taken at `↓βA`  `[spec §23]`
+  have hA := fun ls' w σ' h =>
+    vC_outlivesLe hδ hβA hOa true ls' w σ' h _ (Life.down_sqsubset βA)
+  generalize Life.down βA = βA at hA
   obtain ⟨b, hdefb, hOb⟩ := hsideB
   obtain ⟨βB, hβB⟩ := hdefb δ hδ
-  have hB := vC_outlives hδ hβB hOb true
+  -- 6.60 at the non-strict side condition: every stratum below `βB`; the frame is
+  -- taken at `↓βB`  `[spec §23]`
+  have hB := fun ls' w σ' h =>
+    vC_outlivesLe hδ hβB hOb true ls' w σ' h _ (Life.down_sqsubset βB)
+  generalize Life.down βB = βB at hB
   let Φ : List SRec → Val → WProp := fun ls' v =>
     ex fun v'' => ⌜v = Val.pair (Val.arr ℓ n) v''⌝ ⋆ vP B ls' δ v''
   have hΦ : ∀ ls' v σ, Φ ls' v σ → BoLo.Outlives σ βB := by

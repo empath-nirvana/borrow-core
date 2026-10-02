@@ -295,7 +295,7 @@ theorem embed {Δ : LifeCtx} {Γ : Ctx Ty} {e : Expr} {T : Ty} (h : DerivesWf Δ
       obtain ⟨h₁, h₂⟩ := BoCa.scopedB_axWithbor2Ty hwf
       obtain ⟨b, hb, ho⟩ := hs
       rw [cbv_axWithbor2Ty]
-      exact .withbor2 x (dead_cbvCtx hΓd) hx ⟨b, hb, vOutlives_cbv ho⟩ (not_vFree_cbv hx h₁)
+      exact .withbor2 x (dead_cbvCtx hΓd) hx ⟨b, hb, (vOutlives_cbv ho).toLe⟩ (not_vFree_cbv hx h₁)
         (not_vFree_cbv hx h₂)
   | withbor3Ax hΓd x hx hwf =>
       intro _ _

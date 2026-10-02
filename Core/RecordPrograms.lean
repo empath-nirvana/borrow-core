@@ -203,7 +203,7 @@ theorem d_pokeG {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
           (.boxI (.unitI (by cdead)) ⟨LifeCtx.defines_of_wf rfl, dead_noLive (by cdead)⟩))
       (appW (.var (by csolo))
         (.withbor2 (A := BB) (B := .unit) 1 (by cdead) rfl
-          ⟨.top, LifeCtx.defines_of_wf rfl, outlives_of_dataB rfl⟩ (by simp [VFree])
+          ⟨.top, LifeCtx.defines_of_wf rfl, (outlives_of_dataB rfl).toLe⟩ (by simp [VFree])
           (by simp [VFree])))
 
 def mutBody : Expr :=
@@ -242,8 +242,8 @@ theorem d_mutFields : CDerives LifeCtx.empty [] mutFields (.val .unit) :=
           (appW (.sumI₁ (.unitI (by cdead))) (.alloc (by cdead))))
           (.alloc (by cdead)))
         (.withbor2 (A := Pt.valTy) (B := .unit) 0 (by cdead) rfl
-          ⟨.top, LifeCtx.defines_of_wf rfl, .tensor (outlives_of_dataB rfl)
-            (.ref (outlives_of_dataB rfl))⟩ (by simp [VFree, Shape.valTy]) (by simp [VFree])))) <|
+          ⟨.top, LifeCtx.defines_of_wf rfl, VOutlives.toLe (.tensor (outlives_of_dataB rfl)
+            (.ref (outlives_of_dataB rfl)))⟩ (by simp [VFree, Shape.valTy]) (by simp [VFree])))) <|
   seqW (.var (by csolo)) <|
   d_freePt (appW (.var (by csolo)) (.free (by cdead))) (by cdead)
 
@@ -387,7 +387,7 @@ theorem d_bagProg : CDerives LifeCtx.empty [] bagProg (.val .unit) :=
     (appW d_pushBorrower
       (appW (appW (pairW (d_num (by cdead) 0) (d_nilC (by cdead))) (.alloc (by cdead)))
         (.withbor2 (A := Bag.valTy) (B := .unit) 0 (by cdead) rfl
-          ⟨.top, LifeCtx.defines_of_wf rfl, .tensor (natN_outlives _ _) (clistL_outlives _ _)⟩
+          ⟨.top, LifeCtx.defines_of_wf rfl, VOutlives.toLe (.tensor (natN_outlives _ _) (clistL_outlives _ _))⟩
           (by simp [VFree, Shape.valTy, natN, natBody, clistL, FShape.ty])
           (by simp [VFree])))) <|
   seqW (.var (by csolo)) <|

@@ -396,7 +396,7 @@ theorem mapProgOpenC_derives : CDerives LifeCtx.empty ΓMC mapProgOpenC (.comp (
     (.ret (.lolliE (.right (.dead (.left (.dead .nil)))) d_borrowerMC
       (.lolliE (.left (.dead (.dead (.dead .nil)))) (.var (.here (by repeat constructor)))
         (.withbor2 (A := clistL) (B := .unit) 0 (by repeat constructor) rfl
-          ⟨LifeCtx.empty.meetOfDom, LifeCtx.defines_of_wf rfl, clistL_outlives _ _⟩
+          ⟨LifeCtx.empty.meetOfDom, LifeCtx.defines_of_wf rfl, (clistL_outlives _ _).toLe⟩
           (by simp [VFree, FShape.ty, natN, natBody]) (by simp [VFree]))))) ?_
   refine .tensorE (A := .ref clistL) (B := .unit) (.left (.dead (.dead (.dead (.right .nil)))))
     (.var (.here (by repeat constructor))) ?_

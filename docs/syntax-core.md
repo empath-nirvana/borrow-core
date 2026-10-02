@@ -368,7 +368,7 @@ constant.
 | `forget_unk` | `unk => 1` | `forgetUnk` `Fu:145` | none |
 | `forget_bang[A]` | `!A => 1` | `forgetBang` `Fu:127` | none |
 | `withbor1['x, A, B]` | `ref A => (all 'x < dom. imm 'x A => box 'x B) => ref A * B` | `withbor1` `Fu:146`, `Ty:1411` | `x` fresh; `VScoped Δ A`; `'x ∉ FV(A), FV(B)` |
-| `withbor2['x, @b, A, B]` | `ref A => (all 'x < dom. mut 'x A => box 'x B) => ref A * B` | `withbor2` `Fu:149`, `Ty:1416` | `x` fresh; `Δ ⊨ @b` and `Δ ⊢ A ⊐ @b` (the `∃ b` witness); `'x ∉ FV(A), FV(B)` |
+| `withbor2['x, @b, A, B]` | `ref A => (all 'x < dom. mut 'x A => box 'x B) => ref A * B` | `withbor2` `Fu:149`, `Ty:1416` | `x` fresh; `Δ ⊨ @b` and `Δ ⊢ A ⊒ @b` (the `∃ b` witness, non-strict, SPEC §23); `'x ∉ FV(A), FV(B)` |
 | `withbor3[@a, 'x, A, B]` | `mut @a A => (all 'x < dom. mut 'x A => box 'x B) => mut @a A * B` | `withbor3` `Fu:153`, `Ty:1421` | `x` fresh; `'x ∉ FV(A), FV(B)` |
 | `withload[@a, 'x, A, B]` | `imm @a A => (all 'x < dom. view 'x A => box 'x B) => B` | `withload` `Fu:156`, `Ty:1426` | `x` fresh; `'x ∉ FV(A), FV(B)` |
 | `withswap[@a, A, B]` | `mut @a A => (A => A * B) => mut @a A * B` | `withswap` `Fu:159`, `Ty:1431` | none |

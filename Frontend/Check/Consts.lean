@@ -18,7 +18,7 @@ A fold's shape argument is a type with the recursive position `X`, decoded to an
 namespace Frontend.Check
 open BoCa BoCa.Lifetime
 open BoCa.Fig16.LogRel.Core.Check
-open BoCa.Fig16.LogRel.Core (CDerives Jdg VFree VOutlives FShape FD₁ mutM immM formerMut formerImm d_allocS
+open BoCa.Fig16.LogRel.Core (CDerives Jdg VFree VOutlives VOutlivesLe FShape FD₁ mutM immM formerMut formerImm d_allocS
   d_freeS withborSM_wf withborSI_wf withborM2_wf withborI2_wf shortenE_wf FamSide cbTy2 famTy2
   plainV HasDtor dtorE dtor_wf withborUE withbor1UTy withbor2UTy withbor3UTy withloadUTy
   sliceBorrowMUTy sliceBorrowIUTy closedAt)
@@ -76,11 +76,11 @@ def freshFor (sp : Span) (x : LifeVar) (A B : CVTy) :
     else err sp s!"the binder {ppLVar x} occurs free in `{ppVTy A}`"
   else err sp s!"the binder {ppLVar x} is already bound"
 
-/-- `Δ ⊨ @b` and `Δ ⊢ A ⊐ @b`: `withbor2`'s witness. -/
+/-- `Δ ⊨ @b` and `Δ ⊢ A ⊒ @b`: `withbor2`'s witness.  `[spec §23]` -/
 def outlivesWitness (sp : Span) (b : CLife) (A : CVTy) :
-    Except Error (PLift (∃ b, Δ.Defines b ∧ VOutlives Δ b A)) :=
+    Except Error (PLift (∃ b, Δ.Defines b ∧ VOutlivesLe Δ b A)) :=
   if hw : b.wf Δ = true then
-    if ho : outlivesB Δ b A = true then pure ⟨⟨b, defines_of_wf hw, outlivesB_sound Δ b A ho⟩⟩
+    if ho : outlivesLeB Δ b A = true then pure ⟨⟨b, defines_of_wf hw, outlivesLeB_sound Δ b A ho⟩⟩
     else err sp s!"cannot show that `{ppVTy A}` outlives `{ppLife b}`"
   else err sp s!"the lifetime `{ppLife b}` is not defined here"
 

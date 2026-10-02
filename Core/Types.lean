@@ -1723,32 +1723,43 @@ theorem vFree_immReborrow {x y : LifeVar} : ∀ (A : VTy),
 
 /-! ### Outlives and scoping -/
 
-/-- `Δ ⊢ A ⊐ @a` on value types: `[TR]` p. 2's rules (`OutlivesRules`), with `0` outliving
-every lifetime (it has no values), and `μ` checked at its body. The box rule is non-strict,
-`[@b] A ⊐ @a` from `Δ ⊨ @a ⊑ @b`: an extension of 2.35, sound because a `[@b] A` value's
-resource is already in `Res_β ⊆ Res_α` (`vC_outlives`).  `[spec §23]` -/
-inductive VOutlives (Δ : LifeCtx) (a : Lifetime.Life) : VTy → Prop where
-  | unit : VOutlives Δ a .unit
-  | tensor {A B} : VOutlives Δ a A → VOutlives Δ a B → VOutlives Δ a (.tensor A B)
-  | zero : VOutlives Δ a .zero
-  | sum {A B} : VOutlives Δ a A → VOutlives Δ a B → VOutlives Δ a (.sum A B)
-  | ref {A} : VOutlives Δ a A → VOutlives Δ a (.ref A)
-  | bang {A} : VOutlives Δ a (.bang A)
-  /-- `[@b] A ⊐ @a` from `Δ ⊨ @a ⊑ @b`.  `[spec §23]` -/
-  | box {b A} : Δ.EntailsLe a b → VOutlives Δ a (.box b A)
-  | imm {b A} : Δ.EntailsLt a b → VOutlives Δ a (.imm b A)
-  | «mut» {b A} : Δ.EntailsLt a b → VOutlives Δ a (.mut b A)
+/-- The outlives judgment on value types with the box rule's lifetime premise `Rb b` and the
+`Imm`/`Mut` rules' premise `Rr b`: `[TR]` p. 2's rules (`OutlivesRules`), with `0` outliving
+every lifetime (it has no values), and `μ` checked at its body. `VOutlives` and `VOutlivesLe`
+are its two instances.  `[spec §23]` -/
+inductive VOutlivesR (Rb Rr : Lifetime.Life → Prop) : VTy → Prop where
+  | unit : VOutlivesR Rb Rr .unit
+  | tensor {A B} : VOutlivesR Rb Rr A → VOutlivesR Rb Rr B → VOutlivesR Rb Rr (.tensor A B)
+  | zero : VOutlivesR Rb Rr .zero
+  | sum {A B} : VOutlivesR Rb Rr A → VOutlivesR Rb Rr B → VOutlivesR Rb Rr (.sum A B)
+  | ref {A} : VOutlivesR Rb Rr A → VOutlivesR Rb Rr (.ref A)
+  | bang {A} : VOutlivesR Rb Rr (.bang A)
+  | box {b A} : Rb b → VOutlivesR Rb Rr (.box b A)
+  | imm {b A} : Rr b → VOutlivesR Rb Rr (.imm b A)
+  | «mut» {b A} : Rr b → VOutlivesR Rb Rr (.mut b A)
   /-- A type variable is read under its `μ`, whose body is checked with the variable
   outliving `@a`. -/
-  | tvar {n} : VOutlives Δ a (.tvar n)
+  | tvar {n} : VOutlivesR Rb Rr (.tvar n)
   /-- `Δ ⊢ μX. A ⊐ @a` from `A ⊐ @a` with `X ⊐ @a` (`docs/scope-recursion.md` §2.3:
   `X` holds only what `A` holds). -/
-  | mu {A} : VOutlives Δ a A → VOutlives Δ a (.mu A)
+  | mu {A} : VOutlivesR Rb Rr A → VOutlivesR Rb Rr (.mu A)
   /-- `I32`/`I64` outlive every lifetime.  `[spec §8]` -/
-  | int {w} : VOutlives Δ a (.int w)
-  | opq {k} : VOutlives Δ a (.opq k)
+  | int {w} : VOutlivesR Rb Rr (.int w)
+  | opq {k} : VOutlivesR Rb Rr (.opq k)
   /-- `Δ ⊢ [L] ⊐ @a` from `Δ ⊢ L ⊐ @a`.  `[spec §9]` -/
-  | fam {L} : VOutlives Δ a L → VOutlives Δ a (.fam L)
+  | fam {L} : VOutlivesR Rb Rr L → VOutlivesR Rb Rr (.fam L)
+
+/-- `Δ ⊢ A ⊐ @a`: the box rule from `Δ ⊨ @a ⊑ @b`, an extension of 2.35, sound because a
+`[@b] A` value's resource is already in `Res_β ⊆ Res_α` (`vC_outlives`); the `Imm`/`Mut` rules
+from `Δ ⊨ @a ⊏ @b`, as printed.  `[spec §23]` -/
+abbrev VOutlives (Δ : LifeCtx) (a : Lifetime.Life) : VTy → Prop :=
+  VOutlivesR (Δ.EntailsLe a) (Δ.EntailsLt a)
+
+/-- `Δ ⊢ A ⊒ @a`: all three lifetime premises `Δ ⊨ @a ⊑ @b`, the side condition of the borrows
+that lend a payload `mut`. It gives every stratum strictly below `α` (`vC_outlivesLe`), not
+`Res_α`.  `[spec §23]` -/
+abbrev VOutlivesLe (Δ : LifeCtx) (a : Lifetime.Life) : VTy → Prop :=
+  VOutlivesR (Δ.EntailsLe a) (Δ.EntailsLe a)
 
 /-- `Δ ⊨ @a ⊏ @b` gives `Δ ⊨ @a ⊑ @b`. -/
 theorem entailsLe_of_entailsLt {Δ : LifeCtx} {a b : Lifetime.Life} (h : Δ.EntailsLt a b) :
@@ -1757,8 +1768,31 @@ theorem entailsLe_of_entailsLt {Δ : LifeCtx} {a b : Lifetime.Life} (h : Δ.Enta
   refine ⟨m, n, hm, hn, ?_⟩
   simp only [Lifetime.SLife.Lt, Lifetime.SLife.Le] at hlt ⊢; omega
 
-theorem VOutlives.rename {Δ : LifeCtx} {a : Lifetime.Life} {A : VTy} (h : VOutlives Δ a A) :
-    ∀ r : Nat → Nat, VOutlives Δ a (A.rename r) := by
+theorem VOutlivesR.mono {Rb Rr Rb' Rr' : Lifetime.Life → Prop} (hb : ∀ b, Rb b → Rb' b)
+    (hr : ∀ b, Rr b → Rr' b) {A : VTy} (h : VOutlivesR Rb Rr A) : VOutlivesR Rb' Rr' A := by
+  induction h with
+  | unit => exact .unit
+  | tensor _ _ ih₁ ih₂ => exact .tensor ih₁ ih₂
+  | zero => exact .zero
+  | sum _ _ ih₁ ih₂ => exact .sum ih₁ ih₂
+  | ref _ ih => exact .ref ih
+  | bang => exact .bang
+  | box h => exact .box (hb _ h)
+  | imm h => exact .imm (hr _ h)
+  | «mut» h => exact .mut (hr _ h)
+  | tvar => exact .tvar
+  | mu _ ih => exact .mu ih
+  | int => exact .int
+  | opq => exact .opq
+  | fam _ ih => exact .fam ih
+
+/-- Every `Δ ⊢ A ⊐ @a` is a `Δ ⊢ A ⊒ @a`.  `[spec §23]` -/
+theorem VOutlives.toLe {Δ : LifeCtx} {a : Lifetime.Life} {A : VTy} (h : VOutlives Δ a A) :
+    VOutlivesLe Δ a A :=
+  VOutlivesR.mono (fun _ h => h) (fun _ h => entailsLe_of_entailsLt h) h
+
+theorem VOutlivesR.rename {Rb Rr : Lifetime.Life → Prop} {A : VTy} (h : VOutlivesR Rb Rr A) :
+    ∀ r : Nat → Nat, VOutlivesR Rb Rr (A.rename r) := by
   induction h with
   | unit => intro _; exact .unit
   | tensor _ _ ih₁ ih₂ => intro r; exact .tensor (ih₁ r) (ih₂ r)
@@ -1775,8 +1809,8 @@ theorem VOutlives.rename {Δ : LifeCtx} {a : Lifetime.Life} {A : VTy} (h : VOutl
   | int => intro _; exact .int
   | opq => intro _; exact .opq
 
-theorem VOutlives.subst {Δ : LifeCtx} {a : Lifetime.Life} {A : VTy} (h : VOutlives Δ a A) :
-    ∀ σ : Nat → VTy, (∀ n, VOutlives Δ a (σ n)) → VOutlives Δ a (A.subst σ) := by
+theorem VOutlivesR.subst {Rb Rr : Lifetime.Life → Prop} {A : VTy} (h : VOutlivesR Rb Rr A) :
+    ∀ σ : Nat → VTy, (∀ n, VOutlivesR Rb Rr (σ n)) → VOutlivesR Rb Rr (A.subst σ) := by
   induction h with
   | unit => intro _ _; exact .unit
   | tensor _ _ ih₁ ih₂ => intro σ hσ; exact .tensor (ih₁ σ hσ) (ih₂ σ hσ)
@@ -1799,13 +1833,26 @@ theorem VOutlives.subst {Δ : LifeCtx} {a : Lifetime.Life} {A : VTy} (h : VOutli
         | succ n => exact (hσ n).rename Nat.succ))
 
 /-- An outlives judgment at `μX. A` holds at its unrolling. -/
-theorem VOutlives.unroll {Δ : LifeCtx} {a : Lifetime.Life} {A : VTy}
-    (h : VOutlives Δ a (.mu A)) : VOutlives Δ a (VTy.inst (.mu A) A) := by
+theorem VOutlivesR.unroll {Rb Rr : Lifetime.Life → Prop} {A : VTy}
+    (h : VOutlivesR Rb Rr (.mu A)) : VOutlivesR Rb Rr (VTy.inst (.mu A) A) := by
   cases h with
   | mu hA => exact hA.subst _ (fun n => by
       cases n with
       | zero => exact .mu hA
       | succ n => exact .tvar)
+
+theorem VOutlives.rename {Δ : LifeCtx} {a : Lifetime.Life} {A : VTy} (h : VOutlives Δ a A)
+    (r : Nat → Nat) : VOutlives Δ a (A.rename r) := VOutlivesR.rename h r
+
+theorem VOutlives.subst {Δ : LifeCtx} {a : Lifetime.Life} {A : VTy} (h : VOutlives Δ a A)
+    (σ : Nat → VTy) (hσ : ∀ n, VOutlives Δ a (σ n)) : VOutlives Δ a (A.subst σ) :=
+  VOutlivesR.subst h σ hσ
+
+theorem VOutlives.unroll {Δ : LifeCtx} {a : Lifetime.Life} {A : VTy}
+    (h : VOutlives Δ a (.mu A)) : VOutlives Δ a (VTy.inst (.mu A) A) := VOutlivesR.unroll h
+
+theorem VOutlivesLe.unroll {Δ : LifeCtx} {a : Lifetime.Life} {A : VTy}
+    (h : VOutlivesLe Δ a (.mu A)) : VOutlivesLe Δ a (VTy.inst (.mu A) A) := VOutlivesR.unroll h
 
 /-- `Δ ⊨ Γ ⊐ @a`: `@a` is defined under `Δ` and every live slot outlives it (`Ctx.Outlives`). -/
 def CtxOutlives (Δ : LifeCtx) (Γ : Ctx VTy) (a : Lifetime.Life) : Prop :=

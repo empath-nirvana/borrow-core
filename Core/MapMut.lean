@@ -477,7 +477,7 @@ theorem mapProg_derives : CDerives LifeCtx.empty ΓM mapProgOpen (.comp (.ret pu
     (.ret (.lolliE (.right (.dead (.left (.dead .nil)))) d_borrowerM
       (.lolliE (.left (.dead (.dead (.dead .nil)))) (.var (.here (by repeat constructor)))
         (.withbor2 (A := listP) (B := .unit) 0 (by repeat constructor) rfl
-          ⟨LifeCtx.empty.meetOfDom, LifeCtx.defines_of_wf rfl, listP_outlives _ _⟩
+          ⟨LifeCtx.empty.meetOfDom, LifeCtx.defines_of_wf rfl, (listP_outlives _ _).toLe⟩
           (by simp [VFree, listP, listPBody, natN, natBody]) (by simp [VFree]))))) ?_
   refine .tensorE (A := .ref listP) (B := .unit) (.left (.dead (.dead (.dead (.right .nil)))))
     (.var (.here (by repeat constructor))) ?_

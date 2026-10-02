@@ -1,0 +1,19 @@
+-- A cell holding a borrow, lent `mut` inside the borrow's own scope (SPEC §23). `c` holds
+-- `b : imm 'x i32`, and `borrow mut c` lends it at a lifetime `'w` below `'x`; `withbor`'s side
+-- condition asks for a lifetime in scope that `imm 'x i32` lasts at least as long as, and `'x`
+-- itself is one, since that side condition is non-strict. The body swaps the borrow in the cell for
+-- a copy of it, so the cell is read and written through the lent borrow.
+--
+-- Answer: i32[17], and `live 0`: the cell read through the borrow after the lend (5), the lend's
+-- answer (7), and `a`, freed by its owner after the borrow has ended (5).
+
+main -> i32 =
+  let a = alloc(5);
+  let n = borrow imm a { 'x, b ->
+    let c = alloc(b);
+    let k = borrow mut c { 'w, m ->
+      modify m { i -> let (i, j) = copy['x, i32] i; forget_imm['x, i32] j; i };
+      7 };
+    let b2 = free(c);
+    *b2 + k };
+  free(a) + n

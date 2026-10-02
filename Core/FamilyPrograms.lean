@@ -113,7 +113,7 @@ theorem d_withborM2A (hA : ∀ z, ¬ VFree z A) (hAo : ∀ Δ a, VOutlives Δ a 
     CDerives LifeCtx.empty Γ withborF2
       (.val (withborF2Ty mutM 0 LifeCtx.empty.meetOfDom A A .unit)) :=
   withborM2_wf (famSide0 mutM .unit hA (fun _ h => h) (fun _ _ _ => Iff.rfl) hinst)
-    ⟨.top, LifeCtx.defines_of_wf rfl, hAo _ _⟩ (hAo _ _) .unit hΓ
+    ⟨.top, LifeCtx.defines_of_wf rfl, (hAo _ _).toLe⟩ (hAo _ _) .unit hΓ
 
 theorem d_swapBoth {e₁ e₂ dropE : Expr} (hA : ∀ z, ¬ VFree z A) (hAo : ∀ Δ a, VOutlives Δ a A)
     (hinst : VTy.instLife 0 (.var 2) (.lolli (famTy2 mutM (.var 0) A A) (.box (.var 0) .unit))
@@ -482,7 +482,7 @@ theorem d_withborM2In {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
         Lifetime.meetOfDomL, LifeCtx.empty, LifeCtx.extend],
       by simp [cbTy2, famTy2, VFree, CFree, Lifetime.Life.mentions, LifeCtx.meetOfDom,
         Lifetime.meetOfDomL, LifeCtx.empty, LifeCtx.extend], rfl⟩
-    ⟨.top, LifeCtx.defines_of_wf rfl, outlives_of_dataB rfl⟩ (outlives_of_dataB rfl) .unit hΓ
+    ⟨.top, LifeCtx.defines_of_wf rfl, (outlives_of_dataB rfl).toLe⟩ (outlives_of_dataB rfl) .unit hΓ
 
 /-- `(Ref B ⊗ Ref B) ⊗ 1`, the outer family's result. -/
 abbrev T4 : VTy := .tensor (refs2 BB BB) .unit
@@ -510,7 +510,7 @@ theorem d_withborM2Out {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
       (.val (withborF2Ty mutM 0 LifeCtx.empty.meetOfDom BB BB T4)) :=
   withborM2_wf (famSide0 (A := BB) mutM T4 (fun _ h => by simp [VFree] at h)
       (fun _ h => by simp [VFree] at h) (fun _ _ _ => Iff.rfl) rfl)
-    ⟨.top, LifeCtx.defines_of_wf rfl, outlives_of_dataB rfl⟩ (outlives_of_dataB rfl)
+    ⟨.top, LifeCtx.defines_of_wf rfl, (outlives_of_dataB rfl).toLe⟩ (outlives_of_dataB rfl)
     (.tensor (.tensor (.ref (outlives_of_dataB rfl)) (.ref (outlives_of_dataB rfl))) .unit) hΓ
 
 theorem d_freePair {Δ : LifeCtx} {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :

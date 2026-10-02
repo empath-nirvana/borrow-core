@@ -270,9 +270,10 @@ theorem ewp_ret_pair {Tb : Table} (hTb : Tb.Mono) (u : Val) (hu : closedAt 0 u.1
 (`withbor2_compatX`), with the frame over `ewpTS` (`ewpTS_M_frameU`) at the row's table, the
 returned source beside each stop.  Every end of the callback is boxed at the frame's lifetime
 (`ewp_box_end`), so the frame ends at a `raise` as at a return; then `ewp_unwind` pairs the
-source with the answer, or finalises it and raises again.  `[spec §19]` -/
+source with the answer, or finalises it and raises again.  Its side conditions are non-strict,
+read at `↓@bδ`.  `[spec §19, §23]` -/
 theorem withbor2U_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {A B : VTy} {S : Row} {d : Expr}
-    (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hside : ∃ b, Δ.Defines b ∧ VOutlives Δ b A)
+    (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hside : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b A)
     (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : S.Unwind x)
     (hdc : closedAt 0 d = true) (hd : SemV Δ Γ d (.lolli (.ref A) .unit)) :
     SemV Δ Γ (withborUE d) (withbor2UTy x Δ.meetOfDom A B S) := by
@@ -305,7 +306,11 @@ theorem withbor2U_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {A B : VTy} {S : Row} {d
   -- the Mut Frame over the callback, at the row's table with the source beside each stop
   obtain ⟨b, hdef, hO⟩ := hside
   obtain ⟨β, hb⟩ := hdef δ hδ
-  have hβ := vC_outlives hδ hb hO true
+  -- 6.60 at the non-strict side condition: every stratum below `β`; the frame is
+  -- taken at `↓β`  `[spec §23]`
+  have hβ := fun ls' w σ' h =>
+    vC_outlivesLe hδ hb hO true ls' w σ' h _ (Life.down_sqsubset β)
+  generalize Life.down β = β at hβ
   obtain ⟨σ, hcσ, hcτ⟩ := compS_reassoc hcℓ hc₂
   refine ewpTS_M_frameU ((opTable T).withFr Fr) (Table.withFr_abortive (opTable_abortive hA) Fr) ℓ A δ β
     (fun ls' w σ' h => hβ ls' w σ' h) vℓ _ ls₁ (fun ls v => Q₁ ls v ⋆ Fr ls) τ
@@ -635,10 +640,11 @@ def cbEnds (T : OpTab) (B : VTy) (δ : LSub) : List SRec → Expr → WProp := f
 
 /-- **The `Mut` slice borrow at an unwinding row.**  `sliceBorrowM_compatX`'s proof, the `n`
 Mut Frames at `wpG` (`wpG_M_frameFam`) around the callback, whose ends are a result or a stop
-held by its argument (`cbEnds`, `ewp_end`).  `[spec §19]` -/
+held by its argument (`cbEnds`, `ewp_end`).  Its side conditions are non-strict, read at
+`↓@bδ`.  `[spec §19, §23]` -/
 theorem sliceBorrowMU_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {A B : VTy} {S : Row} {d : Expr}
-    (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hsideA : ∃ b, Δ.Defines b ∧ VOutlives Δ b A)
-    (hsideB : ∃ b, Δ.Defines b ∧ VOutlives Δ b B)
+    (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hsideA : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b A)
+    (hsideB : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b B)
     (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : S.Unwind x)
     (hdc : closedAt 0 d = true) (hd : SemV Δ Γ d (.lolli (.array A) .unit)) :
     SemV Δ Γ (withborUE d) (sliceBorrowMUTy x Δ.meetOfDom A B S) := by
@@ -669,10 +675,18 @@ theorem sliceBorrowMU_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {A B : VTy} {S : Row
     exact ⟨Val.arr ℓ n, v, pure_sep_mk rfl ⟨σ₂, σ₁, ResU.CompS.comm hcσ, hFr, hv⟩⟩
   obtain ⟨a, hdefa, hOa⟩ := hsideA
   obtain ⟨βA, hβA⟩ := hdefa δ hδ
-  have hA' := vC_outlives hδ hβA hOa true
+  -- 6.60 at the non-strict side condition: every stratum below `βA`; the frame is
+  -- taken at `↓βA`  `[spec §23]`
+  have hA' := fun ls' w σ' h =>
+    vC_outlivesLe hδ hβA hOa true ls' w σ' h _ (Life.down_sqsubset βA)
+  generalize Life.down βA = βA at hA'
   obtain ⟨b, hdefb, hOb⟩ := hsideB
   obtain ⟨βB, hβB⟩ := hdefb δ hδ
-  have hB := vC_outlives hδ hβB hOb true
+  -- 6.60 at the non-strict side condition: every stratum below `βB`; the frame is
+  -- taken at `↓βB`  `[spec §23]`
+  have hB := fun ls' w σ' h =>
+    vC_outlivesLe hδ hβB hOb true ls' w σ' h _ (Life.down_sqsubset βB)
+  generalize Life.down βB = βB at hB
   have hΦ : ∀ ls' t σ, cbEnds T B δ ls' t σ → BoLo.Outlives σ βB := by
     rintro ls' t σ (⟨v, -, hv⟩ | ⟨-, n, i, en, v, hT, hPA⟩)
     · exact hB ls' v σ hv
@@ -708,11 +722,11 @@ theorem sliceBorrowMU_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {A B : VTy} {S : Row
 
 /-- **The `Imm` slice borrow at an unwinding row.**  `sliceBorrowI_compatX`'s proof, the `n` Imm
 Frames at `wpG` (`wpG_I_frameFam`) around the callback, whose ends are carried along `Ext`.
-`[spec §19]` -/
+Its side conditions are non-strict, read at `↓@bδ`.  `[spec §19, §23]` -/
 theorem sliceBorrowIU_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {A B : VTy} {S : Row} {d : Expr}
     (x : LifeVar) (hΓ : Ctx.DeadP Γ) (hsc : VScoped Δ A)
-    (hsideA : ∃ b, Δ.Defines b ∧ VOutlives Δ b A)
-    (hsideB : ∃ b, Δ.Defines b ∧ VOutlives Δ b B)
+    (hsideA : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b A)
+    (hsideB : ∃ b, Δ.Defines b ∧ VOutlivesLe Δ b B)
     (hfree₁ : ¬ VFree x A) (hfree₂ : ¬ VFree x B) (hS : S.Unwind x)
     (hdc : closedAt 0 d = true) (hd : SemV Δ Γ d (.lolli (.array A) .unit)) :
     SemV Δ Γ (withborUE d) (sliceBorrowIUTy x Δ.meetOfDom A B S) := by
@@ -744,10 +758,18 @@ theorem sliceBorrowIU_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {A B : VTy} {S : Row
     exact ⟨Val.arr ℓ n, v, pure_sep_mk rfl ⟨σ₂, σ₁, ResU.CompS.comm hcσ, hFr, hv⟩⟩
   obtain ⟨a, hdefa, hOa⟩ := hsideA
   obtain ⟨βA, hβA⟩ := hdefa δ hδ
-  have hA' := vC_outlives hδ hβA hOa true
+  -- 6.60 at the non-strict side condition: every stratum below `βA`; the frame is
+  -- taken at `↓βA`  `[spec §23]`
+  have hA' := fun ls' w σ' h =>
+    vC_outlivesLe hδ hβA hOa true ls' w σ' h _ (Life.down_sqsubset βA)
+  generalize Life.down βA = βA at hA'
   obtain ⟨b, hdefb, hOb⟩ := hsideB
   obtain ⟨βB, hβB⟩ := hdefb δ hδ
-  have hB := vC_outlives hδ hβB hOb true
+  -- 6.60 at the non-strict side condition: every stratum below `βB`; the frame is
+  -- taken at `↓βB`  `[spec §23]`
+  have hB := fun ls' w σ' h =>
+    vC_outlivesLe hδ hβB hOb true ls' w σ' h _ (Life.down_sqsubset βB)
+  generalize Life.down βB = βB at hB
   have hΦ : ∀ ls' t σ, cbEnds T B δ ls' t σ → BoLo.Outlives σ βB := by
     rintro ls' t σ (⟨v, -, hv⟩ | ⟨-, n, i, en, v, hT, hPA⟩)
     · exact hB ls' v σ hv

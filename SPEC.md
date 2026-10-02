@@ -522,8 +522,10 @@ the list of places (`wpTS_M_frameList`, `Core/SliceFrames.lean`); at `Imm`, one 
 the callback runs at a lifetime below all of them, where every leaf is a leaf of `[M 'x A]`
 because leaf cells are antitone in their lifetime (6.118, 6.114). The callback's result, and at
 `Imm` the payloads handed back, are reboxed at each outer frame's lifetime by 6.60
-(`vC_outlives`): that is what the side conditions on `A` and `B` pay for. The compatibility
-lemmas are `sliceBorrowM_compatX` and `sliceBorrowI_compatX`.
+(`vC_outlives`): that is what the side conditions on `A` and `B` pay for. The side conditions
+are non-strict (§23): 6.60 at `Δ ⊢ A ⊒ @b` gives every stratum below `@bδ`, and the frames are
+taken at `↓@bδ` (`vC_outlivesLe`). The compatibility lemmas are `sliceBorrowM_compatX` and
+`sliceBorrowI_compatX`.
 
 **On a `mut` family** (`ArrayMut @a A`), the element operations, with the terms of their `imm`
 counterparts:
@@ -3467,64 +3469,81 @@ cost programs a scope each and protect nothing the model needs (`docs/outlives-s
 #241): the box rule of `Δ ⊢ T ⊐ @a`, and the side condition of `withbor` (Ref → Mut). Relaxing
 them to `⊑` is an **extension** of the calculus, read against the model the paper defines, as
 §4 (Entry 3) is; it is not a correction of the paper, and `Paper/` is unchanged. Two
-elaborations, with no judgment change, remove the rest of the cost in the `aff-*` programs: an
-implicit lifetime for `main`, and lifetime bounds on the type parameters of a generic function.
+elaborations, with no judgment change, remove the rest of the cost in the `aff-*` programs: a
+lifetime of `main`'s own, and lifetime bounds on the type parameters of a generic function. (#243
+calls the four K1, K2, E1 and B1.)
 
-### K1: the box rule of the outlives judgment
+### The outlives judgment
 
-`VOutlives.box` (`Core/Types.lean`) is `[@b] T ⊐ @a` from `Δ ⊨ @a ⊑ @b` (was `Δ ⊨ @a ⊏ @b`). A
-value of `[@b] T` has its resource in `Res_β`, and `Res_β ⊆ Res_α` for `α ⊑ β`, so 6.60
-(`vC_outlives`, `Core/RelationFacts.lean`) holds with the box case at `α ⊑ β`; every other
-consumer of `VOutlives` reads it through 6.60 or passes it on. `Core/Embedding.lean` maps 2.35's
-strict premise to the non-strict one (`entailsLe_of_entailsLt`). The checker's `outlivesB` takes
-`leB` at a box (`Frontend/Check/Decide.lean`).
+`VOutlivesR Rb Rr` (`Core/Types.lean`) is `[TR]` p. 2's outlives judgment with the box rule's
+lifetime premise `Rb @b` and the `Imm`/`Mut` rules' premise `Rr @b`. It has two instances:
+
+- `VOutlives Δ a` (`Δ ⊢ T ⊐ @a`), with `Rb = (Δ ⊨ @a ⊑ ·)` and `Rr = (Δ ⊨ @a ⊏ ·)`;
+- `VOutlivesLe Δ a` (`Δ ⊢ T ⊒ @a`), with `⊑` at all three rules.
+
+Every `VOutlives` derivation is a `VOutlivesLe` one (`VOutlives.toLe`). `rename`, `subst` and
+`unroll` are proved once, at `VOutlivesR`.
+
+### The box rule
+
+`VOutlives`'s box rule is `[@b] T ⊐ @a` from `Δ ⊨ @a ⊑ @b` (was `Δ ⊨ @a ⊏ @b`). A value of
+`[@b] T` has its resource in `Res_β`, and `Res_β ⊆ Res_α` for `α ⊑ β`, so 6.60 (`vC_outlives`,
+`Core/RelationFacts.lean`) holds with the box case at `α ⊑ β`; every other consumer of
+`VOutlives` reads it through 6.60 or passes it on. `Core/Embedding.lean` maps 2.35's strict
+premise to the non-strict one (`entailsLe_of_entailsLt`). The checker's `outlivesB` takes `leB`
+at a box (`Frontend/Check/Decide.lean`).
 
 The box modality itself stays strict: `[@x] T` is membership in `Res_x`. So `[@x] T ⊐ 'x` holds,
 and a closure bounded by `'x` is lent `mut` inside `'x`'s own scope; `Mut 'x T ⊐ 'x` stays
 refused, and a closure capturing `mut 'x T` is still bounded strictly below `'x`
 (`corpus/reject/aff-outlives.bc`).
 
-### K2: `withbor`'s side condition
+### `withbor`'s side condition
 
-The side condition of the borrows that lend a payload `mut` is non-strict at all three rules:
-`∃ @b. Δ ⊨ @b ∧ Δ ⊢ A ⊒ @b`, with `Δ ⊢ A ⊒ @b` the judgment `VOutlivesLe` whose box, `Imm` and
-`Mut` rules take `Δ ⊨ @b ⊑ @c`. The rules that carry it are `withbor2` and `withbor2U`, the
-slice borrows `sliceBorrowM`, `sliceBorrowI`, `sliceBorrowMU`, `sliceBorrowIU`, the family
-borrows (`Family.borrowsMut`) and the block borrows (`BlockBorrow.formerMut`).
+The side condition of the borrows that lend a payload `mut` is `∃ @b. Δ ⊨ @b ∧ Δ ⊢ A ⊒ @b`
+(was `Δ ⊢ A ⊐ @b`), at every rule that carries one: `withbor2` and `withbor2U`, and the slice
+borrows `sliceBorrowM`, `sliceBorrowI`, `sliceBorrowMU` and `sliceBorrowIU` at both their payload
+and their result (`Core/Fundamental.lean`). The family borrows (`Family.borrowsMut`) and the
+block borrows (`BlockBorrow.formerMut`) are derived from `withbor2` and take it with it.
 
 The condition reaches each proof through 6.60, as `𝒱⟦A⟧δ ⊧ [@bδ] 𝒱⟦A⟧δ` ([TR] 6.173), and the
-frame rule uses it only to put the payload in the stratum of the borrow's own lifetime, which it
-chooses strictly below `@bδ`. At `VOutlivesLe`, 6.60 gives every stratum strictly below `@bδ`
-(`vC_outlivesLe`), and the frame rule is applied at `↓@bδ`. Each `VOutlives` derivation is a
-`VOutlivesLe` derivation, so every derivation of before is one of after. The checker decides
-`VOutlivesLe` with `leB` at all three rules (`outlivesLeB`).
+frame rule uses it only to put the payload (and, at a slice, the result) in a stratum that its
+own fresh lifetime lies below. At `VOutlivesLe`, 6.60 gives every stratum strictly below `@bδ`
+(`vC_outlivesLe`), and the frame is taken at `↓@bδ` (`withbor2_compatX`, `Core/Compatibility.lean`;
+`sliceBorrowM_compatX`, `sliceBorrowI_compatX`, `Core/Slices.lean`; the unwinding forms,
+`Core/EffBorrow.lean`). The checker decides `VOutlivesLe` with `leB` at all three rules
+(`outlivesLeB`), and `outlivesWitness` uses it.
 
-### E1: `main`'s lifetime
+### `main`'s lifetime
 
 A lifetime argument that a call of a function does not determine, from its arguments or the type
 expected of its result, is `dom`: the meet of the lifetimes in scope. In `main`, at a point where
 no lifetime is in scope, it is `main`'s own lifetime: the body of `main` is then elaborated inside
 a `mut` borrow of a unit cell, allocated and freed around it, whose lifetime is in scope
-throughout. The cell is made only when the body needs that lifetime. Outside `main`, a call
-with no lifetime in scope and a lifetime left undetermined is an error, as before.
+throughout (`mainLifeBody`, `Frontend/Sugar.lean`). The cell is made only when the body needs
+that lifetime, and the standard capabilities the body uses are handed back beside its result, as
+a borrow block hands back what it lends. Outside `main`, a call with no lifetime in scope and a
+lifetime left undetermined is an error, as before.
 
 So a library function's lifetime parameter, bounded by `top`, is instantiated at a lifetime the
-program has without a scope of its own, and with K1 a closure bounded by it is stored and lent
-`mut` in `main`'s body.
+program has without a scope of its own, and by the box rule a closure bounded by it is stored and
+lent `mut` in `main`'s body.
 
-### B1: lifetime bounds on type parameters
+### Lifetime bounds on type parameters
 
-    fn f[S, …]<'c, …>(…) -> T where S: 'c, … = …
+    fn f[S, …]<'c, …>(…) -> T with … where S: 'c, … = …
 
 A bound `S: 'c` names a type parameter and a lifetime parameter of the function. At an instance
 whose type argument for `S` mentions the lifetimes `'q₁ … 'qₙ` (each a lifetime parameter of the
 instance, §15 *Generic functions*), the instance's binder of `'c` is
 `all 'c < @ /\ 'q₁ /\ … /\ 'qₙ.` (and `Fun 'c < …` around its body), where `@` is the bound
-written for `'c` (`top` when none). With no lifetime in `S` the bound is unchanged. This is a
-different bound at the kernel's existing `∀'c ⊏ @b`, so the instance is checked by the unchanged
-checker, and `S ⊐ 'c` is checked there, at the instance's types. A caller instantiates `'q̄` with
-its own lifetimes and `'c` with one strictly below their meet. The printed form of a template
-keeps its bounds, `fn def f[S, …] where S: 'c : A = V`.
+written for `'c` (`'q₁ /\ … /\ 'qₙ` alone when `@` is `top`). With no lifetime in `S` the bound is
+unchanged. This is a different bound at the kernel's existing `∀'c ⊏ @b`, so the instance is
+checked by the unchanged checker, and `S ⊐ 'c` is checked there, at the instance's types. A
+caller instantiates `'q̄` with its own lifetimes and `'c` with one strictly below their meet,
+which `allE` asks of it (`corpus/reject/aff-bound.bc`). The bounds are kept with the template
+(`Mark.template`) and printed with it, `fn def f[S, …] where S: 'c : A = V`. `where` is a word
+in that position, not a keyword.
 
 `lib/aff.bc` declares `aff_new_boxed[S, A, B]<'c>(s: S, step) -> box 'c Aff[A, B]<'c> where
 S: 'c`, which boxes the closure and every rest itself, and `aff_of_fn` is built on it.
@@ -3533,20 +3552,25 @@ S: 'c`, which boxes the closure and every rest itself, and `aff_of_fn` is built 
 
 | program | what it shows |
 |---|---|
-| `corpus/aff-counter.bc`, `aff-depth.bc` | the closure stored and lent `mut` in `main`'s body, under `main`'s lifetime (K1, E1); no `boxed` (B1) |
-| `corpus/aff-drop.bc`, `aff-higher.bc` | a closure over a closure bounded by the same lifetime (K1) |
+| `corpus/aff-counter.bc`, `aff-depth.bc` | the closure stored and lent `mut` in `main`'s body, under `main`'s lifetime; built with `aff_new_boxed`, with no `boxed` |
+| `corpus/aff-drop.bc`, `aff-higher.bc` | a closure over a closure, bounded by the same lifetime as the closure it holds |
 | `corpus/aff-coerce.bc` | the coercions at `main`'s lifetime |
-| `corpus/aff-capture.bc` | `logger`'s bound `'w < 'x` filled with `dom` (E1); its scope `'w` stays (the `Mut` rule) |
+| `corpus/aff-capture.bc` | `logger`'s `'w < 'x`, filled with `dom`, gives `aff_new_boxed`'s bound; its scope `'w` stays (the `Mut` rule) |
+| `corpus/borrow-in-scope.bc` | a cell holding `imm 'x i32` lent `mut` inside `'x`'s own scope (the side condition) |
 | `corpus/reject/aff-outlives.bc` | still refused: a closure bounded by the lifetime of the borrow it captures |
+| `corpus/reject/aff-bound.bc` | refused: a lifetime bound's instance called at a lifetime not below the type argument's |
 | `corpus/reject/generic-lifetime-unknown.bc` | refused: a lifetime left undetermined where no lifetime is in scope, outside `main` |
+
+Across the six `aff-*` programs, the scopes opened only to name a lifetime go from 10 to 1, the
+cells allocated for them from 6 to 1 written (plus `main`'s, made by the elaborator, in five
+programs, so the allocation counts are unchanged), and the `boxed[…]` annotations from 18 to 4.
 
 ### Baseline
 
 `fundamentalC`, `adequacyC`, `fundamentalD`, `adequacyD`, the totality theorems and every result
-of entries 1–21 keep their statements; the proofs change at 6.60's box case, at the `[]I` programs
-that wrote the strict premise (`Core/AffPrograms.lean`), and at the side condition's consumers
-(K2). Nothing in `Paper/` or `Support/` changes. The axioms are `[propext, Classical.choice,
-Quot.sound]`.
+of entries 1–21 keep their statements; the proofs change at 6.60's box case, at the derivations
+that supply a side condition (now `.toLe`), and at the side condition's consumers. Nothing in
+`Paper/` or `Support/` changes. The axioms are `[propext, Classical.choice, Quot.sound]`.
 
 ### Left as printed
 
@@ -3559,9 +3583,9 @@ Quot.sound]`.
 
 ### Open
 
-- **A non-strict `∀` binder**, `∀'a ⊑ @b`: a second binder kind in `LifeCtx` and `Models`. B1's
-  bound is strict, so a closure whose state is a closure bounded by `'c` is built with `aff_new`
-  and `boxed['c]` (`aff-drop`'s `nest`, `aff-higher`'s `doubler`).
+- **A non-strict `∀` binder**, `∀'a ⊑ @b`: a second binder kind in `LifeCtx` and `Models`. A
+  lifetime bound is strict, so a closure whose state is a closure bounded by `'c` is built with
+  `aff_new` and `boxed['c]` (`aff-drop`'s `nest`, `aff-higher`'s `doubler`).
 - **A lifetime without a cell.** `main`'s lifetime, and `aff-capture`'s scope below `'x`, are
   borrows of a cell; a rule that opens a lifetime without one was not probed.
 - **`'main` by name.** The implicit lifetime is reached only through `dom`.
@@ -3612,6 +3636,13 @@ the machine in `Frontend/Sugar.lean` (`recMachine`); `lib/rec.bc`; and the lower
 Entry 20 (§21) is implemented in `Frontend/Elab/Effects.lean` (`groupCopy`, `selfCall`, `layerCopy`,
 `withCtl`, `resumeCall`) and `Frontend/Sugar.lean` (`hndCtlC`, `HInfo.after`), with no change to
 `CDerives`; `Backend/Clos/Capture.lean` loses `unwindClause?`.
+
+Entry 22 (§23) is implemented: the outlives judgment and its 6.60 in `Core/Types.lean` and
+`Core/RelationFacts.lean`; the side condition at the borrow rules in `Core/Fundamental.lean`,
+`Core/Compatibility.lean`, `Core/Slices.lean` and `Core/EffBorrow.lean`; the checker's decisions
+in `Frontend/Check/Decide.lean` and `Frontend/Check/Consts.lean`; `main`'s lifetime and the
+lifetime bounds in `Frontend/Sugar.lean`, `Frontend/Parser.lean`, `Frontend/Syntax.lean` and
+`Frontend/Print.lean`; `lib/aff.bc`. No change to `Paper/`, `Support/` or `CDerives`'s indices.
 
 Entry 21 (§22) is implemented: the positivity in `Core/Types.lean`, `Core/Relation.lean`,
 `Core/RelationFacts.lean`, `Core/NuRel.lean`, `Core/Computation.lean` and `Core/Nu.lean`; the
