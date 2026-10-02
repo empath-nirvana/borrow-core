@@ -2,6 +2,7 @@ import Frontend.Parser
 import Frontend.Print
 import Frontend.Check.Steps
 import Frontend.Elab.Respan
+import Frontend.Elab.RenameLife
 import Frontend.Elab.Subst
 import Frontend.Elab.Meta
 import Frontend.Elab.LoopLend
@@ -1923,7 +1924,7 @@ for it (`Flat.zeroCell`). The standard capabilities `caps` the body lends are ha
 its result, as a borrow block hands back what it lends. A body that names no `'main` is left as it
 is: the borrow is not observable.  `[spec §23]` -/
 def mainLife (sp : Span) (C : CTy) (caps : List String) (M : Comp) : Except Error Comp := do
-  if !((M.pp 0 0).splitOn "'main").length > 1 then return M
+  if !M.mentionsLife "main" then return M
   let .ret _ B := C
     | throw ⟨sp, "`main` uses its lifetime `'main`, so its type is written `F A` or `-> A`"⟩
   let x : Ident := ⟨"main", sp⟩

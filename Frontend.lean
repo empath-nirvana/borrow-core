@@ -15,6 +15,7 @@ import Frontend.Check.Program
 import Frontend.Check.CrossCheck
 import Frontend.Check.Externs
 import Frontend.Elab.Respan
+import Frontend.Elab.RenameLife
 import Frontend.Elab.Subst
 import Frontend.Elab.Tir
 import Frontend.Elab.Infer

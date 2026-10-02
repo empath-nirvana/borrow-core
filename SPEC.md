@@ -3520,7 +3520,8 @@ own fresh lifetime lies below. At `VOutlivesLe`, 6.60 gives every stratum strict
 `'main` in scope, inside a `mut` borrow of a unit cell allocated before it and freed after
 (`mainLife`, `Frontend/Sugar.lean`); the standard capabilities the body lends are handed back
 beside its result, as a borrow block hands back what it lends. A body whose elaboration names no
-`'main` is left as it is, since the borrow is then not observable. A body that names it has the
+`'main` (`Comp.mentionsLife`, `Frontend/Elab/RenameLife.lean`) is left as it is, since the borrow
+is then not observable. A body that names it has the
 type `F A`.
 
 A lifetime argument that a call of a function does not determine, from its arguments or the type
