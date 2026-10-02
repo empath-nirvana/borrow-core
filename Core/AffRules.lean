@@ -45,8 +45,6 @@ theorem CDerives.affOut {Γ : Ctx VTy} {e : Expr} {c : Lifetime.Life} {A B : VTy
 abbrev affUnfoldTy (c : Lifetime.Life) (A B S : VTy) : VTy :=
   .lolli (.bang (.thunk (.arr S (affStepC c A B S)))) (.bang (.thunk (.arr S (affC c A B))))
 
-abbrev affUnfoldV (c : Lifetime.Life) (A B : VTy) : Val := unfoldV (affBody c A B)
-
 theorem CDerives.affUnfold {Γ : Ctx VTy} {c : Lifetime.Life} {A : VTy} (hA : A.Cl 0) (B S : VTy)
     (hΓ : Ctx.DeadP Γ) : CDerives Δ Γ (.val (affUnfoldV c A B)) (.val (affUnfoldTy c A B S)) := by
   have h := CDerives.unfoldN (Δ := Δ) (affBody c A B) S (affBody_nuOk hA c B) hΓ
@@ -74,13 +72,6 @@ theorem CtxOutlives.consLive {Γ : Ctx VTy} {a : Lifetime.Life} {T : VTy} (hT : 
 
 /-! ### Introduction: a closure from a state and `!` code -/
 
-/-- `⟨f to g. (g s) π₁, f to g. (g s) π₂⟩`, with `f : !U(S ⊸ Aff^c A B)` at `2` and `s : S`
-at `3` inside `withPair`'s binders: the codata `unfold step s` as a value.  `f` stays `!` in
-the context, so the value outlives whatever `s` outlives. -/
-def packE : Expr :=
-  withPair (bindE (.var 2) (.app (.app (.var 0) (.var 4)) (.val (.inj₁ .unit))))
-    (bindE (.var 2) (.app (.app (.var 0) (.var 4)) (.val (.inj₂ .unit))))
-
 /-- The unfolded code's type, `!U(S ⊸ Aff^c A B)`. -/
 abbrev affCodeT (c : Lifetime.Life) (A B S : VTy) : VTy := .bang (.thunk (.arr S (affC c A B)))
 
@@ -107,11 +98,6 @@ theorem d_packBox {Γ : Ctx VTy} {c : Lifetime.Life} {A B S : VTy} (hA : A.Cl 0)
     (hc : Δ.Defines c) (hS : VOutlives Δ c S) :
     CDerives Δ (⟨affCodeT c A B S, true⟩ :: ⟨S, true⟩ :: Γ) packE (.val (affBox c A B)) :=
   .boxI (d_pack hA hΓ) (.consLive .bang (.consLive hS (ctxOutlives_dead hc hΓ)))
-
-/-- `s₀ to s. unfold step to f. pack to k. K`: `K` with the closure `unfold step s₀` at
-index `0`. -/
-def mkE (c : Lifetime.Life) (A B : VTy) (s₀ : Expr) (step : Val) (K : Expr) : Expr :=
-  bindE s₀ (bindE (.app (.val (affUnfoldV c A B)) (.val step)) (bindE packE K))
 
 /-- The two bindings in front of `pack`. -/
 theorem d_mkPrefix {Γ Γ₁ Γ₂ : Ctx VTy} {c : Lifetime.Life} {A B S : VTy} {C : CTy} {s₀ K : Expr}

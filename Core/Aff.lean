@@ -1,5 +1,6 @@
 import Core.Dtor
 import Core.RelationFacts
+import Core.AffTy
 
 /-!
 # The affine closure as codata  `[spec §22]`
@@ -10,10 +11,10 @@ value is `U(Aff^c A B)`; one that outlives `@c` is `[@c] U(Aff^c A B)` (`affBox`
 rest every call hands back is again of that type.  `@c` is the bound (cf. Rust's
 `dyn FnMut(A) -> B + 'c`).
 
-The type is an abbreviation over `νX. C`, an instance of §7's positivity with an observation
-taking a closed argument (`A ⊸ D`) and a boxed rest (`[@c] U X`).  The relation clause is the
-unrolling (`cC_aff_iff`); the paper's `Unk` clause and the observable view are untouched
-(`immReborrow_affBox`, `vC_obs_aff`).
+The type, its relation clause (`cC_aff_iff`) and coinduction (`aff_coind`) are in `AffTy.lean`,
+before `CDerives`, so that a rule of the judgment may answer at the type (`[gen]`, `Gen.lean`).
+This file has its structure: the paper's `Unk` clause and the observable view are untouched
+(`immReborrow_affBox`, `vC_obs_aff`), and it has a destructor and is not persistent.
 -/
 
 noncomputable section
@@ -25,65 +26,6 @@ open BoCa
 open BoCa.Fig16
 open BoCa.Fig16.BoLo
 open BoCa.Lifetime (LSub LifeCtx LifeVar)
-
-/-! ### The type -/
-
-/-- The body of `Aff^c A B`: `(A ⊸ F(B ⊗ [@c] U X)) & F 1`, `U X` the variable `0`. -/
-abbrev affBody (c : Lifetime.Life) (A B : VTy) : CTy :=
-  .amp (.arr A (.ret (.tensor (B.rename Nat.succ) (.box c (.tvar 0))))) (.ret .unit)
-
-/-- `Aff^c A B = νX. (A ⊸ F(B ⊗ [@c] U X)) & F 1`. -/
-abbrev affC (c : Lifetime.Life) (A B : VTy) : CTy := .nu (affBody c A B)
-
-/-- `U(Aff^c A B)`: an affine closure. -/
-abbrev affT (c : Lifetime.Life) (A B : VTy) : VTy := .thunk (affC c A B)
-
-/-- `[@c] U(Aff^c A B)`: an affine closure that outlives `@c`, the type stored, lent and
-handed back by a call. -/
-abbrev affBox (c : Lifetime.Life) (A B : VTy) : VTy := .box c (affT c A B)
-
-/-- The body at the state `S`: `(A ⊸ F(B ⊗ [@c] S)) & F 1`. -/
-abbrev affStepC (c : Lifetime.Life) (A B S : VTy) : CTy :=
-  .amp (.arr A (.ret (.tensor B (.box c S)))) (.ret .unit)
-
-/-- The unrolling, `(A ⊸ F(B ⊗ [@c] U(Aff^c A B))) & F 1`. -/
-abbrev affUnroll (c : Lifetime.Life) (A B : VTy) : CTy := affStepC c A B (affT c A B)
-
-/-- **Positivity**: at a closed argument type, the affine closure's body is an observation tree. -/
-theorem affBody_nuOk {A : VTy} (hA : A.Cl 0) (c : Lifetime.Life) (B : VTy) :
-    (affBody c A B).NuOk :=
-  ⟨⟨hA, VTy.poly_of_not_occ (VTy.not_occ_rename_succ B), trivial⟩, fun h => h⟩
-
-theorem affBody_instT (c : Lifetime.Life) (A B S : VTy) :
-    (affBody c A B).instT S = affStepC c A B S := by
-  simp only [CTy.instT, VTy.inst, VTy.subst, VTy.scons]
-  rw [← VTy.inst, VTy.inst_rename_succ]
-
-theorem affBody_unroll (c : Lifetime.Life) (A B : VTy) :
-    (affBody c A B).unroll = affUnroll c A B :=
-  affBody_instT c A B _
-
-/-! ### The relation clause -/
-
-/-- **The relation at the affine arrow.**  `𝒞⟦Aff^c A B⟧` is its unrolling: a computation
-is an affine closure when, at every argument, `call` answers a `B` and a rest that is again an
-affine closure outliving `@c` (`[@c]`, the resource condition `@ρ ⊐ c`), and `close` runs to
-`()`.  The greatest fixed point of that clause (`NuRel.lean`), read off at the unrolling. -/
-theorem cC_aff_iff {A : VTy} (hA : A.Cl 0) (c : Lifetime.Life) (B : VTy) (ls : List SRec)
-    (δ : LSub) (e : Expr) (ρ : WRes) :
-    cC (affC c A B) ls δ e ρ ↔
-      (∀ v, (vC true A ls δ v ─⋆
-          wpTS ls (.app (.app e (.val (.inj₁ .unit))) (.val v))
-            (fun ls' => vC true (.tensor B (affBox c A B)) ls' δ)) ρ) ∧
-      wpTS ls (.app e (.val (.inj₂ .unit))) (fun ls' => vC true .unit ls' δ) ρ := by
-  rw [cC_nu_iff (affBody_nuOk hA c B), affBody_unroll]
-  rfl
-
-/-- Coinduction at the affine arrow: a candidate closed under the clause is in the relation. -/
-theorem aff_coind {A : VTy} (hA : A.Cl 0) {c : Lifetime.Life} {B : VTy} {δ : LSub}
-    {R : CPred} (hR : R.Le (nuF (affBody c A B) δ R)) :
-    ∀ ls e ρ, R ls e ρ → cC (affC c A B) ls δ e ρ :=
-  fun ls e ρ h _ => nuRel_coind (C := affBody c A B) hR ls e ρ h
 
 /-! ### The observable view and the paper's `Unk` clause
 
