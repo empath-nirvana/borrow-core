@@ -178,6 +178,121 @@ set_option maxRecDepth 100000 in
 /-- `0`, and no cell left: the destructor closed the closure, and `close` freed its cell. -/
 theorem dropProg_eval : i32NoLeak (eval dropProg) = some 0 := by decide
 
+/-! ### A scope: one lifetime `'x ⊏ ⊤` -/
+
+/-- `Λ'x. λd. forget d; body`. -/
+def scopeCbOf (body : Expr) : Expr := lam2 (.seq (.app forget (.var 0)) body)
+
+/-- `alloc () to d₀. withbor d₀ (Λ'x. λd. forget d; body) to (d₀, t). free d₀ to u. u; t`:
+`body` runs under `'x ⊏ ⊤`, below which a closure boxed at `⊤` can be lent, and at which a
+closure capturing a closure boxed at `⊤` can be boxed. -/
+def scopeProg (body : Expr) : Expr :=
+  bindE (.app (.val (.prim .alloc)) (.val .unit))
+    (.letpair (.app (.app withbor (.var 0)) (scopeCbOf body))
+      (bindE (.app (.val (.prim .free)) (.var 1)) (.seq (.var 0) (.var 1))))
+
+/-- The context `body` is typed in. -/
+abbrev ΓS : Ctx VTy := [⟨.imm (.var 0) .unit, false⟩, ⟨.unit, false⟩, ⟨.ref .unit, false⟩]
+
+theorem d_scopeProg {body : Expr} (h : CDerives Δ₁ ΓS body (.comp (.ret (.box (.var 0) .i32)))) :
+    CDerives LifeCtx.empty [] (scopeProg body) (.comp (.ret .i32)) := by
+  have hcb : CDerives LifeCtx.empty [⟨.ref .unit, false⟩] (scopeCbOf body)
+      (.val (.all 0 LifeCtx.empty.meetOfDom (.lolli (.imm (.var 0) .unit) (.box (.var 0) .i32)))) :=
+    callbackW rfl rfl (.cons .nil) (.seqV (.left (.dead (deadSplit (.cons .nil))))
+      (.lolliE (split_kill' _).toP (.var (.here (.cons (.cons .nil)))) (.forgetImm (kill_dead _).toP))
+      (.ofRet h))
+  refine .bind .nil (.ret (.lolliE .nil (.unitI .nil) (.alloc (A := .unit) .nil))) ?_
+  refine .tensorE (.left .nil)
+    (.lolliE (.right .nil) hcb
+      (.lolliE (.left .nil) (.var (.here .nil))
+        (.withbor1 (A := .unit) (B := .i32) 0 (.cons .nil) rfl (fun _ h => h.elim)
+          (by simp [VFree]) (by simp [VFree])))) ?_
+  refine .bind (.right (.left (.dead .nil)))
+    (.ret (.lolliE (.dead (.left (.dead .nil))) (.var (.there (.here (.cons .nil))))
+      (.free (.cons (.cons (.cons .nil)))))) ?_
+  exact .unitE (.left (.right (.dead (.dead .nil)))) (.var (.here (.cons (.cons (.cons .nil)))))
+    (.ret (.var (.there (.here (.cons (.cons .nil))))))
+
+/-- Types that outlive `'x` under `Δ₁`: data, and a box at `⊤`. -/
+def outX : VTy → Bool
+  | .box .top _ => true
+  | A => dataB A
+
+theorem outX_sound {A : VTy} (h : outX A = true) : VOutlives Δ₁ (.var 0) A := by
+  cases A with
+  | box b A =>
+      cases b with
+      | top => exact .box (BoCa.Programs.entailsLt_top rfl)
+      | _ => exact outlives_of_dataB (by simpa [outX] using h)
+  | _ => exact outlives_of_dataB (by simpa [outX] using h)
+
+theorem outlives_ctxX {Γ : Ctx VTy} (h : (Γ.all fun s => !s.live || outX s.ty) = true) :
+    CtxOutlives Δ₁ Γ (.var 0) := by
+  refine ⟨LifeCtx.defines_of_wf rfl, fun s hs hl => outX_sound ?_⟩
+  have := List.all_eq_true.mp h s hs
+  simpa [hl] using this
+
+/-! ### An affine closure capturing another -/
+
+/-- The outer step over the inner closure `s : [@⊤] U(FnMut^⊤ I32 I32)`:
+`λs. ⟨λa. callBox s a to (b, r). (b + b, [r]), s to g. g π₂⟩`.  Closing the outer closure
+closes the inner one. -/
+def doubleStep : Val :=
+  .lam (withPair (.val (.lam (callBoxE 3 0 (.pair (addE (.var 1) (.var 1)) (.var 0)))))
+    (bindE (.var 2) (closeE 0)))
+
+/-- The body under `'x`:
+
+    mkBox⊤ (alloc 0) counterStep to inner. mkBox'x inner doubleStep to outer.
+    callBox outer 1 to (x₁, outer). callBox outer 2 to (x₂, outer). close outer; [x₁ + x₂] -/
+def nestBody : Expr :=
+  mkE .top .i32 .i32 (.app (.val (.prim .alloc)) (i32E 0)) counterStep
+    (mkE (.var 0) .i32 .i32 (.var 0) doubleStep
+      (elet (i32E 1) (callBoxE 1 0
+        (elet (i32E 2) (callBoxE 1 0
+          (bindE (bindE (.var 0) (closeE 0)) (.seq (.var 0) (addE (.var 6) (.var 2)))))))))
+
+theorem d_nestBody : CDerives Δ₁ ΓS nestBody (.comp (.ret (.box (.var 0) .i32))) := by
+  have hT : Δ₁.Defines .top := LifeCtx.defines_of_wf rfl
+  have hX : Δ₁.Defines (.var 0) := LifeCtx.defines_of_wf rfl
+  refine mkBoxC trivial hT (.ref .int)
+    (appP (d_i32 0 (by cdeadP)) (.alloc (by cdeadP))) (d_counterStep hT (kill_dead _)) ?_
+  refine mkBoxC trivial hX (.box (BoCa.Programs.entailsLt_top rfl)) (.var (by csoloP)) ?_ ?_
+  · -- the outer step
+    refine .bangThunkV (persistent_dead (kill_dead _)) rfl (.lam (.withI (.lam ?_) ?_))
+    · refine bindC (unboxC (by csoloP)
+        (callC (A := .i32) (B := .i32) (c := .top) trivial (by csoloP) (by csoloP))) ?_
+      refine letC (.var (by csoloP)) ?_
+      exact .ret (pairP (d_add (pairP (.var (by csoloP)) (.var (by csoloP))) (by cdeadP))
+        (.boxI (.var (by csoloP)) (outlives_ctxX (by decide))))
+    · exact unboxC (by csoloP) (d_close (A := .i32) (B := .i32) (c := .top) trivial (by csoloP))
+  refine bindC (.ret (d_i32 1 (by cdeadP))) ?_
+  refine bindC (unboxC (by csoloP)
+    (callC (A := .i32) (B := .i32) (c := .var 0) trivial (by csoloP) (by csoloP))) ?_
+  refine letC (.var (by csoloP)) ?_
+  refine bindC (.ret (d_i32 2 (by cdeadP))) ?_
+  refine bindC (unboxC (by csoloP)
+    (callC (A := .i32) (B := .i32) (c := .var 0) trivial (by csoloP) (by csoloP))) ?_
+  refine letC (.var (by csoloP)) ?_
+  refine bindC (unboxC (by csoloP) (d_close (A := .i32) (B := .i32) (c := .var 0) trivial
+    (by csoloP))) ?_
+  exact seqC (.var (by csoloP)) (.ret (.boxI (d_add (pairP (.var (by csoloP)) (.var (by csoloP)))
+    (by cdeadP)) (outlives_ctxX (by decide))))
+
+def nestProg : Expr := scopeProg nestBody
+
+theorem nestProg_derives : CDerives LifeCtx.empty [] nestProg (.comp (.ret .i32)) :=
+  d_scopeProg d_nestBody
+
+theorem nestProg_runs :
+    ∃ n, BoCa.BoLo.Steps Adequacy.emptyMem nestProg Adequacy.emptyMem (.val (Val.i32 n)) :=
+  runs_i32 nestProg_derives
+
+set_option maxRecDepth 100000 in
+/-- `2 + 6 = 8`, no cell left: the inner counter saw both calls, and closing the outer closure
+closed the inner one. -/
+theorem nestProg_eval : i32NoLeak (eval nestProg) = some 8 := by decide
+
 end BoCa.Fig16.LogRel.Core
 
 end
