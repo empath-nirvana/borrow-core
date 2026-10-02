@@ -180,4 +180,189 @@ theorem h_op {e : S.E} (x : Var Ψ e) (hr : Cmp S Ψ (A :: Γ) C)
     exact (Cmp.den_ren _ _ (hab a') η η _ _ (fun _ _ => rfl)
       (wk_lift_pt (A := .g _) (B := .g _) v' y)).symm
 
+def Val.wkI (v : Val S Ψ Γ A) : Val S (e :: Ψ) Γ A := v.ren Ren.wk (Ren.id Γ)
+
+theorem Val.den_wkI (v : Val S Ψ Γ A) (η : IEnv Ψ) (ρ : Env Γ) (i : Nat) :
+    (v.wkI (e := e)).den (η.cons i) ρ = v.den η ρ :=
+  Val.den_ren _ _ v _ _ _ _ (fun _ _ => rfl) (fun _ _ => rfl)
+
+/-- **H-fwd**: a handler passes on an operation of another instance:
+`ν h. handle_h (op_l v; y.M) ≡ ν h. op_l v; y. handle_h M`. The instance `h` is fresh, so `l`
+cannot be it. -/
+theorem h_fwd {e e' : S.E} (x : Var Ψ e') (hr : Cmp S (e :: Ψ) (A :: Γ) C)
+    (hop : (o : S.O e) → Cmp S (e :: Ψ) (kty (S.q e o) (S.res e o) C :: .g (S.arg e o) :: Γ) C)
+    (hab : (a : S.A e) → Cmp S (e :: Ψ) (.g (S.aarg e a) :: Γ) C) (o : S.O e')
+    (v : Val S (e :: Ψ) Γ (.g (S.arg e' o))) (M : Cmp S (e :: Ψ) (.g (S.res e' o) :: Γ) (.F A)) :
+    CtxEq (.nu e (.handleAt .z hr hop hab (.op (.s x) o v M)))
+      (.nu e (.op (.s x) o v (.handleAt .z (hr.ren (Ren.id _) Ren.wk.lift)
+        (fun o' => (hop o').ren (Ren.id _) Ren.wk.lift.lift)
+        (fun a => (hab a).ren (Ren.id _) Ren.wk.lift) M))) := by
+  apply soundness
+  apply LR.nu_of_fresh
+  intro η ρ i hf
+  simp only [Cmp.den, CTy.opA, Tree.hnd]
+  refine (if_neg (hf e' x)).trans ?_
+  congr 1; funext y
+  congr 1
+  · funext a'
+    exact (Cmp.den_ren _ _ hr _ _ _ _ (fun _ _ => rfl) (wk_lift_pt (B := .g _) a' y)).symm
+  · funext o' v' k' d'
+    exact (Cmp.den_ren _ _ (hop o') _ _ _ _ (fun _ _ => rfl)
+      (fun D z => by rcases z with _ | _ | z <;> rfl)).symm
+  · funext a' v'
+    exact (Cmp.den_ren _ _ (hab a') _ _ _ _ (fun _ _ => rfl)
+      (wk_lift_pt (A := .g _) (B := .g _) v' y)).symm
+
+/-- **H-fwd at arity 0**: `ν h. handle_h (raise_f) ≡ raise_f`. -/
+theorem h_fwd_ab {e e' : S.E} (x : Var Ψ e') (hr : Cmp S (e :: Ψ) (A :: Γ) C)
+    (hop : (o : S.O e) → Cmp S (e :: Ψ) (kty (S.q e o) (S.res e o) C :: .g (S.arg e o) :: Γ) C)
+    (hab : (a : S.A e) → Cmp S (e :: Ψ) (.g (S.aarg e a) :: Γ) C) (a : S.A e')
+    (v : Val S Ψ Γ (.g (S.aarg e' a))) :
+    CtxEq (.nu e (.handleAt .z hr hop hab (.ab (C := .F A) (.s x) a v.wkI))) (.ab x a v) := by
+  apply soundness
+  apply LR.nuG_of
+  intro η ρ i hf
+  simp only [Cmp.den, CTy.abA, Tree.hnd]
+  refine (if_neg (hf e' x)).trans ?_
+  rw [Val.den_wkI]; rfl
+
+/-! ## L6: Staton's instance laws -/
+
+/-- **idem-ν**: an unused instance is unobservable. -/
+theorem idem_nu (e : S.E) (M : Cmp S Ψ Γ C) : CtxEq (.nu e M.wkI) M :=
+  soundness (LR.nuG_of fun η ρ i _ => Cmp.den_wkI M η ρ i)
+
+/-- **new-ν**: a fresh instance differs from every existing one. -/
+theorem new_nu {e e' : S.E} (a : Var Ψ e') (M N : Cmp S (e :: Ψ) Γ C) :
+    CtxEq (.nu e (.bind (.ieq (.s a) .z) (.ite (.var .z) M.wk N.wk))) (.nu e N) := by
+  apply soundness
+  apply LR.nu_of_fresh
+  intro η ρ i hf
+  simp only [Cmp.den, Tree.bindC, Val.den]
+  have : decide (η e' a = i) = false := decide_eq_false (hf e' a)
+  simp only [IEnv.cons, Env.cons, this]
+  exact Cmp.den_wk N _ _ _
+
+theorem W.both_sl {w : W} {i i' : Nat} {hi hi'} (a : Nat) :
+    (w.both i i' hi hi').sl a = upd w.sl i (.m i') a := rfl
+theorem W.both_sr {w : W} {i i' : Nat} {hi hi'} (b : Nat) :
+    (w.both i i' hi hi').sr b = upd w.sr i' (.m i) b := rfl
+
+/-- **ν/ν**: the order in which two instances are allocated is unobservable. -/
+theorem nu_nu (e : S.E) (M : Cmp S (e :: e :: Ψ) Γ C) :
+    CtxEq (.nu e (.nu e M)) (.nu e (.nu e (M.ren Ren.swap (Ren.id Γ)))) := by
+  apply soundness
+  intro w hw η η' ρ ρ' hη hρ
+  simp only [Cmp.den]
+  apply nuA_L C; intro i₁ h₁
+  apply nuA_R C; intro j₁ h₁'
+  have hp₁ : ((w.pendL i₁ h₁).pendR j₁ h₁').sr j₁ = .p := by
+    simp [W.pendR, W.setR, upd]
+  apply nuA_mL C hp₁; intro i₂ h₂
+  have hne₂ : i₂ ≠ i₁ := by
+    intro h; subst h; simp [W.pendR, W.setR, W.pendL, W.setL, upd] at h₂
+  have hp₂ : (((w.pendL i₁ h₁).pendR j₁ h₁').matchL i₂ j₁ h₂ hp₁).sl i₁ = .p := by
+    simp [W.matchL, W.link, W.pendR, W.setR, W.pendL, W.setL, upd, Ne.symm hne₂]
+  apply nuA_mR C hp₂; intro j₂ h₂'
+  have hne₂' : j₂ ≠ j₁ := by
+    intro h; subst h; simp [W.matchL, W.link, upd] at h₂'
+  rw [Cmp.den_ren Ren.swap (Ren.id Γ) M _ ((η'.cons j₂).cons j₁) ρ' ρ'
+    (fun e x => by rcases x with _ | _ | x <;> rfl) (fun _ _ => rfl)]
+  have hs : w.sub ((((w.pendL i₁ h₁).pendR j₁ h₁').matchL i₂ j₁ h₂ hp₁).matchR j₂ i₁ h₂' hp₂) :=
+    ((((W.sub_pendL _ _ _).trans (W.sub_pendR _ _ _)).trans (W.sub_matchL _ _ _ _ _)).trans
+      (W.sub_matchR _ _ _ _ _))
+  refine Cmp.fp M ⟨fun a => ?_, fun b => ?_⟩ ?_ (hρ.mono hs)
+  · simp only [W.matchR, W.matchL, W.link, W.pendR, W.setR, W.pendL, W.setL, upd]
+    by_cases ha1 : a = i₁
+    · subst ha1; simp
+    · by_cases ha2 : a = i₂
+      · subst ha2; simp [ha1]
+      · simp [ha1, ha2, hw.1 a]
+  · simp only [W.matchR, W.matchL, W.link, W.pendR, W.setR, W.pendL, W.setL, upd]
+    by_cases hb1 : b = j₂
+    · subst hb1; simp
+    · by_cases hb2 : b = j₁
+      · subst hb2; simp [hb1]
+      · simp [hb1, hb2, hw.2 b]
+  · intro e' x
+    rcases x with _ | _ | x
+    · exact (W.sub_matchR _ _ _ _ _).r' (W.matchL_r _ _ _ _ _)
+    · exact W.matchR_r _ _ _ _ _
+    · exact hs.r' (hη _ x)
+
+/-! ## No accidental handling, as parametricity in instances -/
+
+theorem W.sl_link_ne {w : W} {i i' : Nat} {h1 h2} {a : Nat} (h : a ≠ i) :
+    (w.link i i' h1 h2).sl a = w.sl a := upd_ne _ _ h
+theorem W.sl_setL_ne {w : W} {i : Nat} {s : St} {hs h1} {a : Nat} (h : a ≠ i) :
+    (w.setL i s hs h1).sl a = w.sl a := upd_ne _ _ h
+
+/-- A handler of an instance the world never matched catches nothing: on related trees it is
+the identity. -/
+theorem hnd_transparent {A : VTy S} {R : W → A.den → A.den → Prop} {w : W}
+    {t t' : Tree S A.den} (h : TreeRel R w t t') {i : Nat} {e : S.E}
+    {hr : A.den → (CTy.F A).den} (hhr : ∀ x, hr x = Tree.ret x) {hop hab}
+    (hi : w.sl i = .g) : TreeRel R w (t.hnd (.F A) i e hr hop hab) t' := by
+  revert hi
+  induction h with
+  | ret hp hx => intro _; simp only [Tree.hnd, hhr]; exact .ret hp hx
+  | @op w j j' e' o v k k' d d' hp hj hd _ ih =>
+      intro hi
+      have hji : j ≠ i := fun h' => by subst h'; unfold W.r at hj; rw [hj] at hi; cases hi
+      simp only [Tree.hnd]; rw [if_neg hji]
+      exact .op hp hj hd (fun y => ih y hi)
+  | @ab w j j' e' a v d d' hp hj hd =>
+      intro hi
+      have hji : j ≠ i := fun h' => by subst h'; unfold W.r at hj; rw [hj] at hi; cases hi
+      simp only [Tree.hnd]; rw [if_neg hji]
+      exact .ab hp hj hd
+  | @abE w j j' e' a v d d' f f' hp hj hd hf =>
+      intro hi
+      have hji : j ≠ i := fun h' => by subst h'; unfold W.r at hj; rw [hj] at hi; cases hi
+      simp only [Tree.hnd]; rw [if_neg hji]
+      exact .abE hp hj hd hf
+  | act ha _ ih => intro hi; exact .act ha (fun y => ih y hi)
+  | @nu w k k' _ ih =>
+      intro hi
+      exact .nu (fun j j' hj hj' => ih j j' hj hj' (
+        (upd_ne _ _ (fun h' => by subst h'; rw [hj] at hi; cases hi)).trans hi))
+  | @nuL w k t' _ ih =>
+      intro hi
+      exact .nuL (fun j hj => ih j hj (
+        (upd_ne _ _ (fun h' => by subst h'; rw [hj] at hi; cases hi)).trans hi))
+  | nuR _ ih => intro hi; exact .nuR (fun j hj => ih j hj hi)
+  | @gL w k t' _ ih =>
+      intro hi
+      exact .gL (fun j hj => ih j hj (
+        (upd_ne _ _ (fun h' => by subst h'; rw [hj] at hi; cases hi)).trans hi))
+  | gR _ ih => intro hi; exact .gR (fun j hj => ih j hj hi)
+  | @mL w k t' i' hi' _ ih =>
+      intro hi
+      exact .mL hi' (fun j hj => ih j hj (
+        (upd_ne _ _ (fun h' => by subst h'; rw [hj] at hi; cases hi)).trans hi))
+  | @mR w t k' j hj _ ih =>
+      intro hi
+      exact .mR hj (fun j' hj' => ih j' hj' (
+        (upd_ne _ _ (fun h' => by subst h'; rw [hj] at hi; cases hi)).trans hi))
+
+/-- **No accidental handling.** A handler of a fresh instance, around a computation that cannot
+name it, is invisible: `ν h. handle_h M ≡ M` for any clauses. This is parametricity in
+instances: `M` treats every instance it is not given alike, so it treats `h` as it treats an
+instance the world never matches. -/
+theorem no_accidental_handling (e : S.E)
+    (hop : (o : S.O e) → Cmp S (e :: Ψ) (kty (S.q e o) (S.res e o) (.F A) :: .g (S.arg e o) :: Γ)
+      (.F A))
+    (hab : (a : S.A e) → Cmp S (e :: Ψ) (.g (S.aarg e a) :: Γ) (.F A)) (M : Cmp S Ψ Γ (.F A)) :
+    CtxEq (.nu e (.handleAt .z (.ret (.var .z)) hop hab M.wkI)) M := by
+  apply soundness
+  intro w hw η η' ρ ρ' hη hρ
+  simp only [Cmp.den, CTy.nuA]
+  apply CRU_F.2
+  refine .gL (fun i hi => ?_)
+  rw [Cmp.den_wkI]
+  have hs := W.le_garbL_self w i hi
+  refine hnd_transparent (CRU_F.1 (CRU.mono _ hs (Cmp.fp M hw hη hρ))) (fun _ => rfl) ?_
+  show upd w.sl i St.g i = St.g
+  exact upd_same _ _ _
+
 end EffRel
