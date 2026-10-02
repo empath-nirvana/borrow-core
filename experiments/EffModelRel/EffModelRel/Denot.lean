@@ -37,6 +37,16 @@ def IEnv.cons (i : Nat) (η : IEnv (S := S) Ψ) : IEnv (e :: Ψ)
   | _, .z => i
   | _, .s x => η _ x
 
+/-! ## Values at their value types
+
+The denotation puts these into environments; their declared types are the value types, so
+lemmas about environments match them syntactically. -/
+
+def VTy.gv {g : G} (x : g.den) : (VTy.g (S := S) g).den := x
+def VTy.capv {e : S.E} {s : G} (c : Nat) (co : CoSem S e s) : (VTy.cap (S := S) e s).den := (c, co)
+def VTy.resv (ℓ r : Nat) : (VTy.res (S := S)).den := (ℓ, r)
+def VTy.uv {m : Mode} {C : CTy S} (c : C.den) : (VTy.U m C).den := c
+
 /-- `n`-fold iteration. -/
 def iter {X : Type} : Nat → (X → X) → X → X
   | 0, _, x => x
@@ -81,35 +91,36 @@ def Cmp.den : {C : CTy S} → Cmp S Ψ Γ C → IEnv Ψ → Env Γ → C.den
   | _, .absurd v, η, ρ => (v.den η ρ : Empty).elim
   | _, .prim p a b, η, ρ => .ret (p.eval (a.den η ρ) (b.den η ρ))
   | _, .emit v, η, ρ => .act (.out (v.den η ρ)) (fun _ => .ret ())
-  | C, .op x o v M, η, ρ => C.opA (η _ x) _ o (v.den η ρ) (fun y => M.den η (ρ.cons y)) []
+  | C, .op x o v M, η, ρ => C.opA (η _ x) _ o (v.den η ρ) (fun y => M.den η (ρ.cons (VTy.gv y))) []
   | C, .ab x a v, η, ρ => C.abA (η _ x) _ a (v.den η ρ) []
   | C, .handle e hr hop hab M, η, ρ =>
       C.nuA (fun i => (M.den (η.cons i) ρ).hnd C i e (fun a => hr.den η (ρ.cons a))
-        (fun o v k d => (hop o).den η ((ρ.cons (A := .g _) v).cons (mkK _ _ _ C k (dtorsT d))))
-        (fun a v => (hab a).den η (ρ.cons (A := .g _) v)))
+        (fun o v k d => (hop o).den η ((ρ.cons (VTy.gv v)).cons (mkK _ _ _ C k (dtorsT d))))
+        (fun a v => (hab a).den η (ρ.cons (VTy.gv v))))
   | C, .handleAt (e := e) x hr hop hab M, η, ρ =>
       (M.den η ρ).hnd C (η _ x) e (fun a => hr.den η (ρ.cons a))
-        (fun o v k d => (hop o).den η ((ρ.cons (A := .g _) v).cons (mkK _ _ _ C k (dtorsT d))))
-        (fun a v => (hab a).den η (ρ.cons (A := .g _) v))
+        (fun o v k d => (hop o).den η ((ρ.cons (VTy.gv v)).cons (mkK _ _ _ C k (dtorsT d))))
+        (fun a v => (hab a).den η (ρ.cons (VTy.gv v)))
   | C, .nu _ M, η, ρ => C.nuA (fun i => M.den (η.cons i) ρ)
   | _, .ieq x y, η, _ => .ret (decide (η _ x = η _ y))
   | _, .ilam M, η, ρ => fun i => M.den (η.cons i) ρ
   | _, .iapp M x, η, ρ => M.den η ρ (η _ x)
   | _, .newcap _ s co v, η, ρ =>
       .nu (fun c => .act (.new c ⟨s, v.den η ρ⟩)
-        (fun _ => .ret (c, fun o a st => (co o).den IEnv.nil ((Env.nil.cons (A := .g _) a).cons (A := .g _) st))))
+        (fun _ => .ret (VTy.capv c
+          (fun o a st => (co o).den IEnv.nil ((Env.nil.cons (VTy.gv a)).cons (VTy.gv st))))))
   | _, .getcap (s := s) v, η, ρ => .act (.kill (v.den η ρ).1 s) .ret
   | _, .lend (e := e) (s := s) v M, η, ρ =>
       .act (.rd (v.den η ρ).1 s) (fun st =>
         .nu (fun i => (M.den (η.cons i) ρ).runL i e (v.den η ρ).1 s (v.den η ρ).2 st))
   | _, .using ℓ M, η, ρ =>
-      .nu (fun r => .act (.acq ℓ r) (fun _ => (M.den η (ρ.cons (ℓ, r))).addFin ℓ r))
+      .nu (fun r => .act (.acq ℓ r) (fun _ => (M.den η (ρ.cons (VTy.resv ℓ r))).addFin ℓ r))
   | _, .use v, η, ρ => .act (.use (v.den η ρ).1 (v.den η ρ).2) (fun _ => .ret ())
   | _, .unfold v, η, ρ =>
       match v.den η ρ with
       | .mk p d => (p, d)
   | C, .bfix x a v n M, η, ρ =>
-      iter n (fun f => M.den η (ρ.cons f)) (C.abA (η _ x) _ a (v.den η ρ) [])
+      iter n (fun f => M.den η (ρ.cons (VTy.uv f))) (C.abA (η _ x) _ a (v.den η ρ) [])
 end
 
 end EffRel

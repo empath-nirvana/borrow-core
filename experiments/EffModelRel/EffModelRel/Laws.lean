@@ -55,6 +55,12 @@ theorem wk_lift_pt {A B : VTy S} {ρ : Env (S := S) Γ} (a : A.den) (b : B.den) 
     ∀ D x, ((ρ.cons b).cons a) D (Ren.wk.lift D x) = (ρ.cons a) D x := by
   intro D x; cases x <;> rfl
 
+theorem TreeRel.of_eq {R : W → X → X → Prop} {w : W} {t₁ t₂ t' : Tree S X} (h : t₁ = t₂)
+    (h' : TreeRel R w t₂ t') : TreeRel R w t₁ t' := h ▸ h'
+
+theorem TreeRel.of_eq' {R : W → X → X → Prop} {w : W} {t t₁' t₂' : Tree S X} (h : t₁' = t₂')
+    (h' : TreeRel R w t t₂') : TreeRel R w t t₁' := h ▸ h'
+
 /-! ## L1a: algebraicity -/
 
 /-- At `to`: `(op; y.M) to z. N ≡ op; y.(M to z. N)`. -/
@@ -73,7 +79,7 @@ theorem alg_app {e : S.E} (x : Var Ψ e) (o : S.O e) (v : Val S Ψ Γ (.g (S.arg
   apply CtxEq.of_den; intro η ρ
   simp only [Cmp.den, CTy.opA]
   congr 1; funext y
-  rw [Val.den_wk (A := .g _) u η ρ y]
+  exact congrArg (M.den η (ρ.cons (VTy.gv y))) (Val.den_wk u η ρ (VTy.gv y)).symm
 
 /-- At a record type: `π₁ (op; y.M) ≡ op; y.(π₁ M)`, and the same for `π₂`. -/
 theorem alg_prj1 {e : S.E} (x : Var Ψ e) (o : S.O e) (v : Val S Ψ Γ (.g (S.arg e o)))
@@ -115,7 +121,10 @@ theorem alg_dtor {e : S.E} (ℓ : Nat) (x : Var Ψ e) (a : S.A e) (v : Val S Ψ 
   simp only [Cmp.den, CTy.abA, CTy.nuA, CTy.actA, Tree.bindC, Tree.addFin]
   apply CRU_F.2
   refine .nu (fun r r' hr hr' => .act (.acq (W.both_r _ _ _ _ _)) (fun _ => ?_))
-  rw [Val.den_wk (A := .res) v η ρ (ℓ, r), hv, Val.den_wk (A := .g .unit) v η' ρ']
+  refine TreeRel.of_eq (congrArg (fun z => Tree.ab (η e x) e a z ([] ++ [Dtor.free ℓ r]))
+    ((Val.den_wk v η ρ (VTy.resv ℓ r)).trans hv)) ?_
+  refine TreeRel.of_eq' (congrArg (fun z => Tree.act (Act.free ℓ r') (fun _ => Tree.ab (η' e x) e a z []))
+    (Val.den_wk v η' ρ' _)) ?_
   exact TreeRel.abE (d := [Dtor.free ℓ r]) (d' := [Dtor.free ℓ r']) (f := []) (f' := [])
     (W.noPend_both hw _ _ _ _) ((W.sub_both _ _ _ _ _).r' (hη _ x))
     (.cons (.free (W.both_r _ _ _ _ _)) .nil) .nil
