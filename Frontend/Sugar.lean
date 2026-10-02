@@ -1750,6 +1750,9 @@ structure DivSt where
   /-- The row of the callback of the borrow block being elaborated, when its body performs
   operations: the block is the unwinding form of its borrow (SPEC §19). -/
   cbRow : Option Frontend.Check.CRow := none
+  /-- The answer type of each handler site whose clauses run after it (`HInfo.after`), as the type
+  name `fx_res{n}`: an annotation that names it is its type.  `[spec §19]` -/
+  siteRes : List (String × VTy) := []
 
 /-- Elaboration with the state of the declarations. -/
 abbrev DM := StateT DivSt SM
@@ -3262,6 +3265,10 @@ def surfC : Nat → TCx → Option CCTy → Comp → DM Comp
       | none => pure (.ret sp V')
     | .absurd sp V => do pure (.absurd sp (← surfV n c (some .zero) V))
     | .bind sp x A M N lin => do
+      -- The answer type of a handler site whose clauses run after it, by its name.
+      let A ← match A with
+        | some T => do pure (some (T.subst (← get).siteRes))
+        | none => pure none
       -- What follows a loop (`restScope`): outside the loop, so the loop's exit is not its.
       if x.name == restScope then
         let saved := (← get).exits
@@ -3428,6 +3435,11 @@ def hndCtlC : Nat → TCx → Span → HInfo → Val → Val → Val → Comp �
     let Rc ← need sp s!"the answer type of `{i.name}`" (cP.elabV (i.res.subst σ))
     let cS : TCx := { cP with E := { cP.E with row := some S } }
     let ans : CCTy := BoCa.Fig16.LogRel.Core.CTy.effOf S Rc
+    -- The clauses run after the site: its handler's answer type, by name (`HInfo.after`).
+    if let some Ra := i.after then
+      let Rs ← (cP.surface sp (← need sp s!"the answer type of `{i.name}`" (cP.elabV (Ra.subst σ))) :
+        Except Error VTy)
+      modify fun st => { st with siteRes := (s!"fx_res{i.n}", Rs) :: st.siteRes }
     -- The return clause.
     let hr ← match R with
       | .thunkv _ (.lam lsp x _ body) => do
@@ -3449,8 +3461,14 @@ def hndCtlC : Nat → TCx → Span → HInfo → Val → Val → Val → Comp �
     let hcTy ← (cP.surface sp (BoCa.Fig16.LogRel.Core.clausesTy S Rc ops) : Except Error VTy)
     let hrN : Ident := ⟨s!"io_hr{i.n}", sp⟩
     let hcN : Ident := ⟨s!"io_hc{i.n}", sp⟩
+    -- A site whose clauses run after it answers its arguments beside its own answer.
+    let hd : Comp := .handle sp i.n hrN hcN M'
+    let hd ← if i.after.isNone then pure hd else do
+      let r : Ident := ⟨s!"io_ar{i.n}", sp⟩
+      pure (.bind sp r none hd (.ret sp (binds.foldr (fun (x, _, _) t => Val.pair sp (.var sp x.name) t)
+        (.var sp r.name))) false)
     let core : Comp := .bind sp hrN (some hrTy) (.ret sp hr)
-      (.bind sp hcN (some hcTy) (.ret sp hcV) (.handle sp i.n hrN hcN M') false) false
+      (.bind sp hcN (some hcTy) (.ret sp hcV) hd false) false
     pure (binds.foldr (fun (x, T, a) K => Comp.bind sp x (some T) (.ret sp a) K false) core)
 
 /-- `for x in V' { M }; N` over a sized source (`dataSrcOf`), `V'` elaborated: a counted loop,

@@ -62,17 +62,21 @@ Each entry: the decision, and why. Newest last.
     does nothing, are affine. A destructor that frees or closes is an action whose placement can
     be observed. It goes at the end of each path, never earlier than an effect, and the opt-out is
     a `linear` binder rather than a grade on types. Types without a destructor stay linear.
-24. **Recursion is an effect (revised; the original read "recursion is always structured, no
-    general direct recursion").** A recursive function is written as ordinary self-calls, and the
-    elaborator turns each self-reference into the `rec` operation, one `rec` per mutually recursive
-    group. A driver, chosen at the call site, runs it: `bounded` (the default: a native recursion
-    with a budget of depth, total, whose end performs `Exhausted`) or `deep` (pending calls as
-    first-order frames on a heap buffer, div). Totality is not a goal of recursion: `fuel` as a
-    route to totality and structural descent (K5, #179) are not built. Layers (`memo`) intercept
-    `rec` and never drive it; `memo` waits for a map (#211). Stack behaviour is a choice of
+24. **Recursion is the fixed point of a generator, called directly (revised twice; first read
+    "recursion is always structured, no general direct recursion", then "recursion is an
+    effect").** A recursive function is written as ordinary self-calls. A mutually recursive group
+    is the bounded fixed point of its generator (Cook and Palsberg), taken at the record of its
+    members and called directly: there is no `rec` site and no `rec` operation. "Recursion is an
+    effect" was a pretty idea, not a requirement, and its site caused the gaps the second-class
+    spike found (decision 59). The drivers stay, chosen at the call site: `bounded` (the default: a
+    native recursion with a budget of depth, total, whose end performs `Exhausted`) or `deep`
+    (pending calls as first-order frames on a heap buffer, div). Layers (`memo`, tracing,
+    counting) are transformers of the generator, applied before the fixed point, not handlers;
+    `memo` waits for a map (#211). Totality is not a goal of recursion: `fuel` as a route to
+    totality and structural descent (K5, #179) are not built. Stack behaviour is a choice of
     driver, and deep non-tail recursion is a lowering matter (#123), not a reason to forbid
-    recursion. Design: `docs/rec-effect/` (#133), its addendum `bounded-deep.md`; SPEC §20;
-    decision 58.
+    recursion. Design: `docs/rec-effect/` (#133), its addendum `bounded-deep.md`;
+    `docs/second-class-and-system-c.md`; SPEC §20, §21; decisions 58, 59.
 25. **Every lowering has a plain LLVM counterpart.** Wasm is the verified target, but no
     semantics may depend on a Wasm-only feature: stack switching (WasmFX), `resume_throw`, Wasm
     exceptions and Wasm GC may appear only as optimizations with a portable fallback. Async,
@@ -682,7 +686,7 @@ Each entry: the decision, and why. Newest last.
     - **An effect is a signature; a handler is a value implementing it.** `effect E[T, …] { fn op(x: A) -> B; ctl op(x: A) -> B; … }`: `fn` is answering, `ctl` control. An effect has one kind of operation. `never` is the empty type `0`; a `ctl` operation answering `never` is abortive.
     - **The qualifier is on the operation**: `ctl` is affine, `linear ctl` linear, `multi ctl` unrestricted. Open: whether `ctl` is inferred from a clause's `k`, and whether the qualifier belongs on the handler.
     - **Handlers**: `handler h(mut s: S): E = { op(x) = e; … }` for an answering effect (its state a `mut` parameter); `handler h[T, …](p: A, …): E[…], A -> R with E₂[…] = { return(x) = M; op(x, …, k) = N; … }` for a control effect, naming the type `A` of the body it handles and its answer `R`, with the row its clauses perform after `with`. An abortive operation's clause takes no `k`. Open: the form of the handler's type annotation.
-    - **A clause is `!` code** (§19's `[handle]`), so a control handler's parameters are `!` values: `default` takes `!(1 => A)`, written `with default(!{ u -> 0 }) { … }`, provisionally: it should take an ordinary owned fallback once a clause's captures follow its multiplicity (#216). Alternative not taken: a state-passing answer type for a non-`!` parameter (§19 *Open*).
+    - **A clause is `!` code** (§19's `[handle]`). Revised by decision 59: what a clause uses is passed to it, the clauses of a handler whose operations are all abortive run after it (`default` takes an owned fallback), and a handler whose operations resume has a state.
     - **`with h[A, …](e, …) { M }`** installs a handler; its type arguments are written only when the body does not determine them. A control `with` answers the handler's answer alone; an answering `with h(&mut c)` rebinds `c`.
     - **Errors are `Fail[E]` in `lib/fail.bc`**, `ctl raise(e: E) -> never`, with `to_result`, `default` and `map_err` (`include fail`). `retry` waits for functions over computations (#161). An error holds nothing owned (§19's `[raise]`): `from_utf8` raises the index and drops the buffer, provisionally: the error should hand the buffer back once an abortive payload may be linear (#215).
     - **Static names are per `with` site**, numbered from 1 in the order the elaboration meets them; a function performing a control effect is copied per site, `f__n3`.
@@ -729,11 +733,40 @@ Each entry: the decision, and why. Newest last.
     - **No effect is named by the elaborator.** A recursive group is a strongly connected component
       of the calls; the exhaustion effect is found by its structure (no type parameters, one
       abortive operation with no argument), and a heap driver by its type. The group's `rec`
-      operation is made per group: its argument carries the self-reference, whose type names the
-      group's row, so it is not a declared effect (rows are first order, decision 57).
+      operation, made per group, is withdrawn by decision 59: a group is the fixed point of its
+      generator, called directly.
     - **A `for` over data whose body performs an operation that resumes is a div loop** over the
       source's cursor; `&a` and `&mut a` stay rejected there (T1, #172).
     - **Spellings (provisional):** `include rec`; `with deep { … }`; `on_exhausted(!{ u -> d })`;
       `exhausted_to_option`; the reports' `row … (a recursive group …)` lines. Decision 57's
       pattern, a per-level handler around the recursive call, is rejected (recursion through a
       site, #173).
+59. **Closure conversion at the seams (#229, #216, SPEC §21; the user's decisions of 2026-10-01
+    after the second-class spike, `docs/second-class-and-system-c.md`; spellings provisional).**
+    Revises decisions 24 and 58 where they name the `rec` operation, and decision 55 where a
+    control handler's parameters are `!` values.
+    - **The principle.** Effectful code is `!` code, and its environment (capabilities, linear
+      values) is passed to it at each call, the `FnMut` shape of SPEC §2; a closure that holds an
+      environment is not asked to be `!`. A gap closes because it falls out of this principle, not
+      because of a rule for it.
+    - **Recursion.** A recursive group is the bounded fixed point of a generator, called directly,
+      at the record of its members `&ⱼ(E ⊗ Pⱼ ⊸ F_Σ(E ⊗ Tⱼ))` (Bekič), its environment `E` in the
+      argument as a copy's capabilities are. The `rec` operation, its site per group and Capture's
+      rule for the site's clause are removed; `Exhausted`, `bounded`, `deep` and `bounded_fix`
+      stay. A recursion may use an answering capability, perform an operation that resumes, and
+      have members with different result types.
+    - **Layers** are transformers of the generator: a function `fn L[A, B](call: !(A => B), a: A)
+      -> B`, recognized by its type, applied with `with L { … }` to the recursions its body calls,
+      before their fixed point. Its row joins the recursion's, its capabilities its environment.
+    - **Handler clauses.** A handler whose operations are all abortive runs its clauses after it
+      (the derived rule `d_handleAbortCapture`), so they use its arguments and the capabilities in
+      scope; `default` takes an owned fallback. A handler whose operations resume has a state, its
+      parameters that are not `!` and the capabilities its clauses use, passed to each clause and
+      at each resume; `k(v)` resumes.
+    - **Not built.** A native handler parameter in the lowering (a handler with a state dispatches
+      at each resume); `memo` (#211); a recursion whose body loops, whose `Exhausted` would be
+      performed inside a loop, where a handler around a div computation is not provided; effects
+      under `deep` and generic recursion, which the spike found separate; recursion through a site
+      (decision 57's parser: a site per level, L2, #173) and through values (#161).
+    - **Spellings (provisional):** `with L { … }` of a layer; `call` as a layer's first parameter by
+      convention only; `k(v)` to resume; `mut` parameters of a control handler.

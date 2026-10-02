@@ -4,6 +4,12 @@ A theory spike for #229, #216 and #161. Experiment: `experiments/SecondClass/` (
 library `SecondClass`, imported by nothing). It changes nothing in `Core/`, `Frontend/` or
 `Backend/`.
 
+**Status.** §8's step 1 is built: SPEC §21, decision 59. Recursive groups are generators called
+directly, layers transform them, abortive clauses run after the handler and a handler whose
+operations resume has a state. Not built from step 1: a recursion whose body loops (its
+`Exhausted` would be performed inside a loop, and a handler around a div computation is not
+provided) and a native handler parameter in the lowering.
+
 **How claims are marked.**
 
 - **[Lean]**: a theorem in `experiments/SecondClass/SecondClass/`. Axioms are within

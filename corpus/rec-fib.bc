@@ -1,13 +1,12 @@
--- Recursion as an effect (SPEC §20): `fib` calls itself, and nothing else is written. Its calls of
--- itself are its `rec` operation, and a call of `fib` from outside is driven by `bounded`, the
--- default driver: the kernel's `bounded_fix`, a native recursion that carries a budget of depth,
--- each call with one less. `fib`'s row has `Exhausted`, what `bounded` performs when the budget is
--- spent, where a loop's has `div`; `main` handles it with `on_exhausted`.
+-- Recursion (SPEC §20, §21): `fib` calls itself, and nothing else is written. It is the fixed point
+-- of its generator, whose calls of itself are direct calls of the self-reference it is given, and
+-- a call of `fib` from outside is driven by `bounded`, the default driver: the kernel's
+-- `bounded_fix`, a native recursion that carries a budget of depth, each call with one less.
+-- `fib`'s row has `Exhausted`, what `bounded` performs when the budget is spent, where a loop's
+-- has `div`; `main` handles it with `on_exhausted`.
 --
--- The handler of `rec` resumes in tail position with the answer of the call, so the operation is
--- a direct call of its clause, and the clause calls the next level: one native call per level,
--- the budget a word passed down. Nothing is allocated and nothing is dispatched
--- (`corpus/counts.expected`: 0, 0, 0).
+-- Each level is one native call of known code, the budget a word passed down. Nothing is
+-- allocated and nothing is dispatched (`corpus/counts.expected`: 0, 0, 0).
 --
 -- Answer: i32[610], fib(15). A budget that ran out gives 4294967295 (-1); a recursion that
 -- answered a call with the wrong level gives another number.

@@ -1,7 +1,8 @@
--- Recursion (SPEC §20). A function that calls itself, or functions that call one another, is a
--- recursive group: its calls of itself are its `rec` operation, which a driver handles. The
--- default driver is `bounded`: the kernel's `bounded_fix`, a native recursion that carries a
--- budget of depth, each call with one less. A recursion that spends the budget performs
+-- Recursion (SPEC §20, §21). A function that calls itself, or functions that call one another, is
+-- a recursive group: the fixed point of its generator, whose calls of the group are direct calls
+-- of the self-reference it is given. A driver takes the fixed point. The default driver is
+-- `bounded`: the kernel's `bounded_fix`, a native recursion that carries a budget of depth, each
+-- call with one less. A recursion that spends the budget performs
 -- `exhausted()`, an abortive operation: it unwinds as any error does, running the finalisers of
 -- what it abandons, and a handler of `Exhausted` receives it.
 --

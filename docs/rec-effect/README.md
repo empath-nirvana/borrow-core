@@ -1,5 +1,17 @@
 # Recursion as an effect: a design corpus
 
+> **Revised (SPEC §21, decision 59).** The design below made each self-reference a `rec` operation
+> and layers handlers that intercept it. As built now, a recursive group is the bounded fixed point
+> of its generator, called directly: a self-call is a direct call of the self-reference the
+> generator is given, with no `rec` operation and no site, and a layer is a transformer of the
+> generator, applied before the fixed point (`with L { … }`). The environment a step needs
+> (capabilities, a layer's state) is passed in its argument, as §3.2's finding 5 found it must be
+> (`rec : !(S * A => S * B)`, the `FnMut` row). The `rec` site was what blocked an operation that
+> resumes, an answering capability and members with different result types in a recursion
+> (`docs/second-class-and-system-c.md`). The drivers (`bounded`, `deep`) and `Exhausted` are as
+> `bounded-deep.md` describes. The corpus and the lowerings below stand as the record of what was
+> explored.
+
 Status: design work for PR #133. Nothing here changes SPEC, the kernel, the checker, the compiler
 or `lib/`. It has two parts:
 

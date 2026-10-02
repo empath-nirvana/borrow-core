@@ -39,7 +39,7 @@ fn checked_sum<'a>(xs: array_imm 'a i32) -> i32 with Fail[Bad] =
 fn summed<'a>(xs: array_imm 'a i32) -> i32 + Bad = with to_result { checked_sum(xs) }
 
 -- The sum, or −1 on an error.
-fn summed_or<'a>(xs: array_imm 'a i32) -> i32 = with default(!{ u -> 0 - 1 }) { checked_sum(xs) }
+fn summed_or<'a>(xs: array_imm 'a i32) -> i32 = with default(0 - 1) { checked_sum(xs) }
 
 -- The elements doubled, into a new buffer; a negative element raises its index.
 fn doubled<'a>(xs: array_imm 'a i32) -> buf i32 with Fail[Bad] =

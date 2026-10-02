@@ -1,0 +1,24 @@
+effect 17:1: Fail: raise (ctl, affine, abortive)
+effect 20:1: Ask: ask (ctl, affine)
+effect 21:1: Count: tick
+row 35:1: check: Fail[i32]
+lowering 23:1: handler count (Count): call — each clause resumes once, in tail position (fun): a direct call on the lent state (withswap), with no allocation and no dispatch
+lowering 35:1: copy `check__n2`: `check` for the site 2 of `Fail`
+lowering 35:1: copy `check__n3`: `check` for the site 3 of `Fail`
+lowering 39:11: with count (Count): a borrow block of its state (lent from `n`); its operations are calls of the clauses on the capability
+lowering 40:13: with releasing: every operation abortive, so its clauses run after the handler, in the scope of the `with`
+lowering 40:13: with releasing (Fail): a handler, the static name 3; raise abortive: a branch per call (final ctl)
+lowering 41:13: with releasing: every operation abortive, so its clauses run after the handler, in the scope of the `with`
+lowering 41:13: with releasing (Fail): a handler, the static name 2; raise abortive: a branch per call (final ctl)
+lowering 42:13: with asking (Ask): a handler, the static name 1; ask affine: resumed or cancelled
+lowering 42:13: with asking: a handler with a state, its parameters and the capabilities its clauses use, passed to each clause and to the continuation at each resume
+call 27:14: tick (Count) → `count__tick`, on the state of `count`
+call 32:49: tick (Count) → `count__tick`, on the state of `count`
+call 32:57: k → the continuation resumed, at the handler's state
+call 35:54: raise (Fail) → abort[3.0], handled by the caller at 35:1: abortive, it never resumes
+call 35:54: raise (Fail) → abort[2.0], handled by the caller at 35:1: abortive, it never resumes
+call 40:42: tick (Count) → `count__tick`, on the state of `count`
+call 40:50: check → `check__n3`
+call 41:42: check → `check__n2`
+call 42:45: ask (Ask) → perform[1.0], handled by `with asking` at 42:13
+call 42:60: ask (Ask) → perform[1.0], handled by `with asking` at 42:13

@@ -654,8 +654,9 @@ was resolved to. The provable core is §9.2's uniqueness lemma.
   `fn walk(t, f: () -> 1) = with to_result { f(); for c in children(t) { walk(c, { raise(e) }) } }`
   - Each level's callback raises to the previous level's site.
   - Rule 1 asks a renamed instance per level: polymorphic recursion over names.
-  - With `rec` as an operation (decision 24), R3 rejects it: the operation's argument type
-    mentions the site's name in its outer row.
+  - With `rec` as an operation (decision 24 as first revised), R3 rejected it: the operation's
+    argument type mentions the site's name in its outer row. With the self-call a direct call
+    (decision 59) the rejection stands: each level's handler is a site of its own.
 - **To accept it** needs generative labels: Biernacki et al.'s labels by night, behind T2 (#173).
 - **Stage 3 (`rec`) must add a corpus program of this pattern:** a recursive-descent parser with a
   per-level error handler whose callback raises to an outer handler. #173 is raised only if that
