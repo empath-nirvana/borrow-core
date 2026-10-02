@@ -109,7 +109,7 @@ def ktyB : Bool → Mode → G → CTy S → VTy S
   | true, q, r, C => .U (if q.c then Mode.unr else Mode.lin) (.wth (.arr (.g r) C) (.F (.g .unit)))
   | false, q, r, C => .U q (.arr (.g r) C)
 
-def kty (q : Mode) (r : G) (C : CTy S) : VTy S := ktyB q.w q r C
+abbrev kty (q : Mode) (r : G) (C : CTy S) : VTy S := ktyB q.w q r C
 
 /-- A co-operation's answer: the operation's answer and the next state, or an error code and
 the state the capability keeps. -/

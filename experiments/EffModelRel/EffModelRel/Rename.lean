@@ -12,7 +12,7 @@ namespace EffRel
 variable {S : Sig}
 
 /-- A renaming of variables. -/
-def Ren {α : Type} (Γ Δ : List α) : Type := ∀ a, Var Γ a → Var Δ a
+abbrev Ren {α : Type} (Γ Δ : List α) : Type := ∀ a, Var Γ a → Var Δ a
 
 def Ren.id {α : Type} (Γ : List α) : Ren Γ Γ := fun _ x => x
 

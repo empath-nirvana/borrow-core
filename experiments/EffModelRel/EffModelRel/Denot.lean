@@ -20,7 +20,7 @@ namespace EffRel
 variable {S : Sig}
 
 /-- Value environments. -/
-def Env (Γ : List (VTy S)) : Type := (A : VTy S) → Var Γ A → A.den
+abbrev Env (Γ : List (VTy S)) : Type := (A : VTy S) → Var Γ A → A.den
 
 def Env.nil : Env (S := S) [] := fun _ x => nomatch x
 
@@ -29,7 +29,7 @@ def Env.cons (a : A.den) (ρ : Env Γ) : Env (A :: Γ)
   | _, .s x => ρ _ x
 
 /-- Instance environments: each instance variable names an instance. -/
-def IEnv (Ψ : List S.E) : Type := (e : S.E) → Var Ψ e → Nat
+abbrev IEnv (Ψ : List S.E) : Type := (e : S.E) → Var Ψ e → Nat
 
 def IEnv.nil : IEnv (S := S) [] := fun _ x => nomatch x
 
