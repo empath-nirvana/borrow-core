@@ -207,6 +207,16 @@ structure RSelf where
   /-- Under a heap driver: a call of itself is a call of the self-reference `fx_rself{j}` of the
   group's machine source, which the typed elaboration turns into a request (`recMachine`). -/
   deep : Bool := false
+  /-- The computation parameters of the member the group's copy was made for, each passed the
+  copy's callback (SPEC §22): the member's index, and the positions and names of the parameters.
+  A call of that member passes them on. -/
+  cbArgs : List (Nat × List (Nat × String)) := []
+  /-- When made for callbacks (SPEC §22), the record's fields are generic in the lifetimes of the
+  capabilities, named so here, so that a callback that calls the group calls it with the
+  capabilities it holds: the fields' row and results. -/
+  poly : List String := []
+  rowR : Row := .nil
+  Ts : List VTy := []
 
 /-- The state of the elaboration: counters for fresh names and site names, the reports for
 `bcc check`, and the copies made (finished ones in `made`, in the order they were finished). -/
@@ -1135,6 +1145,96 @@ structure CbSpec where
   cp : CParam
   T : List Inst
   assigns : Bool
+  /-- The port of each provided effect the callback performs at one: the callee's, for a closure
+  written at the call; a computation parameter passed on keeps its own (`cbCall`). -/
+  ports : List (String × Nat)
+
+/-- A callback's capabilities in its code's order: by effect, so that a callback passed on has the
+type the callee's parameter expects whatever the order of either function's row. -/
+def codeOrder (cs : List Cap) : List Cap := cs.mergeSort fun a b => decide (a.eff ≤ b.eff)
+
+/-- A callback's row in its code's order: by static name. -/
+def siteOrder (ss : List Site) : List Site := ss.mergeSort fun a b => decide (a.n ≤ b.n)
+
+mutual
+/-- A closure in `V` refers to one of `xs` (a callback that calls back into a recursive group). -/
+def closureRefsV (xs : List String) : Nat → Val → Bool
+  | 0, _ => false
+  | n + 1, V => match V with
+    | .thunkv _ M | .bangThunkv _ M | .thunk _ M | .bangThunk _ M =>
+      (refsC fuel M).any xs.contains || closureRefsC xs n M
+    | .pair _ V W | .app _ V W => closureRefsV xs n V || closureRefsV xs n W
+    | .inl _ V | .inr _ V | .unbang _ V | .boxed _ _ V | .unbox _ V | .sub _ V _ | .roll _ V
+    | .unroll _ V | .inst _ V _ | .ascribe _ V _ | .shorten _ _ _ _ V => closureRefsV xs n V
+    | .run _ M => closureRefsC xs n M
+    | _ => false
+
+/-- A closure in `M` refers to one of `xs`. -/
+def closureRefsC (xs : List String) : Nat → Comp → Bool
+  | 0, _ => false
+  | n + 1, M => match M with
+    | .ret _ V | .absurd _ V | .perform _ _ _ V | .abort _ _ _ V => closureRefsV xs n V
+    | .bind _ _ _ M N _ | .with_ _ M N => closureRefsC xs n M || closureRefsC xs n N
+    | .letUnit _ V M | .letPair _ _ _ V M => closureRefsV xs n V || closureRefsC xs n M
+    | .case _ V _ M _ N | .for_ _ _ V M N =>
+      closureRefsV xs n V || closureRefsC xs n M || closureRefsC xs n N
+    | .lam _ _ _ M | .app _ M _ | .proj _ _ M | .lamL _ _ _ M | .inst _ M _ | .nuIn _ M
+    | .nuOut _ M | .ascribe _ M _ | .handle _ _ _ _ M => closureRefsC xs n M
+    | .unwind _ _ _ M D N => closureRefsC xs n M || closureRefsC xs n D || closureRefsC xs n N
+    | _ => false
+end
+
+/-- The capabilities a copy takes for the row `Rc`, in its order: an answering handler's state, the
+variable a `for`'s site threads, and an enclosing callback's environment (`envMut`, each a type
+parameter of the copy, `FX_Ek`); and those type parameters. -/
+def rowCaps (env : Env) (dsp : Span) (Rc : List Inst) (hs : List HSig) (ss : List Site)
+    (envMut : List (String × Bool)) : List Cap × List Ident := Id.run do
+  let mut extra : List Ident := []
+  let mut caps : List Cap := []
+  for i in Rc do
+    if let some m := envMut.lookup i.eff then
+      let W := s!"FX_E{caps.length}"
+      extra := extra ++ [⟨W, dsp⟩]
+      caps := caps ++ [⟨i.eff, "fx_c_" ++ sanitize i.eff, "", noHandler dsp, some W, some m⟩]
+    else if env.answering i.eff then
+      if let some h := hs.find? (·.eff == i.eff) then
+        caps := caps ++ [⟨i.eff, "fx_c_" ++ i.eff.toLower, "fx_l_" ++ i.eff.toLower, h, none, none⟩]
+    else if let some s := ss.find? (·.eff == i.eff) then
+      if let some (w, W) := s.thr then caps := caps ++ [threadCap dsp i.eff w W]
+  return (caps, extra)
+
+/-- The computation parameters of a function's copy made for callbacks (SPEC §22), the callbacks
+`specs`: each one's environment capability (`fx_ek`, of the type parameter `FX_Wk`), the parameter
+types `Ps` with each such parameter at its code's type, the parameters as the copy's body sees
+them, and their rows as functions of the copy. `x` is the function (its ports), `name` the copy. -/
+def cbSetup (env : Env) (dsp : Span) (x name : String) (σ : TySubst) (caps : List Cap)
+    (ss : List Site) (specs : List CbSpec) (pnames : List Ident) (Ps : List VTy) :
+    EM (List Cap × List VTy × List CbParam × List FSig) := do
+  let mut cbps : List CbParam := []
+  let mut envCaps : List Cap := []
+  let mut Ps := Ps
+  let mut cbF : List FSig := []
+  for c in specs do
+    let eEff := envEffName name c.cp.idx
+    let ec : Cap := ⟨eEff, s!"fx_e{c.cp.idx}", "", noHandler dsp, some s!"FX_W{c.cp.idx}", some c.assigns⟩
+    envCaps := envCaps ++ [ec]
+    let ports : List Site := c.cp.prov.filterMap fun (e, Pe) => (c.ports.lookup e.name).map fun pn =>
+      ⟨e.name, pn, Pe.map (·.subst σ), none, dsp, s!"`{x}`"⟩
+    let _ := x
+    let tun := c.T.filterMap fun i => if env.answering i.eff then none else ss.find? (·.eff == i.eff)
+    let codeCaps := codeOrder (caps.filter fun cc => c.T.any (·.eff == cc.eff)) ++ [ec]
+    let codeCaps' := codeCaps.map fun cc =>
+      if cc.thr.isSome then cc else { cc with life := "fx_k_" ++ cc.eff.toLower }
+    let lives := (codeCaps'.filter (·.thr.isNone)).map fun cc => ((⟨cc.life, dsp⟩ : Ident), Life.top dsp)
+    let codeF : FnParts := ⟨true, lives, capsTy dsp codeCaps' (c.cp.A.subst σ),
+      capsTy dsp codeCaps' (c.cp.B.subst σ), ⟨"_", dsp⟩, .top dsp⟩
+    let (codeT, _) := codeF.build dsp (env.rowOf (siteOrder (ports ++ tun)))
+    Ps := Ps.set c.cp.idx codeT
+    let pname := (pnames.getD c.cp.idx ⟨"?", dsp⟩).name
+    let rowCb : List Inst := ports.map (fun s => ⟨s.eff, some s.args⟩) ++ c.T ++ [⟨eEff, some []⟩]
+    cbps := cbps ++ [⟨pname, ports.map fun s => (s.eff, s.n), rowCb, codeCaps⟩]
+    cbF := cbF ++ [{ name := pname, row := rowCb, decl := .main dsp (.top dsp) (.top dsp) }]
+  pure (envCaps, Ps, cbps, cbF)
 
 mutual
 /-- `M` with its operations resolved, handing the capabilities `cs` back beside its result: each
@@ -1232,6 +1332,10 @@ def trBind : Nat → Cx → List Cap → Bool → Span → Ident → Option VTy 
       if let (true, some (g, gs, i, f, W)) := (isPullTy A', cx.env.iterCall? V) then
         let (bs, V') ← pullSite n cx cs rsp g gs i f W
         return ← chain bs (.bind sp x A (.ret rsp V') (← trC n cx cs wrap N) lin)
+    -- A callback's environment rebuilt at a terminal of its code (`cbCode`): its variables, the
+    -- code of a computation parameter among them, as values.
+    if x.name.startsWith "fx_cenv" then
+      return .bind sp x A M (← trC n cx cs wrap N) lin
     let csM := cx.needC M
     let N' ← trC n cx cs wrap N
     if csM.isEmpty then
@@ -1433,11 +1537,13 @@ def blockResult : Nat → Cx → Span → Val → List Cap → EM (List Bind × 
 
 /-- The call of member `j` through the function `g` of a self-reference, on `W` with the
 environment: `f <- return unbang g; z <- return (); a <- return (E, W); (force f z).j a`. -/
-def memberCall (sp : Span) (rs : RSelf) (j : Nat) (g f z a : String) (W : Val) : Comp :=
+def memberCall (sp : Span) (rs : RSelf) (j : Nat) (g f z a : String) (W : Val)
+    (lives : List String := []) : Comp :=
+  let field := projAt sp j rs.members.length (.app sp (.force sp ⟨f, sp⟩) ⟨z, sp⟩)
   .bind sp ⟨f, sp⟩ none (.ret sp (.unbang sp (.var sp g)))
     (.bind sp ⟨z, sp⟩ none (.ret sp (.unit sp))
       (.bind sp ⟨a, sp⟩ none (.ret sp (capsTuple sp rs.env W))
-        (.app sp (projAt sp j rs.members.length (.app sp (.force sp ⟨f, sp⟩) ⟨z, sp⟩)) ⟨a, sp⟩)
+        (.app sp (lives.foldl (fun M l => .inst sp M (.var sp l)) field) ⟨a, sp⟩)
         false) false) false
 
 /-- `g(W)` of a member `g` of the recursive group whose generator is being elaborated (SPEC §20):
@@ -1466,7 +1572,33 @@ def selfCall : Nat → Cx → List Cap → Span → RSelf → String → Nat →
       if let some c' := cx.capOf c.eff then
         if c'.h.name != c.h.name || c'.var != c.var then throw (through c.eff)
     noLend sp s!"`{x}`" W
-    let (b, W') ← goV k cx cs W
+    -- The callbacks of the member the group's copy was made for are passed on as they are: a
+    -- recursion that passes another callback there would need a copy per level (SPEC §22).
+    let (b, W') ← match rs.cbArgs.lookup j, cx.env.arity.lookup x with
+      | some pos, some na => do
+        let some comps := splitVal na W
+          | throw ⟨sp, s!"`{x}` takes {na} arguments: write them one by one"⟩
+        let mut bs : List Bind := []
+        let mut vs : List Val := []
+        for (V, i) in comps.zipIdx do
+          match pos.lookup i, V with
+          | some pn, .var _ y =>
+            unless y == pn do
+              throw ⟨V.span, s!"`{x}` calls itself with a callback other than its own `{pn}`: each " ++
+                "level would need a copy of its own (recursion through values with a new callback; " ++
+                "not provided)"⟩
+            -- The generator holds the code: the call passes `()` in its place.
+            vs := vs ++ [.unit V.span]
+          | some pn, _ =>
+            throw ⟨V.span, s!"`{x}` calls itself with a callback other than its own `{pn}`: each " ++
+              "level would need a copy of its own (recursion through values with a new callback; " ++
+              "not provided)"⟩
+          | none, _ =>
+            let (b, V') ← goV k cx cs V
+            bs := bs ++ b
+            vs := vs ++ [V']
+        pure (bs, tupleOf sp vs)
+      | _, _ => goV k cx cs W
     let t ← fresh "fx_b"
     let r ← fresh "fx_v"
     let u ← fresh "fx_u"
@@ -1482,9 +1614,14 @@ def selfCall : Nat → Cx → List Cap → Span → RSelf → String → Nat →
     report sp "call" (s!"{x} → the group's self-reference, called directly" ++
       (if rs.env.isEmpty then "" else ", passing the capabilities") ++
       s!"; at the end of the budget abort[{rs.e}.0]")
+    -- Fields generic in the capabilities' lifetimes are called at those the capabilities have here.
+    let cur := rs.env.map fun c => (cx.capOf c.eff).getD c
+    let lives := if rs.poly.isEmpty then [] else (cur.filter (·.thr.isNone)).map (·.life)
+    let res : CTy := if rs.poly.isEmpty then res else
+      .eff sp rs.rowR (capsTy sp cur ((rs.Ts[j]?).getD (.unit sp)))
     let call : Comp := .case sp (.var sp rs.self) ⟨u, sp⟩
       (.ascribe sp (.abort sp rs.e 0 (.unit sp)) res) ⟨g, sp⟩
-      (memberCall sp rs j g f z a W')
+      (memberCall sp rs j g f z a W' lives)
     let bind : Bind := fun N => do
       pure (.bind sp ⟨t, sp⟩ none call (← unpack sp rs.env r t N) false)
     pure (b ++ [bind], .var sp r)
@@ -1685,14 +1822,14 @@ def withCtl : Nat → Cx → List Cap → Span → Span → CHandler → List VT
     let mut σ : TySubst := tps.zip As
     -- The handled effect's type arguments from what the body performs. A site whose body calls a
     -- computation parameter that is provided `e` is named by its port (SPEC §22).
-    let port := match forced with
-      | some p => some p
-      | none =>
-        if cx.cbs.any fun cb => cb.ports.any (·.1 == e) && (refsC fuel M).contains cb.name
-        then cx.ports.lookup e else none
-    let n ← match port with
-      | some p => pure p
-      | none => freshSite
+    let called : List Nat := (cx.cbs.filter fun (cb : CbParam) => (refsC fuel M).contains cb.name).filterMap fun (cb : CbParam) => cb.ports.lookup e
+    let n ← match forced, called.eraseDups with
+      | some p, _ => pure p
+      | none, [p] => pure p
+      | none, [] => freshSite
+      | none, _ =>
+        throw ⟨ksp, s!"the body of `with {ch.name.name}` calls callbacks provided `{e}` at two ports: one " ++
+          "handler cannot serve both (two ports under one site; `rename` would, not built)"⟩
     if let some i := (rowC cx.env fuel M).find? (·.eff == e) then
       if let some Bs := i.args then
         unless Bs.length == ch.effArgs.length do
@@ -2114,14 +2251,15 @@ def cbCall : Nat → Cx → List Cap → Span → Val → String → Val → EM 
     let cps := cx.env.cparamsOf x
     let some n := cx.env.arity.lookup x | throw ⟨sp, s!"internal error: the arity of `{x}`"⟩
     noLend sp s!"`{x}`" W
-    let (bP, W) ← pullArgsV k cx cs x W
-    let some comps := splitVal n W
+    let (bP, W₀) ← pullArgsV k cx cs x W
+    let some comps := splitVal n W₀
       | throw ⟨sp, s!"`{x}` takes {n} arguments: write them one by one, `{x}(a, b, …)`"⟩
     let cbNames := cx.cbs.map (·.name)
-    let σ := callSubst cx.env fuel f x W
-    -- The callbacks: a closure as written; a function passed by name, or a computation parameter
-    -- passed on, as the closure that calls it.
-    let mut specs : List (CbSpec × Ident × Comp × List String) := []
+    let σ := callSubst cx.env fuel f x W₀
+    -- The callbacks: a closure as written, or a function passed by name as the closure that calls
+    -- it (`fresh`); or a computation parameter of this copy passed on as it is, its code, its
+    -- environment and the ports of its provided effects (`passed`).
+    let mut specs : List (CbSpec × Option (Ident × Comp × List String) × Option CbParam) := []
     for cp in cps do
       let V := comps.getD cp.idx (.unit sp)
       let cl? := cbArg? cx.env cbNames V
@@ -2129,6 +2267,20 @@ def cbCall : Nat → Cx → List Cap → Span → Val → String → Val → EM 
       if cl?.isNone && (headName V).isNone then
         throw ⟨V.span, s!"the argument at `{cp.name}` of `{x}`, which `{x}` provides " ++
           ", ".intercalate (cp.prov.map (·.1.name)) ++ ", is a closure or a function"⟩
+      let prov := cp.prov.map (·.1.name)
+      for e in prov do
+        if cx.env.answering e then
+          throw ⟨V.span, s!"`{x}` provides `{e}` at `{cp.name}`: a provided answering effect is not " ++
+            "provided (SPEC §22)"⟩
+      -- A computation parameter passed on.
+      if let (.var _ g, some cb) := (V, cx.cb? (headName V |>.getD "")) then
+        let _ := g
+        let envEff := (cb.caps.getLast?.map (·.eff)).getD ""
+        let ports := cb.ports.filter fun (e, _) => prov.contains e
+        let T := cb.row.filter fun i => i.eff != envEff && !ports.any (·.1 == i.eff)
+        let assigns := ((cx.capOf envEff).bind (·.env)).getD false
+        specs := specs ++ [(⟨cp, T, assigns, ports⟩, none, some cb)]
+        continue
       let mut y : Ident := ⟨"", V.span⟩
       let mut M : Comp := .top V.span
       let mut written := false
@@ -2137,19 +2289,38 @@ def cbCall : Nat → Cx → List Cap → Span → Val → String → Val → EM 
       | _ =>
         y := ⟨← fresh "fx_cx", V.span⟩
         M := .ret V.span (.app V.span V (.var V.span y.name))
-      let prov := cp.prov.map (·.1.name)
-      for e in prov do
-        if cx.env.answering e then
-          throw ⟨V.span, s!"`{x}` provides `{e}` at `{cp.name}`: a provided answering effect is not " ++
-            "provided (SPEC §22)"⟩
       let T := (rowC cx.env fuel M).filter fun i => !prov.contains i.eff
       -- A closure that performs nothing, at a parameter that provides nothing, is passed as written.
       if written && prov.isEmpty && T.isEmpty then continue
       let globals := cx.env.sigs.map (·.1) ++ cx.env.ops.map (·.decl.name.name) ++ cx.env.externs
-      let vars := (fvC fuel [y.name] M).eraseDups.filter fun v =>
-        !globals.contains v && !cx.caps.any (·.var == v)
+      let fv := (fvC fuel [y.name] M).eraseDups
+      let vars := fv.filter fun v => !globals.contains v && !cx.caps.any (·.var == v)
+      -- A callback that calls the recursive group being elaborated takes its self-reference.
+      let vars := match cx.recSelf with
+        | some rs => if fv.any rs.members.contains && !rs.deep then vars ++ [rs.self] else vars
+        | none => vars
       let assigns := vars.any M.boundNames.contains
-      specs := specs ++ [(⟨cp, T, assigns⟩, y, M, vars)]
+      let mut ports : List (String × Nat) := []
+      for e in prov do ports := ports ++ [(e, ← portOf x e)]
+      specs := specs ++ [(⟨cp, T, assigns, ports⟩, some (y, M, vars), none)]
+    -- A computation parameter passed on performs its provided effects that the callee does not
+    -- provide at its own ports: the call runs under a site of that port whose clauses raise again
+    -- at the handler around it, unless that handler is the port's (R2c).
+    for (c, _, cb?) in specs do
+      if let some cb := cb? then
+        for (e, p) in cb.ports do
+          if c.ports.any (·.1 == e) then continue
+          match cx.siteOf e with
+          | some s => if s.n == p then continue
+          | none => throw ⟨sp, s!"`{cb.name}` is provided `{e}`, and is passed here outside every handler of `{e}`"⟩
+          let some eff := cx.env.eff? e | throw ⟨sp, s!"internal error: the effect `{e}`"⟩
+          unless eff.ops.all (·.abortive) do
+            throw ⟨sp, s!"`{cb.name}` is provided `{e}`, whose operations resume, and is passed to `{x}`, " ++
+              s!"which does not provide it, outside the handlers of `{e}` that serve it: its port would " ++
+              "be relabelled, which needs the callback inlined or a `rename` primitive (R2c, not built)"⟩
+          report sp "lowering" (s!"{x}: passed `{cb.name}`, provided {e}, outside its handler, under a " ++
+            s!"site of its port {p} whose clauses raise again at the handler around it (R2c)")
+          return ← withCtl k cx cs sp sp (relabelHandler sp eff) [] (.unit sp) (.ret sp (.app sp f W)) (some p)
     -- What the copy performs: the function's own row, and what its callbacks tunnel.
     let own := ((cx.env.fn? x).map (·.row)).getD [] |>.map (·.subst σ)
     let Rc := specs.foldl (fun r (c, _) => union r c.T) own
@@ -2172,38 +2343,67 @@ def cbCall : Nat → Cx → List Cap → Span → Val → String → Val → EM 
     -- A callback that tunnels one of the callee's ports was written inside the callee's own
     -- handler of it: the recursion through a site of decision 57.
     let myPorts := (← get).ports.filterMap fun ((g, _), p) => if g == x then some p else none
-    if let some s := ss.find? (myPorts.contains ·.n) then
-      throw ⟨sp, s!"`{x}` is passed a callback that performs `{s.eff}` at the handler of `{s.eff}` " ++
+    if let some (c, _) := specs.find? fun (c, cl?, _) => cl?.isSome && c.T.any fun i =>
+        ss.any fun s => s.eff == i.eff && myPorts.contains s.n then
+      throw ⟨sp, s!"`{x}` is passed a callback at `{c.cp.name}` that performs an effect at the handler " ++
         s!"inside `{x}` that serves its callbacks: each level would need a copy whose sites are its own, " ++
         "without end (recursion through a site, decision 57; generative labels, #173)"⟩
     let σkeys := tps.filterMap fun t => (σ.lookup t).map fun T => sanitize (T.pp 0)
     let specKeys := specs.map fun (c, _) => s!"k{c.cp.idx}" ++
-      String.join (c.T.map fun i => "_" ++ i.eff) ++ (if c.assigns then "_m" else "")
+      String.join (c.T.map fun i => "_" ++ i.eff) ++ String.join (c.ports.map fun (_, p) => s!"_p{p}") ++
+      (if c.assigns then "_m" else "")
     let name := copyName x (keys ++ σkeys ++ specKeys)
     -- The capabilities as this call holds them: those of the copy's row, then each callback's
-    -- environment.
+    -- environment, a passed parameter's its own.
     let used := cx.needIn Rc
     let mut envCaps : List Cap := []
-    for (c, _) in specs do
-      let v ← fresh "fx_env"
-      let ec : Cap := ⟨envEffName name c.cp.idx, v, "", noHandler sp, some s!"FX_W{c.cp.idx}", some c.assigns⟩
-      envCaps := envCaps ++ [ec]
+    for (c, cl?, cb?) in specs do
+      match cl?, cb? with
+      | _, some cb =>
+        let some ec := cx.caps.find? (·.eff == ((cb.caps.getLast?.map (·.eff)).getD ""))
+          | throw ⟨sp, s!"internal error: the environment of `{cb.name}`"⟩
+        envCaps := envCaps ++ [ec]
+      | _, none =>
+        let v ← fresh "fx_env"
+        let ec : Cap := ⟨envEffName name c.cp.idx, v, "", noHandler sp, some s!"FX_W{c.cp.idx}", some c.assigns⟩
+        envCaps := envCaps ++ [ec]
     let allCaps := used ++ envCaps
     -- Each callback's code.
     let mut codes : List (Nat × Val) := []
-    for ((c, y, M, vars), ec) in specs.zip envCaps do
-      let codeCaps := used.filter fun cc => c.T.any (·.eff == cc.eff)
-      let mut ports : List Site := []
-      for (e, Ps) in c.cp.prov do
-        let args := Ps.map (·.subst σ)
-        if args.any (mentions tps) then
-          throw ⟨sp, s!"the type arguments of the `{e.name}` that `{x}` provides at `{c.cp.name}` are " ++
-            s!"not determined here: write them, `{x}[…](…)`"⟩
-        let pn ← portOf x e.name
-        let site : Site := ⟨e.name, pn, args, none, sp, s!"`{x}`"⟩
-        ports := ports ++ [site]
-      codes := codes ++ [(c.cp.idx, ← cbCode k cx sp y M codeCaps ec vars ports)]
-    let name ← cbCopyOf k cx.env sp x d σ Rc hs ss envMut (specs.map (·.1)) name
+    for ((c, cl?, cb?), ec) in specs.zip envCaps do
+      match cl?, cb? with
+      | some (y, M, vars), _ =>
+        let codeCaps := codeOrder (used.filter fun cc => c.T.any (·.eff == cc.eff))
+        let mut ports : List Site := []
+        for (e, Ps) in c.cp.prov do
+          let args := Ps.map (·.subst σ)
+          if args.any (mentions tps) then
+            throw ⟨sp, s!"the type arguments of the `{e.name}` that `{x}` provides at `{c.cp.name}` are " ++
+              s!"not determined here: write them, `{x}[…](…)`"⟩
+          if let some pn := c.ports.lookup e.name then
+            let site : Site := ⟨e.name, pn, args, none, sp, s!"`{x}`"⟩
+            ports := ports ++ [site]
+        codes := codes ++ [(c.cp.idx, ← cbCode k cx sp y M codeCaps ec vars ports)]
+      | none, some cb =>
+        -- Passed η-expanded at its lifetimes, `!thunkv Fun 'y₁ … return f ['y₁] …`: checked against
+        -- the parameter's type, whose binders are numbered where it was written.
+        let ls := (cb.caps.filter (·.thr.isNone)).zipIdx.map fun (_, i) => s!"fx_y{i}"
+        let rec eta : List String → Val → Val
+          | [], V => V
+          | l :: rest, V => .thunkv sp (.lamL sp ⟨l, sp⟩ (.top sp) (.ret sp (eta rest (.inst sp V (.var sp l)))))
+        let code : Val := match ls with
+          | [] => .var sp cb.name
+          | l :: rest => .bangThunkv sp (.lamL sp ⟨l, sp⟩ (.top sp)
+              (.ret sp (eta rest (.inst sp (.var sp cb.name) (.var sp l)))))
+        codes := codes ++ [(c.cp.idx, code)]
+      | none, none => pure ()
+    let name ← match (cx.env.fn? x).bind (·.group) with
+      | some (gn, _) =>
+        if !cx.env.inLayers.isEmpty then
+          throw ⟨sp, s!"`{x}` is recursive, is passed a callback and runs under a layer: not provided"⟩
+        groupCopy k { cx.env with inLayers := [] } sp gn Rc [] hs ss (keys ++ σkeys ++ specKeys) x
+          (specs.map (·.1)) envMut
+      | none => cbCopyOf k cx.env sp x d σ Rc hs ss envMut (specs.map (·.1)) name
     -- The call.
     let mut bs : List Bind := bP
     let mut args : List Val := []
@@ -2214,20 +2414,23 @@ def cbCall : Nat → Cx → List Cap → Span → Val → String → Val → EM 
         let (b, V') ← goV k cx cs V
         bs := bs ++ b
         args := args ++ [V']
-    for ((_, _, _, vars), ec) in specs.zip envCaps do
-      let envB : Bind := fun N =>
-        pure (.bind sp ⟨ec.var, sp⟩ none (.ret sp (tupleOf sp (vars.map (Val.var sp ·)))) N false)
-      bs := bs ++ [envB]
+    for ((_, cl?, _), ec) in specs.zip envCaps do
+      if let some (_, _, vars) := cl? then
+        let envB : Bind := fun N =>
+          pure (.bind sp ⟨ec.var, sp⟩ none (.ret sp (tupleOf sp (vars.map (Val.var sp ·)))) N false)
+        bs := bs ++ [envB]
     let t ← fresh "fx_b"
     let r ← fresh "fx_v"
     report sp "call" (s!"{x} → `{name}`" ++ (if used.isEmpty then "" else ", passing the capabilities") ++
-      "; " ++ ", ".intercalate (specs.map fun (c, _) => s!"the callback at `{c.cp.name}` a closure value " ++
-        "(its code and its environment)") ++ ": one body per profile")
+      "; " ++ ", ".intercalate (specs.map fun (c, cl?, _) => s!"the callback at `{c.cp.name}` " ++
+        (if cl?.isSome then "a closure value (its code and its environment)" else "passed on as it is")) ++
+      ": one body per profile")
     let after (N : Comp) : EM Comp := do
       -- Each environment taken apart again: its variables as the callback leaves them.
       let mut K := N
-      for ((_, _, _, vars), ec) in (specs.zip envCaps).reverse do
-        K ← bindParams sp ec.var (vars.map (⟨·, sp⟩)) K
+      for ((_, cl?, _), ec) in (specs.zip envCaps).reverse do
+        if let some (_, _, vars) := cl? then
+          K ← bindParams sp ec.var (vars.map (⟨·, sp⟩)) K
       -- The capabilities bound again at their own types.
       pure (used.foldr (fun c K => if c.thr.isSome then K else
         .bind sp ⟨c.var, sp⟩ (some (c.ty sp)) (.ret sp (.var sp c.var)) K false) K)
@@ -2259,49 +2462,12 @@ def cbCopyOf : Nat → Env → Span → String → Decl → TySubst → List Ins
     let f ← (fnParts dsp dn.name (A.subst σ) (V.subst σ) : Except Error FnParts)
     let some pnames := paramNames f.p.name fuel f.body
       | throw ⟨dsp, s!"internal error: the parameters of `{x}`"⟩
-    -- The capabilities, in the order of the row.
-    let mut extraTps : List Ident := []
-    let mut caps : List Cap := []
-    for i in Rc do
-      if let some m := envMut.lookup i.eff then
-        let W := s!"FX_E{caps.length}"
-        extraTps := extraTps ++ [⟨W, dsp⟩]
-        let ec : Cap := ⟨i.eff, "fx_c_" ++ sanitize i.eff, "", noHandler dsp, some W, some m⟩
-        caps := caps ++ [ec]
-      else if env.answering i.eff then
-        if let some h := hs.find? (·.eff == i.eff) then
-          caps := caps ++ [⟨i.eff, "fx_c_" ++ i.eff.toLower, "fx_l_" ++ i.eff.toLower, h, none, none⟩]
-      else if let some s := ss.find? (·.eff == i.eff) then
-        if let some (w, W) := s.thr then caps := caps ++ [threadCap dsp i.eff w W]
+    -- The capabilities, in the order of the row, then each callback's environment.
+    let (caps, extraTps) := rowCaps env dsp Rc hs ss envMut
     let thrTps : List Ident := (ss.filterMap (·.thr)).map fun (_, W) => ⟨W, dsp⟩
     let ss' := ss.map fun s => { s with sp := dsp, what := "the caller" }
-    -- Each callback: its environment's capability, and its parameter at its code's type.
-    let mut cbps : List CbParam := []
-    let mut envCaps : List Cap := []
-    let mut Ps := splitTy pnames.length f.P
-    let mut cbF : List FSig := []
-    for c in specs do
-      let eEff := envEffName name c.cp.idx
-      let ec : Cap := ⟨eEff, s!"fx_e{c.cp.idx}", "", noHandler dsp, some s!"FX_W{c.cp.idx}", some c.assigns⟩
-      envCaps := envCaps ++ [ec]
-      let mut ports : List Site := []
-      for (e, Pe) in c.cp.prov do
-        let pn ← portOf x e.name
-        let site : Site := ⟨e.name, pn, Pe.map (·.subst σ), none, dsp, s!"`{x}`"⟩
-        ports := ports ++ [site]
-      let tun := c.T.filterMap fun i => if env.answering i.eff then none else ss'.find? (·.eff == i.eff)
-      let codeCaps := (caps.filter fun cc => c.T.any (·.eff == cc.eff)) ++ [ec]
-      let codeCaps' := codeCaps.map fun cc =>
-        if cc.thr.isSome then cc else { cc with life := "fx_k_" ++ cc.eff.toLower }
-      let lives := (codeCaps'.filter (·.thr.isNone)).map fun cc => ((⟨cc.life, dsp⟩ : Ident), Life.top dsp)
-      let codeF : FnParts := ⟨true, lives, capsTy dsp codeCaps' (c.cp.A.subst σ),
-        capsTy dsp codeCaps' (c.cp.B.subst σ), ⟨"_", dsp⟩, .top dsp⟩
-      let (codeT, _) := codeF.build dsp (env.rowOf (ports ++ tun))
-      Ps := Ps.set c.cp.idx codeT
-      let pname := (pnames.getD c.cp.idx ⟨"?", dsp⟩).name
-      let rowCb : List Inst := ports.map (fun s => ⟨s.eff, some s.args⟩) ++ c.T ++ [⟨eEff, some []⟩]
-      cbps := cbps ++ [⟨pname, ports.map fun s => (s.eff, s.n), rowCb, codeCaps⟩]
-      cbF := cbF ++ [{ name := pname, row := rowCb, decl := d }]
+    let (envCaps, Ps, cbps, cbF) ← cbSetup env dsp x name σ caps ss' specs pnames
+      (splitTy pnames.length f.P)
     let allCaps := caps ++ envCaps
     let effs' := envCaps.map (·.eff) ++ envMut.map (·.1) ++ env.envEffs
     let env' : Env := { env with fns := cbF ++ env.fns, inLayers := [], envEffs := effs' }
@@ -2352,7 +2518,7 @@ def copyFor : Nat → Cx → Span → String → FSig → EM String
     if keys.isEmpty then return x
     if let some (gn, _) := g.group then
       let env := { cx.env with inLayers := [] }
-      return ← groupCopy k env sp gn row cx.env.inLayers hs ss (keys ++ cx.env.inLayers) x
+      return ← groupCopy k env sp gn row cx.env.inLayers hs ss (keys ++ cx.env.inLayers) x [] []
     copyOf k { cx.env with inLayers := [] } sp g hs ss (copyName x keys)
 
 /-- The layer `L` made for the group `G` (SPEC §20): a transformer of its generator, applied before
@@ -2414,9 +2580,9 @@ back first; a call of a member inside it is a direct call of the self-reference 
 member's copy is `(bounded_fix[1, R] (gen, (budget, ()))).j`, the budget `recBudget`; it has the
 type a copy of the member has, so a call of it is a call of a copy. Answers the copy of `x`. -/
 def groupCopy : Nat → Env → Span → String → List Inst → List String → List HSig → List Site →
-    List String → String → EM String
-  | 0, _, sp, _, _, _, _, _, _, _ => throw ⟨sp, "internal error: copies nested too deeply"⟩
-  | k + 1, env, sp, gn, row, layers, hs, ss, keys, x => do
+    List String → String → List CbSpec → List (String × Bool) → EM String
+  | 0, _, sp, _, _, _, _, _, _, _, _, _ => throw ⟨sp, "internal error: copies nested too deeply"⟩
+  | k + 1, env, sp, gn, row, layers, hs, ss, keys, x, cbx, envMut => do
     let name := copyName x keys
     let stepName := copyName (gn ++ "__step") keys
     let st ← get
@@ -2427,43 +2593,91 @@ def groupCopy : Nat → Env → Span → String → List Inst → List String �
     let some e := ss.find? (·.eff == exh.name)
       | throw ⟨sp, s!"`{x}` is recursive: its depth is bounded, and no handler of `{exh.name}` is in scope here"⟩
     let gsp := G.sp
-    -- The environment: the capabilities, in the order of the row, as `copyOf` takes them.
-    let cs : List Cap := row.filterMap fun i =>
-      if env.answering i.eff then
-        (hs.find? (·.eff == i.eff)).map fun h =>
-          ⟨i.eff, "fx_c_" ++ i.eff.toLower, "fx_l_" ++ i.eff.toLower, h, none, none⟩
-      else (ss.find? (·.eff == i.eff)).bind fun s => s.thr.map fun (w, W) => threadCap gsp i.eff w W
-    let tps : List Ident := (ss.filterMap (·.thr)).map fun (_, W) => ⟨W, gsp⟩
+    -- The environment: the capabilities, in the order of the row, as `copyOf` takes them, and the
+    -- environments of the callbacks passed to `x` (SPEC §22).
+    let (cs₀, extraTps) := rowCaps env gsp row hs ss envMut
+    let ss := ss.map fun s => { s with sp := gsp, what := "the caller" }
+    let some jx := (G.members.map (·.1)).idxOf? x | throw ⟨sp, s!"internal error: `{x}`"⟩
+    let some (_, fx) := G.members[jx]? | throw ⟨sp, s!"internal error: `{x}`"⟩
+    if !cbx.isEmpty && !layers.isEmpty then
+      throw ⟨sp, s!"`{x}` is recursive, is passed a callback and runs under a layer: not provided"⟩
+    let pnames ← if cbx.isEmpty then pure [] else match paramNames fx.p.name fuel fx.body with
+      | some ns => pure ns
+      | none => throw ⟨sp, s!"internal error: the parameters of `{x}`"⟩
+    let (envCaps, Psx, cbps, cbF) ← cbSetup env gsp x name [] cs₀ ss cbx pnames
+      (splitTy pnames.length fx.P)
+    let cs := cs₀ ++ envCaps
+    -- The callbacks' code is captured by the generator, which takes it first: the members' types
+    -- in `R` hold `()` in its place, so that `R` has no `∀` of the code's lifetimes.
+    let cbPos : List Nat := cbx.map (·.cp.idx)
+    let codeNames : List String := cbPos.map fun i => (pnames.getD i ⟨"?", gsp⟩).name
+    let codesTy : VTy := tupleTy gsp (cbPos.map fun i => Psx.getD i (.unit gsp))
+    let Pof (j : Nat) (f : FnParts) : VTy := if j == jx && !cbx.isEmpty then
+        tupleTy gsp (Psx.zipIdx.map fun (A, i) => if cbPos.contains i then VTy.unit gsp else A)
+      else f.P
+    let tps : List Ident := (ss.filterMap (·.thr)).map (fun (_, W) => (⟨W, gsp⟩ : Ident)) ++ extraTps ++
+      cbx.map fun c => (⟨s!"FX_W{c.cp.idx}", gsp⟩ : Ident)
     let tArgs : List VTy := tps.map fun t => .name gsp t.name
     let lives : List (Ident × Life) :=
       (cs.filter (·.thr.isNone)).map fun c => ((⟨c.life, gsp⟩ : Ident), Life.top gsp)
-    let ss := ss.map fun s => { s with sp := gsp, what := "the caller" }
     let rowR := env.rowOf ss
     let n := G.members.length
-    let Cs : List CTy := G.members.map fun (_, f) =>
-      .arr gsp (capsTy gsp cs f.P) (.eff gsp rowR (capsTy gsp cs f.T))
+    -- Made for callbacks, the fields are generic in the capabilities' lifetimes (`RSelf.poly`).
+    -- So are they when a member passes a callback that calls the group (recursion through values):
+    -- its call holds the capabilities at the callee's lifetimes. Then the generator is made in each
+    -- member's copy, where the record's type is written.
+    let poly := !cbx.isEmpty || G.members.any fun (_, f) => closureRefsC (G.members.map (·.1)) fuel f.body
+    let polyL : List String := if !poly then [] else
+      (cs.filter (·.thr.isNone)).map fun c => "fx_g_" ++ c.eff.toLower
+    let csP : List Cap := if !poly then cs else
+      cs.map fun c => if c.thr.isSome then c else { c with life := "fx_g_" ++ c.eff.toLower }
+    let Cs : List CTy := G.members.zipIdx.map fun ((_, f), j) =>
+      polyL.foldr (fun x C => .all gsp ⟨x, gsp⟩ (.top gsp) C)
+        (.arr gsp (capsTy gsp csP (Pof j f)) (.eff gsp rowR (capsTy gsp csP f.T)))
     let R := ampTys gsp Cs
     let selfT : VTy := .sum gsp (.unit gsp) (.bang gsp (.thunk gsp (.arr gsp (.unit gsp) R)))
     let self := "fx_self"
-    let rs : RSelf := ⟨G.members.map (·.1), e.n, self, Cs, cs, ss.map (fun s => (s.eff, s.n)), false⟩
-    let cx : Cx := { env, caps := cs, sites := ss, fnCaps := cs, recSelf := some rs }
+    let rs : RSelf := ⟨G.members.map (·.1), e.n, self, Cs, cs, ss.map (fun s => (s.eff, s.n)), false,
+      if cbx.isEmpty then [] else [(jx, cbx.map fun c => (c.cp.idx, (pnames.getD c.cp.idx ⟨"?", gsp⟩).name))],
+      polyL, rowR, G.members.map (·.2.T)⟩
+    let effs' := envCaps.map (·.eff) ++ envMut.map (·.1) ++ env.envEffs
+    let env' : Env := { env with envEffs := effs' }
+    let cx : Cx := { env := env', caps := csP, sites := ss, fnCaps := csP, recSelf := some rs }
+    let portsAll := (cbps.flatMap (·.ports)).eraseDups
     -- The generator's record: each member's body, taking the environment first.
     let mut fields : List Comp := []
-    for (_, f) in G.members do
-      let body ← trC k cx cs true f.body
-      if cs.isEmpty then
-        fields := fields ++ [.lam gsp f.p f.P body]
-      else
-        let pp ← fresh "fx_pp"
-        fields := fields ++ [.lam gsp ⟨pp, gsp⟩ (capsTy gsp cs f.P) (← unpack gsp cs f.p.name pp body)]
+    for ((_, f), j) in G.members.zipIdx do
+      let cxj : Cx := if j == jx && !cbx.isEmpty then
+          { cx with env := { env' with fns := cbF ++ env'.fns }, cbs := cbps, ports := portsAll }
+        else cx
+      let body ← trC k cxj csP true f.body
+      -- The member passed the callbacks takes `()` in their place, and its parameters are bound
+      -- with the code the generator captured.
+      let (pn, body) ← if j == jx && !cbx.isEmpty then do
+          let q ← fresh "fx_rq"
+          let vs ← pnames.mapM fun _ => fresh "fx_ra"
+          let full := tupleOf gsp (vs.zipIdx.map fun (v, i) =>
+            if cbPos.contains i then Val.var gsp ((pnames.getD i ⟨"?", gsp⟩).name) else .var gsp v)
+          let rebuilt := Comp.bind gsp f.p none (.ret gsp full) body false
+          pure (q, ← bindParams gsp q (vs.map (⟨·, gsp⟩)) rebuilt)
+        else pure (f.p.name, body)
+      let field ← if cs.isEmpty then pure (Comp.lam gsp ⟨pn, gsp⟩ (Pof j f) body)
+        else do
+          let pp ← fresh "fx_pp"
+          pure (.lam gsp ⟨pp, gsp⟩ (capsTy gsp csP (Pof j f)) (← unpack gsp csP pn pp body))
+      fields := fields ++ [polyL.foldr (fun x M => .lamL gsp ⟨x, gsp⟩ (.top gsp) M) field]
     let ps ← fresh "fx_rsp"
     let pu ← fresh "fx_ru"
     let P : VTy := .tensor gsp selfT (.unit gsp)
     let gen : Comp := .lam gsp ⟨ps, gsp⟩ P
       (.letPair gsp ⟨self, gsp⟩ ⟨pu, gsp⟩ (.var gsp ps) (.letUnit gsp (.var gsp pu) (withAll gsp fields)))
-    -- `!U (P -o R)`, under the capabilities' lifetimes when there are any.
-    let genT : VTy := .bang gsp (.thunk gsp (.arr gsp P R))
-    let genV : Val := .bangThunkv gsp gen
+    -- `!U (P -o R)`, under the capabilities' lifetimes when there are any; taking the callbacks'
+    -- code first when there are any.
+    let genT₀ : VTy := .bang gsp (.thunk gsp (.arr gsp P R))
+    let cv ← fresh "fx_rcodes"
+    let _ := cv
+    let _ := codesTy
+    let (genT, genV) : VTy × Val := (genT₀, .bangThunkv gsp gen)
     let (sA, sV) : VTy × Val := match lives.foldr (fun (a, b) (T, V) =>
         (VTy.all gsp a b T, Val.thunkv gsp (.lamL gsp a b (.ret gsp V)))) (genT, genV) with
       | (T@(.all ..), .thunkv _ M) => (.bang gsp T, .bangThunkv gsp M)
@@ -2474,7 +2688,10 @@ def groupCopy : Nat → Env → Span → String → List Inst → List String �
       s!"; each member's copy is bounded_fix of it at the budget {recBudget}, its calls of itself " ++
       s!"direct calls of the self-reference, the exhaustion effect at the site {e.n}")
     let mk : Mark := if tps.isEmpty then .none else .template .none
-    modify fun s => { s with made := s.made.push (stepName, .def_ gsp ⟨stepName, gsp⟩ tps sA sV mk) }
+    -- With callbacks, the generator is made in the member's copy, where it captures their code:
+    -- `!` code, which a `!` closure may hold. The record `R` holds none of it.
+    if !poly then
+      modify fun s => { s with made := s.made.push (stepName, .def_ gsp ⟨stepName, gsp⟩ tps sA sV mk) }
     -- The layers, innermost first: each a transformer of the generator.
     let mut trs : List String := []
     for L in layers do
@@ -2482,12 +2699,21 @@ def groupCopy : Nat → Env → Span → String → List Inst → List String �
     -- Each member's copy: `(bounded_fix[1, R] (Lₙ(… L₁(gen))), (budget, ()))).j`.
     let genRef : Val := if tps.isEmpty then .var gsp stepName else .defApp gsp stepName tArgs
     for ((mn, f), j) in G.members.zipIdx do
+      -- Made for callbacks, only the member passed them has a copy: the others have no code to
+      -- give the generator.
+      if !cbx.isEmpty && j != jx then continue
       let p ← fresh "fx_rp"
       let sv ← fresh "fx_rst"
       let fb ← fresh "fx_rbf"
       let fa ← fresh "fx_rba"
-      let inst : Val := lives.foldl (fun V (a, _) => .inst gsp V (.var gsp a.name))
+      let inst₀ : Val := lives.foldl (fun V (a, _) => .inst gsp V (.var gsp a.name))
         (if lives.isEmpty then genRef else .unbang gsp genRef)
+      -- With callbacks: the generator applied to their code, taken from the argument, which the
+      -- recursion is entered with `()` in its place.
+      let cvs ← codeNames.mapM fun _ => fresh "fx_rc"
+      let vs ← pnames.mapM fun _ => fresh "fx_rv"
+      let p' ← fresh "fx_rp"
+      let inst : Val := if !poly then inst₀ else genV
       let mut tv := sv
       let mut applied : List (String × Val) := []
       for t in trs do
@@ -2499,17 +2725,36 @@ def groupCopy : Nat → Env → Span → String → List Inst → List String �
         tv := tv'
       let arg : Val := .pair gsp (.var gsp tv)
         (.pair gsp (.const gsp (.lit (.i32 (UInt32.ofNat recBudget)))) (.unit gsp))
+      let pe := if cbx.isEmpty then p else p'
       let fixC : Comp :=
           (.bind gsp ⟨fb, gsp⟩ none (.ret gsp (.unbang gsp (.const gsp (.boundedFix (.unit gsp) R))))
             (.bind gsp ⟨fa, gsp⟩ none (.ret gsp arg)
-              (.app gsp (projAt gsp j n (.app gsp (.force gsp ⟨fb, gsp⟩) ⟨fa, gsp⟩)) ⟨p, gsp⟩) false)
+              (.app gsp ((lives.map (·.1.name)).foldl (fun M l => if polyL.isEmpty then M else .inst gsp M (.var gsp l))
+                (projAt gsp j n (.app gsp (.force gsp ⟨fb, gsp⟩) ⟨fa, gsp⟩))) ⟨pe, gsp⟩) false)
             false)
       let body : Comp :=
         .bind gsp ⟨sv, gsp⟩ none (.ret gsp inst) (applied.foldr (fun (y, V) K =>
           .bind gsp ⟨y, gsp⟩ none (.ret gsp V) K false) fixC) false
-      let drv : FnParts := ⟨true, lives, capsTy gsp cs f.P, capsTy gsp cs f.T, ⟨p, gsp⟩, body⟩
+      -- The argument taken apart: the code out, `()` in its place.
+      let body ← if cbx.isEmpty then pure body else do
+        let q ← fresh "fx_rq"
+        let codesOut : List (String × String) :=
+          (cbPos.zip codeNames).map fun (i, c) => (vs.getD i "?", c)
+        let _ := cvs
+        let entry := capsTuple gsp cs (tupleOf gsp (vs.zipIdx.map fun (v, i) =>
+          if cbPos.contains i then Val.unit gsp else .var gsp v))
+        let K := codesOut.foldr (fun (v, c) K => Comp.bind gsp ⟨c, gsp⟩ none (.ret gsp (.var gsp v)) K false)
+          (.bind gsp ⟨p', gsp⟩ none (.ret gsp entry) body false)
+        let K ← bindParams gsp q (vs.map (⟨·, gsp⟩)) K
+        unpack gsp cs q p K
+      let Pj := if cbx.isEmpty then f.P else tupleTy gsp Psx
+      let drv : FnParts := ⟨true, lives, capsTy gsp cs Pj, capsTy gsp cs f.T, ⟨p, gsp⟩, body⟩
       let (dA, dV) := drv.build gsp rowR
       let dn := copyName mn keys
+      -- A member passed callbacks takes its argument through its identity (`cbCopyOf`).
+      if j == jx && !cbx.isEmpty then
+        let (iA, iV) := ({ drv with T := drv.P, body := .ret gsp (.var gsp p) } : FnParts).build gsp
+        modify fun s => { s with made := s.made.push (dn ++ "__id", .def_ gsp ⟨dn ++ "__id", gsp⟩ tps iA iV mk) }
       modify fun s => { s with made := s.made.push (dn, .def_ gsp ⟨dn, gsp⟩ tps dA dV mk) }
     pure name
 
@@ -2540,7 +2785,7 @@ def deepCopy : Nat → Env → Span → String → String → String → EM Stri
     if let some (y, _) := G.members.find? (·.2.T.strip != B.strip) then
       throw ⟨sp, s!"`{y}` answers a type other than `{x}`'s: members with different result types " ++
         s!"are not provided under the heap driver `{d}`"⟩
-    let rs : RSelf := ⟨G.members.map (·.1), 0, "", [], [], [], true⟩
+    let rs : RSelf := ⟨G.members.map (·.1), 0, "", [], [], [], true, [], [], .nil, []⟩
     let cx : Cx := { env, caps := [], recSelf := some rs }
     let mut bodies : List (Ident × Comp) := []
     for (_, f) in G.members do
@@ -2752,7 +2997,10 @@ def defineGroup (env : Env) (ms : List (Span × Ident × VTy × Val × Mark)) : 
         "div: the `Exhausted` of its budget would be performed inside its loop, and a handler around " ++
         "a div computation is not provided"⟩
     let (written, _) := splitRow mk
-    for i in rowV env fuel V do
+    -- A computation parameter performs what it is provided (SPEC §22).
+    let cbF : List FSig := (env.cparamsOf n.name).filterMap fun cp => if cp.prov.isEmpty then none else
+      some { name := cp.name, row := cp.prov.map fun (e, As) => ⟨e.name, some As⟩, decl := .main sp (.top sp) (.top sp) }
+    for i in rowV { env with fns := cbF ++ env.fns } fuel V do
       unless written.isEmpty || written.any (·.1.name == i.eff) do
         throw ⟨n.span, s!"`{n.name}` performs `{i.eff}`, which its written row does not list"⟩
       let i ← match written.find? (·.1.name == i.eff), i.args with

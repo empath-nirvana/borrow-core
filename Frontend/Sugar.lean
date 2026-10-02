@@ -3159,7 +3159,7 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
     | .app sp (.sugar _ (.cbCode i)) (.thunkv _ (.lam lsp q _ M)) => do
       -- A callback's code (SPEC §22), at the type its parameter expects.
       let some T := exp | throw ⟨sp, "the type of this callback's code is not determined here"⟩
-      pure (← cbCodeAt n c sp i lsp q M T false).1
+      pure (← cbCodeAt n c sp i lsp q M T false id id id id).1
     | .app sp f W => do
       -- A call of a generic function: its type and lifetime arguments filled.
       if let some V' ← genericCall n c sp exp f W none then return V'
@@ -3242,9 +3242,10 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
 named as the code names them and `M` elaborated at `C`. When `C`'s result is not determined
 (`open`, a type parameter of the callee that the callback's result gives), `M` is elaborated at
 `C`'s row and its result read off it. The code, and its type. -/
-def cbCodeAt : Nat → TCx → Span → CbInfo → Span → Ident → Comp → CVTy → Bool → DM (Val × CVTy)
-  | 0, _, sp, _, _, _, _, _, _ => throw ⟨sp, "internal error: a callback nested too deeply"⟩
-  | n + 1, c, sp, i, lsp, q, M, T, opn => do
+def cbCodeAt : Nat → TCx → Span → CbInfo → Span → Ident → Comp → CVTy → Bool → (CVTy → CVTy) →
+    (CCTy → CCTy) → (CVTy → CVTy) → (CCTy → CCTy) → DM (Val × CVTy)
+  | 0, _, sp, _, _, _, _, _, _, _, _, _, _ => throw ⟨sp, "internal error: a callback nested too deeply"⟩
+  | n + 1, c, sp, i, lsp, q, M, T, opn, preV, preC, solveV, solveC => do
     let bad : Error := ⟨sp, s!"internal error: a callback's code at `{ppT T}`"⟩
     let .bang (.thunk C₀) := T | throw bad
     -- The lifetime binders, outermost first, and the function type under them.
@@ -3256,6 +3257,8 @@ def cbCodeAt : Nat → TCx → Span → CbInfo → Span → Ident → Comp → C
       | _, .arr X D => some ([], X, D)
       | _, _ => none
     let some (bs, X, D) := peel 64 C₀ | throw bad
+    -- The callee's own lifetime parameters first (`m.life`, in `solveV`'s first stage): what is
+    -- left free is this context's.
     unless bs.length == i.lives.length do throw bad
     -- The binders named as the code names them, in this context.
     let mut c' := c
@@ -3267,8 +3270,10 @@ def cbCodeAt : Nat → TCx → Span → CbInfo → Span → Ident → Comp → C
       c' := c'.pushLife x b'
       let some v' := c'.E.lenv.lookup x | throw bad
       σ := (v, .var v') :: σ
-    let X' := X.applyLSub σ
-    let D' := D.applyLSub σ
+    -- The binders renamed before what matching found is put in: a type argument's lifetimes are
+    -- not the code's.
+    let X' := solveV ((preV X).applyLSub σ)
+    let D' := solveC ((preC D).applyLSub σ)
     if hasPhV X' then
       throw ⟨lsp, "the type of this callback's parameter is not determined by the other arguments"⟩
     let Xs ← (c'.surface lsp X' : Except Error VTy)
@@ -4391,7 +4396,8 @@ def genericCall : Nat → TCx → Span → Option CVTy → Val → Val → Optio
         -- A callback's code (SPEC §22), at the parameter's type; what its result leaves open is
         -- read off its body.
         if let .app wsp (.sugar _ (.cbCode ci)) (.thunkv _ (.lam lsp q _ M)) := Wi then
-          let (V', T) ← cbCodeAt n c wsp ci lsp q M pat' opn
+          let (V', T) ← cbCodeAt n c wsp ci lsp q M Pi opn (·.applyLSub m.life) (·.applyLSub m.life)
+            (solvedV m.ty 0) (solvedC m.ty 0)
           match matchV m 0 Pi T with
           | some m' => m := m'
           | none => throw ⟨Wi.span, s!"this callback of `{fname}` has type `{ppT T}`, which is not " ++
