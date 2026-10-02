@@ -13,3 +13,5 @@ import GhostEnd.Typed
 import GhostEnd.Branch
 import GhostEnd.Loop
 import GhostEnd.Drop
+import GhostEnd.Frames
+import GhostEnd.General
