@@ -20,3 +20,6 @@ import GhostEnd.Descend
 import GhostEnd.Values
 import GhostEnd.TypedD
 import GhostEnd.Tuple
+import GhostEnd.Closures
+import GhostEnd.ClosureBody
+import GhostEnd.Capture
