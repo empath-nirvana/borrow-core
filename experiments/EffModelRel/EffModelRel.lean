@@ -21,3 +21,4 @@ import EffModelRel.Obstruction
 import EffModelRel.Writers
 import EffModelRel.Findings
 import EffModelRel.Ownership
+import EffModelRel.Cell
