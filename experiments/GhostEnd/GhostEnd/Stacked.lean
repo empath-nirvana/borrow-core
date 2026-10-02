@@ -45,7 +45,7 @@ single-lend objects:
 * **Re-lend.** `ReLend αs' αs`: pointwise `α′ᵢ ⊑ αᵢ`, in nesting order.
 * **`RelendableS`**: the resource splits into the views it dropped and a part strictly above the
   outermost lend that, at every extension and every re-lend, handed the views, is in `P`. At one
-  entry it is `Relendable` (`RLCompat.lean`); at `[]` it is the kernel's `U` clause
+  `mut` entry it has `Relendable`'s shape (`RLCompat.lean`); at `[]` it is the kernel's `U` clause
   (`relendableS_nil`).
 * **Stops** (`stopS`). An operation of the name `n` stops at depth `depth σ n`, the number of
   innermost entries whose lender's row holds `n`. It ghost-ends those entries (their views are
@@ -60,7 +60,7 @@ single-lend objects:
 
 ## What is proved
 
-* **`σ = []`**: `vRLs [] = vC`, `cRLs [] = cC`, `gRLs [] = gDenC` up to `↔` (`vRLs_nil`,
+* **`σ = []`**: `vRLs [] = vC`, `cRLs [] = cC`, `gRLs [] = gDenC` as functions (`vRLs_nil`,
   `cRLs_nil`, `gRLs_nil`), so `GFPAt [] ↔` the conclusion of `fundamentalC` (`gfpAt_nil_iff`),
   and `GFPAt []` holds (`gfpAt_nil`).
 * **The stacked `U` clause**: `[force]` (`force_RLs`), the slot thawing by construction

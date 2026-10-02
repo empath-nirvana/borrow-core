@@ -667,7 +667,7 @@ objects.
   lend's side ("a stop inside an inner lend is at an extension `σ·τ`").
 - *`ghostS`*: what a stop owes the lenders it crosses, in `nestF`'s shape.
 
-At one entry `RelendableS` is `Relendable`. At `[]` every component is the kernel's: `Relendable_[]`
+At one `mut` entry `RelendableS` has `Relendable`'s shape. At `[]` every component is the kernel's: `Relendable_[]`
 is the `U` clause's `Ext`-closure (`relendableS_nil`), a stop is a stop of the table (`stopS_nil`),
 and the piece is `ewpTS` (`bodyS_nil_iff`, by induction on each least fixed point).
 
