@@ -212,7 +212,10 @@ The only objects are:
 - **Cells.** `alloc v` allocates the cell's contents, `max 1 w` words with no header, where `w`
   is the widest contents its *cell class* holds: `swap` changes a cell's type
   (`Ref A ⊸ B ⊸ Ref B ⊗ A`), so the locations that may be one cell are a class, and a cell is as
-  wide as its class needs.
+  wide as its class needs. A cell whose class takes no words (every contents it holds is `1`, or
+  a closure capturing nothing) allocates nothing: its address is `0`, it is never read or written,
+  and `free` frees nothing (`zeroCell`). So `main`'s lifetime, a borrow of a unit cell (SPEC
+  §23), costs nothing.
 - **Arrays** (SPEC §9). One allocation of `n·s` words, `s` the class width of the element
   type: element `i`'s location is `base + 8·s·i`, a cell address like any other. The array value
   is the pair `(base, n)`, two words. `idx` is an unsigned compare and an address computation,

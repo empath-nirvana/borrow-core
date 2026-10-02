@@ -3,7 +3,8 @@
 -- of the log: each call adds its argument to the log through the borrow (`withswap`) and answers
 -- the new total, and `close` ends the borrow. The closure outlives `'w` because its state does,
 -- `'w` being below `'x`; it cannot be bounded by `'x` itself (`corpus/reject/aff-outlives.bc`),
--- so a scope below `'x` is opened for it. `aff_new_boxed`'s bound `S: 'c` (SPEC §23) makes its
+-- so a scope below `'x` is opened for it, a borrow of a unit cell `d`, which takes no words and
+-- allocates nothing. `aff_new_boxed`'s bound `S: 'c` (SPEC §23) makes its
 -- instance at `S = mut 'x i32` take `'c` below `'x`, which `logger`'s `'w < 'x` gives; `logger`'s
 -- `'w` is not written at the call, and is `dom`, the meet of `'x` and `'w`. The owner reads the log
 -- after the borrow has ended.
@@ -24,7 +25,7 @@ fn logger<'x, 'w < 'x>(ml: mut 'x i32) -> box 'w Aff[i32, i32]<'w> =
 
 main -> i32 =
   let log = alloc(0);
-  let d = alloc(0);
+  let d = alloc(());
   let (d, r) = borrow mut log { 'x, ml ->
     let r = borrow mut d { 'w, e ->
       let k = logger(ml);
@@ -33,4 +34,5 @@ main -> i32 =
       aff_close(k);
       a * 100 + b };
     (d, r) };
-  free(d) + r + free(log) * 10000
+  let u = free(d);
+  r + free(log) * 10000

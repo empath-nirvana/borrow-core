@@ -117,7 +117,8 @@ the function's result.
 for a shorter lifetime. The callback's type is read as follows.
 
 - `all 'x < dom. …` is a function of the lifetime `'x`, which is shorter than every lifetime in
-  scope. `dom` is the meet of those lifetimes; at the top of `main` it is `top`. A callback is
+  scope. `dom` is the meet of those lifetimes; at the top of `main` it is `top`, or `'main` in a body
+  that names `main`'s lifetime (see below). A callback is
   written `thunkv Fun 'x < top. return (…)`, where `Fun 'x < @. M` binds the lifetime.
 - `imm 'x A => box 'x B` takes the borrow and returns a `B` in a **box** for `'x`. `boxed['x] V`
   builds the box, and it checks that everything `V` uses outlives `'x`. This is what stops a
@@ -211,9 +212,10 @@ inside a callback for `'x` is shorter than `'x`.
 ## Lifetime parameters, bounds, and `main`'s lifetime
 
 A function's lifetime parameter `fn f<'c>(…)` stands for a lifetime strictly shorter than `top`,
-so a call needs a lifetime to pass. A call that does not determine it, from its arguments or the
-type expected of its result, passes `dom`, the meet of the lifetimes in scope. In `main` with no
-lifetime in scope, it passes a lifetime of `main`'s own, which lasts for the whole body.
+so a call needs a lifetime to pass. `main` runs under a lifetime of its own, `'main`, which lasts
+for its whole body and can be passed by name, `f ['main](…)`. A call that does not determine a
+lifetime, from its arguments or the type expected of its result, passes `dom`, the meet of the
+lifetimes in scope: `'main` at the top of `main`.
 
 A box outlives the lifetime it is bounded by: `box 'c T` outlives `'c` itself. So a closure
 bounded by `main`'s lifetime is made, called and closed in `main` with no scope of its own:
@@ -240,8 +242,9 @@ main -> i32 =
 -- answer: i32[24]
 ```
 
-`main`'s lifetime is a borrow of a unit cell, made only when a call needs it. Outside `main`, a
-lifetime that a call leaves undetermined where no lifetime is in scope is an error.
+`'main` is a borrow of a unit cell, and a cell holding `1` takes no memory, so it costs nothing
+at run time. Outside `main`, a lifetime that a call leaves undetermined where no lifetime is in
+scope is an error. The spelling `'main` is provisional.
 
 A generic function's lifetime parameters are unrelated to the lifetimes in its type arguments,
 unless a **lifetime bound** relates them. `aff_new_boxed` is declared

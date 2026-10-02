@@ -790,10 +790,11 @@ Each entry: the decision, and why. Newest last.
       as SPEC §4 is; the paper's `⊏` is kept at the `Imm`/`Mut` rules where `[]I` reads them, at
       the strata and the box modality, and at the fresh lifetime of `withbor`/`withload`, where
       the spike found the strict premise load-bearing.
-    - **`main`'s lifetime (E1).** An undetermined lifetime argument is `dom`; in `main`, with no
-      lifetime in scope, it is a lifetime of `main`'s own, a borrow of a unit cell made only when
-      the body needs it. Chosen over instances at `top` (one instance per function reached at
-      `top`) for its cost of one cell.
+    - **`main`'s lifetime (E1).** `main` always runs under a lifetime of its own, a borrow of a
+      unit cell, elaborated once; an undetermined lifetime argument is `dom`. A cell of no words
+      is not allocated (a backend representation, for every such cell, not only `main`'s), so the
+      lifetime costs nothing. Chosen over instances at `top` (one instance per function reached
+      at `top`).
     - **Spellings (provisional):** `where S: 'c` after a function's result type (and its row) for
-      a lifetime bound on a type parameter; the implicit lifetime has no name; `aff_new_boxed` for
-      the bounded constructor of `lib/aff.bc`. Rust's `T: 'a` is the comparison only.
+      a lifetime bound on a type parameter; `'main` for `main`'s lifetime; `aff_new_boxed` for the
+      bounded constructor of `lib/aff.bc`. Rust's `T: 'a` is the comparison only.

@@ -3516,18 +3516,27 @@ own fresh lifetime lies below. At `VOutlivesLe`, 6.60 gives every stratum strict
 
 ### `main`'s lifetime
 
+`main` runs under a lifetime of its own, written `'main`. Its body is elaborated once, with
+`'main` in scope, inside a `mut` borrow of a unit cell allocated before it and freed after
+(`mainLife`, `Frontend/Sugar.lean`); the standard capabilities the body lends are handed back
+beside its result, as a borrow block hands back what it lends. A body whose elaboration names no
+`'main` is left as it is, since the borrow is then not observable. A body that names it has the
+type `F A`.
+
 A lifetime argument that a call of a function does not determine, from its arguments or the type
-expected of its result, is `dom`: the meet of the lifetimes in scope. In `main`, at a point where
-no lifetime is in scope, it is `main`'s own lifetime: the body of `main` is then elaborated inside
-a `mut` borrow of a unit cell, allocated and freed around it, whose lifetime is in scope
-throughout (`mainLifeBody`, `Frontend/Sugar.lean`). The cell is made only when the body needs
-that lifetime, and the standard capabilities the body uses are handed back beside its result, as
-a borrow block hands back what it lends. Outside `main`, a call with no lifetime in scope and a
-lifetime left undetermined is an error, as before.
+expected of its result, is `dom`: the meet of the lifetimes in scope, so at least `'main` in
+`main`'s body. Outside `main`, a call with no lifetime in scope and a lifetime left undetermined
+is an error, as before.
 
 So a library function's lifetime parameter, bounded by `top`, is instantiated at a lifetime the
 program has without a scope of its own, and by the box rule a closure bounded by it is stored and
 lent `mut` in `main`'s body.
+
+**Cells of no words.** `'main` costs nothing at run time, and the mechanism is general: a cell
+whose cell class takes no words (every contents it holds is `1`, or a closure capturing nothing)
+is not allocated, its address is `0` and never read or written, and `free` frees nothing
+(`zeroCell`, `Backend/Flat/Lower.lean`). This is a change of representation in the backend only;
+the source semantics, the interpreter and every golden's output are unchanged.
 
 ### Lifetime bounds on type parameters
 
@@ -3556,14 +3565,15 @@ S: 'c`, which boxes the closure and every rest itself, and `aff_of_fn` is built 
 | `corpus/aff-drop.bc`, `aff-higher.bc` | a closure over a closure, bounded by the same lifetime as the closure it holds |
 | `corpus/aff-coerce.bc` | the coercions at `main`'s lifetime |
 | `corpus/aff-capture.bc` | `logger`'s `'w < 'x`, filled with `dom`, gives `aff_new_boxed`'s bound; its scope `'w` stays (the `Mut` rule) |
+| `corpus/main-lifetime.bc` | `'main` by name, and cells of `1` that allocate nothing |
 | `corpus/borrow-in-scope.bc` | a cell holding `imm 'x i32` lent `mut` inside `'x`'s own scope (the side condition) |
 | `corpus/reject/aff-outlives.bc` | still refused: a closure bounded by the lifetime of the borrow it captures |
 | `corpus/reject/aff-bound.bc` | refused: a lifetime bound's instance called at a lifetime not below the type argument's |
 | `corpus/reject/generic-lifetime-unknown.bc` | refused: a lifetime left undetermined where no lifetime is in scope, outside `main` |
 
 Across the six `aff-*` programs, the scopes opened only to name a lifetime go from 10 to 1, the
-cells allocated for them from 6 to 1 written (plus `main`'s, made by the elaborator, in five
-programs, so the allocation counts are unchanged), and the `boxed[…]` annotations from 18 to 4.
+cells written for them from 6 to 1 (`aff-capture`'s, a unit cell), and the `boxed[…]` annotations
+from 18 to 4. Each program allocates one object fewer than before (`corpus/counts.expected`).
 
 ### Baseline
 
@@ -3587,8 +3597,8 @@ that supply a side condition (now `.toLe`), and at the side condition's consumer
   lifetime bound is strict, so a closure whose state is a closure bounded by `'c` is built with
   `aff_new` and `boxed['c]` (`aff-drop`'s `nest`, `aff-higher`'s `doubler`).
 - **A lifetime without a cell.** `main`'s lifetime, and `aff-capture`'s scope below `'x`, are
-  borrows of a cell; a rule that opens a lifetime without one was not probed.
-- **`'main` by name.** The implicit lifetime is reached only through `dom`.
+  borrows of a unit cell, which costs nothing at run time but is written; a rule that opens a
+  lifetime without one was not probed.
 
 ---
 
@@ -3642,7 +3652,7 @@ Entry 22 (§23) is implemented: the outlives judgment and its 6.60 in `Core/Type
 `Core/Compatibility.lean`, `Core/Slices.lean` and `Core/EffBorrow.lean`; the checker's decisions
 in `Frontend/Check/Decide.lean` and `Frontend/Check/Consts.lean`; `main`'s lifetime and the
 lifetime bounds in `Frontend/Sugar.lean`, `Frontend/Parser.lean`, `Frontend/Syntax.lean` and
-`Frontend/Print.lean`; `lib/aff.bc`. No change to `Paper/`, `Support/` or `CDerives`'s indices.
+`Frontend/Print.lean`; `lib/aff.bc`; cells of no words in `Backend/Flat/Lower.lean`. No change to `Paper/`, `Support/` or `CDerives`'s indices.
 
 Entry 21 (§22) is implemented: the positivity in `Core/Types.lean`, `Core/Relation.lean`,
 `Core/RelationFacts.lean`, `Core/NuRel.lean`, `Core/Computation.lean` and `Core/Nu.lean`; the
@@ -3685,8 +3695,8 @@ with every kernel program at every stage (*Lowering*).
 
 - **0.40** (2026-10-02) — §23 (#243, from #241): non-strict outlives. The box rule of the outlives
   judgment and the side condition of the borrows that lend a payload `mut` take `⊑`, extensions
-  read against the paper's model (`Paper/` unchanged). `main` runs under an implicit lifetime, and
-  an undetermined lifetime argument is `dom`; a generic function's lifetime parameter may be
+  read against the paper's model (`Paper/` unchanged). `main` runs under a lifetime of its own,
+  `'main`, and an undetermined lifetime argument is `dom`; a cell of no words allocates nothing; a generic function's lifetime parameter may be
   bounded by a type parameter, `where S: 'c`. §22's *Bounds* and *Open* revised. Decision 61.
 
 - **0.39** (2026-10-02) — §22 (#239, from #236): the affine closure. §7's positivity admits an

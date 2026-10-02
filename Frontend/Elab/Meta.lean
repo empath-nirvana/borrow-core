@@ -37,9 +37,6 @@ structure TCx where
   locals : List (String × Option CVTy) := []
   /-- The lifetime context: the `Fun` binders entered, as the checker numbers them. -/
   Δ : LifeCtx := LifeCtx.empty
-  /-- The body is `main`'s: a lifetime argument left undetermined where no lifetime is in scope is
-  `main`'s own lifetime.  `[spec §23]` -/
-  inMain : Bool := false
 
 /-- Bind `x : A` (`A` unknown when `none`). -/
 def TCx.push (c : TCx) (x : String) (A : Option CVTy) : TCx :=
