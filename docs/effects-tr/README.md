@@ -73,6 +73,14 @@ cross-check: every result it has proved is cited by name, and nothing here contr
 | T9.4 | no step-indexing | proved here |
 | O3, O4 | an owning lend of a borrowed source under a suspending table; higher-type capability states | open |
 
+**Mechanised since** (#249, `docs/effect-model.md` §9): the three rule fixes of §2.5 in phase B's
+Lean, each counterexample of §10 refused by the judgement; T5.1 and T5.2 on trees, with lends
+and effect safety (`CM.fp`, `safety`); T7.11 (`writers_commute`, through the relation: the
+denotations agree only where the inner fresh name differs from the outer). O1 is restated over
+moded contexts (`O1`); it is still open. A cell holding a continuation, stratified by level, is
+proved closed under resume and drop in a separate model (`Cell.lean`), with T1 as the return of a
+borrow at the drop of the place that holds it.
+
 ## Findings, in brief
 
 1. **Three of phase A's typing rules let programs go wrong**, each machine-checked against phase

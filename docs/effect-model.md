@@ -466,6 +466,11 @@ Every theorem named below builds with `lake build EffModelRel`, has no `sorry`, 
 at most `propext`, `Classical.choice` and `Quot.sound`. Claims here are **[proved]** (a
 theorem), **[open]** (the exact statement and what blocks it), or **[inferred]** (analysis).
 
+This section describes phase B as it was merged (#247). The run of §9 (#249) revised the Lean:
+bounds `Eb` became rows `Rw`; `VTy.res` and `Cmp.use` became instances of a built-in `Res`
+effect; `lend` answers its capability; `resource_safety` became `safety`, which covers lends and
+adds effect safety. §8.8's items 2, 4, 5 and 6 are closed there, and item 3 is sharpened.
+
 ### 8.1 The calculus, re-stated
 
 Phase A's calculus, intrinsically typed (`Syntax.lean`), so that a term is its typing derivation
@@ -795,3 +800,209 @@ its instances.
 5. **Lends in the moded judgement.** This is the same missing mechanism as item 1.
 6. **Use-after-free of resource handles.** A handle is second class by phase A's scope rule,
    which is not modelled as a check here (`use` checks nothing).
+
+## 9. The narrow run (#249): the TR's fixes, rows, ownership, and a cell holding a continuation
+
+Experiment: still `experiments/EffModelRel/` (`lake build EffModelRel`). Nothing outside
+`experiments/` and `docs/` changed. Every declaration of the library (3607 of them) depends on at
+most `propext`, `Classical.choice` and `Quot.sound`; there is no `sorry`. Markings are §8's.
+
+The run was asked for in this order: reconcile phase B with the TR (`docs/effects-tr/`), then the
+ownership fragment, then borrows, with a `Mut` cell holding a continuation attempted first and T1
+on top of it. The result in one line: **the cell lemma holds in a model stratified by level, in
+which a place's content cannot touch its own level; T1 is the return of a borrow at the drop of
+the place that holds it; without strata, a place holding a continuation is T15 again.** The cell
+model is a semantic model beside the calculus; the typing that would map the calculus into it is
+not built (§9.6).
+
+### 9.1 Step 0: phase B reconciled with the TR
+
+**The TR's three rule fixes** (`docs/effects-tr` §2.5, §10), in phase B's Lean:
+
+| fix | where | machine-checked refusal of the TR's counterexample |
+|---|---|---|
+| `lend` consumes its capability and answers it back beside the body's answer | `Syntax.lean` `Cmp.lend`, `Denot.lean` | `movedLend_stuck`, `movedLend_not_moded` (`Findings.lean`) |
+| a resource handle is an instance of a built-in effect `Res`; `use` is an operation on it, answered in place by the `using` frame | `Sig.Res`, `Cmp.using`, `Tree.addFin` | `resEscape_obs` (the late `use` is unhandled after the free), `resEscape_not_moded` |
+| `[handle]` checks the clauses' captures at the handler's own resuming qualifiers | already in phase B's `CM.handle` (`LH.Empty ∨ ∀ o, (S.q e o).IsLin`) | `retTwice_stuck`, `retTwice_not_moded` |
+
+Each refusal is a consequence of the fundamental property: the program's run goes wrong
+(`decide`), and a moded closed program answers (`safety_obs`). Co-operations now fail only at a
+fallible operation (`Sig.errG`, the TR's `E_o`), so the failure branch is empty elsewhere.
+
+**[proved] Rows on types.** `Rw` replaces `Eb` on thunk, function and stream types: a list of
+`(instance, lifetime)` pairs, both de Bruijn *levels*, so a type keeps its meaning under more
+instances. The thunk's lifetime is the meet of the pairs' lifetimes (`Rw.life`, the innermost
+level); its effect bound, the join of its instances' declared bounds, is recovered from the row
+(`Row.mode`). Scope (`VTy.Sc`) says a type names only instances in scope; the moded judgement
+checks it wherever a type enters (`CM.bind`, `CM.app`, `CM.handle`, …), and an instance's binder
+then confines it. [inferred] In this calculus the lifetime of a pair is its instance's own level:
+no rule reads the lifetime component beyond scope. It is where a borrow's lifetime would go.
+
+**[proved] Effect safety and resource safety** (`UnaryFP.lean`). The unary relation reads a set
+of permitted instances (`Ok`) where phase B read a mode bound: a thunk's body may perform only on
+its row's instances, a handler adds its own for its body, a frame removes the instance it answers.
+`safety`: a moded closed program, run against the world with a ghost count of live tokens, never
+fails an action, no operation reaches the top, and at the end nothing is live. `safety_obs`: its
+observation is an answer, never stuck and never unhandled. The moded judgement now has `lend`
+(`CM.lend`, whose body forwards only linear operations, the TR's `bound(ρ).req = lin`), and the
+relation's `runL_safe` carries the capability's token in the `run` frame.
+
+**The TR's paper-only results, where cheap.**
+
+| TR | status | Lean |
+|---|---|---|
+| T5.1, the unary FP | [proved] on trees | `CM.fp`, `VM.fp` |
+| T5.2, resource safety | [proved] on trees, with lends and effect safety | `safety`, `safety_obs` |
+| T7.11, writers commute | [proved] | `writers_commute` (`Writers.lean`) |
+| T6.6, machine–tree agreement | **not attempted** | the TR's CK machine (§3.1) has no Lean; the agreement is a development of its own |
+
+T7.11's proof in the TR is an equation of denotations. The denotations agree only where the inner
+handler's fresh name differs from the outer one: where they coincide and the effects agree, the
+inner handler catches both operations. The proof therefore goes through the relation, whose world
+says the inner name is fresh (`TreeRel.nu_congr`: a `ν` is related through its body at free names
+only).
+
+### 9.2 Step 1: the ownership fragment
+
+**Names in a continuation.** The tree semantics allocates a name when the run reaches its `nu`
+node, so a name a continuation allocates after its capture point is fresh at each resumption: the
+α-renaming at resume is the semantics. A name allocated before the capture point and still
+pending is shared by every resumption. Staton's `ν/op` moves a `ν` from the first kind to the
+second.
+
+**`ν` under capture.** idem-ν, ν/ν and new-ν hold as before (`Laws.lean`). For `ν/op`:
+
+- [proved] It fails in phase B's `CtxEq` at a **linear** operation too (`nu_op_fails_linear`):
+  its contexts ignore modes, so a clause may resume a linear continuation twice, and phase B's
+  multi-shot counterexample goes through unchanged.
+- So O1 is a statement about moded contexts. `CtxEqM` (`Ownership.lean`) quantifies over the
+  contexts the moded judgement accepts, and `O1 : Prop` states the law there at an operation
+  without contraction. **[open] Not derived.** `TreeRel.op` relates an operation only at a world
+  with nothing pending, so the left side's pending name must be read as garbage, and garbage is
+  never matched with the right side's later name. A proof needs a binary relation in which a
+  continuation value owns the pending names it will match, with a fundamental property for moded
+  terms only. I have not derived O1 and have not verified that any obstruction is real.
+
+**η, the forwarding handler.** In this calculus the forwarding handler is `handleAt x` with every
+clause `op x.o(p; y. resume k y)`: the same instance, re-performed past the handler frame; no
+renaming is involved.
+
+- [proved] Semantically, a handler whose clauses re-perform each operation on the same instance
+  **with the destructors it was performed under** is the identity on related trees (`fwd_id`).
+- [proved] The syntactic clause re-performs with no destructors, so it loses those of the frames
+  between the operation and the handler. At a linear operation that is observable only at an
+  unhandled operation, where the stack unwinds (`eta_fails_linear`); effect safety excludes it for
+  moded programs. At an affine operation it is observable when an outer handler cancels: the
+  frame's resource leaks (`etaAff_obs`), and the program is not moded (`etaAff_not_moded`; the
+  clause's continuation captures `k`, a linear thunk, at an affine operation).
+- [inferred] η that forwards cancel, finalisers included, needs a forwarding primitive whose
+  destructor is the cancel of `k`. Phase B's destructors (`Dtor`: free a resource, write a state
+  back) are first order and cannot carry one; `fwd_id` is that primitive's law.
+
+**[proved] Hiding, as parametricity** (`hnd_sim`). Two handlers into state-passing types, of
+possibly different state types, whose clauses map related states to related computations given
+related continuations, relate the handled trees at related states, for any related bodies. The
+body cannot see the handler's witness. `hiding_counter` instantiates it: no body tells a counter
+kept as `n` from one kept as `-n`. This is the relational form of BoLo's anti-frame for a
+handler's state, the template an anti-frame for a borrowed witness would instantiate.
+
+### 9.3 Step 2: a cell holding a continuation
+
+**The model** (`Cell.lean`, namespace `EffCell`). A *place* is a cell that a computation creates
+(`pnew`), resumes in place (`pnext`) and drops (`pdrop`); it holds a *generator*, phase B's
+stream: a continuation captured at `yield`, with its cancel as the drop. Resources are acquired
+and freed. Places are stratified by **level**: a tree at level `L` touches only places of level
+`L`, and a place of level `L + 1` holds a generator whose trees are at level `L` (`St`). So a
+place's content never touches a place of its own level, in particular not the place itself: the
+cell's stratum excludes it. The run (`runK`) is by recursion on the level, then on the tree; no
+step index, no fuel.
+
+**[proved] The cell lemma** (`adequacy`, its `pnext` and `pdrop` cases). The invariant of a place
+of level `L + 1` (`VSt`) is the least predicate closed under one unfolding: its generator's pull,
+run at level `L`, answers done or an element and a rest that again satisfies it, and its drop
+disposes of what it owns.
+
+- *Resume.* The content is taken out (`Inv.takeOut`: the place is busy, and the run that resumed
+  it holds its token as a frame), its pull runs at the level below under fresh names (`acq` and
+  `pnew` take the world's next name), and the rest is put back (`Inv.putBack`). The rest satisfies
+  the invariant because the invariant is a fixed point: re-rebasing is the generator's own type.
+  A tree cannot resume a busy place: its token is held by the frame that resumed it.
+- *Drop.* The content is taken out and its drop runs to completion; the place is freed
+  (`Inv.freePl`).
+
+**[proved] Safety** (`cell_safety`). A safe closed tree runs to an answer from the empty world,
+never stuck, and at the end every resource is freed and every place dropped, including places
+that contents created. The proof that nothing is left uses that strata order ownership: a
+content owns places only below its own level (`VSt.below`), so the highest live place would have
+no owner (`Inv.empty`).
+
+**Tripwire.** `no_negative_domain` is unchanged and builds. [proved] Without strata, a place
+holding a continuation is T15 in its exact form (`no_place_store`, `no_place_store_tree`): phase
+B's denotation reads a cell's content as a value (`Act.rd`), and a tree type with a node reading
+a place that holds a continuation over the same trees retracts onto its own function space, which
+no type with a fixed-point-free map does (Lawvere's form of Cantor). The cell model avoids it
+twice: the world runs a content rather than a tree reading it as a value, and the level makes
+that run well founded. [inferred] With strata, the disguise the brief named (a cell's invariant
+over continuations whose relation ranges over worlds containing that cell) does not arise:
+`VSt (L + 1)` refers only to `TS` at level `L`, which cannot name a place of level `L + 1`.
+
+**[proved] T1, on top** (`CellExamples.lean`). Borrows are tokens: `lend` turns an owned resource
+into a reservation and a borrow, `reclaim` turns them back, `touch` uses a live resource. A
+place's token carries its *return set*: the borrows its content gives back when dropped. A
+generator that captures a borrow is stored in a place whose return set names it; the loan can end
+only with the borrow back, so the place must be dropped first. `borProg` keeps that order and is
+safe (`borProg_safe`, run `borProg_run`). `harmProg` frees the resource while the generator still
+holds its borrow, then resumes it: the run is stuck (`harmProg_stuck`), so it has no safety
+derivation (`harmProg_not_safe`). A continuation capturing a borrow is bounded by the loan because
+what it holds must be given back, and that is the drop of the place that holds it. A generator
+that owns its resource needs nothing of the kind (`ownProg_safe`).
+
+### 9.4 Machinery reused, and not
+
+- Reused: phase B's relation and its fold lemmas (`hnd_rel`'s induction is the template of
+  `hnd_sim`; `TreeRel.abE` gives `fwd_id`'s abort case); phase B's least-fixed-point streams
+  (`StrmS`) are the template of `GenS`; phase B's tokens (`Own`, `TS`) are the template of the
+  cell model's.
+- Read and not reused: `relabel_reb` (`Core/Images.lean`) re-tags a reborrow image's `imm` cells
+  at a new lifetime through `relRes`; `relabel_obs` (`Core/RelationFacts.lean`) re-takes [TR]
+  6.131's image at the program's relation; `ResU.Reb` (`Paper/S5_Model/Definitions.lean`). The
+  `π` of `ResU.Reb` assigns each location of the image the piece of the source it came from; it
+  is not a renaming of locations. All three live on BoLo's carrier (`ResU`), which none of the
+  models here use: names are rebased by fresh allocation in the tree semantics, and a stored
+  generator's level is fixed by its type. [inferred] `relabel_reb` is what "re-rebase" becomes
+  when the cell model is lifted onto BoLo's carrier, where a content's borrows are `imm` and
+  `mut` cells whose lifetimes must be moved above the place's.
+
+### 9.5 Theorems
+
+| result | Lean | file |
+|---|---|---|
+| the TR's rule fixes, refusals | `movedLend_not_moded`, `resEscape_not_moded`, `retTwice_not_moded` | `Findings.lean` |
+| unary FP, with lends and rows | `CM.fp`, `VM.fp` | `UnaryFP.lean` |
+| resource and effect safety | `safety`, `safety_obs` | `UnaryFP.lean` |
+| writers commute (T7.11) | `writers_commute` | `Writers.lean` |
+| `ν/op` fails at a linear operation in `CtxEq` | `nu_op_fails_linear` | `Ownership.lean` |
+| η, semantically | `fwd_id` | `Ownership.lean` |
+| η, the syntactic clause: lost destructors | `eta_fails_linear`, `etaAff_obs`, `etaAff_not_moded` | `Ownership.lean` |
+| hiding | `hnd_sim`, `hiding_counter` | `Ownership.lean` |
+| the cell lemma | `adequacy` (cases `pnext`, `pdrop`), `Inv.takeOut`, `Inv.putBack`, `Inv.freePl` | `Cell.lean` |
+| safety of the cell model, no leaks | `cell_safety`, `VSt.below`, `Inv.empty` | `Cell.lean` |
+| T15 without strata | `no_place_store`, `no_place_store_tree` | `Cell.lean` |
+| T1 as the return of a borrow | `borProg_safe`, `harmProg_stuck`, `harmProg_not_safe` | `CellExamples.lean` |
+
+### 9.6 Open items
+
+1. **O1** (`O1` in `Ownership.lean`): `ν/op` over moded contexts at an operation without
+   contraction. What is missing is a binary relation in which continuation values own pending
+   names (§9.2). Not derived; no obstruction verified.
+2. **η with cancellation.** A forwarding primitive whose destructor is the cancel of its
+   continuation; `Dtor` would need a destructor that runs a tree.
+3. **The calculus into the cell model.** A typing that assigns each place its level and its
+   return set, so that a moded program denotes a safe tree of the cell model. Levels are
+   lifetimes: the lifetime component of a row (§9.1) is where they would come from, and a place's
+   level must be above every lifetime its content's row mentions. Not built; the cell lemma is
+   proved for the model, not yet for the calculus.
+4. **The lift onto BoLo's carrier** (O2, O3). The cell model's tokens are the own fragment of
+   `ResU`; a content's borrows there are `imm`/`mut` cells, which `relabel_reb` would move above
+   the place's lifetime. Not attempted.
+5. **T6.6**, agreement of the TR's machine with the trees: needs the machine in Lean.

@@ -9,8 +9,8 @@ name erased. Labels of resources stay, so the order in which destructors run is 
 
 - An operation that reaches the top is `unhandled`. The stack unwinds first: the destructors
   `d` it carries run.
-- Reading, writing or consuming a dead cell is `stuck`. A typed program in which every lend
-  ends before its owner consumes the cell never does that (T1, `Safety.lean`).
+- Reading, writing or consuming a dead cell is `stuck`. A moded program never does that
+  (`safety_obs`, `UnaryFP.lean`).
 
 **Contextual equivalence.** A context is a closed program with one free variable, the closure
 of the hole: the hole's term abstracted over its instances and its values. Two terms are

@@ -7,8 +7,8 @@ The cell lemma, in a semantic model small enough to see it whole. A **place** is
 computation creates, resumes in place and drops: it holds a **generator**, a suspended
 computation that, when resumed, runs to its next element and leaves a new generator, its rest
 (phase B's stream: a continuation captured at `yield`, with its `cancel` as the drop). The model
-has resources (acquire, free) and places; it has no handlers, because a stored generator has
-already handled its own yields.
+has resources (acquire, use, free), loans of resources (`lend`, `reclaim`) and places; it has no
+handlers, because a stored generator has already handled its own yields.
 
 - **Strata.** Places are stratified by **level**. A tree at level `L` may create, resume and drop
   only places of level `L`; a place of level `L + 1` holds a generator whose trees are at level
@@ -18,22 +18,25 @@ already handled its own yields.
   defined by recursion on the level, then on the tree (`runK`); nothing is step-indexed.
 - **The invariant at the cell's level** (`VSt`): a place of level `L + 1` holds a generator whose
   pull, run at level `L`, answers done or an element and a rest that again satisfies `VSt`, and
-  whose drop disposes of what it owns. It is a least fixed point at each level, and refers only to
-  level `L`.
+  whose drop disposes of what it owns but the borrows it gives back. It is a least fixed point at
+  each level, and refers only to level `L`.
 - **The cell lemma** (`adequacy`, cases `pnext` and `pdrop`). *Resume*: the content is taken out
   (the place is busy), its pull runs at the level below, under fresh names (`acq` and `pnew` take
   the world's next name), and the rest is put back: it satisfies the invariant again because the
   invariant is a fixed point (re-rebasing is the generator's own type). *Drop*: the content is
-  taken out and its drop runs to completion, freeing what it owns. A tree cannot resume a place
+  taken out and its drop runs to completion, giving back its borrows. A tree cannot resume a place
   whose content is running: its token is held by the frame that resumed it.
-- **Safety** (`cell_safety`): a safe closed tree at any level runs without getting stuck, holds
-  nothing at the end, and every resource and place still live is owned by the content of a
-  live place.
+- **Borrows.** `lend` turns an owned resource into a reservation and a borrow; `reclaim` needs
+  both back. A place's token names the borrows its content gives back when dropped (its return
+  set), so a loan whose borrow a stored generator captured ends only after that place is
+  dropped: T1, as bookkeeping (`CellExamples.lean`).
+- **Safety** (`cell_safety`): a safe closed tree at any level runs without getting stuck, and at
+  the end every resource is freed and every place dropped.
 - **Without strata** (`no_place_store`): if a tree could read the content of a place as a value
   of a type of trees, as phase B's denotation reads a cell, the type of trees would retract onto
-  its own function space. No set does (Cantor), which is T15's obstruction (`no_negative_domain`)
-  again. The world-run here avoids storing trees in trees; strata avoid running a content inside
-  itself.
+  its own function space. No such type has a map that moves every element (Cantor), which is
+  T15's obstruction (`no_negative_domain`) again. The world-run here avoids storing trees in
+  trees; strata make the run of a content well founded.
 -/
 
 namespace EffCell
