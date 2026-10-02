@@ -1,4 +1,5 @@
 import FnMut.Core.Splits
+import FnMut.Core.Weaken
 import FnMut.Types
 import Support.Dynamics.Interpreter
 

@@ -143,10 +143,10 @@ theorem d_cntCb {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
 
     mkBox⊤ (alloc 0) counterStep to f. alloc f to r. withbor r cntCb to (r, t).
     free r to f. (f to g. g π₂) to u. u; [t]                                         -/
-def scopeBody : Expr :=
+def scopeBodyWith (cb : Expr) : Expr :=
   mkE .top .i32 .i32 (.app (.val (.prim .alloc)) (i32E 0)) counterStep
     (bindE (.app (.val (.prim .alloc)) (.var 0))
-      (.letpair (.app (.app withbor (.var 0)) cntCb)
+      (.letpair (.app (.app withbor (.var 0)) cb)
         (bindE (.app (.val (.prim .free)) (.var 1))
           (bindE (bindE (.var 0) (closeE 0))
             (.seq (.var 0) (.var 2))))))
@@ -154,8 +154,13 @@ def scopeBody : Expr :=
 theorem vfree_PC (x : LifeVar) : ¬ VFree x PC := by
   simp [VFree, CFree, Lifetime.Life.mentions, VTy.rename]
 
-theorem d_scopeBody {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
-    CDerives Δ₁ Γ scopeBody (.comp (.ret (.box (.var 0) .i32))) := by
+/-- The borrower's type, `∀'w ⊏ ⊓Δ₁. Mut 'w PC ⊸ ['w] I32`. -/
+abbrev cntCbTy : VTy := .all 1 Δ₁.meetOfDom (.lolli (.mut (.var 1) PC) (.box (.var 1) .i32))
+
+/-- The counter made, stored, lent to any borrower `cb`, and closed. -/
+theorem d_scopeBodyWith {Γ : Ctx VTy} {cb : Expr}
+    (hcb : ∀ {Γ' : Ctx VTy}, Ctx.Dead Γ' → CDerives Δ₁ Γ' cb (.val cntCbTy)) (hΓ : Ctx.Dead Γ) :
+    CDerives Δ₁ Γ (scopeBodyWith cb) (.comp (.ret (.box (.var 0) .i32))) := by
   have hT : Δ₁.Defines .top := LifeCtx.defines_of_wf rfl
   refine d_mkBox trivial hT (.ref .int) (split_kill _).toP
     (.lolliE (deadSplit (kill_dead _)) (d_i32 0 (kill_dead _).toP) (.alloc (kill_dead _).toP))
@@ -164,7 +169,7 @@ theorem d_scopeBody {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
     (.ret (.lolliE (split_kill' _).toP (.var (.here (.cons (.cons hΓ.toP))))
       (.alloc (kill_dead _).toP))) ?_
   refine .tensorE (.left (.dead (.dead (.dead (deadSplit hΓ)))))
-    (.lolliE (split_kill _).toP (d_cntCb (kill_dead _))
+    (.lolliE (split_kill _).toP (hcb (kill_dead _))
       (.lolliE (split_kill' _).toP (.var (.here (.cons (.cons (.cons hΓ.toP)))))
         (.withbor2 (A := PC) (B := .i32) 1 (kill_dead _).toP rfl
           ⟨.var 0, LifeCtx.defines_of_wf rfl, .box (BoCa.Programs.entailsLt_top rfl)⟩ (vfree_PC 1)
@@ -181,28 +186,39 @@ theorem d_scopeBody {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
       (.consDead (.consDead (.consLive .int (.consDead (.consDead (.consDead (.consDead
         (.consDead (ctxOutlives_dead (LifeCtx.defines_of_wf rfl) hΓ)))))))))))
 
-/-- `Λ'x. λd. forget d; scopeBody`. -/
-def scopeCb : Expr := lam2 (.seq (.app forget (.var 0)) scopeBody)
+/-- The counter lent to `cntCb`. -/
+def scopeBody : Expr := scopeBodyWith cntCb
 
-theorem d_scopeCb {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
-    CDerives LifeCtx.empty Γ scopeCb (.val (.all 0 LifeCtx.empty.meetOfDom
-      (.lolli (.imm (.var 0) .unit) (.box (.var 0) .i32)))) :=
-  callbackW rfl rfl hΓ (.seqV (.left (.dead (deadSplit hΓ)))
-    (.lolliE (split_kill' _).toP (.var (.here (.cons hΓ.toP))) (.forgetImm (kill_dead _).toP))
-    (.ofRet (d_scopeBody (.cons (.cons hΓ)))))
+theorem d_scopeBody {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
+    CDerives Δ₁ Γ scopeBody (.comp (.ret (.box (.var 0) .i32))) :=
+  d_scopeBodyWith (fun hΓ' => d_cntCb hΓ') hΓ
 
-/-! ### The program -/
+/-! ### A scope: one lifetime `'x ⊏ ⊤` -/
 
-/-- `alloc () to d₀. withbor d₀ scopeCb to (d₀, t). free d₀ to u. u; t`. -/
-def counterProg : Expr :=
+/-- `Λ'x. λd. forget d; body`. -/
+def scopeCbOf (body : Expr) : Expr := lam2 (.seq (.app forget (.var 0)) body)
+
+/-- `alloc () to d₀. withbor d₀ (Λ'x. λd. forget d; body) to (d₀, t). free d₀ to u. u; t`:
+`body` runs under `'x ⊏ ⊤`, below which a closure boxed at `⊤` can be lent, and at which a
+closure capturing a closure boxed at `⊤` can be boxed. -/
+def scopeProg (body : Expr) : Expr :=
   bindE (.app (.val (.prim .alloc)) (.val .unit))
-    (.letpair (.app (.app withbor (.var 0)) scopeCb)
+    (.letpair (.app (.app withbor (.var 0)) (scopeCbOf body))
       (bindE (.app (.val (.prim .free)) (.var 1)) (.seq (.var 0) (.var 1))))
 
-theorem counterProg_derives : CDerives LifeCtx.empty [] counterProg (.comp (.ret .i32)) := by
+/-- The context `body` is typed in. -/
+abbrev ΓS : Ctx VTy := [⟨.imm (.var 0) .unit, false⟩, ⟨.unit, false⟩, ⟨.ref .unit, false⟩]
+
+theorem d_scopeProg {body : Expr} (h : CDerives Δ₁ ΓS body (.comp (.ret (.box (.var 0) .i32)))) :
+    CDerives LifeCtx.empty [] (scopeProg body) (.comp (.ret .i32)) := by
+  have hcb : CDerives LifeCtx.empty [⟨.ref .unit, false⟩] (scopeCbOf body)
+      (.val (.all 0 LifeCtx.empty.meetOfDom (.lolli (.imm (.var 0) .unit) (.box (.var 0) .i32)))) :=
+    callbackW rfl rfl (.cons .nil) (.seqV (.left (.dead (deadSplit (.cons .nil))))
+      (.lolliE (split_kill' _).toP (.var (.here (.cons (.cons .nil)))) (.forgetImm (kill_dead _).toP))
+      (.ofRet h))
   refine .bind .nil (.ret (.lolliE .nil (.unitI .nil) (.alloc (A := .unit) .nil))) ?_
   refine .tensorE (.left .nil)
-    (.lolliE (.right .nil) (d_scopeCb (.cons .nil))
+    (.lolliE (.right .nil) hcb
       (.lolliE (.left .nil) (.var (.here .nil))
         (.withbor1 (A := .unit) (B := .i32) 0 (.cons .nil) rfl (fun _ h => h.elim)
           (by simp [VFree]) (by simp [VFree])))) ?_
@@ -211,6 +227,14 @@ theorem counterProg_derives : CDerives LifeCtx.empty [] counterProg (.comp (.ret
       (.free (.cons (.cons (.cons .nil)))))) ?_
   exact .unitE (.left (.right (.dead (.dead .nil)))) (.var (.here (.cons (.cons (.cons .nil)))))
     (.ret (.var (.there (.here (.cons (.cons .nil))))))
+
+/-! ### The program -/
+
+/-- `alloc () to d₀. withbor d₀ (Λ'x. λd. forget d; scopeBody) to (d₀, t). free d₀ to u. u; t`. -/
+def counterProg : Expr := scopeProg scopeBody
+
+theorem counterProg_derives : CDerives LifeCtx.empty [] counterProg (.comp (.ret .i32)) :=
+  d_scopeProg (d_scopeBody (.cons (.cons (.cons .nil))))
 
 /-- **The counter runs at every host**: from the empty memory to a 32-bit literal, and the
 empty memory: the closure's cell, the cell holding the closure and the scope's cell are all

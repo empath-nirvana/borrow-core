@@ -178,41 +178,6 @@ set_option maxRecDepth 100000 in
 /-- `0`, and no cell left: the destructor closed the closure, and `close` freed its cell. -/
 theorem dropProg_eval : i32NoLeak (eval dropProg) = some 0 := by decide
 
-/-! ### A scope: one lifetime `'x ⊏ ⊤` -/
-
-/-- `Λ'x. λd. forget d; body`. -/
-def scopeCbOf (body : Expr) : Expr := lam2 (.seq (.app forget (.var 0)) body)
-
-/-- `alloc () to d₀. withbor d₀ (Λ'x. λd. forget d; body) to (d₀, t). free d₀ to u. u; t`:
-`body` runs under `'x ⊏ ⊤`, below which a closure boxed at `⊤` can be lent, and at which a
-closure capturing a closure boxed at `⊤` can be boxed. -/
-def scopeProg (body : Expr) : Expr :=
-  bindE (.app (.val (.prim .alloc)) (.val .unit))
-    (.letpair (.app (.app withbor (.var 0)) (scopeCbOf body))
-      (bindE (.app (.val (.prim .free)) (.var 1)) (.seq (.var 0) (.var 1))))
-
-/-- The context `body` is typed in. -/
-abbrev ΓS : Ctx VTy := [⟨.imm (.var 0) .unit, false⟩, ⟨.unit, false⟩, ⟨.ref .unit, false⟩]
-
-theorem d_scopeProg {body : Expr} (h : CDerives Δ₁ ΓS body (.comp (.ret (.box (.var 0) .i32)))) :
-    CDerives LifeCtx.empty [] (scopeProg body) (.comp (.ret .i32)) := by
-  have hcb : CDerives LifeCtx.empty [⟨.ref .unit, false⟩] (scopeCbOf body)
-      (.val (.all 0 LifeCtx.empty.meetOfDom (.lolli (.imm (.var 0) .unit) (.box (.var 0) .i32)))) :=
-    callbackW rfl rfl (.cons .nil) (.seqV (.left (.dead (deadSplit (.cons .nil))))
-      (.lolliE (split_kill' _).toP (.var (.here (.cons (.cons .nil)))) (.forgetImm (kill_dead _).toP))
-      (.ofRet h))
-  refine .bind .nil (.ret (.lolliE .nil (.unitI .nil) (.alloc (A := .unit) .nil))) ?_
-  refine .tensorE (.left .nil)
-    (.lolliE (.right .nil) hcb
-      (.lolliE (.left .nil) (.var (.here .nil))
-        (.withbor1 (A := .unit) (B := .i32) 0 (.cons .nil) rfl (fun _ h => h.elim)
-          (by simp [VFree]) (by simp [VFree])))) ?_
-  refine .bind (.right (.left (.dead .nil)))
-    (.ret (.lolliE (.dead (.left (.dead .nil))) (.var (.there (.here (.cons .nil))))
-      (.free (.cons (.cons (.cons .nil)))))) ?_
-  exact .unitE (.left (.right (.dead (.dead .nil)))) (.var (.here (.cons (.cons (.cons .nil)))))
-    (.ret (.var (.there (.here (.cons (.cons .nil))))))
-
 /-- Types that outlive `'x` under `Δ₁`: data, and a box at `⊤`. -/
 def outX : VTy → Bool
   | .box .top _ => true
