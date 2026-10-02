@@ -1,5 +1,6 @@
 import GhostEnd.Body
 import GhostEnd.Frames
+import GhostEnd.Table
 import GhostEnd.Instance
 
 /-!
@@ -36,9 +37,15 @@ share is in `[α₁]`: the frozen frames of the inner borrower outlive the outer
 stop condition README step 3c names.
 
 `nested_relend` is the commutation lemma: a nested piece is re-lendable for the outer lend
-(`Relend`). `nested_spans` composes it with `ewpTS_M_frameR`. `nest_yield` and `nest_ret` build a
+(`Relend`). `nested_spans` composes it with `ewpTS_M_frameR`. `nest_yield` and `nest_val` build a
 nested piece, and `nested_spans_yield` discharges every hypothesis on a reborrow whose callback
 yields once with both lends open.
+
+**A lend of another place** (`withbor` (1)–(2) inside the borrower) is the other shape of a
+two-entry lend stack: the inner lend is of a place `ℓ′` the borrower owns, and the piece may hold
+both views at once. `NestRelend₂` hands it both, and `nested₂_relend` is its commutation lemma: the
+outer re-lend first, then 6.65 on `ℓ′` below it, the owner of `ℓ′` carried in the continuation.
+`nested₂_spans_yield` discharges every hypothesis.
 -/
 
 noncomputable section
@@ -251,6 +258,226 @@ theorem nested_spans_yield (δ : LSub) (l : BoCa.Loc) (ls : List SRec) :
   refine nest_yield (Row.tab [yieldOp] δ) (en := yieldOp.ent δ)
     (by simp [Row.tab, Row.find, yieldOp]) rfl rfl ?_ (fun ls => ⟨rfl, 1, rfl⟩)
     (fun ls => nest_val (opTable_mono _) (fun _ => ⟨rfl, rfl⟩) ls) ls
+  intro ls w σ h
+  simp only [OpSig.ent, yieldOp] at h
+  exact ⟨h.2, h.1⟩
+
+/-! ### A second lend of another place, opened under the outer lend
+
+`withbor` (1)–(2) inside the borrower lend a place `ℓ′` the borrower owns, at `α₂ ⊏ α₁`, while
+the outer view `ℓ ↦ M_{α₁}` may sit in the inner piece's frames. This is the lend stack
+`[ℓ@α₁, ℓ′@α₂]` with both cells in the piece: `nestF₂` hands the piece both views, the inner one
+at every `α₂ ⊏ α₁`, and at a stop the piece leaves both behind. The inner lender is 6.65 on the
+owner of `ℓ′`, which the outer piece holds. At a stop its exit hands that owner back; it travels in
+the continuation to the next outer lend, where 6.65 lends `ℓ′` again below it. -/
+
+/-- One unfolding of a two-lend piece at the outer lend `α₁`: handed, at every `α₂ ⊏ α₁`, the
+inner view and the outer one, it runs; with the inner owner handed back, it returns that owner
+beside a share in `[α₁]`. -/
+def nestF₂ (Tb : Table) (l : BoCa.Loc) (T : VTy) (δ : LSub) (l' : BoCa.Loc) (T' : VTy)
+    (Qa : List SRec → Val → WProp) (X : List SRec → Expr → WProp) (α₁ : Life) (ls : List SRec)
+    (e : Expr) : WProp := fun ρ =>
+  ∀ α₂, α₂ ⊏ α₁ → box α₂ (viewP l' T' δ α₂ ls ─⋆ (viewP l T δ α₁ ls ─⋆
+    wpG ls e (fun ls'' t => box α₂ (ownWand l' T' δ ls''
+      (owner l' T' δ ls'' ⋆ box α₁ (fun σ => valPost Qa ls'' t σ ∨ Tb ls'' t X σ)))))) ρ
+
+/-- The two-lend piece: the least fixed point of `⋔ ∘ nestF₂`. -/
+def NestRelend₂ (Tb : Table) (l : BoCa.Loc) (T : VTy) (δ : LSub) (l' : BoCa.Loc) (T' : VTy)
+    (Qa : List SRec → Val → WProp) (ls : List SRec) (e : Expr) : WProp := fun ρ =>
+  ∀ X : List SRec → Expr → WProp,
+    (∀ ls e ρ, fresh (fun α₁ => nestF₂ Tb l T δ l' T' Qa X α₁ ls e) ρ → X ls e ρ) → X ls e ρ
+
+section
+variable {Tb : Table} {l : BoCa.Loc} {T : VTy} {δ : LSub} {l' : BoCa.Loc} {T' : VTy}
+  {Qa : List SRec → Val → WProp}
+
+theorem nestF₂_mono (hTb : Tb.Mono) {X X' : List SRec → Expr → WProp}
+    (hX : ∀ ls e ρ, X ls e ρ → X' ls e ρ) {ls : List SRec} {e : Expr} :
+    Entails (fresh fun α₁ => nestF₂ Tb l T δ l' T' Qa X α₁ ls e)
+      (fresh fun α₁ => nestF₂ Tb l T δ l' T' Qa X' α₁ ls e) := by
+  rintro ρ ⟨γ, hγ⟩
+  refine ⟨γ, fun α₁ hα₁ => ⟨fun α₂ hα₂ => ?_, (hγ α₁ hα₁).2⟩⟩
+  refine box_mono (wand_mono_right (wand_mono_right fun _ hw =>
+    wpG_mono (fun ls'' t σ hb => ?_) hw)) ρ ((hγ α₁ hα₁).1 α₂ hα₂)
+  refine box_mono (ownWand_mono fun τ ⟨τ₁, τ₂, hcτ, ho, hs⟩ => ⟨τ₁, τ₂, hcτ, ho, ?_⟩) σ hb
+  rcases hs.1 with hq | hq
+  · exact ⟨Or.inl hq, hs.2⟩
+  · exact ⟨Or.inr (hTb _ _ _ _ _ hX hq), hs.2⟩
+
+theorem nestRelend₂_fold (hTb : Tb.Mono) {ls : List SRec} {e : Expr} {ρ : WRes}
+    (h : fresh (fun α₁ => nestF₂ Tb l T δ l' T' Qa (NestRelend₂ Tb l T δ l' T' Qa) α₁ ls e) ρ) :
+    NestRelend₂ Tb l T δ l' T' Qa ls e ρ :=
+  fun X hX => hX ls e ρ (nestF₂_mono hTb (fun _ _ _ h' => h' X hX) ρ h)
+
+theorem nestRelend₂_unfold (hTb : Tb.Mono) {ls : List SRec} {e : Expr} {ρ : WRes}
+    (h : NestRelend₂ Tb l T δ l' T' Qa ls e ρ) :
+    fresh (fun α₁ => nestF₂ Tb l T δ l' T' Qa (NestRelend₂ Tb l T δ l' T' Qa) α₁ ls e) ρ :=
+  h (fun ls e ρ => fresh (fun α₁ =>
+      nestF₂ Tb l T δ l' T' Qa (NestRelend₂ Tb l T δ l' T' Qa) α₁ ls e) ρ)
+    (fun _ _ _ h' => nestF₂_mono hTb (fun _ _ _ h'' => nestRelend₂_fold hTb h'') _ h')
+
+theorem nestRelend₂_step (hTb : Tb.Mono) {ls : List SRec} {e e' : Expr}
+    (hs : ∀ μ : Heap, Step1N μ e μ e') {ρ : WRes} (h : NestRelend₂ Tb l T δ l' T' Qa ls e' ρ) :
+    NestRelend₂ Tb l T δ l' T' Qa ls e ρ := by
+  refine nestRelend₂_fold hTb ?_
+  obtain ⟨γ, hγ⟩ := nestRelend₂_unfold hTb h
+  exact ⟨γ, fun α₁ hα₁ => ⟨fun α₂ hα₂ => box_mono (wand_mono_right (wand_mono_right
+    (wpG_step hs ls _))) ρ ((hγ α₁ hα₁).1 α₂ hα₂), (hγ α₁ hα₁).2⟩⟩
+
+end
+
+/-- A view at `α₁` is in `Res_α₂` for every `α₂ ⊏ α₁`. -/
+theorem ptoMutS_below {l : BoCa.Loc} {α₁ α₂ : Life} (h₂ : α₂ ⊏ α₁) {ls : List SRec}
+    {P : List SRec → Val → WProp} {ρ : WRes} (h : ptoMutS l α₁ ls P ρ) : ρ.InStratum α₂ := by
+  refine (ptoMutS_down h).mono ?_
+  show OrderDual.ofDual α₁ + 1 ≤ OrderDual.ofDual α₂
+  have : OrderDual.ofDual α₁ < OrderDual.ofDual α₂ := h₂
+  omega
+
+/-- An owner whose payload is in `Res_β` is in `Res_α` for `α ⊏ β`. -/
+theorem owner_inStratum {l : BoCa.Loc} {T : VTy} {δ : LSub} {β : Life}
+    (hP : ∀ ls w σ, vC true T ls δ w σ → σ.InStratum β) {α : Life} (hα : α ⊏ β)
+    {ls : List SRec} {ρ : WRes} (h : owner l T δ ls ρ) : ρ.InStratum α := by
+  obtain ⟨w, ρ₁, ρ₂, hc, hρ₁, hv⟩ := h
+  rw [hρ₁] at hc
+  exact (outlives_comp hc α).mpr ⟨ResU.inStratum_single_own α l w,
+    (hP ls w ρ₂ hv).mono (le_of_lt hα)⟩
+
+/-- **The commutation lemma for a lend of another place.** The owner of `ℓ′` beside a two-lend
+piece is re-lendable for the outer lend at `ℓ`. At each outer lend `α₁`, taken below the payload
+stratum of `ℓ′` so that its owner lies in `[α₁]`, 6.65 lends `ℓ′` below `α₁` (`wpG_M_frameX` with
+the `⋔` bound `α₁`) and the piece receives both views. At a return or a stop 6.65's exit hands the
+owner of `ℓ′` back; at a stop it and the outer owner join the continuation, which is again the
+owner of `ℓ′` beside a two-lend piece. By induction on `NestRelend₂`. -/
+theorem nested₂_relend (Tab : OpTab) (hLR : LinResume Tab) (l : BoCa.Loc) (T : VTy) (δ : LSub)
+    (l' : BoCa.Loc) (T' : VTy) (β' : Life)
+    (hP' : ∀ ls w σ, vC true T' ls δ w σ → σ.InStratum β')
+    (Qa : List SRec → Val → WProp) {ls : List SRec} {e : Expr} {ρo ρ ρt : WRes}
+    (ho : owner l' T' δ ls ρo) (h : NestRelend₂ (opTable Tab) l T δ l' T' Qa ls e ρ)
+    (hc : ResU.CompS ρo ρ ρt) :
+    Relend (opTable Tab) l T δ (fun ls v => owner l T δ ls ⋆ (owner l' T' δ ls ⋆ Qa ls v))
+      ls e ρt := by
+  let Qo : List SRec → Val → WProp := fun ls v => owner l T δ ls ⋆ (owner l' T' δ ls ⋆ Qa ls v)
+  let M : List SRec → Expr → WProp := fun ls e ρ => ∀ ρo ρt, owner l' T' δ ls ρo →
+    ResU.CompS ρo ρ ρt → Relend (opTable Tab) l T δ Qo ls e ρt
+  refine h M ?_ ρo ρt ho hc
+  intro ls e ρ hF ρo ρt ho hc
+  refine relend_fold (opTable_mono Tab) ?_
+  obtain ⟨γ, hγ⟩ := hF
+  refine ⟨γ ⊓ β', fun α₁ hα₁ => ⟨fun ρm ρ' hm hcm => ?_,
+    (outlives_comp hc α₁).mpr ⟨owner_inStratum hP' (lt_of_lt_of_le hα₁ inf_le_right) ho,
+      (hγ α₁ (lt_of_lt_of_le hα₁ inf_le_left)).2⟩⟩⟩
+  have hN := (hγ α₁ (lt_of_lt_of_le hα₁ inf_le_left)).1
+  have hαβ : α₁ ⊏ β' := lt_of_lt_of_le hα₁ inf_le_right
+  -- the callback 6.65 lends `ℓ′` to is the piece beside the outer view
+  obtain ⟨Z, hZ, hoZ⟩ := compS_reassoc hc hcm
+  obtain ⟨w, ρl, ρP, hcl, hl, hv⟩ := ho
+  obtain ⟨Y, hY, hlY⟩ := compS_reassoc hcl hoZ
+  refine wpG_M_frameX l' T' δ β' hP' w e ls _ ρ'
+    ⟨ρl, Y, hlY, hl, ρP, Z, hY, hv, α₁, fun α₂ hα₂ => ⟨fun ρv τ hv' hcv => ?_,
+      (outlives_comp hZ α₂).mpr ⟨((hN α₂ hα₂).2), ptoMutS_below hα₂ hm⟩⟩⟩
+  obtain ⟨τ₁, hc₁, hτ⟩ := compS_exch hZ hcv
+  refine wpG_mono (fun ls'' t τ' hb => ?_) ((hN α₂ hα₂).1 ρv τ₁ hv' hc₁ ρm τ hm hτ)
+  refine box_mono (ownWand_mono fun σ' hs => ?_) τ' hb
+  obtain ⟨τo, τs, hcτ, hown', hS⟩ := hs
+  refine ⟨fun w' π₁ π₂ hπ₁ hcπ π₃ π₄ hπ₃ hcπ' => ?_,
+    (outlives_comp hcτ α₁).mpr ⟨owner_inStratum hP' hαβ hown', hS.2⟩⟩
+  obtain ⟨s, hs, hρs⟩ := compS_reassoc hcπ hcπ'
+  have hO : owner l T δ ls'' s := ⟨w', π₁, π₃, hs, hπ₁, hπ₃⟩
+  rcases hS.1 with ⟨u, rfl, hq⟩ | hq
+  · exact Or.inl ⟨u, rfl, s, σ', ResU.CompS.comm hρs, hO, τo, τs, hcτ, hown', hq⟩
+  · obtain ⟨bc, hbc, hsbc⟩ := compS_reassoc (ResU.CompS.comm hcτ) hρs
+    refine Or.inr (opTable_frame hLR .hole (fun _ => rfl)
+      (fun ls ρ => (owner l T δ ls ⋆ owner l' T' δ ls) ρ)
+      (fun _ _ _ he ⟨a, b, hab, ha, hb⟩ =>
+        ⟨a, b, hab, owner_local (he.left hab) ha, owner_local (he.right hab) hb⟩)
+      (fun ls e ρ₁ ρz ρ hx ⟨a, b, hab, ha, hb⟩ hc' => ?_) hq
+      ⟨s, τo, ResU.CompS.comm hbc, hO, hown'⟩ hsbc)
+    obtain ⟨y, hy, hay⟩ := compS_lcomm hab hc'
+    exact ⟨a, y, hay, ha, hx b y hb (ResU.CompS.comm hy)⟩
+
+/-- **Two lends spanning stops, at the outer lender.** The outer owner, the owner of `ℓ′` and a
+two-lend piece give the piece's `ewpTS`: `nested₂_relend`, then `ewpTS_M_frameR`. -/
+theorem nested₂_spans (Tab : OpTab) (hLR : LinResume Tab) (l : BoCa.Loc) (T : VTy) (δ : LSub)
+    (β : Life) (hP : ∀ ls w σ, vC true T ls δ w σ → σ.InStratum β)
+    (l' : BoCa.Loc) (T' : VTy) (β' : Life)
+    (hP' : ∀ ls w σ, vC true T' ls δ w σ → σ.InStratum β')
+    (Qa : List SRec → Val → WProp) (ls : List SRec) (e : Expr) :
+    Entails (owner l T δ ls ⋆ (owner l' T' δ ls ⋆ NestRelend₂ (opTable Tab) l T δ l' T' Qa ls e))
+      (ewpTS ls e (opTable Tab) (fun ls v => owner l T δ ls ⋆ (owner l' T' δ ls ⋆ Qa ls v))) := by
+  rintro ρ ⟨ρo, ρr, hc, ho, ρo', ρn, hc', ho', hn⟩
+  exact ewpTS_M_frameR (opTable Tab) (opTable_mono Tab) l T δ β hP _ ls e ρ
+    ⟨ρo, ρr, hc, ho, nested₂_relend Tab hLR l T δ l' T' β' hP' Qa ho' hn hc'⟩
+
+/-- Two views beside a share are left behind. -/
+theorem wpG_garbage₂ {ls : List SRec} {e : Expr} {Q : List SRec → Expr → WProp}
+    {ρa ρb ρab ρ σ : WRes} (ha : NoOwn ρa) (hb : NoOwn ρb) (hab : ResU.CompS ρa ρb ρab)
+    (hc : ResU.CompS σ ρab ρ) (hq : Q ls e σ) : wpG ls e Q ρ := by
+  obtain ⟨x, hx, hcx⟩ := compS_reassoc' hab hc
+  exact wpG_garbage (wpG_garbage (wpG_here ls e _ ρ
+    ⟨x, ρb, hcx, hb, σ, ρa, hx, ha, hq⟩))
+
+/-- **A two-lend piece at an answer**: both views are left behind. -/
+theorem nest₂_val {Tb : Table} (hTb : Tb.Mono) {l : BoCa.Loc} {T : VTy} {δ : LSub}
+    {l' : BoCa.Loc} {T' : VTy} {Qa : List SRec → Val → WProp} {u : Val}
+    (hu : ∀ ls, Qa ls u PMap.empty) (ls : List SRec) :
+    NestRelend₂ Tb l T δ l' T' Qa ls (.val u) PMap.empty := by
+  refine nestRelend₂_fold hTb ⟨⊤, fun α₁ _ => ⟨fun α₂ _ => ⟨fun ρv τ hv hc ρm τ' hm hc' => ?_,
+    ResU.inStratum_empty α₂⟩, ResU.inStratum_empty α₁⟩⟩
+  rw [eq_of_compS_empty_left hc] at hc'
+  refine wpG_garbage₂ (noOwn_ptoMutS hv) (noOwn_ptoMutS hm) hc' (compS_empty_left τ') ?_
+  refine ⟨fun w ρa ρb ha hcab ρc ρd hw hccd => ?_, ResU.inStratum_empty α₂⟩
+  rw [eq_of_compS_empty_left hcab] at hccd
+  exact ⟨ρd, PMap.empty, ResU.comp_empty_right ρd, ⟨w, ρa, ρc, hccd, ha, hw⟩,
+    Or.inl ⟨u, rfl, hu ls⟩, ResU.inStratum_empty α₁⟩
+
+/-- **A two-lend piece at a yield.** Both views are dropped (both lends ghost-ended), the inner
+owner is handed back beside the stop, and the continuation is a two-lend piece again. -/
+theorem nest₂_yield (Tab : OpTab) {n i : UInt32} {en : OpEnt} (hTn : Tab n i = some en)
+    (ha : en.abort = false) (hq : en.q = .lin)
+    (hPB : ∀ ls w ρ, en.PB ls w ρ → w = Val.unit ∧ ρ = PMap.empty)
+    {l : BoCa.Loc} {T : VTy} {δ : LSub} {l' : BoCa.Loc} {T' : VTy}
+    {Qa : List SRec → Val → WProp} {y : Val} (hy : ∀ ls, en.PA ls y PMap.empty) {rest : Expr}
+    (h : ∀ ls, NestRelend₂ (opTable Tab) l T δ l' T' Qa ls rest PMap.empty) (ls : List SRec) :
+    NestRelend₂ (opTable Tab) l T δ l' T' Qa ls (yieldSeq n i y rest) PMap.empty := by
+  refine nestRelend₂_fold (opTable_mono Tab) ⟨⊤, fun α₁ _ => ⟨fun α₂ _ =>
+    ⟨fun ρv τ hv hc ρm τ' hm hc' => ?_, ResU.inStratum_empty α₂⟩, ResU.inStratum_empty α₁⟩⟩
+  rw [eq_of_compS_empty_left hc] at hc'
+  refine wpG_garbage₂ (noOwn_ptoMutS hv) (noOwn_ptoMutS hm) hc' (compS_empty_left τ') ?_
+  refine ⟨fun w ρa ρb hown hcab ρc ρd hw hccd => ?_, ResU.inStratum_empty α₂⟩
+  rw [eq_of_compS_empty_left hcab] at hccd
+  refine ⟨ρd, PMap.empty, ResU.comp_empty_right ρd, ⟨w, ρa, ρc, hccd, hown, hw⟩,
+    Or.inr (Or.inl ⟨.seq .hole rest, n, i, y, en, pure_sep_mk ⟨rfl, rfl, hTn, ha⟩
+      ⟨PMap.empty, PMap.empty, ResU.comp_empty_right _, hy ls, ?_⟩⟩), ResU.inStratum_empty α₁⟩
+  refine ⟨fun _ => rfl, fun ls' _ => ⟨fun w' τ₁ τ₂ hBw hcτ => ?_, fun hl => absurd hq hl⟩⟩
+  obtain ⟨rfl, rfl⟩ := hPB _ _ _ hBw
+  rw [eq_of_compS_empty_left hcτ]
+  exact nestRelend₂_step (opTable_mono Tab) (fun μ => Step1N.head (Head.seq μ rest) rfl) (h ls')
+
+open GhostEnd.Instance in
+/-- **Every hypothesis discharged.** A piece holding the outer view of `ℓ` and an inner lend of
+`ℓ′` yields once with both lends open, then returns `()`, at the row `{yield : I32 ↠ 1}`. At the
+resumption the outer lend is re-lent first and `ℓ′` below it. -/
+theorem nested₂_spans_yield (δ : LSub) (l l' : BoCa.Loc) (ls : List SRec) :
+    Entails (owner l .unit δ ls ⋆ owner l' .unit δ ls)
+      (ewpTS ls (yieldSeq yieldOp.n yieldOp.i (Val.i32 1) (.val .unit))
+        (opTable (Row.tab [yieldOp] δ))
+        (fun ls v => owner l .unit δ ls ⋆ (owner l' .unit δ ls ⋆ ⌜v = Val.unit⌝))) := by
+  have hLR : LinResume (Row.tab [yieldOp] δ) := by
+    intro n i en hT
+    obtain ⟨o, hf, rfl⟩ := Row.tab_some hT
+    obtain ⟨hm, -, -⟩ := Row.find_mem hf
+    simp only [List.mem_singleton] at hm
+    subst hm
+    exact ⟨rfl, rfl⟩
+  have hP : ∀ ls w σ, vC true VTy.unit ls δ w σ → σ.InStratum ⊤ :=
+    fun _ _ σ h => by rw [h.1]; exact ResU.inStratum_empty _
+  rintro ρ ⟨ρ₁, ρ₂, hc, h₁, h₂⟩
+  refine nested₂_spans _ hLR l .unit δ ⊤ hP l' .unit ⊤ hP _ ls _ ρ
+    ⟨ρ₁, ρ₂, hc, h₁, ρ₂, PMap.empty, ResU.comp_empty_right ρ₂, h₂, ?_⟩
+  refine nest₂_yield (Row.tab [yieldOp] δ) (en := yieldOp.ent δ)
+    (by simp [Row.tab, Row.find, yieldOp]) rfl rfl ?_ (fun ls => ⟨rfl, 1, rfl⟩)
+    (fun ls => nest₂_val (opTable_mono _) (fun _ => ⟨rfl, rfl⟩) ls) ls
   intro ls w σ h
   simp only [OpSig.ent, yieldOp] at h
   exact ⟨h.2, h.1⟩
