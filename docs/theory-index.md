@@ -72,7 +72,7 @@ on a reading (§12.67–§12.73 are the typed-world repairs behind the Fundament
   closed code `fn T₁ T₂` goes through the typed world. The fork is "superseded by the
   exponential `!T` … `fn T₁ T₂` is `!(T₁ ⊸ T₂)`".
 - **Status:** stage 1 proved (in the library as `Support/Model/Unr.lean`); stage 2 superseded by
-  `!T` (SPEC §2, decision 3). Environments and `FnMut` as a closure former: "not attempted".
+  `!T` (SPEC §2, decision 3). Environments and `FnMut` as a closure former: "not attempted"; `FnMut` is [FnMut](#fnmut), as codata.
 - **Key results:** `reb_self_of_imm`, `reborrow_self_of_imm`, `envShape_unlinked`,
   `envValue_unlinked`; archived fork: `fnI_compatX`, `fnE_compatX`, `callBorrowed_runs`.
 - **Feeds:** decision 3 ("A closure former's borrowed image is not determined by its type");
@@ -193,6 +193,27 @@ on a reading (§12.67–§12.73 are the typed-world repairs behind the Fundament
   Recursion).
 - **Links:** [`experiments/Core/README.md`](../experiments/Core/README.md), `Core/README.md`,
   [`docs/consolidation-audit.md`](consolidation-audit.md).
+
+### FnMut
+
+- **Question:** "Can a closure that owns or captures mutable or linear state be called many
+  times, each call borrowing that state, with its environment hidden by its type: Rust's
+  `FnMut`?" (#236)
+- **Answer:** "Yes, as an abbreviation over `νX. C`, once `ν`'s positivity admits an observation
+  with an argument and a boxed rest: `FnMut^c A B ≜ νX. (A ⊸ F(B ⊗ [@c] U X)) & F 1`. It needs
+  no new former, no new rule and no new index."
+- **Status:** proved over a fork of `Core` with the relaxed positivity (`kernel.patch`); the
+  kernel change is described, not made. Open: a lifetime-polymorphic argument (`∀` in
+  observation trees), the closure sugar, the lowering.
+- **Key results:** `cC_fnMut_iff`, `obs_transfer_fnBox`, `immReborrow_fnMut`, `d_callMut`,
+  `d_passF`, `d_fromFn`, `d_once`, `logState_not_outlives`, `not_affine_fnMut`; the programs
+  `counterProg`, `passProg`, `nestProg`, `retProg`, `logProg`, `fromFnProg`, `onceProg`,
+  `dropProg`.
+- **Feeds:** SPEC §2's closure table and §7's positivity; #233 and
+  `docs/effect-polymorphism.md` R2a (the environment type hidden); [ModesLabels](#modeslabels)
+  (an affine closure is droppable by an action, not forgettable).
+- **Links:** [`docs/fnmut.md`](fnmut.md);
+  [`experiments/FnMut/README.md`](../experiments/FnMut/README.md).
 
 ### FrameEnd
 

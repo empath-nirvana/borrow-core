@@ -34,6 +34,9 @@ below are design and research notes.
 - [Effect polymorphism](effect-polymorphism.md) — functions over effectful computations (#161):
   copies over static names, provided and tunneled rows, site freshness, stored callbacks. A design;
   nothing is built.
+- [The affine closure, `FnMut`](fnmut.md) — Rust's `FnMut` as codata, `νX. (A ⊸ F(B ⊗ [@c] U X)) & F 1`
+  (#236): an experiment over a fork of `Core` with `ν`'s positivity relaxed; the kernel change is
+  described, not made.
 - [Strings and slices](strings-slices-design.md) — slices, buffers, UTF-8 text and literals, end
   to end, with the status of each stage.
 - [A Kubernetes operator](operator/README.md) — a design-down sketch of a target program in the
