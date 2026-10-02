@@ -2776,6 +2776,93 @@ def defineGroup (env : Env) (ms : List (Span × Ident × VTy × Val × Mark)) : 
                                              group := some (G.name, (parts.map (·.1)).idxOf x) }] }
   pure env
 
+/-- `e |> g(a, …)` resolved (decision 50, SPEC §22): `with g(a, …) { e }` when `g` is a handler, a
+heap driver or a layer; `g({ _ -> e }, a, …)` when `g`'s first parameter is a computation
+parameter, `e` suspended; `g(e, a, …)` otherwise. -/
+def pipeOf (env : Env) (sp : Span) (e g : Val) (k : Nat) : Val :=
+  let (f, W?) : Val × Option Val := match g with
+    | .app _ f W => (f, some W)
+    | f => (f, none)
+  let h := headName f
+  let isHandler := match h with
+    | some x => (env.handler? x).isSome || (env.chandler? x).isSome || env.driver? x ||
+        (env.layer? x).isSome
+    | none => false
+  if isHandler then
+    let (x, As) := match f with
+      | .defApp _ x As => (x, As)
+      | _ => (h.getD "", [])
+    .app sp (.app sp (.sugar sp (.handle x s!"fx_pl{k}" As)) (W?.getD (.unit sp)))
+      (.thunkv sp (.lam sp ⟨s!"fx_pc{k}", sp⟩ (holeTy sp) (.ret sp e)))
+  else
+    let first := match h with
+      | some x => (env.cparamsOf x).any (·.idx == 0)
+      | none => false
+    let e' : Val := if first then .thunkv sp (.lam sp ⟨s!"fx_pu{k}", sp⟩ (holeTy sp) (.ret sp e)) else e
+    let args : Val := match W? with
+      | none | some (.unit _) => e'
+      | some W => .pair sp e' W
+    .app sp f args
+
+mutual
+/-- A value with its pipes resolved (`pipeOf`). -/
+def pipesV (env : Env) : Nat → Val → Val
+  | 0, V => V
+  | n + 1, V => match V with
+    | .app sp (.sugar _ .pipe) (.pair _ e g) => pipeOf env sp (pipesV env n e) (pipesV env n g) n
+    | .pair sp V W => .pair sp (pipesV env n V) (pipesV env n W)
+    | .app sp V W => .app sp (pipesV env n V) (pipesV env n W)
+    | .inl sp V => .inl sp (pipesV env n V)
+    | .inr sp V => .inr sp (pipesV env n V)
+    | .unbang sp V => .unbang sp (pipesV env n V)
+    | .boxed sp a V => .boxed sp a (pipesV env n V)
+    | .unbox sp V => .unbox sp (pipesV env n V)
+    | .sub sp V a => .sub sp (pipesV env n V) a
+    | .roll sp V => .roll sp (pipesV env n V)
+    | .unroll sp V => .unroll sp (pipesV env n V)
+    | .inst sp V a => .inst sp (pipesV env n V) a
+    | .ascribe sp V A => .ascribe sp (pipesV env n V) A
+    | .shorten sp m σ a V => .shorten sp m σ a (pipesV env n V)
+    | .thunk sp M => .thunk sp (pipesC env n M)
+    | .thunkv sp M => .thunkv sp (pipesC env n M)
+    | .bangThunk sp M => .bangThunk sp (pipesC env n M)
+    | .bangThunkv sp M => .bangThunkv sp (pipesC env n M)
+    | .run sp M => .run sp (pipesC env n M)
+    | V => V
+
+/-- A computation with its pipes resolved. -/
+def pipesC (env : Env) : Nat → Comp → Comp
+  | 0, M => M
+  | n + 1, M => match M with
+    | .ret sp V => .ret sp (pipesV env n V)
+    | .bind sp x A M N lin => .bind sp x A (pipesC env n M) (pipesC env n N) lin
+    | .lam sp x A M => .lam sp x A (pipesC env n M)
+    | .app sp M x => .app sp (pipesC env n M) x
+    | .with_ sp M N => .with_ sp (pipesC env n M) (pipesC env n N)
+    | .proj sp i M => .proj sp i (pipesC env n M)
+    | .letUnit sp V M => .letUnit sp (pipesV env n V) (pipesC env n M)
+    | .letPair sp x y V M => .letPair sp x y (pipesV env n V) (pipesC env n M)
+    | .case sp V x M y N => .case sp (pipesV env n V) x (pipesC env n M) y (pipesC env n N)
+    | .absurd sp V => .absurd sp (pipesV env n V)
+    | .lamL sp x b M => .lamL sp x b (pipesC env n M)
+    | .inst sp M a => .inst sp (pipesC env n M) a
+    | .nuIn sp M => .nuIn sp (pipesC env n M)
+    | .nuOut sp M => .nuOut sp (pipesC env n M)
+    | .ascribe sp M C => .ascribe sp (pipesC env n M) C
+    | .for_ sp x V M N => .for_ sp x (pipesV env n V) (pipesC env n M) (pipesC env n N)
+    | .perform sp k i V => .perform sp k i (pipesV env n V)
+    | .abort sp k i V => .abort sp k i (pipesV env n V)
+    | .handle sp k hr hc M => .handle sp k hr hc (pipesC env n M)
+    | .unwind sp x A M D N => .unwind sp x A (pipesC env n M) (pipesC env n D) (pipesC env n N)
+    | M => M
+end
+
+/-- A declaration has a pipe `e |> g(…)` (decision 50). -/
+def hasPipe : Decl → Bool
+  | .def_ _ _ _ _ V _ => (pipesV {} fuel V) != V
+  | .main _ _ M => (pipesC {} fuel M) != M
+  | _ => false
+
 /-- The program with its effects elaborated, and the reports for `bcc check`: the effect and
 handler declarations are removed, each answering handler's clauses become functions, each
 function with a row is replaced by its copies for what serves it where it is called, each `with`
@@ -2791,7 +2878,7 @@ def elaborate (ds : List Decl) (lib : List String := []) :
       | .def_ sp n (_ :: _) _ V _ => if (refsV fuel V).contains n.name then some (sp, n.name) else none
       | _ => none) then
     throw ⟨sp, s!"`{n}` is generic and calls itself: a generic recursive function is not provided"⟩
-  if !hasEffects ds && groups.isEmpty then return (ds, [])
+  if !hasEffects ds && groups.isEmpty && !ds.any hasPipe then return (ds, [])
   let names := ds.filterMap Decl.defName
   let go : EM (List Decl) := do
     let mut env : Env := { lib }
@@ -2844,6 +2931,7 @@ def elaborate (ds : List Decl) (lib : List String := []) :
           throw ⟨ch.eff.span, s!"`{ch.eff.name}` takes {eff.tps.length} type argument(s)"⟩
         env := { env with chandlers := env.chandlers ++ [ch] }
       | .def_ sp n ps A V mk =>
+        let V := pipesV env fuel V
         env := { env with sigs := (n.name, A) :: env.sigs }
         let (_, provs, mkS) := splitMarks mk
         env := { env with defs := (n.name, .def_ sp n ps A V mkS) :: env.defs }
@@ -2913,6 +3001,7 @@ def elaborate (ds : List Decl) (lib : List String := []) :
           out := out ++ ((← get).made.extract before).map (·.2)
           out := out.push (.def_ sp n ps A V' mk)
       | .main sp C M =>
+        let M := pipesC env fuel M
         modify fun s => { s with quiet := false }
         let before := (← get).made.size
         let M' ← trC fuel { env, caps := [] } [] false M

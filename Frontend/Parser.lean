@@ -950,7 +950,7 @@ def val : Nat → P Val
         discard bump; let M ← inClosure (comp n); pure (.bangThunkv (← spanFrom st) M)
       else if ← isSym "{" then brace n st true
       else expected "`thunk`, `thunkv` or `{` after `!`"
-    | .sym "{" => brace n st false
+    | .sym "{" => pipes n st (← brace n st false)
     | _ => do
       let a ← valOps n 0
       -- `a..b`: a count (`VSugar.count`).
@@ -961,7 +961,18 @@ def val : Nat → P Val
         let b ← valOps n 0
         let sp ← spanFrom st
         return .app sp (.sugar d₁.span .count) (.pair sp a b)
-      pure a
+      pipes n st a
+
+/-- `a |> g(…) |> …`, associating to the left (decision 50): each `VSugar.pipe`. -/
+def pipes : Nat → Pos → Val → P Val
+  | 0, _, _ => outOfFuel
+  | n + 1, st, a => do
+    let t ← peek
+    if t.tok != .sym "|>" then return a
+    discard bump
+    let g ← valPrefix n
+    let sp ← spanFrom st
+    pipes n st (.app sp (.sugar t.span .pipe) (.pair sp a g))
 
 /-- Operators, by precedence `lvl` and above, associating to the left. -/
 def valOps : Nat → Nat → P Val

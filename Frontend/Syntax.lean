@@ -396,6 +396,10 @@ inductive VSugar where
   lifetimes of the capabilities it takes, `!thunkv Fun 'k₁ < @. … return thunkv fun (q : A) -> M`,
   at the type the computation parameter expects. -/
   | cbCode (info : CbInfo)
+  /-- `e |> g(a, …)` (decision 50, SPEC §22), applied to the pair of `e` and `g(a, …)`: `g(e, a, …)`,
+  with `e` suspended when `g`'s first parameter is a computation parameter, or `with g(a, …) { e }`
+  when `g` is a handler. Resolved by `Frontend.Elab.Effects`, which knows which `g` is. -/
+  | pipe
   deriving DecidableEq, Repr, Inhabited
 
 mutual
