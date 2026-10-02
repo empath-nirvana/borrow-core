@@ -353,17 +353,44 @@ theorem rbody_perform (hbx : b.mentions x = false)
   show vC true o.B ls'' (δ.extend x α') Val.unit PMap.empty
   rw [hoB]; exact ⟨rfl, rfl⟩
 
-/-- **`M to z. N`.** `N`'s context is the frame `(λz. N) [·]` around `M`. It is carried through
-`M`'s run, frozen at each of `M`'s stops (its view, if it holds `m`, dropped), and thawed at each
-re-lend (`open_bind`). Its slots other than `m` span the stops, so they are `StopSafe`. At `M`'s
-answer, `N` runs at the lend `M` answered at, from its own judgment. -/
-theorem rbody_let (hbx : b.mentions x = false)
+/-- **A frame that spans a stop thaws at a fresh lend.** For each closing substitution, a frozen
+form `Fz` of the frame `Γ, m` exists: Kripke along `Ext`, in `[α]` at every lend `α ⊏ @bδ`. The
+frame at a lend freezes to it, leaving garbage that owns nothing (its view, if any). The frozen
+frame, with the view handed at a fresh lend if the frame holds `m`, is the frame at that lend.
+This is what a stop asks of the values the frames around it hold. -/
+def FrameThaws (Δ : LifeCtx) (x : LifeVar) (b : Lifetime.Life) (T : VTy) (Γ : Ctx VTy)
+    (ml : Bool) : Prop :=
+  ∀ (δ : LSub), Δ.Models δ → ∀ (β : Life), b.interp δ = some β →
+    ∀ (l : BoCa.Loc) (γ : List Val), γ.length = Γ.length → ∃ Fz : List SRec → WProp,
+      (∀ ls ls' ρ, Ext ls ls' ρ → Fz ls ρ → Fz ls' ρ) ∧
+      (∀ ls ρ, Fz ls ρ → ∀ α, α ⊏ β → ρ.InStratum α) ∧
+      (∀ α ls ρ, gDenC ls (δ.extend x α) (Γ ++ [mSlot x T ml]) (γ ++ [Val.loc l]) ρ →
+        ∃ ρz ρn, ResU.CompS ρz ρn ρ ∧ Fz ls ρz ∧ NoOwn ρn) ∧
+      (∀ α ls ρv ρz ρ, α ⊏ β → vwOf l T δ ml α ls ρv → Fz ls ρz → ResU.CompS ρv ρz ρ →
+        gDenC ls (δ.extend x α) (Γ ++ [mSlot x T ml]) (γ ++ [Val.loc l]) ρ)
+
+/-- A frame whose slots other than `m` are free of `'x` and outlive it thaws (`frame_freeze`,
+`frame_thaw`). -/
+theorem stopSafe_thaws (hbx : b.mentions x = false)
     (hΔx : ∀ y u, Δ.find? y = some u → u.mentions x = false) (hT : ¬ VFree x T)
-    (hS : Row.Resume S x) {Γ Γ₁ Γ₂ : Ctx VTy} {ml ml₁ ml₂ : Bool} {M N : Expr} {A₁ A : VTy}
+    {Γ : Ctx VTy} (hs : StopSafe Δ x b Γ) (ml : Bool) : FrameThaws Δ x b T Γ ml := by
+  intro δ hδ β hβ l γ hlen
+  exact ⟨fun ls => gDenC ls δ (Γ ++ [mSlot x T false]) (γ ++ [Val.loc l]),
+    fun _ _ _ he h => gDenC_local he h,
+    fun _ _ h _ hα => stopSafe_outlives hs hδ hbx hΔx hβ h hα,
+    fun _ _ _ h => frame_freeze hs hT hlen h,
+    fun _ _ _ _ _ _ hv hz hc => frame_thaw hs hT hlen hv hz hc⟩
+
+/-- **`M to z. N`.** `N`'s context is the frame `(λz. N) [·]` around `M`. It is carried through
+`M`'s run, frozen at each of `M`'s stops, and thawed at each re-lend (`open_bind`), as
+`FrameThaws` says. At `M`'s answer, `N` runs at the lend `M` answered at, from its own
+judgment. -/
+theorem rbody_letF (hS : Row.Resume S x) {Γ Γ₁ Γ₂ : Ctx VTy} {ml ml₁ ml₂ : Bool} {M N : Expr}
+    {A₁ A : VTy}
     (hsp : Ctx.SplitP (Γ ++ [mSlot x T ml]) (Γ₁ ++ [mSlot x T ml₁]) (Γ₂ ++ [mSlot x T ml₂]))
     (hl₁ : Γ₁.length = Γ.length) (hl₂ : Γ₂.length = Γ.length)
     (hml : ml₂ = true → ml = true ∧ ml₁ = false) (hml' : ml₂ = false → ml₁ = ml)
-    (hsafe : StopSafe Δ x b Γ₂)
+    (hsafe : FrameThaws Δ x b T Γ₂ ml₂)
     (hM : RBody Δ x b T S Γ₁ ml₁ M A₁) (hN : RBody Δ x b T S (⟨A₁, true⟩ :: Γ₂) ml₂ N A) :
     RBody Δ x b T S Γ ml (.app (.val (.lam N)) M) A := by
   intro δ hδ β hβ l α hα ls γ ρ hlen hg
@@ -371,34 +398,26 @@ theorem rbody_let (hbx : b.mentions x = false)
   have hTb := opTable_mono (Row.tab S δ)
   obtain ⟨ρ₁, ρ₂, hc, hg₁, hg₂⟩ := gDenC_split hsp hg
   have hlen₂ : γ.length = Γ₂.length := hlen.trans hl₂.symm
+  obtain ⟨Fz, hFe, hFo, hfz, hth⟩ := hsafe δ hδ β hβ l γ hlen₂
   let K : Kont := .appR (.val (.lam (Expr.psub 1 (γ ++ [Val.loc l]) N))) .hole
   have hK : ∀ n, K.HasHnd n = false := fun n => by simp [K, Kont.HasHnd]
   let Fr : Life → List SRec → WProp := fun α' ls =>
     gDenC ls (δ.extend x α') (Γ₂ ++ [mSlot x T ml₂]) (γ ++ [Val.loc l])
-  let Fz : List SRec → WProp := fun ls =>
-    gDenC ls δ (Γ₂ ++ [mSlot x T false]) (γ ++ [Val.loc l])
   have hFs : ∀ α' ls ls', (∀ x, x ∈ ls' ↔ x ∈ ls) → Entails (Fr α' ls) (Fr α' ls') :=
     fun _ _ _ hs _ h => gDenC_same hs h
-  have hFe : ∀ ls ls' ρ, Ext ls ls' ρ → Fz ls ρ → Fz ls' ρ := fun _ _ _ he h => gDenC_local he h
-  have hFo : ∀ ls ρ, Fz ls ρ → ∀ α', α' ⊏ β → ρ.InStratum α' :=
-    fun _ _ h _ hα' => stopSafe_outlives hsafe hδ hbx hΔx hβ h hα'
-  have hfz : ∀ α' ls ρ, Fr α' ls ρ → ∃ ρz ρn, ResU.CompS ρz ρn ρ ∧ Fz ls ρz ∧ NoOwn ρn :=
-    fun _ _ _ h => frame_freeze hsafe hT hlen₂ h
   have hthaw : ∀ α' ls ρv ρz ρ, α' ⊏ β → vwOf l T δ ml α' ls ρv → Fz ls ρz →
       ResU.CompS ρv ρz ρ → ∃ ρ₁ ρ₂, ResU.CompS ρ₁ ρ₂ ρ ∧ vwOf l T δ ml₁ α' ls ρ₁ ∧ Fr α' ls ρ₂ := by
-    intro α' ls' ρv ρz ρ' _ hv hz hc'
+    intro α' ls' ρv ρz ρ' hα' hv hz hc'
     cases h₂ : ml₂ with
     | true =>
         obtain ⟨rfl, rfl⟩ := hml h₂
         refine ⟨PMap.empty, ρ', compS_empty_left ρ', ⟨rfl, trivial⟩, ?_⟩
-        show gDenC ls' (δ.extend x α') (Γ₂ ++ [mSlot x T ml₂]) (γ ++ [Val.loc l]) ρ'
-        rw [h₂]; exact frame_thaw hsafe hT hlen₂ hv hz hc'
+        exact hth α' ls' ρv ρz ρ' hα' (by rw [h₂]; exact hv) hz hc'
     | false =>
         rw [hml' h₂]
         refine ⟨ρv, ρz, hc', hv, ?_⟩
-        show gDenC ls' (δ.extend x α') (Γ₂ ++ [mSlot x T ml₂]) (γ ++ [Val.loc l]) ρz
-        rw [h₂]
-        exact frame_thaw (ml := false) hsafe hT hlen₂ ⟨rfl, trivial⟩ hz (compS_empty_left ρz)
+        exact hth α' ls' PMap.empty ρz ρz hα' (by rw [h₂]; exact ⟨rfl, trivial⟩) hz
+          (compS_empty_left ρz)
   have hk : ∀ α', α' ⊏ β → ∀ ls v, Entails (ansR x δ A₁ α' ls v ⋆ Fr α' ls)
       (bodyAt (opTable (Row.tab S δ)) l T δ (ansR x δ A)
         (Open (opTable (Row.tab S δ)) l T δ β (vwOf l T δ ml) (ansR x δ A)) α' ls
@@ -410,9 +429,23 @@ theorem rbody_let (hbx : b.mentions x = false)
     have hb := hN δ hδ β hβ l α' hα' ls' (v :: γ) σ (by simp [hlen₂])
       (gDenC_mk hlw ⟨σ₁, σ₂, hcσ, hv, hgs⟩)
     exact bodyAt_mono hTb (fun _ _ _ h => open_vwOf_le hTb (fun h' => (hml h').1) h) σ hb
-  exact bodyAt_bind hLR K hK Fr Fz hFs hFe hFo hfz
-    (fun _ _ _ _ _ hx hz hcτ => open_bind hLR K hK Fr Fz hFs hFe hFo hfz hthaw hk hx hz hcτ)
+  have hfz' : ∀ α' ls ρ, Fr α' ls ρ → ∃ ρz ρn, ResU.CompS ρz ρn ρ ∧ Fz ls ρz ∧ NoOwn ρn :=
+    fun α' ls ρ h => hfz α' ls ρ h
+  exact bodyAt_bind hLR K hK Fr Fz hFs hFe hFo hfz'
+    (fun _ _ _ _ _ hx hz hcτ => open_bind hLR K hK Fr Fz hFs hFe hFo hfz' hthaw hk hx hz hcτ)
     hα (hk α hα) (hM δ hδ β hβ l α hα ls γ ρ₁ (hlen.trans hl₁.symm) hg₁) hg₂ hc
+
+/-- `rbody_letF` at a frame whose slots other than `m` are free of `'x` and outlive it. -/
+theorem rbody_let (hbx : b.mentions x = false)
+    (hΔx : ∀ y u, Δ.find? y = some u → u.mentions x = false) (hT : ¬ VFree x T)
+    (hS : Row.Resume S x) {Γ Γ₁ Γ₂ : Ctx VTy} {ml ml₁ ml₂ : Bool} {M N : Expr} {A₁ A : VTy}
+    (hsp : Ctx.SplitP (Γ ++ [mSlot x T ml]) (Γ₁ ++ [mSlot x T ml₁]) (Γ₂ ++ [mSlot x T ml₂]))
+    (hl₁ : Γ₁.length = Γ.length) (hl₂ : Γ₂.length = Γ.length)
+    (hml : ml₂ = true → ml = true ∧ ml₁ = false) (hml' : ml₂ = false → ml₁ = ml)
+    (hsafe : StopSafe Δ x b Γ₂)
+    (hM : RBody Δ x b T S Γ₁ ml₁ M A₁) (hN : RBody Δ x b T S (⟨A₁, true⟩ :: Γ₂) ml₂ N A) :
+    RBody Δ x b T S Γ ml (.app (.val (.lam N)) M) A :=
+  rbody_letF hS hsp hl₁ hl₂ hml hml' (stopSafe_thaws hbx hΔx hT hsafe ml₂) hM hN
 
 /-- **`case V {inj₁ z. M₁ | inj₂ z. M₂}`**: `V` runs pure, the branches' context a frame beside
 it, and the branch taken runs at the same lend. -/
