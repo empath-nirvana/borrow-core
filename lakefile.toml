@@ -156,6 +156,11 @@ srcDir = "experiments/EffModel"
 roots = ["EffModel"]
 
 [[lean_lib]]
+name = "EffModelRel"
+srcDir = "experiments/EffModelRel"
+roots = ["EffModelRel"]
+
+[[lean_lib]]
 name = "Outlives"
 srcDir = "experiments/Outlives"
 roots = ["Outlives"]
