@@ -53,3 +53,4 @@ import FnMut.Rules
 import FnMut.Counter
 import FnMut.Programs
 import FnMut.Passing
+import FnMut.Capture
