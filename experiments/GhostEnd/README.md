@@ -44,6 +44,10 @@ Build with `lake build GhostEnd`. It uses only the standard axioms and has no `s
 | 3d | a closure that stops while holding the lend | `CloL`, `cloL_of_rbodyC`, `cloL_call` (`Callee.lean`) |
 | 3d | every hypothesis discharged: the callee yields with the lend inside it | `callee_spans_yields` (`Callee.lean`) |
 | 3d | the kernel invariant, where it enters | `capture_hides_lend`, `KernelInvariant`, `rbodyC_retTV` (`Kernel.lean`) |
+| 3e | what `TW`'s records carry | `record_shape_thunk`, `tw_heap_any` (`Bridge.lean`) |
+| 3e | the re-lendable continuation relation, positive | `KapRelR`, `kapRelR_mono` (`Bridge.lean`) |
+| 3e | the frame thaw at a `U` slot, exactly | `URelend`, `frameThawsD_thunk_iff`, `uThaw_free`, `uThaw_tv` (`Bridge.lean`) |
+| 3e | the relation re-lendable by construction; `CloL` its `U` clause | `vRL`, `cRL`, `cloL_of_vRL` (`Bridge.lean`) |
 
 ### Step 0: the segment fundamental lemma (restated)
 
@@ -351,7 +355,7 @@ yields again with the lend inside it. Every hypothesis is discharged.
 | `[lam]` (effectful body) | routine given the body's `RBodyC`: `cloL_of_rbodyC` |
 | `[app]`, `[force]` of a `CloL` closure | routine: `cloL_call` |
 | a pure piece answering a closure | needs the kernel invariant (`KernelInvariant`, `rbodyC_retTV`) |
-| a pure piece handed a `CloL` closure | **not routine**; see below |
+| a pure piece handed a `CloL` closure | **not routine**; see below and step 3e |
 | `∀E` at a row, `[then]`, `[handle]`, borrow constants | not attempted |
 
 The case that is not routine is a pure piece handed a `CloL` closure. A `CloL` closure need not
@@ -370,6 +374,36 @@ closure over a view of itself: a cell's witness lies strictly above the cell's l
 making `TV`'s closure case carry its body's `RBodyC`, which would put `TV` negatively inside its
 own constructor: the shape of `no_negative_domain`. `CloL` avoids it by being semantic. I have
 not stated that variant in Lean.
+
+### Step 3e: a pure piece handed a lend-aware closure (#264)
+
+**`TW` does not give the kernel invariant.** `TW`'s records are 6.64's frames `⟨le, v, R, T, δ⟩`
+typed by `vShape`, which is `True` at every `U C` (`record_shape_thunk`); the heap's own cells are
+untyped (`tw_heap_any`); and `TW` constrains worlds, not the answer of a run, which is what
+`KernelInvariant` is about. A record at the program's relation at `U` would put `TW` under
+`wpTS`'s negative occurrence of `TW`. What would supply `KernelInvariant` is subject reduction for
+the machine's configurations over `TV` values. Not derived; no obstruction verified.
+
+**Every route meets one step: the thaw of a frame's values.** At a resumption the continuation is
+re-run at a fresh lend. Its code is re-derived from its typing; its frames' values have to be read
+at the new lend with the fresh view (`FrameThawsD`).
+
+| route | status |
+|---|---|
+| (c) re-lend in the continuation relation (`KapRelR`) | positive (`kapRelR_mono`). Closes the case when the frames' values are typed (`uThaw_tv`) or hold no cell at the lend and have types free of `'x` (`uThaw_free`). At a `U` slot of the ordinary relation it needs exactly `URelend` (`frameThawsD_thunk_iff`). Not derived; no obstruction verified |
+| (a) a bridge from the pure piece's typing | the same step: the piece passes `f`'s stops through, but its frame values are re-lent at each resumption |
+| (b) re-lendable by construction (`vRL`, `cRL`) | supplies `URelend`'s conclusion by definition; `CloL` is its `U` clause (`cloL_of_vRL`). Positive: structural recursion on types. Its fundamental lemma is work, not attempted |
+
+The case left by (a) and (c) is a `U` value of the ordinary relation that holds the lend's cell
+(`capture_hides_lend`: the type need not mention `'x`) or whose type mentions `'x`. For it,
+`ptoMutS ℓ α` does not hold of the fresh cell at `α′ ⊏ α`, so the reading at `α′` is a fresh-lend
+naturality of `wpTS` at `U` (`Restrat`'s `WpNatural`, open). (c) without (b) therefore needs the
+frames of pure pieces to hold `TV` values: `KernelInvariant` extended from answers to frames.
+
+**The T15 tripwire is not reached.** `vRL`/`cRL` recur on strictly smaller types, the argument
+relation negatively at `A → C`, so there is no domain equation of `no_negative_domain`'s shape.
+The shape #262 named is an inductive `TV` carrying its closures' borrower readings, with `TV`
+negative in its own constructor. `CloL` and `KapRelR` are not recursive.
 
 ### Step 4: the witness
 
