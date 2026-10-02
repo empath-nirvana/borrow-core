@@ -1,0 +1,34 @@
+-- `corpus/aff-depth.bc` under K1, E1 and B1. Scopes: `'w` and the reborrow `'v`, the two the
+-- program is about (was `'x`, `'y`, `'w`, `'v`, with a cell `d`). `boxed[…]`: none (was 2).
+
+include aff
+
+fn counter<'c>(start: i32) -> box 'c Aff[i32, i32]<'c> =
+  aff_new_boxed[ref i32, i32, i32]['c](alloc(start), !thunkv fun (s : ref i32) ->
+    < fun (a : i32) ->
+        cx <- return (swap[i32, i32] s i32[0]);
+        let (c, x) = cx;
+        cu <- return (swap[i32, i32] c (x + a));
+        let (c1, u) = cu;
+        return (x + a, c1),
+      n <- return (free[i32] s); return () >)
+
+fn inner<'a, 'c>(m: mut 'a (box 'c Aff[i32, i32]<'c>), k: i32) -> mut 'a (box 'c Aff[i32, i32]<'c>) * i32 =
+  aff_call_mut(m, k)
+
+fn middle<'a, 'c>(m: mut 'a (box 'c Aff[i32, i32]<'c>), k: i32) -> mut 'a (box 'c Aff[i32, i32]<'c>) * i32 =
+  let (m, x) = inner(m, k);
+  let (m, y) = inner(m, k + 1);
+  (m, x * 100 + y)
+
+fn outer<'a, 'c>(m: mut 'a (box 'c Aff[i32, i32]<'c>)) -> i32 =
+  let x = borrow mut m { 'v, n -> let (n, x) = middle(n, 1); x };
+  let (m, y) = middle(m, 3);
+  x * 10000 + y
+
+main -> i32 =
+  let c = alloc(counter(0));
+  let t = borrow mut c { 'w, m -> outer(m) };
+  let k = free(c);
+  aff_close(k);
+  t

@@ -1,0 +1,26 @@
+-- `corpus/aff-counter.bc` under K1, E1 and B1. Scopes: `'w`, the borrow the program is about
+-- (was `'x`, `'y`, `'w`, with a cell `d` allocated for `'x`). `boxed[…]`: none (was 2).
+
+include aff
+
+fn counter<'c>(start: i32) -> box 'c Aff[i32, i32]<'c> =
+  aff_new_boxed[ref i32, i32, i32]['c](alloc(start), !thunkv fun (s : ref i32) ->
+    < fun (a : i32) ->
+        cx <- return (swap[i32, i32] s i32[0]);
+        let (c, x) = cx;
+        cu <- return (swap[i32, i32] c (x + a));
+        let (c1, u) = cu;
+        return (x + a, c1),
+      n <- return (free[i32] s); return () >)
+
+fn twice<'a, 'c>(m: mut 'a (box 'c Aff[i32, i32]<'c>)) -> mut 'a (box 'c Aff[i32, i32]<'c>) * i32 =
+  let (m, x) = aff_call_mut(m, 1);
+  let (m, y) = aff_call_mut(m, 2);
+  (m, x + y)
+
+main -> i32 =
+  let c = alloc(counter(10));                                  -- 'c = dom, main's lifetime (E1)
+  let t = borrow mut c { 'w, m -> let (m, t) = twice(m); t };  -- box 'c … ⊐ dom (K1)
+  let k = free(c);
+  aff_close(k);
+  t

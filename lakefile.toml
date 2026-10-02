@@ -154,3 +154,8 @@ roots = ["SecondClass"]
 name = "EffModel"
 srcDir = "experiments/EffModel"
 roots = ["EffModel"]
+
+[[lean_lib]]
+name = "Outlives"
+srcDir = "experiments/Outlives"
+roots = ["Outlives"]

@@ -1,0 +1,32 @@
+-- `corpus/aff-drop.bc` under K1, E1 and B1. Scopes: none (was `'x` and `'y`, with a cell `d`).
+-- `boxed[…]`: 2, in `nest` (was 4). `nest` bounds its closure by the bound `'c` of the closure it
+-- holds (K1); it keeps `aff_new` and its two `boxed['c]`, because B1's bound is strict, and
+-- `aff_new_boxed` at `S = box 'q …` bounds its own lifetime strictly below `'q`
+-- (`docs/outlives-strictness.md` §4).
+
+include aff
+
+fn counter<'c>(start: i32) -> box 'c Aff[i32, i32]<'c> =
+  aff_new_boxed[ref i32, i32, i32]['c](alloc(start), !thunkv fun (s : ref i32) ->
+    < fun (a : i32) ->
+        cx <- return (swap[i32, i32] s i32[0]);
+        let (c, x) = cx;
+        cu <- return (swap[i32, i32] c (x + a));
+        let (c1, u) = cu;
+        return (x + a, c1),
+      n <- return (free[i32] s); return () >)
+
+fn nest<'c>(k: box 'c Aff[i32, i32]<'c>) -> box 'c Aff[i32, i32]<'c> =
+  boxed['c] aff_new[box 'c Aff[i32, i32]<'c>, i32, i32]['c](k, !thunkv fun (s : box 'c Aff[i32, i32]<'c>) ->
+    < fun (a : i32) ->
+        p <- return (aff_call(s, a));
+        let (b, r) = p;
+        return (b, boxed['c] r),
+      return (aff_close(s)) >)
+
+main -> i32 =
+  let k = counter(7);
+  let k2 = counter(1);
+  let (a, k2) = aff_call(k2, 2);
+  let o = nest(counter(5));
+  a

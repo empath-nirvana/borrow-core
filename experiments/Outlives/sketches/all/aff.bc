@@ -1,0 +1,31 @@
+-- `lib/aff.bc` under B1: one more constructor, `aff_new_boxed`, which boxes the closure and every
+-- rest at `'c` itself, so its step returns the state unboxed. Its bound `S: 'c` makes each
+-- instance's own `'c` lie below the lifetimes of `S` (`../../bc/capture-bounded.bc` is its
+-- instance at `S = mut 'q i32`, checked). Unchecked: `where` is not syntax today.
+
+type Aff[A, B]<'c> = U (nu X. (A -o F (B * box 'c U X)) & F 1)
+
+fn aff_new[S, A, B]<'c>(s: S, step: !U (S -o (A -o F (B * box 'c S)) & F 1)) -> Aff[A, B]<'c> =
+  f <- return (unfold[nu X. (A -o F (B * box 'c U X)) & F 1, S] step);
+  thunkv nu_in < g <- return (unbang f); (nu_out (force g s)).1,
+                 g <- return (unbang f); (nu_out (force g s)).2 >
+
+-- A closure over the state `s` that outlives `'c`, from a step that returns the state as it is.
+fn aff_new_boxed[S, A, B]<'c>(s: S, step: !U (S -o (A -o F (B * S)) & F 1)) -> box 'c Aff[A, B]<'c>
+    where S: 'c =
+  boxed['c] aff_new[S, A, B]['c](s, !thunkv fun (s0 : S) ->
+    < fun (a : A) ->
+        g <- return (unbang step);
+        p <- (force g s0).1 a;
+        let (b, s1) = p;
+        return (b, boxed['c] s1),
+      g <- return (unbang step);
+      (force g s0).2 >)
+
+-- `aff_call`, `aff_call_mut`, `aff_close` and `aff_once` as in `lib/aff.bc`.
+
+-- Persistent ≤ affine, with no `boxed`.
+fn aff_of_fn[A, B]<'c>(h: !(A => B)) -> box 'c Aff[A, B]<'c> =
+  aff_new_boxed[!(A => B), A, B]['c](h, !thunkv fun (h : !(A => B)) ->
+    < fun (x : A) -> b <- return ((unbang h) x); return (b, h),
+      return () >)

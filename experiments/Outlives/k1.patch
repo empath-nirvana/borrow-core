@@ -1,0 +1,115 @@
+diff --git a/Core/AffPrograms.lean b/Core/AffPrograms.lean
+index efc38e4..48fbe24 100644
+--- a/Core/AffPrograms.lean
++++ b/Core/AffPrograms.lean
+@@ -173,7 +173,7 @@ theorem d_scopeBodyWith {Γ : Ctx VTy} {cb : Expr}
+     (.lolliE (split_kill _).toP (hcb (kill_dead _))
+       (.lolliE (split_kill' _).toP (.var (.here (.cons (.cons (.cons hΓ.toP)))))
+         (.withbor2 (A := PC) (B := .i32) 1 (kill_dead _).toP rfl
+-          ⟨.var 0, LifeCtx.defines_of_wf rfl, .box (BoCa.Programs.entailsLt_top rfl)⟩ (vfree_PC 1)
++          ⟨.var 0, LifeCtx.defines_of_wf rfl, .box (entailsLe_of_entailsLt (BoCa.Programs.entailsLt_top rfl))⟩ (vfree_PC 1)
+           (by simp [VFree])))) ?_
+   refine .bind (.right (.left (.dead (.dead (.dead (.dead (deadSplit hΓ)))))))
+     (.ret (.lolliE (split_kill' _).toP
+@@ -448,7 +448,7 @@ theorem outX_sound {A : VTy} (h : outX A = true) : VOutlives Δ₁ (.var 0) A :=
+   cases A with
+   | box b A =>
+       cases b with
+-      | top => exact .box (BoCa.Programs.entailsLt_top rfl)
++      | top => exact .box (entailsLe_of_entailsLt (BoCa.Programs.entailsLt_top rfl))
+       | _ => exact outlives_of_dataB (by simpa [outX] using h)
+   | _ => exact outlives_of_dataB (by simpa [outX] using h)
+ 
+@@ -483,7 +483,7 @@ theorem d_nestBody : CDerives Δ₁ ΓS nestBody (.comp (.ret (.box (.var 0) .i3
+   have hX : Δ₁.Defines (.var 0) := LifeCtx.defines_of_wf rfl
+   refine mkBoxC trivial hT (.ref .int)
+     (appP (d_i32 0 (by cdeadP)) (.alloc (by cdeadP))) (d_counterStep hT (kill_dead _)) ?_
+-  refine mkBoxC trivial hX (.box (BoCa.Programs.entailsLt_top rfl)) (.var (by csoloP)) ?_ ?_
++  refine mkBoxC trivial hX (.box (entailsLe_of_entailsLt (BoCa.Programs.entailsLt_top rfl))) (.var (by csoloP)) ?_ ?_
+   · -- the outer step
+     refine .bangThunkV (persistent_dead (kill_dead _)) rfl (.lam (.withI (.lam ?_) ?_))
+     · refine bindC (unboxC (by csoloP)
+diff --git a/Core/Embedding.lean b/Core/Embedding.lean
+index c12118d..c06a045 100644
+--- a/Core/Embedding.lean
++++ b/Core/Embedding.lean
+@@ -159,7 +159,10 @@ theorem vOutlives_cbv {Δ : LifeCtx} {a : Lifetime.Life} {T : Ty} (h : OutlivesR
+   | sum _ _ ih₁ ih₂ => exact .sum ih₁ ih₂
+   | ref _ ih => exact .ref ih
+   | bang => exact .bang
+-  | box h => exact .box h
++  | box h => exact .box (fun δ hδ => by
++      obtain ⟨m, n, hm, hn, hlt⟩ := h δ hδ
++      refine ⟨m, n, hm, hn, ?_⟩
++      simp only [Lifetime.SLife.Lt, Lifetime.SLife.Le] at hlt ⊢; omega)
+   | imm h => exact .imm h
+   | «mut» h => exact .mut h
+ 
+diff --git a/Core/RelationFacts.lean b/Core/RelationFacts.lean
+index 7d45cdb..3057a55 100644
+--- a/Core/RelationFacts.lean
++++ b/Core/RelationFacts.lean
+@@ -516,12 +516,12 @@ theorem vC_outlives {Δ : LifeCtx} {δ : LSub} {a : Lifetime.Life} {α : Life}
+       exact ResU.inStratum_empty α
+   | box c T =>
+       cases hT with
+-      | box hlt =>
++      | box hle =>
+           obtain ⟨β, hb, -, ho⟩ := h
+-          obtain ⟨α', β', ha', hb', hlt'⟩ := hlt δ hδ
++          obtain ⟨α', β', ha', hb', hle'⟩ := hle δ hδ
+           rw [ha] at ha'; cases Option.some.inj ha'
+           rw [hb] at hb'; cases Option.some.inj hb'
+-          exact ho.mono (le_of_lt (show (α : Life) < β from hlt'))
++          exact ho.mono (show (α : Life) ≤ β from hle')
+   | imm c T =>
+       cases hT with
+       | imm hlt =>
+diff --git a/Core/Types.lean b/Core/Types.lean
+index d5a694f..242f774 100644
+--- a/Core/Types.lean
++++ b/Core/Types.lean
+@@ -1732,7 +1732,7 @@ inductive VOutlives (Δ : LifeCtx) (a : Lifetime.Life) : VTy → Prop where
+   | sum {A B} : VOutlives Δ a A → VOutlives Δ a B → VOutlives Δ a (.sum A B)
+   | ref {A} : VOutlives Δ a A → VOutlives Δ a (.ref A)
+   | bang {A} : VOutlives Δ a (.bang A)
+-  | box {b A} : Δ.EntailsLt a b → VOutlives Δ a (.box b A)
++  | box {b A} : Δ.EntailsLe a b → VOutlives Δ a (.box b A)
+   | imm {b A} : Δ.EntailsLt a b → VOutlives Δ a (.imm b A)
+   | «mut» {b A} : Δ.EntailsLt a b → VOutlives Δ a (.mut b A)
+   /-- A type variable is read under its `μ`, whose body is checked with the variable
+@@ -1747,6 +1747,12 @@ inductive VOutlives (Δ : LifeCtx) (a : Lifetime.Life) : VTy → Prop where
+   /-- `Δ ⊢ [L] ⊐ @a` from `Δ ⊢ L ⊐ @a`.  `[spec §9]` -/
+   | fam {L} : VOutlives Δ a L → VOutlives Δ a (.fam L)
+ 
++theorem entailsLe_of_entailsLt {Δ : LifeCtx} {a b : Lifetime.Life} (h : Δ.EntailsLt a b) :
++    Δ.EntailsLe a b := fun δ hδ => by
++  obtain ⟨m, n, hm, hn, hlt⟩ := h δ hδ
++  refine ⟨m, n, hm, hn, ?_⟩
++  simp only [Lifetime.SLife.Lt, Lifetime.SLife.Le] at hlt ⊢; omega
++
+ theorem VOutlives.rename {Δ : LifeCtx} {a : Lifetime.Life} {A : VTy} (h : VOutlives Δ a A) :
+     ∀ r : Nat → Nat, VOutlives Δ a (A.rename r) := by
+   induction h with
+diff --git a/Frontend/Check/Decide.lean b/Frontend/Check/Decide.lean
+index b1079c7..219ce9a 100644
+--- a/Frontend/Check/Decide.lean
++++ b/Frontend/Check/Decide.lean
+@@ -467,7 +467,7 @@ def outlivesB (Δ : LifeCtx) (a : Lifetime.Life) : VTy → Bool
+   | .tensor A B => outlivesB Δ a A && outlivesB Δ a B
+   | .sum A B => outlivesB Δ a A && outlivesB Δ a B
+   | .ref A => outlivesB Δ a A
+-  | .box b _ => ltB Δ a b
++  | .box b _ => leB Δ a b
+   | .imm b _ => ltB Δ a b
+   | .mut b _ => ltB Δ a b
+   | .mu A => outlivesB Δ a A
+@@ -490,7 +490,7 @@ theorem outlivesB_sound (Δ : LifeCtx) (a : Lifetime.Life) :
+       simp only [outlivesB, Bool.and_eq_true] at h
+       exact .sum (outlivesB_sound Δ a A h.1) (outlivesB_sound Δ a B h.2)
+   | .ref A, h => .ref (outlivesB_sound Δ a A h)
+-  | .box _ _, h => .box (ltB_sound h)
++  | .box _ _, h => .box (leB_sound h)
+   | .imm _ _, h => .imm (ltB_sound h)
+   | .mut _ _, h => .mut (ltB_sound h)
+   | .mu A, h => .mu (outlivesB_sound Δ a A h)

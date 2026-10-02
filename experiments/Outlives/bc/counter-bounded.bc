@@ -1,0 +1,49 @@
+-- `corpus/aff-counter.bc` with the bounded `aff_new` (`docs/outlives-strictness.md` §4),
+-- elaborated by hand and checked by the unchanged checker. At `S = ref i32` the type argument has
+-- no lifetime, so the instance's bound is `top` and today's elaboration is already the bounded
+-- one: only the library's signature changes. `counter` then writes no `boxed`. The scopes are
+-- today's: `'x` and `'y` go only with the relaxations of §3 (`sketches/aff-counter.bc`).
+--
+-- Answer: i32[24], and `live 0`, as `corpus/aff-counter.bc`.
+
+include aff
+
+-- The instance of `aff_new_boxed` at `S = ref i32`, `A = B = i32`.
+fn aff_new_boxed__ref<'c>(s: ref i32, step: !U (ref i32 -o (i32 -o F (i32 * ref i32)) & F 1)) -> box 'c Aff[i32, i32]<'c> =
+  boxed['c] aff_new[ref i32, i32, i32]['c](s, !thunkv fun (s0 : ref i32) ->
+    < fun (a : i32) ->
+        g <- return (unbang step);
+        p <- (force g s0).1 a;
+        let (b, s1) = p;
+        return (b, boxed['c] s1),
+      g <- return (unbang step);
+      (force g s0).2 >)
+
+-- The counter, with no `boxed`.
+fn counter<'c>(start: i32) -> box 'c Aff[i32, i32]<'c> =
+  aff_new_boxed__ref ['c](alloc(start), !thunkv fun (s : ref i32) ->
+    < fun (a : i32) ->
+        cx <- return (swap[i32, i32] s i32[0]);
+        let (c, x) = cx;
+        cu <- return (swap[i32, i32] c (x + a));
+        let (c1, u) = cu;
+        return (x + a, c1),
+      n <- return (free[i32] s); return () >)
+
+fn twice<'a, 'c>(m: mut 'a (box 'c Aff[i32, i32]<'c>)) -> mut 'a (box 'c Aff[i32, i32]<'c>) * i32 =
+  let (m, x) = aff_call_mut(m, 1);
+  let (m, y) = aff_call_mut(m, 2);
+  (m, x + y)
+
+main -> i32 =
+  let d = alloc(0);
+  let r = borrow mut d { 'x, e ->
+    let c = alloc(counter ['x](10));
+    let (c, t) = borrow mut e { 'y, e2 ->
+      let t = borrow mut c { 'w, m -> let (m, t) = twice(m); t };
+      (c, t) };
+    let k = free(c);
+    aff_close(k);
+    t
+  };
+  free(d) + r
