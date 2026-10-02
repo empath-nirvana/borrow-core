@@ -221,15 +221,15 @@ def VR : (A : VTy S) → W → A.den → A.den → Prop
       | .inl a, .inl a' => VR A w a a'
       | .inr b, .inr b' => VR B w b b'
       | _, _ => False
-  | .U _ C, w, c, c' => CRU C w.gcP c c'
+  | .U _ _ C, w, c, c' => CRU C w.gcP c c'
   | .cap _ _, w, c, c' => w.r c.1 c'.1 ∧ ∀ w', w.gcP.le w' → ∀ o a st,
       TreeRel (fun _ x x' => x = x') w' (c.2 o a st) (c'.2 o a st)
   | .res, w, x, x' => x.1 = x'.1 ∧ w.r x.2 x'.2
-  | .strm A, w, s, s' => StrmRel (fun w a a' => VR A w a a') w.gcP s s'
+  | .strm _ A, w, s, s' => StrmRel (fun w a a' => VR A w a a') w.gcP s s'
 
 def CRU : (C : CTy S) → W → C.den → C.den → Prop
   | .F A, w, t, t' => TreeRel (fun w a a' => VR A w a a') w t t'
-  | .arr A C, w, f, f' => ∀ w', w.le w' → ∀ a a', VR A w' a a' → CRU C w' (f a) (f' a')
+  | .arr A _ C, w, f, f' => ∀ w', w.le w' → ∀ a a', VR A w' a a' → CRU C w' (f a) (f' a')
   | .wth C D, w, p, p' => CRU C w p.1 p'.1 ∧ CRU D w p.2 p'.2
   | .pi _ C, w, f, f' => ∀ w', w.le w' → ∀ i i', w'.r i i' → CRU C w' (f i) (f' i')
 end
@@ -246,13 +246,13 @@ theorem VR.mono : (A : VTy S) → ∀ {w w' : W} {a a' : A.den}, w.sub w' → VR
       | .inr _, .inr _ => exact VR.mono B hw h
       | .inl _, .inr _ => exact h.elim
       | .inr _, .inl _ => exact h.elim
-  | .U _ C, _, _, _, _, hw, h => by unfold VR at h ⊢; exact CRU.mono C hw h
+  | .U _ _ C, _, _, _, _, hw, h => by unfold VR at h ⊢; exact CRU.mono C hw h
   | .cap _ _, _, _, _, _, hw, h => by
       unfold VR at h ⊢
       exact ⟨W.gcP_r.1 (hw.r _ _ (W.gcP_r.2 h.1)), fun w'' h2 => h.2 w'' (W.le.trans hw h2)⟩
   | .res, _, _, _, _, hw, h => by
       unfold VR at h ⊢; exact ⟨h.1, W.gcP_r.1 (hw.r _ _ (W.gcP_r.2 h.2))⟩
-  | .strm A, _, _, _, _, hw, h => by
+  | .strm _ A, _, _, _, _, hw, h => by
       unfold VR at h ⊢
       exact StrmRel.mono (RA := fun w a a' => VR A w a a') (fun _ _ _ _ h1 h2 => VR.mono A h1.sub h2) h _ hw
 
@@ -261,7 +261,7 @@ theorem CRU.mono : (C : CTy S) → ∀ {w w' : W} {c c' : C.den}, w.le w' → CR
   | .F A, _, _, _, _, hw, h => by
       unfold CRU at h ⊢
       exact TreeRel.mono (R := fun w a a' => VR A w a a') (fun _ _ _ _ h1 h2 => VR.mono A h1.sub h2) h _ hw
-  | .arr _ _, _, _, _, _, hw, h => by
+  | .arr _ _ _, _, _, _, _, hw, h => by
       unfold CRU at h ⊢; exact fun w'' h2 a a' ha => h w'' (W.le.trans hw h2) a a' ha
   | .wth C D, _, _, _, _, hw, h => by
       unfold CRU at h ⊢; exact ⟨CRU.mono C hw h.1, CRU.mono D hw h.2⟩

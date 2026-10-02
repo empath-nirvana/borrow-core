@@ -46,6 +46,11 @@ abbrev σ : Sig where
     | .log => Mode.lin | .inc => Mode.lin | .get => Mode.lin | .yield => Mode.aff
     | .choose => Mode.unr
   aarg := fun _ _ => .unit
+  bnd := fun e => match e with
+    | .log => Mode.lin | .fail => Mode.aff | .ctr => Mode.lin | .yld => Mode.aff
+    | .choose => Mode.unr
+  bnd_q := by intro e o; cases o <;> rfl
+  bnd_ab := by intro e a; cases a; rfl
 
 variable {Ψ : List Eff} {Γ : List (VTy σ)}
 
@@ -63,28 +68,28 @@ def tUnit : VTy σ := .g .unit
 
 /-- `Log` printed to the world, `κ` resumed in place. -/
 def printOps {Γ : List (VTy σ)} {C : CTy σ} : (o : Op .log) →
-    M Ψ (kty (σ.q .log o) (σ.res .log o) C :: .g (σ.arg .log o) :: Γ) C
+    M Ψ (kty (σ.q .log o) Eb.top (σ.res .log o) C :: .g (σ.arg .log o) :: Γ) C
   | .log => .bind (.emit v1) (.app (.force v1) .unit)
 
 /-- `Log` as a writer: a handler into `int → F (A × int)`. -/
 def writerOps {Γ : List (VTy σ)} {A : VTy σ} : (o : Op .log) →
-    M Ψ (kty (σ.q .log o) (σ.res .log o) (.arr tInt (.F (.prod A tInt))) :: .g (σ.arg .log o) :: Γ)
-      (.arr tInt (.F (.prod A tInt)))
+    M Ψ (kty (σ.q .log o) Eb.top (σ.res .log o) (.arr tInt Eb.top (.F (.prod A tInt))) :: .g (σ.arg .log o) :: Γ)
+      (.arr tInt Eb.top (.F (.prod A tInt)))
   | .log => .lam (.bind (.prim .add v0 v2) (.app (.app (.force v2) .unit) v0))
 
-def writerRet {Γ : List (VTy σ)} {A : VTy σ} : M Ψ (A :: Γ) (.arr tInt (.F (.prod A tInt))) :=
+def writerRet {Γ : List (VTy σ)} {A : VTy σ} : M Ψ (A :: Γ) (.arr tInt Eb.top (.F (.prod A tInt))) :=
   .lam (.ret (.pair v1 v0))
 
 /-- Run `M` under a writer `Log` from 0: its answer and the total logged. -/
 def writer {A : VTy σ} (N : M (.log :: Ψ) Γ (.F A)) : M Ψ Γ (.F (.prod A tInt)) :=
-  .app (.handle .log writerRet writerOps (fun a => nomatch a) N) (.int 0)
+  .app (.handle .log Eb.top writerRet writerOps (fun a => nomatch a) N) (.int 0)
 
 /-- `Fail` to a default. -/
 def failDefault {A : VTy σ} (d : V Ψ Γ A) (N : M (.fail :: Ψ) Γ (.F A)) : M Ψ Γ (.F A) :=
-  .handle .fail (.ret v0) (fun o => nomatch o) (fun _ => .ret (d.wk)) N
+  .handle .fail Eb.top (.ret v0) (fun o => nomatch o) (fun _ => .ret (d.wk)) N
 
 def printLog {A : VTy σ} (N : M (.log :: Ψ) Γ (.F A)) : M Ψ Γ (.F A) :=
-  .handle .log (.ret v0) printOps (fun a => nomatch a) N
+  .handle .log Eb.top (.ret v0) printOps (fun a => nomatch a) N
 
 def raise (f : Var Ψ .fail) : M Ψ Γ C := .ab f .raise .unit
 def logm (l : Var Ψ .log) (m : Int) (N : M Ψ (tUnit :: Γ) C) : M Ψ Γ C := .op l .log (.int m) N
@@ -92,14 +97,15 @@ def logm (l : Var Ψ .log) (m : Int) (N : M Ψ (tUnit :: Γ) C) : M Ψ Γ C := .
 /-! ## Absorption: `log m; raise ≡ raise` inside a writer -/
 
 theorem writer_pure {Ψ : List Eff} {Γ : List (VTy σ)} {A : VTy σ} :
-    PureClause (S := σ) (Ψ := Ψ) (Γ := Γ) (e := .log) Op.log (writerOps (A := A) Op.log)
+    PureClause (S := σ) (Ψ := Ψ) (Γ := Γ) (e := .log) (bA := Eb.top) (bh := Eb.top) Op.log
+      (writerOps (A := A) Op.log)
       (fun _ => ()) (fun v s => (show Int from s) + (show Int from v)) := by
   intro η ρ v k d; rfl
 
 /-- Inside a writer `Log`, under any `Fail` handler: `log m; raise ≡ raise`. -/
 theorem absorb_writer (f : Var Ψ .fail) (m : Int) :
     CtxEq (Γ := Γ) (writer (A := tInt) (logm .z m (raise (.s f)))) (writer (raise (.s f))) :=
-  absorb_pure (S := σ) (e := .log) (f := .fail) (by decide) writerRet writerOps
+  absorb_pure (S := σ) (e := .log) (f := .fail) (bh := Eb.top) (bA := Eb.top) (by decide) writerRet writerOps
     (fun a => nomatch a) Op.log writer_pure m f Ab.raise () (.int 0)
 
 /-! ## Observations of closed programs -/
@@ -174,8 +180,8 @@ resumes twice keeps the predicate of the first run and the function of the secon
 one to the other: on the left both runs share `b` (true); on the right each run has its own
 (false). -/
 
-def predT : VTy σ := .U Mode.unr (.pi .log (.F (.g .bool)))
-def appT : VTy σ := .U Mode.unr (.arr predT (.F (.g .bool)))
+def predT : VTy σ := .U Mode.unr Eb.top (.pi .log (.F (.g .bool)))
+def appT : VTy σ := .U Mode.unr Eb.top (.arr predT Eb.top (.F (.g .bool)))
 
 /-- The two closures over `b` (instance index 0). -/
 def twoClosures {Γ : List (VTy σ)} : M [.log, .choose] Γ (.F (.prod predT appT)) :=
@@ -190,7 +196,7 @@ def nuOpR : M [.choose] [] (.F (.prod predT appT)) :=
 
 /-- Resume twice; keep the first run's predicate and the second run's function. -/
 def chooseOps {Γ : List (VTy σ)} : (o : Op .choose) →
-    M Ψ (kty (σ.q .choose o) (σ.res .choose o) (.F (.prod predT appT)) :: .g (σ.arg .choose o) :: Γ)
+    M Ψ (kty (σ.q .choose o) Eb.top (σ.res .choose o) (.F (.prod predT appT)) :: .g (σ.arg .choose o) :: Γ)
       (.F (.prod predT appT))
   | .choose =>
       .bind (.app (.prj1 (.force v0)) (.bool true))
@@ -199,7 +205,7 @@ def chooseOps {Γ : List (VTy σ)} : (o : Op .choose) →
 
 /-- The context: handle the hole's instance with `chooseOps`, then apply. -/
 def nuOpCtx : Context σ [.choose] [] (.F (.prod predT appT)) .bool :=
-  .bind (.handle .choose (.ret v0) chooseOps (fun a => nomatch a) (.iapp (.force v0) .z))
+  .bind (.handle .choose Eb.top (.ret v0) chooseOps (fun a => nomatch a) (.iapp (.force v0) .z))
     (.split v0 (.app (.force v0) v1))
 
 theorem nuOp_obs : nuOpCtx.obs nuOpL.den = ⟨.ret (.bool true), []⟩ ∧

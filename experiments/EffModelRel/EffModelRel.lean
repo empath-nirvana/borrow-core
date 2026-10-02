@@ -11,3 +11,4 @@ import EffModelRel.Rename
 import EffModelRel.Laws
 import EffModelRel.Tensor
 import EffModelRel.Examples
+import EffModelRel.Own

@@ -18,8 +18,8 @@ variable {S : Sig}
 theorem CRU_F {A : VTy S} {w : W} {t t' : (CTy.F A).den} :
     CRU (.F A) w t t' ↔ TreeRel (fun w a a' => VR A w a a') w t t' := by simp only [CRU]
 
-theorem CRU_arr {A : VTy S} {C : CTy S} {w : W} {f f' : (CTy.arr A C).den} :
-    CRU (.arr A C) w f f' ↔ ∀ w', w.le w' → ∀ a a', VR A w' a a' → CRU C w' (f a) (f' a') := by
+theorem CRU_arr {A : VTy S} {b : Eb} {C : CTy S} {w : W} {f f' : (CTy.arr A b C).den} :
+    CRU (.arr A b C) w f f' ↔ ∀ w', w.le w' → ∀ a a', VR A w' a a' → CRU C w' (f a) (f' a') := by
   simp only [CRU]
 
 theorem CRU_wth {C D : CTy S} {w : W} {p p' : (CTy.wth C D).den} :
@@ -47,8 +47,8 @@ theorem VR_inl_inr {A B : VTy S} {w : W} {a : A.den} {b : B.den} :
 theorem VR_inr_inl {A B : VTy S} {w : W} {a : A.den} {b : B.den} :
     ¬ VR (.sum A B) w (.inr b) (.inl a) := by simp only [VR]; exact id
 
-theorem VR_U {m : Mode} {C : CTy S} {w : W} {c c' : C.den} :
-    VR (.U m C) w c c' ↔ CRU C w.gcP c c' := by simp only [VR]
+theorem VR_U {m : Mode} {b : Eb} {C : CTy S} {w : W} {c c' : C.den} :
+    VR (.U m b C) w c c' ↔ CRU C w.gcP c c' := by simp only [VR]
 
 theorem VR_cap {e : S.E} {s : G} {w : W} {c c' : (VTy.cap (S := S) e s).den} :
     VR (.cap e s) w c c' ↔ w.r c.1 c'.1 ∧ ∀ w', w.gcP.le w' → ∀ o a st,
@@ -57,12 +57,12 @@ theorem VR_cap {e : S.E} {s : G} {w : W} {c c' : (VTy.cap (S := S) e s).den} :
 theorem VR_res {w : W} {x x' : (VTy.res (S := S)).den} :
     VR .res w x x' ↔ x.1 = x'.1 ∧ w.r x.2 x'.2 := by simp only [VR]
 
-theorem VR_strm {A : VTy S} {w : W} {s s' : (VTy.strm A).den} :
-    VR (.strm A) w s s' ↔ StrmRel (fun w a a' => VR A w a a') w.gcP s s' := by simp only [VR]
+theorem VR_strm {A : VTy S} {b : Eb} {w : W} {s s' : (VTy.strm b A).den} :
+    VR (.strm b A) w s s' ↔ StrmRel (fun w a a' => VR A w a a') w.gcP s s' := by simp only [VR]
 
 /-- On a world with nothing pending, a thunk's relation is its computation's. -/
-theorem VR_U_noPend {m : Mode} {C : CTy S} {w : W} (hw : w.noPend) {c c' : C.den} :
-    VR (.U m C) w c c' ↔ CRU C w c c' :=
+theorem VR_U_noPend {m : Mode} {b : Eb} {C : CTy S} {w : W} (hw : w.noPend) {c c' : C.den} :
+    VR (.U m b C) w c c' ↔ CRU C w c c' :=
   ⟨fun h => CRU.mono C (W.gcP_le w hw) (VR_U.1 h), fun h => VR_U.2 (CRU.mono C (W.le_gcP w hw) h)⟩
 
 theorem W.sub.r' {w w' : W} (h : w.sub w') {a b : Nat} (hr : w.r a b) : w'.r a b :=
@@ -78,7 +78,7 @@ theorem opA_rel : (C : CTy S) → ∀ {w : W} {i i' : Nat} {e : S.E} {o : S.O e}
     CRU C w (C.opA i e o v k d) (C.opA i' e o v k' d')
   | .F _, _, _, _, _, _, _, _, _, _, _, hp, hi, hd, hk => by
       rw [CRU_F]; exact .op hp hi hd (fun y => CRU_F.1 (hk y))
-  | .arr _ C, _, _, _, _, _, _, _, _, _, _, hp, hi, hd, hk => by
+  | .arr _ _ C, _, _, _, _, _, _, _, _, _, _, hp, hi, hd, hk => by
       rw [CRU_arr]; intro w' hw a a' ha
       exact opA_rel C (hw.noPend' hp) (hw.r _ _ hi) (hd.mono hw.r)
         (fun y => CRU_arr.1 (hk y) w' hw a a' ha)
@@ -95,7 +95,7 @@ theorem abA_rel : (C : CTy S) → ∀ {w : W} {i i' : Nat} {e : S.E} {a : S.A e}
     {v : (S.aarg e a).den} {d d' : List Dtor},
     w.noPend → w.r i i' → DR w d d' → CRU C w (C.abA i e a v d) (C.abA i' e a v d')
   | .F _, _, _, _, _, _, _, _, _, hp, hi, hd => by rw [CRU_F]; exact .ab hp hi hd
-  | .arr _ C, _, _, _, _, _, _, _, _, hp, hi, hd => by
+  | .arr _ _ C, _, _, _, _, _, _, _, _, hp, hi, hd => by
       rw [CRU_arr]; intro w' hw _ _ _
       exact abA_rel C (hw.noPend' hp) (hw.r _ _ hi) (hd.mono hw.r)
   | .wth C D, _, _, _, _, _, _, _, _, hp, hi, hd => by
@@ -107,7 +107,7 @@ theorem abA_rel : (C : CTy S) → ∀ {w : W} {i i' : Nat} {e : S.E} {a : S.A e}
 theorem actA_rel : (C : CTy S) → ∀ {w : W} {g : G} {a a' : Act g} {k k' : g.den → C.den},
     AR w a a' → (∀ y, CRU C w (k y) (k' y)) → CRU C w (C.actA a k) (C.actA a' k')
   | .F _, _, _, _, _, _, _, ha, hk => by rw [CRU_F]; exact .act ha (fun y => CRU_F.1 (hk y))
-  | .arr _ C, _, _, _, _, _, _, ha, hk => by
+  | .arr _ _ C, _, _, _, _, _, _, ha, hk => by
       rw [CRU_arr]; intro w' hw x x' hx
       exact actA_rel C (ha.mono hw.r) (fun y => CRU_arr.1 (hk y) w' hw x x' hx)
   | .wth C D, _, _, _, _, _, _, ha, hk => by
@@ -122,7 +122,7 @@ theorem nuA_both : (C : CTy S) → ∀ {w : W} {k k' : Nat → C.den},
     (∀ i i' (hi : w.sl i = .free) (hi' : w.sr i' = .free), CRU C (w.both i i' hi hi') (k i) (k' i')) →
     CRU C w (C.nuA k) (C.nuA k')
   | .F _, _, _, _, hk => by rw [CRU_F]; exact .nu (fun i i' hi hi' => CRU_F.1 (hk i i' hi hi'))
-  | .arr A C, _, _, _, hk => by
+  | .arr A _ C, _, _, _, hk => by
       rw [CRU_arr]; intro w' hw a a' ha
       exact nuA_both C (fun i i' hi hi' => CRU_arr.1 (hk i i' (hw.fl i hi) (hw.fr i' hi'))
         _ (W.le_both hw _ _ _ _) a a' (VR.mono A (W.sub_both _ _ _ _ _) ha))
@@ -138,7 +138,7 @@ theorem nuA_both : (C : CTy S) → ∀ {w : W} {k k' : Nat → C.den},
 theorem nuA_L : (C : CTy S) → ∀ {w : W} {k : Nat → C.den} {c' : C.den},
     (∀ i (hi : w.sl i = .free), CRU C (w.pendL i hi) (k i) c') → CRU C w (C.nuA k) c'
   | .F _, _, _, _, hk => by rw [CRU_F]; exact .nuL (fun i hi => CRU_F.1 (hk i hi))
-  | .arr A C, _, _, _, hk => by
+  | .arr A _ C, _, _, _, hk => by
       rw [CRU_arr]; intro w' hw a a' ha
       exact nuA_L C (fun i hi => CRU_arr.1 (hk i (hw.fl i hi)) _ (W.le_pendL hw _ _) a a'
         (VR.mono A (W.sub_pendL _ _ _) ha))
@@ -154,7 +154,7 @@ theorem nuA_L : (C : CTy S) → ∀ {w : W} {k : Nat → C.den} {c' : C.den},
 theorem nuA_R : (C : CTy S) → ∀ {w : W} {c : C.den} {k' : Nat → C.den},
     (∀ i' (hi' : w.sr i' = .free), CRU C (w.pendR i' hi') c (k' i')) → CRU C w c (C.nuA k')
   | .F _, _, _, _, hk => by rw [CRU_F]; exact .nuR (fun i hi => CRU_F.1 (hk i hi))
-  | .arr A C, _, _, _, hk => by
+  | .arr A _ C, _, _, _, hk => by
       rw [CRU_arr]; intro w' hw a a' ha
       exact nuA_R C (fun i hi => CRU_arr.1 (hk i (hw.fr i hi)) _ (W.le_pendR hw _ _) a a'
         (VR.mono A (W.sub_pendR _ _ _) ha))
@@ -170,7 +170,7 @@ theorem nuA_R : (C : CTy S) → ∀ {w : W} {c : C.den} {k' : Nat → C.den},
 theorem nuA_gL : (C : CTy S) → ∀ {w : W} {k : Nat → C.den} {c' : C.den},
     (∀ i (hi : w.sl i = .free), CRU C (w.garbL i hi) (k i) c') → CRU C w (C.nuA k) c'
   | .F _, _, _, _, hk => by rw [CRU_F]; exact .gL (fun i hi => CRU_F.1 (hk i hi))
-  | .arr A C, _, _, _, hk => by
+  | .arr A _ C, _, _, _, hk => by
       rw [CRU_arr]; intro w' hw a a' ha
       exact nuA_gL C (fun i hi => CRU_arr.1 (hk i (hw.fl i hi)) _ (W.le_garbL hw _ _) a a'
         (VR.mono A (W.sub_garbL _ _ _) ha))
@@ -186,7 +186,7 @@ theorem nuA_gL : (C : CTy S) → ∀ {w : W} {k : Nat → C.den} {c' : C.den},
 theorem nuA_gR : (C : CTy S) → ∀ {w : W} {c : C.den} {k' : Nat → C.den},
     (∀ i' (hi' : w.sr i' = .free), CRU C (w.garbR i' hi') c (k' i')) → CRU C w c (C.nuA k')
   | .F _, _, _, _, hk => by rw [CRU_F]; exact .gR (fun i hi => CRU_F.1 (hk i hi))
-  | .arr A C, _, _, _, hk => by
+  | .arr A _ C, _, _, _, hk => by
       rw [CRU_arr]; intro w' hw a a' ha
       exact nuA_gR C (fun i hi => CRU_arr.1 (hk i (hw.fr i hi)) _ (W.le_garbR hw _ _) a a'
         (VR.mono A (W.sub_garbR _ _ _) ha))
@@ -203,7 +203,7 @@ theorem nuA_mL : (C : CTy S) → ∀ {w : W} {i' : Nat} (hi' : w.sr i' = .p) {k 
     {c' : C.den}, (∀ i (hi : w.sl i = .free), CRU C (w.matchL i i' hi hi') (k i) c') →
     CRU C w (C.nuA k) c'
   | .F _, _, _, hi', _, _, hk => by rw [CRU_F]; exact .mL hi' (fun i hi => CRU_F.1 (hk i hi))
-  | .arr A C, _, _, hi', _, _, hk => by
+  | .arr A _ C, _, _, hi', _, _, hk => by
       rw [CRU_arr]; intro w' hw a a' ha
       exact nuA_mL C (hw.pR hi') (fun i hi => CRU_arr.1 (hk i (hw.fl i hi)) _
         (W.le_matchL hw _ _ _ _) a a' (VR.mono A (W.sub_matchL _ _ _ _ _) ha))
@@ -221,7 +221,7 @@ theorem nuA_mR : (C : CTy S) → ∀ {w : W} {i : Nat} (hi : w.sl i = .p) {c : C
     {k' : Nat → C.den}, (∀ i' (hi' : w.sr i' = .free), CRU C (w.matchR i' i hi' hi) c (k' i')) →
     CRU C w c (C.nuA k')
   | .F _, _, _, hi, _, _, hk => by rw [CRU_F]; exact .mR hi (fun i hi => CRU_F.1 (hk i hi))
-  | .arr A C, _, _, hi, _, _, hk => by
+  | .arr A _ C, _, _, hi, _, _, hk => by
       rw [CRU_arr]; intro w' hw a a' ha
       exact nuA_mR C (hw.pL hi) (fun i' hi' => CRU_arr.1 (hk i' (hw.fr i' hi')) _
         (W.le_matchR hw _ _ _ _) a a' (VR.mono A (W.sub_matchR _ _ _ _ _) ha))
@@ -302,8 +302,8 @@ theorem addFin_dtors (ℓ r : Nat) (d : List Dtor) (t : Tree S X) :
   | nil => rfl
   | cons δ d ih => simp only [Tree.dtors, Tree.addFin, ih]
 
-theorem dtorsA_arr {A : VTy S} {C : CTy S} (d : List Dtor) (g : (CTy.arr A C).den) :
-    (CTy.arr A C).dtorsA d g = fun x => C.dtorsA d (g x) := by
+theorem dtorsA_arr {A : VTy S} {b : Eb} {C : CTy S} (d : List Dtor) (g : (CTy.arr A b C).den) :
+    (CTy.arr A b C).dtorsA d g = fun x => C.dtorsA d (g x) := by
   induction d with
   | nil => rfl
   | cons δ d ih => simp only [CTy.dtorsA, CTy.actA, ih]; rfl
@@ -326,7 +326,7 @@ theorem abA_dtors_rel : (C : CTy S) → ∀ {w : W} {i i' : Nat} {e : S.E} {a : 
     CRU C w (C.abA i e a v (d ++ f)) (C.dtorsA d' (C.abA i' e a v f'))
   | .F _, _, _, _, _, _, _, _, _, _, _, hp, hi, hd, hf => by
       rw [dtorsA_F]; exact CRU_F.2 (.abE hp hi hd hf)
-  | .arr _ C, _, _, _, _, _, _, _, _, _, _, hp, hi, hd, hf => by
+  | .arr _ _ C, _, _, _, _, _, _, _, _, _, _, hp, hi, hd, hf => by
       rw [dtorsA_arr]
       refine CRU_arr.2 (fun w' hw _ _ _ => ?_)
       exact abA_dtors_rel C (hw.noPend' hp) (hw.r _ _ hi) (hd.mono hw.r) (hf.mono hw.r)

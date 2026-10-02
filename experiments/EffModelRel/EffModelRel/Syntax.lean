@@ -65,8 +65,26 @@ structure Sig where
   /-- The continuation qualifier of a resuming operation. -/
   q : (e : E) → O e → Mode
   aarg : (e : E) → A e → G
+  /-- The bound of an effect's continuations: every qualifier, and affine if it may abort. -/
+  bnd : E → Mode := fun _ => Mode.unr
+  bnd_q : ∀ e o, (bnd e).ge (q e o) = true := by intro e o; simp [Mode.ge, Mode.unr]
+  bnd_ab : ∀ e (_ : A e), (bnd e).ge Mode.aff = true := by intro e _; simp [Mode.ge, Mode.unr]
 
 attribute [instance] Sig.deq
+
+/-- The bound of a computation's effects: the structural rules a handler of any operation it
+performs may apply to the continuation (`req`), and whether such a handler may keep it past the
+operation (`susp`). Phase A's `Bound`. -/
+structure Eb where
+  req : Mode
+  susp : Bool
+deriving DecidableEq, Repr
+
+namespace Eb
+/-- Nothing, or only operations whose continuation is resumed once, in place. -/
+def bot : Eb := ⟨Mode.lin, false⟩
+def top : Eb := ⟨Mode.unr, true⟩
+end Eb
 
 mutual
 /-- Value types. -/
@@ -74,19 +92,21 @@ inductive VTy (S : Sig) : Type where
   | g (g : G)
   | prod (A B : VTy S)
   | sum (A B : VTy S)
-  /-- `U` at mode `m`: a suspended computation. -/
-  | U (m : Mode) (C : CTy S)
+  /-- `U` at mode `m`: a suspended computation; forcing it performs within `b`. -/
+  | U (m : Mode) (b : Eb) (C : CTy S)
   /-- An owned capability: a cell with state of type `s` and the co-operations of effect `e`. -/
   | cap (e : S.E) (s : G)
   /-- A handle on a resource owned by a `using` frame. -/
   | res
-  /-- A stored generator `μX. U(F(A + int × X) & F 1)`: pulled, or dropped. -/
-  | strm (A : VTy S)
+  /-- A stored generator `μX. U(F(A + int × X) & F 1)` whose pull performs within `b`: pulled, or
+  dropped. -/
+  | strm (b : Eb) (A : VTy S)
 
 /-- Computation types. -/
 inductive CTy (S : Sig) : Type where
   | F (A : VTy S)
-  | arr (A : VTy S) (C : CTy S)
+  /-- `A ⇒_b C`: after receiving its argument the function performs within `b`. -/
+  | arr (A : VTy S) (b : Eb) (C : CTy S)
   /-- A record of two methods, `C & D`. -/
   | wth (C D : CTy S)
   /-- `Πx:e. C`: a computation abstracted over an instance of `e`. -/
@@ -96,20 +116,23 @@ end
 variable {S : Sig}
 
 /-- The pull side of a stream: done with an `A`, or an element and the rest. -/
-abbrev VTy.step (A : VTy S) : VTy S := .sum A (.prod (.g .int) (.strm A))
+abbrev VTy.step (b : Eb) (A : VTy S) : VTy S := .sum A (.prod (.g .int) (.strm b A))
 
 /-- What a stream unfolds to: pull it, or drop it. -/
-abbrev VTy.strmBody (A : VTy S) : CTy S := .wth (.F A.step) (.F (.g .unit))
+abbrev VTy.strmBody (b : Eb) (A : VTy S) : CTy S := .wth (.F (A.step b)) (.F (.g .unit))
 
 /-- The type of a continuation captured at an operation of qualifier `q`, answer `r`, into
 `C`. A continuation that may be dropped (`q.w`) is the pair `⟨resume, cancel⟩`, linear unless it
 may also be duplicated; cancelling runs its destructors. One that may not be dropped is just
 `resume`, at mode `q`. -/
-def ktyB : Bool → Mode → G → CTy S → VTy S
-  | true, q, r, C => .U (if q.c then Mode.unr else Mode.lin) (.wth (.arr (.g r) C) (.F (.g .unit)))
-  | false, q, r, C => .U q (.arr (.g r) C)
+def ktyB : Bool → Mode → Eb → G → CTy S → VTy S
+  | true, q, b, r, C =>
+      .U (if q.c then Mode.unr else Mode.lin) Eb.bot (.wth (.arr (.g r) b C) (.F (.g .unit)))
+  | false, q, b, r, C => .U q Eb.bot (.arr (.g r) b C)
 
-abbrev kty (q : Mode) (r : G) (C : CTy S) : VTy S := ktyB q.w q r C
+/-- The continuation of an operation of qualifier `q` and answer `r`, into `C`, whose resumption
+performs within `b`. -/
+abbrev kty (q : Mode) (b : Eb) (r : G) (C : CTy S) : VTy S := ktyB q.w q b r C
 
 /-- A co-operation's answer: the operation's answer and the next state, or an error code and
 the state the capability keeps. -/
@@ -145,18 +168,18 @@ inductive Val (S : Sig) : List S.E → List (VTy S) → VTy S → Type where
   | pair : Val S Ψ Γ A → Val S Ψ Γ B → Val S Ψ Γ (.prod A B)
   | inl : Val S Ψ Γ A → Val S Ψ Γ (.sum A B)
   | inr : Val S Ψ Γ B → Val S Ψ Γ (.sum A B)
-  | thunk (m : Mode) : Cmp S Ψ Γ C → Val S Ψ Γ (.U m C)
+  | thunk (m : Mode) : Cmp S Ψ Γ C → Val S Ψ Γ (.U m b C)
   /-- Roll a stream from a linear thunk of its body. -/
-  | fold : Val S Ψ Γ (.U Mode.lin A.strmBody) → Val S Ψ Γ (.strm A)
+  | fold : Val S Ψ Γ (.U Mode.lin Eb.bot (A.strmBody b)) → Val S Ψ Γ (.strm b A)
 
 /-- Computations. -/
 inductive Cmp (S : Sig) : List S.E → List (VTy S) → CTy S → Type where
   | ret : Val S Ψ Γ A → Cmp S Ψ Γ (.F A)
   /-- `M to x. N`. -/
   | bind : Cmp S Ψ Γ (.F A) → Cmp S Ψ (A :: Γ) C → Cmp S Ψ Γ C
-  | lam : Cmp S Ψ (A :: Γ) C → Cmp S Ψ Γ (.arr A C)
-  | app : Cmp S Ψ Γ (.arr A C) → Val S Ψ Γ A → Cmp S Ψ Γ C
-  | force : Val S Ψ Γ (.U m C) → Cmp S Ψ Γ C
+  | lam : Cmp S Ψ (A :: Γ) C → Cmp S Ψ Γ (.arr A b C)
+  | app : Cmp S Ψ Γ (.arr A b C) → Val S Ψ Γ A → Cmp S Ψ Γ C
+  | force : Val S Ψ Γ (.U m b C) → Cmp S Ψ Γ C
   | rcd : Cmp S Ψ Γ C → Cmp S Ψ Γ D → Cmp S Ψ Γ (.wth C D)
   | prj1 : Cmp S Ψ Γ (.wth C D) → Cmp S Ψ Γ C
   | prj2 : Cmp S Ψ Γ (.wth C D) → Cmp S Ψ Γ D
@@ -176,13 +199,13 @@ inductive Cmp (S : Sig) : List S.E → List (VTy S) → CTy S → Type where
   /-- `ν x. handleAt x H M`: a fresh instance of `e` and a deep handler of it into `C`. A
   resuming clause binds the argument (index 1) and the continuation (index 0); an abortive
   clause binds the argument. -/
-  | handle (e : S.E) (hr : Cmp S Ψ (A :: Γ) C)
-      (hop : (o : S.O e) → Cmp S Ψ (kty (S.q e o) (S.res e o) C :: .g (S.arg e o) :: Γ) C)
+  | handle (e : S.E) (b : Eb) (hr : Cmp S Ψ (A :: Γ) C)
+      (hop : (o : S.O e) → Cmp S Ψ (kty (S.q e o) b (S.res e o) C :: .g (S.arg e o) :: Γ) C)
       (hab : (a : S.A e) → Cmp S Ψ (.g (S.aarg e a) :: Γ) C)
       (M : Cmp S (e :: Ψ) Γ (.F A)) : Cmp S Ψ Γ C
   /-- A deep handler of an instance already in scope. -/
-  | handleAt (x : Var Ψ e) (hr : Cmp S Ψ (A :: Γ) C)
-      (hop : (o : S.O e) → Cmp S Ψ (kty (S.q e o) (S.res e o) C :: .g (S.arg e o) :: Γ) C)
+  | handleAt (x : Var Ψ e) (b : Eb) (hr : Cmp S Ψ (A :: Γ) C)
+      (hop : (o : S.O e) → Cmp S Ψ (kty (S.q e o) b (S.res e o) C :: .g (S.arg e o) :: Γ) C)
       (hab : (a : S.A e) → Cmp S Ψ (.g (S.aarg e a) :: Γ) C)
       (M : Cmp S Ψ Γ (.F A)) : Cmp S Ψ Γ C
   /-- `ν x. M`: a fresh instance, handled by nobody yet. -/
@@ -206,11 +229,11 @@ inductive Cmp (S : Sig) : List S.E → List (VTy S) → CTy S → Type where
   | using (ℓ : Nat) : Cmp S Ψ (.res :: Γ) (.F A) → Cmp S Ψ Γ (.F A)
   | use : Val S Ψ Γ .res → Cmp S Ψ Γ (.F (.g .unit))
   /-- Unroll a stream. -/
-  | unfold : Val S Ψ Γ (.strm A) → Cmp S Ψ Γ A.strmBody
+  | unfold : Val S Ψ Γ (.strm b A) → Cmp S Ψ Γ (A.strmBody b)
   /-- Bounded recursion: `n` unrollings of `M` (the recursive thunk is index 0), then the
   abortive operation `a` on `x` (the kernel's `bounded_fix` and `Exhausted`). -/
   | bfix (x : Var Ψ e) (a : S.A e) (v : Val S Ψ Γ (.g (S.aarg e a))) (n : Nat) :
-      Cmp S Ψ (.U Mode.unr C :: Γ) C → Cmp S Ψ Γ C
+      Cmp S Ψ (.U Mode.unr b C :: Γ) C → Cmp S Ψ Γ C
 end
 
 end EffRel

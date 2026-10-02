@@ -45,7 +45,7 @@ lemmas about environments match them syntactically. -/
 def VTy.gv {g : G} (x : g.den) : (VTy.g (S := S) g).den := x
 def VTy.capv {e : S.E} {s : G} (c : Nat) (co : CoSem S e s) : (VTy.cap (S := S) e s).den := (c, co)
 def VTy.resv (ℓ r : Nat) : (VTy.res (S := S)).den := (ℓ, r)
-def VTy.uv {m : Mode} {C : CTy S} (c : C.den) : (VTy.U m C).den := c
+def VTy.uv {m : Mode} {b : Eb} {C : CTy S} (c : C.den) : (VTy.U m b C).den := c
 
 /-- `n`-fold iteration. -/
 def iter {X : Type} : Nat → (X → X) → X → X
@@ -61,10 +61,10 @@ def iter {X : Type} : Nat → (X → X) → X → X
     (η.cons (e := e) i) e' (.s x) = η e' x := rfl
 
 /-- The continuation a resuming clause receives. -/
-def mkK : (b : Bool) → (q : Mode) → (r : G) → (C : CTy S) → (r.den → C.den) → Tree S Unit →
-    (ktyB b q r C).den
-  | true, _, _, _, k, t => (k, t)
-  | false, _, _, _, k, _ => k
+def mkK : (w : Bool) → (q : Mode) → (b : Eb) → (r : G) → (C : CTy S) → (r.den → C.den) →
+    Tree S Unit → (ktyB w q b r C).den
+  | true, _, _, _, _, k, t => (k, t)
+  | false, _, _, _, _, k, _ => k
 
 mutual
 def Val.den : Val S Ψ Γ A → IEnv Ψ → Env Γ → A.den
@@ -101,13 +101,13 @@ def Cmp.den : {C : CTy S} → Cmp S Ψ Γ C → IEnv Ψ → Env Γ → C.den
   | _, .emit v, η, ρ => .act (.out (v.den η ρ)) (fun _ => .ret ())
   | C, .op x o v M, η, ρ => C.opA (η _ x) _ o (v.den η ρ) (fun y => M.den η (ρ.cons (VTy.gv y))) []
   | C, .ab x a v, η, ρ => C.abA (η _ x) _ a (v.den η ρ) []
-  | C, .handle e hr hop hab M, η, ρ =>
+  | C, .handle e _ hr hop hab M, η, ρ =>
       C.nuA (fun i => (M.den (η.cons i) ρ).hnd C i e (fun a => hr.den η (ρ.cons a))
-        (fun o v k d => (hop o).den η ((ρ.cons (VTy.gv v)).cons (mkK _ _ _ C k (dtorsT d))))
+        (fun o v k d => (hop o).den η ((ρ.cons (VTy.gv v)).cons (mkK _ _ _ _ C k (dtorsT d))))
         (fun a v => (hab a).den η (ρ.cons (VTy.gv v))))
-  | C, .handleAt (e := e) x hr hop hab M, η, ρ =>
+  | C, .handleAt (e := e) x _ hr hop hab M, η, ρ =>
       (M.den η ρ).hnd C (η _ x) e (fun a => hr.den η (ρ.cons a))
-        (fun o v k d => (hop o).den η ((ρ.cons (VTy.gv v)).cons (mkK _ _ _ C k (dtorsT d))))
+        (fun o v k d => (hop o).den η ((ρ.cons (VTy.gv v)).cons (mkK _ _ _ _ C k (dtorsT d))))
         (fun a v => (hab a).den η (ρ.cons (VTy.gv v)))
   | C, .nu _ M, η, ρ => C.nuA (fun i => M.den (η.cons i) ρ)
   | _, .ieq x y, η, _ => .ret (decide (η _ x = η _ y))

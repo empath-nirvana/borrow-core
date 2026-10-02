@@ -66,13 +66,13 @@ def VTy.den : VTy S → Type
   | .g g => g.den
   | .prod A B => A.den × B.den
   | .sum A B => A.den ⊕ B.den
-  | .U _ C => C.den
+  | .U _ _ C => C.den
   | .cap e s => Nat × CoSem S e s
   | .res => Nat × Nat
-  | .strm A => Strm S A.den
+  | .strm _ A => Strm S A.den
 def CTy.den : CTy S → Type
   | .F A => Tree S A.den
-  | .arr A C => A.den → C.den
+  | .arr A _ C => A.den → C.den
   | .wth C D => C.den × D.den
   | .pi _ C => Nat → C.den
 end
@@ -82,26 +82,26 @@ end
 def CTy.opA : (C : CTy S) → Nat → (e : S.E) → (o : S.O e) → (S.arg e o).den →
     ((S.res e o).den → C.den) → List Dtor → C.den
   | .F _, i, e, o, v, k, d => Tree.op i e o v k d
-  | .arr _ C, i, e, o, v, k, d => fun a => C.opA i e o v (fun y => k y a) d
+  | .arr _ _ C, i, e, o, v, k, d => fun a => C.opA i e o v (fun y => k y a) d
   | .wth C D, i, e, o, v, k, d =>
       (C.opA i e o v (fun y => (k y).1) d, D.opA i e o v (fun y => (k y).2) d)
   | .pi _ C, i, e, o, v, k, d => fun n => C.opA i e o v (fun y => k y n) d
 
 def CTy.abA : (C : CTy S) → Nat → (e : S.E) → (a : S.A e) → (S.aarg e a).den → List Dtor → C.den
   | .F _, i, e, a, v, d => Tree.ab i e a v d
-  | .arr _ C, i, e, a, v, d => fun _ => C.abA i e a v d
+  | .arr _ _ C, i, e, a, v, d => fun _ => C.abA i e a v d
   | .wth C D, i, e, a, v, d => (C.abA i e a v d, D.abA i e a v d)
   | .pi _ C, i, e, a, v, d => fun _ => C.abA i e a v d
 
 def CTy.nuA : (C : CTy S) → (Nat → C.den) → C.den
   | .F _, k => Tree.nu k
-  | .arr _ C, k => fun a => C.nuA (fun n => k n a)
+  | .arr _ _ C, k => fun a => C.nuA (fun n => k n a)
   | .wth C D, k => (C.nuA (fun n => (k n).1), D.nuA (fun n => (k n).2))
   | .pi _ C, k => fun m => C.nuA (fun n => k n m)
 
 def CTy.actA : (C : CTy S) → {g : G} → Act g → (g.den → C.den) → C.den
   | .F _, _, a, k => Tree.act a k
-  | .arr _ C, _, a, k => fun x => C.actA a (fun y => k y x)
+  | .arr _ _ C, _, a, k => fun x => C.actA a (fun y => k y x)
   | .wth C D, _, a, k => (C.actA a (fun y => (k y).1), D.actA a (fun y => (k y).2))
   | .pi _ C, _, a, k => fun m => C.actA a (fun y => k y m)
 

@@ -57,9 +57,9 @@ def Cmp.ren (ri : Ren Ψ Ψ') (r : Ren Γ Δ) : Cmp S Ψ Γ C → Cmp S Ψ' Δ C
   | .emit v => .emit (v.ren ri r)
   | .op x o v M => .op (ri _ x) o (v.ren ri r) (M.ren ri r.lift)
   | .ab x a v => .ab (ri _ x) a (v.ren ri r)
-  | .handle e hr hop hab M => .handle e (hr.ren ri r.lift) (fun o => (hop o).ren ri r.lift.lift)
+  | .handle e b hr hop hab M => .handle e b (hr.ren ri r.lift) (fun o => (hop o).ren ri r.lift.lift)
       (fun a => (hab a).ren ri r.lift) (M.ren ri.lift r)
-  | .handleAt x hr hop hab M => .handleAt (ri _ x) (hr.ren ri r.lift)
+  | .handleAt x b hr hop hab M => .handleAt (ri _ x) b (hr.ren ri r.lift)
       (fun o => (hop o).ren ri r.lift.lift) (fun a => (hab a).ren ri r.lift) (M.ren ri r)
   | .nu e M => .nu e (M.ren ri.lift r)
   | .ieq x y => .ieq (ri _ x) (ri _ y)
@@ -181,7 +181,7 @@ theorem Cmp.den_ren (ri : Ren Ψ Ψ') (r : Ren Γ Δ) : (M : Cmp S Ψ Γ C) →
       exact Cmp.den_ren ri r.lift M η η₀ _ _ hη (Env.lift_pt (A := .g _) hρ y)
   | .ab x a v, η, η₀, ρ, ρ₀, hη, hρ => by
       simp only [Cmp.ren, Cmp.den]; rw [Val.den_ren ri r v η η₀ ρ ρ₀ hη hρ, hη _ x]
-  | .handle e hr hop hab M, η, η₀, ρ, ρ₀, hη, hρ => by
+  | .handle e _ hr hop hab M, η, η₀, ρ, ρ₀, hη, hρ => by
       simp only [Cmp.ren, Cmp.den]
       congr 1; funext i
       rw [Cmp.den_ren ri.lift r M _ _ ρ ρ₀ (IEnv.lift_pt hη i) hρ]
@@ -190,7 +190,7 @@ theorem Cmp.den_ren (ri : Ren Ψ Ψ') (r : Ren Γ Δ) : (M : Cmp S Ψ Γ C) →
       · funext o v k d
         exact Cmp.den_ren ri r.lift.lift (hop o) η η₀ _ _ hη (Env.lift_pt (Env.lift_pt hρ _) _)
       · funext a v; exact Cmp.den_ren ri r.lift (hab a) η η₀ _ _ hη (Env.lift_pt (A := .g _) hρ v)
-  | .handleAt x hr hop hab M, η, η₀, ρ, ρ₀, hη, hρ => by
+  | .handleAt x _ hr hop hab M, η, η₀, ρ, ρ₀, hη, hρ => by
       simp only [Cmp.ren, Cmp.den]
       rw [Cmp.den_ren ri r M η η₀ ρ ρ₀ hη hρ, hη _ x]
       congr 1
@@ -231,7 +231,7 @@ theorem Cmp.den_ren (ri : Ren Ψ Ψ') (r : Ren Γ Δ) : (M : Cmp S Ψ Γ C) →
       simp only [Cmp.ren, Cmp.den]
       rw [Val.den_ren ri r v η η₀ ρ ρ₀ hη hρ, hη _ x]
       exact iter_congr n (fun f => Cmp.den_ren ri r.lift M η η₀ _ _ hη
-        (Env.lift_pt (A := .U Mode.unr _) hρ f)) _
+        (Env.lift_pt (A := .U Mode.unr _ _) hρ f)) _
 end
 
 theorem Cmp.den_wk {A : VTy S} (M : Cmp S Ψ Γ C) (η : IEnv Ψ) (ρ : Env Γ) (a : A.den) :

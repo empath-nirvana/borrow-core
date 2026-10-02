@@ -74,7 +74,7 @@ theorem alg_bind {e : S.E} (x : Var Ψ e) (o : S.O e) (v : Val S Ψ Γ (.g (S.ar
 
 /-- At a function type: `(op; y.M) w ≡ op; y.(M w)`. -/
 theorem alg_app {e : S.E} (x : Var Ψ e) (o : S.O e) (v : Val S Ψ Γ (.g (S.arg e o)))
-    (M : Cmp S Ψ (.g (S.res e o) :: Γ) (.arr A C)) (u : Val S Ψ Γ A) :
+    (M : Cmp S Ψ (.g (S.res e o) :: Γ) (.arr A b C)) (u : Val S Ψ Γ A) :
     CtxEq (.app (.op x o v M) u) (.op x o v (.app M u.wk)) := by
   apply CtxEq.of_den; intro η ρ
   simp only [Cmp.den, CTy.opA]
@@ -105,7 +105,7 @@ theorem alg_ab_bind {e : S.E} (x : Var Ψ e) (a : S.A e) (v : Val S Ψ Γ (.g (S
 
 /-- At arity 0, at a function type: `raise w ≡ raise`. -/
 theorem alg_ab_app {e : S.E} (x : Var Ψ e) (a : S.A e) (v : Val S Ψ Γ (.g (S.aarg e a)))
-    (u : Val S Ψ Γ A) : CtxEq (.app (.ab (C := .arr A C) x a v) u) (.ab x a v) := by
+    (u : Val S Ψ Γ A) : CtxEq (.app (.ab (C := .arr A b C) x a v) u) (.ab x a v) := by
   apply CtxEq.of_den; intro η ρ; simp only [Cmp.den, CTy.abA]
 
 /-- **The destructor form at arity 0**: `K[raise] ≡ D_K; raise`, for `K` a destructor frame
@@ -133,21 +133,21 @@ theorem alg_dtor {e : S.E} (ℓ : Nat) (x : Var Ψ e) (a : S.A e) (v : Val S Ψ 
 
 /-- The continuation as a value: a thunk of `resume` (and of a `cancel` that runs nothing, when
 the operation may drop it). -/
-def kVal {r : G} {C : CTy S} : (b : Bool) → (q : Mode) → Cmp S Ψ (.g r :: Γ) C →
-    Val S Ψ Γ (ktyB b q r C)
-  | true, _, M => .thunk _ (.rcd (.lam M) (.ret .unit))
-  | false, q, M => .thunk q (.lam M)
+def kVal {r : G} {C : CTy S} : (w : Bool) → (q : Mode) → (b : Eb) → Cmp S Ψ (.g r :: Γ) C →
+    Val S Ψ Γ (ktyB w q b r C)
+  | true, _, _, M => .thunk _ (.rcd (.lam M) (.ret .unit))
+  | false, q, _, M => .thunk q (.lam M)
 
-theorem kVal_den {r : G} {C : CTy S} (b : Bool) (q : Mode) (M : Cmp S Ψ (.g r :: Γ) C)
+theorem kVal_den {r : G} {C : CTy S} (w : Bool) (q : Mode) (b : Eb) (M : Cmp S Ψ (.g r :: Γ) C)
     (η : IEnv Ψ) (ρ : Env Γ) :
-    (kVal b q M).den η ρ = mkK b q r C (fun y => M.den η (ρ.cons y)) (Tree.ret ()) := by
-  cases b <;> rfl
+    (kVal w q b M).den η ρ = mkK w q b r C (fun y => M.den η (ρ.cons (VTy.gv y))) (Tree.ret ()) := by
+  cases w <;> rfl
 
 /-- **H-ret**: `handle (return v) ≡ h_ret v`. -/
 theorem h_ret (e : S.E) (hr : Cmp S Ψ (A :: Γ) C)
-    (hop : (o : S.O e) → Cmp S Ψ (kty (S.q e o) (S.res e o) C :: .g (S.arg e o) :: Γ) C)
+    (hop : (o : S.O e) → Cmp S Ψ (kty (S.q e o) b (S.res e o) C :: .g (S.arg e o) :: Γ) C)
     (hab : (a : S.A e) → Cmp S Ψ (.g (S.aarg e a) :: Γ) C) (v : Val S Ψ Γ A) :
-    CtxEq (.handle e hr hop hab (.ret (v.ren Ren.wk (Ren.id Γ)))) (.bind (.ret v) hr) := by
+    CtxEq (.handle e b hr hop hab (.ret (v.ren Ren.wk (Ren.id Γ)))) (.bind (.ret v) hr) := by
   apply soundness
   intro w hw η η' ρ ρ' hη hρ
   simp only [Cmp.den, Tree.hnd, Tree.bindC]
@@ -161,12 +161,12 @@ theorem h_ret (e : S.E) (hr : Cmp S Ψ (A :: Γ) C)
 /-- **H-op**: `handle (op_h v; y.M) ≡ h_op(v, λy. handle M)`. The handler is at an instance
 variable, so the continuation can name it. -/
 theorem h_op {e : S.E} (x : Var Ψ e) (hr : Cmp S Ψ (A :: Γ) C)
-    (hop : (o : S.O e) → Cmp S Ψ (kty (S.q e o) (S.res e o) C :: .g (S.arg e o) :: Γ) C)
+    (hop : (o : S.O e) → Cmp S Ψ (kty (S.q e o) b (S.res e o) C :: .g (S.arg e o) :: Γ) C)
     (hab : (a : S.A e) → Cmp S Ψ (.g (S.aarg e a) :: Γ) C) (o : S.O e)
     (v : Val S Ψ Γ (.g (S.arg e o))) (M : Cmp S Ψ (.g (S.res e o) :: Γ) (.F A)) :
-    CtxEq (.handleAt x hr hop hab (.op x o v M))
-      (.bind (.ret v) (.bind (.ret (kVal (S.q e o).w (S.q e o)
-          ((Cmp.handleAt x (hr.ren (Ren.id Ψ) Ren.wk.lift)
+    CtxEq (.handleAt x b hr hop hab (.op x o v M))
+      (.bind (.ret v) (.bind (.ret (kVal (S.q e o).w (S.q e o) b
+          ((Cmp.handleAt x b (hr.ren (Ren.id Ψ) Ren.wk.lift)
               (fun o' => (hop o').ren (Ren.id Ψ) Ren.wk.lift.lift)
               (fun a => (hab a).ren (Ren.id Ψ) Ren.wk.lift) M).ren (Ren.id Ψ) Ren.wk.lift)))
         (hop o))) := by
@@ -199,11 +199,11 @@ theorem Val.den_wkI (v : Val S Ψ Γ A) (η : IEnv Ψ) (ρ : Env Γ) (i : Nat) :
 `ν h. handle_h (op_l v; y.M) ≡ ν h. op_l v; y. handle_h M`. The instance `h` is fresh, so `l`
 cannot be it. -/
 theorem h_fwd {e e' : S.E} (x : Var Ψ e') (hr : Cmp S (e :: Ψ) (A :: Γ) C)
-    (hop : (o : S.O e) → Cmp S (e :: Ψ) (kty (S.q e o) (S.res e o) C :: .g (S.arg e o) :: Γ) C)
+    (hop : (o : S.O e) → Cmp S (e :: Ψ) (kty (S.q e o) b (S.res e o) C :: .g (S.arg e o) :: Γ) C)
     (hab : (a : S.A e) → Cmp S (e :: Ψ) (.g (S.aarg e a) :: Γ) C) (o : S.O e')
     (v : Val S (e :: Ψ) Γ (.g (S.arg e' o))) (M : Cmp S (e :: Ψ) (.g (S.res e' o) :: Γ) (.F A)) :
-    CtxEq (.nu e (.handleAt .z hr hop hab (.op (.s x) o v M)))
-      (.nu e (.op (.s x) o v (.handleAt .z (hr.ren (Ren.id _) Ren.wk.lift)
+    CtxEq (.nu e (.handleAt .z b hr hop hab (.op (.s x) o v M)))
+      (.nu e (.op (.s x) o v (.handleAt .z b (hr.ren (Ren.id _) Ren.wk.lift)
         (fun o' => (hop o').ren (Ren.id _) Ren.wk.lift.lift)
         (fun a => (hab a).ren (Ren.id _) Ren.wk.lift) M))) := by
   apply soundness
@@ -224,10 +224,10 @@ theorem h_fwd {e e' : S.E} (x : Var Ψ e') (hr : Cmp S (e :: Ψ) (A :: Γ) C)
 
 /-- **H-fwd at arity 0**: `ν h. handle_h (raise_f) ≡ raise_f`. -/
 theorem h_fwd_ab {e e' : S.E} (x : Var Ψ e') (hr : Cmp S (e :: Ψ) (A :: Γ) C)
-    (hop : (o : S.O e) → Cmp S (e :: Ψ) (kty (S.q e o) (S.res e o) C :: .g (S.arg e o) :: Γ) C)
+    (hop : (o : S.O e) → Cmp S (e :: Ψ) (kty (S.q e o) b (S.res e o) C :: .g (S.arg e o) :: Γ) C)
     (hab : (a : S.A e) → Cmp S (e :: Ψ) (.g (S.aarg e a) :: Γ) C) (a : S.A e')
     (v : Val S Ψ Γ (.g (S.aarg e' a))) :
-    CtxEq (.nu e (.handleAt .z hr hop hab (.ab (C := .F A) (.s x) a v.wkI))) (.ab x a v) := by
+    CtxEq (.nu e (.handleAt .z b hr hop hab (.ab (C := .F A) (.s x) a v.wkI))) (.ab x a v) := by
   apply soundness
   apply LR.nuG_of
   intro η ρ i hf
@@ -359,10 +359,10 @@ name it, is invisible: `ν h. handle_h M ≡ M` for any clauses. This is paramet
 instances: `M` treats every instance it is not given alike, so it treats `h` as it treats an
 instance the world never matches. -/
 theorem no_accidental_handling (e : S.E)
-    (hop : (o : S.O e) → Cmp S (e :: Ψ) (kty (S.q e o) (S.res e o) (.F A) :: .g (S.arg e o) :: Γ)
+    (hop : (o : S.O e) → Cmp S (e :: Ψ) (kty (S.q e o) b (S.res e o) (.F A) :: .g (S.arg e o) :: Γ)
       (.F A))
     (hab : (a : S.A e) → Cmp S (e :: Ψ) (.g (S.aarg e a) :: Γ) (.F A)) (M : Cmp S Ψ Γ (.F A)) :
-    CtxEq (.nu e (.handleAt .z (.ret (.var .z)) hop hab M.wkI)) M := by
+    CtxEq (.nu e (.handleAt .z b (.ret (.var .z)) hop hab M.wkI)) M := by
   apply soundness
   intro w hw η η' ρ ρ' hη hρ
   simp only [Cmp.den, CTy.nuA]
