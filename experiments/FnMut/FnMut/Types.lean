@@ -1,4 +1,5 @@
 import FnMut.Core.Dtor
+import FnMut.Core.RelationFacts
 
 /-!
 # FnMut — the affine closure as codata
@@ -121,6 +122,46 @@ theorem not_persistent_fnMut (c : Lifetime.Life) (A B : VTy) :
 theorem not_persistent_fnBox (c : Lifetime.Life) (A B : VTy) :
     ¬ (fnBox c A B).Persistent := by
   simp [VTy.Persistent, VTy.persistent]
+
+/-- An affine closure is not forgettable (`Affine`, SPEC §12 class 1): dropping one runs its
+`close`, so it is affine by its destructor (class 2), not by `forget`. -/
+theorem not_affine_fnMut (c : Lifetime.Life) (A B : VTy) : ¬ Affine (fnMutT c A B) := by
+  intro h; cases h
+
+/-- A linear closure `U(A ⊸ F B)` has no destructor (SPEC §12 class 3): it is disposed of only
+by calling it, which needs an `A`.  So it cannot be the state of an affine closure whose `close`
+must dispose of it, and `FnOnce ≤ FnMut` has no uniform coercion. -/
+theorem not_hasDtor_lolli (A B : VTy) : ¬ HasDtor (.lolli A B) := by
+  intro h; cases h
+
+/-- `obs_transfer` at an affine closure: the lemma is unchanged in the fork, and its arm at
+`U C`, where the observable view holds `True`, is the arm `FnMut` takes.  `[spec §12.69]` -/
+theorem obs_transfer_fnBox {R : WRes} {ls : List SRec} (hLB : WitLB ls R) (c : Lifetime.Life)
+    (A B : VTy) {δ : LSub} {v : Val} {P Q : WRes} (hP : CellMatch R P) (hQ : CellMatch R Q)
+    (h : vC false (fnBox c A B) ls δ v P) (hs : vShape (fnBox c A B) δ v Q) :
+    vC false (fnBox c A B) ls δ v Q :=
+  obs_transfer hLB (fnBox c A B) hP hQ h hs
+
+/-! ### Higher-order and effectful affine closures -/
+
+/-- An affine closure whose argument is a borrowed affine closure is positive: the argument
+type is closed. -/
+theorem fnBody_nuOk_higher (a c c' : Lifetime.Life) (A' B' B : VTy) :
+    (fnBody c (.mut a (fnBox c' A' B')) B).NuOk :=
+  fnBody_nuOk (A := .mut a (fnBox c' A' B')) trivial c B
+
+/-- The body of an affine closure whose call performs the operations of the row `Σ`:
+`(A ⊸ F_Σ(B ⊗ [@c] U X)) & F_Σ 1`.  `[spec §19]` -/
+abbrev fnEffBody (S : List OpSig) (c : Lifetime.Life) (A B : VTy) : CTy :=
+  .amp (.arr A (CTy.effOf S (.tensor (B.rename Nat.succ) (.box c (.tvar 0)))))
+    (CTy.effOf S .unit)
+
+/-- An effectful affine closure is positive at closed operation types, so `nuIn`, `nuOut` and
+`unfold` cover it with no further change. -/
+theorem fnEffBody_nuOk {S : List OpSig} (hS : ∀ o ∈ S, o.A.Cl 0 ∧ o.B.Cl 0) {A : VTy}
+    (hA : A.Cl 0) (c : Lifetime.Life) (B : VTy) : (fnEffBody S c A B).NuOk :=
+  ⟨⟨hA, CTy.nuLeaf_effOf hS ⟨VTy.poly_of_not_occ (VTy.not_occ_rename_succ B), trivial⟩⟩,
+   CTy.nuLeaf_effOf hS (fun h => h)⟩
 
 end BoCa.Fig16.LogRel.Core
 

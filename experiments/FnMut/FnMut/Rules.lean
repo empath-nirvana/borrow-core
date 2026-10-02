@@ -9,7 +9,8 @@ Every rule here is a derivation in the fork's `CDerives`, from `nuIn`/`nuOut`, c
 
 | rule | term | from |
 |---|---|---|
-| introduction | `mkE`: a state `s₀ : S`, `!` code `step : S ⊸ (A ⊸ F(B ⊗ [@c] S)) & F 1` | `unfoldN` |
+| introduction | `mkE`: a state `s₀ : S`, `!` code `step : S ⊸ (A ⊸ F(B ⊗ [@c] S)) & F 1` (`d_mk`) | `unfoldN` |
+| introduction outliving `@c` | `mkE` when `S` outlives `@c` (`d_mkBox`) | `unfoldN`, `[]I` |
 | call | `callE f a : F(B ⊗ [@c] U(FnMut^c A B))` | `nuOut`, `π₁`, application |
 | close | `closeE f : F 1` | `nuOut`, `π₂` |
 | call through `Mut` | `callMutE m a : Mut @a ([@c] U FnMut) ⊗ B` | `withswap` with the call as callback |
