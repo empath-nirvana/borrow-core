@@ -1648,7 +1648,9 @@ else:
   borrow is shortened to it with `:>`; there is no other solving.
 - **`unbang`** is inserted, before the lifetimes, as for any persistent function.
 
-A type or lifetime that is not determined is an error at the call that names it.
+A type that is not determined is an error at the call that names it. A lifetime that is not
+determined is `dom`, the meet of the lifetimes in scope, or `main`'s own lifetime in `main` (§23);
+with no lifetime in scope outside `main`, it is an error at the call.
 
 ### Lowering
 

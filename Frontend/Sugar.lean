@@ -1757,6 +1757,38 @@ structure DivSt where
 /-- Elaboration with the state of the declarations. -/
 abbrev DM := StateT DivSt SM
 
+/-- The error by which a call in `main` asks for `main`'s own lifetime: `main` is elaborated
+again inside `mainLifeBody`.  `[spec §23]` -/
+def mainLifeSignal : String := "internal: a lifetime argument is main's own lifetime"
+
+/-- `main`'s body `M` under a lifetime of its own: a `mut` borrow of a unit cell, allocated before
+it and freed after. The standard capabilities the body uses are handed back beside its result, as
+a borrow block hands back what it lends.  `[spec §23]` -/
+def mainLifeBody (sp : Span) (M : Comp) : Comp :=
+  let caps := ["stdin", "stdout", "stderr"].filter (M.lentNames true).contains
+  let M := if caps.isEmpty then M else
+    wrapTerms (fun T => .bind T.span ⟨"io_bt", T.span⟩ none T
+      (.ret T.span (.pair T.span (.var T.span "io_bt") (varTuple T.span caps))) false) M
+  let cell : Ident := ⟨"io_main", sp⟩
+  let blk : Val := .app sp (.app sp (.sugar sp (.borrow .mut "main")) (.var sp cell.name))
+    (.thunkv sp (.lam sp ⟨"io_mainb", sp⟩ (holeTy sp) M))
+  -- `(cell, (r, caps))`, bound name by name.
+  let rec unpack (v : String) : List String → Comp → Comp
+    | [], N => N
+    | [x], N => .bind sp ⟨x, sp⟩ none (.ret sp (.var sp v)) N false
+    | x :: xs, N => .letPair sp ⟨x, sp⟩ ⟨v ++ "_", sp⟩ (.var sp v) (unpack (v ++ "_") xs N)
+  let after : Comp :=
+    .bind sp ⟨"io_mainu", sp⟩ none (.ret sp (.app sp (.sugar sp (.call "free")) (.var sp cell.name)))
+      (.ret sp (.var sp "io_mainr")) false
+  .bind sp cell none (.ret sp (.app sp (.sugar sp (.call "alloc")) (.unit sp)))
+    (.bind sp ⟨"io_mainp", sp⟩ none (.ret sp blk)
+      (.letPair sp cell ⟨"io_mainq", sp⟩ (.var sp "io_mainp")
+        (if caps.isEmpty then
+          .bind sp ⟨"io_mainr", sp⟩ none (.ret sp (.var sp "io_mainq")) after false
+        else
+          .letPair sp ⟨"io_mainr", sp⟩ ⟨"io_mainc", sp⟩ (.var sp "io_mainq")
+            (unpack "io_mainc" caps after))) false) false
+
 /-- The function a call applies, by name, when it is a higher-order function as written. -/
 def hofCallee : Val → Option String
   | .var _ h | .unbang _ (.var _ h) => some h
@@ -4159,7 +4191,10 @@ def surfDecl : Nat → Decl → DM Decl
       | some (.ret A) => some (BoCa.Fig16.LogRel.Core.CTy.ret A)
       | e => e
     set { st with caps := caps }
-    let M' ← surfC n c exp M
+    -- `main`'s own lifetime, when a call needs it: the body again, inside `mainLifeBody`.
+    -- The state is that of before the first attempt, which the error discards.
+    let M' ← tryCatch (surfC n { c with inMain := true } exp M) fun e =>
+      if e.msg == mainLifeSignal then surfC n c exp (mainLifeBody sp M) else throw e
     modify fun st => { st with caps := [] }
     pure (.main sp C M')
   | _, d => pure d
@@ -4369,10 +4404,15 @@ def genericCall : Nat → TCx → Span → Option CVTy → Val → Val → Optio
       if m.isOpen Q then
         if let some m' := matchV m 0 Q e then m := m'
     let lends := W.lends
+    -- A lifetime the call leaves undetermined is `dom`, the meet of the lifetimes in scope; in
+    -- `main` with none in scope, `main`'s own (`mainLifeBody`).  `[spec §23]`
     for (v, _) in sig.binders do
       if (m.life.lookup v).isNone && !(lends && sig.binders.length == 1) then
-        throw ⟨sp, s!"the lifetime `{lname v}` of `{fname}` is not determined by its arguments " ++
-          s!"here: write it, `{writeLives fname}"⟩
+        if c.Δ.entries.isEmpty then
+          if c.inMain then throw ⟨sp, mainLifeSignal⟩
+          throw ⟨sp, s!"the lifetime `{lname v}` of `{fname}` is not determined by its arguments " ++
+            s!"here: write it, `{writeLives fname}"⟩
+        m := { m with life := (v, c.Δ.meetOfDom) :: m.life }
     -- The callee at its type arguments.
     let mut extras : List BoCa.Lifetime.LifeVar := []
     let base ← match head with
