@@ -55,6 +55,7 @@ Build with `lake build GhostEnd`. It uses only the standard axioms and has no `s
 | 3g | `'x` in a borrow's payload: strictness agrees, freshness excludes it, an inner lend, no payload cell at or below the lend | `payload_strict`, `payload_strict_down`, `PayFree`, `payFree_immReborrow`, `payFree_handed`, `lend_in_scope_below`, `tabAt_wit` (`Payload.lean`) |
 | 3g | an `Imm` lend spanning a stop: subtraction, union, 6.64 at a resuming table | `imm_ghostEnd_split`, `imm_ghostEnd_empty`, `imm_relend_union`, `imm_erase_sets`, `relent_copies`, `RelendI`, `ewpTS_I_frameR`, `imm_spans_yield` (`ImmLend.lean`) |
 | 3g | a nested lend spanning a stop: the commutation lemma | `NestRelend`, `nested_relend`, `nested_spans`, `nest_yield`, `nested_spans_yield` (`Nested.lean`) |
+| 3g | two lends spanning a stop, the inner of another place: both views in the piece | `NestRelend₂`, `nested₂_relend`, `nested₂_spans`, `nest₂_yield`, `nested₂_spans_yield` (`Nested.lean`) |
 
 ### Step 0: the segment fundamental lemma (restated)
 
@@ -603,6 +604,17 @@ The refold is always under the outer's *new* witness. The old-lifetime refold
 `nested_spans` composes the lemma with `ewpTS_M_frameR`. `nested_spans_yield` discharges every
 hypothesis on a callback that yields with both lends open. No cell is left that the refold cannot
 place.
+
+The other two-entry stack is an inner lend of a different place `ℓ′` (`withbor` (1)–(2) inside the
+borrower). There the piece may hold the outer view and the inner one at once. `NestRelend₂` hands
+it both. `nested₂_relend` is its commutation lemma:
+
+1. the outer lender re-lends first;
+2. 6.65 lends `ℓ′` below the outer lend, with the owner of `ℓ′` carried in the continuation;
+3. at a stop the piece leaves both views behind.
+
+`nested₂_spans_yield` discharges every hypothesis. The two lemmas are §16's D16.1 at
+`σ = [x, y]`, for a `Mut` outer lend, written as the least fixed points of the stops.
 
 **What is work, not unknown.**
 
