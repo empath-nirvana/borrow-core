@@ -31,6 +31,9 @@ below are design and research notes.
 
 - [Effects and handlers: scoping](effects-scoping.md) — the staging of effects (#18): answering
   operations, `Fail`, control operations, and what each stage needs.
+- [The effect calculus: a technical report](effects-tr/README.md) — the paper proof for the
+  effect calculus of #235 (#245): BoLo's resource world plus a local control discipline; resource
+  safety, the binary relation, the laws L1–L6, T1, and the mechanisation plan.
 - [Effect polymorphism](effect-polymorphism.md) — functions over effectful computations (#161):
   copies over static names, provided and tunneled rows, site freshness, stored callbacks. A design;
   nothing is built.
