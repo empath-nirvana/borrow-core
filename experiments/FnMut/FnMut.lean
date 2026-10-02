@@ -50,3 +50,4 @@ import FnMut.Core.World
 import FnMut.Core.Wp
 import FnMut.Types
 import FnMut.Rules
+import FnMut.Counter

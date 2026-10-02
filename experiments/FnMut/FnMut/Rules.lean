@@ -50,27 +50,78 @@ theorem CDerives.fnUnfold {Γ : Ctx VTy} {c : Lifetime.Life} {A : VTy} (hA : A.C
   have h := CDerives.unfoldN (Δ := Δ) (fnBody c A B) S (fnBody_nuOk hA c B) hΓ
   rwa [unfoldTy, fnBody_instT] at h
 
+/-! ### Outlives of contexts -/
+
+theorem ctxOutlives_dead {Γ : Ctx VTy} {a : Lifetime.Life} (ha : Δ.Defines a) (hΓ : Ctx.Dead Γ) :
+    CtxOutlives Δ Γ a :=
+  ⟨ha, dead_noLive (P := fun s => VOutlives Δ a s.ty) hΓ⟩
+
+theorem CtxOutlives.consDead {Γ : Ctx VTy} {a : Lifetime.Life} {T : VTy}
+    (h : CtxOutlives Δ Γ a) : CtxOutlives Δ (⟨T, false⟩ :: Γ) a := by
+  refine ⟨h.1, fun s hs hl => ?_⟩
+  cases hs with
+  | head => exact absurd hl (by simp)
+  | tail _ hs' => exact h.2 s hs' hl
+
+theorem CtxOutlives.consLive {Γ : Ctx VTy} {a : Lifetime.Life} {T : VTy} (hT : VOutlives Δ a T)
+    (h : CtxOutlives Δ Γ a) : CtxOutlives Δ (⟨T, true⟩ :: Γ) a := by
+  refine ⟨h.1, fun s hs hl => ?_⟩
+  cases hs with
+  | head => exact hT
+  | tail _ hs' => exact h.2 s hs' hl
+
 /-! ### Introduction: a closure from a state and `!` code -/
 
-/-- `⟨(f s) π₁, (f s) π₂⟩`, with `f : U(S ⊸ FnMut^c A B)` at `2` and `s : S` at `3` inside
-`withPair`'s binders: the codata `unfold step s` as a value. -/
+/-- `⟨f to g. (g s) π₁, f to g. (g s) π₂⟩`, with `f : !U(S ⊸ FnMut^c A B)` at `2` and `s : S`
+at `3` inside `withPair`'s binders: the codata `unfold step s` as a value.  `f` stays `!` in
+the context, so the value outlives whatever `s` outlives. -/
 def packE : Expr :=
-  withPair (.app (.app (.var 2) (.var 3)) (.val (.inj₁ .unit)))
-    (.app (.app (.var 2) (.var 3)) (.val (.inj₂ .unit)))
+  withPair (bindE (.var 2) (.app (.app (.var 0) (.var 4)) (.val (.inj₁ .unit))))
+    (bindE (.var 2) (.app (.app (.var 0) (.var 4)) (.val (.inj₂ .unit))))
+
+/-- The unfolded code's type, `!U(S ⊸ FnMut^c A B)`. -/
+abbrev fnCodeT (c : Lifetime.Life) (A B S : VTy) : VTy := .bang (.thunk (.arr S (fnMutC c A B)))
 
 theorem d_pack {Γ : Ctx VTy} {c : Lifetime.Life} {A B S : VTy} (hA : A.Cl 0) (hΓ : Ctx.Dead Γ) :
-    CDerives Δ (⟨.thunk (.arr S (fnMutC c A B)), true⟩ :: ⟨S, true⟩ :: Γ) packE
-      (.val (fnMutT c A B)) := by
-  have hfs : CDerives Δ (withCtx (⟨.thunk (.arr S (fnMutC c A B)), true⟩ :: ⟨S, true⟩ :: Γ))
-      (.app (.var 2) (.var 3)) (.comp (fnMutC c A B)) :=
-    .app (.dead (.dead (.left (.right (deadSplit hΓ)))))
-      (.force (.there (.there (.here (.cons hΓ.toP))))) (.there (.there (.there (.here hΓ.toP))))
-  exact .thunkV rfl (.fnIn hA (.withI (.proj₁ (.fnOut hA hfs)) (.proj₂ (.fnOut hA hfs))))
+    CDerives Δ (⟨fnCodeT c A B S, true⟩ :: ⟨S, true⟩ :: Γ) packE (.val (fnMutT c A B)) := by
+  have hfs : CDerives Δ (⟨.thunk (.arr S (fnMutC c A B)), true⟩ ::
+      withCtx (⟨fnCodeT c A B S, false⟩ :: ⟨S, true⟩ :: Γ))
+      (.app (.var 0) (.var 4)) (.comp (fnMutC c A B)) :=
+    .app (.left (.dead (.dead (.dead (.right (deadSplit hΓ))))))
+      (.force (.here (.cons (.cons (.cons (.cons hΓ.toP))))))
+      (.there (.there (.there (.there (.here hΓ.toP)))))
+  have hf : CDerives Δ (withCtx (⟨fnCodeT c A B S, true⟩ :: ⟨S, false⟩ :: Γ)) (.var 2)
+      (.comp (.ret (.thunk (.arr S (fnMutC c A B))))) :=
+    .ret (.bangE (.var (.there (.there (.here (.cons hΓ.toP))))))
+  have hs : Ctx.SplitP (withCtx (⟨fnCodeT c A B S, true⟩ :: ⟨S, true⟩ :: Γ))
+      (withCtx (⟨fnCodeT c A B S, true⟩ :: ⟨S, false⟩ :: Γ))
+      (withCtx (⟨fnCodeT c A B S, false⟩ :: ⟨S, true⟩ :: Γ)) :=
+    .dead (.dead (.left (.right (deadSplit hΓ))))
+  exact .thunkV rfl (.fnIn hA (.withI (.bind hs hf (.proj₁ (.fnOut hA hfs)))
+    (.bind hs hf (.proj₂ (.fnOut hA hfs)))))
 
-/-- `s₀ to s. unfold step to f. ⟨(f s) π₁, (f s) π₂⟩ to k. K`: `K` with the closure
-`unfold step s₀` at index `0`. -/
+/-- The packed closure outlives `@c` when its state does: `[]I` over `f : !…` and `s : S`. -/
+theorem d_packBox {Γ : Ctx VTy} {c : Lifetime.Life} {A B S : VTy} (hA : A.Cl 0) (hΓ : Ctx.Dead Γ)
+    (hc : Δ.Defines c) (hS : VOutlives Δ c S) :
+    CDerives Δ (⟨fnCodeT c A B S, true⟩ :: ⟨S, true⟩ :: Γ) packE (.val (fnBox c A B)) :=
+  .boxI (d_pack hA hΓ) (.consLive .bang (.consLive hS (ctxOutlives_dead hc hΓ)))
+
+/-- `s₀ to s. unfold step to f. pack to k. K`: `K` with the closure `unfold step s₀` at
+index `0`. -/
 def mkE (c : Lifetime.Life) (A B : VTy) (s₀ : Expr) (step : Val) (K : Expr) : Expr :=
   bindE s₀ (bindE (.app (.val (fnUnfoldV c A B)) (.val step)) (bindE packE K))
+
+/-- The two bindings in front of `pack`. -/
+theorem d_mkPrefix {Γ Γ₁ Γ₂ : Ctx VTy} {c : Lifetime.Life} {A B S : VTy} {C : CTy} {s₀ K : Expr}
+    {step : Val} (hA : A.Cl 0) (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hs₀ : CDerives Δ Γ₁ s₀ (.val S))
+    (hstep : ∀ {Γ' : Ctx VTy}, Ctx.Dead Γ' →
+      CDerives Δ Γ' (.val step) (.val (.bang (.thunk (.arr S (fnStepC c A B S))))))
+    (hK : CDerives Δ (⟨fnCodeT c A B S, true⟩ :: ⟨S, true⟩ :: Γ₂) (bindE packE K) (.comp C)) :
+    CDerives Δ Γ (mkE c A B s₀ step K) (.comp C) :=
+  .bind hs (.ret hs₀)
+    (.bind (split_kill _).toP
+      (.ret (.lolliE (deadSplit (kill_dead _)) (hstep (kill_dead _))
+        (.fnUnfold hA B S (kill_dead _).toP))) hK)
 
 /-- **Introduction.**  A closure over the state `s₀ : S`, with `!` code `step`.  The state
 holds whatever the closure captures, linear and borrowed parts included; the type hides `S`. -/
@@ -78,14 +129,23 @@ theorem d_mk {Γ Γ₁ Γ₂ : Ctx VTy} {c : Lifetime.Life} {A B S : VTy} {C : C
     {step : Val} (hA : A.Cl 0) (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hs₀ : CDerives Δ Γ₁ s₀ (.val S))
     (hstep : ∀ {Γ' : Ctx VTy}, Ctx.Dead Γ' →
       CDerives Δ Γ' (.val step) (.val (.bang (.thunk (.arr S (fnStepC c A B S))))))
-    (hK : CDerives Δ (⟨fnMutT c A B, true⟩ :: ⟨.thunk (.arr S (fnMutC c A B)), false⟩ ::
-      ⟨S, false⟩ :: Γ₂) K (.comp C)) :
+    (hK : CDerives Δ (⟨fnMutT c A B, true⟩ :: ⟨fnCodeT c A B S, false⟩ :: ⟨S, false⟩ :: Γ₂) K
+      (.comp C)) :
     CDerives Δ Γ (mkE c A B s₀ step K) (.comp C) :=
-  .bind hs (.ret hs₀)
-    (.bind (split_kill _).toP
-      (.ret (.bangE (.lolliE (deadSplit (kill_dead _)) (hstep (kill_dead _))
-        (.fnUnfold hA B S (kill_dead _).toP))))
-      (.bind (.left (.left (split_kill Γ₂).toP)) (.ret (d_pack hA (kill_dead Γ₂))) hK))
+  d_mkPrefix hA hs hs₀ hstep
+    (.bind (.left (.left (split_kill Γ₂).toP)) (.ret (d_pack hA (kill_dead Γ₂))) hK)
+
+/-- **Introduction, outliving `@c`.**  When the state outlives `@c`, so does the closure. -/
+theorem d_mkBox {Γ Γ₁ Γ₂ : Ctx VTy} {c : Lifetime.Life} {A B S : VTy} {C : CTy} {s₀ K : Expr}
+    {step : Val} (hA : A.Cl 0) (hc : Δ.Defines c) (hS : VOutlives Δ c S)
+    (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hs₀ : CDerives Δ Γ₁ s₀ (.val S))
+    (hstep : ∀ {Γ' : Ctx VTy}, Ctx.Dead Γ' →
+      CDerives Δ Γ' (.val step) (.val (.bang (.thunk (.arr S (fnStepC c A B S))))))
+    (hK : CDerives Δ (⟨fnBox c A B, true⟩ :: ⟨fnCodeT c A B S, false⟩ :: ⟨S, false⟩ :: Γ₂) K
+      (.comp C)) :
+    CDerives Δ Γ (mkE c A B s₀ step K) (.comp C) :=
+  d_mkPrefix hA hs hs₀ hstep
+    (.bind (.left (.left (split_kill Γ₂).toP)) (.ret (d_packBox hA (kill_dead Γ₂) hc hS)) hK)
 
 /-! ### Elimination: call and close -/
 
@@ -146,26 +206,6 @@ theorem d_callMut {Γ Γa Γm : Ctx VTy} {a c : Lifetime.Life} {A B : VTy} {i j 
   exact .lolliE hs (.thunkV rfl (.lam hbody))
     (.lolliE (split_kill' Γm).toP (.var hm) (.withswap (kill_dead Γm).toP))
 
-/-! ### Outlives of contexts -/
-
-theorem ctxOutlives_dead {Γ : Ctx VTy} {a : Lifetime.Life} (ha : Δ.Defines a) (hΓ : Ctx.Dead Γ) :
-    CtxOutlives Δ Γ a :=
-  ⟨ha, dead_noLive (P := fun s => VOutlives Δ a s.ty) hΓ⟩
-
-theorem CtxOutlives.consDead {Γ : Ctx VTy} {a : Lifetime.Life} {T : VTy}
-    (h : CtxOutlives Δ Γ a) : CtxOutlives Δ (⟨T, false⟩ :: Γ) a := by
-  refine ⟨h.1, fun s hs hl => ?_⟩
-  cases hs with
-  | head => exact absurd hl (by simp)
-  | tail _ hs' => exact h.2 s hs' hl
-
-theorem CtxOutlives.consLive {Γ : Ctx VTy} {a : Lifetime.Life} {T : VTy} (hT : VOutlives Δ a T)
-    (h : CtxOutlives Δ Γ a) : CtxOutlives Δ (⟨T, true⟩ :: Γ) a := by
-  refine ⟨h.1, fun s hs hl => ?_⟩
-  cases hs with
-  | head => exact hT
-  | tail _ hs' => exact h.2 s hs' hl
-
 /-! ### `Fn ≤ FnMut` -/
 
 /-- The step over a `Fn`: `λs. ⟨λa. s a to b. (b, s), ()⟩`.  The state `s : !U(A ⊸ F B)` is
@@ -190,15 +230,15 @@ theorem d_fromFnStep {Γ : Ctx VTy} {c : Lifetime.Life} {A B : VTy} (hc : Δ.Def
             (ctxOutlives_dead hc hΓ)))))))))
   · exact .unitI (.cons (.cons (.drop rfl hΓ.toP)))
 
-/-- **`Fn ≤ FnMut`.**  A `!U(A ⊸ F B)` is an affine closure outliving any defined `@c`. -/
+/-- **`Fn ≤ FnMut`.**  A `!U(A ⊸ F B)` is an affine closure outliving any defined `@c`: the
+state is persistent, so the closure is boxed at `@c` (`d_mkBox`). -/
 theorem d_fromFn {Γ Γ₁ Γ₂ : Ctx VTy} {c : Lifetime.Life} {A B : VTy} {C : CTy} {g K : Expr}
     (hA : A.Cl 0) (hc : Δ.Defines c) (hs : Ctx.SplitP Γ Γ₁ Γ₂)
     (hg : CDerives Δ Γ₁ g (.val (.bang (.lolli A B))))
-    (hK : CDerives Δ (⟨fnMutT c A B, true⟩ ::
-      ⟨.thunk (.arr (.bang (.lolli A B)) (fnMutC c A B)), false⟩ :: ⟨.bang (.lolli A B), false⟩ ::
-        Γ₂) K (.comp C)) :
+    (hK : CDerives Δ (⟨fnBox c A B, true⟩ :: ⟨fnCodeT c A B (.bang (.lolli A B)), false⟩ ::
+      ⟨.bang (.lolli A B), false⟩ :: Γ₂) K (.comp C)) :
     CDerives Δ Γ (mkE c A B g fromFnStep K) (.comp C) :=
-  d_mk hA hs hg (fun hΓ' => d_fromFnStep hc hΓ') hK
+  d_mkBox hA hc .bang hs hg (fun hΓ' => d_fromFnStep hc hΓ') hK
 
 /-! ### `FnMut ≤ FnOnce` -/
 
