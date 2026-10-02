@@ -603,8 +603,11 @@ Each entry: the decision, and why. Newest last.
 48. **Effects: the scoping of #18 (`docs/effects-scoping.md`, #151). The user's decisions.**
     - **Handlers are defined by elaboration** into existing core terms: a capability lent by
       `withbor`, a handler as state plus `!` clauses, resume-once as a call, abort as a sum exit,
-      suspension as `ν` codata, finalisation as the §12 destructors. Effect rows never enter the
-      core, and effect safety follows from the Fundamental Property.
+      suspension as `ν` codata, finalisation as the §12 destructors. Effect safety follows from the
+      Fundamental Property. Keeping effect rows out of the core was this stage's scope, not a
+      standing rule: the user did not decide that rows never enter the core. Superseded by the
+      user's decision (2026-09-30) that effects are core, built on a literature-backed
+      foundation; §19 puts `F_Σ` rows in the kernel.
     - **Acceptance** is per-class handler laws on the elaboration schemas, cost-parity counts and
       per-handler lowering reports (#126), in place of "an erasure theorem", which elaboration
       makes true by definition.
