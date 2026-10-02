@@ -1816,9 +1816,14 @@ def withCtl : Nat → Cx → List Cap → Span → Span → CHandler → List VT
     -- they come back when the body is abandoned.
     let mut csM : List Cap := []
     for c in cx.needC M do
-      -- A callback's environment is passed in, and comes back with each call; it is not lent. It
-      -- holds what the callback captures, which the callback does not bind again (`cbCall`).
-      if c.env.isSome then continue
+      -- A callback's environment is passed in, and comes back with each call; it is not lent. One
+      -- that the callback binds again would not come back from an abandoned body.
+      if let some m := c.env then
+        if m then
+          throw ⟨ksp, s!"a callback called in the body of `with {ch.name.name}` binds again a variable " ++
+            "it captures: the body may be abandoned, and the variable would not come back; keep that " ++
+            "state in a handler's capability instead (SPEC §22)"⟩
+        continue
       if c.thr.isSome then
         throw ⟨ksp, s!"the body of `with {ch.name.name}` performs `{c.eff}` of an enclosing `for`, " ++
           "which threads its variables through the operation: a control handler's body may be " ++
@@ -2309,13 +2314,8 @@ def cbCall : Nat → Cx → List Cap → Span → Val → String → Val → EM 
       let vars := match cx.recSelf with
         | some rs => if fv.any rs.members.contains && !rs.deep then vars ++ [rs.self] else vars
         | none => vars
-      -- Its environment comes back from each call, but not out of the blocks around the call: a
-      -- variable it captures is not bound again in it.
-      if let some v := vars.find? M.boundNames.contains then
-        throw ⟨V.span, s!"this callback binds `{v}` again, a variable it captures: an assignment or a " ++
-          "shadowing `let` of a captured variable in a callback is not provided; keep such state in " ++
-          "a handler's capability, or rename the inner variable (SPEC §22)"⟩
-      let assigns := false
+      -- A variable it binds again comes back with its environment, as the callback leaves it.
+      let assigns := vars.any M.boundNames.contains
       let mut ports : List (String × Nat) := []
       for e in prov do ports := ports ++ [(e, ← portOf x e)]
       specs := specs ++ [(⟨cp, T, assigns, ports⟩, some (y, M, vars), none)]

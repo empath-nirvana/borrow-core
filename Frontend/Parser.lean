@@ -1023,7 +1023,13 @@ def brace : Nat → Pos → Bool → P Val
       catch _ => set saved; pure none
     match p? with
     | some p =>
-      let M ← blockBody n
+      -- A closure passed as a callback hands back the variables it captures (SPEC §22): a `let mut`
+      -- variable of the enclosing body it assigns is assigned where the closure is.
+      let s₀ ← get
+      let M ← comp n
+      let inner := (← get).assigned
+      modify fun s => { s with muts := s₀.muts,
+                               assigned := s₀.assigned ++ inner.filter s₀.muts.contains }
       expectSym "}"
       let sp ← spanFrom st
       let (x, M) ← match p with

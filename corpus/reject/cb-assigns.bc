@@ -1,8 +1,8 @@
--- A callback that binds a variable it captures again (SPEC §22): its environment comes back from
--- each call, but not out of the blocks around the call, and a handler around it may abandon it.
--- An assignment or a shadowing `let` of a captured variable is rejected; state that a callback
--- keeps belongs in a handler's capability.
--- expect: 14:19: this callback binds `n` again, a variable it captures: an assignment or a shadowing `let` of a captured variable in a callback is not provided; keep such state in a handler's capability, or rename the inner variable (SPEC §22)
+-- A callback that binds a variable it captures again, called inside a control handler (SPEC
+-- §22): its environment comes back from each call, but not from a body the handler abandons, as a
+-- `let mut` variable assigned in the body of a control `with` does not (§18). State a callback
+-- keeps across an abort belongs in a handler's capability, which is lent again to the body.
+-- expect: 8:54: a callback called in the body of `with to_result` binds again a variable it captures: the body may be abandoned, and the variable would not come back; keep that state in a handler's capability instead (SPEC §22)
 include fail
 
 fn guarded(f: !(1 => 1) with Fail[i32]) -> 1 + i32 = f() |> to_result

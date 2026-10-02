@@ -3324,10 +3324,12 @@ performs an effect or `f` provides one:
   it was written, in the order of their names. Its lifetimes and its parameter's type are filled
   where the types are known (`VSugar.cbCode`).
 - **The environment** is the tuple of the variables the callback captures, rebuilt at each
-  terminal of the code and bound again after the call. The code of a computation parameter it
-  captures is `!` code, so the callback's own code captures it, and its environment does not. A
-  callback that binds a captured variable again (an assignment, or a shadowing `let`) is rejected:
-  its environment would come back from the call but not out of the blocks around it.
+  terminal of the code and bound again after the call, so a variable the callback binds again
+  comes back as it leaves it: a `let mut` variable it assigns (the parser counts a closure's
+  assignments of the enclosing body's `let mut` variables as assignments where the closure is, so
+  the blocks around hand them back), or a view it threads through `array_copy`. The code of a
+  computation parameter it captures is `!` code, so the callback's own code captures it, and its
+  environment does not.
 - **The copy.** The call is a call of `h`'s copy for what serves its row and its callbacks'
   tunneled rows here (as §18's copies), and for each callback's profile: its tunneled effects and
   its ports. The copy takes the capabilities of that row and each callback's environment first,
@@ -3354,8 +3356,10 @@ its continuation across an operation (§15, *A body that performs a control oper
 
 **Re-lending (R2e).** A `with` of a control handler lends each capability its body uses again for
 the body (§18); a callback's capabilities are among them, so an attempt that aborts gives them
-back and the next attempt has them. A callback's environment is not lent: it is passed in, and
-holds what the callback captures, which it does not bind again.
+back and the next attempt has them. A callback's environment is not lent: it is passed in. A
+callback that binds a captured variable again, called inside a control handler's body, is
+rejected: an abandoned body does not hand the variable back (as a `let mut` variable assigned in
+a control `with`'s body, §18).
 
 **Passing on.** A computation parameter passed at another function's computation parameter is
 passed as it is: its code (η-expanded at its lifetimes, so that it is checked against the

@@ -112,7 +112,9 @@ Where draft 1 is silent or ambiguous about parsing, the parser does the followin
     next parameter's name or the `)`. It is printed as a written row is, before the `def`, the
     parameter named: `with[x: E₁, E₂[T]] fn def …` (`Mark.provides`). `e |> g(…)` is the token
     `|>` (`VSugar.pipe`, its operands a pair), associating to the left, below every operator; the
-    effects pass resolves it (`Frontend/Elab/Effects.lean`, `pipeOf`).
+    effects pass resolves it (`Frontend/Elab/Effects.lean`, `pipeOf`). A closure's assignments of
+    the enclosing body's `let mut` variables count as assignments where the closure is, so the
+    blocks around hand the variables back: a callback hands back what it captures (SPEC §22).
 
 ## The checker (`Frontend/Check/`)
 

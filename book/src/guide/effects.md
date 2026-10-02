@@ -200,9 +200,10 @@ attempts, and its second error, at tick 5, reaches the caller.
   is lent again to each attempt, so an attempt that raises gives it back, and the next attempt
   sees its ticks.
 - **A computation parameter is second class**: it is called, or passed on at another function's
-  computation parameter, and never stored, returned or bound to a value. A callback captures
-  variables it does not bind again: state it keeps belongs in a handler's capability, which it
-  may share with its caller and with other callbacks.
+  computation parameter, and never stored, returned or bound to a value. A callback may assign a
+  `let mut` variable it captures: the variable comes back with its environment after each call.
+  State that must survive an abort belongs in a handler's capability, which a callback may share
+  with its caller and with other callbacks.
 
 The library's `lib/callbacks.bc` has `each`, `fold`, `map_buf` and `filter_buf` over counts, and
 `attempt` and `retry`, each written once:

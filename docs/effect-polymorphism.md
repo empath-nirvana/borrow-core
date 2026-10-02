@@ -628,7 +628,9 @@ and `Frontend/Sugar.lean`, and run by the `corpus/cb-*.bc` programs):
   What R2e asks of a lent environment, re-lending to each entry of an aborting site, is done for
   the capabilities, which are the only captures that carry state across a call: a `with` of a
   control handler lends each capability its body uses again (§18), and a callback's capabilities
-  are among them. A callback may not bind a captured variable again. So `retry` around a
+  are among them. A variable the callback binds again comes back with its environment (a
+  `let mut` it assigns); inside a control handler's body that would abandon it, that is rejected.
+  So `retry` around a
   computation, failing or not, allocates nothing of its own (`corpus/cb-retry.bc`: the program's
   two cells), and the one cost §10 lists that Rust does not pay is not paid.
 - **Captured code is captured by the code.** A callback that calls a computation parameter

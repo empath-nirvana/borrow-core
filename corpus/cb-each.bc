@@ -8,10 +8,14 @@
 -- their two codes. A callback that does nothing effectful is passed as written, to the function as
 -- written.
 --
--- Answer: ((inr i32[300], i32[6]), ((i32[45], i32[65]), (inr i32[3], i32[16]))): `each` logs 0,
--- 1, 2 and 3 (6) and raises at 3; the first fold sums 0..10 (45) and notes each index (45), the
--- second notes each index of 0..5 doubled (20); the third fold raises at 3; the pure fold doubles
--- 1 four times.
+-- A callback may assign a `let mut` variable it captures: its environment comes back from each
+-- call, and the variable is bound again after it, as a loop's body assigns one.
+--
+-- Answer: ((inr i32[300], i32[6]), ((i32[45], i32[65]), ((inr i32[3], i32[16]), (i32[60], i32[4])))):
+-- `each` logs 0, 1, 2 and 3 (6) and raises at 3; the first fold sums 0..10 (45) and notes each
+-- index (45), the second notes each index of 0..5 doubled (20); the third fold raises at 3; the
+-- pure fold doubles 1 four times; the last `each` adds 0, 10, 20 and 30 to `acc` and notes four
+-- times.
 include fail
 
 effect Log { fn note(x: i32) }
@@ -28,7 +32,7 @@ fn fold(n: i32, z: i32, f: !(i32 * i32 => i32)) -> i32 =
 
 fn check(x: i32) -> 1 with Fail[i32] = if x > 2 { raise(x) } else { () }
 
-main -> ((1 + i32) * i32) * ((i32 * i32) * ((i32 + i32) * i32)) =
+main -> ((1 + i32) * i32) * ((i32 * i32) * (((i32 + i32) * i32) * (i32 * i32))) =
   let l = alloc(0);
   let lim = 3;
   let a = with tally(&mut l) {
@@ -40,4 +44,7 @@ main -> ((1 + i32) * i32) * ((i32 * i32) * ((i32 + i32) * i32)) =
   let n2 = free(m);
   let b = with to_result { fold(5, 0, { (s, i) -> check(i); s + i }) };
   let p = fold(4, 1, !{ (s, i) -> s * 2 });
-  ((a, n1), ((s, n2), (b, p)))
+  let k = alloc(0);
+  let mut acc = 0;
+  with tally(&mut k) { each(4, { i -> note(1); acc = acc + i * 10 }) };
+  ((a, n1), ((s, n2), ((b, p), (acc, free(k)))))
