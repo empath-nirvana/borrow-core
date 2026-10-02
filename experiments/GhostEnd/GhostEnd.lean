@@ -25,3 +25,4 @@ import GhostEnd.ClosureBody
 import GhostEnd.Capture
 import GhostEnd.Callee
 import GhostEnd.Kernel
+import GhostEnd.Bridge
