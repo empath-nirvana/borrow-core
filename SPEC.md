@@ -3535,8 +3535,10 @@ with every kernel program at every stage (*Lowering*).
   type; a callback passed there is a closure value, its `!` code and its environment, given to one
   body of the function per profile, its provided effects at the function's ports and the rest
   resolved where it was written. `e |> g(a, …)` (decision 50). Computation parameters are second
-  class, passed on as they are, and passed down a recursion. `lib/callbacks.bc`. §14, §15, §18, §21
-  *Open* updated; a `return` in a counted loop of a function at a row.
+  class, passed on as they are, and passed down a recursion; a callback hands back the variables
+  it captures, and a closure's assignments of the enclosing body's `let mut` variables are
+  assignments where it is. `lib/callbacks.bc`. §14, §15, §18, §21 *Open* updated; a `return` in a
+  counted loop of a function at a row.
 
 - **0.38** (2026-10-01) — §21 (#229, #216): closure conversion at the seams. A recursive group is
   the bounded fixed point of its generator, taken at the record of its members and called
