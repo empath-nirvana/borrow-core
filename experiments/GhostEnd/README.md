@@ -1,4 +1,4 @@
-# GhostEnd: end a suspended segment's lends at freeze, re-lend fresh at resume (#258, #260)
+# GhostEnd: end a suspended segment's lends at freeze, re-lend fresh at resume (#258, #260, #262)
 
 Issue #258 asks for the ghost-end lemma against BoLo's real carrier. The plan comes from the
 sharpened brief: re-derive, don't transport. At a stop, the segment's internal `Mut` lend is
@@ -33,6 +33,17 @@ Build with `lake build GhostEnd`. It uses only the standard axioms and has no `s
 | 3 | 6.64's `hQ`, 6.66, and 6.150's view copy at resuming tables | `opTable_extR`, `ewpTS_M_antiFrameR`, `ptoImm_dup` (`Frames.lean`) |
 | 3 | the general case, reduced | `RelendOfTyped`, `withbor_of_relendOfTyped` (`Open.lean`); `RBodyOfTyped`, `relendOfTyped_of_rbodyOfTyped` (`General.lean`) |
 | 4 | `mut_not_natural`'s witness under freeze and re-lend | `relent_holds`, `gap_accepted` (`Witness.lean`) |
+| 3d | the lend table: the only cell at the lend's lifetime is at `ℓ`, kept by every run (6.50) | `TabAt`, `tabAt_updV`, `wpG_tabAt`, `wpTS_tabAt`, `vC_mut_vary` (`Table.lean`) |
+| 3d | stops report the cell they drop; each lend below the last | `stopAtD`, `OpenD`, `bodyAtD_bind`, `openD_bind`, `relend_of_openD` (`Descend.lean`) |
+| 3d | values carrying the lend in data, frozen and thawed by type | `LOk`, `fzV_freeze`, `fzV_thaw`, `FrameThawsD`, `lok_thaws`, `stopSafe_lok` (`Values.lean`) |
+| 3d | typed borrowers with the table | `RBodyT`, `rbodyT_ret`, `rbodyT_perform`, `rbodyT_letF`, `rbodyT_let`, `rbodyT_case`, `rbodyT_seq`, `withbor_of_rbodyT`, `relendOfTyped_of_rbodyTOfTyped` (`TypedD.lean`) |
+| 3d | every hypothesis discharged: `m` moved into a pair across a yield | `tuple_spans_yield` (`Tuple.lean`) |
+| 3d | closures carrying the lend, re-derived by `fundamentalC` | `TV`, `TVG`, `tv_sound`, `tv_freeze`, `tv_thaw` (`Closures.lean`) |
+| 3d | borrowers over typed contexts | `RBodyC`, `tvg_split`, `rbodyC_ret`, `rbodyC_thunk`, `rbodyC_perform`, `rbodyC_let`, `withbor_of_rbodyC` (`ClosureBody.lean`) |
+| 3d | every hypothesis discharged: `m` captured in a closure held across a yield | `closure_spans_yield` (`Capture.lean`) |
+| 3d | a closure that stops while holding the lend | `CloL`, `cloL_of_rbodyC`, `cloL_call` (`Callee.lean`) |
+| 3d | every hypothesis discharged: the callee yields with the lend inside it | `callee_spans_yields` (`Callee.lean`) |
+| 3d | the kernel invariant, where it enters | `capture_hides_lend`, `KernelInvariant`, `rbodyC_retTV` (`Kernel.lean`) |
 
 ### Step 0: the segment fundamental lemma (restated)
 
@@ -198,6 +209,10 @@ obstruction is real:
    row, `[then]`, `[handle]`, and the borrow constants inside the borrower. Each needs a relation
    for `U`, `→` and `∀` values read with the lend re-lendable.
 
+Step 3d (#262) takes up both. The first is closed for data (`RBodyT`, `lok_thaws`) and for
+closures the borrower builds (`RBodyC`, `tv_thaw`). For the second, `[lam]` and `[app]` are
+proved with the lend re-lendable (`CloL`). The table of rule cases is in step 3d.
+
 ### Step 3b: drop at an affine yield (#260)
 
 At an affine yield the continuation may be cancelled. The lend was ended by the freeze, and the
@@ -248,6 +263,114 @@ the borrow constants, which is step 3a's second kind.
 
 **§15's statement** (`O151AsStated`) is not attempted (#260, item 5 skipped).
 
+### Step 3d: values carrying a lend across a suspension (#262)
+
+Step 3a left two kinds of step open: a frame holding the lend inside a value other than `m`, and a
+rule whose premise is an effectful function. Both come down to one question: what does it mean
+for a value to carry a lend across a stop?
+
+**The table** (`Table.lean`). A lend at `α` records one cell, at `ℓ`, at `α`. `TabAt ℓ α ρ` says
+that `ρ` agrees: every borrow cell is at a lifetime `⊒ α` (`Res_{↓α}`), and every one away from
+`ℓ` is strictly above `α`. It is a fact about runs, read off existing lemmas. `↭` keeps the
+lifetime of every flattened borrow cell at its location (6.50). So `tabAt_updV` is
+`updV_outlives` at `↓α` together with `updV_outlives_at` away from `ℓ`, and `wpG_tabAt` puts
+`TabAt` in the postcondition of every run, at a stop as at a return. A lend a run opens has a
+fresh lifetime and is ended before the run returns or stops. A load keeps the lifetimes of the
+cells it reads through. For a `Mut` lend, the table entry is the single location `ℓ`.
+
+The `⊒` half is the relation itself: `ptoMutS ℓ α` holds a cell at `b ⊒ α`. A view of a cell
+recorded strictly above `α` (an outer view weakened to `'x` by `Mut<`) stays a view at every later
+lend `α′ ⊑ α`, by M Vary (`vC_mut_vary`). Only the cell at `ℓ` is ghost-ended and re-lent.
+
+The table is stated over resources, not types. `capture_hides_lend` (`Kernel.lean`) is a closure
+of type `U(F 1)`, free of `'x`, whose value holds the lend's cell. So "a value whose type mentions
+`'x`" does not pick out the values that hold the lend.
+
+**Two changes to `Open`** (`Descend.lean`). Whether a piece needs the view at the next lend
+depends on what its frames froze, and a frame can hold the lend in a value while `m` is dead. So:
+
+* a stop reports what it dropped: `stopAtD` is `dropC d ⋆ [α](…)`, and the continuation is owed
+  `X α d`;
+* each lend is taken below the last (`OpenD`'s bound is the lend just ended), because a frozen
+  frame may keep outer views at lifetimes between `α` and `@bδ`.
+
+`fresh` lets each re-lend choose its own bound, so `relend_of_openD` gives `Relend` unchanged.
+Two dropped cells cannot meet, since both are `mut` at `ℓ` and `●` composes only `imm`
+(`dropC_disj`).
+
+**Tuples** (`Values.lean`, `TypedD.lean`). `LOk` admits `Mut 'x T`, `⊗` and `⊕` of such, and
+types free of `'x` that outlive it. The freeze and the thaw are by induction on the type, with
+`Mut` as case 2:
+
+* at `ℓ` the cell is dropped and re-lent (`mutView`);
+* elsewhere the table puts the cell above `α`, so it is kept, and it holds at the next lend by
+  M Vary;
+* data does not see `'x`.
+
+The re-lend produces the cell for the one location the table records at `α`. `lok_thaws` gives
+`FrameThawsD` for every `LOk` frame. `RBodyT` carries the table and takes `FrameThawsD` at
+`[let]`; it has `RBody`'s rules. `tuple_spans_yield` moves `m` into `z : Mut 'x 1 ⊗ 1`, yields with
+`z` in the frame and `m`'s slot dead, and uses the borrow afterwards. Every hypothesis is
+discharged.
+
+**Closures, re-derived** (`Closures.lean`, `ClosureBody.lean`). `𝒱⟦U C⟧` reads a closure through
+its behaviour only, so it cannot say which part of the closure's resource is the cell to drop.
+A closure the borrower builds is a typed term over typed values. `TV` records that: atoms in the
+relation, pairs, sums, closures typed by their derivations over a typed environment `TVG`, and
+fixed axiomatic constants. The lemmas are inductions over typed values, closures recursing into
+their environments:
+
+* `tv_sound` re-derives a closure at `δ[x ↦ α]` by `fundamentalC` at its own derivation;
+* `tv_freeze` drops the lend's cell wherever it sits;
+* `tv_thaw` puts the fresh view back.
+
+`RBodyC` reads a borrower over typed contexts. `closure_spans_yield` packs `m` into
+`f : U(F(['x] 1))`, yields with `f` in the frame, and forces `f` afterwards. `f` is re-derived at
+the fresh lend, and nothing is transported.
+
+**A closure that stops while holding the lend** (`Callee.lean`). Called inside the borrower, such
+a closure stops inside the callee with the lend's cell in the callee's environment. Through
+`fundamentalC` its stops are `ewpTS`'s: the continuation is a wand over the callee's whole share.
+The ghost end needs that share split into the view and a part in `[α]`, and the wand does not
+expose the split. So re-deriving the closure through the kernel's relation does not reach the
+stop, and its body has to be read as a borrower piece.
+
+`CloL` is that reading: applied at every later lend, handed the view if it holds the cell, the
+closure is a piece. Its environment is fixed in its resource, so it is uniform in the lend.
+`cloL_of_rbodyC` is `[lam]` at an effectful arrow, from the body's `RBodyC`. `cloL_call` is
+`[app]`. In `callee_spans_yields` the callee holds `m` across the caller's yield, is called, and
+yields again with the lend inside it. Every hypothesis is discharged.
+
+**Rule cases.**
+
+| rule | status |
+|---|---|
+| `[ret]` and the pure rules | routine: `fundamentalC` from the context's relation (`rbodyT_ret`, `rbodyC_ret`) |
+| `[perform]`, `[let]`, `1E`, `+E` | routine: `RBody`'s proofs, with the table and the dropped cell carried (all four for `RBodyT`; `[perform]` and `[let]` for `RBodyC`) |
+| `[lam]`, `thunk` (pure body) | routine: the value is a typed closure (`rbodyC_thunk`) |
+| `[lam]` (effectful body) | routine given the body's `RBodyC`: `cloL_of_rbodyC` |
+| `[app]`, `[force]` of a `CloL` closure | routine: `cloL_call` |
+| a pure piece answering a closure | needs the kernel invariant (`KernelInvariant`, `rbodyC_retTV`) |
+| a pure piece handed a `CloL` closure | **not routine**; see below |
+| `∀E` at a row, `[then]`, `[handle]`, borrow constants | not attempted |
+
+The case that is not routine is a pure piece handed a `CloL` closure. A `CloL` closure need not
+be in `𝒱⟦U(1 ⊸ F_Σ B)⟧` at any `δ[x ↦ α]`, so `tv_sound` has no case for it, and a pure piece
+cannot be handed one through `fundamentalC`. That piece would need the pure rules proved again at
+the lend-aware relation, in place of reading them off the kernel's fundamental lemma.
+`callee_spans_yields` avoids it: the closure goes from the frame straight to its call. I have not
+derived this case and have not verified that any obstruction is real.
+
+**The T15 tripwire.** It is not reached. `TV` is an inductive predicate in which the
+environment occurs positively. `CloL` fixes the environment in the closure's resource and is
+defined over `bodyAtD`/`OpenD`, which do not mention `TV`. A frozen closure thaws by structural
+recursion on its typing derivation, not by a domain equation. The lend's own cell cannot hold a
+closure over a view of itself: a cell's witness lies strictly above the cell's lifetime
+(`ptoMutS`'s `σ ∈ Res_b`), as §15's L14.9 uses. The tripwire would be reached by
+making `TV`'s closure case carry its body's `RBodyC`, which would put `TV` negatively inside its
+own constructor: the shape of `no_negative_domain`. `CloL` avoids it by being semantic. I have
+not stated that variant in Lean.
+
 ### Step 4: the witness
 
 `mut_not_natural`'s cell `ρ₀ = ℓ ↦ mut(2, ℓ′, ℓ′ ↦ imm({1}, (), ∅), 𝒱⟦Imm 'b 1⟧_δ)` is below the cut,
@@ -280,6 +403,11 @@ each re-application, and 6.60's outlives premise in `frame_outlives` and `stopSa
 
 Lifted: 6.65 (`ewpTS_M_frameR`), 6.66 (`ewpTS_M_antiFrameR`), and the unwinding form of 6.65
 (`withborR_compat`, from `ewp_then_owner`).
+
+**Printed lemmas in the run-up, #262.** 6.50 is used at `↓α` and at one location
+(`updV_outlives`, `updV_outlives_at`); 6.60 at frames (`vC_outlives`); 6.65 and 6.66 as lifted
+above. The table for an `Imm` lend (many locations, through nested references) is not built:
+nested lends spanning a stop are not in scope.
 
 **Hypotheses added.** `relendOfTyped_of_rbodyOfTyped` takes `@bδ` defined, which `RelendOfTyped`
 does not carry: `Relend`'s `И` needs a bound. `rbody_letF` takes `FrameThaws` of the frame, the
