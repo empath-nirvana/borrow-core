@@ -1,0 +1,31 @@
+-- Driving program 6a (design §10.6): the AST of a regular expression and its parser (#225), in
+-- the proposed surface. Does not parse today. `../lowered/regex.bc` runs the parser and printer.
+
+-- `box` on a field: the field is one owned pointer (Rust's `Box`), and the node itself is a
+-- value. The other form, `box Node(…)` with a cell per field, is `tree.bc`'s.
+data Re derives eq, debug =
+    Eps
+  | Lit(u8)
+  | Any
+  | Class(lo: u8, hi: u8)
+  | Cat(box Re, box Re)
+  | Alt(box Re, box Re)
+  | Star(box Re)
+  | Group(index: i32, body: box Re)
+
+data ReError derives debug = UnexpectedEnd | Unclosed(at: i32) | Trailing(at: u8)
+
+-- Recursive descent: alt := cat ('|' alt)?   cat := rep cat?   rep := atom '*'?
+-- Its depth is bounded by the pattern's length, so `bounded` is the natural driver. The cursor
+-- is borrowed here; the lowering passes the rest of the input along instead, because a
+-- recursive group's members take no lifetime parameters today (SPEC §20; design §9.3).
+fn alt(p: &mut Pattern) -> Re with Fail[ReError] =
+  let l = cat(p);
+  if p.eat(b'|') { Alt(box l, box alt(p)) } else { l }
+
+-- The Pike VM's program (#225 §1): a flat array of instructions, compiled from the AST by one
+-- recursion over it. `Inst` is an unboxed variant: two words with the n-ary tag (design §7.2).
+data Inst derives debug = Char(u8) | AnyByte | Range(u8, u8) | Split(i32, i32) | Jmp(i32)
+                        | Save(i32) | Match
+
+fn compile(re: &Re, code: &mut buf Inst) -> 1 = …

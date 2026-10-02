@@ -1,0 +1,113 @@
+-- Driving program 4 of docs/type-declarations-design.md §10.4: a hash map's types, and the
+-- union of two maps, hand-lowered at `K = V = i32`. `proposed/hashmap.bc` declares
+--
+--   data Slot[K, V] = Empty | Full(key: K, val: V)
+--   data HashMap[K, V] = { slots: array Slot[K, V], len: i32 }
+--
+-- with open addressing and linear probing (#211). `Slot[i32, i32]` is an unboxed variant, a tag
+-- and two words, so the table is one allocation of fixed-width slots. Lookup is a total loop
+-- over a view of the slots.
+--
+-- Where `hash` and `eq` come from is the open question of design §9.5. This file is the
+-- lowering both candidates agree on when the provider is known at elaboration: a trait instance
+-- at `i32`, or a provider tracked in the type by a static name. Either way the calls are direct
+-- (`hash_i32`, `==`) and nothing is stored in the map. `union` is then plain code: the two maps
+-- have one type, so they have one provider. The candidate that stores the provider in the map
+-- ("data carries its provider") adds two `!` fields and an unchecked assumption in `union`
+-- (design §9.5).
+--
+-- Answer: (i32[5], (i32[30], i32[0])): the union of {1:10, 2:20, 3:30} and {3:33, 4:40, 5:50}
+-- keeps 5 keys, `a`'s value wins at 3 (30), and key 9 is absent.
+
+include slice
+
+-- data Slot[K, V] = Empty | Full(key: K, val: V)
+type Slot = 1 + (i32 * i32)
+-- data HashMap[K, V] = { slots: array Slot[K, V], len: i32 }
+type Map = array Slot * i32
+
+def empty_slot : Slot = inl ()
+fn empty_at(i: i32) -> Slot = inl ()
+
+fn with_capacity(cap: i32) -> Map = (array_new[Slot] (cap, empty_at), 0)
+
+-- hash[i32]: the derived, structural hash of an `i32` (design §9.2), reduced to a slot.
+fn slot_of(k: i32, cap: i32) -> i32 = match host[rem_u32] (k * 40503, cap) { inl r -> r | inr _ -> 0 }
+fn wrap(i: i32, cap: i32) -> i32 = if i < cap { i } else { i - cap }
+
+-- The slot holding `k`, or the first empty slot of its probe sequence; `inr ()` when full.
+fn probe<'a>(v: array_imm 'a Slot, k: i32) -> i32 + 1 =
+  let (v, w) = array_copy['a, Slot](v);
+  let cap = len(w);
+  let start = slot_of(k, cap);
+  let mut cur = v;
+  for j in 0..cap {
+    let (c2, u) = array_copy['a, Slot](cur);
+    cur = c2;
+    let i = wrap(start + j, cap);
+    match at(u, i, empty_slot) {
+      inl e -> return inl i
+    | inr (k2, x) -> if k2 == k { return inl i } else { () }
+    }
+  };
+  inr ()
+
+-- `insert`: the value it displaces, if any; a full table drops the entry (no growth here).
+fn insert(m: Map, k: i32, v: i32) -> Map * (i32 + 1) =
+  let (slots, n) = m;
+  let at_i = borrow imm slots { 'x, w -> probe(w, k) };
+  match at_i {
+    inl i ->
+      let old = borrow imm slots { 'x, w -> at(w, i, empty_slot) };
+      borrow mut slots { 'x, w -> let w = set(w, i, inr (k, v)); () };
+      match old { inl e -> ((slots, n + 1), inr ()) | inr (k2, x) -> ((slots, n), inl x) }
+  | inr u -> ((slots, n), inr ())
+  }
+
+-- `lookup` (#211's `get`) over a view of the slots.
+fn lookup<'a>(v: array_imm 'a Slot, k: i32) -> i32 + 1 =
+  let (v, w) = array_copy['a, Slot](v);
+  match probe(v, k) {
+    inl i -> match at(w, i, empty_slot) { inl e -> inr () | inr (k2, x) -> inl x }
+  | inr u -> inr ()
+  }
+
+-- `k` added unless it is present.
+fn insert_absent(m: Map, k: i32, v: i32) -> Map =
+  let (slots, n) = m;
+  let at_i = borrow imm slots { 'x, w -> probe(w, k) };
+  match at_i {
+    inl i ->
+      let old = borrow imm slots { 'x, w -> at(w, i, empty_slot) };
+      match old {
+        inl e -> borrow mut slots { 'x, w -> let w = set(w, i, inr (k, v)); () }; (slots, n + 1)
+      | inr p -> (slots, n)
+      }
+  | inr u -> (slots, n)
+  }
+
+-- The deciding test of design §9.5: `union(a, b)`, `a`'s value kept on a shared key. Both maps
+-- are `HashMap[i32, i32]`, so they hash alike; nothing is checked at run time.
+fn union(a: Map, b: Map) -> Map =
+  let (bs, bn) = b;
+  let mut am = a;
+  for s in &bs {
+    match *s { inl e -> () | inr (k, x) -> am = insert_absent(am, k, x) }
+  };
+  am
+
+fn of3(k1: i32, k2: i32, k3: i32) -> Map =
+  let (m, d) = insert(with_capacity(16), k1, k1 * 10);
+  let (m, d) = insert(m, k2, k2 * 10);
+  let (m, d) = insert(m, k3, k3 * 10);
+  m
+
+main -> i32 * (i32 * i32) =
+  let a = of3(1, 2, 3);
+  let (b, d) = insert(of3(3, 4, 5), 3, 33);
+  let (slots, n) = union(a, b);
+  let three = borrow imm slots { 'x, w -> lookup(w, 3) };
+  let nine = borrow imm slots { 'x, w -> lookup(w, 9) };
+  let t = match three { inl x -> x | inr u -> 0 - 1 };
+  let z = match nine { inl x -> x | inr u -> 0 };
+  (n, (t, z))

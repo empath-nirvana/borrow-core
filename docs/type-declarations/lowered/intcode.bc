@@ -1,20 +1,24 @@
--- Target 3 of docs/type-declarations-design.md §9.3: an Intcode-style instruction type,
--- hand-lowered. `proposed/intcode.bc` declares
+-- Driving program 5 of docs/type-declarations-design.md §10.5: an Intcode-style VM, hand-lowered.
+-- `proposed/intcode.bc` declares
 --
---   data Param = Pos(i32) | Imm(i32) | Rel(i32)
---   data Instr = Add(a: Param, b: Param, to: Param) | Mul(a: Param, b: Param, to: Param)
---              | Input(to: Param) | Output(a: Param) | Halt
+--   data Param derives debug = Pos(i32) | Imm(i32) | Rel(i32)
+--   data Instr derives debug = Add(a: Param, b: Param, to: Param) | Mul(a: Param, b: Param, to: Param)
+--                            | Input(to: Param) | Output(a: Param) | Halt
+--   data Machine = { mem: array i32, pc: i32, running: bool }
 --
--- Both are unboxed variants: no constructor allocates, and an `Instr` is a value of words. The
--- elaboration is right-nested `+` of right-nested `*` (SPEC §5), below. `debug[Instr]`, the
--- derived printer, is `show_instr`; `decode` is written by hand (it is the program's logic).
+-- `Param` and `Instr` are unboxed variants: no constructor allocates, and an `Instr` is a value
+-- of words. `debug[Instr]` is `show_instr`; `decode` is the program's logic, written by hand.
+-- A `let mut` record is its fields as places (design §5.3), so `let mut m: Machine` with
+-- `m.pc = …` elaborates to the three `let mut` variables of `main`, and the VM is one `while`.
 --
--- The program is `1002,4,3,4,33`: `Mul(Pos(4), Imm(3), Pos(4))` multiplies slot 4 (33) by 3
--- into slot 4, and the next instruction, at 4, is then 99, `Halt`.
+-- The program is `1002,7,3,7,4,7,99,33`: `Mul(Pos(7), Imm(3), Pos(7))` makes slot 7 99,
+-- `Output(Pos(7))` writes it, and `Halt` stops.
 --
--- Answer: the lines `Mul(Pos(4), Imm(3), Pos(4))` and `Halt`, then i32[99].
+-- Answer: the lines `Mul(Pos(7), Imm(3), Pos(7))`, `Output(Pos(7))`, `99` and `Halt`, then
+-- i32[99].
 
 include slice
+include textio
 
 -- data Param = Pos(i32) | Imm(i32) | Rel(i32)
 type Param = i32 + (i32 + i32)
@@ -22,7 +26,8 @@ type Param = i32 + (i32 + i32)
 type Instr = (Param * (Param * Param)) + ((Param * (Param * Param)) + (Param + (Param + 1)))
 
 fn prog(i: i32) -> i32 =
-  if i == 0 { 1002 } else { if i == 1 { 4 } else { if i == 2 { 3 } else { if i == 3 { 4 } else { 33 } } } }
+  if i == 0 { 1002 } else { if i == 1 { 7 } else { if i == 2 { 3 } else { if i == 3 { 7 } else {
+  if i == 4 { 4 } else { if i == 5 { 7 } else { if i == 6 { 99 } else { 33 } } } } } } }
 
 fn digit(n: i32, d: i32) -> i32 =
   match host[div_u32] (n, d) { inl q -> match host[rem_u32] (q, 10) { inl r -> r | inr _ -> 0 } | inr _ -> 0 }
@@ -46,63 +51,69 @@ fn decode<'a>(v: array_imm 'a i32, pc: i32) -> (Instr * i32) + i32 =
   else { if code == 99 { inl (inr (inr (inr (inr ()))), 1) } else { inr code } } } } }
 
 -- debug[Param] and debug[Instr]: the constructor's name, then its fields in parentheses.
-fn pc(o: Out, c: u8) -> Out = let (o, _) = putb(o, to_i32(c)); o
+fn pc(o: Out, c: u8) -> Out = let (o, _) = putb(o, c); o
+fn w(o: Out, l: lit) -> Out = let (o, _) = write_lit(o, l); o
 fn num(o: Out, x: i32) -> Out = let (o, _) = put_dec(o, x); o
 fn show_param(o: Out, p: Param) -> Out =
   let o = match p {
-    inl x -> num(pc(pc(pc(pc(o, b'P'), b'o'), b's'), b'('), x)
-  | inr q -> match q { inl x -> num(pc(pc(pc(pc(o, b'I'), b'm'), b'm'), b'('), x)
-                     | inr x -> num(pc(pc(pc(pc(o, b'R'), b'e'), b'l'), b'('), x) } };
+    inl x -> num(w(o, "Pos("), x)
+  | inr q -> match q { inl x -> num(w(o, "Imm("), x) | inr x -> num(w(o, "Rel("), x) } };
   pc(o, b')')
 fn show3(o: Out, ps: Param * (Param * Param)) -> Out =
   let (a, r) = ps;
   let (b, c) = r;
   let o = show_param(pc(o, b'('), a);
-  let o = show_param(pc(pc(o, b','), b' '), b);
-  let o = show_param(pc(pc(o, b','), b' '), c);
+  let o = show_param(w(o, ", "), b);
+  let o = show_param(w(o, ", "), c);
   pc(o, b')')
-fn show_instr(o: Out, i: Instr) -> Out =
+fn show_instr(o: Out, i: Instr) -> Out * 1 =
   let o = match i {
-    inl ps -> show3(pc(pc(pc(o, b'A'), b'd'), b'd'), ps)
+    inl ps -> show3(w(o, "Add"), ps)
   | inr j -> match j {
-      inl ps -> show3(pc(pc(pc(o, b'M'), b'u'), b'l'), ps)
+      inl ps -> show3(w(o, "Mul"), ps)
     | inr k -> match k {
-        inl p -> pc(show_param(pc(pc(pc(pc(pc(pc(o, b'I'), b'n'), b'p'), b'u'), b't'), b'('), p), b')')
+        inl p -> pc(show_param(w(o, "Input("), p), b')')
       | inr l -> match l {
-          inl p -> pc(show_param(pc(pc(pc(pc(pc(pc(pc(o, b'O'), b'u'), b't'), b'p'), b'u'), b't'), b'('), p), b')')
-        | inr _ -> pc(pc(pc(pc(o, b'H'), b'a'), b'l'), b't') } } } };
-  pc(o, b'\n')
+          inl p -> pc(show_param(w(o, "Output("), p), b')')
+        | inr _ -> w(o, "Halt") } } } };
+  (pc(o, b'\n'), ())
 
--- The value of a parameter (relative mode reads at base 0 here).
+-- The value of a parameter (relative mode reads at base 0 here), and its address.
 fn value<'a>(v: array_imm 'a i32, p: Param) -> i32 =
   match p { inl a -> at(v, a, 0) | inr q -> match q { inl x -> x | inr a -> at(v, a, 0) } }
 fn addr(p: Param) -> i32 = match p { inl a -> a | inr q -> match q { inl x -> x | inr a -> a } }
 
--- One step: (output, (memory, (pc, halted))).
-fn step(i: i32, s: Out * (array i32 * (i32 * bool))) -> Out * (array i32 * (i32 * bool)) =
-  let (o, r) = s;
-  let (mem, q) = r;
-  let (pc0, halted) = q;
-  if halted { (o, (mem, (pc0, halted))) } else {
+fn arith<'a>(v: array_imm 'a i32, mul: bool, a: Param, b: Param) -> i32 =
+  let (v, u) = array_copy['a, i32](v);
+  if mul { value(v, a) * value(u, b) } else { value(v, a) + value(u, b) }
+
+main -> i32 =
+  let mut mem = array_new[i32] (8, prog);
+  let mut pc0 = 0;
+  let mut running = true;
+  while running {
     let d = borrow imm mem { 'x, v -> decode(v, pc0) };
     match d {
       inl (ins, n) ->
-        let o = show_instr(o, ins);
+        show_instr(&mut stdout, ins);
+        pc0 = pc0 + n;
         match ins {
           inl ps -> let (a, t) = ps; let (b, c) = t;
-                    let x = borrow imm mem { 'x, v -> let (v, w) = array_copy['x, i32](v); value(v, a) + value(w, b) };
-                    borrow mut mem { 'x, v -> let v = set(v, addr(c), x); () };
-                    (o, (mem, (pc0 + n, false)))
+            let x = borrow imm mem { 'x, v -> arith(v, false, a, b) };
+            borrow mut mem { 'x, v -> let v = set(v, addr(c), x); () }
         | inr j -> match j {
             inl ps -> let (a, t) = ps; let (b, c) = t;
-                      let x = borrow imm mem { 'x, v -> let (v, w) = array_copy['x, i32](v); value(v, a) * value(w, b) };
-                      borrow mut mem { 'x, v -> let v = set(v, addr(c), x); () };
-                      (o, (mem, (pc0 + n, false)))
-          | inr _ -> (o, (mem, (pc0 + n, true))) } }
-    | inr _ -> (o, (mem, (pc0, true))) } }
-
-main -> i32 =
-  let mem = array_new[i32] (5, prog);
-  let (stdout, r) = count_fold[Out * (array i32 * (i32 * bool))] (step, 10, 0, (stdout, (mem, (0, false))));
-  let (mem, _) = r;
-  borrow imm mem { 'x, v -> at(v, 4, 0) }
+              let x = borrow imm mem { 'x, v -> arith(v, true, a, b) };
+              borrow mut mem { 'x, v -> let v = set(v, addr(c), x); () }
+          | inr k -> match k {
+              inl p -> borrow mut mem { 'x, v -> let v = set(v, addr(p), 0); () }
+            | inr l -> match l {
+                inl p ->
+                  let x = borrow imm mem { 'x, v -> value(v, p) };
+                  put_dec(&mut stdout, x);
+                  putb(&mut stdout, b'\n')
+              | inr u -> running = false } } } }
+    | inr code -> running = false
+    }
+  };
+  borrow imm mem { 'x, v -> at(v, 7, 0) }

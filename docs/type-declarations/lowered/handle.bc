@@ -1,4 +1,4 @@
--- Target 9 of docs/type-declarations-design.md §9.9: a linear handle type with a destructor,
+-- Design §10.7 (docs/type-declarations-design.md): a linear handle type with a destructor,
 -- hand-lowered. `proposed/handle.bc` declares
 --
 --   data Session = { id: box i32, uses: i32 } drop end_session

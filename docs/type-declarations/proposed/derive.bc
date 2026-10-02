@@ -1,7 +1,9 @@
--- The derivation machinery of design §6, in the proposed surface: attribute declarations, the
--- structure view, and polytypic functions written once by cases on it. Does not parse today.
--- Everything here is library code in `lib/json.bc` and `lib/schema.bc`; the only language
--- parts are the forms `attr`, `poly`, `impl` and `derives`.
+-- The derivation machinery of design §8–§9, in the proposed surface: attribute declarations,
+-- the structure view, and polytypic functions written once by cases on it. Does not parse
+-- today. Everything here is library code in `lib/json.bc` and `lib/schema.bc`; the language
+-- parts are the forms `attr`, `poly` and `derives`. Where a derived result is found by generic
+-- code (traits, declaration attributes or handlers) is design §9.5's open question; nothing
+-- below depends on its answer.
 
 -- ---------------------------------------------------------------------------------------------
 -- Attributes: declared, typed, and checked where they are used.
@@ -38,7 +40,7 @@ attr schema on field, data = {
 }
 
 -- ---------------------------------------------------------------------------------------------
--- A polytypic function: one definition by cases on the structure view (design §6.2).
+-- A polytypic function: one definition by cases on the structure view (design §9.2).
 -- ---------------------------------------------------------------------------------------------
 --
 -- The cases are the core's formers plus the declaration's labels:
@@ -71,9 +73,9 @@ poly members[F]<'a>(o: Out, v: view 'a F, first: bool) -> Out * bool {
                              (encode_field[A](f, o, v), false) }
 }
 
--- Presence: every value is present, except the ones an override says are not.
-poly present[T]<'a>(v: view 'a T) -> bool { _ -> true }
-impl present[Option[A]] = is_some[A]
+-- Presence: every value is present except `None`. A case may name a declared type: the
+-- library that owns the `poly` decides it, so no override mechanism is involved.
+poly present[T]<'a>(v: view 'a T) -> bool { Option[A] -> is_some(v)   _ -> true }
 
 -- A field's encoder: the `@json_with` function if the field has one, `encode[A]` otherwise.
 -- (`json_with(f)` is `Option[…]` of a function known at elaboration: the match is resolved there.)
@@ -96,20 +98,21 @@ poly eq[T]<'a, 'b>(x: view 'a T, y: view 'b T) -> bool {
   A * B -> let (a1, b1) = x; let (a2, b2) = y; eq[A](a1, a2) && eq[B](b1, b2)
   A + B -> match (x, y) { (inl a, inl b) -> eq[A](a, b) | (inr a, inr b) -> eq[B](a, b) | _ -> false }
   data(d) A -> eq[A](x, y)
-  rec -> …    -- a recursive type: a fold over the pair (design §6.4, open)
+  rec -> …    -- a recursive type: a fold over the pair (design §9.3, open)
 }
 
 -- ---------------------------------------------------------------------------------------------
--- Overrides and derivation.
+-- A type's own encoding.
 -- ---------------------------------------------------------------------------------------------
 
--- A type provides its own instance: at most one `impl` per (poly, type) in a program, written
--- in the package of the type or of the poly. The function must have the poly's signature at
--- the type.
-data Duration = { nanos: i64 }
-impl encode[Duration] = encode_duration          -- "30s", not {"nanos":30000000000}
-impl schema[Duration] = schema_duration          -- {"type":"string","format":"duration"}
+-- A field of a type the program does not own: `@json_with(f)` on the field (serde's `with`).
+data Job derives encode = { name: string, timeout: Duration @json_with(encode_duration) }
 
--- `derives encode` on a declaration is `impl encode[N] = <the structural instance>`, exported
--- with `N`. Outside `N`'s package there is no other way to get `encode[N]`: the structural
--- cases need the iso, which an abstract type does not export.
+-- A type that encodes itself the same way everywhere: under candidate D of design §9.5 the
+-- declaration carries it as a typed attribute, so only the declaring package can set it and
+-- there is one per type. Under T it is an `impl`; under H, a handler in scope.
+data Duration @json(with = encode_duration) = { nanos: i64 }
+
+-- `derives encode` on a declaration exports the structural instance with `N`. For an abstract
+-- `N` (design §3.4) it is the only way outside code gets `encode[N]`: the structural cases need
+-- the iso, which an abstract type does not export.

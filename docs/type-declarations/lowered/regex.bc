@@ -1,0 +1,133 @@
+-- Driving program 6a of docs/type-declarations-design.md §10.6: the AST of a regular
+-- expression and its parser (#225), hand-lowered. `proposed/regex.bc` declares
+--
+--   data Re derives debug = Eps | Lit(u8) | Any | Cat(box Re, box Re) | Alt(box Re, box Re)
+--                         | Star(box Re)
+--
+-- The recursive fields are under `box`, so the structure is one `mu` in `FShape`, below. The
+-- parser is recursive descent over the pattern's bytes (SPEC §20), its depth bounded by the
+-- pattern's length, and a malformed pattern raises `Fail[i32]`. `show` is what `derives debug`
+-- specialises to: the constructor's name and its fields in parentheses, appended to a string.
+-- Both take the value and hand back what they keep, because a recursive group's members take
+-- no lifetime parameters (design §9.3).
+--
+-- Grammar: alt := cat ('|' alt)?    cat := rep cat?    rep := atom '*'?    atom := '(' alt ')' | '.' | byte
+--
+-- Answer: the line `Cat(Lit(a), Cat(Star(Alt(Lit(b), Lit(c))), Cat(Any, Lit(d))))` for
+-- `a(b|c)*.d`, then i32[2]: `(ab` is missing its `)`.
+
+include rec
+include fail
+include textio
+
+type Bs = mu X. 1 + (i32 * X)
+
+-- data Re = Eps | Lit(u8) | Any | Cat(box Re, box Re) | Alt(box Re, box Re) | Star(box Re)
+type Re = mu X. 1 + (i32 + (1 + ((ref X * ref X) + ((ref X * ref X) + ref X))))
+
+def nil : Bs = roll inl ()
+fn cons(x: i32, t: Bs) -> Bs = roll inr (x, t)
+
+-- The constructors (the iso, design §5).
+def eps : Re = roll inl ()
+fn lit(c: i32) -> Re = roll inr (inl c)
+def any : Re = roll inr (inr (inl ()))
+fn cat_of(a: Re, b: Re) -> Re = roll inr (inr (inr (inl (alloc(a), alloc(b)))))
+fn alt_of(a: Re, b: Re) -> Re = roll inr (inr (inr (inr (inl (alloc(a), alloc(b))))))
+fn star(a: Re) -> Re = roll inr (inr (inr (inr (inr (alloc(a))))))
+
+-- ---------------------------------------------------------------------------------------------
+-- The parser.
+-- ---------------------------------------------------------------------------------------------
+
+fn rev_onto(a: Bs, acc: Bs) -> Bs =
+  match unroll a { inl u -> acc | inr (c, r) -> rev_onto(r, cons(c, acc)) }
+
+-- Whether the next byte ends a `cat`: the end, `|` or `)`. The input is handed back.
+fn at_end(ts: Bs) -> bool * Bs =
+  match unroll ts { inl u -> (true, nil) | inr (c, r) -> (c == 124 || c == 41, cons(c, r)) }
+
+fn alt(ts: Bs) -> Re * Bs with Fail[i32], Exhausted =
+  let (l, r) = cat(ts);
+  match unroll r {
+    inl u -> (l, nil)
+  | inr (c, rest) -> if c == 124 { let (rr, r) = alt(rest); (alt_of(l, rr), r) } else { (l, cons(c, rest)) }
+  }
+
+fn cat(ts: Bs) -> Re * Bs with Fail[i32], Exhausted =
+  let (e, ts) = at_end(ts);
+  if e { (eps, ts) } else {
+    let (a, r) = rep(ts);
+    let (e, r) = at_end(r);
+    if e { (a, r) } else { let (b, r) = cat(r); (cat_of(a, b), r) }
+  }
+
+fn rep(ts: Bs) -> Re * Bs with Fail[i32], Exhausted =
+  let (a, r) = atom(ts);
+  match unroll r {
+    inl u -> (a, nil)
+  | inr (c, rest) -> if c == 42 { (star(a), rest) } else { (a, cons(c, rest)) }
+  }
+
+fn atom(ts: Bs) -> Re * Bs with Fail[i32], Exhausted =
+  match unroll ts {
+    inl u -> raise(1)
+  | inr (c, r) ->
+      if c == 40 {
+        let (e, r) = alt(r);
+        match unroll r { inl u -> raise(2) | inr (d, r) -> if d == 41 { (e, r) } else { raise(3) } }
+      } else { if c == 46 { (any, r) } else { (lit(c), r) } }
+  }
+
+fn parse(ts: Bs) -> Re with Fail[i32], Exhausted =
+  let (e, rest) = alt(rev_onto(ts, nil));
+  match unroll rest { inl u -> e | inr (c, r) -> raise(4) }
+
+fn bytes_of<'a>(t: text 'a) -> Bs =
+  let mut acc = nil;
+  for c in t { acc = cons(to_i32(*c), acc) };
+  acc
+
+-- ---------------------------------------------------------------------------------------------
+-- `debug[Re]`: the derived printer, appending to a string and handing the value back.
+-- ---------------------------------------------------------------------------------------------
+
+fn lit_s(s: string, l: lit) -> string = let (s, _) = push_lit(s, l); s
+fn byte_s(s: string, c: i32) -> string = let (s, _) = push_byte(s, to_u8(c)); s
+
+-- Two fields: `Name(a, b)`.
+fn show2(s: string, name: lit, a: ref Re, b: ref Re) -> string * (ref Re * ref Re) =
+  let (s, x) = show(lit_s(lit_s(s, name), "("), free(a));
+  let (s, y) = show(lit_s(s, ", "), free(b));
+  (lit_s(s, ")"), (alloc(x), alloc(y)))
+
+fn show(s: string, e: Re) -> string * Re =
+  match unroll e {
+    inl u -> (lit_s(s, "Eps"), eps)
+  | inr e1 -> match e1 {
+      inl c -> (lit_s(byte_s(lit_s(s, "Lit("), c), ")"), lit(c))
+    | inr e2 -> match e2 {
+        inl u -> (lit_s(s, "Any"), any)
+      | inr e3 -> match e3 {
+          inl (a, b) -> let (s, p) = show2(s, "Cat", a, b); (s, roll inr (inr (inr (inl p))))
+        | inr e4 -> match e4 {
+            inl (a, b) -> let (s, p) = show2(s, "Alt", a, b); (s, roll inr (inr (inr (inr (inl p)))))
+          | inr a -> let (s, x) = show(lit_s(s, "Star("), free(a)); (lit_s(s, ")"), star(x)) } } } }
+  }
+
+main -> i32 =
+  let good = borrow imm "a(b|c)*.d" { 'x, t -> bytes_of(t) };
+  let bad = borrow imm "(ab" { 'x, t -> bytes_of(t) };
+  let r : (string * i32) + 1 = with on_exhausted(!{ u -> inr () }) {
+    let a : Re + i32 = with to_result { parse(good) };
+    let b : Re + i32 = with to_result { parse(bad) };
+    let s = match a { inl e -> let (s, e) = show(string_new(64), e); s | inr c -> string_new(1) };
+    let (s, _) = push_byte(s, b'\n');
+    let code = match b { inl e -> 0 | inr c -> c };
+    let res : (string * i32) + 1 = inl (s, code);
+    res
+  };
+  match r {
+    inl (s, c) -> let (o, s) = write_string(stdout, s); let stdout = o; c
+  | inr u -> 0 - 1
+  }

@@ -1,4 +1,4 @@
--- Target 4 of docs/type-declarations-design.md §9.4: a graph with node ids, hand-lowered.
+-- Driving program 3b of docs/type-declarations-design.md §10.3: a graph with node ids, hand-lowered.
 -- `proposed/graph.bc` declares
 --
 --   data NodeId = NodeId(i32)                     -- one field: a newtype, its iso the identity

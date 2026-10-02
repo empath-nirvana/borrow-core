@@ -1,9 +1,10 @@
--- Target 8 (design §9.8): a declared codata iterator, in the proposed surface. Does not parse
--- today. `../lowered/codata.bc` runs the same type written as a `nu` with `unfold`.
+-- Design §6 and §10.7: codata declarations, objects defined by their observations, in the
+-- proposed surface. Does not parse today. `../lowered/codata.bc` runs `Countdown` written as a
+-- `nu` with `unfold`.
 
--- Observations, not constructors. `Self` is the rest of the object (`U X` in SPEC §7). The
--- declaration must satisfy `NuOk`: at least two observations, each returning an `F A` in which
--- `Self` occurs only under `*` and `+`.
+-- Observations, not constructors. `Self` is the rest of the object (`U X` in SPEC §7). With a
+-- `Self`, the declaration is a `nu` and must satisfy `NuOk`: at least two observations, each
+-- returning an `F A` in which `Self` occurs only under `*` and `+`, and none taking an argument.
 codata Countdown {
   next      : F (i32 * Self + 1)
   remaining : F (i32 * Self)
@@ -27,17 +28,34 @@ fn demo() -> i32 * (i32 * i32) =
   c.close;
   (a, (left, b - 1))
 
--- The library's iterator and generator types become declarations of the same kind, in
--- `lib/gen.bc`, and the frontend's built-in abbreviations (`VTy`/`CTy` nodes `delay`,
--- `stream`, `iter`, `loop`, `gen`) are deleted (design §4.3):
+-- Iterating a codata value is a generator over it: no `iterate` interface, and the pipeline's
+-- type stays the generator's row.
+fn each(c: Countdown) -> 1 with Yield[i32] =
+  let mut c = c;
+  loop { match <- c.next { Some((x, rest)) -> yield(x); c = rest | None -> break } }
+
+-- The pull types of SPEC §7 and §15 become library declarations of the same kind (in
+-- `lib/yield.bc` and `lib/div.bc`), and the frontend's abbreviations `delay`, `stream`, `iter`,
+-- `loop` and `pull` are deleted. The elaborator finds them by structure, as it finds `Yield`.
+codata Pull[A, B, R]    { next: F (A * Self + (B + Self))  close: F R }    -- a stored generator
 codata Iter[A, R, R2]   { next: F (A * Self + R)           close: F R2 }
-codata Gen[A, B, R]     { next: F (A * Self + (B + Self))  close: F R }
 codata Loop[A, B]       { next: F (A + Self)               close: F B }
 
--- `for x in e { … }` accepts any codata whose structure, through its iso, is `Iter`'s or
--- `Gen`'s (observations `next` and `close` of those shapes); `Countdown` has a third
--- observation, so it is not iterable by `for` unless it provides a view as an `Iter`:
-impl iterate[Countdown] = fn(c: Countdown) -> Iter[i32, 1, 1] = unfold c { c ->
-  next  -> match c.next { None -> inr () | Some((x, c)) -> inl (x, c) }
-  close -> c.close
+-- Each observation has its own row (effect-polymorphism §5.9): `next` logs, `close` may fail.
+-- The kernel admits effectful leaves in a `nu` (`EffLeaf`, `NuLeaf`); storing such a value is
+-- SPEC §15 *Open* (stored generators over a row).
+codata Reader[A, E] {
+  next  : F (A * Self + 1) with Log
+  close : F 1 with Fail[E]
 }
+
+-- Methods that take arguments. An observation of a `nu` takes none (`NuOk`), so an object with
+-- state and methods such as `push(x)` is the environment-passing record of SPEC §2 and §21: a
+-- state `S` and a persistent record of methods, each taking the state first and handing it
+-- back. Called through a `mut` borrow of the state, it is Rust's `FnMut` with several methods
+-- (#236). Design §6.4.
+codata Sink[A] on S {
+  push  : A -> F 1
+  flush : F 1
+}
+--   elaborates to  S * !U((S * A -o F (S * 1)) & (S -o F (S * 1)))

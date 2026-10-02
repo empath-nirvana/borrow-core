@@ -1,0 +1,43 @@
+-- Driving program 4 (design §10.4): a hash map's types (#211), in the proposed surface. Does
+-- not parse today. `../lowered/hashmap.bc` runs the instance at `K = V = i32`. Where `hash`
+-- and `eq` for `K` come from is design §9.5's open question; `providers.bc` writes the
+-- deciding test under each candidate. This file is written so that it reads the same under all
+-- of them: `hash(k)` and `eq(a, b)` are calls whose provider is resolved at the instance.
+
+package hashmap
+
+export data HashMap[K, V]                 -- abstract: the name is exported, the iso is not (§3.4)
+export type HashSet[K] = HashMap[K, 1]
+
+-- The representation, private to the package. A slot is an unboxed variant, so the table is one
+-- allocation of fixed-width slots; with the n-ary tag and a niche (design §7.2–7.3), `Slot[i32,
+-- i32]` is two words.
+data Slot[K, V] = Empty | Full(key: K, val: V)
+data HashMap[K, V] = { slots: array Slot[K, V], len: i32 }
+
+export fn with_capacity[K, V](cap: i32) -> HashMap[K, V] =
+  HashMap { slots: array(cap, |_| Empty), len: 0 }
+
+-- Lookup is a total loop over a view of the slots: at most `cap` probes.
+export fn get[K, V]<'a>(m: &'a HashMap[K, V], k: &K) -> Option[&'a V] =
+  let cap = len(&m.slots);
+  let start = hash(k) % cap;
+  for j in 0..cap {
+    match &m.slots[(start + j) % cap] {
+      Empty -> return None
+    | Full(key, val) -> if eq(key, k) { return Some(val) }
+    }
+  };
+  None
+
+export fn insert[K, V](m: &mut HashMap[K, V], k: K, v: V) -> Option[V] = …
+export fn remove[K, V](m: &mut HashMap[K, V], k: &K) -> Option[(K, V)] = …
+export fn len[K, V](m: &HashMap[K, V]) -> i32 = m.len
+
+-- Push iteration: a generator of views, consumed by `for` (SPEC §15). The pipeline's type is
+-- this function's row, `Yield[(&'a K, &'a V)]`, whatever adapters follow it.
+export fn iter[K, V]<'a>(m: &'a HashMap[K, V]) -> 1 with Yield[(&'a K, &'a V)] =
+  for s in &m.slots { match s { Full(k, v) -> yield((k, v)) | Empty -> () } }
+
+-- Linearity propagates (#211): `HashMap[K, V]` has a destructor when `K` and `V` do, by the
+-- structure (an array of slots), so nothing is declared.

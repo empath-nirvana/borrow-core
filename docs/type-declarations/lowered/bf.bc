@@ -1,0 +1,162 @@
+-- Driving program 6b of docs/type-declarations-design.md §10.6: a Brainfuck interpreter (#226),
+-- hand-lowered. `proposed/bf.bc` declares two representations:
+--
+--   data Inst = Add(i32) | Move(i32) | Put | Get | Jz(to: i32) | Jnz(to: i32)    -- flat
+--   data Op = Add(i32) | Move(i32) | Put | Get | Loop(body: box List[Op])          -- a tree
+--
+-- The flat form is the interpreter: the program compiled to a `buf Inst` with the bracket
+-- targets patched in (a stack of open brackets), then one `while` over the program counter.
+-- `Inst` is an unboxed variant, a tag and one word, so the code is one allocation.
+--
+-- The tree form shows mutual recursion through a regular declaration (design §4.3): `Op` and
+-- `List[Op]` are one recursive group, and `List[Op]` is on every cycle of it, so the group
+-- elaborates to one `mu` rooted at `List[Op]`, in `FShape`, with `Op` the substitution of it
+-- into `Op`'s structure (type `Ops` below). `nesting` walks it by recursion.
+--
+-- The `while` makes `main` div (SPEC §14). A step budget is a counter in the loop's condition:
+-- a handler of `Exhausted` around a div computation is not provided (SPEC §21 *Open*).
+--
+-- Answer: the line `AB`, then (i32[3], i32[2]): the tree of `+[>[-]<-]>` has 3 top-level ops
+-- (`+`, the loop, `>`) and nesting 2.
+
+include rec
+include slice
+include textio
+
+-- data Inst = Add(i32) | Move(i32) | Put | Get | Jz(to: i32) | Jnz(to: i32)
+type Inst = i32 + (i32 + (1 + (1 + (i32 + i32))))
+
+fn add(k: i32) -> Inst = inl k
+fn move(k: i32) -> Inst = inr (inl k)
+def put : Inst = inr (inr (inl ()))
+fn jz(t: i32) -> Inst = inr (inr (inr (inr (inl t))))
+fn jnz(t: i32) -> Inst = inr (inr (inr (inr (inr t))))
+
+fn zero(i: i32) -> i32 = 0
+
+-- The flat code, and the number of unmatched brackets.
+fn compile<'a>(t: text 'a) -> buf Inst * i32 =
+  let mut code = buf_new[Inst](64);
+  let mut open = buf_new[i32](16);
+  let mut bad = 0;
+  for c in t {
+    let b = *c;
+    if b == b'+' { push(&mut code, add(1)) }
+    else { if b == b'-' { push(&mut code, add(0 - 1)) }
+    else { if b == b'>' { push(&mut code, move(1)) }
+    else { if b == b'<' { push(&mut code, move(0 - 1)) }
+    else { if b == b'.' { push(&mut code, put) }
+    else { if b == b'[' {
+      let (c2, n) = len_of(code);
+      code = c2;
+      push(&mut open, n);
+      push(&mut code, jz(0))
+    } else { if b == b']' {
+      let (o2, popped) = pop(open);
+      open = o2;
+      match popped {
+        inl j ->
+          let (arr, n) = code;
+          borrow mut arr { 'x, v -> let v = set(v, j, jz(n + 1)); () };
+          code = (arr, n);
+          push(&mut code, jnz(j + 1))
+      | inr u -> bad = bad + 1
+      }
+    } else { () } } } } } } }
+  };
+  let (o2, left) = len_of(open);
+  (code, bad + left)
+
+-- data Op = Add(i32) | Move(i32) | Put | Get | Loop(body: box List[Op])
+-- One `mu` rooted at `List[Op]`: Ops = mu X. 1 + (Op[X] * ref X), Op[X] = i32 + (i32 + (1 + (1 + ref X))).
+type Ops = mu X. 1 + ((i32 + (i32 + (1 + (1 + ref X)))) * ref X)
+type Op = i32 + (i32 + (1 + (1 + ref Ops)))
+type Bs = mu X. 1 + (i32 * X)
+
+def nil : Bs = roll inl ()
+fn cons(x: i32, t: Bs) -> Bs = roll inr (x, t)
+def end_ops : Ops = roll inl ()
+fn op_cons(o: Op, rest: Ops) -> Ops = roll inr (o, alloc(rest))
+
+fn rev_onto(a: Bs, acc: Bs) -> Bs =
+  match unroll a { inl u -> acc | inr (c, r) -> rev_onto(r, cons(c, acc)) }
+
+fn bytes_of<'a>(t: text 'a) -> Bs =
+  let mut acc = nil;
+  for c in t { acc = cons(to_i32(*c), acc) };
+  acc
+
+-- The ops up to the matching `]` or the end, and the input after it.
+fn ops(ts: Bs) -> Ops * Bs =
+  match unroll ts {
+    inl u -> (end_ops, nil)
+  | inr (c, r) ->
+      if c == 93 { (end_ops, r) }
+      else { if c == 91 {
+        let (body, r) = ops(r);
+        let (rest, r) = ops(r);
+        (op_cons(inr (inr (inr (inr (alloc(body))))), rest), r)
+      } else {
+        let (rest, r) = ops(r);
+        let o : Op = if c == 43 { inl 1 } else { if c == 45 { inl (0 - 1) } else {
+                if c == 62 { inr (inl 1) } else { if c == 60 { inr (inl (0 - 1)) } else {
+                if c == 46 { inr (inr (inl ())) } else { inr (inr (inr (inl ()))) } } } } };
+        (op_cons(o, rest), r)
+      } }
+  }
+
+-- The number of ops at the top level and the deepest loop nesting; the tree is handed back.
+fn nesting(p: Ops) -> (i32 * i32) * Ops =
+  match unroll p {
+    inl u -> ((0, 0), end_ops)
+  | inr (o, rest) ->
+      let ((n, d), rest) = nesting(free(rest));
+      match o {
+        inl k -> ((n + 1, d), op_cons(inl k, rest))
+      | inr o1 -> match o1 {
+          inl k -> ((n + 1, d), op_cons(inr (inl k), rest))
+        | inr o2 -> match o2 {
+            inl u -> ((n + 1, d), op_cons(inr (inr (inl u)), rest))
+          | inr o3 -> match o3 {
+              inl u -> ((n + 1, d), op_cons(inr (inr (inr (inl u))), rest))
+            | inr body ->
+                let ((m, e), body) = nesting(free(body));
+                let d2 = if d < e + 1 { e + 1 } else { d };
+                ((n + 1, d2), op_cons(inr (inr (inr (inr (alloc(body))))), rest)) } } }
+      }
+  }
+
+main -> i32 * i32 =
+  let r = borrow imm "++++++++[>++++++++<-]>+.+.>++++++++++." { 'x, t -> compile(t) };
+  let (code, bad) = r;
+  let (arr, n) = code;
+  let mut tape = array_new[i32] (16, zero);
+  let mut pc = 0;
+  let mut ptr = 0;
+  let mut steps = 0;
+  while pc < n && steps < 100000 {
+    let ins = borrow imm arr { 'x, v -> at(v, pc, add(0)) };
+    let cell = borrow imm tape { 'x, v -> at(v, ptr, 0) };
+    pc = pc + 1;
+    steps = steps + 1;
+    match ins {
+      inl k -> borrow mut tape { 'x, v -> let v = set(v, ptr, cell + k); () }
+    | inr i1 -> match i1 {
+        inl k -> ptr = ptr + k
+      | inr i2 -> match i2 {
+          inl u -> putb(&mut stdout, to_u8(cell))
+        | inr i3 -> match i3 {
+            inl u -> ()
+          | inr i4 -> match i4 {
+              inl t -> if cell == 0 { pc = t } else { () }
+            | inr t -> if cell == 0 { () } else { pc = t } } } } }
+    }
+  };
+  let tree = borrow imm "+[>[-]<-]>" { 'x, t -> bytes_of(t) };
+  let s : (i32 * i32) + 1 = with on_exhausted(!{ u -> inr () }) {
+    let (p, rest) = ops(rev_onto(tree, nil));
+    let (nd, p) = nesting(p);
+    let res : (i32 * i32) + 1 = inl nd;
+    res
+  };
+  match s { inl nd -> nd | inr u -> (0 - 1, 0 - 1) }

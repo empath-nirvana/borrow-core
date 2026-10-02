@@ -1,0 +1,78 @@
+-- The deciding test of design §9.5, in the proposed surface: where `hash`, `eq` and `cmp` for a
+-- type parameter are found. Does not parse today. Two test cases, each written under each
+-- candidate:
+--
+--   1. `union(a, b)` of two hash sets;
+--   2. `merge(a, b)` of two sorted maps, linear in their sizes.
+--
+-- Both are only correct when `a` and `b` agree on their provider. `../lowered/hashmap.bc` runs
+-- case 1 at `K = i32`, where every candidate lowers to the same code.
+
+-- ---------------------------------------------------------------------------------------------
+-- T. Traits: one instance per type, coherent across the program.
+-- ---------------------------------------------------------------------------------------------
+
+trait Hash[T] { fn hash(x: &T) -> u64 }
+trait Ord[T]  { fn cmp(x: &T, y: &T) -> Ordering }
+
+data Text derives eq, hash, ord = Text(string)            -- the structural instances
+data CiText = CiText(string)                              -- custom semantics need a newtype
+impl Eq for CiText   { fn eq(a, b) = eq_ignore_case(&a.0, &b.0) }
+impl Hash for CiText { fn hash(x) = hash_lower(&x.0) }
+
+fn union[K: Hash + Eq](a: HashSet[K], b: HashSet[K]) -> HashSet[K] = …     -- one `K`, one instance
+fn merge[K: Ord, V](a: SortedMap[K, V], b: SortedMap[K, V]) -> SortedMap[K, V] = …   -- linear
+
+-- ---------------------------------------------------------------------------------------------
+-- D. Declaration-attached providers: the structural `poly` by default; an override is a typed
+--    attribute of the type's own declaration (design §9.1), so there is one per type by
+--    construction, and no orphan rule is needed. No bounds: a generic body calls `hash[K]`, and
+--    the call is resolved at each instance (decision 45).
+-- ---------------------------------------------------------------------------------------------
+
+data CiText @eq(with = eq_ignore_case) @hash(with = hash_lower) = CiText(string)
+
+fn union[K](a: HashSet[K], b: HashSet[K]) -> HashSet[K] = …     -- `hash[K]` found at the instance
+fn merge[K, V](a: SortedMap[K, V], b: SortedMap[K, V]) -> SortedMap[K, V] = …
+
+-- ---------------------------------------------------------------------------------------------
+-- H. Handlers with ambient defaults (the `Num[T]` pattern of decision 54): `Hash[T]`, `Eq[T]`
+--    and `Ord[T]` are answering effects; the structural handler is ambient for every type whose
+--    iso is visible; a custom one is installed lexically. Generic code performs them, and the
+--    effects tunnel (decision 57).
+-- ---------------------------------------------------------------------------------------------
+
+effect Hash[T] { fn hash(x: &T) -> u64 }
+handler ci_hash: Hash[string] = { hash(x) = hash_lower(x) }
+handler ci_eq: Eq[string] = { eq(a, b) = eq_ignore_case(a, b) }
+
+-- H1. The provider's static name in the type. A structure that keeps an invariant records which
+--     handler served its provider effects when it was built: the declaration names them,
+--
+data HashSet[K] provides Hash[K], Eq[K] = { … }
+--
+--     and a value's type carries their names, `HashSet[string] @ {ci_hash, ci_eq}`. Inside the
+--     structure's functions, `hash` is served by the recorded provider, not by the handler in
+--     scope at the call. The ambient structural handler has one name per type (`derived`), and a
+--     named handler with no parameters has its declaration's name.
+
+let a = with ci_hash, ci_eq { from_iter(words(x)) };       -- HashSet[string] @ {ci_hash, ci_eq}
+let b = with ci_hash, ci_eq { from_iter(words(y)) };       -- the same names: same type
+let c = from_iter(words(z));                               -- HashSet[string] @ {derived, derived}
+union(a, b)                                                -- accepted
+union(a, c)                                                -- rejected at elaboration: the names differ
+merge(m1, m2)                                              -- accepted iff their `Ord` names agree
+
+--     A handler with a parameter (`seeded(s)`) has no static identity: two sites with equal
+--     seeds are one provider, and the name cannot say so. The options are the site's name
+--     (generative: such sets never union across sites), a run-time comparison of the
+--     parameters, or no parameterised providers for invariant-bearing structures.
+
+-- H2. Data carries its provider (#211's present constraint): the set stores `!` functions
+--     captured at construction; the type says nothing.
+fn union[K](a: HashSet[K], b: HashSet[K]) -> HashSet[K] =
+  for k in drain(b) { insert(&mut a, k) };   -- re-hashed with `a`'s provider: `a`'s semantics
+  a
+fn merge[K, V](a: SortedMap[K, V], b: SortedMap[K, V]) -> SortedMap[K, V] =
+  if same_code(a.cmp, b.cmp) { merge_linear(a, b) }        -- a run-time check of code identity
+  else { for (k, v) in drain(b) { insert(&mut a, k, v) }; a }   -- else `a`'s order, n log n

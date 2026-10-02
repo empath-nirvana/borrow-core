@@ -1,5 +1,6 @@
--- Target 2 (design §9.2): the JSON value type, in the proposed surface. Does not parse today.
--- The hand-lowered form, `../lowered/json.bc`, uses the one-`mu` encoding that exists today.
+-- Driving program 1 (design §10.1): the JSON value type and its parser, in the proposed surface.
+-- Does not parse today. `../lowered/json.bc` runs a parser and encoder over the one-`mu`
+-- encoding that exists today.
 
 data Json derives eq, clone, debug =
     Null
@@ -11,22 +12,49 @@ data Json derives eq, clone, debug =
 
 data Member derives eq, clone, debug = { key: string, value: Json }
 
--- `Json` provides its own encoder, decoder and schema, since it *is* the data model:
-impl encode[Json] = encode_value            -- written by hand in the json library
-impl decode[Json] = decode_value            -- a pull parser with an explicit stack (design §6.4)
-impl schema[Json] = schema_any              -- {"x-kubernetes-preserve-unknown-fields": true}
+-- `Json` is the data model, so its encoder, parser and schema are the json library's own
+-- functions, not derived: `write_json(o, &v)`, `parse_json(&text)` and `schema_any`
+-- ({"x-kubernetes-preserve-unknown-fields": true}). A field of type `Json` in a derived record
+-- uses them because the `poly`'s author gave `Json` its own case (`derive.bc`, `present`).
+
+-- The parser: recursive descent over a cursor, raising on malformed input. Its depth is the
+-- document's nesting, so `bounded` is the natural driver; a document nested deeper than the
+-- budget raises `Exhausted`, which a server turns into a 400.
+data JsonError derives debug = Unexpected(at: i32, byte: u8) | UnexpectedEnd | BadNumber(at: i32)
+
+fn value(c: &mut Cursor) -> Json with Fail[JsonError] =
+  match c.peek() {
+    b'n' -> c.word("null"); Null
+  | b't' -> c.word("true"); Bool(true)
+  | b'f' -> c.word("false"); Bool(false)
+  | b'"' -> Str(string(c))
+  | b'[' -> c.bump(); Arr(elements(c))
+  | b'{' -> c.bump(); Obj(members(c))
+  | b -> if is_digit(b) || b == b'-' { Num(number(c)) } else { raise(Unexpected(c.pos, b)) }
+  }
+
+-- `elements` loops inside a recursive group, which SPEC §21 rejects today (a recursion whose
+-- body loops, `corpus/reject/rec-loop.bc`). Written as tail recursion instead, each element is
+-- a level of the budget (SPEC §20: every call has one less), so an array of more than 10 000
+-- elements raises `Exhausted`. `../lowered/json.bc` uses the tail recursion on a small input.
+-- Design §10.1 and §13 Q10.
+fn elements(c: &mut Cursor) -> Vec[Json] with Fail[JsonError] =
+  let mut out = Vec.new();
+  if c.eat(b']') { return out };
+  loop { out.push(value(c)); if c.eat(b',') { continue }; c.expect(b']'); break };
+  out
 
 -- Elaboration: `Json` and `Member` are mutually recursive through `Vec`, so their `mu` is
 --   mu X. 1 + (bool + (f64 + (string + (Vec[X] + Vec[string * X]))))       (with `Member` inlined)
 -- and `Vec[X]` puts `X` under an array (`[Ref X]` in `buf`). SPEC §6's `FShape` allows `X`
 -- only under `Ref`, `⊗`, `⊕` and at the head, with closed leaves, so this `mu` has no fold and
--- no destructor (class 3, SPEC §12). Design §9.2 recommends extending `FShape` with arrays of
+-- no destructor (class 3, SPEC §12). Design §4.5 recommends extending `FShape` with arrays of
 -- recursive positions (a kernel entry), and, until then, the sibling encoding of the lowering:
 --
 --   data Node = { key: Option[string], kind: Kind, next: Option[box Node] }
 --   data Kind = Null | Bool(bool) | Num(f64) | Str(string)
 --             | Arr(first: Option[box Node]) | Obj(first: Option[box Node])
 --
--- Layout (design §5), once `FShape` covers arrays: a `Json` is a tag word and the widest payload
+-- Layout (design §7), once `FShape` covers arrays: a `Json` is a tag word and the widest payload
 -- (`Str`: a `buf u8`, three words), four words, unboxed; an array element or object member is a
 -- slot of that width in one allocation. No `box` per node.

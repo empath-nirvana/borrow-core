@@ -1,4 +1,4 @@
--- Target 1 (design §9.1): a CRD spec and status for a toy operator, in the proposed surface.
+-- Driving program 2 (design §10.2): a CRD spec and status for a toy operator, in the proposed surface.
 -- Does not parse today. The hand-lowered form, which runs, is `../lowered/crd.bc`.
 --
 -- Every piece of metadata is checked syntax: `derives` and `@kube(…)` name declarations
@@ -33,7 +33,7 @@ data Memcached derives encode, decode, schema, resource
   status: Option[MemcachedStatus],
 }
 
--- What the derivations produce (design §9.1):
+-- What the derivations produce (design §10.2):
 --
 -- encode[Memcached] on { spec = { size = 2, container_port = 11211, version = None },
 --                        status = Some({ phase = Running, ready_replicas = Some(2) }) }:

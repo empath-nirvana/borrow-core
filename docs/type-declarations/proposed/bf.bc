@@ -1,0 +1,28 @@
+-- Driving program 6b (design §10.6): a Brainfuck interpreter (#226), in the proposed surface.
+-- Does not parse today. `../lowered/bf.bc` runs the flat interpreter and the tree's parser.
+
+-- Flat: the program compiled to instructions with the bracket targets resolved, run by one loop.
+data Inst derives debug = Add(i32) | Move(i32) | Put | Get | Jz(to: i32) | Jnz(to: i32)
+
+data Machine = { tape: array u8, ptr: i32, pc: i32 }
+
+fn run(code: &buf Inst, m: &mut Machine, gas: i32) -> i32 =     -- div: a Brainfuck loop may not end
+  let mut steps = 0;
+  while m.pc < len(code) && steps < gas {
+    match code[m.pc] {
+      Add(k) -> m.tape[m.ptr] += k
+    | Move(k) -> m.ptr += k
+    | Put -> write_byte(m.tape[m.ptr])
+    | Get -> m.tape[m.ptr] = read_byte()
+    | Jz(t) -> if m.tape[m.ptr] == 0 { m.pc = t; continue }
+    | Jnz(t) -> if m.tape[m.ptr] != 0 { m.pc = t; continue }
+    };
+    m.pc += 1;
+    steps += 1
+  };
+  steps
+
+-- The tree: a loop's body is a list of ops. `Op` and `List[Op]` are mutually recursive, and
+-- `List[Op]` lies on every cycle, so the pair elaborates to one `mu` rooted at `List[Op]`
+-- (design §4.3). The recursion is under `box`, so a node has a fixed width.
+data Op derives debug = Add(i32) | Move(i32) | Put | Get | Loop(body: box List[Op])

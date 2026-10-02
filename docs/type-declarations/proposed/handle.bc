@@ -1,4 +1,4 @@
--- Target 9 (design §9.9): linear handle types, with and without a destructor, in the proposed
+-- Design §10.7: linear handle types, with and without a destructor, in the proposed
 -- surface. Does not parse today. `../lowered/handle.bc` runs the destructor case with the
 -- inserted calls written out.
 

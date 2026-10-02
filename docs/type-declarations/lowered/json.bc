@@ -1,29 +1,133 @@
--- Target 2 of docs/type-declarations-design.md §9.2: the JSON value type, hand-lowered.
+-- Driving program 1 of docs/type-declarations-design.md §10.1: the JSON value type with a parser
+-- and an encoder, hand-lowered. `proposed/json.bc` declares
 --
--- `proposed/json.bc` declares `Json` with `Arr(Vec[Json])` and `Obj(Vec[Member])`: recursion
--- *nested* under another recursive type. That is outside `FShape` (SPEC §6: a leaf must be
--- closed), so the declared type would have no fold and no destructor. This file uses the
--- encoding available today, one `mu` in `FShape`: every node carries its key (inside an object)
--- and its next sibling, and an array or an object points at its first child ("left child,
--- right sibling"). §9.2 of the design weighs this against extending `FShape`.
+--   data Json = Null | Bool(bool) | Num(i32) | Str(Txt) | Arr(Vec[Json]) | Obj(Vec[Member])
+--   data Member = { key: Txt, value: Json }
 --
--- The encoder is what `encode[Json]` specialises to at a borrowed value: a `fold_imm` whose
--- algebra is the encoder of the unrolled node, with the encoding of the children in place. The
--- result type of a `fold_imm` must outlive every lifetime, and a thunk does not (`VOutlives`
--- has no `U` case), so the fold cannot return a writer (`Out -o F Out`); it returns the text,
--- as a list of bytes, which `main` then writes. §6.4 of the design records this.
+-- `Arr(Vec[Json])` puts the recursion under an array, which is outside `FShape` (SPEC §6), so
+-- the declared type would have no fold and no destructor until the kernel entry of design §4.5
+-- lands. This file uses the encoding available today, one `mu` in `FShape`: every node carries
+-- its key (inside an object) and its next sibling, and an array or object points at its first
+-- child ("left child, right sibling").
 --
--- Answer: the line `{"a":[1,true,"hi"],"b":null,"c":{}}` and i32[0].
+-- The parser is plain recursive descent over an owned byte list (SPEC §20): `value`,
+-- `elem_list` and `member_list` are one recursive group, driven by `bounded`, and a malformed
+-- input raises `Fail[i32]`. Its members take owned input and return the rest, because a
+-- recursive group's members take no lifetime parameters.
+--
+-- The encoder is what a derived `encode[Json]` over a borrowed value specialises to: a
+-- `fold_imm`, total, whose carrier is text as a byte list. A `fold_imm`'s result must outlive
+-- every lifetime and a thunk does not, so it cannot return a writer (design §9.3).
+--
+-- Answer: the line `{"a":[1,true,"hi"],"b":null,"c":{}}`, then (i32[0], i32[4]): the first
+-- input parses and is written back; the second, `[1,}`, raises 4 where a value was expected.
 
--- The text of a string, and the encoder's result: bytes, first byte first.
+include rec
+include fail
+include textio
+
+-- Bytes, first byte first: a string's text, and the encoder's result.
 type Txt = mu X. 1 + (i32 * X)
 
 -- One node: (key inside an object, (kind, next sibling)); a kind is
 -- Null | Bool(bool) | Num(i32) | Str(Txt) | Arr(first child) | Obj(first child).
-type J = mu X. (1 + i32) * ((1 + ((1 + 1) + (i32 + (Txt + ((1 + ref X) + (1 + ref X)))))) * (1 + ref X))
+type J = mu X. (1 + Txt) * ((1 + ((1 + 1) + (i32 + (Txt + ((1 + ref X) + (1 + ref X)))))) * (1 + ref X))
+type Kind = 1 + ((1 + 1) + (i32 + (Txt + ((1 + ref J) + (1 + ref J)))))
+type Sib = 1 + ref J
 
 def nil : Txt = roll inl ()
 fn cons(x: i32, t: Txt) -> Txt = roll inr (x, t)
+
+-- The constructors, as the declaration's iso would name them.
+fn mk(k: 1 + Txt, kind: Kind, sib: Sib) -> J = roll (k, (kind, sib))
+
+-- ---------------------------------------------------------------------------------------------
+-- The parser.
+-- ---------------------------------------------------------------------------------------------
+
+fn rev_onto(a: Txt, acc: Txt) -> Txt =
+  match unroll a { inl u -> acc | inr (c, r) -> rev_onto(r, cons(c, acc)) }
+
+fn expect(c: i32, ts: Txt) -> Txt with Fail[i32] =
+  match unroll ts { inl u -> raise(1) | inr (d, r) -> if d == c { r } else { raise(2) } }
+
+-- `n` bytes dropped: the rest of a `null`, `true` or `false`.
+fn skip(n: i32, ts: Txt) -> Txt =
+  if n == 0 { ts } else { match unroll ts { inl u -> nil | inr (c, r) -> skip(n - 1, r) } }
+
+-- A string's bytes after its opening quote, and the input after its closing one.
+fn str_body(ts: Txt) -> Txt * Txt with Fail[i32], Exhausted =
+  match unroll ts {
+    inl u -> raise(3)
+  | inr (c, r) -> if c == 34 { (nil, r) } else { let (s, r) = str_body(r); (cons(c, s), r) }
+  }
+
+fn digits(acc: i32, ts: Txt) -> i32 * Txt =
+  match unroll ts {
+    inl u -> (acc, nil)
+  | inr (c, r) -> if 48 <= c && c <= 57 { digits(acc * 10 + c - 48, r) } else { (acc, cons(c, r)) }
+  }
+
+fn value(ts: Txt) -> Kind * Txt with Fail[i32], Exhausted =
+  match unroll ts {
+    inl u -> raise(1)
+  | inr (c, r) ->
+      if c == 110 { (inl (), skip(3, r)) }
+      else { if c == 116 { (inr (inl (inr ())), skip(3, r)) }
+      else { if c == 102 { (inr (inl (inl ())), skip(4, r)) }
+      else { if c == 34 { let (s, r) = str_body(r); (inr (inr (inr (inl s))), r) }
+      else { if c == 91 { let (first, r) = elems(r); (inr (inr (inr (inr (inl first)))), r) }
+      else { if c == 123 { let (first, r) = members(r); (inr (inr (inr (inr (inr first)))), r) }
+      else { if 48 <= c && c <= 57 { let (n, r) = digits(c - 48, r); (inr (inr (inl n)), r) }
+      else { raise(4) } } } } } } }
+  }
+
+-- After `[`: the first element with its siblings chained, and the input after `]`.
+fn elems(ts: Txt) -> Sib * Txt with Fail[i32], Exhausted =
+  match unroll ts {
+    inl u -> raise(1)
+  | inr (c, r) -> if c == 93 { (inl (), r) } else { elem_list(cons(c, r)) }
+  }
+
+fn elem_list(ts: Txt) -> Sib * Txt with Fail[i32], Exhausted =
+  let (kind, r) = value(ts);
+  match unroll r {
+    inl u -> raise(1)
+  | inr (c, r) ->
+      if c == 44 { let (sib, r) = elem_list(r); (inr (alloc(mk(inl (), kind, sib))), r) }
+      else { if c == 93 { (inr (alloc(mk(inl (), kind, inl ()))), r) } else { raise(5) } }
+  }
+
+-- After `{`: the first member with its siblings chained, and the input after `}`.
+fn members(ts: Txt) -> Sib * Txt with Fail[i32], Exhausted =
+  match unroll ts {
+    inl u -> raise(1)
+  | inr (c, r) -> if c == 125 { (inl (), r) } else { member_list(cons(c, r)) }
+  }
+
+fn member_list(ts: Txt) -> Sib * Txt with Fail[i32], Exhausted =
+  let (k, r) = str_body(expect(34, ts));
+  let (kind, r) = value(expect(58, r));
+  match unroll r {
+    inl u -> raise(1)
+  | inr (c, r) ->
+      if c == 44 { let (sib, r) = member_list(r); (inr (alloc(mk(inr k, kind, sib))), r) }
+      else { if c == 125 { (inr (alloc(mk(inr k, kind, inl ()))), r) } else { raise(6) } }
+  }
+
+fn parse(ts: Txt) -> J with Fail[i32], Exhausted =
+  let (kind, rest) = value(rev_onto(ts, nil));
+  mk(inl (), kind, inl ())
+
+-- The input as a byte list, last byte first (`parse` turns it round).
+fn bytes_of<'a>(t: text 'a) -> Txt =
+  let mut acc = nil;
+  for c in t { acc = cons(to_i32(*c), acc) };
+  acc
+
+-- ---------------------------------------------------------------------------------------------
+-- The encoder: `encode[Json]` at a borrowed value.
+-- ---------------------------------------------------------------------------------------------
 
 -- `a ++ b`, by an owned fold into a function of the tail.
 type App = U (Txt -o F Txt)
@@ -39,8 +143,10 @@ fn num(n: i32, t: Txt) -> Txt =
            inl q -> match host[rem_u32] (n, 10) { inl r -> cons(48 + q, cons(48 + r, t)) | inr _ -> t }
          | inr _ -> t } }
 
+fn quoted(s: Txt, t: Txt) -> Txt = cons(34, app(s, cons(34, t)))
+
 -- The algebra: one node, with its first child's and its sibling's encodings in place.
-fn enc_alg<'y>(r: (1 + i32) * ((1 + ((1 + 1) + (i32 + (Txt + ((1 + Txt) + (1 + Txt)))))) * (1 + Txt))) -> Txt =
+fn enc_alg<'y>(r: (1 + Txt) * ((1 + ((1 + 1) + (i32 + (Txt + ((1 + Txt) + (1 + Txt)))))) * (1 + Txt))) -> Txt =
   let (key, rest) = r;
   let (kind, sib) = rest;
   let after = match sib { inl _ -> nil | inr s -> cons(44, s) };
@@ -52,38 +158,39 @@ fn enc_alg<'y>(r: (1 + i32) * ((1 + ((1 + 1) + (i32 + (Txt + ((1 + Txt) + (1 + T
     | inr k2 -> match k2 {
         inl n -> num(n, after)
       | inr k3 -> match k3 {
-          inl s -> cons(34, app(s, cons(34, after)))
+          inl s -> quoted(s, after)
         | inr k4 -> match k4 {
             inl a -> match a { inl _ -> cons(91, cons(93, after)) | inr c -> cons(91, app(c, cons(93, after))) }
           | inr o -> match o { inl _ -> cons(123, cons(125, after)) | inr c -> cons(123, app(c, cons(125, after))) } } } } } };
-  match key { inl _ -> body | inr c -> cons(34, cons(c, cons(34, cons(58, body)))) }
+  match key { inl _ -> body | inr k -> quoted(k, cons(58, body)) }
 
 def encode : !(all 'a < top. imm 'a J => Txt) =
-  fold_imm[(1 + i32) * ((1 + ((1 + 1) + (i32 + (Txt + ((1 + ref X) + (1 + ref X)))))) * (1 + ref X)), 'b, top, Txt] enc_alg
-
--- The constructors, as the declaration's elaboration would name them.
-fn mk(k: 1 + i32, kind: 1 + ((1 + 1) + (i32 + (Txt + ((1 + ref J) + (1 + ref J))))), sib: 1 + ref J) -> J =
-  roll (k, (kind, sib))
+  fold_imm[(1 + Txt) * ((1 + ((1 + 1) + (i32 + (Txt + ((1 + ref X) + (1 + ref X)))))) * (1 + ref X)), 'b, top, Txt] enc_alg
 
 -- Writing text: an owned fold into a function of the output (`corpus/gen-lines.bc`).
 type Run = U (Out -o F (Out * 1))
 fn run_alg(r: 1 + i32 * Run) -> Run =
-  match r { inl _ -> { o -> (o, ()) } | inr (x, k) -> { o -> let (o, _) = putb(o, x); k!(o) } }
+  match r { inl _ -> { o -> (o, ()) } | inr (x, k) -> { o -> let (o, _) = putb(o, to_u8(x)); k!(o) } }
 def run_txt : !(Txt => Run) = fold_own[1 + i32 * X, Run] run_alg
 
-main -> i32 =
-  -- {"a":[1,true,"hi"],"b":null,"c":{}}
-  let hi = mk(inl (), inr (inr (inr (inl (cons(104, cons(105, nil)))))), inl ());
-  let t = mk(inl (), inr (inl (inr ())), inr (alloc(hi)));
-  let one = mk(inl (), inr (inr (inl 1)), inr (alloc(t)));
-  let c = mk(inr 99, inr (inr (inr (inr (inr (inl ()))))), inl ());
-  let b = mk(inr 98, inl (), inr (alloc(c)));
-  let a = mk(inr 97, inr (inr (inr (inr (inl (inr (alloc(one))))))), inr (alloc(b)));
-  let root = mk(inl (), inr (inr (inr (inr (inr (inr (alloc(a))))))), inl ());
-  let cell = alloc(root);
-  let txt = borrow imm cell { 'x, v -> encode(v) };
-  let w = run_txt(txt);
+fn enc(j: J) -> Txt = let cell = alloc(j); borrow imm cell { 'x, v -> encode(v) }
+
+main -> i32 * i32 =
+  let good = borrow imm "{\"a\":[1,true,\"hi\"],\"b\":null,\"c\":{}}" { 'x, t -> bytes_of(t) };
+  let bad = borrow imm "[1,}" { 'x, t -> bytes_of(t) };
+  let r : (J + i32) * (J + i32) + 1 = with on_exhausted(!{ u -> inr () }) {
+    let a : J + i32 = with to_result { parse(good) };
+    let b : J + i32 = with to_result { parse(bad) };
+    let res : (J + i32) * (J + i32) + 1 = inl (a, b);
+    res
+  };
+  let (out, codes) = match r {
+    inl (a, b) ->
+      let eb = match b { inl j -> 0 | inr e -> e };
+      match a { inl j -> (enc(j), (0, eb)) | inr e -> (nil, (e, eb)) }
+  | inr u -> (nil, (0 - 1, 0 - 1))
+  };
+  let w = run_txt(app(out, cons(10, nil)));
   r <- w!(stdout);
   let (stdout, _) = r;
-  putb(&mut stdout, 10);
-  0
+  codes

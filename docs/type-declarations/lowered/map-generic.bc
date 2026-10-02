@@ -1,23 +1,18 @@
--- EXPECTED TO BE REJECTED today. `map.bc` with `empty` and `insert` generic in `K, V`, as the
--- template `Map[K, V]` would elaborate them: a generic `fn` whose signature has a type
--- parameter inside a `mu` does not elaborate at its call (design §3.1). Kept as the evidence.
+-- EXPECTED TO BE REJECTED today; kept as the evidence for design §4.1. An association-list map
+-- generic in `K, V`, as the template `data Map[K, V] = Empty | Entry(key: K, value: V, rest:
+-- box Map[K, V])` would elaborate its functions: a generic `fn` whose signature has a type
+-- parameter inside a `mu`. Its call at `[i32, i32]` is rejected:
 --
--- Target 5 of docs/type-declarations-design.md §9.5: the declaration side of a generic
--- `Map[K, V]`, hand-lowered. `proposed/map.bc` declares an interface that exports the name
--- `Map[K, V]` and its functions but not its iso, and an implementation whose representation
--- here is an association list, newest first:
+--   this argument of `insert` has type `mu X. 1 + (i32 * i32) * X`, which is not
+--   `mu X. 1 + (K * V) * X`
 --
---   data Map[K, V] = Empty | Entry(key: K, value: V, rest: Map[K, V])      -- (unboxed)
+-- First-order matching (decision 45) does not look inside a `mu`, so `K` and `V` are not read off
+-- the argument. With declarations the parameter's type is the named `Map[K, V]`, which matches
+-- `Map[i32, i32]` by name and arguments (design §3.2), and the instance is elaborated at the
+-- substituted structure. There are no `type` parameters today, so every signature writes the
+-- `mu` out.
 --
--- A parameterised declaration is a template, as a generic `fn` is (decision 45): `Map[i32, i32]`
--- is the `mu` below with `K := i32, V := i32`. There are no `type` parameters today, so every
--- signature writes the `mu` out; that repetition is what §3.1 of the design removes.
---
--- `get` is a borrowed fold whose result is a function of the key. The result of a `fold_imm`
--- must outlive every lifetime, and a thunk does not, but a `!` closure does (`VOutlives.bang`);
--- a `!` closure may capture only persistent values, so this `get` is for persistent `K` and `V`.
---
--- Answer: i32[3] (entries) * (i32[20] (the newest value of key 1) * i32[0] (key 9 absent)).
+-- Once it is accepted: i32[3] (entries) * (i32[20] (the newest value of key 1) * i32[0]).
 
 fn empty[K, V]() -> mu X. 1 + ((K * V) * X) = roll inl ()
 

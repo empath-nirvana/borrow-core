@@ -1,4 +1,4 @@
--- Target 7 (design §9.7): a C struct for FFI, zlib's `z_stream`, in the proposed surface. Does
+-- Design §10.7: a C struct for FFI, zlib's `z_stream`, in the proposed surface. Does
 -- not parse today, and nothing here can run: there is no FFI and no byte-level record layout.
 --
 -- zlib.h (madler/zlib, `typedef struct z_stream_s`):
@@ -9,7 +9,7 @@
 --   int data_type; uLong adler; uLong reserved;
 --
 -- `layout C` is a keyword clause, not an attribute or a comment: it changes what the backend
--- does, so the grammar owns it. Its field types must be C-representable (design §5.4), checked
+-- does, so the grammar owns it. Its field types must be C-representable (design §7.4), checked
 -- at the declaration: `c_uint`, `c_ulong`, `c_int` are the platform's C integer types, and
 -- `cptr`, `cfn` are the raw pointer and function-pointer types of the platform design (branch
 -- `platform-design`), usable only in extern contracts and `layout C` declarations.

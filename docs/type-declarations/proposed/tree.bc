@@ -1,0 +1,35 @@
+-- Driving program 3a (design §10.3): a binary search tree, LeetCode style, in the proposed
+-- surface. Does not parse today. `../lowered/tree.bc` runs the same program.
+
+-- A node is one block with a cell per field; its allocation is written `box` (typed elaboration
+-- §5.3, decided). `Leaf` allocates nothing.
+data Tree derives eq, debug = Leaf | Node(left: Tree, val: i32, right: Tree)
+
+fn insert(t: Tree, x: i32) -> Tree =
+  match t {
+    Leaf -> box Node(Leaf, x, Leaf)
+  | Node(l, v, r) -> if x < v { box Node(insert(l, x), v, r) } else { box Node(l, v, insert(r, x)) }
+  }
+
+-- LeetCode 104 and 226. Plain recursion, driven by `bounded` (SPEC §20).
+fn depth(t: &Tree) -> i32 =
+  match t { Leaf -> 0 | Node(l, _, r) -> 1 + max(depth(l), depth(r)) }
+
+fn invert(t: Tree) -> Tree =
+  match t { Leaf -> Leaf | Node(l, v, r) -> box Node(invert(r), v, invert(l)) }
+
+-- A generator over a borrowed tree, consumed by a `for` (SPEC §15).
+fn inorder<'a>(t: &'a Tree) -> 1 with Yield[i32] =
+  match t { Leaf -> () | Node(l, v, r) -> inorder(l); yield(*v); inorder(r) }
+
+main -> i32 = with on_exhausted(-1) {
+  let mut t = Leaf;
+  for k in 0..7 { t = insert(t, (k * 3) % 7 + 1) };          -- 1 4 7 3 6 2 5
+  for x in inorder(&t) { print(x, " ") };
+  depth(&t)
+}
+
+-- `depth(&Tree)` and `inorder(&Tree)` recurse over a *borrowed* tree. Today a recursive group's
+-- members take no lifetime parameters (SPEC §20), so the lowering takes the tree and hands it
+-- back, and `inorder` builds a string rather than yielding: a recursion's `Exhausted` may abort,
+-- and a generator cannot yet be recursive over a borrow (design §9.3, §13 Q9).

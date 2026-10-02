@@ -1,0 +1,88 @@
+-- Driving program 3a of docs/type-declarations-design.md §10.3: a binary search tree, LeetCode
+-- style, hand-lowered. `proposed/tree.bc` declares
+--
+--   data Tree = Leaf | Node(left: Tree, val: i32, right: Tree)
+--   fn node(l: Tree, v: i32, r: Tree) -> Tree = box Node(l, v, r)
+--
+-- A node is one block with a cell per field, and its allocation is written `box` (typed
+-- elaboration §5.3, decided; design §7.1), so the structure is
+-- `mu X. 1 + (ref X * (ref i32 * ref X))` and a leaf allocates nothing. The constructor and the
+-- pattern are the iso (design §5): `box Node(l, v, r)` is `roll inr (alloc_s[Node] (l, (v, r)))`,
+-- and `match t { Node(l, v, r) -> … }` is `unroll`, then `free` of each cell the arm takes.
+--
+-- The functions are plain recursion (SPEC §20), driven by `bounded`: `insert`, `depth`
+-- (LeetCode 104), `invert` (LeetCode 226) and an in-order walk that writes. A function that
+-- reads a tree and keeps it hands it back: a recursive group's members take no lifetime
+-- parameters (SPEC §20), so a walk over a *borrowed* tree is a fold (design §9.3).
+--
+-- Answer: the in-order line `1 2 3 4 5 6 7`, the inverted line `7 6 5 4 3 2 1`, then i32[3]
+-- (the depth of the tree built from 4 2 6 1 3 5 7).
+
+include rec
+include textio
+
+type Tree = mu X. 1 + (ref X * (ref i32 * ref X))
+shape Node = node (leaf Tree) (node (leaf i32) (leaf Tree))
+
+def tip : Tree = roll inl ()
+fn mk(l: Tree, v: i32, r: Tree) -> Tree = roll inr (alloc_s[Node] (l, (v, r)))
+
+fn insert(t: Tree, x: i32) -> Tree =
+  match unroll t {
+    inl u -> mk(tip, x, tip)
+  | inr (l, p) -> let (c, r) = p; let v = free(c);
+      if x < v { mk(insert(free(l), x), v, free(r)) }
+      else { mk(free(l), v, insert(free(r), x)) }
+  }
+
+fn max(a: i32, b: i32) -> i32 = if a < b { b } else { a }
+
+-- LeetCode 104. The tree is handed back.
+fn depth(t: Tree) -> i32 * Tree =
+  match unroll t {
+    inl u -> (0, tip)
+  | inr (l, p) -> let (c, r) = p; let v = free(c);
+      let (dl, l) = depth(free(l));
+      let (dr, r) = depth(free(r));
+      (1 + max(dl, dr), mk(l, v, r))
+  }
+
+-- LeetCode 226.
+fn invert(t: Tree) -> Tree =
+  match unroll t {
+    inl u -> tip
+  | inr (l, p) -> let (c, r) = p; let v = free(c); mk(invert(free(r)), v, invert(free(l)))
+  }
+
+-- The in-order walk, appending each value and a space to a string; the tree is handed back.
+-- It builds text rather than writing: `stdout` has no destructor, so it cannot be live across a
+-- recursion, which may abort with `Exhausted` (SPEC §18's drop glue; inventory 4.A).
+fn walk(s: string, t: Tree) -> string * Tree =
+  match unroll t {
+    inl u -> (s, tip)
+  | inr (l, p) -> let (c, r) = p; let v = free(c);
+      let (s, l) = walk(s, free(l));
+      let (s, _) = push_dec(s, v);
+      let (s, _) = push_byte(s, b' ');
+      let (s, r) = walk(s, free(r));
+      (s, mk(l, v, r))
+  }
+
+fn line(s: string, t: Tree) -> string * Tree =
+  let (s, t) = walk(s, t);
+  let (s, _) = push_byte(s, b'\n');
+  (s, t)
+
+main -> i32 =
+  let r : (string * i32) + 1 = with on_exhausted(!{ u -> inr () }) {
+    let t = insert(insert(insert(insert(insert(insert(insert(tip, 4), 2), 6), 1), 3), 5), 7);
+    let (s, t) = line(string_new(32), t);
+    let (s, t) = line(s, invert(t));
+    let (d, t) = depth(t);
+    let res : (string * i32) + 1 = inl (s, d);
+    res
+  };
+  match r {
+    inl (s, d) -> let (o, s) = write_string(stdout, s); let stdout = o; d
+  | inr u -> 0 - 1
+  }

@@ -1,4 +1,4 @@
--- Target 8 of docs/type-declarations-design.md §9.8: a declared codata iterator, hand-lowered.
+-- Design §6 and §10.7 (docs/type-declarations-design.md): a declared codata iterator, hand-lowered.
 -- `proposed/codata.bc` declares
 --
 --   codata Countdown {

@@ -1,4 +1,4 @@
--- Target 4 (design §9.4): a graph with node ids, in the proposed surface. Does not parse today.
+-- Driving program 3b (design §10.3): a graph with node ids, in the proposed surface. Does not parse today.
 -- The hand-lowered form, `../lowered/graph.bc`, runs.
 
 -- One field: a newtype. Its iso is the identity in the core, so a `NodeId` is an `i32` at run
@@ -24,4 +24,4 @@ fn out_degree<'a>(g: imm 'a Graph, n: NodeId) -> i32 =
 --   out_degree(&g, 3)            -- "expected `NodeId`, found `i32`"
 --
 -- `derives encode` on a newtype encodes the field alone (`3`, not `{"0":3}`): the `newtype`
--- case of the structure view (design §6.2), as serde's `newtype_struct`.
+-- case of the structure view (design §9.2), as serde's `newtype_struct`.
