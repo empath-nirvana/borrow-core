@@ -1,7 +1,8 @@
--- An operation inside a closure (SPEC §18): the step of `count_fold` is `!` code, which cannot
--- capture the capability of the enclosing `with`. Effectful callbacks are S4 (#161); a `for` over
--- the count threads the capability instead.
--- expect: 9:47: an operation of `Counter` is performed inside a closure or block that is not run in place: it cannot reach its handler (effectful callbacks, #161)
+-- An operation inside a closure (SPEC §18): the step of `count_fold`, a kernel constant and not a
+-- function with a computation parameter (SPEC §22), is `!` code, which cannot capture the
+-- capability of the enclosing `with`. A `for` over the count threads the capability instead, and so
+-- does `fold` of `lib/callbacks.bc`.
+-- expect: 10:47: an operation of `Counter` is performed inside a closure or block that is not run in place, nor passed at a function's computation parameter (SPEC §22): it cannot reach its handler (a stored callback, R6 of decision 57, is not built)
 effect Counter { fn tick() -> i32 }
 
 handler count(mut n: i32): Counter = { tick() = { n = n + 1; n } }

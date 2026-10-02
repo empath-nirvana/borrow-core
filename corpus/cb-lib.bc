@@ -1,0 +1,44 @@
+-- The library's functions over computations (`lib/callbacks.bc`, SPEC §22), each written once and
+-- used at several effects: `fold` with a pure callback (passed as written, to `fold` as written),
+-- with one that logs (`Log`'s capability passed at each call), and with one that raises (the loop
+-- leaves at the raise, the error raised again after it); `each` with one that yields, inside a
+-- generator (the loop is then a loop of the generator's body, one turn per index); `map_buf` with
+-- one that logs; `filter_buf` with a pure predicate; `retry` with a computation that fails twice.
+--
+-- Answer: (i32[10], (i32[20], (inr i32[3], (i32[74], (i32[20], (inl i32[3], (i32[14], i32[3])))))))
+-- `fold` sums 0..5 (10), doubles it while noting each index (20), and raises at 3; the generator
+-- yields 0, 10, 20 and 30 (60), and the map's squares add 14; the filter keeps 0, 1, 2, 8 and 9
+-- (20); `retry` succeeds at the third tick; the log holds 10 + 4, the counter 3.
+include yield
+include callbacks
+
+effect Log { fn note(x: i32) }
+handler tally(mut n: i32): Log = { note(x) = { n = n + x; () } }
+effect Count { fn tick() -> i32 }
+handler count(mut n: i32): Count = { tick() = { n = n + 1; n } }
+
+fn tens(n: i32) -> 1 with Yield[i32] = each(n, { x -> yield(x * 10) })
+
+fn check(x: i32) -> i32 with Fail[i32] = if x > 2 { raise(x) } else { x }
+
+fn flaky(k: i32) -> i32 with Count, Fail[i32] = let t = tick(); if t < k { raise(t) } else { t }
+
+fn sum_buf(b: buf i32) -> i32 =
+  let (b, n) = len_of(b);
+  let mut s = 0;
+  let mut b = b;
+  for i in 0..n { let (b2, o) = pop(b); b = b2; let x = match o { inl x -> x | inr u -> 0 }; s = s + x };
+  s
+
+main -> i32 * (i32 * ((i32 + i32) * (i32 * (i32 * ((i32 + i32) * (i32 * i32)))))) =
+  let l = alloc(0);
+  let c = alloc(0);
+  let p = fold(5, 0, !{ (s, i) -> s + i });
+  let q = with tally(&mut l) { fold(5, 0, { (s, i) -> note(i); s + i * 2 }) };
+  let mut t = 0;
+  for y in tens(4) { t = t + y };
+  let r = with to_result { fold(5, 0, { (s, i) -> s + check(i) }) };
+  let m = with tally(&mut l) { sum_buf(map_buf(4, { i -> note(1); i * i })) };
+  let f = sum_buf(filter_buf(10, !{ i -> i < 3 || i > 7 }));
+  let a = with count(&mut c) { with to_result { retry({ u -> flaky(3) }, 5) } };
+  (p, (q, (r, (t + m, (f, (a, (free(l), free(c))))))))

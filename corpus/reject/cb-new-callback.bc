@@ -1,0 +1,11 @@
+-- A recursion passed a callback holds it in its generator (SPEC §21, §22), and each level calls
+-- that one. `nest` calls itself with a new callback at each level, whose code a generator taken
+-- once cannot hold.
+-- expect: 9:64: `nest` calls itself with a callback other than its own `f`: a recursion holds the callbacks it was entered with, in its generator, and a new one at each level is not provided (SPEC §22)
+include rec
+include fail
+
+fn nest(n: i32, f: !(1 => i32) with Fail[i32]) -> i32 =
+  if n == 0 { f() } else { with to_result { f() }; nest(n - 1, { u -> raise(n) }) }
+
+main -> i32 + i32 = with on_exhausted(!{ u -> inr 0 }) { with to_result { nest(3, { u -> 7 }) } }

@@ -1,0 +1,9 @@
+-- A provided answering effect (SPEC §22, R2d): the callback would perform `Log` on a capability
+-- the callee makes inside it. Not provided: a provided row lists control effects.
+-- expect: 9:22: `logged` provides `Log` at `f`: a provided answering effect is not provided (SPEC §22)
+effect Log { fn note(x: i32) }
+handler tally(mut n: i32): Log = { note(x) = { n = n + x; () } }
+
+fn logged(f: !(1 => i32) with Log) -> i32 = with tally(0) { f() }
+
+main -> i32 = logged({ u -> note(1); 2 })

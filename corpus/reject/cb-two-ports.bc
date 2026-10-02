@@ -1,0 +1,13 @@
+-- Two ports of one effect under one handler (SPEC §22): `pass` passes `both` its own callback,
+-- provided `Fail` at `pass`'s port, beside a new one provided `Fail` at `both`'s. One `with` of
+-- `Fail` in `both` serves calls of both, and a site has one name. A `rename` primitive would serve
+-- it; it is not built.
+-- expect: 9:3: the body of `with to_result` calls callbacks provided `Fail` at two ports: one handler cannot serve both (two ports under one site; `rename` would, not built)
+include fail
+
+fn both(f: !(1 => i32) with Fail[i32], g: !(1 => i32) with Fail[i32]) -> i32 + i32 =
+  with to_result { f() + g() }
+
+fn pass(f: !(1 => i32) with Fail[i32]) -> i32 + i32 = both(f, { u -> raise(2) })
+
+main -> i32 + i32 = pass({ u -> 1 })

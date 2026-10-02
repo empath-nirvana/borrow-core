@@ -91,4 +91,4 @@ main -> (i32 + i32) * ((i32 + i32) * ((i32 + i32) * ((i32 + i32) * i32))) =
   let d = with to_result { view_sum(&bad) };
   let n = len(&bad);
   (a, (b, (c, (d, n))))
--- now: 70:69: `sum_alg` performs `Fail` and is passed as a value: it can only be called (effectful callbacks, #161)
+-- now: 70:69: `sum_alg` performs `Fail` and is passed as a value: it can only be called, or passed at a function's computation parameter (SPEC §22)

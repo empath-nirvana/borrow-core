@@ -1,0 +1,11 @@
+-- A callback provided an effect whose operations resume, called outside the callee's handlers of
+-- it (SPEC §22, R2c): its operations, at the callee's port, would have to be performed again at the
+-- handler around the call, and a clause that holds the continuation across an operation is not
+-- typed. Inlining the callback, or a `rename` primitive, would serve it; neither is built.
+-- expect: 9:53: `f` is provided `Ask`, whose operations resume, and is called here outside the handlers of `Ask` that serve it: its port would be relabelled to the handler around this call, which needs the callback inlined or a `rename` primitive (R2c, not built)
+effect Ask { ctl ask() -> i32 }
+handler asking(c: i32): Ask, i32 -> i32 = { return(a) = a; ask(k) = k(c) }
+
+fn twice(f: !(1 => i32) with Ask) -> i32 with Ask = f() + f()
+
+main -> i32 = with asking(5) { twice({ u -> ask() }) }

@@ -1,7 +1,7 @@
 -- A function with a row passed as a value (SPEC §18): `step` performs `Counter`, so it is
--- elaborated once per handler it is called under, and has no value of its own to pass.
--- Effectful callbacks are S4 (#161).
--- expect: 11:47: `step` performs `Counter` and is passed as a value: it can only be called (effectful callbacks, #161)
+-- elaborated once per handler it is called under, and has no value of its own to pass, except at a
+-- function's computation parameter (SPEC §22). `count_fold` is a kernel constant.
+-- expect: 11:47: `step` performs `Counter` and is passed as a value: it can only be called, or passed at a function's computation parameter (SPEC §22)
 effect Counter { fn tick() -> i32 }
 
 handler count(mut n: i32): Counter = { tick() = { n = n + 1; n } }

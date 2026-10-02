@@ -1,0 +1,46 @@
+-- Functions over computations (SPEC §22, #161). Each is written once, at a callback type that says
+-- nothing of effects, and runs a callback that performs any: what the callback performs that the
+-- function does not provide tunnels to the handlers where the callback was written. A call passes
+-- the callback as a closure value, its code and its environment, to the function's copy for the
+-- callback's profile, one body per profile. A callback that performs nothing is passed as written.
+--
+-- * `each(n, f)`: `f(i)` for each `i` of `0..n`, in order;
+-- * `fold(n, z, f)`: `f` threaded through `0..n` from `z`;
+-- * `map_buf(n, f)`: the buffer of `f(i)` for each `i` of `0..n` (the lazy `map` of a sized
+--   iterator or a generator is `iters`' and `adapters`');
+-- * `filter_buf(n, p)`: the buffer of the `i` of `0..n` for which `p(i)`;
+-- * `attempt(body)`: `body`'s value, or its error: `Fail` is provided to `body`;
+-- * `retry(body, n)`: `body` run at most `n` times, until an attempt does not raise; the last
+--   attempt's error is raised. `Fail` is provided to `body`, and the capabilities it uses are lent
+--   again to each attempt, so a failed attempt's work on them is kept.
+--
+-- `include callbacks` puts them in scope, with `fail` and `buf`.
+include fail
+include buf
+
+fn each(n: i32, f: !(i32 => 1)) -> 1 =
+  for i in 0..n { f(i) };
+  ()
+
+fn fold[B](n: i32, z: B, f: !(B * i32 => B)) -> B =
+  let mut acc = z;
+  for i in 0..n { acc = f(acc, i) };
+  acc
+
+fn map_buf[B](n: i32, f: !(i32 => B)) -> buf B =
+  let mut out = buf_new[B](4);
+  for i in 0..n { let (o, u) = push(out, f(i)); out = o };
+  out
+
+fn filter_buf(n: i32, p: !(i32 => bool)) -> buf i32 =
+  let mut out = buf_new[i32](4);
+  for i in 0..n { if p(i) { let (o, u) = push(out, i); out = o } else { () } };
+  out
+
+fn attempt[A, E](body: !(1 => A) with Fail[E]) -> A + E = body() |> to_result
+
+fn retry[A, E](body: !(1 => A) with Fail[E], n: i32) -> A with Fail[E] =
+  let r = for i in 1..n {
+    match attempt(body) { inl a -> break (inl a : A + 1) | inr e -> () }
+  } else { (inr () : A + 1) };
+  match r { inl a -> a | inr u -> body() }

@@ -3,7 +3,7 @@ import Frontend.Print
 import Frontend.Elab.Subst
 
 /-!
-# Frontend — Elab — effects and handlers  `[spec §18, §19, §20, §21]`
+# Frontend — Elab — effects and handlers  `[spec §18, §19, §20, §21, §22]`
 
 An effect declares operations, each **answering** (`fn`) or **control** (`ctl`, with the
 structural qualifier of its continuation: affine by default, `linear ctl`, `multi ctl`). An effect
@@ -42,11 +42,25 @@ rest of the sugar; it knows no effect by name.
   member inside it is a direct call of the self-reference. A layer is a transformer of the
   generator, applied before the fixed point.
 
+* **A computation parameter** (§22) is a parameter of a function type. A call that passes a
+  callback there, a closure or a function with a row, is a call of the function's copy for the
+  callback's profile: the callback is a closure value, its `!` code (`cbCode`), which takes its
+  capabilities and its environment first and hands them back, and its environment, the variables
+  it captures, a type parameter of the copy (`cbCopyOf`). Its provided effects are at the
+  function's ports, and a `with` around a call of it is named by the port; the rest tunnel. A
+  computation parameter is called (`cbParamCall`), or passed on as it is (`cbCall`).
+* **`e |> g(a, …)`** (decision 50) is `with g(a, …) { e }` for a handler, `g({ _ -> e }, a, …)`
+  when `g`'s first parameter is a computation parameter, and `g(e, a, …)` otherwise (`pipeOf`).
+
 What is not provided, with the message that says so: an operation inside a closure or block that
-is not run in place, and a function with a row passed as a value (effectful callbacks, #161); a
-lend `&mut x` in the arguments of a call that threads a capability; an operation of an answering
-effect inside a clause; an effect with both kinds of operation; type parameters on an answering
-effect; a function with a row whose result is a computation (a loop or a generator).
+is not run in place nor passed at a computation parameter, and a function with a row passed as a
+value elsewhere (a stored callback, R6 of decision 57); a callback that binds a variable it
+captures again; a provided answering effect; a provided effect that resumes, of a callback called
+outside the callee's handlers of it (R2c); two ports of one effect under one site; a recursion that
+passes a new callback at each level; a lend `&mut x` in the arguments of a call that threads a
+capability; an operation of an answering effect inside a clause; an effect with both kinds of
+operation; type parameters on an answering effect; a function with a row whose result is a
+computation (a loop or a generator).
 -/
 
 namespace Frontend.Elab.Effects
@@ -943,8 +957,9 @@ def Cx.capOf (cx : Cx) (e : String) : Option Cap := cx.caps.find? (·.eff == e)
 def Cx.siteOf (cx : Cx) (e : String) : Option Site := cx.sites.find? (·.eff == e)
 
 def notInClosure (sp : Span) (e : String) : Error :=
-  ⟨sp, s!"an operation of `{e}` is performed inside a closure or block that is not run in place: " ++
-    "it cannot reach its handler (effectful callbacks, #161)"⟩
+  ⟨sp, s!"an operation of `{e}` is performed inside a closure or block that is not run in place, " ++
+    "nor passed at a function's computation parameter (SPEC §22): it cannot reach its handler " ++
+    "(a stored callback, R6 of decision 57, is not built)"⟩
 
 /-- The site serving the control instance `i` here, its type arguments checked against the
 instance's when both are determined. -/
@@ -1470,10 +1485,10 @@ def goV : Nat → Cx → List Cap → Val → EM (List Bind × Val)
       match cx.env.fn? x with
       | some g =>
         if g.group.isSome then
-          throw ⟨sp, s!"`{x}` is recursive and is passed as a value: it can only be called " ++
-            "(effectful callbacks, #161)"⟩
+          throw ⟨sp, s!"`{x}` is recursive and is passed as a value: it can only be called, or " ++
+            "passed at a function's computation parameter (SPEC §22)"⟩
         throw ⟨sp, s!"`{x}` performs `{", ".intercalate (g.row.map (·.eff))}` and is passed as a " ++
-          "value: it can only be called (effectful callbacks, #161)"⟩
+          "value: it can only be called, or passed at a function's computation parameter (SPEC §22)"⟩
       | none => pure ([], V)
     | .pair sp V W => do
       let (b₁, V') ← goV k cx cs V
@@ -1583,15 +1598,15 @@ def selfCall : Nat → Cx → List Cap → Span → RSelf → String → Nat →
           match pos.lookup i, V with
           | some pn, .var _ y =>
             unless y == pn do
-              throw ⟨V.span, s!"`{x}` calls itself with a callback other than its own `{pn}`: each " ++
-                "level would need a copy of its own (recursion through values with a new callback; " ++
-                "not provided)"⟩
+              throw ⟨V.span, s!"`{x}` calls itself with a callback other than its own `{pn}`: a " ++
+                "recursion holds the callbacks it was entered with, in its generator, and a new one at " ++
+                "each level is not provided (SPEC §22)"⟩
             -- The generator holds the code: the call passes `()` in its place.
             vs := vs ++ [.unit V.span]
           | some pn, _ =>
-            throw ⟨V.span, s!"`{x}` calls itself with a callback other than its own `{pn}`: each " ++
-              "level would need a copy of its own (recursion through values with a new callback; " ++
-              "not provided)"⟩
+            throw ⟨V.span, s!"`{x}` calls itself with a callback other than its own `{pn}`: a " ++
+              "recursion holds the callbacks it was entered with, in its generator, and a new one at " ++
+              "each level is not provided (SPEC §22)"⟩
           | none, _ =>
             let (b, V') ← goV k cx cs V
             bs := bs ++ b
@@ -1803,13 +1818,9 @@ def withCtl : Nat → Cx → List Cap → Span → Span → CHandler → List VT
     -- they come back when the body is abandoned.
     let mut csM : List Cap := []
     for c in cx.needC M do
-      -- A callback's environment is passed in, and comes back with each call; it is not lent.
-      if let some m := c.env then
-        if m then
-          throw ⟨ksp, s!"a callback called in the body of `with {ch.name.name}` assigns a variable it " ++
-            "captures: the body may be abandoned, and the assignment would be lost; keep that state " ++
-            "in a handler's capability instead (SPEC §22)"⟩
-        continue
+      -- A callback's environment is passed in, and comes back with each call; it is not lent. It
+      -- holds what the callback captures, which the callback does not bind again (`cbCall`).
+      if c.env.isSome then continue
       if c.thr.isSome then
         throw ⟨ksp, s!"the body of `with {ch.name.name}` performs `{c.eff}` of an enclosing `for`, " ++
           "which threads its variables through the operation: a control handler's body may be " ++
@@ -2297,7 +2308,13 @@ def cbCall : Nat → Cx → List Cap → Span → Val → String → Val → EM 
       let vars := match cx.recSelf with
         | some rs => if fv.any rs.members.contains && !rs.deep then vars ++ [rs.self] else vars
         | none => vars
-      let assigns := vars.any M.boundNames.contains
+      -- Its environment comes back from each call, but not out of the blocks around the call: a
+      -- variable it captures is not bound again in it.
+      if let some v := vars.find? M.boundNames.contains then
+        throw ⟨V.span, s!"this callback binds `{v}` again, a variable it captures: an assignment or a " ++
+          "shadowing `let` of a captured variable in a callback is not provided; keep such state in " ++
+          "a handler's capability, or rename the inner variable (SPEC §22)"⟩
+      let assigns := false
       let mut ports : List (String × Nat) := []
       for e in prov do ports := ports ++ [(e, ← portOf x e)]
       specs := specs ++ [(⟨cp, T, assigns, ports⟩, some (y, M, vars), none)]

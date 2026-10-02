@@ -1,0 +1,15 @@
+-- A callback that binds a variable it captures again (SPEC §22): its environment comes back from
+-- each call, but not out of the blocks around the call, and a handler around it may abandon it.
+-- An assignment or a shadowing `let` of a captured variable is rejected; state that a callback
+-- keeps belongs in a handler's capability.
+-- expect: 14:19: this callback binds `n` again, a variable it captures: an assignment or a shadowing `let` of a captured variable in a callback is not provided; keep such state in a handler's capability, or rename the inner variable (SPEC §22)
+include fail
+
+fn guarded(f: !(1 => 1) with Fail[i32]) -> 1 + i32 = f() |> to_result
+
+fn check(x: i32) -> 1 with Fail[i32] = if x > 2 { raise(x) } else { () }
+
+main -> i32 =
+  let mut n = 0;
+  let r = guarded({ u -> n = n + 1; check(n) });
+  n

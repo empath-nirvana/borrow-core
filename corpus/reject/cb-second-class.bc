@@ -1,0 +1,13 @@
+-- A computation parameter is second class (SPEC §22; R5 of decision 57): it is called, or passed
+-- at a computation parameter, and never returned, stored or bound to a value. `keep` returns its
+-- callback, which is a closure value lent for the call: its environment is the caller's.
+-- expect: 8:42: the callback `f` is used as a value: a computation parameter is second class, and can only be called or passed at a computation parameter (SPEC §22)
+effect Log { fn note(x: i32) }
+handler tally(mut n: i32): Log = { note(x) = { n = n + x; () } }
+
+fn keep(f: !(i32 => 1)) -> !(i32 => 1) = f
+
+main -> i32 =
+  let l = alloc(0);
+  let g = with tally(&mut l) { keep({ x -> note(x) }) };
+  free(l)
