@@ -1,7 +1,9 @@
 # An executable model of effects as algebras, capabilities as comodels
 
 Phase A of #235. Experiment: `experiments/EffModel/` (non-default library `EffModel`, imported by
-nothing, no Mathlib). It changes nothing in `Core/`, `Frontend/` or `Backend/`.
+nothing, no Mathlib). It changes nothing in `Core/`, `Frontend/` or `Backend/`. Phase B (the
+relation, the theorems, resource safety and the lift plan) is §8, over
+`experiments/EffModelRel/`.
 
 **Question.** Today's effect system is two mechanisms joined by glue:
 
@@ -453,3 +455,343 @@ Then:
 5. **The bridge to borrow-core.** Which of these can be stated over `CDerives`, in the spirit
    of #184 (`effect_safety` as a corollary of the FP)? A spec entry would follow, per
    `CLAUDE.md`.
+
+---
+
+## 8. Phase B: the relation and what it proves
+
+Experiment: `experiments/EffModelRel/` (non-default library `EffModelRel`, imported by nothing,
+no Mathlib). It changes nothing in `Core/`, `Paper/`, `Support/`, `Frontend/` or `Backend/`.
+Every theorem named below builds with `lake build EffModelRel`, has no `sorry`, and depends on
+at most `propext`, `Classical.choice` and `Quot.sound`. Claims here are **[proved]** (a
+theorem), **[open]** (the exact statement and what blocks it), or **[inferred]** (analysis).
+
+### 8.1 The calculus, re-stated
+
+Phase A's calculus, intrinsically typed (`Syntax.lean`), so that a term is its typing derivation
+for everything but modes:
+
+- **Contexts.** An instance context `Ψ` (instances are second class: a variable of `Ψ` is never
+  a value) and a value context `Γ`.
+- **Bounds.** Thunks, functions and streams carry an effect bound `Eb = (req : Mode, susp :
+  Bool)`: the least qualifier of what they may perform, and whether a handler of it may keep its
+  continuation.
+- **Continuations.** `κ` has type `kty q b r C`: at an operation whose qualifier has weakening
+  (`q.w`) it is the linear record `⟨resume, cancel⟩`, the `A & 1` encoding of §3.2. This is static
+  destructor placement (§8.6).
+- **Recursion.** Only `bfix x a v n M`, the `n`-th iterate of `M` from "abort `a` on `x`"; and
+  one recursive type, the stream `strm b A = μX. U(F(A + int × X) & F 1)`.
+- **Co-operations may raise.** A comodel's co-operation answers `coRes = (res × s) + (int × s)`.
+
+**Denotation** (`Tree.lean`, `Denot.lean`). A computation denotes a finite tree with nodes
+`ret`, `op i e o v k d`, `ab i e a v d`, `nu k` and `act a k`:
+
+- `d` lists the destructors between an operation and its eventual handler. Cancelling the
+  continuation runs `d` and nothing else (decision C).
+- Every computation type is a model: an operation at a function or record type acts pointwise.
+- A handler is the fold of a tree into a model (`Tree.hnd`), a lend the state-passing fold
+  against a comodel (`Tree.runL`), and `finally` an `addFin`.
+
+There is no fuel: `bfix` is bounded, so every definition is structural.
+
+**Contextual equivalence** (`Obs.lean`). `CtxEq M N` quantifies over every syntactic closing
+context `P : Context S Ψ Γ C g` at every ground type `g`, and compares the observables of the
+closed programs: outcome (value, unhandled operation, or stuck) and trace (output, acquire, use,
+free, create, consume).
+
+### 8.2 The binary relation
+
+**Worlds** (`World.lean`) are Staton's `[Inj, Set]` reading of `ν`, extended so that two sides
+may allocate in different orders. For each name on each side the world says one of:
+
+- `free`: not yet allocated;
+- `m b`: matched with name `b` on the other side (a partial bijection);
+- `p`: allocated, waiting to be matched later;
+- `g`: garbage, never to be matched: an instance nothing can name.
+
+The Kripke order `le` matches more names and frees fewer, with pending names unchanged. Values
+are related at the world with pending names read as garbage (`gcP`).
+
+**Trees** (`Rel.lean`). `TreeRel R w t t'` is an inductive relation: same shape up to the
+world's matching of names. The constructors:
+
+- `ret`, `op`, `ab` and `act` relate equal shapes. Operations and leaves need a world with
+  nothing pending.
+- `nu` matches two allocations. `nuL`/`nuR` and `mL`/`mR` let one side allocate first and match
+  later; `gL`/`gR` let a side allocate a name the other never does.
+- `abE` relates an abort carrying destructors `d ++ f` to running `d` first and then aborting
+  with `f`. This is the destructor form of arity-0 algebraicity.
+
+**Values and computations.** `VR` is defined by recursion on value types, `CRU` on computation
+types, both Kripke at functions, instance abstractions and thunks. The stream type is the one
+place a type mentions itself. Its relation `StrmRel` is the least relation closed under one
+unfolding, an impredicative least fixed point; it exists because `X` is positive. Instance
+environments are related by the world's matching (`IR`), value environments by `VR` (`ER`).
+`LR M N` is the open relation.
+
+**Theorems.**
+
+- **[proved] The fundamental property**: `fundamental : LR M M` for every term (`Fundamental.lean`).
+  It rests on the compatibility of the relation with every model operation, `bind`, handlers,
+  lends and `finally` (`Compat.lean`: `hnd_rel`, `runL_rel`, `addFin_rel`, `bindC_rel`).
+- **[proved] Soundness**: `soundness : LR M N → CtxEq M N` (`Adequacy.lean`). Adequacy runs two
+  related trees against two worlds kept in step by an invariant (`Inv`). Related actions
+  execute alike (`AR.exec_rel`), and related destructor lists unwind alike (`DR.unwind_rel`).
+- **[proved]** `CtxEq` is an equivalence (`CtxEq.refl`, `symm`, `trans`), and denotational
+  equality implies it (`CtxEq.of_den`).
+
+**Step-indexing was avoided.** Trees are finite because recursion is bounded (`bfix`), so
+`TreeRel` is inductive and `VR`/`CRU` are structural. The stream's relation is a least fixed
+point, which needs positivity and nothing else.
+
+**[proved] Where the method stops** (`Obstruction.lean`). Take a recursive type with `X` to the
+left of an arrow under `U`, such as `μX. U(X → F bool)` (T15's "X under a `U`-codomain"). It has
+no set denotation in this semantics. `no_negative_domain` shows that no set `X` retracts onto
+`X → Tree S Bool`; it is Cantor's argument. Admitting that type is exactly what would force a
+step-indexed or domain-theoretic model. The theorem is about this method, not about the type's
+soundness.
+
+### 8.3 The theorem table
+
+Rows follow the brief's list: algebraicity (phase A's L1a), the handler laws, the `Log`/`Fail`
+sum and absorption, the tensor, Staton's `ν` laws, and no accidental handling.
+
+| law | statement | status | theorem |
+|---|---|---|---|
+| L1a at `to` | `(op x v; y.M) to z. N ≡ op x v; y.(M to z. N)` | **proved** | `alg_bind` |
+| L1a at a function type | `(op x v; y.M) w ≡ op x v; y.(M w)` | **proved** | `alg_app` |
+| L1a at a record type | `πᵢ (op x v; y.M) ≡ op x v; y.(πᵢ M)` | **proved** | `alg_prj1`, `alg_prj2` |
+| L1a at an instance abstraction | `(op x v; y.M) b ≡ op x v; y.(M b)` | **proved** | `alg_iapp` |
+| L1a at arity 0 | `abort to z. N ≡ abort`; `(abort) w ≡ abort` | **proved** | `alg_ab_bind`, `alg_ab_app` |
+| L1a at arity 0, destructor form | `K[abort] ≡ D_K; abort`: `using ℓ (abort to z. N) ≡ (using ℓ (return ())); abort` | **proved** | `alg_dtor` |
+| H-ret | `handle (return v) ≡ h_ret v` | **proved** | `h_ret` |
+| H-op | `handle_x (op_x v; y.M) ≡ h_op(v, ⟨λy. handle_x M, cancel⟩)`, the handler at an instance variable `x` | **proved** | `h_op` |
+| H-fwd | `handle_h (op_l v; y.M) ≡ op_l v; y. handle_h M` | **proved** | `h_fwd` |
+| H-fwd at arity 0 | `handle_h abort_l ≡ abort_l` | **proved** | `h_fwd_ab` |
+| absorption, general | inside a model of `e` whose clause for `o` resumes once with a pure answer and next state (`PureClause`), `h (op_o v; abort_f) s ≡ h abort_f s` for `f ≠ e` | **proved** | `absorb_pure` |
+| absorption, `Log`/`Fail` | inside a writer `Log`, under any `Fail`: `log m; raise ≡ raise` | **proved** | `absorb_writer` (`writer_pure` discharges `PureClause`) |
+| sum: absorption fails elsewhere | `Fail` outside a printing `Log`; a writer outside `Fail`; printing outside `Fail`; a runner with the lend inside `Fail` | **proved** (four `¬ CtxEq`) | `not_absorb_print_inside`, `not_absorb_writer_outside`, `not_absorb_print_outside`, `not_absorb_runner_inside` |
+| sum for lent state | `inc c; raise ≢ raise`: the lend's state survives the abort | **proved** (`¬ CtxEq`) | `lent_state_survives` |
+| sum: printers | two printing `Log`s do not commute | **proved** (`¬ CtxEq`) | `print_print_not_commute` |
+| sum: writers | two writer `Log`s commute | **open** | not attempted; by `CtxEq.of_den` it is a denotational equation of `hnd` at a state-passing type |
+| tensor | on two lent capabilities whose co-operations answer in place (`PureCo`), `op_x₁ v₁; op_x₂ v₂; K ≡ op_x₂ v₂; op_x₁ v₁; K` | **proved** | `tensor` |
+| idem-ν | `ν b. M ≡ M` (`b ∉ M`) | **proved** | `idem_nu` |
+| new-ν | `ν b. (if a = b then M else N) ≡ ν b. N` | **proved** | `new_nu` |
+| ν/ν | `ν b₁ b₂. M(b₁,b₂) ≡ ν b₁ b₂. M(b₂,b₁)` | **proved** | `nu_nu` |
+| ν/op, multi-shot | `ν b. op_a(v; y.M b) ≡ op_a(v; y. ν b. M b)` | **refuted** at an unrestricted operation: a handler resuming twice sees one instance on the left and two on the right | `nu_op_fails_multishot` (with `nuOp_obs`) |
+| ν/op, linear or affine | the same, `S.q e o` without contraction | **open** | see §8.8 |
+| no accidental handling | `ν h. handle_h M ≡ M` for any clauses, `h ∉ M` | **proved**, as parametricity in instances | `no_accidental_handling` (via `hnd_transparent`) |
+
+**Commutation of disjoint capabilities** is the tensor row. **Absorption exactly under the
+stated nesting** is the absorption rows together with the four refutations under them. Phase A's rows that are
+`#guard`s over a finite context suite are here statements over all contexts.
+
+**`ν/op` and phase A.** Phase A passed `ν/op` in all 48 of its contexts, because its suite had
+no multi-shot handler around that law's hole. The law holds in Staton's setting, where
+operations are algebraic with linear-use continuations. Over all contexts here it fails exactly
+when the continuation may be copied.
+
+### 8.4 Resource safety (unary)
+
+**Ownership** (`Own.lean`). Ownership is a multiset of tokens: one per `using` frame's resource,
+one per owned capability. The inductive `TS` says what a tree does with what it owns:
+
+- acquiring and creating add a token; freeing and consuming remove one;
+- reading and writing a cell need its token;
+- at an operation, the continuation keeps everything owned. If the operation's qualifier has
+  weakening, the destructors `d` free exactly what it owns (`CancelOK`, `DropOK`). If it has
+  contraction, it owns nothing;
+- an abort's destructors free exactly what it owns.
+
+`Tree.Safe` runs a tree against the world with a ghost count of live tokens. `adequacyU`
+proves that a `TS` tree runs safely.
+
+**Values** (`Unary.lean`). `VS A O v`: the value `v` owns `O`. A thunk or a stream is safe at
+its bound: forcing it gives a `TS` tree bounded by the bound's mode.
+
+**[proved] The key lemma is independence**, `VS.indep`: a value at a mode with weakening or
+contraction owns nothing. A continuation that may be dropped or copied therefore captures
+nothing that owns. That is the whole content of the multi-shot persistence condition, of "no
+destructor-less capability across an affine operation", and of "`!` captures only persistent
+values".
+
+**The judgement** (`ModedJ.lean`). `VM`/`CM` is phase A's typing on the intrinsic terms:
+
+- grades: a linear variable is consumed once on every path;
+- independence at every capture point;
+- `using` frames are affine;
+- bounds cover what is performed;
+- rows are sets of instances with a mode for what thunks perform.
+
+The fragment omits `lend`.
+
+**[proved] The fundamental property** `CM.fp` / `VM.fp` (`UnaryFP.lean`): a moded term, in an
+environment whose values own `Os`, is safe owning exactly what its linear variables own. The
+tree-level lemmas it uses are in `UnaryCompat.lean` (`hnd_safe`, `mkK_safe`, `bindC_safe`,
+`addFin_safe`, `dtorsT_safe`, and the model operations).
+
+**[proved] `resource_safety`.** For a closed program `P` with `CM VSet.none R P`, the run of
+`P` never fails an action. Every free, read, write and consume finds its token and a live cell.
+If the run returns, nothing is live:
+
+- every resource a `using` frame acquired was freed exactly once, whether on return, on abort,
+  when a continuation holding the frame was cancelled, or when a stream was dropped;
+- every capability was consumed exactly once.
+
+The statement is:
+
+    theorem resource_safety {g : G} (P : Prog S g) {R : Row S []}
+        (hP : CM (Ψ := []) (Γ := []) VSet.none R P) :
+        (P.den IEnv.nil Env.nil).Safe (fun O _ => O = 0) ⟨Wd.init, 0⟩
+
+**What it does not cover:**
+
+- **Lends.** The judgement has no `lend` rule (§8.5).
+- **Effect safety.** An operation that reaches the top is not `Safe`'s business: `Tree.Safe`
+  is `True` at a top-level `op` or `ab`. The judgement bounds what a thunk performs by a mode,
+  not by a set of instances (`Row.fgn`), so it cannot conclude that a forced thunk's operations
+  are handled. This is open (§8.8).
+- **Use of a resource handle after its frame freed it.** A handle is second class by phase A's
+  scope rule, and `use` checks no token.
+
+"No stuck states" holds for actions: intrinsic typing excludes type errors, and `Safe` excludes
+a failed action. It does not hold for unhandled operations, which is effect safety.
+
+### 8.5 T1 and the tests that depend on it
+
+**[proved] The harm T1 prevents is real.** In `t1Harm` (`Examples.lean`), a stream escapes a
+lend through a handler that keeps the continuation. The owner then consumes the capability, and
+pulling the stream resumes the runner, whose write-back finds no cell:
+`t1Harm_stuck : t1Harm.obs.out = .stuck`. The control, a tail-resumptive handler, runs:
+`t1Control_runs`.
+
+**[open] T1 soundness.** The statement to prove is `resource_safety` for the judgement extended
+with a `lend` rule whose body's row has `susp = false`, with the rule as phase A states it.
+
+What is missing is not verified to be an obstruction. It is a mechanism the current proof does
+not have:
+
+- **Ownership is tree-local.** `TS` gives each token to one subtree.
+- **During a lend, the capability's token sits with the runner frame**, inside every
+  continuation the body's operations capture.
+- **When the lend returns, the token must go back to the owner.** This is a lifetime-style
+  return of ownership at a scope's end.
+- **`susp = false` is not yet a semantic fact.** It has to become one: a handler whose bound
+  says it does not suspend resumes or cancels `κ` before its clause returns, so no continuation
+  holding the token outlives the lend.
+
+Neither the debt bookkeeping in `TS`/`CS` nor that tail-resumption lemma is built.
+
+The three tests that depend on T1 have this status:
+
+- **The tail-resumption test.** Phase A's `Tm.tailOnly` is syntactic. Here it is the bound's
+  `susp` bit. Its soundness is the tail-resumption lemma above: **open**.
+- **"Instances are never data"** is **[proved] by construction**. Instances live in `Ψ`, which
+  no value type mentions, and `ilam`/`iapp` abstract over them. `no_accidental_handling` is
+  the parametricity this buys.
+- **The stream type with `drop`** is **[proved] sound** for resources:
+  - `StrmS` and the `fold`/`unfold` cases of `CM.fp`;
+  - `drop` is the stream's `& F 1` component;
+  - a dropped stream runs its continuations' destructors (`mkK_safe`);
+  - in the binary relation, `StrmRel` and the fundamental property cover it.
+
+### 8.6 The two settled questions
+
+**Destructor placement: static** (Congard et al.). `κ` at an operation with weakening is the
+linear record `⟨resume, cancel⟩` (`kty`). `cancel` runs exactly the destructors recorded at the
+operation. The elaborator places `cancel` at each weakening point, so a dropped `κ` is a static
+destructor call and the machine has no reachability test.
+
+- **[proved]** The binary relation (`mkK_rel`, `hnd_rel`) and resource safety (`mkK_safe`,
+  `hnd_safe`, `resource_safety`) hold with this placement.
+- Phase A's open problem 1, "an affine thunk holding a continuation leaks when dropped", is
+  closed by it.
+- This is the kernel's `kTy` (`Core/EffRules.lean`): `U((B ⊸ F_Σ R) & F_Σ 1)` at `aff`. The
+  kernel already has the static form.
+
+**Co-operations that can raise: yes, by Ahman–Bauer's `finally`.** A co-operation answers
+`coRes = (res × s) + (int × s)`: an answer and a next state, or an error and a state. When a
+co-operation raises:
+
+1. the runner cancels the client's continuation, running its destructors;
+2. it writes the state back to the cell;
+3. the lend answers `inr e`.
+
+- **[proved]** The relation is preserved (`runL_rel`), and the resource side by
+  `dtors_safe`/`dtorsT_safe`.
+- The write-back is itself a destructor (`Dtor.wb`) on every operation the lend forwards. An
+  abort that passes through the lend therefore also writes back first. That is
+  `not_absorb_runner_inside` and `lent_state_survives`.
+- **[inferred]** An operation whose co-operation can raise must have a qualifier with
+  weakening, since its continuation may be cancelled.
+- In the kernel this is `Row.Unwind` (`Core/EffBorrow.lean`): a borrow's callback may unwind
+  through abortive operations, and the frame writes back.
+
+### 8.7 The lift onto the current kernel
+
+**This section is analysis only [inferred].** Nothing in `Core/` was changed.
+
+**Construct by construct:**
+
+| construct | in the kernel | verdict |
+|---|---|---|
+| `κ = ⟨resume, cancel⟩`, static destructors | `kTy` (§19), `& F_Σ 1` at `aff`, `!` at `unr` | **already present** |
+| raising co-operations, unwinding borrows | `Row.Unwind`, the unwinding `withbor` forms (§19) | **already present**; the model adds the error-with-state answer, which the kernel's capability methods can already return as data |
+| `finally` / `using` | `effThen` (`thenE`), §12's implicit destructors | **already present** |
+| the affine closure (§22) | `Aff^c A B = νX. (A ⊸ F(B ⊗ [@c] U X)) & F 1`, no new former | **already present**; the model's stream is the same `C & F 1` shape with `drop` as the second component, and its soundness (§8.5) is the shape §22 relies on |
+| outlives K1/K2, `'main` (§23) | `VOutlivesR`, `withbor2Le`, `main`'s lifetime | **already present**, orthogonal: the model has no lifetimes; a lend is scoped syntactically. A lifetime check could replace T1's `susp` test, since a `κ` whose type mentions `'x` cannot leave `'x`; this was phase A's open problem 4 and is still untested |
+| `bounded_fix` (§20/§21) | `boundedFix`, `boundedFix_compatX` | **already present**; the model's `bfix` is the same iterate from the exhausted computation |
+| §19's static names `n`, sites, per-row copies | `effHandle` with `hn0 : n ≠ 0`, `hnS : n ∉ Σ`; `Row.ofEff n`; `groupCopy`/`layerCopy` and `withCtl` in `Frontend/Elab/Effects.lean` | **replaced by `ν`**: an instance context `Ψ` in `CDerives`, rules `nu`, `handleAt`, `ilam`/`iapp`. A static name becomes an instance allocated once at its declaration |
+| rows `Σ` of `(name, index, q, A, B)` | `CTy.effOf Σ`, `Row` | **replaced**: rows over instance variables, not static names. The model puts only a bound `(mode, susp)` on thunk types, which is why its effect safety is open (§8.8); the kernel's rows should not be weakened to bounds |
+| `fn` (answering) | capabilities lent by `withbor` (#184), `withswap` | **comodel**: present; a lend is `runL`, the state-passing fold |
+| `ctl` (control) | `effHandle` answering `F_Σ R` | **model**: a new rule generalising `effHandle`'s answer type from `F_Σ R` to any computation type (state-passing handlers into `A → C`) |
+| `ν/op` and fresh-instance laws | none (T2 is generative names) | **new**: the relation's worlds (§8.2) are what T16, the missing binary relation on `Core`, would need for instances |
+
+**Order of the lift.** Decision 20 applies: a generalisation lands together with the deletion of
+its instances.
+
+1. **A binary relation on `Core` (T16).** Port §8.2's worlds onto `Core`'s typed worlds, so the
+   laws can be stated there. `Core` has no step index, and §8.2 shows instances need none. Its
+   `μ`/`ν` are positive, and `Obstruction.lean` names what would force one (T15).
+2. **Instances replace static names**, in one change:
+   - add `Ψ`, `nu`, `handleAt`, `ilam`/`iapp`;
+   - delete from `effHandle` the static name and `hn0`/`hnS`;
+   - delete `Row.ofEff`'s naming, the per-site and per-row copies (`groupCopy`, `layerCopy`)
+     and the `withCtl` glue.
+
+   Rows are re-indexed by instance variables.
+3. **Handlers into any computation type.** Generalise `effHandle`'s answer type. Delete the
+   hand-written state-passing elaborations that this subsumes, in the same change.
+4. **`fn`/`ctl` as comodel/model.** This is surface only: `fn` keeps elaborating to a lent
+   capability, and `ctl` to the generalised handler. The two keywords stay as spellings.
+5. **T1 relaxed** (a lend's body may perform tail-resumptive control, not only abort). This
+   would generalise `Row.Unwind`'s abortive-only condition. Only after T1 soundness (§8.5) is
+   proved.
+
+**Deletions**, by step:
+
+| step | deleted |
+|---|---|
+| 2 | static names in `effHandle` (`hn0`, `hnS`); `Row.ofEff n`; `groupCopy`, `layerCopy`; `withCtl` glue |
+| 3 | the special state-passing handler elaborations |
+| 5 | `Row.Unwind`'s abortive-only clause, which becomes the `susp = false` condition |
+
+`kTy`, `boundedFix`, `effThen` and §22/§23 are unchanged.
+
+### 8.8 Open items
+
+1. **T1 soundness.** The statement and the missing mechanism are in §8.5. The harm is
+   machine-checked (`t1Harm_stuck`).
+2. **Effect safety.** For a closed moded program with an empty row, no operation reaches the
+   top. It is blocked because thunk types carry a bound (`Eb`), not a row of instances, so
+   `force` contributes `Row.fgn b.req` and the judgement loses track of which instances a forced
+   thunk performs on. The fix is to carry rows in types. Not attempted.
+3. **`ν/op` at linear and affine operations.** The statement is
+   `CtxEq (ν b. op_a(v; y.M b)) (op_a(v; y. ν b. M b))` when `(S.q e o).c = false`. It needs
+   contextual equivalence over **moded** contexts: `CtxEq` ranges over intrinsically typed
+   contexts, whose handler clauses may copy a linear `κ`, and that copy is exactly the
+   counterexample. Not attempted.
+4. **Two writers commute** (the sum). Not attempted.
+5. **Lends in the moded judgement.** This is the same missing mechanism as item 1.
+6. **Use-after-free of resource handles.** A handle is second class by phase A's scope rule,
+   which is not modelled as a check here (`use` checks nothing).
