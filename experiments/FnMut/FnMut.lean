@@ -48,3 +48,5 @@ import FnMut.Core.Steps
 import FnMut.Core.Types
 import FnMut.Core.World
 import FnMut.Core.Wp
+import FnMut.Types
+import FnMut.Rules

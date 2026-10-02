@@ -1,0 +1,227 @@
+import FnMut.Kit
+
+/-!
+# FnMut — the rules, derived
+
+Every rule here is a derivation in the fork's `CDerives`, from `nuIn`/`nuOut`, coiteration
+(`unfoldN`), `withswap`, `[]I`/`[]E` and the CBPV formers.  None is a new constructor, so
+`fundamentalC` and `adequacyC` cover them with no new compatibility lemma.
+
+| rule | term | from |
+|---|---|---|
+| introduction | `mkE`: a state `s₀ : S`, `!` code `step : S ⊸ (A ⊸ F(B ⊗ [@c] S)) & F 1` | `unfoldN` |
+| call | `callE f a : F(B ⊗ [@c] U(FnMut^c A B))` | `nuOut`, `π₁`, application |
+| close | `closeE f : F 1` | `nuOut`, `π₂` |
+| call through `Mut` | `callMutE m a : Mut @a ([@c] U FnMut) ⊗ B` | `withswap` with the call as callback |
+| `Fn ≤ FnMut` | `mkE` at the state `!U(A ⊸ F B)` (`d_fromFn`) | `unfoldN`, persistence |
+| `FnMut ≤ FnOnce` | `onceE f : U(A ⊸ F B)`: call once, close the rest (`d_once`) | the above |
+-/
+
+noncomputable section
+
+variable {ℍ : BoCa.Host} [BoCa.HostIs ℍ]
+
+namespace BoCa.Fig16.LogRel.Core
+open BoCa
+open BoCa.Fig16
+open BoCa.Fig16.BoLo
+open BoCa.Lifetime (LSub LifeCtx LifeVar)
+
+variable {Δ : LifeCtx}
+
+/-! ### In, out, coiteration -/
+
+theorem CDerives.fnIn {Γ : Ctx VTy} {e : Expr} {c : Lifetime.Life} {A B : VTy} (hA : A.Cl 0)
+    (h : CDerives Δ Γ e (.comp (fnUnroll c A B))) : CDerives Δ Γ e (.comp (fnMutC c A B)) :=
+  .nuIn (fnBody_nuOk hA c B) (by rw [fnBody_unroll]; exact h)
+
+theorem CDerives.fnOut {Γ : Ctx VTy} {e : Expr} {c : Lifetime.Life} {A B : VTy} (hA : A.Cl 0)
+    (h : CDerives Δ Γ e (.comp (fnMutC c A B))) : CDerives Δ Γ e (.comp (fnUnroll c A B)) := by
+  rw [← fnBody_unroll]; exact .nuOut (fnBody_nuOk hA c B) h
+
+/-- `unfold` at `FnMut^c A B`: `!U(S ⊸ (A ⊸ F(B ⊗ [@c] S)) & F 1) ⊸ !U(S ⊸ FnMut^c A B)`. -/
+abbrev fnUnfoldTy (c : Lifetime.Life) (A B S : VTy) : VTy :=
+  .lolli (.bang (.thunk (.arr S (fnStepC c A B S)))) (.bang (.thunk (.arr S (fnMutC c A B))))
+
+abbrev fnUnfoldV (c : Lifetime.Life) (A B : VTy) : Val := unfoldV (fnBody c A B)
+
+theorem CDerives.fnUnfold {Γ : Ctx VTy} {c : Lifetime.Life} {A : VTy} (hA : A.Cl 0) (B S : VTy)
+    (hΓ : Ctx.DeadP Γ) : CDerives Δ Γ (.val (fnUnfoldV c A B)) (.val (fnUnfoldTy c A B S)) := by
+  have h := CDerives.unfoldN (Δ := Δ) (fnBody c A B) S (fnBody_nuOk hA c B) hΓ
+  rwa [unfoldTy, fnBody_instT] at h
+
+/-! ### Introduction: a closure from a state and `!` code -/
+
+/-- `⟨(f s) π₁, (f s) π₂⟩`, with `f : U(S ⊸ FnMut^c A B)` at `2` and `s : S` at `3` inside
+`withPair`'s binders: the codata `unfold step s` as a value. -/
+def packE : Expr :=
+  withPair (.app (.app (.var 2) (.var 3)) (.val (.inj₁ .unit)))
+    (.app (.app (.var 2) (.var 3)) (.val (.inj₂ .unit)))
+
+theorem d_pack {Γ : Ctx VTy} {c : Lifetime.Life} {A B S : VTy} (hA : A.Cl 0) (hΓ : Ctx.Dead Γ) :
+    CDerives Δ (⟨.thunk (.arr S (fnMutC c A B)), true⟩ :: ⟨S, true⟩ :: Γ) packE
+      (.val (fnMutT c A B)) := by
+  have hfs : CDerives Δ (withCtx (⟨.thunk (.arr S (fnMutC c A B)), true⟩ :: ⟨S, true⟩ :: Γ))
+      (.app (.var 2) (.var 3)) (.comp (fnMutC c A B)) :=
+    .app (.dead (.dead (.left (.right (deadSplit hΓ)))))
+      (.force (.there (.there (.here (.cons hΓ.toP))))) (.there (.there (.there (.here hΓ.toP))))
+  exact .thunkV rfl (.fnIn hA (.withI (.proj₁ (.fnOut hA hfs)) (.proj₂ (.fnOut hA hfs))))
+
+/-- `s₀ to s. unfold step to f. ⟨(f s) π₁, (f s) π₂⟩ to k. K`: `K` with the closure
+`unfold step s₀` at index `0`. -/
+def mkE (c : Lifetime.Life) (A B : VTy) (s₀ : Expr) (step : Val) (K : Expr) : Expr :=
+  bindE s₀ (bindE (.app (.val (fnUnfoldV c A B)) (.val step)) (bindE packE K))
+
+/-- **Introduction.**  A closure over the state `s₀ : S`, with `!` code `step`.  The state
+holds whatever the closure captures, linear and borrowed parts included; the type hides `S`. -/
+theorem d_mk {Γ Γ₁ Γ₂ : Ctx VTy} {c : Lifetime.Life} {A B S : VTy} {C : CTy} {s₀ K : Expr}
+    {step : Val} (hA : A.Cl 0) (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hs₀ : CDerives Δ Γ₁ s₀ (.val S))
+    (hstep : ∀ {Γ' : Ctx VTy}, Ctx.Dead Γ' →
+      CDerives Δ Γ' (.val step) (.val (.bang (.thunk (.arr S (fnStepC c A B S))))))
+    (hK : CDerives Δ (⟨fnMutT c A B, true⟩ :: ⟨.thunk (.arr S (fnMutC c A B)), false⟩ ::
+      ⟨S, false⟩ :: Γ₂) K (.comp C)) :
+    CDerives Δ Γ (mkE c A B s₀ step K) (.comp C) :=
+  .bind hs (.ret hs₀)
+    (.bind (split_kill _).toP
+      (.ret (.bangE (.lolliE (deadSplit (kill_dead _)) (hstep (kill_dead _))
+        (.fnUnfold hA B S (kill_dead _).toP))))
+      (.bind (.left (.left (split_kill Γ₂).toP)) (.ret (d_pack hA (kill_dead Γ₂))) hK))
+
+/-! ### Elimination: call and close -/
+
+/-- `f π₁ a`: call. -/
+def callE (i j : Nat) : Expr := .app (.app (.var i) (.val (.inj₁ .unit))) (.var j)
+
+/-- `f π₂`: close. -/
+def closeE (i : Nat) : Expr := .app (.var i) (.val (.inj₂ .unit))
+
+/-- **Call.**  `f : U(FnMut^c A B)`, `a : A ⊢ f π₁ a : F(B ⊗ [@c] U(FnMut^c A B))`. -/
+theorem d_call {Γ Γ₁ Γ₂ : Ctx VTy} {c : Lifetime.Life} {A B : VTy} {i j : Nat} (hA : A.Cl 0)
+    (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hf : Ctx.SoloP Γ₁ i (fnMutT c A B)) (ha : Ctx.SoloP Γ₂ j A) :
+    CDerives Δ Γ (callE i j) (.comp (.ret (.tensor B (fnBox c A B)))) :=
+  .app hs (.proj₁ (.fnOut hA (.force hf))) ha
+
+/-- **Close.**  `f : U(FnMut^c A B) ⊢ f π₂ : F 1`. -/
+theorem d_close {Γ : Ctx VTy} {c : Lifetime.Life} {A B : VTy} {i : Nat} (hA : A.Cl 0)
+    (hf : Ctx.SoloP Γ i (fnMutT c A B)) : CDerives Δ Γ (closeE i) (.comp (.ret .unit)) :=
+  .proj₂ (.fnOut hA (.force hf))
+
+/-- `x to y. N` at `x : [@c] T`: `N` with the unboxed `y : T` at `0` (`[]E`). -/
+theorem d_unbox {Γ Γ₁ Γ₂ : Ctx VTy} {c : Lifetime.Life} {T : VTy} {C : CTy} {i : Nat} {N : Expr}
+    (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hx : Ctx.SoloP Γ₁ i (.box c T))
+    (hN : CDerives Δ (⟨T, true⟩ :: Γ₂) N (.comp C)) : CDerives Δ Γ (bindE (.var i) N) (.comp C) :=
+  .bind hs (.ret (.boxE (.var hx))) hN
+
+/-- Close a boxed closure: `x to y. y π₂`. -/
+theorem d_closeBox {Γ : Ctx VTy} {c : Lifetime.Life} {A B : VTy} (hA : A.Cl 0) (hΓ : Ctx.Dead Γ) :
+    CDerives Δ (⟨fnBox c A B, true⟩ :: Γ) (bindE (.var 0) (closeE 0)) (.comp (.ret .unit)) :=
+  d_unbox (.left (deadSplit hΓ)) (.here hΓ.toP) (d_close hA (.here (.cons hΓ.toP)))
+
+/-! ### Call through a `Mut` borrow -/
+
+/-- The callback `λbf. (bf to f. f π₁ a) to p. let (b, r) = p in (r, b)`, `a` at `j` outside. -/
+def kMutE (j : Nat) : Expr :=
+  bindE (bindE (.var 0) (callE 0 (j + 2))) (.letpair (.var 0) (.pair (.var 0) (.var 1)))
+
+/-- `withswap m (λbf. …)`: call the closure behind `m : Mut @a ([@c] U FnMut^c A B)`. -/
+def callMutE (i j : Nat) : Expr := .app (.app withswap (.var i)) (.val (.lam (kMutE j)))
+
+/-- **Call through `Mut`.**  `m : Mut @a ([@c] U(FnMut^c A B))`, `a : A ⊢
+withswap m (λbf. …) : Mut @a ([@c] U(FnMut^c A B)) ⊗ B`: the closure is swapped out, called,
+and its rest swapped back in, so the state persists between calls. -/
+theorem d_callMut {Γ Γa Γm : Ctx VTy} {a c : Lifetime.Life} {A B : VTy} {i j : Nat} (hA : A.Cl 0)
+    (hs : Ctx.SplitP Γ Γa Γm) (hm : Ctx.SoloP Γm i (.mut a (fnBox c A B)))
+    (ha : Ctx.Solo Γa j A) :
+    CDerives Δ Γ (callMutE i j) (.val (.tensor (.mut a (fnBox c A B)) B)) := by
+  have hbody : CDerives Δ (⟨fnBox c A B, true⟩ :: Γa) (kMutE j)
+      (.comp (.ret (.tensor (fnBox c A B) B))) :=
+    .bind (split_kill' _).toP
+      (d_unbox (.left (split_kill Γa).toP) (.here (kill_dead Γa).toP)
+        (d_call hA (.left (.dead (split_kill Γa).toP)) (.here (.cons (kill_dead Γa).toP))
+          (.there (.there ha.toP))))
+      (.tensorE (.left (deadSplit (kill_dead _))) (.var (.here (kill_dead _).toP))
+        (.ret (.tensorI (.left (.right (.dead (deadSplit (kill_dead _)))))
+          (.var (.here (.cons (.cons (kill_dead _).toP))))
+          (.var (.there (.here (.cons (kill_dead _).toP)))))))
+  exact .lolliE hs (.thunkV rfl (.lam hbody))
+    (.lolliE (split_kill' Γm).toP (.var hm) (.withswap (kill_dead Γm).toP))
+
+/-! ### Outlives of contexts -/
+
+theorem ctxOutlives_dead {Γ : Ctx VTy} {a : Lifetime.Life} (ha : Δ.Defines a) (hΓ : Ctx.Dead Γ) :
+    CtxOutlives Δ Γ a :=
+  ⟨ha, dead_noLive (P := fun s => VOutlives Δ a s.ty) hΓ⟩
+
+theorem CtxOutlives.consDead {Γ : Ctx VTy} {a : Lifetime.Life} {T : VTy}
+    (h : CtxOutlives Δ Γ a) : CtxOutlives Δ (⟨T, false⟩ :: Γ) a := by
+  refine ⟨h.1, fun s hs hl => ?_⟩
+  cases hs with
+  | head => exact absurd hl (by simp)
+  | tail _ hs' => exact h.2 s hs' hl
+
+theorem CtxOutlives.consLive {Γ : Ctx VTy} {a : Lifetime.Life} {T : VTy} (hT : VOutlives Δ a T)
+    (h : CtxOutlives Δ Γ a) : CtxOutlives Δ (⟨T, true⟩ :: Γ) a := by
+  refine ⟨h.1, fun s hs hl => ?_⟩
+  cases hs with
+  | head => exact hT
+  | tail _ hs' => exact h.2 s hs' hl
+
+/-! ### `Fn ≤ FnMut` -/
+
+/-- The step over a `Fn`: `λs. ⟨λa. s a to b. (b, s), ()⟩`.  The state `s : !U(A ⊸ F B)` is
+persistent: the call uses it and hands it back, `close` drops it. -/
+def fromFnStep : Val :=
+  .lam (withPair (.val (.lam (bindE (.app (.var 3) (.var 0)) (.pair (.var 0) (.var 4)))))
+    (.val .unit))
+
+theorem d_fromFnStep {Γ : Ctx VTy} {c : Lifetime.Life} {A B : VTy} (hc : Δ.Defines c)
+    (hΓ : Ctx.Dead Γ) :
+    CDerives Δ Γ (.val fromFnStep)
+      (.val (.bang (.thunk (.arr (.bang (.lolli A B)) (fnStepC c A B (.bang (.lolli A B))))))) := by
+  refine .bangThunkV (persistent_dead hΓ) rfl (.lam (.withI (.lam ?_) (.ret ?_)))
+  · refine .bind (.left (.dead (.dead (.dup rfl (deadSplit hΓ)))))
+      (.ret (.lolliE (.left (.dead (.dead (.right (deadSplit hΓ)))))
+        (.var (.here (.cons (.cons (.cons hΓ.toP)))))
+        (.bangE (.var (.there (.there (.there (.here hΓ.toP))))))))
+      (.ret (.tensorI (.left (.dead (.dead (.dead (.right (deadSplit hΓ))))))
+        (.var (.here (.cons (.cons (.cons (.cons hΓ.toP))))))
+        (.boxI (.var (.there (.there (.there (.there (.here hΓ.toP))))))
+          (.consDead (.consDead (.consDead (.consDead (.consLive .bang
+            (ctxOutlives_dead hc hΓ)))))))))
+  · exact .unitI (.cons (.cons (.drop rfl hΓ.toP)))
+
+/-- **`Fn ≤ FnMut`.**  A `!U(A ⊸ F B)` is an affine closure outliving any defined `@c`. -/
+theorem d_fromFn {Γ Γ₁ Γ₂ : Ctx VTy} {c : Lifetime.Life} {A B : VTy} {C : CTy} {g K : Expr}
+    (hA : A.Cl 0) (hc : Δ.Defines c) (hs : Ctx.SplitP Γ Γ₁ Γ₂)
+    (hg : CDerives Δ Γ₁ g (.val (.bang (.lolli A B))))
+    (hK : CDerives Δ (⟨fnMutT c A B, true⟩ ::
+      ⟨.thunk (.arr (.bang (.lolli A B)) (fnMutC c A B)), false⟩ :: ⟨.bang (.lolli A B), false⟩ ::
+        Γ₂) K (.comp C)) :
+    CDerives Δ Γ (mkE c A B g fromFnStep K) (.comp C) :=
+  d_mk hA hs hg (fun hΓ' => d_fromFnStep hc hΓ') hK
+
+/-! ### `FnMut ≤ FnOnce` -/
+
+/-- `λa. f π₁ a to p. let (b, r) = p in r to r'. r' π₂ to u. u; b`: call once, close the rest. -/
+def onceE (i : Nat) : Expr :=
+  .val (.lam (bindE (callE (i + 1) 0) (.letpair (.var 0)
+    (bindE (.var 0) (bindE (closeE 0) (.seq (.var 0) (.var 3)))))))
+
+/-- **`FnMut ≤ FnOnce`.**  `f : U(FnMut^c A B) ⊢ λa. … : U(A ⊸ F B)`. -/
+theorem d_once {Γ : Ctx VTy} {c : Lifetime.Life} {A B : VTy} {i : Nat} (hA : A.Cl 0)
+    (hf : Ctx.Solo Γ i (fnMutT c A B)) : CDerives Δ Γ (onceE i) (.val (.lolli A B)) := by
+  refine .thunkV rfl (.lam ?_)
+  refine .bind (split_kill' _).toP
+    (d_call hA (.right (split_kill' Γ).toP) (.there hf.toP) (.here (kill_dead Γ).toP)) ?_
+  refine .tensorE (.left (deadSplit (kill_dead _))) (.var (.here (kill_dead _).toP)) ?_
+  refine d_unbox (.left (.right (.dead (deadSplit (kill_dead _))))) (.here (.cons (.cons
+    (kill_dead _).toP))) ?_
+  refine .bind (.left (.dead (.right (.dead (deadSplit (kill_dead _))))))
+    (d_close hA (.here (.cons (.cons (.cons (kill_dead _).toP))))) ?_
+  exact .unitE (.left (.dead (.dead (.right (.dead (deadSplit (kill_dead _)))))))
+    (.var (.here (.cons (.cons (.cons (.cons (kill_dead _).toP))))))
+    (.ret (.var (.there (.there (.there (.here (.cons (kill_dead _).toP)))))))
+
+end BoCa.Fig16.LogRel.Core
+
+end
