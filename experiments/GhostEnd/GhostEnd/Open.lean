@@ -12,18 +12,12 @@ of linear resuming operations whose arguments are closed data (`Row.Resume`, the
 `withbor_of_relendOfTyped` derives O15.1's resume half for every such borrower, through
 `ewpTS_M_frameR` exactly as `withbor_spans_yields` does for straight-line ones.
 
-`relend_chain` proves it for straight-line borrowers. There the induction is on the number of
-yields left, which no lifetime affects. Two steps of a general proof are not derived:
-
-1. **Typed stops.** At a stop of `M`'s run the remaining context `K` has to be presented as a
-   typed segment closed by the frames' values (`SegOf`). That is what lets `segment_fundamental`
-   re-derive `K[w]` at the fresh assignment. `ewpTS`'s stops carry the continuation's share as a
-   semantic proposition at the old assignment (`contShare`), not as a typed segment.
-2. **A measure fixed across re-lends.** `Relend` is a least fixed point. Each resumption runs the
-   remainder under the typing instantiated at a new `δ′`, and that is a different `ewpTS` from
-   the one the stop came from. So an induction on the stop's own `ewpTS` does not reach the
-   re-instantiated run. A proof needs a well-founded measure on the interaction that does not
-   depend on the internal lifetimes.
+`relend_chain` proves it for straight-line borrowers. `relend_of_rbody` (`Typed.lean`) proves it
+for every borrower `RBody` reads: pieces built by `[ret]`, `[perform]`, `[let]`, `1E` and `+E`,
+each stop a typed segment, the frames spanning a stop `StopSafe`. The measure is `Open`'s own
+least fixed point and the typing derivation (`open_bind`), and a loop's budget
+(`open_boundedFix`); none mentions a lifetime. `General.lean` reduces `RelendOfTyped` to the
+fundamental lemma for `RBody` (`RBodyOfTyped`) and names the steps that are not derived.
 
 **`O151AsStated`: §15's statement.** It is O15.1 as `docs/effects-tr/15-mut-cell.md` prints it: 6.65
 over `ewpTS` at a table with a resuming entry, with the premise's callback quantified from its
