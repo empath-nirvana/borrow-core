@@ -21,7 +21,8 @@ Build: `lake build FnMut`. Non-default; nothing imports it. Every declaration's 
 `Core.Steps` need, plus `Splits.lean` and `Weaken.lean`), copied at `620c82c` with `import Core.X`
 renamed to `import FnMut.Core.X`. The namespace stays `BoCa.Fig16.LogRel.Core`, so nothing may
 import both. The branch's first commit is the verbatim copy, and the relaxation is a later
-commit. [`kernel.patch`](kernel.patch) is that diff against `Core/`:
+commit. [`kernel.patch`](kernel.patch) is that diff against `Core/`, plus one proof arm in
+`Frontend/Check/Decide.lean`; with it applied, `lake build Core Frontend Backend bcc` succeeds:
 
 | file | change |
 |---|---|

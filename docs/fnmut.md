@@ -143,8 +143,10 @@ Every arm that read the old trees gains its case: `cB_mono`, `cB_unroll`, `cB_st
 - every previously positive body is still positive;
 - `Dtor.lean`'s `HasDtor.nu` covers `FnMut` without a new case.
 
-`experiments/FnMut/kernel.patch` is the same diff as a patch against `Core/`. Applied to this
-branch's `Core/`, `lake build Core Frontend Backend` succeeds (§8).
+`experiments/FnMut/kernel.patch` is the same diff as a patch against `Core/`, plus one proof arm
+in `Frontend/Check/Decide.lean` (`polyB_sound`'s `[@a]` case, which now reaches `VTy.Poly`'s new
+clause; `polyB` itself is unchanged). With the patch applied to this branch,
+`lake build Core Frontend Backend bcc` succeeds. The corpus was not re-run against it.
 
 Why the box: `VOutlives` has no rule at `U C` (`fnMut_not_outlives`). `withbor`'s mutable form
 needs its payload to outlive a defined lifetime, so a closure is lent only as `[@c] U(…)`. A call
@@ -276,7 +278,10 @@ Described, not made.
 - **SPEC §2's closure table.** The `FnMut` row becomes `[@c] U(FnMut^c A B)`, called through
   `Mut` by `withswap`.
 - **`Core/`.** `kernel.patch`: about 140 changed lines in `Types.lean`, `Relation.lean`,
-  `RelationFacts.lean`, `NuRel.lean`, `Computation.lean` and `Nu.lean`. No new
+  `RelationFacts.lean`, `NuRel.lean`, `Computation.lean` and `Nu.lean`, and one proof arm in
+  `Frontend/Check/Decide.lean`. The whole library and `bcc` build with it. The checker's
+  positivity decision (`nuLeafB`, `polyB`) would still have to admit the new shapes before the
+  checker accepts an `FnMut` program. No new
   `VTy`/`CTy`/`CDerives` constructor and no new index. The baseline theorems keep their
   statements.
 - **`Frontend/`.** A closure sugar: `fnmut` over a context elaborates to `unfold` with the
