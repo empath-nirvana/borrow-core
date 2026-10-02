@@ -1,0 +1,28 @@
+-- `corpus/aff-capture.bc` under K1, E1 and B1. Scopes: `'x`, the borrow of the log, and `'w`
+-- with its cell `d`, unchanged: a closure capturing `mut 'x i32` is bounded strictly below `'x`,
+-- since the `Mut` rule of the outlives judgment stays strict (`Outlives/Obstructions.lean`,
+-- `not_vC_outlives_le`). `boxed[…]`: none (was 2). `logger`'s lifetimes are read off `ml` and
+-- filled with `dom` (E1).
+
+include aff
+
+fn logger<'x, 'w < 'x>(ml: mut 'x i32) -> box 'w Aff[i32, i32]<'w> =
+  aff_new_boxed[mut 'x i32, i32, i32]['w](ml, !thunkv fun (m : mut 'x i32) ->
+    < fun (a : i32) ->
+        q <- return (withswap['x, i32, i32] m (thunkv fun (v : i32) -> return (v + a, v + a)));
+        let (m, t) = q;
+        return (t, m),
+      return (forget_mut['x, i32] m) >)
+
+main -> i32 =
+  let log = alloc(0);
+  let d = alloc(0);
+  let (d, r) = borrow mut log { 'x, ml ->
+    let r = borrow mut d { 'w, e ->
+      let k = logger(ml);
+      let (a, k) = aff_call(k, 5);
+      let (b, k) = aff_call(k, 7);
+      aff_close(k);
+      a * 100 + b };
+    (d, r) };
+  free(d) + r + free(log) * 10000

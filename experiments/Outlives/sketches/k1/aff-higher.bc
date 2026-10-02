@@ -1,0 +1,49 @@
+-- `corpus/aff-higher.bc` under K1, the box rule of the outlives judgment non-strict
+-- (`docs/outlives-strictness.md` §3.1): `doubler` bounds the closure it makes by
+-- its argument's bound `'c`. Its second lifetime and the scope `'y` are gone.
+-- Checked by `bcc` built with `experiments/Outlives/k1.patch` applied; it prints the corpus golden.
+--
+include aff
+
+fn counter<'c>(start: i32) -> box 'c Aff[i32, i32]<'c> =
+  boxed['c] aff_new[ref i32, i32, i32]['c](alloc(start), !thunkv fun (s : ref i32) ->
+    < fun (a : i32) ->
+        cx <- return (swap[i32, i32] s i32[0]);
+        let (c, x) = cx;
+        cu <- return (swap[i32, i32] c (x + a));
+        let (c1, u) = cu;
+        return (x + a, boxed['c] c1),
+      n <- return (free[i32] s); return () >)
+
+-- A closure capturing a closure.
+fn doubler<'c>(k: box 'c Aff[i32, i32]<'c>) -> box 'c Aff[i32, i32]<'c> =
+  boxed['c] aff_new[box 'c Aff[i32, i32]<'c>, i32, i32]['c](k, !thunkv fun (s : box 'c Aff[i32, i32]<'c>) ->
+    < fun (a : i32) ->
+        p <- return (aff_call(s, a));
+        let (b, r) = p;
+        return (b * 2, boxed['c] r),
+      return (aff_close(s)) >)
+
+-- A closure taking a closure.
+fn runner<'c, 'd>() -> box 'd Aff[box 'c Aff[i32, i32]<'c>, i32]<'d> =
+  boxed['d] aff_new[i32, box 'c Aff[i32, i32]<'c>, i32]['d](0, !thunkv fun (t : i32) ->
+    < fun (f : box 'c Aff[i32, i32]<'c>) ->
+        p <- return (aff_call(f, 5));
+        let (b, r) = p;
+        u <- return (aff_close(r));
+        return (t + b, boxed['d] (t + b)),
+      return () >)
+
+main -> i32 =
+  let d = alloc(0);
+  let r = borrow mut d { 'x, e ->
+    let o = doubler ['x](counter ['x](0));
+    let (a, o) = aff_call(o, 1);
+    let (b, o) = aff_call(o, 2);
+    aff_close(o);
+    let rn = runner ['x] ['x]();
+    let (u, rn) = aff_call(rn, counter ['x](100));
+    let (v, rn) = aff_call(rn, aff_of_fn[i32, i32]['x](!thunkv fun (x : i32) -> return (x * 3)));
+    aff_close(rn);
+    a + b * 10 + v * 100 };
+  free(d) + r

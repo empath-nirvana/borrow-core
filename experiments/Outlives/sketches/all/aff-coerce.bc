@@ -1,0 +1,23 @@
+-- `corpus/aff-coerce.bc` under K1, E1 and B1. Scopes: none (was `'x`, with a cell `d`).
+-- `boxed[…]`: none (was 2).
+
+include aff
+
+fn counter<'c>(start: i32) -> box 'c Aff[i32, i32]<'c> =
+  aff_new_boxed[ref i32, i32, i32]['c](alloc(start), !thunkv fun (s : ref i32) ->
+    < fun (a : i32) ->
+        cx <- return (swap[i32, i32] s i32[0]);
+        let (c, x) = cx;
+        cu <- return (swap[i32, i32] c (x + a));
+        let (c1, u) = cu;
+        return (x + a, c1),
+      n <- return (free[i32] s); return () >)
+
+main -> i32 =
+  let f = aff_of_fn[i32, i32](!thunkv fun (x : i32) -> return (x + 10));
+  let (a, f) = aff_call(f, 1);
+  let (b, f) = aff_call(f, 2);
+  aff_close(f);
+  let g = aff_once[i32, i32](counter(10));
+  let c = g(1);
+  (a + b) * 10000 + c

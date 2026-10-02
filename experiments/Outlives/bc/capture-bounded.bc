@@ -1,0 +1,51 @@
+-- `corpus/aff-capture.bc` with a lifetime bound on `aff_new` (`docs/outlives-strictness.md` §4),
+-- elaborated by hand and checked by the unchanged checker.
+--
+-- The template the bound would let `lib/aff.bc` declare,
+--
+--     fn aff_new_boxed[S, A, B]<'c>(s: S, step: !U (S -o (A -o F (B * S)) & F 1))
+--         -> box 'c Aff[A, B]<'c>  where S: 'c
+--
+-- boxes the closure and every rest itself, so its step returns the state unboxed. At
+-- `S = mut 'q i32` its instance takes the lifetime `'q` of its type argument as an outer parameter
+-- (as every instance does, SPEC §15) and its own `'c` bounded by it: `<'q, 'c < 'q>`, where the
+-- elaboration of today writes `<'q, 'c < top>`. That bound is all the bound changes; the instance
+-- below is that elaboration written out, and the checker accepts it with no other change.
+-- `logger` then writes no `boxed`.
+--
+-- Answer: i32[120512], and `live 0`, as `corpus/aff-capture.bc`.
+
+include aff
+
+-- The instance of `aff_new_boxed` at `S = mut 'q i32`, `A = B = i32`.
+fn aff_new_boxed__mut<'q, 'c < 'q>(s: mut 'q i32, step: !U (mut 'q i32 -o (i32 -o F (i32 * mut 'q i32)) & F 1)) -> box 'c Aff[i32, i32]<'c> =
+  boxed['c] aff_new[mut 'q i32, i32, i32]['c](s, !thunkv fun (s0 : mut 'q i32) ->
+    < fun (a : i32) ->
+        g <- return (unbang step);
+        p <- (force g s0).1 a;
+        let (b, s1) = p;
+        return (b, boxed['c] s1),
+      g <- return (unbang step);
+      (force g s0).2 >)
+
+-- The logger, with no `boxed`.
+fn logger<'x, 'w < 'x>(ml: mut 'x i32) -> box 'w Aff[i32, i32]<'w> =
+  aff_new_boxed__mut ['x] ['w](ml, !thunkv fun (m : mut 'x i32) ->
+    < fun (a : i32) ->
+        q <- return (withswap['x, i32, i32] m (thunkv fun (v : i32) -> return (v + a, v + a)));
+        let (m, t) = q;
+        return (t, m),
+      return (forget_mut['x, i32] m) >)
+
+main -> i32 =
+  let log = alloc(0);
+  let d = alloc(0);
+  let (d, r) = borrow mut log { 'x, ml ->
+    let r = borrow mut d { 'w, e ->
+      let k = logger ['x] ['w](ml);
+      let (a, k) = aff_call(k, 5);
+      let (b, k) = aff_call(k, 7);
+      aff_close(k);
+      a * 100 + b };
+    (d, r) };
+  free(d) + r + free(log) * 10000
