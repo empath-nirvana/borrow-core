@@ -36,6 +36,7 @@ cb-policy 2 0 0 # the two cells; three layers over a computation add none
 cb-recursion 2 0 0 # the two cells
 cb-retry 2 0 0 # the two cells: `retry` adds none, failing or not
 cb-shared 1 4 0 # the counter; the indirect calls are the state-passing answers of `flipper`, a handler with a state
+cb-tunnel 0 0 0 # the callback's error passes `guard`'s handler: a branch, no search
 clause-captures 6 3 0 # the counter and the cells; the indirect calls are the state-passing answers of `asking`, as in the probe P4(a) (a native handler parameter is not built)
 clone-reuse 6 0 1
 core-effects-borrow-abort 1 0 0 # the cell, freed by the finaliser on the unwind

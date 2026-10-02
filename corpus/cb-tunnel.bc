@@ -1,0 +1,14 @@
+-- No accidental handling (SPEC §22; decision 57, §6 of the design): `guard` handles `Fail[i32]`
+-- of its own around the call of its callback, which it does not provide. The callback's `raise`
+-- tunnels: it is at the static name of the handler where the callback was written, `main`'s
+-- `to_result`, and passes `guard`'s handler, whose name is another.
+--
+-- Answer: inr i32[7]: `main`'s handler has the error. A `guard` that caught it would give
+-- `inl (inr i32[7])`.
+include fail
+
+fn guard(f: !(1 => i32)) -> i32 + i32 = with to_result[i32, i32] { let x = f(()); if x > 100 { raise(x) } else { x } }
+
+fn bad(u: 1) -> i32 with Fail[i32] = raise(7)
+
+main -> (i32 + i32) + i32 = with to_result { guard({ u -> bad(()) }) }

@@ -3410,7 +3410,7 @@ dispatched call beyond its handlers' own.
 handler with a state shared with the caller), `cb-recursion.bc` (a recursion passing its callback
 on, a callback calling back into its function, recursion through a value), `cb-parser.bc`
 (decision 57's parser, its error callback passed down), `cb-pass-on.bc` (callbacks two levels
-deep), `cb-policy.bc` (policies composed), `cb-lib.bc` (`lib/callbacks.bc`: `each`, `fold`,
+deep), `cb-tunnel.bc` (no accidental handling), `cb-policy.bc` (policies composed), `cb-lib.bc` (`lib/callbacks.bc`: `each`, `fold`,
 `map_buf`, `filter_buf`, `attempt`, `retry`, each written once); rejects `corpus/reject/cb-*.bc`;
 pending `corpus/pending/cb-*.bc`.
 
