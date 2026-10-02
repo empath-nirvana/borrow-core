@@ -1869,7 +1869,7 @@ def decl (n : Nat) : P Decl := do
           | _ => expected "`fn` or `ctl` (an operation)"
       let o ← ident "an operation name"
       expectSym "("
-      let ps ← if ← isSym ")" then pure [] else params n
+      let ps ← if ← isSym ")" then pure [] else (·.map fun (x, A, _) => (x, A)) <$> params n
       expectSym ")"
       let B ← if ← isSym "->" then do discard bump; vty n else pure (VTy.unit o.span)
       ops := ops.push ⟨o, ps, B, kind⟩
@@ -2028,7 +2028,8 @@ where
     let tps ← typeParams
     let lives ← lifeParams
     expectSym "("
-    let ps ← if ← isSym ")" then pure [] else params n
+    let ps₃ ← if ← isSym ")" then pure [] else params n
+    let ps := ps₃.map fun (x, A, _) => (x, A)
     expectSym ")"
     expectSym "->"
     let T ← rty n
@@ -2048,6 +2049,8 @@ where
       | .error _ => do let C ← liftSort T.toC; pure (VTy.thunk sp (.arr sp A C))
     let (ty, V) := withLives sp lives fnTy lam
     let mk := if tps.isEmpty then mk else .template mk
+    -- The provided rows of the computation parameters (SPEC §22), outside the template mark.
+    let mk := ps₃.foldr (fun (x, _, es) m => if es.isEmpty then m else .provides x es m) mk
     pure (.def_ sp x tps ty V (if es.isEmpty then mk else .row es mk))
   /-- `E₁, E₂[A, …], …`: the effects of a written row, at least one. -/
   rowList : Nat → P (List (Ident × List VTy))
@@ -2098,17 +2101,36 @@ where
           (.all sp a b T, .lamL sp a b (.ret sp (.thunkv sp M)))
       let (T, M) := inner ls
       (.bang sp (.all sp a b T), .bangThunkv sp (.lamL sp a b (.ret sp (.thunkv sp M))))
-  /-- `x₁: A₁, …, xₙ: Aₙ`, at least one. -/
-  params : Nat → P (List (Ident × VTy))
+  /-- `x₁: A₁, …, xₙ: Aₙ`, at least one; a computation parameter's type may be followed by its
+  provided row, `x: A => B with E₁, E₂[A]` (SPEC §22). -/
+  params : Nat → P (List (Ident × VTy × List (Ident × List VTy)))
     | 0 => outOfFuel
     | m + 1 => do
       let x ← ident "a parameter name"
       expectSym ":"
       let A ← vty n
+      let es ← if ← isKw "with" then do discard bump; paramRow m else pure []
       if ← isSym "," then
         discard bump
-        return (x, A) :: (← params m)
-      else pure [(x, A)]
+        return (x, A, es) :: (← params m)
+      else pure [(x, A, es)]
+  /-- The provided row of a parameter: `E₁, E₂[A, …]`, up to a `,` that is followed by the next
+  parameter's name or the `)`. -/
+  paramRow : Nat → P (List (Ident × List VTy))
+    | 0 => outOfFuel
+    | m + 1 => do
+      let e ← uident "an effect name"
+      let As ← if ← isSym "[" then do
+          discard bump
+          let As ← tyList n (fuelPerToken * ((← get).toks.size + 1))
+          expectSym "]"
+          pure As
+        else pure []
+      let more := (← isSym ",") && (match (← peekAt 1).tok with | .uident _ => true | _ => false)
+      if more then
+        discard bump
+        return (e, As) :: (← paramRow m)
+      else pure [(e, As)]
   /-- The parameter tuple's type (`1` with no parameters). -/
   tupleTy (sp : Span) : List VTy → VTy
     | [] => .unit sp
@@ -2132,15 +2154,23 @@ where
         return p :: (← uidents m)
       else pure [p]
 
-/-- `with[E₁, E₂[A]] def …`: a definition with a written row, as it is printed (SPEC §18). -/
-def rowDecl (n : Nat) : P Decl := do
-  let t ← bump
-  expectSym "["
-  let es ← decl.rowList n n
-  expectSym "]"
-  match ← decl n with
-  | .def_ sp x ps A V mk => pure (.def_ sp x ps A V (.row es mk))
-  | _ => failAt t.span "a written row is on a function"
+/-- `with[E₁, E₂[A]] def …`: a definition with a written row, as it is printed (SPEC §18); and
+`with[x: E₁, …] def …`, the provided row of its parameter `x` (SPEC §22). -/
+def rowDecl : Nat → P Decl
+  | 0 => outOfFuel
+  | n + 1 => do
+    let t ← bump
+    expectSym "["
+    let x? ← match (← peek).tok, (← peekAt 1).tok with
+      | .ident _, .sym ":" => do let x ← ident; expectSym ":"; pure (some x)
+      | _, _ => pure none
+    let es ← decl.rowList n n
+    expectSym "]"
+    let d ← if (← peek).tok == .kw "with" then rowDecl n else decl n
+    match d, x? with
+    | .def_ sp x ps A V mk, none => pure (.def_ sp x ps A V (.row es mk))
+    | .def_ sp x ps A V mk, some p => pure (.def_ sp x ps A V (.provides p es mk))
+    | _, _ => failAt t.span "a written row is on a function"
 
 /-- Declarations until the end of input. -/
 def decls (n : Nat) : Nat → List Decl → P (List Decl)

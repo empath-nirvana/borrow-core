@@ -2273,6 +2273,10 @@ def matchV (m : MatchSt) (d : Nat) : CVTy → CVTy → Option MatchSt
 /-- `t` matches the computation-type pattern `p`. -/
 def matchC (m : MatchSt) (d : Nat) : CCTy → CCTy → Option MatchSt
   | .ret A, .ret A' => matchV m d A A'
+  | .eff n i q A B C, .eff n' i' q' A' B' C' =>
+    if n == n' && i == i' && q == q' then
+      ((matchV m d A A').bind (matchV · d B B')).bind (matchC · d C C')
+    else none
   | .arr A C, .arr A' C' => (matchV m d A A').bind (matchC · d C C')
   | .amp C D, .amp C' D' => (matchC m d C C').bind (matchC · d D D')
   | .nu C, .nu C' => matchC m (d + 1) C C'
@@ -2398,9 +2402,10 @@ def holeClosure : Val → Bool
   | .thunkv _ (.lam _ _ A _) | .bangThunkv _ (.lam _ _ A _) => isHoleTy A
   | _ => false
 
-/-- An argument whose type only the context gives: a closure with a hole, or an injection. -/
+/-- An argument whose type only the context gives: a closure with a hole, an injection, or a
+callback's code (SPEC §22). -/
 def checkOnly : Val → Bool
-  | .inl .. | .inr .. | .roll .. => true
+  | .inl .. | .inr .. | .roll .. | .app _ (.sugar _ (.cbCode _)) _ => true
   | V => holeClosure V
 
 /-- The function a call applies when it may be generic by name: its name, and its type
@@ -3151,6 +3156,10 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
       | _, _ => throw ⟨P.span, s!"this borrow block's place has type `{ppT tP}`: `borrow imm`/" ++
           "`borrow mut` take a cell `ref A` or an array (a pair of cells for a family), `modify` a `mut` " ++
           "borrow"⟩
+    | .app sp (.sugar _ (.cbCode i)) (.thunkv _ (.lam lsp q _ M)) => do
+      -- A callback's code (SPEC §22), at the type its parameter expects.
+      let some T := exp | throw ⟨sp, "the type of this callback's code is not determined here"⟩
+      pure (← cbCodeAt n c sp i lsp q M T false).1
     | .app sp f W => do
       -- A call of a generic function: its type and lifetime arguments filled.
       if let some V' ← genericCall n c sp exp f W none then return V'
@@ -3227,6 +3236,69 @@ def surfV : Nat → TCx → Option CVTy → Val → DM Val
       pure (.bangThunkv sp (← surfC n c (exp.bind fun | .bang (.thunk C) => some C | _ => none) M))
     | .run sp M => do pure (.run sp (← surfC n c (exp.map .ret) M))
     | V => pure V
+
+/-- A callback's code (`VSugar.cbCode`, SPEC §22) at `T`, the type its parameter expects,
+`!(∀'k₁ < @₁. … X ⊸ C)`: `!thunkv Fun 'k₁ < @₁. … return thunkv fun (q : X) -> M`, the binders
+named as the code names them and `M` elaborated at `C`. When `C`'s result is not determined
+(`open`, a type parameter of the callee that the callback's result gives), `M` is elaborated at
+`C`'s row and its result read off it. The code, and its type. -/
+def cbCodeAt : Nat → TCx → Span → CbInfo → Span → Ident → Comp → CVTy → Bool → DM (Val × CVTy)
+  | 0, _, sp, _, _, _, _, _, _ => throw ⟨sp, "internal error: a callback nested too deeply"⟩
+  | n + 1, c, sp, i, lsp, q, M, T, opn => do
+    let bad : Error := ⟨sp, s!"internal error: a callback's code at `{ppT T}`"⟩
+    let .bang (.thunk C₀) := T | throw bad
+    -- The lifetime binders, outermost first, and the function type under them.
+    let rec peel : Nat → CCTy → Option (List (BoCa.Lifetime.LifeVar × BoCa.Lifetime.Life) × CVTy × CCTy)
+      | 0, _ => none
+      | k + 1, .all v b (.ret (.thunk C)) => do
+        let (bs, X, D) ← peel k C
+        pure ((v, b) :: bs, X, D)
+      | _, .arr X D => some ([], X, D)
+      | _, _ => none
+    let some (bs, X, D) := peel 64 C₀ | throw bad
+    unless bs.length == i.lives.length do throw bad
+    -- The binders named as the code names them, in this context.
+    let mut c' := c
+    let mut σ : List (BoCa.Lifetime.LifeVar × BoCa.Lifetime.Life) := []
+    let mut binders : List (Ident × Frontend.Life) := []
+    for ((v, b), x) in bs.zip i.lives do
+      let b' := b.applySub σ
+      binders := binders ++ [(⟨x, lsp⟩, ← c'.surfaceL lsp b')]
+      c' := c'.pushLife x b'
+      let some v' := c'.E.lenv.lookup x | throw bad
+      σ := (v, .var v') :: σ
+    let X' := X.applyLSub σ
+    let D' := D.applyLSub σ
+    if hasPhV X' then
+      throw ⟨lsp, "the type of this callback's parameter is not determined by the other arguments"⟩
+    let Xs ← (c'.surface lsp X' : Except Error VTy)
+    let cq := c'.push q.name (some X')
+    let (M', D'') ← if !opn || !hasPhC D' then do
+        pure (← surfC n cq (some D') M, D')
+      else do
+        -- The result is open: the body at the row, its result read off it.
+        let some (S, _) := rowRes? D' | throw bad
+        if S.any fun o => hasPhV o.A || hasPhV o.B then
+          throw ⟨lsp, "the operations this callback performs are not determined here: write the " ++
+            "callee's type arguments"⟩
+        let cS : TCx := { cq with E := { cq.E with row := some S } }
+        let M' ← surfC n cS none M
+        let some C := (← refresh cS).tyC M'
+          | throw ⟨lsp, "the type of this callback's result is not determined here"⟩
+        let some (_, Q) := rowRes? C
+          | throw ⟨lsp, "the type of this callback's result is not determined here"⟩
+        pure (M', Frontend.Check.effOf S Q)
+    -- The code, and its type.
+    let inner : Comp := .lam lsp q Xs M'
+    let rec wrap : List (Ident × Frontend.Life) → Comp
+      | [] => inner
+      | (x, b) :: bs => .lamL lsp x b (.ret lsp (.thunkv lsp (wrap bs)))
+    let V : Val := .bangThunkv sp (wrap binders)
+    let rec tyOf : List (BoCa.Lifetime.LifeVar × BoCa.Lifetime.Life) → CCTy
+      | [] => .arr X' D''
+      | (v, b) :: rest => .all v b (.ret (.thunk (tyOf rest)))
+    let vs' := (bs.zip i.lives).map fun ((_, b), x) => ((c'.E.lenv.lookup x).getD 0, b)
+    pure (V, .bang (.thunk (tyOf vs')))
 
 /-- A computation with its surface forms elaborated; `exp` is its type, when known. -/
 def surfC : Nat → TCx → Option CCTy → Comp → DM Comp
@@ -3513,8 +3585,8 @@ def forData : Nat → TCx → Option CCTy → Span → Ident → Val → Val →
     let outer := st.exits.head?
     let Rt : CVTy ← if !hasRet then pure .unit else match outer with
       | some (.total Rt _) => pure Rt
-      | _ => match exp with
-        | some (.ret Q) => pure Q
+      | _ => match exp.bind rowRes? with
+        | some (_, Q) => pure Q
         | _ => throw ⟨sp, "the type of the function's result, which a `return` in this loop " ++
             "returns, is not determined here"⟩
     let retOut (rsp : Span) (v : Val) : Comp := match outer with
@@ -4316,6 +4388,18 @@ def genericCall : Nat → TCx → Span → Option CVTy → Val → Val → Optio
           | _, _ => pure ()
           args := args.set! k (some Wi)
           continue
+        -- A callback's code (SPEC §22), at the parameter's type; what its result leaves open is
+        -- read off its body.
+        if let .app wsp (.sugar _ (.cbCode ci)) (.thunkv _ (.lam lsp q _ M)) := Wi then
+          let (V', T) ← cbCodeAt n c wsp ci lsp q M pat' opn
+          match matchV m 0 Pi T with
+          | some m' => m := m'
+          | none => throw ⟨Wi.span, s!"this callback of `{fname}` has type `{ppT T}`, which is not " ++
+              s!"`{ppT pat'}`"⟩
+          args := args.set! k (some V')
+          tys := tys.set! k (some T)
+          c ← refresh c
+          continue
         -- A closure whose parameter's type is a hole: the parameter's, as solved.
         let Wi ← match Wi, pat' with
           | .bangThunkv wsp (.lam lsp x Ax M), .bang (.thunk (.arr X _))
@@ -4412,6 +4496,21 @@ def genericCall : Nat → TCx → Span → Option CVTy → Val → Val → Optio
     for (v, _) in sig.binders do
       let some l := m.life.lookup v | throw ⟨sp, "internal error: a lifetime parameter"⟩
       g := .inst sp g (← c.surfaceL sp l)
+    -- A copy made for callbacks (SPEC §22) takes its arguments through its identity, at the same
+    -- instantiation: the argument, a callback's `∀` code among it, is checked against the
+    -- parameter's type as the callee has it, and not synthesized where it is bound.
+    let ident : Option Val ← match head with
+      | .tmpl _ _ => match st.templates.find? (fun | .def_ _ m _ _ _ _ => m.name == fname ++ "__id" | _ => false) with
+        | some ti => do
+          let (nmI, exI) ← makeInst n c sp ti m.ty
+          let mut gi : Val := if sig.bang then .unbang f.span (.var f.span nmI) else .var f.span nmI
+          for v in exI do gi := .inst sp gi (← c.surfaceL sp (.var v))
+          for (v, _) in sig.binders do
+            let some l := m.life.lookup v | throw ⟨sp, "internal error: a lifetime parameter"⟩
+            gi := .inst sp gi (← c.surfaceL sp l)
+          pure (some gi)
+        | none => pure none
+      | _ => pure none
     -- An argument that gave a lifetime parameter a longer lifetime than the meet is shortened.
     let mut args' : List Val := []
     for (((Pi, _), Wi'), k) in (comps.zip argsL).zipIdx do
@@ -4431,7 +4530,9 @@ def genericCall : Nat → TCx → Span → Option CVTy → Val → Val → Optio
           args' := args' ++ [Wi']
         | none => args' := args' ++ [Wi']
       | none, _ => args' := args' ++ [Wi']
-    return some (.app sp g (argOf W args'))
+    match ident with
+    | some gi => return some (.app sp g (.app sp gi (argOf W args')))
+    | none => return some (.app sp g (argOf W args'))
 
 
 /-- Elaborate one declaration: first the copies its calls need (each elaborated the same way),

@@ -101,6 +101,18 @@ structure FSig where
   decl : Decl
   group : Option (String × Nat) := none
 
+/-- A **computation parameter** of a function (SPEC §22): a parameter whose written type is a
+function type, `!(A => B)` or `A => B`. Its index in the parameter tuple, its name, the argument
+and result types of its function type as written, whether it is `!`, and its **provided row**, the
+effects the function serves for the callback passed there (written `x: A => B with E₁, …`). -/
+structure CParam where
+  idx : Nat
+  name : String
+  A : VTy
+  B : VTy
+  bang : Bool
+  prov : List (Ident × List VTy)
+
 /-- A recursive group (SPEC §20): the functions of one strongly connected component of the calls,
 each taken apart (`FnParts`), in declaration order. The group is named by its first member. -/
 structure RGroup where
@@ -127,6 +139,18 @@ structure Env where
   driven by `bounded` over their generator transformed by them, and a call of a member performs
   the layers' rows too. A copy's body is outside them: they apply to the calls written inside. -/
   inLayers : List String := []
+  /-- Every function declared so far, as written (its marks without rows): a function with a
+  computation parameter is copied for the callbacks passed to it (SPEC §22). -/
+  defs : List (String × Decl) := []
+  /-- The computation parameters of each function that has one (SPEC §22). -/
+  cparams : List (String × List CParam) := []
+  /-- The names of the externs declared so far: not captured by a callback. -/
+  externs : List String := []
+  /-- The number of parameters of each `fn` declared so far. -/
+  arity : List (String × Nat) := []
+  /-- The effects that stand for a callback's environment in a copy (SPEC §22): answering, served
+  by the environment's capability. -/
+  envEffs : List String := []
 
 /-- A capability in scope: the answering effect it serves, the variable holding its `mut 'l S`
 borrow, the lifetime `'l`, and the handler. Or the variable a `for`'s site of an iteration effect
@@ -138,6 +162,10 @@ structure Cap where
   life : String
   h : HSig
   thr : Option String := none
+  /-- A callback's environment (SPEC §22): the tuple of the variables it captures, of the type
+  `thr`, passed and handed back as a capability is; `some true` when the callback assigns one of
+  them. -/
+  env : Option Bool := none
 
 /-- A capability's type: `mut 'l S`, or the threaded variable's `W`. -/
 def Cap.ty (sp : Span) (c : Cap) : VTy := match c.thr with
@@ -185,6 +213,9 @@ structure RSelf where
 structure St where
   fresh : Nat := 0
   site : Nat := 1
+  /-- The ports (SPEC §22): the static name at which a callback performs an effect `E` that the
+  function `f` provides it, one per `(f, E)`. -/
+  ports : List ((String × String) × Nat) := []
   reports : Array (Span × String) := #[]
   made : Array (String × Decl) := #[]
   started : List String := []
@@ -198,6 +229,13 @@ def fresh (pre : String) : EM String :=
 
 /-- A fresh static name for a handler site. -/
 def freshSite : EM Nat := modifyGet fun s => (s.site, { s with site := s.site + 1 })
+
+/-- The port of the effect `e` provided by the function `f` (SPEC §22), made on first use. -/
+def portOf (f e : String) : EM Nat := do
+  if let some n := (← get).ports.lookup (f, e) then return n
+  let n ← freshSite
+  modify fun s => { s with ports := ((f, e), n) :: s.ports }
+  pure n
 
 /-- A report for `bcc check` (SPEC §18, #126): its kind (`effect`, `row`, `lowering`, `call`) and
 its text, at `sp`. -/
@@ -220,8 +258,12 @@ def Env.handler? (env : Env) (x : String) : Option HSig := env.handlers.find? (�
 def Env.chandler? (env : Env) (x : String) : Option CHandler :=
   env.chandlers.find? (·.name.name == x)
 
-/-- The effect is answering. -/
-def Env.answering (env : Env) (e : String) : Bool := ((env.eff? e).map (·.answering)).getD false
+/-- The effect is answering (an environment's effect is, SPEC §22). -/
+def Env.answering (env : Env) (e : String) : Bool :=
+  env.envEffs.contains e || ((env.eff? e).map (·.answering)).getD false
+
+/-- The computation parameters of the function `x`. -/
+def Env.cparamsOf (env : Env) (x : String) : List CParam := (env.cparams.lookup x).getD []
 
 /-- The effect is an **iteration effect** (SPEC §15): its one operation is control, resumes, and
 answers `()`. A `for` over a call of a function that performs one handles it, and a stored
@@ -281,16 +323,71 @@ def paramTyOf : VTy → Option VTy
   | .lolli _ P _ => some P
   | _ => none
 
+/-- The first `n` components of a right-nested tuple type, the last one the rest. -/
+def splitTy : Nat → VTy → List VTy
+  | 0, _ => []
+  | 1, A => [A]
+  | n + 1, .tensor _ A B => A :: splitTy n B
+  | _, A => [A]
+
+/-- The `n` components of a right-nested tuple, when it has them. -/
+def splitVal : Nat → Val → Option (List Val)
+  | 0, .unit _ => some []
+  | 0, _ => none
+  | 1, V => some [V]
+  | n + 1, .pair _ V W => (splitVal n W).map (V :: ·)
+  | _, _ => none
+
+/-- A right-nested tuple of the values `Vs` (`()` when there are none). -/
+def tupleOf (sp : Span) : List Val → Val
+  | [] => .unit sp
+  | [V] => V
+  | V :: Vs => .pair sp V (tupleOf sp Vs)
+
+/-- The names of a `fn`'s parameters, as the parser binds them from the tuple `p`
+(`Parser.bindParams`): `let () = p`, `x <- return p`, `let (x, y) = p`, or `let (x, r) = p` with
+`r` a generated name holding the rest. -/
+def paramNames (p : String) : Nat → Comp → Option (List Ident)
+  | 0, _ => none
+  | _ + 1, .letUnit _ (.var _ q) _ => if q == p then some [] else none
+  | _ + 1, .bind _ x _ (.ret _ (.var _ q)) _ _ => if q == p then some [x] else none
+  | k + 1, .letPair _ x y (.var _ q) M =>
+    if q != p then none
+    else if y.name.startsWith "io_p" then (paramNames y.name k M).map (x :: ·)
+    else some [x, y]
+  | _ + 1, _ => none
+
+/-- A written function type: its argument and result types, and whether it is `!`. -/
+def fnTyOf : VTy → Option (VTy × VTy × Bool)
+  | .bang _ (.lolli _ A B) => some (A, B, true)
+  | .lolli _ A B => some (A, B, false)
+  | .bang _ (.thunk _ (.arr _ A (.ret _ B))) => some (A, B, true)
+  | .thunk _ (.arr _ A (.ret _ B)) => some (A, B, false)
+  | _ => none
+
+/-- The components of a call's argument tuple, each with whether its parameter's written type is
+a stored generator's (`U (pull A B R)`), and the effects its parameter provides (SPEC §22). -/
+def Env.argsOf (env : Env) (f : String) (W : Val) : List (Val × Bool × List String) :=
+  match (env.sigs.lookup f).bind paramTyOf with
+  | some P =>
+    let byArity : Option (List (Val × Bool × List String)) := do
+      let n ← env.arity.lookup f
+      let Vs ← splitVal n W
+      let Ps := splitTy n P
+      let cps := env.cparamsOf f
+      pure ((Vs.zip Ps).zipIdx.map fun ((V, A), k) =>
+        (V, isPullTy A, ((cps.find? (·.idx == k)).map fun cp => cp.prov.map (·.1.name)).getD []))
+    byArity.getD (go fuel P W)
+  | none => [(W, false, [])]
+where
+  go : Nat → VTy → Val → List (Val × Bool × List String)
+    | k + 1, .tensor _ A B, .pair _ V W => (V, isPullTy A, []) :: go k B W
+    | _, P, W => [(W, isPullTy P, [])]
+
 /-- The components of a call's argument tuple, each with whether its parameter's written type is
 a stored generator's (`U (pull A B R)`). -/
 def Env.pullArgs (env : Env) (f : String) (W : Val) : List (Val × Bool) :=
-  match (env.sigs.lookup f).bind paramTyOf with
-  | some P => go fuel P W
-  | none => [(W, false)]
-where
-  go : Nat → VTy → Val → List (Val × Bool)
-    | k + 1, .tensor _ A B, .pair _ V W => (V, isPullTy A) :: go k B W
-    | _, P, W => [(W, isPullTy P)]
+  (env.argsOf f W).map fun (V, p, _) => (V, p)
 
 /-- An operation's parameter tuple type (`1` with no parameters). -/
 def tupleTy (sp : Span) : List VTy → VTy
@@ -409,10 +506,20 @@ def Env.iterCall? (env : Env) : Val → Option (String × FSig × Inst × Val ×
     pure (x, g, i, f, W)
   | _ => none
 
+/-- An instance at the type arguments `σ`. -/
+def Inst.subst (σ : TySubst) (i : Inst) : Inst := { i with args := i.args.map (·.map (·.subst σ)) }
+
+/-- The type parameters of the function `x`, as declared. -/
+def Env.tpsOf (env : Env) (x : String) : List String :=
+  match env.defs.lookup x with
+  | some (.def_ _ _ ps _ _ _) => ps.map (·.name)
+  | _ => []
+
 mutual
 /-- The effects a value performs, outside the `with`s that handle them. A call of a function
 performing an iteration effect, as an argument at a stored generator's parameter, is the stored
-generator: it does not perform the iteration effect. -/
+generator: it does not perform the iteration effect. What a callback performs at a computation
+parameter that provides it is the callee's (SPEC §22). -/
 def rowV (env : Env) : Nat → Val → List Inst
   | 0, _ => []
   | n + 1, V => match V with
@@ -432,11 +539,14 @@ def rowV (env : Env) : Nat → Val → List Inst
       let head := match headName f with
         | some x => match env.op? x, env.fn? x with
           | some o, _ => [env.opInst o]
-          | none, some g => env.callRow g
+          | none, some g =>
+            let σ := callSubst env n f x W
+            (env.callRow g).map (·.subst σ)
           | none, none => rowV env n f
         | none => rowV env n f
       let args := match headName f with
-        | some x => (env.pullArgs x W).foldl (fun r (V, pull) => union r (pullRow env n pull V)) []
+        | some x => (env.argsOf x W).foldl (fun r (V, pull, prov) =>
+            union r ((pullRow env n pull V).filter fun i => !prov.contains i.eff)) []
         | none => rowV env n W
       union head args
     | .var _ x => match env.fn? x with
@@ -475,7 +585,44 @@ def pullRow (env : Env) : Nat → Bool → Val → List Inst
   | n + 1, pull, V => match pull, env.iterCall? V with
     | true, some (_, _, i, _, _) => without (rowV env n V) i.eff
     | _, _ => rowV env n V
+
+/-- The type parameters of `x` that a call `f(W)` of it determines for the effects (SPEC §22):
+written, `x[T, …](…)`, or read off the instances of what the callbacks at its computation
+parameters perform, against the rows those parameters provide. -/
+def callSubst (env : Env) : Nat → Val → String → Val → TySubst
+  | 0, _, _, _ => []
+  | n + 1, f, x, W =>
+    let tps := env.tpsOf x
+    if tps.isEmpty then [] else
+    let σ₀ : TySubst := match f with
+      | .defApp _ _ As => if As.length == tps.length then tps.zip As else []
+      | _ => []
+    let cps := env.cparamsOf x
+    (env.argsOf x W).zipIdx.foldl (fun σ ((V, _, _), k) =>
+      match cps.find? (·.idx == k) with
+      | some cp =>
+        let r := rowV env n V
+        cp.prov.foldl (fun σ (e, Ps) => match r.find? (·.eff == e.name) with
+          | some ⟨_, some Bs⟩ => (Ps.zip Bs).foldl (fun σ (P, B) => (matchTy tps σ P B).getD σ) σ
+          | _ => σ) σ
+      | none => σ) σ₀
 end
+
+/-- A value is a callback for a computation parameter (SPEC §22): a closure, a function with a row,
+or a computation parameter of the copy being elaborated (`cbs`). -/
+def cbArg? (env : Env) (cbs : List String) : Val → Option (Option (Ident × Comp))
+  | .thunkv _ (.lam _ x _ M) | .bangThunkv _ (.lam _ x _ M) => some (some (x, M))
+  | V => match headName V with
+    | some g => if cbs.contains g || (env.fn? g).isSome then some none else none
+    | none => none
+
+/-- A call of `x` that passes a callback at a computation parameter (SPEC §22): `x` has a
+computation parameter that provides an effect, or one whose argument performs one. -/
+def Env.isCbCall (env : Env) (cbs : List String) (x : String) (W : Val) : Bool :=
+  let cps := env.cparamsOf x
+  !cps.isEmpty && (cps.any (!·.prov.isEmpty) ||
+    (env.argsOf x W).zipIdx.any fun ((V, _, _), k) =>
+      cps.any (·.idx == k) && (cbArg? env cbs V).isSome && !(rowV env fuel V).isEmpty)
 
 /-! ### Building terms -/
 
@@ -651,6 +798,42 @@ def refsC : Nat → Comp → List String
     | .force .. | .top _ => []
 end
 
+mutual
+/-- The variables a value refers to that the names `bd` do not bind (free variables). -/
+def fvV : Nat → List String → Val → List String
+  | 0, _, _ => []
+  | n + 1, bd, V => match V with
+    | .var _ x | .defApp _ x _ => if bd.contains x then [] else [x]
+    | .lend _ x _ => if bd.contains x.name then [] else [x.name]
+    | .pair _ V W | .app _ V W => fvV n bd V ++ fvV n bd W
+    | .inl _ V | .inr _ V | .unbang _ V | .boxed _ _ V | .unbox _ V | .sub _ V _ | .roll _ V
+    | .unroll _ V | .inst _ V _ | .ascribe _ V _ | .shorten _ _ _ _ V => fvV n bd V
+    | .thunk _ M | .thunkv _ M | .bangThunk _ M | .bangThunkv _ M | .run _ M => fvC n bd M
+    | _ => []
+
+/-- The free variables of a computation. -/
+def fvC : Nat → List String → Comp → List String
+  | 0, _, _ => []
+  | n + 1, bd, M =>
+    let v (x : Ident) : List String := if bd.contains x.name then [] else [x.name]
+    match M with
+    | .ret _ V | .absurd _ V | .perform _ _ _ V | .abort _ _ _ V => fvV n bd V
+    | .bind _ x _ M N _ => fvC n bd M ++ fvC n (x.name :: bd) N
+    | .force _ x => v x
+    | .lam _ x _ M => fvC n (x.name :: bd) M
+    | .app _ M x => fvC n bd M ++ v x
+    | .with_ _ M N => fvC n bd M ++ fvC n bd N
+    | .proj _ _ M | .lamL _ _ _ M | .inst _ M _ | .nuIn _ M | .nuOut _ M | .ascribe _ M _ =>
+      fvC n bd M
+    | .letUnit _ V M => fvV n bd V ++ fvC n bd M
+    | .letPair _ x y V M => fvV n bd V ++ fvC n (x.name :: y.name :: bd) M
+    | .case _ V x M y N => fvV n bd V ++ fvC n (x.name :: bd) M ++ fvC n (y.name :: bd) N
+    | .for_ _ x V M N => fvV n bd V ++ fvC n (x.name :: bd) M ++ fvC n bd N
+    | .handle _ _ hr hc M => v hr ++ v hc ++ fvC n bd M
+    | .unwind _ x _ M D N => fvC n bd M ++ fvC n bd D ++ fvC n (x.name :: bd) N
+    | .top _ => []
+end
+
 /-! ### Elaborating a body -/
 
 /-- In a layer's body made for a member of a group (SPEC §20): the name of its `call` parameter,
@@ -670,6 +853,16 @@ structure ResumeK where
   params : List String
   stateful : Bool
 
+/-- A computation parameter in a copy made for the callback passed at it (SPEC §22): its variable,
+bound to the callback's code; the ports of its provided control effects; what a call of it
+performs (the provided effects, the tunneled ones and its environment's effect); and the
+capabilities the code takes, in order, its environment last. -/
+structure CbParam where
+  name : String
+  ports : List (String × Nat)
+  row : List Inst
+  caps : List Cap
+
 /-- The context of an elaboration: what is declared, the capabilities and handler sites in scope,
 and, in a function's copy, the capabilities its `return e` from inside a loop hands back. -/
 structure Cx where
@@ -688,10 +881,17 @@ structure Cx where
   layerCall : Option LCall := none
   /-- In a clause of an operation that resumes: its continuation. -/
   resume : Option ResumeK := none
+  /-- In a copy made for callbacks (SPEC §22): its computation parameters. -/
+  cbs : List CbParam := []
+  /-- In a copy made for callbacks: the ports of the function's provided effects, by effect. -/
+  ports : List (String × Nat) := []
 
 /-- What a call of `g` performs here: its row, and for a member of a recursive group the rows of
 the layers its recursion runs under. -/
 def Cx.rowOf (cx : Cx) (g : FSig) : List Inst := cx.env.callRow g
+
+/-- The computation parameter `x` of the copy being elaborated. -/
+def Cx.cb? (cx : Cx) (x : String) : Option CbParam := cx.cbs.find? (·.name == x)
 
 /-- The capabilities of `cx` for the effects `row`, in the order of `cx.caps`. -/
 def Cx.need (cx : Cx) (row : List Inst) : List Cap := cx.caps.filter (fun c => row.any (·.eff == c.eff))
@@ -711,6 +911,14 @@ def Cx.lcallV (cx : Cx) (V : Val) : Bool :=
   (match cx.resume with
     | some rk => (refsV fuel V).contains rk.k
     | none => false)
+
+/-- `V` is a call that passes a callback, or calls a computation parameter (SPEC §22). -/
+def Cx.cbCallV (cx : Cx) (V : Val) : Bool :=
+  match V with
+  | .app _ f W => match headName f with
+    | some x => (cx.cb? x).isSome || cx.env.isCbCall (cx.cbs.map (·.name)) x W
+    | none => false
+  | _ => false
 
 /-- The control effects of `row`. -/
 def Cx.ctl (cx : Cx) (row : List Inst) : List Inst := row.filter (!cx.env.answering ·.eff)
@@ -785,11 +993,11 @@ def FnParts.build (sp : Span) (f : FnParts) (row : Row := .nil) : VTy × Val :=
 /-- The variable `w` of type `W` that a `for`'s site of the iteration effect `e` threads, as a
 capability. -/
 def threadCap (sp : Span) (e w W : String) : Cap :=
-  ⟨e, w, "", ⟨"", e, ⟨"", sp⟩, .unit sp, [], sp⟩, some W⟩
+  ⟨e, w, "", ⟨"", e, ⟨"", sp⟩, .unit sp, [], sp⟩, some W, none⟩
 
 /-- The capabilities of a copy made for the handlers `hs`, one per answering effect of `effs`. -/
 def copyCaps (effs : List String) (hs : List HSig) : List Cap :=
-  (effs.zip hs).map fun (e, h) => ⟨e, "fx_c_" ++ e.toLower, "fx_l_" ++ e.toLower, h, none⟩
+  (effs.zip hs).map fun (e, h) => ⟨e, "fx_c_" ++ e.toLower, "fx_l_" ++ e.toLower, h, none, none⟩
 
 /-- A body taking the capabilities `cs` first: `fx_pp : mut 'l₁ S₁ * (… * P)`, taken apart into
 the capabilities and the original parameter `p`. -/
@@ -810,7 +1018,10 @@ def withInV (env : Env) : Nat → Val → Bool
       let pull := match headName f with
         | some x => (env.pullArgs x W).any fun (V, p) => p && (env.iterCall? V).isSome
         | none => false
-      pull || withInV env k f || withInV env k W
+      let cb := match headName f with
+        | some x => env.isCbCall [] x W
+        | none => false
+      pull || cb || withInV env k f || withInV env k W
     | .pair _ f W => withInV env k f || withInV env k W
     | .inl _ V | .inr _ V | .ascribe _ V _ | .roll _ V | .unroll _ V | .boxed _ _ V
     | .unbox _ V | .unbang _ V | .inst _ V _ | .sub _ V _ | .shorten _ _ _ _ V => withInV env k V
@@ -840,6 +1051,16 @@ def retIn : Nat → Val → Bool
     | .inl _ V | .inr _ V | .ascribe _ V _ => retIn k V
     | _ => false
 
+/-- `V` has, outside nested computations, a call that passes a callback or calls a computation
+parameter (SPEC §22). -/
+def cbIn (cx : Cx) : Nat → Val → Bool
+  | 0, _ => false
+  | k + 1, V => cx.cbCallV V || match V with
+    | .app _ f W | .pair _ f W => cbIn cx k f || cbIn cx k W
+    | .inl _ V | .inr _ V | .ascribe _ V _ | .roll _ V | .unroll _ V | .boxed _ _ V | .unbox _ V
+    | .unbang _ V | .inst _ V _ | .sub _ V _ | .shorten _ _ _ _ V => cbIn cx k V
+    | _ => false
+
 /-- The plain calls of `V` that perform no effect, lifted (`liftCalls`), in the order its
 evaluation runs them in; an effectful call stays, its arguments' plain calls lifted. -/
 def liftPlain (cx : Cx) : Nat → Val → StateT (List Bind) EM Val
@@ -849,7 +1070,7 @@ def liftPlain (cx : Cx) : Nat → Val → StateT (List Bind) EM Val
       match f with
       | .sugar .. | .app _ (.sugar ..) _ => do pure (.app sp f (← liftPlain cx k W))
       | _ =>
-        if !(cx.needV V).isEmpty || cx.ctlV V || cx.lcallV V then do
+        if !(cx.needV V).isEmpty || cx.ctlV V || cx.lcallV V || cx.cbCallV V then do
           pure (.app sp f (← liftPlain cx k W))
         else liftCalls k V
     | .pair sp V W => do pure (.pair sp (← liftPlain cx k V) (← liftPlain cx k W))
@@ -886,6 +1107,35 @@ def wrapTerms (f : Comp → Comp) : Comp → Comp
   | .for_ sp x V M N => .for_ sp x V M (wrapTerms f N)
   | T => f T
 
+/-- A name made of `s`, its characters other than letters, digits and `_` replaced by `_`. -/
+def sanitize (s : String) : String := s.map fun c => if c.isAlphanum || c == '_' then c else '_'
+
+/-- The effect that stands for the environment of the callback at the parameter `k` of the copy
+`name` (SPEC §22). -/
+def envEffName (name : String) (k : Nat) : String := s!"fx_env_{name}_{k}"
+
+/-- A handler with no name, for capabilities that are not a handler's state. -/
+def noHandler (sp : Span) : HSig := ⟨"", "", ⟨"", sp⟩, .unit sp, [], sp⟩
+
+/-- The handler that relabels a provided effect's port (SPEC §22, R2c): each clause performs its
+operation again at the site around the `with`, and the return clause answers the body's value. -/
+def relabelHandler (sp : Span) (eff : EffSig) : CHandler :=
+  let targs : List VTy := eff.tps.map (.name sp ·)
+  { name := ⟨s!"fx_relabel_{eff.name}", sp⟩, tps := (eff.tps ++ ["FX_RA"]).map (⟨·, sp⟩),
+    params := [], eff := ⟨eff.name, sp⟩, effArgs := targs, row := [(⟨eff.name, sp⟩, targs)],
+    res := .name sp "FX_RA", ret := (⟨"fx_rx", sp⟩, .name sp "FX_RA", .ret sp (.var sp "fx_rx")),
+    clauses := eff.ops.map fun o =>
+      let xs : List Ident := o.params.zipIdx.map fun (_, i) => ⟨s!"fx_ro{i}", sp⟩
+      ⟨o.name, xs, .ret sp (.app sp (.var sp o.name.name) (tupleOf sp (xs.map fun x => .var sp x.name)))⟩ }
+
+/-- A callback's specification for the copy made for it (SPEC §22): its computation parameter,
+what it performs that the callee does not provide (its tunneled row), and whether it assigns a
+variable it captures. -/
+structure CbSpec where
+  cp : CParam
+  T : List Inst
+  assigns : Bool
+
 mutual
 /-- `M` with its operations resolved, handing the capabilities `cs` back beside its result: each
 terminal answering `v` answers `(c₁, (…, (cₙ, v)))`. With `wrap := false` (the body of a loop,
@@ -901,6 +1151,8 @@ def trC : Nat → Cx → List Cap → Bool → Comp → EM Comp
       let self := match cx.recSelf, headName f with
         | some rs, some x => rs.members.contains x
         | _, _ => false
+      -- A call that passes a callback, or of a computation parameter, is elaborated as a value.
+      let self := self || cx.cbCallV V
       match headName f, wrap && !self with
       | some x, true =>
         match cx.env.fn? x with
@@ -1030,8 +1282,9 @@ def trV : Nat → Cx → List Cap → Val → EM (List Bind × Val)
     let unhandled := row.any fun i => (cx.capOf i.eff).isNone && (cx.siteOf i.eff).isNone
     -- A `return e` from a loop's body hands the copy's capabilities back too (`plainApp`).
     let ret := !cx.fnCaps.isEmpty && retIn fuel V
-    -- A layer's `call` is the member's call, which threads the environment.
-    let lcall := cx.lcallV V
+    -- A layer's `call` is the member's call, which threads the environment; so does a call that
+    -- passes a callback, or calls a computation parameter (SPEC §22).
+    let lcall := cx.lcallV V || cbIn cx fuel V
     if !needs && !unhandled && !ret && !lcall && !withInV cx.env fuel V then return ([], V)
     let (V, pre) ← if needs || lcall then (liftPlain cx fuel V).run [] else pure (V, [])
     let (bs, V') ← goV n cx cs V
@@ -1044,7 +1297,7 @@ def goV : Nat → Cx → List Cap → Val → EM (List Bind × Val)
     | .app sp (.app sp₂ (.sugar ksp (.handle h l As)) P) (.thunkv tsp (.lam lsp b A M)) =>
       match cx.env.handler? h, cx.env.chandler? h with
       | some hs, _ => withBlk k cx cs sp sp₂ ksp hs l P tsp lsp b A M
-      | none, some ch => withCtl k cx cs sp ksp ch As P M
+      | none, some ch => withCtl k cx cs sp ksp ch As P M none
       | none, none =>
         if cx.env.driver? h then do
           -- `with d { M }` of a heap driver: `M`, its recursive groups driven by `d`.
@@ -1087,6 +1340,11 @@ def goV : Nat → Cx → List Cap → Val → EM (List Bind × Val)
         if let some rk := cx.resume then
           if rk.k == x then
             return ← resumeCall k cx cs sp rk W
+        -- A computation parameter called, and a call that passes a callback (SPEC §22).
+        if let some cb := cx.cb? x then
+          return ← cbParamCall k cx cs sp cb W
+        if cx.env.isCbCall (cx.cbs.map (·.name)) x W then
+          return ← cbCall k cx cs sp f x W
         -- An argument at a stored generator's parameter: the stored generator of the call.
         let (bP, W) ← pullArgsV k cx cs x W
         let (b, V') ← match cx.env.op? x, cx.env.fn? x with
@@ -1103,6 +1361,9 @@ def goV : Nat → Cx → List Cap → Val → EM (List Bind × Val)
       if let some lc := cx.layerCall then
         if lc.name == x then
           throw ⟨sp, s!"`{x}`, the call a layer runs around, is passed as a value: it can only be called"⟩
+      if (cx.cb? x).isSome then
+        throw ⟨sp, s!"the callback `{x}` is used as a value: a computation parameter is second class, " ++
+          "and can only be called or passed at a computation parameter (SPEC §22)"⟩
       match cx.env.fn? x with
       | some g =>
         if g.group.isSome then
@@ -1365,7 +1626,7 @@ def withBlk : Nat → Cx → List Cap → Span → Span → Span → HSig → St
       | .lend _ x .mut => pure (Val.var x.span x.name)
       | .lend lsp' _ .imm => throw ⟨lsp', "a handler's state is lent `&mut`"⟩
       | V => pure (.app V.span (.sugar V.span (.call "alloc")) V)
-    let cap : Cap := ⟨hs.eff, b.name, l, hs, none⟩
+    let cap : Cap := ⟨hs.eff, b.name, l, hs, none, none⟩
     let cx' : Cx := { cx with caps := cap :: cx.caps.filter (·.eff != hs.eff) }
     let csM := cx'.needC M
     let outer := csM.filter (·.eff != hs.eff)
@@ -1391,10 +1652,10 @@ def withBlk : Nat → Cx → List Cap → Span → Span → Span → HSig → St
 handled effect's type arguments are the ones written, or the ones the body performs; the
 handler's own row is resolved to the sites around the `with`. The site is assembled with its
 clauses where the types are known (`VSugar.hndCtl`). -/
-def withCtl : Nat → Cx → List Cap → Span → Span → CHandler → List VTy → Val → Comp →
+def withCtl : Nat → Cx → List Cap → Span → Span → CHandler → List VTy → Val → Comp → Option Nat →
     EM (List Bind × Val)
-  | 0, _, _, sp, _, _, _, _, _ => throw ⟨sp, "internal error: a value nested too deeply"⟩
-  | k + 1, cx, cs, sp, ksp, ch, As, P, M => do
+  | 0, _, _, sp, _, _, _, _, _, _ => throw ⟨sp, "internal error: a value nested too deeply"⟩
+  | k + 1, cx, cs, sp, ksp, ch, As, P, M, forced => do
     let tps := ch.tps.map (·.name)
     let e := ch.eff.name
     if M.boundNames.contains "io_bt" then
@@ -1406,6 +1667,13 @@ def withCtl : Nat → Cx → List Cap → Span → Span → CHandler → List VT
     -- they come back when the body is abandoned.
     let mut csM : List Cap := []
     for c in cx.needC M do
+      -- A callback's environment is passed in, and comes back with each call; it is not lent.
+      if let some m := c.env then
+        if m then
+          throw ⟨ksp, s!"a callback called in the body of `with {ch.name.name}` assigns a variable it " ++
+            "captures: the body may be abandoned, and the assignment would be lost; keep that state " ++
+            "in a handler's capability instead (SPEC §22)"⟩
+        continue
       if c.thr.isSome then
         throw ⟨ksp, s!"the body of `with {ch.name.name}` performs `{c.eff}` of an enclosing `for`, " ++
           "which threads its variables through the operation: a control handler's body may be " ++
@@ -1415,8 +1683,16 @@ def withCtl : Nat → Cx → List Cap → Span → Span → CHandler → List VT
     if As.length > tps.length then
       throw ⟨ksp, s!"`{ch.name.name}` takes {tps.length} type argument(s)"⟩
     let mut σ : TySubst := tps.zip As
-    -- The handled effect's type arguments from what the body performs.
-    let n ← freshSite
+    -- The handled effect's type arguments from what the body performs. A site whose body calls a
+    -- computation parameter that is provided `e` is named by its port (SPEC §22).
+    let port := match forced with
+      | some p => some p
+      | none =>
+        if cx.cbs.any fun cb => cb.ports.any (·.1 == e) && (refsC fuel M).contains cb.name
+        then cx.ports.lookup e else none
+    let n ← match port with
+      | some p => pure p
+      | none => freshSite
     if let some i := (rowC cx.env fuel M).find? (·.eff == e) then
       if let some Bs := i.args then
         unless Bs.length == ch.effArgs.length do
@@ -1755,6 +2031,304 @@ def pullArgsV : Nat → Cx → List Cap → String → Val → EM (List Bind × 
       | V :: Vs => .pair V.span V (tuple Vs)
     pure (bs, tuple vs)
 
+/-- `cb(W)`, a computation parameter called in the copy made for its callback (SPEC §22, R2a): the
+callback's code applied to its capabilities, its environment and `W`, which hands the capabilities
+and the environment back; bound before the value it is in. A provided effect whose innermost site
+here is not its port, because the call is outside the function's handlers of it, is relabelled
+first (R2c): the call runs under a site of the port whose clauses raise again at the site around
+it. That needs the effect's operations abortive. -/
+def cbParamCall : Nat → Cx → List Cap → Span → CbParam → Val → EM (List Bind × Val)
+  | 0, _, _, sp, _, _ => throw ⟨sp, "internal error: a value nested too deeply"⟩
+  | k + 1, cx, cs, sp, cb, W => do
+    let x := cb.name
+    let stray := cb.ports.filter fun (e, p) => match cx.siteOf e with
+      | some s => s.n != p
+      | none => true
+    if let some (e, p) := stray.head? then
+      let some eff := cx.env.eff? e | throw ⟨sp, s!"internal error: the effect `{e}`"⟩
+      if (cx.siteOf e).isNone then
+        throw ⟨sp, s!"`{x}` is provided `{e}`, and is called here outside every handler of `{e}`"⟩
+      unless eff.ops.all (·.abortive) do
+        throw ⟨sp, s!"`{x}` is provided `{e}`, whose operations resume, and is called here outside " ++
+          s!"the handlers of `{e}` that serve it: its port would be relabelled to the handler around " ++
+          "this call, which needs the callback inlined or a `rename` primitive (R2c, not built)"⟩
+      report sp "lowering" (s!"{x}: called outside a handler of the {e} it is provided, under a site " ++
+        s!"of its port {p} whose clauses raise again at the handler around it (R2c)")
+      return ← withCtl k cx cs sp sp (relabelHandler sp eff) [] (.unit sp)
+        (.ret sp (.app sp (.var sp x) W)) (some p)
+    noLend sp s!"`{x}`" W
+    let used := cx.need cb.row
+    let (b, W') ← goV k cx cs W
+    let t ← fresh "fx_b"
+    let r ← fresh "fx_v"
+    report sp "call" (s!"{x} → the callback's code, a closure value: called with its environment " ++
+      "and capabilities, which it hands back")
+    -- The capabilities bound again at their own types.
+    let N' (N : Comp) : Comp := used.foldr (fun c K => if c.thr.isSome then K else
+      .bind sp ⟨c.var, sp⟩ (some (c.ty sp)) (.ret sp (.var sp c.var)) K false) N
+    let bind : Bind := fun N => do
+      pure (.bind sp ⟨t, sp⟩ none (.ret sp (.app sp (.var sp x) (capsTuple sp used W')))
+        (← unpack sp used r t (N' N)) false)
+    pure (b ++ [bind], .var sp r)
+
+/-- The code of a callback passed at a computation parameter (SPEC §22, R2a): `!` code that takes
+its capabilities and its environment first and hands them back first,
+
+    !(∀'k₁ … 'kₙ. caps ⊗ (Env ⊗ A) ⊸ F[ports ∪ tunneled] (caps ⊗ (Env ⊗ B)))
+
+`Env` the tuple of the variables `vars` it captures, bound again inside and rebuilt at each
+terminal. Its provided effects are at the callee's ports (`ports`); the rest resolve where it is
+written. Its lifetimes and its parameter's type are filled where the types are known
+(`VSugar.cbCode`). -/
+def cbCode : Nat → Cx → Span → Ident → Comp → List Cap → Cap → List String → List Site → EM Val
+  | 0, _, sp, _, _, _, _, _, _ => throw ⟨sp, "internal error: a value nested too deeply"⟩
+  | k + 1, cx, sp, x, M, caps, envCap, vars, ports => do
+    let caps := caps.map fun c => if c.thr.isSome then c else { c with life := "fx_k_" ++ c.eff.toLower }
+    let lives := (caps.filter (·.thr.isNone)).map (·.life)
+    let ev ← fresh "fx_cenv"
+    let cs := caps ++ [{ envCap with var := ev }]
+    let envT := tupleOf sp (vars.map (Val.var sp ·))
+    let ct ← fresh "fx_ct"
+    -- Each terminal hands the environment back as the body leaves it.
+    let M₁ := wrapTerms (fun T => .bind T.span ⟨ct, T.span⟩ none T
+      (.bind T.span ⟨ev, T.span⟩ none (.ret T.span envT) (.ret T.span (.var T.span ct)) false) false) M
+    let sites := ports ++ cx.sites.filter fun s => !ports.any (·.eff == s.eff)
+    let cxc : Cx := { cx with caps := cs, sites, fnCaps := [] }
+    let body ← trC k cxc cs true M₁
+    let body ← bindParams sp ev (vars.map (⟨·, sp⟩)) body
+    let q ← fresh "fx_cq"
+    let body ← unpack sp cs x.name q body
+    pure (.app sp (.sugar sp (.cbCode ⟨lives⟩)) (.thunkv sp (.lam sp ⟨q, sp⟩ (holeTy sp) body)))
+
+/-- `x(W)` of a function with computation parameters, passing a callback at one (SPEC §22, R2a): a
+call of the copy of `x` made for what serves its row and its callbacks' tunneled rows here, and
+for each callback's profile (`cbCopyOf`). Each callback is passed as a closure value: its code
+(`cbCode`), and its environment, the tuple of the variables it captures, passed beside the
+capabilities and handed back with them, its variables bound again after. A function passed by
+name, and a computation parameter passed on, are the closure that calls them. -/
+def cbCall : Nat → Cx → List Cap → Span → Val → String → Val → EM (List Bind × Val)
+  | 0, _, _, sp, _, _, _ => throw ⟨sp, "internal error: a value nested too deeply"⟩
+  | k + 1, cx, cs, sp, f, x, W => do
+    let some d := cx.env.defs.lookup x | throw ⟨sp, s!"internal error: `{x}` is not a function"⟩
+    let tps := cx.env.tpsOf x
+    let cps := cx.env.cparamsOf x
+    let some n := cx.env.arity.lookup x | throw ⟨sp, s!"internal error: the arity of `{x}`"⟩
+    noLend sp s!"`{x}`" W
+    let (bP, W) ← pullArgsV k cx cs x W
+    let some comps := splitVal n W
+      | throw ⟨sp, s!"`{x}` takes {n} arguments: write them one by one, `{x}(a, b, …)`"⟩
+    let cbNames := cx.cbs.map (·.name)
+    let σ := callSubst cx.env fuel f x W
+    -- The callbacks: a closure as written; a function passed by name, or a computation parameter
+    -- passed on, as the closure that calls it.
+    let mut specs : List (CbSpec × Ident × Comp × List String) := []
+    for cp in cps do
+      let V := comps.getD cp.idx (.unit sp)
+      let cl? := cbArg? cx.env cbNames V
+      if cl?.isNone && cp.prov.isEmpty then continue
+      if cl?.isNone && (headName V).isNone then
+        throw ⟨V.span, s!"the argument at `{cp.name}` of `{x}`, which `{x}` provides " ++
+          ", ".intercalate (cp.prov.map (·.1.name)) ++ ", is a closure or a function"⟩
+      let mut y : Ident := ⟨"", V.span⟩
+      let mut M : Comp := .top V.span
+      let mut written := false
+      match cl? with
+      | some (some (y', M')) => y := y'; M := M'; written := true
+      | _ =>
+        y := ⟨← fresh "fx_cx", V.span⟩
+        M := .ret V.span (.app V.span V (.var V.span y.name))
+      let prov := cp.prov.map (·.1.name)
+      for e in prov do
+        if cx.env.answering e then
+          throw ⟨V.span, s!"`{x}` provides `{e}` at `{cp.name}`: a provided answering effect is not " ++
+            "provided (SPEC §22)"⟩
+      let T := (rowC cx.env fuel M).filter fun i => !prov.contains i.eff
+      -- A closure that performs nothing, at a parameter that provides nothing, is passed as written.
+      if written && prov.isEmpty && T.isEmpty then continue
+      let globals := cx.env.sigs.map (·.1) ++ cx.env.ops.map (·.decl.name.name) ++ cx.env.externs
+      let vars := (fvC fuel [y.name] M).eraseDups.filter fun v =>
+        !globals.contains v && !cx.caps.any (·.var == v)
+      let assigns := vars.any M.boundNames.contains
+      specs := specs ++ [(⟨cp, T, assigns⟩, y, M, vars)]
+    -- What the copy performs: the function's own row, and what its callbacks tunnel.
+    let own := ((cx.env.fn? x).map (·.row)).getD [] |>.map (·.subst σ)
+    let Rc := specs.foldl (fun r (c, _) => union r c.T) own
+    -- What serves it here.
+    let mut hs : List HSig := []
+    let mut ss : List Site := []
+    let mut keys : List String := []
+    let mut envMut : List (String × Bool) := []
+    for i in Rc do
+      if cx.env.answering i.eff then
+        let some c := cx.capOf i.eff
+          | throw ⟨sp, s!"`{x}` performs `{i.eff}`, but no handler of `{i.eff}` is in scope here"⟩
+        match c.env with
+        | some m => envMut := envMut ++ [(i.eff, m)]; keys := keys ++ ["e"]
+        | none => hs := hs ++ [c.h]; keys := keys ++ [c.h.name]
+      else
+        let s ← (cx.serve sp s!"`{x}`" i : Except Error Site)
+        ss := ss ++ [s]
+        keys := keys ++ [s!"n{s.n}"]
+    -- A callback that tunnels one of the callee's ports was written inside the callee's own
+    -- handler of it: the recursion through a site of decision 57.
+    let myPorts := (← get).ports.filterMap fun ((g, _), p) => if g == x then some p else none
+    if let some s := ss.find? (myPorts.contains ·.n) then
+      throw ⟨sp, s!"`{x}` is passed a callback that performs `{s.eff}` at the handler of `{s.eff}` " ++
+        s!"inside `{x}` that serves its callbacks: each level would need a copy whose sites are its own, " ++
+        "without end (recursion through a site, decision 57; generative labels, #173)"⟩
+    let σkeys := tps.filterMap fun t => (σ.lookup t).map fun T => sanitize (T.pp 0)
+    let specKeys := specs.map fun (c, _) => s!"k{c.cp.idx}" ++
+      String.join (c.T.map fun i => "_" ++ i.eff) ++ (if c.assigns then "_m" else "")
+    let name := copyName x (keys ++ σkeys ++ specKeys)
+    -- The capabilities as this call holds them: those of the copy's row, then each callback's
+    -- environment.
+    let used := cx.needIn Rc
+    let mut envCaps : List Cap := []
+    for (c, _) in specs do
+      let v ← fresh "fx_env"
+      let ec : Cap := ⟨envEffName name c.cp.idx, v, "", noHandler sp, some s!"FX_W{c.cp.idx}", some c.assigns⟩
+      envCaps := envCaps ++ [ec]
+    let allCaps := used ++ envCaps
+    -- Each callback's code.
+    let mut codes : List (Nat × Val) := []
+    for ((c, y, M, vars), ec) in specs.zip envCaps do
+      let codeCaps := used.filter fun cc => c.T.any (·.eff == cc.eff)
+      let mut ports : List Site := []
+      for (e, Ps) in c.cp.prov do
+        let args := Ps.map (·.subst σ)
+        if args.any (mentions tps) then
+          throw ⟨sp, s!"the type arguments of the `{e.name}` that `{x}` provides at `{c.cp.name}` are " ++
+            s!"not determined here: write them, `{x}[…](…)`"⟩
+        let pn ← portOf x e.name
+        let site : Site := ⟨e.name, pn, args, none, sp, s!"`{x}`"⟩
+        ports := ports ++ [site]
+      codes := codes ++ [(c.cp.idx, ← cbCode k cx sp y M codeCaps ec vars ports)]
+    let name ← cbCopyOf k cx.env sp x d σ Rc hs ss envMut (specs.map (·.1)) name
+    -- The call.
+    let mut bs : List Bind := bP
+    let mut args : List Val := []
+    for (V, i) in comps.zipIdx do
+      match codes.lookup i with
+      | some code => args := args ++ [code]
+      | none =>
+        let (b, V') ← goV k cx cs V
+        bs := bs ++ b
+        args := args ++ [V']
+    for ((_, _, _, vars), ec) in specs.zip envCaps do
+      let envB : Bind := fun N =>
+        pure (.bind sp ⟨ec.var, sp⟩ none (.ret sp (tupleOf sp (vars.map (Val.var sp ·)))) N false)
+      bs := bs ++ [envB]
+    let t ← fresh "fx_b"
+    let r ← fresh "fx_v"
+    report sp "call" (s!"{x} → `{name}`" ++ (if used.isEmpty then "" else ", passing the capabilities") ++
+      "; " ++ ", ".intercalate (specs.map fun (c, _) => s!"the callback at `{c.cp.name}` a closure value " ++
+        "(its code and its environment)") ++ ": one body per profile")
+    let after (N : Comp) : EM Comp := do
+      -- Each environment taken apart again: its variables as the callback leaves them.
+      let mut K := N
+      for ((_, _, _, vars), ec) in (specs.zip envCaps).reverse do
+        K ← bindParams sp ec.var (vars.map (⟨·, sp⟩)) K
+      -- The capabilities bound again at their own types.
+      pure (used.foldr (fun c K => if c.thr.isSome then K else
+        .bind sp ⟨c.var, sp⟩ (some (c.ty sp)) (.ret sp (.var sp c.var)) K false) K)
+    let call : Val := .app sp (.var f.span name) (capsTuple sp allCaps (tupleOf sp args))
+    let bind : Bind := fun N => do
+      pure (.bind sp ⟨t, sp⟩ none (.ret sp call) (← unpack sp allCaps r t (← after N)) false)
+    pure (bs ++ [bind], .var sp r)
+
+/-- The copy `name` of `x` made for callbacks (SPEC §22, R2a), once per (function, what serves its
+row, the profile of each callback): `x`'s body at the type arguments `σ`, taking first the
+capabilities of the row `Rc` (its own and its callbacks' tunneled rows) and each callback's
+environment, and handing them back first. Each callback's parameter has the type of its code,
+
+    !(∀'k₁ …. caps ⊗ (W ⊗ A) ⊸ F[ports ∪ tunneled] (caps ⊗ (W ⊗ B)))
+
+`W` a type parameter of the copy, so one body serves every callback of the profile, whatever it
+captures. A `with` of a provided effect around a call of the parameter is named by its port. -/
+def cbCopyOf : Nat → Env → Span → String → Decl → TySubst → List Inst → List HSig → List Site →
+    List (String × Bool) → List CbSpec → String → EM String
+  | 0, _, sp, _, _, _, _, _, _, _, _, _ => throw ⟨sp, "internal error: copies nested too deeply"⟩
+  | k + 1, env, sp, x, d, σ, Rc, hs, ss, envMut, specs, name => do
+    let st ← get
+    if st.made.any (·.1 == name) || st.started.contains name then return name
+    modify fun s => { s with started := name :: s.started }
+    let .def_ dsp dn ps A V mk := d | throw ⟨sp, s!"internal error: `{x}` is not a function"⟩
+    let q := (← get).quiet
+    if env.lib.contains x then modify fun s => { s with quiet := true }
+    let ps := ps.filter fun p => (σ.lookup p.name).isNone
+    let f ← (fnParts dsp dn.name (A.subst σ) (V.subst σ) : Except Error FnParts)
+    let some pnames := paramNames f.p.name fuel f.body
+      | throw ⟨dsp, s!"internal error: the parameters of `{x}`"⟩
+    -- The capabilities, in the order of the row.
+    let mut extraTps : List Ident := []
+    let mut caps : List Cap := []
+    for i in Rc do
+      if let some m := envMut.lookup i.eff then
+        let W := s!"FX_E{caps.length}"
+        extraTps := extraTps ++ [⟨W, dsp⟩]
+        let ec : Cap := ⟨i.eff, "fx_c_" ++ sanitize i.eff, "", noHandler dsp, some W, some m⟩
+        caps := caps ++ [ec]
+      else if env.answering i.eff then
+        if let some h := hs.find? (·.eff == i.eff) then
+          caps := caps ++ [⟨i.eff, "fx_c_" ++ i.eff.toLower, "fx_l_" ++ i.eff.toLower, h, none, none⟩]
+      else if let some s := ss.find? (·.eff == i.eff) then
+        if let some (w, W) := s.thr then caps := caps ++ [threadCap dsp i.eff w W]
+    let thrTps : List Ident := (ss.filterMap (·.thr)).map fun (_, W) => ⟨W, dsp⟩
+    let ss' := ss.map fun s => { s with sp := dsp, what := "the caller" }
+    -- Each callback: its environment's capability, and its parameter at its code's type.
+    let mut cbps : List CbParam := []
+    let mut envCaps : List Cap := []
+    let mut Ps := splitTy pnames.length f.P
+    let mut cbF : List FSig := []
+    for c in specs do
+      let eEff := envEffName name c.cp.idx
+      let ec : Cap := ⟨eEff, s!"fx_e{c.cp.idx}", "", noHandler dsp, some s!"FX_W{c.cp.idx}", some c.assigns⟩
+      envCaps := envCaps ++ [ec]
+      let mut ports : List Site := []
+      for (e, Pe) in c.cp.prov do
+        let pn ← portOf x e.name
+        let site : Site := ⟨e.name, pn, Pe.map (·.subst σ), none, dsp, s!"`{x}`"⟩
+        ports := ports ++ [site]
+      let tun := c.T.filterMap fun i => if env.answering i.eff then none else ss'.find? (·.eff == i.eff)
+      let codeCaps := (caps.filter fun cc => c.T.any (·.eff == cc.eff)) ++ [ec]
+      let codeCaps' := codeCaps.map fun cc =>
+        if cc.thr.isSome then cc else { cc with life := "fx_k_" ++ cc.eff.toLower }
+      let lives := (codeCaps'.filter (·.thr.isNone)).map fun cc => ((⟨cc.life, dsp⟩ : Ident), Life.top dsp)
+      let codeF : FnParts := ⟨true, lives, capsTy dsp codeCaps' (c.cp.A.subst σ),
+        capsTy dsp codeCaps' (c.cp.B.subst σ), ⟨"_", dsp⟩, .top dsp⟩
+      let (codeT, _) := codeF.build dsp (env.rowOf (ports ++ tun))
+      Ps := Ps.set c.cp.idx codeT
+      let pname := (pnames.getD c.cp.idx ⟨"?", dsp⟩).name
+      let rowCb : List Inst := ports.map (fun s => ⟨s.eff, some s.args⟩) ++ c.T ++ [⟨eEff, some []⟩]
+      cbps := cbps ++ [⟨pname, ports.map fun s => (s.eff, s.n), rowCb, codeCaps⟩]
+      cbF := cbF ++ [{ name := pname, row := rowCb, decl := d }]
+    let allCaps := caps ++ envCaps
+    let effs' := envCaps.map (·.eff) ++ envMut.map (·.1) ++ env.envEffs
+    let env' : Env := { env with fns := cbF ++ env.fns, inLayers := [], envEffs := effs' }
+    let portsAll := (cbps.flatMap (·.ports)).eraseDups
+    let cx : Cx := { env := env', caps := allCaps, sites := ss', fnCaps := allCaps, cbs := cbps, ports := portsAll }
+    let body ← trC k cx allCaps true f.body
+    let f' ← takeCaps dsp allCaps { f with P := tupleTy dsp Ps } body
+    let (A', V') := f'.build dsp (env.rowOf ss')
+    report dsp "lowering" (s!"copy `{name}`: `{x}` for " ++ ", ".intercalate
+      ((hs.map (·.name)) ++ (ss.map fun s => s!"the site {s.n} of `{s.eff}`") ++
+        (specs.map fun c => s!"the callback at `{c.cp.name}`" ++
+          (if c.cp.prov.isEmpty then "" else
+            s!" (provided {", ".intercalate (c.cp.prov.map (·.1.name))} at its port)"))) ++
+      "; each callback a closure value, its environment a type parameter")
+    modify fun s => { s with quiet := q }
+    let base := match mk with
+      | .template m => m
+      | m => m
+    let tps' := ps ++ thrTps ++ extraTps ++ specs.map fun c => (⟨s!"FX_W{c.cp.idx}", dsp⟩ : Ident)
+    -- Its identity, with the same lifetime parameters and parameter type: a call passes its
+    -- argument through it, so that the callbacks' `∀` code is checked against the parameter's type.
+    let (iA, iV) := ({ f' with T := f'.P, body := .ret dsp (.var dsp f'.p.name) } : FnParts).build dsp
+    let idName := name ++ "__id"
+    modify fun s => { s with made := s.made.push (idName, .def_ dsp ⟨idName, dn.span⟩ tps' iA iV (.template base)) }
+    modify fun s => { s with made := s.made.push (name, .def_ dsp ⟨name, dn.span⟩ tps' A' V' (.template base)) }
+    pure name
+
 /-- The copy of `g` for what serves its effects at a call in `cx`, made once. -/
 def copyFor : Nat → Cx → Span → String → FSig → EM String
   | 0, _, sp, _, _ => throw ⟨sp, "internal error: copies nested too deeply"⟩
@@ -1857,7 +2431,7 @@ def groupCopy : Nat → Env → Span → String → List Inst → List String �
     let cs : List Cap := row.filterMap fun i =>
       if env.answering i.eff then
         (hs.find? (·.eff == i.eff)).map fun h =>
-          ⟨i.eff, "fx_c_" ++ i.eff.toLower, "fx_l_" ++ i.eff.toLower, h, none⟩
+          ⟨i.eff, "fx_c_" ++ i.eff.toLower, "fx_l_" ++ i.eff.toLower, h, none, none⟩
       else (ss.find? (·.eff == i.eff)).bind fun s => s.thr.map fun (w, W) => threadCap gsp i.eff w W
     let tps : List Ident := (ss.filterMap (·.thr)).map fun (_, W) => ⟨W, gsp⟩
     let tArgs : List VTy := tps.map fun t => .name gsp t.name
@@ -2023,7 +2597,7 @@ def copyOf : Nat → Env → Span → FSig → List HSig → List Site → Strin
     -- `for`'s site threads (whose type is a parameter of the copy, `W`).
     let cs : List Cap := g.row.filterMap fun i =>
       if env.answering i.eff then
-        (hs.find? (·.eff == i.eff)).map fun h => ⟨i.eff, "fx_c_" ++ i.eff.toLower, "fx_l_" ++ i.eff.toLower, h, none⟩
+        (hs.find? (·.eff == i.eff)).map fun h => ⟨i.eff, "fx_c_" ++ i.eff.toLower, "fx_l_" ++ i.eff.toLower, h, none, none⟩
       else (ss.find? (·.eff == i.eff)).bind fun s => s.thr.map fun (w, W) => threadCap dsp i.eff w W
     let tps : List Ident := (ss.filterMap (·.thr)).map fun (_, W) => ⟨W, dsp⟩
     let ss := ss.map fun s => { s with sp := dsp, what := "the caller" }
@@ -2080,7 +2654,7 @@ def clauseDef (env : Env) (h : HSig) (o : OpDecl) (c : Clause) : EM Decl := do
   let p ← fresh "fx_p"
   let inner ← bindParams sp p c.params inner
   let pp ← fresh "fx_pp"
-  let cap : Cap := ⟨h.eff, cv, l, h, none⟩
+  let cap : Cap := ⟨h.eff, cv, l, h, none, none⟩
   let P := tupleTy sp (o.params.map (·.2))
   let f : FnParts := ⟨true, [(⟨l, sp⟩, .top sp)], capsTy sp [cap] P, capsTy sp [cap] o.res, ⟨pp, sp⟩,
     .letPair sp ⟨cv, sp⟩ ⟨p, sp⟩ (.var sp pp) inner⟩
@@ -2135,16 +2709,24 @@ def Decl.defName : Decl → Option String
   | .def_ _ n _ _ _ _ => some n.name
   | _ => none
 
+/-- The marks of a definition taken apart: its written row, the provided rows of its computation
+parameters (SPEC §22), and the rest. -/
+def splitMarks : Mark → List (Ident × List VTy) × List (String × List (Ident × List VTy)) × Mark
+  | .row es m => let (r, p, m') := splitMarks m; (es ++ r, p, m')
+  | .provides x es m => let (r, p, m') := splitMarks m; (r, (x.name, es) :: p, m')
+  | .template m => let (r, p, m') := splitMarks m; (r, p, .template m')
+  | m => ([], [], m)
+
 /-- The mark of a definition without its written row, and the row. -/
-def splitRow : Mark → List (Ident × List VTy) × Mark
-  | .row es m => (es, m)
-  | m => ([], m)
+def splitRow (m : Mark) : List (Ident × List VTy) × Mark :=
+  let (r, _, m') := splitMarks m
+  (r, m')
 
 /-- Anything for this pass to do: an effect, a handler or a written row. -/
 def hasEffects (ds : List Decl) : Bool :=
   ds.any fun
     | .effect .. | .handler .. | .chandler .. => true
-    | .def_ _ _ _ _ _ mk => (match mk with | .row .. => true | _ => false)
+    | .def_ _ _ _ _ _ mk => (match mk with | .row .. | .provides .. => true | _ => false)
     | _ => false
 
 /-- The recursive group of the definitions `ms` declared (SPEC §20): each member a function of the
@@ -2263,6 +2845,22 @@ def elaborate (ds : List Decl) (lib : List String := []) :
         env := { env with chandlers := env.chandlers ++ [ch] }
       | .def_ sp n ps A V mk =>
         env := { env with sigs := (n.name, A) :: env.sigs }
+        let (_, provs, mkS) := splitMarks mk
+        env := { env with defs := (n.name, .def_ sp n ps A V mkS) :: env.defs }
+        -- Its computation parameters (SPEC §22): those whose written type is a function type.
+        let mut cps : List CParam := []
+        if let .ok fp := fnParts sp n.name A V then
+          if let some names := paramNames fp.p.name fuel fp.body then
+            let Ts := splitTy names.length fp.P
+            cps := ((names.zip Ts).zipIdx).filterMap fun ((x, T), k) =>
+              (fnTyOf T).map fun (a, b, bang) => ⟨k, x.name, a, b, bang, (provs.lookup x.name).getD []⟩
+            env := { env with arity := (n.name, names.length) :: env.arity }
+        for (x, _) in provs do
+          unless cps.any (·.name == x) do
+            throw ⟨n.span, s!"`{x}` is given a provided row, and is not a parameter of `{n.name}` " ++
+              "whose type is a function type"⟩
+        unless cps.isEmpty do
+          env := { env with cparams := (n.name, cps) :: env.cparams }
         if isLayerTy (ps.map (·.name)) A then
           env := { env with layers := (n.name, .def_ sp n ps A V mk) :: env.layers }
         modify fun s => { s with quiet := lib.contains n.name }
@@ -2274,7 +2872,10 @@ def elaborate (ds : List Decl) (lib : List String := []) :
               | _ => none)
           continue
         let (written, mk) := splitRow mk
-        let row := rowV env fuel V
+        -- A computation parameter performs what it is provided, at the function's ports.
+        let cbF : List FSig := cps.filterMap fun cp => if cp.prov.isEmpty then none else
+          some { name := cp.name, row := cp.prov.map fun (e, As) => ⟨e.name, some As⟩, decl := .def_ sp n ps A V mk }
+        let row := rowV { env with fns := cbF ++ env.fns } fuel V
         for i in row do
           unless written.isEmpty || written.any (·.1.name == i.eff) do
             throw ⟨n.span, s!"`{n.name}` performs `{i.eff}`, which its written row does not list"⟩
@@ -2302,6 +2903,9 @@ def elaborate (ds : List Decl) (lib : List String := []) :
             match i.args with
             | some (_ :: _) => s!"{i.eff}[{", ".intercalate ((i.args.getD []).map (VTy.pp · 0))}]"
             | _ => i.eff))
+        else if cps.any (!·.prov.isEmpty) then
+          -- It provides effects to a callback: it is elaborated only as its copies (SPEC §22).
+          pure ()
         else
           let before := (← get).made.size
           let (bs, V') ← trV fuel { env, caps := [] } [] V
@@ -2314,6 +2918,9 @@ def elaborate (ds : List Decl) (lib : List String := []) :
         let M' ← trC fuel { env, caps := [] } [] false M
         out := out ++ ((← get).made.extract before).map (·.2)
         out := out.push (.main sp C M')
+      | .extern sp x A =>
+        env := { env with externs := x.name :: env.externs }
+        out := out.push (.extern sp x A)
       | d => out := out.push d
     pure out.toList
   match go.run {} with

@@ -329,6 +329,14 @@ structure ItInfo where
   callee : String
   deriving DecidableEq, Repr
 
+/-- The code of a callback passed at a computation parameter (SPEC §22), as
+`Frontend.Elab.Effects` leaves it: the names of its lifetime parameters, outermost first, one per
+capability it takes. Its parameter's type and the lifetimes' bounds are filled from the type the
+parameter expects. -/
+structure CbInfo where
+  lives : List String
+  deriving DecidableEq, Repr
+
 /-- A surface form that needs types to elaborate (docs/typed-elaboration.md §5): a leaf, applied
 to its operands as values, and elaborated to core by the typed pass of `Frontend/Sugar.lean`. -/
 inductive VSugar where
@@ -384,6 +392,10 @@ inductive VSugar where
   /-- The stored generator of a call of a function that performs an iteration effect (SPEC §15),
   applied to the call of its copy for the site. -/
   | pullSite (info : ItInfo)
+  /-- A callback's code (SPEC §22), applied to `thunkv fun (q : _) -> M`: `!` code generic in the
+  lifetimes of the capabilities it takes, `!thunkv Fun 'k₁ < @. … return thunkv fun (q : A) -> M`,
+  at the type the computation parameter expects. -/
+  | cbCode (info : CbInfo)
   deriving DecidableEq, Repr, Inhabited
 
 mutual
@@ -497,6 +509,10 @@ inductive Mark where
   row is within it, and gives the type arguments of an effect it performs directly. The function
   is marked `m` besides. -/
   | row (effs : List (Ident × List VTy)) (m : Mark)
+  /-- `fn f(…, x: A => B with E₁, E₂[A], …) -> …`: the **provided row** of the computation
+  parameter `x` (SPEC §22): the effects `f` serves for the callback passed at `x`. The function is
+  marked `m` besides. -/
+  | provides (x : Ident) (effs : List (Ident × List VTy)) (m : Mark)
   deriving DecidableEq, Repr, Inhabited
 
 /-- The kind of an operation (SPEC §19): answering (`fn`), or control (`ctl`) with the structural
@@ -749,6 +765,7 @@ end
 def Mark.strip : Mark → Mark
   | .template m => .template m.strip
   | .row es m => .row (es.map fun (e, As) => (e.strip, As.map VTy.strip)) m.strip
+  | .provides x es m => .provides x.strip (es.map fun (e, As) => (e.strip, As.map VTy.strip)) m.strip
   | m => m
 
 def Decl.strip : Decl → Decl

@@ -141,7 +141,8 @@ def Val.level : Val → Nat
   -- `alloc(e)`, `clone(x)`: an application, parenthesized as an argument.
   | .app _ (.sugar _ (.call _)) _ => 2
   | .app _ (.sugar _ .deref) _ => 2
-  | .app _ (.sugar _ .retE) _ | .app _ (.sugar _ (.forSite _)) _ | .app _ (.sugar _ (.pullSite _)) _ => 1
+  | .app _ (.sugar _ .retE) _ | .app _ (.sugar _ (.forSite _)) _ | .app _ (.sugar _ (.pullSite _)) _
+  | .app _ (.sugar _ (.cbCode _)) _ => 1
   | .app _ (.sugar _ .brace) _
   | .app _ (.app _ (.sugar _ (.borrow ..)) _) _ => 2
   | .thunk .. | .thunkv .. | .bangThunk .. | .bangThunkv .. => 0
@@ -196,6 +197,7 @@ def Val.pp (V : Val) (lvl : Nat := 0) (k : Nat := 0) : String :=
     | .app _ (.sugar _ .retE) V => "return " ++ V.pp 1 k
     | .app _ (.sugar _ (.forSite i)) V => s!"for_site[{i.n}] " ++ V.pp 1 k
     | .app _ (.sugar _ (.pullSite i)) V => s!"pull_site[{i.n}] " ++ V.pp 1 k
+    | .app _ (.sugar _ (.cbCode i)) V => s!"cb_code[{", ".intercalate i.lives}] " ++ V.pp 1 k
     | .app _ (.sugar _ .brace) (.thunk _ M) => "{ " ++ M.pp 0 (k + 2) ++ " }"
     | .app _ (.sugar _ .brace) (.bangThunk _ M) => "!{ " ++ M.pp 0 (k + 2) ++ " }"
     | .app _ (.app _ (.sugar _ (.borrow bk x)) P) (.thunkv _ (.lam _ b _ M)) =>
@@ -286,12 +288,13 @@ def Decl.pp : Decl → String
   | .shape _ n σ => "shape " ++ n.name ++ " = " ++ σ.pp
   | .def_ _ n ps A V m =>
     let params := if ps.isEmpty then "" else "[" ++ ", ".intercalate (ps.map (·.name)) ++ "]"
+    let effs (es : List (Ident × List VTy)) : String := ", ".intercalate (es.map fun (e, As) =>
+      e.name ++ (if As.isEmpty then "" else "[" ++ ", ".intercalate (As.map (VTy.pp · 0)) ++ "]"))
     let rec mk : Mark → String
       | .none => "" | .total => "total " | .div => "div "
       | .template m => mk m ++ "fn "
-      | .row es m => "with[" ++ ", ".intercalate (es.map fun (e, As) =>
-          e.name ++ (if As.isEmpty then "" else "[" ++ ", ".intercalate (As.map (VTy.pp · 0)) ++ "]")) ++
-          "] " ++ mk m
+      | .row es m => "with[" ++ effs es ++ "] " ++ mk m
+      | .provides x es m => "with[" ++ x.name ++ ": " ++ effs es ++ "] " ++ mk m
     let mk := mk m
     mk ++ "def " ++ n.name ++ params ++ " : " ++ A.pp ++ " =" ++ nl 2 ++ V.pp 0 2
   | .extern _ n A => "extern " ++ n.name ++ " : " ++ A.pp
