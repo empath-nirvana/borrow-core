@@ -11,3 +11,4 @@ import GhostEnd.Witness
 import GhostEnd.Body
 import GhostEnd.Typed
 import GhostEnd.Branch
+import GhostEnd.Loop

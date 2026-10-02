@@ -477,26 +477,40 @@ theorem rbody_seq (hbx : b.mentions x = false)
 
 /-! ### The whole borrower -/
 
+/-- A whole borrower `M`, `m` its only variable, is a piece holding the view. -/
+theorem open_of_rbody (hT : ¬ VFree x T) {A : VTy} {M : Expr}
+    {δ : LSub} (hδ : Δ.Models δ) {β : Life} (hβ : b.interp δ = some β)
+    (h : RBody Δ x b T S [] true M A) (l : BoCa.Loc) (ls : List SRec) :
+    Open (opTable (Row.tab S δ)) l T δ β (viewP l T δ) (ansR x δ A) ls (substAll [Val.loc l] M)
+      PMap.empty :=
+  open_fold (opTable_mono _) fun α hα => ⟨fun ρm σ hm hc => by
+    obtain rfl := eq_of_compS_empty_left hc
+    exact h δ hδ β hβ l α hα ls [] _ rfl (gDenC_mk trivial (sep_emp_iff.mpr (mutView hT hm))),
+    ResU.inStratum_empty α⟩
+
+/-- A piece answering `['x] B` hands the owner back at its answer: it is `Relend`. -/
+theorem relend_of_open_box {Tb : Table} (hTb : Tb.Mono) {l : BoCa.Loc} {B : VTy}
+    (hB : ¬ VFree x B) {δ : LSub} {β : Life} {ls : List SRec} {e : Expr} {ρ : WRes}
+    (h : Open Tb l T δ β (viewP l T δ) (ansR x δ (.box (.var x) B)) ls e ρ) :
+    Relend Tb l T δ (finPost l T B δ) ls e ρ := by
+  refine relend_of_open (β := β) hTb (open_mono_Q hTb ?_ h)
+  intro α _ ls' v ρ hv
+  obtain ⟨α', hα', hBr, hout⟩ := hv
+  rw [interp_ext_self] at hα'
+  cases Option.some.inj hα'
+  refine ⟨fun w ρa ρb ha hcab ρc ρd hc hccd => ?_, hout⟩
+  obtain ⟨s, hs, hρs⟩ := compS_reassoc hcab hccd
+  exact ⟨s, ρ, ResU.CompS.comm hρs, ⟨w, ρa, ρc, hs, ha, hc⟩,
+    by rwa [vC_extend_of_not_free hB] at hBr⟩
+
 /-- **A borrower is re-lendable.** `Δ, x ⊏ b; m : Mut 'x T ⊢ M : F_Σ(['x] B)` read as `RBody`: at
 each lend the view is `m`, and the answer, boxed at the lend, hands the owner back. -/
 theorem relend_of_rbody (hT : ¬ VFree x T) {B : VTy} (hB : ¬ VFree x B) {M : Expr}
     {δ : LSub} (hδ : Δ.Models δ) {β : Life} (hβ : b.interp δ = some β)
     (h : RBody Δ x b T S [] true M (.box (.var x) B)) (l : BoCa.Loc) (ls : List SRec) :
     Relend (opTable (Row.tab S δ)) l T δ (finPost l T B δ) ls (substAll [Val.loc l] M)
-      PMap.empty := by
-  have hTb := opTable_mono (Row.tab S δ)
-  refine relend_of_open (β := β) hTb (open_mono_Q hTb (Q := ansR x δ (.box (.var x) B)) ?_ ?_)
-  · intro α _ ls' v ρ hv
-    obtain ⟨α', hα', hBr, hout⟩ := hv
-    rw [interp_ext_self] at hα'
-    cases Option.some.inj hα'
-    refine ⟨fun w ρa ρb ha hcab ρc ρd hc hccd => ?_, hout⟩
-    obtain ⟨s, hs, hρs⟩ := compS_reassoc hcab hccd
-    exact ⟨s, ρ, ResU.CompS.comm hρs, ⟨w, ρa, ρc, hs, ha, hc⟩,
-      by rwa [vC_extend_of_not_free hB] at hBr⟩
-  · refine open_fold hTb fun α hα => ⟨fun ρm σ hm hc => ?_, ResU.inStratum_empty α⟩
-    obtain rfl := eq_of_compS_empty_left hc
-    exact h δ hδ β hβ l α hα ls [] _ rfl (gDenC_mk trivial (sep_emp_iff.mpr (mutView hT hm)))
+      PMap.empty :=
+  relend_of_open_box (opTable_mono _) hB (open_of_rbody hT hδ hβ h l ls)
 
 /-- **O15.1's resume half for every borrower `RBody` reads.** As `withbor_of_relendOfTyped`,
 from `relend_of_rbody` in place of `RelendOfTyped`. -/
