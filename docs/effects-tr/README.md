@@ -28,6 +28,7 @@ cross-check: every result it has proved is cited by name, and nothing here contr
 | 10 | [Findings](10-findings.md) | three machine-checked counterexamples to phase A's checker; ν/op |
 | 11 | [Transcription guide](11-transcription.md) | dependency order; [TR], phase B and `Core/` reuse by name; open problems |
 | 12 | [Sources and novelty](12-sources.md) | references with how each was checked; what is adapted and what is new |
+| 14 | [The `Mut` cell with a rebased continuation](14-mut-cell.md) | candidate result (#251): a cell holding a suspended continuation, closed under resume and drop; where internal lifetimes go; the spanning lend (O14.1) |
 
 ## Conventions
 
@@ -72,6 +73,9 @@ cross-check: every result it has proved is cited by name, and nothing here contr
 | L9.3 | T1 is necessary for a place-based lend | machine-checked (phase A) |
 | T9.4 | no step-indexing | proved here |
 | O3, O4 | an owning lend of a borrowed source under a suspending table; higher-type capability states | open |
+| T14.5 | the `Mut`-cell lemma: a cell holding a rebased continuation is closed under resume (`d_callMut`) and drop (`close`) | proved here (candidate, §14) |
+| T14.6 | the kernel produces rebased continuations from every body with no lend spanning a suspension | proved here (candidate, §14) |
+| O14.1, O14.2 | a lend spanning a suspension (O3 at the kernel's tables); relabelling at `U` | open; the same-lifetime route is refuted (`refoldKripke_false`) |
 
 ## Findings, in brief
 
