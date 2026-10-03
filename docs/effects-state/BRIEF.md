@@ -24,11 +24,12 @@ The evidence for every line is in the files beside it:
 
 > **The first rule: nothing can break the borrow calculus.**
 > In the user's words, 2026-10-03: "NOTHING CAN BREAK THE BORROW CALCULUS."
-> - BoLo's definitions and rules stay exactly as printed.
-> - Every BoLo theorem keeps holding.
-> - The effect calculus extends BoLo; it never edits, weakens or works around it.
 >
-> A design that needs a BoLo rule changed is wrong. Stop and report it.
+> This is about the borrow calculus's **guarantees**, not about leaving BoLo's text untouched. The user: "There is a big difference between doesn't break the borrow calculus and doesn't change bolo. You can't add an effect system without changing it. They interact."
+> - **Effects change BoLo.** The world, the wp and its stop condition, the relation and the borrow rules at effect rows are expected to change where effects and borrows interact.
+> - **Borrow safety is never weakened.** The extended calculus must still prove borrow safety for every program, effectful ones included: the fundamental property, adequacy, no use after free, exclusive mutable borrows, lifetimes respected, leak freedom.
+> - **No effect feature is a way around borrowing.**
+> - **Each change is proved.** A changed BoLo definition comes with the proof that the guarantees still hold. It is never assumed.
 
 ---
 
@@ -205,7 +206,7 @@ The full register, with sources, is [04](04-decisions.md). Only entries marked d
 - **Divergence** is an effect: `Loop` codata. Totality is not a goal.
 - **Errors** are a control-flow effect: `raise` plus handlers (#168).
 - **Handler state** is passed to each clause and at each resume (decision 59).
-- **Nothing can break the borrow calculus** (2026-10-03). See the first rule above.
+- **Nothing can break the borrow calculus** (2026-10-03). See the first rule above. It is about the guarantees; BoLo's definitions are expected to change where effects interact.
 - **Row variables are in the kernel** (2026-10-03). In the user's words: "of course we have row variables in the kernel." This supersedes decision 57's first bullet.
 - **Handlers are deep** (2026-10-03), as SPEC §19 builds them. This revises decision 15.
 - **Cancellation is what the unwinding effects do as built** (SPEC §19). In the user's words: "Whatever they do is what we decided." (2026-10-03)
@@ -304,13 +305,13 @@ Don't cite these as authority. Most of them wait on the user.
 
 ## 10. Rules for every agent
 
-- **Nothing can break the borrow calculus.** No change to BoLo's definitions, rules or theorems. Every addition must leave every BoLo result holding.
+- **Nothing can break the borrow calculus.** BoLo's definitions may change where effects interact with borrows. The borrow guarantees may not weaken: each change comes with the proof that they hold for every program, effectful ones included.
 - **Build the actual calculus.** If something can't be specified or proved yet, box it as an open question in the spec. Never narrow silently.
 - **Say which world every result lives at:** Core σ=[], GE, SIB, PAPER, or `W`. A result at σ = [] is not a result at `W`.
 - **Read before touching borrowing.**
   - Read the existing BoLo Lean in `Core/` and the paper: [CONF] `~/repos/borrow_lang/3764117.pdf`, and [TR] `~/repos/borrow_lang/3764117-supplement.pdf` for the full proofs.
   - The paper is not wrong. Where something will not reconcile, name what our side is missing.
-  - Follow printed proofs; don't take shorter routes.
+  - Where a BoLo proof is reused or extended to effects, follow its printed technique rather than a shorter route; later lemmas reach for the technique.
 - **No new relation families, twin constants or side mechanisms.** If you need one, stop and report. That is a finding about the structure.
 - **Use `TW` for arising.** A counterexample must arise before it steers anything.
 - **A blocker is a claim.** Report an obstruction only as a named `def … : Prop` that elaborates, or as a Lean configuration with every hypothesis discharged.

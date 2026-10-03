@@ -803,9 +803,9 @@ Each entry: the decision, and why. Newest last.
       bounded constructor of `lib/aff.bc`. Rust's `T: 'a` is the comparison only.
 62. **The effect calculus (the user's decisions of 2026-10-03, #290).**
     - **Nothing can break the borrow calculus.** In the user's words: "NOTHING CAN BREAK THE BORROW CALCULUS."
-      - BoLo's definitions and rules stay as printed.
-      - Every BoLo theorem keeps holding.
-      - The effect calculus extends BoLo; it never edits it.
+      - This is about the guarantees. The user: "There is a big difference between doesn't break the borrow calculus and doesn't change bolo. You can't add an effect system without changing it. They interact."
+      - BoLo's definitions change where effects and borrows interact.
+      - Borrow safety must still be proved for every program, effectful ones included, and no effect feature is a way around borrowing.
     - **The kernel has row variables.** In the user's words: "of course we have row variables in the kernel." This supersedes decision 57's first bullet.
     - **Handlers are deep**, as SPEC §19 builds them. This revises decision 15.
     - **Cancellation is what SPEC §19 and the unwinding effects do as built.** In the user's words: "Whatever they do is what we decided."
