@@ -61,6 +61,11 @@ Build with `lake build GhostEnd`. It uses only the standard axioms and has no `s
 | 3h | the stacked `U` clause | `force_RLs`, `relendableS_thunk`, `thunkF_RLs`, `thunkE_RLs` |
 | 3h | the `withbor` rows at `σ·new`, `|σ| = 1`: D16.1's piece is the nested piece, folded back by the commutation lemmas | `nestRelend_of_openS`, `nestRelend₂_of_openS`, `withbor_reborrow_RLs`, `withbor_other_RLs`, `withbor_reborrow_spans`, `withbor_other_spans` |
 | 3h | every hypothesis discharged: a reborrow callback yielding with both lends open, as D16.1's piece | `openS_yield`, `openS_val`, `withbor_reborrow_spans_yield` |
+| 3i | the commutation lemma at every stack, `σ·new` to `σ`: a lend of another place, and a reborrow | `stack_step_other`, `stack_step_reborrow` (`StackStep.lean`) |
+| 3i | an `imm` entry at `σ·new`, at every stack (6.64 at a resuming table) | `stack_step_imm`, `fold_imm`, `opTable_shift` |
+| 3i | `Relendable_σ` closed under `⋆`, at every stack | `relendableS_sep`, `vwS_join`, `vwS_split`, `ptoImmS_join` |
+| 3i | a whole stack folds back to `[]` by induction on the stack; the depth-1 and depth-2 rows from the uniform steps | `openS_nil_ewp`, `fold_other`, `stack_spans_mut`, `stack_spans_imm`, `stack2_reborrow_spans` |
+| 3i | every hypothesis discharged: three lends of one place spanning a yield; an `imm` lend inside a `mut` lend spanning a yield | `openS_val_any`, `openS_yield_any`, `stack3_reborrow_yield`, `stack2_imm_yield` |
 
 ### Step 0: the segment fundamental lemma (restated)
 
@@ -697,10 +702,81 @@ lenders' row, which drops both views and hands the inner owner back.
   to the callback form these rows take (answers in `ghostS`). That is `relend_of_openD` at a stack,
   and it is the content of reading `NestRelend` off typing (#275).
 - The reborrow followed by the outer borrower's continuation (#276).
-- The commutation lemmas at `|σ| ≥ 2`, the entries above the outer one carried along.
-- An `imm` entry at `σ·new`.
-- `RelendableS` closed under `⋆`.
 - The rows at a depth between `0` and `|σ|` (`effHandle`'s inner-stop clause, #278).
+
+I have not derived these and have not verified that any obstruction is real.
+
+### Step 3i: the stacked lemmas at every stack (#279)
+
+Step 3h left three lemmas. Each is proved once, for every stack (`StackStep.lean`). Each is one
+statement with the stack a parameter. Its proof is one induction on D16.1's piece `OpenS` at
+`σ·new`, its least fixed point of stops. Lemmas by recursion on the stack list carry the entries of
+`σ` along. No step depends on `|σ|`.
+
+**The hypothesis on stops.** `AllCross σ Tab` says that every operation of the row crosses every
+entry. It generalises step 3h's `hcross`. A stop is then at depth `|σ|`: `stopS_full` takes a stop
+apart and `stopS_of_full` builds one. The rows at an intermediate depth are #278's.
+
+**1. The commutation lemma, `σ·new` to `σ`.** Each shape maps D16.1's piece at `σ·new` to D16.1's
+piece at `σ`, both answering as a callback.
+
+- `stack_step_other`: `new` lends a place `ℓ′` not in `σ`. The owner of `ℓ′` is beside the piece.
+  1. At each re-lend `αs′` of `σ`, 6.65 lends `ℓ′` below the innermost of `αs′` and below the new
+     entry's last lifetime.
+  2. The piece at `σ·new` runs at `α :: αs′`.
+  3. At a return, the owner of `ℓ′` joins the answer.
+  4. At a stop, it joins the continuation (`opTable_frame`).
+- `stack_step_reborrow`: `new` lends again the place `ℓ` of `σ`'s innermost `mut` entry.
+  1. 6.66 unfolds the view of `ℓ` that `σ` is handed.
+  2. 6.65 lends its content.
+  3. At a stop, 6.66's refold is the cell the stop drops for that entry.
+  4. The owner passes through `ghostS`, so this shape needs no `LinResume`.
+
+This is `nested_relend`'s argument run at D16.1's piece, with `σ`'s other entries carried along.
+`nested_relend` concludes `Relend`, the single-lend form, so it is not the step.
+
+At a stop, `σ`'s dropped views pass 6.65's exit. The table at the new lend (`wpG_tabAt`) puts every
+cell away from the new place strictly above the new lifetime. So the views are kept for the next
+re-lend, not discarded.
+
+The index moves from `b :: bs` to `bs`. The new entry's next lifetime is chosen below
+`b ⊓ head αs′`, so the continuation's index is the re-lend of `σ` itself.
+
+**2. An `imm` entry at `σ·new`.**
+
+- `stack_step_imm` is 6.64 at every stack.
+- 6.64 runs the callback at a list it extends with a fresh record. The piece is therefore given at
+  every `Ext`-extension of the list. This is the quantifier `RelendI` builds into its unfolding.
+- Inside the induction the table owes every continuation at every extension (`opTable_shift`), and
+  `fold_imm` folds that family back to the piece at `σ`.
+- 6.64's postcondition (`Q64`) is stated before the owner is handed back, in the form `hQ` carries
+  along `Ext` (`q64_ext`).
+
+**3. `RelendableS` closed under `⋆`.** `relendableS_sep` is proved by one induction on the stack,
+entry by entry.
+
+- A `mut` view is in at most one part (`vwE_disj`, `dropC_disj`).
+- Two `imm` views at one entry compose only at one value and payload, into the cell at the union of
+  their sets (`ptoImmS_join`, 6.43). At the re-lend the view is duplicated (`ptoImmS_dup`, 6.116).
+
+**The fold.**
+
+- At `σ = []` the piece is `ewpTS` (`openS_nil_ewp`). The steps at `σ = []` are 6.65 and 6.64 at a
+  resuming table (`stack_spans_mut`, `stack_spans_imm`).
+- `fold_other` folds a stack of `mut` lends of distinct places to `ewpTS`, by induction on the
+  stack.
+- `stack2_reborrow_spans` is step 3h's `withbor_reborrow_spans`. It no longer needs `a₂ < a₁`.
+- `stack3_reborrow_yield` takes three lends of one place across a yield. It is folded by
+  `stack_step_reborrow` at `σ₀ = [outer]` and at `σ₀ = []`, then `stack_step_other` at `[]`.
+- `stack2_imm_yield` is an `imm` lend inside a `mut` lend.
+- Each instance discharges every hypothesis.
+
+**Not shown here.**
+
+- GFP's induction itself.
+- `relend_of_openD` at a stack (#275).
+- The reborrow followed by the outer borrower's continuation (#276).
+- The rows at an intermediate depth (#278).
 
 I have not derived these and have not verified that any obstruction is real.
 
@@ -778,3 +854,30 @@ whose slots other than `m` are free of `'x` and outlive it.
   crosses both lends. That is the single table `NestRelend` and `NestRelend₂` stop at. They also
   take the old lifetimes in nesting order (`a₂ < a₁`), which every stop's re-lend supplies
   (`openFS`'s chain).
+
+**Step 3i (#279).**
+
+- *Printed hypotheses not spent.* None.
+  - 6.65's `hP` is spent in `wpG_M_frameX` at each re-lend, in both commutation steps.
+  - 6.66's premises are spent in `wpG_M_antiFrameX`, in the reborrow step.
+  - 6.64's `AdmWf` is spent in `wpG_I_frameX`. Its `hQ` is discharged by `q64_ext`, from
+    `Tab.Local` (`opTable_extR`) and `hQa`.
+- *Uniqueness and functionality results.*
+  - Used: `ResU.CompS.functional` and `CellU.immOf_inj` (in `ptoImmS_join` and `vwE_join`), and
+    `dropC_disj` (in `vwE_disj`).
+  - Not used: the machine's determinism, and `LSet.Diff.functional`.
+- *Untranscribed printed lemmas in the run-up.* As for step 3g: 6.150 at a resuming table.
+- *Hypotheses added.*
+  - `AllCross`, which generalises `hcross`. The instances discharge it by constant `true`.
+  - `stack_step_other` and `stack_step_imm` take `hβ`: the outermost index of `σ` is at or below
+    the payload stratum of `ℓ′`.
+    - It places the owner of `ℓ′`, carried across a stop, in `[top]`.
+    - `nested₂_relend` got it by choosing the outer lend below `β′` inside `Relend`'s `⋔`.
+      `OpenS` fixes that bound by its index.
+    - It is vacuous at `σ = []`. `stack2_imm_yield` discharges it.
+  - `stack_step_imm` takes the piece at every `Ext`-extension of the list, `Tab.Local`, and `hQa`.
+    These are what `RelendI`, `ewpTS_I_frameR`'s `hTL` and its `hQ` carry at depth 1.
+    `stack2_imm_yield` discharges them.
+  - `stack_step_reborrow` takes the reborrowed entry to be `mut` at the payload type `T`. That is
+    the shape of `withbor` (3).
+- *Hypotheses removed.* `stack2_reborrow_spans` does not take `a₂ < a₁`.
