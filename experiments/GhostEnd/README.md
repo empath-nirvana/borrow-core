@@ -56,6 +56,11 @@ Build with `lake build GhostEnd`. It uses only the standard axioms and has no `s
 | 3g | an `Imm` lend spanning a stop: subtraction, union, 6.64 at a resuming table | `imm_ghostEnd_split`, `imm_ghostEnd_empty`, `imm_relend_union`, `imm_erase_sets`, `relent_copies`, `RelendI`, `ewpTS_I_frameR`, `imm_spans_yield` (`ImmLend.lean`) |
 | 3g | a nested lend spanning a stop: the commutation lemma | `NestRelend`, `nested_relend`, `nested_spans`, `nest_yield`, `nested_spans_yield` (`Nested.lean`) |
 | 3g | two lends spanning a stop, the inner of another place: both views in the piece | `NestRelend₂`, `nested₂_relend`, `nested₂_spans`, `nest₂_yield`, `nested₂_spans_yield` (`Nested.lean`) |
+| 3h | D16.1, the stacked relation, by structural recursion on the type, the stack a parameter; GFP (D16.2) stated | `vRLs`, `cRLs`, `effRetS`, `RelendableS`, `OpenS`, `openFS_mono`, `GFPAt`, `GFP` (`Stacked.lean`) |
+| 3h | at `σ = []` it is the kernel's relation, and GFP is `fundamentalC` | `vRLs_nil`, `cRLs_nil`, `gRLs_nil`, `bodyS_nil_iff`, `gfpAt_nil_iff`, `gfpAt_nil` |
+| 3h | the stacked `U` clause | `force_RLs`, `relendableS_thunk`, `thunkF_RLs`, `thunkE_RLs` |
+| 3h | the `withbor` rows at `σ·new`, `|σ| = 1`: D16.1's piece is the nested piece, folded back by the commutation lemmas | `nestRelend_of_openS`, `nestRelend₂_of_openS`, `withbor_reborrow_RLs`, `withbor_other_RLs`, `withbor_reborrow_spans`, `withbor_other_spans` |
+| 3h | every hypothesis discharged: a reborrow callback yielding with both lends open, as D16.1's piece | `openS_yield`, `openS_val`, `withbor_reborrow_spans_yield` |
 
 ### Step 0: the segment fundamental lemma (restated)
 
@@ -626,6 +631,79 @@ it both. `nested₂_relend` is its commutation lemma:
   `wpG_reborrow` already runs at a stop. The lift re-instantiates the chooser `rebChooseTW_top` at
   each resumption's list, where the record persists along `Ext`.
 
+### Step 3h: D16.1 in Lean, and GFP (#279)
+
+`docs/effects-tr/16-regress.md` §16.5 read D16.1 as needing no recursive domain, and said that writing
+it would make that a fact. `Stacked.lean` writes it.
+
+**The recursion.** `vRLs σ`, `cRLs σ` and `effRetS σ` are one `mutual` block, each with
+`termination_by structural` on its type, so Lean checks that every recursive call is at a strict
+subterm. The stack `σ` is a fixed parameter. The substitution (extended at `∀`) and the lifetime
+vector (re-lent at `U`) are indices. Each clause reads the relation only at a component of its
+type:
+
+- `U C`: `RelendableS` of `cRLs σ C`;
+- `⊗`, `⊕`, `!`, `[@a]`, `Ref`: `vRLs σ` at the components;
+- `F A`: `wpTS` answering in `vRLs σ A`;
+- `F_Σ R`: the piece `bodyS`/`OpenS` at Σ's table, answering in `effRetS σ R`;
+- `A ⊸ C`: `vRLs σ A` left of `─⋆` and `cRLs σ C`; `&` and `∀` at the components;
+- `Imm`, `Mut`, `μ`, `[L]`, the leaves, and `ν`: the kernel's `vC`/`cC` at `δ_σ(αs)`.
+
+The stack-dependent parts take the relation only as a predicate argument. `OpenS` is a least fixed
+point over its own continuation variable, which occurs only positively (`openFS_mono`), as in
+`OpenD`. No predicate is defined in terms of itself at the same type, and nothing is stored in the
+world.
+
+**The components §16.4 left open.** They are fixed as the stacked forms of the proved single-lend
+objects.
+
+- *Entries* carry `(ℓ, x, T, k)` and the lender's row (`cross`: the names whose stops cross the
+  lend). `withbor`'s type carries that row.
+- *Views*: a reborrow shadows its parent's view, which 6.66 has unfolded.
+- *Stops*: an operation stops at the depth its name reaches in the stack. It ghost-ends that many
+  innermost entries and keeps the rest open, owing a continuation re-lendable over them
+  (`RelendableN`). Depth `|σ|` is D16.1's "stop at the lenders' row" and depth `0` its "row handled
+  inside". A depth in between is a handler between two lenders. D16.1 reaches it from the inner
+  lend's side ("a stop inside an inner lend is at an extension `σ·τ`").
+- *`ghostS`*: what a stop owes the lenders it crosses, in `nestF`'s shape.
+
+At one `mut` entry `RelendableS` has `Relendable`'s shape. At `[]` every component is the kernel's: `Relendable_[]`
+is the `U` clause's `Ext`-closure (`relendableS_nil`), a stop is a stop of the table (`stopS_nil`),
+and the piece is `ewpTS` (`bodyS_nil_iff`, by induction on each least fixed point).
+
+**GFP at `[]`.** `vRLs [] = vC`, `cRLs [] = cC` and `gRLs [] = gDenC`, by induction on the type.
+`gfpAt_nil_iff` makes `GFPAt []` equivalent to the conclusion of `fundamentalC`, and `gfpAt_nil`
+proves it from `fundamentalC`.
+
+**The `withbor` rows at `σ·new`, `|σ| = 1`.** Take D16.1's piece at `[new, outer]`, answering as a
+callback (`ghostS`: the new lend ends), with every stop of the row crossing both lends. It is
+#268's `NestRelend` when `new` reborrows `outer`'s place (`nestRelend_of_openS`), and `NestRelend₂`
+when `new` lends another place (`nestRelend₂_of_openS`). Each is proved by induction on `OpenS`:
+one unfolding at `α₁` and at `α₂ ⊏ α₁` is one `openFS` at the re-lend `[α₂, α₁]`. A run's
+postcondition is read as `nestF`'s by `post_nest`. The commutation lemmas then fold the stack back
+to `[outer]`:
+
+- `withbor_reborrow_RLs` (`nested_relend`) and `withbor_other_RLs` (`nested₂_relend`);
+- at the outer lender, `withbor_reborrow_spans` and `withbor_other_spans`.
+
+`withbor_reborrow_spans_yield` discharges every hypothesis. The callback yields once with both lends
+open and then returns `()`. It is written as D16.1's piece: `openS_yield` builds a stop at the
+lenders' row, which drops both views and hands the inner owner back.
+
+**Not shown here.**
+
+- GFP's induction itself.
+- The step from the inner callback's piece (GFP's hypothesis at `σ·new`, answering in `vRL_{σ·new}`)
+  to the callback form these rows take (answers in `ghostS`). That is `relend_of_openD` at a stack,
+  and it is the content of reading `NestRelend` off typing (#275).
+- The reborrow followed by the outer borrower's continuation (#276).
+- The commutation lemmas at `|σ| ≥ 2`, the entries above the outer one carried along.
+- An `imm` entry at `σ·new`.
+- `RelendableS` closed under `⋆`.
+- The rows at a depth between `0` and `|σ|` (`effHandle`'s inner-stop clause, #278).
+
+I have not derived these and have not verified that any obstruction is real.
+
 ### Step 4: the witness
 
 `mut_not_natural`'s cell `ρ₀ = ℓ ↦ mut(2, ℓ′, ℓ′ ↦ imm({1}, (), ∅), 𝒱⟦Imm 'b 1⟧_δ)` is below the cut,
@@ -688,3 +766,15 @@ nested lends spanning a stop are not in scope.
 does not carry: `Relend`'s `И` needs a bound. `rbody_letF` takes `FrameThaws` of the frame, the
 condition a stop puts on the values the frame holds; `stopSafe_thaws` discharges it for frames
 whose slots other than `m` are free of `'x` and outlive it.
+
+**Step 3h (#279).**
+
+- *Printed hypotheses not spent.* None. The rows take `nested_relend`'s and `nested₂_relend`'s
+  hypotheses (`LinResume`, 6.65's `hP`) and pass them on.
+- *Uniqueness and functionality results not used.* `ResU.CompS.functional` is used (at `[]`).
+  `dropC_disj` is not: `RelendableS`'s `⋆`-closure is not proved here.
+- *Untranscribed printed lemmas in the run-up.* As for step 3g: 6.150 at a resuming table.
+- *Hypotheses added.* The `withbor` rows take `hcross`: every operation of the callback's row
+  crosses both lends. That is the single table `NestRelend` and `NestRelend₂` stop at. They also
+  take the old lifetimes in nesting order (`a₂ < a₁`), which every stop's re-lend supplies
+  (`openFS`'s chain).
