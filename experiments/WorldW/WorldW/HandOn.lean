@@ -172,7 +172,7 @@ theorem anti_unclosable {τ : List OEnt} {π πc F : WRes} {l : BoCa.Loc} {w : V
     (hP : ∀ ρ, ¬ P w ρ) (hc : Close τ π πc) (hF : ResU.Flat πc F) :
     ∀ v χ h hw, F.get l ≠ some (CellU.mutOf β v χ h P hw) := by
   intro v χ h hw hFl
-  obtain ⟨U, A, -, hr, -, -, -, hown⟩ :=
+  obtain ⟨U, A, -, hr, -, -, -, hown, -⟩ :=
     close_pair hc hc (.nil π) (.nil π) rfl (fun _ h => absurd h List.not_mem_nil)
       (fun _ h => absurd h List.not_mem_nil)
   have hUl := hown l w hπ

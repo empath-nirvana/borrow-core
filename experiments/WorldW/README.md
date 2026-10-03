@@ -67,7 +67,7 @@ and I have not verified that any obstruction to them is real.
 | `UnpinnedIncoherent` | UNFINISHED: stated; no concrete resource built |
 | `FrameCopyBlocksExit` (F0) | UNFINISHED: stated; the `TW` history of §5 is not built |
 | `compatW_iff_hash` (F1) | PROVED |
-| `EntryRecordedMut` (F2) | UNFINISHED: stated; `entryRecorded_imm`/`_anti` not stated |
+| `EntryRecordedMut` (F2 at a 6.65 lend, OQ-44's `MutLendRecorded`) | PROVED (`entryRecorded_mut`); `entryRecorded_imm`/`_anti` not stated |
 | `HoldsInjective` (i) | refuted as stated: `not_holdsInjective` (correction 3); the corrected (`imm` keys) form is not stated |
 | `HoldsChain` (ii) | UNFINISHED: stated |
 | `close_relend_anti` | PROVED (both halves: `close_relend_anti`, `not_closeE_anti_at_mut`) |
@@ -218,6 +218,11 @@ together with OQ-3, not by this draft. The (b) arm's probes, which would show (b
 configuration at an unordered `σ`, are unfinished. Their list-reading instances would stop at our
 frozen list (`not_mutViewSurvives_reads`, checkpoint 3), their list-stable ones need not
 (`mutViewSurvives_stable`).
+
+**OQ-44.** OQ-44 (a)'s entries suffice to record an open 6.65 lend: a `mut` cell at the stop that
+the start's closure lacks forces a `mut` entry at its place and lifetime in what the stop hands on
+(`entryRecorded_mut`), from conjunct (37) alone, with no `TW` constructor. That is reading 3 for
+6.65; the `imm` and anti forms are not stated here.
 
 **OQ-57.** Not addressed here, as DESIGN scopes it out; FINDING-3 stands as written there.
 

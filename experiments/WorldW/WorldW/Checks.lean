@@ -56,7 +56,7 @@ theorem close_flat_agree {τ : List OEnt} {π π₁ π₂ F₁ F₂ : WRes} :
       (∃ χ h hw, F₁.get l = some (CellU.mutOf β v χ h P hw)) ∧
       (∃ χ h hw, F₂.get l = some (CellU.mutOf β v χ h P hw))) := by
   intro h₁ h₂ hF₁ hF₂
-  obtain ⟨U, A₁, A₂, hr₁, hr₂, hs₁, hs₂, -⟩ :=
+  obtain ⟨U, A₁, A₂, hr₁, hr₂, hs₁, hs₂, -, -⟩ :=
     close_pair h₁ h₂ (.nil π) (.nil π) rfl (fun _ h => absurd h List.not_mem_nil)
       (fun _ h => absurd h List.not_mem_nil)
   simp only [List.map_nil] at hs₁ hs₂
@@ -112,7 +112,7 @@ theorem close_flat_agree_off_anti {τ : List OEnt} {π π₁ π₂ F₁ F₂ : W
 /-- `↭` from the pointwise agreement `close_flat_agree` gives. -/
 theorem close_upd_of_valid {τ : List OEnt} {π π₁ π₂ : WRes} (h₁ : Close τ π π₁)
     (h₂ : Close τ π π₂) (hv₁ : ResU.Valid π₁) : ResU.UpdV π₁ π₂ := by
-  obtain ⟨U, A₁, A₂, hr₁, hr₂, -, -, -⟩ :=
+  obtain ⟨U, A₁, A₂, hr₁, hr₂, -, -, -, -⟩ :=
     close_pair h₁ h₂ (.nil π) (.nil π) rfl (fun _ h => absurd h List.not_mem_nil)
       (fun _ h => absurd h List.not_mem_nil)
   have hv₂ : ResU.Valid π₂ := refolds_valid_end hr₂ (refolds_valid_start hr₁ hv₁)
@@ -528,6 +528,38 @@ under it. -/
 def ClosedCompatW : Prop :=
   ∀ {τ : List OEnt} {R ρ : WRes}, (∀ α, R.InStratum α) → ResU.Hash R ρ → Holds τ ρ →
     CompatW τ R ρ
+
+/-- **F2 at a 6.65 lend** (OQ-44's `MutLendRecorded`, from (37) alone): a `mut` cell of the stop at
+`(α, Q̂)` that the start's closure lacks is closed by a `mut` entry of `τ′` at its place and
+lifetime. Without one, closing keeps the cell in the flattening (the steps lift through the
+pending refolds without touching it, and no refold sits at a place holding a `mut` cell), and
+`UpdMut` then finds it in `⦇ρc⦈`. -/
+theorem entryRecorded_mut : EntryRecordedMut := by
+  intro τ τ' ρ ρc π πc l α Q v χ h hw _ hπ hu hnot hl
+  by_contra hno
+  have hno' : ∀ T δ, OEnt.mut l (CellU.mutOf α v χ h Q hw).at T δ ∉ τ' :=
+    fun T δ hm => hno ⟨T, δ, hm⟩
+  obtain ⟨U, A, -, hr, -, -, -, -, hmut⟩ :=
+    close_pair hπ hπ (.nil π) (.nil π) rfl (fun _ h => absurd h List.not_mem_nil)
+      (fun _ h => absurd h List.not_mem_nil)
+  have hUl := hmut l _ (CellU.kind_mutOf _ _ _ _ _ _) hl hno'
+  obtain ⟨Fπ, hFπ⟩ := hu.2.2
+  obtain ⟨FU, hFU⟩ := refolds_valid_start hr ⟨Fπ, hFπ⟩
+  obtain ⟨hoff, -⟩ := refolds_flat hr ⟨FU, hFU⟩ hFU hFπ
+  have hnotl : ∀ f ∈ A, f.l ≠ l := by
+    intro f hf e
+    obtain ⟨A₁, A₂, rfl⟩ := List.append_of_mem hf
+    obtain ⟨x, hx, hx'⟩ := refolds_append.mp hr
+    obtain ⟨y, hfy, -⟩ := refolds_cons_iff.mp hx'
+    obtain ⟨w, hw'⟩ := closeEAnti_get_own hfy
+    obtain ⟨hU', -⟩ := refolds_own hx hw'
+    rw [e, hUl] at hU'
+    exact CellU.ownOf_ne_mutOf (Option.some.inj hU').symm
+  have hFl : Fπ.get l = some (CellU.mutOf α v χ h Q hw) := by
+    rw [hoff l hnotl]; exact ResU.flat_get_of_ne_imm hFU hUl kind_mutOf_ne
+  obtain ⟨v', χ', h', hw', hρl⟩ :=
+    (hu.1.2 l α Q).mpr ⟨v, χ, h, hw, (ResU.flatAt_iff hFπ _ _).mpr hFl⟩
+  exact hnot v' χ' h' hw' hρl
 
 end WorldW
 

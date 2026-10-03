@@ -972,6 +972,10 @@ theorem entryRecorded_anti {τ τ' : List OEnt} {ρ ρc π πc : WRes} {l : Loc}
 - **Instance.** `entryRecorded_mut` is checked at the absorbed-view configuration of F-CLOSE.
 - **What it answers.** OQ-44's `MutLendRecorded`, from conjunct (37) alone, with no `TW`
   constructor: OQ-44 (a)'s entries suffice.
+- **Built** (`WorldW/Checks.lean`): `entryRecorded_mut`, proved at every resource with no lifetime
+  premise, through `close_pair`'s invariant (the steps keep the unfolded resource's `mut` cells,
+  and no refold sits at a place holding one). `entryRecorded_imm` and `entryRecorded_anti` are not
+  stated.
 
 ### The other checks
 

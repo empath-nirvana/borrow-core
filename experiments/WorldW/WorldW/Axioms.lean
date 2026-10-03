@@ -28,6 +28,7 @@ Each `#print axioms` below must report a subset of `[propext, Classical.choice, 
 #print axioms WorldW.close_relend_anti
 #print axioms WorldW.not_closeE_anti_at_mut
 #print axioms WorldW.not_holdsInjective
+#print axioms WorldW.entryRecorded_mut
 -- conservativity (DESIGN §1.9)
 #print axioms WorldW.wpGW_nil
 #print axioms WorldW.ewpTS_ewpW
