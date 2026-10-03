@@ -49,8 +49,11 @@ about our draft, none about OQ-9 (a) or a printed lemma):
 
 PROVED means a Lean theorem of the design's statement (or of the corrected statement, where
 marked). UNFINISHED means the statement elaborates as a named `def … : Prop` and has no proof here.
-No OBSTRUCTION is reported: I have not derived any of the UNFINISHED probes, and I have not verified
-that any obstruction to them is real.
+*Refuted* means a Lean proof of the statement's negation. The two refutations (`HoldsInjective`,
+`MutViewSurvivesOlderClose T3Reads`) are of statements about our own definitions, at inputs not
+built from a `TW` history; they are findings about our draft and Core's `ptoMutS`, not
+obstructions to (a). No OBSTRUCTION is reported: I have not derived any of the UNFINISHED probes,
+and I have not verified that any obstruction to them is real.
 
 ### Stage A — definitions and checks (`Refold.lean`, `Coherence.lean`, `Checks.lean`, `Nil.lean`, `Wp.lean`)
 
@@ -212,7 +215,9 @@ out of nesting order under both options (`resumeOutOfOrder`). The draft relation
 rejects nothing `CompatW` admits (`argBelowExtent`, `argAboveExtent`). So whether a handler between
 two lenders may resume, cancel or drop `κ` inside a younger lend is decided by OQ-8's D-ORD
 together with OQ-3, not by this draft. The (b) arm's probes, which would show (b) accepting the
-configuration at an unordered `σ`, are unfinished.
+configuration at an unordered `σ`, are unfinished. Their list-reading instances would stop at our
+frozen list (`not_mutViewSurvives_reads`, checkpoint 3), their list-stable ones need not
+(`mutViewSurvives_stable`).
 
 **OQ-57.** Not addressed here, as DESIGN scopes it out; FINDING-3 stands as written there.
 
