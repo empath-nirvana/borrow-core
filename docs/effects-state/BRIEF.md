@@ -22,6 +22,14 @@ The evidence for every line is in the files beside it:
 
 **Read the detail file before relying on a line here for anything load-bearing.**
 
+> **The first rule: nothing can break the borrow calculus.**
+> In the user's words, 2026-10-03: "NOTHING CAN BREAK THE BORROW CALCULUS."
+> - BoLo's definitions and rules stay exactly as printed.
+> - Every BoLo theorem keeps holding.
+> - The effect calculus extends BoLo; it never edits, weakens or works around it.
+>
+> A design that needs a BoLo rule changed is wrong. Stop and report it.
+
 ---
 
 ## 1. What works
@@ -178,7 +186,7 @@ This is the audit's structure, with the critic's corrections:
 - Include TwoRun, Grades, Shifts, SPEC entries 13 and 19–21, `raise`, lowering and threads.
 - Read the literature; don't recall it.
 
-**Tier 1 first.** In the user's words: "Stage 1 … at tier 1 … proceeds regardless" (2026-10-02). Tier 2 (self-referential suspension) is in scope, under the hard-stop rule in §6.
+**Tiers.** Tier 1 keeps T1. Tier 2 is self-referential suspension, and it is in scope. The hard-stop rule is not in force while we plan. In the user's words: "There's no hard stop phase now we are just planning." (2026-10-03)
 
 ---
 
@@ -197,7 +205,11 @@ The full register, with sources, is [04](04-decisions.md). Only entries marked d
 - **Divergence** is an effect: `Loop` codata. Totality is not a goal.
 - **Errors** are a control-flow effect: `raise` plus handlers (#168).
 - **Handler state** is passed to each clause and at each resume (decision 59).
-- **The hard-stop rule for tier 2** (2026-10-02). Tier 2 runs on a frozen finite list, and any item that spawns a new unknown halts it. In the user's words: "If the new work is n+1 and we are done, it's fine. If it's 3 and then 4 and then 5, no."
+- **Nothing can break the borrow calculus** (2026-10-03). See the first rule above.
+- **Row variables are in the kernel** (2026-10-03). In the user's words: "of course we have row variables in the kernel." This supersedes decision 57's first bullet.
+- **Handlers are deep** (2026-10-03), as SPEC §19 builds them. This revises decision 15.
+- **Cancellation is what the unwinding effects do as built** (SPEC §19). In the user's words: "Whatever they do is what we decided." (2026-10-03)
+- **No hard-stop phase while planning** (2026-10-03). The tier-2 hard-stop rule of 2026-10-02 is not in force.
 - **Process:**
   - unknowns first;
   - no changing an agent's scope mid-run;
@@ -209,7 +221,6 @@ The full register, with sources, is [04](04-decisions.md). Only entries marked d
 - **Multi-shot:** "we also don't need multishot unless we get it for free" (2026-10-02).
 - **Kernel equations and binary laws:** "optional and don't get pursued unless they become necessary for safety" (2026-10-02).
 - **Higher-order operations:** "out of scope" in decision 57 (2026-10-01). Read this as not now.
-- **Row variables:** decision 57 says none in the kernel (2026-10-01). Whether it survives the 2026-10-02 laws-first reset is unrecorded (OQ-13).
 - **Runners:** not user-facing. As an internal architecture, BoLo-as-runner is "kind of genius", "not yet decided".
 - **Threads** are required eventually. Keep the door open.
 - **Traits** are up in the air. **Interior mutability** is open.
@@ -237,12 +248,13 @@ The draft boxed 68 questions. Classified against decisions and evidence ([05a](0
 **Posed on a misreading**
 - OQ-1 and OQ-30 treat effects in a type as colouring.
 - OQ-20 omits the TR's "fail to the lend".
-- OQ-21 calls the built cancel-error policy a decision; see §9.
+- OQ-21: settled. Cancellation is as built.
 
-**Need the user now**
-- **OQ-13:** do row variables stay out?
-- **OQ-21:** the cancel-error discrepancy.
-- **OQ-33:** how the hard stop applies under this structure.
+**Settled by the user on 2026-10-03**
+- **OQ-13:** row variables are in the kernel.
+- **OQ-21:** cancellation is as built.
+- **OQ-26:** handlers are deep.
+- **OQ-33:** no hard stop while planning.
 
 **Need the user later:** OQ-6 (typed role declarations, a one-way door) and OQ-23 (is lowering correctness a theorem?).
 
@@ -277,22 +289,22 @@ Don't cite these as authority. Most of them wait on the user.
 - **Decision 48** still says "Effect rows never enter the core" (`docs/decisions.md:606`). PR #234, which corrects it, is unmerged, and SPEC §18 and `Core/Handlers.lean:8` still cite it.
 - **"Decision 19 forbids rows"** (`docs/effects-scoping.md`, `docs/effect-polymorphism.md`) is an agent's reading. Decision 19 forbids only an unused index added for later use.
 - **Decisions 51–53** are not marked superseded.
-- **Shallow vs deep.** Decision 15 says shallow handlers are primitive; SPEC §19's primitive is deep. Decision 15 is not marked revised.
+- **Decision 15** (shallow handlers primitive) is revised by decision 62: handlers are deep.
+- **Decision 57's "no row variables in the kernel"** is superseded by decision 62. Docs that cite it, such as `docs/effect-polymorphism.md`, are stale on that point.
 - **Multi-shot** is recorded at three strengths. The user's words are in §6.
-- **Cancel errors.**
-  - The user decided on #186 (2026-09-30) that the canceller "always receives 'cancelled'".
-  - SPEC §19, committed after that, re-raises the first error.
-  - No record shows the user approved the change.
+- **Cancel errors.** The #186 comment of 2026-09-30 ("always receives 'cancelled'") is superseded: what SPEC §19 builds is the decision (decision 62).
 - **`docs/effects-tr/08-decisions.md`** was written by an agent, with no user confirmation found.
 - **"Recursion is an effect"** is superseded ("a pretty idea, not a hard req", 2026-10-01). It is still presented as current in `docs/rec-effect/README.md`.
 - **PR #141:** the providers decision there is missing from `docs/decisions.md`.
 - **SPEC §19 Status** says "in progress"; it also lists `unwindClause?`, and its §16 Open is out of date.
-- **`experiments/README.md`** says TwoRun and FrameTheorems build; they don't. It lists EffModelRel's safety as open; it is proved.
+- **`experiments/README.md`** says TwoRun and FrameTheorems build; they don't. They matter only for binary laws, which are optional. It also lists EffModelRel's safety as open; it is proved.
+- **The hard-stop memory and the frozen tier-2 list (#275–#280)** are not in force while we plan.
 
 ---
 
 ## 10. Rules for every agent
 
+- **Nothing can break the borrow calculus.** No change to BoLo's definitions, rules or theorems. Every addition must leave every BoLo result holding.
 - **Build the actual calculus.** If something can't be specified or proved yet, box it as an open question in the spec. Never narrow silently.
 - **Say which world every result lives at:** Core σ=[], GE, SIB, PAPER, or `W`. A result at σ = [] is not a result at `W`.
 - **Read before touching borrowing.**
