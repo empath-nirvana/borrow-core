@@ -67,6 +67,12 @@ Build with `lake build GhostEnd`. It uses only the standard axioms and has no `s
 | 3i | a whole stack folds back to `[]` by induction on the stack; the depth-1 and depth-2 rows from the uniform steps | `openS_nil_ewp`, `fold_other`, `stack_spans_mut`, `stack_spans_imm`, `stack2_reborrow_spans` |
 | 3i | every hypothesis discharged: three lends of one place spanning a yield; an `imm` lend inside a `mut` lend spanning a yield | `openS_val_any`, `openS_yield_any`, `stack3_reborrow_yield`, `stack2_imm_yield` |
 | 3j | GFP as stated does not hold at `σ = [x]`: a callback-shaped function at a lifetime below the stack, every hypothesis discharged | `not_gfpAt_below`, `not_gfp`, `no_flat_mut_of_part`, `tw_innerView` (`Below.lean`) |
+| 3k | the witness does not arise at `[x]`: it fails the table, and every run at one entry keeps the table, at a return as at a stop | `not_tabAtS_innerView`, `tabAtS_comp`, `tabAtS_one`, `tabAtS_start_one`, `wpG_tabAtS_one`, `wpG_below_not_arises`, `tabAtS_innerView_inner` (`Arising.lean`) |
+| 3k | D16.1 with the table as a guard at `U`, `⊸` and `∀`; GFP at it | `guardS`, `vRLa`, `cRLa`, `effRetA`, `gRLa`, `SemA`, `GFPAtA`, `GFPA` |
+| 3k | at `σ = []` it is the kernel's relation, and GFP is `fundamentalC` | `vRLa_nil`, `cRLa_nil`, `gRLa_nil`, `gfpAtA_nil_iff`, `gfpAtA_nil` |
+| 3k | the stack results carry over: the piece is unchanged, the `U` rows restated, elimination not weakened | `cRLa_eff`, `force_RLa`, `relendableS_thunkA`, `thunkF_RLa`, `thunkE_RLa`, `arr_elimA`, `all_elimA` |
+| 3k | the rows `lam` and `allI` | `cRLa_step`, `lam_RLa`, `vRLa_congr`, `cRLa_congr`, `allI_RLa`, `stackFresh_of_fresh`, `stackTyFresh_of_fresh`, `allI_hyps_below` |
+| 3k | `not_gfpAt_below`'s configuration is excluded by the guard | `below_excluded`, `below_excluded_at` |
 
 ### Step 0: the segment fundamental lemma (restated)
 
@@ -819,6 +825,58 @@ premise (a `CDerives` change). A table guard on the `⊸` clause would remove th
 whether a borrow constant's row survives it, its callback handed a view below the stack, is not
 checked. I have not derived any repair and have not verified that any obstruction to one is real.
 
+### Step 3k: the witness does not arise; D16.1 guarded (#279)
+
+`not_gfp` refutes GFP over every configuration `GFPAt`'s hypotheses admit. The follow-up asked
+whether its witness arises, with the machinery the project has for that: `GFPAt`'s own `TabAt_σ`,
+#262's table and its preservation by runs (`wpG_tabAt`, `[TR]` 6.50), and #266's guard.
+
+**The witness does not arise at `[x]`.** The refutation hands the function the inner view
+`k ↦ M_3`, a borrow cell away from the stack's place and below its lend. That resource fails the
+table at `[x]` (`not_tabAtS_innerView`), and so does every resource it is a part of
+(`tabAtS_comp`). What arises at `[x]` satisfies the table. The callback of `x`'s lend starts
+consistent with it (`tabAtS_start_one`, from `tabAt_start`), and every run keeps it at a return as
+at a stop (`wpG_tabAtS_one`). So no run at `[x]` reaches a state of which the inner view is a part
+(`wpG_below_not_arises`). The view exists only inside an inner lend of `k`, at the stack `[y, x]`,
+where it is that stack's own view and satisfies its table (`tabAtS_innerView_inner`).
+
+**The restatement.** `guardS σ αs P` asks `P` only of a resource consistent with `TabAtS σ αs`.
+`vRLa`/`cRLa`/`effRetA` are D16.1 with that guard at the three clauses that receive a resource
+from outside:
+
+- `U` (`RelendableS` under the guard, #266's change 3 at the stack);
+- `⊸` (the joined resource);
+- `∀` (the instance).
+
+Every other clause and every stack component is D16.1's own definition. `GFPAtA` is `GFPAt`'s
+statement over the restated relation. Nothing new is defined beyond the guard, which is `TabAtS`
+used as a hypothesis.
+
+- *At `σ = []`* the table holds of every resource, so the guard vanishes. `GFPAtA []` is
+  `fundamentalC` (`gfpAtA_nil_iff`, `gfpAtA_nil`).
+- *The stack results carry over.* `cRLa` at `F_Σ R` is D16.1's piece itself (`cRLa_eff`, by
+  `rfl`). `StackStep.lean` and the `withbor` rows of `Stacked.lean` are stated over `OpenS`/`bodyS`
+  at an arbitrary answer relation, and never mention `vRLs`/`cRLs`, so they apply verbatim. The `U`
+  rows are restated: `force_RLa` takes the table, which `GFPAt` supplies; `thunkF_RLa` and
+  `thunkE_RLa` take exactly `thunkF_RLs`' and `thunkE_RLs`' hypotheses.
+- *Elimination is not weakened.* At `app` and `allE` the joined resource is the context's, which
+  `GFPAt` assumes consistent with the table (`arr_elimA`, `all_elimA`).
+- *`lam` and `allI` are proved* (`lam_RLa`, `allI_RLa`). Each guard is the table at the resource
+  the body's judgment starts from. `allI` reads the context at `δ[x ↦ α]`, which needs D16.1 to
+  read `δ` only at the type's and the stack's variables (`vRLa_congr`, `cRLa_congr`). This is the
+  stacked form of `vC_congr`, which the kernel's `allI_compatC` uses.
+- *The refuted configuration is excluded* (`below_excluded`, `below_excluded_at`). At the restated
+  relation the `⊸` clause at `[x]` asks nothing of the inner view.
+
+**Verdict: the arising repair works** for the three items asked: the witness does not arise, the
+restatement uses existing definitions, `lam`/`allI` are proved, and the stack results carry over.
+
+**Not settled here.** The guard at `⊸` also means that a callback read at `σ` is obliged on no
+argument holding a cell below the stack (`below_excluded` holds at every expression). A borrow
+constant hands its callback a view at a fresh lifetime below the stack. So its row (#275) cannot
+take the callback's behaviour on that view from the callback's reading at `σ`; it has to take it
+at `σ·y`. I have not derived it and have not verified that any obstruction is real.
+
 ### Step 4: the witness
 
 `mut_not_natural`'s cell `ρ₀ = ℓ ↦ mut(2, ℓ′, ℓ′ ↦ imm({1}, (), ∅), 𝒱⟦Imm 'b 1⟧_δ)` is below the cut,
@@ -930,3 +988,18 @@ whose slots other than `m` are free of `'x` and outlive it.
 - *Printed lemmas in the run-up that are untranscribed at a resuming table.* 6.150 (↺), as above.
   GFP's other cases (#276, #277, #278, #280, `effThen`, `unfoldN`, the `*U` constants) were not
   attempted after the refutation, under the hard stop.
+
+**Step 3k (#279, arising).**
+
+- *Hypotheses not spent.* None. `lam_RLa` and `allI_RLa` spend the guard on the body's `TabAtS`.
+  `force_RLa` spends `GFPAt`'s table on the `U` guard. `wpG_below_not_arises` spends
+  `TabAtS` through `wpG_tabAt`.
+- *Uniqueness and functionality results.* Not needed: no step compares two runs or two
+  decompositions. `ResU.CompS.functional` enters only through `eq_of_compS_empty_left`.
+- *Printed lemmas in the run-up that are untranscribed at a resuming table.* 6.150 (↺), as above.
+  6.50 is used through `wpG_tabAt`.
+- *Hypotheses added.* `allI_RLa` takes `hσx` (the bound variable is not a stack variable) and `hσT`
+  (it is free in no stack payload type). Both follow from the presupposed rule's freshness when the
+  payload types are scoped in `Δ` (`stackFresh_of_fresh`, `stackTyFresh_of_fresh`). Both hold at
+  `σ = []` and at `Below.lean`'s derivation (`allI_hyps_below`). `force_RLa` and
+  `relendableS_thunkA` take `TabAtS`, which `GFPAt` supplies.

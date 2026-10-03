@@ -33,3 +33,4 @@ import GhostEnd.Nested
 import GhostEnd.Stacked
 import GhostEnd.StackStep
 import GhostEnd.Below
+import GhostEnd.Arising
