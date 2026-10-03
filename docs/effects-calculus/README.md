@@ -21,7 +21,6 @@ Tracking issue: #290. Input: [the effects audit](../effects-audit.md) (#288).
 | [07-metatheory.md](07-metatheory.md) | compatibility, the fundamental property at `W`, adequacy, effect safety, leak freedom, finalisation, linear use, T1 and its lifting, preservation, determinism, renaming, the binary results | T-COMPAT, T-FP, T-ADEQ, T-SAFE, T-LEAK, T-FIN, T-LIN, T-T1, T-T2, T-PRES, T-DET, T-REN, T-NAH, T-ABS, T-TOTAL, T-2RUN, T-BINFP, T-SOUND |
 | [08-correspondence.md](08-correspondence.md) | every id against the code and its fate; the SPEC entries, each drafted, and the decisions affected; the surface elaboration; the lowering; threads; the completeness check | T-CONS, T-ELAB, T-LOWER, E-* |
 | [99-open-questions.md](99-open-questions.md) | the register: every open question boxed, with its tags, cross-references, what it blocks, what settles it and its default; the table of every question; indexes by tag, by the absence of a default, and by the audit's and the critic's numbering | OQ-* |
-| [plan.md](plan.md) | the implementation plan: one GitHub issue per probe, decision, SPEC entry, kernel construct, law group, metatheorem, retirement, lowering class and acceptance program, in dependency order, with the validation step (PLAN-CHECK) and the gate (SPEC-DONE) | — |
 
 ## Reading order
 
