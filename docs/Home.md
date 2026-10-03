@@ -34,6 +34,9 @@ below are design and research notes.
 - [The effect calculus: a technical report](effects-tr/README.md) — the paper proof for the
   effect calculus of #235 (#245): BoLo's resource world plus a local control discipline; resource
   safety, the binary relation, the laws L1–L6, T1, and the mechanisation plan.
+- [Effect system coherence audit](effects-audit.md) — is the effect system one proof algebra,
+  consistent with BoLo's machinery and the algebra of effects (#288)? Verdict, coherence map, the
+  unifying structure, ranked incoherences, conformance table, and the recommended path.
 - [Effect polymorphism](effect-polymorphism.md) — functions over effectful computations (#161):
   copies over static names, provided and tunneled rows, site freshness, stored callbacks. A design;
   nothing is built.
