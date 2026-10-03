@@ -1,6 +1,6 @@
 # The effect calculus: coarse plan
 
-**Status: validated, awaiting the user's agreement.** Three adversarial validators passed it after three rounds: borrow guarantees, decisions, and completeness. Each ran against the shared brief and the code. No GitHub issues are filed until the user agrees this plan and the full spec. Open questions are never issues.
+**Status: agreed by the user (2026-10-03).** Validated first by three adversarial lenses. Three adversarial validators passed it after three rounds: borrow guarantees, decisions, and completeness. Each ran against the shared brief and the code. No GitHub issues are filed until the user agrees this plan and the full spec. Open questions are never issues.
 
 **Shared context:** `docs/effects-state/BRIEF.md` (branch `effects-state`).
 
