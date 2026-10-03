@@ -73,6 +73,8 @@ Build with `lake build GhostEnd`. It uses only the standard axioms and has no `s
 | 3k | the stack results carry over: the piece is unchanged, the `U` rows restated, elimination not weakened | `cRLa_eff`, `force_RLa`, `relendableS_thunkA`, `thunkF_RLa`, `thunkE_RLa`, `arr_elimA`, `all_elimA` |
 | 3k | the rows `lam` and `allI` | `cRLa_step`, `lam_RLa`, `vRLa_congr`, `cRLa_congr`, `allI_RLa`, `stackFresh_of_fresh`, `stackTyFresh_of_fresh`, `allI_hyps_below` |
 | 3k | `not_gfpAt_below`'s configuration is excluded by the guard | `below_excluded`, `below_excluded_at` |
+| 3l | D16.1 guarded, with the `∀` clause read at every extension `τ ++ σ` of the stack: still structural, the stack an index | `vRLk`, `cRLk`, `effRetK` (`Extend.lean`) |
+| 3l | elimination not weakened; a callback read at `σ`, applied to a fresh lend's view, is in `cRL_{σ·y}`; at one entry every hypothesis discharged | `all_elimK`, `callback_ext`, `callback_ext_one` |
 
 ### Step 0: the segment fundamental lemma (restated)
 
@@ -877,6 +879,39 @@ constant hands its callback a view at a fresh lifetime below the stack. So its r
 take the callback's behaviour on that view from the callback's reading at `σ`; it has to take it
 at `σ·y`. I have not derived it and have not verified that any obstruction is real.
 
+### Step 3l: the `∀` clause at every extension of the stack (#286)
+
+`docs/effects-tr/17-borrow-callbacks.md` grounds step 3k's open item in the literature. In every
+Kripke model surveyed, the binder clauses quantify over every future world. The scoped
+construct's compatibility lemma creates the fresh name and extends the world. BoLo's 6.172–6.174
+do the same: `𝒱⟦∀⟧` is a plain universal, Mut Frame's `И` makes the lifetime, and the row ends
+with `∀E-compat` and `⊸E-compat`.
+
+D16.1's world has a second component, the stack, which the guard reads. Its quantifiers range
+over resource extensions only.
+
+`Extend.lean` reads the `∀` clause over future stacks `τ ++ σ`. The instance `τ = []` is
+`cRLa`'s clause.
+
+- **Structural.** The block elaborates under `termination_by structural`. The stack is an index
+  that grows only at `∀`.
+- **Elimination is not weakened** (`all_elimK`).
+- **The row's starting point** (`callback_ext`). A callback read at `σ`, at
+  `∀'y ⊏ c. Mut 'y T ⊸ D`, applied to the view of a fresh lend `e` at `α` below the stack, is in
+  `cRL_{e·σ} D` at `α :: αs`. At one entry both tables are discharged from the callback's
+  resource lying above `α` (`callback_ext_one`), as 6.172 discharges `⋔` by `⋔r`.
+
+**Not shown here.**
+
+- The conversion from that piece (answers in `effRetK (e :: σ)`) to the callback form
+  `stack_step_other` consumes. This is #275's other half.
+- GFP at the extended relation. Its `allI` row needs the context read at `σ` to be read at
+  `τ ++ σ` (Kripke monotonicity). A premise-style `withbor` needs the same lemma.
+- Whether `U` and `⊸` should take the same quantifier (§17.6 reads it as the standard way to get
+  monotonicity).
+
+I have not derived these and have not verified that any obstruction is real.
+
 ### Step 4: the witness
 
 `mut_not_natural`'s cell `ρ₀ = ℓ ↦ mut(2, ℓ′, ℓ′ ↦ imm({1}, (), ∅), 𝒱⟦Imm 'b 1⟧_δ)` is below the cut,
@@ -1003,3 +1038,17 @@ whose slots other than `m` are free of `'x` and outlive it.
   payload types are scoped in `Δ` (`stackFresh_of_fresh`, `stackTyFresh_of_fresh`). Both hold at
   `σ = []` and at `Below.lean`'s derivation (`allI_hyps_below`). `force_RLa` and
   `relendableS_thunkA` take `TabAtS`, which `GFPAt` supplies.
+
+**Step 3l (#286).**
+
+- *Hypotheses not spent.* None. `callback_ext` spends the callback's `∀` and `⊸` clauses and both
+  guards. `callback_ext_one` spends `ρf ∈ Res_α` on both tables.
+- *Uniqueness and functionality results.* None needed.
+- *Printed lemmas in the run-up that are untranscribed at a resuming table.* 6.150 (↺), as above.
+  6.172–6.174 are the model the row follows. They are transcribed at the kernel's relation, not
+  lifted to the stack.
+- *Hypotheses added.*
+  - `callback_ext` takes `e.x ∉ σ.map LEnt.x` (from `stackFresh_of_fresh`) and the tables at
+    `e·σ`, both discharged at one entry.
+  - The `∀` clause asks the extension's variables to be fresh for `σ`, and each either the bound
+    variable or not free in the body.

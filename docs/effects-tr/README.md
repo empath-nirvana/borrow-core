@@ -32,6 +32,7 @@ cross-check: every result it has proved is cited by name, and nothing here contr
 | 14 | [Stored continuations, borrows, proof cost](14-stored-continuations.md) | *candidate extension (#250)*: a continuation holding a borrow; capture rebasing; the `Mut` cell holding a continuation; T1 as a theorem; the verdict on proof cost |
 | 15 | [The `Mut` cell with a rebased continuation](15-mut-cell.md) | candidate result (#251): a cell holding a suspended continuation, closed under resume and drop; where internal lifetimes go; the spanning lend (O15.1) |
 | 16 | [Does the chain bottom out?](16-regress.md) | analysis (#269): the one failure every level of #249–#268 meets (an internal lend open at a suspension); why it regressed; the single induction (GFP) and its measures; T15's five cut-offs; restriction (i), the kernel's present rule, against route (b); the verdict |
+| 17 | [Borrow callbacks](17-borrow-callbacks.md) | analysis (#286): scoped resource-introducing constructs in the literature (premise or constant, the fresh thing made in the construct's compatibility lemma, binders as Kripke universals); BoLo's 6.172–6.174 read the same way; D16.1's stack as a world component the guarded clauses must quantify over; `callback_ext` in Lean; the verdict |
 
 **§§13–15 are candidate extensions, not adopted.** They test the structure proposed on #245 and
 #250 against §§1–12, which they do not change. The verdict (§14.5): the `F ⊣ U` framing removes no

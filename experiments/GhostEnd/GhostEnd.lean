@@ -34,3 +34,4 @@ import GhostEnd.Stacked
 import GhostEnd.StackStep
 import GhostEnd.Below
 import GhostEnd.Arising
+import GhostEnd.Extend

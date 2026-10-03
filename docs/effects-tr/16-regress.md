@@ -1,6 +1,6 @@
 # §16 Does the effects-safety chain bottom out?
 
-[← §15 The `Mut` cell with a rebased continuation](15-mut-cell.md) · [index](README.md)
+[← §15 The `Mut` cell with a rebased continuation](15-mut-cell.md) · [index](README.md) · next: [§17 Borrow callbacks](17-borrow-callbacks.md)
 
 Issue #269. This is a reading of the chain #249 → #268, not a new result. Nothing here is
 mechanised. Each claim cites the Lean declaration it rests on, or is marked as a reading. A prior-art
