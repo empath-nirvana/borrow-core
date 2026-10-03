@@ -40,6 +40,8 @@ Each `#print axioms` below must report a subset of `[propext, Classical.choice, 
 #print axioms WorldW.handOn65
 #print axioms WorldW.anti_unclosable
 #print axioms WorldW.anti_handOn_needs_invariant
+#print axioms WorldW.reb_restrict
+#print axioms WorldW.handOn150
 -- 6.150's chooser at `W` (DESIGN §3.3)
 #print axioms WorldW.rebChooseTW_pin_W
 -- the OQ-3 (a) arm and the argument variant (DESIGN §3.4)

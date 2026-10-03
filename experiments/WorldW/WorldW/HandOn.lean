@@ -20,10 +20,17 @@ hand-on step is a printed lemma at a chosen split.* This file checks that readin
 * `handOn65` (every path, 6.65). 6.27 puts the lend's cell `mut(α, v′, χ′, Q̂)` at the top of the
   stop's closure with the same `α` and `Q̂`; 6.24 makes the exit defined; 6.28 (an iff) gives the
   lender's relativised `↭`; 6.50 keeps the rest above `α`.
+* `handOn150` (resume, 6.150). 6.52 with the split `ρ′ := ∅`, `ρ⁺ :=` the stop's resource puts the
+  image at the top of the stop's closure with its subtraction in `Res_β`; 6.59 gives the lender's
+  relativised `↭` with the reborrow closed on both sides and the view kept.
+* `anti_handOn_needs_invariant` (6.66). Closing an anti entry at a stop refolds its place, which
+  needs `P̂` of the content at the stop; where `P̂` fails, no closure of the stop is `↭`-related to
+  the start's.
 
-These are the steps of `OpenFrame64`/`OpenFrame65` that touch resources (DESIGN §4.3, (ii)–(iv)
-and the value case). They are not the probes: the probes also carry the frame list, the record
-list and its tags, the payload's relation along the list, the tables and the shares.
+These are the steps of the `OpenFrame*` and `OpenRecord150` probes that touch resources (DESIGN
+§4.3, (ii)–(iv) and the value case; §4.7). They are not the probes: the probes also carry the frame
+list, the record list and its tags, the payload's relation along the list, the tables and the
+shares.
 -/
 
 noncomputable section
@@ -203,6 +210,88 @@ theorem anti_handOn_needs_invariant {τi τ' : List OEnt} {l : BoCa.Loc} {α β 
   obtain ⟨u', χ', h', hw', hπl⟩ :=
     (hu.1.2 l β P).mp ⟨u, χ, h, hw, (ResU.flatAt_iff hFρ _ _).mpr hFl⟩
   exact anti_unclosable hπ hP hc hFπ u' χ' h' hw' ((ResU.flatAt_iff hFπ _ _).mp hπl)
+
+/-! ### 6.150: a reborrow handed on at a stop -/
+
+/-- A reborrow image restricted to the source's exclusive locations is a reborrow image too:
+`reb_β`'s family restricted to those locations. -/
+theorem reb_restrict {β : Life} {σR χ : WRes} (h : ResU.Reb β σR χ) :
+    ResU.Reb β σR (χ.restrictDom σR.exclPart) := by
+  classical
+  obtain ⟨hs, π, b, hdom, hbig, hle, hat⟩ := h
+  let q : BoCa.Loc × WRes → Bool := fun lp => (σR.exclPart.get lp.1).isSome
+  have hget : ∀ l, (χ.restrictDom σR.exclPart).get l =
+      if (σR.exclPart.get l).isSome then χ.get l else none := fun _ => rfl
+  obtain ⟨b', hbig', hle'⟩ :=
+    BigComp.leS_of_sublist (List.Sublist.map _ (List.filter_sublist (p := q) (l := π))) hbig
+  refine ⟨hs, π.filter q, b', ⟨?_, fun l => ?_⟩, hbig', ResU.Le.trans hle' hle,
+    fun l p hlp => ?_⟩
+  · exact (List.Sublist.map _ (List.filter_sublist (p := q) (l := π))).nodup hdom.1
+  · rw [hget]
+    constructor
+    · intro hl
+      obtain ⟨⟨l', p⟩, hlp, rfl⟩ := List.mem_map.mp hl
+      obtain ⟨hlp, hq⟩ := List.mem_filter.mp hlp
+      simp only [q] at hq
+      rw [if_pos hq]
+      exact (hdom.2 _).mp (List.mem_map_of_mem (f := Prod.fst) hlp)
+    · rintro ⟨ψ, hψ⟩
+      by_cases hq : (σR.exclPart.get l).isSome
+      · rw [if_pos hq] at hψ
+        obtain ⟨⟨l', p⟩, hlp, e⟩ := List.mem_map.mp ((hdom.2 l).mpr ⟨ψ, hψ⟩)
+        simp only at e
+        subst e
+        exact List.mem_map_of_mem (f := Prod.fst) (List.mem_filter.mpr ⟨hlp, by simpa [q] using hq⟩)
+      · rw [if_neg hq] at hψ; exact absurd hψ (by simp)
+  · obtain ⟨hlp, hq⟩ := List.mem_filter.mp hlp
+    simp only [q] at hq
+    obtain ⟨h₁, h₂, h₃, h₄⟩ := hat l p hlp
+    refine ⟨h₁, fun v hv => ?_, fun b' v χ' hb P hw hv => ?_, fun s' v χ' h hv => ?_⟩
+    · rw [hget, if_pos hq]; exact h₂ v hv
+    · rw [hget, if_pos hq]; exact h₃ b' v χ' hb P hw hv
+    · rw [hget, if_pos hq]; exact h₄ s' v χ' h hv
+
+theorem restrictDom_idem (χ σ : WRes) : (χ.restrictDom σ).restrictDom σ = χ.restrictDom σ := by
+  classical
+  refine PMap.ext fun l => ?_
+  show (if (σ.get l).isSome then (χ.restrictDom σ).get l else none) = (χ.restrictDom σ).get l
+  by_cases h : (σ.get l).isSome
+  · rw [if_pos h]
+  · rw [if_neg h]; show none = (if (σ.get l).isSome then χ.get l else none); rw [if_neg h]
+
+/-- **`handOn150`: a 6.150 record handed on at a stop** (reading 2 for 6.150). The borrower holds
+the image beside a part `Xr` in `Res_β` and runs beside the view. At the stop, 6.52 (split
+`ρ′ := ∅`, `ρ⁺ :=` the stop's resource) puts the image at the top of the stop's closure, its
+subtraction in `Res_β` (the open-entry invariant's strata again), and 6.59 gives the lender's
+relativised `↭` with the reborrow closed on both sides and the view kept. -/
+theorem handOn150 {l : BoCa.Loc} {s : LSet} {w : Val} {σR : WRes} {hs : σR.InStratum s.join}
+    {β : Life} {χ X Xr πs : WRes} (hreb : ResU.Reb β σR χ)
+    (hX : ResU.CompS Xr (χ.restrictDom σR.exclPart) X) (hXr : Xr.InStratum β)
+    (hh1 : ResU.Hash Xr (ResU.single l (CellU.immOf s w σR hs))) (hu : ResU.UpdV X πs)
+    (hh2 : ResU.Hash πs (ResU.single l (CellU.immOf s w σR hs))) :
+    ∃ χ', ResU.SubKeep πs (χ.restrictDom σR.exclPart) χ' ∧
+      ResU.CompS χ' (χ.restrictDom σR.exclPart) πs ∧ χ'.InStratum β ∧
+      ∃ Xi Y, ResU.CompS (ResU.single l (CellU.immOf s w σR hs)) Xr Xi ∧
+        ResU.CompS χ' (ResU.single l (CellU.immOf s w σR hs)) Y ∧ ResU.UpdV Xi Y := by
+  have hreb' := reb_restrict hreb
+  have hce : ResU.CompS (χ.restrictDom σR.exclPart) Xr X := ResU.CompS.comm hX
+  have hcp : ResU.CompS PMap.empty πs πs := compS_empty_left πs
+  have hs0 : ResU.InStratum β (PMap.empty : WRes) := ResU.inStratum_empty β
+  obtain ⟨χ', hsk, hcχ', hχ'⟩ := ResU.six52_keep hreb' hce hcp hu hXr hs0
+  rw [restrictDom_idem] at hsk hcχ'
+  obtain ⟨-, Xi, hXi, hvXi⟩ := hh1
+  obtain ⟨-, Z, hZ, hvZ⟩ := hh2
+  -- `χ′ ● view` is a part of `πs ● view`
+  obtain ⟨Y', hY', hY'Z⟩ := compS_exch hcχ' hZ
+  have hvY' : ResU.Valid Y' := (ResU.Valid.split hY'Z hvZ).1
+  obtain ⟨σX, hσX⟩ := hvXi
+  obtain ⟨σY, hσY⟩ := hvY'
+  have hupd := ResU.six59 hreb' hce hcp hu hXr hs0
+    ⟨hXi.1, Xi, hXi, ⟨σX, hσX⟩⟩ ⟨hZ.1, Z, hZ, hvZ⟩
+    (by rw [restrictDom_idem]; exact hsk) (ResU.CompS.comm hXi)
+    ⟨χ', compS_empty_left χ', hY'⟩ hσX hσY
+  exact ⟨χ', hsk, hcχ', hχ', Xi, Y', ResU.CompS.comm hXi, hY',
+    ⟨hupd, ⟨σX, hσX⟩, ⟨σY, hσY⟩⟩⟩
 
 end WorldW
 

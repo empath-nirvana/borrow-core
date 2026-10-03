@@ -143,9 +143,17 @@ The instances are at the resource level (the first stop's share, `e₂`'s view, 
 | statement | outcome |
 |---|---|
 | `OpenRecord150` | UNFINISHED |
+| `handOn150` (resume: reading 2 for 6.150 at the resource level), with `reb_restrict` | PROVED |
 | `RebExitW`, `RebChooseTWW` | stated |
 | `rebChooseTW_pin_W` | PROVED |
 | `RebChooseTWTopW`, `RebChooseTWDeepW` | UNFINISHED: stated |
+
+`handOn150`: 6.52 with the split `ρ′ := ∅`, `ρ⁺ :=` the stop's resource puts the image at the top
+of the stop's closure with its subtraction in `Res_β` (the open-entry invariant's strata again);
+6.59 gives the lender's relativised `↭` with the reborrow closed on both sides and the view kept.
+The image restricted to the source's exclusive locations is a reborrow image (`reb_restrict`), so
+6.52 and 6.59 apply to it as printed. The step DESIGN §3.3 says to watch, the exit's typing by
+`TW.rebEnd` at a world holding a younger lend, is at the wp level and is not reached here.
 
 ### Stage C2 — 6.66 (`Frame66.lean`, `HandOn.lean`)
 
@@ -171,10 +179,11 @@ so `¬ OpenFrame66` is not proved. OQ-9 (b)'s `AntiRelend` (GhostEnd) asks the b
   to our closure (corrections 1 and 2), both about `Close`, neither about (a). A definition of
   Unit 3's stop that reads `↭` relative to the closure of the open entries must carry the printed
   H16 at the 6.150 exit and the pin at the anti step.
-* The resource core of carrying a 6.64 frame and a 6.65 lend across a resuming stop, and of closing
-  them at a later return, abortive stop or cancel's end, goes through with printed lemmas only
-  (6.24, 6.27, 6.28, 6.29, 6.38, 6.39, 6.50), with the lend table (6.50) standing for the box
-  (`handOn64`, `exit64`, `handOn65`). That is DESIGN §7's reading 2, checked for 6.64 and 6.65.
+* The resource core of carrying a 6.64 frame, a 6.65 lend and a 6.150 record across a resuming
+  stop, and of closing the first two at a later return, abortive stop or cancel's end, goes through
+  with printed lemmas only (6.24, 6.27, 6.28, 6.29, 6.38, 6.39, 6.50, 6.52, 6.59), with the lend
+  table (6.50) standing for the box (`handOn64`, `exit64`, `handOn65`, `handOn150`). That is
+  DESIGN §7's reading 2, checked for 6.64, 6.65 and 6.150.
 * For 6.66 the draft's (37) needs the anti entry's invariant `P̂` at every stop that hands it on
   (`anti_handOn_needs_invariant`): closing the entry at the stop refolds the place. That is the
   invariant OQ-9 (b)'s `AntiRelend` asks for at each stop. So under this (37), (a) gains nothing
@@ -210,7 +219,8 @@ configuration at an unordered `σ`, are unfinished.
 
 **Printed hypotheses spent by the proved results.** `handOn64`/`exit64` spend 6.29's H1 and H3,
 6.38's H1–H4 (H3 and H4 through the lend table) and 6.39's H1–H3. `handOn65` spends 6.27's `@ρ ⊐ α`,
-6.24 and 6.28's validity premises. The 6.150 exit's H16 is spent in `CloseE` (correction 2).
+6.24 and 6.28's validity premises. `handOn150` spends 6.52's `@ρₑ ⊐ α` (the open-entry invariant's
+strata) and `@ρ′ ⊐ α` (at `ρ′ := ∅`), and 6.59's H(`@ρ_b ⊐ β`), `ρ_b # ρᵢ` and `ρ′ ● ρ⁺ # ρᵢ`. The 6.150 exit's H16 is spent in `CloseE` (correction 2).
 **Unspent**, because the entry lemmas and the wp-level probes are not built: 6.64/6.65's И
 freshness (H4, 6.112), 6.65's `P̂ ⊨ [β]P̂`, 6.150's `RebEscrow` and its local strata, and Core's
 added `hQ` (`QExt`).
@@ -232,7 +242,7 @@ WorldW/Coherence.lean  two closures of one resource: close_pair
 WorldW/Checks.lean     §2: F-CLOSE, F1, exclusivity, the other checks
 WorldW/Wp.lean         §4.2: ewpW's fixed point, σ-monotonicity
 WorldW/Nil.lean        §1.9: Core is the τ = σ = [] instance
-WorldW/HandOn.lean     reading 2: the resource core of the hand-on (6.64, 6.65)
+WorldW/HandOn.lean     reading 2: the resource core of the hand-on (6.64, 6.65, 6.150); 6.66's refold
 WorldW/Frame64.lean    OpenFrame64
 WorldW/Frame65.lean    OpenFrame65, OpenFrame65OutStable, OpenFrame65Out
 WorldW/Frame66.lean    OpenFrame66
