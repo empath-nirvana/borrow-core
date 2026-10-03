@@ -4,6 +4,7 @@ import WorldW.HandOn
 import WorldW.Record150
 import WorldW.Between
 import WorldW.Instances
+import WorldW.Diag
 
 /-!
 # WorldW — axioms of every delivered result
@@ -55,3 +56,6 @@ Each `#print axioms` below must report a subset of `[propext, Classical.choice, 
 #print axioms WorldW.reentryInheritA_premises
 #print axioms WorldW.reentryFreshA_premises
 #print axioms WorldW.argBelowExtent_premises
+-- the frozen-list diagnostic (DESIGN §3.4, checkpoint 3)
+#print axioms WorldW.mutViewSurvives_stable
+#print axioms WorldW.not_mutViewSurvives_reads

@@ -133,10 +133,21 @@ resume, the return, the abortive stop and the cancel's end. 6.40 (untranscribed)
 | `extentObligation_bypassed` | PROVED |
 | `ArgBelowExtent` | PROVED (`argBelowExtent`); premises satisfied (`argBelowExtent_premises`) |
 | `ArgAboveExtent` | PROVED (`argAboveExtent`) |
-| `MutViewSurvivesOlderClose` (diagnostic) | UNFINISHED: stated |
+| `MutViewSurvivesOlderClose T3Stable` (diagnostic) | PROVED (`mutViewSurvives_stable`) |
+| `MutViewSurvivesOlderClose T3Reads` (diagnostic) | refuted (`not_mutViewSurvives_reads`) at a non-arising input |
 
 The instances are at the resource level (the first stop's share, `e₂`'s view, with
 `α₃ ⊏ α₂ ⊏ h`). They are not built from a `TW` history of the between-lenders program.
+
+The diagnostic settles checkpoint 3 of DESIGN §3.4. `ptoMutS` stores the payload predicate frozen
+at the list of records longer-lived than the cell, and asks it to *equal* the payload relation at
+that list. When an older 6.64 frame closes while the younger `Mut` view exists, its records leave
+the list. At `1 ⊕ 1` nothing changes. At `1 ⊕ Imm 'x₁ 1` the relation reads the list through
+`CohE`, and at a view of the older frame's place the two lists give different predicates, so the
+view is no longer `ptoMutS` at the shorter list. The distinguishing input is not built from a `TW`
+history, so this measures our `ptoMutS` (`[about ours]`), not (a): the list-reading between-lenders
+probes would stop there, and the list-stable ones need not (reading 4). Under OQ-9 (b) the re-lend
+at a fresh lifetime keeps the list LIFO and the case does not occur.
 
 ### Stage E — 6.150 (`Record150.lean`)
 

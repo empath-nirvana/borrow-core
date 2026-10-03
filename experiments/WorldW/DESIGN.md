@@ -1816,6 +1816,10 @@ body (`handle_is_shift`), so every stop to it would end that lend by 6.65's exit
        ptoMutS ℓ₃ α₃ ls (fun ls₀ => vC true (T₃ x₁) ls₀ δ) ρ →
        ptoMutS ℓ₃ α₃ ls' (fun ls₀ => vC true (T₃ x₁) ls₀ δ) ρ
    ```
+   **Built** (`WorldW/Diag.lean`): `mutViewSurvives_stable` proves the diagnostic at `λ_. 1 ⊕ 1`;
+   `not_mutViewSurvives_reads` refutes it at `λx₁. 1 ⊕ Imm 'x₁ 1`, at an input with the older
+   record in the list and a view of its place (not built from a `TW` history). So the
+   list-reading probes would stop here, at our frozen list, as this checkpoint predicts.
 4. **`L₃`'s exit.** 6.65's H35 reads the content at the exit list (`vC_local` along
    `Ext ls₀ ls″ χ`). With `χ` the content `inj₁ ()`, this holds. On the drop path the exit is at
    the abortive stop (`openFrameDrop65Out`). It closes `e₃` after `e₂`: context order, the reverse
