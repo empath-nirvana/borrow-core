@@ -1227,6 +1227,18 @@ def OpenFrame66 : Prop :=
 - **If it fails.** A failure at the refold names 6.28. A failure at `Holds` names the point where
   `ClosedOps` lets an argument carry the owned cell. That is reported as a route around borrowing
   that our table check does not exclude. It is not patched.
+- **Found while building: the refold at a stop** (`WorldW/HandOn.lean`). A stop that hands the anti
+  entry on must close it in (37)'s `Close τ′ π πc`, and closing it refolds the place, which needs
+  `P̂` of the content *at the stop*. `anti_handOn_needs_invariant` (proved): if the place holds
+  `own(w)` at the top of the stop's resource and `P̂(w)` holds of no resource, no closure of the stop
+  by any `τ′` is `↭`-related to the start's closure. `OpenFrame66`'s premise, the body's `ewpW`,
+  does not exclude such a stop (a body may store outside `P̂` and then perform), so its conclusion
+  asks for more than its premise gives at such a body. I have not built that body, its `ewpW`, or its
+  `TW` history, so `¬ OpenFrame66` is not proved. OQ-9 (b)'s `AntiRelend` (GhostEnd,
+  `Frames.lean:68`) asks the body to hand back `ℓ ↦ w ⋆ 𝒱⟦T⟧(w)` at every stop. So under this draft's
+  (37), (a) for 6.66 needs the same invariant at the stop as (b) does. The alternatives are a
+  premise of `AntiRelend`'s kind on `OpenFrame66`, or a (37) that reads an open anti entry's place by
+  the entry's own `(β, P̂)` without refolding it. Both change a definition here; neither is made.
 
 ### 3.3 `OpenRecord150`: a reborrow handed on at a stop
 

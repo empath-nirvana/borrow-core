@@ -56,7 +56,7 @@ theorem close_flat_agree {τ : List OEnt} {π π₁ π₂ F₁ F₂ : WRes} :
       (∃ χ h hw, F₁.get l = some (CellU.mutOf β v χ h P hw)) ∧
       (∃ χ h hw, F₂.get l = some (CellU.mutOf β v χ h P hw))) := by
   intro h₁ h₂ hF₁ hF₂
-  obtain ⟨U, A₁, A₂, hr₁, hr₂, hs₁, hs₂⟩ :=
+  obtain ⟨U, A₁, A₂, hr₁, hr₂, hs₁, hs₂, -⟩ :=
     close_pair h₁ h₂ (.nil π) (.nil π) rfl (fun _ h => absurd h List.not_mem_nil)
       (fun _ h => absurd h List.not_mem_nil)
   simp only [List.map_nil] at hs₁ hs₂
@@ -112,7 +112,7 @@ theorem close_flat_agree_off_anti {τ : List OEnt} {π π₁ π₂ F₁ F₂ : W
 /-- `↭` from the pointwise agreement `close_flat_agree` gives. -/
 theorem close_upd_of_valid {τ : List OEnt} {π π₁ π₂ : WRes} (h₁ : Close τ π π₁)
     (h₂ : Close τ π π₂) (hv₁ : ResU.Valid π₁) : ResU.UpdV π₁ π₂ := by
-  obtain ⟨U, A₁, A₂, hr₁, hr₂, -, -⟩ :=
+  obtain ⟨U, A₁, A₂, hr₁, hr₂, -, -, -⟩ :=
     close_pair h₁ h₂ (.nil π) (.nil π) rfl (fun _ h => absurd h List.not_mem_nil)
       (fun _ h => absurd h List.not_mem_nil)
   have hv₂ : ResU.Valid π₂ := refolds_valid_end hr₂ (refolds_valid_start hr₁ hv₁)

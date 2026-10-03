@@ -147,11 +147,21 @@ The instances are at the resource level (the first stop's share, `e₂`'s view, 
 | `rebChooseTW_pin_W` | PROVED |
 | `RebChooseTWTopW`, `RebChooseTWDeepW` | UNFINISHED: stated |
 
-### Stage C2 — 6.66 (`Frame66.lean`)
+### Stage C2 — 6.66 (`Frame66.lean`, `HandOn.lean`)
 
 | statement | outcome |
 |---|---|
-| `OpenFrame66` | UNFINISHED |
+| `OpenFrame66` | UNFINISHED; see below |
+| `anti_unclosable`, `anti_handOn_needs_invariant` | PROVED |
+
+A stop that hands the anti entry on must close it in (37), and closing it refolds the place, which
+needs `P̂` of the content at the stop. `anti_handOn_needs_invariant`: if the place holds `own(w)` at
+the top of the stop's resource and `P̂(w)` holds of no resource, no closure of the stop, by any list,
+is `↭`-related to the start's closure. `OpenFrame66`'s premise (the body's `ewpW`) does not exclude
+such a stop: a body may store a value outside `P̂` and then perform. So the statement asks for more
+than its premise gives at such a body. I have not built that body, its `ewpW` or its `TW` history,
+so `¬ OpenFrame66` is not proved. OQ-9 (b)'s `AntiRelend` (GhostEnd) asks the body to restore
+`ℓ ↦ w ⋆ 𝒱⟦T⟧(w)` at every stop: under this draft's (37), (a) for 6.66 needs the same.
 
 ## What the outcomes mean
 
@@ -165,9 +175,14 @@ The instances are at the resource level (the first stop's share, `e₂`'s view, 
   them at a later return, abortive stop or cancel's end, goes through with printed lemmas only
   (6.24, 6.27, 6.28, 6.29, 6.38, 6.39, 6.50), with the lend table (6.50) standing for the box
   (`handOn64`, `exit64`, `handOn65`). That is DESIGN §7's reading 2, checked for 6.64 and 6.65.
+* For 6.66 the draft's (37) needs the anti entry's invariant `P̂` at every stop that hands it on
+  (`anti_handOn_needs_invariant`): closing the entry at the stop refolds the place. That is the
+  invariant OQ-9 (b)'s `AntiRelend` asks for at each stop. So under this (37), (a) gains nothing
+  over (b) for 6.66, unless (37) reads an open anti place by the entry's own `(β, P̂)` instead of
+  refolding it.
 * The probes themselves (`OpenFrame64`, `OpenFrame65`, `OpenFrame66`, `OpenRecord150`) are
-  unfinished. The steps they still need are listed above; none of them is a step these results
-  found blocked.
+  unfinished. The steps 6.64's and 6.65's still need are listed above; none of them is a step
+  these results found blocked.
 
 **OQ-3.** FINDING-2 holds in Lean, at an unordered `σ`. (a)'s own rule rejects resuming `κ` inside
 a lend younger than `κ`'s inner lend: at once with an inherited extent (`reentryInheritA`), and at

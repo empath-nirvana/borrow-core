@@ -150,6 +150,60 @@ theorem handOn65 {l : BoCa.Loc} {α : Life} {v : Val} {χ : WRes} {hχ : χ.InSt
   exact ⟨tabAt_del_inStratum htab', v', χ', h', hw', hsplit, W, W', ρo, πo, hW, hW', hρo, hπo,
     ⟨hupd, hvo, hvπo⟩⟩
 
+/-! ### 6.66: the refold at a stop
+
+`[TR]` 6.66 asks the body to hand back `ℓ ↦ v″ ⋆ P̂(v″)` when it returns (H20). Under the draft's
+conjunct (37) a stop that hands an anti entry on must also close it in `Close τ′ π πc`, which
+refolds the place: so the content at the stop must satisfy `P̂`. `anti_handOn_needs_invariant`
+states it at the lender's (37): when the place holds `own(w)` and `P̂(w)` holds of no resource, no
+closure of the stop is `↭`-related to the start's closure, whatever list the stop hands on. -/
+
+/-- **An anti place whose content breaks its invariant cannot be refolded by any closure**: no
+closure carries `mut(β, _, _, P̂)` there. -/
+theorem anti_unclosable {τ : List OEnt} {π πc F : WRes} {l : BoCa.Loc} {w : Val} {β : Life}
+    {P : Val → SPropS BoCa.Loc Val β} (hπ : π.get l = some (CellU.ownOf w))
+    (hP : ∀ ρ, ¬ P w ρ) (hc : Close τ π πc) (hF : ResU.Flat πc F) :
+    ∀ v χ h hw, F.get l ≠ some (CellU.mutOf β v χ h P hw) := by
+  intro v χ h hw hFl
+  obtain ⟨U, A, -, hr, -, -, -, hown⟩ :=
+    close_pair hc hc (.nil π) (.nil π) rfl (fun _ h => absurd h List.not_mem_nil)
+      (fun _ h => absurd h List.not_mem_nil)
+  have hUl := hown l w hπ
+  obtain ⟨FU, hFU⟩ := refolds_valid_start hr ⟨F, hF⟩
+  have hFUl : FU.get l = some (CellU.ownOf w) := ResU.flat_get_of_ne_imm hFU hUl (kind_ownOf_ne w)
+  obtain ⟨hoff, hat⟩ := refolds_flat hr ⟨FU, hFU⟩ hFU hF
+  by_cases hl : ∃ f ∈ A, f.l = l
+  · obtain ⟨⟨fl, fβ, fP, fρ⟩, hf, rfl⟩ := hl
+    obtain ⟨v', χ', h', hw', hFf, hFUf⟩ := hat _ hf
+    simp only at hFf hFUf
+    rw [hFUl] at hFUf
+    have hvw : w = v' := by simpa [CellU.ownOf] using Option.some.inj hFUf
+    rw [hFl] at hFf
+    have he := Option.some.inj hFf
+    obtain rfl : β = fβ := CellU.mutOf_at he
+    obtain ⟨rfl, -, -⟩ := CellU.mutOf_inj he
+    exact hP _ (hvw ▸ hw)
+  · rw [hoff l (fun f hf e => hl ⟨f, hf, e⟩), hFUl] at hFl
+    exact CellU.ownOf_ne_mutOf (Option.some.inj hFl)
+
+/-- **The lender's relativised `↭` fails at a stop where an anti entry's content breaks its
+invariant**, whatever list the stop hands on: the start's closure carries the refolded
+`mut(β, _, _, P̂)` at the place, and no closure of the stop does. -/
+theorem anti_handOn_needs_invariant {τi τ' : List OEnt} {l : BoCa.Loc} {α β : Life} {T : VTy}
+    {δ : LSub} {P : Val → SPropS BoCa.Loc Val β} {ρ ρc π πc : WRes} {w : Val}
+    (hρ : Close (τi ++ [.anti l α β T δ P]) ρ ρc) (hv : ResU.Valid ρc)
+    (hπ : π.get l = some (CellU.ownOf w)) (hP : ∀ ρ', ¬ P w ρ') (hc : Close τ' π πc) :
+    ¬ ResU.UpdV ρc πc := by
+  intro hu
+  obtain ⟨Fρ, hFρ⟩ := hv
+  have hlen : τi.length < (τi ++ [OEnt.anti l α β T δ P]).length := by simp
+  obtain ⟨u, ⟨χ, h, hw, hFl⟩, -⟩ := (close_flat_agree hρ hρ hFρ hFρ).2 τi.length hlen l α β T δ P
+    (by simp) (by simp)
+  obtain ⟨Fπ, hFπ⟩ := hu.2.2
+  obtain ⟨u', χ', h', hw', hπl⟩ :=
+    (hu.1.2 l β P).mp ⟨u, χ, h, hw, (ResU.flatAt_iff hFρ _ _).mpr hFl⟩
+  exact anti_unclosable hπ hP hc hFπ u' χ' h' hw' ((ResU.flatAt_iff hFπ _ _).mp hπl)
+
 end WorldW
 
 end

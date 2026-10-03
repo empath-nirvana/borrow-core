@@ -126,6 +126,23 @@ theorem kind_immOf_ne_mut {s : LSet} {v : Val} {w : WRes} {h : w.InStratum s.joi
     (CellU.immOf s v w h).kind ≠ Kind.mut := by
   rw [CellU.kind_immOf]; exact fun c => Kind.noConfusion c
 
+/-- A step that replaces a non-`own` cell keeps every `own` cell elsewhere. -/
+theorem own_keep_of_replace {U X U' : WRes} {p : BoCa.Loc} {c : CellU BoCa.Loc Val}
+    (hUp : U.get p = some c) (hck : c.kind ≠ Kind.own) (hU' : ResU.CompS (U.del p) X U') :
+    ∀ m w, U.get m = some (CellU.ownOf w) → U'.get m = some (CellU.ownOf w) := by
+  classical
+  intro m w hm
+  have hmp : m ≠ p := by
+    rintro rfl; rw [hUp] at hm; cases Option.some.inj hm; exact hck rfl
+  exact compS_get_of_left_nonimm hU' (by rw [ResU.del_get_ne _ hmp]; exact hm) (kind_ownOf_ne w)
+
+/-- `⊟` keeps every `own` cell. -/
+theorem own_keep_of_subKeep {U img U' : WRes} (h : ResU.SubKeep U img U') :
+    ∀ m w, U.get m = some (CellU.ownOf w) → U'.get m = some (CellU.ownOf w) := by
+  intro m w hm
+  obtain ⟨ρ'', -, -, -, -, hc⟩ := h
+  exact compS_get_of_left_nonimm hc (ResU.exclPart_eq_some.mpr ⟨hm, by simp⟩) (kind_ownOf_ne w)
+
 /-- **One step of two chains over one list keeps the invariant.** -/
 theorem close_step {e : OEnt} {τr : List OEnt} {π₁ π₂ π₁' π₂' U : WRes} {A₁ A₂ : List Fold}
     (h₁ : CloseE τr e π₁ π₁') (h₂ : CloseE τr e π₂ π₂') (hr₁ : Refolds U A₁ π₁)
@@ -133,7 +150,8 @@ theorem close_step {e : OEnt} {τr : List OEnt} {π₁ π₂ π₁' π₂' U : W
     (hp₁ : PinsOK A₁ (e :: τr)) (hp₂ : PinsOK A₂ (e :: τr)) :
     ∃ U' A₁' A₂', Refolds U' A₁' π₁' ∧ Refolds U' A₂' π₂' ∧
       A₁'.map Fold.shape = pendStep (A₁.map Fold.shape) e ∧
-      A₂'.map Fold.shape = pendStep (A₂.map Fold.shape) e ∧ PinsOK A₁' τr ∧ PinsOK A₂' τr := by
+      A₂'.map Fold.shape = pendStep (A₂.map Fold.shape) e ∧ PinsOK A₁' τr ∧ PinsOK A₂' τr ∧
+      (∀ m w, U.get m = some (CellU.ownOf w) → U'.get m = some (CellU.ownOf w)) := by
   classical
   have hpl := places_eq hsh
   cases e with
@@ -143,13 +161,15 @@ theorem close_step {e : OEnt} {τr : List OEnt} {π₁ π₂ π₁' π₂' U : W
       obtain ⟨hh₂, X₂, hg₂, hX₂, hc₂, hv₂⟩ := h₂
       cases ResU.CompS.functional hX₂ hX₁
       have hXm := compS_single_nonimm_get hX₁ (kind_ownOf_ne p.v)
-      obtain ⟨U₁, -, hU₁, hr₁'⟩ :=
+      obtain ⟨U₁, hU₁g, hU₁, hr₁'⟩ :=
         refolds_replace hXm (refolds_off_place hr₁ hg₁ kind_immOf_ne_mut) hr₁ hg₁ hc₁ hv₁
       obtain ⟨U₂, -, hU₂, hr₂'⟩ :=
         refolds_replace hXm (refolds_off_place hr₂ hg₂ kind_immOf_ne_mut) hr₂ hg₂ hc₂ hv₂
       cases ResU.CompS.functional hU₂ hU₁
       exact ⟨U₁, A₁, A₂, hr₁', hr₂', rfl, rfl, pinsOK_tail hp₁ (fun _ _ => rfl),
-        pinsOK_tail hp₂ (fun _ _ => rfl)⟩
+        pinsOK_tail hp₂ (fun _ _ => rfl),
+        own_keep_of_replace hU₁g (by rw [CellU.kind_immOf]; exact fun c => Kind.noConfusion c)
+          hU₁⟩
   | «mut» l α T δ =>
       obtain ⟨v₁, χ₁, k₁, Q₁, hw₁, X₁, hg₁, hX₁, hc₁, hv₁⟩ := h₁
       obtain ⟨v₂, χ₂, k₂, Q₂, hw₂, X₂, hg₂, hX₂, hc₂, hv₂⟩ := h₂
@@ -162,7 +182,7 @@ theorem close_step {e : OEnt} {τr : List OEnt} {π₁ π₂ π₁' π₂' U : W
           exact ⟨g, hg, hgl⟩
         refine ⟨U, A₁.filter (fun g => g.l != l), A₂.filter (fun g => g.l != l),
           refolds_unfold hr₁ hmem hg₁ hX₁ hc₁ hv₁, refolds_unfold hr₂ hmem₂ hg₂ hX₂ hc₂ hv₂,
-          ?_, ?_, ?_, ?_⟩
+          ?_, ?_, ?_, ?_, fun _ _ h => h⟩
         · show _ = (A₁.map Fold.shape).filter _
           rw [List.filter_map]; rfl
         · show _ = (A₂.map Fold.shape).filter _
@@ -196,14 +216,16 @@ theorem close_step {e : OEnt} {τr : List OEnt} {π₁ π₂ π₁' π₂' U : W
           refine List.filter_eq_self.mpr fun s hs => ?_
           obtain ⟨f, hf, rfl⟩ := List.mem_map.mp hs
           simpa [Fold.shape] using hA f hf
-        refine ⟨U₁, A₁, A₂, hr₁', hr₂', (hS A₁ hA₁).symm, (hS A₂ hA₂).symm, ?_, ?_⟩
+        refine ⟨U₁, A₁, A₂, hr₁', hr₂', (hS A₁ hA₁).symm, (hS A₂ hA₂).symm, ?_, ?_,
+          own_keep_of_replace hU₁g (by rw [CellU.kind_mutOf]; exact fun c => Kind.noConfusion c)
+            hU₁⟩
         · exact pinsOK_tail hp₁ (fun f hf => by simp [OEnt.isMutAt, Ne.symm (hA₁ f hf)])
         · exact pinsOK_tail hp₂ (fun f hf => by simp [OEnt.isMutAt, Ne.symm (hA₂ f hf)])
   | anti l α β T δ P =>
       obtain ⟨ρP₁, hpin₁, ha₁⟩ := h₁
       obtain ⟨ρP₂, hpin₂, ha₂⟩ := h₂
       refine ⟨U, A₁ ++ [⟨l, β, P, ρP₁⟩], A₂ ++ [⟨l, β, P, ρP₂⟩],
-        refolds_snoc hr₁ ha₁, refolds_snoc hr₂ ha₂, ?_, ?_, ?_, ?_⟩
+        refolds_snoc hr₁ ha₁, refolds_snoc hr₂ ha₂, ?_, ?_, ?_, ?_, fun _ _ h => h⟩
       · simp [pendStep, Fold.shape]
       · simp [pendStep, Fold.shape]
       · intro f hf
@@ -225,13 +247,13 @@ theorem close_step {e : OEnt} {τr : List OEnt} {π₁ π₂ π₁' π₂' U : W
         (fun f hf => antiPin_head (hp₂ f hf) rfl rfl) hr₂ hle₂ hsk₂ hv₂
       cases ResU.SubKeep.functional (subLe_of_le hleU) hskU₂ hskU₁
       exact ⟨U₁, A₁, A₂, hr₁', hr₂', rfl, rfl, pinsOK_tail hp₁ (fun _ _ => rfl),
-        pinsOK_tail hp₂ (fun _ _ => rfl)⟩
+        pinsOK_tail hp₂ (fun _ _ => rfl), own_keep_of_subKeep hskU₁⟩
   | hnd n h =>
       have e₁ : π₁' = π₁ := h₁
       have e₂ : π₂' = π₂ := h₂
       subst e₁ e₂
       exact ⟨U, A₁, A₂, hr₁, hr₂, rfl, rfl, pinsOK_tail hp₁ (fun _ _ => rfl),
-        pinsOK_tail hp₂ (fun _ _ => rfl)⟩
+        pinsOK_tail hp₂ (fun _ _ => rfl), fun _ _ h => h⟩
 
 theorem closePre_cons_inv {e : OEnt} {τ τ₂ : List OEnt} {π π' : WRes}
     (h : ClosePre (e :: τ) τ₂ π π') : ∃ π₁, CloseE (τ ++ τ₂) e π π₁ ∧ ClosePre τ τ₂ π₁ π' := by
@@ -248,21 +270,23 @@ theorem close_pair : ∀ {τ τ₂ : List OEnt} {π₁ π₁' : WRes}, ClosePre 
     PinsOK A₁ (τ ++ τ₂) → PinsOK A₂ (τ ++ τ₂) →
     ∃ U' A₁' A₂', Refolds U' A₁' π₁' ∧ Refolds U' A₂' π₂' ∧
       A₁'.map Fold.shape = pendAfter (A₁.map Fold.shape) τ ∧
-      A₂'.map Fold.shape = pendAfter (A₂.map Fold.shape) τ := by
+      A₂'.map Fold.shape = pendAfter (A₂.map Fold.shape) τ ∧
+      (∀ m w, U.get m = some (CellU.ownOf w) → U'.get m = some (CellU.ownOf w)) := by
   intro τ τ₂ π₁ π₁' h
   induction h with
   | nil τ₂ π =>
       intro π₂ π₂' U A₁ A₂ h₂ hr₁ hr₂ _ _ _
       rw [closePre_nil_inv h₂]
-      exact ⟨U, A₁, A₂, hr₁, hr₂, rfl, rfl⟩
+      exact ⟨U, A₁, A₂, hr₁, hr₂, rfl, rfl, fun _ _ h => h⟩
   | @cons e τ τ₂ π π₁ π' hstep _ ih =>
       intro π₂ π₂' U A₁ A₂ h₂ hr₁ hr₂ hsh hp₁ hp₂
       obtain ⟨π₂m, hstep₂, hrest₂⟩ := closePre_cons_inv h₂
-      obtain ⟨Um, A₁m, A₂m, hr₁m, hr₂m, hs₁, hs₂, hp₁m, hp₂m⟩ :=
+      obtain ⟨Um, A₁m, A₂m, hr₁m, hr₂m, hs₁, hs₂, hp₁m, hp₂m, hom⟩ :=
         close_step hstep hstep₂ hr₁ hr₂ hsh hp₁ hp₂
-      obtain ⟨U', A₁', A₂', hr₁', hr₂', hs₁', hs₂'⟩ :=
+      obtain ⟨U', A₁', A₂', hr₁', hr₂', hs₁', hs₂', ho'⟩ :=
         ih hrest₂ hr₁m hr₂m (by rw [hs₁, hs₂, hsh]) hp₁m hp₂m
-      exact ⟨U', A₁', A₂', hr₁', hr₂', by rw [hs₁', hs₁]; rfl, by rw [hs₂', hs₂]; rfl⟩
+      exact ⟨U', A₁', A₂', hr₁', hr₂', by rw [hs₁', hs₁]; rfl, by rw [hs₂', hs₂]; rfl,
+        fun m w h => ho' m w (hom m w h)⟩
 
 /-! ### The pending places of a list -/
 
