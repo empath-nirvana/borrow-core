@@ -75,7 +75,8 @@ single-lend objects:
   written as D16.1's piece (`openS_yield`, `openS_val`), gives its `ewpTS` beside the outer owner
   (`withbor_reborrow_spans_yield`). A stop of D16.1's piece at the lenders' row is inhabited.
 
-GFP itself (D16.2) is stated (`GFP`, `GFPAt`), not proved.
+GFP itself (D16.2) is stated (`GFP`, `GFPAt`), not proved. `Below.lean` shows that, as stated, it
+does not hold at a one-entry stack (`not_gfp`).
 -/
 
 noncomputable section

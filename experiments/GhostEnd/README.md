@@ -66,6 +66,7 @@ Build with `lake build GhostEnd`. It uses only the standard axioms and has no `s
 | 3i | `Relendable_σ` closed under `⋆`, at every stack | `relendableS_sep`, `vwS_join`, `vwS_split`, `ptoImmS_join` |
 | 3i | a whole stack folds back to `[]` by induction on the stack; the depth-1 and depth-2 rows from the uniform steps | `openS_nil_ewp`, `fold_other`, `stack_spans_mut`, `stack_spans_imm`, `stack2_reborrow_spans` |
 | 3i | every hypothesis discharged: three lends of one place spanning a yield; an `imm` lend inside a `mut` lend spanning a yield | `openS_val_any`, `openS_yield_any`, `stack3_reborrow_yield`, `stack2_imm_yield` |
+| 3j | GFP as stated does not hold at `σ = [x]`: a callback-shaped function at a lifetime below the stack, every hypothesis discharged | `not_gfpAt_below`, `not_gfp`, `no_flat_mut_of_part`, `tw_innerView` (`Below.lean`) |
 
 ### Step 0: the segment fundamental lemma (restated)
 
@@ -780,6 +781,44 @@ entry by entry.
 
 I have not derived these and have not verified that any obstruction is real.
 
+### Step 3j: GFP at a non-empty stack (#279)
+
+The final run on #279 was to prove GFP (D16.2) by induction on `CDerives`, at D16.1, case by case,
+unknowns first. GFP as stated does not hold at the stack `[x]` (`Below.lean`).
+
+**The configuration** (`not_gfpAt_below`). `Δ = x ⊏ ⊤`, `σ = [x]`, the lend at `1`, the empty
+context and resource. The derivation is `allI` over `lam`: `Λ. λn. return (thunk (return n))` at
+`∀'y ⊏ ⊓Δ. Mut 'y 1 ⊸ F (U (F (Mut 'y 1)))`, the shape of a borrow callback's type. Every
+hypothesis of `GFPAt [x]` is discharged.
+
+1. D16.1's `∀` clause takes `'y` at every lifetime below `⊓Δ`, which is `x`'s: here `3`.
+2. Its `⊸` clause hands every argument in `vRL_σ (Mut 'y 1)`: here the inner view `k ↦ M_3`.
+3. The answer's `U` clause (`RelendableS`) puts the closure's resource, apart from the stack's
+   views, in `Res_2`.
+4. Forcing the closure needs a `mut` cell at `k`. That resource is a part, in `Res_2`, of a
+   `↭`-update of the inner view, so neither it nor a `↭`-update of it flattens to a `mut` cell
+   at `k` (`no_flat_mut_of_part`).
+
+The refutation runs both: the first from the inner view's typed world (`tw_innerView`), the second,
+the force, from the first run's final world.
+
+**Which case.** The rule whose compatibility lemma fails is `lam`, with `allI`: #266 classed both
+routine. Their induction hypothesis is GFP at the body, guarded by `TabAt_σ`. D16.1's `⊸` and `∀`
+clauses are not guarded, and hand arguments whose cells lie below the stack.
+
+**What it measures.** At `σ = [x]` such a cell arises only from a lend opened inside `x`'s borrower:
+a borrow constant applied to a callback of this shape. §16.4's sketch applies the induction
+hypothesis to that callback's premise at `σ·y`. In `CDerives` the borrow operations are constants,
+and their callbacks reach them as values. D16.1 reads a value at `σ`, with `'y` a plain variable;
+no clause of D16.1 extends the stack. So #275 (the inner callback's piece at `σ·new`) has no
+induction hypothesis to start from, and the `lam` row has no proof at a non-empty stack.
+
+**The verdict: blocked.** Repairing GFP needs a construct the list does not contain: a reading of
+values at an extended stack in D16.1's `U`, `∀` or `⊸` clause, or borrow rules whose callback is a
+premise (a `CDerives` change). A table guard on the `⊸` clause would remove this configuration;
+whether a borrow constant's row survives it, its callback handed a view below the stack, is not
+checked. I have not derived any repair and have not verified that any obstruction to one is real.
+
 ### Step 4: the witness
 
 `mut_not_natural`'s cell `ρ₀ = ℓ ↦ mut(2, ℓ′, ℓ′ ↦ imm({1}, (), ∅), 𝒱⟦Imm 'b 1⟧_δ)` is below the cut,
@@ -881,3 +920,13 @@ whose slots other than `m` are free of `'x` and outlive it.
   - `stack_step_reborrow` takes the reborrowed entry to be `mut` at the payload type `T`. That is
     the shape of `withbor` (3).
 - *Hypotheses removed.* `stack2_reborrow_spans` does not take `a₂ < a₁`.
+
+**Step 3j (#279, the final run).**
+
+- *Hypotheses not spent.* `not_gfpAt_below` instantiates every hypothesis of `GFPAt`. It does not
+  use `e₀.cross` or the stack's place: the failure is in the `U` clause's stratum.
+- *Uniqueness and functionality results.* Used: `ResU.CompS.functional`, `ResU.Flat.functional`,
+  and the machine's determinism through `ARun.rest`. Not used: `ResU.Lower.functional`.
+- *Printed lemmas in the run-up that are untranscribed at a resuming table.* 6.150 (↺), as above.
+  GFP's other cases (#276, #277, #278, #280, `effThen`, `unfoldN`, the `*U` constants) were not
+  attempted after the refutation, under the hard stop.
