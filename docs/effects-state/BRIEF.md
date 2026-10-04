@@ -196,6 +196,7 @@ This is the audit's structure, with the critic's corrections:
 The full register, with sources, is [04](04-decisions.md). Only entries marked decided constrain a design, and even they stay open to the user. How code is built today is not a decision.
 
 **Decided**
+- **Multi-shot is ignored as a design goal** (decision 63, 2026-10-04). In the user's words: "TOTALLY IGNORE MULTISHOT AS A DESIGN GOAL. If it works it works, if it doesn't, it doesn't, I don't care either way." It never blocks, shapes or costs anything. On friction, restrict or remove the `unr` qualifier, and don't ask.
 - **Effects are core.** They live in the kernel, on a literature-backed foundation.
 - **Laws first.** Design from the equational theory; never improvise a mechanism.
 - **The actual calculus.** "Make sure the agents are building the actual effects calculus not an approximation of it." No first-order fragment, no effect-ish encoding.
@@ -219,7 +220,7 @@ The full register, with sources, is [04](04-decisions.md). Only entries marked d
   - the first-pass plan stays coarse.
 
 **Defaults and deferrals (not prohibitions)**
-- **Multi-shot:** "we also don't need multishot unless we get it for free" (2026-10-02).
+
 - **Kernel equations and binary laws:** "optional and don't get pursued unless they become necessary for safety" (2026-10-02).
 - **Higher-order operations:** "out of scope" in decision 57 (2026-10-01). Read this as not now.
 - **Runners:** not user-facing. As an internal architecture, BoLo-as-runner is "kind of genius", "not yet decided".
@@ -239,7 +240,7 @@ The draft boxed 68 questions. Classified against decisions and evidence ([05a](0
 - OQ-4: binary laws optional.
 - OQ-12: higher-order operations not now.
 - OQ-15: div is codata.
-- OQ-16: the multi-shot criterion.
+- OQ-16: multi-shot is ignored.
 - OQ-19: runners are not user-facing.
 - OQ-25: handler state.
 - OQ-31: no step-indexing.
@@ -292,7 +293,7 @@ Don't cite these as authority. Most of them wait on the user.
 - **Decisions 51–53** are not marked superseded.
 - **Decision 15** (shallow handlers primitive) is revised by decision 62: handlers are deep.
 - **Decision 57's "no row variables in the kernel"** is superseded by decision 62. Docs that cite it, such as `docs/effect-polymorphism.md`, are stale on that point.
-- **Multi-shot** is recorded at three strengths. The user's words are in §6.
+- **Multi-shot.** Older records give three strengths. All are superseded by decision 63: multi-shot is ignored as a design goal.
 - **Cancel errors.** The #186 comment of 2026-09-30 ("always receives 'cancelled'") is superseded: what SPEC §19 builds is the decision (decision 62).
 - **`docs/effects-tr/08-decisions.md`** was written by an agent, with no user confirmation found.
 - **"Recursion is an effect"** is superseded ("a pretty idea, not a hard req", 2026-10-01). It is still presented as current in `docs/rec-effect/README.md`.
