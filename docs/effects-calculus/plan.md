@@ -27,10 +27,10 @@ Effects change BoLo's definitions where the two interact. Each unit names those 
 
 | # | unit | tier | builds | first unknown |
 |---|---|---|---|---|
-| 1 | **One signature:** rows as sums, row variables, `raise`, grades, renaming | 1 | item 1 | the grade of a row-variable tail |
+| 1 | **One signature:** rows as sums, row variables, `raise`, grades, renaming | 1 | item 1 | `[handle]` forwarding through an unknown row tail |
 | 2 | **Handlers and capabilities:** models, comodels, handler laws over the kernel, stored continuations at `σ = []` | 1 | items 2, 3 | is an answering handler a tail-resumptive `[handle]`? (OQ-1) |
 | 3 | **The world `W`:** relativised stop; frame rules and 6.150 at `W`; `vC`/`cC` as `σ = []` | 2 | item 4 | do open frames close on resume, cancel, drop and between lenders? |
-| 4 | **Borrows over rows:** one term per printed constant at any well-formed row | 2 | item 5 | can an unrestricted continuation hold a lend? |
+| 4 | **Borrows over rows:** one term per printed constant at any well-formed row | 2 | item 5 | does `withswap` refold on every exit path? (OQ-20) |
 | 5 | **Stored lends and async:** stored continuations holding lends, effectful codata, the lead-axis acceptance | 2 | tier 2; acceptance | how a stored continuation holding a lend is bounded (OQ-28) |
 
 Each unit depends on the ones before it. Unit 3's definitions also wait on the OQ-28 probe, because one of its options changes the relation's `U` clause.
@@ -51,7 +51,7 @@ Each unit depends on the ones before it. Unit 3's definitions also wait on the O
 2. **One probe phase for every unit, ordered by risk,** all in `experiments/`:
    1. open frames on resume, cancel and drop, together with a handler between two lenders (OQ-9, OQ-3);
    2. stored continuations (OQ-28);
-   3. what `W` holds and its empty-stack instance (OQ-44, 46, 57, 58, 8). In the same batch, decided once: whether a `!` value or an unrestricted continuation may hold an entry of `σ`, with `!`'s outlives rule and 6.60 at stake. Unit 3 owns the definition, and Unit 4 uses it;
+   3. what `W` holds and its empty-stack instance (OQ-44, 46, 57, 58, 8). Multi-shot is ignored as a design goal, so this is decided without a probe: no `!` value and no unrestricted continuation holds an entry of `σ`. Unit 3 proves that obligation;
    4. the borrow constants at resuming rows: `withswap`'s refold on every exit path (OQ-20), and finalisers at a resuming table (OQ-7);
    5. the async axis (OQ-56, 60, 61, 67);
    6. Units 1 and 2's probes.
@@ -80,7 +80,9 @@ Each unit depends on the ones before it. Unit 3's definitions also wait on the O
 - **`[handle]`'s premises at a row-variable tail.** The handled row may end in a variable, so forwarding has to be sound at every table that variable can stand for.
 - **The law set comes first.** The grade premise is derived from graded algebraicity and linearity, which are fixed in the full spec before this unit lands.
 
-**First unknown.** What grade a row-variable tail carries at `[let]` and `[then]`. A conservative reading ("could be weakening and unrestricted") would force `Persistent Γ₂` on every row-generic `[let]`. "Multi-shot only if free" is the criterion that judges the answer.
+**Grade of a row-variable tail.** Multi-shot is ignored as a design goal (2026-10-04). So a row variable ranges over rows with no unrestricted operations, and its tail is graded as weakening at most. It never forces `Persistent Γ₂`.
+
+**First unknown.** Is `[handle]`'s forwarding sound at every table a row variable can stand for?
 
 **Done when:**
 - the rules at sums and row variables are inside `fundamentalC`;
@@ -100,7 +102,7 @@ Each unit depends on the ones before it. Unit 3's definitions also wait on the O
 - **Unary laws over the kernel relation:**
   - return, operation, forwarding and initiality;
   - the comodel laws;
-  - linearity of continuations and the multi-shot condition;
+  - linearity of continuations;
   - the tail-resumptive law and graded algebraicity, which justify the erased lowering classes.
 
   Whether lowering correctness is a theorem is OQ-23. Fusion and the other equations are binary, and so optional: "optional and don't get pursued unless they become necessary for safety".
@@ -167,7 +169,7 @@ Tables, `Ext` (which becomes `⊑`) and how points-to reads a stored payload (OQ
   - `Persistent`/`Drops`;
   - `NoOwn` in the tables.
 
-  Each must also constrain `σ`. Whether a `!` value or an unrestricted continuation may hold an entry is decided in the probe phase. This unit defines it, and proves the obligation at the outlives entry.
+  Each must also constrain `σ`. No `!` value and no unrestricted continuation holds an entry; this unit proves it at the outlives entry.
 - **A new lemma: a closed program's final world has `σ' = []`.** With it, `reclaim` and adequacy apply. A handler's value carries no entry whose lender lies inside the handled body.
 - **Arising is derived from `TW`,** not stated beside it. That is the remaining work of OQ-45.
 - **Core is the `σ = []` instance.** `NilAgreesU` is to be stated. The quantifier placement is settled by stating both candidates in Lean (OQ-8).
@@ -197,7 +199,7 @@ Tables, `Ext` (which becomes `⊑`) and how points-to reads a stored payload (OQ
 
 **Well-formed row.** The condition is semantic: the row's table frames under the frame rules (`TableOK`). A syntactic class is only a sufficient condition.
 
-**First unknown.** Does `withswap` refold on every exit path (OQ-20)? Can finalisers run at a resuming table (OQ-7)? Whether an unrestricted continuation may hold a lend is taken from Unit 3's definition. Row variables at a borrow callback are settled with lifetime-polymorphic operation types (OQ-56).
+**First unknown.** Does `withswap` refold on every exit path (OQ-20)? Can finalisers run at a resuming table (OQ-7)? No unrestricted continuation holds a lend (Unit 3). Row variables at a borrow callback are settled with lifetime-polymorphic operation types (OQ-56).
 
 **Guarantees.**
 - While a lend is in `σ`, its lender's frame is not exited.
@@ -249,7 +251,7 @@ A restriction does not close this unit; an obstruction goes to the user.
 | item | why |
 |---|---|
 | Binary laws and kernel equations, fusion included, with its composite-handler term (OQ-49) | "optional and don't get pursued unless they become necessary for safety" (user, 2026-10-02). TwoRun was considered for them; it does not build on `main`, and nothing here depends on it. |
-| Multi-shot beyond what is free | "we also don't need multishot unless we get it for free" (2026-10-02) |
+| Multi-shot | ignored as a design goal: "TOTALLY IGNORE MULTISHOT AS A DESIGN GOAL. If it works it works, if it doesn't, it doesn't" (user, 2026-10-04). It never blocks or shapes anything. On friction, the `unr` qualifier is restricted or removed. |
 | Higher-order operations | decision 57: out of scope, read as not now |
 | Shallow handlers | handlers are deep (decision 62) |
 | Threads beyond the split of `σ` | required eventually. The split is stated so the door stays open. |
