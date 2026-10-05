@@ -1,0 +1,8 @@
+[book]
+title = "Effects meet borrows: a research notebook"
+description = "The space of effect systems over the BoLo borrow calculus: properties, evidence, options and trade-offs, before the spec decides."
+language = "en"
+src = "src"
+
+[build]
+build-dir = "book"
