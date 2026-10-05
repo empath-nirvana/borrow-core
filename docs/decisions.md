@@ -34,7 +34,7 @@ Each entry: the decision, and why. Newest last.
 14. **A compiler MVP that keeps options open.** Uniform representation with exact memory
     accounting, explicit tail calls, per-stage interpreters, a backend-neutral flat IR, and
     wasmtime as the engine. Talos is deferred until its interfaces settle.
-15. **Shallow handlers are primitive; deep handlers are derived.** A suspended computation is
+15. **Shallow handlers are primitive; deep handlers are derived.** *Revised by decision 62: handlers are deep.* A suspended computation is
     codata; one observation is a shallow handler, and a deep handler is a fold or a loop.
 16. **Monads stay in the core.** The surface is direct style.
 17. **A feature is done when it compiles.** Spec, core proofs, checker, lowering and a running
@@ -707,7 +707,7 @@ Each entry: the decision, and why. Newest last.
     - **Withdrawn**: `gen fn`, `gen { }`, `yield from`, the `gen` type, callbacks that yield (they need effectful callbacks, #161; `corpus/pending/yield-callback.bc`), the generator machine and the fallback to nested binds (`gen_bind`, `lib/gen.bc`): a body the machine does not cover is an error that names it.
     - **A generator cannot hold a capability across `yield`** (`corpus/pending/gen-digits.bc`): the kernel's `[let]` asks what is live across an affine operation to drop, and a capability has no destructor; a cancel answers `()`, with no residual. Not taken: a `linear ctl` iteration effect, which allows it but not `break`.
 57. **Effect polymorphism and functions over computations (#161, `docs/effect-polymorphism.md`; the user's decisions of 2026-10-01; spellings provisional).**
-    - **No row variables in the kernel (Option 2).** A function type states only what the callee provides. The kernel stays first-order in rows: no new `CTy` former, relation clause or `CDerives` rule.
+    - *Superseded by decision 62: the kernel has row variables.* **No row variables in the kernel (Option 2).** A function type states only what the callee provides. The kernel stays first-order in rows: no new `CTy` former, relation clause or `CDerives` rule.
     - **Provided and tunneled rows.** A computation parameter's written row is what the callee serves; its control effects are at **ports**, static names fixed by the parameter's declaration. Every other effect of the argument tunnels to the handlers in scope where the argument was written.
     - **Copies.** Instances per assignment of names are typing artefacts (a renaming lemma would let the checker derive once). The default is one body per (function, profile of the tunneled row), with the callback a defunctionalised closure value whose environment is lent; specialising per callback is an optimisation chosen by a heuristic. Answering effects are capability arguments and add no copies.
     - **Site freshness (R3) is checked by the elaborator only.** It is an abstraction property, not a safety one: the FP holds either way. It may move into `[handle]` later as a pure restriction.
@@ -801,3 +801,17 @@ Each entry: the decision, and why. Newest last.
     - **Spellings (provisional):** `where S: 'c` after a function's result type (and its row) for
       a lifetime bound on a type parameter; `'main` for `main`'s lifetime; `aff_new_boxed` for the
       bounded constructor of `lib/aff.bc`. Rust's `T: 'a` is the comparison only.
+62. **The effect calculus (the user's decisions of 2026-10-03, #290).**
+    - **Nothing can break the borrow calculus.** In the user's words: "NOTHING CAN BREAK THE BORROW CALCULUS."
+      - This is about the guarantees. The user: "There is a big difference between doesn't break the borrow calculus and doesn't change bolo. You can't add an effect system without changing it. They interact."
+      - BoLo's definitions change where effects and borrows interact.
+      - Borrow safety must still be proved for every program, effectful ones included, and no effect feature is a way around borrowing.
+    - **The kernel has row variables.** In the user's words: "of course we have row variables in the kernel." This supersedes decision 57's first bullet.
+    - **Handlers are deep**, as SPEC §19 builds them. This revises decision 15.
+    - **Cancellation is what SPEC §19 and the unwinding effects do as built.** In the user's words: "Whatever they do is what we decided."
+    - **No hard-stop phase while planning.** The tier-2 hard-stop rule is not in force. In the user's words: "There's no hard stop phase now we are just planning."
+63. **Multi-shot continuations are not a design goal (the user's decision of 2026-10-04).**
+    - In the user's words: "TOTALLY IGNORE MULTISHOT AS A DESIGN GOAL. If it works it works, if it doesn't, it doesn't, I don't care either way."
+    - It supersedes "we also don't need multishot unless we get it for free" (2026-10-02).
+    - Multi-shot never blocks, shapes or adds cost to a definition, rule, law, proof or plan.
+    - Where the `unr` qualifier or `multi ctl` causes friction, it is restricted or removed.
