@@ -1236,11 +1236,10 @@ def OpenFrame66 : Prop :=
   `P̂` of the content *at the stop*. `anti_handOn_needs_invariant` (proved): if the place holds
   `own(w)` at the top of the stop's resource and `P̂(w)` holds of no resource, no closure of the stop
   by any `τ′` is `↭`-related to the start's closure. `OpenFrame66`'s premise, the body's `ewpW`,
-  does not exclude such a stop (a body may store outside `P̂` and then perform), so its conclusion
-  asks for more than its premise gives at such a body. I have not built that body, its `ewpW`, or its
-  `TW` history, so `¬ OpenFrame66` is not proved. OQ-9 (b)'s `AntiRelend` (GhostEnd,
-  `Frames.lean:68`) asks the body to hand back `ℓ ↦ w ⋆ 𝒱⟦T⟧(w)` at every stop. So under this draft's
-  (37), (a) for 6.66 needs the same invariant at the stop as (b) does. The alternatives are a
+  may not exclude such a stop at the resource level, but `π` is existential in `wpGW`, so this does
+  not show that `OpenFrame66` fails. I have not derived `OpenFrame66`, and I have not verified that
+  any obstruction to it is real. No body, `ewpW` or `TW` history has been built. OQ-9 (b)'s `AntiRelend` (GhostEnd,
+  `Frames.lean:68`) asks the body to hand back `ℓ ↦ w ⋆ 𝒱⟦T⟧(w)` at every stop. Whether (a) for 6.66 needs the same invariant at the stop is not derived. The alternatives are a
   premise of `AntiRelend`'s kind on `OpenFrame66`, or a (37) that reads an open anti entry's place by
   the entry's own `(β, P̂)` without refolding it. Both change a definition here; neither is made.
 

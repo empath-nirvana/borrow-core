@@ -17,8 +17,7 @@ import WorldW.Coherence
   their place follows. The design's first conjunct is `close_flat_agree_off_anti`.
 * `close_upd_coherent`: two closures are `↭`-related. Proved after **correction 2** (recorded in
   DESIGN §2): `CloseE`'s 6.150 step now asks that the image is a reborrow image at the entry's
-  lifetime (`ResU.Reb β σR χ`, the printed H16). Without it the image's cells may sit at lifetimes
-  the pin does not cover, and the statement is false at a resource the design admits.
+  lifetime (`ResU.Reb β σR χ`, the printed H16). With it the statement is proved. Whether it fails without H16 is not stated in Lean.
 * `upd_choice_free`: conjunct (37) holds at one pair of closures iff at every pair.
 * `pin_harmless`: where the lifetimes are in the order arising obligations have, the pin removes
   no split.

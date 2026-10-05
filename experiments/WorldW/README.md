@@ -142,15 +142,16 @@ resume, the return, the abortive stop and the cancel's end. 6.40 (untranscribed)
 The instances are at the resource level (the first stop's share, `e₂`'s view, with
 `α₃ ⊏ α₂ ⊏ h`). They are not built from a `TW` history of the between-lenders program.
 
-The diagnostic settles checkpoint 3 of DESIGN §3.4. `ptoMutS` stores the payload predicate frozen
+The diagnostic gives two facts, both at an input that is not built from a `TW` history. It does not settle checkpoint 3 of DESIGN §3.4. `ptoMutS` stores the payload predicate frozen
 at the list of records longer-lived than the cell, and asks it to *equal* the payload relation at
 that list. When an older 6.64 frame closes while the younger `Mut` view exists, its records leave
 the list. At `1 ⊕ 1` nothing changes. At `1 ⊕ Imm 'x₁ 1` the relation reads the list through
 `CohE`, and at a view of the older frame's place the two lists give different predicates, so the
 view is no longer `ptoMutS` at the shorter list. The distinguishing input is not built from a `TW`
-history, so this measures our `ptoMutS` (`[about ours]`), not (a): the list-reading between-lenders
-probes would stop there, and the list-stable ones need not (reading 4). Under OQ-9 (b) the re-lend
-at a fresh lifetime keeps the list LIFO and the case does not occur.
+history. So it does not say where the list-reading between-lenders probes stop. It also does not
+say whether a failure there belongs to our `ptoMutS` or to (a). Deciding that needs one of two
+things: an arising witness (a `TW` history of the between-lenders program), or the list-reading
+probe attempted until it stops at a named step.
 
 ### Stage E — 6.150 (`Record150.lean`)
 
@@ -180,29 +181,30 @@ A stop that hands the anti entry on must close it in (37), and closing it refold
 needs `P̂` of the content at the stop. `anti_handOn_needs_invariant`: if the place holds `own(w)` at
 the top of the stop's resource and `P̂(w)` holds of no resource, no closure of the stop, by any list,
 is `↭`-related to the start's closure. `OpenFrame66`'s premise (the body's `ewpW`) does not exclude
-such a stop: a body may store a value outside `P̂` and then perform. So the statement asks for more
-than its premise gives at such a body. I have not built that body, its `ewpW` or its `TW` history,
-so `¬ OpenFrame66` is not proved. OQ-9 (b)'s `AntiRelend` (GhostEnd) asks the body to restore
-`ℓ ↦ w ⋆ 𝒱⟦T⟧(w)` at every stop: under this draft's (37), (a) for 6.66 needs the same.
+such a stop at the resource level. What is proved is narrower than a failure of `OpenFrame66`:
+`anti_handOn_needs_invariant` fixes the ghost resource's shape at the stop, and `π` is chosen
+existentially in `wpGW`, so it does not show that a run of `OpenFrame66`'s conclusion is forced into
+that shape. I have not derived `OpenFrame66`, and I have not verified that any obstruction to it is
+real. No body, `ewpW` or `TW` history has been built.
 
 ## What the outcomes mean
 
 **OQ-9 (a).** Two things are settled in Lean, one is not.
 * The draft's relativised `↭` is coherent: conjunct (37) does not depend on which closures a run
   picks (`close_upd_coherent`, `upd_choice_free`), at every resource. That needed two corrections
-  to our closure (corrections 1 and 2), both about `Close`, neither about (a). A definition of
-  Unit 3's stop that reads `↭` relative to the closure of the open entries must carry the printed
-  H16 at the 6.150 exit and the pin at the anti step.
+  to our closure (corrections 1 and 2), both about `Close`, neither about (a). With H16 at the
+  6.150 exit and the pin at the anti step, `Close` is coherent (`close_upd_coherent`). Whether
+  either is *needed* has not been checked: `UnpinnedIncoherent` is unfinished, and the H16 case is
+  not stated in Lean.
 * The resource core of carrying a 6.64 frame, a 6.65 lend and a 6.150 record across a resuming
   stop, and of closing the first two at a later return, abortive stop or cancel's end, goes through
   with printed lemmas only (6.24, 6.27, 6.28, 6.29, 6.38, 6.39, 6.50, 6.52, 6.59), with the lend
   table (6.50) standing for the box (`handOn64`, `exit64`, `handOn65`, `handOn150`). That is
   DESIGN §7's reading 2, checked for 6.64, 6.65 and 6.150.
-* For 6.66 the draft's (37) needs the anti entry's invariant `P̂` at every stop that hands it on
-  (`anti_handOn_needs_invariant`): closing the entry at the stop refolds the place. That is the
-  invariant OQ-9 (b)'s `AntiRelend` asks for at each stop. So under this (37), (a) gains nothing
-  over (b) for 6.66, unless (37) reads an open anti place by the entry's own `(β, P̂)` instead of
-  refolding it.
+* For 6.66: under the draft's (37), suppose a stop's ghost resource holds `own(w)` at an open anti
+  place and `P̂(w)` is unsatisfiable. Then the lender's (37) fails at that stop
+  (`anti_handOn_needs_invariant`). Whether `OpenFrame66` fails, and how (a) compares with (b) for
+  6.66, are not derived.
 * The probes themselves (`OpenFrame64`, `OpenFrame65`, `OpenFrame66`, `OpenRecord150`) are
   unfinished. The steps 6.64's and 6.65's still need are listed above; none of them is a step
   these results found blocked.
@@ -215,9 +217,10 @@ out of nesting order under both options (`resumeOutOfOrder`). The draft relation
 rejects nothing `CompatW` admits (`argBelowExtent`, `argAboveExtent`). So whether a handler between
 two lenders may resume, cancel or drop `κ` inside a younger lend is decided by OQ-8's D-ORD
 together with OQ-3, not by this draft. The (b) arm's probes, which would show (b) accepting the
-configuration at an unordered `σ`, are unfinished. Their list-reading instances would stop at our
-frozen list (`not_mutViewSurvives_reads`, checkpoint 3), their list-stable ones need not
-(`mutViewSurvives_stable`).
+configuration at an unordered `σ`, are unfinished. The diagnostic (`mutViewSurvives_stable`
+proved, `not_mutViewSurvives_reads` refuted) is at a non-arising input and predicts nothing about
+them. The premises of the four negative statements above are shown satisfiable at a concrete
+resource, not built from a `TW` history.
 
 **OQ-44.** OQ-44 (a)'s entries suffice to record an open 6.65 lend: a `mut` cell at the stop that
 the start's closure lacks forces a `mut` entry at its place and lifetime in what the stop hands on
@@ -227,12 +230,14 @@ the start's closure lacks forces a `mut` entry at its place and lifetime in what
 **OQ-57.** Not addressed here, as DESIGN scopes it out; FINDING-3 stands as written there.
 
 **Unit 3.** For the definitions:
-* the stop relativisation is a conservative extension: Core is the `τ = σ = []` instance
-  (`wpGW_nil`, `ewpTS_ewpW`);
+* Core embeds into the draft: Core's `ewpTS` implies `ewpW []` (`ewpTS_ewpW`), and `wpGW` is `wpG`
+  at `τ = τ' = []` (`wpGW_nil`, an iff only at a postcondition that forces `τ' = []`). The converse
+  does not hold: `ewpW [] []` admits stops that hand on entries, so it is not Core's relation. That
+  T1 holds for tier-1 programs is open;
 * the σ-component of `#` restricts frames only at `imm` and `reb` entries; at `mut` and `anti`
   entries it is `#` (`compatW_iff_hash`, F1);
-* exclusivity at a stop is not injectivity of entries to keys: the exclusive keys at one location
-  alternate, and repeat across nested `withbor3`s (correction 3);
+* exclusivity at a stop is OPEN. Injectivity of entries to keys is refuted at a non-arising
+  resource (`not_holdsInjective`), and the alternation form (`HoldsChain`) is unfinished;
 * a resumer's frame inherits compatibility from the stop's pieces and its own
   (`compat_at_stop`, `compat_resume`); a resumer read only through a relation is FINDING-1, unchanged.
 

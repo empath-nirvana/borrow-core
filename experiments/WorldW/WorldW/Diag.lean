@@ -14,8 +14,9 @@ equality, not OQ-9 (a).
   *equal* the payload relation at the shorter list; `CohE` makes the two differ at a view of the
   older frame's place. The input is not built from a `TW` history.
 
-So checkpoint 3 of DESIGN §3.4 is where the list-reading between-lenders probes would stop, and
-it is about our frozen list (`ptoMutS`, `[about ours]`), not about (a): reading 4 holds.
+The input is not built from a `TW` history. So this predicts nothing about where the
+list-reading between-lenders probes stop, and does not say whether a failure there belongs to our
+`ptoMutS` or to (a).
 -/
 
 noncomputable section

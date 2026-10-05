@@ -6,8 +6,10 @@ results. They are not kernel results, and they are not results at Unit 3's `W`. 
 other experiment are untouched.
 
 > [!WARNING]
-> **Two of three verifiers failed this checkpoint with major findings. Do not rely on the
-> conclusions drawn from these outcomes until the findings are resolved.** The Lean builds, and
+> **Two of three verifiers failed this checkpoint with major findings.** All of them were about
+> prose that claimed more than the Lean proves. They are resolved: README.md, DESIGN.md, and the
+> docstrings of `Checks.lean` and `Diag.lean` now state only what is proved. The list below records
+> what was corrected. The Lean builds, and
 > every theorem's axioms are within `[propext, Classical.choice, Quot.sound]`. One verifier checked
 > all 148 theorems. The problem is the README and DESIGN: their prose claims more than the Lean
 > proves. The major findings:
