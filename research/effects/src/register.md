@@ -19,4 +19,6 @@ This is the global view, one row per property. **Status** uses the words defined
 | P13 | [Zero-cost lowering](properties/zero-cost.md) | evidence | the erased lowering, which compiles and runs; corpus counts | P11 | decide whether lowering correctness is a theorem (OQ-23) |
 | P14 | [Well-bracketing conservativity](properties/conservativity.md) | proved for tier 1 by construction | T1, the lexical stop (`Core/EffDefs.lean:40`) | P4 | state what tier 2 gives up, and for which classes |
 
+**Not tracked:** multi-shot. It is ignored as a design goal. The side question of whether, and why, it is hard is recorded in [Multi-shot](side/multi-shot.md).
+
 **Next by the rule.** P4, I2. P5, P10 and tier 2 depend on it, and it carries the largest unknown. Its first step is to state it in Lean as equivariance, then check whether Restrat's `mut_not_natural` arises.

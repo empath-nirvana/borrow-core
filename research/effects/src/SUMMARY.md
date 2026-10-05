@@ -34,6 +34,10 @@
 - [P13 Zero-cost lowering](properties/zero-cost.md)
 - [P14 Well-bracketing conservativity](properties/conservativity.md)
 
+# Side questions
+
+- [Multi-shot (not a goal)](side/multi-shot.md)
+
 # Design space
 
 - [Axes and options](design-space/axes.md)
