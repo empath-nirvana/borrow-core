@@ -116,7 +116,11 @@ Use these by name. Don't rebuild them. Details and paper page numbers are in [06
 
 These are properties of the current kernel, each with a location.
 
-1. **T1 is one clause.** At every stop, `wpG` requires the open Imm frames and records to equal those at entry (`Core/EffDefs.lean:40`), so no internal lend spans a suspension.
+1. **No lend spans a suspension. Two conjuncts of `wpG`'s stop do this, not one.**
+   - **T1, conjunct 40** (`Core/EffDefs.lean:40`) requires the open Imm (6.64) frames and records to equal those at entry. It stops an Imm frame from spanning a stop.
+   - **`↭`, conjunct 37** (`ResU.UpdV ρ π`) stops a Mut (6.65) lend from spanning a stop. A 6.65 lend leaves the frame and record lists unchanged, so T1 accepts it, but `↭` forbids a run ending with a new `mut` cell.
+
+   This is machine-checked in the targets library (`experiments/Targets/Targets/Restricted/RunEnd.lean`, branch `targets`), using LoopBorrow's `not_upd_of_new_mut`. So tier 2 must change the update relation at a stop, not only lift T1.
    - It is our conjunct, not a printed row: [TR]'s `wp` ends at a value.
    - Its consumers are every `F_Σ` clause, `wpG_bind`, and the `hFs` hypotheses of the frame lemmas.
    - Downstream it causes: borrow callbacks restricted to `Row.Unwind` (abortive operations only); and the surface rejecting a resuming operation inside a borrow block or a resuming `for` body over a lend.
