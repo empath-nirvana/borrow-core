@@ -4,7 +4,7 @@
 
 A suspended computation (a continuation) is a value of the resource world. It can be passed, stored and dropped like any owned thing, and its semantic type is well defined.
 
-**Lean target:** designed in [`experiments/Targets/DESIGN.md`](../../../../experiments/Targets/DESIGN.md) as `Targets.I1` (§5), a conjunct of the end state, with the program-level corollary `Targets.I1Prog` (stored suspensions: `storeCancel`, AT17). In Lean: `Targets.I1` is PROVED AT σ=[] (`i1_core`), OPEN at W; `Targets.I1Prog` follows from done (`i1Prog_of_endState`).
+**Lean target:** [`experiments/Targets/RESTRUCTURE.md`](../../../../experiments/Targets/RESTRUCTURE.md) §3.2: in done, E9 (a continuation stored and resumed after its handler returned) and E1′ (a real suspension, resumed after its handler returned), with the program-level corollary `I1Prog` (stored suspensions: `storeCancel`, AT17). The world-level `I1` is the proof device's, beside done. In Lean: `I1 coreW` is PROVED AT σ=[] (`i1_core`); `I1Prog` follows from the combined theorem at `c = .any` (`i1Prog_of_combined`); E1′ and E9 at our instance are OPEN.
 
 ## Why it matters
 

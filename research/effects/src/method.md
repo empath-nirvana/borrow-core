@@ -13,7 +13,7 @@
 1. Among properties whose statement is agreed, pick the one the most other properties depend on.
 2. Break ties by risk: the larger unknown goes first.
 
-**What counts as done.** A property is done when its Lean target holds at W with no `sorry`, as a conjunct of the end state `EndStateAt J₂ W` ([`experiments/Targets/DESIGN.md`](../../../experiments/Targets/DESIGN.md) §1.0), at the same world and typing system as every other conjunct. Done names its world `W` and passes the step-index audit of `W`'s definition (§4.4), because no step-indexing is a property of a definition, not of the laws. Targets beside done (the freeze binder, conservativity at every type) are recorded but do not decide it. Prose results are evidence, not status.
+**What counts as done.** A property is done when its Lean target holds with no `sorry`, as a conjunct of the combined theorem `Combined orowRF J₂ W admClosedOp .any` ([`experiments/Targets/RESTRUCTURE.md`](../../../experiments/Targets/RESTRUCTURE.md) §3.5), at the same world and typing system as every other conjunct. Done names its world `W` and passes the step-index audit of `W`'s definition (RESTRUCTURE §5.2), because no step-indexing is a property of a definition, not of the laws. Targets beside done (the proof device, the freeze binder, conservativity at every type) are recorded but do not decide it. Prose results are evidence, not status.
 
 **What an obstruction is.** An obstruction is reported only as an elaborating `def … : Prop`, or as a Lean configuration with every hypothesis discharged whose counterexample arises in `TW`. Otherwise the report says "not derived, and no obstruction verified".
 

@@ -4,7 +4,7 @@
 
 A handler means what its clauses say: initiality of the handler as a model, plus the unary laws (return, operation, forwarding, the tail-resumptive law, graded algebraicity).
 
-**Lean target:** designed in [`experiments/Targets/DESIGN.md`](../../../../experiments/Targets/DESIGN.md) as `Targets.P11` (§6), unary, a conjunct of the end state; the equational laws are `Targets.Laws` (§3, T2), with hiding stated under a simulation of answering handlers' states and fusion at a composite-handler parameter (OQ-49). In Lean: `Targets.P11` (`HandleCompat ∧ RedLaws`) is PROVED AT σ=[] (`p11_core`), OPEN at W; `RedLaws` holds at every world whose operation tables are monotone (`redLaws_of_mono`). `Targets.Laws` is stated and OPEN (binary, out of the first pass).
+**Lean target:** [`experiments/Targets/RESTRUCTURE.md`](../../../../experiments/Targets/RESTRUCTURE.md) §1.5, §3.7: A's S4 `HandlerSem`, in done: the handler's return, operation and unwind steps, deep resume and cancel of a captured continuation, and finalisation, each in every context up to administrative steps. At the world, P11 (`HandleCompat ∧ RedLaws`) is the proof device's, beside done. The equational laws are A₂ `HandlerLaws` (binary, at A's contextual approximation) and, over Core, `Laws` (hiding under a simulation of answering handlers' states, fusion at a composite-handler parameter, OQ-49). In Lean: S4 at our instance is OPEN (`handlerSem_ourInst` is not built). `P11 coreW` is PROVED AT σ=[] (`p11_core`), and `RedLaws` holds at every world whose operation tables are monotone (`redLaws_of_mono`). The binary laws are stated and OPEN (out of the first pass).
 
 ## Why it matters
 

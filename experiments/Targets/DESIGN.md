@@ -1,5 +1,17 @@
 # Targets: the effect calculus's end state, stated
 
+> [!IMPORTANT]
+> **Superseded in part by `RESTRUCTURE.md`**, which reorganises the targets into an effect system
+> (A), the borrow calculus (B), their interaction (I) and our calculus as one instance of A, and
+> which the library now follows. It supersedes this file's architecture (§1.0–§1.5, §4.3, §9, and
+> §10's shape of done): done is `I.Combined orowRF J₂ W admClosedOp .any` with `audit_W`, not
+> `EndStateAt`. The semantic world of §1.3–§1.4 and `FIX-RUN-END.md` is carried over as the
+> interaction's proof device. **Every statement below that presents `ReleasedOnceAll` (D9) or
+> P8.a as carrying exactly-once release is corrected there:** `ReleasedOnceAll` is a tautology
+> about runs, and the guarantee is B4 (leak freedom) with B5 (`ReleasedOnceReuse`, at-most-once on
+> runs that reuse locations), RESTRUCTURE §2.4 and §5.1. P8.b, the continuation's use, is A's S6
+> `ContUse`. RESTRUCTURE §Unresolved records the build.
+
 This file says what "done" means for the effect calculus. "Done" is one proposition,
 `EndStateAt J₂ W Adm RF` (§1.0), proved at a **named** typing system `J₂` and a **named** world
 `W`, together with the audit of `W`'s definition (§4.4). Every other target in this file is one
@@ -1126,6 +1138,11 @@ claimed for it. Divergence is an effect and totality is not a goal (decision 35)
 place where that is kept true.
 
 ### D9. Finalisation exactly once
+
+> [!NOTE]
+> Corrected by RESTRUCTURE §2.4: on runs that reuse no location, `ReleasedOnceAll` is a tautology
+> given `NoReuse` and `Final`. Exactly-once release is B4 with B5 (`ReleasedOnceReuse`, every run the
+> image of a bump run), not this section's statement.
 
 **Resources.** In this machine three facts hold: `alloc`/`tab` take a free location; `free` needs
 an allocated one (`Head.free` asks `μ ℓ = some v`); a step that matches no rule is stuck. A run

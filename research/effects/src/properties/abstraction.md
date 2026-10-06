@@ -4,7 +4,7 @@
 
 There is no accidental handling: a handler cannot intercept effects of code it was handed abstractly, and handler state is representation-independent.
 
-**Lean target:** designed in [`experiments/Targets/DESIGN.md`](../../../../experiments/Targets/DESIGN.md) as `Targets.Abstraction` (§3, T3): `Tunnel` (Zhang–Myers Example 1 over a row-polymorphic `f`), `RepInd`, `Encap`. Binary, out of the first pass. In Lean: `Targets.Abstraction` with `Tunnel`, `RepInd` and `Encap` (`experiments/Targets/Targets/Statements/Abstraction.lean`), stated and elaborating; OPEN (binary, out of the first pass). Its proof device, T3 from a binary fundamental lemma, is named-only.
+**Lean target:** [`experiments/Targets/RESTRUCTURE.md`](../../../../experiments/Targets/RESTRUCTURE.md) §1.6, §1.7: in done, E6 (`Tunnel`, unary): a function that handles a label of its own, written once, serves a callback at every row without that label, and the callback's own raise of another label escapes it (Zhang–Myers Example 1, in the shape `∀α. (N → [N]α) → [N]α`, `PolyUseLacks`). The binary form is A₂'s `Abstraction` (`Tunnel`, `RepInd`, `Encap`), out of the first pass, and its form over Core is stated in `Targets/Instance/Binary.lean`. In Lean: E6 needs effect polymorphism, at every instance (`not_tunnel_of_monoCallback`, PROVED); E6 at our instance is OPEN; the binary forms are stated and OPEN. Their proof device, T3 from a binary fundamental lemma, is named-only.
 
 ## Why it matters
 

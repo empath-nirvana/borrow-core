@@ -1,182 +1,139 @@
-import Targets.Restricted.Acceptance
-import Targets.Restricted.AcceptedT1
-import Targets.Restricted.Answering
-import Targets.Restricted.Composition
-import Targets.Restricted.CoreLaws
-import Targets.Restricted.Corollaries
-import Targets.Restricted.EffectSafety
-import Targets.Restricted.Interface
-import Targets.Restricted.NoInterception
-import Targets.Restricted.NonVacuity
-import Targets.Restricted.RowAlg
-import Targets.Restricted.Soundness
-import Targets.Restricted.Transport
-import Targets.Restricted.Typing
-import Targets.Restricted.Unwind
-import Targets.Restricted.Release
-import Targets.Restricted.Handlers
-import Targets.Restricted.RunEnd
-import Targets.Statements.Abstraction
-import Targets.Statements.ZeroCost
+import Targets.I.Combined
+import Targets.B.NonVacuity
+import Targets.B.Release
+import Targets.Instance.Bridges
+import Targets.Instance.Binary
+import Targets.Instance.ZeroCost
+import Targets.Instance.Restricted.NoInterception
+import Targets.Instance.Restricted.Unwind
+import Targets.Instance.Restricted.Programs
+import Targets.A.NonVacuity
+import Targets.A.Binary
+import Targets.A.Lowering
 import Targets.Audit
 
 /-!
-# Targets — status (DESIGN §1.6)
+# Targets — status, by system (RESTRUCTURE §0)
 
-Status words: **PROVED**, **PROVED AT σ=[]**, **PROVED AT A RESTRICTION** (the restriction
-named), **OPEN**.
+Status words: **PROVED**, **PROVED AT σ=[]**, **PROVED AT A RESTRICTION** (the restriction named),
+**OPEN**.  Four parts: **A**, an effect system, abstractly; **B**, the borrow calculus, given; **I**,
+the interaction and the combined theorem; **the Instance**, our calculus as one instance of A.
 
 ## Done
 
-Done is `EndStateAt J₂ W Adm RF` (`Statements/EndState.lean`) at the `Adm` OQ-56 settles and the
-`RF` OQ-13's remaining question settles, with two parts:
+Done is `I.Combined orowRF J₂ W admClosedOp .any` (`Targets/I/Combined.lean`) at a **named**
+tier-2 typing system `J₂` and a **named** world `W`, with `audit_W` (`Targets/Audit.lean`): A's
+properties at our instance at every admissible effect context, B's guarantees in the composite, the
+interaction's option-neutral rules, the pins, the composite's programs and its rejections.  Fixed at
+`admClosedOp` until OQ-56 is chosen and at `orowRF` until OQ-13's remaining question is answered.
 
-1. `theorem endState_W : EndStateAt J₂ W Adm RF` at a **named** tier-2 typing system `J₂` (the
-   kernel's, unr-free) and a **named** world `W`;
-2. `audit_W`: the step-index audit of `W`'s definition (`Targets/Audit.lean`, DESIGN §4.4)
-   passing.
+**Done: OPEN.**  Neither `J₂` nor `W` is defined.  **Tier 1** (`I.Tier1 J₁`): OPEN; `J₁` (today's
+rules over open rows with the row `∀`) waits on RESTRUCTURE §7 Q1–Q2.
 
-**Done: OPEN.**  Neither `J₂` nor `W` is defined.  `EndState` (the existential) follows from done
-and is not done: an existential witness has no definition to audit.
+**The restricted tier-1 reduction** (`I.Tier1Core`, at today's kernel `tier1Open` and Core's world):
+OPEN.  Proved of it: the world conjuncts and the device at `coreW` (`status_tier1Core_world`), and
+B's guarantees from `Adequate coreB` and the step-for-step simulation `BumpSim`
+(`status_tier1Core_guarantees_of`; B5 aside, from `Adequate coreB` alone, `status_tier1Core_B_of`).
+Missing: A's (S) properties at our instance (the bridges below marked OPEN) and `I4a` at today's
+unr-free kernel; and the two open statements themselves, `Adequate coreB` at every platform and for
+the drive, and `BumpSim` (OQ-43).
 
-**Tier 1 (`Tier1End`): OPEN.**  Proved at Core σ=[]: `RowAlgSafe orowRF`, `RowLink orowRF`,
-`WBCore`, `I4a tier1 admClosedOp .abortive`, and of `Guarantees tier1 coreW admClosedOp .abortive`
-the conjuncts `ExtendsNU`, `OutExtends`, `ReleasedOnceAll`, `EffSafe`, `NoInterception`, `WLaws`,
-`FL`, `I1`, `I2`, `I3`, `I5`, `LifetimeSound`, `Exclusive`, `P11`, `ConservativeWB`.  Not proved:
-`Soundness tier1` (its return conjunct is proved at `Platform.none`), `SoundnessContracts tier1`,
-`FinaliserOrder tier1`, and `Adequate coreW` (its return conjunct is proved at `Platform.none`).
-`Tier1End` follows from `Adequate coreW` and `FinaliserOrder tier1` alone
-(`status_tier1End_of`): T1 and its contract form follow from FL and adequacy.  These two are what
-remains of DESIGN §9's second wave for tier 1, beside `AdequateOfLaws`, `BinderMachine` and the
-arising check.
-
-**`ReleasedOnceAll` holds at every typing system** (`releasedOnceAll`): its run premises carry the
-empty memory at the run's start and `Final` at its end, and with `NoReuse` that is all the
-occupancy argument reads.  Its typing content is T1's (`Terminates`, `SafeRuns`).
-
-## DESIGN §9
-
-**First wave.**
-
-| # | target | status | Lean |
-|---|---|---|---|
-| 1 | `(closedRowAlg Ξ).Laws ∧ .Safe`; `RowAlgSafe orowRF`; `RowLink orowRF` | PROVED AT A RESTRICTION (`RF = orowRF`) | `closedRowAlg_lawsSafe`, `rowAlgSafe_orowRF`, `rowLink_orowRF` |
-| 2 | `coreW`, the transports; `WLaws coreW` | PROVED AT σ=[] | `wpGW_core`, `ewpW_core`, `opTabW_core`, `cancelTabW_core`, `ptoMutSW_core`, `ptoImmSW_core`; `wlaws_core` |
-| 3 | `CDerivesNU`; `Extends tier1`, `ExtendsNU tier1`, `FL coreW tier1` | PROVED AT σ=[] | `CDerivesNU.toCDerives`, `extends_tier1`, `extendsNU_tier1`, `fl_core_tier1` |
-| 4 | `SoundnessOfFL`, `SoundnessContractsOfFL` (C2), `EffSafeOfFL` | PROVED (generic) | `soundnessOfFL`, `soundnessContractsOfFL`, `soundnessContractsOfFLWB`, `effSafeOfFL` |
-| 5 | `AdequateRetAt coreW Platform.none` | PROVED AT A RESTRICTION (`P = Platform.none`) | `adequateRetAt_core_none` |
-| 6 | `SoundRetAt tier1 Platform.none` | PROVED AT A RESTRICTION (`P = Platform.none`) | `soundRetAt_tier1_none` |
-| 7 | `stop_irreducible`; `AdequateEvery coreW`; `EffSafe tier1` | PROVED AT σ=[] | `stop_irreducible`, `adequateEvery_core`, `effSafe_tier1` |
-| 8 | `I1 coreW` | PROVED AT σ=[] | `i1_core` |
-| 9 | `I2 coreW OutJ.core admClosedOp .abortive` | PROVED AT A RESTRICTION (abortive rows) | `i2_core_abortive` |
-| 10 | `I3 coreW` | PROVED AT A RESTRICTION (nothing held) | `i3_core` |
-| 11 | `AdmExtends admClosedOp`; `OutExtends OutJ.core` | PROVED AT A RESTRICTION (`Adm = admClosedOp`); PROVED AT σ=[] | `admExtends_closedOp`, `outExtends_core` |
-| 12 | `NoInterception tier1` | PROVED AT σ=[] | `noInterception_tier1` |
-| 13 | `I5 coreW`; `I5beta` | PROVED AT σ=[]; PROVED (generic) | `i5_core`, `i5beta` |
-| 14 | `I4a tier1 admClosedOp .abortive` (C4) | PROVED AT A RESTRICTION (tier 1, abortive rows) | `i4a_tier1` |
-| 15 | `LifetimeSound coreW OutJ.core` | PROVED AT σ=[] | `lifetimeSound_core` |
-| 16 | `Exclusive coreW` | PROVED AT σ=[] | `exclusive_core` |
-| 17 | `HandleCompat coreW` | PROVED AT σ=[] | `handleCompat_core` |
-| 18 | `WBCore`; `ConservativeWB coreW`; `Conservative coreW` | PROVED; PROVED AT σ=[] | `wbCore`, `conservativeWB_core`, `conservative_core` |
-| 19 | the step-index audit on `coreW`; the pin of Core's relation | PASSES (`run_meta`) | `Targets/Audit.lean` |
-| 20 | the existing effect programs against T1 | PROVED AT A RESTRICTION (`P = Platform.none`) | `acceptedT1_*` |
-| 21 | the two-frame `UnwindRun` of §5 I3 | PROVED (an instance) | `two_frame`, `two_frame_steps`, `one_frame` |
-
-**Second wave.**
+## System A
 
 | target | status | Lean |
 |---|---|---|
-| `ReleasedOnceOfSound`; `ReleasedOnceAll J` | PROVED; PROVED (generic, every `J`) | `releasedOnceOfSound`, `releasedOnceAll` |
-| `RedLaws coreW`, hence `P11 coreW` | PROVED AT σ=[]; `RedLaws` PROVED (generic, at monotone tables) | `redLaws_core`, `p11_core`, `redLaws_of_mono` |
-| `AdequateOfLaws` (with `UpdSeq`, `UpdReclaim`) | OPEN | |
-| `SoundRetAt tier1 P` at platforms with operations, then `Soundness tier1` | OPEN | |
-| `SoundDriveAt tier1 Platform.none` | OPEN | |
-| `SoundnessContracts tier1` | OPEN | |
-| `FinaliserOrder tier1` | OPEN | |
-| `BinderMachine` at `rs = []` | OPEN | |
-| the arising check of Restrat's `not_vDenNatural` witness at `coreW` | OPEN (stated) | `NotVDenNaturalArises` |
-| the AT-rejects | OPEN | |
+| `EffectSystem`, S0–S6, E1–E10, `Props`; A₂ (`HandlerLaws`, `EffDepLaws`, `Abstraction`); A₃ (`Tgt`, `LoweringCorrect`, `ZeroCost`) | stated (elaborate) | `Targets/A/*` |
+| a typing that types nothing fails `EProps`; no effects fail it | PROVED (every instance) | `not_eProps_of_emptyTyping`, `not_eProps_of_noLabels` |
+| E1, E2, E6, E10 need effect polymorphism (row variables, decision 62) | PROVED (every instance; E10 with `LiftExt`) | `not_noColouring_of_monoCallback`, `not_higherOrderPoly_of_monoCallback`, `not_tunnel_of_monoCallback`, `not_reconciler_of_monoCallback` |
+| E3 needs divergence; a pure-row loop that diverges is not at a data answer | PROVED (every instance; the latter with `RowAlgebra`) | `not_loops_of_total`, `divInTypes_of_loops` |
+| effect safety has teeth; Def. 5.1 (1) from one signature object | PROVED (every instance) | `not_der_unhandled`, `c1_of_rowSig` |
+| the runners `Rtick`, `Rtl`, `Rrec` keep their protocol | PROVED (every instance; `Rrec` at distinct labels) | `rtick_respects`, `rtl_respects`, `rrec_respects` |
+| A's properties at our instance | OPEN (the Instance's bridges, below) | — |
+| A₃'s reference programs (the `Tgt` code checking each `refCost` entry) | not written | RESTRUCTURE §Unresolved |
 
-## The run-end relation (FIX-RUN-END)
+## System B
 
-`wpGW` ends every run under the field `SemWorld.Upd`, pinned to Core's `↭` on the nil slice by
-`SliceShape` (`Restricted/RunEnd.lean`, `Restricted/CoreLaws.lean`, `Restricted/Corollaries.lean`).
-*Generic* is for every world; a pin or a witness world is named.
-
-| target | world | status | Lean |
+| id | guarantee | status at BoLo | Lean |
 |---|---|---|---|
-| the embedding, run by run | every world meeting `SliceShape` | PROVED | `wpGW_of_wpG_nil` |
-| `UpdRefl`, `UpdOwn`, `UpdSeq`, `UpdReclaim`, `UpdFrame`, `UpdOutlives`, `UpdLendBack` | where `Upd` is Core's at every index | PROVED (generic) | `updRefl_of_core`, `updOwn_of_core`, `updSeq_of_core`, `updReclaim_of_core`, `updFrame_of_core`, `updOutlives_of_core`, `updLendBack_of_core` |
-| the same at `coreW` | Core σ=[] | PROVED AT σ=[] | `updRefl_core`, `updOwn_core`, `updSeq_core`, `updReclaim_core`, `updFrame_core`, `updOutlives_core`, `updLendBack_core` |
-| done's program-level conjuncts do not mention the world | generic | PROVED | `endState_prog` |
-| a run-end relation that relates everything fails the pin | generic | PROVED (a sanity check on the pin) | `not_sliceShape_of_updTop` |
-| a reachable leak fails `Adequate`, so done | generic, at `EffInterp` and `DataVals` | PROVED | `not_adequate_of_leak`, `not_endState_of_leak` |
-| `leakW` meets the pin, `EffInterp`, `DataVals` and admits a leak; it fails `Adequate` and `UpdReclaim` | the witness `leakW` | PROVED | `sliceShape_leakW`, `effInterp_leakW`, `dataVals_leakW`, `leakAt_leakW`, `not_adequate_leakW`, `not_updReclaim_leakW` |
-| the run-end laws admit an end that holds a `Mut` lend as a cell | the witness `carryW` | PROVED | `sliceShape_carryW`, `updRefl_carryW`, `updOwn_carryW`, `updSeq_carryW`, `updReclaim_carryW`, `at02_held_end_carry`, `upd_close_carryW` |
-| the printed forms of 6.50 and 6.27 at every index exclude it | generic; at `carryW` | PROVED | `not_updOutlives_of_opened`, `not_updMutBack_of_closed`; `not_updOutlives_carryW`, `not_updLendBack_carryW` |
-| AT02's end at `Foo` holding the lend fails `↭`, so `M.Upd`, at the nil index; unfolded it meets them | every world meeting `SliceShape`; `coreW` | PROVED | `at02_held_end`, `at02_unfolded_end`, `at02_runEnd_nil`; `at02_held_end_core` |
-| under Core's `↭` at every index, no run of AT02's body stops holding the lend as a cell | every world whose `Upd` gives Core's `↭` at every index | PROVED | `at02_runEnd`, `wpGW_at02` |
-| AT02's run ended in the configuration a 6.64 lend gives fails R-T1 and `↭`, so `M.Upd`, at the nil index | every world meeting `SliceShape` | PROVED | `at02_imm_end`, `not_stop_imm_of_stopVisible` |
-| `AdequateOfLaws` (with `UpdSeq`, `UpdReclaim`) | generic | OPEN | — |
+| B0 | BoLo's programs stay typed | PROVED AT σ=[] | `extendsB_tier1` |
+| B1 | the fundamental property | PROVED AT σ=[] | `fl_core_tier1`, `fl_core_tier1NU` (at `coreB`) |
+| B2 | adequacy | PROVED AT A RESTRICTION (the platform with no operation, data answers); every platform and the drive: OPEN | `adequateRetAt_core_none` |
+| B3, B4 | safety, leak freedom | PROVED AT A RESTRICTION (the same) | `soundRetAt_tier1_none` |
+| B4′ | with externs meeting W's contract | PROVED (generic, from B1 and B2, finding #7) | `soundContractsOfFL` |
+| B5 | release exactly once, reuse included | from B4′ given the step-for-step simulation `BumpSim`: PROVED (generic); `BumpSim` itself OPEN (OQ-43); not a tautology: PROVED | `releasedOnceReuse_of_bumpSim`, `not_releasedOnceReuse_staleFree` |
+| B6 | exclusive mutable borrows | PROVED AT σ=[] | `exclusiveB_core` |
+| B7 | lifetimes respected | PROVED AT σ=[] | `lifetimeSound_core` |
+| — | the bounds | PROVED AT σ=[] | `wBound_core` |
+| — | `ReleasedOnceAll` | a **tautology about runs** (finding #2), a lemma, not a guarantee | `releasedOnceAll` |
+| — | the run-end laws where `Upd` is Core's | PROVED (generic); at `coreB` | `updRefl_of_core` …, `updRefl_core` … |
+| — | P14: `WBCore`; `ConservativeWB`, `Conservative` at `coreB` | PROVED; PROVED AT σ=[] | `wbCore`, `conservativeWB_core`, `conservative_core` |
 
-## The verifiers' findings (AGREE.md)
+## The interaction
 
-1. **(blocker)** `wpGW` had Core's `↭` as a fixed conjunct, so no world could stop at a resuming
-   operation holding, as a borrow cell, a `Mut` lend it opened (OQ-9 (a)).  **Answered** by
-   FIX-RUN-END: the run-end relation is the field `SemWorld.Upd`, Core's `↭` on the nil slice.  The
-   review of FIX-RUN-END ended with two unresolved major findings (FIX-RUN-END §Unresolved,
-   AGREE.md).
+| target | status | Lean |
+|---|---|---|
+| `Bounds coreW`, `Interface coreW`, `Device coreW tier1Open.read admClosedOp .abortive`, `WBCore` | PROVED AT σ=[] (abortive rows) | `I.tier1Core_world` |
+| the corollaries of `Combined` | PROVED (generic) | `combined_prog`, `i1Prog_of_combined`, `i2Prog_of_combined`, `effSafe_core_of_combined`, `soundnessContractsAR_of_combined` |
+| Core's extern contract gives W's at row-abortive types, with `EmbedsNil` | PROVED (generic) | `contractsW_of_meets` |
+| a reachable leak breaks the combined theorem | PROVED (generic) | `not_combined_of_leak`; the witness `leakW` |
+| the composite programs run (interpreter, evidence) | checked | `at02_eval` … `at17_eval`, `genSelf_eval` (the generator borrowing its own state), `at07_eval` (AT07 runs into `useAfterFree`) |
+| `CompositeT1 tier1`'s typing and safety | PROVED AT A RESTRICTION (`Platform.none`) | `acceptedT1_*` |
+| `Tier2Programs`, `Accepts`, `Rejects`, `RejectsAT07` | OPEN (no tier-2 typing system; inversions to build) | — |
+| `EffSafe tier1` (Core's P2) | PROVED AT σ=[] | `effSafe_tier1` |
+| FIX-RUN-END's checks and witness worlds | PROVED | `Targets/I/RunEnd.lean` (73 results) |
+| I1, I3, I5, P11 at `coreW` (the device); I2 at `coreW` | PROVED AT σ=[]; PROVED AT A RESTRICTION (abortive rows) | `i1_core`, `i3_core`, `i5_core`, `p11_core`; `i2_core_abortive` |
+| `EmbedsNil coreW` | PROVED AT σ=[] | `embedsNil_core` |
+| `AdequateOfLaws`, `FreezeBinder`, `BinderMachine`, `NotVDenNaturalArises`, `I4Typing`, `I4c` | OPEN (stated) | — |
 
-Findings 2–7 are open; AGREE.md lists them.
+## The Instance
 
-## Corrections to the design (DESIGN §Corrections)
+| target | status | Lean |
+|---|---|---|
+| `ourInst RF Ξ J`, `AdmEff`, the open types, `OurTyping`, `tier1Open`, `read` | defined | `Targets/Instance/*` |
+| `tier1Open.read = tier1NU` | PROVED | `tier1Open_read` |
+| `ConfLaws`, `KontLaws` (names told apart), `NoIO`, `DataInj` at our instance | PROVED | `confLaws_ourInst`, `kontLaws_ourInst`, `kontLaws_orow`, `noIO_ourInst`, `dataInj_ourInst` |
+| `LiftExt` at the tail-variable rows | PROVED | `liftExt_orow` |
+| our rows meet Def. 3.5 and Def. 5.1; `RowLink orowRF` | PROVED AT A RESTRICTION (`RF = orowRF`) | `rowAlgSafe_orowRF`, `rowLink_orowRF`, `closedRowAlg_lawsSafe` |
+| no typed term intercepts a cancel; the two-frame unwind | PROVED AT σ=[]; an instance | `noInterception_tier1`; `two_frame` |
+| `AppLaw`, `Congr`, `OpStuck`, `LoopLaws`, `DriveLaws`, `LetLaw`, `RowAlgebra`, `Safety`, `EffSafe`, `HandlerSem`, `Cancellation`, `ContUse` at our instance | OPEN (the bridges to build, RESTRUCTURE §4.1) | — |
+| `monoCallback_tier1Open` (today's kernel fails E1, E2, E6, E10); R1–R4 (S6 bites); the positive (E) runs at `tier1Open` | OPEN (inversions and runs to build, RESTRUCTURE §6.1) | — |
+| `RowVarKernel J₂`, `spanRules_J₂` | OPEN (`J₂` not built) | — |
+| A₂ over Core (`Laws`, `Abstraction`), A₃'s lowering classes | stated, out of the first pass | `Targets/Instance/Binary.lean`, `Targets/Instance/ZeroCost.lean` |
 
-* **C1.** `SemW₀` reads `.val A` as `.comp (.ret A)` through the helper `SemWC`, not by calling
-  itself (the design's clause is not structural recursion).  Same meaning.
-* **C2.** `SoundnessContractsOfFL` asks `ExtPre M` and `Conservative M` (an extern may sit at any
-  persistent type, a thunk at a resuming row included, and the nil index must be reachable); the
-  design's route is kept as `SoundnessContractsOfFLWB`, at externs of row-abortive type.
-* **C3.** `ansRun`, `lendCell` and `at04` are in A-normal form: Core's `[app]` applies only to a
-  variable, and `lolliE` only at an arrow into `F`, so the unwinding borrow constant is bound and
-  called on variables.
-* **C4.** `I4a` adds `CDerives.allI`'s premises `hΔx`, `hΓx`: `x` is fresh for `Δ`'s bounds and for
-  `Γ`'s live types.  The callback `Λ. λm. body` of the borrow form needs them.
+## The step-index audit (finding #6)
 
-DESIGN §Corrections also lists the elaboration-only adjustments, which change no meaning.
+`coreW`'s report (`Targets/Audit.lean`, pinned): report 1, `Cell` (`WellFounded.fix`: the
+stratification by lifetime decision 7 keeps), `sepRange`, `tabFill`, `dropFill` and their
+auxiliaries (recursion on an array's length), and the matchers `clauseAt.match_1`,
+`VTy.upR.match_1` (a clause's index, a de Bruijn index: data); report 2, `AHead`, `ARun` (index `ℕ`:
+the allocator's allocation count, never decremented, which selects the allocator's location), and,
+via `Loc` only, `Head`, `Chain`, `GPos`, `LinPath`, `MutPos`, `RefPos`, `TW` (heaps, resources,
+locations: names); report 3, `Table`, `ewpTS`, `vCE._f` (their `∀`-bound predicates range over
+lend records, `List SRec`, whose `Life` is a lifetime); report 5 (a), `AHead.alloc`, `AHead.tab`
+(the allocation count).  Reports 4 and 5 (b): none.  The nine negative tests pass, each at its own
+entry.
 
-## Unresolved review findings (DESIGN §Unresolved)
+## Retired and restated (nothing silently dropped)
 
-The statement review ended with ten major findings.  The design was revised in response to each
-(the response is in DESIGN.md's text); the revised statements were not reviewed again.
-
-1. `UnwindRun.fin`: a finaliser's own raise stops under the `seq` frame `ufin` leaves.  Response:
-   `fin`'s `hD` ends at `Kd.plug (raise …)` with `Kd.Catches m = false`, and `hr` starts at
-   `(K₀.comp Kd).plug …`; checked on two frames here (`two_frame`).  `Kd` may hold handler frames
-   of other names (DESIGN §5 I3), where the finding asked for none.
-2. I2 and I3 did not state spanning lends or the frames a cancel closes.  Response: `FramesW`
-   (6.64/6.65 at W, in the printed rule's shape) and `SpanBorrows` are conjuncts of `I2`;
-   `ShareCancel` has the closing clause; at `coreW` they are recorded PROVED AT A RESTRICTION.
-   `CancelCloses` (the lends a cancel ends) is named-only under OQ-57.
-3. `FreezeBinder` was a conjunct of done.  Response: it is beside done (`EndStateBinder`), with
-   its lifetime clauses forward implications.
-4. `Adm` had no lower bound and the outlives judgment was not the typing system's.  Response:
-   `AdmExtends Adm` is a conjunct; `TypingJ` carries `out : OutJ`, read by every rule
-   transcription, by `OutExtends J.out` and by `LifetimeSound M J.out`.
-5. Done as an existential could not carry decision 7.  Response: done is `EndStateAt` at a named
-   `W` with `audit_W`; `Targets/Audit.lean` runs the audit on `coreW`.
-6. A6 and T7 overclaimed.  Response: A6's continuation-use half is P8.b (named-only, OQ-50);
-   `ConservativeWB` (T7's shape) is in done, `Conservative` beside it; Core's relation is pinned by
-   hash (`Targets/Audit.lean`), so a redefined Core cannot meet either by definition.
-7. `Slice` pinned R-T1 at σ=[] for every type.  Response: `SliceShape` pins the nil slice
-   structurally only; the embedding is `ConservativeWB`; DESIGN §10 asks the user whether the
-   equivalence was meant.
-8. `FreezeBinder`'s lifetime half against `not_vDenNatural`.  Response: beside done; the arising
-   check of the witness at `coreW` is stated (`NotVDenNaturalArises`) and OPEN.
-9. `Extends` needed resuming `unr` operations at W.  Response: done asks `ExtendsNU` (Core's rules
-   without resuming `unr` operations, `CDerivesNU`); `Tier1End` keeps `tier1` at Core σ=[] only.
-10. `RelShape`'s `Imm`/`Mut` clauses were not Core's.  Response: they transcribe Core's clauses
-    with W's relation for the payload (`ptoImmSW`, `ptoMutSW`, `CohE`); OQ-46 is open only in
-    `payStk`.
+* `EndStateAt`, `EndState`, `Guarantees` (the library's), `Tier1End`, `EndStateBinder`: restated
+  as `I.Combined`, done, `B.Guarantees`, `I.Tier1` (with `I.Tier1Core`) and `I.CombinedBinder`.
+* `status_tier1End_of` (`Adequate coreW → FinaliserOrder tier1 → Tier1End`): **retired**.  Its
+  conjuncts `EffSafe`, `NoInterception` and `FinaliserOrder` became A's properties at our instance,
+  which need the bridges, and B5 now has content, which needs `BumpSim`.  Its proved content is
+  kept: `status_tier1Core_world`, `status_tier1Core_B_of`, `status_tier1Core_guarantees_of`.
+* `endState_prog`, `i1Prog_of_endState`, `i2Prog_of_endState`, `not_endState_of_leak` (and their
+  status rows): restated as `combined_prog`, `i1Prog_of_combined`, `i2Prog_of_combined` (at
+  `c = .any`), `not_combined_of_leak`.
+* `P8a`, `p8a_of_endState`, `status_p8a_of_endState`: **retired**.  `P8a` was `ReleasedOnceAll`
+  read at the runs that capture a continuation, a tautology about runs (#2); P8.a is B4 with B5, and
+  P8.b (the use count) is A's S6 `ContUse`.
+* `ReleasedOnceAll`: kept as a lemma about runs (`releasedOnceAll`), out of done; done holds B5
+  `ReleasedOnceReuse`, restated (per-step maps from a bump run, `ContractsW`).
+* `effSafeOfFL`, `soundnessContractsOfFLWB`: restated over `FamEmpty ∧ AdequateEvery` and
+  `EmbedsNil`.  `Tier2Pinned`, `AcceptsTier2`: kept as definitions, superseded in done by
+  `SpanRulesAt` (recorded) and `Tier2Programs` (with answers).
+* `Targets/Checks/RunEnd.lean` (untracked, not imported): **deleted**, superseded: each of its 17
+  theorems has a same-named successor in `Targets/I/RunEnd.lean`, restated against the field `Upd`.
 -/
 
 noncomputable section
@@ -185,221 +142,237 @@ variable {ℍ : BoCa.Host} [BoCa.HostIs ℍ]
 
 namespace Targets
 open BoCa BoCa.Fig16 BoCa.Fig16.BoLo BoCa.Fig16.LogRel BoCa.Fig16.LogRel.Core
+open Targets.Inst (OurTyping ourInst AdmEff tier1Open)
 
-/-! ## Done -/
+/-! ## Done and tier 1 (OPEN) -/
 
-/-- The statement of done elaborates.  **OPEN.** -/
-example (J : TypingJ) (M : SemWorld) : Prop := EndStateAt (ℍ := ℍ) J M admClosedOp orowRF
+/-- **Done**, at a named `J₂` and `W`: the statement elaborates.  OPEN. -/
+example (J₂ : OurTyping orowRF) (W : SemWorld) : Prop :=
+  I.Combined (ℍ := ℍ) orowRF J₂ W admClosedOp .any
 
-/-- Implied by done, not done. -/
-example : Prop := EndState (ℍ := ℍ) admClosedOp orowRF
+/-- **Tier 1**: OPEN. -/
+example (J₁ : OurTyping orowRF) : Prop := I.Tier1 (ℍ := ℍ) J₁
 
-/-- **Tier 1: OPEN** (the conjuncts missing are listed in the module docstring). -/
-example : Prop := Tier1End (ℍ := ℍ)
+/-- The restricted tier-1 reduction: OPEN. -/
+example : Prop := I.Tier1Core (ℍ := ℍ)
 
-/-- **`Tier1End` from its two open parts**: adequacy at Core's world for every platform and every
-drive, and the finaliser order for Core's typing.  Every other conjunct is proved. -/
-theorem status_tier1End_of (hA : Adequate (ℍ := ℍ) (coreW (ℍ := ℍ)))
-    (hF : FinaliserOrder (ℍ := ℍ) tier1) : Tier1End (ℍ := ℍ) :=
-  ⟨rowAlgSafe_orowRF, rowLink_orowRF, wbCore, i4a_tier1,
-    extendsNU_tier1, outExtends_core, soundnessOfFL _ _ fl_core_tier1 hA,
-    soundnessContractsOfFL _ _ fl_core_tier1 extPre_core conservative_core hA,
-    releasedOnceAll tier1, effSafe_tier1, noInterception_tier1, hF, wlaws_core, fl_core_tier1, hA,
-    i1_core, i2_core_abortive, i3_core, i5_core, lifetimeSound_core, exclusive_core, p11_core,
-    conservativeWB_core⟩
+/-- PROVED AT σ=[]: the tier-1 world conjuncts and the device at `coreW`. -/
+theorem status_tier1Core_world :
+    I.Bounds (ℍ := ℍ) (coreW (ℍ := ℍ)) ∧ I.Interface (coreW (ℍ := ℍ)) ∧
+      Device (ℍ := ℍ) (coreW (ℍ := ℍ)) tier1Open.read admClosedOp .abortive ∧ WBCore (ℍ := ℍ) :=
+  I.tier1Core_world
 
-/-! ## The conjuncts of `EndStateAt`
+/-- PROVED (from adequacy at BoLo): B's guarantees but B5, at today's kernel. -/
+theorem status_tier1Core_B_of (hA : Adequate (ℍ := ℍ) (B.coreB (ℍ := ℍ))) :
+    B.ExtendsB tier1Open.read ∧ FL (B.coreB (ℍ := ℍ)) tier1Open.read ∧ Sound (ℍ := ℍ) tier1Open.read ∧
+      B.SoundContracts (ℍ := ℍ) tier1Open.read (B.coreB (ℍ := ℍ)) ∧ B.ExclusiveB (B.coreB (ℍ := ℍ)) ∧
+      LifetimeSound (B.coreB (ℍ := ℍ)) tier1Open.read.out ∧ B.WBound (B.coreB (ℍ := ℍ)) :=
+  I.tier1Core_B_of hA
 
-At the end state every conjunct is OPEN until done is proved.  Below, each conjunct's status at
-tier 1, σ = [] or a restriction. -/
+/-- PROVED (from adequacy at BoLo and the step-for-step simulation): B's guarantees at today's
+kernel, B5 included. -/
+theorem status_tier1Core_guarantees_of (hA : Adequate (ℍ := ℍ) (B.coreB (ℍ := ℍ)))
+    (hS : BumpSim (ℍ := ℍ)) : B.Guarantees (ℍ := ℍ) tier1Open.read (B.coreB (ℍ := ℍ)) :=
+  I.tier1Core_guarantees_of hA hS
 
-/-! ### `RowAlgSafe RF`, `RowLink RF` (T0) -/
+/-! ## System A -/
 
-/-- PROVED AT A RESTRICTION (`RF = orowRF`, the minimal tail-variable form). -/
-theorem status_rowAlgSafe_orow : RowAlgSafe orowRF := rowAlgSafe_orowRF
+section A
+open Targets.A Targets.A.EffectSystem
+variable {S : A.EffectSystem}
 
-/-- PROVED AT A RESTRICTION (`RF = orowRF`). -/
-theorem status_rowLink_orow : RowLink orowRF := rowLink_orowRF
+/-- The first pass of A elaborates at every instance. -/
+example (S : A.EffectSystem) : Prop := S.Props
 
-/-! ### `AdmExtends Adm` -/
+/-- A₂ and A₃, stated, out of the first pass. -/
+example (S : A.EffectSystem) (L : S.Lowering) : Prop :=
+  S.HandlerLaws ∧ S.EffDepLaws ∧ S.Abstraction ∧ S.LoweringCorrect L ∧ S.ZeroCost L
 
-/-- PROVED AT A RESTRICTION (`Adm = admClosedOp`, OQ-56 (a)). -/
-theorem status_admExtends_closedOp : AdmExtends admClosedOp := admExtends_closedOp
+/-- PROVED: an instance that types nothing fails the (E) properties. -/
+theorem status_not_eProps_of_emptyTyping (h : ∀ Γ e C, ¬ S.der Γ e C) : ¬ S.EProps :=
+  not_eProps_of_emptyTyping h
 
-/-! ### `Tier2Pinned J Adm`, `AcceptsTier2 J` -/
+/-- PROVED: an instance with no error label (no effects) fails the (E) properties. -/
+theorem status_not_eProps_of_noLabels (h : ∀ l, S.sig l ≠ S.sigExn) : ¬ S.EProps :=
+  not_eProps_of_noLabels h
 
-/-- OPEN: they are about tier 2's typing system, which does not exist.  The acceptance terms run
-(`at02_eval`, `at04_eval`, `at12_eval`, `at17_eval`). -/
-example (J : TypingJ) (Adm : OpAdm) : Prop := Tier2Pinned J Adm ∧ AcceptsTier2 J
+/-- PROVED: no instance meets S0, S1, S3, the let law and E1 without effect polymorphism. -/
+theorem status_not_noColouring_of_monoCallback (hm : S.MachShape) (hr : S.RowAlgebra)
+    (he : S.EffSafe) (hl : S.LetLaw) (hmono : MonoCallback S) : ¬ S.NoColouring :=
+  not_noColouring_of_monoCallback hm hr he hl hmono
 
-/-! ### `I4a J Adm .any` (I4.a) -/
+/-- PROVED: the same at E2a, E6 and E10. -/
+theorem status_not_poly_of_monoCallback (hm : S.MachShape) (hr : S.RowAlgebra) (he : S.EffSafe)
+    (hl : S.LetLaw) (hmono : MonoCallback S) (hext : LiftExt S) :
+    ¬ S.HigherOrderPoly ∧ ¬ S.Tunnel ∧ ¬ S.Reconciler :=
+  ⟨not_higherOrderPoly_of_monoCallback hm hr he hl hmono, not_tunnel_of_monoCallback hm hr he hl hmono,
+    not_reconciler_of_monoCallback hm hr he hl hmono hext⟩
 
-/-- PROVED AT A RESTRICTION (tier 1, abortive rows).  Statement corrected (C4).  Non-vacuity:
-`i4a_witness`, `d_ansRun_witness`. -/
-theorem status_I4a_tier1_abortive : I4a tier1 admClosedOp .abortive := i4a_tier1
+/-- PROVED: totality fails E3; divergence at the pure row is not at a data answer. -/
+theorem status_loops (hr : S.RowAlgebra) (hs : S.Safety) (hd : S.DataDiv) :
+    (Total S → ¬ S.Loops) ∧
+      (S.Loops → ∀ L, S.der [] (S.runL S.spinL) (S.F S.EA.unit (S.Sum S.UnitT L)) → ¬ S.DataTy L) :=
+  ⟨not_loops_of_total, fun hl => divInTypes_of_loops hr hs hd hl⟩
 
-/-! ## The conjuncts of `Guarantees` -/
+/-- PROVED: the runners keep their protocol. -/
+theorem status_runners_respect {lt llog lk : S.EA.Lab} (ht : S.sig lt = S.sigTick)
+    (hl : S.sig llog = S.sigLog) (hk : S.sig lk = S.sigKube) (hne : llog ≠ lk) :
+    (S.Rtick lt).Respects ∧ (S.Rtl lt llog).Respects ∧ (S.Rrec lk llog).Respects :=
+  ⟨rtick_respects ht, rtl_respects ht hl, rrec_respects hk hl hne⟩
 
-/-! ### `ExtendsNU J`, `OutExtends J.out` -/
+/-- PROVED: an operation is untypable at the pure row on its own; Def. 5.1 (1) from `RowSig`. -/
+theorem status_effSafe_teeth (hm : S.MachShape) (hr : S.RowAlgebra) (he : S.EffSafe) :
+    (∀ l i v A', ¬ S.der [] (S.perform l i v) (S.F S.EA.unit A')) ∧
+      ∀ L, ¬ S.EA.Sub (S.EA.lift L) S.EA.unit :=
+  ⟨fun l i v A' => not_der_unhandled hm hr he l i v A', c1_of_rowSig hr.2.2.1⟩
 
-/-- PROVED AT σ=[] (also `extends_tier1 : Extends tier1`, `extendsNU_tier1NU`). -/
-theorem status_extendsNU_tier1 : ExtendsNU tier1 := extendsNU_tier1
+end A
 
-/-- PROVED AT σ=[]. -/
-theorem status_outExtends_core : OutExtends OutJ.core := outExtends_core
+/-! ## System B -/
 
-/-! ### `Soundness J` (T1) -/
+/-- PROVED AT σ=[]: B0. -/
+theorem status_extendsB_tier1 : B.ExtendsB tier1 := extendsB_tier1
 
-/-- PROVED AT A RESTRICTION (`P = Platform.none`, the return conjunct).  `Soundness tier1`:
-OPEN (second wave).  Non-vacuity: `platformNone_respects`, `platformPing_respects`, the
-`acceptedT1_*` programs. -/
-theorem status_soundRet_tier1_none : SoundRetAt (ℍ := ℍ) tier1 Platform.none :=
-  soundRetAt_tier1_none
+/-- PROVED AT σ=[]: B1 (`fundamentalC`). -/
+theorem status_fl_core_tier1 : FL (B.coreB (ℍ := ℍ)) tier1 := fl_core_tier1
 
-/-- PROVED (generic): T1 is FL and adequacy. -/
+/-- PROVED AT A RESTRICTION (`P = Platform.none`): B2's return conjunct. -/
+theorem status_adequateRet_core_none : AdequateRetAt (ℍ := ℍ) (B.coreB (ℍ := ℍ)) Platform.none :=
+  adequateRetAt_core_none
+
+/-- PROVED AT A RESTRICTION (`P = Platform.none`): B3 and B4's return conjunct. -/
+theorem status_soundRet_tier1_none : SoundRetAt (ℍ := ℍ) tier1 Platform.none := soundRetAt_tier1_none
+
+/-- PROVED (generic): B3, B4 from B1, B2. -/
 theorem status_soundnessOfFL : SoundnessOfFL (ℍ := ℍ) := soundnessOfFL
 
-/-! ### `SoundnessContracts J` -/
+/-- PROVED (generic): B4′ from B1, B2, externs at W's contract (finding #7). -/
+theorem status_soundContractsOfFL {M : B.BWorld} {J : TypingJ} (hFL : FL M J)
+    (hA : Adequate (ℍ := ℍ) M) : B.SoundContracts (ℍ := ℍ) J M := soundContractsOfFL hFL hA
 
-/-- OPEN at tier 1 (second wave).  PROVED (generic) from FL, `ExtPre`, `Conservative` and
-adequacy (C2). -/
+/-- PROVED (generic): the alternative route, with Core's contracts through `Conservative`. -/
 theorem status_soundnessContractsOfFL : SoundnessContractsOfFL (ℍ := ℍ) := soundnessContractsOfFL
 
-/-- PROVED (generic): the design's route, at externs of row-abortive type. -/
+/-- PROVED: B5 is not a tautology (finding #2). -/
+theorem status_not_releasedOnceReuse_staleFree (J : TypingJ) (M : B.BWorld)
+    (h : J.closed B.staleFree (.ret .unit)) : ¬ B.ReleasedOnceReuse (ℍ := ℍ) J M :=
+  B.not_releasedOnceReuse_staleFree J M h
+
+/-- PROVED, and a **tautology about runs**: `ReleasedOnceAll` holds at every typing system; it is
+a lemma, not a guarantee (finding #2). -/
+theorem status_releasedOnceAll : ∀ J : TypingJ, ReleasedOnceAll (ℍ := ℍ) J := releasedOnceAll
+
+/-- PROVED: D9's machine lemma (its premises unused). -/
+theorem status_releasedOnceOfSound : ReleasedOnceOfSound (ℍ := ℍ) := releasedOnceOfSound
+
+/-- PROVED AT σ=[]: B6. -/
+theorem status_exclusiveB_core : B.ExclusiveB (B.coreB (ℍ := ℍ)) := exclusiveB_core
+
+/-- PROVED AT σ=[]: B7. -/
+theorem status_lifetimeSound_core : LifetimeSound (B.coreB (ℍ := ℍ)) OutJ.core := lifetimeSound_core
+
+/-- PROVED AT σ=[]: the bounds. -/
+theorem status_wBound_core : B.WBound (B.coreB (ℍ := ℍ)) := wBound_core
+
+/-- PROVED: P14.a. -/
+theorem status_wbCore : WBCore (ℍ := ℍ) := wbCore
+
+/-- PROVED AT σ=[]: P14.b, P14.b′ at `coreB`. -/
+theorem status_conservative_core :
+    ConservativeWB (ℍ := ℍ) (B.coreB (ℍ := ℍ)) ∧ Conservative (ℍ := ℍ) (B.coreB (ℍ := ℍ)) :=
+  ⟨conservativeWB_core, conservative_core⟩
+
+/-- PROVED (generic): where `Upd` is Core's at every index, the run-end laws hold. -/
+theorem status_updLaws_of_core {M : B.BWorld}
+    (hC : ∀ i i' ρ ρ' π, M.Upd i i' ρ ρ' π ↔ ResU.UpdV ρ π) :
+    UpdRefl M ∧ UpdOwn M ∧ UpdSeq M ∧ UpdReclaim M ∧ UpdFrame M ∧ UpdOutlives M ∧ UpdLendBack M :=
+  ⟨updRefl_of_core hC, updOwn_of_core hC, updSeq_of_core hC, updReclaim_of_core hC,
+    updFrame_of_core hC, updOutlives_of_core hC, updLendBack_of_core hC⟩
+
+/-- PROVED AT σ=[]: the run-end laws at `coreB`. -/
+theorem status_updLaws_core :
+    UpdRefl (B.coreB (ℍ := ℍ)) ∧ UpdOwn (B.coreB (ℍ := ℍ)) ∧ UpdSeq (B.coreB (ℍ := ℍ)) ∧
+      UpdReclaim (B.coreB (ℍ := ℍ)) ∧ UpdFrame (B.coreB (ℍ := ℍ)) ∧
+      UpdOutlives (B.coreB (ℍ := ℍ)) ∧ UpdLendBack (B.coreB (ℍ := ℍ)) :=
+  ⟨updRefl_core, updOwn_core, updSeq_core, updReclaim_core, updFrame_core, updOutlives_core,
+    updLendBack_core⟩
+
+/-- PROVED (generic): B5 from B4′, given the step-for-step simulation. -/
+theorem status_releasedOnceReuse_of_bumpSim (hS : BumpSim (ℍ := ℍ)) {J : TypingJ} {M : B.BWorld}
+    (hC : B.SoundContracts (ℍ := ℍ) J M) : B.ReleasedOnceReuse (ℍ := ℍ) J M :=
+  releasedOnceReuse_of_bumpSim hS hC
+
+/-- OPEN (stated): the step-for-step simulation (OQ-43 (b), or (c) through a binary FP). -/
+example : Prop := BumpSim (ℍ := ℍ)
+
+/-! ## The interaction -/
+
+section I
+variable {RF : RowForm} {J : OurTyping RF} {M : SemWorld} {Adm : OpAdm} {c : RowClass}
+
+/-- PROVED (generic): the combined theorem's conjuncts that read no world. -/
+theorem status_combined_prog (h : I.Combined (ℍ := ℍ) RF J M Adm c) :
+    (∀ Ξ, AdmEff Ξ → (ourInst (ℍ := ℍ) RF Ξ J).Props) ∧ Sound (ℍ := ℍ) J.read ∧
+      B.ReleasedOnceReuse₀ (ℍ := ℍ) J.read ∧ B.ExtendsB J.read ∧ I.Pins J Adm c ∧
+      I.Accepts (ℍ := ℍ) J.read c ∧ Rejects J.read :=
+  I.combined_prog h
+
+/-- PROVED (generic): I1 and I2 at the program level, at `c = .any`. -/
+theorem status_progs_of_combined (h : I.Combined (ℍ := ℍ) RF J M Adm .any) :
+    I1Prog (ℍ := ℍ) J.read ∧ I2Prog (ℍ := ℍ) J.read :=
+  ⟨I.i1Prog_of_combined h, I.i2Prog_of_combined h⟩
+
+/-- PROVED (generic): Core's form of P2, from the combined theorem. -/
+theorem status_effSafe_core_of_combined (h : I.Combined (ℍ := ℍ) RF J M Adm c) :
+    EffSafe (ℍ := ℍ) J.read := I.effSafe_core_of_combined h
+
+/-- PROVED (generic): the SPEC's externs, from the combined theorem with the device's `EmbedsNil`. -/
+theorem status_soundnessContractsAR_of_combined (h : I.Combined (ℍ := ℍ) RF J M Adm c)
+    (hE : EmbedsNil (ℍ := ℍ) M) : SoundnessContractsAR (ℍ := ℍ) J.read :=
+  I.soundnessContractsAR_of_combined h hE
+
+/-- PROVED (generic): Core's extern contract gives W's at row-abortive types, with `EmbedsNil`. -/
+theorem status_contractsW_of_meets (hE : EmbedsNil (ℍ := ℍ) M) {Γ : Ctx VTy} {γ : List Val}
+    (hAR : ∀ s ∈ Γ, s.ty.AbortRows) (hγ : ExternsMeet (ℍ := ℍ) Γ γ) : B.ContractsW M.toBWorld Γ γ :=
+  contractsW_of_meets hE hAR hγ
+
+/-- PROVED (generic): a reachable leak breaks the combined theorem. -/
+theorem status_not_combined_of_leak {α : Life} (hL : RunEnd.LeakAt M α) :
+    ¬ I.Combined (ℍ := ℍ) RF J M Adm c := I.not_combined_of_leak hL
+
+end I
+
+/-- PROVED AT σ=[]: Core's P2 at tier 1, from FL, `FamEmpty` and `AdequateEvery`. -/
+theorem status_effSafe_tier1 : EffSafe (ℍ := ℍ) tier1 := effSafe_tier1
+
+/-- PROVED (generic): effect safety from FL, `FamEmpty` and `AdequateEvery`. -/
+theorem status_effSafeOfFL : EffSafeOfFL (ℍ := ℍ) := effSafeOfFL
+
+/-- PROVED (generic): row-abortive externs at Core's contract, from FL, `EmbedsNil` and adequacy. -/
 theorem status_soundnessContractsOfFLWB : SoundnessContractsOfFLWB (ℍ := ℍ) :=
   soundnessContractsOfFLWB
 
-/-! ### `ReleasedOnceAll J` (D9, P8.a) -/
-
-/-- PROVED: D9's machine lemma. -/
-theorem status_releasedOnceOfSound : ReleasedOnceOfSound (ℍ := ℍ) := releasedOnceOfSound
-
-/-- PROVED (generic): at every typing system, by the occupancy argument on complete no-reuse
-runs; its typing content is T1's. -/
-theorem status_releasedOnceAll : ∀ J : TypingJ, ReleasedOnceAll (ℍ := ℍ) J := releasedOnceAll
-
-/-! ### `EffSafe J` (P2) -/
-
-/-- PROVED AT σ=[] (unr-free rows, by the statement). -/
-theorem status_effSafe_tier1 : EffSafe (ℍ := ℍ) tier1 := effSafe_tier1
-
-/-- PROVED (generic). -/
-theorem status_effSafeOfFL : EffSafeOfFL (ℍ := ℍ) := effSafeOfFL
-
-/-! ### `NoInterception J` (I3.c) -/
-
-/-- PROVED AT σ=[]. -/
-theorem status_noInterception_tier1 : NoInterception tier1 := noInterception_tier1
-
-/-! ### `FinaliserOrder J` (I3.b) -/
-
-/-- OPEN (second wave).  Its first instance, the two-frame unwind, is proved (`two_frame`,
-`two_frame_steps`, `one_frame`). -/
-example (J : TypingJ) : Prop := FinaliserOrder (ℍ := ℍ) J
-
-/-! ### `WLaws M` -/
-
-/-- PROVED AT σ=[]. -/
+/-- PROVED AT σ=[]: the device's laws at `coreW`. -/
 theorem status_wlaws_core : WLaws (ℍ := ℍ) (coreW (ℍ := ℍ)) := wlaws_core
 
-/-! ### `FL M J` -/
+/-- PROVED AT σ=[] (I1, I3, I5, P11), AT A RESTRICTION (I2, at abortive rows). -/
+theorem status_device_core :
+    I1 (ℍ := ℍ) (coreW (ℍ := ℍ)) ∧ I2 (ℍ := ℍ) (coreW (ℍ := ℍ)) OutJ.core admClosedOp .abortive ∧
+      I3 (ℍ := ℍ) (coreW (ℍ := ℍ)) ∧ I5 (ℍ := ℍ) (coreW (ℍ := ℍ)) ∧ P11 (ℍ := ℍ) (coreW (ℍ := ℍ)) :=
+  ⟨i1_core, i2_core_abortive, i3_core, i5_core, p11_core⟩
 
-/-- PROVED AT σ=[] (`fundamentalC`). -/
-theorem status_fl_core_tier1 : FL (coreW (ℍ := ℍ)) tier1 := fl_core_tier1
-
-/-! ### `Adequate M` -/
-
-/-- PROVED AT A RESTRICTION (`P = Platform.none`, the return conjunct).  `Adequate coreW` and
-`AdequateOfLaws`: OPEN (second wave). -/
-theorem status_adequateRet_core_none : AdequateRetAt (ℍ := ℍ) (coreW (ℍ := ℍ)) Platform.none :=
-  adequateRetAt_core_none
-
-/-! ### `I1 M` -/
-
-/-- PROVED AT σ=[]. -/
-theorem status_I1_core : I1 (ℍ := ℍ) (coreW (ℍ := ℍ)) := i1_core
-
-/-! ### `I2 M J.out Adm c` -/
-
-/-- PROVED AT A RESTRICTION (abortive rows: no resuming entry, so the frames at resuming tables
-and the spanning rules at resuming rows are not exercised). -/
-theorem status_I2_core_abortive : I2 (ℍ := ℍ) (coreW (ℍ := ℍ)) OutJ.core admClosedOp .abortive :=
-  i2_core_abortive
-
-/-! ### `I3 M` (I3.a) -/
-
-/-- PROVED AT A RESTRICTION (nothing held at σ = []: the closing clause is vacuous). -/
-theorem status_I3_core : I3 (ℍ := ℍ) (coreW (ℍ := ℍ)) := i3_core
-
-/-! ### `I5 M` -/
-
-/-- PROVED AT σ=[]. -/
-theorem status_I5_core : I5 (ℍ := ℍ) (coreW (ℍ := ℍ)) := i5_core
-
-/-- PROVED (generic). -/
+/-- PROVED (generic): I5.β at every world. -/
 theorem status_I5beta : ∀ M : SemWorld, I5beta (ℍ := ℍ) M := i5beta
 
-/-! ### `LifetimeSound M J.out` (P9) -/
+/-- PROVED AT A RESTRICTION (tier 1, abortive rows): I4.a. -/
+theorem status_I4a_tier1_abortive : I4a tier1 admClosedOp .abortive := i4a_tier1
 
-/-- PROVED AT σ=[]. -/
-theorem status_lifetimeSound_core : LifetimeSound (coreW (ℍ := ℍ)) OutJ.core := lifetimeSound_core
+/-- PROVED: R-CLOSEDOP bounds every admissibility. -/
+theorem status_admExtends_closedOp : AdmExtends admClosedOp := admExtends_closedOp
 
-/-! ### `Exclusive M` (P10) -/
-
-/-- PROVED AT σ=[]. -/
-theorem status_exclusive_core : Exclusive (coreW (ℍ := ℍ)) := exclusive_core
-
-/-! ### `P11 M` -/
-
-/-- PROVED AT σ=[]: `HandleCompat coreW` and `RedLaws coreW`. -/
-theorem status_P11_core : P11 (ℍ := ℍ) (coreW (ℍ := ℍ)) := p11_core
-
-/-- PROVED (generic): the reduction laws at every world whose operation tables are monotone. -/
-theorem status_redLaws_of_mono {M : SemWorld} (hM : ∀ T, TableI.Mono (opTabW M T)) :
-    RedLaws (ℍ := ℍ) M := redLaws_of_mono hM
-
-/-! ### `ConservativeWB M` (P14.b) -/
-
-/-- PROVED AT σ=[]. -/
-theorem status_conservativeWB_core : ConservativeWB (ℍ := ℍ) (coreW (ℍ := ℍ)) :=
-  conservativeWB_core
-
-/-! ### `WBCore` (P14.a, a conjunct of `Tier1End`) -/
-
-/-- PROVED. -/
-theorem status_wbCore : WBCore (ℍ := ℍ) := wbCore
-
-/-! ## Beside done (OPEN unless stated) -/
-
-example (M : SemWorld) (act : StkAct M) : Prop := FreezeBinder M act
-example : Prop := BinderMachine (ℍ := ℍ)
-example (J : TypingJ) (M : SemWorld) (act : StkAct M) (Adm : OpAdm) (RF : RowForm) : Prop :=
-  EndStateBinder (ℍ := ℍ) J M act Adm RF
-example (J : TypingJ) : Prop := ReleasedOnceReuse (ℍ := ℍ) J
-example (J : TypingJ) (Adm : OpAdm) : Prop := I4Typing J Adm .any
-/-- The binder's first check (second wave): OPEN. -/
-example : Prop := NotVDenNaturalArises (ℍ := ℍ)
-
-/-- `Conservative W`: OPEN; at `coreW` PROVED AT σ=[]. -/
-theorem status_conservative_core : Conservative (ℍ := ℍ) (coreW (ℍ := ℍ)) := conservative_core
-
-/-! ## Corollaries of done (PROVED, generic) -/
-
-theorem status_i1Prog_of_endState {J : TypingJ} {M : SemWorld} {Adm : OpAdm} {RF : RowForm} :
-    EndStateAt (ℍ := ℍ) J M Adm RF → I1Prog (ℍ := ℍ) J := i1Prog_of_endState
-
-theorem status_i2Prog_of_endState {J : TypingJ} {M : SemWorld} {Adm : OpAdm} {RF : RowForm} :
-    EndStateAt (ℍ := ℍ) J M Adm RF → I2Prog (ℍ := ℍ) J := i2Prog_of_endState
-
-theorem status_p8a_of_endState {J : TypingJ} {M : SemWorld} {Adm : OpAdm} {RF : RowForm} :
-    EndStateAt (ℍ := ℍ) J M Adm RF → P8a (ℍ := ℍ) J := p8a_of_endState
-
-/-! ## The run-end relation (FIX-RUN-END)
-
-The laws of `M.Upd` are beside done: `UpdSeq` and `UpdReclaim` are hypotheses of `AdequateOfLaws`,
-and `UpdRefl`, `UpdOwn`, `UpdFrame`, `UpdOutlives` and `UpdLendBack` are the forms FL's printed
-route reads.  The AT02 configurations are in `Restricted/RunEnd.lean` (the module docstring's
-table). -/
+/-- PROVED AT σ=[]: today's unr-free rules and outlives judgements. -/
+theorem status_extendsNU_tier1 : ExtendsNU tier1 ∧ OutExtends OutJ.core :=
+  ⟨extendsNU_tier1, outExtends_core⟩
 
 /-- PROVED (generic, at every world meeting `SliceShape`): a `wpG` run is a `wpGW` run at the nil
 index that ends on the nil slice. -/
@@ -408,86 +381,55 @@ theorem status_wpGW_of_wpG_nil {M : SemWorld} (hS : SliceShape M) (ls : List SRe
     wpG (ℍ := ℍ) ls e (fun ls' t => Q (ls', M.nil) t) ρ → wpGW (ℍ := ℍ) M (ls, M.nil) e Q ρ :=
   wpGW_of_wpG_nil hS ls e Q ρ
 
-/-- PROVED (generic): where `Upd` is Core's at every index, the run-end laws and the printed
-route's forms of `↭`'s lemmas hold. -/
-theorem status_updLaws_of_core {M : SemWorld}
-    (hC : ∀ i i' ρ ρ' π, M.Upd i i' ρ ρ' π ↔ ResU.UpdV ρ π) :
-    UpdRefl M ∧ UpdOwn M ∧ UpdSeq M ∧ UpdReclaim M ∧ UpdFrame M ∧ UpdOutlives M ∧
-      UpdLendBack M :=
-  ⟨updRefl_of_core hC, updOwn_of_core hC, updSeq_of_core hC, updReclaim_of_core hC,
-    updFrame_of_core hC, updOutlives_of_core hC, updLendBack_of_core hC⟩
-
-/-- PROVED AT σ=[]. -/
-theorem status_updLaws_core :
-    UpdRefl (coreW (ℍ := ℍ)) ∧ UpdOwn (coreW (ℍ := ℍ)) ∧ UpdSeq (coreW (ℍ := ℍ)) ∧
-      UpdReclaim (coreW (ℍ := ℍ)) ∧ UpdFrame (coreW (ℍ := ℍ)) ∧ UpdOutlives (coreW (ℍ := ℍ)) ∧
-      UpdLendBack (coreW (ℍ := ℍ)) :=
-  ⟨updRefl_core, updOwn_core, updSeq_core, updReclaim_core, updFrame_core, updOutlives_core,
-    updLendBack_core⟩
-
-/-- PROVED (generic): done's program-level conjuncts, which do not mention the world. -/
-theorem status_endState_prog {J : TypingJ} {M : SemWorld} {Adm : OpAdm} {RF : RowForm} :
-    EndStateAt (ℍ := ℍ) J M Adm RF →
-    RowAlgSafe RF ∧ RowLink RF ∧ AdmExtends Adm ∧ Tier2Pinned J Adm ∧ AcceptsTier2 J ∧
-    I4a J Adm .any ∧ ExtendsNU J ∧ OutExtends J.out ∧ Soundness (ℍ := ℍ) J ∧
-    SoundnessContracts (ℍ := ℍ) J ∧ ReleasedOnceAll (ℍ := ℍ) J ∧ EffSafe (ℍ := ℍ) J ∧
-    NoInterception J ∧ FinaliserOrder (ℍ := ℍ) J := endState_prog
-
-/-- PROVED (generic): a sanity check on the pin, read through its `→` half. -/
+/-- PROVED (generic): a run-end relation that relates everything fails the pin. -/
 theorem status_not_sliceShape_of_updTop {M : SemWorld} (h : ∀ i i' ρ ρ' π, M.Upd i i' ρ ρ' π) :
     ¬ SliceShape M := RunEnd.not_sliceShape_of_updTop h
 
-/-- PROVED (generic): a world whose run-end relation admits a reachable leak does not satisfy
-done. -/
-theorem status_not_endState_of_leak {J : TypingJ} {M : SemWorld} {Adm : OpAdm} {RF : RowForm}
-    {α : Life} (hL : RunEnd.LeakAt M α) : ¬ EndStateAt (ℍ := ℍ) J M Adm RF :=
-  RunEnd.not_endState_of_leak hL
-
-/-- PROVED at the witness `leakW`: it meets the pin, `EffInterp` and `DataVals`, admits a leak,
-and fails `Adequate` and `UpdReclaim`. -/
+/-- PROVED at the witness `leakW`: it meets the pin, `EffInterp`, `DataVals`, admits a leak, and
+fails `Adequate` and `UpdReclaim`. -/
 theorem status_leakW (α : Life) :
     SliceShape (RunEnd.leakW (ℍ := ℍ)) ∧ EffInterp (ℍ := ℍ) (RunEnd.leakW (ℍ := ℍ)) ∧
-      DataVals (RunEnd.leakW (ℍ := ℍ)) ∧ RunEnd.LeakAt (RunEnd.leakW (ℍ := ℍ)) α ∧
-      ¬ Adequate (ℍ := ℍ) (RunEnd.leakW (ℍ := ℍ)) ∧ ¬ UpdReclaim (RunEnd.leakW (ℍ := ℍ)) :=
+      DataVals (RunEnd.leakW (ℍ := ℍ)).toBWorld ∧ RunEnd.LeakAt (RunEnd.leakW (ℍ := ℍ)) α ∧
+      ¬ Adequate (ℍ := ℍ) (RunEnd.leakW (ℍ := ℍ)).toBWorld ∧
+      ¬ UpdReclaim (RunEnd.leakW (ℍ := ℍ)).toBWorld :=
   ⟨RunEnd.sliceShape_leakW, RunEnd.effInterp_leakW, RunEnd.dataVals_leakW,
     RunEnd.leakAt_leakW α, RunEnd.not_adequate_leakW α, RunEnd.not_updReclaim_leakW⟩
 
 /-- PROVED at the witness `carryW`: the run-end laws admit an end that holds a `Mut` lend as a
-cell (AT02's held end, `RunEnd.at02_held_end_carry`). -/
-theorem status_carryW_laws :
-    SliceShape (RunEnd.carryW (ℍ := ℍ)) ∧ UpdRefl (RunEnd.carryW (ℍ := ℍ)) ∧
-      UpdOwn (RunEnd.carryW (ℍ := ℍ)) ∧ UpdSeq (RunEnd.carryW (ℍ := ℍ)) ∧
-      UpdReclaim (RunEnd.carryW (ℍ := ℍ)) :=
+cell; the printed forms of 6.50 and 6.27 at every index exclude it. -/
+theorem status_carryW :
+    SliceShape (RunEnd.carryW (ℍ := ℍ)) ∧ UpdRefl (RunEnd.carryW (ℍ := ℍ)).toBWorld ∧
+      UpdOwn (RunEnd.carryW (ℍ := ℍ)).toBWorld ∧ UpdSeq (RunEnd.carryW (ℍ := ℍ)).toBWorld ∧
+      UpdReclaim (RunEnd.carryW (ℍ := ℍ)).toBWorld ∧
+      ¬ UpdOutlives (RunEnd.carryW (ℍ := ℍ)).toBWorld ∧ ¬ UpdLendBack (RunEnd.carryW (ℍ := ℍ)).toBWorld :=
   ⟨RunEnd.sliceShape_carryW, RunEnd.updRefl_carryW, RunEnd.updOwn_carryW, RunEnd.updSeq_carryW,
-    RunEnd.updReclaim_carryW⟩
+    RunEnd.updReclaim_carryW, RunEnd.not_updOutlives_carryW, RunEnd.not_updLendBack_carryW⟩
 
-/-- PROVED at the witness `carryW`: the printed forms of 6.50 and 6.27 at every index exclude it
-(`RunEnd.not_updOutlives_of_opened`, `RunEnd.not_updMutBack_of_closed`, generic). -/
-theorem status_carryW_printed :
-    ¬ UpdOutlives (RunEnd.carryW (ℍ := ℍ)) ∧ ¬ UpdLendBack (RunEnd.carryW (ℍ := ℍ)) :=
-  ⟨RunEnd.not_updOutlives_carryW, RunEnd.not_updLendBack_carryW⟩
+/-! ## The Instance -/
 
-/-! ## Binary and cross-language, out of the first pass (stated, OPEN) -/
+/-- PROVED: the reading of today's kernel over the open types is `tier1NU`. -/
+theorem status_tier1Open_read : tier1Open.read = tier1NU := Inst.tier1Open_read
 
-example (J : TypingJ) (fuse : Val → Val → Val) : Prop := Laws (ℍ := ℍ) J fuse
-example (J : TypingJ) : Prop := Abstraction (ℍ := ℍ) J
-example (J : TypingJ) : Prop := I4c (ℍ := ℍ) J
+/-- PROVED: the syntactic laws of A's machine at our instance. -/
+theorem status_ourInst_syntactic (Ξ : EffCtx) (J : OurTyping orowRF) :
+    (ourInst (ℍ := ℍ) orowRF Ξ J).ConfLaws ∧ (ourInst (ℍ := ℍ) orowRF Ξ J).KontLaws ∧
+      (ourInst (ℍ := ℍ) orowRF Ξ J).NoIO ∧ (ourInst (ℍ := ℍ) orowRF Ξ J).DataInj ∧
+      A.EffectSystem.LiftExt (ourInst (ℍ := ℍ) orowRF Ξ J) :=
+  ⟨Inst.confLaws_ourInst, Inst.kontLaws_orow J, Inst.noIO_ourInst, Inst.dataInj_ourInst,
+    Inst.liftExt_orow J⟩
 
-/-! ## Named-only (no statement; excluded from the elaboration check)
+/-- PROVED AT A RESTRICTION (`RF = orowRF`): our rows meet Def. 3.5 and Def. 5.1, and the link. -/
+theorem status_rows : RowAlgSafe orowRF ∧ RowLink orowRF := ⟨rowAlgSafe_orowRF, rowLink_orowRF⟩
 
-* **`CancelCloses`** (beside done, OQ-57): a cancel ends every lend the cancelled continuation
-  holds, at W.  Missing: the frames a continuation froze, as distinct from frames other suspended
-  computations hold at the same index (OQ-57's closing accounting).
-* **P8.b, `ContUse`** (beside done, OQ-50): each continuation a step creates is used as its
-  qualifier says.  Missing: an observation of a continuation's use (an instrumented `hop`, or the
-  TR's one-shot-cell machine).
-* **T3's proof device, `AbstractionOfFL₂`** (out of the first pass): T3 from a binary
-  fundamental lemma.  Missing: a binary world `SemWorld₂`.
-* **T4, `LoweringCorrect` and `ZeroCost`** (out of the first pass, OQ-23): the lowering preserves
-  observations, and the lowered code allocates and indirects only where the reference encoding
-  does.  Missing: the backend's fuel-parametric stage interpreter, and each class's reference
-  encoding and cost model (`LowClass` names the classes).
--/
+/-- PROVED AT σ=[]: no typed term intercepts a cancel. -/
+theorem status_noInterception_tier1 : NoInterception tier1 := noInterception_tier1
+
+/-- The A properties at our instance: OPEN (the bridges to build). -/
+example (Ξ : EffCtx) : Prop := AdmEff Ξ → (ourInst (ℍ := ℍ) orowRF Ξ tier1Open).SPropsNoUse
+
+/-- Binary and cross-language over Core, out of the first pass (stated, OPEN). -/
+example (J : TypingJ) (fuse : Val → Val → Val) : Prop :=
+  Laws (ℍ := ℍ) J fuse ∧ Abstraction (ℍ := ℍ) J ∧ I4c (ℍ := ℍ) J
 
 end Targets
 

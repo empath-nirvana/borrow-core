@@ -4,7 +4,7 @@
 
 Every reachable configuration satisfies the aliasing invariant, counting the loans held by suspended frames, by running handler clauses, and by values in transit.
 
-**Lean target:** designed in [`experiments/Targets/DESIGN.md`](../../../../experiments/Targets/DESIGN.md) as `Targets.Exclusive` (§6, P10), a conjunct of the end state, counting the frames suspended computations hold (`SemWorld.held`). In Lean: `Targets.Exclusive` is PROVED AT σ=[] (`exclusive_core`), OPEN at W.
+**Lean target:** [`experiments/Targets/RESTRUCTURE.md`](../../../../experiments/Targets/RESTRUCTURE.md) §2.2, §3.5: B6 `ExclusiveB` (every configuration the world reaches is a valid resource) in `B.Guarantees`, and I's `Exclusive` (the same counting the frames suspended computations hold, `SemWorld.held`) in `Interface`, both in done. In Lean: `ExclusiveB coreB` is PROVED AT σ=[] (`exclusiveB_core`, from `TW.valid`), and so is `Exclusive coreW` (`exclusive_core`); both OPEN at W.
 
 ## Why it matters
 

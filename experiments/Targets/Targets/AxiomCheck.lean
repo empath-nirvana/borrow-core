@@ -3,8 +3,11 @@ import Targets.Status
 /-!
 # Targets — the axioms of every proved result
 
-The `run_meta` checks every theorem of the `Targets` library, the generated equation lemmas
-included, against `[propext, Classical.choice, Quot.sound]` and fails the build otherwise.  Below,
+The `run_meta` checks every theorem and every definition declared in a module of the `Targets`
+library, the generated equation lemmas and instances included, against
+`[propext, Classical.choice, Quot.sound]`, and fails the build otherwise.  It also fails on any
+`opaque` or `axiom` constant, on any `implemented_by` attribute, and on any unsafe definition other
+than the `._unsafe_rec` copies the compiler generates for recursive definitions.  Below,
 `#print axioms` of every theorem the library's sources state.
 -/
 
@@ -14,30 +17,129 @@ namespace Targets.AxiomCheck
 
 def allowed : List Name := [``propext, ``Classical.choice, ``Quot.sound]
 
-/-- Every theorem declared in a module of the library. -/
-def targetsTheorems : MetaM (Array Name) := do
+/-- Every theorem and definition declared in a module of the library, with the constants the
+hygiene check rejects outright. -/
+def targetsConstants : MetaM (Array Name × Array String) := do
   let env ← getEnv
   let mut out := #[]
+  let mut odd := #[]
   for (n, ci) in env.constants.toList do
     let some idx := env.getModuleIdxFor? n | continue
     let m := env.header.moduleNames[idx.toNat]!
     unless m.getRoot == `Targets do continue
-    if let .thmInfo _ := ci then out := out.push n
-  return out.qsort (·.toString < ·.toString)
+    if (Compiler.implementedByAttr.getParam? env n).isSome then
+      odd := odd.push s!"implemented_by {n}"
+    match ci with
+    | .thmInfo _ => out := out.push n
+    | .defnInfo d =>
+      out := out.push n
+      if d.safety != .safe && !(n.toString.endsWith "._unsafe_rec") then
+        odd := odd.push s!"unsafe or partial {n}"
+    | .opaqueInfo _ => odd := odd.push s!"opaque {n}"
+    | .axiomInfo _ => odd := odd.push s!"axiom {n}"
+    | _ => pure ()
+  return (out.qsort (·.toString < ·.toString), odd)
 
 end Targets.AxiomCheck
 
 open Targets.AxiomCheck in
 run_meta do
+  let (cs, odd) ← targetsConstants
+  unless odd.isEmpty do
+    throwError m!"constants the hygiene check rejects: {odd}"
   let mut bad := #[]
-  for n in ← targetsTheorems do
+  for n in cs do
     for a in ← collectAxioms n do
       unless allowed.contains a do bad := bad.push (n, a)
   unless bad.isEmpty do
     throwError m!"axioms outside [propext, Classical.choice, Quot.sound]: {bad}"
 
+#print axioms Targets.A.EffectSystem.c1_of_rowSig
+#print axioms Targets.A.EffectSystem.complete_of_terminates
+#print axioms Targets.A.EffectSystem.dataTy_bool
+#print axioms Targets.A.EffectSystem.divInTypes_of_loops
+#print axioms Targets.A.EffectSystem.lastC_cons
+#print axioms Targets.A.EffectSystem.lastC_nil
+#print axioms Targets.A.EffectSystem.not_der_unhandled
+#print axioms Targets.A.EffectSystem.not_eProps_of_emptyTyping
+#print axioms Targets.A.EffectSystem.not_eProps_of_noLabels
+#print axioms Targets.A.EffectSystem.not_effSafe_of_stuck
+#print axioms Targets.A.EffectSystem.not_higherOrderPoly_of_monoCallback
+#print axioms Targets.A.EffectSystem.not_loops_of_total
+#print axioms Targets.A.EffectSystem.not_noColouring_of_monoCallback
+#print axioms Targets.A.EffectSystem.not_reconciler_of_monoCallback
+#print axioms Targets.A.EffectSystem.not_tunnel_of_monoCallback
+#print axioms Targets.A.EffectSystem.path_of_rreach
+#print axioms Targets.A.EffectSystem.reach_of_pureSteps
+#print axioms Targets.A.EffectSystem.rrec_respects
+#print axioms Targets.A.EffectSystem.rtick_respects
+#print axioms Targets.A.EffectSystem.rtl_respects
+#print axioms Targets.B.bindK_plain
+#print axioms Targets.B.borrowRulesClosed_of_rulesClosed
+#print axioms Targets.B.freeAt_subst
+#print axioms Targets.B.not_isVal_app
+#print axioms Targets.B.not_releasedOnceReuse_staleFree
+#print axioms Targets.B.platformNone_respects'
+#print axioms Targets.B.pstep_mach
+#print axioms Targets.B.seqK_plain
+#print axioms Targets.B.staleRest_subst
+#print axioms Targets.B.staleRun_final
+#print axioms Targets.B.staleRun_prun
+#print axioms Targets.B.step1_alloc_inv
+#print axioms Targets.B.step1_free_inv
+#print axioms Targets.B.step1_seqUnit_inv
+#print axioms Targets.B.upd_del_empty
 #print axioms Targets.CDerives.insert_dead
 #print axioms Targets.CDerivesNU.toCDerives
+#print axioms Targets.I.combined_prog
+#print axioms Targets.I.effSafe_core_of_combined
+#print axioms Targets.I.i1Prog_of_combined
+#print axioms Targets.I.i2Prog_of_combined
+#print axioms Targets.I.not_combined_of_leak
+#print axioms Targets.I.soundnessContractsAR_of_combined
+#print axioms Targets.I.tier1Core_B_of
+#print axioms Targets.I.tier1Core_guarantees_of
+#print axioms Targets.I.tier1Core_world
+#print axioms Targets.Inst.OCTy.den_ofC
+#print axioms Targets.Inst.OCTy.rFree_ofC
+#print axioms Targets.Inst.OJdg.den_ofJ
+#print axioms Targets.Inst.OJdg.rFree_ofJ
+#print axioms Targets.Inst.OVTy.den_ofV
+#print axioms Targets.Inst.OVTy.rFree_ofV
+#print axioms Targets.Inst.appK_fins
+#print axioms Targets.Inst.appK_fins_map
+#print axioms Targets.Inst.appK_hasHnd
+#print axioms Targets.Inst.appK_noUnwind
+#print axioms Targets.Inst.bindK_noUnwind
+#print axioms Targets.Inst.confLaws_ourInst
+#print axioms Targets.Inst.dataInj_ourInst
+#print axioms Targets.Inst.driveK_noUnwind
+#print axioms Targets.Inst.finE_shift
+#print axioms Targets.Inst.fins_comp
+#print axioms Targets.Inst.fins_map_comp
+#print axioms Targets.Inst.fins_map_of_noUnwind
+#print axioms Targets.Inst.fins_of_noUnwind
+#print axioms Targets.Inst.handleK_hasHnd
+#print axioms Targets.Inst.handleK_noUnwind
+#print axioms Targets.Inst.isOVal_of_isVal
+#print axioms Targets.Inst.isOVal_of_plug
+#print axioms Targets.Inst.kontLaws_orow
+#print axioms Targets.Inst.kontLaws_ourInst
+#print axioms Targets.Inst.labelOf_ne_io
+#print axioms Targets.Inst.liftExt_orow
+#print axioms Targets.Inst.noIO_ourInst
+#print axioms Targets.Inst.noUnwind_comp
+#print axioms Targets.Inst.not_isOVal_prim_app
+#print axioms Targets.Inst.octxDen_octxOf
+#print axioms Targets.Inst.octxRFree_octxOf
+#print axioms Targets.Inst.orowRF_name_injective
+#print axioms Targets.Inst.oval_ext_inj₁
+#print axioms Targets.Inst.oval_ext_inj₂
+#print axioms Targets.Inst.rowCtx_models_nil
+#print axioms Targets.Inst.rowEq_comm_ofEff
+#print axioms Targets.Inst.thenK_fins
+#print axioms Targets.Inst.thenK_not_noUnwind
+#print axioms Targets.Inst.tier1Open_read
 #print axioms Targets.RunEnd.admWf_flag
 #print axioms Targets.RunEnd.at02Body_run
 #print axioms Targets.RunEnd.at02StopK_hasHnd
@@ -83,7 +185,6 @@ run_meta do
 #print axioms Targets.RunEnd.not_adequate_leakW
 #print axioms Targets.RunEnd.not_adequate_of_leak
 #print axioms Targets.RunEnd.not_close_from_nil_carryW
-#print axioms Targets.RunEnd.not_endState_of_leak
 #print axioms Targets.RunEnd.not_flatAt_empty
 #print axioms Targets.RunEnd.not_post_of_step
 #print axioms Targets.RunEnd.not_sliceShape_of_updTop
@@ -134,8 +235,10 @@ run_meta do
 #print axioms Targets.arun_rest_irr
 #print axioms Targets.at02_eval
 #print axioms Targets.at04_eval
+#print axioms Targets.at07_eval
 #print axioms Targets.at12_eval
 #print axioms Targets.at17_eval
+#print axioms Targets.bump_follows
 #print axioms Targets.cancelTabW_core
 #print axioms Targets.closedRowAlg_laws
 #print axioms Targets.closedRowAlg_lawsSafe
@@ -143,6 +246,9 @@ run_meta do
 #print axioms Targets.comp_of_FL
 #print axioms Targets.conservativeWB_core
 #print axioms Targets.conservative_core
+#print axioms Targets.contractsW_nil
+#print axioms Targets.contractsW_of_meets
+#print axioms Targets.coreW_toBWorld
 #print axioms Targets.coreW_upd
 #print axioms Targets.ctxOutlivesJ_core
 #print axioms Targets.d_ansRun_witness
@@ -164,7 +270,7 @@ run_meta do
 #print axioms Targets.effInterp_core
 #print axioms Targets.effSafeOfFL
 #print axioms Targets.effSafe_tier1
-#print axioms Targets.endState_prog
+#print axioms Targets.embedsNil_core
 #print axioms Targets.errOkW_core
 #print axioms Targets.err_data
 #print axioms Targets.every_alloc_of_wpTS
@@ -173,13 +279,18 @@ run_meta do
 #print axioms Targets.ewpW_fold
 #print axioms Targets.ewpW_step
 #print axioms Targets.ewpW_unfold
+#print axioms Targets.exclusiveB_core
 #print axioms Targets.exclusive_core
 #print axioms Targets.extPre_core
+#print axioms Targets.extendsB_tier1
 #print axioms Targets.extendsNU_tier1
 #print axioms Targets.extendsNU_tier1NU
 #print axioms Targets.extends_tier1
 #print axioms Targets.fall_between
 #print axioms Targets.famEmpty_core
+#print axioms Targets.finDom_head
+#print axioms Targets.finDom_pstep
+#print axioms Targets.final_of_relAt
 #print axioms Targets.final_vacant
 #print axioms Targets.find_nil
 #print axioms Targets.find_ofEff_other
@@ -194,12 +305,11 @@ run_meta do
 #print axioms Targets.gDenW_nil
 #print axioms Targets.gDenW_of_meets
 #print axioms Targets.gSepW_core
+#print axioms Targets.genSelf_eval
 #print axioms Targets.getElem?_pred
 #print axioms Targets.handleCompat_core
 #print axioms Targets.hndTerm_shift
-#print axioms Targets.i1Prog_of_endState
 #print axioms Targets.i1_core
-#print axioms Targets.i2Prog_of_endState
 #print axioms Targets.i2_core_abortive
 #print axioms Targets.i3_core
 #print axioms Targets.i4a_tier1
@@ -210,19 +320,29 @@ run_meta do
 #print axioms Targets.immFrameUW_core
 #print axioms Targets.immFrameW_core_abortive
 #print axioms Targets.init_vacant
+#print axioms Targets.isVal_mapLoc
 #print axioms Targets.isVal_renameLoc
 #print axioms Targets.lifetimeSound_core
 #print axioms Targets.live_insert
+#print axioms Targets.mapLoc_id
+#print axioms Targets.mapLoc_of_noLoc
 #print axioms Targets.meetOfDomL_not_mentions
+#print axioms Targets.mem_locsOf
+#print axioms Targets.mem_namedList
 #print axioms Targets.models_empty
 #print axioms Targets.models_nil
 #print axioms Targets.mono_core
 #print axioms Targets.mutFrameUW_core
 #print axioms Targets.mutFrameW_core_abortive
 #print axioms Targets.mutView_core
+#print axioms Targets.named_init
 #print axioms Targets.noInterception_tier1
+#print axioms Targets.noLoc_of_dataVal
+#print axioms Targets.noLoc_of_mapLoc
+#print axioms Targets.noReuse_of_bump
 #print axioms Targets.no_infinite_of_wpTS
 #print axioms Targets.not_occ_vac
+#print axioms Targets.not_pstep_of_val
 #print axioms Targets.nu_susp
 #print axioms Targets.ofEff_wf
 #print axioms Targets.okE_app
@@ -257,7 +377,6 @@ run_meta do
 #print axioms Targets.orow_ext
 #print axioms Targets.outExtends_core
 #print axioms Targets.p11_core
-#print axioms Targets.p8a_of_endState
 #print axioms Targets.platformNone_respects
 #print axioms Targets.platformPing_respects
 #print axioms Targets.plug_not_post
@@ -267,6 +386,8 @@ run_meta do
 #print axioms Targets.ptoImmSW_core
 #print axioms Targets.ptoMutSW_core
 #print axioms Targets.ptoMutSW_core_eq
+#print axioms Targets.push_emptyMem
+#print axioms Targets.push_isSome
 #print axioms Targets.raiseE_subst
 #print axioms Targets.raiseFin_steps
 #print axioms Targets.rc_allEV_tier1
@@ -367,11 +488,14 @@ run_meta do
 #print axioms Targets.rc_zeroE_tier1NU
 #print axioms Targets.redLaws_core
 #print axioms Targets.redLaws_of_mono
+#print axioms Targets.relAt_init
 #print axioms Targets.relElim_core
 #print axioms Targets.relLaws_core
 #print axioms Targets.relShape_core
 #print axioms Targets.releasedOnceAll
 #print axioms Targets.releasedOnceOfSound
+#print axioms Targets.releasedOnceReuse_of_bumpSim
+#print axioms Targets.releasedOnceReuse₀_of
 #print axioms Targets.releasedOnce_of_ends
 #print axioms Targets.resuming_abortive_empty
 #print axioms Targets.resuming_fooSig
@@ -404,9 +528,13 @@ run_meta do
 #print axioms Targets.shareResume_core
 #print axioms Targets.shift_closed0
 #print axioms Targets.size_shift
+#print axioms Targets.sliceShapeB_core
+#print axioms Targets.sliceShapeI_core
 #print axioms Targets.sliceShape_core
+#print axioms Targets.sliceShape_iff
 #print axioms Targets.soloP_insert
 #print axioms Targets.soloP_prepend
+#print axioms Targets.soundContractsOfFL
 #print axioms Targets.soundDriveAt_of_FL
 #print axioms Targets.soundRetAt_of_FL
 #print axioms Targets.soundRetAt_tier1_none
@@ -416,46 +544,54 @@ run_meta do
 #print axioms Targets.spanBorrows_core_abortive
 #print axioms Targets.splitP_insert
 #print axioms Targets.splitP_prepend
-#print axioms Targets.status_I1_core
-#print axioms Targets.status_I2_core_abortive
-#print axioms Targets.status_I3_core
 #print axioms Targets.status_I4a_tier1_abortive
-#print axioms Targets.status_I5_core
 #print axioms Targets.status_I5beta
-#print axioms Targets.status_P11_core
 #print axioms Targets.status_adequateRet_core_none
 #print axioms Targets.status_admExtends_closedOp
-#print axioms Targets.status_carryW_laws
-#print axioms Targets.status_carryW_printed
-#print axioms Targets.status_conservativeWB_core
+#print axioms Targets.status_carryW
+#print axioms Targets.status_combined_prog
 #print axioms Targets.status_conservative_core
+#print axioms Targets.status_contractsW_of_meets
+#print axioms Targets.status_device_core
 #print axioms Targets.status_effSafeOfFL
+#print axioms Targets.status_effSafe_core_of_combined
+#print axioms Targets.status_effSafe_teeth
 #print axioms Targets.status_effSafe_tier1
-#print axioms Targets.status_endState_prog
-#print axioms Targets.status_exclusive_core
+#print axioms Targets.status_exclusiveB_core
+#print axioms Targets.status_extendsB_tier1
 #print axioms Targets.status_extendsNU_tier1
 #print axioms Targets.status_fl_core_tier1
-#print axioms Targets.status_i1Prog_of_endState
-#print axioms Targets.status_i2Prog_of_endState
 #print axioms Targets.status_leakW
 #print axioms Targets.status_lifetimeSound_core
+#print axioms Targets.status_loops
 #print axioms Targets.status_noInterception_tier1
-#print axioms Targets.status_not_endState_of_leak
+#print axioms Targets.status_not_combined_of_leak
+#print axioms Targets.status_not_eProps_of_emptyTyping
+#print axioms Targets.status_not_eProps_of_noLabels
+#print axioms Targets.status_not_noColouring_of_monoCallback
+#print axioms Targets.status_not_poly_of_monoCallback
+#print axioms Targets.status_not_releasedOnceReuse_staleFree
 #print axioms Targets.status_not_sliceShape_of_updTop
-#print axioms Targets.status_outExtends_core
-#print axioms Targets.status_p8a_of_endState
-#print axioms Targets.status_redLaws_of_mono
+#print axioms Targets.status_ourInst_syntactic
+#print axioms Targets.status_progs_of_combined
 #print axioms Targets.status_releasedOnceAll
 #print axioms Targets.status_releasedOnceOfSound
-#print axioms Targets.status_rowAlgSafe_orow
-#print axioms Targets.status_rowLink_orow
+#print axioms Targets.status_releasedOnceReuse_of_bumpSim
+#print axioms Targets.status_rows
+#print axioms Targets.status_runners_respect
+#print axioms Targets.status_soundContractsOfFL
 #print axioms Targets.status_soundRet_tier1_none
+#print axioms Targets.status_soundnessContractsAR_of_combined
 #print axioms Targets.status_soundnessContractsOfFL
 #print axioms Targets.status_soundnessContractsOfFLWB
 #print axioms Targets.status_soundnessOfFL
-#print axioms Targets.status_tier1End_of
+#print axioms Targets.status_tier1Core_B_of
+#print axioms Targets.status_tier1Core_guarantees_of
+#print axioms Targets.status_tier1Core_world
+#print axioms Targets.status_tier1Open_read
 #print axioms Targets.status_updLaws_core
 #print axioms Targets.status_updLaws_of_core
+#print axioms Targets.status_wBound_core
 #print axioms Targets.status_wbCore
 #print axioms Targets.status_wlaws_core
 #print axioms Targets.status_wpGW_of_wpG_nil
@@ -491,6 +627,7 @@ run_meta do
 #print axioms Targets.vC_data_mp
 #print axioms Targets.vC_of_dataVal
 #print axioms Targets.var_shift
+#print axioms Targets.wBound_core
 #print axioms Targets.wbCore
 #print axioms Targets.withPair_shift
 #print axioms Targets.wlaws_core

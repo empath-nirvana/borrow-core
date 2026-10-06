@@ -1,296 +1,244 @@
 # Targets: what you are asked to agree
 
-This page summarises `DESIGN.md` and `Targets/Status.lean` so you can read and agree them. The
-Lean in `experiments/Targets` states every target as a `def … : Prop`. It contains no `sorry`
-and no forbidden axiom, and `lake build Targets` is clean. It proves the first wave of
-restricted instances, mostly at Core's own world (σ = []). **Done itself is OPEN**: the tier-2
-typing system `J₂` and the world `W` do not exist yet.
+This page summarises `RESTRUCTURE.md` and `Targets/Status.lean` so that you can read and agree
+them. The targets are now two systems and the rules of their interaction: an effect system (A), the
+borrow calculus (B), the interaction (I), and our calculus as one instance of A. The Lean in
+`experiments/Targets` states every target as a `def … : Prop`. `lake build Targets` is clean, with
+no `sorry` and no forbidden axiom. The axiom check covers every theorem and definition, and the
+step-index audit passes with its nine negative tests. **Done itself is OPEN**: the tier-2 typing
+system `J₂` and the world `W` do not exist yet.
 
 > [!WARNING]
-> **Do not agree to these targets yet.** Three independent verifiers checked them. One passed
-> with minor findings only. Two failed, reporting one blocker and six major findings, listed
-> below. The blocker is answered (`FIX-RUN-END.md`); the six major findings are open. Each of
-> them changes what "done" says, so the end state should be revised and re-verified before you
-> agree it. The earlier statement review's ten major findings were answered in DESIGN.md, but
-> the answers were never reviewed again.
+> **Do not agree these targets yet.** Five things are open. The first three are review findings
+> and departures that no one has checked; the fourth is what the build has not reached; the last
+> is the minor findings still open.
 >
-> **Blocker (answered by `FIX-RUN-END.md`)**
+> **1. The third review's findings, answered in the design and not reviewed again**
+> (RESTRUCTURE §9.0 and §Unresolved U.1). The build implements each answer as written.
 >
-> 1. **W's wp fixed an open design option (OQ-9).** Every `SemWorld`'s one-run wp (`wpGW`) had
->    Core's `↭` built in as a fixed conjunct (`ResU.UpdV`), so no W could stop at a resuming
->    operation holding, as a borrow cell, a `Mut` lend it opened (LoopBorrow's
->    `not_upd_of_new_mut`; in the library `at02_runEnd`, `wpGW_at02`). *Answer*, each line for a
->    `Mut` lend (an `Imm` lend carried open is not built):
->    1. The run-end relation is the field `SemWorld.Upd`, and `wpGW` ends every run under
->       `M.Upd`.
->    2. `SliceShape` pins it to Core's `↭` on the nil slice. The pin puts Core's runs in W's runs
->       (`wpGW_of_wpG_nil`), and it bounds ends from the nil slice to the nil slice; it does not
->       bound W's runs, since a run picks its end index and one from σ = [] may end off the nil
->       slice. Its `→` half fixes a reading of σ = [] (decision 10).
->    3. What keeps a weak `Upd` from making done easy: the program-level guarantees are asserted
->       of `J` and do not mention W (`endState_prog`); `Arises`, `Exclusive` and `LifetimeSound`
->       do not read `Upd`; at the device, `Adequate` (with `EffInterp` and `DataVals`) excludes a
->       reachable leak (`not_adequate_of_leak`, `not_endState_of_leak`, `not_adequate_leakW`).
->       The rule-shaped conjuncts read `Upd` on both sides, are not monotone in it, and no bound
->       is recorded from them. Off the nil slice, no conjunct of done is shown to constrain
->       `Upd`'s borrow content beyond `Adequate`'s leak bound.
->    4. The lend-back laws (6.27–6.29, 6.38, 6.39, and 6.48 into the post, 6.50, at W) are stated
->       beside done and hold where `Upd` is Core's at every index (`updLendBack_of_core`,
->       `updFrame_of_core`, `updOutlives_of_core`). Stated at every index, 6.27 and 6.50 fail at
->       every world that admits the runs OQ-9 (a) with the cell kept makes of AT02 (the held end,
->       and the run that closes it), `carryW` among them (`not_updOutlives_of_opened`,
->       `not_updMutBack_of_closed`). Their form for such a world is the open part of the field's
->       specification (OQ-9 (a), OQ-44). `AdequateOfLaws` asks `UpdSeq` and `UpdReclaim`.
+> - *Blocker: A's matchers never matched a driven configuration.* Answer: the driver is a
+>   context, `driveF`, with `plug driveF M = drive M`, catching and stopping nothing. Built in A's
+>   laws. **Unchecked at our instance**: the bridges that would prove `Congr` and `DriveLaws`
+>   there, the drive-phase run correspondence and `effSafeDriveOfFL` are not built.
+> - *Major: E6 used `PolyUseOpen`, which allows the accidental handling E6 excludes.* Answer:
+>   `PolyUseLacks`. Built, and `not_tunnel_of_monoCallback` is proved against it. **Unchecked**:
+>   `fwrap`'s type at `J₁`.
+> - *Major: done did not bind the effect context Ξ or the row form `RF`.* Answer:
+>   `Combined RF J M Adm c`, with A's properties at every admissible Ξ (`AdmEff`). Built.
+>   **Unchecked**: whether `AdmEff` is the right range.
 >
->    The review of the answer ended with two major findings, unresolved: the answer was revised
->    in response to each, and the revision was not reviewed again (`FIX-RUN-END.md`
->    §Unresolved).
+> **2. `FIX-RUN-END.md`'s two major findings, revised and not reviewed again** (its §Unresolved).
+> Its recorded text chose a representation for OQ-9 (a); it now names both. Two impossibility
+> claims about a 6.64 lend had no Lean; the configuration is now built at AT02's run
+> (`at02_imm_end`).
 >
->    - *The recorded design text chose a representation for OQ-9 (a).* The `held` docstring, D10
->      and the §10 row were to say that a `Mut` lend carried open "is a borrow cell … not a held
->      frame" and "shows only as a borrow cell", although FIX-RUN-END §4 lists (a) with the cell
->      unfolded, where the lend is kept only in the index. *Revision:* the three places say the
->      lend adds no 6.64 frame or record, so `held` does not see it, and that a world carrying it
->      accounts for it through `Upd` and the index, either as a borrow cell in the run's resource
->      or unfolded with the lend recorded in the index, which is OQ-9 (a)'s and OQ-44's question.
->    - *Two impossibility claims about a 6.64 (`Imm`) lend had no Lean*: that R-T1 and `↭` each
->      exclude an `Imm` lend open at a stop, and that relaxing `Stop` alone does not admit one.
->      *Revision:* the configuration is built (the review's option (a)) at AT02's machine run:
->      `at02_imm_end` ends it at `Foo` holding `c ↦ imm({α}, inj₁ (), ∅)` with 6.64's record in
->      the visible frames and the index; it arises in `TW` and fails R-T1, `↭` and `M.Upd` at
->      the nil index, and `StopVisible` excludes its visible frame at every index
->      (`not_stop_imm_of_stopVisible`). Each claim is now about that end. No 6.64-typed program
->      is built.
+> **3. The build's departures from the design, not reviewed** (RESTRUCTURE §Unresolved U.2, 30
+> items). These change what a target says, and you should look at them before agreeing:
 >
-> **Major**
+> - A's laws that assert a step (`AppLaw`, `LoopLaws`, `DriveLaws`, `HandlerSem`) hold only at
+>   configurations reached from a typed closed program (`Live`). A's values include variables, and
+>   no machine steps an open redex.
+> - Two abstract lemmas take one more hypothesis each: `divInTypes_of_loops` takes `RowAlgebra`;
+>   `not_reconciler_of_monoCallback` takes `LiftExt`, which our rows meet.
+> - At our instance the driver is a Core frame around the program, not a phase mark. A phase would
+>   be lost in a stored finaliser.
+> - `BumpSim`, the machine lemma B5 rests on, has a body of the builder's: a finite set the bump
+>   step avoids, and maps that move array blocks as blocks.
+> - A₃'s `LoweringCorrect` and `ZeroCost` are relational, through `PlatformSim`. `refCost` is
+>   `(0, 0)` with no reference program written to check it.
+> - `Tier2Programs` has five programs: `reconB` is not built.
 >
-> 2. **Exactly-once release in done has no content.** `ReleasedOnceAll` assumes its own
->    conclusion. `NoReuse` already gives at-most-once, and `Final`'s empty memory already
->    gives at-least-once. It is proved at *every* typing system and ignores typing, `SafeRuns`
->    and `Terminates`. The content that matters, at-most-once on runs that *reuse* locations,
->    is `ReleasedOnceReuse`, which sits beside done rather than in it. DESIGN D9, §9, I3 (a),
->    the notebook's `i3-drop.md` and `continuation-linearity.md`, and README rows A6/T4/T6
->    all still present `ReleasedOnceAll` as carrying the guarantee.
-> 3. **Soundness with externs no longer comes from the fundamental lemma alone.** Correction
->    C2 is right that `ExternsMeet` admits an extern at any persistent type. As a result,
->    `SoundnessContracts` (a conjunct of done) has a route at W only through `Conservative W`.
->    That is A7 in full, which is beside done and which the survey calls open. This
->    contradicts "one proof method: the fundamental lemma" and DESIGN §4.1's "FL is the only
->    hard theorem". You are asked to choose a fix (decision 4 below).
-> 4. **Row variables in the kernel (decision 62) are not required by any target.** Row
->    variables exist only as Lean-level families. The types (`VTy`/`CTy`) have no row-variable
->    former, there is no rule for generalising or instantiating rows, and `RowLink` never
->    connects the row algebra to `J`'s types. A kernel with no row variables meets done. The
->    prenex reading also ties the target to Core's current lack of a row former.
-> 5. **T4 (zero cost) is not stated.** It is one of your four top-level theorems, and the
->    task said to state it and mark it out of the first pass. The file has only
->    `inductive LowClass`. "Effect handling is erased at runtime" has no target anywhere. The
->    stated reason is missing backend definitions, but W has the same problem and is handled
->    as an abstract parameter.
-> 6. **Done contains conjuncts that constrain OQ-8 and OQ-9, and mixes the proof device into
->    the guarantees.** `Mono` rules out placing the future-world quantifier inside the binder
->    clause, unless `EwpMono` holds, and nothing proves it. `ShareResume` and `ShareCancel`
->    fix Core's placement of that quantifier. The printed-shape `FramesW` can decide OQ-9.
->    These are requirements on BoLo's text, not program-level guarantees, yet `FL`, `WLaws`
->    and `FramesW` are conjuncts of `Guarantees`. The task asked for the fundamental lemma at
->    W to be a *separate* target. *Proposed fix:* split done into a program-level end state
->    and a proof-device target, or state the option-sensitive conjuncts as disjunctions over
->    the options.
-> 7. **The step-index audit can be fooled.** The audit is part of done (decision 7), but it
->    scans only definition bodies for recursors. A step index carried by an ℕ-indexed
->    inductive family passes it, and so does one carried by a library function outside our
->    modules. So "the audit passes" does not establish "no step-indexing". It needs to flag
->    ℕ-indexed inductives and come with a negative test (a toy step-indexed world it must
->    reject).
+> **4. A is checked at no instance of ours** (RESTRUCTURE §Unresolved U.3).
 >
-> The minor findings are listed at the end of this page.
+> - Proved: A's non-vacuity lemmas, abstractly at every instance. An instance with no typing,
+>   with no effects, without effect polymorphism, or total fails the (E) properties that need each.
+> - Not built:
+>   - the semantic bridges from Core to A's laws, so it is not verified that our calculus meets
+>     A's (S) properties;
+>   - §6.1's concrete lemmas: that today's kernel fails E1, E2, E6 and E10
+>     (`monoCallback_tier1Open`), that tier 1 rejects the tier-2 programs, that R1–R4 break S6 at
+>     our machine, and the positive (E) runs.
+>
+> **5. Minor findings still open.**
+>
+> - Targets declares names in Core's namespaces (`BoCa.Expr.mapLoc`, `BoCa.Expr.MentionsLoc`, …),
+>   so a future addition to Core could clash with them.
+> - In `I4a`, `ImplTyped` is a dead hypothesis, and the non-vacuity witness exercises no operation.
+> - No tier-1 rejection of the tier-2 programs is proved, so `Tier2Programs`' discrimination is
+>   unchecked.
+> - η has no unary form in I5; it lives only in A₂'s binary laws.
+> - `FreezeBinder` has no instance half, and its lifetime half is forward instantiation, not
+>   equivariance.
+> - `DivFree` reads decision 35 (divergence lives in `Loop`); its docstring says so, and
+>   RESTRUCTURE §7 Q3 asks whether that is the intended reading.
 
 ---
 
-## The definitions, in a few lines each
+## The two systems, in a few lines each
 
-- **Effect.** An effect is a name together with a signature: a list of operations `A ↠^q B`.
-  The qualifier `q` says how the continuation may be used: `lin` (exactly once), `aff` (at most
-  once, otherwise cancelled) or `unr`. An operation with `B = 0` that is not `lin` is
-  *abortive*. Names are static, one per handler site. A **row** is a finite list of operation
-  signatures, read by first match. A **row variable** stands for a closed row and is
-  constrained by a class and an admissibility condition. The rows form an effect algebra
-  (Yoshioka–Sekiyama–Igarashi Def. 3.5) that must be *safe* (their Def. 5.1). (See major
-  finding 4: J's types do not yet have row variables.)
-- **Handler.** A handler is Core's `hnd (n, (h_ret, hs))`: a return clause plus one clause per
-  operation, typed by `[handle]`. It is a model of its signature, and handling is the map that
-  model induces. The machine's `[ret]`, `[op]` and `[unwind]` steps carry it out.
-- **Suspension.** A suspension is the continuation value `κ = kappa n H K` that the `[op]` step
-  hands to a clause. Its type `kTy` follows the qualifier: `U((B ⊸ F R) & ⊤)` at `lin`,
-  `U((B ⊸ F R) & F 1)` at `aff`. A suspension can be **resumed** with an answer, or
-  **cancelled**. Cancelling runs `cancelOf n H K`, which fires the frozen `[then]` finalisers
-  (`Kont.fins`) innermost first. Nothing can forget a `lin`/`aff` continuation: discard is an
-  explicit cancel.
-- **Platform.** The platform is a comodel (Ahman–Bauer). It answers at the top the operations
-  that no handler catches. It may only access its own state, never touches program memory, and
-  serves linear, resuming data operations.
-- **Effect safety (`EffSafe`).** A typed program at row `S` either runs to a value, keeps
-  stepping, or stops at an operation of `S` that nothing catches. It never stops anywhere else.
-- **Soundness (T1).** Take every allocator and every platform that keeps its protocol. Every
-  run of a typed program is never stuck: no use after free, no double release, no unhandled
-  operation. At a data answer, every run terminates with the memory empty. A program that
-  returns a loop is safe at every finite prefix of its drive. Termination is claimed only at
-  div-free answers, since div is an effect.
-- **Finalisation exactly once.** Every allocated cell is released exactly once. On a cancel or
-  an unwind, finalisers fire once each, innermost first (`FinaliserOrder`). No typed program
-  can intercept a cancel (`NoInterception`). (See major finding 2: the conjunct in done that
-  states this is currently empty.)
-- **The invariant.** The invariant is W's family of configurations, `SemWorld.Fam`, which at
-  Core is the typed worlds `TW`, together with what suspended computations hold
-  (`SemWorld.held`). **Arising** says that every configuration a W-run ends in is a typed world
-  over the visible frames plus the held ones, so `TW.inv` and `TW.valid` apply to it. This is
-  "every wp run ends in a TW world plus TW.inv", extended to W.
-- **W.** W is not built. It enters only as the parameter `M : SemWorld`, which has fields for
-  the world, the stop condition, the run-end relation `Upd` (Core's `↭` on the nil slice), the
-  relation at rows, `held` (OQ-9) and `payStk` (OQ-46). `coreW` is Core's relation, the instance
-  with a one-point lend stack.
+### A: an effect system, on its own
+
+A is judged on its own terms, with no borrows in sight. An `EffectSystem` is a call-by-push-value
+calculus over an effect algebra (Yoshioka–Sekiyama–Igarashi Def. 3.5). It has handlers,
+continuations that are resumed or cancelled, finalisers, a loop vocabulary with the runtime's
+driver, a labelled machine and a typing.
+
+- **(S) soundness**, upper bounds that say nothing goes wrong:
+  - S0, the machine's shape and the let law;
+  - S1, the row algebra (lawful, safe, rows as sums of signatures);
+  - S2, safety, and termination at data answers on the pure row;
+  - S3, effect safety;
+  - S4, the handler laws in every context, deep;
+  - S5, cancellation as SPEC §19 builds it: finalisers innermost first, each once, the first
+    outside error re-raised, no interception;
+  - S6, linear and affine use of continuations, observed from the run.
+- **(E) expressiveness**, lower bounds that say what must be accepted and run. E1–E10 are
+  concrete programs with their answers and observable traces, and schemas of effect polymorphism
+  in Zhang–Myers' shape:
+  - E1, no colouring;
+  - E2, higher-order polymorphism;
+  - E3, loops and the driver;
+  - E4, deep handlers;
+  - E5, nested handlers;
+  - E6, tunnelling;
+  - E7 and E8, the cancel and unwind policies;
+  - E9, stored continuations;
+  - E10, the reconciler.
+
+  A decided feature enters A only through an (E) property that needs it.
+- **Read in good faith.** The targets state what we are building, as the literature states its
+  theorems. A contrived instance that would meet one is not a finding (RESTRUCTURE, introduction).
+
+### B: the borrow calculus, given
+
+B states BoLo's guarantees over a typing system and a borrow world `BWorld`, which has borrow
+fields only:
+
+- B0, BoLo's programs stay typed;
+- B1, the fundamental property;
+- B2, adequacy;
+- B3, no use after free and no double free;
+- B4, leak freedom;
+- B4′, B3 and B4 with externs meeting W's contract;
+- B5, release exactly once, location reuse included;
+- B6, exclusive mutable borrows;
+- B7, lifetimes respected;
+- the bounds.
+
+Each is proved at BoLo by citing `Core` and `Paper`, at the restrictions in the table below.
+"Nothing breaks the borrow calculus" is `B.Guarantees`. **B5 has content now**: every complete run
+is, step for step, the image of a run that reuses no location (`ReleasedOnceReuse`).
+`ReleasedOnceAll`, which done used to hold, is a tautology about runs and is kept only as a lemma.
+
+### I: the interaction
+
+I is the only place where A and B meet. Its world `SemWorld` extends `BWorld` with what
+suspensions hold, the stop condition and the continuation's share. I states:
+
+- how rows are read in the world (`Bounds`), and what the world reaches (`Interface`);
+- what the composite's typing must contain (`Pins`, with I4: answering effects are borrows);
+- the composite's programs (`Accepts`) and its rejections (`Rejects`);
+- the combined theorem.
+
+Every conjunct that would fix an option of OQ-8 or OQ-9 is in the **proof device**, beside done,
+so done picks neither.
+
+### The Instance: our calculus as one instance of A
+
+`ourInst RF Ξ J` reads Core as an `EffectSystem`, at a row form `RF`, an effect context Ξ and a
+typing system `J` over open types with row variables. `tier1Open` is today's kernel over those
+types, and its reading is exactly today's unr-free rules (`tier1Open_read`).
 
 ## What "done" means
 
-Done is `theorem endState_W : EndStateAt J₂ W Adm RF` at a **named** tier-2 typing system `J₂`
-(the kernel's unr-free judgment) and a **named** world `W`, together with `audit_W`, the
-step-index audit of W's definition, passing. `Adm` is the admissibility that OQ-56 settles, and
-`RF` is the row form that OQ-13 settles.
+```lean
+def I.Combined (RF : RowForm) (J : OurTyping RF) (M : SemWorld) (Adm : OpAdm) (c : RowClass) : Prop :=
+  (∀ Ξ, AdmEff Ξ → (ourInst RF Ξ J).Props)   -- nothing breaks the effect algebra, whatever effects are declared
+  ∧ B.Guarantees J.read M.toBWorld            -- nothing breaks the borrow calculus
+  ∧ Bounds M ∧ Interface M                    -- the interaction's option-neutral rules at the world
+  ∧ Pins J Adm c                              -- what the composite's typing must contain
+  ∧ Accepts J.read c ∧ Rejects J.read         -- the composite's programs, and the rejections that pin soundness
+```
 
-`EndStateAt` consists of three parts:
-
-- T0, the row-algebra conjuncts, and `AdmExtends`;
-- the typing pins `Tier2Pinned`, `AcceptsTier2` and `I4a`;
-- `Guarantees`, the program-level guarantees and the W-level device/interface at one fixed `J`
-  and one fixed `M`.
-
-The tier-1 milestone `Tier1End` is separate from done. It is the same `Guarantees` at Core's
-typing and `coreW`, restricted to abortive rows.
-
-**Status:** done is OPEN. `Tier1End` is OPEN, but it follows from two open statements,
-`Adequate coreW` and `FinaliserOrder tier1` (`status_tier1End_of`). Every other conjunct of it
-is proved.
+- **Done** is `Combined orowRF J₂ W admClosedOp .any` at a named `J₂` and a named `W`, with
+  `audit_W`. It is fixed at `admClosedOp` until OQ-56 is chosen, and at `orowRF` until OQ-13's
+  remaining question is answered.
+- **Tier 1** is `Combined orowRF J₁ coreW admClosedOp .abortive`. `J₁` is today's rules with row
+  variables, because A's (E) properties need effect polymorphism at every tier (Q1 below).
+- **Status.** Done and tier 1 are OPEN. The restricted reduction `Tier1Core`, at today's kernel
+  and Core's world, has its world conjuncts and device proved. B's guarantees there follow from
+  adequacy at BoLo and the step-for-step simulation `BumpSim` (`tier1Core_guarantees_of`). It
+  lacks A's (S) properties at our instance and `I4a` at today's unr-free kernel.
 
 ## The targets
 
-Worlds: **prog** means runs and typing only, with no semantic world; **W** means the parameter
-`M`; **Core** means σ = [] (`coreW`/`tier1`). Status words come from `Status.lean`.
+Status words come from `Status.lean`. **σ=[]** is Core's relation and typing; **generic** is every
+world or typing system; **every instance** is every `EffectSystem`.
 
-| id | one-line statement | world | status | depends on |
-|---|---|---|---|---|
-| **done** | `EndStateAt J₂ W Adm RF` + `audit_W` | W | OPEN | everything below |
-| `Tier1End` | every guarantee for Core's typing at Core's relation, lends spanning abortive rows | Core | OPEN | `Adequate coreW`, `FinaliserOrder tier1` |
-| **T1** `Soundness` | every run safe; data answers terminate with memory empty; driven loops safe | prog | return conjunct PROVED AT A RESTRICTION (`Platform.none`); full OPEN | FL + `Adequate` (`soundnessOfFL`, proved) |
-| T1 `SoundnessContracts` | T1 with externs meeting their contracts, under platform operations | prog | OPEN | FL, `ExtPre`, `Conservative`, `Adequate` (major 3) |
-| **T2** `Laws` | handler equations as contextual equivalences | prog, binary | stated, OPEN; out of first pass | binary world (named-only) |
-| **T3** `Abstraction` | tunnelling, representation independence, encapsulation | prog, binary | stated, OPEN; out of first pass | binary FL (named-only) |
-| **T4** `LoweringCorrect`, `ZeroCost` | lowering preserves output; handling costs no more than hand-written C/Rust | prog + backend | **not stated** (major 5); out of first pass | backend interpreter, reference encodings |
-| T0 `RowAlgSafe`, `RowLink` | the row algebra is lawful and safe, and is the one typing uses | prog | PROVED AT A RESTRICTION (`orowRF`) | — |
-| `AdmExtends` | admissibility contains R-CLOSEDOP | prog | PROVED AT A RESTRICTION (`admClosedOp`) | — |
-| `Tier2Pinned`, `AcceptsTier2` | tier 2 has the spanning rules and types `at02`, `at04`, `at12`, `at17` | prog | OPEN (no tier-2 typing); the four terms run | `J₂` |
-| `ExtendsNU`, `OutExtends` | the typing extends Core's unr-free rules and outlives judgments | prog | PROVED AT σ=[] | — |
-| `ReleasedOnceAll` | exactly-once release on complete no-reuse runs | prog | PROVED for every `J` (**empty**; major 2) | — |
-| `ReleasedOnceReuse` | exactly-once release on runs that reuse locations | prog | OPEN; beside done | `BinderMachine` |
-| P2 `EffSafe` | stops only at an uncaught operation of the row | prog | PROVED AT σ=[] | — |
-| I3.c `NoInterception` | no typed program catches a cancel | prog | PROVED AT σ=[] | — |
-| I3.b `FinaliserOrder` | cancel/unwind fire finalisers once each, innermost first | prog | OPEN; two-frame instance PROVED | — |
-| `FL` | every typing judgment holds in W's relation | W | PROVED AT σ=[] | `WLaws` |
-| `Adequate` | a closed computation in W's relation runs safely and terminates | W | return conjunct PROVED AT A RESTRICTION (`Platform.none`); full OPEN | `WLaws`, `UpdSeq`, `UpdReclaim` (`AdequateOfLaws`, OPEN) |
-| `WLaws` | the laws every W satisfies (bounds, `Mono`, nil-slice shape, …) | W | PROVED AT σ=[] | — |
-| **I1** | a suspension is a value of the resource world at its `kTy` | W | PROVED AT σ=[] | — |
-| **I2** | capture and resume preserve the invariant, spanning lends included (preservation, no termination) | W | PROVED AT A RESTRICTION (abortive rows) | `Arises`, `FramesW`, `SpanBorrows` |
-| **I3** (I3.a) | the cancel run preserves the invariant and leaves nothing newly held | W | PROVED at `coreW` (label says "restriction: nothing held"; minor) | — |
-| **I4** (I4.a) | an answering effect's borrow form is typed by the borrow rules | prog | PROVED AT A RESTRICTION (tier 1, abortive rows) | — |
-| `I4Typing`, `I4c` | the control form types its borrow form; the two are equivalent | prog / binary | OPEN; beside done / out of pass | OQ-1 |
-| **I5** | capture laws: β, hiding (6.66 at W), frame | W | PROVED AT σ=[]; `I5beta` generic | — (η only in T2; minor) |
-| P9 `LifetimeSound` | 6.60 at W at every type, suspension types included | W | PROVED AT σ=[] | `J.out` |
-| P10 `Exclusive` | every reached configuration satisfies aliasing, counting held loans | W | PROVED AT σ=[] | `Arises` |
-| P11 | `[handle]` sound at W; reduction is semantic identity | W | PROVED AT σ=[] | — |
-| P14.b `ConservativeWB` | Core-valid values at row-abortive types stay valid in W | W | PROVED AT σ=[] | — |
-| `Conservative` | the same at every type (A7 in full) | W | OPEN; at `coreW` PROVED AT σ=[]; beside done | — |
-| `FreezeBinder`, `BinderMachine` | freeze as a binder: equivariance under renamings | W / prog | OPEN; beside done | — |
-| `CancelCloses`, P8.b | a cancel ends every lend it holds; each continuation is used as its qualifier says | W / prog | named-only (no statement) | OQ-57, OQ-50 |
-| step-index audit | no step index in W's definition | meta | passes on `coreW` (blind spots; major 7) | — |
+| system | target | status |
+|---|---|---|
+| A | S0–S6, E1–E10, `Props` | stated; at our instance OPEN (the bridges) |
+| A | an instance that types nothing, has no effects, lacks effect polymorphism or is total fails the (E) properties that need each; effect safety has teeth | PROVED (every instance) |
+| A | A₂ (binary laws, abstraction), A₃ (erased lowering, zero cost) | stated, out of the first pass; A₃'s reference programs not written |
+| B | B0, B1, B6, B7, the bounds | PROVED AT σ=[] |
+| B | B2, B3, B4 | PROVED AT A RESTRICTION (no platform operation, data answers); in full OPEN |
+| B | B4′ (externs at W's contract) | PROVED (generic, from B1 and B2) |
+| B | B5 | PROVED from B4′ given `BumpSim` (generic); `BumpSim` OPEN (OQ-43); not a tautology (`not_releasedOnceReuse_staleFree`) |
+| I | `Bounds`, `Interface`, the device at `coreW` | PROVED AT σ=[] (abortive rows) |
+| I | the corollaries of `Combined`; a reachable leak breaks it | PROVED (generic) |
+| I | the composite programs | run by the interpreter (evidence); `CompositeT1` at tier 1 PROVED AT A RESTRICTION; `Tier2Programs`, `Rejects` at a typing system OPEN |
+| I | `I4a` | PROVED AT A RESTRICTION (tier 1, abortive rows) |
+| Instance | `tier1Open.read = tier1NU`; A's syntactic laws at our instance; our rows' algebra | PROVED |
+| Instance | A's semantic laws at our instance; today's kernel fails E1, E2, E6, E10; R1–R4 | OPEN |
+| meta | the step-index audit at `coreW`, nine negative tests | passes |
 
 ## Deliberately out of the first pass
 
-- **Binary and cross-language targets.** T2 (laws), T3 (abstraction), T4 (lowering and zero
-  cost), I4.b's rejections and I4.c's equivalence. They are stated but drive nothing; T4 is not
-  yet stated.
-- **Multi-shot** (decision 63). Done pins only the unr-free fragment, W is unconstrained at
-  resuming `unr` rows, and the survey's multi-shot programs are dropped.
-- **Beside done (stated, not required).** The freeze binder (`EndStateBinder`), `Conservative`
-  at every type, `ReleasedOnceReuse`, and `I4Typing`. `CancelCloses` and P8.b are named-only.
-- **Scope limits of T1.** Main's row may hold only platform operations, so an error must be
-  handled before the top (OQ-51 (a)); exit-with-error is not stated. Termination is claimed
-  only at data answers.
+- **Binary and cross-language targets**: A₂ and A₃, I4.c.
+- **Multi-shot** (decision 63): the composite's typing is unr-free, and the survey's multi-shot
+  programs are dropped.
+- **Beside done, stated and not required**: the proof device; the run-end laws; the freeze binder
+  (`CombinedBinder`); `Conservative` at every type; `I4Typing`; `FLOpen`.
+- **Not built in this pass**: `W` (and `audit_W`); `J₁` and `J₂`, which wait on Q1 and Q2.
 
 ## Decisions you are asked to confirm
 
-1. **"vC/cC are the σ = [] instance."** DESIGN reads this as "the nil slice has Core's
-   structure, and Core's relation embeds into W". It does not read it as an equivalence at
-   every type, because that would put every tier-2 computation starting at σ = [] inside
-   today's `cC`, with R-T1 at every stop and `↭` at every run end, and so decide OQ-9 for (b).
-   Was the equivalence meant?
-2. **Conservativity's scope.** Done holds the row-abortive form (`ConservativeWB`), and the
-   every-type form (`Conservative`, A7 in full) is beside done. Should done hold the
-   every-type form? This interacts with decision 4.
-3. **The freeze binder.** It is beside done, because the notebook lists its unifications as
-   hypotheses to check. Should done require it once the form of its lifetime half is settled?
-4. **Externs in T1 (major 3).** Choose one:
-   - (a) done holds `SoundnessContractsAR`, externs at row-abortive types, which is proved
-     from FL; the every-type form stays beside done.
-   - (b) `Conservative` moves into done.
-   - (c) `ExternsMeet` is restricted to the SPEC's extern types.
-5. **Exactly-once release (major 2).** Should `ReleasedOnceReuse`, at-most-once on every run,
-   move into done in place of the empty `ReleasedOnceAll`?
-6. **Shape of done (major 6).** Should done split into a program-level end state and a
-   separate proof-device target (FL, `WLaws`, `Mono`, `FramesW` at W)?
-7. **T1's scope.** Is it acceptable that T1 covers only data answers, and only mains whose row
-   is the platform's? The other option is to state an exit-with-error conjunct (memory empty
-   at an unhandled raise, OQ-51 (b)) and soundness at any persistent answer.
-8. **The survey.** The 1472-line `research/effects/survey.md` was committed on `targets` in
-   0180b67. Should it stay?
-9. **The run-end relation's laws.** `UpdSeq` and `UpdReclaim` are hypotheses of
-   `AdequateOfLaws`, and `UpdRefl`, `UpdOwn`, `UpdFrame`, `UpdOutlives` and `UpdLendBack` are
-   laws FL at W reads; none is a conjunct of done (FIX-RUN-END §2.3). Should done hold
-   `UpdReclaim`, which would bound `Upd` from above in done itself? (The every-index
-   `UpdOutlives` and `UpdLendBack` cannot go in done without excluding OQ-9 (a) with the cell
-   kept.)
-10. **The `Upd` pin's `→` half.** `SliceShape`'s `Upd` pin is an equivalence. Its `→` half reads
-    σ = [] as "no lend carried open anywhere in the configuration", so a σ that counts only the
-    lends the running computation carries must end, off the nil slice, a run that closes a lend a
-    stored continuation carried (FIX-RUN-END §2.2). This is a constraint on OQ-44. Should the
-    pin stay an equivalence, or keep only its `←` half (Core's run ends are W's)? That drops the
-    constraint and the checks that read the `→` half (`at02_runEnd_nil`, the `M.Upd` conjuncts
-    of `at02_held_end` and `at02_imm_end`, `not_sliceShape_of_updTop`), and changes no derived
-    result.
+From RESTRUCTURE §7.
 
-## Minor findings
-
-- `AxiomCheck` fails the build only on *theorems*. Proof-carrying `def`s are not checked. A
-  manual scan of all 1824 constants found no forbidden axiom.
-- `status_I3_core` proves the unrestricted `I3 coreW` but is labelled "PROVED AT A
-  RESTRICTION". It should read PROVED AT σ=[].
-- Targets declares names in Core's namespaces (`BoCa.Expr.renameLoc`, …) and imports other
-  experiments, so future additions to Core could clash with these names.
-- `UnwindOrder` covers only unwinds through contexts with no handler frame. It should use
-  `K.Catches n = false`, or record this as a scope limit.
-- `CancelOrder`/`UnwindOrder` are stated over platform-free `Steps` from empty memory, so they
-  are vacuous for programs that perform platform operations. They should be over `PSteps P`.
-- In `I4a`, `ImplTyped` is a dead hypothesis, and the non-vacuity witness exercises no
-  operation.
-- `AcceptsTier2` has no tier-1 rejection proved, so its discrimination is unchecked. Several
-  reachability premises lack Lean witnesses.
-- The notebook's P1 text was narrowed to data answers to fit the Lean, without recording this
-  as a scope decision.
-- η has no unary form in I5; it lives only in T2. Status, README and the I5 notebook do not
-  say so.
-- `FreezeBinder` has no instance half, and its lifetime half is forward instantiation, not
-  equivariance under order-isomorphisms.
-- `StopVisible` forces every lend that spans a stop into `held`, which is a representation
-  choice.
-- "No forget" for `lin`/`aff` continuations is not pinned. `J` is only bounded from below, so
-  it could add weakening at thunk types without any conjunct failing.
-- `DivFree` depends on decision 35 (divergence lives in `Loop`). Status should list that
-  dependence.
+1. **Tier 1 needs row variables.** E1, E2, E6 and E10 are A properties, so tier 1's typing is
+   `J₁`: today's unr-free rules over open rows with a rank-1 row `∀`, and no spanning. Is `J₁` the
+   intended tier-1 milestone, or should E1, E2, E6 and E10 wait for tier 2?
+2. **Rank.** Done requires rank 1, and no polymorphism over value types. Should done add a rank-2
+   program, or does rank n stay with OQ-13?
+3. **Loops.** Is "a loop runs without bound only at the top, under the runtime's driver" the
+   intended reading? Should divergence be a row effect, so that E1's one typing serves div
+   callbacks? `DataDiv` claims termination only at data answers on the pure row; under "codata"
+   it would become every row.
+4. **B5 and OQ-43.** B5 is in done. It costs one machine lemma, the step-for-step simulation
+   `BumpSim`, and `releasedOnceReuse_of_bumpSim` proves B5 from it. It excludes OQ-43 (a) for
+   done. Confirm?
+5. **OQ-56.** Done is fixed at `admClosedOp`. When OQ-56 is chosen, should done move to that
+   `Adm`, and `asyncRead` join `Tier2Programs` (with `at04` its stand-in until then)?
+6. **"No sum for failure."** A carries failure as an effect at an unchanged answer type. Is #168's
+   "no API returns a sum for failure" outside A?
+7. **The earlier `AGREE.md` decisions.**
+   - Positions the design takes, which you are asked to confirm:
+     - externs carry W's contract as a stated hypothesis, `ContractsW` (old AGREE 4, Q8 below);
+     - B5 is in done (old AGREE 5);
+     - done is split from the proof device (old AGREE 6).
+   - Still open, unchanged:
+     - the σ = [] reading (old AGREE 1);
+     - conservativity's scope: done holds no conservativity statement, `ConservativeWB` and
+       `EmbedsNil` are in the device, and `WBCore` is a companion lemma (old AGREE 2);
+     - the freeze binder beside done (old AGREE 3);
+     - T1's scope: data answers, with main's row the platform's (old AGREE 7);
+     - whether the survey stays on `targets` (old AGREE 8);
+     - whether `UpdReclaim` belongs in done (old AGREE 9);
+     - the `→` half of the nil-slice `Upd` pin, which constrains OQ-44 (old AGREE 10).
+8. **Externs at resuming rows.** Their contract is W's, as a stated hypothesis. Is that the
+   intended reading of "outside the proofs by design"? The SPEC's row-abortive externs at Core's
+   contract follow from done together with the device's `EmbedsNil`
+   (`soundnessContractsAR_of_combined`), not from done alone. Is that acceptable?
+9. **OQ-50.** Done states the continuation's use count (S6). With S4 and `capture` as a value,
+   that excludes OQ-50 (b), the one-shot-cell machine. Confirm, or should A carry the
+   continuation's cell?

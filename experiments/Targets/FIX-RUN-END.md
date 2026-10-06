@@ -538,7 +538,10 @@ are what make it hold; Layer 3 is the device-level check.
   Its conclusion is `RowAlgSafe RF ∧ RowLink RF ∧ AdmExtends Adm ∧ Tier2Pinned J Adm ∧
   AcceptsTier2 J ∧ I4a J Adm .any ∧ ExtendsNU J ∧ OutExtends J.out ∧ Soundness J ∧
   SoundnessContracts J ∧ ReleasedOnceAll J ∧ EffSafe J ∧ NoInterception J ∧ FinaliserOrder J`,
-  and it holds for every `M`.
+  and it holds for every `M`. (`ReleasedOnceAll J` is a tautology about runs, not a guarantee:
+  RESTRUCTURE §2.4, finding #2. The restructured library's `combined_prog` projects B4 (`Sound J`)
+  and B5 at closed programs (`ReleasedOnceReuse₀ J`) in its place, with A's properties at every
+  admissible effect context.)
 - With `i2Prog_of_endState` (already proved), done gives that AT02, AT04 and AT12 are typed,
   never stuck under any platform that respects its protocol, and end with the memory empty.
   These are the programs whose lends span stops.
@@ -678,7 +681,8 @@ excluding.
 - **Not a leak.** A run end that drops a lend, or changes a borrow's lifetime or predicate, without
   leaking an owned cell is not a leak, and `Adequate` does not see it. Its consequences for
   programs are excluded at the program level: a use after free is a stuck run (`Soundness J`), and
-  a cell never freed is a non-empty final memory (`Soundness J`, `ReleasedOnceAll J`). The frames
+  a cell never freed is a non-empty final memory (B4, `Soundness J`'s `Final`; a release through a
+  reused location is B5's, `ReleasedOnceReuse`). The frames
   can exclude a world whose `Upd` drops a lend (the sketch in §2.3 (a), not built); which such
   worlds a device conjunct excludes is not established.
 
@@ -1064,8 +1068,8 @@ The verifier's file already has `heldRes` (a definition) and `held_arises` (prov
   cancel's end holds nothing its start did not". A `Mut` lend carried open adds nothing to
   `held`, under either representation of (a). So the closing clause says nothing about `Mut`
   lends, and `ShareCancel`'s option-neutrality does not cover them. Noted only: the program-level
-  `Soundness` and `ReleasedOnceAll` still catch a cell that is never closed, as a non-empty final
-  memory.
+  `Soundness` (B4) still catches a cell that is never closed, as a non-empty final memory, and B5
+  (`ReleasedOnceReuse`) a release through a reused location.
 - **`CancelCloses`** (named-only, OQ-57). "A cancel ends every lend it holds" would have to read
   the index (and `Upd`) as well as `held`.
 - **The minor finding on `StopVisible`** ("forces every lend that spans a stop into `held`").

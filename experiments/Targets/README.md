@@ -1,9 +1,16 @@
-# Targets — the effect calculus's end state, in Lean
+# Targets — an effect system, a borrow calculus, and their interaction, in Lean
 
-`DESIGN.md` says what "done" means for the effect calculus. This library states every target
-there as a `def … : Prop`, proves the restricted instances the design asks for now (its §9), and
-records each target's status in `Targets/Status.lean`. W, the world the effect calculus needs, is
-not built here: it is the parameter `M : SemWorld` of the end state.
+`RESTRUCTURE.md` says what "done" means, as two systems and the rules of their interaction:
+
+- **A**, an effect system, stated abstractly over any calculus;
+- **B**, the borrow calculus (BoLo), whose guarantees are given;
+- **I**, the interaction, the only place where A and B meet, with the combined theorem;
+- **the Instance**, our calculus as one instance of A.
+
+This library states every target as a `def … : Prop`, proves what the design asks for now, and
+records each target's status in `Targets/Status.lean`, grouped by system. `RESTRUCTURE.md`
+§Unresolved records where the Lean departs from the design and what is not built. `AGREE.md` is
+the page to agree.
 
 ```
 lake build Targets
@@ -11,185 +18,163 @@ lake build Targets
 
 The build has no `sorry`, `axiom`, `native_decide`, `opaque`, `partial`, `unsafe` or
 `implemented_by`. `Targets/AxiomCheck.lean` prints `#print axioms` of every theorem the sources
-state and fails the build if any theorem of the library uses an axiom outside
-`[propext, Classical.choice, Quot.sound]`.
+state. It fails the build if any theorem or definition of the library uses an axiom outside
+`[propext, Classical.choice, Quot.sound]`, or if any constant is `opaque`, an `axiom`, carries
+`implemented_by`, or is unsafe (other than the compiler's `._unsafe_rec` copies).
+`Targets/Audit.lean`, the step-index audit, fails the build if `coreW`'s report changes or a
+negative test is not rejected.
 
 ## Layout
 
-| path | contents |
-|---|---|
-| `Targets/Defs/Effects.lean` | rows, row variables and row contexts (`Row.NU`, `RowClass`, `RowCtx.Models`); the effect algebra (`EffAlg`, `EffAlg.Laws`, `EffAlg.Safe`), the row forms `closedRowAlg` and `orowRF`; `Kont.fins`, `cancelOf` |
-| `Targets/Defs/Typing.lean` | `OutJ`, `TypingJ`; `tier1` (Core's `CDerives`), `CDerivesNU` and `tier1NU` (Core's rules without resuming `unr` operations); the rule transcriptions `RC_*`; `Extends`, `ExtendsNU` |
-| `Targets/Defs/Runs.lean` | platforms (`Platform`, `Platform.Respects`, `PStep`), the outermost driver (`RStep`), data (`VTy.Data`, `DataVal`), `Final`, `SafeRuns`, `Terminates`, `SafeDrive`, `StopsIn`, runs as lists (`PRun`, `Allocated`, `Released`, `NoReuse`, `ReleasedOnce`) |
-| `Targets/Defs/World.lean` | `SemWorld`, its run-end relation `Upd` among the fields; W's `wpGW`, `ewpW`, `opTabW`, `cancelTabW`, `ptoMutSW`, `ptoImmSW`, `gDenW`, `SemW`; `coreW`, Core's relation as the instance whose lend stack has one point |
-| `Targets/Defs/Binder.lean` | D11: the actions of a location permutation and of a re-stratification, `StkAct`, `BlockAffine`, `StepsIn` |
-| `Targets/Defs/Ctx.lean` | D12: observations and contextual approximation (binary targets) |
-| `Targets/Defs/Programs.lean` | D13: answering implementations (`AnsImpl`, `ansRun`, `ctlForm`, `capPass`); D14: the acceptance terms `at02`, `at04`, `at12`, `at17` |
-| `Targets/Statements/*.lean` | every target; `Guarantees`, `EndStateAt`, `EndState`, `Tier1End`, `EndStateBinder`, `I1Prog`, `I2Prog` (`EndState.lean`) |
-| `Targets/Restricted/*.lean` | the proofs: the restricted instances, the generic composition lemmas, non-vacuity; the run-end relation's checks and witness worlds (`RunEnd.lean`, `FIX-RUN-END.md`) |
-| `Targets/Audit.lean` | the step-index audit, run on `coreW`; the pin of Core's relation |
-| `Targets/Status.lean` | the record: done, tier 1, every conjunct, the targets beside done, the corollaries, the named-only targets, the corrections and the unresolved review findings |
-| `Targets/AxiomCheck.lean` | the axioms of every proved result |
+The imports run one way: A imports nothing of ours; base imports no A; B imports no A, I or
+Instance; the Instance imports no B or I; I imports everything.
+
+| part | path | contents |
+|---|---|---|
+| **A** | `Targets/A/EffAlg.lean` | the effect algebra (Yoshioka–Sekiyama–Igarashi Def. 3.5) and its safety (Def. 5.1) |
+| | `Targets/A/System.lean` | `EffectSystem` (CBPV formers over an effect algebra; contexts with five named frames, the driver `driveF` among them; a labelled machine; typing); runners and runs; `SafeRuns`, `Terminates`, `RunsTo`, `RunsForever`; the schemas `PolyUse`, `PolyUseLacks`, `PolyUseOpen`, `CallsThrough` |
+| | `Targets/A/Machine.lean` | S0: `ConfLaws`, `KontLaws`, `AppLaw`, `Congr`, `NoIO`, `OpStuck`, `DataInj`, `LoopLaws`, `DriveLaws`, `MachShape`; the let law `LetLaw` |
+| | `Targets/A/Soundness.lean` | S1 `RowAlgebra`, S2 `DataDiv` and `Safety`, S3 `EffSafe`, S4 `HandlerSem`, S5 `Cancellation` (the cancel and unwind traces), S6 `ContUse`; `SProps` |
+| | `Targets/A/Programs.lean` | the signatures, runners and programs of E1–E10, and S6's witnesses R1–R4 |
+| | `Targets/A/Expressiveness.lean` | E1 `NoColouring` … E10 `Reconciler`; `EProps`; `Props := SProps ∧ EProps` |
+| | `Targets/A/NonVacuity.lean` | the abstract non-vacuity lemmas |
+| | `Targets/A/Binary.lean`, `Targets/A/Lowering.lean` | A₂ (the binary laws) and A₃ (the erased lowering over a fixed target), stated, out of the first pass |
+| **base** | `Targets/Base/*` | Core's machine, rows and typing as B, I and the Instance read them: platforms, runs, `PRun`, `ReleasedOnce`, B5's `Named`, `Expr.mapLoc`, `Heap.push`, `RelAt`, `Bump`, `BumpSim` (`Machine.lean`); the statements about runs that mention no world, `Sound`, Core's `EffSafe`, `EffSafeDrive` (`RunProps.lean`); `TypingJ`, `tier1`, `tier1NU`, the `RC_*` rules (`Typing.lean`); Core's cancel and unwind shapes (`CoreCancel.lean`); the answering implementations; contextual approximation |
+| **B** | `Targets/B/World.lean` | `BWorld`, a borrow world with borrow fields only; `coreB`, Core's relation as one |
+| | `Targets/B/Guarantees.lean` | B0–B7 and the bounds as Props: `ExtendsB`, `FL`, `Adequate`, `Sound`, `SoundContracts` (externs at `ContractsW`), `ReleasedOnceReuse`, `ExclusiveB`, `LifetimeSound`, `WBound`; `B.Guarantees` |
+| | `Targets/B/BoLo.lean` | each guarantee at BoLo, by citing `Core` and `Paper` |
+| | `Targets/B/Routes.lean` | the routes: `soundnessOfFL`, `soundContractsOfFL`, `releasedOnceReuse_of_bumpSim`, … |
+| | `Targets/B/Release.lean` | release as lemmas about runs: `ReleasedOnceAll`, a tautology; `releasedOnce_of_ends`; `bump_follows` |
+| | `Targets/B/NonVacuity.lean` | `not_releasedOnceReuse_staleFree`: B5 is not a tautology |
+| | `Targets/B/Conservativity.lean`, `RunEnd.lean`, `Binder.lean` | P14; the run-end laws where `Upd` is Core's; the freeze binder's machine half |
+| **Instance** | `Targets/Instance/Rows.lean` | our row forms as instances of A's effect algebra (`orowAlg`, `orowRF`, `RowLink`) |
+| | `Targets/Instance/Types.lean`, `Typing.lean` | the open types (`OVTy`, `OCTy`, with `effF` and the row `∀`), `OurTyping`, its reading `read` (the design's `⟦J⟧`), `tier1Open`, `RowVarKernel` |
+| | `Targets/Instance/Core.lean` | `AdmEff`, `ourInst RF Ξ J : A.EffectSystem`, the encodings, the labelled machine `OStep` |
+| | `Targets/Instance/Bridges.lean` | A's syntactic laws at our instance: `ConfLaws`, `KontLaws`, `NoIO`, `DataInj`, `LiftExt` |
+| | `Targets/Instance/Restricted/*`, `Binary.lean`, `ZeroCost.lean` | Core's no-interception and two-frame unwind; `storeCancel` unr-free; A₂ over Core, stated; A₃'s lowering classes |
+| **I** | `Targets/I/World.lean` | `SemWorld extends B.BWorld` (`held`, `Stop`, `share`), `coreW`, the effectful wp |
+| | `Targets/I/Interface.lean`, `Device.lean`, `Pins.lean`, `Routes.lean` | I1–I5 at the world; `Bounds`, `Interface`, the proof device `Device`, `EmbedsNil`; R-CLOSEDOP; `effSafeOfFL`, `contractsW_of_meets` |
+| | `Targets/I/Programs.lean` | the composite programs: `at02`, `at04`, `at12`, `at17`, `genSelf`, and the rejected AT05–AT08, AT13; `AcceptedAt`, `Tier2Programs`, `Rejects`, `RejectsAT07` |
+| | `Targets/I/Combined.lean` | **`I.Combined`**, done's statement; `Tier1`, `Tier1Core`; the corollaries |
+| | `Targets/I/RunEnd.lean`, `Binder.lean`, `NonVacuity.lean`, `Restricted/*` | FIX-RUN-END's checks and witness worlds; the freeze binder at W; witnesses for the pins; the restricted results at `coreW` and `tier1` |
+| meta | `Targets/Audit.lean`, `Status.lean`, `AxiomCheck.lean` | the step-index audit with nine negative tests and the pin of Core's relation; the record; the axiom check |
 
 ## Done
 
-Done is `EndStateAt J₂ W Adm RF` at a **named** tier-2 typing system `J₂` and a **named** world `W`,
-together with `audit_W`, the step-index audit of `W`'s definition. **It is OPEN**: neither `J₂` nor
-`W` exists. `EndState`, the existential, follows from done and is not done.
+```lean
+def I.Combined (RF : RowForm) (J : OurTyping RF) (M : SemWorld) (Adm : OpAdm) (c : RowClass) : Prop :=
+  (∀ Ξ, AdmEff Ξ → (ourInst RF Ξ J).Props)   -- nothing breaks the effect algebra
+  ∧ B.Guarantees J.read M.toBWorld            -- nothing breaks the borrow calculus
+  ∧ Bounds M ∧ Interface M                    -- the interaction's option-neutral rules
+  ∧ Pins J Adm c                              -- what the composite's typing must contain
+  ∧ Accepts J.read c ∧ Rejects J.read         -- the composite's programs and its rejections
+```
 
-`Tier1End`, every guarantee for Core's typing at Core's relation with lends spanning abortive rows
-only, is **OPEN**. It follows from two statements (`status_tier1End_of`): `Adequate coreW`,
-adequacy at Core's world under every platform with operations and for driven loops (T1 and its
-contract form then follow from `FL`), and `FinaliserOrder tier1`. Every other conjunct is proved.
+**Done** is `Combined orowRF J₂ W admClosedOp .any` at a **named** tier-2 typing system `J₂` and a
+**named** world `W`, with `audit_W`. **It is OPEN**: neither `J₂` nor `W` exists. **Tier 1** is
+`Combined orowRF J₁ coreW admClosedOp .abortive`, also OPEN: `J₁` (today's rules over open rows
+with the row `∀`) waits on RESTRUCTURE §7 Q1–Q2.
 
-## The definitions
+**The restricted tier-1 reduction** `Tier1Core` (today's kernel `tier1Open`, Core's world) is
+OPEN. Proved of it: the world conjuncts and the device at `coreW` (`tier1Core_world`), and B's
+guarantees from `Adequate coreB` and the step-for-step simulation `BumpSim`
+(`tier1Core_guarantees_of`). Missing: A's (S) properties at our instance (the Instance's bridges
+are not built), and `I4a` at today's unr-free kernel.
 
-- **An effect** is a name with a signature of operations `A ↠^q B` (`EffCtx`), each `q` linear,
-  affine or unrestricted, or abortive at `B = 0`. **A row** is Core's list of operation signatures,
-  read by first match (`Row.find`); a row variable stands for a closed row (`RowEnv`), constrained
-  by a class and an admissibility condition (`RowCon`, `RowCtx.Models`). The rows form an effect
-  algebra (Yoshioka–Sekiyama–Igarashi Def. 3.5, `EffAlg.Laws`) that is safe (Def. 5.1,
-  `EffAlg.Safe`); `RowLink` ties the algebra to the rows the typing rules read.
-- **A handler** is Core's `hnd (n, (h_ret, hs))` and its `[handle]` rule; handling is the machine's
-  `[ret]`, `[op]` and `[unwind]` steps.
-- **A suspension** is the value `κ = kappa n H K` the `[op]` step hands a clause, at the type
-  `kTy` of its qualifier: resumed (`κ (inj₁ ())`), or cancelled (`κ (inj₂ ())`, which runs
-  `cancelOf n H K` and fires the frozen finalisers `Kont.fins`).
-- **Effect safety** (`EffSafe`): a typed program at the row `S` either runs to a value, keeps
-  stepping, or stops at an operation of `S` that no handler catches (`StopsIn S`).
-- **Soundness** (T1, `Soundness`): under every platform that respects its protocol, every run of
-  a typed program at a data answer is safe (`SafeRuns`) and terminates (`Terminates`) with the
-  memory empty (`Final`); a program returning a loop is safe at every finite prefix of its drive
-  (`SafeDrive`).
-- **Finalisation exactly once** (D9, `ReleasedOnceAll`): on every complete run that reuses no
-  location, every allocated cell is released exactly once; finalisers fire once each, innermost
-  first, on a cancel and on an unwind (`FinaliserOrder`); no typed program intercepts a cancel
-  (`NoInterception`).
-- **The invariant** is W's family of configurations (`SemWorld.Fam`, at Core the typed worlds
-  `TW`), with what suspensions hold (`SemWorld.held`), W's relation (`val`, `comp`, `share`), and
-  the run-end relation (`SemWorld.Upd`, Core's `↭` on the nil slice). **Arising** (`Arises`) says
-  every configuration W reaches is a typed world over the visible and the held frames.
+## Status, by system
 
-## Status
+From `Targets/Status.lean`. *PROVED AT σ=[]* is Core's relation (`coreB`, `coreW`) or Core's typing
+(`tier1`); *generic* is for every world or typing system; *every instance* is for every
+`EffectSystem`.
 
-From `Targets/Status.lean`. *PROVED AT σ=[]* is Core's relation (`coreW`) or Core's typing
-(`tier1`); *generic* is for every world or typing system.
+### A — an effect system
 
-| target | world | status | Lean |
+| target | status | Lean |
+|---|---|---|
+| `EffectSystem`, S0–S6, E1–E10, `Props`; A₂, A₃ | stated | `Targets/A/*` |
+| a typing that types nothing fails `EProps`; so does an instance with no effects | PROVED (every instance) | `not_eProps_of_emptyTyping`, `not_eProps_of_noLabels` |
+| E1, E2, E6, E10 need effect polymorphism (decision 62's row variables) | PROVED (every instance) | `not_noColouring_of_monoCallback` and its three siblings |
+| E3 needs divergence; a pure-row loop that diverges is not at a data answer | PROVED (every instance) | `not_loops_of_total`, `divInTypes_of_loops` |
+| effect safety has teeth; Def. 5.1 (1) from one signature object | PROVED (every instance) | `not_der_unhandled`, `c1_of_rowSig` |
+| the runners `Rtick`, `Rtl`, `Rrec` keep their protocol | PROVED (every instance) | `rtick_respects`, `rtl_respects`, `rrec_respects` |
+| A's properties at our instance | OPEN (the Instance's bridges) | — |
+| A₃'s reference programs | not written | — |
+
+### B — the borrow calculus
+
+| id | guarantee | status at BoLo | Lean |
 |---|---|---|---|
-| done: `EndStateAt J₂ W Adm RF` + `audit_W` | W | OPEN | — |
-| `Tier1End` | Core σ=[] | OPEN; follows from `Adequate coreW` and `FinaliserOrder tier1` | `status_tier1End_of` |
-| T0: `RowAlgSafe`, `RowLink` | prog | PROVED AT A RESTRICTION (`orowRF`) | `rowAlgSafe_orowRF`, `rowLink_orowRF` |
-| `AdmExtends` | prog | PROVED AT A RESTRICTION (`admClosedOp`) | `admExtends_closedOp` |
-| `Tier2Pinned`, `AcceptsTier2` | prog | OPEN (no tier-2 typing); the four terms run | `at02_eval` … `at17_eval` |
-| `I4a` (I4.a) | prog | PROVED AT A RESTRICTION (tier 1, abortive rows) | `i4a_tier1` |
-| `ExtendsNU`, `OutExtends` | prog | PROVED AT σ=[] | `extendsNU_tier1`, `outExtends_core` |
-| `Soundness` (T1) | prog | return conjunct PROVED AT A RESTRICTION (`Platform.none`); at tier 1, follows from `Adequate coreW`: OPEN | `soundRetAt_tier1_none` |
-| `SoundnessOfFL`, `SoundnessContractsOfFL`, `EffSafeOfFL` | generic | PROVED | `soundnessOfFL`, `soundnessContractsOfFL`, `effSafeOfFL` |
-| `SoundnessContracts` | prog | at tier 1, follows from `Adequate coreW`: OPEN | `soundnessContractsOfFL` |
-| `ReleasedOnceAll` (D9, P8.a) | prog | PROVED, generic (every `J`) | `releasedOnceAll`, `releasedOnceOfSound` |
-| `EffSafe` (P2) | prog | PROVED AT σ=[] | `effSafe_tier1` |
-| `NoInterception` (I3.c) | prog | PROVED AT σ=[] | `noInterception_tier1` |
-| `FinaliserOrder` (I3.b) | prog | OPEN; its two-frame instance PROVED | `two_frame` |
-| `WLaws` | W | PROVED AT σ=[] | `wlaws_core` |
-| `FL` | W | PROVED AT σ=[] | `fl_core_tier1` |
-| `Adequate` | W | return conjunct PROVED AT A RESTRICTION (`Platform.none`); full: OPEN | `adequateRetAt_core_none` |
-| `I1` | W | PROVED AT σ=[] | `i1_core` |
-| `I2` | W | PROVED AT A RESTRICTION (abortive rows) | `i2_core_abortive` |
-| `I3` (I3.a) | W | PROVED AT A RESTRICTION (nothing held) | `i3_core` |
-| `I5` | W | PROVED AT σ=[]; `I5beta` generic | `i5_core`, `i5beta` |
-| `LifetimeSound` (P9) | W | PROVED AT σ=[] | `lifetimeSound_core` |
-| `Exclusive` (P10) | W | PROVED AT σ=[] | `exclusive_core` |
-| `P11` | W | PROVED AT σ=[]; `RedLaws` generic at monotone tables | `p11_core`, `redLaws_of_mono` |
-| `ConservativeWB` (P14.b) | W | PROVED AT σ=[] | `conservativeWB_core` |
-| `WBCore` (P14.a) | Core | PROVED | `wbCore` |
-| `FreezeBinder`, `BinderMachine`, `EndStateBinder` | beside done | OPEN | — |
-| `NotVDenNaturalArises` (the binder's first check) | Core σ=[] | OPEN | — |
-| `Conservative` | beside done | OPEN; at `coreW` PROVED AT σ=[] | `conservative_core` |
-| `ReleasedOnceReuse`, `I4Typing` | beside done | OPEN | — |
-| `I1Prog`, `I2Prog`, P8.a from done | corollaries | PROVED (generic) | `i1Prog_of_endState`, `i2Prog_of_endState`, `p8a_of_endState` |
-| the run-end relation's pin (`SliceShape`'s `Upd` conjunct): Core's runs are W's | generic | PROVED | `wpGW_of_wpG_nil` |
-| the run-end laws `UpdRefl`, `UpdOwn`, `UpdSeq`, `UpdReclaim`, `UpdFrame`, `UpdOutlives`, `UpdLendBack` (beside done) | Core σ=[]; generic where `Upd` is Core's at every index | PROVED AT σ=[]; PROVED (generic) | `updRefl_core` … `updLendBack_core`; `updRefl_of_core` … `updLendBack_of_core` |
-| a degenerate world does not satisfy done: done's program-level conjuncts do not mention W; a reachable leak fails `Adequate` | generic | PROVED | `endState_prog`, `not_adequate_of_leak`, `not_endState_of_leak` |
-| a run-end relation that relates everything fails the pin (a sanity check) | generic | PROVED | `not_sliceShape_of_updTop` |
-| a world meeting the pin, `EffInterp` and `DataVals` with a reachable leak | the witness `leakW` | PROVED: it fails `Adequate` and `UpdReclaim` | `not_adequate_leakW`, `not_updReclaim_leakW` |
-| the run-end laws admit an end that holds a `Mut` lend as a cell | the witness `carryW` | PROVED | `updRefl_carryW`, `updOwn_carryW`, `updSeq_carryW`, `updReclaim_carryW`, `at02_held_end_carry` |
-| the printed forms of 6.50 and 6.27 at every index exclude it | generic | PROVED | `not_updOutlives_of_opened`, `not_updMutBack_of_closed` |
-| AT02's run ended at `Foo` in the configuration a 6.64 lend gives fails R-T1, `↭` and `M.Upd` at the nil index | every world meeting `SliceShape` | PROVED | `at02_imm_end` |
-| T2 `Laws`, T3 `Abstraction`, `I4c` | binary, out of the first pass | OPEN (stated) | — |
-| `CancelCloses`, P8.b, T3's proof device, T4 | named-only | OPEN (no statement) | — |
-| the step-index audit on `coreW`; Core's relation pinned | meta | passes | `Targets/Audit.lean` |
+| B0 | BoLo's programs stay typed | PROVED AT σ=[] | `extendsB_tier1` |
+| B1 | the fundamental property | PROVED AT σ=[] | `fl_core_tier1`, `fl_core_tier1NU` |
+| B2 | adequacy | PROVED AT A RESTRICTION (no platform operation, data answers); in full OPEN | `adequateRetAt_core_none` |
+| B3, B4 | no use after free, no double free; leak freedom | PROVED AT A RESTRICTION (the same) | `soundRetAt_tier1_none` |
+| B4′ | the same with externs meeting W's contract | PROVED (generic, from B1 and B2) | `soundContractsOfFL` |
+| B5 | release exactly once, location reuse included | from B4′ given `BumpSim`: PROVED (generic); `BumpSim` OPEN (OQ-43); not a tautology: PROVED | `releasedOnceReuse_of_bumpSim`, `not_releasedOnceReuse_staleFree` |
+| B6 | exclusive mutable borrows | PROVED AT σ=[] | `exclusiveB_core` |
+| B7 | lifetimes respected | PROVED AT σ=[] | `lifetimeSound_core` |
+| — | the bounds | PROVED AT σ=[] | `wBound_core` |
+| — | `ReleasedOnceAll` | a **tautology about runs**, a lemma, not a guarantee | `releasedOnceAll` |
+| — | the run-end laws where `Upd` is Core's; P14 | PROVED (generic; at `coreB`) | `updRefl_of_core` …, `wbCore`, `conservative_core` |
 
-`ReleasedOnceAll` holds at every typing system: its run premises carry the empty memory at the
-start and `Final` at the end, and with `NoReuse` that is all the occupancy argument reads. Its
-typing content is T1's `Terminates` and `SafeRuns`.
+### I — the interaction
 
-Non-vacuity (`Targets/Restricted/NonVacuity.lean`): `Platform.none` and a platform with a linear
-operation respect their protocol; `RowSpan admClosedOp` is met at each class by a row with an
-operation, and `OpTabI.Resuming` by resuming tables; every hypothesis of `I4a tier1` is met by one
-configuration at an abortive row, whose borrow form is then typed (`d_ansRun_witness`).
-`Targets/Restricted/RunEnd.lean` has two witness worlds for the run-end relation, neither a
-candidate for W: `leakW` meets the pin, `EffInterp`, `DataVals` and `LeakAt`, so the hypotheses
-of `not_adequate_of_leak` are met; `carryW` meets the pin, `UpdRefl`, `UpdOwn`, `UpdSeq` and
-`UpdReclaim`, and admits AT02's end holding the lend as a cell.
+| target | status | Lean |
+|---|---|---|
+| `Bounds`, `Interface`, the device and `WBCore` at `coreW` | PROVED AT σ=[] (abortive rows) | `tier1Core_world` |
+| the corollaries of `Combined`: the conjuncts that read no world, I1 and I2 at the program level, Core's P2, the SPEC's externs (with `EmbedsNil`) | PROVED (generic) | `combined_prog`, `i1Prog_of_combined`, `i2Prog_of_combined`, `effSafe_core_of_combined`, `soundnessContractsAR_of_combined` |
+| a reachable leak breaks the combined theorem | PROVED (generic) | `not_combined_of_leak` |
+| Core's extern contract gives W's at row-abortive types, with `EmbedsNil` | PROVED (generic) | `contractsW_of_meets` |
+| the composite programs run (interpreter, evidence only) | checked | `at02_eval` … `at17_eval`, `genSelf_eval`, `at07_eval` (a use after free) |
+| `CompositeT1 tier1`'s typing and safety | PROVED AT A RESTRICTION (no platform operation) | `acceptedT1_*` |
+| `Tier2Programs`, `Accepts`, `Rejects`, `RejectsAT07` at a typing system | OPEN | — |
+| I1, I3, I5, P11 at `coreW`; I2 at abortive rows; `EmbedsNil coreW` | PROVED AT σ=[]; AT A RESTRICTION | `status_device_core`, `embedsNil_core` |
+| FIX-RUN-END's checks and witness worlds | PROVED | `Targets/I/RunEnd.lean` |
 
-## The survey's package, translated
+### The Instance
 
-DESIGN §7 maps each of the survey's A1–A7 and T0–T9:
+| target | status | Lean |
+|---|---|---|
+| `tier1Open.read = tier1NU` | PROVED | `tier1Open_read` |
+| `ConfLaws`, `KontLaws`, `NoIO`, `DataInj`, `LiftExt` at our instance | PROVED | `confLaws_ourInst`, `kontLaws_orow`, `noIO_ourInst`, `dataInj_ourInst`, `liftExt_orow` |
+| our rows meet Def. 3.5 and Def. 5.1 | PROVED AT A RESTRICTION (`orowRF`) | `rowAlgSafe_orowRF`, `rowLink_orowRF` |
+| no typed term intercepts a cancel; the two-frame unwind | PROVED AT σ=[]; an instance | `noInterception_tier1`; `two_frame` |
+| the semantic bridges (`AppLaw`, `Congr`, `OpStuck`, `LoopLaws`, `DriveLaws`, `LetLaw`, `RowAlgebra`, `Safety`, `EffSafe`, `HandlerSem`, `Cancellation`, `ContUse`) | OPEN | — |
+| `monoCallback_tier1Open`, R1–R4 at our machine, the positive (E) runs | OPEN | — |
+
+### The step-index audit
+
+`coreW`'s report is pinned: recursion on an array's length, a clause index or a de Bruijn index;
+the lifetime stratification `Cell`; the allocator's allocation count (`AHead`, `ARun`); and
+`Table`, `ewpTS`, `vCE._f`, whose `∀`-bound predicates range over lend records. The nine
+negative tests (step-indexed toy worlds) are each rejected at their own entry. When `W` is built,
+`audit_W` is the same check at `W`.
+
+## The survey's package
 
 | survey | here |
 |---|---|
-| A1 type soundness with suspended frames | T1, `FL`, `I1`, semantic preservation (`Arises`) |
-| A2 effect safety and algebra conditions | `EffSafe`; T0 (`RowAlgSafe`, `RowLink`) |
-| A3 multiplicity soundness | P8, for `lin`/`aff`; multi-shot dropped (decision 63) |
-| A4 lifetime and escape soundness | `LifetimeSound` (6.60 at every type, at the typing system's outlives judgments), `EffSafe` |
-| A5 exclusivity across the handler | `Exclusive`, I4 |
-| A6 discard semantics | resource half: `ReleasedOnceAll`, I3; continuation-use half: P8.b, named-only (OQ-50) |
-| A7 conservativity | `ConservativeWB` (T7's shape) in done, `Conservative` beside it, against Core's relation as pinned |
-| T0 effect algebra | `RowAlgSafe`, `RowLink` |
-| T1 capture lemma | `I1` |
-| T2 preservation | `I2`, `I3` |
-| T3 progress and effect safety | `SafeRuns`, `EffSafe` |
-| T4 resource conservation | `ReleasedOnceAll`; use count behind OQ-50 |
-| T5 borrow invariants with suspended frames | `Exclusive`, `I2`, `LifetimeSound`, `EffSafe` |
-| T6 discard | T1 with `ReleasedOnceAll`; `FinaliserOrder`; `ShareCancel` |
-| T7 conservativity | `ConservativeWB` |
-| T8 abstraction safety | T3 `Abstraction` (binary, out of the first pass) |
+| A1 type soundness with suspended frames | B1, B3, B4 in the composite; I's `Arises`; the device's I1 |
+| A2 effect safety and algebra conditions | A's S1 `RowAlgebra` and S3 `EffSafe` |
+| A3 multiplicity soundness | A's S6 `ContUse` (linear and affine continuations); multi-shot dropped (decision 63) |
+| A4 lifetime and escape soundness | B7 `LifetimeSound`; S3 |
+| A5 exclusivity across the handler | B6 `ExclusiveB`, I's `Exclusive`, I4 |
+| A6 discard semantics | resource half: B4 with B5; continuation half: S6 `ContUse`; S5 `Cancellation` |
+| A7 conservativity | the device (`ConservativeWB`, `EmbedsNil`); `Conservative` beside done; `WBCore` a companion lemma |
+| T0 effect algebra | S1 |
+| T1 capture lemma | the device's I1; E9 and E1′ in done |
+| T2 preservation | I's `Arises` in done; the device's I2 and I3 |
+| T3 progress and effect safety | B3 (`SafeRuns`), S3 |
+| T4 resource conservation | B4 with B5 |
+| T5 borrow invariants with suspended frames | B6, I's `Exclusive`, B7, S3 |
+| T6 discard | B4 with B5; S5; E7, E9c |
+| T7 conservativity | the device |
+| T8 abstraction safety | A₂ `Abstraction` (binary, out of the first pass) |
 | T9 elaboration | not a target |
 
-## The acceptance programs
+## Review findings
 
-**Tier 2 (D14).** The terms tier 2 must type, run by `Support`'s interpreter
-(`Targets/Restricted/Acceptance.lean`, by `decide`):
-
-| term | survey program | answer | observation |
-|---|---|---|---|
-| `at02` | 2: a cell lent across a once-resuming `Foo`, then read | `Flag` | `inj₁ ()`, memory empty |
-| `at04` | 4: `v.push(do choose())`, one-shot | `Flag ⊗ Flag` | `(inj₁ (), inj₂ ())`, memory empty |
-| `at12` | 12: `thread::scope` with the continuation cancelled | `Flag` | `inj₂ ()`, memory empty; the lend's finaliser frees the cell during the cancel |
-| `at17` | 17: a lend across a perform in a moved continuation | `Flag` | `inj₁ ()`, memory empty |
-
-DESIGN §8 expects tier 1 to reject each (its unwinding constants ask `Row.Unwind`); the
-rejections are not proved here. Tier 2's typing does not exist, so `AcceptsTier2` is OPEN.
-
-**Tier 1.** These effect programs of `Core/EffPrograms.lean` and `Core/EffExamples.lean` are
-`AcceptedT1`: typed by tier 1 at a data answer, and every run under the platform with no operation
-safe and terminating with the memory empty (`Targets/Restricted/AcceptedT1.lean`): `prog`, `progC`,
-`logOutside`, `failOutside`, `reborrowRaise`, `nLogOutside`, `nFailOutside`, `logInBorrow`,
-`tickProg n`, `takeProg n`, `storeCancel`, `tickAnsProg n`. `storeCancel` is also typed by the
-unr-free fragment (`d_storeCancelNU`), which `I1Prog`'s derivation from done uses.
-
-DESIGN §8 places the survey's seventeen programs: the multi-shot ones are dropped, AT02, AT04,
-AT12 and AT17 are above, and the rejects are outside the first pass.
-
-## Corrections and open review findings
-
-`DESIGN.md` §Corrections lists the places the Lean departs from the design as first printed (C1
-`SemW₀`, C2 `SoundnessContractsOfFL`, C3 the A-normal acceptance terms, C4 `I4a`'s freshness
-premises, C5 the run-end relation as the field `SemWorld.Upd`) and the elaboration-only
-adjustments. §Unresolved review findings lists the ten findings the statement review ended with,
-and the revision that answers each; the revised statements were not reviewed again.
-
-`AGREE.md` lists the verifiers' findings. The blocker, that `wpGW` had Core's `↭` as a fixed
-conjunct, is answered by `FIX-RUN-END.md`; the review of that answer ended with two unresolved
-major findings, revised in answer and not reviewed again (`FIX-RUN-END.md` §Unresolved).
+`RESTRUCTURE.md` §9 maps every review finding of the design to where it is resolved. The third
+review's blocker and two major findings were answered in the design text and not reviewed again;
+§Unresolved says how the build implements each, and what of each is unchecked. `FIX-RUN-END.md`
+§Unresolved lists the two major findings its own review ended with, also revised and not reviewed
+again. `AGREE.md` boxes every finding still open.

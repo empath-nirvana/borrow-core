@@ -6,7 +6,7 @@
 - **η for capture:** the forwarding handler is the identity.
 - **Hiding:** a body cannot observe a handler's state except through its operations. This is the anti-frame read relationally.
 
-**Lean target:** designed in [`experiments/Targets/DESIGN.md`](../../../../experiments/Targets/DESIGN.md) as `Targets.I5` (§5): `I5beta`, `AntiFrameW` ([TR] 6.66 at W, at every protocol table) and `FrameW` (the plain frame rule at W); the binary forms are in `Targets.Laws` (§3, T2). In Lean: `Targets.I5` is PROVED AT σ=[] (`i5_core`), with `I5beta` proved at every world (`i5beta`); OPEN at W.
+**Lean target:** [`experiments/Targets/RESTRUCTURE.md`](../../../../experiments/Targets/RESTRUCTURE.md) §3.2, §3.7: in done, S4's deep-resume law (resuming a captured continuation reinstalls its own handler). The world-level `I5` is the proof device's, beside done: `I5beta`, `AntiFrameW` ([TR] 6.66 at W, at every protocol table) and `FrameW` (the plain frame rule at W). The binary forms are A₂'s `HandlerLaws` and Core's `Laws`. η has no unary form; it lives in the binary laws. In Lean: `I5 coreW` is PROVED AT σ=[] (`i5_core`), with `I5beta` proved at every world (`i5beta`); S4 at our instance is OPEN; OPEN at W.
 
 ## Why it matters
 
