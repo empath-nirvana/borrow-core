@@ -32,6 +32,7 @@ import Targets.Restricted.NoInterception
 import Targets.Restricted.NonVacuity
 import Targets.Restricted.Release
 import Targets.Restricted.RowAlg
+import Targets.Restricted.RunEnd
 import Targets.Restricted.Soundness
 import Targets.Restricted.Transport
 import Targets.Restricted.Typing

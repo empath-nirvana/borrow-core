@@ -9,22 +9,58 @@ typing system `J₂` and the world `W` do not exist yet.
 > [!WARNING]
 > **Do not agree to these targets yet.** Three independent verifiers checked them. One passed
 > with minor findings only. Two failed, reporting one blocker and six major findings, listed
-> below. Each of these changes what "done" says, so the end state should be revised and
-> re-verified before you agree it. The earlier statement review's ten major findings were
-> answered in DESIGN.md, but the answers were never reviewed again.
+> below. The blocker is answered (`FIX-RUN-END.md`); the six major findings are open. Each of
+> them changes what "done" says, so the end state should be revised and re-verified before you
+> agree it. The earlier statement review's ten major findings were answered in DESIGN.md, but
+> the answers were never reviewed again.
 >
-> **Blocker**
+> **Blocker (answered by `FIX-RUN-END.md`)**
 >
-> 1. **W's wp fixes an open design option (OQ-9).** Every `SemWorld`'s one-run wp (`wpGW`)
->    has Core's `↭` built in as a fixed conjunct (`ResU.UpdV`), not as a field. Under `↭` a
->    run cannot end holding a `mut` cell it created (LoopBorrow's `not_upd_of_new_mut`). So
->    no W can represent a lend carried open across a stop, which is OQ-9 option (a). That
->    silently picks the alternative, which the task forbade. DESIGN says the opposite: it
->    puts OQ-9 inside `held`/`Fam`/`Stop` and says the printed-shape frames "decide OQ-9 for
->    (a)" in one case. In that case `EndStateAt` could be unsatisfiable at every W. *Proposed
->    fix:* make the run-end relation a `SemWorld` field, pin it to Core's `↭` only on the nil
->    slice, and check the claim in Lean against an `at02`-shaped lend. The verifier has not
->    yet built that configuration in Lean.
+> 1. **W's wp fixed an open design option (OQ-9).** Every `SemWorld`'s one-run wp (`wpGW`) had
+>    Core's `↭` built in as a fixed conjunct (`ResU.UpdV`), so no W could stop at a resuming
+>    operation holding, as a borrow cell, a `Mut` lend it opened (LoopBorrow's
+>    `not_upd_of_new_mut`; in the library `at02_runEnd`, `wpGW_at02`). *Answer*, each line for a
+>    `Mut` lend (an `Imm` lend carried open is not built):
+>    1. The run-end relation is the field `SemWorld.Upd`, and `wpGW` ends every run under
+>       `M.Upd`.
+>    2. `SliceShape` pins it to Core's `↭` on the nil slice. The pin puts Core's runs in W's runs
+>       (`wpGW_of_wpG_nil`), and it bounds ends from the nil slice to the nil slice; it does not
+>       bound W's runs, since a run picks its end index and one from σ = [] may end off the nil
+>       slice. Its `→` half fixes a reading of σ = [] (decision 10).
+>    3. What keeps a weak `Upd` from making done easy: the program-level guarantees are asserted
+>       of `J` and do not mention W (`endState_prog`); `Arises`, `Exclusive` and `LifetimeSound`
+>       do not read `Upd`; at the device, `Adequate` (with `EffInterp` and `DataVals`) excludes a
+>       reachable leak (`not_adequate_of_leak`, `not_endState_of_leak`, `not_adequate_leakW`).
+>       The rule-shaped conjuncts read `Upd` on both sides, are not monotone in it, and no bound
+>       is recorded from them. Off the nil slice, no conjunct of done is shown to constrain
+>       `Upd`'s borrow content beyond `Adequate`'s leak bound.
+>    4. The lend-back laws (6.27–6.29, 6.38, 6.39, and 6.48 into the post, 6.50, at W) are stated
+>       beside done and hold where `Upd` is Core's at every index (`updLendBack_of_core`,
+>       `updFrame_of_core`, `updOutlives_of_core`). Stated at every index, 6.27 and 6.50 fail at
+>       every world that admits the runs OQ-9 (a) with the cell kept makes of AT02 (the held end,
+>       and the run that closes it), `carryW` among them (`not_updOutlives_of_opened`,
+>       `not_updMutBack_of_closed`). Their form for such a world is the open part of the field's
+>       specification (OQ-9 (a), OQ-44). `AdequateOfLaws` asks `UpdSeq` and `UpdReclaim`.
+>
+>    The review of the answer ended with two major findings, unresolved: the answer was revised
+>    in response to each, and the revision was not reviewed again (`FIX-RUN-END.md`
+>    §Unresolved).
+>
+>    - *The recorded design text chose a representation for OQ-9 (a).* The `held` docstring, D10
+>      and the §10 row were to say that a `Mut` lend carried open "is a borrow cell … not a held
+>      frame" and "shows only as a borrow cell", although FIX-RUN-END §4 lists (a) with the cell
+>      unfolded, where the lend is kept only in the index. *Revision:* the three places say the
+>      lend adds no 6.64 frame or record, so `held` does not see it, and that a world carrying it
+>      accounts for it through `Upd` and the index, either as a borrow cell in the run's resource
+>      or unfolded with the lend recorded in the index, which is OQ-9 (a)'s and OQ-44's question.
+>    - *Two impossibility claims about a 6.64 (`Imm`) lend had no Lean*: that R-T1 and `↭` each
+>      exclude an `Imm` lend open at a stop, and that relaxing `Stop` alone does not admit one.
+>      *Revision:* the configuration is built (the review's option (a)) at AT02's machine run:
+>      `at02_imm_end` ends it at `Foo` holding `c ↦ imm({α}, inj₁ (), ∅)` with 6.64's record in
+>      the visible frames and the index; it arises in `TW` and fails R-T1, `↭` and `M.Upd` at
+>      the nil index, and `StopVisible` excludes its visible frame at every index
+>      (`not_stop_imm_of_stopVisible`). Each claim is now about that end. No 6.64-typed program
+>      is built.
 >
 > **Major**
 >
@@ -110,9 +146,9 @@ typing system `J₂` and the world `W` do not exist yet.
   over the visible frames plus the held ones, so `TW.inv` and `TW.valid` apply to it. This is
   "every wp run ends in a TW world plus TW.inv", extended to W.
 - **W.** W is not built. It enters only as the parameter `M : SemWorld`, which has fields for
-  the world, the stop condition, the relation at rows, `held` (OQ-9) and `payStk` (OQ-46).
-  `coreW` is Core's relation, the instance with a one-point lend stack. (See the blocker: `↭`
-  is fixed, not a field.)
+  the world, the stop condition, the run-end relation `Upd` (Core's `↭` on the nil slice), the
+  relation at rows, `held` (OQ-9) and `payStk` (OQ-46). `coreW` is Core's relation, the instance
+  with a one-point lend stack.
 
 ## What "done" means
 
@@ -159,7 +195,7 @@ Worlds: **prog** means runs and typing only, with no semantic world; **W** means
 | I3.c `NoInterception` | no typed program catches a cancel | prog | PROVED AT σ=[] | — |
 | I3.b `FinaliserOrder` | cancel/unwind fire finalisers once each, innermost first | prog | OPEN; two-frame instance PROVED | — |
 | `FL` | every typing judgment holds in W's relation | W | PROVED AT σ=[] | `WLaws` |
-| `Adequate` | a closed computation in W's relation runs safely and terminates | W | return conjunct PROVED AT A RESTRICTION (`Platform.none`); full OPEN | `WLaws` (`AdequateOfLaws`, OPEN) |
+| `Adequate` | a closed computation in W's relation runs safely and terminates | W | return conjunct PROVED AT A RESTRICTION (`Platform.none`); full OPEN | `WLaws`, `UpdSeq`, `UpdReclaim` (`AdequateOfLaws`, OPEN) |
 | `WLaws` | the laws every W satisfies (bounds, `Mono`, nil-slice shape, …) | W | PROVED AT σ=[] | — |
 | **I1** | a suspension is a value of the resource world at its `kTy` | W | PROVED AT σ=[] | — |
 | **I2** | capture and resume preserve the invariant, spanning lends included (preservation, no termination) | W | PROVED AT A RESTRICTION (abortive rows) | `Arises`, `FramesW`, `SpanBorrows` |
@@ -194,7 +230,8 @@ Worlds: **prog** means runs and typing only, with no semantic world; **W** means
 1. **"vC/cC are the σ = [] instance."** DESIGN reads this as "the nil slice has Core's
    structure, and Core's relation embeds into W". It does not read it as an equivalence at
    every type, because that would put every tier-2 computation starting at σ = [] inside
-   today's `cC` and so decide OQ-9 for (b). Was the equivalence meant?
+   today's `cC`, with R-T1 at every stop and `↭` at every run end, and so decide OQ-9 for (b).
+   Was the equivalence meant?
 2. **Conservativity's scope.** Done holds the row-abortive form (`ConservativeWB`), and the
    every-type form (`Conservative`, A7 in full) is beside done. Should done hold the
    every-type form? This interacts with decision 4.
@@ -214,6 +251,20 @@ Worlds: **prog** means runs and typing only, with no semantic world; **W** means
    at an unhandled raise, OQ-51 (b)) and soundness at any persistent answer.
 8. **The survey.** The 1472-line `research/effects/survey.md` was committed on `targets` in
    0180b67. Should it stay?
+9. **The run-end relation's laws.** `UpdSeq` and `UpdReclaim` are hypotheses of
+   `AdequateOfLaws`, and `UpdRefl`, `UpdOwn`, `UpdFrame`, `UpdOutlives` and `UpdLendBack` are
+   laws FL at W reads; none is a conjunct of done (FIX-RUN-END §2.3). Should done hold
+   `UpdReclaim`, which would bound `Upd` from above in done itself? (The every-index
+   `UpdOutlives` and `UpdLendBack` cannot go in done without excluding OQ-9 (a) with the cell
+   kept.)
+10. **The `Upd` pin's `→` half.** `SliceShape`'s `Upd` pin is an equivalence. Its `→` half reads
+    σ = [] as "no lend carried open anywhere in the configuration", so a σ that counts only the
+    lends the running computation carries must end, off the nil slice, a run that closes a lend a
+    stored continuation carried (FIX-RUN-END §2.2). This is a constraint on OQ-44. Should the
+    pin stay an equivalence, or keep only its `←` half (Core's run ends are W's)? That drops the
+    constraint and the checks that read the `→` half (`at02_runEnd_nil`, the `M.Upd` conjuncts
+    of `at02_held_end` and `at02_imm_end`, `not_sliceShape_of_updTop`), and changes no derived
+    result.
 
 ## Minor findings
 

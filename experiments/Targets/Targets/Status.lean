@@ -15,6 +15,7 @@ import Targets.Restricted.Typing
 import Targets.Restricted.Unwind
 import Targets.Restricted.Release
 import Targets.Restricted.Handlers
+import Targets.Restricted.RunEnd
 import Targets.Statements.Abstraction
 import Targets.Statements.ZeroCost
 import Targets.Audit
@@ -87,7 +88,7 @@ occupancy argument reads.  Its typing content is T1's (`Terminates`, `SafeRuns`)
 |---|---|---|
 | `ReleasedOnceOfSound`; `ReleasedOnceAll J` | PROVED; PROVED (generic, every `J`) | `releasedOnceOfSound`, `releasedOnceAll` |
 | `RedLaws coreW`, hence `P11 coreW` | PROVED AT σ=[]; `RedLaws` PROVED (generic, at monotone tables) | `redLaws_core`, `p11_core`, `redLaws_of_mono` |
-| `AdequateOfLaws` | OPEN | |
+| `AdequateOfLaws` (with `UpdSeq`, `UpdReclaim`) | OPEN | |
 | `SoundRetAt tier1 P` at platforms with operations, then `Soundness tier1` | OPEN | |
 | `SoundDriveAt tier1 Platform.none` | OPEN | |
 | `SoundnessContracts tier1` | OPEN | |
@@ -95,6 +96,38 @@ occupancy argument reads.  Its typing content is T1's (`Terminates`, `SafeRuns`)
 | `BinderMachine` at `rs = []` | OPEN | |
 | the arising check of Restrat's `not_vDenNatural` witness at `coreW` | OPEN (stated) | `NotVDenNaturalArises` |
 | the AT-rejects | OPEN | |
+
+## The run-end relation (FIX-RUN-END)
+
+`wpGW` ends every run under the field `SemWorld.Upd`, pinned to Core's `↭` on the nil slice by
+`SliceShape` (`Restricted/RunEnd.lean`, `Restricted/CoreLaws.lean`, `Restricted/Corollaries.lean`).
+*Generic* is for every world; a pin or a witness world is named.
+
+| target | world | status | Lean |
+|---|---|---|---|
+| the embedding, run by run | every world meeting `SliceShape` | PROVED | `wpGW_of_wpG_nil` |
+| `UpdRefl`, `UpdOwn`, `UpdSeq`, `UpdReclaim`, `UpdFrame`, `UpdOutlives`, `UpdLendBack` | where `Upd` is Core's at every index | PROVED (generic) | `updRefl_of_core`, `updOwn_of_core`, `updSeq_of_core`, `updReclaim_of_core`, `updFrame_of_core`, `updOutlives_of_core`, `updLendBack_of_core` |
+| the same at `coreW` | Core σ=[] | PROVED AT σ=[] | `updRefl_core`, `updOwn_core`, `updSeq_core`, `updReclaim_core`, `updFrame_core`, `updOutlives_core`, `updLendBack_core` |
+| done's program-level conjuncts do not mention the world | generic | PROVED | `endState_prog` |
+| a run-end relation that relates everything fails the pin | generic | PROVED (a sanity check on the pin) | `not_sliceShape_of_updTop` |
+| a reachable leak fails `Adequate`, so done | generic, at `EffInterp` and `DataVals` | PROVED | `not_adequate_of_leak`, `not_endState_of_leak` |
+| `leakW` meets the pin, `EffInterp`, `DataVals` and admits a leak; it fails `Adequate` and `UpdReclaim` | the witness `leakW` | PROVED | `sliceShape_leakW`, `effInterp_leakW`, `dataVals_leakW`, `leakAt_leakW`, `not_adequate_leakW`, `not_updReclaim_leakW` |
+| the run-end laws admit an end that holds a `Mut` lend as a cell | the witness `carryW` | PROVED | `sliceShape_carryW`, `updRefl_carryW`, `updOwn_carryW`, `updSeq_carryW`, `updReclaim_carryW`, `at02_held_end_carry`, `upd_close_carryW` |
+| the printed forms of 6.50 and 6.27 at every index exclude it | generic; at `carryW` | PROVED | `not_updOutlives_of_opened`, `not_updMutBack_of_closed`; `not_updOutlives_carryW`, `not_updLendBack_carryW` |
+| AT02's end at `Foo` holding the lend fails `↭`, so `M.Upd`, at the nil index; unfolded it meets them | every world meeting `SliceShape`; `coreW` | PROVED | `at02_held_end`, `at02_unfolded_end`, `at02_runEnd_nil`; `at02_held_end_core` |
+| under Core's `↭` at every index, no run of AT02's body stops holding the lend as a cell | every world whose `Upd` gives Core's `↭` at every index | PROVED | `at02_runEnd`, `wpGW_at02` |
+| AT02's run ended in the configuration a 6.64 lend gives fails R-T1 and `↭`, so `M.Upd`, at the nil index | every world meeting `SliceShape` | PROVED | `at02_imm_end`, `not_stop_imm_of_stopVisible` |
+| `AdequateOfLaws` (with `UpdSeq`, `UpdReclaim`) | generic | OPEN | — |
+
+## The verifiers' findings (AGREE.md)
+
+1. **(blocker)** `wpGW` had Core's `↭` as a fixed conjunct, so no world could stop at a resuming
+   operation holding, as a borrow cell, a `Mut` lend it opened (OQ-9 (a)).  **Answered** by
+   FIX-RUN-END: the run-end relation is the field `SemWorld.Upd`, Core's `↭` on the nil slice.  The
+   review of FIX-RUN-END ended with two unresolved major findings (FIX-RUN-END §Unresolved,
+   AGREE.md).
+
+Findings 2–7 are open; AGREE.md lists them.
 
 ## Corrections to the design (DESIGN §Corrections)
 
@@ -360,6 +393,79 @@ theorem status_i2Prog_of_endState {J : TypingJ} {M : SemWorld} {Adm : OpAdm} {RF
 
 theorem status_p8a_of_endState {J : TypingJ} {M : SemWorld} {Adm : OpAdm} {RF : RowForm} :
     EndStateAt (ℍ := ℍ) J M Adm RF → P8a (ℍ := ℍ) J := p8a_of_endState
+
+/-! ## The run-end relation (FIX-RUN-END)
+
+The laws of `M.Upd` are beside done: `UpdSeq` and `UpdReclaim` are hypotheses of `AdequateOfLaws`,
+and `UpdRefl`, `UpdOwn`, `UpdFrame`, `UpdOutlives` and `UpdLendBack` are the forms FL's printed
+route reads.  The AT02 configurations are in `Restricted/RunEnd.lean` (the module docstring's
+table). -/
+
+/-- PROVED (generic, at every world meeting `SliceShape`): a `wpG` run is a `wpGW` run at the nil
+index that ends on the nil slice. -/
+theorem status_wpGW_of_wpG_nil {M : SemWorld} (hS : SliceShape M) (ls : List SRec) (e : Expr)
+    (Q : Idx M.Stk → Expr → WProp) (ρ : WRes) :
+    wpG (ℍ := ℍ) ls e (fun ls' t => Q (ls', M.nil) t) ρ → wpGW (ℍ := ℍ) M (ls, M.nil) e Q ρ :=
+  wpGW_of_wpG_nil hS ls e Q ρ
+
+/-- PROVED (generic): where `Upd` is Core's at every index, the run-end laws and the printed
+route's forms of `↭`'s lemmas hold. -/
+theorem status_updLaws_of_core {M : SemWorld}
+    (hC : ∀ i i' ρ ρ' π, M.Upd i i' ρ ρ' π ↔ ResU.UpdV ρ π) :
+    UpdRefl M ∧ UpdOwn M ∧ UpdSeq M ∧ UpdReclaim M ∧ UpdFrame M ∧ UpdOutlives M ∧
+      UpdLendBack M :=
+  ⟨updRefl_of_core hC, updOwn_of_core hC, updSeq_of_core hC, updReclaim_of_core hC,
+    updFrame_of_core hC, updOutlives_of_core hC, updLendBack_of_core hC⟩
+
+/-- PROVED AT σ=[]. -/
+theorem status_updLaws_core :
+    UpdRefl (coreW (ℍ := ℍ)) ∧ UpdOwn (coreW (ℍ := ℍ)) ∧ UpdSeq (coreW (ℍ := ℍ)) ∧
+      UpdReclaim (coreW (ℍ := ℍ)) ∧ UpdFrame (coreW (ℍ := ℍ)) ∧ UpdOutlives (coreW (ℍ := ℍ)) ∧
+      UpdLendBack (coreW (ℍ := ℍ)) :=
+  ⟨updRefl_core, updOwn_core, updSeq_core, updReclaim_core, updFrame_core, updOutlives_core,
+    updLendBack_core⟩
+
+/-- PROVED (generic): done's program-level conjuncts, which do not mention the world. -/
+theorem status_endState_prog {J : TypingJ} {M : SemWorld} {Adm : OpAdm} {RF : RowForm} :
+    EndStateAt (ℍ := ℍ) J M Adm RF →
+    RowAlgSafe RF ∧ RowLink RF ∧ AdmExtends Adm ∧ Tier2Pinned J Adm ∧ AcceptsTier2 J ∧
+    I4a J Adm .any ∧ ExtendsNU J ∧ OutExtends J.out ∧ Soundness (ℍ := ℍ) J ∧
+    SoundnessContracts (ℍ := ℍ) J ∧ ReleasedOnceAll (ℍ := ℍ) J ∧ EffSafe (ℍ := ℍ) J ∧
+    NoInterception J ∧ FinaliserOrder (ℍ := ℍ) J := endState_prog
+
+/-- PROVED (generic): a sanity check on the pin, read through its `→` half. -/
+theorem status_not_sliceShape_of_updTop {M : SemWorld} (h : ∀ i i' ρ ρ' π, M.Upd i i' ρ ρ' π) :
+    ¬ SliceShape M := RunEnd.not_sliceShape_of_updTop h
+
+/-- PROVED (generic): a world whose run-end relation admits a reachable leak does not satisfy
+done. -/
+theorem status_not_endState_of_leak {J : TypingJ} {M : SemWorld} {Adm : OpAdm} {RF : RowForm}
+    {α : Life} (hL : RunEnd.LeakAt M α) : ¬ EndStateAt (ℍ := ℍ) J M Adm RF :=
+  RunEnd.not_endState_of_leak hL
+
+/-- PROVED at the witness `leakW`: it meets the pin, `EffInterp` and `DataVals`, admits a leak,
+and fails `Adequate` and `UpdReclaim`. -/
+theorem status_leakW (α : Life) :
+    SliceShape (RunEnd.leakW (ℍ := ℍ)) ∧ EffInterp (ℍ := ℍ) (RunEnd.leakW (ℍ := ℍ)) ∧
+      DataVals (RunEnd.leakW (ℍ := ℍ)) ∧ RunEnd.LeakAt (RunEnd.leakW (ℍ := ℍ)) α ∧
+      ¬ Adequate (ℍ := ℍ) (RunEnd.leakW (ℍ := ℍ)) ∧ ¬ UpdReclaim (RunEnd.leakW (ℍ := ℍ)) :=
+  ⟨RunEnd.sliceShape_leakW, RunEnd.effInterp_leakW, RunEnd.dataVals_leakW,
+    RunEnd.leakAt_leakW α, RunEnd.not_adequate_leakW α, RunEnd.not_updReclaim_leakW⟩
+
+/-- PROVED at the witness `carryW`: the run-end laws admit an end that holds a `Mut` lend as a
+cell (AT02's held end, `RunEnd.at02_held_end_carry`). -/
+theorem status_carryW_laws :
+    SliceShape (RunEnd.carryW (ℍ := ℍ)) ∧ UpdRefl (RunEnd.carryW (ℍ := ℍ)) ∧
+      UpdOwn (RunEnd.carryW (ℍ := ℍ)) ∧ UpdSeq (RunEnd.carryW (ℍ := ℍ)) ∧
+      UpdReclaim (RunEnd.carryW (ℍ := ℍ)) :=
+  ⟨RunEnd.sliceShape_carryW, RunEnd.updRefl_carryW, RunEnd.updOwn_carryW, RunEnd.updSeq_carryW,
+    RunEnd.updReclaim_carryW⟩
+
+/-- PROVED at the witness `carryW`: the printed forms of 6.50 and 6.27 at every index exclude it
+(`RunEnd.not_updOutlives_of_opened`, `RunEnd.not_updMutBack_of_closed`, generic). -/
+theorem status_carryW_printed :
+    ¬ UpdOutlives (RunEnd.carryW (ℍ := ℍ)) ∧ ¬ UpdLendBack (RunEnd.carryW (ℍ := ℍ)) :=
+  ⟨RunEnd.not_updOutlives_carryW, RunEnd.not_updLendBack_carryW⟩
 
 /-! ## Binary and cross-language, out of the first pass (stated, OPEN) -/
 

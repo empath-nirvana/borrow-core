@@ -77,9 +77,9 @@ lemma (§7).
 
 - **Nothing breaks the borrow calculus.** The end state states the borrow guarantees for
   effectful programs: every-run safety, empty memory, exclusivity, lifetimes, exactly-once
-  release. Where W must change BoLo (the world, the wp's stop condition, the relation at rows),
-  the change is a field of `SemWorld`. What it must satisfy is a conjunct of the end state, never
-  an assumption.
+  release. Where W must change BoLo (the world, the wp's stop condition, the run-end relation
+  `↭`, the relation at rows), the change is a field of `SemWorld`. What it must satisfy is a
+  conjunct of the end state, never an assumption.
 - **Multi-shot is ignored** (decision 63). The end state's typing pin is the **unr-free
   fragment**: `ExtendsNU` (§1.2) asks the typing system to extend `CDerivesNU`, Core's rules with
   no `[perform]`, `[let]`, `[then]`, `[sub]` or `[handle]` at a row holding a resuming `unr`
@@ -100,11 +100,12 @@ lemma (§7).
 - **Open options stay open, or say which option they constrain.** Where a target cannot be
   stated without an option of an open question, the option is a parameter of `EndStateAt`
   (`Adm` for OQ-56, the row form `RF` for OQ-13's remaining question) or a field of `SemWorld`
-  (`held` for OQ-9, `payStk` for OQ-46). The typing system's outlives judgment is a field of the
-  typing system (OQ-28). Where a conjunct does constrain an open question it says so: `Mono`
-  constrains OQ-8; the nil slice is pinned only structurally so that OQ-9 and the stop condition
-  stay open; and the lend frames at W, stated in the printed rule's shape, decide OQ-9 for (a) if
-  (b) cannot give that shape (§4.2, §5 I2, §10).
+  (`held` and `Upd` for OQ-9, `payStk` for OQ-46). The typing system's outlives judgment is a
+  field of the typing system (OQ-28). Where a conjunct does constrain an open question it says so:
+  `Mono` constrains OQ-8; the nil slice is pinned only structurally so that OQ-9 and the stop
+  condition stay open; and the lend frames at W, stated in the printed rule's shape, decide OQ-9
+  for (a) if (b) cannot give that shape (§4.2, §5 I2, §10), which a fixed `↭` no longer excludes
+  for a `Mut` lend: the run-end relation is the field `Upd` (§10).
 
 ---
 
@@ -115,10 +116,18 @@ lemma (§7).
 Every [W] conjunct is about the **same** world `M`, and every [prog] conjunct about the **same**
 typing system `J`. That is what makes each conjunct a fixed proposition: a degenerate `M` cannot
 meet one conjunct while another `M` meets the next. The laws of §4.2 bound the relation from
-above at every index and at every type former, the borrow types included (`RelShape` transcribes
-Core's `Imm`/`Mut` clauses, §4.2). So a containment conjunct (I1, the FL cases,
-`ConservativeWB`) cannot be met by an over-approximating relation. At a row holding a resuming
-`unr` operation the relation is unconstrained, and no conjunct reads it there (§0).
+above by W's runs at every index and at every type former, the borrow types included
+(`RelShape` transcribes Core's `Imm`/`Mut` clauses, §4.2). So a containment conjunct (I1, the FL
+cases, `ConservativeWB`) cannot be met by an over-approximating relation. At a row holding a
+resuming `unr` operation the relation is unconstrained, and no conjunct reads it there (§0).
+
+W's runs end under `M.Upd`, Core's `↭` on the nil slice (`SliceShape`) and a field elsewhere. Of
+the conjuncts of done, `Adequate` bounds `M.Upd` from above, through `EffInterp` and `DataVals`,
+at a reachable leak (FIX-RUN-END §3), and the pin bounds it between nil indices. The rule-shaped
+conjuncts (`FramesW`, `SpanBorrows`, `I5`, `I1`, `P11`, the FL cases) read `M.Upd` on both sides
+and are not monotone in it, and no bound is recorded from them; their printed proofs consume
+`↭`'s borrow content, which at W is the laws of FIX-RUN-END §2.3 (d). `Arises`, `Exclusive`,
+`LifetimeSound` and the program-level conjuncts do not read it.
 
 ```lean
 /-- **Every guarantee**, for the typing system `J` at the world `M`, with OQ-56's admissibility
@@ -226,8 +235,10 @@ records them as such, not as conjuncts.
 2. **The proof device [W].** The fundamental lemma `FL M J` and adequacy `Adequate M`, at the
    end state's `M`.
    - `SoundnessOfFL`: `FL M J → Adequate M → Soundness J`. Soundness is a corollary of FL.
-   - `AdequateOfLaws`: adequacy follows from the laws of §4.2.
-   - So at W, FL is the only hard theorem Soundness needs.
+   - `AdequateOfLaws`: adequacy follows from the laws of §4.2 with `UpdSeq` and `UpdReclaim`.
+     Where `Upd` is Core's at every index those hold (`updSeq_of_core`, `updReclaim_of_core`) and
+     FL is the only hard theorem. Otherwise they are W's own obligations, or `Adequate` is proved
+     directly.
 3. **The interaction interface [W].** I1–I5, P9, P10, P11 and P14 at the same `M`: the facts
    about suspension that FL's effect cases are made of. Each has the program-level corollary of
    §1.0 or §5.
@@ -422,7 +433,7 @@ The signed-off structure says what W is: one Kripke world `W = (ρ, ls, σ)`, th
 record list × lend stack. Effects change three things in BoLo:
 
 - the world;
-- the wp's stop condition;
+- the wp's stop condition and its run-end relation `↭`;
 - the relation at effect rows.
 
 `SemWorld` has exactly those as fields, and two more: `held`, which says what the suspended
@@ -455,7 +466,10 @@ structure SemWorld where
   nil   : Stk
   /-- What the suspended computations at an index hold: their open 6.64 frames and their
   tagged records.  Where they are kept is OQ-9's question; under its option (b) nothing is
-  held at any index. -/
+  held at any index.  A 6.65 `Mut` lend adds no 6.64 frame or record, so `held` does not see
+  it; a world that carries one open across a stop accounts for it through `Upd` and the index,
+  either as a borrow cell in the run's resource or unfolded with the lend recorded in the index
+  (OQ-9 (a), OQ-44). -/
   held  : Idx Stk → List FrameRec × List SRec
   /-- The configurations W reaches at an index: the full resource and the open 6.64 frames
   visible to the running computation. -/
@@ -463,6 +477,12 @@ structure SemWorld where
   /-- The stop condition: entry frames/index, exit frames/index, final term.  Core's is R-T1
   (`Core/EffDefs.lean:40`). -/
   Stop  : List FrameRec × Idx Stk → List FrameRec × Idx Stk → Expr → Prop
+  /-- The run-end relation: a run from the resource `ρ` at the index `i` may end at the index
+  `i′` with `π = ρ′ ● ρ⁺`, its postcondition holding `ρ′`.  Core's is `↭` ([TR] p. 5 row 18,
+  `ResU.UpdV ρ π`), which reads neither index nor `ρ′`.  On the nil slice it is Core's
+  (`SliceShape`).  Whether, and how, a run may end holding a lend it opened is OQ-9's
+  question. -/
+  Upd   : Idx Stk → Idx Stk → WRes → WRes → WRes → Prop
   /-- The Kripke order on indices, relative to a resource (Core's `Ext`,
   `Core/FrameRecords.lean:172`). -/
   Ext   : Idx Stk → Idx Stk → WRes → Prop
@@ -480,7 +500,7 @@ structure SemWorld where
 ```
 
 **Derived definitions.** Each is a transcription of Core's, with `TW … ∧ Tagged …` replaced by
-`M.Fam`, R-T1 by `M.Stop`, and a record list `ls` by an index `i`.
+`M.Fam`, R-T1 by `M.Stop`, `↭` by `M.Upd`, and a record list `ls` by an index `i`.
 
 ```lean
 /-- `ℓ ↦ M_α P` at W: `ptoMutS` (`Core/Relation.lean:43`) with the stored predicate read at the
@@ -501,7 +521,8 @@ def ptoImmSW (M : SemWorld) (l : Loc) (α : Life) (i : Idx M.Stk) (P : Idx M.Stk
 ```
 
 ```lean
-/-- W's one-run wp: `wpG` (`Core/EffDefs.lean:27`) over `M.Fam`, ending under `M.Stop`. -/
+/-- W's one-run wp: `wpG` (`Core/EffDefs.lean:27`) over `M.Fam`, ending under `M.Stop` and
+`M.Upd`. -/
 def wpGW (M : SemWorld) (i : Idx M.Stk) (e : Expr) (Q : Idx M.Stk → Expr → WProp) : WProp :=
   fun ρ => ∀ (ρf fρ : WRes) (ps : List FrameRec), ResU.Hash ρf ρ → ResU.CompS ρf ρ fρ →
     M.Fam fρ ps i → ∀ (A : Alloc) (k : Nat),
@@ -509,7 +530,7 @@ def wpGW (M : SemWorld) (i : Idx M.Stk) (e : Expr) (Q : Idx M.Stk → Expr → W
       (i' : Idx M.Stk),
       ResU.Hash ρ' ρf ∧ ResU.CompS ρf ρ' fρ' ∧ ResU.Hash ρp fρ' ∧ ResU.Lower fρ μ ∧
       ResU.CompS fρ' ρp fρ'p ∧ ResU.Lower fρ'p μ' ∧ (∃ k', ARun A k μ e k' μ' t) ∧
-      ResU.CompS ρ' ρp π ∧ ResU.UpdV ρ π ∧ NoOwn ρp ∧
+      ResU.CompS ρ' ρp π ∧ M.Upd i i' ρ ρ' π ∧ NoOwn ρp ∧
       M.Fam fρ'p ps' i' ∧ M.Stop (ps, i) (ps', i') t ∧ Q i' t ρ'
 
 def valPostI {I} (Q : I → Val → WProp) : I → Expr → WProp :=
@@ -585,15 +606,21 @@ question inside the field. These constrain an open question, or may, and say whi
 - the nil slice is pinned only structurally (`SliceShape`), with Core embedding into W rather than
   equal to it. An equivalence at σ = [] at a type a tier-2 value can inhabit would decide OQ-9
   and the stop condition (§4.2);
+- the run-end relation `Upd` is pinned on the nil slice only. The pin puts Core's runs in W's,
+  and it bounds ends from the nil slice to the nil slice; it does not bound W's runs. A world that
+  carries a `Mut` lend open across a stop as a borrow cell needs `Upd` off the nil slice; one that
+  carries it with the cell unfolded does not (FIX-RUN-END §2.2, §4);
 - the lend frames at W (`MutFrameW`, `ImmFrameW`, §5 I2) are stated in the printed rule's shape
-  with stops; if OQ-9 (b) cannot give that shape, they decide OQ-9 for (a).
+  with stops; if OQ-9 (b) cannot give that shape, they decide OQ-9 for (a), which a fixed `↭` no
+  longer excludes for a `Mut` lend.
 
 | field | Core (`coreW`) | the open question inside it |
 |---|---|---|
 | `Stk` | `Unit` | OQ-44 (what σ holds), OQ-57 (a closing-obligation list beside W) |
-| `held` | `([], [])` | OQ-9 (lends carried open, or ghost-ended and re-lent), OQ-44 |
-| `Fam` | `TW fρ ps (rsOf ls) ∧ Tagged fρ ps ls` | OQ-9; bounded above by `Arises` (I2) |
-| `Stop` | R-T1: `ps′ ≡ ps ∧ ls′ ≡ ls` | OQ-9, OQ-10, the stop condition at resuming rows; bounded above by `StopVisible` (I2) |
+| `held` | `([], [])` | OQ-9 (lends carried open, or ghost-ended and re-lent), OQ-44; a 6.65 `Mut` lend adds no 6.64 frame or record, so the frame and record lists `held` reads do not see it |
+| `Fam` | `TW fρ ps (rsOf ls) ∧ Tagged fρ ps ls` | OQ-9; bounded above by `Arises` (I2); a 6.65 `Mut` lend adds no frame or record to the lists `Fam` reads, and `Fam` admits the configuration holding it (`TW.mutFold`) |
+| `Stop` | R-T1: `ps′ ≡ ps ∧ ls′ ≡ ls` | OQ-9, OQ-10, the stop condition at resuming rows; bounded above by `StopVisible` (I2); a 6.65 `Mut` lend adds no frame or record to the lists `Stop` reads, and at Core's world the end holding it meets `Fam` and R-T1 (`at02_held_end_core`) |
+| `Upd` | `ResU.UpdV ρ π` | OQ-9 (a `Mut` lend carried open as a borrow cell), OQ-44; pinned to Core's `↭` on the nil slice by `SliceShape` (the `←` half the embedding; the `→` half bounds ends between nil indices, and fixes the reading of σ = [] that AGREE decision 10 asks about); bounded above by `Adequate` through `EffInterp` and `DataVals` (a reachable leak); read on both sides, and not monotonically, by `FramesW`, `SpanBorrows`, `I5`, `I1`, `P11` and FL, whose printed proofs consume 6.27–6.29, 6.38, 6.39, 6.47–6.50 and the own-cell step (FIX-RUN-END §2.3 (d)); `AdequateOfLaws` asks `UpdSeq`, `UpdReclaim` |
 | `Ext` | `Ext` | OQ-8 (stack extension in the order, or at binder clauses); constrained by `Mono` |
 | `share` | `contShare` | OQ-8 (Kripke at the share and `KapRel`, or at binder clauses); bounded above by `ShareResume` (I2) and `ShareCancel` (I3) at non-`unr` entries |
 | `payStk` | `fun _ _ => ()` | OQ-46 (the stack a stored payload is read at) |
@@ -609,6 +636,7 @@ def coreW : SemWorld where
   held _ := ([], [])
   Fam fρ ps i := TW fρ ps (rsOf i.1) ∧ Tagged fρ ps i.1
   Stop a b _ := (∀ p, p ∈ b.1 ↔ p ∈ a.1) ∧ (∀ x, x ∈ b.2.1 ↔ x ∈ a.2.1)
+  Upd _ _ ρ _ π := ResU.UpdV ρ π
   Ext i i' ρ := Ext i.1 i'.1 ρ
   share T en n i K Φ := contShare T.down en.down n i.1 K (fun ls t => Φ (ls, ()) t)
   payStk _ _ := ()
@@ -616,8 +644,9 @@ def coreW : SemWorld where
   comp C i δ e := cC C i.1 δ e
 ```
 
-`T.down`/`en.down` precompose the entries' predicates with `(·, ())`. The builder's first lemmas
-are the transports, each by unfolding:
+`T.down`/`en.down` precompose the entries' predicates with `(·, ())`. `coreW`'s run-end relation
+is Core's `↭` at every index (`coreW_upd`, by `Iff.rfl`), so the transports are unchanged by it.
+The builder's first lemmas are the transports, each by unfolding:
 
 - `wpGW_core : wpGW coreW (ls, ()) e Q ρ ↔ wpG ls e (fun ls' t => Q (ls', ()) t) ρ`;
 - `ewpW_core` with `ewpTS`;
@@ -630,7 +659,7 @@ are the transports, each by unfolding:
 
 | conjunct | follows from, or is used by |
 |---|---|
-| `Soundness J` | `SoundnessOfFL`: `FL M J` + `Adequate M`; `Adequate M` from §4.2 by `AdequateOfLaws` |
+| `Soundness J` | `SoundnessOfFL`: `FL M J` + `Adequate M`; `Adequate M` from §4.2, `UpdSeq` and `UpdReclaim`, by `AdequateOfLaws` |
 | `SoundnessContracts J` | `FL M J` + `ExtPre M` + `Conservative M` (the externs' contracts are Core's, at any type) + `Adequate M` (§Corrections C2); at row-abortive externs, `ConservativeWB M` in place of `Conservative M` |
 | `ReleasedOnceAll J` | the occupancy argument of D9 alone: it holds at every `J` (§Builder's notes); its typing content is `SoundnessContracts J`'s `Final` and `Terminates` |
 | `EffSafe J` | `FL M J` + `AdequateEvery M` at the empty world |
@@ -667,7 +696,7 @@ roots = ["Targets"]
 | `Targets/Defs/Programs.lean` | D13–D14: answering implementations, `ctlForm`, `capPass`; the acceptance terms |
 | `Targets/Statements/*.lean` | every conjunct as a `def … : Prop`; `Guarantees`, `EndStateAt`, `EndState`, `EndStateBinder`, `Tier1End`; the targets beside done |
 | `Targets/Audit.lean` | the step-index audit (§4.4), run on `coreW` now and on `W` when it is built; the pin of Core's relation (§6 P14) |
-| `Targets/Restricted/*.lean` | the proofs of §9 |
+| `Targets/Restricted/*.lean` | the proofs of §9; `RunEnd.lean`, the run-end relation's checks and witness worlds (FIX-RUN-END) |
 | `Targets/Status.lean` | the record below |
 
 **`Status.lean` format.** The file opens with the definition of done and its two parts, then one
@@ -708,8 +737,9 @@ The file's docstring carries the table of §9.
   it exists, is a `theorem` of that `def`.
 - `#print axioms` of every proved result is within `[propext, Classical.choice, Quot.sound]`.
 - Build with `lake build Targets` only.
-- The library imports `Core`'s modules, `Restrat` (for `Restrat.Emb`) and `GhostEnd` (for
-  `ewpTS_M_antiFrameR`, the anti-frame at a resuming table). Import the `Core` modules needed, not
+- The library imports `Core`'s modules, `Restrat` (for `Restrat.Emb`), `GhostEnd` (for
+  `ewpTS_M_antiFrameR`, the anti-frame at a resuming table) and `LoopBorrow` (for
+  `not_upd_of_new_mut`, `not_upd_of_new_imm`, `mutCell`). Import the `Core` modules needed, not
   the root: a scratch `import Core` against this branch's built oleans failed (`Core.Embedding`
   and `Core.Examples` both carry `CFree.eq_def`), and `import Core.EffRules` elaborated. If
   `lake build Targets` fails in an import, copy the declarations needed locally and record the
@@ -1198,6 +1228,11 @@ This is SPEC §19's machine. I3.b states it over complete runs (§5).
   the visible frames and records together with the held ones (I2, §5). Then `TW.inv` and
   `TW.valid` apply to it. Where the held frames are kept is `held`'s content and OQ-9's question;
   `Arises` ties the count to it, so it cannot be met by an unrelated superset.
+- **A lend open across a stop.** A 6.65 `Mut` lend adds no 6.64 frame or record, so `held` does
+  not see it. A world that carries one open across a stop accounts for it through `Upd` and the
+  index, either as a borrow cell in the run's resource or unfolded with the lend recorded in the
+  index (OQ-9 (a), OQ-44). A 6.64 frame left open at a stop is excluded from the visible frames
+  by `StopVisible` (`not_stop_imm_of_stopVisible`); where a world keeps it is OQ-9's question.
 
 ### D11. The freeze binder's actions
 
@@ -1977,8 +2012,9 @@ the control class, are OQ-23, which needs the user. The answering class rests on
 - **FL:** every judgment of the typing system holds in W's relation, at every admissible instance.
 - **Adequacy:** a closed computation in W's relation is safe and terminating under every platform
   (or safely driven).
-- So Soundness is a corollary of FL. Adequacy follows from the laws of §4.2, so FL is the only
-  hard theorem.
+- So Soundness is a corollary of FL. Adequacy follows from the laws of §4.2 with the run-end
+  relation's `UpdSeq` and `UpdReclaim` (§1.1), so where `Upd` is Core's at every index FL is the
+  only hard theorem.
 
 **(b) Definitions.** §1.3, D5–D8.
 
@@ -2004,7 +2040,23 @@ def SoundnessContractsOfFL : Prop :=        -- corrected, §Corrections C2
 def SoundnessContractsOfFLWB : Prop :=      -- the route as first designed, at row-abortive externs
   ∀ M J, FL M J → ExtPre M → ConservativeWB M → Adequate M → SoundnessContractsAR J
 def EffSafeOfFL : Prop := ∀ M J, FL M J → WLaws M → EffSafe J
-def AdequateOfLaws : Prop := ∀ M, WLaws M → ShareResume M → Adequate M
+
+/-- **6.48 then 6.49 at W**, as `wpG_bind` composes two runs (`Core/EffWp.lean:910-911`): a run
+from `ρ` at `i` ending at `i₁` with `π₁ = ρ′₁ ● ρ⁺₁`, then a run from `ρ′₁` at `i₁` ending at `i₂`
+with `π₂`, together end at `i₂` with `ρ⁺₁ ● π₂`. -/
+def UpdSeq (M : SemWorld) : Prop :=
+  ∀ (i i₁ i₂ : Idx M.Stk) (ρ ρ'₁ ρp₁ π₁ ρ'₂ π₂ π : WRes),
+    M.Upd i i₁ ρ ρ'₁ π₁ → ResU.CompS ρ'₁ ρp₁ π₁ → M.Upd i₁ i₂ ρ'₁ ρ'₂ π₂ →
+    ResU.Hash ρp₁ π₂ → ResU.CompS ρp₁ π₂ π → M.Upd i i₂ ρ ρ'₂ π
+
+/-- **Reclaim at W** (`reclaim`, at `theorem32D`'s end): a run from the empty resource at σ = []
+whose postcondition holds nothing leaves nothing borrowed, whatever index it ends at. -/
+def UpdReclaim (M : SemWorld) : Prop :=
+  ∀ (i' : Idx M.Stk) (π : WRes),
+    M.Upd ([], M.nil) i' PMap.empty PMap.empty π → NoOwn π → π = PMap.empty
+
+def AdequateOfLaws : Prop :=
+  ∀ M, WLaws M → ShareResume M → UpdSeq M → UpdReclaim M → Adequate M
 ```
 
 **(d) Literature.**
@@ -2024,8 +2076,12 @@ def AdequateOfLaws : Prop := ∀ M, WLaws M → ShareResume M → Adequate M
 - `AdequateOfLaws` is `wpTS_demonic`/`theorem32D`'s replay-and-reclaim argument over `wpGW`. It
   never inspects `Fam` beyond the empty world, and it chains runs across platform answers by
   `ShareResume` at the same index (`ExtPre`'s reflexivity) at resource-free answers (`DataVals`).
-  Platform operations are linear, so the rows it reads are unr-free. Generic. Prove the
-  `Platform.none`, non-loop part first.
+  It composes chained runs, platform answers and drive observations by `UpdSeq` (as `wpG_bind`)
+  and reclaims by `UpdReclaim` (as `theorem32D`). With the run-end relation a field these two are
+  properties of `M.Upd`, so they are named hypotheses, as `ShareResume` is; both hold where `Upd`
+  is Core's at every index (`updSeq_of_core`, `updReclaim_of_core`), so at `coreW` nothing is
+  lost (FIX-RUN-END §2.3 (b)). Platform operations are linear, so the rows it reads are unr-free.
+  Generic. Prove the `Platform.none`, non-loop part first.
 - `FL M J` at the end state: OPEN.
 
 **(f) Non-vacuity.** `CDerives` has closed derivations at data answers (T1 (f)), and `coreW`
@@ -2036,12 +2092,17 @@ satisfies the laws.
 ### 4.2 The laws every W satisfies
 
 These are conjuncts of `Guarantees` about the end state's `M`, [W]. Each holds of `coreW`, mostly
-by unfolding. Together they bound the relation from above at **every** index and every type
-former: data values are exactly data (`DataVals`), a computation of `F_Σ A` at an unr-free row is
-exactly W's runs (`EffInterp`), every other former is bounded by its eliminations and its shape
-(`RelLaws`; at `Imm` and `Mut` by Core's own clauses, with W's relation for the payload), and
-every run from every configuration W reaches is safe (`AdequateEvery`). With `LifetimeSound` (P9,
-at every index) no conjunct of the end state can be met by an over-approximating relation.
+by unfolding. Together they bound the relation from above by W's runs at **every** index and
+every type former: data values are exactly data (`DataVals`), a computation of `F_Σ A` at an
+unr-free row is exactly W's runs (`EffInterp`), every other former is bounded by its eliminations
+and its shape (`RelLaws`; at `Imm` and `Mut` by Core's own clauses, with W's relation for the
+payload), and every run from every configuration W reaches is safe (`AdequateEvery`). With
+`LifetimeSound` (P9, at every index) no conjunct of the end state can be met by an
+over-approximating relation.
+
+`EffInterp` bounds `F_Σ` by W's runs, which end under `M.Upd`. `M.Upd` is bounded from above by
+`Adequate` at a reachable leak, and pinned to `↭` on the nil slice: the `←` half is the
+embedding, the `→` half bounds ends between nil indices (FIX-RUN-END §2.2, §3).
 
 At an index where no configuration arises (`M.Fam` empty there), the relation is unconstrained,
 and nothing reads it: every quantifier over configurations in `wpGW` ranges over `M.Fam`, and
@@ -2067,14 +2128,15 @@ def CTy.AbortRows : CTy → Prop
   | .eff _ _ q A B C => (B.isZero && q != .lin) = true ∧ A.AbortRows ∧ B.AbortRows ∧ C.AbortRows
 end
 
-/-- **The nil slice, structurally**: at σ = [] nothing is held, the configurations, the order
-and the stop are Core's, and a stored payload is read at σ = []. -/
+/-- **The nil slice, structurally**: at σ = [] nothing is held, the configurations, the order,
+the stop and the run-end relation are Core's, and a stored payload is read at σ = []. -/
 def SliceShape (M : SemWorld) : Prop :=
   (∀ ls, M.held (ls, M.nil) = ([], [])) ∧
   (∀ fρ ps ls, M.Fam fρ ps (ls, M.nil) ↔ TW fρ ps (rsOf ls) ∧ Tagged fρ ps ls) ∧
   (∀ ls ls' ρ, M.Ext (ls, M.nil) (ls', M.nil) ρ ↔ Ext ls ls' ρ) ∧
   (∀ ps ls ps' ls' t, M.Stop (ps, (ls, M.nil)) (ps', (ls', M.nil)) t ↔
      (∀ p, p ∈ ps' ↔ p ∈ ps) ∧ (∀ x, x ∈ ls' ↔ x ∈ ls)) ∧
+  (∀ ls ls' ρ ρ' π, M.Upd (ls, M.nil) (ls', M.nil) ρ ρ' π ↔ ResU.UpdV ρ π) ∧
   (∀ b, M.payStk b M.nil = M.nil)
 
 /-- **Mono**: Kripke monotonicity of the value relation, in both modes. -/
@@ -2166,9 +2228,85 @@ reads. `AdequateEvery` follows from `EffInterp` and `ewpW`'s shape by `wpTS_demo
 only in `payStk`, the stack the payload is read at; the record half of the payload's index is
 `ptoMutS`'s own `ls₀`.
 
+**The run-end relation's laws, beside `WLaws` and not in it** (FIX-RUN-END §2.3). `AdequateOfLaws`
+asks `UpdSeq` and `UpdReclaim` (§4.1). FL at W, `FramesW` at W and `AdequateOfLaws`'s proof read
+`M.Upd` through the W-level forms of Core's `↭` lemmas, each stated at every pair of indices in
+the shape Core's proof reads the printed lemma:
+
+```lean
+/-- **6.47 at W** (as `wpG_here` reads `ResU.updV_self_iff`, `Core/EffWp.lean:969`). -/
+def UpdRefl (M : SemWorld) : Prop :=
+  ∀ (i : Idx M.Stk) (ρf ρ fρ : WRes) (ps : List FrameRec),
+    ResU.Hash ρf ρ → ResU.CompS ρf ρ fρ → M.Fam fρ ps i → M.Upd i i ρ ρ ρ
+
+/-- **The own-cell step at W** (`updV_compS_own`, as the alloc and free rules read it). -/
+def UpdOwn (M : SemWorld) : Prop :=
+  (∀ (i : Idx M.Stk) (ρf ρ fρ ρ₁ : WRes) (ps : List FrameRec) (l : Loc) (v : Val),
+    ResU.Hash ρf ρ → ResU.CompS ρf ρ fρ → M.Fam fρ ps i →
+    ResU.CompS ρ (ResU.single l (CellU.ownOf v)) ρ₁ → ResU.Hash ρf ρ₁ → M.Upd i i ρ ρ₁ ρ₁) ∧
+  (∀ (i : Idx M.Stk) (ρf ρ ρ₁ fρ₁ : WRes) (ps : List FrameRec) (l : Loc) (v : Val),
+    ResU.Hash ρf ρ₁ → ResU.CompS ρf ρ₁ fρ₁ → M.Fam fρ₁ ps i →
+    ResU.CompS ρ (ResU.single l (CellU.ownOf v)) ρ₁ → M.Upd i i ρ₁ ρ ρ)
+
+/-- **6.48 into the post at W** (`updV_frame`, as `wpG_ramify` reads it). -/
+def UpdFrame (M : SemWorld) : Prop :=
+  ∀ (i i' : Idx M.Stk) (ρ₁ ρ₂ ρ ρ'₁ π₁ ρ' π : WRes),
+    M.Upd i i' ρ₁ ρ'₁ π₁ → ResU.CompS ρ₂ ρ₁ ρ → ResU.Hash ρ₂ ρ₁ →
+    ResU.CompS ρ₂ π₁ π → ResU.Hash ρ₂ π₁ → ResU.CompS ρ'₁ ρ₂ ρ' → M.Upd i i' ρ ρ' π
+
+/-- **6.50 at W** (`updV_outlives`, as `wpTS_box` reads it). -/
+def UpdOutlives (M : SemWorld) : Prop :=
+  ∀ (i i' : Idx M.Stk) (ρ ρ' π : WRes) (α : Life),
+    BoLo.Outlives ρ α → M.Upd i i' ρ ρ' π → BoLo.Outlives π α
+
+/-- **6.27 then 6.28 at W**, as `wpG_M_frameX` reads them (`Core/EffWp.lean:441, 525`). -/
+def UpdMutBack (M : SemWorld) : Prop :=
+  ∀ (i i' : Idx M.Stk) (l : Loc) (α : Life) (v : Val) (ρv ρb BM ρ' π : WRes)
+    (h : ρv.InStratum α) (P : Val → SPropS Loc Val α) (hw : P v ⟨ρv, h⟩),
+    BoLo.Outlives ρb α → ResU.CompS ρb (ResU.single l (CellU.mutOf α v ρv h P hw)) BM →
+    M.Upd i i' BM ρ' π →
+    ∃ (v' : Val) (χ : WRes) (h' : χ.InStratum α) (hw' : P v' ⟨χ, h'⟩),
+      ResU.CompS (π.del l) (ResU.single l (CellU.mutOf α v' χ h' P hw')) π ∧
+      ∀ (W W' O O' ρ'' : WRes), ResU.CompS ρv (ResU.single l (CellU.ownOf v)) W →
+        ResU.CompS χ (ResU.single l (CellU.ownOf v')) W' → ResU.CompS ρb W O →
+        ResU.CompS (π.del l) W' O' → ResU.CompS ρ' W' ρ'' → ResU.Valid O → ResU.Valid O' →
+        M.Upd i i' O ρ'' O'
+
+/-- **6.29, 6.38 and 6.39 at W**, as `wpG_I_frameX` reads them (`Core/EffWp.lean:174-240`). -/
+def UpdImmBack (M : SemWorld) : Prop :=
+  ∀ (i i' : Idx M.Stk) (l : Loc) (α : Life) (v : Val) (ρv ρb W BI ρ' ρp π : WRes)
+    (h : ρv.InStratum (LSet.singleton α).join),
+    ResU.CompS ρv (ResU.single l (CellU.ownOf v)) W → ResU.Hash ρb W →
+    BoLo.Outlives ρb α → BoLo.Outlives ρ' α → ResU.Hash ρ' ρp → NoOwn ρp →
+    ResU.CompS ρb (ResU.single l (CellU.immOf (LSet.singleton α) v ρv h)) BI →
+    ResU.CompS ρ' ρp π → M.Upd i i' BI ρ' π →
+    ResU.CompS (π.del l) (ResU.single l (CellU.immOf (LSet.singleton α) v ρv h)) π ∧
+    ResU.Hash (π.del l) W ∧
+    ∀ (O O' ρ'' : WRes), ResU.CompS ρb W O → ResU.CompS (π.del l) W O' →
+      ResU.CompS ρ' W ρ'' → M.Upd i i' O ρ'' O'
+
+def UpdLendBack (M : SemWorld) : Prop := UpdMutBack M ∧ UpdImmBack M
+```
+
+| law | Core | where `Upd` is Core's at every index; at `coreW` | at `carryW` (FIX-RUN-END §4) |
+|---|---|---|---|
+| `UpdRefl` (6.47) | `ResU.updV_self_iff` | `updRefl_of_core`; `updRefl_core` | holds (`updRefl_carryW`) |
+| `UpdOwn` (the own-cell step) | `updV_compS_own` | `updOwn_of_core`; `updOwn_core` | holds (`updOwn_carryW`) |
+| `UpdSeq` (6.48 then 6.49) | `updV_frame`, `ResU.UpdV.trans` | `updSeq_of_core`; `updSeq_core` | holds (`updSeq_carryW`) |
+| `UpdReclaim` | `reclaim` | `updReclaim_of_core`; `updReclaim_core` | holds (`updReclaim_carryW`); fails at `leakW` (`not_updReclaim_leakW`) |
+| `UpdFrame` (6.48 into the post) | `updV_frame` | `updFrame_of_core`; `updFrame_core` | not checked |
+| `UpdOutlives` (6.50) | `updV_outlives` | `updOutlives_of_core`; `updOutlives_core` | fails (`not_updOutlives_carryW`) |
+| `UpdLendBack` (6.27, 6.28; 6.29, 6.38, 6.39) | `ResU.six27`, `six28`; `six38_steps_one_two`, `six38`, `six39` | `updLendBack_of_core`; `updLendBack_core` | fails (`not_updLendBack_carryW`) |
+
+Stated at every pair of indices, `UpdOutlives` fails at every world whose `Upd` lets a run from `∅`
+end with a lend at the top of its end (`not_updOutlives_of_opened`), and `UpdLendBack` at every
+world whose `Upd` lets a run that starts with a lend end with no cell there
+(`not_updMutBack_of_closed`); AT02's held end and the run that closes it are such runs. None of
+these laws is a conjunct of done (AGREE decision 9).
+
 **Status at `coreW`.**
 
-- `SliceShape`: by `rfl`.
+- `SliceShape`: by `Iff.rfl` (its `Upd` component too: `coreW_upd`).
 - `Mono`: `vC_local` (`Core/RelationFacts.lean:265`), both modes.
 - `ExtPre`: `Ext.refl`, `Ext.trans` (`Core/Wp.lean:142,138`).
 - `EffInterp`: `cC_effOf`.
@@ -2185,19 +2323,23 @@ All are PROVED AT σ=[] once written.
 **At the end state they are OPEN, and each is a real requirement.**
 
 - `SliceShape` and `ConservativeWB` (§6 P14) are this design's reading of the sign-off's "vC/cC
-  are the σ = [] instance": the nil slice is Core's in its structure, and Core's relation
-  **embeds** into W at σ = [] (at row-abortive types in done, at every type beside done). It is
-  not an equivalence. An equivalence `M.val b A (ls, M.nil) ↔ vCE none b A ls` at a type that a
-  tier-2 value can inhabit would put that value in today's `cC`, whose `wpG` keeps R-T1 at every
-  stop (`Core/EffDefs.lean:40`) and whose `↭` (`UpdV`) cannot end a run with a borrow cell it
-  created (LoopBorrow's `not_upd_of_new_mut`). Under OQ-9 (a) a run from σ = [] can end with a
-  lend held. That is so at abortive-row types too: a handler whose clause answers a thunk that
-  resumes `κ` (`λ_. κ.resume () to t. force t`, at the answer `U(F_∅ Flag)`, a type with no row)
-  returns a value holding the suspended lend of an `at02`-like body. I have not built that program
-  in Lean; the design avoids the equivalence rather than rest on the argument. LoopBorrow found the
-  same thing for loops: a lend spanning runs "needs a model change: a borrow that `↭` lets outlive
-  the run that opens it" (`refoldKripke_false`, `refold_fails_at_consumer_frame`, a list that
-  arises). §10 records the question for the user.
+  are the σ = [] instance": the nil slice is Core's in its structure, its run-end relation
+  included, and Core's relation **embeds** into W at σ = [] (at row-abortive types in done, at
+  every type beside done; run by run, `wpGW_of_wpG_nil`). It is not an equivalence. An
+  equivalence `M.val b A (ls, M.nil) ↔ vCE none b A ls` at a type that a tier-2 value can inhabit
+  would put that value in today's `cC`. That relation's runs end on the nil slice, with R-T1 at
+  every stop (`Core/EffDefs.lean:40`) and `↭` at every run end, and `↭` cannot end a run with a
+  borrow cell it created (LoopBorrow's `not_upd_of_new_mut`). Under OQ-9 (a) a run from σ = []
+  can end off the nil slice, where `M.Upd` is not pinned. That is so at abortive-row types too: a
+  handler whose clause answers a thunk that resumes `κ` (`λ_. κ.resume () to t. force t`, at the
+  answer `U(F_∅ Flag)`, a type with no row) returns a value holding the suspended lend of an
+  `at02`-like body. I have not built that program in Lean; the design avoids the equivalence
+  rather than rest on the argument. LoopBorrow found the same thing for loops: a lend spanning
+  runs "needs a model change: a borrow that `↭` lets outlive the run that opens it"
+  (`refoldKripke_false`, `refold_fails_at_consumer_frame`, a list that arises). That is now
+  expressible at W, as `Upd` off the nil slice: the run-end laws admit it for a `Mut` lend
+  (`carryW`, FIX-RUN-END §4); the printed forms of 6.27 and 6.50 at every index do not
+  (FIX-RUN-END §2.3 (d)). §10 records the question for the user.
 - `Mono` is what GhostEnd's `gRL*` lacks (`docs/effects-state/06` §2.2).
 
 **`Mono` and OQ-8.** `Mono` is Kripke monotonicity, which is what makes W a Kripke world (the
@@ -2428,7 +2570,8 @@ Kripke monotonicity, which I1 and `Mono` require of a stored suspension.
   rule with `wp` allowed to stop and the `И` taken once: under OQ-9 (a) it is the lend carried
   open; under (b) whether the re-lendable variant gives it is open (`O151AsStated`, "I have not
   derived the stated form from the variant"). If (b) cannot give it, these conjuncts decide OQ-9
-  for (a); §10 records this.
+  for (a), which a fixed `↭` no longer excludes for a `Mut` lend (FIX-RUN-END §4); §10 records
+  this.
 
 A table that mixes abortive and resuming entries is the unwinding constants' business, with their
 finaliser (`SpanBorrows`); the plain frames are stated at the two pure shapes.
@@ -2605,7 +2748,14 @@ leak-free, AT02, AT04 and AT12 among them.
   - the re-lendable frames `ewpTS_M_frameR`, `ewpTS_I_frameR` are PROVED; the stated shapes,
     `O151AsStated` (`MutFrameW coreW .resumeOnce`'s content, through the transports) and its
     `Imm` analogue, are OPEN;
-  - WorldW batch 1 has resource-level hand-on and exit lemmas [probe].
+  - WorldW batch 1 has resource-level hand-on and exit lemmas [probe];
+  - AT02's run ended at `Foo` (`Restricted/RunEnd.lean`, FIX-RUN-END §0, §4): holding the `Mut`
+    lend as a cell, the end meets `Fam` and R-T1 at Core's world and fails `↭`
+    (`at02_held_end_core`); with the cell unfolded it meets `↭` (`at02_unfolded_end`); the run-end
+    laws admit the end holding the lend as a cell at the witness `carryW`
+    (`at02_held_end_carry`); in the configuration a 6.64 lend gives, the end fails R-T1 and `↭`
+    at the nil index (`at02_imm_end`), and `StopVisible` excludes its visible frame at every
+    index (`not_stop_imm_of_stopVisible`).
 
 I2 at the end state is OPEN. It is the next track by the register's rule.
 
@@ -2653,6 +2803,8 @@ def FreezeBinderLoc (M : SemWorld) (a : StkAct M) : Prop :=
   (∀ π ps i ps' i' t, M.Stop (ps, i) (ps', i') t ↔
      M.Stop (ps.map (·.renameLoc π), i.locAct a π) (ps'.map (·.renameLoc π), i'.locAct a π)
        (t.renameLoc π)) ∧
+  (∀ π i i' (ρ₁ ρ₂ ρ₃ : WRes), M.Upd i i' ρ₁ ρ₂ ρ₃ ↔
+     M.Upd (i.locAct a π) (i'.locAct a π) (ρ₁.mapLoc π) (ρ₂.mapLoc π) (ρ₃.mapLoc π)) ∧
   (∀ π fρ ps i ρ ρf b A δ v, M.Fam fρ ps i → ResU.CompS ρf ρ fρ →
      BlockAffine π (fρ.arrRanges ⊔ v.1.arrRanges) →
      (M.val b A i δ v ρ ↔ M.val b A (i.locAct a π) δ (v.renameLoc π) (ρ.mapLoc π))) ∧
@@ -2674,6 +2826,8 @@ def FreezeBinderLife (M : SemWorld) (a : StkAct M) : Prop :=
   (∀ c (θ : Restrat.Emb c) i i' ρ, M.Ext i i' ρ → M.Ext (i.lifeAct a θ) (i'.lifeAct a θ) (θ.relRU ρ)) ∧
   (∀ c (θ : Restrat.Emb c) ps i ps' i' t, M.Stop (ps, i) (ps', i') t →
      M.Stop (ps.map (·.restrat θ), i.lifeAct a θ) (ps'.map (·.restrat θ), i'.lifeAct a θ) t) ∧
+  (∀ c (θ : Restrat.Emb c) i i' (ρ₁ ρ₂ ρ₃ : WRes), M.Upd i i' ρ₁ ρ₂ ρ₃ →
+     M.Upd (i.lifeAct a θ) (i'.lifeAct a θ) (θ.relRU ρ₁) (θ.relRU ρ₂) (θ.relRU ρ₃)) ∧
   (∀ c (θ : Restrat.Emb c) fρ ps i ρ ρf b A δ v, M.Fam fρ ps i → ResU.CompS ρf ρ fρ →
      M.val b A i δ v ρ → M.val b A (i.lifeAct a θ) (LSub.mapN θ.toNat δ) v (θ.relRU ρ)) ∧
   (∀ c (θ : Restrat.Emb c) fρ ps i ρ ρf C δ e, M.Fam fρ ps i → ResU.CompS ρf ρ fρ →
@@ -3556,12 +3710,12 @@ analogue, the analogue is kept.
 | # | survey program | here | tier 1 | tier 2 | evidence |
 |---|---|---|---|---|---|
 | 1 | linear or owned value captured by a multi-shot continuation | **dropped** (multi-shot). If `unr` stays, the kernel already refuses it: `unr` share `∅`, and `[let]` asks `Persistent Γ₂` at `Unr` rows. | — | — | `Core/EffDefs.lean:146`, `Core/EffRules.lean:896` |
-| 2 | `region (let r = ref local 0 in do Foo r; !r)` | **AT02** (`at02`): a cell lent mutably to a callback that performs a once-resuming `Foo`, handled outside the lend, then reads through the lend. The multi-shot half is dropped. | reject (`Row.Unwind`; semantically R-T1) | accept: `inj₁ ()` | `corpus/reject/gen-self-borrow.bc`; GhostEnd `withbor_spans_yields_cC` (the lend is in `cC` at σ=[]) |
+| 2 | `region (let r = ref local 0 in do Foo r; !r)` | **AT02** (`at02`): a cell lent mutably to a callback that performs a once-resuming `Foo`, handled outside the lend, then reads through the lend. The multi-shot half is dropped. | reject (`Row.Unwind`; semantically `↭` (`at02_held_end_core`)) | accept: `inj₁ ()` | `corpus/reject/gen-self-borrow.bc`; GhostEnd `withbor_spans_yields_cC` (the lend is in `cC` at σ=[]) |
 | 3 | `g := λf x. f(); x`, multi-shot `f`, affine `x` | **AT03**, the linear-core analogue: `f` performs an affine (cancellable) operation while an owned `x` with no finaliser is live. | reject (`[let]`: `S.Weak → Γ₂.Drops`); accept with a `[then]` finaliser releasing `x` at the cancel | same | `corpus/reject/effect-abort-live.bc` |
-| 4 | `v.push(do choose())`, multi-shot | **AT04** (`at04`), the one-shot analogue: a `Mut` lend of `v` live across a resuming operation, its answer written through the lend. | reject (`Row.Unwind`; semantically R-T1) | accept: `(inj₁ (), inj₂ ())` | as AT02 |
+| 4 | `v.push(do choose())`, multi-shot | **AT04** (`at04`), the one-shot analogue: a `Mut` lend of `v` live across a resuming operation, its answer written through the lend. | reject (`Row.Unwind`; semantically `↭`, by AT02's argument (not built)) | accept: `(inj₁ (), inj₂ ())` | as AT02 |
 | 5 | two `&mut` into handler state from one handler | **AT05** | reject (the capability is `Mut 'h S`, which has no copy rule) | reject | HandlersAsBorrows `twoBlocks_refused` [PAPER]; `corpus/reject/io-capability-twice.bc` |
 | 6 | a clause writes a place the suspended body borrowed | **AT06** | reject (clauses are `!U`: persistent context; a body's lent place reaches a clause only through the operation's argument, as a lend ending at the resume) | reject | `corpus/reject/effect-clause-op.bc`, `effect-try-lend.bc` |
-| 7 | a boxed continuation capturing `&x`, stored past `x`'s frame | **AT07** | reject (R-T1: no lend in a continuation) | reject (P9's bound, OQ-28) | — |
+| 7 | a boxed continuation capturing `&x`, stored past `x`'s frame | **AT07** | reject (`↭` for a `Mut` lend (`at02_held_end_core`); R-T1 and `↭` for a 6.64 frame (`at02_imm_end`, AT02's run): no lend in a continuation) | reject (P9's bound, OQ-28) | — |
 | 8 | a continuation in a shared cell, read twice; moving it out allowed | **AT08** | reject reading twice (`kTy` at lin/aff is neither `Drop` nor persistent; an `Imm` view of a thunk is `True` and cannot be forced); accept moving out and using once (`storeCancel`) | same | `storeCancel` PROVED [Core σ=[]] |
 | 9 | an abort while guards are live | **AT09** | accept: each finaliser runs once, via unwinding (`UnwindOrder`), and every run frees every cell | same | `reborrowRaise`, `failOutside`, the `*U` constants: PROVED [Core σ=[]] |
 | 10 | a higher-order function would accidentally handle its argument's effect | **AT10**: `hof g = hnd_n (g ())`, with `g` performing a name `m ≠ n` handled outside | accept; on every run, no clause of `hnd_n` fires on `g`'s operations (from P2) | same | the full-strength form is T3's `Tunnel` |
@@ -3571,7 +3725,7 @@ analogue, the analogue is kept.
 | 14 | a frame inside `k` swallows the discard-unwind | **AT14** | impossible: `NoInterception` (I3.c); a finaliser's error is kept or suppressed and never resumes the cancelled code | same | `prog_run`, `prog₃_run` PROVED |
 | 15 | `op<'a>()` resumed twice by a multi-shot handler | **dropped** (multi-shot) | — | — | — |
 | 16 | `RefCell::borrow_mut` held across a `perform` | interior mutability is absent (open, decision A7); the static analogue is AT06 | reject statically | reject statically | — |
-| 17 | a borrow of a local across a `perform`, in a movable first-class continuation | **AT17** (`at17`) | reject (`Row.Unwind`; semantically R-T1) | accept: `inj₁ ()`. Borrowed locals are heap cells, and a frozen continuation holds no address of its own frames (the binder); placement by the lowering is T4's concern | — |
+| 17 | a borrow of a local across a `perform`, in a movable first-class continuation | **AT17** (`at17`) | reject (`Row.Unwind`; semantically `↭`, by AT02's argument (not built)) | accept: `inj₁ ()`. Borrowed locals are heap cells, and a frozen continuation holds no address of its own frames (the binder); placement by the lowering is T4's concern | — |
 
 **Existing acceptance programs**, all PROVED at [Core σ=[]] by `adequacyD`/`adequacyD_obs` and run
 by the interpreter:
@@ -3597,7 +3751,7 @@ builder's. Together with the second wave they make `Tier1End`. Each item's statu
 | # | target | world | from |
 |---|---|---|---|
 | 1 | `(closedRowAlg Ξ).Laws ∧ (closedRowAlg Ξ).Safe`, then `RowAlgSafe orowRF`, `RowLink orowRF` | [prog] | list and lookup lemmas on `Row.ofEff`; `ORow` append lemmas; the reading's lemmas (D2) |
-| 2 | `coreW`, the transports (`ptoMutSW_core`, `ptoImmSW_core` included); `WLaws coreW` but `AdequateEvery` | Core σ=[] | unfolding; `vC_local`; `Ext.refl`/`trans`; `cC_effOf`; `opTable_mono`; `vC_data` (new); Core's clauses with `cC_nu_iff`, `vC_unfold` |
+| 2 | `coreW`, the transports (`ptoMutSW_core`, `ptoImmSW_core` included); `WLaws coreW` but `AdequateEvery`; `UpdRefl coreW`, `UpdOwn coreW`, `UpdSeq coreW`, `UpdReclaim coreW`, `UpdFrame coreW`, `UpdOutlives coreW`, `UpdLendBack coreW` | Core σ=[] | unfolding; `vC_local`; `Ext.refl`/`trans`; `cC_effOf`; `opTable_mono`; `vC_data` (new); Core's clauses with `cC_nu_iff`, `vC_unfold`; Core's `↭` lemmas (`ResU.updV_self_iff`, `updV_compS_own`, `updV_frame`, `ResU.UpdV.trans`, `reclaim`, `updV_outlives`, `ResU.six27`, `six28`, `six38`, `six39`) |
 | 3 | `CDerivesNU`, `CDerivesNU.toCDerives`; `Extends tier1`, `ExtendsNU tier1`, `FL coreW tier1` | Core σ=[] | transcription; `CDerives` pointwise; `fundamentalC` at every instance |
 | 4 | `SoundnessOfFL`, `SoundnessContractsOfFL`, `EffSafeOfFL` | generic | composition |
 | 5 | `AdequateRetAt coreW Platform.none` | Core σ=[] | `theorem32D`, `adequacyD_obs`, `total_*` |
@@ -3620,7 +3774,7 @@ builder's. Together with the second wave they make `Tier1End`. Each item's statu
 
 **Second wave** (still σ=[]):
 
-- `AdequateOfLaws` in general;
+- `AdequateOfLaws` (with `UpdSeq`, `UpdReclaim`) in general;
 - `SoundRetAt tier1 P` for platforms with operations (adequacy across platform answers), then
   `Soundness tier1`;
 - `SoundDriveAt tier1 Platform.none` (the drive);
@@ -3663,8 +3817,8 @@ device named-only), T4 `LoweringCorrect` and `ZeroCost` (named-only), I4.b's rej
 | OQ-56: operation types at a borrow callback | `EndStateAt`'s parameter `Adm`; `RowSpan`; `AdmExtends` | `admClosedOp` is option (a), the restricted instance and the lower bound (`AdmExtends`). Option (c) is a wider `Adm` in the same rule shape. Option (b), lifetime-polymorphic operations instantiated at the lend, changes the rule shape (the callback's row is an instance of the handler's), and `SpanRules` is restated over it when (b) is chosen. A wider `Adm` makes the end state stronger. |
 | OQ-28: a stored continuation's bound | the typing system's field `J.out`; `OutExtends`; AT07/AT08 | every rule transcription reads `J.out`, so `LifetimeSound M J.out` certifies the outlives rules the typing system uses; `OutExtends` bounds it below by Core's |
 | OQ-8: where the future-world quantifier goes | `SemWorld.share`, `.val`, `.Ext` | `RelElim` is stated at the same index; `ShareResume`/`ShareCancel` are stated over `M.Ext`-futures, a property both options have. **`Mono` constrains it**: it excludes every placement under which W's relation is not monotone along `M.Ext`, and at the binder-clause placement it asks `EwpMono` (index-monotonicity of `ewpW`), which nothing proves at a binder-clause candidate (GhostEnd's `gRL*` lack it). This is the sign-off's "one Kripke world" read as Kripke monotonicity |
-| OQ-9, OQ-10: lends across a stop, carried open in σ or ghost-ended | `SemWorld.held`, `.Fam`, `.Stop`; `MutFrameW`/`ImmFrameW` | `Arises` counts the held frames without saying where they are kept; `StopVisible` fixes only the visible discipline; under (b) nothing is held. The frames at W are stated in the printed rule's shape with stops (the lend quantified once, `O151AsStated`); GhostEnd proves the re-lendable (b) variants at Core's `ewpTS`. Whether (b) gives the stated shape is GhostEnd's open `O151AsStated`; if it cannot, `MutFrameW`/`ImmFrameW` decide OQ-9 for (a). Recorded, not assumed |
-| **The stop condition at resuming rows** (beside OQ-58) | `SemWorld.Stop`; `SliceShape` | R-T1 (`Core/EffDefs.lean:40`) is "our conjunct, not a printed row" (the brief), and effects change "the wp and its stop condition". The end state pins `Stop` only between nil indices, where nothing is held. It does not pin today's `wpG` at σ = [] for computations at resuming rows: an equivalence there would put every tier-2 computation that starts at σ = [] in today's `cC`, with R-T1 at every stop and `↭` forbidding a run to end with a borrow cell it created (§4.2). LoopBorrow found that a lend spanning runs "needs a model change: a borrow that `↭` lets outlive the run that opens it" (`refoldKripke_false`, `refold_fails_at_consumer_frame`, at a list that arises) |
+| OQ-9, OQ-10: lends across a stop, carried open in σ or ghost-ended | `SemWorld.Upd`, `.held`, `.Fam`, `.Stop`, `.Stk`; `MutFrameW`/`ImmFrameW` | **The run-end relation is a field, `Upd`.** A 6.65 `Mut` lend adds no 6.64 frame and no record, so the frame and record lists that `held`, `Fam` and `Stop` read do not see it, and `Fam` admits the configuration holding it (`TW.mutFold`). At Core's world the end at AT02's `Foo` stop holding it as a cell meets `Fam` and R-T1 (`at02_held_end_core`). Core's `↭` is what excludes it: `↭` keeps the borrows of `⦇ρ⦈` and `⦇ρ′ ● ρ⁺⦈` equal ("this definition embodies lexical borrowing", [CONF] 415:23; LoopBorrow `not_upd_of_new_mut`). So with `↭` fixed in `wpGW`, no world could stop holding the lend as a cell (`at02_runEnd`; `wpGW_at02`, at every world whose `Upd` is Core's at every index), and OQ-9 (a) for a `Mut` lend in that shape needs a changed `↭`. `Upd` is Core's `↭` on the nil slice (`SliceShape`). Off it, it is open. A world that carries a `Mut` lend open across a stop accounts for it through `Upd` and the index: as a borrow cell in the run's resource, or unfolded with the lend recorded in the index. Which one is OQ-9 (a)'s and OQ-44's question. OQ-9 (b), and (a) with the cell unfolded at the stop, are `Upd` at Core's value at every index. The run-end laws (the pin, `UpdRefl`, `UpdOwn`, `UpdSeq`, `UpdReclaim`) also admit an end that holds the lend as a cell: `carryW` meets them and admits AT02's held end (`at02_held_end_carry`). `carryW` is a witness for those laws only. The printed route's other `↭` lemmas at W, stated at every pair of indices (`UpdFrame`, `UpdOutlives`, `UpdLendBack`), hold where `Upd` is Core's at every index. `UpdOutlives` fails at every world that lets a run from `∅` end with a lend at the top of its end, and `UpdLendBack` at every world that lets a run that starts with a lend end with no cell there (`not_updOutlives_of_opened`, `not_updMutBack_of_closed`); AT02's held end and the run that closes it are such runs. So a world that carries a lend open as a cell needs its own forms of them off the nil slice; what they are, and whether such a world meets FL or done, is OQ-9 (a)'s open question. The `Upd` pin, with the `Fam` pin, reads σ = [] as "no lend carried open anywhere in the configuration": a constraint the end state places on OQ-44 (AGREE decision 10). A 6.64 `Imm` lend at AT02's stop, frame open, fails R-T1 and `↭` at the nil index (`at02_imm_end`, AT02's machine run), and `StopVisible` excludes its visible frame at every index (`not_stop_imm_of_stopVisible`); an `Imm` lend carried open is not built. The frames at W are stated in the printed rule's shape with stops (`O151AsStated`). If (b) cannot give that shape, they decide OQ-9 for (a), which a fixed `↭` no longer excludes for a `Mut` lend. Recorded, not assumed. |
+| **The stop condition and the run-end relation at resuming rows** (beside OQ-58) | `SemWorld.Stop`, `.Upd`; `SliceShape`; `UpdSeq`, `UpdReclaim`; `UpdFrame`, `UpdOutlives`, `UpdLendBack` | R-T1 (`Core/EffDefs.lean:40`) is "our conjunct, not a printed row" (the brief). `↭` is printed ([TR] p. 5 row 18, p. 6's `wp`), and effects change "the wp and its stop condition". The end state pins both only between nil indices, where nothing is carried. The `Upd` pin's `←` half puts Core's runs in W's (`wpGW_of_wpG_nil`). Its `→` half bounds ends from the nil slice to the nil slice; it does not bound W's runs, since a run from σ = [] may end off the nil slice. What keeps a weak `Upd` from making done easy: the program-level guarantees are stated over `J` and do not mention W (`endState_prog`); `Arises`, `Exclusive` and `LifetimeSound` do not read `Upd`; at the device, `Adequate`, through `EffInterp` and `DataVals`, excludes a world whose `Upd` admits a reachable leak (`not_adequate_of_leak`, `not_adequate_leakW`). The rule-shaped conjuncts (`FramesW`, `SpanBorrows`, `I5`, `I1`, `P11`, FL) read `Upd` on both sides, are not monotone in it, and no bound is recorded from them. **Off the nil slice, no conjunct of done is shown to constrain `Upd`'s borrow content beyond `Adequate`'s leak bound; the lend-back laws, which carry that content in the printed proofs, are the open part of the field's specification.** Those proofs consume 6.27–6.29, 6.38, 6.39 (the lend comes back), 6.47–6.50 and the own-cell step; at W these are `UpdRefl`, `UpdOwn`, `UpdSeq`, `UpdFrame`, `UpdOutlives` and `UpdLendBack`, Core's where `Upd` is Core's at every index. `AdequateOfLaws` asks `UpdSeq` (6.48 then 6.49, as `wpG_bind` composes runs) and `UpdReclaim` (`reclaim` with the post empty). They hold where `Upd` is Core's at every index and at `carryW`, and they are not conjuncts of done (AGREE decision 9). An equivalence with today's `wpG` at σ = [] for computations at resuming rows would put every tier-2 computation from σ = [] in today's `cC`, with R-T1 at every stop and `↭` at every run end (§4.2). A W whose `Upd` is not Core's off the nil slice changes BoLo's `wp` and needs a SPEC entry when the kernel adopts it. |
 | OQ-44, OQ-57: what σ holds; a closing obligation beside W | `SemWorld.Stk`, `held`; `ShareCancel`; `CancelCloses` | abstract. `ShareCancel`'s closing clause is option-neutral (the cancel's end holds nothing its start did not). "Ends every lend it holds" needs the frames a continuation froze, which is OQ-57's accounting; `CancelCloses` is named-only until then, and its program-level form (`CancelOrder`, `Final`, `ReleasedOnceAll`) is in done |
 | OQ-58: Core as the σ = [] instance | `SliceShape`; `ConservativeWB`; `Conservative` | read as: the nil slice is Core's in structure, and Core's relation embeds into W at σ = [] (at row-abortive types in done; at every type beside done), against today's relation pinned by `Targets/Audit.lean`. Redefining `vC` (OQ-58 (b)) keeps today's as `vC₀`, and both conservativity forms keep reading it |
 | OQ-7, OQ-41: finalisers at a resuming table; a continuation captured inside a cancel | I3.b | stated over complete runs only, with no termination claim |
@@ -3683,19 +3837,30 @@ device named-only), T4 `LoweringCorrect` and `ZeroCost` (named-only), I4.b's rej
 | OQ-52: syntactic subject reduction | none | no target uses it |
 | OQ-16: multi-shot | §1.2 `CDerivesNU`, `Row.NU` | ignored (decision 63): the end state's pin is the unr-free fragment, and W is unconstrained at resuming `unr` rows. `CDerivesNU` copies `CDerives`'s rules into Targets; the alternative decision 63 allows, restricting or removing `unr` in the kernel, would make the copy unnecessary |
 
-**Questions for the user.** Three readings in this design need the user's confirmation, because
-each fixes how strongly a signed-off phrase is held:
+**Questions for the user.** These readings in this design need the user's confirmation, because
+each fixes how strongly a signed-off phrase, or the field that carries the run-end relation, is
+held:
 
 1. **"vC/cC are the σ = [] instance."** Read at every type as an equivalence, together with tier
    2, it says every tier-2 computation that starts at σ = [] is in today's `cC`, with R-T1 at every
-   stop: that decides OQ-9 for the ghost end (b). This design reads it as the structural nil slice
-   plus the embedding of Core into W (§4.2). Was the equivalence meant?
+   stop and `↭` at every run end: that decides OQ-9 for the ghost end (b). This design reads it as
+   the structural nil slice plus the embedding of Core into W (§4.2). Was the equivalence meant?
 2. **Conservativity's scope.** Done holds T7's shape (`ConservativeWB`, row-abortive types), as
    the notebook's P14 states it. The every-type form (`Conservative`, A7 in full) is beside done.
    Should done hold the every-type form?
 3. **The freeze binder.** It is beside done (`EndStateBinder`), as the notebook lists its
    unifications as hypotheses to check. Should done require it once its lifetime half's form is
    settled?
+4. **The run-end relation's laws** (AGREE decision 9). `UpdSeq` and `UpdReclaim` are hypotheses
+   of `AdequateOfLaws`, and `UpdRefl`, `UpdOwn`, `UpdFrame`, `UpdOutlives` and `UpdLendBack` are
+   laws FL at W reads; none is a conjunct of done (§4.2). Should done hold `UpdReclaim`, which
+   would bound `Upd` from above in done itself? The every-index `UpdOutlives` and `UpdLendBack`
+   cannot go in done without excluding OQ-9 (a) with the cell kept.
+5. **The `Upd` pin's `→` half** (AGREE decision 10). `SliceShape`'s `Upd` pin is an equivalence.
+   Its `→` half reads σ = [] as "no lend carried open anywhere in the configuration", so a σ that
+   counts only the lends the running computation carries must end, off the nil slice, a run that
+   closes a lend a stored continuation carried (FIX-RUN-END §2.2). This is a constraint on OQ-44.
+   Should the pin stay an equivalence, or keep only its `←` half (Core's run ends are W's)?
 
 ---
 
@@ -3733,6 +3898,10 @@ definitions above are the corrected ones.
   hypotheses of `I4a`; its conclusion is unchanged. They hold of every well-scoped `Δ` and `Γ`
   with `x` fresh, and `i4a_witness` meets them at an abortive row. Whether `I4a tier1` fails
   without them is not checked.
+- **C5. The run-end relation** (§1.3, §4.1, §4.2; `FIX-RUN-END.md`). `wpGW`'s `↭` was a fixed
+  conjunct. It is the field `Upd`, Core's on the nil slice (`SliceShape`), and `AdequateOfLaws`
+  asks `UpdSeq` and `UpdReclaim`. `FreezeBinderLoc` and `FreezeBinderLife` gain the `Upd`
+  clauses.
 
 **Elaboration only, no change of meaning.** `S.NU` is written `Row.NU S` (`Row.NU` is Targets'
 predicate on Core's `Row`); `T.down`, `en.down`, `K.plug`, `a.interp` and `Δ.Models` are applied as
@@ -3805,6 +3974,16 @@ revision that answers it.
 - **The audit** (`Targets/Audit.lean`) reports, in `coreW`'s closure, recursion on a lifetime
   (`Cell`) and on an array's length (`sepRange`, `tabFill`, `dropFill`), and none on a count of
   steps.
+- **The run-end relation** (`Targets/Restricted/RunEnd.lean`, `FIX-RUN-END.md` §0). At Core's
+  world, AT02's end at `Foo` holding the `Mut` lend as `c ↦ mut(α, inj₁ (), ∅, ⊤)` meets `Fam`
+  and R-T1 and fails `↭` alone (`at02_held_end_core`): a 6.65 lend adds no 6.64 frame and no
+  record (`TW.mutFold` keeps `ps` and `rs`), so the frame and record lists `held`, `Fam` and
+  `Stop` read do not see it. The same run ended in the configuration a 6.64 lend gives,
+  `c ↦ imm({α}, inj₁ (), ∅)` with 6.64's record open in the visible frames and in the index,
+  fails both R-T1 and `↭` at the nil index (`at02_imm_end`), and `StopVisible` excludes its
+  visible frame at every index (`not_stop_imm_of_stopVisible`). That end is AT02's machine run;
+  no 6.64-typed program is built. Making the run-end relation the field `Upd` changed one proof
+  of the library, `sliceShape_core`'s; every other proved result elaborated unchanged.
 
 ## Sources read
 
@@ -3853,9 +4032,21 @@ revision that answers it.
 - A scratch Lean file outside the repository, elaborated against this branch's built `Core`
   (`lake env lean`), checked the revised `UnwindRun` on the two-frame program of §5 I3.
 
-**Paper.** `[TR]` `~/repos/borrow_lang/3764117-supplement.pdf` via `pdftotext`: 6.60, 6.64, 6.65,
-6.66 (statement checked against the PDF), 6.151, and the wp row (p. 6). `[CONF]` `3764117.pdf`:
-Lemma 3.1, Theorem 3.2, Corollary 3.3 (415:17–18), 415:2, and 415:21.
+**Read for the run-end relation (`FIX-RUN-END.md`).**
+
+- Core: `Demonic.lean` (`theorem32D`), `Fundamental.lean` (`reclaim`, `withbor1U`, `withbor2U`),
+  `EffDefs.lean` (`wpG`); `Paper/S5_Model/Definitions.lean` (`ResU.UpdV`, `wp`);
+  `Paper/S6_2_NonStandardLemmas/Lemmas.lean` (`ResU.six27`, `six28`, `six38`, `UpdV.trans`,
+  `updV_frame`, `updV_outlives`); `Support/Model/Entailments.lean` (`updV_compS_own`).
+- Experiments: LoopBorrow `Obstruction.lean` (`not_upd_of_new_mut`, `not_upd_of_new_imm`,
+  `mutCell`).
+- The verifier's and the design's checks, `Targets/Checks/RunEnd.lean` and
+  `Targets/Checks/RunEndDesign.lean`, which `Targets/Restricted/RunEnd.lean` replaces.
+
+**Paper.** `[TR]` `~/repos/borrow_lang/3764117-supplement.pdf` via `pdftotext`: 6.24–6.29, 6.34,
+6.38, 6.39, 6.43, 6.47–6.50, 6.60, 6.64, 6.65, 6.66 (statement checked against the PDF), 6.151,
+the definition of `↭` (p. 5, row 18) and the wp row (p. 6). `[CONF]` `3764117.pdf`: Lemma 3.1,
+Theorem 3.2, Corollary 3.3 (415:17–18), 415:2, 415:21 and 415:22–23.
 
 **Primary literature, fetched and read at the cited statements.**
 

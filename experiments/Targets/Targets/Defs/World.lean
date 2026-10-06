@@ -5,11 +5,12 @@ import Targets.Defs.Effects
 # Targets — the world W, abstractly (DESIGN §1.3–§1.4)
 
 The signed-off structure says what W is: one Kripke world `W = (ρ, ls, σ)`, resource × record list
-× lend stack.  Effects change three things in BoLo: the world, the wp's stop condition, and the
-relation at effect rows.  `SemWorld` has exactly those as fields, and two more: `held`, what the
-suspended computations at an index hold, and `payStk`, the lend stack a cell's stored payload is
-read at (OQ-46).  Everything else is defined from them the way Core defines it, with
-`TW … ∧ Tagged …` replaced by `M.Fam`, R-T1 by `M.Stop`, and a record list by an index.
+× lend stack.  Effects change three things in BoLo: the world, the wp's stop condition and its
+run-end relation `↭`, and the relation at effect rows.  `SemWorld` has exactly those as fields
+(`Fam`, `Ext`; `Stop`, `Upd`; `share`, `val`, `comp`), and two more: `held`, what the suspended
+computations at an index hold, and `payStk`, the lend stack a cell's stored payload is read at
+(OQ-46).  Everything else is defined from them the way Core defines it, with `TW … ∧ Tagged …`
+replaced by `M.Fam`, R-T1 by `M.Stop`, `↭` by `M.Upd`, and a record list by an index.
 
 `coreW` is Core's relation as a world whose lend stack has one point, and the transports
 (`wpGW_core`, `ewpW_core`, `opTabW_core`, `cancelTabW_core`, `ptoMutSW_core`, `ptoImmSW_core`,
@@ -59,13 +60,22 @@ structure SemWorld where
   Stk   : Type
   nil   : Stk
   /-- What the suspended computations at an index hold: their open 6.64 frames and their tagged
-  records.  Where they are kept is OQ-9's question; under its option (b) nothing is held. -/
+  records.  Where they are kept is OQ-9's question; under its option (b) nothing is held.  A
+  6.65 `Mut` lend adds no 6.64 frame or record, so `held` does not see it; a world that carries
+  one open across a stop accounts for it through `Upd` and the index, either as a borrow cell in
+  the run's resource or unfolded with the lend recorded in the index (OQ-9 (a), OQ-44). -/
   held  : Idx Stk → List FrameRec × List SRec
   /-- The configurations W reaches at an index: the full resource and the open 6.64 frames visible
   to the running computation. -/
   Fam   : WRes → List FrameRec → Idx Stk → Prop
   /-- The stop condition: entry frames/index, exit frames/index, final term.  Core's is R-T1. -/
   Stop  : List FrameRec × Idx Stk → List FrameRec × Idx Stk → Expr → Prop
+  /-- The run-end relation: a run from the resource `ρ` at the index `i` may end at the index `i′`
+  with `π = ρ′ ● ρ⁺`, its postcondition holding `ρ′`.  Core's is `↭` ([TR] p. 5 row 18,
+  `ResU.UpdV ρ π`), which reads neither index nor `ρ′`.  On the nil slice it is Core's
+  (`SliceShape`).  Whether, and how, a run may end holding a lend it opened is OQ-9's
+  question. -/
+  Upd   : Idx Stk → Idx Stk → WRes → WRes → WRes → Prop
   /-- The Kripke order on indices, relative to a resource (Core's `Ext`). -/
   Ext   : Idx Stk → Idx Stk → WRes → Prop
   /-- What a stop at a resuming operation owes its continuation (Core's `contShare`). -/
@@ -96,7 +106,7 @@ def ptoImmSW (M : SemWorld) (l : Loc) (α : Life) (i : Idx M.Stk) (P : Idx M.Stk
     ρ = ResU.single l (CellU.immOf s u σ h) ∧ P (ls₀, M.payStk s.meet i.2) u σ ∧ α ⊑ s.meet ∧
     ∀ x, x ∈ ls₀ ↔ (x ∈ i.1 ∧ x.2 ⊐ s.meet)
 
-/-- W's one-run wp: `wpG` over `M.Fam`, ending under `M.Stop`. -/
+/-- W's one-run wp: `wpG` over `M.Fam`, ending under `M.Stop` and `M.Upd`. -/
 def wpGW (M : SemWorld) (i : Idx M.Stk) (e : Expr) (Q : Idx M.Stk → Expr → WProp) : WProp :=
   fun ρ => ∀ (ρf fρ : WRes) (ps : List FrameRec), ResU.Hash ρf ρ → ResU.CompS ρf ρ fρ →
     M.Fam fρ ps i → ∀ (A : Alloc) (k : Nat),
@@ -104,7 +114,7 @@ def wpGW (M : SemWorld) (i : Idx M.Stk) (e : Expr) (Q : Idx M.Stk → Expr → W
       (i' : Idx M.Stk),
       ResU.Hash ρ' ρf ∧ ResU.CompS ρf ρ' fρ' ∧ ResU.Hash ρp fρ' ∧ ResU.Lower fρ μ ∧
       ResU.CompS fρ' ρp fρ'p ∧ ResU.Lower fρ'p μ' ∧ (∃ k', ARun (ℍ := ℍ) A k μ e k' μ' t) ∧
-      ResU.CompS ρ' ρp π ∧ ResU.UpdV ρ π ∧ NoOwn ρp ∧
+      ResU.CompS ρ' ρp π ∧ M.Upd i i' ρ ρ' π ∧ NoOwn ρp ∧
       M.Fam fρ'p ps' i' ∧ M.Stop (ps, i) (ps', i') t ∧ Q i' t ρ'
 
 /-- The postcondition over terms that admits only values. -/
@@ -202,6 +212,7 @@ type is `Idx Unit` to every tactic. -/
   held _ := ([], [])
   Fam fρ ps i := TW fρ ps (rsOf i.1) ∧ Tagged fρ ps i.1
   Stop a b _ := (∀ p, p ∈ b.1 ↔ p ∈ a.1) ∧ (∀ x, x ∈ b.2.1 ↔ x ∈ a.2.1)
+  Upd _ _ ρ _ π := ResU.UpdV ρ π
   Ext i i' ρ := Ext i.1 i'.1 ρ
   share T en n i K Φ := contShare (OpTabI.down T) (OpEntI.down en) n i.1 K (fun ls t => Φ (ls, ()) t)
   payStk _ _ := ()

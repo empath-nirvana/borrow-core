@@ -10,6 +10,8 @@ import Targets.Statements.Linearity
 * `i1Prog_of_endState : EndStateAt J M Adm RF → I1Prog J`, from `ExtendsNU` (through
   `tier1NU`'s derivation of `storeCancel`, `d_storeCancelNU`), `AcceptsTier2` and `Soundness`.
 * `p8a_of_endState : EndStateAt J M Adm RF → P8a J`, the conjunct `ReleasedOnceAll`.
+* `endState_prog`: done's program-level conjuncts, projected out.  None mentions the world, so no
+  world and no run-end relation makes them true: done asserts them of `J` (FIX-RUN-END §3).
 
 Generic: each holds at every typing system and world.  `d_storeCancelNU` is Core's
 `d_storeCancel` (`Core/EffPrograms.lean`) with the premise `Row.NU [suspSig]` at its four effect
@@ -113,6 +115,16 @@ theorem p8a_of_endState {J : TypingJ} {M : SemWorld} {Adm : OpAdm} {RF : RowForm
     (h : EndStateAt (ℍ := ℍ) J M Adm RF) : P8a (ℍ := ℍ) J := by
   obtain ⟨-, -, -, -, -, -, ⟨-, -, -, -, hR, -⟩⟩ := h
   exact hR
+
+/-- **The program-level conjuncts of done**, at every world: they do not mention `M`. -/
+theorem endState_prog {J : TypingJ} {M : SemWorld} {Adm : OpAdm} {RF : RowForm}
+    (h : EndStateAt (ℍ := ℍ) J M Adm RF) :
+    RowAlgSafe RF ∧ RowLink RF ∧ AdmExtends Adm ∧ Tier2Pinned J Adm ∧ AcceptsTier2 J ∧
+    I4a J Adm .any ∧ ExtendsNU J ∧ OutExtends J.out ∧ Soundness (ℍ := ℍ) J ∧
+    SoundnessContracts (ℍ := ℍ) J ∧ ReleasedOnceAll (ℍ := ℍ) J ∧ EffSafe (ℍ := ℍ) J ∧
+    NoInterception J ∧ FinaliserOrder (ℍ := ℍ) J := by
+  obtain ⟨h1, h2, h3, h4, h5, h6, g1, g2, g3, g4, g5, g6, g7, g8, -⟩ := h
+  exact ⟨h1, h2, h3, h4, h5, h6, g1, g2, g3, g4, g5, g6, g7, g8⟩
 
 end Targets
 

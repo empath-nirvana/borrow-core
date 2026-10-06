@@ -51,6 +51,8 @@ def FreezeBinderLoc (M : SemWorld) (a : StkAct M) : Prop :=
   (∀ π ps i ps' i' t, M.Stop (ps, i) (ps', i') t ↔
      M.Stop (ps.map (FrameRec.renameLoc π), idxLocAct a π i)
        (ps'.map (FrameRec.renameLoc π), idxLocAct a π i') (t.renameLoc π)) ∧
+  (∀ π i i' (ρ₁ ρ₂ ρ₃ : WRes), M.Upd i i' ρ₁ ρ₂ ρ₃ ↔
+     M.Upd (idxLocAct a π i) (idxLocAct a π i') (ρ₁.mapLoc π) (ρ₂.mapLoc π) (ρ₃.mapLoc π)) ∧
   (∀ π fρ ps i ρ ρf b A δ v, M.Fam fρ ps i → ResU.CompS ρf ρ fρ →
      BlockAffine π (ResU.arrRanges fρ ⊔ v.1.arrRanges) →
      (M.val b A i δ v ρ ↔ M.val b A (idxLocAct a π i) δ (v.renameLoc π) (ρ.mapLoc π))) ∧
@@ -74,6 +76,8 @@ def FreezeBinderLife (M : SemWorld) (a : StkAct M) : Prop :=
   (∀ c (θ : Restrat.Emb c) ps i ps' i' t, M.Stop (ps, i) (ps', i') t →
      M.Stop (ps.map (FrameRec.restrat θ), idxLifeAct a θ i)
        (ps'.map (FrameRec.restrat θ), idxLifeAct a θ i') t) ∧
+  (∀ c (θ : Restrat.Emb c) i i' (ρ₁ ρ₂ ρ₃ : WRes), M.Upd i i' ρ₁ ρ₂ ρ₃ →
+     M.Upd (idxLifeAct a θ i) (idxLifeAct a θ i') (θ.relRU ρ₁) (θ.relRU ρ₂) (θ.relRU ρ₃)) ∧
   (∀ c (θ : Restrat.Emb c) fρ ps i ρ ρf b A δ v, M.Fam fρ ps i → ResU.CompS ρf ρ fρ →
      M.val b A i δ v ρ →
      M.val b A (idxLifeAct a θ i) (Restrat.LSub.mapN θ.toNat δ) v (θ.relRU ρ)) ∧

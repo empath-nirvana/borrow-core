@@ -21,12 +21,12 @@ state and fails the build if any theorem of the library uses an axiom outside
 | `Targets/Defs/Effects.lean` | rows, row variables and row contexts (`Row.NU`, `RowClass`, `RowCtx.Models`); the effect algebra (`EffAlg`, `EffAlg.Laws`, `EffAlg.Safe`), the row forms `closedRowAlg` and `orowRF`; `Kont.fins`, `cancelOf` |
 | `Targets/Defs/Typing.lean` | `OutJ`, `TypingJ`; `tier1` (Core's `CDerives`), `CDerivesNU` and `tier1NU` (Core's rules without resuming `unr` operations); the rule transcriptions `RC_*`; `Extends`, `ExtendsNU` |
 | `Targets/Defs/Runs.lean` | platforms (`Platform`, `Platform.Respects`, `PStep`), the outermost driver (`RStep`), data (`VTy.Data`, `DataVal`), `Final`, `SafeRuns`, `Terminates`, `SafeDrive`, `StopsIn`, runs as lists (`PRun`, `Allocated`, `Released`, `NoReuse`, `ReleasedOnce`) |
-| `Targets/Defs/World.lean` | `SemWorld`; W's `wpGW`, `ewpW`, `opTabW`, `cancelTabW`, `ptoMutSW`, `ptoImmSW`, `gDenW`, `SemW`; `coreW`, Core's relation as the instance whose lend stack has one point |
+| `Targets/Defs/World.lean` | `SemWorld`, its run-end relation `Upd` among the fields; W's `wpGW`, `ewpW`, `opTabW`, `cancelTabW`, `ptoMutSW`, `ptoImmSW`, `gDenW`, `SemW`; `coreW`, Core's relation as the instance whose lend stack has one point |
 | `Targets/Defs/Binder.lean` | D11: the actions of a location permutation and of a re-stratification, `StkAct`, `BlockAffine`, `StepsIn` |
 | `Targets/Defs/Ctx.lean` | D12: observations and contextual approximation (binary targets) |
 | `Targets/Defs/Programs.lean` | D13: answering implementations (`AnsImpl`, `ansRun`, `ctlForm`, `capPass`); D14: the acceptance terms `at02`, `at04`, `at12`, `at17` |
 | `Targets/Statements/*.lean` | every target; `Guarantees`, `EndStateAt`, `EndState`, `Tier1End`, `EndStateBinder`, `I1Prog`, `I2Prog` (`EndState.lean`) |
-| `Targets/Restricted/*.lean` | the proofs: the restricted instances, the generic composition lemmas, non-vacuity |
+| `Targets/Restricted/*.lean` | the proofs: the restricted instances, the generic composition lemmas, non-vacuity; the run-end relation's checks and witness worlds (`RunEnd.lean`, `FIX-RUN-END.md`) |
 | `Targets/Audit.lean` | the step-index audit, run on `coreW`; the pin of Core's relation |
 | `Targets/Status.lean` | the record: done, tier 1, every conjunct, the targets beside done, the corollaries, the named-only targets, the corrections and the unresolved review findings |
 | `Targets/AxiomCheck.lean` | the axioms of every proved result |
@@ -66,9 +66,9 @@ contract form then follow from `FL`), and `FinaliserOrder tier1`. Every other co
   first, on a cancel and on an unwind (`FinaliserOrder`); no typed program intercepts a cancel
   (`NoInterception`).
 - **The invariant** is W's family of configurations (`SemWorld.Fam`, at Core the typed worlds
-  `TW`), with what suspensions hold (`SemWorld.held`) and W's relation (`val`, `comp`, `share`).
-  **Arising** (`Arises`) says every configuration W reaches is a typed world over the visible and
-  the held frames.
+  `TW`), with what suspensions hold (`SemWorld.held`), W's relation (`val`, `comp`, `share`), and
+  the run-end relation (`SemWorld.Upd`, Core's `↭` on the nil slice). **Arising** (`Arises`) says
+  every configuration W reaches is a typed world over the visible and the held frames.
 
 ## Status
 
@@ -108,6 +108,14 @@ From `Targets/Status.lean`. *PROVED AT σ=[]* is Core's relation (`coreW`) or Co
 | `Conservative` | beside done | OPEN; at `coreW` PROVED AT σ=[] | `conservative_core` |
 | `ReleasedOnceReuse`, `I4Typing` | beside done | OPEN | — |
 | `I1Prog`, `I2Prog`, P8.a from done | corollaries | PROVED (generic) | `i1Prog_of_endState`, `i2Prog_of_endState`, `p8a_of_endState` |
+| the run-end relation's pin (`SliceShape`'s `Upd` conjunct): Core's runs are W's | generic | PROVED | `wpGW_of_wpG_nil` |
+| the run-end laws `UpdRefl`, `UpdOwn`, `UpdSeq`, `UpdReclaim`, `UpdFrame`, `UpdOutlives`, `UpdLendBack` (beside done) | Core σ=[]; generic where `Upd` is Core's at every index | PROVED AT σ=[]; PROVED (generic) | `updRefl_core` … `updLendBack_core`; `updRefl_of_core` … `updLendBack_of_core` |
+| a degenerate world does not satisfy done: done's program-level conjuncts do not mention W; a reachable leak fails `Adequate` | generic | PROVED | `endState_prog`, `not_adequate_of_leak`, `not_endState_of_leak` |
+| a run-end relation that relates everything fails the pin (a sanity check) | generic | PROVED | `not_sliceShape_of_updTop` |
+| a world meeting the pin, `EffInterp` and `DataVals` with a reachable leak | the witness `leakW` | PROVED: it fails `Adequate` and `UpdReclaim` | `not_adequate_leakW`, `not_updReclaim_leakW` |
+| the run-end laws admit an end that holds a `Mut` lend as a cell | the witness `carryW` | PROVED | `updRefl_carryW`, `updOwn_carryW`, `updSeq_carryW`, `updReclaim_carryW`, `at02_held_end_carry` |
+| the printed forms of 6.50 and 6.27 at every index exclude it | generic | PROVED | `not_updOutlives_of_opened`, `not_updMutBack_of_closed` |
+| AT02's run ended at `Foo` in the configuration a 6.64 lend gives fails R-T1, `↭` and `M.Upd` at the nil index | every world meeting `SliceShape` | PROVED | `at02_imm_end` |
 | T2 `Laws`, T3 `Abstraction`, `I4c` | binary, out of the first pass | OPEN (stated) | — |
 | `CancelCloses`, P8.b, T3's proof device, T4 | named-only | OPEN (no statement) | — |
 | the step-index audit on `coreW`; Core's relation pinned | meta | passes | `Targets/Audit.lean` |
@@ -120,6 +128,10 @@ Non-vacuity (`Targets/Restricted/NonVacuity.lean`): `Platform.none` and a platfo
 operation respect their protocol; `RowSpan admClosedOp` is met at each class by a row with an
 operation, and `OpTabI.Resuming` by resuming tables; every hypothesis of `I4a tier1` is met by one
 configuration at an abortive row, whose borrow form is then typed (`d_ansRun_witness`).
+`Targets/Restricted/RunEnd.lean` has two witness worlds for the run-end relation, neither a
+candidate for W: `leakW` meets the pin, `EffInterp`, `DataVals` and `LeakAt`, so the hypotheses
+of `not_adequate_of_leak` are met; `carryW` meets the pin, `UpdRefl`, `UpdOwn`, `UpdSeq` and
+`UpdReclaim`, and admits AT02's end holding the lend as a cell.
 
 ## The survey's package, translated
 
@@ -172,8 +184,12 @@ AT12 and AT17 are above, and the rejects are outside the first pass.
 
 ## Corrections and open review findings
 
-`DESIGN.md` §Corrections lists the four places the Lean departs from the design as first printed
-(C1 `SemW₀`, C2 `SoundnessContractsOfFL`, C3 the A-normal acceptance terms, C4 `I4a`'s freshness
-premises) and the elaboration-only adjustments. §Unresolved review findings lists the ten
-findings the statement review ended with, and the revision that answers each; the revised
-statements were not reviewed again.
+`DESIGN.md` §Corrections lists the places the Lean departs from the design as first printed (C1
+`SemW₀`, C2 `SoundnessContractsOfFL`, C3 the A-normal acceptance terms, C4 `I4a`'s freshness
+premises, C5 the run-end relation as the field `SemWorld.Upd`) and the elaboration-only
+adjustments. §Unresolved review findings lists the ten findings the statement review ended with,
+and the revision that answers each; the revised statements were not reviewed again.
+
+`AGREE.md` lists the verifiers' findings. The blocker, that `wpGW` had Core's `↭` as a fixed
+conjunct, is answered by `FIX-RUN-END.md`; the review of that answer ended with two unresolved
+major findings, revised in answer and not reviewed again (`FIX-RUN-END.md` §Unresolved).

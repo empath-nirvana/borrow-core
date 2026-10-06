@@ -26,6 +26,21 @@ lemmas through the transports:
 `vC_data` is new: a value of a closed data type is data and holds nothing.  Its forward half is
 `vC_ind` (Core's induction principle for the relation, the μ case at the unrolling); its backward
 half is induction on `DataVal` with `vC_roll`.  `[Core σ=[]]`
+
+**The run-end relation** (FIX-RUN-END §2.2, §2.3).
+
+* `wpGW_of_wpG_nil` [generic]: at every world meeting `SliceShape`, a `wpG` run is a `wpGW` run at
+  the nil index that ends on the nil slice.  It reads the `Fam` pin both ways and the `←` halves of
+  the `Stop` and `Upd` pins.
+* Where `Upd` is Core's at every index [generic], the run-end laws and the printed route's forms
+  of `↭`'s lemmas hold, each from Core's lemma, as Core's proof reads it: `updRefl_of_core` (6.47,
+  `ResU.updV_self_iff`), `updOwn_of_core` (the own-cell step, `updV_compS_own`),
+  `updSeq_of_core` (6.48 then 6.49, `updV_frame` and `ResU.UpdV.trans`, `wpG_bind`'s last step),
+  `updReclaim_of_core` (`reclaim`), `updFrame_of_core` (6.48, `updV_frame`),
+  `updOutlives_of_core` (6.50, `updV_outlives`), `updMutBack_of_core` (6.27, 6.28),
+  `updImmBack_of_core` (`six38_steps_one_two`, 6.38, 6.39), `updLendBack_of_core`.
+* At `coreW` (`coreW_upd`, by `Iff.rfl`): `updRefl_core`, `updOwn_core`, `updSeq_core`,
+  `updReclaim_core`, `updFrame_core`, `updOutlives_core`, `updLendBack_core`.
 -/
 
 noncomputable section
@@ -175,7 +190,7 @@ theorem vC_data {A : VTy} (hA : A.Data) {b : Bool} {ls : List SRec} {δ : LSub} 
 
 theorem sliceShape_core : SliceShape (coreW (ℍ := ℍ)) :=
   ⟨fun _ => rfl, fun _ _ _ => Iff.rfl, fun _ _ _ => Iff.rfl, fun _ _ _ _ _ => Iff.rfl,
-    fun _ => rfl⟩
+    fun _ _ _ _ _ => Iff.rfl, fun _ => rfl⟩
 
 theorem mono_core : Mono (coreW (ℍ := ℍ)) :=
   fun b A _ _ _ _ _ he h => vC_local b A he h
@@ -332,6 +347,111 @@ theorem rowSpan_abortive_iff_unwind {Δ : LifeCtx} {x : LifeVar} {S : Row} :
     obtain ⟨ha, hn, hA, hO⟩ := h o ho
     have hB := OpSig.B_zero ha
     refine ⟨hn, Or.inl ha, hA, by rw [hB]; exact id, hO, fun _ _ => by rw [hB]; exact .zero⟩
+
+/-! ### The run-end relation (FIX-RUN-END §2.2, §2.3) -/
+
+/-- `coreW`'s run-end relation is Core's `↭` at every index. -/
+theorem coreW_upd : ∀ (i i' : Idx Unit) (ρ ρ' π : WRes),
+    (coreW (ℍ := ℍ)).Upd i i' ρ ρ' π ↔ ResU.UpdV ρ π := fun _ _ _ _ _ => Iff.rfl
+
+/-- **The embedding, run by run** (DESIGN §4.2's reading of "vC/cC are the σ = [] instance"): at
+every world whose nil slice is Core's, a `wpG` run is a `wpGW` run at the nil index that ends on
+the nil slice.  It reads the `Fam` pin in both directions (the start's configuration is Core's,
+the end's is W's) and the `←` halves of the `Stop` and `Upd` pins. -/
+theorem wpGW_of_wpG_nil {M : SemWorld} (hS : SliceShape M) (ls : List SRec) (e : Expr)
+    (Q : Idx M.Stk → Expr → WProp) (ρ : WRes)
+    (h : wpG (ℍ := ℍ) ls e (fun ls' t => Q (ls', M.nil) t) ρ) :
+    wpGW (ℍ := ℍ) M (ls, M.nil) e Q ρ := by
+  intro ρf fρ ps hf hc hF A k
+  obtain ⟨hT, htg⟩ := (hS.2.1 fρ ps ls).mp hF
+  obtain ⟨ρ', ρp, fρ', fρ'p, π, t, μ, μ', ps', ls', a1, a2, a3, a4, a5, a6, a7, a8, a9, a10,
+    a11, a12, a13, a14, a15⟩ := h ρf fρ ps hf hc hT htg A k
+  exact ⟨ρ', ρp, fρ', fρ'p, π, t, μ, μ', ps', (ls', M.nil), a1, a2, a3, a4, a5, a6, a7, a8,
+    (hS.2.2.2.2.1 ls ls' ρ ρ' π).mpr a9, a10, (hS.2.1 fρ'p ps' ls').mpr ⟨a11, a12⟩,
+    (hS.2.2.2.1 ps ls ps' ls' t).mpr ⟨a13, a14⟩, a15⟩
+
+/-- 6.47 (`ResU.updV_self_iff`), as `wpG_here` reads it, where `Upd` is Core's at every index. -/
+theorem updRefl_of_core {M : SemWorld}
+    (hC : ∀ i i' ρ ρ' π, M.Upd i i' ρ ρ' π ↔ ResU.UpdV ρ π) : UpdRefl M :=
+  fun _ _ ρ _ _ hf _ _ => (hC _ _ _ _ _).mpr ((ResU.updV_self_iff ρ).mpr (hash_valid hf).2)
+
+/-- The own-cell step (`updV_compS_own`), as the alloc and free rules read it, where `Upd` is
+Core's at every index. -/
+theorem updOwn_of_core {M : SemWorld}
+    (hC : ∀ i i' ρ ρ' π, M.Upd i i' ρ ρ' π ↔ ResU.UpdV ρ π) : UpdOwn M :=
+  ⟨fun _ _ _ _ _ _ _ _ hf _ _ ho hf₁ =>
+    (hC _ _ _ _ _).mpr (updV_compS_own ho (hash_valid hf).2 (hash_valid hf₁).2),
+   fun _ _ _ _ _ _ _ _ hf₁ _ _ ho =>
+    (hC _ _ _ _ _).mpr (updV_compS_own ho (ResU.Valid.split ho (hash_valid hf₁).2).1
+      (hash_valid hf₁).2).symm⟩
+
+/-- 6.48 then 6.49, as `wpG_bind`'s last step composes two runs (`Core/EffWp.lean:910-911`),
+where `Upd` is Core's at every index. -/
+theorem updSeq_of_core {M : SemWorld}
+    (hC : ∀ i i' ρ ρ' π, M.Upd i i' ρ ρ' π ↔ ResU.UpdV ρ π) : UpdSeq M := by
+  intro i i₁ i₂ ρ ρ'₁ ρp₁ π₁ ρ'₂ π₂ π hu₁ hc₁ hu₂ hH hc
+  have h₁ := (hC _ _ _ _ _).mp hu₁
+  have h₂ := (hC _ _ _ _ _).mp hu₂
+  have hvπ : ResU.Valid π := by
+    obtain ⟨w, hw, hvw⟩ := hH.2
+    rwa [ResU.CompS.functional hw hc] at hvw
+  have hc₁' : ResU.CompS ρp₁ ρ'₁ π₁ := ResU.CompS.comm hc₁
+  exact (hC _ _ _ _ _).mpr (ResU.UpdV.trans h₁
+    (updV_frame hc₁' hc ⟨hc₁'.1, _, hc₁', h₁.2.2⟩ ⟨hc.1, _, hc, hvπ⟩ h₂))
+
+/-- `reclaim`, at `theorem32D`'s end, where `Upd` is Core's at every index. -/
+theorem updReclaim_of_core {M : SemWorld}
+    (hC : ∀ i i' ρ ρ' π, M.Upd i i' ρ ρ' π ↔ ResU.UpdV ρ π) : UpdReclaim M :=
+  fun _ π hu hno => reclaim π ((hC _ _ _ _ _).mp hu) hno
+
+/-- 6.48 (`updV_frame`), as `wpG_ramify` reads it, where `Upd` is Core's at every index. -/
+theorem updFrame_of_core {M : SemWorld}
+    (hC : ∀ i i' ρ ρ' π, M.Upd i i' ρ ρ' π ↔ ResU.UpdV ρ π) : UpdFrame M :=
+  fun _ _ _ _ _ _ _ _ _ hu hc hh hπ hhπ _ =>
+    (hC _ _ _ _ _).mpr (updV_frame hc hπ hh hhπ ((hC _ _ _ _ _).mp hu))
+
+/-- 6.50 (`updV_outlives`), as `wpTS_box` reads it, where `Upd` is Core's at every index. -/
+theorem updOutlives_of_core {M : SemWorld}
+    (hC : ∀ i i' ρ ρ' π, M.Upd i i' ρ ρ' π ↔ ResU.UpdV ρ π) : UpdOutlives M :=
+  fun _ _ _ _ _ _ ho hu => updV_outlives ho ((hC _ _ _ _ _).mp hu)
+
+/-- 6.27 then 6.28 (`ResU.six27`, `ResU.six28`), as `wpG_M_frameX` reads them, where `Upd` is
+Core's at every index. -/
+theorem updMutBack_of_core {M : SemWorld}
+    (hC : ∀ i i' ρ ρ' π, M.Upd i i' ρ ρ' π ↔ ResU.UpdV ρ π) : UpdMutBack M := by
+  intro i i' l α v ρv ρb BM ρ' π h P hw hout hBM hu
+  have hu' := (hC _ _ _ _ _).mp hu
+  obtain ⟨v', χ, h', hw', hsplit⟩ := ResU.six27 hout hBM hu'
+  refine ⟨v', χ, h', hw', hsplit, fun W W' O O' ρ'' hW hW' hO hO' _ hvO hvO' => ?_⟩
+  exact (hC _ _ _ _ _).mpr
+    ⟨(ResU.six28 hW hW' hBM hsplit hO hO' hu'.2.1 hu'.2.2 hvO hvO').mp hu'.1, hvO, hvO'⟩
+
+/-- 6.29, 6.38 and 6.39 (`ResU.six38_steps_one_two`, `ResU.six38`, `ResU.six39`), as
+`wpG_I_frameX` reads them, where `Upd` is Core's at every index. -/
+theorem updImmBack_of_core {M : SemWorld}
+    (hC : ∀ i i' ρ ρ' π, M.Upd i i' ρ ρ' π ↔ ResU.UpdV ρ π) : UpdImmBack M := by
+  intro i i' l α v ρv ρb W BI ρ' ρp π h hW hH hout hout' hpp hno hBI hc hu
+  have hu' := (hC _ _ _ _ _).mp hu
+  obtain ⟨hGsplit, -, hGc⟩ := ResU.six38_steps_one_two hW hH hpp hout hout' hBI hc hu'
+  obtain ⟨G₀, hG₀, hH28⟩ := ResU.six38 hW hH hpp hout hout' hno hBI hc hu'
+  obtain rfl : π.del l = G₀ := ResU.CompS.functional hGsplit hG₀
+  refine ⟨hGc, hH28, fun O O' ρ'' hO hO' _ => ?_⟩
+  obtain ⟨w, w', hw, hw', hupd⟩ := ResU.six39 (ResU.CompS.comm hW) hH hH28 hBI hGc hu'
+  rw [ResU.CompS.functional hO hw, ResU.CompS.functional hO' hw']
+  exact (hC _ _ _ _ _).mpr hupd
+
+/-- The lend comes back, for both frame rules, where `Upd` is Core's at every index. -/
+theorem updLendBack_of_core {M : SemWorld}
+    (hC : ∀ i i' ρ ρ' π, M.Upd i i' ρ ρ' π ↔ ResU.UpdV ρ π) : UpdLendBack M :=
+  ⟨updMutBack_of_core hC, updImmBack_of_core hC⟩
+
+theorem updRefl_core : UpdRefl (coreW (ℍ := ℍ)) := updRefl_of_core coreW_upd
+theorem updOwn_core : UpdOwn (coreW (ℍ := ℍ)) := updOwn_of_core coreW_upd
+theorem updSeq_core : UpdSeq (coreW (ℍ := ℍ)) := updSeq_of_core coreW_upd
+theorem updReclaim_core : UpdReclaim (coreW (ℍ := ℍ)) := updReclaim_of_core coreW_upd
+theorem updFrame_core : UpdFrame (coreW (ℍ := ℍ)) := updFrame_of_core coreW_upd
+theorem updOutlives_core : UpdOutlives (coreW (ℍ := ℍ)) := updOutlives_of_core coreW_upd
+theorem updLendBack_core : UpdLendBack (coreW (ℍ := ℍ)) := updLendBack_of_core coreW_upd
 
 end Targets
 

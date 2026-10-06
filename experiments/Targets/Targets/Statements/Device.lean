@@ -12,16 +12,26 @@ import Targets.Defs.Runs
 * `Adequate M`: a closed computation in W's relation is safe and terminating under every platform
   (or safely driven).  Soundness is a corollary of FL and adequacy (`SoundnessOfFL`,
   `Statements/Composition.lean`).
-* `WLaws M`: the laws every W satisfies.  Together they bound the relation from above at every
-  index and every type former: data values are exactly data (`DataVals`), a computation of `F_Σ A`
-  at an unr-free row is exactly W's runs (`EffInterp`), every other former is bounded by its
-  eliminations and its shape (`RelLaws`; at `Imm` and `Mut` by Core's own clauses, with W's
+* `WLaws M`: the laws every W satisfies.  Together they bound the relation from above by W's runs
+  at every index and every type former: data values are exactly data (`DataVals`), a computation
+  of `F_Σ A` at an unr-free row is exactly W's runs (`EffInterp`), every other former is bounded
+  by its eliminations and its shape (`RelLaws`; at `Imm` and `Mut` by Core's own clauses, with W's
   relation for the payload), and every run from every configuration W reaches is safe
-  (`AdequateEvery`).
+  (`AdequateEvery`).  W's runs end under `M.Upd`.
 
-`SliceShape` pins the nil slice only structurally: the configurations, the order and the stop at
-σ = [] are Core's.  It does not ask W's relation at σ = [] to equal Core's (DESIGN §4.2): the
-embedding of Core into W is `ConservativeWB` (`Statements/Conservativity.lean`).
+`SliceShape` pins the nil slice only structurally: the configurations, the order, the stop and the
+run-end relation at σ = [] are Core's.  The `Upd` pin's `←` half puts Core's runs in W's
+(`wpGW_of_wpG_nil`, `Restricted/CoreLaws.lean`).  Its `→` half bounds run ends from the nil slice
+to the nil slice, and not W's runs: a run picks its end index, and one from σ = [] may end off the
+nil slice.  `SliceShape` does not ask W's relation at σ = [] to equal Core's (DESIGN §4.2): the
+embedding of Core's relation into W is `ConservativeWB` (`Statements/Conservativity.lean`).
+
+**Beside `WLaws`, not in it.**  `AdequateOfLaws` (`Statements/Composition.lean`) asks two laws of
+the run-end relation: `UpdSeq` (6.48 then 6.49, as `wpG_bind` composes two runs) and `UpdReclaim`
+(`reclaim`, at `theorem32D`'s end).  FL's printed route reads `↭` through 6.47, the own-cell step,
+6.48 into the post, 6.50, and the lend coming back (6.27–6.29, 6.38, 6.39); their forms at W,
+stated at every pair of indices, are `UpdRefl`, `UpdOwn`, `UpdFrame`, `UpdOutlives`, `UpdMutBack`
+and `UpdImmBack`.  Each holds where `Upd` is Core's at every index (`Restricted/CoreLaws.lean`).
 -/
 
 noncomputable section
@@ -82,14 +92,15 @@ def Adequate (M : SemWorld) : Prop := ∀ P : Platform, P.Respects → AdequateA
 
 /-! ### The laws every W satisfies (DESIGN §4.2) -/
 
-/-- **The nil slice, structurally**: at σ = [] nothing is held, the configurations, the order and
-the stop are Core's, and a stored payload is read at σ = []. -/
+/-- **The nil slice, structurally**: at σ = [] nothing is held, the configurations, the order, the
+stop and the run-end relation are Core's, and a stored payload is read at σ = []. -/
 def SliceShape (M : SemWorld) : Prop :=
   (∀ ls, M.held (ls, M.nil) = ([], [])) ∧
   (∀ fρ ps ls, M.Fam fρ ps (ls, M.nil) ↔ TW fρ ps (rsOf ls) ∧ Tagged fρ ps ls) ∧
   (∀ ls ls' ρ, M.Ext (ls, M.nil) (ls', M.nil) ρ ↔ Ext ls ls' ρ) ∧
   (∀ ps ls ps' ls' t, M.Stop (ps, (ls, M.nil)) (ps', (ls', M.nil)) t ↔
      (∀ p, p ∈ ps' ↔ p ∈ ps) ∧ (∀ x, x ∈ ls' ↔ x ∈ ls)) ∧
+  (∀ ls ls' ρ ρ' π, M.Upd (ls, M.nil) (ls', M.nil) ρ ρ' π ↔ ResU.UpdV ρ π) ∧
   (∀ b, M.payStk b M.nil = M.nil)
 
 /-- **Mono**: Kripke monotonicity of the value relation, in both modes. -/
@@ -184,6 +195,94 @@ def WLaws (M : SemWorld) : Prop :=
 def EwpMono (M : SemWorld) : Prop :=
   ∀ i i' e Tb Q ρ, TableI.Mono Tb → M.Ext i i' ρ → ewpW (ℍ := ℍ) M i e Tb Q ρ →
     ewpW (ℍ := ℍ) M i' e Tb Q ρ
+
+/-! ### The run-end relation's laws, beside `WLaws` and not in it
+
+`UpdSeq` and `UpdReclaim` are hypotheses of `AdequateOfLaws`.  The others are the W-level forms of
+the `↭` lemmas FL's printed route reads, stated at every pair of indices in the shape Core's
+proofs read them.  None is a conjunct of done. -/
+
+/-- **6.48 then 6.49 at W**, as `wpG_bind` composes two runs (`Core/EffWp.lean:910-911`): a run
+from `ρ` at `i` ending at `i₁` with `π₁ = ρ′₁ ● ρ⁺₁`, then a run from `ρ′₁` at `i₁` ending at `i₂`
+with `π₂`, together end at `i₂` with `ρ⁺₁ ● π₂`. -/
+def UpdSeq (M : SemWorld) : Prop :=
+  ∀ (i i₁ i₂ : Idx M.Stk) (ρ ρ'₁ ρp₁ π₁ ρ'₂ π₂ π : WRes),
+    M.Upd i i₁ ρ ρ'₁ π₁ → ResU.CompS ρ'₁ ρp₁ π₁ → M.Upd i₁ i₂ ρ'₁ ρ'₂ π₂ →
+    ResU.Hash ρp₁ π₂ → ResU.CompS ρp₁ π₂ π → M.Upd i i₂ ρ ρ'₂ π
+
+/-- **Reclaim at W** (`reclaim`, at `theorem32D`'s end): a run from the empty resource at σ = []
+whose postcondition holds nothing leaves nothing borrowed, whatever index it ends at. -/
+def UpdReclaim (M : SemWorld) : Prop :=
+  ∀ (i' : Idx M.Stk) (π : WRes),
+    M.Upd ([], M.nil) i' PMap.empty PMap.empty π → NoOwn π → π = PMap.empty
+
+/-- **6.47 at W** (as `wpG_here` reads `ResU.updV_self_iff`, `Core/EffWp.lean:969`): from a
+configuration W reaches, a run that changes no cell ends at its own index with its resource as the
+post and no garbage. -/
+def UpdRefl (M : SemWorld) : Prop :=
+  ∀ (i : Idx M.Stk) (ρf ρ fρ : WRes) (ps : List FrameRec),
+    ResU.Hash ρf ρ → ResU.CompS ρf ρ fρ → M.Fam fρ ps i → M.Upd i i ρ ρ ρ
+
+/-- **The own-cell step at W** (`updV_compS_own`, as the alloc and free rules read it,
+`Core/Wp.lean:606, 634`): from a configuration W reaches, a run that adds an own cell the frame
+does not hold, or removes one, ends at its own index with the result as the post. -/
+def UpdOwn (M : SemWorld) : Prop :=
+  (∀ (i : Idx M.Stk) (ρf ρ fρ ρ₁ : WRes) (ps : List FrameRec) (l : Loc) (v : Val),
+    ResU.Hash ρf ρ → ResU.CompS ρf ρ fρ → M.Fam fρ ps i →
+    ResU.CompS ρ (ResU.single l (CellU.ownOf v)) ρ₁ → ResU.Hash ρf ρ₁ → M.Upd i i ρ ρ₁ ρ₁) ∧
+  (∀ (i : Idx M.Stk) (ρf ρ ρ₁ fρ₁ : WRes) (ps : List FrameRec) (l : Loc) (v : Val),
+    ResU.Hash ρf ρ₁ → ResU.CompS ρf ρ₁ fρ₁ → M.Fam fρ₁ ps i →
+    ResU.CompS ρ (ResU.single l (CellU.ownOf v)) ρ₁ → M.Upd i i ρ₁ ρ ρ)
+
+/-- **6.48 into the post at W** (`updV_frame`, as `wpG_ramify` reads it,
+`Core/EffWp.lean:1001`): a resource `ρ₂` framed through a run from `ρ₁` that ends at
+`π₁ = ρ′₁ ● ρ⁺` is in the post, at the same two indices. -/
+def UpdFrame (M : SemWorld) : Prop :=
+  ∀ (i i' : Idx M.Stk) (ρ₁ ρ₂ ρ ρ'₁ π₁ ρ' π : WRes),
+    M.Upd i i' ρ₁ ρ'₁ π₁ → ResU.CompS ρ₂ ρ₁ ρ → ResU.Hash ρ₂ ρ₁ →
+    ResU.CompS ρ₂ π₁ π → ResU.Hash ρ₂ π₁ → ResU.CompS ρ'₁ ρ₂ ρ' → M.Upd i i' ρ ρ' π
+
+/-- **6.50 at W** (`updV_outlives`, as `wpTS_box` reads it, `Core/Wp.lean:805`): a run from a
+resource that outlives `α` ends at one that does. -/
+def UpdOutlives (M : SemWorld) : Prop :=
+  ∀ (i i' : Idx M.Stk) (ρ ρ' π : WRes) (α : Life),
+    BoLo.Outlives ρ α → M.Upd i i' ρ ρ' π → BoLo.Outlives π α
+
+/-- **6.27 then 6.28 at W**, as `wpG_M_frameX` reads them (`Core/EffWp.lean:441, 525`): a run
+from `ρb ● ℓ ↦ mut(α, v, ρv, P̂)`, `@ρb ⊐ α`, ends with the lend back at the top of `π`, as
+`ℓ ↦ mut(α, v′, χ, P̂)`; and the run with the lend unfolded at both ends, from `ρb ● ρv ● ℓ ↦ own(v)`
+to `π/ℓ ● χ ● ℓ ↦ own(v′)`, its post the callback's with the cell unfolded into it, ends at the
+same indices. -/
+def UpdMutBack (M : SemWorld) : Prop :=
+  ∀ (i i' : Idx M.Stk) (l : Loc) (α : Life) (v : Val) (ρv ρb BM ρ' π : WRes)
+    (h : ρv.InStratum α) (P : Val → SPropS Loc Val α) (hw : P v ⟨ρv, h⟩),
+    BoLo.Outlives ρb α → ResU.CompS ρb (ResU.single l (CellU.mutOf α v ρv h P hw)) BM →
+    M.Upd i i' BM ρ' π →
+    ∃ (v' : Val) (χ : WRes) (h' : χ.InStratum α) (hw' : P v' ⟨χ, h'⟩),
+      ResU.CompS (π.del l) (ResU.single l (CellU.mutOf α v' χ h' P hw')) π ∧
+      ∀ (W W' O O' ρ'' : WRes), ResU.CompS ρv (ResU.single l (CellU.ownOf v)) W →
+        ResU.CompS χ (ResU.single l (CellU.ownOf v')) W' → ResU.CompS ρb W O →
+        ResU.CompS (π.del l) W' O' → ResU.CompS ρ' W' ρ'' → ResU.Valid O → ResU.Valid O' →
+        M.Upd i i' O ρ'' O'
+
+/-- **6.29, 6.38 and 6.39 at W**, as `wpG_I_frameX` reads them (`Core/EffWp.lean:174-240`): a
+run from `ρb ● ℓ ↦ imm({α}, v, ρv)`, `@ρb ⊐ α`, ending at `π = ρ′ ● ρ⁺` with `@ρ′ ⊐ α` and `ρ⁺`
+own-free, ends with the lend at the top of `π` (6.29), `π/ℓ` compatible with `ρv ● ℓ ↦ own(v)`
+(6.38), and the run with the lend unfolded at both ends ends at the same indices (6.39). -/
+def UpdImmBack (M : SemWorld) : Prop :=
+  ∀ (i i' : Idx M.Stk) (l : Loc) (α : Life) (v : Val) (ρv ρb W BI ρ' ρp π : WRes)
+    (h : ρv.InStratum (LSet.singleton α).join),
+    ResU.CompS ρv (ResU.single l (CellU.ownOf v)) W → ResU.Hash ρb W →
+    BoLo.Outlives ρb α → BoLo.Outlives ρ' α → ResU.Hash ρ' ρp → NoOwn ρp →
+    ResU.CompS ρb (ResU.single l (CellU.immOf (LSet.singleton α) v ρv h)) BI →
+    ResU.CompS ρ' ρp π → M.Upd i i' BI ρ' π →
+    ResU.CompS (π.del l) (ResU.single l (CellU.immOf (LSet.singleton α) v ρv h)) π ∧
+    ResU.Hash (π.del l) W ∧
+    ∀ (O O' ρ'' : WRes), ResU.CompS ρb W O → ResU.CompS (π.del l) W O' →
+      ResU.CompS ρ' W ρ'' → M.Upd i i' O ρ'' O'
+
+/-- **The lend comes back**, for both frame rules. -/
+def UpdLendBack (M : SemWorld) : Prop := UpdMutBack M ∧ UpdImmBack M
 
 end Targets
 
