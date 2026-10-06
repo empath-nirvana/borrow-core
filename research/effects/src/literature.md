@@ -1,6 +1,6 @@
 # Literature
 
-- **`survey.md`** at the repository root. An unbiased survey of effects and borrows, written without access to our language. Its Tier A metatheorems A1–A7, its theorem package T0–T9 and its 17 test programs are the main input to the properties.
+- **[`survey.md`](../survey.md)** (`research/effects/survey.md`). An unbiased survey of effects and borrows, written without access to our language. Its Tier A metatheorems A1–A7, its theorem package T0–T9 and its 17 test programs are the main input to the properties.
 - **The effects TR's sources:** `docs/effects-tr/12-sources.md`.
 - **Prior art on borrows across suspension:** `docs/prior-art-suspension-borrows.md`.
 - **Queued:** a deep dive on Ante (borrows through operations, handler state as `&own mut`, `resume` as an affine function).

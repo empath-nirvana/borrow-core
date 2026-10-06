@@ -6,7 +6,7 @@ Capture, which freezes a computation at an operation, and resume both preserve t
 
 As a binder: the relation and the invariant are equivariant under bijections of locations and instances and under order-respecting renamings of lifetimes. Resume and placement are instantiations.
 
-**Lean target:** not yet stated. It goes in the targets library with an enumerated `sorry`.
+**Lean target:** designed in [`experiments/Targets/DESIGN.md`](../../../../experiments/Targets/DESIGN.md) as `Targets.I2` (§5), at a class of rows a lend may span (abortive for tier 1, every unr-free row for the end state): `Arises` (every configuration arises, with the frames suspended computations hold counted), `StopVisible` (the stop restores the visible frames), `ShareResume` (the resume conjunct of the share at every future index), `FramesW` ([TR] 6.64 and 6.65 at W, the lend quantified once at the callback's start, GhostEnd's `O151AsStated` shape) and `SpanBorrows` (the six unwinding borrow constants at the spanning rows). The spanning typing rules are tier 2's pin `Targets.Tier2Pinned`, parametric in OQ-56's admissibility, bounded below by R-CLOSEDOP. At Core σ=[] I2 is proved only at abortive rows, where no lend spans a stop. The binder reading is `Targets.FreezeBinder`, a target beside done (`EndStateBinder`): its location half a symmetry, its lifetime half forward instantiation. In Lean: `Targets.I2` is PROVED AT A RESTRICTION at Core σ=[], at abortive rows (`i2_core_abortive`), OPEN at the end state; `Targets.FreezeBinder` is OPEN, and its first check, `Targets.NotVDenNaturalArises`, is stated and OPEN.
 
 ## Why it matters
 

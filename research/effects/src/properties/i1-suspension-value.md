@@ -4,7 +4,7 @@
 
 A suspended computation (a continuation) is a value of the resource world. It can be passed, stored and dropped like any owned thing, and its semantic type is well defined.
 
-**Lean target:** not yet stated. It goes in the targets library with an enumerated `sorry`.
+**Lean target:** designed in [`experiments/Targets/DESIGN.md`](../../../../experiments/Targets/DESIGN.md) as `Targets.I1` (§5), a conjunct of the end state, with the program-level corollary `Targets.I1Prog` (stored suspensions: `storeCancel`, AT17). In Lean: `Targets.I1` is PROVED AT σ=[] (`i1_core`), OPEN at W; `Targets.I1Prog` follows from done (`i1Prog_of_endState`).
 
 ## Why it matters
 

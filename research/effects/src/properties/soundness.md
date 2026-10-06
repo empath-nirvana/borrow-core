@@ -3,14 +3,15 @@
 ## Statement
 
 For every well-typed program, run under every allocator and every platform environment that respects its protocol, every run:
-- never gets stuck: no use after free, no bad access;
-- never stops at an operation outside its row;
-- ends with memory empty except for the result's own resources;
-- runs every finaliser exactly once, LIFO, on return, unwind and cancel.
+- never gets stuck: no use after free, no double release, no bad access;
+- never stops at an operation outside its row: no unhandled operation;
+- at a div-free (data) answer, terminates at a value with the memory empty, so every owned cell and capability is released exactly once, those held by cancelled continuations included;
+- for a program that returns a loop, is safe on every finite prefix of the runtime's drive;
+- runs the finalisers of the frames it unwinds or cancels once each, innermost first.
 
-Termination holds only for types without divergence. Tier 1 and tier 2 are the same theorem over different typing rules.
+A program's answer at the top is data or a loop, so no resource is left with its result. Termination holds only for div-free answers. Tier 1 and tier 2 are the same theorem over different typing rules. The same holds with capabilities given as externs meeting their contracts, together with platform operations.
 
-**Lean target:** not yet stated. It goes in the targets library with an enumerated `sorry`.
+**Lean target:** designed in [`experiments/Targets/DESIGN.md`](../../../../experiments/Targets/DESIGN.md) as `Targets.Soundness`, `Targets.SoundnessContracts` and `Targets.ReleasedOnceAll` (§3, T1; D9), conjuncts of the end state `Targets.EndStateAt` (§1.0), proved through `Targets.FL` and `Targets.Adequate` (§4). Main's row holds only platform operations, so an error must be handled before the top. In Lean: `Targets.Soundness`'s return conjunct is PROVED AT A RESTRICTION for Core's typing at the platform with no operation (`soundRetAt_tier1_none`), with the effect programs of `Core/EffPrograms.lean` as instances (`acceptedT1_*`); at platforms with operations and for driven loops it is OPEN, and so is `Targets.SoundnessContracts`. `Targets.ReleasedOnceAll` is PROVED at every typing system (`releasedOnceAll`). T1 from FL and adequacy is PROVED (`soundnessOfFL`).
 
 ## Why it matters
 

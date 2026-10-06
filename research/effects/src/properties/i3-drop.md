@@ -4,7 +4,7 @@
 
 Dropping a suspended computation is a cancel. It runs every finaliser of the frozen frames exactly once, LIFO, and ends every lend it holds.
 
-**Lean target:** not yet stated. It goes in the targets library with an enumerated `sorry`.
+**Lean target:** designed in [`experiments/Targets/DESIGN.md`](../../../../experiments/Targets/DESIGN.md) as `Targets.I3` (§5), the preservation conjunct for drop: `ShareCancel`, the share's cancel conjunct at W, with an option-neutral closing clause (the cancel leaves nothing newly held). "Ends every lend it holds" needs OQ-57's accounting of which held frames a continuation froze; `CancelCloses` is named-only beside done until then, and its program-level form is in done (`CancelOrder` fires the lender's finaliser, `ReleasedOnceAll` releases its memory once). The finaliser order over complete cancel and unwind runs is `Targets.FinaliserOrder` (its unwind run checked on two frames whose inner finaliser raises), and `Targets.NoInterception` excludes intercepting a cancel. None claims termination. In Lean: `Targets.I3` is PROVED AT A RESTRICTION at Core σ=[] (`i3_core`: nothing is held, so the closing clause is vacuous); `Targets.NoInterception` is PROVED AT σ=[] (`noInterception_tier1`); `Targets.FinaliserOrder` is OPEN, its two-frame unwind run proved (`two_frame`); `CancelCloses` is named-only.
 
 ## Why it matters
 

@@ -4,7 +4,7 @@
 
 Proofs that assume well-bracketed control (every call returns before its caller resumes) still hold where the operations a callback can perform preserve well-bracketing.
 
-**Lean target:** not yet stated. It goes in the targets library with an enumerated `sorry`.
+**Lean target:** designed in [`experiments/Targets/DESIGN.md`](../../../../experiments/Targets/DESIGN.md) as `Targets.WBCore` and `Targets.ConservativeWB` (§6, P14), the latter a conjunct of done: today's Core relation embeds into W at the types whose callbacks perform only `{fn, abort}` operations (row-abortive types), at every index reachable from σ = []. It is stated against today's relation, pinned by an audit, so redefining Core cannot meet it by definition. The every-type form `Targets.Conservative` (A7 in full) is beside done. In Lean: `Targets.WBCore` is PROVED (`wbCore`); `Targets.ConservativeWB` and `Targets.Conservative` are PROVED AT σ=[] at `coreW` (`conservativeWB_core`, `conservative_core`) and OPEN at W. Core's relation is pinned by hash in `experiments/Targets/Targets/Audit.lean`.
 
 ## Why it matters
 

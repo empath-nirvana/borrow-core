@@ -4,7 +4,7 @@
 
 Every reachable configuration satisfies the aliasing invariant, counting the loans held by suspended frames, by running handler clauses, and by values in transit.
 
-**Lean target:** not yet stated. It goes in the targets library with an enumerated `sorry`.
+**Lean target:** designed in [`experiments/Targets/DESIGN.md`](../../../../experiments/Targets/DESIGN.md) as `Targets.Exclusive` (§6, P10), a conjunct of the end state, counting the frames suspended computations hold (`SemWorld.held`). In Lean: `Targets.Exclusive` is PROVED AT σ=[] (`exclusive_core`), OPEN at W.
 
 ## Why it matters
 

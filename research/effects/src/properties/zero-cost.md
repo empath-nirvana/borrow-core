@@ -7,7 +7,7 @@ Each lowering class preserves behaviour:
 - an abortive clause is a branch;
 - a suspension is a state machine.
 
-**Lean target:** not yet stated. It goes in the targets library with an enumerated `sorry`.
+**Lean target:** designed in [`experiments/Targets/DESIGN.md`](../../../../experiments/Targets/DESIGN.md) as `Targets.LoweringCorrect` (semantics preservation) and `Targets.ZeroCost` (the cost conjunct over the lowered program's counts, per lowering class) (§3, T4), out of the first pass, named-only until the backend exposes a fuel-parametric stage interpreter and per-class reference encodings. In Lean: named-only (OPEN); `Targets.LowClass` names the lowering classes.
 
 ## Why it matters
 

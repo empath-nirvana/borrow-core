@@ -16,3 +16,5 @@ A frozen computation abstracts the names its state uses internally. Resume insta
 - order-respecting renamings of lifetimes.
 
 **The known risk.** Restrat's `mut_not_natural` refutes naturality at a stored Mut invariant, and whether it arises has not been checked.
+
+**In the targets.** The binder is a target beside done (`EndStateBinder`, DESIGN §5 I2.c), not a conjunct of it: its location half is stated as a symmetry, its lifetime half as forward instantiation, OPEN pending the arising check.

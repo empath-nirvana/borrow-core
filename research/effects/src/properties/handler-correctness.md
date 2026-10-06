@@ -4,7 +4,7 @@
 
 A handler means what its clauses say: initiality of the handler as a model, plus the unary laws (return, operation, forwarding, the tail-resumptive law, graded algebraicity).
 
-**Lean target:** not yet stated. It goes in the targets library with an enumerated `sorry`.
+**Lean target:** designed in [`experiments/Targets/DESIGN.md`](../../../../experiments/Targets/DESIGN.md) as `Targets.P11` (§6), unary, a conjunct of the end state; the equational laws are `Targets.Laws` (§3, T2), with hiding stated under a simulation of answering handlers' states and fusion at a composite-handler parameter (OQ-49). In Lean: `Targets.P11` (`HandleCompat ∧ RedLaws`) is PROVED AT σ=[] (`p11_core`), OPEN at W; `RedLaws` holds at every world whose operation tables are monotone (`redLaws_of_mono`). `Targets.Laws` is stated and OPEN (binary, out of the first pass).
 
 ## Why it matters
 

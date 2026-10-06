@@ -33,3 +33,5 @@ A multi-shot continuation can be resumed more than once. In our kernel this is t
 - `corpus/pending/backtrack-multishot.bc` stays pending.
 
 **The current answer:** multi-shot over persistent data is possible as built. Over resources it is impossible by linearity, and that is fine.
+
+**In the targets.** The end state's typing pin is the unr-free fragment (`CDerivesNU`, DESIGN §1.2), and W is unconstrained at rows with a resuming `unr` operation, so nothing at W depends on `unr`. `unr` programs are covered at tier 1 (Core σ=[]), where they already work.

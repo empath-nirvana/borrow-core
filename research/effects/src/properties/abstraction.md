@@ -4,7 +4,7 @@
 
 There is no accidental handling: a handler cannot intercept effects of code it was handed abstractly, and handler state is representation-independent.
 
-**Lean target:** not yet stated. It goes in the targets library with an enumerated `sorry`.
+**Lean target:** designed in [`experiments/Targets/DESIGN.md`](../../../../experiments/Targets/DESIGN.md) as `Targets.Abstraction` (§3, T3): `Tunnel` (Zhang–Myers Example 1 over a row-polymorphic `f`), `RepInd`, `Encap`. Binary, out of the first pass. In Lean: `Targets.Abstraction` with `Tunnel`, `RepInd` and `Encap` (`experiments/Targets/Targets/Statements/Abstraction.lean`), stated and elaborating; OPEN (binary, out of the first pass). Its proof device, T3 from a binary fundamental lemma, is named-only.
 
 ## Why it matters
 
