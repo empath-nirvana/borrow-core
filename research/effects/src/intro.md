@@ -4,6 +4,11 @@ This notebook is a research project, not a spec. Its job is to map the space of 
 
 borrow-core already works, and it does a lot with effects (see [What works today](foundations/kernel-today.md)). The question is what end state we are building towards, and how to judge progress against it.
 
+**Two systems and their interaction.** "We need an effect system that satisfies the effect algebra and a borrow calculus that satisfies BoLo's guarantees and the rules for their interaction." (user, 2026-10-05) The notebook is organised that way:
+- [System A](system-a.md): the effect system on its own.
+- [System B](system-b.md): BoLo's guarantees, which are given.
+- [The interaction](interaction.md): where they meet, and the combined theorem.
+
 **How to read it.**
 - [The register](register.md) is the global view. It has one row per property, with its status and what it depends on.
 - Each property has its own chapter, laid out the same way: statement, why it matters, the design space, the evidence we have, the experiments, the trade-offs, and the open questions.
