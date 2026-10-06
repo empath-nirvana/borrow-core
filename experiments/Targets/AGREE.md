@@ -5,13 +5,67 @@ them. The targets are now two systems and the rules of their interaction: an eff
 borrow calculus (B), the interaction (I), and our calculus as one instance of A. The Lean in
 `experiments/Targets` states every target as a `def … : Prop`. `lake build Targets` is clean, with
 no `sorry` and no forbidden axiom. The axiom check covers every theorem and definition, and the
-step-index audit passes with its nine negative tests. **Done itself is OPEN**: the tier-2 typing
+step-index audit passes with its nine negative tests. It does not yet scan `Type`-valued
+ℕ-indexed families (see the verification box). **Done itself is OPEN**: the tier-2 typing
 system `J₂` and the world `W` do not exist yet.
 
 > [!WARNING]
-> **Do not agree these targets yet.** Five things are open. The first three are review findings
-> and departures that no one has checked; the fourth is what the build has not reached; the last
-> is the minor findings still open.
+> **Verification of this restructure: NOT ready to agree.** Three independent verifiers checked
+> the build. Two passed with minor findings only. One failed with a **blocker**. Until the blocker
+> is resolved, the B5 route and the tier-1 guarantees below rest on a premise that Lean refutes.
+>
+> **Blocker: `BumpSim` is refutable as written** (`Targets/Base/Machine.lean:286`, `:309`).
+> `BlocksAffine` reads `∀ ℓ n, … → ∀ j < n, g (ℓ + j) = g ℓ + j` with `n` unbound. Its docstring
+> means `n` to be an array value's length. As written, it forces `g'` to shift every location
+> above each named location by the same amount. Since the bump step must also avoid an arbitrary
+> finite `X`, no `g'` exists at an ordinary reuse step. A verifier checked this in Lean:
+> `¬ BumpSim` compiles with axioms ⊆ [propext, Classical.choice, Quot.sound], in the session
+> scratchpad file `v/BumpSimCheck.lean` (heap `{5 ↦ loc 5}`, term `alloc ()`, `g = id`,
+> `X = {3}`). Consequences:
+>
+> - `releasedOnceReuse_of_bumpSim` (`B/Routes.lean:163`) and `tier1Core_guarantees_of`
+>   (`I/Combined.lean:219`) hold only from a false premise, so they establish nothing yet.
+> - The claims "B5 PROVED from B4′ given `BumpSim`" and "B's tier-1 guarantees follow from
+>   adequacy and `BumpSim`" overclaim. They appear here, in `Status.lean` (the B5 row, the Done
+>   paragraph, `status_tier1Core_guarantees_of`), in `README.md` (lines 80 and 112), and in the
+>   notebook (register P1, `properties/soundness.md`, `system-b.md`, `tracks/log.md`). Those
+>   files are **not yet corrected**. This page is.
+> - B5's statement (`ReleasedOnceReuse`) is not affected.
+> - Fix: tie `n` to an array value `(ℓ, c)` that the term or a stored value mentions. Then
+>   re-check `bump_follows` and `releasedOnceReuse_of_bumpSim`, and add a Lean sanity lemma
+>   showing that `BumpSim`'s conclusion can be met at a reuse step.
+>
+> **Minor verification findings**, all open:
+>
+> - *The audit skips `Type`-valued ℕ-indexed families.* `familyAudit` (`Audit.lean:177-194`)
+>   keeps only `Prop` families. A scratch world that uses
+>   `inductive LaterT : ℕ → Type` through `Nonempty` passed every report. Every `Prop`-valued
+>   variant the verifier tried was caught. Fix: drop the filter or report these families
+>   separately, and add a tenth negative test.
+> - *`Report.rejects` is unused and says nothing* (`Audit.lean:313-316`). It is true for every
+>   world whose closure reaches Core, `coreW` included. The per-constant negative-test check is
+>   sound.
+> - *Stale names.* `Instance/Rows.lean:102` cites `EndStateAt` (now `I.Combined`).
+>   `foundations/freeze-binder.md` still says `EndStateBinder` (now `CombinedBinder`).
+> - *`AxiomCheck.lean`'s docstring overclaims.* It says every source theorem has a `#print`
+>   line, but four do not: `eq_two`, `eq_three`, `eq_four` and `eq_hole_of_plug_prim`. The
+>   `run_meta` covers them, so the gate itself holds.
+> - *Status understates hypotheses.* The "E3 needs divergence" row omits that
+>   `divInTypes_of_loops` also takes Safety (S2) and `DataDiv`.
+> - *Abstractly, divergence shows in types only on the pure row* (`DataDiv`, E3f). This is weaker
+>   than decision 35. It holds at `ourInst`. E3f types `hof` with its own `∃ A'`, so it does not
+>   use E1's one typing (Q3).
+> - *Most feature justifications are prose.* Lean checks only row variables
+>   (`not_*_of_monoCallback`) and divergence (`not_loops_of_total`). Deep handlers (E4, E5),
+>   linear continuations with cancel (E7–E9) and S6's witnesses R1–R4 have no lemma.
+> - *The extern hypothesis is stated against W's relation*, and W is unbuilt (Q8).
+> - *S4's store-free `capture` excludes OQ-50 (b)*, which needs your call (Q9).
+> - *The composite acceptance list lacks `reconB` and the real async-read-into-buffer program.*
+>   `at04` stands in for the latter until OQ-56 is chosen (Q5).
+>
+> **Apart from the verification**, five more things are open. The first three are review
+> findings and departures that no one has checked. The fourth is what the build has not reached.
+> The last is the earlier minor findings.
 >
 > **1. The third review's findings, answered in the design and not reviewed again**
 > (RESTRUCTURE §9.0 and §Unresolved U.1). The build implements each answer as written.
@@ -43,7 +97,8 @@ system `J₂` and the world `W` do not exist yet.
 > - At our instance the driver is a Core frame around the program, not a phase mark. A phase would
 >   be lost in a stored finaliser.
 > - `BumpSim`, the machine lemma B5 rests on, has a body of the builder's: a finite set the bump
->   step avoids, and maps that move array blocks as blocks.
+>   step avoids, and maps that move array blocks as blocks. That body is refutable as written
+>   (the blocker above).
 > - A₃'s `LoweringCorrect` and `ZeroCost` are relational, through `PlatformSim`. `refCost` is
 >   `(0, 0)` with no reference program written to check it.
 > - `Tier2Programs` has five programs: `reconB` is not built.
@@ -166,9 +221,10 @@ def I.Combined (RF : RowForm) (J : OurTyping RF) (M : SemWorld) (Adm : OpAdm) (c
 - **Tier 1** is `Combined orowRF J₁ coreW admClosedOp .abortive`. `J₁` is today's rules with row
   variables, because A's (E) properties need effect polymorphism at every tier (Q1 below).
 - **Status.** Done and tier 1 are OPEN. The restricted reduction `Tier1Core`, at today's kernel
-  and Core's world, has its world conjuncts and device proved. B's guarantees there follow from
-  adequacy at BoLo and the step-for-step simulation `BumpSim` (`tier1Core_guarantees_of`). It
-  lacks A's (S) properties at our instance and `I4a` at today's unr-free kernel.
+  and Core's world, has its world conjuncts and device proved. `tier1Core_guarantees_of` derives
+  B's guarantees there from adequacy at BoLo and `BumpSim`. **`BumpSim` is refutable as written**
+  (the blocker above), so the guarantees there are not established. It also lacks A's (S)
+  properties at our instance and `I4a` at today's unr-free kernel.
 
 ## The targets
 
@@ -183,7 +239,7 @@ world or typing system; **every instance** is every `EffectSystem`.
 | B | B0, B1, B6, B7, the bounds | PROVED AT σ=[] |
 | B | B2, B3, B4 | PROVED AT A RESTRICTION (no platform operation, data answers); in full OPEN |
 | B | B4′ (externs at W's contract) | PROVED (generic, from B1 and B2) |
-| B | B5 | PROVED from B4′ given `BumpSim` (generic); `BumpSim` OPEN (OQ-43); not a tautology (`not_releasedOnceReuse_staleFree`) |
+| B | B5 | statement not a tautology (`not_releasedOnceReuse_staleFree`); the route `releasedOnceReuse_of_bumpSim` rests on `BumpSim`, which is **refutable as written** (blocker above); B5 NOT established |
 | I | `Bounds`, `Interface`, the device at `coreW` | PROVED AT σ=[] (abortive rows) |
 | I | the corollaries of `Combined`; a reachable leak breaks it | PROVED (generic) |
 | I | the composite programs | run by the interpreter (evidence); `CompositeT1` at tier 1 PROVED AT A RESTRICTION; `Tier2Programs`, `Rejects` at a typing system OPEN |
@@ -214,9 +270,10 @@ From RESTRUCTURE §7.
    intended reading? Should divergence be a row effect, so that E1's one typing serves div
    callbacks? `DataDiv` claims termination only at data answers on the pure row; under "codata"
    it would become every row.
-4. **B5 and OQ-43.** B5 is in done. It costs one machine lemma, the step-for-step simulation
-   `BumpSim`, and `releasedOnceReuse_of_bumpSim` proves B5 from it. It excludes OQ-43 (a) for
-   done. Confirm?
+4. **B5 and OQ-43.** B5 is in done, and that excludes OQ-43 (a) for done. The intended route is
+   the step-for-step simulation `BumpSim`. **As written, `BumpSim` is refutable** (blocker above),
+   so what B5 costs is not known until `BlocksAffine` is restated and the route is re-checked.
+   Confirm that B5 belongs in done. Do not read this as a confirmed one-lemma cost.
 5. **OQ-56.** Done is fixed at `admClosedOp`. When OQ-56 is chosen, should done move to that
    `Adm`, and `asyncRead` join `Tier2Programs` (with `at04` its stand-in until then)?
 6. **"No sum for failure."** A carries failure as an effect at an unchanged answer type. Is #168's
