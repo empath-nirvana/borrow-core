@@ -53,6 +53,8 @@
 - [P11/I5 Handler correctness and the capture laws](prior-art/p11-i5-laws.md)
 - [P12 Abstraction safety](prior-art/p12-abstraction.md)
 - [Rows vs capabilities](prior-art/rows-vs-capabilities.md)
+- [P13 Zero-cost lowering](prior-art/p13-zero-cost.md)
+- [P14, I1, I4 Interaction](prior-art/p14-i1-i4-interaction.md)
 
 # Design space
 
