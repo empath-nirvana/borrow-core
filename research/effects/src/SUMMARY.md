@@ -44,6 +44,11 @@
   - [P10 Exclusivity across the handler](properties/exclusivity.md)
   - [P14 Well-bracketing conservativity](properties/conservativity.md)
 
+# Prior art (menus)
+
+- [P2 Effect safety and the row algebra](prior-art/p2-effect-safety.md)
+- [P8/P5 Linearity, drop and finalisation](prior-art/p8-p5-linearity-drop.md)
+
 # Design space
 
 - [Axes and options](design-space/axes.md)
