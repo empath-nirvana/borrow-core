@@ -60,7 +60,7 @@ the drive, and `BumpSim` (OQ-43).
 | B2 | adequacy | PROVED AT A RESTRICTION (the platform with no operation, data answers); every platform and the drive: OPEN | `adequateRetAt_core_none` |
 | B3, B4 | safety, leak freedom | PROVED AT A RESTRICTION (the same) | `soundRetAt_tier1_none` |
 | B4′ | with externs meeting W's contract | PROVED (generic, from B1 and B2, finding #7) | `soundContractsOfFL` |
-| B5 | release exactly once, reuse included | from B4′ given the step-for-step simulation `BumpSim`: PROVED (generic); `BumpSim` itself OPEN (OQ-43); not a tautology: PROVED | `releasedOnceReuse_of_bumpSim`, `not_releasedOnceReuse_staleFree` |
+| B5 | release exactly once, reuse included | from B4′ given the step-for-step simulation `BumpSim`: PROVED (generic); `BumpSim` itself OPEN (OQ-43), its conclusion met at a reuse step: PROVED; not a tautology: PROVED | `releasedOnceReuse_of_bumpSim`, `bumpSim_at_reuse`, `not_releasedOnceReuse_staleFree` |
 | B6 | exclusive mutable borrows | PROVED AT σ=[] | `exclusiveB_core` |
 | B7 | lifetimes respected | PROVED AT σ=[] | `lifetimeSound_core` |
 | — | the bounds | PROVED AT σ=[] | `wBound_core` |
@@ -304,6 +304,19 @@ theorem status_releasedOnceReuse_of_bumpSim (hS : BumpSim (ℍ := ℍ)) {J : Typ
 
 /-- OPEN (stated): the step-for-step simulation (OQ-43 (b), or (c) through a binary FP). -/
 example : Prop := BumpSim (ℍ := ℍ)
+
+/-- PROVED: `BumpSim`'s conclusion at an `alloc` step whose given run reuses a location, for every
+finite `X`: the configuration on which `BlocksAffine`'s earlier, unbound-length reading refuted
+`BumpSim`. -/
+theorem status_bumpSim_at_reuse (X : Finset Loc) :
+    RelAt id B.reuseConf B.reuseConf ∧ BlocksAffine id B.reuseConf.μ B.reuseConf.e ∧
+    PStep (ℍ := ℍ) Platform.none B.reuseConf B.reuseConf' ∧
+    ∃ cB' g', PStep (ℍ := ℍ) Platform.none B.reuseConf cB' ∧
+      (∀ ℓ, B.reuseConf.μ ℓ = none → (cB'.μ ℓ).isSome →
+        ¬ Named B.reuseConf.μ B.reuseConf.e ℓ ∧ ℓ ∉ X) ∧
+      (∀ ℓ, Named B.reuseConf.μ B.reuseConf.e ℓ → g' ℓ = id ℓ) ∧ RelAt g' B.reuseConf' cB' ∧
+      BlocksAffine g' cB'.μ cB'.e :=
+  B.bumpSim_at_reuse X
 
 /-! ## The interaction -/
 

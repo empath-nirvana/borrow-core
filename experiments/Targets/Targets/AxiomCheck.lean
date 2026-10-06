@@ -76,11 +76,14 @@ run_meta do
 #print axioms Targets.A.EffectSystem.rtl_respects
 #print axioms Targets.B.bindK_plain
 #print axioms Targets.B.borrowRulesClosed_of_rulesClosed
+#print axioms Targets.B.bumpSim_at_reuse
 #print axioms Targets.B.freeAt_subst
 #print axioms Targets.B.not_isVal_app
 #print axioms Targets.B.not_releasedOnceReuse_staleFree
 #print axioms Targets.B.platformNone_respects'
 #print axioms Targets.B.pstep_mach
+#print axioms Targets.B.push_id
+#print axioms Targets.B.reuseHeap_eq
 #print axioms Targets.B.seqK_plain
 #print axioms Targets.B.staleRest_subst
 #print axioms Targets.B.staleRun_final
@@ -548,6 +551,7 @@ run_meta do
 #print axioms Targets.status_I5beta
 #print axioms Targets.status_adequateRet_core_none
 #print axioms Targets.status_admExtends_closedOp
+#print axioms Targets.status_bumpSim_at_reuse
 #print axioms Targets.status_carryW
 #print axioms Targets.status_combined_prog
 #print axioms Targets.status_conservative_core

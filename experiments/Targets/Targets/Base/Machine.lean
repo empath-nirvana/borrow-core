@@ -14,7 +14,7 @@ location it follows from the empty memory at both ends (`Targets/B/Release.lean`
 
 A stop is irreducible (`stop_irreducible`), and `ARun.rest` at an irreducible end
 (`arun_rest_irr`).  For B5 (RESTRUCTURE §2.4): `Named`, `Expr.mapLoc`, `Heap.push`, `RelAt`,
-`Bump`, `BumpSim`; for the drive phase: `SafeDriveFrom`.
+`Expr.MentionsArr`, `BlocksAffine`, `Bump`, `BumpSim`; for the drive phase: `SafeDriveFrom`.
 -/
 
 noncomputable section
@@ -281,11 +281,20 @@ open Classical in
 def _root_.BoCa.BoLo.Heap.push (g : Loc → Loc) (μ : Heap) : Heap := fun ℓ' =>
   if h : ∃ ℓ, g ℓ = ℓ' ∧ (μ ℓ).isSome then (μ (Classical.choose h)).map (Val.mapLoc g) else none
 
-/-- `g` moves every block `[ℓ, ℓ + n)` that an array value `(ℓ, n)` of the configuration names as a
-block (array steps compute `ℓ + j`). -/
+/-- The array value `(ℓ, n)` (`Val.arr ℓ n`) occurs in the term. -/
+def _root_.BoCa.Expr.MentionsArr (ℓ : Loc) (n : UInt32) : Expr → Prop
+  | .pair a b => (a = .loc ℓ ∧ b = (Val.i32 n).1) ∨ a.MentionsArr ℓ n ∨ b.MentionsArr ℓ n
+  | .var _ | .unit | .prim _ | .loc _ => False
+  | .seq a b | .letpair a b | .app a b => a.MentionsArr ℓ n ∨ b.MentionsArr ℓ n
+  | .inj₁ a | .inj₂ a | .lam a => a.MentionsArr ℓ n
+  | .case a b c => a.MentionsArr ℓ n ∨ b.MentionsArr ℓ n ∨ c.MentionsArr ℓ n
+
+/-- `g` moves as a block every `[ℓ, ℓ + n]` for an array value `(ℓ, n)` that the term or a stored
+value holds: the array steps compute `ℓ + j` from `(ℓ, n)`, `idx` for `j < n` and `split` for
+`j ≤ n` (its last part `(ℓ + n, 0)` is based at the end location). -/
 def BlocksAffine (g : Loc → Loc) (μ : Heap) (e : Expr) : Prop :=
-  ∀ ℓ n, (e.MentionsLoc ℓ ∨ ∃ m v, μ m = some v ∧ v.1.MentionsLoc ℓ) →
-    ∀ j, j < n → g (ℓ + j) = g ℓ + j
+  ∀ ℓ n, (e.MentionsArr ℓ n ∨ ∃ m v, μ m = some v ∧ v.1.MentionsArr ℓ n) →
+    ∀ j, j ≤ n.toNat → g (ℓ + j) = g ℓ + j
 
 /-- Two configurations related by `g`: `g` is injective on `cB`'s live heap, `cA`'s term is `cB`'s
 renamed, `cA`'s heap is `cB`'s pushed along `g`, and the platform states agree. -/

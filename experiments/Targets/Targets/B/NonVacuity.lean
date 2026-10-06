@@ -14,6 +14,9 @@ has no step.  So a typing system that types `staleFree` fails B5 (`not_releasedO
 That is all it shows: such a typing system already fails B3, whose bump run is stuck at the second
 `free x`; given the step-for-step simulation (`BumpSim`), B5 follows from B3 and B4 (RESTRUCTURE
 §2.4).  `[Core σ=[]]`
+
+`bumpSim_at_reuse`: `BumpSim`'s conclusion is met at an `alloc` step whose given run reuses a
+location, for every finite set `X` the bump step must avoid.
 -/
 
 noncomputable section
@@ -240,6 +243,128 @@ theorem not_releasedOnceReuse_staleFree (J : TypingJ) (M : BWorld)
   -- step 7: the second release, at the freed `ℓ₀`: no step
   obtain ⟨w', hw', -, -⟩ := step1_free_inv (pstep_none h₇)
   simp [BoCa.BoLo.Heap.upd_other (Ne.symm hne)] at hw'
+
+/-! ### `BumpSim`'s conclusion is met at a reuse step -/
+
+/-- The heap holding at `5` a pointer to `5`. -/
+def reuseHeap : Heap := Adequacy.emptyMem.upd 5 (Val.loc 5)
+
+/-- `alloc ()` at `reuseHeap`. -/
+def reuseConf : Conf Platform.none := ⟨reuseHeap, .app alloc' unit', ()⟩
+
+/-- Its step allocating at `3`. -/
+def reuseConf' : Conf Platform.none := ⟨reuseHeap.upd 3 Val.unit, (Val.loc 3).1, ()⟩
+
+/-- Pushing along the identity moves nothing. -/
+theorem push_id (μ : Heap) : Heap.push id μ = μ := by
+  funext l
+  unfold Heap.push
+  by_cases h : (μ l).isSome
+  · have hx : ∃ ℓ, id ℓ = l ∧ (μ ℓ).isSome := ⟨l, rfl, h⟩
+    have hc := (Classical.choose_spec hx).1
+    simp only [id] at hc
+    rw [dif_pos hx, hc]
+    cases μ l <;> simp [Val.mapLoc, mapLoc_id]
+  · rw [dif_neg (by rintro ⟨ℓ, rfl, h'⟩; exact h h')]
+    cases hμ : μ l with
+    | none => rfl
+    | some _ => simp [hμ] at h
+
+/-- `reuseHeap`, pointwise. -/
+theorem reuseHeap_eq (l : Loc) : reuseHeap l = if l = 5 then some (Val.loc 5) else none := by
+  simp [reuseHeap, BoCa.BoLo.Heap.upd, Adequacy.emptyMem]
+
+/-- **`BumpSim`'s conclusion at a reuse step, for every `X`.**  The given configuration is
+`alloc ()` at the heap `{5 ↦ loc 5}`, related to itself by `id`; the given run allocates at `3`,
+which `X` may hold.  The bump step allocates at `b = max X + 6`, which neither `X` nor the
+configuration names, and `g'` sends `b` to `3` and fixes every other location.  No array value
+occurs, so `BlocksAffine` constrains nothing.  At `BlocksAffine`'s earlier reading, whose length
+was unbound, this instance had no `g'` (every named location forced `g'` affine above it). -/
+theorem bumpSim_at_reuse (X : Finset Loc) :
+    RelAt id reuseConf reuseConf ∧ BlocksAffine id reuseConf.μ reuseConf.e ∧
+    PStep (ℍ := ℍ) Platform.none reuseConf reuseConf' ∧
+    ∃ cB' g', PStep (ℍ := ℍ) Platform.none reuseConf cB' ∧
+      (∀ ℓ, reuseConf.μ ℓ = none → (cB'.μ ℓ).isSome →
+        ¬ Named reuseConf.μ reuseConf.e ℓ ∧ ℓ ∉ X) ∧
+      (∀ ℓ, Named reuseConf.μ reuseConf.e ℓ → g' ℓ = id ℓ) ∧ RelAt g' reuseConf' cB' ∧
+      BlocksAffine g' cB'.μ cB'.e := by
+  have h3 : reuseHeap 3 = none := rfl
+  refine ⟨⟨fun _ _ _ _ h => h, (mapLoc_id _).symm, (push_id _).symm, rfl⟩,
+    fun _ _ _ _ _ => rfl, pstep_mach .hole rfl rfl (Head.alloc reuseHeap Val.unit 3 h3), ?_⟩
+  set b : Loc := X.sup id + 6 with hb
+  have hbX : b ∉ X := fun h => by
+    have := Finset.le_sup (f := id) h; simp only [id, Loc] at *; omega
+  have hb5 : b ≠ 5 := by simp only [Loc] at *; omega
+  have hbfree : reuseHeap b = none := by simp [reuseHeap_eq, hb5]
+  let g' : Loc → Loc := fun x => if x = b then 3 else x
+  have hg'b : g' b = 3 := by simp [g']
+  have hg'o : ∀ x, x ≠ b → g' x = x := fun x hx => by simp [g', hx]
+  have hnamed : ¬ Named reuseHeap (.app alloc' unit') b := by
+    rintro (h | h | ⟨m, v, hm, hv⟩)
+    · simp [hbfree] at h
+    · simp [alloc', unit', Expr.MentionsLoc, Expr.val, Val.prim, Val.unit] at h
+    · rw [reuseHeap_eq] at hm
+      split_ifs at hm with h5
+      · cases hm; exact hb5 (by simpa [Val.loc, Expr.MentionsLoc] using hv.symm)
+  let μB : Heap := reuseHeap.upd b Val.unit
+  have hμB : ∀ l, μB l = if l = b then some Val.unit else if l = 5 then some (Val.loc 5) else none :=
+    fun l => by simp [μB, BoCa.BoLo.Heap.upd, reuseHeap_eq]
+  refine ⟨⟨μB, (Val.loc b).1, ()⟩, g', pstep_mach .hole rfl rfl (Head.alloc reuseHeap Val.unit b hbfree),
+    ?_, ?_, ⟨?_, ?_, ?_, rfl⟩, ?_⟩
+  · intro ℓ hℓ hs
+    have : ℓ = b := by
+      by_contra hne; simp [hμB, hne] at hs; simp [reuseConf, reuseHeap_eq, hs] at hℓ
+    subst this; exact ⟨hnamed, hbX⟩
+  · intro ℓ hℓ
+    exact hg'o ℓ (by rintro rfl; exact hnamed hℓ)
+  · intro x hx y hy hxy
+    simp only [Set.mem_ofPred_eq, hμB] at hx hy
+    by_cases hxb : x = b <;> by_cases hyb : y = b
+    · rw [hxb, hyb]
+    · simp [hyb] at hy; subst hy; simp [g', hxb, hyb] at hxy
+    · simp [hxb] at hx; subst hx; simp [g', hxb, hyb] at hxy
+    · simpa [g', hxb, hyb] using hxy
+  · simp [reuseConf', Val.loc, Expr.mapLoc, hg'b]
+  · funext l
+    unfold Heap.push
+    by_cases hl3 : l = 3
+    · subst hl3
+      have hx : ∃ ℓ, g' ℓ = 3 ∧ (μB ℓ).isSome := ⟨b, hg'b, by simp [hμB]⟩
+      rw [dif_pos hx]
+      obtain ⟨hc1, hc2⟩ := Classical.choose_spec hx
+      have : Classical.choose hx = b := by
+        by_contra hne
+        rw [hg'o _ hne] at hc1; rw [hμB, if_neg hne, hc1] at hc2; simp at hc2
+      change _ = Option.map (Val.mapLoc g') (μB _)
+      rw [this, hμB, if_pos rfl]
+      simp [reuseConf', BoCa.BoLo.Heap.upd, Val.mapLoc, Val.unit, Expr.mapLoc]
+    · by_cases hl5 : l = 5
+      · subst hl5
+        have hx : ∃ ℓ, g' ℓ = 5 ∧ (μB ℓ).isSome := ⟨5, hg'o 5 hb5.symm, by simp [hμB, hb5.symm]⟩
+        rw [dif_pos hx]
+        obtain ⟨hc1, hc2⟩ := Classical.choose_spec hx
+        have : Classical.choose hx = 5 := by
+          by_cases hcb : Classical.choose hx = b
+          · rw [hcb, hg'b] at hc1; exact absurd hc1 (by decide)
+          · rw [hg'o _ hcb] at hc1; exact hc1
+        change _ = Option.map (Val.mapLoc g') (μB _)
+        rw [this, hμB, if_neg hb5.symm, if_pos rfl]
+        simp [reuseConf', BoCa.BoLo.Heap.upd, reuseHeap_eq, Val.mapLoc, Val.loc, Expr.mapLoc, hg'o 5 hb5.symm]
+      · rw [dif_neg]
+        · simp [reuseConf', BoCa.BoLo.Heap.upd, reuseHeap_eq, hl3, hl5]
+        · rintro ⟨c, hc1, hc2⟩
+          by_cases hcb : c = b
+          · rw [hcb, hg'b] at hc1; exact hl3 hc1.symm
+          · rw [hg'o _ hcb] at hc1; subst hc1
+            change (μB _).isSome = true at hc2
+            rw [hμB, if_neg hcb, if_neg hl5] at hc2; simp at hc2
+  · rintro ℓ n (h | ⟨m, v, hm, hv⟩)
+    · simp [Val.loc, Expr.MentionsArr] at h
+    · change μB m = some v at hm
+      rw [hμB] at hm
+      split_ifs at hm
+      · cases hm; simp [Val.unit, Expr.MentionsArr] at hv
+      · cases hm; simp [Val.loc, Expr.MentionsArr] at hv
 
 end Targets.B
 

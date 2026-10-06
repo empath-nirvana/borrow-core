@@ -3492,6 +3492,14 @@ below. Whether a revision answers its finding has not been checked.
   - `Accepts`, `Rejects` and `Tier2Programs` at any typing system.
 - **B5's machine lemma.** `BumpSim` (OQ-43, §7 Q4) is not proved. `releasedOnceReuse_of_bumpSim`
   is, so B5 at tier 1 follows from `BumpSim` and `Adequate coreB` (`tier1Core_guarantees_of`).
+  Its side condition `BlocksAffine` reads the array values `(ℓ, n)` (`Val.arr ℓ n`) that the term
+  or a stored value holds (`Expr.MentionsArr`), and asks `g (ℓ + j) = g ℓ + j` for `j ≤ n`: `idx`
+  computes `ℓ + j` for `j < n`, and `split` bases its last part at `ℓ + n`. An earlier reading
+  left `n` unbound, so it constrained `g` above every named location, and a verifier refuted
+  `BumpSim` at an `alloc` step with a finite `X` (heap `{5 ↦ loc 5}`, `g = id`, `X = {3}`). At the
+  current reading `bumpSim_at_reuse` (`B/NonVacuity.lean`) meets `BumpSim`'s conclusion at that
+  step for every `X`. Reading `j < n` instead is refuted at a `split` whose end location a stored
+  value names (checked in scratch, not kept in the build).
 - **A₃.** `Tgt.ref`, `refCost_spec`, `not_zeroCost_of_heapRuntime`, and the per-iteration statement
   for the driven programs.
 - **Adequacy at BoLo** (the library's second wave): `Adequate coreB` at every platform and for the
@@ -3509,6 +3517,8 @@ below. Whether a revision answers its finding has not been checked.
   - `not_releasedOnceReuse_staleFree`.
   - `releasedOnceReuse_of_bumpSim`, with `bump_follows` and its machine lemmas: heap domains stay
     finite, a value takes no step, and `Final` transfers back along a relation.
+  - `bumpSim_at_reuse`: `BumpSim`'s conclusion at an `alloc` step whose given run reuses a
+    location, for every finite `X`.
   - `soundContractsOfFL`, `contractsW_nil`, `releasedOnceReuse₀_of`.
   - `exclusiveB_core`, `sliceShapeB_core`, `wBound_core`, `extendsB_tier1`.
 - **I.**
