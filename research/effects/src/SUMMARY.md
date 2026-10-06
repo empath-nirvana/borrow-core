@@ -17,26 +17,32 @@
 - [Second-class values](foundations/second-class.md)
 - [Well-bracketed control and T1](foundations/well-bracketing.md)
 
-# Properties
+# System A: the effect system
 
-- [P1 Soundness](properties/soundness.md)
-- [P2 Effect safety](properties/effect-safety.md)
-- [P3 I1: a suspension is a value](properties/i1-suspension-value.md)
-- [P4 I2: capture and resume preserve the invariant](properties/i2-capture-resume.md)
-- [P5 I3: drop finalises exactly once](properties/i3-drop.md)
-- [P6 I4: answering effects are borrows](properties/i4-answering-borrows.md)
-- [P7 I5: the capture laws](properties/i5-capture-laws.md)
-- [P8 Continuation linearity](properties/continuation-linearity.md)
-- [P9 Lifetime soundness](properties/lifetimes.md)
-- [P10 Exclusivity across the handler](properties/exclusivity.md)
-- [P11 Handler correctness](properties/handler-correctness.md)
-- [P12 Abstraction safety](properties/abstraction.md)
-- [P13 Zero-cost lowering](properties/zero-cost.md)
-- [P14 Well-bracketing conservativity](properties/conservativity.md)
+- [The effect system on its own](system-a.md)
+  - [P2 Effect safety](properties/effect-safety.md)
+  - [P8 Continuation linearity](properties/continuation-linearity.md)
+  - [P11 Handler correctness](properties/handler-correctness.md)
+  - [P12 Abstraction safety](properties/abstraction.md)
+  - [P13 Zero-cost lowering](properties/zero-cost.md)
+  - [Multi-shot (side question, not a goal)](side/multi-shot.md)
 
-# Side questions
+# System B: the borrow calculus
 
-- [Multi-shot (not a goal)](side/multi-shot.md)
+- [BoLo's guarantees](system-b.md)
+
+# The interaction
+
+- [Where the two systems meet](interaction.md)
+  - [P1 The combined theorem](properties/soundness.md)
+  - [P3 I1: a suspension is a value](properties/i1-suspension-value.md)
+  - [P4 I2: capture and resume preserve the invariant](properties/i2-capture-resume.md)
+  - [P5 I3: drop finalises exactly once](properties/i3-drop.md)
+  - [P6 I4: answering effects are borrows](properties/i4-answering-borrows.md)
+  - [P7 I5: the capture laws](properties/i5-capture-laws.md)
+  - [P9 Lifetime soundness](properties/lifetimes.md)
+  - [P10 Exclusivity across the handler](properties/exclusivity.md)
+  - [P14 Well-bracketing conservativity](properties/conservativity.md)
 
 # Design space
 

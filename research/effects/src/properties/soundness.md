@@ -1,4 +1,4 @@
-# P1 Soundness
+# P1 The combined theorem
 
 ## Statement
 
