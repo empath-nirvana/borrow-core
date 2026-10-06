@@ -48,6 +48,9 @@
 
 - [P2 Effect safety and the row algebra](prior-art/p2-effect-safety.md)
 - [P8/P5 Linearity, drop and finalisation](prior-art/p8-p5-linearity-drop.md)
+- [I2 Capture and resume](prior-art/i2-capture-resume.md)
+- [P10/P9 Exclusivity and lifetimes](prior-art/p10-p9-exclusivity-lifetimes.md)
+- [Rows vs capabilities](prior-art/rows-vs-capabilities.md)
 
 # Design space
 
