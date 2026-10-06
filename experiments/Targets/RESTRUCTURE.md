@@ -3504,6 +3504,13 @@ below. Whether a revision answers its finding has not been checked.
   for the driven programs.
 - **Adequacy at BoLo** (the library's second wave): `Adequate coreB` at every platform and for the
   drive, and `AdequateOfLaws`.
+- **A's unary laws, beside done.** `A.UnaryLaws` (`Targets/A/UnaryLaws.lean`): the tail-resumptive
+  law `TailLaw` (its hygiene as three hypotheses), algebraicity `AlgLaw` (resuming operations; the
+  abortive case is S4's finaliser conjuncts), η with a frame that holds the continuation `EtaHold`
+  (effects TR D13.7), and η's typing-restricted alternative `EtaLin` (TR L13.5), run-level (P11/I5
+  menu form F.3). STATED, not proved, at no instance; `etaLin_of_etaHold` and the four
+  non-vacuity lemmas at `toy` are proved. Not conjuncts of S4 or of done: whether they join done is
+  a menu choice (axes H, F, K) for the user.
 
 ### U.4 Proved in the build, beyond the moves
 

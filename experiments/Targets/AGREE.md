@@ -124,7 +124,12 @@ system `J₂` and the world `W` do not exist yet.
 > - In `I4a`, `ImplTyped` is a dead hypothesis, and the non-vacuity witness exercises no operation.
 > - No tier-1 rejection of the tier-2 programs is proved, so `Tier2Programs`' discrimination is
 >   unchecked.
-> - η has no unary form in I5; it lives only in A₂'s binary laws.
+> - η has no unary form in done. Its binary form is Core's `CapEta` (A₂ omits η).
+> - **The unary tail-resumptive law, algebraicity and η are stated beside done, not in it**
+>   (`A.UnaryLaws`, `Targets/A/UnaryLaws.lean`: `TailLaw`, `AlgLaw`, `EtaHold`, with η's
+>   typing-restricted alternative `EtaLin`), run-level, STATED and not proved. The P11 chapter
+>   lists them among the unary laws; S4 has none of them. Whether they join done is your choice on
+>   the P11/I5 menu's axes H, F and K.
 > - `FreezeBinder` has no instance half, and its lifetime half is forward instantiation, not
 >   equivariance.
 > - `DivFree` reads decision 35 (divergence lives in `Loop`); its docstring says so, and

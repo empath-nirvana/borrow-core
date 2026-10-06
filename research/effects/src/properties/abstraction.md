@@ -17,7 +17,7 @@ Zhang–Myers 2019 (tunnelling); Biernacki et al. 2018 and 2019; capabilities (S
 
 ## Evidence
 
-None in Core. Decision 57 site freshness is checked by the elaborator.
+None in Core. Decision 57 site freshness: decided; to be checked by the elaborator (not built).
 
 ## Experiments
 

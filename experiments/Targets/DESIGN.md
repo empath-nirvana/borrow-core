@@ -771,8 +771,8 @@ The file's docstring carries the table of §9.
   `Core/EffRules.lean:40`).
 - **Signature** (Plotkin–Power, Plotkin–Pretnar Def. 4.2). The operations of one name:
   `E : List (Qual × VTy × VTy)`, numbered by `i` (`Row.ofEff n E 0`, `Core/EffRules.lean:969`).
-- **Effect.** A name with its signature. Names are static, one per handler site (decision 57 R3,
-  checked by the elaborator). So each program fixes an **effect context**
+- **Effect.** A name with its signature. Names are static, one per handler site (the elaborator's `freshSite`;
+  decision 57 R3's site freshness: decided; to be checked by the elaborator, not built). So each program fixes an **effect context**
   `Ξ : UInt32 → List (Qual × VTy × VTy)`, proper in Yoshioka et al.'s sense (Def. 5.3): one
   signature per label, its types well formed.
 - **Row** (existing). `Row := List OpSig` (`Core/EffRules.lean:33`), a finite sum of operation
@@ -1938,7 +1938,7 @@ tunnelling is played by site freshness (`HndFree`, decision 57 R3) and the row t
 `[handle]` (`hnS`).
 
 **(e) Existing Lean.** None in Core. EffModelRel has a binary relation with `fundamental`/
-`soundness` [SIB]. Site freshness is checked by the elaborator (decision 57 R3).
+`soundness` [SIB]. Site freshness: decided (decision 57 R3); to be checked by the elaborator (not built).
 
 **(f) Non-vacuity.** `Tunnel`'s hypotheses are met by every HOF typed generically in its
 callback's row whose own handlers use other names, with `k = ⟨.any, fun _ => True⟩`.

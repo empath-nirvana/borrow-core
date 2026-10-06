@@ -6,6 +6,7 @@ import Targets.A.Machine
 import Targets.A.NonVacuity
 import Targets.A.Programs
 import Targets.A.Soundness
+import Targets.A.UnaryLaws
 import Targets.A.System
 import Targets.Base.CoreCancel
 import Targets.Base.Ctx

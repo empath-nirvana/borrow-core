@@ -9,6 +9,7 @@ import Targets.Instance.Restricted.Unwind
 import Targets.Instance.Restricted.Programs
 import Targets.A.NonVacuity
 import Targets.A.Binary
+import Targets.A.UnaryLaws
 import Targets.A.Lowering
 import Targets.Audit
 
@@ -49,6 +50,8 @@ the drive, and `BumpSim` (OQ-43).
 | effect safety has teeth; Def. 5.1 (1) from one signature object | PROVED (every instance) | `not_der_unhandled`, `c1_of_rowSig` |
 | the runners `Rtick`, `Rtl`, `Rrec` keep their protocol | PROVED (every instance; `Rrec` at distinct labels) | `rtick_respects`, `rtl_respects`, `rrec_respects` |
 | A's properties at our instance | OPEN (the Instance's bridges, below) | — |
+| the unary laws beside done, `UnaryLaws` (`TailLaw`, `AlgLaw`, `EtaHold`) and the alternative `EtaLin`: run-level (menu form F.3), the tail law's hygiene as hypotheses | STATED, not proved (at no instance); **not in done**: whether they join done is a menu choice (P11/I5 menu axes H, F, K), for the user | `Targets/A/UnaryLaws.lean` |
+| `EtaHold` gives `EtaLin`; each of the four fails at an instance whose handler or bind ignores its clauses | PROVED | `etaLin_of_etaHold`, `not_tailLaw_toy`, `not_algLaw_toy`, `not_etaHold_toy`, `not_etaLin_toy` |
 | A₃'s reference programs (the `Tgt` code checking each `refCost` entry) | not written | RESTRUCTURE §Unresolved |
 
 ## System B
@@ -187,6 +190,20 @@ example (S : A.EffectSystem) : Prop := S.Props
 /-- A₂ and A₃, stated, out of the first pass. -/
 example (S : A.EffectSystem) (L : S.Lowering) : Prop :=
   S.HandlerLaws ∧ S.EffDepLaws ∧ S.Abstraction ∧ S.LoweringCorrect L ∧ S.ZeroCost L
+
+/-- The unary laws beside done (tail-resumptive, algebraicity, η with a holding frame), and η's
+typing-restricted alternative: STATED, not proved.  Not a conjunct of S4 or of done; whether they
+join done is a menu choice (P11/I5 menu axes H, F, K). -/
+example (S : A.EffectSystem) : Prop := S.UnaryLaws ∧ S.EtaLin
+
+/-- PROVED: `EtaHold` gives `EtaLin`. -/
+theorem status_etaLin_of_etaHold (h : S.EtaHold) : S.EtaLin := etaLin_of_etaHold S h
+
+/-- PROVED: each unary law fails at an instance whose handler or bind ignores its clauses. -/
+theorem status_unaryLaws_not_vacuous (hd : Bool → Bool) (bd : Bool → Bool → Bool) :
+    ¬ (toy id bd).TailLaw ∧ ¬ (toy hd (fun M _ => !M)).AlgLaw ∧ ¬ (toy (fun _ => true) bd).EtaHold ∧
+      ¬ (toy (fun _ => true) bd).EtaLin :=
+  ⟨not_tailLaw_toy, not_algLaw_toy, not_etaHold_toy, not_etaLin_toy⟩
 
 /-- PROVED: an instance that types nothing fails the (E) properties. -/
 theorem status_not_eProps_of_emptyTyping (h : ∀ Γ e C, ¬ S.der Γ e C) : ¬ S.EProps :=

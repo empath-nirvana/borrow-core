@@ -50,6 +50,8 @@
 - [P8/P5 Linearity, drop and finalisation](prior-art/p8-p5-linearity-drop.md)
 - [I2 Capture and resume](prior-art/i2-capture-resume.md)
 - [P10/P9 Exclusivity and lifetimes](prior-art/p10-p9-exclusivity-lifetimes.md)
+- [P11/I5 Handler correctness and the capture laws](prior-art/p11-i5-laws.md)
+- [P12 Abstraction safety](prior-art/p12-abstraction.md)
 - [Rows vs capabilities](prior-art/rows-vs-capabilities.md)
 
 # Design space
