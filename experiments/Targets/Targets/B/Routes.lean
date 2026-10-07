@@ -81,7 +81,7 @@ theorem soundRetAt_of_FL {M : B.BWorld} {J : TypingJ} {P : Platform} (hFL : FL M
 /-- The drive conjunct of T1 at one platform, from FL and adequacy there. -/
 theorem soundDriveAt_of_FL {M : B.BWorld} {J : TypingJ} {P : Platform} (hFL : FL M J)
     (hA : AdequateDriveAt (ℍ := ℍ) M P) : SoundDriveAt (ℍ := ℍ) J P :=
-  fun S A B e hd hle h => hA S A B e hd hle (comp_of_FL hFL h)
+  fun S A B e hd hle hC h => hA S A B e hd hle hC (comp_of_FL hFL h)
 
 /-- **`SoundnessOfFL`**, generic. -/
 theorem soundnessOfFL : SoundnessOfFL (ℍ := ℍ) :=

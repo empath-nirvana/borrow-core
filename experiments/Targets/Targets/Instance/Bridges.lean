@@ -18,12 +18,10 @@ needs B; where a B theorem discharges a hypothesis, the discharge lives in I.
 * `liftExt_orow`: at the tail-variable rows, two distinct labels compose, and the second's row is
   below the composite (`not_reconciler_of_monoCallback`'s algebraic hypothesis).
 
-**OPEN** (to build; RESTRUCTURE §4.1): `AppLaw`, `Congr`, `OpStuck`, `LoopLaws`, `DriveLaws` (the
-rest of `MachShape`), `LetLaw` (needs `CDerivesNU` weakening by dead slots), `RowAlgebra` at our
-instance (`RowSig` through `RowLink`, `SubClosed` through `[sub]`), `safety_of_sound` (through
-`platformOf` and a stuttering simulation to `SoundDriveAt`), `effSafe_of_core` (with
-`EffSafeDrive`), `handlerSem_ourInst`, `noIntercept_of_core`, `unwindOrder_of_core`, and S6's proof
-route (OQ-50, §7 Q9).
+The rest of `MachShape` and S4 are in `Targets/Instance/Machine.lean` (given `LiveOK`), the let law
+and S1 at today's kernel in `Targets/Instance/J1Checks.lean`, and S2, S3 and `LiveOK` at today's
+kernel in `Targets/I/Restricted/InstanceSafety.lean`.  **OPEN** (to build; RESTRUCTURE §4.1):
+`noIntercept_of_core`, `unwindOrder_of_core` (S5), and S6's proof route (OQ-50, §7 Q9).
 -/
 
 noncomputable section
@@ -183,10 +181,18 @@ theorem dataInj_ourInst : (ourInst (ℍ := ℍ) RF Ξ J).DataInj := by
   · exact Expr.noConfusion (congrArg Subtype.val h : Expr.unit = Expr.inj₂ a.1)
   · exact Expr.noConfusion (congrArg Subtype.val h : Expr.pair a.1 b.1 = Expr.inj₁ c.1)
   · exact Expr.noConfusion (congrArg Subtype.val h : Expr.pair a.1 b.1 = Expr.inj₂ c.1)
-  · have h' : K.plug (performE (opArgE (RF.name Ξ l) (UInt32.ofNat i) v.1)) = w.1 := h
-    exact not_isOVal_prim_app (p := .perform) (by decide) _ (isOVal_of_plug K (h' ▸ w.2))
-  · have h' : K.plug (raiseE (opArgE (RF.name Ξ l) (UInt32.ofNat i) v.1)) = w.1 := h
-    exact not_isOVal_prim_app (p := .raise) (by decide) _ (isOVal_of_plug K (h' ▸ w.2))
+  · have h' : K.plug ((ourInst (ℍ := ℍ) RF Ξ J).perform l i v) = w.1 := h
+    by_cases hi : i < 2 ^ 32
+    · rw [perform_eq (ℍ := ℍ) (l := l) v hi] at h'
+      exact not_isOVal_prim_app (p := .perform) (by decide) _ (isOVal_of_plug K (h' ▸ w.2))
+    · rw [perform_junk (ℍ := ℍ) (l := l) v hi] at h'
+      exact not_isOVal_prim_app (p := .perform) (by decide) _ (isOVal_of_plug K (h' ▸ w.2))
+  · have h' : K.plug ((ourInst (ℍ := ℍ) RF Ξ J).raise l i v) = w.1 := h
+    by_cases hi : i < 2 ^ 32
+    · rw [raise_eq (ℍ := ℍ) (l := l) v hi] at h'
+      exact not_isOVal_prim_app (p := .raise) (by decide) _ (isOVal_of_plug K (h' ▸ w.2))
+    · rw [raise_junk (ℍ := ℍ) (l := l) v hi] at h'
+      exact not_isOVal_prim_app (p := .raise) (by decide) _ (isOVal_of_plug K (h' ▸ w.2))
   · have h' : driveE M = w.1 := h
     exact not_isOVal_prim_app (p := .lit (.u8 0)) (by decide) _ (h' ▸ w.2)
 

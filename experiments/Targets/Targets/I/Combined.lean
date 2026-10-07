@@ -38,13 +38,12 @@ The corollaries (generic): `combined_prog` (the conjuncts that read no world), `
 `soundnessContractsAR_of_combined` (the SPEC's externs at Core's contract, with the device's
 `EmbedsNil`), `not_combined_of_leak` (a reachable leak breaks done).
 
-**The tier-1 reduction**, restricted: the library proved that its tier-1 end state follows from two
-open statements (`status_tier1End_of`).  Its proved content is kept, in the new vocabulary: B's
-guarantees at today's kernel and `coreB` follow from `Adequate coreB` and, for B5, the
-step-for-step simulation `BumpSim` (`tier1Core_guarantees_of`; without B5, from `Adequate coreB`
-alone, `tier1Core_B_of`), and the world conjuncts and the device at `coreW` hold
-(`tier1Core_world`).  `Tier1Core` itself also needs A's properties at our instance (the Instance's
-bridges, OPEN); its `Pins` conjunct is proved (`pins_tier1Open`).
+**The tier-1 reduction**, restricted: B's guarantees at today's kernel and `coreB` hold but B5
+(`tier1Core_B`, from FL and B2, `adequate_core`), and with B5 given the step-for-step simulation
+`BumpSim` (`tier1Core_guarantees_of_bumpSim`); the world conjuncts and the device at `coreW` hold
+(`tier1Core_world`); its `Pins` conjunct is proved (`pins_tier1Open`).  A's properties at our
+instance hold but S5 (`sPropsNoCancel_tier1Open`, `Targets/I/Tier1Route.lean`), so `Tier1Core`
+follows from S5 at today's kernel and `BumpSim` (`tier1Core_of`); S5's bridges are not built.
 -/
 
 noncomputable section
@@ -211,49 +210,24 @@ theorem pins_tier1Open : Pins tier1Open admClosedOp .abortive := by
   rw [tier1Open_read]
   exact ⟨admExtends_closedOp, extendsNU_tier1NU, outExtends_core, i4a_tier1NU⟩
 
-/-- **B's guarantees at today's kernel and BoLo, B5 aside, from adequacy at BoLo**: B0, B1, B3–B4,
-B4′, B6, B7 and the bounds.  The library's `status_tier1End_of`'s content, in the new vocabulary. -/
-theorem tier1Core_B_of (hA : Adequate (ℍ := ℍ) (B.coreB (ℍ := ℍ))) :
-    B.ExtendsB tier1Open.read ∧ FL (B.coreB (ℍ := ℍ)) tier1Open.read ∧ Sound (ℍ := ℍ) tier1Open.read ∧
-      B.SoundContracts (ℍ := ℍ) tier1Open.read (B.coreB (ℍ := ℍ)) ∧ B.ExclusiveB (B.coreB (ℍ := ℍ)) ∧
-      LifetimeSound (B.coreB (ℍ := ℍ)) tier1Open.read.out ∧ B.WBound (B.coreB (ℍ := ℍ)) := by
-  rw [tier1Open_read]
-  refine ⟨⟨fun Θ Δ Γ e j h => h, B.borrowRulesClosed_of_rulesClosed extendsNU_tier1NU.2⟩,
-    fl_core_tier1NU, soundnessOfFL _ _ fl_core_tier1NU hA, soundContractsOfFL fl_core_tier1NU hA,
-    exclusiveB_core, lifetimeSound_core, wBound_core⟩
-
-/-- **B's guarantees at today's kernel and BoLo, from adequacy at BoLo and the step-for-step
-simulation**: `tier1Core_B_of` with B5 (`releasedOnceReuse_of_bumpSim`). -/
-theorem tier1Core_guarantees_of (hA : Adequate (ℍ := ℍ) (B.coreB (ℍ := ℍ)))
-    (hS : BumpSim (ℍ := ℍ)) : B.Guarantees (ℍ := ℍ) tier1Open.read (B.coreB (ℍ := ℍ)) := by
-  obtain ⟨h0, h1, h3, h4, h6, h7, hb⟩ := tier1Core_B_of hA
-  exact ⟨h0, h1, hA, h3, h4, releasedOnceReuse_of_bumpSim hS h4, h6, h7, hb⟩
-
-/-! ### Tier 1 and B2 at BoLo -/
-
-/-- **Tier 1 fails as written, at every typing system**: its B conjunct holds `Adequate coreB`, whose
-drive conjunct fails at a loop type whose body is not positive (`not_adequate_core`). -/
-theorem not_tier1 (J₁ : OurTyping orowRF) : ¬ Tier1 (ℍ := ℍ) J₁ :=
-  fun h => not_guarantees_core J₁.read h.2.1
-
-/-- **The restricted tier-1 reduction fails as written**, for the same reason. -/
-theorem not_tier1Core : ¬ Tier1Core (ℍ := ℍ) := fun h => not_guarantees_core _ h.2.1
-
-/-- **B's guarantees at today's kernel and BoLo, at what B2 gives**: B0, B1; B2's return conjunct at
-every platform and its drive conjunct at positive loop bodies; B3 and B4 at the same; B4′ in full
-(it reads only the return conjunct); B6, B7 and the bounds. -/
-theorem tier1Core_B_nu :
+/-- **B's guarantees at today's kernel and BoLo, B5 aside**: B0, B1, B2 (`adequate_core`), B3–B4
+from FL and B2, B4′, B6, B7 and the bounds. -/
+theorem tier1Core_B :
     B.ExtendsB tier1Open.read ∧ FL (B.coreB (ℍ := ℍ)) tier1Open.read ∧
-      (∀ P : Platform, P.Respects →
-        AdequateRetAt (ℍ := ℍ) (B.coreB (ℍ := ℍ)) P ∧ AdequateDriveAtNu (ℍ := ℍ) (B.coreB (ℍ := ℍ)) P ∧
-        SoundRetAt (ℍ := ℍ) tier1Open.read P ∧ SoundDriveAtNu (ℍ := ℍ) tier1Open.read P) ∧
+      Adequate (ℍ := ℍ) (B.coreB (ℍ := ℍ)) ∧ Sound (ℍ := ℍ) tier1Open.read ∧
       B.SoundContracts (ℍ := ℍ) tier1Open.read (B.coreB (ℍ := ℍ)) ∧ B.ExclusiveB (B.coreB (ℍ := ℍ)) ∧
       LifetimeSound (B.coreB (ℍ := ℍ)) tier1Open.read.out ∧ B.WBound (B.coreB (ℍ := ℍ)) := by
   rw [tier1Open_read]
   exact ⟨⟨fun Θ Δ Γ e j h => h, B.borrowRulesClosed_of_rulesClosed extendsNU_tier1NU.2⟩,
-    fl_core_tier1NU, fun P hP => ⟨adequateRetAt_core P hP, adequateDriveAt_core_nuOk P hP,
-      soundRetAt_tier1NU P hP, soundDriveAtNu_tier1NU P hP⟩,
-    soundContracts_tier1NU, exclusiveB_core, lifetimeSound_core, wBound_core⟩
+    fl_core_tier1NU, adequate_core, sound_tier1NU, soundContracts_tier1NU, exclusiveB_core,
+    lifetimeSound_core, wBound_core⟩
+
+/-- **B's guarantees at today's kernel and BoLo, given the step-for-step simulation**:
+`tier1Core_B` with B5 (`releasedOnceReuse_of_bumpSim`). -/
+theorem tier1Core_guarantees_of_bumpSim (hS : BumpSim (ℍ := ℍ)) :
+    B.Guarantees (ℍ := ℍ) tier1Open.read (B.coreB (ℍ := ℍ)) := by
+  obtain ⟨h0, h1, hA, h3, h4, h6, h7, hb⟩ := tier1Core_B
+  exact ⟨h0, h1, hA, h3, h4, releasedOnceReuse_of_bumpSim hS h4, h6, h7, hb⟩
 
 /-- **B5 at today's kernel and BoLo, given the step-for-step simulation.** -/
 theorem tier1Core_releasedOnceReuse_of_bumpSim (hS : BumpSim (ℍ := ℍ)) :

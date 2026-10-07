@@ -11,11 +11,14 @@ it on the other; η relates a handler to no handler).  Their only statements wer
 `HandlerLaws` (tail, algebraicity) and Core's `Laws` (`LawTail`, `LawAlg`, `CapEta`).
 
 Here each is stated **unary, at the run level** (the menu's F.3): at a configuration that a typed
-closed program reaches under a runner that keeps its protocol, with the law's left side in the
-evaluation context `K₀`, the complete runs from that configuration and from the same configuration
-with the right side in `K₀` have the same answers and observable traces.  Each side is read only
-through its own runs; there is no context quantifier beyond the evaluation context and no binary
-relation.  As A₂'s `Observes`, this reads complete runs only.
+closed program at a data answer reaches under a runner that keeps its protocol, with the law's left
+side in the evaluation context `K₀`, the complete runs from that configuration and from the same
+configuration with the right side in `K₀` have the same answers and observable traces.  The two
+sides are compared **observationally, not as terms** (decision D4): the program's answer is data,
+as A₂'s contextual approximation observes it (`CtxApprox`), so a value of code that the two sides
+build differently (a closure over a different continuation) is never compared.  Each side is read
+only through its own runs; there is no context quantifier beyond the evaluation context and no
+binary relation.  As A₂'s `Observes`, this reads complete runs only.
 
 * `TailLaw`: Xie, Brachthäuser, Hillerström, Schuster & Leijen, *Effect Handlers, Evidently*
   (ICFP 2020) §6.2, a clause `λx k. k e` with `k ∉ fv(e)` run in place ("since f has already
@@ -48,13 +51,15 @@ variable (S : EffectSystem)
 def ObsFrom (R : S.Runner) (c : S.RConf R) (v : S.Val) (tr : List S.Event) : Prop :=
   ∃ q, S.CompleteFrom R c q ∧ S.term (S.lastC c q).1 = S.ret v ∧ S.obs q = tr
 
-/-- **`t₁` and `t₂` run alike in every evaluation context**: under every runner that keeps its
-protocol, at every configuration a typed closed program reaches whose term is `t₁` in `K₀`, the
-complete runs from it and from the same configuration with `t₂` in `K₀` show the same answers and
-traces. -/
+/-- **`t₁` and `t₂` run alike in every evaluation context, observationally**: under every runner
+that keeps its protocol, at every configuration a typed closed program at a data answer reaches
+whose term is `t₁` in `K₀`, the complete runs from it and from the same configuration with `t₂` in
+`K₀` show the same answers and traces.  The answers are data, so they are compared as observations,
+not as terms of code. -/
 def RunsAlike (t₁ t₂ : S.Term) : Prop :=
-  ∀ R : S.Runner, R.Respects → ∀ (P : S.Term) (C : S.CTy) (c : S.RConf R) (K₀ : S.Kont),
-    S.der [] P C → S.RReach R (S.rinit R P) c → S.term c.1 = S.plug K₀ t₁ →
+  ∀ R : S.Runner, R.Respects → ∀ (P : S.Term) (ε : S.EA.Eff) (A : S.Ty) (c : S.RConf R)
+    (K₀ : S.Kont), S.DataTy A → S.der [] P (S.F ε A) → S.RReach R (S.rinit R P) c →
+    S.term c.1 = S.plug K₀ t₁ →
     ∀ v tr, S.ObsFrom R c v tr ↔ S.ObsFrom R (S.setR c (S.plug K₀ t₂)) v tr
 
 /-! ### The tail-resumptive law -/
@@ -277,7 +282,7 @@ theorem toy_r₀_respects : (toy hd bd).R₀.Respects := fun _ _ _ h => h.elim
 theorem toy_not_runsAlike {t₁ t₂ : Bool} (h₁ : t₁ = true) (h₂ : t₂ = false) :
     ¬ (toy hd bd).RunsAlike t₁ t₂ := fun h => by
   subst h₁ h₂
-  have := (h (toy hd bd).R₀ toy_r₀_respects true () (true, ()) () trivial
+  have := (h (toy hd bd).R₀ toy_r₀_respects true () () (true, ()) () .unit trivial
     Relation.ReflTransGen.refl rfl () []).2 toy_obs_false
   exact toy_not_obs_true () [] this
 

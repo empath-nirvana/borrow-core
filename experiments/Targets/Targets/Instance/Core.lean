@@ -16,14 +16,14 @@ each signature the (E) programs use).
 | `Ty`, `CTy`, `F`, data | the open types; `F ε A` the returner at the row's reading, `effF` |
 | `DivFree` | the type's instances are returners at closed data (decision 35's reading) |
 | `Val`, `Term` | expressions in value form, variables included (`OVal`), and expressions |
-| formers | Core's: `lam` is `λ`, `force V` is `V` (every A-thunk is a function), `app M V` is `V to x. M x` (Core's `[app]` takes a variable), `bind` is `bindE`, `perform`/`raise` are `performE`/`raiseE` at the payload, `handle` is the run-time handler frame, `resume k w` is `w to y. k (inj₁ ()) y`, `cancel k` is `k (inj₂ ())`, `thenT M N D` is `thenE N D↑ M` |
+| formers | Core's: `lam` is `λ`, `force V` is `V` (every A-thunk is a function), `app M V` is `V to x. M x` (Core's `[app]` takes a variable), `bind` is `bindE`, `perform`/`raise` are `performE`/`raiseE` at the payload, at an index below `2³²` (beyond it, the stuck `opJunk`), `handle` is the run-time handler frame, `resume k w` is `w to y. k (inj₁ ()) y`, `cancel k` is `k (inj₂ ())`, `thenT M N D` is `thenE N D↑ M` |
 | `unfold A B f g s` | `unfoldV (loopEffBody [] A B)` at the coalgebra `λs. ⟨f s, g s⟩` and the state, stepped to its loop value `etaN` (`unfoldV`'s code is type-directed, so `unfold` carries the answer types); `next` is `nextE`, `close l` is `l (inj₂ ())` |
 | `drive M`, `driveF` | the context `drive □`, a frame Core never steps (an applied literal); the driver's steps are `top` steps at the whole term (`RStep.again`, and the return to the main program at `inj₁ a`) |
 | `Kont`, `plug`, `kcomp`, frames | Core's `Kont`, `Kont.plug`, `Kont.comp`; `bindF N` is `□ to x. N`, `appF V` is `□ V`, `handleF` the handler frame, `thenF` the `ubind` frame |
 | `catches`, `unwindClear`, `fins` | `Kont.HasHnd`; no `ubind` and no `cfin` frame; `Kont.fins`, each read as an A-term |
 | `capture`, `cancelOf` | `kappa`, `cancelOf` (base) |
 | `step` | `Step1` under every allocator, labelled `fire D` at `ufin`/`ufinC`, `finEnd` at `cfret`/`cferr`, `tau` otherwise; and the driver's `top` steps |
-| `derV`, `der` | `J` at the empty lifetime context and a row context declaring row variables at `any`, every slot live; a driven program is typed at `[]` and a loop sum, its current step's type, the loop's row below the step's |
+| `derV`, `der` | `J` at the empty lifetime context and a row context declaring row variables at `any`, every slot live; a computation at a returner whose row is tied to `Ξ` (`OCTy.TiedAt`, decision D1); a driven program is typed at `[]` and a loop sum, its current step's type, the loop's row below the step's and its body positive (decision D2) |
 
 **Builder's encodings** (RESTRUCTURE §Unresolved): A's values include variables and Core's `Val`
 does not, so A's `Val` is `OVal`; `drive` is a marked context rather than a phase, so that a
@@ -42,7 +42,8 @@ open BoCa BoCa.Fig16 BoCa.Fig16.BoLo BoCa.Fig16.LogRel BoCa.Fig16.LogRel.Core
 open BoCa.BoLo (Heap Steps Step1 Head Kont performE raiseE opPayload hndE ubindE cfinE cancelVal
   kappa)
 open BoCa.Lifetime (LSub LifeCtx LifeVar)
-open Targets (RVar RowEnv RowCon RowCtx RowForm EffCtx TypingJ OutJ Phase nextE orowRF RowClass)
+open Targets (RVar RowEnv RowCon RowCtx RowForm EffCtx TypingJ OutJ Phase nextE orowRF RowClass
+  RowAt rowAt_nil orowAlg ORow)
 
 /-! ### The effect contexts done ranges over -/
 
@@ -70,6 +71,48 @@ def Rich (Ξ : EffCtx) : Prop :=
 
 /-- **The effect contexts done ranges over.** -/
 def AdmEff (Ξ : EffCtx) : Prop := Ξ.NU ∧ Ξ.ClosedLife ∧ Rich Ξ
+
+/-- **A row tied to an effect context with no resuming `unr` operation is unr-free** (decision D6):
+every operation the row finds is the context's, and the context's `unr` operations are abortive. -/
+theorem rowNU_of_rowAt {Ξ : EffCtx} (hΞ : Ξ.NU) {S : Row} (h : RowAt Ξ S) : Row.NU S := by
+  intro n i o hf
+  obtain ⟨-, -, hget⟩ := h n i o hf
+  by_cases hq : o.q = .unr
+  · have hB := hΞ n o.q o.A o.B (List.mem_of_getElem? hget) hq
+    exact Or.inl (by simp [OpSig.abort, hB, hq])
+  · exact Or.inr hq
+
+/-- **A well-formed row at an admissible effect context is unr-free** (decision D6): the
+well-formedness of `orowAlg`, `Γ ⊢ ε : Eff`, ties the row's operations to `Ξ`. -/
+theorem rowNU_of_wf {Ξ : EffCtx} (hΞ : AdmEff Ξ) {Γ : List RVar} {ε : ORow}
+    (h : (orowAlg Ξ).WF Γ ε) : Row.NU ε.ops :=
+  rowNU_of_rowAt hΞ.1 h.2
+
+/-! ### Rows tied to the effect context (decision D1) -/
+
+/-- A row environment whose rows are tied to the effect context. -/
+def EnvAt (Ξ : EffCtx) (η : RowEnv) : Prop := ∀ ρ, RowAt Ξ (η ρ)
+
+/-- The environment that reads every row variable as the empty row is tied to every context. -/
+theorem envAt_nil (Ξ : EffCtx) : EnvAt Ξ (fun _ => []) := fun _ => rowAt_nil Ξ
+
+theorem effOf_inj : ∀ {S S' : Row} {Y Y' : VTy}, CTy.effOf S Y = CTy.effOf S' Y' → S = S' ∧ Y = Y'
+  | [], [], _, _, h => by simp only [CTy.effOf, CTy.ret.injEq] at h; exact ⟨rfl, h⟩
+  | [], _ :: _, _, _, h => by simp [CTy.effOf] at h
+  | _ :: _, [], _, _, h => by simp [CTy.effOf] at h
+  | o :: S, o' :: S', _, _, h => by
+      simp only [CTy.effOf, CTy.eff.injEq] at h
+      obtain ⟨h1, h2, h3, h4, h5, h6⟩ := h
+      obtain ⟨rfl, rfl⟩ := effOf_inj h6
+      cases o; cases o'
+      simp_all
+
+/-- **A computation type tied to the effect context** (decision D1): at every row environment tied
+to `Ξ`, the type is a returner `F_S A` whose row `S` is tied to `Ξ`, every operation it finds a
+label's at the signature `Ξ` declares.  A's computation types are its returners `F ε A`, and a
+typed program at our instance is read at one of these. -/
+def OCTy.TiedAt (Ξ : EffCtx) (C : OCTy) : Prop :=
+  ∀ η, EnvAt Ξ η → ∃ (S : Row) (A : VTy), C.den η = CTy.effOf S A ∧ RowAt Ξ S
 
 /-! ### Values, variables included -/
 
@@ -121,6 +164,12 @@ def resumeE (k w : Expr) : Expr := .app (.lam (.app (.app (k.shift 1 0) (.inj₁
 
 /-- `cancel k`: `k (inj₂ ())`. -/
 def cancelE (k : Expr) : Expr := .app k (.inj₂ .unit)
+
+/-- The term an operation index beyond `UInt32` encodes to: the operation at an open payload,
+stuck, and held by no closed configuration.  Reading every index through `UInt32.ofNat` would make
+`i` and `i + 2³²` one operation, and a runner that keeps its protocol may answer the second with
+anything (`Runner.Respects` constrains only the operations a label has). -/
+def opJunk (r : Bool) : Expr := .app (.prim (if r then .raise else .perform)) (.var 0)
 
 /-- A right-nested tuple of clauses. -/
 def clausesE : List Expr → Expr
@@ -231,9 +280,10 @@ def clsOf (q : Qual) (B : VTy) : A.OpClass :=
 def anyCon : RowCon := ⟨.any, fun _ => True⟩
 
 /-- A computation type whose instances are loop sums `F_S (A ⊕ U(Loop_S₀ A 1))`, the loop's row
-`S₀` below the step's row `S` (`[sub]` weakens the step's row, not the loop's). -/
+`S₀` below the step's row `S` (`[sub]` weakens the step's row, not the loop's), and the loop's body
+positive: `νX. C` is well formed at a positive `C` (`CTy.NuOk`, decision D2). -/
 def IsLoopSum (C : OCTy) : Prop :=
-  ∀ η, ∃ (S S₀ : Row) (A₀ : VTy), RowLe S₀ S ∧
+  ∀ η, ∃ (S S₀ : Row) (A₀ : VTy), RowLe S₀ S ∧ (CTy.loopEffBody S₀ A₀ .unit).NuOk ∧
     C.den η = CTy.effOf S (.sum A₀ (.thunk (CTy.loopEff S₀ A₀ .unit)))
 
 /-- Every slot live. -/
@@ -270,8 +320,10 @@ def ourInst (RF : RowForm) (Ξ : EffCtx) (J : OurTyping RF) : A.EffectSystem whe
   bind M N := bindE M N
   split V M := .letpair V.1 M
   case V M₁ M₂ := .case V.1 M₁ M₂
-  perform l i v := performE (opArgE (RF.name Ξ l) (UInt32.ofNat i) v.1)
-  raise l i v := raiseE (opArgE (RF.name Ξ l) (UInt32.ofNat i) v.1)
+  perform l i v := if i < 2 ^ 32 then performE (opArgE (RF.name Ξ l) (UInt32.ofNat i) v.1)
+    else opJunk false
+  raise l i v := if i < 2 ^ 32 then raiseE (opArgE (RF.name Ξ l) (UInt32.ofNat i) v.1)
+    else opJunk true
   hnd r cs := (r, cs)
   handle l H M := (handleK (RF.name Ξ l) H.1.1 (H.2.map Subtype.val)).plug M
   resume k w := resumeE k.1 w.1
@@ -305,9 +357,41 @@ def ourInst (RF : RowForm) (Ξ : EffCtx) (J : OurTyping RF) : A.EffectSystem whe
   setT c t := (c.1, t)
   step := OStep (ℍ := ℍ) RF Ξ
   derV Γ V A := ∃ Θ : RowCtx, (∀ p ∈ Θ, p.2 = anyCon) ∧ J.der Θ LifeCtx.empty (liveCtx Γ) V.1 (.val A)
-  der Γ e C := (∃ Θ : RowCtx, (∀ p ∈ Θ, p.2 = anyCon) ∧ J.der Θ LifeCtx.empty (liveCtx Γ) e (.comp C)) ∨
+  der Γ e C := C.TiedAt Ξ ∧
+    ((∃ Θ : RowCtx, (∀ p ∈ Θ, p.2 = anyCon) ∧ J.der Θ LifeCtx.empty (liveCtx Γ) e (.comp C)) ∨
     (Γ = [] ∧ ∃ M, e = driveE M ∧ IsLoopSum C ∧
-      ∃ Θ : RowCtx, (∀ p ∈ Θ, p.2 = anyCon) ∧ J.der Θ LifeCtx.empty [] M (.comp C))
+      ∃ Θ : RowCtx, (∀ p ∈ Θ, p.2 = anyCon) ∧ J.der Θ LifeCtx.empty [] M (.comp C)))
+
+theorem perform_eq {RF : RowForm} {Ξ : EffCtx} {J : OurTyping RF} {l : (RF.alg Ξ).Lab} {i : ℕ}
+    (v : OVal) (hi : i < 2 ^ 32) :
+    (ourInst RF Ξ J).perform l i v = performE (opArgE (RF.name Ξ l) (UInt32.ofNat i) v.1) :=
+  if_pos hi
+
+theorem raise_eq {RF : RowForm} {Ξ : EffCtx} {J : OurTyping RF} {l : (RF.alg Ξ).Lab} {i : ℕ}
+    (v : OVal) (hi : i < 2 ^ 32) :
+    (ourInst RF Ξ J).raise l i v = raiseE (opArgE (RF.name Ξ l) (UInt32.ofNat i) v.1) :=
+  if_pos hi
+
+theorem perform_junk {RF : RowForm} {Ξ : EffCtx} {J : OurTyping RF} {l : (RF.alg Ξ).Lab} {i : ℕ}
+    (v : OVal) (hi : ¬ i < 2 ^ 32) : (ourInst RF Ξ J).perform l i v = opJunk false :=
+  if_neg hi
+
+theorem raise_junk {RF : RowForm} {Ξ : EffCtx} {J : OurTyping RF} {l : (RF.alg Ξ).Lab} {i : ℕ}
+    (v : OVal) (hi : ¬ i < 2 ^ 32) : (ourInst RF Ξ J).raise l i v = opJunk true :=
+  if_neg hi
+
+/-- The pure row's returner is tied to every effect context, at every typing system. -/
+theorem tiedAt_unit {Ξ : EffCtx} (J : OurTyping orowRF) (A : OVTy) :
+    ((ourInst orowRF Ξ J).F (orowAlg Ξ).unit A).TiedAt Ξ :=
+  fun η _ => ⟨[] ++ [], A.den η, rfl, rowAt_nil Ξ⟩
+
+/-- A data value of A's at our instance is a Core value. -/
+theorem isVal_of_dataVal {RF : RowForm} {Ξ : EffCtx} {J : OurTyping RF} :
+    ∀ {T : OVTy} {w : OVal}, (ourInst RF Ξ J).DataVal T w → IsVal w.1
+  | _, _, .unit => .unit
+  | _, _, .pair ha hb => .pair (isVal_of_dataVal ha) (isVal_of_dataVal hb)
+  | _, _, .inl ha => .inj₁ (isVal_of_dataVal ha)
+  | _, _, .inr hb => .inj₂ (isVal_of_dataVal hb)
 
 end Targets.Inst
 

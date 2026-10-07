@@ -8,6 +8,7 @@ import Targets.A.Programs
 import Targets.A.Soundness
 import Targets.A.UnaryLaws
 import Targets.A.System
+import Targets.Base.Closed
 import Targets.Base.CoreCancel
 import Targets.Base.Ctx
 import Targets.Base.Look
@@ -25,6 +26,7 @@ import Targets.B.BoLo
 import Targets.B.Conservativity
 import Targets.B.Guarantees
 import Targets.B.NonVacuity
+import Targets.B.PlatSafe
 import Targets.B.Release
 import Targets.B.Routes
 import Targets.B.RunEnd
@@ -40,6 +42,7 @@ import Targets.Instance.ContUse
 import Targets.Instance.LiveWitness
 import Targets.Instance.Core
 import Targets.Instance.Machine
+import Targets.Instance.Platform
 import Targets.Instance.Restricted.NoInterception
 import Targets.Instance.Restricted.Programs
 import Targets.Instance.Restricted.Unwind
@@ -63,6 +66,7 @@ import Targets.I.Restricted.Core
 import Targets.I.Restricted.Device
 import Targets.I.Restricted.FinAlone
 import Targets.I.Restricted.InstanceProps
+import Targets.I.Restricted.InstanceSafety
 import Targets.I.Routes
 import Targets.I.RunEnd
 import Targets.I.Tier1Route

@@ -209,17 +209,6 @@ theorem effOf_ne_amp (S : Row) (Y : VTy) (C D : CTy) : CTy.effOf S Y ≠ .amp C 
 theorem effOf_isRet (S : Row) (Y : VTy) : (CTy.effOf S Y).isRet = true := by
   cases S <;> rfl
 
-theorem effOf_inj : ∀ {S S' : Row} {Y Y' : VTy}, CTy.effOf S Y = CTy.effOf S' Y' → S = S' ∧ Y = Y'
-  | [], [], _, _, h => by simp only [CTy.effOf, CTy.ret.injEq] at h; exact ⟨rfl, h⟩
-  | [], _ :: _, _, _, h => by simp [CTy.effOf] at h
-  | _ :: _, [], _, _, h => by simp [CTy.effOf] at h
-  | o :: S, o' :: S', _, _, h => by
-      simp only [CTy.effOf, CTy.eff.injEq] at h
-      obtain ⟨h1, h2, h3, h4, h5, h6⟩ := h
-      obtain ⟨rfl, rfl⟩ := effOf_inj h6
-      cases o; cases o'
-      simp_all
-
 /-! ### The judgements a variable is read at -/
 
 theorem soloP_slot {Γ : Ctx VTy} {i : Nat} {A : VTy} (h : Ctx.SoloP Γ i A) :

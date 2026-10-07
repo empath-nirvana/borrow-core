@@ -26,9 +26,11 @@ def SoundRetAt (J : TypingJ) (P : Platform) : Prop :=
   ∀ (S : Row) (A : VTy) (e : Expr), DivFree S A → RowLe S P.ops →
     J.closed e (CTy.effOf S A) → SafeRuns (ℍ := ℍ) P A e ∧ Terminates (ℍ := ℍ) P A e
 
-/-- Programs that return a loop: every finite prefix of the drive is safe. -/
+/-- Programs that return a loop whose body is positive: every finite prefix of the drive is safe.
+`νX. C` is well formed at a positive `C` (`CTy.NuOk`, decision D2); at a row with distinct keys that
+the platform answers, every loop body is positive (`loopEffBody_nuOk_of_uniq`). -/
 def SoundDriveAt (J : TypingJ) (P : Platform) : Prop :=
-  ∀ (S : Row) (A B : VTy) (e : Expr), A.Data → RowLe S P.ops →
+  ∀ (S : Row) (A B : VTy) (e : Expr), A.Data → RowLe S P.ops → (CTy.loopEffBody S A B).NuOk →
     J.closed e (CTy.effOf S (.thunk (CTy.loopEff S A B))) → SafeDrive (ℍ := ℍ) P A e
 
 /-- T1 at one platform. -/
@@ -78,12 +80,21 @@ open BoCa.Lifetime (LSub LifeCtx LifeVar)
 respects its protocol, is safe, and at a div-free answer terminates with the memory empty. -/
 abbrev Sound (J : TypingJ) : Prop := Soundness (ℍ := ℍ) J
 
+/-- **A finished drive, observed**: the drive phase at the loop's answer `inl a`.  The answer is
+compared observationally, not as a term (decision D4): the driver observes that the loop finished,
+whatever the answer's type, as `FinalDrive` does not at an answer of code. -/
+def DoneDrive (P : Platform) : Conf P × Phase → Prop
+  | (c, .drive) => ∃ a, c.e = .val (Val.inj₁ a)
+  | (_, .main)  => False
+
 /-- **P2 for driven programs**: every configuration the drive of a typed driven program reaches is
-a finished drive, takes a step, or stops at an operation of the row. -/
+a finished drive, takes a step, or stops at an operation of the row.  The loop body is positive
+(decision D2), and the finished drive is observed (decision D4). -/
 def EffSafeDrive (J : TypingJ) : Prop :=
-  ∀ M (S : Row) A, Row.NU S → J.closed M (CTy.effOf S (.sum A (.thunk (CTy.loopEff S A .unit)))) →
+  ∀ M (S : Row) A, Row.NU S → (CTy.loopEffBody S A .unit).NuOk →
+    J.closed M (CTy.effOf S (.sum A (.thunk (CTy.loopEff S A .unit)))) →
     ∀ rc, Relation.ReflTransGen (RStep (ℍ := ℍ) Platform.none) (init _ M, .drive) rc →
-      FinalDrive Platform.none A rc ∨ (∃ rc', RStep (ℍ := ℍ) Platform.none rc rc') ∨ StopsIn S rc.1.e
+      DoneDrive Platform.none rc ∨ (∃ rc', RStep (ℍ := ℍ) Platform.none rc rc') ∨ StopsIn S rc.1.e
 
 
 end Targets

@@ -27,6 +27,13 @@ structure ORow where
   ops  : Row
   tail : Option RVar
 
+/-- **A closed row tied to the effect context** (decision D1): every operation the row finds is a
+label's, at the signature `Ξ` declares.  A label is a name that is not the reserved `0` and whose
+signature is at most `2³²` operations long (operations are numbered by `UInt32`). -/
+def RowAt (Ξ : EffCtx) (S : Row) : Prop :=
+  ∀ n i o, Row.find S n i = some o →
+    n ≠ 0 ∧ (Ξ n).length ≤ 2 ^ 32 ∧ (Ξ n)[i.toNat]? = some (o.q, o.A, o.B)
+
 open Classical in
 /-- **The minimal open-row form**: `⊙` is defined when the left row has no tail, or the right row
 is empty, as for Yoshioka's simple rows; `∼` is equal tails and equal first-match lookup, so a
@@ -36,8 +43,7 @@ every tactic. -/
   Lab := {n : UInt32 // n ≠ 0 ∧ Ξ n ≠ [] ∧ (Ξ n).length ≤ 2 ^ 32}
   Eff := ORow
   Var := RVar
-  WF Γ ε := (∀ ρ, ε.tail = some ρ → ρ ∈ Γ) ∧
-    ∀ n i o, Row.find ε.ops n i = some o → n ≠ 0 ∧ (Ξ n)[i.toNat]? = some (o.q, o.A, o.B)
+  WF Γ ε := (∀ ρ, ε.tail = some ρ → ρ ∈ Γ) ∧ RowAt Ξ ε.ops
   WFLab _ _ := True
   comp ε₁ ε₂ := match ε₁.tail with
     | none => some ⟨ε₁.ops ++ ε₂.ops, ε₂.tail⟩
@@ -52,7 +58,7 @@ every tactic. -/
   Lab := {n : UInt32 // n ≠ 0 ∧ Ξ n ≠ [] ∧ (Ξ n).length ≤ 2 ^ 32}
   Eff := Row
   Var := Empty
-  WF _ S := ∀ n i o, Row.find S n i = some o → n ≠ 0 ∧ (Ξ n)[i.toNat]? = some (o.q, o.A, o.B)
+  WF _ S := RowAt Ξ S
   WFLab _ _ := True
   comp S S' := some (S ++ S')
   unit := []
@@ -125,6 +131,25 @@ theorem rowEq_of_eq {S S' : Row} (h : S = S') : RowEq S S' := h ▸ rowEq_refl S
 
 theorem find_nil (n i : UInt32) : Row.find [] n i = none := rfl
 
+theorem rowAt_nil (Ξ : EffCtx) : RowAt Ξ [] := fun _ _ _ h => by simp [Row.find] at h
+
+/-- Two rows tied to `Ξ` append to one. -/
+theorem rowAt_append {Ξ : EffCtx} {S S' : Row} (h : RowAt Ξ S) (h' : RowAt Ξ S') :
+    RowAt Ξ (S ++ S') := by
+  intro n i o hf
+  rw [Row.find_append] at hf
+  cases hS : Row.find S n i with
+  | none => rw [hS, Option.none_or] at hf; exact h' n i o hf
+  | some o' => rw [hS, Option.some_or] at hf; cases hf; exact h n i o hS
+
+/-- A row below a row tied to `Ξ` is tied to `Ξ`. -/
+theorem rowAt_of_le {Ξ : EffCtx} {S S' : Row} (hle : RowLe S S') (h : RowAt Ξ S') : RowAt Ξ S :=
+  fun n i o hf => h n i o (hle n i o hf)
+
+/-- The prefix of a row tied to `Ξ`, read with its tail empty, is tied to `Ξ`. -/
+theorem rowAt_left {Ξ : EffCtx} {S S' : Row} (h : RowAt Ξ (S ++ S')) : RowAt Ξ S :=
+  rowAt_of_le (fun n i o hf => by rw [Row.find_append, hf, Option.some_or]) h
+
 /-- A signature's row finds its first operation. -/
 theorem find_ofEff_zero (n : UInt32) {E : List (Qual × VTy × VTy)} (hE : E ≠ []) :
     ∃ o, Row.find (Row.ofEff n E 0) n 0 = some o := by
@@ -134,11 +159,10 @@ theorem find_ofEff_zero (n : UInt32) {E : List (Qual × VTy × VTy)} (hE : E ≠
 
 /-- A signature's row is well formed at its effect context. -/
 theorem ofEff_wf (Ξ : EffCtx) (n : UInt32) (hn : n ≠ 0) (hlen : (Ξ n).length ≤ 2 ^ 32) :
-    ∀ m i o, Row.find (Row.ofEff n (Ξ n) 0) m i = some o →
-      m ≠ 0 ∧ (Ξ m)[i.toNat]? = some (o.q, o.A, o.B) := by
+    RowAt Ξ (Row.ofEff n (Ξ n) 0) := by
   intro m i o h
   obtain ⟨rfl, j, hj, rfl, rfl⟩ := Row.find_ofEff n (Ξ n) 0 m i o h
-  refine ⟨hn, ?_⟩
+  refine ⟨hn, hlen, ?_⟩
   have hj' : (UInt32.ofNat (0 + j)).toNat = j := by
     rw [Nat.zero_add]; exact UInt32.toNat_ofNat_of_lt' (by simp [UInt32.size]; omega)
   rw [hj']

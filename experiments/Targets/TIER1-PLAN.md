@@ -930,13 +930,16 @@ theorem tier1Core_guarantees : B.Guarantees tier1Open.read B.coreB
 
 ## Tier-1 track outcome
 
-**Where the track ends.** `I.Tier1 J₁` is not proved. `J₁` is not built (piece 2), and with B2's
-drive conjunct failing as written, `I.Tier1 J₁` fails for every `J₁` and `I.Tier1Core` fails as
-written (`I.not_tier1`, piece 3). Seven target statements fail as written at configurations built
-in Lean; their restatements are the user's decision. Pieces 5 and 6 were not run. Every result is
-at Core σ=[]. `lake build Targets` passes with AxiomCheck and Audit, every new result's axioms are
-within `[propext, Classical.choice, Quot.sound]`, and nothing in `Core/` changed. HEAD after the
-four pieces is `56f10a8`; none of it is pushed.
+**Where the track ends.** `I.Tier1 J₁` is not proved: `J₁` is not built (piece 2; decision D5).
+After the four pieces, seven target statements failed as written at configurations built in Lean.
+The user restated them on 2026-10-07 (D1–D4, D6), and the restatements are applied below
+("Decisions of 2026-10-07"). With them, `I.Tier1Core` follows from S5 at today's kernel and
+`BumpSim` (`I.tier1Core_of`), and S2, S3 and `LiveOK` hold at today's kernel. Pieces 5 and 6 were
+not run. Every result is at Core σ=[]. `lake build Targets` passes with AxiomCheck and Audit, every
+new result's axioms are within `[propext, Classical.choice, Quot.sound]`, and nothing in `Core/`
+changed. HEAD after the four pieces was `56f10a8`; none of it is pushed. The per-piece notes below
+record each piece as it landed; where a decision restated a statement, the note's refutation is no
+longer in the build.
 
 | # | piece | status | verifier | commits |
 |---|---|---|---|---|
@@ -1024,6 +1027,8 @@ four pieces is `56f10a8`; none of it is pushed.
 > - **S5, S6, `AlgLaw`, `TailLaw`:** restate the observations (checks 1–3).
 > - **`J₁`:** one of the three options under piece 2.
 
+The user decided these on 2026-10-07 (D1–D6, below); D1–D4 and D6 are applied, D5 is next.
+
 ### Untranscribed in the run-up
 
 `J₁` and `J1Der`; `CfgTyped`; the bridges `noIntercept_of_core`, `unwindOrder_of_core`,
@@ -1031,9 +1036,108 @@ four pieces is `56f10a8`; none of it is pushed.
 
 ### Next
 
-1. Resolve piece 2's verifier finding: prove `WF → Row.NU` at `AdmEff`, and correct Status.lean's
-   S1 and `Tier1Core` rows.
-2. Bring the decisions above to the user. Rows-to-`Ξ` comes first: it unblocks S2, S3 and `LiveOK`.
-3. Piece 5 at `tier1Open` (h2, h4 through the comodel); it does not wait on `J₁` except where a
-   program is a handler at the top.
-4. Piece 6 (`BumpSim`), independent of the rest.
+Superseded by "Decisions of 2026-10-07", below: piece 2's verifier finding is resolved (D6), and
+the decisions are applied but D5.
+
+---
+
+## Decisions of 2026-10-07: D1–D4 and D6 applied
+
+**The decisions** (the user's):
+
+- **D1.** Tie rows to the effect context `Ξ`: the one repair serving S2, S3 and `LiveOK`.
+- **D2.** B2's drive conjunct holds under distinct keys (well-formed rows) and positive loop
+  bodies; state these as hypotheses or well-formedness.
+- **D3.** Finalisers, option A: the `[then]` finaliser premise requires a finaliser's raises to be
+  handled locally (no escape). S5's set of endings is parameterised by what finalisers may raise;
+  option A is the empty instance. OQ-7 stays separate and open. This subsumes the `FinAlone`
+  restatement.
+- **D4.** Restatements: S6 counts a direct application of `κ` as a use; `AlgLaw`, `TailLaw` and
+  `EffSafeDrive` compare observationally, not as terms; S5 per D3; the cancellation statement
+  carries the no-interception condition explicitly.
+- **D5** (next step, not this one). `J₁` by new Core rules.
+- **D6.** Prove `WF → Row.NU` at `AdmEff`, drop the invalid S1 refutation, fix Status.lean.
+
+**How each landed.**
+
+| decision | statements | the hypothesis is needed |
+|---|---|---|
+| D1 | `RowAt Ξ S` (`Instance/Rows.lean`): every operation the row finds is a label's, at the signature `Ξ` declares; `orowAlg.WF` and `closedRowAlg.WF` read it; `OCTy.TiedAt`, `EnvAt` (`Instance/Core.lean`); our instance's `der` carries `C.TiedAt Ξ` | `safety_needs_tie`, `liveOK_needs_tie` |
+| D2 | `CTy.NuOk` of the loop body in `AdequateDriveAt`, `SoundDriveAt`, `EffSafeDrive` and `IsLoopSum`; distinct keys give it at a platform that answers the row (`loopEffBody_nuOk_of_uniq`) | `adequateDrive_needs_nuOk`, `effSafeDrive_needs_nuOk` |
+| D3 | `Cancellation FR`, `FinEnd FR`, `noFinRaise` (`A/Soundness.lean`), `SProps` at `noFinRaise`; `FinAloneAt FR`, `FinRowsAt FR`, `finaliserOrder_at`, `finaliserOrder_A` (`Base/CoreCancel.lean`); the platform-quantified `FinAlone` is gone. The kernel half, `[then]`'s finaliser premise at option A, is a Core change and waits with D5: today's `[then]` types the finaliser at the row's abortive part | — |
+| D4 | S6: `UseAt`, `uses`; `RunsAlike` at a program's data answers; `EffSafeDrive` observes a finished drive (`DoneDrive`); `NoIntercept FR`, `UnwindOrder FR` take `∀ D ∈ fins K, FinRow FR D` | `noIntercept_needs_finRow` |
+| D6 | `SubClosed` at a target well formed under some variables; `rowNU_of_rowAt`, `rowNU_of_wf`; S1 at today's kernel, `rowAlgebra_ourInst_tier1Open` (at `Ξ.NU`); `not_reconciler_of_monoCallback` takes labels well formed at `[]` | `subClosed_needs_wf` |
+
+**Readings to confirm.** Four places where the decision's words admit more than one statement:
+
+1. *"The cancellation statement carries the no-interception condition explicitly"* (D4) is read
+   as a hypothesis on the finalisers a cancel or an unwind fires: `FinRow FR D`, `D` closed and
+   typed at a row whose operations are abortive operations of labels in `FR` (SPEC §19's
+   finaliser row). At `noFinRaise` that row admits nothing.
+2. *"S6 counts direct application of κ as a use"* (D4) is read as: a use is a step whose
+   configuration applies `κ` to a data value at the evaluation position (`UseAt`). `resume κ w`
+   (A-normal) counts once, at its application step; `cancel κ` is `κ (inj₂ ())`.
+3. *"Compare observationally"* (D4) is read, for `RunsAlike`, as comparing programs at data
+   answers (`DataTy A → der [] P (F ε A)`), and, for `EffSafeDrive`, as observing a finished drive
+   (`DoneDrive`: the drive at a value) instead of `FinalDrive`'s data answer with the memory empty.
+4. *"Distinct keys and positive loop bodies"* (D2) is carried as positivity (`CTy.NuOk`); distinct
+   keys at a platform that answers the row give it (`loopEffBody_nuOk_of_uniq`).
+
+**Found and repaired: an encoding defect in our instance.** `perform l i v` and `raise l i v` read
+the index `i : ℕ` through `UInt32.ofNat`, so `i` and `i + 2³²` were one operation. A runner that
+keeps its protocol (`Runner.Respects` constrains only the indices a label's signature has) could
+answer `perform l (i + 2³²) v` at any type, and `LiveOK` failed at today's kernel even with the
+tie. This was checked in Lean before the repair (`not_liveOK_alias`, in scratch, standard axioms;
+not kept, since it measures the old encoding). An index beyond `UInt32` now encodes to `opJunk`,
+an open stuck term that no closed configuration holds (`not_closed_opJunk`, `no_ostep_junk`).
+Nothing in BoLo changed.
+
+**Proved now** (Core σ=[]; every result's axioms within the standard three):
+
+- **S2, S3 and `LiveOK` at today's kernel, at every effect context**
+  (`I/Restricted/InstanceSafety.lean`: `safety_ourInst_tier1Open`, `effSafe_ourInst_tier1Open`,
+  `liveOK_tier1Open`). A typed closed program is closed (`closedAt_of_derives`,
+  `Base/Closed.lean`) and in Core's relation (`der_cases`). A run under a runner is the run under
+  the platform it gives (`platformOf`, `Instance/Platform.lean`), step for step from a typed
+  program (`pstep_of_io`, `plain_rstep`, `drive_rstep`). Under a platform that answers part of the
+  row, every run continues to an end or to a stop of the row the platform does not answer
+  (`platSafe_of_ewp`, `driveSafe_cont`, `B/PlatSafe.lean`). B2 gives the rest
+  (`adequateRetAt_core`, `safeDriveFrom_of_rel`).
+- **S0 and S4 at today's kernel, at every effect context**, from `LiveOK`.
+- **S1 at today's kernel** at every effect context with no resuming `unr` operation
+  (`rowAlgebra_ourInst_tier1Open`).
+- **B2 at BoLo** (`adequate_core`), so B3 and B4 at today's unr-free kernel (`sound_tier1NU`);
+  the drive at positive loop bodies (`adequateDriveAt_core`, `soundDriveAt_tier1NU`).
+- **`EffSafeDrive`** at every typing system with FL at BoLo (`effSafeDrive_of_FL`), so at today's
+  unr-free kernel (`effSafeDrive_tier1NU`).
+- **`I.Tier1Core` given S5 at today's kernel and `BumpSim`** (`I.tier1Core_of`); A's properties but
+  S5 at every admissible context (`I.sPropsNoCancel_tier1Open`).
+
+**Remaining.**
+
+- **S5 at our instance** (`Cancellation noFinRaise`): the bridges `noIntercept_of_core` and
+  `unwindOrder_of_core` from Core's `FinaliserOrder` are not built. `FinRowsAt`, what typing gives
+  about a finaliser's own run, is OPEN; route 8.2 is not built.
+- **S6 at our instance**, restated: not proved at today's kernel.
+- **The unary laws at our instance**, restated: not checked.
+- **`EffSafeDriveOfFL`** at a generic world: OPEN.
+- **`BumpSim`** (OQ-43): OPEN.
+- **`J₁`** (D5): a polymorphic let, a `force` of a polymorphic entry, and a handler with value
+  clauses, as new Core rules.
+- Pieces 5 and 6: not run.
+
+**Unspent hypotheses.** S2, S3 and `LiveOK` hold at every effect context; `AdmEff` is spent in
+`Tier1Core`'s A conjunct only by S1 (`Ξ.NU`). `I.Tier1Core`'s `AdmEff` conjuncts `ClosedLife` and
+`Rich` are not used by any S property at today's kernel.
+
+**Untranscribed in the run-up.** `noIntercept_of_core`, `unwindOrder_of_core`; `CfgTyped` (route
+8.2); `J₁` and its FL.
+
+**Next.**
+
+1. D5: `J₁` by new Core rules (a SPEC entry each), and FL for them; with them, D3's `[then]`
+   premise at option A.
+2. S5's bridges at `noFinRaise`, from Core's `FinaliserOrder` (`finaliserOrder_A`) and `FinRowsAt`
+   at option A.
+3. S6 at today's kernel, restated.
+4. Piece 5 (h2, h4 through the comodel) and piece 6 (`BumpSim`).

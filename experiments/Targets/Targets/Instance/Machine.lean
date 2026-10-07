@@ -31,7 +31,9 @@ A-value, a handler of non-values (where `captureE`, `cancelOfE` and `unfoldE` ar
 answer of the wrong shape leaves a configuration stuck where the law asks for a step.  It states
 nothing about which step a configuration takes.  It is met at a typing system that types one
 program with a handler, an operation and a continuation (`liveOK_JnLog`,
-`Targets/Instance/LiveWitness.lean`); its discharge at `J₁` is piece 4's.
+`Targets/Instance/LiveWitness.lean`), and at today's kernel at every effect context
+(`liveOK_tier1Open`, `Targets/I/Restricted/InstanceSafety.lean`); its discharge at `J₁` is piece
+4's.
 -/
 
 noncomputable section
@@ -152,6 +154,48 @@ theorem opArg_val_or_var (K : Kont) (r : Bool) (n i : UInt32) (v : OVal) :
     rw [Kont.plug_comp]
     cases r <;> simp [Kont.plug, opArgE, performE, raiseE, hKv]
 
+/-! ### Operation indices beyond `UInt32` -/
+
+/-- The junk of an index beyond `UInt32`, plugged: a variable at an evaluation position. -/
+theorem opJunk_plug (K : Kont) (r : Bool) :
+    K.plug (opJunk r) =
+      (K.comp (.appR (.prim (if r then .raise else .perform)) .hole)).plug (.var 0) := by
+  rw [Kont.plug_comp]; rfl
+
+/-- A plugged `perform`: the Core operation at an index below `2³²`, the junk beyond it. -/
+theorem perform_cases (l : (RF.alg Ξ).Lab) (i : ℕ) (v : OVal) :
+    (i < 2 ^ 32 ∧ (ourInst (ℍ := ℍ) RF Ξ J).perform l i v =
+      performE (opArgE (RF.name Ξ l) (UInt32.ofNat i) v.1)) ∨
+    (¬ i < 2 ^ 32 ∧ (ourInst (ℍ := ℍ) RF Ξ J).perform l i v = opJunk false) := by
+  by_cases hi : i < 2 ^ 32
+  · exact .inl ⟨hi, perform_eq (ℍ := ℍ) (l := l) v hi⟩
+  · exact .inr ⟨hi, perform_junk (ℍ := ℍ) (l := l) v hi⟩
+
+/-- A plugged `raise`: the Core raise at an index below `2³²`, the junk beyond it. -/
+theorem raise_cases (l : (RF.alg Ξ).Lab) (i : ℕ) (v : OVal) :
+    (i < 2 ^ 32 ∧ (ourInst (ℍ := ℍ) RF Ξ J).raise l i v =
+      raiseE (opArgE (RF.name Ξ l) (UInt32.ofNat i) v.1)) ∨
+    (¬ i < 2 ^ 32 ∧ (ourInst (ℍ := ℍ) RF Ξ J).raise l i v = opJunk true) := by
+  by_cases hi : i < 2 ^ 32
+  · exact .inl ⟨hi, raise_eq (ℍ := ℍ) (l := l) v hi⟩
+  · exact .inr ⟨hi, raise_junk (ℍ := ℍ) (l := l) v hi⟩
+
+/-- `perform` and `raise` are applications of their primitives. -/
+theorem perform_app (l : (RF.alg Ξ).Lab) (i : ℕ) (v : OVal) :
+    ∃ x, (ourInst (ℍ := ℍ) RF Ξ J).perform l i v = .app (.prim .perform) x := by
+  rcases perform_cases (ℍ := ℍ) (J := J) l i v with ⟨-, h⟩ | ⟨-, h⟩ <;> rw [h] <;> exact ⟨_, rfl⟩
+
+theorem raise_app (l : (RF.alg Ξ).Lab) (i : ℕ) (v : OVal) :
+    ∃ x, (ourInst (ℍ := ℍ) RF Ξ J).raise l i v = .app (.prim .raise) x := by
+  rcases raise_cases (ℍ := ℍ) (J := J) l i v with ⟨-, h⟩ | ⟨-, h⟩ <;> rw [h] <;> exact ⟨_, rfl⟩
+
+/-- A closed term holds no junk. -/
+theorem not_closed_opJunk (K : Kont) (r : Bool) : closedAt 0 (K.plug (opJunk r)) = false := by
+  rw [opJunk_plug]
+  induction (K.comp (.appR (.prim (if r then .raise else .perform)) .hole)) generalizing r with
+  | hole => rfl
+  | _ => simp_all [Kont.plug, closedAt]
+
 /-! ### Determinism -/
 
 theorem no_head_lit {μ μ' : Heap} {c : IntLit} {v : Val} {a' : Expr} :
@@ -207,8 +251,14 @@ theorem det_ourInst {μ μ' : Heap} {K : Kont} {a a' : Expr} (hh : Head (ℍ := 
 /-- A configuration with a machine step is not stopped at an operation the runner answers. -/
 theorem no_io_of_step1 {μ μ' : Heap} {e t : Expr} (hs : Step1 (ℍ := ℍ) μ e μ' t) (K : Kont)
     (l : (RF.alg Ξ).Lab) (i : ℕ) (v : OVal)
-    (he : e = K.plug (performE (opArgE (RF.name Ξ l) (UInt32.ofNat i) v.1)))
+    (he : e = K.plug ((ourInst (ℍ := ℍ) RF Ξ J).perform l i v))
     (hK : K.HasHnd (RF.name Ξ l) = false) : False := by
+  rcases perform_cases (ℍ := ℍ) (J := J) l i v with ⟨-, hp⟩ | ⟨-, hp⟩
+  swap
+  · rw [hp, opJunk_plug] at he
+    subst he
+    exact step1_plug_var _ 0 hs
+  rw [hp] at he
   subst he
   rcases opArg_val_or_var K false (RF.name Ξ l) (UInt32.ofNat i) v with ⟨w, hw⟩ | ⟨K', j, hK'⟩
   · have : K.plug (performE (opArgE (RF.name Ξ l) (UInt32.ofNat i) v.1)) =
@@ -418,8 +468,10 @@ theorem no_rstep_val (R : (ourInst (ℍ := ℍ) RF Ξ J).Runner) {μ : Heap} {s 
           simp only [Prod.mk.injEq] at hcc
           exact not_isOVal_prim_app (p := .lit (.u8 0)) (by decide) _
             (hcc.2 ▸ isOVal_of_isVal v.2)
-  | io hterm _ _ _ =>
-      have h' : v.1 = _ := hterm
+  | @io _ _ _ K l i u _ hterm _ _ _ =>
+      have h' : v.1 = K.plug ((ourInst (ℍ := ℍ) RF Ξ J).perform l i u) := hterm
+      obtain ⟨x, hx⟩ := perform_app (ℍ := ℍ) (J := J) l i u
+      rw [hx] at h'
       exact not_isOVal_prim_app (p := .perform) (by decide) _
         (isOVal_of_plug _ (h' ▸ isOVal_of_isVal v.2))
 
@@ -534,7 +586,7 @@ theorem runsAlike_of_join {t₁ t₂ t : Expr} {q₁ q₂ : List (Kont × Expr �
     (hτ₁ : ∀ x ∈ q₁, (labelOf RF Ξ x.2.1).Obs = false)
     (hτ₂ : ∀ x ∈ q₂, (labelOf RF Ξ x.2.1).Obs = false) :
     (ourInst (ℍ := ℍ) RF Ξ J).RunsAlike t₁ t₂ := by
-  rintro R - P C ⟨⟨μ, e⟩, s⟩ (K₀ : Kont) - - hterm v tr
+  rintro R - P ε A ⟨⟨μ, e⟩, s⟩ (K₀ : Kont) - - - hterm v tr
   change e = K₀.plug t₁ at hterm
   subst hterm
   have lift : ∀ {q : List (Kont × Expr × Expr)}, (∀ x ∈ q, (labelOf RF Ξ x.2.1).Obs = false) →
@@ -559,7 +611,8 @@ a runner that keeps its protocol, has a closed term and goes on.  This is the pr
 docstring states of a calculus ("A's values include variables, and a calculus steps on closed
 values only"), and RESTRUCTURE §4.1's reading of the junk encodings ("no configuration a typed
 closed program reaches has one").  It is a fact about the configurations of runs, which neither
-FL nor adequacy states at every answer type; its discharge at `J₁` is piece 4's. -/
+FL nor adequacy states at every answer type.  At today's kernel it holds at every effect context
+(`liveOK_tier1Open`); its discharge at `J₁` is piece 4's. -/
 def LiveOK (RF : RowForm) (Ξ : EffCtx) (J : OurTyping RF) : Prop :=
   ∀ c, (ourInst (ℍ := ℍ) RF Ξ J).Live c → closedAt 0 c.2 = true ∧ GoesOn (ℍ := ℍ) RF Ξ c
 
@@ -684,6 +737,32 @@ theorem no_ostep_op {c : Heap × Expr} {K : Kont} (r : Bool) (n i : UInt32) (v :
   · rw [hterm, hK'] at hs
     exact step1_plug_var K' j hs
 
+/-- The junk of an index beyond `UInt32` takes no step of our machine. -/
+theorem no_ostep_junk {c : Heap × Expr} {K : Kont} (r : Bool) (hterm : c.2 = K.plug (opJunk r))
+    {ev : A.Ev (RF.alg Ξ).Lab OVal Expr} {c' : Heap × Expr} :
+    ¬ OStep (ℍ := ℍ) RF Ξ c ev c' := by
+  intro h
+  rw [opJunk_plug] at hterm
+  obtain ⟨μ, e⟩ := c
+  simp only at hterm
+  subst hterm
+  generalize hc : (μ, (K.comp (.appR (.prim (if r then .raise else .perform)) .hole)).plug
+    (Expr.var 0)) = c₀ at h
+  cases h with
+  | mach hh =>
+      obtain ⟨rfl, he⟩ := Prod.mk.inj hc
+      exact step1_plug_var _ 0 ⟨_, _, _, he, rfl, hh⟩
+  | again =>
+      obtain ⟨-, he⟩ := Prod.mk.inj hc
+      have := plug_eq_drive he (by simp)
+      rw [this] at he
+      simp [Kont.plug, driveE, driveMark] at he
+  | fin =>
+      obtain ⟨-, he⟩ := Prod.mk.inj hc
+      have := plug_eq_drive he (by simp)
+      rw [this] at he
+      simp [Kont.plug, driveE, driveMark] at he
+
 /-- A context with no finaliser frame and no handler of the name `n ≠ 0` stops no raise of it. -/
 theorem catches_of_noUnwind (n : UInt32) (hn : n ≠ 0) :
     ∀ (K : Kont), K.NoUnwind → K.HasHnd n = false → K.Catches n = false
@@ -702,9 +781,19 @@ theorem catches_of_noUnwind (n : UInt32) (hn : n ≠ 0) :
 stops.  At a row form whose labels' names are not the reserved `0`. -/
 theorem opStuck_ourInst (hnz : ∀ l, RF.name Ξ l ≠ 0) : (ourInst (ℍ := ℍ) RF Ξ J).OpStuck := by
   refine ⟨fun c K l i v hterm hK ev c' h => ?_, fun c K l i v hterm hK hU ev c' h => ?_⟩
-  · exact no_ostep_op (r := false) (K := K) (RF.name Ξ l) (UInt32.ofNat i) v hterm hK h
-  · exact no_ostep_op (r := true) (K := K) (RF.name Ξ l) (UInt32.ofNat i) v hterm
-      (catches_of_noUnwind _ (hnz l) K hU hK) h
+  · rcases perform_cases (ℍ := ℍ) (J := J) l i v with ⟨-, hp⟩ | ⟨-, hp⟩
+    · have hterm' : c.2 = K.plug (performE (opArgE (RF.name Ξ l) (UInt32.ofNat i) v.1)) := by
+        rw [← hp]; exact hterm
+      exact no_ostep_op (r := false) (K := K) (RF.name Ξ l) (UInt32.ofNat i) v hterm' hK h
+    · have hterm' : c.2 = K.plug (opJunk false) := by rw [← hp]; exact hterm
+      exact no_ostep_junk (K := K) false hterm' h
+  · rcases raise_cases (ℍ := ℍ) (J := J) l i v with ⟨-, hp⟩ | ⟨-, hp⟩
+    · have hterm' : c.2 = K.plug (raiseE (opArgE (RF.name Ξ l) (UInt32.ofNat i) v.1)) := by
+        rw [← hp]; exact hterm
+      exact no_ostep_op (r := true) (K := K) (RF.name Ξ l) (UInt32.ofNat i) v hterm'
+        (catches_of_noUnwind _ (hnz l) K hU hK) h
+    · have hterm' : c.2 = K.plug (opJunk true) := by rw [← hp]; exact hterm
+      exact no_ostep_junk (K := K) true hterm' h
 
 /-- A configuration holding a stuck redex at an evaluation position does not go on. -/
 theorem not_goesOn_stuck {s : Expr} (hs : StuckAt (ℍ := ℍ) s) (K : Kont) (μ : Heap)
@@ -988,6 +1077,7 @@ theorem handlerSem_ourInst (hL : LiveOK (ℍ := ℍ) RF Ξ J) (hnz : ∀ l, RF.n
       appE_steps K₀ r.1 ⟨v.1, hv⟩⟩
   · rintro ⟨μ, e⟩ (K₀ : Kont) l (r : OVal) (cs : List OVal) (K : Kont) i (v : OVal) o (cl : OVal)
       hlive he hK hsig - hcl
+    rw [perform_eq (ℍ := ℍ) (l := l) v (idx_lt (J := J) (hlen l) hsig)] at he
     change e = K₀.plug ((handleK (RF.name Ξ l) r.1 (cs.map Subtype.val)).plug
       (K.plug (performE (opArgE (RF.name Ξ l) (UInt32.ofNat i) v.1)))) at he
     subst he
@@ -1014,6 +1104,7 @@ theorem handlerSem_ourInst (hL : LiveOK (ℍ := ℍ) RF Ξ J) (hnz : ∀ l, RF.n
     exact appE_steps K₀ cl.1 ⟨.pair v.1 (kappa _ _ K), .pair hv .lam⟩
   · rintro ⟨μ, e⟩ (K₀ : Kont) l (r : OVal) (cs : List OVal) (K : Kont) i (v : OVal) o (cl : OVal)
       hlive he hK hU hsig - hcl
+    rw [raise_eq (ℍ := ℍ) (l := l) v (idx_lt (J := J) (hlen l) hsig)] at he
     change e = K₀.plug ((handleK (RF.name Ξ l) r.1 (cs.map Subtype.val)).plug
       (K.plug (raiseE (opArgE (RF.name Ξ l) (UInt32.ofNat i) v.1)))) at he
     subst he
@@ -1083,6 +1174,16 @@ theorem handlerSem_ourInst (hL : LiveOK (ℍ := ℍ) RF Ξ J) (hnz : ∀ l, RF.n
     exact ⟨_, pureSteps_head K₀ .hole (Head.uthen μ (Val.lam N) (Val.lam (D.shift 1 0)) ⟨v.1, hv⟩),
       Relation.ReflTransGen.refl⟩
   · rintro ⟨μ, e⟩ (K₀ : Kont) (N : Expr) (D : Expr) (K : Kont) m j (w : OVal) hlive he hK hU
+    rcases raise_cases (ℍ := ℍ) (J := J) m j w with ⟨-, hp⟩ | ⟨-, hp⟩
+    swap
+    · -- an index beyond `UInt32`: the junk, which no closed configuration holds
+      rw [hp] at he
+      have hcl := (hL _ hlive).1
+      change e = K₀.plug ((thenK N D).plug (K.plug (opJunk true))) at he
+      rw [he, ← Kont.plug_comp, ← Kont.plug_comp, not_closed_opJunk] at hcl
+      cases hcl
+    rw [hp] at he
+    rw [hp]
     change e = K₀.plug ((thenK N D).plug
       (K.plug (raiseE (opArgE (RF.name Ξ m) (UInt32.ofNat j) w.1)))) at he
     subst he

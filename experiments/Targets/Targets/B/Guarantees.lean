@@ -73,9 +73,11 @@ def AdequateRetAt (M : B.BWorld) (P : Platform) : Prop :=
     M.comp (CTy.effOf S A) ([], M.nil) LSub.empty e (PMap.empty : WRes) →
     SafeRuns (ℍ := ℍ) P A e ∧ Terminates (ℍ := ℍ) P A e
 
-/-- Adequacy at a platform, for programs that return a loop. -/
+/-- Adequacy at a platform, for programs that return a loop whose body is positive.  `νX. C` is
+well formed at a positive `C` (`CTy.NuOk`, decision D2); at a row with distinct keys that the
+platform answers, every loop body is positive (`loopEffBody_nuOk_of_uniq`). -/
 def AdequateDriveAt (M : B.BWorld) (P : Platform) : Prop :=
-  ∀ (S : Row) (A B : VTy) (e : Expr), A.Data → RowLe S P.ops →
+  ∀ (S : Row) (A B : VTy) (e : Expr), A.Data → RowLe S P.ops → (CTy.loopEffBody S A B).NuOk →
     M.comp (CTy.effOf S (.thunk (CTy.loopEff S A B))) ([], M.nil) LSub.empty e
       (PMap.empty : WRes) →
     SafeDrive (ℍ := ℍ) P A e

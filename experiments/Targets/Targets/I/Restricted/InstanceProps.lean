@@ -11,10 +11,10 @@ A theorem that uses a B theorem to establish an A property lives here.
 * `effSafe_tier1 : EffSafe tier1` (Core's form of P2), by `effSafeOfFL _ _ fl_core_tier1
   ⟨famEmpty_core, adequateEvery_core⟩`: FL at BoLo, the empty configuration and adequacy from every
   index.  PROVED AT σ=[].
-* `not_effSafeDriveOfFL`: the route from FL to effect safety of driven programs fails as written.
-  At `coreW`, a typing system that types `return (inr ())` at `F_S(1 ⊕ U(Loop_S 1 1))`, `S` a row
-  whose loop body is not positive (`shadowOp`), meets FL (`cC` at `νX. C` holds of everything when
-  `C` is not positive), and its drive is stuck at `nextE ()`.
+* `effSafeDrive_needs_nuOk`: effect safety of driven programs needs its positive loop body
+  (decision D2).  At `coreW`, a typing system that types `return (inr ())` at
+  `F_S(1 ⊕ U(Loop_S 1 1))`, `S` a row whose loop body is not positive (`shadowOp`), meets FL (`cC`
+  at `νX. C` holds of everything when `C` is not positive), and its drive is stuck at `nextE ()`.
 -/
 
 noncomputable section
@@ -66,18 +66,17 @@ theorem fl_core_jShadow : FL (B.coreB (ℍ := ℍ)) jShadow := by
   exact (cC_effOf _ _ i.1 δ _ PMap.empty).mpr (ewp_val (opTable_mono _)
     (Or.inr ⟨Val.unit, pure_sep_mk rfl (fun _ _ hN => absurd hN (not_nuOk_shadow op₁ _ _))⟩))
 
-/-- **The route to effect safety of driven programs fails as written**: at `coreW`, `jShadow`
-meets FL, the empty configuration is reached and adequacy holds from every index, and the drive of
-`return (inr ())` is stuck at `nextE ()`, which is no finished drive, takes no step and stops at
-no operation. -/
-theorem not_effSafeDriveOfFL : ¬ EffSafeDriveOfFL (ℍ := ℍ) := by
-  intro h
-  have hE := h coreW jShadow fl_core_jShadow famEmpty_core adequateEvery_core
-  have hreach : Relation.ReflTransGen (RStep (ℍ := ℍ) Platform.none)
-      (init Platform.none inrUnit, .drive)
-      (⟨Adequacy.emptyMem, nextE Val.unit, ()⟩, .drive) := .single .again
-  rcases hE inrUnit rowShadow .unit rowNU_rowShadow ⟨rfl, rfl, fun _ => ⟨rfl, rfl⟩⟩ _ hreach with
-    ⟨a, ha, -⟩ | ⟨rc', hs⟩ | hstop
+/-- **Effect safety of driven programs needs its positive loop body** (the scope of decision D2's
+hypothesis): at `coreW`, `jShadow` meets FL, and the drive of `return (inr ())`, at a loop type whose
+body is not positive, reaches `nextE ()`, which is no finished drive, takes no step and stops at no
+operation. -/
+theorem effSafeDrive_needs_nuOk :
+    FL (B.coreB (ℍ := ℍ)) jShadow ∧ ¬ (CTy.loopEffBody rowShadow .unit .unit).NuOk ∧
+      ∃ rc, Relation.ReflTransGen (RStep (ℍ := ℍ) Platform.none) (init Platform.none inrUnit, .drive)
+        rc ∧ ¬ (DoneDrive Platform.none rc ∨ (∃ rc', RStep (ℍ := ℍ) Platform.none rc rc') ∨
+          StopsIn rowShadow rc.1.e) := by
+  refine ⟨fl_core_jShadow, not_nuOk_shadow op₁ _ _, _, .single .again, ?_⟩
+  rintro (⟨a, ha⟩ | ⟨rc', hs⟩ | hstop)
   · simp [nextE, Val.val_inj₁] at ha
   · rcases rstep_cases hs with ⟨hp, -⟩ | ⟨hph, -⟩ | ⟨-, l, he, -⟩
     · rcases pstep_cases hp with ⟨hst, -⟩ | ⟨K, n, i, v, w, s', o, he, -⟩

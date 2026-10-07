@@ -88,7 +88,7 @@ theorem not_isLoopSum_nLogTy : ¬ IsLoopSum nLogTy := by
 theorem liveOK_JnLog : LiveOK (ℍ := ℍ) orowRF Ξ JnLog := by
   rintro c ⟨P, C, R, s, -, hP, hreach⟩
   have hP' : P = nLogOutside := by
-    rcases hP with ⟨Θ, -, he, -⟩ | ⟨-, M, rfl, hC, Θ, -, hM, hj⟩
+    rcases hP with ⟨-, ⟨Θ, -, he, -⟩ | ⟨-, M, rfl, hC, Θ, -, hM, hj⟩⟩
     · exact he
     · exfalso
       cases hj

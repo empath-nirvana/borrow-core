@@ -207,9 +207,11 @@ def LiftExt (S : EffectSystem) : Prop :=
 
 /-- **E10 needs effect polymorphism**, at `timeout`, whose handler does not catch `le`; the
 callbacks are put at `wait ⊙ ε` by `SubClosed`, through the unit laws at the pure row and through
-`LiftExt` at `(exn)↑`. -/
+`LiftExt` at `(exn)↑`.  `SubClosed` asks its target row well formed; with labels well formed in the
+empty context (`hwf`, as our rows' labels are), so are the targets here (`lift_wf`, `comp_wf`). -/
 theorem not_reconciler_of_monoCallback (hm : S.MachShape) (hr : S.RowAlgebra) (he : S.EffSafe)
-    (hl : S.LetLaw) (hmono : MonoCallback S) (hext : LiftExt S) : ¬ S.Reconciler := by
+    (hl : S.LetLaw) (hmono : MonoCallback S) (hext : LiftExt S) (hwf : ∀ l, S.EA.WFLab [] l) :
+    ¬ S.Reconciler := by
   rintro ⟨⟨ls, hls⟩, hP⟩
   obtain ⟨lw, le, lk, llog, rfl⟩ := eq_four hls.1
   have hne : lw ≠ le := by
@@ -225,11 +227,13 @@ theorem not_reconciler_of_monoCallback (hm : S.MachShape) (hr : S.RowAlgebra) (h
   have h1' : S.der [] (S.ret S.tt) (S.F ε₁ S.bool) := by
     obtain ⟨x, hx, hxe⟩ := hlaws.unit_l ε₁
     exact hsub _ _ _ _ _ h1 ⟨ε₁, x, hx, hxe⟩
+      ⟨[], hlaws.comp_wf [] _ _ _ (hlaws.lift_wf [] lw (hwf lw)) (hlaws.unit_wf []) hc₁⟩
   have u1 := hpoly S.EA.unit ε₁ _ (fun i => hunit lw i) hc₁ h1'
   -- the failing callback, at `wait ⊙ (exn)↑`
   obtain ⟨ε₂, hc₂, hs₂⟩ := hext lw le hne
   have hl2 : S.Lacks (S.EA.lift le) lw := fun i h => hne ((hlift le lw i).mp h).1
-  have u2 := hpoly (S.EA.lift le) ε₂ _ hl2 hc₂ (hsub _ _ _ _ _ h2 hs₂)
+  have u2 := hpoly (S.EA.lift le) ε₂ _ hl2 hc₂ (hsub _ _ _ _ _ h2 hs₂
+    ⟨[], hlaws.comp_wf [] _ _ _ (hlaws.lift_wf [] lw (hwf lw)) (hlaws.lift_wf [] le (hwf le)) hc₂⟩)
   have u2' := hmono [At] 0 [] [] S.bool dataTy_bool _ _ _ _ _ _ h1 h2 u1 u2
   have hprog : S.der [] (S.lets [S.timeoutR lw] (S.call (S.var 0) (S.lam (S.raise le 0 S.unitV))))
       (S.F S.EA.unit S.bool) := hl [] _ _ _ _ hAt u2'

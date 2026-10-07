@@ -25,27 +25,23 @@ the platform's answers (`psteps_split`).
 
 **The return conjunct** holds at every platform that keeps its protocol (`adequateRetAt_core`).
 
-**The drive conjunct** reads the relation at `U(Loop_S A B)`, which `cC` makes trivial when the
-loop's body is not positive (`CTy.NuOk`, `cC`'s `nu` clause).  A row whose shadowed entry has an
-open operation type makes the body not positive without changing what the row's protocol reads, so
-`()` is in the relation at that loop type, and its drive is stuck at `nextE ()`: the drive
-conjunct as written fails at every platform with an operation (`not_adequateDriveAt_core`), and so
-does `Adequate B.coreB` (`not_adequate_core`).  At a positive body each iteration is in the relation
-at `F_S(A ⊕ U(Loop_S A B))` (`cC_nu_iff`, `loopEffBody_instT`), re-established at each `inj₂ l`, and
-every finite prefix of the drive is safe (`adequateDriveAt_core_nuOk`).  At rows with distinct keys
-the body is positive (`adequateDriveAt_core_uniq`), and at the platform with no operation every row
-is (`adequateDriveAt_core_none`).
+**The drive conjunct** reads the relation at `U(Loop_S A B)`, at a positive loop body (decision D2:
+`νX. C` is well formed at a positive `C`, `CTy.NuOk`).  Each iteration is in the relation at
+`F_S(A ⊕ U(Loop_S A B))` (`cC_nu_iff`, `loopEffBody_instT`), re-established at each `inj₂ l`, and
+every finite prefix of the drive is safe (`adequateDriveAt_core`).  At rows with distinct keys that
+the platform answers, every loop body is positive (`loopEffBody_nuOk_of_uniq`).  So **B2 holds at
+BoLo** (`adequate_core`).  The hypothesis is needed: a row whose shadowed entry has an open type
+makes the body not positive without changing what the row's protocol reads, `cC` then holds of
+`()` at that loop type, and its drive is stuck (`adequateDrive_needs_nuOk`).
 
-**B3, B4, B4′, B5** at today's unr-free kernel follow at what B2 gives: the return conjunct at every
-platform and the drive at positive bodies (`soundRetAt_tier1NU`, `soundDriveAtNu_tier1NU`); B4′ in
-full, since it reads only the return conjunct (`soundContractsOfFL_ret`, `soundContracts_tier1NU`);
-B5 given `BumpSim` (`releasedOnceReuse_tier1NU_of_bumpSim`).
+**B3, B4, B4′, B5** at today's unr-free kernel: B3 and B4 from FL and B2 (`sound_tier1NU`); B4′
+from the return conjunct (`soundContractsOfFL_ret`, `soundContracts_tier1NU`); B5 given `BumpSim`
+(`releasedOnceReuse_tier1NU_of_bumpSim`).
 
-**Effect safety of driven programs** (`EffSafeDrive`) fails as written at today's unr-free kernel:
-`FinalDrive` asks a data answer, and a typed loop step may finish at `inl (λ_. ())` at `U(F 1)`
-(`not_effSafeDrive_tier1NU`).  At data answers and positive loop bodies it holds
-(`effSafeDriveNu_tier1NU`): each step runs to a value or to a stop of its row (`platStart_seg`).
-`[Core σ=[]]`
+**Effect safety of driven programs** (`EffSafeDrive`, at a positive loop body, its finished drive
+observed, decisions D2 and D4) holds at every typing system with FL at BoLo (`effSafeDrive_of_FL`):
+each step runs to a value or to a stop of its row (`platStart_seg`), and a step whose loop's row is
+below its own is covered (`effSafeDrive_of_rel`).  `[Core σ=[]]`
 -/
 
 noncomputable section
@@ -570,18 +566,11 @@ theorem safeDrive_of_nuOk (hP : P.Respects) (hle : RowLe S P.ops) (hA : A.Data)
 
 end Drive
 
-/-- `AdequateDriveAt` at the rows whose loop body is positive (`CTy.NuOk`): the restriction under
-which the relation at `U(Loop_S A B)` is not trivial. -/
-def AdequateDriveAtNu (M : B.BWorld) (P : Platform) : Prop :=
-  ∀ (S : Row) (A B : VTy) (e : Expr), A.Data → RowLe S P.ops → (CTy.loopEffBody S A B).NuOk →
-    M.comp (CTy.effOf S (.thunk (CTy.loopEff S A B))) ([], M.nil) LSub.empty e
-      (PMap.empty : WRes) →
-    SafeDrive (ℍ := ℍ) P A e
-
-/-- **B2's drive conjunct at BoLo, at a positive loop body, at every platform that keeps its
-protocol.** -/
-theorem adequateDriveAt_core_nuOk (P : Platform) (hP : P.Respects) :
-    AdequateDriveAtNu (ℍ := ℍ) (B.coreB (ℍ := ℍ)) P :=
+/-- **B2's drive conjunct at BoLo, at every platform that keeps its protocol**: at a positive loop
+body (decision D2), every finite prefix of the drive of a program in Core's relation at
+`F_S(U(Loop_S A B))` is safe. -/
+theorem adequateDriveAt_core (P : Platform) (hP : P.Respects) :
+    AdequateDriveAt (ℍ := ℍ) (B.coreB (ℍ := ℍ)) P :=
   fun _ _ _ _ hA hle hC h => safeDrive_of_nuOk hP hle hA hC h
 
 /-- A row whose operations have distinct keys and which a platform answers has closed operation
@@ -592,26 +581,24 @@ theorem loopEffBody_nuOk_of_uniq {P : Platform} (hP : P.Respects) {S : Row} (hU 
     have hm := (Row.find_mem (hle o.n o.i o (Row.find_of_mem hU ho))).1
     exact ⟨dataB_cl (hP.data o hm).1, dataB_cl (hP.data o hm).2⟩) A B
 
-/-- **B2's drive conjunct at BoLo at the rows whose operations have distinct keys.** -/
+/-- **B2's drive conjunct at BoLo at the rows whose operations have distinct keys**: there the
+positivity hypothesis holds (`loopEffBody_nuOk_of_uniq`). -/
 theorem adequateDriveAt_core_uniq (P : Platform) (hP : P.Respects) (S : Row) (hU : S.Uniq)
     (A B : VTy) (e : Expr) (hA : A.Data) (hle : RowLe S P.ops)
     (h : cC (ℍ := ℍ) (CTy.effOf S (.thunk (CTy.loopEff S A B))) [] LSub.empty e PMap.empty) :
     SafeDrive (ℍ := ℍ) P A e :=
   safeDrive_of_nuOk hP hle hA (loopEffBody_nuOk_of_uniq hP hU hle A B) h
 
-/-- **B2's drive conjunct at BoLo at the platform with no operation**: its rows are empty, so
-every loop body is positive. -/
-theorem adequateDriveAt_core_none : AdequateDriveAt (ℍ := ℍ) (B.coreB (ℍ := ℍ)) Platform.none := by
-  intro S A B e hA hle h
-  obtain rfl := row_nil_of_le hle
-  exact safeDrive_of_nuOk platformNone_respects hle hA
-    (CTy.loopEffBody_nuOk (fun o ho => absurd ho (by simp)) A B) h
+/-- **B2 at BoLo**: adequacy at every platform that keeps its protocol, the return conjunct through
+the platform's answers and the drive conjunct at positive loop bodies. -/
+theorem adequate_core : Adequate (ℍ := ℍ) (B.coreB (ℍ := ℍ)) :=
+  fun P hP => ⟨adequateRetAt_core P hP, adequateDriveAt_core P hP⟩
 
 /-- **B2 at the platform with no operation.** -/
 theorem adequateAt_core_none : AdequateAt (ℍ := ℍ) (B.coreB (ℍ := ℍ)) Platform.none :=
-  ⟨adequateRetAt_core Platform.none platformNone_respects, adequateDriveAt_core_none⟩
+  adequate_core Platform.none platformNone_respects
 
-/-! ### The drive conjunct as written fails -/
+/-! ### The drive conjunct needs its positivity hypothesis -/
 
 /-- The shadow of an operation: its key, linear, at the open argument type `tvar 0`, answering `1`.
 Behind the operation in a row, `Row.find` never finds it. -/
@@ -667,19 +654,21 @@ theorem not_safeDrive_unit (P : Platform) (A : VTy) : ¬ SafeDrive (ℍ := ℍ) 
     · cases hph
     · simp [nextE, Val.val_inj₂] at he
 
-/-- **B2's drive conjunct as written fails at every platform with an operation.**  For `o` the
-platform's, the row `[o, shadowOp o]` reads as `[o]`, which the platform answers; its loop body is
-not positive, so `()` is in Core's relation at `F_S(U(Loop_S 1 1))` (`cC_loop_unit_of_not_nuOk`),
-and its drive is stuck at `nextE ()`.  The configurations are the empty world's (`TW.empty`). -/
-theorem not_adequateDriveAt_core {P : Platform} (hP : P.Respects) {o : OpSig} (ho : o ∈ P.ops) :
-    ¬ AdequateDriveAt (ℍ := ℍ) (B.coreB (ℍ := ℍ)) P := by
-  intro h
-  have hle : RowLe [o, shadowOp o] P.ops := by
-    intro n i x hx
-    obtain ⟨rfl, rfl, rfl⟩ := find_shadow o hx
-    exact Row.find_of_mem hP.uniq ho
-  exact not_safeDrive_unit P .unit (h [o, shadowOp o] .unit .unit _ (.unit 0) hle
-    (cC_loop_unit_of_not_nuOk (not_nuOk_shadow o _ _)))
+/-- **The drive conjunct needs its positivity hypothesis** (its scope, decision D2).  At every
+platform with an operation `o`, the row `[o, shadowOp o]` reads as `[o]`, which the platform
+answers; its loop body is not positive, so `()` is in Core's relation at `F_S(U(Loop_S 1 1))`
+(`cC_loop_unit_of_not_nuOk`), and its drive is stuck at `nextE ()`.  The configurations are the
+empty world's (`TW.empty`). -/
+theorem adequateDrive_needs_nuOk {P : Platform} (hP : P.Respects) {o : OpSig} (ho : o ∈ P.ops) :
+    RowLe [o, shadowOp o] P.ops ∧ ¬ (CTy.loopEffBody [o, shadowOp o] .unit .unit).NuOk ∧
+      cC (ℍ := ℍ) (CTy.effOf [o, shadowOp o] (.thunk (CTy.loopEff [o, shadowOp o] .unit .unit))) []
+        LSub.empty (.val Val.unit) PMap.empty ∧
+      ¬ SafeDrive (ℍ := ℍ) P .unit (.val Val.unit) := by
+  refine ⟨?_, not_nuOk_shadow o _ _, cC_loop_unit_of_not_nuOk (not_nuOk_shadow o _ _),
+    not_safeDrive_unit P .unit⟩
+  intro n i x hx
+  obtain ⟨rfl, rfl, rfl⟩ := find_shadow o hx
+  exact Row.find_of_mem hP.uniq ho
 
 /-- The platform with one operation, `1.0 : 1 ↠ 1`, linear, answering `()`. -/
 def Platform.one : Platform :=
@@ -711,16 +700,7 @@ theorem platformOne_respects : Platform.one.Respects where
     obtain ⟨rfl, -⟩ := hco
     exact .unit
 
-/-- **`Adequate B.coreB` fails as written** (at `Platform.one`). -/
-theorem not_adequate_core : ¬ Adequate (ℍ := ℍ) (B.coreB (ℍ := ℍ)) := fun h =>
-  not_adequateDriveAt_core platformOne_respects (List.mem_singleton_self _)
-    (h _ platformOne_respects).2
-
-/-- **B's guarantees at BoLo fail as written, at every typing system**: they hold `Adequate`. -/
-theorem not_guarantees_core (J : TypingJ) : ¬ B.Guarantees (ℍ := ℍ) J (B.coreB (ℍ := ℍ)) :=
-  fun h => not_adequate_core h.2.2.1
-
-/-! ### B3, B4, B4′ and B5 from the return conjunct -/
+/-! ### B3, B4, B4′ and B5 -/
 
 /-- **B4′ from FL and B2's return conjunct**: `soundContractsOfFL` reads adequacy only at its
 return conjunct. -/
@@ -731,25 +711,18 @@ theorem soundContractsOfFL_ret {M : B.BWorld} {J : TypingJ} (hFL : FL M J)
     hAd P hP S A (substAll γ e) hd hle
       (semWC_of_FL hFL h LSub.empty γ ([], M.nil) PMap.empty Adequacy.models_empty hγ)
 
-/-- `SoundDriveAt` at the rows whose loop body is positive. -/
-def SoundDriveAtNu (J : TypingJ) (P : Platform) : Prop :=
-  ∀ (S : Row) (A B : VTy) (e : Expr), A.Data → RowLe S P.ops → (CTy.loopEffBody S A B).NuOk →
-    J.closed e (CTy.effOf S (.thunk (CTy.loopEff S A B))) → SafeDrive (ℍ := ℍ) P A e
-
-/-- The drive conjunct of T1 at positive loop bodies, from FL and adequacy there. -/
-theorem soundDriveAtNu_of_FL {M : B.BWorld} {J : TypingJ} {P : Platform} (hFL : FL M J)
-    (hA : AdequateDriveAtNu (ℍ := ℍ) M P) : SoundDriveAtNu (ℍ := ℍ) J P :=
-  fun S A B e hd hle hC h => hA S A B e hd hle hC (comp_of_FL hFL h)
-
 /-- **B3 and B4's return conjunct at today's unr-free kernel, at every platform.** -/
 theorem soundRetAt_tier1NU (P : Platform) (hP : P.Respects) : SoundRetAt (ℍ := ℍ) tier1NU P :=
   soundRetAt_of_FL fl_core_tier1NU (adequateRetAt_core P hP)
 
-/-- **B3 and B4's drive conjunct at today's unr-free kernel, at positive loop bodies, at every
-platform.** -/
-theorem soundDriveAtNu_tier1NU (P : Platform) (hP : P.Respects) :
-    SoundDriveAtNu (ℍ := ℍ) tier1NU P :=
-  soundDriveAtNu_of_FL fl_core_tier1NU (adequateDriveAt_core_nuOk P hP)
+/-- **B3 and B4's drive conjunct at today's unr-free kernel, at every platform** (positive loop
+bodies). -/
+theorem soundDriveAt_tier1NU (P : Platform) (hP : P.Respects) : SoundDriveAt (ℍ := ℍ) tier1NU P :=
+  soundDriveAt_of_FL fl_core_tier1NU (adequateDriveAt_core P hP)
+
+/-- **B3 and B4 at today's unr-free kernel**: from FL and B2. -/
+theorem sound_tier1NU : Sound (ℍ := ℍ) tier1NU :=
+  soundnessOfFL _ _ fl_core_tier1NU adequate_core
 
 /-- **B4′ at today's unr-free kernel and BoLo.** -/
 theorem soundContracts_tier1NU : B.SoundContracts (ℍ := ℍ) tier1NU (B.coreB (ℍ := ℍ)) :=
@@ -761,40 +734,6 @@ theorem releasedOnceReuse_tier1NU_of_bumpSim (hS : BumpSim (ℍ := ℍ)) :
   releasedOnceReuse_of_bumpSim hS soundContracts_tier1NU
 
 /-! ### Effect safety of driven programs -/
-
-/-- A loop whose step answers `inl (λ_. ())` at `A = U(F 1)`, a type that is not data. -/
-abbrev doneThunk : Expr := .inj₁ (.lam .unit)
-
-/-- **Today's unr-free kernel types `doneThunk` at `F(U(F 1) ⊕ U(Loop (U(F 1)) 1))`.** -/
-theorem derNU_doneThunk :
-    tier1NU.closed doneThunk
-      (CTy.effOf [] (.sum (.thunk (.ret .unit)) (.thunk (CTy.loopEff [] (.thunk (.ret .unit)) .unit)))) :=
-  fun _ _ => CDerivesNU.ret (CDerivesNU.sumI₁ (CDerivesNU.thunkF
-    (CDerivesNU.ret (CDerivesNU.unitI (Ctx.DeadP.cons .nil)))))
-
-/-- **`EffSafeDrive` fails as written at today's unr-free kernel**: the drive of `doneThunk` is at
-`inl (λ_. ())` at once, which is no finished drive (`FinalDrive` asks a data answer), takes no
-step and stops at no operation. -/
-theorem not_effSafeDrive_tier1NU : ¬ EffSafeDrive (ℍ := ℍ) tier1NU := by
-  intro h
-  rcases h doneThunk [] (.thunk (.ret .unit)) (fun _ _ _ hf => by simp [Row.find] at hf)
-    derNU_doneThunk _ .refl with ⟨a, ha, hd, -⟩ | ⟨rc', hs⟩ | hstop
-  · obtain rfl : Val.lam Expr.unit = a := Val.inj₁_inj' (Subtype.ext ha)
-    cases hd
-  · rcases rstep_cases hs with ⟨hp, -⟩ | ⟨hph, -⟩ | ⟨-, l, he, -⟩
-    · exact no_pstep_of_val (v := Val.inj₁ (Val.lam .unit)) rfl hp
-    · cases hph
-    · exact Val.inj₁_ne_inj₂ (a := Val.lam .unit) (c := l) (Subtype.ext he)
-  · rcases hstop with ⟨K, n, i, v, o, -, -, hf, -⟩ | ⟨K, n, i, v, o, -, -, hf, -⟩ <;>
-      simp [Row.find] at hf
-
-/-- `EffSafeDrive` at data answers and the rows whose loop body is positive. -/
-def EffSafeDriveNu (J : TypingJ) : Prop :=
-  ∀ M (S : Row) A, Row.NU S → A.Data → (CTy.loopEffBody S A .unit).NuOk →
-    J.closed M (CTy.effOf S (.sum A (.thunk (CTy.loopEff S A .unit)))) →
-    ∀ rc, Relation.ReflTransGen (RStep (ℍ := ℍ) Platform.none) (init _ M, .drive) rc →
-      FinalDrive Platform.none A rc ∨ (∃ rc', RStep (ℍ := ℍ) Platform.none rc rc') ∨
-        StopsIn S rc.1.e
 
 section DriveStop
 variable {P : Platform} {S : Row} {A B : VTy}
@@ -826,32 +765,49 @@ theorem platStart_seg {Q : List SRec → Val → WProp} {c₀ : Conf P} {μ₁ :
 
 end DriveStop
 
-/-- **Effect safety of driven programs at data answers and positive loop bodies, from FL at
-BoLo**: every configuration the drive of a program in Core's relation at `F_S(A ⊕ U(Loop_S A 1))`
-reaches is a finished drive, takes a step, or stops at an operation of `S`.  The invariant at the
-platform with no operation: the configuration is reached by machine steps from a start of a loop's
-step (`platStart_seg`); `again` starts the next step (`platStart_inr`). -/
-theorem effSafeDriveNu_of_FL {J : TypingJ} (hFL : FL (B.coreB (ℍ := ℍ)) J) :
-    EffSafeDriveNu (ℍ := ℍ) J := by
-  intro M S A _ hA hC hJ
+/-- A stop of a row is a stop of every larger row. -/
+theorem stopsIn_mono {T S : Row} (hle : RowLe T S) {e : Expr} (h : StopsIn T e) : StopsIn S e := by
+  rcases h with ⟨K, n, i, v, o, he, hK, hf, ha⟩ | ⟨K, n, i, v, o, he, hK, hf, ha⟩
+  · exact Or.inl ⟨K, n, i, v, o, he, hK, hle n i o hf, ha⟩
+  · exact Or.inr ⟨K, n, i, v, o, he, hK, hle n i o hf, ha⟩
+
+/-- The start of a program in Core's relation at the empty configuration. -/
+theorem platStart_init {P : Platform} {T : Row} {Q : List SRec → Val → WProp} {e : Expr}
+    (h : ewpTS (ℍ := ℍ) [] e (opTable (Row.tab T LSub.empty)) Q PMap.empty) :
+    PlatStart P T Q (init P e) :=
+  ⟨[], PMap.empty, PMap.empty, PMap.empty, [], noOwn_empty, Fig16.LogRel.hash_empty,
+    ResU.comp_empty_right _, TW.empty, fun x hx => absurd hx (by simp), Fig16.BoLo.lower_empty,
+    (ResU.updV_self_iff _).mpr Fig16.LogRel.valid_empty, h⟩
+
+/-- **Effect safety of a drive from its first step, at Core's relation.**  The drive phase from `M`,
+in Core's relation at `F_S(A ⊕ U(Loop_{S₀} A 1))`, the loop's row `S₀` below the step's row `S`
+and its body positive, reaches only a finished drive, a configuration that steps, or a stop of `S`.
+The invariant at the platform with no operation: the configuration is reached by machine steps
+from a start of a step at a row below `S` (`platStart_seg`); `again` starts the next step, at the
+loop's row (`platStart_inr`). -/
+theorem effSafeDrive_of_rel {S S₀ : Row} {A : VTy} (hle : RowLe S₀ S)
+    (hC : (CTy.loopEffBody S₀ A .unit).NuOk) {M : Expr}
+    (h : cC (ℍ := ℍ) (CTy.effOf S (.sum A (.thunk (CTy.loopEff S₀ A .unit)))) [] LSub.empty M
+      PMap.empty) :
+    ∀ rc, Relation.ReflTransGen (RStep (ℍ := ℍ) Platform.none) (init _ M, .drive) rc →
+      DoneDrive Platform.none rc ∨ (∃ rc', RStep (ℍ := ℍ) Platform.none rc rc') ∨
+        StopsIn S rc.1.e := by
   let Inv : Conf Platform.none × Phase → Prop := fun rc =>
-    rc.2 = .drive ∧ ∃ c₀, PlatStart Platform.none S (QStep S A .unit) c₀ ∧
-      Steps (ℍ := ℍ) c₀.μ c₀.e rc.1.μ rc.1.e
+    rc.2 = .drive ∧ ∃ (T : Row) (c₀ : Conf Platform.none), RowLe T S ∧
+      PlatStart Platform.none T (QStep S₀ A .unit) c₀ ∧ Steps (ℍ := ℍ) c₀.μ c₀.e rc.1.μ rc.1.e
   have h₀ : Inv (init _ M, .drive) :=
-    ⟨rfl, init _ M, ⟨[], PMap.empty, PMap.empty, PMap.empty, [], noOwn_empty,
-      Fig16.LogRel.hash_empty, ResU.comp_empty_right _, TW.empty, fun x hx => absurd hx (by simp),
-      Fig16.BoLo.lower_empty, (ResU.updV_self_iff _).mpr Fig16.LogRel.valid_empty,
-      (cC_effOf S _ [] LSub.empty M PMap.empty).mp (comp_of_FL hFL hJ)⟩, .refl _ _⟩
+    ⟨rfl, S, init _ M, fun _ _ _ hf => hf,
+      platStart_init ((cC_effOf S _ [] LSub.empty M PMap.empty).mp h), .refl _ _⟩
   have hstep : ∀ rc rc', Inv rc → RStep (ℍ := ℍ) Platform.none rc rc' → Inv rc' := by
-    rintro rc rc' ⟨hph, c₀, hs₀, hr⟩ hs
+    rintro rc rc' ⟨hph, T, c₀, hT, hs₀, hr⟩ hs
     rcases rstep_cases hs with ⟨hp, hph'⟩ | ⟨hph', -⟩ | ⟨-, l, he, rfl⟩
-    · exact ⟨hph'.trans hph, c₀, hs₀, hr.trans (.more (pstep_none hp) (.refl _ _))⟩
+    · exact ⟨hph'.trans hph, T, c₀, hT, hs₀, hr.trans (.more (pstep_none hp) (.refl _ _))⟩
     · rw [hph] at hph'; cases hph'
     · obtain ⟨μ', t, hst, hend | hstop⟩ := platStart_seg hs₀ hr
       · rw [he] at hst
         cases hst with
         | more h _ => exact absurd h BoCa.BoLo.no_step_val
-        | refl => exact ⟨rfl, _, platStart_inr hC rfl hend, .refl _ _⟩
+        | refl => exact ⟨rfl, S₀, _, hle, platStart_inr hC rfl hend, .refl _ _⟩
       · rw [he] at hst
         cases hst with
         | more h _ => exact absurd h BoCa.BoLo.no_step_val
@@ -864,7 +820,7 @@ theorem effSafeDriveNu_of_FL {J : TypingJ} (hFL : FL (B.coreB (ℍ := ℍ)) J) :
     induction hrc with
     | refl => exact h₀
     | tail _ hs ih => exact hstep _ _ ih hs
-  obtain ⟨hph, c₀, hs₀, hr⟩ := hinv
+  obtain ⟨hph, T, c₀, hT, hs₀, hr⟩ := hinv
   obtain ⟨⟨μ, e, ⟨⟩⟩, ph⟩ := rc
   obtain ⟨μ₀, e₀, ⟨⟩⟩ := c₀
   simp only at hph hr
@@ -878,17 +834,22 @@ theorem effSafeDriveNu_of_FL {J : TypingJ} (hFL : FL (B.coreB (ℍ := ℍ)) J) :
         subst he
         rcases hQ with ⟨a, hp⟩ | ⟨l, hp⟩
         · obtain ⟨rfl, -⟩ := pure_sep_iff.mp hp
-          exact Or.inl (finalDrive_of_inl hA rfl hend)
+          exact Or.inl ⟨a, rfl⟩
         · obtain ⟨rfl, -⟩ := pure_sep_iff.mp hp
           exact Or.inr (Or.inl ⟨_, .again⟩)
   · cases hst with
     | more h _ => exact Or.inr (Or.inl ⟨_, .run (.mach h)⟩)
-    | refl => exact Or.inr (Or.inr hstop)
+    | refl => exact Or.inr (Or.inr (stopsIn_mono hT hstop))
 
-/-- **Effect safety of driven programs at today's unr-free kernel, at data answers and positive
-loop bodies.** -/
-theorem effSafeDriveNu_tier1NU : EffSafeDriveNu (ℍ := ℍ) tier1NU :=
-  effSafeDriveNu_of_FL fl_core_tier1NU
+/-- **Effect safety of driven programs from FL at BoLo** (decision D2's positive loop body; decision
+D4's observed end). -/
+theorem effSafeDrive_of_FL {J : TypingJ} (hFL : FL (B.coreB (ℍ := ℍ)) J) :
+    EffSafeDrive (ℍ := ℍ) J :=
+  fun _ _ _ _ hC hJ => effSafeDrive_of_rel (fun _ _ _ hf => hf) hC (comp_of_FL hFL hJ)
+
+/-- **Effect safety of driven programs at today's unr-free kernel.** -/
+theorem effSafeDrive_tier1NU : EffSafeDrive (ℍ := ℍ) tier1NU :=
+  effSafeDrive_of_FL fl_core_tier1NU
 
 end Targets
 

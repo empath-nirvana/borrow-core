@@ -9,12 +9,11 @@ TIER1-PLAN §2 proves FL at `J₁` by elaborating each derivation of `J₁` into
 (`CDerivesNU`), each use of a row-`∀` entry a copy at its own instance, and then applying
 `fundamentalC` unchanged.  These are the checks run before building `J₁`.
 
-1. **The polymorphic let has no elaboration** (`not_elabClosed_of_letLaw`).  On a closed term the
-   plan's elaboration copies nothing, so it says that a closed derivation of `J₁` at a `∀`-free
-   type is a `CDerivesNU` derivation of the same term (`ElabClosed`).  The let law at a
-   polymorphic value, and a body that reads the bound variable at two instances, type
-   `(λx. ⟨x, x⟩) V` at `F(!U c₁) & F(!U c₂)`; no `CDerivesNU` derivation does (`not_der_letTwo`).
-   So `J1Der.elab`, `letLaw_ourInst` and the rules the plan gives `J₁` cannot all hold.
+1. **The polymorphic let.**  On a closed term the plan's elaboration copies nothing, so it says
+   that a closed derivation of `J₁` at a `∀`-free type is a `CDerivesNU` derivation of the same
+   term (`ElabClosed`).  No `CDerivesNU` derivation types `(λx. ⟨x, x⟩) V` at
+   `F(!U c₁) & F(!U c₂)` with `c₁ ≠ c₂` (`not_der_letTwo`, `Targets/Instance/Inversion.lean`):
+   today's kernel has no polymorphic let.  Decision D5 gives `J₁` one as a new Core rule.
 2. **A-level handlers are not typed by today's `[handle]`** (`not_der_handle_tier1Open`).  Our
    instance's `handle` is the run-time frame, its clauses values; Core's `[handle]` types only
    `hndTerm n ir ic e`, its clauses variables (`not_der_handleK`).  So today's kernel at our
@@ -22,11 +21,12 @@ TIER1-PLAN §2 proves FL at `J₁` by elaborating each derivation of `J₁` into
    `tier1Open` at every effect context (`not_deepHandler_tier1Open` and the four after it).  A
    typing system whose closed derivations elaborate fails E8 (`not_unwindPolicy_of_elabClosed`),
    and so fails tier 1 (`I.not_tier1_of_elabClosed`).
-3. **S1's subeffecting ranges over every row of the algebra** (`not_subClosed_ourInst_tier1Open`).
-   `SubClosed` asks a typed computation to be typed at every larger row, well formed or not.
-   `[sub]` asks `Row.NU` of its target, and the algebra's rows include one with a resuming `unr`
-   operation: `()` at the pure row is typed, at that row it is not (`not_der_unit_nonNU`).  The other
-   three conjuncts of S1 hold (`rowAlgebra_noSub_ourInst`).
+3. **S1 at today's kernel** (decision D6).  `SubClosed` asks its target row well formed, as
+   Yoshioka's `[sub]` does; a well-formed row at an admissible effect context is unr-free
+   (`rowNU_of_wf`), where `[sub]` applies (`subClosed_nu_tier1Open`).  So S1 holds at every
+   effect context with no resuming `unr` operation (`rowAlgebra_ourInst_tier1Open`).  The premise
+   is needed: the pure row is below `[unrOp]`, a row with a resuming `unr` operation, which is not
+   well formed at any admissible context and at which `()` is not typed (`subClosed_needs_wf`).
 4. **The let law at today's kernel** (`letLaw_ourInst_tier1Open`): proved.
 -/
 
@@ -38,7 +38,8 @@ namespace Targets.Inst
 open BoCa BoCa.Fig16 BoCa.Fig16.BoLo BoCa.Fig16.LogRel BoCa.Fig16.LogRel.Core
 open BoCa.BoLo (Kont)
 open BoCa.Lifetime (LifeCtx)
-open Targets (CDerivesNU RowForm EffCtx orowRF orowAlg ORow RowCtx RowEnv RowEq rowEq_refl)
+open Targets (CDerivesNU RowForm EffCtx orowRF orowAlg ORow RowCtx RowEnv RowEq rowEq_refl RowAt
+  rowAt_nil rowAt_append rowAt_left orowRF_den)
 
 /-- Every row variable at `anyCon`: the empty row is an admissible instance. -/
 theorem models_anyCon_nil {Θ : RowCtx} (hΘ : ∀ p ∈ Θ, p.2 = anyCon) :
@@ -62,46 +63,6 @@ def ElabClosed {RF : RowForm} (J : OurTyping RF) : Prop :=
   ∀ (Θ : RowCtx) (Δ : LifeCtx) (e : Expr) (j : OJdg), J.der Θ Δ [] e j → j.RFree →
     ∀ η, Θ.Models η → CDerivesNU Δ [] e (j.den η)
 
-/-- **The let law, a polymorphic value and a body that reads it at two instances leave no
-elaboration.**  The plan's `J₁` gives the two typings this takes:
-* `hV`: `λx. x` at `!U(∀ρ:any. 1 → F_ρ 1)` (`bangThunkV` over the empty context, then `[allR-I]`
-  at `!U`);
-* `hW`: `⟨x, x⟩`'s components read `x` by `[var]`, then `[allR-E]` at `!U` at the pure row and at
-  `[o]`, then `[ret]`; `[&I]` pairs them (each component at the context `withCtx`, as Core's rule
-  has it).
-
-The let law then types the closed program `(λx. ⟨x, x⟩) (λx. x)` at `F(!U c₁) & F(!U c₂)`, and
-`ElabClosed` would make it a `CDerivesNU` derivation, which `not_der_letTwo` refutes. -/
-theorem not_elabClosed_of_letLaw {RF : RowForm} {Ξ : EffCtx} {J : OurTyping RF} {b : Expr}
-    {A : OVTy} {c₁ c₂ : CTy} (hr₁ : c₁.isRet = false) (hn₁ : ∀ C, c₁ ≠ .nu C)
-    (hr₂ : c₂.isRet = false) (hn₂ : ∀ C, c₂ ≠ .nu C) (hne : c₁ ≠ c₂)
-    (hL : (ourInst (ℍ := ℍ) RF Ξ J).LetLaw)
-    (hV : (ourInst (ℍ := ℍ) RF Ξ J).derV [] ⟨.lam b, .lam⟩ A)
-    (hW : (ourInst (ℍ := ℍ) RF Ξ J).der [A] (withPair (.var 2) (.var 2))
-      (.amp (.ret (OVTy.ofV (.bang (.thunk c₁)))) (.ret (OVTy.ofV (.bang (.thunk c₂)))))) :
-    ¬ ElabClosed J := by
-  intro hE
-  rcases hL [] _ A _ _ hV hW with ⟨Θ, hΘ, hd⟩ | ⟨-, M, he, -⟩
-  · have hR : (OJdg.comp (.amp (.ret (OVTy.ofV (.bang (.thunk c₁))))
-        (.ret (OVTy.ofV (.bang (.thunk c₂)))))).RFree :=
-      ⟨OVTy.rFree_ofV _, OVTy.rFree_ofV _⟩
-    have h := hE Θ _ _ _ hd hR (fun _ => []) (models_anyCon_nil hΘ)
-    simp only [OJdg.den, OCTy.den, OVTy.den_ofV] at h
-    exact not_der_letTwo hr₁ hn₁ hr₂ hn₂ hne h
-  · change bindE (Expr.lam b) _ = _ at he
-    simp [driveE, driveMark, bindE] at he
-
-/-- The two instances of the check: `1 → F 1` and `1 → F_[o] 1`. -/
-theorem not_elabClosed_of_letLaw_arr {RF : RowForm} {Ξ : EffCtx} {J : OurTyping RF} {b : Expr}
-    {A : OVTy} (o : OpSig) (hL : (ourInst (ℍ := ℍ) RF Ξ J).LetLaw)
-    (hV : (ourInst (ℍ := ℍ) RF Ξ J).derV [] ⟨.lam b, .lam⟩ A)
-    (hW : (ourInst (ℍ := ℍ) RF Ξ J).der [A] (withPair (.var 2) (.var 2))
-      (.amp (.ret (OVTy.ofV (.bang (.thunk (.arr .unit (.ret .unit))))))
-        (.ret (OVTy.ofV (.bang (.thunk (.arr .unit (CTy.effOf [o] .unit)))))))) :
-    ¬ ElabClosed J :=
-  not_elabClosed_of_letLaw rfl (fun _ h => by cases h) rfl (fun _ h => by cases h)
-    (fun h => by simp [CTy.effOf] at h) hL hV hW
-
 /-! ### 2. A-level handlers -/
 
 /-- **Today's kernel types no A-level handler at our instance.** -/
@@ -109,7 +70,7 @@ theorem not_der_handle_tier1Open {Ξ : EffCtx} (Γ : List OVTy) (l : (orowAlg Ξ
     (H : (ourInst (ℍ := ℍ) orowRF Ξ tier1Open).Hnd) (M : Expr) (C : OCTy) :
     ¬ (ourInst (ℍ := ℍ) orowRF Ξ tier1Open).der Γ
       ((ourInst (ℍ := ℍ) orowRF Ξ tier1Open).handle l H M) C := by
-  rintro (⟨Θ, hΘ, -, -, hd⟩ | ⟨-, M', he, -⟩)
+  rintro ⟨-, ⟨Θ, hΘ, -, -, hd⟩ | ⟨-, M', he, -⟩⟩
   · exact not_der_handleK _ _ _ _ (hd (fun _ => []) (models_anyCon_nil hΘ))
   · change (handleK _ _ _).plug M = _ at he
     simp [driveE, driveMark, handleK, hndValE, Kont.plug] at he
@@ -121,7 +82,7 @@ theorem not_der_handle_of_elabClosed {RF : RowForm} {Ξ : EffCtx} {J : OurTyping
     (hE : ElabClosed J) (l : (RF.alg Ξ).Lab) (H : (ourInst (ℍ := ℍ) RF Ξ J).Hnd) (M : Expr)
     {C : OCTy} (hC : C.RFree) :
     ¬ (ourInst (ℍ := ℍ) RF Ξ J).der [] ((ourInst (ℍ := ℍ) RF Ξ J).handle l H M) C := by
-  rintro (⟨Θ, hΘ, hd⟩ | ⟨-, M', he, -⟩)
+  rintro ⟨-, ⟨Θ, hΘ, hd⟩ | ⟨-, M', he, -⟩⟩
   · exact not_der_handleK _ _ _ _ (hE Θ _ _ _ hd hC (fun _ => []) (models_anyCon_nil hΘ))
   · change (handleK _ _ _).plug M = _ at he
     simp [driveE, driveMark, handleK, hndValE, Kont.plug] at he
@@ -184,26 +145,6 @@ theorem not_nu_unrOp : ¬ Row.NU [unrOp] := by
   rcases h 1 0 unrOp (by simp [Row.find, unrOp]) with h | h <;>
     simp [OpSig.abort, unrOp, VTy.isZero] at h
 
-/-- **S1's subeffecting, as written, fails at today's kernel.**  `SubClosed` ranges over every row
-of the algebra.  `()` is typed at the pure row, and the pure row is below `[unrOp]`, whose operation
-is a resuming `unr` one; `[sub]` asks `Row.NU` of its target, so `()` is not typed there. -/
-theorem not_subClosed_ourInst_tier1Open : ¬ (ourInst (ℍ := ℍ) orowRF Ξ tier1Open).SubClosed := by
-  intro hS
-  have hd : (ourInst (ℍ := ℍ) orowRF Ξ tier1Open).der [] (.unit)
-      ((ourInst (ℍ := ℍ) orowRF Ξ tier1Open).F (orowAlg Ξ).unit .unit) := by
-    refine .inl ⟨[], by simp, fun _ h => absurd h List.not_mem_nil, trivial, fun η _ => ?_⟩
-    exact CDerivesNU.ret (.unitI .nil)
-  have hsub : (orowAlg Ξ).Sub (orowAlg Ξ).unit ⟨[unrOp], none⟩ :=
-    ⟨⟨[unrOp], none⟩, ⟨[unrOp], none⟩, rfl, rfl, rowEq_refl _⟩
-  rcases hS [] _ _ ⟨[unrOp], none⟩ .unit hd hsub with ⟨Θ, hΘ, -, -, hd'⟩ | ⟨-, M, he, -⟩
-  · exact not_der_unit_nonNU (S := [unrOp] ++ []) not_nu_unrOp
-      (hd' (fun _ => []) (models_anyCon_nil hΘ))
-  · simp [driveE, driveMark] at he
-
-/-- **S1, as written, fails at today's kernel.** -/
-theorem not_rowAlgebra_ourInst_tier1Open : ¬ (ourInst (ℍ := ℍ) orowRF Ξ tier1Open).RowAlgebra :=
-  fun h => not_subClosed_ourInst_tier1Open h.2.2.2
-
 theorem row_nu_append {S S' : Row} (h : Row.NU S) (h' : Row.NU S') : Row.NU (S ++ S') := by
   intro n i o hf
   rw [Row.find_append] at hf
@@ -211,13 +152,37 @@ theorem row_nu_append {S S' : Row} (h : Row.NU S) (h' : Row.NU S') : Row.NU (S +
   | none => rw [hS, Option.none_or] at hf; exact h' n i o hf
   | some o' => rw [hS, Option.some_or] at hf; cases hf; exact h n i o hS
 
-/-- **Subeffecting at today's kernel, at a target row whose closed prefix is unr-free**: the
-hypothesis `SubClosed` lacks.  A tail variable of the target is read at `anyCon`, which gives its
-instances `Row.NU`; `[sub]` then applies at every instance. -/
+/-- **A returner at a row whose closed prefix is tied to the effect context is tied to it** (decision
+D1), at a typing system that reads its row variables as themselves: a tail is read at a tied
+environment. -/
+theorem tiedAt_F {J : OurTyping orowRF} (henv : ∀ η, J.env Ξ η = η) {ε : ORow} (h : RowAt Ξ ε.ops)
+    (A : OVTy) : ((ourInst (ℍ := ℍ) orowRF Ξ J).F ε A).TiedAt Ξ := by
+  intro η hη
+  refine ⟨orowRF.den Ξ ε (J.env Ξ η), A.den η, rfl, ?_⟩
+  rw [henv, orowRF_den]
+  refine rowAt_append h ?_
+  cases ε.tail with
+  | none => exact rowAt_nil Ξ
+  | some ρ => exact hη ρ
+
+/-- A returner tied to the effect context has its closed prefix tied to it: read the tail at the
+empty row. -/
+theorem rowAt_of_tiedAt_F {J : OurTyping orowRF} (henv : ∀ η, J.env Ξ η = η) {ε : ORow} {A : OVTy}
+    (h : ((ourInst (ℍ := ℍ) orowRF Ξ J).F ε A).TiedAt Ξ) : RowAt Ξ ε.ops := by
+  obtain ⟨S, A', he, hS⟩ := h _ (envAt_nil Ξ)
+  have he' : CTy.effOf (orowRF.den Ξ ε (J.env Ξ (fun _ => []))) (A.den (fun _ => [])) =
+      CTy.effOf S A' := he
+  obtain ⟨rfl, -⟩ := effOf_inj he'
+  rw [henv, orowRF_den] at hS
+  exact rowAt_left hS
+
+/-- **Subeffecting at today's kernel, at a target row whose closed prefix is unr-free and tied to
+the effect context.**  A tail variable of the target is read at `anyCon`, which gives its instances
+`Row.NU`; `[sub]` then applies at every instance. -/
 theorem subClosed_nu_tier1Open {Γ : List OVTy} {e : Expr} {ε₁ ε₂ : ORow} {A : OVTy}
     (h : (ourInst (ℍ := ℍ) orowRF Ξ tier1Open).der Γ e
       ((ourInst (ℍ := ℍ) orowRF Ξ tier1Open).F ε₁ A))
-    (hsub : (orowAlg Ξ).Sub ε₁ ε₂) (hNU : Row.NU ε₂.ops) :
+    (hsub : (orowAlg Ξ).Sub ε₁ ε₂) (hNU : Row.NU ε₂.ops) (hat : RowAt Ξ ε₂.ops) :
     (ourInst (ℍ := ℍ) orowRF Ξ tier1Open).der Γ e ((ourInst (ℍ := ℍ) orowRF Ξ tier1Open).F ε₂ A) := by
   have hle : ∀ η, RowLe (orowRF.den Ξ ε₁ η) (orowRF.den Ξ ε₂ η) :=
     rowLink_orowRF.sub Ξ ε₁ ε₂ hsub
@@ -239,6 +204,8 @@ theorem subClosed_nu_tier1Open {Γ : List OVTy} {e : Expr} {ε₁ ε₂ : ORow} 
     · rename_i ρ hρ
       rw [hρ] at hη
       exact (hη ρ anyCon (List.mem_singleton_self _)).1
+  obtain ⟨-, h⟩ := h
+  refine ⟨tiedAt_F (fun _ => rfl) hat A, ?_⟩
   rcases h with ⟨Θ, hΘ, hRΓ, hRC, hd⟩ | ⟨hΓ, M, he, hL, Θ, hΘ, hRΓ, hRC, hd⟩
   · refine .inl ⟨Θ ++ Θt, fun p hp => ?_, hRΓ, hRC, fun η hη => ?_⟩
     · rcases List.mem_append.mp hp with hp | hp
@@ -247,10 +214,10 @@ theorem subClosed_nu_tier1Open {Γ : List OVTy} {e : Expr} {ε₁ ε₂ : ORow} 
     · obtain ⟨hη₁, hη₂⟩ := models_append hη
       exact CDerivesNU.effSub (hden η hη₂) (hle η) (hd η hη₁)
   · refine .inr ⟨hΓ, M, he, fun η => ?_, Θ ++ Θt, fun p hp => ?_, hRΓ, hRC, fun η hη => ?_⟩
-    · obtain ⟨S, S₀, A₀, hS₀, hC⟩ := hL η
+    · obtain ⟨S, S₀, A₀, hS₀, hC₀, hC⟩ := hL η
       have hC' : CTy.effOf (orowRF.den Ξ ε₁ η) (A.den η) = CTy.effOf S (.sum A₀ (.thunk (CTy.loopEff S₀ A₀ .unit))) := hC
       obtain ⟨rfl, hA⟩ := effOf_inj hC'
-      refine ⟨orowRF.den Ξ ε₂ η, S₀, A₀, fun n i o hf => hle η n i o (hS₀ n i o hf), ?_⟩
+      refine ⟨orowRF.den Ξ ε₂ η, S₀, A₀, fun n i o hf => hle η n i o (hS₀ n i o hf), hC₀, ?_⟩
       show CTy.effOf (orowRF.den Ξ ε₂ η) (A.den η) = _
       rw [hA]
     · rcases List.mem_append.mp hp with hp | hp
@@ -258,6 +225,32 @@ theorem subClosed_nu_tier1Open {Γ : List OVTy} {e : Expr} {ε₁ ε₂ : ORow} 
       · exact hΘt p hp
     · obtain ⟨hη₁, hη₂⟩ := models_append hη
       exact CDerivesNU.effSub (hden η hη₂) (hle η) (hd η hη₁)
+
+/-- **S1's subeffecting at today's kernel** (decision D6): a well-formed target row at an effect
+context with no resuming `unr` operation is unr-free and tied to the context (`rowNU_of_rowAt`),
+where `[sub]` applies. -/
+theorem subClosed_ourInst_tier1Open (hΞ : Ξ.NU) : (ourInst (ℍ := ℍ) orowRF Ξ tier1Open).SubClosed := by
+  rintro Γ e ε₁ ε₂ A h hsub ⟨Δ, hwf⟩
+  exact subClosed_nu_tier1Open h hsub (rowNU_of_rowAt hΞ hwf.2) hwf.2
+
+/-- **The well-formedness premise of `SubClosed` is needed** (its scope): the pure row is below
+`[unrOp]`, which is well formed at no admissible effect context, and `()`, typed at the pure row,
+is not typed at `[unrOp]`. -/
+theorem subClosed_needs_wf (hΞ : AdmEff Ξ) :
+    (orowAlg Ξ).Sub (orowAlg Ξ).unit ⟨[unrOp], none⟩ ∧ (¬ ∃ Δ, (orowAlg Ξ).WF Δ ⟨[unrOp], none⟩) ∧
+      (ourInst (ℍ := ℍ) orowRF Ξ tier1Open).der [] .unit
+        ((ourInst (ℍ := ℍ) orowRF Ξ tier1Open).F (orowAlg Ξ).unit .unit) ∧
+      ¬ (ourInst (ℍ := ℍ) orowRF Ξ tier1Open).der [] .unit
+        ((ourInst (ℍ := ℍ) orowRF Ξ tier1Open).F ⟨[unrOp], none⟩ .unit) := by
+  refine ⟨⟨⟨[unrOp], none⟩, ⟨[unrOp], none⟩, rfl, rfl, rowEq_refl _⟩,
+    fun ⟨_, hwf⟩ => not_nu_unrOp (rowNU_of_wf hΞ hwf), ?_, ?_⟩
+  · refine ⟨tiedAt_F (fun _ => rfl) (rowAt_nil Ξ) _,
+      .inl ⟨[], by simp, fun _ h => absurd h List.not_mem_nil, trivial, fun η _ => ?_⟩⟩
+    exact CDerivesNU.ret (.unitI .nil)
+  · rintro ⟨-, ⟨Θ, hΘ, -, -, hd'⟩ | ⟨-, M, he, -⟩⟩
+    · exact not_der_unit_nonNU (S := [unrOp] ++ []) not_nu_unrOp
+        (hd' (fun _ => []) (models_anyCon_nil hΘ))
+    · simp [driveE, driveMark] at he
 
 /-- A signature's row finds each of its operations by index. -/
 theorem find_ofEff_isSome (n : UInt32) : ∀ (E : List (Qual × VTy × VTy)) (k j : Nat) (i : UInt32),
@@ -379,6 +372,11 @@ theorem rowAlgebra_noSub_ourInst {J : OurTyping orowRF} :
       (ourInst (ℍ := ℍ) orowRF Ξ J).RowSig :=
   ⟨orowAlg_laws Ξ, orowAlg_safe Ξ, rowSig_orow⟩
 
+/-- **S1 at today's kernel** (decision D6), at every effect context with no resuming `unr`
+operation, the admissible ones among them. -/
+theorem rowAlgebra_ourInst_tier1Open (hΞ : Ξ.NU) : (ourInst (ℍ := ℍ) orowRF Ξ tier1Open).RowAlgebra :=
+  ⟨orowAlg_laws Ξ, orowAlg_safe Ξ, rowSig_orow, subClosed_ourInst_tier1Open hΞ⟩
+
 end S1
 
 /-! ### 4. The let law at today's kernel -/
@@ -393,6 +391,8 @@ at the empty context, is weakened by the dead slots of the body's context (`appe
 theorem letLaw_ourInst_tier1Open {Ξ : EffCtx} : (ourInst (ℍ := ℍ) orowRF Ξ tier1Open).LetLaw := by
   intro Γ V A N C hV hN
   obtain ⟨Θ, hΘ, -, hRA, hVd⟩ := hV
+  obtain ⟨hT, hN⟩ := hN
+  refine ⟨hT, ?_⟩
   rcases hN with ⟨Θ', hΘ', hRΓ, hRC, hNd⟩ | ⟨h, -⟩
   · refine .inl ⟨Θ ++ Θ', fun p hp => ?_, fun s hs => hRΓ s (List.mem_cons_of_mem _ hs), hRC,
       fun η hη => ?_⟩

@@ -13,29 +13,26 @@ named `0`).  They mention no world.  A's S5 (`Targets/A/Soundness.lean`) is the 
 every instance; these are the Instance's route to it at Core (RESTRUCTURE §4.1).
 
 **`FinaliserOrder` holds at every typing system that meets `NoInterception` and `FinAloneAt`**
-(`finaliserOrder_at`, from `cancelOrder_at` and `unwindOrder_at`; `finaliserOrder_of` takes
-`FinAlone`, which gives `FinAloneAt`).  The route:
+(`finaliserOrder_at`, from `cancelOrder_at` and `unwindOrder_at`).  The route:
 * **no step creates a handler named `0`** (`hndNamesNZ_steps`), so the frames a cancel tears down
   and its handler stop the cancel only at finaliser frames;
 * **a step at a raise is the step of its innermost stopping frame** (`step1_raise`; that frame is
   unique, `innerCatch_unique`), so a cancel or an unwind goes from finaliser frame to finaliser
   frame;
-* **run splitting** (`steps_plug_split_end`) runs a fired finaliser alone, and `FinAlone` says how
+* **run splitting** (`steps_plug_split_end`) runs a fired finaliser alone, and `FinAloneAt` says how
   that run ends; `[cfin-ret]`, `[cfin-raise]` or `1↦` then hand the raise on.
 
-`FinAlone` is an added hypothesis.  Its source is SPEC §19's typing of `[then]`'s finaliser at the
-abortive part of the row (`D : F_{Σ^abort} 1`).  Its scope is what typing gives about a finaliser's
-own run, at a configuration a typed program reaches; it says nothing about the cancel's or the
-unwind's trace.  The name it allows a finaliser to raise is not the reserved `0`: the unwind goes
-on through the next finaliser frame by `[finalise]`, whose name is not `0` (`Head.ufin`), and typed
-raises are of labels, whose names are not `0`.  `NoInterception` does not give it (check 4,
-`not_noIntercept_of_noInterception`).
-
-`FinAlone`, as written, ranges over every platform that keeps its protocol, and fails at today's
-kernel at a platform that answers at another type than the program's row
-(`Targets/Instance/RunTyping.lean`).  Its consumers read it at the platform with no operation and
-the pure row: that is `FinAloneAt`, which `FinaliserOrder` takes.  `FinRowsAt` is its half about
-operations; the interaction shows that B gives the rest (`Targets/I/Restricted/FinAlone.lean`).
+`FinAloneAt FR` is an added hypothesis: a fired finaliser's run alone, in a platform-free run of a
+typed closed program, ends at a value or at an uncaught raise of a name in `FR`.  Its source is
+SPEC §19's typing of `[then]`'s finaliser.  Its endings are parameterised by what a finaliser may
+raise (decision D3): today's kernel types the finaliser at the abortive part of the row
+(`D : F_{Σ^abort} 1`), whose names are not the reserved `0`, and `FinaliserOrder` reads that form,
+`FinAloneAt (· ≠ 0)`; option A, the target, has a finaliser handle its raises itself,
+`FinAloneAt (fun _ => False)`, which gives it (`finAloneAt_mono`, `finaliserOrder_A`).  Its scope
+is what typing gives about a finaliser's own run, at a configuration a typed program reaches; it
+says nothing about the cancel's or the unwind's trace.  `NoInterception` does not give it.  It is
+read platform-free, as its consumers read it.  `FinRowsAt FR` is its half about operations; the
+interaction shows that B gives the rest (`Targets/I/Restricted/FinAlone.lean`).
 -/
 
 noncomputable section
@@ -1090,29 +1087,11 @@ theorem step1_det {μ μ₁ μ' : Heap} {K : Kont} {a a₁ T : Expr} (hh : Head 
 
 /-! ### A fired finaliser runs alone -/
 
-/-- **A fired finaliser runs alone** (SPEC §19's finaliser row, at run time).  In every run of a
-typed closed program, under every platform that keeps its protocol, consider a `[then]` frame at
-the step that fires it.  Its finaliser, run alone from `D ()`, ends only at a value or at a raise
-of a name other than the reserved `0` that nothing inside it catches. -/
-def FinAlone (J : TypingJ) : Prop :=
-  ∀ P : Platform, P.Respects → ∀ (S : Row) (A : VTy) (e : Expr), Row.NU S →
-    J.closed e (CTy.effOf S A) →
-    ∀ (c : Conf P) (K₀ K : Kont) (N D : Val) (n i : UInt32) (v : Val),
-      PSteps (ℍ := ℍ) P (init P e) c →
-      c.e = K₀.plug (ubindE (Val.pair N D) (K.plug (raiseE (.val (opPayload n i v))))) →
-      K.Catches n = false →
-      ∀ μ' t, Steps (ℍ := ℍ) c.μ (.app (.val D) (.val .unit)) μ' t →
-        (∀ μ'' t', ¬ Step1 (ℍ := ℍ) μ' t μ'' t') →
-        IsVal t ∨ ∃ (K' : Kont) (m j : UInt32) (w : Val),
-          t = K'.plug (raiseE (.val (opPayload m j w))) ∧ K'.Catches m = false ∧ m ≠ 0
-
-theorem rowNU_nil : Row.NU [] := fun _ _ _ h => by simp [Row.find] at h
-
-/-- **A fired finaliser runs alone, platform-free**: `FinAlone` at the platform with no operation
-and the pure row, which is what `FinaliserOrder` reads.  A run from a typed closed program at `F A`
-reaches a `[then]` frame at the step that fires it; the finaliser's run alone, from `D ()`, ends
-only at a value or at a raise of a nonzero name that nothing inside it catches. -/
-def FinAloneAt (J : TypingJ) : Prop :=
+/-- **A fired finaliser runs alone** (SPEC §19's finaliser row, at run time), platform-free: a run
+from a typed closed program at `F A` reaches a `[then]` frame at the step that fires it; the
+finaliser's run alone, from `D ()`, ends only at a value or at an uncaught raise of a name in `FR`,
+the names a finaliser may raise (decision D3). -/
+def FinAloneAt (FR : UInt32 → Prop) (J : TypingJ) : Prop :=
   ∀ {e : Expr} {A : VTy}, J.closed e (.ret A) →
     ∀ {μ : Heap} {K₀ K : Kont} {N D : Val} {n i : UInt32} {v : Val},
       Steps (ℍ := ℍ) Adequacy.emptyMem e μ
@@ -1121,13 +1100,13 @@ def FinAloneAt (J : TypingJ) : Prop :=
       ∀ {μ' : Heap} {t : Expr}, Steps (ℍ := ℍ) μ (.app (.val D) (.val .unit)) μ' t →
         (∀ μ'' t', ¬ Step1 (ℍ := ℍ) μ' t μ'' t') →
         IsVal t ∨ ∃ (K' : Kont) (m j : UInt32) (w : Val),
-          t = K'.plug (raiseE (.val (opPayload m j w))) ∧ K'.Catches m = false ∧ m ≠ 0
+          t = K'.plug (raiseE (.val (opPayload m j w))) ∧ K'.Catches m = false ∧ FR m
 
 /-- **The operations a fired finaliser's run alone stops at**, platform-free: at every term the
-run reaches, an operation its context leaves uncaught is a raise of a nonzero name.  This is the
-half of `FinAloneAt` that reads the finaliser's row (`D : F_{Σ^abort} 1`): no resuming operation,
-and no cancel, escapes it. -/
-def FinRowsAt (J : TypingJ) : Prop :=
+run reaches, an operation its context leaves uncaught is a raise of a name in `FR`.  This is the
+half of `FinAloneAt FR` that reads the finaliser's row: no resuming operation, and no cancel,
+escapes it. -/
+def FinRowsAt (FR : UInt32 → Prop) (J : TypingJ) : Prop :=
   ∀ {e : Expr} {A : VTy}, J.closed e (.ret A) →
     ∀ {μ : Heap} {K₀ K : Kont} {N D : Val} {n i : UInt32} {v : Val},
       Steps (ℍ := ℍ) Adequacy.emptyMem e μ
@@ -1135,24 +1114,17 @@ def FinRowsAt (J : TypingJ) : Prop :=
       K.Catches n = false →
       ∀ {μ' : Heap} {t : Expr}, Steps (ℍ := ℍ) μ (.app (.val D) (.val .unit)) μ' t →
         ∀ (K' : Kont) (r : Bool) (m j : UInt32) (w : Val), t = K'.plug (opE r (opPayload m j w)) →
-          OpFree r m K' → r = true ∧ m ≠ 0
+          OpFree r m K' → r = true ∧ FR m
 
-/-- `FinAlone` at a configuration a platform-free run of a program typed at `F A` reaches. -/
-theorem finAlone_at {J : TypingJ} (hF : FinAlone (ℍ := ℍ) J) {e : Expr} {A : VTy}
-    (he : J.closed e (.ret A)) {μ : Heap} {K₀ K : Kont} {N D : Val} {n i : UInt32} {v : Val}
-    (hreach : Steps (ℍ := ℍ) Adequacy.emptyMem e μ
-      (K₀.plug (ubindE (Val.pair N D) (K.plug (raiseE (.val (opPayload n i v)))))))
-    (hK : K.Catches n = false) {μ' : Heap} {t : Expr}
-    (hD : Steps (ℍ := ℍ) μ (.app (.val D) (.val .unit)) μ' t)
-    (hirr : ∀ μ'' t', ¬ Step1 (ℍ := ℍ) μ' t μ'' t') :
-    IsVal t ∨ ∃ (K' : Kont) (m j : UInt32) (w : Val),
-      t = K'.plug (raiseE (.val (opPayload m j w))) ∧ K'.Catches m = false ∧ m ≠ 0 :=
-  hF Platform.none platformNone_respects [] A e rowNU_nil he ⟨μ, _, ()⟩ K₀ K N D n i v
-    (psteps_of_steps (ℍ := ℍ) Platform.none () hreach) rfl hK μ' t hD hirr
+/-- A finaliser that may raise fewer names runs alone at more. -/
+theorem finAloneAt_mono {FR FR' : UInt32 → Prop} (hle : ∀ m, FR m → FR' m) {J : TypingJ}
+    (h : FinAloneAt (ℍ := ℍ) FR J) : FinAloneAt (ℍ := ℍ) FR' J := by
+  intro e A he μ K₀ K N D n i v hreach hK μ' t hD hirr
+  rcases h he hreach hK hD hirr with hv | ⟨K', m, j, w, ht, hK', hm⟩
+  · exact .inl hv
+  · exact .inr ⟨K', m, j, w, ht, hK', hle m hm⟩
 
-/-- `FinAlone` gives its platform-free form. -/
-theorem finAloneAt_of_finAlone {J : TypingJ} (hF : FinAlone (ℍ := ℍ) J) : FinAloneAt (ℍ := ℍ) J :=
-  fun he _ _ _ _ _ _ _ _ hreach hK _ _ hD hirr => finAlone_at hF he hreach hK hD hirr
+theorem rowNU_nil : Row.NU [] := fun _ _ _ h => by simp [Row.find] at h
 
 /-! ### Runs and contexts -/
 
@@ -1332,7 +1304,7 @@ theorem catches_innerUbind {n : UInt32} {Ko Ki : Kont} (x : Expr) :
 
 /-- **The unwind through frames with no handler fires their finalisers once each, innermost
 first**: `KA` holds no handler, `ccatch` or `cfin` frame, and `KB` stops nothing of the raise. -/
-theorem unwindRun_of {J : TypingJ} (hF : FinAloneAt (ℍ := ℍ) J) {e : Expr} {A : VTy}
+theorem unwindRun_of {J : TypingJ} (hF : FinAloneAt (ℍ := ℍ) (· ≠ 0) J) {e : Expr} {A : VTy}
     (he : J.closed e (.ret A)) (K₀ : Kont) :
     ∀ (k : ℕ) (KA KB : Kont) (μ : Heap) (n i : UInt32) (v : Val), KA.fins.length = k →
       KA.hndNames = [] → KA.NoCtl → KB.Catches n = false → n ≠ 0 →
@@ -1447,16 +1419,13 @@ theorem unwindRun_of {J : TypingJ} (hF : FinAloneAt (ℍ := ℍ) J) {e : Expr} {
 
 
 /-- **I3.b, unwind, given `FinAloneAt`.** -/
-theorem unwindOrder_at {J : TypingJ} (hF : FinAloneAt (ℍ := ℍ) J) : UnwindOrder (ℍ := ℍ) J := by
+theorem unwindOrder_at {J : TypingJ} (hF : FinAloneAt (ℍ := ℍ) (· ≠ 0) J) : UnwindOrder (ℍ := ℍ) J := by
   intro e A he μ₁ K₀ K n i v hH hC hn hreach μ₂ K' m j w hK' hrun
   have h := unwindRun_of hF he K₀ K.fins.length K .hole μ₁ n i v rfl hH hC rfl hn
     (by rw [Kont.comp_hole]; exact hreach) μ₂ K' m j w hK' (by rw [Kont.comp_hole]; exact hrun)
   rw [Kont.comp_hole] at h
   exact h
 
-/-- **I3.b, unwind, given `FinAlone`.** -/
-theorem unwindOrder_of {J : TypingJ} (hF : FinAlone (ℍ := ℍ) J) : UnwindOrder (ℍ := ℍ) J :=
-  unwindOrder_at (finAloneAt_of_finAlone hF)
 
 /-! ### The cancel -/
 
@@ -1548,7 +1517,7 @@ abbrev ccatchK (K : Kont) : Kont := .appR (.prim .ccatch) K
 
 /-- **A cancel run through frames with no `ccatch`, no `cfin` and no handler of `0` fires their
 finalisers once each, innermost first.** -/
-theorem cancelRun_of {J : TypingJ} (hF : FinAloneAt (ℍ := ℍ) J) {e : Expr} {A : VTy}
+theorem cancelRun_of {J : TypingJ} (hF : FinAloneAt (ℍ := ℍ) (· ≠ 0) J) {e : Expr} {A : VTy}
     (he : J.closed e (.ret A)) (K₀ : Kont) (Ns : List UInt32) :
     ∀ (k : ℕ) (Kc : Kont) (μ : Heap) (err : Option Val), Kc.fins.length = k →
       Kc.NoCtl → Kc.HasHnd 0 = false →
@@ -1681,7 +1650,7 @@ theorem cancelRun_of {J : TypingJ} (hF : FinAloneAt (ℍ := ℍ) J) {e : Expr} {
       (hpre.trans (.more (hst₄.plug K₀) (.refl _ _))) μ₃ r hrest₄ hr)
 
 /-- **I3.b, cancel, given `NoInterception` and `FinAloneAt`.** -/
-theorem cancelOrder_at {J : TypingJ} (hN : NoInterception J) (hF : FinAloneAt (ℍ := ℍ) J) :
+theorem cancelOrder_at {J : TypingJ} (hN : NoInterception J) (hF : FinAloneAt (ℍ := ℍ) (· ≠ 0) J) :
     CancelOrder (ℍ := ℍ) J := by
   intro e A he μ₁ K₀ n H K hC hreach μ₃ r hrun hr
   have hreach' : Steps (ℍ := ℍ) Adequacy.emptyMem e μ₁ (K₀.plug (cancelOf n H K)) :=
@@ -1711,20 +1680,17 @@ theorem cancelOrder_at {J : TypingJ} (hN : NoInterception J) (hF : FinAloneAt (�
   rw [hfins] at h
   exact h
 
-/-- **I3.b, cancel, given `NoInterception` and `FinAlone`.** -/
-theorem cancelOrder_of {J : TypingJ} (hN : NoInterception J) (hF : FinAlone (ℍ := ℍ) J) :
-    CancelOrder (ℍ := ℍ) J :=
-  cancelOrder_at hN (finAloneAt_of_finAlone hF)
-
-/-- **I3.b given `NoInterception` and `FinAloneAt`.** -/
-theorem finaliserOrder_at {J : TypingJ} (hN : NoInterception J) (hF : FinAloneAt (ℍ := ℍ) J) :
-    FinaliserOrder (ℍ := ℍ) J :=
+/-- **I3.b given `NoInterception` and `FinAloneAt`** at today's endings (raises of nonzero
+names). -/
+theorem finaliserOrder_at {J : TypingJ} (hN : NoInterception J)
+    (hF : FinAloneAt (ℍ := ℍ) (· ≠ 0) J) : FinaliserOrder (ℍ := ℍ) J :=
   ⟨cancelOrder_at hN hF, unwindOrder_at hF⟩
 
-/-- **I3.b given `NoInterception` and `FinAlone`.** -/
-theorem finaliserOrder_of {J : TypingJ} (hN : NoInterception J) (hF : FinAlone (ℍ := ℍ) J) :
-    FinaliserOrder (ℍ := ℍ) J :=
-  finaliserOrder_at hN (finAloneAt_of_finAlone hF)
+/-- **I3.b at option A** (decision D3): given `NoInterception` and that a fired finaliser's run
+alone ends at a value. -/
+theorem finaliserOrder_A {J : TypingJ} (hN : NoInterception J)
+    (hF : FinAloneAt (ℍ := ℍ) (fun _ => False) J) : FinaliserOrder (ℍ := ℍ) J :=
+  finaliserOrder_at hN (finAloneAt_mono (fun _ h => h.elim) hF)
 
 end Targets
 

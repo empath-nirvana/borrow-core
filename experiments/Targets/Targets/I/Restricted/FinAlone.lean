@@ -7,22 +7,24 @@ import Targets.Instance.Restricted.NoInterception
 /-!
 # The interaction — a fired finaliser runs alone: what B gives, and what typing must
 
-`FinAloneAt J` (`Targets/Base/CoreCancel.lean`) is what `FinaliserOrder` reads: in a platform-free
-run of a typed closed program, a fired finaliser's run alone ends at a value or at a raise of a
-nonzero name nothing inside it catches.  It has two halves.
+`FinAloneAt FR J` (`Targets/Base/CoreCancel.lean`) is what `FinaliserOrder` reads: in a
+platform-free run of a typed closed program, a fired finaliser's run alone ends at a value or at an
+uncaught raise of a name in `FR`, the names a finaliser may raise (decision D3: today's kernel's
+endings are raises of nonzero names, option A's are none).  It has two halves.
 
 * **Stuck redexes: B gives them.**  A program in Core's relation never gets stuck, under the
   platform with no operation (`platOK_of_ewp`, B2's runs).  A finaliser's run alone is the whole
   run's, inside `K₀[□; raise p]` or `K₀[cfin s □]`.  A term that is no value, takes no step, and
   leaves no operation uncaught, takes no step in such a context either (`no_step_plug`).  So a
   finaliser whose run alone stopped at such a term would leave the whole run stuck.
-* **Operations: typing must give them.**  `FinRowsAt J`: an operation the finaliser's run alone
-  leaves uncaught is a raise of a nonzero name, neither a resuming operation nor a cancel.  This is
-  the finaliser's row (`D : F_{Σ^abort} 1`) read at run time.  No route proves it (TIER1-PLAN §4).
+* **Operations: typing must give them.**  `FinRowsAt FR J`: an operation the finaliser's run alone
+  leaves uncaught is a raise of a name in `FR`, neither a resuming operation nor a cancel.  This is
+  the finaliser's row read at run time.  No route proves it (TIER1-PLAN §4).
 
-`finAloneAt_of_finRows`: FL at Core's world and `FinRowsAt` give `FinAloneAt`; at today's unr-free
-kernel FL holds (`fl_core_tier1NU`), so `FinaliserOrder tier1NU` follows from `FinRowsAt tier1NU`
-alone (`finaliserOrder_tier1NU_of_finRows`).
+`finAloneAt_of_finRows`: FL at Core's world and `FinRowsAt FR` give `FinAloneAt FR`, at every `FR`;
+at today's unr-free kernel FL holds (`fl_core_tier1NU`), so `FinaliserOrder tier1NU` follows from
+`FinRowsAt (· ≠ 0) tier1NU` alone (`finaliserOrder_tier1NU_of_finRows`), and from option A's
+`FinRowsAt (fun _ => False) tier1NU` (`finaliserOrder_tier1NU_of_finRowsA`).
 
 **Route 8.2's statement** (`RowRoute`): a typing of configurations at rows, through the heap, that
 types the configurations a typed program reaches, types a fired finaliser at a row of abortive
@@ -197,9 +199,9 @@ theorem stuck_of_rel {e : Expr} {A : VTy}
 alone is the whole run's, inside `K₀[□; raise p]` or `K₀[cfin p □]`; where it stops at a term
 that is no value and leaves no operation uncaught, the whole run is stuck (`no_step_plug`), which
 FL and B2's runs exclude (`stuck_of_rel`).  What is left is an operation left uncaught, and
-`FinRowsAt` says it is a raise of a nonzero name. -/
-theorem finAloneAt_of_finRows {J : TypingJ} (hR : FinRowsAt (ℍ := ℍ) J)
-    (hFL : FL (B.coreB (ℍ := ℍ)) J) : FinAloneAt (ℍ := ℍ) J := by
+`FinRowsAt FR` says it is a raise of a name in `FR`. -/
+theorem finAloneAt_of_finRows {FR : UInt32 → Prop} {J : TypingJ} (hR : FinRowsAt (ℍ := ℍ) FR J)
+    (hFL : FL (B.coreB (ℍ := ℍ)) J) : FinAloneAt (ℍ := ℍ) FR J := by
   intro e A he μ K₀ K N D n i v hreach hK μ' t hD hirr
   have hrel := comp_of_FL hFL he
   by_cases hv : IsVal t
@@ -265,7 +267,7 @@ theorem finAloneAt_of_finRows {J : TypingJ} (hR : FinRowsAt (ℍ := ℍ) J)
 /-- **`FinaliserOrder` from `FinRowsAt`**, at a typing system that meets FL at Core's world and
 `NoInterception`. -/
 theorem finaliserOrder_of_finRows {J : TypingJ} (hN : NoInterception J)
-    (hR : FinRowsAt (ℍ := ℍ) J) (hFL : FL (B.coreB (ℍ := ℍ)) J) : FinaliserOrder (ℍ := ℍ) J :=
+    (hR : FinRowsAt (ℍ := ℍ) (· ≠ 0) J) (hFL : FL (B.coreB (ℍ := ℍ)) J) : FinaliserOrder (ℍ := ℍ) J :=
   finaliserOrder_at hN (finAloneAt_of_finRows hR hFL)
 
 /-- `NoInterception` at today's unr-free kernel. -/
@@ -274,9 +276,15 @@ theorem noInterception_tier1NU : NoInterception tier1NU := fun Θ _ _ e _ h =>
 
 /-- **`FinaliserOrder` at today's unr-free kernel, given `FinRowsAt`**: what is left of Core's
 I3.b is the operations a fired finaliser's run alone stops at. -/
-theorem finaliserOrder_tier1NU_of_finRows (hR : FinRowsAt (ℍ := ℍ) tier1NU) :
+theorem finaliserOrder_tier1NU_of_finRows (hR : FinRowsAt (ℍ := ℍ) (· ≠ 0) tier1NU) :
     FinaliserOrder (ℍ := ℍ) tier1NU :=
   finaliserOrder_of_finRows noInterception_tier1NU hR fl_core_tier1NU
+
+/-- **`FinaliserOrder` at today's unr-free kernel, given option A's `FinRowsAt`** (decision D3): a
+fired finaliser's run alone leaves no operation uncaught. -/
+theorem finaliserOrder_tier1NU_of_finRowsA (hR : FinRowsAt (ℍ := ℍ) (fun _ => False) tier1NU) :
+    FinaliserOrder (ℍ := ℍ) tier1NU :=
+  finaliserOrder_A noInterception_tier1NU (finAloneAt_of_finRows hR fl_core_tier1NU)
 
 /-! ### The route's statement (TIER1-PLAN §4, route 8.2) -/
 
@@ -303,7 +311,8 @@ structure RowRoute (J : TypingJ) where
       OpFree r m K' → r = true ∧ m ≠ 0
 
 /-- The route's obligations give `FinRowsAt`. -/
-theorem finRowsAt_of_route {J : TypingJ} (hr : RowRoute (ℍ := ℍ) J) : FinRowsAt (ℍ := ℍ) J := by
+theorem finRowsAt_of_route {J : TypingJ} (hr : RowRoute (ℍ := ℍ) J) :
+    FinRowsAt (ℍ := ℍ) (· ≠ 0) J := by
   intro e A he μ K₀ K N D n i v hreach hK μ' t hD K' r m j w ht hfree
   obtain ⟨S', hS', hNZ, hT⟩ := hr.fire (hr.reach he hreach) hK
   have hsteps : ∀ {μ₁ : Heap} {e₁ : Expr} {μ₂ : Heap} {e₂ : Expr},
