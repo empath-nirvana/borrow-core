@@ -396,6 +396,13 @@ theorem I.pins_J₁ : I.Pins J₁ admClosedOp .abortive
   - `letLaw_ourInst` and `rowAlgebra_ourInst` at `J₁`;
   - the eight schema lemmas;
   - `I.flOpen_core_J₁`, `I.fl_core_J₁`, `I.i4a_J₁` and `I.pins_J₁`.
+- **The cost of the inversions** (CLAUDE.md asks for it). `Instance/Inversion.lean` holds ten
+  inductions over `CDerivesNU`, in 765 lines with their invariants.
+  - Each induction tells apart the rules whose conclusion's term has another head by one simp set
+    over the term constants (`cdnu_terms`, `cdnu_at`).
+  - It carries an invariant through the fourteen rules whose premise has the conclusion's term.
+  - The invariants are reusable: the views of a slot's type (`ThunkOf`, `ValInv`, `CompInv`), and
+    `ν`'s unrolling (`NuUp`, `NuEq`, `NuRoot`).
 - **For pieces 3–5,** which need `J₁`:
   - at `tier1Open` they can go on;
   - every (E) property whose program has a handler at its top fails there, and each waits on the
