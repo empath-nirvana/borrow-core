@@ -19,9 +19,10 @@ lower rank is refuted by a refutation that passes the arising check, and provisi
 through `FutQ` (W's order `Fut`, or the stack itself, by the placement's flag) followed, at the
 clause that makes the callback's own lend, by `OwnPush` at the type it reads. The own lend is the
 outermost `∀`'s instance read as the lend the instance names; it is named by the type, so it is
-relative to it, as `vRLk`'s extension is (`e'.x = x ∨ ¬ CFree e'.x C`). It is not a future: its
-variable is a binder, which `BindersLow` keeps off the futures' names (`NsVar`). Contexts are
-carried across it by `MonoOwnG` (statement 0). Synthesis §11's failure (d) is worded as
+relative to it, as `vRLk`'s extension is (`e'.x = x ∨ ¬ CFree e'.x C`). The type's own clause
+does not quantify over it as a future (`FutAvoids` asks the type's binders avoided), though the
+push is a one-step future of the stack (`ownPush_futStep`), so contexts are carried across it by
+`MonoG`'s instance (`MonoOwnG`, statement 0). Synthesis §11's failure (d) is worded as
 "different future-world quantifiers at `U` and at `⊸`". Reading it as this property is the
 design's, and the outcome is reported against both (DESIGN §4.2, §12.2).
 

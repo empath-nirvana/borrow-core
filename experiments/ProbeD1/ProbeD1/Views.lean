@@ -47,7 +47,7 @@ theorem mem_drop_l {σ : LStack} {k : Nat} {l : BoCa.Loc} (h : l ∈ (σ.drop k)
 /-- A step keeps every variable of the stack. -/
 theorem FutStep.vars_mono {δ : LSub} {ρ : WRes} {s s' : Stk} (h : FutStep δ ρ s s') :
     ∀ y ∈ s.1.map LEnt.x, y ∈ s'.1.map LEnt.x := by
-  obtain ⟨k, τ, αt, N, -, -, h₁, -⟩ := h
+  obtain ⟨k, τ, αt, N, -, h₁, -⟩ := h
   intro y hy
   rw [h₁, futS_map_x]
   rw [← List.take_append_drop k s.1, List.map_append] at hy
@@ -241,7 +241,7 @@ theorem vwS_futStep {δ : LSub} {ρ : WRes} {σ σ' : LStack} {αs αs' : List L
     (hok : StackOK σ αs) (h : FutStep δ ρ (σ, αs) (σ', αs')) {ds : List Bool}
     (hl : ds.length = σ.length) (seen : List BoCa.Loc) (ls : List SRec) :
     vwS δ seen σ' (futDs σ ds σ') αs' ls = vwS δ seen σ ds αs ls := by
-  obtain ⟨k, τ, αt, N, hf, -, h₁, h₂⟩ := h
+  obtain ⟨k, τ, αt, N, hf, h₁, h₂⟩ := h
   simp only at h₁ h₂
   subst h₁ h₂
   have hkσ : k ≤ σ.length := hf.depth_le
@@ -306,7 +306,7 @@ theorem stratS_fut {δ : LSub} {ρ : WRes} {s s' : Stk} (hok : StackOK s.1 s.2) 
   | @tail s₁ s₂ hs₁ hst ih =>
       have hok₁ := Fut.stackOK hok hs₁
       have hok₂ := FutStep.stackOK hok₁ hst
-      obtain ⟨k, τ, αt, N, hf, -, -, h₂⟩ := hst
+      obtain ⟨k, τ, αt, N, hf, -, h₂⟩ := hst
       rw [stratS_iff_all hok₂.2.1]
       rw [stratS_iff_all hok₁.2.1] at ih
       intro a ha
@@ -368,7 +368,7 @@ theorem extS_find_futStep {δ : LSub} {ρ : WRes} {σ σ' : LStack} {αs αs' : 
     (hok : StackOK σ αs) (h : FutStep δ ρ (σ, αs) (σ', αs')) {y : LifeVar}
     (hy : y ∈ σ'.map LEnt.x → y ∈ σ.map LEnt.x) :
     (extS δ σ' αs').find? y = (extS δ σ αs).find? y := by
-  obtain ⟨k, τ, αt, N, hf, -, h₁, h₂⟩ := h
+  obtain ⟨k, τ, αt, N, hf, h₁, h₂⟩ := h
   simp only at h₁ h₂
   subst h₁ h₂
   have hkσ : k ≤ σ.length := hf.depth_le

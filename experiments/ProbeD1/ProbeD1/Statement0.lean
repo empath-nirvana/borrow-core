@@ -116,15 +116,20 @@ def MonoG (p : Placement) : Prop :=
 
 /-- **Contexts across the callback's own lend**: a context related at `σ` is related at the stack
 the own lend of the type `C` pushes on it, when the pushed variable is neither free nor bound in
-the context's live types (`CtxFresh`). The push is not a future (its variable is the type's
-binder, not a future's name), so `MonoG` does not give it. `ThunkVRow` and `BangThunkVRow` at
-`cbpv` (the `U` clause's own push) and `AllIRow` at `binder0` and `binder` (the `∀` clause's own
-push) call their premise at the pushed stack, with the context carried there by this. -/
+the context's live types (`CtxFresh`) and is new to the reading substitution. `ThunkVRow` and
+`BangThunkVRow` at `cbpv` (the `U` clause's own push) and `AllIRow` at `binder0` and `binder` (the
+`∀` clause's own push) call their premise at the pushed stack, with the context carried there by
+this.
+
+`δ.find? e.x = none` is added (DESIGN §4.3: "`vars_sub` follows from `SubDom` and the binder new to
+`Δ`"): it is `FutOK.vars_sub` at the push, which `OwnOK` does not ask. Every use meets it: the
+judgement's binder is new to `Δ` (`OwnHyg`, `AllIRow`'s `Δ.find? x = none`) and `δ` maps only
+`Δ`'s variables (`SubDom`). -/
 def MonoOwnG (p : Placement) : Prop :=
   ∀ (σ : LStack) (δ : LSub) (Γ : Ctx VTy) (γ : List Val) (αs : List Life) (ls : List SRec)
     (ρ : WRes) (C : CTy) (e : LEnt) (a : Life),
-    StackOK σ αs → OwnPush δ C ρ (σ, αs) e a → CtxFresh e.x Γ → TabAtS σ αs ρ →
-    gRL p σ δ αs ls Γ γ ρ → gRL p (e :: σ) δ (a :: αs) ls Γ γ ρ
+    StackOK σ αs → OwnPush δ C ρ (σ, αs) e a → δ.find? e.x = none → CtxFresh e.x Γ →
+    TabAtS σ αs ρ → gRL p σ δ αs ls Γ γ ρ → gRL p (e :: σ) δ (a :: αs) ls Γ γ ρ
 
 /-- **Computations along W's order**, stated beside the bundles: `binder0`'s `U` clause needs it
 for `MonoV` at a `U` value. -/

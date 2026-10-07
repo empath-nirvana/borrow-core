@@ -11,8 +11,8 @@ Targets' `SemW`/`FL` (`Targets/B/World.lean`, `Targets/B/Guarantees.lean`) quant
 index with no hypothesis on its stack. At a stack whose variables a binder of the judgement
 rebinds, or whose lifetimes do not model `Δ`, the rows' proofs have nothing to work with, so the
 probe states FL at W with GhostEnd's index hypotheses (`StackOK`, `StackJ`, the models, the table)
-and two of the judgement's own: its binders are not a future's names (`BindersLow`), and its free
-lifetime variables are `Δ`'s (`Scoped`). The reading substitution maps only `Δ`'s variables
+and two of the judgement's own: its binders are not names `StackJ`'s second kind admits
+(`BindersLow`), and its free lifetime variables are `Δ`'s (`Scoped`). The reading substitution maps only `Δ`'s variables
 (`SubDom`); the stack's own come from `extS`. At the nil index, at a scoped judgement, `SemS` and
 Targets' `SemW₀` read the same judgement.
 
@@ -58,9 +58,11 @@ def OwnHyg (Δ : LifeCtx) (Γ : Ctx VTy) (C : CTy) : Prop :=
   ∀ (x : LifeVar) (c : Lifetime.Life) (C' : CTy), C = .all x c C' →
     Δ.find? x = none ∧ CtxFresh x Γ
 
-/-- **Binder hygiene**: no binder of the judgement's types is a name a future gives an entry
+/-- **Binder hygiene**: no binder of the judgement's types is a name `StackJ`'s second kind admits
 (`NsVar`). Every row takes it of the types its premises add (the rule's binder, its intermediate
-types), as `allI_RLa` takes `hσx`. -/
+types), as `allI_RLa` takes `hσx`. A future may insert other names (`FutStep`); a row that calls
+its premise at such a future meets a stack `StackJ` does not admit, and an inserted name a type in
+sight binds (DESIGN §2.2, *Names*). -/
 def BindersLow (Γ : Ctx VTy) (C : CTy) : Prop :=
   (∀ x ∈ CTy.binders C, ¬ NsVar x) ∧ ∀ s ∈ Γ, s.live = true → ∀ x ∈ VTy.binders s.ty, ¬ NsVar x
 
@@ -78,8 +80,8 @@ def SubDom (δ : LSub) (Δ : LifeCtx) : Prop := ∀ y, δ.find? y ≠ none → �
 /-- **The stack's entries in a judgement** `Δ; Γ ⊢ _ : C`: distinct variables; every variable free
 in an entry's payload type `Δ`'s or the stack's; each entry one of three kinds.
 * A variable of `Δ` (GhostEnd's `LStack.WF`).
-* A future's name (`NsVar`), new to `Δ` and free nowhere in `Γ` and `C`: an entry a future
-  inserted. Under `BindersLow` no binder of the judgement is one.
+* A name no program binds (`NsVar`), new to `Δ` and free nowhere in `Γ` and `C`: an entry a
+  future inserted under such a name. Under `BindersLow` no binder of the judgement is one.
 * The innermost entry named by `C`'s outermost `∀`, new to `Δ`, at a lifetime meeting its bound,
   the variable bound nowhere else in `C` and neither free nor bound in `Γ` (`CtxFresh`): the
   callback's own lend, which the `U` clause makes at `cbpv`. -/

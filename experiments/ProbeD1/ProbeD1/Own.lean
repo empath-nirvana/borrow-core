@@ -4,28 +4,25 @@ import ProbeD1.Mono
 # ProbeD1 — the callback's own lend: `MonoOwnG` (statement 0, the first per-placement fact)
 
 `MonoOwnG p` carries a context across the stack the callback's own lend pushes (DESIGN §4.1). The
-push is named by the type's binder, not by a future's name, so it is no future of the stack
-(DESIGN §2.2, *The own lend*).
+push is named by the type's binder.
 
-* **What holds at every placement** (`monoOwnV_uFree`, `monoOwnG_uFree`): at a slot whose type
-  reaches no `U` through the formers W reads componentwise, the transport is the leaves' reading at
-  the pushed stack, which agrees with the old one at the slot's free variables (`CtxFresh`,
-  `vC_extend_of_not_free`, `interp_extend_of_not_mentions`).
-* **What holds at a push named by a future's name** (`ownPush_futStep`, `monoOwnGNs_of_monoG`):
-  when the pushed variable is `NsVar` and new to the reading substitution, the push is the one-step
-  future at depth `0` (`OwnOK` gives `FutOK`'s fields), and the transport is `MonoG`'s instance
-  there. So at `cbpv` and `binder` the transport holds at such a push (`monoOwnGNs_cbpv`,
-  `monoOwnGNs_binder`).
-* **What is not derived.** At a thunk slot `g : U C₁` and a push named by a program binder, `g`'s
-  `U` clause owes `g`'s body at every future of the pushed stack, the pushed stack itself
-  included. No such stack is a future of the old one (the pushed variable is not `NsVar`), and
-  `g`'s clause gives its body only at the old stack's futures and, at `cbpv`, at `C₁`'s own pushes,
-  which are named by `C₁`'s binder, not by the context's. The transport would need `g`'s forced
-  body carried along the push itself (`MonoC` along a non-future insertion). At `⊸` that reads the
-  argument back at the old stack, under the old stack's guard, which is stronger than the pushed
-  stack's (`TabAtS σ` fails at a resource holding a cell at the pushed place). This holds at every
-  placement, for the one reason the design names (DESIGN §4.3, §12.3): our `Fut` has no step for a
-  binder-named entry. I have not derived it and have not verified that any obstruction is real.
+* **The push is a future** (`ownPush_futStep`). A step's inserted variables are any new to the
+  stack and to the reading substitution (`FutStep`), so the push of an entry whose variable is new
+  to `δ` is the one-step future at depth `0`: `OwnOK` gives `FutOK`'s fields. `MonoOwnG` is
+  `MonoG`'s instance there (`monoOwnG_of_monoG`), and holds at `cbpv` and `binder`
+  (`monoOwnG_cbpv`, `monoOwnG_binder`). It takes `δ.find? e.x = none`, which is `FutOK.vars_sub`
+  at the push (DESIGN §4.3: "`vars_sub` follows from `SubDom` and the binder new to `Δ`").
+* **Why the futures' names are not restricted to `NsVar`.** With every inserted variable a name no
+  program binds, a binder-named push is no future. At a thunk slot `g : U C₁`, `g`'s `U` clause
+  owes `g`'s body at every future of the pushed stack, the pushed stack itself included, and gives
+  it only at the old stack's futures (and, at `cbpv`, at `C₁`'s own pushes, named by `C₁`'s
+  binder). The transport would then need `g`'s forced body carried along the push itself (`MonoC`
+  along a non-future insertion), which at `⊸` reads the argument back at the old stack under the
+  old stack's stronger guard. That is the case DESIGN §13 step 2 admits such names for.
+* **At `binder0`** the `U` clause ranges over the stack itself, so the transport at a thunk slot
+  needs `MonoG binder0`, hence `MonoC binder0` along the push. Not derived.
+* **At every placement**, at a context reaching no `U` (`monoOwnG_uFree`): the leaves' reading at
+  the pushed stack agrees with the old one at the slot's free variables (`CtxFresh`).
 -/
 
 noncomputable section
@@ -148,15 +145,15 @@ theorem monoOwnG_uFree (p : Placement) {σ : LStack} {δ : LSub} {αs : List Lif
           · simp only [gSepRL, hl] at hgs ⊢
             exact ih γ ρ hu' hfr' hgs
 
-/-! ### At a push named by a future's name -/
+/-! ### The push as a future: `MonoOwnG` at `cbpv` and `binder` -/
 
-/-- **The own push at a future's name is a one-step future**: its entry, named by an `NsVar` new to
-the reading substitution, meets `FutOK` at depth `0` from `OwnOK`. -/
+/-- **The own push is a one-step future**: its entry, its variable new to the reading
+substitution, meets `FutOK` at depth `0` from `OwnOK`. -/
 theorem ownPush_futStep {δ : LSub} {C : CTy} {ρ : WRes} {σ : LStack} {αs : List Life} {e : LEnt}
-    {a : Life} (hpush : OwnPush δ C ρ (σ, αs) e a) (hns : NsVar e.x) (hδ : δ.find? e.x = none) :
+    {a : Life} (hpush : OwnPush δ C ρ (σ, αs) e a) (hδ : δ.find? e.x = none) :
     FutStep δ ρ (σ, αs) (e :: σ, a :: αs) := by
   obtain ⟨x, c, C', -, -, -, hown, -⟩ := hpush
-  refine ⟨0, [e], [a], none, ?_, fun e' he' => by rw [List.mem_singleton.mp he']; exact hns, ?_, ?_⟩
+  refine ⟨0, [e], [a], none, ?_, ?_, ?_⟩
   · exact
       { len := rfl
         depth_le := Nat.zero_le _
@@ -176,30 +173,21 @@ theorem ownPush_futStep {δ : LSub} {C : CTy} {ρ : WRes} {σ : LStack} {αs : L
   · show a :: αs = futL 0 [a] αs
     simp [futL]
 
-/-- **`MonoOwnG` at a push named by a future's name**: `MonoOwnG` with the pushed variable `NsVar`
-and new to the reading substitution. -/
-def MonoOwnGNs (p : Placement) : Prop :=
-  ∀ (σ : LStack) (δ : LSub) (Γ : Ctx VTy) (γ : List Val) (αs : List Life) (ls : List SRec)
-    (ρ : WRes) (C : CTy) (e : LEnt) (a : Life),
-    StackOK σ αs → OwnPush δ C ρ (σ, αs) e a → NsVar e.x → δ.find? e.x = none →
-    CtxFresh e.x Γ → TabAtS σ αs ρ →
-    gRL p σ δ αs ls Γ γ ρ → gRL p (e :: σ) δ (a :: αs) ls Γ γ ρ
-
-/-- **At a push named by a future's name the transport is `MonoG`'s instance.** -/
-theorem monoOwnGNs_of_monoG (p : Placement) (hG : MonoG (ℍ := ℍ) p) : MonoOwnGNs (ℍ := ℍ) p := by
-  intro σ δ Γ γ αs ls ρ C e a hok hpush hns hδ hfr ht hg
-  have hvar : e.x ∉ σ.map LEnt.x := by
-    obtain ⟨_, _, _, -, -, -, hown, -⟩ := hpush; exact hown.var
+/-- **`MonoOwnG` is `MonoG`'s instance at the one-step future the push is.** -/
+theorem monoOwnG_of_monoG (p : Placement) (hG : MonoG (ℍ := ℍ) p) : MonoOwnG (ℍ := ℍ) p := by
+  intro σ δ Γ γ αs ls ρ C e a hok hpush hδ hfr ht hg
   refine hG σ δ Γ γ αs ls ls ρ (e :: σ) (a :: αs) hok (Ext.refl ls ρ)
-    (Relation.ReflTransGen.single (ownPush_futStep hpush hns hδ)) ?_ ht hg
+    (Relation.ReflTransGen.single (ownPush_futStep hpush hδ)) ?_ ht hg
   intro s hs hl e' he' hx
   rcases List.mem_cons.mp he' with rfl | he'
   · exact hfr s hs hl
   · exact absurd (List.mem_map_of_mem he') hx
 
-theorem monoOwnGNs_cbpv : MonoOwnGNs (ℍ := ℍ) .cbpv := monoOwnGNs_of_monoG .cbpv monoG_cbpv
+/-- **`MonoOwnG` at `cbpv`.** -/
+theorem monoOwnG_cbpv : MonoOwnG (ℍ := ℍ) .cbpv := monoOwnG_of_monoG .cbpv monoG_cbpv
 
-theorem monoOwnGNs_binder : MonoOwnGNs (ℍ := ℍ) .binder := monoOwnGNs_of_monoG .binder monoG_binder
+/-- **`MonoOwnG` at `binder`.** -/
+theorem monoOwnG_binder : MonoOwnG (ℍ := ℍ) .binder := monoOwnG_of_monoG .binder monoG_binder
 
 end ProbeD1
 

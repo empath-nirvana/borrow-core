@@ -42,9 +42,9 @@ theorem extPreW (p : Placement) : ExtPreW (ℍ := ℍ) p :=
 /-- One step at a resource is one step at each part of it. -/
 theorem FutStep.part {δ : LSub} {ρz ρn ρ : WRes} (hc : ResU.CompS ρz ρn ρ) {s s' : Stk}
     (h : FutStep δ ρ s s') : FutStep δ ρz s s' := by
-  obtain ⟨k, τ, αt, N, hok, hns, h₁, h₂⟩ := h
+  obtain ⟨k, τ, αt, N, hok, h₁, h₂⟩ := h
   exact ⟨k, τ, αt, N, { hok with below := fun a ha => ResU.CompS.inStratum_left hc (hok.below a ha) },
-    hns, h₁, h₂⟩
+    h₁, h₂⟩
 
 /-- **A future at a resource is a future at each of its parts.** -/
 theorem futPart : FutPart := fun _ _ _ _ _ _ hc h =>
@@ -138,7 +138,7 @@ theorem mem_futS_x {k : Nat} {τ : LStack} {N : Option (UInt32 → Bool)} {σ : 
 /-- **A step keeps the stack in shape.** -/
 theorem FutStep.stackOK {δ : LSub} {ρ : WRes} {s s' : Stk} (hok : StackOK s.1 s.2)
     (h : FutStep δ ρ s s') : StackOK s'.1 s'.2 := by
-  obtain ⟨k, τ, αt, N, hf, -, h₁, h₂⟩ := h
+  obtain ⟨k, τ, αt, N, hf, h₁, h₂⟩ := h
   refine ⟨?_, ?_, ?_⟩
   · rw [h₁, h₂, futS_length, futL_length, hok.1, hf.len]
   · rw [h₂]; exact hf.chain
@@ -209,7 +209,7 @@ below the resource (`ResU.InStratum.mono`). -/
 theorem FutStep.reLend {δ : LSub} {ρ : WRes} {σ σ' : LStack} {αs αs' αs'' : List Life}
     (hok : StackOK σ αs) (h : FutStep δ ρ (σ, αs) (σ', αs')) (hr : ReLend αs'' αs') :
     ∃ αs₀, ReLend αs₀ αs ∧ FutStep δ ρ (σ, αs₀) (σ', αs'') := by
-  obtain ⟨k, τ, αt, N, hf, hns, h₁, h₂⟩ := h
+  obtain ⟨k, τ, αt, N, hf, h₁, h₂⟩ := h
   simp only at h₁ h₂
   subst h₁ h₂
   have hkσ : k ≤ σ.length := hf.depth_le
@@ -232,7 +232,7 @@ theorem FutStep.reLend {δ : LSub} {ρ : WRes} {σ σ' : LStack} {αs αs' αs''
     rw [futL, hac_take, hac_drop, hsplit]
   have hlen₀ : (a ++ c).length = αs.length := by
     rw [List.length_append, hla, hr₂.length_eq, List.length_drop, hok.1]; omega
-  refine ⟨a ++ c, ⟨?_, ?_⟩, ⟨k, τ, b, N, ?_, hns, rfl, ?_⟩⟩
+  refine ⟨a ++ c, ⟨?_, ?_⟩, ⟨k, τ, b, N, ?_, rfl, ?_⟩⟩
   · have := List.rel_append ha hr₂
     simp only at this
     rwa [List.take_append_drop] at this

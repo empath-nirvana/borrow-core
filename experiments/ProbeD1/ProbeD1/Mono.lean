@@ -239,8 +239,7 @@ theorem monoG_binder : MonoG (ℍ := ℍ) .binder := monoG_of_monoV .binder mono
 /-- Hiding the names `N` is the one-step future that inserts nothing at depth `0`. -/
 theorem fut_hide {δ : LSub} {ρ : WRes} {σ : LStack} {αs : List Life} (hok : StackOK σ αs)
     (N : UInt32 → Bool) : Fut δ ρ (σ, αs) (hideS N σ, αs) := by
-  refine Relation.ReflTransGen.single ⟨0, [], [], some N, ?_, fun _ h => absurd h List.not_mem_nil,
-    ?_, ?_⟩
+  refine Relation.ReflTransGen.single ⟨0, [], [], some N, ?_, ?_, ?_⟩
   · exact
       { len := rfl
         depth_le := Nat.zero_le _
