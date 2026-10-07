@@ -30,3 +30,6 @@ import ProbeD1.BinderArise
 import ProbeD1.BinderRisk
 import ProbeD1.Gap
 import ProbeD1.GapWitness
+import ProbeD1.GapCover
+import ProbeD1.GapRows
+import ProbeD1.GapPos
