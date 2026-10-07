@@ -1281,7 +1281,10 @@ run_meta do
 #print axioms Targets.status_extendsNU_tier1
 #print axioms Targets.status_finaliserOrder_of
 #print axioms Targets.status_fl_core_tier1
+#print axioms Targets.status_ghostCoupling
+#print axioms Targets.status_guarantees_J₁
 #print axioms Targets.status_handlers_tier1Open
+#print axioms Targets.status_j1
 #print axioms Targets.status_law1_relation
 #print axioms Targets.status_leakW
 #print axioms Targets.status_letLaw_tier1Open
@@ -1299,6 +1302,7 @@ run_meta do
 #print axioms Targets.status_not_releasedOnceReuse_staleFree
 #print axioms Targets.status_not_sliceShape_of_updTop
 #print axioms Targets.status_ourInst_syntactic
+#print axioms Targets.status_pins_J₁
 #print axioms Targets.status_pins_tier1Open
 #print axioms Targets.status_progs_of_combined
 #print axioms Targets.status_releasedOnceAll
@@ -1309,6 +1313,7 @@ run_meta do
 #print axioms Targets.status_rows
 #print axioms Targets.status_runTyping
 #print axioms Targets.status_runners_respect
+#print axioms Targets.status_sPropsNoCancel_J₁
 #print axioms Targets.status_sPropsNoCancel_tier1Open
 #print axioms Targets.status_safety_tier1Open
 #print axioms Targets.status_soundContractsOfFL
@@ -1323,6 +1328,7 @@ run_meta do
 #print axioms Targets.status_tier1Core_of
 #print axioms Targets.status_tier1Core_world
 #print axioms Targets.status_tier1Open_read
+#print axioms Targets.status_tier1_J₁_of
 #print axioms Targets.status_unaryLaws_not_vacuous
 #print axioms Targets.status_updLaws_core
 #print axioms Targets.status_updLaws_of_core

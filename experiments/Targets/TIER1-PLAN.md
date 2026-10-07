@@ -18,6 +18,10 @@
 **Every result is at Core σ=[]** (`coreW`, `B.coreB`). Tier 1 keeps T1, so no lend spans a stop.
 `W`, Law 2, the spanning rules and `J₂` belong to tier 2, which this track leaves alone.
 
+**Where it stands.** `J₁` is built (decision D5, the last section). `I.Tier1 J₁` follows from A's
+(E) properties, S5 and S6 at every admissible effect context, `Accepts`, `Rejects` and `BumpSim`
+(`I.tier1_J₁_of`).
+
 The six pieces below are ordered by what depends on them. Ties go to the larger unknown first.
 `I.Tier1 J₁` also needs work that is not among these pieces; it is listed at the end.
 
@@ -1141,3 +1145,132 @@ Nothing in BoLo changed.
    at option A.
 3. S6 at today's kernel, restated.
 4. Piece 5 (h2, h4 through the comodel) and piece 6 (`BumpSim`).
+
+---
+
+## Decision D5 applied: `J₁` by new Core rules
+
+**The decision** (the user's, 2026-10-07). `J₁` gets its rules from Core: row polymorphism (a `∀`
+over rows or a polymorphic let) and a general `[handle]`, each with a SPEC entry and its
+`fundamentalC` case, and with them D3's kernel half (`[then]` at option A). Nothing may change
+BoLo's definitions or weaken a borrow guarantee. S6's route 8.4 goes probe-first.
+
+**Core: SPEC §24 (Entry 23).** No change to the machine, the relation (`cC`, `vC`, `wpTS`, `wpG`,
+`ewpTS`) or any borrow rule. `fundamentalC`, `adequacyC` and `adequacyD` keep their statements
+and hold over the extended judgement.
+
+| rule | `CDerives` | its `fundamentalC` case |
+|---|---|---|
+| `[let-poly]`: `let x = λy. b in N` for a closed λ-value, from `N` with the λ-value for `x`, `x`'s slot dead | `letPoly` | `letPoly_compatC` (`Core/PolyLet.lean`): one β-step that allocates nothing (`cC_head`); closing at the dead slot is closing `N` at the λ-value (`psub_fill`) |
+| `[handle]` at a value form: the handler `H` a value form (`Expr.ValFormIn`) over a part of the context whose live slots are persistent | `effHandleV`; the two-variable rule is now the theorem `CDerives.effHandle`, with its former statement | `handleV_compatC` (`Core/EffRules.lean`): `H`'s relation read off `wpTS` at its value (`wpTS_val_post`), then `ewp_handle` at clause values (`ewp_handle_vals`) |
+| `[then]` at option A: the finaliser at `F 1` | `effThen` | `thenA_compatC`: `[sub]` to `F_{Σ^abort} 1`, then `then_compatC` |
+
+- **Row polymorphism is the polymorphic let**, not a `∀` in Core's types. It adds no type former,
+  so the relation, the machine and every Core lemma over `CTy` are unchanged. Terms carry no rows:
+  each occurrence of the bound λ-value is typed at its own row.
+- **Only closed λ-values are bound** (the value restriction). A λ-value is no pair and no primitive,
+  so filling a variable with it makes and unmakes no handler frame (`okE_fill`); a closed pair
+  could.
+- **The checker** types a finaliser at `F 1` (`Frontend/Check/Steps.lean`, `Rules.lean`,
+  `Checker.lean`; `Elab/Infer.lean`, `Sugar.lean`). Its finalisers are destructors, which were
+  already pure.
+
+**`J₁`** (`Instance/J1.lean`).
+- **Definition.** `J1Der Θ Δ Γ e j`: the slot types and `j` are free of the row `∀`, or are
+  polymorphic function types `U(∀ρ:k. C)` / `!U(∀ρ:k. C)` with `C` free of it and no returner
+  (rank 1); and at every admissible `η` and every closing `σ` of the live polymorphic slots, Core
+  types `fillS σ 0 e` (`J1Core`). A closing fills each such slot with a closed λ-value that Core
+  types at every instance of the slot's type (`Closing`). A judgement at a polymorphic type is
+  Core typing the λ-value at every instance.
+- **Proved.** `j1_read : J₁.read = tier1` (Core's kernel); `coreClosed_J₁`; the let law
+  (`letLaw_ourInst_J₁`: `[let-poly]` at a polymorphic type, `[let]` otherwise, through
+  `fillS_scons_some`); S1 at every effect context (`subClosed_ourInst_J₁`,
+  `rowAlgebra_ourInst_J₁`: Core's `[sub]` asks nothing of its rows).
+
+**The interaction** (`I/J1.lean`), Core σ=[]:
+- B1 (`fl_core_J₁`); B's guarantees but B5 (`guarantees_noB5_J₁`), and with B5 given `BumpSim`
+  (`guarantees_J₁_of_bumpSim`); the pins (`pins_J₁`, abortive rows);
+- FL at `J₁`'s open judgements over contexts with no polymorphic slot (`flOpen_J₁_mono`): a
+  polymorphic type is read through `ojdgW` as the intersection of its instances (Law 1,
+  `oretThunk_rFree`), each instance by `fundamentalC`;
+- A's (S) properties but S5 and S6, at every effect context (`sPropsNoCancel_J₁`), through
+  `CoreClosed`: `InstanceSafety` now proves S2, S3 and `LiveOK` (whence S0 and S4) at every typing
+  system whose closed programs are Core's (`safety_of_coreClosed`, `effSafe_of_coreClosed`,
+  `liveOK_of_coreClosed`), and keeps its `tier1Open` corollaries;
+- **`I.Tier1 J₁` given what is open** (`tier1_J₁_of`): A's (E) properties, S5 and S6 at every
+  admissible effect context, `Accepts`, `Rejects` and `BumpSim`.
+
+**S6's route 8.4: probed, stopped** (`I/GhostCoupling.lean`). The probe asked for the coupling at a
+single capture, a resume and a cancel. What fails, each machine-checked:
+- **FL at BoLo does not give S6.** A closed program's relation at its pure type is `wpTS`
+  (`cC_ret_eq`), where no protocol table and so no `contShare` occurs. R1 (a capture never used),
+  R2 (a capture resumed twice) and R3 (a linear capture cancelled) run by head steps that allocate
+  nothing to a value of `bool`, so each is in Core's relation at `F bool` (`semC_RProg`). `JRp`,
+  which types them there and nothing else, has FL at BoLo (`fl_core_JRp`) and fails S6 at `ΞA` on
+  each (`ghost_probe`, `ghost_probe_resume`, `ghost_probe_cancel`). Hence `¬ GhostCoupling`
+  (`not_ghostCoupling`): whatever `contShare` carries, it changes no closed program's relation.
+- **BoLo's world has no obligation along those runs.** Their heap stays empty, and BoLo's world at
+  the empty heap is the empty resource (`lower_empty_eq`), so `NoOwn` holds at every configuration
+  (`noOwn_of_lower_empty`).
+- **What the route needs**: an `own`-like obligation that `ResU.Lower` does not lower to the heap,
+  or `wpTS`'s run-end conditions read on a run's steps. Both change BoLo's definitions, so the S6
+  part stops here. S6 at `J₁` is OPEN; route 8.2 (`CfgTyped`) is not built.
+
+**Changed statements in the Targets.**
+- `CDerivesNU`'s `effThen` and the pin `RC_effThen` take the finaliser at `F 1` (option A).
+- Check 2's four derivations (`d_thenProgNU`, `d_prog₃TNU`, `d_thenRaiseProgNU`,
+  `d_unwindProgNU`) are removed: their finalisers let a raise escape, which option A excludes. The
+  programs stay.
+- The inductions over `CDerives` gain the new cases: `insert_dead` (`Base/Support.lean`,
+  `hndExpr_shift`, `valFormIn_insert`), `closedAt_of_derives` (`Base/Closed.lean`,
+  `closedAt_of_fill`), `okE_of_derives` (`NoInterception.lean`, `okE_fill`); `Base/Fill.lean`
+  holds `fill_shift` and `closedAt_of_fill`.
+
+**Readings to confirm.**
+1. **`J₁`'s kernel is Core's whole `CDerives`**, not the unr-free fragment this plan's §2 named.
+   The new rules are in `CDerives`; `CDerivesNU` stays the fragment `tier1Open` reads. Our
+   instance ties a derivation's conclusion to `Ξ` (D1), so at an admissible context its rows are
+   unr-free (`rowNU_of_rowAt`). A derivation's inner judgements are not tied, and may use Core's
+   unr rules.
+2. **"A `∀` over rows or a polymorphic let"** is read as the polymorphic let, with the row `∀` of
+   the open types read through it (rank 1, by closing substitution). `J₁` is defined by its
+   closings, not as an inductive with `[allR-I]` and `[allR-E]` (§2's `J1Der`).
+3. **"A general `[handle]` (clauses not restricted to variables)"** is read as §19's printed rule:
+   the handler a value form over a persistent part of the context. A handler that is a computation
+   is not admitted.
+4. **D3's kernel half** is read as the finaliser at the pure row, in Core's `[then]`, in
+   `CDerivesNU`'s and in the pin `RC_effThen`.
+
+**Remaining.**
+- **A's (E) properties at `J₁`**: the runs (E1–E10's `RunsTo`, `RunsForever`) and the eight
+  schema lemmas. A schema's callback `λ_. M` puts `M`, typed at the empty context, under a live
+  binder it does not use. Core's λ with a dead binder (`thunkF`) is at the pure returner only, and
+  Core has no weakening by an unused live slot (a direct induction meets `bangThunkV`'s
+  `Persistent` premise). Not derived; no obstruction verified.
+- **`RowVarKernel J₁`**: not attempted. `[allR-I]` reads a value judgement at `U C` as Core
+  typing the λ-value at `C`, an inversion of Core's thunk rules (cost not stated).
+- **`FLOpen coreB J₁` at contexts with a polymorphic slot**: not proved. `ogDenW` relates such a
+  slot to any value related at every instance, and `J₁` speaks of closed λ-values Core types.
+- **S5** at `noFinRaise`: the bridges `noIntercept_of_core`, `unwindOrder_of_core`, and
+  `FinRowsAt noFinRaise` for typed programs, now that `[then]` types a finaliser at the pure row.
+- **S6**: route 8.4 stopped (above); route 8.2 not built.
+- **`Accepts J₁.read .abortive`** (the composite's eight programs, each with a derivation in Core's
+  kernel and one complete run) and **`Rejects J₁.read`** (inversions, cost to be stated).
+- **`BumpSim`** (OQ-43); pieces 5 and 6.
+
+**Unspent hypotheses.** `sPropsNoCancel_J₁` holds at every effect context, so `tier1_J₁_of` spends
+`AdmEff` only through its open hypotheses. `letPoly`'s premise typing the λ-value (`hV`) is not
+read by `letPoly_compatC`; `okE_of_derives` reads it (the λ-value's body passes `okE`). The probe
+uses no determinism result (`det_ourInst`): each run is a chain of head steps.
+
+**Untranscribed in the run-up.** The schema lemmas; the (E) runs at `J₁`; `RowVarKernel J₁`;
+`noIntercept_of_core`, `unwindOrder_of_core`, `cancellation_of_core`; `CfgTyped` (route 8.2); the
+composite's derivations in Core's kernel; `Rejects`' inversions over `CDerives`; `BumpSim`.
+
+**Next.**
+1. The schema lemmas at `J₁`: a weakening of Core's derivations by an unused live slot of a
+   droppable type, or a dead-binder λ at an effectful returner (a Core rule, with a SPEC entry).
+2. S5's bridges at `noFinRaise`.
+3. S6 by a route that does not run through FL at BoLo: route 8.2's run-time typing, or the user's
+   call on a resource kind for `κ` (a BoLo change, so the user's).
+4. `Accepts`, `Rejects` at `J₁`; piece 5 (h2, h4) and piece 6 (`BumpSim`).

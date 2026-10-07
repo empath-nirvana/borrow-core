@@ -172,8 +172,8 @@ theorem d_cancelClNU {Δ : LifeCtx} {Γ : Ctx VTy} {S : Row} (hΓ : Ctx.Dead Γ)
 /-! ### Check 2's programs: `prog₃`'s shape
 
 Check 2 typed these at the kernel whose `[then]` took its finaliser at the row's abortive
-operations.  At option A (SPEC §24) a finaliser lets no raise escape, and these finalisers raise
-the name `21` to a handler outside them, so no derivation of today's rules types them. -/
+operations.  These finalisers raise the name `21` to a handler outside them, which option A
+(SPEC §24) excludes: `[then]` types a finaliser at `F 1`.  Their derivations are not kept. -/
 
 /-- `raise : 1 ↠ 0` of the names `20` and `21` and `cancel`'s operation `1 ↠ 1` of the name
 `2`, each affine. -/

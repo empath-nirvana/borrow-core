@@ -39,7 +39,7 @@ Instance; the Instance imports no B or I; I imports everything.
 | | `Targets/A/Expressiveness.lean` | E1 `NoColouring` … E10 `Reconciler`; `EProps`; `Props := SProps ∧ EProps` |
 | | `Targets/A/NonVacuity.lean` | the abstract non-vacuity lemmas |
 | | `Targets/A/Binary.lean`, `Targets/A/Lowering.lean` | A₂ (the binary laws) and A₃ (the erased lowering over a fixed target), stated, out of the first pass |
-| **base** | `Targets/Base/*` | Core's machine, rows and typing as B, I and the Instance read them: platforms, runs, `PRun`, `ReleasedOnce`, B5's `Named`, `Expr.mapLoc`, `Heap.push`, `RelAt`, `Bump`, `BumpSim` (`Machine.lean`); the statements about runs that mention no world, `Sound`, Core's `EffSafe`, `EffSafeDrive` (`RunProps.lean`); `TypingJ`, `tier1`, `tier1NU`, the `RC_*` rules (`Typing.lean`); Core's cancel and unwind shapes (`CoreCancel.lean`); a typed term is closed at its context (`Closed.lean`); the answering implementations; contextual approximation |
+| **base** | `Targets/Base/*` | Core's machine, rows and typing as B, I and the Instance read them: platforms, runs, `PRun`, `ReleasedOnce`, B5's `Named`, `Expr.mapLoc`, `Heap.push`, `RelAt`, `Bump`, `BumpSim` (`Machine.lean`); the statements about runs that mention no world, `Sound`, Core's `EffSafe`, `EffSafeDrive` (`RunProps.lean`); `TypingJ`, `tier1`, `tier1NU`, the `RC_*` rules (`Typing.lean`); Core's cancel and unwind shapes (`CoreCancel.lean`); a typed term is closed at its context (`Closed.lean`); the polymorphic let's premise term (`Fill.lean`); the answering implementations; contextual approximation |
 | **B** | `Targets/B/World.lean` | `BWorld`, a borrow world with borrow fields only; `coreB`, Core's relation as one |
 | | `Targets/B/Adequacy.lean`, `PlatSafe.lean` | B2 at BoLo (`adequate_core`); runs under a platform that answers part of the row |
 | | `Targets/B/Guarantees.lean` | B0–B7 and the bounds as Props: `ExtendsB`, `FL`, `Adequate`, `Sound`, `SoundContracts` (externs at `ContractsW`), `ReleasedOnceReuse`, `ExclusiveB`, `LifetimeSound`, `WBound`; `B.Guarantees` |
@@ -54,6 +54,7 @@ Instance; the Instance imports no B or I; I imports everything.
 | | `Targets/Instance/Bridges.lean` | A's syntactic laws at our instance: `ConfLaws`, `KontLaws`, `NoIO`, `DataInj`, `LiftExt` |
 | | `Targets/Instance/Platform.lean` | the platform a runner gives (`platformOf`), its protocol, and its steps as the runner's |
 | | `Targets/Instance/Restricted/*`, `Binary.lean`, `ZeroCost.lean` | Core's no-interception and two-frame unwind; `storeCancel` unr-free; A₂ over Core, stated; A₃'s lowering classes |
+| | `Targets/Instance/J1.lean` | `J₁`, tier 1's typing: Core's kernel over the open types, a polymorphic slot closed by substitution (`Closing`, `fillS`); its reading is `tier1`; the let law and S1 at our instance |
 | | `Targets/Instance/Inversion.lean`, `J1Checks.lean` | what today's kernel does not type (A-level handlers, a let read at two instances, a persistent function called at an effectful row, `()` at a resuming `unr` row); the checks on TIER1-PLAN §2's route; the let law and S1's parts at our instance |
 | **I** | `Targets/I/World.lean` | `SemWorld extends B.BWorld` (`held`, `Stop`, `share`), `coreW`, the effectful wp |
 | | `Targets/I/Interface.lean`, `Device.lean`, `Pins.lean`, `Routes.lean` | I1–I5 at the world; `Bounds`, `Interface`, the proof device `Device`, `EmbedsNil`; R-CLOSEDOP; `effSafeOfFL`, `contractsW_of_meets` |
@@ -61,7 +62,8 @@ Instance; the Instance imports no B or I; I imports everything.
 | | `Targets/I/Combined.lean` | **`I.Combined`**, done's statement; `Tier1`, `Tier1Core`; the corollaries |
 | | `Targets/I/RunEnd.lean`, `Binder.lean`, `NonVacuity.lean`, `Restricted/*` | FIX-RUN-END's checks and witness worlds; the freeze binder at W; witnesses for the pins; the restricted results at `coreW` and `tier1` |
 | | `Targets/I/OpenRel.lean`, `Tier1Route.lean` | Law 1 at the relation (`ovalW`, `FLOpen`, `fl_of_flOpen`); the elaboration route does not reach tier 1; `Tier1Core` from S5 and `BumpSim` |
-| | `Targets/I/Restricted/InstanceSafety.lean` | S2, S3 and `LiveOK` at today's kernel: a run under a runner is the run under its platform, and B2's runs give A's |
+| | `Targets/I/Restricted/InstanceSafety.lean` | S2, S3 and `LiveOK` at every typing system whose closed programs are Core's (today's kernel, `J₁`): a run under a runner is the run under its platform, and B2's runs give A's |
+| | `Targets/I/J1.lean`, `GhostCoupling.lean` | B1, B's guarantees, the pins, FL at the open judgements and A's (S) properties at `J₁`; `Tier1 J₁` from what is open (`tier1_J₁_of`); route 8.4's probe for S6, stopped (`not_ghostCoupling`) |
 | meta | `Targets/Audit.lean`, `Status.lean`, `AxiomCheck.lean` | the step-index audit with nine negative tests and the pin of Core's relation; the record; the axiom check |
 
 ## Done
@@ -77,8 +79,9 @@ def I.Combined (RF : RowForm) (J : OurTyping RF) (M : SemWorld) (Adm : OpAdm) (c
 
 **Done** is `Combined orowRF J₂ W admClosedOp .any` at a **named** tier-2 typing system `J₂` and a
 **named** world `W`, with `audit_W`. **It is OPEN**: neither `J₂` nor `W` exists. **Tier 1** is
-`Combined orowRF J₁ coreW admClosedOp .abortive`, also OPEN: `J₁` (today's rules over open rows
-with the row `∀`) waits on RESTRUCTURE §7 Q1–Q2.
+`Combined orowRF J₁ coreW admClosedOp .abortive`, also OPEN. `J₁` is Core's kernel with SPEC §24's
+rules over the open types, with the row `∀` (decision D5); `Tier1 J₁` follows from A's (E)
+properties, S5 and S6, `Accepts`, `Rejects` and `BumpSim` (`tier1_J₁_of`).
 
 **The restricted tier-1 reduction** `Tier1Core` (today's kernel `tier1Open`, Core's world)
 follows from S5 at today's kernel and the step-for-step simulation `BumpSim` (`tier1Core_of`).
