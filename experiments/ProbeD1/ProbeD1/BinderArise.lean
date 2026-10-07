@@ -494,6 +494,13 @@ theorem pvlUpd_arises {c : Cfg} (hA : ArisesI (ℍ := ℍ) c) (s : LSub) (ls : L
     (hu : ResU.UpdV ρ π) : PlaceViewsL s c.σ c.αs ls π :=
   pvlUpdN s c.σ c.αs ls ρ π hok (placesNodupArises c hA) h hu
 
+/-- **`PVLRuns` at every stack `ArisesI` reaches**: `PVLRunsN` and `placesNodupArises`. -/
+theorem pvlRuns_arises {c : Cfg} (hA : ArisesI (ℍ := ℍ) c) (s : LSub) (ls : List SRec)
+    (e : Expr) (Q : List SRec → Expr → WProp) {ρ : WRes} (hok : StackOK c.σ c.αs)
+    (h : PlaceViewsL s c.σ c.αs ls ρ) (hw : wpG (ℍ := ℍ) ls e Q ρ) :
+    wpG (ℍ := ℍ) ls e (fun ls' t ρ' => PlaceViewsL s c.σ c.αs ls' ρ' ∧ Q ls' t ρ') ρ :=
+  pvlRunsN s c.σ c.αs ls e Q ρ hok (placesNodupArises c hA) h hw
+
 end ProbeD1
 
 end

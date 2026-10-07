@@ -2130,8 +2130,8 @@ verified. *Not attempted* means no proof was tried.
   (`pvlTop`).
 - `PVLUpd` and `PVLRuns` are proved at a stack whose places are distinct (`PVLUpdN`, `pvlUpdN`;
   `PVLRunsN`, `pvlRunsN`). The places of every `ArisesI` stack are distinct, since each lend opens at
-  a place new to the stack (`placesNodupArises`). So `PVLUpd` holds at every stack `ArisesI` reaches
-  (`pvlUpd_arises`).
+  a place new to the stack (`placesNodupArises`). So `PVLUpd` and `PVLRuns` hold at every stack
+  `ArisesI` reaches (`pvlUpd_arises`, `pvlRuns_arises`).
 - Not derived: `PVLUpd` and `PVLRuns` as stated, at a stack whose places may repeat. The case left is
   two `imm` entries lending one place. No configuration for it was built, and no obstruction is
   claimed. W's index (`StackOK`) asks distinct variables, not distinct places. Adding distinct places
