@@ -221,25 +221,44 @@ about our statement and decides nothing by itself.
   - OQ-8 is not decided. No failure of type (a), (b) or (d) occurred, and the fallback is not
     triggered.
 
-## The instantiation's gap at `∀` (`GAP.md`)
+## The instantiation's gap at `∀` (`GAP.md`): the outcome
 
-`GAP.md` designs the step `BINDER.md` §11.2 left: `TyEqInst` at every type. Statements are in
-`ProbeD1/Gap.lean`; the one result proved now is in `ProbeD1/GapWitness.lean`.
+`GAP.md` takes the step `BINDER.md` §11.2 left: `TyEqInst` at every type. Its §8 is the build's
+outcome in full. Statements are in `ProbeD1/Gap.lean`; proofs in `GapWitness.lean`,
+`GapCover.lean`, `GapRows.lean`, `GapPos.lean` and `GapRoom.lean`. No relation changed.
 
+- **Proved: `TyEqInst` at every type** (`tyEqInst`). `TyEq` is a conjunction of equalities of
+  lifetime terms under an unbounded `∀`, and an equality on a chain is decided threshold by
+  threshold. So `TyEq` holds at every pair a family of `TyEq` pairs covers threshold by threshold
+  (`tyEqOfCover`); an instantiated pair is covered by its source (`coverInst`), and an instance in
+  the instantiation's gap by the image instances (`coverGap`, `tyEqGapStep`). `TyEq` is invariant,
+  both ways, under every order embedding fixing `⊤`, those that open a gap included
+  (`tyEqRoomBlind`).
+- **Proved: the thaw and the four `U` rows at every payload type** (`statement0UThawFreeKJ`, at
+  `binder0`). The `CoreStable` restriction on `Mut` and `Imm` payloads is gone (`cohEInstOB`,
+  `viewSlotInstOB`, `relendJValueK`): the result holds at every `CtxThawFreeK` context, which
+  excludes only slots with a `μ` or `fam` type outside a `Mut` or `Imm` payload (R1) and strictly
+  contains `CtxThawFree`.
 - **Proved: Core's `∀` reads the room between lifetimes.** At `∀'0 ⊏ ⊤. F (Mut '0 1)` the clause
   holds at a `mut` cell at `1`, adjacent to `⊤`, and fails at every `mut` cell at `2` with an empty
-  witness, its image under `shift ⊤ 1` among them (`coreAllAdjacent`, `coreAllNotNatural`). So Core's relation is not invariant under an
-  embedding that opens a gap, and it does not imply the full position-`∀` at `σ = []`
-  (`not_coreAllImpCutAll`).
-- **Designed, not attempted: `TyEq` reads no room.** It is a conjunction of equalities of lifetime
-  terms under an unbounded `∀`, and an equality on a chain is decided threshold by threshold. A
-  cover argument gives `TyEqInst` at every type with no change to any relation (`TyEqOfCover`,
-  `CoverInst`), and with it the leaves at every payload type (`Statement0UThawFreeKJ`). `μ` and
-  `fam` slots stay outside (R1).
-- **The position-`∀`.** Read over the cuts below the stack's cut (`AllPosJ`), it is the quantifier
-  W's `U` clause already has, so the thaw needs no change to `cRLJ`'s `∀`. Read over every cut of
-  the order in play (`CutAllC`), it would rename retained cells and make agreement with Core at
-  `σ = []` one-way.
+  witness, its image under `shift ⊤ 1` among them (`coreAllAdjacent`, `coreAllNotNatural`). So
+  Core's relation is not invariant under an embedding that opens a gap.
+- **The position-`∀`, both readings.**
+  - (B), every cut below the stack's cut, realised by an instantiation: proved realisable
+    (`instRealisesCut`), transported along instantiations (`allPosJTransport`), and Core's clause
+    at `σ = []` both ways (`allPosJNil`). **It is the quantifier W's `U` clause already has**
+    (`wU_allPosJ`). At the configuration where Core's `ℕ`-`∀` reads adjacency, W's `U` clause reads
+    the cut and excludes the closure that Core's `U` clause admits (`adj_not_wU`, `adj_core_U`).
+  - (A), every cut of the whole order, realised by renaming the configuration: one-way at
+    `σ = []` (`cutAllNilSound`; the converse is refuted, `not_coreAllImpCutAll`). Not adopted.
+- **`cRLJ`'s own `∀` is unchanged.** No statement carries a computation across an instantiation
+  outside `U`, so (B) is not put there (`GAP.md` §3.4).
+- **Open.** R1, the thaw at a `μ` or `fam` slot (`Statement0UFullJ`), not attempted here: its route
+  is W reading `μ` and `fam` itself, in its own unit. `ViewSlotInst` without `OuterBelowTop` (every
+  `SemSJ` index carries it). Everything else `BINDER.md` §11 lists as owed is unchanged.
+- **What it decides.** The gap `BINDER.md` §11.2 left is closed with no relation changed, and the
+  thaw's only guarantee gap is R1. OQ-8 is not decided. No failure of type (a), (b) or (d)
+  occurred, and the fallback is not triggered.
 
 ## Files
 
@@ -267,6 +286,10 @@ about our statement and decides nothing by itself.
 | `ProbeD1/BinderRows.lean` | the thaw (`relendJ_value`, `ctxRelendsThawFreeJ`), `thawInstJ`, the four rows, `statement0UThawFreeJ` |
 | `ProbeD1/BinderArise.lean` | the arising check of `k`: `pvArises`, `arisesInv`, `kNotInArises`, `kSlotNotW`, `placesNodupArises` |
 | `ProbeD1/BinderRisk.lean` | `notVDenNaturalArises`, `mutWitnessThaws`, `mutWitnessThaws_met`, `viewSlotInstCS`, `viewTypeCoincidence` |
-| `GAP.md` | the design for `TyEqInst` at every type and the position-`∀`: the diagnosis, the threshold cover, the two readings of the position-`∀`, the agreement with Core at `σ = []`, R1, the literature |
+| `GAP.md` | the design for `TyEqInst` at every type and the position-`∀`: the diagnosis, the threshold cover, the two readings of the position-`∀`, the agreement with Core at `σ = []`, R1, the literature; §8 the build's outcome |
 | `ProbeD1/Gap.lean` | that design's definitions and `def … : Prop` statements; no proofs |
 | `ProbeD1/GapWitness.lean` | `coreAllAdjacent`, `coreAllNotNatural`, `not_coreAllImpCutAll`: Core's `∀` reads the room between lifetimes |
+| `ProbeD1/GapCover.lean` | the threshold cover: `interpCollapse`, `eqOfCollapse`, `tyEqOfCover`, `coverInst`, `coverGap`, `tyEqInst`, `tyEqGapStep`, `tyEqRoomBlind` |
+| `ProbeD1/GapRows.lean` | the leaves and rows at every payload type: `cohEInstOB`, `viewSlotInstOB`, `relendJValueK`, `ctxRelendsThawFreeKJ`, `statement0UThawFreeKJ` |
+| `ProbeD1/GapPos.lean` | the position-`∀`: `instRealisesCut`, `allPosJNil`, `allPosJSelf`, `allPosJTransport`, `cutAllNilSound` |
+| `ProbeD1/GapRoom.lean` | W's `U` clause as reading (B): `wU_allPosJ`, `adj_core_U`, `adj_not_wU` |

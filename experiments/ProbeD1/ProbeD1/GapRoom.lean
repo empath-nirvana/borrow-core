@@ -18,9 +18,9 @@ value. This file checks that claim.
 * **Core's `U` clause admits the closure** (`adj_core_U`): its body is Core's `∀`, which holds by
   adjacency (`adj_holds_ls`).
 * **W's does not** (`adj_not_wU`): every split of the resource puts the cell among the views
-  (`not_relendJ_adj`), and at the instantiation `shift ⊤ 1`, which opens the cut between `⊤` and the
-  view, the view is handed back at `2`, where the body's `∀` at `α = 1` meets the cell's lifetime
-  (`adj_run_fails`, the run of `adj_fails`).
+  (`relendJ_adj_handed`), and at the instantiation `shift ⊤ 1`, which opens the cut between `⊤`
+  and the view, the view is handed back at `2`, where the body's `∀` at `α = 1` meets the cell's
+  lifetime (`adj_run_fails`, the run of `adj_fails`).
 
 So at this configuration W's `U` clause is the position-`∀` at work: it reads the cut that Core's
 `ℕ`-`∀` skips. The closure is not claimed derivable (`GAP.md` §3c), and nothing here refutes a
@@ -145,10 +145,10 @@ theorem adjIndex :
 /-- **At the configuration, the `U` clause's body is asked at `shift ⊤ 1` over the view handed
 back at `2`**: a part strictly above the outermost lend holds no cell at `1`, so the view is
 dropped, and it is handed back at the instantiated lifetime. -/
-theorem not_relendJ_adj {δ : LSub} {P : LSub → List Life → List SRec → WProp}
-    (hP : ¬ P (adjι.sub δ) [lifeN 2] [] (innerView 0 (lifeN 2))) :
-    ¬ RelendJ δ [muEnt] P [lifeN 1] [] (innerView 0 (lifeN 1)) := by
-  rintro ⟨ds, ρz, ρn, hc, ⟨hn, -⟩, hz, H⟩
+theorem relendJ_adj_handed {δ : LSub} {P : LSub → List Life → List SRec → WProp}
+    (h : RelendJ δ [muEnt] P [lifeN 1] [] (innerView 0 (lifeN 1))) :
+    P (adjι.sub δ) [lifeN 2] [] (innerView 0 (lifeN 2)) := by
+  obtain ⟨ds, ρz, ρn, hc, ⟨hn, -⟩, hz, H⟩ := h
   match ds, hn with
   | [], hn => exact hn.elim
   | _ :: _ :: _, hn =>
@@ -160,7 +160,7 @@ theorem not_relendJ_adj {δ : LSub} {P : LSub → List Life → List SRec → WP
       subst ha'
       obtain rfl := eq_empty_of_compS_empty hc'
       obtain rfl := ResU.CompS.functional hc (ResU.comp_empty_right ρz)
-      exact lt_irrefl (lifeN 1) (hz (lifeN 1) rfl 0 (viewCell (lifeN 1)) (innerView_get _))
+      exact absurd (hz (lifeN 1) rfl 0 (viewCell (lifeN 1)) (innerView_get _)) (lt_irrefl _)
   | [true], hn =>
       obtain ⟨a, r, hc', ha, ⟨rfl, -⟩⟩ := hn
       obtain rfl := ResU.CompS.functional hc' (ResU.comp_empty_right a)
@@ -178,9 +178,9 @@ theorem not_relendJ_adj {δ : LSub} {P : LSub → List Life → List SRec → WP
             rw [e] at this
             exact absurd this (by simp)
       subst hz0
-      refine hP (H adjι adj_instAt [] (Ext.refl _ _) (fun _ hx _ => hx) (fun _ hx _ => ?_)
+      refine H adjι adj_instAt [] (Ext.refl _ _) (fun _ hx _ => hx) (fun _ hx _ => ?_)
         (fun _ _ x hx => absurd hx List.not_mem_nil) (innerView 0 (lifeN 2)) _
-        (vwSL_innerView _ (lifeN 2) []) (compS_empty_left _))
+        (vwSL_innerView _ (lifeN 2) []) (compS_empty_left _)
       exact absurd hx List.not_mem_nil
 
 /-! ### The body at the view handed back at `2` -/
@@ -268,8 +268,7 @@ theorem adj_not_wU :
       (Val.lam (.val (Val.loc 0))) (innerView 0 (lifeN 1)) := by
   intro h
   rw [vRLJ_thunk0] at h
-  have hR := h (tab_innerView _) (pvl_innerView _ _ _)
-  refine not_relendJ_adj (fun hP => ?_) hR
+  have hP := relendJ_adj_handed (h (tab_innerView _) (pvl_innerView _ _ _))
   rw [forceE_of_not_ret rfl] at hP
   exact adj_not_cRLJ _ hP
 

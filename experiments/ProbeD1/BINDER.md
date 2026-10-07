@@ -2199,10 +2199,12 @@ It does not say that `k` does not arise: `ArisesI` is not shown to over-approxim
   So a payload supported in `Res_⊤` at the reading is not supported at the instantiated one. This is
   `mut_not_natural`'s mechanism at the retained part (§11.3).
 
-**Not derived, no obstruction verified.** `TyEqInst` at every type: at `CTyEq`'s `∀` clause the
-instantiated side quantifies over lifetimes in the instantiation's gap, where the hypothesis has no
-instance, so the structural induction stops there. `ViewSlotInst` as stated, at every type and at an
-outermost lend at `⊤`.
+**Not derived by this build; `TyEqInst` since proved** (`GAP.md` §8). `TyEqInst` at every type: at
+`CTyEq`'s `∀` clause the instantiated side quantifies over lifetimes in the instantiation's gap,
+where the hypothesis has no instance, so the structural induction stops there. `GAP.md`'s threshold
+cover proves it with no relation changed (`tyEqInst`), and with it `ViewSlotInst` at every slot type
+under `OuterBelowTop` (`viewSlotInstOB`). `ViewSlotInst` as stated, at an outermost lend at `⊤`, is
+still not derived.
 
 **Not attempted.** `MovedRecPremises`, `RecsOutsideArises`, `RecsInsideOwnArises`, `FreshFrameI`.
 Their consumers are the share at a resume (statement 2) and the arising set's records. [unchecked]
@@ -2290,7 +2292,8 @@ one draft relation at W; `vRLI` stays only as the design's refuted statement, an
 
 **Not derived.** `Statement0UFullJ binder0`: the thaw at a `μ` or `fam` slot (`CtxRelendsAllJ`), the
 guarantee gap R1 of §5.4. `ThawFreeScope` (stated, not attempted here) is the design's witness that
-typing reaches such a context.
+typing reaches such a context. Since `GAP.md` §8 the rows and the thaw hold at every `CtxThawFreeK`
+context (`statement0UThawFreeKJ`), every payload type admitted; R1 is the only exclusion left.
 
 **What the revision owes** (none of it proved here; each is the next unit's):
 - `RetainedPay` at every row that introduces a `Mut` or `Imm` value. [unchecked] A retained cell was
@@ -2392,3 +2395,24 @@ reviewed again.
    any lifetime, the set of lifetimes shorter than it is infinite") and 6.64's. Status: `SubFresh` is
    in the `∀` clause and `SubOutsidePush` is proved. Open: `RecsOutsideArises` and
    `RecsInsideOwnArises` at `ArisesI` are not attempted.
+
+### Since `GAP.md`
+
+`GAP.md` §8 changes the status of the items above as follows. Nothing in this section was reviewed.
+
+- **§11.2's not-derived `TyEqInst`: proved** at every type (`tyEqInst`), by the threshold cover,
+  with no relation changed. `CohEInst` and `ViewSlotInst` follow at every type under
+  `OuterBelowTop` (`cohEInstOB`, `viewSlotInstOB`).
+- **The thaw's `CoreStable` restriction: gone.** The four `U` rows, the context's thaw and
+  `ThawInstJ` hold at `binder0` at every `CtxThawFreeK` context (`statement0UThawFreeKJ`). Only
+  slots with a `μ` or `fam` type outside a `Mut` or `Imm` payload are excluded: R1 is the thaw's
+  only guarantee gap.
+- **Findings 1–4 above: unchanged.** Finding 2's open items (whether a retained cell with
+  `not_mutPayloadInst`'s shape arises, `RetainedPay` at every row) are where they were; the retained
+  leaves still read `RetainedPay`, now at every payload type.
+- **The position-`∀`.** W's `U` clause quantifies over the cuts below the stack's cut, each realised
+  by an instantiation (`wU_allPosJ`, `instRealisesCut_at`). At the configuration where Core's
+  `ℕ`-`∀` holds by adjacency, W's `U` clause excludes the closure (`adj_not_wU`). `cRLJ`'s own `∀`
+  is unchanged.
+- **Open, as before**: R1; `ViewSlotInst` at an outermost lend at `⊤`; `binder0`'s own `MonoV`,
+  `MonoG`, `MonoOwnG`; the revision's obligations at the other rows.

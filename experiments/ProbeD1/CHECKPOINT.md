@@ -190,16 +190,62 @@ the outcome that favours D1. D1 is not yet shown tractable. The added hypotheses
 other row, R1 is open, `binder0`'s own monotonicity is not derived, and the `mut_not_natural` risk
 has moved rather than gone.
 
+## The instantiation's gap at `∀` (`GAP.md`)
+
+This unit took the one step the freeze-binder unit left open in the lifetime half: that the
+comparison of types up to the reading (`TyEq`) survives a resume's instantiation at every type, not
+only at types with no thunk. The design is `GAP.md`, and its §8 has the outcome in full. Nothing in
+`Core/`, in a printed definition, or in any ProbeD1 relation changed.
+
+**Why it was hard.** Lifetimes are the naturals, so an instantiation that moves internal lifetimes
+down can leave a gap: lifetimes nothing is sent to. A `∀` over lifetimes on the instantiated side
+then ranges over the gap, where the old fact says nothing. And Core's relation really does notice
+gaps: at `∀'0 ⊏ ⊤. F (Mut '0 1)` the closure `Λ. return ℓ₀` is related over a cell at `1`, next to
+`⊤`, and not over the same cell moved to `2` (`coreAllAdjacent`, `coreAllNotNatural`). So
+"invariance under every order embedding" is false for the relation, not just unproved.
+
+**What was proved.**
+- **`TyEq` does not notice gaps, so `TyEqInst` holds at every type** (`tyEqInst`). `TyEq` only
+  compares lifetime terms for equality, and an equality on a chain can be checked one threshold at a
+  time; at each threshold a lifetime in a gap behaves like `⊤` or like a lifetime below the
+  threshold, and both exist. This is the "threshold cover" (`tyEqOfCover`).
+- **The thaw and the four `U` rows hold at every payload type** at `binder0`
+  (`statement0UThawFreeKJ`). The restriction on borrow payloads (no thunk, `μ` or `fam` inside)
+  is gone. The only slots still excluded hold a `μ` or `fam` type outside a borrow's payload (R1).
+- **The direction given with the task, made exact.** Quantifying over positions among the lifetimes
+  in play, each realised by an instantiation, is a combinator (`AllPosJ`) that is realisable
+  (`instRealisesCut`), carried along instantiations (`allPosJTransport`) and equal to Core's clause
+  when nothing is lent (`allPosJNil`). **W's `U` clause already is this quantifier**
+  (`wU_allPosJ`): at the configuration where Core's `∀` holds by adjacency, W's `U` clause rejects
+  the closure that Core's accepts (`adj_not_wU`, `adj_core_U`). Quantifying over every position of
+  the whole order instead, by renaming the configuration, would agree with Core only one way
+  (`cutAllNilSound`, `not_coreAllImpCutAll`), and it is not adopted.
+
+**What is still open.**
+- R1: the thaw at a `μ` or `fam` slot. Its route is for W to read `μ` and `fam` itself, so that a
+  thunk inside is W's `U`, which reads every position below the stack's cut by construction. Not
+  attempted here.
+- `ViewSlotInst` without the "outermost lend below `⊤`" hypothesis, which every index the relation
+  reads has.
+- Everything else the freeze-binder unit listed: `binder0`'s own monotonicity, the revision's
+  obligations at the other rows, the guard at repeated places, and whether a kept cell with the
+  refuted shape arises.
+
+**What it decides.** The lifetime half of the freeze binder no longer depends on the payload
+types: the gap the last unit left is closed with no change to any relation. The thaw's only
+guarantee gap is R1. OQ-8 is still undecided, no machine-checked failure occurred, and the fallback
+is not triggered.
+
 ## What to do next (options, not a decision)
 
 1. **Finish the open review findings** (the statement-0 unit's minor wording ones, listed in the
    note at the top). This is needed under every option.
 2. **Continue D1.** The freeze-binder unit did the first two steps at `binder0`: PlaceViews is in
    the guard and the own lend, and the re-lend is an instantiation that lowers the stack's variables
-   together. What is left:
+   together. The gap unit removed the payload restriction. What is left:
    - whether a retained cell with `mut_not_natural`'s shape arises (`InternalPayloadArises`), which
      decides whether `RetainedPay` is a real restriction;
-   - R1: the thaw at `μ` and `fam` slots;
+   - R1: the thaw at `μ` and `fam` slots, by W reading `μ` and `fam` itself (`GAP.md` §6.5);
    - the revised relation's obligations at the other rows (the payload condition, the tags at the
      share, lends below `⊤`), and statement 0's other facts redone at it;
    - `cbpv`'s and `binder`'s `U` rows with futures (`BINDER.md` §5.6);

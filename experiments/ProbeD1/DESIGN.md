@@ -2163,6 +2163,29 @@ outcome, with the report lists, is `BINDER.md` §11. In brief:
   arise, `vRLJ` replaces `vRLI` as the one draft relation, and no clause reaches another stack by a
   new means. The fallback is not triggered.
 
+### 15.8 The instantiation's gap at `∀`, built (`GAP.md` §8)
+
+The unit after the freeze binder (`GAP.md`) takes the step `BINDER.md` §11.2 left, `TyEqInst` at
+every type, and the position-`∀` the task gave as the direction. Its build is
+`Gap{Witness,Cover,Rows,Pos,Room}.lean`; the full outcome is `GAP.md` §8. In brief:
+
+- **`TyEqInst` at every type: proved** (`tyEqInst`), by a threshold cover: `TyEq` compares lifetime
+  terms by equality, which a chain decides threshold by threshold, so a lifetime in an
+  instantiation's gap is covered by `⊤` or by a lifetime below the threshold. No relation changed.
+- **The thaw and the four `U` rows at every payload type: proved at `binder0`**
+  (`statement0UThawFreeKJ`). The `CoreStable` restriction on `Mut` and `Imm` payloads is gone; the
+  only exclusion left is a slot with a `μ` or `fam` type outside a `Mut` or `Imm` payload (R1).
+- **Core's `∀` reads the room between lifetimes: proved** (`coreAllAdjacent`, `coreAllNotNatural`).
+  Core's relation is not invariant under an embedding that opens a gap.
+- **The position-`∀`.** Read over the cuts below the stack's cut and realised by instantiations
+  (`AllPosJ`), it is realisable, transported along instantiations, and Core's clause at `σ = []`
+  both ways; W's `U` clause already is it (`wU_allPosJ`), and at the adjacency configuration it
+  excludes the closure Core's `U` clause admits (`adj_not_wU`). Read over every cut of the whole
+  order by renaming (`CutAllC`), it agrees with Core one way only. `cRLJ`'s `∀` is unchanged.
+- **Open**: R1; `ViewSlotInst` without `OuterBelowTop`; everything §15.7 lists as owed.
+- **What it decides**: the thaw's only guarantee gap is R1. OQ-8 is not decided. No failure of type
+  (a), (b) or (d) occurred, and the fallback is not triggered.
+
 ---
 
 ## Unresolved: the reviews' findings, answered and not reviewed again
@@ -2229,3 +2252,5 @@ gives the finding, where the current text answers it, and what stays open.
    - Since (`BINDER.md` §11): PlaceViews holds at the world of every configuration of the revised
      arising set `ArisesI` (`pvArises`), and the thaw holds at the revised relation `vRLJ` at every
      `CtxThawFree` context (`ctxRelendsThawFreeJ`). Open: the thaw at a `μ` or `fam` slot.
+   - Since (`GAP.md` §8): the thaw holds at every `CtxThawFreeK` context, every payload type
+     admitted (`ctxRelendsThawFreeKJ`). Open: the thaw at a `μ` or `fam` slot.

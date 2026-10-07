@@ -6,19 +6,20 @@ import ProbeD1.BinderRisk
 `TyEqInst` is proved only at `CoreStable` types (`tyEq_inst`). The structural induction stops at
 `CTyEq`'s `∀` clause: at a fixed instantiation `ι` the hypothesis reaches the instances in `ι`'s
 image only (`Inst.sub_extend`), and a re-stratification leaves lifetimes with no preimage below
-its cut. This file states what `GAP.md` designs; the proofs of its §3c witness are in
-`GapWitness.lean`.
+its cut. This file states what `GAP.md` designs. The proofs are in `GapWitness.lean` (§3c),
+`GapCover.lean` (§2), `GapRows.lean` (§2's leaves and rows), `GapPos.lean` (§3) and
+`GapRoom.lean` (W's `U` clause as reading (B)); `GAP.md` §8 is the outcome.
 
 * **§1 The stop** (`InGap`, `TyEqGapStep`): the step the fixed-`ι` induction cannot take.
 * **§2 `TyEq` reads no room.** `TyEq` and `CTyEq` (`Core/FrameRecords.lean`) are conjunctions of
   equalities `@aδ = @a′δ′` under an unbounded `∀`. Equality on a chain is decided threshold by
   threshold, and a lifetime term commutes with the two-point collapse at a threshold
   (`collapseN`, `InterpCollapse`, `EqOfCollapse`). The statements, argued in `GAP.md` §2.1 and
-  not proved: `TyEq` holds at every pair a family of `TyEq` pairs covers threshold by threshold
-  (`TyCover`, `TyEqOfCover`), an instantiated pair is covered by its source (`CoverInst`), and a
-  gap instance by the image instances (`CoverGap`); `TyEq` is invariant under every order
-  embedding fixing `⊤` (`TyEqRoomBlind`). With `TyEqInst` at every type the leaves' `CoreStable`
-  restriction goes (`CohEInstOB`, `ViewSlotInstOB`, `ThawFreeK`, `RelendJValueK`,
+  proved in `GapCover.lean`: `TyEq` holds at every pair a family of `TyEq` pairs covers threshold
+  by threshold (`TyCover`, `TyEqOfCover`), an instantiated pair is covered by its source
+  (`CoverInst`), and a gap instance by the image instances (`CoverGap`); `TyEq` is invariant under
+  every order embedding fixing `⊤` (`TyEqRoomBlind`). With `TyEqInst` at every type the leaves'
+  `CoreStable` restriction goes (`CohEInstOB`, `ViewSlotInstOB`, `ThawFreeK`, `RelendJValueK`,
   `Statement0UThawFreeKJ`); `μ` and `fam` slots stay outside (R1).
 * **§3 The position-`∀`.** The order of lifetimes in play, its positions, and the two readings:
   - (B) `AllPosJ`: the `∀` clause read at every instantiation of the stack, the views handed back,
@@ -33,7 +34,7 @@ its cut. This file states what `GAP.md` designs; the proofs of its §3c witness 
     `CoreAllNotNatural`, `NotCoreAllImpCutAll`; proved in `GapWitness.lean`).
 * **§4 R1.** A `μ` slot read by Core's relation, holding a closure whose `∀` holds by adjacency at
   the outermost lend (`muΓ`, `MuSlotIndex`), and the thaw's expected failure there
-  (`NotMuSlotThawCore`). Stated, not attempted.
+  (`NotMuSlotThawCore`). Stated, not attempted (`GAP.md` §6.5 item 2).
 
 Definitions and `def … : Prop` statements only.
 -/

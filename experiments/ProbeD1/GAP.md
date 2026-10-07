@@ -5,11 +5,13 @@ types, because "the induction stops at the `∀` clause where lifetimes fall in 
 gap". It follows the direction given with the task (quantify over positions of the finite order of
 lifetimes in play, not over all of ℕ) and reports what that direction meets when it is made exact.
 
-The statements are in `ProbeD1/Gap.lean`: definitions and `def … : Prop` only, no proofs. The one
-thing proved now is the justification §3c asks for, Core's `∀` reading the room between
-lifetimes, in `ProbeD1/GapWitness.lean`. `lake build ProbeD1` builds both. There is no `sorry`,
-`axiom`, `native_decide`, `opaque`, `partial`, `unsafe` or `implemented_by`, and the witness's
-theorems have `#print axioms` within `[propext, Classical.choice, Quot.sound]`. Nothing in `Core/`,
+The statements are in `ProbeD1/Gap.lean`: definitions and `def … : Prop` only. The proofs are in
+five files: `GapWitness.lean` (§3c, Core's `∀` reading the room between lifetimes),
+`GapCover.lean` (§2, the threshold cover), `GapRows.lean` (§2.3, the leaves and rows at every
+payload type), `GapPos.lean` (§3, the position-`∀`'s lemmas) and `GapRoom.lean` (§3.4, W's `U`
+clause as the position-`∀`). §8 is the build's outcome. `lake build ProbeD1` builds them. There is
+no `sorry`, `axiom`, `native_decide`, `opaque`, `partial`, `unsafe` or `implemented_by`, and every
+theorem's `#print axioms` is within `[propext, Classical.choice, Quot.sound]`. Nothing in `Core/`,
 `Paper/` or any printed definition changes.
 
 **Status words**, as in `BINDER.md`: *proved* is a theorem; *refuted* a theorem proving the
@@ -38,30 +40,35 @@ re-read here), *[unverified]*.
   first under `shift ⊤ 1` is one of them (`coreAllNotNatural`). The correction given with the task
   is right about the relation: invariance under an embedding that opens a gap is false for it, not
   merely unproved.
-- **`TyEq` does not read the room** [unchecked] (§2). An equality on a chain is decided threshold
-  by threshold, and a lifetime term commutes with the two-point collapse at a threshold. So `TyEq`
-  holds at every pair whose threshold patterns are those of `TyEq` pairs. At `∀` the source
-  lifetime is chosen per threshold, `⊤` or one below it, which always exists. The factorisation
-  the task rules out asks one source lifetime for all thresholds at once, and that is what
-  adjacency blocks. This gives `TyEqInst` at every type, and `TyEqRoomBlind`: invariance under
-  every order embedding fixing `⊤`. No relation changes.
-- **What that unlocks** (§2.3, §4). The `CoreStable` restriction on `Mut` and `Imm` payloads goes:
-  `CohEInstOB`, `ViewSlotInstOB`, `RelendJValueK`, `Statement0UThawFreeKJ`. The partial result
-  widens from `CtxThawFree` to `CtxThawFreeK`, where only `μ` and `fam` slots are excluded (R1).
+- **`TyEq` does not read the room. Proved** (§2, `GapCover.lean`). An equality on a chain is
+  decided threshold by threshold, and a lifetime term commutes with the two-point collapse at a
+  threshold. So `TyEq` holds at every pair whose threshold patterns are those of `TyEq` pairs. At
+  `∀` the source lifetime is chosen per threshold, `⊤` or one below it, which always exists. The
+  factorisation the task rules out asks one source lifetime for all thresholds at once, and that is
+  what adjacency blocks. This gives `TyEqInst` at every type (`tyEqInst`), and `TyEqRoomBlind`:
+  invariance under every order embedding fixing `⊤` (`tyEqRoomBlind`). No relation changes.
+- **What that unlocks. Proved** (§2.3, §4, `GapRows.lean`). The `CoreStable` restriction on `Mut`
+  and `Imm` payloads goes: `CohEInstOB`, `ViewSlotInstOB`, `RelendJValueK`,
+  `Statement0UThawFreeKJ .binder0`. The partial result widens from `CtxThawFree` to `CtxThawFreeK`,
+  where only `μ` and `fam` slots are excluded (R1).
 - **The thaw never asks the relation's `∀` to be invariant** (§1.3). Computation types occur in
   value types only under `U`. W's `U` clause quantifies over every instantiation itself
   (`RelendJ`), and every cut below the stack's cut is opened by one (`InstRealisesCut`). So the
   `∀` inside a `U` value is already read at every position an admissible embedding can open. For
-  everything under `U`, **W's `U` clause is the position-`∀`** (§3.4).
+  everything under `U`, **W's `U` clause is the position-`∀`** (§3.4). Proved: a W `U` value at a
+  `∀` type is `AllPosJ` of its body (`wU_allPosJ`), and at §3c's configuration W's `U` clause
+  excludes the closure Core's `U` clause admits (`adj_not_wU`, `adj_core_U`).
 - **The position-`∀`, made exact, has two readings** (§3.2).
   - (A) `CutAllC` reads every cut of the whole order in play, realised by renaming the
     configuration. It needs retained cells renamed, the transport Restrat refutes at a `Mut` cell
-    (`mut_not_natural`). It makes agreement with Core at `σ = []` one-way: `not_coreAllImpCutAll`
-    is proved. That puts OQ-58 into outcome (c) at the types whose `∀` body compares the bound
-    variable with a cell, and the remedy there would redefine Core's printed `∀`.
+    (`mut_not_natural`). It makes agreement with Core at `σ = []` one-way: (A) ⇒ Core is proved
+    (`cutAllNilSound`) and Core ⇒ (A) is refuted (`not_coreAllImpCutAll`). That puts OQ-58 into
+    outcome (c) at the types whose `∀` body compares the bound variable with a cell, and the
+    remedy there would redefine Core's printed `∀`.
   - (B) `AllPosJ` reads every cut below the stack's cut, realised by an instantiation (W's own
-    re-lend). It is invariant under admissible embeddings by transport (`AllPosJTransport`), and
-    it is Core's clause at `σ = []` in both directions (`AllPosJNil`).
+    re-lend; `instRealisesCut`). It is invariant under admissible embeddings by transport
+    (`allPosJTransport`), and it is Core's clause at `σ = []` in both directions (`allPosJNil`).
+    All proved (`GapPos.lean`).
 - **Recommendation** (§3.4): keep `cRLJ`'s `∀` as it is. No statement carries a computation across
   an instantiation outside `U`. Putting (B) at `cRLJ`'s `∀` would make `∀I` owe the context's thaw,
   and with it R1. `AllPosJ` is stated for the day a statement needs it.
@@ -201,7 +208,7 @@ re-lends by construction too).
 
 ## 2. `TyEq` reads no room: `TyEqInst` at every type
 
-### 2.1 The argument [unchecked]
+### 2.1 The argument (proved in `GapCover.lean`)
 
 Lifetimes are carried as naturals (`LSub` stores `ℕ`): `⊤ = 0`, larger is shorter, `⊔ = min`,
 `⊓ = max`.
@@ -404,7 +411,8 @@ every cut below the stack's cut is opened by some instantiation. So the `∀` in
 value is read at every position an admissible embedding can open. Transplant §3c's closure into W
 at a `U` slot, at a stack whose outermost lend holds the cell and is adjacent to the bound (as in
 `MuSlotIndex`, with the `μ` removed). It is then **not** a W `U` value: `RelendJ` asks its body at
-the instantiation that opens the cut, where it fails [unchecked; the arithmetic is `adj_fails`'s].
+the instantiation that opens the cut, where it fails (`adj_not_wU`, `GapRoom.lean`; the run is
+`adj_fails`'s, `adj_run_fails`).
 
 **Adopting (B) at `cRLJ`'s own `∀`:**
 - **What it buys.** Invariance of a top-level `∀`-computation under instantiations
@@ -624,20 +632,18 @@ def NotMuSlotThawCore : Prop := ¬ CtxRelendableAtJ .binder0 LifeCtx.empty muΓ
 
 ### 6.1 The statements
 
-All are in `ProbeD1/Gap.lean`, which elaborates. Proved now (`GapWitness.lean`):
-`coreAllAdjacent`, `coreAllNotNatural`, `not_coreAllImpCutAll`, with `adj_holds`, `adj_fails`,
-`adj_fails'`, `adj_fails_relRU`, `adj_relRU`, `flat_single_mut_empty`, `tw_single_mut_empty` and
-`ptoMutS_innerView_le`.
+All are in `ProbeD1/Gap.lean`, which elaborates. The status column is the build's (§8).
 
 | § | statement | status |
 |---|---|---|
-| 1 | `InGap`, `TyEqGapStep` | stated |
-| 2 | `collapseN`, `InterpCollapse`, `EqOfCollapse`, `TyCover`, `TyEqOfCover`, `CoverInst`, `CoverGap`, `TyEqRoomBlind`; `TyEqInst` (`Binder.lean`) at every type | stated, not attempted |
-| 2 | `CohEInstOB`, `ViewSlotInstOB`, `ThawFreeK`, `CtxThawFreeK`, `RelendJValueK`, `CtxRelendsThawFreeKJ`, `ThunkFRowKJ`, `ThunkVRowKJ`, `BangThunkFRowKJ`, `BangThunkVRowKJ`, `Statement0UThawFreeKJ` | stated, not attempted |
-| 3 | `SamePos`, `InstRealisesCut`, `AllPosJ`, `AllPosJNil`, `AllPosJSelf`, `AllPosJTransport` | stated, not attempted |
-| 3 | `CutAllC`, `CutAllNilSound` | stated, not attempted |
-| 3c | `CoreAllAdjacent`, `CoreAllNotNatural`, `NotCoreAllImpCutAll` | **proved** |
-| 4 | `muAdjTy`, `muEnt`, `muΓ`, `muγ`, `MuSlotIndex`, `NotMuSlotThawCore` | stated, not attempted |
+| 1 | `InGap`, `TyEqGapStep` | `TyEqGapStep` **proved** (`tyEqGapStep`) |
+| 2 | `collapseN`, `InterpCollapse`, `EqOfCollapse`, `TyCover`, `TyEqOfCover`, `CoverInst`, `CoverGap`, `TyEqRoomBlind`; `TyEqInst` (`Binder.lean`) at every type | **proved** (`GapCover.lean`) |
+| 2 | `CohEInstOB`, `ViewSlotInstOB`, `ThawFreeK`, `CtxThawFreeK`, `RelendJValueK`, `CtxRelendsThawFreeKJ`, `ThunkFRowKJ`, `ThunkVRowKJ`, `BangThunkFRowKJ`, `BangThunkVRowKJ`, `Statement0UThawFreeKJ` | **proved** at `binder0` (`GapRows.lean`) |
+| 3 | `SamePos`, `InstRealisesCut`, `AllPosJ`, `AllPosJNil`, `AllPosJSelf`, `AllPosJTransport` | **proved** (`GapPos.lean`); `SamePos` is a definition, not read by a proof |
+| 3 | `CutAllC`, `CutAllNilSound` | **proved** (`cutAllNilSound`) |
+| 3c | `CoreAllAdjacent`, `CoreAllNotNatural`, `NotCoreAllImpCutAll` | **proved** (`GapWitness.lean`) |
+| 3.4 | W's `U` clause as reading (B); the transplanted closure | **proved** (`wU_allPosJ`, `adj_not_wU`, `adj_core_U`; `GapRoom.lean`) |
+| 4 | `muAdjTy`, `muEnt`, `muΓ`, `muγ`, `MuSlotIndex`, `NotMuSlotThawCore` | not attempted (§6.5 item 2) |
 
 ### 6.2 Success
 
@@ -703,3 +709,141 @@ gap, and decides nothing about OQ-8.
 - **Printed lemmas in the run-up that are untranscribed**: none read here.
 - **Hypotheses added**: none. The widened statements drop `CoreStable` and keep `OuterBelowTop`,
   which `not_cohEInst` requires.
+
+---
+
+## 8. The build's outcome
+
+The build is in four files beside the design's two (`Gap.lean`, `GapWitness.lean`):
+`GapCover.lean`, `GapRows.lean`, `GapPos.lean` and `GapRoom.lean`. `lake build ProbeD1` builds
+them. There is no `sorry`, `axiom`, `native_decide`, `opaque`, `partial`, `unsafe` or
+`implemented_by`, and every theorem's `#print axioms` is within
+`[propext, Classical.choice, Quot.sound]`. Nothing in `Core/`, `Paper/`, `Restrat/`, `GhostEnd/` or
+any printed definition changed, and no ProbeD1 relation changed.
+
+### 8.1 Per statement
+
+**§2, the threshold cover: proved** (`GapCover.lean`).
+- `InterpCollapse` (`interpCollapse`): a monotone map fixing `⊤` commutes with every lifetime term
+  (`interp_mapN_mono`, `Restrat.Emb.interp_mapN`'s argument without strictness).
+- `EqOfCollapse` (`eqOfCollapse`).
+- `TyEqOfCover` (`tyEqOfCover`; `tyEq_of_cover` and `cTyEq_of_cover`, mutual over `VTy` and
+  `CTy`). The `∀` arm extends the family at the binder (`extFam`, `cover_extend`): `⊤` above the
+  threshold, the lifetime just below the member's threshold under it.
+- `CoverInst` (`coverInst`): on the naturals that carry `Life`, a threshold `t₂` of the image is
+  met at the source by the largest `n` the instantiation sends to at most `t₂`
+  (`collapse_comp_strictMono`, `Nat.find`).
+- `CoverGap` (`coverGap`) and `TyEqGapStep` (`tyEqGapStep`).
+- **`TyEqInst` at every type** (`tyEqInst`), and `CTyEq` at every computation type (`cTyEq_inst`).
+- `TyEqRoomBlind` (`tyEqRoomBlind`): `TyEq` is invariant, both ways, under every embedding fixing
+  `⊤`, those that open a gap included.
+
+The brute-force check of §2.1 is superseded by the proof.
+
+**§2.3, the leaves and rows at every payload type: proved at `binder0`** (`GapRows.lean`).
+- `CohEInstOB` (`cohEInstOB`, from `cohE_instK`) and `ViewSlotInstOB` (`viewSlotInstOB`).
+- The leaves: `vC_imm_retainedK`, `vC_mut_boundK`, `vC_imm_boundK`, `relendJ_mutK`, `relendJ_immK`.
+  At an `Imm` leaf at a bound place, `vO_obs` gives the observable payload from the handed view's
+  full one, where `vC_true_eq_false` needed `CoreStable`.
+- `RelendJValueK` (`relendJValueK`), `CtxRelendsThawFreeKJ binder0` (`ctxRelendsThawFreeKJ`).
+- The four rows (`thunkFRowKJ`, `thunkVRowKJ`, `bangThunkFRowKJ`, `bangThunkVRowKJ`) and
+  **`Statement0UThawFreeKJ binder0`** (`statement0UThawFreeKJ`). The rows go through
+  `thunkF_U_of_thawJ` and `thunkV_U_of_thawJ`, the `U` clause from the thaw of the row's own
+  context, so a context whose thaw is proved another way reuses them.
+- The widening is strict (`thawFreeK_strict`: `Mut '0 (U (F 1))` is `ThawFreeK` and not `ThawFree`)
+  and contains the old class (`ctxThawFreeK_of_ctxThawFree`).
+- Each proof is `BinderRows.lean`'s with `tyEq_inst ι T hT` replaced by `tyEqInst` (and
+  `vC_true_eq_false` by `vO_obs`). The `CoreStable` versions are kept as they were.
+
+**§3, reading (B): proved** (`GapPos.lean`).
+- `InstRealisesCut` (`instRealisesCut`), and at a stack (`instRealisesCut_at`): the realising
+  re-stratification is an instantiation of the stack.
+- No instantiation opens a cut at or above the stack's cut (`inst_closed_above`).
+- `AllPosJNil` (`allPosJNil`): both directions.
+- `AllPosJSelf` (`allPosJSelf`) and `AllPosJTransport` (`allPosJTransport`), the "`∀` by transport"
+  step, by `instComp`.
+
+**§3, reading (A): `CutAllNilSound` proved** (`cutAllNilSound`). The identity renaming moves no
+cell (`Restrat.Emb.relRU_id`; `relU_of_fixAll_aux` is Restrat's `relU_of_inStratum_aux` with no
+cut), no record (`srecRestrat_id`) and no reading (`mapN_id_eq`). With `not_coreAllImpCutAll`,
+(A)'s agreement with Core at `σ = []` is one-way.
+
+**§3.4, W's `U` clause is reading (B): proved** (`GapRoom.lean`).
+- `wU_allPosJ`: under its guard, a W `U` value of `U (∀'x ⊏ c. C)` at `binder0` is `AllPosJ` of its
+  body, the records moved exactly. With `instRealisesCut_at`, its `∀` is read at every cut below
+  the stack's cut.
+- At §3c's configuration (`muEnt` lending `ℓ₀` at `1`, cut `⊤`; the resource its view
+  `innerView 0 1`), which meets the index hypotheses `SemSJ` reads at `Δ = ∅` (`adjIndex`):
+  - `adj_core_U`: Core's `U` clause admits `Λ. return ℓ₀` at `U (∀'0 ⊏ ⊤. F (Mut '0 1))`;
+  - `adj_not_wU`: W's does not. Every split drops the view (`relendJ_adj_handed`); at
+    `shift ⊤ 1` it is handed back at `2`, where the body at `α = 1` fails (`adj_not_cRLJ`,
+    `adj_run_fails`, the run of `adj_fails`).
+- Neither result refutes a statement of the probe: both are about the clauses at one
+  configuration, and the closure is not claimed derivable (§3c).
+
+**§4, R1 through Core: not attempted** (§6.5 item 2). `adjIndex` proves `MuSlotIndex`'s first
+eight conjuncts; its ninth (the `μ` slot related by Core's `μ` clause) and `NotMuSlotThawCore` are
+not built. `NotMuSlotThawCore` would refute a statement of ours at a configuration not shown to
+arise.
+
+### 8.2 What remains
+
+- **R1**: the thaw at a `μ` or `fam` slot outside a `Mut` or `Imm` payload (`CtxRelendsAllJ
+  binder0`), and with it `Statement0UFullJ binder0`. Not derived, not attempted here. The route is
+  `BINDER.md` §5.4's, W reading `μ` and `fam` itself, in its own unit. §3.4's results show what that
+  route buys at a `U` slot: W's own `U` clause excludes the closure that Core's `U` clause, which a
+  `μ` slot is read by now, admits.
+- **`ViewSlotInst` as stated** (`Binder.lean`, without `OuterBelowTop`): not derived. With
+  `OuterBelowTop`, which every `SemSJ` index carries, it holds at every slot type
+  (`viewSlotInstOB`). The case it leaves is an outermost lend at `⊤`, where `CohEInst` fails
+  (`not_cohEInst`); no refutation of `ViewSlotInst` itself was built.
+- **Instantiation invariance at computation types**: not available at `F` (`Restrat.Open.WpNatural`)
+  or `⊸` (contravariant); at `∀` only through (B) (`allPosJTransport`). No statement reads it
+  (§1.3).
+- **(B) at `cRLJ`'s own `∀`**: not adopted, as §3.4 recommends. `AllIRow` is unchanged and not
+  re-proved with the context's thaw.
+- Unchanged by this unit: `binder0`'s own `MonoV`, `MonoG` and `MonoOwnG`; `RetainedPay`, `KeepsT`
+  and `OuterBelowTop` at the other rows; `cbpv`'s and `binder`'s `BINDER.md` §5.6 list.
+
+### 8.3 Agreement with Core at `σ = []`, and its downstream uses
+
+- **(B)**: both directions (`allPosJNil`). Adopting (B) at `cRLJ`'s `∀` would restate no
+  downstream use.
+- **(A)**: one direction (`cutAllNilSound`; `not_coreAllImpCutAll`). §3b's table names the uses that
+  read the direction that fails: `NilAgreesU` and `NilAgrees` (their Core ⇒ W half), and `NilSoundC`
+  at `A ⊸ C`, which reads Core ⇒ W at `A`. That they fail once W's `∀` at `σ = []` is read as
+  `CutAllC` is §3b's [unchecked] identification. None is restated, since (A) is not adopted.
+- **`vRLJ` itself**: its `∀` clause is unchanged, so its agreement with Core at `σ = []` is what it
+  was. None of W₀'s nil statements (`Statement0.lean`) is restated at `vRLJ`.
+
+### 8.4 Report lists (CLAUDE.md §5)
+
+- **Printed hypotheses unspent**: none is spent. The step "a lifetime below the threshold exists"
+  (`cover_extend`, `coverGap`) is H4's fact ([TR] 6.64, 6.65: "for any lifetime, the set of
+  lifetimes shorter than it is infinite"), used as arithmetic on `ℕ`; no printed lemma is cited,
+  since `TyEq` is ours.
+- **Uniqueness and functionality results.** Used: `ResU.CompS.functional`, `ResU.Flat.functional`,
+  `CellU.mutOf_at`, `Option.some.inj`, `ResU.CompS.get_right_of_ne_imm` (a `mut` cell composes with
+  nothing), the strict monotonicity of `Restrat.Emb` (`toNat_strictMono`; `Inst.life1_le` and
+  `Inst.life1_le_iff` through the reused leaf proofs). Not used: the machine's determinism.
+- **Printed lemmas in the run-up that are untranscribed**: none read here. The cover reads only
+  `TyEq` (`[about ours]`) and `Life.interp` ([TR] p. 3, row 2.54, as transcribed).
+- **Hypotheses added**: none. The widened statements drop `CoreStable`; `CohEInstOB` and
+  `ViewSlotInstOB` keep `OuterBelowTop`, which `not_cohEInst` requires.
+- **The technique built**: the threshold cover. No printed proof governs `TyEq`, so no printed route
+  was replaced. `GapRows.lean` repeats `BinderRows.lean`'s proofs with one lemma swapped; the
+  route is theirs.
+
+### 8.5 What it decides
+
+- **The gap `BINDER.md` §11.2 left is closed**: `TyEqInst` holds at every type, by an argument about
+  `TyEq` alone, with no relation changed. The thaw's `CoreStable` restriction is gone, and its only
+  guarantee gap is R1.
+- **The direction given with the task**: the position-`∀`, read over the cuts below the stack's cut
+  and realised by instantiations (B), is the quantifier W's `U` clause already has (`wU_allPosJ`).
+  At the configuration where Core's `ℕ`-`∀` reads adjacency, W's `U` clause reads the cut and
+  excludes the closure (`adj_not_wU`, `adj_core_U`). Read over every cut of the whole order (A), it
+  agrees with Core one way only.
+- **OQ-8 is not decided.** No failure of type (a), (b) or (d) occurred: nothing was refuted at a
+  configuration shown to arise, and no guard, relation family or quantifier was added. The fallback
+  is not triggered.

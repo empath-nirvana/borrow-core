@@ -144,7 +144,8 @@ theorem cover_extend {S : LSub → LSub → Prop} {s₂ s₂' : LSub} (hc : TyCo
   have hα : collapseN t₂ (OrderDual.ofDual β) = collapseN t₁ α := by
     by_cases hβ : OrderDual.ofDual β ≤ t₂
     · simp only [α, if_pos hβ, collapseN_of_le hβ, collapseN_zero]
-    · simp only [α, if_neg hβ, collapseN_of_lt (not_le.mp hβ), collapseN_of_lt (Nat.lt_succ_self t₁)]
+    · simp only [α, if_neg hβ, collapseN_of_lt (not_le.mp hβ),
+        collapseN_of_lt (Nat.lt_succ_self t₁)]
   refine ⟨s₁.extend x (OrderDual.toDual α), s₁'.extend x' (OrderDual.toDual α),
     ⟨s₁, s₁', OrderDual.toDual α, hm, rfl, rfl⟩, t₁, fun y => ⟨?_, ?_⟩⟩
   · rw [find?_extendL, find?_extendL]
