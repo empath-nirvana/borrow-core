@@ -11,9 +11,10 @@ import ProbeD1.Statement34
   "a frozen frame unwinding at a cancel, at an inner affine row" GhostEnd step 3f leaves open.
 * **Statement 7, the side check.** Targets' `NotVDenNaturalArises` (`Targets/I/Binder.lean`), as it
   stands.
-* **The arising check.** `ArisesAt` is what a configuration refuting one of the statements must
-  satisfy, beside every hypothesis of the statement it refutes (DESIGN §11).
-* **`Probe p`** bundles statements 0–6 at one placement.
+* **`Probe p`** bundles statements 0–6 at one placement. **`Survives e p`** adds `reconB′`'s
+  acceptance at its term `e`. W is the placement of least `rank` among those whose `Survives` is
+  proved: the cuts order of synthesis §4.2, `cbpv`, then `binder`, then `binder0`, applied to the
+  proved bundles (DESIGN §3). The arising check is `Arising.lean`'s.
 
 Statements only; no proofs.
 -/
@@ -56,19 +57,6 @@ def ThenRow (p : Placement) : Prop :=
     SemS p Δ (⟨.unit, false⟩ :: Γ₂) D (.comp (CTy.effOf S.abortOnly .unit)) →
     SemS p Δ Γ (thenE N D M) (.comp (CTy.effOf S B))
 
-/-! ### The arising check -/
-
-/-- **A configuration that arises at W's index**: its world `fρ = ρf ● ρ` a tagged `TW` world at
-the records, the stack in shape, every 6.64 entry among `TW`'s records, every 6.65 entry's place a
-`mut` cell of the world, and the local part `ρ` consistent with the stack's table (the stack's run
-invariant, statement 1). -/
-def ArisesAt (σ : LStack) (αs : List Life) (ls : List SRec) (ps : List FrameRec)
-    (ρf ρ fρ : WRes) : Prop :=
-  TW fρ ps (rsOf ls) ∧ Tagged fρ ps ls ∧ ResU.Hash ρf ρ ∧ ResU.CompS ρf ρ fρ ∧
-    StackOK σ αs ∧ (∀ e ∈ σ, ∀ u, e.k = .imm u → ∃ r ∈ ps, r.le = e.l) ∧
-    (∀ e ∈ σ, e.k = .mut → ∃ ψ : CellU BoCa.Loc Val, fρ.get e.l = some ψ ∧ ψ.kind = Kind.mut) ∧
-    TabAtS σ αs ρ
-
 /-! ### The probe at one placement -/
 
 /-- **Statements 0–6 at the placement `p`.** `reconB′`'s acceptance is stated at its term, once
@@ -77,6 +65,20 @@ def Probe (p : Placement) : Prop :=
   Statement0 (ℍ := ℍ) p ∧ Statement1 (ℍ := ℍ) p ∧ Statement2 (ℍ := ℍ) p ∧
     Statement3 (ℍ := ℍ) p ∧ Statement4 (ℍ := ℍ) p ∧ GenSelfAccepted (ℍ := ℍ) p ∧
     ThenRow (ℍ := ℍ) p
+
+/-! ### Which placement is W -/
+
+/-- The cuts order (synthesis §4.2): the future-world quantifier at the resume cut's value side
+first, at every binder clause next, at `∀` only last. -/
+def Placement.rank : Placement → Nat
+  | .cbpv => 0
+  | .binder => 1
+  | .binder0 => 2
+
+/-- **A placement survives**: its probe bundle, and `reconB′` accepted at the term `e` built for
+it. W is the surviving placement of least `rank` (DESIGN §3, §12.1). -/
+def Survives (e : Expr) (p : Placement) : Prop :=
+  Probe (ℍ := ℍ) p ∧ ReconAccepted (ℍ := ℍ) p e
 
 end ProbeD1
 

@@ -8,7 +8,9 @@ import Targets.Instance.Types
   The handled body is read at `hideS (· == n) σ`: inside the handler no stop of `n` reaches a lend
   outside it, so its stops of `n` are at depth `0` (the lend open, the continuation re-lendable)
   and its other stops pass the handler frame to the lenders' row. That is GhostEnd's `effHandle`
-  case (step 3f), with `AllCross` relaxed: `n` crosses no entry of the body's stack.
+  case (step 3f), with `AllCross` relaxed: `n` crosses no entry of the body's stack. The context
+  is carried to the hidden stack by `MonoHide`, which statement 0's `MonoV` gives
+  (`MonoHideFromMonoV`).
 * **`ovalW p`**: the relation at the open types (RESTRUCTURE §4.2's `I.ovalW`) over W: at
   `U(∀ρ:k. C)` the intersection over the admissible rows on the same value, at every other type
   W's relation at the instance.
@@ -42,7 +44,7 @@ def HandleRow (p : Placement) : Prop :=
     SemS p Δ Γ (hndTerm n ir ic e) (.comp (CTy.effOf S R))
 
 /-- **Statement 3 at the placement `p`.** -/
-def Statement3 (p : Placement) : Prop := HandleRow (ℍ := ℍ) p ∧ MonoHide (ℍ := ℍ) p
+def Statement3 (p : Placement) : Prop := HandleRow (ℍ := ℍ) p
 
 /-! ### Statement 4 -/
 
@@ -74,12 +76,11 @@ def AllREW (p : Placement) : Prop :=
 intersection, at every instance. -/
 def AllRMono (p : Placement) : Prop :=
   ∀ (σ : LStack) (δ : LSub) (αs : List Life) (ls ls' : List SRec) (ρv : RVar) (k : RowCon)
-    (C : Targets.Inst.OCTy) (η : RowEnv) (v : Val) (r : WRes) (kd : Nat) (τ : LStack)
-    (αt : List Life) (N : Option (UInt32 → Bool)),
-    StackOK σ αs → Ext ls ls' r → FutOK δ σ αs kd τ αt r → NsFresh τ →
-    (∀ η', VarsAvoidV (Targets.Inst.OVTy.den η' (.thunk (.allR ρv k C))) τ) → TabAtS σ αs r →
+    (C : Targets.Inst.OCTy) (η : RowEnv) (v : Val) (r : WRes) (σ' : LStack) (αs' : List Life),
+    StackOK σ αs → Ext ls ls' r → Fut δ r (σ, αs) (σ', αs') →
+    (∀ η', FutAvoidsV (Targets.Inst.OVTy.den η' (.thunk (.allR ρv k C))) σ σ') → TabAtS σ αs r →
     ovalW p σ δ αs ls (.thunk (.allR ρv k C)) η v r →
-    ovalW p (futS kd τ N σ) δ (futL kd αt αs) ls' (.thunk (.allR ρv k C)) η v r
+    ovalW p σ' δ αs' ls' (.thunk (.allR ρv k C)) η v r
 
 /-- **Statement 4 at the placement `p`.** -/
 def Statement4 (p : Placement) : Prop := AllREW (ℍ := ℍ) p ∧ AllRMono (ℍ := ℍ) p

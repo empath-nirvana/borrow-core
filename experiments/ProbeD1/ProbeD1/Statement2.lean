@@ -7,11 +7,14 @@ import ProbeD1.Statement1
   (`Targets/I/Interface.lean`) at `Adm = admClosedOp`, class `.any`, `O = OutJ.core`, stated at
   `SemS`. The 6.65 row is `genSelf`'s; the 6.64 row is `reconB′`'s two borrows. Their callback is
   read at `σ·y` through the placement's clause (`CallbackExtMut`, `CallbackExtImm`).
-* **[TR] 6.150 at a resuming table** (`RebFrameR`): the lift GhostEnd's report lists carry as the
+* **[TR] 6.150 at a resuming table** (`RebFrameR`): the lift GhostEnd's report lists as the
   untranscribed printed lemma in the run-up of the borrow-constant rows. It is stated at Core's
-  relation, where the other lifts (`ewpTS_M_frameR`, `ewpTS_I_frameR`, `ewpTS_M_antiFrameR`) are:
-  the re-borrowing callback's least fixed point, a stop owing the view kept beside the callback
-  (`ptoImm_dup`) and the callback again.
+  relation, where the other lifts (`ewpTS_M_frameR`, `ewpTS_I_frameR`, `ewpTS_M_antiFrameR`) are,
+  and shaped as they are: the re-borrowing callback's least fixed point, whose postcondition takes
+  back the copy of the view the lift keeps beside it (`ptoImm_dup`) before owing it, with the next
+  unfolding, to the continuation at a stop. The chooser is asked at the lists that hold the view's
+  record, with its payload input and its image indexed by the list, as `rebChooseTW_top` supplies
+  them; `RebChooserNonVacuous` is that supply at a record whose payload is not data.
 * **`withload` spanning a stop at W** (`SpanLoadRow`): Targets' `SpanWithload` at `SemS`.
 
 Statements only; no proofs.
@@ -39,7 +42,7 @@ def SpanW2Row (p : Placement) : Prop :=
     SemS p Δ Γ (withborUE d) (.val (withbor2UTy x Δ.meetOfDom A B S))
 
 /-- **`withbor` (1) spanning a stop, at W** (`SpanWithbor1 W OutJ.core admClosedOp .any` at
-`SemS`): the 6.64 lend, whose cancel path is the one not built (`CancelImmFrame`, DESIGN §6.2). -/
+`SemS`): the 6.64 lend, whose cancel path is the one not built (DESIGN §6.2). -/
 def SpanW1Row (p : Placement) : Prop :=
   ∀ (Δ : LifeCtx) (Γ : Ctx VTy) (A B : VTy) (S : Row) (d : Expr) (x : LifeVar),
     Ctx.DeadP Γ → Δ.find? x = none → VScoped Δ A →
@@ -57,42 +60,58 @@ def SpanLoadRow (p : Placement) : Prop :=
 
 /-! ### [TR] 6.150 at a resuming table -/
 
-/-- The view 6.150 consumes: `ℓ ↦ Imm α (И β. ↺_β P̂₀)`, the payload in `R`. -/
-def rebView (l : BoCa.Loc) (α : Life) (R : Val → WRes → Prop) (P₀ : Life → Val → WProp) :
-    WProp :=
-  ptoImm l α (fun v σ => R v σ ∧ fresh (fun b => reborrow b (P₀ b v)) σ)
+/-- The view 6.150 consumes, at the list `ls`: `ℓ ↦ Imm α (И β. ↺_β P̂₀)`, the payload in `R ls`. -/
+def rebView (l : BoCa.Loc) (α : Life) (R : List SRec → Val → WRes → Prop)
+    (P₀ : Life → Val → WProp) (ls : List SRec) : WProp :=
+  ptoImm l α (fun v σ => R ls v σ ∧ fresh (fun b => reborrow b (P₀ b v)) σ)
 
 /-- **One unfolding of the re-borrowing callback** at a resuming table: 6.150's premise
-(`wpG_reborrow`'s), its postcondition an answer in `Q` or a stop the table admits, owing the view
-again beside the next unfolding. -/
-def rebF (Tb : Table) (l : BoCa.Loc) (α : Life) (R : Val → WRes → Prop)
-    (P₀ P : Life → Val → WProp) (Q : List SRec → Val → WProp) (X : List SRec → Expr → WProp) :
-    List SRec → Expr → WProp :=
-  fun ls e => fresh fun b => all fun v => P b v ─⋆ wpG ls e (fun ls' t => box b (fun ρ =>
-    valPost Q ls' t ρ ∨ Tb ls' t (fun ls'' e'' => rebView l α R P₀ ⋆ X ls'' e'') ρ))
+(`wpG_reborrow`'s), handed the chosen image at the list it starts from; at its end the copy of the
+view the lift keeps is handed back (the wand), and the callback answers in `Q` or stops as the
+table admits, owing the view at the resumption's list beside the next unfolding. -/
+def rebF (Tb : Table) (l : BoCa.Loc) (α : Life) (R : List SRec → Val → WRes → Prop)
+    (P₀ : Life → Val → WProp) (P : List SRec → Life → Val → WProp) (Q : List SRec → Val → WProp)
+    (X : List SRec → Expr → WProp) : List SRec → Expr → WProp :=
+  fun ls e => fresh fun b => all fun v => P ls b v ─⋆ wpG ls e (fun ls' t => box b
+    (rebView l α R P₀ ls' ─⋆ fun ρ => valPost Q ls' t ρ ∨
+      Tb ls' t (fun ls'' e'' => rebView l α R P₀ ls'' ⋆ X ls'' e'') ρ))
 
 /-- **The re-borrowing callback**: the least fixed point of `rebF`, written in `Prop` as `ewpTS`
 is. -/
-def RebRelend (Tb : Table) (l : BoCa.Loc) (α : Life) (R : Val → WRes → Prop)
-    (P₀ P : Life → Val → WProp) (Q : List SRec → Val → WProp) (ls : List SRec) (e : Expr) :
-    WProp := fun ρ =>
+def RebRelend (Tb : Table) (l : BoCa.Loc) (α : Life) (R : List SRec → Val → WRes → Prop)
+    (P₀ : Life → Val → WProp) (P : List SRec → Life → Val → WProp) (Q : List SRec → Val → WProp)
+    (ls : List SRec) (e : Expr) : WProp := fun ρ =>
   ∀ X : List SRec → Expr → WProp, (∀ ls e ρ, rebF Tb l α R P₀ P Q X ls e ρ → X ls e ρ) →
     X ls e ρ
 
-/-- **[TR] 6.150 at a resuming table** (Law 2 for `withload`): the view beside the re-borrowing
-callback gives the callback's `ewpTS`. The chooser is taken at every list, where
-`rebChooseTW_top` supplies it at each resumption's list (the record persists along `Ext`). -/
+/-- **[TR] 6.150 at a resuming table** (Law 2 for `withload`): the view of a record's cell beside
+the re-borrowing callback gives the callback's `ewpTS`. The chooser (6.150's H16) is asked at
+every list that holds the record, its payload input `R` and its image `P` read at that list. The
+record persists along the unfoldings' `Ext`s, since the kept view is a cell at its place
+(`Rel`, `Keeps`). -/
 def RebFrameR : Prop :=
-  ∀ (Tb : Table), Tb.Mono → ∀ (l : BoCa.Loc) (α : Life) (R : Val → WRes → Prop)
-    (P₀ P : Life → Val → WProp) (Q : List SRec → Val → WProp) (ls : List SRec) (e : Expr),
-    (∀ ls', RebChooseTW ls' l R P₀ P) →
-    Entails (rebView l α R P₀ ⋆ RebRelend (ℍ := ℍ) Tb l α R P₀ P Q ls e)
+  ∀ (Tb : Table), Tb.Mono → ∀ (r : FrameRec) (α : Life) (R : List SRec → Val → WRes → Prop)
+    (P₀ : Life → Val → WProp) (P : List SRec → Life → Val → WProp) (Q : List SRec → Val → WProp)
+    (ls : List SRec) (e : Expr),
+    r ∈ rsOf ls → (∀ ls', r ∈ rsOf ls' → RebChooseTW ls' r.le (R ls') P₀ (P ls')) →
+    Entails (rebView r.le α R P₀ ls ⋆ RebRelend (ℍ := ℍ) Tb r.le α R P₀ P Q ls e)
       (ewpTS (ℍ := ℍ) ls e Tb Q)
+
+/-- **`RebFrameR`'s chooser hypothesis is met where 6.150 does anything**: at a record whose
+payload is not data (its reborrow image is not its type), `rebChooseTW_top` supplies the chooser at
+every list holding the record, its payload input and image those of the program's relation at
+that list. -/
+def RebChooserNonVacuous : Prop :=
+  ∃ (r : FrameRec) (x : LifeVar), r.T.immReborrow (.var x) ≠ r.T ∧ ¬ VFree x r.T ∧
+    ∀ ls', r ∈ rsOf ls' →
+      RebChooseTW ls' r.le (fun w σ => vC false r.T ls' r.δ w σ)
+        (fun β w χ => vShape (r.T.immReborrow (.var x)) (r.δ.extend x β) w χ)
+        (fun β w χ => vC true (r.T.immReborrow (.var x)) ls' (r.δ.extend x β) w χ)
 
 /-! ### The bundle -/
 
 /-- **Statement 2 at the placement `p`**: the two spanning rows the programs use, and 6.150's
-lift. `SpanLoadRow` is Law 2 for `withload` at W, stated beside it (DESIGN §6.4). -/
+lift. `SpanLoadRow` is Law 2 for `withload` at W, stated beside it (DESIGN §6.2). -/
 def Statement2 (p : Placement) : Prop :=
   SpanW2Row (ℍ := ℍ) p ∧ SpanW1Row (ℍ := ℍ) p ∧ RebFrameR (ℍ := ℍ)
 

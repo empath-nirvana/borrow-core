@@ -1,18 +1,25 @@
 import ProbeD1.Statement0
+import ProbeD1.Arising
 
 /-!
-# ProbeD1 — statement 1: the guard read from `TW` (OQ-45; DESIGN §5)
+# ProbeD1 — statement 1: the guard as `TW`'s run invariant (OQ-45; DESIGN §5)
 
-W's guard is the stack's table `TabAtS`. Statement 1 is that the table is a `TW` invariant at every
-depth: it holds at the empty stack, at every part of a resource that has it, at the start of every
-lend W's rules open, after every re-lend and every future, and after every run from a `TW` world, at
-a return as at a stop. Those make the guard the stack's arising condition read from `TW`'s runs,
-not a guard beside `TW`. Then the rows GhostEnd proved at its own guard are re-proved at W: `[lam]`,
-`[allI]`, and the derivation `not_gfpAt_below` refutes GFP at (`BelowRow`).
+W's guard is the stack's table `TabAtS`. Synthesis §11 asks for the guard read from `TW` (T-ARISE.0,
+the table read off one `TW` world). The probe states the sound direction instead: the table holds
+at every configuration that arises (`ArisesSound`), because every transition of W's semantics
+keeps it. Arising is historical: `TW` records no 6.65 lend (OQ-44), so one world cannot say that a
+cell was folded after a lend opened, and the pointwise reading is expected to fail at
+`innerView`, where the configuration does not arise. `TabOfTWPointwise` is that pointwise reading,
+stated so that its first check can be run; it is not part of the bundle.
 
-`TabOfTWPointwise` is the draft spec's T-ARISE.0: the table read off one `TW` world, with no run
-behind it. It is stated so that its first check can be run (DESIGN §5.2); it is not part of the
-bundle.
+* **The transitions keep the table**: the empty stack (`TabNil`), a part (`TabParts`), a run's
+  update (`TabUpd`, [TR] 6.50; `TabRuns` its `wpG` form), a lend's start (`TabStart`), a handler
+  (`TabHide`).
+* **The relation's quantified configurations keep it**: a re-lend (`TabRelend`), a future
+  (`TabFut`), the resume composite (`TabResume`).
+* **The rows GhostEnd proved at its own guard, re-proved at W**: `[lam]`, `[allI]`, and the
+  derivation `not_gfpAt_below` refutes GFP at (`BelowRow`), with its witness excluded
+  (`BelowExcluded`).
 
 Statements only; no proofs.
 -/
@@ -26,7 +33,7 @@ open BoCa BoCa.Fig16 BoCa.Fig16.BoLo BoCa.Fig16.LogRel BoCa.Fig16.LogRel.Core
 open BoCa.Lifetime (LSub LifeCtx LifeVar)
 open GhostEnd (LEnt LStack LKind extS vwS vwE stratS ReLend TabAtS innerView)
 
-/-! ### The table as `TW`'s run invariant at every depth -/
+/-! ### The transitions of W's semantics keep the table -/
 
 /-- At the empty stack the table holds of every resource (`tabAtS_nil`). -/
 def TabNil : Prop := ∀ ρ : WRes, TabAtS [] [] ρ
@@ -36,9 +43,15 @@ def TabParts : Prop :=
   ∀ (σ : LStack) (αs : List Life) (ρ₁ ρ₂ ρ : WRes), ResU.CompS ρ₁ ρ₂ ρ →
     (TabAtS σ αs ρ ↔ TabAtS σ αs ρ₁ ∧ TabAtS σ αs ρ₂)
 
-/-- **Every run keeps the table, at every depth** (`wpG_tabAtS_one` at every stack; [TR] 6.50 at
-the innermost lend's `↓α` and at the outermost lend away from the stack's places). A run of W is
-`wpG` at the record list with the stack fixed. -/
+/-- **A run's update keeps the table** ([TR] 6.50 at the innermost lend's `↓α` and at the outermost
+lend away from the stack's places, `tabAt_updV` twice): `↭` from a resource with the table gives
+one with the table. -/
+def TabUpd : Prop :=
+  ∀ (σ : LStack) (αs : List Life) (ρ π : WRes), StackOK σ αs → TabAtS σ αs ρ →
+    ResU.UpdV ρ π → TabAtS σ αs π
+
+/-- **Every run keeps the table, at every depth** (`wpG_tabAtS_one` at every stack): `TabUpd` read
+through `wpG`'s run-end conjunct. A run of W is `wpG` at the record list with the stack fixed. -/
 def TabRuns : Prop :=
   ∀ (σ : LStack) (αs : List Life) (ls : List SRec) (e : Expr) (Q : List SRec → Expr → WProp)
     (ρ : WRes), StackOK σ αs → TabAtS σ αs ρ → wpG (ℍ := ℍ) ls e Q ρ →
@@ -48,8 +61,15 @@ def TabRuns : Prop :=
 resource below the fresh lend, joined to the lend's view, has the table at `e·σ`. -/
 def TabStart : Prop :=
   ∀ (δ : LSub) (σ : LStack) (αs : List Life) (ls : List SRec) (e : LEnt) (α : Life)
-    (d : Bool) (ρ a R : WRes), StackOK σ αs → FutOK δ σ αs 0 [e] [α] ρ → TabAtS σ αs ρ →
+    (d : Bool) (ρ a R : WRes), StackOK σ αs → OwnOK δ σ αs e α ρ → TabAtS σ αs ρ →
     vwE δ e d α ls a → ResU.CompS ρ a R → TabAtS (e :: σ) (α :: αs) R
+
+/-- **A handler keeps the table**: the table does not read the entries' rows. -/
+def TabHide : Prop :=
+  ∀ (N : UInt32 → Bool) (σ : LStack) (αs : List Life) (ρ : WRes),
+    TabAtS σ αs ρ → TabAtS (hideS N σ) αs ρ
+
+/-! ### The relation's quantified configurations keep the table -/
 
 /-- **A re-lend keeps the table**: a share strictly above the outermost lend, handed the views at a
 re-lend, has the table at the re-lend. -/
@@ -58,11 +78,29 @@ def TabRelend : Prop :=
     (ρz ρv R : WRes), StackOK σ αs → ReLend αs' αs → stratS αs ρz → vwS δ [] σ ds αs' ls ρv →
     ResU.CompS ρz ρv R → TabAtS σ αs' R
 
-/-- **A future keeps the table**: an insertion below the resource and a hiding. -/
+/-- **A future keeps the table**: insertions below the resource and hidings, any number. -/
 def TabFut : Prop :=
-  ∀ (δ : LSub) (σ : LStack) (αs : List Life) (k : Nat) (τ : LStack) (αt : List Life)
-    (N : Option (UInt32 → Bool)) (ρ : WRes), StackOK σ αs → FutOK δ σ αs k τ αt ρ →
-    TabAtS σ αs ρ → TabAtS (futS k τ N σ) (futL k αt αs) ρ
+  ∀ (δ : LSub) (σ σ' : LStack) (αs αs' : List Life) (ρ : WRes), StackOK σ αs →
+    Fut δ ρ (σ, αs) (σ', αs') → TabAtS σ αs ρ → TabAtS σ' αs' ρ
+
+/-- **The resume composite keeps the table**: the continuation's share, strictly above the
+outermost lend of its stack `σi ++ σo`, handed the views of the re-lent inner entries `σi`, joined
+to the handler's answer resource, which has the table at the kept part's future `σo`, has the table
+at the continuation's stack. It follows from `TabRelend` at `σi ++ σo` (the views are the inner
+entries'), `TabParts`, and `TabStart`'s argument at an empty view for the answer's resource; it is
+named because the share's rows call their induction hypothesis there. -/
+def TabResume : Prop :=
+  ∀ (δ : LSub) (σi σo : LStack) (ds : List Bool) (αi αo : List Life) (ls : List SRec)
+    (ρz ρv ρa R R' : WRes),
+    StackOK (σi ++ σo) (αi ++ αo) → stratS (αi ++ αo) ρz → vwS δ [] σi ds αi ls ρv →
+    TabAtS σo αo ρa → ResU.CompS ρz ρv R → ResU.CompS R ρa R' → TabAtS (σi ++ σo) (αi ++ αo) R'
+
+/-! ### The guard is `TW`'s run invariant -/
+
+/-- **Every configuration that arises has the table** (`Arises ⊆ ArisesAt`): the guard is the
+stack's arising condition read from `TW`'s runs, not a guard beside `TW`. -/
+def ArisesSound : Prop :=
+  ∀ c : Cfg, Arises (ℍ := ℍ) c → ArisesAt c.σ c.αs c.ls c.ps c.ρf c.ρ c.fρ
 
 /-! ### The pointwise reading (the draft spec's T-ARISE.0) -/
 
@@ -88,7 +126,8 @@ def LamRow (p : Placement) : Prop :=
     SemS p Δ (⟨A, true⟩ :: Γ) M (.comp C) → SemS p Δ Γ (.val (.lam M)) (.comp (.arr A C))
 
 /-- **`[allI]` at W** (`allI_RLa` at the placement's relation). Its binder is new to `Δ`, the
-freshness `allI_RLa`'s added hypotheses come from (`stackFresh_of_fresh`). -/
+freshness `allI_RLa`'s added hypotheses come from: with `StackJ`'s payload scoping, it is new to
+the stack's first-kind variables and free in no payload type. -/
 def AllIRow (p : Placement) : Prop :=
   ∀ (Δ : LifeCtx) (Γ : Ctx VTy) (x : LifeVar) (b : Lifetime.Life) (M : Expr) (S : VTy) (C : CTy),
     b.mentions x = false → (∀ y u, Δ.find? y = some u → u.mentions x = false) →
@@ -123,7 +162,8 @@ def BelowExcluded (p : Placement) : Prop :=
 
 /-- **Statement 1 at the placement `p`.** -/
 def Statement1 (p : Placement) : Prop :=
-  TabNil ∧ TabParts ∧ TabRuns (ℍ := ℍ) ∧ TabStart (ℍ := ℍ) ∧ TabRelend (ℍ := ℍ) ∧ TabFut ∧
+  TabNil ∧ TabParts ∧ TabUpd ∧ TabRuns (ℍ := ℍ) ∧ TabStart (ℍ := ℍ) ∧ TabHide ∧
+    TabRelend (ℍ := ℍ) ∧ TabFut ∧ TabResume (ℍ := ℍ) ∧ ArisesSound (ℍ := ℍ) ∧
     LamRow (ℍ := ℍ) p ∧ AllIRow (ℍ := ℍ) p ∧ BelowRow (ℍ := ℍ) p ∧ BelowExcluded (ℍ := ℍ) p
 
 end ProbeD1

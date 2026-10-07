@@ -9,15 +9,21 @@ W's index is Targets' `Idx` at the stack `Stk := LStack × List Life`: GhostEnd'
 their current lifetimes, both innermost first, beside the record list.
 
 * **Futures of the stack.** A value or a continuation may be used deeper than where it was made:
-  inside new lends and inside new handlers. A new lend is an entry inserted in the stack: at the
-  front when the value moves inside it, at depth `k` when a continuation that ghost-ended its `k`
-  innermost entries is resumed inside a lend the resumer opened (between lenders). A new handler
-  hides its names from the stack's rows outside it. `FutOK` is the freshness an inserted entry
-  meets (6.112's `И`: below the holder's resource; nesting order; new variables and places), and
-  `futS`/`futL` the stack and the lifetimes it gives. An inserted entry's variable is drawn from
-  the names no program binds (`NsVar`), so it never collides with a binder of the code that runs
-  at the future: lifetime variables are names, and the stack binds its entries' variables over
-  the reading substitution (`extS`).
+  inside new lends and inside new handlers. One step of a future (`FutStep`) inserts a block of
+  fresh entries at one depth and hides names from the part outside it: at the front when a value
+  moves inside a new lend, at depth `k` when a continuation that ghost-ended its `k` innermost
+  entries is resumed inside a lend the resumer opened (between lenders). `FutOK` is the freshness
+  a step's entries meet (6.112's `И`: below the holder's resource; nesting order; new variables
+  and places; payload types read by the new stack's substitution). A **future** (`Fut`) is
+  finitely many steps, so a future of a future is a future by construction: the composite is an
+  order-preserving interleaving of the stack with fresh entries, each kept entry's row reduced by
+  hiding sets that grow outward.
+* **The own lend** (`OwnPush`): the entry a callback's lend pushes, named by its type's outermost
+  `∀`, at a lifetime meeting the bound. It is that binder's instance read as the lend the instance
+  names, so it is relative to the type, and a clause makes it after a future, never before one.
+* **Names.** An inserted entry's variable is drawn from the names no program binds (`NsVar`), so
+  it never collides with a binder of the code that runs at the future: lifetime variables are
+  names, and the stack binds its entries' variables over the reading substitution (`extS`).
 * **Hiding.** GhostEnd's stop depth reads each entry's lender row (`depth`). Inside a handler of
   `n` no stop of `n` reaches the lends outside the handler, so the handled body is read at
   `hideS (· == n) σ`.
@@ -50,21 +56,22 @@ def StackOK (σ : LStack) (αs : List Life) : Prop :=
 def hideS (N : UInt32 → Bool) (σ : LStack) : LStack :=
   σ.map fun e => { e with cross := fun n => e.cross n && !N n }
 
-/-- The stack a future gives: the fresh entries `τ` placed at depth `k` (inside the outer part
-`σ.drop k`, outside the inner part `σ.take k`), after the names `N` are hidden from the outer part.
-At `k = 0` it is a push inside the whole stack. -/
+/-- The stack one step of a future gives: the fresh entries `τ` placed at depth `k` (inside the
+outer part `σ.drop k`, outside the inner part `σ.take k`), after the names `N` are hidden from the
+outer part. At `k = 0` it is a push inside the whole stack. -/
 def futS (k : Nat) (τ : LStack) (N : Option (UInt32 → Bool)) (σ : LStack) : LStack :=
   σ.take k ++ τ ++ match N with
     | none => σ.drop k
     | some N => hideS N (σ.drop k)
 
-/-- The lifetimes a future gives, placed the same way. -/
+/-- The lifetimes one step gives, placed the same way. -/
 def futL (k : Nat) (αt αs : List Life) : List Life := αs.take k ++ αt ++ αs.drop k
 
-/-- **A fresh insertion.** The entries `τ` at the lifetimes `αt`, placed at depth `k ≤ |σ|`, every
-one below the holder's resource `ρ` (6.112's `И`), the whole vector in nesting order (so the inner
-part is below `αt`, which is below the outer part); `τ`'s variables new to the stack and to the
-reading substitution `extS δ σ αs`, and distinct; `τ`'s places new to the stack. -/
+/-- **The freshness of one step.** The entries `τ` at the lifetimes `αt`, placed at depth
+`k ≤ |σ|`, every one below the holder's resource `ρ` (6.112's `И`), the whole vector in nesting
+order (so the inner part is below `αt`, which is below the outer part); `τ`'s variables new to the
+stack and to the reading substitution `extS δ σ αs`, and distinct; `τ`'s places new to the stack;
+every variable free in a payload type of `τ` read by the new stack's substitution. -/
 structure FutOK (δ : LSub) (σ : LStack) (αs : List Life) (k : Nat) (τ : LStack)
     (αt : List Life) (ρ : WRes) : Prop where
   len : αt.length = τ.length
@@ -75,6 +82,8 @@ structure FutOK (δ : LSub) (σ : LStack) (αs : List Life) (k : Nat) (τ : LSta
   vars_sub : ∀ e ∈ τ, (extS δ σ αs).find? e.x = none
   nodup : (τ.map LEnt.x).Nodup
   places : ∀ e ∈ τ, e.l ∉ σ.map LEnt.l
+  pay : ∀ e ∈ τ, ∀ y, VFree y e.T →
+    (extS δ (σ.take k ++ τ ++ σ.drop k) (futL k αt αs)).find? y ≠ none
 
 /-- The base of the names a future gives its inserted entries. A program's binders are below it, so
 an inserted entry's variable is never one the program binds (`BindersLow`, `Sem.lean`). -/
@@ -86,22 +95,26 @@ def NsVar (x : LifeVar) : Prop := nsBase ≤ x
 /-- Every inserted entry's variable is a future's. -/
 def NsFresh (τ : LStack) : Prop := ∀ e ∈ τ, NsVar e.x
 
-/-- The futures a clause quantifies over: every fresh insertion and hiding when `fut`, and only
-the stack itself otherwise. -/
-def FutQ (fut : Bool) (δ : LSub) (σ : LStack) (αs : List Life) (k : Nat) (τ : LStack)
-    (αt : List Life) (N : Option (UInt32 → Bool)) (ρ : WRes) : Prop :=
-  if fut then FutOK δ σ αs k τ αt ρ ∧ NsFresh τ else k = 0 ∧ τ = [] ∧ αt = [] ∧ N = none
+/-- **One step of a future** at the holder's resource `ρ`, read at `δ`: a fresh insertion at one
+depth and a hiding of the part outside it. -/
+def FutStep (δ : LSub) (ρ : WRes) (s s' : Stk) : Prop :=
+  ∃ (k : Nat) (τ : LStack) (αt : List Life) (N : Option (UInt32 → Bool)),
+    FutOK δ s.1 s.2 k τ αt ρ ∧ NsFresh τ ∧ s'.1 = futS k τ N s.1 ∧ s'.2 = futL k αt s.2
 
-/-- **W's order** at a resource, read at `δ`: the records by `Ext`; the stack by a fresh insertion
-and a hiding. The re-lend of the stack's own lifetimes is not part of it: the `U` clause and the
-share hand the dropped views back at a re-lend, and an insertion below the outer part needs that
-re-lend to make room. -/
-def OrdW (δ : LSub) (i i' : Ix) (ρ : WRes) : Prop :=
-  Ext i.1 i'.1 ρ ∧ ∃ k τ αt N, FutOK δ i.2.1 i.2.2 k τ αt ρ ∧ NsFresh τ ∧
-    i'.2.1 = futS k τ N i.2.1 ∧ i'.2.2 = futL k αt i.2.2
+/-- **A future of the stack**: finitely many steps. Reflexive and transitive by construction; the
+stack it gives is an order-preserving interleaving of `s.1` with fresh entries, each kept entry's
+row reduced by hiding sets that grow outward. -/
+def Fut (δ : LSub) (ρ : WRes) : Stk → Stk → Prop := Relation.ReflTransGen (FutStep δ ρ)
 
-/-- **The guard**: `P` asked only of a resource consistent with the stack's table. -/
-def guardW (σ : LStack) (αs : List Life) (P : WProp) : WProp := fun ρ => TabAtS σ αs ρ → P ρ
+/-- **The futures a clause quantifies over**: every future when `fut`, the stack itself
+otherwise. -/
+def FutQ (fut : Bool) (δ : LSub) (ρ : WRes) (s s' : Stk) : Prop :=
+  if fut then Fut δ ρ s s' else s' = s
+
+/-- The record extensions a binder clause quantifies over: every `Ext`-future when `fut`, the list
+itself otherwise. -/
+def ExtQ (fut : Bool) (ls ls' : List SRec) (ρ : WRes) : Prop :=
+  if fut then Ext ls ls' ρ else ls' = ls
 
 mutual
 /-- The lifetime variables a value type binds, at every depth. -/
@@ -128,9 +141,43 @@ def CTy.binders : CTy → List LifeVar
   | .eff _ _ _ A B C => VTy.binders A ++ VTy.binders B ++ CTy.binders C
 end
 
-/-- A pushed entry's variable is not read by the type: neither free in it nor bound in it. -/
-def VarsAvoid (C : CTy) (τ : LStack) : Prop :=
-  ∀ e ∈ τ, ¬ CFree e.x C ∧ e.x ∉ CTy.binders C
+/-- **The entries a future inserted are not read by the computation type `C`**: an entry of `σ'`
+whose variable `σ` does not have is neither free nor bound in `C`. -/
+def FutAvoids (C : CTy) (σ σ' : LStack) : Prop :=
+  ∀ e ∈ σ', e.x ∉ σ.map LEnt.x → ¬ CFree e.x C ∧ e.x ∉ CTy.binders C
+
+/-- The same at a value type. -/
+def FutAvoidsV (A : VTy) (σ σ' : LStack) : Prop :=
+  ∀ e ∈ σ', e.x ∉ σ.map LEnt.x → ¬ VFree e.x A ∧ e.x ∉ VTy.binders A
+
+/-- **The freshness of a callback's own lend**: the entry `e` at the lifetime `a`, below the
+innermost lend and below the holder's resource `ρ` (6.112's `И`), its variable and place new to
+the stack, every variable free in its payload type read by the extended stack's substitution. The
+variable is the type's binder, which the extended substitution overrides, so nothing is asked of
+the reading substitution at it. -/
+structure OwnOK (δ : LSub) (σ : LStack) (αs : List Life) (e : LEnt) (a : Life) (ρ : WRes) :
+    Prop where
+  chain : List.IsChain (· < ·) (a :: αs)
+  below : ρ.InStratum a
+  var : e.x ∉ σ.map LEnt.x
+  place : e.l ∉ σ.map LEnt.l
+  pay : ∀ y, VFree y e.T → (extS δ (e :: σ) (a :: αs)).find? y ≠ none
+
+/-- **The own lend at the type `C`**, pushed on the stack `s`: when `C` is `∀'x ⊏ c. C'`, an entry
+named `x` (bound nowhere in `C'`) meeting `OwnOK`, at a lifetime meeting the bound. -/
+def OwnPush (δ : LSub) (C : CTy) (ρ : WRes) (s : Stk) (e : LEnt) (a : Life) : Prop :=
+  ∃ (x : LifeVar) (c : Lifetime.Life) (C' : CTy), C = .all x c C' ∧ e.x = x ∧
+    x ∉ CTy.binders C' ∧ OwnOK δ s.1 s.2 e a ρ ∧ LtLife (extS δ s.1 s.2) c a
+
+/-- **W's order** at a resource, read at `δ`: the records by `Ext`, the stack by a future. The
+re-lend of the stack's own lifetimes is not part of it: the `U` clause and the share hand the
+dropped views back at a re-lend, and an insertion below the outer part needs that re-lend to make
+room. -/
+def OrdW (δ : LSub) (i i' : Ix) (ρ : WRes) : Prop :=
+  Ext i.1 i'.1 ρ ∧ Fut δ ρ i.2 i'.2
+
+/-- **The guard**: `P` asked only of a resource consistent with the stack's table. -/
+def guardW (σ : LStack) (αs : List Life) (P : WProp) : WProp := fun ρ => TabAtS σ αs ρ → P ρ
 
 end ProbeD1
 

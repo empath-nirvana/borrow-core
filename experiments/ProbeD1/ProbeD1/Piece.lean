@@ -5,14 +5,14 @@ import ProbeD1.World
 
 GhostEnd's piece `OpenS` (`Stacked.lean`) runs at one stack `σ`: a stop of depth `k` ghost-ends the
 innermost `k` entries and owes its continuation, re-lent below them, at the same stack. The share
-over futures, `OpenSF`, owes the continuation also at every future of the kept part `σ.drop k`: the
-handler may resume it inside new lends and new handlers, which places new entries between the
-continuation's own (re-lent) lends and the kept ones. The continuation's stack is then
-`σ.take k ++ futS k' τ N (σ.drop k)`, so the continuation variable carries its stack (`XTF`).
+over futures, `OpenSF`, owes the continuation also at every future of the kept part `σ.drop k`
+(`Fut`, finitely many steps): the handler may resume it inside new lends and new handlers, which
+places new entries between the continuation's own (re-lent) lends and the kept ones. The
+continuation's stack is then `σ.take k ++ σo` for a future `σo` of `σ.drop k`, so the continuation
+variable carries its stack (`XTF`).
 
 At `fut = false` the only future is the kept part itself, and `OpenSF` is `OpenS` read at the one
-stack. The relation (`Relation.lean`) uses GhostEnd's own `OpenS` there, so that `StackStep.lean`
-applies to it verbatim.
+stack. The relation (`Relation.lean`) uses GhostEnd's own `OpenS` there.
 
 Definitions only.
 -/
@@ -33,14 +33,14 @@ abbrev XTF := LStack → Nat → List Bool → List Life → List Life → List 
 /-- **`Relendable_σ` at one list, over the kept stack's futures**: the share splits into the views
 it dropped and a part strictly above the outermost lend that, at every re-lend and every future
 (`FutQ`) of the kept stack `σ`, handed the views, is in `P` at the future's stack. `inner` is the
-part the stop ghost-ended: its places shadow `σ`'s views, and an inserted entry's variable and
-place are new to it too. -/
+part the stop ghost-ended: its places shadow `σ`'s views, and an entry a future inserts has a
+variable and a place new to it too. -/
 def RelendableNF (fut : Bool) (δ : LSub) (inner σ : LStack)
     (P : LStack → List Life → WProp) (αs : List Life) (ls : List SRec) : WProp := fun ρ =>
   ∃ ds ρz ρn, ResU.CompS ρz ρn ρ ∧ vwS δ (inner.map LEnt.l) σ ds αs ls ρn ∧ stratS αs ρz ∧
-    ∀ αs', ReLend αs' αs → ∀ k τ αt N, FutQ fut δ σ αs' k τ αt N ρz →
-      (∀ e ∈ τ, e.x ∉ inner.map LEnt.x ∧ e.l ∉ inner.map LEnt.l) →
-      (vwS δ (inner.map LEnt.l) σ ds αs' ls ─⋆ P (futS k τ N σ) (futL k αt αs')) ρz
+    ∀ αs', ReLend αs' αs → ∀ σ' αs'', FutQ fut δ ρz (σ, αs') (σ', αs'') →
+      (∀ e ∈ σ', e.x ∉ σ.map LEnt.x → e.x ∉ inner.map LEnt.x ∧ e.l ∉ inner.map LEnt.l) →
+      (vwS δ (inner.map LEnt.l) σ ds αs' ls ─⋆ P σ' αs'') ρz
 
 /-- **A stop with the stack open at `αs`**, as GhostEnd's `stopS`, the kept part's continuation
 owed at its futures. -/
