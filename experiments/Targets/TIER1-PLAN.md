@@ -925,3 +925,115 @@ theorem tier1Core_guarantees : B.Guarantees tier1Open.read B.coreB
   every hypothesis discharged, reached from a typed program, so that it arises in `TW`. A statement
   a check refutes is reported, not restated. Restating a target is the user's decision.
 - **Commit** on `tier1-effects` with the trailer the task names. Never push, and never touch main.
+
+---
+
+## Tier-1 track outcome
+
+**Where the track ends.** `I.Tier1 J₁` is not proved. `J₁` is not built (piece 2), and with B2's
+drive conjunct failing as written, `I.Tier1 J₁` fails for every `J₁` and `I.Tier1Core` fails as
+written (`I.not_tier1`, piece 3). Seven target statements fail as written at configurations built
+in Lean; their restatements are the user's decision. Pieces 5 and 6 were not run. Every result is
+at Core σ=[]. `lake build Targets` passes with AxiomCheck and Audit, every new result's axioms are
+within `[propext, Classical.choice, Quot.sound]`, and nothing in `Core/` changed. HEAD after the
+four pieces is `56f10a8`; none of it is pushed.
+
+| # | piece | status | verifier | commits |
+|---|---|---|---|---|
+| 1 | Runs at our instance, and four statement checks | LANDED; S0, S4 and `FinaliserOrder` proved given `LiveOK`/`FinAlone`; checks 1–3 break S6, S5, `AlgLaw`/`TailLaw` as written | pass | 2a84ac7, bc4218b, 12d5e83, 188d4de |
+| 2 | Law 1: `J₁` and the row `∀` | STOPPED at its stop condition; Law 1 at the relation proved (`ovalW_allR`, `FLOpen`); `J₁` not built | **fail: one major finding (open, below)** | dff0a57, 335046f |
+| 3 | Adequacy through platform answers and loop iterations; S2, S3 | LANDED; B2's return conjunct proved at every protocol-keeping platform; B2's drive, S2, S3, `EffSafeDrive` fail as written | pass | d53c464 |
+| 4 | `FinAlone` and S6 | PARTIAL; R1–R4 teeth and the clause refusals proved; `FinAlone` and `LiveOK` fail as written; route 8.2 not accepted, not built | pass (the route's review was the agent's own) | 789506a, 56f10a8 |
+| 5 | The answering class: h2, h4, the unary laws | NOT RUN | — | — |
+| 6 | `BumpSim` (OQ-43) | NOT RUN | — | — |
+
+### Piece 1
+
+- **Proved.** Run splitting and the `look` evaluator (`Base/Runs.lean`, `Base/Look.lean`);
+  `det_ourInst`, `runsAlike_of_join`; S0 `machShape_orow` and S4 `handlerSem_orow` given `LiveOK`;
+  `finaliserOrder_of` given `NoInterception` and `FinAlone`; `liveOK_JnLog`.
+- **Fails as written** (each at `ΞA`): S6 (`not_contUse_directResume`), S5
+  (`not_noIntercept_undeclared`, `not_unwindOrder_undeclared`), `AlgLaw`, `TailLaw`
+  (`not_algLaw_ourInst`, `not_tailLaw_ourInst`); check 4 shows `FinAlone` is needed
+  (`not_noIntercept_of_noInterception`).
+- **Added hypotheses.** `LiveOK`; `FinAlone`'s nonzero raise name.
+- **Unchecked.** `EtaHold`'s witness (no inversion); whether `UnwindOrder` fails without
+  `FinAlone`.
+
+### Piece 2
+
+- **Proved.** Law 1 at the relation (`I.ovalW`, `ovalW_allR`, `ovalW_bang_allR`, `I.FLOpen`,
+  `I.fl_of_flOpen`, `I.flOpen_core_tier1Open`); `letLaw_ourInst_tier1Open`;
+  `rowAlgebra_noSub_ourInst`; `i4a_tier1NU` and `I.pins_tier1Open`.
+- **Why `J₁` stops.** Three Lean facts against `CDerivesNU`: no polymorphic let
+  (`not_der_letTwo`, `not_elabClosed_of_letLaw`); A-level `handle` is not the form `[handle]` types
+  (`not_der_handleK`, `I.not_tier1_of_elabClosed`, `status_handlers_tier1Open`); a schema's use
+  needs a `force` of a `∀` entry (`der_var_arr_thunk`, `not_der_callBang`).
+- **Decision for the user.** `J₁` needs a polymorphic let, a `force` of a polymorphic entry and a
+  handler with value clauses. Options: prove each new rule sound at `ovalW`; change A's encodings at
+  our instance; or add the rules to Core with a SPEC entry.
+
+> **OPEN VERIFIER FINDING (major), piece 2.** The S1 refutation
+> `not_rowAlgebra_ourInst_tier1Open` (`Instance/J1Checks.lean`, `unrOp`) uses the row `[unrOp]`,
+> which is not `(orowAlg Ξ).WF` at any `AdmEff Ξ`: `Ξ.NU` makes every `unr` operation abortive, so
+> `WF ⇒ Row.NU`. The check measures our `A.SubClosed`, which ranges over rows "well formed or not"
+> and omits the well-formedness premise Yoshioka's `[sub]` carries (`Γ ⊢ ε₂ : Eff`). That is a
+> defect in our transcription of S1, not a fact about S1 at our instance. Not yet done: prove
+> `WF Γ ε → Row.NU ε.ops` at `AdmEff Ξ`; with `subClosed_nu_tier1Open` this gives subeffecting at
+> every well-formed target. Status.lean's S1 row still reads FAILS AS WRITTEN, and its `Tier1Core`
+> line is inconsistent with the refutation. Until this is resolved, do not cite the S1 refutation.
+
+### Piece 3
+
+- **Proved.** B2's return conjunct at every platform that keeps its protocol
+  (`adequateRetAt_core`, by induction on `ewpTS`); the drive at positive loop bodies, at rows with
+  distinct keys, and in full at `Platform.none` (`adequateDriveAt_core_nuOk`, `_uniq`, `_none`);
+  `I.tier1Core_B_nu` (B3/B4 return, B4′ in full, B5 given `BumpSim`); `Inst.dataDiv_ourInst`;
+  `effSafeDriveNu_tier1NU`.
+- **Fails as written.** B2's drive at every platform with an operation (`not_adequateDriveAt_core`,
+  hence `not_adequate_core`, `not_guarantees_core`); S2 and S3 at `tier1Open`
+  (`Inst.not_safety_tier1Open`, `Inst.not_effSafe_tier1Open`: rows are not tied to `Ξ`);
+  `EffSafeDrive` (`not_effSafeDrive_tier1NU`); the route `EffSafeDriveOfFL`
+  (`not_effSafeDriveOfFL`).
+- **Open.** B3/B4's drive at non-positive loop bodies; not derived, and no stuck typed program
+  checked.
+- **Unspent hypotheses.** `P.Respects.nz`; `Row.NU S` in `effSafeDriveNu_of_FL`.
+
+### Piece 4
+
+- **Proved.** S6's teeth `not_contUse_of_der_R1` … `_R4` with witnesses at `JR` and `ΞA`
+  (`teeth_JR_ΞA`); `refuses_R_tier1Open`; the linearity refusal at `clauseTy`
+  (`refuses_R_clauses`, `clauseRefusals_pinned`); `FinAloneAt`, `finaliserOrder_at`;
+  `finaliserOrder_tier1NU_of_finRows` (FinaliserOrder from `FinRowsAt` alone);
+  `finaliserOrder_of_route`.
+- **Fails as written.** `FinAlone` (`not_finAlone_of_types`, `not_finAlone_tier1NU`) and `LiveOK`
+  (`not_liveOK_ΞA`): both from platform answers not tied to the program's row, the same cause as
+  S2/S3.
+- **Not built.** `CfgTyped` and route 8.2 (a syntactic run-time typing with subject reduction;
+  thousands of lines, estimated). Route 8.4 is a kernel change; its SPEC §19 entry is drafted in §4.
+  Route 8.3 is the user's call (AGREE Q9).
+
+### Decisions for the user
+
+> - **S1:** add `[sub]`'s well-formedness premise to `SubClosed` (the verifier finding above).
+> - **Rows and `Ξ`:** tie rows to the effect context. One repair serves S2, S3 and `LiveOK`.
+> - **Platform answers and rows:** restate `FinAlone` as B2's `AdequateRetAt` does (`RowLe S P.ops`).
+> - **B2's drive, `SoundDriveAt`, S3 for driven programs:** a positive loop body or distinct keys,
+>   or a change to Core's relation at non-positive `ν` (kernel; SPEC entry).
+> - **`EffSafeDrive`:** also require a data answer.
+> - **S5, S6, `AlgLaw`, `TailLaw`:** restate the observations (checks 1–3).
+> - **`J₁`:** one of the three options under piece 2.
+
+### Untranscribed in the run-up
+
+`J₁` and `J1Der`; `CfgTyped`; the bridges `noIntercept_of_core`, `unwindOrder_of_core`,
+`cancellation_of_core`; `platformOf`; pieces 5 (h2, h4, the unary laws) and 6 (`BumpSim`).
+
+### Next
+
+1. Resolve piece 2's verifier finding: prove `WF → Row.NU` at `AdmEff`, and correct Status.lean's
+   S1 and `Tier1Core` rows.
+2. Bring the decisions above to the user. Rows-to-`Ξ` comes first: it unblocks S2, S3 and `LiveOK`.
+3. Piece 5 at `tier1Open` (h2, h4 through the comodel); it does not wait on `J₁` except where a
+   program is a handler at the top.
+4. Piece 6 (`BumpSim`), independent of the rest.
