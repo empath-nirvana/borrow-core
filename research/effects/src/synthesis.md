@@ -110,7 +110,7 @@ The targets' own names are RESTRUCTURE's and are written bare: S0–S6, E1–E10
     - It buys AS1 and a second route to S3, both by 6.60 (B7).
     - It puts a lifetime into the row algebra and into callback types. That is away from the cuts unless extents are read only at install, transit and resume.
   - **(iii) Answers borrowed from handler state (OQ-29): large, and open.**
-    - It needs tier (ii), `AntiFrameW` at W, and decision 59's state passing shown to be X.2's round trip (D2.c5, D2.c10).
+    - It needs tier (ii), `AntiFrameW` at W, the handler-state instance of 6.150's lift, and decision 59's state passing shown to be X.2's round trip (D2.c5, D2.c10). The lift itself is D1's (D1.i5), so it is not a cost of this tier.
     - It buys Ante's rule (b) as B6. No target in done asks for it.
   - **Shared by every tier:** the handler extent, which D1 needs too, and the control-class carrier for the lowering, which costs the same under every design.
   - **No gain in reuse at tier (i).** The borrow facts about answering handlers concern the borrow encoding that D1's surface already emits: `handle_is_shift`, `effect_safety`, `op_tail`, `op_answer`, `handle_fold` and the escape check. They reach native `hnd` only through `I4Typing` and a run correspondence, which is D1.h2. Tier (i) does remove the answering encoding's cell (`log-outside` 1 → 0), and S4 and h1 then cover the language's answering handlers directly.
@@ -1195,7 +1195,7 @@ Control-handler state stays decision 59's state passing. D2.c10 says what X.2 th
 
 Xie et al.'s named handlers, the precedent D2.c9 cites: `withvec : ∀α μ. (∀η. () → ⟨vec^η | μ⟩ α) → μ α` (p10 §1.11).
 
-**Sacrifices relative to D1.** None in programs, given D2.c9. D2 adds risks to S1 (D2.c3), to the type language (D2.c9) and to resume (D2.c8).
+**Sacrifices relative to D1.** D2a gives up D1's sacrifices less OQ-29, which it takes for handlers with one live answer. OQ-28 stays among them only by the reading below (D2.c9); if that reading fails, D2a takes OQ-28's rule (D2.c12) and gives up OQ-56's borrow form and placement parity alone. D2a gives up no program D1 carries, given D2.c9. It adds risks to S1 (D2.c3), to the type language (D2.c9) and to resume (D2.c8).
 
 **OQ-28 under D2a** [synthesis, unchecked].
 - Three edges call for boxes: chain 2 (§1.3), P2's R5 edge, and `p12:N6` → `p10:L.1`. They are edges of capabilities as values.
@@ -1447,8 +1447,9 @@ This is the full lead-axis design. P10/P9 (p10 §5.3): "X.2 and X.5 are the two 
 
 | | D0 tier 1 | D1 rows + ghost end | D1+B4 one install mechanism | D2a rows of lends | D2b capabilities as values | D3 rows + carried lends |
 |---|---|---|---|---|---|---|
+| tiers of capabilities as borrows (§5.1) | none | none | (i) | (i), (ii), (iii) | (i), (ii), (iii), with capability values in place of rows | none |
 | distance from today | one law (the row `∀`) and the bridges | D0 + the extent, Law 2, W at Core's stop | D1 + §18 emitting `hnd` for answering handlers (D2.c4) + an `answering` class in W1's guard (D2.c11) | D1+B4 + extents in rows and callback types, Law 2 at extents, OQ-29 | D2a with capability values in place of rows, an elaborating instance, boxes, a class grade | D0 + the extent, a relativised stop and `↭`, held entries, τ, `∀`-operations, scoped rows |
-| kernel definitions changed | two typing rules (the row `∀`) and one relation clause; `ClosedLife` as a rule of the effect typing (D1.a8) | D0's, + `[handle]`'s extent; the spanning rules (today's constants at wider rows); **the logical relation re-indexed by the lend stack**, with Core as its σ=[] instance, every compatibility lemma of `fundamentalC` restated, and every consumer of `vC`/`cC` re-pointed (D1.i3; OQ-58). The stop is unchanged | D1's. §18's elaboration changes; the kernel does not | D1's, the re-indexed relation included, + `CTy.eff` layers with extents; `AdmEff`'s `ClosedLife` replaced by "own extent only" | D2a's, the re-indexed relation included, + capability types in place of rows; boxes or an outlives rule at `U C` | D0's, + `wpG`'s conjuncts 37 and 40; `Upd`; `TW` 6.65 records or a split σ; the relation at W with `held` (OQ-58); `∼` and `[handle]` for scoped rows |
+| kernel definitions changed | two typing rules (the row `∀`) and one relation clause; `ClosedLife` as a rule of the effect typing (D1.a8) | D0's, + `[handle]`'s extent; the spanning rules (today's constants at wider rows); **the logical relation re-indexed by the lend stack**, with Core as its σ=[] instance, every compatibility lemma of `fundamentalC` restated, and every consumer of `vC`/`cC` re-pointed (D1.i3; OQ-58). The stop is unchanged | D1's. §18's elaboration changes; the kernel does not | D1's, the re-indexed relation included, + `CTy.eff` layers with extents; `AdmEff`'s `ClosedLife` replaced by "own extent only"; + an outlives rule at `U C` if D2.c12 applies (§1.4 item 13) | D2a's, the re-indexed relation included, + capability types in place of rows; boxes or an outlives rule at `U C` | D0's, + `wpG`'s conjuncts 37 and 40; `Upd`; `TW` 6.65 records or a split σ; the relation at W with `held` (OQ-58); `∼` and `[handle]` for scoped rows |
 | A's object | today's | today's | today's | extents in row entries and callback types | capability sets, through an elaboration | lifetime-quantified operations; scoped rows |
 | A's (S) and (E) at done | given the bridges and S6's route; S2 and S3 from FL at `coreW` | the same; S2 and S3 ride on FL at W (§2.5) | as D1 | as D1, + S1 at extents (D2.c3); E2b–d, E3d and E10 need D2.c9 | + an S1 bridge through the elaboration; E1′, E2b and E9 need boxes | + S1 with conditions (3) and (4); Law 1 over scoped rows; S2 and S3 ride on FL at the relaxed world |
 | laws of handling | S4's reductions in done; `A.UnaryLaws` with D1.h1 | the same | the same, and they cover the answering handlers directly | as D1+B4 | as D1+B4 | as D1, with `TailLaw`'s hygiene changed |
@@ -1466,6 +1467,8 @@ This is the full lead-axis design. P10/P9 (p10 §5.3): "X.2 and X.5 are the two 
 - only D0 meets "two algebras with interactions only at cuts";
 - D1 and D1+B4 keep their rank against D2a, which has the same binder-clause obligation plus extents in the row algebra and in callback types;
 - D3 has no Law 2, but it changes `↭` for every run off the nil slice and puts lifetime-quantified operations into the row algebra. By count of places away from the cuts, one against two, D1 still ranks ahead of D3.
+
+**A's dependency on B** [synthesis]. In every tier-2 design A's S2 and S3 at `J₂` ride on FL at the design's world (`p2:S-e`; §2.5): W for D1, D1+B4, D2a and D2b, the relaxed world for D3. So a failure of FL at a rule costs A's safety and effect safety for the programs that use that rule, as well as B's (§11, failure (a)). This is shared, so it does not reorder the tier-2 designs. It does separate them from D0, whose S2 and S3 rest on FL at `coreW` alone. `p2:S-f` would take S3 off this dependency at the cost of A-level typing rules and a syntactic subject reduction for configurations (§2.5); no menu takes S2 off it.
 
 ---
 
@@ -1667,51 +1670,17 @@ Under every outcome, D1's A-side work (Law 1, the bridges, S6, D1.a8 and the har
 
 ---
 
-## Unresolved review findings
+## Review findings addressed
 
-An adversarial review raised the findings below. They are listed as the review stated them. Line numbers and section numbers refer to the draft that was reviewed, so they may not match the current text. Some of the current text takes up parts of these findings. No finding has been checked off here, and each stays open until someone checks it against the text.
+An adversarial review raised seven major findings. Each is taken up where the text stands:
 
-> [!WARNING]
-> **1. 6.150 at a resuming table is attributed only to OQ-29 (major).**
-> *Location:* §3.4 row "an answer borrowed from handler state (OQ-29)"; §9 OQ-29 row "proof saved"; D1.i2; §10 item 2's Open list; §4.8 risks.
-> *Problem:* 6.150 at a resuming table is attributed only to OQ-29, and is listed as "proof saved" by giving OQ-29 up. The I2 menu (§5 M1, *Cost*) lists "6.150 at a resuming table is not lifted" as a cost of M1 itself. GhostEnd's README (step 3c, step 3g "What is work", and the report lists for 3f–3i) records it as the untranscribed printed lemma in the run-up of the borrow-constant rows: a `withload` that spans a stop, needed whatever OQ-29 decides. So D1's delta, which the chapter calls wiring "named lemma by lemma", leaves out an obligation of FL at W, and the sacrifice table overstates what giving up OQ-29 saves.
-> *Fix:* Add "6.150 lifted to resuming tables (`withload` spanning a stop; `ptoImm_dup` proved, lift not written)" to D1.i2 / D1.i5, to §10 Law 2's Open list and to §4.8, citing i2 §5 M1 and the GhostEnd report lists. In §3.4 and §9, keep only the handler-state instance of 6.150 (and `AntiFrameW` / decision 59) as OQ-29-specific, and remove 6.150's lift in general from OQ-29's "proof saved".
-
-> [!WARNING]
-> **2. D2a sacrifices OQ-28 against rc §3.7's O3 edge (major).**
-> *Location:* §1.2 "From rows vs capabilities", `rc:O3` row; §5.2 "OQ-28 under D2a"; §5.2 delta D2.c1–c11; §8 D2a sacrifices.
-> *Problem:* The rc menu's §3.7 says O3 needs "everything O2 needs at Core, plus the row algebra over instances; the bridge from SIB to Core". O2's Core needs include "the box/outlives rule at `U C` (T2, OQ-28)". The edge table copies only §5's short form. D2a then sacrifices OQ-28 ("needs no more of OQ-28 than D1"), which goes against that edge, and the edge is not listed among §1.4's inconsistencies. The SIB bridge appears as an R edge in §1.2 but nowhere in D2a's delta, and is neither discharged nor argued away. So the claim that every design is "consistent with every relation the menus state" does not hold for D2a as written.
-> *Fix:* Add rc §3.7's O3 → (O2's Core requirements, SIB bridge) edge to §1.2. Then either add OQ-28/T2 and the SIB bridge (or a stated reason it is not needed when D2a proves its results directly at Core) to D2a's delta, or record the disagreement as a §1.4 item, marking the D2.c9 argument as the [synthesis, unchecked] reading that would remove the edge. Update D2a's sacrifices and the comparison table to match.
-
-> [!WARNING]
-> **3. Capabilities as borrows is priced only with extents and OQ-29 attached (major).**
-> *Location:* §0 "Capabilities as borrows, at its marginal cost over D1"; §5 D2a choices; §5.1 verdict.
-> *Problem:* The user asked for the real marginal cost of "capabilities as borrows". The draft prices it only as D2a/D2b, which also take extents in row entries (`rc:O3`, D2.c1–c3), extent binders in callback types (D2.c9) and OQ-29 (D2.c5, c10). Its "not shared at resume" cost (D2.c8) and its "moderate" callback-type cost (D2.c3, c9) come from those extra choices, not from capabilities as borrows as such. The menus allow a cheaper coherent point: `p14:B4` (`hnd` opens a lifetime and lends its state, L.4a) + B2/B3 + B6(a) under `rc:O1` rows (p14 §0.4: B4 requires L.4 (a)/(c) and 6.65 at answering tables; B6(a) requires O1), with control handlers opening an extent that lends nothing, as in D1.i1. Over D1 this costs about D2.c4 + D2.c11, with h2 and h3 shared. In it no type names an extent, so D2.c8 and D2.c9 do not arise. Leaving it out overstates the cost of the user's proposal and hides what may be the cheapest step toward it.
-> *Fix:* Add this variant (for example "D1+B4": one install mechanism, rows of labels, no answers borrowed from handler state) to §2.4, §5 and §8. Split the §0 and §5.1 verdict into three tiers, each with its own cost and cuts: (i) capabilities as borrows for install and the answering class (≈ D1.h2/h3 + D2.c4, c11); (ii) extents in types (D2.c1–c3, c8, c9); (iii) OQ-29 (D2.c5, c10).
-
-> [!WARNING]
-> **4. "Handlers as models with laws" is met only by a conflation (major).**
-> *Location:* §0 "The hard test"; §2.1 decided-constraints table; §4.3 "Handlers as models: realised, with vacuous laws"; §7.5; §10 item 6; D1.h1/D1.h3.
-> *Problem:* Every design keeps empty theories, which §4.3 admits ("every handler is correct", Plotkin–Pretnar Def. 4.5). The chapter then says D1.h1 makes the laws non-vacuous. But `TailLaw`, `AlgLaw` and `EtaHold` (`Targets/A/UnaryLaws.lean`) are laws of the handling construct, not equations of a signature that a handler must validate. D1.h3's `IsModel`/`IsComodel` is also trivial under the free theory. The decided constraint "Laws first" (04-decisions P2; BRIEF §6, decided) is missing from §2.1, and so is OQ-22 (05a: "CONSTRAINED, toward (a)", i.e. equations writable in `Sig`, for "theory-specific laws (exceptions, state and linearly used state, nondeterminism, generators)"). No design costs equations in signatures, per-handler model obligations, or sum/tensor of theories. They are listed neither as an addition nor as a sacrifice in §9 or §10.
-> *Fix:* Add "Laws first" and OQ-22 to §2.1. Add the theory side as a hard-test item for every design (e.g. D1.h4: equations in `Sig`, and a run-level model obligation per handler, at least for the state/answering class through h3's comodel). Otherwise list "free theories only" as an explicit sacrifice in §9, naming the targets it costs. In §4.3, §7.5 and §10, stop calling D1.h1 what makes "models" non-vacuous: say that h1 gives laws of handling, that h3's `IsModel` is vacuous without equations, and what each adds.
-
-> [!WARNING]
-> **5. A's S2 and S3 at `J₂` depend on B's tier-2 machinery (major).**
-> *Location:* §0 "What decides A"; §2.5; §4.2 "Independence away from the cuts", against §4.3's S2/S3 rows.
-> *Problem:* §2.5 says A's (S) and (E) properties are decided by three items (the row `∀`, the bridges, S6's route) and that "the tier-2 choice (axis 4) touches none of them". §4.3's own table contradicts this. At D1, S3 "rides on FL at W", because `effSafeDriveOfFL` is `FL M J → FamEmpty M → AdequateEvery M → EffSafeDrive J` (RESTRUCTURE l.2473), and S2 comes through `safety_of_sound` / `soundnessOfFL`. So at `J₂`, A's safety and effect safety depend on B1 at W, which is Law 2 and GFP: the B-side tier-2 unknown. The probe's failure branch (§11 (a)) therefore costs A's S2/S3 at `J₂`, not only `Tier2Programs`. That is a proof dependency of A on B's interaction machinery, away from the named cuts, and the hard test asks about exactly this.
-> *Fix:* Correct §0 and §2.5 to say that S2 and S3 at `J₂` ride on FL at W, so axis 4 does decide them. Then either name `p2:S-f` (a generic A-level route, `RowAlgebra ∧ TypingRules ⇒ EffSafe`) as the way to keep A's effect safety independent of B, and cost it, or record the dependency as an interaction and carry it into the ranking and into §11's failure consequences.
-
-> [!WARNING]
-> **6. "Interactions only at cuts" for D0/D1 is stated without its condition (major).**
-> *Location:* §0 ("In them the two systems meet only at the cuts"); §2.5; §0 "Ranking" (cuts criterion D0 > D1 > D2a), against §4.2 "Where a smell could enter" and §8's row "interaction away from the cuts".
-> *Problem:* The summary and §2.5 say without condition that D0 and D1 meet the user's "two algebras with interactions only at cuts". §4.2 and §8 make that conditional on where Law 2's quantifier goes (OQ-8). The binder-clause placement (option 3) "puts a resume obligation into value clauses, away from the cut". The evidence points at option 3: 02-experiments §1.3 says that with the guard at `⊸`, #275's borrow-constant row must read its callback at σ·y (`vRLk`'s shape), and §11's statement 2 adopts exactly that. Option 1 (naturality) is under `mut_not_natural`, and whether its witness arises is unchecked. So D1's first place in the cuts ranking is not established, and the probe as written works at the placement that would break it.
-> *Fix:* Make the summary and §2.5 conditional: "only at the cuts if Law 2 is placed at `U`/`contShare`/`KapRel` or proved as naturality". In §8, say that if option 3 is forced, D1 has an interaction away from the cuts in every binder clause, and how that changes D1 against D2a on the cuts criterion.
-
-> [!WARNING]
-> **7. The probe assumes the `U`-clause thaw transports to W (major).**
-> *Location:* §11 "What is already proved, and is not the crux"; statements 1–2; "Success".
-> *Problem:* The probe treats the `U` clause (`RelendableS`: `force_RLs`, `thunkF_RLs`) as "a transport" to W and drops it from the crux. That is decided in prose. BRIEF §5 item 4 marks the future-world quantifier's placement "OPEN: A Lean statement settles it, not prose", and 02-experiments lists "Whether U and ⊸ take the same quantifier" as open. `force_RLs` is proved at the unguarded `vRLs`, while the guarded relation (`vRLa`) also guards `U`, so the transport is not immediate once statement 1 reads the guard from `TW`. Statement 2 puts a quantifier at `⊸`. So W would carry quantifiers at both `U` and `⊸`, and nothing checks that they cohere: the accretion pattern of BRIEF §8 item 4. The success criteria also do not record which placement the proof used, so success could confirm a D1 that fails the cuts criterion (finding 6).
-> *Fix:* Add a probe statement 0 that fixes W's `U`, `⊸` and `∀` clauses together in Lean, reads the guard from `TW`, and proves the `U`-clause thaw at that guarded W, without assuming it transports from `vRLs`. Add to "Success" that the placement used is recorded, with its consequence for the cuts ranking. Add to "Failure" the case where `U` and `⊸` need different quantifiers.
+1. **6.150 at a resuming table is D1's, not only OQ-29's.** D1.i5 and D1.i2 carry the lift (`withload` spanning a stop); it is in §10 Law 2's open list, §4.8, §4.4 and §8's B row. §3.4 splits the row, and §9, §5.1 and §0 keep only its handler-state instance as OQ-29's.
+2. **rc §3.7's O3 edge.** §1.2 carries it in full. §1.4 item 13 records how D2a meets each of O2's Core needs, that D2a does not take the SIB bridge because it proves its results at Core, and the one disagreement, OQ-28, with D2.c9's reading marked unchecked. D2.c12 adds OQ-28's rule to D2a's delta if that reading fails; §5.3's sacrifices, §8 and §9 follow it.
+3. **Three tiers of capabilities as borrows.** D1+B4 is tier (i). §0, §5.1 and §8 state the tiers and their costs alike.
+4. **The theory side.** §2.1 has Laws first and OQ-22. D1.h4 (equations in signatures, a run-level model obligation per handler) is a hard-test item in every design. D1.h1 is called the laws of handling throughout, and D1.h3 vacuous without D1.h4 (§0, §4.3, §7.5, §10). Free theories are not offered as a sacrifice (§9).
+5. **A's dependency on B.** §0, §2.5 and §4.2 say that S2 and S3 at `J₂` ride on FL at W. §2.5 names and costs `p2:S-f` as the route that would free S3. §0's ranking, §8 and §11's failure (a) carry the dependency.
+6. **"Only at the cuts" is conditional.** §0, §2.5, §4.2, the ranking and §8 make it depend on OQ-8's placement of Law 2.
+7. **The `U` clause is settled in Lean.** §11's statement 0 fixes W's `U`, `⊸` and `∀` clauses together at `TW`'s guard and proves the thaw there. Success records the placement used, and failure (d) covers different quantifiers at `U` and `⊸`.
 
 ---
 
