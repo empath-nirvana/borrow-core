@@ -9,13 +9,13 @@ semantics and per configuration the relation quantifies over.
 * **Cells at any depth across `●`.** A cell of a part is a cell of the whole, an `imm` cell
   possibly as a copy inside the composite (`ImmSub`: one value and witness, its lifetimes among
   the composite's); a cell of the whole is a cell of a part, or at the top the composite of two
-  `imm` copies (`ExAt.split`, `DeepAt.split`).
+  `imm` copies (`ExAt.of_compS_left`, `DeepAt.of_compS_left`, `top_split`, `wit_split`).
 * **Views across `●`.** A view's copy is a view, and two copies of a view compose to it
   (`vwEW_immSub`, `vwEW_compS`). This is where `AtExactly` earns its place: every lifetime of a
   copy is the entry's.
 * **The facts proved here**: `PVLNil`, `PVLParts`, `PVLStart`, `PVLEnd`, `PVLHide`, `PVLResume`,
-  `GuardInst`. The run facts (`PVLUpd`, `PVLRuns`) and the future (`PVLFut`) are in
-  `BinderPVRun.lean`.
+  `GuardInst`. The run facts at distinct places (`PVLUpdN`, `PVLRunsN`) are in
+  `BinderPVRun.lean`; `PVLFut` is not attempted.
 -/
 
 noncomputable section

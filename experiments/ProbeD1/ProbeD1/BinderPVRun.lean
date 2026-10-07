@@ -15,15 +15,14 @@ import ProbeD1.BinderPV
   (`ResU.upd_ag_nonimm_transfer`, the step 6.48's proof spends at the aliasable walk); an `imm`
   cell by `↭`'s `imm` clause and the copies it is made of; a cell under an `imm` ancestor through
   that ancestor, which `↭`'s `imm` clause keeps whole. The places are distinct so that every copy
-  at a place is the view of its one entry. `PVLUpd` as stated, at any stack, is not derived: with
-  two entries lending one place, a copy of the outer entry's frozen view and the inner entry's
-  view compose to one flattening cell, and a resource `↭`-related to it may hold the composite
-  where the inner entry's view must be.
+  at a place is the view of its one entry. `PVLUpd` as stated, at any stack, is not derived, and no
+  configuration refuting it was built. [unchecked] With two entries lending one place, a copy of the
+  outer entry's frozen view and the inner entry's view compose to one flattening cell, and a
+  resource `↭`-related to it may hold the composite where the inner entry's view must be. Every
+  `ArisesI` stack has distinct places (`placesNodupArises`, `BinderArise.lean`).
 * **`PVLRuns`** at distinct places (`pvlRunsN`): `PVLUpd` through `wpG`'s run-end conjunct.
-* **`PVLFut`** at payloads the old reading scopes (`pvlFutS`): an inserted variable is new to the
-  reading, so a payload type that mentions it is not one the old reading reads. `PVLFut` as
-  stated is not derived: at a payload type under a thunk whose `∀` bound mentions an inserted
-  variable, the old reading's relation is the vacuous one and the new reading's is not.
+* **`PVLFut`** is not attempted. `binder0`'s clauses quantify over the stack itself, so `binder0`
+  does not read it.
 -/
 
 noncomputable section

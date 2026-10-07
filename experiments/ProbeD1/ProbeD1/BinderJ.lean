@@ -1,34 +1,35 @@
 import ProbeD1.BinderRefute
 
 /-!
-# ProbeD1 — the draft W as this build revises it (`BINDER.md` §11)
+# ProbeD1 — the draft W as this build revises it (`BINDER.md` §11.4)
 
 `BinderW.lean` states the design's revision of W (`vRLI`). The build refuted three steps of its
-plan (`BinderRefute.lean`), and with them the item-4 targets as designed. This file is the one
-draft relation at W that replaces `vRLI`: `vRLI` with three changes, each answering one refuted
-step, none to a printed BoLo definition and none in `Core/`.
+plan (`BinderRefute.lean`), each at a configuration not shown to arise, and with them the item-4
+targets as designed. This file is the one draft relation at W that replaces `vRLI`: `vRLI` with
+three changes, each answering one refuted step, none to a printed BoLo definition and none in
+`Core/`.
 
 * **`RelendJ`: the extension keeps the retained part's records with their tags** (`KeepsT`).
-  `ExtInst` is false (`not_extInst`): `Ext` keeps a relevant record untagged, so an extension may
+  `ExtInst` is refuted (`not_extInst`): `Ext` keeps a relevant record untagged, so an extension may
   hold it at a tag the instantiation leaves alone while the original list holds it at one the
   instantiation moves, and the composite of two instantiations is then not covered. `KeepsT`
-  composes along instantiations (`keepsT_comp`). Every consumer supplies it: `[force]` at the list
-  itself; the composite by `keepsT_comp`; the share by the resumer's world, which holds the
-  records the retained part reads unchanged (statement 2's records fact, `BINDER.md` §3.7).
+  composes along instantiations (`ext_inst_comp`, `BinderRows.lean`). `[force]` supplies it at the
+  list itself, and the composite by `ext_inst_comp`; the share's is statement 2's (`BINDER.md`
+  §3.7).
 * **The retained borrow leaves read their payload type only at external lifetimes** (`PayExt`, in
   `vRLJ`'s `Mut` and `Imm` leaves at a place no entry lends). `MutPayloadInst`'s support conjunct
-  is false (`not_mutPayloadInst`), and the thaw as designed with it (`not_ctxRelendsThawFree`): a
-  retained cell whose payload type reads an internal lifetime can have its stored predicate's
-  support broken by the room an instantiation's gap makes. A retained cell is outside the frozen
-  computation; a binder leaves its free names alone. Its payload type, fixed when the cell was
-  made (`Mut` is invariant: `mutSub` changes only the lifetime index), reads the variables bound
-  then, which `SubOutside` reads above every lend [unchecked: that every row that introduces a
-  retained `Mut` or `Imm` value establishes it is the next unit's to prove].
-* **`SemSJ`'s index has its outermost lend below `⊤`** (`OuterBelowTop`). `CohEInst` is false at
+  is refuted (`not_mutPayloadInst`), and the thaw as designed with it (`not_ctxRelendsThawFree`):
+  a retained cell whose payload type reads an internal lifetime can have its stored predicate's
+  support broken by the room an instantiation's gap makes. [unchecked] A retained cell was made
+  outside the frozen computation; its payload type, fixed when the cell was made (`Mut` is
+  invariant: `mutSub` changes only the lifetime index), reads the variables bound then, which
+  `SubOutside` reads above every lend. That every row introducing a retained `Mut` or `Imm` value
+  establishes it is the next unit's to prove.
+* **`SemSJ`'s index has its outermost lend below `⊤`** (`OuterBelowTop`). `CohEInst` is refuted at
   an outermost lend at `⊤` (`not_cohEInst`): the cut is then `⊤` itself, a record at `⊤` is left
   alone, and its reading below `⊤` moves in the slot's. Every own lend is below `⊤`
-  (`ownPushBelowTop`), and so is every lend [TR] 6.64 and 6.65 make, H4 taking it below a lifetime
-  ("Let α be some lifetime where α ⊏ γ ⊓ β").
+  (`ownPushBelowTop`). [unchecked] So is every lend [TR] 6.64 and 6.65 make, whose H4 takes it
+  below a lifetime (6.65: the cell made at "α ⊏ γ ⊓ β").
 
 Definitions only; the proofs are in `BinderRows.lean`.
 -/

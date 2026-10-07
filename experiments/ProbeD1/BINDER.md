@@ -2097,3 +2097,286 @@ reviewer.
     or `NotVCNaturalCore` with the program and its run exhibited. §4.3's conclusion does not depend on
     it.
 12. **Minor: `MutPayloadInst` did not give `InstEquivLeaf`'s `Mut` case.** Answered as finding 2.
+
+---
+
+## 11. The build's outcome
+
+The build is in eight files beside the design's two. `lake build ProbeD1` builds them; they have no
+`sorry`, `axiom`, `native_decide`, `opaque`, `partial`, `unsafe` or `implemented_by`, and every
+theorem's `#print axioms` is within `[propext, Classical.choice, Quot.sound]`.
+
+| file | contents |
+|---|---|
+| `BinderInst.lean` | item 2's bookkeeping, readings, records and freshness |
+| `BinderPV.lean` | the guard's local facts at a part, a lend's start and end, a handler, the resume; `GuardInst` |
+| `BinderPVRun.lean` | the guard across `↭` and a run, at distinct places ([TR] 6.48's technique) |
+| `BinderRefute.lean` | four of the design's statements refuted, each at a configuration not shown to arise |
+| `BinderJ.lean` | the draft relation as the build revises it (`vRLJ`), and item 4's statements at it |
+| `BinderRows.lean` | the thaw at every `ThawFree` slot type, `ThawInstJ`, the four `U` rows at `binder0` |
+| `BinderArise.lean` | the arising check of `k`: PlaceViews at the world of every `ArisesI` configuration |
+| `BinderRisk.lean` | item 3: the `TW` history, the view slot at the witness, `ViewTypeCoincidence` |
+
+**The status words.** *Proved* is a theorem. *Refuted* is a theorem proving the statement's negation;
+each refutation here is at a configuration not shown to arise, so it is a fact about our statement
+and decides nothing by itself (DESIGN §11). *Not derived* means neither, with no obstruction
+verified. *Not attempted* means no proof was tried.
+
+### 11.1 Item 1: PlaceViews
+
+**The local bundle.**
+- Proved: `PVLNil` (`pvlNil`), `PVLParts` (`pvlParts`), `PVLStart` (`pvlStart`), `PVLEnd`
+  (`pvlEnd`), `PVLHide` (`pvlHide`), `GuardInst` (`guardInst`), `PVLResume` (`pvlResume`), `PVLTop`
+  (`pvlTop`).
+- `PVLUpd` and `PVLRuns` are proved at a stack whose places are distinct (`PVLUpdN`, `pvlUpdN`;
+  `PVLRunsN`, `pvlRunsN`). The places of every `ArisesI` stack are distinct, since each lend opens at
+  a place new to the stack (`placesNodupArises`). So `PVLUpd` holds at every stack `ArisesI` reaches
+  (`pvlUpd_arises`).
+- Not derived: `PVLUpd` and `PVLRuns` as stated, at a stack whose places may repeat. The case left is
+  two `imm` entries lending one place. No configuration for it was built, and no obstruction is
+  claimed. W's index (`StackOK`) asks distinct variables, not distinct places. Adding distinct places
+  to the index is the step that would carry `pvlUpdN` to every index the relation reads; it is not
+  made here.
+- Not attempted: `PVLFut`. `binder0`'s clauses quantify over the stack itself (`FutQI false` is the
+  identity), so `binder0` does not read it.
+- So `PVLBundle` is not proved. The guard is the stack's run invariant at distinct places, which every
+  `ArisesI` stack has; `PVLFut` is `cbpv`'s and `binder`'s.
+- **The printed technique spent.** `pvlUpdN` follows [TR] 6.48's case analysis at the local part. A
+  `mut` cell of the exclusive walk goes by `↭`'s `mut` clause; the case where the old flattening's
+  `mut` cell sits beneath an `imm` ancestor is excluded by the ancestor transfer
+  (`ResU.upd_ag_nonimm_transfer`, the step 6.48's proof spends at the aliasable walk). An `imm` cell
+  goes by `↭`'s `imm` clause and the copies it is made of (`AgW.imm_mem_deep`).
+
+**The arising check of `k`** (`BinderArise.lean`). All proved:
+- `PVWNil`, `PVWHide`;
+- `PVWUpd` (`pvwUpd`): `↭`'s `mut` clause read backwards keeps the lifetime and stored invariant,
+  its `imm` clause the cell;
+- `PVWRun` (`pvwRun`): [TR] 6.48 (`updV_frame`) at the frame, the local part and `π = ρ' ● ρp`, then
+  `pvwUpd`;
+- `PVWLendMut`, `PVWLendImm` (`pvwLendMut`, `pvwLendImm`). At the lent place the folded cell is the
+  flattening there (`flatAt_fold_mut_self`, `flatAt_fold_imm_self`), at exactly the lend's lifetime,
+  storing the entry's view or holding its value. Off the place the flattening is unchanged
+  (`flatAt_fold_mut_ne`, `flatAt_fold_imm_ne`). At an `imm` fold, a payload cell of the exclusive walk
+  moves under the `imm` cell into the aliasable walk, where validity before the fold leaves it the only
+  contribution ([TR] 6.36, `ExS.immFree`; 6.32, `ExS.toExR`).
+- `ArisesInv`, `PVArises` (`arisesInv`, `pvArises`), by induction on `ArisesI`;
+- `PVLocal` (`pvLocal`), `KNotInArises` (`kNotInArises`), `KSlotNotW` (`kSlotNotW`),
+  `KNotViewAt` (`kNotViewAt`).
+
+`KNotInArises` says that `k` is not in `ArisesI`, so `not_ctxRelendableAt_k` cannot pass DESIGN §11.
+It does not say that `k` does not arise: `ArisesI` is not shown to over-approximate what arises.
+
+### 11.2 Item 2: the lifetime binder
+
+**Proved.**
+- The models: `InstModels` (`instModels`), and `ReLendModelsI` at every index from `Δ.Models`
+  alone (`reLendModelsI_of`). This replaces `BoundsStackFree`; no condition on `Δ` is left.
+  `Q2Inst` (`q2Inst`): `q2_reached`'s configuration is kept by every instantiation.
+- The bookkeeping: `ExtSInst`, `InstReLend`, `EmbLift`, `InstComp`, `RecsOutsideInst`,
+  `ShareReLendInst`, `StackJInst`, `InternalOfBound`, `OwnPushBelowTop`, `InstFreshExists`,
+  `KeepsSComp`.
+- The readings: `SubOutsideInst`, `SubOutsidePush`, `SubOutsideExtend`, `InternalBoundInside`,
+  `SharedReadFixed`.
+- `ViewTypeCoincidence` (`viewTypeCoincidence`): `1 ⊕ Imm 'x (Imm 'x (Imm 'x 1))` and `1 ⊕ 0` are
+  one relation at `'x ↦ 1` and two at `'x ↦ 2`. So the guard alone does not carry the type tie, and
+  `CohS` asks the types up to `TyEq`.
+- `TyEqInst` at a type Core reads without a thunk (`tyEq_inst`).
+- Coherence at the stack's own index (`cohE_inst`): `CohEInst` with `OuterBelowTop`, at a
+  `CoreStable` type, the record kept up to `RecUpTo`. A record's reading moves with it below the cut
+  and is fixed above it (`rec1_δ`, from `RecsOutside` and `OuterBelowTop`).
+- `ViewSlotInst` at a `CoreStable` slot type with `OuterBelowTop` (`viewSlotInstCS`).
+
+**Refuted** (`BinderRefute.lean`, each at a configuration not shown to arise).
+- `ExtInst` (`not_extInst`). `Ext` keeps a relevant record without its tag, so an extension may hold
+  it at a tag the instantiation leaves alone while the original holds it at one the instantiation
+  moves. The design's composite, which `ThawInst` reads, rested on this step.
+- `CohEInst` (`not_cohEInst`). At an outermost lend at `⊤` the cut is `⊤`, a record at `⊤` is left
+  alone, and `RecsOutside` says nothing of it; its reading below `⊤` moves in the slot's reading.
+- `MutPayloadInst` (`not_mutPayloadInst`), its support conjunct, and with it `InstEquivLeaf`
+  (`not_instEquivLeaf`) and the forms at every type (`not_mutPayloadInstAll`,
+  `not_instEquivLeafAll`). The payload `1 ⊕ Imm 'x (Imm 'x (Imm 'x 1))` at `'x ↦ 1` has no resource in
+  its second branch. The shift `n ↦ n + 1` reads `'x` at `2`, and the gap at `1` makes room for one.
+  So a payload supported in `Res_⊤` at the reading is not supported at the instantiated one. This is
+  `mut_not_natural`'s mechanism at the retained part (§11.3).
+
+**Not derived, no obstruction verified.** `TyEqInst` at every type: at `CTyEq`'s `∀` clause the
+instantiated side quantifies over lifetimes in the instantiation's gap, where the hypothesis has no
+instance, so the structural induction stops there. `ViewSlotInst` as stated, at every type and at an
+outermost lend at `⊤`.
+
+**Not attempted.** `MovedRecPremises`, `RecsOutsideArises`, `RecsInsideOwnArises`, `FreshFrameI`.
+Their consumers are the share at a resume (statement 2) and the arising set's records.
+
+### 11.3 Item 3: the known risk
+
+- **`NotVDenNaturalArises` is proved** (`notVDenNaturalArises`). Restrat's `ρ₀` is a part of a tagged
+  `TW` world, by §4.2's history (`nv_tw₁`, `nv_tw₂`, `nv_tw`, `nv_tagged`). `Tagged` reading `ag`
+  through the `mut` witness goes through (`AgW.single_mut_inv`). The last step is `TW.mutFold`, which
+  takes any stored predicate. So the proof shows only that `ρ₀` is a part of a world `TW`'s
+  constructors build, not of one a run produces. It is not arising in DESIGN §11's sense, and it
+  carries no refutation.
+- **At the view slot the witness does not apply.** `MutWitnessThaws` is proved (`mutWitnessThaws`):
+  at the witness's own map, the slot holding `x`'s view at `Mut '0 (Imm '1 1)` is re-established from
+  the view handed at the instantiated reading. The image of the old stored invariant is never formed.
+  The general case is `vC_mut_bound` and `vC_imm_bound`, which the thaw uses at every bound place.
+  Its hypotheses are met at an exhibited configuration (`MutWitnessThawsMet`,
+  `mutWitnessThaws_met`): `x`'s cell at `2` over `ℓ′ ↦ imm({1}, (), ∅)` and the handed view at `3`
+  over `ℓ′ ↦ imm({2}, (), ∅)`, each coherent with `ℓ′`'s record. That configuration is not shown to
+  arise. `MutWitnessThawsInhabited`, the same at `ArisesI`, is not attempted.
+- **At the retained part the mechanism does apply, as a fact about our statement.**
+  `not_mutPayloadInst` breaks the support conjunct of a retained `mut` cell whose payload type reads
+  an internal lifetime. The configuration is not shown to arise, and DESIGN §11's check on a
+  retained cell with such a payload was not run. So it is evidence and not an obstruction: D3 is not
+  triggered, and D1's lifetime half is not refuted. The revised W excludes the case at the leaf
+  (`RetainedPay`, §11.4), and the instantiation fixes a payload read at external lifetimes
+  (`agree_of_payExt`).
+- §4.4's table reads: `NotVDenNaturalArises` proved; the view slot proved; the retained part not
+  derived at `Mut`, with a conjunct of `MutPayloadInst` refuted and its arising check not run. That
+  is the table's second row, and the conjunct that excludes it sits at the leaf rather than the guard.
+- **Not attempted.** `InternalPayloadArises`, `NotVCNaturalCore`, `NotVCNaturalCoreRefutes`.
+
+### 11.4 Item 4: the `U` introductions at the revised W
+
+**The design's targets are false as stated.** At `vRLI` (`BinderW.lean`), `CtxRelendsThawFree
+binder0` fails (`not_ctxRelendsThawFree`), and with it `Statement0UThawFree binder0` and
+`Statement0UFull binder0` (`not_statement0UThawFree`, `not_statement0UFull`). The context is one
+`CtxThawFree` slot `m : Mut '0 (1 ⊕ Imm '0 (Imm '0 (Imm '0 1)))` holding a retained cell at `⊤`, at
+the stack `[qEnt]` at `1`. It meets every hypothesis of `CtxRelendableAtI`, and it is not shown to
+arise. These are facts about the design's statements.
+
+**The revision** (`BinderJ.lean`). `vRLJ` is `vRLI` with three changes. Each answers one refuted step,
+none changes a printed BoLo definition, and nothing in `Core/` changes. `vRLJ` replaces `vRLI` as the
+one draft relation at W; `vRLI` stays only as the design's refuted statement, and W₀ stays as before.
+- **`RelendJ`: the extension keeps the retained part's records with their tags** (`KeepsT`).
+  It answers `not_extInst`. `KeepsT` composes along instantiations (`ext_inst_comp`).
+- **A retained `Mut` or `Imm` leaf reads its payload type at external lifetimes only**
+  (`RetainedPay`, `PayExt`). It answers `not_mutPayloadInst`. At a bound place it is vacuous.
+- **`SemSJ`'s index has its outermost lend below `⊤`** (`OuterBelowTop`). It answers
+  `not_cohEInst`.
+
+**Proved: `Statement0UThawFreeJ binder0`** (`statement0UThawFreeJ`). These are the four `U` rows at
+`SemSJ`, the context's thaw at every `CtxThawFree` context (`ctxRelendsThawFreeJ`), and
+`ThawInstJ` (`thawInstJ`).
+- **The thaw of a slot** (`relendJ_value`), by the slot type:
+  - `⊗`, `⊕`, `!`, `ref`: by the clause's closure under `⋆` and its monotonicity (`relendJ_sep`,
+    `relendJ_mono`). A `mut` view is in at most one part (`GhostEnd.vwE_disj`). Two `imm` views join
+    into one cell (`GhostEnd.vwE_join`), and an `imm` view handed at an instantiation splits back into
+    two copies of itself by [TR] 6.43 (`ResU.compS_single_imm`, at `compS_self_single_imm`), which is
+    the model step of 6.116's `I-dup`;
+  - a box: the handed views stay above the instantiated bound (`vwSW_outlives_inst`);
+  - `U`: `relendJ_thunk`, the composite of two instantiations (`instComp`, `ext_inst_comp`,
+    `keepsSComp`);
+  - `Mut`, `Imm`, retained: the cell lies above the outermost lend by the table, so the records it
+    reads are fixed (`mem_above_cell`), and its payload is read at external lifetimes
+    (`vC_mut_retained`, `vC_imm_retained`);
+  - `Mut`, `Imm`, at a bound place: the cell is the innermost entry's view (the guard's
+    `PlaceViewsL`), dropped and handed back, the payload types one type up to the reading (`CohS`,
+    `tyEq_inst`), and coherence moved with its record (`cohE_inst`) (`vC_mut_bound`,
+    `vC_imm_bound`);
+  - data leaves hold nothing.
+- **The rows** (`thunkF_U_J`, `thunkV_U_J`). The body comes from the premise at each instantiation.
+  The index's facts are carried by the instantiation (`StackOK.inst`, `outerBelowTop_inst`,
+  `stackJInst`, `subDom_inst`, `instModels`, `subOutsideInst`), and the table and views by
+  `guardInst`. No `ReLendModels` hypothesis is left: the rows supersede `thunkFRow_binder0_at` and its
+  siblings, which took `SemSR`.
+
+**Not derived.** `Statement0UFullJ binder0`: the thaw at a `μ` or `fam` slot (`CtxRelendsAllJ`), the
+guarantee gap R1 of §5.4. `ThawFreeScope` (stated, not attempted here) is the design's witness that
+typing reaches such a context.
+
+**What the revision owes** (none of it proved here; each is the next unit's):
+- `RetainedPay` at every row that introduces a `Mut` or `Imm` value. [unchecked] A retained cell was
+  made outside the frozen computation, so its payload type reads the variables bound then, which
+  `SubOutside` reads above every lend.
+- `KeepsT` at every consumer of the `U` clause. `[force]` supplies it at the list itself; the share
+  at a resume is statement 2's.
+- `OuterBelowTop` at every row that pushes a lend. The own lend meets it (`ownPushBelowTop`); 6.64's
+  and 6.65's lends are chosen below a lifetime (H4).
+- Statement 0's other facts at `SemSJ` (§5.5's re-proofs), not redone at `vRLJ`.
+
+### 11.5 Statement 0 and OQ-8, reconsidered
+
+- **The two needs statement 0 named as shared are met at `binder0`, at `CtxThawFree` contexts**, by
+  changes to our definitions. Q1, the context's thaw: PlaceViews in the guard and the views, `CohS`
+  and `RetainedPay` at the leaves, and `KeepsT` at the extension. Q2, `Δ`'s models at a re-lend: the
+  re-lend as an order-preserving instantiation keeps every `Δ`'s models (`reLendModelsI_of`). Both were
+  findings about our definitions, as DESIGN §12.3's shared-reason clause reads them.
+- **The result is partial.** Guarantee gap R1 (`μ`, `fam`) is open, and typing reaches contexts
+  outside `CtxThawFree`. Under the top rule a result with a guarantee gap is partial, and no placement
+  decision rests on it.
+- **`binder0` still stops at its own monotonicity** (`MonoV`, `MonoG`, `MonoOwnG`, not derived and
+  not retried at `vRLJ`).
+- **OQ-8 stays undecided.** `cbpv` and `binder` still owe §5.6's list: `RelendUI`, `FutInst`,
+  `MonoGPart`, the premise at a future's names, and `CallbackExt*` at `cbpv`. The revision's
+  `KeepsT`, `RetainedPay` and `OuterBelowTop` join that list at every placement.
+- **No failure occurred.** Nothing was refuted at a configuration shown to arise (a). No guard beside
+  `TW` and no second relation family was added (b): the guard's facts are the local bundle, proved at
+  distinct places, and `vRLJ` replaces `vRLI`. No clause reaches another stack by a new means (d).
+  The fallback is not triggered.
+
+### 11.6 Report lists (CLAUDE.md §5)
+
+**Printed hypotheses spent.**
+- [TR] 6.48 (`updV_frame`) at `pvwRun`; its technique (a `mut` cell of the aliasable walk accounted
+  for by its immutable ancestor) at `pvlUpdN`.
+- `↭`'s `mut` and `imm` clauses ([TR] p. 5, row 18) at `pvwUpd` and `pvlUpdN`.
+- 6.65's and 6.64's opening cells at `pvwLendMut`, `pvwLendImm` and `pvlStart`; their closings at
+  `pvlEnd`.
+- 6.43 (`ResU.compS_single_imm`) at `vwEW_split`, through `compS_self_single_imm`: 6.116's (`I-dup`)
+  model step. `ptoImm_dup` (6.116 itself) is not invoked.
+- 6.36 (`ExS.immFree`), 6.32 (`ExS.toExR`), and 6.18 and 6.20 (`ExS.split`, `AgW.split`) at the
+  fold lemmas.
+
+**Still unspent.** 6.108–6.112 (`FreshFrameI` not attempted); 6.65's `P̂ ⊧ [β] P̂`; 6.64's `AdmWf`
+and `hQ` at a resuming table; 6.66's premises; 6.150's H11 and H16; 6.149; 6.50 for the table; 6.62.
+
+**Uniqueness and functionality results.**
+- Used: `ResU.Flat.functional`, `ResU.CompS.functional`, `CellU.CompS.functional`,
+  `CellU.CompR.functional` (`comp_get_det`), `ExS.functional`, `ExR.functional`, `AgW.functional`,
+  `zip_unique_l` (one entry per place at distinct places), the strict monotonicity of
+  `Restrat.Emb` (`life1_lt_iff`).
+- Not used: the machine's determinism.
+
+**Printed lemmas in the run-up that are untranscribed.** None of those read here. The block form of
+6.112 (`freshI`, `FreshFrameI`) is ours, stated and not built.
+
+**Hypotheses added, and their scope.**
+- `KeepsT` at `RelendJ`'s extension: `Ext`'s `Keeps` with the tags kept. Consumers: §11.4.
+- `RetainedPay` at `vRLJ`'s `Mut` and `Imm` leaves. It holds at a payload type with no free variable
+  and is vacuous at a bound place. It excludes `not_mutPayloadInst`'s configuration, and whether such a
+  retained cell arises is not decided.
+- `OuterBelowTop` at `SemSJ`'s index and `CtxRelendableAtJ`. It excludes `not_cohEInst`'s
+  configuration. An instantiation keeps it (`outerBelowTop_inst`).
+- Distinct places, at `PVLUpdN` and `PVLRunsN`: an invariant of `ArisesI` (`placesNodupArises`), not
+  of W's index.
+- `CtxThawFree` at the partial result: R1, as before.
+
+---
+
+## Unresolved: the four review findings, and their status
+
+The four findings below were given with this unit. The revision `99e921f` answers each in §10.2, and
+the build checked the answer against the Lean. Whether the answers meet the findings has not been
+reviewed again.
+
+1. **The instantiation can move external readings** (`SubOutside`, `LendFresh`). Answered in §10.2
+   items 1 and 10: the own lend is fresh below the reading (`SubFresh`), and the index carries
+   `SubOutside`. Status: the readings' facts are proved (`subOutsidePush`, `subOutsideInst`,
+   `subOutsideExtend`, `internalBoundInside`, `sharedReadFixed`), and the rows use `subOutsideInst`.
+   Open: that every row of `SemSJ` keeps `SubOutside`, beyond the four `U` rows.
+2. **`MutPayloadInst` is missing its support conjunct.** Answered in §10.2 item 2: `MutPayloadInst`
+   states both conjuncts. Status: the build refuted the support conjunct as stated
+   (`not_mutPayloadInst`), at a configuration not shown to arise, and with it `InstEquivLeaf`
+   (`not_instEquivLeaf`). The revised W excludes the case at the leaf (`RetainedPay`). Open: whether
+   such a retained cell arises (DESIGN §11's check), and `RetainedPay` at every row that introduces a
+   `Mut` or `Imm` value.
+3. **`RelendI`'s `Ext` can drop the stack's own records** (needs `KeepsS`). Answered in §10.2 item 9:
+   `RelendI` asks `KeepsS` at the dropped views. Status: `KeepsSComp` is proved (`keepsSComp`). The
+   build found that `Ext`'s untagged `Keeps` at the retained part does not compose along two
+   instantiations either (`not_extInst`), and `RelendJ` adds `KeepsT`. Open: the share's `KeepsS` and
+   `KeepsT` at a resume (statement 2).
+4. **`LendFresh` does not put a lend below the reading** (needs `SubFresh`; cite 6.65's H4).
+   Answered in §10.2 item 10, as finding 1, with 6.65's H4 cited ("Such an α always exists because for
+   any lifetime, the set of lifetimes shorter than it is infinite") and 6.64's. Status: `SubFresh` is
+   in the `∀` clause and `SubOutsidePush` is proved. Open: `RecsOutsideArises` and
+   `RecsInsideOwnArises` at `ArisesI` are not attempted.
