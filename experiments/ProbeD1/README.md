@@ -185,3 +185,5 @@ were not attempted either. `reconB′`'s term was not committed, since statement
 | `ProbeD1/Rows0.lean` | `forceRow`, `thawRelend`, `callbackExt*` |
 | `ProbeD1/Thunk.lean` | `CtxRelendable`, `CtxRelendableAt`, `models_reLend_fails`, `tabRelend`, `SemSR`, the four `U` introductions at `binder0` given `CtxRelendableAt` |
 | `ProbeD1/Relendability.lean` | Q1: `not_ctxRelendable_binder0`, `not_ctxRelendableAt_k`, `k_index`, `k_world_TW`, `k_reached`, `k_thunk_not_vRL`, `PlaceViews`, `lendMut_placeView`, `not_placeViews_k`, `ctxRelendableAt_nil`, `ctxRelendableAt_thunk`, `thunkFRow_binder0_nil`, `thunkFRow_binder0_thunk`; Q2: `ReLendModels`, `BoundsStackFree`, `reLendModels_of_boundsStackFree`, `q2_reached` |
+| `BINDER.md` | the design of the next unit: PlaceViews in W, the re-lend as an order-preserving instantiation, the arising check of `mut_not_natural`, the `U` introductions retried |
+| `ProbeD1/Binder.lean` | that design's definitions and `def … : Prop` statements; no proofs |
