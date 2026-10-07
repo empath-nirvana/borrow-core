@@ -10,11 +10,13 @@ import Targets.A.UnaryLaws
 import Targets.A.System
 import Targets.Base.CoreCancel
 import Targets.Base.Ctx
+import Targets.Base.Look
 import Targets.Base.Data
 import Targets.Base.Machine
 import Targets.Base.Programs
 import Targets.Base.Rows
 import Targets.Base.RunProps
+import Targets.Base.Runs
 import Targets.Base.Support
 import Targets.Base.Typing
 import Targets.B.Binder
@@ -28,7 +30,10 @@ import Targets.B.RunEnd
 import Targets.B.World
 import Targets.Instance.Binary
 import Targets.Instance.Bridges
+import Targets.Instance.CheckPrograms
+import Targets.Instance.Checks
 import Targets.Instance.Core
+import Targets.Instance.Machine
 import Targets.Instance.Restricted.NoInterception
 import Targets.Instance.Restricted.Programs
 import Targets.Instance.Restricted.Unwind

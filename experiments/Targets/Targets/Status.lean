@@ -4,6 +4,7 @@ import Targets.B.Release
 import Targets.Instance.Bridges
 import Targets.Instance.Binary
 import Targets.Instance.ZeroCost
+import Targets.Instance.Checks
 import Targets.Instance.Restricted.NoInterception
 import Targets.Instance.Restricted.Unwind
 import Targets.Instance.Restricted.Programs
