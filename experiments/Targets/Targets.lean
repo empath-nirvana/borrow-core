@@ -34,6 +34,7 @@ import Targets.B.RunEnd
 import Targets.B.World
 import Targets.Instance.Binary
 import Targets.Instance.Inversion
+import Targets.Instance.J1
 import Targets.Instance.J1Checks
 import Targets.Instance.Bridges
 import Targets.Instance.CheckPrograms
@@ -58,6 +59,7 @@ import Targets.I.Combined
 import Targets.I.Device
 import Targets.I.GhostCoupling
 import Targets.I.Interface
+import Targets.I.J1
 import Targets.I.NonVacuity
 import Targets.I.OpenRel
 import Targets.I.Pins

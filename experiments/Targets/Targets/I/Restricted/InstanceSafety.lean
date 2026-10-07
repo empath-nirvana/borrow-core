@@ -2,6 +2,7 @@ import Targets.I.Restricted.InstanceProps
 import Targets.B.PlatSafe
 import Targets.Instance.Platform
 import Targets.Instance.J1Checks
+import Targets.Instance.J1
 import Targets.Base.Closed
 
 /-!
@@ -41,8 +42,8 @@ namespace Targets.Inst
 open BoCa BoCa.Fig16 BoCa.Fig16.BoLo BoCa.Fig16.LogRel BoCa.Fig16.LogRel.Core
 open BoCa.BoLo (Heap Steps Step1 Head Kont performE raiseE opPayload hndE ubindE ccatchE cfinE)
 open BoCa.Lifetime (LSub LifeCtx)
-open Targets (RowForm EffCtx orowRF orowAlg ORow RowAt RowEnv Platform PStep PSteps Conf DataVal
-  CDerivesNU tier1NU fl_core_tier1NU comp_of_FL PlatEnd UnansweredAt PlatSafe platSafe_of_ewp
+open Targets (RowForm EffCtx orowRF orowAlg ORow RowAt RowEnv RowCtx Platform PStep PSteps Conf DataVal
+  CDerivesNU tier1NU fl_core_tier1NU fl_core_tier1 comp_of_FL PlatEnd UnansweredAt PlatSafe platSafe_of_ewp
   platSafe_init psteps_from_val no_pstep_of_val pstep_cases DriveSafe driveSafe_init driveSafe_step
   driveSafe_cont QStep RStep Phase rstep_cases HeapClosed closed_step1 closedAt_plug_iff
   heapClosed_empty step1_plug_var closedAt_of_derives PlatAgree platAgree_of_le PlatStart
@@ -104,15 +105,15 @@ theorem ofV_den_of_dataTy {RF : RowForm} {J : OurTyping RF} :
 /-! ### A typed program, read at the empty instance -/
 
 section Read
-variable {Ξ : EffCtx}
+variable {Ξ : EffCtx} {D : RowCtx → LifeCtx → Ctx OVTy → Expr → OJdg → Prop}
 
-local notation "𝕊" => ourInst (ℍ := ℍ) orowRF Ξ tier1Open
+local notation "𝕊" => ourInst (ℍ := ℍ) orowRF Ξ (OurTyping.ofDer D)
 
 /-- **A program typed by today's kernel at our instance, read with its row variables empty**: its
 type is a returner `F_S A₀` whose row is tied to the effect context, and it is a plain program in
 Core's relation there, or a driven program whose step is: the type a loop sum
 `F_S(A₁ ⊕ U(Loop_{S₀} A₁ 1))`, the loop's row below the step's and its body positive. -/
-theorem der_cases {e : Expr} {C : OCTy} (h : (𝕊).der [] e C) :
+theorem der_cases (hJ : CoreClosed (OurTyping.ofDer D)) {e : Expr} {C : OCTy} (h : (𝕊).der [] e C) :
     ∃ (S : Row) (A₀ : VTy), C.den (fun _ => []) = CTy.effOf S A₀ ∧ RowAt Ξ S ∧
       (cC (ℍ := ℍ) (CTy.effOf S A₀) [] LSub.empty e PMap.empty ∨
        ∃ (M : Expr) (S₀ : Row) (A₁ : VTy), e = driveE M ∧ RowLe S₀ S ∧
@@ -121,29 +122,24 @@ theorem der_cases {e : Expr} {C : OCTy} (h : (𝕊).der [] e C) :
   obtain ⟨hT, hd⟩ := h
   obtain ⟨S, A₀, hC, hS⟩ := hT _ (envAt_nil Ξ)
   refine ⟨S, A₀, hC, hS, ?_⟩
-  rcases hd with ⟨Θ, hΘ, -, -, hd⟩ | ⟨-, M, rfl, hL, Θ, hΘ, -, -, hd⟩
-  · have hd₀ := hd _ (models_anyCon_nil hΘ)
-    change CDerivesNU LifeCtx.empty [] e (.comp (C.den (fun _ => []))) at hd₀
+  rcases hd with ⟨Θ, hΘ, hd⟩ | ⟨-, M, rfl, hL, Θ, hΘ, hd⟩
+  · have hd₀ := hJ Θ e C hΘ hd
     rw [hC] at hd₀
-    exact .inl (comp_of_FL fl_core_tier1NU (fun _ _ => hd₀))
-  · have hd₀ := hd _ (models_anyCon_nil hΘ)
-    change CDerivesNU LifeCtx.empty [] M (.comp (C.den (fun _ => []))) at hd₀
+    exact .inl (comp_of_FL fl_core_tier1 (fun _ _ => hd₀))
+  · have hd₀ := hJ Θ M C hΘ hd
     rw [hC] at hd₀
     obtain ⟨S', S₀, A₁, hle, hnu, hC'⟩ := hL (fun _ => [])
     rw [hC] at hC'
     obtain ⟨rfl, rfl⟩ := effOf_inj hC'
-    exact .inr ⟨M, S₀, A₁, rfl, hle, hnu, rfl, comp_of_FL fl_core_tier1NU (fun _ _ => hd₀)⟩
+    exact .inr ⟨M, S₀, A₁, rfl, hle, hnu, rfl, comp_of_FL fl_core_tier1 (fun _ _ => hd₀)⟩
 
 /-- **A typed closed program is closed.** -/
-theorem closed_of_der {e : Expr} {C : OCTy} (h : (𝕊).der [] e C) : closedAt 0 e = true := by
+theorem closed_of_der (hJ : CoreClosed (OurTyping.ofDer D)) {e : Expr} {C : OCTy} (h : (𝕊).der [] e C) :
+    closedAt 0 e = true := by
   obtain ⟨-, hd⟩ := h
-  rcases hd with ⟨Θ, hΘ, -, -, hd⟩ | ⟨-, M, rfl, -, Θ, hΘ, -, -, hd⟩
-  · have hd₀ := hd _ (models_anyCon_nil hΘ)
-    change CDerivesNU LifeCtx.empty [] e (.comp (C.den (fun _ => []))) at hd₀
-    simpa using closedAt_of_derives hd₀.toCDerives
-  · have hd₀ := hd _ (models_anyCon_nil hΘ)
-    change CDerivesNU LifeCtx.empty [] M (.comp (C.den (fun _ => []))) at hd₀
-    have := closedAt_of_derives hd₀.toCDerives
+  rcases hd with ⟨Θ, hΘ, hd⟩ | ⟨-, M, rfl, -, Θ, hΘ, hd⟩
+  · simpa using closedAt_of_derives (hJ Θ e C hΘ hd)
+  · have := closedAt_of_derives (hJ Θ M C hΘ hd)
     simp only [List.length_nil] at this
     simp [driveE, driveMark, closedAt, this]
 
@@ -186,16 +182,16 @@ theorem head_ne_drive {μ μ' : Heap} {a a' : Expr} (hh : Head (ℍ := ℍ) μ a
     ∀ b, a ≠ .app driveMark b := by
   rintro b rfl; exact no_head_lit_app hh
 
-theorem perform_ne_drive (l : (orowAlg Ξ).Lab) (i : ℕ) (v : OVal) :
-    ∀ b, (ourInst (ℍ := ℍ) orowRF Ξ tier1Open).perform l i v ≠ .app driveMark b := by
+theorem perform_ne_drive {J : OurTyping orowRF} (l : (orowAlg Ξ).Lab) (i : ℕ) (v : OVal) :
+    ∀ b, (ourInst (ℍ := ℍ) orowRF Ξ J).perform l i v ≠ .app driveMark b := by
   intro b h
-  obtain ⟨x, hx⟩ := perform_app (ℍ := ℍ) (J := tier1Open) l i v
+  obtain ⟨x, hx⟩ := perform_app (ℍ := ℍ) (J := J) l i v
   rw [hx] at h
   injection h with h₁; injection h₁ with h₂; cases h₂
 
-theorem not_isVal_perform (l : (orowAlg Ξ).Lab) (i : ℕ) (v : OVal) :
-    ¬ IsVal ((ourInst (ℍ := ℍ) orowRF Ξ tier1Open).perform l i v) := by
-  obtain ⟨x, hx⟩ := perform_app (ℍ := ℍ) (J := tier1Open) l i v
+theorem not_isVal_perform {J : OurTyping orowRF} (l : (orowAlg Ξ).Lab) (i : ℕ) (v : OVal) :
+    ¬ IsVal ((ourInst (ℍ := ℍ) orowRF Ξ J).perform l i v) := by
+  obtain ⟨x, hx⟩ := perform_app (ℍ := ℍ) (J := J) l i v
   rw [hx]; intro h; cases h
 
 /-- A driver's configuration at a value takes no step under a platform. -/
@@ -241,11 +237,11 @@ theorem closedAt_plug_of {K : Kont} {x y : Expr} (hx : closedAt 0 (K.plug x) = t
 /-! ### Runs under a runner and under its platform -/
 
 section Sim
-variable {Ξ : EffCtx}
+variable {Ξ : EffCtx} {D : RowCtx → LifeCtx → Ctx OVTy → Expr → OJdg → Prop}
 
-local notation "𝕊" => ourInst (ℍ := ℍ) orowRF Ξ tier1Open
+local notation "𝕊" => ourInst (ℍ := ℍ) orowRF Ξ (OurTyping.ofDer D)
 
-variable {R : (ourInst (ℍ := ℍ) orowRF Ξ tier1Open).Runner} {S : Row}
+variable {R : (ourInst (ℍ := ℍ) orowRF Ξ (OurTyping.ofDer D)).Runner} {S : Row}
   {Q : List SRec → Val → WProp}
 
 /-- **The runner's answer, at a closed configuration that goes on under its platform, is the
@@ -260,7 +256,7 @@ theorem pstep_of_io {μ : Heap} {s s' : R.St} {K : Kont} {l : (orowAlg Ξ).Lab} 
       (PlatEnd (platformOf R S) Q c' ∨ UnansweredAt (platformOf R S) S c'.e)) :
     PStep (ℍ := ℍ) (platformOf R S) ⟨μ, K.plug ((𝕊).perform l i v), s⟩ ⟨μ, K.plug w.1, s'⟩ ∧
       closedAt 0 w.1 = true := by
-  rcases perform_cases (ℍ := ℍ) (J := tier1Open) l i v with ⟨hi, hp⟩ | ⟨-, hp⟩
+  rcases perform_cases (ℍ := ℍ) (J := OurTyping.ofDer D) l i v with ⟨hi, hp⟩ | ⟨-, hp⟩
   swap
   · rw [hp, not_closed_opJunk] at hcl; cases hcl
   have hv : IsVal v.1 := by
@@ -368,11 +364,11 @@ end Sim
 /-! ### What a run under a runner reaches -/
 
 section Reach
-variable {Ξ : EffCtx}
+variable {Ξ : EffCtx} {D : RowCtx → LifeCtx → Ctx OVTy → Expr → OJdg → Prop}
 
-local notation "𝕊" => ourInst (ℍ := ℍ) orowRF Ξ tier1Open
+local notation "𝕊" => ourInst (ℍ := ℍ) orowRF Ξ (OurTyping.ofDer D)
 
-variable {R : (ourInst (ℍ := ℍ) orowRF Ξ tier1Open).Runner} {S : Row}
+variable {R : (ourInst (ℍ := ℍ) orowRF Ξ (OurTyping.ofDer D)).Runner} {S : Row}
 
 /-- The platform of a runner that keeps its protocol, at a row tied to the effect context, agrees
 with the row. -/
@@ -479,10 +475,11 @@ reaches, under a runner that keeps its protocol, has a closed term and goes on. 
 run is its run under the runner's platform (`plain_reach`), which continues to an end or a stop
 (`platSafe_of_ewp`); a driven program's run is the drive's (`drive_reach`, `driveSafe_cont`), or,
 after `fin`, a closed value. -/
-theorem liveOK_tier1Open {Ξ : EffCtx} : LiveOK (ℍ := ℍ) orowRF Ξ tier1Open := by
+theorem liveOK_of_coreClosed {Ξ : EffCtx} {D : RowCtx → LifeCtx → Ctx OVTy → Expr → OJdg → Prop}
+    (hJ : CoreClosed (OurTyping.ofDer D)) : LiveOK (ℍ := ℍ) orowRF Ξ (OurTyping.ofDer D) := by
   rintro ⟨μ, e⟩ ⟨P, C, R, s, hR, hP, hreach⟩
-  obtain ⟨S, A₀, -, hS, hcases⟩ := der_cases hP
-  have hcl := closed_of_der hP
+  obtain ⟨S, A₀, -, hS, hcases⟩ := der_cases hJ hP
+  have hcl := closed_of_der hJ hP
   have hPl := platformOf_respects hR hS
   rcases hcases with hcC | ⟨M, S₀, A₁, rfl, hle, hnu, rfl, hcC⟩
   · obtain ⟨hc, -, hps⟩ := plain_reach hR hS hcC hcl hreach
@@ -520,9 +517,9 @@ theorem clsOf_eq_abortive {o : OpSig} : clsOf o.q o.B = .abortive ↔ o.abort = 
     split <;> simp
 
 section Effects
-variable {Ξ : EffCtx}
+variable {Ξ : EffCtx} {D : RowCtx → LifeCtx → Ctx OVTy → Expr → OJdg → Prop}
 
-local notation "𝕊" => ourInst (ℍ := ℍ) orowRF Ξ tier1Open
+local notation "𝕊" => ourInst (ℍ := ℍ) orowRF Ξ (OurTyping.ofDer D)
 
 /-- An operation a row finds with its row variables empty, it has at every reading. -/
 theorem has_of_find_den {ε : ORow} {n i : UInt32} {o : OpSig}
@@ -543,7 +540,7 @@ theorem lab_of_rowAt {S : Row} (hS : RowAt Ξ S) {n i : UInt32} {o : OpSig}
       ((𝕊).sig l)[i.toNat]? = some ⟨OVTy.ofV o.A, OVTy.ofV o.B, clsOf o.q o.B⟩ := by
   obtain ⟨hn, hlen, hΞ⟩ := hS n i o hf
   have hne : Ξ n ≠ [] := fun h => by simp [h] at hΞ
-  exact ⟨⟨n, hn, hne, hlen⟩, rfl, sig_of_rowAt (J := tier1Open) (l := ⟨n, hn, hne, hlen⟩) hΞ⟩
+  exact ⟨⟨n, hn, hne, hlen⟩, rfl, sig_of_rowAt (J := OurTyping.ofDer D) (l := ⟨n, hn, hne, hlen⟩) hΞ⟩
 
 /-- A configuration at a Core value is an answer of A's. -/
 theorem isVal_conf (μ : Heap) (w : Val) : (𝕊).IsVal (μ, w.1) :=
@@ -626,15 +623,15 @@ that answers nothing, whose platform answers nothing; what that run reaches goes
 platform (`plain_reach`, `drive_reach`), to an end or a stop of the row (`platSafe_of_ewp`,
 `driveSafe_cont`), and a stop of a row tied to the effect context is a stop in A's sense
 (`stopsIn_of_unanswered`). -/
-theorem effSafe_ourInst_tier1Open : (𝕊).EffSafe := by
+theorem effSafe_of_coreClosed (hJ : CoreClosed (OurTyping.ofDer D)) : (𝕊).EffSafe := by
   intro e ε A hd c hc
   obtain ⟨μc, ec⟩ := c
   have hr := rreach_of_reach (R := (𝕊).R₀) () hc
   have hR : (𝕊).R₀.Respects := fun _ _ _ h => h.elim
-  obtain ⟨S, A₀, hC, hS, hcases⟩ := der_cases hd
+  obtain ⟨S, A₀, hC, hS, hcases⟩ := der_cases hJ hd
   have hC' : CTy.effOf (orowRF.den Ξ ε (fun _ => [])) (A.den (fun _ => [])) = CTy.effOf S A₀ := hC
   obtain ⟨rfl, rfl⟩ := effOf_inj hC'
-  have hcl := closed_of_der hd
+  have hcl := closed_of_der hJ hd
   have hPl := platformOf_respects hR hS
   have hnone : ∀ n i o, Row.find (platformOf (𝕊).R₀ (orowRF.den Ξ ε (fun _ => []))).ops n i ≠
       some o := by
@@ -692,11 +689,11 @@ theorem psteps_drive_shape {P : Platform} {μ : Heap} {t : Expr} {s : P.St} {c :
         exact ⟨K'.plug (.val w), rfl⟩
 
 section Safety
-variable {Ξ : EffCtx}
+variable {Ξ : EffCtx} {D : RowCtx → LifeCtx → Ctx OVTy → Expr → OJdg → Prop}
 
-local notation "𝕊" => ourInst (ℍ := ℍ) orowRF Ξ tier1Open
+local notation "𝕊" => ourInst (ℍ := ℍ) orowRF Ξ (OurTyping.ofDer D)
 
-variable {R : (ourInst (ℍ := ℍ) orowRF Ξ tier1Open).Runner}
+variable {R : (ourInst (ℍ := ℍ) orowRF Ξ (OurTyping.ofDer D)).Runner}
 
 /-- A run under the runner's platform is a run under the runner. -/
 theorem rreach_of_psteps {S : Row} {cc cc' : Conf (platformOf R S)}
@@ -744,7 +741,7 @@ theorem rowLe_platformOf {ε : ORow} (hS : RowAt Ξ (orowRF.den Ξ ε (fun _ => 
     (hans : (𝕊).Answers R ε) :
     RowLe (orowRF.den Ξ ε (fun _ => [])) (platformOf R (orowRF.den Ξ ε (fun _ => []))).ops := by
   intro n i o hf
-  obtain ⟨l, rfl, -⟩ := lab_of_rowAt hS hf
+  obtain ⟨l, rfl, -⟩ := lab_of_rowAt (D := D) hS hf
   refine find_platformOf.2 ⟨hf, l, rfl, hans l i.toNat ⟨i.toNat_lt, fun η => ?_⟩⟩
   show Targets.Row.Has (orowRF.den Ξ ε η) l.1 (UInt32.ofNat i.toNat)
   rw [UInt32.ofNat_toNat]
@@ -757,10 +754,10 @@ never stuck and ending at a data value of `A`.  The runner's platform answers th
 (`rowLe_platformOf`), so B2 applies: `adequateRetAt_core` to a plain program, whose run is its run
 under the platform (`plain_reach`, `plain_rstep`), and `safeDriveFrom_of_rel` to a driven one,
 whose run is the drive's (`drive_reach`). -/
-theorem safety_ourInst_tier1Open : (𝕊).Safety := by
+theorem safety_of_coreClosed (hJ : CoreClosed (OurTyping.ofDer D)) : (𝕊).Safety := by
   intro R hR ε hans
   refine ⟨fun e A hA hd => ?_, fun M A L hA hd => ?_⟩
-  · obtain ⟨S, A₀, hC, hS, hcases⟩ := der_cases hd
+  · obtain ⟨S, A₀, hC, hS, hcases⟩ := der_cases hJ hd
     have hC' : CTy.effOf (orowRF.den Ξ ε (fun _ => [])) (A.den (fun _ => [])) =
         CTy.effOf S A₀ := hC
     obtain ⟨rfl, rfl⟩ := effOf_inj hC'
@@ -768,7 +765,7 @@ theorem safety_ourInst_tier1Open : (𝕊).Safety := by
     rcases hcases with hcC | ⟨M, S₀, A₁, rfl, -, -, he₀, -⟩
     swap
     · rw [he₀] at hdata; exact (not_data_thunkSum hdata).elim
-    have hcl := closed_of_der hd
+    have hcl := closed_of_der hJ hd
     have hPl := platformOf_respects hR hS
     have hle := rowLe_platformOf hS hans
     obtain ⟨hsafe, hterm⟩ := adequateRetAt_core (platformOf R _) hPl _ _ e hdata hle hcC
@@ -814,13 +811,13 @@ theorem safety_ourInst_tier1Open : (𝕊).Safety := by
       obtain ⟨cc', hcc', w, he, hw, -⟩ := hterm.1 _ hps
       obtain rfl := psteps_from_val (v := ⟨_, hcv⟩) rfl hcc'
       exact ⟨OVal.ofVal w, he, dataVal_ofVal hA hA' hw⟩
-  · obtain ⟨S, A₀, hC, hS, hcases⟩ := der_cases hd
+  · obtain ⟨S, A₀, hC, hS, hcases⟩ := der_cases hJ hd
     have hC' : CTy.effOf (orowRF.den Ξ ε (fun _ => [])) ((OVTy.sum A L).den (fun _ => [])) =
         CTy.effOf S A₀ := hC
     obtain ⟨rfl, rfl⟩ := effOf_inj hC'
     have hPl := platformOf_respects hR hS
     have hle := rowLe_platformOf hS hans
-    have hcl : closedAt 0 (driveE M) = true := closed_of_der hd
+    have hcl : closedAt 0 (driveE M) = true := closed_of_der hJ hd
     have hM : closedAt 0 M = true := by simpa [driveE, driveMark, closedAt] using hcl
     rcases hcases with hcC | ⟨M', S₀, A₁, hMM, hle₀, hnu, he₀, hcC⟩
     · exfalso
@@ -879,6 +876,20 @@ theorem safety_ourInst_tier1Open : (𝕊).Safety := by
             · simp [Expr.val, Val.inj₁, Val.inj₂] at hel
 
 end Safety
+
+/-! ### At today's kernel -/
+
+/-- **`LiveOK` at today's kernel** (decision D1). -/
+theorem liveOK_tier1Open {Ξ : EffCtx} : LiveOK (ℍ := ℍ) orowRF Ξ tier1Open :=
+  liveOK_of_coreClosed (D := tier1OpenDer) coreClosed_tier1Open
+
+/-- **S3 at today's kernel**, at every effect context. -/
+theorem effSafe_ourInst_tier1Open {Ξ : EffCtx} : (ourInst (ℍ := ℍ) orowRF Ξ tier1Open).EffSafe :=
+  effSafe_of_coreClosed (D := tier1OpenDer) coreClosed_tier1Open
+
+/-- **S2 at today's kernel**, at every effect context. -/
+theorem safety_ourInst_tier1Open {Ξ : EffCtx} : (ourInst (ℍ := ℍ) orowRF Ξ tier1Open).Safety :=
+  safety_of_coreClosed (D := tier1OpenDer) coreClosed_tier1Open
 
 end Targets.Inst
 

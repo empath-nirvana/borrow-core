@@ -22,6 +22,7 @@ import Targets.Instance.ContUse
 import Targets.Instance.RunTyping
 import Targets.I.Restricted.InstanceSafety
 import Targets.I.GhostCoupling
+import Targets.I.J1
 
 /-!
 # Targets — status, by system (RESTRUCTURE §0)
