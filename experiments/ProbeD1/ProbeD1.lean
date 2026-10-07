@@ -27,3 +27,4 @@ import ProbeD1.BinderRefute
 import ProbeD1.BinderJ
 import ProbeD1.BinderRows
 import ProbeD1.BinderArise
+import ProbeD1.BinderRisk
