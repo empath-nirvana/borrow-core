@@ -1772,7 +1772,8 @@ edit. Work on `targets`; never push.
 
 ## 14. Report lists
 
-**Printed hypotheses the routes must spend** (none is spent yet; there is no proof):
+**Printed hypotheses the routes must spend** (written before the build; §15.5 says which were
+spent):
 - 6.65's `P̂ ⊧ [β] P̂` at each re-lend (`wpG_M_frameX`'s `hP`);
 - 6.64's `AdmWf` and its `hQ`, the postcondition carried along `Ext` (`opTable_extR`,
   `ewpPostR_ext`);
