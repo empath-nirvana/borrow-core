@@ -19,3 +19,4 @@ import ProbeD1.Rows0
 import ProbeD1.Thunk
 import ProbeD1.Relendability
 import ProbeD1.Binder
+import ProbeD1.BinderW

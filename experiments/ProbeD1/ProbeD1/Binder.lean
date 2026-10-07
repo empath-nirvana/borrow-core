@@ -8,7 +8,8 @@ Freeze is a binder over internal locations, lifetimes and instances; resume and 
 instantiate it. This file states the binder's location half (a place the stack lends is a bound
 location, and a borrow cell there, at any depth, is the binder's view) and its lifetime half (the
 re-lend at a resume is an order-preserving instantiation of every internal lifetime). `BINDER.md`
-is the design; its §5 gives the revision of W's clauses these definitions enter.
+is the design. `BinderW.lean` holds the revised relation these definitions enter, and the `U`
+introductions retried at it.
 
 * **PlaceViews.**
   - `PlaceViewsL`: W's guard conjunct. Every borrow cell of the local resource at a place the
@@ -18,13 +19,17 @@ is the design; its §5 gives the revision of W's clauses these definitions enter
     bundle `PVLBundle` states it as the stack's run invariant, one fact per transition and per
     configuration the relation quantifies over, the analog of statement 1's table facts.
   - `PlaceViewsW`: a shape of the same read off a configuration's world. Its preservation along
-    `Arises` (`PVArises`) is the arising check that `k` does not arise (`KNotArises`). The guard
-    does not rest on it.
+    the revised arising set (`PVArises`) shows that `k` is not in that set (`KNotInArises`), so a
+    refutation at `k` cannot pass DESIGN §11. The guard does not rest on it.
   - `CohS`: W's `Mut` and `Imm` leaves at a stack place. The view's payload type is the entry's up
     to the reading (`TyEq`), and its cell is at the entry's lifetime. It is the 6.65 analog of
     Core's `CohE`, which ties an `imm` cell to its 6.64 record.
   - `vwEW`, `vwSW`: W's views, GhostEnd's read at the stack's reading, the cell at the exact
     lifetime; `vwSL` adds that their nested cells at the stack's places are views as well.
+* **The revised own lend, futures and lends.** `OwnOKI` and `FutOKI`: the lent and the inserted
+  places hold no cell of the resource at any depth. `OwnPushI`: at a callback-shaped type the own
+  lend is the view's lend (`ViewAt`). `LendMutI`, `LendImmI`, `ArisesI`: a lend fresh below the
+  records (`LendFresh`). They replace W₀'s when the revision lands.
 * **The instantiation.** `Inst` is the identity or a re-stratification `Restrat.Emb c` at the
   stack's cut `cutOf αs`. It moves the lifetimes below the cut, strictly monotonically and
   downward, and fixes every one at or above it. It acts on the index: the reading substitution
@@ -33,27 +38,31 @@ is the design; its §5 gives the revision of W's clauses these definitions enter
   - `RecsOutside`: every record outliving one of the stack's lends reads only lifetimes outliving
     it. An index invariant, from the lends' freshness (`LendFresh`); with it a record the
     instantiation leaves alone is coherent at the instantiated reading (`CohEInst`).
+  - `SubOutside`: every variable bound before one of the stack's lends is read at a lifetime
+    outliving it. An index invariant, from the own lend's freshness below the reading
+    (`SubFresh`); with it an internal variable was bound inside the outermost lend
+    (`InternalBoundInside`), and the share's instantiation fixes every variable bound before the
+    part it moves (`SharedReadFixed`).
   - `RelendI` (the stack itself) and `RelendUI` (its futures): W's `U` clause over
-    instantiations.
+    instantiations. The list it is handed keeps the records the dropped views are coherent with
+    (`KeepsS`), up to what the relation does not read of a record (`RecUpTo`).
   - `InstModels`: an instantiation keeps every lifetime context's models.
-  - `Internal`, `InternalVar` (semantic) and `BoundBelowV` (the bound reaches below a stack
-    variable), with `InternalOfBound` between them.
+  - `Internal`, `InternalVar` (semantic), `BoundBelowV` (the bound reaches below a stack
+    variable) and `BoundInside` (bound after the outermost lend), with `InternalOfBound` and
+    `InternalBoundInside` between them.
   - `InstFresh`, `InstFreshExists`: a resume's instantiation, fresh below the resumer's resource
     and every lifetime its index reads; `freshI`, `FreshFrameI`: [TR] 6.112 at a block.
   - The equivariance the thaw needs: `TyEqInst`, `CohEInst`, `MutPayloadInst`, `InstEquivLeaf`
     (at types Core reads without a thunk, `CoreStable`), `ViewSlotInst`; why the leaf must tie the
     type, `ViewTypeCoincidence`; what `CoreStable` leaves out, `InstEquivLeafAll`,
     `MutPayloadInstAll`.
-* **The known risk.** `Targets.NotVDenNaturalArises` (the `TW` history), `InternalPayloadArises`
-  (the witness's shape with both lends on W's stack), `MutWitnessThaws` (the instantiation at
-  it), and, beside them, `NotVCNaturalCore` (transport, as `FreezeBinderLife` states it, fails at
-  a `coreW` world).
-* **The `U` introductions retried.** The target is statement 0's four rows at the revised W
-  (`Statement0UFull`). `Statement0UThawFree` is the partial form at the contexts `CtxThawFree`
-  admits, and `ThawFreeScope` shows that typing reaches a context it excludes.
+* **The known risk.** `Targets.NotVDenNaturalArises` (a `TW` world holding the witness),
+  `InternalPayloadArises` (the witness's shape with both lends on W's stack), `MutWitnessThaws`
+  (the instantiation at it) and `MutWitnessThawsInhabited` (its hypotheses met at a configuration
+  of that shape), and, beside them, `NotVCNaturalCore` (transport, as `FreezeBinderLife` states
+  it, fails at a `coreW` world).
 
-Definitions and `def … : Prop` statements only; no proofs. The statements over `vRL`, `gRL`,
-`SemS`, `OwnOK`, `FutOK`, `LendMut` and `LendImm` are read at W as `BINDER.md` §5 revises them.
+Definitions and `def … : Prop` statements only; no proofs.
 -/
 
 noncomputable section
@@ -93,7 +102,7 @@ inductive ExAt : WRes → BoCa.Loc → CellU BoCa.Loc Val → Prop
 innermost lending entry is a 6.65 entry, the world's `mut` cell there is at the entry's current
 lifetime and stores `𝒱⟦T⟧` of the entry's payload type, at some reading and list. At a 6.64
 entry's place, the world's `imm` cell there is at the entry's current lifetime and holds the
-entry's value. Its preservation along `Arises` is the arising check of `k` (`PVArises`). -/
+entry's value. Its preservation along `ArisesI` is the arising check of `k` (`PVArises`). -/
 def PlaceViewsW (σ : LStack) (αs : List Life) (fρ : WRes) : Prop :=
   ∀ (l : BoCa.Loc) (e : LEnt) (α : Life), innerAt σ αs l = some (e, α) →
     ∀ ψ : CellU BoCa.Loc Val, fρ.FlatAt l ψ →
@@ -169,12 +178,46 @@ def CohS (σ : LStack) (αs : List Life) (s : LSub) (A : VTy) (v : Val) (ρ : WR
   ∀ (l : BoCa.Loc) (e : LEnt) (α : Life), v = .loc l → innerAt σ αs l = some (e, α) →
     CohKind s e A ∧ ∀ ψ, ρ.get l = some ψ → ψ.at = α
 
-/-- A callback's view type at its binder `x`, against the entry the own lend pushes (the revised
-`OwnPush`'s last conjunct, `BINDER.md` §2.1). -/
+/-- A callback's view type at its binder `x`, against the entry the own lend pushes (`OwnPushI`'s
+last conjunct). `True` at a type that is not a `Mut` or `Imm` of a variable; `False` at a `Mut` or
+`Imm` of a variable other than `x`, or of the other kind, where no own lend is admitted. -/
 def ViewAt (x : LifeVar) (e : LEnt) : VTy → Prop
   | .mut (.var y) T => y = x ∧ (match e.k with | .mut => True | .imm _ => False) ∧ e.T = T
   | .imm (.var y) T => y = x ∧ (match e.k with | .mut => False | .imm _ => True) ∧ e.T = T
   | _ => True
+
+/-! ### The revised own lend and futures -/
+
+/-- **The freshness of a callback's own lend, revised**: `OwnOK`, and no cell of the callback's
+resource at the lent place at any depth, the place's owner being with the lender. -/
+structure OwnOKI (δ : LSub) (σ : LStack) (αs : List Life) (e : LEnt) (a : Life) (ρ : WRes) :
+    Prop extends OwnOK δ σ αs e a ρ where
+  placeFree : ∀ ψ, ¬ DeepAt ρ e.l ψ
+
+/-- **The own lend at the type `C`, revised**: `OwnPush` at `OwnOKI`, and at a callback-shaped
+type `∀'x ⊏ c. A ⊸ D` the lend the instance names is the view's (`ViewAt x e A`). -/
+def OwnPushI (δ : LSub) (C : CTy) (ρ : WRes) (s : Stk) (e : LEnt) (a : Life) : Prop :=
+  ∃ (x : LifeVar) (c : Lifetime.Life) (C' : CTy), C = .all x c C' ∧ e.x = x ∧
+    x ∉ CTy.binders C' ∧ OwnOKI δ s.1 s.2 e a ρ ∧ LtLife (extS δ s.1 s.2) c a ∧
+    ∀ A D, C' = .arr A D → ViewAt x e A
+
+/-- **The freshness of one step of a future, revised**: `FutOK`, and no cell of the holder's
+resource at an inserted place at any depth. -/
+structure FutOKI (δ : LSub) (σ : LStack) (αs : List Life) (k : Nat) (τ : LStack)
+    (αt : List Life) (ρ : WRes) : Prop extends FutOK δ σ αs k τ αt ρ where
+  placesFree : ∀ e ∈ τ, ∀ ψ, ¬ DeepAt ρ e.l ψ
+
+/-- One step of a future at `FutOKI`. -/
+def FutStepI (δ : LSub) (ρ : WRes) (s s' : Stk) : Prop :=
+  ∃ (k : Nat) (τ : LStack) (αt : List Life) (N : Option (UInt32 → Bool)),
+    FutOKI δ s.1 s.2 k τ αt ρ ∧ s'.1 = futS k τ N s.1 ∧ s'.2 = futL k αt s.2
+
+/-- A future at `FutOKI`: finitely many steps. -/
+def FutI (δ : LSub) (ρ : WRes) : Stk → Stk → Prop := Relation.ReflTransGen (FutStepI δ ρ)
+
+/-- The futures a clause quantifies over, at `FutOKI`. -/
+def FutQI (fut : Bool) (δ : LSub) (ρ : WRes) (s s' : Stk) : Prop :=
+  if fut then FutI δ ρ s s' else s' = s
 
 /-! ### The cut, internal lifetimes, and the records -/
 
@@ -188,11 +231,12 @@ the cut and fixed by none other. Below `⊤` it is a lifetime at or below the ou
 def Internal (αs : List Life) (a : Life) : Prop := ∃ c ∈ cutOf αs, a < c
 
 /-- **An internal variable** of an index: one the stack's reading sends to an internal lifetime. An
-instantiation at the stack's cut may move the values of these and fixes every other. -/
+instantiation at the stack's cut may move the values of these and fixes every other. At an index
+keeping `SubOutside` they were bound inside the outermost lend (`InternalBoundInside`). -/
 def InternalVar (δ : LSub) (σ : LStack) (αs : List Life) (y : LifeVar) : Prop :=
   ∃ m, (extS δ σ αs).find? y = some m ∧ Internal αs (OrderDual.toDual m)
 
-/-- The outermost lend is below `⊤`, so it is internal. `OwnPush`'s bound puts every own lend
+/-- The outermost lend is below `⊤`, so it is internal. `OwnPushI`'s bound puts every own lend
 there (`OwnPushBelowTop`). -/
 def OuterBelowTop (αs : List Life) : Prop := ∀ o ∈ αs.getLast?, o < ⊤
 
@@ -212,11 +256,56 @@ def RecsInsideOwn (σ : LStack) (αs : List Life) (ls : List SRec) : Prop :=
   ∀ x ∈ ls, (∃ o ∈ αs.getLast?, x.2 ≤ o) →
     ∃ e ∈ σ, ∃ u, e.k = .imm u ∧ ∃ r ∈ rsOf ls, r.le = e.l ∧ DescR r x.1
 
-/-- **A lend fresh below every lifetime the records read** ([TR] 6.112's `И`, taken below the
-finite set of the records' frame lifetimes and readings). `LendMut` and `LendImm` carry it in the
-revision (`BINDER.md` §5.1). -/
+/-- **A lend fresh below every lifetime the records read**: below the finite set of the records'
+frame lifetimes and readings. [TR] 6.64's and 6.65's proofs choose the lend below a bound (H4,
+"Such an α always exists because for any lifetime, the set of lifetimes shorter than it is
+infinite"), and the `И` they unfold admits every lifetime below it. `LendMutI` and `LendImmI` carry
+it. -/
 def LendFresh (ls : List SRec) (α : Life) : Prop :=
   ∀ x ∈ ls, α < x.2 ∧ ∀ p ∈ x.1.δ.entries, α < OrderDual.toDual p.2
+
+/-! ### The readings: a variable bound before a lend is read above it -/
+
+/-- **The bindings of `δ` made before the newest binding of `x`**: those after it in the association
+list, `extend` consing at the front. None when `x` is not bound in `δ`. -/
+def boundBefore (x : LifeVar) (δ : LSub) : List (LifeVar × ℕ) :=
+  (δ.entries.dropWhile fun p => p.1 != x).drop 1
+
+/-- **A variable bound before a lend is read above it**: for each of the stack's lends `(e, a)`,
+every binding of `δ` made before `e`'s variable was bound is read at a lifetime strictly
+longer-lived than `a`. The own lend's freshness below the reading (`SubFresh`) opens with it, and a
+binding made inside a lend comes after it. So an instantiation at the stack's cut, or at the cut of
+an inner part of the stack, fixes every variable bound before the lends it moves. -/
+def SubOutside (σ : LStack) (αs : List Life) (δ : LSub) : Prop :=
+  ∀ (e : LEnt) (a : Life), (e, a) ∈ σ.zip αs → ∀ p ∈ boundBefore e.x δ, a < OrderDual.toDual p.2
+
+/-- **A lend fresh below the reading**: below every value of the reading substitution, a finite set
+(H4 of [TR] 6.64 and 6.65, as for `LendFresh`). The `∀` clause asks it of the own lend. -/
+def SubFresh (δ : LSub) (α : Life) : Prop := ∀ p ∈ δ.entries, α < OrderDual.toDual p.2
+
+/-- **Bound inside the outermost lend**: a stack variable, or a variable whose newest binding in `δ`
+was made after the outermost entry's variable was bound. -/
+def BoundInside (δ : LSub) (σ : LStack) (y : LifeVar) : Prop :=
+  y ∈ σ.map LEnt.x ∨
+    ∀ eo ∈ σ.getLast?, y ∈ (δ.entries.takeWhile fun p => p.1 != eo.x).map Prod.fst
+
+/-! ### The records an extension keeps -/
+
+/-- **A record up to what the relation does not read of it**: the same place, value, payload type,
+reading and frame lifetime, and the same `own` cells in the witness. The relation reads a record's
+witness only through its `own` cells (`Coh`'s and `Rel`'s `Chain`). A resume may rebuild the borrow
+cells of a moved record's witness (frozen copies of views), which the world's record then holds
+(`BINDER.md` §3.2). -/
+def RecUpTo (x x' : SRec) : Prop :=
+  x'.1.le = x.1.le ∧ x'.1.v = x.1.v ∧ x'.1.T = x.1.T ∧ x'.1.δ = x.1.δ ∧ x'.2 = x.2 ∧
+    ∀ (l : BoCa.Loc) (u : Val), x'.1.R.get l = some (CellU.ownOf u) ↔ x.1.R.get l = some (CellU.ownOf u)
+
+/-- **The extension keeps the records `ρ`'s `imm` cells are coherent with**: every record of `ls`
+relevant to `ρ` (`Rel`: an `imm` cell of `ρ` at its place or at a chain position of it) is in `ls'`,
+up to `RecUpTo`. `Ext` keeps such records for the resource it is taken at; the `U` clause takes
+`Ext` at the retained part and this at the dropped views. -/
+def KeepsS (ls ls' : List SRec) (ρ : WRes) : Prop :=
+  ∀ x ∈ ls, Rel x.1 ρ → ∃ x' ∈ ls', RecUpTo x x'
 
 /-! ### The instantiation -/
 
@@ -258,27 +347,32 @@ def InstAt (αs : List Life) (ι : Inst) : Prop :=
 
 /-- **W's `U` clause over instantiations, at the stack itself** (`binder0`). The resource splits into
 the views it holds and a part strictly above the outermost lend. At every instantiation of the
-stack's internal lifetimes, and every extension of the instantiated list that keeps
-`RecsOutside`, that part, handed the views at the instantiated stack, is in `P` at the
-instantiated reading. -/
+stack's internal lifetimes, and every extension of the instantiated list that keeps the records
+the retained part (`Ext`) and the dropped views (`KeepsS`) are coherent with and keeps
+`RecsOutside`, that part, handed the views at the instantiated stack, is in `P` at the instantiated
+reading. -/
 def RelendI (δ : LSub) (σ : LStack) (P : LSub → List Life → List SRec → WProp)
     (αs : List Life) (ls : List SRec) : WProp := fun ρ =>
   ∃ ds ρz ρn, ResU.CompS ρz ρn ρ ∧ vwSL (extS δ σ αs) σ ds αs ls ρn ∧ stratS αs ρz ∧
-    ∀ ι, InstAt αs ι → ∀ ls', Ext (ι.recs ls) ls' ρz → RecsOutside (ι.life αs) ls' →
+    ∀ ι, InstAt αs ι → ∀ ls', Ext (ι.recs ls) ls' ρz → KeepsS (ι.recs ls) ls' ρn →
+      RecsOutside (ι.life αs) ls' →
       (vwSL (extS (ι.sub δ) σ (ι.life αs)) σ ds (ι.life αs) ls' ─⋆
         P (ι.sub δ) (ι.life αs) ls') ρz
 
-/-- **W's `U` clause over instantiations and futures** (`cbpv`, `binder`): `RelendU` with the
-re-lend replaced by an instantiation. -/
+/-- **W's `U` clause over instantiations and futures** (`cbpv`, `binder`; the next unit's):
+`RelendU` with the re-lend replaced by an instantiation, its futures at `FutOKI`, its own lend at
+`OwnPushI`, fresh below the records and the reading as the `∀` clause's is. -/
 def RelendUI (fut own : Bool) (δ : LSub) (σ : LStack) (C : CTy)
     (P : LStack → LSub → List Life → List SRec → WProp) (αs : List Life) (ls : List SRec) :
     WProp := fun ρ =>
   ∃ ds ρz ρn, ResU.CompS ρz ρn ρ ∧ vwSL (extS δ σ αs) σ ds αs ls ρn ∧ stratS αs ρz ∧
-    ∀ ι, InstAt αs ι → ∀ ls', Ext (ι.recs ls) ls' ρz → RecsOutside (ι.life αs) ls' →
-      ∀ σ' αs'', FutQ fut (ι.sub δ) ρz (σ, ι.life αs) (σ', αs'') → FutAvoids C σ σ' →
+    ∀ ι, InstAt αs ι → ∀ ls', Ext (ι.recs ls) ls' ρz → KeepsS (ι.recs ls) ls' ρn →
+      RecsOutside (ι.life αs) ls' →
+      ∀ σ' αs'', FutQI fut (ι.sub δ) ρz (σ, ι.life αs) (σ', αs'') → FutAvoids C σ σ' →
         (vwSL (extS (ι.sub δ) σ (ι.life αs)) σ ds (ι.life αs) ls' ─⋆
           P σ' (ι.sub δ) αs'' ls') ρz ∧
-        (own = true → ∀ (e : LEnt) (a : Life), OwnPush (ι.sub δ) C ρz (σ', αs'') e a →
+        (own = true → ∀ (e : LEnt) (a : Life), OwnPushI (ι.sub δ) C ρz (σ', αs'') e a →
+          RecsOutside (a :: αs'') ls' → SubFresh (ι.sub δ) a →
           (vwSL (extS (ι.sub δ) σ (ι.life αs)) σ ds (ι.life αs) ls' ─⋆
             P (e :: σ') (ι.sub δ) (a :: αs'') ls') ρz)
 
@@ -310,9 +404,17 @@ def InternalOfBound : Prop :=
     StackOK σ αs → OuterBelowTop αs → Δ.Models (extS δ σ αs) → BoundBelowV Δ σ y →
     InternalVar δ σ αs y
 
-/-- **An own lend is below `⊤`**: `OwnPush` reads the bound's `LtLife`, `a ⊏ @c ⊑ ⊤`. -/
+/-- **The semantic set is inside what the frozen computation bound**: at an index keeping
+`SubOutside`, an internal variable is a stack variable or was bound after the outermost lend. So the
+instantiation moves no variable bound outside the frozen computation. The converse does not hold:
+a variable bound inside may be read above the cut, and every instantiation fixes it. -/
+def InternalBoundInside : Prop :=
+  ∀ (δ : LSub) (σ : LStack) (αs : List Life) (y : LifeVar), StackOK σ αs → SubOutside σ αs δ →
+    InternalVar δ σ αs y → BoundInside δ σ y
+
+/-- **An own lend is below `⊤`**: `OwnPushI` reads the bound's `LtLife`, `a ⊏ @c ⊑ ⊤`. -/
 def OwnPushBelowTop : Prop :=
-  ∀ (δ : LSub) (C : CTy) (ρ : WRes) (s : Stk) (e : LEnt) (a : Life), OwnPush δ C ρ s e a → a < ⊤
+  ∀ (δ : LSub) (C : CTy) (ρ : WRes) (s : Stk) (e : LEnt) (a : Life), OwnPushI δ C ρ s e a → a < ⊤
 
 /-! ### The models at an instantiation (replacing `BoundsStackFree`) -/
 
@@ -398,11 +500,39 @@ def ExtInst : Prop :=
   ∀ (ls ls' : List SRec) (ρ : WRes) (αs : List Life) (ι : Inst), InstAt αs ι → stratS αs ρ →
     Ext ls ls' ρ → Ext (ι.recs ls) (ι.recs ls') ρ
 
+/-- **The views' records are kept along a composite instantiation**: the records the first views
+are coherent with, kept by the first extension, are kept by the second, since the handed views
+have `imm` cells at the same places and `Rel` reads no substitution or frame lifetime. -/
+def KeepsSComp : Prop :=
+  ∀ (s s' : LSub) (σ : LStack) (ds : List Bool) (αs αs' : List Life)
+    (ls lsv ls₁ ls₂ : List SRec) (ρn ρv : WRes) (ι₁ ι₂ : Inst),
+    vwSL s σ ds αs ls ρn → vwSL s' σ ds αs' lsv ρv →
+    KeepsS (ι₁.recs ls) ls₁ ρn → KeepsS (ι₂.recs ls₁) ls₂ ρv → KeepsS (ι₂.recs (ι₁.recs ls)) ls₂ ρn
+
 /-- **An instantiation keeps `RecsOutside`**: the moved records and the moved lends move together,
 and a record left alone outlives every moved lend. -/
 def RecsOutsideInst : Prop :=
   ∀ (αs : List Life) (ls : List SRec) (ι : Inst), InstAt αs ι → RecsOutside αs ls →
     RecsOutside (ι.life αs) (ι.recs ls)
+
+/-- **An instantiation keeps `SubOutside`**: it moves the readings and the lend lifetimes by one
+strictly monotone map. -/
+def SubOutsideInst : Prop :=
+  ∀ (σ : LStack) (αs : List Life) (δ : LSub) (ι : Inst), SubOutside σ αs δ →
+    SubOutside σ (ι.life αs) (ι.sub δ)
+
+/-- **The own lend opens `SubOutside`**: pushed fresh below the reading, under a variable new to the
+stack, it has before it exactly the reading's bindings, and every older lend's bindings are as
+they were. -/
+def SubOutsidePush : Prop :=
+  ∀ (σ : LStack) (αs : List Life) (δ : LSub) (e : LEnt) (α : Life), e.x ∉ σ.map LEnt.x →
+    SubOutside σ αs δ → SubFresh δ α → SubOutside (e :: σ) (α :: αs) (δ.extend e.x α)
+
+/-- **A binding new to the stack keeps `SubOutside`**: the `∀` clause's instance is bound after every
+lend. -/
+def SubOutsideExtend : Prop :=
+  ∀ (σ : LStack) (αs : List Life) (δ : LSub) (x : LifeVar) (α : Life), x ∉ σ.map LEnt.x →
+    SubOutside σ αs δ → SubOutside σ αs (δ.extend x α)
 
 /-- **The stack's entries in a judgement are entries of it at an instantiation**: the own lend's
 bound is read at the instantiated reading (`Restrat.Emb.ltLife_mapN_iff`). -/
@@ -421,15 +551,75 @@ def ShareReLendInst : Prop :=
     ∃ ι : Inst, InstAt (αi ++ αo) ι ∧ ι.life (αi ++ αo) = (Inst.ofEmb θ).life αi ++ αo ∧
       (∀ δ, ι.sub δ = (Inst.ofEmb θ).sub δ) ∧ ι.recs ls = (Inst.ofEmb θ).recs ls
 
+/-- **The share's instantiation fixes every variable bound before the part it moves**: at an index
+keeping `SubOutside`, an instantiation at the cut of the inner part `σi` (the ghost-ended entries)
+fixes the reading of every binding made before `σi`'s outermost entry. A resumer's variables are
+such bindings, so the resumed continuation reads them at the resumer's lifetimes. -/
+def SharedReadFixed : Prop :=
+  ∀ (σi σo : LStack) (αi αo : List Life) (δ : LSub) (ci : Life) (θ : Restrat.Emb ci) (eo : LEnt),
+    αi.length = σi.length → cutOf αi = some ci → σi.getLast? = some eo →
+    SubOutside (σi ++ σo) (αi ++ αo) δ →
+    ∀ p ∈ boundBefore eo.x δ, θ (OrderDual.toDual p.2) = OrderDual.toDual p.2
+
+/-! ### The revised arising set: lends fresh below the records -/
+
+/-- **A 6.65 lend opened, fresh below the records**: `LendMut`, its lifetime below every record's
+frame lifetime and reading. -/
+def LendMutI (c c' : Cfg) (e : LEnt) : Prop :=
+  LendMut c c' e ∧ ∀ α ∈ c'.αs.head?, LendFresh c.ls α
+
+/-- **A 6.64 lend opened, fresh below the records.** -/
+def LendImmI (c c' : Cfg) (e : LEnt) : Prop :=
+  LendImm c c' e ∧ ∀ α ∈ c'.αs.head?, LendFresh c.ls α
+
+mutual
+/-- **The configurations that arise at W, revised**: `Arises` with its lends at `LendMutI` and
+`LendImmI`. Its direction is `Arises`'s: not established (DESIGN §11). -/
+inductive ArisesI : Cfg → Prop where
+  | nil {fρ ρf ρ : WRes} {ps : List FrameRec} {ls : List SRec} :
+      TW fρ ps (rsOf ls) → Tagged fρ ps ls → ResU.Hash ρf ρ → ResU.CompS ρf ρ fρ →
+      ArisesI ⟨fρ, ρf, ρ, ps, ls, [], []⟩
+  | run {c c' : Cfg} {Δ : LifeCtx} {Γ : Ctx VTy} {e₀ : Expr} {j : Jdg} {γ : List Val}
+      {t : Expr} :
+      ArisesI c → ProbeRules Δ Γ e₀ j → ArisesCtxI c Γ γ →
+      RunEnd (ℍ := ℍ) c (substAll γ e₀) c' t → ArisesI c'
+  | part {c : Cfg} {ρ₁ ρ₂ ρf' : WRes} :
+      ArisesI c → ResU.CompS ρ₁ ρ₂ c.ρ → ResU.CompS c.ρf ρ₂ ρf' → ResU.Hash ρf' ρ₁ →
+      ArisesI ⟨c.fρ, ρf', ρ₁, c.ps, c.ls, c.σ, c.αs⟩
+  | lendMut {c c' : Cfg} {e : LEnt} : ArisesI c → LendMutI c c' e → ArisesI c'
+  | lendImm {c c' : Cfg} {e : LEnt} : ArisesI c → LendImmI c c' e → ArisesI c'
+  | hide {c : Cfg} (N : UInt32 → Bool) :
+      ArisesI c → ArisesI ⟨c.fρ, c.ρf, c.ρ, c.ps, c.ls, hideS N c.σ, c.αs⟩
+/-- **The values that arise at a configuration, revised.** -/
+inductive ArisesVI : Cfg → Val → VTy → Prop where
+  | ret {c c' : Cfg} {Δ : LifeCtx} {Γ : Ctx VTy} {e₀ : Expr} {j : Jdg} {S : Row} {A : VTy}
+      {γ : List Val} {v : Val} :
+      ArisesI c → ProbeRules Δ Γ e₀ j → jdgCty j = CTy.effOf S A → ArisesCtxI c Γ γ →
+      RunEnd (ℍ := ℍ) c (substAll γ e₀) c' (.val v) → ArisesVI c' v A
+  | view {c c' : Cfg} {e : LEnt} {ψ : CellU BoCa.Loc Val} {ρc ρf' : WRes} :
+      ArisesI c → (LendMutI c c' e ∨ LendImmI c c' e) →
+      ResU.CompS (ResU.single e.l ψ) ρc c'.ρ → ResU.CompS c'.ρf ρc ρf' →
+      ArisesVI (c'.at ρf' (ResU.single e.l ψ)) (.loc e.l) (viewTy e)
+/-- **A run's captured values arise at its start, slot by slot, revised.** -/
+inductive ArisesCtxI : Cfg → Ctx VTy → List Val → Prop where
+  | nil {c : Cfg} : c.ρ = PMap.empty → ArisesCtxI c [] []
+  | dead {c : Cfg} {s : Slot VTy} {Γ : Ctx VTy} {w : Val} {γ : List Val} :
+      s.live = false → ArisesCtxI c Γ γ → ArisesCtxI c (s :: Γ) (w :: γ)
+  | live {c : Cfg} {s : Slot VTy} {Γ : Ctx VTy} {w : Val} {γ : List Val} {ρ₁ ρ₂ ρf₁ ρf₂ : WRes} :
+      s.live = true → ResU.CompS ρ₁ ρ₂ c.ρ → ResU.CompS c.ρf ρ₂ ρf₁ → ResU.CompS c.ρf ρ₁ ρf₂ →
+      ArisesVI (c.at ρf₁ ρ₁) w s.ty → ArisesCtxI (c.at ρf₂ ρ₂) Γ γ →
+      ArisesCtxI c (s :: Γ) (w :: γ)
+end
+
 /-- **A configuration that arises carries its frame, its local part and a valid world.** -/
 def ArisesInv : Prop :=
-  ∀ c : Cfg, Arises (ℍ := ℍ) c →
+  ∀ c : Cfg, ArisesI (ℍ := ℍ) c →
     ResU.Hash c.ρf c.ρ ∧ ResU.CompS c.ρf c.ρ c.fρ ∧ ResU.Valid c.fρ
 
-/-- **The records' invariants arise**, at the revised `Arises` whose lends carry `LendFresh`. -/
-def RecsOutsideArises : Prop := ∀ c : Cfg, Arises (ℍ := ℍ) c → RecsOutside c.αs c.ls
+/-- **The records' invariants arise**, at the revised arising set, whose lends carry `LendFresh`. -/
+def RecsOutsideArises : Prop := ∀ c : Cfg, ArisesI (ℍ := ℍ) c → RecsOutside c.αs c.ls
 
-def RecsInsideOwnArises : Prop := ∀ c : Cfg, Arises (ℍ := ℍ) c → RecsInsideOwn c.σ c.αs c.ls
+def RecsInsideOwnArises : Prop := ∀ c : Cfg, ArisesI (ℍ := ℍ) c → RecsInsideOwn c.σ c.αs c.ls
 
 /-! ### The guard's run invariant: the local bundle -/
 
@@ -472,17 +662,29 @@ def PVLStart : Prop :=
     vwEW s' e true α ls a → PlaceViewsL s' (e :: σ) (α :: αs) ls a →
     ResU.CompS ρ a R → PlaceViewsL s' (e :: σ) (α :: αs) ls R
 
+/-- **The end of a lend**: the callback's result, with the guard's views at the pushed stack and no
+cell at the lent place at any depth (the view went back to the lender), joined to what the lender
+gets back (the owner, an `own` cell, and the payload, whose cells at the stack's places are views
+at the outer stack), has the guard's views at the outer stack, read at the outer reading. The two
+readings agree at the outer entries' payload types. -/
+def PVLEnd : Prop :=
+  ∀ (s s' : LSub) (σ : LStack) (αs : List Life) (ls : List SRec) (e : LEnt) (α : Life)
+    (ρ' a R : WRes), StackOK (e :: σ) (α :: αs) →
+    (∀ e' ∈ σ, ∀ y, VFree y e'.T → s'.find? y = s.find? y) →
+    PlaceViewsL s' (e :: σ) (α :: αs) ls ρ' → (∀ ψ, ¬ DeepAt ρ' e.l ψ) →
+    PlaceViewsL s σ αs ls a → ResU.CompS ρ' a R → PlaceViewsL s σ αs ls R
+
 /-- **A handler keeps the guard's views**: they read no entry's row. -/
 def PVLHide : Prop :=
   ∀ (N : UInt32 → Bool) (s : LSub) (σ : LStack) (αs : List Life) (ls : List SRec) (ρ : WRes),
     PlaceViewsL s σ αs ls ρ → PlaceViewsL s (hideS N σ) αs ls ρ
 
 /-- **A future keeps the guard's views**: the inserted entries' places are new and hold no cell of
-the resource (the revised `FutOK.placesFree`), the old entries' payload types read the same, and
-the list's records above the resource's cells are kept. -/
+the resource (`FutOKI.placesFree`), the old entries' payload types read the same, and the list's
+records above the resource's cells are kept. -/
 def PVLFut : Prop :=
   ∀ (δ : LSub) (σ σ' : LStack) (αs αs' : List Life) (ls ls' : List SRec) (ρ : WRes),
-    StackOK σ αs → Fut δ ρ (σ, αs) (σ', αs') → Ext ls ls' ρ →
+    StackOK σ αs → FutI δ ρ (σ, αs) (σ', αs') → Ext ls ls' ρ →
     PlaceViewsL (extS δ σ αs) σ αs ls ρ → PlaceViewsL (extS δ σ' αs') σ' αs' ls' ρ
 
 /-- **The table and the guard's views at an instantiation**: a part above the outermost lend, handed
@@ -509,11 +711,11 @@ def PVLResume : Prop :=
     PlaceViewsL s (σi ++ σo) (αi ++ αo) ls R'
 
 /-- **The guard's views are the stack's run invariant**: one fact per transition of W's semantics
-(the nil index, a part, a run, a lend's start, a handler) and per configuration the relation
-quantifies over (an instantiation, a future, the resume composite). -/
+(the nil index, a part, a run, a lend's start and end, a handler) and per configuration the
+relation quantifies over (an instantiation, a future, the resume composite). -/
 def PVLBundle : Prop :=
-  PVLNil ∧ PVLParts ∧ PVLUpd ∧ PVLRuns (ℍ := ℍ) ∧ PVLStart ∧ PVLHide ∧ GuardInst ∧ PVLFut ∧
-    PVLResume
+  PVLNil ∧ PVLParts ∧ PVLUpd ∧ PVLRuns (ℍ := ℍ) ∧ PVLStart ∧ PVLEnd ∧ PVLHide ∧ GuardInst ∧
+    PVLFut ∧ PVLResume
 
 /-! ### The equivariance the thaw needs -/
 
@@ -578,13 +780,16 @@ def RecFixed (c : Life) (x : SRec) : Prop :=
 
 /-- **A supported `Mut` payload is fixed by an instantiation whose cut is at or below its stratum.**
 This is the case of `mut_not_natural`'s shape that the instantiation meets: the cell is not moved,
-and its stored invariant is re-read at the instantiated reading. The records it reads are those
-longer-lived than the cell, which the instantiation leaves alone. -/
+and its stored invariant is re-read at the instantiated reading. Both parts of Core's `ptoMutS` at
+the instantiated reading: the stored predicate, at the records longer-lived than the cell, which
+the instantiation leaves alone; and its support in `Res_b` at every list, whose records may sit in
+the instantiation's gap, where `CohE` and `TyEq` read them. -/
 def MutPayloadInst : Prop :=
   ∀ (T : VTy) (ls₀ : List SRec) (s : LSub) (b c : Life) (θ : Restrat.Emb c), CoreStable T →
     c ≤ b → (∀ x ∈ ls₀, RecFixed c x) → (∀ ls' u σ', vC true T ls' s u σ' → σ'.InStratum b) →
-    ∀ u σ', vC true T (Inst.recs (Inst.ofEmb θ) ls₀) (Inst.sub (Inst.ofEmb θ) s) u σ' ↔
-      vC true T ls₀ s u σ'
+    (∀ u σ', vC true T (Inst.recs (Inst.ofEmb θ) ls₀) (Inst.sub (Inst.ofEmb θ) s) u σ' ↔
+      vC true T ls₀ s u σ') ∧
+    ∀ ls' u σ', vC true T ls' (Inst.sub (Inst.ofEmb θ) s) u σ' → σ'.InStratum b
 
 /-- **`MutPayloadInst` at every payload type**: the excluded case of the partial result. At
 `T = U C` it is the `Mut (U C)` leaf at an instantiation, where Core's `U` clause reads its
@@ -592,13 +797,14 @@ argument contravariantly (`Restrat.Open.WpNatural`'s question). Stated, not deri
 def MutPayloadInstAll : Prop :=
   ∀ (T : VTy) (ls₀ : List SRec) (s : LSub) (b c : Life) (θ : Restrat.Emb c),
     c ≤ b → (∀ x ∈ ls₀, RecFixed c x) → (∀ ls' u σ', vC true T ls' s u σ' → σ'.InStratum b) →
-    ∀ u σ', vC true T (Inst.recs (Inst.ofEmb θ) ls₀) (Inst.sub (Inst.ofEmb θ) s) u σ' ↔
-      vC true T ls₀ s u σ'
+    (∀ u σ', vC true T (Inst.recs (Inst.ofEmb θ) ls₀) (Inst.sub (Inst.ofEmb θ) s) u σ' ↔
+      vC true T ls₀ s u σ') ∧
+    ∀ ls' u σ', vC true T ls' (Inst.sub (Inst.ofEmb θ) s) u σ' → σ'.InStratum b
 
 /-- **Core's relation is kept by an instantiation at a resource it fixes**: at a type read without a
 thunk, at a resource all of whose cells are at or above the cut, it holds at the instantiated
 reading and list. W's leaves off the stack's places, at the part a `U` value retains, are its
-instances. -/
+instances. Its `Mut` case is `MutPayloadInst`, both parts. -/
 def InstEquivLeaf : Prop :=
   ∀ (A : VTy) (b : Bool) (αs : List Life) (ls : List SRec) (s : LSub) (v : Val) (ρ : WRes)
     (c : Life) (θ : Restrat.Emb c), cutOf αs = some c → RecsOutside αs ls → CoreStable A →
@@ -615,15 +821,33 @@ def InstEquivLeafAll : Prop :=
 
 /-- **A view slot is re-established from the view handed at the instantiation.** This is what the
 instantiation asks in place of naturality. The slot's cell is not moved: it is dropped, and the view
-handed at the instantiated reading re-establishes the slot by `TyEq` and the exact lifetime. The
-stored invariant of the dropped cell is never read. -/
+handed at the instantiated reading re-establishes the slot by `TyEq` and the exact lifetime; at
+`Imm`, against the slot's coherence record moved (`CohEInst`) and kept by the extension
+(`KeepsS`, since the record is relevant to the slot's `imm` cell). The stored invariant of the
+dropped cell is never read. -/
 def ViewSlotInst : Prop :=
   ∀ (σ : LStack) (αs : List Life) (s : LSub) (ls ls' : List SRec) (A : VTy) (l : BoCa.Loc)
     (e : LEnt) (α : Life) (ρ ρv : WRes) (ι : Inst),
-    innerAt σ αs l = some (e, α) → ι.recs ls ⊆ ls' →
+    innerAt σ αs l = some (e, α) → InstAt αs ι → RecsOutside αs ls → KeepsS (ι.recs ls) ls' ρ →
     vC true A ls s (.loc l) ρ → CohS σ αs s A (.loc l) ρ →
     vwEW (ι.sub s) e true (ι.life1 α) ls' ρv →
     vC true A ls' (ι.sub s) (.loc l) ρv ∧ CohS σ (ι.life αs) (ι.sub s) A (.loc l) ρv
+
+/-! ### The records at a resume -/
+
+/-- **A moved record meets `TW.immFrame`'s per-record premises, its witness kept**: `AdmWf`, `vShape`
+and the witness's stratum, at the instantiated reading and frame lifetime. They read the reading and
+the lifetime only through lower bounds, which the instantiation lowers. Whether the world's
+re-opened frame holds the kept witness is another question (`BINDER.md` §3.2): a frozen copy of a
+view in the witness is rebuilt at the resume, and the lender may have written inside the payload
+between the stop and the resume. `Tagged`'s `FrameLife` at the re-opened world is statement 2's
+(§3.7). -/
+def MovedRecPremises : Prop :=
+  ∀ (x : SRec) (c : Life) (θ : Restrat.Emb c), x.2 < c →
+    AdmWf x.1.T x.1.δ → vShape x.1.T x.1.δ x.1.v x.1.R → x.1.R.InStratum (LSet.singleton x.2).join →
+    AdmWf x.1.T (Restrat.LSub.mapN θ.toNat x.1.δ) ∧
+      vShape x.1.T (Restrat.LSub.mapN θ.toNat x.1.δ) x.1.v x.1.R ∧
+      x.1.R.InStratum (LSet.singleton (θ x.2)).join
 
 /-! ### The arising check of `k`: PlaceViews at the world -/
 
@@ -658,9 +882,9 @@ def PVWHide : Prop :=
   ∀ (N : UInt32 → Bool) (σ : LStack) (αs : List Life) (W : WRes), PlaceViewsW σ αs W →
     PlaceViewsW (hideS N σ) αs W
 
-/-- **PlaceViews holds at the world of every configuration that arises.** It is used only to
-exclude `k`. -/
-def PVArises : Prop := ∀ c : Cfg, Arises (ℍ := ℍ) c → PlaceViewsW c.σ c.αs c.fρ
+/-- **PlaceViews holds at the world of every configuration of the revised arising set.** It is used
+only to show that `k` is not in that set. -/
+def PVArises : Prop := ∀ c : Cfg, ArisesI (ℍ := ℍ) c → PlaceViewsW c.σ c.αs c.fρ
 
 /-- **The local part reads it**: a top-level `mut` cell of a part of a valid world is the world's
 cell at its place (`ex` of the part is a `●`-factor of `ex` of the world, and a `mut` cell composes
@@ -670,33 +894,35 @@ def PVLocal : Prop :=
     ∀ (l : BoCa.Loc) (ψ : CellU BoCa.Loc Val), ρ.get l = some ψ → ψ.kind = Kind.mut →
       fρ.FlatAt l ψ
 
-/-- **`k` does not arise**: no configuration that arises has `k`'s stack, lifetimes and local part. -/
-def KNotArises : Prop :=
-  ∀ c : Cfg, Arises (ℍ := ℍ) c → c.σ = kσ → c.αs = [kα] → c.ρ ≠ kρ
+/-- **`k` is not in the revised arising set**: no configuration of `ArisesI` has `k`'s stack,
+lifetimes and local part. So a refutation at `k` cannot pass DESIGN §11. It does not say that `k`
+does not arise: `ArisesI` is not shown to over-approximate what arises. -/
+def KNotInArises : Prop :=
+  ∀ c : Cfg, ArisesI (ℍ := ℍ) c → c.σ = kσ → c.αs = [kα] → c.ρ ≠ kρ
 
 /-- **`k`'s slot fails W's `Mut` leaf**: its payload `1` is not the entry's `Unk` up to the reading
 (`CohS`). With `KNotViewAt`, `k_reached`'s third conjunct is false at W. -/
 def KSlotNotW : Prop :=
   ∀ δ : LSub, ¬ CohS kσ [kα] (extS δ kσ [kα]) (.mut (.var 0) .unit) (.loc 0) kρ
 
-/-- **`k`'s entry is not the own lend at `kC`** under the revised `OwnPush`: its payload `Unk` is not
-the callback's view payload `1`. -/
+/-- **`k`'s entry is not the own lend at `kC`** under `OwnPushI`: its payload `Unk` is not the
+callback's view payload `1`. -/
 def KNotViewAt : Prop := ¬ ViewAt 0 kEnt (.mut (.var 0) .unit)
 
 /-! ### The known risk: `mut_not_natural` -/
 
-/-- **The shape of `mut_not_natural`'s witness arises at W**: a 6.65 entry `x` at `2` whose payload
-type is `Imm 'b 1`, `'b` the variable of a 6.64 entry `b` at `1` outside it, both on the stack. The
-cell at `x`'s place is `x`'s view at the stack's reading, its witness holds `b`'s `imm` cell at
-`1`, and the place is a value that arises at `x`'s view type. Evidence that the shape is reachable,
-not a refutation. -/
+/-- **The shape of `mut_not_natural`'s witness at W**: a 6.65 entry `x` at `2` whose payload type is
+`Imm 'b 1`, `'b` the variable of a 6.64 entry `b` at `1` outside it, both on the stack, at a
+configuration of the revised arising set. The cell at `x`'s place is `x`'s view at the stack's
+reading, its witness holds `b`'s `imm` cell at `1`, and the place is a value of that set at `x`'s
+view type. Evidence that the shape is reachable, not a refutation. -/
 def InternalPayloadArises : Prop :=
   ∃ (c : Cfg) (x b : LEnt) (u : Val) (δ : LSub) (ψ ψb : CellU BoCa.Loc Val) (ρf' : WRes),
-    Arises (ℍ := ℍ) c ∧ c.σ = [x, b] ∧ c.αs = [lifeN 2, lifeN 1] ∧ x.k = .mut ∧ b.k = .imm u ∧
+    ArisesI (ℍ := ℍ) c ∧ c.σ = [x, b] ∧ c.αs = [lifeN 2, lifeN 1] ∧ x.k = .mut ∧ b.k = .imm u ∧
     x.T = .imm (.var b.x) .unit ∧ c.ρ.get x.l = some ψ ∧
     vwEW (extS δ c.σ c.αs) x true (lifeN 2) c.ls (ResU.single x.l ψ) ∧
     ψ.wit.get b.l = some ψb ∧ ψb.kind = Kind.imm ∧ ψb.at = lifeN 1 ∧
-    ArisesV (ℍ := ℍ) (c.at ρf' (ResU.single x.l ψ)) (.loc x.l) (viewTy x)
+    ArisesVI (ℍ := ℍ) (c.at ρf' (ResU.single x.l ψ)) (.loc x.l) (viewTy x)
 
 /-- `InternalPayloadArises`'s entries, at concrete places and variables: `x` lends the place `0` at
 `'0`, payload `Imm '1 1`; `b` lends the place `1` at `'1`, payload `1`, kind `imm ()`. -/
@@ -715,16 +941,31 @@ abbrev mwTy : VTy := .mut (.var 0) (.imm (.var 1) .unit)
 abbrev mwι : Inst := Inst.ofEmb (Restrat.Emb.shift ⊤ 1)
 
 /-- **`ViewSlotInst` at the witness**: at `mut_not_natural`'s own map, the slot holding `x`'s view
-at `Mut '0 (Imm '1 1)` is re-established from the view handed at the instantiated reading. It is
-meant at `InternalPayloadArises`'s configuration, the slot `m` holding `x`'s view. -/
+at `Mut '0 (Imm '1 1)` is re-established from the view handed at the instantiated reading.
+`MutWitnessThawsInhabited` meets its hypotheses at a configuration of `InternalPayloadArises`'s
+shape. -/
 def MutWitnessThaws : Prop :=
   InstAt mwαs mwι ∧
-  ∀ (δ : LSub) (ls ls' : List SRec) (ρ ρv : WRes), mwι.recs ls ⊆ ls' →
+  ∀ (δ : LSub) (ls ls' : List SRec) (ρ ρv : WRes), RecsOutside mwαs ls →
+    KeepsS (mwι.recs ls) ls' ρ →
     vC true mwTy ls (extS δ mwσ mwαs) (.loc mwX.l) ρ →
     CohS mwσ mwαs (extS δ mwσ mwαs) mwTy (.loc mwX.l) ρ →
     vwEW (mwι.sub (extS δ mwσ mwαs)) mwX true (mwι.life1 (lifeN 2)) ls' ρv →
     vC true mwTy ls' (mwι.sub (extS δ mwσ mwαs)) (.loc mwX.l) ρv ∧
       CohS mwσ (mwι.life mwαs) (mwι.sub (extS δ mwσ mwαs)) mwTy (.loc mwX.l) ρv
+
+/-- **`MutWitnessThaws`'s hypotheses are met**, at a configuration of the revised arising set with
+`InternalPayloadArises`'s shape at `mwσ`: the slot is `x`'s cell there, its witness holding `b`'s
+`imm` cell at `1`, the list is the configuration's, and a view is handed at the instantiated
+reading. So `MutWitnessThaws` does not hold vacuously at the witness. -/
+def MutWitnessThawsInhabited : Prop :=
+  ∃ (c : Cfg) (δ : LSub) (ψ ψb : CellU BoCa.Loc Val) (ls' : List SRec) (ρv : WRes),
+    ArisesI (ℍ := ℍ) c ∧ c.σ = mwσ ∧ c.αs = mwαs ∧ c.ρ.get mwX.l = some ψ ∧
+    ψ.wit.get mwB.l = some ψb ∧ ψb.kind = Kind.imm ∧ ψb.at = lifeN 1 ∧
+    RecsOutside mwαs c.ls ∧ KeepsS (mwι.recs c.ls) ls' (ResU.single mwX.l ψ) ∧
+    vC true mwTy c.ls (extS δ mwσ mwαs) (.loc mwX.l) (ResU.single mwX.l ψ) ∧
+    CohS mwσ mwαs (extS δ mwσ mwαs) mwTy (.loc mwX.l) (ResU.single mwX.l ψ) ∧
+    vwEW (mwι.sub (extS δ mwσ mwαs)) mwX true (mwι.life1 (lifeN 2)) ls' ρv
 
 /-- **Beside: transport fails at a `coreW` world.** A resource that is part of a tagged `TW` world,
 at which Core's relation holds, and at which it fails once the resource, the reading and the
@@ -742,93 +983,6 @@ stacks: its `val` clause fails at that configuration. A fact about that statemen
 def NotVCNaturalCoreRefutes : Prop :=
   NotVCNaturalCore (ℍ := ℍ) →
     ∀ a : Targets.StkAct (Targets.coreW (ℍ := ℍ)), ¬ Targets.FreezeBinderLife (Targets.coreW (ℍ := ℍ)) a
-
-/-! ### The `U` introductions retried -/
-
-/-- **The context's thaw over instantiations**, at one row's context: at every index `SemS` admits,
-the guard's views and the records' invariant included, a context related at the stack is
-re-lendable over instantiations. -/
-def CtxRelendableAtI (p : Placement) (Δ : LifeCtx) (Γ : Ctx VTy) : Prop :=
-  ∀ (δ : LSub) (σ : LStack) (αs : List Life) (ls : List SRec) (γ : List Val) (ρ : WRes),
-    StackOK σ αs → SubDom δ Δ → Δ.Models (extS δ σ αs) → RecsOutside αs ls → TabAtS σ αs ρ →
-    PlaceViewsL (extS δ σ αs) σ αs ls ρ → gRL p σ δ αs ls Γ γ ρ →
-    RelendI δ σ (fun δ' αs' ls' => gRL p σ δ' αs' ls' Γ γ) αs ls ρ
-
-/-- **The thaw at every context**: the target. -/
-def CtxRelendsAll (p : Placement) : Prop := ∀ (Δ : LifeCtx) (Γ : Ctx VTy), CtxRelendableAtI p Δ Γ
-
-/-- **The thaw at the contexts the partial result handles.** -/
-def CtxRelendsThawFree (p : Placement) : Prop :=
-  ∀ (Δ : LifeCtx) (Γ : Ctx VTy), CtxThawFree Γ → CtxRelendableAtI p Δ Γ
-
-/-- **A `U` value instantiated is a `U` value at the instantiation** (`ThawRelend` over
-instantiations). -/
-def ThawInst (p : Placement) : Prop :=
-  ∀ (σ : LStack) (δ : LSub) (C : CTy) (αs : List Life) (ls : List SRec) (f : Val) (ρ : WRes),
-    StackOK σ αs → RecsOutside αs ls → TabAtS σ αs ρ → PlaceViewsL (extS δ σ αs) σ αs ls ρ →
-    vRL p σ δ (.thunk C) αs ls f ρ →
-    RelendI δ σ (fun δ' αs' ls' => vRL p σ δ' (.thunk C) αs' ls' f) αs ls ρ
-
-/-- **The `U` side of statement 0 at the revised W**: the target. The four rows are statement 0's
-own (`ThunkFRow` …), read at the revised W, with the thaw at every context. -/
-def Statement0UFull (p : Placement) : Prop :=
-  ThawInst (ℍ := ℍ) p ∧ CtxRelendsAll (ℍ := ℍ) p ∧ ThunkFRow (ℍ := ℍ) p ∧
-    ThunkVRow (ℍ := ℍ) p ∧ BangThunkFRow (ℍ := ℍ) p ∧ BangThunkVRow (ℍ := ℍ) p
-
-/-- **`thunk M : U (F A)`** at a context the partial result handles. -/
-def ThunkFRowTF (p : Placement) : Prop :=
-  ∀ (Δ : LifeCtx) (Γ : Ctx VTy) (M : Expr) (A : VTy), CtxThawFree Γ →
-    SemS p Δ (⟨.unit, false⟩ :: Γ) M (.comp (.ret A)) →
-    SemS p Δ Γ (.val (.lam M)) (.val (.thunk (.ret A)))
-
-/-- **`thunk V : U C`** at a context the partial result handles. -/
-def ThunkVRowTF (p : Placement) : Prop :=
-  ∀ (Δ : LifeCtx) (Γ : Ctx VTy) (N : Expr) (C : CTy), CtxThawFree Γ → C.isRet = false →
-    OwnHyg Δ Γ C → SemS p Δ Γ (.val (.lam N)) (.comp C) →
-    SemS p Δ Γ (.val (.lam N)) (.val (.thunk C))
-
-/-- **`!thunk M : !U (F A)`** at a persistent context the partial result handles. -/
-def BangThunkFRowTF (p : Placement) : Prop :=
-  ∀ (Δ : LifeCtx) (Γ : Ctx VTy) (M : Expr) (A : VTy), CtxThawFree Γ → Persistent Γ →
-    SemS p Δ (⟨.unit, false⟩ :: Γ) M (.comp (.ret A)) →
-    SemS p Δ Γ (.val (.lam M)) (.val (.bang (.thunk (.ret A))))
-
-/-- **`!thunk V : !U C`** at a persistent context the partial result handles. -/
-def BangThunkVRowTF (p : Placement) : Prop :=
-  ∀ (Δ : LifeCtx) (Γ : Ctx VTy) (N : Expr) (C : CTy), CtxThawFree Γ → Persistent Γ →
-    C.isRet = false → OwnHyg Δ Γ C → SemS p Δ Γ (.val (.lam N)) (.comp C) →
-    SemS p Δ Γ (.val (.lam N)) (.val (.bang (.thunk C)))
-
-/-- **The `U` side of statement 0 at the contexts `CtxThawFree` admits**: the partial result,
-guarantee gap R1 (`μ`, `fam`) open. -/
-def Statement0UThawFree (p : Placement) : Prop :=
-  ThawInst (ℍ := ℍ) p ∧ CtxRelendsThawFree (ℍ := ℍ) p ∧ ThunkFRowTF (ℍ := ℍ) p ∧
-    ThunkVRowTF (ℍ := ℍ) p ∧ BangThunkFRowTF (ℍ := ℍ) p ∧ BangThunkVRowTF (ℍ := ℍ) p
-
-/-- `μX. 1 ⊕ X`, a list of units: a slot type `CtxThawFree` excludes. -/
-abbrev listTy : VTy := .mu (.sum .unit (.tvar 0))
-
-/-- The type of `Λ'0. λm. λxs. thunk (return (m, xs))`:
-`∀'0 ⊏ ⊤. Mut '0 1 ⊸ μX. 1 ⊕ X ⊸ F (U (F (Mut '0 1 ⊗ μX. 1 ⊕ X)))`. -/
-abbrev scopeC : CTy :=
-  .all 0 .top (.arr (.mut (.var 0) .unit)
-    (.arr listTy (.ret (.thunk (.ret (.tensor (.mut (.var 0) .unit) listTy))))))
-
-/-- The context at the thunk: `xs : μX. 1 ⊕ X`, `m : Mut '0 1`, the `∀`'s slot dead. -/
-abbrev scopeΓ : Ctx VTy := [⟨listTy, true⟩, ⟨.mut (.var 0) .unit, true⟩, ⟨.unit, false⟩]
-
-/-- **`CtxThawFree` excludes a context typing reaches inside a lend.** The closed term
-`Λ'0. λm. λxs. thunk (return (m, xs))` is derived at `scopeC`. Read at `[]`, `binder0`'s `∀`
-clause pushes the own lend of `'0` (`OwnPush`, payload `1`, `qEnt`), and at the pushed stack the
-`U` introduction sits at `scopeΓ`, whose live slot `xs` is a `μ` and whose live slot `m` is the
-lend's view. So the partial result says nothing of this thunk. -/
-def ThawFreeScope : Prop :=
-  CDerives LifeCtx.empty []
-      (.val (.lam (.val (.lam (.val (.lam (.val (.lam (.pair (.var 2) (.var 1))))))))))
-      (.comp scopeC) ∧
-    CDerives kΔ scopeΓ (.val (.lam (.pair (.var 2) (.var 1))))
-      (.val (.thunk (.ret (.tensor (.mut (.var 0) .unit) listTy)))) ∧
-    OwnPush kδ scopeC PMap.empty ([], []) qEnt kα ∧ ¬ CtxThawFree scopeΓ
 
 end ProbeD1
 
