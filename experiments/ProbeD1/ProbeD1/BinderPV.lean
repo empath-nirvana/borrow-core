@@ -541,7 +541,7 @@ theorem no_bound_of_stratS {s : LSub} {σ : LStack} {αs : List Life} {ls : List
 theorem placeViewsL_of_noBound {s : LSub} {σ : LStack} {αs : List Life} {ls : List SRec}
     {ρ : WRes} (h : ∀ l ψ, DeepAt ρ l ψ → ψ.kind ≠ Kind.own → l ∈ σ.map LEnt.l → False) :
     PlaceViewsL s σ αs ls ρ :=
-  ⟨fun l ψ hx ho e α hi => (h l ψ hx.toDeepAt ho (mem_places_of_innerAt hi)).elim,
+  ⟨fun l ψ hx ho _ _ hi => (h l ψ hx.toDeepAt ho (mem_places_of_innerAt hi)).elim,
     fun l ψ hd ho hl => (h l ψ hd ho hl).elim⟩
 
 theorem vwEW_vwE {s : LSub} {e : LEnt} {d : Bool} {α : Life} {ls : List SRec} {ρ : WRes}

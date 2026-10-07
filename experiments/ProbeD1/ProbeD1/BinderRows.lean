@@ -200,7 +200,7 @@ theorem lt_of_cellIn {αs : List Life} {ρ : WRes} (hz : stratS αs ρ) {b : Lif
   exact lt_of_lt_of_le this hle
 
 /-- **The retained part's extension along a composite instantiation.** -/
-theorem ext_inst_comp {αs : List Life} {ι₁ ι₂ : Inst} (h₁ : InstAt αs ι₁)
+theorem ext_inst_comp {αs : List Life} {ι₁ ι₂ : Inst}
     (h₂ : InstAt (ι₁.life αs) ι₂) {ls ls₁ ls₂ : List SRec} {ρz : WRes} (hz : stratS αs ρz)
     (he₁ : Ext (ι₁.recs ls) ls₁ ρz) (hk₁ : KeepsT (ι₁.recs ls) ls₁ ρz)
     (he₂ : Ext (ι₂.recs ls₁) ls₂ ρz) (hk₂ : KeepsT (ι₂.recs ls₁) ls₂ ρz) :
@@ -969,7 +969,7 @@ theorem relendJ_thunk {C : CTy} {δ : LSub} {σ : LStack} {αs : List Life} {ls 
   have hl₃ : ι₃.life αs = ι₂.life (ι.life αs) := by
     simp only [Inst.life, List.map_map]
     exact List.map_congr_left fun a _ => hlife a
-  obtain ⟨he₃, hkt₃⟩ := ext_inst_comp hat hat₂ hz he hkt he₂ hkt₂
+  obtain ⟨he₃, hkt₃⟩ := ext_inst_comp hat₂ hz he hkt he₂ hkt₂
   have hks₃ := keepsSComp _ _ σ ds αs (ι.life αs) ls ls' ls' ls₂ ρn ρv ι ι₂ hn hv hks hks₂
   rw [← hrecs] at he₃ hkt₃ hks₃
   have := H ι₃ hat₃ ls₂ he₃ hkt₃ hks₃ (by rw [hl₃]; exact hro₂) ρv₂ τ₂
@@ -1141,7 +1141,6 @@ theorem thunkF_U_J {Δ : LifeCtx} {Γ : Ctx VTy} (hTF : CtxThawFree Γ) {M : Exp
   refine ⟨ds, ρz, ρn, hc, hn, hz, fun ι hat ls' he hkt hks hro' ρv τ hv hcv => ?_⟩
   obtain ⟨ht', hpv'⟩ := guardInst δ σ ds αs ls ls' ρz ρn ρ ρv τ ι hok hat hz hn hc hpv hv hcv
   have hg' := H ι hat ls' he hkt hks hro' ρv τ hv hcv
-  beta_reduce
   refine wpTS_step (fun μ => Step1N.head (Head.beta μ _ Val.unit) rfl) ls' _ τ ?_
   rw [← GhostEnd.substAll_cons_l]
   exact hM hBL hSc (ι.sub δ) σ (ι.life αs) ls' (Val.unit :: γ) τ (hok.inst ι)
@@ -1166,7 +1165,6 @@ theorem thunkV_U_J {Δ : LifeCtx} {Γ : Ctx VTy} (hTF : CtxThawFree Γ) {N : Exp
     ctxRelendsThawFreeJ Δ Γ hTF δ σ αs ls γ ρ hok hob hSD hMod hro hso ht hpv hg
   refine ⟨ds, ρz, ρn, hc, hn, hz, fun ι hat ls' he hkt hks hro' ρv τ hv hcv => ?_⟩
   obtain ⟨ht', hpv'⟩ := guardInst δ σ ds αs ls ls' ρz ρn ρ ρv τ ι hok hat hz hn hc hpv hv hcv
-  beta_reduce
   rw [forceE_of_not_ret hC]
   exact hN hBL hSc (ι.sub δ) σ (ι.life αs) ls' γ τ (hok.inst ι) (outerBelowTop_inst ι hob)
     (stackJInst σ αs δ Δ Γ C ι hok.1 hJ) (subDom_inst ι hSD) (instModels Δ δ σ αs ι hMod) hro'

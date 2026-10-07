@@ -256,6 +256,66 @@ theorem mutWitnessThaws_met : MutWitnessThawsMet := by
     · obtain ⟨-, rfl⟩ := ResU.single_get_eq_some hψ
       exact ⟨rfl, fun t ht => by simp [CellU.lsOf, CellU.mutOf] at ht⟩
 
+/-! ### `ViewSlotInst` at a type Core reads without a thunk -/
+
+/-- **`ViewSlotInst` at a `CoreStable` slot type, the outermost lend below `⊤`**: the slot at a
+bound place is re-established from the view handed at the instantiation (`vC_mut_bound`,
+`vC_imm_bound`). At any other type `CohS` at a bound place is false. `ViewSlotInst` as stated, at
+every type and with no bound on the outermost lend, is not derived: at an outermost lend at `⊤`
+the cut is `⊤`, which is where `CohEInst` fails (`not_cohEInst`). -/
+def ViewSlotInstCS : Prop :=
+  ∀ (σ : LStack) (αs : List Life) (s : LSub) (ls ls' : List SRec) (A : VTy) (l : BoCa.Loc)
+    (e : LEnt) (α : Life) (ρ ρv : WRes) (ι : Inst), CoreStable A → OuterBelowTop αs →
+    innerAt σ αs l = some (e, α) → InstAt αs ι → RecsOutside αs ls → KeepsS (ι.recs ls) ls' ρ →
+    vC true A ls s (.loc l) ρ → CohS σ αs s A (.loc l) ρ →
+    vwEW (ι.sub s) e true (ι.life1 α) ls' ρv →
+    vC true A ls' (ι.sub s) (.loc l) ρv ∧ CohS σ (ι.life αs) (ι.sub s) A (.loc l) ρv
+
+theorem viewSlotInstCS : ViewSlotInstCS := by
+  intro σ αs s ls ls' A l e α ρ ρv ι hA hob hi hat hro hks hvc hcoh hv
+  have hel : e.l = l := (innerAt_mem hi).2
+  have hco := hcoh l e α rfl hi
+  have hcohI : (∀ ψ, ρv.get l = some ψ → ψ.at = ι.life1 α) →
+      CohKind (ι.sub s) e A → CohS σ (ι.life αs) (ι.sub s) A (.loc l) ρv := by
+    intro hat' hk' l' e' α' hl' hi'
+    cases hl'
+    rw [innerAt_inst_some ι hi] at hi'
+    obtain ⟨rfl, rfl⟩ : e = e' ∧ ι.life1 α = α' := by simpa using hi'
+    exact ⟨hk', hat'⟩
+  have hat' : ∀ ψ, ρv.get l = some ψ → ψ.at = ι.life1 α :=
+    fun ψ hψ => (hv.2 ψ (by rw [hel]; exact hψ)).1
+  cases A with
+  | «mut» a T =>
+      obtain ⟨hkind, hTy⟩ := hco.1
+      have hk : e.k = .mut := by
+        cases hek : e.k with
+        | «mut» => rfl
+        | imm u₀ => rw [hek] at hkind; exact hkind.elim
+      exact ⟨vC_mut_bound ι (T := T) hA hel hk hTy hvc hco.2 hv,
+        hcohI hat' ⟨by rw [hk]; trivial, tyEq_inst ι T hA hTy⟩⟩
+  | imm a T =>
+      obtain ⟨hkind, hTy⟩ := hco.1
+      obtain ⟨u₀, hk⟩ : ∃ u₀, e.k = .imm u₀ := by
+        cases hek : e.k with
+        | «mut» => rw [hek] at hkind; exact hkind.elim
+        | imm u₀ => exact ⟨u₀, rfl⟩
+      exact ⟨vC_imm_bound hat hob (T := T) hA hro hel hk hTy hvc hco.2 hks hv,
+        hcohI hat' ⟨by rw [hk]; trivial, tyEq_inst ι T hA hTy⟩⟩
+  | unit => exact hco.1.elim
+  | zero => exact hco.1.elim
+  | unk => exact hco.1.elim
+  | int _ => exact hco.1.elim
+  | opq _ => exact hco.1.elim
+  | tvar _ => exact hco.1.elim
+  | tensor _ _ => exact hco.1.elim
+  | sum _ _ => exact hco.1.elim
+  | thunk _ => exact hco.1.elim
+  | bang _ => exact hco.1.elim
+  | box _ _ => exact hco.1.elim
+  | ref _ => exact hco.1.elim
+  | mu _ => exact hco.1.elim
+  | fam _ => exact hco.1.elim
+
 end ProbeD1
 
 end
