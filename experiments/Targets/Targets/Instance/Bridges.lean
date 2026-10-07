@@ -46,12 +46,6 @@ theorem noUnwind_comp : ∀ (K₁ K₂ : Kont), (K₁.comp K₂).NoUnwind ↔ K�
   | .seq K _, K₂ | .inj₁ K, K₂ | .inj₂ K, K₂ => by
       simp only [Kont.comp, Kont.NoUnwind, noUnwind_comp K K₂]
 
-theorem fins_comp : ∀ (K₁ K₂ : Kont), (K₁.comp K₂).fins = K₂.fins ++ K₁.fins
-  | .hole, _ => by simp [Kont.comp, Kont.fins]
-  | .appR f K, K₂ => by simp only [Kont.comp, Kont.fins, fins_comp K K₂, List.append_assoc]
-  | .pairL K _, K₂ | .pairR _ K, K₂ | .letpair K _, K₂ | .case K _ _, K₂ | .appL K _, K₂
-  | .seq K _, K₂ | .inj₁ K, K₂ | .inj₂ K, K₂ => by simp only [Kont.comp, Kont.fins, fins_comp K K₂]
-
 theorem fins_of_noUnwind : ∀ (K : Kont), K.NoUnwind → K.fins = []
   | .hole, _ => rfl
   | .appR f K, h => by

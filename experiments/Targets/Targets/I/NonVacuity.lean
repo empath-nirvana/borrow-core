@@ -23,14 +23,6 @@ open BoCa BoCa.Fig16 BoCa.Fig16.BoLo BoCa.Fig16.LogRel BoCa.Fig16.LogRel.Core
 open BoCa.Fig16.LogRel.Core.EffPrograms
 open BoCa.Lifetime (LifeCtx LifeVar)
 
-theorem platformNone_respects : Platform.none.Respects where
-  uniq := List.Pairwise.nil
-  nz := fun _ h => absurd h (by simp [Platform.none])
-  lin := fun _ h => absurd h (by simp [Platform.none])
-  data := fun _ h => absurd h (by simp [Platform.none])
-  total := fun _ _ _ h => absurd h (by simp [Platform.none])
-  typed := fun _ _ _ _ _ h => absurd h (by simp [Platform.none])
-
 /-- `ping : 1 ↠^lin 1`, the operation `0` of the name `9`. -/
 def pingSig : OpSig := ⟨9, 0, .lin, .unit, .unit⟩
 

@@ -476,7 +476,8 @@ theorem _root_.Targets.HeadChain.plug (K₀ : Kont) : ∀ {e e' : Expr} {q : Lis
       HeadChain (ℍ := ℍ) (K₀.plug e) (q.map fun x => (K₀.comp x.1, x.2.1, x.2.2)) (K₀.plug e')
   | _, _, _, .nil => .nil
   | _, _, _, @HeadChain.cons _ _ K a a' _ _ hh hn hq => by
-      have := HeadChain.cons (K := K₀.comp K) hh hn (by rw [Kont.plug_comp]; exact HeadChain.plug K₀ hq)
+      have := HeadChain.cons (K := K₀.comp K) hh hn
+        (by rw [Kont.plug_comp]; exact HeadChain.plug K₀ hq)
       rw [Kont.plug_comp] at this
       exact this
 

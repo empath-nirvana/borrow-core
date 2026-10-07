@@ -73,6 +73,12 @@ def _root_.BoCa.BoLo.Kont.fins : Kont → List Expr
   | .pairL K _ | .pairR _ K | .letpair K _ | .case K _ _ | .appL K _ | .seq K _ | .inj₁ K
   | .inj₂ K => K.fins
 
+theorem fins_comp : ∀ (K₁ K₂ : Kont), (K₁.comp K₂).fins = K₂.fins ++ K₁.fins
+  | .hole, _ => by simp [Kont.comp, Kont.fins]
+  | .appR f K, K₂ => by simp only [Kont.comp, Kont.fins, fins_comp K K₂, List.append_assoc]
+  | .pairL K _, K₂ | .pairR _ K, K₂ | .letpair K _, K₂ | .case K _ _, K₂ | .appL K _, K₂
+  | .seq K _, K₂ | .inj₁ K, K₂ | .inj₂ K, K₂ => by simp only [Kont.comp, Kont.fins, fins_comp K K₂]
+
 /-- The cancel branch of `κ = kappa n H K` after its three administrative steps. -/
 def cancelOf (n : UInt32) (H : Val) (K : Kont) : Expr :=
   ccatchE (hndE H (K.plug (raiseE (.val (cancelVal (n :: K.hndNames) none)))))

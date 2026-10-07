@@ -184,13 +184,6 @@ theorem psteps_none {c c' : Conf Platform.none} (h : PSteps (ℍ := ℍ) Platfor
   | refl => exact .refl _ _
   | tail _ hs ih => exact ih.trans (.one (pstep_none hs))
 
-/-- A machine run is a run under the empty platform. -/
-theorem psteps_of_steps {μ μ' : Heap} {e e' : Expr} (s : Unit) (h : Steps (ℍ := ℍ) μ e μ' e') :
-    PSteps (ℍ := ℍ) Platform.none (⟨μ, e, s⟩ : Conf Platform.none) ⟨μ', e', s⟩ := by
-  induction h with
-  | refl => exact .refl
-  | more h _ ih => exact Relation.ReflTransGen.head (.mach h) ih
-
 /-- **`AdequateRetAt B.coreB Platform.none`.** -/
 theorem adequateRetAt_core_none : AdequateRetAt (ℍ := ℍ) (B.coreB (ℍ := ℍ)) Platform.none := by
   intro S A e hd hle h
@@ -209,7 +202,7 @@ theorem adequateRetAt_core_none : AdequateRetAt (ℍ := ℍ) (B.coreB (ℍ := �
     | refl => exact Or.inl ⟨v, rfl, hD, rfl⟩
     | more h _ => exact Or.inr ⟨⟨_, _, sc⟩, .mach h⟩
   · obtain ⟨v, hs, hD⟩ := hrun c hc
-    exact ⟨⟨Adequacy.emptyMem, .val v, c.s⟩, psteps_of_steps c.s hs, v, rfl, hD, rfl⟩
+    exact ⟨⟨Adequacy.emptyMem, .val v, c.s⟩, psteps_of_steps Platform.none c.s hs, v, rfl, hD, rfl⟩
   · rintro ⟨f, h0, hf⟩
     refine no_infinite_of_wpTS hwp ⟨fun n => ((f n).μ, (f n).e),
       by show ((f 0).μ, (f 0).e) = _; rw [h0]; rfl, fun n => pstep_none (hf n)⟩

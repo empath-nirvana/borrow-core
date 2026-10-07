@@ -75,6 +75,14 @@ structure Platform.Respects (P : Platform) : Prop where
 /-- The platform with no operation. -/
 def Platform.none : Platform := ⟨[], Unit, (), fun _ _ _ _ => Option.none⟩
 
+theorem platformNone_respects : Platform.none.Respects where
+  uniq := List.Pairwise.nil
+  nz := fun _ h => absurd h (by simp [Platform.none])
+  lin := fun _ h => absurd h (by simp [Platform.none])
+  data := fun _ h => absurd h (by simp [Platform.none])
+  total := fun _ _ _ h => absurd h (by simp [Platform.none])
+  typed := fun _ _ _ _ _ h => absurd h (by simp [Platform.none])
+
 /-- A configuration under a platform: memory, term, platform state. -/
 structure Conf (P : Platform) where
   μ : Heap
@@ -93,6 +101,13 @@ inductive PStep (P : Platform) : Conf P → Conf P → Prop
 
 /-- Runs under a platform. -/
 abbrev PSteps (P : Platform) := Relation.ReflTransGen (PStep (ℍ := ℍ) P)
+
+/-- A machine run is a run under every platform, its state unchanged. -/
+theorem psteps_of_steps (P : Platform) (s : P.St) {μ μ' : Heap} {e e' : Expr}
+    (h : Steps (ℍ := ℍ) μ e μ' e') : PSteps (ℍ := ℍ) P ⟨μ, e, s⟩ ⟨μ', e', s⟩ := by
+  induction h with
+  | refl => exact .refl
+  | more h _ ih => exact .head (PStep.mach h) ih
 
 /-- The initial configuration: the empty memory and the platform's initial state. -/
 def init (P : Platform) (e : Expr) : Conf P := ⟨Adequacy.emptyMem, e, P.s₀⟩
