@@ -4,45 +4,25 @@ This is a plain-language summary of where the D1 tractability probe stands. The 
 `README.md` and `DESIGN.md` §15. The Lean is in `ProbeD1/`, and `lake build ProbeD1` builds it.
 
 > [!WARNING]
-> **The verifiers' findings are not resolved yet. Do not rely on the outcomes below until they are.**
-> The hygiene review passed. The content review did **not** pass, and it raised these findings:
+> **Some verifier findings are still open.** The hygiene review passed. The content review raised
+> one major finding and several minor ones.
 >
-> - **Major: the binder0 `U` results may be vacuous.** `thunkFRow_binder0_of`,
->   `thunkVRow_binder0_of`, `bangThunkFRow_binder0_of` and `bangThunkVRow_binder0_of` take
->   `CtxRelendable .binder0` (`Thunk.lean`) as one global hypothesis over every context with the
->   table. Each proof only uses it at the row's own context.
->   - Nothing shows the hypothesis is satisfiable, which breaks CLAUDE.md §4 (prove an added
->     hypothesis non-vacuous and pin its scope).
->   - The README itself describes a case that may break it: a live `Mut` leaf whose cell sits at a
->     stack place, at the innermost lend's lifetime, with a payload other than that entry's view.
->     `TabAtS` allows that cell, but `RelendableS` has nowhere to put it.
->   - If the hypothesis is false, all four results say nothing.
->   - Nobody has built that configuration in Lean, and nobody has checked that the hypothesis is
->     false.
->   - The fix is a per-row hypothesis at the row's own context, shown non-vacuous (for example at
->     `Γ = []`, and at a `U`-slot context through `thawRelend`), or a Lean result that settles
->     `CtxRelendable .binder0` either way.
-> - **Minor findings about wording.** These do not change the Lean, but they do change what the
->   prose claims:
->   - The README says `SemS` "does not give" the context's thaw. No Lean backs that, so it should
->     read "not derived, no obstruction verified". (The claim about Δ's models at a re-lend *is*
->     backed in Lean, by `models_reLend_fails`.)
->   - "Only with" (DESIGN §2.2) and "exactly" (DESIGN §15.3, commit 5751956) claim the conditions
->     are necessary. The Lean shows only that they are sufficient.
->   - At `cbpv`, the callback at `σ·y` is proved only when its bound does not mention the binder. One
->     README sentence states it without that condition.
->   - "One reason at every placement" claims too much. At binder0, statement 0 already stops earlier,
->     at monotonicity. At `cbpv` and `binder`, the `U` introductions have further needs that only
->     those placements have. The only needs every placement shares are the context's thaw and Δ's
->     models at a re-lend.
+> - **Major, now settled: the binder0 `U` results were vacuous.** They took `CtxRelendable .binder0`
+>   as one global hypothesis. That hypothesis is false (`not_ctxRelendable_binder0`,
+>   `Relendability.lean`), so the four results said nothing. They are replaced by per-row forms
+>   (`thunkFRow_binder0_at` and its three siblings) that take `CtxRelendableAt` at the row's own
+>   context. That hypothesis holds at `Γ = []` and at a `U` slot (`ctxRelendableAt_nil`,
+>   `ctxRelendableAt_thunk`), so the rows are not vacuous there. It fails at the configuration the
+>   review described (`not_ctxRelendableAt_k`). See "The two follow-up questions" below.
+> - **Minor findings about wording.** Fixed in the README and DESIGN §15.3: "`SemS` does not give
+>   the thaw", "exactly" and "one reason at every placement". Still open:
+>   - "Only with" (DESIGN §2.2) claims a condition is necessary; the Lean shows only that it is
+>     sufficient.
 >   - Several prose explanations of why a route stopped are written as facts, with no Lean behind
->     them (DESIGN §15.2, §15.3, and the README's note on `MonoG`). They should be marked
->     unchecked.
+>     them (DESIGN §15.2, and the README's note on `MonoG`). They should be marked unchecked.
 >   - DESIGN §13 names `MonoHide binder0` and `MonoC binder0` as the facts that would tell the
 >     placements apart, but the report gives `MonoHide binder0` no status. "`MonoOwnG`'s hypothesis
 >     holds at every use" looks ahead, because `MonoOwnG` has no uses yet.
->   - "Statement 0 did not hold" should read "`Statement0 p` was not proved at any placement".
->     Nothing was refuted.
 >   - The README sentence "it added no way to reach a stack" contradicts itself. The meaning is
 >     that the change adds no way to reach a stack besides `FutQ` and `OwnPush`.
 > - **Minor, scope only.** Commit 14b8592 copies three GhostEnd files onto `targets` unchanged (the
@@ -69,7 +49,7 @@ D1 meets "two algebras that interact only at cuts".
 
 ## Statement 0: what happened
 
-**`Statement0 p` was not proved at any of the three placements. Nothing was refuted.**
+**`Statement0 p` was not proved at any of the three placements. No fact of statement 0 was refuted.**
 
 - **Proved at every placement:** the shared lemmas (`statement0Shared`), `ForceRow`, `ThawRelend`,
   `MonoHideFromMonoV`.
@@ -85,14 +65,45 @@ D1 meets "two algebras that interact only at cuts".
   this placement to stop here.
 - **Not derived anywhere:** the four `U` introductions (`ThunkFRow`, `ThunkVRow`, `BangThunkFRow`,
   `BangThunkVRow`). Two needs are common to every placement:
-  - **the context's thaw** (`CtxRelendable`): not derived, and no obstruction verified;
-  - **Δ's models at a re-lend.** Lean shows a configuration that `SemS` admits where a re-lend does
-    not keep them (`models_reLend_fails`). That configuration is not shown to arise in `TW`.
+  - **the context's thaw** (`CtxRelendableAt`): fails at a configuration W's own clauses reach
+    (see the follow-up questions);
+  - **Δ's models at a re-lend** (`ReLendModels`): fails at a configuration typing reaches (see the
+    follow-up questions).
 
   `cbpv` and `binder` have further needs of their own. One is the context carried to a future that
   inserts between lenders. The other is the names `StackJ` admits after the `FutStep` change.
-- **At `binder0`**, the four `U` rows are proved *given* `CtxRelendable .binder0`, and statement 1's
-  `TabRelend` was proved on the way. **See the warning: that hypothesis may be unsatisfiable.**
+- **At `binder0`**, the four `U` rows are proved given `CtxRelendableAt` at the row's own context,
+  at the configurations whose re-lends keep Δ's models. Statement 1's `TabRelend` was proved on the
+  way.
+
+## The two follow-up questions (`Relendability.lean`, DESIGN §15.6)
+
+**Q1. Can the context always be re-lent?** No, not as `SemS` stands.
+- The configuration `k`: a lend of place `0` whose entry says the payload type is `Unk`, while the
+  context holds `r : Mut '0 1` pointing at place `0` with a cell that stores `1`.
+- The table allows it, `SemS`'s index allows it, and no split puts the cell anywhere, so the context
+  cannot be re-lent there (`not_ctxRelendable_binder0`, `not_ctxRelendableAt_k`, `k_index`).
+- Its world arises in `TW` (`k_world_TW`). Its stack and context are reached by binder0's own `∀`
+  and `⊸` clauses, starting from a closed typed program (`k_reached`). There the `U` clause fails
+  for every closure (`k_thunk_not_vRL`).
+- It is still not an obstruction. No row is refuted: whether the program's own clause fails, once
+  `wpTS` may update the answer's resource, is not derived.
+- **What keeps `k` out of a real run** is the lend's step, not `TW`. A lend opens with the cell at
+  its place equal to the entry's view (`lendMut_placeView`), and `↭` keeps that cell's predicate.
+  `PlaceViews` names this, and `k` breaks it (`not_placeViews_k`). W's guard (`TabAtS`) and its own
+  lend (`OwnOK`) do not carry it. That `PlaceViews` holds at every arising configuration is not
+  proved.
+
+**Q2. Do Δ's models survive a re-lend?** Not always, and typing reaches the failing case.
+- The rows need `ReLendModels`: every re-lend of the stack models Δ.
+- `BoundsStackFree` (no bound of Δ mentions a stack variable) is enough
+  (`reLendModels_of_boundsStackFree`).
+- The program `Λ'0. Λ'1 ⊏ '0. thunk (return ())` is typed closed. Read by binder0's own clauses, its
+  thunk is introduced at an index where `'1 ⊏ '0` holds and a re-lend of `'0` breaks it
+  (`q2_reached`). So `ReLendModels` fails at a configuration typing reaches.
+- This is a real obligation. The re-lend has to keep those bounds: either it also lowers the
+  variables bounded by stack variables, or the `U` clause only quantifies over re-lends that keep
+  them. Neither is built.
 
 **What it decides:**
 - **OQ-8: not decided.** No placement got through statement 0, and none was refuted. The design's
@@ -110,29 +121,32 @@ binder0. Statements 5–7 and OQ-58's facts were not attempted either, and `reco
 
 ## What this says about D1's tractability
 
-The probe leaves it open. Most of the value-side cost of the quantifier is proved at `cbpv` and
-`binder`: monotonicity at `U`, the own lend, the thaw and `[force]`. The open part is the `U`
-introductions, and what they need is now listed. One of those needs, Δ's models at a re-lend, fails
-at a configuration `SemS` admits. So that step cannot apply the premise at every re-lend while
-`SemS` stands as it is. It needs another route, a change to `SemS`, or a change to what a re-lend
-re-lends. Nothing here is evidence that D1 cannot be made to work, and nothing is evidence that it
-can.
+The probe still leaves it open. Most of the value-side cost of the quantifier is proved at `cbpv`
+and `binder`: monotonicity at `U`, the own lend, the thaw and `[force]`. The open part is the `U`
+introductions, and the two follow-up questions locate both of their shared needs:
+- **The thaw** fails at a configuration W's guard admits and W's own clauses reach. What excludes
+  it in a real run (`PlaceViews`) is missing from W's guard and own lend. This is a fix to our
+  definitions, not evidence against D1.
+- **The models** fail at a configuration typing reaches. D1's ghost-end route therefore needs its
+  re-lend to keep the bounds of variables bounded by a lend variable. [unchecked] A resume re-lends
+  at a fresh lifetime, below everything, so restricting the re-lends would exclude the resumes D1
+  needs; lowering the bounded variables along with the stack is the likelier route.
+
+No row is refuted and no fallback is triggered. Nothing here is evidence that D1 cannot be made to
+work, and nothing is evidence that it can.
 
 ## What to do next (options, not a decision)
 
-1. **Fix the review findings first.** This is needed under every option. Scope `CtxRelendable` to
-   each row and show it non-vacuous, or settle it in Lean. Then correct the wording the review
-   lists.
-2. **Continue D1.** Settle the `U` introductions' needs:
-   - Δ's models at a re-lend: rule out a variable that is off the stack but bounded by a stack
-     variable, or re-lend it with the stack;
-   - the context's thaw under the table, by type or from arising;
-   - the names the changed `FutStep` gives, through a `StackJ` with a hygiene the rows can discharge,
-     or through the renaming lemma.
+1. **Finish the open review findings** (the minor wording ones above). This is needed under every
+   option.
+2. **Continue D1.**
+   - Add `PlaceViews` to W's guard and to `OwnOK`, prove statement 1 keeps it, and retry the thaw.
+   - Choose how a re-lend treats variables bounded by a lend variable (lower them with the stack, or
+     restrict the re-lends), and change W's `U` clause to match.
+   - Settle the names the changed `FutStep` gives, through a `StackJ` with a hygiene the rows can
+     discharge, or through the renaming lemma.
 
-   Then re-attempt statement 0, and statement 1 after it. This is what the README proposes. It is
-   cheapest if the models issue turns out to be a mistake in our `SemS`, not something the design
-   requires.
+   Then re-attempt statement 0, and statement 1 after it.
 3. **Fall back to D3.** The closure keeps its lifetime across the stop, so there is no re-lend. The
    models-at-a-re-lend need does not come up. The cost is D3's stop change (D3.k1–k7) and scoped
    rows (D3.k12). The probe has not triggered the fallback: no machine-checked failure of type (a),

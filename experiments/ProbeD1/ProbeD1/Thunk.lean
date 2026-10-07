@@ -11,21 +11,25 @@ at the own push there). GhostEnd proves the clause's half of each row at its own
 (`thunkF_RLa`, `thunkE_RLa`), taking two things as hypotheses: the context re-lendable (`hG`) and
 the body at every re-lend (`hM`). At W each is a fact about the judgement.
 
-* **The context's re-lendability** (`CtxRelendable`, named here, not proved): a context related
-  at the stack, at a resource with the table, splits into the views it holds and a part above the
-  outermost lend that, handed the views at any re-lend, is the context there. A `U` slot meets it
-  by construction (`thawRelend`). A leaf holding a cell at a stack place that is not that entry's
-  view (a different payload predicate) is not covered by the table, and nothing here excludes it.
+* **The context's re-lendability** (`CtxRelendable` at every context; `CtxRelendableAt` at one
+  row's context and `SemS`'s index): a context related at the stack, at a resource with the table,
+  splits into the views it holds and a part above the outermost lend that, handed the views at any
+  re-lend, is the context there. A `U` slot meets it (`thawRelend`; `ctxRelendableAt_thunk`,
+  `Relendability.lean`). `CtxRelendable binder0` is false, and `CtxRelendableAt` fails at some
+  contexts (`not_ctxRelendable_binder0`, `not_ctxRelendableAt_k`): a leaf holding a cell at a stack
+  place that is not that entry's view.
 * **The body at a re-lend** comes from the premise's `SemS` at the re-lent stack, which asks
   `Δ.Models` there. A re-lend need not keep it at a configuration `SemS` admits
   (`models_reLend_fails`): a variable of `Δ` off the stack, bounded by a stack variable, keeps
-  `δ`'s lifetime while the stack's is re-lent below it.
+  `δ`'s lifetime while the stack's is re-lent below it. Typing reaches such a `Δ` at a `U`
+  introduction, at an index `binder0`'s own clauses read (`q2_reached`, `Relendability.lean`).
 * **The table at a re-lend** (`tabRelend`, statement 1's `TabRelend`): the share lies above every
   lend, the views above the re-lent innermost lend's predecessor and at the stack's places.
-* **At `binder0` these are all** (`thunkFRow_binder0_of`, `thunkVRow_binder0_of`,
-  `bangThunkFRow_binder0_of`, `bangThunkVRow_binder0_of`): given `CtxRelendable binder0`, each row
-  holds at the configurations whose re-lends keep `Δ`'s models (`SemSR`). At `σ = []` that
-  hypothesis is vacuous (the only re-lend of `[]` is `[]`), so `SemSR` and `SemS` agree there.
+* **At `binder0` these are all** (`thunkFRow_binder0_at`, `thunkVRow_binder0_at`,
+  `bangThunkFRow_binder0_at`, `bangThunkVRow_binder0_at`): given `CtxRelendableAt binder0` at the
+  row's context, each row holds at the configurations whose re-lends keep `Δ`'s models (`SemSR`).
+  At `σ = []` that hypothesis is vacuous (the only re-lend of `[]` is `[]`), so `SemSR` and `SemS`
+  agree there.
 * **At `cbpv` and `binder`** the clause also owes the body at every future of the re-lend. The
   context reaches it by `MonoG`, which asks the future at the context's resource; that resource
   holds the inner entries' re-lent views, and a step inserting at depth `k > 0` puts its lifetimes
@@ -33,7 +37,8 @@ the body at every re-lend (`hM`). At W each is a fact about the judgement.
   `NsVar`, which `StackJ`'s second kind does not admit, so the premise is not available at that
   future. Neither is derived here.
 
-None of this is an obstruction: no configuration here arises in `TW`, and no row is refuted.
+No row is refuted here. `Relendability.lean` asks whether the configurations that break the first
+two are reached.
 -/
 
 noncomputable section
@@ -53,6 +58,22 @@ def CtxRelendable (p : Placement) : Prop :=
   ∀ (σ : LStack) (δ : LSub) (αs : List Life) (ls : List SRec) (Γ : Ctx VTy) (γ : List Val)
     (ρ : WRes), StackOK σ αs → TabAtS σ αs ρ → gRL p σ δ αs ls Γ γ ρ →
     RelendableS δ [] σ (fun αs' ls' => gRL p σ δ αs' ls' Γ γ) αs ls ρ
+
+/-- **The context's re-lendability at one row's context** `Δ; Γ`: at every index `SemS` admits
+(the stack in shape, the substitution mapping only `Δ`'s variables and modelling `Δ` at the
+stack's lifetimes, the table), a context related at the stack is re-lendable. The `U` rows take it
+at their own context, where their proofs use it. `CtxRelendable p` gives it at every context
+(`ctxRelendableAt_of`); that global form is refuted at `binder0` (`not_ctxRelendable_binder0`,
+`Relendability.lean`), and so is this one at some contexts (`not_ctxRelendableAt_k`); it holds at
+`Γ = []` and at a `U` slot (`ctxRelendableAt_nil`, `ctxRelendableAt_thunk`). -/
+def CtxRelendableAt (p : Placement) (Δ : LifeCtx) (Γ : Ctx VTy) : Prop :=
+  ∀ (δ : LSub) (σ : LStack) (αs : List Life) (ls : List SRec) (γ : List Val) (ρ : WRes),
+    StackOK σ αs → SubDom δ Δ → Δ.Models (extS δ σ αs) → TabAtS σ αs ρ →
+    gRL p σ δ αs ls Γ γ ρ → RelendableS δ [] σ (fun αs' ls' => gRL p σ δ αs' ls' Γ γ) αs ls ρ
+
+theorem ctxRelendableAt_of {p : Placement} (h : CtxRelendable (ℍ := ℍ) p) (Δ : LifeCtx)
+    (Γ : Ctx VTy) : CtxRelendableAt (ℍ := ℍ) p Δ Γ :=
+  fun δ σ αs ls γ ρ hok _ _ ht hg => h σ δ αs ls Γ γ ρ hok ht hg
 
 /-- `Δ = '0 ⊏ ⊤, '1 ⊏ '0`. -/
 abbrev mΔ : LifeCtx := (LifeCtx.empty.extend 0 .top).extend 1 (.var 0)
@@ -239,18 +260,18 @@ theorem ctxAvoids_dead {x : LifeVar} {S : VTy} {Γ : Ctx VTy} (h : CtxAvoids x �
 /-- **The `U` clause of `thunk M : U (F A)` at `binder0`, given the context's thaw**: the clause at
 the stack itself, the context re-lendable (`CtxRelendable`), the body at each re-lend by the
 premise there, at the models the re-lend keeps, with the table there by `tabRelend`. -/
-theorem thunkF_U_binder0 (hR : CtxRelendable (ℍ := ℍ) .binder0) {Δ : LifeCtx} {Γ : Ctx VTy}
+theorem thunkF_U_binder0 {Δ : LifeCtx} {Γ : Ctx VTy} (hR : CtxRelendableAt (ℍ := ℍ) .binder0 Δ Γ)
     {M : Expr} {A : VTy} (hM : SemS (ℍ := ℍ) .binder0 Δ (⟨.unit, false⟩ :: Γ) M (.comp (.ret A)))
     (hBL : BindersLow (⟨.unit, false⟩ :: Γ) (.ret A)) (hSc : Scoped Δ (⟨.unit, false⟩ :: Γ) (.ret A))
     {δ : LSub} {σ : LStack} {αs : List Life} {ls : List SRec} {γ : List Val} {ρ : WRes}
     (hok : StackOK σ αs) (hJ : ∀ αs', StackJ σ αs' δ Δ (⟨.unit, false⟩ :: Γ) (.ret A))
-    (hSD : SubDom δ Δ) (hModR : ∀ αs', ReLend αs' αs → Δ.Models (extS δ σ αs'))
-    (ht : TabAtS σ αs ρ) (hg : gRL .binder0 σ δ αs ls Γ γ ρ) :
+    (hSD : SubDom δ Δ) (hMod : Δ.Models (extS δ σ αs))
+    (hModR : ∀ αs', ReLend αs' αs → Δ.Models (extS δ σ αs')) (ht : TabAtS σ αs ρ) (hg : gRL .binder0 σ δ αs ls Γ γ ρ) :
     vRL (ℍ := ℍ) .binder0 σ δ (.thunk (.ret A)) αs ls (.lam (Expr.psub 1 γ M)) ρ := by
   rw [vRL_thunk_eq]
   intro _
   rw [if_neg (by decide)]
-  obtain ⟨ds, ρz, ρn, hc, hn, hz, H⟩ := hR σ δ αs ls Γ γ ρ hok ht hg
+  obtain ⟨ds, ρz, ρn, hc, hn, hz, H⟩ := hR δ σ αs ls γ ρ hok hSD hMod ht hg
   refine ⟨ds, ρz, ρn, hc, hn, hz, fun ls' he αs' hr ρv τ hv hcv => ?_⟩
   refine wpTS_step (fun μ => Step1N.head (Head.beta μ _ Val.unit) rfl) ls' _ τ ?_
   rw [← GhostEnd.substAll_cons_l]
@@ -260,35 +281,35 @@ theorem thunkF_U_binder0 (hR : CtxRelendable (ℍ := ℍ) .binder0) {Δ : LifeCt
 
 /-- **The `U` clause of `thunk V : U C` at `binder0`, given the context's thaw**: as
 `thunkF_U_binder0`, the thunk the λ-value itself. -/
-theorem thunkV_U_binder0 (hR : CtxRelendable (ℍ := ℍ) .binder0) {Δ : LifeCtx} {Γ : Ctx VTy}
+theorem thunkV_U_binder0 {Δ : LifeCtx} {Γ : Ctx VTy} (hR : CtxRelendableAt (ℍ := ℍ) .binder0 Δ Γ)
     {N : Expr} {C : CTy} (hC : C.isRet = false)
     (hN : SemS (ℍ := ℍ) .binder0 Δ Γ (.val (.lam N)) (.comp C))
     (hBL : BindersLow Γ C) (hSc : Scoped Δ Γ C)
     {δ : LSub} {σ : LStack} {αs : List Life} {ls : List SRec} {γ : List Val} {ρ : WRes}
     (hok : StackOK σ αs) (hJ : ∀ αs', StackJ σ αs' δ Δ Γ C)
-    (hSD : SubDom δ Δ) (hModR : ∀ αs', ReLend αs' αs → Δ.Models (extS δ σ αs'))
-    (ht : TabAtS σ αs ρ) (hg : gRL .binder0 σ δ αs ls Γ γ ρ) :
+    (hSD : SubDom δ Δ) (hMod : Δ.Models (extS δ σ αs))
+    (hModR : ∀ αs', ReLend αs' αs → Δ.Models (extS δ σ αs')) (ht : TabAtS σ αs ρ) (hg : gRL .binder0 σ δ αs ls Γ γ ρ) :
     vRL (ℍ := ℍ) .binder0 σ δ (.thunk C) αs ls (.lam (Expr.psub 1 γ N)) ρ := by
   rw [vRL_thunk_eq]
   intro _
   rw [if_neg (by decide)]
-  obtain ⟨ds, ρz, ρn, hc, hn, hz, H⟩ := hR σ δ αs ls Γ γ ρ hok ht hg
+  obtain ⟨ds, ρz, ρn, hc, hn, hz, H⟩ := hR δ σ αs ls γ ρ hok hSD hMod ht hg
   refine ⟨ds, ρz, ρn, hc, hn, hz, fun ls' he αs' hr ρv τ hv hcv => ?_⟩
   rw [forceE_of_not_ret hC]
   exact hN hBL hSc δ σ αs' ls' γ τ (hok.reLend hr) (hJ αs') hSD (hModR αs' hr)
     (tabRelend δ σ ds αs αs' ls' ρz ρv τ hok hr hz hv hcv) (H ls' he αs' hr ρv τ hv hcv)
 
-/-- **`ThunkFRow` at `binder0`, given the context's thaw**, at the configurations whose re-lends
-keep `Δ`'s models (`SemSR`). -/
-theorem thunkFRow_binder0_of (hR : CtxRelendable (ℍ := ℍ) .binder0) :
-    ∀ (Δ : LifeCtx) (Γ : Ctx VTy) (M : Expr) (A : VTy),
+/-- **`ThunkFRow` at `binder0`, given the thaw of the row's own context** (`CtxRelendableAt` at
+`Δ; Γ`), at the configurations whose re-lends keep `Δ`'s models (`SemSR`). -/
+theorem thunkFRow_binder0_at :
+    ∀ (Δ : LifeCtx) (Γ : Ctx VTy) (M : Expr) (A : VTy), CtxRelendableAt (ℍ := ℍ) .binder0 Δ Γ →
       SemS (ℍ := ℍ) .binder0 Δ (⟨.unit, false⟩ :: Γ) M (.comp (.ret A)) →
       SemSR (ℍ := ℍ) .binder0 Δ Γ (.val (.lam M)) (.val (.thunk (.ret A))) := by
-  intro Δ Γ M A hM hBL hSc δ σ αs ls γ ρ hok hJ hSD _ hModR ht hg
+  intro Δ Γ M A hR hM hBL hSc δ σ αs ls γ ρ hok hJ hSD hMod hModR ht hg
   show wpTS ls (.val (.lam (Expr.psub 1 γ M))) _ ρ
   refine wpTS_val _ _ _ _ (thunkF_U_binder0 hR hM ⟨hBL.1, fun s hs hl => ?_⟩
     ⟨hSc.1, fun s hs hl => ?_⟩ hok (fun _ => stackJ_body hJ (fun _ _ _ h => by cases h)
-      (fun _ h => h) fun _ => ctxAvoids_dead) hSD hModR ht hg)
+      (fun _ h => h) fun _ => ctxAvoids_dead) hSD hMod hModR ht hg)
   · rcases List.mem_cons.mp hs with rfl | hs
     · simp at hl
     · exact hBL.2 s hs hl
@@ -296,17 +317,18 @@ theorem thunkFRow_binder0_of (hR : CtxRelendable (ℍ := ℍ) .binder0) :
     · simp at hl
     · exact hSc.2 s hs hl
 
-/-- **`ThunkVRow` at `binder0`, given the context's thaw**, at the configurations whose re-lends
-keep `Δ`'s models (`SemSR`). -/
-theorem thunkVRow_binder0_of (hR : CtxRelendable (ℍ := ℍ) .binder0) :
-    ∀ (Δ : LifeCtx) (Γ : Ctx VTy) (N : Expr) (C : CTy), C.isRet = false →
+/-- **`ThunkVRow` at `binder0`, given the thaw of the row's own context**, at the configurations
+whose re-lends keep `Δ`'s models (`SemSR`). -/
+theorem thunkVRow_binder0_at :
+    ∀ (Δ : LifeCtx) (Γ : Ctx VTy) (N : Expr) (C : CTy), CtxRelendableAt (ℍ := ℍ) .binder0 Δ Γ →
+      C.isRet = false →
       SemS (ℍ := ℍ) .binder0 Δ Γ (.val (.lam N)) (.comp C) →
       SemSR (ℍ := ℍ) .binder0 Δ Γ (.val (.lam N)) (.val (.thunk C)) := by
-  intro Δ Γ N C hC hN hBL hSc δ σ αs ls γ ρ hok hJ hSD _ hModR ht hg
+  intro Δ Γ N C hR hC hN hBL hSc δ σ αs ls γ ρ hok hJ hSD hMod hModR ht hg
   show wpTS ls (.val (.lam (Expr.psub 1 γ N))) _ ρ
   exact wpTS_val _ _ _ _ (thunkV_U_binder0 hR hC hN hBL hSc hok
     (fun _ => stackJ_body hJ (fun _ _ _ h => by cases h) (fun _ h => h) fun _ h => h)
-    hSD hModR ht hg)
+    hSD hMod hModR ht hg)
 
 /-- A persistent context holds nothing. -/
 theorem gSepRL_persistent {p : Placement} {σ : LStack} {δ : LSub} {αs : List Life}
@@ -328,18 +350,20 @@ theorem gSepRL_persistent {p : Placement} {σ : LStack} {δ : LSub} {αs : List 
       · simp only [gSepRL, hl] at h
         exact gSepRL_persistent Γ γ ρ hP' h
 
-/-- **`BangThunkFRow` at `binder0`, given the context's thaw**, at the configurations whose re-lends
-keep `Δ`'s models: the context is persistent, so it, and the thunk with it, hold nothing. -/
-theorem bangThunkFRow_binder0_of (hR : CtxRelendable (ℍ := ℍ) .binder0) :
-    ∀ (Δ : LifeCtx) (Γ : Ctx VTy) (M : Expr) (A : VTy), Persistent Γ →
+/-- **`BangThunkFRow` at `binder0`, given the thaw of the row's own context**, at the
+configurations whose re-lends keep `Δ`'s models: the context is persistent, so it, and the thunk
+with it, hold nothing. -/
+theorem bangThunkFRow_binder0_at :
+    ∀ (Δ : LifeCtx) (Γ : Ctx VTy) (M : Expr) (A : VTy), CtxRelendableAt (ℍ := ℍ) .binder0 Δ Γ →
+      Persistent Γ →
       SemS (ℍ := ℍ) .binder0 Δ (⟨.unit, false⟩ :: Γ) M (.comp (.ret A)) →
       SemSR (ℍ := ℍ) .binder0 Δ Γ (.val (.lam M)) (.val (.bang (.thunk (.ret A)))) := by
-  intro Δ Γ M A hP hM hBL hSc δ σ αs ls γ ρ hok hJ hSD _ hModR ht hg
+  intro Δ Γ M A hR hP hM hBL hSc δ σ αs ls γ ρ hok hJ hSD hMod hModR ht hg
   have hρ : ρ = PMap.empty := gSepRL_persistent Γ γ ρ hP (pure_sep_iff.mp hg).2
   show wpTS ls (.val (.lam (Expr.psub 1 γ M))) _ ρ
   refine wpTS_val _ _ _ _ ⟨hρ, thunkF_U_binder0 hR hM ⟨hBL.1, fun s hs hl => ?_⟩
     ⟨hSc.1, fun s hs hl => ?_⟩ hok (fun _ => stackJ_body hJ (fun _ _ _ h => by cases h)
-      (fun _ h => h) fun _ => ctxAvoids_dead) hSD hModR ht hg⟩
+      (fun _ h => h) fun _ => ctxAvoids_dead) hSD hMod hModR ht hg⟩
   · rcases List.mem_cons.mp hs with rfl | hs
     · simp at hl
     · exact hBL.2 s hs hl
@@ -347,18 +371,19 @@ theorem bangThunkFRow_binder0_of (hR : CtxRelendable (ℍ := ℍ) .binder0) :
     · simp at hl
     · exact hSc.2 s hs hl
 
-/-- **`BangThunkVRow` at `binder0`, given the context's thaw**, at the configurations whose re-lends
-keep `Δ`'s models. -/
-theorem bangThunkVRow_binder0_of (hR : CtxRelendable (ℍ := ℍ) .binder0) :
-    ∀ (Δ : LifeCtx) (Γ : Ctx VTy) (N : Expr) (C : CTy), Persistent Γ → C.isRet = false →
+/-- **`BangThunkVRow` at `binder0`, given the thaw of the row's own context**, at the
+configurations whose re-lends keep `Δ`'s models. -/
+theorem bangThunkVRow_binder0_at :
+    ∀ (Δ : LifeCtx) (Γ : Ctx VTy) (N : Expr) (C : CTy), CtxRelendableAt (ℍ := ℍ) .binder0 Δ Γ →
+      Persistent Γ → C.isRet = false →
       SemS (ℍ := ℍ) .binder0 Δ Γ (.val (.lam N)) (.comp C) →
       SemSR (ℍ := ℍ) .binder0 Δ Γ (.val (.lam N)) (.val (.bang (.thunk C))) := by
-  intro Δ Γ N C hP hC hN hBL hSc δ σ αs ls γ ρ hok hJ hSD _ hModR ht hg
+  intro Δ Γ N C hR hP hC hN hBL hSc δ σ αs ls γ ρ hok hJ hSD hMod hModR ht hg
   have hρ : ρ = PMap.empty := gSepRL_persistent Γ γ ρ hP (pure_sep_iff.mp hg).2
   show wpTS ls (.val (.lam (Expr.psub 1 γ N))) _ ρ
   exact wpTS_val _ _ _ _ ⟨hρ, thunkV_U_binder0 hR hC hN hBL hSc hok
     (fun _ => stackJ_body hJ (fun _ _ _ h => by cases h) (fun _ h => h) fun _ h => h)
-    hSD hModR ht hg⟩
+    hSD hMod hModR ht hg⟩
 
 end ProbeD1
 

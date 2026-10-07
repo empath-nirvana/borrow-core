@@ -1669,15 +1669,14 @@ Then the rules these two programs use have their laws at W, and Law 1 is low-ris
 Under every outcome, D1's A-side work (Law 1, the bridges, S6, D1.a8 and the hard-test items D1.h1–h4) carries over to D0 unchanged. It carries over to D3 except where D3 changes A: S1 at scoped rows, Law 1 over their `∼`, and the signatures (§2.5).
 
 
-**Outcome (2026-10-07, `experiments/ProbeD1/CHECKPOINT.md`; review findings unresolved).** `Statement0 p` was not proved at any of the three placements, and nothing was refuted.
+**Outcome (2026-10-07, `experiments/ProbeD1/CHECKPOINT.md`; minor review findings still open).** `Statement0 p` was not proved at any of the three placements, and no fact of statement 0 was refuted.
 - At `cbpv` and `binder`, the value-side cost of the quantifier is proved: monotonicity, the own lend (after DESIGN §13's `FutStep` change), the thaw and `[force]`. The callback at `σ·y` is proved too, at `cbpv` only when its bound does not mention the binder.
 - `binder0` stops at its own monotonicity.
-- The `U` introductions are derived at no placement. Every placement shares two of their needs:
-  - the context's thaw (`CtxRelendable`): not derived, no obstruction verified;
-  - Δ's models at a re-lend: `models_reLend_fails` shows they can fail at a configuration `SemS` admits, but that configuration is not shown to arise.
-- At binder0 the `U` rows are proved given `CtxRelendable .binder0`. A verifier's major finding says that hypothesis may be unsatisfiable, which would make those results vacuous.
+- The `U` introductions are derived at no placement. At binder0 they are proved given two things, the thaw of the row's own context (`CtxRelendableAt`) and Δ's models at every re-lend (`ReLendModels`). The global hypothesis they first took, `CtxRelendable .binder0`, is false (`not_ctxRelendable_binder0`), so those first results were vacuous. The per-row hypothesis holds at `Γ = []` and at a `U` slot.
+- **The thaw** fails at a configuration W's guard admits and binder0's own `∀`/`⊸` clauses reach from a closed typed program, its world a `TW` world (`not_ctxRelendableAt_k`, `k_reached`, `k_world_TW`). What keeps it out of a run is a lend-step invariant, `PlaceViews` (the cell at a lent place is the entry's view), which W's guard and own lend do not carry. Its preservation over every arising configuration is not proved.
+- **The models** fail at a configuration typing reaches: a `U` introduction inside `Λ'1 ⊏ '0` within a lend of `'0`, where a re-lend of `'0` breaks `'1 ⊏ '0` (`q2_reached`). So D1's ghost-end re-lend must keep the bounds of variables bounded by a lend variable, by lowering them with the stack or by restricting the `U` clause's re-lends. Neither is built.
 
-So OQ-8 is not decided, and neither is whether D1 meets "interactions only at cuts". No failure of type (a), (b) or (d) occurred, so the fallback to D3 or D0 is not triggered. Statements 1–7 were not attempted. Do not rely on these outcomes until the review findings are resolved.
+So OQ-8 is not decided, and neither is whether D1 meets "interactions only at cuts". No row is refuted and no failure of type (a), (b) or (d) occurred, so the fallback to D3 or D0 is not triggered. Statements 1–7 were not attempted.
 
 ---
 

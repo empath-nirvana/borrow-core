@@ -1895,10 +1895,10 @@ proved at no placement. Statements 1–7, `Survives` and OQ-58's four facts were
 | `CallbackExtImm` | as `CallbackExtMut`, `callbackExtImm_cbpv_of` | proved, `callbackExtImm_binder` | proved, `callbackExtImm_binder0` |
 | `ForceRow` | proved, `forceRow` | proved | proved |
 | `ThawRelend` | proved, `thawRelend` | proved | proved |
-| `ThunkFRow` | not derived | not derived | not derived; proved given `CtxRelendable binder0`, at `SemSR` (`thunkFRow_binder0_of`) |
-| `ThunkVRow` | not derived | not derived | not derived; the same (`thunkVRow_binder0_of`) |
-| `BangThunkFRow` | not derived | not derived | not derived; the same (`bangThunkFRow_binder0_of`) |
-| `BangThunkVRow` | not derived | not derived | not derived; the same (`bangThunkVRow_binder0_of`) |
+| `ThunkFRow` | not derived | not derived | not derived; proved given `CtxRelendableAt binder0` at the row's context, at `SemSR` (`thunkFRow_binder0_at`); that hypothesis discharged at `Γ = []` and at a `U` slot (§15.6) |
+| `ThunkVRow` | not derived | not derived | not derived; the same (`thunkVRow_binder0_at`) |
+| `BangThunkFRow` | not derived | not derived | not derived; the same (`bangThunkFRow_binder0_at`) |
+| `BangThunkVRow` | not derived | not derived | not derived; the same (`bangThunkVRow_binder0_at`) |
 
 Beside the bundles: `MonoHideFromMonoV` is proved at every placement (`monoHideFromMonoV`: hiding is
 the one-step future that inserts nothing), so `MonoHide` holds at `cbpv` and `binder`
@@ -1951,7 +1951,7 @@ binder read through `δ`) was not needed and not made.
   derived.
 - The four `U` introductions: §15.3.
 
-### 15.3 The `U` introductions: one reason at every placement
+### 15.3 The `U` introductions: the needs every placement shares
 
 `ThunkFRow`, `ThunkVRow`, `BangThunkFRow` and `BangThunkVRow` are not derived at any placement. Each
 conclusion is the `U` clause of a closure over the context, so it owes the body at every re-lend of
@@ -1959,29 +1959,31 @@ the stack, and at `cbpv` and `binder` at every future of the re-lend. GhostEnd p
 half at its own relation (`thunkF_RLa`, `thunkE_RLa`) from two hypotheses. At W each is a fact
 about the judgement, and neither is derived (`Thunk.lean`):
 
-- **The context's re-lendability** (`CtxRelendable`, named, not proved): the context, at a resource
-  with the table, splits into the views it holds and a part above the outermost lend that, handed
-  the views at any re-lend, is the context there. A `U` slot meets it (`thawRelend`). A leaf whose
-  cell sits at a stack place but is not that entry's view (another payload predicate) is not
-  covered by the table, and nothing in `SemS` excludes it.
+- **The context's re-lendability** (`CtxRelendable` at every context, `CtxRelendableAt` at the
+  row's context and `SemS`'s index): the context, at a resource with the table, splits into the
+  views it holds and a part above the outermost lend that, handed the views at any re-lend, is the
+  context there. A `U` slot meets it (`thawRelend`, `ctxRelendableAt_thunk`). A leaf whose cell sits
+  at a stack place but is not that entry's view does not: both forms are refuted at such a leaf
+  (§15.6).
 - **The body at every re-lend.** It comes from the premise's `SemS` at the re-lent stack, which
   asks `Δ.Models` there. A re-lend need not keep it at a configuration `SemS` admits
   (`models_reLend_fails`, Lean): a variable of `Δ` off the stack, bounded by a stack variable,
   keeps `δ`'s lifetime while the stack's is re-lent below it. So the premise does not supply the
   body at every re-lend the clause owes. Such a `Δ` is a `∀'z ⊏ x` opened inside the callback of a
-  lend of `x`. [unchecked] A closure made inside it and resumed after `x` is re-lent below `z`'s
-  instance would be read with `z ⊏ x` false. No obstruction is verified: no configuration here is
-  shown to arise, and no row is refuted.
+  lend of `x`, and typing reaches it at an index `binder0`'s own clauses read (§15.6). No row is
+  refuted.
 - **The table** at the re-lend: statement 1's `TabRelend`, proved here (`tabRelend`: the share lies
   above every lend, the views above the re-lent innermost lend's predecessor and at the stack's
   places). At a future, `TabFut`, and at `cbpv`'s own push, `TabStart`'s argument at an empty view:
   not attempted.
-- **At `binder0` the first two are all.** Given `CtxRelendable binder0`, each of the four rows
-  holds at the configurations whose re-lends keep `Δ`'s models (`thunkFRow_binder0_of`,
-  `thunkVRow_binder0_of`, `bangThunkFRow_binder0_of`, `bangThunkVRow_binder0_of`, at `SemSR`:
-  `SemS` with that hypothesis on the index). At `σ = []` the hypothesis is vacuous, the only re-lend
-  of `[]` being `[]`. So at `binder0` what the `U` introductions still need is exactly the context's
-  thaw and the models at a re-lend.
+- **At `binder0` the first two are all.** Given `CtxRelendableAt binder0` at the row's context,
+  each of the four rows holds at the configurations whose re-lends keep `Δ`'s models
+  (`thunkFRow_binder0_at`, `thunkVRow_binder0_at`, `bangThunkFRow_binder0_at`,
+  `bangThunkVRow_binder0_at`, at `SemSR`: `SemS` with `ReLendModels` on the index). At `σ = []`
+  `ReLendModels` is vacuous, the only re-lend of `[]` being `[]`. So at `binder0` the context's thaw
+  and the models at a re-lend suffice for the `U` introductions; that they are needed is not shown.
+  The rows first took `CtxRelendable binder0` at every context, which is false (§15.6), so those
+  first results were vacuous; the per-row forms replace them.
 - **At `cbpv` and `binder`, the context at a future of the re-lend.** `MonoG` asks the future at the
   context's resource, which holds the inner entries' re-lent views, and a step inserting at depth
   `k > 0` puts its lifetimes above them, so `FutOK.below` fails at that resource. The leaves do not
@@ -1991,10 +1993,10 @@ about the judgement, and neither is derived (`Thunk.lean`):
   not `NsVar`, which `StackJ`'s second kind does not admit, so the premise is not available at
   that future either (§2.2, *The change §13 step 2 made*).
 
-These hold at every placement for reasons that do not depend on the placement: they are about
-`SemS`'s hypotheses (the models, the table, the names) and about the context's thaw. By the stop
-rule's shared-reason clause (§12.3) they are a finding about our definitions, not a comparison of
-the placements.
+The first two are needs at every placement for reasons that do not depend on it: they are about
+`SemS`'s hypotheses (the models, the table) and about the context's thaw. By the stop rule's
+shared-reason clause (§12.3) they are a finding about our definitions, not a comparison of the
+placements. The future and the names are needs of `cbpv` and `binder` only.
 
 ### 15.4 What statement 0 decides
 
@@ -2032,9 +2034,74 @@ the placements.
 - **Lemmas re-proved because the originals are private**: `substAll_forceE'` (Core's
   `substAll_forceE` is `private` in `Core/Compat.lean`), from GhostEnd's public `substAll_var_l`.
 
+### 15.6 The two needs, settled at `binder0` (`Relendability.lean`)
+
+**Q1: the context's thaw.**
+- `not_ctxRelendable_binder0`: `CtxRelendable binder0` is false. The configuration `k` is one `mut`
+  entry lending the place `0` at `'0`, payload type `Unk`, and the context `r : Mut '0 1, _ : 1`
+  (dead) holding `0 ↦ mut(α, (), ∅, 𝒱⟦1⟧)` at the entry's lifetime `α`. The table admits the cell;
+  no split of `RelendableS` places it, whatever predicate is re-lent (`k_not_relendableS`): it is
+  not the entry's view, and it is not strictly above the outermost lend.
+- `not_ctxRelendableAt_k`, `k_index`: the per-row form fails at `kΓ` too, and `k` meets every index
+  hypothesis `SemS` has at `Δ = '0 ⊏ ⊤`. So restricting to the row's context and `SemS`'s index
+  does not exclude `k`.
+- `k_world_TW`, `k_world_tagged`: `k`'s world is a `TW` world (`alloc`, then `mutFold`), tagged at
+  the empty list.
+- `k_reached`: `Λ'0. λr. thunk (return r)` is derived closed at
+  `∀'0 ⊏ ⊤. Mut '0 1 ⊸ F (U (F (Mut '0 1)))`. Read at `[]`, `binder0`'s `∀` clause owes the body at
+  every own lend `OwnPush` admits, `k`'s entry among them, and at the pushed stack the `⊸` clause
+  owes it at every related argument under the table, `r` at `k`'s cell among them.
+  `k_thunk_not_vRL`: at `k`'s resource the `U` clause fails for every closure. Not derived: that
+  the closed term's clause fails (the answer's resource is any `↭`-update of `k`'s), and so
+  `ThunkFRow binder0` is not refuted.
+- **The invariant that excludes `k`**: `PlaceViews`, every `mut` cell at a stack place the
+  innermost lending entry's view. `not_placeViews_k`: `k` breaks it. `lendMut_placeView`: a 6.65 lend
+  opens with it at its own place. `↭` keeps a `mut` cell's lifetime and predicate (`ResU.UpdMut`).
+  Not proved: that it holds at every `Arises` configuration. It is not `TW`'s: `TW` does not see the
+  stack. `TabAtS` asks only a stack place's stratum, and `OwnOK` ties the own lend's payload and
+  place to nothing, so `SemS`'s index admits `k` and `binder0`'s clauses reach it.
+- `ctxRelendableAt_nil` (every placement) and `ctxRelendableAt_thunk` (`binder0`): the per-row form
+  holds at `Γ = []` and at a `U` slot. `thunkFRow_binder0_nil`, `thunkFRow_binder0_thunk`: the row
+  with the hypothesis discharged there. Not proved: `CtxRelendableAt` at the contexts `PlaceViews`
+  restricts to.
+
+**Q2: `Δ`'s models at a re-lend.**
+- `ReLendModels Δ δ σ αs`: every re-lend of the stack models `Δ`. It is what `SemSR` adds, the
+  condition the rows' route needs.
+- `BoundsStackFree Δ σ`: no bound of `Δ` mentions a stack variable.
+  `reLendModels_of_boundsStackFree`: it gives `ReLendModels` (`extS_find_reLend`, `interp_congr`).
+- `q2_reached`: `Λ'0. Λ'1 ⊏ '0. thunk (return ())` is derived closed, its `U` introduction at
+  `mΔ = '0 ⊏ ⊤, '1 ⊏ '0`. At `binder0` the outer `∀` pushes the own lend of `'0` (`OwnPush`) and
+  the inner `∀` instantiates `'1` at `2 ⊏ 1` (`LtLife`). There `mΔ` holds, `BoundsStackFree`
+  fails, and the re-lend of `'0` at `2` breaks `'1 ⊏ '0`: `ReLendModels` fails. So typing reaches
+  the configuration, at an index `binder0`'s own clauses read, where the premise's `SemS` is not
+  available at a re-lend the `U` clause quantifies over. Not derived: that the clause fails there
+  for some body.
+- **The extra condition the re-lend needs.** The rows as proved need `ReLendModels`, which typing
+  does not supply. Two ways to meet it, neither built, each a change to W's `U` clause and none to a
+  printed BoLo definition: the re-lend also lowers every variable bounded by a stack variable (the
+  re-lend substituting the bound), or the `U` clause quantifies only over the re-lends that keep the
+  bounds. [unchecked] A resume re-lends at a fresh lifetime, below every lifetime in the world, so
+  the second would exclude the resumes D1 needs whenever such a variable is in scope.
+
+**What it means for D1.** No row is refuted, and no fallback is triggered. Both needs are now
+located. The thaw fails at a configuration the guard admits and the relation's own clauses reach,
+and the fact that keeps it out of a run (`PlaceViews`) is a lend-step invariant W's guard and own
+lend do not carry. The models fail at a configuration typing reaches, so the ghost-end route needs
+its re-lend to keep the bounds of variables bounded by the stack. Whether either change makes the
+`U` introductions provable is not derived.
+
+**Report lists for §15.6.** Printed hypotheses spent: none new; 6.48's `mut` clause of `↭`
+(`ResU.UpdMut`) is cited for `PlaceViews`'s preservation, which is not proved, so it stays
+unspent. Uniqueness and functionality results used: `ResU.CompS.functional`,
+`ResU.CompS.get_left_of_ne_imm` and `get_right_of_ne_imm` (a `mut` cell comes from one side), and
+the cell's stored predicate read back through `mutPred` (`mutPred_mutOf`). Not used:
+`ResU.Flat.functional`, `CellU.immOf_inj`, the machine's determinism. Untranscribed in the run-up:
+as §15.5; `PlaceViews` at every `Arises` configuration is ours and not built.
+
 ---
 
-## Unresolved: the second review's findings, answered and not reviewed again
+## Unresolved: the reviews' findings, answered and not reviewed again
 
 The second review ended with one blocker and five major findings. The text and the statement files
 were revised in answer to each (`9b89b32`), before the build, and the revision was not reviewed
@@ -2087,3 +2154,11 @@ gives the finding, where the current text answers it, and what stays open.
      bundle and used only to exclude a witness.
    - Open: the same-path requirement (finding 4's gaps); `ArisesSound` and the per-transition
      facts are not proved (statement 1, not reached).
+7. **Major (content review of statement 0): the `binder0` `U` results may be vacuous.** They took
+   `CtxRelendable .binder0` at every context, with no proof that it is satisfiable.
+   - Answered: it is false (`not_ctxRelendable_binder0`, §15.6), so they were vacuous. The rows now
+     take `CtxRelendableAt` at their own context (`thunkFRow_binder0_at` and its siblings), which
+     holds at `Γ = []` and at a `U` slot (`ctxRelendableAt_nil`, `ctxRelendableAt_thunk`) and fails
+     at `k` (`not_ctxRelendableAt_k`).
+   - Open: `CtxRelendableAt` at the contexts `PlaceViews` restricts to; `PlaceViews` at every
+     `Arises` configuration.
