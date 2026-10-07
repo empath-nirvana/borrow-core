@@ -3685,6 +3685,12 @@ glue (§12's destructors) already was.
 
 ### Open
 
+- **S6 (the use of a continuation) by a ghost obligation in `contShare` (TIER1-PLAN §4, route
+  8.4).** Probed and stopped: a closed program's relation at its pure type is `wpTS`, where no
+  protocol table occurs, and three programs that drop, twice resume, and cancel a linear `κ` are in
+  it while breaking S6's count; at the empty heap BoLo's world is the empty resource, so `NoOwn`
+  sees no obligation along their runs (`experiments/Targets/Targets/I/GhostCoupling.lean`). The
+  route needs a resource kind or a run-end condition BoLo's model does not have.
 - Other instances of S5's parameter (a finaliser that may let the raises of some labels escape),
   and OQ-7 (finalisers that resume, or clean up asynchronously).
 - Row variables in Core's types. The row `∀` of tier 1's typing is in `experiments/Targets`'s open

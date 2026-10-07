@@ -56,6 +56,7 @@ import Targets.Instance.ZeroCost
 import Targets.I.Binder
 import Targets.I.Combined
 import Targets.I.Device
+import Targets.I.GhostCoupling
 import Targets.I.Interface
 import Targets.I.NonVacuity
 import Targets.I.OpenRel

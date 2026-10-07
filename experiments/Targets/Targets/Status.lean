@@ -21,6 +21,7 @@ import Targets.Instance.ClauseRefusals
 import Targets.Instance.ContUse
 import Targets.Instance.RunTyping
 import Targets.I.Restricted.InstanceSafety
+import Targets.I.GhostCoupling
 
 /-!
 # Targets — status, by system (RESTRUCTURE §0)
