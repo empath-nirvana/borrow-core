@@ -3,6 +3,7 @@
 [Introduction](intro.md)
 [How this notebook works](method.md)
 [The register](register.md)
+[Synthesis: coherent designs](synthesis.md)
 
 # Ground rules
 
