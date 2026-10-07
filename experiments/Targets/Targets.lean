@@ -19,6 +19,7 @@ import Targets.Base.RunProps
 import Targets.Base.Runs
 import Targets.Base.Support
 import Targets.Base.Typing
+import Targets.B.Adequacy
 import Targets.B.Binder
 import Targets.B.BoLo
 import Targets.B.Conservativity
@@ -41,6 +42,7 @@ import Targets.Instance.Restricted.NoInterception
 import Targets.Instance.Restricted.Programs
 import Targets.Instance.Restricted.Unwind
 import Targets.Instance.Rows
+import Targets.Instance.Safety
 import Targets.Instance.Types
 import Targets.Instance.Typing
 import Targets.Instance.ZeroCost

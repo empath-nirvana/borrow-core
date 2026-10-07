@@ -472,6 +472,74 @@ theorem effSafe_ourInst_J₁ (hΞ : AdmEff Ξ) : (ourInst orowRF Ξ J₁).EffSaf
   - B3, B4 and B4′ at `⟦J₁⟧`: PROVED;
   - S2, S3 and `DataDiv` at our instance at `J₁`: PROVED, at Core σ=[].
 
+**Outcome (landed on `tier1-effects`; B2's drive conjunct, S2, S3 and `EffSafeDrive` fail as
+written).**
+- **B2's return conjunct is proved at every platform** (`B/Adequacy.lean`, `adequateRetAt_core`).
+  - A run under a platform is machine segments split at the platform's answers (`psteps_split`).
+  - A segment continues to `wpG`'s end under the allocator that replays it (`wpG_seg`), and is
+    finite (`wpG_no_infinite`, with `arun_no_infinite_irr`, `ARun.no_infinite` at an end that
+    takes no step).
+  - At a stop, the operation is the platform's (`stop_op`): linear, data, never abortive
+    (`not_raise_stop`). Its argument and the answer hold nothing (`vC_data`), so `contShare` resumes
+    `K` at the post's own resource (`answer_at_stop`).
+  - Induction on `ewpTS`'s least fixed point (`ewp_ind`) carries `PlatOK`: every run continues to an
+    end in the postcondition, and none is infinite (`platOK_of_ewp`). The frame accumulates the
+    leftovers, which own nothing, and `↭` from `∅` composes by 6.48 and 6.49 (`seg_frame`). At a
+    data answer, `reclaim` empties the memory (`final_of_platEnd`).
+- **B2's drive conjunct fails as written** at every platform with an operation
+  (`not_adequateDriveAt_core`). So `Adequate coreB` fails (`not_adequate_core`), `B.Guarantees J
+  coreB` fails at every `J` (`not_guarantees_core`), and **`I.Tier1 J₁` fails at every `J₁`**
+  (`I.not_tier1`), as does `I.Tier1Core` (`I.not_tier1Core`).
+  - The configuration: for `o` the platform's, the row `[o, shadowOp o]` reads as `[o]`, so the
+    platform answers it. Its loop body is not positive: the shadowed entry's argument type is
+    `tvar 0`, and `CTy.EffLeaf` asks every layer's types closed (`not_nuOk_shadow`).
+  - `cC` at `νX. C` holds of every term when `C` is not positive, so `()` is in the relation at
+    `F_S(U(Loop_S 1 1))` (`cC_loop_unit_of_not_nuOk`). Its drive is stuck at `nextE ()`
+    (`not_safeDrive_unit`). The world is the empty one.
+- **Proved of the drive.**
+  - At a positive loop body, every finite prefix of the drive is safe (`adequateDriveAt_core_nuOk`).
+    The invariant: the current step is reached from a start in the relation at
+    `F_S(A ⊕ U(Loop_S A B))`, re-established at each `inr l` (`ewp_next_of_loop`, `cC_nu_iff`,
+    `loopEffBody_instT`).
+  - At rows with distinct keys the body is positive (`adequateDriveAt_core_uniq`), and at the
+    platform with no operation every row is (`adequateDriveAt_core_none`, `adequateAt_core_none`).
+- **B3, B4, B4′ and B5 at today's unr-free kernel** (`tier1Core_B_nu`).
+  - B3 and B4: the return conjunct at every platform (`soundRetAt_tier1NU`); the drive at positive
+    loop bodies (`soundDriveAtNu_tier1NU`). The drive at the other rows is OPEN: FL says nothing
+    there, and no typed program at such a type is known to get stuck.
+  - B4′ in full: it reads only the return conjunct (`soundContractsOfFL_ret`,
+    `soundContracts_tier1NU`).
+  - B5 given `BumpSim` (`releasedOnceReuse_tier1NU_of_bumpSim`).
+- **S2 and S3 fail as written** at today's kernel, at every effect context
+  (`Instance/Safety.lean`, `not_safety_tier1Open`, `not_effSafe_tier1Open`).
+  - Our instance's typing reads a row through `RF.den` and ties none of its names to `Ξ`. Today's
+    `[perform]` types `perform (0, (0, ()))` at the row `[0.0 : 1 ↠ 1]` (`der_perform₀`).
+  - No label is named `0`, so the row admits no label's operation (`not_has_ε₀`). The runner that
+    answers nothing keeps its protocol and answers everything the row admits.
+  - The program is stuck at once (`no_ostep_perform₀`), is no answer, and is no label's stop.
+  - `orowAlg`'s `WF` (every name a row finds is a label, at its declared signature) is what such a
+    row lacks. Nothing in `ourInst`'s `der` or in today's rules asks it.
+- **`DataDiv` is proved** at every row form, effect context and typing system (`dataDiv_ourInst`).
+- **`EffSafeDrive` fails as written** at today's unr-free kernel (`not_effSafeDrive_tier1NU`).
+  - `FinalDrive` asks a data answer, and a typed loop step may finish at `inl (λ_. ())` at `U(F 1)`.
+  - At data answers and positive loop bodies it is proved (`effSafeDriveNu_tier1NU`).
+  - The plan's route `effSafeDriveOfFL` fails as written at `coreW` (`not_effSafeDriveOfFL`): a
+    typing system that types `return (inr ())` at a loop type whose body is not positive meets FL.
+- **Not built.**
+  - `adequateDriveAt_core` and `adequate_core`: they fail as written (above).
+  - `platformOf`, `platformOf_respects`, `runs_platformOf`, `runs_platformOf_drive`,
+    `safety_of_sound`, `effSafe_of_core`: the statements they serve, S2 and S3, fail as written.
+  - `tier1Core_B` and `guarantees_J₁_of_bumpSim`: they read `Adequate coreB`.
+  - `sound_J₁`, `soundContracts_J₁`, `safety_ourInst_J₁`, `effSafe_ourInst_J₁`: `J₁` is not built
+    (§2). Their `tier1Open` forms are the results above.
+- **What the restatements would need** (the user's decision).
+  - B2's drive (and `SoundDriveAt`, S2's drive, S3 at driven programs): the loop body positive, or
+    the loop's row with distinct keys.
+  - `EffSafeDrive`: also a data answer.
+  - S2 and S3: rows tied to the effect context, in `der`, in the typing system, or in S2 and S3.
+- **Typing work.** The S2/S3 configuration needs one derivation (`[perform]` over `[unit]`), and
+  `EffSafeDrive`'s needs one (`[ret]`, `[sumI₁]`, `[thunkF]`). No inversion.
+
 ## 4. What a typed program does at run time: S5's `FinAlone`, and S6
 
 **Goal.** A's (S) properties ask two things about what a typed program does at a configuration it

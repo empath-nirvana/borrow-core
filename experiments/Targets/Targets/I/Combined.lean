@@ -229,6 +229,38 @@ theorem tier1Core_guarantees_of (hA : Adequate (ℍ := ℍ) (B.coreB (ℍ := ℍ
   obtain ⟨h0, h1, h3, h4, h6, h7, hb⟩ := tier1Core_B_of hA
   exact ⟨h0, h1, hA, h3, h4, releasedOnceReuse_of_bumpSim hS h4, h6, h7, hb⟩
 
+/-! ### Tier 1 and B2 at BoLo -/
+
+/-- **Tier 1 fails as written, at every typing system**: its B conjunct holds `Adequate coreB`, whose
+drive conjunct fails at a loop type whose body is not positive (`not_adequate_core`). -/
+theorem not_tier1 (J₁ : OurTyping orowRF) : ¬ Tier1 (ℍ := ℍ) J₁ :=
+  fun h => not_guarantees_core J₁.read h.2.1
+
+/-- **The restricted tier-1 reduction fails as written**, for the same reason. -/
+theorem not_tier1Core : ¬ Tier1Core (ℍ := ℍ) := fun h => not_guarantees_core _ h.2.1
+
+/-- **B's guarantees at today's kernel and BoLo, at what B2 gives**: B0, B1; B2's return conjunct at
+every platform and its drive conjunct at positive loop bodies; B3 and B4 at the same; B4′ in full
+(it reads only the return conjunct); B6, B7 and the bounds. -/
+theorem tier1Core_B_nu :
+    B.ExtendsB tier1Open.read ∧ FL (B.coreB (ℍ := ℍ)) tier1Open.read ∧
+      (∀ P : Platform, P.Respects →
+        AdequateRetAt (ℍ := ℍ) (B.coreB (ℍ := ℍ)) P ∧ AdequateDriveAtNu (ℍ := ℍ) (B.coreB (ℍ := ℍ)) P ∧
+        SoundRetAt (ℍ := ℍ) tier1Open.read P ∧ SoundDriveAtNu (ℍ := ℍ) tier1Open.read P) ∧
+      B.SoundContracts (ℍ := ℍ) tier1Open.read (B.coreB (ℍ := ℍ)) ∧ B.ExclusiveB (B.coreB (ℍ := ℍ)) ∧
+      LifetimeSound (B.coreB (ℍ := ℍ)) tier1Open.read.out ∧ B.WBound (B.coreB (ℍ := ℍ)) := by
+  rw [tier1Open_read]
+  exact ⟨⟨fun Θ Δ Γ e j h => h, B.borrowRulesClosed_of_rulesClosed extendsNU_tier1NU.2⟩,
+    fl_core_tier1NU, fun P hP => ⟨adequateRetAt_core P hP, adequateDriveAt_core_nuOk P hP,
+      soundRetAt_tier1NU P hP, soundDriveAtNu_tier1NU P hP⟩,
+    soundContracts_tier1NU, exclusiveB_core, lifetimeSound_core, wBound_core⟩
+
+/-- **B5 at today's kernel and BoLo, given the step-for-step simulation.** -/
+theorem tier1Core_releasedOnceReuse_of_bumpSim (hS : BumpSim (ℍ := ℍ)) :
+    B.ReleasedOnceReuse (ℍ := ℍ) tier1Open.read (B.coreB (ℍ := ℍ)) := by
+  rw [tier1Open_read]
+  exact releasedOnceReuse_tier1NU_of_bumpSim hS
+
 end I
 
 end Targets

@@ -6,6 +6,8 @@ import Targets.B.Routes
 
 * `EffSafeOfFL`: `FL M J → FamEmpty M ∧ AdequateEvery M → EffSafe J` (the empty configuration and
   adequacy from every index; no `Mono`, which done does not hold);
+* `EffSafeDriveOfFL`: the same for driven programs (stated; it fails as written,
+  `not_effSafeDriveOfFL`);
 * `SoundnessContractsOfFLWB`: FL, `EmbedsNil` and adequacy give the SPEC's row-abortive externs at
   Core's contract (the route reads only the nil index); `contractsW_of_meets`: through `EmbedsNil`,
   Core's contract gives W's at row-abortive types;
@@ -28,6 +30,13 @@ def SoundnessContractsOfFLWB : Prop :=
 /-- **Effect safety from FL**, the empty configuration and adequacy from every index (over `FamEmpty ∧ AdequateEvery`, review [17]). -/
 def EffSafeOfFL : Prop :=
   ∀ (M : SemWorld) (J : TypingJ), FL M J → FamEmpty M ∧ AdequateEvery (ℍ := ℍ) M → EffSafe (ℍ := ℍ) J
+
+/-- **Effect safety of driven programs from FL** (TIER1-PLAN §3's route), over the empty
+configuration and adequacy from every index.  It fails as written (`not_effSafeDriveOfFL`): FL says
+nothing of a loop whose body is not positive. -/
+def EffSafeDriveOfFL : Prop :=
+  ∀ (M : SemWorld) (J : TypingJ), FL M J → FamEmpty M → AdequateEvery (ℍ := ℍ) M →
+    EffSafeDrive (ℍ := ℍ) J
 
 /-- **Adequacy from the laws** (second wave), with the run-end relation's sequencing and reclaim
 laws. -/
