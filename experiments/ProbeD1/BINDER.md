@@ -2205,7 +2205,10 @@ instance, so the structural induction stops there. `ViewSlotInst` as stated, at 
 outermost lend at `⊤`.
 
 **Not attempted.** `MovedRecPremises`, `RecsOutsideArises`, `RecsInsideOwnArises`, `FreshFrameI`.
-Their consumers are the share at a resume (statement 2) and the arising set's records.
+Their consumers are the share at a resume (statement 2) and the arising set's records. [unchecked]
+For `RecsOutsideArises`, `LendImm` constrains the new list only through `rsOf` and `Tagged`, so an
+old record may come back with another tag; whether `Tagged`'s `FrameLife` excludes that is the first
+step to check.
 
 ### 11.3 Item 3: the known risk
 
