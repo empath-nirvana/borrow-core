@@ -1668,6 +1668,17 @@ Then the rules these two programs use have their laws at W, and Law 1 is low-ris
 
 Under every outcome, D1's A-side work (Law 1, the bridges, S6, D1.a8 and the hard-test items D1.h1–h4) carries over to D0 unchanged. It carries over to D3 except where D3 changes A: S1 at scoped rows, Law 1 over their `∼`, and the signatures (§2.5).
 
+
+**Outcome (2026-10-07, `experiments/ProbeD1/CHECKPOINT.md`; review findings unresolved).** `Statement0 p` was not proved at any of the three placements, and nothing was refuted.
+- At `cbpv` and `binder`, the value-side cost of the quantifier is proved: monotonicity, the own lend (after DESIGN §13's `FutStep` change), the thaw and `[force]`. The callback at `σ·y` is proved too, at `cbpv` only when its bound does not mention the binder.
+- `binder0` stops at its own monotonicity.
+- The `U` introductions are derived at no placement. Every placement shares two of their needs:
+  - the context's thaw (`CtxRelendable`): not derived, no obstruction verified;
+  - Δ's models at a re-lend: `models_reLend_fails` shows they can fail at a configuration `SemS` admits, but that configuration is not shown to arise.
+- At binder0 the `U` rows are proved given `CtxRelendable .binder0`. A verifier's major finding says that hypothesis may be unsatisfiable, which would make those results vacuous.
+
+So OQ-8 is not decided, and neither is whether D1 meets "interactions only at cuts". No failure of type (a), (b) or (d) occurred, so the fallback to D3 or D0 is not triggered. Statements 1–7 were not attempted. Do not rely on these outcomes until the review findings are resolved.
+
 ---
 
 ## Review findings addressed
