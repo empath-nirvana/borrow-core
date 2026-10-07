@@ -4,8 +4,10 @@ import ProbeD1.Piece
 # ProbeD1 — W's relation, the future-world quantifier placed by `Placement` (DESIGN §2.4)
 
 One `mutual` block, structural on the type, the stack an index (as `vRLk`), the placement a fixed
-parameter. The three placements are the candidates for W's one relation that statement 0 compares;
-W is the one that survives, and the cuts order chooses if more than one does (`Placement.rank`).
+parameter. The three placements are the candidates for W's one relation that statement 0 compares.
+W is the surviving placement of least `Placement.rank`; it is decided only when every placement of
+lower rank is refuted by a refutation that passes the arising check, and provisional otherwise
+(DESIGN §3).
 
 | placement | `U` | `⊸` | `∀` | the stop's share | the callback's own lend |
 |---|---|---|---|---|---|
@@ -13,11 +15,15 @@ W is the one that survives, and the cuts order chooses if more than one does (`P
 | `binder0` (OQ-8 option 3, `vRLk`) | the stack itself (`RelendableS`) | resources only | resources only | the stack itself (`OpenS`) | at `∀`, at the stack itself |
 | `binder` (OQ-8 option 3, §17.6) | futures | futures | futures | futures | at `∀`, at every future |
 
-**One quantifier.** Every clause reaches a stack other than its own only through `FutQ` (W's
-order `Fut`, or the stack itself, by the placement's flag) followed, at the clause that makes the
-callback's own lend, by `OwnPush` at the type it reads. The own lend is the outermost `∀`'s
-instance read as the lend the instance names; it is named by the type, so it is relative to it,
-as `vRLk`'s extension is (`e'.x = x ∨ ¬ CFree e'.x C`).
+**One quantifier, in the design's reading.** Every clause reaches a stack other than its own only
+through `FutQ` (W's order `Fut`, or the stack itself, by the placement's flag) followed, at the
+clause that makes the callback's own lend, by `OwnPush` at the type it reads. The own lend is the
+outermost `∀`'s instance read as the lend the instance names; it is named by the type, so it is
+relative to it, as `vRLk`'s extension is (`e'.x = x ∨ ¬ CFree e'.x C`). It is not a future: its
+variable is a binder, which `BindersLow` keeps off the futures' names (`NsVar`). Contexts are
+carried across it by `MonoOwnG` (statement 0). Synthesis §11's failure (d) is worded as
+"different future-world quantifiers at `U` and at `⊸`". Reading it as this property is the
+design's, and the outcome is reported against both (DESIGN §4.2, §12.2).
 
 Every clause carries the table guard (`guardW`) where it receives a resource from outside, as
 `vRLa`/`vRLk` do. Every former not listed is read as `vRLs` reads it: the components at the
@@ -43,7 +49,7 @@ open GhostEnd (LEnt LStack LKind extS vwS stratS ReLend RelendableS bodyS OpenS 
 
 /-- Where the future-world quantifier sits (OQ-8). -/
 inductive Placement
-  /-- At `U`, the share and `KapRel` (OQ-8 option 2, the audit's). -/
+  /-- At `U` and the stop's share (OQ-8 option 2, the audit's). -/
   | cbpv
   /-- At `∀` only, as `vRLk` (#287; OQ-8 option 3 as built). -/
   | binder0

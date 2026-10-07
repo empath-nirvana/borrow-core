@@ -3,26 +3,35 @@ import ProbeD1.Sem
 /-!
 # ProbeD1 — statement 0: W's `U`, `⊸` and `∀` clauses fixed together (DESIGN §4)
 
-For each placement `p`, five groups of facts. `Statement0 p` bundles them; a placement whose
-bundle is proved, with statements 1–6, survives (`Survives`, `Programs.lean`), and W is the
-surviving placement first in the cuts order (`Placement.rank`).
+Two bundles. The **shared lemmas** (`Statement0Shared`) are about definitions every placement
+shares. A failure of one is a finding about those definitions, not a comparison of placements,
+and stops the probe (DESIGN §12.3). The **per-placement facts** (`Statement0 p`) are the ones the
+placements are compared on. A placement whose shared lemmas and facts are proved, with statements
+1–6, survives (`Survives`, `Programs.lean`).
 
-* **The order** (`ExtPreW`, `FutReLend`): W's `Ext` is a preorder, so `WP p` meets Targets'
-  `ExtPre`; and a re-lend of a future is a future of a re-lend, the order's lemma the `U` clause's
-  monotonicity needs.
-* **Monotonicity** (T-MONO): the value and context relations along W's order (`MonoV`, `MonoG`),
-  and the computation relation (`MonoC`), which `binder0`'s `U` clause needs. `MonoHide` is the
-  hiding instance of `MonoV` (`MonoHideFromMonoV`), named because it is where `binder0` is
-  expected to be tested hardest (DESIGN §4.3).
-* **The nil slice** (OQ-58): W at `σ = []` inside Core (`NilSoundV`, `NilSoundC`); Core's thunks
-  inside W at `σ = []` (`NilAgreesU`, the draft spec's form); the equality (`NilAgrees`), which
-  decides OQ-58 beside the bundle.
-* **The callback-extension fact** (OQ-8's criterion (iii)): a callback related at `σ`, applied at
-  a fresh lend to a value of the lend's view type, is related at `σ·y` (`CallbackExtMut` for 6.65,
+* **The order** (shared). `ExtPreW` is bookkeeping: a future is a reflexive–transitive closure and
+  `Ext` composes, so `WP p` meets Targets' `ExtPre` by construction. The clauses read W's order at
+  the reading substitution `δ`, and the lemmas they use are stated there: a re-lend of a future is
+  a future of a re-lend (`FutReLend`), a future at a resource is a future at its parts (`FutPart`),
+  and a composite future's inserted entries avoid a type when each step's do (`FutAvoidsTrans`).
+* **The piece at the reflexive future** (shared): `OpenSF true` gives GhostEnd's `OpenS` at the
+  stack itself (`OpenSFBridge`), so GhostEnd's lemmas that only consume a piece apply unchanged.
+* **The nil slice the programs read** (shared): W's computations at `σ = []` are Core's at
+  `F_Σ A` with `A` data (`NilSoundRet`), the slice Targets' `AdequateRetAt` reads.
+* **Monotonicity** (per placement): contexts across the callback's own lend (`MonoOwnG`), and values
+  and contexts along W's order (`MonoV`, `MonoG`). `MonoC` and `MonoHide` (`MonoHideFromMonoV`)
+  are stated beside the bundles.
+* **The callback-extension fact** (per placement): a callback related at `σ`, applied at a fresh
+  lend to a value of the lend's view type, is related at `σ·y` (`CallbackExtMut` for 6.65,
   `CallbackExtImm` for 6.64).
-* **The `U`-clause thaw at the guarded W**: `[force]` (`ForceRow`), a `U` value re-lent and handed
-  its views is a `U` value at the re-lend (`ThawRelend`), and the `U` introductions (`ThunkFRow`,
-  `ThunkVRow`, `BangThunkFRow`, `BangThunkVRow`). None is assumed to transport from `vRLs`.
+* **The `U`-clause thaw at the guarded W** (per placement): `[force]` (`ForceRow`), a `U` value
+  re-lent and handed its views is a `U` value at the re-lend (`ThawRelend`), and the `U`
+  introductions (`ThunkFRow`, `ThunkVRow`, `BangThunkFRow`, `BangThunkVRow`). None is assumed to
+  transport from `vRLs`.
+* **Beside the bundles** (OQ-58): the nil slice at every type, W inside Core (`NilSoundV`,
+  `NilSoundC`) and Core inside W (`NilAgreesU`, `NilAgrees`). Core's `⊸` reads its argument
+  contravariantly, so W inside Core at `A ⊸ C` needs Core inside W at `A`, which at a thunk
+  argument is `NilAgreesU`: OQ-58's question, decided beside the bundles (DESIGN §6.3).
 
 Statements only; no proofs.
 -/
@@ -34,12 +43,14 @@ variable {ℍ : BoCa.Host} [BoCa.HostIs ℍ]
 namespace ProbeD1
 open BoCa BoCa.Fig16 BoCa.Fig16.BoLo BoCa.Fig16.LogRel BoCa.Fig16.LogRel.Core
 open BoCa.Lifetime (LSub LifeCtx LifeVar)
-open GhostEnd (LEnt LStack LKind extS vwS ReLend TabAtS jdgCty)
+open GhostEnd (LEnt LStack LKind extS vwS ReLend TabAtS jdgCty OpenS)
 
-/-! ### The order -/
+/-! ### The order (shared) -/
 
-/-- **W's order is a preorder** (Targets' `ExtPre` at `WP p`, which `WLaws` asks): a future of a
-future is a future, and `Ext` composes. -/
+/-- **W's world order is a preorder** (Targets' `ExtPre` at `WP p`, which `WLaws` asks).
+Bookkeeping: it holds by construction, a future being a reflexive–transitive closure and `Ext`
+reflexive and transitive. `WP p`'s `Ext` is `OrdW` at the empty substitution, which is not the
+order the clauses read; their lemmas are `FutReLend`, `FutPart` and `FutAvoidsTrans`, at `δ`. -/
 def ExtPreW (p : Placement) : Prop := Targets.ExtPre (WP (ℍ := ℍ) p).toBWorld
 
 /-- **A re-lend of a future is a future of a re-lend**: the lifetimes a future gives, re-lent, are
@@ -48,6 +59,42 @@ def FutReLend : Prop :=
   ∀ (δ : LSub) (ρ : WRes) (σ σ' : LStack) (αs αs' αs'' : List Life),
     StackOK σ αs → Fut δ ρ (σ, αs) (σ', αs') → ReLend αs'' αs' →
     ∃ αs₀, ReLend αs₀ αs ∧ Fut δ ρ (σ, αs₀) (σ', αs'')
+
+/-- **A future at a resource is a future at each of its parts.** `FutOK.below` asks the inserted
+lifetimes below the holder's resource, and a part lies in every stratum the whole does. A value is
+carried to a future at its whole resource, while the `U` clause and the share quantify over futures
+at the part `ρz` strictly above the outermost lend. -/
+def FutPart : Prop :=
+  ∀ (δ : LSub) (ρz ρn ρ : WRes) (s s' : Stk), ResU.CompS ρz ρn ρ → Fut δ ρ s s' → Fut δ ρz s s'
+
+/-- **A composite future's inserted entries avoid a type when each step's do**, at computation and
+at value types. A `U` value carried to a future owes its computation at the futures of that
+future, and those avoid its type only through this. -/
+def FutAvoidsTrans : Prop :=
+  (∀ (C : CTy) (σ σ' σ'' : LStack), FutAvoids C σ σ' → FutAvoids C σ' σ'' → FutAvoids C σ σ'') ∧
+  ∀ (A : VTy) (σ σ' σ'' : LStack), FutAvoidsV A σ σ' → FutAvoidsV A σ' σ'' → FutAvoidsV A σ σ''
+
+/-! ### The piece at the reflexive future (shared) -/
+
+/-- **The share over futures gives GhostEnd's piece at the stack itself**: every futures quantifier
+of `OpenSF true` instantiated at the reflexive future (the kept part `σ.drop k` itself,
+`σ.take k ++ σ.drop k = σ`). GhostEnd's lemmas that consume an `OpenS` input apply through it
+unchanged; those whose output must be W's piece at `cbpv` or `binder` are restated over `OpenSF`
+(DESIGN §6.2). -/
+def OpenSFBridge : Prop :=
+  ∀ (δ : LSub) (Tab : OpTab) (Q : LStack → List Life → List SRec → Val → WProp) (σ : LStack)
+    (k : Nat) (ds : List Bool) (αi αo : List Life) (ls : List SRec) (e : Expr) (ρ : WRes),
+    OpenSF (ℍ := ℍ) true δ Tab Q σ k ds αi αo ls e ρ → OpenS δ σ Tab (Q σ) k ds αi αo ls e ρ
+
+/-! ### The nil slice the programs read (shared) -/
+
+/-- **W's computations at `σ = []` are Core's, at a data answer**: the slice Targets'
+`AdequateRetAt` reads, `F_Σ A` with `A` data (`DivFree S A` is `A.Data`). The operation types are
+read by Core's `vC` in `rowTab` at both relations, and the answer is data, so no W relation sits at
+a negative position. At `F A` (`S = []`) it is the route for the programs' runs (DESIGN §9.1). -/
+def NilSoundRet (p : Placement) : Prop :=
+  ∀ (δ : LSub) (S : Row) (A : VTy) (ls : List SRec) (e : Expr) (ρ : WRes), A.Data →
+    cRL p [] δ (CTy.effOf S A) [] ls e ρ → cC (CTy.effOf S A) ls δ e ρ
 
 /-! ### Monotonicity -/
 
@@ -67,7 +114,20 @@ def MonoG (p : Placement) : Prop :=
     (∀ s ∈ Γ, s.live = true → FutAvoidsV s.ty σ σ') →
     TabAtS σ αs ρ → gRL p σ δ αs ls Γ γ ρ → gRL p σ' δ αs' ls' Γ γ ρ
 
-/-- **Computations along W's order.** -/
+/-- **Contexts across the callback's own lend**: a context related at `σ` is related at the stack
+the own lend of the type `C` pushes on it, when the pushed variable is neither free nor bound in
+the context's live types (`CtxFresh`). The push is not a future (its variable is the type's
+binder, not a future's name), so `MonoG` does not give it. `ThunkVRow` and `BangThunkVRow` at
+`cbpv` (the `U` clause's own push) and `AllIRow` at `binder0` and `binder` (the `∀` clause's own
+push) call their premise at the pushed stack, with the context carried there by this. -/
+def MonoOwnG (p : Placement) : Prop :=
+  ∀ (σ : LStack) (δ : LSub) (Γ : Ctx VTy) (γ : List Val) (αs : List Life) (ls : List SRec)
+    (ρ : WRes) (C : CTy) (e : LEnt) (a : Life),
+    StackOK σ αs → OwnPush δ C ρ (σ, αs) e a → CtxFresh e.x Γ → TabAtS σ αs ρ →
+    gRL p σ δ αs ls Γ γ ρ → gRL p (e :: σ) δ (a :: αs) ls Γ γ ρ
+
+/-- **Computations along W's order**, stated beside the bundles: `binder0`'s `U` clause needs it
+for `MonoV` at a `U` value. -/
 def MonoC (p : Placement) : Prop :=
   ∀ (σ : LStack) (δ : LSub) (C : CTy) (αs : List Life) (ls ls' : List SRec) (e : Expr) (ρ : WRes)
     (σ' : LStack) (αs' : List Life),
@@ -83,14 +143,16 @@ def MonoHide (p : Placement) : Prop :=
 /-- `MonoHide` is `MonoV` at the one-step future that inserts nothing and hides `N` at depth `0`. -/
 def MonoHideFromMonoV : Prop := ∀ p : Placement, MonoV (ℍ := ℍ) p → MonoHide (ℍ := ℍ) p
 
-/-! ### The nil slice (OQ-58) -/
+/-! ### The nil slice at every type (OQ-58, beside the bundles) -/
 
-/-- W's values at `σ = []` are Core's. -/
+/-- W's values at `σ = []` are Core's, at every type: the W-inside-Core half of `NilAgrees`. -/
 def NilSoundV (p : Placement) : Prop :=
   ∀ (δ : LSub) (A : VTy) (ls : List SRec) (v : Val) (ρ : WRes),
     vRL p [] δ A [] ls v ρ → vC true A ls δ v ρ
 
-/-- W's computations at `σ = []` are Core's. -/
+/-- W's computations at `σ = []` are Core's, at every type. At `A ⊸ C` Core reads the argument
+contravariantly (`∀ v, vCE A v ─⋆ cC C …`), so this needs Core's `A` inside W's: at a thunk
+argument, `NilAgreesU`. -/
 def NilSoundC (p : Placement) : Prop :=
   ∀ (δ : LSub) (C : CTy) (ls : List SRec) (e : Expr) (ρ : WRes),
     cRL p [] δ C [] ls e ρ → cC C ls δ e ρ
@@ -164,9 +226,10 @@ def ThunkFRow (p : Placement) : Prop :=
     SemS p Δ (⟨.unit, false⟩ :: Γ) M (.comp (.ret A)) →
     SemS p Δ Γ (.val (.lam M)) (.val (.thunk (.ret A)))
 
-/-- **`thunk V : U C` at W** (the `thunkV` row): the row at which a callback becomes a value. -/
+/-- **`thunk V : U C` at W** (the `thunkV` row): the row at which a callback becomes a value. It
+takes the own lend's hygiene (`OwnHyg`), which the `U` clause's own push at `cbpv` reads. -/
 def ThunkVRow (p : Placement) : Prop :=
-  ∀ (Δ : LifeCtx) (Γ : Ctx VTy) (N : Expr) (C : CTy), C.isRet = false →
+  ∀ (Δ : LifeCtx) (Γ : Ctx VTy) (N : Expr) (C : CTy), C.isRet = false → OwnHyg Δ Γ C →
     SemS p Δ Γ (.val (.lam N)) (.comp C) → SemS p Δ Γ (.val (.lam N)) (.val (.thunk C))
 
 /-- **Promotion of `thunk M : U (F A)` at W** (the `bangThunkF` row). -/
@@ -176,17 +239,23 @@ def BangThunkFRow (p : Placement) : Prop :=
     SemS p Δ Γ (.val (.lam M)) (.val (.bang (.thunk (.ret A))))
 
 /-- **Promotion of a λ-value at W** (the `bangThunkV` row): the row at which `retryR` and
-`timeoutR` become values. -/
+`timeoutR` become values. It takes the own lend's hygiene, as `ThunkVRow` does. -/
 def BangThunkVRow (p : Placement) : Prop :=
   ∀ (Δ : LifeCtx) (Γ : Ctx VTy) (N : Expr) (C : CTy), Persistent Γ → C.isRet = false →
+    OwnHyg Δ Γ C →
     SemS p Δ Γ (.val (.lam N)) (.comp C) → SemS p Δ Γ (.val (.lam N)) (.val (.bang (.thunk C)))
 
-/-! ### The bundle -/
+/-! ### The bundles -/
 
-/-- **Statement 0 at the placement `p`.** -/
+/-- **Statement 0's shared lemmas**: about definitions every placement shares. Their failure is a
+finding about those definitions and stops the probe (DESIGN §12.3). -/
+def Statement0Shared : Prop :=
+  (∀ p : Placement, ExtPreW (ℍ := ℍ) p) ∧ FutReLend ∧ FutPart ∧ FutAvoidsTrans ∧
+    OpenSFBridge (ℍ := ℍ) ∧ ∀ p : Placement, NilSoundRet (ℍ := ℍ) p
+
+/-- **Statement 0 at the placement `p`**: the facts the placements are compared on. -/
 def Statement0 (p : Placement) : Prop :=
-  ExtPreW (ℍ := ℍ) p ∧ FutReLend ∧ MonoV (ℍ := ℍ) p ∧ MonoG (ℍ := ℍ) p ∧
-    NilSoundV (ℍ := ℍ) p ∧ NilSoundC (ℍ := ℍ) p ∧ CallbackExtMut (ℍ := ℍ) p ∧
+  MonoOwnG (ℍ := ℍ) p ∧ MonoV (ℍ := ℍ) p ∧ MonoG (ℍ := ℍ) p ∧ CallbackExtMut (ℍ := ℍ) p ∧
     CallbackExtImm (ℍ := ℍ) p ∧ ForceRow (ℍ := ℍ) p ∧ ThawRelend (ℍ := ℍ) p ∧
     ThunkFRow (ℍ := ℍ) p ∧ ThunkVRow (ℍ := ℍ) p ∧ BangThunkFRow (ℍ := ℍ) p ∧
     BangThunkVRow (ℍ := ℍ) p

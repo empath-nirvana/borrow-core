@@ -5,12 +5,13 @@ import ProbeD1.Arising
 # ProbeD1 — statement 1: the guard as `TW`'s run invariant (OQ-45; DESIGN §5)
 
 W's guard is the stack's table `TabAtS`. Synthesis §11 asks for the guard read from `TW` (T-ARISE.0,
-the table read off one `TW` world). The probe states the sound direction instead: the table holds
-at every configuration that arises (`ArisesSound`), because every transition of W's semantics
-keeps it. Arising is historical: `TW` records no 6.65 lend (OQ-44), so one world cannot say that a
-cell was folded after a lend opened, and the pointwise reading is expected to fail at
-`innerView`, where the configuration does not arise. `TabOfTWPointwise` is that pointwise reading,
-stated so that its first check can be run; it is not part of the bundle.
+the table read off one `TW` world). The probe states the run-invariant form instead: every
+transition of W's semantics, from a configuration with the table, gives one with the table. That
+claim rests on the per-transition facts below, not on a set of configurations. Arising is
+historical: `TW` records no 6.65 lend (OQ-44), so one world cannot say that a cell was folded after
+a lend opened, and the pointwise reading is expected to fail at `innerView`, where the
+configuration does not arise. `TabOfTWPointwise` is that pointwise reading, stated so that its
+first check can be run; it is not part of the bundle.
 
 * **The transitions keep the table**: the empty stack (`TabNil`), a part (`TabParts`), a run's
   update (`TabUpd`, [TR] 6.50; `TabRuns` its `wpG` form), a lend's start (`TabStart`), a handler
@@ -20,6 +21,9 @@ stated so that its first check can be run; it is not part of the bundle.
 * **The rows GhostEnd proved at its own guard, re-proved at W**: `[lam]`, `[allI]`, and the
   derivation `not_gfpAt_below` refutes GFP at (`BelowRow`), with its witness excluded
   (`BelowExcluded`).
+* **Beside the bundle**: `ArisesSound`, the table at every `Arises` configuration, which follows
+  from the per-transition facts by induction on `Arises` and is used only to exclude a witness.
+  `Arises` is the refutation side's set, whose direction is not established (DESIGN §11).
 
 Statements only; no proofs.
 -/
@@ -58,10 +62,14 @@ def TabRuns : Prop :=
     wpG (ℍ := ℍ) ls e (fun ls' t ρ' => TabAtS σ αs ρ' ∧ Q ls' t ρ') ρ
 
 /-- **The start of a lend, at every depth** (`tabAtS_start_one` at every stack): the callback's
-resource below the fresh lend, joined to the lend's view, has the table at `e·σ`. -/
+resource strictly above the fresh lend, joined to the lend's view, has the table at `e·σ`. It takes
+the freshness fields the table reads, which `LendMut` and `LendImm` carry: the fresh lifetime below
+the stack's (nesting order) and below the callback's resource (6.112's `И`), the variable and the
+place new to the stack. `OwnOK` adds its payload scoping, which the table does not read. -/
 def TabStart : Prop :=
   ∀ (δ : LSub) (σ : LStack) (αs : List Life) (ls : List SRec) (e : LEnt) (α : Life)
-    (d : Bool) (ρ a R : WRes), StackOK σ αs → OwnOK δ σ αs e α ρ → TabAtS σ αs ρ →
+    (d : Bool) (ρ a R : WRes), StackOK σ αs → List.IsChain (· < ·) (α :: αs) →
+    ρ.InStratum α → e.x ∉ σ.map LEnt.x → e.l ∉ σ.map LEnt.l → TabAtS σ αs ρ →
     vwE δ e d α ls a → ResU.CompS ρ a R → TabAtS (e :: σ) (α :: αs) R
 
 /-- **A handler keeps the table**: the table does not read the entries' rows. -/
@@ -95,10 +103,12 @@ def TabResume : Prop :=
     StackOK (σi ++ σo) (αi ++ αo) → stratS (αi ++ αo) ρz → vwS δ [] σi ds αi ls ρv →
     TabAtS σo αo ρa → ResU.CompS ρz ρv R → ResU.CompS R ρa R' → TabAtS (σi ++ σo) (αi ++ αo) R'
 
-/-! ### The guard is `TW`'s run invariant -/
+/-! ### Beside the bundle: the refutation side's set has the table -/
 
-/-- **Every configuration that arises has the table** (`Arises ⊆ ArisesAt`): the guard is the
-stack's arising condition read from `TW`'s runs, not a guard beside `TW`. -/
+/-- **Every `Arises` configuration has the table** (`Arises ⊆ ArisesAt`). It follows from the
+per-transition facts by induction on `Arises`, and is used only to exclude a witness from `Arises`.
+The claim that the guard is `TW`'s run invariant rests on the per-transition facts themselves, not
+on this: `Arises` is the refutation side's set, whose direction is not established (DESIGN §11). -/
 def ArisesSound : Prop :=
   ∀ c : Cfg, Arises (ℍ := ℍ) c → ArisesAt c.σ c.αs c.ls c.ps c.ρf c.ρ c.fρ
 
@@ -127,11 +137,15 @@ def LamRow (p : Placement) : Prop :=
 
 /-- **`[allI]` at W** (`allI_RLa` at the placement's relation). Its binder is new to `Δ`, the
 freshness `allI_RLa`'s added hypotheses come from: with `StackJ`'s payload scoping, it is new to
-the stack's first-kind variables and free in no payload type. -/
+the stack's first-kind variables and free in no payload type. At `binder0` and `binder` the `∀`
+clause pushes an entry named by the binder (`OwnPush`), and the context is carried there by
+`MonoOwnG`, which asks the binder bound in no live type of `Γ` as well as free in none: that
+hygiene is the row's added hypothesis. -/
 def AllIRow (p : Placement) : Prop :=
   ∀ (Δ : LifeCtx) (Γ : Ctx VTy) (x : LifeVar) (b : Lifetime.Life) (M : Expr) (S : VTy) (C : CTy),
     b.mentions x = false → (∀ y u, Δ.find? y = some u → u.mentions x = false) →
     (∀ s ∈ Γ, s.live = true → ¬ VFree x s.ty) → Δ.find? x = none →
+    (∀ s ∈ Γ, s.live = true → x ∉ VTy.binders s.ty) →
     SemS p (Δ.extend x b) (⟨S, false⟩ :: Γ) M (.comp C) →
     SemS p Δ Γ (.val (.lam M)) (.comp (.all x b C))
 
@@ -160,10 +174,10 @@ def BelowExcluded (p : Placement) : Prop :=
 
 /-! ### The bundle -/
 
-/-- **Statement 1 at the placement `p`.** -/
+/-- **Statement 1 at the placement `p`**: the per-transition facts, and the rows at the guard. -/
 def Statement1 (p : Placement) : Prop :=
   TabNil ∧ TabParts ∧ TabUpd ∧ TabRuns (ℍ := ℍ) ∧ TabStart (ℍ := ℍ) ∧ TabHide ∧
-    TabRelend (ℍ := ℍ) ∧ TabFut ∧ TabResume (ℍ := ℍ) ∧ ArisesSound (ℍ := ℍ) ∧
+    TabRelend (ℍ := ℍ) ∧ TabFut ∧ TabResume (ℍ := ℍ) ∧
     LamRow (ℍ := ℍ) p ∧ AllIRow (ℍ := ℍ) p ∧ BelowRow (ℍ := ℍ) p ∧ BelowExcluded (ℍ := ℍ) p
 
 end ProbeD1

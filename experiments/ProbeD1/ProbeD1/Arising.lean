@@ -9,19 +9,29 @@ sound for proving and unsound for refuting. So the check a refutation must pass 
 not a pointwise property of one configuration.
 
 * **`Arises c`**: the configuration is reached from the nil index, whose arising set is `TW`'s
-  (Core's settled one), by the transitions W's semantics makes: a run of a term the probe's rules
-  derive (`ProbeRules`), its captured values arising, ending as `wpG`'s run ends (`RunEnd`: the
-  machine's run, `↭` on the local part, a tagged `TW` world at the end, the stack fixed); a part
-  of the local resource taken, the rest joining the frame; a lend opened by a lend row (`LendMut`:
-  `TW.mutFold`'s step, 6.65's start; `LendImm`: `TW.immFrame`'s step, 6.64's start), its entry
-  pushed below the callback's resource (6.112's `И`); a handler installed (`hideS`). Each
-  transition is a step of W's semantics, so `Arises` under-approximates what arises.
-* **`ArisesV c v`**: the value is the answer of such a run, the run exhibited with its derivation,
-  or the place a lend row hands its callback. `ArisesVal v`: it arises at some configuration, as a
-  run's captured values must.
+  (Core's settled one), by transitions W's semantics makes: a run of a term the probe's rules
+  derive (`ProbeRules`), ending as `wpG`'s run ends (`RunEnd`: the machine's run, `↭` on the local
+  part, a tagged `TW` world at the end, the stack fixed); a part of the local resource taken, the
+  rest joining the frame; a lend opened (`LendMut`: `TW.mutFold`'s step, 6.65's start; `LendImm`:
+  `TW.immFrame`'s step, 6.64's start), its entry pushed below the callback's resource (6.112's
+  `И`); a handler installed (`hideS`).
+* **A run's captured values** (`ArisesCtx c Γ γ`) arise at the run's start configuration, slot by
+  slot at the slot's type, each live slot's value holding its own part of the start's local
+  resource and the parts composing to it: a linear slot is used once, a dead slot is not read.
+* **`ArisesV c v A`**: the value arises at `c` at the type `A`, `c`'s local part being the value's
+  resource: the answer of such a run at the judgement's answer type, or the view a lend hands its
+  callback, at `Mut 'x T` or `Imm 'x T` (`viewTy`).
+* **The direction is not established.** `Arises` is meant to under-approximate what arises, the
+  direction a refutation needs. Two things are not shown: a run's values share its start's
+  configuration (world, records, frames, stack and lifetimes), not its path; and a lend, a handler
+  and a part are taken at any arising configuration, not where a program's term opens the lend or
+  installs the handler. No statement here says that every `Arises` configuration is reached by a
+  closed derivable program's execution, so a refutation is admitted as an obstruction only with
+  that program and its execution exhibited (DESIGN §11).
 * **`ArisesAt`** is the pointwise consequence: the world `TW`'s, the stack consistent with it, the
-  local part consistent with the table. Statement 1 proves `Arises ⊆ ArisesAt` (`ArisesSound`). It
-  is a necessary condition, used to exclude a witness, never to admit one.
+  local part consistent with the table. `Arises ⊆ ArisesAt` (`ArisesSound`, `Statement1.lean`)
+  follows from the per-transition facts of statement 1. It is a necessary condition, used to
+  exclude a witness, never to admit one, and it is not what the guard's claim rests on.
 
 Definitions only.
 -/
@@ -34,7 +44,7 @@ namespace ProbeD1
 open BoCa BoCa.Fig16 BoCa.Fig16.BoLo BoCa.Fig16.LogRel BoCa.Fig16.LogRel.Core
 open BoCa.BoLo (Heap Alloc ARun)
 open BoCa.Lifetime (LSub LifeCtx LifeVar)
-open GhostEnd (LEnt LStack LKind extS vwE TabAtS)
+open GhostEnd (LEnt LStack LKind extS vwE TabAtS jdgCty)
 
 /-- **The pointwise consequence of arising at W's index**: the world `fρ = ρf ● ρ` a tagged `TW`
 world at the records, the stack in shape, every 6.64 entry among `TW`'s records, every 6.65
@@ -107,18 +117,30 @@ def LendImm (c c' : Cfg) (e : LEnt) : Prop :=
       ResU.CompS (ResU.single e.l (CellU.immOf (LSet.singleton α) v R h)) ρc c'.ρ ∧
       ResU.Hash c'.ρf c'.ρ ∧ ResU.CompS c'.ρf c'.ρ c'.fρ ∧ Tagged c'.fρ c'.ps c'.ls
 
+/-- The configuration `c` with the frame part `ρf` and the local part `ρ`: the same world, records,
+frames, stack and lifetimes. -/
+def Cfg.at (c : Cfg) (ρf ρ : WRes) : Cfg := ⟨c.fρ, ρf, ρ, c.ps, c.ls, c.σ, c.αs⟩
+
+/-- The type of an entry's view: `Mut 'x T` at a 6.65 entry, `Imm 'x T` at a 6.64 one, `x` the
+entry's variable, which the stack reads at the entry's lifetime (`extS`). -/
+def viewTy (e : LEnt) : VTy := match e.k with
+  | .mut => .mut (.var e.x) e.T
+  | .imm _ => .imm (.var e.x) e.T
+
 mutual
 /-- **The configurations that arise at W** (DESIGN §11 item 2): reachability from the nil index by
-the transitions of W's semantics. -/
+the transitions of W's semantics. That it under-approximates what arises is not established
+(DESIGN §11). -/
 inductive Arises : Cfg → Prop where
   /-- Core's arising set at the nil index: a tagged `TW` world, the local part a part of it. -/
   | nil {fρ ρf ρ : WRes} {ps : List FrameRec} {ls : List SRec} :
       TW fρ ps (rsOf ls) → Tagged fρ ps ls → ResU.Hash ρf ρ → ResU.CompS ρf ρ fρ →
       Arises ⟨fρ, ρf, ρ, ps, ls, [], []⟩
-  /-- A run, at the stack, of a term the probe's rules derive, its captured values arising. -/
+  /-- A run, at the stack, of a term the probe's rules derive, its captured values arising at its
+  start at their slots' types (`ArisesCtx`). -/
   | run {c c' : Cfg} {Δ : LifeCtx} {Γ : Ctx VTy} {e₀ : Expr} {j : Jdg} {γ : List Val}
       {t : Expr} :
-      Arises c → ProbeRules Δ Γ e₀ j → (∀ w ∈ γ, ArisesVal w) →
+      Arises c → ProbeRules Δ Γ e₀ j → ArisesCtx c Γ γ →
       RunEnd (ℍ := ℍ) c (substAll γ e₀) c' t → Arises c'
   /-- A part of the local resource, the rest joining the frame. -/
   | part {c : Cfg} {ρ₁ ρ₂ ρf' : WRes} :
@@ -131,19 +153,32 @@ inductive Arises : Cfg → Prop where
   /-- A handler of the names `N` installed around the computation. -/
   | hide {c : Cfg} (N : UInt32 → Bool) :
       Arises c → Arises ⟨c.fρ, c.ρf, c.ρ, c.ps, c.ls, hideS N c.σ, c.αs⟩
-/-- **The values that arise at a configuration** (DESIGN §11 item 3): the answer of a run of a
-term the probe's rules derive, the derivation exhibited; or the place a lend row hands its
-callback. -/
-inductive ArisesV : Cfg → Val → Prop where
-  | ret {c c' : Cfg} {Δ : LifeCtx} {Γ : Ctx VTy} {e₀ : Expr} {j : Jdg} {γ : List Val}
-      {v : Val} :
-      Arises c → ProbeRules Δ Γ e₀ j → (∀ w ∈ γ, ArisesVal w) →
-      RunEnd (ℍ := ℍ) c (substAll γ e₀) c' (.val v) → ArisesV c' v
-  | view {c c' : Cfg} {e : LEnt} :
-      Arises c → (LendMut c c' e ∨ LendImm c c' e) → ArisesV c' (.loc e.l)
-/-- A value that arises at some configuration: what a run may capture. -/
-inductive ArisesVal : Val → Prop where
-  | at {c : Cfg} {v : Val} : ArisesV c v → ArisesVal v
+/-- **The values that arise at a configuration, at a type** (DESIGN §11 item 3), the
+configuration's local part being the value's resource. -/
+inductive ArisesV : Cfg → Val → VTy → Prop where
+  /-- The answer of a run of a term the probe's rules derive, the derivation exhibited, at the
+  judgement's answer type (`F_Σ A` answers in `A`). -/
+  | ret {c c' : Cfg} {Δ : LifeCtx} {Γ : Ctx VTy} {e₀ : Expr} {j : Jdg} {S : Row} {A : VTy}
+      {γ : List Val} {v : Val} :
+      Arises c → ProbeRules Δ Γ e₀ j → jdgCty j = CTy.effOf S A → ArisesCtx c Γ γ →
+      RunEnd (ℍ := ℍ) c (substAll γ e₀) c' (.val v) → ArisesV c' v A
+  /-- The place a lend hands its callback, at the entry's view type, holding the lend's cell: the
+  rest of the local part, the callback's resource, joins the frame. -/
+  | view {c c' : Cfg} {e : LEnt} {ψ : CellU BoCa.Loc Val} {ρc ρf' : WRes} :
+      Arises c → (LendMut c c' e ∨ LendImm c c' e) →
+      ResU.CompS (ResU.single e.l ψ) ρc c'.ρ → ResU.CompS c'.ρf ρc ρf' →
+      ArisesV (c'.at ρf' (ResU.single e.l ψ)) (.loc e.l) (viewTy e)
+/-- **A run's captured values arise at its start, slot by slot.** Each live slot's value arises at
+the start configuration at the slot's type, holding its own part of the start's local resource, the
+rest in the frame; the parts compose to the local part, so a linear slot is used once. A dead slot's
+value is not read. -/
+inductive ArisesCtx : Cfg → Ctx VTy → List Val → Prop where
+  | nil {c : Cfg} : c.ρ = PMap.empty → ArisesCtx c [] []
+  | dead {c : Cfg} {s : Slot VTy} {Γ : Ctx VTy} {w : Val} {γ : List Val} :
+      s.live = false → ArisesCtx c Γ γ → ArisesCtx c (s :: Γ) (w :: γ)
+  | live {c : Cfg} {s : Slot VTy} {Γ : Ctx VTy} {w : Val} {γ : List Val} {ρ₁ ρ₂ ρf₁ ρf₂ : WRes} :
+      s.live = true → ResU.CompS ρ₁ ρ₂ c.ρ → ResU.CompS c.ρf ρ₂ ρf₁ → ResU.CompS c.ρf ρ₁ ρf₂ →
+      ArisesV (c.at ρf₁ ρ₁) w s.ty → ArisesCtx (c.at ρf₂ ρ₂) Γ γ → ArisesCtx c (s :: Γ) (w :: γ)
 end
 
 /-- **`Arises` reaches past the nil index**: some configuration with an open lend arises. Its

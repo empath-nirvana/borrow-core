@@ -20,12 +20,15 @@ relates them.
 - Nothing breaks the borrow calculus: its guarantees, not BoLo's text.
 - The paper is not wrong; every refutation the probe can produce is of a statement of ours.
 - An obstruction is only an elaborating `def … : Prop` with its negation proved at a configuration
-  that arises (`Arises`, reachability from the nil index) and at values that arise (`ArisesV`)
-  (§11). Otherwise the report says "not derived, no obstruction verified".
+  that arises (`Arises`, reachability from the nil index) and at values that arise (`ArisesV`),
+  with the closed program whose execution reaches them exhibited (§11). That `Arises`
+  under-approximates what arises is not established, so the program is part of the evidence.
+  Otherwise the report says "not derived, no obstruction verified".
 - No step-indexing: the relation is one `mutual` block, structural on the type.
 - No relation family beside W's one relation. The three placements of §3 are candidates for that
-  one relation. W is the placement that survives; if more than one does, the cuts order chooses
-  (§3).
+  one relation. W is the surviving placement first in the cuts order. It is decided only when
+  every placement before it is refuted by a refutation that passes §11, and is provisional
+  otherwise (§3).
 - Multi-shot is ignored. The core is linear.
 
 ---
@@ -38,23 +41,26 @@ with no relation family beside W?
 
 **The order is fixed.** Statement 0 first. Its outcome decides OQ-8 (where the future-world
 quantifier sits) and with it whether D1 meets "two algebras with interactions only at cuts"
-(synthesis §2.5, §4.2, §8). Statements 1–4 follow, at the placement statement 0 leaves.
+(synthesis §2.5, §4.2, §8), once W is decided rather than provisional (§3). Statements 1–4 follow,
+at the placements statement 0 leaves.
 
 | statement | Lean (`ProbeD1.…`) | what it settles |
 |---|---|---|
-| 0. W's `U`, `⊸`, `∀` clauses fixed together | `vRL`, `cRL` at `Placement.{cbpv, binder0, binder}`; `Statement0 p` = `ExtPreW`, `FutReLend`, `MonoV`, `MonoG`, `NilSoundV`, `NilSoundC`, `CallbackExtMut`, `CallbackExtImm`, `ForceRow`, `ThawRelend`, `ThunkFRow`, `ThunkVRow`, `BangThunkFRow`, `BangThunkVRow`; beside it `MonoC`, `MonoHide` (`MonoHideFromMonoV`), `NilAgreesU`, `NilAgrees` | OQ-8; whether `U` and `⊸` take one quantifier; OQ-58, through `NilAgrees` (§6.3) |
-| 1. the guard as `TW`'s run invariant | `Statement1 p` = `TabNil`, `TabParts`, `TabUpd`, `TabRuns`, `TabStart`, `TabHide`, `TabRelend`, `TabFut`, `TabResume`, `ArisesSound`, `LamRow`, `AllIRow`, `BelowRow`, `BelowExcluded`; beside it `TabOfTWPointwise` | OQ-45's first question, re-scoped (§5.2); `lam`, `allI` and `not_gfpAt_below`'s derivation at W |
-| 2. the borrow-constant row at `σ·y` | `Statement2 p` = `SpanW2Row`, `SpanW1Row`, `RebFrameR`; beside it `SpanLoadRow`, `RebChooserNonVacuous` | #275; [TR] 6.150 at a resuming table (Law 2 for `withload`) |
+| 0. W's `U`, `⊸`, `∀` clauses fixed together | `vRL`, `cRL` at `Placement.{cbpv, binder0, binder}`; the shared lemmas `Statement0Shared` = `ExtPreW`, `FutReLend`, `FutPart`, `FutAvoidsTrans`, `OpenSFBridge`, `NilSoundRet`; the per-placement facts `Statement0 p` = `MonoOwnG`, `MonoV`, `MonoG`, `CallbackExtMut`, `CallbackExtImm`, `ForceRow`, `ThawRelend`, `ThunkFRow`, `ThunkVRow`, `BangThunkFRow`, `BangThunkVRow`; beside them `MonoC`, `MonoHide` (`MonoHideFromMonoV`), `NilSoundV`, `NilSoundC`, `NilAgreesU`, `NilAgrees` | OQ-8; whether `U` and `⊸` take one quantifier; OQ-58, through `NilAgrees` (§6.3) |
+| 1. the guard as `TW`'s run invariant | `Statement1 p` = `TabNil`, `TabParts`, `TabUpd`, `TabRuns`, `TabStart`, `TabHide`, `TabRelend`, `TabFut`, `TabResume`, `LamRow`, `AllIRow`, `BelowRow`, `BelowExcluded`; beside it `ArisesSound`, `TabOfTWPointwise` | OQ-45's first question, re-scoped (§5.2); `lam`, `allI` and `not_gfpAt_below`'s derivation at W |
+| 2. the borrow-constant row at `σ·y` | `Statement2 p` = `SpanW2Row`, `SpanW1Row`, `RebFrameR` (its added hypotheses `RCarried`, `TabKeepsRec`); beside it `SpanLoadRow`, `RebChooserNonVacuous` | #275; [TR] 6.150 at a resuming table (Law 2 for `withload`) |
 | 3. `[handle]` with a lend open | `Statement3 p` = `HandleRow` | #278 |
 | 4. `[allR-E]` at W | `Statement4 p` = `AllREW`, `AllRMono` | Law 1's elimination inside a borrow |
 | 5. the programs | `GenSelfAccepted p`, `ReconAccepted p e` | `genSelf`, `reconB′` accepted at W |
 | 6. the sample row | `ThenRow p` | `effThen` at a frozen frame's cancel |
 | 7. the side check | `Targets.NotVDenNaturalArises` | whether naturality is available for live lends |
-| the arising check | `ProbeRules`, `Arises`, `ArisesV`, `ArisesAt`, `ArisesNonVacuous` | what a refutation must reach (§11) |
-| all | `Probe p`; `Survives e p`, `Placement.rank` | statements 0–6 at one placement; which placement is W (§3) |
+| the arising check | `ProbeRules`, `Arises`, `ArisesV`, `ArisesCtx`, `ArisesAt`, `ArisesNonVacuous` | what a refutation must reach (§11) |
+| all | `Probe p`; `Survives e p`, `Placement.rank` | statements 0–6 at one placement; which placement is W, decided or provisional (§3) |
 
-**The stop rule** (§12.3): if `Statement0 p` is proved at no placement, the probe stops after
-statement 0 and reports.
+**The stop rule** (§12.3). Statement 0's shared lemmas come first. A failure of one is a finding
+about our definitions and stops the probe. If `Statement0 p` is proved at no placement, the probe
+stops after statement 0 and reports. A fact that fails at every placement for one shared reason is
+reported as a finding about our definitions, not as a comparison of placements.
 
 ---
 
@@ -97,7 +103,7 @@ continuation holding a lend's owner, `[allR-E]` inside a borrow, and the value r
 | from | what |
 |---|---|
 | Core | `vC`/`vCE`, `cC`, `wpTS`, `wpG`, `ewpTS`, `opTable`, `contShare`, `cancelOwed`, `KapRel`, `TW` and its constructors, `Tagged`, `Ext`, `Rel`, `Keeps`, `ptoMutS`, `ptoImmS`, `ptoImm`, `reborrow`, `RebChooseTW`, `wpG_reborrow`, `rebChooseTW_top`, `wpG_frame`, `wpTS_I_forget`, the borrow constants' terms and types (`withborUE`, `withbor1UTy`, `withbor2UTy`, `withload`, `withloadUTy`), `CDerives`'s rule shapes |
-| GhostEnd (`targets`) | `LEnt`, `LStack`, `LKind`, `extS`, `depth`, `tabK`, `vwE`, `vwS`, `dropS`, `stratS`, `boxTop`, `ReLend`, `RelendableS`, `RelendableN`, `ghostS`, `stopS`, `bodyS`, `openFS`, `OpenS`, `rowTab`, `TabAtS`, `jdgCty`, `innerView` (`Stacked.lean`, `RLCompat.lean`); the lemmas of `StackStep.lean`, `Drop.lean`, `Relend.lean`, `ImmLend.lean`, `Frames.lean`, `Table.lean`, `Tree.lean`, `Descend.lean`, each at the rows whose hypotheses it meets (the fold lemmas need `LinResume` and `AllCross`, §6.2) |
+| GhostEnd (`targets`) | `LEnt`, `LStack`, `LKind`, `extS`, `depth`, `tabK`, `vwE`, `vwS`, `dropS`, `stratS`, `boxTop`, `ReLend`, `RelendableS`, `RelendableN`, `ghostS`, `stopS`, `bodyS`, `openFS`, `OpenS`, `rowTab`, `TabAtS`, `jdgCty`, `innerView` (`Stacked.lean`, `RLCompat.lean`); the lemmas of `StackStep.lean`, `Drop.lean`, `Relend.lean`, `ImmLend.lean`, `Frames.lean`, `Table.lean`, `Tree.lean`, `Descend.lean`, each at the rows whose hypotheses it meets (the fold lemmas need `LinResume` and `AllCross`, and the 6.64 ones `Tab.Local`, §6.2); at `cbpv` and `binder` through `OpenSFBridge` or restated over `OpenSF` (§6.2) |
 | GhostEnd (branches; §2.6) | `Below.lean` (`gfp`), `Arising.lean` (`gfp-arising`), `Extend.lean` (`borrow-callbacks`): `tabAtS_comp`, `tabAtS_nil`, `wpG_tabAtS_one`, `tabAtS_start_one`, `force_RLa`, `relendableS_thunkA`, `thunkF_RLa`, `thunkE_RLa`, `lam_RLa`, `allI_RLa`, `vRLa_congr`, `below_excluded`, `stackFresh_of_fresh`, `stackTyFresh_of_fresh`, `callback_ext`, `callback_ext_one`, `all_elimK`, `tw_innerView`, `not_gfpAt_below` |
 | Targets | `SemWorld` and its `B.BWorld`; `Idx`; `ExtPre`; `OpTabI`, `OpEntI`; `RowSpan`, `admClosedOp`, `RowClass`, `OutJ.core`; `TypingJ`, `ExtendsNU`, `SpanRule1`, `SpanRule2`, `SpanRuleLoad`; `SpanWithbor1`, `SpanWithbor2`, `SpanWithload`, `HandleCompat`, `SliceShape`, `Mono` (as the forms the probe's statements transcribe); `AcceptedAt`, `genSelf`; `NotVDenNaturalArises`; the open types `Inst.OVTy`, `Inst.OCTy` |
 
@@ -193,12 +199,13 @@ single steps is therefore not transitive. Two things would follow. `WP p` would 
 `ExtPre`, which `WLaws` asks. And at `cbpv` a `U` value carried to a future would owe its
 computation at the futures of that future, which are two-block futures of the original stack that
 no hypothesis supplies. So `Fut` is the reflexive–transitive closure of `FutStep`, and
-transitivity is by construction (`ExtPreW`, statement 0).
+transitivity is by construction (`ExtPreW`, bookkeeping among statement 0's shared lemmas).
 
 The stack a future gives is an order-preserving interleaving of `σ` with fresh entries. Each kept
 entry's row is reduced by hiding sets that grow outward: a hiding at depth `k` reaches every kept
 entry outside depth `k`. The lemmas the proofs need about it are stated where they are used:
-`FutReLend` (§4.1) and `TabFut` (§5.1).
+`FutReLend`, `FutPart` and `FutAvoidsTrans` (§4.1), and `TabFut` (§5.1). They are stated at the
+reading substitution `δ`, since `FutOK.vars_sub` and `FutOK.pay` read it.
 
 **The step's conditions.**
 - `FutOK.below` is 6.112's `И`: the inserted lifetimes lie below the holder's resource.
@@ -219,6 +226,13 @@ never before one (§4.2). Its variable is the binder, which `extS` overrides at 
 So `OwnOK` asks nothing of the reading substitution at it; `FutOK.vars_sub` asks that of an
 inserted name only.
 
+The own lend is not a future. Its variable is the type's binder, which `BindersLow` keeps off the
+futures' names, so the pushed stack is no future of `s`, and `MonoG` does not carry a context
+there. A row that calls its premise at the pushed stack carries its context by `MonoOwnG`
+(statement 0): `ThunkVRow` and `BangThunkVRow` at `cbpv`, `AllIRow` at `binder0` and `binder`.
+`MonoOwnG` asks the pushed variable to be neither free nor bound in the context's live types
+(`CtxFresh`), and `StackJ`'s third kind asks the same of the judgement's context.
+
 **Names.** Lifetime variables are names (`LifeVar := Nat`), and the stack binds its entries'
 variables over the reading substitution (`extS`, which overrides `δ`). An entry a future inserts
 takes its variable from the names no program binds (`NsVar`), and every judgement the probe reads
@@ -229,6 +243,17 @@ This is the representation item OQ-8 boxes (the draft spec's D-W, *Representatio
 `nsBase` is a convention of the probe; its value matters only in being above every binder of the
 two programs. The restriction `BindersLow` puts on FL at W is a guarantee gap with a stated
 discharge (§14).
+
+Of the entries the clauses insert, the own lend is the one named by a binder rather than by a
+future's name. Whether a context is carried across it is `MonoOwnG`, the first per-placement fact
+attempted (§13 step 2). If it is
+provable only by letting a future insert entries that are not `NsVar` but that the reading type
+avoids, free and bound, `FutStep` is changed so before any other proof, and this paragraph and §4.2
+are rewritten to say so. That change has a cost this paragraph names now: with such insertions,
+`BindersLow` no longer keeps an inserted variable off the binders of the code that runs at the
+future. An intermediate type of a row's premise, or a type in a thunk's captured context, can then
+bind it, and a row that meets such a collision needs the renaming lemma §14 lists as `BindersLow`'s
+discharge inside its own proof.
 
 `FutAvoids C σ σ'` says that the entries `σ'` has and `σ` lacks are not read by `C`: their
 variables are neither free nor bound in it. `FutAvoidsV` is the same at a value type, and
@@ -358,6 +383,7 @@ GhostEnd's `OpenS`. So `StackStep.lean`'s lemmas apply to the piece without rest
 row whose hypotheses they meet. The fold lemmas (`stack_step_other`, `stack_step_imm`,
 `stack_spans_mut`, `stack_spans_imm`) need `LinResume Tab` (every operation linear and resuming)
 and `AllCross` (every stop crosses every entry). The programs' critical rows meet neither (§6.2).
+The 6.64 folds also take `Tab.Local`, which every row's table meets (`Row.tab_local`).
 
 The `∀` clause differs from `vRLk`'s in two ways:
 - the extension is the callback's own lend only, one entry named by the binder at the instance's
@@ -384,11 +410,22 @@ body at `e :: σ''` for every future `σ''` of `σ'`. Every such `σ''` is a fut
 made at the stack itself would leave that case to `MonoC` at `⊸`, which `cbpv`'s `⊸` clause
 (resources only) does not give.
 
+The thunk's introduction (`ThunkVRow`) owes the body at `e :: σ'` and gets it from its premise
+there, so its context must reach the pushed stack. No future does (§2.2, *The own lend*); that
+transport is `MonoOwnG` (§4.1).
+
 ### 2.5 The semantic judgement, and W as a `SemWorld` (`Sem.lean`)
 
 ```lean
 def CtxAvoids (x : LifeVar) (Γ : Ctx VTy) : Prop :=
   ∀ s ∈ Γ, s.live = true → ¬ VFree x s.ty
+
+def CtxFresh (x : LifeVar) (Γ : Ctx VTy) : Prop :=
+  ∀ s ∈ Γ, s.live = true → ¬ VFree x s.ty ∧ x ∉ VTy.binders s.ty
+
+def OwnHyg (Δ : LifeCtx) (Γ : Ctx VTy) (C : CTy) : Prop :=
+  ∀ (x : LifeVar) (c : Lifetime.Life) (C' : CTy), C = .all x c C' →
+    Δ.find? x = none ∧ CtxFresh x Γ
 
 def BindersLow (Γ : Ctx VTy) (C : CTy) : Prop :=
   (∀ x ∈ CTy.binders C, ¬ NsVar x) ∧ ∀ s ∈ Γ, s.live = true → ∀ x ∈ VTy.binders s.ty, ¬ NsVar x
@@ -407,7 +444,7 @@ def StackJ (σ : LStack) (αs : List Life) (δ : LSub) (Δ : LifeCtx) (Γ : Ctx 
   ∀ e ∈ σ,
     (∃ u, Δ.find? e.x = some u) ∨
     (NsVar e.x ∧ Δ.find? e.x = none ∧ ¬ CFree e.x C ∧ CtxAvoids e.x Γ) ∨
-    (Δ.find? e.x = none ∧ σ.head? = some e ∧ CtxAvoids e.x Γ ∧
+    (Δ.find? e.x = none ∧ σ.head? = some e ∧ CtxFresh e.x Γ ∧
       ∃ c C', C = .all e.x c C' ∧ e.x ∉ CTy.binders C' ∧ ∀ a ∈ αs.head?, LtLife (extS δ σ αs) c a)
 
 def SemS (p : Placement) (Δ : LifeCtx) (Γ : Ctx VTy) (e : Expr) (j : Jdg) : Prop :=
@@ -437,6 +474,13 @@ second and third kinds are the entries the placements' quantifiers insert.
   variables and the stack's payloads (`vRLa_congr`'s analogue), so this loses nothing. With it,
   `OwnOK` needs no freshness against `δ` at the binder: the binder is new to `Δ`, so `δ` does not
   map it.
+- **The own lend's hygiene** (`CtxFresh` in `StackJ`'s third kind, `OwnHyg`): the entry named by
+  the judgement's own binder is neither free nor bound in the context's live types. A slot's type
+  that mentioned it free would read the entry's lifetime, and a `∀` of a slot's type that bound it
+  would read its body at the entry's lifetime instead of its instance. `ThunkVRow` and
+  `BangThunkVRow` take `OwnHyg` of their judgement, and `AllIRow` takes its binder bound in no live
+  slot, because each calls its premise at a stack the own lend pushes and carries the context
+  there by `MonoOwnG` (§4.1).
 - A row whose premises add types takes their `BindersLow` and `Scoped` as a hypothesis (the rule's
   binder, its intermediate type), as `allI_RLa` takes `hσx`.
 
@@ -458,7 +502,7 @@ def WP (p : Placement) : Targets.SemWorld where
   nil := ([], [])
   Fam fρ ps i := TW fρ ps (rsOf i.1) ∧ Tagged fρ ps i.1 ∧ StackOK i.2.1 i.2.2
   Upd _ _ ρ _ π := ResU.UpdV ρ π
-  Ext := ExtW                     -- OrdW at the empty substitution, a preorder (ExtPreW)
+  Ext := ExtW                     -- OrdW at the empty substitution, a preorder by construction
   payStk _ _ := ([], [])          -- OQ-46 (b): a stored payload read stack-free, as vRLs's leaves
   val b A i δ v := if b then vRL p i.2.1 δ A i.2.2 i.1 v else vC false A i.1 (extS δ i.2.1 i.2.2) v
   comp C i δ e := cRL p i.2.1 δ C i.2.2 i.1 e
@@ -480,8 +524,11 @@ Carrying the ghost-end share in the field would need the payload substitution of
 in the index (OQ-46's world for a stored payload); that is a step of building W proper, outside the
 probe.
 
-`ExtPre (WP p)` is claimed (`ExtPreW`, statement 0). `WLaws (WP p)` is not: Targets' `Mono` reads
-a value at every `δ` and every type, with none of the index hypotheses `MonoV` carries.
+`ExtPre (WP p)` holds by construction (`ExtPreW`, bookkeeping). `ExtW` is not the order the
+clauses read: they read `Fut δ`, whose `FutOK.vars_sub` and `FutOK.pay` read the reading
+substitution, so the order lemmas they use are stated at `δ` (§4.1). `WLaws (WP p)` is not
+claimed: Targets' `Mono` reads a value at every `δ` and every type, with none of the index
+hypotheses `MonoV` carries.
 
 ### 2.6 Build step 0: GhostEnd's branch files
 
@@ -499,9 +546,9 @@ definitions in this design need none of them, so `lake build ProbeD1` passes wit
 
 `Placement` selects which clauses carry the future-world quantifier. It is not a family of
 relations. Statement 0 is proved or refuted per placement. A placement survives when its bundle
-and `reconB′`'s acceptance are proved (`Survives e p`, at the term `e` built for `reconB′`). W is
-the surviving placement of least `rank`: the cuts order of synthesis §4.2, applied to the proved
-bundles.
+and `reconB′`'s acceptance are proved (`Survives e p`, at the term `e` fixed for `reconB′` before
+statement 2's proofs start, §9.2). W is the surviving placement of least `rank`, the cuts order of
+synthesis §4.2.
 
 ```lean
 def Placement.rank : Placement → Nat
@@ -513,6 +560,15 @@ def Survives (e : Expr) (p : Placement) : Prop :=
   Probe p ∧ ReconAccepted p e
 ```
 
+**Decided or provisional.** A placement ranked before W counts against itself only through a
+refutation. OQ-8 is decided against a placement only by a refutation of a statement of its `Probe`
+or of `ReconAccepted` that passes §11: the negation proved, its configuration and values arising,
+and the closed program whose execution reaches them exhibited. If a placement ranked before W is
+only "not derived", W is **provisional**. The report then reads, for example, "cbpv: not derived,
+no obstruction verified; W provisionally = binder". No consequence is drawn from a provisional W:
+not for OQ-8, not for "interactions only at cuts", and not for D1's ranking against D2a and D3
+(§4.4, §12.1).
+
 A naturality placement (OQ-8 option 1) is not a clause set. It is the claim that the `binder0`
 relation without its own-lend conjunct is natural under the freeze binder
 (`Targets.FreezeBinderLife`). Statement 7 is its cheap check, and §4.4 records what follows.
@@ -523,6 +579,8 @@ relation without its own-lend conjunct is natural under the freeze binder
 
 ### 4.1 The statements (`Statement0.lean`)
 
+The shared lemmas: definitions every placement shares.
+
 ```lean
 def ExtPreW (p : Placement) : Prop := Targets.ExtPre (WP p).toBWorld
 
@@ -531,6 +589,29 @@ def FutReLend : Prop :=
     StackOK σ αs → Fut δ ρ (σ, αs) (σ', αs') → ReLend αs'' αs' →
     ∃ αs₀, ReLend αs₀ αs ∧ Fut δ ρ (σ, αs₀) (σ', αs'')
 
+def FutPart : Prop :=
+  ∀ (δ : LSub) (ρz ρn ρ : WRes) (s s' : Stk), ResU.CompS ρz ρn ρ → Fut δ ρ s s' → Fut δ ρz s s'
+
+def FutAvoidsTrans : Prop :=
+  (∀ (C : CTy) (σ σ' σ'' : LStack), FutAvoids C σ σ' → FutAvoids C σ' σ'' → FutAvoids C σ σ'') ∧
+  ∀ (A : VTy) (σ σ' σ'' : LStack), FutAvoidsV A σ σ' → FutAvoidsV A σ' σ'' → FutAvoidsV A σ σ''
+
+def OpenSFBridge : Prop :=
+  ∀ (δ : LSub) (Tab : OpTab) (Q : LStack → List Life → List SRec → Val → WProp) (σ : LStack)
+    (k : Nat) (ds : List Bool) (αi αo : List Life) (ls : List SRec) (e : Expr) (ρ : WRes),
+    OpenSF true δ Tab Q σ k ds αi αo ls e ρ → OpenS δ σ Tab (Q σ) k ds αi αo ls e ρ
+
+def NilSoundRet (p : Placement) : Prop :=
+  ∀ (δ : LSub) (S : Row) (A : VTy) (ls : List SRec) (e : Expr) (ρ : WRes), A.Data →
+    cRL p [] δ (CTy.effOf S A) [] ls e ρ → cC (CTy.effOf S A) ls δ e ρ
+
+def Statement0Shared : Prop :=
+  (∀ p, ExtPreW p) ∧ FutReLend ∧ FutPart ∧ FutAvoidsTrans ∧ OpenSFBridge ∧ ∀ p, NilSoundRet p
+```
+
+The per-placement facts:
+
+```lean
 def MonoV (p : Placement) : Prop :=
   ∀ (σ : LStack) (δ : LSub) (A : VTy) (αs : List Life) (ls ls' : List SRec) (v : Val) (ρ : WRes)
     (σ' : LStack) (αs' : List Life),
@@ -538,28 +619,12 @@ def MonoV (p : Placement) : Prop :=
     TabAtS σ αs ρ → vRL p σ δ A αs ls v ρ → vRL p σ' δ A αs' ls' v ρ
 
 def MonoG (p : Placement) : Prop := …   -- the same for 𝒢⟦Γ⟧ (`gRL`)
-def MonoC (p : Placement) : Prop := …   -- the same for the computation relation (`cRL`)
 
-def MonoHide (p : Placement) : Prop :=
-  ∀ (σ : LStack) (δ : LSub) (A : VTy) (αs : List Life) (ls : List SRec) (v : Val) (ρ : WRes)
-    (N : UInt32 → Bool), StackOK σ αs → TabAtS σ αs ρ →
-    vRL p σ δ A αs ls v ρ → vRL p (hideS N σ) δ A αs ls v ρ
-
-def MonoHideFromMonoV : Prop := ∀ p : Placement, MonoV p → MonoHide p
-
-def NilSoundV (p : Placement) : Prop :=
-  ∀ (δ : LSub) (A : VTy) (ls : List SRec) (v : Val) (ρ : WRes),
-    vRL p [] δ A [] ls v ρ → vC true A ls δ v ρ
-def NilSoundC (p : Placement) : Prop :=
-  ∀ (δ : LSub) (C : CTy) (ls : List SRec) (e : Expr) (ρ : WRes),
-    cRL p [] δ C [] ls e ρ → cC C ls δ e ρ
-
-def NilAgreesU (p : Placement) : Prop :=
-  ∀ (δ : LSub) (C : CTy) (ls : List SRec) (f : Val) (ρ : WRes),
-    vC true (.thunk C) ls δ f ρ → vRL p [] δ (.thunk C) [] ls f ρ
-def NilAgrees (p : Placement) : Prop :=
-  (∀ δ A ls v ρ, vRL p [] δ A [] ls v ρ ↔ vC true A ls δ v ρ) ∧
-  (∀ δ C ls e ρ, cRL p [] δ C [] ls e ρ ↔ cC C ls δ e ρ)
+def MonoOwnG (p : Placement) : Prop :=
+  ∀ (σ : LStack) (δ : LSub) (Γ : Ctx VTy) (γ : List Val) (αs : List Life) (ls : List SRec)
+    (ρ : WRes) (C : CTy) (e : LEnt) (a : Life),
+    StackOK σ αs → OwnPush δ C ρ (σ, αs) e a → CtxFresh e.x Γ → TabAtS σ αs ρ →
+    gRL p σ δ αs ls Γ γ ρ → gRL p (e :: σ) δ (a :: αs) ls Γ γ ρ
 
 def CallbackExtMut (p : Placement) : Prop :=
   ∀ (σ : LStack) (δ : LSub) (y : LifeVar) (c : Lifetime.Life) (T : VTy) (D : CTy)
@@ -589,15 +654,41 @@ def ThunkFRow (p : Placement) : Prop :=
   ∀ Δ Γ M A, SemS p Δ (⟨.unit, false⟩ :: Γ) M (.comp (.ret A)) →
     SemS p Δ Γ (.val (.lam M)) (.val (.thunk (.ret A)))
 def ThunkVRow (p : Placement) : Prop :=
-  ∀ Δ Γ N C, C.isRet = false →
+  ∀ Δ Γ N C, C.isRet = false → OwnHyg Δ Γ C →
     SemS p Δ Γ (.val (.lam N)) (.comp C) → SemS p Δ Γ (.val (.lam N)) (.val (.thunk C))
 def BangThunkFRow (p : Placement) : Prop := …   -- `bangThunkF` at `SemS`
-def BangThunkVRow (p : Placement) : Prop := …   -- `bangThunkV` at `SemS`
+def BangThunkVRow (p : Placement) : Prop := …   -- `bangThunkV` at `SemS`, with `OwnHyg`
 
 def Statement0 (p : Placement) : Prop :=
-  ExtPreW p ∧ FutReLend ∧ MonoV p ∧ MonoG p ∧ NilSoundV p ∧ NilSoundC p ∧ CallbackExtMut p ∧
-    CallbackExtImm p ∧ ForceRow p ∧ ThawRelend p ∧ ThunkFRow p ∧ ThunkVRow p ∧
-    BangThunkFRow p ∧ BangThunkVRow p
+  MonoOwnG p ∧ MonoV p ∧ MonoG p ∧ CallbackExtMut p ∧ CallbackExtImm p ∧ ForceRow p ∧
+    ThawRelend p ∧ ThunkFRow p ∧ ThunkVRow p ∧ BangThunkFRow p ∧ BangThunkVRow p
+```
+
+Beside the bundles:
+
+```lean
+def MonoC (p : Placement) : Prop := …   -- `MonoV`'s form for the computation relation (`cRL`)
+
+def MonoHide (p : Placement) : Prop :=
+  ∀ (σ : LStack) (δ : LSub) (A : VTy) (αs : List Life) (ls : List SRec) (v : Val) (ρ : WRes)
+    (N : UInt32 → Bool), StackOK σ αs → TabAtS σ αs ρ →
+    vRL p σ δ A αs ls v ρ → vRL p (hideS N σ) δ A αs ls v ρ
+
+def MonoHideFromMonoV : Prop := ∀ p : Placement, MonoV p → MonoHide p
+
+def NilSoundV (p : Placement) : Prop :=
+  ∀ (δ : LSub) (A : VTy) (ls : List SRec) (v : Val) (ρ : WRes),
+    vRL p [] δ A [] ls v ρ → vC true A ls δ v ρ
+def NilSoundC (p : Placement) : Prop :=
+  ∀ (δ : LSub) (C : CTy) (ls : List SRec) (e : Expr) (ρ : WRes),
+    cRL p [] δ C [] ls e ρ → cC C ls δ e ρ
+
+def NilAgreesU (p : Placement) : Prop :=
+  ∀ (δ : LSub) (C : CTy) (ls : List SRec) (f : Val) (ρ : WRes),
+    vC true (.thunk C) ls δ f ρ → vRL p [] δ (.thunk C) [] ls f ρ
+def NilAgrees (p : Placement) : Prop :=
+  (∀ δ A ls v ρ, vRL p [] δ A [] ls v ρ ↔ vC true A ls δ v ρ) ∧
+  (∀ δ C ls e ρ, cRL p [] δ C [] ls e ρ ↔ cC C ls δ e ρ)
 ```
 
 ### 4.2 Why each tests the real question at full strength
@@ -605,47 +696,114 @@ def Statement0 (p : Placement) : Prop :=
 - **The clauses are fixed together.** `U`, `⊸` and `∀` are clauses of one `mutual` block, read at
   the guard. No clause is checked at another relation. The three placements differ exactly in the
   flags of `Placement`.
-- **The order is W's, and a preorder.** `ExtPreW` is in the bundle. `WP p` is a Targets world only
-  if its order composes, and the `U` clause's monotonicity at a future of a future needs it.
-  `FutReLend` is the order's lemma that monotonicity at `U` turns on: the futures the clause
-  quantifies over are taken after a re-lend, and a monotone value is re-lent at its future.
+- **The order: bookkeeping, and the lemmas the clauses read at `δ`.** `ExtPreW` is bookkeeping and
+  tests nothing. `Fut` is a reflexive–transitive closure and `Ext` is reflexive and transitive, so
+  `WP p` meets Targets' `ExtPre` by construction. It is among the shared lemmas because a Targets
+  world must meet it. `WP p`'s `Ext` is `OrdW` at the empty substitution, which is not the order
+  the clauses read: they read `Fut δ`, and `FutOK.vars_sub` and `FutOK.pay` read `δ`. The lemmas
+  monotonicity at `U` turns on are therefore stated at `δ`:
+  - `FutReLend`: the futures the clause quantifies over are taken after a re-lend, and a monotone
+    value is re-lent at its future;
+  - `FutPart`: a value is carried to a future at its whole resource, while the clause quantifies
+    over futures at its part `ρz` strictly above the outermost lend (`FutOK.below` is downward
+    closed along `CompS`);
+  - `FutAvoidsTrans`: the futures of a future avoid the value's type only through each step's
+    avoidance.
 - **The `U`-clause thaw is proved at the guarded W.** `ForceRow`, `ThawRelend` and the four
   `U`-introduction rows are stated at `vRL p`, not transported from `vRLs`. At `cbpv` and `binder`
   the thunk rows owe the body at every future, and at `cbpv` the own lend at every future, so
   their proof is where the quantifier's cost shows.
-- **Monotonicity is along the whole order.** That includes any number of insertions at any depths,
-  which the share needs between lenders, and hiding, which `[handle]` needs. A front-only order
-  would make `MonoV` easier and hide the between-lenders case. `MonoC` is named because `binder0`
-  needs it where `cbpv` and `binder` have monotonicity at `U` by construction (§4.3). `MonoHide`
-  is `MonoV`'s hiding instance (`MonoHideFromMonoV`), named because it is where `binder0` is
-  tested hardest.
-- **The nil slice is checked at every type.** That includes thunks, `∀` and `F_Σ`, which are the
-  placements' quantifier sites.
+- **Monotonicity is along the whole order, and across the own lend.** That includes any number of
+  insertions at any depths, which the share needs between lenders, and hiding, which `[handle]`
+  needs. A front-only order would make `MonoV` easier and hide the between-lenders case. `MonoC`
+  is named because `binder0` needs it where `cbpv` and `binder` have monotonicity at `U` by
+  construction (§4.3). `MonoHide` is `MonoV`'s hiding instance (`MonoHideFromMonoV`), named because
+  it is where `binder0` is tested hardest. `MonoOwnG` is the transport across the callback's own
+  lend, which no future reaches (§2.2): `ThunkVRow` and `BangThunkVRow` at `cbpv`, and `AllIRow`
+  at `binder0` and `binder`, call their premise at the pushed stack. It is what tests the claim
+  that the own lend is not a second order (below). It is per placement, and it is the first
+  per-placement fact attempted (§13).
+- **The nil slice is checked where the programs read it.** `NilSoundRet` is W inside Core at
+  `F_Σ A` with `A` data: the slice Targets' `AdequateRetAt` reads, and §9.1's route. No position
+  of it is contravariant in W. The operation types are read by Core's `vC` in `rowTab` at both
+  relations (`Stacked.lean:228`), and the answer is data. It instantiates the share's futures at
+  the reflexive future (`OpenSFBridge`) and is expected to be mechanical (`bodyS_nil_iff`'s
+  pattern). The nil slice at every type, `NilSoundV` and `NilSoundC`, is beside the bundles with
+  `NilAgreesU` and `NilAgrees`. Core's `cC` at `⊸` reads its argument contravariantly
+  (`∀ v, (vCE none true A ls δ v ─⋆ cC C …)`, `Core/Relation.lean:157`), so W inside Core at
+  `A ⊸ C` needs Core inside W at `A`. At a thunk argument that is `NilAgreesU`, and the borrow
+  constants' types have that shape: `withbor1UTy` and `withbor2UTy` are
+  `U(Ref A ⊸ cbUTy ⊸ F_Σ …)`, with `cbUTy = U(∀'x. L ⊸ F_Σ …)` (`Core/EffBorrow.lean:177-190`), as
+  does `retryR`'s `!U(1 → …)` argument. The expected failure of all four at those types is
+  outcome (c), OQ-58's question, which is no stop (§6.3), so none of them is in a bundle.
 - **The callback-extension fact is at any related argument.** The argument is any value of
   `Mut 'y T` (or `Imm 'y T`, its coherence with the records included) at the extended stack, so
   the `⊸` clause there is exercised, not only at the lend's own view. The callback is a value of
   the constant's callback type `cbUTy` (`Core/EffBorrow.lean`), not a premise. `CDerives` has the
   borrow operations as constants (`Below.lean`'s "What it measures"), so the row must get the
   callback's behaviour at `σ·y` from its value.
-- **One quantifier.** Every clause reaches a stack other than its own only through `FutQ`, W's
-  order `Fut` or the stack itself as the placement's flag says. At the clause that makes the
-  callback's own lend, `OwnPush` at the type the clause reads may follow. This is a property of
-  `Relation.lean`'s text, checked by reading it, and it holds at all three placements.
-  - The own lend is not a second order. It is the outermost `∀`'s instance, read as the entry of
-    the lend the instance names. It is named by the type's binder, so it cannot belong to a
-    type-free order. `vRLk`'s extension is relative to the type in the same way
-    (`e'.x = x ∨ ¬ CFree e'.x C`).
+- **One quantifier, in the design's reading of synthesis §11 (d).** The synthesis words failure
+  (d) as: "Statement 0 holds only with different future-world quantifiers at `U` and at `⊸`, which
+  no single definition of W reconciles". The design reads "one quantifier" as a property of
+  `Relation.lean`'s text, checked by reading it, which holds at all three placements: every clause
+  reaches a stack other than its own only through `FutQ` (W's order `Fut`, or the stack itself as
+  the placement's flag says), and at the clause that makes the callback's own lend `OwnPush` at the
+  type the clause reads may follow. That reading is the design's, not the synthesis's text. It
+  admits the type-directed own lend at `U` (`cbpv`) by definition, and with it OQ-8 option 2's
+  claim of interactions only at cuts. So the outcome is reported against both (§12.2):
+  - against the synthesis's wording: whether `OwnPush` at `U` is a second future-world quantifier.
+    It reaches a stack no future reaches (its variable is a program binder, §2.2), it is read from
+    the type, and it sits at `U` and not at `⊸`;
+  - against the design's reading: whether every clause reaches other stacks only as above.
+
+  The design's case that the own lend is not a second order:
+  - It is the outermost `∀`'s instance, read as the entry of the lend the instance names. It is
+    named by the type's binder, so it cannot belong to a type-free order. `vRLk`'s extension is
+    relative to the type in the same way (`e'.x = x ∨ ¬ CFree e'.x C`).
   - It comes after a future, so a value carried to a future keeps it.
+  - It coheres with the order when contexts are Kripke across it: `MonoOwnG`. If `MonoOwnG` holds,
+    a context carried along `Fut` is carried across the push too. If it holds only once `FutStep`
+    admits the push as a step (§2.2, *Names*), the push is a future and one order remains. If it
+    is derived at no placement either way, the report names the own lend as the step statement 0
+    stopped at, read against (d) in the synthesis's wording. Only a refutation that passes §11
+    would show that contexts do not follow the own lend.
   - The world's `Ext` is the type-free part, `OrdW`, since `Mono` reads no type.
   - At `binder0` neither `U` nor the share quantifies over futures (`FutQ false`). Its coherence
     with W's order is a theorem, not a clause: `MonoV binder0` and `MonoG binder0`, both in its
     bundle, say that its values are Kripke along `Fut`.
-  - Failure (d) (§12.2) is a clause changed to reach other stacks by any other means.
+  - Failure (d) in the design's reading (§12.2) is a clause changed to reach other stacks by any
+    other means.
 
 ### 4.3 Where each placement is expected to be tested hardest [unchecked]
 
 These are readings that order the work. None is derived, and none is an obstruction.
 
+- **`MonoOwnG`, at every placement.** At a slot of data, of a reference or of a view it is the
+  leaves' reading at the pushed stack, which agrees with the old one at the slot's free variables
+  (`CtxFresh`). At a thunk slot `g : U C₁` it is expected not to follow at the current `FutStep`:
+  - The push is no future of the stack (its variable is a program binder, not `NsVar`). So `g`'s
+    `U` clause gives `g`'s body at no stack holding the pushed entry. At `cbpv` the clause gives
+    the futures and `C₁`'s own lend, at `binder` the futures, and at `binder0` the stack itself.
+  - The transport then needs `g`'s forced body monotone along an insertion the order does not
+    contain, `MonoC` along the push, and at `⊸` that is the contravariant step `binder0`'s
+    monotonicity meets (below).
+  - So `MonoOwnG` is expected to be "not derived" at a thunk slot at every placement, for one
+    reason shared by all three: our `Fut`, not the placement. With it go `ThunkVRow` and
+    `BangThunkVRow` at `cbpv` (statement 0) and `AllIRow` at `binder0` and `binder`
+    (statement 1).
+  - The change the expectation points to is the one §2.2's *Names* states. `FutStep` would admit an
+    inserted entry whose variable is not `NsVar` when the clause's type avoids it, free and bound
+    (`FutAvoids`). The own push is then a one-step future at depth `0`: `OwnOK` gives `FutOK`'s
+    fields at `k = 0`, and `vars_sub` follows from `SubDom` and the binder new to `Δ`. `MonoOwnG`
+    is then `MonoG` at that future. Its cost is the *Names* guarantee at the code that runs at the
+    future (§2.2).
+  - A second candidate changes the representation instead. The own lend would be named by a
+    future's name, and the type's binder read through `δ` (`δ.extend x a`). The push is then a
+    one-step future followed by the plain `∀`'s instance, and `MonoOwnG` is `MonoG`'s instance. Its
+    cost is GhostEnd's representation: `callback_ext` reads the entry named by the binder, so
+    `CallbackExt*` and their proofs are restated.
+
+  §13 step 2 orders the decision.
 - **`binder0`: monotonicity.** Its `U` clause ranges over the stack itself, so `MonoV` at a `U`
   value needs `MonoC` at its computation. `MonoC` at `⊸` needs the argument read back at the
   original stack, a contravariant step that monotonicity does not give. So at a callback type
@@ -671,9 +829,13 @@ These are readings that order the work. None is derived, and none is an obstruct
     own lends at them, and a future of a future is a future (`Fut` is a closure). The work is the
     order's lemmas:
     - a re-lend of a future is a future of a re-lend (`FutReLend`);
+    - a future at a resource is a future at its parts (`FutPart`);
+    - the entries a composite inserted avoid the type when each step's do (`FutAvoidsTrans`);
     - a future's views are its stack's, the inserted entries' flags off;
-    - `Ext` at a resource gives `Ext` at its parts;
-    - the entries a composite inserted avoid the type when each step's do.
+    - `Ext` at a resource gives `Ext` at its parts (Core's `Ext`, as `he.right hc`).
+
+    The first three are statement 0's shared lemmas; the last two are stated where a proof first
+    uses them.
   - `MonoV` needs no `MonoC` there. The other formers are componentwise, and a leaf reads `vC` at
     `extS δ σ' αs'`, which agrees with `extS δ σ αs` at the type's free variables (`FutAvoidsV`),
     with `vC_local` along `Ext`.
@@ -684,37 +846,47 @@ These are readings that order the work. None is derived, and none is an obstruct
   clause's own lend is made at every future. It adds obligations at `lam` and `allI`: the body at
   every future, from the induction hypothesis at the future with the context transported
   (`MonoG`).
-- **The nil slice, at every placement.** `NilSoundV` and `NilSoundC` instantiate every
-  quantifier at the reflexive future and are expected to be mechanical (`bodyS_nil_iff`,
-  `vRLs_nil`'s pattern). `NilAgreesU` and `NilAgrees` ask Core's relation to carry obligations it
-  has no notion of at the placement's quantifier sites:
-  - `binder0`: the own lend at `∀`;
-  - `cbpv`: futures and own lends at `U`, futures in the share;
-  - `binder`: all of them.
+- **The nil slice, at every placement.** `NilSoundRet` instantiates the share's futures at the
+  reflexive future (`OpenSFBridge`) and reads a data answer, so it is expected to be mechanical
+  (`bodyS_nil_iff`, `vRLs_nil`'s pattern). The nil slice at every type is not:
+  - `NilSoundV` and `NilSoundC` meet Core's contravariant `⊸`. At an argument type `A` they need
+    Core's `A` inside W's, which at a thunk `A` is `NilAgreesU`.
+  - `NilAgreesU` and `NilAgrees` ask Core's relation to carry obligations it has no notion of at
+    the placement's quantifier sites: at `binder0` the own lend at `∀`; at `cbpv` futures and own
+    lends at `U`, and futures in the share; at `binder` all of them.
 
   A Core-related callback keeps its view across a stop, where W re-lends it. So the old-in-new
-  direction is not expected to follow from Core's relation at callback types. `NilAgrees` is a
-  statement about the identity of two definitions, so a refutation of it at any inhabitant decides
-  OQ-58 for the placement's definitions (§6.3). What FL needs at `σ = []` is the `U`-introduction
-  rows, which are in `Statement0`. The expected answer to OQ-58 is that Core is not W's `σ = []`
-  instance at those types: outcome (c), Core redefined (§12.2).
+  direction is not expected to follow from Core's relation at callback types, and with it neither
+  `NilSoundC` at the borrow constants' types nor `NilAgrees`. `NilAgrees` is a statement about the
+  identity of two definitions, so a refutation of it at any inhabitant decides OQ-58 for the
+  placement's definitions (§6.3). What FL needs at `σ = []` is the `U`-introduction rows, which
+  are in `Statement0`, and `NilSoundRet`, which is in the shared lemmas. The expected answer to
+  OQ-58 is that Core is not W's `σ = []` instance at those types: outcome (c), Core redefined
+  (§12.2). That is no stop, which is why none of these four is in a bundle.
 
 ### 4.4 What statement 0 decides
 
-- **OQ-8.**
-  - `cbpv` is W (§3): OQ-8 option 2. D1 then meets "interactions only at cuts", with this cost
+- **OQ-8, when W is decided** (§3: every placement ranked before W refuted by a refutation that
+  passes §11).
+  - `cbpv` is W: OQ-8 option 2. D1 then meets "interactions only at cuts", with this cost
     recorded: the `U` clause reads its type's outermost `∀` to name the callback's own lend. That
     reading stays at `U`, the resume cut's value side. Every clause reads the stack's lifetimes at
     its leaves through `extS`, as Core's relation reads its record list; that is not a quantifier.
-  - `binder` or `binder0` is W: option 3. Every `⊸` and `∀` clause, or the `∀` clause alone at
-    `binder0`, carries a resume obligation away from the cuts. D1 then does not meet "only at the
-    cuts". It keeps its rank against D2a and D3 (synthesis §8).
+    The claim holds in the design's reading of (d) (§4.2). In the synthesis's wording it is
+    reported with the own lend's status beside it.
+  - `binder` or `binder0` is W, every placement before it refuted: option 3. Every `⊸` and `∀`
+    clause, or the `∀` clause alone at `binder0`, carries a resume obligation away from the cuts.
+    D1 then does not meet "only at the cuts". It keeps its rank against D2a and D3 (synthesis §8).
+- **OQ-8, when W is provisional.** A placement ranked before W is only "not derived". The report
+  records W as provisional ("cbpv: not derived, no obstruction verified; W provisionally =
+  binder") and decides nothing: OQ-8 stays open, and nothing follows for "only at the cuts" or for
+  D1's ranking against D2a and D3. Only a refutation that passes §11 counts against a placement.
 - **Option 1 (naturality).** It is not decided here. Statement 7 tells whether its known witness
   (`mut_not_natural`) arises. A placement that passes makes option 1 unnecessary for D1.
 - **"Whether `U` and `⊸` take the same quantifier"** (02-experiments §1.3). Under `cbpv` they do
   not need to, since `⊸` takes none and the `U` clause carries it, as Core's relation does. Under
   `binder` they take the same. If statement 0 holds only after a clause is changed to reach other
-  stacks than through `FutQ` and `OwnPush`, that is failure (d) (§12.2).
+  stacks than through `FutQ` and `OwnPush`, that is failure (d) in the design's reading (§12.2).
 
 ---
 
@@ -737,7 +909,8 @@ def TabRuns : Prop :=
     wpG ls e (fun ls' t ρ' => TabAtS σ αs ρ' ∧ Q ls' t ρ') ρ
 
 def TabStart : Prop :=
-  ∀ δ σ αs ls (e : LEnt) α (d : Bool) (ρ a R : WRes), StackOK σ αs → OwnOK δ σ αs e α ρ →
+  ∀ δ σ αs ls (e : LEnt) α (d : Bool) (ρ a R : WRes), StackOK σ αs →
+    List.IsChain (· < ·) (α :: αs) → ρ.InStratum α → e.x ∉ σ.map LEnt.x → e.l ∉ σ.map LEnt.l →
     TabAtS σ αs ρ → vwE δ e d α ls a → ResU.CompS ρ a R → TabAtS (e :: σ) (α :: αs) R
 
 def TabHide : Prop :=
@@ -758,9 +931,6 @@ def TabResume : Prop :=
     StackOK (σi ++ σo) (αi ++ αo) → stratS (αi ++ αo) ρz → vwS δ [] σi ds αi ls ρv →
     TabAtS σo αo ρa → ResU.CompS ρz ρv R → ResU.CompS R ρa R' → TabAtS (σi ++ σo) (αi ++ αo) R'
 
-def ArisesSound : Prop :=
-  ∀ c : Cfg, Arises c → ArisesAt c.σ c.αs c.ls c.ps c.ρf c.ρ c.fρ
-
 def HeldUnderTW (ρ : WRes) (ps : List FrameRec) (σ : LStack) : Prop :=
   ∀ (m : BoCa.Loc) (ψ : CellU BoCa.Loc Val), ρ.get m = some ψ → ψ.kind ≠ Kind.own →
     (∃ e ∈ σ, e.l = m ∧ ∀ u, e.k = .imm u → ∃ r ∈ ps, r.le = m) ∨ m ∉ σ.map LEnt.l
@@ -776,6 +946,7 @@ def LamRow (p : Placement) : Prop :=
 def AllIRow (p : Placement) : Prop :=
   ∀ Δ Γ x b M S C, b.mentions x = false → (∀ y u, Δ.find? y = some u → u.mentions x = false) →
     (∀ s ∈ Γ, s.live = true → ¬ VFree x s.ty) → Δ.find? x = none →
+    (∀ s ∈ Γ, s.live = true → x ∉ VTy.binders s.ty) →
     SemS p (Δ.extend x b) (⟨S, false⟩ :: Γ) M (.comp C) →
     SemS p Δ Γ (.val (.lam M)) (.comp (.all x b C))
 
@@ -786,7 +957,10 @@ def BelowExcluded (p : Placement) : Prop :=
 
 def Statement1 (p : Placement) : Prop :=
   TabNil ∧ TabParts ∧ TabUpd ∧ TabRuns ∧ TabStart ∧ TabHide ∧ TabRelend ∧ TabFut ∧ TabResume ∧
-    ArisesSound ∧ LamRow p ∧ AllIRow p ∧ BelowRow p ∧ BelowExcluded p
+    LamRow p ∧ AllIRow p ∧ BelowRow p ∧ BelowExcluded p
+
+def ArisesSound : Prop :=          -- beside the bundle
+  ∀ c : Cfg, Arises c → ArisesAt c.σ c.αs c.ls c.ps c.ρf c.ρ c.fρ
 ```
 
 `belowEnt`, `belowCtx`, `belowTerm` and `belowType` are `Below.lean`'s `e₀`, `Δ₀`, `allBelowE` and
@@ -799,9 +973,10 @@ def Statement1 (p : Placement) : Prop :=
 invariant at every depth (`tabAt_of_TW`, T-ARISE.0, not in Lean)?" T-ARISE.0 reads the table off
 one `TW` world. That pointwise form is `TabOfTWPointwise`, and it is not in the bundle.
 
-**What the bundle states instead.** The table holds at every configuration that arises
-(`ArisesSound`: `Arises ⊆ ArisesAt`, §11), because every transition of W's semantics keeps it.
-This changes the content of statement 1, for three reasons:
+**What the bundle states instead.** Every transition of W's semantics keeps the table: from a
+configuration that has it, each transition yields one that has it. That is a run-invariant claim,
+and it rests on the per-transition facts below, not on a set of configurations. This changes the
+content of statement 1, for three reasons:
 - Arising is historical. `TW` records no 6.65 lend (OQ-44), so one world cannot say that a cell
   was folded after a lend opened.
 - The pointwise form is expected to fail at `innerView` (below), a configuration that does not
@@ -811,13 +986,16 @@ This changes the content of statement 1, for three reasons:
   runs, not beside them.
 
 W's configurations are `TW`'s (`WP p`'s `Fam`), as Core's are. The guard asks more of the local
-resource at a stack: the stack's table. The bundle has one fact per transition of `Arises`:
+resource at a stack: the stack's table. The bundle has one fact per transition of W's semantics:
 - the nil index: `TabNil`;
 - a run: `TabUpd`, [TR] 6.50 keeping every borrow cell's lifetime at its location through `↭`, at
   the innermost lend's `↓α` and at the outermost lend away from the stack's places (`tabAt_updV`
   twice), with `TabRuns` its `wpG` form;
 - a part: `TabParts`;
-- a lend's start: `TabStart`, 6.112's `И` putting the callback's resource above the fresh lifetime;
+- a lend's start: `TabStart`, 6.112's `И` putting the callback's resource above the fresh lifetime.
+  It takes only the freshness fields the table reads: the fresh lifetime in nesting order and below
+  the callback's resource, and the variable and place new to the stack. `LendMut` and `LendImm`
+  carry exactly those. `OwnOK`'s payload scoping is not one of them;
 - a handler: `TabHide`.
 
 And one fact per configuration the relation quantifies over:
@@ -829,9 +1007,17 @@ And one fact per configuration the relation quantifies over:
   follows from `TabRelend`, `TabParts` and `TabStart`'s argument at an empty view.
 
 These are the synthesis's "It holds for one lend (`wpG_tabAt`) and for one entry
-(`wpG_tabAtS_one`)", at every depth. Proved, they make `TabAtS` the stack's arising condition
-derived from `TW`'s runs. A guard that some transition from an arising configuration does not
+(`wpG_tabAtS_one`)", at every depth. Proved, they make `TabAtS` the stack's run invariant, read
+from `TW`'s runs transition by transition. A guard that some transition of W's semantics does not
 keep would be a guard beside `TW`: failure (b).
+
+`ArisesSound` (`Arises ⊆ ArisesAt`) is stated beside the bundle. It follows from the
+per-transition facts by induction on `Arises`, and it is used only to exclude a witness from
+`Arises`. The guard's claim does not rest on it. `Arises` is the refutation side's set, and its
+direction is not established (§11). A set not shown to contain every configuration that arises
+cannot carry a claim about all of them. No proving-direction set is needed, since the
+run-invariant claim is per transition. If a proof ever needed one, it would be defined
+separately, as an over-approximation.
 
 **The pointwise check.** The configuration to check `TabOfTWPointwise` against first:
 - `innerView k αy` (`RLCompat.lean:381`) at the stack `[x]`, with `x` a `mut` entry at `α`,
@@ -860,6 +1046,13 @@ exactly the refuted derivation. `BelowExcluded` is `below_excluded` at the place
 At `cbpv` it also meets a stack whose innermost entry is the binder itself (`StackJ`'s third
 kind). There the clause reads the stack's lifetime, and the induction hypothesis applies at
 `Δ.extend x b`, where the entry is of the first kind.
+
+At `binder0` and `binder` the `∀` clause pushes the own lend, an entry named by the binder
+(`OwnPush`), and the row calls its premise at `en :: σ'`, at `δ.extend x α`. The context is
+carried there by `MonoOwnG`, which asks the binder to be neither free nor bound in `Γ`'s live
+types. So the row adds "bound in no live slot" to Core's rule's "free in no live slot". At the
+pushed stack `δ.extend x α` and `δ` read the same lifetimes: the stack's entry overrides `x`, and
+no payload type of `σ'` mentions `x` (`hσT`). That step is `vRLa_congr`'s.
 
 ---
 
@@ -897,17 +1090,31 @@ def rebF (Tb : Table) (l : BoCa.Loc) (α : Life) (R : List SRec → Val → WRes
 def RebRelend (Tb : Table) l α R P₀ P Q (ls : List SRec) (e : Expr) : WProp := fun ρ =>
   ∀ X, (∀ ls e ρ, rebF Tb l α R P₀ P Q X ls e ρ → X ls e ρ) → X ls e ρ
 
+def RCarried (R : List SRec → Val → WRes → Prop) : Prop :=
+  ∀ (ls ls' : List SRec) (v : Val) (σ : WRes), Ext ls ls' σ → R ls v σ → R ls' v σ
+
+def TabKeepsRec (Tb : Table) (r : FrameRec) (α : Life) (R : List SRec → Val → WRes → Prop)
+    (P₀ : Life → Val → WProp) : Prop :=
+  ∀ (ls : List SRec) (t : Expr) (X : List SRec → Expr → WProp) (ρ : WRes), r ∈ rsOf ls →
+    Tb ls t (fun ls'' e'' => rebView r.le α R P₀ ls'' ⋆ X ls'' e'') ρ →
+    Tb ls t (fun ls'' e'' ρ'' => r ∈ rsOf ls'' ∧ (rebView r.le α R P₀ ls'' ⋆ X ls'' e'') ρ'') ρ
+
 def RebFrameR : Prop :=
   ∀ (Tb : Table), Tb.Mono → ∀ (r : FrameRec) α R P₀ P Q ls e,
+    RCarried R → TabKeepsRec Tb r α R P₀ →
     r ∈ rsOf ls → (∀ ls', r ∈ rsOf ls' → RebChooseTW ls' r.le (R ls') P₀ (P ls')) →
     Entails (rebView r.le α R P₀ ls ⋆ RebRelend Tb r.le α R P₀ P Q ls e) (ewpTS ls e Tb Q)
 
 def RebChooserNonVacuous : Prop :=
-  ∃ (r : FrameRec) (x : LifeVar), r.T.immReborrow (.var x) ≠ r.T ∧ ¬ VFree x r.T ∧
-    ∀ ls', r ∈ rsOf ls' →
-      RebChooseTW ls' r.le (fun w σ => vC false r.T ls' r.δ w σ)
-        (fun β w χ => vShape (r.T.immReborrow (.var x)) (r.δ.extend x β) w χ)
-        (fun β w χ => vC true (r.T.immReborrow (.var x)) ls' (r.δ.extend x β) w χ)
+  ∃ (r : FrameRec) (x : LifeVar) (α : Life) (ls : List SRec) (ρ : WRes) (Tab : OpTab)
+    (n i : UInt32) (en : OpEnt),
+    r.T.immReborrow (.var x) ≠ r.T ∧ ¬ VFree x r.T ∧ r ∈ rsOf ls ∧
+    Tab n i = some en ∧ en.abort = false ∧
+    RCarried R₀ ∧ TabKeepsRec (opTable Tab) r α R₀ P₀ ∧
+    (∀ ls', r ∈ rsOf ls' → RebChooseTW ls' r.le (R₀ ls') P₀ (P₀' ls')) ∧
+    rebView r.le α R₀ P₀ ls ρ
+  -- R₀ ls' := vC false r.T ls' r.δ;  P₀ β := vShape (r.T.immReborrow (.var x)) (r.δ.extend x β);
+  -- P₀' ls' β := vC true (r.T.immReborrow (.var x)) ls' (r.δ.extend x β)  (written out in Lean)
 
 def Statement2 (p : Placement) : Prop := SpanW2Row p ∧ SpanW1Row p ∧ RebFrameR
 ```
@@ -933,11 +1140,17 @@ For `withbor` (2) at a stack `σ` (`genSelf`'s at `σ = []`):
    programs' rows it is the form of item (ii) below.
 3. **The fold.** `stack_step_other` (`StackStep.lean:392`), `stack_step_imm` (`:1003`) and
    `stack_spans_mut`/`stack_spans_imm` need `LinResume Tab` (every operation linear and
-   non-abortive) and `AllCross` (every stop crosses every entry). So they apply only at linear,
-   resuming rows whose stops cross the whole stack, and at `σ = []` there `openS_nil_ewp` closes
-   them. `SpanW2Row` and `SpanW1Row` are at `RowClass.any` and at every stack: `genSelf`'s row is
-   the affine `Yield`, and `reconB′`'s `timeout` cancels. On `genSelf`'s critical path three items
-   are therefore **New**:
+   non-abortive) and `AllCross` (every stop crosses every entry). The 6.64 folds `stack_step_imm`
+   and `stack_spans_imm` also take `hL : Tab.Local` (`:1003`, `:1129`): the table's operation types
+   carried along `Ext`. `Tab.Local` holds at every row's table (`Row.tab_local`,
+   `Core/EffRules.lean:733`, from `vC_local`), and the piece's table at `F_Σ R` is a row's
+   (`rowTab` at `CTy.effOf S R` is `Row.tab S δ`, `effTab_effOf`). So the programs' rows meet it,
+   `genSelf`'s affine `Yield` and `reconB′`'s `{wait}` with `timeout`'s cancel of it, and it
+   restricts nothing they use. `LinResume` and `AllCross` are what restrict the folds: they apply
+   only at linear, resuming rows whose stops cross the whole stack, and at `σ = []` there
+   `openS_nil_ewp` closes them. `SpanW2Row` and `SpanW1Row` are at `RowClass.any` and at every
+   stack: `genSelf`'s row is the affine `Yield`, and `reconB′`'s `timeout` cancels. On `genSelf`'s
+   critical path three items are therefore **New**:
    - (i) the stacked commutation at a `ResumeAff` table with a cancel share: `stack_step_other`
      with `opTableO`'s owner hand-back at a cancel (`Drop.lean:49`), read at `σ·new`;
    - (ii) the conversion from the callback's `OpenS` at `[e]` to `Relend (opTableO Tab l T δ) …`,
@@ -946,8 +1159,31 @@ For `withbor` (2) at a stack `σ` (`genSelf`'s at `σ = []`):
    - (iii) `AllCross` relaxed for `SpanW*Row` at `σ ≠ []`: the callback's row need not cross the
      outer entries, so its stops are at depths below `|σ| + 1`.
 
-   At `cbpv` and `binder` each item is restated over `OpenSF`, the futures quantifier carried
-   through each unfolding. **New**: GhostEnd's argument at a stack-indexed least fixed point.
+   **At `cbpv` and `binder`.** The piece is `OpenSF true`, whose share owes the continuation at
+   every future of the kept part. The bridge back to GhostEnd's proved results is `OpenSFBridge`
+   (statement 0's shared lemmas): `OpenSF true δ Tab Q σ … ⊧ OpenS δ σ Tab (Q σ) …`, every futures
+   quantifier taken at the reflexive future. GhostEnd's lemmas then split three ways.
+   - **Used unchanged**, since they do not mention the piece: the view, drop and owner
+     bookkeeping (`vwS_*`, `vwE_*`, `dropS_*`, `ptoImmS_*`, `ownWandE_pass`, `ghostS_of_boxTop`),
+     the table facts (`tabAt_start`, `tabAt_off`, `tabAt_viewI`), `opTable_shift`, `q64_ext`,
+     `viewI_split`, Frames' `opTable_extR` and `ewpPostR_ext`, and Drop's `ewp_then_owner`,
+     `cancel_then` and `opTableO_mono`.
+   - **Used through the bridge**, since they consume a piece and produce something that is not W's
+     piece at a stack: `openS_nil_ewp` and `bodyS_nil_iff`, for `NilSoundRet`'s `F_Σ` case at
+     `σ = []`, whose output is Core's `ewpTS`.
+   - **Restated over `OpenSF`**, since their output is W's piece at a stack, which at `cbpv` and
+     `binder` must owe its continuations at futures: `stack_step_other`, `stack_step_reborrow`,
+     `stack_step_imm`, `fold_other`, `fold_imm`, `stack_spans_mut`, `stack_spans_imm`,
+     `openS_val_any`, `openS_yield_any`, `stopS_full` and `stopS_of_full`. The same goes for
+     items (i)–(iii) above, for `relend_of_openD` at a stack, for `withborR_compat` (its conclusion
+     is the borrow's computation, W's piece at the borrow's stack), and for the 6.64 cancel path
+     below.
+
+   Each restatement follows the GhostEnd proof it mirrors, step by step, with the futures
+   quantifier carried through each unfolding (CLAUDE.md §1). A shorter route is recorded in the
+   restatement's docstring with the GhostEnd technique it leaves unbuilt. **New**: GhostEnd's
+   argument at a stack-indexed least fixed point. At `binder0` the piece is GhostEnd's `OpenS`
+   itself, and every lemma is used unchanged at the rows whose hypotheses it meets.
 
    `stack_step_other`'s callback form puts the answer above the outermost lend (`cbQ`'s `boxTop`).
    An answer that keeps a view of `σ` (#276's shape) needs the form `bodyAtD` has. That is not
@@ -956,9 +1192,11 @@ For `withbor` (2) at a stack `σ` (`genSelf`'s at `σ = []`):
 4. **The unwinding frame and the cancel.** `withborR_compat` (`Drop.lean:108`) for 6.65, from
    (ii): `ewp_then_owner` puts the owner back at a cancel and `d` disposes of it.
 
-For `withbor` (1) the same, with `CallbackExtImm`, `stack_step_imm` (under the same two hypotheses,
-so (i)–(iii) at 6.64) and `ewpTS_I_frameR`. The cancel path over a 6.64 frame is **not built**
-(p10 §5.1 X.4). It is the 6.64 analogue of `withborR_compat`:
+For `withbor` (1) the same, with `CallbackExtImm`, `stack_step_imm` and `ewpTS_I_frameR`.
+`stack_step_imm` takes `LinResume` and `AllCross`, as the 6.65 folds do, and `Tab.Local` besides,
+which the programs' rows meet (item 3); so (i)–(iii) are needed at 6.64 too. `ewpTS_I_frameR`'s
+`hTL` is `opTable_extR`, which takes `Tab.Local` as well. The cancel path over a 6.64 frame is
+**not built** (p10 §5.1 X.4). It is the 6.64 analogue of `withborR_compat`:
 - `RelendI` (`ImmLend.lean:128`) in place of `Relend`;
 - `ownerI` in place of `owner`;
 - an `opTableO` whose cancel hands back `ownerI`.
@@ -982,23 +1220,39 @@ The proof follows the printed proof of 6.150 once per unfolding of `RebRelend`, 
 - `wpG_reborrow` (`Core/Reborrow.lean:232`) runs on the first copy. Its postcondition is over any
   term, so "a reborrow ends at a stopped operation as at a return": 6.52's subtraction at a stop is
   inside it;
-- `wpG_frame` (`Core/EffWp.lean:1005`) carries the kept copy to the run's end, at a list with the
-  same members;
+- `wpG_frame` (`Core/EffWp.lean:1005`) carries the kept copy to the run's end. `wpG` chooses that
+  list among those with the start's members (`Core/EffDefs.lean:27-40`), and `wpG_frame`'s
+  `hR : ∀ ls', (∀ x, x ∈ ls' ↔ x ∈ ls) → Entails (R ls) (R ls')` asks the frame carried to each of
+  them. The kept copy `rebView … ls` reads the payload input at `R ls`, so the step needs `R`
+  carried. That is `RebFrameR`'s added hypothesis `RCarried` (`R` along `Ext`, 6.64's `hQ` form).
+  Lists with the same members are `Ext`-related at every resource, so it gives `hR`;
 - `rebF`'s wand takes the copy back. At a return the answer is in `Q`. At a stop the table owes the
   view at the resumption's list beside the next unfolding, which the induction hypothesis closes
   (`Tb.Mono`). The premise owes the view at that list; a row discharges it from the copy handed
-  back when its `R` is carried along `Ext`, as 6.64's `hQ` carries its postcondition;
-- the chooser is re-instantiated at each resumption's list, where `rebChooseTW_top` supplies it.
-  The record stays on the list along the unfoldings' `Ext`s, since the kept view is an `imm` cell
-  at its place (`Rel`, `Keeps`).
+  back, carried along `Ext` by `RCarried`;
+- the next unfolding runs `wpG_reborrow` at the resumption's list `ls''`, which needs
+  `RebChooseTW ls'' …`. The chooser hypothesis supplies it where `r ∈ rsOf ls''`, and a table with
+  only `Tb.Mono` says nothing about the lists it resumes at. That is the second added hypothesis,
+  `TabKeepsRec` (the shape of `ewpTS_I_frameR`'s `hTL` and `opTable_extR`): at a stop over a list
+  holding `r`, whose continuation is owed the view, the table owes it only at lists holding `r`.
+  `opTable` meets it at a table whose answers hold nothing. Its share is quantified over `Ext` at
+  the share's resource (`contShare`), that share holds the view the continuation is owed, and
+  `Ext` keeps a record relevant to it (`Keeps`, `Rel`). Then `rebChooseTW_top` supplies the
+  chooser at each resumption's list.
 
 If the wand form does not close, the alternative puts the hand-back on the stop disjunct only and
 forgets the copy at a return by 6.149 (`wpTS_I_forget`; its `wpG` form is not built).
 
 `RebFrameR`'s chooser hypothesis is shaped as `rebChooseTW_top` supplies it: at every list that
-holds the view's record, with `R` and `P` read at that list. `RebChooserNonVacuous` is its
-non-vacuity at a record whose payload is not data (`r.T.immReborrow ≠ r.T`), the only place 6.150
-does anything. Its proof is `rebChooseTW_top` at each such list, at `δ' = r.δ`.
+holds the view's record, with `R` and `P` read at that list. Its two other added hypotheses come
+from the steps above that read them: `RCarried` from `wpG_frame`'s `hR`, and `TabKeepsRec` from the
+next unfolding's chooser. `RebChooserNonVacuous` shows all three, with an inhabited `rebView`,
+together at one record whose payload is not data (`r.T.immReborrow ≠ r.T`, the only place 6.150
+does anything), at an operation table with a resuming entry:
+- `RCarried` at `R = vC false r.T · r.δ`, by `vC_local`;
+- `TabKeepsRec` at an `opTable` whose answers hold nothing, by `contShare`, `Keeps` and `Rel`;
+- the chooser by `rebChooseTW_top` at each list holding the record, at `δ' = r.δ`;
+- the view from the record's cell.
 
 **`SpanLoadRow`.** At a data payload `Imm̲ 'y A = A` (`VTy.immReborrow`, `Core/Types.lean:1447`).
 The callback then gets data, and no entry spans the stop. That is the case `reconB′`'s reads are,
@@ -1010,8 +1264,12 @@ about what `σ` holds (OQ-44), recorded, not a new relation.
 
 ### 6.3 OQ-58: Core as W's `σ = []` instance
 
-`NilAgrees p` and `NilAgreesU p` are statement 0's (`Statement0.lean`), beside its bundle. OQ-58 is
-decided there, after the bundle's work, at the placement W is.
+`NilAgrees p`, `NilAgreesU p`, `NilSoundV p` and `NilSoundC p` are statement 0's
+(`Statement0.lean`), beside its bundles. OQ-58 is decided there, after the bundles' work, at the
+placement W is. They are beside the bundles because their expected failure is this section's
+outcome (c), which is no stop. `NilSoundC` meets Core's contravariant `⊸`, and at a thunk argument
+it needs `NilAgreesU` (§4.2). What the programs' adequacy reads is `NilSoundRet`, in the shared
+lemmas (§9.1).
 
 `NilAgrees` states that two definitions are one relation at `σ = []`. A refutation of it at any
 inhabitant, arising or not, decides OQ-58 (a) negatively for the placement's definitions. It is
@@ -1020,7 +1278,8 @@ definition is. The outcomes:
 - `NilAgrees p` proved: Core is W's `σ = []` instance (OQ-58 (a)).
 - `NilAgrees p` refuted, with the sites at which it fails, each with the introduction rows that
   hold there at W: outcome (c) (§12.2). That is a cost, not an obstruction to D1 and not a stop.
-  `NilSoundC` still carries W's programs to Core's adequacy (§9.1).
+  `NilSoundRet` still carries W's programs to Core's adequacy (§9.1), since it reads only a data
+  answer.
 - Neither proved nor refuted: "not derived, no obstruction verified", and (c) is not entered.
 
 ---
@@ -1130,10 +1389,13 @@ def ReconAccepted (p : Placement) (e : Expr) : Prop :=
 - every run under the platform with no operation safe, and terminating with the memory empty;
 - some complete run answering `v`, the run exhibited.
 
-**The route for the runs.** `SemS` at `σ = []` gives `cRL p [] …`. `NilSoundC` gives Core's `cC`,
-which is `coreB`'s `comp`, and `adequateRetAt_core_none` (`Targets/B/BoLo.lean:195`) gives safety
-and termination. The answer's run is written out, or read off an interpreter proved to agree with
-`Step1`. `genSelf_eval` is evidence, not the run.
+**The route for the runs.** `SemS` at `σ = []` gives `cRL p [] δ (.ret A) …` at the program's data
+answer `A`. `NilSoundRet` at `S = []` gives Core's `cC`, which is `coreB`'s `comp`, and
+`adequateRetAt_core_none` (`Targets/B/BoLo.lean:195`) gives safety and termination. That lemma
+reads every row it is handed as `[]` at `Platform.none` (`row_nil_of_le`), and `DivFree S A` is
+`A.Data`, so `NilSoundRet`'s `F_Σ A` at a data `A` is all of the nil slice the route reads. The
+answer's run is written out, or read off an interpreter proved to agree with `Step1`.
+`genSelf_eval` is evidence, not the run.
 
 ### 9.2 Building `reconB′`
 
@@ -1152,6 +1414,18 @@ and termination. The answer's run is written out, or read off an interpreter pro
   under `timeout`) and whose retried body does not capture the view, and records the choice with
   its reason. The choice changes the program, not the probe's statements; it may move `retryR`'s
   type, and with it the row family `AllREW` is instantiated at.
+- **The term is fixed before statement 2's proofs start.** `Survives e p` leaves `e` free, and
+  `ReconAccepted p e` holds of any term accepted at `F (Flag ⊗ Flag)` answering `(tt, ff)`. So the
+  term is committed to `Programs.lean` as a definition, `reconB'`, with the shape choice above and
+  its reason, before any statement 2 proof is begun. From then on `Survives` is read only at it.
+  The structural requirements it must meet, each checked against the committed term by reading it:
+  - the scheduler (`resumer wait`) and `timeout` outside their borrows;
+  - `retry`'s handler of `exn` inside the first borrow, with `retryR` instantiated at a row there;
+  - a `wait` cancelled under `timeout`, inside a 6.64 lend (`withbor` (1)), so the cancel path
+    over a 6.64 frame is exercised.
+
+  A later change to the term is a new commit with its reason, and `ReconAccepted` is then read at
+  the new term only.
 - **Its rows beyond `genSelf`'s.** `SpanW1Row` with the 6.64 cancel path (§6.2), `HandleRow` with
   the handler inside a borrow (`retry`), `AllREW`/`AllRMono`, and `SpanLoadRow` at a data payload.
 
@@ -1227,6 +1501,12 @@ of the following hold:
      σ : LStack
      αs : List Life
 
+   def Cfg.at (c : Cfg) (ρf ρ : WRes) : Cfg := ⟨c.fρ, ρf, ρ, c.ps, c.ls, c.σ, c.αs⟩
+
+   def viewTy (e : LEnt) : VTy := match e.k with
+     | .mut => .mut (.var e.x) e.T
+     | .imm _ => .imm (.var e.x) e.T
+
    def RunEnd (c : Cfg) (e : Expr) (c' : Cfg) (t : Expr) : Prop := …  -- `wpG`'s run conjuncts,
                                      -- the stack fixed, the garbage joining the frame
    def LendMut (c c' : Cfg) (e : LEnt) : Prop := …   -- `TW.mutFold`'s premises; the entry pushed
@@ -1237,7 +1517,7 @@ of the following hold:
    inductive Arises : Cfg → Prop where
      | nil {fρ ρf ρ ps ls} : TW fρ ps (rsOf ls) → Tagged fρ ps ls → ResU.Hash ρf ρ →
          ResU.CompS ρf ρ fρ → Arises ⟨fρ, ρf, ρ, ps, ls, [], []⟩
-     | run {c c' Δ Γ e₀ j γ t} : Arises c → ProbeRules Δ Γ e₀ j → (∀ w ∈ γ, ArisesVal w) →
+     | run {c c' Δ Γ e₀ j γ t} : Arises c → ProbeRules Δ Γ e₀ j → ArisesCtx c Γ γ →
          RunEnd c (substAll γ e₀) c' t → Arises c'
      | part {c ρ₁ ρ₂ ρf'} : Arises c → ResU.CompS ρ₁ ρ₂ c.ρ → ResU.CompS c.ρf ρ₂ ρf' →
          ResU.Hash ρf' ρ₁ → Arises ⟨c.fρ, ρf', ρ₁, c.ps, c.ls, c.σ, c.αs⟩
@@ -1245,12 +1525,18 @@ of the following hold:
      | lendImm {c c' e} : Arises c → LendImm c c' e → Arises c'
      | hide {c} (N : UInt32 → Bool) :
          Arises c → Arises ⟨c.fρ, c.ρf, c.ρ, c.ps, c.ls, hideS N c.σ, c.αs⟩
-   inductive ArisesV : Cfg → Val → Prop where
-     | ret {c c' Δ Γ e₀ j γ v} : Arises c → ProbeRules Δ Γ e₀ j → (∀ w ∈ γ, ArisesVal w) →
-         RunEnd c (substAll γ e₀) c' (.val v) → ArisesV c' v
-     | view {c c' e} : Arises c → (LendMut c c' e ∨ LendImm c c' e) → ArisesV c' (.loc e.l)
-   inductive ArisesVal : Val → Prop where
-     | at {c v} : ArisesV c v → ArisesVal v
+   inductive ArisesV : Cfg → Val → VTy → Prop where
+     | ret {c c' Δ Γ e₀ j S A γ v} : Arises c → ProbeRules Δ Γ e₀ j → jdgCty j = CTy.effOf S A →
+         ArisesCtx c Γ γ → RunEnd c (substAll γ e₀) c' (.val v) → ArisesV c' v A
+     | view {c c' e ψ ρc ρf'} : Arises c → (LendMut c c' e ∨ LendImm c c' e) →
+         ResU.CompS (ResU.single e.l ψ) ρc c'.ρ → ResU.CompS c'.ρf ρc ρf' →
+         ArisesV (c'.at ρf' (ResU.single e.l ψ)) (.loc e.l) (viewTy e)
+   inductive ArisesCtx : Cfg → Ctx VTy → List Val → Prop where
+     | nil {c} : c.ρ = PMap.empty → ArisesCtx c [] []
+     | dead {c s Γ w γ} : s.live = false → ArisesCtx c Γ γ → ArisesCtx c (s :: Γ) (w :: γ)
+     | live {c s Γ w γ ρ₁ ρ₂ ρf₁ ρf₂} : s.live = true → ResU.CompS ρ₁ ρ₂ c.ρ →
+         ResU.CompS c.ρf ρ₂ ρf₁ → ResU.CompS c.ρf ρ₁ ρf₂ → ArisesV (c.at ρf₁ ρ₁) w s.ty →
+         ArisesCtx (c.at ρf₂ ρ₂) Γ γ → ArisesCtx c (s :: Γ) (w :: γ)
    end
 
    def ArisesNonVacuous : Prop := ∃ c : Cfg, Arises c ∧ c.σ ≠ []
@@ -1258,17 +1544,40 @@ of the following hold:
 
    Each transition is a step of W's semantics:
    - at the nil index the arising set is `TW`'s, Core's settled one;
-   - a run of a term the probe's rules derive, its captured values arising, ends as `wpG`'s run
-     ends: the machine's run, `↭` on the local part, a tagged `TW` world at the end;
+   - a run of a term the probe's rules derive ends as `wpG`'s run ends: the machine's run, `↭` on
+     the local part, a tagged `TW` world at the end. Its captured values arise at its start
+     (`ArisesCtx`): each live slot's value at the slot's type, holding its own part of the start's
+     local resource, the parts composing to it, so a linear slot is used once and two slots do not
+     share a cell;
    - a part of the local resource is taken, the rest joining the frame;
    - a lend row opens a lend: `TW.mutFold`'s or `TW.immFrame`'s step, its entry pushed below the
      callback's resource (6.112's `И`);
    - a handler is installed.
 
-   So `Arises` under-approximates what arises, which is the direction a refutation needs.
+   **The direction is not established.** `Arises` is meant to under-approximate what arises, the
+   direction a refutation needs. The definitions close what they can: a run's values are typed
+   and tied to its start, and a value's type is kept. Two gaps remain, and no statement here closes
+   them:
+   - a run's values share its start's configuration (world, records, frames, stack and
+     lifetimes), not its path. Each slot's value is witnessed by its own path to that
+     configuration;
+   - a lend, a handler and a part are taken at any arising configuration, not where a program's
+     term opens the lend or installs the handler.
+
+   So nothing here shows that every `Arises` configuration is reached by a closed derivable
+   program's execution, and the design does not claim it. An `Arises` path is therefore not
+   enough. A refutation is admitted only with the program as well: a closed `ProbeRules` program,
+   its run from the nil index, and the path read along that run. Each run of the path is a run of
+   the program's current term with the values that term holds, and each lend and handler sits at
+   the term that opens or installs it. The Lean statement of that reading is a term-tracked
+   arising, in which each run continues the previous run's end term and each lend and handler is
+   taken at the term that opens it. It is written when a refutation is first offered as an
+   obstruction; no proof needs it. Until then a refutation at an `Arises` configuration is a
+   refutation at the probe's arising set, reported as a fact about the statement.
    - `ArisesAt` is the pointwise consequence: the world `TW`'s, the stack consistent with it, the
-     local part consistent with the table. Statement 1 proves `Arises ⊆ ArisesAt` (`ArisesSound`).
-     It is a necessary condition, used to exclude a witness, never to admit one.
+     local part consistent with the table. `Arises ⊆ ArisesAt` (`ArisesSound`, beside statement 1)
+     follows from statement 1's per-transition facts. It is a necessary condition, used to exclude
+     a witness, never to admit one. Statement 1's claim about the guard does not rest on it (§5.2).
    - `ArisesNonVacuous` (some configuration with an open lend arises) is proved first, so that the
      check can be passed at all.
    - A run inside a resumed continuation runs a reduct, not a derived term. So `Arises` reaches a
@@ -1276,10 +1585,11 @@ of the following hold:
      configurations further inside it. A refutation that needs one of those is recorded as a fact
      about the statement until a transition for it is added with its justification.
 3. **Its values arise**, when the refutation is about a value or a computation in the relation
-   rather than about a derivation: `ArisesV c v`. The value is the answer of a run of a term the
-   probe's rules derive, the `ProbeRules` derivation exhibited, or the place a lend row hands its
-   callback. A relation-level value that no derived term produces does not arise (✓-valid is not
-   reachable).
+   rather than about a derivation: `ArisesV c v A`, at the type the refuted statement reads `v` at.
+   The value is the answer of a run of a term the probe's rules derive, at the judgement's answer
+   type, with the `ProbeRules` derivation exhibited, or the view a lend row hands its callback at
+   `Mut 'x T` or `Imm 'x T`. A relation-level value that no derived term produces does not arise
+   (✓-valid is not reachable). Item 2's program is exhibited for the value's path too.
 4. **The refuted statement is ours.** Every statement here is. A refutation is reported against
    the statement, with the printed lemma it reads named. The paper is not wrong.
 
@@ -1299,8 +1609,8 @@ building the judgement from those closure properties.
 
 A refutation that fails 2 or 3 is recorded as a fact about the statement, never as an obstruction to
 D1. `TabOfTWPointwise` at `innerView` (§5.2) is the first instance: its world passes `ArisesAt`'s
-`TW` part and fails the table, and it is not in `Arises`. `NilAgrees` is exempt from 2 and 3: it
-is about the identity of two definitions (§6.3).
+`TW` part and fails the table, and it is not in `Arises`. `NilAgrees`, `NilAgreesU`, `NilSoundV`
+and `NilSoundC` are exempt from 2 and 3: they are about the identity of two definitions (§6.3).
 
 ---
 
@@ -1308,13 +1618,19 @@ is about the identity of two definitions (§6.3).
 
 ### 12.1 Success
 
-- `Survives e p` is proved at a placement `p`, at the term `e` built for `reconB′`. That is
-  `Probe p` (statements 0–4, `GenSelfAccepted p` and `ThenRow p`) and `ReconAccepted p e`. W is
-  the surviving placement of least `Placement.rank`.
-- The placement is recorded with its consequence (§4.4):
+- `Survives e p` is proved at a placement `p`, at the term `e` committed for `reconB′` (§9.2).
+  That is `Probe p` (statement 0's shared lemmas, statements 0–4, `GenSelfAccepted p` and
+  `ThenRow p`) and `ReconAccepted p e`. W is the surviving placement of least `Placement.rank`.
+- W is recorded as decided or provisional (§3). It is decided when every placement ranked before
+  it is refuted by a refutation that passes §11, and provisional when one is only "not derived".
+- A decided W is recorded with its consequence (§4.4):
   - `cbpv`: OQ-8 option 2, and D1 meets "two algebras with interactions only at cuts", with the
-    own-lend cost at `U` recorded;
+    own-lend cost at `U` recorded and the outcome read against both wordings of (d) (§4.2);
   - `binder` or `binder0`: option 3, with a resume obligation in the binder clauses.
+
+  A provisional W is recorded as such, for example "cbpv: not derived, no obstruction verified;
+  W provisionally = binder", with the step each placement before it stopped at. No consequence is
+  drawn from it for OQ-8, for "interactions only at cuts", or for D1's ranking against D2a and D3.
 - OQ-58's outcome is recorded (§6.3).
 - Law 2 for `withload` is recorded: `RebFrameR` and `RebChooserNonVacuous` proved, and
   `SpanLoadRow` proved or its entry-kind finding stated.
@@ -1348,22 +1664,40 @@ Each failure is machine-checked (§11):
 - **(c)** `NilAgrees p` is refuted at the placement W is (§6.3). Core is then redefined as W's
   `σ = []` instance (OQ-58 (b)), a kernel change with a SPEC entry, and every Core theorem is
   re-proved through FL at W. Not a stop. The expected case (§4.3).
-- **(d)** Statement 0 holds only after a clause is changed to reach a stack other than its own by
-  something other than `FutQ`, followed at the own-lend clause by `OwnPush` at the type it reads
-  (§4.2). W would then carry two quantifiers, a relation family in all but name. Stop and report.
+- **(d)** Two quantifiers, a relation family in all but name. Stop and report. Synthesis §11 words
+  it: "Statement 0 holds only with different future-world quantifiers at `U` and at `⊸`, which no
+  single definition of W reconciles". The design reads it as: statement 0 holds only after a clause
+  is changed to reach a stack other than its own by something other than `FutQ`, followed at the
+  own-lend clause by `OwnPush` at the type it reads (§4.2). The design's reading admits `cbpv`'s
+  type-directed own lend at `U` by definition, and the synthesis's wording does not decide it. So
+  the outcome is reported against both. One report says whether some clause had to be changed (the
+  design's reading). The other says whether `OwnPush` at `U` was needed and how `MonoOwnG` came
+  out: proved at the current `FutStep`, proved only after the push became a future, or not
+  derived (the synthesis's wording).
 
 A statement neither proved nor refuted is reported as "not derived, no obstruction verified",
 with the step it stopped at.
 
 ### 12.3 The stop rule
 
-Statement 0 works at `p` when `Statement0 p` is proved. Statement 1 is attempted only at
-placements where statement 0 works, and statements 2–6 only where statements 0 and 1 work. **If
-`Statement0 p` is proved at no placement, the probe stops after statement 0 and reports**, for each
-placement:
-- the facts proved;
-- the facts refuted, each with its arising check;
-- the facts not derived, each with the step it stopped at.
+Statement 0 has two bundles, and the rule treats them differently.
+- **The shared lemmas** (`Statement0Shared`) are about definitions every placement shares: W's
+  order, the bridge to GhostEnd's piece, and the nil slice the programs read. They are proved
+  first. A shared lemma that is refuted or not derived is a finding about our definitions, not a
+  comparison of placements. **The probe stops and reports it**, with the step it stopped at and
+  the definition it reads.
+- **The per-placement facts** (`Statement0 p`) feed the comparison. Statement 0 works at `p` when
+  the shared lemmas and `Statement0 p` are proved. Statement 1 is attempted only at placements
+  where statement 0 works, and statements 2–6 only where statements 0 and 1 work. **If
+  `Statement0 p` is proved at no placement, the probe stops after statement 0 and reports**, for
+  each placement:
+  - the facts proved;
+  - the facts refuted, each with its arising check;
+  - the facts not derived, each with the step it stopped at.
+- **One shared reason.** A per-placement fact can fail at every placement for one reason that
+  does not depend on the placement. `MonoOwnG` at a thunk slot is the expected case: the own push
+  is no future at any of them (§4.3). The report then states it as a finding about our definitions,
+  with the changes §13 step 2 names. It does not state it as a comparison of the placements.
 
 (b) and (d) stop the probe wherever they occur.
 
@@ -1374,26 +1708,46 @@ placement:
 Unknowns first:
 
 1. **Step 0** (§2.6).
-2. **Statement 0, the discriminating facts first**:
-   - the order's lemmas: `ExtPreW` (by the closure and `Ext.trans`), then `FutReLend`;
-   - `MonoHide binder0` and `MonoC binder0`;
-   - at `cbpv`, `ThunkVRow` at the own lend at a future, and `AllIRow`'s third-kind stack;
-   - at `binder`, `LamRow` at a future;
-   - then `MonoV`/`MonoG`, `MonoHideFromMonoV`, `NilSound*`, `CallbackExt*`, `ForceRow`,
-     `ThawRelend` and the thunk rows.
+2. **Statement 0.**
+   - **The shared lemmas first**: `ExtPreW` (bookkeeping: the closure and `Ext.trans`),
+     `FutReLend`, `FutPart`, `FutAvoidsTrans`, `OpenSFBridge`, `NilSoundRet`. Apply the stop
+     rule's shared clause (§12.3).
+   - **`MonoOwnG`, at each placement, before `ThunkVRow`, `BangThunkVRow` or `AllIRow` is used to
+     tell placements apart.** It is attempted at the current `FutStep`. If it is not derived at a
+     thunk slot, it is attempted next with `FutStep` admitting an inserted entry whose variable is
+     not `NsVar` when the clause's type avoids it, free and bound (§2.2, *Names*). This is done in
+     a scratch file. Then:
+     - if it is provable at the current `FutStep`, nothing changes;
+     - if it is provable only with that change, `FutStep` is changed in `World.lean` before any
+       other proof, and §2.2's *Names*, §4.2 and §14 are rewritten to say so, its cost included
+       (the renaming lemma inside the rows that meet a collision);
+     - if it is provable with neither, it is recorded "not derived, no obstruction verified" with
+       the step it stopped at. The report names both candidate changes (§4.3), as a finding about
+       our definitions under the stop rule's shared-reason clause. The second candidate, the own
+       lend named by a future's name, is a change of representation, and it is not made without
+       that report.
+   - **The discriminating facts**: `MonoHide binder0` and `MonoC binder0`; at `cbpv`, `ThunkVRow`
+     at the own lend at a future; at `binder`, `MonoG` at a future, the transport `LamRow` and
+     `AllIRow` call.
+   - **Then** `MonoV`/`MonoG` at the other placements, `MonoHideFromMonoV`, `CallbackExt*`,
+     `ForceRow`, `ThawRelend` and the thunk rows.
 
-   Apply the stop rule. `NilAgrees` (OQ-58) is attempted after the bundle, at the placements where
-   it holds.
+   Apply the stop rule. `NilAgrees`, `NilAgreesU`, `NilSoundV` and `NilSoundC` (OQ-58) are
+   attempted after the bundles, at the placements where they hold.
 3. **Statement 1**: `ArisesNonVacuous` first; then `TabUpd` (6.50 at both ends of the stack) and
-   `TabRuns`, `TabStart`, `TabHide`, `TabRelend`, `TabFut`, `TabResume`, `ArisesSound`; the first
-   check of `TabOfTWPointwise` (§5.2); then `LamRow`, `AllIRow`, `BelowRow`, `BelowExcluded`.
+   `TabRuns`, `TabStart`, `TabHide`, `TabRelend`, `TabFut`, `TabResume`; `ArisesSound` beside them;
+   the first check of `TabOfTWPointwise` (§5.2); then `LamRow` (at `binder`, at a future),
+   `AllIRow` (at `cbpv` the third-kind stack, at `binder0` and `binder` the own push through
+   `MonoOwnG`), `BelowRow`, `BelowExcluded`.
 4. **Statement 2**:
+   - `reconB′`'s term committed to `Programs.lean` before any proof here (§9.2);
    - the 6.64 cancel path, `RebFrameR` and `RebChooserNonVacuous` first, the items no proof has
      touched;
-   - then #275's conversion and §6.2's items (i)–(iii), the fold, at `OpenS` or `OpenSF`;
+   - then #275's conversion and §6.2's items (i)–(iii), the fold, at `OpenS` or, restated after
+     the GhostEnd proof each mirrors, at `OpenSF`;
    - then `SpanW2Row`, `SpanW1Row`, `SpanLoadRow`.
 5. **Statement 3**, then **statement 4**.
-6. **Statement 5**: compose `genSelf`; build `reconB′` (§9.2) and compose it.
+6. **Statement 5**: compose `genSelf`; compose `reconB′` at the term committed in step 4.
 7. **Statement 6**, then **statement 7**.
 
 **The build.** Iterate with `lake build ProbeD1.<Module>`. `lake build ProbeD1` at milestones.
@@ -1434,6 +1788,9 @@ edit. Work on `targets`; never push.
   at `LinResume` tables only; the folds at `ResumeAff` tables are §6.2's new items.
 - 6.172–6.176 are transcribed at Core's relation and restated at W as the rows of statements 2 and 4.
 - The 6.64 cancel path is ours, not a printed lemma.
+- GhostEnd's stacked folds at `OpenSF` (§6.2): not printed lemmas, but proved GhostEnd results
+  that `cbpv` and `binder` restate. Each restatement follows the proof it mirrors, and
+  `OpenSFBridge` is the way back to the proved `OpenS` results.
 
 **Hypotheses added in the statements.**
 - `AllIRow`'s `Δ.find? x = none`, the binder new to `Δ`, as `allI_RLa`'s `hσx` comes from it.
@@ -1454,6 +1811,26 @@ edit. Work on `targets`; never push.
   holds at every stack `SemS` admits and at every stack the clauses produce. At `σ = []` they are
   vacuous. At the programs every payload type is scoped in its `Δ`.
 - `RebFrameR`'s chooser at the lists that hold the view's record, with `R` and `P` read at the
-  list (§6.2); its non-vacuity is `RebChooserNonVacuous`.
+  list (§6.2).
+- `RebFrameR`'s `RCarried` (the payload input carried along `Ext`). It comes from `wpG_frame`'s
+  `hR`, which the step carrying the kept copy to the run's end reads (§6.2). Its scope: at the
+  program's relation, `R = vC false r.T · r.δ`, it holds by `vC_local`.
+- `RebFrameR`'s `TabKeepsRec` (the record kept on the lists the table resumes at). It comes from
+  the next unfolding's `wpG_reborrow`, whose chooser is supplied only at lists holding the record
+  (§6.2). Its scope: `opTable` at a table whose answers hold nothing, by `contShare`, `Keeps` and
+  `Rel`. The three added hypotheses, the chooser and an inhabited view hold together at one record
+  whose payload is not data, at a resuming table: `RebChooserNonVacuous`.
 - `StackJ`'s second and third kinds, which widen GhostEnd's `LStack.WF` to the entries the
-  placements' quantifiers insert. At `σ = []` they are vacuous.
+  placements' quantifiers insert. At `σ = []` they are vacuous. The third kind asks the own lend's
+  variable to be neither free nor bound in the context's live types (`CtxFresh`): a slot's `∀` that
+  bound it would read its body at the entry's lifetime.
+- `ThunkVRow`'s and `BangThunkVRow`'s `OwnHyg`: when the thunk's type is `∀'x ⊏ c. C'`, its binder
+  is new to `Δ` and neither free nor bound in `Γ`'s live types. It comes from the `U` clause's own
+  push at `cbpv`, where the row calls its premise at the pushed stack (`StackJ`'s third kind) and
+  carries its context there (`MonoOwnG`).
+- `AllIRow`'s binder bound in no live slot of `Γ`, beside Core's "free in no live slot". It comes
+  from the `∀` clause's own push at `binder0` and `binder`, carried by `MonoOwnG`. Both hygiene
+  hypotheses are gaps of `BindersLow`'s kind, with the same discharge: a renaming lemma, which
+  α-renames the binder away from the context. At the programs, binders are distinct from the
+  context's.
+- `MonoOwnG`'s `CtxFresh`, the hygiene the two above supply.

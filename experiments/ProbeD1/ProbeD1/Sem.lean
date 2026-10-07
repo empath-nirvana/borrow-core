@@ -19,9 +19,11 @@ Targets' `SemW₀` read the same judgement.
 **`WP p`** is the world as a `Targets.SemWorld`: the configurations are `TW`'s, the run-end
 relation is Core's `↭` at every index, nothing is held, a run's stop is R-T1 with the stack fixed,
 a stored payload is read stack-free (OQ-46 (b), as `vRLs`'s leaves read `vC`), and the order is
-`OrdW` read at the empty substitution, a preorder because a future is a closure (`ExtPreW`,
-statement 0). Its `share` is Core's `contShare` at the record list: at a stack index the ghost-end
-share lives in the relation's `F_Σ` clause (`bodyS`/`bodySF`), not in this field.
+`OrdW` read at the empty substitution, a preorder by construction (`ExtPreW`, bookkeeping). That
+field is not the order the clauses read: they read `Fut δ` at the reading substitution, whose
+`FutOK.vars_sub` and `FutOK.pay` read `δ`. Its `share` is Core's `contShare` at the record list: at
+a stack index the ghost-end share lives in the relation's `F_Σ` clause (`bodyS`/`bodySF`), not in
+this field.
 
 Definitions only.
 -/
@@ -39,6 +41,22 @@ open Targets (Idx OpTabI OpEntI TableI)
 /-- `x` is free in no live slot of `Γ`. -/
 def CtxAvoids (x : LifeVar) (Γ : Ctx VTy) : Prop :=
   ∀ s ∈ Γ, s.live = true → ¬ VFree x s.ty
+
+/-- `x` is neither free nor bound in any live slot of `Γ`: the hygiene an entry named by a binder
+needs against the context. The stack binds its entries' variables over the reading substitution
+(`extS`), so a slot's type that mentions `x` free would read the entry's lifetime, and a `∀'x` of a
+slot's type would read its body at the entry's lifetime instead of its instance. -/
+def CtxFresh (x : LifeVar) (Γ : Ctx VTy) : Prop :=
+  ∀ s ∈ Γ, s.live = true → ¬ VFree x s.ty ∧ x ∉ VTy.binders s.ty
+
+/-- **The own lend's hygiene** at the judgement `Δ; Γ ⊢ _ : C`: when `C` is `∀'x ⊏ c. C'`, its
+binder is new to `Δ` and neither free nor bound in `Γ`'s live types. The `U` clause's own push at
+`cbpv` names an entry by that binder (`OwnPush`). The row that introduces the thunk calls its
+premise at the pushed stack, where the entry is `StackJ`'s third kind, and carries its context
+there by `MonoOwnG`; both read this. -/
+def OwnHyg (Δ : LifeCtx) (Γ : Ctx VTy) (C : CTy) : Prop :=
+  ∀ (x : LifeVar) (c : Lifetime.Life) (C' : CTy), C = .all x c C' →
+    Δ.find? x = none ∧ CtxFresh x Γ
 
 /-- **Binder hygiene**: no binder of the judgement's types is a name a future gives an entry
 (`NsVar`). Every row takes it of the types its premises add (the rule's binder, its intermediate
@@ -63,8 +81,8 @@ in an entry's payload type `Δ`'s or the stack's; each entry one of three kinds.
 * A future's name (`NsVar`), new to `Δ` and free nowhere in `Γ` and `C`: an entry a future
   inserted. Under `BindersLow` no binder of the judgement is one.
 * The innermost entry named by `C`'s outermost `∀`, new to `Δ`, at a lifetime meeting its bound,
-  the variable bound nowhere else in `C` and free nowhere in `Γ`: the callback's own lend, which the
-  `U` clause makes at `cbpv`. -/
+  the variable bound nowhere else in `C` and neither free nor bound in `Γ` (`CtxFresh`): the
+  callback's own lend, which the `U` clause makes at `cbpv`. -/
 def StackJ (σ : LStack) (αs : List Life) (δ : LSub) (Δ : LifeCtx) (Γ : Ctx VTy) (C : CTy) :
     Prop :=
   (σ.map LEnt.x).Nodup ∧
@@ -72,7 +90,7 @@ def StackJ (σ : LStack) (αs : List Life) (δ : LSub) (Δ : LifeCtx) (Γ : Ctx 
   ∀ e ∈ σ,
     (∃ u, Δ.find? e.x = some u) ∨
     (NsVar e.x ∧ Δ.find? e.x = none ∧ ¬ CFree e.x C ∧ CtxAvoids e.x Γ) ∨
-    (Δ.find? e.x = none ∧ σ.head? = some e ∧ CtxAvoids e.x Γ ∧
+    (Δ.find? e.x = none ∧ σ.head? = some e ∧ CtxFresh e.x Γ ∧
       ∃ c C', C = .all e.x c C' ∧ e.x ∉ CTy.binders C' ∧ ∀ a ∈ αs.head?, LtLife (extS δ σ αs) c a)
 
 /-- **The semantic judgement at W** (GhostEnd's `SemA` at the placement's relation): for a
@@ -86,7 +104,8 @@ def SemS (p : Placement) (Δ : LifeCtx) (Γ : Ctx VTy) (e : Expr) (j : Jdg) : Pr
     TabAtS σ αs ρ → gRL p σ δ αs ls Γ γ ρ → cRL p σ δ (jdgCty j) αs ls (substAll γ e) ρ
 
 /-- W's order as the `Ext` field: `OrdW` at the empty substitution, an inserted variable new to the
-stack and a future's name. -/
+stack and a future's name. The clauses read `Fut δ` instead, and the order lemmas they use are
+stated at `δ` (`Statement0.lean`). -/
 def ExtW (i i' : Ix) (ρ : WRes) : Prop := OrdW LSub.empty i i' ρ
 
 /-- A table at W's index read at the records, the stack fixed. -/

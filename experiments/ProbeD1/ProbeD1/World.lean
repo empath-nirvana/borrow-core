@@ -20,7 +20,10 @@ their current lifetimes, both innermost first, beside the record list.
   hiding sets that grow outward.
 * **The own lend** (`OwnPush`): the entry a callback's lend pushes, named by its type's outermost
   `∀`, at a lifetime meeting the bound. It is that binder's instance read as the lend the instance
-  names, so it is relative to the type, and a clause makes it after a future, never before one.
+  names, so it is relative to the type, and a clause makes it after a future, never before one. It
+  is not a future: its variable is a binder, which `BindersLow` keeps off the futures' names, so
+  `Fut` never reaches the pushed stack, and a context is carried across the push by `MonoOwnG`
+  (statement 0).
 * **Names.** An inserted entry's variable is drawn from the names no program binds (`NsVar`), so
   it never collides with a binder of the code that runs at the future: lifetime variables are
   names, and the stack binds its entries' variables over the reading substitution (`extS`).
@@ -164,7 +167,9 @@ structure OwnOK (δ : LSub) (σ : LStack) (αs : List Life) (e : LEnt) (a : Life
   pay : ∀ y, VFree y e.T → (extS δ (e :: σ) (a :: αs)).find? y ≠ none
 
 /-- **The own lend at the type `C`**, pushed on the stack `s`: when `C` is `∀'x ⊏ c. C'`, an entry
-named `x` (bound nowhere in `C'`) meeting `OwnOK`, at a lifetime meeting the bound. -/
+named `x` (bound nowhere in `C'`) meeting `OwnOK`, at a lifetime meeting the bound. Its variable is
+the type's binder, which `BindersLow` keeps off the futures' names (`NsVar`), so at a judgement the
+probe reads the pushed stack is no future of `s`. -/
 def OwnPush (δ : LSub) (C : CTy) (ρ : WRes) (s : Stk) (e : LEnt) (a : Life) : Prop :=
   ∃ (x : LifeVar) (c : Lifetime.Life) (C' : CTy), C = .all x c C' ∧ e.x = x ∧
     x ∉ CTy.binders C' ∧ OwnOK δ s.1 s.2 e a ρ ∧ LtLife (extS δ s.1 s.2) c a

@@ -11,10 +11,13 @@ import ProbeD1.Statement34
   "a frozen frame unwinding at a cancel, at an inner affine row" GhostEnd step 3f leaves open.
 * **Statement 7, the side check.** Targets' `NotVDenNaturalArises` (`Targets/I/Binder.lean`), as it
   stands.
-* **`Probe p`** bundles statements 0–6 at one placement. **`Survives e p`** adds `reconB′`'s
-  acceptance at its term `e`. W is the placement of least `rank` among those whose `Survives` is
-  proved: the cuts order of synthesis §4.2, `cbpv`, then `binder`, then `binder0`, applied to the
-  proved bundles (DESIGN §3). The arising check is `Arising.lean`'s.
+* **`Probe p`** bundles statement 0's shared lemmas and statements 0–6 at one placement.
+  **`Survives e p`** adds `reconB′`'s acceptance at its term `e`, which is fixed and committed here
+  before statement 2's proofs start (DESIGN §9.2). W is the placement of least `rank` among those
+  whose `Survives` is proved: the cuts order of synthesis §4.2, `cbpv`, then `binder`, then
+  `binder0`. It is decided only when every placement of lower rank is refuted by a refutation that
+  passes the arising check; a lower-rank placement that is only not derived leaves W provisional,
+  and no consequence is drawn for D1's ranking (DESIGN §3). The arising check is `Arising.lean`'s.
 
 Statements only; no proofs.
 -/
@@ -59,12 +62,12 @@ def ThenRow (p : Placement) : Prop :=
 
 /-! ### The probe at one placement -/
 
-/-- **Statements 0–6 at the placement `p`.** `reconB′`'s acceptance is stated at its term, once
-built (DESIGN §9.2). -/
+/-- **Statements 0–6 at the placement `p`**, with statement 0's shared lemmas. `reconB′`'s
+acceptance is stated at its term, fixed before statement 2's proofs start (DESIGN §9.2). -/
 def Probe (p : Placement) : Prop :=
-  Statement0 (ℍ := ℍ) p ∧ Statement1 (ℍ := ℍ) p ∧ Statement2 (ℍ := ℍ) p ∧
-    Statement3 (ℍ := ℍ) p ∧ Statement4 (ℍ := ℍ) p ∧ GenSelfAccepted (ℍ := ℍ) p ∧
-    ThenRow (ℍ := ℍ) p
+  Statement0Shared (ℍ := ℍ) ∧ Statement0 (ℍ := ℍ) p ∧ Statement1 (ℍ := ℍ) p ∧
+    Statement2 (ℍ := ℍ) p ∧ Statement3 (ℍ := ℍ) p ∧ Statement4 (ℍ := ℍ) p ∧
+    GenSelfAccepted (ℍ := ℍ) p ∧ ThenRow (ℍ := ℍ) p
 
 /-! ### Which placement is W -/
 
@@ -76,7 +79,9 @@ def Placement.rank : Placement → Nat
   | .binder0 => 2
 
 /-- **A placement survives**: its probe bundle, and `reconB′` accepted at the term `e` built for
-it. W is the surviving placement of least `rank` (DESIGN §3, §12.1). -/
+it. W is the surviving placement of least `rank`: decided when every placement of lower rank is
+refuted by a refutation that passes the arising check, provisional when one is only not derived
+(DESIGN §3, §12.1). -/
 def Survives (e : Expr) (p : Placement) : Prop :=
   Probe (ℍ := ℍ) p ∧ ReconAccepted (ℍ := ℍ) p e
 
