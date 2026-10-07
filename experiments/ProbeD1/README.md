@@ -246,8 +246,8 @@ outcome in full. Statements are in `ProbeD1/Gap.lean`; proofs in `GapWitness.lea
 - **The position-`∀`, both readings.**
   - (B), every cut below the stack's cut, realised by an instantiation: proved realisable
     (`instRealisesCut`), transported along instantiations (`allPosJTransport`), and Core's clause
-    at `σ = []` both ways (`allPosJNil`). **It is the quantifier W's `U` clause already has**
-    (`wU_allPosJ`). At the configuration where Core's `ℕ`-`∀` reads adjacency, W's `U` clause reads
+    at `σ = []` both ways (`allPosJNil`). **W's `U` clause implies it for the body at a `U (∀…)`
+    type** (`wU_allPosJ`; one way, and W's clause is strictly stronger). At the configuration where Core's `ℕ`-`∀` reads adjacency, W's `U` clause reads
     the cut and excludes the closure that Core's `U` clause admits (`adj_not_wU`, `adj_core_U`).
   - (A), every cut of the whole order, realised by renaming the configuration: one-way at
     `σ = []` (`cutAllNilSound`; the converse is refuted, `not_coreAllImpCutAll`). Not adopted.

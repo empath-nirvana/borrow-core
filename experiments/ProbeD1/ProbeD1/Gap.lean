@@ -207,7 +207,10 @@ def SamePos (L : List Life) (f : Life → Life) (α α' : Life) : Prop :=
 with nothing strictly between `lo < hi ≤ c`, some re-stratification at `c` and some lifetime stand
 strictly between the images of `L` at or below `lo` and those at or above `hi`. The witness is the
 shift by one at `hi`, lifted to `c` (`embLift`), and the lifetime just below `hi`. A cut above
-`c` is opened by no instantiation: every one fixes each lifetime at or above `c`. -/
+`c` is opened by no instantiation: every one fixes each lifetime at or above `c`. The proof does
+not use the hypothesis that nothing in `L` lies strictly between `lo` and `hi`; it is kept so that
+the statement names a cut. Nothing here ties `L` to the lifetimes an index reads, and `SamePos` is
+read by no proof (`GAP.md` §6.1). -/
 def InstRealisesCut : Prop :=
   ∀ (L : List Life) (c lo hi : Life), lo < hi → hi ≤ c → (∀ a ∈ L, a ≤ lo ∨ hi ≤ a) →
     ∃ (θ : Restrat.Emb c) (α : Life), ∀ a ∈ L, (a ≤ lo → θ a < α) ∧ (hi ≤ a → α < θ a)

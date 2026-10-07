@@ -4,19 +4,25 @@ This is a plain-language summary of where the D1 tractability probe stands. The 
 `README.md` and `DESIGN.md` §15. The Lean is in `ProbeD1/`, and `lake build ProbeD1` builds it.
 
 > [!NOTE]
-> **All verifiers passed on the freeze-binder unit.** The hygiene review and the content review both
-> passed. The content review raised three minor findings, and each is addressed:
-> - The "what it decides" paragraphs now say the shared needs are met at `vRLJ` *conditional on*
->   `RetainedPay`, `KeepsT` and `OuterBelowTop`, which are owed, and that `RetainedPay` moves
->   `mut_not_natural`'s retained-part case into the `Mut`/`Imm` rows without settling it.
-> - The added hypotheses now have Lean witnesses that they are satisfiable: `retainedPay_of_closed`,
->   `retainedPay_of_bound` and `keepsT_refl` (`BinderRows.lean`). `OuterBelowTop` already had
->   `ownPushBelowTop` and `outerBelowTop_inst`.
-> - Item 3 now opens by saying that whether the witness arises is undetermined.
+> **All verifiers passed on the gap unit (`GAP.md`).** The hygiene review checked every declaration
+> in the six `Gap*` files: none uses `sorry` or a forbidden keyword, and every axiom set is within
+> `[propext, Classical.choice, Quot.sound]`. The content review passed with three minor wording
+> findings, each addressed:
+> - "W's `U` clause *is* the position-`∀`" overstated `wU_allPosJ`, which proves one direction only.
+>   README, DESIGN §15.8, GAP.md §0, §1.4, §3.4 and §8 now say W's `U` clause *implies* the
+>   position-`∀` for its body at a `U (∀…)` type. W's clause is strictly stronger, because `RelendJ`
+>   also quantifies over record extensions. The same claim for a `∀` nested deeper is marked
+>   [unchecked].
+> - GAP.md §0's sentence placing OQ-58 in outcome (c) is now conditional. It holds only if reading
+>   (A) were adopted, and only subject to §3b's [unchecked] identification of W's `∀` at `σ = []`
+>   with `CutAllC`.
+> - `InstRealisesCut`'s docstring now says the proof does not use the no-lifetime-between hypothesis,
+>   and that nothing ties `L` to the lifetimes an index reads.
 >
-> The earlier statement-0 unit's open wording findings (the "only with" claim in DESIGN §2.2, the
+> The freeze-binder unit's verifiers also all passed, and its findings were addressed. The
+> statement-0 unit's minor wording findings are still open: the "only with" claim in DESIGN §2.2, the
 > unmarked prose reasons in DESIGN §15.2 and the README, `MonoHide binder0`'s status, and the
-> README's "no way to reach a stack" sentence) are still open. They are listed under option 1 below.
+> README's "no way to reach a stack" sentence. They are listed under option 1 below.
 
 ## The question
 
@@ -215,9 +221,10 @@ gaps: at `∀'0 ⊏ ⊤. F (Mut '0 1)` the closure `Λ. return ℓ₀` is relate
 - **The direction given with the task, made exact.** Quantifying over positions among the lifetimes
   in play, each realised by an instantiation, is a combinator (`AllPosJ`) that is realisable
   (`instRealisesCut`), carried along instantiations (`allPosJTransport`) and equal to Core's clause
-  when nothing is lent (`allPosJNil`). **W's `U` clause already is this quantifier**
-  (`wU_allPosJ`): at the configuration where Core's `∀` holds by adjacency, W's `U` clause rejects
-  the closure that Core's accepts (`adj_not_wU`, `adj_core_U`). Quantifying over every position of
+  when nothing is lent (`allPosJNil`). **W's `U` clause implies this quantifier for the body of a
+  thunk whose type is `U (∀…)`** (`wU_allPosJ`). This is one way only: W's clause is stronger,
+  because it also quantifies over record extensions. At the configuration where Core's `∀` holds
+  by adjacency, W's `U` clause rejects the closure that Core's accepts (`adj_not_wU`, `adj_core_U`). Quantifying over every position of
   the whole order instead, by renaming the configuration, would agree with Core only one way
   (`cutAllNilSound`, `not_coreAllImpCutAll`), and it is not adopted.
 
@@ -231,10 +238,48 @@ gaps: at `∀'0 ⊏ ⊤. F (Mut '0 1)` the closure `Λ. return ℓ₀` is relate
   obligations at the other rows, the guard at repeated places, and whether a kept cell with the
   refuted shape arises.
 
+**Is the `∀` gap closed?** Yes, for the statement that was open. `TyEqInst` now holds at every
+type, and so the thaw and the four `U` rows hold at every borrow payload type. No relation changed
+to get there. The fix was an argument about `TyEq` alone, which compares lifetimes only for
+equality and so never sees the gaps. The relation's own `∀` is a different matter: Core's relation
+does see gaps, so it is not invariant under every order embedding, and nothing here claims it is.
+
+**What the stronger invariance gives.**
+- `TyEq` is invariant under every order embedding that fixes `⊤` (`tyEqRoomBlind`), not just under
+  the one instantiation a resume uses. Every row that compares types across a resume can use it.
+- The position-`∀` (`AllPosJ`) is invariant under instantiations by transport
+  (`allPosJTransport`), and it agrees with Core both ways when nothing is lent (`allPosJNil`). So
+  if a later statement needs a computation at `∀` carried across an instantiation outside `U`,
+  `AllPosJ` is ready, and adopting it restates no use of agreement with Core.
+- W's `U` clause already reads the top-level `∀` of a thunk at every position an instantiation can
+  open (`wU_allPosJ`, one way). So the adjacency effect that makes Core's `∀` sensitive to gaps does
+  not reach the thaw at a `U` slot.
+
 **What it decides.** The lifetime half of the freeze binder no longer depends on the payload
-types: the gap the last unit left is closed with no change to any relation. The thaw's only
-guarantee gap is R1. OQ-8 is still undecided, no machine-checked failure occurred, and the fallback
-is not triggered.
+types. The thaw's only guarantee gap is R1. OQ-8 is still undecided, no machine-checked failure
+occurred, and the fallback is not triggered.
+
+## What remains for tier 2
+
+Tier 2 needs `Statement0 p` at some placement, then statements 1–4 and both programs. At `binder0`,
+the placement with the most proved, the remaining work is:
+- **R1, the thaw at a `μ` or `fam` slot.** This is the last gap in the thaw. Core's relation reads a
+  `μ` slot's thunks with Core's own `U` clause and ℕ-`∀`, which is where adjacency bites
+  (`NotMuSlotThawCore`; stated, not attempted). The route is for W to read `μ` and `fam` itself, so
+  that a thunk inside is read by W's `U` clause. It needs its own unit.
+- **`binder0`'s own monotonicity** (`MonoV`, `MonoG`, `MonoOwnG`). Not derived since statement 0.
+  Without it `Statement0 binder0` is not proved even with R1 closed. The design expected
+  `binder0` to stop here.
+- **The three owed obligations.** The revised relation `vRLJ` took three hypotheses, and every
+  other row has to give them:
+  - `RetainedPay`: every row that makes a `Mut` or `Imm` value must give the payload condition.
+    Whether `mut_not_natural`'s cell can arise (`InternalPayloadArises`) decides whether this is a
+    real restriction;
+  - `KeepsT`: the share at a resume must keep the records' tags;
+  - `OuterBelowTop`: every lend must open below `⊤`. `ViewSlotInst` without it is also not derived.
+- **OQ-8, where the future-world quantifier goes.** Still undecided. `binder0` stops at its
+  monotonicity, and `cbpv` and `binder` still owe their `U` rows with futures (`BINDER.md` §5.6) and
+  the names the changed `FutStep` admits.
 
 ## What to do next (options, not a decision)
 
@@ -246,6 +291,7 @@ is not triggered.
    - whether a retained cell with `mut_not_natural`'s shape arises (`InternalPayloadArises`), which
      decides whether `RetainedPay` is a real restriction;
    - R1: the thaw at `μ` and `fam` slots, by W reading `μ` and `fam` itself (`GAP.md` §6.5);
+   - `binder0`'s own monotonicity (`MonoV`, `MonoG`, `MonoOwnG`);
    - the revised relation's obligations at the other rows (the payload condition, the tags at the
      share, lends below `⊤`), and statement 0's other facts redone at it;
    - `cbpv`'s and `binder`'s `U` rows with futures (`BINDER.md` §5.6);

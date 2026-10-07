@@ -54,17 +54,21 @@ re-read here), *[unverified]*.
 - **The thaw never asks the relation's `∀` to be invariant** (§1.3). Computation types occur in
   value types only under `U`. W's `U` clause quantifies over every instantiation itself
   (`RelendJ`), and every cut below the stack's cut is opened by one (`InstRealisesCut`). So the
-  `∀` inside a `U` value is already read at every position an admissible embedding can open. For
-  everything under `U`, **W's `U` clause is the position-`∀`** (§3.4). Proved: a W `U` value at a
-  `∀` type is `AllPosJ` of its body (`wU_allPosJ`), and at §3c's configuration W's `U` clause
+  top-level `∀` of a `U (∀…)` value is already read at every position an admissible embedding can
+  open. For
+  a `U (∀…)` type, **W's `U` clause implies the position-`∀` for its body** (§3.4). Proved, one way:
+  a W `U` value at a `∀` type is `AllPosJ` of its body (`wU_allPosJ`); W's `U` clause is strictly
+  stronger, since `RelendJ` also quantifies over record extensions. That every `∀` nested deeper in
+  a W `U` value is read at every position is [unchecked]. At §3c's configuration W's `U` clause
   excludes the closure Core's `U` clause admits (`adj_not_wU`, `adj_core_U`).
 - **The position-`∀`, made exact, has two readings** (§3.2).
   - (A) `CutAllC` reads every cut of the whole order in play, realised by renaming the
     configuration. It needs retained cells renamed, the transport Restrat refutes at a `Mut` cell
     (`mut_not_natural`). It makes agreement with Core at `σ = []` one-way: (A) ⇒ Core is proved
-    (`cutAllNilSound`) and Core ⇒ (A) is refuted (`not_coreAllImpCutAll`). That puts OQ-58 into
-    outcome (c) at the types whose `∀` body compares the bound variable with a cell, and the
-    remedy there would redefine Core's printed `∀`.
+    (`cutAllNilSound`) and Core ⇒ (A) is refuted (`not_coreAllImpCutAll`). If (A) were adopted, and
+    subject to §3b's [unchecked] identification of W's `∀` at `σ = []` with `CutAllC`, OQ-58 would
+    fall into outcome (c) at the types whose `∀` body compares the bound variable with a cell, and
+    the remedy there would redefine Core's printed `∀`. (A) is not adopted.
   - (B) `AllPosJ` reads every cut below the stack's cut, realised by an instantiation (W's own
     re-lend; `instRealisesCut`). It is invariant under admissible embeddings by transport
     (`allPosJTransport`), and it is Core's clause at `σ = []` in both directions (`allPosJNil`).
@@ -200,8 +204,8 @@ re-lends by construction too).
 - The gap as stated (`TyEqInst`) closes without changing any relation, by an argument about `TyEq`
   alone (§2).
 - The direction given with the task is the right notion for the **relation** (§3). Made exact, its
-  realisable reading (B) is the quantifier W's `U` clause already has, so at value types W reads
-  every internal position by construction.
+  realisable reading (B) is implied by W's `U` clause at a `U (∀…)` type (`wU_allPosJ`), so there W
+  reads every internal position by construction.
 - Where the relation's ℕ-`∀` still matters is R1, through Core's relation at `μ` and `fam` (§4).
 
 ---
@@ -401,14 +405,15 @@ The auxiliary lemmas (statements in `Gap.lean` §3):
 At value types the invariance is the thaw (`RelendJValueK`), §2.3. At computation types it is
 available only at `∀`, by transport, and only if (B) is adopted. `F` and `⊸` stay as §1.3 says.
 
-### 3.4 W's `U` clause is reading (B); whether to put (B) at `cRLJ`'s `∀`
+### 3.4 W's `U` clause implies reading (B); whether to put (B) at `cRLJ`'s `∀`
 
-**W's `U` clause already reads every internal position.** `RelendJ` (`BinderJ.lean:53`) asks a `U`
+**W's `U` clause already reads every internal position at a top-level `∀`.** `RelendJ` (`BinderJ.lean:53`) asks a `U`
 value's body at every instantiation of the stack, with the views handed back. At
 `C = ∀'x ⊏ c. C'` the body's ℕ-`∀` is then read at every instantiated reading. Together that is
 `AllPosJ`'s "∀ ι, ∀ α", with `RelendJ`'s extension of the records added. By `InstRealisesCut`
-every cut below the stack's cut is opened by some instantiation. So the `∀` inside every W `U`
-value is read at every position an admissible embedding can open. Transplant §3c's closure into W
+every cut below the stack's cut is opened by some instantiation. So the top-level `∀` of a W `U`
+value at a `U (∀…)` type is read at every position an admissible embedding can open
+(`wU_allPosJ`, one way); for a `∀` nested deeper this is [unchecked]. Transplant §3c's closure into W
 at a `U` slot, at a stack whose outermost lend holds the cell and is adjacent to the bound (as in
 `MuSlotIndex`, with the `μ` removed). It is then **not** a W `U` value: `RelendJ` asks its body at
 the instantiation that opens the cut, where it fails (`adj_not_wU`, `GapRoom.lean`; the run is
@@ -768,7 +773,9 @@ cell (`Restrat.Emb.relRU_id`; `relU_of_fixAll_aux` is Restrat's `relU_of_inStrat
 cut), no record (`srecRestrat_id`) and no reading (`mapN_id_eq`). With `not_coreAllImpCutAll`,
 (A)'s agreement with Core at `σ = []` is one-way.
 
-**§3.4, W's `U` clause is reading (B): proved** (`GapRoom.lean`).
+**§3.4, W's `U` clause implies reading (B) at a `U (∀…)` type: proved, one way** (`GapRoom.lean`).
+The converse is not claimed: `RelendJ` also quantifies over record extensions, so W's `U` clause is
+strictly stronger. The generalisation to a `∀` nested deeper inside a W `U` value is [unchecked].
 - `wU_allPosJ`: under its guard, a W `U` value of `U (∀'x ⊏ c. C)` at `binder0` is `AllPosJ` of its
   body, the records moved exactly. With `instRealisesCut_at`, its `∀` is read at every cut below
   the stack's cut.
@@ -840,7 +847,8 @@ arise.
   `TyEq` alone, with no relation changed. The thaw's `CoreStable` restriction is gone, and its only
   guarantee gap is R1.
 - **The direction given with the task**: the position-`∀`, read over the cuts below the stack's cut
-  and realised by instantiations (B), is the quantifier W's `U` clause already has (`wU_allPosJ`).
+  and realised by instantiations (B), is implied by W's `U` clause for the body at a `U (∀…)` type
+  (`wU_allPosJ`; one way).
   At the configuration where Core's `ℕ`-`∀` reads adjacency, W's `U` clause reads the cut and
   excludes the closure (`adj_not_wU`, `adj_core_U`). Read over every cut of the whole order (A), it
   agrees with Core one way only.

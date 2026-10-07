@@ -2179,7 +2179,7 @@ every type, and the position-`∀` the task gave as the direction. Its build is
   Core's relation is not invariant under an embedding that opens a gap.
 - **The position-`∀`.** Read over the cuts below the stack's cut and realised by instantiations
   (`AllPosJ`), it is realisable, transported along instantiations, and Core's clause at `σ = []`
-  both ways; W's `U` clause already is it (`wU_allPosJ`), and at the adjacency configuration it
+  both ways; W's `U` clause implies it for the body at a `U (∀…)` type (`wU_allPosJ`; one way), and at the adjacency configuration it
   excludes the closure Core's `U` clause admits (`adj_not_wU`). Read over every cut of the whole
   order by renaming (`CutAllC`), it agrees with Core one way only. `cRLJ`'s `∀` is unchanged.
 - **Open**: R1; `ViewSlotInst` without `OuterBelowTop`; everything §15.7 lists as owed.

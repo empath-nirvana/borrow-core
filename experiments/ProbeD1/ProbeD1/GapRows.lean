@@ -543,7 +543,7 @@ context.** -/
 theorem statement0UThawFreeKJ : Statement0UThawFreeKJ (ℍ := ℍ) .binder0 :=
   ⟨thawInstJ, ctxRelendsThawFreeKJ, thunkFRowKJ, thunkVRowKJ, bangThunkFRowKJ, bangThunkVRowKJ⟩
 
-/-- `CtxThawFree` is inside `CtxThawFreeK`: the partial result widens. -/
+/-- `CtxThawFree` is inside `CtxThawFreeK`: the restricted result widens. -/
 theorem thawFreeK_of_thawFree : ∀ A : VTy, ThawFree A → ThawFreeK A
   | .thunk _, _ => trivial
   | .tensor A B, h => ⟨thawFreeK_of_thawFree A h.1, thawFreeK_of_thawFree B h.2⟩

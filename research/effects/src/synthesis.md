@@ -1686,6 +1686,13 @@ So OQ-8 is not decided, and neither is whether D1 meets "interactions only at cu
 
 OQ-8 stays undecided: `binder0` still stops at its own monotonicity, and `cbpv` and `binder` owe their `U` rows with futures. No failure of type (a), (b) or (d) occurred, and the fallback is not triggered.
 
+**Outcome of the gap unit (2026-10-07, `experiments/ProbeD1/GAP.md` §8; all verifiers passed).** The unit took the step the freeze-binder unit left open: `TyEqInst`, which held only at types with no thunk, because at `∀` an instantiation on `ℕ` leaves lifetimes with no preimage.
+- **The gap is closed with no relation changed.** `TyEq` compares lifetime terms only for equality, which a chain decides one threshold at a time, so it is invariant under every order embedding fixing `⊤` (`tyEqRoomBlind`) and `TyEqInst` holds at every type (`tyEqInst`). The thaw and the four `U` rows then hold at `binder0` at every borrow payload type (`statement0UThawFreeKJ`). The only slots still excluded are `μ` and `fam` slots outside a payload (R1).
+- **The relation's `∀` does read adjacency.** Core's ℕ-`∀` relates `Λ. return ℓ₀` at `∀'0 ⊏ ⊤. F (Mut '0 1)` over a cell at `1` and not at `2` (`coreAllAdjacent`, `coreAllNotNatural`), so invariance of the relation under a gap-opening embedding is false, not merely unproved. Core's `∀` over `Life ≜ ℕ` is printed ([TR] p. 4, [CONF] p. 415:12) and is not changed. A dense carrier is recorded, not taken.
+- **The position-`∀`.** Quantifying over the cuts below the stack's cut, each realised by an instantiation (`AllPosJ`), is realisable (`instRealisesCut`), transported along instantiations (`allPosJTransport`), and Core's clause at `σ = []` in both directions (`allPosJNil`). W's `U` clause implies it for the body at a `U (∀…)` type (`wU_allPosJ`, one way), and at the adjacency configuration excludes the closure Core's `U` clause admits (`adj_not_wU`, `adj_core_U`). Over every cut of the whole order, realised by renaming (`CutAllC`), it agrees with Core one way only (`cutAllNilSound`, `not_coreAllImpCutAll`); it is not adopted, and `cRLJ`'s `∀` is unchanged.
+
+What remains for tier 2 at `binder0`: R1, by W reading `μ` and `fam` itself; `binder0`'s own `MonoV`, `MonoG` and `MonoOwnG`; the three owed obligations `RetainedPay`, `KeepsT` and `OuterBelowTop` at every other row; and OQ-8, which stays undecided. No failure of type (a), (b) or (d) occurred, and the fallback is not triggered.
+
 ---
 
 ## Review findings addressed
