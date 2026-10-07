@@ -3,30 +3,20 @@
 This is a plain-language summary of where the D1 tractability probe stands. The full outcome is in
 `README.md` and `DESIGN.md` §15. The Lean is in `ProbeD1/`, and `lake build ProbeD1` builds it.
 
-> [!WARNING]
-> **Some verifier findings are still open.** The hygiene review passed. The content review raised
-> one major finding and several minor ones.
+> [!NOTE]
+> **All verifiers passed on the freeze-binder unit.** The hygiene review and the content review both
+> passed. The content review raised three minor findings, and each is addressed:
+> - The "what it decides" paragraphs now say the shared needs are met at `vRLJ` *conditional on*
+>   `RetainedPay`, `KeepsT` and `OuterBelowTop`, which are owed, and that `RetainedPay` moves
+>   `mut_not_natural`'s retained-part case into the `Mut`/`Imm` rows without settling it.
+> - The added hypotheses now have Lean witnesses that they are satisfiable: `retainedPay_of_closed`,
+>   `retainedPay_of_bound` and `keepsT_refl` (`BinderRows.lean`). `OuterBelowTop` already had
+>   `ownPushBelowTop` and `outerBelowTop_inst`.
+> - Item 3 now opens by saying that whether the witness arises is undetermined.
 >
-> - **Major, now settled: the binder0 `U` results were vacuous.** They took `CtxRelendable .binder0`
->   as one global hypothesis. That hypothesis is false (`not_ctxRelendable_binder0`,
->   `Relendability.lean`), so the four results said nothing. They are replaced by per-row forms
->   (`thunkFRow_binder0_at` and its three siblings) that take `CtxRelendableAt` at the row's own
->   context. That hypothesis holds at `Γ = []` and at a `U` slot (`ctxRelendableAt_nil`,
->   `ctxRelendableAt_thunk`), so the rows are not vacuous there. It fails at the configuration the
->   review described (`not_ctxRelendableAt_k`). See "The two follow-up questions" below.
-> - **Minor findings about wording.** Fixed in the README and DESIGN §15.3: "`SemS` does not give
->   the thaw", "exactly" and "one reason at every placement". Still open:
->   - "Only with" (DESIGN §2.2) claims a condition is necessary; the Lean shows only that it is
->     sufficient.
->   - Several prose explanations of why a route stopped are written as facts, with no Lean behind
->     them (DESIGN §15.2, and the README's note on `MonoG`). They should be marked unchecked.
->   - DESIGN §13 names `MonoHide binder0` and `MonoC binder0` as the facts that would tell the
->     placements apart, but the report gives `MonoHide binder0` no status. "`MonoOwnG`'s hypothesis
->     holds at every use" looks ahead, because `MonoOwnG` has no uses yet.
->   - The README sentence "it added no way to reach a stack" contradicts itself. The meaning is
->     that the change adds no way to reach a stack besides `FutQ` and `OwnPush`.
-> - **Minor, scope only.** Commit 14b8592 copies three GhostEnd files onto `targets` unchanged (the
->   diff against 5cfe062 is empty). DESIGN §2.6 allows this. Nothing in `Core/` changed.
+> The earlier statement-0 unit's open wording findings (the "only with" claim in DESIGN §2.2, the
+> unmarked prose reasons in DESIGN §15.2 and the README, `MonoHide binder0`'s status, and the
+> README's "no way to reach a stack" sentence) are still open. They are listed under option 1 below.
 
 ## The question
 
@@ -156,9 +146,10 @@ statements: none is at a configuration shown to arise, so none is an obstruction
   covers the context's thaw at every context without `μ` or `fam` slots, and the rule that an
   instantiated `U` value is a `U` value. The rows no longer need a hypothesis about the re-lend's
   models.
-- **`mut_not_natural`'s witness** is part of a `TW` world, but `TW` accepts any stored predicate, so
-  that does not mean it arises. At a view slot the instantiation rebuilds the view and never meets
-  the witness.
+- **Whether `mut_not_natural`'s witness arises is still undetermined.** It is part of a `TW` world,
+  but `TW` accepts any stored predicate, so that tells nothing. The check at the arising set
+  (`InternalPayloadArises`) was not attempted. At a view slot the instantiation rebuilds the view and
+  never meets the witness.
 
 **What the build had to change.** The design's own targets were refuted as stated, and so were three
 steps of its plan:
@@ -184,17 +175,30 @@ Nothing in `Core/` or in a printed definition changed.
 - The guard's run facts at a stack with a repeated place.
 - Whether a kept cell with the refuted shape arises.
 
-**What it decides.** Both shared needs of statement 0 are met at `binder0`, for contexts without `μ`
-or `fam`. OQ-8 is still undecided, because `cbpv` and `binder` still owe their own `U` rows. No
-machine-checked failure occurred, and the fallback is not triggered.
+**What it decides.** Both shared needs of statement 0 are met at `binder0`, at the revised relation
+`vRLJ`, for contexts without `μ` or `fam`. This is conditional on three added hypotheses that the
+other rows still owe: `RetainedPay`, `KeepsT` and `OuterBelowTop`. `RetainedPay` does not settle the
+`mut_not_natural` risk. It moves the retained-part case out of the thaw and into every row that makes
+a `Mut` or `Imm` value. OQ-8 is still undecided, because `cbpv` and `binder` still owe their own
+`U` rows. No machine-checked failure occurred, and the fallback is not triggered.
+
+**What it means for D1's tractability.** The lifetime half of the freeze binder now has a proof
+behind it at `binder0`: a resume that re-lends every internal lifetime as one order-preserving
+instantiation keeps `Δ`'s models with no condition on `Δ`, and the four `U` introductions go through
+with it. Both blockers the previous unit found turned out to be fixes to our definitions, which is
+the outcome that favours D1. D1 is not yet shown tractable. The added hypotheses are owed at every
+other row, R1 is open, `binder0`'s own monotonicity is not derived, and the `mut_not_natural` risk
+has moved rather than gone.
 
 ## What to do next (options, not a decision)
 
-1. **Finish the open review findings** (the minor wording ones above). This is needed under every
-   option.
+1. **Finish the open review findings** (the statement-0 unit's minor wording ones, listed in the
+   note at the top). This is needed under every option.
 2. **Continue D1.** The freeze-binder unit did the first two steps at `binder0`: PlaceViews is in
    the guard and the own lend, and the re-lend is an instantiation that lowers the stack's variables
    together. What is left:
+   - whether a retained cell with `mut_not_natural`'s shape arises (`InternalPayloadArises`), which
+     decides whether `RetainedPay` is a real restriction;
    - R1: the thaw at `μ` and `fam` slots;
    - the revised relation's obligations at the other rows (the payload condition, the tags at the
      share, lends below `⊤`), and statement 0's other facts redone at it;

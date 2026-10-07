@@ -1678,6 +1678,14 @@ Under every outcome, D1's A-side work (Law 1, the bridges, S6, D1.a8 and the har
 
 So OQ-8 is not decided, and neither is whether D1 meets "interactions only at cuts". No row is refuted and no failure of type (a), (b) or (d) occurred, so the fallback to D3 or D0 is not triggered. Statements 1–7 were not attempted.
 
+**Outcome of the freeze-binder unit (2026-10-07, `experiments/ProbeD1/BINDER.md` §11; all verifiers passed).** The unit treated the stop as a binder over internal lifetimes and took both shared needs above.
+- **The thaw.** `PlaceViews` is now in W's guard and own lend. It is kept by every step `binder0` reads, along `↭` and runs at stacks with distinct places by [TR] 6.48's ancestor technique, and it holds at every configuration of the revised arising set `ArisesI` (`pvArises`). So `k` is not in `ArisesI`. That set is not shown to cover everything that arises.
+- **The models.** The re-lend at resume is an order-preserving instantiation of every internal lifetime, lowering the variables bounded below a lend variable together with the stack. It keeps `Δ`'s models with no condition on `Δ` (`reLendModelsI_of`), which settles Q2 and replaces `BoundsStackFree`.
+- **The `U` introductions.** The design's targets were refuted as stated, at configurations not shown to arise. The revised draft relation `vRLJ` adds three hypotheses, each answering one refuted step and each shown satisfiable: `KeepsT`, `RetainedPay` and `OuterBelowTop`. At `vRLJ` the four `U` introductions and the context's thaw are proved at `binder0` for `CtxThawFree` contexts (`statement0UThawFreeJ`), conditional on those hypotheses, which every other row owes. The result is partial: the thaw at `μ` and `fam` slots (R1) is open.
+- **The known risk.** Whether `mut_not_natural`'s witness arises is undetermined: the `TW` history is uninformative, because `mutFold` accepts any predicate, and the check at `ArisesI` was not attempted. At a view slot the instantiation does not meet the witness (`mutWitnessThaws`). At a retained cell its mechanism refutes a step of our statement (`not_mutPayloadInst`), and `RetainedPay` moves that case into the rows that make a `Mut` or `Imm` value without settling it.
+
+OQ-8 stays undecided: `binder0` still stops at its own monotonicity, and `cbpv` and `binder` owe their `U` rows with futures. No failure of type (a), (b) or (d) occurred, and the fallback is not triggered.
+
 ---
 
 ## Review findings addressed

@@ -194,6 +194,9 @@ about our statement and decides nothing by itself.
   - Three steps of the design's plan were refuted: `ExtInst`, `CohEInst` at an outermost lend at `⊤`,
     and `MutPayloadInst`'s support conjunct.
 - **`mut_not_natural`.**
+  - Whether its witness arises is still undetermined. The `TW`-history check below tells nothing,
+    because `mutFold` accepts any predicate. The `ArisesI`-level check (`InternalPayloadArises`,
+    `MutWitnessThawsInhabited`) was not attempted.
   - Its witness is a part of a tagged `TW` world (`notVDenNaturalArises`). `mutFold` takes any
     predicate, so that is not arising.
   - At the view slot the instantiation re-establishes the slot from the handed view
@@ -210,8 +213,11 @@ about our statement and decides nothing by itself.
   - Not derived: the thaw at a `μ` or `fam` slot (guarantee gap R1), and the revision's obligations
     at the other rows.
 - **What it decides.**
-  - Statement 0's two shared needs are met at `binder0`, at `CtxThawFree` contexts. The result is
-    partial (R1), and `binder0` still stops at its own monotonicity.
+  - Statement 0's two shared needs are met at `binder0`, at the revised relation `vRLJ`, at
+    `CtxThawFree` contexts, conditional on `RetainedPay`, `KeepsT` and `OuterBelowTop`, which are
+    owed at the other rows. `RetainedPay` moves `mut_not_natural`'s retained-part case into the rows
+    that introduce a `Mut` or `Imm` value; it does not settle it. The result is partial (R1), and
+    `binder0` still stops at its own monotonicity.
   - OQ-8 is not decided. No failure of type (a), (b) or (d) occurred, and the fallback is not
     triggered.
 

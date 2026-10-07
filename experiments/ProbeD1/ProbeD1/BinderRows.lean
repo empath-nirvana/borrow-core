@@ -1223,6 +1223,21 @@ theorem statement0UThawFreeJ : Statement0UThawFreeJ (ℍ := ℍ) .binder0 :=
   ⟨thawInstJ, ctxRelendsThawFreeJ, thunkFRowTFJ, thunkVRowTFJ, bangThunkFRowTFJ,
     bangThunkVRowTFJ⟩
 
+/-! ### The added hypotheses are satisfiable -/
+
+/-- **`RetainedPay` holds at a payload type with no free lifetime variable.** -/
+theorem retainedPay_of_closed {σ : LStack} {αs : List Life} {s : LSub} {T : VTy} {v : Val}
+    (hT : ∀ y, ¬ VFree y T) : RetainedPay σ αs s T v :=
+  fun _ _ _ y hy => absurd hy (hT y)
+
+/-- **`RetainedPay` holds at a value bound at a place the stack lends.** -/
+theorem retainedPay_of_bound {σ : LStack} {αs : List Life} {s : LSub} {T : VTy} {l : BoCa.Loc}
+    (hl : innerAt σ αs l ≠ none) : RetainedPay σ αs s T (.loc l) :=
+  fun l' hv h => by cases hv; exact absurd h hl
+
+/-- **`KeepsT` holds when the extension is the list itself.** -/
+theorem keepsT_refl (ls : List SRec) (ρ : WRes) : KeepsT ls ls ρ := fun _ hx _ => hx
+
 end ProbeD1
 
 end

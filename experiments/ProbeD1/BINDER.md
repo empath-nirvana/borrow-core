@@ -2212,6 +2212,11 @@ step to check.
 
 ### 11.3 Item 3: the known risk
 
+**Whether `mut_not_natural`'s witness arises is still undetermined.** The `TW`-history check tells
+nothing, because `TW.mutFold` accepts any predicate. The `ArisesI`-level check
+(`InternalPayloadArises`, `MutWitnessThawsInhabited`) was not attempted. `NotVDenNaturalArises` keeps
+the name the targets gave it; it is not an arising result.
+
 - **`NotVDenNaturalArises` is proved** (`notVDenNaturalArises`). Restrat's `ρ₀` is a part of a tagged
   `TW` world, by §4.2's history (`nv_tw₁`, `nv_tw₂`, `nv_tw`, `nv_tagged`). `Tagged` reading `ag`
   through the `mut` witness goes through (`AgW.single_mut_inv`). The last step is `TW.mutFold`, which
@@ -2299,8 +2304,11 @@ typing reaches such a context.
 
 ### 11.5 Statement 0 and OQ-8, reconsidered
 
-- **The two needs statement 0 named as shared are met at `binder0`, at `CtxThawFree` contexts**, by
-  changes to our definitions. Q1, the context's thaw: PlaceViews in the guard and the views, `CohS`
+- **The two needs statement 0 named as shared are met at `binder0`, at the revised relation
+  `vRLJ`, at `CtxThawFree` contexts, conditional on `RetainedPay`, `KeepsT` and `OuterBelowTop`,
+  which are owed** (§11.4), by changes to our definitions. `RetainedPay` moves `mut_not_natural`'s
+  retained-part case (§11.3) out of the thaw and into every row that introduces a `Mut` or `Imm`
+  value; it does not settle it. Q1, the context's thaw: PlaceViews in the guard and the views, `CohS`
   and `RetainedPay` at the leaves, and `KeepsT` at the extension. Q2, `Δ`'s models at a re-lend: the
   re-lend as an order-preserving instantiation keeps every `Δ`'s models (`reLendModelsI_of`). Both were
   findings about our definitions, as DESIGN §12.3's shared-reason clause reads them.
@@ -2345,8 +2353,9 @@ and `hQ` at a resuming table; 6.66's premises; 6.150's H11 and H16; 6.149; 6.50 
 
 **Hypotheses added, and their scope.**
 - `KeepsT` at `RelendJ`'s extension: `Ext`'s `Keeps` with the tags kept. Consumers: §11.4.
+  Satisfiable: it holds when the extension is the list itself (`keepsT_refl`).
 - `RetainedPay` at `vRLJ`'s `Mut` and `Imm` leaves. It holds at a payload type with no free variable
-  and is vacuous at a bound place. It excludes `not_mutPayloadInst`'s configuration, and whether such a
+  (`retainedPay_of_closed`) and at a bound place (`retainedPay_of_bound`). It excludes `not_mutPayloadInst`'s configuration, and whether such a
   retained cell arises is not decided.
 - `OuterBelowTop` at `SemSJ`'s index and `CtxRelendableAtJ`. It excludes `not_cohEInst`'s
   configuration. An instantiation keeps it (`outerBelowTop_inst`).

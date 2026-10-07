@@ -15,6 +15,18 @@ A frozen computation abstracts the names its state uses internally. Resume insta
 - bijections of locations and of instances;
 - order-respecting renamings of lifetimes.
 
-**The known risk.** Restrat's `mut_not_natural` refutes naturality at a stored Mut invariant, and whether it arises has not been checked.
+**The known risk.** Restrat's `mut_not_natural` refutes naturality at a stored Mut invariant. Whether its witness arises is still undetermined (see below).
 
 **In the targets.** The binder is a target beside done (`EndStateBinder`, DESIGN §5 I2.c), not a conjunct of it: its location half is stated as a symmetry, its lifetime half as forward instantiation, OPEN pending the arising check.
+
+## The lifetime half: what is proved (ProbeD1, `BINDER.md` §11)
+
+These results are at ProbeD1's draft W, at the `binder0` placement. Nothing in `Core/` and no printed definition changed. All verifiers passed.
+
+- **Internal lifetimes.** A lifetime is internal when it lies strictly below the stack's cut, the point just above its outermost lend (`Internal`, `InternalVar`). Every `Δ` variable whose bound reaches below a stack variable is internal (`internalOfBound`), and every internal variable is a stack variable or was bound inside the outermost lend (`InternalBoundInside`). An instantiation moves them, fresh and beneath the resumer's lifetimes, preserving every `⊏` among them and to external lifetimes. It fixes every external reading (`SubOutsideInst`, `SharedReadFixed`). Fresh instantiations exist (`InstFreshExists`), and instantiations compose (`InstComp`).
+- **Models.** An instantiation keeps `Δ`'s models with no condition on `Δ` (`instModels`, `reLendModelsI_of`). The configuration typing reaches, where `'1 ⊏ '0` sits under a lend of `'0` (`q2_reached`), is kept (`q2Inst`). This is D-ORD's half of the binder.
+- **Ghost-ending as instantiation.** The re-lend at a resume is the instantiation. With `PlaceViews` in the guard, the four `U` introductions and the context's thaw are proved at `binder0` at the revised relation `vRLJ`, for contexts without `μ` or `fam` slots (`statement0UThawFreeJ`).
+- **Equivariance, in part.** The guard is kept by an instantiation (`GuardInst`). Coherence moves with its record when the outermost lend is below `⊤` (`cohE_inst`). Type equality is kept at types Core reads without a thunk (`tyEq_inst`). Equivariance at every type is not derived: at `∀` the instantiated side quantifies over lifetimes in the instantiation's gap.
+- **Where naturality fails, as a fact about our statement.** At a retained `Mut` cell whose payload type reads an internal lifetime, the instantiation can break the stored predicate's support (`not_mutPayloadInst`). That is `mut_not_natural`'s mechanism. It is excluded by an added hypothesis (`RetainedPay`: a retained cell's payload reads only external lifetimes), which the rows that make `Mut` or `Imm` values still owe. Whether such a cell arises is undetermined. At a view slot the instantiation rebuilds the view and does not meet the witness (`mutWitnessThaws`).
+
+**Still open for the lifetime half:** the thaw at `μ` and `fam` slots (R1); `RetainedPay`, `KeepsT` and `OuterBelowTop` at every other row; the arising check of a retained internal-payload cell (`InternalPayloadArises`); the instance and location halves, which this unit did not touch.
