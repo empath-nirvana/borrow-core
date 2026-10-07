@@ -169,9 +169,11 @@ open Classical in
 def cancelOfE (n : UInt32) (r : Expr) (cs : List Expr) (K : Kont) : Expr :=
   if h : IsVal (hndValE n r cs) then Targets.cancelOf n ⟨_, h⟩ K else .unit
 
-/-- The coalgebra `λs. ⟨f s, g s⟩` of a loop. -/
+/-- The coalgebra `λs. ⟨f s, g s⟩` of a loop.  `withPair`'s arms sit under its two binders (the
+selector and the branch's unit, Core's `withCtx`), so `s` is `var 2` there and `f`, `g` are shifted
+past three binders, as Core's `loopStep` (`Core/DelayPrograms.lean`) writes its arms. -/
 def coalgE (f g : Expr) : Expr :=
-  .lam (withPair (appE (f.shift 1 0) (.var 0)) (appE (g.shift 1 0) (.var 0)))
+  .lam (withPair (appE (f.shift 3 0) (.var 2)) (appE (g.shift 3 0) (.var 2)))
 
 open Classical in
 /-- The loop value of `unfold A B f g s`: `unfoldV (loopEffBody [] A B)`'s codata at the

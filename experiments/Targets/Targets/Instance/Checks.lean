@@ -14,6 +14,26 @@ about every run, determinism (`rstep_det`) makes the computed run the only one.
    matches `resume κ w`, which our instance encodes A-normally (`resumeE`, `w to y. κ (inj₁ ()) y`).
    Core's own `with_log` clause (`clL`) resumes by applying `κ` (`κ (inj₁ ()) v`).  On
    `nLogOutside`'s complete run at a data answer, `κ` is caught once and used never.
+2. **S5's events name only the effect context's labels** (`not_noIntercept_undeclared`,
+   `not_unwindOrder_undeclared`).  A finaliser that raises a name the context does not declare
+   ends at `finEnd none` (`errOf`), which no `Ended` of A's reads, while SPEC §19 keeps its error
+   and re-raises it at the canceller (`prog₃T`); in an unwind, its raise supersedes the pending one
+   and is no `S.raise` (`unwindProg`).
+3. **`RunsAlike` compares answers as terms** (`not_algLaw_ourInst`, `not_tailLaw_ourInst`).  Under
+   E1′'s `sched`, which answers a closure over the continuation it catches, the two sides of
+   algebraicity and of the tail-resumptive law capture different continuations, and their answers
+   differ as terms.  `EtaHold`'s witness, a forwarding handler of `l` whose clause performs `l`,
+   is not built: `[handle]` types the clauses at the outer row, and its premise `hnS` (SPEC §19,
+   "`n` not in `Σ`") keeps the handled name out of that row.  That reading of the rule is not
+   checked here; no derivation of the witness was attempted.
+4. **`NoInterception` does not give `NoIntercept`** (`not_noIntercept_of_noInterception`).  `J₄`
+   types one program, which holds no `ccatch`, no `cfin` and no handler named `0`; its cancelled
+   region's finaliser performs the operation the region's dying handler catches.  So the S5 route
+   at Core takes `FinAlone` (`Targets/Base/CoreCancel.lean`), a fact about what typed finalisers do
+   at run time.
+
+Checks 1–3 also hold at the admissible context `ΞA` (`not_contUse_ΞA`, `not_noIntercept_ΞA`,
+`not_unwindOrder_ΞA`, `not_unaryLaws_ΞA`).
 -/
 
 noncomputable section
