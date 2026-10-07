@@ -316,6 +316,71 @@ theorem viewSlotInstCS : ViewSlotInstCS := by
   | mu _ => exact hco.1.elim
   | fam _ => exact hco.1.elim
 
+/-! ### The guard's top-level part; the statements at every type -/
+
+theorem pvlTop : PVLTop :=
+  fun _ _ _ _ _ h l ψ hg ho e α hi => h.1 l ψ (ExAt.top hg) ho e α hi
+
+/-- `MutPayloadInstAll` has `MutPayloadInst`'s refuting instance. -/
+theorem not_mutPayloadInstAll : ¬ MutPayloadInstAll :=
+  fun h => not_mutPayloadInst fun T ls₀ s b c θ _ => h T ls₀ s b c θ
+
+/-- `InstEquivLeafAll` has `InstEquivLeaf`'s refuting instance. -/
+theorem not_instEquivLeafAll : ¬ InstEquivLeafAll :=
+  fun h => not_instEquivLeaf fun A b αs ls s v ρ c θ hc hro _ => h A b αs ls s v ρ c θ hc hro
+
+/-! ### `ViewTypeCoincidence`: the guard sees cells, not types -/
+
+/-- The coherence records of `gT_violator` at `⊤`, which the instantiation at `⊤` leaves alone. -/
+abbrev gls₀ : List SRec := [(gr₁, ⊤), (gr₂, ⊤), (gr₃, ⊤)]
+
+theorem gT_violator₀ : vC true gT gls₀ gs₂ (.inj₂ (.loc 0)) gw₁ := by
+  refine Or.inr ⟨.loc 0, pure_sep_mk rfl ⟨lifeN 2, rfl, 0, pure_sep_mk ⟨rfl, ?c₁⟩ ?p₁⟩⟩
+  case c₁ => exact (coh_mem (r := gr₁) (t := ⊤) (by simp)).1
+  case p₁ =>
+    refine ⟨LSet.singleton (lifeN 2), Val.loc 1, gw₂, gw₂_in, lsAbove gls₀ (lifeN 2), rfl, ?_,
+      le_rfl, fun x => mem_lsAbove⟩
+    refine ⟨lifeN 2, rfl, 1, pure_sep_mk ⟨rfl, ?c₂⟩ ?p₂⟩
+    case c₂ =>
+      exact (coh_mem (L := lsAbove gls₀ (lifeN 2)) (r := gr₂) (t := ⊤)
+        (mem_lsAbove.mpr ⟨by simp, by decide⟩)).1
+    case p₂ =>
+      refine ⟨LSet.singleton (lifeN 1), Val.loc 2, gw₃, gw₃_in,
+        lsAbove (lsAbove gls₀ (lifeN 2)) (lifeN 1), rfl, ?_,
+        show lifeN 2 ≤ lifeN 1 from by decide, fun x => mem_lsAbove⟩
+      refine ⟨lifeN 2, rfl, 2, pure_sep_mk ⟨rfl, ?c₃⟩ ?p₃⟩
+      case c₃ =>
+        exact (coh_mem (L := lsAbove (lsAbove gls₀ (lifeN 2)) (lifeN 1)) (r := gr₃) (t := ⊤)
+          (mem_lsAbove.mpr ⟨mem_lsAbove.mpr ⟨by simp, by decide⟩, by decide⟩)).1
+      case p₃ =>
+        exact ⟨LSet.singleton (lifeN 0), Val.unit, PMap.empty, ResU.inStratum_empty _,
+          lsAbove (lsAbove (lsAbove gls₀ (lifeN 2)) (lifeN 1)) (lifeN 0), rfl, ⟨rfl, rfl⟩,
+          show lifeN 2 ≤ lifeN 0 from by decide, fun x => mem_lsAbove⟩
+
+/-- **`ViewTypeCoincidence`**: `1 ⊕ Imm 'x (Imm 'x (Imm 'x 1))` and `1 ⊕ 0` are one relation at
+`'x ↦ 1` (the nested branch has no resource, `gB_unsat`), and two at the instantiation's `'x ↦ 2`,
+where the gap at `1` is the nested branch's room (`gT_violator₀`). So a cell at a bound place being
+its entry's view does not make a slot holding it typed as the entry's payload, and `CohS` asks the
+types up to `TyEq`. -/
+theorem viewTypeCoincidence : ViewTypeCoincidence := by
+  refine ⟨gT, .sum .unit .zero, gs₁, gls₀, ⊤, gθ, fun u σ' => ⟨?_, ?_⟩, fun h => ?_⟩
+  · rintro (⟨v₁, hv⟩ | ⟨v₂, hv⟩)
+    · exact Or.inl ⟨v₁, hv⟩
+    · obtain ⟨-, h₂⟩ := pure_sep_iff.mp hv
+      exact (gB_unsat _ _ _ h₂).elim
+  · rintro (⟨v₁, hv⟩ | ⟨v₂, hv⟩)
+    · exact Or.inl ⟨v₁, hv⟩
+    · obtain ⟨-, h₂⟩ := pure_sep_iff.mp hv
+      exact h₂.elim
+  · have hrec : Inst.recs (Inst.ofEmb gθ) gls₀ = gls₀ := by
+      simp [Inst.recs, Inst.ofEmb]
+    rw [hrec, gθ_sub] at h
+    rcases (h (.inj₂ (.loc 0)) gw₁).mp gT_violator₀ with ⟨v₁, hv⟩ | ⟨v₂, hv⟩
+    · obtain ⟨hv', -⟩ := pure_sep_iff.mp hv
+      cases hv'
+    · obtain ⟨-, h₂⟩ := pure_sep_iff.mp hv
+      exact h₂.elim
+
 end ProbeD1
 
 end
