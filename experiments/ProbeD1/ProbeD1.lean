@@ -24,3 +24,5 @@ import ProbeD1.BinderInst
 import ProbeD1.BinderPV
 import ProbeD1.BinderPVRun
 import ProbeD1.BinderRefute
+import ProbeD1.BinderJ
+import ProbeD1.BinderRows
