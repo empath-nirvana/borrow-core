@@ -169,7 +169,11 @@ theorem d_cancelClNU {Δ : LifeCtx} {Γ : Ctx VTy} {S : Row} (hΓ : Ctx.Dead Γ)
       (.proj₂ (.force (C := .amp (.arr .unit (CTy.effOf S .unit)) (CTy.effOf S .unit))
         (.here (.drop rfl (Ctx.Dead.cons hΓ).toP))))))
 
-/-! ### Check 2's programs: `prog₃`'s shape, typed -/
+/-! ### Check 2's programs: `prog₃`'s shape
+
+Check 2 typed these at the kernel whose `[then]` took its finaliser at the row's abortive
+operations.  At option A (SPEC §24) a finaliser lets no raise escape, and these finalisers raise
+the name `21` to a handler outside them, so no derivation of today's rules types them. -/
 
 /-- `raise : 1 ↠ 0` of the names `20` and `21` and `cancel`'s operation `1 ↠ 1` of the name
 `2`, each affine. -/
@@ -206,29 +210,11 @@ def finD : Expr := raiseE (opArgE 21 0 (.val .unit))
 /-- `perform (2, 0, ()) then x. x unwind raise (21, 0, ())`. -/
 def thenProg : Expr := thenE (.var 0) finD (performE (opArgE 2 0 (.val .unit)))
 
-theorem d_thenProgNU {Δ : LifeCtx} {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
-    CDerivesNU Δ Γ thenProg (.comp (CTy.effOf S₂₀ .unit)) :=
-  .effThen (A := .unit) nu_S₂₀ (deadSplit hΓ) (by simp [Row.NZ, Row.ofEff])
-    (by unfold Row.Uniq; decide) (fun h => absurd h (by simp [Row.Unr, Row.ofEff]))
-    (.effPerform (o := ⟨2, 0, .aff, .unit, .unit⟩) nu_S₂₀ rfl rfl (.unitI hΓ.toP))
-    (.effSub (S := []) nu_S₂₀ (fun _ _ _ h => by simp [Row.find] at h)
-      (.ret (.var (.here hΓ.toP))))
-    (.effRaise (o := ⟨21, 0, .aff, .unit, .zero⟩) rfl rfl .unit (.unitI (Ctx.Dead.cons hΓ).toP))
-
 /-- **`prog₃`'s shape** (`Core/EffCancel.lean`): the handler of the name `2` cancels the continuation
 of `perform (2, 0, ())`, inside which a handler of the name `20` and a finaliser that raises the
 name `21` stand; the handler of the name `21`, outside the cancelled region, catches that raise
 when the cancel re-raises it at the canceller. -/
 def prog₃T : Expr := withH 21 abortCl (withH 2 cancelCl (withH 20 abortCl thenProg))
-
-/-- **`prog₃`'s shape is typed by today's unr-free kernel**, at `F 1`. -/
-theorem d_prog₃TNU : CDerivesNU LifeCtx.empty [] prog₃T (.comp (.ret .unit)) := by
-  refine d_withHNU (S := []) (A := .unit) nu_S₂₁ nu_nil (by decide) (by simp) .nil
-    (d_abortClNU nu_nil .nil) ?_
-  refine d_withHNU (S := S₂₁) (A := .unit) nu_S₂ nu_S₂₁ (by decide) (by simp [Row.ofEff])
-    (by cdead) (d_cancelClNU (by cdead)) ?_
-  exact d_withHNU (S := S₂) (A := .unit) nu_S₂₀ nu_S₂ (by decide) (by simp [Row.ofEff])
-    (by cdead) (d_abortClNU nu_S₂ (by cdead)) (d_thenProgNU (by cdead))
 
 /-- `raise (1, 0, ()) then x. x unwind raise (21, 0, ())`, under handlers of `1` and `21`: the
 finaliser's raise of `21` supersedes the pending raise of `1`. -/
@@ -238,24 +224,9 @@ abbrev S₁ : Row := Row.ofEff 1 Eab 0 ++ S₂₁
 
 theorem nu_S₁ : Row.NU S₁ := nu_ofEff_aff nu_S₂₁
 
-theorem d_thenRaiseProgNU {Δ : LifeCtx} {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
-    CDerivesNU Δ Γ thenRaiseProg (.comp (CTy.effOf S₁ .unit)) :=
-  .effThen (A := .unit) nu_S₁ (deadSplit hΓ) (by simp [Row.NZ, Row.ofEff])
-    (by unfold Row.Uniq; decide) (fun h => absurd h (by simp [Row.Unr, Row.ofEff]))
-    (.effRaise (o := ⟨1, 0, .aff, .unit, .zero⟩) rfl rfl .unit (.unitI hΓ.toP))
-    (.effSub (S := []) nu_S₁ (fun _ _ _ h => by simp [Row.find] at h)
-      (.ret (.var (.here hΓ.toP))))
-    (.effRaise (o := ⟨21, 0, .aff, .unit, .zero⟩) rfl rfl .unit (.unitI (Ctx.Dead.cons hΓ).toP))
-
 /-- **The unwind's program**: `handle_21 (handle_1 (raise (1, 0, ()) then x. x unwind raise (21, 0,
 ())))`. -/
 def unwindProg : Expr := withH 21 abortCl (withH 1 abortCl thenRaiseProg)
-
-theorem d_unwindProgNU : CDerivesNU LifeCtx.empty [] unwindProg (.comp (.ret .unit)) := by
-  refine d_withHNU (S := []) (A := .unit) nu_S₂₁ nu_nil (by decide) (by simp) .nil
-    (d_abortClNU nu_nil .nil) ?_
-  exact d_withHNU (S := S₂₁) (A := .unit) nu_S₁ nu_S₂₁ (by decide) (by simp [Row.ofEff])
-    (by cdead) (d_abortClNU nu_S₂₁ (by cdead)) (d_thenRaiseProgNU (by cdead))
 
 /-! ### Check 3's programs: E1′'s `sched` around code that moves across frames -/
 

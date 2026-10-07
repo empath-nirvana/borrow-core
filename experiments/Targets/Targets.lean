@@ -13,6 +13,7 @@ import Targets.Base.CoreCancel
 import Targets.Base.Ctx
 import Targets.Base.Look
 import Targets.Base.Data
+import Targets.Base.Fill
 import Targets.Base.Machine
 import Targets.Base.Programs
 import Targets.Base.Rows

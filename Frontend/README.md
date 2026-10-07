@@ -247,10 +247,10 @@ borrows (`synConstU`, `Consts.lean`); their side conditions are decided by `rowL
   (every operation `lin`) it is `[let]`; when every slot `N` uses drops (`dropB`), and is a `!`
   type at an unrestricted row, `[let]` with the family restricted to those slots; otherwise
   `[then]`, with the finaliser `finalOf`: the destructors (SPEC §12, `rDrop`) of the
-  non-persistent slots `N` uses, lifted to `F_{Σ.abortOnly} 1`. A slot with no destructor there is
-  an error naming it. An annotated head `x : A <- M` at a nonempty row is checked at `F A` first,
-  and at `F_Σ A` only when that fails. `x <- M unwind (D); N` is `[then]` with the `D` written;
-  both `N` and `D` are owed what the binding is owed.
+  non-persistent slots `N` uses, at `F 1` (SPEC §24: a finaliser lets no raise escape). A slot
+  with no destructor there is an error naming it. An annotated head `x : A <- M` at a nonempty
+  row is checked at `F A` first, and at `F_Σ A` only when that fails. `x <- M unwind (D); N` is
+  `[then]` with the `D` written; both `N` and `D` are owed what the binding is owed.
 * **Handlers.** `handle_with[n](hr, hc) M` reads `A`, `Σ` and `R` off `hr : !U(A -o F_Σ R)`
   (`retRead`) and the operations `E` off the clauses' type (`clausesRead`, checked equal to
   `clausesTy Σ R E`); an abortive clause `!U(A -o F_Σ R)` is read as the affine operation

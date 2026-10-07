@@ -3425,7 +3425,7 @@ def surfC : Nat → TCx → Option CCTy → Comp → DM Comp
       let S := c.E.row <|> hd.map (·.1)
       let c := { c with E := { c.E with row := S } }
       let D' ← surfC n c.pushDead
-        (S.map fun S => Frontend.Check.effOf (BoCa.Fig16.LogRel.Core.Row.abortOnly S) .unit) D
+        (S.map fun _ => Frontend.Check.effOf [] .unit) D
       let N' ← surfC n (c.push x.name ((A.bind c.elabV) <|> hd.map (·.2))) exp N
       pure (.unwind sp x A M' D' N')
     | M => pure M

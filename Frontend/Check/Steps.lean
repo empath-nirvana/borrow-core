@@ -580,11 +580,11 @@ def atRow (E : Env) (sp : Span) (S : CRow) :
         s!"type `F[…] B`, but it has type `{E.ppC C}`"⟩
 
 /-- The finaliser of an effectful binding: the destructors of the non-persistent slots `u` (the
-slots the rest of the computation uses), under the binder's dead slot, at the row's abortive
-operations. It runs when an abortive operation of the bound computation stops the rest.
-SPEC §19's drop glue: `[then]`'s `D`, inserted as SPEC §12 inserts destructors. -/
-def finalOf (E : Env) (sp : Span) (S : CRow) (u : List Bool) :
-    Except Error (Res Δ (.unit :: T) (.comp (effOf (BoCa.Fig16.LogRel.Core.Row.abortOnly S) .unit))) := do
+slots the rest of the computation uses), under the binder's dead slot, at the pure row (SPEC §24:
+a finaliser lets no raise escape). It runs when an abortive operation of the bound computation
+stops the rest. SPEC §19's drop glue: `[then]`'s `D`, inserted as SPEC §12 inserts destructors. -/
+def finalOf (E : Env) (sp : Span) (_S : CRow) (u : List Bool) :
+    Except Error (Res Δ (.unit :: T) (.comp (effOf [] .unit))) := do
   let idx := (List.range T.length).filter fun i =>
     u.getD i false && !((T[i]?.map (·.persistent)).getD true)
   let r0 : Res Δ (.unit :: T) (.comp (.ret .unit)) := rRet rUnit
@@ -596,13 +596,13 @@ def finalOf (E : Env) (sp : Span) (S : CRow) (u : List Bool) :
         "that may abort, and its type has no destructor: an abortive operation of the bound " ++
         "computation would abandon it"⟩
     | none => throw ⟨sp, "internal error: a slot is out of range"⟩
-  pure (rEffSub (S := []) rfl r)
+  pure r
 
 /-- `[then]` at the row `S`: `N` (its binder closed) and the finaliser `D` at one context. -/
 def thenIt (E : Env) (sp : Span) {S : CRow} {A B : CVTy} {eN : CExpr}
     (rM : Res Δ T (.comp (effOf S A)))
     (FN : Fam T (fun L => CDerives Δ (mkCtx (A :: T) (true :: L)) eN (.comp (effOf S B))))
-    (rD : Res Δ (.unit :: T) (.comp (effOf (BoCa.Fig16.LogRel.Core.Row.abortOnly S) .unit))) :
+    (rD : Res Δ (.unit :: T) (.comp (effOf [] .unit))) :
     Except Error (Res Δ T (.comp (effOf S B))) := do
   if hNZ : Row.nzB S = true then
     if hUq : Row.uniqB S = true then
@@ -612,7 +612,7 @@ def thenIt (E : Env) (sp : Span) {S : CRow} {A B : CVTy} {eN : CExpr}
           let F := FN.merge FD s₁ s₂
           let F' : Fam T (fun L => (CDerives Δ (mkCtx (A :: T) (true :: L)) eN (.comp (effOf S B)) ∧
               CDerives Δ (mkCtx (.unit :: T) (false :: L)) rD.e
-                (.comp (effOf (BoCa.Fig16.LogRel.Core.Row.abortOnly S) .unit))) ∧
+                (.comp (effOf [] .unit))) ∧
               (S.Unr → BoCa.Fig16.LogRel.Core.Persistent (mkCtx T L))) ←
             if hu : Row.unrB S = true then
               if hs : usedSat isBangB T F.u = true then

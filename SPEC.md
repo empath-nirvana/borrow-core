@@ -2556,8 +2556,8 @@ Six rules, over `CDerives` with its context premises (§10):
     ──────────────────────────────────────────── [raise]
     Δ; Γ ⊢ raise_{n,i} V : F_Σ B          (any B: an abortive operation, whose answer 0 is absurd)
 
-    Γ = Γ₁, Γ₂    Δ; Γ₁ ⊢ M : F_Σ A    Δ; x : A, Γ₂ ⊢ N : F_Σ B    Δ; Γ₂ ⊢ D : F_{Σ^abort} 1
-    ──────────────────────────────────────────────────────────── [then]
+    Γ = Γ₁, Γ₂    Δ; Γ₁ ⊢ M : F_Σ A    Δ; x : A, Γ₂ ⊢ N : F_Σ B    Δ; Γ₂ ⊢ D : F 1
+    ──────────────────────────────────────────────────────────── [then]   (§24: D at the pure row)
     Δ; Γ ⊢ M then x. N unwind D : F_Σ B
 
     Γ = Γ₁, Γ₂    Δ; Γ₁ ⊢ M : F_Σ A    Δ; x : A, Γ₂ ⊢ N : F_Σ B
@@ -2579,8 +2579,10 @@ Six rules, over `CDerives` with its context premises (§10):
   - `[raise]`'s argument type drops (`VTy.Drop`);
   - `[then]` asks `Σ`'s names to be nonzero and its keys unique, and `!Γ₂` at an unrestricted
     row;
-  - `[handle]` takes `h_ret` and the clauses as variables, the clause of the `j`-th operation at
-    index `j` (`Row.ofEff`, `clausesTy`), and `n ≠ 0`.
+  - `[handle]` takes `H` a value form over a part of the context whose live slots are
+    persistent, the clause of the `j`-th operation at index `j` (`Row.ofEff`, `clausesTy`), and
+    `n ≠ 0` (`CDerives.effHandleV`, §24); `h_ret` and the clauses as two variables is its
+    instance (`CDerives.effHandle`).
 - **The linear `κ`** is the same `&` pair as the others: the machine builds one `κ` whatever the
   qualifier. Its cancel branch is at `⊤`, so the clause can only resume it.
 
@@ -2595,8 +2597,8 @@ Six rules, over `CDerives` with its context premises (§10):
   - `&`, `∀`, and thunks of λ-values (a block `!U(A ⊸ F_Σ B)`).
 - **Unwinding contexts.** `[then]` is `[let]` with a finaliser. `D` runs in the same `Γ₂` as `N`,
   additively, and disposes it (§12's destructors).
-- **A finaliser performs only abortive operations** (and answering calls): `D : F_{Σ^abort} 1`,
-  where `Σ^abort` keeps `Σ`'s abortive operations. During a cancel, a non-abortive operation of a
+- **A finaliser lets no operation escape it** (§24, option A): `D : F 1`. It handles its own
+  raises, and calls answering operations. During a cancel, a non-abortive operation of a
   finaliser could reach a dying handler of the region. Its clause could answer without resuming,
   and the region would then continue as if not cancelled. A plain `[let]` at a row with an abortive or
   affine operation needs `Γ₂` to drop with nothing owned (borrows, `!`, data), since a cancel or
@@ -2669,11 +2671,14 @@ Six rules, over `CDerives` with its context premises (§10):
 
 ### Finalisers that perform operations (K3, #162)
 
-A finaliser is a computation `D : F_{Σ^abort} 1`, run where its `ubind` stands, so its operations
-reach the handlers outside that point:
+A finaliser is a computation `D : F 1` (§24, option A), run where its `ubind` stands:
 
 - it may call answering operations (flush a log, close a socket through its capability);
-- it may raise.
+- it may raise, and handles its raises itself: none escapes it.
+
+The machine keeps the rules below for a raise that escapes a finaliser; a typed program's finaliser
+reaches none of them. They are what a typing at another instance of S5's parameter (the labels a
+finaliser may let escape) would read.
 
 If a finaliser raises during an ordinary unwind, the new unwind **supersedes** the pending one:
 the pending `raise (m, v)` is in the finaliser's continuation and is abandoned. During a cancel,
@@ -3603,6 +3608,90 @@ that supply a side condition (now `.toLe`), and at the side condition's consumer
 
 ---
 
+## 24. Entry 23 — the polymorphic let, the general `[handle]`, and `[then]` at option A
+
+### Motivation
+
+Decisions D3 and D5 (2026-10-07). Tier 1's typing `J₁` (`experiments/Targets`, TIER1-PLAN §2)
+needs three things today's rules lack:
+
+- **a let-bound function used at several rows** (effect polymorphism: the targets E1, E2, E6 and
+  E10). A context slot has one type, so a variable is read at one row;
+- **a handler whose clauses are values**. The run-time handler frame `hnd (n, (h_ret, hs)) □`, with
+  its clauses as values, is the form a deep handler takes in every evaluation context, and §19's
+  printed `[handle]` types it; as built, `[handle]` took its clauses as variables only;
+- **a finaliser that lets no raise escape** (option A): S5's endings are parameterised by the labels
+  whose raises a finaliser may let escape, and the target reads the empty set.
+
+### Typing
+
+    ⊢ λy. b : j    (closed)        Δ; x̸, Γ ⊢ N[λy. b / x] : C
+    ────────────────────────────────────────────────────── [let-poly]
+    Δ; Γ ⊢ let x = λy. b in N : C
+
+- `x̸` is `x`'s slot, dead; `N[λy. b / x]` is `N` with the λ-value for `x` and every other variable
+  where it was (`(N.subst 0 V).shift 1 0`).
+- Each occurrence of the λ-value in `N` is typed on its own, at its own row (or lifetime, or type).
+  Terms carry no rows, so this is let-polymorphism by substitution: one closed function used at as
+  many rows as it has occurrences. The value restriction holds: only a closed λ-value is bound.
+- The term is the let itself, `(λx. N) (λy. b)`; the rule adds no term former and no type former.
+
+      Γ = Γ₁, Γ₂    Γ₁'s live slots persistent    H a value form over Γ₁
+      Δ; Γ₁ ⊢ H : !U(A ⊸ F_Σ R) ⊗ ⊗_i C_i       Δ; Γ₂ ⊢ e : F_{Σ, n : E} A
+      ──────────────────────────────────────────────────────────────── [handle]
+      Δ; Γ ⊢ hnd (n, H) e : F_Σ R          (n ∉ Σ, n ≠ 0)
+
+- §19's printed rule, as built. A **value form** is a value, a variable of a live slot, or a pair or
+  injection of these (`Expr.ValFormIn`): a closing substitution makes it a value, so the frame is a
+  handler before `e` runs. The clauses are `!`, so their context is persistent.
+- The former rule, `h_ret` and the clauses as two variables, is its instance (`CDerives.effHandle`,
+  a theorem with the constructor's former statement): the pair of two variables is a value form, and
+  its slots are persistent.
+
+      Γ = Γ₁, Γ₂    Δ; Γ₁ ⊢ M : F_Σ A    Δ; x : A, Γ₂ ⊢ N : F_Σ B    Δ; Γ₂ ⊢ D : F 1
+      ──────────────────────────────────────────────────────────── [then]
+
+- The finaliser is at the pure row: it handles its own raises, and none escapes it. A program
+  whose finaliser lets a raise escape is no longer typed; the corpus has none. The machine is
+  unchanged (§19's *Cancels* and *Finalisers that perform operations*).
+
+### Semantics
+
+No change to the machine, the relation, `wpTS`, `wpG` or `ewpTS`.
+
+- `[let-poly]` (`letPoly_compatC`, `Core/PolyLet.lean`): the let takes one β-step, which allocates
+  nothing, to `N` with the λ-value for `x` (`cC_head`); closing that term with the λ-value at the
+  dead slot is closing `N` at the λ-value (`psub_fill`).
+- `[handle]` (`handleV_compatC`, `Core/EffRules.lean`): `H` closes to a value; its relation is read
+  off `wpTS` at that value, under the frame the handled run starts in (`wpTS_val_post`: the run from
+  a value takes no step); at the persistent types `retTy` and `clausesTy` it holds at `∅`; the
+  handler is then `ewp_handle` at clause values (`ewp_handle_vals`), which `handle_compatC` now
+  also reads.
+- `[then]` (`thenA_compatC`): a finaliser at the pure row is one at `F_{Σ^abort} 1` by `[sub]`
+  (`sub_compatC`), so `then_compatC` applies.
+
+### Theorems
+
+- `fundamentalC`, `adequacyC`, `adequacyD`, `adequacyD_obs` and every compatibility lemma keep
+  their statements, over the extended judgment.
+- `CDerives` gains `letPoly` and `effHandleV`, loses the constructor `effHandle` (now the theorem
+  `CDerives.effHandle`), and `effThen`'s finaliser premise is at `F 1`. No new index.
+
+### Baseline
+
+`Paper/`, `Support/`, the machine, `cC`/`vC` and the effectful `wp` are unchanged; no borrow rule
+and no borrow lemma changes. The checker (`Frontend/Check/`) types a finaliser at `F 1`: the drop
+glue (§12's destructors) already was.
+
+### Open
+
+- Other instances of S5's parameter (a finaliser that may let the raises of some labels escape),
+  and OQ-7 (finalisers that resume, or clean up asynchronously).
+- Row variables in Core's types. The row `∀` of tier 1's typing is in `experiments/Targets`'s open
+  types, read through this entry's `[let-poly]`.
+
+---
+
 ## Status
 
 Entries 2–6 are implemented in the library directory `Core/`, with one `fundamentalC` and
@@ -3690,9 +3779,21 @@ Stage 5 is implemented:
 The lowering of control operations and cancels is implemented (#205): `Backend/Clos/Capture.lean`,
 with every kernel program at every stage (*Lowering*).
 
+Entry 23 (§24) is implemented: `Core/PolyLet.lean` (`letPoly_compatC`), `Core/EffRules.lean`
+(`handleV_compatC`, `ewp_handle_vals`, `thenA_compatC`) and `Core/Fundamental.lean`
+(`CDerives.letPoly`, `CDerives.effHandleV`, `CDerives.effThen`, the theorem `CDerives.effHandle`);
+the checker types a finaliser at `F 1` (`Frontend/Check/Steps.lean`, `Frontend/Check/Rules.lean`,
+`Frontend/Check/Checker.lean`).
+
 ---
 
 ## Changelog
+
+- **0.41** (2026-10-07) — §24 (decisions D3, D5): the polymorphic let `[let-poly]` (a closed
+  λ-value bound by substitution, so one function is used at several rows), the general `[handle]`
+  (§19's printed rule: the handler a value form over a persistent context; the two-variable form is
+  its instance), and `[then]`'s finaliser at the pure row (option A). §19's `[then]`, *As built*
+  and *Finalisers that perform operations* revised. No change to the machine or the relation.
 
 - **0.40** (2026-10-02) — §23 (#243, from #241): non-strict outlives. The box rule of the outlives
   judgment and the side condition of the borrows that lend a payload `mut` take `⊑`, extensions

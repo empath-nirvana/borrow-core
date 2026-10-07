@@ -331,7 +331,7 @@ def inferC : Nat → Env → LifeCtx → List CVTy → Option CCTy → Comp → 
       let E := { E with row := S }
       let b ← mkBinder x.name A
       let d ← inferC n (E.push none) Δ (.unit :: T)
-        (S.map fun S => effOf (BoCa.Fig16.LogRel.Core.Row.abortOnly S) .unit) D
+        (S.map fun _ => effOf [] .unit) D
       let rest ← inferC n (E.push (some x.name)) Δ (slot A :: T) exp N
       pure (node rest.ty.c? [hd, d, rest] [b])
 end

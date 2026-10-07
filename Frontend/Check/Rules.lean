@@ -259,7 +259,7 @@ def rEffThen {S : CRow} {A B : CVTy} (hNZ : S.NZ) (hUq : S.Uniq)
     (rM : Res Δ T (.comp (effOf S A)))
     (F : Fam T (fun L => (CDerives Δ (mkCtx (A :: T) (true :: L)) eN (.comp (effOf S B)) ∧
       CDerives Δ (mkCtx (.unit :: T) (false :: L)) eD
-        (.comp (effOf (BoCa.Fig16.LogRel.Core.Row.abortOnly S) .unit))) ∧
+        (.comp (effOf [] .unit))) ∧
       (S.Unr → Persistent (mkCtx T L))))
     (h : overlapOK T rM.F.u F.u = true) : Res Δ T (.comp (effOf S B)) :=
   ⟨BoCa.Fig16.LogRel.Core.thenE eN eD rM.e, (rM.F.split F h).map

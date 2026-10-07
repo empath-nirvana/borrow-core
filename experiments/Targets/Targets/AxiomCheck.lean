@@ -234,17 +234,13 @@ run_meta do
 #print axioms Targets.Inst.d_logThenRaiseNU
 #print axioms Targets.Inst.d_lvProgNU
 #print axioms Targets.Inst.d_nLogOutsideNU
-#print axioms Targets.Inst.d_prog₃TNU
 #print axioms Targets.Inst.d_schedClLinNU
 #print axioms Targets.Inst.d_schedClNU
 #print axioms Targets.Inst.d_schedRetNU
 #print axioms Targets.Inst.d_tailClNU
 #print axioms Targets.Inst.d_tailProgNU
-#print axioms Targets.Inst.d_thenProgNU
-#print axioms Targets.Inst.d_thenRaiseProgNU
 #print axioms Targets.Inst.d_tickCENU
 #print axioms Targets.Inst.d_toResultNU
-#print axioms Targets.Inst.d_unwindProgNU
 #print axioms Targets.Inst.d_withHNU
 #print axioms Targets.Inst.d_withHTNU
 #print axioms Targets.Inst.d_withLogNU
@@ -722,6 +718,7 @@ run_meta do
 #print axioms Targets.closedAt_kappa
 #print axioms Targets.closedAt_namesVal
 #print axioms Targets.closedAt_of_derives
+#print axioms Targets.closedAt_of_fill
 #print axioms Targets.closedAt_of_zero
 #print axioms Targets.closedAt_plug_iff
 #print axioms Targets.closedAt_subst
@@ -793,6 +790,9 @@ run_meta do
 #print axioms Targets.extends_tier1
 #print axioms Targets.fall_between
 #print axioms Targets.famEmpty_core
+#print axioms Targets.fill_pair_inv
+#print axioms Targets.fill_prim_inv
+#print axioms Targets.fill_shift
 #print axioms Targets.finAloneAt_mono
 #print axioms Targets.finAloneAt_of_finRows
 #print axioms Targets.finDom_head
@@ -841,6 +841,7 @@ run_meta do
 #print axioms Targets.heapNZ_empty
 #print axioms Targets.heapNZ_fill
 #print axioms Targets.heapNZ_upd
+#print axioms Targets.hndExpr_shift
 #print axioms Targets.hndNZ_app
 #print axioms Targets.hndNZ_app_inv
 #print axioms Targets.hndNZ_app_val
@@ -943,6 +944,7 @@ run_meta do
 #print axioms Targets.nu_susp
 #print axioms Targets.ofEff_wf
 #print axioms Targets.okE_app
+#print axioms Targets.okE_fill
 #print axioms Targets.okE_foldImmV
 #print axioms Targets.okE_foldOwnV
 #print axioms Targets.okE_foldReuseV
@@ -1331,6 +1333,7 @@ run_meta do
 #print axioms Targets.vC_data
 #print axioms Targets.vC_data_mp
 #print axioms Targets.vC_of_dataVal
+#print axioms Targets.valFormIn_insert
 #print axioms Targets.valOf?_none
 #print axioms Targets.valOf?_some
 #print axioms Targets.valOf?_val

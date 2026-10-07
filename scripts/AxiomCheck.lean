@@ -171,3 +171,11 @@ import Frontend.Check.Externs
 #print axioms BoCa.Fig16.LogRel.Core.Aff.counterProg_runs
 #print axioms BoCa.Fig16.LogRel.Core.Aff.passProg_runs
 #print axioms BoCa.Fig16.LogRel.Core.Aff.logProg_runs
+-- SPEC §24 (entry 23): the polymorphic let, `[handle]` at a value form, `[then]` at option A
+#print axioms BoCa.Fig16.LogRel.Core.psub_fill
+#print axioms BoCa.Fig16.LogRel.Core.letPoly_compatC
+#print axioms BoCa.Fig16.LogRel.Core.wpTS_val_post
+#print axioms BoCa.Fig16.LogRel.Core.ewp_handle_vals
+#print axioms BoCa.Fig16.LogRel.Core.handleV_compatC
+#print axioms BoCa.Fig16.LogRel.Core.thenA_compatC
+#print axioms BoCa.Fig16.LogRel.Core.CDerives.effHandle

@@ -8,6 +8,7 @@ import Core.FoldReuse
 import Core.Nu
 import Core.EffRules
 import Core.EffBorrow
+import Core.PolyLet
 import Support.LogicalRelation.Adequacy
 
 /-!
@@ -20,7 +21,9 @@ the lifetime `∀` (`∀E` at every `C`), the `!` rules, `[]I`/`[]E` (`[]I` at e
 call-by-value derived forms (`lolliE`, `allEV`, `ofRet`), `roll`/`unroll` at `μ`, and the
 borrowed and owned folds `foldImm`, `foldOwn`, `foldReuse` (`FoldImm.lean`, `FoldOwn.lean`,
 `FoldReuse.lean`), and `νX. C`'s `nuIn`/`nuOut` and coiteration `unfoldN` (`Nu.lean`), of which
-the delay and stream types' rules are instances (`fixD`, `unfoldS`).
+the delay and stream types' rules are instances (`fixD`, `unfoldS`).  §19's effect rules, with
+§24's polymorphic let (`letPoly`), its `[handle]` at a value form (`effHandleV`, of which the
+two-variable `effHandle` is an instance) and its `[then]` at a finaliser of the pure row.
 `fundamentalC` proves every rule sound at `SemV`/`SemC`; `adequacyC` runs a closed `F 1`
 computation to `()` from the empty memory.
 -/
@@ -355,21 +358,47 @@ inductive CDerives : LifeCtx → Ctx VTy → Expr → Jdg → Prop where
       (hM : CDerives Δ Γ₁ M (.comp (CTy.effOf S A)))
       (hN : CDerives Δ (⟨A, true⟩ :: Γ₂) N (.comp (CTy.effOf S B))) :
       CDerives Δ Γ (.app (.val (.lam N)) M) (.comp (CTy.effOf S B))
-  /-- `[then]`: `M then x. N unwind D`, the finaliser at the row's abortive operations.
-  `[spec §19]` -/
+  /-- `[then]`: `M then x. N unwind D`, the finaliser at the pure row: its raises are handled
+  inside it, so none escapes it (option A).  `[spec §19, §24]` -/
   | effThen {Δ Γ Γ₁ Γ₂ M N D A B} {S : Row} (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hNZ : S.NZ)
       (hUq : S.Uniq) (hU : S.Unr → Persistent Γ₂)
       (hM : CDerives Δ Γ₁ M (.comp (CTy.effOf S A)))
       (hN : CDerives Δ (⟨A, true⟩ :: Γ₂) N (.comp (CTy.effOf S B)))
-      (hD : CDerives Δ (⟨.unit, false⟩ :: Γ₂) D (.comp (CTy.effOf S.abortOnly .unit))) :
+      (hD : CDerives Δ (⟨.unit, false⟩ :: Γ₂) D (.comp (.ret .unit))) :
       CDerives Δ Γ (thenE N D M) (.comp (CTy.effOf S B))
-  /-- `[handle]`: `handle_n e with (h_ret, hs)`, `n` not in `Σ`.  `[spec §19]` -/
-  | effHandle {Δ Γ Γ₁ Γ₂ Γr Γc e} {S : Row} {E : List (Qual × VTy × VTy)} {n : UInt32}
-      {A R : VTy} {ir ic : Nat} (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hs₁ : Ctx.SplitP Γ₁ Γr Γc)
-      (hr : Ctx.SoloP Γr ir (retTy S A R)) (hc : Ctx.SoloP Γc ic (clausesTy S R E))
+  /-- `[handle]`: `handle_n e with H`, the handler's pair `H = (h_ret, hs)` a value form over a
+  part of the context whose live slots are persistent, `n` not in `Σ`.  At two variables it is
+  `hndTerm` (`CDerives.effHandle`).  `[spec §19, §24]` -/
+  | effHandleV {Δ Γ Γ₁ Γ₂ H e} {S : Row} {E : List (Qual × VTy × VTy)} {n : UInt32}
+      {A R : VTy} (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hd : Ctx.DeadP Γ₁) (hH : H.ValFormIn Γ₁)
+      (hc : CDerives Δ Γ₁ H (.val (.tensor (retTy S A R) (clausesTy S R E))))
       (hn0 : n ≠ 0) (hnS : ∀ o ∈ S, o.n ≠ n) (hlen : E.length ≤ 2 ^ 32)
       (he : CDerives Δ Γ₂ e (.comp (CTy.effOf (Row.ofEff n E 0 ++ S) A))) :
-      CDerives Δ Γ (hndTerm n ir ic e) (.comp (CTy.effOf S R))
+      CDerives Δ Γ (hndExpr n H e) (.comp (CTy.effOf S R))
+  /-- `[let-poly]`: `let x = λy. b in N` for a closed λ-value, from `N` with the λ-value for `x`,
+  `x`'s slot dead.  Each occurrence of the λ-value in `N` is typed on its own, at its own row: the
+  kernel's row polymorphism, with the value restriction.  `[spec §24]` -/
+  | letPoly {Δ Γ N C} {j : Jdg} (b : Expr) (hcl : closedAt 0 (Val.lam b).1 = true)
+      (hV : CDerives Δ [] (.val (.lam b)) j)
+      (hN : CDerives Δ (⟨.unit, false⟩ :: Γ) ((N.subst 0 (Val.lam b)).shift 1 0) (.comp C)) :
+      CDerives Δ Γ (.app (.val (.lam N)) (.val (.lam b))) (.comp C)
+
+/-- `[handle]` at two variables: `handle_n e with (h_ret, hs)`, `h_ret` and `hs` variables of
+slots at their types.  An instance of `effHandleV`: `(h_ret, hs)` is a value form, typed by
+`[⊗I]`, over slots that are persistent.  `[spec §19]` -/
+theorem CDerives.effHandle {Δ Γ Γ₁ Γ₂ Γr Γc e} {S : Row} {E : List (Qual × VTy × VTy)}
+    {n : UInt32} {A R : VTy} {ir ic : Nat} (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hs₁ : Ctx.SplitP Γ₁ Γr Γc)
+    (hr : Ctx.SoloP Γr ir (retTy S A R)) (hc : Ctx.SoloP Γc ic (clausesTy S R E))
+    (hn0 : n ≠ 0) (hnS : ∀ o ∈ S, o.n ≠ n) (hlen : E.length ≤ 2 ^ 32)
+    (he : CDerives Δ Γ₂ e (.comp (CTy.effOf (Row.ofEff n E 0 ++ S) A))) :
+    CDerives Δ Γ (hndTerm n ir ic e) (.comp (CTy.effOf S R)) := by
+  obtain ⟨sr, hsr, hlr⟩ := hr.live
+  obtain ⟨sc, hsc, hlc⟩ := hc.live
+  obtain ⟨sr', hsr', hlr'⟩ := hs₁.live_left hsr hlr
+  obtain ⟨sc', hsc', hlc'⟩ := hs₁.live_right hsc hlc
+  exact .effHandleV hs
+    (hs₁.deadP (hr.deadP (retTy_persistent S A R)) (hc.deadP (clausesTy_persistent S R E)))
+    (.pair (.var hsr' hlr') (.var hsc' hlc')) (.tensorI hs₁ (.var hr) (.var hc)) hn0 hnS hlen he
 
 /-! ### The delay, stream and finite iterator instances  `[spec §7]`
 
@@ -525,8 +554,10 @@ theorem fundamentalC {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg}
   | effPerform hf hna _ ih => exact perform_compatC hf hna ih
   | effRaise hf ha hd _ ih => exact raise_compatC hf ha (fun _ _ _ _ h => vC_noOwn_of_drop hd h) ih
   | effLet hs hW hU _ _ ihM ihN => exact let_compatC hs hW hU ihM ihN
-  | effThen hs hNZ hUq hU _ _ _ ihM ihN ihD => exact then_compatC hs hNZ hUq hU ihM ihN ihD
-  | effHandle hs hs₁ hr hc hn0 hnS hlen _ ih => exact handle_compatC hs hs₁ hr hc hn0 hnS hlen ih
+  | effThen hs hNZ hUq hU _ _ _ ihM ihN ihD => exact thenA_compatC hs hNZ hUq hU ihM ihN ihD
+  | effHandleV hs hd hH _ hn0 hnS hlen _ ihc ihe =>
+      exact handleV_compatC hs hd hH ihc hn0 hnS hlen ihe
+  | letPoly b hcl _ _ _ ihN => exact letPoly_compatC (Val.lam b) hcl ihN
 
 /-! ### Adequacy -/
 

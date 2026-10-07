@@ -75,10 +75,12 @@ has the `unr` rules, and is used only at Core σ=[]. -/
 def tier1 : TypingJ :=
   ⟨fun Θ Δ Γ e j => ∀ η, Θ.Models η → CDerives Δ (Γ η) e (j η), OutJ.core⟩
 
-/-- **Core's rules without resuming `unr` operations.**  `CDerives`'s constructors
-(`Core/Fundamental.lean`) verbatim, with the premise `Row.NU` added at five of them:
+/-- **Core's monomorphic rules without resuming `unr` operations.**  `CDerives`'s constructors
+(`Core/Fundamental.lean`) verbatim but two, with the premise `Row.NU` added at five of them:
 `effPerform` (on `S`), `effLet` and `effThen` (on `S`), `effSub` (on the target row `S'`), and
-`effHandle` (on `Row.ofEff n E 0 ++ S`). -/
+`effHandle` (on `Row.ofEff n E 0 ++ S`).  The two are SPEC §24's: the polymorphic let `letPoly` is
+left out, and `[handle]` is its instance at two clause variables (`CDerives.effHandle`); the row
+`∀` and the handler at clause values are `J₁`'s (`Targets/Instance/J1.lean`). -/
 inductive CDerivesNU : LifeCtx → Ctx VTy → Expr → Jdg → Prop where
   | var {Δ Γ i A} (h : Ctx.SoloP Γ i A) : CDerivesNU Δ Γ (.var i) (.val A)
   | unitI {Δ Γ} (h : Ctx.DeadP Γ) : CDerivesNU Δ Γ (.val .unit) (.val .unit)
@@ -375,13 +377,13 @@ inductive CDerivesNU : LifeCtx → Ctx VTy → Expr → Jdg → Prop where
       (hM : CDerivesNU Δ Γ₁ M (.comp (CTy.effOf S A)))
       (hN : CDerivesNU Δ (⟨A, true⟩ :: Γ₂) N (.comp (CTy.effOf S B))) :
       CDerivesNU Δ Γ (.app (.val (.lam N)) M) (.comp (CTy.effOf S B))
-  /-- `[then]`: `M then x. N unwind D`, the finaliser at the row's abortive operations.
-  `[spec §19]` -/
+  /-- `[then]`: `M then x. N unwind D`, the finaliser at the pure row (option A).
+  `[spec §19, §24]` -/
   | effThen {Δ Γ Γ₁ Γ₂ M N D A B} {S : Row} (hNU : Row.NU S) (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hNZ : S.NZ)
       (hUq : S.Uniq) (hU : S.Unr → Persistent Γ₂)
       (hM : CDerivesNU Δ Γ₁ M (.comp (CTy.effOf S A)))
       (hN : CDerivesNU Δ (⟨A, true⟩ :: Γ₂) N (.comp (CTy.effOf S B)))
-      (hD : CDerivesNU Δ (⟨.unit, false⟩ :: Γ₂) D (.comp (CTy.effOf S.abortOnly .unit))) :
+      (hD : CDerivesNU Δ (⟨.unit, false⟩ :: Γ₂) D (.comp (.ret .unit))) :
       CDerivesNU Δ Γ (thenE N D M) (.comp (CTy.effOf S B))
   /-- `[handle]`: `handle_n e with (h_ret, hs)`, `n` not in `Σ`.  `[spec §19]` -/
   | effHandle {Δ Γ Γ₁ Γ₂ Γr Γc e} {S : Row} {E : List (Qual × VTy × VTy)} {n : UInt32}
@@ -810,7 +812,7 @@ def RC_effThen (J : TypingJ) (R : Row → Prop) : Prop :=
     (∀ η, Θ.Models η → (S η).Unr → Persistent (Γ₂ η)) →
     J Θ Δ Γ₁ M (fun η => .comp (CTy.effOf (S η) (A η))) →
     J Θ Δ (fun η => ⟨A η, true⟩ :: Γ₂ η) N (fun η => .comp (CTy.effOf (S η) (B η))) →
-    J Θ Δ (fun η => ⟨.unit, false⟩ :: Γ₂ η) D (fun η => .comp (CTy.effOf (S η).abortOnly .unit)) →
+    J Θ Δ (fun η => ⟨.unit, false⟩ :: Γ₂ η) D (fun _ => .comp (.ret .unit)) →
     J Θ Δ Γ (thenE N D M) (fun η => .comp (CTy.effOf (S η) (B η)))
 
 def RC_effHandle (J : TypingJ) (R : Row → Prop) : Prop :=

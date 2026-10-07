@@ -170,6 +170,80 @@ theorem okE_withPair {M N : Expr} (hM : okE M = true) (hN : okE N = true) :
 theorem okE_withborUE {d : Expr} (hd : okE d = true) : okE (withborUE d) = true := by
   simp [withborUE, thenE, okE, okE_app, hd]
 
+/-- Filling a variable with a closed λ-value makes no primitive. -/
+theorem fill_prim_inv {b : Expr} (hc : closedAt 0 (Val.lam b).1 = true) {j : Nat} {p : Prim} :
+    ∀ {x : Expr}, (x.subst j (Val.lam b)).shift 1 j = .prim p → x = .prim p
+  | .var i, h => by
+      simp only [Expr.subst] at h
+      split_ifs at h with h₁ h₂
+      · rw [shift_closedAt _ 1 hc (Nat.zero_le _)] at h; cases h
+      · simp only [Expr.shift] at h; split_ifs at h
+      · simp only [Expr.shift] at h; split_ifs at h
+  | .prim _, h => h
+  | .unit, h | .pair _ _, h | .inj₁ _, h | .inj₂ _, h | .lam _, h | .loc _, h | .seq _ _, h
+  | .letpair _ _, h | .case _ _ _, h | .app _ _, h => by simp [Expr.subst, Expr.shift] at h
+
+/-- Filling a variable with a closed λ-value makes no pair. -/
+theorem fill_pair_inv {b : Expr} (hc : closedAt 0 (Val.lam b).1 = true) {j : Nat} {u w : Expr} :
+    ∀ {x : Expr}, (x.subst j (Val.lam b)).shift 1 j = .pair u w →
+      ∃ x₁ x₂, x = .pair x₁ x₂ ∧ (x₁.subst j (Val.lam b)).shift 1 j = u ∧
+        (x₂.subst j (Val.lam b)).shift 1 j = w
+  | .var i, h => by
+      simp only [Expr.subst] at h
+      split_ifs at h with h₁ h₂
+      · rw [shift_closedAt _ 1 hc (Nat.zero_le _)] at h; cases h
+      · simp only [Expr.shift] at h; split_ifs at h
+      · simp only [Expr.shift] at h; split_ifs at h
+  | .pair x₁ x₂, h => by
+      simp only [Expr.subst, Expr.shift, Expr.pair.injEq] at h
+      exact ⟨x₁, x₂, rfl, h.1, h.2⟩
+  | .unit, h | .prim _, h | .inj₁ _, h | .inj₂ _, h | .lam _, h | .loc _, h | .seq _ _, h
+  | .letpair _ _, h | .case _ _ _, h | .app _ _, h => by simp [Expr.subst, Expr.shift] at h
+
+/-- **Filling a variable with a closed λ-value whose body passes `okE` leaves `okE` as it was**:
+the λ-value is no primitive and no pair, so no handler frame is made or unmade. -/
+theorem okE_fill {b : Expr} (hb : okE b = true) (hc : closedAt 0 (Val.lam b).1 = true) :
+    ∀ (N : Expr) (j : Nat), okE ((N.subst j (Val.lam b)).shift 1 j) = okE N
+  | .var i, j => by
+      have hv : okE (.var i) = true := rfl
+      rw [hv]
+      simp only [Expr.subst]
+      split_ifs with h₁ h₂
+      · rw [shift_closedAt _ 1 hc (Nat.zero_le _)]; exact hb
+      · simp only [Expr.shift]; split_ifs <;> rfl
+      · simp only [Expr.shift]; split_ifs <;> rfl
+  | .unit, _ => rfl
+  | .loc _, _ => rfl
+  | .prim _, _ => rfl
+  | .pair a c, j => by
+      simp only [Expr.subst, Expr.shift, okE, okE_fill hb hc a j, okE_fill hb hc c j]
+  | .seq a c, j => by
+      simp only [Expr.subst, Expr.shift, okE, okE_fill hb hc a j, okE_fill hb hc c j]
+  | .letpair a c, j => by
+      have hs : (Val.lam b).shift 2 0 = Val.lam b := val_shift_closed hc 2 0
+      simp only [Expr.subst, Expr.shift, okE, hs, okE_fill hb hc a j, okE_fill hb hc c (j + 2)]
+  | .case a c e, j => by
+      have hs : (Val.lam b).shift 1 0 = Val.lam b := val_shift_closed hc 1 0
+      simp only [Expr.subst, Expr.shift, okE, hs, okE_fill hb hc a j, okE_fill hb hc c (j + 1),
+        okE_fill hb hc e (j + 1)]
+  | .inj₁ a, j => by simp only [Expr.subst, Expr.shift, okE, okE_fill hb hc a j]
+  | .inj₂ a, j => by simp only [Expr.subst, Expr.shift, okE, okE_fill hb hc a j]
+  | .lam a, j => by
+      have hs : (Val.lam b).shift 1 0 = Val.lam b := val_shift_closed hc 1 0
+      simp only [Expr.subst, Expr.shift, okE, hs, okE_fill hb hc a (j + 1)]
+  | .app a c, j => by
+      by_cases hp : ∃ m r, a = .prim .hnd ∧ c = .pair (.prim (.lit (.i32 m))) r
+      · obtain ⟨m, r, rfl, rfl⟩ := hp
+        simp only [Expr.subst, Expr.shift, okE, okE_fill hb hc r j]
+      · have hq : ∀ (m : UInt32) (r : Expr), (a.subst j (Val.lam b)).shift 1 j = .prim .hnd →
+            (c.subst j (Val.lam b)).shift 1 j = .pair (.prim (.lit (.i32 m))) r → False := by
+          intro m r ha hc'
+          obtain ⟨x₁, x₂, rfl, h₁, -⟩ := fill_pair_inv hc hc'
+          exact hp ⟨m, x₂, fill_prim_inv hc ha, by rw [fill_prim_inv hc h₁]⟩
+        show okE (.app ((a.subst j (Val.lam b)).shift 1 j) ((c.subst j (Val.lam b)).shift 1 j)) = _
+        rw [okE.eq_9 _ _ hq, okE.eq_9 a c (fun m r h₁ h₂ => hp ⟨m, r, h₁, h₂⟩),
+          okE_fill hb hc a j, okE_fill hb hc c j]
+
 theorem okE_of_derives {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg}
     (h : CDerives Δ Γ e j) : okE e = true := by
   induction h with
@@ -185,8 +259,13 @@ theorem okE_of_derives {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg}
   | foldReuse => exact okE_foldReuseV _
   | unfoldN => exact okE_unfoldV _
   | lolliE _ _ _ iha ihf => rw [okE_app ihf]; exact iha
-  | effHandle _ _ _ _ hn0 _ _ _ ih =>
-      simp [hndTerm, Val.i32, okE, okE_app, ih, hn0]
+  | effHandleV _ _ _ _ hn0 _ _ _ ihc ihe =>
+      simp [hndExpr, Val.i32, okE, okE_app, ihc, ihe, hn0]
+  | @letPoly _ _ N _ _ b hcl _ _ ihV ihN =>
+      have hb : okE b = true := ihV
+      rw [okE_fill hb hcl N 0] at ihN
+      rw [okE.eq_9 _ _ (fun m r h _ => by cases h)]
+      simp [okE, Expr.val, Val.lam, ihN, hb]
   | _ => first | rfl | simp_all [okE, okE_app, absurdE, thenE, performE, raiseE, opArgE, Val.i32]
 
 /-- Every row context admits the environment of empty rows. -/

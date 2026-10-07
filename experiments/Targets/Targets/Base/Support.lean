@@ -1,6 +1,7 @@
 import Core.Weaken
 import Targets.Base.Typing
 import Targets.Base.Programs
+import Targets.Base.Fill
 
 /-!
 # Base — shifting and context lemmas (RESTRUCTURE §4.5)
@@ -53,6 +54,9 @@ theorem hndTerm_shift (n : UInt32) (ir ic : Nat) (e : Expr) (d c : Nat) :
   show Expr.app (Expr.app (.prim .hnd) (.pair (.prim (.lit (.i32 n)))
       (.pair ((Expr.var ir).shift d c) ((Expr.var ic).shift d c)))) (e.shift d c) = _
   rw [var_shift, var_shift]; rfl
+
+theorem hndExpr_shift (n : UInt32) (H e : Expr) (d c : Nat) :
+    (hndExpr n H e).shift d c = hndExpr n (H.shift d c) (e.shift d c) := rfl
 
 variable {Γd : Ctx VTy}
 
@@ -114,6 +118,27 @@ theorem soloP_insert (hd : Ctx.Dead Γd) : ∀ (Γa : Ctx VTy) {Γb : Ctx VTy} {
       | here h => rw [List.length_cons, sIdx_zero_succ]; exact .here (deadP_insert hd Γa h)
       | there h => rw [List.length_cons, sIdx_succ]; exact .there (soloP_insert hd Γa h)
       | skip hS h => rw [List.length_cons, sIdx_succ]; exact .skip hS (soloP_insert hd Γa h)
+
+/-- A value form over `Γa ++ Γb` is one over `Γa ++ Γd ++ Γb`, its variables past `Γa` shifted. -/
+theorem valFormIn_insert (Γa : Ctx VTy) {Γb : Ctx VTy} {H : Expr} (h : H.ValFormIn (Γa ++ Γb)) :
+    (H.shift Γd.length Γa.length).ValFormIn (Γa ++ Γd ++ Γb) := by
+  induction h with
+  | @var i s hs hl =>
+      rw [var_shift]
+      refine .var (s := s) ?_ hl
+      unfold sIdx
+      by_cases hi : i < Γa.length
+      · rw [if_pos hi, List.append_assoc, List.getElem?_append_left hi]
+        rwa [List.getElem?_append_left hi] at hs
+      · rw [if_neg hi, List.getElem?_append_right (by simp; omega)]
+        rw [List.getElem?_append_right (by omega)] at hs
+        simp only [List.length_append]
+        rw [show i + Γd.length - (Γa.length + Γd.length) = i - Γa.length by omega]
+        exact hs
+  | val v => exact .val (v.shift Γd.length Γa.length)
+  | pair _ _ ih₁ ih₂ => exact .pair ih₁ ih₂
+  | inj₁ _ ih => exact .inj₁ ih
+  | inj₂ _ ih => exact .inj₂ ih
 
 theorem live_insert (hd : Ctx.Dead Γd) {P : Slot VTy → Prop} {Γa Γb : Ctx VTy}
     (h : ∀ s ∈ Γa ++ Γb, s.live = true → P s) : ∀ s ∈ Γa ++ Γd ++ Γb, s.live = true → P s := by
@@ -410,16 +435,23 @@ theorem CDerives.insert_dead (hd : Ctx.Dead Γd) {Δ : LifeCtx} {Γ₀ : Ctx VTy
       have eD := ihD (_ :: Γa₂) Γb₂ rfl
       rw [h₁] at eM; rw [List.length_cons, h₂] at eN eD
       exact .effThen hs' hNZ hUq (fun hu => live_insert hd (hU hu)) eM eN eD
-  | effHandle hs hs₁ hr hc hn0 hnS hlen _ ih =>
+  | effHandleV hs hdd hH _ hn0 hnS hlen _ ihc ihe =>
       intro Γa Γb hΓ; subst hΓ
       obtain ⟨Γa₁, Γb₁, Γa₂, Γb₂, rfl, rfl, h₁, h₂, hs'⟩ := splitP_insert hd Γa hs
-      obtain ⟨Γar, Γbr, Γac, Γbc, rfl, rfl, hr₁, hc₁, hs₁'⟩ := splitP_insert hd Γa₁ hs₁
-      have e' := ih Γa₂ Γb₂ rfl
-      have hr' := soloP_insert hd Γar hr
-      have hc' := soloP_insert hd Γac hc
-      rw [h₂] at e'; rw [hr₁, h₁] at hr'; rw [hc₁, h₁] at hc'
-      rw [hndTerm_shift]
-      exact .effHandle hs' hs₁' hr' hc' hn0 hnS hlen e'
+      have ec := ihc Γa₁ Γb₁ rfl
+      have ee := ihe Γa₂ Γb₂ rfl
+      have hH' := valFormIn_insert (Γd := Γd) Γa₁ hH
+      rw [h₁] at ec hH'; rw [h₂] at ee
+      rw [hndExpr_shift]
+      exact .effHandleV hs' (deadP_insert hd Γa₁ hdd) hH' ec hn0 hnS hlen ee
+  | @letPoly _ _ N _ _ b hcl hV _ _ ihN =>
+      intro Γa Γb hΓ; subst hΓ
+      have eN := ihN (⟨.unit, false⟩ :: Γa) Γb rfl
+      rw [List.length_cons, ← fill_shift hcl Γd.length N 0 Γa.length (Nat.zero_le _)] at eN
+      have hb : (Expr.lam b).shift Γd.length Γa.length = .lam b := shift_closed0 hcl _ _
+      show CDerives _ _ (Expr.app (Expr.lam (N.shift _ (Γa.length + 1))) ((Expr.lam b).shift _ _)) _
+      rw [hb]
+      exact .letPoly b hcl hV eN
 
 /-- `CDerives.insert_dead` at the unr-free rules: a derivation at `Γa ++ Γb` is one at
 `Γa ++ Γd ++ Γb` for dead `Γd`, the term's variables past `Γa` shifted past `Γd`. -/

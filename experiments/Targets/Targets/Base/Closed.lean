@@ -1,4 +1,5 @@
 import Core.Fundamental
+import Targets.Base.Fill
 
 /-!
 # Base — a typed term is closed at its context
@@ -90,12 +91,15 @@ theorem closedAt_of_derives {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg}
       rw [(splitP_length hs).1] at ihM
       rw [List.length_cons, (splitP_length hs).2] at ihN ihD
       simp [thenE, closedAt, Expr.val, Val.prim, Val.lam, ihM, ihN, ihD]
-  | effHandle hs hs₁ hr hc _ _ _ _ ih =>
-      rw [(splitP_length hs).2] at ih
-      have hr' := soloP_lt hr; have hc' := soloP_lt hc
-      rw [(splitP_length hs₁).1, (splitP_length hs).1] at hr'
-      rw [(splitP_length hs₁).2, (splitP_length hs).1] at hc'
-      simp [hndTerm, closedAt, Expr.val, Val.prim, Val.i32, ih, hr', hc']
+  | effHandleV hs _ _ _ _ _ _ _ ihc ihe =>
+      rw [(splitP_length hs).1] at ihc; rw [(splitP_length hs).2] at ihe
+      simp [hndExpr, closedAt, Expr.val, Val.prim, Val.i32, ihc, ihe]
+  | @letPoly _ Γ' N _ _ b hcl _ _ _ ihN =>
+      rw [List.length_cons] at ihN
+      have hN := closedAt_of_fill hcl N 0 (Γ'.length + 1) (Nat.succ_pos _) ihN
+      have hb : closedAt Γ'.length (Expr.lam b) = true := closedAt_of_zero hcl _
+      simp only [closedAt, Expr.val, Val.lam, Bool.and_eq_true] at hb ⊢
+      exact ⟨hN, hb⟩
   | _ =>
       first
         | assumption

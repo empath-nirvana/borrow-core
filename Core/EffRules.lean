@@ -1087,6 +1087,55 @@ private theorem substAll_var' {γ : List Val} {i : Nat} {v : Val} (hv : γ[i]? =
   show Expr.psub 0 γ (.var i) = _
   simp only [Expr.psub, if_neg (Nat.not_lt_zero i), Nat.sub_zero, hv, Val.shift_zero]
 
+/-- **A handler at clause values**: the answer clause and the clauses related at `∅`, at one list
+(at a `!` type the relation at one list gives it at every list, `ext_empty'`), and the handled
+computation at `Σ` extended by the handler's name, which `Σ` does not hold.  `[spec §19]` -/
+theorem ewp_handle_vals {S : Row} {E : List (Qual × VTy × VTy)} {n : UInt32} {A R : VTy}
+    {δ : LSub} {ls₀ : List SRec} {vr vc : Val} (hn0 : n ≠ 0) (hnS : ∀ o ∈ S, o.n ≠ n)
+    (hlen : E.length ≤ 2 ^ 32) (hVr : vC true (retTy S A R) ls₀ δ vr PMap.empty)
+    (hVc : vC true (clausesTy S R E) ls₀ δ vc PMap.empty) {ls : List SRec} {e : Expr} {ρ : WRes}
+    (he : ewpTS ls e (opTable (Row.tab (Row.ofEff n E 0 ++ S) δ)) (fun ls v => vC true A ls δ v) ρ) :
+    ewpTS ls (hndE (hndVal n vr vc) e) (opTable (Row.tab S δ)) (fun ls v => vC true R ls δ v) ρ := by
+  refine ewp_handle (Row.tab (Row.ofEff n E 0 ++ S) δ) (Row.tab S δ) n hn0 ?_ vr vc
+    (fun ls v => vC true A ls δ v) (fun ls v => vC true R ls δ v) ?_ ?_ he
+  · intro m i hm
+    simp [Row.tab, Row.find_append, Row.find_ofEff_ne n E 0 m i hm]
+  · intro ls' v σ hv
+    have hf := (hVr.2 ls' (ext_empty' ls₀ ls')) v σ σ hv (compS_empty_left σ)
+    exact (cC_effOf S R ls' δ _ σ).mp hf
+  · intro i en hT
+    obtain ⟨o, hf, rfl⟩ := Row.tab_some hT
+    have hfo : Row.find (Row.ofEff n E 0) n i = some o := by
+      rw [Row.find_append] at hf
+      cases h₁ : Row.find (Row.ofEff n E 0) n i with
+      | some o' => rw [h₁] at hf; exact hf
+      | none =>
+          rw [h₁] at hf
+          obtain ⟨hm, hn, -⟩ := Row.find_mem hf
+          exact absurd hn (hnS o hm)
+    obtain ⟨-, j, hj, rfl, rfl⟩ := Row.find_ofEff n E 0 n i o hfo
+    have hjn : (UInt32.ofNat (0 + j)).toNat = j := by
+      rw [Nat.zero_add]; exact UInt32.toNat_ofNat_of_lt' (by simp [UInt32.size]; omega)
+    obtain ⟨c, hcl, hVcl⟩ := clausesTy_at E hVc j hj
+    refine ⟨c, by rw [hjn]; exact hcl, ?_, ?_⟩
+    · intro hna ls' v κ σ hσ
+      generalize hEj : E[j] = t at hVcl hna hσ
+      obtain ⟨q, A', B'⟩ := t
+      simp only [OpSig.ent, OpSig.abort] at hna
+      simp only [clauseTy, hna] at hVcl
+      obtain ⟨σa, σk, hck, hA', hK⟩ := hσ
+      have hκ := vC_kTy_of_kapRel (S := S) (R := R) (B := B') (q := q) A' n (UInt32.ofNat (0 + j)) hK
+      have hf := (hVcl.2 ls' (ext_empty' ls₀ ls')) (Val.pair v κ) σ σ
+        ⟨v, κ, pure_sep_mk rfl ⟨σa, σk, hck, hA', hκ⟩⟩ (compS_empty_left σ)
+      exact (cC_effOf S R ls' δ _ σ).mp hf
+    · intro ha ls' v σ hσ
+      generalize hEj : E[j] = t at hVcl ha hσ
+      obtain ⟨q, A', B'⟩ := t
+      simp only [OpSig.ent, OpSig.abort] at ha hσ
+      simp only [clauseTy, ha] at hVcl
+      have hf := (hVcl.2 ls' (ext_empty' ls₀ ls')) v σ σ hσ (compS_empty_left σ)
+      exact (cC_effOf S R ls' δ _ σ).mp hf
+
 /-- `[handle]`: the clauses and `h_ret` at `Σ`, the handled computation at `Σ` extended by the
 handler's name, which `Σ` does not hold.  `[spec §19]` -/
 theorem handle_compatC {Δ : LifeCtx} {Γ Γ₁ Γ₂ Γr Γc : Ctx VTy} {e : Expr} {S : Row}
@@ -1111,46 +1160,226 @@ theorem handle_compatC {Δ : LifeCtx} {Γ Γ₁ Γ₂ Γr Γc : Ctx VTy} {e : Ex
   show cC _ ls δ (Expr.app (Expr.app (.val (.prim .hnd)) (.pair (.val (Val.i32 n))
     (.pair (substAll γ (.var ir)) (substAll γ (.var ic))))) (substAll γ e)) ρ₂
   rw [substAll_var' hvr, substAll_var' hvc]
-  refine (cC_effOf S R ls δ _ ρ₂).mpr ?_
-  refine ewp_handle (Row.tab (Row.ofEff n E 0 ++ S) δ) (Row.tab S δ) n hn0 ?_ vr vc
-    (fun ls v => vC true A ls δ v) (fun ls v => vC true R ls δ v) ?_ ?_
-    ((cC_effOf _ A ls δ _ ρ₂).mp (he δ γ ls ρ₂ hδ hg₂))
-  · intro m i hm
-    simp [Row.tab, Row.find_append, Row.find_ofEff_ne n E 0 m i hm]
-  · intro ls' v σ hv
-    have hf := (hVr.2 ls' (ext_empty' ls ls')) v σ σ hv (compS_empty_left σ)
-    exact (cC_effOf S R ls' δ _ σ).mp hf
-  · intro i en hT
-    obtain ⟨o, hf, rfl⟩ := Row.tab_some hT
-    have hfo : Row.find (Row.ofEff n E 0) n i = some o := by
-      rw [Row.find_append] at hf
-      cases h₁ : Row.find (Row.ofEff n E 0) n i with
-      | some o' => rw [h₁] at hf; exact hf
-      | none =>
-          rw [h₁] at hf
-          obtain ⟨hm, hn, -⟩ := Row.find_mem hf
-          exact absurd hn (hnS o hm)
-    obtain ⟨-, j, hj, rfl, rfl⟩ := Row.find_ofEff n E 0 n i o hfo
-    have hjn : (UInt32.ofNat (0 + j)).toNat = j := by
-      rw [Nat.zero_add]; exact UInt32.toNat_ofNat_of_lt' (by simp [UInt32.size]; omega)
-    obtain ⟨c, hcl, hVcl⟩ := clausesTy_at E hVc j hj
-    refine ⟨c, by rw [hjn]; exact hcl, ?_, ?_⟩
-    · intro hna ls' v κ σ hσ
-      generalize hEj : E[j] = t at hVcl hna hσ
-      obtain ⟨q, A', B'⟩ := t
-      simp only [OpSig.ent, OpSig.abort] at hna
-      simp only [clauseTy, hna] at hVcl
-      obtain ⟨σa, σk, hck, hA', hK⟩ := hσ
-      have hκ := vC_kTy_of_kapRel (S := S) (R := R) (B := B') (q := q) A' n (UInt32.ofNat (0 + j)) hK
-      have hf := (hVcl.2 ls' (ext_empty' ls ls')) (Val.pair v κ) σ σ
-        ⟨v, κ, pure_sep_mk rfl ⟨σa, σk, hck, hA', hκ⟩⟩ (compS_empty_left σ)
-      exact (cC_effOf S R ls' δ _ σ).mp hf
-    · intro ha ls' v σ hσ
-      generalize hEj : E[j] = t at hVcl ha hσ
-      obtain ⟨q, A', B'⟩ := t
-      simp only [OpSig.ent, OpSig.abort] at ha hσ
-      simp only [clauseTy, ha] at hVcl
-      have hf := (hVcl.2 ls' (ext_empty' ls ls')) v σ σ hσ (compS_empty_left σ)
-      exact (cC_effOf S R ls' δ _ σ).mp hf
+  exact (cC_effOf S R ls δ _ ρ₂).mpr (ewp_handle_vals hn0 hnS hlen hVr hVc
+    ((cC_effOf _ A ls δ _ ρ₂).mp (he δ γ ls ρ₂ hδ hg₂)))
+
+/-! ### The general `[handle]`: the handler as a value form  `[spec §24]` -/
+
+/-- `handle_n e with H`, `H` the handler's pair `(h_ret, hs)` as an expression.  `hndTerm` is its
+instance at two variables (`hndTerm_eq`).  `[spec §19, §24]` -/
+def hndExpr (n : UInt32) (H e : Expr) : Expr :=
+  .app (.app (.val (.prim .hnd)) (.pair (.val (Val.i32 n)) H)) e
+
+theorem hndTerm_eq (n : UInt32) (ir ic : Nat) (e : Expr) :
+    hndTerm n ir ic e = hndExpr n (.pair (.var ir) (.var ic)) e := rfl
+
+/-- `e` is a value form over the live slots of `Γ`: a value, a variable of a live slot, or a pair
+or injection of these.  A closing substitution of `Γ` makes it a value
+(`isVal_psub_valFormIn`).  `[spec §24]` -/
+inductive _root_.BoCa.Expr.ValFormIn (Γ : Ctx VTy) : Expr → Prop where
+  | var {i : Nat} {s : Slot VTy} (h : Γ[i]? = some s) (hl : s.live = true) :
+      Expr.ValFormIn Γ (.var i)
+  | val (v : Val) : Expr.ValFormIn Γ (.val v)
+  | pair {a b : Expr} : Expr.ValFormIn Γ a → Expr.ValFormIn Γ b → Expr.ValFormIn Γ (.pair a b)
+  | inj₁ {a : Expr} : Expr.ValFormIn Γ a → Expr.ValFormIn Γ (.inj₁ a)
+  | inj₂ {a : Expr} : Expr.ValFormIn Γ a → Expr.ValFormIn Γ (.inj₂ a)
+
+/-- A live slot is within the closing substitution. -/
+theorem liveWithin_lt : ∀ {Γ : Ctx VTy} {γ : List Val} {i : Nat} {s : Slot VTy},
+    Ctx.LiveWithin Γ γ → Γ[i]? = some s → s.live = true → i < γ.length
+  | [], _, _, _, _, h, _ => by simp at h
+  | s₀ :: Γ, [], 0, s, hw, h, hl => by
+      simp only [List.getElem?_cons_zero, Option.some.injEq] at h
+      subst h
+      exact absurd hl (by simpa using hw.1)
+  | s₀ :: Γ, [], i + 1, s, hw, h, hl => by
+      have := liveWithin_lt hw.2 (by simpa using h) hl
+      simp at this
+  | s₀ :: Γ, _ :: γ, 0, _, _, _, _ => by simp
+  | s₀ :: Γ, _ :: γ, i + 1, s, hw, h, hl => by
+      simpa using liveWithin_lt (Γ := Γ) (γ := γ) hw (by simpa using h) hl
+
+/-- A closing substitution keeps a value a value. -/
+theorem isVal_psub {e : Expr} (h : IsVal e) (k : Nat) (γ : List Val) : IsVal (Expr.psub k γ e) := by
+  induction h generalizing k with
+  | unit => exact .unit
+  | pair _ _ ih₁ ih₂ => exact .pair (ih₁ k) (ih₂ k)
+  | inj₁ _ ih => exact .inj₁ (ih k)
+  | inj₂ _ ih => exact .inj₂ (ih k)
+  | lam => exact .lam
+  | loc => exact .loc
+  | prim => exact .prim
+  | storeV _ ih => exact .storeV (ih k)
+
+/-- **A value form, closed, is a value.** -/
+theorem isVal_psub_valFormIn {Γ : Ctx VTy} {γ : List Val} (hw : Ctx.LiveWithin Γ γ) {e : Expr}
+    (h : e.ValFormIn Γ) : IsVal (Expr.psub 0 γ e) := by
+  induction h with
+  | @var i s hs hl =>
+      have hi := liveWithin_lt hw hs hl
+      obtain ⟨v, hv⟩ : ∃ v, γ[i]? = some v := ⟨γ[i], List.getElem?_eq_getElem hi⟩
+      simp only [Expr.psub, if_neg (Nat.not_lt_zero i), Nat.sub_zero, hv]
+      exact (v.shift 0 0).2
+  | val v => exact isVal_psub v.2 0 γ
+  | pair _ _ ih₁ ih₂ => exact .pair ih₁ ih₂
+  | inj₁ _ ih => exact .inj₁ ih
+  | inj₂ _ ih => exact .inj₂ ih
+
+theorem _root_.BoCa.Expr.ValFormIn.append {Γ Γ' : Ctx VTy} {e : Expr} (h : e.ValFormIn Γ) :
+    e.ValFormIn (Γ ++ Γ') := by
+  induction h with
+  | @var i s hs hl =>
+      refine .var ?_ hl
+      have hi : i < Γ.length := by
+        by_contra hn
+        rw [List.getElem?_eq_none (by omega)] at hs
+        cases hs
+      rw [List.getElem?_append_left hi]
+      exact hs
+  | val v => exact .val v
+  | pair _ _ ih₁ ih₂ => exact .pair ih₁ ih₂
+  | inj₁ _ ih => exact .inj₁ ih
+  | inj₂ _ ih => exact .inj₂ ih
+
+/-- `h_ret`'s type is persistent. -/
+theorem retTy_persistent (S : Row) (A R : VTy) : (retTy S A R).Persistent := rfl
+
+/-- The clauses' type is persistent: a tuple of `!` types. -/
+theorem clausesTy_persistent (S : Row) (R : VTy) :
+    ∀ E : List (Qual × VTy × VTy), (clausesTy S R E).Persistent
+  | [] => rfl
+  | (q, A, B) :: E => by
+      have h := clausesTy_persistent S R E
+      simp only [VTy.Persistent] at h ⊢
+      simp only [clausesTy, VTy.persistent, Bool.and_eq_true, h, and_true]
+      simp only [clauseTy]
+      split <;> rfl
+
+/-- A context of one live persistent slot, up to persistent slots elsewhere, is consumed up to
+persistent slots. -/
+theorem _root_.BoCa.Fig16.LogRel.Core.Ctx.SoloP.deadP {T : VTy} (hT : T.Persistent) :
+    ∀ {Γ : Ctx VTy} {i : Nat}, Ctx.SoloP Γ i T → Ctx.DeadP Γ
+  | _, _, .here h => .drop hT h
+  | _, _, .there h => .cons (Ctx.SoloP.deadP hT h)
+  | _, _, .skip hS h => .drop hS (Ctx.SoloP.deadP hT h)
+
+/-- Two consumed halves, up to persistent slots, make a consumed whole. -/
+theorem _root_.BoCa.Fig16.LogRel.Core.Ctx.SplitP.deadP :
+    ∀ {Γ Γ₁ Γ₂ : Ctx VTy}, Ctx.SplitP Γ Γ₁ Γ₂ → Ctx.DeadP Γ₁ → Ctx.DeadP Γ₂ → Ctx.DeadP Γ
+  | _, _, _, .nil, _, _ => .nil
+  | _, _, _, .left h, .drop hT h₁, .cons h₂ => .drop hT (Ctx.SplitP.deadP h h₁ h₂)
+  | _, _, _, .right h, .cons h₁, .drop hT h₂ => .drop hT (Ctx.SplitP.deadP h h₁ h₂)
+  | _, _, _, .dead h, .cons h₁, .cons h₂ => .cons (Ctx.SplitP.deadP h h₁ h₂)
+  | _, _, _, .dup hT h, .drop _ h₁, .drop _ h₂ => .drop hT (Ctx.SplitP.deadP h h₁ h₂)
+
+/-- The slot of `SoloP` is live. -/
+theorem _root_.BoCa.Fig16.LogRel.Core.Ctx.SoloP.live :
+    ∀ {Γ : Ctx VTy} {i : Nat} {T : VTy}, Ctx.SoloP Γ i T → ∃ s, Γ[i]? = some s ∧ s.live = true
+  | _, _, _, .here _ => ⟨_, rfl, rfl⟩
+  | _, _, _, .there h => by simpa using Ctx.SoloP.live h
+  | _, _, _, .skip _ h => by simpa using Ctx.SoloP.live h
+
+/-- A slot live in a part of a split is live in the whole. -/
+theorem _root_.BoCa.Fig16.LogRel.Core.Ctx.SplitP.live_left :
+    ∀ {Γ Γ₁ Γ₂ : Ctx VTy} {i : Nat} {s : Slot VTy}, Ctx.SplitP Γ Γ₁ Γ₂ → Γ₁[i]? = some s →
+      s.live = true → ∃ s', Γ[i]? = some s' ∧ s'.live = true
+  | _, _, _, _, _, .nil, h, _ => by simp at h
+  | _, _, _, 0, _, .left _, h, _ => ⟨_, rfl, rfl⟩
+  | _, _, _, 0, _, .right _, h, hl => by
+      simp only [List.getElem?_cons_zero, Option.some.injEq] at h; subst h; cases hl
+  | _, _, _, 0, _, .dead _, h, hl => by
+      simp only [List.getElem?_cons_zero, Option.some.injEq] at h; subst h; cases hl
+  | _, _, _, 0, _, .dup _ _, h, _ => ⟨_, rfl, rfl⟩
+  | _, _, _, i + 1, _, .left hs, h, hl => by simpa using Ctx.SplitP.live_left hs (by simpa using h) hl
+  | _, _, _, i + 1, _, .right hs, h, hl => by simpa using Ctx.SplitP.live_left hs (by simpa using h) hl
+  | _, _, _, i + 1, _, .dead hs, h, hl => by simpa using Ctx.SplitP.live_left hs (by simpa using h) hl
+  | _, _, _, i + 1, _, .dup _ hs, h, hl => by simpa using Ctx.SplitP.live_left hs (by simpa using h) hl
+
+theorem _root_.BoCa.Fig16.LogRel.Core.Ctx.SplitP.live_right :
+    ∀ {Γ Γ₁ Γ₂ : Ctx VTy} {i : Nat} {s : Slot VTy}, Ctx.SplitP Γ Γ₁ Γ₂ → Γ₂[i]? = some s →
+      s.live = true → ∃ s', Γ[i]? = some s' ∧ s'.live = true
+  | _, _, _, _, _, .nil, h, _ => by simp at h
+  | _, _, _, 0, _, .left _, h, hl => by
+      simp only [List.getElem?_cons_zero, Option.some.injEq] at h; subst h; cases hl
+  | _, _, _, 0, _, .right _, h, _ => ⟨_, rfl, rfl⟩
+  | _, _, _, 0, _, .dead _, h, hl => by
+      simp only [List.getElem?_cons_zero, Option.some.injEq] at h; subst h; cases hl
+  | _, _, _, 0, _, .dup _ _, h, _ => ⟨_, rfl, rfl⟩
+  | _, _, _, i + 1, _, .left hs, h, hl => by simpa using Ctx.SplitP.live_right hs (by simpa using h) hl
+  | _, _, _, i + 1, _, .right hs, h, hl => by simpa using Ctx.SplitP.live_right hs (by simpa using h) hl
+  | _, _, _, i + 1, _, .dead hs, h, hl => by simpa using Ctx.SplitP.live_right hs (by simpa using h) hl
+  | _, _, _, i + 1, _, .dup _ hs, h, hl => by simpa using Ctx.SplitP.live_right hs (by simpa using h) hl
+
+/-- A run from a value takes no step. -/
+theorem arun_val {Al : BoCa.BoLo.Alloc} {k k' : Nat} {μ μ' : Heap} {v : Val} {e : Expr}
+    (h : BoCa.BoLo.ARun (ℍ := ℍ) Al k μ (.val v) k' μ' e) : e = .val v := by
+  cases h with
+  | refl => rfl
+  | more s _ => exact (BoCa.BoLo.no_step_val s.toStep1).elim
+
+/-- **At a value, under a frame of the world, `wpTS`'s postcondition holds**, at a list with the
+same members: the run from a value takes no step. -/
+theorem wpTS_val_post {ls : List SRec} {v : Val} {Q : List SRec → Val → WProp} {ρ ρf fρ : WRes}
+    {ps : List FrameRec} (h : wpTS ls (.val v) Q ρ) (hf : ResU.Hash ρf ρ)
+    (hc : ResU.CompS ρf ρ fρ) (hT : TW fρ ps (rsOf ls)) (htg : Tagged fρ ps ls) :
+    ∃ ls' ρ', (∀ x, x ∈ ls' ↔ x ∈ ls) ∧ Q ls' v ρ' := by
+  obtain ⟨ρ', _, _, _, _, w, _, _, _, ls', _, _, _, _, _, _, ⟨_, hrun⟩, _, _, _, _, _, _, hls, hQ⟩ :=
+    h ρf fρ ps hf hc hT htg BoCa.BoLo.Alloc.leastFree 0
+  have hw : w = v := Val.ext (by simpa using arun_val hrun)
+  subst hw
+  exact ⟨ls', ρ', hls, hQ⟩
+
+/-- **The general `[handle]`**: `handle_n e with H`, `H` a value form over a context whose live
+slots are persistent, typed at the answer clause's and the clauses' types; the handled
+computation at `Σ` extended by the handler's name.  `H` closes to a value; its relation is read off
+`wpTS` at that value under the frame the run starts in (`wpTS_val_post`), and the handler is
+`ewp_handle_vals`.  `[spec §24]` -/
+theorem handleV_compatC {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {H e : Expr} {S : Row}
+    {E : List (Qual × VTy × VTy)} {n : UInt32} {A R : VTy}
+    (hsp : Ctx.SplitP Γ Γ₁ Γ₂) (hd : Ctx.DeadP Γ₁) (hH : H.ValFormIn Γ₁)
+    (hc : SemV Δ Γ₁ H (.tensor (retTy S A R) (clausesTy S R E)))
+    (hn0 : n ≠ 0) (hnS : ∀ o ∈ S, o.n ≠ n) (hlen : E.length ≤ 2 ^ 32)
+    (he : SemC Δ Γ₂ e (CTy.effOf (Row.ofEff n E 0 ++ S) A)) :
+    SemC Δ Γ (hndExpr n H e) (CTy.effOf S R) := by
+  intro δ γ ls ρ hδ hg
+  obtain ⟨ρ₁, ρ₂, hc12, hg₁, hg₂⟩ := gDenC_split hsp hg
+  obtain ⟨hlw₁, hs₁⟩ := gDenC_iff.mp hg₁
+  have hρ₁ : ρ₁ = PMap.empty := gSepC_deadP hd hs₁
+  subst hρ₁
+  rw [eq_of_compS_empty_left hc12]
+  have hval : IsVal (substAll γ H) := isVal_psub_valFormIn hlw₁ hH
+  have hH' := hc δ γ ls PMap.empty hδ hg₁
+  have hE' := (cC_effOf _ A ls δ _ ρ₂).mp (he δ γ ls ρ₂ hδ hg₂)
+  show cC _ ls δ (hndExpr n (substAll γ H) (substAll γ e)) ρ₂
+  refine (cC_effOf S R ls δ _ ρ₂).mpr (ewp_fold (opTable_mono _) ?_)
+  intro ρf fρ ps hf hcf hT htg Al k
+  obtain ⟨ls', ρ', -, hv⟩ := wpTS_val_post (v := ⟨substAll γ H, hval⟩) hH'
+    (ResU.hash_empty_right (hash_valid_comp hf hcf)) (ResU.comp_empty_right fρ) hT htg
+  have hT₀ : (VTy.tensor (retTy S A R) (clausesTy S R E)).Persistent := by
+    simp only [VTy.Persistent, VTy.persistent, Bool.and_eq_true]
+    exact ⟨retTy_persistent S A R, clausesTy_persistent S R E⟩
+  have hρ' : ρ' = PMap.empty := vP_empty_of_persistent hT₀ hv
+  subst hρ'
+  obtain ⟨vr, vc, h⟩ := hv
+  obtain ⟨hpair, σ₁, σ₂, -, hVr, hVc⟩ := pure_sep_iff.mp h
+  have hσ₁ : σ₁ = PMap.empty := vP_empty_of_persistent (retTy_persistent S A R) hVr
+  have hσ₂ : σ₂ = PMap.empty := vP_empty_of_persistent (clausesTy_persistent S R E) hVc
+  subst hσ₁ hσ₂
+  have hHe : substAll γ H = (Val.pair vr vc).1 := congrArg Subtype.val hpair
+  rw [hHe]
+  exact ewp_unfold (opTable_mono _) (ewp_handle_vals hn0 hnS hlen hVr hVc hE')
+    ρf fρ ps hf hcf hT htg Al k
+
+/-! ### `[then]` at option A  `[spec §24]` -/
+
+/-- **`[then]` with a finaliser that lets no raise escape** (option A, decision D3): the finaliser
+at the pure row.  `[spec §24]` -/
+theorem thenA_compatC {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {M N D : Expr} {A B : VTy} {S : Row}
+    (hsp : Ctx.SplitP Γ Γ₁ Γ₂) (hNZ : S.NZ) (hUq : S.Uniq) (hU : S.Unr → Persistent Γ₂)
+    (hM : SemC Δ Γ₁ M (CTy.effOf S A)) (hN : SemC Δ (⟨A, true⟩ :: Γ₂) N (CTy.effOf S B))
+    (hD : SemC Δ (⟨.unit, false⟩ :: Γ₂) D (.ret .unit)) :
+    SemC Δ Γ (thenE N D M) (CTy.effOf S B) :=
+  then_compatC hsp hNZ hUq hU hM hN
+    (sub_compatC (S := []) (fun _ _ _ h => by simp [Row.find] at h) hD)
 
 end BoCa.Fig16.LogRel.Core
