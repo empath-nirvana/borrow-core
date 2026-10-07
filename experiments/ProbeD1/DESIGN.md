@@ -2099,6 +2099,70 @@ the cell's stored predicate read back through `mutPred` (`mutPred_mutOf`). Not u
 `ResU.Flat.functional`, `CellU.immOf_inj`, the machine's determinism. Untranscribed in the run-up:
 as §15.5; `PlaceViews` at every `Arises` configuration is ours and not built.
 
+### 15.7 The freeze binder, built (`BINDER.md` §11)
+
+The unit after statement 0 (`BINDER.md`) reads §15.6's two needs through the binder: a place the
+stack lends is bound, and a borrow cell there is the binder's view (PlaceViews); a resume
+instantiates every internal lifetime, preserving their order, and moves the records the frozen
+computation made. Its build is `Binder{Inst,PV,PVRun,Refute,J,Rows,Arise,Risk}.lean`. The full
+outcome, with the report lists, is `BINDER.md` §11. In brief:
+
+**Item 1, PlaceViews.**
+- The guard's local facts are proved at a part, a lend's start and end, a handler, the resume and an
+  instantiation (`pvlParts`, `pvlStart`, `pvlEnd`, `pvlHide`, `pvlResume`, `guardInst`).
+- `↭` and a run keep the guard at a stack whose places are distinct (`pvlUpdN`, `pvlRunsN`), by
+  [TR] 6.48's case analysis with its ancestor transfer. Every `ArisesI` stack has distinct places
+  (`placesNodupArises`).
+- Not derived: `PVLUpd` and `PVLRuns` at repeated places. Not attempted: `PVLFut`, which `binder0`
+  does not read.
+- The arising check of `k` is proved. PlaceViews holds at the world of every `ArisesI`
+  configuration (`pvArises`), so `k` is not in `ArisesI` (`kNotInArises`), and `k`'s slot fails W's
+  `Mut` leaf (`kSlotNotW`). `k` is not shown not to arise: `ArisesI`'s direction is not established.
+
+**Item 2, the lifetime binder.**
+- The re-lend is an order-preserving instantiation at the stack's cut. It keeps every `Δ`'s models
+  (`instModels`, `reLendModelsI_of`), which settles Q2 with no condition on `Δ`, and its bookkeeping,
+  readings and records facts are proved.
+- Refuted, each at a configuration not shown to arise, so each is a fact about our statement:
+  - `ExtInst` (`not_extInst`): `Ext` keeps records without their tags;
+  - `CohEInst` at an outermost lend at `⊤` (`not_cohEInst`);
+  - the support conjunct of `MutPayloadInst` (`not_mutPayloadInst`), and with it `InstEquivLeaf`.
+- `TyEqInst`, `CohEInst` and `ViewSlotInst` are proved at the types and indices the thaw reads
+  (`tyEq_inst`, `cohE_inst`, `viewSlotInstCS`). `ViewTypeCoincidence` is proved.
+
+**Item 3, `mut_not_natural`.**
+- `Targets.NotVDenNaturalArises` is proved: Restrat's witness is a part of a tagged `TW` world.
+  `mutFold` takes any predicate, so this is not arising in §11's sense.
+- At the view slot the witness is re-established from the handed view (`mutWitnessThaws`), at
+  hypotheses an exhibited configuration meets (`mutWitnessThaws_met`).
+- At the retained part the mechanism appears as `not_mutPayloadInst`: a retained cell whose payload
+  type reads an internal lifetime. It is not shown to arise, so it is evidence and not an
+  obstruction.
+
+**Item 4, the `U` introductions.**
+- The design's targets at `vRLI` are refuted as stated (`not_statement0UThawFree`,
+  `not_statement0UFull`), at a configuration not shown to arise.
+- The build revised the draft relation (`vRLJ`, `BinderJ.lean`) in three places, each answering a
+  refuted step: the `U` clause's extension keeps the retained records with their tags (`KeepsT`); a
+  retained `Mut` or `Imm` leaf reads its payload type at external lifetimes (`RetainedPay`); the
+  index's outermost lend is below `⊤` (`OuterBelowTop`).
+- **Proved: `Statement0UThawFreeJ binder0`** (`statement0UThawFreeJ`). These are the four `U`
+  introductions, the context's thaw at every `CtxThawFree` context, and `ThawInstJ`. No
+  `ReLendModels` hypothesis remains.
+- Not derived: the thaw at a `μ` or `fam` slot (`Statement0UFullJ`), guarantee gap R1. The
+  revision's obligations at the other rows (`RetainedPay` at every row introducing a `Mut` or `Imm`
+  value, `KeepsT` at the share, `OuterBelowTop` at the lends) are named and not proved.
+
+**What it decides.**
+- §15.3's two shared needs are met at `binder0` at `CtxThawFree` contexts, by changes to our
+  definitions. The result is partial (R1), so no placement decision rests on it, and `binder0` still
+  stops at its own `MonoV`, `MonoG` and `MonoOwnG`.
+- OQ-8 is not decided. `cbpv` and `binder` owe `BINDER.md` §5.6's list, with the revision's three
+  obligations added.
+- No failure of type (a), (b) or (d) occurred: nothing was refuted at a configuration shown to
+  arise, `vRLJ` replaces `vRLI` as the one draft relation, and no clause reaches another stack by a
+  new means. The fallback is not triggered.
+
 ---
 
 ## Unresolved: the reviews' findings, answered and not reviewed again
@@ -2162,3 +2226,6 @@ gives the finding, where the current text answers it, and what stays open.
      at `k` (`not_ctxRelendableAt_k`).
    - Open: `CtxRelendableAt` at the contexts `PlaceViews` restricts to; `PlaceViews` at every
      `Arises` configuration.
+   - Since (`BINDER.md` §11): PlaceViews holds at the world of every configuration of the revised
+     arising set `ArisesI` (`pvArises`), and the thaw holds at the revised relation `vRLJ` at every
+     `CtxThawFree` context (`ctxRelendsThawFreeJ`). Open: the thaw at a `μ` or `fam` slot.

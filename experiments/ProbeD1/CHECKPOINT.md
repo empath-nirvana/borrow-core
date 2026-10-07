@@ -135,15 +135,71 @@ introductions, and the two follow-up questions locate both of their shared needs
 No row is refuted and no fallback is triggered. Nothing here is evidence that D1 cannot be made to
 work, and nothing is evidence that it can.
 
+## The freeze-binder unit (`BINDER.md`)
+
+This unit took both of statement 0's shared needs and treated the stop as a binder. A place the
+stack lends is bound, and a borrow cell there is that binder's view (PlaceViews). A resume
+instantiates every lifetime the frozen computation made, keeping their order. The design is
+`BINDER.md`, and its §11 has the outcome in full. A refutation below is a fact about one of our
+statements: none is at a configuration shown to arise, so none is an obstruction.
+
+**What was proved.**
+- **PlaceViews holds at every configuration of the revised arising set** (`pvArises`). So `k` is not
+  in that set (`kNotInArises`). This does not show that `k` never arises, because the set is not
+  known to cover everything that arises.
+- **The guard's views are kept by the steps `binder0` reads**: a part, a lend's start and end, a
+  handler, the resume, an instantiation, and `↭` and a run when the stack's places are distinct.
+  Every stack the arising set reaches has distinct places. The step to a future (`PVLFut`) was not
+  attempted; `binder0` does not read it.
+- **The re-lend as an instantiation keeps `Δ`'s models with no condition on `Δ`.** This settles Q2.
+- **At the revised relation, the four `U` introductions are proved at `binder0`.** The proof also
+  covers the context's thaw at every context without `μ` or `fam` slots, and the rule that an
+  instantiated `U` value is a `U` value. The rows no longer need a hypothesis about the re-lend's
+  models.
+- **`mut_not_natural`'s witness** is part of a `TW` world, but `TW` accepts any stored predicate, so
+  that does not mean it arises. At a view slot the instantiation rebuilds the view and never meets
+  the witness.
+
+**What the build had to change.** The design's own targets were refuted as stated, and so were three
+steps of its plan:
+- an extension of the record list loses the records' tags;
+- coherence is not kept when the outermost lend is at `⊤`;
+- a cell kept across the stop can lose its stored invariant's support when its payload type reads a
+  lifetime the instantiation moves. That last one is `mut_not_natural`'s mechanism.
+
+The revised relation (`vRLJ`) fixes each:
+- the extension keeps the tags;
+- the outermost lend is below `⊤`;
+- a kept cell's payload type reads only lifetimes the instantiation fixes.
+
+Nothing in `Core/` or in a printed definition changed.
+
+**What is still open.**
+- The thaw at a `μ` or `fam` slot (guarantee gap R1). So the result is partial.
+- The revision's obligations at the other rows:
+  - every row that makes a `Mut` or `Imm` value must give the payload condition;
+  - the share at a resume must keep the tags;
+  - every lend must open below `⊤`.
+- `binder0`'s own monotonicity (`MonoV`, `MonoG`, `MonoOwnG`), as before.
+- The guard's run facts at a stack with a repeated place.
+- Whether a kept cell with the refuted shape arises.
+
+**What it decides.** Both shared needs of statement 0 are met at `binder0`, for contexts without `μ`
+or `fam`. OQ-8 is still undecided, because `cbpv` and `binder` still owe their own `U` rows. No
+machine-checked failure occurred, and the fallback is not triggered.
+
 ## What to do next (options, not a decision)
 
 1. **Finish the open review findings** (the minor wording ones above). This is needed under every
    option.
-2. **Continue D1.**
-   - Add `PlaceViews` to W's guard and to `OwnOK`, prove statement 1 keeps it, and retry the thaw.
-   - Choose how a re-lend treats variables bounded by a lend variable (lower them with the stack, or
-     restrict the re-lends), and change W's `U` clause to match.
-   - Settle the names the changed `FutStep` gives, through a `StackJ` with a hygiene the rows can
+2. **Continue D1.** The freeze-binder unit did the first two steps at `binder0`: PlaceViews is in
+   the guard and the own lend, and the re-lend is an instantiation that lowers the stack's variables
+   together. What is left:
+   - R1: the thaw at `μ` and `fam` slots;
+   - the revised relation's obligations at the other rows (the payload condition, the tags at the
+     share, lends below `⊤`), and statement 0's other facts redone at it;
+   - `cbpv`'s and `binder`'s `U` rows with futures (`BINDER.md` §5.6);
+   - the names the changed `FutStep` gives, through a `StackJ` with a hygiene the rows can
      discharge, or through the renaming lemma.
 
    Then re-attempt statement 0, and statement 1 after it.

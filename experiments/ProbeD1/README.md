@@ -165,10 +165,55 @@ were not attempted either. `reconB′`'s term was not committed, since statement
   clause at `k`'s resource, not of a row. Nothing here is evidence that D3 or D0 is needed, and
   nothing is evidence that it is not. D3 keeps the closure's lifetime across the stop, so Q2's
   re-lend does not arise there [unchecked].
-- **The next step**: add `PlaceViews` to the guard and to `OwnOK` and retry the thaw; choose how a
-  re-lend treats the variables bounded by stack variables; then the names the changed `FutStep`
-  gives (a `StackJ` that admits them with a hygiene the rows can discharge, or the renaming lemma).
-  Then statement 0 can be re-attempted, and statement 1 after it.
+- **The next step** was to add `PlaceViews` to the guard and to `OwnOK` and retry the thaw, and to
+  choose how a re-lend treats the variables bounded by stack variables. The freeze-binder unit below
+  did both at `binder0`. What remains is listed there: R1, the revised relation's obligations at the
+  other rows, and the names the changed `FutStep` gives (a `StackJ` that admits them with a hygiene
+  the rows can discharge, or the renaming lemma).
+
+## The freeze binder (`BINDER.md`): the outcome
+
+The unit after statement 0 reads its two shared needs through the binder: a place the stack lends
+is bound, and a borrow cell there is the binder's view (PlaceViews); a resume instantiates every
+internal lifetime, preserving their order. `BINDER.md` is the design, and its §11 is the build's
+outcome in full. Every refutation below is at a configuration not shown to arise, so each is a fact
+about our statement and decides nothing by itself.
+
+- **PlaceViews.**
+  - The guard's facts are proved at a part, a lend's start and end, a handler, the resume and an
+    instantiation.
+  - Along `↭` and a run they are proved at a stack whose places are distinct (`pvlUpdN`,
+    `pvlRunsN`), and every `ArisesI` stack has distinct places (`placesNodupArises`).
+  - PlaceViews holds at the world of every `ArisesI` configuration (`pvArises`), so `k` is not in
+    `ArisesI` (`kNotInArises`). That is not a proof that `k` does not arise.
+  - Not derived: the run facts at repeated places. Not attempted: `PVLFut`, which `binder0` does not
+    read.
+- **The lifetime binder.**
+  - The re-lend is an order-preserving instantiation at the stack's cut. It keeps every `Δ`'s models
+    (`reLendModelsI_of`), so Q2 is settled with no condition on `Δ`.
+  - Three steps of the design's plan were refuted: `ExtInst`, `CohEInst` at an outermost lend at `⊤`,
+    and `MutPayloadInst`'s support conjunct.
+- **`mut_not_natural`.**
+  - Its witness is a part of a tagged `TW` world (`notVDenNaturalArises`). `mutFold` takes any
+    predicate, so that is not arising.
+  - At the view slot the instantiation re-establishes the slot from the handed view
+    (`mutWitnessThaws`).
+  - At the retained part its mechanism appears as the refuted support conjunct, which is evidence and
+    not an obstruction.
+- **The `U` introductions.**
+  - The design's targets are refuted as stated.
+  - The build revised the draft relation (`vRLJ`) in three places, each answering a refuted step:
+    `KeepsT`, `RetainedPay` and `OuterBelowTop`.
+  - **At `vRLJ`, the four `U` introductions, the context's thaw and `ThawInstJ` are proved at
+    `binder0` at every `CtxThawFree` context** (`statement0UThawFreeJ`). No `ReLendModels`
+    hypothesis remains.
+  - Not derived: the thaw at a `μ` or `fam` slot (guarantee gap R1), and the revision's obligations
+    at the other rows.
+- **What it decides.**
+  - Statement 0's two shared needs are met at `binder0`, at `CtxThawFree` contexts. The result is
+    partial (R1), and `binder0` still stops at its own monotonicity.
+  - OQ-8 is not decided. No failure of type (a), (b) or (d) occurred, and the fallback is not
+    triggered.
 
 ## Files
 
@@ -185,6 +230,14 @@ were not attempted either. `reconB′`'s term was not committed, since statement
 | `ProbeD1/Rows0.lean` | `forceRow`, `thawRelend`, `callbackExt*` |
 | `ProbeD1/Thunk.lean` | `CtxRelendable`, `CtxRelendableAt`, `models_reLend_fails`, `tabRelend`, `SemSR`, the four `U` introductions at `binder0` given `CtxRelendableAt` |
 | `ProbeD1/Relendability.lean` | Q1: `not_ctxRelendable_binder0`, `not_ctxRelendableAt_k`, `k_index`, `k_world_TW`, `k_reached`, `k_thunk_not_vRL`, `PlaceViews`, `lendMut_placeView`, `not_placeViews_k`, `ctxRelendableAt_nil`, `ctxRelendableAt_thunk`, `thunkFRow_binder0_nil`, `thunkFRow_binder0_thunk`; Q2: `ReLendModels`, `BoundsStackFree`, `reLendModels_of_boundsStackFree`, `q2_reached` |
-| `BINDER.md` | the design of the next unit: PlaceViews in W, the re-lend as an order-preserving instantiation, the arising check of `mut_not_natural`, the `U` introductions retried |
+| `BINDER.md` | the design of the freeze-binder unit: PlaceViews in W, the re-lend as an order-preserving instantiation, the arising check of `mut_not_natural`, the `U` introductions retried; §11 the build's outcome; *Unresolved* the four review findings and their status |
 | `ProbeD1/Binder.lean` | that design's relation-independent definitions and `def … : Prop` statements, and the revised own lend, futures and arising set (`OwnPushI`, `FutI`, `ArisesI`); no proofs |
-| `ProbeD1/BinderW.lean` | the revised relation (`vRLI`, `cRLI`, `gRLI`, `SemSI`) and the `U` introductions retried at it (`Statement0UFull`); no proofs |
+| `ProbeD1/BinderW.lean` | the design's revised relation (`vRLI`, `cRLI`, `gRLI`, `SemSI`) and the `U` introductions retried at it (`Statement0UFull`); no proofs |
+| `ProbeD1/BinderInst.lean` | the instantiation's bookkeeping, readings, records and freshness: `instModels`, `reLendModelsI_of`, `instComp`, `keepsSComp`, `subOutsideInst`, `instFreshExists` |
+| `ProbeD1/BinderPV.lean` | the guard's local facts: `pvlParts`, `pvlStart`, `pvlEnd`, `pvlHide`, `pvlResume`, `guardInst` |
+| `ProbeD1/BinderPVRun.lean` | the guard along `↭` and a run at distinct places: `pvlUpdN`, `pvlRunsN` |
+| `ProbeD1/BinderRefute.lean` | `not_extInst`, `not_cohEInst`, `not_mutPayloadInst`, `not_instEquivLeaf`, `not_statement0UThawFree`, `not_statement0UFull` |
+| `ProbeD1/BinderJ.lean` | the draft relation as the build revises it (`vRLJ`, `RelendJ`, `SemSJ`) and the `U` introductions at it |
+| `ProbeD1/BinderRows.lean` | the thaw (`relendJ_value`, `ctxRelendsThawFreeJ`), `thawInstJ`, the four rows, `statement0UThawFreeJ` |
+| `ProbeD1/BinderArise.lean` | the arising check of `k`: `pvArises`, `arisesInv`, `kNotInArises`, `kSlotNotW`, `placesNodupArises` |
+| `ProbeD1/BinderRisk.lean` | `notVDenNaturalArises`, `mutWitnessThaws`, `mutWitnessThaws_met`, `viewSlotInstCS`, `viewTypeCoincidence` |
