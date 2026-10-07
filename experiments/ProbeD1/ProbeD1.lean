@@ -20,3 +20,7 @@ import ProbeD1.Thunk
 import ProbeD1.Relendability
 import ProbeD1.Binder
 import ProbeD1.BinderW
+import ProbeD1.BinderInst
+import ProbeD1.BinderPV
+import ProbeD1.BinderPVRun
+import ProbeD1.BinderRefute
