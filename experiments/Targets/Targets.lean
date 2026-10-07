@@ -29,6 +29,8 @@ import Targets.B.Routes
 import Targets.B.RunEnd
 import Targets.B.World
 import Targets.Instance.Binary
+import Targets.Instance.Inversion
+import Targets.Instance.J1Checks
 import Targets.Instance.Bridges
 import Targets.Instance.CheckPrograms
 import Targets.Instance.Checks
@@ -47,6 +49,7 @@ import Targets.I.Combined
 import Targets.I.Device
 import Targets.I.Interface
 import Targets.I.NonVacuity
+import Targets.I.OpenRel
 import Targets.I.Pins
 import Targets.I.Programs
 import Targets.I.Restricted.Answering
@@ -56,6 +59,7 @@ import Targets.I.Restricted.Device
 import Targets.I.Restricted.InstanceProps
 import Targets.I.Routes
 import Targets.I.RunEnd
+import Targets.I.Tier1Route
 import Targets.I.World
 import Targets.Audit
 import Targets.Status

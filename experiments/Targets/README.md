@@ -52,11 +52,13 @@ Instance; the Instance imports no B or I; I imports everything.
 | | `Targets/Instance/Core.lean` | `AdmEff`, `ourInst RF Ξ J : A.EffectSystem`, the encodings, the labelled machine `OStep` |
 | | `Targets/Instance/Bridges.lean` | A's syntactic laws at our instance: `ConfLaws`, `KontLaws`, `NoIO`, `DataInj`, `LiftExt` |
 | | `Targets/Instance/Restricted/*`, `Binary.lean`, `ZeroCost.lean` | Core's no-interception and two-frame unwind; `storeCancel` unr-free; A₂ over Core, stated; A₃'s lowering classes |
+| | `Targets/Instance/Inversion.lean`, `J1Checks.lean` | what today's kernel does not type (A-level handlers, a let read at two instances, a persistent function called at an effectful row, `()` at a resuming `unr` row); the checks on TIER1-PLAN §2's route; the let law and S1's parts at our instance |
 | **I** | `Targets/I/World.lean` | `SemWorld extends B.BWorld` (`held`, `Stop`, `share`), `coreW`, the effectful wp |
 | | `Targets/I/Interface.lean`, `Device.lean`, `Pins.lean`, `Routes.lean` | I1–I5 at the world; `Bounds`, `Interface`, the proof device `Device`, `EmbedsNil`; R-CLOSEDOP; `effSafeOfFL`, `contractsW_of_meets` |
 | | `Targets/I/Programs.lean` | the composite programs: `at02`, `at04`, `at12`, `at17`, `genSelf`, and the rejected AT05–AT08, AT13; `AcceptedAt`, `Tier2Programs`, `Rejects`, `RejectsAT07` |
 | | `Targets/I/Combined.lean` | **`I.Combined`**, done's statement; `Tier1`, `Tier1Core`; the corollaries |
 | | `Targets/I/RunEnd.lean`, `Binder.lean`, `NonVacuity.lean`, `Restricted/*` | FIX-RUN-END's checks and witness worlds; the freeze binder at W; witnesses for the pins; the restricted results at `coreW` and `tier1` |
+| | `Targets/I/OpenRel.lean`, `Tier1Route.lean` | Law 1 at the relation (`ovalW`, `FLOpen`, `fl_of_flOpen`); the elaboration route does not reach tier 1 |
 | meta | `Targets/Audit.lean`, `Status.lean`, `AxiomCheck.lean` | the step-index audit with nine negative tests and the pin of Core's relation; the record; the axiom check |
 
 ## Done

@@ -14,6 +14,7 @@ import Targets.A.Binary
 import Targets.A.UnaryLaws
 import Targets.A.Lowering
 import Targets.Audit
+import Targets.I.Tier1Route
 
 /-!
 # Targets — status, by system (RESTRUCTURE §0)
@@ -31,14 +32,20 @@ interaction's option-neutral rules, the pins, the composite's programs and its r
 `admClosedOp` until OQ-56 is chosen and at `orowRF` until OQ-13's remaining question is answered.
 
 **Done: OPEN.**  Neither `J₂` nor `W` is defined.  **Tier 1** (`I.Tier1 J₁`): OPEN; `J₁` (today's
-rules over open rows with the row `∀`) waits on RESTRUCTURE §7 Q1–Q2.
+rules over open rows with the row `∀`) is not built.  TIER1-PLAN §2's route to its FL, elaborating
+each derivation into today's unr-free kernel, does not reach tier 1: a typing system whose closed
+derivations elaborate fails E8, since our instance's handlers are run-time frames that today's
+`[handle]` does not type (`status_elab_route`); and a polymorphic let read at two instances has no
+elaboration (`not_elabClosed_of_letLaw`).  Which rules `J₁` gets, and how FL is proved for them, is
+the user's decision.
 
 **The restricted tier-1 reduction** (`I.Tier1Core`, at today's kernel `tier1Open` and Core's world):
 OPEN.  Proved of it: the world conjuncts and the device at `coreW` (`status_tier1Core_world`), and
 B's guarantees from `Adequate coreB` and the step-for-step simulation `BumpSim`
 (`status_tier1Core_guarantees_of`; B5 aside, from `Adequate coreB` alone, `status_tier1Core_B_of`).
-Missing: A's (S) properties at our instance (S0 and S4 are proved given `LiveOK`; S5 and S6 fail
-as written, checks 2 and 1; the rest below marked OPEN) and `I4a` at today's unr-free kernel; and
+Its `Pins` conjunct is proved (`status_pins_tier1Open`).  Missing: A's (S) properties at our
+instance (S0 and S4 are proved given `LiveOK`; S5 and S6 fail as written, checks 2 and 1; S1 fails
+as written, `status_rowAlgebra_tier1Open`; the rest below marked OPEN); and
 the two open statements themselves, `Adequate coreB` at every platform and for the drive, and
 `BumpSim` (OQ-43).
 
@@ -86,6 +93,9 @@ the two open statements themselves, `Adequate coreB` at every platform and for t
 | `CompositeT1 tier1`'s typing and safety | PROVED AT A RESTRICTION (`Platform.none`) | `acceptedT1_*` |
 | `Tier2Programs`, `Accepts`, `Rejects`, `RejectsAT07` | OPEN (no tier-2 typing system; inversions to build) | — |
 | `EffSafe tier1` (Core's P2) | PROVED AT σ=[] | `effSafe_tier1` |
+| `Pins tier1Open admClosedOp .abortive`, with `I4a` at the unr-free rules | PROVED AT σ=[] (abortive rows) | `I.pins_tier1Open`, `i4a_tier1NU` |
+| Law 1 at the relation: `ovalW` at `U(∀ρ:k. C)` and `!U(∀ρ:k. C)` is the intersection of the instances; `FLOpen M J` gives `FL M J.read`; `FLOpen` at today's kernel | PROVED (generic); PROVED AT σ=[] | `I.ovalW_allR`, `I.ovalW_bang_allR`, `I.fl_of_flOpen`, `I.flOpen_core_tier1Open` |
+| TIER1-PLAN §2's route (elaborate `J₁` into today's unr-free kernel, then `fundamentalC`) | **DOES NOT REACH TIER 1**: closed derivations that elaborate type no A-level handler, so E8 fails; with the let law, a polymorphic value read at two instances leaves no elaboration | `I.not_tier1_of_elabClosed`, `not_elabClosed_of_letLaw` |
 | FIX-RUN-END's checks and witness worlds | PROVED | `Targets/I/RunEnd.lean` (73 results) |
 | I1, I3, I5, P11 at `coreW` (the device); I2 at `coreW` | PROVED AT σ=[]; PROVED AT A RESTRICTION (abortive rows) | `i1_core`, `i3_core`, `i5_core`, `p11_core`; `i2_core_abortive` |
 | `EmbedsNil coreW` | PROVED AT σ=[] | `embedsNil_core` |
@@ -109,7 +119,12 @@ the two open statements themselves, `Adequate coreB` at every platform and for t
 | Core's `FinaliserOrder` (I3.b) | PROVED, given `NoInterception` and `FinAlone` (a fired finaliser's run alone ends at a value or an uncaught raise of a nonzero name); `FinAlone` OPEN (piece 4) | `finaliserOrder_of`, `cancelOrder_of`, `unwindOrder_of` |
 | S6 (`ContUse`) at our instance | **FAILS AS WRITTEN** at today's kernel and `ΞA` (check 1): Core's clauses resume `κ` by applying it, which `ResumeAt` does not read | `not_contUse_ΞA` |
 | `AlgLaw`, `TailLaw` at our instance | **FAIL AS WRITTEN** at today's kernel and `ΞA` (check 3): under E1′'s `sched` the answers are closures over different continuations, compared as terms; `EtaHold`'s witness is not built (`[handle]`'s `hnS` keeps the handled name out of the clauses' row: a reading, not checked) | `not_unaryLaws_ΞA` |
-| `LetLaw`, `RowAlgebra`, `Safety`, `EffSafe` at our instance | OPEN (pieces 2, 3) | — |
+| `LetLaw` at today's kernel | PROVED (typing) | `letLaw_ourInst_tier1Open` |
+| S1 (`RowAlgebra`) at our instance | **FAILS AS WRITTEN** at today's kernel, every effect context: `SubClosed` ranges over every row of the algebra, `[sub]` asks `Row.NU` of its target, and `()` at the pure row is not typed at a row with a resuming `unr` operation; the restatement is the user's decision. `EA.Laws`, `EA.Safe` and `RowSig` hold at every typing system; subeffecting holds at target rows whose prefix is unr-free | `not_rowAlgebra_ourInst_tier1Open`, `rowAlgebra_noSub_ourInst`, `subClosed_nu_tier1Open` |
+| A-level handlers at today's kernel | **NOT TYPED**: our instance's `handle` is the run-time frame, clauses as values; `[handle]` types only `hndTerm n ir ic e`. So E4, E5, E6, E7 and E8 **FAIL** at `tier1Open` at every effect context (RESTRUCTURE §4.3 expected E4, E5, E7, E8 to hold) | `not_der_handleK`, `not_der_handle_tier1Open`, `status_handlers_tier1Open` |
+| a let-bound function used at two rows; a persistent function called at an effectful row | **NOT TYPED** by today's kernel: one slot has one type, of which every judgement a variable is read at is a view; a variable used as a function is a `U` slot | `not_der_letTwo`, `der_var_inv`, `der_var_arr_thunk`, `not_der_callBang` |
+| `Safety`, `EffSafe` at our instance | OPEN (piece 3) | — |
+| `J₁`, `RowVarKernel J₁`, `FLOpen coreB J₁`, `Pins J₁`, the let law and S1 at `J₁`, the schema halves of E1, E2, E6, E10 | NOT BUILT: TIER1-PLAN §2 stopped at its stop condition (a use of a row-`∀` entry other than by `[var]`), and its elaboration does not exist (row above) | — |
 | `monoCallback_tier1Open` (today's kernel fails E1, E2, E6, E10); R1–R4 (S6 bites); the positive (E) runs at `tier1Open` | OPEN (inversions and runs to build, RESTRUCTURE §6.1) | — |
 | `RowVarKernel J₂`, `spanRules_J₂` | OPEN (`J₂` not built) | — |
 | A₂ over Core (`Laws`, `Abstraction`), A₃'s lowering classes | stated, out of the first pass | `Targets/Instance/Binary.lean`, `Targets/Instance/ZeroCost.lean` |
@@ -157,6 +172,7 @@ variable {ℍ : BoCa.Host} [BoCa.HostIs ℍ]
 namespace Targets
 open BoCa BoCa.Fig16 BoCa.Fig16.BoLo BoCa.Fig16.LogRel BoCa.Fig16.LogRel.Core
 open Targets.Inst (OurTyping ourInst AdmEff tier1Open)
+open Targets (ORow orowAlg)
 
 /-! ## Done and tier 1 (OPEN) -/
 
@@ -486,6 +502,63 @@ theorem status_checks_ΞA :
 theorem status_finaliserOrder_of {J : TypingJ} (hN : NoInterception J)
     (hF : FinAlone (ℍ := ℍ) J) : FinaliserOrder (ℍ := ℍ) J :=
   finaliserOrder_of hN hF
+
+/-- PROVED: the let law at today's kernel. -/
+theorem status_letLaw_tier1Open (Ξ : EffCtx) : (ourInst (ℍ := ℍ) orowRF Ξ tier1Open).LetLaw :=
+  Inst.letLaw_ourInst_tier1Open
+
+/-- PROVED: S1, as written, fails at today's kernel (`SubClosed`); its other three conjuncts hold at
+every typing system; subeffecting holds at target rows whose prefix is unr-free. -/
+theorem status_rowAlgebra_tier1Open (Ξ : EffCtx) :
+    ¬ (ourInst (ℍ := ℍ) orowRF Ξ tier1Open).RowAlgebra ∧
+      ((ourInst (ℍ := ℍ) orowRF Ξ tier1Open).EA.Laws ∧
+        (ourInst (ℍ := ℍ) orowRF Ξ tier1Open).EA.Safe ∧
+        (ourInst (ℍ := ℍ) orowRF Ξ tier1Open).RowSig) ∧
+      ∀ {Γ e} {ε₁ ε₂ : ORow} {A}, (ourInst (ℍ := ℍ) orowRF Ξ tier1Open).der Γ e
+          ((ourInst (ℍ := ℍ) orowRF Ξ tier1Open).F ε₁ A) → (orowAlg Ξ).Sub ε₁ ε₂ →
+        Row.NU ε₂.ops →
+        (ourInst (ℍ := ℍ) orowRF Ξ tier1Open).der Γ e ((ourInst (ℍ := ℍ) orowRF Ξ tier1Open).F ε₂ A) :=
+  ⟨Inst.not_rowAlgebra_ourInst_tier1Open, Inst.rowAlgebra_noSub_ourInst,
+    fun h hs hNU => Inst.subClosed_nu_tier1Open h hs hNU⟩
+
+/-- PROVED: today's kernel types no A-level handler, so E4, E5, E6, E7 and E8 fail at `tier1Open`
+at every effect context. -/
+theorem status_handlers_tier1Open (Ξ : EffCtx) :
+    ¬ (ourInst (ℍ := ℍ) orowRF Ξ tier1Open).DeepHandler ∧
+      ¬ (ourInst (ℍ := ℍ) orowRF Ξ tier1Open).NestedHandlers ∧
+      ¬ (ourInst (ℍ := ℍ) orowRF Ξ tier1Open).Tunnel ∧
+      ¬ (ourInst (ℍ := ℍ) orowRF Ξ tier1Open).CancelPolicy ∧
+      ¬ (ourInst (ℍ := ℍ) orowRF Ξ tier1Open).UnwindPolicy :=
+  ⟨Inst.not_deepHandler_tier1Open, Inst.not_nestedHandlers_tier1Open, Inst.not_tunnel_tier1Open,
+    Inst.not_cancelPolicy_tier1Open, Inst.not_unwindPolicy_tier1Open⟩
+
+/-- PROVED: TIER1-PLAN §2's route does not reach tier 1.  A typing system whose closed derivations
+elaborate into today's unr-free kernel fails tier 1 (E8's handler); and with the let law, a closed
+λ at a row-`∀` type and a body reading it at `!U(1 ⊸ F 1)` and `!U(1 ⊸ F_[o] 1)` leave no
+elaboration. -/
+theorem status_elab_route {RF : RowForm} {Ξ : EffCtx} {J : OurTyping RF} {b : Expr} {A : Inst.OVTy}
+    (o : OpSig) :
+    (∀ J₁ : OurTyping orowRF, Inst.ElabClosed J₁ → ¬ I.Tier1 (ℍ := ℍ) J₁) ∧
+      ((ourInst (ℍ := ℍ) RF Ξ J).LetLaw → (ourInst (ℍ := ℍ) RF Ξ J).derV [] ⟨.lam b, .lam⟩ A →
+        (ourInst (ℍ := ℍ) RF Ξ J).der [A] (withPair (.var 2) (.var 2))
+          (.amp (.ret (Inst.OVTy.ofV (.bang (.thunk (.arr .unit (.ret .unit))))))
+            (.ret (Inst.OVTy.ofV (.bang (.thunk (.arr .unit (CTy.effOf [o] .unit))))))) →
+        ¬ Inst.ElabClosed J) :=
+  ⟨fun _ hE => I.not_tier1_of_elabClosed hE,
+    fun hL hV hW => Inst.not_elabClosed_of_letLaw_arr o hL hV hW⟩
+
+/-- PROVED (generic; AT σ=[]): Law 1 at the relation, and FL at the open judgements gives FL at the
+reading; at today's kernel it is `fundamentalC`. -/
+theorem status_law1_relation :
+    (∀ (M : B.BWorld) (J : OurTyping orowRF), I.FLOpen M J → FL M J.read) ∧
+      I.FLOpen (B.coreB (ℍ := ℍ)) tier1Open :=
+  ⟨fun _ _ h => I.fl_of_flOpen h, I.flOpen_core_tier1Open⟩
+
+/-- PROVED AT σ=[] (abortive rows): `Pins` at today's kernel over the open types, with `I4a` at the
+unr-free rules. -/
+theorem status_pins_tier1Open :
+    I.Pins tier1Open admClosedOp .abortive ∧ I4a tier1NU admClosedOp .abortive :=
+  ⟨I.pins_tier1Open, i4a_tier1NU⟩
 
 /-- The A properties at our instance: OPEN (the bridges to build). -/
 example (Ξ : EffCtx) : Prop := AdmEff Ξ → (ourInst (ℍ := ℍ) orowRF Ξ tier1Open).SPropsNoUse

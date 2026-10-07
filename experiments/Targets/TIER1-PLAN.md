@@ -323,6 +323,84 @@ theorem I.pins_J₁ : I.Pins J₁ admClosedOp .abortive
   - `FL coreB ⟦J₁⟧`, `Pins J₁`, and S1 and the let law at our instance: PROVED, at Core σ=[];
   - `RowVarKernel J₁`: recorded.
 
+**Outcome (stopped at this section's stop condition; landed on `tier1-effects`).**
+- **`J₁` is not built.** The route above does not exist, for three reasons. Each is
+  machine-checked at today's kernel (`Instance/Inversion.lean`, `Instance/J1Checks.lean`,
+  `I/Tier1Route.lean`).
+  1. **A polymorphic let has no elaboration.**
+     - At a closed judgement the elaboration copies nothing. So it says that a closed derivation of
+       `J₁` is a `CDerivesNU` derivation of the same term (`ElabClosed`).
+     - The let law at a row-`∀` value, with a body that reads the bound variable at two
+       instances, types `(λx. ⟨x, x⟩) (λx. x)` at `F(!U(1 ⊸ F 1)) & F(!U(1 ⊸ F_[o] 1))`.
+     - No `CDerivesNU` derivation types that term. A slot has one type, and every judgement a
+       variable is read at is a view of that type (`der_var_inv`, `not_der_letTwo`).
+     - So `J1Der.elab`, `letLaw_ourInst` and the rules this section gives `J₁` cannot all hold
+       (`not_elabClosed_of_letLaw`). The plan's rules give its two typing hypotheses: `[allR-I]`
+       for the value; `[var]`, `[allR-E]` at `!U`, `[ret]` and `[&I]` for the body.
+     - `CDerivesNU` has no intersection, and the polymorphic let is where one is needed.
+  2. **A-level handlers are not today's `[handle]`.**
+     - Our instance encodes A's `handle l H M` as the run-time frame, with the clauses as values
+       (`handleK`). S4 and `KontLaws` read that frame.
+     - Core's `[handle]` types only `hndTerm n ir ic e`, whose clauses are two variables. No
+       `CDerivesNU` derivation has the frame form, at any context and judgement
+       (`not_der_handleK`).
+     - So a typing system whose closed derivations elaborate fails E8, and so fails `I.Tier1`
+       (`I.not_tier1_of_elabClosed`).
+     - Today's kernel fails E4, E5, E6, E7 and E8 at every effect context
+       (`status_handlers_tier1Open`). RESTRUCTURE §4.3 expected E4, E5, E7 and E8 to hold there.
+     - By reading this section's rules, not by a theorem: a `J₁` whose handler rule is today's
+       types none of `retryP`, `sumGen`, `fwrap`, `timeoutR` and `retryR`, which five of the
+       eight schema lemmas need.
+  3. **The uses read a row-`∀` entry by `force`.**
+     - Each schema's use is A's `call x g`, which forces `x` itself.
+     - `CDerivesNU` forces a variable only from a `U` slot (`der_var_arr_thunk`). It calls no
+       `!U` slot at an effectful arrow (`not_der_callBang`).
+     - So the use this section describes ("`[var]`, then `[allR-E]` at `!U`, then `bangE`, `force`
+       and `[app]`") has no `force` step. Typing the use needs a rule that reads the entry by
+       `force`, which is this section's stop condition.
+     - A force from a `!U` entry would elaborate to a linear copy. The two branches of `[&I]`,
+       `[case]` and `[then]` share one context, so a linear copy that one branch uses must be
+       used by the other.
+- **What `J₁` needs, and what is the user's decision.**
+  - `J₁` needs rules that today's kernel lacks:
+    - a polymorphic let;
+    - a force of a row-`∀` entry, and of a persistent one;
+    - a handler at clause values.
+  - `fundamentalC` covers none of these rules. Three ways on, none chosen:
+    - prove each new rule sound at `ovalW`, keeping Core's compatibility lemmas for the lifted
+      rules through an induction over `J1Der`. This section ruled that induction out;
+    - change A's encodings at our instance: calls through a let of the derelicted value, and
+      handlers whose clauses are let-bound. This reopens piece 1's machine laws, and still
+      leaves item 1;
+    - put the row `∀` and these rules into Core's kernel, with a SPEC entry.
+- **Proved.**
+  - `I/OpenRel.lean`:
+    - `I.ovalW` and its computation counterpart;
+    - Law 1 at the relation (`ovalW_allR`, `ovalW_bang_allR`);
+    - `I.FLOpen`, `I.fl_of_flOpen` and `I.flOpen_core_tier1Open`.
+  - `Instance/J1Checks.lean`:
+    - `letLaw_ourInst_tier1Open`;
+    - `rowAlgebra_noSub_ourInst`: `EA.Laws`, `EA.Safe` and `RowSig` at every typing system;
+    - `subClosed_nu_tier1Open`.
+  - `I/Combined.lean`: `pins_tier1Open`, from `i4a_tier1NU` (`I/Restricted/Answering.lean`).
+    This is `I.Tier1Core`'s `Pins` conjunct.
+  - `Base/Support.lean`: `CDerivesNU.insert_dead` and `CDerivesNU.append_dead`.
+- **Refuted as written (a check).** S1 at today's kernel, at every effect context.
+  - `SubClosed` ranges over every row of the algebra, and `[sub]` asks `Row.NU` of its target.
+  - So `()` at the pure row is not typed at a row with a resuming `unr` operation
+    (`not_rowAlgebra_ourInst_tier1Open`).
+  - It holds at target rows whose prefix is unr-free. The restatement is the user's decision.
+- **Not built.**
+  - `J1Der`, `J₁` and `J1Der.elab`;
+  - `rowVarKernel_J₁`, `tier1Open_sub_J₁`, `extendsNU_J₁` and `noInterception_J₁`;
+  - `letLaw_ourInst` and `rowAlgebra_ourInst` at `J₁`;
+  - the eight schema lemmas;
+  - `I.flOpen_core_J₁`, `I.fl_core_J₁`, `I.i4a_J₁` and `I.pins_J₁`.
+- **For pieces 3–5,** which need `J₁`:
+  - at `tier1Open` they can go on;
+  - every (E) property whose program has a handler at its top fails there, and each waits on the
+    handler decision in item 2.
+
 ## 3. Adequacy through platform answers and loop iterations; S2 and S3
 
 **Goal.** Prove B2 in full at Core's world: adequacy under every platform that keeps its protocol,

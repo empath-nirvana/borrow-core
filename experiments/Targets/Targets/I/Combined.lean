@@ -44,7 +44,7 @@ guarantees at today's kernel and `coreB` follow from `Adequate coreB` and, for B
 step-for-step simulation `BumpSim` (`tier1Core_guarantees_of`; without B5, from `Adequate coreB`
 alone, `tier1Core_B_of`), and the world conjuncts and the device at `coreW` hold
 (`tier1Core_world`).  `Tier1Core` itself also needs A's properties at our instance (the Instance's
-bridges, OPEN) and `I4a` at today's unr-free kernel (OPEN).
+bridges, OPEN); its `Pins` conjunct is proved (`pins_tier1Open`).
 -/
 
 noncomputable section
@@ -202,6 +202,14 @@ theorem tier1Core_world :
       i1_core, i5_core, p11_core, conservativeWB_core, embedsNil_core⟩, wbCore⟩
   rw [tier1Open_read]
   exact hSB
+
+/-- **`Pins` at today's kernel over the open types**: the admissibility bounded below by today's,
+today's unr-free rules and outlives judgements, and the answering effects' borrow form at the
+unr-free rules (`i4a_tier1NU`). -/
+theorem pins_tier1Open : Pins tier1Open admClosedOp .abortive := by
+  unfold Pins
+  rw [tier1Open_read]
+  exact ⟨admExtends_closedOp, extendsNU_tier1NU, outExtends_core, i4a_tier1NU⟩
 
 /-- **B's guarantees at today's kernel and BoLo, B5 aside, from adequacy at BoLo**: B0, B1, B3–B4,
 B4′, B6, B7 and the bounds.  The library's `status_tier1End_of`'s content, in the new vocabulary. -/
