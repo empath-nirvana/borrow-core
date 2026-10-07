@@ -263,6 +263,12 @@ theorem monoHideFromMonoV : MonoHideFromMonoV (ℍ := ℍ) := by
   intro e he hx
   exact absurd (by rw [← hideS_map_x N σ]; exact List.mem_map_of_mem he) hx
 
+/-- **`MonoHide` at `cbpv`.** -/
+theorem monoHide_cbpv : MonoHide (ℍ := ℍ) .cbpv := monoHideFromMonoV .cbpv monoV_cbpv
+
+/-- **`MonoHide` at `binder`.** -/
+theorem monoHide_binder : MonoHide (ℍ := ℍ) .binder := monoHideFromMonoV .binder monoV_binder
+
 end ProbeD1
 
 end
