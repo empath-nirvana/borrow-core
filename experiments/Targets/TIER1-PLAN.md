@@ -192,6 +192,50 @@ theorem cancellation_of_core : NoInterception J.read → FinAlone J.read → (ou
   - S5 and `FinaliserOrder`: PROVED given `FinAlone`;
   - S5: OPEN until piece 4.
 
+**Outcome (landed on `tier1-effects`).**
+- **The checks.** Checks 1–3 type at `tier1Open` and break their statements, each at the
+  admissible context `ΞA` (`Instance/Checks.lean`, `status_checks_ΞA`):
+  - check 1: `not_contUse_directResume`. S6 as written fails; its part stops.
+  - check 2: `not_noIntercept_undeclared`, `not_unwindOrder_undeclared`. S5 as written fails, so
+    `noIntercept_of_core`, `unwindOrder_of_core` and `cancellation_of_core` are not built; that
+    part stops.
+  - check 3: `not_algLaw_ourInst`, `not_tailLaw_ourInst`. `EtaHold`'s witness is not built:
+    `[handle]`'s `hnS` keeps the handled name out of the row its clauses are typed at, so the
+    forwarding clause has no derivation by that reading. No inversion checks it.
+  - check 4: `not_noIntercept_of_noInterception`, at the typing `J₄` of one untyped program.
+  - The restatements of S5, S6, `AlgLaw` and `TailLaw` are the user's decision.
+- **Proved.**
+  - `Base/Runs.lean`: `steps_plug_split`, `step1_plug_of_step`, `closed_steps`, stuck redexes.
+  - `Base/Look.lean`: `look`, a sound evaluator.
+  - `Base/CoreCancel.lean`: `hndNamesNZ_steps`, `FinAlone`, `cancelOrder_of`, `unwindOrder_of`,
+    `finaliserOrder_of`.
+  - `Instance/Machine.lean`:
+    - `det_ourInst`, `rstep_det`, `runsAlike_of_join`;
+    - `appLaw_ourInst`, `congr_ourInst`, `opStuck_ourInst`, `loopLaws_ourInst`,
+      `driveLaws_ourInst`, `machShape_orow`, `handlerSem_ourInst`, `handlerSem_orow`.
+- **Deviations from the statements above.**
+  - **`LiveOK`**, added to the laws that assert a step (`AppLaw`, `LoopLaws`, `DriveLaws`,
+    `HandlerSem`). It says that every configuration a typed program reaches has a closed term and
+    goes on. Without it, an open A-value, a handler of non-values or a loop answer of the wrong
+    shape is stuck where the law asks for a step. It holds at `JnLog`, a typing of one program
+    with a handler, an operation and a continuation (`liveOK_JnLog`). Piece 4 discharges it at
+    `J₁`, with `closed_steps`.
+  - **`FinAlone`'s raise is of a nonzero name.** The unwind goes on through the next finaliser
+    frame by `[finalise]`, which needs a nonzero name. Typed raises are of labels, so typing gives
+    it.
+  - **`unwindOrder_all` is not built.** `unwindOrder_of` takes `FinAlone`, because the unwind runs
+    the finalisers. I have not checked whether `UnwindOrder` fails at some typing without it.
+  - At a general row form, `OpStuck` takes that label names are nonzero, and `HandlerSem` takes
+    that and that signatures are at most `2³²` long. `orowRF`'s labels carry both, so
+    `machShape_orow` and `handlerSem_orow` take only `LiveOK`.
+  - `runsAlike_of_join` takes its two runs as chains of head steps that allocate nothing and show
+    no event (`HeadChain`).
+  - `hndNamesNZ_steps` is in `Base/CoreCancel.lean`, next to `HndNamesNZ`, not in `Base/Runs.lean`.
+- **The instance changed.** `coalgE` read the selector's unit as the state. It now shifts `f` and
+  `g` past `withPair`'s two binders, as Core's `loopStep` does.
+- **Left for piece 4.** Discharge `LiveOK` and `FinAlone` at `J₁`. S5 and S6 wait on the user's
+  restatement.
+
 ## 2. Law 1: `J₁` and the row `∀`
 
 **Goal.** Build Law 1 (synthesis §10 item 1): the row `∀` is the intersection of its instances.

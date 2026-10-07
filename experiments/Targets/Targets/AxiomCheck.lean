@@ -150,6 +150,7 @@ run_meta do
 #print axioms Targets.Inst.chainTerms_length
 #print axioms Targets.Inst.clauseAt_clausesE
 #print axioms Targets.Inst.close_steps
+#print axioms Targets.Inst.closedAt_chain
 #print axioms Targets.Inst.closedAt_clausesE
 #print axioms Targets.Inst.closedAt_plug_inv
 #print axioms Targets.Inst.coalgE_steps₁
@@ -195,6 +196,7 @@ run_meta do
 #print axioms Targets.Inst.fins_map_comp
 #print axioms Targets.Inst.fins_map_of_noUnwind
 #print axioms Targets.Inst.fins_of_noUnwind
+#print axioms Targets.Inst.goesOn_chain
 #print axioms Targets.Inst.handleK_hasHnd
 #print axioms Targets.Inst.handleK_noUnwind
 #print axioms Targets.Inst.handlerSem_orow
@@ -224,6 +226,7 @@ run_meta do
 #print axioms Targets.Inst.labelOf_uthen
 #print axioms Targets.Inst.lastC_chainPath
 #print axioms Targets.Inst.liftExt_orow
+#print axioms Targets.Inst.liveOK_JnLog
 #print axioms Targets.Inst.live_of_ostep
 #print axioms Targets.Inst.live_of_pureSteps
 #print axioms Targets.Inst.loopK_hasHnd
@@ -252,6 +255,7 @@ run_meta do
 #print axioms Targets.Inst.not_contUse_directResume
 #print axioms Targets.Inst.not_contUse_ΞA
 #print axioms Targets.Inst.not_goesOn_stuck
+#print axioms Targets.Inst.not_isLoopSum_nLogTy
 #print axioms Targets.Inst.not_isOVal_finD
 #print axioms Targets.Inst.not_isOVal_finP
 #print axioms Targets.Inst.not_isOVal_prim_app
@@ -321,6 +325,7 @@ run_meta do
 #print axioms Targets.Inst.rowCtx_models_nil
 #print axioms Targets.Inst.rowEq_comm_ofEff
 #print axioms Targets.Inst.rpath_chainPath
+#print axioms Targets.Inst.rreach_chain_mem
 #print axioms Targets.Inst.rreach_of_chain
 #print axioms Targets.Inst.rstep_det
 #print axioms Targets.Inst.runsAlike_of_join
@@ -447,9 +452,21 @@ run_meta do
 #print axioms Targets.catches_innerUbind
 #print axioms Targets.catches_of_innerCatch
 #print axioms Targets.clauseOf_some
+#print axioms Targets.closedAt_cancelVal
+#print axioms Targets.closedAt_clauseAt
+#print axioms Targets.closedAt_dropFill
+#print axioms Targets.closedAt_host
+#print axioms Targets.closedAt_kappa
+#print axioms Targets.closedAt_namesVal
+#print axioms Targets.closedAt_plug_iff
+#print axioms Targets.closedAt_subst
+#print axioms Targets.closedAt_tabFill
 #print axioms Targets.closedRowAlg_laws
 #print axioms Targets.closedRowAlg_lawsSafe
 #print axioms Targets.closedRowAlg_safe
+#print axioms Targets.closed_head
+#print axioms Targets.closed_step1
+#print axioms Targets.closed_steps
 #print axioms Targets.comp_of_FL
 #print axioms Targets.conservativeWB_core
 #print axioms Targets.conservative_core
@@ -525,6 +542,10 @@ run_meta do
 #print axioms Targets.handleCompat_core
 #print axioms Targets.hasHnd0_of_knz
 #print axioms Targets.head_ubind_raise
+#print axioms Targets.heapClosed_del
+#print axioms Targets.heapClosed_empty
+#print axioms Targets.heapClosed_fill
+#print axioms Targets.heapClosed_upd
 #print axioms Targets.heapNZ_del
 #print axioms Targets.heapNZ_empty
 #print axioms Targets.heapNZ_fill
@@ -583,6 +604,7 @@ run_meta do
 #print axioms Targets.isVal_renameLoc
 #print axioms Targets.kappa_cancel_run
 #print axioms Targets.knz_shift
+#print axioms Targets.kont_shift_closed
 #print axioms Targets.lifetimeSound_core
 #print axioms Targets.live_insert
 #print axioms Targets.lookOK_under
@@ -847,6 +869,7 @@ run_meta do
 #print axioms Targets.status_admExtends_closedOp
 #print axioms Targets.status_bumpSim_at_reuse
 #print axioms Targets.status_carryW
+#print axioms Targets.status_checks_ΞA
 #print axioms Targets.status_combined_prog
 #print axioms Targets.status_conservative_core
 #print axioms Targets.status_contractsW_of_meets
@@ -858,10 +881,12 @@ run_meta do
 #print axioms Targets.status_exclusiveB_core
 #print axioms Targets.status_extendsB_tier1
 #print axioms Targets.status_extendsNU_tier1
+#print axioms Targets.status_finaliserOrder_of
 #print axioms Targets.status_fl_core_tier1
 #print axioms Targets.status_leakW
 #print axioms Targets.status_lifetimeSound_core
 #print axioms Targets.status_loops
+#print axioms Targets.status_machShape_handlerSem
 #print axioms Targets.status_noInterception_tier1
 #print axioms Targets.status_not_combined_of_leak
 #print axioms Targets.status_not_eProps_of_emptyTyping

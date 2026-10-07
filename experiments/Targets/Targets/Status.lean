@@ -5,6 +5,7 @@ import Targets.Instance.Bridges
 import Targets.Instance.Binary
 import Targets.Instance.ZeroCost
 import Targets.Instance.Checks
+import Targets.Instance.LiveWitness
 import Targets.Instance.Restricted.NoInterception
 import Targets.Instance.Restricted.Unwind
 import Targets.Instance.Restricted.Programs
@@ -36,9 +37,10 @@ rules over open rows with the row `∀`) waits on RESTRUCTURE §7 Q1–Q2.
 OPEN.  Proved of it: the world conjuncts and the device at `coreW` (`status_tier1Core_world`), and
 B's guarantees from `Adequate coreB` and the step-for-step simulation `BumpSim`
 (`status_tier1Core_guarantees_of`; B5 aside, from `Adequate coreB` alone, `status_tier1Core_B_of`).
-Missing: A's (S) properties at our instance (the bridges below marked OPEN) and `I4a` at today's
-unr-free kernel; and the two open statements themselves, `Adequate coreB` at every platform and for
-the drive, and `BumpSim` (OQ-43).
+Missing: A's (S) properties at our instance (S0 and S4 are proved given `LiveOK`; S5 and S6 fail
+as written, checks 2 and 1; the rest below marked OPEN) and `I4a` at today's unr-free kernel; and
+the two open statements themselves, `Adequate coreB` at every platform and for the drive, and
+`BumpSim` (OQ-43).
 
 ## System A
 
@@ -99,7 +101,15 @@ the drive, and `BumpSim` (OQ-43).
 | `LiftExt` at the tail-variable rows | PROVED | `liftExt_orow` |
 | our rows meet Def. 3.5 and Def. 5.1; `RowLink orowRF` | PROVED AT A RESTRICTION (`RF = orowRF`) | `rowAlgSafe_orowRF`, `rowLink_orowRF`, `closedRowAlg_lawsSafe` |
 | no typed term intercepts a cancel; the two-frame unwind | PROVED AT σ=[]; an instance | `noInterception_tier1`; `two_frame` |
-| `AppLaw`, `Congr`, `OpStuck`, `LoopLaws`, `DriveLaws`, `LetLaw`, `RowAlgebra`, `Safety`, `EffSafe`, `HandlerSem`, `Cancellation`, `ContUse` at our instance | OPEN (the bridges to build, RESTRUCTURE §4.1) | — |
+| the machine read through contexts: run splitting, determinism where nothing is allocated, runs that join run alike, closed runs stay closed, no step creates a handler named `0` | PROVED AT σ=[] | `steps_plug_split`, `det_ourInst`, `rstep_det`, `runsAlike_of_join`, `closed_steps`, `hndNamesNZ_steps` |
+| S0 (`MachShape`: `AppLaw`, `Congr`, `OpStuck`, `LoopLaws`, `DriveLaws`) and S4 (`HandlerSem`) at our instance | PROVED AT σ=[], given `LiveOK` (every configuration a typed program reaches has a closed term and goes on); `Congr` and `OpStuck` without it; `LiveOK` OPEN at `J₁` (piece 4) | `machShape_orow`, `handlerSem_orow`, `handlerSem_ourInst` |
+| `LiveOK` is met at a typing system that types one program with a handler, an operation it catches and a continuation | PROVED | `liveOK_JnLog` |
+| S5 (`Cancellation`) at our instance | **FAILS AS WRITTEN** at today's kernel and `ΞA` (check 2): a finaliser raising a name the effect context does not declare ends at no `Ended` of A's; the bridges `noIntercept_of_core`, `unwindOrder_of_core`, `cancellation_of_core` are not built; the restatement is the user's decision | `not_noIntercept_ΞA`, `not_unwindOrder_ΞA` |
+| `NoInterception` does not give S5's runs (check 4): a finaliser may perform the operation its dying handler catches | PROVED | `not_noIntercept_of_noInterception` |
+| Core's `FinaliserOrder` (I3.b) | PROVED, given `NoInterception` and `FinAlone` (a fired finaliser's run alone ends at a value or an uncaught raise of a nonzero name); `FinAlone` OPEN (piece 4) | `finaliserOrder_of`, `cancelOrder_of`, `unwindOrder_of` |
+| S6 (`ContUse`) at our instance | **FAILS AS WRITTEN** at today's kernel and `ΞA` (check 1): Core's clauses resume `κ` by applying it, which `ResumeAt` does not read | `not_contUse_ΞA` |
+| `AlgLaw`, `TailLaw` at our instance | **FAIL AS WRITTEN** at today's kernel and `ΞA` (check 3): under E1′'s `sched` the answers are closures over different continuations, compared as terms; `EtaHold`'s witness is not built (`[handle]`'s `hnS` keeps the handled name out of the clauses' row: a reading, not checked) | `not_unaryLaws_ΞA` |
+| `LetLaw`, `RowAlgebra`, `Safety`, `EffSafe` at our instance | OPEN (pieces 2, 3) | — |
 | `monoCallback_tier1Open` (today's kernel fails E1, E2, E6, E10); R1–R4 (S6 bites); the positive (E) runs at `tier1Open` | OPEN (inversions and runs to build, RESTRUCTURE §6.1) | — |
 | `RowVarKernel J₂`, `spanRules_J₂` | OPEN (`J₂` not built) | — |
 | A₂ over Core (`Laws`, `Abstraction`), A₃'s lowering classes | stated, out of the first pass | `Targets/Instance/Binary.lean`, `Targets/Instance/ZeroCost.lean` |
@@ -454,6 +464,28 @@ theorem status_rows : RowAlgSafe orowRF ∧ RowLink orowRF := ⟨rowAlgSafe_orow
 
 /-- PROVED AT σ=[]: no typed term intercepts a cancel. -/
 theorem status_noInterception_tier1 : NoInterception tier1 := noInterception_tier1
+
+/-- PROVED AT σ=[], given `LiveOK` (OPEN, piece 4): S0 and S4 at our instance. -/
+theorem status_machShape_handlerSem (Ξ : EffCtx) (J : OurTyping orowRF)
+    (hL : Inst.LiveOK (ℍ := ℍ) orowRF Ξ J) :
+    (ourInst (ℍ := ℍ) orowRF Ξ J).MachShape ∧ (ourInst (ℍ := ℍ) orowRF Ξ J).HandlerSem :=
+  ⟨Inst.machShape_orow hL, Inst.handlerSem_orow hL⟩
+
+/-- PROVED: at today's kernel and the admissible context `ΞA`, S6 and S5, as written, fail (checks
+1 and 2), and so do algebraicity and the tail-resumptive law (check 3). -/
+theorem status_checks_ΞA :
+    ¬ (ourInst (ℍ := ℍ) orowRF Inst.ΞA tier1Open).ContUse ∧
+      ¬ (ourInst (ℍ := ℍ) orowRF Inst.ΞA tier1Open).NoIntercept ∧
+      ¬ (ourInst (ℍ := ℍ) orowRF Inst.ΞA tier1Open).UnwindOrder ∧
+      ¬ (ourInst (ℍ := ℍ) orowRF Inst.ΞA tier1Open).AlgLaw ∧
+      ¬ (ourInst (ℍ := ℍ) orowRF Inst.ΞA tier1Open).TailLaw :=
+  ⟨Inst.not_contUse_ΞA.2, Inst.not_noIntercept_ΞA.2, Inst.not_unwindOrder_ΞA.2,
+    Inst.not_unaryLaws_ΞA.2.1, Inst.not_unaryLaws_ΞA.2.2⟩
+
+/-- PROVED, given `NoInterception` and `FinAlone` (OPEN, piece 4): Core's `FinaliserOrder`. -/
+theorem status_finaliserOrder_of {J : TypingJ} (hN : NoInterception J)
+    (hF : FinAlone (ℍ := ℍ) J) : FinaliserOrder (ℍ := ℍ) J :=
+  finaliserOrder_of hN hF
 
 /-- The A properties at our instance: OPEN (the bridges to build). -/
 example (Ξ : EffCtx) : Prop := AdmEff Ξ → (ourInst (ℍ := ℍ) orowRF Ξ tier1Open).SPropsNoUse

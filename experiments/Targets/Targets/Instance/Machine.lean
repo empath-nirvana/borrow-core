@@ -29,7 +29,9 @@ under a runner that keeps its protocol, has a closed term and goes on (`GoesOn`)
 junk encodings ("no configuration a typed closed program reaches has one").  Without it, an open
 A-value, a handler of non-values (where `captureE`, `cancelOfE` and `unfoldE` are `()`) or a loop
 answer of the wrong shape leaves a configuration stuck where the law asks for a step.  It states
-nothing about which step a configuration takes.  Its discharge at `J₁` is piece 4's.
+nothing about which step a configuration takes.  It is met at a typing system that types one
+program with a handler, an operation and a continuation (`liveOK_JnLog`,
+`Targets/Instance/LiveWitness.lean`); its discharge at `J₁` is piece 4's.
 -/
 
 noncomputable section
@@ -714,7 +716,7 @@ theorem not_goesOn_stuck {s : Expr} (hs : StuckAt (ℍ := ℍ) s) (K : Kont) (μ
     | mach hh =>
         obtain ⟨h1, he⟩ := Prod.mk.inj hc
         subst h1
-        exact stuck_no_step hs K ⟨_, _, _, by first | exact he | exact he.symm, rfl, hh⟩
+        exact stuck_no_step hs K ⟨_, _, _, he, rfl, hh⟩
     | again => exact hd _ (Prod.mk.inj hc).2
     | fin => exact hd _ (Prod.mk.inj hc).2
   · exact stuck_ne_op hs K K' r p he
@@ -764,13 +766,13 @@ theorem driveLaws_ourInst (hL : LiveOK (ℍ := ℍ) RF Ξ J) : (ourInst (ℍ := 
       | mach hh =>
           obtain ⟨h1, he⟩ := Prod.mk.inj hc
           subst h1
-          exact (no_step1_drive _ ⟨_, _, _, by first | exact he | exact he.symm, rfl, hh⟩).elim
+          exact (no_step1_drive _ ⟨_, _, _, he, rfl, hh⟩).elim
       | @again μ' l' =>
           obtain ⟨h1, he⟩ := Prod.mk.inj hc
           subst h1
           have hl' : l'.1 = l.1 := by
             simp only [driveE, Expr.app.injEq, true_and, Expr.val, Val.inj₂, Expr.inj₂.injEq] at he
-            first | exact he | exact he.symm
+            exact he.symm
           refine ⟨rfl, ?_⟩
           show (μ, driveE (nextE l')) = (μ, driveE (.app l.1 (.inj₁ .unit)))
           simp only [nextE, Expr.val, hl']
@@ -792,7 +794,7 @@ theorem driveLaws_ourInst (hL : LiveOK (ℍ := ℍ) RF Ξ J) : (ourInst (ℍ := 
       | mach hh =>
           obtain ⟨h1, he⟩ := Prod.mk.inj hc
           subst h1
-          exact (no_step1_drive _ ⟨_, _, _, by first | exact he | exact he.symm, rfl, hh⟩).elim
+          exact (no_step1_drive _ ⟨_, _, _, he, rfl, hh⟩).elim
       | again =>
           obtain ⟨-, he⟩ := Prod.mk.inj hc
           simp [driveE, Val.inj₁, Val.inj₂] at he
@@ -801,7 +803,7 @@ theorem driveLaws_ourInst (hL : LiveOK (ℍ := ℍ) RF Ξ J) : (ourInst (ℍ := 
           subst h1
           have ha' : a'.1 = a.1 := by
             simp only [driveE, Expr.app.injEq, true_and, Expr.val, Val.inj₁, Expr.inj₁.injEq] at he
-            first | exact he | exact he.symm
+            exact he.symm
           exact ⟨rfl, by show (μ, a'.1) = (μ, a.1); rw [ha']⟩
     · rintro ⟨rfl, rfl⟩
       exact OStep.fin (a := ⟨a.1, ha⟩)

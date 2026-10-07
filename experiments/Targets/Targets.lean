@@ -32,6 +32,7 @@ import Targets.Instance.Binary
 import Targets.Instance.Bridges
 import Targets.Instance.CheckPrograms
 import Targets.Instance.Checks
+import Targets.Instance.LiveWitness
 import Targets.Instance.Core
 import Targets.Instance.Machine
 import Targets.Instance.Restricted.NoInterception

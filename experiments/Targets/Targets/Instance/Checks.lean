@@ -417,7 +417,7 @@ theorem errOf_undeclared {m : UInt32} (hm : Ξ m = []) (j : UInt32) (w : Val) :
 
 /-- The three steps of the cancel: the finaliser fires, its thunk is applied, and its raise of
 `21` ends it, the end an error that `Ξ` names no label of. -/
-def p3q (h21 : Ξ 21 = []) :
+def p3q :
     List ((ourInst (ℍ := ℍ) orowRF Ξ tier1Open).Event ×
       (ourInst (ℍ := ℍ) orowRF Ξ tier1Open).RConf (ourInst (ℍ := ℍ) orowRF Ξ tier1Open).R₀) :=
   [(.fire finD, ((Adequacy.emptyMem, p3K₀.plug (ccatchE (hndE ⟨H2E, isVal_H2E⟩
@@ -428,7 +428,7 @@ def p3q (h21 : Ξ 21 = []) :
 
 theorem p3_path (h21 : Ξ 21 = []) :
     chainPath (ourInst (ℍ := ℍ) orowRF Ξ tier1Open).R₀ Adequacy.emptyMem ()
-      (lookRun 3 (lookEnd 12 prog₃T)) = p3q (ℍ := ℍ) Ξ h21 := by
+      (lookRun 3 (lookEnd 12 prog₃T)) = p3q (ℍ := ℍ) Ξ := by
   have h1 := p3_run
   have h2' := p3_terms
   unfold chainTerms at h2'
@@ -472,14 +472,14 @@ theorem not_noIntercept_undeclared (h2 : Ξ 2 = [(.aff, .unit, .unit)]) (h21 : �
     rw [show cancelOfE 2 (↑p3H.1) (List.map Subtype.val p3H.2) p3K =
       Targets.cancelOf 2 ⟨H2E, isVal_H2E⟩ p3K from cancelOfE_val isVal_H2E p3K]
     exact p3_c
-  have hpath : S.RPath S.R₀ c (p3q (ℍ := ℍ) Ξ h21) := by
+  have hpath : S.RPath S.R₀ c (p3q (ℍ := ℍ) Ξ) := by
     rw [← p3_path Ξ h21]
     exact rpath_chainPath S.R₀ (lookRun_sound (ℍ := ℍ) 3 _)
   have hT := hNI S.R₀ r₀_respects prog₃T (orowAlg Ξ).unit (OVTy.ofV .unit) (answers_unit S.R₀)
     (der_tier1Open_ret d_prog₃TNU) c₀ c p3K₀ l p3H p3K _ hreach hc₀ hpure rfl hc hpath
   have hfins : S.fins p3K = [finD] := rfl
   rw [hfins] at hT
-  generalize hq' : p3q (ℍ := ℍ) Ξ h21 = q' at hT
+  generalize hq' : p3q (ℍ := ℍ) Ξ = q' at hT
   cases hT with
   | stop => unfold p3q at hq'; cases hq'
   | @fire c' c₁ c₂ D fs err Kf q₀ q'' hst hpp hKf hft =>
