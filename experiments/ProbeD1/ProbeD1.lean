@@ -33,3 +33,4 @@ import ProbeD1.GapWitness
 import ProbeD1.GapCover
 import ProbeD1.GapRows
 import ProbeD1.GapPos
+import ProbeD1.GapRoom
