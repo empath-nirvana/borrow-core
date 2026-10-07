@@ -9,3 +9,6 @@ import ProbeD1.Statement1
 import ProbeD1.Statement2
 import ProbeD1.Statement34
 import ProbeD1.Programs
+import ProbeD1.Order
+import ProbeD1.Bridge
+import ProbeD1.Shared
