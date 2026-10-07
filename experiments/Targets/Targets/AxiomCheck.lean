@@ -176,6 +176,7 @@ run_meta do
 #print axioms Targets.Inst.appK_hasHnd
 #print axioms Targets.Inst.appK_noUnwind
 #print axioms Targets.Inst.appLaw_ourInst
+#print axioms Targets.Inst.arr_ne_nu
 #print axioms Targets.Inst.bindK_noUnwind
 #print axioms Targets.Inst.cancelOfE_of_val
 #print axioms Targets.Inst.cancelOfE_val
@@ -199,6 +200,8 @@ run_meta do
 #print axioms Targets.Inst.cfinShape_p5Kf
 #print axioms Targets.Inst.chainTerms_length
 #print axioms Targets.Inst.clauseAt_clausesE
+#print axioms Targets.Inst.clauseRefusals_pinned
+#print axioms Targets.Inst.clauseTy_resuming
 #print axioms Targets.Inst.clausesE_ne_var
 #print axioms Targets.Inst.close_steps
 #print axioms Targets.Inst.closedAt_chain
@@ -244,16 +247,24 @@ run_meta do
 #print axioms Targets.Inst.dataTy_bool
 #print axioms Targets.Inst.data_den_of_dataTy
 #print axioms Targets.Inst.der_appLam_body
+#print axioms Targets.Inst.der_appLam_split
 #print axioms Targets.Inst.der_app_var_var
+#print axioms Targets.Inst.der_cancel_lin
+#print axioms Targets.Inst.der_clause_body
+#print axioms Targets.Inst.der_free_live
 #print axioms Targets.Inst.der_hnd_shape
+#print axioms Targets.Inst.der_lam_arr
 #print axioms Targets.Inst.der_lam_body
 #print axioms Targets.Inst.der_letLam_amp
+#print axioms Targets.Inst.der_letpair_split
 #print axioms Targets.Inst.der_lvProg
 #print axioms Targets.Inst.der_perform₀
 #print axioms Targets.Inst.der_tier1Open_ret
+#print axioms Targets.Inst.der_unit_dead
 #print axioms Targets.Inst.der_unit_inv
 #print axioms Targets.Inst.der_var_arr_thunk
 #print axioms Targets.Inst.der_var_inv
+#print axioms Targets.Inst.der_var_tensor
 #print axioms Targets.Inst.der_withPair_amp
 #print axioms Targets.Inst.det_ourInst
 #print axioms Targets.Inst.driveK_noUnwind
@@ -274,6 +285,7 @@ run_meta do
 #print axioms Targets.Inst.fins_map_of_noUnwind
 #print axioms Targets.Inst.fins_of_noUnwind
 #print axioms Targets.Inst.forceE_cases
+#print axioms Targets.Inst.freeIn_val_lam
 #print axioms Targets.Inst.goesOn_chain
 #print axioms Targets.Inst.handleK_hasHnd
 #print axioms Targets.Inst.handleK_noUnwind
@@ -293,6 +305,9 @@ run_meta do
 #print axioms Targets.Inst.isVal_of_closed_oval
 #print axioms Targets.Inst.isVal_of_mem_clausesE
 #print axioms Targets.Inst.isVal_val
+#print axioms Targets.Inst.isViewOf_tensor
+#print axioms Targets.Inst.kTy_not_persistent
+#print axioms Targets.Inst.k_twice
 #print axioms Targets.Inst.kappaCancelShape_cancelE
 #print axioms Targets.Inst.kappa_cancel_steps
 #print axioms Targets.Inst.kappa_resume_steps
@@ -309,6 +324,10 @@ run_meta do
 #print axioms Targets.Inst.length_chainPath
 #print axioms Targets.Inst.letLaw_ourInst_tier1Open
 #print axioms Targets.Inst.liftExt_orow
+#print axioms Targets.Inst.liveAt_cons
+#print axioms Targets.Inst.liveAt_of_soloP
+#print axioms Targets.Inst.liveAt_of_split_left
+#print axioms Targets.Inst.liveAt_of_split_right
 #print axioms Targets.Inst.liveOK_JnLog
 #print axioms Targets.Inst.live_of_ostep
 #print axioms Targets.Inst.live_of_pureSteps
@@ -338,6 +357,8 @@ run_meta do
 #print axioms Targets.Inst.no_ostep_perform₀
 #print axioms Targets.Inst.no_rstep_val
 #print axioms Targets.Inst.no_step1_drive
+#print axioms Targets.Inst.notTopJ_nu
+#print axioms Targets.Inst.notTopJ_of_nuEq
 #print axioms Targets.Inst.not_algLaw_ourInst
 #print axioms Targets.Inst.not_cancelPolicy_tier1Open
 #print axioms Targets.Inst.not_cancel_of_shape
@@ -370,6 +391,8 @@ run_meta do
 #print axioms Targets.Inst.not_elabClosed_of_letLaw_arr
 #print axioms Targets.Inst.not_finAlone_of_types
 #print axioms Targets.Inst.not_finAlone_tier1NU
+#print axioms Targets.Inst.not_freeIn_closed
+#print axioms Targets.Inst.not_freeIn_of_closedAt
 #print axioms Targets.Inst.not_goesOn_lvStuck
 #print axioms Targets.Inst.not_goesOn_stuck
 #print axioms Targets.Inst.not_has_ε₀
@@ -378,6 +401,7 @@ run_meta do
 #print axioms Targets.Inst.not_isOVal_finP
 #print axioms Targets.Inst.not_isOVal_prim_app
 #print axioms Targets.Inst.not_isVal_opE'
+#print axioms Targets.Inst.not_liveAt_deadP
 #print axioms Targets.Inst.not_liveOK_ΞA
 #print axioms Targets.Inst.not_nestedHandlers_tier1Open
 #print axioms Targets.Inst.not_noIntercept_of_noInterception
@@ -472,7 +496,13 @@ run_meta do
 #print axioms Targets.Inst.rProg_eq
 #print axioms Targets.Inst.rProg_subs
 #print axioms Targets.Inst.raiseShape_finD
+#print axioms Targets.Inst.refuses_R_clauses
 #print axioms Targets.Inst.refuses_R_tier1Open
+#print axioms Targets.Inst.refuses_cancelCl_lin
+#print axioms Targets.Inst.refuses_cancelClause_lin
+#print axioms Targets.Inst.refuses_cancelResumeClause
+#print axioms Targets.Inst.refuses_dropClause
+#print axioms Targets.Inst.refuses_twiceClause
 #print axioms Targets.Inst.resumeE_steps
 #print axioms Targets.Inst.resumeE_subst
 #print axioms Targets.Inst.resumeShape_resumeE
@@ -501,6 +531,7 @@ run_meta do
 #print axioms Targets.Inst.sameThunk_mut
 #print axioms Targets.Inst.self_mem_evalSubs
 #print axioms Targets.Inst.soloP_slot
+#print axioms Targets.Inst.splitP_both_live
 #print axioms Targets.Inst.splitP_kill_left
 #print axioms Targets.Inst.splitP_live_left
 #print axioms Targets.Inst.splitP_live_right
@@ -1119,6 +1150,7 @@ run_meta do
 #print axioms Targets.status_bumpSim_at_reuse
 #print axioms Targets.status_carryW
 #print axioms Targets.status_checks_ΞA
+#print axioms Targets.status_clauseRefusals
 #print axioms Targets.status_combined_prog
 #print axioms Targets.status_conservative_core
 #print axioms Targets.status_contUse_teeth

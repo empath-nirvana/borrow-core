@@ -32,7 +32,7 @@ handler: our instance's handler is the run-time frame, whose clauses are values,
 types clause variables (`not_der_handle_tier1Open`).  That reason is the handler's form, not the
 linearity of `κ`.  The linearity refusal RESTRUCTURE §6.1 names (`kTy` at `lin`/`aff` is a thunk,
 neither droppable nor persistent; a linear `κ`'s cancel branch is at `⊤`) is an inversion of the
-clauses' typing at `clauseTy`, and is not built here.
+clauses' typing at `clauseTy` (`refuses_R_clauses`, `Targets/Instance/ClauseRefusals.lean`).
 
 The runs are written out at a symbolic label name `n`, since a label's name is the row form's.  A
 step's configuration is read through `chainTerms`, and a count of S6 along a path is a count over
@@ -963,8 +963,8 @@ end Orow
 
 /-- **Today's kernel refuses R1–R4**, at every label and type.  The reason is the handler's form:
 our instance's handler is the run-time frame, whose clauses are values, and today's `[handle]`
-types only clause variables (`not_der_handle_tier1Open`).  It is not the linearity of `κ`: no
-inversion of the clauses' typing at `kTy` is built here. -/
+types only clause variables (`not_der_handle_tier1Open`).  It is not the linearity of `κ`; that
+refusal is read at the clauses themselves (`refuses_R_clauses`). -/
 theorem refuses_R_tier1Open {Ξ : EffCtx} (l : (orowAlg Ξ).Lab) (C : OCTy) :
     ¬ (ourInst (ℍ := ℍ) orowRF Ξ tier1Open).der []
         ((ourInst (ℍ := ℍ) orowRF Ξ tier1Open).withCl l (ourInst (ℍ := ℍ) orowRF Ξ tier1Open).dropCl) C ∧

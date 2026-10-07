@@ -625,11 +625,23 @@ and `FinAlone`'s route. S6 waits on the user's repair of its observation.
 - **`refuses_R_tier1Open`: PROVED, but for the handler's form, not for linearity.** Today's
   kernel types none of R1–R4 for the same reason it types no A-level handler
   (`not_der_handle_tier1Open`, piece 2's item 2).
-  - The refusal this section named was an inversion: `kTy` at `lin`/`aff` is a thunk, neither
-    droppable nor persistent, and a linear `κ`'s cancel branch is at `⊤`.
-  - That inversion is of the clauses at `clauseTy`, and it is **not built**. It would matter only
-    to a `J₁` whose handler rule types A-level handlers with today's clause types.
-  - The refusal needed no new inversion: it reuses `der_hnd_shape`.
+  - That refusal needed no new inversion: it reuses `der_hnd_shape`.
+- **The linearity refusal at the clauses: PROVED** (`Instance/ClauseRefusals.lean`,
+  `refuses_R_clauses`). This is the refusal this section named: `kTy` at `lin`/`aff` is a thunk,
+  neither droppable nor persistent, and a linear `κ`'s cancel branch is at `⊤`. It is read at
+  `clauseTy`, the type `[handle]` gives a clause.
+  - R1's, R2's and R4's clauses are refused at every resuming `lin` or `aff` operation: a live
+    slot of `kTy` is neither dropped (`return ff` consumes its context) nor duplicated (both sides
+    of a bind read `k`).
+  - R3's clause is refused at every `lin` operation: `k (inj₂ ())` at a linear `kTy` is at `⊤`,
+    which no bind takes.
+  - **Pinned** (`clauseRefusals_pinned`). At the clause type of a linear `1 ↠ 1`, where all four
+    clauses are refused, a clause that resumes `κ` once is typed (`d_tailClNU`). `cancelCl`,
+    which cancels `κ`, is typed at `aff` (`d_cancelClNU`) and refused at `lin`.
+  - **Scope.** At `unr`, `kTy` is `!` and persistent, so the argument does not apply. `clsOf`
+    reads a resuming `unr` operation as affine. Multi-shot is not considered.
+  - It would matter to a `J₁` whose handler rule types A-level handlers with today's clause
+    types.
 - **`refuses_R_J₁`: not built.** `J₁` is not built (§2).
 - **`FinAlone` FAILS AS WRITTEN** (`Instance/RunTyping.lean`, `not_finAlone_of_types`,
   `not_finAlone_tier1NU`).
@@ -703,12 +715,17 @@ and `FinAlone`'s route. S6 waits on the user's repair of its observation.
     CLAUDE.md asks for inversions to be costed. The cost is one preservation case per head rule
     (27) and one rule per run-time form and constant body: on the order of thousands of lines,
     an estimate, not a measurement.
-  - **The heap typing with borrows erased has an unresolved case.** An `alloc` may reuse a freed
-    location while a dead copy of a borrow of it still occurs in the configuration. Erased types
-    cannot tell the copy is dead, and preservation at that step then needs an invariant that is
-    BoLo's ownership, a semantic fact. B3 speaks of uses, not occurrences.
-    - I have not derived such a configuration from a typed program, and I have not verified that
-      any obstruction is real. It is a risk, not a claim.
+  - **The heap typing with borrows erased may need an invariant an erased typing cannot state.**
+    Preservation must hold for every configuration `Typed` accepts, not only for those a run
+    reaches.
+    - An erased `Typed` would accept a configuration in which a copy of a borrowed location still
+      occurs after its owner frees it. An `alloc` that reuses the location at another type would
+      then break the heap typing.
+    - Excluding such configurations would need the ownership discipline that lifetimes give, which
+      an erased typing drops. BoLo establishes that discipline semantically, and B3 speaks of
+      uses, not occurrences.
+    - I have not built such a `Typed`, I have not derived such a configuration from a typed
+      program, and I have not verified that any obstruction is real. It is a risk, not a claim.
   - **What it would buy now:** `FinaliserOrder tier1NU` (Core's I3.b). S5 at our instance fails as
     written (check 2), and S6 too (check 1), so their payoff waits on the user either way.
 - **The other routes.**
@@ -726,10 +743,13 @@ and `FinAlone`'s route. S6 waits on the user's repair of its observation.
   - `CfgTyped` and its theorems (the review above);
   - `finAlone_J₁`, `cancellation_ourInst_J₁` and `contUse_ourInst_J₁`: `J₁` is not built,
     `FinAlone` fails as written at every typing system that types `finProg`, and S5 and S6 fail
-    as written;
-  - the linearity refusal of R1–R4's clauses (above).
-- **Typing work** (CLAUDE.md asks for the cost). Two `CDerivesNU` derivations (`d_finProgNU`,
-  `d_lvProgNU`) and no inversion. The R1–R4 refusal reuses piece 2's `der_hnd_shape`.
+    as written.
+- **Typing work** (CLAUDE.md asks for the cost).
+  - Two `CDerivesNU` derivations (`d_finProgNU`, `d_lvProgNU`).
+  - `refuses_R_tier1Open` reuses piece 2's `der_hnd_shape`.
+  - The clause refusals need seven inversions, each one induction over `CDerivesNU`'s 89
+    constructors: `der_free_live`, `der_unit_dead`, `der_lam_arr`, `der_letpair_split`,
+    `der_var_tensor`, `der_appLam_split` and `der_cancel_lin`. The file is about 800 lines.
 
 ## 5. The answering class: h2, h4, the unary laws
 

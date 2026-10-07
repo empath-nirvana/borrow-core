@@ -17,6 +17,7 @@ import Targets.A.Lowering
 import Targets.Audit
 import Targets.I.Tier1Route
 import Targets.I.Restricted.FinAlone
+import Targets.Instance.ClauseRefusals
 import Targets.Instance.ContUse
 import Targets.Instance.RunTyping
 
@@ -129,7 +130,7 @@ checks 2 and 1; S1 fails as written, `status_rowAlgebra_tier1Open`; S2 and S3 fa
 | `FinAlone` (piece 1's added hypothesis) | **FAILS AS WRITTEN** at every typing system that types `finProg`, today's unr-free kernel among them: it ranges over every platform that keeps its protocol, and `Pmis` answers `1.0` at `1 ⊕ 1` where the program's row declares `1 ↠ 1`; the fired finaliser `x; ()` stops at `inj₁ (); ()`. B2's `AdequateRetAt` asks `RowLe S P.ops`; `FinAlone` does not. Its restatement is the user's decision; `FinaliserOrder` takes `FinAloneAt` | `not_finAlone_of_types`, `not_finAlone_tier1NU` |
 | S6 (`ContUse`) at our instance | **FAILS AS WRITTEN** at today's kernel and `ΞA` (check 1): Core's clauses resume `κ` by applying it, which `ResumeAt` does not read | `not_contUse_ΞA` |
 | S6's teeth: R1–R4 (RESTRUCTURE §6.1) at our machine | PROVED: every typing system over our machine that types one of them at `F 0 bool` fails S6 (R1 at a label whose first operation resumes, R3 at a linear one, R2 and R4 at any; at a general row form, given what `orowRF` gives); `JR` types all four, and at `ΞA` each lemma applies | `not_contUse_of_der_R1` … `_R4`, `not_contUse_of_der_R1_orow` … `_R4_orow`, `teeth_JR_ΞA` |
-| today's kernel types none of R1–R4 | PROVED, by the handler's form (our handler is the run-time frame, its clauses values; `[handle]` types clause variables), not by the linearity of `κ`; the linearity refusal at `clauseTy` (RESTRUCTURE §6.1's reason) is not built | `refuses_R_tier1Open` |
+| today's kernel types none of R1–R4 | PROVED, by the handler's form (our handler is the run-time frame, its clauses values; `[handle]` types clause variables). At the clauses, by the linearity of `κ` (RESTRUCTURE §6.1's reason): today's clause typing refuses R1's, R2's and R4's clauses at every resuming `lin` or `aff` operation (a live slot of `kTy` is neither dropped nor duplicated) and R3's at every `lin` one (a linear `κ`'s cancel is at `⊤`); at the clause type of a linear `1 ↠ 1`, where all four are refused, a clause that resumes `κ` once is typed, and `cancelCl` is typed at `aff` and refused at `lin`. At `unr` the argument does not apply (multi-shot is not considered) | `refuses_R_tier1Open`, `refuses_R_clauses`, `clauseRefusals_pinned` |
 | `AlgLaw`, `TailLaw` at our instance | **FAIL AS WRITTEN** at today's kernel and `ΞA` (check 3): under E1′'s `sched` the answers are closures over different continuations, compared as terms; `EtaHold`'s witness is not built (`[handle]`'s `hnS` keeps the handled name out of the clauses' row: a reading, not checked) | `not_unaryLaws_ΞA` |
 | `LetLaw` at today's kernel | PROVED (typing) | `letLaw_ourInst_tier1Open` |
 | S1 (`RowAlgebra`) at our instance | **FAILS AS WRITTEN** at today's kernel, every effect context: `SubClosed` ranges over every row of the algebra, `[sub]` asks `Row.NU` of its target, and `()` at the pure row is not typed at a row with a resuming `unr` operation; the restatement is the user's decision. `EA.Laws`, `EA.Safe` and `RowSig` hold at every typing system; subeffecting holds at target rows whose prefix is unr-free | `not_rowAlgebra_ourInst_tier1Open`, `rowAlgebra_noSub_ourInst`, `subClosed_nu_tier1Open` |
@@ -600,6 +601,21 @@ theorem status_contUse_teeth {Ξ : EffCtx} {J : OurTyping orowRF} (l : (orowAlg 
       ((ourInst (ℍ := ℍ) orowRF Ξ tier1Open).withCl l (ourInst (ℍ := ℍ) orowRF Ξ tier1Open).dropCl) C :=
   ⟨Inst.not_contUse_of_der_R2_orow l, Inst.not_contUse_of_der_R4_orow l,
     Inst.teeth_JR_ΞA.2.2.2.2.2, fun C => (Inst.refuses_R_tier1Open l C).1⟩
+
+/-- PROVED: today's clause typing refuses R1–R4's clauses (RESTRUCTURE §6.1's reason): R1's, R2's
+and R4's at every resuming `lin` or `aff` operation, R3's at every `lin` one.  At the clause type of
+a linear `1 ↠ 1` a clause that resumes `κ` once is typed; `cancelCl` is typed at `aff` and refused
+at `lin`. -/
+theorem status_clauseRefusals {Δ : BoCa.Lifetime.LifeCtx} {Γ : Ctx VTy} {S : Row} {R : VTy}
+    {q : Qual} {A B : VTy} (hq : q ≠ .unr) (hres : (B.isZero && q != .lin) = false) :
+    (¬ CDerivesNU Δ Γ Inst.dropV.1 (.val (clauseTy S R (q, A, B))) ∧
+      ¬ CDerivesNU Δ Γ Inst.twiceV.1 (.val (clauseTy S R (q, A, B))) ∧
+      ¬ CDerivesNU Δ Γ Inst.cancelV.1 (.val (clauseTy S R (.lin, A, B))) ∧
+      ¬ CDerivesNU Δ Γ Inst.cancelResumeV.1 (.val (clauseTy S R (q, A, B)))) ∧
+    CDerivesNU Δ [] Inst.tailClE (.val (clauseTy Inst.S₁₁ .unit (.lin, .unit, .unit))) ∧
+    CDerivesNU Δ [] Inst.cancelCl (.val (clauseTy [] .unit (.aff, .unit, .unit))) ∧
+    ¬ CDerivesNU Δ [] Inst.cancelCl (.val (clauseTy [] .unit (.lin, .unit, .unit))) :=
+  ⟨Inst.refuses_R_clauses hq hres, Inst.clauseRefusals_pinned.1.1, Inst.clauseRefusals_pinned.2⟩
 
 /-- PROVED: the let law at today's kernel. -/
 theorem status_letLaw_tier1Open (Ξ : EffCtx) : (ourInst (ℍ := ℍ) orowRF Ξ tier1Open).LetLaw :=
