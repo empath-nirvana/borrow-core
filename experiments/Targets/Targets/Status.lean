@@ -16,6 +16,9 @@ import Targets.A.UnaryLaws
 import Targets.A.Lowering
 import Targets.Audit
 import Targets.I.Tier1Route
+import Targets.I.Restricted.FinAlone
+import Targets.Instance.ContUse
+import Targets.Instance.RunTyping
 
 /-!
 # Targets — status, by system (RESTRUCTURE §0)
@@ -50,9 +53,9 @@ conjunct at positive loop bodies, B3 and B4 at the same, B4′, B6, B7 and the b
 (`status_tier1Core_B_nu`), and B5 given `BumpSim` (`status_releasedOnceReuse_tier1Open_of_bumpSim`).
 `status_tier1Core_B_of` and `status_tier1Core_guarantees_of` take `Adequate coreB`, which fails as
 written.  Missing besides: A's (S) properties at our instance (S0 and S4 are proved given
-`LiveOK`; S5 and S6 fail as written, checks 2 and 1; S1 fails as written,
-`status_rowAlgebra_tier1Open`; S2 and S3 fail as written, `status_safety_tier1Open`); and
-`BumpSim` (OQ-43).
+`LiveOK`, which fails as written at today's kernel, `status_runTyping`; S5 and S6 fail as written,
+checks 2 and 1; S1 fails as written, `status_rowAlgebra_tier1Open`; S2 and S3 fail as written,
+`status_safety_tier1Open`); and `BumpSim` (OQ-43).
 
 ## System A
 
@@ -118,12 +121,15 @@ written.  Missing besides: A's (S) properties at our instance (S0 and S4 are pro
 | our rows meet Def. 3.5 and Def. 5.1; `RowLink orowRF` | PROVED AT A RESTRICTION (`RF = orowRF`) | `rowAlgSafe_orowRF`, `rowLink_orowRF`, `closedRowAlg_lawsSafe` |
 | no typed term intercepts a cancel; the two-frame unwind | PROVED AT σ=[]; an instance | `noInterception_tier1`; `two_frame` |
 | the machine read through contexts: run splitting, determinism where nothing is allocated, runs that join run alike, closed runs stay closed, no step creates a handler named `0` | PROVED AT σ=[] | `steps_plug_split`, `det_ourInst`, `rstep_det`, `runsAlike_of_join`, `closed_steps`, `hndNamesNZ_steps` |
-| S0 (`MachShape`: `AppLaw`, `Congr`, `OpStuck`, `LoopLaws`, `DriveLaws`) and S4 (`HandlerSem`) at our instance | PROVED AT σ=[], given `LiveOK` (every configuration a typed program reaches has a closed term and goes on); `Congr` and `OpStuck` without it; `LiveOK` OPEN at `J₁` (piece 4) | `machShape_orow`, `handlerSem_orow`, `handlerSem_ourInst` |
+| S0 (`MachShape`: `AppLaw`, `Congr`, `OpStuck`, `LoopLaws`, `DriveLaws`) and S4 (`HandlerSem`) at our instance | PROVED AT σ=[], given `LiveOK` (every configuration a typed program reaches has a closed term and goes on); `Congr` and `OpStuck` without it. `LiveOK` **FAILS AS WRITTEN** at today's kernel and `ΞA`: today's `[perform]` types `perform (6, 0, ())` at the row `[6.0 : 1 ↠ 1]`, the runner answers `kube` at its declared `1 ↠ bool`, keeping its protocol, and the sequenced answer is stuck (the root cause of S2's and S3's failure). Whether S0 and S4 hold at today's kernel without it is not checked. `J₁` is not built | `machShape_orow`, `handlerSem_orow`, `handlerSem_ourInst`; `not_liveOK_ΞA` |
 | `LiveOK` is met at a typing system that types one program with a handler, an operation it catches and a continuation | PROVED | `liveOK_JnLog` |
 | S5 (`Cancellation`) at our instance | **FAILS AS WRITTEN** at today's kernel and `ΞA` (check 2): a finaliser raising a name the effect context does not declare ends at no `Ended` of A's; the bridges `noIntercept_of_core`, `unwindOrder_of_core`, `cancellation_of_core` are not built; the restatement is the user's decision | `not_noIntercept_ΞA`, `not_unwindOrder_ΞA` |
 | `NoInterception` does not give S5's runs (check 4): a finaliser may perform the operation its dying handler catches | PROVED | `not_noIntercept_of_noInterception` |
-| Core's `FinaliserOrder` (I3.b) | PROVED, given `NoInterception` and `FinAlone` (a fired finaliser's run alone ends at a value or an uncaught raise of a nonzero name); `FinAlone` OPEN (piece 4) | `finaliserOrder_of`, `cancelOrder_of`, `unwindOrder_of` |
+| Core's `FinaliserOrder` (I3.b) | PROVED, given `NoInterception` and `FinAloneAt` (a fired finaliser's run alone, platform-free, ends at a value or an uncaught raise of a nonzero name), the form `FinAlone`'s consumer reads; `FinAlone` gives it. At a typing system with FL at Core's world, `FinAloneAt` follows from `FinRowsAt` (an operation the finaliser's run alone leaves uncaught is a raise of a nonzero name): stuck redexes are excluded by FL and B2's runs. So at today's unr-free kernel `FinaliserOrder` follows from `FinRowsAt tier1NU` alone (PROVED AT σ=[]). `FinRowsAt` OPEN: route 8.2's obligations (`RowRoute`) give it (PROVED), and no `RowRoute` is built (TIER1-PLAN §4: the review did not accept route 8.2) | `finaliserOrder_at`, `finaliserOrder_of`, `finAloneAt_of_finRows`, `finaliserOrder_tier1NU_of_finRows`, `finRowsAt_of_route`, `finaliserOrder_of_route` |
+| `FinAlone` (piece 1's added hypothesis) | **FAILS AS WRITTEN** at every typing system that types `finProg`, today's unr-free kernel among them: it ranges over every platform that keeps its protocol, and `Pmis` answers `1.0` at `1 ⊕ 1` where the program's row declares `1 ↠ 1`; the fired finaliser `x; ()` stops at `inj₁ (); ()`. B2's `AdequateRetAt` asks `RowLe S P.ops`; `FinAlone` does not. Its restatement is the user's decision; `FinaliserOrder` takes `FinAloneAt` | `not_finAlone_of_types`, `not_finAlone_tier1NU` |
 | S6 (`ContUse`) at our instance | **FAILS AS WRITTEN** at today's kernel and `ΞA` (check 1): Core's clauses resume `κ` by applying it, which `ResumeAt` does not read | `not_contUse_ΞA` |
+| S6's teeth: R1–R4 (RESTRUCTURE §6.1) at our machine | PROVED: every typing system over our machine that types one of them at `F 0 bool` fails S6 (R1 at a label whose first operation resumes, R3 at a linear one, R2 and R4 at any; at a general row form, given what `orowRF` gives); `JR` types all four, and at `ΞA` each lemma applies | `not_contUse_of_der_R1` … `_R4`, `not_contUse_of_der_R1_orow` … `_R4_orow`, `teeth_JR_ΞA` |
+| today's kernel types none of R1–R4 | PROVED, by the handler's form (our handler is the run-time frame, its clauses values; `[handle]` types clause variables), not by the linearity of `κ`; the linearity refusal at `clauseTy` (RESTRUCTURE §6.1's reason) is not built | `refuses_R_tier1Open` |
 | `AlgLaw`, `TailLaw` at our instance | **FAIL AS WRITTEN** at today's kernel and `ΞA` (check 3): under E1′'s `sched` the answers are closures over different continuations, compared as terms; `EtaHold`'s witness is not built (`[handle]`'s `hnS` keeps the handled name out of the clauses' row: a reading, not checked) | `not_unaryLaws_ΞA` |
 | `LetLaw` at today's kernel | PROVED (typing) | `letLaw_ourInst_tier1Open` |
 | S1 (`RowAlgebra`) at our instance | **FAILS AS WRITTEN** at today's kernel, every effect context: `SubClosed` ranges over every row of the algebra, `[sub]` asks `Row.NU` of its target, and `()` at the pure row is not typed at a row with a resuming `unr` operation; the restatement is the user's decision. `EA.Laws`, `EA.Safe` and `RowSig` hold at every typing system; subeffecting holds at target rows whose prefix is unr-free | `not_rowAlgebra_ourInst_tier1Open`, `rowAlgebra_noSub_ourInst`, `subClosed_nu_tier1Open` |
@@ -132,7 +138,7 @@ written.  Missing besides: A's (S) properties at our instance (S0 and S4 are pro
 | `Safety` (S2), `EffSafe` (S3) at our instance | **FAIL AS WRITTEN** at today's kernel, every effect context: the instance's typing ties no row's names to the effect context, and today's `[perform]` types `perform (0, (0, ()))` at the row `[0.0 : 1 ↠ 1]`, which admits no label's operation; the program is stuck at once, no answer and no label's stop. `platformOf` and the bridges `safety_of_sound`, `effSafe_of_core` are not built; the restatement is the user's decision | `not_safety_tier1Open`, `not_effSafe_tier1Open` |
 | `DataDiv` at our instance | PROVED (every row form, effect context and typing system) | `dataDiv_ourInst` |
 | `J₁`, `RowVarKernel J₁`, `FLOpen coreB J₁`, `Pins J₁`, the let law and S1 at `J₁`, the schema halves of E1, E2, E6, E10 | NOT BUILT: TIER1-PLAN §2 stopped at its stop condition (a use of a row-`∀` entry other than by `[var]`), and its elaboration does not exist (row above) | — |
-| `monoCallback_tier1Open` (today's kernel fails E1, E2, E6, E10); R1–R4 (S6 bites); the positive (E) runs at `tier1Open` | OPEN (inversions and runs to build, RESTRUCTURE §6.1) | — |
+| `monoCallback_tier1Open` (today's kernel fails E1, E2, E6, E10); the positive (E) runs at `tier1Open` | OPEN (inversions and runs to build, RESTRUCTURE §6.1) | — |
 | `RowVarKernel J₂`, `spanRules_J₂` | OPEN (`J₂` not built) | — |
 | A₂ over Core (`Laws`, `Abstraction`), A₃'s lowering classes | stated, out of the first pass | `Targets/Instance/Binary.lean`, `Targets/Instance/ZeroCost.lean` |
 
@@ -558,10 +564,42 @@ theorem status_checks_ΞA :
   ⟨Inst.not_contUse_ΞA.2, Inst.not_noIntercept_ΞA.2, Inst.not_unwindOrder_ΞA.2,
     Inst.not_unaryLaws_ΞA.2.1, Inst.not_unaryLaws_ΞA.2.2⟩
 
-/-- PROVED, given `NoInterception` and `FinAlone` (OPEN, piece 4): Core's `FinaliserOrder`. -/
+/-- PROVED, given `NoInterception` and `FinAloneAt`: Core's `FinaliserOrder`.  `FinAlone` gives
+`FinAloneAt`, and fails as written (`status_runTyping`). -/
 theorem status_finaliserOrder_of {J : TypingJ} (hN : NoInterception J)
-    (hF : FinAlone (ℍ := ℍ) J) : FinaliserOrder (ℍ := ℍ) J :=
-  finaliserOrder_of hN hF
+    (hF : FinAloneAt (ℍ := ℍ) J) : FinaliserOrder (ℍ := ℍ) J :=
+  finaliserOrder_at hN hF
+
+/-- PROVED: what a typed program does at run time, at today's kernel.  `FinAlone` and `LiveOK`, as
+written, fail (a platform or runner answers at its own type, which nothing ties to the program's
+row).  `FinaliserOrder` at today's unr-free kernel follows from `FinRowsAt` alone; route 8.2's
+obligations give `FinRowsAt`. -/
+theorem status_runTyping :
+    ¬ FinAlone (ℍ := ℍ) tier1NU ∧
+      (AdmEff Inst.ΞA ∧ ¬ Inst.LiveOK (ℍ := ℍ) orowRF Inst.ΞA tier1Open) ∧
+      (FinRowsAt (ℍ := ℍ) tier1NU → FinaliserOrder (ℍ := ℍ) tier1NU) ∧
+      ∀ J : TypingJ, NoInterception J → RowRoute (ℍ := ℍ) J → FL (B.coreB (ℍ := ℍ)) J →
+        FinaliserOrder (ℍ := ℍ) J :=
+  ⟨Inst.not_finAlone_tier1NU, Inst.not_liveOK_ΞA, finaliserOrder_tier1NU_of_finRows,
+    fun _ hN hr hFL => finaliserOrder_of_route hN hr hFL⟩
+
+/-- PROVED: S6's teeth.  At the open-row form, a typing system that types R2 or R4 at `F 0 bool`
+fails S6, at every label; `JR` types all four witnesses and fails S6 at `ΞA`; today's kernel types
+none of them, by the handler's form. -/
+theorem status_contUse_teeth {Ξ : EffCtx} {J : OurTyping orowRF} (l : (orowAlg Ξ).Lab) :
+    ((ourInst (ℍ := ℍ) orowRF Ξ J).der []
+        ((ourInst (ℍ := ℍ) orowRF Ξ J).withCl l (ourInst (ℍ := ℍ) orowRF Ξ J).twiceCl)
+        ((ourInst (ℍ := ℍ) orowRF Ξ J).F (orowAlg Ξ).unit (ourInst (ℍ := ℍ) orowRF Ξ J).bool) →
+      ¬ (ourInst (ℍ := ℍ) orowRF Ξ J).ContUse) ∧
+    ((ourInst (ℍ := ℍ) orowRF Ξ J).der []
+        ((ourInst (ℍ := ℍ) orowRF Ξ J).withCl l (ourInst (ℍ := ℍ) orowRF Ξ J).cancelResumeCl)
+        ((ourInst (ℍ := ℍ) orowRF Ξ J).F (orowAlg Ξ).unit (ourInst (ℍ := ℍ) orowRF Ξ J).bool) →
+      ¬ (ourInst (ℍ := ℍ) orowRF Ξ J).ContUse) ∧
+    ¬ (ourInst (ℍ := ℍ) orowRF Inst.ΞA Inst.JR).ContUse ∧
+    ∀ C, ¬ (ourInst (ℍ := ℍ) orowRF Ξ tier1Open).der []
+      ((ourInst (ℍ := ℍ) orowRF Ξ tier1Open).withCl l (ourInst (ℍ := ℍ) orowRF Ξ tier1Open).dropCl) C :=
+  ⟨Inst.not_contUse_of_der_R2_orow l, Inst.not_contUse_of_der_R4_orow l,
+    Inst.teeth_JR_ΞA.2.2.2.2.2, fun C => (Inst.refuses_R_tier1Open l C).1⟩
 
 /-- PROVED: the let law at today's kernel. -/
 theorem status_letLaw_tier1Open (Ξ : EffCtx) : (ourInst (ℍ := ℍ) orowRF Ξ tier1Open).LetLaw :=

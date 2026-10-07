@@ -604,6 +604,133 @@ unknown on A's side (synthesis §10 item 3), and `FinAlone` shares it.
 - **If check 1 refuted S6 as written:** this piece still lands R1–R4 and `FinAlone`'s route, and
   S6 waits on the user's repair of its observation.
 
+**Outcome (landed on `tier1-effects`; the route's review did not accept 8.2, so the build stops
+there).** Check 1 refuted S6 as written, so this piece followed the plan's second branch: R1–R4
+and `FinAlone`'s route. S6 waits on the user's repair of its observation.
+
+- **S6's teeth, R1–R4: PROVED** (`Instance/ContUse.lean`). Every typing system over our machine
+  that types one of them at `F 0 bool` fails S6 (`not_contUse_of_der_R1` … `_R4`).
+  - Each run is written out at a symbolic label name: 3, 20, 8 and 16 head steps, none of which
+    allocates, so each is the program's only run.
+  - The counts break as follows:
+    - R1 catches `κ` once and uses it never. That breaks the exactly-once clause when the
+      label's first operation resumes.
+    - R2 and R4 use `κ` twice and catch it at most once (`caught_le_one`), at any label.
+    - R3 cancels `κ`, which no affine catch made, when the operation is linear.
+  - At a general row form the lemmas take what `orowRF` gives: the pure row reads as the empty
+    row, label names are not `0`, and signatures have at most `2³²` operations. The `_orow`
+    corollaries take none of these.
+  - **Non-vacuity**: `JR` types the four programs, and at `ΞA` each lemma applies to it
+    (`teeth_JR_ΞA`).
+- **`refuses_R_tier1Open`: PROVED, but for the handler's form, not for linearity.** Today's
+  kernel types none of R1–R4 for the same reason it types no A-level handler
+  (`not_der_handle_tier1Open`, piece 2's item 2).
+  - The refusal this section named was an inversion: `kTy` at `lin`/`aff` is a thunk, neither
+    droppable nor persistent, and a linear `κ`'s cancel branch is at `⊤`.
+  - That inversion is of the clauses at `clauseTy`, and it is **not built**. It would matter only
+    to a `J₁` whose handler rule types A-level handlers with today's clause types.
+  - The refusal needed no new inversion: it reuses `der_hnd_shape`.
+- **`refuses_R_J₁`: not built.** `J₁` is not built (§2).
+- **`FinAlone` FAILS AS WRITTEN** (`Instance/RunTyping.lean`, `not_finAlone_of_types`,
+  `not_finAlone_tier1NU`).
+  - It ranges over every platform that keeps its protocol, and nothing ties the type a platform
+    answers at to the one the program's row declares.
+  - The configuration: `finProg` performs `1.0 : 1 ↠ 1`, then raises under a finaliser `x; ()`.
+    `Pmis` answers `1.0` at `1 ⊕ 1` and keeps its protocol. The fired finaliser's run alone stops
+    at `inj₁ (); ()`.
+  - B2's `AdequateRetAt` asks `RowLe S P.ops`; `FinAlone` does not.
+  - `FinAlone`'s only consumer reads it at the platform with no operation and the pure row
+    (`finAlone_at`). Restating it is the user's decision.
+- **`LiveOK` FAILS AS WRITTEN at today's kernel and `ΞA`** (`not_liveOK_ΞA`). Piece 1 left its
+  discharge here.
+  - Today's `[perform]` types `perform (6, 0, ())` at the row `[6.0 : 1 ↠ 1]`. At `ΞA` the name
+    `6` is `kube : 1 ↠ bool`.
+  - The runner that answers `kube` at its declared type keeps its protocol. The sequenced answer
+    `inj₁ (); ()` is stuck: no answer, no step, no operation.
+  - This is the root cause of S2's and S3's failure (§3): rows are not tied to the effect context.
+    The repair that §3 lists would serve `LiveOK` too.
+  - S0 and S4 are proved given `LiveOK`. Whether they hold at today's kernel without it is not
+    checked.
+- **`FinaliserOrder` now takes the platform-free form.**
+  - `FinAloneAt` is `FinAlone` at the platform with no operation and the pure row
+    (`Base/CoreCancel.lean`). `finaliserOrder_at`, `cancelOrder_at` and `unwindOrder_at` take it.
+  - `finaliserOrder_of` and its siblings keep their statements, through `finAloneAt_of_finAlone`.
+- **`FinAloneAt` splits in two, and B gives one half** (`I/Restricted/FinAlone.lean`).
+  - **Stuck redexes, from B.** A program in Core's relation never gets stuck without a platform
+    (`stuck_of_rel`, from `platOK_of_ewp`).
+    - The fired finaliser is the innermost frame that stops the raise (`step1_raise`,
+      `innerCatch_unique`, `head_ubind_raise`). So the finaliser's run alone is the whole run's,
+      inside `K₀[□; raise p]` or `K₀[cfin p □]`.
+    - A term that is no value and leaves no operation uncaught takes no step in such a context
+      (`no_step_plug`, from `head_plug`).
+  - **Operations, which typing must give.** `FinRowsAt J`: an operation the finaliser's run alone
+    leaves uncaught is a raise of a nonzero name.
+  - `finAloneAt_of_finRows`: `FinRowsAt J` and FL at Core's world give `FinAloneAt J`.
+  - So **`FinaliserOrder tier1NU` follows from `FinRowsAt tier1NU` alone**
+    (`finaliserOrder_tier1NU_of_finRows`, with `fl_core_tier1NU` and `noInterception_tier1NU`).
+- **The route's statement** (`RowRoute J`).
+  - `Typed μ E S` is a term typed at a row through the heap. Its obligations:
+    - `reach`: configurations that typed programs reach are typed at the pure row (the plan's
+      `cfgTyped_init` and `cfgTyped_step` along the run);
+    - `fire`: a fired finaliser is typed at a row of abortive operations with nonzero names;
+    - `step`: typing is preserved by steps;
+    - `stop`: such a term leaves no resuming operation and no cancel uncaught.
+  - `finRowsAt_of_route` and `finaliserOrder_of_route` prove the obligations suffice.
+  - `contUse_of_cfgTyped` is not stated: S6 stands refuted (check 1).
+- **The review (adversarial; mine, not an independent reviewer's): route 8.2 is not accepted.**
+  - **The obligations are not circular only if `Typed` is a syntactic judgement.** With `Typed`
+    defined as "reached, and well behaved", `reach`, `fire` and `step` hold by definition and
+    `stop` is `FinRowsAt` itself. So the route is a typing of run-time terms with preservation:
+    `step` is subject reduction and `stop` is canonical forms. That judgement sits beside
+    `CDerives`, which BRIEF §10 allows only on a finding. The finding is above: B supplies every
+    part of `FinAloneAt` but `FinRowsAt`.
+  - **What `Typed` must type that `CDerivesNU` never does:**
+    - run-time handler frames whose clauses are values (`not_der_handleK`);
+    - `κ` values, whose bodies hold `hnd H K[x]` for a captured `K`;
+    - `ccatch` and `cfin` frames;
+    - locations and array values;
+    - the intermediate states of the machine's loops (`tabFill`, `dropFill`, `countNext`,
+      `countTryNext`, `boundedFixNext`).
+  - **Every constant's body.** Core types its constants as axioms: the borrow constants, the
+    array and slice operations, the folds and `unfold`. A β-step exposes the body, so `step`
+    needs a rule for each body.
+    - `withbor` and `withswap` use the location more than once (owner and borrow). With borrows
+      erased, locations must be unrestricted.
+    - The folds and `unfold` recurse through the self-application `selfV` (`Core/Fix.lean`),
+      which no simple typing types, so each needs a dedicated rule for its unrolled states.
+  - **Subject reduction needs a substitution lemma for `Typed`,** and `fire` needs its inversion
+    at every frame former. Core has neither for `CDerives` (`fundamentalC` is semantic), and
+    CLAUDE.md asks for inversions to be costed. The cost is one preservation case per head rule
+    (27) and one rule per run-time form and constant body: on the order of thousands of lines,
+    an estimate, not a measurement.
+  - **The heap typing with borrows erased has an unresolved case.** An `alloc` may reuse a freed
+    location while a dead copy of a borrow of it still occurs in the configuration. Erased types
+    cannot tell the copy is dead, and preservation at that step then needs an invariant that is
+    BoLo's ownership, a semantic fact. B3 speaks of uses, not occurrences.
+    - I have not derived such a configuration from a typed program, and I have not verified that
+      any obstruction is real. It is a risk, not a claim.
+  - **What it would buy now:** `FinaliserOrder tier1NU` (Core's I3.b). S5 at our instance fails as
+    written (check 2), and S6 too (check 1), so their payoff waits on the user either way.
+- **The other routes.**
+  - **8.4, a ghost token in `contShare`** (for S6), changes Core's relation, so it stops here.
+    The SPEC §19 entry it would need: at `lin` and `aff`, `contShare` also owns a non-persistent
+    obligation for `κ` in the world, created at `[op]` and consumed by its resume or its cancel.
+    `NoOwn` at a run's end then forces every caught `κ` to be used. It must preserve
+    `fundamentalC`, `adequacyC`/`adequacyD`, B2–B5 at `coreB`, `ewp_handle` and `i3_core`. It
+    leaves open the coupling from consuming the token to the step that resumes or cancels `κ`,
+    which S6's counts read.
+  - **For `FinRowsAt`, the relation-level analogue** is an obligation in the world for each live
+    finaliser frame, consumed at `[finalise]`. It too is a kernel change and needs a SPEC entry.
+  - **8.3, the one-shot cell,** is the user's (AGREE Q9).
+- **Not built:**
+  - `CfgTyped` and its theorems (the review above);
+  - `finAlone_J₁`, `cancellation_ourInst_J₁` and `contUse_ourInst_J₁`: `J₁` is not built,
+    `FinAlone` fails as written at every typing system that types `finProg`, and S5 and S6 fail
+    as written;
+  - the linearity refusal of R1–R4's clauses (above).
+- **Typing work** (CLAUDE.md asks for the cost). Two `CDerivesNU` derivations (`d_finProgNU`,
+  `d_lvProgNU`) and no inversion. The R1–R4 refusal reuses piece 2's `der_hnd_shape`.
+
 ## 5. The answering class: h2, h4, the unary laws
 
 **Goal.**

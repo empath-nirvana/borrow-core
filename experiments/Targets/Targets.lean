@@ -35,6 +35,7 @@ import Targets.Instance.J1Checks
 import Targets.Instance.Bridges
 import Targets.Instance.CheckPrograms
 import Targets.Instance.Checks
+import Targets.Instance.ContUse
 import Targets.Instance.LiveWitness
 import Targets.Instance.Core
 import Targets.Instance.Machine
@@ -42,6 +43,7 @@ import Targets.Instance.Restricted.NoInterception
 import Targets.Instance.Restricted.Programs
 import Targets.Instance.Restricted.Unwind
 import Targets.Instance.Rows
+import Targets.Instance.RunTyping
 import Targets.Instance.Safety
 import Targets.Instance.Types
 import Targets.Instance.Typing
@@ -58,6 +60,7 @@ import Targets.I.Restricted.Answering
 import Targets.I.Restricted.CompositeT1
 import Targets.I.Restricted.Core
 import Targets.I.Restricted.Device
+import Targets.I.Restricted.FinAlone
 import Targets.I.Restricted.InstanceProps
 import Targets.I.Routes
 import Targets.I.RunEnd
