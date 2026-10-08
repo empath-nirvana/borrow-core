@@ -46,10 +46,10 @@ This is a plain-language summary of where the D1 tractability probe stands. The 
 >   [unchecked], and no such configuration is shown to arise. I have not verified that any
 >   obstruction is real. No change to the draft definitions should follow until that step is
 >   proved in Lean, ideally at an `ArisesI` configuration.
-> - Minor: R1 was closed by changing the draft relation at `μ`. `vRLM` reads `μ` itself and is
->   strictly smaller than Core's relation there (`muAdjNotVRLM`). The unroll row at `vRLM`
->   therefore owes `vRLM`'s substitution lemma (`VRLMUnroll`, `vCE_subst`'s analog), which was not
->   attempted. It is now on the tier-2 list.
+> - Minor: R1 was closed by changing the draft relation at `μ`. At `5210cf1`, `vRLM` read `μ` itself
+>   and was strictly smaller than Core's relation there (`muAdjNotVRLM`, proved at `5210cf1`,
+>   withdrawn after (E1); see `muAdjVRLME1`). The unroll row at `vRLM` therefore owed `vRLM`'s
+>   substitution lemma (`VRLMUnroll`, `vCE_subst`'s analog). It is now proved.
 > - Minor: `retainedPayInstRow` also assumes that no stack entry is named by the instantiated
 >   variable (`x ∉ σ.map LEnt.x`), besides "no join".
 > - Minor (from the review that passed): `OuterBelowTop` across the arising set comes from [TR]
@@ -69,9 +69,54 @@ This is a plain-language summary of where the D1 tractability probe stands. The 
 > The hygiene review passed: no `sorry` or forbidden keyword, and every axiom set is within
 > `[propext, Classical.choice, Quot.sound]`.
 
-> [!NOTE]
-> **The guard-gap unit (`NEXT.md`) has not been through the verifiers.** Four major findings of
-> its design reviews were answered in the text and not reviewed again (`NEXT.md`, *Unresolved*).
+> [!WARNING]
+> **The guard-gap unit (`NEXT.md`) has been through the verifiers. One passed, with two minor
+> findings. The content review did not pass: three major findings and two minor ones.** This file
+> is corrected below. README, DESIGN §15.10 and `NEXT.md` §9–§10 still carry the wording each
+> finding names, and are not yet corrected. Until they are, read this file over them.
+> - **Major: the `!` clause is not "fixed"; what is proved is narrower.** `persistentPushN` and
+>   `monoOwnGMAtBoxN` carry a persistent thunk across instantiations and across an own push under a
+>   *reserved* name (`NsVar`, x ≥ 2^32) only. Two pushes are outside that:
+>   - the push `gdBangJ` fails at (`gdY :: gdσ`, `gdY.x = 2`, not a reserved name);
+>   - the `∀` clause's own push, which is named by the type's binder (`OwnPushI`, `e.x = x`). That
+>     is exactly correction (i)'s case: a lifetime-polymorphic `!U` combinator carried into a lend's
+>     callback.
+>
+>   Both wait on `VRLMStackRename` (stated, not derived) and a reduction that is not built. No
+>   `binder0` clause makes a reserved-name push, so the proved carrying may have no consumer yet.
+>   The user's own example (E1 at a top-level polymorphic combinator, beside `inScope_top_none`) was
+>   **not built**. So the claim that the only borrow-only program (E1) affects is `withload` of a pair
+>   is unchecked. `gdBangJ` is at `gd`, not shown to arise, and its closure is not a Core value, so
+>   it is not evidence of a defect on a borrow-only program.
+> - **Major: the "top-level" `withload` gap is not at an arising configuration.**
+>   `withloadUPairGapNilE1`'s world arises, but its view `p` is not shown to arise (`ArisesVI`): its
+>   own docstring says no transition of the set makes an `Imm` value arise at the empty stack other
+>   than a run's answer. It is not evidence of a borrow-only defect, and not a trigger to revisit
+>   (E1), until an `ArisesVI` witness exists. `pairNilOldGuardHolds` says only that the table at
+>   `[]` holds of every resource; it does not show the row goes through before (E1).
+> - **Major: the box's moves are new, not moves `binder0` already makes.** NEXT §10.2 and DESIGN
+>   §15.10 (d) say `binder0`'s `U` and `∀` clauses already make them. For the `∀` clause that is
+>   wrong: its push is at the type it reads, named by its binder, and the box's pushes are under
+>   reserved names at any thunk type. The box is a new reach of the `!` clause beyond `FutQ` and
+>   beyond the type it reads. OQ-8's (d) is to be reported against both of DESIGN §12.2's readings,
+>   keeping the conditional: if statement 0 holds only with the box, (d)'s reading applies.
+> - Minor: "the `withload` gap is real" holds **for [TR] 6.175's route** (the payload reborrowed at
+>   the reading's own lifetime). No `withloadU` row is refuted; other arguments might meet the table
+>   at non-identity instantiations (`PairArgCellsLe`, not built). "The cause is the stack entry" is
+>   [read], not a theorem. The non-vacuity push `pEn` lends place 3 at type `1`, unrelated to the
+>   payload.
+> - Minor: what `reconB′` owes beyond the proved `∀I` row is [unchecked]. Its lend is `lendCell`,
+>   whose term is `withborUE dFlag`, which only the unwinding rules type, and NEXT says those forms do
+>   not admit `wait`. Which typing rule and which callback row apply (`CallbackExtImmM` at the `.arr`
+>   shape, or the thunked `CallbackExtImmMF`, stated and not proved, a borrow-level obligation and
+>   not tier 2) is open. `reconCb_allI` is `allIRowMUFree0 []` under a program-specific name.
+> - Minor (review that passed): two passages cited `muAdjNotVRLM` in the present tense; they now
+>   say it was proved at `5210cf1` and withdrawn after (E1). The hygiene script does not scan
+>   `experiments/`; the verifier grepped ProbeD1 directly and it is clean (only the words "partial"
+>   and "admit" in doc comments).
+>
+> The hygiene review passed: no `sorry` or forbidden keyword, and every axiom set is within
+> `[propext, Classical.choice, Quot.sound]`.
 
 ## The question
 
@@ -323,8 +368,9 @@ itself instead of handing them to Core.
 **R1 is closed.** Core's relation reads a thunk inside a `μ` value with its own `U` and `ℕ`-`∀`,
 which notice adjacency. Once W reads `μ` itself, the thunk is read by W's `U` clause. The thaw then
 holds at every type, by induction on the data with no step index (`relendMValueE`), and with it the
-four `U` introductions at every context (`statement0UFullM`). The adjacency closure that Core's `μ`
-admits is not in `vRLM` (`muAdjNotVRLM`).
+four `U` introductions at every context (`statement0UFullM`). At `5210cf1` the adjacency closure that
+Core's `μ` admits was not in `vRLM` (`muAdjNotVRLM`, proved at `5210cf1`, withdrawn after (E1); after
+(E1) it is a `vRLM` value, `muAdjVRLME1`).
 
 **Monotonicity: the lemma as stated fails, the row it was for mostly holds.**
 - The configuration `gd` is a closure `λg. return g` that is a value at the stack only because the
@@ -401,20 +447,32 @@ The design is `NEXT.md`. Its §9 has the outcome in full, and §10 the user's co
 - Real restrictions are expected only where a callback suspends while an inner lend is open, which
   is tier 2.
 
-**The `withload` gap is real, and it is a defect of the draft.**
+**What this says about ordinary borrow programs.** Nothing here shows an ordinary closure,
+higher-order function or borrow without suspension failing. Core proves those programs, and the
+draft must reproduce that. Two things the draft does not yet reproduce are found, and both are the
+draft's own definitions, not the borrow calculus:
+- the stack entry lends one place, so a borrow handing its callback two reborrowed cells at once
+  (`withload` of a pair, slices) is rejected by the draft's guard on [TR] 6.175's route;
+- the draft's `!` clause did not carry a persistent value across a lend; the box now does at
+  reserved-name pushes, and the push a lifetime-polymorphic combinator meets is still open.
+
+**The `withload` gap, for [TR] 6.175's route.**
 - A configuration that arises was built: allocations, a 6.64 lend, and the typed world's own
   reborrow step ([TR] 6.150). At it, `withload` of a pair of references, at its unwinding type,
-  hands its callback a reborrowed pair that the guard rejects at every reading
-  (`withloadUPairGapReal`).
-- The cause is the stack entry. A lend's entry covers one place, and the reborrow makes two cells at
-  two places.
+  hands its callback the pair reborrowed at the reading's own lifetime, and the guard rejects it at
+  every reading (`withloadUPairGapReal`). No `withloadU` row is refuted: another argument might meet
+  the table at a non-identity instantiation (`PairArgCellsLe`, not built).
+- The cause [read]: a lend's entry covers one place, and the reborrow makes two cells at two places.
 - At `withload`'s own thunked type, the same configuration does not show the gap: the answer's
   instantiation moves the lend below the cells (`not_withloadPairGapInst`).
-- After (E1), the gap also shows at the top level (`withloadUPairGapNilE1`).
+- After (E1), the gap also shows at the empty stack (`withloadUPairGapNilE1`), but only at a view
+  not shown to arise. It is not evidence of a defect and not a reason to revisit (E1) until the view
+  is shown to arise. Before (E1), the table at `[]` held of every resource (`pairNilOldGuardHolds`).
 - The fix is designed: a block entry lending several places at one lifetime (`NEXT.md` §1.6). It is
-  not built.
+  not built. The slices' gate (`SliceUGapReal`) is not built either.
 
-**The unroll row is proved** (`vRLMUnroll`, `rollRowM`, `unrollRowM`).
+**The unroll row is proved** (`vRLMUnroll`, `rollRowM`, `unrollRowM`), with `VRLMSubst` built by
+`Core/RelMu.lean`'s route (`vCE_subst`'s technique) at W's clauses.
 
 **The `∀I` row.**
 - It now holds at every context whose live variables reach no `U`, at every index, including an
@@ -422,49 +480,54 @@ The design is `NEXT.md`. Its §9 has the outcome in full, and §10 the user's co
   open cases at those contexts.
 - At a context holding a `U` value it is not derived. The planned route to the row's reading
   transports breaks at the effect clause's re-lend (`not_readEquivRelend`, a fact about our own
-  statement). The push at a `U` slot was not attempted.
+  `ReadEquiv`, at a configuration not shown to arise). The push at a `U` slot was not attempted.
 
-**`MonoHide`.**
+**`MonoHide` and the consumers check.**
 - Hiding is the identity where the hidden names cross no lend (`hideInvisible`).
 - Statement 4's transport (`AllRMonoM0`) has its record-order half, its thaw half at the empty
   resource, and its hide half where the hidden names cross no lend. Its own-push half and the rest
   are open.
-- The inventory of statement 0's consumers was not written. So nothing is claimed about what
-  statement 0 at `binder0` reduces to.
+- The inventory of statement 0's consumers was not written. Whether `AllIRowM` and `MonoExtM` are
+  all of `MonoOwnGM`'s, `MonoVM`'s and `MonoGM`'s consumers, including the handler row's context
+  transport, is unchecked. So no document may say statement 0 at `binder0` reduces to the `∀I` row.
 
 **The floor for persistent values.**
-- Before this unit, nothing in the draft's `!` clause carried a persistent value across a lend,
-  with or without (E1). At the relation before (E1), a persistent closure is related at a stack and
-  not after a lend's push (`gdBangJ`, at a configuration not shown to arise).
-- So (E1) was kept, and the `!` clause was fixed: the persistence box.
-  - A persistent thunk is now related at every world `binder0`'s order reaches: every
-    instantiation, and every sequence of resource-free lends under reserved names.
-  - It is carried across those lends by construction (`persistentPushN`), and the `!U` rows are
-    re-proved (`statement0UFullM`).
-- Still open:
-  - the `∀I` row's own lend at a persistent context, which is named by the binder rather than a
-    reserved name (`VRLMStackRename`, stated, not derived);
-  - the reading transports there;
-  - a persistent slot reaching `U` below its top;
-  - linear closures across a lend;
-  - the floor's own statement at the empty stack.
+- Before this unit, nothing in the draft's `!` clause carried a persistent value across a lend. At
+  the relation before (E1), a persistent closure is related at a stack and not after a lend's push
+  (`gdBangJ`), but at `gd`, not shown to arise, with a closure that is not a Core value.
+- (E1) was kept, and the `!` clause gained the persistence box. What is proved: a persistent thunk
+  is related at every instantiation and every sequence of resource-free lends under **reserved**
+  names, and is carried across those by construction (`persistentPushN`, `monoOwnGMAtBoxN`); the
+  `!U` rows are re-proved (`statement0UFullM`).
+- What is not proved, and is correction (i)'s own case: the push the `∀` clause makes, named by the
+  type's binder, which a lifetime-polymorphic `!U` combinator meets inside a lend's callback. It
+  waits on `VRLMStackRename` (stated, not derived) and a reduction not built. The user's example
+  was not built. No `binder0` clause makes a reserved-name push, so the proved carrying may have no
+  consumer yet.
+- Also open: the reading transports at a `!U` slot; a persistent slot reaching `U` below its top;
+  linear closures across a lend; the floor's own statement at the empty stack.
 
 **`reconB′` is written as the language writes it** (`reconB'`).
 - `retry` is a handler around the lend, and the callback performs `wait`. It runs to `(tt, ff)`.
-- Its callback captures nothing, so its `∀I` row is read at the empty context, where it holds
-  (`reconCb_allI`).
-- What it still owes is the suspension inside the lend (tier 2). Its typing is not built.
+- Its callback captures nothing, so the `∀I` row at the empty context covers it (`reconCb_allI`,
+  which is `allIRowMUFree0 []`).
+- Its typing is not built. The lend's term is `withborUE dFlag`, typed only by the unwinding rules,
+  which do not admit `wait`. Which rule and which callback row apply (`CallbackExtImmM` or the
+  thunked `CallbackExtImmMF`, a borrow-level obligation) is open. That what it owes is only the
+  suspension inside the lend (tier 2) is [unchecked].
 
 **Not reached:** the block (item 1b), the slice gate, and the thunked callback rows
-(`CallbackExt*MF`). Four review findings stay open (`NEXT.md`, *Unresolved*).
+(`CallbackExt*MF`).
 
 **What it decides.**
-- The two defects found on borrow-only programs are the draft's: the two-cell entry, and the `!`
-  clause, which is now fixed.
+- No ordinary borrow program is shown to fail. The one defect found at an arising configuration is
+  the draft's single-place stack entry, on [TR] 6.175's route; its fix is designed, not built.
+- The `!` clause is carried at reserved-name pushes only; correction (i)'s case is open.
 - OQ-8 is still undecided. No machine-checked failure of type (a), (b) or (d) occurred, and the
   fallback is not triggered.
-- The box makes the `!` clause reach other stacks. If statement 0 comes to hold only with the box,
-  DESIGN §12.2's reading of (d) applies to it (DESIGN §15.10).
+- The box is a new reach of the `!` clause beyond `FutQ` and beyond the type it reads. If statement
+  0 comes to hold only with the box, DESIGN §12.2's reading of (d) applies; (d) is to be reported
+  against both of §12.2's readings.
 
 ## What remains for tier 2
 
@@ -472,16 +535,20 @@ Tier 2 needs `Statement0 p` at some placement, then statements 1–4 and both pr
 programs are a floor. A gap on one is a defect of the draft, and it is fixed before tier 2 is
 judged. At `binder0`, the placement with the most proved, the remaining work is:
 - **The two-cell defect: the block (item 1b).**
-  - `withload` of a pair of references fails the guard at a configuration that arises
-    (`withloadUPairGapReal`). It also fails at the top level after (E1) (`withloadUPairGapNilE1`).
+  - `withload` of a pair of references fails the guard at a configuration that arises, on [TR]
+    6.175's route (`withloadUPairGapReal`). At the empty stack after (E1) it fails only at a view
+    not shown to arise (`withloadUPairGapNilE1`).
   - The slices at two or more elements fail the same way (`SliceGuardFails`). Their gate
     (`SliceUGapReal`) is not built.
   - The designed fix is a block entry: one lend of several places at one lifetime (`NEXT.md`
     §1.6). It changes `StackOK`, so every row at `binder0` is re-proved at the revised relation.
-  - If the block's gate fails, (E1) is revisited at the top level, as a defect of the draft.
+  - If the block's gate fails, (E1) is revisited at the top level, as a defect of the draft, once
+    the empty-stack view is shown to arise.
 - **The floor for persistent values, the rest of it.**
-  - The `∀I` row's own lend at a persistent context: `VRLMStackRename` (stated, not derived), and
-    the reading transports at a `!U` slot.
+  - The `∀I` row's own lend at a persistent context, which is correction (i)'s case (a
+    lifetime-polymorphic `!U` combinator inside a callback): `VRLMStackRename` (stated, not
+    derived), the reduction to it, and the reading transports at a `!U` slot. Build the user's
+    example.
   - A persistent slot reaching `U` below its top: `PBox` at every `!B` that reaches a `U`.
   - The floor's own statement, that the draft relates at the empty stack every program Core's
     `fundamentalC` covers: not stated. OQ-58's statements are the nearest, and were not attempted.
@@ -501,8 +568,8 @@ judged. At `binder0`, the placement with the most proved, the remaining work is:
     its hide half's general case.
 - **The consumers inventory** (`NEXT.md` §4.2). It is needed before anything is claimed about what
   statement 0 at `binder0` reduces to.
-- **`reconB′`'s typing** at the probe's rule set, and its suspension inside the lend (statements
-  1–3).
+- **`reconB′`'s typing** at the probe's rule set (which rule types `withborUE` under `wait`, and so
+  which callback row it needs), and its suspension inside the lend (statements 1–3).
 - **The obligations' leftovers.**
   - `RetainedPay`:
     - `EntryPayLeaves` at a bound `Mut` view (or the variant leaf, which changes W's views, the
@@ -515,8 +582,8 @@ judged. At `binder0`, the placement with the most proved, the remaining work is:
 - **OQ-8, where the future-world quantifier goes.**
   - Still undecided. `cbpv` and `binder` have not been redone at `vRLM`, and still owe their `U`
     rows with futures (`BINDER.md` §5.6), and the names the changed `FutStep` admits.
-  - If statement 0 comes to hold at `binder0` only with the persistence box, DESIGN §12.2's reading
-    of (d) applies to it.
+  - The box is a new reach of the `!` clause. If statement 0 comes to hold at `binder0` only with
+    it, DESIGN §12.2's reading of (d) applies; (d) is reported against both readings.
 
 ## What to do next (options, not a decision)
 
@@ -525,6 +592,8 @@ judged. At `binder0`, the placement with the most proved, the remaining work is:
      §8, with this unit's results.
    - The four major findings in `NEXT.md` *Unresolved* were answered in the text and not reviewed
      again.
+   - The guard-gap unit's content review (the warning at the top): three major and two minor
+     findings, corrected here and not yet in README, DESIGN §15.10 or `NEXT.md` §9–§10.
    - The statement-0 unit's minor wording findings are still open (the note at the top).
 
    This is needed under every option.

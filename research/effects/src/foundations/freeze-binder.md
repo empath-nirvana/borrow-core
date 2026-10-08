@@ -32,12 +32,23 @@ These results are at ProbeD1's draft W, at the `binder0` placement. Nothing in `
 
 ## R1 and `binder0`'s monotonicity (ProbeD1, `R1MONO.md` §8)
 
-The draft relation is now `vRLM`, which reads `μ`, `fam` and type variables itself. Nothing in `Core/` and no printed definition changed. The hygiene review passed; the content review raised two major findings (ProbeD1 `CHECKPOINT.md`, warning box), reflected here.
+The draft relation is now `vRLM`, which reads `μ`, `fam` and type variables itself. Nothing in `Core/` and no printed definition changed. The hygiene review passed; the content review raised two major findings, since corrected and reflected here.
 
-- **R1 is closed at `binder0`.** A thunk inside a `μ` value is now read by W's `U` clause, so the thaw never meets Core's ℕ-`∀` there. The thaw holds at every type by induction on the data (`relendMValueE`), and the four `U` introductions at every context (`statement0UFullM`). The cost: `vRLM` is strictly smaller than Core's relation at `μ` (`muAdjNotVRLM`), and the unroll row owes `vRLM`'s substitution lemma (`VRLMUnroll`), not attempted.
+- **R1 is closed at `binder0`.** A thunk inside a `μ` value is now read by W's `U` clause, so the thaw never meets Core's ℕ-`∀` there. The thaw holds at every type by induction on the data (`relendMValueE`), and the four `U` introductions at every context (`statement0UFullM`). At `5210cf1`, `vRLM` was strictly smaller than Core's relation at `μ` (`muAdjNotVRLM`, withdrawn after (E1); see `muAdjVRLME1`), and the unroll row owed `vRLM`'s substitution lemma (`VRLMUnroll`), since proved.
 - **`OuterBelowTop`** holds at every lend and across the arising set (`outerBelowTopArises`), from [TR] 6.64/6.65 H4's consequence, now recorded in the draft `LendMutI`/`LendImmI`.
 - **`RetainedPay`** is proved at the view, the transports and `∀E` at an instance with no join whose variable no stack entry names. At a bound `Mut` read-out it stops at `EntryPayLeaves`. The `mut_not_natural` risk is still where it was: whether a retained internal-payload cell arises is not checked.
 - **`KeepsT`** at the share is proved from `LineageUnique`, which is not derived.
 - **Monotonicity.** Unrestricted `MonoOwnG`, `MonoG`, `MonoV` at `vRLM .binder0` are refuted at `gd`, not shown to arise. The `∀I` row is proved at contexts reaching no `U` (`allIRowMNKUFree0`). The handler's `MonoHide` at `vRLM` is not stated.
 
-**Still open for the lifetime half:** the `∀I` row at a `U` slot and at binder-named indices; `MonoHide` at `vRLM`; whether monotonicity has consumers beyond the `∀I` row and `MonoExtM` [unchecked]; `VRLMUnroll`; `EntryPayLeaves`; `LineageUnique`; whether `withload` at two side-by-side references meets `loadGuardFails2` [unchecked]; `ViewSlotInst` without `OuterBelowTop`; the arising check of a retained internal-payload cell (`InternalPayloadArises`); the instance and location halves, which no unit has touched.
+## The guard gap, the unroll row, the `∀I` row and the floor (ProbeD1, `NEXT.md` §9–§10)
+
+Changes only to ProbeD1's draft relation. Hygiene passed; the content review raised three major findings, recorded in ProbeD1 `CHECKPOINT.md`'s warning box and reflected here.
+
+- **Borrow-only programs are a floor** (user, 2026-10-08). Core proves them; a gap on one is a defect of the draft. None is shown to fail.
+- **Two-cell guard gap.** `withload` of a pair fails the draft guard at an arising configuration, on [TR] 6.175's route (`withloadUPairGapReal`). Cause [read]: the single-place stack entry. The fix, a block entry, is designed and not built. No row is refuted. The empty-stack variant after (E1) is at a view not shown to arise.
+- **`VRLMUnroll`** is proved, with the roll and unroll rows.
+- **The `∀I` row** holds at every index at contexts reaching no `U` (`allIRowMUFree0`). At a live `U` slot it is not derived.
+- **`MonoHide`** holds where the hidden names cross no lend. The consumers inventory was not written.
+- **Persistent values and the binder.** A persistence box carries `!` thunks across instantiations and reserved-name pushes. The push named by a `∀`'s binder, which a lifetime-polymorphic combinator meets in a callback, needs a stack renaming (`VRLMStackRename`, stated, not derived).
+
+**Still open for the lifetime half:** the `∀I` row at a `U` slot; `VRLMStackRename`; `MonoHide` beyond invisible hiding; whether monotonicity has consumers beyond the `∀I` row and `MonoExtM` [unchecked]; the block entry for the two-cell gap; `EntryPayLeaves`; `LineageUnique`; `ViewSlotInst` without `OuterBelowTop`; the arising check of a retained internal-payload cell (`InternalPayloadArises`); the instance and location halves, which no unit has touched.
