@@ -40,3 +40,6 @@ import ProbeD1.R1Mono
 import ProbeD1.R1Owed
 import ProbeD1.R1Stmt0
 import ProbeD1.R1AllI
+import ProbeD1.Nx
+import ProbeD1.NxGuard
+import ProbeD1.NxGuardPair
