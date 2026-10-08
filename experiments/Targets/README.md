@@ -34,7 +34,7 @@ Instance; the Instance imports no B or I; I imports everything.
 | **A** | `Targets/A/EffAlg.lean` | the effect algebra (Yoshioka–Sekiyama–Igarashi Def. 3.5) and its safety (Def. 5.1) |
 | | `Targets/A/System.lean` | `EffectSystem` (CBPV formers over an effect algebra; contexts with five named frames, the driver `driveF` among them; a labelled machine; typing); runners and runs; `SafeRuns`, `Terminates`, `RunsTo`, `RunsForever`; the schemas `PolyUse`, `PolyUseLacks`, `PolyUseOpen`, `CallsThrough` |
 | | `Targets/A/Machine.lean` | S0: `ConfLaws`, `KontLaws`, `AppLaw`, `Congr`, `NoIO`, `OpStuck`, `DataInj`, `LoopLaws`, `DriveLaws`, `MachShape`; the let law `LetLaw` |
-| | `Targets/A/Soundness.lean` | S1 `RowAlgebra`, S2 `DataDiv` and `Safety`, S3 `EffSafe`, S4 `HandlerSem`, S5 `Cancellation` (the cancel and unwind traces), S6 `ContUse`; `SProps` |
+| | `Targets/A/Soundness.lean` | S1 `RowAlgebra`, S2 `DataDiv` and `Safety`, S3 `EffSafe`, S4 `HandlerSem`, S5 `Cancellation` (the cancel and unwind traces), S6 `ContUseEv` (per capture event; `ContUse`, read at `capture`, kept); `SProps` |
 | | `Targets/A/Programs.lean` | the signatures, runners and programs of E1–E10, and S6's witnesses R1–R4 |
 | | `Targets/A/Expressiveness.lean` | E1 `NoColouring` … E10 `Reconciler`; `EProps`; `Props := SProps ∧ EProps` |
 | | `Targets/A/NonVacuity.lean` | the abstract non-vacuity lemmas |
@@ -58,7 +58,8 @@ Instance; the Instance imports no B or I; I imports everything.
 | | `Targets/Instance/Restricted/*`, `Binary.lean`, `ZeroCost.lean` | Core's no-interception and two-frame unwind; `storeCancel` unr-free; A₂ over Core, stated; A₃'s lowering classes |
 | | `Targets/Instance/J1.lean` | `J₁`, tier 1's typing: Core's kernel over the open types, a polymorphic slot closed by substitution (`Closing`, `fillS`); its reading is `tier1`; the let law and S1 at our instance |
 | | `Targets/Instance/Inversion.lean`, `J1Checks.lean` | what today's kernel does not type (A-level handlers, a let read at two instances, a persistent function called at an effectful row, `()` at a resuming `unr` row); the checks on TIER1-PLAN §2's route; the let law and S1's parts at our instance |
-| | `Targets/Instance/Runs.lean`, `Theories.lean`, `UnaryLaws.lean` | quiet runs (`Quiet`) and complete runs along a chain; the fold of a straight-line computation under the answering handler and the comodel reduction (`quiet_fold`, `ansCorrect_of_comodel`), global state correct and its bad `put` no model; `AlgLaw` at `J₁` (`not_algLaw_J₁`) and the tail law and algebraicity at the answering class |
+| | `Targets/Instance/Runs.lean`, `CellRuns.lean`, `Theories.lean`, `UnaryLaws.lean` | quiet runs (`Quiet`) and complete runs along a chain; runs around a capture cell (`CellQuiet`, `Calm`, `runsAlike_of_calm`); the fold of a straight-line computation under the answering handler and the comodel reduction (`calm_fold`, `ansCorrect_of_comodel`), global state correct and its bad `put` no model; `AlgLaw` at `J₁` (`not_algLaw_J₁`) and the tail law and algebraicity at the answering class |
+| | `Targets/Instance/ContUse.lean` | S6's tooth at the capture cell: R1's run, and a typing system that types R1 fails `ContUseEv` (`not_contUseEv_of_der_R1`, `teeth_JR_ΞA`) |
 | **I** | `Targets/I/World.lean` | `SemWorld extends B.BWorld` (`held`, `Stop`, `share`), `coreW`, the effectful wp |
 | | `Targets/I/Interface.lean`, `Device.lean`, `Pins.lean`, `Routes.lean` | I1–I5 at the world; `Bounds`, `Interface`, the proof device `Device`, `EmbedsNil`; R-CLOSEDOP; `effSafeOfFL`, `contractsW_of_meets` |
 | | `Targets/I/Programs.lean` | the composite programs: `at02`, `at04`, `at12`, `at17`, `genSelf`, and the rejected AT05–AT08, AT13; `AcceptedAt`, `Tier2Programs`, `Rejects`, `RejectsAT07` |
@@ -66,7 +67,7 @@ Instance; the Instance imports no B or I; I imports everything.
 | | `Targets/I/RunEnd.lean`, `Binder.lean`, `NonVacuity.lean`, `Restricted/*` | FIX-RUN-END's checks and witness worlds; the freeze binder at W; witnesses for the pins; the restricted results at `coreW` and `tier1` |
 | | `Targets/I/OpenRel.lean`, `Tier1Route.lean` | Law 1 at the relation (`ovalW`, `FLOpen`, `fl_of_flOpen`); the elaboration route does not reach tier 1; `Tier1Core` from S5 |
 | | `Targets/I/Restricted/InstanceSafety.lean` | S2, S3 and `LiveOK` at every typing system whose closed programs are Core's (today's kernel, `J₁`): a run under a runner is the run under its platform, and B2's runs give A's |
-| | `Targets/I/J1.lean`, `GhostCoupling.lean` | B1, B's guarantees, the pins, FL at the open judgements and A's (S) properties at `J₁`; `Tier1 J₁` from what is open (`tier1_J₁_of`); route 8.4's probe for S6, stopped (`not_ghostCoupling`) |
+| | `Targets/I/J1.lean`, `GhostCoupling.lean` | B1, B's guarantees, the pins, FL at the open judgements and A's (S) properties at `J₁`; `Tier1 J₁` from what is open (`tier1_J₁_of`); route 8.4's obligation at the capture cell: R1 at a linear or affine operation is not in Core's relation (`not_semC_R1`) |
 | | `Targets/I/Theories.lean` | the answering class at `J₁`: global state's handler correct, the tail law and algebraicity there |
 | meta | `Targets/Audit.lean`, `Status.lean`, `AxiomCheck.lean` | the step-index audit with nine negative tests and the pin of Core's relation; the record; the axiom check |
 
@@ -150,7 +151,7 @@ From `Targets/Status.lean`. *PROVED AT σ=[]* is Core's relation (`coreB`, `core
 | `ConfLaws`, `KontLaws`, `NoIO`, `DataInj`, `LiftExt` at our instance | PROVED | `confLaws_ourInst`, `kontLaws_orow`, `noIO_ourInst`, `dataInj_ourInst`, `liftExt_orow` |
 | our rows meet Def. 3.5 and Def. 5.1 | PROVED AT A RESTRICTION (`orowRF`) | `rowAlgSafe_orowRF`, `rowLink_orowRF` |
 | no typed term intercepts a cancel; the two-frame unwind | PROVED AT σ=[]; an instance | `noInterception_tier1`; `two_frame` |
-| the semantic bridges (`AppLaw`, `Congr`, `OpStuck`, `LoopLaws`, `DriveLaws`, `LetLaw`, `RowAlgebra`, `Safety`, `EffSafe`, `HandlerSem`, `Cancellation`, `ContUse`) | OPEN | — |
+| the semantic bridges (`AppLaw`, `Congr`, `OpStuck`, `LoopLaws`, `DriveLaws`, `LetLaw`, `RowAlgebra`, `Safety`, `EffSafe`, `HandlerSem`, `Cancellation`, `ContUseEv`) | OPEN | — |
 | `monoCallback_tier1Open`, R1–R4 at our machine, the positive (E) runs | OPEN | — |
 
 ### The step-index audit
@@ -167,10 +168,10 @@ negative tests (step-indexed toy worlds) are each rejected at their own entry. W
 |---|---|
 | A1 type soundness with suspended frames | B1, B3, B4 in the composite; I's `Arises`; the device's I1 |
 | A2 effect safety and algebra conditions | A's S1 `RowAlgebra` and S3 `EffSafe` |
-| A3 multiplicity soundness | A's S6 `ContUse` (linear and affine continuations); multi-shot dropped (decision 63) |
+| A3 multiplicity soundness | A's S6 `ContUseEv` (linear and affine continuations); multi-shot dropped (decision 63) |
 | A4 lifetime and escape soundness | B7 `LifetimeSound`; S3 |
 | A5 exclusivity across the handler | B6 `ExclusiveB`, I's `Exclusive`, I4 |
-| A6 discard semantics | resource half: B4 with B5; continuation half: S6 `ContUse`; S5 `Cancellation` |
+| A6 discard semantics | resource half: B4 with B5; continuation half: S6 `ContUseEv`; S5 `Cancellation` |
 | A7 conservativity | the device (`ConservativeWB`, `EmbedsNil`); `Conservative` beside done; `WBCore` a companion lemma |
 | T0 effect algebra | S1 |
 | T1 capture lemma | the device's I1; E9 and E1′ in done |

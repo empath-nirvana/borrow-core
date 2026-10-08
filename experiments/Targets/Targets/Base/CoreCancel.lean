@@ -42,6 +42,7 @@ variable {ℍ : BoCa.Host} [BoCa.HostIs ℍ]
 namespace Targets
 open BoCa BoCa.Fig16 BoCa.Fig16.BoLo BoCa.Fig16.LogRel BoCa.Fig16.LogRel.Core
 open BoCa.BoLo (Heap Steps Step1 Head Kont performE raiseE opPayload cancelVal hndE hndVal kappa
+  kappaAt kappaCell kappaCBody freeE stuckE
   ccatchE cfinE ubindE)
 open BoCa.Lifetime (LSub LifeCtx LifeVar)
 
@@ -485,9 +486,9 @@ theorem notNameLike_perform (p : Val) : NotNameLike (performE (.val p)) :=
   ⟨fun _ _ h => by simp [performE] at h, fun _ h => by simp [performE] at h⟩
 
 /-- `hnd H e` is `NZ` exactly when `H` is a handler of a nonzero literal name and `e` is `NZ`. -/
-theorem hndNZ_hndE (n : UInt32) (hr hs : Val) (e : Expr) :
-    (hndE (hndVal n hr hs) e).HndNamesNZ ↔
-      n ≠ 0 ∧ hr.1.HndNamesNZ ∧ hs.1.HndNamesNZ ∧ e.HndNamesNZ := by
+theorem hndNZ_hndE (n : UInt32) (qs hr hs : Val) (e : Expr) :
+    (hndE (hndVal n qs hr hs) e).HndNamesNZ ↔
+      n ≠ 0 ∧ qs.1.HndNamesNZ ∧ hr.1.HndNamesNZ ∧ hs.1.HndNamesNZ ∧ e.HndNamesNZ := by
   simp only [hndE, hndVal, Expr.val, Val.prim, Val.pair, Val.i32]
   rw [hndNZ_app, hndNZ_app]
   simp only [Expr.HndNamesNZ]
@@ -496,27 +497,65 @@ theorem hndNZ_hndE (n : UInt32) (hr hs : Val) (e : Expr) :
     · simp at h
     · simp only [Expr.pair.injEq, Expr.prim.injEq, Prim.lit.injEq, IntLit.i32.injEq] at h
       obtain ⟨rfl, rfl⟩ := h
-      exact ⟨hm, hr'.1, hr'.2, he⟩
+      exact ⟨hm, hr'.1, hr'.2.1, hr'.2.2, he⟩
     · exact absurd rfl h
-  · rintro ⟨hn, hr', hs', he⟩
+  · rintro ⟨hn, hq', hr', hs', he⟩
     refine .inr ⟨by simp, .inl ⟨trivial, n, _, rfl, hn, ?_⟩, he⟩
-    simp only [Expr.HndNamesNZ]; exact ⟨hr', hs'⟩
+    simp only [Expr.HndNamesNZ]; exact ⟨hq', hr', hs'⟩
 
-theorem hndNZ_kappa {n : UInt32} {hr hs : Val} {K : Kont} (hn : n ≠ 0) (hr' : hr.1.HndNamesNZ)
-    (hs' : hs.1.HndNamesNZ) (hK : KNZ K) : (kappa n (hndVal n hr hs) K).HndNamesNZ := by
-  have hsh : ∀ d, Val.shift d 0 (hndVal n hr hs) = hndVal n (hr.shift d 0) (hs.shift d 0) := by
-    intro d; apply Subtype.ext; simp [hndVal, Val.pair, Val.i32, Val.shift, Expr.shift]
+theorem hndVal_shift (d : ℕ) (n : UInt32) (qs hr hs : Val) :
+    Val.shift d 0 (hndVal n qs hr hs) = hndVal n (qs.shift d 0) (hr.shift d 0) (hs.shift d 0) := by
+  apply Subtype.ext; simp [hndVal, Val.pair, Val.i32, Val.shift, Expr.shift]
+
+theorem hndNZ_kappa {n : UInt32} {qs hr hs : Val} {K : Kont} (hn : n ≠ 0)
+    (hq' : qs.1.HndNamesNZ) (hr' : hr.1.HndNamesNZ)
+    (hs' : hs.1.HndNamesNZ) (hK : KNZ K) : (kappa n (hndVal n qs hr hs) K).HndNamesNZ := by
   simp only [kappa, Expr.val, Val.lam, Expr.HndNamesNZ]
   refine ⟨trivial, ⟨trivial, ?_⟩, trivial, ?_⟩
-  · rw [hsh, hndNZ_hndE]
-    exact ⟨hn, hndNZ_val_shift hr' 3 0, hndNZ_val_shift hs' 3 0,
+  · rw [hndVal_shift, hndNZ_hndE]
+    exact ⟨hn, hndNZ_val_shift hq' 3 0, hndNZ_val_shift hr' 3 0, hndNZ_val_shift hs' 3 0,
       plug_hndNZ _ (knz_shift hK 3) (by simp [Expr.HndNamesNZ])⟩
   · simp only [ccatchE, Expr.val, Val.prim]
     rw [hndNZ_app]
     refine .inr ⟨by simp, by simp [Expr.HndNamesNZ], ?_⟩
-    rw [hsh, hndNZ_hndE]
-    exact ⟨hn, hndNZ_val_shift hr' 2 0, hndNZ_val_shift hs' 2 0,
+    rw [hndVal_shift, hndNZ_hndE]
+    exact ⟨hn, hndNZ_val_shift hq' 2 0, hndNZ_val_shift hr' 2 0, hndNZ_val_shift hs' 2 0,
       plug_hndNZ _ (knz_shift hK 2) (hndNZ_raise (hndNZ_cancelVal _ (fun _ h => by cases h)))⟩
+
+theorem hndNZ_kappaCell {n : UInt32} {qs hr hs : Val} {K : Kont} (aff : Bool) (hn : n ≠ 0)
+    (hq' : qs.1.HndNamesNZ) (hr' : hr.1.HndNamesNZ)
+    (hs' : hs.1.HndNamesNZ) (hK : KNZ K) : (kappaCell aff n (hndVal n qs hr hs) K).HndNamesNZ := by
+  simp only [kappaCell, kappaCBody, Expr.val, Val.lam, Val.prim, Val.unit, freeE, stuckE]
+  rw [hndNZ_app, hndNZ_app]
+  refine .inr ⟨by simp, ?_, .inr ⟨by simp, by simp [Expr.HndNamesNZ], trivial⟩⟩
+  simp only [Expr.HndNamesNZ]
+  refine ⟨trivial, ⟨trivial, ?_, ?_⟩, ?_⟩
+  · exact ⟨by simp, trivial⟩
+  · rw [hndVal_shift, hndNZ_hndE]
+    exact ⟨hn, hndNZ_val_shift hq' 4 0, hndNZ_val_shift hr' 4 0, hndNZ_val_shift hs' 4 0,
+      plug_hndNZ _ (knz_shift hK 4) (by simp [Expr.HndNamesNZ])⟩
+  · cases aff
+    · simp only [Bool.false_eq_true, if_false]
+      rw [hndNZ_app]; exact .inr ⟨by simp, trivial, trivial⟩
+    · simp only [if_true, Expr.HndNamesNZ]
+      refine ⟨trivial, ?_, ?_⟩
+      · exact ⟨by simp, trivial⟩
+      · simp only [ccatchE, Expr.val, Val.prim]
+        rw [hndNZ_app]
+        refine .inr ⟨by simp, by simp [Expr.HndNamesNZ], ?_⟩
+        rw [hndVal_shift, hndNZ_hndE]
+        exact ⟨hn, hndNZ_val_shift hq' 3 0, hndNZ_val_shift hr' 3 0, hndNZ_val_shift hs' 3 0,
+          plug_hndNZ _ (knz_shift hK 3) (hndNZ_raise (hndNZ_cancelVal _ (fun _ h => by cases h)))⟩
+
+theorem hndNZ_kappaAt {t n : UInt32} {qs hr hs : Val} {K : Kont} (hn : n ≠ 0)
+    (hq' : qs.1.HndNamesNZ) (hr' : hr.1.HndNamesNZ)
+    (hs' : hs.1.HndNamesNZ) (hK : KNZ K) : (kappaAt t n (hndVal n qs hr hs) K).HndNamesNZ := by
+  unfold kappaAt
+  split
+  · exact hndNZ_kappaCell false hn hq' hr' hs' hK
+  · split
+    · exact hndNZ_kappaCell true hn hq' hr' hs' hK
+    · exact hndNZ_kappa hn hq' hr' hs' hK
 
 theorem hndNZ_opt {o : Option Val} (h : ∀ v, o = some v → v.1.HndNamesNZ) :
     (Val.opt o).1.HndNamesNZ := by
@@ -716,17 +755,17 @@ theorem hndNZ_head {μ μ' : Heap} {a a' : Expr} (h : Head (ℍ := ℍ) μ a μ'
       · simp [Val.inj₁, Val.unit, Expr.HndNamesNZ]
       · simp only [Val.inj₂, Val.lam, Expr.HndNamesNZ, Expr.val, Val.prim]
         exact ⟨by decide, hndNZ_val_shift h1.1 1 0, by simp [Val.i32, Expr.HndNamesNZ], trivial⟩
-  | hret n hr hs w =>
-      obtain ⟨-, hr', -, hw⟩ := (hndNZ_hndE n hr hs _).1 ha
+  | hret n qs hr hs w =>
+      obtain ⟨-, -, hr', -, hw⟩ := (hndNZ_hndE n qs hr hs _).1 ha
       exact ⟨hndNZ_app_val hr' hw, hμ⟩
-  | hop n i hr hs c v K hc hK =>
-      obtain ⟨hn, hr', hs', hb⟩ := (hndNZ_hndE n hr hs _).1 ha
+  | hop n i qs hr hs c v K hc hK =>
+      obtain ⟨hn, hq', hr', hs', hb⟩ := (hndNZ_hndE n qs hr hs _).1 ha
       obtain ⟨hKnz, hp⟩ := plug_hndNZ_inv K (notNameLike_perform _) hb
       have hv := hndNZ_opPayload_inv (hndNZ_perform_inv hp)
       have hc' := hndNZ_clauseAt hs.1 i.toNat hc hs'
-      exact ⟨hndNZ_app_val hc' ⟨hv, hndNZ_kappa hn hr' hs' hKnz⟩, hμ⟩
-  | hunwind n i hr hs c v K hc hK =>
-      obtain ⟨hn, hr', hs', hb⟩ := (hndNZ_hndE n hr hs _).1 ha
+      exact ⟨hndNZ_app_val hc' ⟨hv, hndNZ_kappaAt hn hq' hr' hs' hKnz⟩, hμ⟩
+  | hunwind n i qs hr hs c v K hc hK =>
+      obtain ⟨hn, -, hr', hs', hb⟩ := (hndNZ_hndE n qs hr hs _).1 ha
       obtain ⟨-, hp⟩ := plug_hndNZ_inv K (notNameLike_raise _) hb
       have hv := hndNZ_opPayload_inv (hndNZ_raise_inv hp)
       exact ⟨hndNZ_app_val (hndNZ_clauseAt hs.1 i.toNat hc hs') hv, hμ⟩
@@ -987,24 +1026,25 @@ theorem step1_raise {μ μ' : Heap} {K : Kont} {p : Val} {n : UInt32} {T : Expr}
       subst h₁
       exact absurd hh not_head_raise
     rcases head_plug hh K'' hnv h₁ h0 with
-      ⟨m, hr, hs, K', rfl⟩ | ⟨N, D, K', rfl⟩ | ⟨K', rfl⟩ | ⟨w, H, q, -, rfl, -⟩ | ⟨Ns, err, K', rfl⟩
+      ⟨m, qs, hr, hs, K', rfl⟩ | ⟨N, D, K', rfl⟩ | ⟨K', rfl⟩ | ⟨w, H, q, -, rfl, -⟩ |
+        ⟨Ns, err, K', rfl⟩
     · subst h₁
-      generalize hX : (Kont.appR (.app (.val (.prim .hnd)) (.val (hndVal m hr hs))) K').plug
+      generalize hX : (Kont.appR (.app (.val (.prim .hnd)) (.val (hndVal m qs hr hs))) K').plug
         (raiseE (.val p)) = X at hh
       cases hh with
-      | hunwind n' i hr' hs' c v K₀ hc hK₀ =>
+      | hunwind n' i qs' hr' hs' c v K₀ hc hK₀ =>
           simp only [hndE, Kont.plug, Expr.app.injEq] at hX
           obtain ⟨hf, hb⟩ := hX
           obtain ⟨hK', hpv⟩ := plug_raise_inj hb
           subst hK' hpv
           simp only [payloadName_opPayload, Option.some.injEq] at hp
           subst hp
-          refine ⟨Kx, _, K', _, ⟨by rw [hf.2], hK₀, ?_⟩, .hunwind μ n' i hr' hs' c v K' hc hK₀, rfl⟩
+          refine ⟨Kx, _, K', _, ⟨by rw [hf.2], hK₀, ?_⟩, .hunwind μ n' i qs' hr' hs' c v K' hc hK₀, rfl⟩
           simp [FrameCatches, Kont.Catches, hndVal, Val.pair, Val.i32, Expr.val]
-      | hop n' i hr' hs' c v K₀ hc hK₀ =>
+      | hop n' i qs' hr' hs' c v K₀ hc hK₀ =>
           simp only [hndE, Kont.plug, Expr.app.injEq] at hX
           exact absurd hX.2.symm (plug_perform_ne_raise _ _ _ _)
-      | hret n' hr' hs' w =>
+      | hret n' qs' hr' hs' w =>
           simp only [hndE, Kont.plug, Expr.app.injEq] at hX
           exact absurd hX.2 (plug_raise_ne_val _ _ _)
       | _ => simp_all [Kont.plug, ubindE, ccatchE, cfinE]

@@ -1,4 +1,5 @@
 import Targets.Instance.Checks
+import Targets.I.Restricted.InstanceSafety
 
 /-!
 # The Instance — `LiveOK` is met at a typing of one program
@@ -7,9 +8,9 @@ import Targets.Instance.Checks
 configuration a typed closed program reaches has a closed term and goes on.  It holds at `JnLog`,
 the typing system that types `nLogOutside` alone, at its answer type
 (`liveOK_JnLog`).  That program has a handler, an operation the handler catches and a continuation
-its clause holds.  The run `look` computes is the only one under every runner (`rreach_chain_mem`):
-each of its steps allocates nothing, so it is its configuration's only step.  The run's terms are
-closed by `closed_steps`, and each of them steps, or is the answer (`goesOn_chain`).
+its clause holds.  Its one program is Core's (`d_nLogOutside`), so `liveOK_of_coreClosed` gives it.
+`rreach_chain_mem`, `goesOn_chain` and `closedAt_chain` read a chain of head steps that allocate
+nothing: every configuration reached from its start is one of its terms.
 -/
 
 noncomputable section
@@ -84,21 +85,13 @@ theorem not_isLoopSum_nLogTy : ¬ IsLoopSum nLogTy := by
   obtain ⟨S, S₀, A₀, -, hC⟩ := h (fun _ => [])
   cases S <;> simp [nLogTy, OCTy.ofC, OCTy.den, OVTy.ofV, OVTy.den, CTy.effOf] at hC
 
-/-- **`LiveOK` holds at `JnLog`**, at every effect context. -/
+/-- **`LiveOK` holds at `JnLog`**, at every effect context: its one program is Core's
+(`d_nLogOutside`), so `liveOK_of_coreClosed` gives it. -/
 theorem liveOK_JnLog : LiveOK (ℍ := ℍ) orowRF Ξ JnLog := by
-  rintro c ⟨P, C, R, s, -, hP, hreach⟩
-  have hP' : P = nLogOutside := by
-    rcases hP with ⟨-, ⟨Θ, -, he, -⟩ | ⟨-, M, rfl, hC, Θ, -, hM, hj⟩⟩
-    · exact he
-    · exfalso
-      cases hj
-      exact not_isLoopSum_nLogTy hC
-  subst hP'
-  have hchain := lookRun_sound (ℍ := ℍ) 20 nLogOutside
-  have hv : IsVal (lookEnd 20 nLogOutside) := by rw [nLogRun_end]; exact .pair (.inj₂ .unit) (.inj₂ .unit)
-  obtain ⟨t, ht, hcs⟩ := rreach_chain_mem R hchain hv (c, s) hreach
-  obtain ⟨rfl, -⟩ := Prod.mk.inj hcs
-  exact ⟨closedAt_chain hchain (by decide) t ht, goesOn_chain hchain hv t ht⟩
+  refine liveOK_of_coreClosed (D := fun _ _ _ e j => e = nLogOutside ∧ j = .comp nLogTy) ?_
+  rintro Θ e C - ⟨rfl, hj⟩
+  cases hj
+  exact d_nLogOutside
 
 end Targets.Inst
 

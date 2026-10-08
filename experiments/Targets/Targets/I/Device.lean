@@ -86,7 +86,7 @@ def HandleCompat (M : SemWorld) : Prop :=
     Ctx.SplitP Γ Γ₁ Γ₂ → Ctx.SplitP Γ₁ Γr Γc → Ctx.SoloP Γr ir (retTy S A R) →
     Ctx.SoloP Γc ic (clausesTy S R E) → n ≠ 0 → (∀ o ∈ S, o.n ≠ n) → E.length ≤ 2 ^ 32 →
     SemW₀ M Δ Γ₂ e (.comp (CTy.effOf (Row.ofEff n E 0 ++ S) A)) →
-    SemW₀ M Δ Γ (hndTerm n ir ic e) (.comp (CTy.effOf S R))
+    SemW₀ M Δ Γ (hndTerm n (E.map Prod.fst) ir ic e) (.comp (CTy.effOf S R))
 
 /-- Reduction is semantic identity (unary): a pure, non-allocating head step neither adds nor
 removes programs from `ewpW` at a protocol table. -/

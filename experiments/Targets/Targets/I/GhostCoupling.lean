@@ -2,33 +2,23 @@ import Targets.I.Combined
 import Targets.Instance.ContUse
 
 /-!
-# The interaction — route 8.4's ghost-to-run coupling, probed (TIER1-PLAN §4; decision D5)
+# The interaction — route 8.4's ghost-to-run coupling, at the capture cell (TIER1-PLAN §4; decision S6)
 
-Route 8.4 gives `contShare` an obligation for a linear or affine `κ`: created at `[op]`, consumed
-where that `κ` is resumed or cancelled and nowhere else, so that `NoOwn` at a run's end yields S6's
-count.  The probe asks for that coupling at a single capture, a resume and a cancel.  At BoLo's
-world and relation it does not hold, for two reasons, each checked here.
+Route 8.4 gives a linear or affine `κ` an obligation: created at `[op]`, consumed where that `κ` is
+resumed or cancelled and nowhere else, so that leak freedom at a run's end yields S6's count.  The
+probe of BoLo's original machine found no such obligation: `[op]` allocated nothing, so R1 (a
+capture never used) ran, at the empty heap throughout, to `ff`, and was in Core's relation.
 
-* **A closed program's relation at its pure type is BoLo's `wpTS`** (`cC_ret_eq`): no protocol
-  table, and so no `contShare`, occurs in it.  Three programs of S6's teeth run, allocating nothing,
-  to a value of `bool`:
-  - R1, a capture never used (`dropCl`);
-  - R2, a capture resumed twice (`twiceCl`);
-  - R3, a linear capture cancelled (`cancelCl`).
+The capture cell (SPEC §25) is that obligation, and BoLo's relation sees it.
 
-  So each is in Core's relation at `F bool` (`semC_RProg`).  A typing system that types them there,
-  and nothing else, meets FL at BoLo (`fl_core_JRp`) and fails S6 at the admissible context `ΞA`,
-  once per program (`ghost_probe`).  Whatever obligation `contShare` carries, FL does not give S6
-  (`not_ghostCoupling`).
-* **No obligation of BoLo's world exists along those runs.**  Their heap is empty at every
-  configuration: each step is a head step that keeps the heap (`HeadChain`).  BoLo's world at the
-  empty heap is the empty resource (`lower_empty_eq`).  An obligation that `NoOwn` sees is an `own`
-  cell, and an `own` cell lowers to a heap cell, which `[op]` does not allocate.  So `NoOwn` holds at
-  every configuration of the three runs, whatever is done with `κ`.
-
-So route 8.4 needs what BoLo's model does not have: an `own`-like obligation that `ResU.Lower` does
-not lower to the heap, or `wpTS`'s run-end conditions read on the run's steps.  Both change BoLo's
-definitions.
+* **A closed program's relation at its pure type is BoLo's `wpTS`** (`cC_ret_eq`), and a run of
+  head steps that keep the heap, ending at a value related at the empty resource, puts its start in
+  the relation (`semC_of_headChain`).
+* **R1 at a linear or affine operation is not in Core's relation at `F bool`** (`not_semC_R1`):
+  its run allocates `κ`'s cell, never releases it, and ends at `ff`; Core's relation at a returner
+  gives every run from the empty memory an end at the empty memory (`theorem32D`).
+* **BoLo's world at the empty heap is the empty resource** (`lower_empty_eq`), so no resource there
+  owns anything (`noOwn_of_lower_empty`).
 -/
 
 noncomputable section
@@ -37,10 +27,9 @@ variable {ℍ : BoCa.Host} [BoCa.HostIs ℍ]
 
 namespace Targets.I
 open BoCa BoCa.Fig16 BoCa.Fig16.BoLo BoCa.Fig16.LogRel BoCa.Fig16.LogRel.Core
-open BoCa.BoLo (Heap Head Kont Step1N)
+open BoCa.BoLo (Heap Head Kont Step1N Steps)
 open BoCa.Lifetime (LSub LifeCtx)
-open Targets.Inst (OurTyping ourInst AdmEff rProg dropV twiceV cancelV cancelResumeV ΞA
-  admEff_ΞA lab2A lab5A tiedAt_unit)
+open BoCa.BoLo (capTag kappaC kappaCBody)
 
 /-! ### BoLo's world at the empty heap -/
 
@@ -98,73 +87,51 @@ theorem vC_tt (ls : List SRec) (δ : LSub) :
     vC true Inst.boolT ls δ (Val.inj₂ Val.unit) (PMap.empty : WRes) :=
   Or.inr ⟨Val.unit, pure_sep_mk rfl ⟨rfl, rfl⟩⟩
 
-/-! ### S6's teeth, in Core's relation -/
+/-! ### The capture cell, in Core's relation -/
 
-/-- R1–R4's programs at a name, R3 and R4 at a nonzero one. -/
-def RProg (e : Expr) : Prop :=
-  ∃ n : UInt32, e = rProg n dropV ∨ e = rProg n twiceV ∨
-    (n ≠ 0 ∧ (e = rProg n cancelV ∨ e = rProg n cancelResumeV))
-
-/-- **Each of R1–R4 is in Core's relation at `F bool`**: its run is a chain of head steps that
-allocate nothing, ending at `ff` or `tt`. -/
-theorem semC_RProg {Δ : LifeCtx} {e : Expr} (h : RProg e) : SemC Δ [] e (.ret Inst.boolT) := by
-  obtain ⟨n, rfl | rfl | ⟨hn, rfl | rfl⟩⟩ := h
-  · exact semC_of_headChain (v := Val.inj₁ Val.unit) rfl (Inst.r1_chain (ℍ := ℍ) n) vC_ff
-  · exact semC_of_headChain (v := Val.inj₂ Val.unit) rfl (Inst.r2_chain (ℍ := ℍ) n) vC_tt
-  · exact semC_of_headChain (v := Val.inj₁ Val.unit) rfl (Inst.r3_chain (ℍ := ℍ) hn) vC_ff
-  · exact semC_of_headChain (v := Val.inj₂ Val.unit) rfl (Inst.r4_chain (ℍ := ℍ) hn) vC_tt
-
-/-- The typing system that types R1–R4 at the pure row's `bool` and nothing else. -/
-def JRp : OurTyping orowRF :=
-  ⟨fun _ _ Γ e j => Γ = [] ∧ RProg e ∧ ∀ η, j.den η = .comp (.ret Inst.boolT), OutJ.core,
-    fun _ η => η⟩
-
-/-- **FL at BoLo holds at `JRp`.** -/
-theorem fl_core_JRp : FL (B.coreB (ℍ := ℍ)) JRp.read := by
-  intro Θ Δ Γ e j hJ η hη
-  obtain ⟨Γ', j', -, -, ⟨rfl, hR, hj'⟩, hΓe, hje⟩ := hJ η hη
-  rw [← hΓe η, ← hje η, hj' η]
-  exact semW₀_core.mpr (semC_RProg hR)
-
-/-- `JRp` types R1, R2 and R3 at our instance, at the pure row's `bool`. -/
-theorem der_JRp (n : UInt32) (cl : Val) (hcl : RProg (rProg n cl)) :
-    ∃ Θ : RowCtx, (∀ p ∈ Θ, p.2 = Inst.anyCon) ∧
-      JRp.der Θ LifeCtx.empty (Inst.liveCtx []) (rProg n cl)
-        (.comp (.effF (fun η => orowRF.den ΞA (orowAlg ΞA).unit η) (.sum .unit .unit))) :=
-  ⟨[], by simp, rfl, hcl, fun _ => rfl⟩
-
-/-- **The probe at one capture, one resume and one cancel**: `JRp` meets FL at BoLo, and at the
-admissible context `ΞA` S6 fails on R1 (a capture never used, at the affine `wait`), on R2 (a
-capture resumed twice, at the linear `tick`) and on R3 (a linear capture cancelled, at `tick`). -/
-theorem ghost_probe :
-    FL (B.coreB (ℍ := ℍ)) JRp.read ∧ AdmEff ΞA ∧
-    ¬ (ourInst (ℍ := ℍ) orowRF ΞA JRp).ContUse := by
-  refine ⟨fl_core_JRp, admEff_ΞA, ?_⟩
-  exact Inst.not_contUse_of_der_R1_orow lab2A (o := ⟨Inst.OVTy.ofV .unit, Inst.OVTy.ofV .unit, .affine⟩)
-    (by simp [lab2A, ΞA]; rfl) (by decide)
-    ⟨tiedAt_unit JRp _, .inl (der_JRp 2 dropV ⟨2, .inl rfl⟩)⟩
-
-/-- S6 fails at `JRp` on R2 alone: a capture resumed twice. -/
-theorem ghost_probe_resume : ¬ (ourInst (ℍ := ℍ) orowRF ΞA JRp).ContUse :=
-  Inst.not_contUse_of_der_R2_orow lab5A
-    ⟨tiedAt_unit JRp _, .inl (der_JRp 5 twiceV ⟨5, .inr (.inl rfl)⟩)⟩
-
-/-- S6 fails at `JRp` on R3 alone: a linear capture cancelled. -/
-theorem ghost_probe_cancel : ¬ (ourInst (ℍ := ℍ) orowRF ΞA JRp).ContUse :=
-  Inst.not_contUse_of_der_R3_orow lab5A (o := ⟨Inst.OVTy.ofV .unit, Inst.OVTy.ofV .unit, .linear⟩)
-    (by simp [lab5A, ΞA]; rfl) (by decide)
-    ⟨tiedAt_unit JRp _, .inl (der_JRp 5 cancelV ⟨5, .inr (.inr ⟨by decide, .inl rfl⟩)⟩)⟩
-
-/-- **The coupling route 8.4 needs, read at Core's relation**: every typing system whose programs
-are in Core's relation meets S6 at every admissible effect context.  The relation at a returner is
-`wpTS` (`cC_ret_eq`), so no definition of `contShare` changes which closed programs it relates. -/
-def GhostCoupling : Prop :=
-  ∀ J : OurTyping orowRF, FL (B.coreB (ℍ := ℍ)) J.read → ∀ Ξ, AdmEff Ξ →
-    (ourInst (ℍ := ℍ) orowRF Ξ J).ContUse
-
-/-- **Route 8.4's coupling fails at BoLo's relation.** -/
-theorem not_ghostCoupling : ¬ GhostCoupling (ℍ := ℍ) := fun h =>
-  (ghost_probe (ℍ := ℍ)).2.2 (h JRp fl_core_JRp ΞA admEff_ΞA)
+open Targets.Inst (rProg dropV rH rK rRet cellAff kappaAt_cell) in
+/-- **R1 at a linear or affine operation is not in Core's relation at `F bool`**: from the empty
+memory its run is the catch, the allocation of `κ`'s cell at `0`, `κ`'s β-step, the clause's β-step
+and its `let`, ending at `ff` with the cell still allocated; Core's relation at a returner gives
+every run from the empty memory an end at the empty memory (`theorem32D`). -/
+theorem not_semC_R1 (n : UInt32) {q : Qual} (qs : List Qual) (hq : q ≠ .unr) :
+    ¬ SemC LifeCtx.empty [] (rProg n (q :: qs) dropV) (.ret Inst.boolT) := by
+  intro h
+  have hwp := h LSub.empty [] [] PMap.empty Adequacy.models_empty (gDenC_nil _ _)
+  have hwp' : wpTS [] (rProg n (q :: qs) dropV) (fun _ _ => Fig16.BoLo.pure True)
+      (PMap.empty : WRes) := by
+    have he : substAll [] (rProg n (q :: qs) dropV) = rProg n (q :: qs) dropV :=
+      Adequacy.psub_nil 0 _
+    rw [he] at hwp
+    exact wpTS_mono (fun _ _ _ hv => ⟨(vC_sum_unit_pure (A := .unit) (fun h => h.1) hv).1, trivial⟩)
+      PMap.empty hwp
+  -- the run
+  have htag : capTag (qualsVal (q :: qs)).1 (0 : UInt32).toNat = q.tag := by
+    rw [show (0 : UInt32).toNat = 0 from rfl, capTag_qualsVal _ 0 (by simp)]; rfl
+  have hop := Head.hop (ℍ := ℍ) Adequacy.emptyMem n 0 (qualsVal (q :: qs)) ⟨rRet, .lam⟩
+    ⟨Inst.clausesE [dropV.1], .pair dropV.2 .unit⟩ dropV Val.unit rK
+    (Inst.clauseAt_clausesE [dropV.1] 0 dropV.2 rfl) rfl
+  rw [htag, kappaAt_cell hq] at hop
+  have hal := Head.alloc (ℍ := ℍ) Adequacy.emptyMem Val.unit 0 rfl
+  have hb := Head.beta (ℍ := ℍ) (Adequacy.emptyMem.upd 0 Val.unit)
+    (kappaCBody (cellAff q) n (rH n (q :: qs) dropV) rK) (Val.loc 0)
+  rw [kappaCBody_subst] at hb
+  have hs : Steps Adequacy.emptyMem (rProg n (q :: qs) dropV) (Adequacy.emptyMem.upd 0 Val.unit)
+      (.val (Val.inj₁ Val.unit)) :=
+    .more ⟨.hole, _, _, Inst.rProg_eq n (q :: qs) dropV, rfl, hop⟩ <|
+    .more ⟨.appR (.val dropV) (.pairR Val.unit
+      (.appR (.val (Val.lam (kappaCBody (cellAff q) n (rH n (q :: qs) dropV) rK))) .hole)),
+      _, _, rfl, rfl, hal⟩ <|
+    .more ⟨.appR (.val dropV) (.pairR Val.unit .hole), _, _, rfl, rfl, hb⟩ <|
+    .more ⟨.hole, _, _, rfl, rfl, Head.beta _ _ (Val.pair Val.unit
+      ⟨kappaC (cellAff q) 0 n (rH n (q :: qs) dropV) rK, isVal_kappaC _ _ _ _ _⟩)⟩ <|
+    .more ⟨.hole, _, _, rfl, rfl, Head.letpair _ Val.unit
+      ⟨kappaC (cellAff q) 0 n (rH n (q :: qs) dropV) rK, isVal_kappaC _ _ _ _ _⟩ (.inj₁ .unit)⟩ <|
+    .refl _ _
+  obtain ⟨v, hs', -⟩ := theorem32D _ (fun _ => True) hwp' hs
+  obtain ⟨h₁, -⟩ := steps_from_val (v := Val.inj₁ Val.unit) hs'
+  have := congrFun h₁ 0
+  simp [Adequacy.emptyMem, BoCa.BoLo.Heap.upd] at this
 
 end Targets.I
 

@@ -50,20 +50,22 @@ interaction's option-neutral rules, the pins, the composite's programs and its r
 **Tier 1** (`I.Tier1 J₁`): OPEN, **reduced** (`status_tier1_J₁_of`).  `J₁` is built (decision D5):
 Core's kernel with SPEC §24's rules (the polymorphic let, the general `[handle]`, `[then]` at option
 A) over the open types, with the row `∀` (`Targets/Instance/J1.lean`).  Proved of it: A's (S)
-properties but S5 and S6 at every effect context, B's guarantees (B5 included, piece 6), the world's
-conjuncts and the pins.  `I.Tier1 J₁` follows from what is open: A's (E) properties, S5 and S6 at
-every admissible effect context, the composite's programs (`Accepts`) and rejections
-(`Rejects`).  TIER1-PLAN §2's first route (elaborating each derivation into the kernel before
+properties but S4, S5 and S6 at every effect context (S4 at an effect context whose resuming
+operations are unrestricted), B's guarantees (B5 included, piece 6), the world's conjuncts and the
+pins.  `I.Tier1 J₁` follows from what is open: A's (E) properties, S4, S5 and S6 at every
+admissible effect context, the composite's programs (`Accepts`) and rejections (`Rejects`).  TIER1-PLAN §2's first route (elaborating each derivation into the kernel before
 D5) does not reach tier 1 (`status_elab_route`); `J₁` is built by D5's route instead.
 
 **The restricted tier-1 reduction** (`I.Tier1Core`, at today's kernel `tier1Open` and Core's world):
-**PROVED AT σ=[] given S5 at today's kernel** (`status_tier1Core_of`).  Proved of it: A's
-properties but S5 at every admissible effect context — S0 and S4 (from `LiveOK`, proved), the let
+**PROVED AT σ=[] given S4 and S5 at today's kernel** (`status_tier1Core_of`).  Proved of it: A's
+properties but S4 and S5 at every admissible effect context — S0 (from `LiveOK`, proved), the let
 law, S1, `DataDiv`, S2 and S3 (`status_sPropsNoCancel_tier1Open`); B's guarantees, B5 included
 (`status_tier1Core_guarantees`; B5 alone, `status_releasedOnceReuse_tier1Open`); the world
 conjuncts and the device at `coreW` (`status_tier1Core_world`); its `Pins` conjunct
-(`status_pins_tier1Open`).  Missing: S5 at our instance (its bridges `noIntercept_of_core`,
-`unwindOrder_of_core` are not built).
+(`status_pins_tier1Open`).  Missing: S4 at an effect context with a resuming linear or affine
+operation (its catch law hands the clause `capture l H K` and keeps the store; the catch of such an
+operation hands `κ` a fresh cell, SPEC §25 — the capture cell, below), and S5 at our instance (its
+bridges `noIntercept_of_core`, `unwindOrder_of_core` are not built).
 
 ## Piece 6: the step-for-step simulation (OQ-43 (b))
 
@@ -128,16 +130,46 @@ start (`Targets/B/BumpSim.lean`):
   kernel (`j1_read`) and its FL is `fundamentalC`; at a context with no polymorphic slot its open
   judgements meet `FLOpen`'s relation, a polymorphic type read as the intersection of its instances
   (Law 1, `flOpen_J₁_mono`).
-* **S6 by a ghost obligation in `contShare` (route 8.4): probed, and stopped.**  At BoLo's relation
-  a closed program at its pure type is related by `wpTS`, where no protocol table occurs; R1 (κ
-  never used), R2 (κ resumed twice) and R3 (a linear κ cancelled) are in it and break S6
-  (`status_ghostCoupling`: a typing system with FL at BoLo fails S6); along their runs the heap is
-  empty and BoLo's world at the empty heap is the empty resource, so `NoOwn` sees no obligation.
-  The route needs a resource kind or a run-end condition BoLo's model does not have.
+* **S6 by a ghost obligation (route 8.4): its probe found none in BoLo's model; the capture cell
+  (decision S6, below) is that obligation.**  The probe ran R1, R2 and R3 on the machine before the
+  cell, where they allocate nothing and are in Core's relation.
 * **An encoding defect, repaired.**  Reading every operation index through `UInt32.ofNat` made `i`
   and `i + 2³²` one operation, and a runner keeping its protocol could answer the second at any
   type; checked in Lean before the repair.  An index beyond `UInt32` now encodes to an open stuck
   term (`opJunk`), which no closed configuration holds.
+
+## The capture cell (decision S6, 2026-10-08)
+
+The machine carries a linear or affine capture's obligation at run time (SPEC §25): a handler's
+value carries its operations' tags, and the catch of a linear or affine operation hands its clause
+`κ` with a fresh unit cell, allocated by the ordinary allocator; `κ`'s resume frees the cell, and
+so does an affine `κ`'s cancel; a linear `κ`'s cancel branch has no step.  No BoLo definition
+changed; Core's effect lemmas and `fundamentalC` are re-proved with `adequacyC` and `adequacyD`
+unchanged; the lowering's counts are unchanged.
+
+* **S6, restated per capture event** (decision S6; `ContUseEv`, `CatchEvAt`, `caughtEv`): on every
+  complete run of a typed program at a data answer, each `κ` that a capture event hands is used
+  once per event, and cancelled at most once per affine event.  The capture event reads `κ` off the
+  run (the first hand-off of the clause after the catch), so the cell's `κ`, which no function of
+  the handler and the context names, is counted.  `ContUse`, read at `capture`, is kept as the
+  earlier reading.
+* **S6's tooth** (`status_contUse_teeth`): a typing system that types R1 at a resuming linear or
+  affine operation fails S6 (its run completes at `ff`, `κ` handed once and never used, its cell
+  left allocated); `JR` types it at `ΞA`.  R2–R4 have no complete run at such an operation, and no
+  lemma here concludes more of them.
+* **The obligation is in Core's relation** (`status_ghostCoupling`): R1 at a linear or affine
+  operation is not in Core's relation at `F bool` (`I.not_semC_R1`): its run leaks `κ`'s cell, and
+  Core's relation at a returner ends every run from the empty memory at the empty memory.
+* **The answering class keeps its laws** (`Targets/Instance/CellRuns.lean`): a run around one cell
+  — quiet to the allocation, quiet at every location from the allocation to the release, quiet on —
+  is calm (`Calm`), and two terms with a common calm reduct run alike (`runsAlike_of_calm`), the
+  memories of reached configurations being finite (`finDom_reach`).  The tail-resumptive law,
+  algebraicity at the answering class and D1.h4's comodel reduction hold at every operation
+  (`calm_tailClause`, `calm_opStep`, `calm_fold`); the bad-state witness runs calmly around two
+  cells.
+* **S4's catch law reads `capture`**: it holds at an effect context whose resuming operations are
+  unrestricted (`handlerSem_orow` under `CatchUnr`), and is OPEN elsewhere; an admissible context
+  has no resuming unrestricted operation.
 
 ## Piece 5: the answering class (D1.h1–h4)
 
@@ -152,7 +184,7 @@ start (`Targets/B/BumpSim.lean`):
 * **The comodel reduction, D1.h4 (c)** (`ansCorrect_of_comodel`): at our instance, co-operations
   that run quietly (`PureCo`, this piece's added hypothesis) and form a comodel give a correct
   handler, at every typing system whose reached configurations are closed: the handled sides fold
-  as the co-runs do (`quiet_fold`, the native counterpart of `handle_fold`) and meet.  `stateCo`
+  calmly as the co-runs do (`calm_fold`, the native counterpart of `handle_fold`) and meet.  `stateCo`
   is a comodel and its handler correct (`state_isComodel`, `state_correct`; at `J₁`,
   `I.state_correct_J₁`).  Not vacuous: at `J₁` and an admissible context with a state signature
   (`Ξst`), the handler whose `put` keeps the old state fails the update–lookup law at a typed
@@ -184,7 +216,7 @@ start (`Targets/B/BumpSim.lean`):
 | E3 needs divergence; a pure-row loop that diverges is not at a data answer | PROVED (every instance; the latter with `RowAlgebra`) | `not_loops_of_total`, `divInTypes_of_loops` |
 | effect safety has teeth; Def. 5.1 (1) from one signature object | PROVED (every instance) | `not_der_unhandled`, `c1_of_rowSig` |
 | the runners `Rtick`, `Rtl`, `Rrec` keep their protocol | PROVED (every instance; `Rrec` at distinct labels) | `rtick_respects`, `rtl_respects`, `rrec_respects` |
-| A's properties at our instance | at today's kernel, every admissible effect context: S0, the let law, S1, `DataDiv`, S2, S3, S4 PROVED AT σ=[]; at `J₁`, every effect context: the same, PROVED AT σ=[]; S5 OPEN (bridges not built); S6 OPEN (below) | `status_sPropsNoCancel_tier1Open`, `status_sPropsNoCancel_J₁` |
+| A's properties at our instance | at today's kernel, every admissible effect context: S0, the let law, S1, `DataDiv`, S2, S3 PROVED AT σ=[]; at `J₁`, every effect context: the same, PROVED AT σ=[]; S4 PROVED AT σ=[] at an effect context whose resuming operations are unrestricted, OPEN elsewhere (its catch law reads `capture`; SPEC §25); S5 OPEN (bridges not built); S6 OPEN (below) | `status_sPropsNoCancel_tier1Open`, `status_sPropsNoCancel_J₁` |
 | the unary laws beside done, `UnaryLaws` (`TailLaw`, `AlgLaw`, `EtaHold`) and the alternative `EtaLin`: run-level (menu form F.3), the tail law's hygiene as hypotheses, compared at a program's data answers (D4) | RESTATED; STATED (at our instance: the Instance's rows); **not in done**: whether they join done is a menu choice (P11/I5 menu axes H, F, K), for the user | `Targets/A/UnaryLaws.lean` |
 | theories (D1.h3, D1.h4 (a)–(b)): equations in signatures (`Eqn`, `SLComp`, `Theory`), the state-passing handler of co-operations (`ansHnd`, `runAt`), handler correctness (`AnsCorrect`, Plotkin–Pretnar Def. 4.5 at `RunsAlike`), comodels (`IsComodel`, Ahman–Bauer Def. 1 with equations), global state (`stateTheory`, `stateCo`, `badStateCo`) | stated (elaborate); at our instance: the Instance's rows | `Targets/A/Theories.lean` |
 | `EtaHold` gives `EtaLin`; each of the four fails at an instance whose handler or bind ignores its clauses | PROVED | `etaLin_of_etaHold`, `not_tailLaw_toy`, `not_algLaw_toy`, `not_etaHold_toy`, `not_etaLin_toy` |
@@ -223,7 +255,7 @@ start (`Targets/B/BumpSim.lean`):
 | `Pins tier1Open admClosedOp .abortive`, with `I4a` at the unr-free rules | PROVED AT σ=[] (abortive rows) | `I.pins_tier1Open`, `i4a_tier1NU` |
 | Law 1 at the relation: `ovalW` at `U(∀ρ:k. C)` and `!U(∀ρ:k. C)` is the intersection of the instances; `FLOpen M J` gives `FL M J.read`; `FLOpen` at today's kernel | PROVED (generic); PROVED AT σ=[] | `I.ovalW_allR`, `I.ovalW_bang_allR`, `I.fl_of_flOpen`, `I.flOpen_core_tier1Open` |
 | `J₁`: its reading is Core's kernel; FL at BoLo (B1); B's guarantees; the pins; FL at its open judgements over contexts with no polymorphic slot, a polymorphic type read as the intersection of its instances (Law 1) | PROVED AT σ=[] (abortive rows for the pins); `FLOpen coreB J₁` at contexts with a polymorphic slot NOT PROVED (a value `ovalW` relates there need not be a closed λ-value Core types) | `status_j1`, `status_guarantees_J₁`, `status_pins_J₁`, `I.flOpen_J₁_mono` |
-| tier 1 at `J₁` | OPEN; follows from A's (E) properties, S5, S6, `Accepts` and `Rejects` | `status_tier1_J₁_of` |
+| tier 1 at `J₁` | OPEN; follows from A's (E) properties, S4, S5, S6, `Accepts` and `Rejects` | `status_tier1_J₁_of` |
 | TIER1-PLAN §2's route (elaborate `J₁` into today's unr-free kernel, then `fundamentalC`) | **DOES NOT REACH TIER 1**: closed derivations that elaborate type no A-level handler, so E8 fails; today's kernel types no let-bound function read at two rows | `I.not_tier1_of_elabClosed`, `not_der_letTwo` |
 | FIX-RUN-END's checks and witness worlds | PROVED | `Targets/I/RunEnd.lean` (73 results) |
 | I1, I3, I5, P11 at `coreW` (the device); I2 at `coreW` | PROVED AT σ=[]; PROVED AT A RESTRICTION (abortive rows) | `i1_core`, `i3_core`, `i5_core`, `p11_core`; `i2_core_abortive` |
@@ -242,18 +274,19 @@ start (`Targets/B/BumpSim.lean`):
 | our rows meet Def. 3.5 and Def. 5.1; `RowLink orowRF` | PROVED AT A RESTRICTION (`RF = orowRF`) | `rowAlgSafe_orowRF`, `rowLink_orowRF`, `closedRowAlg_lawsSafe` |
 | no typed term intercepts a cancel; the two-frame unwind | PROVED AT σ=[]; an instance | `noInterception_tier1`; `two_frame` |
 | the machine read through contexts: run splitting, determinism where nothing is allocated, runs that join run alike, closed runs stay closed, no step creates a handler named `0` | PROVED AT σ=[] | `steps_plug_split`, `det_ourInst`, `rstep_det`, `runsAlike_of_join`, `closed_steps`, `hndNamesNZ_steps` |
-| S0 (`MachShape`: `AppLaw`, `Congr`, `OpStuck`, `LoopLaws`, `DriveLaws`) and S4 (`HandlerSem`) at our instance | PROVED AT σ=[] given `LiveOK` (every configuration a typed program reaches has a closed term and goes on), at every typing system; `Congr` and `OpStuck` without it. At today's kernel `LiveOK` holds at every effect context (D1), so S0 and S4 are PROVED AT σ=[] there. `LiveOK` needs the tie | `machShape_orow`, `handlerSem_orow`, `handlerSem_ourInst`; `liveOK_tier1Open`, `status_machShape_handlerSem_tier1Open`; `liveOK_needs_tie` |
+| S0 (`MachShape`: `AppLaw`, `Congr`, `OpStuck`, `LoopLaws`, `DriveLaws`) and S4 (`HandlerSem`) at our instance | S0 PROVED AT σ=[] given `LiveOK` (every configuration a typed program reaches has a closed term and goes on), at every typing system; `Congr` and `OpStuck` without it. S4 the same at an effect context whose resuming operations are unrestricted (`CatchUnr`); OPEN at one with a resuming linear or affine operation, whose catch hands `κ` a fresh cell rather than `capture l H K` (SPEC §25). At today's kernel `LiveOK` holds at every effect context (D1). `LiveOK` needs the tie | `machShape_orow`, `handlerSem_orow`, `handlerSem_ourInst`; `liveOK_tier1Open`, `status_machShape_handlerSem_tier1Open`; `liveOK_needs_tie` |
 | `LiveOK` is met at a typing system that types one program with a handler, an operation it catches and a continuation | PROVED | `liveOK_JnLog` |
 | S5 (`Cancellation noFinRaise`) at our instance, RESTATED (D3, D4) | OPEN: the bridges `noIntercept_of_core`, `unwindOrder_of_core` are not built. The no-interception condition is needed: `NoInterception` is syntactic, and a typed program's cancelled finaliser may perform the operation its region's dying handler catches; its run follows no cancel trace at any set of endings | `noIntercept_needs_finRow` |
 | Core's `FinaliserOrder` (I3.b) | PROVED, given `NoInterception` and `FinAloneAt FR` (a fired finaliser's run alone, platform-free, ends at a value or an uncaught raise of a name in `FR`), at today's endings (nonzero names) and at option A's (none). At a typing system with FL at Core's world, `FinAloneAt FR` follows from `FinRowsAt FR` (an operation the finaliser's run alone leaves uncaught is a raise of a name in `FR`): stuck redexes are excluded by FL and B2's runs. So at today's unr-free kernel `FinaliserOrder` follows from `FinRowsAt` alone (PROVED AT σ=[]). `FinRowsAt` OPEN: route 8.2's obligations (`RowRoute`) give it (PROVED), and no `RowRoute` is built (TIER1-PLAN §4: the review did not accept route 8.2) | `finaliserOrder_at`, `finaliserOrder_A`, `finAloneAt_of_finRows`, `finaliserOrder_tier1NU_of_finRows`, `finaliserOrder_tier1NU_of_finRowsA`, `finRowsAt_of_route`, `finaliserOrder_of_route` |
 | `FinAlone` (piece 1's added hypothesis) | RESTATED by D3: its consumer reads `FinAloneAt FR`, platform-free | — |
-| S6 (`ContUse`) at our instance, RESTATED (D4: a use is a step that applies `κ` to a data value) | OPEN at today's kernel and at `J₁` | — |
-| route 8.4 to S6: a ghost obligation in `contShare`, consumed where `κ` is resumed or cancelled, read by `NoOwn` at a run's end | **STOPPED at its probe**: FL at BoLo does not give S6, at one capture, one resume and one cancel (R1, R2, R3 are in Core's relation at `F bool`, whose clause is `wpTS`, and break S6); along their runs BoLo's world is the empty resource | `status_ghostCoupling`, `I.not_ghostCoupling`, `I.ghost_probe`, `I.lower_empty_eq` |
-| S6's teeth: R1–R4 (RESTRUCTURE §6.1) at our machine | PROVED: every typing system over our machine that types one of them at `F 0 bool` fails S6 (R1 at a label whose first operation resumes, R3 at a linear one, R2 and R4 at any; at a general row form, given what `orowRF` gives); `JR` types all four, and at `ΞA` each lemma applies | `not_contUse_of_der_R1` … `_R4`, `not_contUse_of_der_R1_orow` … `_R4_orow`, `teeth_JR_ΞA` |
+| S6 (`ContUseEv`) at our instance, RESTATED (decision S6: per capture event, on complete runs, at data answers) | OPEN at today's kernel and at `J₁` | — |
+| route 8.4 to S6: an obligation created at `[op]`, consumed where `κ` is resumed or cancelled, read by leak freedom at a run's end | the capture cell is that obligation (SPEC §25): R1 at a linear or affine operation is not in Core's relation at `F bool` (its run leaks `κ`'s cell); BoLo's world at the empty heap is the empty resource | `status_ghostCoupling`, `I.not_semC_R1`, `I.lower_empty_eq` |
+| S6's tooth: R1 (RESTRUCTURE §6.1) at our machine | PROVED: every typing system over our machine that types R1 at `F 0 bool`, at a label whose first operation resumes and is linear or affine, fails S6; `JR` types it, and at `ΞA` the lemma applies. R2–R4 have no complete run at such an operation | `not_contUseEv_of_der_R1`, `not_contUseEv_of_der_R1_orow`, `teeth_JR_ΞA` |
 | today's kernel types none of R1–R4 | PROVED, by the handler's form (our handler is the run-time frame, its clauses values; `[handle]` types clause variables). At the clauses, by the linearity of `κ` (RESTRUCTURE §6.1's reason): today's clause typing refuses R1's, R2's and R4's clauses at every resuming `lin` or `aff` operation (a live slot of `kTy` is neither dropped nor duplicated) and R3's at every `lin` one (a linear `κ`'s cancel is at `⊤`); at the clause type of a linear `1 ↠ 1`, where all four are refused, a clause that resumes `κ` once is typed, and `cancelCl` is typed at `aff` and refused at `lin`. At `unr` the argument does not apply (multi-shot is not considered) | `refuses_R_tier1Open`, `refuses_R_clauses`, `clauseRefusals_pinned` |
 | `AlgLaw`, `TailLaw`, `EtaHold` at our instance, RESTATED (D4: data answers) | `AlgLaw` **FAILS AS WRITTEN at `J₁`**, at the admissible `ΞA`: `algFireProg`, typed by Core's kernel, reaches the law's left side under a handler at an `unr` operation whose clause holds its persistent continuation in a finaliser and raises; the two runs answer `()` and show `fire` of finalisers that differ as terms. `TailLaw` OPEN: by this mechanism no witness types (an `unr` outer handler forces the tail clause's continuation context persistent, and our instance's `resume` forces only a `U` slot); not proved. `EtaHold` OPEN: `[handle]`'s `hnS` keeps a forwarding handler's own name out of its clauses' row, so by that reading no typed program installs one (not checked by an inversion); not proved | `not_algLaw_J₁`, `not_algLaw_ΞA`, `d_algFireProg`, `finE_DL_ne` |
-| the tail-resumptive law and algebraicity at the answering class (a clause `λ(a, k). c a to b. k.resume b` whose code runs quietly) | PROVED at every typing system with `LiveOK`, so at `J₁` | `quiet_tailClause`, `tailLaw_quiet`, `algLaw_quiet`, `I.tailLaw_quiet_J₁`, `I.algLaw_quiet_J₁` |
-| D1.h4 (c), the comodel reduction: co-operations that run quietly (`PureCo`) and form a comodel give a correct handler | PROVED at every typing system with `LiveOK` whose typed closed values are closed | `ansCorrect_of_comodel`, `quiet_fold`, `quiet_opStep`, `quiet_coFrom` |
+| the tail-resumptive law and algebraicity at the answering class (a clause `λ(a, k). c a to b. k.resume b` whose code runs quietly) | PROVED at every typing system with `LiveOK`, so at `J₁`, at every operation: quietly when `κ` owns no cell, around its cell when it does | `calm_tailClause`, `quiet_tailClause`, `cellQuiet_tailClause`, `tailLaw_quiet`, `algLaw_quiet`, `I.tailLaw_quiet_J₁`, `I.algLaw_quiet_J₁` |
+| runs around a capture cell: finite memories on every run from `init`; the allocation at every free location; calm runs compose, go under contexts and keep the complete runs' answers and traces | PROVED | `finDom_reach`, `obsFrom_alloc_iff`, `obsFrom_mstep_iff`, `obsFrom_calm_iff`, `runsAlike_of_calm`, `kappaC_resume_parts` |
+| D1.h4 (c), the comodel reduction: co-operations that run quietly (`PureCo`) and form a comodel give a correct handler | PROVED at every typing system with `LiveOK` whose typed closed values are closed | `ansCorrect_of_comodel`, `calm_fold`, `calm_opStep`, `calm_side`, `quiet_coFrom` |
 | global state: `stateCo` a comodel of the four laws, its handler correct; not vacuous | PROVED (at `J₁`: `I.state_correct_J₁`); at `J₁` and the admissible `Ξst`, the handler whose `put` keeps the old state fails the update–lookup law at a typed program, and its co-operations are no comodel | `state_isComodel`, `state_correct`, `I.state_correct_J₁`, `not_ansCorrect_badState`, `not_isComodel_badState`, `admEff_Ξst` |
 | `LetLaw` at today's kernel | PROVED (typing) | `letLaw_ourInst_tier1Open` |
 | S1 (`RowAlgebra`) at our instance, RESTATED (D6: `SubClosed` at a well-formed target row) | PROVED at today's kernel, at every effect context with no resuming `unr` operation, the admissible ones among them; `EA.Laws`, `EA.Safe` and `RowSig` at every typing system. The premise is needed | `rowAlgebra_ourInst_tier1Open`, `rowAlgebra_noSub_ourInst`, `subClosed_nu_tier1Open`, `rowNU_of_wf`; `subClosed_needs_wf` |
@@ -272,7 +305,8 @@ start (`Targets/B/BumpSim.lean`):
 `coreW`'s report (`Targets/Audit.lean`, pinned): report 1, `Cell` (`WellFounded.fix`: the
 stratification by lifetime decision 7 keeps), `sepRange`, `tabFill`, `dropFill` and their
 auxiliaries (recursion on an array's length), and the matchers `clauseAt.match_1`,
-`VTy.upR.match_1` (a clause's index, a de Bruijn index: data); report 2, `AHead`, `ARun` (index `ℕ`:
+`VTy.upR.match_1`, `capTag.match_1` and `capTag._sparseCasesOn_5` (a clause's index, a de Bruijn
+index, an operation's index into its handler's tag list: data); report 2, `AHead`, `ARun` (index `ℕ`:
 the allocator's allocation count, never decremented, which selects the allocator's location), and,
 via `Loc` only, `Head`, `Chain`, `GPos`, `LinPath`, `MutPos`, `RefPos`, `TW` (heaps, resources,
 locations: names); report 3, `Table`, `ewpTS`, `vCE._f` (their `∀`-bound predicates range over
@@ -339,19 +373,19 @@ theorem status_tier1Core_world :
       Device (ℍ := ℍ) (coreW (ℍ := ℍ)) tier1Open.read admClosedOp .abortive ∧ WBCore (ℍ := ℍ) :=
   I.tier1Core_world
 
-/-- PROVED AT σ=[], given S5 at today's kernel: the restricted tier-1 reduction. -/
+/-- PROVED AT σ=[], given S4 and S5 at today's kernel: the restricted tier-1 reduction. -/
 theorem status_tier1Core_of
+    (hS4 : ∀ Ξ, AdmEff Ξ → (ourInst (ℍ := ℍ) orowRF Ξ tier1Open).HandlerSem)
     (hC : ∀ Ξ, AdmEff Ξ → (ourInst (ℍ := ℍ) orowRF Ξ tier1Open).Cancellation
       (ourInst (ℍ := ℍ) orowRF Ξ tier1Open).noFinRaise) : I.Tier1Core (ℍ := ℍ) :=
-  I.tier1Core_of hC
+  I.tier1Core_of hS4 hC
 
-/-- PROVED AT σ=[]: A's properties at today's kernel but S5 (and S6, which the restricted reduction
-does not hold), at every admissible effect context. -/
+/-- PROVED AT σ=[]: A's properties at today's kernel but S4, S5 (and S6, which the restricted
+reduction does not hold), at every admissible effect context.  S4 at `status_machShape_handlerSem`. -/
 theorem status_sPropsNoCancel_tier1Open {Ξ : EffCtx} (hΞ : AdmEff Ξ) :
     (ourInst (ℍ := ℍ) orowRF Ξ tier1Open).MachShape ∧ (ourInst (ℍ := ℍ) orowRF Ξ tier1Open).LetLaw ∧
       (ourInst (ℍ := ℍ) orowRF Ξ tier1Open).RowAlgebra ∧ (ourInst (ℍ := ℍ) orowRF Ξ tier1Open).DataDiv ∧
-      (ourInst (ℍ := ℍ) orowRF Ξ tier1Open).Safety ∧ (ourInst (ℍ := ℍ) orowRF Ξ tier1Open).EffSafe ∧
-      (ourInst (ℍ := ℍ) orowRF Ξ tier1Open).HandlerSem :=
+      (ourInst (ℍ := ℍ) orowRF Ξ tier1Open).Safety ∧ (ourInst (ℍ := ℍ) orowRF Ξ tier1Open).EffSafe :=
   I.sPropsNoCancel_tier1Open hΞ
 
 /-- PROVED AT σ=[]: B's guarantees at today's kernel but B5 — B0, B1, B2, B3 and B4, B4′, B6, B7
@@ -686,17 +720,21 @@ theorem status_rows : RowAlgSafe orowRF ∧ RowLink orowRF := ⟨rowAlgSafe_orow
 /-- PROVED AT σ=[]: no typed term intercepts a cancel. -/
 theorem status_noInterception_tier1 : NoInterception tier1 := noInterception_tier1
 
-/-- PROVED AT σ=[], given `LiveOK`: S0 and S4 at our instance, at every typing system. -/
+/-- PROVED AT σ=[], given `LiveOK`: S0 at our instance, at every typing system; S4 at an effect
+context whose resuming operations are unrestricted (`CatchUnr`), where the catch hands `capture`
+and keeps the store (at a linear or affine operation it hands `κ` a fresh cell, SPEC §25). -/
 theorem status_machShape_handlerSem (Ξ : EffCtx) (J : OurTyping orowRF)
     (hL : Inst.LiveOK (ℍ := ℍ) orowRF Ξ J) :
-    (ourInst (ℍ := ℍ) orowRF Ξ J).MachShape ∧ (ourInst (ℍ := ℍ) orowRF Ξ J).HandlerSem :=
+    (ourInst (ℍ := ℍ) orowRF Ξ J).MachShape ∧
+      (Ξ.CatchUnr → (ourInst (ℍ := ℍ) orowRF Ξ J).HandlerSem) :=
   ⟨Inst.machShape_orow hL, Inst.handlerSem_orow hL⟩
 
-/-- PROVED AT σ=[]: `LiveOK`, so S0 and S4, at today's kernel at every effect context (D1). -/
+/-- PROVED AT σ=[]: `LiveOK`, so S0, at today's kernel at every effect context (D1); S4 there at an
+effect context whose resuming operations are unrestricted. -/
 theorem status_machShape_handlerSem_tier1Open (Ξ : EffCtx) :
     Inst.LiveOK (ℍ := ℍ) orowRF Ξ tier1Open ∧
       (ourInst (ℍ := ℍ) orowRF Ξ tier1Open).MachShape ∧
-      (ourInst (ℍ := ℍ) orowRF Ξ tier1Open).HandlerSem :=
+      (Ξ.CatchUnr → (ourInst (ℍ := ℍ) orowRF Ξ tier1Open).HandlerSem) :=
   ⟨Inst.liveOK_tier1Open, Inst.machShape_orow Inst.liveOK_tier1Open,
     Inst.handlerSem_orow Inst.liveOK_tier1Open⟩
 
@@ -704,7 +742,7 @@ theorem status_machShape_handlerSem_tier1Open (Ξ : EffCtx) :
 with no `ccatch`, no `cfin` and no handler named `0` reaches a cancel whose region's finaliser
 performs the operation the region's dying handler catches; that finaliser meets `FinRow` at no set
 of endings, and the run from the cancel follows no cancel trace at any. -/
-theorem status_noIntercept_needs_finRow {Ξ : EffCtx} (h2 : Ξ 2 = [(.aff, .unit, .unit)]) :
+theorem status_noIntercept_needs_finRow {Ξ : EffCtx} (h2 : Ξ 2 = [(.unr, .unit, .unit)]) :
     NoInterception Inst.J₄.read ∧
       (∀ FR, ¬ (ourInst (ℍ := ℍ) orowRF Ξ Inst.J₄).FinRow FR Inst.finP) ∧
       ∀ FR, ¬ (ourInst (ℍ := ℍ) orowRF Ξ Inst.J₄).CancelTrace (ourInst (ℍ := ℍ) orowRF Ξ Inst.J₄).R₀ FR
@@ -735,23 +773,22 @@ theorem status_runTyping :
     finaliserOrder_tier1NU_of_finRows, finaliserOrder_tier1NU_of_finRowsA,
     fun _ hN hr hFL => finaliserOrder_of_route hN hr hFL⟩
 
-/-- PROVED: S6's teeth.  At the open-row form, a typing system that types R2 or R4 at `F 0 bool`
-fails S6, at every label; `JR` types all four witnesses and fails S6 at `ΞA`; today's kernel types
-none of them, by the handler's form. -/
-theorem status_contUse_teeth {Ξ : EffCtx} {J : OurTyping orowRF} (l : (orowAlg Ξ).Lab) :
+/-- PROVED: S6's tooth.  At the open-row form, a typing system that types R1 at `F 0 bool`, at a
+label whose first operation resumes and is linear or affine, fails S6; `JR` types R1 at the affine
+`wait` of `ΞA` and fails S6; today's kernel types none of R1–R4, by the handler's form. -/
+theorem status_contUse_teeth {Ξ : EffCtx} {J : OurTyping orowRF} (l : (orowAlg Ξ).Lab)
+    {q : Qual} {qs : List Qual} (hqs : Inst.qsL (RF := orowRF) (Ξ := Ξ) l = q :: qs) (hq : q ≠ .unr)
+    {o : A.OpSig Inst.OVTy} (ho : ((ourInst (ℍ := ℍ) orowRF Ξ J).sig l)[0]? = some o)
+    (hk : o.cls ≠ .abortive) :
     ((ourInst (ℍ := ℍ) orowRF Ξ J).der []
-        ((ourInst (ℍ := ℍ) orowRF Ξ J).withCl l (ourInst (ℍ := ℍ) orowRF Ξ J).twiceCl)
+        ((ourInst (ℍ := ℍ) orowRF Ξ J).withCl l (ourInst (ℍ := ℍ) orowRF Ξ J).dropCl)
         ((ourInst (ℍ := ℍ) orowRF Ξ J).F (orowAlg Ξ).unit (ourInst (ℍ := ℍ) orowRF Ξ J).bool) →
-      ¬ (ourInst (ℍ := ℍ) orowRF Ξ J).ContUse) ∧
-    ((ourInst (ℍ := ℍ) orowRF Ξ J).der []
-        ((ourInst (ℍ := ℍ) orowRF Ξ J).withCl l (ourInst (ℍ := ℍ) orowRF Ξ J).cancelResumeCl)
-        ((ourInst (ℍ := ℍ) orowRF Ξ J).F (orowAlg Ξ).unit (ourInst (ℍ := ℍ) orowRF Ξ J).bool) →
-      ¬ (ourInst (ℍ := ℍ) orowRF Ξ J).ContUse) ∧
-    ¬ (ourInst (ℍ := ℍ) orowRF Inst.ΞA Inst.JR).ContUse ∧
+      ¬ (ourInst (ℍ := ℍ) orowRF Ξ J).ContUseEv) ∧
+    ¬ (ourInst (ℍ := ℍ) orowRF Inst.ΞA Inst.JR).ContUseEv ∧
     ∀ C, ¬ (ourInst (ℍ := ℍ) orowRF Ξ tier1Open).der []
       ((ourInst (ℍ := ℍ) orowRF Ξ tier1Open).withCl l (ourInst (ℍ := ℍ) orowRF Ξ tier1Open).dropCl) C :=
-  ⟨Inst.not_contUse_of_der_R2_orow l, Inst.not_contUse_of_der_R4_orow l,
-    Inst.teeth_JR_ΞA.2.2.2.2.2, fun C => (Inst.refuses_R_tier1Open l C).1⟩
+  ⟨Inst.not_contUseEv_of_der_R1_orow l hqs hq ho hk, Inst.teeth_JR_ΞA.2.2.2,
+    fun C => (Inst.refuses_R_tier1Open l C).1⟩
 
 /-- PROVED: today's clause typing refuses R1–R4's clauses (RESTRUCTURE §6.1's reason): R1's, R2's
 and R4's at every resuming `lin` or `aff` operation, R3's at every `lin` one.  At the clause type of
@@ -850,33 +887,37 @@ theorem status_guarantees_J₁ : B.Guarantees (ℍ := ℍ) J₁.read (B.coreB (�
 /-- PROVED AT σ=[] (abortive rows): `Pins` at `J₁`. -/
 theorem status_pins_J₁ : I.Pins J₁ admClosedOp .abortive := I.pins_J₁
 
-/-- PROVED AT σ=[]: A's (S) properties at `J₁` but S5 and S6, at every effect context. -/
+/-- PROVED AT σ=[]: A's (S) properties at `J₁` but S4, S5 and S6, at every effect context; S4 at an
+effect context whose resuming operations are unrestricted. -/
 theorem status_sPropsNoCancel_J₁ (Ξ : EffCtx) :
     (ourInst (ℍ := ℍ) orowRF Ξ J₁).MachShape ∧ (ourInst (ℍ := ℍ) orowRF Ξ J₁).LetLaw ∧
       (ourInst (ℍ := ℍ) orowRF Ξ J₁).RowAlgebra ∧ (ourInst (ℍ := ℍ) orowRF Ξ J₁).DataDiv ∧
       (ourInst (ℍ := ℍ) orowRF Ξ J₁).Safety ∧ (ourInst (ℍ := ℍ) orowRF Ξ J₁).EffSafe ∧
-      (ourInst (ℍ := ℍ) orowRF Ξ J₁).HandlerSem :=
-  I.sPropsNoCancel_J₁
+      (Ξ.CatchUnr → (ourInst (ℍ := ℍ) orowRF Ξ J₁).HandlerSem) :=
+  ⟨I.sPropsNoCancel_J₁.1, I.sPropsNoCancel_J₁.2.1, I.sPropsNoCancel_J₁.2.2.1,
+    I.sPropsNoCancel_J₁.2.2.2.1, I.sPropsNoCancel_J₁.2.2.2.2.1, I.sPropsNoCancel_J₁.2.2.2.2.2,
+    I.handlerSem_J₁⟩
 
-/-- PROVED: tier 1 at `J₁` follows from A's (E) properties, S5 and S6 at every admissible effect
-context, and the composite's programs and rejections. -/
+/-- PROVED: tier 1 at `J₁` follows from A's (E) properties, S4, S5 and S6 at every admissible
+effect context, and the composite's programs and rejections. -/
 theorem status_tier1_J₁_of
     (hE : ∀ Ξ, AdmEff Ξ → (ourInst (ℍ := ℍ) orowRF Ξ J₁).EProps)
+    (hS4 : ∀ Ξ, AdmEff Ξ → (ourInst (ℍ := ℍ) orowRF Ξ J₁).HandlerSem)
     (hC : ∀ Ξ, AdmEff Ξ → (ourInst (ℍ := ℍ) orowRF Ξ J₁).Cancellation
       (ourInst (ℍ := ℍ) orowRF Ξ J₁).noFinRaise)
-    (hU : ∀ Ξ, AdmEff Ξ → (ourInst (ℍ := ℍ) orowRF Ξ J₁).ContUse)
+    (hU : ∀ Ξ, AdmEff Ξ → (ourInst (ℍ := ℍ) orowRF Ξ J₁).ContUseEv)
     (hAc : I.Accepts (ℍ := ℍ) J₁.read .abortive) (hRj : Rejects J₁.read) :
     I.Tier1 (ℍ := ℍ) J₁ :=
-  I.tier1_J₁_of hE hC hU hAc hRj
+  I.tier1_J₁_of hE hS4 hC hU hAc hRj
 
-/-- PROVED: route 8.4's coupling fails at BoLo's world and relation.  A typing system with FL at
-BoLo fails S6 at an admissible context, at a capture never used (R1), at a capture resumed twice
-(R2) and at a linear capture cancelled (R3); BoLo's world at the empty heap is the empty resource. -/
+/-- PROVED: route 8.4's obligation, at the capture cell.  R1 at a linear or affine operation is not
+in Core's relation at `F bool`: its run leaks `κ`'s cell, and Core's relation at a returner ends every
+run at the empty memory; BoLo's world at the empty heap is the empty resource. -/
 theorem status_ghostCoupling :
-    ¬ I.GhostCoupling (ℍ := ℍ) ∧ FL (B.coreB (ℍ := ℍ)) I.JRp.read ∧
-      ¬ (ourInst (ℍ := ℍ) orowRF Inst.ΞA I.JRp).ContUse ∧
+    (∀ (n : UInt32) (q : Qual) (qs : List Qual), q ≠ .unr →
+      ¬ SemC BoCa.Lifetime.LifeCtx.empty [] (Inst.rProg n (q :: qs) Inst.dropV) (.ret Inst.boolT)) ∧
       (∀ ρ : WRes, ResU.Lower ρ Adequacy.emptyMem → ρ = PMap.empty) :=
-  ⟨I.not_ghostCoupling, I.fl_core_JRp, I.ghost_probe_resume, fun _ h => I.lower_empty_eq h⟩
+  ⟨fun n _ qs hq => I.not_semC_R1 (ℍ := ℍ) n qs hq, fun _ h => I.lower_empty_eq h⟩
 
 /-! ## Piece 5: the answering class -/
 

@@ -41,7 +41,8 @@ variable {ℍ : BoCa.Host} [BoCa.HostIs ℍ]
 namespace Targets
 open BoCa BoCa.Fig16 BoCa.Fig16.BoLo BoCa.Fig16.LogRel BoCa.Fig16.LogRel.Core
 open BoCa.BoLo (Heap Steps Step1 Head Kont performE raiseE opPayload hndE ubindE ccatchE cfinE
-  hndVal cancelVal kappa clauseAt errNext namesVal errVal)
+  hndVal cancelVal kappa clauseAt errNext namesVal errVal capTag kappaAt kappaC kappaCell kappaCBody
+  freeE stuckE)
 
 /-- `omega` over locations: `Loc` unfolded to `Nat` first. -/
 local macro "lomega" : tactic => `(tactic| (try simp only [Loc] at *) <;> omega)
@@ -372,8 +373,22 @@ theorem arr_mapLoc (g : Loc → Loc) (ℓ : Loc) (n : UInt32) :
     (Val.arr ℓ n).mapLoc g = Val.arr (g ℓ) n := rfl
 theorem opPayload_mapLoc (g : Loc → Loc) (n i : UInt32) (v : Val) :
     (opPayload n i v).mapLoc g = opPayload n i (v.mapLoc g) := rfl
-theorem hndVal_mapLoc (g : Loc → Loc) (n : UInt32) (hr hs : Val) :
-    (hndVal n hr hs).mapLoc g = hndVal n (hr.mapLoc g) (hs.mapLoc g) := rfl
+theorem hndVal_mapLoc (g : Loc → Loc) (n : UInt32) (qs hr hs : Val) :
+    (hndVal n qs hr hs).mapLoc g = hndVal n (qs.mapLoc g) (hr.mapLoc g) (hs.mapLoc g) := rfl
+
+theorem capTag_mapLoc (g : Loc → Loc) (e : Expr) (i : Nat) : capTag (e.mapLoc g) i = capTag e i := by
+  induction e generalizing i with
+  | pair a r _ ihr =>
+      cases i with
+      | zero =>
+          cases a with
+          | prim p =>
+              cases p with
+              | lit c => cases c <;> rfl
+              | _ => rfl
+          | _ => rfl
+      | succ i => simpa only [Expr.mapLoc, capTag] using ihr i
+  | _ => cases i <;> rfl
 
 theorem namesVal_mapLoc (g : Loc → Loc) : ∀ N : List UInt32, (namesVal N).mapLoc g = namesVal N
   | [] => rfl
@@ -425,6 +440,54 @@ theorem kappa_mapLoc (g : Loc → Loc) (n : UInt32) (H : Val) (K : Kont) :
     congrArg Subtype.val (valMapLoc_shift g 2 0 H)
   simp only [kappa, hndE, ccatchE, Expr.val, Val.lam, Val.prim, Expr.mapLoc] at h₁ h₂ h₃ h₄ ⊢
   rw [h₁, h₂, h₃, h₄]
+
+theorem freeE_mapLoc (g : Loc → Loc) (e : Expr) :
+    (freeE e).mapLoc g = freeE (e.mapLoc g) := rfl
+
+theorem kappaC_mapLoc (g : Loc → Loc) (aff : Bool) (ℓ : Loc) (n : UInt32) (H : Val) (K : Kont) :
+    (kappaC aff ℓ n H K).mapLoc g = kappaC aff (g ℓ) n (H.mapLoc g) (K.mapLoc g) := by
+  have h₁ : ((K.shift 3 0).plug (.var 0)).mapLoc g = ((K.mapLoc g).shift 3 0).plug (.var 0) := by
+    rw [kont_mapLoc_plug, kont_mapLoc_shift]; rfl
+  have h₂ : ((K.shift 2 0).plug (raiseE (.val (cancelVal (n :: K.hndNames) none)))).mapLoc g =
+      ((K.mapLoc g).shift 2 0).plug (raiseE (.val (cancelVal (n :: (K.mapLoc g).hndNames) none))) := by
+    rw [kont_mapLoc_plug, kont_mapLoc_shift, hndNames_mapLoc, raiseE_mapLoc]
+    congr 2
+    exact congrArg Subtype.val (cancelVal_mapLoc g _ none)
+  have h₃ : (H.shift 3 0).1.mapLoc g = ((H.mapLoc g).shift 3 0).1 :=
+    congrArg Subtype.val (valMapLoc_shift g 3 0 H)
+  have h₄ : (H.shift 2 0).1.mapLoc g = ((H.mapLoc g).shift 2 0).1 :=
+    congrArg Subtype.val (valMapLoc_shift g 2 0 H)
+  cases aff <;>
+  simp only [kappaC, hndE, ccatchE, freeE, stuckE, Expr.val, Val.lam, Val.prim, Val.loc, Val.unit,
+    Expr.mapLoc, Bool.false_eq_true, if_true, if_false] at h₁ h₂ h₃ h₄ ⊢ <;>
+  rw [h₁] <;> (try rw [h₂]) <;> rw [h₃] <;> (try rw [h₄])
+
+theorem kappaCell_mapLoc (g : Loc → Loc) (aff : Bool) (n : UInt32) (H : Val) (K : Kont) :
+    (kappaCell aff n H K).mapLoc g = kappaCell aff n (H.mapLoc g) (K.mapLoc g) := by
+  have h₁ : ((K.shift 4 0).plug (.var 0)).mapLoc g = ((K.mapLoc g).shift 4 0).plug (.var 0) := by
+    rw [kont_mapLoc_plug, kont_mapLoc_shift]; rfl
+  have h₂ : ((K.shift 3 0).plug (raiseE (.val (cancelVal (n :: K.hndNames) none)))).mapLoc g =
+      ((K.mapLoc g).shift 3 0).plug (raiseE (.val (cancelVal (n :: (K.mapLoc g).hndNames) none))) := by
+    rw [kont_mapLoc_plug, kont_mapLoc_shift, hndNames_mapLoc, raiseE_mapLoc]
+    congr 2
+    exact congrArg Subtype.val (cancelVal_mapLoc g _ none)
+  have h₃ : (H.shift 4 0).1.mapLoc g = ((H.mapLoc g).shift 4 0).1 :=
+    congrArg Subtype.val (valMapLoc_shift g 4 0 H)
+  have h₄ : (H.shift 3 0).1.mapLoc g = ((H.mapLoc g).shift 3 0).1 :=
+    congrArg Subtype.val (valMapLoc_shift g 3 0 H)
+  cases aff <;>
+  simp only [kappaCell, kappaCBody, hndE, ccatchE, freeE, stuckE, Expr.val, Val.lam, Val.prim,
+    Val.unit, Expr.mapLoc, Bool.false_eq_true, if_true, if_false] at h₁ h₂ h₃ h₄ ⊢ <;>
+  rw [h₁] <;> (try rw [h₂]) <;> rw [h₃] <;> (try rw [h₄])
+
+theorem kappaAt_mapLoc (g : Loc → Loc) (t n : UInt32) (H : Val) (K : Kont) :
+    (kappaAt t n H K).mapLoc g = kappaAt t n (H.mapLoc g) (K.mapLoc g) := by
+  unfold kappaAt
+  split
+  · exact kappaCell_mapLoc g false n H K
+  · split
+    · exact kappaCell_mapLoc g true n H K
+    · exact kappa_mapLoc g n H K
 
 theorem clauseAt_mapLoc (g : Loc → Loc) :
     ∀ (e : Expr) (i : Nat), clauseAt (e.mapLoc g) i = (clauseAt e i).map (Val.mapLoc g)
@@ -784,16 +847,18 @@ theorem head_mapLoc_exists (g : Loc → Loc) {μ μ' : Heap} {b b' : Expr}
   | count f n i s => exact ⟨_, _, _, Head.count μ (f.mapLoc g) n i (s.mapLoc g)⟩
   | countTry f n i s => exact ⟨_, _, _, Head.countTry μ (f.mapLoc g) n i (s.mapLoc g)⟩
   | boundedFix s k a => exact ⟨_, _, _, Head.boundedFix μ (s.mapLoc g) k (a.mapLoc g)⟩
-  | hret n hr hs w => exact ⟨_, _, _, Head.hret μ n (hr.mapLoc g) (hs.mapLoc g) (w.mapLoc g)⟩
-  | hop n i hr hs c v K hc hK =>
+  | hret n qs hr hs w =>
+      exact ⟨_, _, _, Head.hret μ n (qs.mapLoc g) (hr.mapLoc g) (hs.mapLoc g) (w.mapLoc g)⟩
+  | hop n i qs hr hs c v K hc hK =>
       rw [hndE_mapLoc, hndVal_mapLoc, kont_mapLoc_plug, performE_mapLoc]
-      exact ⟨_, _, _, Head.hop μ n i (hr.mapLoc g) (hs.mapLoc g) (c.mapLoc g) (v.mapLoc g) (K.mapLoc g)
+      exact ⟨_, _, _, Head.hop μ n i (qs.mapLoc g) (hr.mapLoc g) (hs.mapLoc g) (c.mapLoc g)
+        (v.mapLoc g) (K.mapLoc g)
         (by rw [show (hs.mapLoc g).1 = hs.1.mapLoc g from rfl, clauseAt_mapLoc, hc]; rfl)
         (by rw [hasHnd_mapLoc, hK])⟩
-  | hunwind n i hr hs c v K hc hK =>
+  | hunwind n i qs hr hs c v K hc hK =>
       rw [hndE_mapLoc, hndVal_mapLoc, kont_mapLoc_plug, raiseE_mapLoc]
-      exact ⟨_, _, _, Head.hunwind μ n i (hr.mapLoc g) (hs.mapLoc g) (c.mapLoc g) (v.mapLoc g)
-        (K.mapLoc g)
+      exact ⟨_, _, _, Head.hunwind μ n i (qs.mapLoc g) (hr.mapLoc g) (hs.mapLoc g) (c.mapLoc g)
+        (v.mapLoc g) (K.mapLoc g)
         (by rw [show (hs.mapLoc g).1 = hs.1.mapLoc g from rfl, clauseAt_mapLoc, hc]; rfl)
         (by rw [catches_mapLoc, hK])⟩
   | uthen N D w => exact ⟨_, _, _, Head.uthen μ (N.mapLoc g) (D.mapLoc g) (w.mapLoc g)⟩
@@ -894,19 +959,24 @@ theorem head_image {g : Loc → Loc} {μ μ' : Heap} {b b' : Expr} (h : Head (�
   | boundedFix s k a =>
       rw [boundedFixNext_mapLoc]
       exact Head.boundedFix _ (s.mapLoc g) k (a.mapLoc g)
-  | hret n hr hs w => exact Head.hret _ n (hr.mapLoc g) (hs.mapLoc g) (w.mapLoc g)
-  | hop n i hr hs c v K hc hK =>
+  | hret n qs hr hs w => exact Head.hret _ n (qs.mapLoc g) (hr.mapLoc g) (hs.mapLoc g) (w.mapLoc g)
+  | hop n i qs hr hs c v K hc hK =>
       rw [hndE_mapLoc, hndVal_mapLoc, kont_mapLoc_plug, performE_mapLoc,
-        show (Expr.app (.val c) (.pair (.val v) (kappa n (hndVal n hr hs) K))).mapLoc g =
+        show (Expr.app (.val c) (.pair (.val v)
+            (kappaAt (capTag qs.1 i.toNat) n (hndVal n qs hr hs) K))).mapLoc g =
           .app (.val (c.mapLoc g)) (.pair (.val (v.mapLoc g))
-            (kappa n (hndVal n (hr.mapLoc g) (hs.mapLoc g)) (K.mapLoc g))) from by
-          simp only [Expr.mapLoc, kappa_mapLoc, hndVal_mapLoc]; rfl]
-      exact Head.hop _ n i (hr.mapLoc g) (hs.mapLoc g) (c.mapLoc g) (v.mapLoc g) (K.mapLoc g)
+            (kappaAt (capTag (qs.mapLoc g).1 i.toNat) n
+              (hndVal n (qs.mapLoc g) (hr.mapLoc g) (hs.mapLoc g)) (K.mapLoc g))) from by
+          simp only [Expr.mapLoc, kappaAt_mapLoc, hndVal_mapLoc]
+          rw [show (qs.mapLoc g).1 = qs.1.mapLoc g from rfl, capTag_mapLoc]; rfl]
+      exact Head.hop _ n i (qs.mapLoc g) (hr.mapLoc g) (hs.mapLoc g) (c.mapLoc g) (v.mapLoc g)
+        (K.mapLoc g)
         (by rw [show (hs.mapLoc g).1 = hs.1.mapLoc g from rfl, clauseAt_mapLoc, hc]; rfl)
         (by rw [hasHnd_mapLoc, hK])
-  | hunwind n i hr hs c v K hc hK =>
+  | hunwind n i qs hr hs c v K hc hK =>
       rw [hndE_mapLoc, hndVal_mapLoc, kont_mapLoc_plug, raiseE_mapLoc]
-      exact Head.hunwind _ n i (hr.mapLoc g) (hs.mapLoc g) (c.mapLoc g) (v.mapLoc g) (K.mapLoc g)
+      exact Head.hunwind _ n i (qs.mapLoc g) (hr.mapLoc g) (hs.mapLoc g) (c.mapLoc g) (v.mapLoc g)
+        (K.mapLoc g)
         (by rw [show (hs.mapLoc g).1 = hs.1.mapLoc g from rfl, clauseAt_mapLoc, hc]; rfl)
         (by rw [catches_mapLoc, hK])
   | uthen N D w => exact Head.uthen _ (N.mapLoc g) (D.mapLoc g) (w.mapLoc g)
@@ -1040,6 +1110,38 @@ theorem mentionsLoc_kappa {x : Loc} {n : UInt32} {H : Val} {K : Kont}
         obtain ⟨E, hE, -⟩ := mentionsLoc_cancelVal h
         cases hE
 
+theorem mentionsLoc_kappaCell {x : Loc} {aff : Bool} {n : UInt32} {H : Val} {K : Kont}
+    (h : (kappaCell aff n H K).MentionsLoc x) : H.1.MentionsLoc x ∨ (K.plug .unit).MentionsLoc x := by
+  cases aff <;>
+  simp only [kappaCell, kappaCBody, hndE, ccatchE, raiseE, freeE, stuckE, Expr.val, Val.lam,
+    Val.prim, Val.unit, Expr.MentionsLoc, false_or, or_false, Bool.false_eq_true, if_true,
+    if_false] at h
+  · rcases h with h | h
+    · exact .inl ((mentionsLoc_shift 4 0 H.1).mp h)
+    · rcases (mentionsLoc_plug _ _).mp h with h | h
+      · exact .inr ((mentionsLoc_kshift 4 0 K).mp h)
+      · exact h.elim
+  · rcases h with (h | h) | (h | h)
+    · exact .inl ((mentionsLoc_shift 4 0 H.1).mp h)
+    · rcases (mentionsLoc_plug _ _).mp h with h | h
+      · exact .inr ((mentionsLoc_kshift 4 0 K).mp h)
+      · exact h.elim
+    · exact .inl ((mentionsLoc_shift 3 0 H.1).mp h)
+    · rcases (mentionsLoc_plug _ _).mp h with h | h
+      · exact .inr ((mentionsLoc_kshift 3 0 K).mp h)
+      · simp only [Expr.MentionsLoc, false_or] at h
+        obtain ⟨E, hE, -⟩ := mentionsLoc_cancelVal h
+        cases hE
+
+theorem mentionsLoc_kappaAt {x : Loc} {t n : UInt32} {H : Val} {K : Kont}
+    (h : (kappaAt t n H K).MentionsLoc x) : H.1.MentionsLoc x ∨ (K.plug .unit).MentionsLoc x := by
+  unfold kappaAt at h
+  split at h
+  · exact mentionsLoc_kappaCell h
+  · split at h
+    · exact mentionsLoc_kappaCell h
+    · exact mentionsLoc_kappa h
+
 theorem mentionsLoc_clauseAt {x : Loc} : ∀ {e : Expr} {i : Nat} {c : Val},
     clauseAt e i = some c → c.1.MentionsLoc x → e.MentionsLoc x
   | .pair c' r, 0, c, h, hx => by
@@ -1084,8 +1186,9 @@ theorem mentionsLoc_tabFill {x : Loc} (f : Val) (ℓ : Loc) (n : UInt32) :
         · exact .inr (.inl h)
         · exact .inr (.inr ⟨j, by omega, rfl⟩)
 
-theorem mentions_hndVal {x : Loc} (n : UInt32) (hr hs : Val) :
-    (hndVal n hr hs).1.MentionsLoc x ↔ hr.1.MentionsLoc x ∨ hs.1.MentionsLoc x := by
+theorem mentions_hndVal {x : Loc} (n : UInt32) (qs hr hs : Val) :
+    (hndVal n qs hr hs).1.MentionsLoc x ↔
+      qs.1.MentionsLoc x ∨ hr.1.MentionsLoc x ∨ hs.1.MentionsLoc x := by
   simp [hndVal, Val.pair, Val.i32, Expr.MentionsLoc]
 
 theorem mentions_opPayload {x : Loc} (n i : UInt32) (v : Val) :
@@ -1218,24 +1321,24 @@ theorem head_mentions {μ μ' : Heap} {b b' : Expr} (h : Head (ℍ := ℍ) μ b 
             false_or, or_false, Val.val_shift, mentionsLoc_shift] at h
           exact .inl h
       · exact .inr (.inr h)
-  | hret n hr hs w =>
+  | hret n qs hr hs w =>
       refine .inl ((mentions_app2_prim _ _ _).mpr ?_)
       rcases hx with h | h
-      · exact .inl ((mentions_hndVal n hr hs).mpr (.inl h))
+      · exact .inl ((mentions_hndVal n qs hr hs).mpr (.inr (.inl h)))
       · exact .inr h
-  | hop n i hr hs c v K hc hK =>
+  | hop n i qs hr hs c v K hc hK =>
       refine .inl ((mentions_app2_prim _ _ _).mpr ?_)
       rcases hx with h | h | h
-      · exact .inl ((mentions_hndVal n hr hs).mpr (.inr (mentionsLoc_clauseAt hc h)))
+      · exact .inl ((mentions_hndVal n qs hr hs).mpr (.inr (.inr (mentionsLoc_clauseAt hc h))))
       · exact .inr ((mentionsLoc_plug _ _).mpr (.inr ((mentions_app_prim _ _).mpr
           ((mentions_opPayload n i v).mpr h))))
-      · rcases mentionsLoc_kappa h with h | h
+      · rcases mentionsLoc_kappaAt h with h | h
         · exact .inl h
         · exact .inr ((mentionsLoc_plug _ _).mpr (.inl h))
-  | hunwind n i hr hs c v K hc hK =>
+  | hunwind n i qs hr hs c v K hc hK =>
       refine .inl ((mentions_app2_prim _ _ _).mpr ?_)
       rcases hx with h | h
-      · exact .inl ((mentions_hndVal n hr hs).mpr (.inr (mentionsLoc_clauseAt hc h)))
+      · exact .inl ((mentions_hndVal n qs hr hs).mpr (.inr (.inr (mentionsLoc_clauseAt hc h))))
       · exact .inr ((mentionsLoc_plug _ _).mpr (.inr ((mentions_app_prim _ _).mpr
           ((mentions_opPayload n i v).mpr h))))
   | uthen N D w =>

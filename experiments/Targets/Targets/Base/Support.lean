@@ -49,14 +49,16 @@ theorem withPair_shift (M N : Expr) (d c : Nat) :
     (withPair M N).shift d c = withPair (M.shift d (c + 1 + 1)) (N.shift d (c + 1 + 1)) := by
   simp [withPair, Expr.shift]
 
-theorem hndTerm_shift (n : UInt32) (ir ic : Nat) (e : Expr) (d c : Nat) :
-    (hndTerm n ir ic e).shift d c = hndTerm n (sIdx d c ir) (sIdx d c ic) (e.shift d c) := by
+theorem hndTerm_shift (n : UInt32) (qs : List Qual) (ir ic : Nat) (e : Expr) (d c : Nat) :
+    (hndTerm n qs ir ic e).shift d c = hndTerm n qs (sIdx d c ir) (sIdx d c ic) (e.shift d c) := by
   show Expr.app (Expr.app (.prim .hnd) (.pair (.prim (.lit (.i32 n)))
-      (.pair ((Expr.var ir).shift d c) ((Expr.var ic).shift d c)))) (e.shift d c) = _
-  rw [var_shift, var_shift]; rfl
+      (.pair ((qualsVal qs).1.shift d c)
+        (.pair ((Expr.var ir).shift d c) ((Expr.var ic).shift d c))))) (e.shift d c) = _
+  rw [var_shift, var_shift, shift_qualsVal]; rfl
 
-theorem hndExpr_shift (n : UInt32) (H e : Expr) (d c : Nat) :
-    (hndExpr n H e).shift d c = hndExpr n (H.shift d c) (e.shift d c) := rfl
+theorem hndExpr_shift (n : UInt32) (qs : List Qual) (H e : Expr) (d c : Nat) :
+    (hndExpr n qs H e).shift d c = hndExpr n qs (H.shift d c) (e.shift d c) :=
+  shift_hndExpr d c n qs H e
 
 variable {Γd : Ctx VTy}
 

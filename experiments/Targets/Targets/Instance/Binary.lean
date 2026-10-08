@@ -21,7 +21,7 @@ variable {ℍ : BoCa.Host} [BoCa.HostIs ℍ]
 
 namespace Targets
 open BoCa BoCa.Fig16 BoCa.Fig16.BoLo BoCa.Fig16.LogRel BoCa.Fig16.LogRel.Core
-open BoCa.BoLo (Heap Steps Step1 Head Kont performE raiseE opPayload cancelVal hndE hndVal kappa
+open BoCa.BoLo (Heap Steps Step1 Head Kont performE raiseE opPayload cancelVal hndE hndVal kappa kappaAt capTag
   clauseAt)
 open BoCa.Lifetime (LSub LifeCtx LifeVar)
 
@@ -49,32 +49,33 @@ def _root_.BoCa.Expr.renameOp (n n' : UInt32) : Expr → Expr
   | .case a b c => .case (a.renameOp n n') (b.renameOp n n') (c.renameOp n n')
 
 def LawRet (J : TypingJ) (P : Platform) : Prop :=
-  ∀ n hr hs (v : Val) S R, J.closed (hndE (hndVal n hr hs) (.val v)) (CTy.effOf S R) →
-    CtxEquiv (ℍ := ℍ) J P (CTy.effOf S R) (thunkF (hndE (hndVal n hr hs) (.val v)))
+  ∀ n qs hr hs (v : Val) S R, J.closed (hndE (hndVal n qs hr hs) (.val v)) (CTy.effOf S R) →
+    CtxEquiv (ℍ := ℍ) J P (CTy.effOf S R) (thunkF (hndE (hndVal n qs hr hs) (.val v)))
       (thunkF (.app (.val hr) (.val v)))
 
 def LawOp (J : TypingJ) (P : Platform) : Prop :=
-  ∀ n i hr hs c (v : Val) (K : Kont) S R, K.HasHnd n = false → clauseAt hs.1 i.toNat = some c →
-    J.closed (hndE (hndVal n hr hs) (K.plug (performE (.val (opPayload n i v))))) (CTy.effOf S R) →
+  ∀ n i qs hr hs c (v : Val) (K : Kont) S R, K.HasHnd n = false → clauseAt hs.1 i.toNat = some c →
+    J.closed (hndE (hndVal n qs hr hs) (K.plug (performE (.val (opPayload n i v))))) (CTy.effOf S R) →
     CtxEquiv (ℍ := ℍ) J P (CTy.effOf S R)
-      (thunkF (hndE (hndVal n hr hs) (K.plug (performE (.val (opPayload n i v))))))
-      (thunkF (.app (.val c) (.pair (.val v) (kappa n (hndVal n hr hs) K))))
+      (thunkF (hndE (hndVal n qs hr hs) (K.plug (performE (.val (opPayload n i v))))))
+      (thunkF (.app (.val c) (.pair (.val v)
+        (kappaAt (capTag qs.1 i.toNat) n (hndVal n qs hr hs) K))))
 
 def LawFwd (J : TypingJ) (P : Platform) : Prop :=
-  ∀ n m i hr hs (v : Val) (K : Kont) S R, m ≠ n → K.HasHnd m = false →
-    J.closed (hndE (hndVal n hr hs) (K.plug (performE (.val (opPayload m i v))))) (CTy.effOf S R) →
+  ∀ n m i qs hr hs (v : Val) (K : Kont) S R, m ≠ n → K.HasHnd m = false →
+    J.closed (hndE (hndVal n qs hr hs) (K.plug (performE (.val (opPayload m i v))))) (CTy.effOf S R) →
     CtxEquiv (ℍ := ℍ) J P (CTy.effOf S R)
-      (thunkF (hndE (hndVal n hr hs) (K.plug (performE (.val (opPayload m i v))))))
+      (thunkF (hndE (hndVal n qs hr hs) (K.plug (performE (.val (opPayload m i v))))))
       (thunkF (bindE (performE (.val (opPayload m i v)))
-        (hndE (hndVal n hr hs) ((K.shift 1 0).plug (.var 0)))))
+        (hndE (hndVal n qs hr hs) ((K.shift 1 0).plug (.var 0)))))
 
 def LawTail (J : TypingJ) (P : Platform) : Prop :=
-  ∀ n i hr hs c (v : Val) (K : Kont) S R, K.HasHnd n = false →
+  ∀ n i qs hr hs c (v : Val) (K : Kont) S R, K.HasHnd n = false →
     clauseAt hs.1 i.toNat = some (tailClause c) →
-    J.closed (hndE (hndVal n hr hs) (K.plug (performE (.val (opPayload n i v))))) (CTy.effOf S R) →
+    J.closed (hndE (hndVal n qs hr hs) (K.plug (performE (.val (opPayload n i v))))) (CTy.effOf S R) →
     CtxEquiv (ℍ := ℍ) J P (CTy.effOf S R)
-      (thunkF (hndE (hndVal n hr hs) (K.plug (performE (.val (opPayload n i v))))))
-      (thunkF (hndE (hndVal n hr hs) (K.plug (.app (.val c) (.val v)))))
+      (thunkF (hndE (hndVal n qs hr hs) (K.plug (performE (.val (opPayload n i v))))))
+      (thunkF (hndE (hndVal n qs hr hs) (K.plug (.app (.val c) (.val v)))))
 
 /-- Algebraicity: an operation commutes with the `let` it is sequenced in, at `lin`/`aff`. -/
 def LawAlg (J : TypingJ) (P : Platform) : Prop :=
@@ -84,7 +85,8 @@ def LawAlg (J : TypingJ) (P : Platform) : Prop :=
       (thunkF (bindE (bindE (performE (.val (opPayload n i v))) M) N))
       (thunkF (bindE (performE (.val (opPayload n i v))) (bindE M (N.shift 1 1))))
 
-/-- β for capture: resuming `κ` at `w` is the frozen computation at `w` under its handler. -/
+/-- β for capture: resuming `κ` at `w` is the frozen computation at `w` under its handler.  It is
+stated at the unrestricted `κ`; a linear or affine `κ` frees its cell first (SPEC §25). -/
 def CapBeta (J : TypingJ) (P : Platform) : Prop :=
   ∀ n H K (w : Val) S R, J.closed (hndE H (K.plug (.val w))) (CTy.effOf S R) →
     CtxEquiv (ℍ := ℍ) J P (CTy.effOf S R)
@@ -99,7 +101,8 @@ def fwdClause (n' : UInt32) (j : Nat) : Val :=
 
 /-- The forwarding handler of `n`'s operations `E`, to `n'`. -/
 def fwdH (n n' : UInt32) (E : List (Qual × VTy × VTy)) : Val :=
-  hndVal n ⟨.lam (.var 0), .lam⟩ (clausesV ((List.range E.length).map (fwdClause n')))
+  hndVal n (qualsVal (E.map Prod.fst)) ⟨.lam (.var 0), .lam⟩
+    (clausesV ((List.range E.length).map (fwdClause n')))
 
 /-- η for capture, up to renaming the name (`[handle]` forbids the handled name in the result row,
 so `fwdH n n` is not typed; OQ-27's typing check). -/
@@ -187,7 +190,7 @@ def Tunnel (J : TypingJ) (P : Platform) : Prop :=
     (f.1).HndFree n →
     CtxEquiv (ℍ := ℍ) J P (.ret R)
       (thunkF (.app (.val f) (.val ⟨.lam (.app (.val c) (.var 0)), .lam⟩)))
-      (thunkF (hndE (hndVal n ⟨.lam (.var 0), .lam⟩ (Val.pair (tailClause c) .unit))
+      (thunkF (hndE (hndVal n (qualsVal [.lin]) ⟨.lam (.var 0), .lam⟩ (Val.pair (tailClause c) .unit))
         (.app (.val f) (.val ⟨.lam (performE (opArgE n 0 (.var 0))), .lam⟩))))
 
 /-- **Representation independence**: T2's `Hiding`, at answering handlers, whose operations are the

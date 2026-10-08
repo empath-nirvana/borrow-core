@@ -391,7 +391,7 @@ inductive CDerivesNU : LifeCtx → Ctx VTy → Expr → Jdg → Prop where
       (hr : Ctx.SoloP Γr ir (retTy S A R)) (hc : Ctx.SoloP Γc ic (clausesTy S R E))
       (hn0 : n ≠ 0) (hnS : ∀ o ∈ S, o.n ≠ n) (hlen : E.length ≤ 2 ^ 32)
       (he : CDerivesNU Δ Γ₂ e (.comp (CTy.effOf (Row.ofEff n E 0 ++ S) A))) :
-      CDerivesNU Δ Γ (hndTerm n ir ic e) (.comp (CTy.effOf S R))
+      CDerivesNU Δ Γ (hndTerm n (E.map Prod.fst) ir ic e) (.comp (CTy.effOf S R))
 
 /-- Every `CDerivesNU` derivation is a `CDerives` one. -/
 theorem CDerivesNU.toCDerives {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg}
@@ -817,7 +817,9 @@ def RC_effThen (J : TypingJ) (R : Row → Prop) : Prop :=
 
 def RC_effHandle (J : TypingJ) (R : Row → Prop) : Prop :=
   ∀ (Θ : RowCtx) (Δ : LifeCtx) (Γ Γ₁ Γ₂ Γr Γc : RowEnv → Ctx VTy) (e : Expr) (S : RowEnv → Row)
-    (E : RowEnv → List (Qual × VTy × VTy)) (n : UInt32) (A R' : RowEnv → VTy) (ir ic : Nat),
+    (E : RowEnv → List (Qual × VTy × VTy)) (qs : List Qual) (n : UInt32) (A R' : RowEnv → VTy)
+    (ir ic : Nat),
+    (∀ η, Θ.Models η → (E η).map Prod.fst = qs) →
     (∀ η, Θ.Models η → R (Row.ofEff n (E η) 0 ++ S η)) →
     (∀ η, Θ.Models η → Ctx.SplitP (Γ η) (Γ₁ η) (Γ₂ η) ∧ Ctx.SplitP (Γ₁ η) (Γr η) (Γc η) ∧
       Ctx.SoloP (Γr η) ir (retTy (S η) (A η) (R' η)) ∧
@@ -825,7 +827,7 @@ def RC_effHandle (J : TypingJ) (R : Row → Prop) : Prop :=
       (∀ o ∈ S η, o.n ≠ n) ∧ (E η).length ≤ 2 ^ 32) →
     n ≠ 0 →
     J Θ Δ Γ₂ e (fun η => .comp (CTy.effOf (Row.ofEff n (E η) 0 ++ S η) (A η))) →
-    J Θ Δ Γ (hndTerm n ir ic e) (fun η => .comp (CTy.effOf (S η) (R' η)))
+    J Θ Δ Γ (hndTerm n qs ir ic e) (fun η => .comp (CTy.effOf (S η) (R' η)))
 
 /-- `J` is closed under every rule of `CDerives` that has a derivation premise or reads an outlives
 judgment, the five effect rules `CDerivesNU` restricts asked their row predicate `R` (`Row.NU` for
@@ -981,9 +983,10 @@ theorem rc_effThen_tier1 (R : Row → Prop) : RC_effThen tier1 R :=
   fun _ _ _ _ _ _ _ _ _ _ _ _ hs hNZ hUq hU hM hN hD η hη => CDerives.effThen (hs η hη) (hNZ η hη) (hUq η hη) (hU η hη) (hM η hη) (hN η hη) (hD η hη)
 
 theorem rc_effHandle_tier1 (R : Row → Prop) : RC_effHandle tier1 R :=
-  fun _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ hside hn0 he η hη =>
+  fun _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ hqs _ hside hn0 he η hη =>
     match hside η hη with
-    | ⟨hs, hs₁, hr, hc, hnS, hlen⟩ => CDerives.effHandle hs hs₁ hr hc hn0 hnS hlen (he η hη)
+    | ⟨hs, hs₁, hr, hc, hnS, hlen⟩ =>
+        hqs η hη ▸ CDerives.effHandle hs hs₁ hr hc hn0 hnS hlen (he η hη)
 
 theorem rc_withbor2_tier1 : RC_withbor2 tier1 :=
   fun _ _ _ _ _ x hΓ hx hside hf₁ hf₂ η hη => CDerives.withbor2 x (hΓ η hη) hx (hside η hη) (hf₁ η hη) (hf₂ η hη)
@@ -1127,9 +1130,10 @@ theorem rc_effThen_tier1NU : RC_effThen tier1NU Row.NU :=
   fun _ _ _ _ _ _ _ _ _ _ _ hR hs hNZ hUq hU hM hN hD η hη => CDerivesNU.effThen (hR η hη) (hs η hη) (hNZ η hη) (hUq η hη) (hU η hη) (hM η hη) (hN η hη) (hD η hη)
 
 theorem rc_effHandle_tier1NU : RC_effHandle tier1NU Row.NU :=
-  fun _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ hR hside hn0 he η hη =>
+  fun _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ hqs hR hside hn0 he η hη =>
     match hside η hη with
-    | ⟨hs, hs₁, hr, hc, hnS, hlen⟩ => CDerivesNU.effHandle (hR η hη) hs hs₁ hr hc hn0 hnS hlen (he η hη)
+    | ⟨hs, hs₁, hr, hc, hnS, hlen⟩ =>
+        hqs η hη ▸ CDerivesNU.effHandle (hR η hη) hs hs₁ hr hc hn0 hnS hlen (he η hη)
 
 theorem rc_withbor2_tier1NU : RC_withbor2 tier1NU :=
   fun _ _ _ _ _ x hΓ hx hside hf₁ hf₂ η hη => CDerivesNU.withbor2 x (hΓ η hη) hx (hside η hη) (hf₁ η hη) (hf₂ η hη)

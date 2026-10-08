@@ -29,7 +29,7 @@ variable {ℍ : BoCa.Host} [BoCa.HostIs ℍ]
 namespace Targets.Inst
 open BoCa BoCa.Fig16 BoCa.Fig16.BoLo BoCa.Fig16.LogRel BoCa.Fig16.LogRel.Core
 open BoCa.BoLo (Heap Steps Step1 Head Kont performE raiseE opPayload hndE ubindE hndVal kappa
-  clauseAt)
+  clauseAt capTag kappaAt)
 open BoCa.Lifetime (LifeCtx)
 open Targets (RowForm EffCtx orowRF orowAlg HeadChain lookRun lookEnd lookRun_sound)
 
@@ -132,13 +132,20 @@ theorem quiet_kappa_resume (K₀ : Kont) (n : UInt32) (H : Val) (K : Kont) (w : 
   rw [e] at hb
   exact hb
 
-/-- **An operation a handler of values catches**: `hnd H K[perform (n, (i, v))] ↦ h_i (v, κ)`,
-quietly. -/
-theorem quiet_hop (K₀ : Kont) (n i : UInt32) (hr hs c v : Val) (K : Kont)
-    (hc : clauseAt hs.1 i.toNat = some c) (hK : K.HasHnd n = false) :
-    Quiet (ℍ := ℍ) (K₀.plug (hndE (hndVal n hr hs) (K.plug (performE (.val (opPayload n i v))))))
-      (K₀.plug (.app (.val c) (.pair (.val v) (kappa n (hndVal n hr hs) K)))) :=
-  Quiet.head K₀ (fun μ => Head.hop μ n i hr hs c v K hc hK) rfl rfl
+/-- **An unrestricted operation a handler of values catches**:
+`hnd H K[perform (n, (i, v))] ↦ h_i (v, κ)`, quietly.  (A linear or affine one allocates `κ`'s cell,
+SPEC §25.) -/
+theorem quiet_hop (K₀ : Kont) (n i : UInt32) (qs hr hs c v : Val) (K : Kont)
+    (hc : clauseAt hs.1 i.toNat = some c) (hK : K.HasHnd n = false)
+    (hu : kappaAt (capTag qs.1 i.toNat) n (hndVal n qs hr hs) K = kappa n (hndVal n qs hr hs) K) :
+    Quiet (ℍ := ℍ) (K₀.plug (hndE (hndVal n qs hr hs) (K.plug (performE (.val (opPayload n i v))))))
+      (K₀.plug (.app (.val c) (.pair (.val v) (kappa n (hndVal n qs hr hs) K)))) := by
+  have h : ∀ μ, Head (ℍ := ℍ) μ (hndE (hndVal n qs hr hs) (K.plug (performE (.val (opPayload n i v)))))
+      μ (.app (.val c) (.pair (.val v) (kappa n (hndVal n qs hr hs) K))) := by
+    intro μ
+    have h := Head.hop (ℍ := ℍ) μ n i qs hr hs c v K hc hK
+    rwa [hu] at h
+  exact Quiet.head K₀ h rfl rfl
 
 /-! ### Complete runs along a chain to a value -/
 

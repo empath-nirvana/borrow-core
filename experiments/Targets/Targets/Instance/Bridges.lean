@@ -74,7 +74,8 @@ theorem confLaws_ourInst : (ourInst (ℍ := ℍ) RF Ξ J).ConfLaws :=
 theorem bindK_noUnwind (N : Expr) : (bindK N).NoUnwind :=
   ⟨fun _ h => Expr.noConfusion h, fun _ h => Expr.noConfusion h, trivial⟩
 
-theorem handleK_noUnwind (n : UInt32) (r : Expr) (cs : List Expr) : (handleK n r cs).NoUnwind :=
+theorem handleK_noUnwind (n : UInt32) (qs r : Expr) (cs : List Expr) :
+    (handleK n qs r cs).NoUnwind :=
   ⟨fun _ h => by simp at h, fun _ h => by simp at h, trivial⟩
 
 theorem driveK_noUnwind : driveK.NoUnwind :=
@@ -82,8 +83,8 @@ theorem driveK_noUnwind : driveK.NoUnwind :=
 
 theorem thenK_not_noUnwind (N D : Expr) : ¬ (thenK N D).NoUnwind := fun h => h.1 _ rfl
 
-theorem handleK_hasHnd (hinj : Function.Injective (RF.name Ξ)) (l m : (RF.alg Ξ).Lab) (r : Expr)
-    (cs : List Expr) : (handleK (RF.name Ξ l) r cs).HasHnd (RF.name Ξ m) = true ↔ m = l := by
+theorem handleK_hasHnd (hinj : Function.Injective (RF.name Ξ)) (l m : (RF.alg Ξ).Lab) (qs r : Expr)
+    (cs : List Expr) : (handleK (RF.name Ξ l) qs r cs).HasHnd (RF.name Ξ m) = true ↔ m = l := by
   simp only [handleK, hndValE, Kont.HasHnd, Bool.or_false, beq_iff_eq]
   exact ⟨fun h => hinj h.symm, fun h => h ▸ rfl⟩
 
@@ -106,9 +107,9 @@ theorem kontLaws_ourInst (hinj : Function.Injective (RF.name Ξ)) :
     (ourInst (ℍ := ℍ) RF Ξ J).KontLaws :=
   ⟨fun _ => rfl, fun K₁ K₂ t => Kont.plug_comp K₁ K₂ t, fun _ _ => rfl, fun _ _ _ => rfl,
     fun _ _ _ => rfl, fun _ => rfl, fun _ => rfl, fun _ _ => rfl, fun V _ => appK_hasHnd V.1 _,
-    fun l H m => handleK_hasHnd hinj l m H.1.1 (H.2.map Subtype.val), fun _ _ _ => rfl, fun _ => rfl,
+    fun l H m => handleK_hasHnd hinj l m (qsOf Ξ (RF.name Ξ l)) H.1.1 (H.2.map Subtype.val), fun _ _ _ => rfl, fun _ => rfl,
     fun K₁ K₂ _ => hasHnd_comp _ K₁ K₂, trivial, fun N => bindK_noUnwind N,
-    fun V => appK_noUnwind V.1, fun _ _ => handleK_noUnwind _ _ _, fun N D => thenK_not_noUnwind N D,
+    fun V => appK_noUnwind V.1, fun _ _ => handleK_noUnwind _ _ _ _, fun N D => thenK_not_noUnwind N D,
     driveK_noUnwind, fun K₁ K₂ => noUnwind_comp K₁ K₂, rfl, fun _ => rfl, fun V => appK_fins_map V.1,
     fun _ _ => rfl, fun N D => thenK_fins N D, rfl, fun K₁ K₂ => fins_map_comp K₁ K₂,
     fun K h => fins_map_of_noUnwind K h⟩

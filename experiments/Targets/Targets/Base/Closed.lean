@@ -37,6 +37,12 @@ theorem soloP_lt {Γ : Ctx VTy} {i : Nat} {T : VTy} (h : Ctx.SoloP Γ i T) : i <
 theorem closedAt_of_zero {e : Expr} (h : closedAt 0 e = true) (k : Nat) : closedAt k e = true :=
   closedAt_mono e h (Nat.zero_le k)
 
+/-- A handler's tags are closed. -/
+theorem closedAt_qualsVal (k : Nat) : ∀ qs : List Qual, closedAt k (qualsVal qs).1 = true
+  | [] => rfl
+  | q :: qs => by
+      simp only [qualsVal, Val.pair, Val.i32, closedAt, closedAt_qualsVal k qs, Bool.and_true]
+
 /-- **A typed term is closed at its context.** -/
 theorem closedAt_of_derives {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg}
     (h : CDerives Δ Γ e j) : closedAt Γ.length e = true := by
@@ -93,7 +99,7 @@ theorem closedAt_of_derives {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg}
       simp [thenE, closedAt, Expr.val, Val.prim, Val.lam, ihM, ihN, ihD]
   | effHandleV hs _ _ _ _ _ _ _ ihc ihe =>
       rw [(splitP_length hs).1] at ihc; rw [(splitP_length hs).2] at ihe
-      simp [hndExpr, closedAt, Expr.val, Val.prim, Val.i32, ihc, ihe]
+      simp [hndExpr, closedAt, Expr.val, Val.prim, Val.i32, closedAt_qualsVal, ihc, ihe]
   | @letPoly _ Γ' N _ _ b hcl _ _ _ ihN =>
       rw [List.length_cons] at ihN
       have hN := closedAt_of_fill hcl N 0 (Γ'.length + 1) (Nat.succ_pos _) ihN

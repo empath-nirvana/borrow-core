@@ -64,7 +64,8 @@ def clausesV : List Val → Val
 
 /-- `(handle_n e with ctlRet, ctlClause co_j …) s₀`, `e` closed. -/
 def ctlForm (n : UInt32) (impl : AnsImpl) (s₀ e : Expr) : Expr :=
-  bindE (bindE (.val (clausesV (impl.co.map ctlClause))) (bindE (.val ctlRet) (hndTerm n 0 1 e)))
+  bindE (bindE (.val (clausesV (impl.co.map ctlClause)))
+    (bindE (.val ctlRet) (hndTerm n (impl.E.map fun _ => .lin) 0 1 e)))
     (bindE s₀ (.app (.var 1) (.var 0)))
 
 /-- `n` is not the name literal of any `perform`, `raise` or `hnd` in the term. -/

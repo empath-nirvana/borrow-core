@@ -138,7 +138,7 @@ theorem not_post_of_step {M : SemWorld} {μ μ' : Heap} {t t' : Expr}
 /-- AT02's handled computation. -/
 def at02Body : Expr := lendCell (.inj₁ unit') (cb (bindE fooE (.seq (.var 0) (readThrough 1))))
 
-theorem at02_eq : at02 = handleWith 5 resumeArg at02Body := rfl
+theorem at02_eq : at02 = handleWith 5 .lin resumeArg at02Body := rfl
 
 /-- `Foo : 1 ↠^lin 1`. -/
 theorem fooSig_lin : fooSig.q = .lin := rfl

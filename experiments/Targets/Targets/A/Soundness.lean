@@ -35,13 +35,14 @@ nothing meets every one; the lower bounds are the (E) properties (`Targets/A/Exp
   no-interception condition explicitly (decision D4, `FinRow`): the finalisers that fire are closed
   computations typed at a row of abortive operations of `FR`'s labels.  Ahman–Bauer Thm 7 and
   Voigt–Schuster–Brachthäuser Thm 3.6 are possible proof routes, not the statements' shape.
-* **S6** (`ContUse`): Tang et al. Thm 3.6 ("tagged linear values are not duplicated or discarded
+* **S6** (`ContUseEv`): Tang et al. Thm 3.6 ("tagged linear values are not duplicated or discarded
   during evaluation"); Affect ("continuations corresponding to one-shot effects are resumed at most
   once").  A use of a continuation is a step that applies it to a data value (decision D4: a
   clause's direct application of `κ` counts, and the instance's `resume` and `cancel` apply it).
-  On every run no continuation is used more often than it was caught, and one caught at a linear
-  operation is never cancelled; on every complete run at a data answer each is used exactly as often
-  as it was caught.
+  Per capture event, on complete runs (decision S6): the continuation a catch hands is read off the
+  run, and on every complete run at a data answer each continuation a capture event hands is used
+  exactly as often as it was handed, a linear one never cancelled.  `ContUse` is D4's form, which
+  counts catches at `capture` and uses of every value.
 -/
 
 namespace Targets.A
@@ -370,7 +371,12 @@ noncomputable def caught {R : S.Runner} (c₀ : S.RConf R) (q : List (S.Event ×
     (κ : S.Val) : ℕ :=
   S.caughtLin c₀ q κ + S.caughtAff c₀ q κ
 
-/-- **S6.** -/
+/-- **S6, read at `capture`** (decision D4's form).  A catch is counted at `capture l H K`, and a
+use is any application of a value to a data value.  Two things make it the wrong reading: a
+machine whose catch gives `κ` a resource of its own hands a `κ` that no function of the handler and
+the context names (our instance's capture cell, SPEC §25); and every application of a value that is
+not a continuation, a handler's return clause at a data answer among them, counts as a use of a
+value never caught.  `ContUseEv` is S6. -/
 def ContUse : Prop :=
   ∀ R : S.Runner, R.Respects → ∀ e ε A, S.Answers R ε → S.der [] e (S.F ε A) →
     ∀ q, S.RPath R (S.rinit R e) q → ∀ κ,
@@ -379,15 +385,61 @@ def ContUse : Prop :=
       (S.DataTy A → S.IsVal (S.lastC (S.rinit R e) q).1 →
         S.uses (S.rinit R e) q κ = S.caught (S.rinit R e) q κ)
 
+/-! ### S6 per capture event (the user's decision S6, 2026-10-08) -/
+
+/-- **A capture event**: step `j` of the path `q` from `c₀` catches a resuming operation of class
+`k`, the clause `cl`, and `κ` is the continuation the catch hands the clause, read off the run: at
+the first configuration after step `j` whose term is the clause applied to the operation's argument
+and a value, `κ` is that value.  The hand-off is an application (`appF` of the pair is a frame), so
+no open junk matches it. -/
+def CatchEvAt {R : S.Runner} (c₀ : S.RConf R) (q : List (S.Event × S.RConf R)) (j : ℕ) (κ : S.Val)
+    (k : OpClass) : Prop :=
+  j < q.length ∧ ∃ K₀ l r cs K i v, ∃ o : OpSig S.Ty, ∃ cl,
+    S.term (S.cfgAt c₀ q j).1 = S.plug K₀ (S.handle l (S.hnd r cs) (S.plug K (S.perform l i v))) ∧
+    S.catches K l = false ∧ (S.sig l)[i]? = some o ∧ o.cls = k ∧ k ≠ .abortive ∧ cs[i]? = some cl ∧
+    S.appF (S.pair v κ) ≠ S.hole ∧
+    ∃ j', j < j' ∧ j' ≤ q.length ∧
+      S.term (S.cfgAt c₀ q j').1 = S.plug K₀ (S.plug (S.appF (S.pair v κ)) (S.force cl)) ∧
+      ∀ j'' κ', j < j'' → j'' < j' → S.appF (S.pair v κ') ≠ S.hole →
+        S.term (S.cfgAt c₀ q j'').1 ≠ S.plug K₀ (S.plug (S.appF (S.pair v κ')) (S.force cl))
+
+open Classical in
+/-- The capture events handing `κ` at a linear operation along `q`. -/
+noncomputable def caughtEvLin {R : S.Runner} (c₀ : S.RConf R) (q : List (S.Event × S.RConf R))
+    (κ : S.Val) : ℕ :=
+  (List.range q.length).countP (fun j => decide (S.CatchEvAt c₀ q j κ .linear))
+
+open Classical in
+/-- The capture events handing `κ` at an affine operation along `q`. -/
+noncomputable def caughtEvAff {R : S.Runner} (c₀ : S.RConf R) (q : List (S.Event × S.RConf R))
+    (κ : S.Val) : ℕ :=
+  (List.range q.length).countP (fun j => decide (S.CatchEvAt c₀ q j κ .affine))
+
+/-- The capture events handing `κ`. -/
+noncomputable def caughtEv {R : S.Runner} (c₀ : S.RConf R) (q : List (S.Event × S.RConf R))
+    (κ : S.Val) : ℕ :=
+  S.caughtEvLin c₀ q κ + S.caughtEvAff c₀ q κ
+
+/-- **S6, per capture event, on complete runs** (decision S6).  On every complete run of a typed
+program at a data answer, each continuation a capture event hands is used exactly as often as it
+was handed (a use is a step that applies it to a data value, decision D4), and cancelled no more
+often than an affine event handed it: a linear one is never cancelled.  Counts are per
+continuation value, over the values capture events hand. -/
+def ContUseEv : Prop :=
+  ∀ R : S.Runner, R.Respects → ∀ e ε A, S.Answers R ε → S.der [] e (S.F ε A) → S.DataTy A →
+    ∀ q, S.CompleteFrom R (S.rinit R e) q → ∀ κ, (∃ j k, S.CatchEvAt (S.rinit R e) q j κ k) →
+      S.uses (S.rinit R e) q κ = S.caughtEv (S.rinit R e) q κ ∧
+      S.cancels (S.rinit R e) q κ ≤ S.caughtEvAff (S.rinit R e) q κ
+
 /-! ### The (S) properties together -/
 
-/-- **The soundness properties of A**, S5 at option A (`noFinRaise`, decision D3). -/
+/-- **The soundness properties of A**, S5 at option A (`noFinRaise`, decision D3), S6 per capture
+event (decision S6). -/
 def SProps : Prop :=
   S.MachShape ∧ S.LetLaw ∧ S.RowAlgebra ∧ S.DataDiv ∧ S.Safety ∧ S.EffSafe ∧ S.HandlerSem ∧
-    S.Cancellation S.noFinRaise ∧ S.ContUse
+    S.Cancellation S.noFinRaise ∧ S.ContUseEv
 
-/-- `SProps` without `ContUse` (OPEN at our instance, §7 Q9): the restricted tier-1 reduction's
-A conjunct. -/
+/-- `SProps` without S6 (OPEN at our instance): the restricted tier-1 reduction's A conjunct. -/
 def SPropsNoUse : Prop :=
   S.MachShape ∧ S.LetLaw ∧ S.RowAlgebra ∧ S.DataDiv ∧ S.Safety ∧ S.EffSafe ∧ S.HandlerSem ∧
     S.Cancellation S.noFinRaise

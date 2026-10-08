@@ -131,34 +131,39 @@ theorem flOpen_J₁_mono {Θ : Targets.RowCtx} {Δ : LifeCtx} {Γ : Ctx OVTy} {e
 
 /-! ### A's side -/
 
-/-- **A's (S) properties at `J₁`, S5 and S6 aside**, at every effect context: S0 and S4 from
+/-- **A's (S) properties at `J₁`, S4, S5 and S6 aside**, at every effect context: S0 from
 `LiveOK`, the let law, S1, `DataDiv`, S2 and S3. -/
 theorem sPropsNoCancel_J₁ {Ξ : EffCtx} :
     (ourInst (ℍ := ℍ) orowRF Ξ J₁).MachShape ∧ (ourInst (ℍ := ℍ) orowRF Ξ J₁).LetLaw ∧
       (ourInst (ℍ := ℍ) orowRF Ξ J₁).RowAlgebra ∧ (ourInst (ℍ := ℍ) orowRF Ξ J₁).DataDiv ∧
-      (ourInst (ℍ := ℍ) orowRF Ξ J₁).Safety ∧ (ourInst (ℍ := ℍ) orowRF Ξ J₁).EffSafe ∧
-      (ourInst (ℍ := ℍ) orowRF Ξ J₁).HandlerSem :=
+      (ourInst (ℍ := ℍ) orowRF Ξ J₁).Safety ∧ (ourInst (ℍ := ℍ) orowRF Ξ J₁).EffSafe :=
   ⟨Inst.machShape_orow (Inst.liveOK_of_coreClosed (D := J1Der) Inst.coreClosed_J₁),
     Inst.letLaw_ourInst_J₁, Inst.rowAlgebra_ourInst_J₁, Inst.dataDiv_ourInst,
     Inst.safety_of_coreClosed (D := J1Der) Inst.coreClosed_J₁,
-    Inst.effSafe_of_coreClosed (D := J1Der) Inst.coreClosed_J₁,
-    Inst.handlerSem_orow (Inst.liveOK_of_coreClosed (D := J1Der) Inst.coreClosed_J₁)⟩
+    Inst.effSafe_of_coreClosed (D := J1Der) Inst.coreClosed_J₁⟩
 
-/-- **Tier 1 at `J₁`, given what is open**: A's (E) properties, S5 and S6 at every admissible
+/-- **S4 at `J₁`**, at an effect context whose resuming operations are unrestricted (`CatchUnr`):
+there `κ` owns no cell, and the catch keeps the store (SPEC §25). -/
+theorem handlerSem_J₁ {Ξ : EffCtx} (hU : Ξ.CatchUnr) : (ourInst (ℍ := ℍ) orowRF Ξ J₁).HandlerSem :=
+  Inst.handlerSem_orow (Inst.liveOK_of_coreClosed (D := J1Der) Inst.coreClosed_J₁) hU
+
+/-- **Tier 1 at `J₁`, given what is open**: A's (E) properties, S4, S5 and S6 at every admissible
 effect context, and the composite's programs and rejections.  The rest of `Tier1 J₁` is proved:
-A's (S) properties but S5 and S6 (`sPropsNoCancel_J₁`), B's guarantees (`guarantees_J₁`), the
-world's conjuncts at `coreW` (`tier1Core_world`), and the pins (`pins_J₁`). -/
+A's (S) properties but S4, S5 and S6 (`sPropsNoCancel_J₁`), B's guarantees (`guarantees_J₁`), the
+world's conjuncts at `coreW` (`tier1Core_world`), and the pins (`pins_J₁`).  S4's capture laws keep
+the store, which the catch of a linear or affine operation does not (SPEC §25). -/
 theorem tier1_J₁_of
     (hE : ∀ Ξ, AdmEff Ξ → (ourInst (ℍ := ℍ) orowRF Ξ J₁).EProps)
+    (hS4 : ∀ Ξ, AdmEff Ξ → (ourInst (ℍ := ℍ) orowRF Ξ J₁).HandlerSem)
     (hC : ∀ Ξ, AdmEff Ξ → (ourInst (ℍ := ℍ) orowRF Ξ J₁).Cancellation
       (ourInst (ℍ := ℍ) orowRF Ξ J₁).noFinRaise)
-    (hU : ∀ Ξ, AdmEff Ξ → (ourInst (ℍ := ℍ) orowRF Ξ J₁).ContUse)
+    (hU : ∀ Ξ, AdmEff Ξ → (ourInst (ℍ := ℍ) orowRF Ξ J₁).ContUseEv)
     (hAc : Accepts (ℍ := ℍ) J₁.read .abortive) (hRj : Rejects J₁.read) :
     Tier1 (ℍ := ℍ) J₁ := by
   obtain ⟨hB, hI, -, -⟩ := tier1Core_world (ℍ := ℍ)
   refine ⟨fun Ξ hΞ => ⟨?_, hE Ξ hΞ⟩, guarantees_J₁, hB, hI, pins_J₁, hAc, hRj⟩
-  obtain ⟨h0, hl, h1, hd, h2, h3, h4⟩ := sPropsNoCancel_J₁ (ℍ := ℍ) (Ξ := Ξ)
-  exact ⟨h0, hl, h1, hd, h2, h3, h4, hC Ξ hΞ, hU Ξ hΞ⟩
+  obtain ⟨h0, hl, h1, hd, h2, h3⟩ := sPropsNoCancel_J₁ (ℍ := ℍ) (Ξ := Ξ)
+  exact ⟨h0, hl, h1, hd, h2, h3, hS4 Ξ hΞ, hC Ξ hΞ, hU Ξ hΞ⟩
 
 end Targets.I
 

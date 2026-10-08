@@ -43,6 +43,7 @@ variable {ℍ : BoCa.Host} [BoCa.HostIs ℍ]
 namespace Targets.Inst
 open BoCa BoCa.Fig16 BoCa.Fig16.BoLo BoCa.Fig16.LogRel BoCa.Fig16.LogRel.Core
 open BoCa.BoLo (Heap Steps Step1 Head Kont performE raiseE opPayload hndE ubindE ccatchE cfinE
+  capTag kappaAt
   hndVal cancelVal kappa clauseAt)
 open Targets (RowForm EffCtx orowRF Look look lookRun lookEnd HeadChain LookOK StuckAt stuck_no_step
   stuck_ne_op stuckAt_unit_app)
@@ -397,8 +398,8 @@ def catchShape (t : Expr) : Bool :=
     | .app (.app (.prim .hnd) _) b => (evalSubs b).any performShape
     | _ => false
 
-theorem catchShape_plug (K₀ : Kont) (n : UInt32) (r : Expr) (cs : List Expr) (K : Kont)
-    (p : Expr) : catchShape (K₀.plug ((handleK n r cs).plug (K.plug (performE p)))) = true := by
+theorem catchShape_plug (K₀ : Kont) (n : UInt32) (qs r : Expr) (cs : List Expr) (K : Kont)
+    (p : Expr) : catchShape (K₀.plug ((handleK n qs r cs).plug (K.plug (performE p)))) = true := by
   unfold catchShape
   refine any_evalSubs_plug K₀ ?_
   simp only [handleK, Kont.plug]
@@ -939,15 +940,16 @@ theorem closedAt_clausesE : ∀ (cs : List Expr) {k : ℕ}, closedAt k (clausesE
 
 /-- At a configuration a typed program reaches, a handler frame's handler is a Core value. -/
 theorem hndVal_of_live (hL : LiveOK (ℍ := ℍ) RF Ξ J) {c : Heap × Expr}
-    (hc : (ourInst (ℍ := ℍ) RF Ξ J).Live c) {K₀ : Kont} {n : UInt32} {r : OVal} {cs : List OVal}
-    {x : Expr} (h : c.2 = K₀.plug ((handleK n r.1 (cs.map Subtype.val)).plug x)) :
+    (hc : (ourInst (ℍ := ℍ) RF Ξ J).Live c) {K₀ : Kont} {n : UInt32} {qs : List Qual} {r : OVal}
+    {cs : List OVal} {x : Expr}
+    (h : c.2 = K₀.plug ((handleK n (qualsVal qs).1 r.1 (cs.map Subtype.val)).plug x)) :
     IsVal r.1 ∧ IsVal (clausesE (cs.map Subtype.val)) := by
   have hcl := closedAt_plug_inv K₀ (h ▸ (hL c hc).1)
   simp only [handleK, Kont.plug, hndValE, closedAt, Bool.and_eq_true, Bool.true_and] at hcl
-  refine ⟨isVal_of_closed_oval r.2 hcl.1.1, isVal_clausesE _ ?_⟩
+  refine ⟨isVal_of_closed_oval r.2 hcl.1.2.1, isVal_clausesE _ ?_⟩
   intro e he
   obtain ⟨cl, -, rfl⟩ := List.mem_map.1 he
-  exact isVal_of_closed_oval cl.2 (closedAt_clausesE _ hcl.1.2 _ he)
+  exact isVal_of_closed_oval cl.2 (closedAt_clausesE _ hcl.1.2.2 _ he)
 
 
 /-- Resuming `κ` at `w` reaches `hnd H K[w]`: `ewp_kappa_resume`'s four steps. -/
@@ -1040,17 +1042,35 @@ theorem resumeE_steps {μ : Heap} (K₀ : Kont) (k : Expr) (w : Val) :
   rw [resumeE_subst] at h
   exact h
 
-theorem captureE_of_val {n : UInt32} {r : Expr} {cs : List Expr} (K : Kont)
-    (h : IsVal (hndValE n r cs)) : captureE n r cs K = kappa n ⟨_, h⟩ K := by
+theorem captureE_of_val {n : UInt32} {qs r : Expr} {cs : List Expr} (K : Kont)
+    (h : IsVal (hndValE n qs r cs)) : captureE n qs r cs K = kappa n ⟨_, h⟩ K := by
   unfold captureE; rw [dif_pos h]
 
-theorem captureE_of_not_val {n : UInt32} {r : Expr} {cs : List Expr} (K : Kont)
-    (h : ¬ IsVal (hndValE n r cs)) : captureE n r cs K = .unit := by
+theorem captureE_of_not_val {n : UInt32} {qs r : Expr} {cs : List Expr} (K : Kont)
+    (h : ¬ IsVal (hndValE n qs r cs)) : captureE n qs r cs K = .unit := by
   unfold captureE; rw [dif_neg h]
 
-theorem cancelOfE_of_val {n : UInt32} {r : Expr} {cs : List Expr} (K : Kont)
-    (h : IsVal (hndValE n r cs)) : cancelOfE n r cs K = Targets.cancelOf n ⟨_, h⟩ K := by
+theorem cancelOfE_of_val {n : UInt32} {qs r : Expr} {cs : List Expr} (K : Kont)
+    (h : IsVal (hndValE n qs r cs)) : cancelOfE n qs r cs K = Targets.cancelOf n ⟨_, h⟩ K := by
   unfold cancelOfE; rw [dif_pos h]
+
+/-- **Every resuming operation of `Ξ` is unrestricted**: its `κ` owns no cell (SPEC §25).  At a
+linear or affine operation the catch is followed by the cell's allocation, which changes the
+store, so S4's catch law, which keeps it, is read at contexts with this property. -/
+def _root_.Targets.EffCtx.CatchUnr (Ξ : EffCtx) : Prop :=
+  ∀ n q A B, (q, A, B) ∈ Ξ n → (B.isZero && q != .lin) = false → q = .unr
+
+/-- At a context whose resuming operations are unrestricted, a resuming operation's tag is the
+unrestricted one. -/
+theorem capTag_qsOf_unr {Ξ : EffCtx} (hU : Ξ.CatchUnr) {n : UInt32} {i : ℕ}
+    {p : Qual × VTy × VTy} (hp : (Ξ n)[i]? = some p) (hres : (p.2.2.isZero && p.1 != .lin) = false) :
+    capTag (qsOf Ξ n) i = 2 := by
+  have hi : i < (Ξ n).length := (List.getElem?_eq_some_iff.1 hp).1
+  have hpe : (Ξ n)[i] = p := (List.getElem?_eq_some_iff.1 hp).2
+  have hq := hU n p.1 p.2.1 p.2.2 (by rw [← hpe]; exact List.getElem_mem hi) hres
+  unfold qsOf
+  rw [capTag_qualsVal _ i (by simpa using hi)]
+  simp [hpe, hq, Qual.tag]
 
 /-- An operation's index is below `2³²` when its label's signature is no longer. -/
 theorem idx_lt {l : (RF.alg Ξ).Lab} {i : ℕ} {o : A.OpSig OVTy}
@@ -1061,58 +1081,100 @@ theorem idx_lt {l : (RF.alg Ξ).Lab} {i : ℕ} {o : A.OpSig OVTy}
     first | exact List.length_map _ _ | exact List.length_map _
   omega
 
+/-- The signature entry behind an operation of A's signature at our instance. -/
+theorem sig_entry {l : (RF.alg Ξ).Lab} {i : ℕ} {o : A.OpSig OVTy}
+    (h : ((ourInst (ℍ := ℍ) RF Ξ J).sig l)[i]? = some o) :
+    ∃ p, (Ξ (RF.name Ξ l))[i]? = some p ∧ o.cls = clsOf p.1 p.2.2 := by
+  change ((Ξ (RF.name Ξ l)).map fun p => (⟨OVTy.ofV p.2.1, OVTy.ofV p.2.2, clsOf p.1 p.2.2⟩ :
+    A.OpSig OVTy))[i]? = some o at h
+  rw [List.getElem?_map] at h
+  cases hp : (Ξ (RF.name Ξ l))[i]? with
+  | none => rw [hp] at h; cases h
+  | some p => rw [hp] at h; cases h; exact ⟨p, rfl, rfl⟩
+
+/-- A resuming operation is not abortive. -/
+theorem resuming_of_cls {q : Qual} {B : VTy} (h : clsOf q B ≠ .abortive) :
+    (B.isZero && q != .lin) = false := by
+  unfold clsOf at h
+  by_contra hc
+  simp only [Bool.not_eq_false] at hc
+  simp [hc] at h
+
 /-- **S4** (`HandlerSem`) at a configuration a typed program reaches, at a row form whose labels'
-names are not the reserved `0` and whose signatures are indexable by `UInt32`. -/
+names are not the reserved `0` and whose signatures are indexable by `UInt32`, at an effect context
+whose resuming operations are unrestricted (`CatchUnr`): there the catch hands `kappa`, which owns no
+cell, and keeps the store.  At a linear or affine operation the catch is followed by the allocation
+of `κ`'s cell (SPEC §25). -/
 theorem handlerSem_ourInst (hL : LiveOK (ℍ := ℍ) RF Ξ J) (hnz : ∀ l, RF.name Ξ l ≠ 0)
-    (hlen : ∀ l, (Ξ (RF.name Ξ l)).length ≤ 2 ^ 32) :
+    (hlen : ∀ l, (Ξ (RF.name Ξ l)).length ≤ 2 ^ 32) (hU : Ξ.CatchUnr) :
     (ourInst (ℍ := ℍ) RF Ξ J).HandlerSem := by
   refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
   · rintro ⟨μ, e⟩ (K₀ : Kont) l (r : OVal) (cs : List OVal) (v : OVal) hlive he
-    change e = K₀.plug ((handleK (RF.name Ξ l) r.1 (cs.map Subtype.val)).plug v.1) at he
+    change e = K₀.plug ((handleK (RF.name Ξ l) (qsOf Ξ (RF.name Ξ l)) r.1
+      (cs.map Subtype.val)).plug v.1) at he
     subst he
     obtain ⟨hr, hcs⟩ := hndVal_of_live hL hlive rfl
     have hv : IsVal v.1 := val_of_live hL hlive v.2
-      (K := K₀.comp (handleK (RF.name Ξ l) r.1 (cs.map Subtype.val))) (by rw [Kont.plug_comp])
-    exact ⟨_, pureSteps_head K₀ .hole (Head.hret μ (RF.name Ξ l) ⟨r.1, hr⟩ ⟨_, hcs⟩ ⟨v.1, hv⟩),
+      (K := K₀.comp (handleK (RF.name Ξ l) (qsOf Ξ (RF.name Ξ l)) r.1 (cs.map Subtype.val)))
+      (by rw [Kont.plug_comp])
+    exact ⟨_, pureSteps_head K₀ .hole (Head.hret μ (RF.name Ξ l)
+      (qualsVal ((Ξ (RF.name Ξ l)).map Prod.fst)) ⟨r.1, hr⟩ ⟨_, hcs⟩ ⟨v.1, hv⟩),
       appE_steps K₀ r.1 ⟨v.1, hv⟩⟩
   · rintro ⟨μ, e⟩ (K₀ : Kont) l (r : OVal) (cs : List OVal) (K : Kont) i (v : OVal) o (cl : OVal)
-      hlive he hK hsig - hcl
+      hlive he hK hsig hres hcl
     rw [perform_eq (ℍ := ℍ) (l := l) v (idx_lt (J := J) (hlen l) hsig)] at he
-    change e = K₀.plug ((handleK (RF.name Ξ l) r.1 (cs.map Subtype.val)).plug
+    change e = K₀.plug ((handleK (RF.name Ξ l) (qsOf Ξ (RF.name Ξ l)) r.1 (cs.map Subtype.val)).plug
       (K.plug (performE (opArgE (RF.name Ξ l) (UInt32.ofNat i) v.1)))) at he
     subst he
     change K.HasHnd (RF.name Ξ l) = false at hK
     obtain ⟨hr, hcs⟩ := hndVal_of_live hL hlive rfl
     have hv : IsVal v.1 := val_of_live hL hlive v.2
-      (K := ((K₀.comp (handleK (RF.name Ξ l) r.1 (cs.map Subtype.val))).comp K).comp
+      (K := ((K₀.comp (handleK (RF.name Ξ l) (qsOf Ξ (RF.name Ξ l)) r.1
+        (cs.map Subtype.val))).comp K).comp
         (.appR (.prim .perform) (.pairR (Val.i32 (RF.name Ξ l)) (.pairR (Val.i32 (UInt32.ofNat i))
           .hole))))
       (by simp only [Kont.plug_comp]; rfl)
     have hcl' : (cs.map Subtype.val)[i]? = some cl.1 := by
       rw [List.getElem?_map]; exact congrArg (Option.map Subtype.val) hcl
     have hclv : IsVal cl.1 := isVal_of_mem_clausesE hcs _ (List.mem_of_getElem? hcl')
+    have hi := idx_lt (J := J) (hlen l) hsig
     have hca : clauseAt (clausesE (cs.map Subtype.val)) (UInt32.ofNat i).toNat =
         some ⟨cl.1, hclv⟩ := by
-      rw [UInt32.toNat_ofNat_of_lt' (idx_lt (hlen l) hsig)]
+      rw [UInt32.toNat_ofNat_of_lt' hi]
       exact clauseAt_clausesE _ i hclv hcl'
-    have hH : IsVal (hndValE (RF.name Ξ l) r.1 (cs.map Subtype.val)) := .pair .prim (.pair hr hcs)
-    refine ⟨_, pureSteps_head K₀ .hole (Head.hop μ (RF.name Ξ l) (UInt32.ofNat i) ⟨r.1, hr⟩
-      ⟨_, hcs⟩ ⟨cl.1, hclv⟩ ⟨v.1, hv⟩ K hca hK), ?_⟩
+    have hqv : IsVal (qsOf Ξ (RF.name Ξ l)) := (qualsVal _).2
+    have hH : IsVal (hndValE (RF.name Ξ l) (qsOf Ξ (RF.name Ξ l)) r.1 (cs.map Subtype.val)) :=
+      .pair .prim (.pair hqv (.pair hr hcs))
+    obtain ⟨p, hp, hpo⟩ := sig_entry (J := J) hsig
+    have htag : capTag (qsOf Ξ (RF.name Ξ l)) (UInt32.ofNat i).toNat = 2 := by
+      rw [UInt32.toNat_ofNat_of_lt' hi]
+      exact capTag_qsOf_unr hU hp (resuming_of_cls (hpo ▸ hres))
+    refine ⟨_, pureSteps_head K₀ .hole (Head.hop μ (RF.name Ξ l) (UInt32.ofNat i)
+      (qualsVal ((Ξ (RF.name Ξ l)).map Prod.fst)) ⟨r.1, hr⟩ ⟨_, hcs⟩ ⟨cl.1, hclv⟩ ⟨v.1, hv⟩ K hca hK),
+      ?_⟩
     show (ourInst (ℍ := ℍ) RF Ξ J).PureSteps (μ, K₀.plug (appE cl.1
-      (.pair v.1 (captureE (RF.name Ξ l) r.1 (cs.map Subtype.val) K)))) _
+      (.pair v.1 (captureE (RF.name Ξ l) (qsOf Ξ (RF.name Ξ l)) r.1 (cs.map Subtype.val) K)))) _
     rw [captureE_of_val K hH]
+    have hk : kappaAt (capTag (qualsVal ((Ξ (RF.name Ξ l)).map Prod.fst)).1 (UInt32.ofNat i).toNat)
+        (RF.name Ξ l) (hndVal (RF.name Ξ l) (qualsVal ((Ξ (RF.name Ξ l)).map Prod.fst))
+          ⟨r.1, hr⟩ ⟨_, hcs⟩) K =
+        kappa (RF.name Ξ l) ⟨_, hH⟩ K := by
+      change kappaAt (capTag (qsOf Ξ (RF.name Ξ l)) (UInt32.ofNat i).toNat) _ _ K = _
+      rw [htag]; rfl
+    rw [hk]
     exact appE_steps K₀ cl.1 ⟨.pair v.1 (kappa _ _ K), .pair hv .lam⟩
   · rintro ⟨μ, e⟩ (K₀ : Kont) l (r : OVal) (cs : List OVal) (K : Kont) i (v : OVal) o (cl : OVal)
-      hlive he hK hU hsig - hcl
+      hlive he hK hU' hsig - hcl
     rw [raise_eq (ℍ := ℍ) (l := l) v (idx_lt (J := J) (hlen l) hsig)] at he
-    change e = K₀.plug ((handleK (RF.name Ξ l) r.1 (cs.map Subtype.val)).plug
+    change e = K₀.plug ((handleK (RF.name Ξ l) (qsOf Ξ (RF.name Ξ l)) r.1 (cs.map Subtype.val)).plug
       (K.plug (raiseE (opArgE (RF.name Ξ l) (UInt32.ofNat i) v.1)))) at he
     subst he
     change K.HasHnd (RF.name Ξ l) = false at hK
-    change K.NoUnwind at hU
+    change K.NoUnwind at hU'
     obtain ⟨hr, hcs⟩ := hndVal_of_live hL hlive rfl
     have hv : IsVal v.1 := val_of_live hL hlive v.2
-      (K := ((K₀.comp (handleK (RF.name Ξ l) r.1 (cs.map Subtype.val))).comp K).comp
+      (K := ((K₀.comp (handleK (RF.name Ξ l) (qsOf Ξ (RF.name Ξ l)) r.1
+        (cs.map Subtype.val))).comp K).comp
         (.appR (.prim .raise) (.pairR (Val.i32 (RF.name Ξ l)) (.pairR (Val.i32 (UInt32.ofNat i))
           .hole))))
       (by simp only [Kont.plug_comp]; rfl)
@@ -1123,22 +1185,27 @@ theorem handlerSem_ourInst (hL : LiveOK (ℍ := ℍ) RF Ξ J) (hnz : ∀ l, RF.n
         some ⟨cl.1, hclv⟩ := by
       rw [UInt32.toNat_ofNat_of_lt' (idx_lt (hlen l) hsig)]
       exact clauseAt_clausesE _ i hclv hcl'
-    exact ⟨_, pureSteps_head K₀ .hole (Head.hunwind μ (RF.name Ξ l) (UInt32.ofNat i) ⟨r.1, hr⟩
-      ⟨_, hcs⟩ ⟨cl.1, hclv⟩ ⟨v.1, hv⟩ K hca (catches_of_noUnwind _ (hnz l) K hU hK)),
+    exact ⟨_, pureSteps_head K₀ .hole (Head.hunwind μ (RF.name Ξ l) (UInt32.ofNat i)
+      (qualsVal ((Ξ (RF.name Ξ l)).map Prod.fst)) ⟨r.1, hr⟩
+      ⟨_, hcs⟩ ⟨cl.1, hclv⟩ ⟨v.1, hv⟩ K hca (catches_of_noUnwind _ (hnz l) K hU' hK)),
       appE_steps K₀ cl.1 ⟨v.1, hv⟩⟩
   · rintro ⟨μ, e⟩ (K₀ : Kont) l (H : OVal × List OVal) (K : Kont) (w : OVal) hlive he
-    change e = K₀.plug (resumeE (captureE (RF.name Ξ l) H.1.1 (H.2.map Subtype.val) K) w.1) at he
+    change e = K₀.plug (resumeE (captureE (RF.name Ξ l) (qsOf Ξ (RF.name Ξ l)) H.1.1
+      (H.2.map Subtype.val) K) w.1) at he
     subst he
     have hw : IsVal w.1 := val_of_live hL hlive w.2
-      (K := K₀.comp (.appR (.lam (.app (.app ((captureE (RF.name Ξ l) H.1.1 (H.2.map Subtype.val)
-        K).shift 1 0) (.inj₁ .unit)) (.var 0))) .hole)) (by rw [Kont.plug_comp]; rfl)
+      (K := K₀.comp (.appR (.lam (.app (.app ((captureE (RF.name Ξ l) (qsOf Ξ (RF.name Ξ l)) H.1.1
+        (H.2.map Subtype.val) K).shift 1 0) (.inj₁ .unit)) (.var 0))) .hole))
+      (by rw [Kont.plug_comp]; rfl)
     have hst := resumeE_steps (ℍ := ℍ) (RF := RF) (Ξ := Ξ) (J := J) (μ := μ) K₀
-      (captureE (RF.name Ξ l) H.1.1 (H.2.map Subtype.val) K) ⟨w.1, hw⟩
-    by_cases hH : IsVal (hndValE (RF.name Ξ l) H.1.1 (H.2.map Subtype.val))
+      (captureE (RF.name Ξ l) (qsOf Ξ (RF.name Ξ l)) H.1.1 (H.2.map Subtype.val) K) ⟨w.1, hw⟩
+    by_cases hH : IsVal (hndValE (RF.name Ξ l) (qsOf Ξ (RF.name Ξ l)) H.1.1 (H.2.map Subtype.val))
     · refine ⟨_, ?_, Relation.ReflTransGen.refl⟩
       show (ourInst (ℍ := ℍ) RF Ξ J).PureSteps
-        (μ, K₀.plug (resumeE (captureE (RF.name Ξ l) H.1.1 (H.2.map Subtype.val) K) w.1))
-        (μ, K₀.plug ((handleK (RF.name Ξ l) H.1.1 (H.2.map Subtype.val)).plug (K.plug w.1)))
+        (μ, K₀.plug (resumeE (captureE (RF.name Ξ l) (qsOf Ξ (RF.name Ξ l)) H.1.1
+          (H.2.map Subtype.val) K) w.1))
+        (μ, K₀.plug ((handleK (RF.name Ξ l) (qsOf Ξ (RF.name Ξ l)) H.1.1
+          (H.2.map Subtype.val)).plug (K.plug w.1)))
       rw [captureE_of_val K hH] at hst ⊢
       exact hst.trans (kappa_resume_steps K₀ _ ⟨_, hH⟩ K ⟨w.1, hw⟩)
     · exfalso
@@ -1150,18 +1217,20 @@ theorem handlerSem_ourInst (hL : LiveOK (ℍ := ℍ) RF Ξ J) (hnz : ∀ l, RF.n
       rw [Kont.plug_comp]
       exact (hL _ hl').2
   · rintro ⟨μ, e⟩ (K₀ : Kont) l (H : OVal × List OVal) (K : Kont) hlive he
-    change e = K₀.plug (cancelE (captureE (RF.name Ξ l) H.1.1 (H.2.map Subtype.val) K)) at he
+    change e = K₀.plug (cancelE (captureE (RF.name Ξ l) (qsOf Ξ (RF.name Ξ l)) H.1.1
+      (H.2.map Subtype.val) K)) at he
     subst he
-    by_cases hH : IsVal (hndValE (RF.name Ξ l) H.1.1 (H.2.map Subtype.val))
+    by_cases hH : IsVal (hndValE (RF.name Ξ l) (qsOf Ξ (RF.name Ξ l)) H.1.1 (H.2.map Subtype.val))
     · refine ⟨_, ?_, Relation.ReflTransGen.refl⟩
       show (ourInst (ℍ := ℍ) RF Ξ J).PureSteps
-        (μ, K₀.plug (cancelE (captureE (RF.name Ξ l) H.1.1 (H.2.map Subtype.val) K)))
-        (μ, K₀.plug (cancelOfE (RF.name Ξ l) H.1.1 (H.2.map Subtype.val) K))
+        (μ, K₀.plug (cancelE (captureE (RF.name Ξ l) (qsOf Ξ (RF.name Ξ l)) H.1.1
+          (H.2.map Subtype.val) K)))
+        (μ, K₀.plug (cancelOfE (RF.name Ξ l) (qsOf Ξ (RF.name Ξ l)) H.1.1 (H.2.map Subtype.val) K))
       rw [captureE_of_val K hH, cancelOfE_of_val K hH]
       exact kappa_cancel_steps K₀ _ _ K
     · exfalso
       have hg := (hL _ hlive).2
-      change GoesOn RF Ξ (μ, K₀.plug (cancelE (captureE (RF.name Ξ l) H.1.1
+      change GoesOn RF Ξ (μ, K₀.plug (cancelE (captureE (RF.name Ξ l) (qsOf Ξ (RF.name Ξ l)) H.1.1
         (H.2.map Subtype.val) K))) at hg
       rw [captureE_of_not_val K hH] at hg
       exact not_goesOn_stuck (stuckAt_unit_app (Val.inj₂ Val.unit)) K₀ μ
@@ -1486,9 +1555,9 @@ theorem machShape_orow {J : OurTyping orowRF} (hL : LiveOK (ℍ := ℍ) orowRF �
 
 /-- **S4** at the open-row form: its labels' names are not `0` and their signatures have at most
 `2³²` operations. -/
-theorem handlerSem_orow {J : OurTyping orowRF} (hL : LiveOK (ℍ := ℍ) orowRF Ξ J) :
-    (ourInst (ℍ := ℍ) orowRF Ξ J).HandlerSem :=
-  handlerSem_ourInst hL (fun l => l.2.1) (fun l => l.2.2.2)
+theorem handlerSem_orow {J : OurTyping orowRF} (hL : LiveOK (ℍ := ℍ) orowRF Ξ J)
+    (hU : Ξ.CatchUnr) : (ourInst (ℍ := ℍ) orowRF Ξ J).HandlerSem :=
+  handlerSem_ourInst hL (fun l => l.2.1) (fun l => l.2.2.2) hU
 
 end Targets.Inst
 

@@ -93,19 +93,19 @@ theorem step1_plug_var (K : Kont) (j : ℕ) {μ μ' : Heap} {t : Expr} :
   · by_cases h0 : K'' = .hole
     · subst h0; simp only [Kont.plug] at h₁; subst h₁; cases hh
     rcases head_plug hh K'' not_isVal_var h₁ h0 with
-      ⟨n, hr, hs, K₃, rfl⟩ | ⟨N, D, K₃, rfl⟩ | ⟨K₃, rfl⟩ | ⟨w, H, q, -, rfl, he⟩ |
+      ⟨n, qs, hr, hs, K₃, rfl⟩ | ⟨N, D, K₃, rfl⟩ | ⟨K₃, rfl⟩ | ⟨w, H, q, -, rfl, he⟩ |
         ⟨Ns, err, K₃, rfl⟩
-    · generalize hX : (Kont.appR (.app (.val (.prim .hnd)) (.val (hndVal n hr hs))) K₃).plug
+    · generalize hX : (Kont.appR (.app (.val (.prim .hnd)) (.val (hndVal n qs hr hs))) K₃).plug
         (.var j) = X at h₁
       subst h₁
       cases hh with
-      | hret n' hr' hs' w =>
+      | hret n' qs' hr' hs' w =>
           simp only [hndE, Kont.plug, Expr.app.injEq] at hX
           exact not_isVal_var (K₃.isVal_of_plug (by rw [hX.2]; exact w.2))
-      | hop n' i hr' hs' c v K₀ =>
+      | hop n' i qs' hr' hs' c v K₀ =>
           simp only [hndE, Kont.plug, Expr.app.injEq] at hX
           exact plug_var_ne_plug_op K₃ K₀ j false (opPayload n' i v) hX.2
-      | hunwind n' i hr' hs' c v K₀ =>
+      | hunwind n' i qs' hr' hs' c v K₀ =>
           simp only [hndE, Kont.plug, Expr.app.injEq] at hX
           exact plug_var_ne_plug_op K₃ K₀ j true (opPayload n' i v) hX.2
       | _ => simp_all [Kont.plug, ubindE, ccatchE, cfinE]
@@ -233,18 +233,18 @@ theorem stuck_no_step {s : Expr} (hs : StuckAt (ℍ := ℍ) s) (K : Kont) {μ μ
     have hbody : ∀ (K₃ : Kont) (w : Val), K₃.plug s ≠ w.1 := fun K₃ w h =>
       hs.not_val (K₃.isVal_of_plug (by rw [h]; exact w.2))
     rcases head_plug hh K'' hs.not_val h₁ h0 with
-      ⟨n, hr, hs', K₃, rfl⟩ | ⟨N, D, K₃, rfl⟩ | ⟨K₃, rfl⟩ | ⟨w, H, q, hq, rfl, he⟩ |
+      ⟨n, qs, hr, hs', K₃, rfl⟩ | ⟨N, D, K₃, rfl⟩ | ⟨K₃, rfl⟩ | ⟨w, H, q, hq, rfl, he⟩ |
         ⟨Ns, err, K₃, rfl⟩
-    · generalize hX : (Kont.appR (.app (.val (.prim .hnd)) (.val (hndVal n hr hs'))) K₃).plug s = X
+    · generalize hX : (Kont.appR (.app (.val (.prim .hnd)) (.val (hndVal n qs hr hs'))) K₃).plug s = X
         at h₁
       subst h₁
       cases hh with
-      | hret _ _ _ w =>
+      | hret _ _ _ _ w =>
           simp only [hndE, Kont.plug, Expr.app.injEq] at hX; exact hbody K₃ w hX.2
-      | hop n' i _ _ _ v K₀ =>
+      | hop n' i _ _ _ _ v K₀ =>
           simp only [hndE, Kont.plug, Expr.app.injEq] at hX
           exact stuck_ne_op hs K₃ K₀ false (opPayload n' i v) hX.2
-      | hunwind n' i _ _ _ v K₀ =>
+      | hunwind n' i _ _ _ _ v K₀ =>
           simp only [hndE, Kont.plug, Expr.app.injEq] at hX
           exact stuck_ne_op hs K₃ K₀ true (opPayload n' i v) hX.2
       | _ => simp_all [Kont.plug, ubindE, ccatchE, cfinE]
@@ -516,6 +516,58 @@ theorem closedAt_kappa (n : UInt32) {H : Val} {K : Kont} (hH : closedAt 0 H.1 = 
     | exact closedAt_mono _ hK (by omega)
     | exact closedAt_mono _ hc (by omega)
 
+/-- `κ` with its cell at `ℓ` is closed. -/
+theorem closedAt_kappaC (aff : Bool) (ℓ : Loc) (n : UInt32) {H : Val} {K : Kont}
+    (hH : closedAt 0 H.1 = true) (hK : closedAt 0 (K.plug .unit) = true) :
+    closedAt 0 (BoCa.BoLo.kappaC aff ℓ n H K) = true := by
+  simp only [BoCa.BoLo.kappaC, val_shift_closed hH, kont_shift_closed _ K 0 hK]
+  have hc := closedAt_cancelVal (n :: K.hndNames) (err := none) (fun _ h => by cases h)
+  cases aff <;>
+  simp only [Expr.val, Val.lam, closedAt, hndE, ccatchE, raiseE, Val.prim, Bool.and_eq_true,
+    decide_eq_true_eq, BoCa.BoLo.freeE, BoCa.BoLo.stuckE, Val.loc, Val.unit, Bool.false_eq_true,
+    if_true, if_false] <;>
+  (try rw [closedAt_plug_iff 3]) <;> (try rw [closedAt_plug_iff 2]) <;>
+  simp only [closedAt, Bool.and_eq_true, decide_eq_true_eq] <;>
+  (repeat' constructor) <;>
+    first
+    | omega
+    | trivial
+    | exact closedAt_mono _ hH (by omega)
+    | exact closedAt_mono _ hK (by omega)
+    | exact closedAt_mono _ hc (by omega)
+
+/-- `κ` before its cell is closed. -/
+theorem closedAt_kappaCell (aff : Bool) (n : UInt32) {H : Val} {K : Kont}
+    (hH : closedAt 0 H.1 = true) (hK : closedAt 0 (K.plug .unit) = true) :
+    closedAt 0 (BoCa.BoLo.kappaCell aff n H K) = true := by
+  simp only [BoCa.BoLo.kappaCell, BoCa.BoLo.kappaCBody, val_shift_closed hH,
+    kont_shift_closed _ K 0 hK]
+  have hc := closedAt_cancelVal (n :: K.hndNames) (err := none) (fun _ h => by cases h)
+  cases aff <;>
+  simp only [Expr.val, Val.lam, closedAt, hndE, ccatchE, raiseE, Val.prim, Bool.and_eq_true,
+    decide_eq_true_eq, BoCa.BoLo.freeE, BoCa.BoLo.stuckE, Val.unit, Bool.false_eq_true,
+    if_true, if_false] <;>
+  (try rw [closedAt_plug_iff 4]) <;> (try rw [closedAt_plug_iff 3]) <;>
+  simp only [closedAt, Bool.and_eq_true, decide_eq_true_eq] <;>
+  (repeat' constructor) <;>
+    first
+    | omega
+    | trivial
+    | exact closedAt_mono _ hH (by omega)
+    | exact closedAt_mono _ hK (by omega)
+    | exact closedAt_mono _ hc (by omega)
+
+/-- The continuation `[op]` hands is closed, at every tag. -/
+theorem closedAt_kappaAt (t n : UInt32) {H : Val} {K : Kont}
+    (hH : closedAt 0 H.1 = true) (hK : closedAt 0 (K.plug .unit) = true) :
+    closedAt 0 (BoCa.BoLo.kappaAt t n H K) = true := by
+  unfold BoCa.BoLo.kappaAt
+  split
+  · exact closedAt_kappaCell false n hH hK
+  · split
+    · exact closedAt_kappaCell true n hH hK
+    · exact closedAt_kappa n hH hK
+
 theorem closedAt_clauseAt : ∀ (e : Expr) (i : ℕ) {c : Val}, BoCa.BoLo.clauseAt e i = some c →
     closedAt 0 e = true → closedAt 0 c.1 = true
   | .pair c' _, 0, c, h, he => by
@@ -660,26 +712,26 @@ theorem closed_head {μ μ' : Heap} {a a' : Expr} (h : Head (ℍ := ℍ) μ a μ
       · simp only [Val.inj₂, Val.lam, closedAt, Val.prim, Val.i32, Bool.and_eq_true,
           val_shift_closed ha.2.1, decide_eq_true_eq]
         exact ⟨trivial, closedAt_mono _ ha.2.1 (by omega), trivial, by omega⟩
-  | hret n hr hs w =>
+  | hret n qs hr hs w =>
       simp only [hndE, hndVal, closedAt, Expr.val, Val.prim, Val.pair, Val.i32,
         Bool.and_eq_true] at ha
       simp only [closedAt, Expr.val, Bool.and_eq_true]
-      exact ⟨⟨ha.1.2.2.1, ha.2⟩, hμ⟩
-  | hop n i hr hs c v K hc hK =>
+      exact ⟨⟨ha.1.2.2.2.1, ha.2⟩, hμ⟩
+  | hop n i qs hr hs c v K hc hK =>
       have ha' := ha
       simp only [hndE, hndVal, closedAt, Expr.val, Val.prim, Val.pair, Val.i32,
         Bool.and_eq_true] at ha'
       rw [closedAt_plug_iff] at ha'
       simp only [performE, opPayload, closedAt, Expr.val, Val.prim, Val.pair, Val.i32,
         Bool.and_eq_true] at ha'
-      have hH : closedAt 0 (hndVal n hr hs).1 = true := by
+      have hH : closedAt 0 (hndVal n qs hr hs).1 = true := by
         simp only [hndVal, closedAt, Val.pair, Val.i32, Bool.and_eq_true]
-        exact ⟨trivial, ha'.1.2.2.1, ha'.1.2.2.2⟩
+        exact ⟨trivial, ha'.1.2.2.1, ha'.1.2.2.2.1, ha'.1.2.2.2.2⟩
       refine ⟨?_, hμ⟩
       simp only [closedAt, Expr.val, Bool.and_eq_true]
-      exact ⟨closedAt_clauseAt hs.1 i.toNat hc ha'.1.2.2.2, ha'.2.2.2.2.2,
-        closedAt_kappa n hH ha'.2.1⟩
-  | hunwind n i hr hs c v K hc hK =>
+      exact ⟨closedAt_clauseAt hs.1 i.toNat hc ha'.1.2.2.2.2, ha'.2.2.2.2.2,
+        closedAt_kappaAt _ n hH ha'.2.1⟩
+  | hunwind n i qs hr hs c v K hc hK =>
       have ha' := ha
       simp only [hndE, hndVal, closedAt, Expr.val, Val.prim, Val.pair, Val.i32,
         Bool.and_eq_true] at ha'
@@ -688,7 +740,7 @@ theorem closed_head {μ μ' : Heap} {a a' : Expr} (h : Head (ℍ := ℍ) μ a μ
         Bool.and_eq_true] at ha'
       refine ⟨?_, hμ⟩
       simp only [closedAt, Expr.val, Bool.and_eq_true]
-      exact ⟨closedAt_clauseAt hs.1 i.toNat hc ha'.1.2.2.2, ha'.2.2.2.2.2⟩
+      exact ⟨closedAt_clauseAt hs.1 i.toNat hc ha'.1.2.2.2.2, ha'.2.2.2.2.2⟩
   | uthen N D w =>
       simp only [ubindE, closedAt, Expr.val, Val.prim, Val.pair, Bool.and_eq_true] at ha
       simp only [closedAt, Expr.val, Bool.and_eq_true]

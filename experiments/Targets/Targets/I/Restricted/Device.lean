@@ -56,7 +56,7 @@ end Targets
 
 namespace Targets
 open BoCa BoCa.Fig16 BoCa.Fig16.BoLo BoCa.Fig16.LogRel BoCa.Fig16.LogRel.Core
-open BoCa.BoLo (Heap Steps Step1 Head Kont Alloc ARun Step1N performE raiseE opPayload cancelVal
+open BoCa.BoLo (Heap Steps Step1 Head Kont Alloc ARun Step1N performE raiseE opPayload cancelVal kappaC
   hndE hndVal kappa ccatchE)
 open BoCa.Lifetime (LSub LifeCtx LifeVar)
 
@@ -92,28 +92,45 @@ theorem mutView_core (ℓ : Loc) (α : Life) (T : VTy) (δ : LSub) (i : Idx (cor
 
 /-- **`I1 coreW`**: `ewp_handle`'s `[op]` case. -/
 theorem i1_core : I1 (ℍ := ℍ) (coreW (ℍ := ℍ)) := by
-  intro S n E R δ hr hs j o K i ρ hn0 hnS _ hfo ha hsh
+  intro S n E R δ qs hr hs j o K i ℓ ρk σ ρ hn0 hnS hNU hfo ha hsh hcell hc
   rcases i with ⟨ls, ⟨⟩⟩
-  obtain ⟨hu, hk⟩ := hsh
+  obtain ⟨-, hk⟩ := hsh
   have hTin : OpTabI.down (rowTabW (coreW (ℍ := ℍ)) (Row.ofEff n E 0 ++ S) δ) =
       Row.tab (ℍ := ℍ) (Row.ofEff n E 0 ++ S) δ := rowTabW_core _ _
   have hTout : OpTabI.down (rowTabW (coreW (ℍ := ℍ)) S δ) = Row.tab (ℍ := ℍ) S δ :=
     rowTabW_core _ _
+  -- the rows are unr-free, so the operation is linear or affine
+  have hq : o.q ≠ .unr := by
+    obtain ⟨hm, -, -⟩ := Row.find_mem hfo
+    have hf : Row.find (Row.ofEff n E 0 ++ S) n j = some o := by
+      rw [Row.find_append, hfo]; rfl
+    rcases hNU n j o hf with h | h
+    · rw [h] at ha; cases ha
+    · exact h
   have hκ : KapRel (Row.tab S δ) (fun ls v => vC true R ls δ v) (OpSig.ent δ ⟨n, j, o.q, o.A, o.B⟩)
-      ls ⟨kappa n (hndVal n hr hs) K, by unfold kappa; exact .lam⟩ ρ := by
-    refine ⟨hu, fun ls' he => ⟨fun w σ₁ σ₂ hB hc => ?_, fun hq => ?_⟩⟩
-    · have h₁ := (hk ls' he).1 w σ₁ σ₂ hB hc
+      ls ⟨kappaC (o.q == .aff) ℓ n (hndVal n qs hr hs) K, by unfold kappaC; exact .lam⟩ ρ := by
+    refine ⟨fun h' => absurd h' hq, fun ls' he => ⟨fun w τ₁ τ₂ hB hcτ => ?_, fun hq' => ?_⟩⟩
+    · obtain ⟨z, hz, hzτ⟩ := compS_exch hc hcτ
+      have h₁ := (hk ls' (Ext.left hc he)).1 w τ₁ z hB hz
       simp only [ewpW_core_eq, opTabW_core_down, hTout] at h₁
-      exact ewp_kappa_resume (opTable_mono _) n _ K w h₁
-    · refine ewp_kappa_cancel (opTable_mono _) n _ K ?_
-      have hC0 : (hndK (hndVal n hr hs)).Catches 0 = false := by
+      exact ewp_kappaC_resume (opTable_mono _) _ ℓ n _ K w ⟨σ, z, ResU.CompS.comm hzτ, hcell, h₁⟩
+    · have hq'' : o.q ≠ .lin := hq'
+      have haff : o.q = .aff := by
+        cases hh : o.q
+        · exact absurd hh hq''
+        · rfl
+        · exact absurd hh hq
+      have hC0 : (hndK (hndVal n qs hr hs)).Catches 0 = false := by
         rw [hndK_catches]; simpa using hn0
-      have hco := (hk ls' he).2 hq (n :: K.hndNames) List.mem_cons_self
+      have hco := (hk ls' (Ext.left hc he)).2 hq' (n :: K.hndNames) List.mem_cons_self
         (fun x hx => List.mem_cons_of_mem _ hx)
       rw [hTin] at hco
-      refine ewp_ccatch (Tin := Row.tab (Row.ofEff n E 0 ++ S) δ) _ hC0 (fun m j' en hm h => ?_) hco
-      have hmn : m ≠ n := fun e => hm (e ▸ List.mem_cons_self)
-      simpa [Row.tab, Row.find_append, Row.find_ofEff_ne n E 0 m j' hmn] using h
+      have hcc := ewp_ccatch (Tin := Row.tab (Row.ofEff n E 0 ++ S) δ) (Tout := Row.tab S δ) _ hC0
+        (fun m j' en hm h => by
+          have hmn : m ≠ n := fun e => hm (e ▸ List.mem_cons_self)
+          simpa [Row.tab, Row.find_append, Row.find_ofEff_ne n E 0 m j' hmn] using h) hco
+      simp only [haff]
+      exact ewp_kappaC_cancel (opTable_mono _) ℓ n _ K ⟨σ, ρk, ResU.CompS.comm hc, hcell, hcc⟩
   exact vC_kTy_of_kapRel o.A n j hκ
 
 theorem mutFrameUW_core : MutFrameUW (ℍ := ℍ) (coreW (ℍ := ℍ)) := by

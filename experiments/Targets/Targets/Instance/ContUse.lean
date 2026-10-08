@@ -2,11 +2,10 @@ import Targets.Instance.Checks
 import Targets.Instance.J1Checks
 
 /-!
-# The Instance — S6's teeth: R1–R4 at our machine
+# The Instance — S6's tooth at the capture cell: R1 at our machine
 
-RESTRUCTURE §6.1 keeps four rejected programs as the witnesses that S6 (`ContUse`) bites.  Each is
-`withCl l cl` (`Targets/A/Programs.lean`): a handler of `l` around `op () to _. return tt`, its
-clause `cl` one of
+RESTRUCTURE §6.1 keeps four rejected programs as the witnesses that S6 bites.  Each is `withCl l cl`
+(`Targets/A/Programs.lean`): a handler of `l` around `op () to _. return tt`, its clause `cl` one of
 
 * R1, `dropCl`: `op (v, k) ⇒ return ff` — `κ` is never used;
 * R2, `twiceCl`: `op (v, k) ⇒ resume k () to _. resume k ()` — `κ` is resumed twice;
@@ -14,31 +13,25 @@ clause `cl` one of
 * R4, `cancelResumeCl`: `op (v, k) ⇒ cancel k to _. resume k ()` — `κ` is resumed after its
   cancel.
 
-Each runs to a data answer on our machine, under the runner that answers nothing, whatever the
-typing system: the run is a chain of head steps that allocate nothing, so it is the program's only
-run.  On it the counts of S6 break, a use being a step that applies `κ` to a data value
-(decision D4; `resume κ w` applies `κ` to `inj₁ ()` one step after binding `w`, and `cancel κ` is
-`κ (inj₂ ())`).  R1 catches `κ` once and uses it never, which breaks the exactly-once clause when
-`l`'s operation resumes.  R2 and R4 use `κ` twice and catch it at most once, at any label.  R3
-cancels `κ`, and no affine catch made it when `l`'s operation is linear.
-So **every typing system over our machine that types one of them at `F 0 bool` fails S6**
-(`not_contUse_of_der_R1` … `_R4`).  At a general row form they take what `orowRF` gives: the pure
-row reads as the empty row, labels' names are not the reserved `0` (the cancel), and signatures
-have at most `2³²` operations (`_orow` drops them).
+At a linear or affine operation the catch hands `κ` a fresh cell (SPEC §25): the `[op]` step, the
+allocation of the cell, and `κ` at its location.  R1's run is written out from the empty memory,
+the cell at location `0`.
 
-**The witnesses' premises are met**: `JR` types the four programs, and at the admissible context
-`ΞA` each lemma applies to it (`teeth_JR_ΞA`).
+* **R1 breaks S6** (`not_contUseEv_of_der_R1`): its run completes at `ff`, the capture event hands
+  `κ` once and nothing uses it.  (Its cell is left allocated.)
+* R2, R3 and R4 are read by S6 only through their complete runs (decision S6).  At a linear or
+  affine operation their second use of `κ`, or the cancel of a linear `κ`, reaches a release of a
+  released cell or the linear cancel branch `() ()`; those runs are not written out here, and no
+  lemma of this file concludes anything about R2–R4 beyond the kernel's refusal below.
+
+So every typing system over our machine that types R1 at `F 0 bool` fails S6.  **The witness's
+premises are met**: `JR` types the four programs, and at the admissible context `ΞA` the lemma
+applies to it at the affine `wait` (`teeth_JR_ΞA`).
 
 **Today's kernel types none of R1–R4** (`refuses_R_tier1Open`), for the reason it types no A-level
-handler: our instance's handler is the run-time frame, whose clauses are values, and `[handle]`
-types clause variables (`not_der_handle_tier1Open`).  That reason is the handler's form, not the
-linearity of `κ`.  The linearity refusal RESTRUCTURE §6.1 names (`kTy` at `lin`/`aff` is a thunk,
-neither droppable nor persistent; a linear `κ`'s cancel branch is at `⊤`) is an inversion of the
-clauses' typing at `clauseTy` (`refuses_R_clauses`, `Targets/Instance/ClauseRefusals.lean`).
-
-The runs are written out at a symbolic label name `n`, since a label's name is the row form's.  A
-step's configuration is read through `chainTerms`, and a count of S6 along a path is a count over
-the configurations before its steps (`countP_range_take`).
+handler: our instance's handler is the run-time frame, whose clauses are values
+(`not_der_handle_tier1Open`).  The linearity refusal is read at the clauses' typing
+(`refuses_R_clauses`, `Targets/Instance/ClauseRefusals.lean`).
 -/
 
 noncomputable section
@@ -68,32 +61,48 @@ theorem countP_range_take {R : S.Runner} (c : S.RConf R) (q : List (S.Event × S
   rfl
 
 open Classical in
-/-- A catch along the path counts. -/
-theorem caught_pos {R : S.Runner} {c₀ : S.RConf R} {q : List (S.Event × S.RConf R)} {j : ℕ}
-    {κ : S.Val} {k : OpClass} (h : S.CatchAt c₀ q j κ k) : 0 < S.caught c₀ q κ := by
+/-- A capture event along the path counts. -/
+theorem caughtEv_pos {R : S.Runner} {c₀ : S.RConf R} {q : List (S.Event × S.RConf R)} {j : ℕ}
+    {κ : S.Val} {k : OpClass} (h : S.CatchEvAt c₀ q j κ k) : 0 < S.caughtEv c₀ q κ := by
   have hj : j ∈ List.range q.length := List.mem_range.2 h.1
   have hk : k ≠ .abortive := by
-    obtain ⟨-, _, _, _, _, _, _, _, _, -, -, -, -, hk, -⟩ := h
+    obtain ⟨-, _, _, _, _, _, _, _, _, _, -, -, -, -, hk, -⟩ := h
     exact hk
   cases k with
   | abortive => exact absurd rfl hk
   | linear =>
-      have : 0 < S.caughtLin c₀ q κ := List.countP_pos_iff.2 ⟨j, hj, by simpa using h⟩
-      unfold caught; omega
+      have : 0 < S.caughtEvLin c₀ q κ := List.countP_pos_iff.2 ⟨j, hj, by simpa using h⟩
+      unfold caughtEv; omega
   | affine =>
-      have : 0 < S.caughtAff c₀ q κ := List.countP_pos_iff.2 ⟨j, hj, by simpa using h⟩
-      unfold caught; omega
+      have : 0 < S.caughtEvAff c₀ q κ := List.countP_pos_iff.2 ⟨j, hj, by simpa using h⟩
+      unfold caughtEv; omega
+
+/-- Two paths, the second from the first's end, make a path. -/
+theorem rpath_append {R : S.Runner} :
+    ∀ {c : S.RConf R} {q₁ q₂ : List (S.Event × S.RConf R)}, S.RPath R c q₁ →
+      S.RPath R (S.lastC c q₁) q₂ → S.RPath R c (q₁ ++ q₂)
+  | _, [], _, .nil, h₂ => h₂
+  | c, (ev, c') :: q₁, q₂, .cons hs h₁, h₂ => by
+      rw [lastC_cons] at h₂
+      exact .cons hs (rpath_append h₁ h₂)
+
+theorem lastC_append {R : S.Runner} (c : S.RConf R) :
+    ∀ (q₁ q₂ : List (S.Event × S.RConf R)), S.lastC c (q₁ ++ q₂) = S.lastC (S.lastC c q₁) q₂
+  | [], _ => rfl
+  | (ev, c') :: q₁, q₂ => by
+      rw [List.cons_append, lastC_cons, lastC_cons]
+      exact lastC_append c' q₁ q₂
 
 end Targets.A.EffectSystem
 
 namespace Targets.Inst
 open BoCa BoCa.Fig16 BoCa.Fig16.BoLo BoCa.Fig16.LogRel BoCa.Fig16.LogRel.Core
 open BoCa.BoLo (Heap Steps Step1 Head Kont performE raiseE opPayload hndE ubindE ccatchE cfinE
-  hndVal cancelVal kappa clauseAt)
+  hndVal cancelVal kappa clauseAt capTag kappaAt kappaC kappaCBody kappaCell freeE stuckE)
 open BoCa.Lifetime (LifeCtx)
 open Targets (RowForm EffCtx orowRF HeadChain)
 
-/-! ### The programs, at a name -/
+/-! ### The programs, at a name and its tags -/
 
 /-- The return clause `return x ⇒ x`. -/
 def rRet : Expr := .lam (.var 0)
@@ -101,238 +110,147 @@ def rRet : Expr := .lam (.var 0)
 /-- `tt`. -/
 def rTt : Expr := .inj₂ .unit
 
+/-- `ff`. -/
+def rFf : Expr := .inj₁ .unit
+
 /-- `□ to _. return tt`. -/
 def rK : Kont := bindK rTt
 
-/-- The handler of the name `n` with the clause `cl`, as a value. -/
-def rH (n : UInt32) (cl : Val) : Val := hndVal n ⟨rRet, .lam⟩ ⟨clausesE [cl.1], .pair cl.2 .unit⟩
+/-- The handler of the name `n` with the tags of `qs` and the clause `cl`, as a value. -/
+def rH (n : UInt32) (qs : List Qual) (cl : Val) : Val :=
+  hndVal n (qualsVal qs) ⟨rRet, .lam⟩ ⟨clausesE [cl.1], .pair cl.2 .unit⟩
 
-/-- `withCl` at the name `n`: `hnd (n, (return x ⇒ x, [cl])) (op () to _. return tt)`. -/
-def rProg (n : UInt32) (cl : Val) : Expr :=
-  (handleK n rRet [cl.1]).plug (rK.plug (performE (opArgE n 0 .unit)))
+/-- `withCl` at the name `n` and the tags of `qs`:
+`hnd (n, (qs, (return x ⇒ x, [cl]))) (op () to _. return tt)`. -/
+def rProg (n : UInt32) (qs : List Qual) (cl : Val) : Expr :=
+  (handleK n (qualsVal qs).1 rRet [cl.1]).plug (rK.plug (performE (opArgE n 0 .unit)))
 
-/-- The continuation the catch hands the clause. -/
-def rκ (n : UInt32) (cl : Val) : Val := ⟨kappa n (rH n cl) rK, .lam⟩
+theorem rProg_eq (n : UInt32) (qs : List Qual) (cl : Val) :
+    rProg n qs cl = hndE (rH n qs cl) (rK.plug (performE (.val (opPayload n 0 Val.unit)))) := rfl
 
-theorem rProg_eq (n : UInt32) (cl : Val) :
-    rProg n cl = hndE (rH n cl) (rK.plug (performE (.val (opPayload n 0 Val.unit)))) := rfl
+/-- A linear or affine qualifier's cell: affine when its cancel frees it. -/
+def cellAff (q : Qual) : Bool := q == .aff
 
-/-- **The catch**: the handler hands its clause `((), κ)`. -/
-theorem head_rCatch (μ : Heap) (n : UInt32) (cl : Val) :
-    Head (ℍ := ℍ) μ (rProg n cl) μ (.app cl.1 (.pair .unit (rκ n cl).1)) := by
-  rw [rProg_eq]
-  exact Head.hop μ n 0 ⟨rRet, .lam⟩ ⟨clausesE [cl.1], .pair cl.2 .unit⟩ cl Val.unit rK
-    (clauseAt_clausesE [cl.1] 0 cl.2 rfl) rfl
+/-- The tag of a linear or affine operation is a cell's. -/
+theorem kappaAt_cell {q : Qual} (hq : q ≠ .unr) (n : UInt32) (H : Val) (K : Kont) :
+    kappaAt q.tag n H K = kappaCell (cellAff q) n H K := by
+  cases q
+  · rfl
+  · rfl
+  · exact absurd rfl hq
 
-/-! ### Chains: concatenation, and the segments of a resume and a cancel -/
+/-- `withCl`'s `κ` at its cell `ℓ`. -/
+def rκ (q : Qual) (qs : List Qual) (ℓ : Loc) (n : UInt32) (cl : Val) : OVal :=
+  ⟨kappaC (cellAff q) ℓ n (rH n (q :: qs) cl) rK, .lam⟩
 
-theorem _root_.Targets.HeadChain.append {e e₁ e₂ : Expr} :
-    ∀ {q₁ q₂ : List (Kont × Expr × Expr)}, HeadChain (ℍ := ℍ) e q₁ e₁ → HeadChain (ℍ := ℍ) e₁ q₂ e₂ →
-      HeadChain (ℍ := ℍ) e (q₁ ++ q₂) e₂
-  | _, _, .nil, h₂ => h₂
-  | _, _, .cons hh hn h₁, h₂ => .cons hh hn (HeadChain.append h₁ h₂)
+/-! ### Steps at our instance -/
 
-/-- A chain's steps, in a context. -/
-def plugRun (K₀ : Kont) (q : List (Kont × Expr × Expr)) : List (Kont × Expr × Expr) :=
-  q.map fun x => (K₀.comp x.1, x.2.1, x.2.2)
-
-/-- `κ`'s body at the selector `s`: resume (`inj₁ ()`) or cancel (`inj₂ ()`). -/
-def kSel (n : UInt32) (cl : Val) (s : Expr) : Expr :=
-  .case s (.seq (.var 0) (.lam (hndE (rH n cl) (rK.plug (.var 0)))))
-    (.seq (.var 0) (ccatchE (hndE (rH n cl) (rK.plug (raiseE (.val (cancelVal [n] none)))))))
-
-/-- The handler frame of `withCl`. -/
-def rHK (n : UInt32) (cl : Val) : Kont := .appR (.app (.prim .hnd) (rH n cl).1) .hole
-
-/-- **A resume of `κ` at `w`**: `resume κ w` binds `w`, `κ` selects its resume branch, which
-reinstalls the handler around `□ to _. return tt` at `w`; that returns `tt` through the handler's
-return clause. -/
-def resumeRun (n : UInt32) (cl : Val) (w : Val) : List (Kont × Expr × Expr) :=
-  [(.hole, resumeE (rκ n cl).1 w.1, .app (.app (rκ n cl).1 (.inj₁ .unit)) w.1),
-   (.appL .hole w, .app (rκ n cl).1 (.inj₁ .unit), kSel n cl (.inj₁ .unit)),
-   (.appL .hole w, kSel n cl (.inj₁ .unit), .seq .unit (.lam (hndE (rH n cl) (rK.plug (.var 0))))),
-   (.appL .hole w, .seq .unit (.lam (hndE (rH n cl) (rK.plug (.var 0)))),
-     .lam (hndE (rH n cl) (rK.plug (.var 0)))),
-   (.hole, .app (.lam (hndE (rH n cl) (rK.plug (.var 0)))) w.1, hndE (rH n cl) (rK.plug w.1)),
-   (rHK n cl, rK.plug w.1, rTt),
-   (.hole, hndE (rH n cl) rTt, .app rRet rTt),
-   (.hole, .app rRet rTt, rTt)]
-
-/-- `κ`'s body. -/
-def kBody (n : UInt32) (cl : Val) : Expr :=
-  .case (.var 0)
-    (.seq (.var 0) (.val (.lam (hndE ((rH n cl).shift 3 0) ((rK.shift 3 0).plug (.var 0))))))
-    (.seq (.var 0) (ccatchE (hndE ((rH n cl).shift 2 0)
-      ((rK.shift 2 0).plug (raiseE (.val (cancelVal (n :: rK.hndNames) none)))))))
-
-theorem rκ_eq (n : UInt32) (cl : Val) : (rκ n cl).1 = .lam (kBody n cl) := rfl
-
-/-- The body of the twice-resuming clause under its `let`. -/
-def twBody : Expr := bindE (resumeE (.var 0) .unit) (resumeE (.var 1) .unit)
-
-/-- The twice-resuming clause, at our instance. -/
-def twiceV : Val := ⟨.lam (.letpair (.var 0) twBody), .lam⟩
-
-theorem resume_chain_twice (n : UInt32) (w : Val) :
-    HeadChain (ℍ := ℍ) (resumeE (rκ n twiceV).1 w.1) (resumeRun n twiceV w) rTt := by
-  refine .cons (K := .hole) (fun μ => Head.beta μ
-    (.app (.app ((rκ n twiceV).1.shift 1 0) (.inj₁ .unit)) (.var 0)) w) rfl ?_
-  refine .cons (K := .appL .hole w) (fun μ => Head.beta μ (kBody n twiceV) (Val.inj₁ Val.unit)) rfl ?_
-  refine .cons (K := .appL .hole w) (fun μ => Head.case₁ μ Val.unit _ _) rfl ?_
-  refine .cons (K := .appL .hole w) (fun μ => Head.seq μ _) rfl ?_
-  refine .cons (K := .hole) (fun μ => Head.beta μ (hndE (rH n twiceV) (rK.plug (.var 0))) w) rfl ?_
-  refine .cons (K := rHK n twiceV) (fun μ => Head.beta μ rTt w) rfl ?_
-  refine .cons (K := .hole) (fun μ => Head.hret μ n ⟨rRet, .lam⟩ _ ⟨rTt, .inj₂ .unit⟩) rfl ?_
-  refine .cons (K := .hole) (fun μ => Head.beta μ (.var 0) ⟨rTt, .inj₂ .unit⟩) rfl ?_
-  exact .nil
-
-/-- `κ`'s handler catches no cancel: its name is not the reserved `0`. -/
-theorem rCancelK_catches {n : UInt32} (hn : n ≠ 0) (cl : Val) :
-    ((rHK n cl).comp rK).Catches 0 = false := by
-  simp [rHK, rK, bindK, rH, hndVal, Kont.comp, Kont.Catches, Val.i32, hn]
-
-/-- **A cancel of `κ`**: `κ` selects its cancel branch, which raises the cancel through the
-reinstalled handler and `□ to _. return tt`, neither of which stops it, to `ccatch`, which answers
-`()`. -/
-def cancelRun (n : UInt32) (cl : Val) : List (Kont × Expr × Expr) :=
-  [(.hole, cancelE (rκ n cl).1, kSel n cl (.inj₂ .unit)),
-   (.hole, kSel n cl (.inj₂ .unit),
-     .seq .unit (ccatchE (hndE (rH n cl) (rK.plug (raiseE (.val (cancelVal [n] none))))))),
-   (.hole, .seq .unit (ccatchE (hndE (rH n cl) (rK.plug (raiseE (.val (cancelVal [n] none)))))),
-     ccatchE (hndE (rH n cl) (rK.plug (raiseE (.val (cancelVal [n] none)))))),
-   (.hole, ccatchE (hndE (rH n cl) (rK.plug (raiseE (.val (cancelVal [n] none))))), .unit)]
-
-/-- The body of the cancelling clause under its `let`. -/
-def cBody : Expr := bindE (cancelE (.var 0)) (.inj₁ .unit)
-
-/-- The cancelling clause, at our instance. -/
-def cancelV : Val := ⟨.lam (.letpair (.var 0) cBody), .lam⟩
-
-/-- The body of the clause that cancels and then resumes, under its `let`. -/
-def crBody : Expr := bindE (cancelE (.var 0)) (resumeE (.var 1) .unit)
-
-/-- The clause that cancels and then resumes, at our instance. -/
-def cancelResumeV : Val := ⟨.lam (.letpair (.var 0) crBody), .lam⟩
-
-theorem cancel_chain_cancel {n : UInt32} (hn : n ≠ 0) :
-    HeadChain (ℍ := ℍ) (cancelE (rκ n cancelV).1) (cancelRun n cancelV) .unit := by
-  refine .cons (K := .hole) (fun μ => Head.beta μ (kBody n cancelV) (Val.inj₂ Val.unit)) rfl ?_
-  refine .cons (K := .hole) (fun μ => Head.case₂ μ Val.unit _ _) rfl ?_
-  refine .cons (K := .hole) (fun μ => Head.seq μ _) rfl ?_
-  refine .cons (K := .hole) (fun μ => Head.cancel μ [n] ((rHK n cancelV).comp rK)
-    (rCancelK_catches hn cancelV)) rfl ?_
-  exact .nil
-
-theorem cancel_chain_cancelResume {n : UInt32} (hn : n ≠ 0) :
-    HeadChain (ℍ := ℍ) (cancelE (rκ n cancelResumeV).1) (cancelRun n cancelResumeV) .unit := by
-  refine .cons (K := .hole) (fun μ => Head.beta μ (kBody n cancelResumeV) (Val.inj₂ Val.unit))
-    rfl ?_
-  refine .cons (K := .hole) (fun μ => Head.case₂ μ Val.unit _ _) rfl ?_
-  refine .cons (K := .hole) (fun μ => Head.seq μ _) rfl ?_
-  refine .cons (K := .hole) (fun μ => Head.cancel μ [n] ((rHK n cancelResumeV).comp rK)
-    (rCancelK_catches hn cancelResumeV)) rfl ?_
-  exact .nil
-
-theorem resume_chain_cancelResume (n : UInt32) (w : Val) :
-    HeadChain (ℍ := ℍ) (resumeE (rκ n cancelResumeV).1 w.1) (resumeRun n cancelResumeV w) rTt := by
-  refine .cons (K := .hole) (fun μ => Head.beta μ
-    (.app (.app ((rκ n cancelResumeV).1.shift 1 0) (.inj₁ .unit)) (.var 0)) w) rfl ?_
-  refine .cons (K := .appL .hole w) (fun μ => Head.beta μ (kBody n cancelResumeV)
-    (Val.inj₁ Val.unit)) rfl ?_
-  refine .cons (K := .appL .hole w) (fun μ => Head.case₁ μ Val.unit _ _) rfl ?_
-  refine .cons (K := .appL .hole w) (fun μ => Head.seq μ _) rfl ?_
-  refine .cons (K := .hole) (fun μ => Head.beta μ (hndE (rH n cancelResumeV) (rK.plug (.var 0))) w)
-    rfl ?_
-  refine .cons (K := rHK n cancelResumeV) (fun μ => Head.beta μ rTt w) rfl ?_
-  refine .cons (K := .hole) (fun μ => Head.hret μ n ⟨rRet, .lam⟩ _ ⟨rTt, .inj₂ .unit⟩) rfl ?_
-  refine .cons (K := .hole) (fun μ => Head.beta μ (.var 0) ⟨rTt, .inj₂ .unit⟩) rfl ?_
-  exact .nil
-
-/-! ### R1: `κ` dropped -/
-
-/-- `op (v, k) ⇒ return ff`, at our instance. -/
-def dropV : Val := ⟨.lam (.letpair (.var 0) (.inj₁ .unit)), .lam⟩
-
-/-- R1's run: the catch, the clause's β, and its `let`. -/
-def r1Run (n : UInt32) : List (Kont × Expr × Expr) :=
-  [(.hole, rProg n dropV, .app dropV.1 (.pair .unit (rκ n dropV).1)),
-   (.hole, .app dropV.1 (.pair .unit (rκ n dropV).1), .letpair (.pair .unit (rκ n dropV).1) (.inj₁ .unit)),
-   (.hole, .letpair (.pair .unit (rκ n dropV).1) (.inj₁ .unit), .inj₁ .unit)]
-
-theorem r1_chain (n : UInt32) : HeadChain (ℍ := ℍ) (rProg n dropV) (r1Run n) (.inj₁ .unit) := by
-  refine .cons (K := .hole) (fun μ => head_rCatch μ n dropV) rfl ?_
-  refine .cons (K := .hole) (fun μ => Head.beta μ _ (Val.pair Val.unit (rκ n dropV))) rfl ?_
-  refine .cons (K := .hole) (fun μ => Head.letpair μ Val.unit (rκ n dropV) (.inj₁ .unit)) rfl ?_
-  exact .nil
-
-/-! ### Shapes at evaluation positions -/
-
-/-- `κ = kappa n H K` applied at an argument. -/
-def kappaAppShape : Expr → Bool
-  | .app (.lam (.case (.var 0) _ _)) _ => true
-  | _ => false
-
-/-- A configuration with no `κ`-shaped application at an evaluation position applies no `κ` to a
-value. -/
-theorem not_use_of_shape {t : Expr} {n : UInt32} {H : Val} {K : Kont}
-    (h : (evalSubs t).any kappaAppShape = false) :
-    ¬ ∃ (K₀ : Kont) (w : Val), t = K₀.plug (.app (kappa n H K) w.1) := by
-  rintro ⟨K₀, w, rfl⟩
-  rw [any_evalSubs_plug K₀ (p := kappaAppShape) rfl] at h
-  exact absurd h (by decide)
-
-theorem not_cancel_of_shape {t : Expr} {n : UInt32} {H : Val} {K : Kont}
-    (h : (evalSubs t).any kappaCancelShape = false) :
-    ¬ ∃ K₀ : Kont, t = K₀.plug (cancelE (kappa n H K)) := by
-  rintro ⟨K₀, rfl⟩
-  rw [any_evalSubs_plug K₀ (kappaCancelShape_cancelE n H K)] at h
-  exact absurd h (by decide)
-
-theorem not_catch_of_shape {t : Expr} (h : catchShape t = false) :
-    ¬ ∃ (K₀ : Kont) (n : UInt32) (r : Expr) (cs : List Expr) (K : Kont) (p : Expr),
-      t = K₀.plug ((handleK n r cs).plug (K.plug (performE p))) := by
-  rintro ⟨K₀, n, r, cs, K, p, rfl⟩
-  rw [catchShape_plug] at h
-  exact absurd h (by decide)
-
-/-! ### Counts along a computed run -/
-
-section Counts
+section Steps
 variable {RF : RowForm} {Ξ : EffCtx} {J : OurTyping RF}
 
-/-- The configurations before the steps of a chain's path are the chain's terms but its last. -/
-theorem take_chainPath (R : (ourInst (ℍ := ℍ) RF Ξ J).Runner) (μ : Heap) (s : R.St) (e : Expr)
-    (q : List (Kont × Expr × Expr)) :
-    ((((μ, e), s) : (ourInst (ℍ := ℍ) RF Ξ J).RConf R) ::
-        (chainPath (ℍ := ℍ) R μ s q).map Prod.snd).take q.length =
-      ((chainTerms e q).take q.length).map (fun t => ((μ, t), s)) := by
-  simp only [chainPath, chainTerms, List.map_cons, List.map_map, List.map_take]
-  rfl
+local notation "𝕊" => ourInst (ℍ := ℍ) RF Ξ J
 
-/-- A count of S6 along a chain's path, as a count over the chain's terms. -/
-theorem countP_chain (R : (ourInst (ℍ := ℍ) RF Ξ J).Runner) (μ : Heap) (s : R.St) (e : Expr)
-    (q : List (Kont × Expr × Expr)) (p : ℕ → Bool) (P : Expr → Bool)
-    (h : ∀ j < q.length, p j = P ((ourInst (ℍ := ℍ) RF Ξ J).term
-      ((ourInst (ℍ := ℍ) RF Ξ J).cfgAt ((μ, e), s) (chainPath (ℍ := ℍ) R μ s q) j).1)) :
-    (List.range q.length).countP p = ((chainTerms e q).take q.length).countP P := by
-  have hl : (chainPath (ℍ := ℍ) R μ s q).length = q.length := by simp [chainPath]
-  have := A.EffectSystem.countP_range_take (S := ourInst (ℍ := ℍ) RF Ξ J) ((μ, e), s)
-    (chainPath (ℍ := ℍ) R μ s q) p (fun c => P ((ourInst (ℍ := ℍ) RF Ξ J).term c.1))
-    (by rw [hl]; exact h)
-  rw [hl, take_chainPath] at this
-  exact this.trans List.countP_map
+/-- A head step in a context is a step of the runner, labelled `tau` off the finaliser frames. -/
+theorem rstep_head (R : (𝕊).Runner) (s : R.St) {μ μ' : Heap} (K : Kont) {a a' : Expr}
+    (hh : Head (ℍ := ℍ) μ a μ' a') (hf : finHead a = false) :
+    (𝕊).RStep R ((μ, K.plug a), s) .tau ((μ', K.plug a'), s) := by
+  have h := A.EffectSystem.RStep.mach (R := R) (s := s) (OStep.mach (RF := RF) (Ξ := Ξ) (K := K) hh)
+  rwa [labelOf_tau_of hf] at h
 
-end Counts
+/-- The runner that answers nothing takes only machine steps. -/
+theorem ostep_of_r₀ {c : Heap × Expr} {s : Unit} {ev : (𝕊).Event} {c' : (𝕊).RConf (𝕊).R₀}
+    (h : (𝕊).RStep (𝕊).R₀ (c, s) ev c') : OStep (ℍ := ℍ) RF Ξ c ev c'.1 := by
+  cases h with
+  | mach h' => exact h'
+  | io _ _ hans _ => exact hans.elim
 
-/-! ### The pure row, answered -/
+/-- A release of a location the memory does not hold has no step: the release is its
+configuration's only redex. -/
+theorem no_ostep_free {μ : Heap} (K : Kont) {ℓ : Loc} (hμ : μ ℓ = none)
+    {ev : (𝕊).Event} {c' : Heap × Expr} :
+    ¬ OStep (ℍ := ℍ) RF Ξ (μ, K.plug (freeE (.val (Val.loc ℓ)))) ev c' := by
+  have hnv : ¬ IsVal (freeE (.val (Val.loc ℓ))) := by
+    unfold freeE; intro h; cases h
+  intro h
+  generalize hc : (μ, K.plug (freeE (.val (Val.loc ℓ)))) = c₀ at h
+  cases h with
+  | mach hh =>
+      obtain ⟨h1, h2⟩ := Prod.mk.inj hc
+      subst h1
+      have hfree : Head (ℍ := ℍ) (μ.upd ℓ Val.unit) (freeE (.val (Val.loc ℓ)))
+          ((μ.upd ℓ Val.unit).del ℓ) (.val Val.unit) :=
+        Head.free _ ℓ Val.unit (by simp [BoCa.BoLo.Heap.upd])
+      obtain ⟨rfl, -⟩ := plug_decomp hh K _ hfree h2
+      cases hh with
+      | free _ v hv => rw [hμ] at hv; cases hv
+  | again =>
+      obtain ⟨-, h2⟩ := Prod.mk.inj hc
+      have := plug_eq_drive h2 hnv
+      subst this
+      simp [Kont.plug, driveE, driveMark, freeE] at h2
+  | fin =>
+      obtain ⟨-, h2⟩ := Prod.mk.inj hc
+      have := plug_eq_drive h2 hnv
+      subst this
+      simp [Kont.plug, driveE, driveMark, freeE] at h2
 
-section Pure
+/-- A configuration at a release of a location the memory does not hold is stuck under the runner
+that answers nothing. -/
+theorem stuck_free_r₀ {μ : Heap} (K : Kont) {ℓ : Loc} (hμ : μ ℓ = none) :
+    ¬ (𝕊).IsVal (μ, K.plug (freeE (.val (Val.loc ℓ)))) ∧
+      ∀ ev c', ¬ (𝕊).RStep (𝕊).R₀ ((μ, K.plug (freeE (.val (Val.loc ℓ)))), ()) ev c' := by
+  refine ⟨fun hval => ?_, fun ev c' h => no_ostep_free K hμ (ostep_of_r₀ h)⟩
+  obtain ⟨⟨v, hv⟩, _⟩ := hval
+  change K.plug _ = v.1 at hv
+  exact not_isOVal_prim_app (p := .free) (by decide) _ (isOVal_of_plug K (hv ▸ v.2))
+
+/-- The configurations after the catch of a linear or affine operation, the allocation of `κ`'s
+cell at `ℓ`, and `κ` at its cell: the clause applied to `((), κ)`. -/
+def prefixPath (R : (𝕊).Runner) (s : R.St) (μ : Heap) (q : Qual) (qs : List Qual) (ℓ : Loc)
+    (n : UInt32) (cl : Val) : List ((𝕊).Event × (𝕊).RConf R) :=
+  [(.tau, ((μ, .app cl.1 (.pair .unit (kappaCell (cellAff q) n (rH n (q :: qs) cl) rK))), s)),
+   (.tau, ((μ.upd ℓ Val.unit, .app cl.1 (.pair .unit
+      (.app (.lam (kappaCBody (cellAff q) n (rH n (q :: qs) cl) rK)) (.loc ℓ)))), s)),
+   (.tau, ((μ.upd ℓ Val.unit, .app cl.1 (.pair .unit (rκ q qs ℓ n cl).1)), s))]
+
+/-- **The catch of a linear or affine operation** hands its clause `κ` at a fresh cell: the `[op]`
+step, the allocation, and `κ`'s `β`. -/
+theorem rpath_prefix (R : (𝕊).Runner) (s : R.St) {μ : Heap} {q : Qual} (qs : List Qual) {ℓ : Loc}
+    (n : UInt32) (cl : Val) (hq : q ≠ .unr) (hμ : μ ℓ = none) :
+    (𝕊).RPath R ((μ, rProg n (q :: qs) cl), s) (prefixPath R s μ q qs ℓ n cl) := by
+  have htag : capTag (qualsVal (q :: qs)).1 (0 : UInt32).toNat = q.tag := by
+    rw [show (0 : UInt32).toNat = 0 from rfl, capTag_qualsVal _ 0 (by simp)]; rfl
+  have hop := Head.hop (ℍ := ℍ) μ n 0 (qualsVal (q :: qs)) ⟨rRet, .lam⟩
+    ⟨clausesE [cl.1], .pair cl.2 .unit⟩ cl Val.unit rK (clauseAt_clausesE [cl.1] 0 cl.2 rfl) rfl
+  rw [htag, kappaAt_cell hq] at hop
+  refine .cons (rstep_head R s .hole hop rfl) ?_
+  have hal := Head.alloc (ℍ := ℍ) μ Val.unit ℓ hμ
+  refine .cons (rstep_head R s (K := .appR (.val cl) (.pairR Val.unit
+    (.appR (.val (Val.lam (kappaCBody (cellAff q) n (rH n (q :: qs) cl) rK))) .hole))) hal rfl) ?_
+  have hb := Head.beta (ℍ := ℍ) (μ.upd ℓ Val.unit) (kappaCBody (cellAff q) n (rH n (q :: qs) cl) rK)
+    (Val.loc ℓ)
+  rw [kappaCBody_subst] at hb
+  refine .cons (rstep_head R s (K := .appR (.val cl) (.pairR Val.unit .hole)) hb rfl) ?_
+  exact .nil
+
+end Steps
+
+/-! ### The A-level reading -/
+
+section Reading
 variable {RF : RowForm} {Ξ : EffCtx} {J : OurTyping RF}
+
+local notation "𝕊" => ourInst (ℍ := ℍ) RF Ξ J
+
+/-- The tags of a label's operations. -/
+abbrev qsL (l : (RF.alg Ξ).Lab) : List Qual := (Ξ (RF.name Ξ l)).map Prod.fst
+
+theorem withCl_eq (l : (RF.alg Ξ).Lab) (cl : Val) :
+    (𝕊).withCl l (OVal.ofVal cl) = rProg (RF.name Ξ l) (qsL l) cl := rfl
 
 /-- A row form whose pure row reads as the empty row: the runner that answers nothing answers it. -/
 theorem answers_unit_of (hU : ∀ η, RF.den Ξ (RF.alg Ξ).unit η = [])
-    (R : (ourInst (ℍ := ℍ) RF Ξ J).Runner) :
-    (ourInst (ℍ := ℍ) RF Ξ J).Answers R (RF.alg Ξ).unit := by
+    (R : (𝕊).Runner) : (𝕊).Answers R (RF.alg Ξ).unit := by
   intro l i h
   obtain ⟨-, h⟩ := h
   have := h (fun _ => [])
@@ -340,598 +258,217 @@ theorem answers_unit_of (hU : ∀ η, RF.den Ξ (RF.alg Ξ).unit η = [])
   simp [Targets.Row.Has, Row.find] at this
 
 /-- `bool` is a data type. -/
-theorem dataTy_bool : (ourInst (ℍ := ℍ) RF Ξ J).DataTy (ourInst (ℍ := ℍ) RF Ξ J).bool :=
-  .sum .unit .unit
+theorem dataTy_bool : (𝕊).DataTy (𝕊).bool := .sum .unit .unit
 
-end Pure
-
-/-! ### The catch, at our instance -/
-
-section Catch
-variable {RF : RowForm} {Ξ : EffCtx} {J : OurTyping RF}
-
-/-- The A-handler of `withCl l cl`. -/
-def rHA (cl : OVal) : OVal × List OVal := (⟨rRet, .lam⟩, [cl])
-
-theorem withCl_eq (l : (RF.alg Ξ).Lab) (cl : Val) :
-    (ourInst (ℍ := ℍ) RF Ξ J).withCl l (OVal.ofVal cl) = rProg (RF.name Ξ l) cl := rfl
-
-/-- The A-continuation of `withCl l cl`'s catch is `rκ`. -/
-theorem capture_eq (l : (RF.alg Ξ).Lab) (cl : Val) :
-    ((ourInst (ℍ := ℍ) RF Ξ J).capture l (rHA (OVal.ofVal cl)) rK).1 = (rκ (RF.name Ξ l) cl).1 := by
-  show captureE (RF.name Ξ l) rRet [cl.1] rK = kappa (RF.name Ξ l) (rH (RF.name Ξ l) cl) rK
-  rw [captureE_of_val rK (rH (RF.name Ξ l) cl).2]
-  rfl
-
-/-- **`withCl l cl` catches its continuation at its first step**, at the class of `l`'s first
-operation. -/
-theorem catchAt_r (R : (ourInst (ℍ := ℍ) RF Ξ J).Runner) (s : R.St) (l : (RF.alg Ξ).Lab) (cl : Val)
-    (q : List (Kont × Expr × Expr)) (hq : 0 < q.length) {o : A.OpSig OVTy}
-    (ho : ((ourInst (ℍ := ℍ) RF Ξ J).sig l)[0]? = some o) (hk : o.cls ≠ .abortive) :
-    (ourInst (ℍ := ℍ) RF Ξ J).CatchAt (((Adequacy.emptyMem, rProg (RF.name Ξ l) cl), s) :
-        (ourInst (ℍ := ℍ) RF Ξ J).RConf R) (chainPath (ℍ := ℍ) R Adequacy.emptyMem s q) 0
-      ((ourInst (ℍ := ℍ) RF Ξ J).capture l (rHA (OVal.ofVal cl)) rK) o.cls := by
-  refine ⟨by simpa [chainPath] using hq, .hole, l, ⟨rRet, .lam⟩, [OVal.ofVal cl], rK, 0,
-    ⟨.unit, .unit⟩, o, rfl, rfl, ho, rfl, hk, rfl⟩
-
-end Catch
-
-/-! ### The counts of S6 along a chain -/
-
-section ChainCounts
-variable {RF : RowForm} {Ξ : EffCtx} {J : OurTyping RF}
-
-local notation "𝕊" => ourInst (ℍ := ℍ) RF Ξ J
-
-theorem length_chainPath (R : (𝕊).Runner) (μ : Heap) (s : R.St) (q : List (Kont × Expr × Expr)) :
-    (chainPath (ℍ := ℍ) R μ s q).length = q.length := by
-  simp [chainPath]
-
-open Classical in
-theorem uses_chain (R : (𝕊).Runner) (μ : Heap) (s : R.St) (e : Expr)
-    (q : List (Kont × Expr × Expr)) (κ : OVal) :
-    (𝕊).uses ((μ, e), s) (chainPath (ℍ := ℍ) R μ s q) κ =
-      ((chainTerms e q).take q.length).countP
-        (fun t => decide (∃ (K₀ : Kont) (w : OVal) (T : OVTy), (𝕊).DataVal T w ∧
-          t = K₀.plug ((appK w.1).plug κ.1))) := by
-  unfold A.EffectSystem.uses
-  rw [length_chainPath]
-  refine countP_chain R μ s e q _ _ fun j hj => ?_
-  refine decide_eq_decide.2 ⟨fun h => h.2, fun h => ⟨by rw [length_chainPath]; exact hj, h⟩⟩
-
-/-- An application of `κ` to a data value is `κ w` at the evaluation position. -/
+/-- An application of a value to a data value is the value applied at the evaluation position. -/
 theorem use_app {K₀ : Kont} {w : OVal} {T : OVTy} (hw : (𝕊).DataVal T w) (k : Expr) :
     K₀.plug ((appK w.1).plug k) = K₀.plug (.app k w.1) := by
   have hv := isVal_of_dataVal hw
   unfold appK; rw [dif_pos hv]; rfl
 
-/-- The selectors are data: `inj₁ ()` (resume) and `inj₂ ()` (cancel). -/
-theorem dataVal_sel₁ : (𝕊).DataVal (𝕊).bool ⟨.inj₁ .unit, .inj₁ .unit⟩ := .inl .unit
+/-- `appF` of a value form is a frame only at a Core value. -/
+theorem isVal_of_appK_ne {V : Expr} (h : appK V ≠ .hole) : IsVal V := by
+  unfold appK at h; split at h
+  · assumption
+  · exact absurd rfl h
 
-theorem dataVal_sel₂ : (𝕊).DataVal (𝕊).bool ⟨.inj₂ .unit, .inj₂ .unit⟩ := .inr .unit
+theorem plug_appK_of_isVal {V : Expr} (h : IsVal V) (K₀ : Kont) (f : Expr) :
+    K₀.plug ((appK V).plug f) = K₀.plug (.app f V) := by
+  unfold appK; rw [dif_pos h]; rfl
 
-open Classical in
-theorem cancels_chain (R : (𝕊).Runner) (μ : Heap) (s : R.St) (e : Expr)
-    (q : List (Kont × Expr × Expr)) (κ : OVal) :
-    (𝕊).cancels ((μ, e), s) (chainPath (ℍ := ℍ) R μ s q) κ =
-      ((chainTerms e q).take q.length).countP
-        (fun t => decide (∃ K₀ : Kont, t = K₀.plug (cancelE κ.1))) := by
-  unfold A.EffectSystem.cancels
-  rw [length_chainPath]
-  refine countP_chain R μ s e q _ _ fun j hj => ?_
-  refine decide_eq_decide.2 ⟨fun h => h.2, fun h => ⟨by rw [length_chainPath]; exact hj, h⟩⟩
+/-- `κ = λs. case s {…}` applied at an argument. -/
+def kappaAppShape : Expr → Bool
+  | .app (.lam (.case (.var 0) _ _)) _ => true
+  | _ => false
 
-/-- A catch at a configuration: a handler at an evaluation position whose body holds a `perform`
-of its name at one, the continuation `κ` the catch would hand its clause, and the class `k`. -/
-def CatchTerm (t : Expr) (κ : OVal) (k : A.OpClass) : Prop :=
-  ∃ (K₀ : Kont) (l : (RF.alg Ξ).Lab) (r : OVal) (cs : List OVal) (K : Kont) (i : ℕ) (v : OVal)
-    (o : A.OpSig OVTy),
-    t = K₀.plug ((handleK (RF.name Ξ l) r.1 (cs.map Subtype.val)).plug
-      (K.plug ((𝕊).perform l i v))) ∧
-    K.HasHnd (RF.name Ξ l) = false ∧ ((𝕊).sig l)[i]? = some o ∧ o.cls = k ∧ k ≠ .abortive ∧
-    κ = (𝕊).capture l (r, cs) K
+/-- A `κ`-shaped value `λs. case s {…}` applied at an evaluation position shows in `evalSubs`. -/
+theorem not_use_of_shape {t b₁ b₂ : Expr} (h : (evalSubs t).any kappaAppShape = false) :
+    ¬ ∃ (K₀ : Kont) (w : Expr), t = K₀.plug (.app (.lam (.case (.var 0) b₁ b₂)) w) := by
+  rintro ⟨K₀, w, rfl⟩
+  rw [any_evalSubs_plug K₀ (p := kappaAppShape) rfl] at h
+  exact absurd h (by decide)
 
-open Classical in
-theorem caught_chain (R : (𝕊).Runner) (μ : Heap) (s : R.St) (e : Expr)
-    (q : List (Kont × Expr × Expr)) (κ : OVal) (k : A.OpClass) :
-    (List.range (chainPath (ℍ := ℍ) R μ s q).length).countP
-        (fun j => decide ((𝕊).CatchAt ((μ, e), s) (chainPath (ℍ := ℍ) R μ s q) j κ k)) =
-      ((chainTerms e q).take q.length).countP
-        (fun t => decide (CatchTerm (RF := RF) (Ξ := Ξ) (J := J) t κ k)) := by
-  rw [length_chainPath]
-  refine countP_chain R μ s e q _ _ fun j hj => ?_
-  refine decide_eq_decide.2 ⟨fun h => h.2, fun h => ⟨by rw [length_chainPath]; exact hj, h⟩⟩
+/-- No application of a `κ`-shaped value sits at an evaluation position of an operation tag list. -/
+theorem any_kappa_qualsVal : ∀ qs : List Qual, (evalSubs (qualsVal qs).1).any kappaAppShape = false
+  | [] => rfl
+  | q :: qs => by
+      show (evalSubs (.pair (.prim (.lit (.i32 q.tag))) (qualsVal qs).1)).any kappaAppShape = false
+      simp only [evalSubs, List.any_cons, List.any_append, any_kappa_qualsVal qs]
+      rfl
 
-theorem not_catchTerm_of_shape {t : Expr} (h : catchShape t = false) (κ : OVal) (k : A.OpClass) :
-    ¬ CatchTerm (RF := RF) (Ξ := Ξ) (J := J) t κ k := by
-  rintro ⟨K₀, l, r, cs, K, i, v, o, rfl, -⟩
-  obtain ⟨x, hx⟩ := perform_app (ℍ := ℍ) (J := J) l i v
-  rw [hx] at h
-  exact not_catch_of_shape h ⟨K₀, _, _, _, K, x, rfl⟩
+/-- Nor of `withCl` at a clause with none. -/
+theorem any_kappa_rProg (n : UInt32) (qs : List Qual) (cl : Val)
+    (hcl : (evalSubs cl.1).any kappaAppShape = false) :
+    (evalSubs (rProg n qs cl)).any kappaAppShape = false := by
+  simp only [rProg, handleK, hndValE, clausesE, rK, bindK, Kont.plug, performE, evalSubs,
+    List.any_cons, List.any_append, any_kappa_qualsVal, hcl, List.any_nil]
+  rfl
 
-end ChainCounts
+end Reading
 
-/-! ### R1 -/
+/-! ### R1: `κ` dropped -/
+
+/-- `op (v, k) ⇒ return ff`, at our instance. -/
+def dropV : Val := ⟨.lam (.letpair (.var 0) (.inj₁ .unit)), .lam⟩
+
+/-- The body of the twice-resuming clause under its `let`. -/
+def twBody : Expr := bindE (resumeE (.var 0) .unit) (resumeE (.var 1) .unit)
+
+/-- R2's clause `op (v, k) ⇒ resume k () to _. resume k ()`, at our instance. -/
+def twiceV : Val := ⟨.lam (.letpair (.var 0) twBody), .lam⟩
+
+/-- The body of the cancelling clause under its `let`. -/
+def cBody : Expr := bindE (cancelE (.var 0)) (.inj₁ .unit)
+
+/-- R3's clause `op (v, k) ⇒ cancel k to _. return ff`, at our instance. -/
+def cancelV : Val := ⟨.lam (.letpair (.var 0) cBody), .lam⟩
+
+/-- The body of the clause that cancels and then resumes, under its `let`. -/
+def crBody : Expr := bindE (cancelE (.var 0)) (resumeE (.var 1) .unit)
+
+/-- R4's clause `op (v, k) ⇒ cancel k to _. resume k ()`, at our instance. -/
+def cancelResumeV : Val := ⟨.lam (.letpair (.var 0) crBody), .lam⟩
+
+/-- R1's run after `κ` is handed: the clause's `β` and its `let`. -/
+def r1Tail (κ : Val) : List (Kont × Expr × Expr) :=
+  [(.hole, .app dropV.1 (.pair .unit κ.1), .letpair (.pair .unit κ.1) (.inj₁ .unit)),
+   (.hole, .letpair (.pair .unit κ.1) (.inj₁ .unit), .inj₁ .unit)]
+
+theorem r1Tail_chain (κ : Val) :
+    HeadChain (ℍ := ℍ) (.app dropV.1 (.pair .unit κ.1)) (r1Tail κ) (.inj₁ .unit) := by
+  refine .cons (K := .hole) (fun μ => Head.beta μ _ (Val.pair Val.unit κ)) rfl ?_
+  refine .cons (K := .hole) (fun μ => Head.letpair μ Val.unit κ (.inj₁ .unit)) rfl ?_
+  exact .nil
 
 section R1
 variable {RF : RowForm} {Ξ : EffCtx} {J : OurTyping RF}
 
 local notation "𝕊" => ourInst (ℍ := ℍ) RF Ξ J
 
-/-- No configuration of R1's run applies a continuation. -/
-theorem r1_shapes (n : UInt32) :
-    ((chainTerms (rProg n dropV) (r1Run n)).take 3).all
-      (fun t => !(evalSubs t).any kappaAppShape) = true := rfl
+/-- R1's run from the empty memory, its cell at `0`. -/
+def r1Path (R : (𝕊).Runner) (s : R.St) (q : Qual) (qs : List Qual) (n : UInt32) :
+    List ((𝕊).Event × (𝕊).RConf R) :=
+  prefixPath R s Adequacy.emptyMem q qs 0 n dropV ++
+    chainPath (ℍ := ℍ) R (Adequacy.emptyMem.upd 0 Val.unit) s
+      (r1Tail ⟨(rκ q qs 0 n dropV).1, .lam⟩)
 
-/-- **R1 breaks S6.**  A typing system that types R1 at `F 0 bool`, at a label whose first
-operation resumes (linear or affine), fails S6: R1's run completes at `ff`, catching `κ` once and
-using it never. -/
-theorem not_contUse_of_der_R1 (hU : ∀ η, RF.den Ξ (RF.alg Ξ).unit η = [])
-    (l : (RF.alg Ξ).Lab) {o : A.OpSig OVTy} (ho : ((𝕊).sig l)[0]? = some o) (hk : o.cls ≠ .abortive)
-    (h : (𝕊).der [] ((𝕊).withCl l (𝕊).dropCl) ((𝕊).F (RF.alg Ξ).unit (𝕊).bool)) : ¬ (𝕊).ContUse := by
+theorem rpath_r1 (R : (𝕊).Runner) (s : R.St) {q : Qual} (qs : List Qual) (n : UInt32)
+    (hq : q ≠ .unr) :
+    (𝕊).RPath R ((Adequacy.emptyMem, rProg n (q :: qs) dropV), s) (r1Path R s q qs n) :=
+  A.EffectSystem.rpath_append (rpath_prefix R s qs n dropV hq rfl)
+    (rpath_chainPath R (r1Tail_chain _))
+
+theorem lastC_r1 (R : (𝕊).Runner) (s : R.St) (q : Qual) (qs : List Qual) (n : UInt32) :
+    (𝕊).lastC ((Adequacy.emptyMem, rProg n (q :: qs) dropV), s) (r1Path R s q qs n) =
+      ((Adequacy.emptyMem.upd 0 Val.unit, .inj₁ .unit), s) := by
+  rw [r1Path, A.EffectSystem.lastC_append]
+  exact lastC_chainPath R (r1Tail_chain _)
+
+/-- The configurations before R1's five steps. -/
+theorem take_r1 (R : (𝕊).Runner) (s : R.St) (q : Qual) (qs : List Qual) (n : UInt32) :
+    ((((Adequacy.emptyMem, rProg n (q :: qs) dropV), s) : (𝕊).RConf R) ::
+      (r1Path R s q qs n).map Prod.snd).take (r1Path R s q qs n).length =
+    [((Adequacy.emptyMem, rProg n (q :: qs) dropV), s),
+     ((Adequacy.emptyMem, .app dropV.1 (.pair .unit (kappaCell (cellAff q) n
+        (rH n (q :: qs) dropV) rK))), s),
+     ((Adequacy.emptyMem.upd 0 Val.unit, .app dropV.1 (.pair .unit
+        (.app (.lam (kappaCBody (cellAff q) n (rH n (q :: qs) dropV) rK)) (.loc 0)))), s),
+     ((Adequacy.emptyMem.upd 0 Val.unit, .app dropV.1 (.pair .unit (rκ q qs 0 n dropV).1)), s),
+     ((Adequacy.emptyMem.upd 0 Val.unit,
+        .letpair (.pair .unit (rκ q qs 0 n dropV).1) (.inj₁ .unit)), s)] := by
+  rfl
+
+open Classical in
+/-- **R1 breaks S6.**  A typing system that types R1 at `F 0 bool`, at a label whose first operation
+is resuming and linear or affine, fails S6: R1's run completes at `ff`; its capture event hands `κ`,
+and no step uses it.  (The run ends with `κ`'s cell allocated.) -/
+theorem not_contUseEv_of_der_R1 (hU : ∀ η, RF.den Ξ (RF.alg Ξ).unit η = [])
+    (l : (RF.alg Ξ).Lab) {q : Qual} {qs : List Qual} (hqs : qsL l = q :: qs) (hq : q ≠ .unr)
+    {o : A.OpSig OVTy} (ho : ((𝕊).sig l)[0]? = some o) (hk : o.cls ≠ .abortive)
+    (h : (𝕊).der [] ((𝕊).withCl l (𝕊).dropCl) ((𝕊).F (RF.alg Ξ).unit (𝕊).bool)) :
+    ¬ (𝕊).ContUseEv := by
   intro hC
-  have hchain := r1_chain (ℍ := ℍ) (RF.name Ξ l)
-  have hpath := rpath_chainPath (RF := RF) (Ξ := Ξ) (J := J) (𝕊).R₀ (μ := Adequacy.emptyMem)
-    (s := (𝕊).R₀.s₀) hchain
-  obtain ⟨-, -, h3⟩ := hC (𝕊).R₀ r₀_respects _ _ _ (answers_unit_of hU (𝕊).R₀) h _ hpath
-    ((𝕊).capture l (rHA (OVal.ofVal dropV)) rK)
-  have hlast := lastC_chainPath (RF := RF) (Ξ := Ξ) (J := J) (𝕊).R₀ (μ := Adequacy.emptyMem)
-    (s := (𝕊).R₀.s₀) hchain
-  have hu := h3 dataTy_bool (by
-    show (𝕊).IsVal ((𝕊).lastC ((Adequacy.emptyMem, rProg (RF.name Ξ l) dropV), (𝕊).R₀.s₀) _).1
-    rw [hlast]
-    exact isVal_val Adequacy.emptyMem (Val.inj₁ Val.unit))
-  have hu : (𝕊).uses ((Adequacy.emptyMem, rProg (RF.name Ξ l) dropV), (𝕊).R₀.s₀)
-      (chainPath (ℍ := ℍ) (𝕊).R₀ Adequacy.emptyMem (𝕊).R₀.s₀ (r1Run (RF.name Ξ l)))
-      ((𝕊).capture l (rHA (OVal.ofVal dropV)) rK) =
-    (𝕊).caught ((Adequacy.emptyMem, rProg (RF.name Ξ l) dropV), (𝕊).R₀.s₀)
-      (chainPath (ℍ := ℍ) (𝕊).R₀ Adequacy.emptyMem (𝕊).R₀.s₀ (r1Run (RF.name Ξ l)))
-      ((𝕊).capture l (rHA (OVal.ofVal dropV)) rK) := hu
-  have hshape := List.all_eq_true.1 (r1_shapes (RF.name Ξ l))
-  have e1 : (𝕊).uses ((Adequacy.emptyMem, rProg (RF.name Ξ l) dropV), (𝕊).R₀.s₀)
-      (chainPath (ℍ := ℍ) (𝕊).R₀ Adequacy.emptyMem (𝕊).R₀.s₀ (r1Run (RF.name Ξ l)))
-      ((𝕊).capture l (rHA (OVal.ofVal dropV)) rK) = 0 := by
-    refine (uses_chain (RF := RF) (Ξ := Ξ) (J := J) (𝕊).R₀ _ _ _ _ _).trans
-      (List.countP_eq_zero.2 fun t ht => ?_)
-    have := hshape t ht
-    simp only [Bool.not_eq_eq_eq_not, Bool.not_true] at this
+  have he : (𝕊).withCl l (𝕊).dropCl = rProg (RF.name Ξ l) (q :: qs) dropV := by
+    rw [← hqs]; rfl
+  let R := (𝕊).R₀
+  let q₁ := r1Path R () q qs (RF.name Ξ l)
+  let κ : OVal := ⟨(rκ q qs 0 (RF.name Ξ l) dropV).1, .lam⟩
+  have hpath := rpath_r1 R () qs (RF.name Ξ l) hq
+  have hcomp : (𝕊).CompleteFrom R (((Adequacy.emptyMem, (𝕊).withCl l (𝕊).dropCl), ())) q₁ := by
+    rw [he]
+    refine ⟨hpath, ?_⟩
+    change (𝕊).IsVal (Adequacy.emptyMem.upd 0 Val.unit, Expr.inj₁ Expr.unit)
+    exact isVal_val _ (Val.inj₁ Val.unit)
+  have hpv : IsVal (Expr.pair .unit κ.1) := .pair .unit .lam
+  have hev : (𝕊).CatchEvAt (((Adequacy.emptyMem, (𝕊).withCl l (𝕊).dropCl), ())) q₁ 0 κ o.cls := by
+    rw [he]
+    refine ⟨by simp [q₁, r1Path, prefixPath, chainPath, r1Tail], .hole, l, ⟨rRet, .lam⟩,
+      [(𝕊).dropCl], rK, 0, (𝕊).unitV, o, (𝕊).dropCl, ?_, rfl, ho, rfl, hk, rfl, ?_, 3,
+      by omega, by simp [q₁, r1Path, prefixPath, chainPath, r1Tail], ?_, ?_⟩
+    · show rProg (RF.name Ξ l) (q :: qs) dropV = _
+      rw [← he]; rfl
+    · show appK (Expr.pair .unit κ.1) ≠ .hole
+      unfold appK; rw [dif_pos hpv]; simp
+    · show Expr.app dropV.1 (.pair .unit κ.1) = Kont.hole.plug ((appK (Expr.pair .unit κ.1)).plug dropV.1)
+      rw [plug_appK_of_isVal hpv]; rfl
+    · intro j'' κ' h0 h3 hne
+      have hv' : IsVal (Expr.pair .unit κ'.1) := isVal_of_appK_ne hne
+      have hκ' : IsVal κ'.1 := hv'.pair_right
+      change _ ≠ Kont.hole.plug ((appK (Expr.pair .unit κ'.1)).plug dropV.1)
+      rw [plug_appK_of_isVal hv']
+      interval_cases j''
+      · intro heq
+        have h1 : (𝕊).term ((𝕊).cfgAt (((Adequacy.emptyMem, rProg (RF.name Ξ l) (q :: qs) dropV), ())
+            : (𝕊).RConf R) q₁ 1).1 = Expr.app dropV.1 (.pair .unit (kappaCell (cellAff q)
+              (RF.name Ξ l) (rH (RF.name Ξ l) (q :: qs) dropV) rK)) := rfl
+        rw [h1] at heq
+        injection heq with _ h2
+        injection h2 with _ h3
+        rw [← h3] at hκ'
+        unfold kappaCell at hκ'
+        cases hκ'
+      · intro heq
+        have h1 : (𝕊).term ((𝕊).cfgAt (((Adequacy.emptyMem, rProg (RF.name Ξ l) (q :: qs) dropV), ())
+            : (𝕊).RConf R) q₁ 2).1 = Expr.app dropV.1 (.pair .unit
+              (.app (.lam (kappaCBody (cellAff q) (RF.name Ξ l) (rH (RF.name Ξ l) (q :: qs) dropV)
+                rK)) (.loc 0))) := rfl
+        rw [h1] at heq
+        injection heq with _ h2
+        injection h2 with _ h3
+        rw [← h3] at hκ'
+        cases hκ'
+  obtain ⟨huse, -⟩ := hC R r₀_respects _ _ _ (answers_unit_of hU R) h dataTy_bool q₁ hcomp κ
+    ⟨0, o.cls, hev⟩
+  have huse' : (𝕊).uses (((Adequacy.emptyMem, (𝕊).withCl l (𝕊).dropCl), ()) : (𝕊).RConf R) q₁ κ =
+      (𝕊).caughtEv (((Adequacy.emptyMem, (𝕊).withCl l (𝕊).dropCl), ()) : (𝕊).RConf R) q₁ κ := huse
+  have hu0 : (𝕊).uses (((Adequacy.emptyMem, (𝕊).withCl l (𝕊).dropCl), ()) : (𝕊).RConf R) q₁ κ = 0 := by
+    unfold A.EffectSystem.uses
+    rw [A.EffectSystem.countP_range_take _ _ _
+      (fun c : (𝕊).RConf R => decide (∃ (K₀ : Kont) (w : OVal) (T : OVTy), (𝕊).DataVal T w ∧
+        c.1.2 = K₀.plug ((appK w.1).plug κ.1))) (fun j hj => decide_eq_decide.2
+          ⟨fun h => h.2, fun h => ⟨hj, h⟩⟩)]
+    rw [he, show List.take q₁.length ((((Adequacy.emptyMem, rProg (RF.name Ξ l) (q :: qs) dropV), ())
+        : (𝕊).RConf R) :: List.map Prod.snd q₁) = _ from take_r1 R () q qs (RF.name Ξ l)]
+    refine List.countP_eq_zero.2 fun c hc => ?_
     simp only [decide_eq_true_eq, not_exists, not_and]
-    intro K₀ w T hw hK₀
-    refine not_use_of_shape (n := RF.name Ξ l) (H := rH (RF.name Ξ l) dropV) (K := rK)
-      this ⟨K₀, ⟨w.1, isVal_of_dataVal hw⟩, ?_⟩
-    rw [hK₀, use_app hw, capture_eq]
-    rfl
-  have e3 := A.EffectSystem.caught_pos (catchAt_r (RF := RF) (Ξ := Ξ) (J := J) (𝕊).R₀ (𝕊).R₀.s₀ l
-    dropV (r1Run (RF.name Ξ l)) (by simp [r1Run]) ho hk)
-  rw [e1] at hu
+    intro K₀ w T hw heq
+    rw [use_app hw] at heq
+    refine not_use_of_shape (b₁ := _) (b₂ := _) ?_ ⟨K₀, w.1, heq⟩
+    rcases List.mem_cons.1 hc with rfl | hc
+    · exact any_kappa_rProg _ _ dropV rfl
+    rcases List.mem_cons.1 hc with rfl | hc
+    · rfl
+    rcases List.mem_cons.1 hc with rfl | hc
+    · rfl
+    rcases List.mem_cons.1 hc with rfl | hc
+    · rfl
+    rcases List.mem_cons.1 hc with rfl | hc
+    · rfl
+    exact absurd hc List.not_mem_nil
+  have hc1 := A.EffectSystem.caughtEv_pos hev
   omega
 
 end R1
-
-/-! ### One catch, at one class -/
-
-/-- A handler applied at a term. -/
-def hndAppShape : Expr → Bool
-  | .app (.app (.prim .hnd) _) _ => true
-  | _ => false
-
-/-- `perform p`. -/
-def performAppShape : Expr → Bool
-  | .app (.prim .perform) _ => true
-  | _ => false
-
-theorem two_le_countP {α : Type} (p : α → Bool) :
-    ∀ (l : List α) (i j : ℕ) (hij : i < j) (hj : j < l.length), p (l[i]'(by omega)) = true →
-      p l[j] = true → 2 ≤ l.countP p
-  | [], _, _, _, hj, _, _ => absurd hj (by simp)
-  | a :: l, 0, j + 1, _, hj, hi, hj' => by
-      have h1 : 0 < l.countP p :=
-        List.countP_pos_iff.2 ⟨l[j]'(by simpa using hj), List.getElem_mem _, hj'⟩
-      simp only [List.getElem_cons_zero] at hi
-      rw [List.countP_cons, if_pos hi]
-      omega
-  | a :: l, i + 1, j + 1, hij, hj, hi, hj' => by
-      have := two_le_countP p l i j (by omega) (by simpa using hj) hi hj'
-      rw [List.countP_cons]
-      omega
-
-section Unique
-variable {RF : RowForm} {Ξ : EffCtx} {J : OurTyping RF}
-
-local notation "𝕊" => ourInst (ℍ := ℍ) RF Ξ J
-
-/-- The only handler at an evaluation position of `withCl`'s start is its own, and the only
-`perform` its body. -/
-theorem rProg_subs (n : UInt32) (b : Expr) :
-    ((evalSubs (rProg n ⟨.lam b, .lam⟩)).tail.all fun x => !hndAppShape x) = true ∧
-    ∀ x ∈ evalSubs (rK.plug (performE (opArgE n 0 .unit))), performAppShape x = true →
-      x = performE (opArgE n 0 .unit) := by
-  refine ⟨rfl, fun x hx hs => ?_⟩
-  simp [rK, bindK, rTt, Kont.plug, performE, opArgE, evalSubs, Val.i32] at hx
-  rcases hx with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl <;>
-    first | rfl | simp [performAppShape] at hs
-
-/-- **`withCl l cl`'s start catches at one class**: its handler's, at `l`'s first operation. -/
-theorem catchTerm_rProg {l : (RF.alg Ξ).Lab} (hlen : (Ξ (RF.name Ξ l)).length ≤ 2 ^ 32)
-    (b : Expr) {κ : OVal} {k : A.OpClass}
-    (h : CatchTerm (RF := RF) (Ξ := Ξ) (J := J) (rProg (RF.name Ξ l) ⟨.lam b, .lam⟩) κ k) :
-    ∃ o, ((𝕊).sig l)[0]? = some o ∧ o.cls = k := by
-  obtain ⟨K₀, l', r, cs, K, i, v, o, he, -, ho, hk, -, -⟩ := h
-  obtain ⟨hH, hP⟩ := rProg_subs (RF.name Ξ l) b
-  obtain ⟨x, hx⟩ := perform_app (ℍ := ℍ) (J := J) l' i v
-  rw [hx] at he
-  -- the handler is the start's own
-  have hmem := mem_evalSubs_plug K₀ ((handleK (RF.name Ξ l') r.1 (cs.map Subtype.val)).plug
-    (K.plug (.app (.prim .perform) x)))
-  rw [← he] at hmem
-  have hX : (handleK (RF.name Ξ l') r.1 (cs.map Subtype.val)).plug
-      (K.plug (.app (.prim .perform) x)) = rProg (RF.name Ξ l) ⟨.lam b, .lam⟩ := by
-    have hcons : evalSubs (rProg (RF.name Ξ l) ⟨.lam b, .lam⟩) =
-        rProg (RF.name Ξ l) ⟨.lam b, .lam⟩ :: (evalSubs (rProg (RF.name Ξ l) ⟨.lam b, .lam⟩)).tail :=
-      rfl
-    rw [hcons, List.mem_cons] at hmem
-    rcases hmem with hx | hx
-    · exact hx
-    · have := List.all_eq_true.1 hH _ hx
-      simp [handleK, Kont.plug, hndAppShape] at this
-  simp only [handleK, rProg, Kont.plug, hndValE, Expr.app.injEq, Expr.pair.injEq, Expr.prim.injEq,
-    Prim.lit.injEq, IntLit.i32.injEq, true_and] at hX
-  obtain ⟨⟨hn, -⟩, hY⟩ := hX
-  -- the `perform` is the start's own
-  have hmem' := mem_evalSubs_plug K (.app (.prim .perform) x)
-  have hY' : K.plug (.app (.prim .perform) x) = rK.plug (performE (opArgE (RF.name Ξ l) 0 .unit)) :=
-    hY
-  rw [hY'] at hmem'
-  have hxe := hP _ hmem' rfl
-  -- the operation is `l`'s first
-  have hsig : (𝕊).sig l' = (𝕊).sig l := by
-    show (Ξ (RF.name Ξ l')).map _ = (Ξ (RF.name Ξ l)).map _
-    rw [hn]
-  rw [hsig] at ho
-  have hlt := idx_lt (RF := RF) (Ξ := Ξ) (J := J) hlen ho
-  rcases perform_cases (ℍ := ℍ) (J := J) l' i v with ⟨-, hp⟩ | ⟨hi', -⟩
-  swap
-  · exact absurd hlt hi'
-  rw [hp] at hx
-  rw [← hx] at hxe
-  simp only [performE, Expr.val, Val.prim, opArgE, Expr.app.injEq, Expr.pair.injEq, Val.i32,
-    Expr.prim.injEq, Prim.lit.injEq, IntLit.i32.injEq, true_and] at hxe
-  obtain ⟨-, hi, -⟩ := hxe
-  have hi0 : i = 0 := by
-    have := congrArg UInt32.toNat hi
-    rwa [UInt32.toNat_ofNat_of_lt' (by simp [UInt32.size]; omega)] at this
-  subst hi0
-  exact ⟨o, ho, hk⟩
-
-end Unique
-
-/-! ### At most one catch -/
-
-section Caught
-variable {RF : RowForm} {Ξ : EffCtx} {J : OurTyping RF}
-
-local notation "𝕊" => ourInst (ℍ := ℍ) RF Ξ J
-
-open Classical in
-/-- The catches of `κ` at the class `k` along a run of `withCl l cl` that catches nothing after
-its start: one if the start catches `κ` at `k`, none otherwise. -/
-theorem caughtK_chain (R : (𝕊).Runner) (s : R.St) (l : (RF.alg Ξ).Lab) (b : Expr)
-    (q : List (Kont × Expr × Expr)) (hq : 0 < q.length)
-    (hrest : ∀ t ∈ ((chainTerms (rProg (RF.name Ξ l) ⟨.lam b, .lam⟩) q).take q.length).tail,
-      catchShape t = false) (κ : OVal) (k : A.OpClass) :
-    (List.range (chainPath (ℍ := ℍ) R Adequacy.emptyMem s q).length).countP
-        (fun j => decide ((𝕊).CatchAt ((Adequacy.emptyMem, rProg (RF.name Ξ l) ⟨.lam b, .lam⟩), s)
-          (chainPath (ℍ := ℍ) R Adequacy.emptyMem s q) j κ k)) =
-      if CatchTerm (RF := RF) (Ξ := Ξ) (J := J) (rProg (RF.name Ξ l) ⟨.lam b, .lam⟩) κ k then 1
-      else 0 := by
-  rw [caught_chain]
-  obtain ⟨m, hm⟩ : ∃ m, q.length = m + 1 := ⟨q.length - 1, by omega⟩
-  have htake : (chainTerms (rProg (RF.name Ξ l) ⟨.lam b, .lam⟩) q).take q.length =
-      rProg (RF.name Ξ l) ⟨.lam b, .lam⟩ ::
-        ((chainTerms (rProg (RF.name Ξ l) ⟨.lam b, .lam⟩) q).take q.length).tail := by
-    rw [hm]; rfl
-  rw [htake, List.countP_cons, List.countP_eq_zero.2]
-  · simp
-  · intro t ht
-    simpa using not_catchTerm_of_shape (RF := RF) (Ξ := Ξ) (J := J) (hrest t ht) κ k
-
-open Classical in
-/-- **At most one catch**: a run of `withCl l cl` that catches nothing after its start catches `κ`
-at most once, its start catching at one class. -/
-theorem caught_le_one (R : (𝕊).Runner) (s : R.St) {l : (RF.alg Ξ).Lab}
-    (hlen : (Ξ (RF.name Ξ l)).length ≤ 2 ^ 32) (b : Expr)
-    (q : List (Kont × Expr × Expr)) (hq : 0 < q.length)
-    (hrest : ∀ t ∈ ((chainTerms (rProg (RF.name Ξ l) ⟨.lam b, .lam⟩) q).take q.length).tail,
-      catchShape t = false) (κ : OVal) :
-    (𝕊).caught ((Adequacy.emptyMem, rProg (RF.name Ξ l) ⟨.lam b, .lam⟩), s)
-      (chainPath (ℍ := ℍ) R Adequacy.emptyMem s q) κ ≤ 1 := by
-  have hL := caughtK_chain R s l b q hq hrest κ .linear
-  have hA := caughtK_chain R s l b q hq hrest κ .affine
-  have e : (𝕊).caught ((Adequacy.emptyMem, rProg (RF.name Ξ l) ⟨.lam b, .lam⟩), s)
-      (chainPath (ℍ := ℍ) R Adequacy.emptyMem s q) κ =
-      (if CatchTerm (RF := RF) (Ξ := Ξ) (J := J) (rProg (RF.name Ξ l) ⟨.lam b, .lam⟩) κ .linear
-        then 1 else 0) +
-      (if CatchTerm (RF := RF) (Ξ := Ξ) (J := J) (rProg (RF.name Ξ l) ⟨.lam b, .lam⟩) κ .affine
-        then 1 else 0) := by
-    rw [← hL, ← hA]; rfl
-  rw [e]
-  by_cases h₁ : CatchTerm (RF := RF) (Ξ := Ξ) (J := J) (rProg (RF.name Ξ l) ⟨.lam b, .lam⟩) κ .linear
-  · by_cases h₂ : CatchTerm (RF := RF) (Ξ := Ξ) (J := J) (rProg (RF.name Ξ l) ⟨.lam b, .lam⟩) κ
-        .affine
-    · obtain ⟨o₁, ho₁, hk₁⟩ := catchTerm_rProg hlen b h₁
-      obtain ⟨o₂, ho₂, hk₂⟩ := catchTerm_rProg hlen b h₂
-      rw [ho₁] at ho₂
-      cases ho₂
-      rw [hk₁] at hk₂
-      cases hk₂
-    · simp [h₁, h₂]
-  · rw [if_neg h₁]
-    split <;> simp
-
-end Caught
-
-/-! ### R2: `κ` resumed twice -/
-
-section R2
-variable {RF : RowForm} {Ξ : EffCtx} {J : OurTyping RF}
-
-local notation "𝕊" => ourInst (ℍ := ℍ) RF Ξ J
-
-/-- The second resume, under the first's bind. -/
-def tw2 (n : UInt32) : Expr := resumeE (rκ n twiceV).1 .unit
-
-/-- R2's run: the catch; the clause's β and `let`; the first resume, under `□ to _. resume κ ()`;
-the bind; the second resume. -/
-def r2Run (n : UInt32) : List (Kont × Expr × Expr) :=
-  (.hole, rProg n twiceV, .app twiceV.1 (.pair .unit (rκ n twiceV).1)) ::
-  (.hole, .app twiceV.1 (.pair .unit (rκ n twiceV).1), .letpair (.pair .unit (rκ n twiceV).1) twBody) ::
-  (.hole, .letpair (.pair .unit (rκ n twiceV).1) twBody, (bindK (tw2 n)).plug (tw2 n)) ::
-  (plugRun (bindK (tw2 n)) (resumeRun n twiceV Val.unit) ++
-    ((.hole, (bindK (tw2 n)).plug rTt, tw2 n) :: resumeRun n twiceV Val.unit))
-
-theorem r2_chain (n : UInt32) : HeadChain (ℍ := ℍ) (rProg n twiceV) (r2Run n) rTt := by
-  refine .cons (K := .hole) (fun μ => head_rCatch μ n twiceV) rfl ?_
-  refine .cons (K := .hole) (fun μ => Head.beta μ (.letpair (.var 0) twBody)
-    (Val.pair Val.unit (rκ n twiceV))) rfl ?_
-  refine .cons (K := .hole) (fun μ => Head.letpair μ Val.unit (rκ n twiceV) twBody) rfl ?_
-  refine HeadChain.append (HeadChain.plug (bindK (tw2 n)) (resume_chain_twice n Val.unit)) ?_
-  refine .cons (K := .hole) (fun μ => Head.beta μ (tw2 n) ⟨rTt, .inj₂ .unit⟩) rfl ?_
-  exact resume_chain_twice n Val.unit
-
-theorem r2_length (n : UInt32) : (r2Run n).length = 20 := rfl
-
-/-- No configuration of R2's run catches, but the first. -/
-theorem r2_noCatch (n : UInt32) :
-    (((chainTerms (rProg n twiceV) (r2Run n)).take 20).tail.all fun t => !catchShape t) = true :=
-  rfl
-
-theorem r2_at4 (n : UInt32) :
-    ((chainTerms (rProg n twiceV) (r2Run n)).take 20)[4]? =
-      some ((bindK (tw2 n)).plug (.app (.app (rκ n twiceV).1 (.inj₁ .unit)) .unit)) := rfl
-
-theorem r2_at13 (n : UInt32) :
-    ((chainTerms (rProg n twiceV) (r2Run n)).take 20)[13]? =
-      some (Kont.hole.plug (.app (.app (rκ n twiceV).1 (.inj₁ .unit)) .unit)) := rfl
-
-/-- **R2 breaks S6.**  A typing system that types R2 at `F 0 bool` fails S6: R2's run applies `κ`
-twice (each resume selects with `inj₁ ()`), and catches it at most once. -/
-theorem not_contUse_of_der_R2 (hU : ∀ η, RF.den Ξ (RF.alg Ξ).unit η = [])
-    (l : (RF.alg Ξ).Lab) (hlen : (Ξ (RF.name Ξ l)).length ≤ 2 ^ 32)
-    (h : (𝕊).der [] ((𝕊).withCl l (𝕊).twiceCl) ((𝕊).F (RF.alg Ξ).unit (𝕊).bool)) :
-    ¬ (𝕊).ContUse := by
-  intro hC
-  have hchain := r2_chain (ℍ := ℍ) (RF.name Ξ l)
-  have hpath := rpath_chainPath (RF := RF) (Ξ := Ξ) (J := J) (𝕊).R₀ (μ := Adequacy.emptyMem)
-    (s := (𝕊).R₀.s₀) hchain
-  obtain ⟨h1, -, -⟩ := hC (𝕊).R₀ r₀_respects _ _ _ (answers_unit_of hU (𝕊).R₀) h _ hpath
-    ((𝕊).capture l (rHA (OVal.ofVal twiceV)) rK)
-  have huse : 2 ≤ (𝕊).uses ((Adequacy.emptyMem, rProg (RF.name Ξ l) twiceV), (𝕊).R₀.s₀)
-      (chainPath (ℍ := ℍ) (𝕊).R₀ Adequacy.emptyMem (𝕊).R₀.s₀ (r2Run (RF.name Ξ l)))
-      ((𝕊).capture l (rHA (OVal.ofVal twiceV)) rK) := by
-    refine le_of_le_of_eq ?_ (uses_chain (RF := RF) (Ξ := Ξ) (J := J) _ _ _ _ _ _).symm
-    rw [r2_length]
-    refine two_le_countP _ _ 4 13 (by omega) (by simp [chainTerms, r2_length]) ?_ ?_
-    · rw [(List.getElem_eq_iff _).2 (r2_at4 (RF.name Ξ l))]
-      simp only [decide_eq_true_eq]
-      exact ⟨(bindK (tw2 (RF.name Ξ l))).comp (.appL .hole Val.unit), _, _, dataVal_sel₁,
-        by rw [use_app (RF := RF) (Ξ := Ξ) (J := J) dataVal_sel₁, capture_eq, Kont.plug_comp]; rfl⟩
-    · rw [(List.getElem_eq_iff _).2 (r2_at13 (RF.name Ξ l))]
-      simp only [decide_eq_true_eq]
-      exact ⟨.appL .hole Val.unit, _, _, dataVal_sel₁, by rw [use_app (RF := RF) (Ξ := Ξ) (J := J) dataVal_sel₁, capture_eq]; rfl⟩
-  have hrest : ∀ t ∈ ((chainTerms (rProg (RF.name Ξ l) twiceV) (r2Run (RF.name Ξ l))).take
-      (r2Run (RF.name Ξ l)).length).tail, catchShape t = false := by
-    rw [r2_length]
-    intro t ht
-    simpa using List.all_eq_true.1 (r2_noCatch (RF.name Ξ l)) t ht
-  have hcaught : (𝕊).caught ((Adequacy.emptyMem, rProg (RF.name Ξ l) twiceV), (𝕊).R₀.s₀)
-      (chainPath (ℍ := ℍ) (𝕊).R₀ Adequacy.emptyMem (𝕊).R₀.s₀ (r2Run (RF.name Ξ l)))
-      ((𝕊).capture l (rHA (OVal.ofVal twiceV)) rK) ≤ 1 :=
-    caught_le_one (RF := RF) (Ξ := Ξ) (J := J) (𝕊).R₀ (𝕊).R₀.s₀ hlen
-      (.letpair (.var 0) twBody) (r2Run (RF.name Ξ l)) (by rw [r2_length]; omega) hrest _
-  have h1' : (𝕊).uses ((Adequacy.emptyMem, rProg (RF.name Ξ l) twiceV), (𝕊).R₀.s₀)
-        (chainPath (ℍ := ℍ) (𝕊).R₀ Adequacy.emptyMem (𝕊).R₀.s₀ (r2Run (RF.name Ξ l)))
-        ((𝕊).capture l (rHA (OVal.ofVal twiceV)) rK) ≤
-      (𝕊).caught ((Adequacy.emptyMem, rProg (RF.name Ξ l) twiceV), (𝕊).R₀.s₀)
-        (chainPath (ℍ := ℍ) (𝕊).R₀ Adequacy.emptyMem (𝕊).R₀.s₀ (r2Run (RF.name Ξ l)))
-        ((𝕊).capture l (rHA (OVal.ofVal twiceV)) rK) := h1
-  omega
-
-end R2
-
-/-! ### R3: a linear `κ` cancelled -/
-
-section R3
-variable {RF : RowForm} {Ξ : EffCtx} {J : OurTyping RF}
-
-local notation "𝕊" => ourInst (ℍ := ℍ) RF Ξ J
-
-/-- `ff`. -/
-def rFf : Expr := .inj₁ .unit
-
-/-- R3's run: the catch; the clause's β and `let`; the cancel, under `□ to _. return ff`; the
-bind. -/
-def r3Run (n : UInt32) : List (Kont × Expr × Expr) :=
-  (.hole, rProg n cancelV, .app cancelV.1 (.pair .unit (rκ n cancelV).1)) ::
-  (.hole, .app cancelV.1 (.pair .unit (rκ n cancelV).1), .letpair (.pair .unit (rκ n cancelV).1) cBody) ::
-  (.hole, .letpair (.pair .unit (rκ n cancelV).1) cBody, (bindK rFf).plug (cancelE (rκ n cancelV).1)) ::
-  (plugRun (bindK rFf) (cancelRun n cancelV) ++ [(.hole, (bindK rFf).plug .unit, rFf)])
-
-theorem r3_chain {n : UInt32} (hn : n ≠ 0) : HeadChain (ℍ := ℍ) (rProg n cancelV) (r3Run n) rFf := by
-  refine .cons (K := .hole) (fun μ => head_rCatch μ n cancelV) rfl ?_
-  refine .cons (K := .hole) (fun μ => Head.beta μ (.letpair (.var 0) cBody)
-    (Val.pair Val.unit (rκ n cancelV))) rfl ?_
-  refine .cons (K := .hole) (fun μ => Head.letpair μ Val.unit (rκ n cancelV) cBody) rfl ?_
-  refine HeadChain.append (HeadChain.plug (bindK rFf) (cancel_chain_cancel hn)) ?_
-  refine .cons (K := .hole) (fun μ => Head.beta μ rFf Val.unit) rfl ?_
-  exact .nil
-
-theorem r3_length (n : UInt32) : (r3Run n).length = 8 := rfl
-
-theorem r3_noCatch (n : UInt32) :
-    (((chainTerms (rProg n cancelV) (r3Run n)).take 8).tail.all fun t => !catchShape t) = true :=
-  rfl
-
-theorem r3_at3 (n : UInt32) :
-    ((chainTerms (rProg n cancelV) (r3Run n)).take 8)[3]? =
-      some ((bindK rFf).plug (cancelE (rκ n cancelV).1)) := rfl
-
-/-- **R3 breaks S6.**  A typing system that types R3 at `F 0 bool`, at a label whose first
-operation is linear, fails S6: R3's run cancels a `κ` that no affine catch made. -/
-theorem not_contUse_of_der_R3 (hU : ∀ η, RF.den Ξ (RF.alg Ξ).unit η = [])
-    (l : (RF.alg Ξ).Lab) (hn : RF.name Ξ l ≠ 0) (hlen : (Ξ (RF.name Ξ l)).length ≤ 2 ^ 32)
-    {o : A.OpSig OVTy} (ho : ((𝕊).sig l)[0]? = some o) (hlin : o.cls = .linear)
-    (h : (𝕊).der [] ((𝕊).withCl l (𝕊).cancelCl) ((𝕊).F (RF.alg Ξ).unit (𝕊).bool)) :
-    ¬ (𝕊).ContUse := by
-  intro hC
-  have hchain := r3_chain (ℍ := ℍ) hn
-  have hpath := rpath_chainPath (RF := RF) (Ξ := Ξ) (J := J) (𝕊).R₀ (μ := Adequacy.emptyMem)
-    (s := (𝕊).R₀.s₀) hchain
-  obtain ⟨-, h2, -⟩ := hC (𝕊).R₀ r₀_respects _ _ _ (answers_unit_of hU (𝕊).R₀) h _ hpath
-    ((𝕊).capture l (rHA (OVal.ofVal cancelV)) rK)
-  have h2' : (𝕊).cancels ((Adequacy.emptyMem, rProg (RF.name Ξ l) cancelV), (𝕊).R₀.s₀)
-        (chainPath (ℍ := ℍ) (𝕊).R₀ Adequacy.emptyMem (𝕊).R₀.s₀ (r3Run (RF.name Ξ l)))
-        ((𝕊).capture l (rHA (OVal.ofVal cancelV)) rK) ≤
-      (𝕊).caughtAff ((Adequacy.emptyMem, rProg (RF.name Ξ l) cancelV), (𝕊).R₀.s₀)
-        (chainPath (ℍ := ℍ) (𝕊).R₀ Adequacy.emptyMem (𝕊).R₀.s₀ (r3Run (RF.name Ξ l)))
-        ((𝕊).capture l (rHA (OVal.ofVal cancelV)) rK) := h2
-  have hcan : 0 < (𝕊).cancels ((Adequacy.emptyMem, rProg (RF.name Ξ l) cancelV), (𝕊).R₀.s₀)
-      (chainPath (ℍ := ℍ) (𝕊).R₀ Adequacy.emptyMem (𝕊).R₀.s₀ (r3Run (RF.name Ξ l)))
-      ((𝕊).capture l (rHA (OVal.ofVal cancelV)) rK) := by
-    refine lt_of_lt_of_eq ?_ (cancels_chain (RF := RF) (Ξ := Ξ) (J := J) _ _ _ _ _ _).symm
-    rw [r3_length]
-    refine List.countP_pos_iff.2 ⟨_, List.mem_of_getElem? (r3_at3 (RF.name Ξ l)), ?_⟩
-    simp only [decide_eq_true_eq]
-    exact ⟨bindK rFf, by rw [capture_eq]; try rfl⟩
-  have hrest : ∀ t ∈ ((chainTerms (rProg (RF.name Ξ l) cancelV) (r3Run (RF.name Ξ l))).take
-      (r3Run (RF.name Ξ l)).length).tail, catchShape t = false := by
-    rw [r3_length]
-    intro t ht
-    simpa using List.all_eq_true.1 (r3_noCatch (RF.name Ξ l)) t ht
-  have haff := caughtK_chain (RF := RF) (Ξ := Ξ) (J := J) (𝕊).R₀ (𝕊).R₀.s₀ l
-    (.letpair (.var 0) cBody) (r3Run (RF.name Ξ l)) (by rw [r3_length]; omega) hrest
-    ((𝕊).capture l (rHA (OVal.ofVal cancelV)) rK) .affine
-  rw [if_neg] at haff
-  · have : (𝕊).caughtAff ((Adequacy.emptyMem, rProg (RF.name Ξ l) cancelV), (𝕊).R₀.s₀)
-        (chainPath (ℍ := ℍ) (𝕊).R₀ Adequacy.emptyMem (𝕊).R₀.s₀ (r3Run (RF.name Ξ l)))
-        ((𝕊).capture l (rHA (OVal.ofVal cancelV)) rK) = 0 := haff
-    omega
-  · intro hct
-    obtain ⟨o', ho', hk'⟩ := catchTerm_rProg (RF := RF) (Ξ := Ξ) (J := J) hlen _ hct
-    obtain rfl : o = o' := Option.some.inj (ho.symm.trans ho')
-    rw [hlin] at hk'
-    cases hk'
-
-end R3
-
-/-! ### R4: `κ` resumed after its cancel -/
-
-section R4
-variable {RF : RowForm} {Ξ : EffCtx} {J : OurTyping RF}
-
-local notation "𝕊" => ourInst (ℍ := ℍ) RF Ξ J
-
-/-- The resume after the cancel, under the cancel's bind. -/
-def cr2 (n : UInt32) : Expr := resumeE (rκ n cancelResumeV).1 .unit
-
-/-- R4's run: the catch; the clause's β and `let`; the cancel, under `□ to _. resume κ ()`; the
-bind; the resume. -/
-def r4Run (n : UInt32) : List (Kont × Expr × Expr) :=
-  (.hole, rProg n cancelResumeV, .app cancelResumeV.1 (.pair .unit (rκ n cancelResumeV).1)) ::
-  (.hole, .app cancelResumeV.1 (.pair .unit (rκ n cancelResumeV).1),
-    .letpair (.pair .unit (rκ n cancelResumeV).1) crBody) ::
-  (.hole, .letpair (.pair .unit (rκ n cancelResumeV).1) crBody,
-    (bindK (cr2 n)).plug (cancelE (rκ n cancelResumeV).1)) ::
-  (plugRun (bindK (cr2 n)) (cancelRun n cancelResumeV) ++
-    ((.hole, (bindK (cr2 n)).plug .unit, cr2 n) :: resumeRun n cancelResumeV Val.unit))
-
-theorem r4_chain {n : UInt32} (hn : n ≠ 0) :
-    HeadChain (ℍ := ℍ) (rProg n cancelResumeV) (r4Run n) rTt := by
-  refine .cons (K := .hole) (fun μ => head_rCatch μ n cancelResumeV) rfl ?_
-  refine .cons (K := .hole) (fun μ => Head.beta μ (.letpair (.var 0) crBody)
-    (Val.pair Val.unit (rκ n cancelResumeV))) rfl ?_
-  refine .cons (K := .hole) (fun μ => Head.letpair μ Val.unit (rκ n cancelResumeV) crBody) rfl ?_
-  refine HeadChain.append (HeadChain.plug (bindK (cr2 n)) (cancel_chain_cancelResume hn)) ?_
-  refine .cons (K := .hole) (fun μ => Head.beta μ (cr2 n) Val.unit) rfl ?_
-  exact resume_chain_cancelResume n Val.unit
-
-theorem r4_length (n : UInt32) : (r4Run n).length = 16 := rfl
-
-theorem r4_noCatch (n : UInt32) :
-    (((chainTerms (rProg n cancelResumeV) (r4Run n)).take 16).tail.all
-      fun t => !catchShape t) = true := rfl
-
-theorem r4_at3 (n : UInt32) :
-    ((chainTerms (rProg n cancelResumeV) (r4Run n)).take 16)[3]? =
-      some ((bindK (cr2 n)).plug (cancelE (rκ n cancelResumeV).1)) := rfl
-
-theorem r4_at9 (n : UInt32) :
-    ((chainTerms (rProg n cancelResumeV) (r4Run n)).take 16)[9]? =
-      some (Kont.hole.plug (.app (.app (rκ n cancelResumeV).1 (.inj₁ .unit)) .unit)) := rfl
-
-/-- **R4 breaks S6.**  A typing system that types R4 at `F 0 bool` fails S6: R4's run cancels `κ`
-(`κ (inj₂ ())`) and then resumes it (`κ (inj₁ ())`), and catches it at most once. -/
-theorem not_contUse_of_der_R4 (hU : ∀ η, RF.den Ξ (RF.alg Ξ).unit η = [])
-    (l : (RF.alg Ξ).Lab) (hn : RF.name Ξ l ≠ 0) (hlen : (Ξ (RF.name Ξ l)).length ≤ 2 ^ 32)
-    (h : (𝕊).der [] ((𝕊).withCl l (𝕊).cancelResumeCl) ((𝕊).F (RF.alg Ξ).unit (𝕊).bool)) :
-    ¬ (𝕊).ContUse := by
-  intro hC
-  have hchain := r4_chain (ℍ := ℍ) hn
-  have hpath := rpath_chainPath (RF := RF) (Ξ := Ξ) (J := J) (𝕊).R₀ (μ := Adequacy.emptyMem)
-    (s := (𝕊).R₀.s₀) hchain
-  obtain ⟨h1, -, -⟩ := hC (𝕊).R₀ r₀_respects _ _ _ (answers_unit_of hU (𝕊).R₀) h _ hpath
-    ((𝕊).capture l (rHA (OVal.ofVal cancelResumeV)) rK)
-  have huse : 2 ≤ (𝕊).uses ((Adequacy.emptyMem, rProg (RF.name Ξ l) cancelResumeV), (𝕊).R₀.s₀)
-      (chainPath (ℍ := ℍ) (𝕊).R₀ Adequacy.emptyMem (𝕊).R₀.s₀ (r4Run (RF.name Ξ l)))
-      ((𝕊).capture l (rHA (OVal.ofVal cancelResumeV)) rK) := by
-    refine le_of_le_of_eq ?_ (uses_chain (RF := RF) (Ξ := Ξ) (J := J) _ _ _ _ _ _).symm
-    rw [r4_length]
-    refine two_le_countP _ _ 3 9 (by omega) (by simp [chainTerms, r4_length]) ?_ ?_
-    · rw [(List.getElem_eq_iff _).2 (r4_at3 (RF.name Ξ l))]
-      simp only [decide_eq_true_eq]
-      exact ⟨bindK (cr2 (RF.name Ξ l)), _, _, dataVal_sel₂,
-        by rw [use_app (RF := RF) (Ξ := Ξ) (J := J) dataVal_sel₂, capture_eq]; rfl⟩
-    · rw [(List.getElem_eq_iff _).2 (r4_at9 (RF.name Ξ l))]
-      simp only [decide_eq_true_eq]
-      exact ⟨.appL .hole Val.unit, _, _, dataVal_sel₁, by rw [use_app (RF := RF) (Ξ := Ξ) (J := J) dataVal_sel₁, capture_eq]; rfl⟩
-  have hrest : ∀ t ∈ ((chainTerms (rProg (RF.name Ξ l) cancelResumeV) (r4Run (RF.name Ξ l))).take
-      (r4Run (RF.name Ξ l)).length).tail, catchShape t = false := by
-    rw [r4_length]
-    intro t ht
-    simpa using List.all_eq_true.1 (r4_noCatch (RF.name Ξ l)) t ht
-  have hcaught : (𝕊).caught ((Adequacy.emptyMem, rProg (RF.name Ξ l) cancelResumeV), (𝕊).R₀.s₀)
-      (chainPath (ℍ := ℍ) (𝕊).R₀ Adequacy.emptyMem (𝕊).R₀.s₀ (r4Run (RF.name Ξ l)))
-      ((𝕊).capture l (rHA (OVal.ofVal cancelResumeV)) rK) ≤ 1 :=
-    caught_le_one (RF := RF) (Ξ := Ξ) (J := J) (𝕊).R₀ (𝕊).R₀.s₀ hlen
-      (.letpair (.var 0) crBody) (r4Run (RF.name Ξ l)) (by rw [r4_length]; omega) hrest _
-  have h1' : (𝕊).uses ((Adequacy.emptyMem, rProg (RF.name Ξ l) cancelResumeV), (𝕊).R₀.s₀)
-        (chainPath (ℍ := ℍ) (𝕊).R₀ Adequacy.emptyMem (𝕊).R₀.s₀ (r4Run (RF.name Ξ l)))
-        ((𝕊).capture l (rHA (OVal.ofVal cancelResumeV)) rK) ≤
-      (𝕊).caught ((Adequacy.emptyMem, rProg (RF.name Ξ l) cancelResumeV), (𝕊).R₀.s₀)
-        (chainPath (ℍ := ℍ) (𝕊).R₀ Adequacy.emptyMem (𝕊).R₀.s₀ (r4Run (RF.name Ξ l)))
-        ((𝕊).capture l (rHA (OVal.ofVal cancelResumeV)) rK) := h1
-  omega
-
-end R4
 
 /-! ### At the open-row form -/
 
@@ -942,31 +479,13 @@ local notation "𝕊" => ourInst (ℍ := ℍ) orowRF Ξ J
 
 theorem orow_unit (η : RowEnv) : orowRF.den Ξ (orowAlg Ξ).unit η = [] := rfl
 
-/-- R1 at the open-row form: its labels' names are not `0`. -/
-theorem not_contUse_of_der_R1_orow (l : (orowAlg Ξ).Lab) {o : A.OpSig OVTy}
+/-- R1 at the open-row form. -/
+theorem not_contUseEv_of_der_R1_orow (l : (orowAlg Ξ).Lab) {q : Qual} {qs : List Qual}
+    (hqs : qsL (RF := orowRF) (Ξ := Ξ) l = q :: qs) (hq : q ≠ .unr) {o : A.OpSig OVTy}
     (ho : ((𝕊).sig l)[0]? = some o) (hk : o.cls ≠ .abortive)
     (h : (𝕊).der [] ((𝕊).withCl l (𝕊).dropCl) ((𝕊).F (orowAlg Ξ).unit (𝕊).bool)) :
-    ¬ (𝕊).ContUse :=
-  not_contUse_of_der_R1 orow_unit l ho hk h
-
-/-- R2 at the open-row form: its signatures have at most `2³²` operations. -/
-theorem not_contUse_of_der_R2_orow (l : (orowAlg Ξ).Lab)
-    (h : (𝕊).der [] ((𝕊).withCl l (𝕊).twiceCl) ((𝕊).F (orowAlg Ξ).unit (𝕊).bool)) :
-    ¬ (𝕊).ContUse :=
-  not_contUse_of_der_R2 orow_unit l l.2.2.2 h
-
-/-- R3 at the open-row form. -/
-theorem not_contUse_of_der_R3_orow (l : (orowAlg Ξ).Lab) {o : A.OpSig OVTy}
-    (ho : ((𝕊).sig l)[0]? = some o) (hlin : o.cls = .linear)
-    (h : (𝕊).der [] ((𝕊).withCl l (𝕊).cancelCl) ((𝕊).F (orowAlg Ξ).unit (𝕊).bool)) :
-    ¬ (𝕊).ContUse :=
-  not_contUse_of_der_R3 orow_unit l l.2.1 l.2.2.2 ho hlin h
-
-/-- R4 at the open-row form. -/
-theorem not_contUse_of_der_R4_orow (l : (orowAlg Ξ).Lab)
-    (h : (𝕊).der [] ((𝕊).withCl l (𝕊).cancelResumeCl) ((𝕊).F (orowAlg Ξ).unit (𝕊).bool)) :
-    ¬ (𝕊).ContUse :=
-  not_contUse_of_der_R4 orow_unit l l.2.1 l.2.2.2 h
+    ¬ (𝕊).ContUseEv :=
+  not_contUseEv_of_der_R1 orow_unit l hqs hq ho hk h
 
 end Orow
 
@@ -991,10 +510,10 @@ theorem refuses_R_tier1Open {Ξ : EffCtx} (l : (orowAlg Ξ).Lab) (C : OCTy) :
 
 /-! ### The witnesses' premises are met -/
 
-/-- A typing system that types R1–R4, at every name, and nothing else. -/
+/-- A typing system that types R1–R4, at every name and tag list, and nothing else. -/
 def JR : OurTyping orowRF :=
-  ⟨fun _ _ Γ e _ => Γ = [] ∧ ∃ n, e = rProg n dropV ∨ e = rProg n twiceV ∨ e = rProg n cancelV ∨
-    e = rProg n cancelResumeV, OutJ.core, fun _ η => η⟩
+  ⟨fun _ _ Γ e _ => Γ = [] ∧ ∃ n qs, e = rProg n qs dropV ∨ e = rProg n qs twiceV ∨
+    e = rProg n qs cancelV ∨ e = rProg n qs cancelResumeV, OutJ.core, fun _ η => η⟩
 
 /-- The label of the name `5`, linear at `ΞA` (`tick`). -/
 def lab5A : (orowAlg ΞA).Lab := ⟨5, by decide, by simp [ΞA], by simp [ΞA]⟩
@@ -1002,33 +521,24 @@ def lab5A : (orowAlg ΞA).Lab := ⟨5, by decide, by simp [ΞA], by simp [ΞA]�
 /-- The label of the name `2`, affine at `ΞA` (`wait`). -/
 def lab2A : (orowAlg ΞA).Lab := ⟨2, by decide, by simp [ΞA], by simp [ΞA]⟩
 
-/-- **S6's teeth bite at an admissible effect context**: `JR` types each of R1–R4 at `F 0 bool`,
-R1 and R4 at the affine `wait`, R3 at the linear `tick`, R2 at both; each lemma's other premises
-hold there; so `JR` fails S6, four times over. -/
+/-- **S6's tooth bites at an admissible effect context**: `JR` types R1 at `F 0 bool` at the affine
+`wait` and at the linear `tick`; the lemma's other premises hold there; so `JR` fails S6. -/
 theorem teeth_JR_ΞA :
     AdmEff ΞA ∧
     (ourInst (ℍ := ℍ) orowRF ΞA JR).der []
       ((ourInst (ℍ := ℍ) orowRF ΞA JR).withCl lab2A (ourInst (ℍ := ℍ) orowRF ΞA JR).dropCl)
       ((ourInst (ℍ := ℍ) orowRF ΞA JR).F (orowAlg ΞA).unit (ourInst (ℍ := ℍ) orowRF ΞA JR).bool) ∧
     (ourInst (ℍ := ℍ) orowRF ΞA JR).der []
-      ((ourInst (ℍ := ℍ) orowRF ΞA JR).withCl lab5A (ourInst (ℍ := ℍ) orowRF ΞA JR).twiceCl)
+      ((ourInst (ℍ := ℍ) orowRF ΞA JR).withCl lab5A (ourInst (ℍ := ℍ) orowRF ΞA JR).dropCl)
       ((ourInst (ℍ := ℍ) orowRF ΞA JR).F (orowAlg ΞA).unit (ourInst (ℍ := ℍ) orowRF ΞA JR).bool) ∧
-    (ourInst (ℍ := ℍ) orowRF ΞA JR).der []
-      ((ourInst (ℍ := ℍ) orowRF ΞA JR).withCl lab5A (ourInst (ℍ := ℍ) orowRF ΞA JR).cancelCl)
-      ((ourInst (ℍ := ℍ) orowRF ΞA JR).F (orowAlg ΞA).unit (ourInst (ℍ := ℍ) orowRF ΞA JR).bool) ∧
-    (ourInst (ℍ := ℍ) orowRF ΞA JR).der []
-      ((ourInst (ℍ := ℍ) orowRF ΞA JR).withCl lab2A (ourInst (ℍ := ℍ) orowRF ΞA JR).cancelResumeCl)
-      ((ourInst (ℍ := ℍ) orowRF ΞA JR).F (orowAlg ΞA).unit (ourInst (ℍ := ℍ) orowRF ΞA JR).bool) ∧
-    ¬ (ourInst (ℍ := ℍ) orowRF ΞA JR).ContUse := by
+    ¬ (ourInst (ℍ := ℍ) orowRF ΞA JR).ContUseEv := by
   have d1 : (ourInst (ℍ := ℍ) orowRF ΞA JR).der []
       ((ourInst (ℍ := ℍ) orowRF ΞA JR).withCl lab2A (ourInst (ℍ := ℍ) orowRF ΞA JR).dropCl)
       ((ourInst (ℍ := ℍ) orowRF ΞA JR).F (orowAlg ΞA).unit (ourInst (ℍ := ℍ) orowRF ΞA JR).bool) :=
-    ⟨tiedAt_unit JR _, .inl ⟨[], by simp, rfl, 2, .inl rfl⟩⟩
-  refine ⟨admEff_ΞA, d1, ⟨tiedAt_unit JR _, .inl ⟨[], by simp, rfl, 5, .inr (.inl rfl)⟩⟩,
-    ⟨tiedAt_unit JR _, .inl ⟨[], by simp, rfl, 5, .inr (.inr (.inl rfl))⟩⟩,
-    ⟨tiedAt_unit JR _, .inl ⟨[], by simp, rfl, 2, .inr (.inr (.inr rfl))⟩⟩, ?_⟩
-  exact not_contUse_of_der_R1_orow lab2A (o := ⟨OVTy.ofV .unit, OVTy.ofV .unit, .affine⟩)
-    (by simp [lab2A, ΞA]; rfl) (by decide) d1
+    ⟨tiedAt_unit JR _, .inl ⟨[], by simp, rfl, 2, _, .inl rfl⟩⟩
+  refine ⟨admEff_ΞA, d1, ⟨tiedAt_unit JR _, .inl ⟨[], by simp, rfl, 5, _, .inl rfl⟩⟩, ?_⟩
+  exact not_contUseEv_of_der_R1_orow lab2A (q := .aff) (qs := []) rfl (by decide)
+    (o := ⟨OVTy.ofV .unit, OVTy.ofV .unit, .affine⟩) (by simp [lab2A, ΞA]; rfl) (by decide) d1
 
 end Targets.Inst
 

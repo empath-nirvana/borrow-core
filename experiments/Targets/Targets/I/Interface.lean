@@ -26,19 +26,23 @@ variable {ℍ : BoCa.Host} [BoCa.HostIs ℍ]
 namespace Targets
 open BoCa BoCa.Fig16 BoCa.Fig16.BoLo BoCa.Fig16.LogRel BoCa.Fig16.LogRel.Core
 open BoCa.BoLo (Heap Steps Step1 Head Kont performE raiseE opPayload cancelVal hndE hndVal kappa
-  ccatchE cfinE ubindE)
+  ccatchE cfinE ubindE kappaC)
 open BoCa.Lifetime (LSub LifeCtx LifeVar)
 
-/-- **I1.** -/
+/-- **I1**: the continuation's share and its cell give `κ` its type.  The rows are unr-free, so
+the operation is linear or affine, and the `κ` its catch hands is `kappaC` at a fresh cell `ℓ`
+(SPEC §25). -/
 def I1 (M : SemWorld) : Prop :=
-  ∀ (S : Row) (n : UInt32) (E : List (Qual × VTy × VTy)) (R : VTy) (δ : LSub) (hr hs : Val)
-    (j : UInt32) (o : OpSig) (K : Kont) (i : Idx M.Stk) (ρ : WRes),
+  ∀ (S : Row) (n : UInt32) (E : List (Qual × VTy × VTy)) (R : VTy) (δ : LSub) (qs hr hs : Val)
+    (j : UInt32) (o : OpSig) (K : Kont) (i : Idx M.Stk) (ℓ : Loc) (ρk σ ρ : WRes),
     n ≠ 0 → (∀ o' ∈ S, o'.n ≠ n) → Row.NU (Row.ofEff n E 0 ++ S) →
     Row.find (Row.ofEff n E 0) n j = some o → o.abort = false →
     M.share (rowTabW M (Row.ofEff n E 0 ++ S) δ) (entW M δ o) n i K
-      (fun i' t => ewpW (ℍ := ℍ) M i' (hndE (hndVal n hr hs) t) (opTabW M (rowTabW M S δ))
-        (fun i'' v => M.val true R i'' δ v)) ρ →
-    M.val true (kTy S R o.q o.B) i δ ⟨kappa n (hndVal n hr hs) K, by unfold kappa; exact .lam⟩ ρ
+      (fun i' t => ewpW (ℍ := ℍ) M i' (hndE (hndVal n qs hr hs) t) (opTabW M (rowTabW M S δ))
+        (fun i'' v => M.val true R i'' δ v)) ρk →
+    ptoOwn ℓ Val.unit σ → ResU.CompS ρk σ ρ →
+    M.val true (kTy S R o.q o.B) i δ
+      ⟨kappaC (o.q == .aff) ℓ n (hndVal n qs hr hs) K, by unfold kappaC; exact .lam⟩ ρ
 
 /-- OQ-56's question: which operations a borrow callback's row may hold, given the context and the
 lend's variable. -/
@@ -363,7 +367,8 @@ def I4c (J : TypingJ) : Prop :=
       (thunkF (ansRun d s₀ body))
 
 /-- **I5.β**: resuming `κ` at `w` runs the frozen computation at `w` under the reinstalled
-handler. -/
+handler.  It is stated at an unrestricted operation's `κ`, which owns no cell; a linear or affine
+`κ` frees its cell first (SPEC §25; at Core's world `ewp_kappaC_resume`). -/
 def I5beta (M : SemWorld) : Prop :=
   ∀ (Tb : TableI (Idx M.Stk)) (n : UInt32) (H : Val) (K : Kont) (w : Val) i Q ρ,
     TableI.Mono Tb → ewpW (ℍ := ℍ) M i (hndE H (K.plug (.val w))) Tb Q ρ →

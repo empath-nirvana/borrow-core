@@ -16,12 +16,12 @@ each signature the (E) programs use).
 | `Ty`, `CTy`, `F`, data | the open types; `F ε A` the returner at the row's reading, `effF` |
 | `DivFree` | the type's instances are returners at closed data (decision 35's reading) |
 | `Val`, `Term` | expressions in value form, variables included (`OVal`), and expressions |
-| formers | Core's: `lam` is `λ`, `force V` is `V` (every A-thunk is a function), `app M V` is `V to x. M x` (Core's `[app]` takes a variable), `bind` is `bindE`, `perform`/`raise` are `performE`/`raiseE` at the payload, at an index below `2³²` (beyond it, the stuck `opJunk`), `handle` is the run-time handler frame, `resume k w` is `w to y. k (inj₁ ()) y`, `cancel k` is `k (inj₂ ())`, `thenT M N D` is `thenE N D↑ M` |
+| formers | Core's: `lam` is `λ`, `force V` is `V` (every A-thunk is a function), `app M V` is `V to x. M x` (Core's `[app]` takes a variable), `bind` is `bindE`, `perform`/`raise` are `performE`/`raiseE` at the payload, at an index below `2³²` (beyond it, the stuck `opJunk`), `handle` is the run-time handler frame, its tags `Ξ`'s qualifiers of the name (`qsOf`), `resume k w` is `w to y. k (inj₁ ()) y`, `cancel k` is `k (inj₂ ())`, `thenT M N D` is `thenE N D↑ M` |
 | `unfold A B f g s` | `unfoldV (loopEffBody [] A B)` at the coalgebra `λs. ⟨f s, g s⟩` and the state, stepped to its loop value `etaN` (`unfoldV`'s code is type-directed, so `unfold` carries the answer types); `next` is `nextE`, `close l` is `l (inj₂ ())` |
 | `drive M`, `driveF` | the context `drive □`, a frame Core never steps (an applied literal); the driver's steps are `top` steps at the whole term (`RStep.again`, and the return to the main program at `inj₁ a`) |
 | `Kont`, `plug`, `kcomp`, frames | Core's `Kont`, `Kont.plug`, `Kont.comp`; `bindF N` is `□ to x. N`, `appF V` is `□ V`, `handleF` the handler frame, `thenF` the `ubind` frame |
 | `catches`, `unwindClear`, `fins` | `Kont.HasHnd`; no `ubind` and no `cfin` frame; `Kont.fins`, each read as an A-term |
-| `capture`, `cancelOf` | `kappa`, `cancelOf` (base) |
+| `capture`, `cancelOf` | `kappa`, `cancelOf` (base): the continuation of an unrestricted operation; at a linear or affine one the catch hands `kappaC` at a fresh cell (SPEC §25) |
 | `step` | `Step1` under every allocator, labelled `fire D` at `ufin`/`ufinC`, `finEnd` at `cfret`/`cferr`, `tau` otherwise; and the driver's `top` steps |
 | `derV`, `der` | `J` at the empty lifetime context and a row context declaring row variables at `any`, every slot live; a computation at a returner whose row is tied to `Ξ` (`OCTy.TiedAt`, decision D1); a driven program is typed at `[]` and a loop sum, its current step's type, the loop's row below the step's and its body positive (decision D2) |
 
@@ -176,13 +176,16 @@ def clausesE : List Expr → Expr
   | [] => .unit
   | c :: cs => .pair c (clausesE cs)
 
-/-- The handler value `(n, (h_ret, hs))`, as an expression. -/
-def hndValE (n : UInt32) (r : Expr) (cs : List Expr) : Expr :=
-  .pair (.prim (.lit (.i32 n))) (.pair r (clausesE cs))
+/-- The handler value `(n, (qs, (h_ret, hs)))`, as an expression. -/
+def hndValE (n : UInt32) (qs r : Expr) (cs : List Expr) : Expr :=
+  .pair (.prim (.lit (.i32 n))) (.pair qs (.pair r (clausesE cs)))
 
-/-- The run-time handler frame `hnd (n, (h_ret, hs)) □`. -/
-def handleK (n : UInt32) (r : Expr) (cs : List Expr) : Kont :=
-  .appR (.app (.prim .hnd) (hndValE n r cs)) .hole
+/-- The run-time handler frame `hnd (n, (qs, (h_ret, hs))) □`. -/
+def handleK (n : UInt32) (qs r : Expr) (cs : List Expr) : Kont :=
+  .appR (.app (.prim .hnd) (hndValE n qs r cs)) .hole
+
+/-- The tags of the name `n`'s operations' qualifiers at `Ξ` (SPEC §25). -/
+def qsOf (Ξ : EffCtx) (n : UInt32) : Expr := (qualsVal ((Ξ n).map Prod.fst)).1
 
 /-- The finaliser frame `ubind (λx. N, λ_. D↑) □`. -/
 def thenK (N D : Expr) : Kont := .appR (.app (.prim .ubind) (.pair (.lam N) (.lam (D.shift 1 0)))) .hole
@@ -209,14 +212,16 @@ holds, the hole). -/
 def appK (V : Expr) : Kont := if h : IsVal V then .appL .hole ⟨V, h⟩ else .hole
 
 open Classical in
-/-- The continuation `κ` a catch hands its clause (`kappa`), at a handler of values. -/
-def captureE (n : UInt32) (r : Expr) (cs : List Expr) (K : Kont) : Expr :=
-  if h : IsVal (hndValE n r cs) then kappa n ⟨_, h⟩ K else .unit
+/-- The continuation `κ` a catch of an unrestricted operation hands its clause (`kappa`), at a
+handler of values.  At a linear or affine operation the catch hands `kappaC` at a fresh cell
+(SPEC §25), which no function of the handler and the context names. -/
+def captureE (n : UInt32) (qs r : Expr) (cs : List Expr) (K : Kont) : Expr :=
+  if h : IsVal (hndValE n qs r cs) then kappa n ⟨_, h⟩ K else .unit
 
 open Classical in
 /-- The start of `κ`'s cancel run (`cancelOf`), at a handler of values. -/
-def cancelOfE (n : UInt32) (r : Expr) (cs : List Expr) (K : Kont) : Expr :=
-  if h : IsVal (hndValE n r cs) then Targets.cancelOf n ⟨_, h⟩ K else .unit
+def cancelOfE (n : UInt32) (qs r : Expr) (cs : List Expr) (K : Kont) : Expr :=
+  if h : IsVal (hndValE n qs r cs) then Targets.cancelOf n ⟨_, h⟩ K else .unit
 
 /-- The coalgebra `λs. ⟨f s, g s⟩` of a loop.  `withPair`'s arms sit under its two binders (the
 selector and the branch's unit, Core's `withCtx`), so `s` is `var 2` there and `f`, `g` are shifted
@@ -325,7 +330,7 @@ def ourInst (RF : RowForm) (Ξ : EffCtx) (J : OurTyping RF) : A.EffectSystem whe
   raise l i v := if i < 2 ^ 32 then raiseE (opArgE (RF.name Ξ l) (UInt32.ofNat i) v.1)
     else opJunk true
   hnd r cs := (r, cs)
-  handle l H M := (handleK (RF.name Ξ l) H.1.1 (H.2.map Subtype.val)).plug M
+  handle l H M := (handleK (RF.name Ξ l) (qsOf Ξ (RF.name Ξ l)) H.1.1 (H.2.map Subtype.val)).plug M
   resume k w := resumeE k.1 w.1
   cancel k := cancelE k.1
   thenT M N D := (thenK N D).plug M
@@ -340,18 +345,18 @@ def ourInst (RF : RowForm) (Ξ : EffCtx) (J : OurTyping RF) : A.EffectSystem whe
   kcomp := Kont.comp
   bindF := bindK
   appF V := appK V.1
-  handleF l H := handleK (RF.name Ξ l) H.1.1 (H.2.map Subtype.val)
+  handleF l H := handleK (RF.name Ξ l) (qsOf Ξ (RF.name Ξ l)) H.1.1 (H.2.map Subtype.val)
   thenF := thenK
   driveF := driveK
   plug := Kont.plug
   catches K l := K.HasHnd (RF.name Ξ l)
   unwindClear K := K.NoUnwind
   fins K := K.fins.map finE
-  capture l H K := ⟨captureE (RF.name Ξ l) H.1.1 (H.2.map Subtype.val) K, by
+  capture l H K := ⟨captureE (RF.name Ξ l) (qsOf Ξ (RF.name Ξ l)) H.1.1 (H.2.map Subtype.val) K, by
     unfold captureE; split
     · unfold kappa; exact .lam
     · exact .unit⟩
-  cancelOf l H K := cancelOfE (RF.name Ξ l) H.1.1 (H.2.map Subtype.val) K
+  cancelOf l H K := cancelOfE (RF.name Ξ l) (qsOf Ξ (RF.name Ξ l)) H.1.1 (H.2.map Subtype.val) K
   init e := (Adequacy.emptyMem, e)
   term c := c.2
   setT c t := (c.1, t)

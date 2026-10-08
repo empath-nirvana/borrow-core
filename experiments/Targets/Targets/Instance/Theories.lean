@@ -5,20 +5,22 @@ import Targets.Instance.UnaryLaws
 # The Instance — theories at our instance: the answering class, models and comodels (D1.h4)
 
 At our instance, `A.Theories`' answering handler is Core's run-time handler frame with the
-state-passing clauses, and its runs are quiet when the co-operations' are (`PureCo`).  `[Core
-σ=[]]`
+state-passing clauses, and its runs are calm (`Calm`) when the co-operations' are quiet
+(`PureCo`).  `[Core σ=[]]`
 
-* **The fold** (`quiet_fold`): a straight-line computation handled by `ansHnd co` from the state
-  `s` runs, quietly, as the co-operations do on the threaded state (`CoRun`), to
+* **The fold** (`calm_fold`): a straight-line computation handled by `ansHnd co` from the state
+  `s` runs, calmly, as the co-operations do on the threaded state (`CoRun`), to
   `(□ to f. f sₙ)[hnd H (k fin)]`.  Each operation is caught, its clause returns the state
   function, the closing frame applies it to the current state, the co-operation runs, and `κ` is
-  resumed in place with the closing frame at the new state (`quiet_opStep`).  This is the native
-  counterpart of `handle_fold` (`Core/Handlers.lean`), which states the same of the borrow form.
+  resumed in place with the closing frame at the new state (`calm_opStep`): quietly when `κ` owns
+  no cell (`quiet_opStep`), and around the cell when it does, the resume releasing it
+  (`cellQuiet_opStep`, SPEC §25).  This is the native counterpart of `handle_fold`
+  (`Core/Handlers.lean`), which states the same of the borrow form.
 * **The co-run** (`quiet_coRun`): the co-operations' own run of the computation reaches
   `(sₙ, fin)` quietly.
 * **D1.h4 (c)** (`ansCorrect_of_comodel`): at a typing system whose reached configurations are
   closed, co-operations that run quietly and form a comodel give a correct handler: the two sides
-  of each equation reach one configuration.
+  of each equation reach one configuration calmly (`calm_side`).
 * **Global state** (`state_isComodel`, `state_correct`): `stateCo` is a comodel of the four laws
   at every carrier, and its handler is correct, at every row form, effect context and typing
   system with `LiveOK`; so at `J₁` (`state_correct_J₁`).
@@ -38,7 +40,7 @@ variable {ℍ : BoCa.Host} [BoCa.HostIs ℍ]
 namespace Targets.Inst
 open BoCa BoCa.Fig16 BoCa.Fig16.BoLo BoCa.Fig16.LogRel BoCa.Fig16.LogRel.Core
 open BoCa.BoLo (Heap Steps Step1 Head Kont performE raiseE opPayload hndE ubindE hndVal kappa
-  clauseAt)
+  clauseAt capTag kappaAt kappaC kappaCBody kappaCell)
 open BoCa.Lifetime (LifeCtx)
 open Targets (RowForm EffCtx orowRF orowAlg HeadChain lookRun lookEnd lookRun_sound closedAt_kappa
   closedAt_plug_iff kont_shift_closed)
@@ -230,15 +232,15 @@ theorem isVal_ansClauses (co : List OVal) :
     obtain ⟨c, -, rfl⟩ := List.mem_map.1 he
     exact .lam
 
-/-- **The answering handler's value at our instance.** -/
-def ansHV (n : UInt32) (co : List OVal) : Val :=
-  hndVal n ⟨ansRetE, .lam⟩ ⟨_, isVal_ansClauses co⟩
+/-- **The answering handler's value at our instance**, at the tags `ts` of its operations. -/
+def ansHV (n : UInt32) (ts : List Qual) (co : List OVal) : Val :=
+  hndVal n (qualsVal ts) ⟨ansRetE, .lam⟩ ⟨_, isVal_ansClauses co⟩
 
 /-- The closing frame at the state `s`: `□ to f. f s`. -/
 def stFrame (s : Val) : Kont := bindK (appE (.var 0) s.1)
 
-theorem closedAt_ansHV (n : UInt32) {co : List OVal} (hco : ∀ c ∈ co, closedAt 0 c.1 = true) :
-    closedAt 0 (ansHV n co).1 = true := by
+theorem closedAt_ansHV (n : UInt32) (ts : List Qual) {co : List OVal}
+    (hco : ∀ c ∈ co, closedAt 0 c.1 = true) : closedAt 0 (ansHV n ts co).1 = true := by
   have hcl : ∀ cs : List OVal, (∀ c ∈ cs, closedAt 0 c.1 = true) →
       closedAt 0 (clausesE (cs.map fun c => ansClauseE c.1)) = true := by
     intro cs hcs
@@ -250,90 +252,180 @@ theorem closedAt_ansHV (n : UInt32) {co : List OVal} (hco : ∀ c ∈ co, closed
         simp only [List.map_cons, clausesE, ansClauseE, closedAt, Bool.and_eq_true]
         exact ⟨⟨rfl, closedAt_mono _ hb (by omega)⟩, ih fun c' h' => hcs c' (List.mem_cons_of_mem _ h')⟩
   simp only [ansHV, hndVal, Val.pair, Val.i32, ansRetE, closedAt, Bool.and_eq_true, Bool.true_and]
-  exact ⟨by simp, hcl co hco⟩
+  exact ⟨Targets.closedAt_qualsVal 0 ts, by simp, hcl co hco⟩
 
 theorem clauseAt_ansHV {co : List OVal} {i : ℕ} (hi : i < co.length) :
     clauseAt (clausesE (co.map fun c => ansClauseE c.1)) i = some ⟨ansClauseE co[i].1, .lam⟩ :=
   clauseAt_clausesE _ i .lam (by rw [List.getElem?_map, List.getElem?_eq_getElem hi]; rfl)
 
-/-- **One operation, caught by the answering handler**: at the state `s`, `op (n, i, a)` with
-the rest `R` runs quietly to `R[b]` under the handler at the state `s'`, when the co-operation
-`co_i` runs quietly from `(s, a)` to `(s', b)`.  The catch; the clause's β-step and `letpair`,
-which answer the state function; the closing frame's β-step and `app`; the state function's
-β-step; the co-operation; the bind and the `letpair` of its answer; `resume`'s β-step and `κ`'s
-four steps (`quiet_kappa_resume`), which reinstall the handler under the closing frame at `s'`;
-and the rest's β-step. -/
-theorem quiet_opStep {n i : UInt32} {co : List OVal} (hco : ∀ c ∈ co, closedAt 0 c.1 = true)
-    (hi : i.toNat < co.length) {s a s' b : Val} (hs : closedAt 0 s.1 = true)
-    (ha : closedAt 0 a.1 = true) (hs' : closedAt 0 s'.1 = true) (hb : closedAt 0 b.1 = true)
-    (hq : Quiet (ℍ := ℍ) (.app co[i.toNat].1 (Val.pair s a).1) (.val (Val.pair s' b)))
-    {R : Expr} (hR : closedAt 1 R = true) :
+/-- **The answering clause after the catch**: applied to `(a, κ)` under the closing frame at the
+state `s`, the clause answers the state function, the closing frame applies it to `s`, the
+co-operation `co_i` runs quietly from `(s, a)` to `(s', b)`, and the clause resumes `κ` at `b` under
+the closing frame at `s'`.  The clause's β-step and `letpair`; the closing frame's β-step and
+`app`; the state function's β-step; the co-operation; the bind and the `letpair` of its answer;
+`resume`'s β-step. -/
+theorem quiet_ansClause {co : List OVal} {i : ℕ} (hi : i < co.length) (hc : closedAt 0 co[i].1 = true)
+    (κ : Expr) (hκv : IsVal κ) (hκ : closedAt 0 κ = true) {s a s' b : Val}
+    (hs : closedAt 0 s.1 = true) (ha : closedAt 0 a.1 = true) (hs' : closedAt 0 s'.1 = true)
+    (hb : closedAt 0 b.1 = true)
+    (hq : Quiet (ℍ := ℍ) (.app co[i].1 (Val.pair s a).1) (.val (Val.pair s' b))) :
     Quiet (ℍ := ℍ)
-      ((stFrame s).plug (hndE (ansHV n co) (bindE (performE (.val (opPayload n i a))) R)))
-      ((stFrame s').plug (hndE (ansHV n co) (R.subst 0 b))) := by
-  have hc : closedAt 0 co[i.toNat].1 = true := hco _ (List.getElem_mem hi)
-  have hH := closedAt_ansHV n hco
-  have hRk : closedAt 0 ((bindK R).plug .unit) = true := by
-    simp [bindK, Kont.plug, closedAt, hR]
-  have hκ : closedAt 0 (kappa n (ansHV n co) (bindK R)) = true := closedAt_kappa n hH hRk
-  have hκv := isVal_kappa n (ansHV n co) (bindK R)
-  let κV : Val := ⟨kappa n (ansHV n co) (bindK R), hκv⟩
-  -- the catch
-  have h₁ := quiet_hop (ℍ := ℍ) (stFrame s) n i ⟨ansRetE, .lam⟩ ⟨_, isVal_ansClauses co⟩
-    ⟨ansClauseE co[i.toNat].1, .lam⟩ a (bindK R) (clauseAt_ansHV hi) (by simp [bindK, Kont.HasHnd])
-  refine h₁.trans ?_
+      ((stFrame s).plug (.app (.val ⟨ansClauseE co[i].1, .lam⟩) (.pair (.val a) κ)))
+      ((stFrame s').plug (.app (.app κ (.val (Val.inj₁ .unit))) (.val b))) := by
+  let κV : Val := ⟨κ, hκv⟩
   -- the clause answers the state function
-  have h₂ := quiet_beta (ℍ := ℍ) (stFrame s) (.letpair (.var 0) (.lam (ansBody co[i.toNat].1)))
+  have h₂ := quiet_beta (ℍ := ℍ) (stFrame s) (.letpair (.var 0) (.lam (ansBody co[i].1)))
     (Val.pair a κV)
-  have e₂ : Expr.subst 0 (Val.pair a κV) (.letpair (.var 0) (.lam (ansBody co[i.toNat].1))) =
-      .letpair (.val (Val.pair a κV)) (.lam (ansBody co[i.toNat].1)) := by
-    show Expr.letpair _ ((Expr.lam (ansBody co[i.toNat].1)).subst 2 _) = _
-    rw [subst_closedAt _ _ (show closedAt 2 (Expr.lam (ansBody co[i.toNat].1)) = true from
+  have e₂ : Expr.subst 0 (Val.pair a κV) (.letpair (.var 0) (.lam (ansBody co[i].1))) =
+      .letpair (.val (Val.pair a κV)) (.lam (ansBody co[i].1)) := by
+    show Expr.letpair _ ((Expr.lam (ansBody co[i].1)).subst 2 _) = _
+    rw [subst_closedAt _ _ (show closedAt 2 (Expr.lam (ansBody co[i].1)) = true from
       ansBody_closedAt hc) (le_refl _)]
     rfl
   rw [e₂] at h₂
   refine h₂.trans ?_
-  have h₃ := quiet_letpair (ℍ := ℍ) (stFrame s) a κV (.lam (ansBody co[i.toNat].1))
+  have h₃ := quiet_letpair (ℍ := ℍ) (stFrame s) a κV (.lam (ansBody co[i].1))
   rw [ansBody_letpair hc hκ hκv ha] at h₃
   refine h₃.trans ?_
   -- the closing frame applies it to `s`
   have h₄ := quiet_beta (ℍ := ℍ) .hole (appE (.var 0) s.1)
-    ⟨.lam (bindE (appE co[i.toNat].1 (.pair (.var 0) a.1)) (ansRest (kappa n (ansHV n co) (bindK R)))), .lam⟩
+    ⟨.lam (bindE (appE co[i].1 (.pair (.var 0) a.1)) (ansRest κ)), .lam⟩
   have e₄ : Expr.subst 0
-      ⟨.lam (bindE (appE co[i.toNat].1 (.pair (.var 0) a.1)) (ansRest (kappa n (ansHV n co) (bindK R)))), .lam⟩
+      ⟨.lam (bindE (appE co[i].1 (.pair (.var 0) a.1)) (ansRest κ)), .lam⟩
       (appE (.var 0) s.1) =
-      appE (.lam (bindE (appE co[i.toNat].1 (.pair (.var 0) a.1)) (ansRest (kappa n (ansHV n co) (bindK R))))) s.1 := by
+      appE (.lam (bindE (appE co[i].1 (.pair (.var 0) a.1)) (ansRest κ))) s.1 := by
     simp [appE, Expr.subst, Expr.shift, subst_closedE hs]
   rw [e₄] at h₄
   refine (show Quiet (ℍ := ℍ) ((stFrame s).plug _) _ from h₄).trans ?_
   have h₅ := quiet_appE (ℍ := ℍ) .hole
-    (.lam (bindE (appE co[i.toNat].1 (.pair (.var 0) a.1)) (ansRest (kappa n (ansHV n co) (bindK R))))) s
+    (.lam (bindE (appE co[i].1 (.pair (.var 0) a.1)) (ansRest κ))) s
   refine h₅.trans ?_
   have h₆ := quiet_beta (ℍ := ℍ) .hole
-    (bindE (appE co[i.toNat].1 (.pair (.var 0) a.1)) (ansRest (kappa n (ansHV n co) (bindK R)))) s
+    (bindE (appE co[i].1 (.pair (.var 0) a.1)) (ansRest κ)) s
   rw [ansBody_state hc hκ ha] at h₆
   refine h₆.trans ?_
   -- the co-operation, under the clause's rest
-  have h₇ := ((quiet_appE (ℍ := ℍ) .hole co[i.toNat].1 (Val.pair s a)).trans hq).plug
-    (bindK (ansRest (kappa n (ansHV n co) (bindK R))))
+  have h₇ := ((quiet_appE (ℍ := ℍ) .hole co[i].1 (Val.pair s a)).trans hq).plug
+    (bindK (ansRest κ))
   refine h₇.trans ?_
-  have h₈ := quiet_beta (ℍ := ℍ) .hole (ansRest (kappa n (ansHV n co) (bindK R))) (Val.pair s' b)
+  have h₈ := quiet_beta (ℍ := ℍ) .hole (ansRest κ) (Val.pair s' b)
   rw [ansRest_pair hκ] at h₈
   refine h₈.trans ?_
   have h₉ := quiet_letpair (ℍ := ℍ) .hole s' b
-    (bindE (resumeE (kappa n (ansHV n co) (bindK R)) (.var 0)) (appE (.var 0) (.var 2)))
+    (bindE (resumeE κ (.var 0)) (appE (.var 0) (.var 2)))
   rw [ansRest_split hκ hs' hb] at h₉
   refine h₉.trans ?_
   -- the resume, under the closing frame at `s'`
-  have h₁₀ := quiet_resumeE (ℍ := ℍ) (stFrame s') (kappa n (ansHV n co) (bindK R)) b
-  refine (show Quiet (ℍ := ℍ) (.app (.val (.lam (appE (.var 0) s'.1)))
-    (resumeE (kappa n (ansHV n co) (bindK R)) b.1)) _ from h₁₀).trans ?_
-  have h₁₁ := quiet_kappa_resume (ℍ := ℍ) (stFrame s') n (ansHV n co) (bindK R) b
+  have h₁₀ := quiet_resumeE (ℍ := ℍ) (stFrame s') κ b
+  exact (show Quiet (ℍ := ℍ) (.app (.val (.lam (appE (.var 0) s'.1))) (resumeE κ b.1)) _ from h₁₀)
+
+/-- **One operation whose `κ` owns no cell, caught by the answering handler**: at the state `s`,
+`op (n, i, a)` with the rest `R` runs quietly to `R[b]` under the handler at the state `s'`, when
+the co-operation `co_i` runs quietly from `(s, a)` to `(s', b)`.  The catch; the clause
+(`quiet_ansClause`); `κ`'s four steps (`quiet_kappa_resume`), which reinstall the handler under the
+closing frame at `s'`; and the rest's β-step. -/
+theorem quiet_opStep {n i : UInt32} {ts : List Qual} {co : List OVal}
+    (hco : ∀ c ∈ co, closedAt 0 c.1 = true) (hi : i.toNat < co.length) {s a s' b : Val}
+    (hs : closedAt 0 s.1 = true) (ha : closedAt 0 a.1 = true) (hs' : closedAt 0 s'.1 = true)
+    (hb : closedAt 0 b.1 = true)
+    (hq : Quiet (ℍ := ℍ) (.app co[i.toNat].1 (Val.pair s a).1) (.val (Val.pair s' b)))
+    {R : Expr} (hR : closedAt 1 R = true)
+    (hu : kappaAt (capTag (qualsVal ts).1 i.toNat) n (ansHV n ts co) (bindK R) =
+      kappa n (ansHV n ts co) (bindK R)) :
+    Quiet (ℍ := ℍ)
+      ((stFrame s).plug (hndE (ansHV n ts co) (bindE (performE (.val (opPayload n i a))) R)))
+      ((stFrame s').plug (hndE (ansHV n ts co) (R.subst 0 b))) := by
+  have hc : closedAt 0 co[i.toNat].1 = true := hco _ (List.getElem_mem hi)
+  have hH := closedAt_ansHV n ts hco
+  have hRk : closedAt 0 ((bindK R).plug .unit) = true := by
+    simp [bindK, Kont.plug, closedAt, hR]
+  have hκ : closedAt 0 (kappa n (ansHV n ts co) (bindK R)) = true := closedAt_kappa n hH hRk
+  have hκv := isVal_kappa n (ansHV n ts co) (bindK R)
+  -- the catch
+  have h₁ := quiet_hop (ℍ := ℍ) (stFrame s) n i (qualsVal ts) ⟨ansRetE, .lam⟩
+    ⟨_, isVal_ansClauses co⟩ ⟨ansClauseE co[i.toNat].1, .lam⟩ a (bindK R)
+    (clauseAt_ansHV hi) (by simp [bindK, Kont.HasHnd]) hu
+  refine h₁.trans ?_
+  refine (quiet_ansClause hi hc _ hκv hκ hs ha hs' hb hq).trans ?_
+  have h₁₁ := quiet_kappa_resume (ℍ := ℍ) (stFrame s') n (ansHV n ts co) (bindK R) b
   refine h₁₁.trans ?_
-  have h₁₂ := quiet_beta (ℍ := ℍ) ((stFrame s').comp (.appR (.app (.prim .hnd) (ansHV n co).1) .hole))
-    R b
+  have h₁₂ := quiet_beta (ℍ := ℍ)
+    ((stFrame s').comp (.appR (.app (.prim .hnd) (ansHV n ts co).1) .hole)) R b
   simp only [Kont.plug_comp] at h₁₂
   exact h₁₂
+
+/-- **One operation whose `κ` owns a cell, caught by the answering handler**: as `quiet_opStep`,
+around the cell (SPEC §25).  The catch and the allocation; at the cell's location `ℓ`, `κ`'s β-step
+at `ℓ`, the clause (`quiet_ansClause`) and `κ`'s resume branch up to the release of `ℓ`; after it,
+the rest of the resume branch (`kappaC_resume_parts`) and the rest's β-step. -/
+theorem cellQuiet_opStep {n i : UInt32} {ts : List Qual} {co : List OVal} (aff : Bool)
+    (hco : ∀ c ∈ co, closedAt 0 c.1 = true) (hi : i.toNat < co.length) {s a s' b : Val}
+    (hs : closedAt 0 s.1 = true) (ha : closedAt 0 a.1 = true) (hs' : closedAt 0 s'.1 = true)
+    (hb : closedAt 0 b.1 = true)
+    (hq : Quiet (ℍ := ℍ) (.app co[i.toNat].1 (Val.pair s a).1) (.val (Val.pair s' b)))
+    {R : Expr} (hR : closedAt 1 R = true)
+    (hcell : kappaAt (capTag (qualsVal ts).1 i.toNat) n (ansHV n ts co) (bindK R) =
+      kappaCell aff n (ansHV n ts co) (bindK R)) :
+    CellQuiet (ℍ := ℍ)
+      ((stFrame s).plug (hndE (ansHV n ts co) (bindE (performE (.val (opPayload n i a))) R)))
+      ((stFrame s').plug (hndE (ansHV n ts co) (R.subst 0 b))) := by
+  have hc : closedAt 0 co[i.toNat].1 = true := hco _ (List.getElem_mem hi)
+  have hH := closedAt_ansHV n ts hco
+  have hRk : closedAt 0 ((bindK R).plug .unit) = true := by
+    simp [bindK, Kont.plug, closedAt, hR]
+  have hh : ∀ μ, Head (ℍ := ℍ) μ
+      (hndE (ansHV n ts co) ((bindK R).plug (performE (.val (opPayload n i a))))) μ
+      (.app (.val ⟨ansClauseE co[i.toNat].1, .lam⟩)
+        (.pair (.val a) (kappaCell aff n (ansHV n ts co) (bindK R)))) := by
+    intro μ
+    have h : Head (ℍ := ℍ) μ
+        (hndE (ansHV n ts co) ((bindK R).plug (performE (.val (opPayload n i a))))) μ
+        (.app (.val ⟨ansClauseE co[i.toNat].1, .lam⟩)
+          (.pair (.val a) (kappaAt (capTag (qualsVal ts).1 i.toNat) n (ansHV n ts co) (bindK R)))) :=
+      Head.hop (ℍ := ℍ) μ n i (qualsVal ts) ⟨ansRetE, .lam⟩ ⟨_, isVal_ansClauses co⟩
+        ⟨ansClauseE co[i.toNat].1, .lam⟩ a (bindK R) (clauseAt_ansHV hi)
+        (by simp [bindK, Kont.HasHnd])
+    rwa [hcell] at h
+  refine ⟨(stFrame s).comp (.appR (.val ⟨ansClauseE co[i.toNat].1, .lam⟩) (.pairR a
+    (.appR (.val (Val.lam (kappaCBody aff n (ansHV n ts co) (bindK R)))) .hole))), ?_,
+    fun ℓ => ?_⟩
+  · rw [Kont.plug_comp]
+    exact Quiet.head (stFrame s) hh rfl rfl
+  refine ⟨(stFrame s').comp (Kont.appL (Kont.seq .hole (kResV (ansHV n ts co) (bindK R))) b),
+    ?_, ?_⟩
+  · rw [Kont.plug_comp, Kont.plug_comp]
+    have hb₀ := Quiet.head (ℍ := ℍ) (.appR (.val ⟨ansClauseE co[i.toNat].1, .lam⟩) (.pairR a .hole))
+      (fun μ => Head.beta μ (kappaCBody aff n (ansHV n ts co) (bindK R)) (Val.loc ℓ)) rfl rfl
+    rw [kappaCBody_subst] at hb₀
+    refine (hb₀.plug (stFrame s)).trans ?_
+    have hκ := closedAt_kappaC aff ℓ n hH hRk
+    refine (quiet_ansClause hi hc _ (isVal_kappaC aff ℓ n (ansHV n ts co) (bindK R)) hκ hs ha hs'
+      hb hq).trans ?_
+    exact (kappaC_resume_parts aff ℓ n (ansHV n ts co) (bindK R) b).1.plug (stFrame s')
+  · rw [Kont.plug_comp]
+    refine ((kappaC_resume_parts aff ℓ n (ansHV n ts co) (bindK R) b).2.plug (stFrame s')).trans ?_
+    have h₁₂ := quiet_beta (ℍ := ℍ)
+      ((stFrame s').comp (.appR (.app (.prim .hnd) (ansHV n ts co).1) .hole)) R b
+    simp only [Kont.plug_comp] at h₁₂
+    exact h₁₂
+
+/-- **One operation, caught by the answering handler, calmly**: quietly when its `κ` owns no cell,
+around the cell when it does. -/
+theorem calm_opStep {n i : UInt32} {ts : List Qual} {co : List OVal}
+    (hco : ∀ c ∈ co, closedAt 0 c.1 = true) (hi : i.toNat < co.length) {s a s' b : Val}
+    (hs : closedAt 0 s.1 = true) (ha : closedAt 0 a.1 = true) (hs' : closedAt 0 s'.1 = true)
+    (hb : closedAt 0 b.1 = true)
+    (hq : Quiet (ℍ := ℍ) (.app co[i.toNat].1 (Val.pair s a).1) (.val (Val.pair s' b)))
+    {R : Expr} (hR : closedAt 1 R = true) :
+    Calm (ℍ := ℍ)
+      ((stFrame s).plug (hndE (ansHV n ts co) (bindE (performE (.val (opPayload n i a))) R)))
+      ((stFrame s').plug (hndE (ansHV n ts co) (R.subst 0 b))) := by
+  by_cases h0 : capTag (qualsVal ts).1 i.toNat = 0
+  · exact (cellQuiet_opStep false hco hi hs ha hs' hb hq hR (by rw [kappaAt, if_pos h0])).calm
+  by_cases h1 : capTag (qualsVal ts).1 i.toNat = 1
+  · exact (cellQuiet_opStep true hco hi hs ha hs' hb hq hR
+      (by rw [kappaAt, if_neg h0, if_pos h1])).calm
+  exact (quiet_opStep hco hi hs ha hs' hb hq hR (by rw [kappaAt, if_neg h0, if_neg h1])).calm
 
 
 /-- **The co-operations' run of a computation**, from its `j`-th step, at the parameters `vs`,
@@ -453,19 +545,20 @@ theorem slFrom_nil_subst {l : (RF.alg Ξ).Lab} {np : ℕ} {fin : VExpr} {j : ℕ
   rfl
 
 /-- **The fold**: a straight-line computation handled by `ansHnd co` at the state `s` runs
-quietly, as the co-operations run on the threaded state, to the continuation applied to the last
+calmly, as the co-operations run on the threaded state, to the continuation applied to the last
 value, the closing frame at the final state. -/
-theorem quiet_fold {l : (RF.alg Ξ).Lab} {co : List OVal} (hco : ∀ c ∈ co, closedAt 0 c.1 = true)
+theorem calm_fold {l : (RF.alg Ξ).Lab} {co : List OVal} (hco : ∀ c ∈ co, closedAt 0 c.1 = true)
     (hlen : co.length ≤ 2 ^ 32) {vs : List Val} {k : Val} (hvs : ∀ v ∈ vs, closedAt 0 v.1 = true)
     (hk : closedAt 0 k.1 = true) {fin : VExpr} :
     ∀ {rest : List (ℕ × VExpr)} {rs : List Val} {s sn fv : Val},
       CoRun (ℍ := ℍ) co vs fin rest rs s sn fv → (∀ v ∈ rs, closedAt 0 v.1 = true) →
       closedAt 0 s.1 = true → SLComp.WFFrom vs.length fin co.length rest rs.length →
-      Quiet (ℍ := ℍ)
-        ((stFrame s).plug (hndE (ansHV (RF.name Ξ l) co)
+      Calm (ℍ := ℍ)
+        ((stFrame s).plug (hndE (ansHV (RF.name Ξ l) ((Ξ (RF.name Ξ l)).map Prod.fst) co)
           (substAll (rs ++ vs ++ [k])
             ((ourInst (ℍ := ℍ) RF Ξ J).slFrom l vs.length fin rest rs.length))))
-        ((stFrame sn).plug (hndE (ansHV (RF.name Ξ l) co) (appE k.1 fv.1)))
+        ((stFrame sn).plug (hndE (ansHV (RF.name Ξ l) ((Ξ (RF.name Ξ l)).map Prod.fst) co)
+          (appE k.1 fv.1)))
   | _, rs, s, _, _, .nil, _, _, hwf => by
       have hkj : (rs ++ vs ++ [k])[rs.length + vs.length]? = some k := by
         rw [List.append_assoc, List.getElem?_append_right (by omega),
@@ -473,7 +566,7 @@ theorem quiet_fold {l : (RF.alg Ξ).Lab} {co : List OVal} (hco : ∀ c ∈ co, c
           List.getElem?_append_right (le_refl _)]
         simp
       rw [slFrom_nil_subst hkj hk, vAt_subst fin hwf]
-      exact Quiet.refl _
+      exact Calm.refl _
   | _, rs, s, _, _, @CoRun.cons _ _ _ _ _ i a rest _ _ s' b sn fv hi hq hs' hb h, hrs, hs,
       ⟨hi', ha, hwf⟩ => by
       have hi32 : i < 2 ^ 32 := by omega
@@ -497,11 +590,11 @@ theorem quiet_fold {l : (RF.alg Ξ).Lab} {co : List OVal} (hco : ∀ c ∈ co, c
       have hq' : Quiet (ℍ := ℍ) (.app co[(UInt32.ofNat i).toNat].1
           (Val.pair s (VExpr.eval vs rs a)).1) (.val (Val.pair s' b)) := by
         simp only [hi'']; exact hq
-      have hstep := quiet_opStep (ℍ := ℍ) (n := RF.name Ξ l) (i := UInt32.ofNat i) hco
-        (by rw [hi'']; exact hi) hs hev hs' hb hq' hR
-      refine (show Quiet (ℍ := ℍ) _ _ from hstep).trans ?_
+      have hstep := calm_opStep (ℍ := ℍ) (n := RF.name Ξ l) (i := UInt32.ofNat i)
+        (ts := (Ξ (RF.name Ξ l)).map Prod.fst) hco (by rw [hi'']; exact hi) hs hev hs' hb hq' hR
+      refine (show Calm (ℍ := ℍ) _ _ from hstep).trans ?_
       erw [← substAll_cons_eq]
-      exact quiet_fold hco hlen hvs hk h (fun v hv => by
+      exact calm_fold hco hlen hvs hk h (fun v hv => by
         rcases List.mem_cons.1 hv with rfl | hv
         · exact hb
         · exact hrs v hv) hs' hwf
@@ -701,14 +794,15 @@ theorem clauses_eq : ∀ co : List OVal,
   | [] => rfl
   | _ :: cs => congrArg (List.cons _) (clauses_eq cs)
 
-/-- The answering handler, as our instance installs it, is the frame of `ansHV`. -/
+/-- The answering handler, as our instance installs it, is the frame of `ansHV`, at the tags of
+its label's operations. -/
 theorem runAt_eq (l : (RF.alg Ξ).Lab) (co : List OVal) (s₀ : Val) (M : Expr) :
     (ourInst (ℍ := ℍ) RF Ξ J).runAt l co (OVal.ofVal s₀) M =
-      (stFrame s₀).plug (hndE (ansHV (RF.name Ξ l) co) M) := by
+      (stFrame s₀).plug (hndE (ansHV (RF.name Ξ l) ((Ξ (RF.name Ξ l)).map Prod.fst) co) M) := by
   have h := clauses_eq (ℍ := ℍ) (RF := RF) (Ξ := Ξ) (J := J) co
-  show bindE (Expr.app (.app (.prim .hnd) (hndValE (RF.name Ξ l) ansRetE
+  show bindE (Expr.app (.app (.prim .hnd) (hndValE (RF.name Ξ l) (qsOf Ξ (RF.name Ξ l)) ansRetE
       ((co.map (ourInst (ℍ := ℍ) RF Ξ J).ansClause).map Subtype.val))) M) (appE (.var 0) s₀.1) =
-    bindE (Expr.app (.app (.prim .hnd) (hndValE (RF.name Ξ l) ansRetE
+    bindE (Expr.app (.app (.prim .hnd) (hndValE (RF.name Ξ l) (qsOf Ξ (RF.name Ξ l)) ansRetE
       (co.map fun c => ansClauseE c.1))) M) (appE (.var 0) s₀.1)
   rw [h]
 
@@ -723,12 +817,44 @@ theorem runsTo_val {e : Expr} {v : Val} (h : Quiet (ℍ := ℍ) e (.val v)) {w :
   have := (hR.2 q' hq').1
   exact (hv'.symm.trans this).symm
 
+/-- **Each side of an equation, handled from the state, runs calmly through the fold**: the
+parameters and the continuation are bound, and the straight-line computation is folded as the
+co-operations run (`calm_fold`), to the continuation applied to the last value under the closing
+frame at the final state. -/
+theorem calm_side {l : (RF.alg Ξ).Lab} {co : List OVal} (hco : ∀ c ∈ co, closedAt 0 c.1 = true)
+    (hlen : co.length ≤ 2 ^ 32) {vsV : List Val} {kV s₀V : Val}
+    (hvsV : ∀ v ∈ vsV, closedAt 0 v.1 = true) (hkV : closedAt 0 kV.1 = true)
+    (hs₀V : closedAt 0 s₀V.1 = true) {np : ℕ} (hnp : vsV.length = np) {c : SLComp} {sn fv : Val}
+    (hc : CoRun (ℍ := ℍ) co vsV c.fin c.steps [] s₀V sn fv)
+    (hw : SLComp.WFFrom vsV.length c.fin co.length c.steps 0) :
+    Calm (ℍ := ℍ) ((ourInst (ℍ := ℍ) RF Ξ J).runAt l co (OVal.ofVal s₀V)
+        ((ourInst (ℍ := ℍ) RF Ξ J).lets (vsV.map OVal.ofVal ++ [OVal.ofVal kV])
+          ((ourInst (ℍ := ℍ) RF Ξ J).slTerm l np c)))
+      ((stFrame sn).plug (hndE (ansHV (RF.name Ξ l) ((Ξ (RF.name Ξ l)).map Prod.fst) co)
+        (appE kV.1 fv.1))) := by
+  have hvk : ∀ v ∈ vsV ++ [kV], closedAt 0 v.1 = true := by
+    intro v hv
+    rcases List.mem_append.1 hv with hv | hv
+    · exact hvsV v hv
+    · rw [List.mem_singleton.1 hv]; exact hkV
+  erw [runAt_eq, show vsV.map OVal.ofVal ++ [OVal.ofVal kV] = (vsV ++ [kV]).map OVal.ofVal by simp]
+  have h₁ := (quiet_lets (Ξ := Ξ) (J := J) (vsV ++ [kV]) hvk
+    ((ourInst (ℍ := ℍ) RF Ξ J).slTerm l np c)).plug
+    ((stFrame s₀V).comp (.appR (.app (.prim .hnd)
+      (ansHV (RF.name Ξ l) ((Ξ (RF.name Ξ l)).map Prod.fst) co).1) .hole))
+  simp only [Kont.plug_comp] at h₁
+  refine (show Quiet (ℍ := ℍ) _ _ from h₁).calm.trans ?_
+  have h₂ := calm_fold (J := J) (l := l) hco hlen hvsV hkV hc
+    (fun _ h => absurd h List.not_mem_nil) hs₀V hw
+  rw [← hnp]
+  exact h₂
+
 /-- **D1.h4 (c): a comodel's handler is correct.**  At a typing system whose reached
 configurations are closed and whose typed closed values are closed, co-operations that run
 quietly (`PureCo`) and validate a theory's well-formed equations on the carrier (`IsComodel`)
 give a handler that is correct for it (`AnsCorrect`): the two sides of each equation, handled and
-run from the state, reach one configuration (`quiet_fold`), since the co-runs, which reach the
-same answer, are their operations' co-operation runs. -/
+run from the state, reach one configuration calmly (`calm_fold`), since the co-runs, which reach
+the same answer, are their operations' co-operation runs. -/
 theorem ansCorrect_of_comodel (hL : LiveOK (ℍ := ℍ) RF Ξ J)
     (hJV : ∀ (v : OVal) (T : OVTy), (ourInst (ℍ := ℍ) RF Ξ J).derV [] v T → closedAt 0 v.1 = true)
     {th : (ourInst (ℍ := ℍ) RF Ξ J).Theory} {l : (RF.alg Ξ).Lab} {co : List OVal} {T : OVTy}
@@ -737,7 +863,7 @@ theorem ansCorrect_of_comodel (hL : LiveOK (ℍ := ℍ) RF Ξ J)
     (hC : (ourInst (ℍ := ℍ) RF Ξ J).IsComodel th l co T) :
     (ourInst (ℍ := ℍ) RF Ξ J).AnsCorrect th l co T := by
   intro eq heq vs k s₀ hs₀ hvs
-  refine runsAlike_of_live hL fun hcl => ?_
+  refine runsAlike_of_live_calm hL fun hcl => ?_
   obtain ⟨hwfL, hwfR⟩ := hwf eq heq
   have hlenv : vs.length = eq.params.length := hvs.length_eq
   -- the values are closed
@@ -747,7 +873,7 @@ theorem ansCorrect_of_comodel (hL : LiveOK (ℍ := ℍ) RF Ξ J)
     obtain ⟨i, hi, rfl⟩ := List.getElem_of_mem hv
     exact hJV _ _ (hvs.get hi (by rw [← hlenv]; exact hi))
   have hkc : closedAt 0 k.1 = true := by
-    change closedAt 0 (bindE ((handleK (RF.name Ξ l) ansRetE
+    change closedAt 0 (bindE ((handleK (RF.name Ξ l) (qsOf Ξ (RF.name Ξ l)) ansRetE
       (((co.map (ourInst (ℍ := ℍ) RF Ξ J).ansClause)).map Subtype.val)).plug
       ((ourInst (ℍ := ℍ) RF Ξ J).lets (vs ++ [k]) _)) (appE (.var 0) s₀.1)) = true at hcl
     simp only [bindE, closedAt, Bool.and_eq_true] at hcl
@@ -795,21 +921,11 @@ theorem ansCorrect_of_comodel (hL : LiveOK (ℍ := ℍ) RF Ξ J)
     · rw [List.mem_singleton.1 hv]; exact hkV
   have hside : ∀ {c : SLComp} {sn fv : Val}, CoRun (ℍ := ℍ) co vsV c.fin c.steps [] s₀V sn fv →
       SLComp.WFFrom vsV.length c.fin co.length c.steps 0 →
-      Quiet (ℍ := ℍ) ((ourInst (ℍ := ℍ) RF Ξ J).runAt l co (OVal.ofVal s₀V)
+      Calm (ℍ := ℍ) ((ourInst (ℍ := ℍ) RF Ξ J).runAt l co (OVal.ofVal s₀V)
           ((ourInst (ℍ := ℍ) RF Ξ J).lets (vsV.map OVal.ofVal ++ [OVal.ofVal kV])
             ((ourInst (ℍ := ℍ) RF Ξ J).slTerm l eq.params.length c)))
-        ((stFrame sn).plug (hndE (ansHV (RF.name Ξ l) co) (appE kV.1 fv.1))) := by
-    intro c sn fv hc hw
-    erw [runAt_eq, show vsV.map OVal.ofVal ++ [OVal.ofVal kV] = (vsV ++ [kV]).map OVal.ofVal by simp]
-    have h₁ := (quiet_lets (Ξ := Ξ) (J := J) (vsV ++ [kV]) hvk
-      ((ourInst (ℍ := ℍ) RF Ξ J).slTerm l eq.params.length c)).plug
-      ((stFrame s₀V).comp (.appR (.app (.prim .hnd) (ansHV (RF.name Ξ l) co).1) .hole))
-    simp only [Kont.plug_comp] at h₁
-    refine (show Quiet (ℍ := ℍ) _ _ from h₁).trans ?_
-    have h₂ := quiet_fold (J := J) (l := l) hP.1 hlen hvsV hkV hc
-      (fun _ h => absurd h List.not_mem_nil) hs₀V hw
-    rw [← hlen']
-    exact h₂
+        ((stFrame sn).plug (hndE (ansHV (RF.name Ξ l) ((Ξ (RF.name Ξ l)).map Prod.fst) co)
+          (appE kV.1 fv.1))) := fun hc hw => calm_side hP.1 hlen hvsV hkV hs₀V hlen' hc hw
   exact ⟨_, hside hcL hwfL, by rw [hsn, hfv]; exact hside hcR hwfR⟩
 
 end Subst
@@ -1142,7 +1258,8 @@ abbrev stRow : Row := Row.ofEff 13 stE 0 ++ []
 
 /-- The program: `M` handled by the co-operations' handler at the name `13`, run from `tt`. -/
 def stProg (cos : List Expr) (M : Expr) : Expr :=
-  bindE (hndExpr 13 (.pair ansRetE (clausesE (cos.map ansClauseE))) M) (appE (.var 0) (.inj₂ .unit))
+  bindE (hndExpr 13 (stE.map Prod.fst) (.pair ansRetE (clausesE (cos.map ansClauseE))) M)
+    (appE (.var 0) (.inj₂ .unit))
 
 /-- The update–lookup law's left side, at the parameter `ff` and the continuation `λx. x`:
 `put ff; get to y. k y`. -/
@@ -1276,22 +1393,31 @@ theorem badR_eq :
           ((ourInst (ℍ := ℍ) orowRF Ξst J₁).eqnPG stT).rhs)) =
       stProg [getCoE, badPutCoE] stBodyR := rfl
 
-theorem badL_end : lookEnd 43 (stProg [getCoE, badPutCoE] stBodyL) = .pair (.inj₂ .unit) (.inj₂ .unit) := by
+/-- `λx. x`, the continuation, as a Core value. -/
+def idKV : Val := ⟨.lam (.var 0), .lam⟩
+
+/-- The handler's last steps from the fold's end: the continuation `λx. x` at the answer `fv`, the
+return clause and the closing frame at the state `tt` answer `(tt, fv)`. -/
+def badTail (fv : Val) : Expr :=
+  (stFrame (Val.inj₂ Val.unit)).plug (hndE (ansHV (orowRF.name Ξst labSt)
+    ((Ξst (orowRF.name Ξst labSt)).map Prod.fst) (ourInst (ℍ := ℍ) orowRF Ξst J₁).badStateCo)
+    (appE idKV.1 fv.1))
+
+theorem badTail_tt : lookEnd 20 (badTail (ℍ := ℍ) (Val.inj₂ Val.unit)) = .pair (.inj₂ .unit) (.inj₂ .unit) := by
   rfl
 
-theorem badR_end : lookEnd 26 (stProg [getCoE, badPutCoE] stBodyR) = .pair (.inj₂ .unit) (.inj₁ .unit) := by
+theorem badTail_ff : lookEnd 20 (badTail (ℍ := ℍ) (Val.inj₁ Val.unit)) = .pair (.inj₂ .unit) (.inj₁ .unit) := by
   rfl
 
+theorem quiet_badTail_tt :
+    Quiet (ℍ := ℍ) (badTail (ℍ := ℍ) (Val.inj₂ Val.unit)) (.pair (.inj₂ .unit) (.inj₂ .unit)) := by
+  have h := quiet_of_look (ℍ := ℍ) 20 (badTail (ℍ := ℍ) (Val.inj₂ Val.unit)) rfl
+  rwa [badTail_tt] at h
 
-theorem badL_chain : HeadChain (ℍ := ℍ) (stProg [getCoE, badPutCoE] stBodyL)
-    (lookRun 43 (stProg [getCoE, badPutCoE] stBodyL)) (.pair (.inj₂ .unit) (.inj₂ .unit)) := by
-  have := lookRun_sound (ℍ := ℍ) 43 (stProg [getCoE, badPutCoE] stBodyL)
-  rwa [badL_end] at this
-
-theorem badR_chain : HeadChain (ℍ := ℍ) (stProg [getCoE, badPutCoE] stBodyR)
-    (lookRun 26 (stProg [getCoE, badPutCoE] stBodyR)) (.pair (.inj₂ .unit) (.inj₁ .unit)) := by
-  have := lookRun_sound (ℍ := ℍ) 26 (stProg [getCoE, badPutCoE] stBodyR)
-  rwa [badR_end] at this
+theorem quiet_badTail_ff :
+    Quiet (ℍ := ℍ) (badTail (ℍ := ℍ) (Val.inj₁ Val.unit)) (.pair (.inj₂ .unit) (.inj₁ .unit)) := by
+  have h := quiet_of_look (ℍ := ℍ) 20 (badTail (ℍ := ℍ) (Val.inj₁ Val.unit)) rfl
+  rwa [badTail_ff] at h
 
 /-- A closed value Core types at a type free of the row `∀` is typed at our instance by `J₁`. -/
 theorem derV_J₁_of {Ξ : EffCtx} {v : OVal} {A : VTy} (hcl : closedAt 0 v.1 = true)
@@ -1330,15 +1456,42 @@ theorem not_ansCorrect_badState :
       (S.F (orowAlg Ξst).unit (OVTy.ofV (.tensor boolT boolT))) :=
     der_J₁_ret (by decide) (d_stProg hcg hcb (fun _ hΓ => d_getCoE hΓ) (fun _ hΓ => d_badPutCoE hΓ)
       d_stBodyL)
+  let ttV : Val := Val.inj₂ Val.unit
+  let ffV : Val := Val.inj₁ Val.unit
+  have hco : ∀ c ∈ S.badStateCo, closedAt 0 c.1 = true := pureCo_badStateCo.1
+  -- the co-runs: `put ff` keeps `tt`; then `get` answers `tt`, or the continuation takes `ff`
+  have cL : CoRun (ℍ := ℍ) S.badStateCo [ffV] (S.eqnPG stT).lhs.fin (S.eqnPG stT).lhs.steps [] ttV
+      ttV ttV :=
+    .cons (i := 1) (by show 1 < 2; decide) (quiet_badPutCo ttV _) rfl rfl
+      (.cons (i := 0) (by show 0 < 2; decide) (quiet_getCo ttV _) rfl rfl .nil)
+  have cR : CoRun (ℍ := ℍ) S.badStateCo [ffV] (S.eqnPG stT).rhs.fin (S.eqnPG stT).rhs.steps [] ttV
+      ttV ffV :=
+    .cons (i := 1) (by show 1 < 2; decide) (quiet_badPutCo ttV _) rfl rfl .nil
+  have hwf := stateTheory_wf (ℍ := ℍ) (RF := orowRF) (Ξ := Ξst) (J := J₁) stT labSt _ hmem
+  have hvs : ∀ v ∈ [ffV], closedAt 0 v.1 = true := fun v hv => by rw [List.mem_singleton.1 hv]; rfl
+  -- each side runs calmly through the fold, then to its answer
+  have hcalmL : Calm (ℍ := ℍ) (stProg [getCoE, badPutCoE] stBodyL)
+      (.pair (.inj₂ .unit) (.inj₂ .unit)) := by
+    rw [← badL_eq]
+    exact (calm_side (J := J₁) (l := labSt) hco (show 2 ≤ 2 ^ 32 by decide) (vsV := [ffV]) (kV := idKV)
+      (s₀V := ttV) hvs rfl rfl rfl cL hwf.1).trans quiet_badTail_tt.calm
+  have hcalmR : Calm (ℍ := ℍ) (stProg [getCoE, badPutCoE] stBodyR)
+      (.pair (.inj₂ .unit) (.inj₁ .unit)) := by
+    rw [← badR_eq]
+    exact (calm_side (J := J₁) (l := labSt) hco (show 2 ≤ 2 ^ 32 by decide) (vsV := [ffV]) (kV := idKV)
+      (s₀V := ttV) hvs rfl rfl rfl cR hwf.2).trans quiet_badTail_ff.calm
   have hvL : IsVal (Expr.pair (.inj₂ .unit) (.inj₂ .unit)) := .pair (.inj₂ .unit) (.inj₂ .unit)
-  have hL := obsFrom_of_chain (J := J₁) S.R₀ (μ := Adequacy.emptyMem) (s := ()) badL_chain hvL
+  have hvR : IsVal (Expr.pair (.inj₂ .unit) (.inj₁ .unit)) := .pair (.inj₂ .unit) (.inj₁ .unit)
+  have hL := (obsFrom_calm_iff S.R₀ (μ := Adequacy.emptyMem) (s := ()) finDom_empty hcalmL _ _).2
+    (obsFrom_of_chain (J := J₁) S.R₀ (μ := Adequacy.emptyMem) (s := ()) .nil hvL)
   have hdat : S.DataTy (OVTy.ofV (.tensor boolT boolT)) :=
     A.EffectSystem.DataTy.tensor (A.EffectSystem.DataTy.sum .unit .unit)
       (A.EffectSystem.DataTy.sum .unit .unit)
   have h' := (hRA S.R₀ r₀_respects _ _ _ ((Adequacy.emptyMem, stProg [getCoE, badPutCoE] stBodyL), ())
     .hole hdat hder .refl rfl _ _).mp hL
-  obtain ⟨q, hq, hv, -⟩ := h'
-  have hend := complete_chain (J := J₁) S.R₀ badR_chain (.pair (.inj₂ .unit) (.inj₁ .unit)) q hq
+  have h'' := (obsFrom_calm_iff S.R₀ (μ := Adequacy.emptyMem) (s := ()) finDom_empty hcalmR _ _).1 h'
+  obtain ⟨q, hq, hv, -⟩ := h''
+  have hend := complete_chain (J := J₁) S.R₀ .nil hvR q hq
   have e : (Expr.pair (.inj₂ .unit) (.inj₂ .unit) : Expr) = .pair (.inj₂ .unit) (.inj₁ .unit) :=
     hv.symm.trans hend
   simp at e

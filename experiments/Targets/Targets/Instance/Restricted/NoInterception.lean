@@ -29,6 +29,13 @@ def okE : Expr → Bool
   | .inj₁ a | .inj₂ a | .lam a => okE a
   | .case a b c => okE a && okE b && okE c
 
+/-- A handler's tags hold no handler, `ccatch` or `cfin`. -/
+theorem okE_qualsVal : ∀ qs : List Qual, okE (qualsVal qs).1 = true
+  | [] => rfl
+  | q :: qs => by
+      simp only [qualsVal, Val.pair, Val.i32, okE, okE_qualsVal qs, Bool.and_true]
+      rfl
+
 theorem okE_sound (e : Expr) (h : okE e = true) :
     ¬ e.HasPrim .ccatch ∧ ¬ e.HasPrim .cfin ∧ e.HndNamesNZ := by
   fun_induction okE e with
@@ -260,7 +267,7 @@ theorem okE_of_derives {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg}
   | unfoldN => exact okE_unfoldV _
   | lolliE _ _ _ iha ihf => rw [okE_app ihf]; exact iha
   | effHandleV _ _ _ _ hn0 _ _ _ ihc ihe =>
-      simp [hndExpr, Val.i32, okE, okE_app, ihc, ihe, hn0]
+      simp [hndExpr, Val.i32, okE, okE_app, okE_qualsVal, ihc, ihe, hn0]
   | @letPoly _ _ N _ _ b hcl _ _ ihV ihN =>
       have hb : okE b = true := ihV
       rw [okE_fill hb hcl N 0] at ihN

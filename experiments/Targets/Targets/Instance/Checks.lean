@@ -127,12 +127,9 @@ end Inst
 
 /-! ### Check 1's witness: `nLogOutside`'s run -/
 
-/-- `nLogOutside`'s run, as `look` computes it. -/
+/-- `nLogOutside`'s run up to the catch of `log`, as `look` computes it: `log` is affine, so the
+catch is followed by the allocation of `κ`'s cell (SPEC §25), which `look` does not take. -/
 abbrev nLogRun : List (Kont × Expr × Expr) := lookRun 20 nLogOutside
-
-theorem nLogRun_length : nLogRun.length = 20 := by decide
-
-theorem nLogRun_end : lookEnd 20 nLogOutside = .pair (.inj₂ .unit) (.inj₂ .unit) := by rfl
 
 /-- `with_log`'s answer clause and its clause, as A-values. -/
 def hrLV : OVal := ⟨hrL, .lam⟩
@@ -142,32 +139,34 @@ def clLV : OVal := ⟨clL, .lam⟩
 /-- What lies between `with_log`'s handler and the `log` it catches: `to_result`'s handler and
 `□ to _. raise ()`. -/
 def nLogK : Kont :=
-  .appR (.app (.prim .hnd) (hndValE 1 hrR [.lam (.inj₂ (.var 0))])) (.appR (.lam raiseU) .hole)
+  .appR (.app (.prim .hnd) (hndValE 1 (qualsVal [.aff]).1 hrR [.lam (.inj₂ (.var 0))]))
+    (.appR (.lam raiseU) .hole)
 
 /-- The configuration before the catch: `with_log`'s handler around `nLogK[log ()]`. -/
 theorem nLogRun_catch :
     (chainTerms nLogOutside nLogRun)[4]? =
-      some ((handleK 2 hrL [clL]).plug (nLogK.plug (performE (opArgE 2 0 (.val .unit))))) := by
+      some ((handleK 2 (qualsVal [.aff]).1 hrL [clL]).plug
+        (nLogK.plug (performE (opArgE 2 0 (.val .unit))))) := by
   rfl
 
 section Check1
 variable (Ξ : EffCtx)
 
-/-- The label of the name `2`, where `Ξ` declares `log`'s signature there. -/
-def lab2 (h2 : Ξ 2 = [(.aff, .unit, .unit)]) : (orowAlg Ξ).Lab :=
+/-- The label of the name `2`, where `Ξ` declares one operation. -/
+def lab2 {p : Qual × VTy × VTy} (h2 : Ξ 2 = [p]) : (orowAlg Ξ).Lab :=
   ⟨2, by decide, by rw [h2]; simp, by rw [h2]; simp⟩
 
-theorem captureE_val {n : UInt32} {r : Expr} {cs : List Expr} (h : IsVal (hndValE n r cs))
-    (K : Kont) : captureE n r cs K = kappa n ⟨_, h⟩ K := by
+theorem captureE_val {n : UInt32} {qs r : Expr} {cs : List Expr} (h : IsVal (hndValE n qs r cs))
+    (K : Kont) : captureE n qs r cs K = kappa n ⟨_, h⟩ K := by
   unfold captureE; rw [dif_pos h]
 
-theorem isVal_hndValE_log : IsVal (hndValE 2 hrL [clL]) :=
-  .pair .prim (.pair .lam (.pair .lam .unit))
+theorem isVal_hndValE_log : IsVal (hndValE 2 (qualsVal [.aff]).1 hrL [clL]) :=
+  .pair .prim (.pair (qualsVal _).2 (.pair .lam (.pair .lam .unit)))
 
 end Check1
 
-theorem cancelOfE_val {n : UInt32} {r : Expr} {cs : List Expr} (h : IsVal (hndValE n r cs))
-    (K : Kont) : cancelOfE n r cs K = Targets.cancelOf n ⟨_, h⟩ K := by
+theorem cancelOfE_val {n : UInt32} {qs r : Expr} {cs : List Expr} (h : IsVal (hndValE n qs r cs))
+    (K : Kont) : cancelOfE n qs r cs K = Targets.cancelOf n ⟨_, h⟩ K := by
   unfold cancelOfE; rw [dif_pos h]
 
 /-! ### Check 4: the no-interception condition is needed -/
@@ -176,9 +175,10 @@ theorem cancelOfE_val {n : UInt32} {r : Expr} {cs : List Expr} (h : IsVal (hndVa
 def finP : Expr := performE (opArgE 2 0 (.val .unit))
 
 /-- `handle_2 (perform (2, 0, ()) then x. x unwind perform (2, 0, ()))`, the clause of `2`
-cancelling its continuation. -/
+cancelling its continuation.  The operation is unrestricted, so `κ` owns no cell (SPEC §25), which
+is beside the point of the check. -/
 def finAloneProg : Expr :=
-  withH 2 cancelCl (thenE (.var 0) finP (performE (opArgE 2 0 (.val .unit))))
+  withH 2 .unr cancelCl (thenE (.var 0) finP (performE (opArgE 2 0 (.val .unit))))
 
 /-- **A typing system that types `finAloneProg` alone**, at every type: no typing system of ours,
 the witness that the no-interception condition is needed. -/
@@ -192,9 +192,10 @@ theorem noInterception_J₄ : NoInterception J₄.read := by
   subst he
   exact okE_sound _ (by decide)
 
-def H2E' : Expr := hndValE 2 (.lam (.var 0)) [.lam (.letpair (.var 0) (.app (.var 0) (.inj₂ .unit)))]
+def H2E' : Expr :=
+  hndValE 2 (qualsVal [.unr]).1 (.lam (.var 0)) [.lam (.letpair (.var 0) (.app (.var 0) (.inj₂ .unit)))]
 
-theorem isVal_H2E' : IsVal H2E' := .pair .prim (.pair .lam (.pair .lam .unit))
+theorem isVal_H2E' : IsVal H2E' := .pair .prim (.pair (qualsVal _).2 (.pair .lam (.pair .lam .unit)))
 
 /-- The cancelled region: the finaliser frame alone. -/
 def p5K : Kont := .appR (.app (.prim .ubind) (.pair (.lam (.var 0)) (.lam finP))) .hole
@@ -283,7 +284,7 @@ theorem p5_path :
 named `0`; its run reaches a cancel of `κ`, and the cancel's start.  The cancelled region's
 finaliser performs the operation the region's dying handler catches: it does not meet `FinRow` at
 any set of endings, and the run from the cancel follows no cancel trace at any set of endings. -/
-theorem noIntercept_needs_finRow (h2 : Ξ 2 = [(.aff, .unit, .unit)]) :
+theorem noIntercept_needs_finRow (h2 : Ξ 2 = [(.unr, .unit, .unit)]) :
     NoInterception J₄.read ∧
       (ourInst (ℍ := ℍ) orowRF Ξ J₄).der [] finAloneProg
         ((ourInst (ℍ := ℍ) orowRF Ξ J₄).F (orowAlg Ξ).unit (OVTy.ofV .unit)) ∧
@@ -304,13 +305,15 @@ theorem noIntercept_needs_finRow (h2 : Ξ 2 = [(.aff, .unit, .unit)]) :
         ((Adequacy.emptyMem, lookEnd 8 finAloneProg), ()) [finP] none (p5q (ℍ := ℍ) Ξ) := by
   let S := ourInst (ℍ := ℍ) orowRF Ξ J₄
   have hc₀ : lookEnd 5 finAloneProg = S.plug .hole (S.cancel (S.capture (lab2 Ξ h2) p5H p5K)) := by
-    show lookEnd 5 finAloneProg = Kont.hole.plug (cancelE (captureE 2 _ _ p5K))
-    rw [show captureE 2 (↑p5H.1) (List.map Subtype.val p5H.2) p5K =
+    show lookEnd 5 finAloneProg = Kont.hole.plug (cancelE (captureE 2 (qsOf Ξ 2) _ _ p5K))
+    rw [show qsOf Ξ 2 = (qualsVal [.unr]).1 by simp [qsOf, h2],
+      show captureE 2 (qualsVal [.unr]).1 (↑p5H.1) (List.map Subtype.val p5H.2) p5K =
       kappa 2 ⟨H2E', isVal_H2E'⟩ p5K from captureE_val isVal_H2E' p5K]
     exact p5_c₀
   have hc : lookEnd 8 finAloneProg = S.plug .hole (S.cancelOf (lab2 Ξ h2) p5H p5K) := by
-    show lookEnd 8 finAloneProg = Kont.hole.plug (cancelOfE 2 _ _ p5K)
-    rw [show cancelOfE 2 (↑p5H.1) (List.map Subtype.val p5H.2) p5K =
+    show lookEnd 8 finAloneProg = Kont.hole.plug (cancelOfE 2 (qsOf Ξ 2) _ _ p5K)
+    rw [show qsOf Ξ 2 = (qualsVal [.unr]).1 by simp [qsOf, h2],
+      show cancelOfE 2 (qualsVal [.unr]).1 (↑p5H.1) (List.map Subtype.val p5H.2) p5K =
       Targets.cancelOf 2 ⟨H2E', isVal_H2E'⟩ p5K from cancelOfE_val isVal_H2E' p5K]
     exact p5_c
   refine ⟨noInterception_J₄, ⟨fun η _ => ⟨[] ++ [], _, rfl, rowAt_nil Ξ⟩, .inl ⟨[], by simp, rfl⟩⟩,

@@ -71,8 +71,8 @@ theorem not_der_handle_tier1Open {Ξ : EffCtx} (Γ : List OVTy) (l : (orowAlg Ξ
     ¬ (ourInst (ℍ := ℍ) orowRF Ξ tier1Open).der Γ
       ((ourInst (ℍ := ℍ) orowRF Ξ tier1Open).handle l H M) C := by
   rintro ⟨-, ⟨Θ, hΘ, -, -, hd⟩ | ⟨-, M', he, -⟩⟩
-  · exact not_der_handleK _ _ _ _ (hd (fun _ => []) (models_anyCon_nil hΘ))
-  · change (handleK _ _ _).plug M = _ at he
+  · exact not_der_handleK _ _ _ _ _ (hd (fun _ => []) (models_anyCon_nil hΘ))
+  · change (handleK _ _ _ _).plug M = _ at he
     simp [driveE, driveMark, handleK, hndValE, Kont.plug] at he
 
 /-- **A typing system whose closed derivations elaborate types no closed A-level handler**: the
@@ -83,8 +83,8 @@ theorem not_der_handle_of_elabClosed {RF : RowForm} {Ξ : EffCtx} {J : OurTyping
     {C : OCTy} (hC : C.RFree) :
     ¬ (ourInst (ℍ := ℍ) RF Ξ J).der [] ((ourInst (ℍ := ℍ) RF Ξ J).handle l H M) C := by
   rintro ⟨-, ⟨Θ, hΘ, hd⟩ | ⟨-, M', he, -⟩⟩
-  · exact not_der_handleK _ _ _ _ (hE Θ _ _ _ hd hC (fun _ => []) (models_anyCon_nil hΘ))
-  · change (handleK _ _ _).plug M = _ at he
+  · exact not_der_handleK _ _ _ _ _ (hE Θ _ _ _ hd hC (fun _ => []) (models_anyCon_nil hΘ))
+  · change (handleK _ _ _ _).plug M = _ at he
     simp [driveE, driveMark, handleK, hndValE, Kont.plug] at he
 
 /-- **E8 fails at every typing system whose closed derivations elaborate** into today's kernel. -/

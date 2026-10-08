@@ -317,7 +317,7 @@ def Report.rejects (r : Report) : Bool :=
 
 /-- **`coreW`'s report, pinned**: each entry is justified in `Targets/Status.lean`'s audit table. -/
 def expectedCore : List (String × List String) :=
-  [("shapes", ["BoCa.BoLo.clauseAt.match_1", "BoCa.Fig16.BoLo.sepRange", "BoCa.Fig16.BoLo.sepRange._f", "BoCa.Fig16.BoLo.sepRange.match_1", "BoCa.Fig16.Cell", "BoCa.Fig16.LogRel.Core.VTy.upR.match_1", "BoCa.dropFill", "BoCa.dropFill._f", "BoCa.tabFill", "BoCa.tabFill._f", "BoCa.tabFill.match_1"]),
+  [("shapes", ["BoCa.BoLo.capTag._sparseCasesOn_5", "BoCa.BoLo.capTag.match_1", "BoCa.BoLo.clauseAt.match_1", "BoCa.Fig16.BoLo.sepRange", "BoCa.Fig16.BoLo.sepRange._f", "BoCa.Fig16.BoLo.sepRange.match_1", "BoCa.Fig16.Cell", "BoCa.Fig16.LogRel.Core.VTy.upR.match_1", "BoCa.dropFill", "BoCa.dropFill._f", "BoCa.tabFill", "BoCa.tabFill._f", "BoCa.tabFill.match_1"]),
    ("families", ["BoCa.BoLo.AHead", "BoCa.BoLo.ARun"]),
    ("viaLoc", ["BoCa.BoLo.Head", "BoCa.Fig16.LogRel.Core.Chain", "BoCa.Fig16.LogRel.Core.GPos", "BoCa.Fig16.LogRel.Core.LinPath", "BoCa.Fig16.LogRel.Core.MutPos", "BoCa.Fig16.LogRel.Core.RefPos", "BoCa.Fig16.LogRel.Core.TW"]),
    ("fixes", ["BoCa.Fig16.LogRel.Core.Table", "BoCa.Fig16.LogRel.Core.ewpTS", "BoCa.Fig16.LogRel.Core.vCE._f"]),
@@ -352,13 +352,13 @@ def pinHash (root : Name) : MetaM UInt64 := do
 
 /-- Core's relation as this branch imports it. -/
 def pinned : List (Name × UInt64) :=
-  [(``BoCa.Fig16.LogRel.Core.vCE, 6239293437465802492),
-   (``BoCa.Fig16.LogRel.Core.cC, 16948310798130247264),
-   (``BoCa.Fig16.LogRel.Core.wpTS, 1143937682946941997),
-   (``BoCa.Fig16.LogRel.Core.wpG, 1502089995547854245),
-   (``BoCa.Fig16.LogRel.Core.ewpTS, 17047834202755263910),
-   (``BoCa.Fig16.LogRel.Core.opTable, 9303654006174601968),
-   (``BoCa.Fig16.LogRel.Core.contShare, 8902597917553824952)]
+  [(``BoCa.Fig16.LogRel.Core.vCE, 9959859532828893445),
+   (``BoCa.Fig16.LogRel.Core.cC, 3615715188283227809),
+   (``BoCa.Fig16.LogRel.Core.wpTS, 5959915866947782996),
+   (``BoCa.Fig16.LogRel.Core.wpG, 5876730344465360364),
+   (``BoCa.Fig16.LogRel.Core.ewpTS, 265682439016940519),
+   (``BoCa.Fig16.LogRel.Core.opTable, 12894917340868813709),
+   (``BoCa.Fig16.LogRel.Core.contShare, 8605809838521521065)]
 
 end Targets.Audit
 

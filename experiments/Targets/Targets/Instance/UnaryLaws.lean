@@ -1,4 +1,4 @@
-import Targets.Instance.Runs
+import Targets.Instance.CellRuns
 
 /-!
 # The Instance — the unary laws (`A.UnaryLaws`, restated by D4) at our instance
@@ -28,11 +28,13 @@ restrict or remove the unr qualifier").  With `unr` restricted the law is not pr
 reads, at every reached finaliser frame, that the finaliser holds no captured continuation, which
 is a run-time typing of configurations (route 8.2).
 
-**The laws at the answering class** (`quiet_tailClause`): a tail-resumptive clause
+**The laws at the answering class** (`calm_tailClause`): a tail-resumptive clause
 `λ(a, k). c a to b. k.resume b` whose code `c v` runs quietly to a value resumes `K` in place, so
 the tail-resumptive law (`tailLaw_quiet`) and algebraicity inside such a handler (`algLaw_quiet`)
-hold at every configuration a typed program reaches, by a join (`runsAlike_of_quiet`).  `[Core
-σ=[]]`
+hold at every configuration a typed program reaches, by a join (`runsAlike_of_live_calm`).  At an
+operation whose `κ` owns no cell the run is quiet (`quiet_tailClause`); at a linear or affine one
+the catch allocates `κ`'s cell and the resume releases it (SPEC §25), and the run is quiet around
+the cell at every location the allocation may pick (`cellQuiet_tailClause`).  `[Core σ=[]]`
 -/
 
 noncomputable section
@@ -43,7 +45,7 @@ namespace Targets.Inst
 open BoCa BoCa.Fig16 BoCa.Fig16.BoLo BoCa.Fig16.LogRel BoCa.Fig16.LogRel.Core
 open BoCa.Fig16.LogRel.Core.EffPrograms
 open BoCa.BoLo (Heap Steps Step1 Head Kont performE raiseE opPayload hndE ubindE hndVal kappa
-  clauseAt)
+  clauseAt capTag kappaAt kappaC kappaCBody kappaCell)
 open BoCa.Lifetime (LifeCtx)
 open Targets (RowForm EffCtx orowRF orowAlg HeadChain lookRun lookEnd lookRun_sound closedAt_kappa
   closedAt_plug_iff kont_shift_closed)
@@ -63,7 +65,7 @@ def algL5 : Expr := bindE (bindE (performE (opArgE 5 0 (.val .unit))) (.var 0)) 
 def algR5 : Expr := bindE (performE (opArgE 5 0 (.val .unit))) (bindE (.var 0) (.val .unit))
 
 /-- **The witness**: `handle_1 (handle_5 algL5 with holdRaiseCl) with (λ_. ())`. -/
-def algFireProg : Expr := withH 1 abortCl (withH 5 holdRaiseCl algL5)
+def algFireProg : Expr := withH 1 .aff abortCl (withH 5 .unr holdRaiseCl algL5)
 
 /-- `exn : 1 ↠ 0` at the name `1`, the handler of `5`'s outer row. -/
 abbrev Sx : Row := Row.ofEff 1 Eab 0 ++ []
@@ -107,7 +109,7 @@ theorem d_withH {Δ : LifeCtx} {Γ : Ctx VTy} {S : Row} {A : VTy} {q : Qual} {B 
     (hcl : CDerives Δ Γ cl (.val (clauseTy S A (q, B, C))))
     (he : CDerives Δ (⟨retTy S A A, false⟩ :: ⟨clausesTy S A [(q, B, C)], false⟩ :: Γ) e
       (.comp (CTy.effOf (Row.ofEff n [(q, B, C)] 0 ++ S) A))) :
-    CDerives Δ Γ (withH n cl e) (.comp (CTy.effOf S A)) := by
+    CDerives Δ Γ (withH n q cl e) (.comp (CTy.effOf S A)) := by
   refine .bind (deadSplit hΓ) (.ret (.tensorI (deadSplit hΓ) hcl (.unitI hΓ.toP))) ?_
   refine .bind (A := retTy S A A) (.right (deadSplit hΓ)) (.ret ?_) ?_
   · exact .bangThunkV (dead_noLive (Ctx.Dead.cons hΓ)) rfl
@@ -126,13 +128,14 @@ theorem d_algFireProg : CDerives LifeCtx.empty [] algFireProg (.comp (.ret .unit
 
 /-- The two handler frames, after the program's bindings. -/
 def algK₀ : Kont :=
-  (handleK 1 (.lam (.var 0)) [abortCl]).comp (handleK 5 (.lam (.var 0)) [holdRaiseCl])
+  (handleK 1 (qualsVal [.aff]).1 (.lam (.var 0)) [abortCl]).comp
+    (handleK 5 (qualsVal [.unr]).1 (.lam (.var 0)) [holdRaiseCl])
 
 theorem alg_c : lookEnd 4 algFireProg = algK₀.plug algL5 := by rfl
 
-def H5E : Expr := hndValE 5 (.lam (.var 0)) [holdRaiseCl]
+def H5E : Expr := hndValE 5 (qualsVal [.unr]).1 (.lam (.var 0)) [holdRaiseCl]
 
-theorem isVal_H5E : IsVal H5E := .pair .prim (.pair .lam (.pair .lam .unit))
+theorem isVal_H5E : IsVal H5E := .pair .prim (.pair (qualsVal [.unr]).2 (.pair .lam (.pair .lam .unit)))
 
 /-- What lies between the handler of `5` and the operation, on each side. -/
 def KL5 : Kont := .appR (.lam .unit) (.appR (.lam (.var 0)) .hole)
@@ -146,7 +149,7 @@ def DR5 : Val := Val.lam (bindE (kappa 5 ⟨H5E, isVal_H5E⟩ KR5) (.val .unit))
 
 def raise1 : Expr := raiseE (opArgE 1 0 (.val .unit))
 
-def K1₀ : Kont := handleK 1 (.lam (.var 0)) [abortCl]
+def K1₀ : Kont := handleK 1 (qualsVal [.aff]).1 (.lam (.var 0)) [abortCl]
 
 /-- Each side's run, split at its one finaliser step. -/
 theorem algL_q : lookRun 9 (algK₀.plug algL5) =
@@ -286,41 +289,96 @@ theorem resume0_subst {κ : Expr} (hκ : closedAt 0 κ = true) (w : Val) :
 theorem isVal_kappa (n : UInt32) (H : Val) (K : Kont) : IsVal (kappa n H K) := by
   unfold kappa; exact .lam
 
-/-- **A tail-resumptive clause whose code runs quietly resumes in place**: `hnd H K[op (n, i, v)]`
-reaches `hnd H K[w]` quietly when the clause of `i` is `λ(a, k). c a to b. k.resume b` and `c v`
-runs quietly to `w`.  The steps: the catch, the clause's β-step and `letpair`, the code, the bind,
-`resume`'s β-step, and `κ`'s four (`quiet_kappa_resume`). -/
-theorem quiet_tailClause {n i : UInt32} {hr hs c v w : Val} {K : Kont}
-    (hci : clauseAt hs.1 i.toNat = some ⟨tailOf c.1, .lam⟩) (hK : K.HasHnd n = false)
-    (hH : closedAt 0 (hndVal n hr hs).1 = true) (hKc : closedAt 0 (K.plug .unit) = true)
-    (hc : closedAt 0 c.1 = true) (hq : Quiet (ℍ := ℍ) (.app c.1 v.1) (.val w)) :
-    Quiet (ℍ := ℍ) (hndE (hndVal n hr hs) (K.plug (performE (.val (opPayload n i v)))))
-      (hndE (hndVal n hr hs) (K.plug (.val w))) := by
-  have hκ : closedAt 0 (kappa n (hndVal n hr hs) K) = true := closedAt_kappa n hH hKc
-  let κV : Val := ⟨kappa n (hndVal n hr hs) K, isVal_kappa n _ K⟩
-  have h₁ := quiet_hop (ℍ := ℍ) .hole n i hr hs ⟨tailOf c.1, .lam⟩ v K hci hK
-  simp only [Kont.plug] at h₁
-  refine h₁.trans ?_
+/-- **The clause after the catch**: `λ(a, k). c a to b. k.resume b` applied to `(v, κ)` reaches
+`κ (inj₁ ()) w` quietly when `c v` runs quietly to `w`: the clause's β-step and `letpair`, the code,
+the bind, and `resume`'s β-step. -/
+theorem quiet_tailBody {c v w : Val} (κ : Expr) (hκv : IsVal κ) (hc : closedAt 0 c.1 = true)
+    (hκ : closedAt 0 κ = true) (hq : Quiet (ℍ := ℍ) (.app c.1 v.1) (.val w)) :
+    Quiet (ℍ := ℍ) (.app (.val ⟨tailOf c.1, .lam⟩) (.pair (.val v) κ))
+      (.app (.app κ (.val (Val.inj₁ .unit))) (.val w)) := by
+  let κV : Val := ⟨κ, hκv⟩
   have h₂ := quiet_beta (ℍ := ℍ) .hole (.letpair (.var 0) (tailBody c.1)) (Val.pair v κV)
   simp only [Kont.plug, Expr.subst, if_pos, tailBody_subst2 hc] at h₂
   refine h₂.trans ?_
   have h₃ := quiet_letpair (ℍ := ℍ) .hole v κV (tailBody c.1)
   simp only [Kont.plug] at h₃
-  rw [tailBody_letpair hc hκ (isVal_kappa n _ K) v] at h₃
+  rw [tailBody_letpair hc hκ hκv v] at h₃
   refine h₃.trans ?_
-  have h₄ := ((quiet_appE (ℍ := ℍ) .hole c.1 v).trans hq).plug
-    (bindK (resumeE (kappa n (hndVal n hr hs) K) (.var 0)))
+  have h₄ := ((quiet_appE (ℍ := ℍ) .hole c.1 v).trans hq).plug (bindK (resumeE κ (.var 0)))
   simp only [Kont.plug] at h₄
   refine h₄.trans ?_
-  have h₅ := quiet_beta (ℍ := ℍ) .hole (resumeE (kappa n (hndVal n hr hs) K) (.var 0)) w
+  have h₅ := quiet_beta (ℍ := ℍ) .hole (resumeE κ (.var 0)) w
   simp only [Kont.plug] at h₅
   rw [resume0_subst hκ w] at h₅
   refine h₅.trans ?_
-  have h₆ := quiet_resumeE (ℍ := ℍ) .hole (kappa n (hndVal n hr hs) K) w
+  have h₆ := quiet_resumeE (ℍ := ℍ) .hole κ w
   simp only [Kont.plug] at h₆
-  refine h₆.trans ?_
-  have h₇ := quiet_kappa_resume (ℍ := ℍ) .hole n (hndVal n hr hs) K w
+  exact h₆
+
+/-- **A tail-resumptive clause whose code runs quietly resumes in place, at an operation whose
+`κ` owns no cell**: `hnd H K[op (n, i, v)]` reaches `hnd H K[w]` quietly.  The steps: the catch,
+the clause (`quiet_tailBody`), and `κ`'s four (`quiet_kappa_resume`). -/
+theorem quiet_tailClause {n i : UInt32} {qs hr hs c v w : Val} {K : Kont}
+    (hci : clauseAt hs.1 i.toNat = some ⟨tailOf c.1, .lam⟩) (hK : K.HasHnd n = false)
+    (hu : kappaAt (capTag qs.1 i.toNat) n (hndVal n qs hr hs) K = kappa n (hndVal n qs hr hs) K)
+    (hH : closedAt 0 (hndVal n qs hr hs).1 = true) (hKc : closedAt 0 (K.plug .unit) = true)
+    (hc : closedAt 0 c.1 = true) (hq : Quiet (ℍ := ℍ) (.app c.1 v.1) (.val w)) :
+    Quiet (ℍ := ℍ) (hndE (hndVal n qs hr hs) (K.plug (performE (.val (opPayload n i v)))))
+      (hndE (hndVal n qs hr hs) (K.plug (.val w))) := by
+  have hκ : closedAt 0 (kappa n (hndVal n qs hr hs) K) = true := closedAt_kappa n hH hKc
+  have h₁ := quiet_hop (ℍ := ℍ) .hole n i qs hr hs ⟨tailOf c.1, .lam⟩ v K hci hK hu
+  simp only [Kont.plug] at h₁
+  refine h₁.trans ?_
+  refine (quiet_tailBody _ (isVal_kappa n _ K) hc hκ hq).trans ?_
+  have h₇ := quiet_kappa_resume (ℍ := ℍ) .hole n (hndVal n qs hr hs) K w
   simpa [Kont.plug] using h₇
+
+/-- **A tail-resumptive clause whose code runs quietly resumes in place, at an operation whose
+`κ` owns a cell**: `hnd H K[op (n, i, v)]` reaches `hnd H K[w]` around the cell (SPEC §25).  The
+catch and the allocation; at the cell's location `ℓ`, `κ`'s β-step at `ℓ`, the clause
+(`quiet_tailBody`) and `κ`'s resume branch up to the release of `ℓ`; after it, the rest of the
+resume branch (`kappaC_resume_parts`). -/
+theorem cellQuiet_tailClause {n i : UInt32} {qs hr hs c v w : Val} {K : Kont} (aff : Bool)
+    (hci : clauseAt hs.1 i.toNat = some ⟨tailOf c.1, .lam⟩) (hK : K.HasHnd n = false)
+    (hcell : kappaAt (capTag qs.1 i.toNat) n (hndVal n qs hr hs) K =
+      kappaCell aff n (hndVal n qs hr hs) K)
+    (hH : closedAt 0 (hndVal n qs hr hs).1 = true) (hKc : closedAt 0 (K.plug .unit) = true)
+    (hc : closedAt 0 c.1 = true) (hq : Quiet (ℍ := ℍ) (.app c.1 v.1) (.val w)) :
+    CellQuiet (ℍ := ℍ) (hndE (hndVal n qs hr hs) (K.plug (performE (.val (opPayload n i v)))))
+      (hndE (hndVal n qs hr hs) (K.plug (.val w))) := by
+  have hh : ∀ μ, Head (ℍ := ℍ) μ
+      (hndE (hndVal n qs hr hs) (K.plug (performE (.val (opPayload n i v))))) μ
+      (.app (.val ⟨tailOf c.1, .lam⟩) (.pair (.val v) (kappaCell aff n (hndVal n qs hr hs) K))) := by
+    intro μ
+    have h := Head.hop (ℍ := ℍ) μ n i qs hr hs ⟨tailOf c.1, .lam⟩ v K hci hK
+    rwa [hcell] at h
+  refine ⟨.appR (.val ⟨tailOf c.1, .lam⟩) (.pairR v
+    (.appR (.val (Val.lam (kappaCBody aff n (hndVal n qs hr hs) K))) .hole)),
+    Quiet.head .hole hh rfl rfl, fun ℓ => ?_⟩
+  refine ⟨Kont.appL (Kont.seq .hole (kResV (hndVal n qs hr hs) K)) w, ?_,
+    (kappaC_resume_parts aff ℓ n _ K w).2⟩
+  have hb := Quiet.head (ℍ := ℍ) (.appR (.val ⟨tailOf c.1, .lam⟩) (.pairR v .hole))
+    (fun μ => Head.beta μ (kappaCBody aff n (hndVal n qs hr hs) K) (Val.loc ℓ)) rfl rfl
+  rw [kappaCBody_subst] at hb
+  refine hb.trans ?_
+  have hκ := closedAt_kappaC aff ℓ n hH hKc
+  refine (quiet_tailBody _ (isVal_kappaC aff ℓ n _ K) hc hκ hq).trans ?_
+  exact (kappaC_resume_parts aff ℓ n _ K w).1
+
+/-- **A tail-resumptive clause whose code runs quietly resumes in place, calmly**, at every
+operation: quietly when its `κ` owns no cell, around the cell when it does. -/
+theorem calm_tailClause {n i : UInt32} {qs hr hs c v w : Val} {K : Kont}
+    (hci : clauseAt hs.1 i.toNat = some ⟨tailOf c.1, .lam⟩) (hK : K.HasHnd n = false)
+    (hH : closedAt 0 (hndVal n qs hr hs).1 = true) (hKc : closedAt 0 (K.plug .unit) = true)
+    (hc : closedAt 0 c.1 = true) (hq : Quiet (ℍ := ℍ) (.app c.1 v.1) (.val w)) :
+    Calm (ℍ := ℍ) (hndE (hndVal n qs hr hs) (K.plug (performE (.val (opPayload n i v)))))
+      (hndE (hndVal n qs hr hs) (K.plug (.val w))) := by
+  by_cases h0 : capTag qs.1 i.toNat = 0
+  · exact (cellQuiet_tailClause false hci hK (by rw [kappaAt, if_pos h0]) hH hKc hc hq).calm
+  by_cases h1 : capTag qs.1 i.toNat = 1
+  · exact (cellQuiet_tailClause true hci hK (by rw [kappaAt, if_neg h0, if_pos h1]) hH hKc hc
+      hq).calm
+  exact (quiet_tailClause hci hK (by rw [kappaAt, if_neg h0, if_neg h1]) hH hKc hc hq).calm
 
 /-- At a typing system whose reached configurations are closed, two terms run alike when, closed,
 they have a common quiet reduct. -/
@@ -337,29 +395,30 @@ theorem runsAlike_of_live (hL : LiveOK (ℍ := ℍ) RF Ξ J) {t₁ t₂ : Expr}
 
 /-- What a closed handler frame around a closed context and an operation gives: the handler a
 Core value, its clauses the handler's, the context and the argument closed. -/
-theorem closed_handler_parts {n : UInt32} {r : OVal} {cs : List OVal} {K : Kont} {x : Expr}
-    (h : closedAt 0 ((handleK n r.1 (cs.map Subtype.val)).plug (K.plug x)) = true) :
+theorem closed_handler_parts {n : UInt32} {qs : Val} {r : OVal} {cs : List OVal} {K : Kont}
+    {x : Expr} (h : closedAt 0 ((handleK n qs.1 r.1 (cs.map Subtype.val)).plug (K.plug x)) = true) :
     ∃ (hr : IsVal r.1) (hcs : IsVal (clausesE (cs.map Subtype.val))),
-      closedAt 0 (hndVal n ⟨r.1, hr⟩ ⟨_, hcs⟩).1 = true ∧ closedAt 0 (K.plug .unit) = true ∧
+      closedAt 0 (hndVal n qs ⟨r.1, hr⟩ ⟨_, hcs⟩).1 = true ∧ closedAt 0 (K.plug .unit) = true ∧
       closedAt 0 x = true := by
-  rw [show (handleK n r.1 (cs.map Subtype.val)).plug (K.plug x) =
-    .app (.app (.prim .hnd) (hndValE n r.1 (cs.map Subtype.val))) (K.plug x) from rfl] at h
+  rw [show (handleK n qs.1 r.1 (cs.map Subtype.val)).plug (K.plug x) =
+    .app (.app (.prim .hnd) (hndValE n qs.1 r.1 (cs.map Subtype.val))) (K.plug x) from rfl] at h
   simp only [closedAt, Bool.and_eq_true] at h
   obtain ⟨⟨-, hH⟩, hKx⟩ := h
   rw [closedAt_plug_iff] at hKx
   simp only [Bool.and_eq_true] at hKx
   have hH' := hH
   simp only [hndValE, closedAt, Bool.and_eq_true, Bool.true_and] at hH'
-  refine ⟨isVal_of_closed_oval r.2 hH'.1, isVal_clausesE _ ?_, hH, hKx.1, hKx.2⟩
+  refine ⟨isVal_of_closed_oval r.2 hH'.2.1, isVal_clausesE _ ?_, hH, hKx.1, hKx.2⟩
   intro e he
   obtain ⟨cl, -, rfl⟩ := List.mem_map.1 he
-  exact isVal_of_closed_oval cl.2 (closedAt_clausesE _ hH'.2 _ he)
+  exact isVal_of_closed_oval cl.2 (closedAt_clausesE _ hH'.2.2 _ he)
 
 /-- **The tail-resumptive law at the answering class.**  At a typing system whose reached
 configurations are closed (`LiveOK`), a resuming operation caught by a handler whose clause is
 `λ(a, k). c a to b. k.resume b`, with `c` closed and `c v` running quietly to a value, runs as the
-code in place: both sides reach `hnd H K[w]` quietly.  No hygiene premise is read: quiet code
-performs nothing and allocates nothing. -/
+code in place: both sides reach `hnd H K[w]` calmly (`calm_tailClause`) — quietly, or, at a linear
+or affine operation, around `κ`'s cell, which the resume releases.  No hygiene premise is read:
+quiet code performs nothing and allocates nothing. -/
 theorem tailLaw_quiet (hL : LiveOK (ℍ := ℍ) RF Ξ J) {l : (RF.alg Ξ).Lab} {r : OVal}
     {cs : List OVal} {K : Kont} {i : ℕ} {v c : OVal} {w : Val} (hi : i < 2 ^ 32)
     (hK : (ourInst (ℍ := ℍ) RF Ξ J).catches K l = false)
@@ -371,12 +430,13 @@ theorem tailLaw_quiet (hL : LiveOK (ℍ := ℍ) RF Ξ J) {l : (RF.alg Ξ).Lab} {
       ((ourInst (ℍ := ℍ) RF Ξ J).handle l ((ourInst (ℍ := ℍ) RF Ξ J).hnd r cs)
         ((ourInst (ℍ := ℍ) RF Ξ J).plug K
           ((ourInst (ℍ := ℍ) RF Ξ J).app ((ourInst (ℍ := ℍ) RF Ξ J).force c) v))) := by
-  refine runsAlike_of_live hL fun hcl => ?_
+  refine runsAlike_of_live_calm hL fun hcl => ?_
   have hp := perform_eq (ℍ := ℍ) (RF := RF) (Ξ := Ξ) (J := J) (l := l) v hi
-  change closedAt 0 ((handleK (RF.name Ξ l) r.1 (cs.map Subtype.val)).plug
+  change closedAt 0 ((handleK (RF.name Ξ l) (qsOf Ξ (RF.name Ξ l)) r.1 (cs.map Subtype.val)).plug
     (K.plug ((ourInst (ℍ := ℍ) RF Ξ J).perform l i v))) = true at hcl
   rw [hp] at hcl
-  obtain ⟨hr, hcs, hH, hKc, hx⟩ := closed_handler_parts hcl
+  obtain ⟨hr, hcs, hH, hKc, hx⟩ :=
+    closed_handler_parts (qs := qualsVal ((Ξ (RF.name Ξ l)).map Prod.fst)) hcl
   have hv : IsVal v.1 := by
     simp only [performE, opArgE, closedAt, Expr.val, Val.prim, Val.i32, Bool.true_and] at hx
     exact isVal_of_closed_oval v.2 hx
@@ -387,16 +447,17 @@ theorem tailLaw_quiet (hL : LiveOK (ℍ := ℍ) RF Ξ J) {l : (RF.alg Ξ).Lab} {
     refine clauseAt_clausesE _ i .lam ?_
     rw [List.getElem?_map, hci]; rfl
   have hq' : Quiet (ℍ := ℍ) (.app c.1 (⟨v.1, hv⟩ : Val).1) (.val w) := hq
-  have hT := quiet_tailClause (n := RF.name Ξ l) (hr := ⟨r.1, hr⟩) (hs := ⟨_, hcs⟩)
+  have hT := calm_tailClause (n := RF.name Ξ l) (hr := ⟨r.1, hr⟩) (hs := ⟨_, hcs⟩)
     (c := ⟨c.1, isVal_of_closed_oval c.2 hc⟩) (v := ⟨v.1, hv⟩) (K := K) hcl' hK hH hKc hc hq'
-  refine ⟨hndE (hndVal (RF.name Ξ l) ⟨r.1, hr⟩ ⟨_, hcs⟩) (K.plug (.val w)), ?_, ?_⟩
-  · show Quiet (ℍ := ℍ) ((handleK (RF.name Ξ l) r.1 (cs.map Subtype.val)).plug
+  refine ⟨hndE (hndVal (RF.name Ξ l) (qualsVal ((Ξ (RF.name Ξ l)).map Prod.fst)) ⟨r.1, hr⟩ ⟨_, hcs⟩)
+    (K.plug (.val w)), ?_, ?_⟩
+  · show Calm (ℍ := ℍ) ((handleK (RF.name Ξ l) (qsOf Ξ (RF.name Ξ l)) r.1 (cs.map Subtype.val)).plug
       (K.plug ((ourInst (ℍ := ℍ) RF Ξ J).perform l i v))) _
     rw [hp]; exact hT
   · have h₁ := ((quiet_appE (ℍ := ℍ) .hole c.1 ⟨v.1, hv⟩).trans hq').plug
-      ((handleK (RF.name Ξ l) r.1 (cs.map Subtype.val)).comp K)
+      ((handleK (RF.name Ξ l) (qsOf Ξ (RF.name Ξ l)) r.1 (cs.map Subtype.val)).comp K)
     simp only [Kont.plug_comp] at h₁
-    exact h₁
+    exact h₁.calm
 
 theorem hasHnd_bindK (N : Expr) (n : UInt32) : (bindK N).HasHnd n = false := by
   simp [bindK, Kont.HasHnd]
@@ -404,8 +465,9 @@ theorem hasHnd_bindK (N : Expr) (n : UInt32) : (bindK N).HasHnd n = false := by
 /-- **Algebraicity at the answering class.**  At a typing system whose reached configurations are
 closed, inside a handler whose clause at the operation is `λ(a, k). c a to b. k.resume b`, with
 `c` closed and `c v` running quietly to a value, `(op v to x. M) to y. N` and
-`op v to x. (M to y. N)` both reach `hnd H K[M[w/x] to y. N]` quietly: each continuation is resumed
-once, in place, at the same answer. -/
+`op v to x. (M to y. N)` both reach `hnd H K[M[w/x] to y. N]` calmly: each continuation is resumed
+once, in place, at the same answer, and at a linear or affine operation each side's resume releases
+its `κ`'s cell. -/
 theorem algLaw_quiet (hL : LiveOK (ℍ := ℍ) RF Ξ J) {l : (RF.alg Ξ).Lab} {r : OVal}
     {cs : List OVal} {K : Kont} {i : ℕ} {v c : OVal} {w : Val} {M N : Expr} (hi : i < 2 ^ 32)
     (hK : (ourInst (ℍ := ℍ) RF Ξ J).catches K l = false)
@@ -418,7 +480,7 @@ theorem algLaw_quiet (hL : LiveOK (ℍ := ℍ) RF Ξ J) {l : (RF.alg Ξ).Lab} {r
       ((ourInst (ℍ := ℍ) RF Ξ J).handle l ((ourInst (ℍ := ℍ) RF Ξ J).hnd r cs)
         ((ourInst (ℍ := ℍ) RF Ξ J).plug K ((ourInst (ℍ := ℍ) RF Ξ J).bind
           ((ourInst (ℍ := ℍ) RF Ξ J).perform l i v) ((ourInst (ℍ := ℍ) RF Ξ J).bind M N)))) := by
-  refine runsAlike_of_live hL fun hcl => ?_
+  refine runsAlike_of_live_calm hL fun hcl => ?_
   have hp := perform_eq (ℍ := ℍ) (RF := RF) (Ξ := Ξ) (J := J) (l := l) v hi
   let KL : Kont := (K.comp (bindK N)).comp (bindK M)
   let KR : Kont := K.comp (bindK (bindE M N))
@@ -426,10 +488,11 @@ theorem algLaw_quiet (hL : LiveOK (ℍ := ℍ) RF Ξ J) {l : (RF.alg Ξ).Lab} {r
     simp only [KL, Kont.plug_comp]; rfl
   have eR : ∀ x, K.plug (bindE x (bindE M N)) = KR.plug x := fun x => by
     simp only [KR, Kont.plug_comp]; rfl
-  change closedAt 0 ((handleK (RF.name Ξ l) r.1 (cs.map Subtype.val)).plug
+  change closedAt 0 ((handleK (RF.name Ξ l) (qsOf Ξ (RF.name Ξ l)) r.1 (cs.map Subtype.val)).plug
     (K.plug (bindE (bindE ((ourInst (ℍ := ℍ) RF Ξ J).perform l i v) M) N))) = true at hcl
   rw [hp, eL] at hcl
-  obtain ⟨hr, hcs, hH, hKc, hx⟩ := closed_handler_parts hcl
+  obtain ⟨hr, hcs, hH, hKc, hx⟩ :=
+    closed_handler_parts (qs := qualsVal ((Ξ (RF.name Ξ l)).map Prod.fst)) hcl
   have hv : IsVal v.1 := by
     simp only [performE, opArgE, closedAt, Expr.val, Val.prim, Val.i32, Bool.true_and] at hx
     exact isVal_of_closed_oval v.2 hx
@@ -455,12 +518,12 @@ theorem algLaw_quiet (hL : LiveOK (ℍ := ℍ) RF Ξ J) {l : (RF.alg Ξ).Lab} {r
     simp only [KL, hasHnd_comp, hasHnd_bindK, Bool.or_false]; exact hK
   have hKR : KR.HasHnd (RF.name Ξ l) = false := by
     simp only [KR, hasHnd_comp, hasHnd_bindK, Bool.or_false]; exact hK
-  have hTL := quiet_tailClause (n := RF.name Ξ l) (hr := ⟨r.1, hr⟩) (hs := ⟨_, hcs⟩)
+  have hTL := calm_tailClause (n := RF.name Ξ l) (hr := ⟨r.1, hr⟩) (hs := ⟨_, hcs⟩)
     (c := ⟨c.1, isVal_of_closed_oval c.2 hc⟩) (v := ⟨v.1, hv⟩) (K := KL) hcl' hKL hH hKc hc hq'
-  have hTR := quiet_tailClause (n := RF.name Ξ l) (hr := ⟨r.1, hr⟩) (hs := ⟨_, hcs⟩)
+  have hTR := calm_tailClause (n := RF.name Ξ l) (hr := ⟨r.1, hr⟩) (hs := ⟨_, hcs⟩)
     (c := ⟨c.1, isVal_of_closed_oval c.2 hc⟩) (v := ⟨v.1, hv⟩) (K := KR) hcl' hKR hH hKRc hc hq'
   -- after the resume: `M[w/x] to y. N` on both sides
-  let H : Val := hndVal (RF.name Ξ l) ⟨r.1, hr⟩ ⟨_, hcs⟩
+  let H : Val := hndVal (RF.name Ξ l) (qualsVal ((Ξ (RF.name Ξ l)).map Prod.fst)) ⟨r.1, hr⟩ ⟨_, hcs⟩
   have hβL := quiet_beta (ℍ := ℍ) ((Kont.appR (.app (.prim .hnd) H.1) .hole).comp
     (K.comp (bindK N))) M w
   have hβR := quiet_beta (ℍ := ℍ) ((Kont.appR (.app (.prim .hnd) H.1) .hole).comp K)
@@ -470,20 +533,20 @@ theorem algLaw_quiet (hL : LiveOK (ℍ := ℍ) RF Ξ J) {l : (RF.alg Ξ).Lab} {r
     rw [subst_closedAt N _ hN (le_refl _)]
   rw [eN] at hβR
   refine ⟨hndE H (K.plug (bindE (M.subst 0 w) N)), ?_, ?_⟩
-  · show Quiet (ℍ := ℍ) ((handleK (RF.name Ξ l) r.1 (cs.map Subtype.val)).plug
+  · show Calm (ℍ := ℍ) ((handleK (RF.name Ξ l) (qsOf Ξ (RF.name Ξ l)) r.1 (cs.map Subtype.val)).plug
       (K.plug (bindE (bindE ((ourInst (ℍ := ℍ) RF Ξ J).perform l i v) M) N))) _
     rw [hp, eL]
     refine hTL.trans ?_
     simp only [Kont.plug_comp] at hβL
     rw [← eL]
-    exact hβL
-  · show Quiet (ℍ := ℍ) ((handleK (RF.name Ξ l) r.1 (cs.map Subtype.val)).plug
+    exact hβL.calm
+  · show Calm (ℍ := ℍ) ((handleK (RF.name Ξ l) (qsOf Ξ (RF.name Ξ l)) r.1 (cs.map Subtype.val)).plug
       (K.plug (bindE ((ourInst (ℍ := ℍ) RF Ξ J).perform l i v) (bindE M N)))) _
     rw [hp, eR]
     refine hTR.trans ?_
     simp only [Kont.plug_comp] at hβR
     rw [← eR]
-    exact hβR
+    exact hβR.calm
 
 end Answering
 

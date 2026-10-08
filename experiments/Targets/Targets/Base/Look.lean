@@ -23,7 +23,7 @@ variable {ℍ : BoCa.Host} [BoCa.HostIs ℍ]
 namespace Targets
 open BoCa BoCa.Fig16 BoCa.Fig16.BoLo BoCa.Fig16.LogRel BoCa.Fig16.LogRel.Core
 open BoCa.BoLo (Heap Steps Step1 Head Kont performE raiseE opPayload hndE ubindE ccatchE cfinE
-  hndVal cancelVal kappa clauseAt namesVal errVal errNext)
+  hndVal cancelVal kappa clauseAt namesVal errVal errNext kappaAt capTag)
 
 /-! ### Deciding values and payloads -/
 
@@ -202,15 +202,16 @@ def catchOp (f arg : Expr) (r : Bool) (K : Kont) (p : Val) (n : UInt32) : Look :
     .op r (.appR f K) p n
   else
     match f, r with
-    | .app (.prim .hnd) (.pair (.prim (.lit (.i32 _))) (.pair hr hs)), r =>
-        match valOf? hr, valOf? hs, payOf? p.1 with
-        | some hrv, some hsv, some (_, i, w) =>
+    | .app (.prim .hnd) (.pair (.prim (.lit (.i32 _))) (.pair qs (.pair hr hs))), r =>
+        match valOf? qs, valOf? hr, valOf? hs, payOf? p.1 with
+        | some qsv, some hrv, some hsv, some (_, i, w) =>
             match clauseOf hs i.toNat with
             | some c =>
                 if r then .red .hole (.app f arg) (.app c.1 w.1)
-                else .red .hole (.app f arg) (.app c.1 (.pair w.1 (kappa n (hndVal n hrv hsv) K)))
+                else .red .hole (.app f arg) (.app c.1 (.pair w.1
+                  (kappaAt (capTag qs i.toNat) n (hndVal n qsv hrv hsv) K)))
             | none => .stuck
-        | _, _, _ => .stuck
+        | _, _, _, _ => .stuck
     | .app (.prim .ubind) (.pair N D), true =>
         match valOf? N, valOf? D with
         | some _, some _ =>
@@ -305,10 +306,10 @@ def look : Expr → Look
               match nameOf? a with
               | some n => .op true .hole va n
               | none => .stuck
-          | .app (.prim .hnd) (.pair (.prim (.lit (.i32 _))) (.pair hr hs)) =>
-              match valOf? hr, valOf? hs with
-              | some _, some _ => .red .hole (.app f a) (.app hr a)
-              | _, _ => .stuck
+          | .app (.prim .hnd) (.pair (.prim (.lit (.i32 _))) (.pair qs (.pair hr hs))) =>
+              match valOf? qs, valOf? hr, valOf? hs with
+              | some _, some _, some _ => .red .hole (.app f a) (.app hr a)
+              | _, _, _ => .stuck
           | .app (.prim .ubind) (.pair N D) =>
               match valOf? N, valOf? D with
               | some _, some _ => .red .hole (.app f a) (.app N a)
@@ -370,12 +371,13 @@ theorem catchOp_sound {f a : Expr} {r : Bool} {K : Kont} {p : Val} {n : UInt32}
   · rename_i hcatch
     split
     · -- a handler frame of the name
-      rename_i rr m hr hs
+      rename_i rr m qs hr hs
       split
-      · rename_i hrv hsv n' i w hhr hhs hpay
+      · rename_i qsv hrv hsv n' i w hqs hhr hhs hpay
         have hm : m = n := by
           cases r <;> simp [Kont.Catches, Kont.HasHnd] at hcatch <;> exact hcatch
         subst hm
+        obtain rfl := valOf?_some hqs
         obtain rfl := valOf?_some hhr
         obtain rfl := valOf?_some hhs
         have hp := payOf?_some hpay
@@ -390,12 +392,12 @@ theorem catchOp_sound {f a : Expr} {r : Bool} {K : Kont} {p : Val} {n : UInt32}
           · rename_i hr'
             subst hr'
             refine ⟨rfl, fun μ => ?_, rfl⟩
-            exact Head.hunwind μ _ i hrv hsv c w K hc' (by simpa [OpFree] using hK)
+            exact Head.hunwind μ _ i qsv hrv hsv c w K hc' (by simpa [OpFree] using hK)
           · rename_i hr'
             simp only [Bool.not_eq_true] at hr'
             subst hr'
             refine ⟨rfl, fun μ => ?_, rfl⟩
-            exact Head.hop μ _ i hrv hsv c w K hc' (by simpa [OpFree] using hK)
+            exact Head.hop μ _ i qsv hrv hsv c w K hc' (by simpa [OpFree] using hK)
         · trivial
       · trivial
     · -- a finaliser frame, at a raise
@@ -602,12 +604,13 @@ theorem look_sound : ∀ e : Expr, LookOK (ℍ := ℍ) e (look e)
             refine ⟨rfl, ?_, rfl⟩
             rw [← nameOf?_val]; exact hn
           · trivial
-        · rename_i m hr hs
+        · rename_i m qs hr hs
           split
-          · rename_i hrv hsv hhr hhs
+          · rename_i qsv hrv hsv hqs hhr hhs
+            obtain rfl := valOf?_some hqs
             obtain rfl := valOf?_some hhr
             obtain rfl := valOf?_some hhs
-            exact ⟨rfl, fun μ => Head.hret μ m hrv hsv va, rfl⟩
+            exact ⟨rfl, fun μ => Head.hret μ m qsv hrv hsv va, rfl⟩
           · trivial
         · rename_i N D
           split
@@ -654,6 +657,13 @@ inductive HeadChain : Expr → List (Kont × Expr × Expr) → Expr → Prop
   | cons {K : Kont} {a a' e' : Expr} {q : List (Kont × Expr × Expr)} :
       (∀ μ, Head (ℍ := ℍ) μ a μ a') → a.allocs = false → HeadChain (K.plug a') q e' →
       HeadChain (K.plug a) ((K, a, a') :: q) e'
+
+/-- Two chains, the second from the first's end, make a chain. -/
+theorem HeadChain.append {e e₁ e₂ : Expr} :
+    ∀ {q₁ q₂ : List (Kont × Expr × Expr)}, HeadChain (ℍ := ℍ) e q₁ e₁ → HeadChain (ℍ := ℍ) e₁ q₂ e₂ →
+      HeadChain (ℍ := ℍ) e (q₁ ++ q₂) e₂
+  | _, _, .nil, h₂ => h₂
+  | _, _, .cons hh hn h₁, h₂ => .cons hh hn (HeadChain.append h₁ h₂)
 
 /-- **The run `look` computes is a chain of Core's head steps.** -/
 theorem lookRun_sound : ∀ (k : ℕ) (e : Expr), HeadChain (ℍ := ℍ) e (lookRun k e) (lookEnd k e)

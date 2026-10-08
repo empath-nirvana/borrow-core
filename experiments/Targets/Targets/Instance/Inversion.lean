@@ -74,28 +74,28 @@ theorem not_der_app_hnd' {Δ : LifeCtx} {Γ : Ctx VTy} {X : Expr} {j : Jdg} :
 term is `hnd X M`. -/
 theorem der_hnd_shape {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg}
     (h : CDerivesNU Δ Γ e j) : ∀ X M, e = .app (.app (.prim .hnd) X) M →
-      ∃ (n : UInt32) (ir ic : Nat),
-        X = .pair (.prim (.lit (.i32 n))) (.pair (.var ir) (.var ic)) := by
+      ∃ (n : UInt32) (qs : List Qual) (ir ic : Nat),
+        X = .pair (.prim (.lit (.i32 n))) (.pair (qualsVal qs).1 (.pair (.var ir) (.var ic))) := by
   induction h <;> intro X M he <;> cdnu_terms <;> (try simp_all [not_der_app_hnd'])
   case force _ _ i C _ =>
     rcases forceE_cases C (.var i) with h | h <;> rw [h] at he <;> simp at he
   case effHandle =>
     obtain ⟨hX, -⟩ := he
-    exact ⟨_, _, _, hX.symm⟩
+    exact ⟨_, _, _, _, hX.symm⟩
 
 /-- A list of clauses, as an expression, is a pair or `()`, never a variable. -/
 theorem clausesE_ne_var (cs : List Expr) (i : Nat) : clausesE cs ≠ .var i := by
   cases cs <;> simp [clausesE]
 
 /-- **Today's kernel types no A-level handler.**  Our instance's `handle l (hnd r cs) M` is the
-run-time frame `hnd (n, (r, cs)) M` (`handleK`), its clauses a tuple of values; no derivation of
+run-time frame `hnd (n, (qs, (r, cs))) M` (`handleK`), its clauses a tuple of values; no derivation of
 `CDerivesNU` has a conclusion of that form, at any context and judgement. -/
-theorem not_der_handleK {Δ : LifeCtx} {Γ : Ctx VTy} {j : Jdg} (n : UInt32) (r : Expr)
-    (cs : List Expr) (M : Expr) : ¬ CDerivesNU Δ Γ ((handleK n r cs).plug M) j := by
+theorem not_der_handleK {Δ : LifeCtx} {Γ : Ctx VTy} {j : Jdg} (n : UInt32) (qs r : Expr)
+    (cs : List Expr) (M : Expr) : ¬ CDerivesNU Δ Γ ((handleK n qs r cs).plug M) j := by
   intro h
-  obtain ⟨n', ir, ic, hX⟩ := der_hnd_shape h (hndValE n r cs) M rfl
+  obtain ⟨n', qs', ir, ic, hX⟩ := der_hnd_shape h (hndValE n qs r cs) M rfl
   simp only [hndValE, Expr.pair.injEq] at hX
-  exact clausesE_ne_var cs ic hX.2.2
+  exact clausesE_ne_var cs ic hX.2.2.2
 
 /-! ### The views of a slot's type -/
 

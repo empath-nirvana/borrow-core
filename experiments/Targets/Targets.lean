@@ -42,6 +42,7 @@ import Targets.Instance.Bridges
 import Targets.Instance.CheckPrograms
 import Targets.Instance.Checks
 import Targets.Instance.ClauseRefusals
+import Targets.Instance.CellRuns
 import Targets.Instance.ContUse
 import Targets.Instance.LiveWitness
 import Targets.Instance.Core

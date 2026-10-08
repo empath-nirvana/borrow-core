@@ -1,4 +1,5 @@
 import Targets.Instance.ContUse
+import Targets.Base.Closed
 
 /-!
 # The Instance — today's clause typing refuses R1–R4's clauses
@@ -221,7 +222,8 @@ theorem der_free_live {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg}
   | effHandle _ hs hs₁ hr hc _ _ _ _ ihe =>
       intro i hi
       simp only [hndTerm, Expr.FreeIn, Expr.val, Val.prim, Val.i32, false_or] at hi
-      rcases hi with (hi | hi) | hi
+      rcases hi with (hq | hi | hi) | hi
+      · exact absurd hq (not_freeIn_closed (Targets.closedAt_qualsVal 0 _) i)
       · subst hi
         exact liveAt_of_split_left hs (liveAt_of_split_left hs₁ (liveAt_of_soloP hr))
       · subst hi

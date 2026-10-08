@@ -126,9 +126,10 @@ theorem d_nLogOutsideNU :
 
 /-! ### Handlers with the identity return clause -/
 
-/-- `handle_n e with (λx. x, (cl, ()))`: one clause, the return clause the identity. -/
-def withH (n : UInt32) (cl e : Expr) : Expr :=
-  bindE (.pair cl (.val .unit)) (bindE (.val (.lam (.var 0))) (hndTerm n 0 1 e))
+/-- `handle_n e with (λx. x, (cl, ()))`: one clause, the return clause the identity, its operation's
+qualifier `q`. -/
+def withH (n : UInt32) (q : Qual) (cl e : Expr) : Expr :=
+  bindE (.pair cl (.val .unit)) (bindE (.val (.lam (.var 0))) (hndTerm n [q] 0 1 e))
 
 theorem d_idRetNU {Δ : LifeCtx} {Γ : Ctx VTy} {S : Row} {A : VTy} (hS : Row.NU S)
     (hΓ : Ctx.Dead Γ) : CDerivesNU Δ Γ (.val (.lam (.var 0))) (.val (retTy S A A)) :=
@@ -142,7 +143,7 @@ theorem d_withHNU {Δ : LifeCtx} {Γ : Ctx VTy} {S : Row} {A : VTy} {q : Qual} {
     (hcl : CDerivesNU Δ Γ cl (.val (clauseTy S A (q, B, C))))
     (he : CDerivesNU Δ (⟨retTy S A A, false⟩ :: ⟨clausesTy S A [(q, B, C)], false⟩ :: Γ) e
       (.comp (CTy.effOf (Row.ofEff n [(q, B, C)] 0 ++ S) A))) :
-    CDerivesNU Δ Γ (withH n cl e) (.comp (CTy.effOf S A)) := by
+    CDerivesNU Δ Γ (withH n q cl e) (.comp (CTy.effOf S A)) := by
   refine .bind (deadSplit hΓ) (.ret (.tensorI (deadSplit hΓ) hcl (.unitI hΓ.toP))) ?_
   refine .bind (.right (deadSplit hΓ)) (.ret (d_idRetNU (A := A) hS (Ctx.Dead.cons hΓ))) ?_
   exact .effHandle (E := [(q, B, C)]) hNU (.left (.left (deadSplit hΓ)))
@@ -214,7 +215,7 @@ def thenProg : Expr := thenE (.var 0) finD (performE (opArgE 2 0 (.val .unit)))
 of `perform (2, 0, ())`, inside which a handler of the name `20` and a finaliser that raises the
 name `21` stand; the handler of the name `21`, outside the cancelled region, catches that raise
 when the cancel re-raises it at the canceller. -/
-def prog₃T : Expr := withH 21 abortCl (withH 2 cancelCl (withH 20 abortCl thenProg))
+def prog₃T : Expr := withH 21 .aff abortCl (withH 2 .aff cancelCl (withH 20 .aff abortCl thenProg))
 
 /-- `raise (1, 0, ()) then x. x unwind raise (21, 0, ())`, under handlers of `1` and `21`: the
 finaliser's raise of `21` supersedes the pending raise of `1`. -/
@@ -226,7 +227,7 @@ theorem nu_S₁ : Row.NU S₁ := nu_ofEff_aff nu_S₂₁
 
 /-- **The unwind's program**: `handle_21 (handle_1 (raise (1, 0, ()) then x. x unwind raise (21, 0,
 ())))`. -/
-def unwindProg : Expr := withH 21 abortCl (withH 1 abortCl thenRaiseProg)
+def unwindProg : Expr := withH 21 .aff abortCl (withH 1 .aff abortCl thenRaiseProg)
 
 /-! ### Check 3's programs: E1′'s `sched` around code that moves across frames -/
 
@@ -267,9 +268,10 @@ theorem d_schedClNU {Δ : LifeCtx} {Γ : Ctx VTy} {X : VTy} (hΓ : Ctx.Dead Γ) 
         (.there (.here (.drop rfl (.cons (.drop rfl (Ctx.Dead.cons hΓ).toP))))))
       (.here (by cdead))
 
-/-- `handle_n e with (ret, (cl, ()))`: one clause and a return clause. -/
-def withHT (n : UInt32) (ret cl e : Expr) : Expr :=
-  bindE (.pair cl (.val .unit)) (bindE ret (hndTerm n 0 1 e))
+/-- `handle_n e with (ret, (cl, ()))`: one clause and a return clause, its operation's qualifier
+`q`. -/
+def withHT (n : UInt32) (q : Qual) (ret cl e : Expr) : Expr :=
+  bindE (.pair cl (.val .unit)) (bindE ret (hndTerm n [q] 0 1 e))
 
 theorem d_withHTNU {Δ : LifeCtx} {Γ : Ctx VTy} {S : Row} {A R : VTy} {q : Qual} {B C : VTy}
     {n : UInt32} {ret cl e : Expr} (hNU : Row.NU (Row.ofEff n [(q, B, C)] 0 ++ S))
@@ -278,7 +280,7 @@ theorem d_withHTNU {Δ : LifeCtx} {Γ : Ctx VTy} {S : Row} {A R : VTy} {q : Qual
     (hret : CDerivesNU Δ (⟨clausesTy S R [(q, B, C)], false⟩ :: Γ) ret (.val (retTy S A R)))
     (he : CDerivesNU Δ (⟨retTy S A R, false⟩ :: ⟨clausesTy S R [(q, B, C)], false⟩ :: Γ) e
       (.comp (CTy.effOf (Row.ofEff n [(q, B, C)] 0 ++ S) A))) :
-    CDerivesNU Δ Γ (withHT n ret cl e) (.comp (CTy.effOf S R)) := by
+    CDerivesNU Δ Γ (withHT n q ret cl e) (.comp (CTy.effOf S R)) := by
   refine .bind (deadSplit hΓ) (.ret (.tensorI (deadSplit hΓ) hcl (.unitI hΓ.toP))) ?_
   refine .bind (.right (deadSplit hΓ)) (.ret hret) ?_
   exact .effHandle (E := [(q, B, C)]) hNU (.left (.left (deadSplit hΓ)))
@@ -325,7 +327,7 @@ theorem nu_ofEff_lin {n : UInt32} {A B : VTy} {S : Row} (hS : Row.NU S) :
 theorem nu_S₁₁ : Row.NU S₁₁ := nu_ofEff_lin nu_nil
 
 /-- `withSchedLin e`: `sched` at the linear operation `11.0`, answering `U(1 → F 1)`. -/
-def withSchedLin (e : Expr) : Expr := withHT 11 schedRetE schedClE e
+def withSchedLin (e : Expr) : Expr := withHT 11 .lin schedRetE schedClE e
 
 theorem d_withSchedLinNU {Δ : LifeCtx} {e : Expr}
     (he : CDerivesNU Δ [⟨retTy [] .unit (schedR .unit), false⟩,
@@ -398,7 +400,7 @@ theorem d_tailClNU {Δ : LifeCtx} {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
 /-- **The tail-resumption check's program**: `sched` around the handler of `5`, whose clause is
 A's tail-resumptive clause, around `perform (5, 0, ())`. -/
 def tailProg : Expr :=
-  withSchedLin (withHT 5 (.lam (.var 0)) tailClE (performE (opArgE 5 0 (.val .unit))))
+  withSchedLin (withHT 5 .lin (.lam (.var 0)) tailClE (performE (opArgE 5 0 (.val .unit))))
 
 theorem d_tailProgNU : CDerivesNU LifeCtx.empty [] tailProg (.comp (.ret (schedR .unit))) := by
   refine d_withSchedLinNU ?_

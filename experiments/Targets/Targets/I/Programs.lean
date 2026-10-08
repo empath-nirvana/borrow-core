@@ -35,9 +35,10 @@ def chooseE : Expr := performE (opArgE 6 0 (.val .unit))
 /-- `Susp : 1 ↠^aff 1` is `suspSig`, the name `4` (`Core/EffPrograms.lean`). -/
 def suspE : Expr := performE (opArgE 4 0 (.val .unit))
 
-/-- A handler of the name `n` with the identity answer clause and the one clause `cl`. -/
-def handleWith (n : UInt32) (cl : Expr) (e : Expr) : Expr :=
-  bindE (.pair cl (.val .unit)) (bindE (.val (.lam (.var 0))) (hndTerm n 0 1 e))
+/-- A handler of the name `n` with the identity answer clause and the one clause `cl`, its
+operation's qualifier `q`. -/
+def handleWith (n : UInt32) (q : Qual) (cl : Expr) (e : Expr) : Expr :=
+  bindE (.pair cl (.val .unit)) (bindE (.val (.lam (.var 0))) (hndTerm n [q] 0 1 e))
 
 /-- The clause that resumes with the argument. -/
 def resumeArg : Expr :=
@@ -87,11 +88,11 @@ def lendCell (init : Expr) (f : Expr) : Expr :=
           (.app (.app (.var 0) (.var 2)) (.var 1)))))
 
 /-- **AT02** (Yarrow's region example, one-shot): `m` held across `Foo`, then read. -/
-def at02 : Expr := handleWith 5 resumeArg
+def at02 : Expr := handleWith 5 .lin resumeArg
   (lendCell (.inj₁ unit') (cb (bindE fooE (.seq (.var 0) (readThrough 1)))))
 
 /-- **AT04** (`v.push(do choose())`, one-shot): `Choose`'s answer written through `m`. -/
-def at04 : Expr := handleWith 6 resumeLeft
+def at04 : Expr := handleWith 6 .lin resumeLeft
   (bindE (.app alloc' (.inj₂ unit'))
     (bindE (cb (bindE chooseE (writeThrough 1 0)))
       (bindE (withborUE dFlag)
@@ -102,12 +103,12 @@ def at04 : Expr := handleWith 6 resumeLeft
 /-- **AT12** (`thread::scope` with the continuation dropped, single-threaded): the lend spans an
 affine `Susp`; the handler cancels the continuation, and the lend's finaliser frees the cell
 during the cancel. -/
-def at12 : Expr := handleWith 4 cancelAns
+def at12 : Expr := handleWith 4 .aff cancelAns
   (lendCell (.inj₁ unit') (cb (bindE suspE (.seq (.var 0) (readThrough 1)))))
 
 /-- **AT17** (a lend across a perform in a movable first-class continuation): the handler moves the
 continuation into a cell and back, then resumes it. -/
-def at17 : Expr := handleWith 5 storeResume
+def at17 : Expr := handleWith 5 .lin storeResume
   (lendCell (.inj₁ unit') (cb (bindE fooE (.seq (.var 0) (readThrough 1)))))
 
 
@@ -174,9 +175,10 @@ open BoCa.Programs (alloc' free' app2)
 /-- `Yield : Flag ↠^aff 1`, the operation `0` of the name `7`. -/
 def yieldFlagE (v : Expr) : Expr := performE (opArgE 7 0 v)
 
-/-- A handler of the name `n` with the return clause `r` and the one clause `cl`. -/
-def handleWithRet (n : UInt32) (r cl : Expr) (e : Expr) : Expr :=
-  bindE (.pair cl (.val .unit)) (bindE r (hndTerm n 0 1 e))
+/-- A handler of the name `n` with the return clause `r` and the one clause `cl`, its operation's
+qualifier `q`. -/
+def handleWithRet (n : UInt32) (q : Qual) (r cl : Expr) (e : Expr) : Expr :=
+  bindE (.pair cl (.val .unit)) (bindE r (hndTerm n [q] 0 1 e))
 
 /-- `yield (x, k) ⇒ resume k () to r. case x of inl _ ⇒ r | inr _ ⇒ tt`: the yielded flags, or-ed. -/
 def orClause : Expr :=
@@ -197,7 +199,7 @@ before each; the handler or-s the yielded flags and answers `ff` when the genera
 lend here is `withbor` (2)'s (`Mut`, as `at02`'s); the design's `Imm` form (6.64, read by
 `withload`) is RESTRUCTURE §Unresolved's. -/
 def genSelf : Expr :=
-  handleWithRet 7 (.val (.lam (.inj₁ unit'))) orClause (lendCell (.inj₂ unit') (cb genBody))
+  handleWithRet 7 .aff (.val (.lam (.inj₁ unit'))) orClause (lendCell (.inj₂ unit') (cb genBody))
 
 /-- **`genSelf` runs**: the or of the yielded flags, `tt`, and no cell left. -/
 theorem genSelf_eval :
@@ -216,14 +218,14 @@ def at05 : Expr := ansRun dFlag (.inj₁ unit') (.pair (.var 0) (.var 0))
 `c` is linear. -/
 def at06 : Expr :=
   bindE (.app alloc' (.inj₁ unit'))
-    (handleWith 5 (.val (.lam (.letpair (.var 0) (.seq (dropB (.app free' (.var 3)))
+    (handleWith 5 .lin (.val (.lam (.letpair (.var 0) (.seq (dropB (.app free' (.var 3)))
         (.app (.app (.var 0) (.val (.inj₁ .unit))) (.val .unit))))))
       (bindE fooE (dropB (.app free' (.var 3)))))
 
 /-- **AT08**: a continuation in a shared cell, read twice: the clause stores `κ` in a cell, loads
 it twice and resumes both copies.  `kTy` at `lin` and `aff` is neither droppable nor persistent. -/
 def at08 : Expr :=
-  handleWith 5 (.val (.lam (.letpair (.var 0)
+  handleWith 5 .lin (.val (.lam (.letpair (.var 0)
     (bindE (.app alloc' (.var 0))
       (bindE (.app (.val (.prim .load)) (.var 0))
         (bindE (.app (.val (.prim .load)) (.var 1))
@@ -233,14 +235,14 @@ def at08 : Expr :=
 
 /-- **AT13**: `forget κ`: a `lin` or `aff` continuation has no weakening, and the `forget`
 constants are at `Imm`, `Mut`, `!` and `Unk`; discard is an explicit cancel. -/
-def at13 : Expr := handleWith 5 (.val (.lam (.letpair (.var 0) (.seq (.app forget (.var 0)) unit')))) fooE
+def at13 : Expr := handleWith 5 .lin (.val (.lam (.letpair (.var 0) (.seq (.app forget (.var 0)) unit')))) fooE
 
 /-- **AT07**: a continuation capturing a lend of `x`, stored past `x`'s release, then resumed: the
 handler answers `κ` itself (suspended inside the callback that reads through the lend), the program
 frees `x`, and resumes `κ`, whose read then meets a freed cell. -/
 def at07 : Expr :=
   bindE (.app alloc' (.inj₁ unit'))
-    (bindE (handleWithRet 5 (.val (.lam (.var 0))) (.val (.lam (.letpair (.var 0) (.var 0))))
+    (bindE (handleWithRet 5 .lin (.val (.lam (.var 0))) (.val (.lam (.letpair (.var 0) (.var 0))))
         (bindE (cb (bindE fooE (.seq (.var 0) (readThrough 1))))
           (bindE (withborUE dFlag) (.app (.app (.var 0) (.var 4)) (.var 1)))))
       (.seq (dropB (.app free' (.var 1))) (.app (.app (.var 0) (.val (.inj₁ .unit))) (.val .unit))))

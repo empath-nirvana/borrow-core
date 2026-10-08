@@ -114,20 +114,20 @@ theorem no_step_plug {μ : Heap} {t : Expr} (hirr : ∀ μ' t', ¬ Step1 (ℍ :=
   by_cases h0 : K'' = .hole
   · subst h0
     exact hirr _ _ ⟨.hole, a, a', by simpa [Kont.plug] using h₁.symm, rfl, hh⟩
-  rcases head_plug hh K'' hnv h₁ h0 with ⟨n, hr, hs, K₃, rfl⟩ | ⟨N, D, K₃, rfl⟩ | ⟨K₃, rfl⟩ |
+  rcases head_plug hh K'' hnv h₁ h0 with ⟨n, qs, hr, hs, K₃, rfl⟩ | ⟨N, D, K₃, rfl⟩ | ⟨K₃, rfl⟩ |
       ⟨w, H, p, hp, rfl, rfl⟩ | ⟨Ns, err, K₃, rfl⟩
   · -- a handler frame: `[ret]`, `[op]`, `[unwind]`
-    generalize hX : (Kont.appR (.app (.val (.prim .hnd)) (.val (hndVal n hr hs))) K₃).plug t = X
+    generalize hX : (Kont.appR (.app (.val (.prim .hnd)) (.val (hndVal n qs hr hs))) K₃).plug t = X
       at h₁
     subst h₁
     cases hh with
-    | hret n' hr' hs' w =>
+    | hret n' qs' hr' hs' w =>
         simp only [hndE, Kont.plug, Expr.app.injEq] at hX
         exact keyV K₃ w hX.2
-    | hop n' i hr' hs' c v K₄ _ hK₄ =>
+    | hop n' i qs' hr' hs' c v K₄ _ hK₄ =>
         simp only [hndE, Kont.plug, Expr.app.injEq] at hX
         exact key K₃ K₄ false n' i v (by simpa [opE] using hX.2) (by simpa [OpFree] using hK₄)
-    | hunwind n' i hr' hs' c v K₄ _ hK₄ =>
+    | hunwind n' i qs' hr' hs' c v K₄ _ hK₄ =>
         simp only [hndE, Kont.plug, Expr.app.injEq] at hX
         exact key K₃ K₄ true n' i v (by simpa [opE] using hX.2) (by simpa [OpFree] using hK₄)
     | _ => simp [Kont.plug, ubindE, ccatchE, cfinE] at hX
