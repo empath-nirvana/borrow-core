@@ -3776,10 +3776,13 @@ no `[TR]` lemma and no borrow rule changes; the cell is handled by 6.141, 6.142,
 
 ### Open
 
-- **S4's capture laws** (`A.HandlerSem`) ask the catch, the resume and the cancel to keep the
-  store. With the cell, the catch is followed by the cell's allocation and the resume and the
-  cancel free it (TIER1-PLAN, *Round 3*).
-- **S6 at tier 1's typing**, from the cell: TIER1-PLAN, *Round 3*.
+- **S4's catch law** (`A.HandlerSem`) hands the clause `capture l H K` and keeps the store. With the
+  cell it fails as written at tier 1's typing at an admissible effect context
+  (`not_handlerSem_J₁_ΞA`): the catch of a linear operation is followed by the cell's allocation.
+  It holds where every resuming operation is unrestricted. Its restatement is open (TIER1-PLAN,
+  *Round 3*).
+- **S6 at tier 1's typing**, from the cell: reduced to leak freedom (proved) and two ownership
+  properties of the cell, open (`contUseEv_J₁_of`; TIER1-PLAN, *Round 3*).
 
 ---
 
@@ -3889,7 +3892,8 @@ the checker types a finaliser at `F 1` (`Frontend/Check/Steps.lean`, `Frontend/C
   `[op]`'s `κ` owns a unit cell, allocated by the ordinary allocator and freed when `κ` is used; a
   linear `κ`'s cancel branch has no step. The handler value carries its operations' qualifier tags,
   which `[handle]` writes. §19's *Terms and machine* and *Typing* revised, §24's *Open* revised. No
-  change to the relation, the effectful `wp` or any borrow rule.
+  change to the relation, the effectful `wp` or any borrow rule. §25's *Open*: S4's catch law fails
+  as written at tier 1's typing; S6 there is reduced to two ownership properties of the cell.
 
 - **0.41** (2026-10-07) — §24 (decisions D3, D5): the polymorphic let `[let-poly]` (a closed
   λ-value bound by substitution, so one function is used at several rows), the general `[handle]`

@@ -1608,3 +1608,70 @@ facts (`op_tail`, `op_answer`, `handle_fold`, `clauseRun`, `seqCalls`); `ctlForm
 3. S5's bridges at `noFinRaise`.
 4. `Accepts` and `Rejects`.
 5. The user's call on S6 and `AlgLaw`.
+
+## Round 3: the capture cell (decision S6)
+
+**Where tier 1 stands.** `I.Tier1 J₁` **fails as written** since the capture cell
+(`I.not_tier1_J₁`): its A conjunct asks S4 at every admissible effect context, and S4's catch law
+fails at `ΞA` (`Inst.not_handlerSem_J₁_ΞA`). S6 at `J₁` is reduced to two ownership properties of
+the cell. No BoLo definition changed and no borrow guarantee was weakened: `fundamentalC`,
+`adequacyC` and `adequacyD` keep their statements. Every result is at Core σ=[]. On
+`tier1-effects`, not pushed.
+
+| step | status | commits |
+|---|---|---|
+| the machine and Core (SPEC §25, Entry 24) | LANDED. A handler value carries its operations' tags (`hndVal`, `capTag`); `[op]` hands `kappaAt`: at a linear or affine operation `κ` with a unit cell allocated by the ordinary allocator (`kappaCell`, `kappaC`), freed by the resume and by an affine cancel; a linear `κ`'s cancel branch has no step. Core's effect lemmas re-proved (`ewp_kappaCell`, `ewp_kappaC_resume`, `ewp_kappaC_cancel`, `ewp_handle` with the tags' hypothesis, `handleV_compatC`); kernel and corpus counts unchanged (`zeroCell`) | 96562bc |
+| the A level at the cell | LANDED. S6 per capture event (`ContUseEv`, `CatchEvAt`, `caughtEv`) in `SProps`; its tooth R1 (`not_contUseEv_of_der_R1`, `teeth_JR_ΞA`); route 8.4's obligation in Core's relation (`I.not_semC_R1`); runs around one cell (`CellQuiet`, `Calm`, `runsAlike_of_calm`, `finDom_reach`), so the answering-class laws and D1.h4 hold at every operation (`calm_tailClause`, `calm_opStep`, `calm_fold`) | fa225d5 |
+| S6 at `J₁` | REDUCED (`I.contUseEv_J₁_of`): a capture event allocates `κ`'s cell (`catchEv_cell`); a use releases it three steps later, a linear `κ`'s cancel reaching a branch with no step (`use_frees_cell`); complete runs end at the empty memory (`I.leakFreeAt_J₁`); S6 follows from these and `OnlyOwnerFrees` and `NoDanglingUse` (`contUseEv_of_cells`), both OPEN | 68e0d04 |
+| S4 at the cell | **FAILS AS WRITTEN at `J₁`** (`not_handlerSem_J₁_ΞA`): at `ΞA`, Core's handled program at the linear `tick` reaches the catch, from which the store-keeping steps reach only the catch and the clause at `κ` before its cell, while the clause at `capture l H K` runs, keeping the store, through terms naming neither `perform` nor `alloc`. Proved where every resuming operation is unrestricted (`handlerSem_orow`, `CatchUnr`) | 68e0d04 |
+
+**The two open properties** (`Targets/I/ContUseJ1.lean`), on every complete run of a typed program
+at a data answer under a runner that keeps its protocol and answers the row:
+- `OnlyOwnerFrees`: the first release of a capture event's cell after its allocation is three
+  steps after a use of the event's `κ`. Route: a run invariant — until `κ` is applied, its cell's
+  location occurs only inside copies of `κ` — kept by every head step (substitution copies `κ`
+  whole; `κ` is closed), with host answers, runner answers and array arithmetic naming no such
+  location. Not built.
+- `NoDanglingUse`: a use of `κ` comes after a capture event that handed `κ`, with no release of its
+  location since. Route: B5's simulation (`releasedOnceReuse_of_soundContracts`) runs every complete
+  run as the image of a bump run, where a use after the release frees a location the memory does
+  not hold and has no step; the transfer needs the maps to agree on `κ`'s locations between its
+  hand-off and its use. `BumpSimAt`'s construction keeps the maps on named locations;
+  `ReleasedOnceReuse`'s statement does not expose it. Not built.
+
+**Findings.**
+1. S4's catch law, read at `capture` and store-keeping, fails as written at `J₁` at `ΞA`
+   (machine-checked, above); so `Tier1 J₁` (machine-checked). The restatement is the user's: S6's
+   reading per capture event is one candidate (the catch, the allocation, the hand-off).
+2. The answering-class laws and D1.h4's comodel reduction needed runs that are quiet only around a
+   cell; with finite memories on every run they hold at linear and affine operations as before.
+3. `ContUse` (S6 read at `capture`) is kept as the earlier reading; it is not refuted here.
+4. S5's statements read `capture` and `cancelOf`; they are not checked here against the cell.
+
+**Readings for the user to confirm** (pending):
+1. `J₁`'s kernel is Core's whole `CDerives`.
+2. Row polymorphism is the polymorphic let; the general `[handle]` is the handler value form over a
+   persistent context.
+3. D4's readings: the no-interception condition is `FinRow FR`; a use of `κ` is a step applying
+   `κ` to a data value; "observationally" is `RunsAlike` at data answers and `EffSafeDrive` at a
+   finished drive.
+4. Decision S6's reading: a capture event is a catch of a resuming operation, its `κ` the value the
+   clause is first handed after it (`CatchEvAt`); counts are per `κ` value, on complete runs from a
+   typed program at a data answer.
+
+**Unspent hypotheses.** `AdmEff`'s `ClosedLife` and `Rich` are not read by S6's reduction (its
+`NU` is, through `catchEv_cell`); `ContUseEv`'s `DataTy A` is read only through leak freedom; the
+runner's `Respects` only gives `Live`.
+
+**Unused uniqueness/functionality results.** `AStep1.deterministic`; B5's step maps (`RelAt`),
+which `NoDanglingUse`'s route reads.
+
+**Untranscribed in the run-up.** The sealing invariant of a capture cell's location; the coherence
+of B5's maps on a `κ`'s locations from hand-off to use; S2's teeth R2–R4 at the cell (their runs are
+not written out); S4's restatement.
+
+**Remaining.**
+- S4's restatement (the user's), then its proof at `J₁`.
+- `OnlyOwnerFrees` and `NoDanglingUse` at `J₁` (routes above).
+- A's (E) properties at `J₁`; S5's bridges at `noFinRaise`; `Accepts` and `Rejects`; the earlier
+  round's open items.
