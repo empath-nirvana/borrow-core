@@ -22,10 +22,12 @@ read through `ojdgW` as the intersection of its instances (Law 1, `oretThunk`), 
 `fundamentalC`.  At a context with a polymorphic slot it is not proved: `J₁` closes such a slot by
 the closed λ-values Core types at every instance, and a value `ovalW` relates there need not be one.
 
-**A's (S) properties at `J₁`**, at every effect context (`sPropsNoCancel_J₁`): S0 and S4 (from
-`LiveOK`, `liveOK_of_coreClosed`), the let law (`letLaw_ourInst_J₁`), S1 (`rowAlgebra_ourInst_J₁`),
-`DataDiv`, S2 and S3 (`safety_of_coreClosed`, `effSafe_of_coreClosed`).  S5 waits on its bridges,
-and S6 on a route (`Targets/I/GhostCoupling.lean`).  `[Core σ=[]]`
+**A's (S) properties at `J₁`**, at every effect context, where our instance reads `J₁` with its
+inner rows tied (decision R; `sPropsNoCancel_J₁`): S0 and S4 (from `LiveOK`,
+`liveOK_of_coreClosed` at `coreClosed_J₁At`), the let law (`letLaw_ourInst_J₁`), S1
+(`rowAlgebra_ourInst_J₁`), `DataDiv`, S2 and S3 (`safety_of_coreClosed`,
+`effSafe_of_coreClosed`).  S5 waits on its bridges, and S6 on a route
+(`Targets/I/GhostCoupling.lean`).  `[Core σ=[]]`
 -/
 
 noncomputable section
@@ -137,15 +139,17 @@ theorem sPropsNoCancel_J₁ {Ξ : EffCtx} :
     (ourInst (ℍ := ℍ) orowRF Ξ J₁).MachShape ∧ (ourInst (ℍ := ℍ) orowRF Ξ J₁).LetLaw ∧
       (ourInst (ℍ := ℍ) orowRF Ξ J₁).RowAlgebra ∧ (ourInst (ℍ := ℍ) orowRF Ξ J₁).DataDiv ∧
       (ourInst (ℍ := ℍ) orowRF Ξ J₁).Safety ∧ (ourInst (ℍ := ℍ) orowRF Ξ J₁).EffSafe :=
-  ⟨Inst.machShape_orow (Inst.liveOK_of_coreClosed (D := J1Der) Inst.coreClosed_J₁),
+  ⟨Inst.machShape_orow
+      (Inst.liveOK_of_coreClosed (D := Inst.J1DerAt Ξ) (Inst.coreClosed_J₁At Ξ)),
     Inst.letLaw_ourInst_J₁, Inst.rowAlgebra_ourInst_J₁, Inst.dataDiv_ourInst,
-    Inst.safety_of_coreClosed (D := J1Der) Inst.coreClosed_J₁,
-    Inst.effSafe_of_coreClosed (D := J1Der) Inst.coreClosed_J₁⟩
+    Inst.safety_of_coreClosed (D := Inst.J1DerAt Ξ) (Inst.coreClosed_J₁At Ξ),
+    Inst.effSafe_of_coreClosed (D := Inst.J1DerAt Ξ) (Inst.coreClosed_J₁At Ξ)⟩
 
 /-- **S4 at `J₁`**, at an effect context whose resuming operations are unrestricted (`CatchUnr`):
 there `κ` owns no cell, and the catch keeps the store (SPEC §25). -/
 theorem handlerSem_J₁ {Ξ : EffCtx} (hU : Ξ.CatchUnr) : (ourInst (ℍ := ℍ) orowRF Ξ J₁).HandlerSem :=
-  Inst.handlerSem_orow (Inst.liveOK_of_coreClosed (D := J1Der) Inst.coreClosed_J₁) hU
+  Inst.handlerSem_orow
+    (Inst.liveOK_of_coreClosed (D := Inst.J1DerAt Ξ) (Inst.coreClosed_J₁At Ξ)) hU
 
 /-- **Tier 1 at `J₁`, given what is open**: A's (E) properties, S4, S5 and S6 at every admissible
 effect context, and the composite's programs and rejections.  The rest of `Tier1 J₁` is proved:

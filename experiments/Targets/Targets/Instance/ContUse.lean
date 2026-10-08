@@ -513,7 +513,9 @@ theorem refuses_R_tier1Open {Ξ : EffCtx} (l : (orowAlg Ξ).Lab) (C : OCTy) :
 /-- A typing system that types R1–R4, at every name and tag list, and nothing else. -/
 def JR : OurTyping orowRF :=
   ⟨fun _ _ Γ e _ => Γ = [] ∧ ∃ n qs, e = rProg n qs dropV ∨ e = rProg n qs twiceV ∨
-    e = rProg n qs cancelV ∨ e = rProg n qs cancelResumeV, OutJ.core, fun _ η => η⟩
+    e = rProg n qs cancelV ∨ e = rProg n qs cancelResumeV, OutJ.core, fun _ η => η,
+    fun _ _ _ Γ e _ => Γ = [] ∧ ∃ n qs, e = rProg n qs dropV ∨ e = rProg n qs twiceV ∨
+    e = rProg n qs cancelV ∨ e = rProg n qs cancelResumeV⟩
 
 /-- The label of the name `5`, linear at `ΞA` (`tick`). -/
 def lab5A : (orowAlg ΞA).Lab := ⟨5, by decide, by simp [ΞA], by simp [ΞA]⟩

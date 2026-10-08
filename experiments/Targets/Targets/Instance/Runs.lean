@@ -19,7 +19,8 @@ The run facts the unary laws and the theories read (`Targets/Instance/UnaryLaws.
   (`complete_chain_eq`), so its trace is the chain's (`obsFrom_chain_trace`); the chain's own run
   is complete (`obsFrom_of_chain`); a chain with one finaliser step shows that step's event only
   (`obs_chainPath_one`);
-* **a closed program Core types at `F A` is typed at our instance by `J₁`** (`der_J₁_ret`).
+* **a closed program Core's kernel types at `F A`, its inner rows tied to the effect context, is
+  typed at our instance by `J₁`** (`der_J₁_ret`).
 -/
 
 noncomputable section
@@ -209,15 +210,16 @@ end Complete
 
 /-! ### Closed programs at `J₁` -/
 
-/-- **A closed program Core types at `F A` is typed at our instance by `J₁`**, at the pure row:
-`J₁` closes no slot of the empty context, and the pure row is tied to every effect context. -/
+/-- **A closed program that Core's kernel, its inner rows tied to `Ξ`, types at `F A` is typed at
+our instance by `J₁`**, at the pure row: `J₁` closes no slot of the empty context, and the pure row
+is tied to every effect context. -/
 theorem der_J₁_ret {Ξ : EffCtx} {e : Expr} {A : VTy} (hcl : closedAt 0 e = true)
-    (h : CDerives LifeCtx.empty [] e (.comp (.ret A))) :
+    (h : CDerivesAt Ξ LifeCtx.empty [] e (.comp (.ret A))) :
     (ourInst (ℍ := ℍ) orowRF Ξ J₁).der [] e
       ((ourInst (ℍ := ℍ) orowRF Ξ J₁).F (orowAlg Ξ).unit (OVTy.ofV A)) := by
   refine ⟨tiedAt_unit J₁ _, .inl ⟨[], by simp, ?_⟩⟩
-  refine ⟨fun _ h => absurd h List.not_mem_nil, OVTy.rFree_ofV A, fun η _ σ _ => ?_⟩
-  show CDerives LifeCtx.empty [] (fillS σ 0 e)
+  refine ⟨fun _ h => absurd h List.not_mem_nil, OVTy.rFree_ofV A, fun η _ _ σ _ => ?_⟩
+  show CDerivesAt Ξ LifeCtx.empty [] (fillS σ 0 e)
     (.comp (CTy.effOf ([] ++ []) (OVTy.den η (OVTy.ofV A))))
   rw [fillS_closed σ e 0 hcl, OVTy.den_ofV]
   exact h

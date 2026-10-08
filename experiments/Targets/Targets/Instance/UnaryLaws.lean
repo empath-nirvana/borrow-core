@@ -4,29 +4,38 @@ import Targets.Instance.CellRuns
 # The Instance — the unary laws (`A.UnaryLaws`, restated by D4) at our instance
 
 **Algebraicity fails as written at `J₁`** (`not_algLaw_J₁`, at the admissible context `ΞA`:
-`not_algLaw_ΞA`).  D4 compares the two sides at a program's data answers; the trace still compares
-each finaliser event `fire D` by the finaliser's code.  The witness `algFireProg`, typed by Core's
-kernel:
+`not_algLaw_ΞA`), with `J₁`'s inner rows tied to the effect context (decision R).  D4 compares the
+two sides at a program's data answers; the trace still compares each finaliser event `fire D` by
+the finaliser's code.  The witness `algAffProg` is typed by Core's kernel with every handler's and
+operation's row tied to the context (`d_algAffProg`):
 
-* a handler of `5` is typed at an `unr` operation (`Eu`), so its clause's continuation `κ` is
-  persistent, and the clause holds `κ` in a finaliser frame (`λ_. (λz. ()) κ`) while it raises
-  `exn` to a handler outside (`holdRaiseCl`);
-* the two sides of the law, `(tick () to x. ret x) to y. ret ()` and
-  `tick () to x. (ret x to y. ret ())`, are caught by that handler with the continuations
-  `□ to x. ret x` then `□ to y. ret ()` (left) and `□ to x. (ret x to y. ret ())` (right);
-* the raise fires the finaliser, and the two runs show `fire ((λz. ()) κ₁)` and
-  `fire ((λz. ()) κ₂)`, which differ as terms (`finE_DL_ne`), at the same data answer `()`.
+* a handler of `2` handles the affine `wait : 1 ↠ 1`; its clause raises `exn` to a handler outside,
+  inside a finaliser frame whose finaliser cancels the clause's continuation `κ` and handles the
+  cancel's row itself, so that the finaliser is at the pure row (`holdCancelCl`:
+  `λ(a, k). raise exn then y. k.resume y unwind (handle_exn (k.cancel) with λ_. ())`);
+* the two sides of the law, `(wait () to x. ret x) to y. ret ()` and
+  `wait () to x. (ret x to y. ret ())`, are caught by that handler with continuations that frame
+  the rest differently;
+* the raise fires the finaliser, and the two runs show `fire D` at finalisers that differ as terms
+  (`finE_D2_ne`), each mentioning the `κ` its side captured, at whatever location the allocation of
+  `κ`'s cell picks (SPEC §25); both answer `()`.
 
-What the witness reads: an inner handler at a resuming `unr` operation (multi-shot, decision 63;
-`J₁`'s inner judgements are not tied to the effect context, TIER1-PLAN "Readings to confirm" 1), a
-finaliser at `F 1` that holds that operation's persistent continuation, and the trace's `fire D`
-carrying `D`'s code.  At a linear or affine continuation no finaliser at `F 1` can hold it: its
-two branches are at the handler's outer row, and a frame inside a clause is unwound only by an
-operation of that row.  Two repairs, the user's: observe a finaliser's start without its code
-(D4's "observationally" read at the trace's events), or restrict `unr` (decision 63: "On friction,
-restrict or remove the unr qualifier").  With `unr` restricted the law is not proved here: a proof
-reads, at every reached finaliser frame, that the finaliser holds no captured continuation, which
-is a run-time typing of configurations (route 8.2).
+The finaliser uses `κ` once, by its cancel branch, as an affine `κ` may be used; the clause's `then`
+branch resumes it.  Option A's `[then]` (the finaliser at `F 1`) admits the finaliser because it
+handles the cancel's raises inside itself.  So neither tying rows (D1, decision R) nor restricting
+`unr` (decision 63; at an admissible context a tied row has no resuming `unr` operation) excludes
+the witness.  The restatement is the user's: observe a finaliser's start without its code (D4 read
+at the trace's events), or keep continuations out of finalisers.
+
+**The witness at an unrestricted continuation is outside the tied kernel.**  `algFireProg`
+(`d_algFireProg`, Core's kernel) handles the name `5` at an `unr` operation where `ΞA` declares a
+linear one: its handled row `R5` is not tied to `ΞA` (`not_rowAt_R5`), a tied `[handle]` of `5`
+carries the tags of a prefix of `ΞA`'s qualifiers of `5`, never `[unr]` (`not_tied_hnd5_unr`), and
+so Core's kernel with its inner rows tied to `ΞA` types `algFireProg` at no context and judgement
+(`not_derAt_algFireProg`), and `J₁` at `ΞA` types it at no type (`not_der_algFireProg_J₁`).  The
+inversion reads the program's two handlers through their `let`s (`derAt_withH`): `[let]`,
+`[let-poly]` and the call-by-value application of the λ-value (`derAt_let`, `derAt_lam`), then
+`[handle]` (`derAt_hnd`).
 
 **The laws at the answering class** (`calm_tailClause`): a tail-resumptive clause
 `λ(a, k). c a to b. k.resume b` whose code `c v` runs quietly to a value resumes `K` in place, so
@@ -46,11 +55,326 @@ open BoCa BoCa.Fig16 BoCa.Fig16.BoLo BoCa.Fig16.LogRel BoCa.Fig16.LogRel.Core
 open BoCa.Fig16.LogRel.Core.EffPrograms
 open BoCa.BoLo (Heap Steps Step1 Head Kont performE raiseE opPayload hndE ubindE hndVal kappa
   clauseAt capTag kappaAt kappaC kappaCBody kappaCell)
+open Targets (CDerivesAt RowAt rowAt_nil rowAt_ofEff_append hndTags_of_rowAt derAt_let derAt_lam
+  derAt_hnd)
 open BoCa.Lifetime (LifeCtx)
 open Targets (RowForm EffCtx orowRF orowAlg HeadChain lookRun lookEnd lookRun_sound closedAt_kappa
   closedAt_plug_iff kont_shift_closed)
 
-/-! ### Algebraicity's witness: a finaliser holding a persistent continuation -/
+/-! ### Typing with the inner rows tied -/
+
+theorem rowLe_nil (S : Row) : RowLe [] S := fun _ _ _ h => by simp [Row.find] at h
+
+/-- `exn : 1 ↠ 0` at the name `1`: the handlers' outer row in the witnesses below. -/
+abbrev Sx : Row := Row.ofEff 1 Eab 0 ++ []
+
+/-- `withH` in Core's kernel with its inner rows tied: one clause and the identity return clause,
+the handled row tied to `Ξ`. -/
+theorem d_withHAt {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {S : Row} {A : VTy} {q : Qual}
+    {B C : VTy} {n : UInt32} {cl e : Expr} (hAt : RowAt Ξ (Row.ofEff n [(q, B, C)] 0 ++ S))
+    (hn0 : n ≠ 0) (hnS : ∀ o ∈ S, o.n ≠ n) (hΓ : Ctx.Dead Γ)
+    (hcl : CDerivesAt Ξ Δ Γ cl (.val (clauseTy S A (q, B, C))))
+    (he : CDerivesAt Ξ Δ (⟨retTy S A A, false⟩ :: ⟨clausesTy S A [(q, B, C)], false⟩ :: Γ) e
+      (.comp (CTy.effOf (Row.ofEff n [(q, B, C)] 0 ++ S) A))) :
+    CDerivesAt Ξ Δ Γ (withH n q cl e) (.comp (CTy.effOf S A)) := by
+  refine .bind (deadSplit hΓ) (.ret (.tensorI (deadSplit hΓ) hcl (.unitI hΓ.toP))) ?_
+  refine .bind (A := retTy S A A) (.right (deadSplit hΓ)) (.ret ?_) ?_
+  · exact .bangThunkV (dead_noLive (Ctx.Dead.cons hΓ)) rfl
+      (.lam (.effSub (S := []) (rowLe_nil _) (.ret (.var (.here (Ctx.Dead.cons hΓ).toP)))))
+  exact .effHandle (E := [(q, B, C)]) hAt (.left (.left (deadSplit hΓ)))
+    (.left (.right (deadSplit hΓ))) (.here (Ctx.Dead.cons hΓ).toP) (.there (.here hΓ.toP)) hn0
+    hnS (by simp) he
+
+/-- `λ_. ()`, the clause at `exn`, with its inner rows tied: it performs nothing. -/
+theorem d_abortClAt {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {S : Row} (hΓ : Ctx.Dead Γ) :
+    CDerivesAt Ξ Δ Γ abortCl (.val (clauseTy S .unit (.aff, .unit, .zero))) :=
+  .bangThunkV (dead_noLive hΓ) rfl
+    (.lam (.effSub (S := []) (rowLe_nil _) (.ret (.unitI (.drop rfl hΓ.toP)))))
+
+/-! ### Algebraicity's witness: a finaliser holding an affine continuation -/
+
+/-- `λ(a, k). raise (1, 0, ()) then y. k.resume y unwind (handle_1 (k (inj₂ ())) with (λ_. ()))`:
+a clause that raises `exn` inside a finaliser frame whose finaliser cancels `k`, handling the
+cancel's raises of `exn` itself. -/
+def holdCancelCl : Expr :=
+  .val (.lam (.letpair (.var 0)
+    (thenE (.app (.app (.var 1) (.val (Val.inj₁ Val.unit))) (.var 0))
+      (withH 1 .aff abortCl (.app (.var 3) (.val (Val.inj₂ Val.unit))))
+      (raiseE (opArgE 1 0 (.val .unit))))))
+
+/-- Algebraicity's left side at the name `2`: `(wait () to x. ret x) to y. ret ()`. -/
+def algL2 : Expr := bindE (bindE (performE (opArgE 2 0 (.val .unit))) (.var 0)) (.val .unit)
+
+/-- Its right side: `wait () to x. (ret x to y. ret ())`. -/
+def algR2 : Expr := bindE (performE (opArgE 2 0 (.val .unit))) (bindE (.var 0) (.val .unit))
+
+/-- **The witness**: `handle_1 (handle_2 algL2 with holdCancelCl) with (λ_. ())`. -/
+def algAffProg : Expr := withH 1 .aff abortCl (withH 2 .aff holdCancelCl algL2)
+
+/-- `wait : 1 ↠ 1`, affine, at the name `2`. -/
+abbrev Ew : List (Qual × VTy × VTy) := [(.aff, .unit, .unit)]
+
+/-- The row the handler of `2` handles. -/
+abbrev R2 : Row := Row.ofEff 2 Ew 0 ++ Sx
+
+/-- The clause's continuation's type: `U((1 ⊸ F_Sx 1) & F_Sx 1)`, affine. -/
+abbrev kT : VTy := kTy Sx .unit .aff .unit
+
+section AffTyping
+variable {Ξ : EffCtx}
+
+/-- **The finaliser**: `handle_1 (k (inj₂ ())) with (λ_. ())`, `k` at index `1` under the
+finaliser's dead binder.  The cancel's row `Sx` is handled inside it, so it is at the pure row. -/
+theorem d_holdD (h1 : Ξ 1 = Eab) {Δ : LifeCtx} {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) {T : VTy} :
+    CDerivesAt Ξ Δ (⟨.unit, false⟩ :: ⟨kT, true⟩ :: ⟨.unit, false⟩ :: ⟨T, false⟩ :: Γ)
+      (withH 1 .aff abortCl (.app (.var 3) (.val (Val.inj₂ Val.unit)))) (.comp (.ret .unit)) := by
+  have hk : Ctx.Dead (kill (⟨.unit, false⟩ :: ⟨kT, true⟩ :: ⟨.unit, false⟩ :: ⟨T, false⟩ :: Γ)) :=
+    kill_dead _
+  refine .bind (splitP_kill_left _) (.ret (.tensorI (deadSplit hk) (d_abortClAt (S := []) hk)
+    (.unitI hk.toP))) ?_
+  refine .bind (A := retTy [] .unit .unit) (.right (splitP_kill_left _)) (.ret ?_) ?_
+  · exact .bangThunkV (dead_noLive (Ctx.Dead.cons hk)) rfl
+      (.lam (.effSub (S := []) (rowLe_nil _) (.ret (.var (.here (Ctx.Dead.cons hk).toP)))))
+  refine .effHandle (E := Eab) (S := []) (A := .unit) (R := .unit)
+    (rowAt_ofEff_append h1 (by decide) (by simp) (rowAt_nil Ξ))
+    (.left (.left (splitP_kill_left _))) (.left (.right (deadSplit hk)))
+    (.here (Ctx.Dead.cons hk).toP) (.there (.here hk.toP)) (by decide) (by simp) (by simp) ?_
+  exact .proj₂ (.force (C := .amp (.arr .unit (CTy.effOf Sx .unit)) (CTy.effOf Sx .unit))
+    (.there (.there (.there (.here (.cons (.cons hΓ.toP)))))))
+
+/-- **The clause**, at the affine `1 ↠ 1` of a handler answering `F_Sx 1`: its raise at the row
+`Sx`, tied; the `then` branch resumes `k`, the finaliser cancels it. -/
+theorem d_holdCancelCl (h1 : Ξ 1 = Eab) {Δ : LifeCtx} {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
+    CDerivesAt Ξ Δ Γ holdCancelCl (.val (clauseTy Sx .unit (.aff, .unit, .unit))) := by
+  refine .bangThunkV (dead_noLive hΓ) rfl (.lam ?_)
+  refine .tensorE (.left (deadSplit hΓ)) (.var (.here hΓ.toP)) ?_
+  refine .effThen (A := .unit) (.right (.left (.dead (deadSplit hΓ)))) ?_ ?_
+    (fun h => absurd h (by simp [Row.Unr, Row.ofEff])) ?_ ?_ (d_holdD h1 hΓ)
+  · intro o ho; simp [Row.ofEff] at ho; subst ho; decide
+  · simp [Row.Uniq, Row.ofEff]
+  · exact .effRaise (o := ⟨1, 0, .aff, .unit, .zero⟩)
+      (rowAt_ofEff_append h1 (by decide) (by simp) (rowAt_nil Ξ)) rfl rfl .unit
+      (.unitI (.cons (.drop rfl (.cons hΓ.toP))))
+  · exact .app (.right (.left (.dead (.dead (deadSplit hΓ)))))
+      (.proj₁ (.force (C := .amp (.arr .unit (CTy.effOf Sx .unit)) (CTy.effOf Sx .unit))
+        (.there (.here (.cons (.cons hΓ.toP))))))
+      (.here (.cons (.cons (.cons hΓ.toP))))
+
+theorem rowAt_R2 (h1 : Ξ 1 = Eab) (h2 : Ξ 2 = Ew) : RowAt Ξ R2 :=
+  rowAt_ofEff_append h2 (by decide) (by simp)
+    (rowAt_ofEff_append h1 (by decide) (by simp) (rowAt_nil Ξ))
+
+theorem d_algL2 (h1 : Ξ 1 = Eab) (h2 : Ξ 2 = Ew) {Δ : LifeCtx} {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
+    CDerivesAt Ξ Δ Γ algL2 (.comp (CTy.effOf R2 .unit)) := by
+  refine .effLet (A := .unit) (deadSplit hΓ) (fun _ => Ctx.Dead.drops hΓ) (fun _ => dead_noLive hΓ)
+    ?_ ?_
+  · refine .effLet (A := .unit) (deadSplit hΓ) (fun _ => Ctx.Dead.drops hΓ)
+      (fun _ => dead_noLive hΓ) (.effPerform (o := ⟨2, 0, .aff, .unit, .unit⟩) (rowAt_R2 h1 h2)
+        rfl rfl (.unitI hΓ.toP)) ?_
+    exact .effSub (S := []) (rowLe_nil _) (.ret (.var (.here hΓ.toP)))
+  · exact .effSub (S := []) (rowLe_nil _) (.ret (.unitI (.drop rfl hΓ.toP)))
+
+/-- **The witness is typed by Core's kernel with its inner rows tied**, at `F 1`, at every effect
+context declaring `exn` at `1` and `wait` at `2`. -/
+theorem d_algAffProg (h1 : Ξ 1 = Eab) (h2 : Ξ 2 = Ew) :
+    CDerivesAt Ξ LifeCtx.empty [] algAffProg (.comp (.ret .unit)) := by
+  refine d_withHAt (S := []) (rowAt_ofEff_append h1 (by decide) (by simp) (rowAt_nil Ξ))
+    (by decide) (by simp) .nil (d_abortClAt (S := []) .nil) ?_
+  exact d_withHAt (S := Sx) (rowAt_R2 h1 h2) (by decide) (by simp [Row.ofEff]) (by cdead)
+    (d_holdCancelCl h1 (by cdead)) (d_algL2 h1 h2 (by cdead))
+
+end AffTyping
+
+/-! ### The witness's runs -/
+
+/-- The two handler frames, after the program's bindings. -/
+def algAffK₀ : Kont :=
+  (handleK 1 (qualsVal [.aff]).1 (.lam (.var 0)) [abortCl]).comp
+    (handleK 2 (qualsVal [.aff]).1 (.lam (.var 0)) [holdCancelCl])
+
+theorem algAff_c : lookEnd 4 algAffProg = algAffK₀.plug algL2 := by rfl
+
+def H2E : Expr := hndValE 2 (qualsVal [.aff]).1 (.lam (.var 0)) [holdCancelCl]
+
+theorem isVal_H2E : IsVal H2E :=
+  .pair .prim (.pair (qualsVal [.aff]).2 (.pair .lam (.pair .lam .unit)))
+
+/-- The handler value of `2`. -/
+def H2V : Val := ⟨H2E, isVal_H2E⟩
+
+/-- What lies between the handler of `2` and the operation, on each side. -/
+def KL2 : Kont := .appR (.lam .unit) (.appR (.lam (.var 0)) .hole)
+
+def KR2 : Kont := .appR (.lam (.app (.lam .unit) (.var 0))) .hole
+
+def clV : Val := ⟨holdCancelCl, .lam⟩
+
+def K1₀ : Kont := handleK 1 (qualsVal [.aff]).1 (.lam (.var 0)) [abortCl]
+
+def raise1 : Expr := raiseE (opArgE 1 0 (.val .unit))
+
+theorem not_isVal_raise1 : ¬ IsVal raise1 := fun h =>
+  plug_raise_ne_val .hole (Val.pair (Val.i32 1) (Val.pair (Val.i32 0) Val.unit)) ⟨_, h⟩ rfl
+
+/-- The context of the allocation of `κ`'s cell after the catch, on the side whose `κ` holds `K`. -/
+def KA (K : Kont) : Kont :=
+  K1₀.comp (.appR (.val clV) (.pairR Val.unit
+    (.appR (.val (Val.lam (kappaCBody true 2 H2V K))) .hole)))
+
+/-- The context of the release of `κ`'s cell, on the side whose `κ` holds `K`: the outer handler of
+`1`, the raise after the finaliser, the finaliser's handler of `1`, and `κ`'s cancel after the
+release. -/
+def KF (K : Kont) : Kont :=
+  K1₀.comp ((Kont.seq .hole raise1).comp (K1₀.comp (Kont.seq .hole
+    (BoCa.BoLo.ccatchE (hndE H2V (K.plug (raiseE (.val (BoCa.BoLo.cancelVal (2 :: K.hndNames)
+      none)))))))))
+
+/-- The finaliser each side's frame holds, at the cell `ℓ`:
+`λ_. handle_1 (κ (inj₂ ())) with (λ_. ())`, `κ` the side's continuation. -/
+def DV (K : Kont) (ℓ : Loc) : Val :=
+  Val.lam (withH 1 .aff abortCl (.app (kappaC true ℓ 2 H2V K) (.val (Val.inj₂ Val.unit))))
+
+/-- The `then` branch each side's frame holds, at the cell `ℓ`: `λy. κ (inj₁ ()) y`. -/
+def NV (K : Kont) (ℓ : Loc) : Val :=
+  Val.lam (.app (.app (kappaC true ℓ 2 H2V K) (.val (Val.inj₁ Val.unit))) (.var 0))
+
+/-- The catch, on each side: the next step allocates `κ`'s cell. -/
+theorem algL2_hop : lookEnd 1 (algAffK₀.plug algL2) = (KA KL2).plug (allocE Val.unit) := by rfl
+
+theorem algR2_hop : lookEnd 1 (algAffK₀.plug algR2) = (KA KR2).plug (allocE Val.unit) := by rfl
+
+/-- From the cell `ℓ`'s allocation, the clause raises, the finaliser fires and cancels `κ`, up to
+the release of `ℓ`. -/
+theorem algL2_free (ℓ : Loc) : lookEnd 10 ((KA KL2).plug (.val (Val.loc ℓ))) =
+    (KF KL2).plug (BoCa.BoLo.freeE (.val (Val.loc ℓ))) := by rfl
+
+theorem algR2_free (ℓ : Loc) : lookEnd 10 ((KA KR2).plug (.val (Val.loc ℓ))) =
+    (KF KR2).plug (BoCa.BoLo.freeE (.val (Val.loc ℓ))) := by rfl
+
+/-- After the release, the cancel ends, the finaliser ends, the raise reaches the outer handler and
+the program answers `()`. -/
+theorem algL2_end : lookEnd 7 ((KF KL2).plug (.val Val.unit)) = .unit := by rfl
+
+/-- Each side's run from the cell's allocation, split at its one finaliser step. -/
+theorem algL2_q (ℓ : Loc) : lookRun 10 ((KA KL2).plug (.val (Val.loc ℓ))) =
+    (lookRun 10 ((KA KL2).plug (.val (Val.loc ℓ)))).take 3 ++
+      (K1₀, ubindE (Val.pair (NV KL2 ℓ) (DV KL2 ℓ)) raise1,
+        .seq (.app (.val (DV KL2 ℓ)) (.val .unit)) raise1) ::
+      (lookRun 10 ((KA KL2).plug (.val (Val.loc ℓ)))).drop 4 := by rfl
+
+theorem algR2_q (ℓ : Loc) : lookRun 10 ((KA KR2).plug (.val (Val.loc ℓ))) =
+    (lookRun 10 ((KA KR2).plug (.val (Val.loc ℓ)))).take 3 ++
+      (K1₀, ubindE (Val.pair (NV KR2 ℓ) (DV KR2 ℓ)) raise1,
+        .seq (.app (.val (DV KR2 ℓ)) (.val .unit)) raise1) ::
+      (lookRun 10 ((KA KR2).plug (.val (Val.loc ℓ)))).drop 4 := by rfl
+
+/-- What tells the two finalisers apart: the right side's frame `□ to x. (ret x to y. ret ())`,
+which the left side's continuation does not hold. -/
+def algPat : Expr → Bool
+  | .lam (.app (.lam .unit) (.var 0)) => true
+  | _ => false
+
+theorem finE_DL2_pat (ℓ : Loc) : occursIn algPat (finE (DV KL2 ℓ).1) = false := by rfl
+
+theorem finE_DR2_pat (ℓ : Loc) : occursIn algPat (finE (DV KR2 ℓ).1) = true := by rfl
+
+/-- **The two finalisers differ as terms**, at every pair of cells. -/
+theorem finE_D2_ne (ℓ ℓ' : Loc) : finE (DV KL2 ℓ).1 ≠ finE (DV KR2 ℓ').1 := fun h => by
+  have := finE_DL2_pat ℓ; rw [h, finE_DR2_pat] at this; cases this
+
+section AlgW
+variable (Ξ : EffCtx)
+
+local notation "𝕁" => ourInst (ℍ := ℍ) orowRF Ξ J₁
+
+/-- The label of the name `2`, where `Ξ` declares `wait : 1 ↠ 1` affine. -/
+def labWait (h2 : Ξ 2 = Ew) : (orowAlg Ξ).Lab :=
+  ⟨2, by decide, by rw [h2]; simp, by rw [h2]; simp⟩
+
+theorem obs_hopL (s : (𝕁).R₀.St) : (𝕁).obs (chainPath (𝕁).R₀ Adequacy.emptyMem s
+    (lookRun 1 (algAffK₀.plug algL2))) = [] := obs_chainPath (J := J₁) _ _ _ _ rfl
+
+theorem obs_hopR (s : (𝕁).R₀.St) : (𝕁).obs (chainPath (𝕁).R₀ Adequacy.emptyMem s
+    (lookRun 1 (algAffK₀.plug algR2))) = [] := obs_chainPath (J := J₁) _ _ _ _ rfl
+
+theorem obs_endL (s : (𝕁).R₀.St) : (𝕁).obs (chainPath (𝕁).R₀ Adequacy.emptyMem s
+    (lookRun 7 ((KF KL2).plug (.val Val.unit)))) = [] := obs_chainPath (J := J₁) _ _ _ _ rfl
+
+theorem obs_midL (μ : Heap) (s : (𝕁).R₀.St) (ℓ : Loc) : (𝕁).obs (chainPath (𝕁).R₀ μ s
+    (lookRun 10 ((KA KL2).plug (.val (Val.loc ℓ))))) = [.fire (finE (DV KL2 ℓ).1)] := by
+  rw [algL2_q ℓ, obs_chainPath_one _ _ _ _ _ _ rfl rfl]
+  simp only
+  erw [labelOf_fire not_isVal_raise1]
+  rfl
+
+theorem obs_midR (μ : Heap) (s : (𝕁).R₀.St) (ℓ : Loc) : (𝕁).obs (chainPath (𝕁).R₀ μ s
+    (lookRun 10 ((KA KR2).plug (.val (Val.loc ℓ))))) = [.fire (finE (DV KR2 ℓ).1)] := by
+  rw [algR2_q ℓ, obs_chainPath_one _ _ _ _ _ _ rfl rfl]
+  simp only
+  erw [labelOf_fire not_isVal_raise1]
+  rfl
+
+/-- **Algebraicity, as restated by D4, fails at `J₁`**, its inner rows tied to the effect context.
+`algAffProg`, typed by Core's kernel at `F 1` with every handler's and operation's row tied to `Ξ`,
+reaches the law's left side under its two handlers.  The left side's complete run allocates `κ`'s
+cell, fires `λ_. handle_1 (κ (inj₂ ())) with (λ_. ())` and answers `()`; every complete run of the
+right side fires the finaliser that mentions its own `κ`, which holds the frame
+`□ to x. (ret x to y. ret ())`, at whatever cell the allocation picks. -/
+theorem not_algLaw_J₁ (h1 : Ξ 1 = Eab) (h2 : Ξ 2 = Ew) : ¬ (𝕁).AlgLaw := by
+  intro hA
+  have hRA := hA (labWait Ξ h2) 0 (𝕁).unitV ⟨OVTy.ofV .unit, OVTy.ofV .unit, .affine⟩ (.var 0)
+    (.val .unit) (by show ((Ξ 2).map _)[0]? = _; rw [h2]; rfl) (by intro h; cases h)
+  have hreach : (𝕁).RReach (𝕁).R₀ ((𝕁).rinit (𝕁).R₀ algAffProg)
+      ((Adequacy.emptyMem, lookEnd 4 algAffProg), ()) :=
+    rreach_of_chain (𝕁).R₀ (lookRun_sound (ℍ := ℍ) 4 algAffProg)
+  have hder : (𝕁).der [] algAffProg ((𝕁).F (orowAlg Ξ).unit (OVTy.ofV .unit)) :=
+    der_J₁_ret (by decide) (d_algAffProg h1 h2)
+  have hfr : ∃ ℓ, (Adequacy.emptyMem : Heap) ℓ = none := ⟨0, rfl⟩
+  -- the left side's run: the catch, the cell at `0`, the finaliser, the release, the answer
+  have hopL := lookRun_sound (ℍ := ℍ) 1 (algAffK₀.plug algL2)
+  rw [algL2_hop] at hopL
+  have midL := lookRun_sound (ℍ := ℍ) 10 ((KA KL2).plug (.val (Val.loc 0)))
+  rw [algL2_free] at midL
+  have endL := lookRun_sound (ℍ := ℍ) 7 ((KF KL2).plug (.val Val.unit))
+  rw [algL2_end] at endL
+  have hfree : Head (ℍ := ℍ) (Adequacy.emptyMem.upd 0 Val.unit)
+      (BoCa.BoLo.freeE (.val (Val.loc 0))) ((Adequacy.emptyMem.upd 0 Val.unit).del 0)
+      (.val Val.unit) :=
+    Head.free _ 0 Val.unit (Heap.upd_same _ _ _)
+  have hL : (𝕁).ObsFrom (𝕁).R₀ ((Adequacy.emptyMem, algAffK₀.plug algL2), ()) (𝕁).unitV
+      [.fire (finE (DV KL2 0).1)] := by
+    refine (obsFrom_chain_obs_iff (𝕁).R₀ hopL _ _).2 ⟨[.fire (finE (DV KL2 0).1)], ?_, ?_⟩
+    · erw [obs_hopL]; rfl
+    refine (obsFrom_alloc_ex_iff (𝕁).R₀ (KA KL2) Val.unit hfr _ _).2 ⟨0, rfl, ?_⟩
+    refine (obsFrom_chain_obs_iff (𝕁).R₀ midL _ _).2 ⟨[], ?_, ?_⟩
+    · erw [obs_midL]; rfl
+    refine (obsFrom_mstep_iff (𝕁).R₀ hfree rfl (by rw [labelOf_tau_of rfl]; rfl) _ _).2 ?_
+    rw [del_upd_fresh rfl]
+    have := obsFrom_of_chain (J := J₁) (Ξ := Ξ) (𝕁).R₀ (μ := Adequacy.emptyMem) (s := ()) endL
+      .unit
+    erw [obs_endL] at this
+    exact this
+  have h := (hRA (𝕁).R₀ r₀_respects algAffProg _ (OVTy.ofV .unit)
+    ((Adequacy.emptyMem, lookEnd 4 algAffProg), ()) algAffK₀ .unit hder hreach algAff_c _ _).mp
+    (by rw [algAff_c]; exact hL)
+  -- the right side's runs: the catch, a cell at some `ℓ`, then the finaliser's event
+  have hopR := lookRun_sound (ℍ := ℍ) 1 (algAffK₀.plug algR2)
+  rw [algR2_hop] at hopR
+  obtain ⟨tr₁, htr₁, h₁⟩ := (obsFrom_chain_obs_iff (𝕁).R₀ hopR _ _).1 h
+  obtain ⟨ℓ, -, h₂⟩ := (obsFrom_alloc_ex_iff (𝕁).R₀ (KA KR2) Val.unit hfr _ _).1 h₁
+  have midR := lookRun_sound (ℍ := ℍ) 10 ((KA KR2).plug (.val (Val.loc ℓ)))
+  rw [algR2_free] at midR
+  obtain ⟨tr₂, htr₂, -⟩ := (obsFrom_chain_obs_iff (𝕁).R₀ midR _ _).1 h₂
+  erw [obs_midR] at htr₂
+  erw [obs_hopR, List.nil_append] at htr₁
+  rw [← htr₁] at htr₂
+  have := List.cons.inj htr₂
+  injection this.1 with h'
+  exact finE_D2_ne 0 ℓ h'
+
+end AlgW
+
+/-! ### The witness at an unrestricted continuation, outside the tied kernel -/
 
 /-- `λ(a, k). raise (1, 0, ()) then y. () unwind ((λz. ()) k)`: a clause that raises `exn` inside
 a finaliser frame whose finaliser holds `k`. -/
@@ -61,21 +385,14 @@ def holdRaiseCl : Expr :=
 /-- Algebraicity's left side at the name `5`: `(tick () to x. ret x) to y. ret ()`. -/
 def algL5 : Expr := bindE (bindE (performE (opArgE 5 0 (.val .unit))) (.var 0)) (.val .unit)
 
-/-- Its right side: `tick () to x. (ret x to y. ret ())`. -/
-def algR5 : Expr := bindE (performE (opArgE 5 0 (.val .unit))) (bindE (.var 0) (.val .unit))
-
-/-- **The witness**: `handle_1 (handle_5 algL5 with holdRaiseCl) with (λ_. ())`. -/
+/-- `handle_1 (handle_5 algL5 with holdRaiseCl) with (λ_. ())`. -/
 def algFireProg : Expr := withH 1 .aff abortCl (withH 5 .unr holdRaiseCl algL5)
-
-/-- `exn : 1 ↠ 0` at the name `1`, the handler of `5`'s outer row. -/
-abbrev Sx : Row := Row.ofEff 1 Eab 0 ++ []
 
 /-- An `unr` operation `1 ↠ 1`: the handler of `5` reads `5`'s operation so. -/
 abbrev Eu : List (Qual × VTy × VTy) := [(.unr, .unit, .unit)]
 
+/-- The row `algFireProg`'s handler of `5` handles. -/
 abbrev R5 : Row := Row.ofEff 5 Eu 0 ++ Sx
-
-theorem rowLe_nil (S : Row) : RowLe [] S := fun _ _ _ h => by simp [Row.find] at h
 
 theorem d_holdRaiseCl {Δ : LifeCtx} {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
     CDerives Δ Γ holdRaiseCl (.val (clauseTy Sx .unit (.unr, .unit, .unit))) := by
@@ -118,133 +435,84 @@ theorem d_withH {Δ : LifeCtx} {Γ : Ctx VTy} {S : Row} {A : VTy} {q : Qual} {B 
     (.left (.right (deadSplit hΓ))) (.here (Ctx.Dead.cons hΓ).toP) (.there (.here hΓ.toP)) hn0
     hnS (by simp) he
 
-/-- **The witness is typed by Core's kernel**, at `F 1`. -/
+/-- **Core's kernel types `algFireProg`**, at `F 1`, with its handler of `5` at `R5`. -/
 theorem d_algFireProg : CDerives LifeCtx.empty [] algFireProg (.comp (.ret .unit)) := by
   refine d_withH (S := []) (by decide) (by simp) .nil (d_abortClNU nu_nil .nil).toCDerives ?_
   exact d_withH (S := Sx) (by decide) (by simp [Row.ofEff]) (by cdead) (d_holdRaiseCl (by cdead))
     (d_algL5 (by cdead))
 
-/-! ### The witness's runs -/
+/-- **`R5` is not tied to `ΞA`**: it finds the name `5`'s operation at `unr`, where `ΞA` declares
+`tick : 1 ↠ 1` linear. -/
+theorem not_rowAt_R5 : ¬ RowAt ΞA R5 := by
+  intro h
+  obtain ⟨-, -, hg⟩ := h 5 0 ⟨5, 0, .unr, .unit, .unit⟩ rfl
+  simp [ΞA] at hg
 
-/-- The two handler frames, after the program's bindings. -/
-def algK₀ : Kont :=
-  (handleK 1 (qualsVal [.aff]).1 (.lam (.var 0)) [abortCl]).comp
-    (handleK 5 (qualsVal [.unr]).1 (.lam (.var 0)) [holdRaiseCl])
+/-- **A tied derivation of `withH n q cl e`**, `e` closed: the handler's tag `[q]` is a prefix of
+`Ξ`'s qualifiers of `n`, and the handled body `e` is typed.  The two `let`s are inverted
+(`derAt_let`; through the λ-value at a call-by-value application, `derAt_lam`; at `[let-poly]`, the
+handler with the return clause in place), then the handler (`derAt_hnd`). -/
+theorem derAt_withH {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {n : UInt32} {q : Qual}
+    {cl e : Expr} {j : Jdg} (hcl : closedAt 0 e = true) (h : CDerivesAt Ξ Δ Γ (withH n q cl e) j) :
+    [q] <+: (Ξ n).map Prod.fst ∧
+      ∃ (Δ' : LifeCtx) (Γ' : Ctx VTy) (C : CTy), CDerivesAt Ξ Δ' Γ' e (.comp C) := by
+  -- the handler, at any lifetime context
+  have hnd : ∀ {Δ' : LifeCtx} {Γ' : Ctx VTy} {C : CTy} (H : Expr),
+      CDerivesAt Ξ Δ' Γ' (.app (.app (.prim .hnd) (.pair (.prim (.lit (.i32 n)))
+        (.pair (qualsVal [q]).1 H))) e) (.comp C) →
+      [q] <+: (Ξ n).map Prod.fst ∧
+        ∃ (Δ' : LifeCtx) (Γ' : Ctx VTy) (C : CTy), CDerivesAt Ξ Δ' Γ' e (.comp C) := by
+    intro Δ' Γ' C H hH
+    obtain ⟨hp, Γ'', C', he⟩ := derAt_hnd hH n _ H e rfl
+    exact ⟨hp [q] rfl, Δ', Γ'', C', he⟩
+  -- the inner `let` of the return clause, at any lifetime context
+  have inner : ∀ {Δ' : LifeCtx} {Γ' : Ctx VTy} {C : CTy},
+      CDerivesAt Ξ Δ' Γ' (bindE (.val (.lam (.var 0))) (hndTerm n [q] 0 1 e)) (.comp C) →
+      [q] <+: (Ξ n).map Prod.fst ∧
+        ∃ (Δ' : LifeCtx) (Γ' : Ctx VTy) (C : CTy), CDerivesAt Ξ Δ' Γ' e (.comp C) := by
+    intro Δ' Γ' C h₁
+    rcases derAt_let h₁ _ _ rfl with ⟨Γ₂, C₂, h₂⟩ | ⟨b, hb, Γ₂, C₂, h₂⟩ | ⟨Γ₂, j₂, h₂⟩
+    · exact hnd _ h₂
+    · simp only [Expr.val, Val.lam, Expr.lam.injEq] at hb
+      subst hb
+      rw [hndTerm_eq, subst_hndExpr, shift_hndExpr, subst_closedAt e _ hcl (le_refl _),
+        shift_closedAt e 1 hcl (le_refl _)] at h₂
+      exact hnd _ h₂
+    · obtain ⟨Δ₃, Γ₃, C₃, h₃⟩ := derAt_lam h₂ _ _ _ rfl rfl
+      exact hnd _ h₃
+  rcases derAt_let h _ _ rfl with ⟨Γ₁, C₁, h₁⟩ | ⟨b, hb, -⟩ | ⟨Γ₁, j₁, h₁⟩
+  · exact inner h₁
+  · simp [Expr.val] at hb
+  · obtain ⟨Δ₂, Γ₂, C₂, h₂⟩ := derAt_lam h₁ _ _ _ rfl rfl
+    exact inner h₂
 
-theorem alg_c : lookEnd 4 algFireProg = algK₀.plug algL5 := by rfl
+/-- **`algFireProg` has no derivation in Core's kernel with its inner rows tied to `ΞA`**: its inner
+handler of `5` carries the tag `unr`, and a tied handler of `5` carries a prefix of `ΞA`'s
+`[lin]`. -/
+theorem not_derAt_algFireProg {Δ : LifeCtx} {Γ : Ctx VTy} {j : Jdg} :
+    ¬ CDerivesAt ΞA Δ Γ algFireProg j := by
+  intro h
+  obtain ⟨-, Δ', Γ', C, h₁⟩ := derAt_withH (n := 1) (q := .aff) (cl := abortCl) (by rfl) h
+  obtain ⟨hp, -⟩ := derAt_withH (n := 5) (q := .unr) (cl := holdRaiseCl) (by rfl) h₁
+  rw [show (ΞA 5).map Prod.fst = [.lin] from rfl] at hp
+  exact absurd (List.cons_prefix_cons.1 hp).1 (by decide)
 
-def H5E : Expr := hndValE 5 (qualsVal [.unr]).1 (.lam (.var 0)) [holdRaiseCl]
+/-- **`J₁` at `ΞA` types `algFireProg` at no type.** -/
+theorem not_der_algFireProg_J₁ (C : OCTy) :
+    ¬ (ourInst (ℍ := ℍ) orowRF ΞA J₁).der [] algFireProg C := by
+  rintro ⟨-, ⟨Θ, hΘ, hd⟩ | ⟨-, M, he, -⟩⟩
+  · exact not_derAt_algFireProg (coreClosedAt_J₁ ΞA hΘ hd)
+  · simp [algFireProg, withH, bindE, driveE, driveMark] at he
 
-theorem isVal_H5E : IsVal H5E := .pair .prim (.pair (qualsVal [.unr]).2 (.pair .lam (.pair .lam .unit)))
-
-/-- What lies between the handler of `5` and the operation, on each side. -/
-def KL5 : Kont := .appR (.lam .unit) (.appR (.lam (.var 0)) .hole)
-
-def KR5 : Kont := .appR (.lam (.app (.lam .unit) (.var 0))) .hole
-
-/-- The finaliser each side's frame holds: `λ_. (λz. ()) κ`, `κ` the side's continuation. -/
-def DL5 : Val := Val.lam (bindE (kappa 5 ⟨H5E, isVal_H5E⟩ KL5) (.val .unit))
-
-def DR5 : Val := Val.lam (bindE (kappa 5 ⟨H5E, isVal_H5E⟩ KR5) (.val .unit))
-
-def raise1 : Expr := raiseE (opArgE 1 0 (.val .unit))
-
-def K1₀ : Kont := handleK 1 (qualsVal [.aff]).1 (.lam (.var 0)) [abortCl]
-
-/-- Each side's run, split at its one finaliser step. -/
-theorem algL_q : lookRun 9 (algK₀.plug algL5) =
-    (lookRun 9 (algK₀.plug algL5)).take 3 ++
-      (K1₀, ubindE (Val.pair (Val.lam (.val .unit)) DL5) raise1,
-        .seq (.app (.val DL5) (.val .unit)) raise1) :: (lookRun 9 (algK₀.plug algL5)).drop 4 := by
-  rfl
-
-theorem algR_q : lookRun 9 (algK₀.plug algR5) =
-    (lookRun 9 (algK₀.plug algR5)).take 3 ++
-      (K1₀, ubindE (Val.pair (Val.lam (.val .unit)) DR5) raise1,
-        .seq (.app (.val DR5) (.val .unit)) raise1) :: (lookRun 9 (algK₀.plug algR5)).drop 4 := by
-  rfl
-
-theorem algL_end : lookEnd 9 (algK₀.plug algL5) = .unit := by rfl
-
-theorem algR_end : lookEnd 9 (algK₀.plug algR5) = .unit := by rfl
-
-theorem algL_chain : HeadChain (ℍ := ℍ) (algK₀.plug algL5) (lookRun 9 (algK₀.plug algL5)) .unit := by
-  have := lookRun_sound (ℍ := ℍ) 9 (algK₀.plug algL5)
-  rwa [algL_end] at this
-
-theorem algR_chain : HeadChain (ℍ := ℍ) (algK₀.plug algR5) (lookRun 9 (algK₀.plug algR5)) .unit := by
-  have := lookRun_sound (ℍ := ℍ) 9 (algK₀.plug algR5)
-  rwa [algR_end] at this
-
-/-- What tells the two finalisers apart: the right side's frame `□ to x. (ret x to y. ret ())`,
-which the left side's continuation does not hold. -/
-def algPat5 : Expr → Bool
-  | .lam (.app (.lam .unit) (.var 0)) => true
-  | _ => false
-
-theorem finE_DL_pat : occursIn algPat5 (finE DL5.1) = false := by decide
-
-theorem finE_DR_pat : occursIn algPat5 (finE DR5.1) = true := by decide
-
-/-- **The two finalisers differ as terms.** -/
-theorem finE_DL_ne : finE DL5.1 ≠ finE DR5.1 := fun h => by
-  have := finE_DL_pat; rw [h, finE_DR_pat] at this; cases this
-
-theorem not_isVal_raise1 : ¬ IsVal raise1 := fun h =>
-  plug_raise_ne_val .hole (Val.pair (Val.i32 1) (Val.pair (Val.i32 0) Val.unit)) ⟨_, h⟩ rfl
-
-section AlgW
-variable (Ξ : EffCtx)
-
-/-- The label of the name `5`, where `Ξ` declares `tick : 1 ↠ 1` there. -/
-def lab5 (h5 : Ξ 5 = [(.lin, .unit, .unit)]) : (orowAlg Ξ).Lab :=
-  ⟨5, by decide, by rw [h5]; simp, by rw [h5]; simp⟩
-
-theorem obs_algL (μ : Heap) (s : (ourInst (ℍ := ℍ) orowRF Ξ J₁).R₀.St) :
-    (ourInst (ℍ := ℍ) orowRF Ξ J₁).obs (chainPath (ourInst (ℍ := ℍ) orowRF Ξ J₁).R₀ μ s
-      (lookRun 9 (algK₀.plug algL5))) = [.fire (finE DL5.1)] := by
-  rw [algL_q, obs_chainPath_one _ _ _ _ _ _ (by decide) (by decide)]
-  simp only
-  rw [labelOf_fire not_isVal_raise1]
-  rfl
-
-theorem obs_algR (μ : Heap) (s : (ourInst (ℍ := ℍ) orowRF Ξ J₁).R₀.St) :
-    (ourInst (ℍ := ℍ) orowRF Ξ J₁).obs (chainPath (ourInst (ℍ := ℍ) orowRF Ξ J₁).R₀ μ s
-      (lookRun 9 (algK₀.plug algR5))) = [.fire (finE DR5.1)] := by
-  rw [algR_q, obs_chainPath_one _ _ _ _ _ _ (by decide) (by decide)]
-  simp only
-  rw [labelOf_fire not_isVal_raise1]
-  rfl
-
-/-- **Algebraicity, as restated by D4, fails at `J₁`.**  `algFireProg`, typed by Core's kernel at
-`F 1`, reaches the law's left side under its two handlers; the complete runs from there and from
-the right side answer `()`, and show `fire ((λz. ()) κ₁)` and `fire ((λz. ()) κ₂)`: the finaliser
-the handler of `5` holds mentions the continuation it caught, which the two sides frame
-differently. -/
-theorem not_algLaw_J₁ (h5 : Ξ 5 = [(.lin, .unit, .unit)]) :
-    ¬ (ourInst (ℍ := ℍ) orowRF Ξ J₁).AlgLaw := by
-  intro hA
-  let S := ourInst (ℍ := ℍ) orowRF Ξ J₁
-  have hRA := hA (lab5 Ξ h5) 0 S.unitV ⟨OVTy.ofV .unit, OVTy.ofV .unit, .linear⟩ (.var 0)
-    (.val .unit) (by show ((Ξ 5).map _)[0]? = _; rw [h5]; rfl) (by intro h; cases h)
-  have hreach : S.RReach S.R₀ (S.rinit S.R₀ algFireProg)
-      ((Adequacy.emptyMem, lookEnd 4 algFireProg), ()) :=
-    rreach_of_chain S.R₀ (lookRun_sound (ℍ := ℍ) 4 algFireProg)
-  have hder : S.der [] algFireProg (S.F (orowAlg Ξ).unit (OVTy.ofV .unit)) :=
-    der_J₁_ret (by decide) d_algFireProg
-  have hL := obsFrom_of_chain (J := J₁) S.R₀ (μ := Adequacy.emptyMem) (s := ()) algL_chain .unit
-  erw [obs_algL] at hL
-  have h := (hRA S.R₀ r₀_respects algFireProg _ (OVTy.ofV .unit)
-    ((Adequacy.emptyMem, lookEnd 4 algFireProg), ()) algK₀ .unit hder hreach alg_c _ _).mp
-    (by rw [alg_c]; exact hL)
-  have htr := obsFrom_chain_trace (J := J₁) S.R₀ algR_chain .unit h
-  erw [obs_algR] at htr
-  have := List.cons.inj htr
-  injection this.1 with h'
-  exact finE_DL_ne h'
-
-end AlgW
-
+/-- **No tied `[handle]` of `5` at `ΞA` carries the tag `unr`**: a tied handler's tags are a prefix
+of `ΞA`'s qualifiers of `5`, `[lin]` (`hndTags_of_rowAt`). -/
+theorem not_tied_hnd5_unr {E : List (Qual × VTy × VTy)} {S : Row}
+    (hAt : RowAt ΞA (Row.ofEff 5 E 0 ++ S)) (hlen : E.length ≤ 2 ^ 32) :
+    E.map Prod.fst ≠ [.unr] := by
+  intro h
+  have hp := hndTags_of_rowAt hAt hlen
+  rw [h, show (ΞA 5).map Prod.fst = [.lin] from rfl] at hp
+  exact absurd (List.cons_prefix_cons.1 hp).1 (by decide)
 
 /-! ### The laws at the answering class -/
 
@@ -550,10 +818,10 @@ theorem algLaw_quiet (hL : LiveOK (ℍ := ℍ) RF Ξ J) {l : (RF.alg Ξ).Lab} {r
 
 end Answering
 
-/-- **Algebraicity fails at `J₁` at an admissible effect context.** -/
+/-- **Algebraicity fails at `J₁` at an admissible effect context**, `J₁`'s inner rows tied to it. -/
 theorem not_algLaw_ΞA :
     AdmEff ΞA ∧ ¬ (ourInst (ℍ := ℍ) orowRF ΞA J₁).AlgLaw :=
-  ⟨admEff_ΞA, not_algLaw_J₁ ΞA (by simp [ΞA])⟩
+  ⟨admEff_ΞA, not_algLaw_J₁ ΞA rfl rfl⟩
 
 end Targets.Inst
 

@@ -54,10 +54,11 @@ its A conjunct asks S4 at every admissible effect context, and S4's catch law, w
 `κ`'s cell.  The restatement of S4's capture laws is the user's.  Before it, the reduction
 (`status_tier1_J₁_of`) stood as below.  `J₁` is built (decision D5):
 Core's kernel with SPEC §24's rules (the polymorphic let, the general `[handle]`, `[then]` at option
-A) over the open types, with the row `∀` (`Targets/Instance/J1.lean`).  Proved of it: A's (S)
-properties but S4, S5 and S6 at every effect context (S4 at an effect context whose resuming
-operations are unrestricted), B's guarantees (B5 included, piece 6), the world's conjuncts and the
-pins.  `I.Tier1 J₁` follows from what is open: A's (E) properties, S4, S5 and S6 at every
+A) over the open types, with the row `∀` (`Targets/Instance/J1.lean`); our instance at an effect
+context reads it with the rows of its handlers and operations tied to the context (decision R,
+below).  Proved of it: A's (S) properties but S4, S5 and S6 at every effect context (S4 at an
+effect context whose resuming operations are unrestricted), B's guarantees (B5 included, piece 6),
+the world's conjuncts and the pins.  `I.Tier1 J₁` follows from what is open: A's (E) properties, S4, S5 and S6 at every
 admissible effect context, the composite's programs (`Accepts`) and rejections (`Rejects`).  TIER1-PLAN §2's first route (elaborating each derivation into the kernel before
 D5) does not reach tier 1 (`status_elab_route`); `J₁` is built by D5's route instead.
 
@@ -186,6 +187,39 @@ unchanged; the lowering's counts are unchanged.
   OPEN: only a capture's `κ` releases its cell (`OnlyOwnerFrees`), and a `κ` is used only while a
   cell of its own lives (`NoDanglingUse`) (`contUseEv_of_cells`).
 
+## Decision R: `J₁`'s inner rows tied (2026-10-08)
+
+Decision D1 ties a program's row to the effect context; decision R ties the rows inside its
+derivation the same way (`status_innerTie`).
+
+* **The tied kernel** (`Targets/Instance/TiedKernel.lean`): `CDerivesAt Ξ` is Core's `CDerives`
+  with `RowAt Ξ` at the three rules that read an operation's signature off a row — `[perform]` and
+  `[raise]` (the row the operation is found in) and `[handle]` (the handled row `(n)↑E ⊙ Σ`).  Every
+  tied derivation is Core's (`CDerivesAt.toCDerives`), so `fundamentalC` holds of it.  At a tied
+  handler the signature `E` is a prefix of `Ξ n`, so the handler value's tags (SPEC §25) are a
+  prefix of `Ξ`'s qualifiers of `n` (`sig_prefix_of_rowAt`, `hndTags_of_rowAt`).
+* **`J₁` at an effect context** (`J1DerAt`): `J1Der` with Core's kernel read as `CDerivesAt Ξ`, at
+  the row environments tied to `Ξ` (`EnvAt`, as D1 reads a program's row), polymorphic slots closed
+  by λ-values typed at their instances at tied rows.  A typing system carries its judgement at an
+  effect context (`OurTyping.derAt`), which our instance at `Ξ` reads; every other typing system
+  here ties nothing (`derAt` is `der`).  `J₁.read`, which B and the pins read, is Core's whole
+  kernel (`j1_read`, unchanged), so B's guarantees, FL and the pins at `J₁` are unchanged.
+* **Re-established at the tied `J₁`**, every statement unchanged: the let law and S1
+  (`letLaw_ourInst_J₁`, `rowAlgebra_ourInst_J₁`), S0, S2, S3 and `LiveOK` (through
+  `coreClosed_J₁At`), S4 where resuming operations are unrestricted, leak freedom and S6's
+  reduction, the comodel results, the answering-class laws, and the failures of S4 (`progT` types
+  with its rows tied, `progT_derivesAt`) and of the bad state's handler (`d_stProg` at `Ξst`).
+* **The open finding on algebraicity, settled** (`status_unaryLaws`): the round-2 witness handles
+  the name `5` at an `unr` operation where `ΞA` declares `tick` linear; its handled row is not tied
+  to `ΞA` (`not_rowAt_R5`), no tied handler of `5` carries the tag `unr` (`not_tied_hnd5_unr`), and
+  the tied `J₁` at `ΞA` types it at no type (`not_der_algFireProg_J₁`, by inversions of the tied
+  kernel at its two handlers: `derAt_withH`, `derAt_let`, `derAt_lam`, `derAt_hnd`).  Algebraicity
+  still **FAILS AS WRITTEN at the tied `J₁`** at `ΞA`, by a witness at the affine `wait` (below).
+* **A tied handler may declare a prefix of `Ξ n`.**  A's `handle` is the handler frame at `Ξ`'s whole
+  tags (`qsOf`), so the frame of a typed program's handler of a proper prefix is no A-level handler
+  frame, and S4's catch law and S6's capture events do not read its catches.  Whether a handler
+  declares all of `Ξ n` is a reading for the user (TIER1-PLAN, round 3, step T2).
+
 ## Piece 5: the answering class (D1.h1–h4)
 
 * **Theories** (D1.h3, D1.h4; `Targets/A/Theories.lean`).  Equations are writable in signatures:
@@ -205,14 +239,17 @@ unchanged; the lowering's counts are unchanged.
   (`Ξst`), the handler whose `put` keeps the old state fails the update–lookup law at a typed
   program, and its co-operations are no comodel (`status_theories`).
 * **The unary laws at our instance** (D1.h1, D4's restatement).  **Algebraicity FAILS AS WRITTEN
-  at `J₁`** (`status_unaryLaws`): an inner handler at an `unr` operation holds its persistent
-  continuation in a finaliser frame, and the trace's `fire D` compares `D`'s code, which mentions
-  the continuation the two sides capture differently (`Targets/Instance/UnaryLaws.lean`).  At a
-  linear or affine continuation no finaliser at `F 1` can hold it.  Two repairs, the user's: a
-  finaliser's start observed without its code (D4 read at the trace's events), or `unr`
-  restricted (decision 63).  The tail-resumptive law and η: OPEN (below).  At the answering class
-  (a tail-resumptive clause whose code runs quietly) both the tail-resumptive law and
-  algebraicity hold (`tailLaw_quiet`, `algLaw_quiet`; at `J₁`, `I.tailLaw_quiet_J₁`,
+  at `J₁`, its inner rows tied** (`status_unaryLaws`): at `ΞA`, an inner handler of the affine
+  `wait` raises `exn` from its clause inside a finaliser frame whose finaliser cancels the clause's
+  `κ` and handles the cancel's `exn` itself, so it is at the pure row (option A); the trace's
+  `fire D` compares `D`'s code, which mentions the `κ` the two sides capture differently
+  (`Targets/Instance/UnaryLaws.lean`).  Tying rows does not exclude it, and at an admissible
+  context no tied row has a resuming `unr` operation, so restricting `unr` does not either.  The
+  round-2 witness, at an `unr` continuation, is outside the tied kernel.  The repair is the
+  user's: a finaliser's start observed without its code (D4 read at the trace's events), or no
+  continuation held by a finaliser.  The tail-resumptive law and η: OPEN (below).  At the
+  answering class (a tail-resumptive clause whose code runs quietly) both the tail-resumptive law
+  and algebraicity hold (`tailLaw_quiet`, `algLaw_quiet`; at `J₁`, `I.tailLaw_quiet_J₁`,
   `I.algLaw_quiet_J₁`).
 * **The answering class as `[handle]`, D1.h2: OPEN.**  `I4Typing` (the typing half) and `I4Runs`
   (the run correspondence, stated here: the control form and the borrow form in one evaluation
@@ -298,7 +335,7 @@ unchanged; the lowering's counts are unchanged.
 | route 8.4 to S6: an obligation created at `[op]`, consumed where `κ` is resumed or cancelled, read by leak freedom at a run's end | the capture cell is that obligation (SPEC §25): R1 at a linear or affine operation is not in Core's relation at `F bool` (its run leaks `κ`'s cell); BoLo's world at the empty heap is the empty resource | `status_ghostCoupling`, `I.not_semC_R1`, `I.lower_empty_eq` |
 | S6's tooth: R1 (RESTRUCTURE §6.1) at our machine | PROVED: every typing system over our machine that types R1 at `F 0 bool`, at a label whose first operation resumes and is linear or affine, fails S6; `JR` types it, and at `ΞA` the lemma applies. R2–R4 have no complete run at such an operation | `not_contUseEv_of_der_R1`, `not_contUseEv_of_der_R1_orow`, `teeth_JR_ΞA` |
 | today's kernel types none of R1–R4 | PROVED, by the handler's form (our handler is the run-time frame, its clauses values; `[handle]` types clause variables). At the clauses, by the linearity of `κ` (RESTRUCTURE §6.1's reason): today's clause typing refuses R1's, R2's and R4's clauses at every resuming `lin` or `aff` operation (a live slot of `kTy` is neither dropped nor duplicated) and R3's at every `lin` one (a linear `κ`'s cancel is at `⊤`); at the clause type of a linear `1 ↠ 1`, where all four are refused, a clause that resumes `κ` once is typed, and `cancelCl` is typed at `aff` and refused at `lin`. At `unr` the argument does not apply (multi-shot is not considered) | `refuses_R_tier1Open`, `refuses_R_clauses`, `clauseRefusals_pinned` |
-| `AlgLaw`, `TailLaw`, `EtaHold` at our instance, RESTATED (D4: data answers) | `AlgLaw` **FAILS AS WRITTEN at `J₁`**, at the admissible `ΞA`: `algFireProg`, typed by Core's kernel, reaches the law's left side under a handler at an `unr` operation whose clause holds its persistent continuation in a finaliser and raises; the two runs answer `()` and show `fire` of finalisers that differ as terms. `TailLaw` OPEN: by this mechanism no witness types (an `unr` outer handler forces the tail clause's continuation context persistent, and our instance's `resume` forces only a `U` slot); not proved. `EtaHold` OPEN: `[handle]`'s `hnS` keeps a forwarding handler's own name out of its clauses' row, so by that reading no typed program installs one (not checked by an inversion); not proved | `not_algLaw_J₁`, `not_algLaw_ΞA`, `d_algFireProg`, `finE_DL_ne` |
+| `AlgLaw`, `TailLaw`, `EtaHold` at our instance, RESTATED (D4: data answers) | `AlgLaw` **FAILS AS WRITTEN at `J₁`**, its inner rows tied (decision R), at the admissible `ΞA`: `algAffProg`, typed by Core's kernel with every handler's and operation's row tied to `ΞA`, reaches the law's left side under a handler of the affine `wait` whose clause raises inside a finaliser frame; the finaliser cancels `κ` and handles the cancel's raises itself; the two runs answer `()` and show `fire` of finalisers that differ as terms, at every cell `κ`'s allocation picks. The round-2 witness `algFireProg` (an `unr` continuation held by a finaliser) is outside the tied kernel: its handled row is not tied to `ΞA`, no tied handler of `5` carries the tag `unr`, and the tied `J₁` at `ΞA` types it at no type. `TailLaw` OPEN: not proved, not refuted. The round-2 note that no witness types by the `unr` mechanism does not extend to the affine one, and whether a witness types by a finaliser that uses its `κ` is not checked. `EtaHold` OPEN: `[handle]`'s `hnS` keeps a forwarding handler's own name out of its clauses' row, so by that reading no typed program installs one (not checked by an inversion); not proved | `not_algLaw_J₁`, `not_algLaw_ΞA`, `d_algAffProg`, `finE_D2_ne`; `d_algFireProg`, `not_rowAt_R5`, `not_tied_hnd5_unr`, `not_der_algFireProg_J₁` |
 | the tail-resumptive law and algebraicity at the answering class (a clause `λ(a, k). c a to b. k.resume b` whose code runs quietly) | PROVED at every typing system with `LiveOK`, so at `J₁`, at every operation: quietly when `κ` owns no cell, around its cell when it does | `calm_tailClause`, `quiet_tailClause`, `cellQuiet_tailClause`, `tailLaw_quiet`, `algLaw_quiet`, `I.tailLaw_quiet_J₁`, `I.algLaw_quiet_J₁` |
 | runs around a capture cell: finite memories on every run from `init`; the allocation at every free location; calm runs compose, go under contexts and keep the complete runs' answers and traces | PROVED | `finDom_reach`, `obsFrom_alloc_iff`, `obsFrom_mstep_iff`, `obsFrom_calm_iff`, `runsAlike_of_calm`, `kappaC_resume_parts` |
 | D1.h4 (c), the comodel reduction: co-operations that run quietly (`PureCo`) and form a comodel give a correct handler | PROVED at every typing system with `LiveOK` whose typed closed values are closed | `ansCorrect_of_comodel`, `calm_fold`, `calm_opStep`, `calm_side`, `quiet_coFrom` |
@@ -309,7 +346,7 @@ unchanged; the lowering's counts are unchanged.
 | a let-bound function used at two rows; a persistent function called at an effectful row | **NOT TYPED** by today's kernel: one slot has one type, of which every judgement a variable is read at is a view; a variable used as a function is a `U` slot | `not_der_letTwo`, `der_var_inv`, `der_var_arr_thunk`, `not_der_callBang` |
 | `Safety` (S2), `EffSafe` (S3), `LiveOK` at our instance | PROVED AT σ=[] at today's kernel, every effect context (D1): a run under a runner is the run under the platform it gives (`platformOf`), step for step from a typed program, and B2's runs give A's. The tie is needed | `safety_ourInst_tier1Open`, `effSafe_ourInst_tier1Open`, `liveOK_tier1Open`; `safety_needs_tie`, `liveOK_needs_tie` |
 | `DataDiv` at our instance | PROVED (every row form, effect context and typing system) | `dataDiv_ourInst` |
-| `J₁`, `Pins J₁`, the let law and S1 at `J₁` | BUILT; PROVED AT σ=[] (S1 at every effect context: Core's `[sub]` asks nothing of its rows) | `Inst.J₁`, `status_pins_J₁`, `status_sPropsNoCancel_J₁` |
+| `J₁`, `Pins J₁`, the let law and S1 at `J₁` | BUILT; PROVED AT σ=[] (S1 at every effect context: Core's `[sub]` asks nothing of its rows); our instance reads `J₁` at an effect context with its handlers' and operations' rows tied to it (decision R): Core's tied kernel `CDerivesAt Ξ` at tied row environments, every tied derivation Core's, a tied handler's tags a prefix of the context's | `Inst.J₁`, `status_pins_J₁`, `status_sPropsNoCancel_J₁`, `status_innerTie` |
 | `RowVarKernel J₁`, the schema halves of E1, E2, E6, E10, the (E) programs at `J₁` | NOT PROVED, not attempted.  A schema's callback `λ_. M` puts `M`, typed at the empty context, under a live binder it does not use (Core's `lam`); Core's λ with a dead binder (`thunkF`) is at the pure returner only, and Core has no weakening by an unused live slot (a direct induction meets `bangThunkV`'s `Persistent` premise).  `[allR-I]` at `J₁` reads a value judgement at `U C` as Core typing the λ at `C`, an inversion of Core's thunk rules.  Neither is derived, and no obstruction is verified | — |
 | `monoCallback_tier1Open` (today's kernel fails E1, E2, E6, E10); the positive (E) runs at `tier1Open` | OPEN (inversions and runs to build, RESTRUCTURE §6.1) | — |
 | `RowVarKernel J₂`, `spanRules_J₂` | OPEN (`J₂` not built) | — |
@@ -354,6 +391,12 @@ entry.
 * `effSafeOfFL`, `soundnessContractsOfFLWB`: restated over `FamEmpty ∧ AdequateEvery` and
   `EmbedsNil`.  `Tier2Pinned`, `AcceptsTier2`: kept as definitions, superseded in done by
   `SpanRulesAt` (recorded) and `Tier2Programs` (with answers).
+* `not_algLaw_J₁` at `J₁` before decision R (its inner judgements untied), with the witness
+  `algFireProg` and its runs (`alg_c`, `algL_q`, `algR_q`, `obs_algL`, `obs_algR`, `finE_DL_ne`):
+  **not kept**.  The witness's handler of `5` is at `unr` where `ΞA` declares `tick` linear, which
+  the tie excludes (`not_rowAt_R5`, `not_tied_hnd5_unr`): the tied `J₁` at `ΞA` types the witness at
+  no type (`not_der_algFireProg_J₁`).  `not_algLaw_J₁` now refutes algebraicity at the tied `J₁` by
+  `algAffProg`.  `algFireProg` and its typing by Core's kernel (`d_algFireProg`) stay.
 * Check 2's derivations (`d_thenProgNU`, `d_prog₃TNU`, `d_thenRaiseProgNU`, `d_unwindProgNU`):
   **removed** with D3's kernel half.  Their finalisers let a raise escape, which option A excludes
   (SPEC §24); the programs stay (`Instance/CheckPrograms.lean`).
@@ -895,6 +938,19 @@ theorem status_j1 :
   ⟨Inst.j1_read, I.fl_core_J₁, Inst.coreClosed_J₁,
     fun hd hΓ η hη δ γ i ρ hδ hg => I.flOpen_J₁_mono hd hΓ η hη δ γ i ρ hδ hg⟩
 
+/-- PROVED: decision R.  Our instance at `Ξ` reads `J₁` at `Ξ`, its handlers' and operations' rows
+tied to `Ξ`; a tied derivation is one of Core's; a tied handler's signature is a prefix of the
+context's; `J₁`'s reading, which B and the pins read, is Core's whole kernel. -/
+theorem status_innerTie :
+    (∀ Ξ, ourInst (ℍ := ℍ) orowRF Ξ J₁ =
+      ourInst (ℍ := ℍ) orowRF Ξ (OurTyping.ofDer (Inst.J1DerAt Ξ))) ∧
+      (∀ Ξ Δ Γ e j, CDerivesAt Ξ Δ Γ e j → CDerives Δ Γ e j) ∧
+      (∀ (Ξ : EffCtx) (n : UInt32) (E : List (Qual × VTy × VTy)) (S : Row),
+        RowAt Ξ (Row.ofEff n E 0 ++ S) → E.length ≤ 2 ^ 32 → E <+: Ξ n) ∧
+      J₁.read = tier1 :=
+  ⟨fun Ξ => Inst.ourInst_J₁ Ξ, fun _ _ _ _ _ h => h.toCDerives,
+    fun _ _ _ _ h hl => sig_prefix_of_rowAt h hl, Inst.j1_read⟩
+
 /-- PROVED AT σ=[]: B's guarantees at `J₁`, B5 included. -/
 theorem status_guarantees_J₁ : B.Guarantees (ℍ := ℍ) J₁.read (B.coreB (ℍ := ℍ)) :=
   I.guarantees_J₁
@@ -951,13 +1007,23 @@ theorem status_contUseEv_J₁_of :
 
 /-! ## Piece 5: the answering class -/
 
-/-- **FAILS AS WRITTEN at `J₁`**: algebraicity, at the admissible effect context `ΞA`.  The
-witness is typed by Core's kernel. -/
+/-- **FAILS AS WRITTEN at `J₁`**, its inner rows tied: algebraicity, at the admissible effect
+context `ΞA`.  The witness is typed by Core's kernel with its handlers' and operations' rows tied to
+`ΞA`, and its two sides fire finalisers that differ as terms at every pair of cells.  The round-2
+witness, typed by Core's kernel, handles `5` at a row not tied to `ΞA`; no tied handler of `5`
+carries the tag `unr`, and the tied `J₁` at `ΞA` types the witness at no type. -/
 theorem status_unaryLaws :
     (AdmEff Inst.ΞA ∧ ¬ (ourInst (ℍ := ℍ) orowRF Inst.ΞA J₁).AlgLaw) ∧
-      CDerives BoCa.Lifetime.LifeCtx.empty [] Inst.algFireProg (.comp (.ret .unit)) ∧
-      Inst.finE Inst.DL5.1 ≠ Inst.finE Inst.DR5.1 :=
-  ⟨Inst.not_algLaw_ΞA, Inst.d_algFireProg, Inst.finE_DL_ne⟩
+      CDerivesAt Inst.ΞA BoCa.Lifetime.LifeCtx.empty [] Inst.algAffProg (.comp (.ret .unit)) ∧
+      (∀ ℓ ℓ', Inst.finE (Inst.DV Inst.KL2 ℓ).1 ≠ Inst.finE (Inst.DV Inst.KR2 ℓ').1) ∧
+      (CDerives BoCa.Lifetime.LifeCtx.empty [] Inst.algFireProg (.comp (.ret .unit)) ∧
+        ¬ RowAt Inst.ΞA Inst.R5 ∧
+        (∀ (E : List (Qual × VTy × VTy)) (S : Row), RowAt Inst.ΞA (Row.ofEff 5 E 0 ++ S) →
+          E.length ≤ 2 ^ 32 → E.map Prod.fst ≠ [.unr]) ∧
+        ∀ C, ¬ (ourInst (ℍ := ℍ) orowRF Inst.ΞA J₁).der [] Inst.algFireProg C) :=
+  ⟨Inst.not_algLaw_ΞA, Inst.d_algAffProg rfl rfl, Inst.finE_D2_ne,
+    Inst.d_algFireProg, Inst.not_rowAt_R5, fun _ _ h hl => Inst.not_tied_hnd5_unr h hl,
+    Inst.not_der_algFireProg_J₁⟩
 
 /-- **PROVED AT σ=[]**: the theory of global state at `J₁` — `stateCo` is a comodel and its
 handler is correct, at every effect context, carrier and label; and not vacuously: at the

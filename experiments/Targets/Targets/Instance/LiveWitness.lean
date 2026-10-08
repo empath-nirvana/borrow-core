@@ -77,7 +77,7 @@ abbrev nLogTy : OCTy := OCTy.ofC (.ret (.tensor (.sum .zero .unit) Flag))
 
 /-- **A typing system that types `nLogOutside` alone**, at its answer type. -/
 def JnLog : OurTyping orowRF := ⟨fun _ _ _ e j => e = nLogOutside ∧ j = .comp nLogTy, OutJ.core,
-  fun _ η => η⟩
+  fun _ η => η, fun _ _ _ _ e j => e = nLogOutside ∧ j = .comp nLogTy⟩
 
 /-- `nLogOutside`'s answer type is no loop sum: `JnLog` types no driven program. -/
 theorem not_isLoopSum_nLogTy : ¬ IsLoopSum nLogTy := by

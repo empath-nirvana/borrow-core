@@ -1,4 +1,4 @@
-import Targets.Instance.J1Checks
+import Targets.Instance.TiedKernel
 import Targets.Base.Support
 import Targets.Base.Closed
 
@@ -18,9 +18,13 @@ import Targets.Base.Closed
   closed λ-values that Core types at every instance (`Closing`).  A judgement at such a type is Core
   typing the term, a λ-value, at every instance.  This is let-polymorphism by substitution, the
   reading of `[let-poly]` at an open judgement.
+* **At an effect context `Ξ`** (decision R): our instance at `Ξ` reads `J1DerAt Ξ`, `J1Der` with
+  Core's kernel read as `CDerivesAt Ξ` (the rows of its handlers and operations tied to `Ξ`,
+  `Targets/Instance/TiedKernel.lean`) at the row environments tied to `Ξ`, as D1 reads a program's
+  row.  `J₁.read`, which B and the pins read, is Core's whole kernel.
 * **What it gives at our instance**: the let law at every row (`letLaw_ourInst_J₁`), subeffecting
   at every well-formed target (`subClosed_ourInst_J₁`), and Core's closed programs
-  (`coreClosed_J₁`), from which the interaction gets S0, S2, S3 and S4 (`Targets/I/J1.lean`).
+  (`coreClosed_J₁At`), from which the interaction gets S0, S2, S3 and S4 (`Targets/I/J1.lean`).
 Typing work: none of it inverts `CDerives`; each fact constructs derivations or reads `J₁`'s
 definition.
 -/
@@ -38,9 +42,9 @@ open Targets (RowForm EffCtx orowRF orowAlg ORow RowCtx RowEnv RowCon RVar RowAt
 /-! ### Typing systems that read their row variables as themselves -/
 
 /-- The typing system of a judgement, at Core's outlives judgements, its row variables read as
-themselves. -/
+themselves, tying nothing: its judgement at every effect context is the judgement. -/
 def OurTyping.ofDer (D : RowCtx → LifeCtx → Ctx OVTy → Expr → OJdg → Prop) : OurTyping orowRF :=
-  ⟨D, OutJ.core, fun _ η => η⟩
+  ⟨D, OutJ.core, fun _ η => η, fun _ => D⟩
 
 /-- **A typing system whose closed programs are Core's**: at a row context of `any` variables, a
 closed derivation at a computation type is a `CDerives` derivation of the type's instance with the
@@ -382,8 +386,120 @@ def J1Der (Θ : RowCtx) (Δ : LifeCtx) (Γ : Ctx OVTy) (e : Expr) (j : OJdg) : P
   (∀ s ∈ Γ, s.ty.J1OK) ∧ J1JOK j ∧
     ∀ η, Θ.Models η → ∀ σ, Closing Δ Γ η σ → J1Core Δ (octxStrip η Γ) (fillS σ 0 e) η j
 
-/-- **`J₁`, tier 1's typing**: Core's kernel (SPEC §24) over the open types, with the row `∀`. -/
-def J₁ : OurTyping orowRF := OurTyping.ofDer J1Der
+/-! ### `J₁` at an effect context: its inner rows tied (decision R) -/
+
+/-- The instances of a polymorphic function type at rows tied to `Ξ`. -/
+def OVTy.PolyInstAt (Ξ : EffCtx) : OVTy → RowEnv → CTy → Prop
+  | .thunk (.allR ρ k C), η, C' =>
+      ∃ r, AdmRow k r ∧ RowAt Ξ r ∧ C' = C.den (Function.update η ρ r)
+  | .bang (.thunk (.allR ρ k C)), η, C' =>
+      ∃ r, AdmRow k r ∧ RowAt Ξ r ∧ C' = C.den (Function.update η ρ r)
+  | _, _, _ => False
+
+/-- A polymorphic function type has an instance at every row environment, at the empty row. -/
+theorem OVTy.polyInstAt_nonempty (Ξ : EffCtx) :
+    ∀ {A : OVTy}, A.isPoly = true → ∀ η, ∃ C', A.PolyInstAt Ξ η C'
+  | .thunk (.allR _ k _), _, _ => ⟨_, [], admRow_nil k, rowAt_nil Ξ, rfl⟩
+  | .bang (.thunk (.allR _ k _)), _, _ => ⟨_, [], admRow_nil k, rowAt_nil Ξ, rfl⟩
+
+/-- **The closings of a context's live polymorphic slots at `η`, at `Ξ`**: each by a closed
+λ-value that Core's kernel, its inner rows tied to `Ξ`, types at every instance of the slot's type
+at a row tied to `Ξ`, and nothing else filled. -/
+def ClosingAt (Ξ : EffCtx) (Δ : LifeCtx) (Γ : Ctx OVTy) (η : RowEnv) (σ : ℕ → Option Val) :
+    Prop :=
+  ∀ i, (σ i = none ↔ ∀ s, ¬ PolyAt Γ i s) ∧
+    ∀ s W, PolyAt Γ i s → σ i = some W → ∃ b, W = Val.lam b ∧ closedAt 0 W.1 = true ∧
+      ∀ C', s.ty.PolyInstAt Ξ η C' → CDerivesAt Ξ Δ [] (.val W) (.comp C')
+
+theorem ClosingAt.closed {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx OVTy} {η : RowEnv}
+    {σ : ℕ → Option Val} (h : ClosingAt Ξ Δ Γ η σ) :
+    ∀ i W, σ i = some W → closedAt 0 W.1 = true := by
+  intro i W hW
+  have hs : ¬ ∀ s, ¬ PolyAt Γ i s := fun hn => by rw [(h i).1.mpr hn] at hW; cases hW
+  push Not at hs
+  obtain ⟨s, hs⟩ := hs
+  obtain ⟨b, -, hc, -⟩ := (h i).2 s W hs hW
+  exact hc
+
+/-- A context with no live polymorphic slot is closed at `Ξ` by filling nothing. -/
+theorem closingAt_none {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx OVTy} {η : RowEnv}
+    (hΓ : ∀ s ∈ Γ, s.live = true → s.ty.isPoly = false) : ClosingAt Ξ Δ Γ η (fun _ => none) := by
+  intro i
+  refine ⟨⟨fun _ s ⟨hs, hl, hp⟩ => ?_, fun _ => rfl⟩, fun _ _ _ h => by cases h⟩
+  rw [hΓ s (List.mem_of_getElem? hs) hl] at hp
+  cases hp
+
+/-- A closing at `Ξ` extends past a live polymorphic slot at the front. -/
+theorem closingAt_cons_poly {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx OVTy} {η : RowEnv}
+    {σ : ℕ → Option Val} (h : ClosingAt Ξ Δ Γ η σ) {A : OVTy} (hA : A.isPoly = true) {b : Expr}
+    (hc : closedAt 0 (Val.lam b).1 = true)
+    (hb : ∀ C', A.PolyInstAt Ξ η C' → CDerivesAt Ξ Δ [] (.val (Val.lam b)) (.comp C')) :
+    ClosingAt Ξ Δ (⟨A, true⟩ :: Γ) η (VTy.scons (some (Val.lam b)) σ) := by
+  intro i
+  cases i with
+  | zero =>
+      refine ⟨⟨fun h' => by simp [VTy.scons] at h',
+        fun hn => absurd (show PolyAt (⟨A, true⟩ :: Γ) 0 ⟨A, true⟩ from ⟨rfl, rfl, hA⟩) (hn _)⟩, ?_⟩
+      rintro s W ⟨hs, -, -⟩ hW
+      simp only [List.getElem?_cons_zero, Option.some.injEq] at hs
+      subst hs
+      simp only [VTy.scons, Option.some.injEq] at hW
+      subst hW
+      exact ⟨b, rfl, hc, hb⟩
+  | succ i =>
+      have hpi : ∀ s, PolyAt (⟨A, true⟩ :: Γ) (i + 1) s ↔ PolyAt Γ i s := fun s => by
+        simp [PolyAt]
+      refine ⟨?_, fun s W hs hW => (h i).2 s W ((hpi s).mp hs) hW⟩
+      simp only [VTy.scons]
+      exact ⟨fun hn s hs => (h i).1.mp hn s ((hpi s).mp hs),
+        fun hn => (h i).1.mpr fun s hs => hn s ((hpi s).mpr hs)⟩
+
+/-- A closing at `Ξ` extends past a slot at the front that is not a live polymorphic one. -/
+theorem closingAt_cons_mono {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx OVTy} {η : RowEnv}
+    {σ : ℕ → Option Val} (h : ClosingAt Ξ Δ Γ η σ) {s₀ : Slot OVTy}
+    (hs₀ : (s₀.live && s₀.ty.isPoly) = false) :
+    ClosingAt Ξ Δ (s₀ :: Γ) η (VTy.scons none σ) := by
+  intro i
+  cases i with
+  | zero =>
+      refine ⟨⟨fun _ s ⟨hs, hl, hp⟩ => ?_, fun _ => rfl⟩, fun _ _ _ h' => by cases h'⟩
+      simp only [List.getElem?_cons_zero, Option.some.injEq] at hs
+      subst hs
+      simp [hl, hp] at hs₀
+  | succ i =>
+      have hpi : ∀ s, PolyAt (s₀ :: Γ) (i + 1) s ↔ PolyAt Γ i s := fun s => by
+        simp [PolyAt]
+      refine ⟨?_, fun s W hs hW => (h i).2 s W ((hpi s).mp hs) hW⟩
+      simp only [VTy.scons]
+      exact ⟨fun hn s hs => (h i).1.mp hn s ((hpi s).mp hs),
+        fun hn => (h i).1.mpr fun s hs => hn s ((hpi s).mpr hs)⟩
+
+/-- **Core's judgement at an instance, its inner rows tied to `Ξ`**: `J1Core` with Core's kernel
+read as `CDerivesAt Ξ`, and a polymorphic function type read at its instances at rows tied to
+`Ξ`. -/
+def J1CoreAt (Ξ : EffCtx) (Δ : LifeCtx) (Γ : Ctx VTy) (e : Expr) (η : RowEnv) : OJdg → Prop
+  | .comp C => CDerivesAt Ξ Δ Γ e (.comp (C.den η))
+  | .val A => if A.isPoly = true then
+        ∃ b, e = .lam b ∧ (A.isBang = true → Persistent Γ) ∧
+          ∀ C', A.PolyInstAt Ξ η C' → CDerivesAt Ξ Δ Γ (.val (Val.lam b)) (.comp C')
+      else CDerivesAt Ξ Δ Γ e (.val (A.den η))
+
+/-- **`J₁`'s judgement at the effect context `Ξ`** (decision R): `J1Der` with its inner rows tied
+to `Ξ` — at every instance whose row variables are read as rows tied to `Ξ` (`EnvAt`, as D1 reads a
+program's row) and every closing of the context's live polymorphic slots at `Ξ`, Core's kernel with
+`RowAt Ξ` at its handlers and operations (`CDerivesAt Ξ`) types the term. -/
+def J1DerAt (Ξ : EffCtx) (Θ : RowCtx) (Δ : LifeCtx) (Γ : Ctx OVTy) (e : Expr) (j : OJdg) : Prop :=
+  (∀ s ∈ Γ, s.ty.J1OK) ∧ J1JOK j ∧
+    ∀ η, Θ.Models η → EnvAt Ξ η → ∀ σ, ClosingAt Ξ Δ Γ η σ →
+      J1CoreAt Ξ Δ (octxStrip η Γ) (fillS σ 0 e) η j
+
+/-- **`J₁`, tier 1's typing**: Core's kernel (SPEC §24) over the open types, with the row `∀`; at an
+effect context, its inner rows tied to the context (`J1DerAt`, decision R). -/
+def J₁ : OurTyping orowRF := ⟨J1Der, OutJ.core, fun _ η => η, J1DerAt⟩
+
+/-- Our instance at `J₁` is our instance at its judgement at `Ξ`. -/
+theorem ourInst_J₁ (Ξ : EffCtx) :
+    ourInst (ℍ := ℍ) orowRF Ξ J₁ = ourInst (ℍ := ℍ) orowRF Ξ (OurTyping.ofDer (J1DerAt Ξ)) := rfl
 
 theorem J1Core_of_rFree {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {η : RowEnv} :
     ∀ {j : OJdg}, j.RFree → (J1Core Δ Γ e η j ↔ CDerives Δ Γ e (j.den η))
@@ -429,6 +545,20 @@ theorem coreClosed_J₁ : CoreClosed J₁ := by
   rw [fillS_none] at h
   exact h
 
+/-- **`J₁`'s closed programs at `Ξ` are typed by Core's kernel with its inner rows tied to `Ξ`**,
+at the empty row environment. -/
+theorem coreClosedAt_J₁ (Ξ : EffCtx) {Θ : RowCtx} {e : Expr} {C : OCTy}
+    (hΘ : ∀ p ∈ Θ, p.2 = anyCon) (hd : J1DerAt Ξ Θ LifeCtx.empty [] e (.comp C)) :
+    CDerivesAt Ξ LifeCtx.empty [] e (.comp (C.den (fun _ => []))) := by
+  have h := hd.2.2 _ (models_anyCon_nil hΘ) (envAt_nil Ξ) (fun _ => none)
+    (closingAt_none (fun s hs => absurd hs List.not_mem_nil))
+  rw [fillS_none] at h
+  exact h
+
+/-- **`J₁`'s closed programs at `Ξ` are Core's.** -/
+theorem coreClosed_J₁At (Ξ : EffCtx) : CoreClosed (OurTyping.ofDer (J1DerAt Ξ)) :=
+  fun _ _ _ hΘ hd => (coreClosedAt_J₁ Ξ hΘ hd).toCDerives
+
 /-! ### The let law and subeffecting at our instance -/
 
 section Ours
@@ -443,8 +573,8 @@ theorem octxStrip_live_cons_mono (η : RowEnv) {A : OVTy} (hA : A.isPoly = false
   simp only [octxStrip, liveCtx, List.map_cons, Bool.true_and, hA, Bool.false_eq_true, if_false]
 
 /-- **The let law at `J₁`**, at every row: a closed value at a polymorphic function type is bound by
-Core's `[let-poly]` (`CDerives.letPoly`), its body typed with the value in place; at any other
-type by `[let]` (`CDerives.bind`). -/
+Core's `[let-poly]` (`CDerivesAt.letPoly`), its body typed with the value in place; at any other
+type by `[let]` (`CDerivesAt.bind`); each at its inner rows tied to `Ξ`. -/
 theorem letLaw_ourInst_J₁ : (ourInst (ℍ := ℍ) orowRF Ξ J₁).LetLaw := by
   intro Γ V A N C hV hN
   obtain ⟨Θ, hΘ, hVOK, hAOK, hVd⟩ := hV
@@ -452,36 +582,37 @@ theorem letLaw_ourInst_J₁ : (ourInst (ℍ := ℍ) orowRF Ξ J₁).LetLaw := by
   refine ⟨hT, ?_⟩
   rcases hN with ⟨Θ', hΘ', hNOK, hCOK, hNd⟩ | ⟨h, -⟩
   · refine .inl ⟨Θ ++ Θ', fun p hp => ?_, ⟨fun s hs => hNOK s (List.mem_cons_of_mem _ hs), hCOK,
-      fun η hη σ hσ => ?_⟩⟩
+      fun η hη hηΞ σ hσ => ?_⟩⟩
     · rcases List.mem_append.mp hp with hp | hp
       · exact hΘ p hp
       · exact hΘ' p hp
     · obtain ⟨hη₁, hη₂⟩ := models_append hη
-      have hV₀ := hVd η hη₁ (fun _ => none) (closing_none (fun s hs => absurd hs List.not_mem_nil))
+      have hV₀ := hVd η hη₁ hηΞ (fun _ => none)
+        (closingAt_none (fun s hs => absurd hs List.not_mem_nil))
       rw [fillS_none] at hV₀
-      have hV₁ : J1Core LifeCtx.empty [] (V.1 : Expr) η (.val (A : OVTy)) := hV₀
-      change CDerives LifeCtx.empty (octxStrip η (liveCtx Γ))
+      have hV₁ : J1CoreAt Ξ LifeCtx.empty [] (V.1 : Expr) η (.val (A : OVTy)) := hV₀
+      change CDerivesAt Ξ LifeCtx.empty (octxStrip η (liveCtx Γ))
         (.app (.lam (fillS σ 1 N)) (fillS σ 0 V.1)) (.comp (C.den η))
-      have hN₁ : ∀ σ', Closing LifeCtx.empty (liveCtx ((A : OVTy) :: (Γ : List OVTy))) η σ' →
-          CDerives LifeCtx.empty (octxStrip η (liveCtx ((A : OVTy) :: (Γ : List OVTy))))
-            (fillS σ' 0 (N : Expr)) (.comp ((C : OCTy).den η)) := fun σ' h' => hNd η hη₂ σ' h'
+      have hN₁ : ∀ σ', ClosingAt Ξ LifeCtx.empty (liveCtx ((A : OVTy) :: (Γ : List OVTy))) η σ' →
+          CDerivesAt Ξ LifeCtx.empty (octxStrip η (liveCtx ((A : OVTy) :: (Γ : List OVTy))))
+            (fillS σ' 0 (N : Expr)) (.comp ((C : OCTy).den η)) := fun σ' h' => hNd η hη₂ hηΞ σ' h'
       by_cases hA : A.isPoly = true
       · -- a polymorphic function: `[let-poly]`
-        simp only [J1Core, hA, if_true] at hV₁
+        simp only [J1CoreAt, hA, if_true] at hV₁
         obtain ⟨b, hVb, -, hb⟩ := hV₁
-        obtain ⟨C₀, hC₀⟩ := OVTy.polyInst_nonempty hA η
+        obtain ⟨C₀, hC₀⟩ := OVTy.polyInstAt_nonempty Ξ hA η
         have hcl : closedAt 0 (Val.lam b).1 = true := by
-          have := closedAt_of_derives (hb C₀ hC₀); simpa using this
-        have hN₀ := hN₁ _ (closing_cons_poly hσ hA hcl hb)
+          have := closedAt_of_derives (hb C₀ hC₀).toCDerives; simpa using this
+        have hN₀ := hN₁ _ (closingAt_cons_poly hσ hA hcl hb)
         rw [fillS_scons_some hσ.closed hcl (N : Expr) 0, octxStrip_live_cons_poly η hA (Γ : List OVTy)] at hN₀
         rw [hVb, fillS_closed σ (.lam b) 0 hcl]
         exact .letPoly b hcl (hb C₀ hC₀) hN₀
       · -- any other type: `[let]`
         have hA' : A.isPoly = false := by simpa using hA
-        simp only [J1Core, hA', Bool.false_eq_true, if_false] at hV₁
+        simp only [J1CoreAt, hA', Bool.false_eq_true, if_false] at hV₁
         have hcl : closedAt 0 V.1 = true := by
-          have := closedAt_of_derives hV₁; simpa using this
-        have hN₀ := hN₁ _ (closing_cons_mono hσ (s₀ := ⟨A, true⟩) (by simp [hA']))
+          have := closedAt_of_derives hV₁.toCDerives; simpa using this
+        have hN₀ := hN₁ _ (closingAt_cons_mono hσ (s₀ := ⟨A, true⟩) (by simp [hA']))
         rw [fillS_scons_none σ (N : Expr) 0, octxStrip_live_cons_mono η hA' (Γ : List OVTy)] at hN₀
         rw [fillS_closed σ V.1 0 hcl]
         exact .bind (splitP_kill_left _) (.ret (hV₁.append_dead (kill_dead _))) hN₀
@@ -498,9 +629,10 @@ theorem subClosed_J₁_tied {Γ : List OVTy} {e : Expr} {ε₁ ε₂ : ORow} {A 
   obtain ⟨-, h⟩ := h
   refine ⟨tiedAt_F (fun _ => rfl) hat A, ?_⟩
   rcases h with ⟨Θ, hΘ, hOK, hCOK, hd⟩ | ⟨hΓ, M, he, hL, Θ, hΘ, hOK, hCOK, hd⟩
-  · exact .inl ⟨Θ, hΘ, hOK, hCOK, fun η hη σ hσ => CDerives.effSub (hle η) (hd η hη σ hσ)⟩
-  · refine .inr ⟨hΓ, M, he, fun η => ?_, Θ, hΘ, hOK, hCOK, fun η hη σ hσ =>
-      CDerives.effSub (hle η) (hd η hη σ hσ)⟩
+  · exact .inl ⟨Θ, hΘ, hOK, hCOK, fun η hη hηΞ σ hσ =>
+      CDerivesAt.effSub (hle η) (hd η hη hηΞ σ hσ)⟩
+  · refine .inr ⟨hΓ, M, he, fun η => ?_, Θ, hΘ, hOK, hCOK, fun η hη hηΞ σ hσ =>
+      CDerivesAt.effSub (hle η) (hd η hη hηΞ σ hσ)⟩
     obtain ⟨S, S₀, A₀, hS₀, hC₀, hC⟩ := hL η
     have hC' : CTy.effOf (orowRF.den Ξ ε₁ η) (A.den η) =
         CTy.effOf S (.sum A₀ (.thunk (CTy.loopEff S₀ A₀ .unit))) := hC

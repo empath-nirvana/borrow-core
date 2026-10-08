@@ -45,7 +45,7 @@ open BoCa.Lifetime (LifeCtx)
 open Targets (RowForm EffCtx orowRF orowAlg HeadChain lookRun lookEnd lookRun_sound closedAt_kappa
   closedAt_plug_iff kont_shift_closed)
 open Targets.A (VExpr SLComp Eqn)
-open Targets (closedAt_of_derives)
+open Targets (closedAt_of_derives CDerivesAt RowAt rowAt_nil rowAt_ofEff_append)
 
 /-! ### Values written over the parameters and the answers -/
 
@@ -1144,21 +1144,22 @@ end State
 section AtJ1
 variable {Ξ : EffCtx}
 
-/-- `J₁`'s typed closed values are closed: at the empty context `J₁` is Core's kernel. -/
+/-- `J₁`'s typed closed values are closed: at the empty context `J₁` at `Ξ` is Core's kernel with
+its inner rows tied. -/
 theorem closed_of_derV_J₁ (v : OVal) (T : OVTy)
     (h : (ourInst (ℍ := ℍ) orowRF Ξ J₁).derV [] v T) : closedAt 0 v.1 = true := by
   obtain ⟨Θ, hΘ, -, -, hd⟩ := h
-  have h' := hd _ (models_anyCon_nil hΘ) (fun _ => none)
-    (closing_none (fun s hs => absurd hs List.not_mem_nil))
+  have h' := hd _ (models_anyCon_nil hΘ) (envAt_nil Ξ) (fun _ => none)
+    (closingAt_none (fun s hs => absurd hs List.not_mem_nil))
   rw [fillS_none] at h'
-  simp only [J1Core] at h'
+  simp only [J1CoreAt] at h'
   split at h'
   · rename_i hp
     obtain ⟨b, hb, -, hC⟩ := h'
-    obtain ⟨C', hC'⟩ := OVTy.polyInst_nonempty hp (fun _ => [])
-    have := closedAt_of_derives (hC C' hC')
+    obtain ⟨C', hC'⟩ := OVTy.polyInstAt_nonempty Ξ hp (fun _ => [])
+    have := closedAt_of_derives (hC C' hC').toCDerives
     rw [hb]; exact this
-  · exact closedAt_of_derives h'
+  · exact closedAt_of_derives h'.toCDerives
 
 /-- **`stateCo` is a comodel at `J₁`.** -/
 theorem state_isComodel_J₁ (T : OVTy) (l : (orowAlg Ξ).Lab) :
@@ -1177,15 +1178,15 @@ open BoCa.Fig16.LogRel.Core.EffPrograms
 abbrev stR : VTy := .thunk (.arr boolT (.ret (.tensor boolT boolT)))
 
 /-- `ansRetE : !U(bool ⊸ F stR)`. -/
-theorem d_ansRetE {Δ : LifeCtx} {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
-    CDerives Δ Γ ansRetE (.val (retTy [] boolT stR)) := by
+theorem d_ansRetE {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
+    CDerivesAt Ξ Δ Γ ansRetE (.val (retTy [] boolT stR)) := by
   refine .bangThunkV (dead_noLive hΓ) rfl (.lam (.ret (.thunkV rfl (.lam ?_))))
   exact .ret (.tensorI (.left (.right (deadSplit hΓ))) (.var (.here (.cons hΓ.toP)))
     (.var (.there (.here hΓ.toP))))
 
 /-- `get`'s co-operation `λ(s, u). (s, s)` at `bool ⊗ 1 ⊸ F(bool ⊗ bool)`. -/
-theorem d_getCoE {Δ : LifeCtx} {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
-    CDerives Δ Γ (.lam (.letpair (.var 0) (.pair (.var 1) (.var 1))))
+theorem d_getCoE {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
+    CDerivesAt Ξ Δ Γ (.lam (.letpair (.var 0) (.pair (.var 1) (.var 1))))
       (.comp (.arr (.tensor boolT .unit) (.ret (.tensor boolT boolT)))) := by
   refine .lam (.tensorE (.left (deadSplit hΓ)) (.var (.here hΓ.toP)) ?_)
   exact .ret (.tensorI (.dup rfl (.dup rfl (.dead (deadSplit hΓ))))
@@ -1194,8 +1195,8 @@ theorem d_getCoE {Δ : LifeCtx} {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
 
 /-- `put`'s co-operation that keeps the old state, `λ(s, t). (s, ())`, at
 `bool ⊗ bool ⊸ F(bool ⊗ 1)`. -/
-theorem d_badPutCoE {Δ : LifeCtx} {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
-    CDerives Δ Γ (.lam (.letpair (.var 0) (.pair (.var 1) .unit)))
+theorem d_badPutCoE {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
+    CDerivesAt Ξ Δ Γ (.lam (.letpair (.var 0) (.pair (.var 1) .unit)))
       (.comp (.arr (.tensor boolT boolT) (.ret (.tensor boolT .unit)))) := by
   refine .lam (.tensorE (.left (deadSplit hΓ)) (.var (.here hΓ.toP)) ?_)
   exact .ret (.tensorI (.left (.left (.dead (deadSplit hΓ))))
@@ -1206,12 +1207,12 @@ theorem clauseTy_lin (R A B : VTy) :
   simp [clauseTy]; rfl
 
 /-- **The state-passing clause at state `bool`**, from its co-operation's type. -/
-theorem d_ansClauseE {Δ : LifeCtx} {Γ : Ctx VTy} {A B : VTy} {co : Expr}
+theorem d_ansClauseE {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {A B : VTy} {co : Expr}
     (hco : closedAt 0 co = true)
     (hcoT : ∀ Γ' : Ctx VTy, Ctx.Dead Γ' →
-      CDerives Δ Γ' co (.comp (.arr (.tensor boolT A) (.ret (.tensor boolT B)))))
+      CDerivesAt Ξ Δ Γ' co (.comp (.arr (.tensor boolT A) (.ret (.tensor boolT B)))))
     (hΓ : Ctx.Dead Γ) :
-    CDerives Δ Γ (ansClauseE co) (.val (clauseTy [] stR (.lin, A, B))) := by
+    CDerivesAt Ξ Δ Γ (ansClauseE co) (.val (clauseTy [] stR (.lin, A, B))) := by
   rw [clauseTy_lin]
   refine .bangThunkV (dead_noLive hΓ) rfl (.lam ?_)
   refine .tensorE (.left (deadSplit hΓ)) (.var (.here hΓ.toP)) ?_
@@ -1274,18 +1275,25 @@ def stBodyR : Expr :=
 
 theorem nW_stRow : ¬ stRow.Weak := by simp [Row.Weak, Row.ofEff]
 
+/-- The handled row of `13` is tied to every context declaring global state there. -/
+theorem rowAt_stRow {Ξ : EffCtx} (h13 : Ξ 13 = stE) : RowAt Ξ stRow :=
+  rowAt_ofEff_append h13 (by decide) (by simp) (rowAt_nil Ξ)
+
 theorem nU_stRow : ¬ stRow.Unr := by simp [Row.Unr, Row.ofEff]
 
-theorem d_stBodyL {Δ : LifeCtx} : CDerives Δ [] stBodyL (.comp (CTy.effOf stRow boolT)) := by
+theorem d_stBodyL {Ξ : EffCtx} (h13 : Ξ 13 = stE) {Δ : LifeCtx} :
+    CDerivesAt Ξ Δ [] stBodyL (.comp (CTy.effOf stRow boolT)) := by
   refine .bind (A := .thunk (.arr boolT (CTy.effOf stRow boolT))) .nil
     (.ret (.thunkV rfl (.lam (.effSub (S := []) (rowLe_nil _) (.ret (.var (.here .nil))))))) ?_
   refine .bind (A := boolT) (.right .nil) (.ret (.sumI₁ (.unitI (.cons .nil)))) ?_
   refine .effLet (A := .unit) (.left (.right .nil)) (fun h => absurd h nW_stRow)
     (fun h => absurd h nU_stRow)
-    (.effPerform (o := ⟨13, 1, .lin, boolT, .unit⟩) rfl rfl (.var (.here (.cons .nil)))) ?_
+    (.effPerform (o := ⟨13, 1, .lin, boolT, .unit⟩) (rowAt_stRow h13) rfl rfl
+      (.var (.here (.cons .nil)))) ?_
   refine .effLet (A := boolT) (.left (.dead (.right .nil))) (fun h => absurd h nW_stRow)
     (fun h => absurd h nU_stRow)
-    (.effPerform (o := ⟨13, 0, .lin, .unit, boolT⟩) rfl rfl (.unitI (.drop rfl (.cons (.cons .nil)))))
+    (.effPerform (o := ⟨13, 0, .lin, .unit, boolT⟩) (rowAt_stRow h13) rfl rfl
+      (.unitI (.drop rfl (.cons (.cons .nil)))))
     ?_
   exact .bind (A := boolT) (.left (.dead (.dead (.right .nil))))
     (.ret (.var (.here (.cons (.cons (.cons .nil))))))
@@ -1293,36 +1301,40 @@ theorem d_stBodyL {Δ : LifeCtx} : CDerives Δ [] stBodyL (.comp (CTy.effOf stRo
       (.force (C := .arr boolT (CTy.effOf stRow boolT)) (.there (.there (.there (.there (.here .nil))))))
       (.here (.cons (.cons (.cons (.cons .nil))))))
 
-theorem d_stBodyR {Δ : LifeCtx} : CDerives Δ [] stBodyR (.comp (CTy.effOf stRow boolT)) := by
+theorem d_stBodyR {Ξ : EffCtx} (h13 : Ξ 13 = stE) {Δ : LifeCtx} :
+    CDerivesAt Ξ Δ [] stBodyR (.comp (CTy.effOf stRow boolT)) := by
   refine .bind (A := .thunk (.arr boolT (CTy.effOf stRow boolT))) .nil
     (.ret (.thunkV rfl (.lam (.effSub (S := []) (rowLe_nil _) (.ret (.var (.here .nil))))))) ?_
   refine .bind (A := boolT) (.right .nil) (.ret (.sumI₁ (.unitI (.cons .nil)))) ?_
   refine .effLet (A := .unit) (.dup rfl (.right .nil)) (fun h => absurd h nW_stRow)
     (fun h => absurd h nU_stRow)
-    (.effPerform (o := ⟨13, 1, .lin, boolT, .unit⟩) rfl rfl (.var (.here (.cons .nil)))) ?_
+    (.effPerform (o := ⟨13, 1, .lin, boolT, .unit⟩) (rowAt_stRow h13) rfl rfl
+      (.var (.here (.cons .nil)))) ?_
   exact .bind (A := boolT) (.left (.left (.right .nil)))
     (.ret (.var (.skip rfl (.here (.cons .nil)))))
     (.app (.right (.dead (.dead (.left .nil))))
       (.force (C := .arr boolT (CTy.effOf stRow boolT)) (.there (.there (.there (.here .nil)))))
       (.here (.cons (.cons (.cons .nil)))))
 
-/-- **The program is typed by Core's kernel**, at `F(bool ⊗ bool)`, for co-operations at state's
-types. -/
-theorem d_stProg {Δ : LifeCtx} {co₁ co₂ : Expr} (hc₁ : closedAt 0 co₁ = true)
+/-- **The program is typed by Core's kernel with its inner rows tied**, at `F(bool ⊗ bool)`, for
+co-operations at state's types, at every context declaring global state at `13`. -/
+theorem d_stProg {Ξ : EffCtx} (h13 : Ξ 13 = stE) {Δ : LifeCtx} {co₁ co₂ : Expr}
+    (hc₁ : closedAt 0 co₁ = true)
     (hc₂ : closedAt 0 co₂ = true)
     (ht₁ : ∀ Γ' : Ctx VTy, Ctx.Dead Γ' →
-      CDerives Δ Γ' co₁ (.comp (.arr (.tensor boolT .unit) (.ret (.tensor boolT boolT)))))
+      CDerivesAt Ξ Δ Γ' co₁ (.comp (.arr (.tensor boolT .unit) (.ret (.tensor boolT boolT)))))
     (ht₂ : ∀ Γ' : Ctx VTy, Ctx.Dead Γ' →
-      CDerives Δ Γ' co₂ (.comp (.arr (.tensor boolT boolT) (.ret (.tensor boolT .unit)))))
-    {M : Expr} (hM : CDerives Δ [] M (.comp (CTy.effOf stRow boolT))) :
-    CDerives Δ [] (stProg [co₁, co₂] M) (.comp (.ret (.tensor boolT boolT))) := by
-  have hH : CDerives Δ [] (.pair ansRetE (clausesE ([co₁, co₂].map ansClauseE)))
+      CDerivesAt Ξ Δ Γ' co₂ (.comp (.arr (.tensor boolT boolT) (.ret (.tensor boolT .unit)))))
+    {M : Expr} (hM : CDerivesAt Ξ Δ [] M (.comp (CTy.effOf stRow boolT))) :
+    CDerivesAt Ξ Δ [] (stProg [co₁, co₂] M) (.comp (.ret (.tensor boolT boolT))) := by
+  have hH : CDerivesAt Ξ Δ [] (.pair ansRetE (clausesE ([co₁, co₂].map ansClauseE)))
       (.val (.tensor (retTy [] boolT stR) (clausesTy [] stR stE))) :=
     .tensorI .nil (d_ansRetE .nil) (.tensorI .nil (d_ansClauseE hc₁ ht₁ .nil)
       (.tensorI .nil (d_ansClauseE hc₂ ht₂ .nil) (.unitI .nil)))
   have hv : IsVal (.pair ansRetE (clausesE ([co₁, co₂].map ansClauseE))) :=
     .pair .lam (.pair .lam (.pair .lam .unit))
-  refine .bind (A := stR) .nil (.effHandleV (S := []) (E := stE) (A := boolT) (R := stR) .nil .nil
+  refine .bind (A := stR) .nil (.effHandleV (S := []) (E := stE) (A := boolT) (R := stR)
+    (rowAt_stRow h13) .nil .nil
     (.val ⟨_, hv⟩) hH (by decide) (by simp) (by simp) hM) ?_
   exact .bind (A := boolT) (.right .nil) (.ret (.sumI₂ (.unitI (.cons .nil))))
     (.app (.right (.left .nil)) (.force (C := .arr boolT (.ret (.tensor boolT boolT)))
@@ -1419,14 +1431,15 @@ theorem quiet_badTail_ff :
   have h := quiet_of_look (ℍ := ℍ) 20 (badTail (ℍ := ℍ) (Val.inj₁ Val.unit)) rfl
   rwa [badTail_ff] at h
 
-/-- A closed value Core types at a type free of the row `∀` is typed at our instance by `J₁`. -/
+/-- A closed value that Core's kernel with its inner rows tied types at a type free of the row `∀`
+is typed at our instance by `J₁`. -/
 theorem derV_J₁_of {Ξ : EffCtx} {v : OVal} {A : VTy} (hcl : closedAt 0 v.1 = true)
-    (h : CDerives LifeCtx.empty [] v.1 (.val A)) :
+    (h : CDerivesAt Ξ LifeCtx.empty [] v.1 (.val A)) :
     (ourInst (ℍ := ℍ) orowRF Ξ J₁).derV [] v (OVTy.ofV A) := by
   refine ⟨[], by simp, fun _ h => absurd h List.not_mem_nil, .inl (OVTy.rFree_ofV A), ?_⟩
-  intro η _ σ _
-  simp only [J1Core, OVTy.isPoly_of_rFree (OVTy.rFree_ofV A), Bool.false_eq_true, if_false]
-  show CDerives LifeCtx.empty [] (fillS σ 0 v.1) (.val (OVTy.den η (OVTy.ofV A)))
+  intro η _ _ σ _
+  simp only [J1CoreAt, OVTy.isPoly_of_rFree (OVTy.rFree_ofV A), Bool.false_eq_true, if_false]
+  show CDerivesAt Ξ LifeCtx.empty [] (fillS σ 0 v.1) (.val (OVTy.den η (OVTy.ofV A)))
   rw [fillS_closed σ v.1 0 hcl, OVTy.den_ofV]
   exact h
 
@@ -1454,8 +1467,8 @@ theorem not_ansCorrect_badState :
   have hcb : closedAt 0 badPutCoE = true := rfl
   have hder : S.der [] (stProg [getCoE, badPutCoE] stBodyL)
       (S.F (orowAlg Ξst).unit (OVTy.ofV (.tensor boolT boolT))) :=
-    der_J₁_ret (by decide) (d_stProg hcg hcb (fun _ hΓ => d_getCoE hΓ) (fun _ hΓ => d_badPutCoE hΓ)
-      d_stBodyL)
+    der_J₁_ret (by decide) (d_stProg Ξst_13 hcg hcb (fun _ hΓ => d_getCoE hΓ)
+      (fun _ hΓ => d_badPutCoE hΓ) (d_stBodyL Ξst_13))
   let ttV : Val := Val.inj₂ Val.unit
   let ffV : Val := Val.inj₁ Val.unit
   have hco : ∀ c ∈ S.badStateCo, closedAt 0 c.1 = true := pureCo_badStateCo.1

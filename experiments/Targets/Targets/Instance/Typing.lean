@@ -5,8 +5,10 @@ import Targets.Instance.Rows
 # The Instance — typing systems over the open types (RESTRUCTURE §4.2)
 
 * **`OurTyping RF`**: a judgement `Θ; Δ; Γ ⊢ e : j` over the open types, with the outlives
-  judgements its rules consult, and how its row variables are the row form `RF`'s variables
-  (`env`; at `orowRF`, whose variables are row variables, the identity).
+  judgements its rules consult, how its row variables are the row form `RF`'s variables (`env`;
+  at `orowRF`, whose variables are row variables, the identity), and its judgement at an effect
+  context `Ξ` (`derAt`): the derivations whose inner rows are tied to `Ξ` (decision R), which our
+  instance at `Ξ` reads.  A typing system that ties nothing reads `der` there.
 * **The reading `J.read`** (the design's `⟦J⟧ : TypingJ`), what B and the pins see: at each
   admissible instance `η` of the row context, a derivation of `J` at the empty row context whose
   conclusion has no row `∀` and denotes the instance, `Γ η ⊢ e : j η`.  The derivation may use
@@ -37,6 +39,9 @@ structure OurTyping (RF : RowForm) where
   out : OutJ
   /-- Its row variables as the row form's variables. -/
   env : ∀ Ξ, RowEnv → (RF.alg Ξ).Var → Row
+  /-- Its judgement at the effect context `Ξ`: the derivations whose inner rows, the rows of their
+  handlers and operations, are tied to `Ξ` (decision R).  Our instance at `Ξ` reads it. -/
+  derAt : EffCtx → RowCtx → LifeCtx → Ctx OVTy → Expr → OJdg → Prop
 
 /-- The empty row context admits every environment. -/
 theorem rowCtx_models_nil (η : RowEnv) : RowCtx.Models [] η := fun _ _ h => absurd h (by simp)
@@ -55,7 +60,7 @@ def tier1OpenDer : RowCtx → LifeCtx → Ctx OVTy → Expr → OJdg → Prop :=
 
 /-- **`tier1Open`**: today's kernel, unr-free, over the open types at the minimal tail-variable row
 form.  Its row variables are those of the row context only. -/
-def tier1Open : OurTyping orowRF := ⟨tier1OpenDer, OutJ.core, fun _ η => η⟩
+def tier1Open : OurTyping orowRF := ⟨tier1OpenDer, OutJ.core, fun _ η => η, fun _ => tier1OpenDer⟩
 
 /-- **The reading of `tier1Open` is `tier1NU`.** -/
 theorem tier1Open_read : tier1Open.read = tier1NU := by

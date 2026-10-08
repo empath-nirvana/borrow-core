@@ -30,7 +30,7 @@ variable {Ξ : EffCtx}
 
 /-- **`J₁`'s reached configurations are closed and go on.** -/
 theorem liveOK_J₁ : Inst.LiveOK (ℍ := ℍ) orowRF Ξ J₁ :=
-  Inst.liveOK_of_coreClosed (D := J1Der) Inst.coreClosed_J₁
+  Inst.liveOK_of_coreClosed (D := Inst.J1DerAt Ξ) (Inst.coreClosed_J₁At Ξ)
 
 /-- **The handler of global state is correct at `J₁`** (D1.h4 (b), (c)), at every effect context,
 carrier and label. -/

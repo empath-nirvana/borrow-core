@@ -12,7 +12,8 @@ step allocates the cell, which changes the store.
 
 **The catch law FAILS AS WRITTEN at `J₁`, at the admissible context `ΞA`** (`not_handlerSem_J₁_ΞA`).
 The witness is `progT`: Core's handled program of `Core/EffExamples.lean` at the name `5`, where `ΞA`
-declares `tick : 1 ↠ 1` linear; Core's kernel types it at `F 1`.  Its run reaches the catch; from
+declares `tick : 1 ↠ 1` linear; Core's kernel types it at `F 1`, its handler's and operation's row
+tied to `ΞA` (`progT_derivesAt`).  Its run reaches the catch; from
 there the store-keeping steps reach only the catch and the clause applied to `κ` before its cell,
 each of which names `perform` or `alloc`, while the clause applied to `capture l H K` runs, keeping
 the store, through terms that name neither, to `()` (`pureSteps_chain`).
@@ -117,6 +118,33 @@ theorem progT_derives : CDerives LifeCtx.empty [] progT (.comp (.ret .unit)) := 
     (by decide) (by simp) (by simp)
     (.effPerform (o := ⟨5, 0, .lin, .unit, .unit⟩) (by rfl) rfl (.unitI (.cons (.cons .nil))))
 
+/-- Core's clause `cl₀` (`Core/EffExamples.lean`), in Core's kernel with its inner rows tied: it
+performs nothing and handles nothing. -/
+theorem cl₀_derivesAt (Ξ : EffCtx) :
+    CDerivesAt Ξ LifeCtx.empty [] EffExamples.cl₀
+      (.val (clauseTy [] .unit (.lin, .unit, .unit))) := by
+  refine .bangThunkV (fun _ hs => by simp at hs) rfl (.lam ?_)
+  refine .tensorE (.left .nil) (.var (.here .nil)) ?_
+  exact .app (.left (.right (.dead .nil)))
+    (.proj₁ (.force (C := .amp (.arr .unit (CTy.effOf [] .unit)) .top)
+      (.here (.cons (.cons .nil)))))
+    (.there (.here (.cons .nil)))
+
+/-- **`progT` at `ΞA`, its inner rows tied**: its handler's row and its operation's row are
+`(5)↑[tick]`, the signature `ΞA` declares at `5`. -/
+theorem progT_derivesAt : CDerivesAt ΞA LifeCtx.empty [] progT (.comp (.ret .unit)) := by
+  have hAt : RowAt ΞA (Row.ofEff 5 EffExamples.E₁ 0 ++ []) :=
+    rowAt_ofEff_append (by rfl) (by decide) (by simp) (rowAt_nil _)
+  refine .bind .nil (.ret (.tensorI .nil (cl₀_derivesAt ΞA) (.unitI .nil))) ?_
+  refine .bind (.right .nil)
+    (.ret (.bangThunkV (C := .arr .unit (.ret .unit)) (fun s hs hl => by
+      simp at hs; subst hs; simp at hl) rfl (.lam (.ret (.var (.here (.cons .nil))))))) ?_
+  exact .effHandle (S := []) (E := EffExamples.E₁) (A := .unit) (R := .unit) hAt
+    (.left (.left .nil)) (.left (.right .nil)) (.here (.cons .nil)) (.there (.here .nil))
+    (by decide) (by simp) (by simp)
+    (.effPerform (o := ⟨5, 0, .lin, .unit, .unit⟩) hAt (by rfl) rfl
+      (.unitI (.cons (.cons .nil))))
+
 /-- `cl₀`, the clause, as a term. -/
 def clT : Expr := .lam (.letpair (.var 0) (.app (.app (.var 0) (.inj₁ .unit)) (.var 1)))
 
@@ -145,16 +173,16 @@ theorem sig_lab5A {J : OurTyping orowRF} :
   simp [lab5A, ΞA]; rfl
 
 /-- **S4's catch law FAILS AS WRITTEN at `J₁`, at the admissible context `ΞA`.**  `progT`, typed
-by Core's kernel at `F 1`, reaches the catch of the linear `tick`; from there the store-keeping
-steps reach only the catch and the clause applied to `κ` before its cell (the next step allocates
-the cell), whose terms name `perform` and `alloc`; the clause applied to `capture l H K` runs,
-keeping the store, through terms that name neither. -/
+by Core's kernel at `F 1` with its inner rows tied to `ΞA`, reaches the catch of the linear `tick`;
+from there the store-keeping steps reach only the catch and the clause applied to `κ` before its
+cell (the next step allocates the cell), whose terms name `perform` and `alloc`; the clause applied
+to `capture l H K` runs, keeping the store, through terms that name neither. -/
 theorem not_handlerSem_J₁_ΞA : ¬ (ourInst (ℍ := ℍ) orowRF ΞA J₁).HandlerSem := by
   intro hS
   obtain ⟨-, hcatch, -⟩ := hS
   let S := ourInst (ℍ := ℍ) orowRF ΞA J₁
   have hder : S.der [] progT (S.F (orowAlg ΞA).unit (OVTy.ofV .unit)) :=
-    der_J₁_ret (by decide) progT_derives
+    der_J₁_ret (by decide) progT_derivesAt
   have hreach : S.RReach S.R₀ (S.rinit S.R₀ progT) ((Adequacy.emptyMem, lookEnd 2 progT), ()) :=
     rreach_of_chain S.R₀ (lookRun_sound (ℍ := ℍ) 2 progT)
   have hlive : S.Live (Adequacy.emptyMem, lookEnd 2 progT) :=

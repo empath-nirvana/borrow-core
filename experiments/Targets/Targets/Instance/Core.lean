@@ -23,7 +23,7 @@ each signature the (E) programs use).
 | `catches`, `unwindClear`, `fins` | `Kont.HasHnd`; no `ubind` and no `cfin` frame; `Kont.fins`, each read as an A-term |
 | `capture`, `cancelOf` | `kappa`, `cancelOf` (base): the continuation of an unrestricted operation; at a linear or affine one the catch hands `kappaC` at a fresh cell (SPEC §25) |
 | `step` | `Step1` under every allocator, labelled `fire D` at `ufin`/`ufinC`, `finEnd` at `cfret`/`cferr`, `tau` otherwise; and the driver's `top` steps |
-| `derV`, `der` | `J` at the empty lifetime context and a row context declaring row variables at `any`, every slot live; a computation at a returner whose row is tied to `Ξ` (`OCTy.TiedAt`, decision D1); a driven program is typed at `[]` and a loop sum, its current step's type, the loop's row below the step's and its body positive (decision D2) |
+| `derV`, `der` | `J` at `Ξ` (`derAt`: its inner rows tied to `Ξ`, decision R), at the empty lifetime context and a row context declaring row variables at `any`, every slot live; a computation at a returner whose row is tied to `Ξ` (`OCTy.TiedAt`, decision D1); a driven program is typed at `[]` and a loop sum, its current step's type, the loop's row below the step's and its body positive (decision D2) |
 
 **Builder's encodings** (RESTRUCTURE §Unresolved): A's values include variables and Core's `Val`
 does not, so A's `Val` is `OVal`; `drive` is a marked context rather than a phase, so that a
@@ -361,11 +361,12 @@ def ourInst (RF : RowForm) (Ξ : EffCtx) (J : OurTyping RF) : A.EffectSystem whe
   term c := c.2
   setT c t := (c.1, t)
   step := OStep (ℍ := ℍ) RF Ξ
-  derV Γ V A := ∃ Θ : RowCtx, (∀ p ∈ Θ, p.2 = anyCon) ∧ J.der Θ LifeCtx.empty (liveCtx Γ) V.1 (.val A)
+  derV Γ V A := ∃ Θ : RowCtx, (∀ p ∈ Θ, p.2 = anyCon) ∧
+    J.derAt Ξ Θ LifeCtx.empty (liveCtx Γ) V.1 (.val A)
   der Γ e C := C.TiedAt Ξ ∧
-    ((∃ Θ : RowCtx, (∀ p ∈ Θ, p.2 = anyCon) ∧ J.der Θ LifeCtx.empty (liveCtx Γ) e (.comp C)) ∨
+    ((∃ Θ : RowCtx, (∀ p ∈ Θ, p.2 = anyCon) ∧ J.derAt Ξ Θ LifeCtx.empty (liveCtx Γ) e (.comp C)) ∨
     (Γ = [] ∧ ∃ M, e = driveE M ∧ IsLoopSum C ∧
-      ∃ Θ : RowCtx, (∀ p ∈ Θ, p.2 = anyCon) ∧ J.der Θ LifeCtx.empty [] M (.comp C)))
+      ∃ Θ : RowCtx, (∀ p ∈ Θ, p.2 = anyCon) ∧ J.derAt Ξ Θ LifeCtx.empty [] M (.comp C)))
 
 theorem perform_eq {RF : RowForm} {Ξ : EffCtx} {J : OurTyping RF} {l : (RF.alg Ξ).Lab} {i : ℕ}
     (v : OVal) (hi : i < 2 ^ 32) :

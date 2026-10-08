@@ -56,9 +56,10 @@ Instance; the Instance imports no B or I; I imports everything.
 | | `Targets/Instance/Bridges.lean` | A's syntactic laws at our instance: `ConfLaws`, `KontLaws`, `NoIO`, `DataInj`, `LiftExt` |
 | | `Targets/Instance/Platform.lean` | the platform a runner gives (`platformOf`), its protocol, and its steps as the runner's |
 | | `Targets/Instance/Restricted/*`, `Binary.lean`, `ZeroCost.lean` | Core's no-interception and two-frame unwind; `storeCancel` unr-free; A₂ over Core, stated; A₃'s lowering classes |
-| | `Targets/Instance/J1.lean` | `J₁`, tier 1's typing: Core's kernel over the open types, a polymorphic slot closed by substitution (`Closing`, `fillS`); its reading is `tier1`; the let law and S1 at our instance |
+| | `Targets/Instance/J1.lean` | `J₁`, tier 1's typing: Core's kernel over the open types, a polymorphic slot closed by substitution (`Closing`, `fillS`); its reading is `tier1`; its judgement at an effect context, its inner rows tied (`J1DerAt`, decision R); the let law and S1 at our instance |
+| | `Targets/Instance/TiedKernel.lean` | Core's kernel with the rows of its handlers and operations tied to the effect context (`CDerivesAt`, decision R); a tied derivation is Core's; a tied handler's signature is a prefix of the context's |
 | | `Targets/Instance/Inversion.lean`, `J1Checks.lean` | what today's kernel does not type (A-level handlers, a let read at two instances, a persistent function called at an effectful row, `()` at a resuming `unr` row); the checks on TIER1-PLAN §2's route; the let law and S1's parts at our instance |
-| | `Targets/Instance/Runs.lean`, `CellRuns.lean`, `Theories.lean`, `UnaryLaws.lean` | quiet runs (`Quiet`) and complete runs along a chain; runs around a capture cell (`CellQuiet`, `Calm`, `runsAlike_of_calm`); the fold of a straight-line computation under the answering handler and the comodel reduction (`calm_fold`, `ansCorrect_of_comodel`), global state correct and its bad `put` no model; `AlgLaw` at `J₁` (`not_algLaw_J₁`) and the tail law and algebraicity at the answering class |
+| | `Targets/Instance/Runs.lean`, `CellRuns.lean`, `Theories.lean`, `UnaryLaws.lean` | quiet runs (`Quiet`) and complete runs along a chain; runs around a capture cell (`CellQuiet`, `Calm`, `runsAlike_of_calm`); the fold of a straight-line computation under the answering handler and the comodel reduction (`calm_fold`, `ansCorrect_of_comodel`), global state correct and its bad `put` no model; `AlgLaw` fails at `J₁`, its inner rows tied, by a finaliser that holds an affine `κ` (`not_algLaw_J₁`), the round-2 witness outside the tied kernel (`not_rowAt_R5`); the tail law and algebraicity at the answering class |
 | | `Targets/Instance/ContUse.lean` | S6's tooth at the capture cell: R1's run, and a typing system that types R1 fails `ContUseEv` (`not_contUseEv_of_der_R1`, `teeth_JR_ΞA`) |
 | | `Targets/Instance/HandlerCell.lean` | S4's catch law, read at `capture`, fails at `J₁` and `ΞA` since the capture cell (`not_handlerSem_J₁_ΞA`) |
 | **I** | `Targets/I/World.lean` | `SemWorld extends B.BWorld` (`held`, `Stop`, `share`), `coreW`, the effectful wp |
@@ -86,9 +87,12 @@ def I.Combined (RF : RowForm) (J : OurTyping RF) (M : SemWorld) (Adm : OpAdm) (c
 
 **Done** is `Combined orowRF J₂ W admClosedOp .any` at a **named** tier-2 typing system `J₂` and a
 **named** world `W`, with `audit_W`. **It is OPEN**: neither `J₂` nor `W` exists. **Tier 1** is
-`Combined orowRF J₁ coreW admClosedOp .abortive`, also OPEN. `J₁` is Core's kernel with SPEC §24's
-rules over the open types, with the row `∀` (decision D5); `Tier1 J₁` follows from A's (E)
-properties, S5 and S6, `Accepts` and `Rejects` (`tier1_J₁_of`).
+`Combined orowRF J₁ coreW admClosedOp .abortive`; it **FAILS AS WRITTEN** since the capture cell
+(S4's catch law at `ΞA`, `not_tier1_J₁`), and the restatement is the user's. `J₁` is Core's kernel
+with SPEC §24's rules over the open types, with the row `∀` (decision D5); our instance reads it at
+an effect context with its handlers' and operations' rows tied to the context (decision R). Before
+the cell, `Tier1 J₁` followed from A's (E) properties, S4, S5 and S6, `Accepts` and `Rejects`
+(`tier1_J₁_of`).
 
 **The restricted tier-1 reduction** `Tier1Core` (today's kernel `tier1Open`, Core's world)
 follows from S5 at today's kernel (`tier1Core_of`). Proved of it: A's properties but S5 at every

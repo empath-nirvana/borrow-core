@@ -58,6 +58,7 @@ import Targets.Instance.Safety
 import Targets.Instance.Types
 import Targets.Instance.Typing
 import Targets.Instance.Theories
+import Targets.Instance.TiedKernel
 import Targets.Instance.UnaryLaws
 import Targets.Instance.ZeroCost
 import Targets.I.Binder

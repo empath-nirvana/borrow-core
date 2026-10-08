@@ -793,18 +793,19 @@ namespace Targets.I
 open BoCa BoCa.Fig16 BoCa.Fig16.BoLo BoCa.Fig16.LogRel BoCa.Fig16.LogRel.Core
 open Targets.Inst (ourInst J₁ J1Der AdmEff LeakFreeAt OnlyOwnerFrees NoDanglingUse)
 
-/-- **Leak freedom at `J₁`**, at every effect context: its closed programs are Core's
-(`coreClosed_J₁`), so B2's runs end at the empty memory. -/
+/-- **Leak freedom at `J₁`**, at every effect context: its closed programs there are Core's
+(`coreClosed_J₁At`), so B2's runs end at the empty memory. -/
 theorem leakFreeAt_J₁ {Ξ : EffCtx} : LeakFreeAt (ℍ := ℍ) Ξ J₁ :=
   fun _ hR _ _ _ hans hd hA _ hq =>
-    Inst.leakFree_of_coreClosed (D := Inst.J1Der) Inst.coreClosed_J₁ hR hans hA hd hq
+    Inst.leakFree_of_coreClosed (D := Inst.J1DerAt Ξ) (Inst.coreClosed_J₁At Ξ) hR hans hA hd hq
 
 /-- **S6 at `J₁`, given the capture cell's ownership** (`OnlyOwnerFrees`, `NoDanglingUse`), at every
 admissible effect context: leak freedom (`leakFreeAt_J₁`) and `LiveOK` hold there. -/
 theorem contUseEv_J₁_of (hO : ∀ Ξ, AdmEff Ξ → OnlyOwnerFrees (ℍ := ℍ) Ξ J₁)
     (hN : ∀ Ξ, AdmEff Ξ → NoDanglingUse (ℍ := ℍ) Ξ J₁) :
     ∀ Ξ, AdmEff Ξ → (ourInst (ℍ := ℍ) orowRF Ξ J₁).ContUseEv := fun Ξ hΞ =>
-  Inst.contUseEv_of_cells hΞ (Inst.liveOK_of_coreClosed (D := Inst.J1Der) Inst.coreClosed_J₁)
+  Inst.contUseEv_of_cells hΞ
+    (Inst.liveOK_of_coreClosed (D := Inst.J1DerAt Ξ) (Inst.coreClosed_J₁At Ξ))
     leakFreeAt_J₁ (hO Ξ hΞ) (hN Ξ hΞ)
 
 /-- **Tier 1 at `J₁` FAILS AS WRITTEN**: its A conjunct asks S4 at every admissible effect context,

@@ -182,7 +182,8 @@ def finAloneProg : Expr :=
 
 /-- **A typing system that types `finAloneProg` alone**, at every type: no typing system of ours,
 the witness that the no-interception condition is needed. -/
-def J₄ : OurTyping orowRF := ⟨fun _ _ _ e _ => e = finAloneProg, OutJ.core, fun _ η => η⟩
+def J₄ : OurTyping orowRF := ⟨fun _ _ _ e _ => e = finAloneProg, OutJ.core, fun _ η => η,
+  fun _ _ _ _ e _ => e = finAloneProg⟩
 
 /-- `J₄` meets `NoInterception`: its one program holds no `ccatch`, no `cfin` and no handler named
 `0`. -/

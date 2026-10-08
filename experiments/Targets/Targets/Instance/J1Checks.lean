@@ -57,10 +57,10 @@ theorem models_append {Θ Θ' : RowCtx} {η : RowEnv} (h : (Θ ++ Θ').Models η
 
 /-- **The plan's elaboration at closed judgements** (TIER1-PLAN §2's `J1Der.elab` at the empty
 context, where no entry has copies, so that the elaborated term is the term itself): every closed
-derivation of `J` at a `∀`-free judgement is, at every admissible instance, a `CDerivesNU`
-derivation of the same term. -/
+derivation of `J` at an effect context, at a `∀`-free judgement, is at every admissible instance a
+`CDerivesNU` derivation of the same term. -/
 def ElabClosed {RF : RowForm} (J : OurTyping RF) : Prop :=
-  ∀ (Θ : RowCtx) (Δ : LifeCtx) (e : Expr) (j : OJdg), J.der Θ Δ [] e j → j.RFree →
+  ∀ (Ξ : EffCtx) (Θ : RowCtx) (Δ : LifeCtx) (e : Expr) (j : OJdg), J.derAt Ξ Θ Δ [] e j → j.RFree →
     ∀ η, Θ.Models η → CDerivesNU Δ [] e (j.den η)
 
 /-! ### 2. A-level handlers -/
@@ -83,7 +83,7 @@ theorem not_der_handle_of_elabClosed {RF : RowForm} {Ξ : EffCtx} {J : OurTyping
     {C : OCTy} (hC : C.RFree) :
     ¬ (ourInst (ℍ := ℍ) RF Ξ J).der [] ((ourInst (ℍ := ℍ) RF Ξ J).handle l H M) C := by
   rintro ⟨-, ⟨Θ, hΘ, hd⟩ | ⟨-, M', he, -⟩⟩
-  · exact not_der_handleK _ _ _ _ _ (hE Θ _ _ _ hd hC (fun _ => []) (models_anyCon_nil hΘ))
+  · exact not_der_handleK _ _ _ _ _ (hE Ξ Θ _ _ _ hd hC (fun _ => []) (models_anyCon_nil hΘ))
   · change (handleK _ _ _ _).plug M = _ at he
     simp [driveE, driveMark, handleK, hndValE, Kont.plug] at he
 

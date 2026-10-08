@@ -16,6 +16,10 @@ location, and after the release the memory is the one before the allocation.
   allocation show the same answers and traces as a configuration `c` at every free location, so do
   the complete runs from the allocation.
 * **A step that changes the memory and is its configuration's only step** (`obsFrom_mstep_iff`).
+* **Steps with events**: the complete runs of an allocation are, at some free location, the
+  allocation there and the complete runs after it (`obsFrom_alloc_ex_iff`); along a chain of head
+  steps, the chain's observable events and then the complete runs of its end
+  (`obsFrom_chain_obs_iff`).
 * **Calm runs** (`CellQuiet`, `Calm`): quiet runs, and runs around one cell — quietly to an
   allocation of `()`, at every location quietly from its answer to the release of that location,
   and quietly on from the release's answer.  Calm runs compose and go under every evaluation
@@ -223,6 +227,103 @@ theorem obsFrom_mstep_iff (R : (𝕊).Runner) {μ μ' : Heap} {s : R.St} {K : Ko
     · exact (congrArg (fun x => (𝕊).term x.1 = (𝕊).ret v) hc).mpr hv
     · rw [← htr]
       exact List.filter_cons_of_neg (Bool.eq_false_iff.mp hτ')
+
+/-- **An allocation, at some free location**: the complete runs from it are the allocation at a
+location the memory does not hold, then the complete runs of the next configuration.  (Some location
+must be free: otherwise the allocation has no step.) -/
+theorem obsFrom_alloc_ex_iff (R : (𝕊).Runner) {μ : Heap} {s : R.St} (K : Kont) (v : Val)
+    (hfr : ∃ ℓ, μ ℓ = none) (w : OVal) (tr : List (𝕊).Event) :
+    (𝕊).ObsFrom R ((μ, K.plug (allocE v)), s) w tr ↔
+      ∃ ℓ, μ ℓ = none ∧ (𝕊).ObsFrom R ((μ.upd ℓ v, K.plug (.val (Val.loc ℓ))), s) w tr := by
+  have hτ : ((.tau : (𝕊).Event)).Obs = false := rfl
+  constructor
+  · rintro ⟨q, ⟨hp, hlast⟩, hv, htr⟩
+    cases hp with
+    | nil =>
+        obtain ⟨ℓ, hℓ⟩ := hfr
+        exact absurd (hlast.2 _ _ (OStep.mach (Head.alloc μ v ℓ hℓ))) (fun h => h)
+    | @cons _ ev c₁ q' hst hp' =>
+        obtain ⟨ℓ, hℓ, rfl, rfl⟩ := rstep_alloc_inv R K v hst
+        refine ⟨ℓ, hℓ, q', ⟨hp', ?_⟩, ?_, ?_⟩
+        · rw [← A.EffectSystem.lastC_cons (S := 𝕊) _ _ .tau]
+          exact hlast
+        · rw [← A.EffectSystem.lastC_cons (S := 𝕊) _ _ .tau]
+          exact hv
+        · rw [← htr]
+          exact (List.filter_cons_of_neg (Bool.eq_false_iff.mp hτ)).symm
+  · rintro ⟨ℓ, hℓ, q, ⟨hp, hlast⟩, hv, htr⟩
+    have hst : (𝕊).RStep R ((μ, K.plug (allocE v)), s) .tau
+        ((μ.upd ℓ v, K.plug (.val (Val.loc ℓ))), s) := by
+      have := A.EffectSystem.RStep.mach (R := R) (s := s)
+        (OStep.mach (RF := RF) (Ξ := Ξ) (K := K) (Head.alloc (ℍ := ℍ) μ v ℓ hℓ))
+      rwa [labelOf_tau_of rfl] at this
+    have hc := A.EffectSystem.lastC_cons (S := 𝕊) ((μ, K.plug (allocE v)), s)
+      ((μ.upd ℓ v, K.plug (.val (Val.loc ℓ))), s) .tau q
+    refine ⟨(.tau, ((μ.upd ℓ v, K.plug (.val (Val.loc ℓ))), s)) :: q, ⟨.cons hst hp, ?_⟩, ?_, ?_⟩
+    · exact (congrArg (fun x => (𝕊).IsVal x.1) hc).mpr hlast
+    · exact (congrArg (fun x => (𝕊).term x.1 = (𝕊).ret w) hc).mpr hv
+    · rw [← htr]
+      exact List.filter_cons_of_neg (Bool.eq_false_iff.mp hτ)
+
+theorem obs_cons {R : (𝕊).Runner} (ev : (𝕊).Event) (c : (𝕊).RConf R)
+    (q : List ((𝕊).Event × (𝕊).RConf R)) :
+    (𝕊).obs ((ev, c) :: q) = [ev].filter Targets.A.Ev.Obs ++ (𝕊).obs q := by
+  unfold A.EffectSystem.obs
+  simp only [List.map_cons, List.filter_cons, List.filter_nil]
+  split <;> rfl
+
+/-- **A head step that keeps every memory and allocates nothing, showing its event**: the
+complete runs of its configuration are the step, showing its event if observable, then the complete
+runs of the next configuration. -/
+theorem obsFrom_head_iff (R : (𝕊).Runner) {μ : Heap} {s : R.St} {K : Kont} {a a' : Expr}
+    (hh : ∀ μ, Head (ℍ := ℍ) μ a μ a') (hn : a.allocs = false) (v : OVal)
+    (tr : List (𝕊).Event) :
+    (𝕊).ObsFrom R ((μ, K.plug a), s) v tr ↔
+      ∃ tr', tr = ([labelOf RF Ξ a] : List (𝕊).Event).filter Targets.A.Ev.Obs ++ tr' ∧
+        (𝕊).ObsFrom R ((μ, K.plug a'), s) v tr' := by
+  constructor
+  · rintro ⟨q, ⟨hp, hlast⟩, hv, htr⟩
+    cases hp with
+    | nil => exact absurd (hlast.2 _ _ (OStep.mach (hh μ))) (fun h => h)
+    | @cons _ ev c₁ q' hst hp' =>
+        obtain ⟨rfl, rfl⟩ := rstep_det (hh μ) hn hst
+        refine ⟨(𝕊).obs q', ?_, q', ⟨hp', ?_⟩, ?_, rfl⟩
+        · rw [← htr]; exact obs_cons (R := R) _ _ _
+        · rw [← A.EffectSystem.lastC_cons (S := 𝕊) _ _ (labelOf RF Ξ a)]
+          exact hlast
+        · rw [← A.EffectSystem.lastC_cons (S := 𝕊) _ _ (labelOf RF Ξ a)]
+          exact hv
+  · rintro ⟨tr', rfl, q, ⟨hp, hlast⟩, hv, htr⟩
+    have hc := A.EffectSystem.lastC_cons (S := 𝕊) ((μ, K.plug a), s)
+      ((μ, K.plug a'), s) (labelOf RF Ξ a) q
+    refine ⟨(labelOf RF Ξ a, ((μ, K.plug a'), s)) :: q,
+      ⟨.cons (.mach (OStep.mach (hh μ))) hp, ?_⟩, ?_, ?_⟩
+    · exact (congrArg (fun x => (𝕊).IsVal x.1) hc).mpr hlast
+    · exact (congrArg (fun x => (𝕊).term x.1 = (𝕊).ret v) hc).mpr hv
+    · rw [← htr]; exact obs_cons (R := R) _ _ _
+
+/-- **Along a chain of head steps that keep every memory and allocate nothing**, the complete runs
+of its start are the chain's path, showing the chain's observable events, then the complete runs
+of its end. -/
+theorem obsFrom_chain_obs_iff (R : (𝕊).Runner) {μ : Heap} {s : R.St} :
+    ∀ {e e' : Expr} {q : List (Kont × Expr × Expr)}, HeadChain (ℍ := ℍ) e q e' → ∀ v tr,
+      ((𝕊).ObsFrom R ((μ, e), s) v tr ↔
+        ∃ tr', tr = (𝕊).obs (chainPath R μ s q) ++ tr' ∧ (𝕊).ObsFrom R ((μ, e'), s) v tr')
+  | _, _, _, .nil, v, tr =>
+      ⟨fun h => ⟨tr, rfl, h⟩, fun ⟨tr', h₁, h₂⟩ => by
+        have : tr = tr' := h₁
+        subst this; exact h₂⟩
+  | _, _, _, @HeadChain.cons _ _ K a a' e' q hh hn hq, v, tr => by
+      refine (obsFrom_head_iff R hh hn v tr).trans ?_
+      have hcp : chainPath R μ s ((K, a, a') :: q) =
+          (labelOf RF Ξ a, ((μ, K.plug a'), s)) :: chainPath R μ s q := rfl
+      constructor
+      · rintro ⟨tr₁, rfl, h₁⟩
+        obtain ⟨tr₂, rfl, h₂⟩ := (obsFrom_chain_obs_iff R hq v tr₁).1 h₁
+        exact ⟨tr₂, by rw [hcp]; erw [obs_cons]; rw [List.append_assoc], h₂⟩
+      · rintro ⟨tr₂, rfl, h₂⟩
+        exact ⟨_, by rw [hcp]; erw [obs_cons]; rw [List.append_assoc],
+          (obsFrom_chain_obs_iff R hq v _).2 ⟨tr₂, rfl, h₂⟩⟩
 
 /-- The release of a cell the allocation added gives back the memory before it. -/
 theorem del_upd_fresh {μ : Heap} {ℓ : Loc} (h : μ ℓ = none) (v : Val) : (μ.upd ℓ v).del ℓ = μ := by
