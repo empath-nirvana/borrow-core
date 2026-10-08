@@ -35,6 +35,7 @@ Instance; the Instance imports no B or I; I imports everything.
 | | `Targets/A/System.lean` | `EffectSystem` (CBPV formers over an effect algebra; contexts with five named frames, the driver `driveF` among them; a labelled machine; typing); runners and runs; `SafeRuns`, `Terminates`, `RunsTo`, `RunsForever`; the schemas `PolyUse`, `PolyUseLacks`, `PolyUseOpen`, `CallsThrough` |
 | | `Targets/A/Machine.lean` | S0: `ConfLaws`, `KontLaws`, `AppLaw`, `Congr`, `NoIO`, `OpStuck`, `DataInj`, `LoopLaws`, `DriveLaws`, `MachShape`; the let law `LetLaw` |
 | | `Targets/A/Soundness.lean` | S1 `RowAlgebra`, S2 `DataDiv` and `Safety`, S3 `EffSafe`, S4 `HandlerSem`, S5 `Cancellation` (the cancel and unwind traces), S6 `ContUseEv` (per capture event; `ContUse`, read at `capture`, kept); `SProps` |
+| | `Targets/A/CancelPrefix.lean` | S5's traces read prefix-closed (`NoInterceptPfx`, `UnwindOrderPfx`, `CancellationPfx`): a candidate restatement, which the target implies |
 | | `Targets/A/Programs.lean` | the signatures, runners and programs of E1–E10, and S6's witnesses R1–R4 |
 | | `Targets/A/Expressiveness.lean` | E1 `NoColouring` … E10 `Reconciler`; `EProps`; `Props := SProps ∧ EProps` |
 | | `Targets/A/NonVacuity.lean` | the abstract non-vacuity lemmas |
@@ -43,6 +44,7 @@ Instance; the Instance imports no B or I; I imports everything.
 | **base** | `Targets/Base/*` | Core's machine, rows and typing as B, I and the Instance read them: platforms, runs, `PRun`, `ReleasedOnce`, B5's `Named`, `Expr.mapLoc`, `Heap.push`, `RelAt`, `Bump`, `BumpSim` (`Machine.lean`); the statements about runs that mention no world, `Sound`, Core's `EffSafe`, `EffSafeDrive` (`RunProps.lean`); `TypingJ`, `tier1`, `tier1NU`, the `RC_*` rules (`Typing.lean`); Core's cancel and unwind shapes (`CoreCancel.lean`); a typed term is closed at its context (`Closed.lean`); the polymorphic let's premise term (`Fill.lean`); the answering implementations; contextual approximation |
 | **B** | `Targets/B/World.lean` | `BWorld`, a borrow world with borrow fields only; `coreB`, Core's relation as one |
 | | `Targets/B/Adequacy.lean`, `PlatSafe.lean` | B2 at BoLo (`adequate_core`); runs under a platform that answers part of the row |
+| | `Targets/B/HeapFrame.lean` | a closed program in Core's relation runs from every finite memory, its cells `wpG`'s frame (`ownWorld`, `runs_of_rel`, `runs_of_rel_unit`) |
 | | `Targets/B/Guarantees.lean` | B0–B7 and the bounds as Props: `ExtendsB`, `FL`, `Adequate`, `Sound`, `SoundContracts` (externs at `ContractsW`), `ReleasedOnceReuse`, `ExclusiveB`, `LifetimeSound`, `WBound`; `B.Guarantees` |
 | | `Targets/B/BoLo.lean` | each guarantee at BoLo, by citing `Core` and `Paper` |
 | | `Targets/B/Routes.lean` | the routes: `soundnessOfFL`, `soundContractsOfFL`, `releasedOnceReuse_of_bumpSim`, … |
@@ -62,6 +64,7 @@ Instance; the Instance imports no B or I; I imports everything.
 | | `Targets/Instance/Runs.lean`, `CellRuns.lean`, `Theories.lean`, `UnaryLaws.lean` | quiet runs (`Quiet`) and complete runs along a chain; runs around a capture cell (`CellQuiet`, `Calm`, `runsAlike_of_calm`); the fold of a straight-line computation under the answering handler and the comodel reduction (`calm_fold`, `ansCorrect_of_comodel`), global state correct and its bad `put` no model; `AlgLaw` fails at `J₁`, its inner rows tied, by a finaliser that holds an affine `κ` (`not_algLaw_J₁`), the round-2 witness outside the tied kernel (`not_rowAt_R5`); the tail law and algebraicity at the answering class |
 | | `Targets/Instance/ContUse.lean` | S6's tooth at the capture cell: R1's run, and a typing system that types R1 fails `ContUseEv` (`not_contUseEv_of_der_R1`, `teeth_JR_ΞA`) |
 | | `Targets/Instance/HandlerCell.lean` | S4's catch law, read at `capture`, fails at `J₁` and `ΞA` since the capture cell (`not_handlerSem_J₁_ΞA`) |
+| | `Targets/Instance/CancelRuns.lean` | S5's traces at our machine: a step of a context around a stepping term is the term's (`rstep_unplug`); the unwind's and the cancel's traces, every path a trace once at most one step is appended (`unwind_pfx`, `cancel_pfx`); the bridges (`unwindOrderPfx_of_core`, `noInterceptPfx_of_core`, `cancellationPfx_of_core`); a path that stops right after a fire step follows no unwind trace (`not_unwindTrace_one`) |
 | | `Targets/Instance/FinRaise.lean`, `ELabels.lean`, `ETyping.lean`, `EHof.lean`, `ERuns.lean`, `E1.lean`, `E1Runs.lean`, `EProps.lean`, `E2.lean`, `E4.lean`, `E5.lean`, `E6.lean`, `E10.lean` | A's (E) properties at `J₁` (decision E): E1, E4 and E6 at every admissible context, E5 and E2's `sumGen` program with no `unr` operation in the way, E10's `timeout`; E7, E8, E9 fail as written (option A), so `EProps` does (`not_eProps_J₁`) |
 | **I** | `Targets/I/World.lean` | `SemWorld extends B.BWorld` (`held`, `Stop`, `share`), `coreW`, the effectful wp |
 | | `Targets/I/Interface.lean`, `Device.lean`, `Pins.lean`, `Routes.lean` | I1–I5 at the world; `Bounds`, `Interface`, the proof device `Device`, `EmbedsNil`; R-CLOSEDOP; `effSafeOfFL`, `contractsW_of_meets` |
@@ -73,6 +76,7 @@ Instance; the Instance imports no B or I; I imports everything.
 | | `Targets/I/J1.lean`, `GhostCoupling.lean` | B1, B's guarantees, the pins, FL at the open judgements and A's (S) properties at `J₁`; `Tier1 J₁` from what is open (`tier1_J₁_of`); route 8.4's obligation at the capture cell: R1 at a linear or affine operation is not in Core's relation (`not_semC_R1`) |
 | | `Targets/I/ContUseJ1.lean` | S6 at the capture cell: a capture event allocates `κ`'s cell (`catchEv_cell`), a use releases it (`use_frees_cell`), leak freedom (`leakFreeAt_J₁`); S6 from the cell's ownership (`contUseEv_of_cells`, `contUseEv_J₁_of`); `Tier1 J₁` fails as written through S4 (`not_tier1_J₁`) |
 | | `Targets/I/Theories.lean` | the answering class at `J₁`: global state's handler correct, the tail law and algebraicity there |
+| | `Targets/I/S5J1.lean` | S5 at `J₁` and today's kernel: a fired finaliser that meets the no-interception condition runs to `()` from every finite memory (`finOK_of_finRow`); S5 read prefix-closed (`unwindOrderPfx_J₁`, `noInterceptPfx_J₁_of`, `cancellationPfx_tier1Open`); S5 as written fails (`not_cancellation_J₁`, `not_cancellation_tier1Open`, `not_cancellation_admissible`) |
 | meta | `Targets/Audit.lean`, `Status.lean`, `AxiomCheck.lean` | the step-index audit with nine negative tests and the pin of Core's relation; the record; the axiom check |
 
 ## Done
@@ -89,7 +93,10 @@ def I.Combined (RF : RowForm) (J : OurTyping RF) (M : SemWorld) (Adm : OpAdm) (c
 **Done** is `Combined orowRF J₂ W admClosedOp .any` at a **named** tier-2 typing system `J₂` and a
 **named** world `W`, with `audit_W`. **It is OPEN**: neither `J₂` nor `W` exists. **Tier 1** is
 `Combined orowRF J₁ coreW admClosedOp .abortive`; it **FAILS AS WRITTEN** since the capture cell
-(S4's catch law at `ΞA`, `not_tier1_J₁`), and the restatement is the user's. `J₁` is Core's kernel
+(S4's catch law at `ΞA`, `not_tier1_J₁`), and the restatement is the user's. S5 also fails as
+written at `J₁` (`not_cancellation_J₁`): its traces stop only at `[]` and read a fire step's
+administrative steps whole; read prefix-closed, its unwind is proved and its no-interception given
+`CancelsStd`. `J₁` is Core's kernel
 with SPEC §24's rules over the open types, with the row `∀` (decision D5); our instance reads it at
 an effect context with its handlers' and operations' rows tied to the context (decision R). Before
 the cell, `Tier1 J₁` followed from A's (E) properties, S4, S5 and S6, `Accepts` and `Rejects`
@@ -100,7 +107,9 @@ the cell, `Tier1 J₁` followed from A's (E) properties, S4, S5 and S6, `Accepts
 follows from S5 at today's kernel (`tier1Core_of`). Proved of it: A's properties but S5 at every
 admissible effect context (`sPropsNoCancel_tier1Open`), B's guarantees, B5 included
 (`tier1Core_guarantees`), the world conjuncts and the device at `coreW` (`tier1Core_world`), and
-`Pins` (`pins_tier1Open`). Missing: S5 at our instance (the bridges are not built).
+`Pins` (`pins_tier1Open`). Missing: S5 at our instance, which fails as written at today's kernel
+too (`not_cancellation_tier1Open`); read prefix-closed, its unwind is proved there and its
+no-interception given `CancelsStd` (`cancellationPfx_tier1Open`).
 
 ## Status, by system
 

@@ -1,4 +1,5 @@
 import Targets.A.Binary
+import Targets.A.CancelPrefix
 import Targets.A.EffAlg
 import Targets.A.Expressiveness
 import Targets.A.Lowering
@@ -28,6 +29,7 @@ import Targets.B.BoLo
 import Targets.B.BumpSim
 import Targets.B.Conservativity
 import Targets.B.Guarantees
+import Targets.B.HeapFrame
 import Targets.B.NonVacuity
 import Targets.B.PlatSafe
 import Targets.B.Release
@@ -42,6 +44,7 @@ import Targets.Instance.Bridges
 import Targets.Instance.CheckPrograms
 import Targets.Instance.Checks
 import Targets.Instance.ClauseRefusals
+import Targets.Instance.CancelRuns
 import Targets.Instance.CellRuns
 import Targets.Instance.ContUse
 import Targets.Instance.LiveWitness
@@ -78,6 +81,7 @@ import Targets.I.Binder
 import Targets.I.Combined
 import Targets.I.Device
 import Targets.I.GhostCoupling
+import Targets.I.S5J1
 import Targets.I.Interface
 import Targets.I.J1
 import Targets.I.ContUseJ1
