@@ -229,6 +229,21 @@ theorem no_step1_drive {μ μ' : Heap} (v : Val) {t : Expr} :
       exact hh.not_isVal .prim
   | _ => simp [Kont.plug, driveE] at hE
 
+/-- A redex plugged into a driver's configuration sits inside the driven term. -/
+theorem plug_eq_driveE {K : Kont} {x t : Expr} (h : K.plug x = driveE t) (hx : ¬ IsVal x)
+    (hna : ∀ b, x ≠ .app driveMark b) : ∃ K', K = .appR driveMark K' ∧ t = K'.plug x := by
+  cases K with
+  | hole => exact absurd h (hna t)
+  | appR f K =>
+      simp only [Kont.plug, driveE, Expr.app.injEq] at h
+      exact ⟨K, by rw [h.1], h.2.symm⟩
+  | appL K v =>
+      simp only [Kont.plug, driveE, driveMark, Expr.app.injEq] at h
+      have h1 := h.1
+      cases K <;> simp [Kont.plug] at h1
+      subst h1; exact absurd .prim hx
+  | _ => simp [Kont.plug, driveE] at h
+
 /-- **A step whose redex allocates nothing is the only step of its configuration.** -/
 theorem det_ourInst {μ μ' : Heap} {K : Kont} {a a' : Expr} (hh : Head (ℍ := ℍ) μ a μ' a')
     (hn : a.allocs = false) {ev : A.Ev (RF.alg Ξ).Lab OVal Expr} {c' : Heap × Expr}
@@ -417,6 +432,14 @@ theorem rreach_of_chain (R : (ourInst (ℍ := ℍ) RF Ξ J).Runner) {μ : Heap} 
   | _, _, _, .nil => Relation.ReflTransGen.refl
   | _, _, _, .cons hh _ hq =>
       Relation.ReflTransGen.head ⟨_, .mach (OStep.mach (hh μ))⟩ (rreach_of_chain R hq)
+
+/-- A run along a path reaches its last configuration. -/
+theorem rreach_of_path {S : A.EffectSystem} {R : S.Runner} :
+    ∀ {c : S.RConf R} {q : List (S.Event × S.RConf R)}, S.RPath R c q → S.RReach R c (S.lastC c q)
+  | _, _, .nil => .refl
+  | _, _, @A.EffectSystem.RPath.cons _ _ c ev c' q h hp => by
+      rw [A.EffectSystem.lastC_cons]
+      exact (Relation.ReflTransGen.single ⟨ev, h⟩).trans (rreach_of_path hp)
 
 theorem pureSteps_of_chain {μ : Heap} :
     ∀ {e e' : Expr} {q : List (Kont × Expr × Expr)}, HeadChain (ℍ := ℍ) e q e' →

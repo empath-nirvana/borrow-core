@@ -26,18 +26,6 @@ variable {RF : RowForm} {Ξ : EffCtx} {J : OurTyping RF}
 
 local notation "𝕊" => ourInst (ℍ := ℍ) RF Ξ J
 
-/-- The complete runs from a value: the empty run, answering the value, showing nothing. -/
-theorem obsFrom_val_iff (R : (𝕊).Runner) {μ : Heap} {s : R.St} (v : Val) (w : OVal)
-    (tr : List (𝕊).Event) :
-    (𝕊).ObsFrom R ((μ, v.1), s) w tr ↔ w.1 = v.1 ∧ tr = [] := by
-  constructor
-  · rintro ⟨q, ⟨hp, -⟩, hv, htr⟩
-    cases hp with
-    | nil => exact ⟨hv.symm, htr.symm⟩
-    | cons hst _ => exact (no_rstep_val R v hst).elim
-  · rintro ⟨hw, rfl⟩
-    exact ⟨[], ⟨.nil, isVal_val μ v⟩, hw.symm, rfl⟩
-
 /-- **A program that reaches a value calmly runs to it, showing no event**, under every runner. -/
 theorem runsTo_of_calm (R : (𝕊).Runner) {e : Expr} {v : Val} (h : Calm (ℍ := ℍ) e (.val v)) :
     (𝕊).RunsTo R e (OVal.ofVal v) [] := by

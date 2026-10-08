@@ -64,6 +64,7 @@ import Targets.Instance.Typing
 import Targets.Instance.Theories
 import Targets.Instance.TiedKernel
 import Targets.Instance.UnaryLaws
+import Targets.Instance.AlgSim
 import Targets.Instance.FinRaise
 import Targets.Instance.ELabels
 import Targets.Instance.ETyping
@@ -79,6 +80,7 @@ import Targets.Instance.E2
 import Targets.Instance.E10
 import Targets.Instance.ZeroCost
 import Targets.I.AcceptsRejects
+import Targets.I.AlgJ1
 import Targets.I.Binder
 import Targets.I.Combined
 import Targets.I.Device

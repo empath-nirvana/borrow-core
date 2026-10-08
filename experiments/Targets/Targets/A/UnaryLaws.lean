@@ -26,7 +26,13 @@ binary relation.  As A₂'s `Observes`, this reads complete runs only.
   captured its evidence w, it can still perform operations itself"); Kammar–Lindley–Oury's
   handle.op with a clause that resumes in tail position.  Its hygiene is explicit hypotheses.
 * `AlgLaw`: Plotkin–Power algebraicity in Core `LawAlg`'s form, graded by continuation class as
-  `LawAlg` is (resuming operations only).
+  `LawAlg` is (resuming operations only), its two sides compared with a finaliser's start observed
+  but not its code (`RunsAlikeStart`).  The two sides capture different continuations, and a
+  finaliser may hold its side's (an affine `κ`'s cancel branch is a use of it), so its code differs
+  between them though each side runs it at the same point; D4's reading, applied to the trace's
+  events, observes that the finaliser starts and not the term it is.  `AlgLawCode` compares the
+  traces with the finaliser's code (`RunsAlike`), kept as a record; it implies `AlgLaw`
+  (`algLaw_of_algLawCode`).
 * `EtaHold`, `EtaLin`: effects TR §13 T13.8, `handleAt x with Fwd_x in M ≡ M`, at the same label
   (P13.10 refutes the fresh-label form).  `EtaHold` writes the clause at an affine operation with a
   frame that holds the continuation (D13.7); `EtaLin` is the typing-restricted alternative
@@ -37,8 +43,9 @@ or of done: whether these laws belong in done is a menu choice (P11/I5 menu axes
 the user.
 
 `not_tailLaw_toy`, `not_algLaw_toy`, `not_etaHold_toy` and `not_etaLin_toy` show that each fails at
-an instance (`toy`) whose handler or bind ignores its clauses.  So does S4 (`not_handlerSem_toy`):
-`toy` has no cells, and its refutation of S4 with no cell is one of S4.
+an instance (`toy`) whose handler or bind ignores its clauses (`not_algLawCode_toy` for the record).
+So does S4 (`not_handlerSem_toy`): `toy` has no cells, and its refutation of S4 with no cell is one
+of S4.
 -/
 
 namespace Targets.A
@@ -63,6 +70,64 @@ def RunsAlike (t₁ t₂ : S.Term) : Prop :=
     (K₀ : S.Kont), S.DataTy A → S.der [] P (S.F ε A) → S.RReach R (S.rinit R P) c →
     S.term c.1 = S.plug K₀ t₁ →
     ∀ v tr, S.ObsFrom R c v tr ↔ S.ObsFrom R (S.setR c (S.plug K₀ t₂)) v tr
+
+/-! ### A finaliser's start, without its code -/
+
+/-- **An event with a finaliser's start read without its code**: `fire D` as `fire ()`, every
+other event as it is. -/
+def _root_.Targets.A.Ev.start {Lab Val Term : Type} : Ev Lab Val Term → Ev Lab Val Unit
+  | .tau => .tau
+  | .fire _ => .fire ()
+  | .finEnd r => .finEnd r
+  | .io l i v w => .io l i v w
+  | .top => .top
+
+/-- Two events read alike without a finaliser's code exactly when they are equal or both a
+finaliser's start. -/
+theorem _root_.Targets.A.Ev.start_eq_start_iff {Lab Val Term : Type} (e e' : Ev Lab Val Term) :
+    e.start = e'.start ↔ e = e' ∨ ∃ D D', e = .fire D ∧ e' = .fire D' := by
+  constructor
+  · intro h
+    cases e <;> cases e' <;> simp_all [Ev.start]
+  · rintro (rfl | ⟨D, D', rfl, rfl⟩) <;> rfl
+
+/-- Two events read alike without a finaliser's code are observable alike. -/
+theorem _root_.Targets.A.Ev.obs_of_start_eq {Lab Val Term : Type} {e e' : Ev Lab Val Term}
+    (h : e.start = e'.start) : e.Obs = e'.Obs := by
+  cases e <;> cases e' <;> simp_all [Ev.start, Ev.Obs]
+
+/-- The observable events of a path, each finaliser's start read without its code. -/
+def obsStart {R : S.Runner} (q : List (S.Event × S.RConf R)) : List (Ev S.EA.Lab S.Val Unit) :=
+  (S.obs q).map Ev.start
+
+/-- A complete run from `c` answers `v` with the observable trace `tr`, each finaliser's start
+read without its code. -/
+def ObsStartFrom (R : S.Runner) (c : S.RConf R) (v : S.Val) (tr : List (Ev S.EA.Lab S.Val Unit)) :
+    Prop :=
+  ∃ q, S.CompleteFrom R c q ∧ S.term (S.lastC c q).1 = S.ret v ∧ S.obsStart q = tr
+
+theorem obsStartFrom_iff {R : S.Runner} {c : S.RConf R} {v : S.Val}
+    {tr : List (Ev S.EA.Lab S.Val Unit)} :
+    S.ObsStartFrom R c v tr ↔ ∃ tr₀, S.ObsFrom R c v tr₀ ∧ tr₀.map Ev.start = tr :=
+  ⟨fun ⟨q, hq, hv, htr⟩ => ⟨S.obs q, ⟨q, hq, hv, rfl⟩, htr⟩,
+    fun ⟨_, ⟨q, hq, hv, h₀⟩, htr⟩ => ⟨q, hq, hv, by rw [obsStart, h₀]; exact htr⟩⟩
+
+/-- **`t₁` and `t₂` run alike, a finaliser's start observed but not its code**: `RunsAlike` with
+each trace read through `Ev.start`.  A finaliser's start is an event of the run, and the two sides
+show it at the same point; the finaliser is a term of code, which D4 does not compare. -/
+def RunsAlikeStart (t₁ t₂ : S.Term) : Prop :=
+  ∀ R : S.Runner, R.Respects → ∀ (P : S.Term) (ε : S.EA.Eff) (A : S.Ty) (c : S.RConf R)
+    (K₀ : S.Kont), S.DataTy A → S.der [] P (S.F ε A) → S.RReach R (S.rinit R P) c →
+    S.term c.1 = S.plug K₀ t₁ →
+    ∀ v tr, S.ObsStartFrom R c v tr ↔ S.ObsStartFrom R (S.setR c (S.plug K₀ t₂)) v tr
+
+/-- Running alike with the finaliser's code observed gives running alike without it. -/
+theorem runsAlikeStart_of_runsAlike {t₁ t₂ : S.Term} (h : S.RunsAlike t₁ t₂) :
+    S.RunsAlikeStart t₁ t₂ := by
+  intro R hR P ε A c K₀ hA hP hreach hterm v tr
+  simp only [obsStartFrom_iff]
+  exact ⟨fun ⟨tr₀, h₀, ht⟩ => ⟨tr₀, (h R hR P ε A c K₀ hA hP hreach hterm v tr₀).1 h₀, ht⟩,
+    fun ⟨tr₀, h₀, ht⟩ => ⟨tr₀, (h R hR P ε A c K₀ hA hP hreach hterm v tr₀).2 h₀, ht⟩⟩
 
 /-! ### The tail-resumptive law -/
 
@@ -100,15 +165,31 @@ def TailLaw : Prop :=
 /-! ### Algebraicity -/
 
 /-- **Algebraicity, unary, graded by continuation class**: a resuming operation commutes with the
-`let` it is sequenced in, `(op v to x. M) to y. N` runs as `op v to x. (M to y. N)`.  Plotkin–Power
-algebraicity; the grading is Core `LawAlg`'s (`o.abort = false`, `o.q ≠ .unr`).  A has no `unr`
-class, so the grading here is `o.cls ≠ .abortive`.  The abortive case is S4's: a raise passes bind
-frames (`unwindClear`, `KontLaws`), and the frames it does not pass are finaliser frames, whose
-laws are S4's finaliser conjuncts.  `N` is written under the binder of `x`, which it does not
-mention, as A₂ writes it. -/
+`let` it is sequenced in, `(op v to x. M) to y. N` runs as `op v to x. (M to y. N)`, a finaliser's
+start observed but not its code (`RunsAlikeStart`).  Plotkin–Power algebraicity; the grading is
+Core `LawAlg`'s (`o.abort = false`, `o.q ≠ .unr`).  A has no `unr` class, so the grading here is
+`o.cls ≠ .abortive`.  The abortive case is S4's: a raise passes bind frames (`unwindClear`,
+`KontLaws`), and the frames it does not pass are finaliser frames, whose laws are S4's finaliser
+conjuncts.  `N` is written under the binder of `x`, which it does not mention, as A₂ writes it.
+
+The two sides' continuations differ (`□ to x. M` then `□ to y. N` against `□ to x. (M to y. N)`).
+A handler's clause may put its continuation in a finaliser, which then differs between the sides as
+a term though it starts at the same point of each run; the trace observes the start
+(`Ev.start`). -/
 def AlgLaw : Prop :=
   ∀ l i v (o : OpSig S.Ty) M N, (S.sig l)[i]? = some o → o.cls ≠ .abortive →
+    S.RunsAlikeStart (S.bind (S.bind (S.perform l i v) M) N)
+      (S.bind (S.perform l i v) (S.bind M N))
+
+/-- **Algebraicity observing a finaliser's code**: `AlgLaw` with the traces compared event by
+event, each `fire D` by its finaliser `D` (`RunsAlike`).  Kept as a record. -/
+def AlgLawCode : Prop :=
+  ∀ l i v (o : OpSig S.Ty) M N, (S.sig l)[i]? = some o → o.cls ≠ .abortive →
     S.RunsAlike (S.bind (S.bind (S.perform l i v) M) N) (S.bind (S.perform l i v) (S.bind M N))
+
+/-- Algebraicity observing a finaliser's code gives algebraicity. -/
+theorem algLaw_of_algLawCode (h : S.AlgLawCode) : S.AlgLaw := fun l i v o M N hs ho =>
+  S.runsAlikeStart_of_runsAlike (h l i v o M N hs ho)
 
 /-! ### η: the forwarding handler -/
 
@@ -298,9 +379,27 @@ theorem not_tailLaw_toy : ¬ (toy id bd).TailLaw := fun h =>
   toy_not_runsAlike rfl rfl (h () () [(toy id bd).tailCl ()] () 0 () ⟨(), (), .linear⟩ () () ()
     rfl rfl (fun h => nomatch h) rfl trivial (fun _ _ h => h.elim) (fun _ h => h) (Or.inl trivial))
 
+/-- At `toy`, the returned configuration completes with no event, read without finaliser code. -/
+theorem toy_obsStart_false : (toy hd bd).ObsStartFrom (toy hd bd).R₀ (false, ()) () [] :=
+  (toy hd bd).obsStartFrom_iff.2 ⟨[], toy_obs_false, rfl⟩
+
+/-- `RunsAlikeStart` fails at `toy` when the left side is stopped and the right side returned. -/
+theorem toy_not_runsAlikeStart {t₁ t₂ : Bool} (h₁ : t₁ = true) (h₂ : t₂ = false) :
+    ¬ (toy hd bd).RunsAlikeStart t₁ t₂ := fun h => by
+  subst h₁ h₂
+  have := (h (toy hd bd).R₀ toy_r₀_respects true () () (true, ()) () .unit trivial
+    Relation.ReflTransGen.refl rfl () []).2 toy_obsStart_false
+  obtain ⟨tr₀, h₀, -⟩ := (toy hd bd).obsStartFrom_iff.1 this
+  exact toy_not_obs_true () tr₀ h₀
+
 /-- **Algebraicity is not trivially true**: it fails where `bind` does not associate with
-`perform` (`bd M _ = !M`). -/
+`perform` (`bd M _ = !M`).  `toy` shows no event, so a finaliser's code plays no part. -/
 theorem not_algLaw_toy : ¬ (toy hd (fun M _ => !M)).AlgLaw := fun h =>
+  toy_not_runsAlikeStart rfl rfl
+    (h () 0 () ⟨(), (), .linear⟩ false false rfl (fun h => nomatch h))
+
+/-- Algebraicity observing a finaliser's code fails at the same instance. -/
+theorem not_algLawCode_toy : ¬ (toy hd (fun M _ => !M)).AlgLawCode := fun h =>
   toy_not_runsAlike rfl rfl (h () 0 () ⟨(), (), .linear⟩ false false rfl (fun h => nomatch h))
 
 /-- **η with a holding frame is not trivially true**: it fails where `handle` never returns

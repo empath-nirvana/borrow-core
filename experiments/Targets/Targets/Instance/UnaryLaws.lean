@@ -3,10 +3,13 @@ import Targets.Instance.CellRuns
 /-!
 # The Instance — the unary laws (`A.UnaryLaws`, restated by D4) at our instance
 
-**Algebraicity fails as written at `J₁`** (`not_algLaw_J₁`, at the admissible context `ΞA`:
-`not_algLaw_ΞA`), with `J₁`'s inner rows tied to the effect context (decision R).  D4 compares the
-two sides at a program's data answers; the trace still compares each finaliser event `fire D` by
-the finaliser's code.  The witness `algAffProg` is typed by Core's kernel with every handler's and
+**Algebraicity observing a finaliser's code fails as written at `J₁`** (`not_algLawCode_J₁`, at
+the admissible context `ΞA`: `not_algLawCode_ΞA`), with `J₁`'s inner rows tied to the effect
+context (decision R): D4 compares the two sides at a program's data answers, and that statement
+compares each finaliser event `fire D` by the finaliser's code.  **Algebraicity as restated, a
+finaliser's start observed but not its code, holds at the same configuration** (`algLaw_algAffProg`):
+each side's complete runs answer `()` and show one finaliser's start (`obsFrom_algAffL`,
+`obsFrom_algAffR`).  The witness `algAffProg` is typed by Core's kernel with every handler's and
 operation's row tied to the context (`d_algAffProg`):
 
 * a handler of `2` handles the affine `wait : 1 ↠ 1`; its clause raises `exn` to a handler outside,
@@ -24,8 +27,10 @@ The finaliser uses `κ` once, by its cancel branch, as an affine `κ` may be use
 branch resumes it.  Option A's `[then]` (the finaliser at `F 1`) admits the finaliser because it
 handles the cancel's raises inside itself.  So neither tying rows (D1, decision R) nor restricting
 `unr` (decision 63; at an admissible context a tied row has no resuming `unr` operation) excludes
-the witness.  The restatement is the user's: observe a finaliser's start without its code (D4 read
-at the trace's events), or keep continuations out of finalisers.
+the witness.  Algebraicity is stated with a finaliser's start observed without its code (D4 read at
+the trace's events, `A.EffectSystem.RunsAlikeStart`), the repair that adds no surface restriction;
+the reading is pending the user's confirmation.  The alternative, keeping continuations out of
+finalisers, is a surface rule and is not applied.
 
 **The witness at an unrestricted continuation is outside the tied kernel.**  `algFireProg`
 (`d_algFireProg`, Core's kernel) handles the name `5` at an `unr` operation where `ΞA` declares a
@@ -255,6 +260,8 @@ theorem algR2_free (ℓ : Loc) : lookEnd 10 ((KA KR2).plug (.val (Val.loc ℓ)))
 the program answers `()`. -/
 theorem algL2_end : lookEnd 7 ((KF KL2).plug (.val Val.unit)) = .unit := by rfl
 
+theorem algR2_end : lookEnd 7 ((KF KR2).plug (.val Val.unit)) = .unit := by rfl
+
 /-- Each side's run from the cell's allocation, split at its one finaliser step. -/
 theorem algL2_q (ℓ : Loc) : lookRun 10 ((KA KL2).plug (.val (Val.loc ℓ))) =
     (lookRun 10 ((KA KL2).plug (.val (Val.loc ℓ)))).take 3 ++
@@ -291,36 +298,40 @@ local notation "𝕁" => ourInst (ℍ := ℍ) orowRF Ξ J₁
 def labWait (h2 : Ξ 2 = Ew) : (orowAlg Ξ).Lab :=
   ⟨2, by decide, by rw [h2]; simp, by rw [h2]; simp⟩
 
-theorem obs_hopL (s : (𝕁).R₀.St) : (𝕁).obs (chainPath (𝕁).R₀ Adequacy.emptyMem s
+theorem obs_hopL (R : (𝕁).Runner) (s : R.St) : (𝕁).obs (chainPath R Adequacy.emptyMem s
     (lookRun 1 (algAffK₀.plug algL2))) = [] := obs_chainPath (J := J₁) _ _ _ _ rfl
 
-theorem obs_hopR (s : (𝕁).R₀.St) : (𝕁).obs (chainPath (𝕁).R₀ Adequacy.emptyMem s
+theorem obs_hopR (R : (𝕁).Runner) (s : R.St) : (𝕁).obs (chainPath R Adequacy.emptyMem s
     (lookRun 1 (algAffK₀.plug algR2))) = [] := obs_chainPath (J := J₁) _ _ _ _ rfl
 
-theorem obs_endL (s : (𝕁).R₀.St) : (𝕁).obs (chainPath (𝕁).R₀ Adequacy.emptyMem s
+theorem obs_endL (R : (𝕁).Runner) (s : R.St) : (𝕁).obs (chainPath R Adequacy.emptyMem s
     (lookRun 7 ((KF KL2).plug (.val Val.unit)))) = [] := obs_chainPath (J := J₁) _ _ _ _ rfl
 
-theorem obs_midL (μ : Heap) (s : (𝕁).R₀.St) (ℓ : Loc) : (𝕁).obs (chainPath (𝕁).R₀ μ s
+theorem obs_endR (R : (𝕁).Runner) (s : R.St) : (𝕁).obs (chainPath R Adequacy.emptyMem s
+    (lookRun 7 ((KF KR2).plug (.val Val.unit)))) = [] := obs_chainPath (J := J₁) _ _ _ _ rfl
+
+theorem obs_midL (R : (𝕁).Runner) (μ : Heap) (s : R.St) (ℓ : Loc) : (𝕁).obs (chainPath R μ s
     (lookRun 10 ((KA KL2).plug (.val (Val.loc ℓ))))) = [.fire (finE (DV KL2 ℓ).1)] := by
   rw [algL2_q ℓ, obs_chainPath_one _ _ _ _ _ _ rfl rfl]
   simp only
   erw [labelOf_fire not_isVal_raise1]
   rfl
 
-theorem obs_midR (μ : Heap) (s : (𝕁).R₀.St) (ℓ : Loc) : (𝕁).obs (chainPath (𝕁).R₀ μ s
+theorem obs_midR (R : (𝕁).Runner) (μ : Heap) (s : R.St) (ℓ : Loc) : (𝕁).obs (chainPath R μ s
     (lookRun 10 ((KA KR2).plug (.val (Val.loc ℓ))))) = [.fire (finE (DV KR2 ℓ).1)] := by
   rw [algR2_q ℓ, obs_chainPath_one _ _ _ _ _ _ rfl rfl]
   simp only
   erw [labelOf_fire not_isVal_raise1]
   rfl
 
-/-- **Algebraicity, as restated by D4, fails at `J₁`**, its inner rows tied to the effect context.
-`algAffProg`, typed by Core's kernel at `F 1` with every handler's and operation's row tied to `Ξ`,
-reaches the law's left side under its two handlers.  The left side's complete run allocates `κ`'s
-cell, fires `λ_. handle_1 (κ (inj₂ ())) with (λ_. ())` and answers `()`; every complete run of the
-right side fires the finaliser that mentions its own `κ`, which holds the frame
-`□ to x. (ret x to y. ret ())`, at whatever cell the allocation picks. -/
-theorem not_algLaw_J₁ (h1 : Ξ 1 = Eab) (h2 : Ξ 2 = Ew) : ¬ (𝕁).AlgLaw := by
+/-- **Algebraicity observing a finaliser's code fails at `J₁`**, its inner rows tied to the effect
+context.  `algAffProg`, typed by Core's kernel at `F 1` with every handler's and operation's row
+tied to `Ξ`, reaches the law's left side under its two handlers.  The left side's complete run
+allocates `κ`'s cell, fires `λ_. handle_1 (κ (inj₂ ())) with (λ_. ())` and answers `()`; every
+complete run of the right side fires the finaliser that mentions its own `κ`, which holds the frame
+`□ to x. (ret x to y. ret ())`, at whatever cell the allocation picks.  Kept as a record: the law as
+restated holds at this configuration (`algLaw_algAffProg`). -/
+theorem not_algLawCode_J₁ (h1 : Ξ 1 = Eab) (h2 : Ξ 2 = Ew) : ¬ (𝕁).AlgLawCode := by
   intro hA
   have hRA := hA (labWait Ξ h2) 0 (𝕁).unitV ⟨OVTy.ofV .unit, OVTy.ofV .unit, .affine⟩ (.var 0)
     (.val .unit) (by show ((Ξ 2).map _)[0]? = _; rw [h2]; rfl) (by intro h; cases h)
@@ -344,15 +355,15 @@ theorem not_algLaw_J₁ (h1 : Ξ 1 = Eab) (h2 : Ξ 2 = Ew) : ¬ (𝕁).AlgLaw :=
   have hL : (𝕁).ObsFrom (𝕁).R₀ ((Adequacy.emptyMem, algAffK₀.plug algL2), ()) (𝕁).unitV
       [.fire (finE (DV KL2 0).1)] := by
     refine (obsFrom_chain_obs_iff (𝕁).R₀ hopL _ _).2 ⟨[.fire (finE (DV KL2 0).1)], ?_, ?_⟩
-    · erw [obs_hopL]; rfl
+    · erw [obs_hopL Ξ (𝕁).R₀]; rfl
     refine (obsFrom_alloc_ex_iff (𝕁).R₀ (KA KL2) Val.unit hfr _ _).2 ⟨0, rfl, ?_⟩
     refine (obsFrom_chain_obs_iff (𝕁).R₀ midL _ _).2 ⟨[], ?_, ?_⟩
-    · erw [obs_midL]; rfl
+    · erw [obs_midL Ξ (𝕁).R₀]; rfl
     refine (obsFrom_mstep_iff (𝕁).R₀ hfree rfl (by rw [labelOf_tau_of rfl]; rfl) _ _).2 ?_
     rw [del_upd_fresh rfl]
     have := obsFrom_of_chain (J := J₁) (Ξ := Ξ) (𝕁).R₀ (μ := Adequacy.emptyMem) (s := ()) endL
       .unit
-    erw [obs_endL] at this
+    erw [obs_endL Ξ (𝕁).R₀] at this
     exact this
   have h := (hRA (𝕁).R₀ r₀_respects algAffProg _ (OVTy.ofV .unit)
     ((Adequacy.emptyMem, lookEnd 4 algAffProg), ()) algAffK₀ .unit hder hreach algAff_c _ _).mp
@@ -365,8 +376,8 @@ theorem not_algLaw_J₁ (h1 : Ξ 1 = Eab) (h2 : Ξ 2 = Ew) : ¬ (𝕁).AlgLaw :=
   have midR := lookRun_sound (ℍ := ℍ) 10 ((KA KR2).plug (.val (Val.loc ℓ)))
   rw [algR2_free] at midR
   obtain ⟨tr₂, htr₂, -⟩ := (obsFrom_chain_obs_iff (𝕁).R₀ midR _ _).1 h₂
-  erw [obs_midR] at htr₂
-  erw [obs_hopR, List.nil_append] at htr₁
+  erw [obs_midR Ξ (𝕁).R₀] at htr₂
+  erw [obs_hopR Ξ (𝕁).R₀, List.nil_append] at htr₁
   rw [← htr₁] at htr₂
   have := List.cons.inj htr₂
   injection this.1 with h'
@@ -415,6 +426,129 @@ theorem cancelCell_algAffProg (h1 : Ξ 1 = Eab) (h2 : Ξ 2 = Ew) :
   rw [dif_pos (show IsVal (hndValE 2 (qualsVal [.aff]).1 (.lam (.var 0)) [holdCancelCl]) from
     isVal_H2E)]
   rfl
+
+/-- **The complete runs of one side of the witness**, from its stretches: a chain from the side's
+start to the allocation of `κ`'s cell, showing nothing; at each location, a chain from the cell to
+its release, showing one finaliser's start; and a chain from the release's answer to `()`, showing
+nothing.  Every complete run allocates the cell at some location the memory leaves free, shows that
+location's finaliser start, and answers `()`. -/
+theorem obsFrom_algSide (R : (𝕁).Runner) (s : R.St) {e : Expr} {K : Kont}
+    {q₁ q₃ : List (Kont × Expr × Expr)} {q₂ : Loc → List (Kont × Expr × Expr)}
+    (hop : HeadChain (ℍ := ℍ) e q₁ ((KA K).plug (allocE Val.unit)))
+    (hq₁ : (𝕁).obs (chainPath R Adequacy.emptyMem s q₁) = [])
+    (hmid : ∀ ℓ, HeadChain (ℍ := ℍ) ((KA K).plug (.val (Val.loc ℓ))) (q₂ ℓ)
+      ((KF K).plug (BoCa.BoLo.freeE (.val (Val.loc ℓ)))))
+    (hq₂ : ∀ ℓ, (𝕁).obs (chainPath R (Adequacy.emptyMem.upd ℓ Val.unit) s (q₂ ℓ)) =
+      [.fire (finE (DV K ℓ).1)])
+    (hend : HeadChain (ℍ := ℍ) ((KF K).plug (.val Val.unit)) q₃ .unit)
+    (hq₃ : (𝕁).obs (chainPath R Adequacy.emptyMem s q₃) = []) (v : OVal) (tr : List (𝕁).Event) :
+    (𝕁).ObsFrom R ((Adequacy.emptyMem, e), s) v tr ↔
+      v.1 = Expr.unit ∧ ∃ ℓ, tr = [.fire (finE (DV K ℓ).1)] := by
+  have hfr : ∃ ℓ, (Adequacy.emptyMem : Heap) ℓ = none := ⟨0, rfl⟩
+  -- from the cell's release on: the release, the end, the answer
+  have rel : ∀ ℓ tr', (𝕁).ObsFrom R ((Adequacy.emptyMem.upd ℓ Val.unit,
+      (KF K).plug (BoCa.BoLo.freeE (.val (Val.loc ℓ)))), s) v tr' ↔ v.1 = Expr.unit ∧ tr' = [] := by
+    intro ℓ tr'
+    have hfree : Head (ℍ := ℍ) (Adequacy.emptyMem.upd ℓ Val.unit)
+        (BoCa.BoLo.freeE (.val (Val.loc ℓ))) ((Adequacy.emptyMem.upd ℓ Val.unit).del ℓ)
+        (.val Val.unit) :=
+      Head.free _ ℓ Val.unit (Heap.upd_same _ _ _)
+    refine (obsFrom_mstep_iff R hfree rfl (by rw [labelOf_tau_of rfl]; rfl) v tr').trans ?_
+    rw [del_upd_fresh rfl]
+    refine (obsFrom_chain_obs_iff R hend v tr').trans ?_
+    rw [hq₃]
+    constructor
+    · rintro ⟨tr'', htr, h⟩
+      obtain ⟨hv, h₀⟩ := (obsFrom_val_iff R Val.unit v tr'').1 h
+      rw [htr, h₀]
+      exact ⟨hv, rfl⟩
+    · rintro ⟨hv, rfl⟩
+      exact ⟨[], rfl, (obsFrom_val_iff R Val.unit v []).2 ⟨hv, rfl⟩⟩
+  refine (obsFrom_chain_obs_iff R hop v tr).trans ?_
+  rw [hq₁]
+  constructor
+  · rintro ⟨tr₁, htr, h₁⟩
+    obtain ⟨ℓ, -, h₂⟩ := (obsFrom_alloc_ex_iff R (KA K) Val.unit hfr v tr₁).1 h₁
+    obtain ⟨tr₂, htr₂, h₃⟩ := (obsFrom_chain_obs_iff R (hmid ℓ) v tr₁).1 h₂
+    obtain ⟨hv, h₄⟩ := (rel ℓ tr₂).1 h₃
+    rw [hq₂ ℓ, h₄] at htr₂
+    rw [htr, htr₂]
+    exact ⟨hv, ℓ, rfl⟩
+  · rintro ⟨hv, ℓ, rfl⟩
+    refine ⟨[.fire (finE (DV K ℓ).1)], rfl, ?_⟩
+    refine (obsFrom_alloc_ex_iff R (KA K) Val.unit hfr v _).2 ⟨ℓ, rfl, ?_⟩
+    refine (obsFrom_chain_obs_iff R (hmid ℓ) v _).2 ⟨[], ?_, (rel ℓ []).2 ⟨hv, rfl⟩⟩
+    rw [hq₂ ℓ]; rfl
+
+/-- The complete runs of the witness's left side: the cell at some location `ℓ`, the finaliser
+holding the left side's `κ` at `ℓ` started, the answer `()`. -/
+theorem obsFrom_algAffL (R : (𝕁).Runner) (s : R.St) (v : OVal) (tr : List (𝕁).Event) :
+    (𝕁).ObsFrom R ((Adequacy.emptyMem, algAffK₀.plug algL2), s) v tr ↔
+      v.1 = Expr.unit ∧ ∃ ℓ, tr = [.fire (finE (DV KL2 ℓ).1)] := by
+  have hop := lookRun_sound (ℍ := ℍ) 1 (algAffK₀.plug algL2)
+  rw [algL2_hop] at hop
+  have hend := lookRun_sound (ℍ := ℍ) 7 ((KF KL2).plug (.val Val.unit))
+  rw [algL2_end] at hend
+  refine obsFrom_algSide Ξ R s hop (obs_hopL Ξ R s) (fun ℓ => ?_) (fun ℓ => obs_midL Ξ R _ s ℓ)
+    hend (obs_endL Ξ R s) v tr
+  have hmid := lookRun_sound (ℍ := ℍ) 10 ((KA KL2).plug (.val (Val.loc ℓ)))
+  rwa [algL2_free] at hmid
+
+/-- The complete runs of the witness's right side: the same, the finaliser holding the right
+side's `κ`. -/
+theorem obsFrom_algAffR (R : (𝕁).Runner) (s : R.St) (v : OVal) (tr : List (𝕁).Event) :
+    (𝕁).ObsFrom R ((Adequacy.emptyMem, algAffK₀.plug algR2), s) v tr ↔
+      v.1 = Expr.unit ∧ ∃ ℓ, tr = [.fire (finE (DV KR2 ℓ).1)] := by
+  have hop := lookRun_sound (ℍ := ℍ) 1 (algAffK₀.plug algR2)
+  rw [algR2_hop] at hop
+  have hend := lookRun_sound (ℍ := ℍ) 7 ((KF KR2).plug (.val Val.unit))
+  rw [algR2_end] at hend
+  refine obsFrom_algSide Ξ R s hop (obs_hopR Ξ R s) (fun ℓ => ?_) (fun ℓ => obs_midR Ξ R _ s ℓ)
+    hend (obs_endR Ξ R s) v tr
+  have hmid := lookRun_sound (ℍ := ℍ) 10 ((KA KR2).plug (.val (Val.loc ℓ)))
+  rwa [algR2_free] at hmid
+
+/-- **The witness is on the right side of algebraicity as restated**: at the configuration
+`algAffProg` reaches with the law's left side under its two handlers (`not_algLawCode_J₁`'s), under
+every runner, each side's complete runs answer `()` and show one finaliser's start, read without
+its code.  The finalisers differ as terms (`finE_D2_ne`) and start at the same point of each run. -/
+theorem algLaw_algAffProg (R : (𝕁).Runner) (s : R.St) (v : OVal)
+    (tr : List (A.Ev (orowAlg Ξ).Lab OVal Unit)) :
+    (𝕁).ObsStartFrom R ((Adequacy.emptyMem, algAffK₀.plug algL2), s) v tr ↔
+      (𝕁).ObsStartFrom R ((Adequacy.emptyMem, algAffK₀.plug algR2), s) v tr := by
+  have key : ∀ (K : Kont) (e : Expr), (∀ v tr, (𝕁).ObsFrom R ((Adequacy.emptyMem, e), s) v tr ↔
+      v.1 = Expr.unit ∧ ∃ ℓ, tr = [.fire (finE (DV K ℓ).1)]) →
+      ((𝕁).ObsStartFrom R ((Adequacy.emptyMem, e), s) v tr ↔ v.1 = Expr.unit ∧ tr = [.fire ()]) := by
+    intro K e hK
+    refine (𝕁).obsStartFrom_iff.trans ?_
+    constructor
+    · rintro ⟨tr₀, h₀, rfl⟩
+      obtain ⟨hv, ℓ, rfl⟩ := (hK v tr₀).1 h₀
+      exact ⟨hv, rfl⟩
+    · rintro ⟨hv, rfl⟩
+      exact ⟨_, (hK v _).2 ⟨hv, 0, rfl⟩, rfl⟩
+  exact (key KL2 _ (obsFrom_algAffL Ξ R s)).trans (key KR2 _ (obsFrom_algAffR Ξ R s)).symm
+
+/-- **Algebraicity as restated reads `algAffProg`'s configuration, and holds there**: the program
+is typed by `J₁` with its rows tied (at `F 1`), it reaches the law's left side under its two
+handlers under every runner, and from there each side's complete runs show the same answers and
+traces with a finaliser's start read without its code. -/
+theorem algAffProg_start (h1 : Ξ 1 = Eab) (h2 : Ξ 2 = Ew) :
+    (𝕁).der [] algAffProg ((𝕁).F (orowAlg Ξ).unit (OVTy.ofV .unit)) ∧
+    (𝕁).term (Adequacy.emptyMem, algAffK₀.plug algL2) = (𝕁).plug algAffK₀
+      ((𝕁).bind ((𝕁).bind ((𝕁).perform (labWait Ξ h2) 0 (𝕁).unitV) (.var 0)) (.val .unit)) ∧
+    (𝕁).term (Adequacy.emptyMem, algAffK₀.plug algR2) = (𝕁).plug algAffK₀
+      ((𝕁).bind ((𝕁).perform (labWait Ξ h2) 0 (𝕁).unitV) ((𝕁).bind (.var 0) (.val .unit))) ∧
+    (∀ R : (𝕁).Runner, (𝕁).RReach R ((𝕁).rinit R algAffProg)
+      ((Adequacy.emptyMem, algAffK₀.plug algL2), R.s₀)) ∧
+    ∀ (R : (𝕁).Runner) (s : R.St) (v : OVal) (tr : List (A.Ev (orowAlg Ξ).Lab OVal Unit)),
+      (𝕁).ObsStartFrom R ((Adequacy.emptyMem, algAffK₀.plug algL2), s) v tr ↔
+        (𝕁).ObsStartFrom R ((Adequacy.emptyMem, algAffK₀.plug algR2), s) v tr :=
+  ⟨der_J₁_ret (by decide) (d_algAffProg h1 h2), rfl, rfl, fun R => by
+    have h := rreach_of_chain R (μ := Adequacy.emptyMem) (s := R.s₀)
+      (lookRun_sound (ℍ := ℍ) 4 algAffProg)
+    rw [algAff_c] at h
+    exact h, algLaw_algAffProg Ξ⟩
 
 end AlgW
 
@@ -862,10 +996,11 @@ theorem algLaw_quiet (hL : LiveOK (ℍ := ℍ) RF Ξ J) {l : (RF.alg Ξ).Lab} {r
 
 end Answering
 
-/-- **Algebraicity fails at `J₁` at an admissible effect context**, `J₁`'s inner rows tied to it. -/
-theorem not_algLaw_ΞA :
-    AdmEff ΞA ∧ ¬ (ourInst (ℍ := ℍ) orowRF ΞA J₁).AlgLaw :=
-  ⟨admEff_ΞA, not_algLaw_J₁ ΞA rfl rfl⟩
+/-- **Algebraicity observing a finaliser's code fails at `J₁` at an admissible effect context**,
+`J₁`'s inner rows tied to it.  Kept as a record. -/
+theorem not_algLawCode_ΞA :
+    AdmEff ΞA ∧ ¬ (ourInst (ℍ := ℍ) orowRF ΞA J₁).AlgLawCode :=
+  ⟨admEff_ΞA, not_algLawCode_J₁ ΞA rfl rfl⟩
 
 end Targets.Inst
 

@@ -19,7 +19,7 @@ location, and after the release the memory is the one before the allocation.
 * **Steps with events**: the complete runs of an allocation are, at some free location, the
   allocation there and the complete runs after it (`obsFrom_alloc_ex_iff`); along a chain of head
   steps, the chain's observable events and then the complete runs of its end
-  (`obsFrom_chain_obs_iff`).
+  (`obsFrom_chain_obs_iff`); from a value, the empty run alone (`obsFrom_val_iff`).
 * **Calm runs** (`CellQuiet`, `Calm`): quiet runs, and runs around one cell — quietly to an
   allocation of `()`, at every location quietly from its answer to the release of that location,
   and quietly on from the release's answer.  Calm runs compose and go under every evaluation
@@ -340,6 +340,18 @@ theorem obsFrom_quiet_iff (R : (𝕊).Runner) {μ : Heap} {s : R.St} {e e' : Exp
   obtain ⟨q, hc, hf⟩ := h
   refine obsFrom_chain_iff R hc (fun x hx => ?_) v tr
   rw [labelOf_tau_of (hf x hx)]; rfl
+
+/-- The complete runs from a value: the empty run, answering the value, showing nothing. -/
+theorem obsFrom_val_iff (R : (𝕊).Runner) {μ : Heap} {s : R.St} (v : Val) (w : OVal)
+    (tr : List (𝕊).Event) :
+    (𝕊).ObsFrom R ((μ, v.1), s) w tr ↔ w.1 = v.1 ∧ tr = [] := by
+  constructor
+  · rintro ⟨q, ⟨hp, -⟩, hv, htr⟩
+    cases hp with
+    | nil => exact ⟨hv.symm, htr.symm⟩
+    | cons hst _ => exact (no_rstep_val R v hst).elim
+  · rintro ⟨hw, rfl⟩
+    exact ⟨[], ⟨.nil, isVal_val μ v⟩, hw.symm, rfl⟩
 
 end Obs
 
