@@ -576,6 +576,35 @@ theorem pairProgU_typed : ProbeRules pairΔ pairΓ (pairProgU pCbE) (.comp (.ret
 
 theorem pairWithloadUTyped : PairWithloadUTyped := ⟨pCbE, .unit, pairProgU_typed⟩
 
+/-- **`PairWithloadTyped`**: the same callback term at `withload`'s own (thunked) callback type
+`U (∀'1 ⊏ ⊓Δ. F (Imm̲ '1 (Ref 1 ⊗ Ref 1) ⊸ ['1] 1))`, and `withload p cb` by `lolliE` twice. -/
+theorem pairWithloadTyped : PairWithloadTyped := by
+  refine ⟨pCbE, .unit, probeRules_of_nu (.ret (.lolliE (.right .nil) ?_
+    (.lolliE (.left .nil) (.var (.here .nil))
+      (.withload (a := .var 0) (A := pairTy) (B := .unit) 1 (.cons .nil) pairΔ_find_one
+        (pairTy_closed 1) (fun h => h)))))⟩
+  refine .thunkV rfl (.allI (S := .unit) rfl (fun y u hu => ?_) (fun s hs hl => ?_)
+    (.ret (.thunkV rfl (.lam ?_))))
+  · simp [LifeCtx.find?, LifeCtx.extend, LifeCtx.empty, Lifetime.assocFind] at hu
+    obtain ⟨-, rfl⟩ := hu
+    rfl
+  · rw [List.mem_singleton] at hs; subst hs; exact absurd hl (by simp)
+  · refine .tensorE (.left (.dead (.dead .nil))) (.var (.here (.cons (.cons .nil)))) ?_
+    refine .unitE (.left (.right (.dead (.dead (.dead .nil)))))
+      (.lolliE (.left (.dead (.dead (.dead (.dead .nil)))))
+        (.var (.here (.cons (.cons (.cons (.cons .nil))))))
+        (.forgetImm (.cons (.cons (.cons (.cons (.cons .nil))))))) ?_
+    refine .unitE (.dead (.left (.dead (.dead (.dead .nil)))))
+      (.lolliE (.dead (.left (.dead (.dead (.dead .nil)))))
+        (.var (.there (.here (.cons (.cons (.cons .nil))))))
+        (.forgetImm (.cons (.cons (.cons (.cons (.cons .nil))))))) ?_
+    refine .ret (.boxI (.unitI (.cons (.cons (.cons (.cons (.cons .nil)))))) ⟨fun δ hδ => ?_,
+      fun s hs hl => ?_⟩)
+    · obtain ⟨m, n, hm, -, -⟩ := hδ 1 pairΔ.meetOfDom rfl
+      exact ⟨m, hm⟩
+    · simp only [List.mem_cons, List.not_mem_nil, or_false] at hs
+      rcases hs with rfl | rfl | rfl | rfl | rfl <;> exact absurd hl (by simp)
+
 /-! ### The own push -/
 
 /-- **An own push of `withloadU`'s callback at `pc`'s index**: `pEn` at `pβ`, below the lend and the
@@ -778,6 +807,28 @@ theorem pairGuardRejectsU_of {c : Cfg} {e : LEnt} {α : Life} {r : FrameRec} {l�
       simp only [List.map_cons, List.map_nil, List.mem_singleton] at hvar ⊢
       exact List.nodup_cons.mpr ⟨by simpa using hvar, List.nodup_singleton _⟩
 
+/-- **Link (d) at a slice of two elements, at every configuration of the shape**: one entry named
+`'0`, the elements at places the stack does not lend. At every reading the clause of
+`U (sliceCbUC x B)` offers, a family of two borrow cells exactly at the reading's lifetime fails
+the guard (`sliceCallbackGuardFails`, `pairBoundBelow`). -/
+theorem sliceGuardRejectsU_of {c : Cfg} {e : LEnt} {α : Life} {ℓ : BoCa.Loc} {δ : LSub}
+    {x : LifeVar} {B : VTy} (hσ : c.σ = [e]) (hαs : c.αs = [α]) (hx : e.x = 0)
+    (hn : ∀ i < 2, ℓ + i ∉ c.σ.map LEnt.l) : SliceGuardRejectsU c δ ℓ x B := by
+  rintro ρk δ' σ' αs' β ρs ρ ⟨ι, -, -, hcase⟩ hcells hc
+  have hg := sliceCallbackGuardFails c.σ (ι.life c.αs) β ρs ρk ρ ℓ hn hcells hc
+  rcases hcase with ⟨rfl, rfl, hlt⟩ | ⟨en, hpush, rfl, rfl⟩
+  · rw [hσ, hαs] at hlt
+    have hβ : β < ι.life1 α := pairBoundBelow (ι.sub δ) e (ι.life1 α) β hx hlt
+    refine hg.1 (ι.life1 α) ?_ hβ
+    rw [hαs]; rfl
+  · obtain ⟨x', c', C', -, -, -, hok, -, -⟩ := hpush
+    have hvar := hok.var
+    refine hg.2 en ⟨?_, hok.chain, ?_⟩
+    · rw [hσ, hαs]; rfl
+    · rw [hσ] at hvar ⊢
+      simp only [List.map_cons, List.map_nil, List.mem_singleton] at hvar ⊢
+      exact List.nodup_cons.mpr ⟨by simpa using hvar, List.nodup_singleton _⟩
+
 theorem empty_not_deepAt (l : BoCa.Loc) (ψ : CellU BoCa.Loc Val) : ¬ DeepAt (PMap.empty : WRes) l ψ := by
   intro h
   cases h with
@@ -796,6 +847,88 @@ theorem withloadUPairGapReal : WithloadUPairGapReal (ℍ := ℍ) :=
     fun y h => h, pairTy_closed 1, pPairReb, pStratumLe, comp_pW₁_pcb, pW₂_tw, pW₂_tagged,
     pairGuardRejectsU_of rfl rfl rfl rfl rfl pR_1 pR_2 (by decide) (by simp [pc, pE])
       (by simp [pc, pE])⟩
+
+/-! ### `withload`'s thunked form: the answer's instantiation (decided; not a gate) -/
+
+/-- The answer's instantiation: the shift by `2` below the cut `⊤` of `[pα]`. -/
+abbrev pθ : Restrat.Emb (⊤ : Life) := Restrat.Emb.shift ⊤ 2
+
+theorem cutOf_pα : cutOf [pα] = some ⊤ := rfl
+
+theorem pθ_pα : pθ pα = lifeN 3 := rfl
+
+theorem pθ_toNat2 : pθ.toNat 2 = 4 := rfl
+
+/-- The reading the answer's instantiation gives: `'1 ↦ 4`. -/
+abbrev pS₂ : LSub := ⟨[(1, 4)]⟩
+
+/-- A reborrowed cell at `Imm '1 1` at the instantiated index: Core's `Imm` clause (the cell at
+`2`, at or above the instance `4`; coherent with `pRec` through the chain at its place), `CohS` and
+`RetainedPay` vacuous at a place no entry lends. -/
+theorem pImm_vRLM_inst (l : BoCa.Loc) (hl : l = 1 ∨ l = 2) :
+    vRLM (ℍ := ℍ) .binder0 none [pE] pS₂ (.imm (.var 1) .unit) [lifeN 3] pls (.loc l)
+      (ResU.single l pImm) := by
+  have hl0 : pE.l ≠ l := by rcases hl with rfl | rfl <;> decide
+  have hchain : ∃ p u, Chain pRec.R pRec.T pRec.v p l .unit u := by
+    rcases hl with rfl | rfl
+    · exact ⟨none, .unit, Chain.one (RefPos.tensorL (RefPos.ref .unit 1)) pR_1⟩
+    · exact ⟨none, .unit, Chain.one (RefPos.tensorR (RefPos.ref .unit 2)) pR_2⟩
+  obtain ⟨p, u, hch⟩ := hchain
+  rw [vRLM_imm_eq, vRLJ_imm_eq]
+  refine ⟨⟨4, rfl, l, pure_sep_iff.mpr ⟨⟨rfl, .unit, _, TyEq.refl _ _,
+    Or.inr ⟨pRec, List.mem_singleton_self _, p, u, hch, fun y hy => hy.elim⟩⟩,
+    LSet.singleton pβ, .unit, PMap.empty, ResU.inStratum_empty _, pls, rfl, ⟨rfl, rfl⟩,
+    show (lifeN 4 : Life) ≤ lifeN 2 by decide, fun x => ?_⟩⟩, fun l' e α hl' hin => ?_,
+    retainedPay_of_closed (fun y hy => hy)⟩
+  · refine ⟨fun hx => ⟨hx, ?_⟩, fun h => h.1⟩
+    simp only [pls, List.mem_singleton] at hx
+    subst hx
+    exact pβ_lt_pα
+  · cases hl'
+    rw [innerAt_cons, if_neg hl0] at hin
+    exact absurd hin (by simp [innerAt])
+
+/-- **`withload`'s thunked form admits the reborrowed pair at an instantiated reading of the
+answer** (`¬ WithloadPairGapInst`): at the gate's configuration, at the callback's identity
+reading and the instance `pβ` below the bound, the answer's `U` clause instantiates `[pα]` by the
+shift `pθ`, which moves the lend to `3`, strictly below the reborrowed cells at `2`. The reborrow
+is related at `Imm '1 1 ⊗ Imm '1 1` at the instantiated reading (`'1 ↦ 4`), and with nothing beside
+it the table holds there. A fact about the thunked form's guard: it is not shown that a row can use
+that reading (`NEXT.md` §1.2). -/
+theorem not_withloadPairGapInst : ¬ WithloadPairGapInst (ℍ := ℍ) := by
+  intro h
+  have hF := h pc pE pα pψ PMap.empty pRec 1 2 ⟨[]⟩ .unit 1 pairCfg (pairTy_closed 1)
+  have hR : CbReading ⟨[]⟩ (pairCbC 1 .unit) 1 pairΔ.meetOfDom pc.σ pc.αs PMap.empty
+      (LSub.extend ⟨[]⟩ 1 pβ) [pE] [pα] pβ := by
+    refine ⟨none, ?_, rfl, Or.inl ⟨rfl, rfl, 1, rfl, pβ_lt_pα⟩⟩
+    intro c θ h; cases h
+  refine hF PMap.empty (LSub.extend ⟨[]⟩ 1 pβ) [pE] [pα] pβ pcb hR pPairReb
+    (Inst.ofEmb pθ) pls PMap.empty pcb (fun c θ h => ?_) ?_ (ResU.comp_empty_left _) ?_
+  · obtain ⟨rfl, -⟩ := Sigma.mk.inj (Option.some.inj h)
+    exact cutOf_pα
+  · show vRLM .binder0 none [pE] pS₂ (pairTy.immReborrow (.var 1)) [lifeN 3] pls pV pcb
+    rw [pairTy_immReborrow, vRLM]
+    exact ⟨.loc 1, .loc 2, pure_sep_iff.mpr ⟨rfl, _, _, comp_pcb, pImm_vRLM_inst 1 (Or.inl rfl),
+      pImm_vRLM_inst 2 (Or.inr rfl)⟩⟩
+  · show TabAtS [pE] [lifeN 3] pcb
+    refine ⟨fun a ha => ?_, fun a ha k ψ _ hψ => ?_⟩
+    · cases ha
+      intro k ψ hψ
+      by_cases e1 : k = 1
+      · subst e1; rw [pcb_1] at hψ; cases hψ
+        exact show (↓(lifeN 3) : Life) < lifeN 2 by decide
+      · by_cases e2 : k = 2
+        · subst e2; rw [pcb_2] at hψ; cases hψ
+          exact show (↓(lifeN 3) : Life) < lifeN 2 by decide
+        · rw [pcb_ne e1 e2] at hψ; cases hψ
+    · cases ha
+      by_cases e1 : k = 1
+      · subst e1; rw [pcb_1] at hψ; cases hψ
+        exact show (lifeN 3 : Life) < lifeN 2 by decide
+      · by_cases e2 : k = 2
+        · subst e2; rw [pcb_2] at hψ; cases hψ
+          exact show (lifeN 3 : Life) < lifeN 2 by decide
+        · rw [pcb_ne e1 e2] at hψ; cases hψ
 
 end ProbeD1
 
