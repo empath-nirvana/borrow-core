@@ -272,12 +272,18 @@ def LoadGateNil (A : VTy) (C' : LifeVar → CTy) : Prop :=
 The own push at a payload with no reborrowed cell lends such a place. -/
 def FreePlaceExists : Prop := ∀ ρ : WRes, ∃ l : BoCa.Loc, ∀ ψ, ¬ DeepAt ρ l ψ
 
-/-- **The gate at a payload with no reborrowed cell** (`1`): the reborrowed resource is empty, and
-one own push at a free place with a closed payload type admits it. From `FreePlaceExists`. -/
-theorem loadGateNil_unit (hfree : FreePlaceExists) (C' : LifeVar → CTy)
-    (hnarr : ∀ x A D, C' x ≠ .arr A D ∨ ∀ (en : LEnt), ViewAt x en A) :
-    LoadGateNil (ℍ := ℍ) .unit C' := by
-  intro δ ls W ℓ u R x c β cb ρc ρ _ _ _ _ hbind _ _ hv hst _ hlt _ _ _ hc
+/-- **The gate at a payload with no reborrowed cell** (`1`), from what it reads: the reborrowed
+resource is empty, and one own push at a free place with a closed payload type admits it. -/
+theorem loadGateNil_unit_of (hfree : FreePlaceExists) (C' : LifeVar → CTy)
+    (hnarr : ∀ x A D, C' x ≠ .arr A D ∨ ∀ (en : LEnt), ViewAt x en A) {δ : LSub}
+    {ls : List SRec} {u : Val} {x : LifeVar} {c : Lifetime.Life} {β : Life} {cb ρc ρ : WRes}
+    (hbind : x ∉ CTy.binders (C' x))
+    (hv : vC true (VTy.unit.immReborrow (.var x)) ls (δ.extend x β) u cb)
+    (hst : ρc.InStratum β) (hlt : LtLife δ c β) (hc : ResU.CompS ρc cb ρ) :
+    ∃ en : LEnt, OwnPushM δ (.all x c (C' x)) ρc ([], []) en β ∧
+      vRLM (ℍ := ℍ) .binder0 none [en] (δ.extend x β) (VTy.unit.immReborrow (.var x)) [β] ls u
+        cb ∧
+      TabAtS [en] [β] ρ ∧ PlaceViewsL (extS (δ.extend x β) [en] [β]) [en] [β] ls ρ := by
   have hcb : cb = PMap.empty := hv.1
   subst hcb
   have hρ : ρ = ρc := ResU.CompS.functional hc (ResU.comp_empty_right ρc)
@@ -302,6 +308,15 @@ theorem loadGateNil_unit (hfree : FreePlaceExists) (C' : LifeVar → CTy)
   · have : l = l₀ := by simpa [en] using hl
     subst this
     exact absurd hd (hl₀ ψ)
+
+/-- **The gate at a payload with no reborrowed cell** (`1`): `loadGateNil_unit_of`, which reads
+neither the reborrow's structure nor the callback's freedom at the reborrowed places. From
+`FreePlaceExists`. -/
+theorem loadGateNil_unit (hfree : FreePlaceExists) (C' : LifeVar → CTy)
+    (hnarr : ∀ x A D, C' x ≠ .arr A D ∨ ∀ (en : LEnt), ViewAt x en A) :
+    LoadGateNil (ℍ := ℍ) .unit C' := by
+  intro δ ls W ℓ u R x c β cb ρc ρ _ _ _ _ hbind _ _ hv hst _ hlt _ _ _ hc
+  exact loadGateNil_unit_of hfree C' hnarr hbind hv hst hlt hc
 
 /-! ### `EntryRead` and the callback shape `callbackW` builds -/
 
@@ -1152,26 +1167,33 @@ def AccPairLoadLoaderU : Prop := ∀ Γ : Ctx VTy, Ctx.Dead Γ →
   AccNode (ℍ := ℍ) Δ₁ Γ pairLoader
     (.val (cbUTy 1 Δ₁.meetOfDom (VTy.immReborrow (.var 1) pairTy) (.box (.var 0) .unit) []))
 
-/-- K1: `withbor` (1) at `pairTy`. NOT BUILT: `Withbor1RowM`. -/
+/-- K1: `withbor` (1) at `pairTy`. NOT BUILT: `Withbor1RowM`. At the empty stack
+(`Withbor1NilRowM`, `GroundBlock.lean`) the payload step ports at the flat `pairTy`
+(`nilPayloadCore_flat`), and the own push at the frame's place reads `ImmFramePlaceFree`, not
+derived. -/
 def AccPairLoadWithbor : Prop := ∀ Γ : Ctx VTy, Ctx.Dead Γ →
   AccNode (ℍ := ℍ) LifeCtx.empty Γ withbor
     (.val (axWithbor1Ty 0 LifeCtx.empty.meetOfDom pairTy .unit))
 
-/-- K2: `withload` of the pair, at every index. NOT BUILT: `WithloadRowM`. Its route is blocked
-at the single own push: the push lends one place, and the second reborrowed cell fails the table
-at the identity instantiation of the answer's `U` clause, at every stack (`loadGuardFails2`). At
-the thunked type the answer's `U` clause at a non-identity instantiation moves the push below the
-cells (`not_withloadPairGapInst`), a route not refuted and not built. -/
+/-- K2: `withload` of the pair, at every index. NOT BUILT: `WithloadRowM`. The single own push
+lends one place, and the second reborrowed cell fails the table at the identity instantiation of
+the answer's `U` clause, at every stack (`loadGuardFails2`). The relation also reads the block push
+of both places, and at the empty stack the block gate passes (`loadGateNilB_pairTy`). The row at
+the empty stack (`WithloadNilRowM`) stops at (l3): the gate reads the reborrow's structure, which
+[TR] 6.150's rule does not hand its continuation (`LoadGateNilBI`, not derived). At the thunked
+type the answer's `U` clause at a non-identity instantiation moves a single push below the cells
+(`not_withloadPairGapInst`), a route not refuted and not built. -/
 def AccPairLoadWithload : Prop := ∀ Γ : Ctx VTy, Ctx.Dead Γ →
   AccNode (ℍ := ℍ) Δ₁ Γ withload
     (.val (axWithloadTy (.var 0) 1 Δ₁.meetOfDom pairTy (.box (.var 0) .unit)))
 
-/-- K2′: the same at `withloadU`'s type at the empty row. NOT BUILT: `WithloadURowM`. Its route is
-blocked at an arising configuration (`withloadUPairGapReal`): at the stack of the enclosing lend of
-the pair, the payload reborrowed by `TW.reb` at an own push's lifetime fails the guard at every
-reading the callback's clause offers (`PairGuardRejectsU`). The entry's own judgement is not
-refuted: another argument might meet the table at a non-identity instantiation (`PairArgCellsLe`,
-not built), so it is not a FAILS. -/
+/-- K2′: the same at `withloadU`'s type at the empty row. NOT BUILT: `WithloadURowM`. At an arising
+configuration (`withloadUPairGapReal`), at the stack of the enclosing lend of the pair, the payload
+reborrowed by `TW.reb` at an own push's lifetime fails the guard at every single-push reading the
+callback's clause offers (`PairGuardRejectsU`). The relation also reads the block push of both
+places, which those readings do not list; at the empty stack the block gate passes
+(`loadGateNilB_pairTy`), and the row there (`WithloadUNilRowM`) stops at (l3) (`LoadGateNilBI`, not
+derived). The entry's own judgement is not refuted, so it is not a FAILS. -/
 def AccPairLoadWithloadU : Prop := ∀ Γ : Ctx VTy, Ctx.Dead Γ →
   AccNode (ℍ := ℍ) Δ₁ Γ withload
     (.val (withloadUTy (.var 0) 1 Δ₁.meetOfDom pairTy (.box (.var 0) .unit) []))
@@ -1696,8 +1718,9 @@ theorem accArrayGetRead : AccArrayGetRead (ℍ := ℍ) := fun Δ z Γ hΔ hz hΓ
     (.imm _ _) (.int 0 _) (.ret (CDerives.append_dead hΓ (d_readBody hΔ hz)))
 
 /-- K: `withload` at `array i32` (five cells at one lifetime: S2's case). NOT BUILT:
-`WithloadRowM`; its route is blocked at the single own push, which lends one place
-(`loadGuardFails2` at any two cells). -/
+`WithloadRowM`. The single own push lends one place (`loadGuardFails2` at any two cells); the block
+push of the reborrowed cells passes the gate at the empty stack (`loadGateNilB_arrayI32`), and the
+row there (`WithloadNilRowM`) stops at (l3) (`LoadGateNilBI`, not derived). -/
 def AccArrayGetLoad : Prop :=
   ∀ (Δ : LifeCtx) (Γ : Ctx VTy) (x z : LifeVar), Ctx.DeadP Γ → Δ.find? z = none →
     AccNode (ℍ := ℍ) Δ Γ withload

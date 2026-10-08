@@ -946,6 +946,110 @@ theorem loadGateNilB_arrayI32 (B : VTy) :
       LoadGateNilB (ℍ := ℍ) (VTy.array (.int .w32)) (loadCbU (VTy.array (.int .w32)) B) :=
   loadGateNilB_array freePlaceExists B
 
+/-! ### The rows attempted at the empty stack (`GROUND.md` §4.6)
+
+Each row follows its Core lemma's route step for step. None closes. The first step of each that
+does not port is stated below as the lemma it is missing. None of these is derived, and no
+obstruction to any of them is verified. "Ports" below is [read] unless a lemma is named.
+
+* **`Withbor1NilRowM`** (`withbor1_compatX`). Before the frame the route reads the dead context,
+  the β steps and the `⊸` clauses at the empty stack (`vRLM_thunk_nil_iff`, `cRLMArrNil`). The
+  first step that does not port is the payload put into 6.64's frame: `wpTS_I_frameX` holds the
+  payload at Core's relation (`vC true A`) and gives it back there, and the row holds it at the
+  draft's relation at the empty stack (`NilPayloadCore`). The two agree at a flat payload
+  (`nilPayloadCore_flat`); at a payload with a thunk inside, `NilPayloadCore` is not derived. At a
+  flat payload the next step is (w1), the own push of the lend, whose `OwnOKI.placeFree` reads the
+  callee's resource free at the framed place (D3), and Core's rule hands the callee any resource
+  beside the borrow (`ImmFramePlaceFree`). Step (w3), the callback at the push at the thunked
+  shape, is `CallbackExtImmMF` (`Nx.lean`), stated and not derived.
+* **`WithloadNilRowM`, `WithloadUNilRowM`** (`withload_compatX`, `withloadU_compatX`). The
+  argument is Core's at `Imm` at the empty stack (`CohS` and `RetainedPay` hold at `[]`), and the
+  chooser and [TR] 6.150 (`wpTS_reborrow`) are Core's. The first step that does not port is (l3),
+  the callback's own push at `β`. The block gate (`LoadGateNilB`, proved) reads the reborrow's
+  structure (`ResU.Reb`, `LoadPay`) and the callback's freedom at the reborrowed places, and
+  `wpTS_reborrow` hands its continuation a wand over every resource at Core's relation at the
+  reborrowed type, with none of these (`LoadGateNilBI`). At a payload with no reborrowed cell the
+  gate reads none of them (`loadGateNilBI_unit`). At the thunked shape the step after (l3) reads
+  the answer's `U` clause at the pushed stack, whose guard is read at the run's answer, which the
+  `F` clause's postcondition does not carry [read] (`CallbackExtImmMF`'s step).
+-/
+
+/-- **`withbor` (1) at the empty stack** (`withbor1_compatX`'s statement at `SemSMNil`). -/
+def Withbor1NilRowM : Prop :=
+  ∀ (Δ : LifeCtx) (Γ : Ctx VTy) (A B : VTy) (x : LifeVar), Ctx.DeadP Γ → Δ.find? x = none →
+    VScoped Δ A → ¬ VFree x A → ¬ VFree x B →
+    SemSMNil (ℍ := ℍ) .binder0 Δ Γ withbor (.val (axWithbor1Ty x Δ.meetOfDom A B))
+
+/-- **`withload` at the empty stack** (`withload_compatX`'s statement at `SemSMNil`). -/
+def WithloadNilRowM : Prop :=
+  ∀ (Δ : LifeCtx) (Γ : Ctx VTy) (a : Lifetime.Life) (A B : VTy) (x : LifeVar),
+    Ctx.DeadP Γ → Δ.find? x = none → ¬ VFree x A → ¬ VFree x B →
+    SemSMNil (ℍ := ℍ) .binder0 Δ Γ withload (.val (axWithloadTy a x Δ.meetOfDom A B))
+
+/-- **`withload` at its unwinding type at the empty row, at the empty stack.** -/
+def WithloadUNilRowM : Prop :=
+  ∀ (Δ : LifeCtx) (Γ : Ctx VTy) (a : Lifetime.Life) (A B : VTy) (x : LifeVar),
+    Ctx.DeadP Γ → Δ.find? x = none → ¬ VFree x A → ¬ VFree x B →
+    SemSMNil (ℍ := ℍ) .binder0 Δ Γ withload (.val (withloadUTy a x Δ.meetOfDom A B []))
+
+/-- **`withbor` (1)'s first step that does not port: the payload in 6.64's frame.** The frame holds
+the payload at Core's relation and gives it back there (`wpTS_I_frameX`), and the row reads it at
+the draft's relation at the empty stack, on the way in and on the way out. Not derived at a payload
+with a thunk inside. -/
+def NilPayloadCore (A : VTy) : Prop :=
+  ∀ (δ : LSub) (ls : List SRec) (v : Val) (ρ : WRes),
+    vRLM (ℍ := ℍ) .binder0 none [] δ A [] ls v ρ ↔ vC true A ls δ v ρ
+
+/-- At a flat payload the two relations agree (G1). -/
+theorem nilPayloadCore_flat {A : VTy} (hA : FlatTy A) : NilPayloadCore (ℍ := ℍ) A := by
+  intro δ ls v ρ
+  rw [vRLMFlat .binder0 [] δ [] A hA ls v]
+  rfl
+
+/-- **(w1) at a flat payload: the own push at the frame's place.** `wpTS_I_frameX` with the callee
+also handed that its resource holds no cell at the framed place at any depth, which the own push's
+`OwnOKI.placeFree` reads (D3). Core's rule hands the callee any resource beside the borrow. -/
+def ImmFramePlaceFree : Prop :=
+  ∀ (l : BoCa.Loc) (T : VTy) (δ : LSub) (v : Val) (e : Expr) (ls : List SRec)
+    (Q : List SRec → Val → WProp), AdmWf T δ →
+    (∀ ls₁ ls₂ w ρ, Ext ls₁ ls₂ ρ → Q ls₁ w ρ → Q ls₂ w ρ) →
+    Entails
+      (ptoOwn l v ⋆ vC true T ls δ v ⋆
+        fresh (fun α ρ => (∀ ψ, ¬ DeepAt ρ l ψ) → ∀ ls', AddAt ls ls' α →
+          (∃ r ∈ rsOf ls', r.le = l ∧ r.T = T ∧ r.δ = δ) →
+          (ptoImmS l α ls' (fun ls₀ => vC true T ls₀ δ) ─⋆
+            wpTS ls' e (fun ls'' v' => box α (ptoOwn l v ─⋆ (vC true T ls'' δ v ─⋆ Q ls'' v'))))
+            ρ))
+      (wpTS ls e Q)
+
+/-- **`withload`'s first step that does not port: (l3) at 6.150's interface.** `LoadGateNilB` with
+only what `wpTS_reborrow` hands its continuation: the reborrowed resource, any resource at Core's
+relation at the reborrowed type beside the callback's, and the freshness of `β`. The proved gate
+also reads the reborrow's structure (`ResU.Reb`, `LoadPay`) and the callback's freedom at the
+reborrowed places. -/
+def LoadGateNilBI (A : VTy) (C' : LifeVar → CTy) : Prop :=
+  ∀ (δ : LSub) (ls : List SRec) (ℓ : BoCa.Loc) (u : Val) (x : LifeVar) (c : Lifetime.Life)
+    (β : Life) (cb ρc ρ : WRes),
+    CohE (rsOf ls) ℓ A δ → ¬ VFree x A → δ.find? x = none → x ∉ CTy.binders (C' x) →
+    (∀ y, VFree y A → δ.find? y ≠ none) →
+    vC true (A.immReborrow (.var x)) ls (δ.extend x β) u cb →
+    ρc.InStratum β → β < ⊤ → LtLife δ c β → RecsOutside [β] ls → SubFresh δ β →
+    ResU.CompS ρc cb ρ →
+    ∃ τ : LStack, ((∃ en, τ = [en] ∧ OwnPushM δ (.all x c (C' x)) ρc ([], []) en β) ∨
+        OwnPushB δ (.all x c (C' x)) ρc ([], []) τ β) ∧
+      vRLM (ℍ := ℍ) .binder0 none τ (δ.extend x β) (A.immReborrow (.var x)) (blockL τ β) ls u cb ∧
+      TabAtS τ (blockL τ β) ρ ∧
+      PlaceViewsL (extS (δ.extend x β) τ (blockL τ β)) τ (blockL τ β) ls ρ
+
+/-- **(l3) ports at a payload with no reborrowed cell**: the gate at `1` reads neither the
+reborrow's structure nor the callback's freedom (`loadGateNil_unit_of`). -/
+theorem loadGateNilBI_unit (C' : LifeVar → CTy)
+    (hnarr : ∀ x A D, C' x ≠ .arr A D ∨ ∀ (en : LEnt), ViewAt x en A) :
+    LoadGateNilBI (ℍ := ℍ) .unit C' := by
+  intro δ ls ℓ u x c β cb ρc ρ _ _ _ hbind _ hv hst _ hlt _ _ hc
+  obtain ⟨en, hpush, hv', ht, hpv⟩ := loadGateNil_unit_of freePlaceExists C' hnarr hbind hv hst hlt hc
+  exact ⟨[en], Or.inl ⟨en, rfl, hpush⟩, hv', ht, hpv⟩
+
 end ProbeD1
 
 end
