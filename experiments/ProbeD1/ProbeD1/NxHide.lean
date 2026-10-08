@@ -6,8 +6,9 @@ import ProbeD1.NxAllI
 * **Hiding, where it is invisible.** `hideInvisible`: hiding names no entry's row holds leaves the
   stack as it is. So `[handle]`'s context transport is the identity where the handled name crosses
   no entry (`monoHideGMHandle0_noCross`), and so is `AllRMono`'s hiding half
-  (`allRHideM0_noCross`). Both programs' handlers are of this kind: `reconB′`'s callback row is
-  `{wait}`, and `retry` hides `exn`, which no lender of theirs crosses.
+  (`allRHideM0_noCross`). `reconB′`'s handlers, as `NxRecon.lean` writes the program, are installed
+  around the lends at the empty stack, where every hiding is invisible [read: the typing is not
+  built]. `genSelf`'s handlers are not checked here.
 * **`AllRMono`'s record-order half** (`allRExtM0`): `monoExtM0` at each instance of the
   intersection.
 -/

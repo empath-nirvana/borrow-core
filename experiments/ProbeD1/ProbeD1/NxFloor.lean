@@ -157,9 +157,10 @@ theorem monoOwnGMAtBoxN (Γ : Ctx VTy) : MonoOwnGMAtBoxN (ℍ := ℍ) .binder0 �
 /-! ### What the `∀I` row needs beside the box at a persistent context
 
 The `∀` clause's own lend names its entry by the type's binder, which is no reserved name, so the
-box does not reach the row's push directly. The row's push differs from a box step only in the
-entry's name. The statement below says the relation does not read that name; it is stated and not
-derived here. The row's two reading transports (`CtxExtendMSAt`, `CtxShadowMSAt`, `Nx.lean`) are
+box does not reach the row's push directly. At a persistent context the row's push is at the empty
+resource, as a box step is, and is named by the binder where a box step is named by a reserved
+name. The statement below says the relation does not read that name; it is stated and not derived
+here. The row's two reading transports (`CtxExtendMSAt`, `CtxShadowMSAt`, `Nx.lean`) are
 the other step: the box's pushes may read a variable the extended reading binds, so they move with
 the reading as well. -/
 
@@ -170,8 +171,8 @@ def renEnt (x y : LifeVar) (e : LEnt) : LEnt := { e with T := e.T.applyLSub [(x,
 the entry's variable `x` to `y`, and `x` to `y` in the payload types of the entries pushed after it,
 leaves `vRLM` as it is, when neither name is read or bound by the type or read by the reading, `y`
 is new to the stack and to every payload type, and `x` is read by no payload type at or below the
-entry. With `persistentPushN` it gives the `∀I` row's own push at a context the box carries. Not
-derived here. -/
+entry. With `persistentPushN` it is meant to give the `∀I` row's own push at a context the box
+carries [unchecked: that reduction is not built]. Not derived here. -/
 def VRLMStackRename : Prop :=
   ∀ (A : VTy) (σ₁ σ₂ : LStack) (e : LEnt) (y : LifeVar) (δ : LSub) (αs : List Life)
     (ls : List SRec) (v : Val) (ρ : WRes),

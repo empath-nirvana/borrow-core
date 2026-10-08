@@ -1770,6 +1770,31 @@ The findings given with this revision, each with the place it is answered.
 
 ## 8. The build's outcome
 
+**Corrections after the build** (`NEXT.md` §9, §10). These hold wherever this section, §0, §1.2,
+§1.3 or §6's table says otherwise:
+- `relMAgreesJ` and `muAdjNotVRLM` are facts about `vRLM` at commit `5210cf1`. After `NEXT.md`'s
+  edits, `relMAgreesJ` is restated at types with no lifetime `∀` and no persistent thunk.
+  `muAdjNotVRLM` is withdrawn: after (E1) the adjacency closure is a `vRLM` value
+  (`muAdjVRLME1`). Where §0, §1.2, §1.3 and §6 carry facts from `vRLJ` to `vRLM` through
+  `relMAgreesJ`, they are about `vRLM` at `5210cf1`.
+- `statement0MAtConsumers0_iff` holds by the definition of our own conjunction. That `AllIRowM` and
+  `MonoExtM` are all of statement 0's consumers is [unchecked] (§4.1): `MonoHide` at `vRLM` was not
+  stated here, and the inventory (`NEXT.md` §4.2) was not written. So "statement 0 at `binder0` is
+  exactly (reduces to) its `∀I` row" is not established.
+- The `withload` gap's unchecked step is proved at an arising configuration at `withloadU`'s type
+  (`withloadUPairGapReal`). It is refuted at `withload`'s thunked type at that configuration
+  (`not_withloadPairGapInst`). "Real" is meant for [TR] 6.175's route at every reading
+  (`NEXT.md` §1.2).
+- Under the user's corrections of 2026-10-08, `withload` at two references and the slices at two
+  or more elements are defects of the draft, to fix, and not restrictions. The designed fix is a
+  block entry (`NEXT.md` §1.6), which is not built.
+- `CallbackExtMutM`, `CallbackExtImmM`, `RetainedPayLoadImmRow`, `RetainedPaySliceRow` and
+  `OwnPushI`'s `ViewAt` are stated at the unwinding forms' `.arr` callback shape (`cbUTy`). They
+  are not at the non-unwinding constants' thunked shape. The mismatch predates this unit
+  (`BINDER.md:1920`), and `NEXT.md`'s `CallbackExt*MF` state the thunked shape.
+- `VRLMUnroll` is proved (`NEXT.md` §9.2). The `∀I` row at an index whose stack names the binder is
+  proved at contexts reaching no `U` (`allIRowMUFree0`).
+
 The build is in five files beside the design's `R1.lean`: `R1Thaw.lean` (§1), `R1Mono.lean` (§2),
 `R1Owed.lean` (§3), `R1Stmt0.lean` (§4) and `R1AllI.lean` (the `∀I` row, §2.6). `lake build
 ProbeD1` builds them. There is no `sorry`, `axiom`, `native_decide`, `opaque`, `partial`, `unsafe`
@@ -1800,7 +1825,8 @@ obligation at a narrower scope:
 ### 8.1 Per statement
 
 **§1, R1: closed at `binder0`** (`R1Thaw.lean`).
-- Proved: `RelMAgreesJ` (`relMAgreesJ`), `VRLMMonoAt` (`vRLMMonoAt`), `VRLMRoll` (`vRLMRoll`).
+- Proved: `RelMAgreesJ` (`relMAgreesJ`, at `5210cf1`; restated since), `VRLMMonoAt`
+  (`vRLMMonoAt`), `VRLMRoll` (`vRLMRoll`).
 - **`RelendMValueE`: proved** (`relendMValueE`). The proof is structural recursion on the type,
   with the environment generalised (`EnvThaws`):
   - at `μ`, the fixed point's least-ness at the candidate "a `μ` value that thaws under the
@@ -1817,8 +1843,8 @@ obligation at a narrower scope:
   `bangThunkVRowM`).
 - **Proved: `Statement0UFullM .binder0`** (`statement0UFullM`). The thaw and the four `U`
   introductions hold at every context.
-- Proved: `MuAdjNotVRLM` (`muAdjNotVRLM`). `GAP.md` §4's `μ` slot, whose closure Core's `μ` admits
-  by adjacency, is no `vRLM` value.
+- Proved at `5210cf1`: `MuAdjNotVRLM` (`muAdjNotVRLM`). `GAP.md` §4's `μ` slot, whose closure
+  Core's `μ` admits by adjacency, is no `vRLM` value. Withdrawn after (E1) (`muAdjVRLME1`).
 - Not attempted: `VRLMUnroll`, `MuSlotArises` and `NotMuSlotThawCore`. The `vRLJ` thaw at a `μ`
   slot stays not derived, and no obstruction to it was verified.
 
@@ -1970,14 +1996,15 @@ obligation at a narrower scope:
 - Proved: `NilSoundRetM` (`nilSoundRetM`) and `Statement0SharedM` (`statement0SharedM`, with
   `FutPartI`).
 - Proved: `ForceRowM` at every placement (`forceRowM`), and `CallbackExtMutM` and `CallbackExtImmM`
-  at `binder0` and `binder`.
+  at `binder0` and `binder`, at the unwinding forms' `.arr` callback shape.
 - **`Statement0MBesideMono0`: proved** (`statement0MBesideMono0`). Every fact of statement 0
   beside monotonicity holds at `binder0` at `vRLM`.
 - `Statement0M .binder0` as stated: refuted together with the unrestricted monotonicity statements
   it bundles (`not_statement0M_binder0`), at a configuration not shown to arise. This is not
   `binder0`'s status.
 - **`Statement0MAtConsumers0 ↔ AllIRowM .binder0`: proved** (`statement0MAtConsumers0_iff`).
-  Read at its consumers, statement 0 at `binder0` is exactly its `∀I` row. The row holds at
+  It holds by the definition of our own conjunction; that its conjuncts are all the consumers is
+  [unchecked] (see the corrections above). The row holds at
   every context reaching no `U`, at every index whose stack does not name the binder, and is not
   derived elsewhere.
 
@@ -2035,13 +2062,15 @@ obligation at a narrower scope:
 
 - **R1 is closed at `binder0`.** W reads `μ` and `fam` itself, and the thaw and the four `U`
   introductions hold at every context (`statement0UFullM`).
-- **Statement 0 at `binder0` reduces to its `∀I` row** (`statement0MAtConsumers0_iff`). The row
+- **Statement 0 at `binder0`, read at the consumers `R1Stmt0.lean` names, is its `∀I` row**
+  (`statement0MAtConsumers0_iff`, by definition; the consumers are [unchecked]). The row
   holds at contexts reaching no `U`, at indices whose stack does not name the binder
   (`allIRowMNKUFree0`). Unrestricted monotonicity is refuted at `gd`, a configuration not shown to
   arise. That refutes a lemma for the row, not the row: at `gd` the row's conclusion holds at a
   derivable body that exercises the closure (`gdAllIHoldsAtMt`). The row's remaining cases are not
   derived.
-- **The guard leaves out a second borrow constant.** Beside the slice rows at two or more elements,
+- **The guard and the stack entry do not cover a second borrow constant** (a defect of the draft,
+  under the corrections above). Beside the slice rows at two or more elements,
   `withload` at a payload whose reborrow puts two cells at the own lend's lifetime at distinct
   places no entry lends meets the guard at no pushed stack (`loadGuardFails2`). The guard and the
   stack are ours. What they lack is named in §8.1 and not built.
@@ -2073,9 +2102,9 @@ obligation at a narrower scope:
     `Statement0MBesideMono0`, and `MonoUnrestrictedRefuted0`, the unrestricted statements'
     negation (not `binder0`'s status).
 - **`AllIRowM .binder0`** (open; the target). This is `[allI]` at `SemSM`, `MonoOwnGM`'s only
-  consumer at `binder0`. By `statement0MAtConsumers0_iff` it is all that statement 0 at `binder0`
-  still owes at its consumers. It is proved at every context reaching no `U`, at every index whose
-  stack does not name the binder (`allIRowMNKUFree0`). Open:
+  consumer at `binder0`. Whether it is all that statement 0 at `binder0` still owes at its
+  consumers is [unchecked] (see §8's corrections). It is proved at every context reaching no `U`,
+  at every index whose stack does not name the binder (`allIRowMNKUFree0`). Open:
   - **at a live `U` slot**: the three transports (`MonoOwnGMAt`, `CtxExtendMAt`, `CtxShadowMAt`).
     The routes, each stated in Lean:
     - through the restriction: `MonoOwnGMC` (each live slot also a Core value), `SemSMC`,
@@ -2107,6 +2136,10 @@ obligation at a narrower scope:
   missing object is an entry lending the reborrowed payload's places, or a table that admits the
   cells the innermost lend's reborrow makes. Either changes the draft guard or the stack, which is
   the user's to decide.
+  - Since (`NEXT.md` §9.1): the unchecked step is proved at an arising configuration at
+    `withloadU`'s type (`withloadUPairGapReal`). Under the corrections of 2026-10-08 this is a
+    defect of the draft, and the designed fix is the block entry (`NEXT.md` §1.6), which is not
+    built.
 - **`RetainedPay` at the read-outs** (open).
   - At a bound `Mut` view the build stops where expected, at `EntryPayLeaves`
     (`retainedPayLoadMutRowNJ_of_entry`).

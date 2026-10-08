@@ -5,6 +5,10 @@ items, in the order of §5, and states every target as a Lean `def … : Prop` w
 lemmas it reuses, what counts as success or failure, and the arising check any counterexample must
 pass. It contains no proofs. §8 answers the two design reviews' findings.
 
+The build's outcome is §9. §10 records the user's corrections of 2026-10-08, which supersede this
+design wherever it calls a gap on a borrow-only program a cost or a restriction, and §3.5's program
+check. The four review findings still open are under *Unresolved*.
+
 The statements go in a new statements file `Nx.lean` (definitions and `def … : Prop` only). It
 imports `R1AllI.lean`, and `Statement34.lean` for statement 4's open types. Items 1a's and 2's
 statements are written first. Every statement that reads `InScope`, `OwnPushM` or `StackJM` (1a′'s,
@@ -2377,4 +2381,406 @@ The names below are the current ones. §8.2 changed the gate's form and the read
 
 ## 9. Outcome
 
-To be written by the build.
+The build is on `targets`, commits `4b7936b` to `6dcdf72` and the documentation commit after them.
+The proofs are in:
+- `NxGuard.lean` and `NxGuardPair.lean` (item 1a);
+- `NxUnroll.lean` (item 2);
+- `NxE1.lean` (step 3.0's checks and item 1a′);
+- `NxAllI.lean` (§3.2, §3.3);
+- `NxHide.lean` (item 4);
+- for the corrections of 2026-10-08 (§10), `R1Box.lean`, `NxFloor.lean` and `NxRecon.lean`.
+
+The statements are in `Nx.lean`. `NxCallback.lean`, `NxBlock.lean` and `NxBlockRows.lean` were not
+created. `lake build ProbeD1` is clean. There is no `sorry`, `axiom`, `native_decide`, `opaque`,
+`partial`, `unsafe` or `implemented_by`. Every theorem in the unit's files and in the edited
+`R1*.lean` files was checked with `#print axioms`, and each set is within
+`[propext, Classical.choice, Quot.sound]`. Nothing outside ProbeD1 changed, and no printed
+definition changed.
+
+**Edits to existing definitions and statements** (all in ProbeD1's draft):
+- (E1)–(E4), as §3.1 (`40c35b5`), with every result in §3.1's table at its disposition.
+- The persistence box (`55434c6`, §10.2): `BoxStep`, `PBox`, and `vRLM`'s `!` clause reading
+  `PBox`. It is not one of §3.1's edits. It answers correction (i).
+- Statement changes, each disclosed in its docstring:
+  - `RelMAgreesJ` and its three helper equalities are restated at types with no lifetime `∀`
+    ((E1)) and no persistent thunk (the box: `VBoxFree`, `CBoxFree`).
+  - `muAdjNotVRLM` is withdrawn ((E1)), and `MuAdjVRLME1` is proved in its place.
+  - `VRLMSubst` is restated at substitutions that substitute no thunk (the box). The unrolling
+    substitutes a `μ`, so item 2's rows are unaffected.
+  - `BangThunkFRowM` and `BangThunkVRowM` take `PersistentBoxed` (the box). So
+    `Statement0UFullM .binder0` and `Statement0MBesideMono0` hold with the two `!U` rows at
+    contexts the box carries.
+  - `CtxExtendNamedMAt` carries `StackOK` beside §3.2's statement.
+- Two results are recorded as proved at commit `5210cf1`, before the edits: `muAdjNotVRLM` (the
+  adjacency closure is no `vRLM` value), and `relMAgreesJ` without `VAllFree` or `VBoxFree`.
+
+### 9.1 Item 1a: the two-cell gap
+
+- **Proved** (`NxGuard.lean`): `PairRebCells`, `PairCallbackGuardFails`,
+  `PairCallbackGuardFailsLe`, `SliceCallbackGuardFails`, `PairBoundBelow` and
+  `PairNilOldGuardHolds`.
+- **Proved** (`NxGuardPair.lean`):
+  - the configuration `pc`: `ArisesI.nil`, three allocations and the 6.64 lend (`pc_arises`);
+  - the view (`ArisesVI.view`) and the index at it (`pairCfg`);
+  - `PairWithloadUTyped` and `PairWithloadTyped`;
+  - link (d) at every configuration of the pair's shape (`pairGuardRejectsU_of`), and at every
+    configuration of a two-element slice's (`sliceGuardRejectsU_of`).
+- **The gate: `WithloadUPairGapReal` is proved** (`withloadUPairGapReal`). The configuration
+  arises, and the program is typed at `withloadU`'s type. One own push has a closed payload type,
+  and [TR] 6.150's `TW.reb` reborrows at its lifetime into a tagged typed world. At every reading
+  the callback's clause offers, the reborrowed pair fails the guard.
+- **The thunked form: `WithloadPairGapInst` is refuted** (`not_withloadPairGapInst`). At the gate's
+  configuration, the answer's `U` clause instantiates the lend below the reborrowed cells. There
+  they are related at `Imm '1 1 ⊗ Imm '1 1` and meet the table. It is not shown that a row can
+  use that reading.
+- **Not built:** `SliceUGapReal` (the array's frames, `SliceFrames`), `SliceTyped`, `SliceUTyped`,
+  and the optional `PairArgCellsLe`. `SliceGapInst` was not stated.
+- **What it means.** `withload` of a pair of references is a borrow-only program. Under correction
+  (i) (§10), a borrow-only program that the draft does not cover is a defect of the draft. It is
+  never a restriction or a cost.
+  - Here the defect is in the draft's stack entry. The pushed entry lends one place, and the table
+    puts a borrow cell at a place no entry lends strictly above the outermost lend. So one of the
+    two reborrowed cells always fails (`loadGuardFails2`).
+  - Item 1b's block is the designed fix (§1.6). It is not built (§9.6).
+
+### 9.2 Item 2: `VRLMUnroll`, proved
+
+- `VRLMSome`, `VRLMRename`, `VRLMSubst` and `VRLMInst` are proved (`vRLMSome`, `vRLMRename`,
+  `vRLMSubst`, `vRLMInst`). This is `Core/RelMu.lean`'s route at W's clauses.
+- `VRLMUnroll` is proved (`vRLMUnroll`): `vRLM_roll` one way, and the least fixed point at the body
+  the other.
+- `RollRowM` and `UnrollRowM` are proved at every placement (`rollRowM`, `unrollRowM`), and
+  re-proved at `StackJM` after (E3).
+
+### 9.3 Step 3.0
+
+- **(E1)–(E4) landed** (`40c35b5`). Re-proved: `all_ownM`, `callbackExt*M_own` and their
+  instances, the `U` rows at `StackJM`, `allIRowMNKAt0_of`, `gdRowRefutation`, `rollRowM` and
+  `unrollRowM`. Everything else rebuilt unchanged.
+- **`MuAdjVRLME1`: proved** (`muAdjVRLME1`). After (E1), the adjacency closure is a `vRLM` value at
+  W's own `μ`.
+- **Item 1a re-checked** (`pairGate_afterEdits`). The gate's push meets `OwnPushM`, its index meets
+  `StackJM`, and after (E1) the callback's first conjunct reads no instance at `pc`'s index at any
+  instantiation.
+- **Item 1a′.**
+  - `WithloadUPairGapNilE1` is proved (`withloadUPairGapNilE1`). At the gate's world at the empty
+    stack, after (E1), no instance in scope is below `⊓Δ`, and every own push fails the guard at
+    the reborrowed pair.
+  - `WithloadPairGapNilInstE1` is refuted (`not_withloadPairGapNilInstE1`). At the thunked type,
+    the answer's `U` clause moves the push below the reborrowed cells.
+  - Before (E1) there was no gap at `[]` (`pairNilOldGuardHolds`).
+  - `SliceUGapNilE1` and `SliceGapNilInstE1` were not stated.
+  - Under correction (i), this is §9.1's defect, showing at the empty stack once (E1) removed the
+    readings that hid it there (§10.2).
+- **`CallbackExtMutMF` and `CallbackExtImmMF`: stated, not built.** `InScopeOfInterp` is stated and
+  not proved; no built proof reads it.
+
+### 9.4 Item 3: the `∀I` row's open cases
+
+- **§3.2, the binder-named index: proved.**
+  - `SubOutsideExtendNamed` (`subOutsideExtendNamed`), from `StackJM`'s `SubFresh`.
+  - The row at one context from its transports (`allIRowMAt0_of`).
+  - `CtxExtendNamedMAt` at contexts reaching no `U` (`ctxExtendNamedMAt_uFree`).
+  - **Target (3a): the `∀I` row at every context whose live slots reach no `U`, at every index,
+    the binder-named index included** (`allIRowMUFree0`). This closes the R1 unit's second open case
+    (`not_subOutsideExtendAny`'s index) at those contexts.
+- **§3.3, the reading transports at a live `U` slot: not derived.**
+  - `VRLMReadEquiv`'s planned route does not pass the `F_Σ` clause. There the continuation of a stop
+    is owed at a re-lend of the stack, and `ReadEquiv`'s in-scope conjunct is not kept along a
+    re-lend (`not_readEquivRelend`). This is a fact about our `ReadEquiv`, at a configuration not
+    shown to arise.
+  - The route's other clauses were not built in Lean.
+  - I have not derived `VRLMReadEquiv`, `CtxExtendMSAt`, `CtxShadowMSAt` or `CtxExtendNamedMSAt`,
+    and have not verified that any obstruction to them is real.
+- **§3.4, the push at a live `U` slot: not built.**
+  - 3b-i (`MonoOwnGMAtPS`) is not built.
+  - 3b-ii's steps (`PushArrStep`, `PushArrStepC`, `PopUStep`, `PushEffStep`, `PushAllStep`) and
+    `MonoOwnGMCAt` are stated and not attempted. `not_pushArrStep` was not built, and
+    `PushArrStep`'s docstring now says so. `PushedViewOutsideOldGuard` is stated and not proved.
+  - 3b-ii's target was `retryR`, captured in `reconB′`'s callback. Written as the language writes
+    it (correction (ii), §10.3), `reconB′`'s callback captures nothing.
+- **§3.5's program check.**
+  - `genSelf`'s callback captures nothing [read, §3.5].
+  - `reconB′` is now built (`NxRecon.lean`, §10.3), and its callback is closed [read].
+- **What may be claimed.** The `∀I` row holds at every context reaching no `U`, at every index. It
+  may not be claimed that statement 0 at `binder0` reduces to the `∀I` row: §4.2's inventory is not
+  written.
+
+### 9.5 Item 4: `MonoHide` and the consumers
+
+- **Proved:**
+  - `HideInvisible` (`hideInvisible`);
+  - `[handle]`'s transport where the handled name crosses no entry (`monoHideGMHandle0_noCross`,
+    the first disjunct of `MonoHideGMHandle0`);
+  - `AllRHideM0` where the hidden names cross no entry (`allRHideM0_noCross`);
+  - `AllRExtM0` (`allRExtM0`);
+  - `RelendJInter` at the empty resource (`relendJInter_empty`);
+  - `AllRThawM0` at the empty resource (`allRThawM0Empty`, at `AllRThawM0Empty`, a statement added
+    beside `AllRThawM0`).
+- **Not attempted:**
+  - `MonoHideGMHandle0`'s second disjunct (no live type carries the name);
+  - `VRLMHideAvoid`;
+  - `HideStopStep` (§4.1's bounded attempt was not made);
+  - `MonoHideM` and `MonoHideGM` in general.
+- **Not derived:** `AllROwnM0`; `AllRThawM0` at a slot holding resource (`RelendJInter` in
+  general); `AllRMonoM0`; and `Statement0MAtConsumers0Full`.
+- **The inventory and the table** (§4.2 Steps 1 and 3) were not written. So, by §4.2's rule, no
+  document says what statement 0 at `binder0` reduces to.
+
+### 9.6 Item 1b: not built
+
+1a is real, so 1b's trigger is met. 1b was scheduled last (§5) and was not reached.
+`NxBlock.lean`, `NxBlockRows.lean`, `StackOKB`, `OwnOKB`, `OwnPushB`, `ViewAtB`, `vRLMB`,
+`PairGuardHoldsB`, `PVLStartB` and 1b's gate do not exist. 1b is the designed fix for the defect of
+§9.1 and §9.3 (§10.2).
+
+### 9.7 Report lists (§7)
+
+- **Printed objects read.**
+  - [TR] 6.150's `TW.reb`, the gate's reborrow (`pW₂_tw`).
+  - [TR] p. 5's `reb_α` (`ResU.RebAt`, `pRebAt`).
+  - [TR] 6.64's lend (`LendImmI`, `pLend`), with its H4 consequence.
+  - Spec §19's `withloadU` and `cbUTy` (`pairCbUC`, `pairProgU_typed`), and `sliceBorrowIU`'s
+    callback type (`sliceCbUC`).
+  - [TR] 6.175's route is read as link (d): the reborrow at the reading's lifetime (§1.2).
+  - Not read: `TW.rebEnd`, `wpG_reborrow`, `array_new` and `array_free`. The slice configuration
+    was not built.
+- **Printed hypotheses unspent.** None. The unit proves no printed lemma: every statement it proves
+  is ProbeD1's own, about the draft relation, which no printed proof governs. The printed objects
+  it reads are constructors (`TW.reb`, `LendImmI`), applied with every premise discharged.
+- **Uniqueness and functionality results.** Used: `ResU.CompS.functional` (`NxGuardPair.lean`,
+  `NxE1.lean`, `NxAllI.lean`, `NxHide.lean`). Not used: `CellU.CompS.functional` and `RebAt`'s piece
+  disjointness. `RelendJInter` is proved only at the empty resource, where the split is forced. Its
+  general case, where §7 expected the determinacy of `RelendJ`'s split to be read, is not derived.
+- **Printed lemmas in the run-up that are untranscribed.** None found for items 1a–4. For item 1b
+  (not built), the share's block re-lend is a forward obligation, not a printed lemma: GhostEnd's
+  `openFS` reads strict re-lends.
+- **Hypotheses added.**
+  - (E1)–(E4), with §3.1's table.
+  - (E4)'s `¬ VFree y T`, from `hfree₁`, at every borrow constant's typing rule.
+  - `StackJM`'s payload avoidance, beside its `SubFresh`.
+  - `StackOK` on `CtxExtendNamedMAt`.
+  - The box's three: `VBoxFree`/`CBoxFree` on `RelMAgreesJ`; the no-thunk substitution on
+    `VRLMSubst`; `PersistentBoxed` on the two `!U` rows. Each is non-vacuous:
+    - `VBoxFree` holds at every type with no persistent thunk (`gdTy_free`, at `gd`'s type);
+    - the no-thunk hypothesis holds at the unrolling's substitution (`vRLMInst`);
+    - `PersistentBoxed` holds at every context of persistent thunks and persistent data reaching
+      no `U`, the empty context among them.
+- **The technique built.**
+  - `VRLMSubst` is `vCE_subst`'s route at W's clauses.
+  - `VRLMReadEquiv`, the symmetric invariance, was not built.
+  - The box's world facts are new to ProbeD1 and follow no printed proof: `BoxIdx`, its transport
+    along instantiations and pushes, and `pBox_world` through `instComp`.
+
+---
+
+## 10. The corrections of 2026-10-08
+
+The user corrected the unit on 2026-10-08. The corrections, as given:
+- **(i) Borrow-only programs are a sanity floor.**
+  - Ordinary closures, higher-order functions and borrows without suspension are proved in Core
+    (`fundamentalC` at `σ = []`). The draft relation must reproduce that.
+  - A restriction found on a borrow-only program is a defect of the draft, most likely of (E1). It
+    is never a sacrifice, and never a cost of a placement for OQ-8. The example given is
+    push-monotonicity failing for a closed, persistent `!U` lifetime-polymorphic top-level
+    function.
+  - Persistent resource-free values must be monotone by construction. If (E1) breaks that, (E1) is
+    fixed or reverted, and the outcome says which.
+- **(ii) Test programs are written as the language writes them.**
+  - `retry` is an effect handler installed around the borrow, and the callback performs
+    operations. It captures no retry combinator.
+  - `reconB′` is defined that way, and push-stability is judged against it.
+  - Real restrictions arise only where a callback suspends while an inner lend is open (tier 2).
+
+For borrow-only programs, they supersede every place where this file, DESIGN or `R1MONO.md` calls a
+gap a "cost" or a "restriction". That includes:
+- (E1)'s disclosed cost (§0, §3.1, and §5's stop rule);
+- "real" in §1.2 and §1.5;
+- `withload` and the slices "not covered at W" (`R1MONO.md` §8);
+- DESIGN §6.3's outcome (c), where it would fall on a borrow-only program.
+
+Each such gap is a defect of the draft, to be fixed. The corrections also supersede §3.5's program
+check, and DESIGN §9.2's requirement that `retry`'s handler sit inside the first borrow.
+
+### 10.1 What the draft lacked
+
+- **The `!` clause.**
+  - `vRLM`'s `!` clause added nothing to `A`'s: `!A` at `σ` was `A` at `σ` over the empty
+    resource. At `A = U C`, `A`'s clause reads the thunk at every instantiation of the stack
+    (`RelendJ`), but no clause read a persistent value after a push.
+  - At `vRLJ`, the relation before (E1) and before the box, the persistent closure `!gdTy` over
+    `gdF` is related at `gd`'s stack and not after the own lend's push (`gdBangJ`).
+  - `gdTy` has no lifetime `∀` (`gdTy_free`), so (E1) plays no part there. Reverting (E1) would not
+    make persistent values monotone by construction.
+  - `gd` is not shown to arise, and `gdF` is no Core value. The fact is about the clause: it gave no
+    persistent value a way across a push.
+- **What (E1) does at the top level.**
+  - At the empty stack and the empty reading no lifetime is in scope (`inScope_top_none`). So after
+    (E1), the `∀` clause's first conjunct reads no instance there. A lifetime-polymorphic value made
+    at the top level is checked by its own pushes alone.
+  - Before (E1), the first conjunct read every instance below the bound.
+
+### 10.2 The fix: the persistence box, with (E1) kept
+
+**The box** (`R1.lean`, `55434c6`).
+- `BoxStep δ ls` is an own push at the empty resource (`OwnOKI`). Its entry is under a reserved
+  name (`NsVar`, a name no program binds), new to the reading, and its payload type does not read
+  its own variable. It is pushed below `⊤` and fresh below the reading, with the records kept
+  outside.
+- `PBox A δ σ αs P` holds at a thunk type when `P` holds at every world `binder0`'s order reaches
+  from the stack: every instantiation (`InstAt`), every list kept outside the instantiated
+  lifetimes, and every finite sequence of `BoxStep`s from there. At every other type it is `True`.
+- `vRLM`'s `!` clause is now `ρ = ∅`, the value at `A`, and `PBox` over the value at `A` at the
+  empty resource.
+
+**What it gives** (`R1Box.lean`, `NxFloor.lean`):
+- the index facts along the box (`BoxIdx`, `boxIdx_inst`, `boxIdx_steps`, `stackJ_of_boxIdx`), and
+  the box's transitivity (`boxSteps_inst`, and `pBox_world` through `instComp`);
+- a persistent thunk at every box world, by construction (`persistentBoxWorld`), and across an own
+  push under a reserved name (`persistentPushN`);
+- a persistent context carried to every box world (`gRLM_boxWorld`) and across such a push
+  (`monoOwnGMAtBoxN`): persistent thunks by the box, and persistent data reaching no `U` by the
+  `U`-free push;
+- the two `!U` rows, re-proved at the box (`bangThunkFRowM`, `bangThunkVRowM`, and so
+  `statement0UFullM`). At every box world the thunk is the `U` row's conclusion, from the premise
+  there, with the context carried there. The rows now take `PersistentBoxed`.
+
+Re-proved with the box: `vRLM_mono_at`, `relendM_valueE`, `monoExtME_go`, `monoOwnUFree_go`,
+`vRLM_reading_uFree`, `vRLM_some`, `vRLM_rename` and `vRLM_subst`.
+
+**(E1) is kept, and the `!` clause is fixed.** The reasons:
+- The defect was in the `!` clause, and it was there before (E1) (`gdBangJ`). The box fixes the
+  clause.
+- §3.3's route to the reading transports reads (E1) (§3.1). Without (E1), they were not derived
+  (`R1MONO.md` §8).
+- The borrow-only program found so far on which (E1) has an effect is `withload` of a pair at the
+  empty stack (`withloadUPairGapNilE1`).
+  - That is §9.1's two-cell defect. At a non-empty stack it shows with or without (E1)
+    (`withloadUPairGapReal`, `pairGate_afterEdits`).
+  - Before (E1), the first conjunct's readings at `[]` hid it there (`pairNilOldGuardHolds`).
+  - One fix is designed to serve both: item 1b's block, which lends the payload's places together
+    at the own push [unchecked: 1b is not built].
+  - If 1b's gate fails, (E1) is revisited at the empty stack, as a defect of the draft.
+
+**The box against DESIGN §12.2 (d).** The box makes the `!` clause reach stacks other than its own
+by something other than `FutQ`: instantiations, and own pushes at the empty resource under reserved
+names. `binder0`'s `U` and `∀` clauses already make those moves.
+- The box was made to answer correction (i). Statement 0 does not yet hold, with the box or without
+  it, so (d) has not occurred.
+- If statement 0 comes to hold only with the box, DESIGN §12.2's reading of (d) applies to it, and
+  the report must say so.
+
+### 10.3 `reconB′` as the language writes it (`NxRecon.lean`)
+
+- **The program** (`reconB'`):
+
+      resumer wait (retry (lend tt (Λ. λb. x ← *b; wait (); y ← *b; y)));
+      timeout (lend tt (Λ. λb. x ← *b; wait (); y ← *b; y))
+
+  - `retry` handles `Fail` around the lend, and re-runs the attempt once on a raise. The callback,
+    like DESIGN §9's, raises nothing, so the run does not exercise the re-run.
+  - `resumer` resumes `wait`. `timeout` cancels it, and the cancel ends the lend's frame by its
+    finaliser.
+  - Each attempt lends a fresh cell holding `tt`.
+  - The lend is `lendCell`'s, `withborU`'s term. It is read at `withbor` (1)'s type, an `Imm` lend
+    (6.64), as DESIGN §9's term borrows `imm`. The term is the same at `withbor` (2)'s type [read].
+- **Its run** (`reconB'_eval`): `(tt, ff)`, and no cell left. This is the interpreter's run, by
+  `decide`.
+- **Push-stability, judged against it.**
+  - The callback `Λ. λb. …` is closed [read]. So its `∀I` row can be read at the empty context,
+    where it holds at every index (`reconCb_allI`, from `allIRowMUFree0`).
+  - The typing at the probe's rule set is not built. So it is [unchecked] that the derivation
+    applies the row at a context with no live `U` slot.
+  - `reconB′`'s handlers are installed around the lends, at the empty stack, where every hiding is
+    invisible [read].
+- **What it owes** is the suspension inside the lend, which is statements 1–3 (tier 2).
+  - The callback performs `wait` while its lend is open. The scheduler resumes it, and `timeout`'s
+    cancel ends the lend's frame by the finaliser.
+  - The unwinding forms admit only abortive operations in the callback (`Row.Unwind`,
+    `Core/EffBorrow.lean`), and `wait` is resumed.
+- 3b-ii's target, `retryR` captured in the callback, does not occur in this program.
+
+### 10.4 What the floor still owes
+
+Each item below is either a statement not derived, with no obstruction verified, or not built.
+Under correction (i), if one fails at a borrow-only program, that is a defect of the draft to fix,
+not a restriction.
+- **The `∀I` row's own push at a persistent context.**
+  - The push is named by the type's binder, not by a reserved name, so the box does not reach it.
+  - `VRLMStackRename` (`NxFloor.lean`) states that `vRLM` does not read the entry's name. With
+    `persistentPushN`, it is meant to give the push [unchecked: not built].
+  - `VRLMStackRename` is not derived.
+- **The row's reading transports at a `!U` slot** (`CtxExtendMSAt`, `CtxShadowMSAt`): not derived.
+  A box world's pushes may read a variable that the extended reading binds, so they must move with
+  the reading too.
+- **`PersistentBoxed`'s left-out case**: a persistent slot `!B` whose `B` reaches a `U` other than
+  at its top, such as `!(U C ⊗ 1)`.
+  - `PBox` reads only `!U C`.
+  - The rules make `!` values only by `bangThunkF`, `bangThunkV` and host operations
+    (`Core/Fundamental.lean`). So such a slot holds a host operation's value or a bound variable
+    [read].
+  - The fix to try is `PBox` at every `!B` that reaches a `U`. It was not attempted.
+- **Linear closures across a push** (a `U` slot not under `!`).
+  - `MonoOwnGMAtPS` (3b-i) is not built, and 3b-ii's steps were not attempted.
+  - `gd` refutes the unrestricted `MonoOwnGM` at a configuration not shown to arise, whose closure
+    is no Core value.
+- **The floor's own statement** is that the draft relates, at `σ = []`, every program
+  `fundamentalC` covers. It is not stated in this unit. The nearest statements are OQ-58's
+  (`NilAgrees`, `NilAgreesU`, `NilSoundV`, `NilSoundC`; DESIGN §6.3), which were not attempted.
+- **The two-cell defect** (`withload` of a pair, and the slices at two or more elements): item 1b,
+  not built.
+
+---
+
+## Unresolved: the reviews' findings
+
+The design reviews raised the four major findings below. §8.2 answered each in the text before the
+build, and the answers were not reviewed again. Each entry gives the finding, the text's answer,
+what the build did, and what stays open.
+
+1. **§1.2(d): at `pairCbC` the guard is read through the answer's `U` clause and `RelendJ`'s
+   instantiations.**
+   - The text's answer (§8.2): the gate is posed at `withloadU`, where the `⊸` is directly under
+     the `∀`. The thunked form has its own statement with both quantifiers.
+   - The build:
+     - The gate at `withloadU` is proved (`withloadUPairGapReal`).
+     - At `pairCbC`, the thunked form is refuted at the gate's configuration
+       (`not_withloadPairGapInst`): through the answer's instantiation, the reborrowed cells meet
+       the table.
+   - Open: at `withload`'s own type, the gap is not established at that configuration. It is not
+     shown that a row can use the instantiated reading.
+2. **`AllRMonoM0` lacks the thaw (instantiation) half and the hide half; `Statement34`'s
+   transport.**
+   - The text's answer (§8.2, `Nx.lean`): four halves (`AllRExtM0`, `AllROwnM0`, `AllRThawM0`,
+     `AllRHideM0`), with `RelendJInter`.
+   - The build:
+     - `allRExtM0`;
+     - the thaw half at the empty resource (`allRThawM0Empty`);
+     - the hide half where the hidden names cross no entry (`allRHideM0_noCross`).
+   - Open:
+     - `AllROwnM0`;
+     - the thaw half at a slot holding resource (`RelendJInter`);
+     - the hide half's general case;
+     - `AllRMonoM0`, and its use as `Statement34`'s transport.
+   - Since §10.3, `reconB′`'s callback does not capture `retryR`, so `reconB′` does not read
+     `AllRMonoM0` at its callback [read; the typing is not built]. Statement 4 still states it.
+3. **Two callback shapes treated as one.** The two shapes are the unwinding forms' `cbUTy`,
+   `.all y c (.arr …)`, and the non-unwinding constants' thunked `∀'x ⊏ c. F (U (A ⊸ …))`.
+   `CallbackExt*M`, `OwnPushI`'s `ViewAt` and 1b's `ViewAtB` are at the `.arr` shape.
+   - The text's answer (§3.1, §8.2): `CallbackExtMutMF` and `CallbackExtImmMF`, at the thunked
+     shape.
+   - The build: both are stated, and neither is proved. `ViewAtB` is not built.
+   - The mismatch predates this unit. It sits in `BINDER.md:1920`, in `R1.lean`'s
+     `CallbackExtMutM`, `CallbackExtImmM`, `RetainedPayLoadImmRow` and `RetainedPaySliceRow`, and in
+     `Binder.lean`'s `ViewAt`.
+   - Open: the non-unwinding constants' own-push route has no proved statement at their shape.
+4. **The guard link is existential where it must be universal** (`PairGuardRejects` over pushes).
+   - The text's answer (§8.2): `PairGuardRejectsU` is universal over every reading. That covers
+     every instantiation, every instance below the bound, and every own push with every resource
+     the callback holds. One existential `TW.reb` witness is kept, so that (d) is not vacuous.
+   - The build:
+     - `pairGuardRejectsU_of` proves it at every configuration of the pair's shape, and
+       `withloadUPairGapReal` carries it.
+     - `sliceGuardRejectsU_of` mirrors it at a two-element slice, whose gate (`SliceUGapReal`) is
+       not built.
+   - Open: the slice gate.

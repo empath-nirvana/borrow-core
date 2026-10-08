@@ -617,8 +617,9 @@ end
 def MonoOwnGMAtPS (p : Placement) : Prop :=
   ∀ Γ : Ctx VTy, (∀ s ∈ Γ, s.live = true → PushStableV s.ty) → MonoOwnGMAt (ℍ := ℍ) p Γ
 
-/-- **The `⊸` case of the push, at an argument holding the pushed view.** As stated, refuted at
-`gd` (`gdG_pushed`, `gd_run_fails_of`), at a configuration not shown to arise. -/
+/-- **The `⊸` case of the push, at an argument holding the pushed view.** As stated it is expected
+to fail at `gd`, a configuration not shown to arise, by the R1 unit's `gdG_pushed` and
+`gd_run_fails_of` [unchecked: no `¬ PushArrStep` is built]. -/
 def PushArrStep : Prop :=
   ∀ (σ : LStack) (δ : LSub) (A : VTy) (D : CTy) (αs : List Life) (ls : List SRec) (e : Expr)
     (ρf : WRes) (en : LEnt) (a : Life) (w : Val) (ρv ρ : WRes) (ψ : CellU BoCa.Loc Val),

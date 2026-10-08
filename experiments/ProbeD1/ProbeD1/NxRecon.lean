@@ -19,11 +19,12 @@ lends a fresh cell holding `tt`. `*b` reads the cell through the view.
 * **The term** (`reconB'`) and its run (`reconB'_eval`: `(tt, ff)` and no cell left; the
   interpreter's run is evidence, as for `genSelf_eval`).
 * **Push-stability, judged against this program** (`reconCb_allI`): the borrow's callback is
-  closed (by reading `reconCbBody`: it reads only the view, its own binder), so the `∀I` row reads
-  it at the empty context, where the row is proved at every index (`allIRowMUFree0`). No context of
-  the program's `∀I` rows holds a `U` value. What the program owes beyond that is the suspension
-  inside the lend: the callback performs `wait` while the 6.64 lend is open, and `timeout`'s cancel
-  ends that lend's frame (statements 1–3, tier 2).
+  closed (by reading `reconCbBody`: it reads only the view, its own binder), so its `∀I` row can be
+  read at the empty context, where the row is proved at every index (`allIRowMUFree0`). That the
+  program's typing applies the row at a context with no live `U` slot is [unchecked]: the typing is
+  not built. What the program owes beyond that is the suspension inside the lend: the callback
+  performs `wait` while the 6.64 lend is open, and `timeout`'s cancel ends that lend's frame
+  (statements 1–3, tier 2).
 
 The typing at the probe's rule set is not built here.
 -/
@@ -87,8 +88,8 @@ theorem reconB'_eval :
       | .value ⟨.pair (.inj₂ .unit) (.inj₁ .unit), _⟩ false => true
       | _ => false) = true := by decide
 
-/-- **The `∀I` row at the callback's context**: the callback is closed, so its context is the empty
-one, and the row holds there at every index (`allIRowMUFree0`). -/
+/-- **The `∀I` row at the empty context**, where the closed callback can be read: the row holds
+there at every index (`allIRowMUFree0`). -/
 theorem reconCb_allI : AllIRowMAt (ℍ := ℍ) .binder0 [] :=
   allIRowMUFree0 [] (fun s hs => by simp at hs)
 

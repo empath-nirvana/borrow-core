@@ -280,9 +280,11 @@ fact about our statement.
     generalised. At `μ` it uses the fixed point's own induction; there is no step index.
   - The four `U` introductions hold at every context.
   - `vRLM` is `vRLJ` wherever no `μ`, `fam` or type variable occurs outside a borrow payload
-    (`relMAgreesJ`).
+    (`relMAgreesJ`, as proved at `5210cf1`). After the next unit's edits it is restated at types
+    with no lifetime `∀` and no persistent thunk.
   - The `μ` slot at which Core's `μ` admits a closure by adjacency is no `vRLM` value
-    (`muAdjNotVRLM`).
+    (`muAdjNotVRLM`, proved at `5210cf1`). After (E1) the closure is a `vRLM` value
+    (`muAdjVRLME1`), and `muAdjNotVRLM` is withdrawn.
 - **Monotonicity at `binder0`.**
   - The record half is proved (`monoExtM0`).
   - The own push is proved at contexts reaching no `U` (`monoOwnGUFreeMA`). It needs one added
@@ -311,6 +313,7 @@ fact about our statement.
     take [unchecked].
   - Not derived: the row at a live `U` slot; and at an index whose innermost entry is named by the
     binder, where `SubOutside` at the extended reading is not given (`not_subOutsideExtendAny`).
+    The second has since been proved at contexts reaching no `U` (`allIRowMUFree0`).
   - The restricted route (each live slot also a Core value) excludes `gd` (`gdCtxNotCore`). It is
     met at `gd`'s index with a `U` slot (`gdRestrictedMet`) and proved at contexts reaching no `U`
     (`monoOwnGMCUFreeA`). Its step at a `U` slot was not attempted in Lean.
@@ -327,26 +330,122 @@ fact about our statement.
       the table excludes the other (`loadGuardFails2`). So, like the slice rows, it is not covered at
       W [unchecked: the argument holds the two cells at the top, and the callback's guard reads
       them with the closure's resource]. The `Imm` read-out at the payloads the guard admits was
-      not attempted;
+      not attempted. Since then, the unchecked step is proved at an arising configuration at
+      `withloadU`'s type (`withloadUPairGapReal`). Under the corrections of 2026-10-08 this is a
+      defect of the draft's stack entry, not a restriction. The designed fix is a block
+      (`NEXT.md` §1.6), which is not built;
     - the slice rows at two or more elements stay outside W (`SliceGuardFails`).
   - `KeepsT` at the share: proved from `LineageUnique` (`shareKeepsT_of`), which is not derived,
     and `FramesKept`, which statement 2 supplies.
 - **Statement 0 at `binder0`.**
   - Every fact beside monotonicity is proved (`statement0MBesideMono0`): the shared lemmas at the
     revised futures, `[force]`, the callbacks at `σ·y`, and the `U` side.
-  - Read at its consumers, statement 0 at `binder0` is exactly its `∀I` row
-    (`statement0MAtConsumers0_iff`). The row is proved where its context reaches no `U`.
+  - `statement0MAtConsumers0_iff` holds by the definition of our own conjunction. That `AllIRowM`
+    and `MonoExtM` are all of statement 0's consumers is [unchecked]: `MonoHide` at `vRLM` was not
+    stated, and the inventory (`NEXT.md` §4.2) was not written. The row is proved where its
+    context reaches no `U`.
   - The bundle as stated is refuted with the unrestricted monotonicity statements
     (`not_statement0M_binder0`). That is not `binder0`'s status.
 - **What it decides.**
   - R1 is closed at `binder0`.
-  - Statement 0 there reduces to the `∀I` row at a live `U` slot and at indices whose stack names
-    the binder.
-  - The guard leaves out a second borrow constant: beside the slice rows, `withload` at a payload
-    with two references side by side (`loadGuardFails2`).
+  - What statement 0 there reduces to is not established, because its consumers were not
+    inventoried.
+  - The guard and the stack entry do not cover a second borrow constant: beside the slice rows,
+    `withload` at a payload with two references side by side (`loadGuardFails2`). Under the
+    corrections of 2026-10-08, both are defects of the draft, to fix.
   - OQ-8 is not decided: no refutation passed DESIGN §11, and `cbpv` and `binder` were not redone
     at `vRLM`.
   - No failure of type (a), (b) or (d) occurred, and the fallback is not triggered.
+
+## The guard gap, `VRLMUnroll`, the `∀I` row, `MonoHide`, and the floor (`NEXT.md`): the outcome
+
+`NEXT.md` takes four items at `binder0`:
+- the two-cell guard gap the R1 unit left unchecked;
+- `VRLMUnroll`;
+- the `∀I` row's two open cases;
+- `MonoHide` at `vRLM`, and the consumers check.
+
+The user's corrections of 2026-10-08 (`NEXT.md` §10) added a floor:
+- borrow-only programs are proved in Core, and the draft must reproduce them;
+- a gap on a borrow-only program is a defect of the draft, not a restriction or a cost;
+- persistent resource-free values must be monotone by construction;
+- test programs are written as the language writes them.
+
+`NEXT.md` §9 is the outcome in full, §10 the corrections, and *Unresolved* the four review findings
+still open. Statements are in `ProbeD1/Nx.lean`. The proofs are in `NxGuard.lean`,
+`NxGuardPair.lean`, `NxUnroll.lean`, `NxE1.lean`, `NxAllI.lean`, `NxHide.lean`, `R1Box.lean`,
+`NxFloor.lean` and `NxRecon.lean`. Nothing outside ProbeD1 changed.
+
+The draft relation changed twice:
+- (E1)–(E4) (`NEXT.md` §3.1):
+  - (E1): the `∀` clause's first conjunct reads only instances in scope;
+  - (E2): its own lend is at `OwnPushM`;
+  - (E3): `SemSM` reads `StackJM`;
+  - (E4): the callback statements take `¬ VFree y T`.
+- The persistence box. `vRLM`'s `!` clause reads a persistent thunk at every world `binder0`'s order
+  reaches from the stack: every instantiation, every list kept outside, and every finite sequence
+  of own pushes at the empty resource under reserved names.
+
+The statement changes are listed in `NEXT.md` §9.
+
+- **The two-cell gap is real at `withloadU`** (`withloadUPairGapReal`).
+  - The configuration arises: three allocations and a 6.64 lend. Its view arises, and the
+    judgement's index holds there.
+  - The program is typed at `withloadU`'s type. [TR] 6.150's `TW.reb` reborrows the payload at an
+    own push's lifetime into a tagged typed world.
+  - At every reading the callback's clause offers, the reborrowed pair fails the guard.
+  - At `withload`'s own thunked type, the statement is refuted at the same configuration
+    (`not_withloadPairGapInst`). The answer's `U` clause moves the lend below the cells, where they
+    meet the table.
+  - After (E1) the gap also shows at the empty stack (`withloadUPairGapNilE1`). Before (E1) it did
+    not (`pairNilOldGuardHolds`).
+  - This is a defect of the draft's stack entry on a borrow-only program. The designed fix is item
+    1b's block, which is not built. The slice gate is not built either.
+- **`VRLMUnroll` is proved** (`vRLMUnroll`), with `vRLM`'s substitution lemma and the roll and
+  unroll rows at every placement.
+- **The `∀I` row.**
+  - It is proved at every context whose live slots reach no `U`, at every index, the binder-named
+    index included (`allIRowMUFree0`).
+  - At a live `U` slot it is not derived. The planned route to the reading transports does not pass
+    the `F_Σ` clause (`not_readEquivRelend`, a fact about our `ReadEquiv`). The push's steps at a
+    `U` slot were not attempted.
+- **`MonoHide`.**
+  - Proved where the hidden names cross no entry (`monoHideGMHandle0_noCross`,
+    `allRHideM0_noCross`).
+  - Statement 4's `AllRMonoM0`: its record-order half is proved (`allRExtM0`), and its thaw half at
+    the empty resource (`allRThawM0Empty`). The rest is not derived.
+  - The consumers inventory was not written, so no claim is made about what statement 0 at
+    `binder0` reduces to.
+- **The floor.**
+  - Before the box, `vRLM`'s `!` clause did not carry persistent values across a push by
+    construction, with or without (E1). At `vRLJ`, a persistent closure at a type with no lifetime
+    `∀` is related at a stack and not after the own lend's push (`gdBangJ`, at `gd`, not shown to
+    arise).
+  - So (E1) was kept, and the `!` clause was fixed.
+  - With the box, a persistent thunk is carried by construction across instantiations and own
+    pushes under reserved names (`persistentPushN`, `monoOwnGMAtBoxN`). The two `!U` rows are
+    re-proved at it (`statement0UFullM`).
+  - Open:
+    - the `∀I` row's own push at a persistent context, which is named by the binder
+      (`VRLMStackRename`, stated, not derived);
+    - the reading transports at a `!U` slot;
+    - a persistent slot reaching `U` below its top;
+    - linear closures across a push;
+    - the floor's own statement at `σ = []` (OQ-58's statements, not attempted).
+- **`reconB′`, as the language writes it** (`reconB'`).
+  - `retry` is a handler installed around the lend, and the callback performs `wait`. It runs to
+    `(tt, ff)` with no cell left (`reconB'_eval`).
+  - Its callback is closed [read]. So its `∀I` row is read at the empty context, where it holds at
+    every index (`reconCb_allI`). The typing is not built.
+  - What it owes is the suspension inside the lend, which is tier 2.
+- **What it decides.**
+  - OQ-8 is not decided. The gate's gap is a defect of the stack entry and the guard, which the
+    placements share [read]. No refutation of a placement's statement passed DESIGN §11, and `cbpv`
+    and `binder` were not redone at `vRLM`.
+  - No failure of type (a) or (b) occurred.
+  - (d) has not occurred, since statement 0 does not yet hold. The box does make the `!` clause
+    reach other stacks by moves `binder0`'s `U` and `∀` clauses already make (DESIGN §15.10).
+  - The fallback is not triggered.
 
 ## Files
 
@@ -383,8 +482,19 @@ fact about our statement.
 | `ProbeD1/GapRoom.lean` | W's `U` clause as reading (B): `wU_allPosJ`, `adj_core_U`, `adj_not_wU` |
 | `R1MONO.md` | the design of R1 and `binder0`'s monotonicity: `vRLM` (W reading `μ`, `fam` and type variables), the monotonicity statements and the configuration `gd`, the consumer and the restricted route, `RetainedPay` row by row, `KeepsT` at the share, statement 0 at `vRLM`; §8 the build's outcome; *Unresolved* the second review's major finding after the build |
 | `ProbeD1/R1.lean` | that design's definitions and `def … : Prop` statements; no proofs |
-| `ProbeD1/R1Thaw.lean` | R1: `relMAgreesJ`, `vRLMMonoAt`, `vRLMRoll`, `relendMValueE`, `ctxRelendsAllM`, `thawInstM`, the four `U` rows, `statement0UFullM`, `muAdjNotVRLM` |
+| `ProbeD1/R1Thaw.lean` | R1: `relMAgreesJ` (restated, see `NEXT.md` §9), `vRLMMonoAt`, `vRLMRoll`, `relendMValueE`, `ctxRelendsAllM`, `thawInstM`, `thunkFRowM`, `thunkVRowM`; the persistence box's local facts (`pBox_mono`, `pBox_inst`, `pBox_env`). The two `!U` rows and `statement0UFullM` are in `R1Box.lean`; `muAdjNotVRLM` (proved at `5210cf1`) is withdrawn |
 | `ProbeD1/R1Mono.lean` | monotonicity: `monoExtM0`, `monoOwnUFreeMEA`, `monoOwnGUFreeMA` (`StackPayAvoids`), `futPartI`, the instance lemmas, the configuration `gd` (`gdIndex`, `gdRelated`, `gdNotPushed`, `notMonoOwnGM0`, `notMonoGM0`, `notMonoVM0`, `gdNotCore`, `gdNotRecsInsideOwn`, `gdIdxNotArisesOf`, `gdRowRefutation`), the restricted route (`gdCtxNotCore`, `gdRestrictedMet`, `monoOwnGMCUFreeA`) |
 | `ProbeD1/R1Owed.lean` | the three obligations: `outerBelowTopArises`; `RetainedPay` by row (`retainedPayViewRow`, the transports, `retainedPayInstRow`, `payLeavesOfTyEq`, `retainedPayLoadMutBound`, `retainedPayLoadMutRowNJ_of_entry`, `sliceGuardFails`, `loadGuardFails`, `loadGuardFails2`, `rebGuardFails`, `thawLeafP`); `KeepsT` at the share (`relAboveOfTagged`, `extKeepsTInst`, `shareKeepsT_of` and its chain from `LineageUnique`) |
 | `ProbeD1/R1Stmt0.lean` | statement 0 at `vRLM`: `vRLMDataE`, `nilSoundRetM`, `statement0SharedM`, `forceRowM`, the callbacks, `statement0MBesideMono0`, `not_statement0M_binder0`, `statement0MAtConsumers0_iff` |
 | `ProbeD1/R1AllI.lean` | the `∀I` row at `binder0`: `allIRowMNKAt0_of` (one context, three transports), `vRLM_reading_uFree`, the transports at contexts reaching no `U`, `allIRowMNKUFree0`, `allIRowMNKNil0`, `cRLM_step`, `not_subOutsideExtendAny`; the test at `gd` (`gdMtDerivable`, `gdAllIHoldsAtMt`) |
+| `NEXT.md` | the design of the guard-gap unit: the two-cell gap and its arising check, `VRLMUnroll`, the edits (E1)–(E4) and the `∀I` row's open cases, `MonoHide` and the consumers, the block; §9 the build's outcome; §10 the corrections of 2026-10-08 (the floor, the persistence box, `reconB′`); *Unresolved* four review findings |
+| `ProbeD1/Nx.lean` | that design's definitions and `def … : Prop` statements; no proofs |
+| `ProbeD1/NxGuard.lean` | the guard lemmas: `pairRebCells`, `pairCallbackGuardFails`, `pairCallbackGuardFailsLe`, `sliceCallbackGuardFails`, `pairBoundBelow`, `pairNilOldGuardHolds` |
+| `ProbeD1/NxGuardPair.lean` | the pair configuration in the typed world and `ArisesI` (`pc_arises`, `pairCfg`), the program at `withloadU` and `withload` (`pairWithloadUTyped`, `pairWithloadTyped`), `TW.reb` at an own push's lifetime, link (d) (`pairGuardRejectsU_of`, `sliceGuardRejectsU_of`), the gate `withloadUPairGapReal`, `not_withloadPairGapInst` |
+| `ProbeD1/NxUnroll.lean` | `vRLMSome`, `vRLMRename`, `vRLMSubst`, `vRLMInst`, `vRLMUnroll`, `rollRowM`, `unrollRowM` |
+| `ProbeD1/NxE1.lean` | `muAdjVRLME1`; the gate after the edits (`pairGate_afterEdits`); item 1a′ (`withloadUPairGapNilE1`, `not_withloadPairGapNilInstE1`) |
+| `ProbeD1/NxAllI.lean` | the binder-named index (`subOutsideExtendNamed`, `allIRowMAt0_of`, `ctxExtendNamedMAt_uFree`), `allIRowMUFree0`; `not_readEquivRelend` |
+| `ProbeD1/NxHide.lean` | `hideInvisible`, `monoHideGMHandle0_noCross`, `allRHideM0_noCross`, `allRExtM0`, `relendJInter_empty`, `allRThawM0Empty` |
+| `ProbeD1/R1Box.lean` | the persistence box: the index facts along it (`BoxIdx`, `boxIdx_inst`, `boxIdx_steps`, `stackJ_of_boxIdx`), its transitivity (`boxSteps_inst`, `pBox_world`), a persistent context at every box world (`gRLM_boxWorld`), the two `!U` rows at the box (`bangThunkFRowM`, `bangThunkVRowM`, `statement0UFullM`) |
+| `ProbeD1/NxFloor.lean` | the floor: `inScope_top_none`, `gdBangJ`, `persistentBoxWorld`, `persistentPushN`, `monoOwnGMAtBoxN`; `VRLMStackRename` (stated) |
+| `ProbeD1/NxRecon.lean` | `reconB′` as the language writes it (`reconB'`, `reconB'_eval`), `reconCb_allI` |
