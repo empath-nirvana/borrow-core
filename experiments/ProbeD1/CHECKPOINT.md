@@ -24,7 +24,41 @@ This is a plain-language summary of where the D1 tractability probe stands. The 
 > unmarked prose reasons in DESIGN §15.2 and the README, `MonoHide binder0`'s status, and the
 > README's "no way to reach a stack" sentence. They are listed under option 1 below.
 >
-> The R1 unit (`R1MONO.md` §8) is built and has not yet been through the verifiers.
+> The R1 unit (`R1MONO.md` §8) has been through the verifiers. One passed, and one did not; see
+> the warning below.
+
+> [!WARNING]
+> **The R1 unit's content review did not pass. It raised two major findings, which are not yet
+> fixed in README, DESIGN §15.9 or `R1MONO.md` §8.** This checkpoint is restated to match them.
+> - **Major: "statement 0 at `binder0` is exactly its `∀I` row" overclaims.**
+>   `statement0MAtConsumers0_iff` holds by definition. `Statement0MAtConsumers0` is our own
+>   conjunction `BesideMono0 ∧ MonoExtM ∧ AllIRowM`, and its first two conjuncts are proved. The
+>   claim actually rests on `AllIRowM` and `MonoExtM` being *all* the consumers of `MonoOwnGM`,
+>   `MonoVM` and `MonoGM` at `binder0`, and `R1MONO.md` §4.1 marks that [unchecked]. Also, the
+>   handler's `MonoHide` at `vRLM` is not stated. The handler row's context transport came from
+>   `MonoHide` through `MonoHideFromMonoV`, so from `MonoV`, and unrestricted `MonoVM .binder0` is
+>   refuted here. `MonoHide` at `vRLM .binder0` is now on the tier-2 list below.
+> - **Major: the `withload` gap was stated without its condition.** `loadGuardFails2` is a proved
+>   fact about the guard: a resource with two shared cells at exactly the new lend's lifetime, at
+>   distinct places the old stack does not lend, meets the guard at no pushed stack. Whether
+>   `withload`'s reborrowed argument at `Ref 1 ⊗ Ref 1` has that shape at the callback's guard is
+>   [unchecked], and no such configuration is shown to arise. I have not verified that any
+>   obstruction is real. No change to the draft definitions should follow until that step is
+>   proved in Lean, ideally at an `ArisesI` configuration.
+> - Minor: R1 was closed by changing the draft relation at `μ`. `vRLM` reads `μ` itself and is
+>   strictly smaller than Core's relation there (`muAdjNotVRLM`). The unroll row at `vRLM`
+>   therefore owes `vRLM`'s substitution lemma (`VRLMUnroll`, `vCE_subst`'s analog), which was not
+>   attempted. It is now on the tier-2 list.
+> - Minor: `retainedPayInstRow` also assumes that no stack entry is named by the instantiated
+>   variable (`x ∉ σ.map LEnt.x`), besides "no join".
+> - Minor (from the review that passed): `OuterBelowTop` across the arising set comes from [TR]
+>   6.64/6.65 H4's consequence, `∀ α ∈ c'.αs.head?, α < ⊤`. That consequence is now recorded as a
+>   field of the draft arising-set definitions `LendMutI` and `LendImmI` (`Binder.lean`). This is
+>   the unit's only edit to an existing Lean file's definitions. It is disclosed in `R1MONO.md`, but
+>   the builder's summary left it out.
+>
+> The hygiene review passed: no `sorry` or forbidden keyword, and every axiom set is within
+> `[propext, Classical.choice, Quot.sound]`.
 
 ## The question
 
@@ -299,31 +333,37 @@ admits is not in `vRLM` (`muAdjNotVRLM`).
   named by the binder.
 
 **The three obligations.**
-- Lends below `⊤`: proved everywhere, including the arising set (`outerBelowTopArises`).
-- The payload condition (`RetainedPay`): proved at the lend's view, the transports and `∀E` with no
-  join. At the `Mut` read-out through a bound view it stops where the design expected, at
+- Lends below `⊤`: proved everywhere, including the arising set (`outerBelowTopArises`). Across the
+  arising set this comes from [TR] 6.64/6.65 H4's consequence (the new lend's lifetime is below
+  `⊤`), which the unit added as a field of the draft definitions `LendMutI` and `LendImmI`.
+- The payload condition (`RetainedPay`): proved at the lend's view, the transports and `∀E` at an
+  instance with no join whose variable no stack entry names. At the `Mut` read-out through a bound view it stops where the design expected, at
   `EntryPayLeaves`: the condition for the lending entry's own payload type, which the index does not
   carry.
-- **A new gap in the guard: `withload` of a value holding two references side by side.**
-  `withload` hands its callback the payload re-borrowed at the new lend's lifetime, so each owned
-  or mutable cell becomes a shared cell at exactly that lifetime. The guard forbids such a cell at
-  a place no stack entry lends (`rebGuardFails`). The new lend's entry lends one place, so with two
-  such cells side by side (`Ref 1 ⊗ Ref 1`) one is always forbidden (`loadGuardFails2`). So, as
-  with slices, the callback's clause says nothing there, and W does not cover `withload` of such a
-  payload [unchecked: the step from the payload's type to the two cells]. Fixing it means a stack
-  entry that lends the payload's places, or a guard that admits the re-borrow's cells; both change
-  W's draft definitions.
+- **A fact about the guard, with one step unchecked: `withload` of a value holding two references
+  side by side.** The guard forbids a shared cell at exactly the new lend's lifetime at a place no
+  stack entry lends (`rebGuardFails`). So a resource with two such cells at distinct places meets
+  the guard at no pushed stack (`loadGuardFails2`). `withload` hands its callback the payload
+  re-borrowed at the new lend's lifetime. Whether that argument at `Ref 1 ⊗ Ref 1` really holds two
+  such top-level cells at the callback's guard is [unchecked], and no such configuration is shown
+  to arise. I have not verified that any obstruction is real, and no change to W's draft
+  definitions follows until that step is proved.
 - The tags at the share (`KeepsT`): proved from `LineageUnique` (a record lies in one frame's
   lineage), which is not derived.
 
 **Statement 0 at `binder0`.** Every fact beside monotonicity is proved
-(`statement0MBesideMono0`). Read at the rows that consume it, statement 0 is exactly the `∀I` row
-(`statement0MAtConsumers0_iff`). That row is now proved except at `U` slots and at the binder-named
-indices.
+(`statement0MBesideMono0`). The `∀I` row together with `MonoExtM` covers `MonoOwnGM`'s consumer and
+the record-order rows; `MonoExtM` is proved, and the `∀I` row is proved except at `U` slots and at
+the binder-named indices. That these are *all* the consumers of `MonoVM` and `MonoGM` is
+[unchecked]. `statement0MAtConsumers0_iff` does not show it: it holds by the definition of our own
+conjunction. And the handler's `MonoHide` at `vRLM`, which used to come from `MonoV`, is not stated.
 
-**What it decides.** R1 is closed at `binder0`, and statement 0 there is down to the `∀I` row's two
-open cases. The guard, as drafted, leaves out `withload` of a value holding two references side by
-side, as it leaves out slices of two or more elements. OQ-8 is still undecided, because no refutation passed the arising check and `cbpv` and
+**What it decides.** R1 is closed at `binder0`, by changing the draft relation at `μ`; the unroll row
+now owes `vRLM`'s substitution lemma. Statement 0 there is not yet shown complete. Its known open
+pieces are the `∀I` row's two open cases and `MonoHide` at `vRLM`, and whether anything else
+consumes `MonoVM` or `MonoGM` is unchecked. `loadGuardFails2` is a proved fact about the guard;
+whether `withload` at `Ref 1 ⊗ Ref 1` meets it is unchecked. OQ-8 is still undecided, because no
+refutation passed the arising check, statement 0 is not complete at any placement, and `cbpv` and
 `binder` were not redone at `vRLM`. No machine-checked failure of type (a), (b) or (d) occurred,
 and the fallback is not triggered.
 
@@ -331,21 +371,32 @@ and the fallback is not triggered.
 
 Tier 2 needs `Statement0 p` at some placement, then statements 1–4 and both programs. At `binder0`,
 the placement with the most proved, the remaining work is:
-- **The `∀I` row at a context holding a `U` value.** This is the last open piece of statement 0
-  at `binder0` (`statement0MAtConsumers0_iff`). The row needs its context carried across the own
+- **The `∀I` row at a context holding a `U` value.** One of the known open pieces of statement 0
+  at `binder0`. The row needs its context carried across the own
   lend's push, and to two extended readings (`MonoOwnGMAt`, `CtxExtendMAt`, `CtxShadowMAt`). The
   unrestricted push is refuted at `gd`, a configuration not shown to arise. A restriction to
   contexts that are also Core values excludes `gd`. Its step at a `U` slot was not attempted, and
   reading the clause suggests it meets Core's relation at an instantiated reading [unchecked].
 - **The `∀I` row at an index whose innermost lend is named by the binder.** The premise's
   `SubOutside` at the extended reading is not given there.
+- **`MonoHide` at `vRLM .binder0`.** The handler row's context transport. It used to come from
+  `MonoV` through `MonoHideFromMonoV`, and unrestricted `MonoVM .binder0` is refuted at `gd`. Not
+  stated. Either state and prove it (in full, or at contexts reaching no `U`), or give the handler
+  row another route.
+- **Whether `MonoVM` and `MonoGM` have consumers beyond the `∀I` row and `MonoExtM`.** [unchecked]
+  (`R1MONO.md` §4.1). Enumerating them is needed before statement 0 at `binder0` can be called
+  complete.
+- **`VRLMUnroll`: the unroll row at `vRLM`.** `vRLM` now reads `μ` itself, so the `μ`-elimination
+  row needs `vRLM`'s substitution lemma (`vCE_subst`'s analog). Not attempted.
 - **The obligations' leftovers.**
   - `RetainedPay`: `EntryPayLeaves` at a bound `Mut` view (or the variant leaf, which changes W's
     views, the user's to decide), the `Imm` read-out, joins, and the slice rows' missing
     range-lending entry.
-  - `withload` at a payload with two references side by side: outside the guard
-    (`loadGuardFails2`); an entry lending the payload's places, or a guard admitting the
-    re-borrow's cells, is not built.
+  - `withload` at a payload with two references side by side: first prove, in Lean, the step from
+    a `vRLM` `Imm` value at such a payload, through `ResU.Reb`, to two top-level cells at the
+    callback's guard (ideally at an `ArisesI` configuration). Only then does `loadGuardFails2`
+    bear on `withload`, and only then is a change to the entry or the guard in question.
+  - `RetainedPay` at `∀E` when a stack entry is named by the instantiated variable.
   - `KeepsT`: `LineageUnique`, and `FramesKept` from statement 2.
   - `ViewSlotInst` without `OuterBelowTop`.
 - **OQ-8, where the future-world quantifier goes.** Still undecided. `cbpv` and `binder` have not
@@ -354,15 +405,18 @@ the placement with the most proved, the remaining work is:
 
 ## What to do next (options, not a decision)
 
-1. **Finish the open review findings** (the statement-0 unit's minor wording ones, listed in the
-   note at the top). This is needed under every option.
+1. **Finish the open review findings**: the R1 unit's two major findings in README, DESIGN §15.9
+   and `R1MONO.md` §8 (the warning above), and the statement-0 unit's minor wording ones (the note
+   at the top). This is needed under every option.
 2. **Continue D1.** The freeze-binder unit did the first two steps at `binder0`: PlaceViews is in
    the guard and the own lend, and the re-lend is an instantiation that lowers the stack's variables
    together. The gap unit removed the payload restriction. The R1 unit closed R1, proved statement
-   0's other facts at `vRLM`, and reduced statement 0 at `binder0` to the `∀I` row. What is left:
+   0's other facts at `vRLM`, and proved the `∀I` row at contexts reaching no `U`. What is left:
    - the `∀I` row at a context holding a `U` value: the three transports of its context at a `U`
      slot, through the restriction to Core values or another route (`R1MONO.md` §8.2);
    - the `∀I` row at an index whose innermost lend is named by the binder;
+   - `MonoHide` at `vRLM .binder0`, the full list of `MonoVM`'s and `MonoGM`'s consumers, and
+     `VRLMUnroll`;
    - whether a retained cell with `mut_not_natural`'s shape arises (`InternalPayloadArises`,
      `InternalLeafArises`), which decides whether `RetainedPay` is a real restriction, and
      `EntryPayLeaves` at the `Mut` read-out;
