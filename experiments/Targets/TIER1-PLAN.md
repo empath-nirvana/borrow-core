@@ -2225,3 +2225,91 @@ PASSED"); it builds the library, which this step does not touch. `lake build Tar
   E7–E9 and option A; S5's restatement (`CancellationPfx`); AT08's program (finding 1).
 - From earlier rounds: `OnlyOwnerFrees`, `NoDanglingUse`; `CancelsStd`, `FinRowsAt`; forcing a `!U C`
   slot, `unr` at abortive operations, `unfold`'s value; `TailLaw`, `EtaHold`; `RowVarKernel J₁`.
+
+## Round 3 outcome
+
+**Where tier 1 stands.** `I.Tier1 J₁` is not proved, and it **fails as written**
+(`I.not_tier1_J₁`): since the capture cell, S4's catch law fails at `ΞA`
+(`Inst.not_handlerSem_J₁_ΞA`). With `Accepts` and `Rejects` proved, it follows from A's (E)
+properties, S4, S5 and S6 at every admissible effect context (`I.tier1_J₁_of_ESU`); (E) and S5 also
+fail as written at `J₁` (steps T3, T4). `B.Guarantees J₁.read B.coreB` still holds. Every result is
+at Core σ=[]. No BoLo definition changed and no borrow guarantee was weakened: `fundamentalC`,
+`adequacyC` and `adequacyD` keep their statements with the new rules' cases. HEAD is `193f4f2`, on
+`tier1-effects`, not pushed. The untracked `GHOST-RESOURCE.md` was left alone.
+
+| step | status | verifier | commits |
+|---|---|---|---|
+| T1: S6, the capture cell | LANDED, PARTIAL. SPEC §25: a linear or affine `κ` owns a unit cell from the ordinary allocator; resume frees it, an affine cancel frees it, a linear cancel has no step; kernel and corpus counts unchanged. S6 stated per capture event (`ContUseEv`, `CatchEvAt`); R1 refused by Core's relation (`I.not_semC_R1`, the route-8.4 obligation); `catchEv_cell`, `use_frees_cell`, `leakFreeAt_J₁`; S6 reduced to `OnlyOwnerFrees` and `NoDanglingUse` (`I.contUseEv_J₁_of`). S4 proved where resuming operations are `unr` (`CatchUnr`); fails as written at `ΞA` | pass | 96562bc, fa225d5, 68e0d04, 009c9c0 |
+| T2: decision R, inner rows tied | LANDED. `CDerivesAt Ξ` (`Instance/TiedKernel.lean`) ties perform, raise and handle to `Ξ`; `toCDerives`; `J1DerAt`; every round-2 result re-established at the tied `J₁`. Round 2's finding settled: `algFireProg` does not type at the tied `J₁` (`not_rowAt_R5`, `not_der_algFireProg_J₁`). `AlgLaw` still fails as written at the tied `J₁` through an affine witness (`algAffProg`, `not_algLaw_J₁`). `TailLaw` recorded OPEN | pass | 612dd94, 9e4a67d |
+| T3: decision E, A's (E) properties | PARTIAL. SPEC §26: `[λ-dead]` (`CDerives.lamDead`, `lamDead_compatC`). Proved: E1, E4, E6 at every admissible context; E5 given `NoUnrExn`; E2d given `NoUnr`; E10's `timeout`. `EProps` fails as written at `J₁` under option A (E7–E9's finalisers raise). E2a–c, E3, E10's `retry` and loop not derived, no obstruction checked | pass | f2c98d6, 1361bb5, 8befb94, e968072, 50a93ce, 8ebedbb |
+| T4: decision S5, the bridges | PARTIAL. Bridges built for the prefix-closed reading (`unwindOrderPfx_of_core`, `noInterceptPfx_of_core`, `cancellationPfx_of_core`); `unwindOrderPfx_J₁` with no added hypothesis; no-interception given `CancelsStd` (open); finalisers meeting no-interception run to `()` (`finOK_of_finRow`). S5 fails as written (`not_cancellation_J₁`, witness `fireProg`): A's trace `fire` needs the β-step after `[finalise]`. `FinRowsAt` not delivered | **fail: one major finding (open, below)** | 826b968, 3903aa8 |
+| T5: decision AR | LANDED. `I.accepts_J₁` (runs by `runM`, `runM_sound`, by `rfl`); `I.rejects_J₁`, `I.rejects_tied` (13 inductions on `CDerives`, `I/Rejects.lean`). AT08 is refused for lack of a bare-`load` rule, not for RESTRUCTURE §3.4's reason | pass | 1af8dc0, 29ed0d0, 3f18d49, 78fe527, 193f4f2 |
+
+**Kernel changes** (effect side only):
+- **SPEC §25, Entry 24: the capture cell.** `hndVal` carries the operations' qualifier tags; at a
+  `lin` or `aff` operation `[op]` allocates a unit cell owned by `κ`; resume frees it, an `aff`
+  cancel frees it (matching `contShare`'s `q ≠ lin` gate). Zero-size, so the lowering allocates
+  nothing; corpus and kernel counts unchanged. Core's effect lemmas re-proved.
+- **SPEC §26, Entry 25: `[λ-dead]`.** `λx. M` at `1 ⊸ F_Σ B` with `x`'s slot dead
+  (`CDerives.lamDead`, `lamDead_compatC`), for A's callbacks `λ_. M`.
+
+The tie of decision R lives in a Targets-side copy of the judgement (`CDerivesAt`), not in Core.
+
+> **OPEN VERIFIER FINDING (major), T4.** Decision S5 named "S5's two bridges plus `FinRowsAt`".
+> `FinRowsAt` was not delivered: the step drafted an effect-side kernel change (a `guard` frame
+> around fired finalisers, SPEC §19) and left it unapplied for the user, although effect-side
+> kernel changes are not a cost and nothing machine-checked blocks the route. This also leaves the
+> `ccatch`/`cfin` half of `CancelsStd` undischarged. The bridges do not need `FinRowsAt`, but
+> `FinaliserOrder` (I3.b) and `CancelsStd` do. Not yet done: apply the guard frame with its SPEC
+> entry, re-prove `then_compatC`, `EffCancel` and `fundamentalC`'s effect cases with
+> `adequacyC`/`adequacyD` unchanged, confirm the lowering erases `guard` (counts unchanged), prove
+> `FinRowsAt noFinRaise J₁`, and discharge `CancelsStd`'s `ccatch`/`cfin` half; or report a
+> machine-checked obstruction.
+
+**Gate.** `make gate` at `193f4f2` passed; the source stage ran ("ci-local --source: ALL
+PASSED"): build, compile scaling (8×/1× ratio 11.9, limit 16), hygiene and axioms, axiom report,
+corpus parse, check (22 pending programs failing as recorded), compile, kernel compile, sugar
+pairs, typed IR, book doc-tests (82 passed, 1 ignored, 0 failed), book build. `lake build Targets`
+passes with AxiomCheck and Audit; every new axiom set is within
+`[propext, Classical.choice, Quot.sound]`.
+
+**Readings for the user to confirm** (pending; carried from round 2 and added this round).
+1. `J₁`'s kernel is all of `CDerives` for `J₁.read`, and `CDerivesAt Ξ` at an effect context.
+2. Row polymorphism is the polymorphic let; the general `[handle]` is the handler value form.
+3. D4: `FinRow FR` as no-interception, `UseAt` as a use of `κ`, comparison at data answers.
+4. S6 is read per capture event (`ContUseEv`).
+5. The tie covers perform, raise and handle only; a tied handler may declare a prefix of `Ξ n`.
+6. `[λ-dead]` is decision E's "dead binder"; an `unr` `exn` label counts among E5's labels.
+7. "Some complete run" (`Accepts`) is a run whose allocator takes one past the largest location.
+
+**Decisions for the user.**
+- S4's catch law: restate for a catch that allocates the cell.
+- `AlgLaw`: observe a finaliser's start without its code, or keep continuations out of finalisers.
+- Whether a handler must declare all of `Ξ n`.
+- E7–E9 against option A; forcing a `!U C` slot (a Core rule, or a derelicting `let`); `unr` at
+  abortive operations in `[let]`'s side condition; typing `unfold`'s value (`etaN`).
+- S5: the prefix-closed reading (`CancellationPfx`); no-interception at the cell's `κ`.
+- AT08: read the cell through `withload` or `swap` so it tests the continuation rule.
+
+**Remaining.** The T4 finding (`FinRowsAt` by the guard frame; `CancelsStd`); `OnlyOwnerFrees`
+and `NoDanglingUse` (S6); S2's teeth for R2–R4 under the cell; S5 at the cell machine; E2a–c, E3,
+E10's `retry` and loop (with `RunsForever`); `TailLaw`, `EtaHold`, `I4Typing`, `I4Runs`;
+`RowVarKernel J₁`.
+
+**Unspent hypotheses.** `AdmEff`'s `ClosedLife` (read by no S6 or (E) result) and `Rich` (labels
+only); `DataTy A` only through leak freedom; `Respects` only for `Live`; the tie, read only by
+exclusion proofs; `Answers R ε` (passed to `CancelsStd`); `CancelTrace`'s region `N`;
+`AcceptedT1`'s safety and termination; `[handle]`'s `DeadP` in the refutations.
+
+**Unused uniqueness/functionality results.** `det_ourInst`, `AStep1.deterministic`, B5's
+per-step `RelAt` maps; `rstep_det` unused in T5.
+
+**Untranscribed in the run-up.** The cell-sealing invariant; coherence of B5's maps between
+hand-off and use; S4's and `AlgLaw`'s restatements; `TailLaw` against the finaliser mechanism;
+`EtaHold`'s and `I4Typing`'s inversions; forcing a `!U C` slot; a typing of `etaN`; `RunsForever`;
+`CancelsStd`'s discharge; `FinRowsAt`; AT07's stuck run; `Tier2Programs`.
+
+**Next.**
+1. Resolve the T4 finding: the guard frame and `FinRowsAt noFinRaise J₁`.
+2. `OnlyOwnerFrees` and `NoDanglingUse`.
+3. The user's restatements above, then the (E) programs they unblock.
