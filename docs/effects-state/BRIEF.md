@@ -75,6 +75,52 @@ The work is not starting from zero. A coherent effect kernel is built, proved an
 
 ---
 
+## 1a. What the language actually does
+
+Effect work is easy to do against the proof model alone and get the implementation wrong. Read this first. Sources: `docs/pipeline.md`, `Backend/README.md` (Pipeline, Representation, Stack, Memory discipline, Counts), and decision 31 in `docs/decisions.md`.
+
+**The pipeline.** `file.bc` is parsed, elaborated and checked into a Core `Expr` with a proof of `CDerives`. It is then compiled through a closure IR and a flat IR to WebAssembly, and run on wasmtime with tail calls. Programs that can't be spelled in the surface, such as §19's capturing handlers, enter at the compile stage (`bcc kernel`).
+
+**Linearity is enforced before the backend.** The check stage inserts the destructor of every owned value that a path leaves unused (SPEC §12). So the `Expr` handed on consumes each value exactly once.
+
+**Effects compile with no runtime handlers, the way Rust compiles `async`** (`Clos/Capture.lean`, `Clos/Unwind.lean`). There is no handler stack and no search.
+- **Abortive operations** become branch-per-call propagation, Rust's `Result` and `?`: a code that may raise answers a sum, and a `raise` arrives at the `case` of the frame that catches it.
+- **A tail-resumptive operation** whose handlers have one closed clause is a direct call.
+- **A code that may suspend** answers its outcome: `inl v`, or `inr (payload, k)`.
+  - The suspended computation `k` is a closure of a resume code over its **state**.
+  - The state is an n-ary sum, one variant per resumption point, holding the variables live there. At a call point it also holds the callee's `k`, so a continuation's size is known statically.
+  - Resuming switches on the state. Cancelling runs the callee's `k` first, then the point's finalisers innermost first, and drops every other variable.
+- **Answering operations** are calls on a capability.
+
+**Where values live** (Representation). Pairs, sums, integers and closures are words, not objects. A closure is a stack value: its code's tag, then its captures, defunctionalised. Only `alloc` makes a cell, and an array is one allocation. A suspended computation is a value, a state-machine state, not a heap object.
+
+**The model's "heap" is the abstract store, not malloc.** BoLo's locations are semantic. The backend maps them to words, stack values, state-machine fields, or a real allocation where necessary. `bcc-counts` tracks runtime allocations, indirect calls and deep copies against `corpus/*counts.expected`, and every run prints `live N`, where `live 0` is the runtime leak check. A resource in the model does not imply a runtime allocation.
+
+**Host resources are opaque types** (decision 31): `VTy.opq k`, for example the I/O handles in `Core/Stdio.lean`. They are not persistent and have no destructor, so they can only be moved or handed to externs, never copied or dropped. Their linearity comes from the typing. In the relation an opaque value is a pure predicate, `⌜k.Holds v⌝`, holding no resource, so leak freedom does not cover them today. Captured continuations are in the same position: linear by typing, invisible to the semantics.
+
+**Known runtime cost:** a place that spans a suspension stays a real cell today, one allocation each. Inline placement in a pinned frame is open (P13, synthesis §11).
+
+**What the language already has, built and running.** Check this list, and grep SPEC and the corpus, before proposing any mechanism. A proposal that duplicates one of these must say why the existing one doesn't suffice.
+
+| feature | SPEC | corpus |
+|---|---|---|
+| codata `νX. C`, observed by drivers | §7 | `nats`, `iter-*` |
+| divergence as an effect (`Loop`) | §14 | `core-effects-loop` |
+| generators (`Yield`, pull, adapters, close, a generator stored in a cell) | §15 | `gen-*` (14), `core-yield-*` |
+| counted loops, `for` over data | §16 | `count-*`, `for-*` |
+| buffers, text, literals | §17 | `utf8`, `split`, `trim`, `parse` |
+| effects and handlers: answering capabilities | §18 | `effects-*` |
+| native capture: `handle`/`perform` with suspend, resume, cancel and finalisers, compiled to state machines | §19 | `capture-*`, kernel programs |
+| recursion: bounded and deep drivers, `Exhausted`, the fixed point of a generator | §20, §21 | `rec-*` |
+| affine closures (codata with arguments) | §22 | `aff-*` |
+| non-strict outlives, `'main` | §23 | `lend-*` |
+| externs and I/O capabilities (linear, opaque host resources) | §11, decision 31 | `io-*` |
+| arrays and slices | §9 | `array-*`, `slice-*` |
+| implicit destructors | §12 | throughout |
+| zero-size cells cost nothing at run time (`zeroCell`) | §23 | |
+
+So coroutines and generators are already effects with suspension. What is missing is lends held across a suspension (tier 2) and the proofs that tie this to an abstract effect algebra, not the mechanisms.
+
 ## 2. The machinery to build on
 
 Use these by name. Don't rebuild them. Details and paper page numbers are in [06](06-bolo-machinery.md).
