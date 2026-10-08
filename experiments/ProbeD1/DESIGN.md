@@ -2219,6 +2219,9 @@ draft relation is `vRLM`: `vRLJ` with Core's `tvar`, `μ` and `fam` clauses read
   - The row reads three transports of its context, not one: across the push, to the reading
     extended at the binder, and to the pushed variable's reading (`allIRowMNKAt0_of`). All three
     hold at contexts reaching no `U` (`vRLM_reading_uFree`).
+  - At `gd`, a `U` slot, the row's conclusion holds at a derivable body that hands `gdF` a thunk
+    holding the argument (`gdMtDerivable`, `gdAllIHoldsAtMt`), the pushed stack included. So the
+    refuted lemma is not the row there, at that body.
   - Open: a live `U` slot, and an index whose stack's innermost entry is named by the binder
     (`not_subOutsideExtendAny`).
   - The restricted route: `gd` is outside it (`gdCtxNotCore`), the restriction is met

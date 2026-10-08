@@ -28,6 +28,11 @@ two places, every index fact carried (`StackJ` to the extended `Δ`, the models,
 (`cRLM_step`). At a context whose live slots reach no `U` the three transports hold
 (`monoOwnGMAt_uFree`, `ctxExtendMAt_uFree`, `ctxShadowMAt_uFree`), so the row holds there
 (`allIRowMNKUFree0`), the empty context among them (`allIRowMNKNil0`).
+
+At `gd`, whose context is a `U` slot, the row's conclusion holds at a derivable body that hands
+`gdF` a thunk holding the argument and forces what comes back (`gdMtDerivable`,
+`gdAllIHoldsAtMt`), at the own lend's pushed stack included, where `MonoOwnGM` fails
+(`notMonoOwnGM0`).
 -/
 
 noncomputable section
@@ -579,6 +584,103 @@ theorem allIRowMNKUFree0 (Γ : Ctx VTy) (hU : ∀ s ∈ Γ, s.live = true → UF
 binder. -/
 theorem allIRowMNKNil0 : AllIRowMNKAt (ℍ := ℍ) .binder0 [] :=
   allIRowMNKUFree0 [] (fun _ hs => absurd hs List.not_mem_nil)
+
+/-! ### The row's conclusion at `gd`, at a derivable body that exercises the closure
+
+`gdM` (`R1.lean`) applies `f` to a thunk literal, which `app` does not take (it takes a variable),
+so `GdMDerivable` is not proved. `gdMt` binds the thunk first and is derived from `CDerivesNU`'s
+rules (`gdMtDerivable`). At `gd`'s index the row's conclusion holds at it (`gdAllIHoldsAtMt`): at
+both conjuncts of the `∀` clause, the argument at `Imm '2 1` is a single `imm` cell, `gdF` hands the
+thunk holding it back, the thunk forgets it, and `()` holds nothing; the cell goes to the garbage
+(`wpTS_frame_noOwn`, as 6.149). The run never reads `gdF`'s relation, so the box at `'1` that
+`GdNotPushed` turns on is never asked. -/
+
+/-- **A derivable body that hands `gdF` a thunk holding the argument**:
+`λr. let t = thunk (forget r) in let g = f t in let h = return g in force h`, at the premise's
+context `_ : 1, f : gdTy` (under `λr`: `r` is `0`, the dead slot `1`, `f` is `2`). -/
+abbrev gdMt : Expr :=
+  .val (.lam (elet (.val (.lam (.app forget (.var 1))))
+    (elet (.app (.var 3) (.var 0))
+      (elet (.var 0) (.app (.var 0) (.val .unit))))))
+
+/-- `gdMt` after `gd`'s closing substitution and the `∀`'s β step: `f` is `gdF`. -/
+abbrev gdMtS : Expr :=
+  .val (.lam (elet (.val (.lam (.app forget (.var 1))))
+    (elet (.app (.val gdF) (.var 0))
+      (elet (.var 0) (.app (.var 0) (.val .unit))))))
+
+/-- A judgement of `CDerivesNU` is one of the probe's rule set (`Tier1SubNU`). -/
+theorem probeRules_of_nu {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg}
+    (h : Targets.CDerivesNU Δ Γ e j) : ProbeRules Δ Γ e j :=
+  fun _ _ hE _ _ _ => hE.1 [] Δ (fun _ => Γ) e (fun _ => j) (fun _ _ => h)
+
+/-- **`gdMt` is derivable at the premise's judgement**: `forget` at `Imm '2 1` under the thunk's
+dead binder, the thunk bound, `f` forced (`forceE` at an `⊸` type is the variable itself) and
+applied to it, the answer unboxed (`boxE`) and bound, and forced. -/
+theorem gdMtDerivable :
+    ProbeRules (gdΔ.extend 2 (.var 1)) (⟨.unit, false⟩ :: gdΓ) gdMt (.comp gdCyBody) := by
+  refine probeRules_of_nu (.lam ?_)
+  refine .bind (A := gdArg) (.left (.dead (.right .nil))) (.ret (.thunkF (A := .unit) (.ret ?_))) ?_
+  · exact .lolliE (.dead (.left (.dead (.dead .nil))))
+      (.var (.there (.here (.cons (.cons .nil))))) (.forgetImm (.cons (.cons (.cons (.cons .nil)))))
+  · refine .bind (A := .box (.var 1) gdArg) (.left (.dead (.dead (.left .nil))))
+      (.app (.right (.dead (.dead (.left .nil))))
+        (.force (C := gdC) (.there (.there (.there (.here .nil)))))
+        (.here (.cons (.cons (.cons .nil))))) ?_
+    exact .bind (A := gdArg) (.left (.dead (.dead (.dead (.dead .nil)))))
+      (.ret (.boxE (.var (.here (.cons (.cons (.cons (.cons .nil))))))))
+      (.force (C := .ret .unit) (.here (.cons (.cons (.cons (.cons (.cons .nil)))))))
+
+/-- **The run of `gdMtS` at a location over a resource with no `own` cell**: five β steps, `gdF`
+handing the thunk back in argument position, then `forget`; the resource goes to the garbage. -/
+theorem gdMtS_run {ls : List SRec} {Q : List SRec → Val → WProp} {l : BoCa.Loc} {ρ : WRes}
+    (hρ : NoOwn ρ) (hQ : Q ls .unit PMap.empty) :
+    wpTS (ℍ := ℍ) ls (.app gdMtS (.val (.loc l))) Q ρ := by
+  let t : Val := Val.lam (.app forget (.val (.loc l)))
+  let B₄ : Expr := .app (.var 0) (.val .unit)
+  let B₃ : Expr := elet (.var 0) B₄
+  let B₂ : Expr := elet (.app (.val gdF) (.var 0)) B₃
+  refine wpTS_lolli ls (elet (.val (.lam (.app forget (.var 1)))) B₂) (.loc l) Q ρ ?_
+  refine wpTS_lolli ls B₂ t Q ρ ?_
+  show wpTS ls (Kont.plug (.appR (.val (.lam B₃)) .hole) (.app (.val gdF) (.val t))) Q ρ
+  refine wpTS_bind _ _ ls Q ρ ?_
+  refine wpTS_lolli ls (.var 0) t _ ρ ?_
+  refine wpTS_val ls t _ ρ ?_
+  refine wpTS_lolli ls B₃ t Q ρ ?_
+  refine wpTS_lolli ls B₄ t Q ρ ?_
+  refine wpTS_lolli ls (.app forget (.val (.loc l))) .unit Q ρ ?_
+  refine wpTS_lolli ls unit' (.loc l) Q ρ ?_
+  exact wpTS_frame_noOwn (R := fun ρ' => ρ' = ρ) (fun _ h => h ▸ hρ) ls _ Q ρ
+    ⟨ρ, PMap.empty, ResU.comp_empty_right ρ, rfl, wpTS_val ls .unit Q PMap.empty hQ⟩
+
+/-- **`gdMtS` is related at `gdCyBody` at every index, over nothing**: every argument at `Imm 'v 1`
+is a location over a single `imm` cell, and the run answers `()` over nothing. -/
+theorem gdMtS_cRLM (σ : LStack) (δ : LSub) (αs : List Life) (ls : List SRec) :
+    cRLM (ℍ := ℍ) .binder0 σ δ gdCyBody αs ls gdMtS PMap.empty := by
+  intro ls' σ' αs' _ _ _ v ρa ρb hv hc _ _
+  rw [eq_of_compS_empty_left hc]
+  rw [vRLM_imm_eq, vRLJ_imm_eq] at hv
+  obtain ⟨hvc, -, -⟩ := hv
+  obtain ⟨α, -, ℓ, hsep⟩ := hvc
+  obtain ⟨⟨rfl, -⟩, S, u, χ, hχ, ls₀, hρ, -⟩ := pure_sep_iff.mp hsep
+  exact gdMtS_run (by rw [hρ]; exact ResU.restrict_single_other (by simp)) ⟨rfl, rfl⟩
+
+/-- **At `gd`'s index the `∀I` row's conclusion holds at `gdMt`**: both conjuncts of the `∀`
+clause reduce to `gdMtS` at `gdCyBody` (`gdMtS_cRLM`), at `gdσ` and at the pushed stack alike. -/
+theorem gdAllIHoldsAtMt : GdAllIConclAt (ℍ := ℍ) gdMt := by
+  show cRLM .binder0 gdσ gdδ gdCy gdαs gdls (.val (.lam (Expr.psub 1 gdγ gdMt))) PMap.empty
+  intro ls' σ' αs' hE hF _
+  have hE' : ls' = gdls := by simpa [ExtQ, Placement.bindFut] using hE
+  have hF' : σ' = gdσ ∧ αs' = gdαs := by simpa [FutQI, Placement.bindFut] using hF
+  obtain ⟨rfl, rfl⟩ := hF'
+  subst hE'
+  refine ⟨fun α ρ₁ ρ₂ hp hc _ _ => ?_, fun _ en α _ _ _ _ _ => ?_⟩
+  · obtain ⟨rfl, -⟩ := hp
+    rw [ResU.CompS.functional hc (ResU.comp_empty_right _)]
+    exact cRLM_step .binder0 gdCyBody (fun μ => Step1N.head (Head.beta μ _ Val.unit) rfl) _ _ _ _
+      _ (gdMtS_cRLM _ _ _ _)
+  · exact cRLM_step .binder0 gdCyBody (fun μ => Step1N.head (Head.beta μ _ Val.unit) rfl) _ _ _ _
+      _ (gdMtS_cRLM _ _ _ _)
 
 end ProbeD1
 

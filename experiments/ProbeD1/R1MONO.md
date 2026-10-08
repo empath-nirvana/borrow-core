@@ -1500,7 +1500,7 @@ stack until a stack entry lends a range (§1.2, §3.2).
 | `ProbeD1/R1Mono.lean` | §2: `GdIndex`, `GdRelated`, `gdG` at the pushed stack, `GdNotPushed`, `NotMonoOwnGM0`, `GdNotCore`, `GdNotRecsInsideOwn`, `GdIdxNotArisesOf`, the instance lemmas (with `FutPartI`), `¬ MonoGM`, `¬ MonoVM`; the consumer and the test at `gd`: `AllIRowMOfMonoOwnGM`, `GdMDerivable`, `GdAllIHoldsAtM`, `GdRowRefutation`; the restricted route: `GdCtxNotCore`, `GdRestrictedMet`, `AllIRowMCOfMonoOwnGMC`, `MonoOwnGMC .binder0` (attempted, its stopping step reported); `EnvExtNone`, `EnvPushNone`, `MonoExtME`, `MonoOwnUFreeME`, `MonoExtMOfE`, `MonoOwnGUFreeMOfE`; optional `GdNotCbpv`, `GdReached` |
 | `ProbeD1/R1Owed.lean` | §3: `OuterBelowTopPush`, `OuterBelowTopFresh`, `OuterBelowTopArises`; `LeafPos`'s lemmas, `PayLeavesOfPayExt`, `RetainedPayViewRow`, `RetainedPayInstRow`, the transports, `SliceGuardFails`, `RetainedPaySliceRow`, `ReadOutAtInternalPayload`, `LeafPosTyEq`, `PayExtOfTyEq`, `PayLeavesOfTyEq`, `RetainedPayLoadMutBound`, `RetainedPayLoadImmRow`, `RetainedPayLoadMutRow` (attempted, expected to stop at `EntryPayLeaves` at a bound view), `RetainedPayLoadMutRowMet`, `RetainedPayLoadImmRowMet`; if the stop is reached, `ThawLeafP` and `VwPayLeaves` (attempted, outcomes reported); `ExtInstT`, `LineageUnique`, `TagFixed`, `KeepsTOfTagged`, `ResumeKeepsT`, `RelAboveOfTagged`, `ExtKeepsTInst`, `ShareKeepsT`, `RelFramesNotEnded`, `ShareKeepsTMet`; optional `NotViewSlotInst` |
 | `ProbeD1/R1Stmt0.lean` | §4: `EnvCoreNone`, `VRLMDataE`, `VRLMDataOfE`, `NilSoundRetM`, `FutPartI`, `ForceRowM`, `CallbackExtMutM`, `CallbackExtImmM`, `Statement0MBesideMono0`, `MonoUnrestrictedRefuted0` |
-| `ProbeD1/R1AllI.lean` | §2.6, added by the build: the `∀I` row at one context from three transports of it (`allIRowMNKAt0_of`), the transports at contexts reaching no `U` and the row there (`allIRowMNKUFree0`, `allIRowMNKNil0`), `cRLM_step`, `not_subOutsideExtendAny` |
+| `ProbeD1/R1AllI.lean` | §2.6, added by the build: the `∀I` row at one context from three transports of it (`allIRowMNKAt0_of`), the transports at contexts reaching no `U` and the row there (`allIRowMNKUFree0`, `allIRowMNKNil0`), `cRLM_step`, `not_subOutsideExtendAny`; the test at `gd` at a derivable body (`gdMtDerivable`, `gdAllIHoldsAtMt`) |
 
 `FutPartI` is read by `MonoGMOfMonoVM`; build it first in `R1Stmt0.lean`, or move it to
 `R1Mono.lean`.
@@ -1790,6 +1790,8 @@ obligation at a narrower scope:
   (`NoJoinV`).
 - `MonoOwnGMAt`, `CtxExtendMAt`, `CtxShadowMAt`, `SemSMNK` and `AllIRowMNKAt` (`R1AllI.lean`): the
   `∀I` row's needs at one context, and the row at the indices whose stack does not name the binder.
+- `gdMt` (`R1AllI.lean`): a derivable body for the test at `gd`, in place of `gdM`, which binds the
+  thunk before applying `f` to it.
 
 ### 8.1 Per statement
 
@@ -1885,8 +1887,21 @@ obligation at a narrower scope:
   - Proved: `GdRowRefutation` (`gdRowRefutation`).
   - `GdMDerivable`: not proved. [unchecked: read against `CDerives`, `Core/Fundamental.lean`]
     `gdM` as written has no derivation in the rule set: its application passes a thunk literal
-    where `app` takes a variable.
-  - Not attempted: `GdAllIHoldsAtM`, `GdAllIHoldsDerivable` and `GdAllIRowRefutes`.
+    where `app` takes a variable. `GdAllIHoldsAtM` (at `gdM`) was not attempted.
+  - **The test at a derivable body: the conclusion holds.** `gdMt` is
+    `λr. let t = thunk (forget r) in let g = f t in let h = return g in force h`. It is derived from
+    `CDerivesNU`'s rules, so it is in the rule set (`gdMtDerivable`, through `probeRules_of_nu`).
+    At `gd`'s index the row's conclusion holds at it (`gdAllIHoldsAtMt`):
+    - at both conjuncts of the `∀` clause, the own lend's pushed stack included, where the argument
+      may be the pushed view;
+    - the run hands `gdF` the thunk holding the argument, takes it back, forces it, and forgets the
+      cell. The answer `()` holds nothing, and the cell goes to the garbage (`gdMtS_run`);
+    - the run never reads `gdF`'s relation, so the box at `'1` that `GdNotPushed` turns on is never
+      asked.
+
+    So at the body that exercises the closure where `MonoOwnGM` fails, the row's conclusion
+    survives. One body is evidence, not the row at `gd`.
+  - Not attempted: `GdAllIHoldsDerivable` and `GdAllIRowRefutes`.
 
 **§3, the three obligations** (`R1Owed.lean`; `retainedPayPush` is in `R1Mono.lean`).
 - **`OuterBelowTop`: proved at every lend and at the arising set.** `OuterBelowTopPush`,
@@ -1969,6 +1984,7 @@ obligation at a narrower scope:
 - **Printed objects read**:
   - [TR] 6.64's and 6.65's H4 (`LendMutI`, `LendImmI`, `outerBelowTopArises`);
   - [TR] 6.144 (`wpTS_load_I`, `gdG`'s run in `gdG_pushed`);
+  - [TR] 6.149's frame (`wpTS_frame_noOwn`, the forgotten cell in `gdMtS_run`);
   - [TR] p. 3's lifetime interpretation (`Life.interp`) at `RetainedPayInstRow` and
     `PayExtOfTyEq`.
 
@@ -1997,7 +2013,8 @@ obligation at a narrower scope:
 - **Statement 0 at `binder0` reduces to its `∀I` row** (`statement0MAtConsumers0_iff`). The row
   holds at contexts reaching no `U`, at indices whose stack does not name the binder
   (`allIRowMNKUFree0`). Unrestricted monotonicity is refuted at `gd`, a configuration not shown to
-  arise. That refutes a lemma for the row, not the row, and the row's remaining cases are not
+  arise. That refutes a lemma for the row, not the row: at `gd` the row's conclusion holds at a
+  derivable body that exercises the closure (`gdAllIHoldsAtMt`). The row's remaining cases are not
   derived.
 - **OQ-8 is not decided.** No refutation passed DESIGN §11, and `cbpv` and `binder` were not redone
   at `vRLM`. No failure of type (a), (b) or (d) occurred: no guard beside `TW`, no relation family
@@ -2020,8 +2037,9 @@ obligation at a narrower scope:
   - (c) Partly done. `MonoOwnGMC` is proved at contexts reaching no `U` (`monoOwnGMCUFreeA`). The
     step at a `U` slot was not attempted in Lean; §8.1 names the stop by reading the clause
     [unchecked].
-  - The test at `gd` with a derivable body: not done. `gdM` as written has no derivation in the rule
-    set [unchecked], no corrected body was stated, and `GdAllIHoldsAtM` was not attempted.
+  - The test at `gd` with a derivable body: done, at a corrected body. `gdM` as written has no
+    derivation in the rule set [unchecked]. `gdMt` binds the thunk first, is derived
+    (`gdMtDerivable`), and the row's conclusion holds at it at `gd`'s index (`gdAllIHoldsAtMt`).
   - The rename: done. `Statement0MBinder0Status` is replaced by two statements, both proved:
     `Statement0MBesideMono0`, and `MonoUnrestrictedRefuted0`, the unrestricted statements'
     negation (not `binder0`'s status).
@@ -2042,7 +2060,8 @@ obligation at a narrower scope:
   - **at an index whose stack's innermost entry is named by the binder** (`StackJ`'s third kind):
     `SubOutside` at the extended reading is not given (`not_subOutsideExtendAny`).
 
-  At `gd` the row's conclusion at every derivable body (`GdAllIHoldsDerivable`) has no known route:
+  At `gd` the row's conclusion holds at one derivable body that exercises the closure
+  (`gdAllIHoldsAtMt`). At every derivable body (`GdAllIHoldsDerivable`) it has no known route:
   `gdF` is in neither relation at the pushed index.
 - **The slice borrows** (not covered at W; not attempted). `sliceBorrowM`, `sliceBorrowI` and their
   `U` forms at a family of two or more elements. The callback runs at its own lend's pushed stack,

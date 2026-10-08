@@ -304,6 +304,10 @@ fact about our statement.
     context: across the push, to the reading extended at the binder, and to the pushed variable's
     reading (`allIRowMNKAt0_of`). All three hold at contexts reaching no `U`
     (`vRLM_reading_uFree`).
+  - At `gd`, a `U` slot, the row's conclusion holds at a derivable body that hands `gdF` a thunk
+    holding the argument and forces what comes back (`gdMtDerivable`, `gdAllIHoldsAtMt`), the
+    pushed stack included. `gdM` itself applies `f` to a thunk literal, which the rules do not
+    take [unchecked].
   - Not derived: the row at a live `U` slot; and at an index whose innermost entry is named by the
     binder, where `SubOutside` at the extended reading is not given (`not_subOutsideExtendAny`).
   - The restricted route (each live slot also a Core value) excludes `gd` (`gdCtxNotCore`). It is
@@ -374,4 +378,4 @@ fact about our statement.
 | `ProbeD1/R1Mono.lean` | monotonicity: `monoExtM0`, `monoOwnUFreeMEA`, `monoOwnGUFreeMA` (`StackPayAvoids`), `futPartI`, the instance lemmas, the configuration `gd` (`gdIndex`, `gdRelated`, `gdNotPushed`, `notMonoOwnGM0`, `notMonoGM0`, `notMonoVM0`, `gdNotCore`, `gdNotRecsInsideOwn`, `gdIdxNotArisesOf`, `gdRowRefutation`), the restricted route (`gdCtxNotCore`, `gdRestrictedMet`, `monoOwnGMCUFreeA`) |
 | `ProbeD1/R1Owed.lean` | the three obligations: `outerBelowTopArises`; `RetainedPay` by row (`retainedPayViewRow`, the transports, `retainedPayInstRow`, `payLeavesOfTyEq`, `retainedPayLoadMutBound`, `retainedPayLoadMutRowNJ_of_entry`, `sliceGuardFails`, `thawLeafP`); `KeepsT` at the share (`relAboveOfTagged`, `extKeepsTInst`, `shareKeepsT_of` and its chain from `LineageUnique`) |
 | `ProbeD1/R1Stmt0.lean` | statement 0 at `vRLM`: `vRLMDataE`, `nilSoundRetM`, `statement0SharedM`, `forceRowM`, the callbacks, `statement0MBesideMono0`, `not_statement0M_binder0`, `statement0MAtConsumers0_iff` |
-| `ProbeD1/R1AllI.lean` | the `∀I` row at `binder0`: `allIRowMNKAt0_of` (one context, three transports), `vRLM_reading_uFree`, the transports at contexts reaching no `U`, `allIRowMNKUFree0`, `allIRowMNKNil0`, `cRLM_step`, `not_subOutsideExtendAny` |
+| `ProbeD1/R1AllI.lean` | the `∀I` row at `binder0`: `allIRowMNKAt0_of` (one context, three transports), `vRLM_reading_uFree`, the transports at contexts reaching no `U`, `allIRowMNKUFree0`, `allIRowMNKNil0`, `cRLM_step`, `not_subOutsideExtendAny`; the test at `gd` (`gdMtDerivable`, `gdAllIHoldsAtMt`) |

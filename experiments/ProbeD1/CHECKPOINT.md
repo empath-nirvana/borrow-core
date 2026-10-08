@@ -292,6 +292,9 @@ admits is not in `vRLM` (`muAdjNotVRLM`).
   (`allIRowMNKUFree0`). On the way, the row turned out to need two more transports of its context
   beside the push, both about the reading of lifetime variables. Both hold where no `U` is reached
   (`vRLM_reading_uFree`).
+- At `gd` itself the row's conclusion holds for a well-typed body that passes the closure a thunk
+  holding the new view and runs what comes back (`gdAllIHoldsAtMt`). The run never asks the box
+  that broke, so the lemma failing there is not the row failing there, at least for that body.
 - Still open: the row at a context holding a `U` value, and at an index whose innermost lend is
   named by the binder.
 
