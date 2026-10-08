@@ -344,8 +344,9 @@ theorem vRLM_thunk_eq (p : Placement) (η : Option (Nat → WEnt)) (σ : LStack)
 /-- **The `U` clause at the identity, at an extension keeping the tags**: at `binder0` the
 instantiation `none` at the extended list, the views read there (`vwSW_local`,
 `placeViewsL_ext`); at the other placements the reflexive re-lend and future. -/
-theorem force_UM (p : Placement) {σ : LStack} {δ : LSub} {C : CTy} {αs : List Life}
-    {ls ls' : List SRec} {f : Val} {ρ : WRes} (hok : StackOK σ αs) (hro : RecsOutside αs ls')
+theorem force_UMR (p : Placement) {σ : LStack} {δ : LSub} {C : CTy} {αs : List Life}
+    {ls ls' : List SRec} {f : Val} {ρ : WRes} (hok : (p.uFut || p.uOwn) = true → ReLend αs αs)
+    (hro : RecsOutside αs ls')
     (ht : TabAtS σ αs ρ) (hpv : PlaceViewsL (extS δ σ αs) σ αs ls ρ) (he : Ext ls ls' ρ)
     (hkt : KeepsT ls ls' ρ) (h : vRLM (ℍ := ℍ) p none σ δ (.thunk C) αs ls f ρ) :
     cRLM (ℍ := ℍ) p σ δ C αs ls' (forceE C (.val f)) ρ := by
@@ -353,7 +354,7 @@ theorem force_UM (p : Placement) {σ : LStack} {δ : LSub} {C : CTy} {αs : List
   have h' := h ht hpv
   split at h'
   · obtain ⟨ds, ρz, ρn, hcomp, hn, -, H⟩ := h'
-    exact (H ls' (he.left hcomp) αs (GhostEnd.reLend_refl hok.2.1) σ αs (futQ_refl _ δ ρz _)
+    exact (H ls' (he.left hcomp) αs (hok (by assumption)) σ αs (futQ_refl _ δ ρz _)
       (futAvoids_self C σ)).1 ρn ρ (GhostEnd.vwS_local (he.right hcomp) hn) hcomp
   · obtain ⟨ds, ρz, ρn, hcomp, hn, -, H⟩ := h'
     have hl : Inst.life none αs = αs := Inst.life_none αs
@@ -363,14 +364,26 @@ theorem force_UM (p : Placement) {σ : LStack} {δ : LSub} {C : CTy} {αs : List
       hcomp
     rwa [hl] at this
 
-/-- **`ForceRowM`, at every placement.** -/
-theorem forceRowM (p : Placement) : ForceRowM (ℍ := ℍ) p := by
-  intro Δ Γ i C hsolo _ _ δ σ αs ls γ ρ hok _ _ _ _ hro _ ht hpv hg
+/-- `force_UMR` at a stack in shape, where the reflexive re-lend holds. -/
+theorem force_UM (p : Placement) {σ : LStack} {δ : LSub} {C : CTy} {αs : List Life}
+    {ls ls' : List SRec} {f : Val} {ρ : WRes} (hok : StackOK σ αs) (hro : RecsOutside αs ls')
+    (ht : TabAtS σ αs ρ) (hpv : PlaceViewsL (extS δ σ αs) σ αs ls ρ) (he : Ext ls ls' ρ)
+    (hkt : KeepsT ls ls' ρ) (h : vRLM (ℍ := ℍ) p none σ δ (.thunk C) αs ls f ρ) :
+    cRLM (ℍ := ℍ) p σ δ C αs ls' (forceE C (.val f)) ρ :=
+  force_UMR p (fun _ => GhostEnd.reLend_refl hok.2.1) hro ht hpv he hkt h
+
+/-- **`ForceRowM`, at every placement whose `U` clause reads the identity instantiation**
+(`binder0`): there the identity is read at every stack, blocks admitted. A placement whose `U`
+clause reads `ReLend` (`cbpv`, `binder`) reads the reflexive re-lend, which a block stack's
+non-strict chain is not. -/
+theorem forceRowM (p : Placement) (hp : (p.uFut || p.uOwn) = false) : ForceRowM (ℍ := ℍ) p := by
+  intro Δ Γ i C hsolo _ _ δ σ αs ls γ ρ _ _ _ _ _ hro _ ht hpv hg
   obtain ⟨hlw, hgs⟩ := pure_sep_iff.mp hg
   obtain ⟨v, hv, hval⟩ := gSepRLM_soloP hsolo (hsolo.lt_of_liveWithin hlw) hgs
   show cRLM p σ δ C αs ls (substAll γ (forceE C (.var i))) ρ
   rw [substAll_forceE' hv]
-  exact force_UM p hok hro ht hpv (Ext.refl ls ρ) (keepsT_refl ls ρ) hval
+  exact force_UMR p (fun h => absurd h (by rw [hp]; decide)) hro ht hpv (Ext.refl ls ρ)
+    (keepsT_refl ls ρ) hval
 
 /-! ### The callbacks at `σ·y` -/
 
@@ -383,7 +396,7 @@ theorem all_ownM {p : Placement} (hp : p.allOwn = true) {σ : LStack} {δ : LSub
     (hpv : PlaceViewsL (extS (δ.extend y α) (en :: σ) (α :: αs)) (en :: σ) (α :: αs) ls ρ) :
     cRLM (ℍ := ℍ) p (en :: σ) (δ.extend y α) C' (α :: αs) ls (.app e (.val .unit)) ρ :=
   (h ls σ αs (extQ_refl _ ls ρ) (by unfold FutQI; split <;> first | exact .refl | rfl)
-    (futAvoids_self _ σ)).2 hp en α hpush hro hsf ht hpv
+    (futAvoids_self _ σ)).2.1 hp en α hpush hro hsf ht hpv
 
 /-- `⊸` at the stack itself, at `vRLM`. -/
 theorem arr_appM {p : Placement} {σ : LStack} {δ : LSub} {A : VTy} {D : CTy} {αs : List Life}
@@ -445,7 +458,7 @@ theorem callbackExtImmM_binder : CallbackExtImmM (ℍ := ℍ) .binder := callbac
 at `vRLM`: the shared lemmas at the revised futures, the callbacks at `σ·y`, `[force]`, and the
 `U` side at every context (R1 closed, `statement0UFullM`). -/
 theorem statement0MBesideMono0 : Statement0MBesideMono0 (ℍ := ℍ) :=
-  ⟨statement0SharedM, callbackExtMutM_binder0, callbackExtImmM_binder0, forceRowM .binder0,
+  ⟨statement0SharedM, callbackExtMutM_binder0, callbackExtImmM_binder0, forceRowM .binder0 rfl,
     statement0UFullM⟩
 
 /-- **`Statement0M binder0` as stated is refuted**, with the three unrestricted monotonicity

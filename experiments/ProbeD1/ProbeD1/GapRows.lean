@@ -209,8 +209,8 @@ theorem viewSlotInstOB : ViewSlotInstOB := by
 
 /-- **The thaw of a `Mut` leaf, at every payload type**: `relendJ_mut` with `vC_mut_boundK` and
 `tyEqInst`. -/
-theorem relendJ_mutK {a : Lifetime.Life} {T : VTy} {δ : LSub} {σ : LStack}
-    {αs : List Life} {ls : List SRec} {v : Val} {ρ : WRes} (hok : StackOK σ αs)
+theorem relendJ_mutK_len {a : Lifetime.Life} {T : VTy} {δ : LSub} {σ : LStack}
+    {αs : List Life} {ls : List SRec} {v : Val} {ρ : WRes} (hl : αs.length = σ.length)
     (ht : TabAtS σ αs ρ) (hpv : PlaceViewsL (extS δ σ αs) σ αs ls ρ)
     (h : vRLJ .binder0 σ δ (.mut a T) αs ls v ρ) :
     RelendJ δ σ (fun δ' αs' ls' => vRLJ .binder0 σ δ' (.mut a T) αs' ls' v) αs ls ρ := by
@@ -221,10 +221,10 @@ theorem relendJ_mutK {a : Lifetime.Life} {T : VTy} {δ : LSub} {σ : LStack}
   have hg : ρ.get ℓ = some (CellU.mutOf b u σ' hσ' Q hw) := by rw [hρ]; simp
   cases hi : innerAt σ αs ℓ with
   | none =>
-      have hz : stratS αs ρ := stratS_single_unbound hok.1 ht hρ hi
+      have hz : stratS αs ρ := stratS_single_unbound hl ht hρ hi
       have hp := hpay ℓ rfl hi
       refine ⟨σ.map fun _ => false, ρ, PMap.empty, ResU.comp_empty_right ρ,
-        ⟨vwSW_false hok.1, placeViewsL_empty⟩, hz, fun ι hat ls' he _ _ _ ρv τ hv hcv => ?_⟩
+        ⟨vwSW_false hl, placeViewsL_empty⟩, hz, fun ι hat ls' he _ _ _ ρv τ hv hcv => ?_⟩
       rw [vwSW_false_inv hv.1] at hcv
       rw [eq_of_compS_empty_left (ResU.CompS.comm hcv)]
       rw [vRLJ_mut_eq, extS_inst]
@@ -245,7 +245,7 @@ theorem relendJ_mutK {a : Lifetime.Life} {T : VTy} {δ : LSub} {σ : LStack}
         | imm u₀ => rw [hek] at hkind; exact hkind.elim
       have hel : e.l = ℓ := (innerAt_mem hi).2
       refine ⟨dsPlace σ ℓ, PMap.empty, ρ, compS_empty_left ρ,
-        ⟨vwSW_dsAt hview hok.1 List.not_mem_nil hi, hpv⟩, stratS_empty αs,
+        ⟨vwSW_dsAt hview hl List.not_mem_nil hi, hpv⟩, stratS_empty αs,
         fun ι hat ls' _ _ _ _ ρv τ hv hcv => ?_⟩
       rw [eq_of_compS_empty_left hcv]
       have hv' : vwEW (ι.sub (extS δ σ αs)) e true (ι.life1 αe) ls' ρv := by
@@ -263,10 +263,18 @@ theorem relendJ_mutK {a : Lifetime.Life} {T : VTy} {δ : LSub} {σ : LStack}
       · cases hl'
         rw [innerAt_inst_some ι hi] at hn; exact absurd hn (by simp)
 
+/-- `relendJ_mutK_len` at a stack in shape. -/
+theorem relendJ_mutK {a : Lifetime.Life} {T : VTy} {δ : LSub} {σ : LStack}
+    {αs : List Life} {ls : List SRec} {v : Val} {ρ : WRes} (hok : StackOK σ αs)
+    (ht : TabAtS σ αs ρ) (hpv : PlaceViewsL (extS δ σ αs) σ αs ls ρ)
+    (h : vRLJ .binder0 σ δ (.mut a T) αs ls v ρ) :
+    RelendJ δ σ (fun δ' αs' ls' => vRLJ .binder0 σ δ' (.mut a T) αs' ls' v) αs ls ρ :=
+  relendJ_mutK_len hok.1 ht hpv h
+
 /-- **The thaw of an `Imm` leaf, at every payload type**: `relendJ_imm` with `vC_imm_retainedK`,
 `vC_imm_boundK` and `tyEqInst`. -/
-theorem relendJ_immK {a : Lifetime.Life} {T : VTy} {δ : LSub} {σ : LStack}
-    {αs : List Life} {ls : List SRec} {v : Val} {ρ : WRes} (hok : StackOK σ αs)
+theorem relendJ_immK_len {a : Lifetime.Life} {T : VTy} {δ : LSub} {σ : LStack}
+    {αs : List Life} {ls : List SRec} {v : Val} {ρ : WRes} (hl : αs.length = σ.length)
     (hob : OuterBelowTop αs) (hro : RecsOutside αs ls) (ht : TabAtS σ αs ρ)
     (hpv : PlaceViewsL (extS δ σ αs) σ αs ls ρ) (h : vRLJ .binder0 σ δ (.imm a T) αs ls v ρ) :
     RelendJ δ σ (fun δ' αs' ls' => vRLJ .binder0 σ δ' (.imm a T) αs' ls' v) αs ls ρ := by
@@ -278,10 +286,10 @@ theorem relendJ_immK {a : Lifetime.Life} {T : VTy} {δ : LSub} {σ : LStack}
   have hko : (CellU.immOf S u χ hχ).kind ≠ Kind.own := by simp [CellU.immOf, CellU.kind]
   cases hi : innerAt σ αs ℓ with
   | none =>
-      have hz : stratS αs ρ := stratS_single_unbound hok.1 ht hρ hi
+      have hz : stratS αs ρ := stratS_single_unbound hl ht hρ hi
       have hp := hpay ℓ rfl hi
       refine ⟨σ.map fun _ => false, ρ, PMap.empty, ResU.comp_empty_right ρ,
-        ⟨vwSW_false hok.1, placeViewsL_empty⟩, hz,
+        ⟨vwSW_false hl, placeViewsL_empty⟩, hz,
         fun ι hat ls' he hkt _ _ ρv τ hv hcv => ?_⟩
       rw [vwSW_false_inv hv.1] at hcv
       rw [eq_of_compS_empty_left (ResU.CompS.comm hcv)]
@@ -304,7 +312,7 @@ theorem relendJ_immK {a : Lifetime.Life} {T : VTy} {δ : LSub} {σ : LStack}
         | imm u₀ => exact ⟨u₀, rfl⟩
       have hel : e.l = ℓ := (innerAt_mem hi).2
       refine ⟨dsPlace σ ℓ, PMap.empty, ρ, compS_empty_left ρ,
-        ⟨vwSW_dsAt hview hok.1 List.not_mem_nil hi, hpv⟩, stratS_empty αs,
+        ⟨vwSW_dsAt hview hl List.not_mem_nil hi, hpv⟩, stratS_empty αs,
         fun ι hat ls' _ _ hks _ ρv τ hv hcv => ?_⟩
       rw [eq_of_compS_empty_left hcv]
       have hv' : vwEW (ι.sub (extS δ σ αs)) e true (ι.life1 αe) ls' ρv := by
@@ -321,6 +329,14 @@ theorem relendJ_immK {a : Lifetime.Life} {T : VTy} {δ : LSub} {σ : LStack}
         exact (hv'.2 ψ (by rw [hel]; exact hψ)).1
       · cases hl'
         rw [innerAt_inst_some ι hi] at hn; exact absurd hn (by simp)
+
+/-- `relendJ_immK_len` at a stack in shape. -/
+theorem relendJ_immK {a : Lifetime.Life} {T : VTy} {δ : LSub} {σ : LStack}
+    {αs : List Life} {ls : List SRec} {v : Val} {ρ : WRes} (hok : StackOK σ αs)
+    (hob : OuterBelowTop αs) (hro : RecsOutside αs ls) (ht : TabAtS σ αs ρ)
+    (hpv : PlaceViewsL (extS δ σ αs) σ αs ls ρ) (h : vRLJ .binder0 σ δ (.imm a T) αs ls v ρ) :
+    RelendJ δ σ (fun δ' αs' ls' => vRLJ .binder0 σ δ' (.imm a T) αs' ls' v) αs ls ρ :=
+  relendJ_immK_len hok.1 hob hro ht hpv h
 
 /-! ### The thaw at every `ThawFreeK` slot type -/
 

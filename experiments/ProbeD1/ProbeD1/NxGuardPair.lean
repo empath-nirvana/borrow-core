@@ -463,8 +463,9 @@ theorem pW₁_tab : TabAtS [pE] [pα] pW₁ := by
 theorem pSemIdx : SemIdxM pairΔ pairΓ (.ret .unit) ⟨[]⟩ [pE] [pα] pls pW₁ := by
   refine ⟨⟨fun x hx => absurd hx (by simp [CTy.binders, VTy.binders]), fun s hs _ x hx => ?_⟩,
     ⟨fun y hy => absurd hy (by simp [CFree, VFree]), fun s hs _ y hy => ?_⟩,
-    ⟨rfl, List.isChain_singleton _, by simp [pE]⟩, ?_, ⟨by simp [pE], fun e he y hy => ?_,
-      fun e he => ?_⟩, fun y hy => absurd rfl hy, ?_, ?_, ?_, pW₁_tab, pW₁_placeViews⟩
+    stackOKB_of_ok _ _ ⟨rfl, List.isChain_singleton _, by simp [pE]⟩, ?_,
+    ⟨fun e he y hy => ?_, fun e he => ?_⟩, fun y hy => absurd rfl hy, ?_, ?_, ?_, pW₁_tab,
+    pW₁_placeViews⟩
   · rw [List.mem_singleton] at hs; subst hs
     simp [VTy.binders] at hx
   · rw [List.mem_singleton] at hs; subst hs
@@ -839,8 +840,9 @@ theorem empty_not_deepAt (l : BoCa.Loc) (ψ : CellU BoCa.Loc Val) : ¬ DeepAt (P
 configuration `pc`.** `pc` arises (a `TW` history and a 6.64 lend), its view arises, and the
 judgement's index holds there with the view as the context. The program is typed at `withloadU`'s
 type. One own push at the index has a closed payload type, and [TR] 6.150's step `TW.reb`
-reborrows the record's payload at its lifetime into a tagged typed world. At every reading the
-callback's clause offers, the reborrow at the reading's lifetime fails the guard. -/
+reborrows the record's payload at its lifetime into a tagged typed world. At every single-push
+reading the callback's clause offers (`CbReading`), the reborrow at the reading's lifetime fails
+the guard. The clause also reads block pushes (`OwnPushB`), which `CbReading` does not list. -/
 theorem withloadUPairGapReal : WithloadUPairGapReal (ℍ := ℍ) :=
   ⟨pc, pE, pα, pψ, PMap.empty, pRec, 1, 2, ⟨[]⟩, .unit, pCbE, 1, pEn, pβ, PMap.empty, pcb, pW₂,
     pairCfg, pairProgU_typed, pOwnPush _ (empty_not_deepAt 3) (ResU.inStratum_empty _),
@@ -893,8 +895,8 @@ answer** (`¬ WithloadPairGapInst`): at the gate's configuration, at the callbac
 reading and the instance `pβ` below the bound, the answer's `U` clause instantiates `[pα]` by the
 shift `pθ`, which moves the lend to `3`, strictly below the reborrowed cells at `2`. The reborrow
 is related at `Imm '1 1 ⊗ Imm '1 1` at the instantiated reading (`'1 ↦ 4`), and with nothing beside
-it the table holds there. A fact about the thunked form's guard: it is not shown that a row can use
-that reading (`NEXT.md` §1.2). -/
+it the table holds there. A fact about the thunked form's guard at a single-push reading
+(`CbReading`): it is not shown that a row can use that reading (`NEXT.md` §1.2). -/
 theorem not_withloadPairGapInst : ¬ WithloadPairGapInst (ℍ := ℍ) := by
   intro h
   have hF := h pc pE pα pψ PMap.empty pRec 1 2 ⟨[]⟩ .unit 1 pairCfg (pairTy_closed 1)

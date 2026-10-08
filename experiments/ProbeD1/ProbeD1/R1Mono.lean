@@ -276,8 +276,11 @@ def MonoOwnGUFreeMA (p : Placement) : Prop :=
 non-empty stack the cut is the same and the reading agrees off the pushed variable; onto the empty
 stack the cut appears just above the pushed lend, and every value of the reading is above it
 (`SubFresh`). -/
-theorem retainedPayPush : RetainedPayPush := by
-  intro σ αs δ e a T v hok _ hsf hx _ h l' hv hi
+theorem retainedPayPush_len {σ : LStack} {αs : List Life} {δ : LSub} {e : LEnt} {a : Life}
+    {T : VTy} {v : Val} (hok : αs.length = σ.length) (hsf : SubFresh δ a) (hx : ¬ VFree e.x T)
+    (h : RetainedPay σ αs (extS δ σ αs) T v) :
+    RetainedPay (e :: σ) (a :: αs) (extS δ (e :: σ) (a :: αs)) T v := by
+  intro l' hv hi
   rw [innerAt_cons] at hi
   have hne : e.l ≠ l' := fun he => by rw [if_pos he] at hi; exact absurd hi (by simp)
   rw [if_neg hne] at hi
@@ -286,7 +289,7 @@ theorem retainedPayPush : RetainedPayPush := by
   rw [extS_push_find δ e σ a αs hyx] at hm
   cases σ with
   | nil =>
-      have hαs : αs = [] := List.length_eq_zero_iff.mp (by simpa using hok.1)
+      have hαs : αs = [] := List.length_eq_zero_iff.mp (by simpa using hok)
       subst hαs
       have hmem : (y, m) ∈ δ.entries := assocFind_mem hm
       have hlt : a < OrderDual.toDual m := hsf (y, m) hmem
@@ -298,7 +301,7 @@ theorem retainedPayPush : RetainedPayPush := by
   | cons e₀ σ₀ =>
       obtain ⟨α₀, αs₀, rfl⟩ : ∃ α₀ αs₀, αs = α₀ :: αs₀ := by
         cases αs with
-        | nil => exact absurd hok.1 (by simp)
+        | nil => exact absurd hok (by simp)
         | cons α₀ αs₀ => exact ⟨α₀, αs₀, rfl⟩
       refine h l' hv hi y hy m hm ?_
       obtain ⟨c, hc, hlt'⟩ := hint
@@ -306,6 +309,10 @@ theorem retainedPayPush : RetainedPayPush := by
       have : (a :: α₀ :: αs₀).getLast? = (α₀ :: αs₀).getLast? := List.getLast?_cons_cons
       simp only [cutOf, this] at hc ⊢
       exact hc
+
+/-- `retainedPayPush_len` at a stack in shape. -/
+theorem retainedPayPush : RetainedPayPush :=
+  fun _ _ _ _ _ _ _ hok _ hsf hx _ h => retainedPayPush_len hok.1 hsf hx h
 
 /-- `TyEq` across one variable bound on both sides, free in neither type. -/
 theorem tyEq_extend_both {S S' : VTy} {δ δ' : LSub} {x : LifeVar} (hx : ¬ VFree x S)
@@ -345,10 +352,10 @@ theorem not_vFree_wClose {η : Option (Nat → WEnt)} {x : LifeVar} {T : VTy} (h
 
 /-- **The leaf at the pushed stack**: Core's leaf at the pushed reading (`vC_congr`), `CohS` by
 `cohS_push`, `RetainedPay` by `retainedPayPush`. -/
-theorem vRLJ_leaf_push {p : Placement} {σ : LStack} {δ : LSub} {αs : List Life} {ls : List SRec}
+theorem vRLJ_leaf_push_len {p : Placement} {σ : LStack} {δ : LSub} {αs : List Life} {ls : List SRec}
     {e : LEnt} {a : Life} {A : VTy} {v : Val} {ρ : WRes}
     (hA : (∃ b T, A = .mut b T) ∨ (∃ b T, A = .imm b T)) (hx : ¬ VFree e.x A)
-    (hok : StackOK σ αs) (hch : List.IsChain (· < ·) (a :: αs)) (hsf : SubFresh δ a)
+    (hok : αs.length = σ.length) (hsf : SubFresh δ a)
     (hpf : ∀ ψ, ¬ DeepAt ρ e.l ψ) (hσ : StackPayAvoids e.x σ)
     (h : vRLJ (ℍ := ℍ) p σ δ A αs ls v ρ) : vRLJ (ℍ := ℍ) p (e :: σ) δ A (a :: αs) ls v ρ := by
   have hagree : ∀ y, VFree y A → (extS δ (e :: σ) (a :: αs)).find? y = (extS δ σ αs).find? y :=
@@ -361,8 +368,7 @@ theorem vRLJ_leaf_push {p : Placement} {σ : LStack} {δ : LSub} {αs : List Lif
     have hne : e.l ≠ ℓ := fun he =>
       hpf (CellU.mutOf b' u σ' hσ' Q hw) (DeepAt.top (by rw [he, hρ]; simp))
     have hxT : ¬ VFree e.x T := fun h' => hx (Or.inr h')
-    refine ⟨by rw [vC_congr _ hagree]; exact hvc, ?_, retainedPayPush σ αs δ e a T _ hok hch hsf
-      hxT (fun l hl => by cases hl; exact Ne.symm hne) hpay⟩
+    refine ⟨by rw [vC_congr _ hagree]; exact hvc, ?_, retainedPayPush_len hok hsf hxT hpay⟩
     exact cohS_push hne (fun b'' T'' hb => by
       rcases hb with hb | hb <;> cases hb; exact hxT) hσ hcoh
   · rw [vRLJ_imm_eq] at h ⊢
@@ -372,11 +378,18 @@ theorem vRLJ_leaf_push {p : Placement} {σ : LStack} {δ : LSub} {αs : List Lif
     have hne : e.l ≠ ℓ := fun he =>
       hpf (CellU.immOf S u χ hχ) (DeepAt.top (by rw [he, hρ]; simp))
     have hxT : ¬ VFree e.x T := fun h' => hx (Or.inr h')
-    refine ⟨by rw [vC_congr _ hagree]; exact hvc, ?_, retainedPayPush σ αs δ e a T _ hok hch hsf
-      hxT (fun l hl => by cases hl; exact Ne.symm hne) hpay⟩
+    refine ⟨by rw [vC_congr _ hagree]; exact hvc, ?_, retainedPayPush_len hok hsf hxT hpay⟩
     exact cohS_push hne (fun b'' T'' hb => by
       rcases hb with hb | hb <;> cases hb; exact hxT) hσ hcoh
 
+/-- `vRLJ_leaf_push_len` at a stack in shape. -/
+theorem vRLJ_leaf_push {p : Placement} {σ : LStack} {δ : LSub} {αs : List Life} {ls : List SRec}
+    {e : LEnt} {a : Life} {A : VTy} {v : Val} {ρ : WRes}
+    (hA : (∃ b T, A = .mut b T) ∨ (∃ b T, A = .imm b T)) (hx : ¬ VFree e.x A)
+    (hok : StackOK σ αs) (_hch : List.IsChain (· < ·) (a :: αs)) (hsf : SubFresh δ a)
+    (hpf : ∀ ψ, ¬ DeepAt ρ e.l ψ) (hσ : StackPayAvoids e.x σ)
+    (h : vRLJ (ℍ := ℍ) p σ δ A αs ls v ρ) : vRLJ (ℍ := ℍ) p (e :: σ) δ A (a :: αs) ls v ρ :=
+  vRLJ_leaf_push_len hA hx hok.1 hsf hpf hσ h
 
 /-- The own lend's facts at a resource hold at its parts. -/
 theorem pushFacts_left {σ : LStack} {αs : List Life} {s : LSub} {ls : List SRec} {e : LEnt}
@@ -397,10 +410,10 @@ theorem pushFacts_right {σ : LStack} {αs : List Life} {s : LSub} {ls : List SR
 (`MonoOwnUFreeMEA`'s induction): the leaves by `vRLJ_leaf_push`, a box's bound read off the old
 reading (the pushed variable is not in it), a variable by `EnvPush`, `[L]` element by element, `μ`
 by the fixed point at the candidate "a `μ` value that crosses the push under the guard". -/
-theorem monoOwnUFree_go (p : Placement) (e : LEnt) (a : Life) : ∀ (A : VTy)
+theorem monoOwnUFree_go_len (p : Placement) (e : LEnt) (a : Life) : ∀ (A : VTy)
     (η η' : Option (Nat → WEnt)) (σ : LStack) (δ : LSub) (αs : List Life) (ls : List SRec)
     (v : Val) (ρ : WRes),
-    UFreeM A → EnvPush η η' σ δ αs ls e a → StackOK σ αs → List.IsChain (· < ·) (a :: αs) →
+    UFreeM A → EnvPush η η' σ δ αs ls e a → αs.length = σ.length → List.IsChain (· < ·) (a :: αs) →
     SubFresh δ a → StackPayAvoids e.x σ → ¬ VFree e.x A →
     (TabAtS σ αs ρ ∧ PlaceViewsL (extS δ σ αs) σ αs ls ρ ∧ (∀ ψ, ¬ DeepAt ρ e.l ψ) ∧
       ρ.InStratum a) →
@@ -451,7 +464,7 @@ theorem monoOwnUFree_go (p : Placement) (e : LEnt) (a : Life) : ∀ (A : VTy)
       intro η η' σ δ αs ls v ρ _ hE hok hch hsf hσ hx hF h
       rw [vRLM_mut_eq] at h ⊢
       rw [wClose_congr hE.1]
-      refine vRLJ_leaf_push (Or.inl ⟨b, _, rfl⟩) ?_ hok hch hsf hF.2.2.1 hσ h
+      refine vRLJ_leaf_push_len (Or.inl ⟨b, _, rfl⟩) ?_ hok hsf hF.2.2.1 hσ h
       rintro (hm | hT)
       · exact hx (Or.inl hm)
       · exact not_vFree_wClose (fun h' => hx (Or.inr h')) hE.2.1 hT
@@ -459,7 +472,7 @@ theorem monoOwnUFree_go (p : Placement) (e : LEnt) (a : Life) : ∀ (A : VTy)
       intro η η' σ δ αs ls v ρ _ hE hok hch hsf hσ hx hF h
       rw [vRLM_imm_eq] at h ⊢
       rw [wClose_congr hE.1]
-      refine vRLJ_leaf_push (Or.inr ⟨b, _, rfl⟩) ?_ hok hch hsf hF.2.2.1 hσ h
+      refine vRLJ_leaf_push_len (Or.inr ⟨b, _, rfl⟩) ?_ hok hsf hF.2.2.1 hσ h
       rintro (hm | hT)
       · exact hx (Or.inl hm)
       · exact not_vFree_wClose (fun h' => hx (Or.inr h')) hE.2.1 hT
@@ -532,6 +545,18 @@ theorem monoOwnUFree_go (p : Placement) (e : LEnt) (a : Life) : ∀ (A : VTy)
         · refine vRLM_roll hnm (by rw [wClose_congr hE.1]; exact hcl) ?_
           exact ih _ _ σ δ αs ls v' ρ' hu hE₁ hok hch hsf hσ hx ⟨ht', hpv', hpf', hin'⟩ h'
       exact (hlfp P' hclosed).2 hF.1 hF.2.1 hF.2.2.1 hF.2.2.2
+
+/-- `monoOwnUFree_go_len` at a stack in shape. -/
+theorem monoOwnUFree_go (p : Placement) (e : LEnt) (a : Life) : ∀ (A : VTy)
+    (η η' : Option (Nat → WEnt)) (σ : LStack) (δ : LSub) (αs : List Life) (ls : List SRec)
+    (v : Val) (ρ : WRes),
+    UFreeM A → EnvPush η η' σ δ αs ls e a → StackOK σ αs → List.IsChain (· < ·) (a :: αs) →
+    SubFresh δ a → StackPayAvoids e.x σ → ¬ VFree e.x A →
+    (TabAtS σ αs ρ ∧ PlaceViewsL (extS δ σ αs) σ αs ls ρ ∧ (∀ ψ, ¬ DeepAt ρ e.l ψ) ∧
+      ρ.InStratum a) →
+    vRLM (ℍ := ℍ) p η σ δ A αs ls v ρ → vRLM (ℍ := ℍ) p η' (e :: σ) δ A (a :: αs) ls v ρ :=
+  fun A η η' σ δ αs ls v ρ hu hE hok =>
+    monoOwnUFree_go_len p e a A η η' σ δ αs ls v ρ hu hE hok.1
 
 /-- **`MonoOwnUFreeMEA`, at every placement.** -/
 theorem monoOwnUFreeMEA (p : Placement) : MonoOwnUFreeMEA (ℍ := ℍ) p := by
@@ -1256,9 +1281,10 @@ theorem gdRowRefutation : GdRowRefutation (ℍ := ℍ) := by
   rintro ⟨hok, hob, hro, hso, -, -, -, -, -, ht, hpv, hBL, hSc, hJ, hSD, hMod⟩ hrel
     ⟨S, M, hM, hn⟩ hrow
   have hc := hrow gdΔ gdΓ 2 (.var 1) M S gdCyBody rfl (fun y u hy => ?_) (fun s hs _ h => ?_)
-    rfl (fun s hs _ h => ?_) hM hBL hSc gdδ gdσ gdαs gdls gdγ PMap.empty hok hob
-    (stackJM_of_kinds hJ hBL (fun e he => by
-      rw [List.mem_singleton] at he; subst he; exact Or.inl ⟨.top, rfl⟩)) hSD hMod
+    rfl (fun s hs _ h => ?_) hM hBL hSc gdδ gdσ gdαs gdls gdγ PMap.empty
+    (stackOKB_of_ok _ _ hok) hob
+    (stackJB_of_stackJM (stackJM_of_kinds hJ hBL (fun e he => by
+      rw [List.mem_singleton] at he; subst he; exact Or.inl ⟨.top, rfl⟩))) hSD hMod
     hro hso ht hpv hrel
   · exact hn hc
   · rw [gdΔ_find] at hy

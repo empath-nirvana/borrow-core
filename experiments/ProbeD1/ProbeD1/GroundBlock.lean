@@ -7,9 +7,8 @@ import ProbeD1.Block
 The facts the block push (`Block.lean`) needs before it enters the relation, and the block gates at
 the suite's payloads.
 
-* **The stack's shape**: `StackOK` is `StackOKB` with no block (`stackOKB_of_ok`); an
-  instantiation keeps `StackOKB` (`instStackOKB`); at distinct variables `StackJBase` and `StackJB`
-  are `StackJ` and `StackJM` (`stackJBaseIff`).
+* **The stack's shape** is in `R1Block.lean` (`stackOKB_of_ok`, `instStackOKB`, `stackJBaseIff`,
+  `guardInstB`), where the re-proved rows read it.
 * **The reach**: a single leaf fits no block of two (`blockFitsLeafLe`), and the reborrowed blocks
   of the pair and of an array fit (`blockFitsReb`).
 * **The guard at a block push**: the start of a block lend keeps the guard's views (`pvlStartB`),
@@ -27,102 +26,6 @@ namespace ProbeD1
 open BoCa BoCa.Fig16 BoCa.Fig16.BoLo BoCa.Fig16.LogRel BoCa.Fig16.LogRel.Core
 open BoCa.Lifetime (LSub LifeCtx LifeVar)
 open GhostEnd (LEnt LStack LKind extS vwE vwS vis stratS ReLend TabAtS jdgCty)
-
-/-! ### The stack's shape -/
-
-/-- Two members of a zip whose first components' images are distinct are equal when their images
-agree. -/
-theorem zip_eq_of_fst {σ : LStack} {αs : List Life} (hl : αs.length = σ.length)
-    (hn : (σ.map LEnt.x).Nodup) {p q : LEnt × Life} (hp : p ∈ σ.zip αs) (hq : q ∈ σ.zip αs)
-    (h : p.1.x = q.1.x) : p = q := by
-  have hm : (σ.zip αs).map (fun p => p.1.x) = σ.map LEnt.x := by
-    rw [show (fun p : LEnt × Life => p.1.x) = LEnt.x ∘ Prod.fst from rfl, ← List.map_map,
-      List.map_fst_zip (le_of_eq hl.symm)]
-  exact List.inj_on_of_nodup_map (f := fun p : LEnt × Life => p.1.x) (by rw [hm]; exact hn) hp hq h
-
-/-- Two members of a zip whose second components are distinct are equal when those agree. -/
-theorem zip_eq_of_snd {σ : LStack} {αs : List Life} (hl : αs.length = σ.length)
-    (hn : αs.Nodup) {p q : LEnt × Life} (hp : p ∈ σ.zip αs) (hq : q ∈ σ.zip αs)
-    (h : p.2 = q.2) : p = q := by
-  have hm : (σ.zip αs).map Prod.snd = αs := List.map_snd_zip (le_of_eq hl)
-  exact List.inj_on_of_nodup_map (f := Prod.snd) (by rw [hm]; exact hn) hp hq h
-
-/-- A strict chain has no repeated lifetime. -/
-theorem nodup_of_chain_lt {αs : List Life} (h : List.IsChain (· < ·) αs) : αs.Nodup :=
-  (List.IsChain.pairwise h).imp fun hab => ne_of_lt hab
-
-/-- **`StackOK` is `StackOKB` with no block.** -/
-def StackOKBOfOK : Prop := ∀ (σ : LStack) (αs : List Life), StackOK σ αs → StackOKB σ αs
-
-theorem stackOKB_of_ok : StackOKBOfOK := by
-  intro σ αs ⟨hl, hc, hn⟩
-  have hna : αs.Nodup := nodup_of_chain_lt hc
-  refine ⟨hl, hc.imp fun _ _ h => le_of_lt h, fun p hp q hq => ⟨fun h => ?_, fun h => ?_⟩,
-    fun p hp q hq h => ?_⟩
-  · rw [zip_eq_of_fst hl hn hp hq h]
-  · rw [zip_eq_of_snd hl hna hp hq h]
-  · rw [zip_eq_of_snd hl hna hp hq h]
-
-/-- **An instantiation keeps `StackOKB`**: it maps the lifetimes by a strictly monotone map. -/
-def InstStackOKB : Prop :=
-  ∀ (σ : LStack) (αs : List Life) (ι : Inst), InstAt αs ι → StackOKB σ αs → StackOKB σ (ι.life αs)
-
-theorem instStackOKB : InstStackOKB := by
-  intro σ αs ι _ ⟨hl, hc, hx, hr⟩
-  have hm := ι.life1_strictMono
-  refine ⟨by simp [Inst.life, hl], ?_, fun p hp q hq => ?_, fun p hp q hq h => ?_⟩
-  · exact (List.isChain_map ι.life1).mpr (hc.imp fun _ _ h => hm.monotone h)
-  · rw [Inst.life, List.zip_map_right, List.mem_map] at hp hq
-    obtain ⟨p₀, hp₀, rfl⟩ := hp
-    obtain ⟨q₀, hq₀, rfl⟩ := hq
-    simp only [Prod.map_fst, Prod.map_snd, id]
-    rw [hx p₀ hp₀ q₀ hq₀]
-    exact ⟨fun h => h ▸ rfl, fun h => hm.injective h⟩
-  · rw [Inst.life, List.zip_map_right, List.mem_map] at hp hq
-    obtain ⟨p₀, hp₀, rfl⟩ := hp
-    obtain ⟨q₀, hq₀, rfl⟩ := hq
-    exact hr p₀ hp₀ q₀ hq₀ (hm.injective h)
-
-/-- **At distinct variables the block forms are the old ones.** -/
-def StackJBaseIff : Prop :=
-  ∀ (σ : LStack) (αs : List Life) (δ : LSub) (Δ : LifeCtx) (Γ : Ctx VTy) (C : CTy),
-    (σ.map LEnt.x).Nodup →
-      ((StackJBase σ αs δ Δ Γ C ↔ StackJ σ αs δ Δ Γ C) ∧
-        (StackJB σ αs δ Δ Γ C ↔ StackJM σ αs δ Δ Γ C))
-
-/-- At distinct variables the head names a member exactly when it is that member. -/
-theorem head_map_x_iff {σ : LStack} (hn : (σ.map LEnt.x).Nodup) {e : LEnt} (he : e ∈ σ) :
-    σ.head?.map LEnt.x = some e.x ↔ σ.head? = some e := by
-  constructor
-  · intro h
-    obtain ⟨h₀, hh, hx⟩ := Option.map_eq_some_iff.mp h
-    have hm : h₀ ∈ σ := List.mem_of_mem_head? hh
-    rw [List.inj_on_of_nodup_map hn hm he hx] at hh
-    exact hh
-  · intro h; rw [h]; rfl
-
-theorem stackJBaseIff : StackJBaseIff := by
-  intro σ αs δ Δ Γ C hn
-  have hbase : StackJBase σ αs δ Δ Γ C ↔ StackJ σ αs δ Δ Γ C := by
-    constructor
-    · rintro ⟨hp, hk⟩
-      refine ⟨hn, hp, fun e he => ?_⟩
-      rcases hk e he with h | h | ⟨h₁, h₂, h₃⟩
-      · exact Or.inl h
-      · exact Or.inr (Or.inl h)
-      · exact Or.inr (Or.inr ⟨h₁, (head_map_x_iff hn he).mp h₂, h₃⟩)
-    · rintro ⟨-, hp, hk⟩
-      refine ⟨hp, fun e he => ?_⟩
-      rcases hk e he with h | h | ⟨h₁, h₂, h₃⟩
-      · exact Or.inl h
-      · exact Or.inr (Or.inl h)
-      · exact Or.inr (Or.inr ⟨h₁, (head_map_x_iff hn he).mpr h₂, h₃⟩)
-  refine ⟨hbase, ?_⟩
-  constructor
-  · rintro ⟨hb, hx⟩
-    exact ⟨hbase.mp hb, fun e he h₁ h₂ h₃ => hx e he h₁ ((head_map_x_iff hn he).mpr h₂) h₃⟩
-  · rintro ⟨hj, hx⟩
-    exact ⟨hbase.mpr hj, fun e he h₁ h₂ h₃ => hx e he h₁ ((head_map_x_iff hn he).mp h₂) h₃⟩
 
 /-! ### The reach -/
 
@@ -274,26 +177,6 @@ theorem get_of_free {ρc cb ρ : WRes} (hc : ResU.CompS ρc cb ρ)
   · exact Or.inr ⟨h₂, by rw [h, h₁]⟩
   · exact Or.inl ⟨ψ, h₂, h₁, h⟩
   · exact absurd (DeepAt.top h₁) (hfree l ψ₂ ψ₁ h₂)
-
-/-- `(e, α)` is a member of a block's zip with its lifetimes. -/
-theorem mem_zip_blockL {τ : LStack} {e : LEnt} (he : e ∈ τ) (α : Life) :
-    (e, α) ∈ τ.zip (blockL τ α) := by
-  induction τ with
-  | nil => exact absurd he List.not_mem_nil
-  | cons e₀ τ ih =>
-      rcases List.mem_cons.mp he with rfl | he
-      · exact List.mem_cons_self ..
-      · exact List.mem_cons_of_mem _ (ih he)
-
-/-- A member of a block's zip is at the block's lifetime. -/
-theorem snd_of_mem_zip_blockL {τ : LStack} {α : Life} {p : LEnt × Life}
-    (h : p ∈ τ.zip (blockL τ α)) : p.2 = α := by
-  induction τ with
-  | nil => exact absurd h List.not_mem_nil
-  | cons e₀ τ ih =>
-      rcases List.mem_cons.mp h with rfl | h
-      · rfl
-      · exact ih h
 
 /-- **The table and the guard's views at a pushed stack with no outer entry**: every cell is at or
 above the block's lifetime, every cell at an unlent place above it, and every borrow cell at any
@@ -970,6 +853,98 @@ theorem loadGateNilB_array (hfp : FreePlaceExists) (B : VTy) :
       LoadGateNilB (ℍ := ℍ) (VTy.array (.int .w32)) (loadCbU (VTy.array (.int .w32)) B) :=
   ⟨loadGateNilB_array_of hfp _ (fun _ => Or.inr ⟨_, rfl⟩) (fun _ _ _ h => by cases h),
     loadGateNilB_array_of hfp _ (fun _ => Or.inl ⟨_, rfl⟩) (fun _ _ _ h => by cases h; rfl)⟩
+
+/-! ### A free place at every depth
+
+`Res` is finite at every depth (`PMap.finite`, the stratification of `Cell`). A witness of a cell
+in `Res_α` is in a stratum strictly inside `α` (`Res.toU_inStratum`), so the places a resource
+holds at every depth lie in one list, and a place outside it is free (`loc_infinite`). -/
+
+/-- The places a resource holds at every depth lie in one list. -/
+def DeepFin (ρ : WRes) : Prop := ∃ d : List BoCa.Loc, ∀ l ψ, DeepAt ρ l ψ → l ∈ d
+
+theorem deepFin_empty : DeepFin (PMap.empty : WRes) :=
+  ⟨[], fun l ψ h => absurd h (empty_not_deepAt l ψ)⟩
+
+/-- **A resource whose cells' witnesses are `DeepFin` is `DeepFin`**: its own places are finite
+(`PMap.finite`), and each of them adds its witness's list. -/
+theorem deepFin_of_wits (ρ : WRes) (hw : ∀ m φ, ρ.get m = some φ → DeepFin φ.wit) :
+    DeepFin ρ := by
+  obtain ⟨d₀, hd₀⟩ := ρ.finite
+  have key : ∀ L : List BoCa.Loc, ∃ d : List BoCa.Loc, ∀ m ∈ L, ∀ φ, ρ.get m = some φ →
+      ∀ l ψ, DeepAt φ.wit l ψ → l ∈ d := by
+    intro L
+    induction L with
+    | nil => exact ⟨[], fun m hm => absurd hm List.not_mem_nil⟩
+    | cons m L ih =>
+        obtain ⟨d, hd⟩ := ih
+        cases hm : ρ.get m with
+        | none =>
+            refine ⟨d, fun m' hm' φ hφ l ψ h => ?_⟩
+            rcases List.mem_cons.mp hm' with rfl | hm'
+            · rw [hm] at hφ; cases hφ
+            · exact hd m' hm' φ hφ l ψ h
+        | some φ₀ =>
+            obtain ⟨d', hd'⟩ := hw m φ₀ hm
+            refine ⟨d' ++ d, fun m' hm' φ hφ l ψ h => ?_⟩
+            rcases List.mem_cons.mp hm' with rfl | hm'
+            · rw [hm] at hφ
+              cases hφ
+              exact List.mem_append_left _ (hd' l ψ h)
+            · exact List.mem_append_right _ (hd m' hm' φ hφ l ψ h)
+  obtain ⟨d, hd⟩ := key d₀
+  refine ⟨d₀ ++ d, fun l ψ h => ?_⟩
+  cases h with
+  | top e => exact List.mem_append_left _ (hd₀ l (by rw [e]; simp))
+  | wit e hdeep => exact List.mem_append_right _ (hd _ (hd₀ _ (by rw [e]; simp)) _ e l ψ hdeep)
+
+/-- **A resource in a stratum is `DeepFin`**, by induction on the stratum: a witness of one of its
+cells is in a stratum strictly inside it. -/
+theorem deepFin_of_inStratum : ∀ (n : ℕ) (ρ : WRes), ρ.InStratum (OrderDual.toDual n) →
+    DeepFin ρ := by
+  intro n
+  induction n using Nat.strong_induction_on with
+  | _ n ih =>
+      intro ρ hρ
+      refine deepFin_of_wits ρ fun m φ hφ => ?_
+      have hs := hρ m φ hφ
+      cases φ with
+      | own v => exact deepFin_empty
+      | imm i =>
+          have hlt : OrderDual.ofDual i.ls.join < n := by
+            have h₁ : OrderDual.toDual n < i.ls.join := lt_of_lt_of_le hs i.ls.meet_le_join
+            exact OrderDual.toDual_lt.mp h₁
+          exact ih _ hlt i.res (Res.toU_inStratum i.ρ)
+      | «mut» mm =>
+          have hlt : OrderDual.ofDual mm.β < n := OrderDual.toDual_lt.mp hs
+          exact ih _ hlt mm.res (Res.toU_inStratum mm.ρ)
+
+/-- **Every resource is `DeepFin`**: each cell's witness is in the cell's own stratum. -/
+theorem deepFin (ρ : WRes) : DeepFin ρ := by
+  refine deepFin_of_wits ρ fun m φ _ => ?_
+  cases φ with
+  | own v => exact deepFin_empty
+  | imm i => exact deepFin_of_inStratum _ i.res (Res.toU_inStratum i.ρ)
+  | «mut» mm => exact deepFin_of_inStratum _ mm.res (Res.toU_inStratum mm.ρ)
+
+/-- **`FreePlaceExists`**: a place outside the resource's list at every depth. -/
+theorem freePlaceExists : FreePlaceExists := by
+  intro ρ
+  obtain ⟨d, hd⟩ := deepFin ρ
+  obtain ⟨l, hl⟩ := loc_infinite d
+  exact ⟨l, fun ψ h => hl (hd l ψ h)⟩
+
+/-- **The block gate at the pair**, both callback shapes. -/
+theorem loadGateNilB_pairTy (B : VTy) :
+    LoadGateNilB (ℍ := ℍ) pairTy (loadCbF pairTy B) ∧
+      LoadGateNilB (ℍ := ℍ) pairTy (loadCbU pairTy B) :=
+  loadGateNilB_pair freePlaceExists B
+
+/-- **The block gate at an array of `I32`**, both callback shapes, every length. -/
+theorem loadGateNilB_arrayI32 (B : VTy) :
+    LoadGateNilB (ℍ := ℍ) (VTy.array (.int .w32)) (loadCbF (VTy.array (.int .w32)) B) ∧
+      LoadGateNilB (ℍ := ℍ) (VTy.array (.int .w32)) (loadCbU (VTy.array (.int .w32)) B) :=
+  loadGateNilB_array freePlaceExists B
 
 end ProbeD1
 

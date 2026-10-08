@@ -11,8 +11,9 @@ gives.
 
 * **The world facts** (`BoxIdx`, `boxIdx_inst`, `boxIdx_steps`): an index `SemSM` reads stays one
   along an instantiation and along the box's pushes, every pushed entry under a reserved name.
-  `StackJ` follows at every judgement scoped in `Δ` (`stackJ_of_boxIdx`).
-* **The box is transitive** (`boxSteps_inst`, `pBox_world`): the box's pushes instantiated are
+  `StackJBase` follows at every judgement scoped in `Δ` (`stackJBase_of_boxIdx`), and `StackJ`
+  where the stack's variables are distinct (`stackJ_of_boxIdx`).
+* **The box is transitive** (`boxSteps_inst`, `pBox_worldB`): the box's pushes instantiated are
   pushes at the instantiated reading, and an instantiation of an instantiated stack is one of the
   stack (`instComp`); at the empty stack, the instantiation of a pushed stack fixes the reading.
   So a value in the box at a stack is in the box at every world the box reaches.
@@ -168,13 +169,13 @@ theorem boxSteps_append {δ : LSub} {ls : List SRec} {s s' : Stk}
 
 /-! ### The index facts along the box -/
 
-/-- **The index facts a box world keeps**, at `Δ`: the stack in shape and below `⊤`, the records
-outside the lends, the reading's bindings outside them, `Δ`'s models, every entry named by a
-variable of `Δ` or by a reserved name, and every payload type reading `Δ`'s variables or the
-stack's. -/
+/-- **The index facts a box world keeps**, at `Δ`: the stack in shape (blocks admitted) and below
+`⊤`, the records outside the lends, the reading's bindings outside them, `Δ`'s models, every entry
+named by a variable of `Δ` or by a reserved name, and every payload type reading `Δ`'s variables or
+the stack's. -/
 structure BoxIdx (Δ : LifeCtx) (δ : LSub) (σ : LStack) (αs : List Life) (ls : List SRec) :
     Prop where
-  ok : StackOK σ αs
+  ok : StackOKB σ αs
   ob : OuterBelowTop αs
   ro : RecsOutside αs ls
   so : SubOutside σ αs δ
@@ -197,9 +198,7 @@ theorem boxIdx_step {Δ : LifeCtx} {δ : LSub} {ls : List SRec} {σ σ' : LStack
   simp only [Prod.mk.injEq] at he
   obtain ⟨rfl, rfl⟩ := he
   have hΔe : Δ.find? e.x = none := delta_none_of_fresh h.md hok.var hδ
-  refine ⟨⟨by simp [h.ok.1], hok.chain, ?_⟩, ?_, hro, ?_, ?_, ?_, ?_⟩
-  · simp only [List.map_cons, List.nodup_cons]
-    exact ⟨hok.var, h.ok.2.2⟩
+  refine ⟨stackOKB_push h.ok hok.chain hok.var, ?_, hro, ?_, ?_, ?_, ?_⟩
   · intro o ho
     cases hαs : αs with
     | nil => rw [hαs] at ho; simp at ho; subst ho; exact htop
@@ -236,12 +235,12 @@ theorem boxIdx_steps {Δ : LifeCtx} {δ : LSub} {ls : List SRec} (hSD : SubDom �
   | refl => exact h
   | tail _ hst₁ ih => exact boxIdx_step hSD ih hst₁
 
-/-- **`StackJ` at a box world**: every entry is of `StackJ`'s first two kinds, a reserved name off
-`Δ` being read by no type scoped in `Δ`. -/
-theorem stackJ_of_boxIdx {Δ : LifeCtx} {δ : LSub} {σ : LStack} {αs : List Life} {ls : List SRec}
-    {Γ : Ctx VTy} {C : CTy} (h : BoxIdx Δ δ σ αs ls) (hSc : Scoped Δ Γ C) :
-    StackJ σ αs δ Δ Γ C := by
-  refine ⟨h.ok.2.2, h.pay, fun e he => ?_⟩
+/-- **`StackJBase` at a box world**: every entry is of `StackJ`'s first two kinds, a reserved name
+off `Δ` being read by no type scoped in `Δ`. -/
+theorem stackJBase_of_boxIdx {Δ : LifeCtx} {δ : LSub} {σ : LStack} {αs : List Life}
+    {ls : List SRec} {Γ : Ctx VTy} {C : CTy} (h : BoxIdx Δ δ σ αs ls) (hSc : Scoped Δ Γ C) :
+    StackJBase σ αs δ Δ Γ C := by
+  refine ⟨h.pay, fun e he => ?_⟩
   rcases h.kind e he with hΔ | hns
   · exact Or.inl hΔ
   · by_cases hΔ : ∃ u, Δ.find? e.x = some u
@@ -253,6 +252,12 @@ theorem stackJ_of_boxIdx {Δ : LifeCtx} {δ : LSub} {σ : LStack} {αs : List Li
       refine Or.inr (Or.inl ⟨hns, hΔ', fun hC => ?_, fun s hs hl hv => ?_⟩)
       · exact hΔ (hSc.1 e.x hC)
       · exact hΔ (hSc.2 s hs hl e.x hv)
+
+/-- **`StackJ` at a box world whose stack has distinct variables** (`StackJBaseIff`). -/
+theorem stackJ_of_boxIdx {Δ : LifeCtx} {δ : LSub} {σ : LStack} {αs : List Life} {ls : List SRec}
+    {Γ : Ctx VTy} {C : CTy} (h : BoxIdx Δ δ σ αs ls) (hSc : Scoped Δ Γ C)
+    (hnd : (σ.map LEnt.x).Nodup) : StackJ σ αs δ Δ Γ C :=
+  ((stackJBaseIff σ αs δ Δ Γ C hnd).1).mp (stackJBase_of_boxIdx h hSc)
 
 /-- **A box step's variable is no variable of `Δ`, so no type scoped in `Δ` reads it.** -/
 theorem boxStep_var_off {Δ : LifeCtx} {δ : LSub} {ls : List SRec} {σ σ' : LStack}
@@ -338,8 +343,8 @@ theorem inst_sub_fix_of_fresh {δ : LSub} {αs : List Life} {ι : Inst} (hat : I
 reaches from there. The reached world's instantiations are, after the reaching instantiation, ones
 of the stack (`instComp`); at the empty stack the reached world's instantiation fixes the reading
 (`inst_sub_fix_of_fresh`). -/
-theorem pBox_world {C : CTy} {δ : LSub} {σ σ' : LStack} {αs αs' : List Life} {ls' : List SRec}
-    {P : LStack → LSub → List Life → List SRec → Prop} {ι : Inst} (hok : StackOK σ αs)
+theorem pBox_worldB {C : CTy} {δ : LSub} {σ σ' : LStack} {αs αs' : List Life} {ls' : List SRec}
+    {P : LStack → LSub → List Life → List SRec → Prop} {ι : Inst}
     (hbox : PBox (.thunk C) δ σ αs P) (hat : InstAt αs ι)
     (hst : Relation.ReflTransGen (BoxStep (ι.sub δ) ls') (σ, ι.life αs) (σ', αs')) :
     PBox (.thunk C) (ι.sub δ) σ' αs' P := by
@@ -391,6 +396,14 @@ theorem pBox_world {C : CTy} {δ : LSub} {σ σ' : LStack} {αs αs' : List Life
     rwa [hsub] at this
 
 /-! ### A persistent context at a box world -/
+
+/-- `pBox_worldB` at a stack in shape (its proof reads no shape). -/
+theorem pBox_world {C : CTy} {δ : LSub} {σ σ' : LStack} {αs αs' : List Life} {ls' : List SRec}
+    {P : LStack → LSub → List Life → List SRec → Prop} {ι : Inst} (_hok : StackOK σ αs)
+    (hbox : PBox (.thunk C) δ σ αs P) (hat : InstAt αs ι)
+    (hst : Relation.ReflTransGen (BoxStep (ι.sub δ) ls') (σ, ι.life αs) (σ', αs')) :
+    PBox (.thunk C) (ι.sub δ) σ' αs' P :=
+  pBox_worldB (ι := ι) hbox hat hst
 
 /-- **Views at the empty resource hold at every reading, lifetimes and list**: every visible flag
 is off. -/
@@ -450,8 +463,8 @@ theorem uFree_boxSteps {Δ : LifeCtx} {δ : LSub} {ls : List SRec} {B : VTy} (hS
       have hbc' : BoxStep δ ls (b.1, b.2) (c.1, c.2) := hbc
       obtain ⟨e, a, hσ, hα, hΔe, hσe, hδe, hok, hsf, -⟩ := boxStep_var_off hb hbc'
       rw [hσ, hα]
-      refine monoOwnUFree_go .binder0 e a B none none b.1 δ b.2 ls v PMap.empty hu
-        (envPushNone b.1 δ b.2 ls e a) hb.ok hok.chain hsf (fun e' he' hx => ?_)
+      refine monoOwnUFree_go_len .binder0 e a B none none b.1 δ b.2 ls v PMap.empty hu
+        (envPushNone b.1 δ b.2 ls e a) hb.ok.1 hok.chain hsf (fun e' he' hx => ?_)
         (fun hx => ?_) ⟨tab_empty _ _, placeViewsL_empty, hok.placeFree, ResU.inStratum_empty _⟩
         ih
       · rcases hb.pay e' he' e.x hx with ⟨u, hu'⟩ | hm
@@ -472,10 +485,10 @@ theorem slot_boxWorld {Δ : LifeCtx} {δ : LSub} {σ σ' : LStack} {αs αs' : L
     vRLM (ℍ := ℍ) .binder0 none σ' (ι.sub δ) (.bang B) αs' ls' v PMap.empty := by
   obtain ⟨-, hv, hbox⟩ := h
   rcases hB with ⟨C, rfl⟩ | hu
-  · exact ⟨rfl, hbox ι hat ls' hro σ' αs' hst, pBox_world hidx.ok hbox hat hst⟩
+  · exact ⟨rfl, hbox ι hat ls' hro σ' αs' hst, pBox_worldB hbox hat hst⟩
   · refine ⟨rfl, ?_, pBox_of_not_thunk fun C hC => by subst hC; exact hu⟩
     have hv' := relendJ_empty_inst hat ls' hro
-      (relendMValue B δ σ αs ls v PMap.empty hidx.ok hidx.ob hidx.ro (tab_empty _ _)
+      (relendMValue_len B δ σ αs ls v PMap.empty hidx.ok.1 hidx.ob hidx.ro (tab_empty _ _)
         placeViewsL_empty hv)
     exact uFree_boxSteps (subDom_inst ι hSD) hu hBΔ hst (boxIdx_inst hidx hro) hv'
 
@@ -523,18 +536,26 @@ theorem gRLM_boxWorld {Δ : LifeCtx} {δ : LSub} {σ σ' : LStack} {αs αs' : L
 
 /-! ### The two `!U` introductions -/
 
+/-- **The index facts at the conclusion's index of a `!U` row**, blocks admitted: the judgement's
+type is no `∀`, so every entry is of `StackJ`'s first two kinds. -/
+theorem boxIdx_of_indexB {Δ : LifeCtx} {δ : LSub} {σ : LStack} {αs : List Life} {ls : List SRec}
+    {Γ : Ctx VTy} {B : VTy} (hok : StackOKB σ αs) (hob : OuterBelowTop αs)
+    (hJ : StackJBase σ αs δ Δ Γ (.ret B)) (hMod : Δ.Models (extS δ σ αs))
+    (hro : RecsOutside αs ls) (hso : SubOutside σ αs δ) : BoxIdx Δ δ σ αs ls :=
+  ⟨hok, hob, hro, hso, hMod, stackJBase_kinds_of_notAll hJ (fun _ _ _ h => by cases h), hJ.1⟩
+
 /-- **The index facts at the conclusion's index of a `!U` row**: the judgement's type is no `∀`,
 so every entry is of `StackJ`'s first two kinds. -/
 theorem boxIdx_of_index {Δ : LifeCtx} {δ : LSub} {σ : LStack} {αs : List Life} {ls : List SRec}
     {Γ : Ctx VTy} {B : VTy} (hok : StackOK σ αs) (hob : OuterBelowTop αs)
     (hJ : StackJ σ αs δ Δ Γ (.ret B)) (hMod : Δ.Models (extS δ σ αs)) (hro : RecsOutside αs ls)
     (hso : SubOutside σ αs δ) : BoxIdx Δ δ σ αs ls :=
-  ⟨hok, hob, hro, hso, hMod, stackJ_kinds_of_notAll hJ (fun _ _ _ h => by cases h), hJ.2.1⟩
+  boxIdx_of_indexB (stackOKB_of_ok σ αs hok) hob (stackJBase_of_stackJ hJ) hMod hro hso
 
 /-- **`BangThunkFRowM binder0`.** The context is persistent, so it, and the thunk, hold nothing. At
-the stack the thunk is the `U` row's (`thunkF_U_M`). At every world of the box the context is
-carried there (`gRLM_boxWorld`), the index facts hold there (`boxIdx_steps`, `stackJ_of_boxIdx`),
-and the thunk is the `U` row's there, from the premise at that world. -/
+the stack the thunk is the `U` row's (`thunkF_U_MB`). At every world of the box the context is
+carried there (`gRLM_boxWorld`), the index facts hold there (`boxIdx_steps`,
+`stackJBase_of_boxIdx`), and the thunk is the `U` row's there, from the premise at that world. -/
 theorem bangThunkFRowM : BangThunkFRowM (ℍ := ℍ) .binder0 := by
   intro Δ Γ M A hP hPB hM hBL hSc δ σ αs ls γ ρ hok hob hJ hSD hMod hro hso ht hpv hg
   have hρ : ρ = PMap.empty := gSepRLM_persistent Γ γ ρ hP (pure_sep_iff.mp hg).2
@@ -547,15 +568,15 @@ theorem bangThunkFRowM : BangThunkFRowM (ℍ := ℍ) .binder0 := by
     rcases List.mem_cons.mp hs with rfl | hs
     · simp at hl
     · exact hSc.2 s hs hl⟩
-  have hJ' : StackJ σ αs δ Δ (⟨.unit, false⟩ :: Γ) (.ret A) :=
-    stackJ_body hJ.1 (fun _ _ _ h => by cases h) (fun _ h => h) fun _ => ctxAvoids_dead
+  have hJ' : StackJBase σ αs δ Δ (⟨.unit, false⟩ :: Γ) (.ret A) :=
+    stackJBase_body hJ.1 (fun _ _ _ h => by cases h) (fun _ h => h) fun _ => ctxAvoids_dead
   show wpTS ls (.val (.lam (Expr.psub 1 γ M))) _ PMap.empty
-  refine wpTS_val _ _ _ _ ⟨rfl, thunkF_U_M hM hBL' hSc' hok hob hJ' hSD hMod hro hso ht hpv hg,
+  refine wpTS_val _ _ _ _ ⟨rfl, thunkF_U_MB hM hBL' hSc' hok hob hJ' hSD hMod hro hso ht hpv hg,
     fun ι hat ls' hro' σ' αs' hst => ?_⟩
-  have hidx₀ := boxIdx_of_index hok hob hJ.1 hMod hro hso
+  have hidx₀ := boxIdx_of_indexB hok hob hJ.1 hMod hro hso
   have hidx := boxIdx_steps (subDom_inst ι hSD) hst (boxIdx_inst hidx₀ hro')
-  exact thunkF_U_M hM hBL' hSc' hidx.ok hidx.ob (stackJ_of_boxIdx hidx hSc') (subDom_inst ι hSD)
-    hidx.md hidx.ro hidx.so (tab_empty _ _) placeViewsL_empty
+  exact thunkF_U_MB hM hBL' hSc' hidx.ok hidx.ob (stackJBase_of_boxIdx hidx hSc')
+    (subDom_inst ι hSD) hidx.md hidx.ro hidx.so (tab_empty _ _) placeViewsL_empty
     (gRLM_boxWorld hSD hidx₀ hat hro' hst hPB hSc.2 hg)
 
 /-- **`BangThunkVRowM binder0`**, as `bangThunkFRowM`. -/
@@ -563,15 +584,15 @@ theorem bangThunkVRowM : BangThunkVRowM (ℍ := ℍ) .binder0 := by
   intro Δ Γ N C hP hPB hC _ hN hBL hSc δ σ αs ls γ ρ hok hob hJ hSD hMod hro hso ht hpv hg
   have hρ : ρ = PMap.empty := gSepRLM_persistent Γ γ ρ hP (pure_sep_iff.mp hg).2
   subst hρ
-  have hJ' : StackJ σ αs δ Δ Γ C :=
-    stackJ_body hJ.1 (fun _ _ _ h => by cases h) (fun _ h => h) fun _ h => h
+  have hJ' : StackJBase σ αs δ Δ Γ C :=
+    stackJBase_body hJ.1 (fun _ _ _ h => by cases h) (fun _ h => h) fun _ h => h
   show wpTS ls (.val (.lam (Expr.psub 1 γ N))) _ PMap.empty
-  refine wpTS_val _ _ _ _ ⟨rfl, thunkV_U_M hC hN hBL hSc hok hob hJ'
-    (stackJ_kinds_of_notAll hJ.1 (fun _ _ _ h => by cases h)) hSD hMod hro hso ht hpv hg,
+  refine wpTS_val _ _ _ _ ⟨rfl, thunkV_U_MB hC hN hBL hSc hok hob hJ'
+    (stackJBase_kinds_of_notAll hJ.1 (fun _ _ _ h => by cases h)) hSD hMod hro hso ht hpv hg,
     fun ι hat ls' hro' σ' αs' hst => ?_⟩
-  have hidx₀ := boxIdx_of_index hok hob hJ.1 hMod hro hso
+  have hidx₀ := boxIdx_of_indexB hok hob hJ.1 hMod hro hso
   have hidx := boxIdx_steps (subDom_inst ι hSD) hst (boxIdx_inst hidx₀ hro')
-  exact thunkV_U_M hC hN hBL hSc hidx.ok hidx.ob (stackJ_of_boxIdx hidx hSc) hidx.kind
+  exact thunkV_U_MB hC hN hBL hSc hidx.ok hidx.ob (stackJBase_of_boxIdx hidx hSc) hidx.kind
     (subDom_inst ι hSD) hidx.md hidx.ro hidx.so (tab_empty _ _) placeViewsL_empty
     (gRLM_boxWorld hSD hidx₀ hat hro' hst hPB hSc.2 hg)
 

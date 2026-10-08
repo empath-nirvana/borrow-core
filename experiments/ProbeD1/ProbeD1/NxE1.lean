@@ -12,9 +12,12 @@ import ProbeD1.NxGuardPair
   `muAdjNotVRLM` (proved of `vRLM` at commit `5210cf1`) is false of the edited relation.
 * **Item 1a′ at the pair** (`withloadUPairGapNilE1`, `not_withloadPairGapNilInstE1`): the gate's
   world at the empty stack (`ArisesI.nil`), at the reading `'0 ↦ 1`. After (E1) no instance in
-  scope is below `⊓Δ`, so the callback's first conjunct reads nothing there, and every own push
-  fails the guard at the reborrowed pair. At `withload`'s thunked type the answer's `U` clause
-  instantiates the push's lifetime below the reborrowed cells, where they meet the table.
+  scope is below `⊓Δ`, so the callback's first conjunct reads nothing there, and every single own
+  push fails the guard at the reborrowed pair. The relation also reads block pushes; the block
+  gate at the empty stack (`LoadGateNilB` at `pairTy`, `loadGateNilB_pairTy`, `GroundBlock.lean`)
+  gives, under its hypotheses, a push at which the reborrowed pair meets the guard. At
+  `withload`'s thunked type the answer's `U` clause instantiates the push's lifetime below the
+  reborrowed cells, where they meet the table.
 -/
 
 noncomputable section
@@ -98,7 +101,8 @@ theorem muAdjVRLME1 : MuAdjVRLME1 (ℍ := ℍ) := by
     have hF' : σ' = [muEnt] ∧ αs' = [α₁] := by simpa [FutQI, Placement.bindFut] using hF
     obtain ⟨rfl, rfl⟩ := hF'
     subst hE'
-    refine ⟨fun α ρ₁ ρ₂ hp hc' ht hpv => ?_, fun _ en α' hpush _ _ ht hpv => ?_⟩
+    refine ⟨fun α ρ₁ ρ₂ hp hc' ht hpv => ?_, fun _ en α' hpush _ _ ht hpv => ?_,
+      fun _ τ α hpush _ _ => ?_⟩
     · obtain ⟨rfl, -, ⟨q, hq, hqα⟩⟩ := hp
       rw [ResU.CompS.functional hc' (ResU.comp_empty_right ρv)]
       simp only [extS, LSub.extend, List.mem_singleton] at hq
@@ -125,6 +129,10 @@ theorem muAdjVRLME1 : MuAdjVRLME1 (ℍ := ℍ) := by
       · rw [innerAt_cons, if_neg hl]; exact hin₀
       · show ((extS (LSub.extend adjδ 0 α') [muEnt] [α₁]).extend en.x α').find? 0 = _
         rw [hex, find?_extend_self]; rfl
+    · obtain ⟨x, c, C', A, hall, hcb, -⟩ := hpush
+      obtain ⟨rfl, -, rfl⟩ : 0 = x ∧ Lifetime.Life.top = c ∧
+          CTy.ret (.mut (.var 0) .unit) = C' := by simpa using hall
+      rcases hcb with ⟨D, hD⟩ | ⟨D, hD⟩ <;> cases hD
   exact ⟨muAdjTy_noMut, muAdjTy_cl, fun P hP => hP _ _ (by
     rw [vRLM_thunk_env .binder0 _ none]; exact hU)⟩
 
@@ -181,9 +189,9 @@ theorem meetOfDom_δN : (pairΔ.meetOfDom).interp δN = some 1 := rfl
 theorem pSemIdxN : SemIdxM pairΔ pairΓ (.ret .unit) δN [] [] pls pW₁ := by
   refine ⟨⟨fun x hx => absurd hx (by simp [CTy.binders, VTy.binders]), fun s hs _ x hx => ?_⟩,
     ⟨fun y hy => absurd hy (by simp [CFree, VFree]), fun s hs _ y hy => ?_⟩,
-    ⟨rfl, List.isChain_nil, List.nodup_nil⟩, fun o ho => absurd ho (by simp),
-    ⟨List.nodup_nil, fun e he => absurd he List.not_mem_nil,
-      fun e he => absurd he List.not_mem_nil⟩, fun y hy => ?_, ?_,
+    stackOKB_of_ok _ _ ⟨rfl, List.isChain_nil, List.nodup_nil⟩, fun o ho => absurd ho (by simp),
+    ⟨fun e he => absurd he List.not_mem_nil, fun e he => absurd he List.not_mem_nil⟩,
+    fun y hy => ?_, ?_,
     fun a ha => absurd ha List.not_mem_nil, fun e a he => absurd he (by simp),
     ⟨fun a ha => absurd ha (by simp), fun a ha => absurd ha (by simp)⟩, pvlNil _ _ _⟩
   · rw [List.mem_singleton] at hs; subst hs
@@ -228,8 +236,9 @@ theorem pOwnPushN {C' : CTy} (hC' : ∀ A D, C' = .arr A D → ViewAt 1 pEn A)
       fun y hy => absurd hy (by simp [pEn, VFree])⟩, empty_not_deepAt _⟩,
     ⟨1, meetOfDom_δN, pβ_lt_pα⟩, hC'⟩, hfreeC, by simp [pEn, VFree]⟩
 
-/-- **`WithloadUPairGapNilE1`**: after (E1), at the empty stack, the own push is the callback's only
-route, and it fails the guard at the reborrowed pair. -/
+/-- **`WithloadUPairGapNilE1`**: after (E1), at the empty stack, the single own push is the
+callback's only single-push route, and it fails the guard at the reborrowed pair. The block push of
+the two places is not read by the statement. -/
 theorem withloadUPairGapNilE1 : WithloadUPairGapNilE1 (ℍ := ℍ) := by
   refine ⟨pcN, pψ, pRec, 1, 2, δN, .unit, pCbE, 1, pEn, pβ, PMap.empty, pcb, pW₂, pairNilCfg,
     pairProgU_typed,

@@ -1,4 +1,5 @@
 import ProbeD1.GapRoom
+import ProbeD1.Block
 
 /-!
 # ProbeD1 — R1 and `binder0`'s monotonicity: the statements (`R1MONO.md`)
@@ -48,6 +49,10 @@ proofs go in the files the design names.
   `CallbackExtMutM`, `CallbackExtImmM`, `Statement0M`; at `binder0`, the facts beside
   monotonicity, the unrestricted monotonicity statements' negation, and statement 0 read at its
   consumers: `Statement0MBesideMono0`, `MonoUnrestrictedRefuted0`, `Statement0MAtConsumers0`).
+* **The block push** (`GROUND.md` §4.2). `cRLM`'s `∀` clause reads a block of two or more entries
+  at one lifetime beside the single own push (`OwnPushB`), and `SemSM`, `SemSMC` and `SemIdxM`
+  admit stacks holding blocks (`StackOKB`, `StackJB`, `StackJBase`). The definitions are in
+  `Block.lean`.
 
 Definitions and `def … : Prop` statements only; no proofs.
 -/
@@ -187,7 +192,8 @@ def vRLM (p : Placement) :
 termination_by structural _ _ _ A => A
 /-- **W's computation relation at `vRLM`**: `cRLJ`'s clauses, the answers at `vRLM p none`. A
 `ν` computation is still read by Core's `cC` whole, as at `cRLJ`: values a `ν` unfolding gives
-are Core's, with Core's `U` and `ℕ`-`∀` inside. -/
+are Core's, with Core's `U` and `ℕ`-`∀` inside. At `∀` the own lend is a single push (`OwnPushM`)
+or a block of two or more entries at one lifetime (`OwnPushB`, `Block.lean`). -/
 def cRLM (p : Placement) : LStack → LSub → CTy → List Life → List SRec → Expr → WProp
   | σ, δ, .ret B, αs, ls, e => wpTS ls e fun ls'' v => vRLM p none σ δ B αs ls'' v
   | σ, δ, .eff n i q A B C, αs, ls, e =>
@@ -216,7 +222,12 @@ def cRLM (p : Placement) : LStack → LSub → CTy → List Life → List SRec �
         (p.allOwn = true → ∀ (en : LEnt) (α : Life), OwnPushM δ (.all x c C) ρ (σ', αs') en α →
           RecsOutside (α :: αs') ls' → SubFresh δ α →
           guardPV (extS (δ.extend x α) (en :: σ') (α :: αs')) (en :: σ') (α :: αs') ls'
-            (cRLM p (en :: σ') (δ.extend x α) C (α :: αs') ls' (.app e (.val .unit))) ρ)
+            (cRLM p (en :: σ') (δ.extend x α) C (α :: αs') ls' (.app e (.val .unit))) ρ) ∧
+        (p.allOwn = true → ∀ (τ : LStack) (α : Life), OwnPushB δ (.all x c C) ρ (σ', αs') τ α →
+          RecsOutside (α :: αs') ls' → SubFresh δ α →
+          guardPV (extS (δ.extend x α) (τ ++ σ') (blockL τ α ++ αs')) (τ ++ σ')
+            (blockL τ α ++ αs') ls'
+            (cRLM p (τ ++ σ') (δ.extend x α) C (blockL τ α ++ αs') ls' (.app e (.val .unit))) ρ)
   | σ, δ, .nu C, αs, ls, e => cC (.nu C) ls (extS δ σ αs) e
 termination_by structural _ _ C => C
 /-- The answer relation of `F_Σ R`: `vRLM R`. -/
@@ -242,11 +253,11 @@ def gRLM (p : Placement) (σ : LStack) (δ : LSub) (αs : List Life) (ls : List 
   ⌜Ctx.LiveWithin Γ γ⌝ ⋆ gSepRLM p σ δ αs ls Γ γ
 
 /-- **The semantic judgement at `vRLM`**: `SemSJ` with `vRLM`'s context and computation, its stack
-admitted by `StackJM`. -/
+in shape with blocks admitted (`StackOKB`) and admitted by `StackJB`. -/
 def SemSM (p : Placement) (Δ : LifeCtx) (Γ : Ctx VTy) (e : Expr) (j : Jdg) : Prop :=
   BindersLow Γ (jdgCty j) → Scoped Δ Γ (jdgCty j) →
   ∀ (δ : LSub) (σ : LStack) (αs : List Life) (ls : List SRec) (γ : List Val) (ρ : WRes),
-    StackOK σ αs → OuterBelowTop αs → StackJM σ αs δ Δ Γ (jdgCty j) → SubDom δ Δ →
+    StackOKB σ αs → OuterBelowTop αs → StackJB σ αs δ Δ Γ (jdgCty j) → SubDom δ Δ →
     Δ.Models (extS δ σ αs) → RecsOutside αs ls → SubOutside σ αs δ → TabAtS σ αs ρ →
     PlaceViewsL (extS δ σ αs) σ αs ls ρ → gRLM p σ δ αs ls Γ γ ρ →
     cRLM p σ δ (jdgCty j) αs ls (substAll γ e) ρ
@@ -803,7 +814,7 @@ give. -/
 def SemSMC (p : Placement) (Δ : LifeCtx) (Γ : Ctx VTy) (e : Expr) (j : Jdg) : Prop :=
   BindersLow Γ (jdgCty j) → Scoped Δ Γ (jdgCty j) →
   ∀ (δ : LSub) (σ : LStack) (αs : List Life) (ls : List SRec) (γ : List Val) (ρ : WRes),
-    StackOK σ αs → OuterBelowTop αs → StackJ σ αs δ Δ Γ (jdgCty j) → SubDom δ Δ →
+    StackOKB σ αs → OuterBelowTop αs → StackJBase σ αs δ Δ Γ (jdgCty j) → SubDom δ Δ →
     Δ.Models (extS δ σ αs) → RecsOutside αs ls → SubOutside σ αs δ → TabAtS σ αs ρ →
     PlaceViewsL (extS δ σ αs) σ αs ls ρ → gRLMC p σ δ αs ls Γ γ ρ →
     cRLM p σ δ (jdgCty j) αs ls (substAll γ e) ρ
@@ -942,10 +953,10 @@ def PayLeavesOfPayExt : Prop :=
     PayExt αs s T → PayLeaves σ αs s R T v
 
 /-- **`SemSM`'s index at a judgement `Δ; Γ ⊢ _ : C`**: what every row has at its conclusion's
-index. -/
+index, blocks admitted. -/
 def SemIdxM (Δ : LifeCtx) (Γ : Ctx VTy) (C : CTy) (δ : LSub) (σ : LStack) (αs : List Life)
     (ls : List SRec) (ρ : WRes) : Prop :=
-  BindersLow Γ C ∧ Scoped Δ Γ C ∧ StackOK σ αs ∧ OuterBelowTop αs ∧ StackJ σ αs δ Δ Γ C ∧
+  BindersLow Γ C ∧ Scoped Δ Γ C ∧ StackOKB σ αs ∧ OuterBelowTop αs ∧ StackJBase σ αs δ Δ Γ C ∧
     SubDom δ Δ ∧ Δ.Models (extS δ σ αs) ∧ RecsOutside αs ls ∧ SubOutside σ αs δ ∧
     TabAtS σ αs ρ ∧ PlaceViewsL (extS δ σ αs) σ αs ls ρ
 

@@ -395,21 +395,44 @@ theorem semIdx_mu_iff {Δ : LifeCtx} {Γ : Ctx VTy} {A : VTy} {σ : LStack} {αs
     · exact Or.inr (Or.inl ⟨hns, hΔ, fun h => hC ((hf _).mp h), hΓ⟩)
     · cases hC
 
+/-- **`StackJBase` carries between `F (μX. A)` and `F (A[μX. A/X])`**, as `StackJ` does
+(`semIdx_mu_iff`): it reads the type only through its free lifetime variables and its `∀`. -/
+theorem stackJBase_mu_iff {Δ : LifeCtx} {Γ : Ctx VTy} {A : VTy} {σ : LStack} {αs : List Life}
+    {δ : LSub} :
+    StackJBase σ αs δ Δ Γ (.ret (VTy.inst (.mu A) A)) ↔ StackJBase σ αs δ Δ Γ (.ret (.mu A)) := by
+  have hf : ∀ y, CFree y (.ret (VTy.inst (.mu A) A)) ↔ CFree y (.ret (.mu A)) :=
+    fun y => vFree_inst_iff A y
+  constructor
+  · rintro ⟨h₁, h₃⟩
+    refine ⟨h₁, fun e he => ?_⟩
+    rcases h₃ e he with h | ⟨hns, hΔ, hC, hΓ⟩ | ⟨-, -, -, c, C', hC, -⟩
+    · exact Or.inl h
+    · exact Or.inr (Or.inl ⟨hns, hΔ, fun h => hC ((hf _).mpr h), hΓ⟩)
+    · cases hC
+  · rintro ⟨h₁, h₃⟩
+    refine ⟨h₁, fun e he => ?_⟩
+    rcases h₃ e he with h | ⟨hns, hΔ, hC, hΓ⟩ | ⟨-, -, -, c, C', hC, -⟩
+    · exact Or.inl h
+    · exact Or.inr (Or.inl ⟨hns, hΔ, fun h => hC ((hf _).mp h), hΓ⟩)
+    · cases hC
+
 /-- **`RollRowM`**: `[roll]` at `SemSM`, at every placement, with the rule's own premises. -/
 theorem rollRowM (p : Placement) : RollRowM (ℍ := ℍ) p := by
   intro Δ Γ e A hA hc h hB hS δ σ αs ls γ ρ hok hob hJ hD hM hR hSO hT hPV hG
-  obtain ⟨eB, eS, eJ⟩ := semIdx_mu_iff (Δ := Δ) (Γ := Γ) (A := A) (σ := σ) (αs := αs) (δ := δ)
+  obtain ⟨eB, eS, -⟩ := semIdx_mu_iff (Δ := Δ) (Γ := Γ) (A := A) (σ := σ) (αs := αs) (δ := δ)
   have := h (eB.mpr hB) (eS.mpr hS) δ σ αs ls γ ρ hok hob
-    (stackJM_of_notAll (eJ.mpr hJ.1) (fun _ _ _ h => by cases h)) hD hM hR hSO hT hPV hG
+    (stackJB_of_notAll (stackJBase_mu_iff.mpr hJ.1) (fun _ _ _ h => by cases h)) hD hM hR hSO hT
+    hPV hG
   exact wpTS_mono (fun ls' v ρ' h' => (vRLMUnroll p A σ δ αs ls' v ρ').mpr ⟨hA, hc, h'⟩) ρ this
 
 /-- **`UnrollRowM`**: `[unroll]` at `SemSM`, at every placement; the rule has no premise beside
 its derivation. -/
 theorem unrollRowM (p : Placement) : UnrollRowM (ℍ := ℍ) p := by
   intro Δ Γ e A h hB hS δ σ αs ls γ ρ hok hob hJ hD hM hR hSO hT hPV hG
-  obtain ⟨eB, eS, eJ⟩ := semIdx_mu_iff (Δ := Δ) (Γ := Γ) (A := A) (σ := σ) (αs := αs) (δ := δ)
+  obtain ⟨eB, eS, -⟩ := semIdx_mu_iff (Δ := Δ) (Γ := Γ) (A := A) (σ := σ) (αs := αs) (δ := δ)
   have := h (eB.mp hB) (eS.mp hS) δ σ αs ls γ ρ hok hob
-    (stackJM_of_notAll (eJ.mp hJ.1) (fun _ _ _ h => by cases h)) hD hM hR hSO hT hPV hG
+    (stackJB_of_notAll (stackJBase_mu_iff.mp hJ.1) (fun _ _ _ h => by cases h)) hD hM hR hSO hT
+    hPV hG
   exact wpTS_mono (fun ls' v ρ' h' => ((vRLMUnroll p A σ δ αs ls' v ρ').mp h').2.2) ρ this
 
 end ProbeD1

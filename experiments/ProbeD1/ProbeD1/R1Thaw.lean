@@ -1,4 +1,4 @@
-import ProbeD1.R1
+import ProbeD1.R1Block
 
 /-!
 # ProbeD1 — R1: the thaw at every type, W reading `μ` and `fam` itself (`R1MONO.md` §1)
@@ -431,10 +431,10 @@ guard". It is closed under the body: the first half by `vRLM_mono_at` and `vRLM_
 by the induction hypothesis at the body, at the environment reading `X` at the candidate and the
 family reading `X` at the `μ` at each instantiated index, then `vRLM_roll` there. The induction is
 on the data: no fuel, no step index. -/
-theorem relendM_valueE : ∀ (A : VTy) (η : Option (Nat → WEnt))
+theorem relendM_valueE_len : ∀ (A : VTy) (η : Option (Nat → WEnt))
     (ηf : LSub → List Life → List SRec → Option (Nat → WEnt))
     (δ : LSub) (σ : LStack) (αs : List Life) (ls : List SRec) (v : Val) (ρ : WRes),
-    EnvThaws η ηf δ σ αs ls → StackOK σ αs → OuterBelowTop αs → RecsOutside αs ls →
+    EnvThaws η ηf δ σ αs ls → αs.length = σ.length → OuterBelowTop αs → RecsOutside αs ls →
     TabAtS σ αs ρ → PlaceViewsL (extS δ σ αs) σ αs ls ρ → vRLM (ℍ := ℍ) .binder0 η σ δ A αs ls v ρ →
     RelendJ δ σ (fun δ' αs' ls' => vRLM (ℍ := ℍ) .binder0 (ηf δ' αs' ls') σ δ' A αs' ls' v) αs ls ρ := by
   intro A
@@ -501,31 +501,31 @@ theorem relendM_valueE : ∀ (A : VTy) (η : Option (Nat → WEnt))
   | «mut» a T _ =>
       intro η ηf δ σ αs ls v ρ hE hok _ _ ht hpv h
       rw [vRLM_mut_eq] at h
-      refine relendJ_mono (fun δ' αs' ls' τ hτ => ?_) (relendJ_mutK hok ht hpv h)
+      refine relendJ_mono (fun δ' αs' ls' τ hτ => ?_) (relendJ_mutK_len hok ht hpv h)
       rw [vRLM_mut_eq, wClose_congr (hE.1 δ' αs' ls')]
       exact hτ
   | imm a T _ =>
       intro η ηf δ σ αs ls v ρ hE hok hob hro ht hpv h
       rw [vRLM_imm_eq] at h
-      refine relendJ_mono (fun δ' αs' ls' τ hτ => ?_) (relendJ_immK hok hob hro ht hpv h)
+      refine relendJ_mono (fun δ' αs' ls' τ hτ => ?_) (relendJ_immK_len hok hob hro ht hpv h)
       rw [vRLM_imm_eq, wClose_congr (hE.1 δ' αs' ls')]
       exact hτ
   | unit =>
       intro η ηf δ σ αs ls v ρ _ hok _ _ _ _ h
       obtain ⟨rfl, hv⟩ := h
-      exact relendJ_emp hok.1 fun _ _ _ => ⟨rfl, hv⟩
+      exact relendJ_emp hok fun _ _ _ => ⟨rfl, hv⟩
   | int w =>
       intro η ηf δ σ αs ls v ρ _ hok _ _ _ _ h
       obtain ⟨rfl, hv⟩ := h
-      exact relendJ_emp hok.1 fun _ _ _ => ⟨rfl, hv⟩
+      exact relendJ_emp hok fun _ _ _ => ⟨rfl, hv⟩
   | opq k =>
       intro η ηf δ σ αs ls v ρ _ hok _ _ _ _ h
       obtain ⟨rfl, hv⟩ := h
-      exact relendJ_emp hok.1 fun _ _ _ => ⟨rfl, hv⟩
+      exact relendJ_emp hok fun _ _ _ => ⟨rfl, hv⟩
   | unk =>
       intro η ηf δ σ αs ls v ρ _ hok _ _ _ _ h
       obtain ⟨rfl, hv⟩ := h
-      exact relendJ_emp hok.1 fun _ _ _ => ⟨rfl, hv⟩
+      exact relendJ_emp hok fun _ _ _ => ⟨rfl, hv⟩
   | zero =>
       intro η ηf δ σ αs ls v ρ _ _ _ _ _ _ h
       exact h.elim
@@ -537,7 +537,7 @@ theorem relendM_valueE : ∀ (A : VTy) (η : Option (Nat → WEnt))
       obtain ⟨ℓ, c, hsep⟩ := h
       obtain ⟨⟨rfl, hcn⟩, hs⟩ := pure_sep_iff.mp hsep
       exact relendJ_mono (fun _ _ _ τ hτ => ⟨ℓ, c, pure_sep_mk ⟨rfl, hcn⟩ hτ⟩)
-        (relendJ_sepRange hok.1 (fun m ρ' ht' hpv' hm =>
+        (relendJ_sepRange hok (fun m ρ' ht' hpv' hm =>
           ih η ηf δ σ αs ls (.loc m) ρ' hE hok hob hro ht' hpv' hm) ht hpv hs)
   | mu A ih =>
       intro η ηf δ σ αs ls v ρ hE hok hob hro ht hpv h
@@ -580,6 +580,17 @@ theorem relendM_valueE : ∀ (A : VTy) (η : Option (Nat → WEnt))
           exact vRLM_roll hnm (by rw [wClose_congr (hE.1 δ' αs' ls')]; exact hcl) hτ
       exact (hlfp P' hclosed).2 ht hpv
 
+/-- `relendM_valueE_len` at a stack in shape. -/
+theorem relendM_valueE : ∀ (A : VTy) (η : Option (Nat → WEnt))
+    (ηf : LSub → List Life → List SRec → Option (Nat → WEnt))
+    (δ : LSub) (σ : LStack) (αs : List Life) (ls : List SRec) (v : Val) (ρ : WRes),
+    EnvThaws η ηf δ σ αs ls → StackOK σ αs → OuterBelowTop αs → RecsOutside αs ls →
+    TabAtS σ αs ρ → PlaceViewsL (extS δ σ αs) σ αs ls ρ →
+    vRLM (ℍ := ℍ) .binder0 η σ δ A αs ls v ρ →
+    RelendJ δ σ (fun δ' αs' ls' => vRLM (ℍ := ℍ) .binder0 (ηf δ' αs' ls') σ δ' A αs' ls' v)
+      αs ls ρ :=
+  fun A η ηf δ σ αs ls v ρ hE hok => relendM_valueE_len A η ηf δ σ αs ls v ρ hE hok.1
+
 /-- **`RelendMValueE`.** -/
 theorem relendMValueE : RelendMValueE (ℍ := ℍ) := relendM_valueE
 
@@ -594,31 +605,51 @@ theorem relendMValue : RelendMValue (ℍ := ℍ) :=
     relendM_valueE A none (fun _ _ _ => none) δ σ αs ls v ρ (envThaws_none δ σ αs ls) hok hob hro
       ht hpv h
 
+/-- **The thaw of a value at every type, at every stack with one lifetime per entry**, blocks
+admitted. -/
+theorem relendMValue_len (A : VTy) (δ : LSub) (σ : LStack) (αs : List Life) (ls : List SRec)
+    (v : Val) (ρ : WRes) (hl : αs.length = σ.length) (hob : OuterBelowTop αs)
+    (hro : RecsOutside αs ls) (ht : TabAtS σ αs ρ) (hpv : PlaceViewsL (extS δ σ αs) σ αs ls ρ)
+    (h : vRLM (ℍ := ℍ) .binder0 none σ δ A αs ls v ρ) :
+    RelendJ δ σ (fun δ' αs' ls' => vRLM (ℍ := ℍ) .binder0 none σ δ' A αs' ls' v) αs ls ρ :=
+  relendM_valueE_len A none (fun _ _ _ => none) δ σ αs ls v ρ (envThaws_none δ σ αs ls) hl hob hro
+    ht hpv h
+
 
 /-! ### The context's thaw, at every context -/
+
+/-- **The thaw of a context's slots, at every context**, at every stack with one lifetime per
+entry. -/
+theorem relendM_gSep_len : ∀ (Γ : Ctx VTy) (γ : List Val)
+    {δ : LSub} {σ : LStack} {αs : List Life} {ls : List SRec} {ρ : WRes},
+    αs.length = σ.length → OuterBelowTop αs → RecsOutside αs ls → TabAtS σ αs ρ →
+    PlaceViewsL (extS δ σ αs) σ αs ls ρ → gSepRLM (ℍ := ℍ) .binder0 σ δ αs ls Γ γ ρ →
+    RelendJ δ σ (fun δ' αs' ls' => gSepRLM (ℍ := ℍ) .binder0 σ δ' αs' ls' Γ γ) αs ls ρ
+  | [], _, _, _, _, _, _, hok, _, _, _, _, h => by
+      obtain ⟨rfl, -⟩ := h
+      exact relendJ_emp hok fun _ _ _ => ⟨rfl, trivial⟩
+  | _ :: _, [], _, _, _, _, _, hok, _, _, _, _, h => by
+      obtain ⟨rfl, -⟩ := h
+      exact relendJ_emp hok fun _ _ _ => ⟨rfl, trivial⟩
+  | s :: Γ, v :: γ, _, _, _, _, _, hok, hob, hro, ht, hpv, h => by
+      by_cases hl : s.live = true
+      · simp only [gSepRLM, hl, if_true] at h ⊢
+        obtain ⟨ρ₁, ρ₂, hc, h₁, h₂⟩ := h
+        have R₁ := relendMValue_len s.ty _ _ _ _ _ _ hok hob hro (tabAtS_left hc ht)
+          (placeViewsL_left hc hpv) h₁
+        have R₂ := relendM_gSep_len Γ γ hok hob hro (tabAtS_right hc ht) (placeViewsL_right hc hpv)
+          h₂
+        exact relendJ_sep ⟨ρ₁, ρ₂, hc, R₁, R₂⟩
+      · simp only [gSepRLM, hl] at h ⊢
+        exact relendM_gSep_len Γ γ hok hob hro ht hpv h
 
 /-- **The thaw of a context's slots, at every context.** -/
 theorem relendM_gSep : ∀ (Γ : Ctx VTy) (γ : List Val)
     {δ : LSub} {σ : LStack} {αs : List Life} {ls : List SRec} {ρ : WRes},
     StackOK σ αs → OuterBelowTop αs → RecsOutside αs ls → TabAtS σ αs ρ →
     PlaceViewsL (extS δ σ αs) σ αs ls ρ → gSepRLM (ℍ := ℍ) .binder0 σ δ αs ls Γ γ ρ →
-    RelendJ δ σ (fun δ' αs' ls' => gSepRLM (ℍ := ℍ) .binder0 σ δ' αs' ls' Γ γ) αs ls ρ
-  | [], _, _, _, _, _, _, hok, _, _, _, _, h => by
-      obtain ⟨rfl, -⟩ := h
-      exact relendJ_emp hok.1 fun _ _ _ => ⟨rfl, trivial⟩
-  | _ :: _, [], _, _, _, _, _, hok, _, _, _, _, h => by
-      obtain ⟨rfl, -⟩ := h
-      exact relendJ_emp hok.1 fun _ _ _ => ⟨rfl, trivial⟩
-  | s :: Γ, v :: γ, _, _, _, _, _, hok, hob, hro, ht, hpv, h => by
-      by_cases hl : s.live = true
-      · simp only [gSepRLM, hl, if_true] at h ⊢
-        obtain ⟨ρ₁, ρ₂, hc, h₁, h₂⟩ := h
-        have R₁ := relendMValue s.ty _ _ _ _ _ _ hok hob hro (tabAtS_left hc ht)
-          (placeViewsL_left hc hpv) h₁
-        have R₂ := relendM_gSep Γ γ hok hob hro (tabAtS_right hc ht) (placeViewsL_right hc hpv) h₂
-        exact relendJ_sep ⟨ρ₁, ρ₂, hc, R₁, R₂⟩
-      · simp only [gSepRLM, hl] at h ⊢
-        exact relendM_gSep Γ γ hok hob hro ht hpv h
+    RelendJ δ σ (fun δ' αs' ls' => gSepRLM (ℍ := ℍ) .binder0 σ δ' αs' ls' Γ γ) αs ls ρ :=
+  fun Γ γ _ _ _ _ _ hok => relendM_gSep_len Γ γ hok.1
 
 /-- **`CtxRelendsAllM binder0`**: the context's thaw at every context. -/
 theorem ctxRelendsAllM : CtxRelendsAllM (ℍ := ℍ) .binder0 := by
@@ -626,6 +657,16 @@ theorem ctxRelendsAllM : CtxRelendsAllM (ℍ := ℍ) .binder0 := by
   obtain ⟨hlw, hgs⟩ := pure_sep_iff.mp hg
   exact relendJ_mono (fun _ _ _ τ hτ => pure_sep_mk hlw hτ)
     (relendM_gSep Γ γ hok hob hro ht hpv hgs)
+
+/-- **The context's thaw at every stack with one lifetime per entry**, blocks admitted. -/
+theorem ctxRelends_len (Γ : Ctx VTy) {δ : LSub} {σ : LStack} {αs : List Life} {ls : List SRec}
+    {γ : List Val} {ρ : WRes} (hl : αs.length = σ.length) (hob : OuterBelowTop αs)
+    (hro : RecsOutside αs ls) (ht : TabAtS σ αs ρ) (hpv : PlaceViewsL (extS δ σ αs) σ αs ls ρ)
+    (hg : gRLM (ℍ := ℍ) .binder0 σ δ αs ls Γ γ ρ) :
+    RelendJ δ σ (fun δ' αs' ls' => gRLM (ℍ := ℍ) .binder0 σ δ' αs' ls' Γ γ) αs ls ρ := by
+  obtain ⟨hlw, hgs⟩ := pure_sep_iff.mp hg
+  exact relendJ_mono (fun _ _ _ τ hτ => pure_sep_mk hlw hτ)
+    (relendM_gSep_len Γ γ hl hob hro ht hpv hgs)
 
 /-- **`ThawInstM binder0`.** -/
 theorem thawInstM : ThawInstM (ℍ := ℍ) .binder0 :=
@@ -686,8 +727,62 @@ theorem stackJ_kinds_of_notAll {σ : LStack} {αs : List Life} {δ : LSub} {Δ :
   · exact Or.inr hns
   · exact absurd hall (hC _ _ _)
 
-/-- **The `U` clause of `thunk M : U (F A)` at `binder0`, at `vRLM`**: `thunkF_U_of_thawJ`'s proof,
-the context's thaw by `ctxRelendsAllM`. -/
+/-- **The `U` clause of `thunk M : U (F A)` at `binder0`, at `vRLM`**, blocks admitted:
+`thunkF_U_of_thawJ`'s proof, the context's thaw by `ctxRelends_len`, the guard at the instantiated
+stack by `guardInstB`. -/
+theorem thunkF_U_MB {Δ : LifeCtx} {Γ : Ctx VTy} {M : Expr} {A : VTy}
+    (hM : SemSM (ℍ := ℍ) .binder0 Δ (⟨.unit, false⟩ :: Γ) M (.comp (.ret A)))
+    (hBL : BindersLow (⟨.unit, false⟩ :: Γ) (.ret A))
+    (hSc : Scoped Δ (⟨.unit, false⟩ :: Γ) (.ret A))
+    {δ : LSub} {σ : LStack} {αs : List Life} {ls : List SRec} {γ : List Val} {ρ : WRes}
+    (hok : StackOKB σ αs) (hob : OuterBelowTop αs)
+    (hJ : StackJBase σ αs δ Δ (⟨.unit, false⟩ :: Γ) (.ret A)) (hSD : SubDom δ Δ)
+    (hMod : Δ.Models (extS δ σ αs)) (hro : RecsOutside αs ls) (hso : SubOutside σ αs δ)
+    (ht : TabAtS σ αs ρ) (hpv : PlaceViewsL (extS δ σ αs) σ αs ls ρ)
+    (hg : gRLM (ℍ := ℍ) .binder0 σ δ αs ls Γ γ ρ) :
+    vRLM (ℍ := ℍ) .binder0 none σ δ (.thunk (.ret A)) αs ls (.lam (Expr.psub 1 γ M)) ρ := by
+  rw [vRLM_thunk0]
+  intro _ _
+  obtain ⟨ds, ρz, ρn, hc, hn, hz, H⟩ :=
+    ctxRelends_len Γ hok.1 hob hro ht hpv hg
+  refine ⟨ds, ρz, ρn, hc, hn, hz, fun ι hat ls' he hkt hks hro' ρv τ hv hcv => ?_⟩
+  obtain ⟨ht', hpv'⟩ := guardInstB δ σ ds αs ls ls' ρz ρn ρ ρv τ ι hok hat hz hn hc hpv hv hcv
+  have hg' := H ι hat ls' he hkt hks hro' ρv τ hv hcv
+  refine wpTS_step (fun μ => Step1N.head (Head.beta μ _ Val.unit) rfl) ls' _ τ ?_
+  rw [← GhostEnd.substAll_cons_l]
+  exact hM hBL hSc (ι.sub δ) σ (ι.life αs) ls' (Val.unit :: γ) τ (instStackOKB σ αs ι hat hok)
+    (outerBelowTop_inst ι hob)
+    (stackJB_of_notAll (stackJBaseInst ι hJ) (fun _ _ _ h => by cases h))
+    (subDom_inst ι hSD)
+    (instModels Δ δ σ αs ι hMod) hro' (subOutsideInst σ αs δ ι hso) ht' hpv'
+    (gRLM_dead_cons hg')
+
+/-- **The `U` clause of `thunk V : U C` at `binder0`, at `vRLM`**, blocks admitted. -/
+theorem thunkV_U_MB {Δ : LifeCtx} {Γ : Ctx VTy} {N : Expr} {C : CTy}
+    (hC : C.isRet = false) (hN : SemSM (ℍ := ℍ) .binder0 Δ Γ (.val (.lam N)) (.comp C))
+    (hBL : BindersLow Γ C) (hSc : Scoped Δ Γ C)
+    {δ : LSub} {σ : LStack} {αs : List Life} {ls : List SRec} {γ : List Val} {ρ : WRes}
+    (hok : StackOKB σ αs) (hob : OuterBelowTop αs) (hJ : StackJBase σ αs δ Δ Γ C)
+    (hk : ∀ e ∈ σ, (∃ u, Δ.find? e.x = some u) ∨ NsVar e.x)
+    (hSD : SubDom δ Δ) (hMod : Δ.Models (extS δ σ αs)) (hro : RecsOutside αs ls)
+    (hso : SubOutside σ αs δ) (ht : TabAtS σ αs ρ) (hpv : PlaceViewsL (extS δ σ αs) σ αs ls ρ)
+    (hg : gRLM (ℍ := ℍ) .binder0 σ δ αs ls Γ γ ρ) :
+    vRLM (ℍ := ℍ) .binder0 none σ δ (.thunk C) αs ls (.lam (Expr.psub 1 γ N)) ρ := by
+  rw [vRLM_thunk0]
+  intro _ _
+  obtain ⟨ds, ρz, ρn, hc, hn, hz, H⟩ :=
+    ctxRelends_len Γ hok.1 hob hro ht hpv hg
+  refine ⟨ds, ρz, ρn, hc, hn, hz, fun ι hat ls' he hkt hks hro' ρv τ hv hcv => ?_⟩
+  obtain ⟨ht', hpv'⟩ := guardInstB δ σ ds αs ls ls' ρz ρn ρ ρv τ ι hok hat hz hn hc hpv hv hcv
+  rw [forceE_of_not_ret hC]
+  exact hN hBL hSc (ι.sub δ) σ (ι.life αs) ls' γ τ (instStackOKB σ αs ι hat hok)
+    (outerBelowTop_inst ι hob)
+    (stackJB_of_kinds (stackJBaseInst ι hJ) hBL hk) (subDom_inst ι hSD)
+    (instModels Δ δ σ αs ι hMod) hro'
+    (subOutsideInst σ αs δ ι hso) ht' hpv' (H ι hat ls' he hkt hks hro' ρv τ hv hcv)
+
+/-- **The `U` clause of `thunk M : U (F A)` at `binder0`, at `vRLM`**: `thunkF_U_MB` at a stack
+in shape. -/
 theorem thunkF_U_M {Δ : LifeCtx} {Γ : Ctx VTy} {M : Expr} {A : VTy}
     (hM : SemSM (ℍ := ℍ) .binder0 Δ (⟨.unit, false⟩ :: Γ) M (.comp (.ret A)))
     (hBL : BindersLow (⟨.unit, false⟩ :: Γ) (.ret A))
@@ -698,24 +793,12 @@ theorem thunkF_U_M {Δ : LifeCtx} {Γ : Ctx VTy} {M : Expr} {A : VTy}
     (hMod : Δ.Models (extS δ σ αs)) (hro : RecsOutside αs ls) (hso : SubOutside σ αs δ)
     (ht : TabAtS σ αs ρ) (hpv : PlaceViewsL (extS δ σ αs) σ αs ls ρ)
     (hg : gRLM (ℍ := ℍ) .binder0 σ δ αs ls Γ γ ρ) :
-    vRLM (ℍ := ℍ) .binder0 none σ δ (.thunk (.ret A)) αs ls (.lam (Expr.psub 1 γ M)) ρ := by
-  rw [vRLM_thunk0]
-  intro _ _
-  obtain ⟨ds, ρz, ρn, hc, hn, hz, H⟩ :=
-    ctxRelendsAllM Δ Γ δ σ αs ls γ ρ hok hob hSD hMod hro hso ht hpv hg
-  refine ⟨ds, ρz, ρn, hc, hn, hz, fun ι hat ls' he hkt hks hro' ρv τ hv hcv => ?_⟩
-  obtain ⟨ht', hpv'⟩ := guardInst δ σ ds αs ls ls' ρz ρn ρ ρv τ ι hok hat hz hn hc hpv hv hcv
-  have hg' := H ι hat ls' he hkt hks hro' ρv τ hv hcv
-  refine wpTS_step (fun μ => Step1N.head (Head.beta μ _ Val.unit) rfl) ls' _ τ ?_
-  rw [← GhostEnd.substAll_cons_l]
-  exact hM hBL hSc (ι.sub δ) σ (ι.life αs) ls' (Val.unit :: γ) τ (hok.inst ι)
-    (outerBelowTop_inst ι hob)
-    (stackJM_of_notAll (stackJInst σ αs δ Δ _ _ ι hok.1 hJ) (fun _ _ _ h => by cases h))
-    (subDom_inst ι hSD)
-    (instModels Δ δ σ αs ι hMod) hro' (subOutsideInst σ αs δ ι hso) ht' hpv'
-    (gRLM_dead_cons hg')
+    vRLM (ℍ := ℍ) .binder0 none σ δ (.thunk (.ret A)) αs ls (.lam (Expr.psub 1 γ M)) ρ :=
+  thunkF_U_MB hM hBL hSc (stackOKB_of_ok σ αs hok) hob (stackJBase_of_stackJ hJ) hSD hMod hro hso
+    ht hpv hg
 
-/-- **The `U` clause of `thunk V : U C` at `binder0`, at `vRLM`.** -/
+/-- **The `U` clause of `thunk V : U C` at `binder0`, at `vRLM`**: `thunkV_U_MB` at a stack in
+shape. -/
 theorem thunkV_U_M {Δ : LifeCtx} {Γ : Ctx VTy} {N : Expr} {C : CTy}
     (hC : C.isRet = false) (hN : SemSM (ℍ := ℍ) .binder0 Δ Γ (.val (.lam N)) (.comp C))
     (hBL : BindersLow Γ C) (hSc : Scoped Δ Γ C)
@@ -725,25 +808,17 @@ theorem thunkV_U_M {Δ : LifeCtx} {Γ : Ctx VTy} {N : Expr} {C : CTy}
     (hSD : SubDom δ Δ) (hMod : Δ.Models (extS δ σ αs)) (hro : RecsOutside αs ls)
     (hso : SubOutside σ αs δ) (ht : TabAtS σ αs ρ) (hpv : PlaceViewsL (extS δ σ αs) σ αs ls ρ)
     (hg : gRLM (ℍ := ℍ) .binder0 σ δ αs ls Γ γ ρ) :
-    vRLM (ℍ := ℍ) .binder0 none σ δ (.thunk C) αs ls (.lam (Expr.psub 1 γ N)) ρ := by
-  rw [vRLM_thunk0]
-  intro _ _
-  obtain ⟨ds, ρz, ρn, hc, hn, hz, H⟩ :=
-    ctxRelendsAllM Δ Γ δ σ αs ls γ ρ hok hob hSD hMod hro hso ht hpv hg
-  refine ⟨ds, ρz, ρn, hc, hn, hz, fun ι hat ls' he hkt hks hro' ρv τ hv hcv => ?_⟩
-  obtain ⟨ht', hpv'⟩ := guardInst δ σ ds αs ls ls' ρz ρn ρ ρv τ ι hok hat hz hn hc hpv hv hcv
-  rw [forceE_of_not_ret hC]
-  exact hN hBL hSc (ι.sub δ) σ (ι.life αs) ls' γ τ (hok.inst ι) (outerBelowTop_inst ι hob)
-    (stackJM_of_kinds (stackJInst σ αs δ Δ Γ C ι hok.1 hJ) hBL hk) (subDom_inst ι hSD)
-    (instModels Δ δ σ αs ι hMod) hro'
-    (subOutsideInst σ αs δ ι hso) ht' hpv' (H ι hat ls' he hkt hks hro' ρv τ hv hcv)
+    vRLM (ℍ := ℍ) .binder0 none σ δ (.thunk C) αs ls (.lam (Expr.psub 1 γ N)) ρ :=
+  thunkV_U_MB hC hN hBL hSc (stackOKB_of_ok σ αs hok) hob (stackJBase_of_stackJ hJ) hk hSD hMod
+    hro hso ht hpv hg
 
 /-- **`ThunkFRowM binder0`.** -/
 theorem thunkFRowM : ThunkFRowM (ℍ := ℍ) .binder0 := by
   intro Δ Γ M A hM hBL hSc δ σ αs ls γ ρ hok hob hJ hSD hMod hro hso ht hpv hg
   show wpTS ls (.val (.lam (Expr.psub 1 γ M))) _ ρ
-  refine wpTS_val _ _ _ _ (thunkF_U_M hM ⟨hBL.1, fun s hs hl => ?_⟩ ⟨hSc.1, fun s hs hl => ?_⟩
-    hok hob (stackJ_body hJ.1 (fun _ _ _ h => by cases h) (fun _ h => h) fun _ => ctxAvoids_dead)
+  refine wpTS_val _ _ _ _ (thunkF_U_MB hM ⟨hBL.1, fun s hs hl => ?_⟩ ⟨hSc.1, fun s hs hl => ?_⟩
+    hok hob
+    (stackJBase_body hJ.1 (fun _ _ _ h => by cases h) (fun _ h => h) fun _ => ctxAvoids_dead)
     hSD hMod hro hso ht hpv hg)
   · rcases List.mem_cons.mp hs with rfl | hs
     · simp at hl
@@ -756,9 +831,9 @@ theorem thunkFRowM : ThunkFRowM (ℍ := ℍ) .binder0 := by
 theorem thunkVRowM : ThunkVRowM (ℍ := ℍ) .binder0 := by
   intro Δ Γ N C hC _ hN hBL hSc δ σ αs ls γ ρ hok hob hJ hSD hMod hro hso ht hpv hg
   show wpTS ls (.val (.lam (Expr.psub 1 γ N))) _ ρ
-  exact wpTS_val _ _ _ _ (thunkV_U_M hC hN hBL hSc hok hob
-    (stackJ_body hJ.1 (fun _ _ _ h => by cases h) (fun _ h => h) fun _ h => h)
-    (stackJ_kinds_of_notAll hJ.1 (fun _ _ _ h => by cases h))
+  exact wpTS_val _ _ _ _ (thunkV_U_MB hC hN hBL hSc hok hob
+    (stackJBase_body hJ.1 (fun _ _ _ h => by cases h) (fun _ h => h) fun _ h => h)
+    (stackJBase_kinds_of_notAll hJ.1 (fun _ _ _ h => by cases h))
     hSD hMod hro hso ht hpv hg)
 
 /-! The two `!U` introductions and `statement0UFullM` are in `R1Box.lean`: at the persistence box

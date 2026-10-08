@@ -90,7 +90,9 @@ the `∀` clause of `C = ∀'x ⊏ b. _`). First an instantiation `ι` of the st
 at the instantiated reading, with the instantiated stack (the first conjunct), or the lifetime of
 an own push at the instantiated index, with the pushed stack (the own-lend conjunct). `σ'` and
 `αs'` are where a `⊸` directly under the `∀` reads its guard, and `ρk` is the resource the forced
-computation holds there. -/
+computation holds there. The own push here is the single one (`OwnPushI`): the readings at a block
+push (`OwnPushB`, the `∀` clause's third conjunct) are not listed, so a fact read through
+`CbReading` is about every single-push reading. -/
 def CbReading (δ : LSub) (C : CTy) (x : LifeVar) (b : Lifetime.Life) (σ : LStack)
     (αs : List Life) (ρk : WRes) (δ' : LSub) (σ' : LStack) (αs' : List Life) (β : Life) : Prop :=
   ∃ ι : Inst, InstAt αs ι ∧ δ' = (ι.sub δ).extend x β ∧
@@ -98,19 +100,20 @@ def CbReading (δ : LSub) (C : CTy) (x : LifeVar) (b : Lifetime.Life) (σ : LSta
       ∃ en : LEnt, OwnPushI (ι.sub δ) C ρk (σ, ι.life αs) en β ∧ σ' = en :: σ ∧
         αs' = β :: ι.life αs)
 
-/-- **Link (d) at `withloadU`'s callback.** At every reading that the clause of `U (pairCbUC x B)`
-offers at the index, beside every resource the callback holds there, the record's payload
-reborrowed at the reading's own lifetime ([TR] 6.175's route) fails the table where the `⊸` reads
-it. -/
+/-- **Link (d) at `withloadU`'s callback.** At every single-push reading that the clause of
+`U (pairCbUC x B)` offers at the index (`CbReading`), beside every resource the callback holds
+there, the record's payload reborrowed at the reading's own lifetime ([TR] 6.175's route) fails the
+table where the `⊸` reads it. -/
 def PairGuardRejectsU (c : Cfg) (δ : LSub) (r : FrameRec) (x : LifeVar) (B : VTy) : Prop :=
   ∀ (ρk : WRes) (δ' : LSub) (σ' : LStack) (αs' : List Life) (β : Life) (cb ρ : WRes),
     CbReading δ (pairCbUC x B) x pairΔ.meetOfDom c.σ c.αs ρk δ' σ' αs' β →
     PairReb r x β cb → ResU.CompS ρk cb ρ → ¬ TabAtS σ' αs' ρ
 
 /-- **Link (d) at `withload`'s callback**: `PairGuardRejectsU` at `U (pairCbC x B)`, with the
-answer's `U` clause read as well. At every reading, every instantiation `ι₂` of the reading's
-stack, every list and every resource beside it, the reborrow at the reading's lifetime is either
-not related at the reborrowed type at the instantiated reading, or fails the instantiated table. -/
+answer's `U` clause read as well. At every single-push reading (`CbReading`), every instantiation
+`ι₂` of the reading's stack, every list and every resource beside it, the reborrow at the reading's
+lifetime is either not related at the reborrowed type at the instantiated reading, or fails the
+instantiated table. -/
 def PairGuardRejectsF (c : Cfg) (δ : LSub) (r : FrameRec) (x : LifeVar) (B : VTy) : Prop :=
   ∀ (ρk : WRes) (δ' : LSub) (σ' : LStack) (αs' : List Life) (β : Life) (cb : WRes),
     CbReading δ (pairCbC x B) x pairΔ.meetOfDom c.σ c.αs ρk δ' σ' αs' β → PairReb r x β cb →
@@ -421,11 +424,14 @@ at the empty stack, at a reading `δ` whose only value is `ψ`'s lifetime:
   at its lifetime;
 - no instance in scope meets the bound, so the first conjunct reads nothing, and the empty stack
   has no other instantiation (`cutOf [] = none`);
-- at every own push, beside every resource the callback holds, the reborrow at the push's lifetime
-  fails the table at the push.
+- at every single own push, beside every resource the callback holds, the reborrow at the push's
+  lifetime fails the table at the push.
 
-So after (E1) the own push is the only route, and it fails. Before (E1) the first conjunct read the
-callback here (`PairNilOldGuardHolds`). The view is not shown to arise by `ArisesVI`: no transition
+So after (E1) the single own push is the only single-push route, and it fails. Before (E1) the
+first conjunct read the callback here (`PairNilOldGuardHolds`). The relation also reads block
+pushes (`OwnPushB`), which this statement does not read; at the empty stack the block gate gives,
+under its hypotheses, a push at which the reborrowed pair meets the guard (`LoadGateNilB` at
+`pairTy`, `loadGateNilB_pairTy`, `GroundBlock.lean`). The view is not shown to arise by `ArisesVI`: no transition
 of the set makes an `Imm` value arise at the empty stack, other than a run's answer. What is shown
 is the configuration's world and the index. -/
 def WithloadUPairGapNilE1 : Prop :=

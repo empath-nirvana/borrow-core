@@ -564,7 +564,7 @@ theorem coreToSemSMConst : CoreToSemSMConst (ℍ := ℍ) := by
   | bang hC =>
       refine ⟨rfl, hth hC (fun s hs => (hcore s hs).2) σ δ αs ls hok.1 hMod, ?_⟩
       intro ι hat ls' hro' σ' αs' hst
-      have hidx₀ := boxIdx_of_index hok hob hJ.1 hMod hro hso
+      have hidx₀ := boxIdx_of_indexB hok hob hJ.1 hMod hro hso
       have hidx := boxIdx_steps (subDom_inst ι hSD) hst (boxIdx_inst hidx₀ hro')
       exact hth hC (fun s hs => (hcore s hs).2) σ' (ι.sub δ) αs' ls' hidx.ok.1 hidx.md
 
@@ -655,49 +655,65 @@ theorem cRLM_all_binder0 {σ : LStack} {δ : LSub} {x : LifeVar} {c : Lifetime.L
       (∀ α, (⌜LtLife (extS δ σ αs) c α ∧ InScope (extS δ σ αs) α⌝ ─⋆
           guardPV (extS (δ.extend x α) σ αs) σ αs ls
             (cRLM (ℍ := ℍ) .binder0 σ (δ.extend x α) C αs ls (.app e (.val .unit)))) ρ) ∧
-      ∀ (en : LEnt) (α : Life), OwnPushM δ (.all x c C) ρ (σ, αs) en α →
+      (∀ (en : LEnt) (α : Life), OwnPushM δ (.all x c C) ρ (σ, αs) en α →
         RecsOutside (α :: αs) ls → SubFresh δ α →
         guardPV (extS (δ.extend x α) (en :: σ) (α :: αs)) (en :: σ) (α :: αs) ls
           (cRLM (ℍ := ℍ) .binder0 (en :: σ) (δ.extend x α) C (α :: αs) ls
+            (.app e (.val .unit))) ρ) ∧
+      ∀ (τ : LStack) (α : Life), OwnPushB δ (.all x c C) ρ (σ, αs) τ α →
+        RecsOutside (α :: αs) ls → SubFresh δ α →
+        guardPV (extS (δ.extend x α) (τ ++ σ) (blockL τ α ++ αs)) (τ ++ σ) (blockL τ α ++ αs) ls
+          (cRLM (ℍ := ℍ) .binder0 (τ ++ σ) (δ.extend x α) C (blockL τ α ++ αs) ls
             (.app e (.val .unit))) ρ := by
   constructor
   · intro h
     have h' := h ls σ αs (extQ_refl _ ls ρ) (by unfold FutQI; split <;> first | exact .refl | rfl)
       (futAvoids_self _ σ)
-    exact ⟨h'.1, h'.2 rfl⟩
+    exact ⟨h'.1, h'.2.1 rfl, h'.2.2 rfl⟩
   · intro h ls' σ' αs' hE hF _
     have hE' : ls' = ls := by simpa [ExtQ, Placement.bindFut] using hE
     have hF' : (σ', αs') = (σ, αs) := by simpa [FutQI, Placement.bindFut] using hF
     obtain ⟨rfl, rfl⟩ := Prod.mk.injEq _ _ _ _ ▸ hF'
     subst hE'
-    exact ⟨h.1, fun _ => h.2⟩
+    exact ⟨h.1, fun _ => h.2.1, fun _ => h.2.2⟩
 
-/-- At the empty stack `∀` reads the instances in scope and the own pushes. -/
+/-- At the empty stack `∀` reads the instances in scope, the single own pushes and the block
+pushes. -/
 def CRLMAllNil : Prop :=
   ∀ (δ : LSub) (x : LifeVar) (c : Lifetime.Life) (C : CTy) (ls : List SRec) (e : Expr)
     (ρ : WRes),
     cRLM (ℍ := ℍ) .binder0 [] δ (.all x c C) [] ls e ρ ↔
       (∀ α, (⌜LtLife δ c α ∧ InScope δ α⌝ ─⋆
           cRLM (ℍ := ℍ) .binder0 [] (δ.extend x α) C [] ls (.app e (.val .unit))) ρ) ∧
-      ∀ (en : LEnt) (α : Life), OwnPushM δ (.all x c C) ρ ([], []) en α →
+      (∀ (en : LEnt) (α : Life), OwnPushM δ (.all x c C) ρ ([], []) en α →
         RecsOutside [α] ls → SubFresh δ α →
         guardPV (extS (δ.extend x α) [en] [α]) [en] [α] ls
-          (cRLM (ℍ := ℍ) .binder0 [en] (δ.extend x α) C [α] ls (.app e (.val .unit))) ρ
+          (cRLM (ℍ := ℍ) .binder0 [en] (δ.extend x α) C [α] ls (.app e (.val .unit))) ρ) ∧
+      ∀ (τ : LStack) (α : Life), OwnPushB δ (.all x c C) ρ ([], []) τ α →
+        RecsOutside [α] ls → SubFresh δ α →
+        guardPV (extS (δ.extend x α) τ (blockL τ α)) τ (blockL τ α) ls
+          (cRLM (ℍ := ℍ) .binder0 τ (δ.extend x α) C (blockL τ α) ls (.app e (.val .unit))) ρ
 
 theorem cRLMAllNil : CRLMAllNil (ℍ := ℍ) := by
   intro δ x c C ls e ρ
   rw [cRLM_all_binder0]
-  exact and_congr (forall_congr' fun α => wand_guardPV_nil) Iff.rfl
+  exact and_congr (forall_congr' fun α => wand_guardPV_nil)
+    (and_congr Iff.rfl (by simp only [List.append_nil]))
 
 /-- **At the top level a polymorphic value is checked by its own pushes alone**: no instance is in
 scope at the empty reading (`inScope_top_none`). -/
 def CRLMAllTop : Prop :=
   ∀ (x : LifeVar) (c : Lifetime.Life) (C : CTy) (ls : List SRec) (e : Expr) (ρ : WRes),
     cRLM (ℍ := ℍ) .binder0 [] (⟨[]⟩ : LSub) (.all x c C) [] ls e ρ ↔
-      ∀ (en : LEnt) (α : Life), OwnPushM (⟨[]⟩ : LSub) (.all x c C) ρ ([], []) en α →
+      (∀ (en : LEnt) (α : Life), OwnPushM (⟨[]⟩ : LSub) (.all x c C) ρ ([], []) en α →
         RecsOutside [α] ls → SubFresh (⟨[]⟩ : LSub) α →
         guardPV (extS ((⟨[]⟩ : LSub).extend x α) [en] [α]) [en] [α] ls
           (cRLM (ℍ := ℍ) .binder0 [en] ((⟨[]⟩ : LSub).extend x α) C [α] ls
+            (.app e (.val .unit))) ρ) ∧
+      ∀ (τ : LStack) (α : Life), OwnPushB (⟨[]⟩ : LSub) (.all x c C) ρ ([], []) τ α →
+        RecsOutside [α] ls → SubFresh (⟨[]⟩ : LSub) α →
+        guardPV (extS ((⟨[]⟩ : LSub).extend x α) τ (blockL τ α)) τ (blockL τ α) ls
+          (cRLM (ℍ := ℍ) .binder0 τ ((⟨[]⟩ : LSub).extend x α) C (blockL τ α) ls
             (.app e (.val .unit))) ρ
 
 theorem cRLMAllTop : CRLMAllTop (ℍ := ℍ) := by
@@ -914,6 +930,15 @@ theorem stackJ_nil (δ : LSub) (Δ : LifeCtx) (Γ : Ctx VTy) (C : CTy) : StackJ 
 theorem stackJM_nil (δ : LSub) (Δ : LifeCtx) (Γ : Ctx VTy) (C : CTy) : StackJM [] [] δ Δ Γ C :=
   ⟨stackJ_nil δ Δ Γ C, fun _ he => absurd he List.not_mem_nil⟩
 
+theorem stackOKB_nil : StackOKB [] [] := stackOKB_of_ok _ _ stackOK_nil
+
+theorem stackJBase_nil (δ : LSub) (Δ : LifeCtx) (Γ : Ctx VTy) (C : CTy) :
+    StackJBase [] [] δ Δ Γ C :=
+  ⟨fun _ he => absurd he List.not_mem_nil, fun _ he => absurd he List.not_mem_nil⟩
+
+theorem stackJB_nil (δ : LSub) (Δ : LifeCtx) (Γ : Ctx VTy) (C : CTy) : StackJB [] [] δ Δ Γ C :=
+  ⟨stackJBase_nil δ Δ Γ C, fun _ he => absurd he List.not_mem_nil⟩
+
 theorem subOutside_nil (δ : LSub) : SubOutside [] [] δ :=
   fun _ _ h => absurd h (by simp)
 
@@ -922,8 +947,8 @@ theorem tabAtS_nil (ρ : WRes) : TabAtS [] [] ρ :=
 
 theorem semSMNilOfSemSM : SemSMNilOfSemSM (ℍ := ℍ) := by
   intro p Δ Γ e j h hBL hSc δ ls γ ρ hSD hMod hg
-  exact h hBL hSc δ [] [] ls γ ρ stackOK_nil (fun _ ho => by simp at ho)
-    (stackJM_nil δ Δ Γ _) hSD hMod (fun _ ha => by simp at ha) (subOutside_nil δ)
+  exact h hBL hSc δ [] [] ls γ ρ stackOKB_nil (fun _ ho => by simp at ho)
+    (stackJB_nil δ Δ Γ _) hSD hMod (fun _ ha => by simp at ha) (subOutside_nil δ)
     (tabAtS_nil ρ) (pvlNil _ ls ρ) hg
 
 /-- **The floor**: the draft's fundamental lemma for Core's rules. Stated, not claimed. -/
@@ -961,7 +986,7 @@ theorem semIdxMNil : SemIdxMNil := by
   · rintro ⟨hBL, hSc, -, -, -, hSD, hMod, -⟩
     exact ⟨hBL, hSc, hSD, hMod⟩
   · rintro ⟨hBL, hSc, hSD, hMod⟩
-    exact ⟨hBL, hSc, stackOK_nil, fun _ ho => by simp at ho, stackJ_nil δ Δ Γ C, hSD, hMod,
+    exact ⟨hBL, hSc, stackOKB_nil, fun _ ho => by simp at ho, stackJBase_nil δ Δ Γ C, hSD, hMod,
       fun _ ha => by simp at ha, subOutside_nil δ, tabAtS_nil ρ, pvlNil _ ls ρ⟩
 
 /-- **The `!` clause at the empty stack**, the box unfolded to every box sequence from `([], [])`:

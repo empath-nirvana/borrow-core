@@ -34,12 +34,15 @@ import ProbeD1.GapCover
 import ProbeD1.GapRows
 import ProbeD1.GapPos
 import ProbeD1.GapRoom
+import ProbeD1.Block
 import ProbeD1.R1
+import ProbeD1.R1Block
 import ProbeD1.R1Thaw
 import ProbeD1.R1Mono
 import ProbeD1.R1Owed
 import ProbeD1.R1Box
 import ProbeD1.R1Stmt0
+import ProbeD1.R1MonoB
 import ProbeD1.R1AllI
 import ProbeD1.Nx
 import ProbeD1.NxGuard

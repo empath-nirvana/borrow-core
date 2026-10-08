@@ -1,4 +1,4 @@
-import ProbeD1.R1Stmt0
+import ProbeD1.R1MonoB
 
 /-!
 # ProbeD1 — `[allI]` at `binder0`: what the row reads beside monotonicity (`R1MONO.md` §2.6)
@@ -17,17 +17,22 @@ reading, and one class of index where its first conjunct does not reach the prem
   variable**, so after the push (`MonoOwnGMAt`) the context must move to that reading, which the
   stack shadows at the pushed variable (`CtxShadowMAt`). Not derived at a `U` slot; no obstruction
   verified.
+* **The block conjunct reads it at the stack with the block pushed** (`τ ++ σ` at
+  `blockL τ α ++ αs`) and the reading extended at the block's variable, so the context is carried
+  across the block (`MonoOwnGMBAt`) and to that reading (`CtxShadowMBAt`). The single push is read
+  at a stack that may hold blocks (`MonoOwnGMAtB`).
 * **At an index whose stack holds an entry named by the binder** (`StackJ`'s third kind) the first
   conjunct's premise needs `SubOutside` at the extended reading, which `subOutsideExtend` gives
   only for a binder new to the stack, and which fails in general (`not_subOutsideExtendAny`).
 
-`allIRowMNKAt0_of` proves the row at `binder0` at one context from the three transports at that
+`allIRowMNKAt0_of` proves the row at `binder0` at one context from the five transports at that
 context, at every index whose stack does not name the binder (`AllIRowMNKAt`): the premise at the
-two places, every index fact carried (`StackJ` to the extended `Δ`, the models, `SubOutside` by
-`subOutsideExtend` and `subOutsidePush`), and the β step in front of every computation type
-(`cRLM_step`). At a context whose live slots reach no `U` the three transports hold
-(`monoOwnGMAt_uFree`, `ctxExtendMAt_uFree`, `ctxShadowMAt_uFree`), so the row holds there
-(`allIRowMNKUFree0`), the empty context among them (`allIRowMNKNil0`).
+three places, every index fact carried (`StackJBase` to the extended `Δ`, the models, `SubOutside`
+by `subOutsideExtend`, `subOutsidePush` and `subOutsideBlock`, the shape by `stackOKB_push` and
+`stackOKB_block`), and the β step in front of every computation type (`cRLM_step`). At a context
+whose live slots reach no `U` the five transports hold (`monoOwnGMAtB_uFree`,
+`monoOwnGMBAt_uFree`, `ctxExtendMAt_uFree`, `ctxShadowMAt_uFree`, `ctxShadowMBAt_uFree`), so the
+row holds there (`allIRowMNKUFree0`), the empty context among them (`allIRowMNKNil0`).
 
 At `gd`, whose context is a `U` slot, the row's conclusion holds at a derivable body that hands
 `gdF` a thunk holding the argument and forces what comes back (`gdMtDerivable`,
@@ -84,13 +89,47 @@ def CtxShadowMAt (p : Placement) (Γ : Ctx VTy) : Prop :=
 /-- `CtxShadowMAt` at every context. -/
 def CtxShadowM (p : Placement) : Prop := ∀ Γ, CtxShadowMAt (ℍ := ℍ) p Γ
 
+/-- **`MonoOwnGMAt` at a stack with blocks** (`StackOKB`): the single own push onto a stack whose
+entries may share a lifetime. -/
+def MonoOwnGMAtB (p : Placement) (Γ : Ctx VTy) : Prop :=
+  ∀ (σ : LStack) (δ : LSub) (γ : List Val) (αs : List Life) (ls : List SRec) (ρ : WRes)
+    (C : CTy) (e : LEnt) (a : Life),
+    StackPayAvoids e.x σ →
+    StackOKB σ αs → OuterBelowTop αs → RecsOutside αs ls → SubOutside σ αs δ →
+    OwnPushI δ C ρ (σ, αs) e a → δ.find? e.x = none → CtxFresh e.x Γ →
+    RecsOutside (a :: αs) ls → SubFresh δ a →
+    TabAtS σ αs ρ → PlaceViewsL (extS δ σ αs) σ αs ls ρ →
+    gRLM (ℍ := ℍ) p σ δ αs ls Γ γ ρ → gRLM (ℍ := ℍ) p (e :: σ) δ (a :: αs) ls Γ γ ρ
+
+/-- **The context across a block push** (`GROUND.md` §4.5, item 3): the block of entries named
+`x` at `a`, its places holding only `own` cells of the resource frozen under an `imm` ancestor. -/
+def MonoOwnGMBAt (p : Placement) (Γ : Ctx VTy) : Prop :=
+  ∀ (σ : LStack) (δ : LSub) (γ : List Val) (αs : List Life) (ls : List SRec) (ρ : WRes)
+    (C : CTy) (τ : LStack) (x : LifeVar) (a : Life),
+    (∀ e ∈ τ, e.x = x) → StackPayAvoids x σ →
+    StackOKB σ αs → OuterBelowTop αs → RecsOutside αs ls → SubOutside σ αs δ →
+    OwnPushB δ C ρ (σ, αs) τ a → δ.find? x = none → CtxFresh x Γ →
+    RecsOutside (a :: αs) ls → SubFresh δ a →
+    TabAtS σ αs ρ → PlaceViewsL (extS δ σ αs) σ αs ls ρ →
+    gRLM (ℍ := ℍ) p σ δ αs ls Γ γ ρ → gRLM (ℍ := ℍ) p (τ ++ σ) δ (blockL τ a ++ αs) ls Γ γ ρ
+
+/-- **The context after a block push, at the reading extended at the block's variable at the
+block's lifetime**: the stack reads the variable at that lifetime already. -/
+def CtxShadowMBAt (p : Placement) (Γ : Ctx VTy) : Prop :=
+  ∀ (σ : LStack) (δ : LSub) (γ : List Val) (αs : List Life) (ls : List SRec) (ρ : WRes)
+    (τ : LStack) (x : LifeVar) (α : Life),
+    (∀ e ∈ τ, e.x = x) → τ ≠ [] → δ.find? x = none →
+    (∀ s ∈ Γ, s.live = true → ¬ VFree x s.ty ∧ x ∉ VTy.binders s.ty) →
+    gRLM (ℍ := ℍ) p (τ ++ σ) δ (blockL τ α ++ αs) ls Γ γ ρ →
+      gRLM (ℍ := ℍ) p (τ ++ σ) (δ.extend x α) (blockL τ α ++ αs) ls Γ γ ρ
+
 /-- `SemSM` at the indices whose stack does not name the variable `x`. -/
 def SemSMNK (p : Placement) (Δ : LifeCtx) (Γ : Ctx VTy) (e : Expr) (j : Jdg) (x : LifeVar) :
     Prop :=
   BindersLow Γ (jdgCty j) → Scoped Δ Γ (jdgCty j) →
   ∀ (δ : LSub) (σ : LStack) (αs : List Life) (ls : List SRec) (γ : List Val) (ρ : WRes),
     x ∉ σ.map LEnt.x →
-    StackOK σ αs → OuterBelowTop αs → StackJ σ αs δ Δ Γ (jdgCty j) → SubDom δ Δ →
+    StackOKB σ αs → OuterBelowTop αs → StackJBase σ αs δ Δ Γ (jdgCty j) → SubDom δ Δ →
     Δ.Models (extS δ σ αs) → RecsOutside αs ls → SubOutside σ αs δ → TabAtS σ αs ρ →
     PlaceViewsL (extS δ σ αs) σ αs ls ρ → gRLM (ℍ := ℍ) p σ δ αs ls Γ γ ρ →
     cRLM (ℍ := ℍ) p σ δ (jdgCty j) αs ls (substAll γ e) ρ
@@ -146,12 +185,15 @@ theorem cRLM_step (p : Placement) : ∀ (C : CTy) {e e' : Expr}, (∀ μ : Heap,
        cRLM_step p D (fun μ => (h μ).plug (Kont.appL .hole _)) σ δ αs ls ρ h₂⟩
   | .top, _, _, _, _, _, _, _ => fun _ _ => trivial
   | .all x c C, _, _, h, σ, δ, αs, ls => fun ρ h' ls' σ' αs' he hf hav => by
-      obtain ⟨h₁, h₂⟩ := h' ls' σ' αs' he hf hav
-      refine ⟨fun α ρ₁ ρ₂ hp hc ht hpv => ?_, fun hown en α hpush hro hsf ht hpv => ?_⟩
+      obtain ⟨h₁, h₂, h₃⟩ := h' ls' σ' αs' he hf hav
+      refine ⟨fun α ρ₁ ρ₂ hp hc ht hpv => ?_, fun hown en α hpush hro hsf ht hpv => ?_,
+        fun hown τ α hpush hro hsf ht hpv => ?_⟩
       · exact cRLM_step p C (fun μ => (h μ).plug (Kont.appL .hole _)) σ' (δ.extend x α) αs' ls' ρ₂
           (h₁ α ρ₁ ρ₂ hp hc ht hpv)
       · exact cRLM_step p C (fun μ => (h μ).plug (Kont.appL .hole _)) (en :: σ') (δ.extend x α)
           (α :: αs') ls' ρ (h₂ hown en α hpush hro hsf ht hpv)
+      · exact cRLM_step p C (fun μ => (h μ).plug (Kont.appL .hole _)) (τ ++ σ') (δ.extend x α)
+          (blockL τ α ++ αs') ls' ρ (h₃ hown τ α hpush hro hsf ht hpv)
   | .nu C, _, _, h, σ, δ, αs, ls => cC_step (.nu C) h ls (extS δ σ αs)
 
 
@@ -275,6 +317,173 @@ theorem stackJM_allPush {σ : LStack} {αs : List Life} {δ δ' : LSub} {Δ : Li
     · exact Or.inl ⟨b, by rw [hex, LifeCtx.find?_extend, if_pos rfl]⟩
     · exact (stackJ_kinds_allBody (S := S) h (hex ▸ hoi.var) e he).imp id (fun h => h.1))
 
+/-- The stack's entries at the binder's body: `Δ`'s or names no program binds, at the extended
+`Δ`, when the binder is new to the stack. -/
+theorem stackJBase_kinds_allBody {σ : LStack} {αs : List Life} {δ : LSub} {Δ : LifeCtx}
+    {Γ : Ctx VTy}
+    {x : LifeVar} {b : Lifetime.Life} {C : CTy} {S : VTy} (h : StackJBase σ αs δ Δ Γ (.all x b C))
+    (hxσ : x ∉ σ.map LEnt.x) : ∀ e ∈ σ,
+      (∃ u, (Δ.extend x b).find? e.x = some u) ∨
+      (NsVar e.x ∧ (Δ.extend x b).find? e.x = none ∧ ¬ CFree e.x C ∧
+        CtxAvoids e.x (⟨S, false⟩ :: Γ)) := by
+  intro e he
+  have hex : e.x ≠ x := fun h' => hxσ (h' ▸ List.mem_map_of_mem he)
+  rcases h.2 e he with ⟨u, hu⟩ | ⟨hns, hΔ, hCe, hctx⟩ | ⟨-, -, -, c, D, hall, -⟩
+  · exact Or.inl (lifeCtx_find?_extend_some hu x b)
+  · refine Or.inr ⟨hns, ?_, fun hc => hCe (Or.inr ⟨hex, hc⟩), ctxAvoids_dead hctx⟩
+    rw [LifeCtx.find?_extend, if_neg (Ne.symm hex)]; exact hΔ
+  · obtain ⟨rfl, -, -⟩ : x = e.x ∧ b = c ∧ C = D := by simpa using hall
+    exact absurd rfl hex
+
+/-- **`StackJBase` at the first conjunct's premise**, the binder new to the stack. -/
+theorem stackJBase_allExtend {σ : LStack} {αs : List Life} {δ δ' : LSub} {Δ : LifeCtx} {Γ : Ctx VTy}
+    {x : LifeVar} {b : Lifetime.Life} {C : CTy} {S : VTy} (h : StackJBase σ αs δ Δ Γ (.all x b C))
+    (hxσ : x ∉ σ.map LEnt.x) :
+    StackJBase σ αs δ' (Δ.extend x b) (⟨S, false⟩ :: Γ) C := by
+  refine ⟨fun e he y hy => ?_, fun e he => ?_⟩
+  · rcases h.1 e he y hy with ⟨u, hu⟩ | hm
+    · exact Or.inl (lifeCtx_find?_extend_some hu x b)
+    · exact Or.inr hm
+  · rcases stackJBase_kinds_allBody (S := S) h hxσ e he with h₁ | h₂
+    · exact Or.inl h₁
+    · exact Or.inr (Or.inl h₂)
+
+/-- **`StackJBase` at the own-lend conjunct's premise**: the pushed entry is named by the binder,
+now `Δ`'s; the old entries as at the first conjunct. -/
+theorem stackJBase_allPush {σ : LStack} {αs : List Life} {δ δ' : LSub} {Δ : LifeCtx} {Γ : Ctx VTy}
+    {x : LifeVar} {b : Lifetime.Life} {C : CTy} {S : VTy} {en : LEnt} {α : Life} {ρ : WRes}
+    (h : StackJBase σ αs δ Δ Γ (.all x b C)) (hSD : SubDom δ Δ) (hex : en.x = x)
+    (hoi : OwnOKI δ σ αs en α ρ) :
+    StackJBase (en :: σ) (α :: αs) δ' (Δ.extend x b) (⟨S, false⟩ :: Γ) C := by
+  have hxσ : x ∉ σ.map LEnt.x := hex ▸ hoi.var
+  refine ⟨fun e he y hy => ?_, fun e he => ?_⟩
+  · rcases List.mem_cons.mp he with rfl | he
+    · have hb := hoi.pay y hy
+      by_cases hyx : e.x = y
+      · exact Or.inr (by rw [← hyx]; exact List.mem_cons_self)
+      · rw [extS_push_find _ e σ α αs hyx] at hb
+        by_cases hyσ : y ∈ σ.map LEnt.x
+        · exact Or.inr (List.mem_cons_of_mem _ hyσ)
+        · rw [extS_find_not_mem _ σ αs y hyσ] at hb
+          obtain ⟨u, hu⟩ := hSD y hb
+          exact Or.inl (lifeCtx_find?_extend_some hu x b)
+    · rcases h.1 e he y hy with ⟨u, hu⟩ | h₁
+      · exact Or.inl (lifeCtx_find?_extend_some hu x b)
+      · exact Or.inr (List.mem_cons_of_mem _ h₁)
+  · rcases List.mem_cons.mp he with rfl | he
+    · exact Or.inl ⟨b, by rw [hex, LifeCtx.find?_extend, if_pos rfl]⟩
+    · rcases stackJBase_kinds_allBody (S := S) h hxσ e he with h₁ | h₂
+      · exact Or.inl h₁
+      · exact Or.inr (Or.inl h₂)
+
+/-- **`StackJB` at the first conjunct's premise**: the entries are of `StackJ`'s first two kinds
+there (`stackJBase_kinds_allBody`). -/
+theorem stackJB_allExtend {σ : LStack} {αs : List Life} {δ δ' : LSub} {Δ : LifeCtx}
+    {Γ : Ctx VTy} {x : LifeVar} {b : Lifetime.Life} {C : CTy} {S : VTy}
+    (h : StackJBase σ αs δ Δ Γ (.all x b C)) (hxσ : x ∉ σ.map LEnt.x)
+    (hBL' : BindersLow (⟨S, false⟩ :: Γ) C) :
+    StackJB σ αs δ' (Δ.extend x b) (⟨S, false⟩ :: Γ) C :=
+  stackJB_of_kinds (stackJBase_allExtend h hxσ) hBL'
+    (fun e he => (stackJBase_kinds_allBody (S := S) h hxσ e he).imp id (fun h => h.1))
+
+/-- **`StackJB` at the own-lend conjunct's premise**: the pushed entry is `Δ`'s at the extended
+`Δ`, the old ones as at the first conjunct. -/
+theorem stackJB_allPush {σ : LStack} {αs : List Life} {δ δ' : LSub} {Δ : LifeCtx} {Γ : Ctx VTy}
+    {x : LifeVar} {b : Lifetime.Life} {C : CTy} {S : VTy} {en : LEnt} {α : Life} {ρ : WRes}
+    (h : StackJBase σ αs δ Δ Γ (.all x b C)) (hSD : SubDom δ Δ) (hex : en.x = x)
+    (hoi : OwnOKI δ σ αs en α ρ) (hBL' : BindersLow (⟨S, false⟩ :: Γ) C) :
+    StackJB (en :: σ) (α :: αs) δ' (Δ.extend x b) (⟨S, false⟩ :: Γ) C :=
+  stackJB_of_kinds (stackJBase_allPush h hSD hex hoi) hBL' (fun e he => by
+    rcases List.mem_cons.mp he with rfl | he
+    · exact Or.inl ⟨b, by rw [hex, LifeCtx.find?_extend, if_pos rfl]⟩
+    · exact (stackJBase_kinds_allBody (S := S) h (hex ▸ hoi.var) e he).imp id (fun h => h.1))
+
+/-- **`StackJBase` at the block conjunct's premise**: the block's entries are named by the binder,
+now `Δ`'s; their payload types read the stack's or the reading's variables (`OwnOKB.pay`). -/
+theorem stackJBase_allBlock {σ : LStack} {αs : List Life} {δ δ' : LSub} {Δ : LifeCtx} {Γ : Ctx VTy}
+    {x : LifeVar} {b : Lifetime.Life} {C : CTy} {S : VTy} {τ : LStack} {α : Life} {ρ : WRes}
+    (h : StackJBase σ αs δ Δ Γ (.all x b C)) (hSD : SubDom δ Δ)
+    (hob : OwnOKB δ σ αs x τ α ρ) :
+    StackJBase (τ ++ σ) (blockL τ α ++ αs) δ' (Δ.extend x b) (⟨S, false⟩ :: Γ) C := by
+  refine ⟨fun e he y hy => ?_, fun e he => ?_⟩
+  · rcases List.mem_append.mp he with he | he
+    · have hb := hob.pay e he y hy
+      by_cases hyx : x = y
+      · subst hyx
+        exact Or.inr (List.mem_map.mpr ⟨e, List.mem_append_left _ he, hob.named e he⟩)
+      · rw [extS_blockPush_ne hob.named hyx] at hb
+        by_cases hyσ : y ∈ σ.map LEnt.x
+        · exact Or.inr (by rw [List.map_append]; exact List.mem_append_right _ hyσ)
+        · rw [extS_find_not_mem _ σ αs y hyσ] at hb
+          obtain ⟨u, hu⟩ := hSD y hb
+          exact Or.inl (lifeCtx_find?_extend_some hu x b)
+    · rcases h.1 e he y hy with ⟨u, hu⟩ | h₁
+      · exact Or.inl (lifeCtx_find?_extend_some hu x b)
+      · exact Or.inr (by rw [List.map_append]; exact List.mem_append_right _ h₁)
+  · rcases List.mem_append.mp he with he | he
+    · exact Or.inl ⟨b, by rw [hob.named e he, LifeCtx.find?_extend, if_pos rfl]⟩
+    · rcases stackJBase_kinds_allBody (S := S) h hob.var e he with h₁ | h₂
+      · exact Or.inl h₁
+      · exact Or.inr (Or.inl h₂)
+
+/-- **`StackJB` at the block conjunct's premise.** -/
+theorem stackJB_allBlock {σ : LStack} {αs : List Life} {δ δ' : LSub} {Δ : LifeCtx} {Γ : Ctx VTy}
+    {x : LifeVar} {b : Lifetime.Life} {C : CTy} {S : VTy} {τ : LStack} {α : Life} {ρ : WRes}
+    (h : StackJBase σ αs δ Δ Γ (.all x b C)) (hSD : SubDom δ Δ)
+    (hob : OwnOKB δ σ αs x τ α ρ) (hBL' : BindersLow (⟨S, false⟩ :: Γ) C) :
+    StackJB (τ ++ σ) (blockL τ α ++ αs) δ' (Δ.extend x b) (⟨S, false⟩ :: Γ) C :=
+  stackJB_of_kinds (stackJBase_allBlock h hSD hob) hBL' (fun e he => by
+    rcases List.mem_append.mp he with he | he
+    · exact Or.inl ⟨b, by rw [hob.named e he, LifeCtx.find?_extend, if_pos rfl]⟩
+    · exact (stackJBase_kinds_allBody (S := S) h hob.var e he).imp id (fun h => h.1))
+
+/-- A block's lifetimes are a non-decreasing chain. -/
+theorem isChain_blockL : ∀ (τ : LStack) (α : Life), List.IsChain (· ≤ ·) (blockL τ α)
+  | [], _ => List.isChain_nil
+  | [_], _ => List.isChain_singleton _
+  | _ :: e' :: τ', α => List.isChain_cons_cons.mpr ⟨le_rfl, isChain_blockL (e' :: τ') α⟩
+
+/-- **A block pushed below a stack in shape keeps `StackOKB`**: its entries share the binder and the
+lifetime, below every lend, and their lender's row (`OwnOKB`). -/
+theorem stackOKB_block {σ : LStack} {αs : List Life} {δ : LSub} {x : LifeVar} {τ : LStack}
+    {α : Life} {ρ : WRes} (h : StackOKB σ αs) (hob : OwnOKB δ σ αs x τ α ρ) :
+    StackOKB (τ ++ σ) (blockL τ α ++ αs) := by
+  obtain ⟨hl, hc, hxs, hr⟩ := h
+  have hlt : ∀ b ∈ αs, α < b := fun b hb =>
+    List.rel_of_pairwise_cons (List.IsChain.pairwise hob.chain) hb
+  have hlen : (blockL τ α).length = τ.length := by simp [blockL]
+  have hmem : ∀ p ∈ (τ ++ σ).zip (blockL τ α ++ αs),
+      (p ∈ τ.zip (blockL τ α) ∧ p.1.x = x ∧ p.2 = α ∧ p.1 ∈ τ) ∨
+        (p ∈ σ.zip αs ∧ p.1.x ≠ x ∧ α < p.2) := by
+    intro p hp
+    rw [List.zip_append hlen.symm] at hp
+    rcases List.mem_append.mp hp with hp | hp
+    · exact Or.inl ⟨hp, hob.named _ (List.of_mem_zip hp).1, snd_of_mem_zip_blockL hp,
+        (List.of_mem_zip hp).1⟩
+    · exact Or.inr ⟨hp, fun h' => hob.var (h' ▸ List.mem_map_of_mem (List.of_mem_zip hp).1),
+        hlt _ (List.of_mem_zip hp).2⟩
+  refine ⟨by simp [hl, blockL], ?_, fun p hp q hq => ?_, fun p hp q hq hpq => ?_⟩
+  · have hτc : List.IsChain (· ≤ ·) (blockL τ α) := isChain_blockL τ α
+    exact List.IsChain.append hτc (hc) (fun a ha b hb => by
+      have ha' : a = α := by
+        have := List.mem_of_getLast? ha
+        simp only [blockL, List.mem_map] at this
+        obtain ⟨_, _, rfl⟩ := this; rfl
+      subst ha'
+      exact le_of_lt (hlt b (List.mem_of_mem_head? hb)))
+  · rcases hmem p hp with ⟨hp', hpx, hpα, -⟩ | ⟨hp', hpx, hpα⟩ <;>
+      rcases hmem q hq with ⟨hq', hqx, hqα, -⟩ | ⟨hq', hqx, hqα⟩
+    · exact ⟨fun _ => hpα.trans hqα.symm, fun _ => hpx.trans hqx.symm⟩
+    · exact ⟨fun h' => absurd (hpx ▸ h'.symm) hqx, fun h' => absurd (hpα ▸ h') (ne_of_lt hqα)⟩
+    · exact ⟨fun h' => absurd (hqx ▸ h') hpx, fun h' => absurd (hqα ▸ h'.symm) (ne_of_lt hpα)⟩
+    · exact hxs p hp' q hq'
+  · rcases hmem p hp with ⟨-, -, hpα, hpτ⟩ | ⟨hp', -, hpα⟩ <;>
+      rcases hmem q hq with ⟨-, -, hqα, hqτ⟩ | ⟨hq', -, hqα⟩
+    · exact hob.sameRow _ hpτ _ hqτ
+    · exact absurd (hpα ▸ hpq) (ne_of_lt hqα)
+    · exact absurd (hqα ▸ hpq.symm) (ne_of_lt hpα)
+    · exact hr p hp' q hq' hpq
+
 /-- **The extended `Δ`'s models at the first conjunct's premise**: `'x ↦ α` below `b`, the other
 bounds read alike (none mentions `'x`). -/
 theorem models_allExtend {Δ : LifeCtx} {δ : LSub} {σ : LStack} {αs : List Life} {x : LifeVar}
@@ -332,17 +541,98 @@ theorem models_allPush {Δ : LifeCtx} {δ : LSub} {σ : LStack} {αs : List Life
     exact ⟨m, n, by rw [hagree y hyx]; exact hm, by rw [hint u (hΔx y u hy)]; exact hn, hl⟩
 
 
+/-- **The extended `Δ`'s models at the block conjunct's premise**: the block reads `'x` at its
+lifetime, below `b`. -/
+theorem models_allBlock {Δ : LifeCtx} {δ : LSub} {σ : LStack} {αs : List Life} {x : LifeVar}
+    {b : Lifetime.Life} {τ : LStack} {α : Life} (hMod : Δ.Models (extS δ σ αs))
+    (hτx : ∀ e ∈ τ, e.x = x) (hne : τ ≠ [])
+    (hbx : b.mentions x = false) (hΔx : ∀ y u, Δ.find? y = some u → u.mentions x = false)
+    (hlt : LtLife (extS δ σ αs) b α) :
+    (Δ.extend x b).Models (extS (δ.extend x α) (τ ++ σ) (blockL τ α ++ αs)) := by
+  have hagree : ∀ y, x ≠ y →
+      (extS (δ.extend x α) (τ ++ σ) (blockL τ α ++ αs)).find? y = (extS δ σ αs).find? y := by
+    intro y hyx
+    rw [extS_blockPush_ne hτx hyx]
+    exact extS_find_base (find?_extend_ne δ α hyx) σ αs
+  have hint : ∀ (u : Lifetime.Life), u.mentions x = false →
+      u.interp (extS (δ.extend x α) (τ ++ σ) (blockL τ α ++ αs)) = u.interp (extS δ σ αs) :=
+    fun u hu => interp_congr u (fun y hy => hagree y (fun he => by rw [he] at hu; simp [hu] at hy))
+  intro y u hy
+  rw [LifeCtx.find?_extend] at hy
+  split at hy
+  · rename_i hyx
+    subst hyx
+    have hub : b = u := Option.some.inj hy
+    subst hub
+    obtain ⟨β, hβ, hαβ⟩ := hlt
+    exact ⟨α, β, extS_blockPush_self hτx hne, by rw [hint b hbx]; exact hβ, hαβ⟩
+  · rename_i hyx
+    obtain ⟨m, n, hm, hn, hl⟩ := hMod y u hy
+    exact ⟨m, n, by rw [hagree y hyx]; exact hm, by rw [hint u (hΔx y u hy)]; exact hn, hl⟩
+
+/-- **A block pushed fresh below the reading keeps `SubOutside`**: the bindings before the block's
+variable are the old reading's, above the block (`SubFresh`); the old entries' are unchanged. -/
+theorem subOutsideBlock {σ : LStack} {αs : List Life} {δ : LSub} {τ : LStack} {x : LifeVar}
+    {α : Life} (hτx : ∀ e ∈ τ, e.x = x) (hx : x ∉ σ.map LEnt.x) (h : SubOutside σ αs δ)
+    (hf : SubFresh δ α) : SubOutside (τ ++ σ) (blockL τ α ++ αs) (δ.extend x α) := by
+  intro e' a' hm p hp
+  rw [List.zip_append (by simp [blockL])] at hm
+  rcases List.mem_append.mp hm with hm | hm
+  · have hex : e'.x = x := hτx e' (List.of_mem_zip hm).1
+    have ha : a' = α := snd_of_mem_zip_blockL hm
+    rw [hex, boundBefore_extend_self] at hp
+    rw [ha]; exact hf p hp
+  · have hne : x ≠ e'.x := fun hxe => hx (hxe ▸ List.mem_map_of_mem (List.of_mem_zip hm).1)
+    rw [boundBefore_extend_ne hne] at hp
+    exact h e' a' hm p hp
+
+/-- The outermost lend of a pushed block: the old one, or the block's own lifetime. -/
+theorem outerBelowTop_block {αs : List Life} {τ : LStack} {α : Life}
+    (h : OuterBelowTop (α :: αs)) : OuterBelowTop (blockL τ α ++ αs) := by
+  intro o ho
+  cases hαs : αs.getLast? with
+  | none =>
+      have hnil : αs = [] := List.getLast?_eq_none_iff.mp hαs
+      subst hnil
+      rw [List.append_nil] at ho
+      have hmo : o ∈ blockL τ α := List.mem_of_getLast? ho
+      obtain ⟨_, _, rfl⟩ := List.mem_map.mp hmo
+      exact h _ (by simp)
+  | some o' =>
+      have : o = o' := by
+        rw [List.getLast?_append, hαs] at ho
+        simpa using ho.symm
+      subst this
+      refine h o ?_
+      cases αs with
+      | nil => simp at hαs
+      | cons a₀ αs₀ => rw [List.getLast?_cons_cons]; exact hαs
+
+/-- **`StackPayAvoids` at every index `SemSM` reads**, blocks admitted. -/
+theorem stackPayAvoids_of_stackJBase {σ : LStack} {αs : List Life} {δ : LSub} {Δ : LifeCtx}
+    {Γ : Ctx VTy} {C : CTy} {x : LifeVar} (hJ : StackJBase σ αs δ Δ Γ C) (hΔ : Δ.find? x = none)
+    (hσ : x ∉ σ.map LEnt.x) : StackPayAvoids x σ := by
+  intro e' he' hx
+  rcases hJ.1 e' he' x hx with ⟨u, hu⟩ | hm
+  · rw [hΔ] at hu; exact absurd hu (by simp)
+  · exact hσ hm
+
 /-! ### The row at `binder0` at one context, from the three transports -/
 
 /-- **`[allI]` at `binder0` at one context, at every index whose stack does not name the binder,
-from the three transports at that context**: the `∀` clause's first conjunct by the premise at
-the reading extended at the binder, the context moved there by `CtxExtendMAt`; its own-lend
-conjunct by the premise at the pushed stack and the reading extended at the pushed variable, the
-context carried across the push by `MonoOwnGMAt` and to that reading by `CtxShadowMAt`; the
-index's facts by `stackJ_allExtend`, `stackJ_allPush`, `models_allExtend`, `models_allPush`,
-`subOutsideExtend`, `subOutsidePush`, `outerBelowTopPush`; the β step by `cRLM_step`. -/
-theorem allIRowMNKAt0_of (Γ : Ctx VTy) (hMono : MonoOwnGMAt (ℍ := ℍ) .binder0 Γ)
-    (hExt : CtxExtendMAt (ℍ := ℍ) .binder0 Γ) (hSh : CtxShadowMAt (ℍ := ℍ) .binder0 Γ) :
+from the transports at that context**: the `∀` clause's first conjunct by the premise at the
+reading extended at the binder, the context moved there by `CtxExtendMAt`; its own-lend conjunct
+by the premise at the pushed stack and the reading extended at the pushed variable, the context
+carried across the push by `MonoOwnGMAtB` and to that reading by `CtxShadowMAt`; its block
+conjunct by the premise at the stack with the block pushed, the context carried by `MonoOwnGMBAt`
+and `CtxShadowMBAt`; the index's facts by `stackJBase_allExtend`, `stackJBase_allPush`,
+`stackJBase_allBlock`, `models_allExtend`, `models_allPush`, `models_allBlock`, `subOutsideExtend`,
+`subOutsidePush`, `subOutsideBlock`, `outerBelowTopPush`, `outerBelowTop_block`,
+`stackOKB_push`, `stackOKB_block`; the β step by `cRLM_step`. -/
+theorem allIRowMNKAt0_of (Γ : Ctx VTy) (hMono : MonoOwnGMAtB (ℍ := ℍ) .binder0 Γ)
+    (hMonoB : MonoOwnGMBAt (ℍ := ℍ) .binder0 Γ)
+    (hExt : CtxExtendMAt (ℍ := ℍ) .binder0 Γ) (hSh : CtxShadowMAt (ℍ := ℍ) .binder0 Γ)
+    (hShB : CtxShadowMBAt (ℍ := ℍ) .binder0 Γ) :
     AllIRowMNKAt (ℍ := ℍ) .binder0 Γ := by
   intro Δ x b M S C hbx hΔx hΓx hΔ hΓb hM hBL hSc δ σ αs ls γ ρ hxσ hok hob hJ hSD hMod hro hso
     ht hpv hg
@@ -352,7 +642,7 @@ theorem allIRowMNKAt0_of (Γ : Ctx VTy) (hMono : MonoOwnGMAt (ℍ := ℍ) .binde
     | some m =>
         obtain ⟨u, hu⟩ := hSD x (by rw [h]; simp)
         rw [hΔ] at hu; exact absurd hu (by simp)
-  have hσx : StackPayAvoids x σ := stackPayAvoids_of_stackJ hJ hΔ hxσ
+  have hσx : StackPayAvoids x σ := stackPayAvoids_of_stackJBase hJ hΔ hxσ
   have hslots : ∀ s ∈ Γ, s.live = true → ¬ VFree x s.ty ∧ x ∉ VTy.binders s.ty :=
     fun s hs hl => ⟨hΓx s hs hl, hΓb s hs hl⟩
   have hBL' := bindersLow_allBody (S := S) hBL
@@ -363,7 +653,8 @@ theorem allIRowMNKAt0_of (Γ : Ctx VTy) (hMono : MonoOwnGMAt (ℍ := ℍ) .binde
   have hF' : σ' = σ ∧ αs' = αs := by simpa [FutQI, Placement.bindFut] using hF
   obtain ⟨rfl, rfl⟩ := hF'
   subst hE'
-  refine ⟨fun α ρ₁ ρ₂ hp hc ht' hpv' => ?_, fun _ en α hpush hro' hsf ht' hpv' => ?_⟩
+  refine ⟨fun α ρ₁ ρ₂ hp hc ht' hpv' => ?_, fun _ en α hpush hro' hsf ht' hpv' => ?_,
+    fun _ τ α hpush hro' hsf ht' hpv' => ?_⟩
   · -- the first conjunct: the premise at the reading extended at the binder
     obtain ⟨rfl, hlt, -⟩ := hp
     rw [ResU.CompS.functional hc (ResU.comp_empty_right ρ)] at ht' hpv' ⊢
@@ -371,7 +662,7 @@ theorem allIRowMNKAt0_of (Γ : Ctx VTy) (hMono : MonoOwnGMAt (ℍ := ℍ) .binde
       (δ.extend x α) αs' ls' ρ ?_
     rw [← GhostEnd.substAll_cons_l]
     exact hM hBL' hSc' (δ.extend x α) σ' αs' ls' (Val.unit :: γ) ρ hok hob
-      (stackJM_allExtend hJ hxσ hBL') (subDom_extend hSD x α b)
+      (stackJB_allExtend hJ hxσ hBL') (subDom_extend hSD x α b)
       (models_allExtend hMod hxσ hbx hΔx hlt) hro (subOutsideExtend σ' αs' δ x α hxσ hso) ht'
       hpv' (gRLM_dead_cons (hExt σ' δ γ αs' ls' ρ x α hxσ hδx hσx hslots hg))
   · -- the own-lend conjunct: the premise at the pushed stack
@@ -389,13 +680,35 @@ theorem allIRowMNKAt0_of (Γ : Ctx VTy) (hMono : MonoOwnGMAt (ℍ := ℍ) .binde
     refine cRLM_step .binder0 C (fun μ => Step1N.head (Head.beta μ _ Val.unit) rfl) (en :: σ')
       (δ.extend x α) (α :: αs') ls' ρ ?_
     rw [← GhostEnd.substAll_cons_l]
-    have hokP : StackOK (en :: σ') (α :: αs') :=
-      ⟨by simp [hok.1], hoi.chain, by rw [List.map_cons]; exact List.nodup_cons.mpr ⟨hoi.var, hok.2.2⟩⟩
-    exact hM hBL' hSc' (δ.extend x α) (en :: σ') (α :: αs') ls' (Val.unit :: γ) ρ hokP
-      (outerBelowTopPush αs' α _ b hob hlt) (stackJM_allPush hJ hSD hex hoi hBL')
+    exact hM hBL' hSc' (δ.extend x α) (en :: σ') (α :: αs') ls' (Val.unit :: γ) ρ
+      (stackOKB_push hok hoi.chain hoi.var)
+      (outerBelowTopPush αs' α _ b hob hlt) (stackJB_allPush hJ hSD hex hoi hBL')
       (subDom_extend hSD x α b) (models_allPush hMod hex hbx hΔx hlt) hro'
       (by rw [← hex]; exact subOutsidePush σ' αs' δ en α hoi.var hso hsf) ht' hpv'
       (gRLM_dead_cons hg₂)
+  · -- the block conjunct: the premise at the stack with the block pushed
+    obtain ⟨x', c', C', A, hall, hcb, hbind, hlen, hob', hlt, hpay, hfits⟩ := hpush
+    obtain ⟨rfl, rfl, rfl⟩ : x = x' ∧ b = c' ∧ C = C' := by simpa using hall
+    have hpushB : OwnPushB δ (.all x b C) ρ (σ', αs') τ α :=
+      ⟨x, b, C, A, rfl, hcb, hbind, hlen, hob', hlt, hpay, hfits⟩
+    have hfr : CtxFresh x Γ := fun s hs hl => hslots s hs hl
+    have hg₁ := hMonoB σ' δ γ αs' ls' ρ (.all x b C) τ x α hob'.named hσx hok hob hro hso hpushB
+      hδx hfr hro' hsf ht hpv hg
+    have hg₂ := hShB σ' δ γ αs' ls' ρ τ x α hob'.named hob'.ne hδx hslots hg₁
+    refine cRLM_step .binder0 C (fun μ => Step1N.head (Head.beta μ _ Val.unit) rfl) (τ ++ σ')
+      (δ.extend x α) (blockL τ α ++ αs') ls' ρ ?_
+    rw [← GhostEnd.substAll_cons_l]
+    exact hM hBL' hSc' (δ.extend x α) (τ ++ σ') (blockL τ α ++ αs') ls' (Val.unit :: γ) ρ
+      (stackOKB_block hok hob') (outerBelowTop_block (outerBelowTopPush αs' α _ b hob hlt))
+      (stackJB_allBlock hJ hSD hob' hBL') (subDom_extend hSD x α b)
+      (models_allBlock hMod hob'.named hob'.ne hbx hΔx hlt)
+      (fun a ha y hy hay p hp => by
+        rw [List.mem_append] at ha
+        rcases ha with ha | ha
+        · obtain ⟨_, _, rfl⟩ := List.mem_map.mp ha
+          exact hro' _ (List.mem_cons_self ..) y hy hay p hp
+        · exact hro' a (List.mem_cons_of_mem _ ha) y hy hay p hp)
+      (subOutsideBlock hob'.named hob'.var hso hsf) ht' hpv' (gRLM_dead_cons hg₂)
 
 /-! ### The three transports at a context whose live slots reach no `U`
 
@@ -596,12 +909,42 @@ theorem monoOwnGMAt_uFree (p : Placement) (Γ : Ctx VTy)
   fun σ δ γ αs ls ρ C e a hσ hok hob hro hso hpush hδ hfr hro' hsf ht hpv hg =>
     monoOwnGUFreeMA p σ δ Γ γ αs ls ρ C e a hσ hU hok hob hro hso hpush hδ hfr hro' hsf ht hpv hg
 
+/-- **`MonoOwnGMAtB` at a context reaching no `U`**: `monoOwnGUFreeMA_len`. -/
+theorem monoOwnGMAtB_uFree (p : Placement) (Γ : Ctx VTy)
+    (hU : ∀ s ∈ Γ, s.live = true → UFreeM s.ty) : MonoOwnGMAtB (ℍ := ℍ) p Γ :=
+  fun _ _ _ _ _ _ _ _ _ hσ hok _ _ _ hpush _ hfr _ hsf ht hpv hg =>
+    monoOwnGUFreeMA_len p hσ hU hok.1 hpush hfr hsf ht hpv hg
+
+/-- **`MonoOwnGMBAt` at a context reaching no `U`**: `monoOwnGUFreeMB`. -/
+theorem monoOwnGMBAt_uFree (p : Placement) (Γ : Ctx VTy)
+    (hU : ∀ s ∈ Γ, s.live = true → UFreeM s.ty) : MonoOwnGMBAt (ℍ := ℍ) p Γ := by
+  intro σ δ γ αs ls ρ C τ x a hτx hσ hok _ _ _ hpush _ hfr _ hsf ht hpv hg
+  obtain ⟨_, _, _, _, _, _, _, _, hob, _⟩ := hpush
+  exact monoOwnGUFreeMB p hτx hσ hU hok.1 (fun s hs hl => (hfr s hs hl).1) hsf
+    ⟨ht, hpv, hob.placeFree, hob.below⟩ hg
+
+/-- **`CtxShadowMBAt` at a context reaching no `U`**: the stack reads the block's variable at the
+block's lifetime, so the two readings agree everywhere. -/
+theorem ctxShadowMBAt_uFree (p : Placement) (Γ : Ctx VTy)
+    (hU : ∀ s ∈ Γ, s.live = true → UFreeM s.ty) : CtxShadowMBAt (ℍ := ℍ) p Γ := by
+  intro σ δ γ αs ls ρ τ x α hτx hne _ _ hg
+  have hag : ∀ y, (extS δ (τ ++ σ) (blockL τ α ++ αs)).find? y =
+      (extS (δ.extend x α) (τ ++ σ) (blockL τ α ++ αs)).find? y := by
+    intro y
+    by_cases hxy : x = y
+    · subst hxy
+      rw [extS_blockPush_self hτx hne, extS_blockPush_self hτx hne]
+    · rw [extS_blockPush_ne hτx hxy, extS_blockPush_ne hτx hxy]
+      exact (extS_find_base (find?_extend_ne δ α hxy) σ αs).symm
+  exact gRLM_reading_uFree p hU (fun _ _ _ y _ => hag y) (fun _ _ y _ => hag y) hg
+
 /-- **`[allI]` at `binder0` at every context whose live slots reach no `U`**, at every index whose
 stack does not name the binder: `allIRowMNKAt0_of` with the three transports at such a context. -/
 theorem allIRowMNKUFree0 (Γ : Ctx VTy) (hU : ∀ s ∈ Γ, s.live = true → UFreeM s.ty) :
     AllIRowMNKAt (ℍ := ℍ) .binder0 Γ :=
-  allIRowMNKAt0_of Γ (monoOwnGMAt_uFree .binder0 Γ hU) (ctxExtendMAt_uFree .binder0 Γ hU)
-    (ctxShadowMAt_uFree .binder0 Γ hU)
+  allIRowMNKAt0_of Γ (monoOwnGMAtB_uFree .binder0 Γ hU) (monoOwnGMBAt_uFree .binder0 Γ hU)
+    (ctxExtendMAt_uFree .binder0 Γ hU) (ctxShadowMAt_uFree .binder0 Γ hU)
+    (ctxShadowMBAt_uFree .binder0 Γ hU)
 
 /-- **`[allI]` at `binder0` at the empty context**, at every index whose stack does not name the
 binder. -/
@@ -697,10 +1040,12 @@ theorem gdAllIHoldsAtMt : GdAllIConclAt (ℍ := ℍ) gdMt := by
   have hF' : σ' = gdσ ∧ αs' = gdαs := by simpa [FutQI, Placement.bindFut] using hF
   obtain ⟨rfl, rfl⟩ := hF'
   subst hE'
-  refine ⟨fun α ρ₁ ρ₂ hp hc _ _ => ?_, fun _ en α _ _ _ _ _ => ?_⟩
+  refine ⟨fun α ρ₁ ρ₂ hp hc _ _ => ?_, fun _ en α _ _ _ _ _ => ?_, fun _ τ α _ _ _ _ _ => ?_⟩
   · obtain ⟨rfl, -⟩ := hp
     rw [ResU.CompS.functional hc (ResU.comp_empty_right _)]
     exact cRLM_step .binder0 gdCyBody (fun μ => Step1N.head (Head.beta μ _ Val.unit) rfl) _ _ _ _
+      _ (gdMtS_cRLM _ _ _ _)
+  · exact cRLM_step .binder0 gdCyBody (fun μ => Step1N.head (Head.beta μ _ Val.unit) rfl) _ _ _ _
       _ (gdMtS_cRLM _ _ _ _)
   · exact cRLM_step .binder0 gdCyBody (fun μ => Step1N.head (Head.beta μ _ Val.unit) rfl) _ _ _ _
       _ (gdMtS_cRLM _ _ _ _)
