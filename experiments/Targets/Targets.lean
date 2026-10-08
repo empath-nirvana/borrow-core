@@ -68,6 +68,9 @@ import Targets.Instance.E1
 import Targets.Instance.ERuns
 import Targets.Instance.E1Runs
 import Targets.Instance.EProps
+import Targets.Instance.E6
+import Targets.Instance.E4
+import Targets.Instance.E5
 import Targets.Instance.ZeroCost
 import Targets.I.Binder
 import Targets.I.Combined

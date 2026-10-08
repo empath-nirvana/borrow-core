@@ -50,7 +50,101 @@ theorem runsTo_of_calm (R : (𝕊).Runner) {e : Expr} {v : Val} (h : Calm (ℍ :
   refine ⟨hw.trans ?_, hk.2⟩
   exact hk.1
 
+/-- **A behaviour from its complete runs**: when the complete runs from the start answer `v` and
+show `tr`, and only these, the program runs to `v` showing `tr`. -/
+theorem runsTo_of_obsFrom (R : (𝕊).Runner) {e : Expr} {v : Val} {tr : List (𝕊).Event}
+    (h : ∀ w tr', (𝕊).ObsFrom R ((𝕊).rinit R e) w tr' ↔ w.1 = v.1 ∧ tr' = tr) :
+    (𝕊).RunsTo R e (OVal.ofVal v) tr := by
+  refine ⟨(h _ _).mpr ⟨rfl, rfl⟩, fun q hq => ?_⟩
+  obtain ⟨⟨w, hw⟩, -⟩ := hq.2
+  have hk := (h w ((𝕊).obs q)).mp ⟨q, hq, hw, rfl⟩
+  exact ⟨hw.trans hk.1, hk.2⟩
+
 end Obs
+
+section IO
+variable {Ξ : EffCtx} {J : OurTyping orowRF}
+
+local notation "𝕊" => ourInst (ℍ := ℍ) orowRF Ξ J
+
+/-- **A platform operation the context does not catch, answered by the runner**: the complete runs
+of the configuration are the runner's answer, showing its event, and then the complete runs from
+the answer, at the runner's next state. -/
+theorem obsFrom_io_iff (R : (𝕊).Runner) {μ : Heap} {s s' : R.St} {K : Kont}
+    {l : (orowAlg Ξ).Lab} {i : ℕ} (hi : i < 2 ^ 32) {v : Val} {w : OVal}
+    (hcl : closedAt 0 (K.plug (performE (.val (opPayload l.1 (UInt32.ofNat i) v)))) = true)
+    (hK : K.HasHnd l.1 = false) (hans : R.answers l i)
+    (hco : R.co s l i (OVal.ofVal v) = some (w, s')) (u : OVal) (tr : List (𝕊).Event) :
+    (𝕊).ObsFrom R ((μ, K.plug (performE (.val (opPayload l.1 (UInt32.ofNat i) v)))), s) u tr ↔
+      ∃ tr', tr = .io l i (OVal.ofVal v) w :: tr' ∧ (𝕊).ObsFrom R ((μ, K.plug w.1), s') u tr' := by
+  have hpe : (𝕊).perform l i (OVal.ofVal v) = performE (.val (opPayload l.1 (UInt32.ofNat i) v)) :=
+    (perform_eq (ℍ := ℍ) (RF := orowRF) (Ξ := Ξ) (J := J) (l := l) (OVal.ofVal v) hi).trans rfl
+  have hstep : (𝕊).RStep R ((μ, K.plug (performE (.val (opPayload l.1 (UInt32.ofNat i) v)))), s)
+      (.io l i (OVal.ofVal v) w) ((μ, K.plug w.1), s') := by
+    have := A.EffectSystem.RStep.io (S := 𝕊) (R := R) (c := (μ, K.plug ((𝕊).perform l i
+      (OVal.ofVal v)))) (K := K) (l := l) (i := i) (v := OVal.ofVal v) (w := w) rfl hK hans hco
+    rw [hpe] at this
+    exact this
+  constructor
+  · rintro ⟨q, ⟨hp, hlast⟩, hv, htr⟩
+    cases hp with
+    | nil =>
+        obtain ⟨v', hv'⟩ := hlast.1
+        have hv'' : K.plug (performE (.val (opPayload l.1 (UInt32.ofNat i) v))) = v'.1 := hv'
+        have hvv : IsVal v'.1 := isVal_of_closed_oval v'.2 (hv'' ▸ hcl)
+        exact absurd hv'' (plug_perform_ne_val K _ ⟨v'.1, hvv⟩)
+    | @cons _ ev c₁ q' hst hp' =>
+        -- the configuration's only step is the runner's answer
+        have hdet : ev = .io l i (OVal.ofVal v) w ∧ c₁ = ((μ, K.plug w.1), s') := by
+          cases hst with
+          | mach h' =>
+              exact (no_ostep_op (RF := orowRF) (Ξ := Ξ) false l.1 (UInt32.ofNat i) (OVal.ofVal v)
+                (K := K) rfl (by simpa [OpFree] using hK) h').elim
+          | @io _ _ s'' K' l' i' v' w' hterm hK' hans' hco' =>
+              change K.plug (performE (.val (opPayload l.1 (UInt32.ofNat i) v))) =
+                K'.plug ((𝕊).perform l' i' v') at hterm
+              rcases perform_cases (ℍ := ℍ) (J := J) l' i' v' with ⟨hi', hp'⟩ | ⟨-, hp'⟩
+              swap
+              · rw [hterm, hp'] at hcl
+                exact absurd (hcl.symm.trans (not_closed_opJunk K' false)) (by simp)
+              rw [hp'] at hterm
+              have hv' : IsVal v'.1 := by
+                have hc := hterm ▸ hcl
+                have := closedAt_plug_inv K' hc
+                simp only [performE, opArgE, closedAt, Expr.val, Val.prim, Val.i32,
+                  Bool.true_and] at this
+                exact isVal_of_closed_oval v'.2 this
+              have e' : K'.plug (performE (opArgE (orowRF.name Ξ l') (UInt32.ofNat i') v'.1)) =
+                  K'.plug (performE (.val (opPayload l'.1 (UInt32.ofNat i') ⟨v'.1, hv'⟩))) := rfl
+              rw [e'] at hterm
+              obtain ⟨rfl, hpay⟩ := plug_perform_inj hterm
+              obtain ⟨hn, hidx, hvv⟩ := opPayload_inj hpay
+              obtain rfl : l' = l := Subtype.ext hn.symm
+              have hii : i' = i := by
+                have h1 := congrArg UInt32.toNat hidx
+                rw [UInt32.toNat_ofNat_of_lt' hi, UInt32.toNat_ofNat_of_lt' hi'] at h1
+                exact h1.symm
+              subst hii
+              have hvo : v' = OVal.ofVal v := Subtype.ext (congrArg Subtype.val hvv).symm
+              subst hvo
+              rw [hco] at hco'
+              obtain ⟨rfl, rfl⟩ := Prod.mk.inj (Option.some.inj hco')
+              exact ⟨rfl, rfl⟩
+        obtain ⟨rfl, rfl⟩ := hdet
+        refine ⟨(𝕊).obs q', ?_, q', ⟨hp', ?_⟩, ?_, rfl⟩
+        · rw [← htr]; erw [obs_cons]; rfl
+        · rw [← A.EffectSystem.lastC_cons (S := 𝕊) _ _ (.io l i (OVal.ofVal v) w)]; exact hlast
+        · rw [← A.EffectSystem.lastC_cons (S := 𝕊) _ _ (.io l i (OVal.ofVal v) w)]; exact hv
+  · rintro ⟨tr', rfl, q, ⟨hp, hlast⟩, hv, htr⟩
+    have hc := A.EffectSystem.lastC_cons (S := 𝕊)
+      ((μ, K.plug (performE (.val (opPayload l.1 (UInt32.ofNat i) v)))), s)
+      ((μ, K.plug w.1), s') (.io l i (OVal.ofVal v) w) q
+    refine ⟨(.io l i (OVal.ofVal v) w, ((μ, K.plug w.1), s')) :: q, ⟨.cons hstep hp, ?_⟩, ?_, ?_⟩
+    · exact (congrArg (fun x => (𝕊).IsVal x.1) hc).mpr hlast
+    · exact (congrArg (fun x => (𝕊).term x.1 = (𝕊).ret u) hc).mpr hv
+    · rw [← htr]; erw [obs_cons]; rfl
+
+end IO
 
 /-! ### Calls -/
 
