@@ -201,7 +201,7 @@ given.
 | `cRL`'s `∀` clause, the own lend | asks `RecsOutside (α :: αs') ls'` and `SubFresh δ α` of the pushed lend | the own lend is fresh below the records and the reading ([TR] 6.65's H4), as a real lend is |
 | `FutOK` | `FutOKI`: adds `placesFree : ∀ e ∈ τ, ∀ ψ, ¬ DeepAt ρ e.l ψ`; `FutStepI`, `FutI`, `FutQI` at it | keeps `MonoV`'s leaf case across `CohS`, and `PVLFut` |
 | `SemS`'s index | `SemSI`: adds `RecsOutside αs ls`, `SubOutside σ αs δ` and `PlaceViewsL (extS δ σ αs) σ αs ls ρ` | the records' and the readings' invariants; the guard at the judgement's resource |
-| `LendMut`, `LendImm`, `Arises` (`Arising.lean`) | `LendMutI`, `LendImmI`: add `LendFresh c.ls α`; `ArisesI` at them | the lend below the records' lifetimes ([TR] 6.64's and 6.65's H4): the source of `RecsOutside` and `RecsInsideOwn` at the arising set |
+| `LendMut`, `LendImm`, `Arises` (`Arising.lean`) | `LendMutI`, `LendImmI`: add `LendFresh c.ls α` and `α < ⊤`; `ArisesI` at them | the lend below the records' lifetimes and below `⊤` ([TR] 6.64's and 6.65's H4): the source of `RecsOutside`, `RecsInsideOwn` and `OuterBelowTop` at the arising set |
 | `cbpv`/`binder`'s `RelendU` | unchanged in this unit; `RelendUI` in the next (§5.6) | keeps their proved facts while `binder0` is retried |
 
 None of these is a printed definition, and none is in `Core/`. In Lean each revised definition is
@@ -789,8 +789,10 @@ def RecsInsideOwn (σ : LStack) (αs : List Life) (ls : List SRec) : Prop :=
 def LendFresh (ls : List SRec) (α : Life) : Prop :=
   ∀ x ∈ ls, α < x.2 ∧ ∀ p ∈ x.1.δ.entries, α < OrderDual.toDual p.2
 
-def LendMutI (c c' : Cfg) (e : LEnt) : Prop := LendMut c c' e ∧ ∀ α ∈ c'.αs.head?, LendFresh c.ls α
-def LendImmI (c c' : Cfg) (e : LEnt) : Prop := LendImm c c' e ∧ ∀ α ∈ c'.αs.head?, LendFresh c.ls α
+def LendMutI (c c' : Cfg) (e : LEnt) : Prop :=
+  LendMut c c' e ∧ (∀ α ∈ c'.αs.head?, LendFresh c.ls α) ∧ ∀ α ∈ c'.αs.head?, α < ⊤
+def LendImmI (c c' : Cfg) (e : LEnt) : Prop :=
+  LendImm c c' e ∧ (∀ α ∈ c'.αs.head?, LendFresh c.ls α) ∧ ∀ α ∈ c'.αs.head?, α < ⊤
 -- `ArisesI`, `ArisesVI`, `ArisesCtxI`: `Arises`, `ArisesV`, `ArisesCtx` with their lends at these
 
 def RecsOutsideArises : Prop := ∀ c : Cfg, ArisesI c → RecsOutside c.αs c.ls
@@ -855,7 +857,9 @@ def RecsOutsideInst : Prop :=
     records are those the stack's own 6.64 lends made (`RecsInsideOwn`).
   - Runs keep the list's members.
   - `RecsOutsideArises` and `RecsInsideOwnArises` are read at the revised arising set `ArisesI`, whose
-    `LendMutI` and `LendImmI` carry `LendFresh` (§1.4). At the current `LendMut`, which puts the lend
+    `LendMutI` and `LendImmI` carry `LendFresh` (§1.4). They also carry H4's other consequence, the
+    lend strictly below a lifetime and so below `⊤`, from which every `ArisesI` configuration has its
+    outermost lend below `⊤` (`outerBelowTopArises`, `R1MONO.md` §3.1). At the current `LendMut`, which puts the lend
     below the callback's resource only, an `Arises.nil` record reading a short lifetime can sit below
     a later, longer lend. `RecsOutside` at that configuration is not expected to hold, and the
     revision is what excludes it. A configuration carries no reading substitution, so `SubOutside`
@@ -1456,7 +1460,7 @@ def SemSI (p : Placement) (Δ : LifeCtx) (Γ : Ctx VTy) (e : Expr) (j : Jdg) : P
 
 The block stays one `mutual` definition, structural on the type, and elaborates. The two new leaf
 cases come before the default. `OwnOKI`, `OwnPushI` and `FutOKI` are as in §2.1; `LendMutI` and
-`LendImmI` add `LendFresh c.ls α` at the pushed lifetime. The stop's share (`F_Σ`) is W₀'s; statement
+`LendImmI` add `LendFresh c.ls α` and `α < ⊤` at the pushed lifetime. The stop's share (`F_Σ`) is W₀'s; statement
 2 restates it (§3.7). When the revision lands, the `I` definitions replace W₀'s, and `DeepAt`, `ExAt`,
 `guardPV`, `PlaceViewsL`, `CohS`, `vwSL`, `RecsOutside`, `SubOutside`, `SubFresh`, `KeepsS` and
 `RelendI` move from `Binder.lean` to `World.lean` and `Relation.lean`, and `LendFresh` to

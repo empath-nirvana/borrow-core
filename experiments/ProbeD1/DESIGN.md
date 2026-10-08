@@ -2186,6 +2186,60 @@ every type, and the position-`∀` the task gave as the direction. Its build is
 - **What it decides**: the thaw's only guarantee gap is R1. OQ-8 is not decided. No failure of type
   (a), (b) or (d) occurred, and the fallback is not triggered.
 
+### 15.9 R1 and `binder0`'s monotonicity, built (`R1MONO.md` §8)
+
+The unit after the gap unit (`R1MONO.md`) took the four things §15.8 left at `binder0`:
+- R1;
+- `binder0`'s own monotonicity;
+- the revision's three obligations;
+- statement 0 at the revised relation.
+
+Its build is `R1{Thaw,Mono,Owed,Stmt0,AllI}.lean`, and `R1MONO.md` §8 is the full outcome. The one
+draft relation is `vRLM`: `vRLJ` with Core's `tvar`, `μ` and `fam` clauses read at W's formers.
+`LendMutI` and `LendImmI` carry H4's consequence `α < ⊤`. In brief:
+
+- **R1 is closed at `binder0`** (`statement0UFullM`). The thaw holds at every type
+  (`relendMValueE`), at `μ` by the fixed point's own induction with no step index, and with it the
+  four `U` introductions at every context. Where no `μ`, `fam` or type variable occurs outside a
+  borrow payload, `vRLM` is `vRLJ` (`relMAgreesJ`). `GAP.md`'s adjacency closure at a `μ` slot is no
+  `vRLM` value (`muAdjNotVRLM`).
+- **Monotonicity.**
+  - The record half is proved (`monoExtM0`).
+  - The own push is proved at contexts reaching no `U`, with the pushed variable free in the
+    entries' payload types (`StackPayAvoids`, which every `SemSM` index gives; `monoOwnGUFreeMA`).
+  - The unrestricted `MonoOwnGM`, `MonoGM` and `MonoVM` at `binder0` are refuted at `gd`
+    (`notMonoOwnGM0`, `notMonoGM0`, `notMonoVM0`). In `gd`, a closure's `U` clause rests on the
+    guard's box at `↓head`, and the push breaks the box. `gd` is not shown to arise, and two facts
+    count against it: its closure is no Core value (`gdNotCore`), and its index fails the record
+    invariant (`gdNotRecsInsideOwn`). These are facts about our statements.
+- **The consumer.**
+  - `MonoOwnGM`'s only consumer at `binder0` is the `∀I` row (`AllIRowM`). It is proved at every
+    context whose live slots reach no `U`, at every index whose stack does not name the binder
+    (`allIRowMNKUFree0`).
+  - The row reads three transports of its context, not one: across the push, to the reading
+    extended at the binder, and to the pushed variable's reading (`allIRowMNKAt0_of`). All three
+    hold at contexts reaching no `U` (`vRLM_reading_uFree`).
+  - Open: a live `U` slot, and an index whose stack's innermost entry is named by the binder
+    (`not_subOutsideExtendAny`).
+  - The restricted route: `gd` is outside it (`gdCtxNotCore`), the restriction is met
+    (`gdRestrictedMet`), and it is proved at contexts reaching no `U` (`monoOwnGMCUFreeA`). Its step
+    at a `U` slot was not attempted in Lean.
+- **The obligations.**
+  - `OuterBelowTop`: proved at every lend and at the arising set (`outerBelowTopArises`).
+  - `RetainedPay`: proved at the view, the transports, `∀E` with no join and a retained `Mut`
+    read-out. At a bound `Mut` read-out it stops where expected, at `EntryPayLeaves`
+    (`retainedPayLoadMutRowNJ_of_entry`). `RetainedPayLoadImmRow` was not attempted.
+  - `KeepsT` at the share: proved from `LineageUnique` (`shareKeepsT_of`), which is not derived.
+- **Statement 0 at `binder0`.**
+  - Every fact beside monotonicity is proved (`statement0MBesideMono0`).
+  - Read at its consumers, statement 0 is exactly the `∀I` row (`statement0MAtConsumers0_iff`).
+  - The bundle as stated is refuted with the unrestricted monotonicity statements it carries
+    (`not_statement0M_binder0`). This is not `binder0`'s status.
+- **What it decides.** R1 is closed at `binder0`, and statement 0 there reduces to the `∀I` row at
+  a live `U` slot and at indices whose stack names the binder. OQ-8 is not decided: no refutation
+  passed §11, and `cbpv` and `binder` were not redone at `vRLM`. No failure of type (a), (b) or (d)
+  occurred, and the fallback is not triggered.
+
 ---
 
 ## Unresolved: the reviews' findings, answered and not reviewed again
@@ -2214,6 +2268,10 @@ gives the finding, where the current text answers it, and what stays open.
      `δ.find? e.x = none` added (§14).
    - Open: `MonoOwnG binder0`; the change's cost at the rows that call their premise at a future
      (§15.3).
+   - Since (`R1MONO.md` §8): at `vRLM`, `MonoOwnGM binder0` is refuted at a configuration not shown
+     to arise (`notMonoOwnGM0`). Its consumer, the `∀I` row, is proved at every context reaching no
+     `U`, at every index whose stack does not name the binder (`allIRowMNKUFree0`). Open: the row
+     at a live `U` slot, and at an index whose stack names the binder.
 3. **Major: W chosen as the least-rank placement among those proved, so a lower-rank placement only
    "not derived" could decide OQ-8** (§3, §4.4, §12.1; `Programs.lean:80`).
    - Answered: OQ-8 is decided against a placement only by a refutation that passes §11; otherwise
@@ -2254,3 +2312,5 @@ gives the finding, where the current text answers it, and what stays open.
      `CtxThawFree` context (`ctxRelendsThawFreeJ`). Open: the thaw at a `μ` or `fam` slot.
    - Since (`GAP.md` §8): the thaw holds at every `CtxThawFreeK` context, every payload type
      admitted (`ctxRelendsThawFreeKJ`). Open: the thaw at a `μ` or `fam` slot.
+   - Since (`R1MONO.md` §8): the thaw holds at every context at `vRLM`, which reads `μ` and `fam`
+     itself (`ctxRelendsAllM`).

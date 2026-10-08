@@ -23,6 +23,8 @@ This is a plain-language summary of where the D1 tractability probe stands. The 
 > statement-0 unit's minor wording findings are still open: the "only with" claim in DESIGN §2.2, the
 > unmarked prose reasons in DESIGN §15.2 and the README, `MonoHide binder0`'s status, and the
 > README's "no way to reach a stack" sentence. They are listed under option 1 below.
+>
+> The R1 unit (`R1MONO.md` §8) is built and has not yet been through the verifiers.
 
 ## The question
 
@@ -259,27 +261,80 @@ does see gaps, so it is not invariant under every order embedding, and nothing h
 types. The thaw's only guarantee gap is R1. OQ-8 is still undecided, no machine-checked failure
 occurred, and the fallback is not triggered.
 
+## R1 and `binder0`'s monotonicity (`R1MONO.md`)
+
+This unit took the four things the gap unit left at `binder0`:
+- R1, the thaw at `μ` and `fam` slots;
+- `binder0`'s own monotonicity;
+- the three obligations the revised relation took;
+- statement 0 at the revised relation.
+
+The design is `R1MONO.md`, and its §8 has the outcome in full. Nothing in `Core/` or in a printed
+definition changed. The draft relation is now `vRLM`, which reads `μ`, `fam` and type variables
+itself instead of handing them to Core.
+
+**R1 is closed.** Core's relation reads a thunk inside a `μ` value with its own `U` and `ℕ`-`∀`,
+which notice adjacency. Once W reads `μ` itself, the thunk is read by W's `U` clause. The thaw then
+holds at every type, by induction on the data with no step index (`relendMValueE`), and with it the
+four `U` introductions at every context (`statement0UFullM`). The adjacency closure that Core's `μ`
+admits is not in `vRLM` (`muAdjNotVRLM`).
+
+**Monotonicity: the lemma as stated fails, the row it was for mostly holds.**
+- The configuration `gd` is a closure `λg. return g` that is a value at the stack only because the
+  stack's guard keeps every argument above a lifetime `'1`. When the own lend pushes a new entry,
+  an argument holding the new view breaks that, and the closure is no longer a value (`gdNotPushed`).
+- So the unrestricted statements `MonoOwnGM`, `MonoGM` and `MonoVM` are refuted at `binder0`
+  (`notMonoOwnGM0`). `gd` is not shown to arise, and two facts count against it: its closure is
+  not a Core value, and its records fail an invariant the arising set is expected to keep
+  (`RecsInsideOwn`, not proved for it). These are facts about our statements.
+- The lemma's one consumer is the `∀I` row. **The row is proved at every context whose live
+  variables reach no `U`**, at every index whose stack does not name the binder
+  (`allIRowMNKUFree0`). On the way, the row turned out to need two more transports of its context
+  beside the push, both about the reading of lifetime variables. Both hold where no `U` is reached
+  (`vRLM_reading_uFree`).
+- Still open: the row at a context holding a `U` value, and at an index whose innermost lend is
+  named by the binder.
+
+**The three obligations.**
+- Lends below `⊤`: proved everywhere, including the arising set (`outerBelowTopArises`).
+- The payload condition (`RetainedPay`): proved at the lend's view, the transports and `∀E` with no
+  join. At the `Mut` read-out through a bound view it stops where the design expected, at
+  `EntryPayLeaves`: the condition for the lending entry's own payload type, which the index does not
+  carry. The `Imm` read-out was not attempted.
+- The tags at the share (`KeepsT`): proved from `LineageUnique` (a record lies in one frame's
+  lineage), which is not derived.
+
+**Statement 0 at `binder0`.** Every fact beside monotonicity is proved
+(`statement0MBesideMono0`). Read at the rows that consume it, statement 0 is exactly the `∀I` row
+(`statement0MAtConsumers0_iff`). That row is now proved except at `U` slots and at the binder-named
+indices.
+
+**What it decides.** R1 is closed at `binder0`, and statement 0 there is down to the `∀I` row's two
+open cases. OQ-8 is still undecided, because no refutation passed the arising check and `cbpv` and
+`binder` were not redone at `vRLM`. No machine-checked failure of type (a), (b) or (d) occurred,
+and the fallback is not triggered.
+
 ## What remains for tier 2
 
 Tier 2 needs `Statement0 p` at some placement, then statements 1–4 and both programs. At `binder0`,
 the placement with the most proved, the remaining work is:
-- **R1, the thaw at a `μ` or `fam` slot.** This is the last gap in the thaw. Core's relation reads a
-  `μ` slot's thunks with Core's own `U` clause and ℕ-`∀`, which is where adjacency bites
-  (`NotMuSlotThawCore`; stated, not attempted). The route is for W to read `μ` and `fam` itself, so
-  that a thunk inside is read by W's `U` clause. It needs its own unit.
-- **`binder0`'s own monotonicity** (`MonoV`, `MonoG`, `MonoOwnG`). Not derived since statement 0.
-  Without it `Statement0 binder0` is not proved even with R1 closed. The design expected
-  `binder0` to stop here.
-- **The three owed obligations.** The revised relation `vRLJ` took three hypotheses, and every
-  other row has to give them:
-  - `RetainedPay`: every row that makes a `Mut` or `Imm` value must give the payload condition.
-    Whether `mut_not_natural`'s cell can arise (`InternalPayloadArises`) decides whether this is a
-    real restriction;
-  - `KeepsT`: the share at a resume must keep the records' tags;
-  - `OuterBelowTop`: every lend must open below `⊤`. `ViewSlotInst` without it is also not derived.
-- **OQ-8, where the future-world quantifier goes.** Still undecided. `binder0` stops at its
-  monotonicity, and `cbpv` and `binder` still owe their `U` rows with futures (`BINDER.md` §5.6) and
-  the names the changed `FutStep` admits.
+- **The `∀I` row at a context holding a `U` value.** This is the last open piece of statement 0
+  at `binder0` (`statement0MAtConsumers0_iff`). The row needs its context carried across the own
+  lend's push, and to two extended readings (`MonoOwnGMAt`, `CtxExtendMAt`, `CtxShadowMAt`). The
+  unrestricted push is refuted at `gd`, a configuration not shown to arise. A restriction to
+  contexts that are also Core values excludes `gd`. Its step at a `U` slot was not attempted, and
+  reading the clause suggests it meets Core's relation at an instantiated reading [unchecked].
+- **The `∀I` row at an index whose innermost lend is named by the binder.** The premise's
+  `SubOutside` at the extended reading is not given there.
+- **The obligations' leftovers.**
+  - `RetainedPay`: `EntryPayLeaves` at a bound `Mut` view (or the variant leaf, which changes W's
+    views, the user's to decide), the `Imm` read-out, joins, and the slice rows' missing
+    range-lending entry.
+  - `KeepsT`: `LineageUnique`, and `FramesKept` from statement 2.
+  - `ViewSlotInst` without `OuterBelowTop`.
+- **OQ-8, where the future-world quantifier goes.** Still undecided. `cbpv` and `binder` have not
+  been redone at `vRLM` and still owe their `U` rows with futures (`BINDER.md` §5.6), and the names
+  the changed `FutStep` admits.
 
 ## What to do next (options, not a decision)
 
@@ -287,14 +342,16 @@ the placement with the most proved, the remaining work is:
    note at the top). This is needed under every option.
 2. **Continue D1.** The freeze-binder unit did the first two steps at `binder0`: PlaceViews is in
    the guard and the own lend, and the re-lend is an instantiation that lowers the stack's variables
-   together. The gap unit removed the payload restriction. What is left:
-   - whether a retained cell with `mut_not_natural`'s shape arises (`InternalPayloadArises`), which
-     decides whether `RetainedPay` is a real restriction;
-   - R1: the thaw at `μ` and `fam` slots, by W reading `μ` and `fam` itself (`GAP.md` §6.5);
-   - `binder0`'s own monotonicity (`MonoV`, `MonoG`, `MonoOwnG`);
-   - the revised relation's obligations at the other rows (the payload condition, the tags at the
-     share, lends below `⊤`), and statement 0's other facts redone at it;
-   - `cbpv`'s and `binder`'s `U` rows with futures (`BINDER.md` §5.6);
+   together. The gap unit removed the payload restriction. The R1 unit closed R1, proved statement
+   0's other facts at `vRLM`, and reduced statement 0 at `binder0` to the `∀I` row. What is left:
+   - the `∀I` row at a context holding a `U` value: the three transports of its context at a `U`
+     slot, through the restriction to Core values or another route (`R1MONO.md` §8.2);
+   - the `∀I` row at an index whose innermost lend is named by the binder;
+   - whether a retained cell with `mut_not_natural`'s shape arises (`InternalPayloadArises`,
+     `InternalLeafArises`), which decides whether `RetainedPay` is a real restriction, and
+     `EntryPayLeaves` at the `Mut` read-out;
+   - `LineageUnique`, which the tags at the share rest on;
+   - `cbpv`'s and `binder`'s `U` rows with futures (`BINDER.md` §5.6), redone at `vRLM`;
    - the names the changed `FutStep` gives, through a `StackJ` with a hygiene the rows can
      discharge, or through the renaming lemma.
 

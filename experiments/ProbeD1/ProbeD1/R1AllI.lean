@@ -5,27 +5,29 @@ import ProbeD1.R1Stmt0
 
 `AllIRowMOfMonoOwnGM` (`R1.lean`) plans the row from `MonoOwnGM` alone. Carrying the premise to the
 two places the `∀` clause asks it shows two more facts the row reads, each about the context's
-reading:
+reading, and one class of index where its first conjunct does not reach the premise:
 
 * **The first conjunct reads the premise at the reading extended at the binder** (`δ.extend x α`),
-  so the context must move there (`CtxExtendM`). `vRLM` reads the reading as a whole at one
-  place: the `∀` clause's own lend is fresh below every value of the reading (`SubFresh δ α`,
-  `BinderJ.lean`'s own-lend conjunct), so a binding new to the stack strengthens that hypothesis,
-  and a `U` slot whose argument type holds a `∀` is read at the extended reading over more
-  arguments. Not derived; no obstruction verified.
+  so the context must move there (`CtxExtendMAt`). At a `U` slot `vRLM` reads the reading as a
+  whole: the `∀` clause's own lend is fresh below every value of the reading (`SubFresh δ α`), so
+  a binding new to the stack strengthens that hypothesis, and a `U` slot whose argument type holds
+  a `∀` is read at the extended reading over more arguments. Not derived at a `U` slot; no
+  obstruction verified.
 * **The own-lend conjunct reads it at the pushed stack and the reading extended at the pushed
-  variable** (`δ.extend x α` with `x` the pushed entry's), so after `MonoOwnGM` the context must
-  move to that reading, which the stack shadows at `x` (`CtxShadowM`). Not derived; no obstruction
+  variable**, so after the push (`MonoOwnGMAt`) the context must move to that reading, which the
+  stack shadows at the pushed variable (`CtxShadowMAt`). Not derived at a `U` slot; no obstruction
   verified.
 * **At an index whose stack holds an entry named by the binder** (`StackJ`'s third kind) the first
   conjunct's premise needs `SubOutside` at the extended reading, which `subOutsideExtend` gives
   only for a binder new to the stack, and which fails in general (`not_subOutsideExtendAny`).
 
-`allIRowMNK0_of` proves the row at `binder0` from `MonoOwnGM`, `CtxExtendM` and `CtxShadowM`, at
-every index whose stack does not name the binder (`AllIRowMNK`). Its proof is the row's: the
-premise at the two places, every index fact carried (`StackJ` to the extended `Δ`, the models,
-`SubOutside` by `subOutsideExtend` and `subOutsidePush`), and the β step in front of every
-computation type (`cRLM_step`).
+`allIRowMNKAt0_of` proves the row at `binder0` at one context from the three transports at that
+context, at every index whose stack does not name the binder (`AllIRowMNKAt`): the premise at the
+two places, every index fact carried (`StackJ` to the extended `Δ`, the models, `SubOutside` by
+`subOutsideExtend` and `subOutsidePush`), and the β step in front of every computation type
+(`cRLM_step`). At a context whose live slots reach no `U` the three transports hold
+(`monoOwnGMAt_uFree`, `ctxExtendMAt_uFree`, `ctxShadowMAt_uFree`), so the row holds there
+(`allIRowMNKUFree0`), the empty context among them (`allIRowMNKNil0`).
 -/
 
 noncomputable section
@@ -41,23 +43,41 @@ open BoCa.BoLo (Step1N Head Heap Kont)
 
 /-! ### The statements -/
 
+/-- **`MonoOwnGM` at one context**, the pushed variable read in no entry's payload type
+(`StackPayAvoids`; the row has it at every index it reads, `stackPayAvoids_of_stackJ`). -/
+def MonoOwnGMAt (p : Placement) (Γ : Ctx VTy) : Prop :=
+  ∀ (σ : LStack) (δ : LSub) (γ : List Val) (αs : List Life) (ls : List SRec) (ρ : WRes)
+    (C : CTy) (e : LEnt) (a : Life),
+    StackPayAvoids e.x σ →
+    StackOK σ αs → OuterBelowTop αs → RecsOutside αs ls → SubOutside σ αs δ →
+    OwnPushI δ C ρ (σ, αs) e a → δ.find? e.x = none → CtxFresh e.x Γ →
+    RecsOutside (a :: αs) ls → SubFresh δ a →
+    TabAtS σ αs ρ → PlaceViewsL (extS δ σ αs) σ αs ls ρ →
+    gRLM (ℍ := ℍ) p σ δ αs ls Γ γ ρ → gRLM (ℍ := ℍ) p (e :: σ) δ (a :: αs) ls Γ γ ρ
+
 /-- **The context at the reading extended at a variable new to the stack and the reading**, free
 and bound in no live slot, read in no entry's payload type. -/
-def CtxExtendM (p : Placement) : Prop :=
-  ∀ (σ : LStack) (δ : LSub) (Γ : Ctx VTy) (γ : List Val) (αs : List Life) (ls : List SRec)
-    (ρ : WRes) (x : LifeVar) (α : Life),
+def CtxExtendMAt (p : Placement) (Γ : Ctx VTy) : Prop :=
+  ∀ (σ : LStack) (δ : LSub) (γ : List Val) (αs : List Life) (ls : List SRec) (ρ : WRes)
+    (x : LifeVar) (α : Life),
     x ∉ σ.map LEnt.x → δ.find? x = none → StackPayAvoids x σ →
     (∀ s ∈ Γ, s.live = true → ¬ VFree x s.ty ∧ x ∉ VTy.binders s.ty) →
     gRLM (ℍ := ℍ) p σ δ αs ls Γ γ ρ → gRLM (ℍ := ℍ) p σ (δ.extend x α) αs ls Γ γ ρ
 
+/-- `CtxExtendMAt` at every context. -/
+def CtxExtendM (p : Placement) : Prop := ∀ Γ, CtxExtendMAt (ℍ := ℍ) p Γ
+
 /-- **The context after the own lend's push, at the reading extended at the pushed variable at the
 pushed lifetime**: the stack reads the variable at that lifetime already. -/
-def CtxShadowM (p : Placement) : Prop :=
-  ∀ (σ : LStack) (δ : LSub) (Γ : Ctx VTy) (γ : List Val) (αs : List Life) (ls : List SRec)
-    (ρ : WRes) (e : LEnt) (α : Life),
+def CtxShadowMAt (p : Placement) (Γ : Ctx VTy) : Prop :=
+  ∀ (σ : LStack) (δ : LSub) (γ : List Val) (αs : List Life) (ls : List SRec) (ρ : WRes)
+    (e : LEnt) (α : Life),
     δ.find? e.x = none → (∀ s ∈ Γ, s.live = true → ¬ VFree e.x s.ty ∧ e.x ∉ VTy.binders s.ty) →
     gRLM (ℍ := ℍ) p (e :: σ) δ (α :: αs) ls Γ γ ρ →
       gRLM (ℍ := ℍ) p (e :: σ) (δ.extend e.x α) (α :: αs) ls Γ γ ρ
+
+/-- `CtxShadowMAt` at every context. -/
+def CtxShadowM (p : Placement) : Prop := ∀ Γ, CtxShadowMAt (ℍ := ℍ) p Γ
 
 /-- `SemSM` at the indices whose stack does not name the variable `x`. -/
 def SemSMNK (p : Placement) (Δ : LifeCtx) (Γ : Ctx VTy) (e : Expr) (j : Jdg) (x : LifeVar) :
@@ -70,14 +90,18 @@ def SemSMNK (p : Placement) (Δ : LifeCtx) (Γ : Ctx VTy) (e : Expr) (j : Jdg) (
     PlaceViewsL (extS δ σ αs) σ αs ls ρ → gRLM (ℍ := ℍ) p σ δ αs ls Γ γ ρ →
     cRLM (ℍ := ℍ) p σ δ (jdgCty j) αs ls (substAll γ e) ρ
 
-/-- **`[allI]` at `SemSM`, its conclusion at the indices whose stack does not name the binder.** -/
-def AllIRowMNK (p : Placement) : Prop :=
-  ∀ (Δ : LifeCtx) (Γ : Ctx VTy) (x : LifeVar) (b : Lifetime.Life) (M : Expr) (S : VTy) (C : CTy),
+/-- **`[allI]` at `SemSM` at one context, its conclusion at the indices whose stack does not name
+the binder.** -/
+def AllIRowMNKAt (p : Placement) (Γ : Ctx VTy) : Prop :=
+  ∀ (Δ : LifeCtx) (x : LifeVar) (b : Lifetime.Life) (M : Expr) (S : VTy) (C : CTy),
     b.mentions x = false → (∀ y u, Δ.find? y = some u → u.mentions x = false) →
     (∀ s ∈ Γ, s.live = true → ¬ VFree x s.ty) → Δ.find? x = none →
     (∀ s ∈ Γ, s.live = true → x ∉ VTy.binders s.ty) →
     SemSM (ℍ := ℍ) p (Δ.extend x b) (⟨S, false⟩ :: Γ) M (.comp C) →
     SemSMNK (ℍ := ℍ) p Δ Γ (.val (.lam M)) (.comp (.all x b C)) x
+
+/-- `AllIRowMNKAt` at every context. -/
+def AllIRowMNK (p : Placement) : Prop := ∀ Γ, AllIRowMNKAt (ℍ := ℍ) p Γ
 
 /-- **`SubOutside` along a binding is not kept in general**: an entry named by the bound variable
 has every binding of the old reading before it. Only for a variable new to the stack
@@ -281,18 +305,19 @@ theorem models_allPush {Δ : LifeCtx} {δ : LSub} {σ : LStack} {αs : List Life
     exact ⟨m, n, by rw [hagree y hyx]; exact hm, by rw [hint u (hΔx y u hy)]; exact hn, hl⟩
 
 
-/-! ### The row at `binder0`, from the three transports -/
+/-! ### The row at `binder0` at one context, from the three transports -/
 
-/-- **`[allI]` at `binder0`, at every index whose stack does not name the binder, from
-`MonoOwnGM`, `CtxExtendM` and `CtxShadowM`**: the `∀` clause's first conjunct by the premise at
-the reading extended at the binder, the context moved there by `CtxExtendM`; its own-lend
+/-- **`[allI]` at `binder0` at one context, at every index whose stack does not name the binder,
+from the three transports at that context**: the `∀` clause's first conjunct by the premise at
+the reading extended at the binder, the context moved there by `CtxExtendMAt`; its own-lend
 conjunct by the premise at the pushed stack and the reading extended at the pushed variable, the
-context carried across the push by `MonoOwnGM` and to that reading by `CtxShadowM`; the index's
-facts by `stackJ_allExtend`, `stackJ_allPush`, `models_allExtend`, `models_allPush`,
+context carried across the push by `MonoOwnGMAt` and to that reading by `CtxShadowMAt`; the
+index's facts by `stackJ_allExtend`, `stackJ_allPush`, `models_allExtend`, `models_allPush`,
 `subOutsideExtend`, `subOutsidePush`, `outerBelowTopPush`; the β step by `cRLM_step`. -/
-theorem allIRowMNK0_of (hMono : MonoOwnGM (ℍ := ℍ) .binder0) (hExt : CtxExtendM (ℍ := ℍ) .binder0)
-    (hSh : CtxShadowM (ℍ := ℍ) .binder0) : AllIRowMNK (ℍ := ℍ) .binder0 := by
-  intro Δ Γ x b M S C hbx hΔx hΓx hΔ hΓb hM hBL hSc δ σ αs ls γ ρ hxσ hok hob hJ hSD hMod hro hso
+theorem allIRowMNKAt0_of (Γ : Ctx VTy) (hMono : MonoOwnGMAt (ℍ := ℍ) .binder0 Γ)
+    (hExt : CtxExtendMAt (ℍ := ℍ) .binder0 Γ) (hSh : CtxShadowMAt (ℍ := ℍ) .binder0 Γ) :
+    AllIRowMNKAt (ℍ := ℍ) .binder0 Γ := by
+  intro Δ x b M S C hbx hΔx hΓx hΔ hΓb hM hBL hSc δ σ αs ls γ ρ hxσ hok hob hJ hSD hMod hro hso
     ht hpv hg
   have hδx : δ.find? x = none := by
     cases h : δ.find? x with
@@ -321,7 +346,7 @@ theorem allIRowMNK0_of (hMono : MonoOwnGM (ℍ := ℍ) .binder0) (hExt : CtxExte
     exact hM hBL' hSc' (δ.extend x α) σ' αs' ls' (Val.unit :: γ) ρ hok hob
       (stackJ_allExtend hJ hxσ) (subDom_extend hSD x α b)
       (models_allExtend hMod hxσ hbx hΔx hlt) hro (subOutsideExtend σ' αs' δ x α hxσ hso) ht'
-      hpv' (gRLM_dead_cons (hExt σ' δ Γ γ αs' ls' ρ x α hxσ hδx hσx hslots hg))
+      hpv' (gRLM_dead_cons (hExt σ' δ γ αs' ls' ρ x α hxσ hδx hσx hslots hg))
   · -- the own-lend conjunct: the premise at the pushed stack
     obtain ⟨x', c', C', hall, hex, hbind, hoi, hlt, hview⟩ := hpush
     obtain ⟨rfl, rfl, rfl⟩ : x = x' ∧ b = c' ∧ C = C' := by simpa using hall
@@ -329,9 +354,10 @@ theorem allIRowMNK0_of (hMono : MonoOwnGM (ℍ := ℍ) .binder0) (hExt : CtxExte
       ⟨x, b, C, rfl, hex, hbind, hoi, hlt, hview⟩
     have hδen : δ.find? en.x = none := by rw [hex]; exact hδx
     have hfr : CtxFresh en.x Γ := fun s hs hl => by rw [hex]; exact hslots s hs hl
-    have hg₁ := hMono σ' δ Γ γ αs' ls' ρ (.all x b C) en α hok hob hro hso hpush hδen hfr hro' hsf
-      ht hpv hg
-    have hg₂ := hSh σ' δ Γ γ αs' ls' ρ en α hδen (fun s hs hl => hfr s hs hl) hg₁
+    have hσen : StackPayAvoids en.x σ' := by rw [hex]; exact hσx
+    have hg₁ := hMono σ' δ γ αs' ls' ρ (.all x b C) en α hσen hok hob hro hso hpush hδen hfr hro'
+      hsf ht hpv hg
+    have hg₂ := hSh σ' δ γ αs' ls' ρ en α hδen (fun s hs hl => hfr s hs hl) hg₁
     rw [hex] at hg₂
     refine cRLM_step .binder0 C (fun μ => Step1N.head (Head.beta μ _ Val.unit) rfl) (en :: σ')
       (δ.extend x α) (α :: αs') ls' ρ ?_
@@ -343,6 +369,216 @@ theorem allIRowMNK0_of (hMono : MonoOwnGM (ℍ := ℍ) .binder0) (hExt : CtxExte
       (subDom_extend hSD x α b) (models_allPush hMod hex hbx hΔx hlt) hro'
       (by rw [← hex]; exact subOutsidePush σ' αs' δ en α hoi.var hso hsf) ht' hpv'
       (gRLM_dead_cons hg₂)
+
+/-! ### The three transports at a context whose live slots reach no `U`
+
+At such a context `vRLM` reads the reading only through the stack's (`extS`), and there only at
+the free variables of the slot's type, of the environment's types and of the entries' payload
+types: Core's leaf by `vC_congr`, `CohS`'s `TyEq` by `TyEq.of_agree`, `RetainedPay` and a box's
+bound at their variables. `MonoOwnGM` itself is refuted at `binder0` (`notMonoOwnGM0`), at a `U`
+slot; at a context reaching no `U` the push is `monoOwnGUFreeMA`. -/
+
+/-- **A value reaching no `U` at two readings that agree wherever it, the environment's types or
+the entries' payload types read.** -/
+theorem vRLM_reading_uFree (p : Placement) : ∀ (A : VTy) (η : Option (Nat → WEnt))
+    (σ : LStack) (δ₁ δ₂ : LSub) (αs : List Life) (ls : List SRec) (v : Val) (ρ : WRes),
+    UFreeM A →
+    (∀ y, (VFree y A ∨ ∃ n, VFree y (wEnv η n).ty) →
+      (extS δ₁ σ αs).find? y = (extS δ₂ σ αs).find? y) →
+    (∀ e ∈ σ, ∀ y, VFree y e.T → (extS δ₁ σ αs).find? y = (extS δ₂ σ αs).find? y) →
+    vRLM (ℍ := ℍ) p η σ δ₁ A αs ls v ρ → vRLM (ℍ := ℍ) p η σ δ₂ A αs ls v ρ := by
+  intro A
+  induction A using VTy.recV with
+  | thunk C => intro _ _ _ _ _ _ _ _ hu; exact hu.elim
+  | tensor A B ihA ihB =>
+      intro η σ δ₁ δ₂ αs ls v ρ hu hag hagE h
+      obtain ⟨v₁, v₂, hsep⟩ := h
+      obtain ⟨rfl, ρ₁, ρ₂, hc, h₁, h₂⟩ := pure_sep_iff.mp hsep
+      exact ⟨v₁, v₂, pure_sep_mk rfl ⟨ρ₁, ρ₂, hc,
+        ihA η σ δ₁ δ₂ αs ls v₁ ρ₁ hu.1
+          (fun y hy => hag y (hy.imp (fun h' => Or.inl h') id)) hagE h₁,
+        ihB η σ δ₁ δ₂ αs ls v₂ ρ₂ hu.2
+          (fun y hy => hag y (hy.imp (fun h' => Or.inr h') id)) hagE h₂⟩⟩
+  | sum A B ihA ihB =>
+      intro η σ δ₁ δ₂ αs ls v ρ hu hag hagE h
+      rcases h with ⟨v₁, hsep⟩ | ⟨v₂, hsep⟩
+      · obtain ⟨rfl, h₁⟩ := pure_sep_iff.mp hsep
+        exact Or.inl ⟨v₁, pure_sep_mk rfl (ihA η σ δ₁ δ₂ αs ls v₁ ρ hu.1
+          (fun y hy => hag y (hy.imp (fun h' => Or.inl h') id)) hagE h₁)⟩
+      · obtain ⟨rfl, h₂⟩ := pure_sep_iff.mp hsep
+        exact Or.inr ⟨v₂, pure_sep_mk rfl (ihB η σ δ₁ δ₂ αs ls v₂ ρ hu.2
+          (fun y hy => hag y (hy.imp (fun h' => Or.inr h') id)) hagE h₂)⟩
+  | bang A ih =>
+      intro η σ δ₁ δ₂ αs ls v ρ hu hag hagE h
+      exact ⟨h.1, ih η σ δ₁ δ₂ αs ls v ρ hu hag hagE h.2⟩
+  | box b A ih =>
+      intro η σ δ₁ δ₂ αs ls v ρ hu hag hagE h
+      obtain ⟨α, hα, hv, hout⟩ := h
+      refine ⟨α, ?_, ih η σ δ₁ δ₂ αs ls v ρ hu
+        (fun y hy => hag y (hy.imp (fun h' => Or.inr h') id)) hagE hv, hout⟩
+      rw [← interp_congr b (fun y hy => hag y (Or.inl (Or.inl hy)))]
+      exact hα
+  | ref A ih =>
+      intro η σ δ₁ δ₂ αs ls v ρ hu hag hagE h
+      obtain ⟨ℓ, v', hsep⟩ := h
+      obtain ⟨rfl, ρo, ρa, hc, hown, ha⟩ := pure_sep_iff.mp hsep
+      exact ⟨ℓ, v', pure_sep_mk rfl ⟨ρo, ρa, hc, hown,
+        ih η σ δ₁ δ₂ αs ls v' ρa hu hag hagE ha⟩⟩
+  | «mut» b T _ =>
+      intro η σ δ₁ δ₂ αs ls v ρ _ hag hagE h
+      rw [vRLM_mut_eq, vRLJ_mut_eq] at h ⊢
+      obtain ⟨hvc, hcoh, hpay⟩ := h
+      have hagT : ∀ y, VFree y (.mut b (wClose η T)) →
+          (extS δ₁ σ αs).find? y = (extS δ₂ σ αs).find? y := by
+        rintro y (hm | hT)
+        · exact hag y (Or.inl (Or.inl hm))
+        · rw [wClose_eq] at hT
+          rcases vFree_subst T _ hT with hT | ⟨n, hn⟩
+          · exact hag y (Or.inl (Or.inr hT))
+          · exact hag y (Or.inr ⟨n, hn⟩)
+      refine ⟨by rw [← vC_congr _ hagT]; exact hvc, fun l e α hl hi => ?_,
+        fun l hl hi y hy m hm => hpay l hl hi y hy m (by rw [hagT y (Or.inr hy)]; exact hm)⟩
+      obtain ⟨hk, hat⟩ := hcoh l e α hl hi
+      have he : e ∈ σ := (List.of_mem_zip (innerAt_mem hi).1).1
+      exact ⟨⟨hk.1, (TyEq.of_agree _ (fun y hy => (hagT y (Or.inr hy)).symm)).trans
+        (hk.2.trans (TyEq.of_agree e.T (fun y hy => hagE e he y hy)))⟩, hat⟩
+  | imm b T _ =>
+      intro η σ δ₁ δ₂ αs ls v ρ _ hag hagE h
+      rw [vRLM_imm_eq, vRLJ_imm_eq] at h ⊢
+      obtain ⟨hvc, hcoh, hpay⟩ := h
+      have hagT : ∀ y, VFree y (.imm b (wClose η T)) →
+          (extS δ₁ σ αs).find? y = (extS δ₂ σ αs).find? y := by
+        rintro y (hm | hT)
+        · exact hag y (Or.inl (Or.inl hm))
+        · rw [wClose_eq] at hT
+          rcases vFree_subst T _ hT with hT | ⟨n, hn⟩
+          · exact hag y (Or.inl (Or.inr hT))
+          · exact hag y (Or.inr ⟨n, hn⟩)
+      refine ⟨by rw [← vC_congr _ hagT]; exact hvc, fun l e α hl hi => ?_,
+        fun l hl hi y hy m hm => hpay l hl hi y hy m (by rw [hagT y (Or.inr hy)]; exact hm)⟩
+      obtain ⟨hk, hat⟩ := hcoh l e α hl hi
+      have he : e ∈ σ := (List.of_mem_zip (innerAt_mem hi).1).1
+      exact ⟨⟨hk.1, (TyEq.of_agree _ (fun y hy => (hagT y (Or.inr hy)).symm)).trans
+        (hk.2.trans (TyEq.of_agree e.T (fun y hy => hagE e he y hy)))⟩, hat⟩
+  | unit =>
+      intro η σ δ₁ δ₂ αs ls v ρ _ _ _ h
+      show vC true .unit ls (extS δ₂ σ αs) v ρ
+      rw [vC_congr .unit (δ₂ := extS δ₁ σ αs) (fun y hy => hy.elim)]; exact h
+  | int w =>
+      intro η σ δ₁ δ₂ αs ls v ρ _ _ _ h
+      show vC true (.int w) ls (extS δ₂ σ αs) v ρ
+      rw [vC_congr (.int w) (δ₂ := extS δ₁ σ αs) (fun y hy => hy.elim)]; exact h
+  | opq k =>
+      intro η σ δ₁ δ₂ αs ls v ρ _ _ _ h
+      show vC true (.opq k) ls (extS δ₂ σ αs) v ρ
+      rw [vC_congr (.opq k) (δ₂ := extS δ₁ σ αs) (fun y hy => hy.elim)]; exact h
+  | unk =>
+      intro η σ δ₁ δ₂ αs ls v ρ _ _ _ h
+      show vC true .unk ls (extS δ₂ σ αs) v ρ
+      rw [vC_congr .unk (δ₂ := extS δ₁ σ αs) (fun y hy => hy.elim)]; exact h
+  | zero => intro _ _ _ _ _ _ _ _ _ _ _ h; exact h.elim
+  | tvar n => intro _ _ _ _ _ _ _ _ _ _ _ h; exact h
+  | fam L ih =>
+      intro η σ δ₁ δ₂ αs ls v ρ hu hag hagE h
+      obtain ⟨ℓ, c, hsep⟩ := h
+      obtain ⟨⟨rfl, hcn⟩, hs⟩ := pure_sep_iff.mp hsep
+      exact ⟨ℓ, c, pure_sep_mk ⟨rfl, hcn⟩
+        (sepRange_mono' (fun m τ hm => ih η σ δ₁ δ₂ αs ls (.loc m) τ hu hag hagE hm) hs)⟩
+  | mu A ih =>
+      intro η σ δ₁ δ₂ αs ls v ρ hu hag hagE h
+      obtain ⟨hnm, hcl, hlfp⟩ := h
+      refine ⟨hnm, hcl, fun P hP => hlfp P (fun v' ρ' h' => hP v' ρ' ?_)⟩
+      refine ih _ σ δ₁ δ₂ αs ls v' ρ' hu (fun y hy => ?_) hagE h'
+      rcases hy with hy | ⟨n, hn⟩
+      · exact hag y (Or.inl hy)
+      · cases n with
+        | zero =>
+            change VFree y (wClose η (.mu A)) at hn
+            rw [wClose_eq] at hn
+            rcases vFree_subst (.mu A) _ hn with hn | ⟨m, hm⟩
+            · exact hag y (Or.inl hn)
+            · exact hag y (Or.inr ⟨m, hm⟩)
+        | succ n => exact hag y (Or.inr ⟨n, hn⟩)
+
+/-- **A context reaching no `U` at two readings that agree wherever its live slots or the entries'
+payload types read.** -/
+theorem gRLM_reading_uFree (p : Placement) {σ : LStack} {δ₁ δ₂ : LSub} {αs : List Life}
+    {ls : List SRec} : ∀ {Γ : Ctx VTy} {γ : List Val} {ρ : WRes},
+    (∀ s ∈ Γ, s.live = true → UFreeM s.ty) →
+    (∀ s ∈ Γ, s.live = true → ∀ y, VFree y s.ty →
+      (extS δ₁ σ αs).find? y = (extS δ₂ σ αs).find? y) →
+    (∀ e ∈ σ, ∀ y, VFree y e.T → (extS δ₁ σ αs).find? y = (extS δ₂ σ αs).find? y) →
+    gRLM (ℍ := ℍ) p σ δ₁ αs ls Γ γ ρ → gRLM (ℍ := ℍ) p σ δ₂ αs ls Γ γ ρ := by
+  intro Γ γ ρ hU hag hagE hg
+  obtain ⟨hlw, hgs⟩ := pure_sep_iff.mp hg
+  refine pure_sep_mk hlw ?_
+  clear hlw hg
+  induction Γ generalizing γ ρ with
+  | nil => cases γ <;> exact hgs
+  | cons s Γ ih =>
+      cases γ with
+      | nil => exact hgs
+      | cons v γ =>
+          have hU' : ∀ s' ∈ Γ, s'.live = true → UFreeM s'.ty :=
+            fun s' hs' hl => hU s' (List.mem_cons_of_mem _ hs') hl
+          have hag' : ∀ s' ∈ Γ, s'.live = true → ∀ y, VFree y s'.ty →
+              (extS δ₁ σ αs).find? y = (extS δ₂ σ αs).find? y :=
+            fun s' hs' hl => hag s' (List.mem_cons_of_mem _ hs') hl
+          by_cases hl : s.live = true
+          · simp only [gSepRLM, hl, if_true] at hgs ⊢
+            obtain ⟨ρ₁, ρ₂, hc, h₁, h₂⟩ := hgs
+            refine ⟨ρ₁, ρ₂, hc, vRLM_reading_uFree p s.ty none σ δ₁ δ₂ αs ls v ρ₁
+              (hU s List.mem_cons_self hl) (fun y hy => ?_) hagE h₁, ih hU' hag' h₂⟩
+            rcases hy with hy | ⟨n, hn⟩
+            · exact hag s List.mem_cons_self hl y hy
+            · exact hn.elim
+          · simp only [gSepRLM, hl] at hgs ⊢
+            exact ih hU' hag' hgs
+
+/-- **`CtxExtendMAt` at a context reaching no `U`**: the extended reading agrees with the old one
+off the new variable, which no live slot and no entry's payload type reads. -/
+theorem ctxExtendMAt_uFree (p : Placement) (Γ : Ctx VTy)
+    (hU : ∀ s ∈ Γ, s.live = true → UFreeM s.ty) : CtxExtendMAt (ℍ := ℍ) p Γ := by
+  intro σ δ γ αs ls ρ x α _ _ hσx hslots hg
+  have hag : ∀ y, x ≠ y → (extS δ σ αs).find? y = (extS (δ.extend x α) σ αs).find? y :=
+    fun y hyx => (extS_find_base (find?_extend_ne δ α hyx) σ αs).symm
+  exact gRLM_reading_uFree p hU
+    (fun s hs hl y hy => hag y (fun he => (hslots s hs hl).1 (he ▸ hy)))
+    (fun e he y hy => hag y (fun hxy => hσx e he (hxy ▸ hy))) hg
+
+/-- **`CtxShadowMAt` at a context reaching no `U`**: the stack reads the pushed variable at the
+pushed lifetime, so the two readings agree everywhere. -/
+theorem ctxShadowMAt_uFree (p : Placement) (Γ : Ctx VTy)
+    (hU : ∀ s ∈ Γ, s.live = true → UFreeM s.ty) : CtxShadowMAt (ℍ := ℍ) p Γ := by
+  intro σ δ γ αs ls ρ e α _ _ hg
+  have hag : ∀ y, (extS δ (e :: σ) (α :: αs)).find? y =
+      (extS (δ.extend e.x α) (e :: σ) (α :: αs)).find? y := by
+    intro y
+    by_cases hxy : e.x = y
+    · subst hxy
+      show ((extS δ σ αs).extend e.x α).find? e.x = ((extS (δ.extend e.x α) σ αs).extend e.x α).find? e.x
+      rw [find?_extend_self, find?_extend_self]
+    · rw [extS_push_find _ e σ α αs hxy, extS_push_find _ e σ α αs hxy]
+      exact (extS_find_base (find?_extend_ne δ α hxy) σ αs).symm
+  exact gRLM_reading_uFree p hU (fun _ _ _ y _ => hag y) (fun _ _ y _ => hag y) hg
+
+/-- **`MonoOwnGMAt` at a context reaching no `U`**: `monoOwnGUFreeMA`. -/
+theorem monoOwnGMAt_uFree (p : Placement) (Γ : Ctx VTy)
+    (hU : ∀ s ∈ Γ, s.live = true → UFreeM s.ty) : MonoOwnGMAt (ℍ := ℍ) p Γ :=
+  fun σ δ γ αs ls ρ C e a hσ hok hob hro hso hpush hδ hfr hro' hsf ht hpv hg =>
+    monoOwnGUFreeMA p σ δ Γ γ αs ls ρ C e a hσ hU hok hob hro hso hpush hδ hfr hro' hsf ht hpv hg
+
+/-- **`[allI]` at `binder0` at every context whose live slots reach no `U`**, at every index whose
+stack does not name the binder: `allIRowMNKAt0_of` with the three transports at such a context. -/
+theorem allIRowMNKUFree0 (Γ : Ctx VTy) (hU : ∀ s ∈ Γ, s.live = true → UFreeM s.ty) :
+    AllIRowMNKAt (ℍ := ℍ) .binder0 Γ :=
+  allIRowMNKAt0_of Γ (monoOwnGMAt_uFree .binder0 Γ hU) (ctxExtendMAt_uFree .binder0 Γ hU)
+    (ctxShadowMAt_uFree .binder0 Γ hU)
+
+/-- **`[allI]` at `binder0` at the empty context**, at every index whose stack does not name the
+binder. -/
+theorem allIRowMNKNil0 : AllIRowMNKAt (ℍ := ℍ) .binder0 [] :=
+  allIRowMNKUFree0 [] (fun _ hs => absurd hs List.not_mem_nil)
 
 end ProbeD1
 

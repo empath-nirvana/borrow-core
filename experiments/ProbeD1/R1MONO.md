@@ -16,9 +16,10 @@ placement with the most proved:
 
 The statements are in `ProbeD1/R1.lean`: definitions and `def … : Prop` only, no proofs. It is
 imported by `ProbeD1.lean`, and `lake build ProbeD1` builds it with no warning. The proof files are
-named in §5. One definition outside `R1.lean` changes, in ProbeD1's draft arising set: `LendMutI`
-and `LendImmI` (`Binder.lean`) gain the consequence `α < ⊤` of [TR] 6.64's and 6.65's H4 (§3.1).
-No proof reads the new field yet, and every `ArisesI` proof builds unchanged. Nothing in `Core/`,
+named in §5, and the build's outcome is §8. One definition outside `R1.lean` changes, in ProbeD1's
+draft arising set: `LendMutI` and `LendImmI` (`Binder.lean`) gain the consequence `α < ⊤` of [TR]
+6.64's and 6.65's H4 (§3.1). `outerBelowTopArises` reads the new field, and every other `ArisesI`
+proof builds unchanged. Nothing in `Core/`,
 `Paper/`, `Restrat/`, `GhostEnd/` or any printed definition changes. The one change to a relation is
 to ProbeD1's draft relation: `vRLM` replaces `vRLJ` as the one draft relation at W, as `vRLJ`
 replaced `vRLI` (§1.2). `vRLJ` stays as the statement it was, and every result proved about it stays
@@ -1499,6 +1500,7 @@ stack until a stack entry lends a range (§1.2, §3.2).
 | `ProbeD1/R1Mono.lean` | §2: `GdIndex`, `GdRelated`, `gdG` at the pushed stack, `GdNotPushed`, `NotMonoOwnGM0`, `GdNotCore`, `GdNotRecsInsideOwn`, `GdIdxNotArisesOf`, the instance lemmas (with `FutPartI`), `¬ MonoGM`, `¬ MonoVM`; the consumer and the test at `gd`: `AllIRowMOfMonoOwnGM`, `GdMDerivable`, `GdAllIHoldsAtM`, `GdRowRefutation`; the restricted route: `GdCtxNotCore`, `GdRestrictedMet`, `AllIRowMCOfMonoOwnGMC`, `MonoOwnGMC .binder0` (attempted, its stopping step reported); `EnvExtNone`, `EnvPushNone`, `MonoExtME`, `MonoOwnUFreeME`, `MonoExtMOfE`, `MonoOwnGUFreeMOfE`; optional `GdNotCbpv`, `GdReached` |
 | `ProbeD1/R1Owed.lean` | §3: `OuterBelowTopPush`, `OuterBelowTopFresh`, `OuterBelowTopArises`; `LeafPos`'s lemmas, `PayLeavesOfPayExt`, `RetainedPayViewRow`, `RetainedPayInstRow`, the transports, `SliceGuardFails`, `RetainedPaySliceRow`, `ReadOutAtInternalPayload`, `LeafPosTyEq`, `PayExtOfTyEq`, `PayLeavesOfTyEq`, `RetainedPayLoadMutBound`, `RetainedPayLoadImmRow`, `RetainedPayLoadMutRow` (attempted, expected to stop at `EntryPayLeaves` at a bound view), `RetainedPayLoadMutRowMet`, `RetainedPayLoadImmRowMet`; if the stop is reached, `ThawLeafP` and `VwPayLeaves` (attempted, outcomes reported); `ExtInstT`, `LineageUnique`, `TagFixed`, `KeepsTOfTagged`, `ResumeKeepsT`, `RelAboveOfTagged`, `ExtKeepsTInst`, `ShareKeepsT`, `RelFramesNotEnded`, `ShareKeepsTMet`; optional `NotViewSlotInst` |
 | `ProbeD1/R1Stmt0.lean` | §4: `EnvCoreNone`, `VRLMDataE`, `VRLMDataOfE`, `NilSoundRetM`, `FutPartI`, `ForceRowM`, `CallbackExtMutM`, `CallbackExtImmM`, `Statement0MBesideMono0`, `MonoUnrestrictedRefuted0` |
+| `ProbeD1/R1AllI.lean` | §2.6, added by the build: the `∀I` row at one context from three transports of it (`allIRowMNKAt0_of`), the transports at contexts reaching no `U` and the row there (`allIRowMNKUFree0`, `allIRowMNKNil0`), `cRLM_step`, `not_subOutsideExtendAny` |
 
 `FutPartI` is read by `MonoGMOfMonoVM`; build it first in `R1Stmt0.lean`, or move it to
 `R1Mono.lean`.
@@ -1766,36 +1768,310 @@ The findings given with this revision, each with the place it is answered.
 
 ---
 
+## 8. The build's outcome
+
+The build is in five files beside the design's `R1.lean`: `R1Thaw.lean` (§1), `R1Mono.lean` (§2),
+`R1Owed.lean` (§3), `R1Stmt0.lean` (§4) and `R1AllI.lean` (the `∀I` row, §2.6). `lake build
+ProbeD1` builds them. There is no `sorry`, `axiom`, `native_decide`, `opaque`, `partial`, `unsafe`
+or `implemented_by`, and every theorem's `#print axioms` is within
+`[propext, Classical.choice, Quot.sound]`. Nothing in `Core/`, `Paper/`, `Restrat/`, `GhostEnd/` or
+any printed definition changed. `vRLM` is the one draft relation, as designed, and `LendMutI` and
+`LendImmI` carry H4's consequence, as designed (§3.1). No relation family, guard, quantifier or
+step index was added.
+
+The build states a few things beside `R1.lean`. Each is an added hypothesis, or a stated
+obligation at a narrower scope:
+- `StackPayAvoids x σ` (`R1Mono.lean`): the pushed variable is free in no entry's payload type.
+  `MonoOwnUFreeMEA`, `MonoOwnGUFreeMA` and `MonoOwnGMCUFreeA` are `MonoOwnUFreeME`,
+  `MonoOwnGUFreeM` and `MonoOwnGMC`, at contexts reaching no `U`, with it added. Every index
+  `SemSM` reads gives it (`stackPayAvoids_of_stackJ`), and it holds at every stack whose entries'
+  payload types are closed, `gd`'s among them.
+- `RetainedPayLoadMutRowNJ` (`R1Owed.lean`): `RetainedPayLoadMutRow` at a payload type with no join
+  (`NoJoinV`).
+- `MonoOwnGMAt`, `CtxExtendMAt`, `CtxShadowMAt`, `SemSMNK` and `AllIRowMNKAt` (`R1AllI.lean`): the
+  `∀I` row's needs at one context, and the row at the indices whose stack does not name the binder.
+
+### 8.1 Per statement
+
+**§1, R1: closed at `binder0`** (`R1Thaw.lean`).
+- Proved: `RelMAgreesJ` (`relMAgreesJ`), `VRLMMonoAt` (`vRLMMonoAt`), `VRLMRoll` (`vRLMRoll`).
+- **`RelendMValueE`: proved** (`relendMValueE`). The proof is structural recursion on the type,
+  with the environment generalised (`EnvThaws`):
+  - at `μ`, the fixed point's least-ness at the candidate "a `μ` value that thaws under the
+    guard". The candidate is closed under the body by the induction hypothesis at the body (at the
+    environment that reads the variable at the candidate) and by `vRLM_roll` at each instantiated
+    index;
+  - at `[L]`, slot by slot (`relendJ_sepRange`);
+  - at a variable, by `EnvThaws`;
+  - every other case as in `GapRows.lean`, the leaves at their closed types.
+
+  No fuel and no step index.
+- Proved: `RelendMValue`, `CtxRelendsAllM .binder0` (`ctxRelendsAllM`), `ThawInstM .binder0`
+  (`thawInstM`), and the four `U` rows (`thunkFRowM`, `thunkVRowM`, `bangThunkFRowM`,
+  `bangThunkVRowM`).
+- **Proved: `Statement0UFullM .binder0`** (`statement0UFullM`). The thaw and the four `U`
+  introductions hold at every context.
+- Proved: `MuAdjNotVRLM` (`muAdjNotVRLM`). `GAP.md` §4's `μ` slot, whose closure Core's `μ` admits
+  by adjacency, is no `vRLM` value.
+- Not attempted: `VRLMUnroll`, `MuSlotArises` and `NotMuSlotThawCore`. The `vRLJ` thaw at a `μ`
+  slot stays not derived, and no obstruction to it was verified.
+
+**§2, `binder0`'s monotonicity** (`R1Mono.lean`, `R1AllI.lean`).
+- **The record half: proved.** `ExtInstT` (`extInstT`), `MonoExtME .binder0` (`monoExtME0`),
+  `EnvExtNone`, `MonoExtMOfE`, and **`MonoExtM .binder0`** (`monoExtM0`).
+- **The push at a context reaching no `U`.**
+  - `MonoOwnUFreeME` and `MonoOwnGUFreeM` as stated: not derived. At the pushed stack a leaf's
+    `CohS` reads the old entries' payload types at the pushed reading, and `TyEq` with them needs the
+    pushed variable free in them. Neither statement carries that.
+  - With it added (`StackPayAvoids`): `MonoOwnUFreeMEA` and `MonoOwnGUFreeMA` are proved at every
+    placement (`monoOwnUFreeMEA`, `monoOwnGUFreeMA`). `EnvPushNone` is proved.
+  - `MonoOwnGUFreeMOfE`: not attempted. `monoOwnGUFreeMA` is proved slot by slot in the same way, with
+    `StackPayAvoids` added.
+- Proved: `FutPartI` (`futPartI`), `MonoOwnGMOfMonoGM` (`monoOwnGMOfMonoGM`), `MonoGMOfMonoVM`
+  (`monoGMOfMonoVM`).
+- **The configuration `gd`.**
+  - Proved: `GdIndex`, `GdRelated` and `GdNotPushed` (`gdIndex`, `gdRelated`, `gdNotPushed`).
+  - After the own lend pushes `gdY`, `gdG = λ_. load ℓ₁₁` is a `binder0` value at the pushed stack
+    over the view (`gdG_pushed`). `gdF` returns it boxed at `'1 ↦ 3`, and no run meets that
+    postcondition (`gd_run_fails_of`). The proof uses the machine's determinism, that the memory
+    does not change in a β step, the flattening of the view, and `gdG_not_U_empty`.
+- **Refuted, at a configuration not shown to arise**: `MonoOwnGM .binder0` (`notMonoOwnGM0`),
+  with `MonoGM .binder0` and `MonoVM .binder0` (`notMonoGM0`, `notMonoVM0`;
+  `MonoUnrestrictedRefuted0`). These are facts about ProbeD1's draft statements, not `binder0`'s
+  status.
+  - Two facts count against `gd` arising, each a theorem about our statements: its closure is no
+    Core value (`gdNotCore`), and its index fails the record invariant (`gdNotRecsInsideOwn`,
+    `gdIdxNotArisesOf`). Neither is a theorem about the arising set: the glue from `GdNotCore` to
+    `ArisesVI` is not written, and `RecsInsideOwnArises` was not attempted.
+  - Not attempted: `GdArises` and `GdNotCbpv`. So `gd` is not shown not to arise either.
+- **The consumer, `AllIRowM .binder0`: not derived. It is proved at every context whose live slots
+  reach no `U`, at every index whose stack does not name the binder** (`allIRowMNKUFree0`;
+  `allIRowMNKNil0` at the empty context).
+  - Carrying the premise to the two places the `∀` clause asks it (`allIRowMNKAt0_of`) shows that
+    the row reads three transports of its own context, not one:
+    - across the own push (`MonoOwnGMAt`, `MonoOwnGM` at one context);
+    - to the reading extended at the binder, for the first conjunct (`CtxExtendMAt`);
+    - after the push, to the reading extended at the pushed variable, which the stack already reads
+      there (`CtxShadowMAt`).
+  - At a context reaching no `U` all three hold (`monoOwnGMAt_uFree`, `ctxExtendMAt_uFree`,
+    `ctxShadowMAt_uFree`). There `vRLM` reads the reading only through `extS`, at the free
+    variables of the slot types and of the entries' payload types (`vRLM_reading_uFree`).
+  - At a `U` slot none of the three is derived. The global forms (`CtxExtendM`, `CtxShadowM`) are
+    stated and not derived.
+  - At an index whose stack's innermost entry is named by the binder (`StackJ`'s third kind), the
+    first conjunct's premise needs `SubOutside` at the extended reading. `subOutsideExtend` gives
+    it only for a binder new to the stack, and it is not kept in general
+    (`not_subOutsideExtendAny`).
+- `AllIRowMOfMonoOwnGM` as stated: its `binder0` instance holds vacuously (`NotMonoOwnGM0`), and it
+  was not attempted at `cbpv` or `binder`. The route it names does not supply the two reading
+  transports that the proof of `allIRowMNKAt0_of` uses.
+- **The restricted route** (§2.6 (ii)).
+  - Proved: `GdCtxNotCore` and `GdRestrictedMet` (`gdCtxNotCore`, `gdRestrictedMet`). `gd` is
+    outside the restriction, and the restriction is met at `gd`'s index with a `U` slot.
+  - `MonoOwnGMC .binder0`: not derived. It is proved at contexts reaching no `U`
+    (`monoOwnGMCUFreeA`, with `StackPayAvoids`).
+  - The step at a `U` slot was not attempted in Lean. What reading the clause shows
+    [unchecked]:
+    - the pushed stack's `U` clause asks for the body at every instantiation of the pushed stack;
+    - the slot's Core half is at the old reading, so it applies only at the identity;
+    - at another instantiation the route needs Core's relation carried along the instantiation.
+      That statement at every type, `InstEquivLeafAll`, is refuted (`not_instEquivLeafAll`, at a
+      configuration not shown to arise), and its `U` instance is not derived;
+    - at the identity it needs `WInsideCoreM` at the argument, and Core inside W at the answer's
+      computation type.
+  - Not attempted: `WInsideCoreM`, `CoreInsideWM`, `AllIRowMCOfMonoOwnGMC`, and the arising form
+    `MonoOwnGMA`.
+- **The row at `gd`** (§2.6 (i)).
+  - Proved: `GdRowRefutation` (`gdRowRefutation`).
+  - `GdMDerivable`: not proved. [unchecked: read against `CDerives`, `Core/Fundamental.lean`]
+    `gdM` as written has no derivation in the rule set: its application passes a thunk literal
+    where `app` takes a variable.
+  - Not attempted: `GdAllIHoldsAtM`, `GdAllIHoldsDerivable` and `GdAllIRowRefutes`.
+
+**§3, the three obligations** (`R1Owed.lean`; `retainedPayPush` is in `R1Mono.lean`).
+- **`OuterBelowTop`: proved at every lend and at the arising set.** `OuterBelowTopPush`,
+  `OuterBelowTopFresh` and **`OuterBelowTopArises`** (`outerBelowTopPush`, `outerBelowTopFresh`,
+  `outerBelowTopArises`, by induction on `ArisesI` from `LendMutI`'s and `LendImmI`'s new field).
+  `NotViewSlotInst`: not attempted.
+- **`RetainedPay`, row by row.**
+  - Proved:
+    - `RetainedPayViewRow`, the lend's view;
+    - `RetainedPayPush`, `RetainedPayPop` and `RetainedPayExtend`, the transports;
+    - `RetainedPayInstRow`, `∀E` at every instance with no join;
+    - `PayLeavesOfPayExt`, `LeafPosTyEq`, `PayExtOfTyEq`, `PayLeavesOfTyEq` and
+      `RetainedPayLoadMutBound`;
+    - `ReadOutAtInternalPayload` and `ThawLeafP`.
+  - **`RetainedPayLoadMutRow` (`withswap`'s read-out): not derived as stated. It stops where §3.2
+    expected.** At a retained view it holds at every payload type
+    (`retainedPayLoadMutRow_retained`). At a payload type with no join it follows from
+    `EntryPayLeaves` (`retainedPayLoadMutRowNJ_of_entry`). `EntryPayLeaves`, the entry's payload
+    type's leaves, is the leftover the index does not carry. Its arising check
+    (`InternalLeafArises`) was not attempted.
+  - The variant leaf: `ThawLeafP` is proved (the thaw re-establishes it at a bound place).
+    `VwPayLeaves` was not attempted. The variant is stated, not adopted.
+  - Not attempted: `RetainedPayLoadImmRow` (`withload`, `foldImm`), `RetainedPayLoadMutRowMet` and
+    `RetainedPayLoadImmRowMet`.
+  - The slice rows: `SliceGuardFails` is proved. `RetainedPaySliceRow` is proved but vacuous, and
+    is not counted.
+- **`KeepsT` at the share: reduced.**
+  - Proved outright: `ExtInstT`, `RelAboveOfTagged` (`relAboveOfTagged`) and `ExtKeepsTInst`
+    (`extKeepsTInst`).
+  - Proved from `LineageUnique` (a record lies in one frame's lineage at a `TW` world): `TagFixed`,
+    `KeepsTOfTagged`, `ResumeKeepsT`, **`ShareKeepsT`** and `RelFramesNotEnded`
+    (`tagFixed_of`, `keepsTOfTagged_of`, `resumeKeepsT_of`, `shareKeepsT_of`,
+    `relFramesNotEnded_of`).
+  - `LineageUnique`: not derived. The records-proper case reads `TI`'s location clauses. The
+    sub-record case needs two frames' escrows to meet at no `mut` cell, which is a walk lemma on
+    `ex(W)` not found among `TW.inv`'s consequences. I have not derived it and have not verified
+    that any obstruction is real.
+  - `ShareKeepsTMet`: not attempted. `ShareKeepsT` stays reduced to `FramesKept`, which statement 2
+    supplies.
+
+**§4, statement 0 at `vRLM`** (`R1Stmt0.lean`).
+- Proved: `VRLMDataE`, `VRLMData`, `EnvCoreNone` and `VRLMDataOfE`. At a data type `vRLM` is
+  Core's, the two least fixed points compared both ways.
+- Proved: `NilSoundRetM` (`nilSoundRetM`) and `Statement0SharedM` (`statement0SharedM`, with
+  `FutPartI`).
+- Proved: `ForceRowM` at every placement (`forceRowM`), and `CallbackExtMutM` and `CallbackExtImmM`
+  at `binder0` and `binder`.
+- **`Statement0MBesideMono0`: proved** (`statement0MBesideMono0`). Every fact of statement 0
+  beside monotonicity holds at `binder0` at `vRLM`.
+- `Statement0M .binder0` as stated: refuted together with the unrestricted monotonicity statements
+  it bundles (`not_statement0M_binder0`), at a configuration not shown to arise. This is not
+  `binder0`'s status.
+- **`Statement0MAtConsumers0 ↔ AllIRowM .binder0`: proved** (`statement0MAtConsumers0_iff`).
+  Read at its consumers, statement 0 at `binder0` is exactly its `∀I` row. The row holds at
+  every context reaching no `U`, at every index whose stack does not name the binder, and is not
+  derived elsewhere.
+
+### 8.2 What remains
+
+- **The `∀I` row at `binder0`.** It is open in two places:
+  - at a context with a live `U` slot, where it reads the three transports of §8.1 (`MonoOwnGMAt`,
+    `CtxExtendMAt`, `CtxShadowMAt`). `MonoOwnGM` is refuted there at `gd` when unrestricted, and
+    the restricted step was not attempted in Lean;
+  - at an index whose stack's innermost entry is named by the binder.
+- **`RetainedPay`.**
+  - `EntryPayLeaves` at a bound `Mut` view.
+  - `RetainedPayLoadImmRow`.
+  - A join.
+  - The slice rows' missing range-lending entry.
+  - The `Met` witnesses.
+- **`KeepsT` at the share**: `LineageUnique`, and `FramesKept` from statement 2.
+- **`StackPayAvoids`**, missing from `MonoOwnUFreeME` and `MonoOwnGUFreeM` as stated.
+- **`cbpv` and `binder`**: not redone at `vRLM`. Their list is `BINDER.md` §5.6's, with `FutPartI`
+  in place of `FutPart`.
+- Unchanged by this unit: `ν` is still read by Core's `cC`, and `ViewSlotInst` without
+  `OuterBelowTop` is still not derived.
+
+### 8.3 Report lists (CLAUDE.md §5)
+
+- **Printed objects read**:
+  - [TR] 6.64's and 6.65's H4 (`LendMutI`, `LendImmI`, `outerBelowTopArises`);
+  - [TR] 6.144 (`wpTS_load_I`, `gdG`'s run in `gdG_pushed`);
+  - [TR] p. 3's lifetime interpretation (`Life.interp`) at `RetainedPayInstRow` and
+    `PayExtOfTyEq`.
+
+  `μ`, `[L]` and type variables are Core's (`[spec §6]`, `[spec §9]`), read at W's formers.
+- **Printed hypotheses unspent**: none spent beyond the above.
+- **Uniqueness and functionality results.**
+  - Used: the machine's determinism (`AStep1.deterministic` through `ARun.rest`, in
+    `run_beta_val`); `ResU.CompS.functional`, `ResU.Flat.functional` and `AgW.functional`;
+    `frameLife_eq` (`frameLife_unique`); `mem_recs_iff_of_lt` (`extInstT`, `extKeepsTInst`).
+  - Not used: `LinPath.functional`.
+- **Printed lemmas in the run-up that are untranscribed**: none read here.
+- **Hypotheses added**:
+  - `StackPayAvoids`, held at every index `SemSM` reads;
+  - `NoJoinV` at `RetainedPayLoadMutRowNJ`, held at every payload type with no `⊔`;
+  - `LineageUnique` in the `KeepsT` chain, not derived;
+  - `EntryPayLeaves` at `retainedPayLoadMutRowNJ_of_entry`, not derived (the expected stop);
+  - the three transports at `allIRowMNKAt0_of`, discharged at every context reaching no `U`.
+- **The technique built**: no printed proof governs W's draft relation, so no printed route was
+  replaced. The thaw at `μ` is the fixed point's own induction (`vCE`'s route, at W), not a step
+  index.
+
+### 8.4 What it decides
+
+- **R1 is closed at `binder0`.** W reads `μ` and `fam` itself, and the thaw and the four `U`
+  introductions hold at every context (`statement0UFullM`).
+- **Statement 0 at `binder0` reduces to its `∀I` row** (`statement0MAtConsumers0_iff`). The row
+  holds at contexts reaching no `U`, at indices whose stack does not name the binder
+  (`allIRowMNKUFree0`). Unrestricted monotonicity is refuted at `gd`, a configuration not shown to
+  arise. That refutes a lemma for the row, not the row, and the row's remaining cases are not
+  derived.
+- **OQ-8 is not decided.** No refutation passed DESIGN §11, and `cbpv` and `binder` were not redone
+  at `vRLM`. No failure of type (a), (b) or (d) occurred: no guard beside `TW`, no relation family
+  beside W, and no second quantifier. The fallback is not triggered.
+
+---
+
 ## Unresolved
 
-- **`AllIRowM .binder0`** (open; the target). `[allI]` at `SemSM`, `MonoOwnGM`'s only consumer at
-  `binder0`. `NotMonoOwnGM0` refutes the lemma, not the row. Its routes, each stated in Lean:
-  - through the restriction: `MonoOwnGMC` (each live slot also a Core value), `SemSMC`,
-    `AllIRowMC`; the attempt's expected stop is `WInsideCoreM` at a `U` argument, OQ-58's question
-    at a stack [unchecked]; adopting `SemSMC` has costs, read against DESIGN §12.2 (b) first (§2.6);
-  - through the arising set: `MonoOwnGMA` with `CtxArisesAt`. Its matching restriction of `SemSM`
-    needs a transition that carries a value across a lend, which `ArisesI` lacks [unchecked].
+- **The second review's major finding, after the build** (§7.2 item 1: item 2 ended in a
+  refutation at a non-arising witness, and the positive work halted). The build's answer was not
+  reviewed again. Each part of the fix, with its status:
+  - (a) The target and the restricted forms are stated (`AllIRowM`, `MonoOwnGMC`, `SemSMC`,
+    `AllIRowMC`, `AllIRowMCOfMonoOwnGMC`, `CtxArisesAt`, `MonoOwnGMA`). Built beside them:
+    - the row at one context (`allIRowMNKAt0_of`), whose proof uses two reading transports the
+      planned route does not supply;
+    - the row at every context reaching no `U` (`allIRowMNKUFree0`).
+  - (b) Done. `gd` is outside the restriction (`gdCtxNotCore`), and the restriction is met at
+    `gd`'s index with a `U` slot (`gdRestrictedMet`).
+  - (c) Partly done. `MonoOwnGMC` is proved at contexts reaching no `U` (`monoOwnGMCUFreeA`). The
+    step at a `U` slot was not attempted in Lean; §8.1 names the stop by reading the clause
+    [unchecked].
+  - The test at `gd` with a derivable body: not done. `gdM` as written has no derivation in the rule
+    set [unchecked], no corrected body was stated, and `GdAllIHoldsAtM` was not attempted.
+  - The rename: done. `Statement0MBinder0Status` is replaced by two statements, both proved:
+    `Statement0MBesideMono0`, and `MonoUnrestrictedRefuted0`, the unrestricted statements'
+    negation (not `binder0`'s status).
+- **`AllIRowM .binder0`** (open; the target). This is `[allI]` at `SemSM`, `MonoOwnGM`'s only
+  consumer at `binder0`. By `statement0MAtConsumers0_iff` it is all that statement 0 at `binder0`
+  still owes at its consumers. It is proved at every context reaching no `U`, at every index whose
+  stack does not name the binder (`allIRowMNKUFree0`). Open:
+  - **at a live `U` slot**: the three transports (`MonoOwnGMAt`, `CtxExtendMAt`, `CtxShadowMAt`).
+    The routes, each stated in Lean:
+    - through the restriction: `MonoOwnGMC` (each live slot also a Core value), `SemSMC`,
+      `AllIRowMC`. §8.1 gives the expected stop at a `U` slot [unchecked]. Adopting `SemSMC` has
+      costs, to be read against DESIGN §12.2 (b) first (§2.6);
+    - through the arising set: `MonoOwnGMA` with `CtxArisesAt`. Its matching restriction of
+      `SemSM` needs a transition that carries a value across a lend, which `ArisesI` lacks
+      [unchecked];
+    - `CtxExtendMAt` and `CtxShadowMAt` at a `U` slot: `vRLM`'s `U` clause reads the whole reading
+      (`SubFresh δ α`, `RelendJ`'s `ι.sub δ`), so a change of reading is not invisible there.
+  - **at an index whose stack's innermost entry is named by the binder** (`StackJ`'s third kind):
+    `SubOutside` at the extended reading is not given (`not_subOutsideExtendAny`).
 
   At `gd` the row's conclusion at every derivable body (`GdAllIHoldsDerivable`) has no known route:
   `gdF` is in neither relation at the pushed index.
 - **The slice borrows** (not covered at W; not attempted). `sliceBorrowM`, `sliceBorrowI` and their
-  `U` forms at a family of two or more elements: the callback runs at its own lend's pushed stack,
+  `U` forms at a family of two or more elements. The callback runs at its own lend's pushed stack,
   where no such family meets the guard (`SliceGuardFails`), at every stack and placement. The
-  missing object is a stack entry lending a range of places, against which the elements' `CohS`
-  would read and at whose places their `RetainedPay` is vacuous. The element operations at the empty
-  stack owe no more at `vRLM` than at `vRLJ`.
-- **`RetainedPay` at the read-outs** (open after the build, if it stops as expected): at a bound
-  view, the leftover `EntryPayLeaves`. The variant leaf (`mutLeafP`, `immLeafP`) is stated, not
-  adopted; its costs (`ThawLeafP`, `VwPayLeaves`) are checked in Lean if the stop is reached. The
-  variant needs W's views to carry `PayLeavesAt`, a change to the draft views, the user's to decide.
-- **A join** (`⊔`): `∀E` at `'v ⊔ 'w`, where `⟦'v ⊔ 'w⟧` external says nothing of the shorter of the
-  two, and a payload type with a join at the read-outs, where `TyEq` pins a join only as a whole.
+  missing object is a stack entry lending a range of places. The elements' `CohS` would read
+  against it, and their `RetainedPay` would be vacuous at its places. The element operations at the
+  empty stack owe no more at `vRLM` than at `vRLJ`.
+- **`RetainedPay` at the read-outs** (open).
+  - At a bound `Mut` view the build stops where expected, at `EntryPayLeaves`
+    (`retainedPayLoadMutRowNJ_of_entry`).
+  - The variant leaf (`mutLeafP`, `immLeafP`) is stated, not adopted. Of its two costs, `ThawLeafP`
+    is proved and `VwPayLeaves` was not attempted. The variant needs W's views to carry
+    `PayLeavesAt`, a change to the draft views, which is the user's to decide.
+  - Not attempted: `RetainedPayLoadImmRow` and the two `Met` witnesses.
+- **A join** (`⊔`).
+  - At `∀E` at `'v ⊔ 'w`, `⟦'v ⊔ 'w⟧` external says nothing of the shorter of the two.
+  - In a payload type at the read-outs, `TyEq` pins a join only as a whole.
+
   `RetainedPay` is not carried there. Neither program reaches it [unchecked].
-- **`ν`** (open for statements 1–4): `cRLM` hands a `ν` computation to Core's `cC` whole, so values
-  a `ν` unfolding gives are read with Core's `U` and `ℕ`-`∀` inside. This unit does not need W to
-  read `ν`; whether it should is open for the rows of statements 1–4.
-- **`KeepsT` at the share** (reduced, not discharged): `FramesKept` is statement 2's resume
-  composite's to supply.
-- **`InternalLeafArises`** (not attempted): the arising check for a stop at a read-out, its second
-  disjunct `EntryPayLeaves`'s failure at a configuration of the arising set.
-- **`RecsInsideOwnArises`** (stated in `Binder.lean`, not attempted): `GdIdxNotArisesOf` reads it.
+- **`ν`** (open for statements 1–4). `cRLM` hands a `ν` computation to Core's `cC` whole, so the
+  values a `ν` unfolding gives are read with Core's `U` and `ℕ`-`∀` inside. This unit does not need
+  W to read `ν`. Whether it should is open for the rows of statements 1–4.
+- **`KeepsT` at the share** (reduced, not discharged). `ShareKeepsT` is proved from `LineageUnique`
+  (`shareKeepsT_of`), which is not derived. `FramesKept` is for statement 2's resume composite to
+  supply. `ShareKeepsTMet` was not attempted.
+- **`StackPayAvoids`**. `MonoOwnUFreeME` and `MonoOwnGUFreeM` as stated lack it and are not derived.
+  The forms with it are proved (`monoOwnUFreeMEA`, `monoOwnGUFreeMA`).
+- **`InternalLeafArises`** (not attempted). It is the arising check for the stop at a read-out: its
+  second disjunct is `EntryPayLeaves`'s failure at a configuration of the arising set.
+- **`RecsInsideOwnArises`** (stated in `Binder.lean`, not attempted). `GdIdxNotArisesOf` reads it.
+- **`cbpv` and `binder` at `vRLM`** (not redone). Their list is `BINDER.md` §5.6's, with `FutPartI`
+  in place of `FutPart`.

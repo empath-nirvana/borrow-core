@@ -260,6 +260,81 @@ outcome in full. Statements are in `ProbeD1/Gap.lean`; proofs in `GapWitness.lea
   thaw's only guarantee gap is R1. OQ-8 is not decided. No failure of type (a), (b) or (d)
   occurred, and the fallback is not triggered.
 
+## R1 and `binder0`'s monotonicity (`R1MONO.md`): the outcome
+
+`R1MONO.md` takes four items at `binder0`:
+- R1;
+- `binder0`'s own monotonicity;
+- the three obligations the freeze-binder unit left;
+- statement 0 at the revised relation.
+
+Its §8 is the build's outcome in full. Statements are in `ProbeD1/R1.lean`; proofs in
+`R1Thaw.lean`, `R1Mono.lean`, `R1Owed.lean`, `R1Stmt0.lean` and `R1AllI.lean`. The one draft
+relation is now `vRLM`: `vRLJ` with Core's `tvar`, `μ` and `fam` clauses read at W's formers.
+`LendMutI` and `LendImmI` carry H4's consequence `α < ⊤`. Nothing in `Core/` or in a printed
+definition changed. Every refutation below is at a configuration not shown to arise, so each is a
+fact about our statement.
+
+- **R1 is closed at `binder0`** (`statement0UFullM`).
+  - The thaw holds at every type (`relendMValueE`), by structural recursion with the environment
+    generalised. At `μ` it uses the fixed point's own induction; there is no step index.
+  - The four `U` introductions hold at every context.
+  - `vRLM` is `vRLJ` wherever no `μ`, `fam` or type variable occurs outside a borrow payload
+    (`relMAgreesJ`).
+  - The `μ` slot at which Core's `μ` admits a closure by adjacency is no `vRLM` value
+    (`muAdjNotVRLM`).
+- **Monotonicity at `binder0`.**
+  - The record half is proved (`monoExtM0`).
+  - The own push is proved at contexts reaching no `U` (`monoOwnGUFreeMA`). It needs one added
+    hypothesis, `StackPayAvoids`: the pushed variable is free in the entries' payload types. Every
+    `SemSM` index gives it (`stackPayAvoids_of_stackJ`). `MonoOwnUFreeME` and `MonoOwnGUFreeM` as
+    stated lack it and are not derived.
+  - **The unrestricted `MonoOwnGM`, `MonoGM` and `MonoVM` are refuted** at the configuration `gd`
+    (`notMonoOwnGM0`, `notMonoGM0`, `notMonoVM0`).
+    - In `gd` the closure `λg. return g` at `U(U(F 1) ⊸ F([@'1] U(F 1)))` is a value at the stack
+      because the guard boxes every argument above `'1`.
+    - After the own lend's push, an argument holding the pushed view is returned boxed at `'1`,
+      and no run meets that (`gdNotPushed`).
+    - Its closure is no Core value (`gdNotCore`), and its index fails the record invariant
+      (`gdNotRecsInsideOwn`). Whether `gd` arises was not attempted.
+- **The `∀I` row, the lemma's only consumer.**
+  - Proved at every context whose live slots reach no `U`, at every index whose stack does not
+    name the binder (`allIRowMNKUFree0`).
+  - Carrying the premise to its two places shows that the row reads three transports of its
+    context: across the push, to the reading extended at the binder, and to the pushed variable's
+    reading (`allIRowMNKAt0_of`). All three hold at contexts reaching no `U`
+    (`vRLM_reading_uFree`).
+  - Not derived: the row at a live `U` slot; and at an index whose innermost entry is named by the
+    binder, where `SubOutside` at the extended reading is not given (`not_subOutsideExtendAny`).
+  - The restricted route (each live slot also a Core value) excludes `gd` (`gdCtxNotCore`). It is
+    met at `gd`'s index with a `U` slot (`gdRestrictedMet`) and proved at contexts reaching no `U`
+    (`monoOwnGMCUFreeA`). Its step at a `U` slot was not attempted in Lean.
+- **The three obligations.**
+  - `OuterBelowTop`: proved at every lend and at the arising set (`outerBelowTopArises`).
+  - `RetainedPay`:
+    - proved at the lend's view, the transports and `∀E` at an instance with no join;
+    - at a `Mut` read-out, proved at a retained view. At a bound view it reduces to
+      `EntryPayLeaves` (the entry's payload type's leaves), the expected stop
+      (`retainedPayLoadMutRowNJ_of_entry`);
+    - not attempted: the `Imm` read-out (`RetainedPayLoadImmRow`);
+    - the slice rows at two or more elements stay outside W (`SliceGuardFails`).
+  - `KeepsT` at the share: proved from `LineageUnique` (`shareKeepsT_of`), which is not derived,
+    and `FramesKept`, which statement 2 supplies.
+- **Statement 0 at `binder0`.**
+  - Every fact beside monotonicity is proved (`statement0MBesideMono0`): the shared lemmas at the
+    revised futures, `[force]`, the callbacks at `σ·y`, and the `U` side.
+  - Read at its consumers, statement 0 at `binder0` is exactly its `∀I` row
+    (`statement0MAtConsumers0_iff`). The row is proved where its context reaches no `U`.
+  - The bundle as stated is refuted with the unrestricted monotonicity statements
+    (`not_statement0M_binder0`). That is not `binder0`'s status.
+- **What it decides.**
+  - R1 is closed at `binder0`.
+  - Statement 0 there reduces to the `∀I` row at a live `U` slot and at indices whose stack names
+    the binder.
+  - OQ-8 is not decided: no refutation passed DESIGN §11, and `cbpv` and `binder` were not redone
+    at `vRLM`.
+  - No failure of type (a), (b) or (d) occurred, and the fallback is not triggered.
+
 ## Files
 
 | file | contents |
@@ -293,3 +368,10 @@ outcome in full. Statements are in `ProbeD1/Gap.lean`; proofs in `GapWitness.lea
 | `ProbeD1/GapRows.lean` | the leaves and rows at every payload type: `cohEInstOB`, `viewSlotInstOB`, `relendJValueK`, `ctxRelendsThawFreeKJ`, `statement0UThawFreeKJ` |
 | `ProbeD1/GapPos.lean` | the position-`∀`: `instRealisesCut`, `allPosJNil`, `allPosJSelf`, `allPosJTransport`, `cutAllNilSound` |
 | `ProbeD1/GapRoom.lean` | W's `U` clause as reading (B): `wU_allPosJ`, `adj_core_U`, `adj_not_wU` |
+| `R1MONO.md` | the design of R1 and `binder0`'s monotonicity: `vRLM` (W reading `μ`, `fam` and type variables), the monotonicity statements and the configuration `gd`, the consumer and the restricted route, `RetainedPay` row by row, `KeepsT` at the share, statement 0 at `vRLM`; §8 the build's outcome; *Unresolved* the second review's major finding after the build |
+| `ProbeD1/R1.lean` | that design's definitions and `def … : Prop` statements; no proofs |
+| `ProbeD1/R1Thaw.lean` | R1: `relMAgreesJ`, `vRLMMonoAt`, `vRLMRoll`, `relendMValueE`, `ctxRelendsAllM`, `thawInstM`, the four `U` rows, `statement0UFullM`, `muAdjNotVRLM` |
+| `ProbeD1/R1Mono.lean` | monotonicity: `monoExtM0`, `monoOwnUFreeMEA`, `monoOwnGUFreeMA` (`StackPayAvoids`), `futPartI`, the instance lemmas, the configuration `gd` (`gdIndex`, `gdRelated`, `gdNotPushed`, `notMonoOwnGM0`, `notMonoGM0`, `notMonoVM0`, `gdNotCore`, `gdNotRecsInsideOwn`, `gdIdxNotArisesOf`, `gdRowRefutation`), the restricted route (`gdCtxNotCore`, `gdRestrictedMet`, `monoOwnGMCUFreeA`) |
+| `ProbeD1/R1Owed.lean` | the three obligations: `outerBelowTopArises`; `RetainedPay` by row (`retainedPayViewRow`, the transports, `retainedPayInstRow`, `payLeavesOfTyEq`, `retainedPayLoadMutBound`, `retainedPayLoadMutRowNJ_of_entry`, `sliceGuardFails`, `thawLeafP`); `KeepsT` at the share (`relAboveOfTagged`, `extKeepsTInst`, `shareKeepsT_of` and its chain from `LineageUnique`) |
+| `ProbeD1/R1Stmt0.lean` | statement 0 at `vRLM`: `vRLMDataE`, `nilSoundRetM`, `statement0SharedM`, `forceRowM`, the callbacks, `statement0MBesideMono0`, `not_statement0M_binder0`, `statement0MAtConsumers0_iff` |
+| `ProbeD1/R1AllI.lean` | the `∀I` row at `binder0`: `allIRowMNKAt0_of` (one context, three transports), `vRLM_reading_uFree`, the transports at contexts reaching no `U`, `allIRowMNKUFree0`, `allIRowMNKNil0`, `cRLM_step`, `not_subOutsideExtendAny` |
