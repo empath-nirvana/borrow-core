@@ -211,6 +211,57 @@ theorem allIRowMUFree0 (Γ : Ctx VTy) (hU : ∀ s ∈ Γ, s.live = true → UFre
   allIRowMAt0_of Γ (monoOwnGMAt_uFree .binder0 Γ hU) (ctxExtendMAt_uFree .binder0 Γ hU)
     (ctxShadowMAt_uFree .binder0 Γ hU) (ctxExtendNamedMAt_uFree .binder0 Γ hU)
 
+/-! ### §3.3 The reading transports: where `VRLMReadEquiv`'s route stops
+
+`VRLMReadEquiv`'s route carries `ReadEquiv` through every clause of `vRLM` (`NEXT.md` §3.3). At the
+`F_Σ` clause the continuation of a stop is owed at a re-lend of the ghost-ended entries (`openFS`),
+which moves the stack's lifetimes and not the base readings. `ReadEquiv`'s in-scope conjunct is not
+kept there: a base reading that binds a fresh variable to one of the stack's lifetimes has that
+value in scope at every re-lend, while the stack itself no longer reads it
+(`not_readEquivRelend`). This is a fact about our `ReadEquiv`, at a configuration not shown to
+arise; it shows only that the planned route does not pass the `F_Σ` clause. I have not derived
+`VRLMReadEquiv` and have not verified that any obstruction to it is real. -/
+
+/-- **`ReadEquiv` along a re-lend of the stack**: the step `VRLMReadEquiv`'s `F_Σ` case takes at
+`openFS`'s re-lend. -/
+def ReadEquivRelend : Prop :=
+  ∀ (X : LifeVar → Prop) (σ : LStack) (αs αs' : List Life) (δ₁ δ₂ : LSub),
+    StackOK σ αs → StackOK σ αs' → ReadEquiv X σ αs δ₁ δ₂ → ReLend αs' αs →
+    ReadEquiv X σ αs' δ₁ δ₂
+
+/-- **`ReadEquivRelend` fails**: at the stack `['0 ↦ 1]`, the readings `∅` and `'5 ↦ 1` are
+equivalent off `'5` (both read `1` in scope, the stack's own lifetime), and at the re-lend `[2]` the
+second still reads `1` in scope and the first does not. -/
+theorem not_readEquivRelend : ¬ ReadEquivRelend := by
+  intro h
+  have hok : ∀ a : Life, StackOK [(⟨0, 0, .unit, .mut, fun _ => true⟩ : LEnt)] [a] :=
+    fun a => ⟨rfl, List.isChain_singleton _, List.nodup_singleton _⟩
+  have hRE : ReadEquiv (· = 5) [⟨0, 0, .unit, .mut, fun _ => true⟩] [lifeN 1] ⟨[]⟩ ⟨[(5, 1)]⟩ := by
+    refine ⟨fun y hy => ?_, fun α => ?_, fun a ha => ?_⟩
+    · have : (5 : LifeVar) ≠ y := fun h => hy h.symm
+      simp [LSub.find?, Lifetime.assocFind, this]
+    · constructor
+      · rintro ⟨q, hq, hqα⟩
+        exact ⟨q, List.mem_cons.mpr (Or.inl (List.mem_singleton.mp hq)), hqα⟩
+      · rintro ⟨q, hq, hqα⟩
+        rcases List.mem_cons.mp hq with rfl | hq
+        · exact ⟨_, List.mem_singleton_self _, hqα⟩
+        · obtain rfl := List.mem_singleton.mp hq
+          exact ⟨_, List.mem_singleton_self _, hqα⟩
+    · constructor
+      · intro _ p hp
+        simp only [List.mem_singleton] at hp
+        subst hp
+        exact ha (lifeN 1) rfl
+      · intro _ p hp
+        simp at hp
+  have := h (· = 5) _ [lifeN 1] [lifeN 2] ⟨[]⟩ ⟨[(5, 1)]⟩ (hok _) (hok _) hRE
+    ⟨List.Forall₂.cons (by decide) List.Forall₂.nil, List.isChain_singleton _⟩
+  obtain ⟨q, hq, hqα⟩ := (this.2.1 (lifeN 1)).mpr
+    ⟨(5, 1), List.mem_cons_of_mem _ (List.mem_singleton_self _), rfl⟩
+  obtain rfl := List.mem_singleton.mp hq
+  exact absurd hqα (by decide)
+
 end ProbeD1
 
 end
