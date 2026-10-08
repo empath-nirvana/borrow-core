@@ -88,6 +88,29 @@ def wClose : Option (Nat → WEnt) → VTy → VTy
   | none, A => A
   | some η, A => A.subst (fun n => (η n).ty)
 
+/-! #### The instances and the own lends W's `∀` clause reads (`NEXT.md` §3.1) -/
+
+/-- **A lifetime in scope at a reading**: the value of one of its bindings. `∀E` instantiates at a
+lifetime term, whose value below `⊤` is one of its variables' (`InScopeOfInterp`). -/
+def InScope (s : LSub) (α : Life) : Prop := ∃ p ∈ s.entries, OrderDual.toDual p.2 = α
+
+/-- **The own lend at `vRLM`**: `OwnPushI`, with its payload type reading only variables free in
+the type (`payLocal`) and not the binder (`selfFree`). Each callback row takes `e.T = T`, the
+argument's payload type, as a hypothesis, and the constant's side condition keeps the binder out
+of `T` (`hfree₁`, (E4)). -/
+def OwnPushM (δ : LSub) (C : CTy) (ρ : WRes) (s : Stk) (e : LEnt) (a : Life) : Prop :=
+  OwnPushI δ C ρ s e a ∧ (∀ y, VFree y e.T → CFree y C) ∧ ¬ VFree e.x e.T
+
+/-- **`StackJ` at `vRLM`.** An entry of the third kind (the innermost, new to `Δ`, named by the
+type's outermost `∀`) was pushed fresh below the reading (`SubFresh`), and no entry's payload type
+reads its variable. No `binder0` clause produces such an entry. `cbpv`'s `U` own push at `vRLM`
+(`RelendU`'s `OwnPush`) asks neither. -/
+def StackJM (σ : LStack) (αs : List Life) (δ : LSub) (Δ : LifeCtx) (Γ : Ctx VTy) (C : CTy) :
+    Prop :=
+  StackJ σ αs δ Δ Γ C ∧
+    ∀ e ∈ σ, Δ.find? e.x = none → σ.head? = some e → (∃ c C', C = .all e.x c C') →
+      (∀ a ∈ αs.head?, SubFresh δ a) ∧ ∀ e' ∈ σ, ¬ VFree e.x e'.T
+
 mutual
 /-- **W's value relation, reading `μ`, `[L]` and type variables itself.** `vRLJ`'s clauses at
 `U`, `⊗`, `⊕`, `!`, `[@a]`, `Ref`, `Mut`, `Imm` and the data leaves, the environment threaded
@@ -157,10 +180,10 @@ def cRLM (p : Placement) : LStack → LSub → CTy → List Life → List SRec �
   | σ, δ, .all x c C, αs, ls, e => fun ρ =>
       ∀ ls' σ' αs', ExtQ p.bindFut ls ls' ρ → FutQI p.bindFut δ ρ (σ, αs) (σ', αs') →
         FutAvoids (.all x c C) σ σ' →
-        (∀ α, (⌜LtLife (extS δ σ' αs') c α⌝ ─⋆
+        (∀ α, (⌜LtLife (extS δ σ' αs') c α ∧ InScope (extS δ σ' αs') α⌝ ─⋆
           guardPV (extS (δ.extend x α) σ' αs') σ' αs' ls'
             (cRLM p σ' (δ.extend x α) C αs' ls' (.app e (.val .unit)))) ρ) ∧
-        (p.allOwn = true → ∀ (en : LEnt) (α : Life), OwnPushI δ (.all x c C) ρ (σ', αs') en α →
+        (p.allOwn = true → ∀ (en : LEnt) (α : Life), OwnPushM δ (.all x c C) ρ (σ', αs') en α →
           RecsOutside (α :: αs') ls' → SubFresh δ α →
           guardPV (extS (δ.extend x α) (en :: σ') (α :: αs')) (en :: σ') (α :: αs') ls'
             (cRLM p (en :: σ') (δ.extend x α) C (α :: αs') ls' (.app e (.val .unit))) ρ)
@@ -188,11 +211,12 @@ def gRLM (p : Placement) (σ : LStack) (δ : LSub) (αs : List Life) (ls : List 
     (Γ : Ctx VTy) (γ : List Val) : WProp :=
   ⌜Ctx.LiveWithin Γ γ⌝ ⋆ gSepRLM p σ δ αs ls Γ γ
 
-/-- **The semantic judgement at `vRLM`**: `SemSJ` with `vRLM`'s context and computation. -/
+/-- **The semantic judgement at `vRLM`**: `SemSJ` with `vRLM`'s context and computation, its stack
+admitted by `StackJM`. -/
 def SemSM (p : Placement) (Δ : LifeCtx) (Γ : Ctx VTy) (e : Expr) (j : Jdg) : Prop :=
   BindersLow Γ (jdgCty j) → Scoped Δ Γ (jdgCty j) →
   ∀ (δ : LSub) (σ : LStack) (αs : List Life) (ls : List SRec) (γ : List Val) (ρ : WRes),
-    StackOK σ αs → OuterBelowTop αs → StackJ σ αs δ Δ Γ (jdgCty j) → SubDom δ Δ →
+    StackOK σ αs → OuterBelowTop αs → StackJM σ αs δ Δ Γ (jdgCty j) → SubDom δ Δ →
     Δ.Models (extS δ σ αs) → RecsOutside αs ls → SubOutside σ αs δ → TabAtS σ αs ρ →
     PlaceViewsL (extS δ σ αs) σ αs ls ρ → gRLM p σ δ αs ls Γ γ ρ →
     cRLM p σ δ (jdgCty j) αs ls (substAll γ e) ρ
@@ -223,12 +247,41 @@ def CMuFree : CTy → Prop
   | .eff _ _ _ _ _ C => CMuFree C
 end
 
-/-- **`vRLM` is `vRLJ` where neither reads a `μ`, a `[L]` or a type variable.** -/
+mutual
+/-- No lifetime `∀` at any depth, outside a `Mut` or `Imm` payload and outside `ν`. Both relations
+read those with Core's relation. -/
+def VAllFree : VTy → Prop
+  | .thunk C => CAllFree C
+  | .tensor A B => VAllFree A ∧ VAllFree B
+  | .sum A B => VAllFree A ∧ VAllFree B
+  | .bang A => VAllFree A
+  | .box _ A => VAllFree A
+  | .ref A => VAllFree A
+  | .mu A => VAllFree A
+  | .fam A => VAllFree A
+  | _ => True
+/-- The same at a computation type. An effect layer's operation types are read by Core's relation
+(`rowTab`), so only its answer type counts. -/
+def CAllFree : CTy → Prop
+  | .ret A => VAllFree A
+  | .arr A C => VAllFree A ∧ CAllFree C
+  | .amp C D => CAllFree C ∧ CAllFree D
+  | .top => True
+  | .all _ _ _ => False
+  | .nu _ => True
+  | .eff _ _ _ _ _ C => CAllFree C
+end
+
+/-- **`vRLM` is `vRLJ` where neither reads a `μ`, a `[L]`, a type variable or a lifetime `∀`.**
+`vRLM`'s `∀` clause reads the instances in scope and the own lends at `OwnPushM` (`NEXT.md`
+(E1), (E2)); `vRLJ`'s keeps the old clause. Proved without `VAllFree` at commit `5210cf1`, before
+the edits. -/
 def RelMAgreesJ : Prop :=
   (∀ (p : Placement) (σ : LStack) (δ : LSub) (A : VTy) (αs : List Life) (ls : List SRec)
-      (v : Val), VMuFree A → vRLM (ℍ := ℍ) p none σ δ A αs ls v = vRLJ (ℍ := ℍ) p σ δ A αs ls v) ∧
+      (v : Val), VMuFree A → VAllFree A →
+      vRLM (ℍ := ℍ) p none σ δ A αs ls v = vRLJ (ℍ := ℍ) p σ δ A αs ls v) ∧
   ∀ (p : Placement) (σ : LStack) (δ : LSub) (C : CTy) (αs : List Life) (ls : List SRec)
-    (e : Expr), CMuFree C → cRLM (ℍ := ℍ) p σ δ C αs ls e = cRLJ (ℍ := ℍ) p σ δ C αs ls e
+    (e : Expr), CMuFree C → CAllFree C → cRLM (ℍ := ℍ) p σ δ C αs ls e = cRLJ (ℍ := ℍ) p σ δ C αs ls e
 
 /-! #### The fixed point's facts -/
 
@@ -329,7 +382,9 @@ def Statement0UFullM (p : Placement) : Prop :=
     ThunkVRowM (ℍ := ℍ) p ∧ BangThunkFRowM (ℍ := ℍ) p ∧ BangThunkVRowM (ℍ := ℍ) p
 
 /-- **`GAP.md` §4's `μ` slot at W's own `μ`**: the closure `Λ. return ℓ₀`, which Core's `μ`
-clause admits there by adjacency, is no `vRLM` value. -/
+clause admits there by adjacency, is no `vRLM` value. Proved of `vRLM` at commit `5210cf1`
+(`muAdjNotVRLM`), before (E1) restricted the `∀` clause's first conjunct to the instances in
+scope; that proof is withdrawn, and `MuAdjVRLME1` (`Nx.lean`) decides the statement after (E1). -/
 def MuAdjNotVRLM : Prop :=
   ¬ vRLM (ℍ := ℍ) .binder0 none [muEnt] adjδ muAdjTy [lifeN 1] [] (Val.lam (.val (Val.loc 0)))
       (innerView 0 (lifeN 1))
@@ -1281,11 +1336,13 @@ def ForceRowM (p : Placement) : Prop :=
     SemSM (ℍ := ℍ) p Δ Γ (forceE C (.var i)) (.comp C)
 
 /-- **The 6.65 callback at `σ·y`, at `vRLM`**: `CallbackExtMut` with the revised own lend and
-index, and the view's payload the entry's (`e.T = T`). -/
+index, and the view's payload the entry's (`e.T = T`). Stated at the `.arr` shape `∀'y ⊏ c. A ⊸ D`,
+the unwinding forms' callback type (`cbUTy`). `¬ VFree y T` is the constants' side condition
+(`hfree₁`, `NEXT.md` (E4)). -/
 def CallbackExtMutM (p : Placement) : Prop :=
   ∀ (σ : LStack) (δ : LSub) (y : LifeVar) (c : Lifetime.Life) (T : VTy) (D : CTy)
     (αs : List Life) (ls : List SRec) (f w : Val) (ρf : WRes) (e : LEnt) (α : Life) (ρv ρ : WRes),
-    StackOK σ αs → OuterBelowTop αs → RecsOutside αs ls → SubOutside σ αs δ →
+    ¬ VFree y T → StackOK σ αs → OuterBelowTop αs → RecsOutside αs ls → SubOutside σ αs δ →
     e.x = y → e.k = .mut → e.T = T → y ∉ CTy.binders (.arr (.mut (.var y) T) D) →
     OwnOKI δ σ αs e α ρf → LtLife (extS δ σ αs) c α → RecsOutside (α :: αs) ls → SubFresh δ α →
     TabAtS σ αs ρf → PlaceViewsL (extS δ σ αs) σ αs ls ρf →
@@ -1297,12 +1354,12 @@ def CallbackExtMutM (p : Placement) : Prop :=
       (.app (.app (.val f) (.val .unit)) (.val w)) ρ
 
 /-- **The 6.64 callback at `σ·y`, at `vRLM`**: the list the lend extends (`ext_add`) keeps the
-tags. -/
+tags. At the `.arr` shape, with (E4)'s `¬ VFree y T`. -/
 def CallbackExtImmM (p : Placement) : Prop :=
   ∀ (σ : LStack) (δ : LSub) (y : LifeVar) (c : Lifetime.Life) (T : VTy) (D : CTy)
     (αs : List Life) (ls ls' : List SRec) (f w : Val) (ρf : WRes) (e : LEnt) (u : Val) (α : Life)
     (ρv ρ : WRes),
-    StackOK σ αs → OuterBelowTop αs → RecsOutside αs ls → SubOutside σ αs δ →
+    ¬ VFree y T → StackOK σ αs → OuterBelowTop αs → RecsOutside αs ls → SubOutside σ αs δ →
     e.x = y → e.k = .imm u → e.T = T → y ∉ CTy.binders (.arr (.imm (.var y) T) D) →
     OwnOKI δ σ αs e α ρf → LtLife (extS δ σ αs) c α → RecsOutside (α :: αs) ls' →
     SubFresh δ α → TabAtS σ αs ρf → PlaceViewsL (extS δ σ αs) σ αs ls ρf →

@@ -83,114 +83,111 @@ theorem vRLM_thunk_env (p : Placement) (η η' : Option (Nat → WEnt)) (σ : LS
 /-! ### Where `vRLM` is `vRLJ` -/
 
 mutual
-theorem vRLM_none_eq (p : Placement) : ∀ (A : VTy), VMuFree A →
+theorem vRLM_none_eq (p : Placement) : ∀ (A : VTy), VMuFree A → VAllFree A →
     ∀ (σ : LStack) (δ : LSub) (αs : List Life) (ls : List SRec),
       vRLM (ℍ := ℍ) p none σ δ A αs ls = vRLJ (ℍ := ℍ) p σ δ A αs ls
-  | .thunk C, h, σ, δ, αs, ls => by
+  | .thunk C, h, h', σ, δ, αs, ls => by
       funext f
-      have ih := cRLM_eq p C h
+      have ih := cRLM_eq p C h h'
       rw [vRLM, vRLJ]
       simp only [ih]
-  | .tensor A B, h, σ, δ, αs, ls => by
+  | .tensor A B, h, h', σ, δ, αs, ls => by
       funext v
-      have ihA := vRLM_none_eq p A h.1
-      have ihB := vRLM_none_eq p B h.2
+      have ihA := vRLM_none_eq p A h.1 h'.1
+      have ihB := vRLM_none_eq p B h.2 h'.2
       rw [vRLM, vRLJ]
       simp only [ihA, ihB]
-  | .sum A B, h, σ, δ, αs, ls => by
+  | .sum A B, h, h', σ, δ, αs, ls => by
       funext v
-      have ihA := vRLM_none_eq p A h.1
-      have ihB := vRLM_none_eq p B h.2
+      have ihA := vRLM_none_eq p A h.1 h'.1
+      have ihB := vRLM_none_eq p B h.2 h'.2
       rw [vRLM, vRLJ]
       simp only [ihA, ihB]
-  | .bang A, h, σ, δ, αs, ls => by
+  | .bang A, h, h', σ, δ, αs, ls => by
       funext v
-      have ih := vRLM_none_eq p A h
+      have ih := vRLM_none_eq p A h h'
       rw [vRLM, vRLJ]
       simp only [ih]
-  | .box a A, h, σ, δ, αs, ls => by
+  | .box a A, h, h', σ, δ, αs, ls => by
       funext v
-      have ih := vRLM_none_eq p A h
+      have ih := vRLM_none_eq p A h h'
       rw [vRLM, vRLJ]
       simp only [ih]
-  | .ref A, h, σ, δ, αs, ls => by
+  | .ref A, h, h', σ, δ, αs, ls => by
       funext v
-      have ih := vRLM_none_eq p A h
+      have ih := vRLM_none_eq p A h h'
       rw [vRLM, vRLJ]
       simp only [ih]
-  | .mut a T, _, σ, δ, αs, ls => by
+  | .mut a T, _, _, σ, δ, αs, ls => by
       funext v
       rw [vRLM_mut_eq]; rfl
-  | .imm a T, _, σ, δ, αs, ls => by
+  | .imm a T, _, _, σ, δ, αs, ls => by
       funext v
       rw [vRLM_imm_eq]; rfl
-  | .unit, _, _, _, _, _ => rfl
-  | .zero, _, _, _, _, _ => rfl
-  | .unk, _, _, _, _, _ => rfl
-  | .int _, _, _, _, _, _ => rfl
-  | .opq _, _, _, _, _, _ => rfl
-  | .tvar _, h, _, _, _, _ => h.elim
-  | .mu _, h, _, _, _, _ => h.elim
-  | .fam _, h, _, _, _, _ => h.elim
-theorem cRLM_eq (p : Placement) : ∀ (C : CTy), CMuFree C →
+  | .unit, _, _, _, _, _, _ => rfl
+  | .zero, _, _, _, _, _, _ => rfl
+  | .unk, _, _, _, _, _, _ => rfl
+  | .int _, _, _, _, _, _, _ => rfl
+  | .opq _, _, _, _, _, _, _ => rfl
+  | .tvar _, h, _, _, _, _, _ => h.elim
+  | .mu _, h, _, _, _, _, _ => h.elim
+  | .fam _, h, _, _, _, _, _ => h.elim
+theorem cRLM_eq (p : Placement) : ∀ (C : CTy), CMuFree C → CAllFree C →
     ∀ (σ : LStack) (δ : LSub) (αs : List Life) (ls : List SRec),
       cRLM (ℍ := ℍ) p σ δ C αs ls = cRLJ (ℍ := ℍ) p σ δ C αs ls
-  | .ret B, h, σ, δ, αs, ls => by
+  | .ret B, h, h', σ, δ, αs, ls => by
       funext e
-      have ih := vRLM_none_eq p B h
+      have ih := vRLM_none_eq p B h h'
       rw [cRLM, cRLJ]
       simp only [ih]
-  | .arr A C, h, σ, δ, αs, ls => by
+  | .arr A C, h, h', σ, δ, αs, ls => by
       funext e
-      have ihA := vRLM_none_eq p A h.1
-      have ihC := cRLM_eq p C h.2
+      have ihA := vRLM_none_eq p A h.1 h'.1
+      have ihC := cRLM_eq p C h.2 h'.2
       rw [cRLM, cRLJ]
       simp only [ihA, ihC]
-  | .amp C D, h, σ, δ, αs, ls => by
+  | .amp C D, h, h', σ, δ, αs, ls => by
       funext e
-      have ihC := cRLM_eq p C h.1
-      have ihD := cRLM_eq p D h.2
+      have ihC := cRLM_eq p C h.1 h'.1
+      have ihD := cRLM_eq p D h.2 h'.2
       rw [cRLM, cRLJ]
       simp only [ihC, ihD]
-  | .top, _, _, _, _, _ => by
+  | .top, _, _, _, _, _, _ => by
       funext e
       rw [cRLM, cRLJ]
-  | .all x c C, h, σ, δ, αs, ls => by
-      funext e
-      have ih := cRLM_eq p C h
-      rw [cRLM, cRLJ]
-      simp only [ih]
-  | .nu C, _, σ, δ, αs, ls => by
+  | .all _ _ _, _, h', _, _, _, _ => h'.elim
+  | .nu C, _, _, σ, δ, αs, ls => by
       funext e
       rw [cRLM, cRLJ]
-  | .eff n i q A B C, h, σ, δ, αs, ls => by
+  | .eff n i q A B C, h, h', σ, δ, αs, ls => by
       funext e
-      have ih := effRetM_eq p C h
+      have ih := effRetM_eq p C h h'
       rw [cRLM, cRLJ]
       simp only [ih]
-theorem effRetM_eq (p : Placement) : ∀ (C : CTy), CMuFree C →
+theorem effRetM_eq (p : Placement) : ∀ (C : CTy), CMuFree C → CAllFree C →
     ∀ (σ : LStack) (δ : LSub) (αs : List Life),
       effRetM (ℍ := ℍ) p σ δ C αs = effRetJ (ℍ := ℍ) p σ δ C αs
-  | .ret A, h, σ, δ, αs => by
-      have ih := vRLM_none_eq p A h
+  | .ret A, h, h', σ, δ, αs => by
+      have ih := vRLM_none_eq p A h h'
       rw [effRetM, effRetJ]
       funext ls v
       rw [ih]
-  | .eff _ _ _ _ _ C, h, σ, δ, αs => by
-      have ih := effRetM_eq p C h
+  | .eff _ _ _ _ _ C, h, h', σ, δ, αs => by
+      have ih := effRetM_eq p C h h'
       rw [effRetM, effRetJ]
       exact ih σ δ αs
-  | .arr _ _, _, _, _, _ => rfl
-  | .amp _ _, _, _, _, _ => rfl
-  | .top, _, _, _, _ => rfl
-  | .all _ _ _, _, _, _, _ => rfl
-  | .nu _, _, _, _, _ => rfl
+  | .arr _ _, _, _, _, _, _ => rfl
+  | .amp _ _, _, _, _, _, _ => rfl
+  | .top, _, _, _, _, _ => rfl
+  | .all _ _ _, _, _, _, _, _ => rfl
+  | .nu _, _, _, _, _, _ => rfl
 end
 
-/-- **`RelMAgreesJ`.** -/
+/-- **`RelMAgreesJ`**, restated at types with no lifetime `∀` (`NEXT.md` §3.1). The unrestricted
+statement was proved at commit `5210cf1`, before (E1) and (E2) changed `vRLM`'s `∀` clause. -/
 theorem relMAgreesJ : RelMAgreesJ (ℍ := ℍ) :=
-  ⟨fun p σ δ A αs ls v hA => by rw [vRLM_none_eq p A hA],
-    fun p σ δ C αs ls e hC => by rw [cRLM_eq p C hC]⟩
+  ⟨fun p σ δ A αs ls v hA hA' => by rw [vRLM_none_eq p A hA hA'],
+    fun p σ δ C αs ls e hC hC' => by rw [cRLM_eq p C hC hC']⟩
 
 
 /-! ### The fixed point's facts -/
@@ -577,6 +574,33 @@ theorem gSepRLM_persistent {σ : LStack} {δ : LSub} {αs : List Life} {ls : Lis
       · simp only [gSepRLM, hl] at h
         exact gSepRLM_persistent Γ γ ρ hP' h
 
+/-- **`StackJM` at a type that is no lifetime `∀`**: its added conjunct reads an outermost `∀`. -/
+theorem stackJM_of_notAll {σ : LStack} {αs : List Life} {δ : LSub} {Δ : LifeCtx} {Γ : Ctx VTy}
+    {C : CTy} (hJ : StackJ σ αs δ Δ Γ C) (hC : ∀ x c D, C ≠ .all x c D) :
+    StackJM σ αs δ Δ Γ C :=
+  ⟨hJ, fun _ _ _ _ ⟨_, _, h⟩ => absurd h (hC _ _ _)⟩
+
+/-- **`StackJM` where every entry is of `StackJ`'s first two kinds**: an entry of the second kind is
+a name no program binds, so under `BindersLow` no `∀` of the type binds it. -/
+theorem stackJM_of_kinds {σ : LStack} {αs : List Life} {δ : LSub} {Δ : LifeCtx} {Γ : Ctx VTy}
+    {C : CTy} (hJ : StackJ σ αs δ Δ Γ C) (hBL : BindersLow Γ C)
+    (hk : ∀ e ∈ σ, (∃ u, Δ.find? e.x = some u) ∨ NsVar e.x) : StackJM σ αs δ Δ Γ C := by
+  refine ⟨hJ, fun e he hΔ _ ⟨c, C', hC⟩ => ?_⟩
+  exfalso
+  rcases hk e he with ⟨u, hu⟩ | hns
+  · rw [hΔ] at hu; cases hu
+  · exact hBL.1 e.x (by rw [hC]; exact List.mem_cons_self ..) hns
+
+/-- At a type that is no lifetime `∀`, every entry `StackJ` admits is of the first two kinds. -/
+theorem stackJ_kinds_of_notAll {σ : LStack} {αs : List Life} {δ : LSub} {Δ : LifeCtx}
+    {Γ : Ctx VTy} {C : CTy} (hJ : StackJ σ αs δ Δ Γ C) (hC : ∀ x c D, C ≠ .all x c D) :
+    ∀ e ∈ σ, (∃ u, Δ.find? e.x = some u) ∨ NsVar e.x := by
+  intro e he
+  rcases hJ.2.2 e he with h | ⟨hns, -⟩ | ⟨-, -, -, c, D, hall, -⟩
+  · exact Or.inl h
+  · exact Or.inr hns
+  · exact absurd hall (hC _ _ _)
+
 /-- **The `U` clause of `thunk M : U (F A)` at `binder0`, at `vRLM`**: `thunkF_U_of_thawJ`'s proof,
 the context's thaw by `ctxRelendsAllM`. -/
 theorem thunkF_U_M {Δ : LifeCtx} {Γ : Ctx VTy} {M : Expr} {A : VTy}
@@ -600,7 +624,9 @@ theorem thunkF_U_M {Δ : LifeCtx} {Γ : Ctx VTy} {M : Expr} {A : VTy}
   refine wpTS_step (fun μ => Step1N.head (Head.beta μ _ Val.unit) rfl) ls' _ τ ?_
   rw [← GhostEnd.substAll_cons_l]
   exact hM hBL hSc (ι.sub δ) σ (ι.life αs) ls' (Val.unit :: γ) τ (hok.inst ι)
-    (outerBelowTop_inst ι hob) (stackJInst σ αs δ Δ _ _ ι hok.1 hJ) (subDom_inst ι hSD)
+    (outerBelowTop_inst ι hob)
+    (stackJM_of_notAll (stackJInst σ αs δ Δ _ _ ι hok.1 hJ) (fun _ _ _ h => by cases h))
+    (subDom_inst ι hSD)
     (instModels Δ δ σ αs ι hMod) hro' (subOutsideInst σ αs δ ι hso) ht' hpv'
     (gRLM_dead_cons hg')
 
@@ -610,6 +636,7 @@ theorem thunkV_U_M {Δ : LifeCtx} {Γ : Ctx VTy} {N : Expr} {C : CTy}
     (hBL : BindersLow Γ C) (hSc : Scoped Δ Γ C)
     {δ : LSub} {σ : LStack} {αs : List Life} {ls : List SRec} {γ : List Val} {ρ : WRes}
     (hok : StackOK σ αs) (hob : OuterBelowTop αs) (hJ : StackJ σ αs δ Δ Γ C)
+    (hk : ∀ e ∈ σ, (∃ u, Δ.find? e.x = some u) ∨ NsVar e.x)
     (hSD : SubDom δ Δ) (hMod : Δ.Models (extS δ σ αs)) (hro : RecsOutside αs ls)
     (hso : SubOutside σ αs δ) (ht : TabAtS σ αs ρ) (hpv : PlaceViewsL (extS δ σ αs) σ αs ls ρ)
     (hg : gRLM (ℍ := ℍ) .binder0 σ δ αs ls Γ γ ρ) :
@@ -622,7 +649,8 @@ theorem thunkV_U_M {Δ : LifeCtx} {Γ : Ctx VTy} {N : Expr} {C : CTy}
   obtain ⟨ht', hpv'⟩ := guardInst δ σ ds αs ls ls' ρz ρn ρ ρv τ ι hok hat hz hn hc hpv hv hcv
   rw [forceE_of_not_ret hC]
   exact hN hBL hSc (ι.sub δ) σ (ι.life αs) ls' γ τ (hok.inst ι) (outerBelowTop_inst ι hob)
-    (stackJInst σ αs δ Δ Γ C ι hok.1 hJ) (subDom_inst ι hSD) (instModels Δ δ σ αs ι hMod) hro'
+    (stackJM_of_kinds (stackJInst σ αs δ Δ Γ C ι hok.1 hJ) hBL hk) (subDom_inst ι hSD)
+    (instModels Δ δ σ αs ι hMod) hro'
     (subOutsideInst σ αs δ ι hso) ht' hpv' (H ι hat ls' he hkt hks hro' ρv τ hv hcv)
 
 /-- **`ThunkFRowM binder0`.** -/
@@ -630,7 +658,7 @@ theorem thunkFRowM : ThunkFRowM (ℍ := ℍ) .binder0 := by
   intro Δ Γ M A hM hBL hSc δ σ αs ls γ ρ hok hob hJ hSD hMod hro hso ht hpv hg
   show wpTS ls (.val (.lam (Expr.psub 1 γ M))) _ ρ
   refine wpTS_val _ _ _ _ (thunkF_U_M hM ⟨hBL.1, fun s hs hl => ?_⟩ ⟨hSc.1, fun s hs hl => ?_⟩
-    hok hob (stackJ_body hJ (fun _ _ _ h => by cases h) (fun _ h => h) fun _ => ctxAvoids_dead)
+    hok hob (stackJ_body hJ.1 (fun _ _ _ h => by cases h) (fun _ h => h) fun _ => ctxAvoids_dead)
     hSD hMod hro hso ht hpv hg)
   · rcases List.mem_cons.mp hs with rfl | hs
     · simp at hl
@@ -644,7 +672,8 @@ theorem thunkVRowM : ThunkVRowM (ℍ := ℍ) .binder0 := by
   intro Δ Γ N C hC _ hN hBL hSc δ σ αs ls γ ρ hok hob hJ hSD hMod hro hso ht hpv hg
   show wpTS ls (.val (.lam (Expr.psub 1 γ N))) _ ρ
   exact wpTS_val _ _ _ _ (thunkV_U_M hC hN hBL hSc hok hob
-    (stackJ_body hJ (fun _ _ _ h => by cases h) (fun _ h => h) fun _ h => h)
+    (stackJ_body hJ.1 (fun _ _ _ h => by cases h) (fun _ h => h) fun _ h => h)
+    (stackJ_kinds_of_notAll hJ.1 (fun _ _ _ h => by cases h))
     hSD hMod hro hso ht hpv hg)
 
 /-- **`BangThunkFRowM binder0`**: the context is persistent, so it, and the thunk with it, hold
@@ -654,7 +683,7 @@ theorem bangThunkFRowM : BangThunkFRowM (ℍ := ℍ) .binder0 := by
   have hρ : ρ = PMap.empty := gSepRLM_persistent Γ γ ρ hP (pure_sep_iff.mp hg).2
   show wpTS ls (.val (.lam (Expr.psub 1 γ M))) _ ρ
   refine wpTS_val _ _ _ _ ⟨hρ, thunkF_U_M hM ⟨hBL.1, fun s hs hl => ?_⟩
-    ⟨hSc.1, fun s hs hl => ?_⟩ hok hob (stackJ_body hJ (fun _ _ _ h => by cases h)
+    ⟨hSc.1, fun s hs hl => ?_⟩ hok hob (stackJ_body hJ.1 (fun _ _ _ h => by cases h)
       (fun _ h => h) fun _ => ctxAvoids_dead) hSD hMod hro hso ht hpv hg⟩
   · rcases List.mem_cons.mp hs with rfl | hs
     · simp at hl
@@ -669,7 +698,8 @@ theorem bangThunkVRowM : BangThunkVRowM (ℍ := ℍ) .binder0 := by
   have hρ : ρ = PMap.empty := gSepRLM_persistent Γ γ ρ hP (pure_sep_iff.mp hg).2
   show wpTS ls (.val (.lam (Expr.psub 1 γ N))) _ ρ
   exact wpTS_val _ _ _ _ ⟨hρ, thunkV_U_M hC hN hBL hSc hok hob
-    (stackJ_body hJ (fun _ _ _ h => by cases h) (fun _ h => h) fun _ h => h)
+    (stackJ_body hJ.1 (fun _ _ _ h => by cases h) (fun _ h => h) fun _ h => h)
+    (stackJ_kinds_of_notAll hJ.1 (fun _ _ _ h => by cases h))
     hSD hMod hro hso ht hpv hg⟩
 
 /-- **The `U` side of statement 0 at `binder0`, at `vRLM`, at every context** (`Statement0UFullM`):
@@ -677,19 +707,13 @@ R1 closed at `binder0`. -/
 theorem statement0UFullM : Statement0UFullM (ℍ := ℍ) .binder0 :=
   ⟨thawInstM, ctxRelendsAllM, thunkFRowM, thunkVRowM, bangThunkFRowM, bangThunkVRowM⟩
 
-/-! ### `GAP.md` §4's `μ` slot at W's own `μ` -/
+/-! ### `GAP.md` §4's `μ` slot at W's own `μ`
 
-/-- **The closure `Λ. return ℓ₀`, which Core's `μ` admits at `μX. U(adjC)` by adjacency, is no
-`vRLM` value there**: the body `U(adjC)` does not mention `X`, so `vRLM`'s `U` clause at `U(adjC)`
-is a candidate closed under the body; a `vRLM` value at the `μ` is one at `U(adjC)`, which is
-`vRLJ`'s there (`relMAgreesJ`), and `adj_not_wU` excludes it. -/
-theorem muAdjNotVRLM : MuAdjNotVRLM (ℍ := ℍ) := by
-  intro h
-  obtain ⟨-, -, hlfp⟩ := h
-  have hU := hlfp (vRLM (ℍ := ℍ) .binder0 none [muEnt] adjδ (.thunk adjC) [lifeN 1] [])
-    (fun v' ρ' h' => by rwa [vRLM_thunk_env .binder0 _ none] at h')
-  rw [vRLM_none_eq .binder0 (.thunk adjC) (show CMuFree adjC from trivial)] at hU
-  exact adj_not_wU hU
+`muAdjNotVRLM` (the closure `Λ. return ℓ₀`, which Core's `μ` admits at `μX. U(adjC)` by adjacency,
+is no `vRLM` value there) was proved of `vRLM` at commit `5210cf1`, through the unrestricted
+`relMAgreesJ` at `U(adjC)`, whose type has a lifetime `∀`. (E1) restricts `vRLM`'s `∀` clause to the
+instances in scope (`NEXT.md` §3.1), so that proof no longer applies, and it is withdrawn here.
+`MuAdjVRLME1` (`Nx.lean`) decides the statement after (E1). -/
 
 end ProbeD1
 

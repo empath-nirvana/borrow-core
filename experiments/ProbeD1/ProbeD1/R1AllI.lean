@@ -253,6 +253,28 @@ theorem stackJ_allPush {σ : LStack} {αs : List Life} {δ δ' : LSub} {Δ : Lif
       · exact Or.inl h₁
       · exact Or.inr (Or.inl h₂)
 
+/-- **`StackJM` at the first conjunct's premise**: the entries are of `StackJ`'s first two kinds
+there (`stackJ_kinds_allBody`). -/
+theorem stackJM_allExtend {σ : LStack} {αs : List Life} {δ δ' : LSub} {Δ : LifeCtx}
+    {Γ : Ctx VTy} {x : LifeVar} {b : Lifetime.Life} {C : CTy} {S : VTy}
+    (h : StackJ σ αs δ Δ Γ (.all x b C)) (hxσ : x ∉ σ.map LEnt.x)
+    (hBL' : BindersLow (⟨S, false⟩ :: Γ) C) :
+    StackJM σ αs δ' (Δ.extend x b) (⟨S, false⟩ :: Γ) C :=
+  stackJM_of_kinds (stackJ_allExtend h hxσ) hBL'
+    (fun e he => (stackJ_kinds_allBody (S := S) h hxσ e he).imp id (fun h => h.1))
+
+/-- **`StackJM` at the own-lend conjunct's premise**: the pushed entry is `Δ`'s at the extended
+`Δ`, the old ones as at the first conjunct. -/
+theorem stackJM_allPush {σ : LStack} {αs : List Life} {δ δ' : LSub} {Δ : LifeCtx} {Γ : Ctx VTy}
+    {x : LifeVar} {b : Lifetime.Life} {C : CTy} {S : VTy} {en : LEnt} {α : Life} {ρ : WRes}
+    (h : StackJ σ αs δ Δ Γ (.all x b C)) (hSD : SubDom δ Δ) (hex : en.x = x)
+    (hoi : OwnOKI δ σ αs en α ρ) (hBL' : BindersLow (⟨S, false⟩ :: Γ) C) :
+    StackJM (en :: σ) (α :: αs) δ' (Δ.extend x b) (⟨S, false⟩ :: Γ) C :=
+  stackJM_of_kinds (stackJ_allPush h hSD hex hoi) hBL' (fun e he => by
+    rcases List.mem_cons.mp he with rfl | he
+    · exact Or.inl ⟨b, by rw [hex, LifeCtx.find?_extend, if_pos rfl]⟩
+    · exact (stackJ_kinds_allBody (S := S) h (hex ▸ hoi.var) e he).imp id (fun h => h.1))
+
 /-- **The extended `Δ`'s models at the first conjunct's premise**: `'x ↦ α` below `b`, the other
 bounds read alike (none mentions `'x`). -/
 theorem models_allExtend {Δ : LifeCtx} {δ : LSub} {σ : LStack} {αs : List Life} {x : LifeVar}
@@ -343,17 +365,17 @@ theorem allIRowMNKAt0_of (Γ : Ctx VTy) (hMono : MonoOwnGMAt (ℍ := ℍ) .binde
   subst hE'
   refine ⟨fun α ρ₁ ρ₂ hp hc ht' hpv' => ?_, fun _ en α hpush hro' hsf ht' hpv' => ?_⟩
   · -- the first conjunct: the premise at the reading extended at the binder
-    obtain ⟨rfl, hlt⟩ := hp
+    obtain ⟨rfl, hlt, -⟩ := hp
     rw [ResU.CompS.functional hc (ResU.comp_empty_right ρ)] at ht' hpv' ⊢
     refine cRLM_step .binder0 C (fun μ => Step1N.head (Head.beta μ _ Val.unit) rfl) σ'
       (δ.extend x α) αs' ls' ρ ?_
     rw [← GhostEnd.substAll_cons_l]
     exact hM hBL' hSc' (δ.extend x α) σ' αs' ls' (Val.unit :: γ) ρ hok hob
-      (stackJ_allExtend hJ hxσ) (subDom_extend hSD x α b)
+      (stackJM_allExtend hJ hxσ hBL') (subDom_extend hSD x α b)
       (models_allExtend hMod hxσ hbx hΔx hlt) hro (subOutsideExtend σ' αs' δ x α hxσ hso) ht'
       hpv' (gRLM_dead_cons (hExt σ' δ γ αs' ls' ρ x α hxσ hδx hσx hslots hg))
   · -- the own-lend conjunct: the premise at the pushed stack
-    obtain ⟨x', c', C', hall, hex, hbind, hoi, hlt, hview⟩ := hpush
+    obtain ⟨⟨x', c', C', hall, hex, hbind, hoi, hlt, hview⟩, -, -⟩ := hpush
     obtain ⟨rfl, rfl, rfl⟩ : x = x' ∧ b = c' ∧ C = C' := by simpa using hall
     have hpush : OwnPushI δ (.all x b C) ρ (σ', αs') en α :=
       ⟨x, b, C, rfl, hex, hbind, hoi, hlt, hview⟩
@@ -370,7 +392,7 @@ theorem allIRowMNKAt0_of (Γ : Ctx VTy) (hMono : MonoOwnGMAt (ℍ := ℍ) .binde
     have hokP : StackOK (en :: σ') (α :: αs') :=
       ⟨by simp [hok.1], hoi.chain, by rw [List.map_cons]; exact List.nodup_cons.mpr ⟨hoi.var, hok.2.2⟩⟩
     exact hM hBL' hSc' (δ.extend x α) (en :: σ') (α :: αs') ls' (Val.unit :: γ) ρ hokP
-      (outerBelowTopPush αs' α _ b hob hlt) (stackJ_allPush hJ hSD hex hoi)
+      (outerBelowTopPush αs' α _ b hob hlt) (stackJM_allPush hJ hSD hex hoi hBL')
       (subDom_extend hSD x α b) (models_allPush hMod hex hbx hΔx hlt) hro'
       (by rw [← hex]; exact subOutsidePush σ' αs' δ en α hoi.var hso hsf) ht' hpv'
       (gRLM_dead_cons hg₂)

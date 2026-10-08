@@ -378,7 +378,7 @@ theorem forceRowM (p : Placement) : ForceRowM (ℍ := ℍ) p := by
 theorem all_ownM {p : Placement} (hp : p.allOwn = true) {σ : LStack} {δ : LSub} {y : LifeVar}
     {c : Lifetime.Life} {C' : CTy} {αs : List Life} {ls : List SRec} {e : Expr} {ρ : WRes}
     (h : cRLM (ℍ := ℍ) p σ δ (.all y c C') αs ls e ρ) {en : LEnt} {α : Life}
-    (hpush : OwnPushI δ (.all y c C') ρ (σ, αs) en α) (hro : RecsOutside (α :: αs) ls)
+    (hpush : OwnPushM δ (.all y c C') ρ (σ, αs) en α) (hro : RecsOutside (α :: αs) ls)
     (hsf : SubFresh δ α) (ht : TabAtS (en :: σ) (α :: αs) ρ)
     (hpv : PlaceViewsL (extS (δ.extend y α) (en :: σ) (α :: αs)) (en :: σ) (α :: αs) ls ρ) :
     cRLM (ℍ := ℍ) p (en :: σ) (δ.extend y α) C' (α :: αs) ls (.app e (.val .unit)) ρ :=
@@ -398,14 +398,18 @@ theorem arr_appM {p : Placement} {σ : LStack} {δ : LSub} {A : VTy} {D : CTy} {
 /-- **The 6.65 callback at `σ·y`, at a placement whose `∀` clause makes the own lend.** -/
 theorem callbackExtMutM_own (p : Placement) (hp : p.allOwn = true) :
     CallbackExtMutM (ℍ := ℍ) p := by
-  intro σ δ y c T D αs ls f w ρf e α ρv ρ hok _ hro _ hex hk heT hy hown hlt hro' hsf htf hpvf hf
-    hw hc ht hpv
+  intro σ δ y c T D αs ls f w ρf e α ρv ρ hfree hok _ hro _ hex hk heT hy hown hlt hro' hsf htf
+    hpvf hf hw hc ht hpv
   have hall := force_UM p hok hro htf hpvf (Ext.refl ls ρf) (keepsT_refl ls ρf) hf
-  have hpush : OwnPushI δ (.all y c (.arr (.mut (.var y) T) D)) ρf (σ, αs) e α :=
-    ⟨y, c, _, rfl, hex, fun h => hy (by simpa [CTy.binders] using h), hown, hlt,
+  have hpush : OwnPushM δ (.all y c (.arr (.mut (.var y) T) D)) ρf (σ, αs) e α :=
+    ⟨⟨y, c, _, rfl, hex, fun h => hy (by simpa [CTy.binders] using h), hown, hlt,
       fun A D' h => by
         obtain ⟨rfl, rfl⟩ : A = .mut (.var y) T ∧ D' = D := by simpa using h.symm
-        exact ⟨rfl, by rw [hk]; trivial, heT⟩⟩
+        exact ⟨rfl, by rw [hk]; trivial, heT⟩⟩,
+      fun y' hy' => by
+        rw [heT] at hy'
+        exact Or.inr ⟨fun h => hfree (h ▸ hy'), Or.inl (Or.inr hy')⟩,
+      by rw [hex, heT]; exact hfree⟩
   exact arr_appM (all_ownM hp hall hpush hro' hsf (tabAtS_left hc ht) (placeViewsL_left hc hpv))
     hw hc ht hpv
 
@@ -413,15 +417,19 @@ theorem callbackExtMutM_own (p : Placement) (hp : p.allOwn = true) :
 the extended list (`force_UM`, the views carried along `Ext`). -/
 theorem callbackExtImmM_own (p : Placement) (hp : p.allOwn = true) :
     CallbackExtImmM (ℍ := ℍ) p := by
-  intro σ δ y c T D αs ls ls' f w ρf e u α ρv ρ hok _ _ _ hex hk heT hy hown hlt hro' hsf htf hpvf
-    he hkt hf hw hc ht hpv
+  intro σ δ y c T D αs ls ls' f w ρf e u α ρv ρ hfree hok _ _ _ hex hk heT hy hown hlt hro' hsf
+    htf hpvf he hkt hf hw hc ht hpv
   have hro'' : RecsOutside αs ls' := fun a ha => hro' a (List.mem_cons_of_mem _ ha)
   have hall := force_UM p hok hro'' htf hpvf he hkt hf
-  have hpush : OwnPushI δ (.all y c (.arr (.imm (.var y) T) D)) ρf (σ, αs) e α :=
-    ⟨y, c, _, rfl, hex, fun h => hy (by simpa [CTy.binders] using h), hown, hlt,
+  have hpush : OwnPushM δ (.all y c (.arr (.imm (.var y) T) D)) ρf (σ, αs) e α :=
+    ⟨⟨y, c, _, rfl, hex, fun h => hy (by simpa [CTy.binders] using h), hown, hlt,
       fun A D' h => by
         obtain ⟨rfl, rfl⟩ : A = .imm (.var y) T ∧ D' = D := by simpa using h.symm
-        exact ⟨rfl, by rw [hk]; trivial, heT⟩⟩
+        exact ⟨rfl, by rw [hk]; trivial, heT⟩⟩,
+      fun y' hy' => by
+        rw [heT] at hy'
+        exact Or.inr ⟨fun h => hfree (h ▸ hy'), Or.inl (Or.inr hy')⟩,
+      by rw [hex, heT]; exact hfree⟩
   exact arr_appM (all_ownM hp hall hpush hro' hsf (tabAtS_left hc ht) (placeViewsL_left hc hpv))
     hw hc ht hpv
 

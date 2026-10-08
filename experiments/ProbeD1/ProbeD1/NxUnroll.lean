@@ -18,7 +18,8 @@ clauses:
   candidate the body at the `μ` gives, inside the `μ` by `vRLM_mono_at` and `vRLM_roll`.
 * `rollRowM`, `unrollRowM`: `[roll]` and `[unroll]` at `SemSM` at every placement, the index facts
   carried between `μX. A` and `A[μX. A/X]` (their free lifetime variables agree, and the
-  unrolling's binders are `A`'s).
+  unrolling's binders are `A`'s). `StackJM`'s added conjunct reads an outermost `∀`, so at `F _` it
+  is `StackJ` (`stackJM_of_notAll`).
 -/
 
 noncomputable section
@@ -361,7 +362,8 @@ theorem semIdx_mu_iff {Δ : LifeCtx} {Γ : Ctx VTy} {A : VTy} {σ : LStack} {αs
 theorem rollRowM (p : Placement) : RollRowM (ℍ := ℍ) p := by
   intro Δ Γ e A hA hc h hB hS δ σ αs ls γ ρ hok hob hJ hD hM hR hSO hT hPV hG
   obtain ⟨eB, eS, eJ⟩ := semIdx_mu_iff (Δ := Δ) (Γ := Γ) (A := A) (σ := σ) (αs := αs) (δ := δ)
-  have := h (eB.mpr hB) (eS.mpr hS) δ σ αs ls γ ρ hok hob (eJ.mpr hJ) hD hM hR hSO hT hPV hG
+  have := h (eB.mpr hB) (eS.mpr hS) δ σ αs ls γ ρ hok hob
+    (stackJM_of_notAll (eJ.mpr hJ.1) (fun _ _ _ h => by cases h)) hD hM hR hSO hT hPV hG
   exact wpTS_mono (fun ls' v ρ' h' => (vRLMUnroll p A σ δ αs ls' v ρ').mpr ⟨hA, hc, h'⟩) ρ this
 
 /-- **`UnrollRowM`**: `[unroll]` at `SemSM`, at every placement; the rule has no premise beside
@@ -369,7 +371,8 @@ its derivation. -/
 theorem unrollRowM (p : Placement) : UnrollRowM (ℍ := ℍ) p := by
   intro Δ Γ e A h hB hS δ σ αs ls γ ρ hok hob hJ hD hM hR hSO hT hPV hG
   obtain ⟨eB, eS, eJ⟩ := semIdx_mu_iff (Δ := Δ) (Γ := Γ) (A := A) (σ := σ) (αs := αs) (δ := δ)
-  have := h (eB.mp hB) (eS.mp hS) δ σ αs ls γ ρ hok hob (eJ.mp hJ) hD hM hR hSO hT hPV hG
+  have := h (eB.mp hB) (eS.mp hS) δ σ αs ls γ ρ hok hob
+    (stackJM_of_notAll (eJ.mp hJ.1) (fun _ _ _ h => by cases h)) hD hM hR hSO hT hPV hG
   exact wpTS_mono (fun ls' v ρ' h' => ((vRLMUnroll p A σ δ αs ls' v ρ').mp h').2.2) ρ this
 
 end ProbeD1

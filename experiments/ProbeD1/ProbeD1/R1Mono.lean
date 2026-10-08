@@ -1254,7 +1254,9 @@ theorem gdRowRefutation : GdRowRefutation (ℍ := ℍ) := by
   rintro ⟨hok, hob, hro, hso, -, -, -, -, -, ht, hpv, hBL, hSc, hJ, hSD, hMod⟩ hrel
     ⟨S, M, hM, hn⟩ hrow
   have hc := hrow gdΔ gdΓ 2 (.var 1) M S gdCyBody rfl (fun y u hy => ?_) (fun s hs _ h => ?_)
-    rfl (fun s hs _ h => ?_) hM hBL hSc gdδ gdσ gdαs gdls gdγ PMap.empty hok hob hJ hSD hMod
+    rfl (fun s hs _ h => ?_) hM hBL hSc gdδ gdσ gdαs gdls gdγ PMap.empty hok hob
+    (stackJM_of_kinds hJ hBL (fun e he => by
+      rw [List.mem_singleton] at he; subst he; exact Or.inl ⟨.top, rfl⟩)) hSD hMod
     hro hso ht hpv hrel
   · exact hn hc
   · rw [gdΔ_find] at hy
