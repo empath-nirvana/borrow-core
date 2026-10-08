@@ -1,15 +1,15 @@
 import Targets.Instance.CellRuns
-import Targets.A.CancelPrefix
+import Targets.A.Soundness
 
 /-!
 # The Instance — S5's traces at our machine
 
 A's S5 (`Cancellation`, `Targets/A/Soundness.lean`) reads every run from the start of a cancel or of
-an unwind against a trace: each finaliser fires, runs alone, and hands the cancel or the raise on.
-This module builds those traces at our machine, from one fact about each fired finaliser: from the
-memory it fires at, every run of it continues to `()` (`FinOK`).  Typing gives that fact
-(`Targets/I/S5J1.lean`: a finaliser that meets S5's no-interception condition at option A is a
-closed program at the pure row, and runs to `()` from every finite memory).
+an unwind as a prefix of a trace: each finaliser fires, runs alone, and hands the cancel or the
+raise on.  This module builds those traces at our machine, from one fact about each fired
+finaliser: from the memory it fires at, every run of it continues to `()` (`FinOK`).  Typing gives
+that fact (`Targets/I/S5J1.lean`: a finaliser that meets S5's no-interception condition at option A
+is a closed program at the pure row, and runs to `()` from every finite memory).
 
 * **A step of `Kf[t]`, `t` stepping, is `t`'s step under `Kf`**, with its label (`ostep_unplug`,
   `rstep_unplug`).  So while the fired finaliser has a step, the run is the finaliser's run alone.
@@ -22,13 +22,13 @@ closed program at the pure row, and runs to `()` from every finite memory).
   (`[finalise-cancel]`), its finaliser runs alone under `cfin` to `()`, `[cfin-ret]` (labelled
   `finEnd none`) hands the cancel on, and at the end `[cancel]` answers `()`.
 
-**What is proved is S5's traces up to one step.**  A's trace constructors read the configuration
-after a fire step's administrative steps (`PurePath c₁ q₀ c₂`, then the finaliser at `c₂`), and a
-trace stops only at `[]`, so a path that stops between the fire step and the finaliser's start
-follows no trace.  At our machine the fire step leaves `D ()`, one β-step from `D`.  Every path
-here is a trace once at most one step of the run is appended: the β-step, when the path stops right
-after a fire.  `Targets/I/S5J1.lean` shows the step is needed: S5 as written fails at `J₁`.
-`[Core σ=[]]`
+**Every path is a trace once the β-step after a fire is taken** (`FireExt`).  A trace's fire step
+carries the administrative steps that start the finaliser (`PurePath c₁ q₀ c₂`, the finaliser at
+`c₂`); at our machine the fire step leaves `D ()`, one β-step from `D`.  So a path that stops right
+after a fire step is a trace once that step is appended, and every other path is a trace as it
+is.  This is S5's prefix-closed reading (`unwindOrder_of_core`, `noIntercept_of_core`), and no
+more: the extension is the one step after a fire.  Read whole, S5 fails at `J₁`
+(`Targets/I/S5J1.lean`).  `[Core σ=[]]`
 -/
 
 noncomputable section
@@ -252,6 +252,34 @@ theorem rreach_tail {R : (𝕊).Runner} {c₀ c c' : (𝕊).RConf R} {ev : (𝕊
     (h : (𝕊).RReach R c₀ c) (hs : (𝕊).RStep R c ev c') : (𝕊).RReach R c₀ c' :=
   Relation.ReflTransGen.tail h ⟨ev, hs⟩
 
+/-! ### What a path needs to be a trace -/
+
+/-- **What S5's prefix-closed reading appends to a path at our machine**: nothing, or one step
+`tau` when the path stops right at a fire step — the step that starts the fired finaliser (at our
+machine the β-step of `D ()`).  The trace's fire step goes with its β-step. -/
+def FireExt {S : A.EffectSystem} {R : S.Runner} (q q' : List (S.Event × S.RConf R)) : Prop :=
+  q' = [] ∨ ∃ D c₁ c₂, q.getLast? = some (.fire D, c₁) ∧ q' = [(.tau, c₂)]
+
+/-- Nothing appended. -/
+theorem FireExt.nil {S : A.EffectSystem} {R : S.Runner} (q : List (S.Event × S.RConf R)) :
+    FireExt q [] :=
+  .inl rfl
+
+/-- A step in front of a path keeps what the path needs. -/
+theorem FireExt.cons {S : A.EffectSystem} {R : S.Runner} {q q' : List (S.Event × S.RConf R)}
+    (x : S.Event × S.RConf R) (h : FireExt q q') : FireExt (x :: q) q' := by
+  rcases h with rfl | ⟨D, c₁, c₂, hl, rfl⟩
+  · exact .inl rfl
+  · refine .inr ⟨D, c₁, c₂, ?_, rfl⟩
+    cases q with
+    | nil => simp at hl
+    | cons y q => rw [List.getLast?_cons_cons]; exact hl
+
+/-- A path that stops at a fire step needs the step after it. -/
+theorem FireExt.fire {S : A.EffectSystem} {R : S.Runner} (D : S.Term) (c₁ c₂ : S.RConf R) :
+    FireExt [((.fire D : S.Event), c₁)] [(.tau, c₂)] :=
+  .inr ⟨D, c₁, c₂, rfl, rfl⟩
+
 /-! ### The unwind's traces -/
 
 /-- A step of the finaliser, read alone, goes in front of the trace of what follows. -/
@@ -279,20 +307,20 @@ theorem pend_pfx {R : (𝕊).Runner} {P : Expr} {K₀ K₂ : Kont} {lab : (RF.al
     (hD : FinOK (ℍ := ℍ) μf D) (n : ℕ)
     (ihU : ∀ q : List ((𝕊).Event × (𝕊).RConf R), q.length < n → ∀ c : (𝕊).RConf R,
       (𝕊).RReach R ((𝕊).rinit R P) c → c.1.2 = K₀.plug (K₂.plug ((𝕊).raise lab j w)) →
-      (𝕊).RPath R c q → ∃ q', q'.length ≤ 1 ∧ (𝕊).RPath R c (q ++ q') ∧
+      (𝕊).RPath R c q → ∃ q', FireExt q q' ∧ (𝕊).RPath R c (q ++ q') ∧
         (𝕊).UnwindTrace R (𝕊).noFinRaise K₀ c K₂ (q ++ q')) :
     ∀ (q : List ((𝕊).Event × (𝕊).RConf R)), q.length < n → ∀ (c : (𝕊).RConf R) (t : Expr),
       (𝕊).RReach R ((𝕊).rinit R P) c →
       c.1.2 = ((K₀.comp K₂).comp (.seq .hole (raiseE (.val p)))).plug t →
       Steps (ℍ := ℍ) μf D c.1.1 t → (𝕊).RPath R c q →
-      ∃ q', q'.length ≤ 1 ∧ (𝕊).RPath R c (q ++ q') ∧
+      ∃ q', FireExt q q' ∧ (𝕊).RPath R c (q ++ q') ∧
         (𝕊).PendTrace R (𝕊).noFinRaise K₀ K₂ (.seq .hole (raiseE (.val p))) (lab, j, w) c
           (q ++ q') := by
   intro q
   induction q with
   | nil =>
       intro _ c t _ _ _ _
-      exact ⟨[], by simp, .nil, .running .nil⟩
+      exact ⟨[], FireExt.nil _, .nil, .running .nil⟩
   | cons x q₁ ih =>
       intro hlen c t hreach hterm hrun hq
       obtain ⟨ev, c'⟩ := x
@@ -316,7 +344,7 @@ theorem pend_pfx {R : (𝕊).Runner} {P : Expr} {K₀ K₂ : Kont} {lab : (RF.al
           rw [hp, Kont.plug_comp]
         obtain ⟨q'', hl'', hpath'', htr''⟩ := ihU q₁ (by simp at hlen; omega) _
           (rreach_tail hreach hst) hterm' hq₁
-        refine ⟨q'', hl'', .cons hst hpath'', ?_⟩
+        refine ⟨q'', hl''.cons _, .cons hst hpath'', ?_⟩
         have hpp := purePath_quiet (R := R) (J := J) sc (K₀.comp K₂)
           (Head.seq (ℍ := ℍ) μc (raiseE (.val p))) rfl
         rw [← he] at hpp
@@ -333,13 +361,13 @@ theorem pend_pfx {R : (𝕊).Runner} {P : Expr} {K₀ K₂ : Kont} {lab : (RF.al
         obtain ⟨⟨-, rfl⟩, rfl⟩ := hc'
         obtain ⟨q'', hl'', hpath'', htr''⟩ := ih (by simp at hlen; omega) _ t'
           (rreach_tail hreach hst) rfl (hrun.trans (Steps.one hs')) hq₁
-        exact ⟨q'', hl'', .cons hst hpath'', pend_cons rfl rfl hst hst' htr''⟩
+        exact ⟨q'', hl''.cons _, .cons hst hpath'', pend_cons rfl rfl hst hst' htr''⟩
 
-/-- **The unwind's traces, up to one step of the run.**  At a configuration a typed program reaches,
-a raise pending under a context of A's unwinding shape (`Std`) that holds no handler of its label,
-whose finalisers run to `()` from every finite memory: every path is an unwind trace once at most
-one step is appended.  The step is the β-step that starts a fired finaliser, needed when the path
-stops right after the fire step. -/
+/-- **The unwind's traces.**  At a configuration a typed program reaches, a raise pending under a
+context of A's unwinding shape (`Std`) that holds no handler of its label, whose finalisers run to
+`()` from every finite memory: every path is an unwind trace once what it needs is appended
+(`FireExt`): nothing, or the β-step that starts a fired finaliser when the path stops right after
+the fire step. -/
 theorem unwind_pfx (hL : LiveOK (ℍ := ℍ) RF Ξ J) (hnz : ∀ l, RF.name Ξ l ≠ 0) {R : (𝕊).Runner}
     (hR : R.Respects) {P : Expr} {C : OCTy} (hP : (𝕊).der [] P C) :
     ∀ (n : ℕ) (q : List ((𝕊).Event × (𝕊).RConf R)), q.length < n →
@@ -347,7 +375,7 @@ theorem unwind_pfx (hL : LiveOK (ℍ := ℍ) RF Ξ J) (hnz : ∀ l, RF.name Ξ l
       (𝕊).RReach R ((𝕊).rinit R P) c → (𝕊).Std K →
       c.1.2 = K₀.plug (Kont.plug K ((𝕊).raise lab j w)) → Kont.HasHnd (RF.name Ξ lab) K = false →
       (∀ D ∈ (𝕊).fins K, ∀ μ, FinDom μ → FinOK (ℍ := ℍ) μ D) → (𝕊).RPath R c q →
-      ∃ q', q'.length ≤ 1 ∧ (𝕊).RPath R c (q ++ q') ∧
+      ∃ q', FireExt q q' ∧ (𝕊).RPath R c (q ++ q') ∧
         (𝕊).UnwindTrace R (𝕊).noFinRaise K₀ c K (q ++ q') := by
   intro n
   induction n with
@@ -355,7 +383,7 @@ theorem unwind_pfx (hL : LiveOK (ℍ := ℍ) RF Ξ J) (hnz : ∀ l, RF.name Ξ l
   | succ n ih =>
     intro q hlen c K₀ K lab j w hreach hstd hterm hhnd hfin hq
     rcases std_split hstd with hU | ⟨K₁, K₂, N, D, rfl, hK₁, hstd₂⟩
-    · refine ⟨[], by simp, by simpa using hq, ?_⟩
+    · refine ⟨[], FireExt.nil _, by simpa using hq, ?_⟩
       rw [List.append_nil]
       exact A.EffectSystem.UnwindTrace.out hterm hhnd hU
     have hlive : (𝕊).Live c.1 := ⟨P, C, R, c.2, hR, hP, hreach⟩
@@ -376,7 +404,7 @@ theorem unwind_pfx (hL : LiveOK (ℍ := ℍ) RF Ξ J) (hnz : ∀ l, RF.name Ξ l
     have hfd : FinDom c.1.1 := finDom_reach hreach
     have ihU : ∀ q' : List ((𝕊).Event × (𝕊).RConf R), q'.length < n → ∀ c' : (𝕊).RConf R,
         (𝕊).RReach R ((𝕊).rinit R P) c' → c'.1.2 = K₀.plug (K₂.plug ((𝕊).raise lab j w)) →
-        (𝕊).RPath R c' q' → ∃ q'', q''.length ≤ 1 ∧ (𝕊).RPath R c' (q' ++ q'') ∧
+        (𝕊).RPath R c' q' → ∃ q'', FireExt q' q'' ∧ (𝕊).RPath R c' (q' ++ q'') ∧
           (𝕊).UnwindTrace R (𝕊).noFinRaise K₀ c' K₂ (q' ++ q'') :=
       fun q' hq' c' hr' ht' hp' => ih q' hq' c' K₀ K₂ lab j w hr' hstd₂ ht' hH.1 hfin₂ hp'
     obtain ⟨⟨μ, e⟩, s⟩ := c
@@ -412,7 +440,7 @@ theorem unwind_pfx (hL : LiveOK (ℍ := ℍ) RF Ξ J) (hnz : ∀ l, RF.name Ξ l
         rfl rfl h
       exact ⟨rfl, by rw [hsub]; rfl⟩
     cases hq with
-    | nil => exact ⟨[], by simp, .nil, .stop⟩
+    | nil => exact ⟨[], FireExt.nil _, .nil, .stop⟩
     | @cons _ ev₁ c₁' q₁ hst₁ hq₁ =>
     have hst₁' := hst₁
     change (𝕊).RStep R ((μ, e), s) ev₁ c₁' at hst₁'
@@ -430,14 +458,14 @@ theorem unwind_pfx (hL : LiveOK (ℍ := ℍ) RF Ξ J) (hnz : ∀ l, RF.name Ξ l
         (q₀ := [(.tau, c₂)]) (q := q)
         rfl hH.2 hK₁ hterm hst₁ hpp (fun _ => rfl) trivial rfl hpend
     rcases q₁ with _ | ⟨⟨ev₂, c₂'⟩, q₂⟩
-    · refine ⟨[(.tau, c₂)], by simp, .cons hst₁ (.cons hβ .nil), ?_⟩
+    · refine ⟨[(.tau, c₂)], FireExt.fire D c₁ c₂, .cons hst₁ (.cons hβ .nil), ?_⟩
       exact hfire [] (.running .nil)
     · obtain ⟨hst₂, hq₂⟩ := rpath_cons_inv hq₁
       obtain ⟨rfl, rfl⟩ := hβinv hst₂
       obtain ⟨q'', hl'', hpath'', hpend''⟩ :=
         pend_pfx (R := R) (P := P) (K₀ := K₀) (K₂ := K₂) (lab := lab) (j := j) (w := w) hr
           (hD μ hfd) n ihU q₂ (by simp at hlen; omega) c₂ D hreach₂ rfl (.refl _ _) hq₂
-      exact ⟨q'', hl'', .cons hst₁ (.cons hst₂ hpath''), hfire _ hpend''⟩
+      exact ⟨q'', (hl''.cons _).cons _, .cons hst₁ (.cons hst₂ hpath''), hfire _ hpend''⟩
 
 /-! ### The steps of a cancel -/
 
@@ -570,20 +598,20 @@ theorem fin_pfx {R : (𝕊).Runner} {P : Expr} {N : (RF.alg Ξ).Lab → Prop} {K
     (ihC : ∀ q : List ((𝕊).Event × (𝕊).RConf R), q.length < n → ∀ c : (𝕊).RConf R,
       (𝕊).RReach R ((𝕊).rinit R P) c →
       c.1.2 = (cancelK K₀ Hv Ko).plug (raiseE (.val (cancelVal Ns none))) → (𝕊).RPath R c q →
-      ∃ q', q'.length ≤ 1 ∧ (𝕊).RPath R c (q ++ q') ∧
+      ∃ q', FireExt q q' ∧ (𝕊).RPath R c (q ++ q') ∧
         (𝕊).CancelTrace R (𝕊).noFinRaise N K₀ c ((𝕊).fins Ko) none (q ++ q')) :
     ∀ (q : List ((𝕊).Event × (𝕊).RConf R)), q.length < n → ∀ (c : (𝕊).RConf R) (t : Expr),
       (𝕊).RReach R ((𝕊).rinit R P) c →
       c.1.2 = ((cancelK K₀ Hv Ko).comp (cfinK (cancelVal Ns none))).plug t →
       Steps (ℍ := ℍ) μf D c.1.1 t → (𝕊).RPath R c q →
-      ∃ q', q'.length ≤ 1 ∧ (𝕊).RPath R c (q ++ q') ∧
+      ∃ q', FireExt q q' ∧ (𝕊).RPath R c (q ++ q') ∧
         (𝕊).FinTrace R (𝕊).noFinRaise N K₀ ((cancelK K₀ Hv Ko).comp (cfinK (cancelVal Ns none)))
           c ((𝕊).fins Ko) none (q ++ q') := by
   intro q
   induction q with
   | nil =>
       intro _ c t _ _ _ _
-      exact ⟨[], by simp, .nil, .running .nil⟩
+      exact ⟨[], FireExt.nil _, .nil, .running .nil⟩
   | cons x q₁ ih =>
       intro hlen c t hreach hterm hrun hq
       obtain ⟨ev, c'⟩ := x
@@ -602,7 +630,7 @@ theorem fin_pfx {R : (𝕊).Runner} {P : Expr} {N : (RF.alg Ξ).Lab → Prop} {K
         obtain ⟨rfl, rfl⟩ := rstep_cfret_inv (J := J) hst'
         obtain ⟨q'', hl'', hpath'', htr''⟩ := ihC q₁ (by simp at hlen; omega) _
           (rreach_tail hreach hst) rfl hq₁
-        refine ⟨q'', hl'', .cons hst hpath'', ?_⟩
+        refine ⟨q'', hl''.cons _, .cons hst hpath'', ?_⟩
         have hend : (𝕊).Ended ((cancelK K₀ Hv Ko).comp (cfinK (cancelVal Ns none)))
             ((μc, ((cancelK K₀ Hv Ko).comp (cfinK (cancelVal Ns none))).plug Val.unit.1), sc) none :=
           ⟨(𝕊).unitV, rfl⟩
@@ -616,14 +644,14 @@ theorem fin_pfx {R : (𝕊).Runner} {P : Expr} {N : (RF.alg Ξ).Lab → Prop} {K
         obtain ⟨⟨-, rfl⟩, rfl⟩ := hc'
         obtain ⟨q'', hl'', hpath'', htr''⟩ := ih (by simp at hlen; omega) _ t'
           (rreach_tail hreach hst) rfl (hrun.trans (Steps.one hs')) hq₁
-        exact ⟨q'', hl'', .cons hst hpath'', fin_cons rfl rfl hst hst' htr''⟩
+        exact ⟨q'', hl''.cons _, .cons hst hpath'', fin_cons rfl rfl hst hst' htr''⟩
 
-/-- **The cancel's traces, up to one step of the run.**  At a configuration a typed program reaches,
-a cancel raised under the dying handler `Hv` and the region's frames `Kc` still to unwind, inside
-`ccatch`: when `Kc` holds no `ccatch` and no `cfin` frame, no handler named `0` is in `hnd Hv ∘ Kc`,
-and `Kc`'s finalisers run to `()` from every finite memory, every path is a cancel trace, with
-nothing kept, once at most one step is appended (the β-step that starts a fired finaliser that is
-a λ). -/
+/-- **The cancel's traces.**  At a configuration a typed program reaches, a cancel raised under the
+dying handler `Hv` and the region's frames `Kc` still to unwind, inside `ccatch`: when `Kc` holds
+no `ccatch` and no `cfin` frame, no handler named `0` is in `hnd Hv ∘ Kc`, and `Kc`'s finalisers
+run to `()` from every finite memory, every path is a cancel trace, with nothing kept, once what it
+needs is appended (`FireExt`): nothing, or the β-step that starts a fired finaliser that is a λ,
+when the path stops right after the fire step. -/
 theorem cancel_pfx (hL : LiveOK (ℍ := ℍ) RF Ξ J) {R : (𝕊).Runner} (hR : R.Respects) {P : Expr}
     {C : OCTy} (hP : (𝕊).der [] P C) {N : (RF.alg Ξ).Lab → Prop} {K₀ : Kont} {Hv : Val}
     {Ns : List UInt32} :
@@ -632,7 +660,7 @@ theorem cancel_pfx (hL : LiveOK (ℍ := ℍ) RF Ξ J) {R : (𝕊).Runner} (hR : 
       c.1.2 = (cancelK K₀ Hv Kc).plug (raiseE (.val (cancelVal Ns none))) → Kc.NoCtl →
       ((hndK Hv).comp Kc).HasHnd 0 = false →
       (∀ D ∈ (𝕊).fins Kc, ∀ μ, FinDom μ → FinOK (ℍ := ℍ) μ D) → (𝕊).RPath R c q →
-      ∃ q', q'.length ≤ 1 ∧ (𝕊).RPath R c (q ++ q') ∧
+      ∃ q', FireExt q q' ∧ (𝕊).RPath R c (q ++ q') ∧
         (𝕊).CancelTrace R (𝕊).noFinRaise N K₀ c ((𝕊).fins Kc) none (q ++ q') := by
   intro n
   induction n with
@@ -659,14 +687,14 @@ theorem cancel_pfx (hL : LiveOK (ℍ := ℍ) RF Ξ J) {R : (𝕊).Runner} (hR : 
     have he : e = K₀.plug (ccatchE (((hndK Hv).comp Kc).plug (raiseE (.val (cancelVal Ns none))))) := by
       rw [hterm, Kont.plug_comp]; rfl
     rcases q with _ | ⟨⟨ev₁, c₁⟩, q₁⟩
-    · exact ⟨[], by simp, .nil, .stop⟩
+    · exact ⟨[], FireExt.nil _, .nil, .stop⟩
     obtain ⟨hst₁, -⟩ := rpath_cons_inv hq
     have hst₁' := hst₁
     change (𝕊).RStep R ((μ, e), s) ev₁ c₁ at hst₁'
     rw [he] at hst₁'
     obtain ⟨rfl, rfl⟩ := rstep_quiet_inv (J := J)
       (Head.cancel (ℍ := ℍ) μ Ns ((hndK Hv).comp Kc) hK0) rfl rfl hst₁'
-    refine ⟨[], by simp, by simpa using hq, ?_⟩
+    refine ⟨[], FireExt.nil _, by simpa using hq, ?_⟩
     rw [List.append_nil]
     have hans : (𝕊).Answered K₀ none (K₀.plug (.val Val.unit)) := rfl
     exact A.EffectSystem.CancelTrace.answer hst₁ hans
@@ -702,13 +730,13 @@ theorem cancel_pfx (hL : LiveOK (ℍ := ℍ) RF Ξ J) {R : (𝕊).Runner} (hR : 
   have ihC : ∀ q' : List ((𝕊).Event × (𝕊).RConf R), q'.length < n → ∀ c' : (𝕊).RConf R,
       (𝕊).RReach R ((𝕊).rinit R P) c' →
       c'.1.2 = (cancelK K₀ Hv Ko).plug (raiseE (.val (cancelVal Ns none))) → (𝕊).RPath R c' q' →
-      ∃ q'', q''.length ≤ 1 ∧ (𝕊).RPath R c' (q' ++ q'') ∧
+      ∃ q'', FireExt q' q'' ∧ (𝕊).RPath R c' (q' ++ q'') ∧
         (𝕊).CancelTrace R (𝕊).noFinRaise N K₀ c' ((𝕊).fins Ko) none (q' ++ q'') :=
     fun q' hq' c' hr' ht' hp' => ih q' hq' c' Ko hr' ht' hCo.1 hH'.2 hfino hp'
   have he : e = (cancelK K₀ Hv Ko).plug (ubindE (Val.pair N' D')
       (Ki.plug (raiseE (.val (cancelVal Ns none))))) := he₀
   rcases q with _ | ⟨⟨ev₁, c₁⟩, q₁⟩
-  · exact ⟨[], by simp, .nil, .stop⟩
+  · exact ⟨[], FireExt.nil _, .nil, .stop⟩
   obtain ⟨hst₁, hq₁⟩ := rpath_cons_inv hq
   have hst₁' := hst₁
   change (𝕊).RStep R ((μ, e), s) ev₁ c₁ at hst₁'
@@ -745,7 +773,8 @@ theorem cancel_pfx (hL : LiveOK (ℍ := ℍ) RF Ξ J) {R : (𝕊).Runner} (hR : 
             [(.tau, c₂)] ++ q) := fun q hft =>
       A.EffectSystem.CancelTrace.fire hst₁ hpp rfl hft
     rcases q₁ with _ | ⟨⟨ev₂, c₂'⟩, q₂⟩
-    · exact ⟨[(.tau, c₂)], by simp, .cons hst₁ (.cons (.mach hβo) .nil), hfire [] (.running .nil)⟩
+    · exact ⟨[(.tau, c₂)], FireExt.fire _ _ c₂, .cons hst₁ (.cons (.mach hβo) .nil),
+        hfire [] (.running .nil)⟩
     obtain ⟨hst₂, hq₂⟩ := rpath_cons_inv hq₁
     have hst₂' := hst₂
     rw [hc₁] at hst₂'
@@ -753,7 +782,7 @@ theorem cancel_pfx (hL : LiveOK (ℍ := ℍ) RF Ξ J) {R : (𝕊).Runner} (hR : 
     obtain ⟨q'', hl'', hpath'', hft''⟩ :=
       fin_pfx (R := R) (P := P) (N := N) (K₀ := K₀) (Hv := Hv) (Ns := Ns) (Ko := Ko) hD n ihC q₂
         (by simp at hlen; omega) c₂ _ (rreach_tail hreach₁ hst₂) rfl (.refl _ _) hq₂
-    exact ⟨q'', hl'', .cons hst₁ (.cons hst₂ hpath''), hfire _ hft''⟩
+    exact ⟨q'', (hl''.cons _).cons _, .cons hst₁ (.cons hst₂ hpath''), hfire _ hft''⟩
   · -- `D` is no λ: `D ()` is the finaliser's term already
     have hfe : finE D'.1 = .app (.val D') (.val Val.unit) :=
       finE_of_not_lam (fun b h => hlam ⟨b, h⟩)
@@ -763,10 +792,10 @@ theorem cancel_pfx (hL : LiveOK (ℍ := ℍ) RF Ξ J) {R : (𝕊).Runner} (hR : 
     obtain ⟨q'', hl'', hpath'', hft''⟩ :=
       fin_pfx (R := R) (P := P) (N := N) (K₀ := K₀) (Hv := Hv) (Ns := Ns) (Ko := Ko) hD n ihC q₁
         (by simp at hlen; omega) _ _ hreach₁ hc₁' (.refl _ _) hq₁
-    exact ⟨q'', hl'', .cons hst₁ hpath'',
+    exact ⟨q'', hl''.cons _, .cons hst₁ hpath'',
       A.EffectSystem.CancelTrace.fire (q₀ := []) hst₁ .nil hc₁' hft''⟩
 
-/-! ### S5 at our instance, prefix-closed -/
+/-! ### S5 at our instance -/
 
 /-- Steps that keep the store reach, under every runner, at the runner's state. -/
 theorem rreach_of_pureSteps {R : (𝕊).Runner} {c₀ : (𝕊).RConf R} {d d' : (𝕊).Conf}
@@ -783,7 +812,7 @@ hypothesis): at a configuration a typed program reaches that cancels `capture l 
 catch nothing", read at the capture — no operation is caught across a cancel or a cancel-mode
 finaliser — with I3.c's `NoInterception` read on the captured context.  Scope: it speaks of the
 context a continuation was captured in, not of the cancel run it starts, so it does not assume the
-trace. -/
+trace.  Its two halves are `CancelsNoCtl` and `CancelsNZ` (`cancelsStd_of`). -/
 def CancelsStd (RF : RowForm) (Ξ : EffCtx) (J : OurTyping RF) : Prop :=
   ∀ R : (ourInst (ℍ := ℍ) RF Ξ J).Runner, R.Respects → ∀ e ε A,
     (ourInst (ℍ := ℍ) RF Ξ J).Answers R ε →
@@ -793,26 +822,54 @@ def CancelsStd (RF : RowForm) (Ξ : EffCtx) (J : OurTyping RF) : Prop :=
       c₀.1.2 = K₀.plug ((ourInst (ℍ := ℍ) RF Ξ J).cancel ((ourInst (ℍ := ℍ) RF Ξ J).capture l H K)) →
       K.NoCtl ∧ K.HasHnd 0 = false
 
-/-- **S5's unwind at our instance, prefix-closed** (`unwind_pfx`), given what typing gives about a
-fired finaliser that meets the no-interception condition: from every finite memory it runs to
-`()`. -/
-theorem unwindOrderPfx_of_core (hL : LiveOK (ℍ := ℍ) RF Ξ J) (hnz : ∀ l, RF.name Ξ l ≠ 0)
+/-- **A cancelled continuation's context holds no `ccatch` and no `cfin` frame** (`CancelsStd`'s
+half about control frames).  It is a whole-run fact about fired finalisers, of `FinRowsAt`'s kind:
+a context holds a `cfin` frame only if an operation escaped a fired finaliser and was caught
+outside it. -/
+def CancelsNoCtl (RF : RowForm) (Ξ : EffCtx) (J : OurTyping RF) : Prop :=
+  ∀ R : (ourInst (ℍ := ℍ) RF Ξ J).Runner, R.Respects → ∀ e ε A,
+    (ourInst (ℍ := ℍ) RF Ξ J).Answers R ε →
+    (ourInst (ℍ := ℍ) RF Ξ J).der [] e ((ourInst (ℍ := ℍ) RF Ξ J).F ε A) →
+    ∀ (c₀ : (ourInst (ℍ := ℍ) RF Ξ J).RConf R) (K₀ : Kont) l H (K : Kont),
+      (ourInst (ℍ := ℍ) RF Ξ J).RReach R ((ourInst (ℍ := ℍ) RF Ξ J).rinit R e) c₀ →
+      c₀.1.2 = K₀.plug ((ourInst (ℍ := ℍ) RF Ξ J).cancel ((ourInst (ℍ := ℍ) RF Ξ J).capture l H K)) →
+      K.NoCtl
+
+/-- **A cancelled continuation's context holds no handler named `0`** (`CancelsStd`'s half about
+handlers): I3.c's `NoInterception` read on the captured context. -/
+def CancelsNZ (RF : RowForm) (Ξ : EffCtx) (J : OurTyping RF) : Prop :=
+  ∀ R : (ourInst (ℍ := ℍ) RF Ξ J).Runner, R.Respects → ∀ e ε A,
+    (ourInst (ℍ := ℍ) RF Ξ J).Answers R ε →
+    (ourInst (ℍ := ℍ) RF Ξ J).der [] e ((ourInst (ℍ := ℍ) RF Ξ J).F ε A) →
+    ∀ (c₀ : (ourInst (ℍ := ℍ) RF Ξ J).RConf R) (K₀ : Kont) l H (K : Kont),
+      (ourInst (ℍ := ℍ) RF Ξ J).RReach R ((ourInst (ℍ := ℍ) RF Ξ J).rinit R e) c₀ →
+      c₀.1.2 = K₀.plug ((ourInst (ℍ := ℍ) RF Ξ J).cancel ((ourInst (ℍ := ℍ) RF Ξ J).capture l H K)) →
+      K.HasHnd 0 = false
+
+/-- `CancelsStd` is its two halves. -/
+theorem cancelsStd_of (h₁ : CancelsNoCtl (ℍ := ℍ) RF Ξ J) (h₂ : CancelsNZ (ℍ := ℍ) RF Ξ J) :
+    CancelsStd (ℍ := ℍ) RF Ξ J :=
+  fun R hR e ε A hA he c₀ K₀ l H K hr hc =>
+    ⟨h₁ R hR e ε A hA he c₀ K₀ l H K hr hc, h₂ R hR e ε A hA he c₀ K₀ l H K hr hc⟩
+
+/-- **S5's unwind at our instance** (`unwind_pfx`), given what typing gives about a fired finaliser
+that meets the no-interception condition: from every finite memory it runs to `()`. -/
+theorem unwindOrder_of_core (hL : LiveOK (ℍ := ℍ) RF Ξ J) (hnz : ∀ l, RF.name Ξ l ≠ 0)
     (hF : ∀ D, (𝕊).FinRow (𝕊).noFinRaise D → ∀ μ, FinDom μ → FinOK (ℍ := ℍ) μ D) :
-    (𝕊).UnwindOrderPfx (𝕊).noFinRaise := by
+    (𝕊).UnwindOrder (𝕊).noFinRaise := by
   intro R hR e ε A _ he c K₀ K m j w q hreach hK hc hm hfin hq
   obtain ⟨q', -, hpath, htr⟩ := unwind_pfx hL hnz hR he (q.length + 1) q (Nat.lt_succ_self _) c
     K₀ K m j w hreach hK hc hm (fun D hD => hF D (hfin D hD)) hq
   exact ⟨q', hpath, htr⟩
 
-/-- **S5's no-interception at our instance, prefix-closed** (`cancel_pfx`), given what typing gives
-about a fired finaliser that meets the no-interception condition, and that a cancelled
-continuation was captured in a standard context (`CancelsStd`).  A cancel of `capture l H K` reaches
-`cancelOf l H K` by three steps that keep the store; there the dying handler's name is a label's,
-not `0`. -/
-theorem noInterceptPfx_of_core (hL : LiveOK (ℍ := ℍ) RF Ξ J) (hnz : ∀ l, RF.name Ξ l ≠ 0)
+/-- **S5's no-interception at our instance** (`cancel_pfx`), given what typing gives about a fired
+finaliser that meets the no-interception condition, and that a cancelled continuation was captured
+in a standard context (`CancelsStd`).  A cancel of `capture l H K` reaches `cancelOf l H K` by three
+steps that keep the store; there the dying handler's name is a label's, not `0`. -/
+theorem noIntercept_of_core (hL : LiveOK (ℍ := ℍ) RF Ξ J) (hnz : ∀ l, RF.name Ξ l ≠ 0)
     (hF : ∀ D, (𝕊).FinRow (𝕊).noFinRaise D → ∀ μ, FinDom μ → FinOK (ℍ := ℍ) μ D)
     (hS : CancelsStd (ℍ := ℍ) RF Ξ J) :
-    (𝕊).NoInterceptPfx (𝕊).noFinRaise := by
+    (𝕊).NoIntercept (𝕊).noFinRaise := by
   intro R hR e ε A hA he c₀ c K₀ l H K q hreach h₀ hps hs hc hfin hq
   obtain ⟨hNC, hK0⟩ := hS R hR e ε A hA he c₀ K₀ l H K hreach h₀
   have hreachc : (𝕊).RReach R ((𝕊).rinit R e) c := by
@@ -853,12 +910,12 @@ theorem noInterceptPfx_of_core (hL : LiveOK (ℍ := ℍ) RF Ξ J) (hnz : ∀ l, 
     (Nat.lt_succ_self _) ((μc, ec), sc) K hreachc hterm hNC hH (fun D hD => hF D (hfin D hD)) hq
   exact ⟨q', hpath, htr⟩
 
-/-- **S5 at our instance, prefix-closed.** -/
-theorem cancellationPfx_of_core (hL : LiveOK (ℍ := ℍ) RF Ξ J) (hnz : ∀ l, RF.name Ξ l ≠ 0)
+/-- **S5 at our instance.** -/
+theorem cancellation_of_core (hL : LiveOK (ℍ := ℍ) RF Ξ J) (hnz : ∀ l, RF.name Ξ l ≠ 0)
     (hF : ∀ D, (𝕊).FinRow (𝕊).noFinRaise D → ∀ μ, FinDom μ → FinOK (ℍ := ℍ) μ D)
     (hS : CancelsStd (ℍ := ℍ) RF Ξ J) :
-    (𝕊).CancellationPfx (𝕊).noFinRaise :=
-  ⟨noInterceptPfx_of_core hL hnz hF hS, unwindOrderPfx_of_core hL hnz hF⟩
+    (𝕊).Cancellation (𝕊).noFinRaise :=
+  ⟨noIntercept_of_core hL hnz hF hS, unwindOrder_of_core hL hnz hF⟩
 
 /-! ### A path that stops right after a fire step -/
 

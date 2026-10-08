@@ -1,5 +1,5 @@
 import Targets.A.Binary
-import Targets.A.CancelPrefix
+import Targets.A.CancelWhole
 import Targets.A.EffAlg
 import Targets.A.Expressiveness
 import Targets.A.Lowering
@@ -82,6 +82,7 @@ import Targets.Instance.ZeroCost
 import Targets.I.AcceptsRejects
 import Targets.I.AlgJ1
 import Targets.I.Binder
+import Targets.I.CancelsNZ
 import Targets.I.Combined
 import Targets.I.Device
 import Targets.I.GhostCoupling

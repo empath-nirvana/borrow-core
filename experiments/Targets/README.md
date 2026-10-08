@@ -34,8 +34,8 @@ Instance; the Instance imports no B or I; I imports everything.
 | **A** | `Targets/A/EffAlg.lean` | the effect algebra (Yoshioka–Sekiyama–Igarashi Def. 3.5) and its safety (Def. 5.1) |
 | | `Targets/A/System.lean` | `EffectSystem` (CBPV formers over an effect algebra; contexts with five named frames, the driver `driveF` among them; a continuation's cell, `captureAt`, `cellFree`, `withCell`; a labelled machine; typing); runners and runs; `SafeRuns`, `Terminates`, `RunsTo`, `RunsForever`; the schemas `PolyUse`, `PolyUseLacks`, `PolyUseOpen`, `CallsThrough` |
 | | `Targets/A/Machine.lean` | S0: `ConfLaws`, `KontLaws`, `AppLaw`, `Congr`, `NoIO`, `OpStuck`, `DataInj`, `LoopLaws`, `DriveLaws`, `MachShape`; the let law `LetLaw` |
-| | `Targets/A/Soundness.lean` | S1 `RowAlgebra`, S2 `DataDiv` and `Safety`, S3 `EffSafe`, S4 `HandlerSem` (a catch may allocate one fresh cell for `κ`, which its resume and affine cancel release: `CatchLaw`, `ResumeCellLaw`, `CancelCellLaw`, `JoinAcross`; `HandlerSemNoCell`, S4 with no cell, kept; at an instance with no cells the two agree, `handlerSem_iff_noCell`), S5 `Cancellation` (the cancel and unwind traces), S6 `ContUseEv` (per capture event; `ContUse`, read at `capture`, kept); `SProps` |
-| | `Targets/A/CancelPrefix.lean` | S5's traces read prefix-closed (`NoInterceptPfx`, `UnwindOrderPfx`, `CancellationPfx`): a candidate restatement, which the target implies |
+| | `Targets/A/Soundness.lean` | S1 `RowAlgebra`, S2 `DataDiv` and `Safety`, S3 `EffSafe`, S4 `HandlerSem` (a catch may allocate one fresh cell for `κ`, which its resume and affine cancel release: `CatchLaw`, `ResumeCellLaw`, `CancelCellLaw`, `JoinAcross`; `HandlerSemNoCell`, S4 with no cell, kept; at an instance with no cells the two agree, `handlerSem_iff_noCell`), S5 `Cancellation` (every run from a cancel's or an unwind's start a prefix of a cancel or unwind trace), S6 `ContUseEv` (per capture event; `ContUse`, read at `capture`, kept); `SProps` |
+| | `Targets/A/CancelWhole.lean` | S5 read whole (`NoInterceptWhole`, `UnwindOrderWhole`, `CancellationWhole`: every run a trace), kept as a record; it implies S5 (`cancellation_of_whole`) |
 | | `Targets/A/Programs.lean` | the signatures, runners and programs of E1–E10, and S6's witnesses R1–R4 |
 | | `Targets/A/Expressiveness.lean` | E1 `NoColouring` … E10 `Reconciler`; `EProps`; `Props := SProps ∧ EProps` |
 | | `Targets/A/NonVacuity.lean` | the abstract non-vacuity lemmas |
@@ -65,7 +65,7 @@ Instance; the Instance imports no B or I; I imports everything.
 | | `Targets/Instance/AlgSim.lean` | algebraicity's two sides step for step: terms related but at algebraicity's frames (`AlgRel`), every head step of Core's machine kept (`AlgRel.head`), a machine step and a runner's step matched forward and back (`ostep_sim`, `rstep_fwd`, `rstep_bwd`), so the same complete runs (`obsStartFrom_iff_rel`); algebraicity at every typing system whose typed programs' runs are `AlgGood` (`algLaw_of_good`) |
 | | `Targets/Instance/ContUse.lean` | S6's tooth at the capture cell: R1's run, and a typing system that types R1 fails `ContUseEv` (`not_contUseEv_of_der_R1`, `teeth_JR_ΞA`) |
 | | `Targets/Instance/HandlerCell.lean` | S4 at the capture cell, at every effect context (`handlerSem_ourInst`, `handlerSem_orow`): a catch at an unrestricted operation keeps the store (`catch_unr_ourInst`), one at a linear or affine operation allocates `κ`'s cell (`catch_cell_ourInst`), resume and cancel at a cell release it (`resumeCellLaw_ourInst`, `cancelCellLaw_ourInst`); S4 with no cell fails at `J₁` and `ΞA` (`not_handlerSemNoCell_J₁_ΞA`) |
-| | `Targets/Instance/CancelRuns.lean` | S5's traces at our machine: a step of a context around a stepping term is the term's (`rstep_unplug`); the unwind's and the cancel's traces, every path a trace once at most one step is appended (`unwind_pfx`, `cancel_pfx`); the bridges (`unwindOrderPfx_of_core`, `noInterceptPfx_of_core`, `cancellationPfx_of_core`); a path that stops right after a fire step follows no unwind trace (`not_unwindTrace_one`) |
+| | `Targets/Instance/CancelRuns.lean` | S5's traces at our machine: a step of a context around a stepping term is the term's (`rstep_unplug`); the unwind's and the cancel's traces, every path a trace once the β-step after a fire step that ends it is appended, or as it is (`unwind_pfx`, `cancel_pfx`, `FireExt`); the bridges (`unwindOrder_of_core`, `noIntercept_of_core`, `cancellation_of_core`), the no-interception's added hypothesis in two halves (`CancelsStd`, `CancelsNoCtl`, `CancelsNZ`); a path that stops right after a fire step follows no unwind trace (`not_unwindTrace_one`) |
 | | `Targets/Instance/FinRaise.lean`, `ELabels.lean`, `ETyping.lean`, `EHof.lean`, `ERuns.lean`, `E1.lean`, `E1Runs.lean`, `EProps.lean`, `E2.lean`, `E4.lean`, `E5.lean`, `E6.lean`, `E10.lean` | A's (E) properties at `J₁` (decision E): E1, E4 and E6 at every admissible context, E5 and E2's `sumGen` program with no `unr` operation in the way, E10's `timeout`; E7, E8, E9 fail as written (option A), so `EProps` does (`not_eProps_J₁`) |
 | **I** | `Targets/I/World.lean` | `SemWorld extends B.BWorld` (`held`, `Stop`, `share`), `coreW`, the effectful wp |
 | | `Targets/I/Interface.lean`, `Device.lean`, `Pins.lean`, `Routes.lean` | I1–I5 at the world; `Bounds`, `Interface`, the proof device `Device`, `EmbedsNil`; R-CLOSEDOP; `effSafeOfFL`, `contractsW_of_meets` |
@@ -78,9 +78,10 @@ Instance; the Instance imports no B or I; I imports everything.
 | | `Targets/I/ContUseJ1.lean` | S6 at the capture cell: a capture event allocates `κ`'s cell (`catchEv_cell`), a use releases it (`use_frees_cell`), leak freedom (`leakFreeAt_J₁`); S6 from the cell's ownership (`contUseEv_of_cells`, `contUseEv_J₁_of`) |
 | | `Targets/I/Theories.lean` | the answering class at `J₁`: global state's handler correct, the tail law and algebraicity there |
 | | `Targets/I/Rejects.lean` | inversions of Core's kernel (thirteen inductions on `CDerives`, a class of judgements carried through the same-term rules; every free variable of a typed term has a live slot, `fv_live`); AT05, AT06, AT08 and AT13 have no derivation (`rejects_tier1`), AT08's for want of a rule for `load` |
-| | `Targets/I/AcceptsRejects.lean` | decision AR: the composite's eight programs with their answers on computed runs (`compositeT1_tier1`), `Accepts` and `Rejects` at `J₁` (`I.accepts_J₁`, `I.rejects_J₁`); `Tier1 J₁` from A's (E) properties, S5 and S6, S4 being proved (`I.tier1_J₁_of_ECU`; with S4, `I.tier1_J₁_of_ESU`); `Tier1 J₁` fails as written through its (E) properties (`I.not_tier1_J₁`) |
+| | `Targets/I/AcceptsRejects.lean` | decision AR: the composite's eight programs with their answers on computed runs (`compositeT1_tier1`), `Accepts` and `Rejects` at `J₁` (`I.accepts_J₁`, `I.rejects_J₁`); `Tier1 J₁` from A's (E) properties, `CancelsNoCtl` and S6, S4 and S5 but `CancelsNoCtl` being proved (`I.tier1_J₁_of_ENU`; with S5, `I.tier1_J₁_of_ECU`; with S4, `I.tier1_J₁_of_ESU`); `Tier1 J₁` fails as written through its (E) properties (`I.not_tier1_J₁`) |
 | | `Targets/I/AlgJ1.lean` | algebraicity at `J₁`, a finaliser's start observed but not its code, given `CfinQuiet` (`I.algLaw_J₁_of`): a typed program's runs answer data (`lamFree_answer_of_coreClosed`) and ask the runner at data (`lamFree_io_of_coreClosed`, `platData_of_start`) |
-| | `Targets/I/S5J1.lean` | S5 at `J₁` and today's kernel: a fired finaliser that meets the no-interception condition runs to `()` from every finite memory (`finOK_of_finRow`); S5 read prefix-closed (`unwindOrderPfx_J₁`, `noInterceptPfx_J₁_of`, `cancellationPfx_tier1Open`); S5 as written fails (`not_cancellation_J₁`, `not_cancellation_tier1Open`, `not_cancellation_admissible`) |
+| | `Targets/I/CancelsNZ.lean` | no run of a typed program creates a handler named `0`, under every runner that keeps its protocol (`hndNZ_reach`: the runner is asked at data and answers data, a driven program's runs too, `driveData_of_reach`); so a cancelled continuation's context has no handler of `0` (`cancelsNZ_of_coreClosed`, `I.cancelsNZ_J₁`) |
+| | `Targets/I/S5J1.lean` | S5 at `J₁` and today's kernel: a fired finaliser that meets the no-interception condition runs to `()` from every finite memory (`finOK_of_finRow`); the unwind (`unwindOrder_J₁`), the no-interception given `CancelsNoCtl` (`noIntercept_J₁_of`, `cancellation_J₁_of`, `cancellation_tier1Open`); S5 read whole fails (`not_cancellationWhole_J₁`, `not_cancellationWhole_tier1Open`, `not_cancellationWhole_admissible`) |
 | meta | `Targets/Audit.lean`, `Status.lean`, `AxiomCheck.lean` | the step-index audit with nine negative tests and the pin of Core's relation; the record; the axiom check |
 
 ## Done
@@ -97,24 +98,23 @@ def I.Combined (RF : RowForm) (J : OurTyping RF) (M : SemWorld) (Adm : OpAdm) (c
 **Done** is `Combined orowRF J₂ W admClosedOp .any` at a **named** tier-2 typing system `J₂` and a
 **named** world `W`, with `audit_W`. **It is OPEN**: neither `J₂` nor `W` exists. **Tier 1** is
 `Combined orowRF J₁ coreW admClosedOp .abortive`; it **FAILS AS WRITTEN** through its (E)
-properties (E7, E8, E9 at option A; `not_tier1_J₁`). S5 also fails as written at `J₁`
-(`not_cancellation_J₁`): its traces stop only at `[]` and read a fire step's administrative steps
-whole; read prefix-closed, its unwind is proved and its no-interception given `CancelsStd`. S4,
+properties (E7, E8, E9 at option A; `not_tier1_J₁`). S5, read prefix-closed (every run a prefix of
+a trace), is proved at `J₁` at every effect context, its unwind outright and its no-interception
+given `CancelsNoCtl` (`cancellation_J₁_of`); read whole it fails (`not_cancellationWhole_J₁`). S4,
 restated so that a catch may allocate the capture cell, is proved at `J₁` at every effect context
 (`handlerSem_J₁`). `J₁` is Core's kernel
 with SPEC §24's rules over the open types, with the row `∀` (decision D5); our instance reads it at
 an effect context with its handlers' and operations' rows tied to the context (decision R).
 `Accepts` and `Rejects` are proved at `J₁` (decision AR), so `Tier1 J₁` follows from A's (E)
-properties, S5 and S6 (`tier1_J₁_of_ECU`); the (E) properties fail as written at `J₁` (E7, E8,
-E9 at option A; `not_eProps_J₁`).
+properties, `CancelsNoCtl` and S6 (`tier1_J₁_of_ENU`); the (E) properties fail as written at `J₁`
+(E7, E8, E9 at option A; `not_eProps_J₁`).
 
 **The restricted tier-1 reduction** `Tier1Core` (today's kernel `tier1Open`, Core's world)
 follows from S5 at today's kernel (`tier1Core_of_S5`). Proved of it: A's properties but S5 at every
 admissible effect context (`sPropsNoCancel_tier1Open`), B's guarantees, B5 included
 (`tier1Core_guarantees`), the world conjuncts and the device at `coreW` (`tier1Core_world`), and
-`Pins` (`pins_tier1Open`). Missing: S5 at our instance, which fails as written at today's kernel
-too (`not_cancellation_tier1Open`); read prefix-closed, its unwind is proved there and its
-no-interception given `CancelsStd` (`cancellationPfx_tier1Open`).
+`Pins` (`pins_tier1Open`). Missing: S5 at our instance, whose unwind is proved there and whose
+no-interception is proved given `CancelsNoCtl` (`cancellation_tier1Open`).
 
 ## Status, by system
 

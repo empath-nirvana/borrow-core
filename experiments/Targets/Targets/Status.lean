@@ -54,21 +54,24 @@ interaction's option-neutral rules, the pins, the composite's programs and its r
 
 **Tier 1** (`I.Tier1 J₁`): **FAILS AS WRITTEN** (`status_tier1_J₁`): its A conjunct asks A's (E)
 properties at every admissible effect context, and E7, E8 and E9 fail at `J₁` at every effect
-context under option A (decision E, below).  S5 (`Cancellation noFinRaise`) also **FAILS AS
-WRITTEN** at `J₁` at `ΞA` (`status_cancellation_J₁`; S5's bridges, below): its traces stop only at
-`[]` and read a fire step's administrative steps whole, while `[finalise]` leaves `D ()`, one β-step
-from `D`.  Read prefix-closed (a candidate restatement), its unwind is PROVED at every effect context
-and its no-interception given `CancelsStd`.  **S4 is RESTATED at the capture cell and PROVED at
-`J₁` at every effect context** (`status_handlerSem_cell`; fix-up F1, below): a catch either hands
-`capture l H K` and keeps the store, or allocates one fresh unit cell and hands `κ` at it; S4 with no
-cell fails at `ΞA` and is kept as a record.  `J₁` is built (decision D5): Core's kernel with
+context under option A (decision E, below).  **S5 is RESTATED prefix-closed** (fix-up F3, below):
+every run from a cancel's or an unwind's start is a prefix of a trace.  At `J₁` at every effect
+context its unwind is PROVED and its no-interception PROVED given `CancelsNoCtl` (no cancelled
+continuation's context holds a `ccatch` or a `cfin` frame; OPEN, fix-up F4's `guard` frame is its
+route); `CancelsStd`'s other half, no handler named `0` there, is PROVED as a run invariant
+(`status_cancellation_J₁`).  Read whole, S5 fails at `ΞA` and is kept as a record.  **S4 is
+RESTATED at the capture cell and PROVED at `J₁` at every effect context**
+(`status_handlerSem_cell`; fix-up F1, below): a catch either hands `capture l H K` and keeps the
+store, or allocates one fresh unit cell and hands `κ` at it; S4 with no cell fails at `ΞA` and is
+kept as a record.  `J₁` is built (decision D5): Core's kernel with
 SPEC §24's rules (the polymorphic let, the general `[handle]`, `[then]` at option A) over the open
 types, with the row `∀` (`Targets/Instance/J1.lean`); our instance at an effect context reads it with
 the rows of its handlers and operations tied to the context (decision R, below).  Proved of it: A's
-(S) properties but S5 and S6 at every effect context, B's guarantees (B5 included, piece 6), the
-world's conjuncts and the pins, and the composite's programs (`Accepts`) and rejections (`Rejects`;
-decision AR, below).  So `I.Tier1 J₁` follows from A's (E) properties, S5 and S6 at every admissible
-effect context (`status_tier1_J₁_of_ECU`; with S4 as a hypothesis, `status_tier1_J₁_of_ESU`).
+(S) properties but S6 at every effect context, S5 given `CancelsNoCtl`, B's guarantees (B5 included,
+piece 6), the world's conjuncts and the pins, and the composite's programs (`Accepts`) and
+rejections (`Rejects`; decision AR, below).  So `I.Tier1 J₁` follows from A's (E) properties,
+`CancelsNoCtl` and S6 at every admissible effect context (`status_tier1_J₁_of_ENU`; with S5 as a
+hypothesis, `status_tier1_J₁_of_ECU`; with S4 too, `status_tier1_J₁_of_ESU`).
 TIER1-PLAN §2's first route (elaborating each derivation into the kernel before D5) does not reach
 tier 1 (`status_elab_route`); `J₁` is built by D5's route instead.
 
@@ -79,9 +82,8 @@ tier 1 (`status_elab_route`); `J₁` is built by D5's route instead.
 S4 at every effect context (`status_machShape_handlerSem_tier1Open`); B's guarantees, B5 included
 (`status_tier1Core_guarantees`; B5 alone, `status_releasedOnceReuse_tier1Open`); the world
 conjuncts and the device at `coreW` (`status_tier1Core_world`); its `Pins` conjunct
-(`status_pins_tier1Open`).  Missing: S5 at our instance, which
-fails as written at today's kernel too (`not_cancellation_tier1Open`); read prefix-closed, its unwind
-is PROVED there and its no-interception given `CancelsStd` (`cancellationPfx_tier1Open`).
+(`status_pins_tier1Open`).  Missing: S5 at our instance, whose unwind is PROVED there and whose
+no-interception is PROVED given `CancelsNoCtl` (`cancellation_tier1Open`, `cancelsNZ_tier1Open`).
 
 ## Piece 6: the step-for-step simulation (OQ-43 (b))
 
@@ -282,10 +284,56 @@ continuations out of finalisers, is a surface rule and is not applied.
   `κ`'s allocation picks (`obsFrom_algAffL`, `obsFrom_algAffR`).  `AlgLawCode` fails there
   (`not_algLawCode_J₁`).
 
+## Fix-up F3: S5 read prefix-closed
+
+S5 read every run from a cancel's or an unwind's start whole, as a trace.  A trace stops only where
+its constructors stop it, and a fire step's constructor reads the administrative steps that start
+the finaliser whole; at our machine `[finalise]` leaves `D ()`, one β-step from `D`, so a run that
+stops right after a fire step followed no trace, and S5 failed at `J₁` (`fireProg`).  S5 is restated
+so that every run is a prefix of a trace, as a safety property is read, and a trace's fire step goes
+with its β-step.
+
+* **The statement** (`Targets/A/Soundness.lean`).  `NoIntercept` and `UnwindOrder`: every run from
+  the start is a prefix of a trace — some continuation of it, itself a run, follows the trace.  The
+  traces' docstrings say where a trace stops.  S5 read whole (`CancellationWhole`,
+  `Targets/A/CancelWhole.lean`) is kept as a record and implies S5 (`cancellation_of_whole`).
+* **Not weakened beyond the β-step.**  Every step a run takes is a trace's step; only where it may
+  stop changes.  At our machine the extension a run needs is nothing, or the one step after a fire
+  step that ends it, the β-step that starts the finaliser (`FireExt`; `unwind_pfx`, `cancel_pfx`).
+* **Teeth.**  The no-interception condition is still needed (`status_noIntercept_needs_finRow`): at
+  `J₄`, whose program meets `NoInterception`, the run from the cancel is a prefix of no cancel trace
+  at any set of endings.  After the dying handler catches the finaliser's operation, every run is a
+  prefix of the computed run to `()` (`rpath_prefix_chainPath`), which holds no operation at an
+  evaluation position, so the finaliser never starts.
+* **At `J₁` and today's kernel, at every effect context** (`status_cancellation_J₁`): the unwind
+  PROVED (`unwindOrder_J₁`, `cancellation_tier1Open`); the no-interception PROVED given
+  `CancelsNoCtl` (`noIntercept_J₁_of`).  `CancelsStd`'s handler half (`CancelsNZ`) is PROVED as a
+  run invariant (`cancelsNZ_J₁`, `cancelsNZ_tier1Open`; `Targets/I/CancelsNZ.lean`): a typed program
+  names no handler `0` (I3.c), no machine step creates one, and the runner answers with data — every
+  run of a program in Core's relation asks the platform at data arguments only, a driven program's
+  too (`driveData_of_reach`) — so every configuration a typed program reaches names none
+  (`hndNZ_reach`), and the cancel run of `κ`, which holds `κ`'s context, names none.
+* **On the right side**: at `fireProg`'s configuration S5 holds with the β-step appended
+  (`unwindOrder_fireProg`), where the whole reading fails (`not_cancellationWhole_ΞA`).
+* **`CancelsNoCtl`, the hypothesis left**: at a configuration a typed program reaches that cancels
+  `capture l H K`, `K` holds no `ccatch` and no `cfin` frame.  Source: SPEC §19's "its handlers are
+  dying, so they catch nothing", read at the capture.  Scope: the context a continuation was
+  captured in, not the cancel run.  OPEN: a context holds a `cfin` frame only if an operation
+  escaped a fired finaliser and was caught outside it, a whole-run fact of `FinRowsAt`'s kind; fix-up
+  F4's `guard` frame makes such an escape stuck.  Non-vacuity at `J₁` is not shown.
+* **What S5's no-interception reads.**  It starts at `cancel (capture l H K)`, and `capture` is the
+  unrestricted `κ` (`kappa`), handed only at an operation the handler's tags read `unr`.  At an
+  admissible context a typed program performs only operations `Ξ` declares resuming, whose tags are
+  `lin` or `aff`, so by that reading no typed program reaches the statement's premise there (not
+  checked by an invariant).  The cancels that arise there are of the capture cell's affine `κ`
+  (SPEC §25), which reach `cancelOf` through the step that frees the cell; the premise's store-keeping
+  steps exclude them, and `cancel_pfx`, stated at `cancelOf`, covers them.  Restating S5's
+  no-interception at the cell's `κ` is the user's (pending since round 3).
+
 ## S5's bridges (decision S5, 2026-10-08)
 
-S5 reads every run from the start of a cancel or of an unwind against a trace: each finaliser fires,
-runs alone, and hands the cancel or the raise on (SPEC §19).  Decision D4 put the no-interception
+S5 reads every run from the start of a cancel or of an unwind as a prefix of a trace: each
+finaliser fires, runs alone, and hands the cancel or the raise on (SPEC §19).  Decision D4 put the no-interception
 condition into the statement: the finalisers it fires are closed programs typed at a row of
 abortive operations of `FR`'s labels (`FinRow`), at option A the pure row.
 
@@ -303,27 +351,11 @@ abortive operations of `FR`'s labels (`FinRow`), at option A the pure row.
   (labelled `finEnd none`) and at the end `[cancel]` make a cancel trace with nothing kept, from
   `cancelOf` at a region with no `ccatch`, `cfin` or handler named `0` (`cancel_pfx`; a cancelled
   finaliser frame holds a pair of values, from `LiveOK`, `ubind_pair_live`).
-* **S5 FAILS AS WRITTEN** at every typing system that types `fireProg` and `(); ()` (`J₁` and today's
+* **S5 read whole fails** at every typing system that types `fireProg` and `(); ()` (`J₁` and today's
   kernel among them), at every effect context declaring `exn : 1 ↠ 0` at `1`, the admissible `ΞA`
-  among them (`status_cancellation_J₁`).  A's trace constructors stop a trace only at `[]` and read
-  the fire step's administrative steps whole (`PurePath c₁ q₀ c₂`, the finaliser at `c₂`), so a path
-  that stops right after a fire step, before `D ()` has reduced to `D`, follows no trace
-  (`not_unwindTrace_one`).  The traces' docstring says "a trace may stop anywhere".
-* **S5 read prefix-closed** (`A.CancellationPfx`, a candidate restatement: every path a prefix of a
-  trace): the unwind PROVED at `J₁` and at today's kernel, at every effect context
-  (`unwindOrderPfx_J₁`, `cancellationPfx_tier1Open`), each path a trace once at most one step of
-  the run, the β-step, is appended; at `fireProg`'s configuration it holds where the target fails
-  (`unwindOrderPfx_fireProg`).  The no-interception PROVED given `CancelsStd` (added hypothesis: a
-  cancelled continuation's context holds no `ccatch`, no `cfin` and no handler named `0`; source:
-  SPEC §19's "its handlers are dying, so they catch nothing", read at the capture; OPEN at `J₁`,
-  where it needs that no operation escapes a fired finaliser, `FinRowsAt`'s kind of whole-run fact).
-* **What S5's no-interception reads.**  It starts at `cancel (capture l H K)`, and `capture` is the
-  unrestricted `κ` (`kappa`), handed only at an operation the handler's tags read `unr`.  At an
-  admissible context a typed program performs only operations `Ξ` declares resuming, whose tags are
-  `lin` or `aff`, so by that reading no typed program reaches the statement's premise there (not
-  checked by an invariant).  The cancels that arise there are of the capture cell's affine `κ`
-  (SPEC §25), which reach `cancelOf` through the step that frees the cell; `cancel_pfx` is stated at
-  `cancelOf` and covers them, and NoIntercept's restatement at the cell is the user's.
+  among them (`status_cancellation_J₁`): a path that stops right after a fire step, before `D ()`
+  has reduced to `D`, follows no trace (`not_unwindTrace_one`).  Kept as a record (fix-up F3,
+  above).
 
 ## Decision R: `J₁`'s inner rows tied (2026-10-08)
 
@@ -484,13 +516,13 @@ every admissible effect context:
 | E3 needs divergence; a pure-row loop that diverges is not at a data answer | PROVED (every instance; the latter with `RowAlgebra`) | `not_loops_of_total`, `divInTypes_of_loops` |
 | effect safety has teeth; Def. 5.1 (1) from one signature object | PROVED (every instance) | `not_der_unhandled`, `c1_of_rowSig` |
 | the runners `Rtick`, `Rtl`, `Rrec` keep their protocol | PROVED (every instance; `Rrec` at distinct labels) | `rtick_respects`, `rtl_respects`, `rrec_respects` |
-| A's properties at our instance | at today's kernel, every admissible effect context: S0, the let law, S1, `DataDiv`, S2, S3 PROVED AT σ=[]; at `J₁`, every effect context: the same, PROVED AT σ=[]; S4, RESTATED at the capture cell, PROVED AT σ=[] at both at every effect context (S4 with no cell at an effect context whose resuming operations are unrestricted; it fails at `J₁` at `ΞA`, kept as a record); S5 **FAILS AS WRITTEN** at both (read prefix-closed: below); S6 OPEN (below) | `status_sPropsNoCancel_tier1Open`, `status_sPropsNoCancel_J₁`, `status_machShape_handlerSem_tier1Open`, `status_handlerSem_cell` |
+| A's properties at our instance | at today's kernel, every admissible effect context: S0, the let law, S1, `DataDiv`, S2, S3 PROVED AT σ=[]; at `J₁`, every effect context: the same, PROVED AT σ=[]; S4, RESTATED at the capture cell, PROVED AT σ=[] at both at every effect context (S4 with no cell at an effect context whose resuming operations are unrestricted; it fails at `J₁` at `ΞA`, kept as a record); S5, RESTATED prefix-closed, PROVED AT σ=[] at both at every effect context given `CancelsNoCtl` (OPEN), its unwind outright (below); S6 OPEN (below) | `status_sPropsNoCancel_tier1Open`, `status_sPropsNoCancel_J₁`, `status_machShape_handlerSem_tier1Open`, `status_handlerSem_cell`, `status_cancellation_J₁` |
 | S4 (`HandlerSem`), RESTATED at the capture cell (F1): a catch hands `capture l H K` keeping the store, or one fresh unit cell and `κ` at it (`CatchLaw`, `JoinAcross`); `κ` at a cell released by its resume and an affine cancel (`ResumeCellLaw`, `CancelCellLaw`); the other five laws unchanged. S4 with no cell (`HandlerSemNoCell`) kept | at an instance with no cells the two agree (PROVED, every instance), so a refutation of S4 with no cell there refutes S4; S4 fails where `handle` ignores its clauses (PROVED) | `handlerSem_iff_noCell`, `not_handlerSem_of_noCell`, `catchLaw_of_keep`, `not_handlerSem_toy`, `not_handlerSemNoCell_toy` |
 | the unary laws beside done, `UnaryLaws` (`TailLaw`, `AlgLaw`, `EtaHold`) and the alternative `EtaLin`: run-level (menu form F.3), the tail law's hygiene as hypotheses, compared at a program's data answers (D4); `AlgLaw` with a finaliser's start observed but not its code (`RunsAlikeStart`, `Ev.start`; fix-up F2), `AlgLawCode` (the finaliser's code observed, `RunsAlike`) kept as a record | RESTATED; STATED (at our instance: the Instance's rows); **not in done**: whether they join done is a menu choice (P11/I5 menu axes H, F, K), for the user | `Targets/A/UnaryLaws.lean` |
 | `AlgLawCode` gives `AlgLaw`; the two observations differ only at a finaliser's start | PROVED (every instance) | `algLaw_of_algLawCode`, `runsAlikeStart_of_runsAlike`, `obsStartFrom_iff`, `Ev.start_eq_start_iff` |
 | theories (D1.h3, D1.h4 (a)–(b)): equations in signatures (`Eqn`, `SLComp`, `Theory`), the state-passing handler of co-operations (`ansHnd`, `runAt`), handler correctness (`AnsCorrect`, Plotkin–Pretnar Def. 4.5 at `RunsAlike`), comodels (`IsComodel`, Ahman–Bauer Def. 1 with equations), global state (`stateTheory`, `stateCo`, `badStateCo`) | stated (elaborate); at our instance: the Instance's rows | `Targets/A/Theories.lean` |
 | `EtaHold` gives `EtaLin`; each of the four fails at an instance whose handler or bind ignores its clauses (and so does `AlgLawCode`) | PROVED | `etaLin_of_etaHold`, `not_tailLaw_toy`, `not_algLaw_toy`, `not_etaHold_toy`, `not_etaLin_toy`, `not_algLawCode_toy` |
-| S5 read prefix-closed (`NoInterceptPfx`, `UnwindOrderPfx`, `CancellationPfx`): every path a prefix of a trace; a candidate restatement, not the target | stated; the target implies it (PROVED, every instance) | `noInterceptPfx_of`, `unwindOrderPfx_of`, `cancellationPfx_of` |
+| S5 (`Cancellation FR`), RESTATED prefix-closed (F3): every run from the start a prefix of a trace (`NoIntercept`, `UnwindOrder`). S5 read whole (`NoInterceptWhole`, `UnwindOrderWhole`, `CancellationWhole`: every run a trace) kept as a record | the whole reading implies S5 (PROVED, every instance) | `noIntercept_of_whole`, `unwindOrder_of_whole`, `cancellation_of_whole` |
 | A₃'s reference programs (the `Tgt` code checking each `refCost` entry) | not written | RESTRUCTURE §Unresolved |
 
 ## System B
@@ -527,7 +559,7 @@ every admissible effect context:
 | `Pins tier1Open admClosedOp .abortive`, with `I4a` at the unr-free rules | PROVED AT σ=[] (abortive rows) | `I.pins_tier1Open`, `i4a_tier1NU` |
 | Law 1 at the relation: `ovalW` at `U(∀ρ:k. C)` and `!U(∀ρ:k. C)` is the intersection of the instances; `FLOpen M J` gives `FL M J.read`; `FLOpen` at today's kernel | PROVED (generic); PROVED AT σ=[] | `I.ovalW_allR`, `I.ovalW_bang_allR`, `I.fl_of_flOpen`, `I.flOpen_core_tier1Open` |
 | `J₁`: its reading is Core's kernel; FL at BoLo (B1); B's guarantees; the pins; FL at its open judgements over contexts with no polymorphic slot, a polymorphic type read as the intersection of its instances (Law 1) | PROVED AT σ=[] (abortive rows for the pins); `FLOpen coreB J₁` at contexts with a polymorphic slot NOT PROVED (a value `ovalW` relates there need not be a closed λ-value Core types) | `status_j1`, `status_guarantees_J₁`, `status_pins_J₁`, `I.flOpen_J₁_mono` |
-| tier 1 at `J₁` | **FAILS AS WRITTEN**: A's (E) properties fail at `J₁` (E7, E8, E9, option A; decision E), and so does S5 (its traces read prefix-closed hold; S5's bridges).  S4, restated at the capture cell, is PROVED at every effect context, so tier 1 follows from A's (E) properties, S5 and S6 at every admissible effect context, `Accepts` and `Rejects` being proved (decision AR) | `status_tier1_J₁`, `I.not_tier1_J₁`, `status_handlerSem_cell`, `status_tier1_J₁_of`, `status_tier1_J₁_of_ESU`, `status_tier1_J₁_of_ECU`, `status_eProps_J₁`, `status_cancellation_J₁` |
+| tier 1 at `J₁` | **FAILS AS WRITTEN**: A's (E) properties fail at `J₁` (E7, E8, E9, option A; decision E); S5 read whole fails too (kept as a record).  S4, restated at the capture cell, is PROVED at every effect context, and S5, restated prefix-closed, given `CancelsNoCtl`, so tier 1 follows from A's (E) properties, `CancelsNoCtl` and S6 at every admissible effect context, `Accepts` and `Rejects` being proved (decision AR) | `status_tier1_J₁`, `I.not_tier1_J₁`, `status_handlerSem_cell`, `status_tier1_J₁_of`, `status_tier1_J₁_of_ESU`, `status_tier1_J₁_of_ECU`, `status_tier1_J₁_of_ENU`, `status_eProps_J₁`, `status_cancellation_J₁` |
 | TIER1-PLAN §2's route (elaborate `J₁` into today's unr-free kernel, then `fundamentalC`) | **DOES NOT REACH TIER 1**: closed derivations that elaborate type no A-level handler, so E8 fails; today's kernel types no let-bound function read at two rows | `I.not_tier1_of_elabClosed`, `not_der_letTwo` |
 | FIX-RUN-END's checks and witness worlds | PROVED | `Targets/I/RunEnd.lean` (73 results) |
 | I1, I3, I5, P11 at `coreW` (the device); I2 at `coreW` | PROVED AT σ=[]; PROVED AT A RESTRICTION (abortive rows) | `i1_core`, `i3_core`, `i5_core`, `p11_core`; `i2_core_abortive` |
@@ -548,7 +580,7 @@ every admissible effect context:
 | the machine read through contexts: run splitting, determinism where nothing is allocated, runs that join run alike, closed runs stay closed, no step creates a handler named `0` | PROVED AT σ=[] | `steps_plug_split`, `det_ourInst`, `rstep_det`, `runsAlike_of_join`, `closed_steps`, `hndNamesNZ_steps` |
 | S0 (`MachShape`: `AppLaw`, `Congr`, `OpStuck`, `LoopLaws`, `DriveLaws`) and S4 (`HandlerSem`) at our instance | S0 PROVED AT σ=[] given `LiveOK` (every configuration a typed program reaches has a closed term and goes on), at every typing system; `Congr` and `OpStuck` without it. S4, RESTATED at the capture cell, the same at every effect context: the catch of an unrestricted operation hands `kappa` and keeps the store; that of a linear or affine one allocates `()` at a free location and hands `kappaC` there; resuming `kappaC` and cancelling an affine one release the cell (SPEC §25). Not vacuous: at `J₁` and `ΞA` the catch of the linear `tick` holds the law by its cell alone. S4 with no cell (`HandlerSemNoCell`) at an effect context whose resuming operations are unrestricted (`CatchUnr`); it **FAILS at `J₁`** at `ΞA`, kept as a record. At today's kernel `LiveOK` holds at every effect context (D1). `LiveOK` needs the tie | `machShape_orow`, `handlerSem_orow`, `handlerSem_ourInst`, `catchLaw_ourInst`, `catch_unr_ourInst`, `catch_cell_ourInst`, `resumeCellLaw_ourInst`, `cancelCellLaw_ourInst`, `I.catchLaw_progT_cell`, `handlerSemNoCell_orow`, `not_handlerSemNoCell_J₁_ΞA`; `liveOK_tier1Open`, `status_machShape_handlerSem_tier1Open`; `liveOK_needs_tie` |
 | `LiveOK` is met at a typing system that types one program with a handler, an operation it catches and a continuation | PROVED | `liveOK_JnLog` |
-| S5 (`Cancellation noFinRaise`) at our instance, RESTATED (D3, D4) | **FAILS AS WRITTEN** at every typing system that types `fireProg` and `(); ()`, so at `J₁` and today's kernel, at every effect context declaring `exn : 1 ↠ 0` at `1` (`ΞA` among them): the path of a fire step alone follows no unwind trace, since `[finalise]` leaves `D ()` and A's `UnwindTrace.fire` reads the β-step to `D` whole. Read prefix-closed (`CancellationPfx`, a candidate restatement): the bridges are built (`unwindOrderPfx_of_core`, `noInterceptPfx_of_core`, `cancellationPfx_of_core`, from `LiveOK`, labels named nonzero, and each fired finaliser meeting the condition running to `()` from every finite memory), and give the unwind PROVED AT σ=[] at `J₁` and today's kernel at every effect context, the no-interception given `CancelsStd` (OPEN). The no-interception condition is needed: `NoInterception` is syntactic, and a typed program's cancelled finaliser may perform the operation its region's dying handler catches; its run follows no cancel trace at any set of endings | `status_cancellation_J₁`, `status_finOK`, `not_unwindOrder_of_types`, `unwind_pfx`, `cancel_pfx`, `unwindOrderPfx_fireProg`; `noIntercept_needs_finRow` |
+| S5 (`Cancellation noFinRaise`) at our instance, RESTATED (D3, D4; F3: prefix-closed) | The bridges (`unwindOrder_of_core`, `noIntercept_of_core`, `cancellation_of_core`, from `LiveOK`, labels named nonzero, and each fired finaliser meeting the condition running to `()` from every finite memory) give, at `J₁` and today's kernel at every effect context, the unwind PROVED AT σ=[], the no-interception PROVED AT σ=[] given `CancelsNoCtl` (OPEN; F4's `guard` frame is its route); `CancelsStd`'s handler half PROVED AT σ=[] as a run invariant (no run of a typed program creates a handler named `0`). The extension a run needs is the β-step after a fire step, or nothing (`FireExt`). Read whole (kept as a record) S5 **FAILS** at every typing system that types `fireProg` and `(); ()`, at every effect context declaring `exn : 1 ↠ 0` at `1` (`ΞA` among them): the path of a fire step alone follows no unwind trace. The no-interception condition is needed: `NoInterception` is syntactic, and a typed program's cancelled finaliser may perform the operation its region's dying handler catches; its run is a prefix of no cancel trace at any set of endings | `status_cancellation_J₁`, `status_finOK`, `unwind_pfx`, `cancel_pfx`, `FireExt`, `cancelsNZ_J₁`, `hndNZ_reach`, `driveData_of_reach`, `unwindOrder_fireProg`, `not_unwindOrderWhole_of_types`, `not_cancellationWhole_ΞA`; `noIntercept_needs_finRow`, `rpath_prefix_chainPath` |
 | Core's `FinaliserOrder` (I3.b) | PROVED, given `NoInterception` and `FinAloneAt FR` (a fired finaliser's run alone, platform-free, ends at a value or an uncaught raise of a name in `FR`), at today's endings (nonzero names) and at option A's (none). At a typing system with FL at Core's world, `FinAloneAt FR` follows from `FinRowsAt FR` (an operation the finaliser's run alone leaves uncaught is a raise of a name in `FR`): stuck redexes are excluded by FL and B2's runs. So at today's unr-free kernel `FinaliserOrder` follows from `FinRowsAt` alone (PROVED AT σ=[]). `FinRowsAt` OPEN: route 8.2's obligations (`RowRoute`) give it (PROVED), and no `RowRoute` is built (TIER1-PLAN §4: the review did not accept route 8.2). It is not on S5's bridges' route: decision D4 put the fired finalisers' typing into S5, and typing gives each such finaliser's run to `()` from every finite memory (`finOK_of_finRow`) | `finaliserOrder_at`, `finaliserOrder_A`, `finAloneAt_of_finRows`, `finaliserOrder_tier1NU_of_finRows`, `finaliserOrder_tier1NU_of_finRowsA`, `finRowsAt_of_route`, `finaliserOrder_of_route` |
 | `FinAlone` (piece 1's added hypothesis) | RESTATED by D3: its consumer reads `FinAloneAt FR`, platform-free | — |
 | S6 (`ContUseEv`) at our instance, RESTATED (decision S6: per capture event, on complete runs, at data answers) | OPEN at today's kernel; at `J₁` REDUCED to two ownership properties of the capture cell, `OnlyOwnerFrees` and `NoDanglingUse` (OPEN), given `LiveOK` and leak freedom (PROVED at `J₁`): a capture event allocates `κ`'s cell, a use releases it three steps later, a linear `κ`'s cancel is stuck | `status_contUseEv_J₁_of`, `contUseEv_of_cells`, `catchEv_cell`, `use_frees_cell`, `leakFree_of_coreClosed` |
@@ -629,6 +661,11 @@ entry.
   (`handlerSemNoCell_orow`).  S4 is restated at the capture cell (fix-up F1, above).  The earlier
   S4 proofs are split into one theorem per law, the laws that read no cell shared by both
   statements (`retLaw_ourInst` … `finLaw_ourInst`).
+* S5 read whole (every run from a cancel's or an unwind's start a trace): **kept** as
+  `CancellationWhole` (`NoInterceptWhole`, `UnwindOrderWhole`), with its refutation at `J₁`, today's
+  kernel and `ΞA` (`not_unwindOrderWhole_of_types`, `not_cancellationWhole_J₁`,
+  `not_cancellationWhole_tier1Open`, `not_cancellationWhole_ΞA`,
+  `not_cancellationWhole_admissible`).  S5 is restated prefix-closed (fix-up F3, above).
 * Check 2's derivations (`d_thenProgNU`, `d_prog₃TNU`, `d_thenRaiseProgNU`, `d_unwindProgNU`):
   **removed** with D3's kernel half.  Their finalisers let a raise escape, which option A excludes
   (SPEC §24); the programs stay (`Instance/CheckPrograms.lean`).
@@ -1041,15 +1078,21 @@ theorem status_machShape_handlerSem_tier1Open (Ξ : EffCtx) :
 /-- PROVED: S5's no-interception condition is needed (D4).  A typing system that types one program
 with no `ccatch`, no `cfin` and no handler named `0` reaches a cancel whose region's finaliser
 performs the operation the region's dying handler catches; that finaliser meets `FinRow` at no set
-of endings, and the run from the cancel follows no cancel trace at any. -/
+of endings, and the run from the cancel is a prefix of no cancel trace at any: no continuation of
+it, itself a run, is one. -/
 theorem status_noIntercept_needs_finRow {Ξ : EffCtx} (h2 : Ξ 2 = [(.unr, .unit, .unit)]) :
     NoInterception Inst.J₄.read ∧
       (∀ FR, ¬ (ourInst (ℍ := ℍ) orowRF Ξ Inst.J₄).FinRow FR Inst.finP) ∧
-      ∀ FR, ¬ (ourInst (ℍ := ℍ) orowRF Ξ Inst.J₄).CancelTrace (ourInst (ℍ := ℍ) orowRF Ξ Inst.J₄).R₀ FR
-        ((ourInst (ℍ := ℍ) orowRF Ξ Inst.J₄).Region (Inst.lab2 Ξ h2) Inst.p5K) .hole
-        ((Adequacy.emptyMem, lookEnd 8 Inst.finAloneProg), ()) [Inst.finP] none (Inst.p5q (ℍ := ℍ) Ξ) :=
+      (ourInst (ℍ := ℍ) orowRF Ξ Inst.J₄).RPath (ourInst (ℍ := ℍ) orowRF Ξ Inst.J₄).R₀
+        ((Adequacy.emptyMem, lookEnd 8 Inst.finAloneProg), ()) (Inst.p5q (ℍ := ℍ) Ξ) ∧
+      ∀ FR q', (ourInst (ℍ := ℍ) orowRF Ξ Inst.J₄).RPath (ourInst (ℍ := ℍ) orowRF Ξ Inst.J₄).R₀
+          ((Adequacy.emptyMem, lookEnd 8 Inst.finAloneProg), ()) (Inst.p5q (ℍ := ℍ) Ξ ++ q') →
+        ¬ (ourInst (ℍ := ℍ) orowRF Ξ Inst.J₄).CancelTrace (ourInst (ℍ := ℍ) orowRF Ξ Inst.J₄).R₀ FR
+          ((ourInst (ℍ := ℍ) orowRF Ξ Inst.J₄).Region (Inst.lab2 Ξ h2) Inst.p5K) .hole
+          ((Adequacy.emptyMem, lookEnd 8 Inst.finAloneProg), ()) [Inst.finP] none
+          (Inst.p5q (ℍ := ℍ) Ξ ++ q') :=
   let h := Inst.noIntercept_needs_finRow (ℍ := ℍ) Ξ h2
-  ⟨h.1, h.2.2.2.2.2.2.2.1, h.2.2.2.2.2.2.2.2⟩
+  ⟨h.1, h.2.2.2.2.2.2.2.1, h.2.2.2.2.2.2.2.2.1, h.2.2.2.2.2.2.2.2.2⟩
 
 /-- PROVED, given `NoInterception` and `FinAloneAt` at today's endings or at option A's: Core's
 `FinaliserOrder`. -/
@@ -1259,13 +1302,25 @@ theorem status_tier1_J₁_of_ECU
   I.tier1_J₁_of_ECU hE hC hU
 
 /-- **FAILS AS WRITTEN**: tier 1 at `J₁`.  Its A conjunct asks A's (E) properties at every
-admissible effect context, and E7, E8 and E9 fail at `J₁` at every effect context under option A;
-its S5 hypothesis fails as written too, at the admissible `ΞA`. -/
+admissible effect context, and E7, E8 and E9 fail at `J₁` at every effect context under option A.
+S5 read whole fails too, at the admissible `ΞA` (kept as a record); S5 is read prefix-closed
+(fix-up F3) and holds given `CancelsNoCtl` (`status_cancellation_J₁`). -/
 theorem status_tier1_J₁ :
     ¬ I.Tier1 (ℍ := ℍ) J₁ ∧ ¬ (ourInst (ℍ := ℍ) orowRF Inst.ΞA J₁).EProps ∧
-      ¬ (∀ Ξ, AdmEff Ξ → (ourInst (ℍ := ℍ) orowRF Ξ J₁).Cancellation
+      ¬ (∀ Ξ, AdmEff Ξ → (ourInst (ℍ := ℍ) orowRF Ξ J₁).CancellationWhole
         (ourInst (ℍ := ℍ) orowRF Ξ J₁).noFinRaise) :=
-  ⟨I.not_tier1_J₁, Inst.not_eProps_J₁, I.not_cancellation_admissible⟩
+  ⟨I.not_tier1_J₁, Inst.not_eProps_J₁, I.not_cancellationWhole_admissible⟩
+
+/-- PROVED: tier 1 at `J₁` follows from A's (E) properties, `CancelsNoCtl` (no cancelled
+continuation's context holds a `ccatch` or a `cfin` frame) and S6 at every admissible effect
+context: S4 is proved, S5 is proved but `CancelsNoCtl` (fix-up F3), and `Accepts` and `Rejects`
+(decision AR). -/
+theorem status_tier1_J₁_of_ENU
+    (hE : ∀ Ξ, AdmEff Ξ → (ourInst (ℍ := ℍ) orowRF Ξ J₁).EProps)
+    (hN : ∀ Ξ, AdmEff Ξ → Inst.CancelsNoCtl (ℍ := ℍ) orowRF Ξ J₁)
+    (hU : ∀ Ξ, AdmEff Ξ → (ourInst (ℍ := ℍ) orowRF Ξ J₁).ContUseEv) :
+    I.Tier1 (ℍ := ℍ) J₁ :=
+  I.tier1_J₁_of_ENU hE hN hU
 
 /-- PROVED (decision E): A's (E) properties at `J₁`.  At every admissible effect context E1, E4 and
 E6, and E5 where no `exn` signature is `unr`; E7, E8 and E9 fail as written at every effect context
@@ -1351,33 +1406,37 @@ theorem status_finOK :
   ⟨fun _ h _ hμ _ _ hs => runs_of_rel_unit h hμ hs, fun _ _ h _ hμ => I.finOK_J₁ h hμ,
     fun _ _ h _ hμ => I.finOK_of_finRow (D := Inst.tier1OpenDer) Inst.coreClosed_tier1Open h hμ⟩
 
-/-- **FAILS AS WRITTEN at `J₁` and at today's kernel**: S5, at the admissible `ΞA`, so the S5
-hypothesis of `status_tier1_J₁_of` cannot be met.  Read prefix-closed (a candidate restatement): the
-unwind PROVED at `J₁` and today's kernel at every effect context, the no-interception given
-`CancelsStd`; at the witness's configuration, where the target fails, the prefix-closed reading
-holds. -/
+/-- **PROVED AT σ=[]** (fix-up F3): S5, read prefix-closed, at `J₁` and at today's kernel, at every
+effect context: the unwind outright, the no-interception given `CancelsNoCtl` (no cancelled
+continuation's context holds a `ccatch` or a `cfin` frame; OPEN, a whole-run fact about fired
+finalisers); `CancelsStd`'s other half, no handler named `0` there, is a run invariant
+(`cancelsNZ_J₁`, `cancelsNZ_tier1Open`).  Read whole (kept as a record), S5 fails at the admissible
+`ΞA`; at the witness's configuration S5 holds, the β-step after the fire step appended. -/
 theorem status_cancellation_J₁ :
-    AdmEff Inst.ΞA ∧
-      ¬ (ourInst (ℍ := ℍ) orowRF Inst.ΞA J₁).Cancellation
-        (ourInst (ℍ := ℍ) orowRF Inst.ΞA J₁).noFinRaise ∧
-      ¬ (ourInst (ℍ := ℍ) orowRF Inst.ΞA tier1Open).Cancellation
-        (ourInst (ℍ := ℍ) orowRF Inst.ΞA tier1Open).noFinRaise ∧
-      ¬ (∀ Ξ, AdmEff Ξ → (ourInst (ℍ := ℍ) orowRF Ξ J₁).Cancellation
-        (ourInst (ℍ := ℍ) orowRF Ξ J₁).noFinRaise) ∧
-      (∀ Ξ, (ourInst (ℍ := ℍ) orowRF Ξ J₁).UnwindOrderPfx
-        (ourInst (ℍ := ℍ) orowRF Ξ J₁).noFinRaise) ∧
-      (∀ Ξ, Inst.CancelsStd (ℍ := ℍ) orowRF Ξ J₁ →
-        (ourInst (ℍ := ℍ) orowRF Ξ J₁).NoInterceptPfx (ourInst (ℍ := ℍ) orowRF Ξ J₁).noFinRaise) ∧
-      (∀ Ξ, (ourInst (ℍ := ℍ) orowRF Ξ tier1Open).UnwindOrderPfx
+    (∀ Ξ, (ourInst (ℍ := ℍ) orowRF Ξ J₁).UnwindOrder (ourInst (ℍ := ℍ) orowRF Ξ J₁).noFinRaise) ∧
+      (∀ Ξ, Inst.CancelsNoCtl (ℍ := ℍ) orowRF Ξ J₁ →
+        (ourInst (ℍ := ℍ) orowRF Ξ J₁).Cancellation (ourInst (ℍ := ℍ) orowRF Ξ J₁).noFinRaise) ∧
+      (∀ Ξ, Inst.CancelsNZ (ℍ := ℍ) orowRF Ξ J₁) ∧
+      (∀ Ξ, (ourInst (ℍ := ℍ) orowRF Ξ tier1Open).UnwindOrder
         (ourInst (ℍ := ℍ) orowRF Ξ tier1Open).noFinRaise) ∧
+      (∀ Ξ, Inst.CancelsNoCtl (ℍ := ℍ) orowRF Ξ tier1Open →
+        (ourInst (ℍ := ℍ) orowRF Ξ tier1Open).NoIntercept
+          (ourInst (ℍ := ℍ) orowRF Ξ tier1Open).noFinRaise) ∧
+      (∀ Ξ, Inst.CancelsNZ (ℍ := ℍ) orowRF Ξ tier1Open) ∧
+      AdmEff Inst.ΞA ∧
+      ¬ (ourInst (ℍ := ℍ) orowRF Inst.ΞA J₁).CancellationWhole
+        (ourInst (ℍ := ℍ) orowRF Inst.ΞA J₁).noFinRaise ∧
+      ¬ (ourInst (ℍ := ℍ) orowRF Inst.ΞA tier1Open).CancellationWhole
+        (ourInst (ℍ := ℍ) orowRF Inst.ΞA tier1Open).noFinRaise ∧
       ∃ q', (ourInst (ℍ := ℍ) orowRF Inst.ΞA J₁).UnwindTrace (ourInst (ℍ := ℍ) orowRF Inst.ΞA J₁).R₀
         (ourInst (ℍ := ℍ) orowRF Inst.ΞA J₁).noFinRaise I.fireK₀
         ((Adequacy.emptyMem, lookEnd 2 I.fireProg), ()) (Inst.thenK (.var 0) I.finSeq)
         ([(.fire I.finSeq, ((Adequacy.emptyMem, I.fireAfter), ()))] ++ q') :=
-  ⟨Inst.admEff_ΞA, I.not_cancellation_ΞA, I.not_cancellation_tier1Open (by simp [Inst.ΞA]),
-    I.not_cancellation_admissible, fun _ => I.unwindOrderPfx_J₁, fun _ => I.noInterceptPfx_J₁_of,
-    fun _ => I.cancellationPfx_tier1Open.1,
-    (I.unwindOrderPfx_fireProg (by simp [Inst.ΞA])).imp fun _ h => h.2⟩
+  ⟨fun _ => I.unwindOrder_J₁, fun _ => I.cancellation_J₁_of, fun _ => I.cancelsNZ_J₁,
+    fun _ => I.cancellation_tier1Open.1, fun _ => I.cancellation_tier1Open.2,
+    fun _ => I.cancelsNZ_tier1Open, Inst.admEff_ΞA, I.not_cancellationWhole_ΞA,
+    I.not_cancellationWhole_tier1Open (by simp [Inst.ΞA]),
+    (I.unwindOrder_fireProg (by simp [Inst.ΞA])).imp fun _ h => h.2⟩
 
 /-- PROVED AT σ=[]: leak freedom at `J₁`, and S6 at `J₁` from the capture cell's two ownership
 properties (OPEN). -/

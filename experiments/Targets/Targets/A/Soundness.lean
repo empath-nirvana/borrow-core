@@ -37,8 +37,13 @@ nothing meets every one; the lower bounds are the (E) properties (`Targets/A/Exp
   `FR`, the labels whose raises a finaliser may let escape (decision D3); the target reads it at
   `noFinRaise`, option A, where a finaliser handles its raises itself.  Each statement carries the
   no-interception condition explicitly (decision D4, `FinRow`): the finalisers that fire are closed
-  computations typed at a row of abortive operations of `FR`'s labels.  Ahman–Bauer Thm 7 and
-  Voigt–Schuster–Brachthäuser Thm 3.6 are possible proof routes, not the statements' shape.
+  computations typed at a row of abortive operations of `FR`'s labels.  Each reads a run
+  prefix-closed, as a safety property is read (Alpern–Schneider): every run from the start is a
+  prefix of a trace, that is, some continuation of it, itself a run, follows the trace.  So a run
+  may stop anywhere, inside a fire step's administrative steps (the steps that start the fired
+  finaliser, at our instance the β-step of `D ()`) among other places, and every step it takes is a
+  trace's.  Ahman–Bauer Thm 7 and Voigt–Schuster–Brachthäuser Thm 3.6 are possible proof routes,
+  not the statements' shape.
 * **S6** (`ContUseEv`): Tang et al. Thm 3.6 ("tagged linear values are not duplicated or discarded
   during evaluation"); Affect ("continuations corresponding to one-shot effects are resumed at most
   once").  A use of a continuation is a step that applies it to a data value (decision D4: a
@@ -292,9 +297,11 @@ def Ended {R : S.Runner} (Kf : S.Kont) (c : S.RConf R) : S.Err → Prop
 
 mutual
 /-- **A cancel trace**: `fs` are the frozen finalisers not yet fired, and `err` is the error kept
-so far.  Each finaliser fires, innermost first, then runs alone to an end `FR` allows, and its end
-updates the kept error.  Last, the canceller is answered.  A trace may stop anywhere, and after the
-answer anything may follow. -/
+so far.  Each finaliser fires, innermost first: the fire step, the administrative steps that start
+the finaliser (`q₀`), then its run alone to an end `FR` allows, which updates the kept error.  Last,
+the canceller is answered, and after the answer anything may follow.  A trace stops before a fire
+step or the answer (`stop`) and while a finaliser runs alone (`FinTrace.running`); S5 reads a run
+as a prefix of a trace (`NoIntercept`), so a run may stop anywhere. -/
 inductive CancelTrace (R : S.Runner) (FR N : S.EA.Lab → Prop) (K₀ : S.Kont) :
     S.RConf R → List S.Term → S.Err → List (S.Event × S.RConf R) → Prop
   | stop {c : S.RConf R} {fs : List S.Term} {err : S.Err} : CancelTrace R FR N K₀ c fs err []
@@ -321,15 +328,17 @@ inductive FinTrace (R : S.Runner) (FR N : S.EA.Lab → Prop) (K₀ : S.Kont) :
 end
 
 /-- **Not interceptable, in order, with the error policy**: every run of a typed program from the
-start of a cancel of `capture l H K`, whose finalisers meet the no-interception condition, follows a
-cancel trace of `fins K` with nothing kept. -/
+start of a cancel of `capture l H K`, whose finalisers meet the no-interception condition, is a
+prefix of a cancel trace of `fins K` with nothing kept: some continuation of it, itself a run,
+follows the trace. -/
 def NoIntercept (FR : S.EA.Lab → Prop) : Prop :=
   ∀ R : S.Runner, R.Respects → ∀ e ε A, S.Answers R ε → S.der [] e (S.F ε A) →
     ∀ (c₀ c : S.RConf R) K₀ l H K q, S.RReach R (S.rinit R e) c₀ →
       S.term c₀.1 = S.plug K₀ (S.cancel (S.capture l H K)) →
       S.PureSteps c₀.1 c.1 → c.2 = c₀.2 → S.term c.1 = S.plug K₀ (S.cancelOf l H K) →
       (∀ D ∈ S.fins K, S.FinRow FR D) →
-      S.RPath R c q → S.CancelTrace R FR (S.Region l K) K₀ c (S.fins K) none q
+      S.RPath R c q → ∃ q', S.RPath R c (q ++ q') ∧
+        S.CancelTrace R FR (S.Region l K) K₀ c (S.fins K) none (q ++ q')
 
 /-- The frames of `K` that stop a raise are handler frames and finaliser frames. -/
 inductive Std : S.Kont → Prop
@@ -341,10 +350,13 @@ inductive Std : S.Kont → Prop
 mutual
 /-- **An unwind trace**: a raise is pending under `K`, inside the fixed context `K₀`, and the first
 frame of `K` that stops it decides.  If that frame is a handler of its label, the trace ends there
-(S4's abortive law says what follows).  If it is a finaliser frame, its finaliser fires and runs
-alone.  If the finaliser returns, the pending raise goes on through the rest of `K`.  If a raise of
-a label in `FR` escapes the finaliser, that raise supersedes the pending one.  Once the pending
-raise has left `K`, the trace is over. -/
+(S4's abortive law says what follows).  If it is a finaliser frame, its finaliser fires: the fire
+step, the administrative steps that start the finaliser (`q₀`), then its run alone.  If the
+finaliser returns, the pending raise goes on through the rest of `K`.  If a raise of a label in
+`FR` escapes the finaliser, that raise supersedes the pending one.  Once the pending raise has left
+`K`, the trace is over.  A trace stops before a fire step (`stop`) and while a finaliser runs alone
+(`PendTrace.running`); S5 reads a run as a prefix of a trace (`UnwindOrder`), so a run may stop
+anywhere. -/
 inductive UnwindTrace (R : S.Runner) (FR : S.EA.Lab → Prop) (K₀ : S.Kont) :
     S.RConf R → S.Kont → List (S.Event × S.RConf R) → Prop
   | stop {c : S.RConf R} {K : S.Kont} : UnwindTrace R FR K₀ c K []
@@ -389,13 +401,13 @@ inductive PendTrace (R : S.Runner) (FR : S.EA.Lab → Prop) (K₀ : S.Kont) :
 end
 
 /-- **The unwind**, in order, with supersession, through frames whose finalisers meet the
-no-interception condition. -/
+no-interception condition: every run from the raise is a prefix of an unwind trace. -/
 def UnwindOrder (FR : S.EA.Lab → Prop) : Prop :=
   ∀ R : S.Runner, R.Respects → ∀ e ε A, S.Answers R ε → S.der [] e (S.F ε A) →
     ∀ (c : S.RConf R) K₀ K m j w q, S.RReach R (S.rinit R e) c → S.Std K →
       S.term c.1 = S.plug K₀ (S.plug K (S.raise m j w)) → S.catches K m = false →
       (∀ D ∈ S.fins K, S.FinRow FR D) →
-      S.RPath R c q → S.UnwindTrace R FR K₀ c K q
+      S.RPath R c q → ∃ q', S.RPath R c (q ++ q') ∧ S.UnwindTrace R FR K₀ c K (q ++ q')
 
 /-- **S5**, its endings parameterised by what a finaliser may raise (decision D3). -/
 def Cancellation (FR : S.EA.Lab → Prop) : Prop := S.NoIntercept FR ∧ S.UnwindOrder FR

@@ -1,8 +1,10 @@
 import Targets.I.J1
 import Targets.I.Theories
+import Targets.I.CancelsNZ
 import Targets.B.HeapFrame
 import Targets.Instance.CancelRuns
 import Targets.Instance.UnaryLaws
+import Targets.A.CancelWhole
 
 /-!
 # The interaction — S5 at `J₁` (decision S5)
@@ -10,7 +12,7 @@ import Targets.Instance.UnaryLaws
 S5 (`Cancellation noFinRaise`, `Targets/A/Soundness.lean`) carries the no-interception condition
 explicitly (decision D4): the finalisers a cancel or an unwind fires are closed programs typed at a
 row of abortive operations of `FR`'s labels (`FinRow`); at option A (`noFinRaise`) that row admits
-nothing.
+nothing.  It reads every run from the start of a cancel or an unwind as a prefix of a trace.
 
 * **What typing gives about such a finaliser** (`finOK_of_finRow`): at a typing system whose closed
   programs are Core's, the row it is typed at is tied to the effect context, and a tied row that
@@ -18,23 +20,27 @@ nothing.
   and it runs to `()` from every finite memory (`runs_of_rel_unit`).  This is the hypothesis the
   instance's traces read (`FinOK`).  It does not read `FinRowsAt`: decision D4 put the finaliser's
   typing into S5's statement, so the bridges need it only for the finalisers S5 names.
-* **S5's unwind, prefix-closed** (`A.UnwindOrderPfx`, a candidate restatement): PROVED at `J₁`
-  (`unwindOrderPfx_J₁`) and at today's kernel (`cancellationPfx_tier1Open`), at every effect
-  context.
-* **S5's no-interception, prefix-closed** (`A.NoInterceptPfx`): PROVED at `J₁`
-  (`noInterceptPfx_J₁_of`) and at today's kernel, given that a cancelled continuation was captured
-  in a standard context (`CancelsStd`, OPEN).
-* **S5 as written fails** at every typing system that types `fireProg` and `(); ()`
-  (`not_unwindOrder_of_types`), so at `J₁` (`not_unwindOrder_J₁`, `not_cancellation_J₁`) and at
-  today's kernel (`not_unwindOrder_tier1Open`, `not_cancellation_tier1Open`), at every effect
-  context declaring `exn : 1 ↠ 0` at the name `1`, among them the admissible `ΞA`
-  (`not_cancellation_ΞA`, `not_cancellation_admissible`).  `fireProg` is
+* **S5's unwind**: PROVED at `J₁` (`unwindOrder_J₁`) and at today's kernel
+  (`cancellation_tier1Open`), at every effect context.
+* **S5's no-interception**: PROVED at `J₁` (`noIntercept_J₁_of`) and at today's kernel, given that
+  a cancelled continuation's context holds no `ccatch` and no `cfin` frame (`CancelsNoCtl`, OPEN:
+  a whole-run fact about fired finalisers).  The other half of `CancelsStd`, no handler named `0`
+  in that context, is a run invariant (`cancelsNZ_J₁`, `Targets/I/CancelsNZ.lean`).
+* **The extension a run needs is the β-step after a fire** (`Inst.unwind_pfx`, `Inst.cancel_pfx`,
+  `Inst.FireExt`): a run is a trace as it is, or, when it stops right after a fire step, once the
+  β-step that starts the finaliser is taken.
+* **S5 read whole fails** (kept as a record, `A.CancellationWhole`) at every typing system that
+  types `fireProg` and `(); ()` (`not_unwindOrderWhole_of_types`), so at `J₁`
+  (`not_unwindOrderWhole_J₁`, `not_cancellationWhole_J₁`) and at today's kernel
+  (`not_unwindOrderWhole_tier1Open`, `not_cancellationWhole_tier1Open`), at every effect context
+  declaring `exn : 1 ↠ 0` at the name `1`, among them the admissible `ΞA`
+  (`not_cancellationWhole_ΞA`, `not_cancellationWhole_admissible`).  `fireProg` is
   `handle_exn (raise exn () then x. x unwind ((); ()))`; its run reaches the raise under the
-  finaliser frame, where every premise of `UnwindOrder` holds (`fireProg_premises`), and the path of
+  finaliser frame, where every premise of the unwind holds (`fireProg_premises`), and the path of
   its one fire step follows no unwind trace: `[finalise]` leaves `((λ_. (); ()) ()); raise p`, the
   finaliser `(); ()` is not yet at an evaluation position, and `UnwindTrace.fire` reads the fire
-  step's administrative steps whole.  At the same configuration the prefix-closed reading holds
-  (`unwindOrderPfx_fireProg`): one more step, the β-step, and the path is a trace.
+  step's administrative steps whole.  At the same configuration S5 holds (`unwindOrder_fireProg`):
+  one more step, the β-step, and the path is a trace.
 
 `[Core σ=[]]`
 -/
@@ -119,41 +125,44 @@ theorem finOK_J₁ {Dt : Expr}
     {μ : Heap} (hfin : FinDom μ) : FinOK (ℍ := ℍ) μ Dt :=
   finOK_of_finRow (D := J1DerAt Ξ) (coreClosed_J₁At Ξ) h hfin
 
-/-- **S5's unwind at `J₁`, prefix-closed**, at every effect context: every run from a raise
-pending under a context of A's unwinding shape follows an unwind trace, once at most one step of
-the run is appended. -/
-theorem unwindOrderPfx_J₁ :
-    (ourInst (ℍ := ℍ) orowRF Ξ J₁).UnwindOrderPfx (ourInst (ℍ := ℍ) orowRF Ξ J₁).noFinRaise :=
-  Inst.unwindOrderPfx_of_core liveOK_J₁ name_ne_zero_orow (fun _ h _ hμ => finOK_J₁ h hμ)
+/-- **S5's unwind at `J₁`**, at every effect context: every run from a raise pending under a
+context of A's unwinding shape is a prefix of an unwind trace — a trace as it is, or once the
+β-step after a fire step is taken. -/
+theorem unwindOrder_J₁ :
+    (ourInst (ℍ := ℍ) orowRF Ξ J₁).UnwindOrder (ourInst (ℍ := ℍ) orowRF Ξ J₁).noFinRaise :=
+  Inst.unwindOrder_of_core liveOK_J₁ name_ne_zero_orow (fun _ h _ hμ => finOK_J₁ h hμ)
 
-/-- **S5's no-interception at `J₁`, prefix-closed**, at every effect context, given that every
-cancelled continuation was captured in a standard context. -/
-theorem noInterceptPfx_J₁_of (hS : Inst.CancelsStd (ℍ := ℍ) orowRF Ξ J₁) :
-    (ourInst (ℍ := ℍ) orowRF Ξ J₁).NoInterceptPfx (ourInst (ℍ := ℍ) orowRF Ξ J₁).noFinRaise :=
-  Inst.noInterceptPfx_of_core liveOK_J₁ name_ne_zero_orow (fun _ h _ hμ => finOK_J₁ h hμ) hS
+/-- **S5's no-interception at `J₁`**, at every effect context, given that no cancelled
+continuation's context holds a `ccatch` or a `cfin` frame; that it holds no handler named `0` is
+proved (`cancelsNZ_J₁`). -/
+theorem noIntercept_J₁_of (hN : Inst.CancelsNoCtl (ℍ := ℍ) orowRF Ξ J₁) :
+    (ourInst (ℍ := ℍ) orowRF Ξ J₁).NoIntercept (ourInst (ℍ := ℍ) orowRF Ξ J₁).noFinRaise :=
+  Inst.noIntercept_of_core liveOK_J₁ name_ne_zero_orow (fun _ h _ hμ => finOK_J₁ h hμ)
+    (Inst.cancelsStd_of hN cancelsNZ_J₁)
 
-/-- **S5 at `J₁`, prefix-closed**, given `CancelsStd`. -/
-theorem cancellationPfx_J₁_of (hS : Inst.CancelsStd (ℍ := ℍ) orowRF Ξ J₁) :
-    (ourInst (ℍ := ℍ) orowRF Ξ J₁).CancellationPfx (ourInst (ℍ := ℍ) orowRF Ξ J₁).noFinRaise :=
-  ⟨noInterceptPfx_J₁_of hS, unwindOrderPfx_J₁⟩
+/-- **S5 at `J₁`**, at every effect context, given `CancelsNoCtl`. -/
+theorem cancellation_J₁_of (hN : Inst.CancelsNoCtl (ℍ := ℍ) orowRF Ξ J₁) :
+    (ourInst (ℍ := ℍ) orowRF Ξ J₁).Cancellation (ourInst (ℍ := ℍ) orowRF Ξ J₁).noFinRaise :=
+  ⟨noIntercept_J₁_of hN, unwindOrder_J₁⟩
 
-/-- **S5 at today's kernel, prefix-closed**: the unwind at every effect context, the
-no-interception given `CancelsStd`. -/
-theorem cancellationPfx_tier1Open :
-    (ourInst (ℍ := ℍ) orowRF Ξ Inst.tier1Open).UnwindOrderPfx
+/-- **S5 at today's kernel**: the unwind at every effect context, the no-interception given
+`CancelsNoCtl`. -/
+theorem cancellation_tier1Open :
+    (ourInst (ℍ := ℍ) orowRF Ξ Inst.tier1Open).UnwindOrder
         (ourInst (ℍ := ℍ) orowRF Ξ Inst.tier1Open).noFinRaise ∧
-      (Inst.CancelsStd (ℍ := ℍ) orowRF Ξ Inst.tier1Open →
-        (ourInst (ℍ := ℍ) orowRF Ξ Inst.tier1Open).NoInterceptPfx
+      (Inst.CancelsNoCtl (ℍ := ℍ) orowRF Ξ Inst.tier1Open →
+        (ourInst (ℍ := ℍ) orowRF Ξ Inst.tier1Open).NoIntercept
           (ourInst (ℍ := ℍ) orowRF Ξ Inst.tier1Open).noFinRaise) :=
   have hF : ∀ D, (ourInst (ℍ := ℍ) orowRF Ξ Inst.tier1Open).FinRow
       (ourInst (ℍ := ℍ) orowRF Ξ Inst.tier1Open).noFinRaise D → ∀ μ, FinDom μ → FinOK (ℍ := ℍ) μ D :=
     fun _ h _ hμ => finOK_of_finRow (D := Inst.tier1OpenDer) Inst.coreClosed_tier1Open h hμ
-  ⟨Inst.unwindOrderPfx_of_core Inst.liveOK_tier1Open name_ne_zero_orow hF,
-    fun hS => Inst.noInterceptPfx_of_core Inst.liveOK_tier1Open name_ne_zero_orow hF hS⟩
+  ⟨Inst.unwindOrder_of_core Inst.liveOK_tier1Open name_ne_zero_orow hF,
+    fun hN => Inst.noIntercept_of_core Inst.liveOK_tier1Open name_ne_zero_orow hF
+      (Inst.cancelsStd_of hN cancelsNZ_tier1Open)⟩
 
 end J1
 
-/-! ### S5 as written fails at `J₁` -/
+/-! ### S5 read whole fails at `J₁` -/
 
 /-- The finaliser `(); ()`: at the pure row, and no value. -/
 def finSeq : Expr := .seq .unit .unit
@@ -269,16 +278,16 @@ theorem fireProg_premises {J : OurTyping orowRF} (h1 : Ξ 1 = Inst.Eab)
       Adequacy.emptyMem fireK₀ .hole (.var 0) finSeq (by decide) rfl
   exact ⟨hreach, hstd, by rw [fireProg_c]; rfl, rfl, hfin, .cons hstep .nil⟩
 
-/-- **S5's unwind fails as written at every typing system that types `fireProg` and `(); ()`**, at
+/-- **S5's unwind read whole fails at every typing system that types `fireProg` and `(); ()`**, at
 every effect context declaring `exn : 1 ↠ 0` at the name `1`: at `fireProg`'s raise under its
 finaliser frame, where every premise holds (`fireProg_premises`), the path of the fire step alone
 follows no unwind trace. -/
-theorem not_unwindOrder_of_types {J : OurTyping orowRF} (h1 : Ξ 1 = Inst.Eab)
+theorem not_unwindOrderWhole_of_types {J : OurTyping orowRF} (h1 : Ξ 1 = Inst.Eab)
     (hder : (ourInst (ℍ := ℍ) orowRF Ξ J).der [] fireProg
       ((ourInst (ℍ := ℍ) orowRF Ξ J).F (orowAlg Ξ).unit (OVTy.ofV .unit)))
     (hseq : (ourInst (ℍ := ℍ) orowRF Ξ J).der [] finSeq
       ((ourInst (ℍ := ℍ) orowRF Ξ J).F (orowAlg Ξ).unit (OVTy.ofV .unit))) :
-    ¬ (ourInst (ℍ := ℍ) orowRF Ξ J).UnwindOrder (ourInst (ℍ := ℍ) orowRF Ξ J).noFinRaise := by
+    ¬ (ourInst (ℍ := ℍ) orowRF Ξ J).UnwindOrderWhole (ourInst (ℍ := ℍ) orowRF Ξ J).noFinRaise := by
   intro h
   obtain ⟨hreach, hstd, hterm, hcat, hfin, hq⟩ := fireProg_premises (ℍ := ℍ) h1 hder hseq
   have htr := h (ourInst (ℍ := ℍ) orowRF Ξ J).R₀ Inst.r₀_respects fireProg _ _
@@ -286,11 +295,11 @@ theorem not_unwindOrder_of_types {J : OurTyping orowRF} (h1 : Ξ 1 = Inst.Eab)
     (ourInst (ℍ := ℍ) orowRF Ξ J).unitV _ hreach hstd hterm hcat hfin hq
   exact Inst.not_unwindTrace_one (fun Kf h' => fireAfter_ne Kf h') htr
 
-/-- **S5's unwind fails as written at `J₁`**, at every effect context declaring `exn : 1 ↠ 0` at the
+/-- **S5's unwind read whole fails at `J₁`**, at every effect context declaring `exn : 1 ↠ 0` at the
 name `1`. -/
-theorem not_unwindOrder_J₁ (h1 : Ξ 1 = Inst.Eab) :
-    ¬ (ourInst (ℍ := ℍ) orowRF Ξ J₁).UnwindOrder (ourInst (ℍ := ℍ) orowRF Ξ J₁).noFinRaise :=
-  not_unwindOrder_of_types h1
+theorem not_unwindOrderWhole_J₁ (h1 : Ξ 1 = Inst.Eab) :
+    ¬ (ourInst (ℍ := ℍ) orowRF Ξ J₁).UnwindOrderWhole (ourInst (ℍ := ℍ) orowRF Ξ J₁).noFinRaise :=
+  not_unwindOrderWhole_of_types h1
     (Inst.der_J₁_ret (ℍ := ℍ) (Ξ := Ξ) (e := fireProg) (A := .unit) rfl (d_fireProg h1))
     der_finSeq_J₁
 
@@ -307,18 +316,18 @@ theorem d_fireProgNU : Targets.CDerivesNU LifeCtx.empty [] fireProg (.comp (.ret
       (.ret (.var (.here (by cdead))))
   · exact .unitE (deadSplit (by cdead)) (.unitI (by cdead)) (.ret (.unitI (by cdead)))
 
-/-- **S5's unwind fails as written at today's kernel** (`tier1Open`), at every effect context
+/-- **S5's unwind read whole fails at today's kernel** (`tier1Open`), at every effect context
 declaring `exn : 1 ↠ 0` at the name `1`. -/
-theorem not_unwindOrder_tier1Open (h1 : Ξ 1 = Inst.Eab) :
-    ¬ (ourInst (ℍ := ℍ) orowRF Ξ Inst.tier1Open).UnwindOrder
+theorem not_unwindOrderWhole_tier1Open (h1 : Ξ 1 = Inst.Eab) :
+    ¬ (ourInst (ℍ := ℍ) orowRF Ξ Inst.tier1Open).UnwindOrderWhole
       (ourInst (ℍ := ℍ) orowRF Ξ Inst.tier1Open).noFinRaise :=
-  not_unwindOrder_of_types h1 (Inst.der_tier1Open_ret d_fireProgNU)
+  not_unwindOrderWhole_of_types h1 (Inst.der_tier1Open_ret d_fireProgNU)
     (Inst.der_tier1Open_ret (.unitE (deadSplit .nil) (.unitI .nil) (.ret (.unitI .nil))))
 
-/-- **At the same configuration the prefix-closed reading holds** at `J₁`: the path of the fire
-step, followed by one step of the run (the β-step that starts the finaliser), follows an unwind
-trace (`unwindOrderPfx_J₁` at `fireProg_premises`). -/
-theorem unwindOrderPfx_fireProg (h1 : Ξ 1 = Inst.Eab) :
+/-- **At the same configuration S5 holds** at `J₁`: the path of the fire step, followed by one step
+of the run (the β-step that starts the finaliser), follows an unwind trace (`unwindOrder_J₁` at
+`fireProg_premises`). -/
+theorem unwindOrder_fireProg (h1 : Ξ 1 = Inst.Eab) :
     ∃ q', (ourInst (ℍ := ℍ) orowRF Ξ J₁).RPath (ourInst (ℍ := ℍ) orowRF Ξ J₁).R₀
         ((Adequacy.emptyMem, lookEnd 2 fireProg), ())
         ([(.fire finSeq, ((Adequacy.emptyMem, fireAfter), ()))] ++ q') ∧
@@ -329,35 +338,34 @@ theorem unwindOrderPfx_fireProg (h1 : Ξ 1 = Inst.Eab) :
   have hder := Inst.der_J₁_ret (ℍ := ℍ) (Ξ := Ξ) (e := fireProg) (A := .unit) rfl (d_fireProg h1)
   obtain ⟨hreach, hstd, hterm, hcat, hfin, hq⟩ :=
     fireProg_premises (ℍ := ℍ) h1 hder der_finSeq_J₁
-  exact unwindOrderPfx_J₁ (ourInst (ℍ := ℍ) orowRF Ξ J₁).R₀ Inst.r₀_respects fireProg _ _
+  exact unwindOrder_J₁ (ourInst (ℍ := ℍ) orowRF Ξ J₁).R₀ Inst.r₀_respects fireProg _ _
     (Inst.answers_unit _) hder _ fireK₀ (Inst.thenK (.var 0) finSeq) (lab₁ h1) 0
     (ourInst (ℍ := ℍ) orowRF Ξ J₁).unitV _ hreach hstd hterm hcat hfin hq
 
-/-- **S5 fails as written at `J₁`**, at every effect context declaring `exn : 1 ↠ 0` at `1`. -/
-theorem not_cancellation_J₁ (h1 : Ξ 1 = Inst.Eab) :
-    ¬ (ourInst (ℍ := ℍ) orowRF Ξ J₁).Cancellation (ourInst (ℍ := ℍ) orowRF Ξ J₁).noFinRaise :=
-  fun h => not_unwindOrder_J₁ h1 h.2
+/-- **S5 read whole fails at `J₁`**, at every effect context declaring `exn : 1 ↠ 0` at `1`. -/
+theorem not_cancellationWhole_J₁ (h1 : Ξ 1 = Inst.Eab) :
+    ¬ (ourInst (ℍ := ℍ) orowRF Ξ J₁).CancellationWhole (ourInst (ℍ := ℍ) orowRF Ξ J₁).noFinRaise :=
+  fun h => not_unwindOrderWhole_J₁ h1 h.2
 
-/-- **S5 fails as written at today's kernel**, at every effect context declaring `exn : 1 ↠ 0` at
+/-- **S5 read whole fails at today's kernel**, at every effect context declaring `exn : 1 ↠ 0` at
 `1`. -/
-theorem not_cancellation_tier1Open (h1 : Ξ 1 = Inst.Eab) :
-    ¬ (ourInst (ℍ := ℍ) orowRF Ξ Inst.tier1Open).Cancellation
+theorem not_cancellationWhole_tier1Open (h1 : Ξ 1 = Inst.Eab) :
+    ¬ (ourInst (ℍ := ℍ) orowRF Ξ Inst.tier1Open).CancellationWhole
       (ourInst (ℍ := ℍ) orowRF Ξ Inst.tier1Open).noFinRaise :=
-  fun h => not_unwindOrder_tier1Open h1 h.2
+  fun h => not_unwindOrderWhole_tier1Open h1 h.2
 
 end Fail
 
-/-- **S5 fails as written at `J₁` at the admissible `ΞA`**, so the S5 hypothesis of `tier1_J₁_of`
-cannot be met. -/
-theorem not_cancellation_ΞA :
-    ¬ (ourInst (ℍ := ℍ) orowRF Inst.ΞA J₁).Cancellation
+/-- **S5 read whole fails at `J₁` at the admissible `ΞA`.** -/
+theorem not_cancellationWhole_ΞA :
+    ¬ (ourInst (ℍ := ℍ) orowRF Inst.ΞA J₁).CancellationWhole
       (ourInst (ℍ := ℍ) orowRF Inst.ΞA J₁).noFinRaise :=
-  not_cancellation_J₁ (by simp [Inst.ΞA])
+  not_cancellationWhole_J₁ (by simp [Inst.ΞA])
 
-theorem not_cancellation_admissible :
-    ¬ ∀ Ξ, Inst.AdmEff Ξ → (ourInst (ℍ := ℍ) orowRF Ξ J₁).Cancellation
+theorem not_cancellationWhole_admissible :
+    ¬ ∀ Ξ, Inst.AdmEff Ξ → (ourInst (ℍ := ℍ) orowRF Ξ J₁).CancellationWhole
       (ourInst (ℍ := ℍ) orowRF Ξ J₁).noFinRaise :=
-  fun h => not_cancellation_ΞA (h Inst.ΞA Inst.admEff_ΞA)
+  fun h => not_cancellationWhole_ΞA (h Inst.ΞA Inst.admEff_ΞA)
 
 end Targets.I
 

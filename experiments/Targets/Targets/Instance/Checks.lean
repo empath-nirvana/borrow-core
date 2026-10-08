@@ -19,9 +19,10 @@ This module holds the admissible context `ΞA`, the programs' typings at our ins
 * **The no-interception condition is needed** (`noIntercept_needs_finRow`).  `J₄` types one
   program, which holds no `ccatch`, no `cfin` and no handler named `0` (`NoInterception`); its
   cancelled region's finaliser performs the operation the region's dying handler catches, so it
-  does not meet `FinRow`, and the run from the cancel follows no cancel trace, at every set of
-  endings.  `NoInterception` is syntactic; the condition is what typing must give about
-  finalisers.
+  does not meet `FinRow`, and the run from the cancel is a prefix of no cancel trace, at every set
+  of endings: no continuation of it starts the finaliser again, the run ending at `()` with no
+  operation at an evaluation position (`rpath_prefix_chainPath`).  `NoInterception` is syntactic;
+  the condition is what typing must give about finalisers.
 -/
 
 noncomputable section
@@ -169,6 +170,41 @@ theorem cancelOfE_val {n : UInt32} {qs r : Expr} {cs : List Expr} (h : IsVal (hn
     (K : Kont) : cancelOfE n qs r cs K = Targets.cancelOf n ⟨_, h⟩ K := by
   unfold cancelOfE; rw [dif_pos h]
 
+/-! ### Paths from a chain to a value -/
+
+/-- **Every path from the start of a chain of head steps that ends at a value is a prefix of the
+chain's path**: each step of the chain is the only step of its configuration (`rstep_det`), and an
+answer takes no step. -/
+theorem rpath_prefix_chainPath {RF : RowForm} {Ξ : EffCtx} {J : OurTyping RF}
+    (R : (ourInst (ℍ := ℍ) RF Ξ J).Runner) {μ : Heap} {s : R.St} :
+    ∀ {e e' : Expr} {q₀ : List (Kont × Expr × Expr)}, HeadChain (ℍ := ℍ) e q₀ e' → IsVal e' →
+      ∀ q, (ourInst (ℍ := ℍ) RF Ξ J).RPath R ((μ, e), s) q → q <+: chainPath R μ s q₀
+  | _, _, _, .nil, hv, q, hp => by
+      cases hp with
+      | nil => exact List.nil_prefix
+      | cons hst _ => exact (no_rstep_val R ⟨_, hv⟩ hst).elim
+  | _, _, _, @HeadChain.cons _ _ K a a' e' q₀ hh hn hq, hv, q, hp => by
+      cases hp with
+      | nil => exact List.nil_prefix
+      | @cons _ ev c₁ q' hst hp' =>
+          obtain ⟨rfl, rfl⟩ := rstep_det (hh μ) hn hst
+          exact List.cons_prefix_cons.2 ⟨rfl, rpath_prefix_chainPath R hq hv q' hp'⟩
+
+/-- **Where a path that keeps the store ends**: at its start when it is empty, otherwise at its last
+configuration. -/
+theorem purePath_end {S : A.EffectSystem} {R : S.Runner} {c c' : S.RConf R}
+    {q : List (S.Event × S.RConf R)} (h : S.PurePath R c q c') :
+    (q = [] ∧ c' = c) ∨ ∃ ev, q.getLast? = some (ev, c') := by
+  induction h with
+  | nil => exact .inl ⟨rfl, rfl⟩
+  | @cons c ev c₁ q c'' _ _ _ ih =>
+      rcases ih with ⟨rfl, rfl⟩ | ⟨ev', hl⟩
+      · exact .inr ⟨ev, rfl⟩
+      · refine .inr ⟨ev', ?_⟩
+        cases q with
+        | nil => simp at hl
+        | cons y q => rw [List.getLast?_cons_cons]; exact hl
+
 /-! ### Check 4: the no-interception condition is needed -/
 
 /-- A finaliser that performs the operation its cancelled region's handler catches. -/
@@ -247,6 +283,21 @@ theorem cfinShape_p5Kf (t : Expr) : (evalSubs (p5Kf.plug t)).any cfinShape = tru
 
 theorem not_isOVal_finP : ¬ IsOVal finP := not_isOVal_prim_app (p := .perform) (by decide) _
 
+/-- The configuration after the dying handler catches the finaliser's operation: the clause of `2`
+applied to `((), κ)`, `κ` holding the cancel-mode frame. -/
+def p5x₃ : Expr :=
+  ccatchE (.app (.lam (.letpair (.var 0) (.app (.var 0) (.inj₂ .unit))))
+    (.pair .unit (kappa 2 ⟨H2E', isVal_H2E'⟩ (.appR (.app (.prim .cfin) p5cs.1) .hole))))
+
+/-- From there the run — the clause cancels `κ`, the cancel-mode frame catches the cancel, and the
+two `ccatch` frames answer — ends at `()` in eight steps. -/
+theorem p5x₃_end : lookEnd 8 p5x₃ = Val.unit.1 := by rfl
+
+/-- No configuration of that run holds an operation at an evaluation position. -/
+theorem p5x₃_noPerform :
+    (chainTerms p5x₃ (lookRun 8 p5x₃)).all (fun t => !(evalSubs t).any performShape) = true := by
+  decide
+
 section Check4
 variable (Ξ : EffCtx)
 
@@ -284,7 +335,8 @@ theorem p5_path :
 `FinRow`).  `J₄` types one program, and that program holds no `ccatch`, no `cfin` and no handler
 named `0`; its run reaches a cancel of `κ`, and the cancel's start.  The cancelled region's
 finaliser performs the operation the region's dying handler catches: it does not meet `FinRow` at
-any set of endings, and the run from the cancel follows no cancel trace at any set of endings. -/
+any set of endings, and the run from the cancel's start is a prefix of no cancel trace at any set of
+endings — no continuation of it, itself a run, follows one. -/
 theorem noIntercept_needs_finRow (h2 : Ξ 2 = [(.unr, .unit, .unit)]) :
     NoInterception J₄.read ∧
       (ourInst (ℍ := ℍ) orowRF Ξ J₄).der [] finAloneProg
@@ -301,9 +353,13 @@ theorem noIntercept_needs_finRow (h2 : Ξ 2 = [(.unr, .unit, .unit)]) :
         ((ourInst (ℍ := ℍ) orowRF Ξ J₄).cancelOf (lab2 Ξ h2) p5H p5K) ∧
       (ourInst (ℍ := ℍ) orowRF Ξ J₄).fins p5K = [finP] ∧
       (∀ FR, ¬ (ourInst (ℍ := ℍ) orowRF Ξ J₄).FinRow FR finP) ∧
-      ∀ FR, ¬ (ourInst (ℍ := ℍ) orowRF Ξ J₄).CancelTrace (ourInst (ℍ := ℍ) orowRF Ξ J₄).R₀ FR
-        ((ourInst (ℍ := ℍ) orowRF Ξ J₄).Region (lab2 Ξ h2) p5K) .hole
-        ((Adequacy.emptyMem, lookEnd 8 finAloneProg), ()) [finP] none (p5q (ℍ := ℍ) Ξ) := by
+      (ourInst (ℍ := ℍ) orowRF Ξ J₄).RPath (ourInst (ℍ := ℍ) orowRF Ξ J₄).R₀
+        ((Adequacy.emptyMem, lookEnd 8 finAloneProg), ()) (p5q (ℍ := ℍ) Ξ) ∧
+      ∀ FR q', (ourInst (ℍ := ℍ) orowRF Ξ J₄).RPath (ourInst (ℍ := ℍ) orowRF Ξ J₄).R₀
+          ((Adequacy.emptyMem, lookEnd 8 finAloneProg), ()) (p5q (ℍ := ℍ) Ξ ++ q') →
+        ¬ (ourInst (ℍ := ℍ) orowRF Ξ J₄).CancelTrace (ourInst (ℍ := ℍ) orowRF Ξ J₄).R₀ FR
+          ((ourInst (ℍ := ℍ) orowRF Ξ J₄).Region (lab2 Ξ h2) p5K) .hole
+          ((Adequacy.emptyMem, lookEnd 8 finAloneProg), ()) [finP] none (p5q (ℍ := ℍ) Ξ ++ q') := by
   let S := ourInst (ℍ := ℍ) orowRF Ξ J₄
   have hc₀ : lookEnd 5 finAloneProg = S.plug .hole (S.cancel (S.capture (lab2 Ξ h2) p5H p5K)) := by
     show lookEnd 5 finAloneProg = Kont.hole.plug (cancelE (captureE 2 (qsOf Ξ 2) _ _ p5K))
@@ -320,27 +376,49 @@ theorem noIntercept_needs_finRow (h2 : Ξ 2 = [(.unr, .unit, .unit)]) :
   refine ⟨noInterception_J₄, ⟨fun η _ => ⟨[] ++ [], _, rfl, rowAt_nil Ξ⟩, .inl ⟨[], by simp, rfl⟩⟩,
     rreach_of_chain S.R₀ (lookRun_sound (ℍ := ℍ) 5 finAloneProg), hc₀,
     pureSteps_of_chain (RF := orowRF) (Ξ := Ξ) (J := J₄) (μ := Adequacy.emptyMem)
-      (lookRun_sound (ℍ := ℍ) 3 (lookEnd 5 finAloneProg)), hc, rfl, ?_, ?_⟩
+      (lookRun_sound (ℍ := ℍ) 3 (lookEnd 5 finAloneProg)), hc, rfl, ?_, ?_, ?_⟩
   · rintro FR ⟨ε, -, -, ⟨Θ, -, he⟩ | ⟨-, M, he, -⟩⟩
     · have he' : finP = finAloneProg := he
       simp [finP, finAloneProg, withH, bindE, performE] at he'
     · simp [finP, driveE, driveMark, performE] at he
-  intro FR hT
-  let l := lab2 Ξ h2
-  let c : S.RConf S.R₀ := ((Adequacy.emptyMem, lookEnd 8 finAloneProg), ())
-  generalize hq' : p5q (ℍ := ℍ) Ξ = q' at hT
+  · rw [← p5_path]
+    exact rpath_chainPath S.R₀ (lookRun_sound (ℍ := ℍ) 3 (lookEnd 8 finAloneProg))
+  intro FR q' hpath hT
+  -- after the dying handler's catch the run is a prefix of the chain to `()`, which holds no
+  -- operation at an evaluation position
+  have hq'ops : ∀ x ∈ q', (evalSubs x.2.1.2).any performShape = false := by
+    have hp3 : S.RPath S.R₀ ((Adequacy.emptyMem, p5x₃), ()) q' := by
+      unfold p5q at hpath
+      cases hpath with
+      | cons _ hp₁ =>
+          cases hp₁ with
+          | cons _ hp₂ =>
+              cases hp₂ with
+              | cons _ hp₃ => exact hp₃
+    obtain ⟨l', hl'⟩ := rpath_prefix_chainPath S.R₀ (lookRun_sound (ℍ := ℍ) 8 p5x₃)
+      (by rw [p5x₃_end]; exact Val.unit.2) q' hp3
+    intro x hx
+    have hx' : x ∈ chainPath S.R₀ Adequacy.emptyMem () (lookRun 8 p5x₃) := by
+      rw [← hl']; exact List.mem_append_left _ hx
+    simp only [chainPath, List.mem_map] at hx'
+    obtain ⟨y, hy, rfl⟩ := hx'
+    have h := List.all_eq_true.1 p5x₃_noPerform (y.1.plug y.2.2)
+      (List.mem_cons_of_mem _ (List.mem_map_of_mem hy))
+    simpa using h
+  generalize hq' : p5q (ℍ := ℍ) Ξ ++ q' = Q at hT
   cases hT with
-  | stop => unfold p5q at hq'; cases hq'
+  | stop => unfold p5q at hq'; simp at hq'
   | @fire c' c₁ c₂ D fs err Kf q₀ q'' hst hpp hKf hft =>
       have hKf' : c₂.1.2 = Kf.plug finP := hKf
       unfold p5q at hq'
+      simp only [List.cons_append, List.nil_append] at hq'
       obtain ⟨hx₁, hrest⟩ := List.cons.inj hq'
       rcases q₀ with _ | ⟨y, _ | ⟨z, _ | ⟨w, q₀⟩⟩⟩
       · cases hpp
         have := any_evalSubs_plug Kf (p := performShape) (s := finP) rfl
         rw [← hKf', ← (Prod.mk.inj hx₁).2] at this
         exact absurd this (by rw [p5_noFin₁]; decide)
-      · simp only [List.append, List.cons.injEq] at hrest
+      · simp only [List.cons_append, List.nil_append, List.cons.injEq] at hrest
         obtain ⟨hy, hq''⟩ := hrest
         cases hpp with
         | cons _ _ hpp' =>
@@ -349,20 +427,21 @@ theorem noIntercept_needs_finRow (h2 : Ξ 2 = [(.unr, .unit, .unit)]) :
             have hKf₂ : Kf = p5Kf := by
               have h : p5Kf.plug finP = Kf.plug finP := by rw [← hKf', ← hc₂]
               exact (plug_inj_ctx (fun h' => not_isOVal_finP (isOVal_of_isVal h')) h).symm
+            -- the dying handler's catch is not a step of the finaliser alone
+            have hcat : ∀ (t' : Expr), ccatchE (.app (.lam (.letpair (.var 0) (.app (.var 0)
+                (.inj₂ .unit)))) (.pair .unit (kappa 2 ⟨H2E', isVal_H2E'⟩
+                  (.appR (.app (.prim .cfin) p5cs.1) .hole)))) ≠ p5Kf.plug t' := by
+              intro t' h₂'
+              have := cfinShape_p5Kf t'
+              rw [← h₂', p5_noCfin₃] at this
+              exact absurd this (by decide)
             generalize hfs0 : ([] : List (ourInst (ℍ := ℍ) orowRF Ξ J₄).Term) = fs0 at hft
             generalize her0 : (none : (ourInst (ℍ := ℍ) orowRF Ξ J₄).Err) = er0 at hft
             cases hft with
             | running hal =>
-                -- the dying handler's catch is not a step of the finaliser alone
                 subst hq'' hKf₂
                 cases hal with
-                | @cons _ _ _ t t' _ _ h₁ h₂ _ _ _ =>
-                    have h₂' : ccatchE (.app (.lam (.letpair (.var 0) (.app (.var 0) (.inj₂ .unit))))
-                        (.pair .unit (kappa 2 ⟨H2E', isVal_H2E'⟩
-                          (.appR (.app (.prim .cfin) p5cs.1) .hole)))) = p5Kf.plug t' := h₂
-                    have := cfinShape_p5Kf t'
-                    rw [← h₂', p5_noCfin₃] at this
-                    exact absurd this (by decide)
+                | @cons _ _ _ t t' _ _ h₁ h₂ _ _ _ => exact hcat t' h₂
             | @ended _ _ _ _ qa c' r c'' qb hal hend _ _ _ =>
                 rcases qa with _ | ⟨a, qa⟩
                 · simp only [List.nil_append, List.cons.injEq] at hq''
@@ -370,9 +449,11 @@ theorem noIntercept_needs_finRow (h2 : Ξ 2 = [(.unr, .unit, .unit)]) :
                   have := (Prod.mk.inj hev).1
                   cases this
                 · simp only [List.cons_append, List.cons.injEq] at hq''
-                  obtain ⟨-, h⟩ := hq''
-                  cases qa <;> simp at h
-      · simp only [List.append, List.cons.injEq] at hrest
+                  obtain ⟨ha, -⟩ := hq''
+                  subst ha hKf₂
+                  cases hal with
+                  | @cons _ _ _ t t' _ _ h₁ h₂ _ _ _ => exact hcat t' h₂
+      · simp only [List.cons_append, List.nil_append, List.cons.injEq] at hrest
         obtain ⟨hy, hz, -⟩ := hrest
         cases hpp with
         | cons _ _ hpp' =>
@@ -382,9 +463,24 @@ theorem noIntercept_needs_finRow (h2 : Ξ 2 = [(.unr, .unit, .unit)]) :
                 have := any_evalSubs_plug Kf (p := performShape) (s := finP) rfl
                 rw [← hKf', ← (Prod.mk.inj hz).2] at this
                 exact absurd this (by rw [p5_noFin₃]; decide)
-      · simp only [List.append, List.cons.injEq] at hrest
-        obtain ⟨-, -, h⟩ := hrest
-        cases h
+      · -- the finaliser would start after the catch: no configuration there holds an operation
+        simp only [List.cons_append, List.cons.injEq] at hrest
+        obtain ⟨-, -, hw⟩ := hrest
+        rcases purePath_end hpp with ⟨h, -⟩ | ⟨ev, hl⟩
+        · cases h
+        · rw [List.getLast?_cons_cons, List.getLast?_cons_cons] at hl
+          have hm : (ev, c₂) ∈ q' := by
+            rw [hw]
+            exact List.mem_cons.2 (by
+              rcases List.mem_cons.1 (List.mem_of_getLast? hl) with h | h
+              · exact .inl h
+              · exact .inr (List.mem_append_left _ h))
+          have h₁ := hq'ops _ hm
+          have h₂ := any_evalSubs_plug Kf (p := performShape) (s := finP) rfl
+          rw [← hKf'] at h₂
+          change (evalSubs c₂.1.2).any performShape = false at h₁
+          rw [h₁] at h₂
+          cases h₂
 
 end Check4
 
