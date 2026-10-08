@@ -100,6 +100,27 @@ Effect work is easy to do against the proof model alone and get the implementati
 
 **Known runtime cost:** a place that spans a suspension stays a real cell today, one allocation each. Inline placement in a pinned frame is open (P13, synthesis §11).
 
+**What the language already has, built and running.** Check this list, and grep SPEC and the corpus, before proposing any mechanism. A proposal that duplicates one of these must say why the existing one doesn't suffice.
+
+| feature | SPEC | corpus |
+|---|---|---|
+| codata `νX. C`, observed by drivers | §7 | `nats`, `iter-*` |
+| divergence as an effect (`Loop`) | §14 | `core-effects-loop` |
+| generators (`Yield`, pull, adapters, close, a generator stored in a cell) | §15 | `gen-*` (14), `core-yield-*` |
+| counted loops, `for` over data | §16 | `count-*`, `for-*` |
+| buffers, text, literals | §17 | `utf8`, `split`, `trim`, `parse` |
+| effects and handlers: answering capabilities | §18 | `effects-*` |
+| native capture: `handle`/`perform` with suspend, resume, cancel and finalisers, compiled to state machines | §19 | `capture-*`, kernel programs |
+| recursion: bounded and deep drivers, `Exhausted`, the fixed point of a generator | §20, §21 | `rec-*` |
+| affine closures (codata with arguments) | §22 | `aff-*` |
+| non-strict outlives, `'main` | §23 | `lend-*` |
+| externs and I/O capabilities (linear, opaque host resources) | §11, decision 31 | `io-*` |
+| arrays and slices | §9 | `array-*`, `slice-*` |
+| implicit destructors | §12 | throughout |
+| zero-size cells cost nothing at run time (`zeroCell`) | §23 | |
+
+So coroutines and generators are already effects with suspension. What is missing is lends held across a suspension (tier 2) and the proofs that tie this to an abstract effect algebra, not the mechanisms.
+
 ## 2. The machinery to build on
 
 Use these by name. Don't rebuild them. Details and paper page numbers are in [06](06-bolo-machinery.md).
