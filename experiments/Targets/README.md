@@ -48,6 +48,7 @@ Instance; the Instance imports no B or I; I imports everything.
 | | `Targets/B/Routes.lean` | the routes: `soundnessOfFL`, `soundContractsOfFL`, `releasedOnceReuse_of_bumpSim`, … |
 | | `Targets/B/Release.lean` | release as lemmas about runs: `ReleasedOnceAll`, a tautology; `releasedOnce_of_ends`; `bump_follows` |
 | | `Targets/B/NonVacuity.lean` | `not_releasedOnceReuse_staleFree`: B5 is not a tautology |
+| | `Targets/B/BumpSim.lean` | the step-for-step simulation B5 rests on (OQ-43 (b)): renaming along a function commutes with every head step, the array steps where it moves their blocks (`head_image`); `BumpSimAt`, `BumpSim` with the hypotheses a bump run supplies, proved (`bumpSimAt`); every run keeps the platform's protocol (`platData_of_safe`); B5 from B4′ (`releasedOnceReuse_of_soundContracts`) |
 | | `Targets/B/Conservativity.lean`, `RunEnd.lean`, `Binder.lean` | P14; the run-end laws where `Upd` is Core's; the freeze binder's machine half |
 | **Instance** | `Targets/Instance/Rows.lean` | our row forms as instances of A's effect algebra (`orowAlg`, `orowRF`, `RowLink`) |
 | | `Targets/Instance/Types.lean`, `Typing.lean` | the open types (`OVTy`, `OCTy`, with `effF` and the row `∀`), `OurTyping`, its reading `read` (the design's `⟦J⟧`), `tier1Open`, `RowVarKernel` |
@@ -63,7 +64,7 @@ Instance; the Instance imports no B or I; I imports everything.
 | | `Targets/I/Programs.lean` | the composite programs: `at02`, `at04`, `at12`, `at17`, `genSelf`, and the rejected AT05–AT08, AT13; `AcceptedAt`, `Tier2Programs`, `Rejects`, `RejectsAT07` |
 | | `Targets/I/Combined.lean` | **`I.Combined`**, done's statement; `Tier1`, `Tier1Core`; the corollaries |
 | | `Targets/I/RunEnd.lean`, `Binder.lean`, `NonVacuity.lean`, `Restricted/*` | FIX-RUN-END's checks and witness worlds; the freeze binder at W; witnesses for the pins; the restricted results at `coreW` and `tier1` |
-| | `Targets/I/OpenRel.lean`, `Tier1Route.lean` | Law 1 at the relation (`ovalW`, `FLOpen`, `fl_of_flOpen`); the elaboration route does not reach tier 1; `Tier1Core` from S5 and `BumpSim` |
+| | `Targets/I/OpenRel.lean`, `Tier1Route.lean` | Law 1 at the relation (`ovalW`, `FLOpen`, `fl_of_flOpen`); the elaboration route does not reach tier 1; `Tier1Core` from S5 |
 | | `Targets/I/Restricted/InstanceSafety.lean` | S2, S3 and `LiveOK` at every typing system whose closed programs are Core's (today's kernel, `J₁`): a run under a runner is the run under its platform, and B2's runs give A's |
 | | `Targets/I/J1.lean`, `GhostCoupling.lean` | B1, B's guarantees, the pins, FL at the open judgements and A's (S) properties at `J₁`; `Tier1 J₁` from what is open (`tier1_J₁_of`); route 8.4's probe for S6, stopped (`not_ghostCoupling`) |
 | | `Targets/I/Theories.lean` | the answering class at `J₁`: global state's handler correct, the tail law and algebraicity there |
@@ -84,15 +85,13 @@ def I.Combined (RF : RowForm) (J : OurTyping RF) (M : SemWorld) (Adm : OpAdm) (c
 **named** world `W`, with `audit_W`. **It is OPEN**: neither `J₂` nor `W` exists. **Tier 1** is
 `Combined orowRF J₁ coreW admClosedOp .abortive`, also OPEN. `J₁` is Core's kernel with SPEC §24's
 rules over the open types, with the row `∀` (decision D5); `Tier1 J₁` follows from A's (E)
-properties, S5 and S6, `Accepts`, `Rejects` and `BumpSim` (`tier1_J₁_of`).
+properties, S5 and S6, `Accepts` and `Rejects` (`tier1_J₁_of`).
 
 **The restricted tier-1 reduction** `Tier1Core` (today's kernel `tier1Open`, Core's world)
-follows from S5 at today's kernel and the step-for-step simulation `BumpSim` (`tier1Core_of`).
-Proved of it: A's properties but S5 at every admissible effect context
-(`sPropsNoCancel_tier1Open`), B's guarantees but B5 (`tier1Core_B`, with `Adequate coreB`), B5
-given `BumpSim` (`tier1Core_guarantees_of_bumpSim`), the world conjuncts and the device at `coreW`
-(`tier1Core_world`), and `Pins` (`pins_tier1Open`). Missing: S5 at our instance (the bridges are
-not built) and `BumpSim` (OQ-43).
+follows from S5 at today's kernel (`tier1Core_of`). Proved of it: A's properties but S5 at every
+admissible effect context (`sPropsNoCancel_tier1Open`), B's guarantees, B5 included
+(`tier1Core_guarantees`), the world conjuncts and the device at `coreW` (`tier1Core_world`), and
+`Pins` (`pins_tier1Open`). Missing: S5 at our instance (the bridges are not built).
 
 ## Status, by system
 
@@ -122,7 +121,7 @@ From `Targets/Status.lean`. *PROVED AT σ=[]* is Core's relation (`coreB`, `core
 | B2 | adequacy | PROVED AT A RESTRICTION (no platform operation, data answers); in full OPEN | `adequateRetAt_core_none` |
 | B3, B4 | no use after free, no double free; leak freedom | PROVED AT A RESTRICTION (the same) | `soundRetAt_tier1_none` |
 | B4′ | the same with externs meeting W's contract | PROVED (generic, from B1 and B2) | `soundContractsOfFL` |
-| B5 | release exactly once, location reuse included | from B4′ given `BumpSim`: PROVED (generic); `BumpSim` OPEN (OQ-43); not a tautology: PROVED | `releasedOnceReuse_of_bumpSim`, `not_releasedOnceReuse_staleFree` |
+| B5 | release exactly once, location reuse included | PROVED (generic, from B4′), through the step-for-step simulation at the configurations a bump run reaches (`bumpSimAt`); so PROVED AT σ=[] at today's unr-free kernel and at `J₁`; not a tautology: PROVED | `releasedOnceReuse_of_soundContracts`, `releasedOnceReuse_tier1NU`, `I.releasedOnceReuse_J₁`, `not_releasedOnceReuse_staleFree` |
 | B6 | exclusive mutable borrows | PROVED AT σ=[] | `exclusiveB_core` |
 | B7 | lifetimes respected | PROVED AT σ=[] | `lifetimeSound_core` |
 | — | the bounds | PROVED AT σ=[] | `wBound_core` |

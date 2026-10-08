@@ -25,6 +25,7 @@ import Targets.Base.Typing
 import Targets.B.Adequacy
 import Targets.B.Binder
 import Targets.B.BoLo
+import Targets.B.BumpSim
 import Targets.B.Conservativity
 import Targets.B.Guarantees
 import Targets.B.NonVacuity

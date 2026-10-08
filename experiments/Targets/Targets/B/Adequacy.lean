@@ -34,9 +34,9 @@ BoLo** (`adequate_core`).  The hypothesis is needed: a row whose shadowed entry 
 makes the body not positive without changing what the row's protocol reads, `cC` then holds of
 `()` at that loop type, and its drive is stuck (`adequateDrive_needs_nuOk`).
 
-**B3, B4, B4′, B5** at today's unr-free kernel: B3 and B4 from FL and B2 (`sound_tier1NU`); B4′
-from the return conjunct (`soundContractsOfFL_ret`, `soundContracts_tier1NU`); B5 given `BumpSim`
-(`releasedOnceReuse_tier1NU_of_bumpSim`).
+**B3, B4, B4′** at today's unr-free kernel: B3 and B4 from FL and B2 (`sound_tier1NU`); B4′
+from the return conjunct (`soundContractsOfFL_ret`, `soundContracts_tier1NU`).  B5 follows from B4′
+through the step-for-step simulation (`Targets/B/BumpSim.lean`, `releasedOnceReuse_tier1NU`).
 
 **Effect safety of driven programs** (`EffSafeDrive`, at a positive loop body, its finished drive
 observed, decisions D2 and D4) holds at every typing system with FL at BoLo (`effSafeDrive_of_FL`):
@@ -700,7 +700,7 @@ theorem platformOne_respects : Platform.one.Respects where
     obtain ⟨rfl, -⟩ := hco
     exact .unit
 
-/-! ### B3, B4, B4′ and B5 -/
+/-! ### B3, B4 and B4′ -/
 
 /-- **B4′ from FL and B2's return conjunct**: `soundContractsOfFL` reads adequacy only at its
 return conjunct. -/
@@ -727,11 +727,6 @@ theorem sound_tier1NU : Sound (ℍ := ℍ) tier1NU :=
 /-- **B4′ at today's unr-free kernel and BoLo.** -/
 theorem soundContracts_tier1NU : B.SoundContracts (ℍ := ℍ) tier1NU (B.coreB (ℍ := ℍ)) :=
   soundContractsOfFL_ret fl_core_tier1NU adequateRetAt_core
-
-/-- **B5 at today's unr-free kernel and BoLo, given the step-for-step simulation.** -/
-theorem releasedOnceReuse_tier1NU_of_bumpSim (hS : BumpSim (ℍ := ℍ)) :
-    B.ReleasedOnceReuse (ℍ := ℍ) tier1NU (B.coreB (ℍ := ℍ)) :=
-  releasedOnceReuse_of_bumpSim hS soundContracts_tier1NU
 
 /-! ### Effect safety of driven programs -/
 

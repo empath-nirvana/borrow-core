@@ -25,6 +25,7 @@ import Targets.I.GhostCoupling
 import Targets.I.J1
 import Targets.I.Theories
 import Targets.Instance.UnaryLaws
+import Targets.B.BumpSim
 
 /-!
 # Targets — status, by system (RESTRUCTURE §0)
@@ -49,20 +50,42 @@ interaction's option-neutral rules, the pins, the composite's programs and its r
 **Tier 1** (`I.Tier1 J₁`): OPEN, **reduced** (`status_tier1_J₁_of`).  `J₁` is built (decision D5):
 Core's kernel with SPEC §24's rules (the polymorphic let, the general `[handle]`, `[then]` at option
 A) over the open types, with the row `∀` (`Targets/Instance/J1.lean`).  Proved of it: A's (S)
-properties but S5 and S6 at every effect context, B's guarantees (B5 given `BumpSim`), the world's
+properties but S5 and S6 at every effect context, B's guarantees (B5 included, piece 6), the world's
 conjuncts and the pins.  `I.Tier1 J₁` follows from what is open: A's (E) properties, S5 and S6 at
-every admissible effect context, the composite's programs (`Accepts`) and rejections (`Rejects`),
-and `BumpSim`.  TIER1-PLAN §2's first route (elaborating each derivation into the kernel before
+every admissible effect context, the composite's programs (`Accepts`) and rejections
+(`Rejects`).  TIER1-PLAN §2's first route (elaborating each derivation into the kernel before
 D5) does not reach tier 1 (`status_elab_route`); `J₁` is built by D5's route instead.
 
 **The restricted tier-1 reduction** (`I.Tier1Core`, at today's kernel `tier1Open` and Core's world):
-**PROVED AT σ=[] given S5 at today's kernel and `BumpSim`** (`status_tier1Core_of`).  Proved of it:
-A's properties but S5 at every admissible effect context — S0 and S4 (from `LiveOK`, proved), the
-let law, S1, `DataDiv`, S2 and S3 (`status_sPropsNoCancel_tier1Open`); B's guarantees but B5
-(`status_tier1Core_B`), and B5 given `BumpSim` (`status_releasedOnceReuse_tier1Open_of_bumpSim`);
-the world conjuncts and the device at `coreW` (`status_tier1Core_world`); its `Pins` conjunct
+**PROVED AT σ=[] given S5 at today's kernel** (`status_tier1Core_of`).  Proved of it: A's
+properties but S5 at every admissible effect context — S0 and S4 (from `LiveOK`, proved), the let
+law, S1, `DataDiv`, S2 and S3 (`status_sPropsNoCancel_tier1Open`); B's guarantees, B5 included
+(`status_tier1Core_guarantees`; B5 alone, `status_releasedOnceReuse_tier1Open`); the world
+conjuncts and the device at `coreW` (`status_tier1Core_world`); its `Pins` conjunct
 (`status_pins_tier1Open`).  Missing: S5 at our instance (its bridges `noIntercept_of_core`,
-`unwindOrder_of_core` are not built) and `BumpSim` (OQ-43).
+`unwindOrder_of_core` are not built).
+
+## Piece 6: the step-for-step simulation (OQ-43 (b))
+
+**B5 is PROVED** at every typing system and borrow world from B4′
+(`status_releasedOnceReuse_of_soundContracts`), so at today's unr-free kernel, at `J₁` and at
+`tier1Open`, at BoLo (`status_releasedOnceReuse_tier1Open`, `status_guarantees_J₁`).  Every complete
+run of a typed program is, step for step, the image of a run of the bump allocator from the same
+start (`Targets/B/BumpSim.lean`):
+
+* **The simulation** (`status_bumpSimAt`): `BumpSim` with the hypotheses a bump run supplies — the
+  platform keeps its protocol; the memory is finite (every memory a run from `init` reaches is);
+  `g` moves as a block the window `[ℓ, ℓ + (k + 2) · 2³²]` above every named location `ℓ`, with `k`
+  steps to go (`AffineAbove`; the identity does, at `init`); and the platform's stops are at data
+  arguments (`PlatData`).  The bump step allocates above every name, every window and `X`, where the
+  new map translates onto the given step's cell or block; a step that allocates nothing is the
+  given step renamed, along the same map (`head_image`, Core's unique decomposition), and its array
+  arithmetic stays within the windows.
+* **The protocol on every run** (`platData_of_safe`): a program safe under the platform restricted
+  to data arguments asks the platform at data arguments only, on every run; B4′ quantifies over
+  every platform that keeps its protocol, the restricted one among them.
+* **`BumpSim`** over every related configuration: not proved, and not used.  Its hypotheses carry
+  none of the invariants a bump run keeps; `BumpSimAt` adds them.
 
 ## The decisions of 2026-10-07
 
@@ -176,7 +199,7 @@ the world conjuncts and the device at `coreW` (`status_tier1Core_world`); its `P
 | B2 | adequacy | PROVED AT σ=[] at every platform that keeps its protocol: the return conjunct through its answers; the drive conjunct at positive loop bodies (D2), so at rows with distinct keys. The hypothesis is needed: at a loop type whose body is not positive (a shadowed entry with an open type) `cC` holds of `()`, whose drive is stuck at `nextE ()` | `adequateRetAt_core`, `adequateDriveAt_core`, `adequate_core`, `adequateDriveAt_core_uniq`, `adequateAt_core_none`; `adequateDrive_needs_nuOk` |
 | B3, B4 | safety, leak freedom | PROVED AT σ=[] at today's unr-free kernel (from FL and B2), the drive conjunct at positive loop bodies | `sound_tier1NU`, `soundRetAt_tier1NU`, `soundDriveAt_tier1NU` |
 | B4′ | with externs meeting W's contract | PROVED (generic, from B1 and B2, finding #7); from B1 and B2's return conjunct alone (generic), so PROVED AT σ=[] at today's unr-free kernel | `soundContractsOfFL`, `soundContractsOfFL_ret`, `soundContracts_tier1NU` |
-| B5 | release exactly once, reuse included | from B4′ given the step-for-step simulation `BumpSim`: PROVED (generic), and so at today's unr-free kernel; `BumpSim` itself OPEN (OQ-43), its conclusion met at a reuse step: PROVED; not a tautology: PROVED | `releasedOnceReuse_of_bumpSim`, `releasedOnceReuse_tier1NU_of_bumpSim`, `bumpSim_at_reuse`, `not_releasedOnceReuse_staleFree` |
+| B5 | release exactly once, reuse included | PROVED (generic, from B4′), so PROVED AT σ=[] at today's unr-free kernel and at `J₁`: through the step-for-step simulation at the configurations a bump run reaches (`BumpSimAt`, PROVED; piece 6); not a tautology: PROVED | `releasedOnceReuse_of_soundContracts`, `releasedOnceReuse_tier1NU`, `I.releasedOnceReuse_J₁`, `bumpSimAt`, `not_releasedOnceReuse_staleFree` |
 | B6 | exclusive mutable borrows | PROVED AT σ=[] | `exclusiveB_core` |
 | B7 | lifetimes respected | PROVED AT σ=[] | `lifetimeSound_core` |
 | — | the bounds | PROVED AT σ=[] | `wBound_core` |
@@ -199,8 +222,8 @@ the world conjuncts and the device at `coreW` (`status_tier1Core_world`); its `P
 | `EffSafeDrive` (P2 for driven programs), RESTATED (D2: a positive loop body; D4: a finished drive observed, `DoneDrive`) | PROVED AT σ=[] at every typing system with FL at BoLo, so at today's unr-free kernel; the hypothesis is needed; the route at a generic world, `EffSafeDriveOfFL`, OPEN | `effSafeDrive_of_FL`, `effSafeDrive_tier1NU`; `effSafeDrive_needs_nuOk` |
 | `Pins tier1Open admClosedOp .abortive`, with `I4a` at the unr-free rules | PROVED AT σ=[] (abortive rows) | `I.pins_tier1Open`, `i4a_tier1NU` |
 | Law 1 at the relation: `ovalW` at `U(∀ρ:k. C)` and `!U(∀ρ:k. C)` is the intersection of the instances; `FLOpen M J` gives `FL M J.read`; `FLOpen` at today's kernel | PROVED (generic); PROVED AT σ=[] | `I.ovalW_allR`, `I.ovalW_bang_allR`, `I.fl_of_flOpen`, `I.flOpen_core_tier1Open` |
-| `J₁`: its reading is Core's kernel; FL at BoLo (B1); B's guarantees, B5 given `BumpSim`; the pins; FL at its open judgements over contexts with no polymorphic slot, a polymorphic type read as the intersection of its instances (Law 1) | PROVED AT σ=[] (abortive rows for the pins); `FLOpen coreB J₁` at contexts with a polymorphic slot NOT PROVED (a value `ovalW` relates there need not be a closed λ-value Core types) | `status_j1`, `status_guarantees_J₁`, `status_pins_J₁`, `I.flOpen_J₁_mono` |
-| tier 1 at `J₁` | OPEN; follows from A's (E) properties, S5, S6, `Accepts`, `Rejects` and `BumpSim` | `status_tier1_J₁_of` |
+| `J₁`: its reading is Core's kernel; FL at BoLo (B1); B's guarantees; the pins; FL at its open judgements over contexts with no polymorphic slot, a polymorphic type read as the intersection of its instances (Law 1) | PROVED AT σ=[] (abortive rows for the pins); `FLOpen coreB J₁` at contexts with a polymorphic slot NOT PROVED (a value `ovalW` relates there need not be a closed λ-value Core types) | `status_j1`, `status_guarantees_J₁`, `status_pins_J₁`, `I.flOpen_J₁_mono` |
+| tier 1 at `J₁` | OPEN; follows from A's (E) properties, S5, S6, `Accepts` and `Rejects` | `status_tier1_J₁_of` |
 | TIER1-PLAN §2's route (elaborate `J₁` into today's unr-free kernel, then `fundamentalC`) | **DOES NOT REACH TIER 1**: closed derivations that elaborate type no A-level handler, so E8 fails; today's kernel types no let-bound function read at two rows | `I.not_tier1_of_elabClosed`, `not_der_letTwo` |
 | FIX-RUN-END's checks and witness worlds | PROVED | `Targets/I/RunEnd.lean` (73 results) |
 | I1, I3, I5, P11 at `coreW` (the device); I2 at `coreW` | PROVED AT σ=[]; PROVED AT A RESTRICTION (abortive rows) | `i1_core`, `i3_core`, `i5_core`, `p11_core`; `i2_core_abortive` |
@@ -263,8 +286,9 @@ entry.
   as `I.Combined`, done, `B.Guarantees`, `I.Tier1` (with `I.Tier1Core`) and `I.CombinedBinder`.
 * `status_tier1End_of` (`Adequate coreW → FinaliserOrder tier1 → Tier1End`): **retired**.  Its
   conjuncts `EffSafe`, `NoInterception` and `FinaliserOrder` became A's properties at our instance,
-  which need the bridges, and B5 now has content, which needs `BumpSim`.  Its proved content is
-  kept: `status_tier1Core_world`, `status_tier1Core_B`, `status_tier1Core_guarantees_of_bumpSim`.
+  which need the bridges, and B5 now has content, which B4′ gives through the step-for-step
+  simulation.  Its proved content is kept: `status_tier1Core_world`, `status_tier1Core_B`,
+  `status_tier1Core_guarantees`.
 * The refutations of the statements the decisions of 2026-10-07 restated are not kept: of B2's
   drive conjunct, `Adequate coreB`, `I.Tier1` and `I.Tier1Core` without a positive loop body; of
   `EffSafeDrive` and `EffSafeDriveOfFL` before D2 and D4; of S2, S3 and `LiveOK` before the tie; of
@@ -315,13 +339,11 @@ theorem status_tier1Core_world :
       Device (ℍ := ℍ) (coreW (ℍ := ℍ)) tier1Open.read admClosedOp .abortive ∧ WBCore (ℍ := ℍ) :=
   I.tier1Core_world
 
-/-- PROVED AT σ=[], given S5 at today's kernel and the step-for-step simulation: the restricted
-tier-1 reduction. -/
+/-- PROVED AT σ=[], given S5 at today's kernel: the restricted tier-1 reduction. -/
 theorem status_tier1Core_of
     (hC : ∀ Ξ, AdmEff Ξ → (ourInst (ℍ := ℍ) orowRF Ξ tier1Open).Cancellation
-      (ourInst (ℍ := ℍ) orowRF Ξ tier1Open).noFinRaise)
-    (hS : BumpSim (ℍ := ℍ)) : I.Tier1Core (ℍ := ℍ) :=
-  I.tier1Core_of hC hS
+      (ourInst (ℍ := ℍ) orowRF Ξ tier1Open).noFinRaise) : I.Tier1Core (ℍ := ℍ) :=
+  I.tier1Core_of hC
 
 /-- PROVED AT σ=[]: A's properties at today's kernel but S5 (and S6, which the restricted reduction
 does not hold), at every admissible effect context. -/
@@ -341,16 +363,14 @@ theorem status_tier1Core_B :
       LifetimeSound (B.coreB (ℍ := ℍ)) tier1Open.read.out ∧ B.WBound (B.coreB (ℍ := ℍ)) :=
   I.tier1Core_B
 
-/-- PROVED (given `BumpSim`): B5 at today's kernel and BoLo. -/
-theorem status_releasedOnceReuse_tier1Open_of_bumpSim (hS : BumpSim (ℍ := ℍ)) :
+/-- PROVED AT σ=[]: B5 at today's kernel and BoLo. -/
+theorem status_releasedOnceReuse_tier1Open :
     B.ReleasedOnceReuse (ℍ := ℍ) tier1Open.read (B.coreB (ℍ := ℍ)) :=
-  I.tier1Core_releasedOnceReuse_of_bumpSim hS
+  I.tier1Core_releasedOnceReuse
 
-/-- PROVED AT σ=[] (given the step-for-step simulation): B's guarantees at today's kernel, B5
-included. -/
-theorem status_tier1Core_guarantees_of_bumpSim (hS : BumpSim (ℍ := ℍ)) :
-    B.Guarantees (ℍ := ℍ) tier1Open.read (B.coreB (ℍ := ℍ)) :=
-  I.tier1Core_guarantees_of_bumpSim hS
+/-- PROVED AT σ=[]: B's guarantees at today's kernel, B5 included. -/
+theorem status_tier1Core_guarantees : B.Guarantees (ℍ := ℍ) tier1Open.read (B.coreB (ℍ := ℍ)) :=
+  I.tier1Core_guarantees
 
 /-! ## System A -/
 
@@ -508,12 +528,23 @@ theorem status_updLaws_core :
   ⟨updRefl_core, updOwn_core, updSeq_core, updReclaim_core, updFrame_core, updOutlives_core,
     updLendBack_core⟩
 
-/-- PROVED (generic): B5 from B4′, given the step-for-step simulation. -/
-theorem status_releasedOnceReuse_of_bumpSim (hS : BumpSim (ℍ := ℍ)) {J : TypingJ} {M : B.BWorld}
+/-- PROVED (generic): B5 from B4′, through the step-for-step simulation. -/
+theorem status_releasedOnceReuse_of_soundContracts {J : TypingJ} {M : B.BWorld}
     (hC : B.SoundContracts (ℍ := ℍ) J M) : B.ReleasedOnceReuse (ℍ := ℍ) J M :=
-  releasedOnceReuse_of_bumpSim hS hC
+  releasedOnceReuse_of_soundContracts hC
 
-/-- OPEN (stated): the step-for-step simulation (OQ-43 (b), or (c) through a binary FP). -/
+/-- PROVED: the step-for-step simulation at the configurations a bump run reaches (OQ-43 (b)). -/
+theorem status_bumpSimAt : BumpSimAt (ℍ := ℍ) := bumpSimAt
+
+/-- PROVED: every run of a program safe under the platform restricted to data arguments asks the
+platform at data arguments only. -/
+theorem status_platData_of_safe {P : Platform} {A : VTy} {e : Expr}
+    (hS : SafeRuns (ℍ := ℍ) P.restrict A e) :
+    ∀ c, PSteps (ℍ := ℍ) P (init P e) c → PlatData P c :=
+  fun c hc => (platData_of_safe hS c hc).1
+
+/-- Not proved, and not used: the step-for-step simulation over every related configuration,
+whose hypotheses carry none of the invariants a bump run keeps (`BumpSimAt` adds them). -/
 example : Prop := BumpSim (ℍ := ℍ)
 
 /-- PROVED: `BumpSim`'s conclusion at an `alloc` step whose given run reuses a location, for every
@@ -812,14 +843,9 @@ theorem status_j1 :
   ⟨Inst.j1_read, I.fl_core_J₁, Inst.coreClosed_J₁,
     fun hd hΓ η hη δ γ i ρ hδ hg => I.flOpen_J₁_mono hd hΓ η hη δ γ i ρ hδ hg⟩
 
-/-- PROVED AT σ=[]: B's guarantees at `J₁` but B5, and with B5 given the step-for-step simulation. -/
-theorem status_guarantees_J₁ :
-    (B.ExtendsB J₁.read ∧ FL (B.coreB (ℍ := ℍ)) J₁.read ∧ Adequate (ℍ := ℍ) (B.coreB (ℍ := ℍ)) ∧
-      Sound (ℍ := ℍ) J₁.read ∧ B.SoundContracts (ℍ := ℍ) J₁.read (B.coreB (ℍ := ℍ)) ∧
-      B.ExclusiveB (B.coreB (ℍ := ℍ)) ∧ LifetimeSound (B.coreB (ℍ := ℍ)) J₁.read.out ∧
-      B.WBound (B.coreB (ℍ := ℍ))) ∧
-    (BumpSim (ℍ := ℍ) → B.Guarantees (ℍ := ℍ) J₁.read (B.coreB (ℍ := ℍ))) :=
-  ⟨I.guarantees_noB5_J₁, I.guarantees_J₁_of_bumpSim⟩
+/-- PROVED AT σ=[]: B's guarantees at `J₁`, B5 included. -/
+theorem status_guarantees_J₁ : B.Guarantees (ℍ := ℍ) J₁.read (B.coreB (ℍ := ℍ)) :=
+  I.guarantees_J₁
 
 /-- PROVED AT σ=[] (abortive rows): `Pins` at `J₁`. -/
 theorem status_pins_J₁ : I.Pins J₁ admClosedOp .abortive := I.pins_J₁
@@ -833,15 +859,15 @@ theorem status_sPropsNoCancel_J₁ (Ξ : EffCtx) :
   I.sPropsNoCancel_J₁
 
 /-- PROVED: tier 1 at `J₁` follows from A's (E) properties, S5 and S6 at every admissible effect
-context, the composite's programs and rejections, and the step-for-step simulation. -/
+context, and the composite's programs and rejections. -/
 theorem status_tier1_J₁_of
     (hE : ∀ Ξ, AdmEff Ξ → (ourInst (ℍ := ℍ) orowRF Ξ J₁).EProps)
     (hC : ∀ Ξ, AdmEff Ξ → (ourInst (ℍ := ℍ) orowRF Ξ J₁).Cancellation
       (ourInst (ℍ := ℍ) orowRF Ξ J₁).noFinRaise)
     (hU : ∀ Ξ, AdmEff Ξ → (ourInst (ℍ := ℍ) orowRF Ξ J₁).ContUse)
-    (hAc : I.Accepts (ℍ := ℍ) J₁.read .abortive) (hRj : Rejects J₁.read) (hS : BumpSim (ℍ := ℍ)) :
+    (hAc : I.Accepts (ℍ := ℍ) J₁.read .abortive) (hRj : Rejects J₁.read) :
     I.Tier1 (ℍ := ℍ) J₁ :=
-  I.tier1_J₁_of hE hC hU hAc hRj hS
+  I.tier1_J₁_of hE hC hU hAc hRj
 
 /-- PROVED: route 8.4's coupling fails at BoLo's world and relation.  A typing system with FL at
 BoLo fails S6 at an admissible context, at a capture never used (R1), at a capture resumed twice

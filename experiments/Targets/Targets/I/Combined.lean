@@ -5,6 +5,7 @@ import Targets.I.Restricted.InstanceProps
 import Targets.I.NonVacuity
 import Targets.I.Binder
 import Targets.Instance.Core
+import Targets.B.BumpSim
 
 /-!
 # The interaction — the combined theorem, done, and tier 1 (RESTRUCTURE §0, §3.4, §3.5)
@@ -38,12 +39,12 @@ The corollaries (generic): `combined_prog` (the conjuncts that read no world), `
 `soundnessContractsAR_of_combined` (the SPEC's externs at Core's contract, with the device's
 `EmbedsNil`), `not_combined_of_leak` (a reachable leak breaks done).
 
-**The tier-1 reduction**, restricted: B's guarantees at today's kernel and `coreB` hold but B5
-(`tier1Core_B`, from FL and B2, `adequate_core`), and with B5 given the step-for-step simulation
-`BumpSim` (`tier1Core_guarantees_of_bumpSim`); the world conjuncts and the device at `coreW` hold
-(`tier1Core_world`); its `Pins` conjunct is proved (`pins_tier1Open`).  A's properties at our
-instance hold but S5 (`sPropsNoCancel_tier1Open`, `Targets/I/Tier1Route.lean`), so `Tier1Core`
-follows from S5 at today's kernel and `BumpSim` (`tier1Core_of`); S5's bridges are not built.
+**The tier-1 reduction**, restricted: B's guarantees at today's kernel and `coreB` hold, B5 among
+them (`tier1Core_guarantees`: B0–B4′, B6, B7 and the bounds from FL and B2, `tier1Core_B`; B5 from
+B4′ through the step-for-step simulation, `releasedOnceReuse_tier1NU`); the world conjuncts and the
+device at `coreW` hold (`tier1Core_world`); its `Pins` conjunct is proved (`pins_tier1Open`).  A's
+properties at our instance hold but S5 (`sPropsNoCancel_tier1Open`, `Targets/I/Tier1Route.lean`),
+so `Tier1Core` follows from S5 at today's kernel (`tier1Core_of`); S5's bridges are not built.
 -/
 
 noncomputable section
@@ -222,18 +223,17 @@ theorem tier1Core_B :
     fl_core_tier1NU, adequate_core, sound_tier1NU, soundContracts_tier1NU, exclusiveB_core,
     lifetimeSound_core, wBound_core⟩
 
-/-- **B's guarantees at today's kernel and BoLo, given the step-for-step simulation**:
-`tier1Core_B` with B5 (`releasedOnceReuse_of_bumpSim`). -/
-theorem tier1Core_guarantees_of_bumpSim (hS : BumpSim (ℍ := ℍ)) :
-    B.Guarantees (ℍ := ℍ) tier1Open.read (B.coreB (ℍ := ℍ)) := by
-  obtain ⟨h0, h1, hA, h3, h4, h6, h7, hb⟩ := tier1Core_B
-  exact ⟨h0, h1, hA, h3, h4, releasedOnceReuse_of_bumpSim hS h4, h6, h7, hb⟩
+/-- **B's guarantees at today's kernel and BoLo**: `tier1Core_B` with B5, from B4′ through the
+step-for-step simulation (`releasedOnceReuse_of_soundContracts`). -/
+theorem tier1Core_guarantees : B.Guarantees (ℍ := ℍ) tier1Open.read (B.coreB (ℍ := ℍ)) := by
+  obtain ⟨h0, h1, hA, h3, h4, h6, h7, hb⟩ := tier1Core_B (ℍ := ℍ)
+  exact ⟨h0, h1, hA, h3, h4, releasedOnceReuse_of_soundContracts h4, h6, h7, hb⟩
 
-/-- **B5 at today's kernel and BoLo, given the step-for-step simulation.** -/
-theorem tier1Core_releasedOnceReuse_of_bumpSim (hS : BumpSim (ℍ := ℍ)) :
+/-- **B5 at today's kernel and BoLo.** -/
+theorem tier1Core_releasedOnceReuse :
     B.ReleasedOnceReuse (ℍ := ℍ) tier1Open.read (B.coreB (ℍ := ℍ)) := by
   rw [tier1Open_read]
-  exact releasedOnceReuse_tier1NU_of_bumpSim hS
+  exact releasedOnceReuse_tier1NU
 
 end I
 

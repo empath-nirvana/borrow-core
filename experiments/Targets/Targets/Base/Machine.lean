@@ -321,15 +321,16 @@ run.  It reuses nothing. -/
 def Bump {P : Platform} (cs : List (Conf P)) : Prop :=
   ∀ k ℓ, Allocated cs k ℓ → ∀ j c, j ≤ k → cs[j]? = some c → ¬ Named c.μ c.e ℓ
 
-/-- **The step-for-step simulation** (a lemma about the machine alone, OPEN: OQ-43 (b), or (c)
-through a binary FP).  Where a configuration `cA` and a configuration `cB` are related by `g`, `g`
-moves `cB`'s arrays as blocks, `cA` steps, and `cB` is not stuck, `cB` steps, allocating only
-locations it does not name and outside `X`, to a configuration related to `cA`'s successor by a map that agrees
-with `g` on what `cB` names; and the bump step can avoid any finite set `X` of locations (the
-names of the run's earlier configurations: a bump allocator picks a location nothing has named).
-TwoRun's `run_sim` (`TwoRun/Sim.lean:253`) is its shape for runs
-with no array and no capture step; the extension to blocks, capture, `count`, `countTry`,
-`boundedFix` and platform steps is not derived. -/
+/-- **The step-for-step simulation, over every related configuration.**  Where a configuration
+`cA` and a configuration `cB` are related by `g`, `g` moves `cB`'s arrays as blocks, `cA` steps, and
+`cB` is not stuck, `cB` steps, allocating only locations it does not name and outside `X`, to a
+configuration related to `cA`'s successor by a map that agrees with `g` on what `cB` names; and the
+bump step can avoid any finite set `X` of locations (the names of the run's earlier configurations:
+a bump allocator picks a location nothing has named).  Not proved, and not used: its hypotheses
+carry none of the invariants a bump run keeps.  `BumpSimAt` (`Targets/B/BumpSim.lean`) adds them —
+a platform that keeps its protocol, a finite memory, `g` moving a window above every named
+location as a block, and data arguments at the platform's stops — and is proved (`bumpSimAt`);
+B5 rests on it (`releasedOnceReuse_of_soundContracts`). -/
 def BumpSim : Prop :=
   ∀ (P : Platform) (X : Finset Loc) (g : Loc → Loc) (cA cA' cB : Conf P), RelAt g cA cB →
     BlocksAffine g cB.μ cB.e → PStep (ℍ := ℍ) P cA cA' → (∃ cB'', PStep (ℍ := ℍ) P cB cB'') →

@@ -11,7 +11,9 @@ typing system (`releasedOnceAll`), and `ReleasedOnceOfSound` uses neither of its
 at a data answer ends with the memory empty: at-least-once) with B5 (`ReleasedOnceReuse`,
 `Targets/B/Guarantees.lean`: at-most-once on runs that reuse locations, every run the image of a
 bump run).  `releasedOnce_of_ends` gives B5's `ReleasedOnce` of the bump run, and `bump_follows` builds the
-bump run from a complete run, given the step-for-step simulation.
+bump run from a complete run, given the step-for-step simulation over every related configuration;
+`bump_follows_at` (`Targets/B/BumpSim.lean`) builds it from the simulation at the configurations a
+bump run reaches, which is proved.
 -/
 
 noncomputable section

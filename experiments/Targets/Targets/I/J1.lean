@@ -11,7 +11,8 @@ import Targets.Instance.J1
 is Core's:
 
 * **B1** (`fl_core_J₁`): `fundamentalC`, which now covers `[let-poly]` and the general `[handle]`;
-* **B's guarantees** (`guarantees_J₁_of_bumpSim`): B0–B7 and the bounds, B5 given `BumpSim`;
+* **B's guarantees** (`guarantees_J₁`): B0–B7 and the bounds, B5 from B4′ through the
+  step-for-step simulation (`releasedOnceReuse_J₁`);
 * **the pins** (`pins_J₁`): today's admissibility, Core's unr-free rules and outlives judgements,
   and the answering borrow form (`i4a_tier1`).
 
@@ -43,15 +44,20 @@ open Targets.Inst (OVTy OCTy OJdg OurTyping ourInst AdmEff J₁ J1Der j1_read oc
 theorem fl_core_J₁ : FL (B.coreB (ℍ := ℍ)) J₁.read := by
   rw [j1_read]; exact fl_core_tier1
 
-/-- **B's guarantees at `J₁` and BoLo, given the step-for-step simulation.** -/
-theorem guarantees_J₁_of_bumpSim (hS : BumpSim (ℍ := ℍ)) :
-    B.Guarantees (ℍ := ℍ) J₁.read (B.coreB (ℍ := ℍ)) := by
+/-- **B5 at `J₁` and BoLo**: from B4′ (B1 and B2's return conjunct) through the step-for-step
+simulation (`releasedOnceReuse_of_soundContracts`). -/
+theorem releasedOnceReuse_J₁ : B.ReleasedOnceReuse (ℍ := ℍ) J₁.read (B.coreB (ℍ := ℍ)) := by
+  rw [j1_read]
+  exact releasedOnceReuse_of_soundContracts (soundContractsOfFL_ret fl_core_tier1 adequateRetAt_core)
+
+/-- **B's guarantees at `J₁` and BoLo.** -/
+theorem guarantees_J₁ : B.Guarantees (ℍ := ℍ) J₁.read (B.coreB (ℍ := ℍ)) := by
   rw [j1_read]
   have hFL := fl_core_tier1 (ℍ := ℍ)
   have hC : B.SoundContracts (ℍ := ℍ) tier1 (B.coreB (ℍ := ℍ)) :=
     soundContractsOfFL_ret hFL adequateRetAt_core
   exact ⟨extendsB_tier1, hFL, adequate_core, soundnessOfFL _ _ hFL adequate_core, hC,
-    releasedOnceReuse_of_bumpSim hS hC, exclusiveB_core, lifetimeSound_core, wBound_core⟩
+    releasedOnceReuse_of_soundContracts hC, exclusiveB_core, lifetimeSound_core, wBound_core⟩
 
 /-- **B's guarantees at `J₁` but B5.** -/
 theorem guarantees_noB5_J₁ :
@@ -139,19 +145,18 @@ theorem sPropsNoCancel_J₁ {Ξ : EffCtx} :
     Inst.handlerSem_orow (Inst.liveOK_of_coreClosed (D := J1Der) Inst.coreClosed_J₁)⟩
 
 /-- **Tier 1 at `J₁`, given what is open**: A's (E) properties, S5 and S6 at every admissible
-effect context, the composite's programs and rejections, and the step-for-step simulation.  The
-rest of `Tier1 J₁` is proved: A's (S) properties but S5 and S6 (`sPropsNoCancel_J₁`), B's
-guarantees (`guarantees_J₁_of_bumpSim`), the world's conjuncts at `coreW` (`tier1Core_world`), and
-the pins (`pins_J₁`). -/
+effect context, and the composite's programs and rejections.  The rest of `Tier1 J₁` is proved:
+A's (S) properties but S5 and S6 (`sPropsNoCancel_J₁`), B's guarantees (`guarantees_J₁`), the
+world's conjuncts at `coreW` (`tier1Core_world`), and the pins (`pins_J₁`). -/
 theorem tier1_J₁_of
     (hE : ∀ Ξ, AdmEff Ξ → (ourInst (ℍ := ℍ) orowRF Ξ J₁).EProps)
     (hC : ∀ Ξ, AdmEff Ξ → (ourInst (ℍ := ℍ) orowRF Ξ J₁).Cancellation
       (ourInst (ℍ := ℍ) orowRF Ξ J₁).noFinRaise)
     (hU : ∀ Ξ, AdmEff Ξ → (ourInst (ℍ := ℍ) orowRF Ξ J₁).ContUse)
-    (hAc : Accepts (ℍ := ℍ) J₁.read .abortive) (hRj : Rejects J₁.read) (hS : BumpSim (ℍ := ℍ)) :
+    (hAc : Accepts (ℍ := ℍ) J₁.read .abortive) (hRj : Rejects J₁.read) :
     Tier1 (ℍ := ℍ) J₁ := by
   obtain ⟨hB, hI, -, -⟩ := tier1Core_world (ℍ := ℍ)
-  refine ⟨fun Ξ hΞ => ⟨?_, hE Ξ hΞ⟩, guarantees_J₁_of_bumpSim hS, hB, hI, pins_J₁, hAc, hRj⟩
+  refine ⟨fun Ξ hΞ => ⟨?_, hE Ξ hΞ⟩, guarantees_J₁, hB, hI, pins_J₁, hAc, hRj⟩
   obtain ⟨h0, hl, h1, hd, h2, h3, h4⟩ := sPropsNoCancel_J₁ (ℍ := ℍ) (Ξ := Ξ)
   exact ⟨h0, hl, h1, hd, h2, h3, h4, hC Ξ hΞ, hU Ξ hΞ⟩
 

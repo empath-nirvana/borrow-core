@@ -19,8 +19,8 @@ today's kernel does not, and its FL needs more than `fundamentalC`.
 
 **The restricted tier-1 reduction at today's kernel** (`tier1Core_of`): A's properties but S5 hold
 at every admissible effect context (`sPropsNoCancel_tier1Open`: S0 and S4 from `LiveOK`, the let
-law, S1, `DataDiv`, S2, S3), so `I.Tier1Core` follows from S5 there and the step-for-step simulation
-`BumpSim`.
+law, S1, `DataDiv`, S2, S3), and B's guarantees hold (`tier1Core_guarantees`), so `I.Tier1Core`
+follows from S5 there.
 -/
 
 noncomputable section
@@ -50,14 +50,12 @@ theorem sPropsNoCancel_tier1Open {Ξ : EffCtx} (hΞ : Inst.AdmEff Ξ) :
     Inst.rowAlgebra_ourInst_tier1Open hΞ.1, Inst.dataDiv_ourInst, Inst.safety_ourInst_tier1Open,
     Inst.effSafe_ourInst_tier1Open, Inst.handlerSem_orow Inst.liveOK_tier1Open⟩
 
-/-- **The restricted tier-1 reduction, given S5 at today's kernel and the step-for-step
-simulation.** -/
+/-- **The restricted tier-1 reduction, given S5 at today's kernel.** -/
 theorem tier1Core_of
     (hC : ∀ Ξ, Inst.AdmEff Ξ → (Inst.ourInst (ℍ := ℍ) orowRF Ξ Inst.tier1Open).Cancellation
-      (Inst.ourInst (ℍ := ℍ) orowRF Ξ Inst.tier1Open).noFinRaise)
-    (hS : BumpSim (ℍ := ℍ)) : Tier1Core (ℍ := ℍ) := by
+      (Inst.ourInst (ℍ := ℍ) orowRF Ξ Inst.tier1Open).noFinRaise) : Tier1Core (ℍ := ℍ) := by
   obtain ⟨hB, hI, hD, hW⟩ := tier1Core_world (ℍ := ℍ)
-  refine ⟨fun Ξ hΞ => ?_, tier1Core_guarantees_of_bumpSim hS, hB, hI, pins_tier1Open, hD, hW⟩
+  refine ⟨fun Ξ hΞ => ?_, tier1Core_guarantees, hB, hI, pins_tier1Open, hD, hW⟩
   obtain ⟨h0, hl, h1, hd, h2, h3, h4⟩ := sPropsNoCancel_tier1Open (ℍ := ℍ) hΞ
   exact ⟨h0, hl, h1, hd, h2, h3, h4, hC Ξ hΞ⟩
 

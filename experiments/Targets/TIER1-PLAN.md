@@ -19,9 +19,10 @@
 `W`, Law 2, the spanning rules and `J₂` belong to tier 2, which this track leaves alone.
 
 **Where it stands.** `J₁` is built (decision D5, below). `I.Tier1 J₁` follows from A's
-(E) properties, S5 and S6 at every admissible effect context, `Accepts`, `Rejects` and `BumpSim`
-(`I.tier1_J₁_of`). Piece 5 has run (the last section): D1.h4 is proved through the comodel, with
-global state as the first theory; D1.h2 is open.
+(E) properties, S5 and S6 at every admissible effect context, `Accepts` and `Rejects`
+(`I.tier1_J₁_of`). Piece 5 has run: D1.h4 is proved through the comodel, with global state as the
+first theory; D1.h2 is open. Piece 6 has run (the last section): B5 is proved, and with it
+`B.Guarantees J₁.read B.coreB`.
 
 The six pieces below are ordered by what depends on them. Ties go to the larger unknown first.
 `I.Tier1 J₁` also needs work that is not among these pieces; it is listed at the end.
@@ -953,7 +954,7 @@ longer in the build.
 | 3 | Adequacy through platform answers and loop iterations; S2, S3 | LANDED; B2's return conjunct proved at every protocol-keeping platform; B2's drive, S2, S3, `EffSafeDrive` fail as written | pass | d53c464 |
 | 4 | `FinAlone` and S6 | PARTIAL; R1–R4 teeth and the clause refusals proved; `FinAlone` and `LiveOK` fail as written; route 8.2 not accepted, not built | pass (the route's review was the agent's own) | 789506a, 56f10a8 |
 | 5 | The answering class: h2, h4, the unary laws | PARTIAL (the last section); h4 through the comodel and global state proved, and the tail law and algebraicity at the answering class; `AlgLaw` fails as written at `J₁`; `TailLaw`, `EtaHold`, `I4Typing` and `I4Runs` open | not run | 6e38745, 3d861cb |
-| 6 | `BumpSim` (OQ-43) | NOT RUN | — | — |
+| 6 | `BumpSim` (OQ-43) | LANDED (the last section); the simulation proved at the configurations a bump run reaches (`bumpSimAt`), B5 proved from B4′, `B.Guarantees J₁.read B.coreB` proved; `BumpSim` over every related configuration not proved, not used | not run | see the last section |
 
 ### Piece 1
 
@@ -1421,3 +1422,83 @@ chain of head steps that allocates nothing, which `rstep_det` reads.
 3. `I4Runs`: the two-context simulation.
 4. `TailLaw` and `EtaHold`: the inversions that turn the readings into theorems, or the witnesses.
 5. Piece 6 (`BumpSim`).
+
+---
+
+## Piece 6 run: the step-for-step simulation (OQ-43)
+
+**What ran.** Piece 6 at Core's machine, with D1–D6 applied. Every result is a fact about Core's
+machine (Core σ=[], read at no world). Nothing in `Core/` changed, and no BoLo definition or borrow
+guarantee was touched. `lake build Targets` passes with AxiomCheck and Audit, and every new
+result's axioms are within `[propext, Classical.choice, Quot.sound]`.
+
+**Proved** (`Targets/B/BumpSim.lean`).
+- **B5 at every typing system and borrow world, from B4′** (`releasedOnceReuse_of_soundContracts`).
+  So B5 holds at today's unr-free kernel (`releasedOnceReuse_tier1NU`), at `tier1Open`
+  (`I.tier1Core_releasedOnceReuse`) and at `J₁` (`I.releasedOnceReuse_J₁`), at BoLo. With it
+  **`B.Guarantees J₁.read B.coreB`** (`I.guarantees_J₁`) and `B.Guarantees tier1Open.read B.coreB`
+  (`I.tier1Core_guarantees`). `I.tier1_J₁_of` and `I.tier1Core_of` no longer take `BumpSim`.
+- **The step-for-step simulation at the configurations a bump run reaches** (`bumpSimAt`), and the
+  bump run that follows a complete run (`bump_follows_at`, `bump_follows`'s proof over it).
+  - Renaming along a function commutes with the term operations: `Kont.mapLoc`, `mapLoc_shift`,
+    `mapLoc_subst`, `kont_mapLoc_plug`, `kont_mapLoc_shift`, `kappa_mapLoc` (the capture step's
+    `κ` copies `K`), `clauseAt_mapLoc`, `cancelVal_mapLoc`, `errNext_mapLoc`, the host step
+    (`host_call_mapLoc`: literals in, literals out), `countNext_mapLoc`, `countTryNext_mapLoc`,
+    `boundedFixNext_mapLoc`; a renamed context has the handlers, catchers and names it had
+    (`hasHnd_mapLoc`, `catches_mapLoc`, `hndNames_mapLoc`).
+  - The array steps under a block renaming: `tabFill_mapLoc`, `dropFill_mapLoc`, `idxAns_mapLoc`,
+    `splitAns_mapLoc` (`split`'s second part at the end location `ℓ + i`).
+  - `head_image`: a head step that allocates nothing, renamed along a map injective on the live
+    heap that moves the window `[ℓ, ℓ + 2³²)` above each location the redex mentions as a block, is
+    a head step of the pushed memory. A renamed redex is a redex (`head_mapLoc_exists`), so Core's
+    `plug_decomp` puts the given step at it (`step_at_image`), and `head_det` makes it the renamed
+    step (`sim_det`).
+  - The allocations: the bump step places its cell (`sim_alloc`) or block (`sim_tab`) above every
+    name, every window and `X`, and the new map translates onto the given step's
+    (`push_upd_fresh`, `push_fill_fresh`).
+  - The platform's answers (`sim_plat`): a data argument and a data answer, which no renaming moves.
+- **The protocol on every run** (`platData_of_safe`). The platform restricted to data arguments
+  (`Platform.restrict`) keeps its protocol (`restrict_respects`). Where it does not get stuck, a
+  stop of the platform's operation is at a data argument (`platData_of_safeAt`), and a run under
+  the platform whose stops are at data arguments is a run under the restriction (`pstep_restrict`).
+  B4′ quantifies over every platform that keeps its protocol, the restriction among them.
+
+**`BumpSimAt` is `BumpSim` with four hypotheses added and one conclusion conjunct**, each
+discharged where B5 applies it (`bump_follows_at`):
+- `P.Respects`: B5 quantifies over the platforms that keep their protocol.
+- `FinDom cB.μ`: every memory a run from `init` reaches is finite (`finDom_pstep`).
+- `AffineAbove g cB.μ cB.e (k + 1)`, with `AffineAbove g' cB'.μ cB'.e k` added to the conclusion:
+  `g` moves as a block the window `[ℓ, ℓ + (k + 2) · 2³²]` above every named location, with `k`
+  steps to go. A step's array arithmetic adds less than `2³²` to a named location
+  (`head_mentions`, `named_step`), so the windows narrow by `2³²` a step (`affineAbove_step`); the
+  identity meets it at `init` at every `k` (`affineAbove_id`). It implies `BlocksAffine`
+  (`blocksAffine_of_affineAbove`).
+- `PlatData P cB`: the platform's stops are at data arguments (`platData_of_safe`).
+
+None is vacuous: B5 is proved through them, for every typed program and every complete run.
+
+**`BumpSim`, over every related configuration: not proved, and not used.** Its hypotheses carry
+none of the invariants a bump run keeps. Checked in scratch, and not kept in the build: its
+conclusion fails at two cells `5` and `6` holding `()`, related to themselves by their swap, at the
+term `(λx. (5, x)) 2` (`Platform.none`, `X = ∅`). The β step forms the pair `(5, 2)`, which
+`BlocksAffine` reads as an array value, and `g'` must agree with the swap at `5` and `6`, so
+`g' 6 = 5 ≠ g' 5 + 1`. The configuration is outside what a bump run of `bump_follows_at` reaches:
+the swap breaks `AffineAbove` at `5`. `FinDom` and `PlatData` rule out an infinite memory and a
+platform answering an argument by its locations; I have not checked that `BumpSim` fails at either.
+
+**Unspent hypotheses.** `BumpSimAt`'s `BlocksAffine g cB.μ cB.e` is not read (`AffineAbove`
+implies it); it is kept because `BumpSim` states it. `P.Respects` is read through `typed` (the
+platform's answer is data) and, for the restriction, `uniq` and `total`; `nz`, `lin` and `data`
+are only passed on to the restriction. B4′'s `Terminates` is not read: B5 uses `SafeRuns` only.
+
+**Unused uniqueness and functionality results.** `det_ourInst` and `AStep1.deterministic` are not
+used; the given step is fixed by `plug_decomp` and `head_det` (allocations by `head_alloc_inv`,
+`head_tab_inv`).
+
+**Untranscribed in the run-up.** None that this piece needs. TwoRun's `head_rename`, `step_sim`
+and `run_sim` (which do not build) were read as a guide; their renaming is rebuilt over
+`Expr.mapLoc`, with the effect steps, the array steps under blocks and the platform's answers.
+
+**Next.** What `I.Tier1 J₁` still needs, unchanged by this piece: A's (E) properties at `J₁`, S5's
+bridges at `noFinRaise`, S6, `Accepts` and `Rejects`.
+
