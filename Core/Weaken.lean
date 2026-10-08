@@ -75,6 +75,7 @@ theorem CDerives.append_dead (h' : Ctx.Dead Γ') {Δ : LifeCtx} {Γ : Ctx VTy} {
   | bind hs _ _ ihM ihN => exact .bind (splitP_append h' hs) ihM ihN
   | force hs => exact .force (soloP_append h' hs)
   | lam _ ih => exact .lam ih
+  | lamDead _ ih => exact .lamDead ih
   | app hs _ hx ih => exact .app (splitP_append h' hs) ih (soloP_append h' hx)
   | withI _ _ ihM ihN => exact .withI ihM ihN
   | proj₁ _ ih => exact .proj₁ ih

@@ -55,7 +55,7 @@ theorem closedAt_of_derives {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg}
   | tensorI hs _ _ ih₁ ih₂ =>
       rw [(splitP_length hs).1] at ih₁; rw [(splitP_length hs).2] at ih₂
       simp [closedAt, ih₁, ih₂]
-  | thunkF _ ih | lam _ ih | allI _ _ _ _ ih | bangThunkF _ _ ih =>
+  | thunkF _ ih | lam _ ih | lamDead _ ih | allI _ _ _ _ ih | bangThunkF _ _ ih =>
       simpa [closedAt, Expr.val, Val.lam] using ih
   | bind hs _ _ ihM ihN | effLet hs _ _ _ _ ihM ihN =>
       rw [(splitP_length hs).1] at ihM; rw [List.length_cons, (splitP_length hs).2] at ihN

@@ -194,6 +194,11 @@ theorem CDerives.insert_dead (hd : Ctx.Dead Γd) {Δ : LifeCtx} {Γ₀ : Ctx VTy
       have e' := ih (_ :: Γa) Γb rfl
       rw [List.length_cons] at e'
       exact .lam e'
+  | lamDead _ ih =>
+      intro Γa Γb hΓ; subst hΓ
+      have e' := ih (_ :: Γa) Γb rfl
+      rw [List.length_cons] at e'
+      exact .lamDead e'
   | app hs _ hx ih =>
       intro Γa Γb hΓ; subst hΓ
       obtain ⟨Γa₁, Γb₁, Γa₂, Γb₂, rfl, rfl, h₁, h₂, hs'⟩ := splitP_insert hd Γa hs

@@ -66,6 +66,10 @@ inductive CDerivesAt (Ξ : EffCtx) : LifeCtx → Ctx VTy → Expr → Jdg → Pr
       CDerivesAt Ξ Δ Γ (forceE C (.var i)) (.comp C)
   | lam {Δ Γ M A C} (h : CDerivesAt Ξ Δ (⟨A, true⟩ :: Γ) M (.comp C)) :
       CDerivesAt Ξ Δ Γ (.val (.lam M)) (.comp (.arr A C))
+  /-- `[λ-dead]`: `λx. M : 1 ⊸ F_Σ B` with `x`'s slot dead.  `[spec §26]` -/
+  | lamDead {Δ Γ M} {S : Row} {B : VTy}
+      (h : CDerivesAt Ξ Δ (⟨.unit, false⟩ :: Γ) M (.comp (CTy.effOf S B))) :
+      CDerivesAt Ξ Δ Γ (.val (.lam M)) (.comp (.arr .unit (CTy.effOf S B)))
   | app {Δ Γ Γ₁ Γ₂ M i A C} (hs : Ctx.SplitP Γ Γ₁ Γ₂)
       (hM : CDerivesAt Ξ Δ Γ₁ M (.comp (.arr A C))) (hx : Ctx.SoloP Γ₂ i A) :
       CDerivesAt Ξ Δ Γ (.app M (.var i)) (.comp C)
@@ -379,6 +383,7 @@ theorem CDerivesAt.toCDerives {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {e : E
   | bind hs _ _ ih1 ih2 => exact .bind hs ih1 ih2
   | force h => exact .force h
   | lam _ ih1 => exact .lam ih1
+  | lamDead _ ih1 => exact .lamDead ih1
   | app hs _ hx ih1 => exact .app hs ih1 hx
   | withI _ _ ih1 ih2 => exact .withI ih1 ih2
   | proj₁ _ ih1 => exact .proj₁ ih1
@@ -633,6 +638,7 @@ theorem CDerivesAt.append_dead {Ξ : EffCtx} (h' : Ctx.Dead Γ') {Δ : LifeCtx} 
   | bind hs _ _ ihM ihN => exact .bind (splitP_append h' hs) ihM ihN
   | force hs => exact .force (soloP_append h' hs)
   | lam _ ih => exact .lam ih
+  | lamDead _ ih => exact .lamDead ih
   | app hs _ hx ih => exact .app (splitP_append h' hs) ih (soloP_append h' hx)
   | withI _ _ ihM ihN => exact .withI ihM ihN
   | proj₁ _ ih => exact .proj₁ ih

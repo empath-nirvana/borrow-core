@@ -189,3 +189,6 @@ import Frontend.Check.Externs
 #print axioms BoCa.Fig16.LogRel.Core.capTag_ofEff
 #print axioms BoCa.Fig16.LogRel.Core.ewp_handle
 #print axioms BoCa.Fig16.LogRel.Core.handle_compatC
+-- SPEC §26 (entry 25): a λ whose binder is dead, at an effectful returner
+#print axioms BoCa.Fig16.LogRel.Core.gDenC_unit_dead
+#print axioms BoCa.Fig16.LogRel.Core.lamDead_compatC

@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 0.42 · 2026-10-08
+Version 0.43 · 2026-10-08
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -3784,6 +3784,53 @@ no `[TR]` lemma and no borrow rule changes; the cell is handled by 6.141, 6.142,
 - **S6 at tier 1's typing**, from the cell: reduced to leak freedom (proved) and two ownership
   properties of the cell, open (`contUseEv_J₁_of`; TIER1-PLAN, *Round 3*).
 
+## 26. Entry 25 — a λ whose binder is dead, at an effectful returner
+
+### Motivation
+
+Decision E (2026-10-08). Tier 1's expressiveness properties state their schemas over every
+callback body (`experiments/Targets`, `A.PolyUse`): a closed computation `M` at `F_Σ B` is passed
+as the callback `λ_. M`, which the higher-order function calls at `()`. As built, Core types
+`λx. M` at `1 ⊸ F_Σ B` only by `[λ]`, with `x`'s slot live. `M` does not use `x`, so a leaf of
+`M`'s derivation must drop the slot, and the rules with a `!Γ` premise (`!`-promotion of a thunk;
+`[let]` and `[then]` at a row with an unrestricted operation) take a context whose live slots are
+all `!`: a live slot of `1` is not one. `thunk M : U (F A)` takes `M` under a dead binder, at the
+pure returner only.
+
+### Typing
+
+    Δ; x̸, Γ ⊢ M : F_Σ B
+    ───────────────────────── [λ-dead]
+    Δ; Γ ⊢ λx. M : 1 ⊸ F_Σ B
+
+- `x̸` is the binder's slot, dead: `M` does not use it. The argument is a value of `1`, which holds
+  no resource.
+- It is `thunk M`'s dead binder at an arrow from `1`, at every row. The term is the λ itself; no
+  term former, type former or index is added.
+
+### Semantics
+
+No change to the machine, the relation, `wpTS`, `wpG` or `ewpTS`.
+
+- `[λ-dead]` (`lamDead_compatC`, `Core/Fundamental.lean`): a live slot of `1` holds only the empty
+  resource (`gSepC_cons_persistent`), so the context relation at `x : 1, Γ` gives the one at
+  `x̸, Γ` (`gDenC_dead_cons`), and `[λ]`'s `lam_compatC` applies.
+
+### Theorems
+
+`fundamentalC`, `adequacyC`, `adequacyD`, `adequacyD_obs` and every compatibility lemma keep their
+statements, over the extended judgment. `CDerives` gains `lamDead`.
+
+### Baseline
+
+`Paper/`, `Support/`, the machine, `cC`/`vC` and the effectful `wp` are unchanged; no borrow rule
+and no borrow lemma changes. The checker does not emit the rule.
+
+### Open
+
+- **Weakening by an unused live slot of a persistent type**, as a derived rule of the kernel: not
+  derived. A direct induction meets the `!Γ` premises above.
+
 ---
 
 ## Status
@@ -3878,6 +3925,9 @@ Entry 24 (§25) is implemented: the machine in `Paper/S3_Dynamics/Definitions.le
 (`ewp_kappaCell`, `ewp_kappaC_resume`, `ewp_kappaC_cancel`, `ewp_handle`), `Core/Fundamental.lean`,
 the checker (`rEffHandle`) and `Backend/Clos/Convert.lean`.
 
+Entry 25 (§26) is implemented: `Core/Fundamental.lean` (`CDerives.lamDead`, `lamDead_compatC`) and
+`Core/Weaken.lean`.
+
 Entry 23 (§24) is implemented: `Core/PolyLet.lean` (`letPoly_compatC`), `Core/EffRules.lean`
 (`handleV_compatC`, `ewp_handle_vals`, `thenA_compatC`) and `Core/Fundamental.lean`
 (`CDerives.letPoly`, `CDerives.effHandleV`, `CDerives.effThen`, the theorem `CDerives.effHandle`);
@@ -3887,6 +3937,10 @@ the checker types a finaliser at `F 1` (`Frontend/Check/Steps.lean`, `Frontend/C
 ---
 
 ## Changelog
+
+- **0.43** (2026-10-08) — §26 (decision E): `[λ-dead]`, a λ whose binder is dead at `1 ⊸ F_Σ B`,
+  so a closed callback body at any row is passed as `λ_. M`. No change to the machine, the relation
+  or any borrow rule.
 
 - **0.42** (2026-10-08) — §25 (decision S6): the capture cell. At a linear or affine operation
   `[op]`'s `κ` owns a unit cell, allocated by the ordinary allocator and freed when `κ` is used; a

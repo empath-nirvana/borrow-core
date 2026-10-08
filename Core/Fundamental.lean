@@ -23,7 +23,8 @@ borrowed and owned folds `foldImm`, `foldOwn`, `foldReuse` (`FoldImm.lean`, `Fol
 `FoldReuse.lean`), and `νX. C`'s `nuIn`/`nuOut` and coiteration `unfoldN` (`Nu.lean`), of which
 the delay and stream types' rules are instances (`fixD`, `unfoldS`).  §19's effect rules, with
 §24's polymorphic let (`letPoly`), its `[handle]` at a value form (`effHandleV`, of which the
-two-variable `effHandle` is an instance) and its `[then]` at a finaliser of the pure row.
+two-variable `effHandle` is an instance) and its `[then]` at a finaliser of the pure row; §26's
+`λ_. M` at `1 ⊸ F_Σ B` with its binder dead (`lamDead`).
 `fundamentalC` proves every rule sound at `SemV`/`SemC`; `adequacyC` runs a closed `F 1`
 computation to `()` from the empty memory.
 -/
@@ -52,6 +53,25 @@ theorem roll_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {A : VTy} (hA : A.
 theorem unroll_compatX {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {A : VTy}
     (h : SemV Δ Γ e (.mu A)) : SemV Δ Γ e (VTy.inst (.mu A) A) :=
   fun δ γ ls ρ hδ hΓ => wpTS_mono (fun _ _ _ hv => (vC_unfold hv).2.2) ρ (h δ γ ls ρ hδ hΓ)
+
+/-! ### `[λ-dead]`  `[spec §26]` -/
+
+/-- A live slot of `1` gives the context relation with the slot dead: a value of `1` holds only
+the empty resource. -/
+theorem gDenC_unit_dead {ls : List SRec} {δ : LSub} {Γ : Ctx VTy} {γ : List Val} {ρ : WRes}
+    (h : gDenC ls δ (⟨.unit, true⟩ :: Γ) γ ρ) : gDenC ls δ (⟨.unit, false⟩ :: Γ) γ ρ := by
+  obtain ⟨hlen, hs⟩ := gDenC_iff.mp h
+  cases γ with
+  | nil => exact absurd hlen (by simp)
+  | cons v γ =>
+      obtain ⟨-, hs'⟩ := gSepC_cons_persistent (T := .unit) rfl hs
+      exact gDenC_dead_cons .unit v (gDenC_mk (by simpa using hlen) hs')
+
+/-- `λx. M : 1 ⊸ C` with `x`'s slot dead: `[λ]` at the context with `x : 1` live, whose relation
+gives the one with `x` dead.  `[spec §26]` -/
+theorem lamDead_compatC {Δ : LifeCtx} {Γ : Ctx VTy} {M : Expr} {C : CTy}
+    (h : SemC Δ (⟨.unit, false⟩ :: Γ) M C) : SemC Δ Γ (.val (.lam M)) (.arr .unit C) :=
+  lam_compatC fun δ γ ls ρ hδ hg => h δ γ ls ρ hδ (gDenC_unit_dead hg)
 
 /-- A judgment form: a value at `A`, or a computation at `C`.  `[spec §3]` -/
 inductive Jdg where
@@ -87,6 +107,10 @@ inductive CDerives : LifeCtx → Ctx VTy → Expr → Jdg → Prop where
       CDerives Δ Γ (forceE C (.var i)) (.comp C)
   | lam {Δ Γ M A C} (h : CDerives Δ (⟨A, true⟩ :: Γ) M (.comp C)) :
       CDerives Δ Γ (.val (.lam M)) (.comp (.arr A C))
+  /-- `[λ-dead]`: `λx. M : 1 ⊸ F_Σ B` with `x`'s slot dead, `M` not using it.  `[spec §26]` -/
+  | lamDead {Δ Γ M} {S : Row} {B : VTy}
+      (h : CDerives Δ (⟨.unit, false⟩ :: Γ) M (.comp (CTy.effOf S B))) :
+      CDerives Δ Γ (.val (.lam M)) (.comp (.arr .unit (CTy.effOf S B)))
   | app {Δ Γ Γ₁ Γ₂ M i A C} (hs : Ctx.SplitP Γ Γ₁ Γ₂)
       (hM : CDerives Δ Γ₁ M (.comp (.arr A C))) (hx : Ctx.SoloP Γ₂ i A) :
       CDerives Δ Γ (.app M (.var i)) (.comp C)
@@ -474,6 +498,7 @@ theorem fundamentalC {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg}
   | bind hs _ _ ihM ihN => exact bind_compatC hs ihM ihN
   | force h => exact force_compatC h
   | lam _ ih => exact lam_compatC ih
+  | lamDead _ ih => exact lamDead_compatC ih
   | app hs _ hx ih => exact app_compatC hs ih hx
   | withI _ _ ihM ihN => exact withI_compatC ihM ihN
   | proj₁ _ ih => exact proj₁_compatC ih
