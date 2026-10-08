@@ -252,3 +252,245 @@ is read at the wrong relation.
 
 No claim of this unit rests on a superseded family, except `gdBangJ` (at `vRLJ`) and the
 `SpanLoadRow`/`ThenRow` mentions (at `SemS`).
+
+---
+
+## 10. The regression suite
+
+`ProbeD1/GroundRegress.lean` ("GR"). The design is `GROUND.md` §3. Every theorem in GR is proved,
+with `#print axioms` within `[propext, Classical.choice, Quot.sound]` (186 theorems checked).
+
+**The obligation.** A program's obligation is `DraftFL` restricted to its derivation: at every node
+`Δ; Γ ⊢ e : j` of its `CDerives` derivation, `SemSM .binder0 Δ Γ e j` at every index (`AccNode`,
+GR:52). Each entry is one node. **PROVED**: a theorem proves the entry at every index. **NOT
+BUILT**: the docstring names the missing lemma, a row of §6 or another named `def … : Prop`; a
+route refuted is recorded as "route blocked" there, with whether its configuration arises. **FAILS**
+would need a configuration that arises (`ArisesI`, with `ArisesVI` for every value read), every
+hypothesis discharged and the entry's own judgement refuted: no entry is FAILS. Every PROVED entry
+has its `EntryRead` lemma (GR:62; `readImmBorrow`, `readPairLoad`, `readBangUse`,
+`readArrayGet`, `readRoots`…`readOthers`, GR:416, :1224, :1590, :1711, :1751–:1826), so its
+judgement's binders are low and its free variables `Δ`'s: the entry's premises hold and its proof
+is not vacuous. No entry is recorded "PROVED at `[]`" alone.
+
+**The floor rule.** Every borrow-only program Core accepts must be accepted by the draft. A FAILS is
+a draft defect, never a restriction. NOT BUILT entries are the floor's remaining work.
+
+### 10.1 What the suite builds
+
+| piece | GR | status | what it is |
+|---|---|---|---|
+| `semSMCallbackOfCore` | :142 | proved | a callback `Λ. return (λx. body)` at `∀'x ⊏ b. A ⊸ F B` (thunked shape), `A` first-order, `B` flat, at a context of first-order slots the binder avoids: G5 at the λ, `ThunkVRowM` (`statement0UFullM.2.2.2.1`), `AllIRowMAt` at a context reaching no `U` (`allIRowMUFree0`), `ThunkVRowM` at the `∀` |
+| `semSMCallbackArrOfCore` | :166 | proved | the same at the `.arr` shape `U(∀'x ⊏ b. A ⊸ F B)` |
+| `semSMBangCallbackOfCore` | :187 | proved | the same, persistent, at a dead context: `BangThunkVRowM` (`statement0UFullM.2.2.2.2.2`) over the `∀` |
+| `semSMBangThunkOfCore`, `semSMThunkOfCore` | :213, :226 | proved | a (persistent) thunk of a first-order computation type: G5 at the λ, then the `!U` or `U` row |
+| `semSM_callbackW`, `semSM_algI`, `semSM_const`, `semSM_root`, `semSM_rootV`, `semSM_embedRoot` | :323–:355, :1253 | proved | the producer lemmas at Core's own shapes (`callbackW`, `d_algI`), G5c at a value, G5 at a closed program, G5 at `embed` |
+| `LoadGateNil` | :256 | stated | `withload`'s draft step at the empty stack, both cases of `CohE` (`LoadPay`, :246). One hypothesis is added: `x ∉ CTy.binders (C' x)`. The own push names the binder, which the body must not bind again (`OwnPushI`); Core's typing does not exclude it |
+| `FreePlaceExists` | :273 | stated | every resource leaves a place free at every depth. Not built here: `[TR]`'s `Res` is finite at every depth (`docs/adjudications.md` D10) |
+| `loadGateNil_unit` | :277 | proved, from `FreePlaceExists` | the gate at a payload with no reborrowed cell (`1`), at callback types other than `.arr` or whose `ViewAt` holds |
+| S1: `pairLoad`, `pairLoadU` | :1076, :1114 | `d_pairLoad`, `d_pairLoadU` proved; `pairLoad_eval`, `pairLoadU_eval` by `decide` | `withload` of a pair of references, at `withload`'s type and at its unwinding type at the empty row (§10.5) |
+| S3: `bangUse` | :1491 | `d_bangUse` proved; `bangUse_eval` = `(7, 8)` by `decide` | the user's case (§10.5) |
+| P56: `corpus/array-get.bc` | :1626 | `arrayGetP_checks`, `arrayGet_shape`, `arrayGet_erasures` by `decide +kernel`; `arrayGet_derives` | the checker's derivation of the corpus file, and its `def`s' erasures checked equal to `tabE`, `readE` |
+
+### 10.2 The enumeration
+
+The source is `GROUND.md` §3.4's table. Taken in: every B program there with a Lean derivation
+that builds on this branch. Not taken in, each with its reason:
+
+| programs | reason |
+|---|---|
+| P43–P48 (`loopImm`, `genMut`, `configImm`, `eachImm`, `zipPushPull`, `zipPushPush`; `experiments/LoopBorrow/LoopBorrow/Instances.lean`) | `LoopBorrow.Instances` does not build on this branch: `lend-gen-mut.bc:14:22` and `zip-push-pull.bc:41:14` no longer parse ("expected a type, found name `gen`"), and for the other four `decide +kernel` fails at `(mainOf …).isSome` with the kernel's reduction stuck. Re-running the checker route here (`bcc_program%` on `lend-each-imm.bc`) fails the same way, although `#eval (mainOf …).isSome` is `true` |
+| P50–P52 (`fieldProg`, `variantProg`, `iterProg`; Optics) | `Optics.Runs` fails to build on this branch (`Runs.lean:38`, application type mismatch; unsolved goals at `:105`, `:123`, `:137`, `:157`), and `Optics.Lens` imports it, so `Optics.Programs`, `Optics.Prism` and `Optics.Traversal` cannot be imported |
+| P60 (Coeffects' `main`) | `Coeffects.Programs` imports `Optics.Lens` (through `Coeffects.Demand`) |
+| P57 (`corpus/slice-imm.bc`), P58 (`corpus/lend-lib-each.bc`) | `decide +kernel` fails at `(mainOf …).isSome` with the kernel's reduction stuck; `#eval` gives `true` |
+
+So S2's primary instance (P46) and S3's (P46, P48) are not available here. S2 is served by P56
+(`array-get.bc`, five cells at one lifetime); S3 by `bangUse` (built for this) and, slot-carried,
+by P33.
+
+### 10.3 Results, per entry
+
+"Kind" is R (root), V (a value at a type with `U`, `∀` or `!`), K (a constant), G (glue). Every
+status is at every index. The abbreviations are `GROUND.md` §3.5's: [G5], [G5c] (`coreToSemSM`,
+`coreToSemSMConst`); [cb], [cb→], [bcb], [bt] (`semSMCallbackOfCore`, `semSMCallbackArrOfCore`,
+`semSMBangCallbackOfCore`, `semSMBangThunkOfCore`) at the named body derivation.
+
+| program | entry (GR) | kind | status | theorem, or the missing lemma |
+|---|---|---|---|---|
+| P1 `cImmBorrow` | `AccImmBorrowRoot` (:362) | R | PROVED | `accImmBorrowRoot` [G5] |
+| | `AccImmBorrowCb` (:366) | V | PROVED | `accImmBorrowCb` [cb] at `d_borrowBody` |
+| | `AccImmBorrowLoader` (:370) | V | PROVED | `accImmBorrowLoader` [cb] at `d_loaderBody` (rebuilt from `d_loader`'s constructors) |
+| | `AccImmBorrowWithbor` (:375) | K | NOT BUILT | `Withbor1RowM` |
+| | `AccImmBorrowWithload` (:381) | K | NOT BUILT | `WithloadRowM`; its gate at `1` is `loadGateNil_unit`, from `FreePlaceExists` |
+| | `AccImmBorrowAlloc`, `AccImmBorrowFree` (:386, :390) | K | PROVED | `accImmBorrowAlloc`, `accImmBorrowFree` [G5c] |
+| P2 `cRecBorrow` | `AccRecBorrowRoot` (:448) | R | PROVED | [G5] |
+| | `AccRecBorrowMethods` (:452) | V | PROVED | `accRecBorrowMethods` [G5c] at `d_methods` |
+| | `AccRecBorrowCb` (:456) | V | PROVED | [cb] at `d_borrowBody` |
+| | `AccRecBorrowLoader` (:460) | V | PROVED | [cb] at `d_recLoaderBody` (rebuilt from `d_recLoader`'s) |
+| | `AccRecBorrowWithbor` (:464) | K | NOT BUILT | `Withbor1RowM` (D11) |
+| | `AccRecBorrowAlloc` (:469) | K | NOT BUILT | `AllocRowM` at a thunk payload |
+| | `AccRecBorrowForget` (:473) | K | PROVED | [G5c] |
+| P3 `cBang` | `AccBangRoot`, `AccBangClosure` (:510, :513) | R, V | PROVED | [G5]; [bt] |
+| P4 `cInst` | `AccInstRoot`, `AccInstPoly` (:524, :527) | R, V | PROVED | [G5]; [cb→] |
+| P5 `readFields` | `AccReadFieldsRoot`, `AccReadFieldsCb` (:539, :542) | R, V | PROVED | [G5]; [cb] at `d_readBody` |
+| | `AccReadFieldsLoad` (:549) | K | NOT BUILT | `WithloadRowM` (one reborrowed cell: the positive control) |
+| | `AccReadFieldsCopy` (:554) | K | NOT BUILT | `CopyRowM` (D7) |
+| | `AccReadFieldsAlloc` (:558) | K | PROVED | [G5c] |
+| P6 `mutFields` | `AccMutFieldsRoot`, `…Flip`, `…Poke` (:573–:580) | R, V, V | PROVED | [G5]; [G5c] at `d_flipG`, `d_pokeG` (`pokeG` lends inside its body) |
+| | `AccMutFieldsSwap` (:584) | K | NOT BUILT | `WithswapRowM` (D7) |
+| P14 `exProg`, P15 `build3`, P16 `matchSome`, P17 `bagProg` | the roots; `AccExProgPair`, `AccBagPush` (:600–:623) | R, V | PROVED | [G5]; [G5c] |
+| P7, P8, P18, P19, P9, P20–P24 (family and block borrows) | the ten roots (:639–:648) | R | PROVED | [G5] |
+| | `AccReadCb` (P7, P21), `AccSwapCb A` (P8, P9, P18), `AccNestCb` (P20), `AccNestReadCb` (P22), `AccBagCb` (P23) (:663–:731) | V | PROVED | [cb], their bodies rebuilt from Core's constructors |
+| | `AccReadFamilyWithborF2` (P7), `AccBlockSwapWithborS` (P9) (:747, :753) | K | NOT BUILT | `DraftFL` at `withborI2_wf`'s and `withborS_wf`'s derivations: the inner callback captures the user's callback as a live `U` slot (`AllIRowMAt` there, D6). P8, P18, P19, P20–P24's borrow constants are the same two |
+| P10, P11, P25, P26, P27, P28, P29, P30, P31 | the nine roots (:764–:772) | R | PROVED | [G5] |
+| | `AccCountAlg`, `AccAnyListAlg`, `AccAnyTreeAlg`, `AccSumIAlg`, `AccSumAlg` (:790–:861) | V | PROVED | [bcb] (P27's algebra loads each leaf with `withload`; P29's calls `natCopy` at its own variable, D1) |
+| | `AccFreeLAlg`, `AccFreeIAlg` (:821, :851) | V | PROVED | [G5c] |
+| | the borrowers at `g : fTy`, `foldImm`, `foldOwn`, `withbor` (1) | V, K | NOT BUILT, not stated as entries | `GROUND.md` §3.5: P10's V2 list (`AllIRowMAt` at a persistent slot, D5), `FoldImmRowM`, `FoldOwnRowM`, `Withbor1RowM` |
+| P30 `mapProgC` (open), P32 `mapProg`, P34 `countFreeProg` | `AccMapProgOpenCRoot`, `AccMapProgRoot`, `AccCountFreeRoot` (:904, :901, :909) | R | NOT BUILT | the glue at `U` slots (`BindRowM`, `LolliERowM`, `LetPairRowM`, `UnitERowM`); `borrowerM` at a live `U` slot (D6) |
+| P33 `countProg` (the user's case, slot-carried) | `AccCountZero` (:869) | V | PROVED | [bcb] |
+| | `AccCountRoot` (:882) | R | NOT BUILT | the glue at `ΓF`'s `U` slots |
+| | `AccCountStep` (:888) | V | NOT BUILT | `AllIRowMAt .binder0 (⟨countTy, true⟩ :: Γ)`: the binder-named push at a persistent context (`VRLMStackRename`, D5) |
+| | `AccCountCb` (:894) | V | NOT BUILT | as `AccCountStep`, and in the body `AllEVRowM` at `g []` (D1), `LolliERowM` (D9) |
+| | `AccCountLoad` (:912) | K | NOT BUILT | `WithloadRowM` (one cell) |
+| P12, P35–P41, P13 (affine closures, arrays) | the nine roots (:922–:930) | R | PROVED | [G5] (P39 at every `n`) |
+| | `AccCounterStep`, `AccInc`, `AccTab10`, `AccDropI32` (:945, :979, :1000, :1007) | V | PROVED | [G5c] |
+| | `AccCntCb` (:956), `AccPassCb n` (:964) | V | PROVED | [cb] at `d_cntBody`; at `passCb`'s body (it hands the borrow through `n` persistent functions) |
+| | `AccPassF` (:989) | V | NOT BUILT | `LamRowM` (its answer holds a `Mut` leaf, D7) |
+| | `AccPassWithbor3` (:994) | K | NOT BUILT | `Withbor3RowM` |
+| S1 `pairLoad` | `AccPairLoadRoot` (:1135) | R | PROVED | `accPairLoadRoot` [G5] |
+| | `AccPairLoadCb` (:1139) | V | PROVED | `accPairLoadCb` [cb] at `d_borrowBody` (its body holds the load of the pair) |
+| | `AccPairLoadLoader` (:1147) | V | PROVED | `accPairLoadLoader` [cb] at `d_pairLoaderBody` |
+| | `AccPairLoadAlloc`, `…Free`, `…Forget` (:1180–:1188); P1's `alloc`, `free` at `1` | K | PROVED | [G5c] |
+| | `AccPairLoadWithbor` (:1156) | K | NOT BUILT | `Withbor1RowM` |
+| | `AccPairLoadWithload` (:1165) | K | NOT BUILT | `WithloadRowM`. Route blocked at the single own push: it lends one place, and the second reborrowed cell fails the table at the identity instantiation of the answer's `U` clause, at every stack (`loadGuardFails2`). At the thunked type the answer's `U` clause at a non-identity instantiation moves the push below the cells (`not_withloadPairGapInst`), a route neither refuted nor built |
+| S1′ `pairLoadU` | `AccPairLoadURoot`, `AccPairLoadCbU`, `AccPairLoadLoaderU` (:1136, :1143, :1151) | R, V, V | PROVED | [G5]; [cb] at `d_borrowBodyU`; [cb→] at `d_pairLoaderBody` |
+| | `AccPairLoadWithloadU` (:1175) | K | NOT BUILT | `WithloadURowM`. Route blocked at an arising configuration: `withloadUPairGapReal` (`NxGuardPair.lean:844`), at the stack of the enclosing lend of the pair, `ArisesI` with the view `ArisesVI`. The entry's own judgement is not refuted (`PairArgCellsLe`, not built), so it is not FAILS |
+| S3 `bangUse` | `AccBangUseRoot` (:1514) | R | PROVED | `accBangUseRoot` [G5] |
+| | `AccBangUseBody` (:1519), the producer | V | PROVED | `accBangUseBody` [bcb], at every `Δ` its binder is fresh for (the use's `Δuse` at `z = 2` among them) and every dead context |
+| | `AccBangUseCall` (:1537), `body ['z] (v, 1)` | G | PROVED | `accBangUseCall` [G5]: the node is first-order (its live slot is the view, its answer `['z] I32`) |
+| | `AccBangUseCb`, `AccBangUseBorrower` (:1542, :1547) | V | PROVED | [cb] at `d_useCall`, `d_useBorrowerBody` |
+| | `AccBangUseDeref` (:1524), `unbang body` | G | NOT BUILT | `BangERowM` |
+| | `AccBangUseInst` (:1530), `body ['z]` at the callback's own variable | G | NOT BUILT | `AllEVRowM` (its step `InScopeOfInterp`, D1) |
+| | `AccBangUseWithbor`, `AccBangUseLoad`, `AccBangUseInnerLoad` (:1552–:1562) | K | NOT BUILT | `Withbor1RowM`; `WithloadRowM` at `Ref I32` (one cell) and at `I32` (no cell) |
+| P42 (×13) | `Acc…Root` for `allocFree`, `fig2c`, `immBorrow`, `mutBorrow`, `loadClosure`, `aliasLoad`, `swapTwo`, `greetProg`, `ownedFn`, `mutClosure`, `callBorrowed`, `captures`, `fnMut` (:1257–:1269) | R | PROVED | `semSM_embedRoot` [G5 at `embed d_X`] |
+| | every other node | — | NOT BUILT | `DraftFLEmbed` (G12) at `d_X` |
+| P49 `recLog` | `AccRecLogRoot` (:1296) | R | NOT BUILT | its answer `F (Mut @a I32 ⊗ 1)` holds a `Mut` leaf (D7): `BoundedFixRowM`, `BindRowM` at a `!U` slot, `BangERowM`, `AppRowM` |
+| | `AccRecLogStep` (:1301) | V | NOT BUILT | `LamRowM` (`BangThunkVRowM` proved) |
+| | `AccRecLogClause` (:1305) | K | PROVED | [G5c] |
+| P53 `sumAffE`, P54 `blockAffE b` | `AccSumAffRoot`, `AccBlockAffRoot` (:1318, :1321) | R | PROVED | [G5] at `ADerives.elab` (P54 at every `b`) |
+| | `AccSumAffAlg` (:1331) | V | PROVED | [bcb] |
+| P55 `allBelow` | `AccBelow` (:1359) | V | NOT BUILT | `LamRowM`, with `ThunkFRowM` (proved) over `VarRowM` at the `Mut` slot (D7); the `∀I` step is `allIRowMUFree0 []` |
+| P56 `array-get.bc` | `AccArrayGetRoot` (:1653) | R | PROVED | `accArrayGetRoot` [G5] at `arrayGet_derives`, the checker's derivation |
+| | `AccArrayGetTab` (:1666) | V | PROVED | [G5c] at `d_tabE` |
+| | `AccArrayGetRead` (:1689), `read` inlined at its use | V | PROVED | [cb] at `d_readBody`, at every `Δ` its binder is fresh for |
+| | the `withbor` (1) and `withload` callbacks | V | NOT BUILT, not stated | their λ-bodies' derivations are inside the checker's and are not re-derived (§3.1's route for an inline sub-term); both bodies are first-order, so G5 gives each once derived |
+| | `AccArrayGetLoad` (:1701), at `array i32` | K | NOT BUILT | `WithloadRowM`; route blocked at the single own push (five cells at one lifetime; `loadGuardFails2` at any two) |
+| | `AccArrayGetReadLoad` (:1707), at `I32` in `read` | K | NOT BUILT | `WithloadRowM` (no reborrowed cell) |
+| | `array_copy`, `array_get`, `array_new`, `array_len`, `withbor` (1) | K | NOT BUILT, not stated | D7 (`ArrGetRowM`); `ArrNewRowM`; `array_len` is G5c-shaped; `Withbor1RowM` |
+| P59 the I/O models | `AccMkInput`, `AccMkOutput`, `AccTakeInput`, `AccTakeOutput` (:1370–:1376) | V | PROVED | [G5] (λs at first-order computation types) |
+| | `AccReadByte`, `AccWriteAll` (:1394, :1399) | V | NOT BUILT | `LamRowM` (answers holding the stream's `Mut` leaf, D7) under `allIRowMUFree0 []` |
+| S4 `reconB′` | `AccReconRoot`, `AccReconCb` (:1733, :1739) | R, V | NOT BUILT | no Core derivation (tier 2): `wait` resumes inside the lend |
+
+### 10.4 Results, per program
+
+The conjunctions of each program's stated entries are GR:1849–:1911. The third column lists the
+nodes `GROUND.md` §3.5 names that GR does not state as entries; the fourth the glue rows (§6) the
+program's derivation reads at nodes that are not first-order, as §3.5 reads them off the
+derivations [read]. A program's line is never "accepted".
+
+| program | stated entries | not stated (GROUND.md §3.5) | glue rows (§6), not stated [read] |
+|---|---|---|---|
+| P1 `cImmBorrow` | 5 PROVED, 2 NOT BUILT | — | `BindRowM`, `AppRowM` (`ForceRowM` proved) |
+| P2 `cRecBorrow` | 5 PROVED, 2 NOT BUILT | `withload` at `methodsTy` (no cell), `free` at `methodsTy` | `BindRowM`, `AppRowM` at `U` slots; `Proj₁RowM` |
+| P3 `cBang` | 2 PROVED | — | `BindRowM` at a `!U` slot, `BangERowM`, `AppRowM` |
+| P4 `cInst` | 2 PROVED | — | `AllERowM` at `'a` in scope, `AppRowM`, `BindRowM` |
+| P5 `readFields` | 3 PROVED, 2 NOT BUILT | `withbor` (1) at `Pt.valTy`; the field loader and `readCell`'s loader [cb]; `withload` at `B` in `readCell` | `LetPairRowM` at `Imm ⊗ Imm`; `BindRowM`, `AppRowM` |
+| P6 `mutFields` | 3 PROVED, 1 NOT BUILT | `mutBorrower` [cb]; `withbor` (2); `forgetMut`, `alloc`, `free` [G5c] | `LetPairRowM` at `Mut ⊗ B` |
+| P14 `exProg` | 2 PROVED | — | `BindRowM` at a `U` slot, `Proj₁RowM` |
+| P15 `build3`, P16 `matchSome`, P17 `bagProg` | roots PROVED; P17's `pushG` PROVED | P16's borrower and loaders [cb] and its constants; P17's `pushBorrower` [cb], `withbor` (2), `withswap`, the folds | P16: `BindRowM`, `AppRowM`; P17: `LetPairRowM`, `BangERowM`, `LolliERowM` |
+| P7, P8, P18, P19, P9, P20–P24 | 10 roots and 5 callbacks PROVED; 2 borrow constants NOT BUILT | `readOne`, `readBoth`, `swapFn` and their loaders [cb]; `withswap`, `copy`, `withload` inside them | `AllEVRowM`, `LolliERowM` at `readOne ()`, `readBoth ()`, `swapFn ()` (D1, D9); `LetPairRowM` at families |
+| P10, P11, P25–P29 | 7 roots, 5 algebras, 2 free algebras PROVED | the borrowers at `g : fTy` (NB, P10's V2 list); `foldImm`, `foldOwn`, `withbor` (1); P27's loader [cb] and its `withload` at `I32` | `progOpen`'s nodes at `g : fTy` (`BindRowM`, `LolliERowM`, `LetPairRowM`, `UnitERowM`); `BangERowM` |
+| P30, P31 | 2 roots PROVED; P30's open root NOT BUILT | `borrowerM` (D6); `withbor` (2), `withswap`, the folds | the glue at `U` slots |
+| P32, P34 | 2 open roots NOT BUILT | the values (`mapInc`, `toPure` [G5v]; `countFree`); the borrowers | the glue at `U` and `!U` slots |
+| P33 `countProg` | 1 PROVED, 4 NOT BUILT | `CountNW`; `freeAll` [G5v]; the borrower; `withbor` (1) | as its root: `BindRowM`, `LolliERowM`, `AppRowM`, `LetPairRowM`, `UnitERowM` |
+| P12, P35–P41 | 8 roots, `counterStep`, `cntCb`, `passCb`, `incV` PROVED; `passF`, `withbor` (3) NOT BUILT | the scope callbacks [cb]; `ofFnStep`, `onceE`, `mkCounterV`, `doubleStep`, `logStep`, `twiceV`, `reV` (NB, `LamRowM`); `reCb`, `logInner`, `logCb` [cb]; `withbor` (1), (2), `withswap`, `unfoldN` | `d_mkBox`'s and `d_closeBox`'s nodes: `BindRowM` at a `!U` slot, `BoxIRowM`, `WithIRowM`, `NuInRowM`, `BoxERowM`, `Proj₂RowM`, `LetPairRowM` |
+| P13 `arrProg` | 3 PROVED | `arrNew`, `arrFree` (NB); `arrReplace`, `arrSize`, `hostOp` [G5c] | `BangERowM` at `arrNew`'s and `arrFree`'s `!` |
+| S1 `pairLoad` | 8 PROVED, 2 NOT BUILT | — | none |
+| S1′ `pairLoadU` | 8 PROVED, 2 NOT BUILT | — | none |
+| S3 `bangUse` | 5 PROVED, 5 NOT BUILT | the inner load's callback [cb], `hostOp` add [G5c] | `BangERowM`, `AllEVRowM` (stated as entries) |
+| P42 (×13) | 13 roots PROVED | every other node: NOT BUILT, `DraftFLEmbed` at `d_X` | through G12 |
+| P49 `recLog` | 1 PROVED, 2 NOT BUILT | `boundedFix` (`BoundedFixRowM`), `withswap` | `BindRowM` at a `!U` slot, `BangERowM`, `AppRowM`, `LetPairRowM`, `SumERowM` |
+| P53, P54 | 3 PROVED | P53: as P27, and the destructor's `foldOwn`; P54: `allocS`, `free`, `freeS` [G5c] | P53: as P27 |
+| P55 `allBelow` | 1 NOT BUILT | — | `LamRowM`, `VarRowM` |
+| P56 `array-get.bc` | 3 PROVED, 2 NOT BUILT | the two callbacks [cb] (their derivations not extracted); `withbor` (1), `array_copy`, `array_get`, `array_new`, `array_len` | `AllEVRowM`, `LolliERowM` at `read ['y] v` (D1, D9); `BangERowM`; `LetPairRowM` at families |
+| P59 the I/O models | 4 PROVED, 2 NOT BUILT | `writeByteV`, `readIntoV` (as `AccReadByte`) | `LetPairRowM`, `SumERowM` at `Mut` and slice slots |
+| S4 `reconB′` | 2 NOT BUILT | — | — |
+
+No program is claimed to meet the floor. The suite claims the entries it states, no more.
+
+### 10.5 The seeds
+
+- **S1, `withload` of a pair** (`pairLoad`, `pairLoadU`): the closed programs are new, built from
+  `cImmBorrow`'s skeleton with `borrower`, `borrowBody` and `d_borrower`; `pairLoadU`'s borrower
+  binds the loader first (`borrowBodyU`), since at `withloadU`'s type the load is applied to the
+  view and the callback at once. Both run, leaving no cell (`pairLoad_eval`, `pairLoadU_eval`).
+  Every entry but the borrow constants' is PROVED (`accPairLoad_but_constants`, GR:1915). The two
+  loads' nodes are `NxGuardPair.lean`'s `PairWithloadTyped` and `PairWithloadUTyped` nodes, under a
+  closed program. So the pair's open question is in the `withload` constant's row (`DraftFL` at that
+  node), not in any judgement of the program's own terms.
+- **S2, `withload` of a slice**: P46 is not available here (§10.2); P56 serves, at five cells.
+  `sliceLoad` is not built: P56 serves.
+- **S3, the user's case** (`bangUse`): `body : !(∀'z ⊏ ⊤. Imm 'z I32 ⊗ I32 ⊸ ['z] I32)` holds no
+  resource, is written at the top of the program, and is called inside the load's callback at the
+  callback's own lifetime. It is written in place, as the checker writes a `def` at its use. It
+  answers `(7, 8)` (`bangUse_eval`). The producer, the call, both callbacks and the root are PROVED
+  (`accBangUse_proved`, GR:1923); the carry side's glue (`unbang body`, `body ['z]`) and the three
+  borrow constants are NOT BUILT. The slot-carried form is P33: its producer `stepV` and carry side
+  `cbE` wait on the binder-named push at a persistent context (D5).
+- **S4, `reconB′`**: recorded, NOT BUILT; tier 2.
+- **S5, `loadKeepsView`**: not built (optional, D3). Its gate fails `OwnOKI.placeFree` at the
+  needed entry, and stays so after part (3), whose relaxed `placeFree` is for blocks only
+  (`GROUND.md` §3.6).
+
+### 10.6 The corpus programs
+
+The checker's acceptance of a corpus file is a `CDerives` derivation (`checkProgram_sound`,
+`Frontend/Check/Program.lean:148`). The suite takes in P56 (`array-get.bc`) by the checker route;
+`sum-prog-exact.bc` and `count-down-exact.bc` erase exactly to Core's `sumProg` (P29) and
+`countDownProg` (C) (`Frontend/Check/CrossCheck.lean:116`–`:140`). P57 (`slice-imm.bc`) and P58
+(`lend-lib-each.bc`) are not taken in (§10.2).
+
+The other files `scripts/check-corpus.sh` checks (`corpus/*.bc`, `corpus/surface/*.bc`,
+`corpus/axes/*.bc`: 155, of which `forms.bc` is `-- check: parse-only` and `13-1-library.bc` has no
+`main`) are classed here by the primitives of their erased `main` (`bcc erase`). **E**: an effect
+primitive (`perform`, `raise`, `hnd`, `ubind`, `ccatch`, `cfin`), the forms the effect rules type.
+Otherwise borrow-only or codata, split by whether the erasure lends cells (`load`, `store`) or
+arrays and slices (`tab`, `idx`, `split`). [read: the class is read off the erasure, not off the
+derivation. The checker erases the handlers it can (a resume-once operation as a call, an abortive
+one as a branch), so an erasure with no effect primitive uses no effect rule. `withbor`'s erasure
+holds no primitive, so the last group may still lend.] None of them has a Lean derivation in this
+suite. Each B file is a floor obligation, and the last column names the suite entries nearest its
+shape [read]. None is "covered".
+
+| class | files | nearest suite shape [read] |
+|---|---|---|
+| B, arrays or slices (`tab`, `idx`, `split`), 40 | `array-empty`, `array-get` (P56, taken in), `array-refs`, `array-replace`, `array-sum`, `axes/borrow-across-loop`, `axes/codata-coeffects`, `axes/scope-boxed-iter`, `axes/scope-loop-lend`, `bytes-upper`, `effects-fold-sum`, `effects-map`, `effects-map-hand`, `fields`, `find-bytes`, `for-adapters`, `for-data`, `for-return`, `format`, `hello`, `http-request`, `io-aoc`, `iter-mut`, `iter-mut-count`, `iter-mut-slice`, `json-tokens`, `labels-json`, `lend-lib-each` (P58), `lend-lib-loop`, `print-borrowed-array`, `quicksort`, `rec-deep`, `reverse-bytes`, `slice-imm` (P57), `slice-lib`, `slice-mut`, `slice-split`, `sort-numbers`, `split-at-mut`, `surface/array-sum` | P13, P56, P59; S2 (and the untaken P43–P48, P57, P58) |
+| B, cells lent or loaded (`load`, `store`), no array, 27 | `13-2-sum-prog`, `aff-capture`, `aff-coerce`, `aff-counter`, `aff-depth`, `aff-drop`, `aff-higher`, `axes/data-coeffects`, `axes/effects-coeffects`, `axes/result-fold-imm`, `axes/scope-data-effects`, `block-swap`, `borrow-in-scope`, `effects-generic`, `family-swap`, `fn-lifetime`, `implicit-drops`, `iter-close`, `lend-config`, `lend-lib-gen`, `lend-mut`, `lend-server`, `map-reuse`, `sum-i32`, `sum-prog-exact` (Core's `sumProg`, P29), `surface/family-swap`, `surface/map-reuse` | P1, P5, P6, P8, P9, P12, P27, P29–P31, P35–P41; S1, S3 |
+| B or C, neither, 37 | `axes/codata-effects`, `axes/codata-generic`, `axes/data-effects`, `axes/free-monad`, `axes/result-fold-own`, `axes/scope-codata-effects`, `capture-log-hand`, `capture-store-cancel-hand`, `capture-tick-hand`, `clone-reuse`, `count-down`, `count-down-exact` (Core's `countDownProg`, C), `count-fold`, `count-try`, `deep-list`, `div-hof`, `for-finite`, `int-arith`, `int-ops`, `io-break`, `io-cat`, `io-for-after`, `io-for-assign`, `io-for-then`, `io-fuel`, `io-guess`, `io-head`, `io-hex`, `io-lines`, `io-sections`, `io-upper`, `io-wc`, `iter-range`, `main-lifetime`, `nats-sum`, `surface/io-upper`, `surface/io-wc` | P14–P16, P28, P59; the `io-*` files are open at the externs `stdin`, `stdout`, as P60 |
+| E, 49 | `ascii-upper`, `capture-take-hand`, `clause-captures`, `core-effects-borrow-abort`, `core-effects-borrows`, `core-effects-drop-glue`, `core-effects-loop`, `core-effects-reborrows`, `core-effects-result`, `core-effects-tail`, `core-yield-loop`, `core-yield-pull`, `effects-borrow-raise`, `effects-fold`, `effects-log-fail`, `effects-map-fail`, `for-data-div`, `for-never`, `gen-adapters`, `gen-adapters-fail`, `gen-borrowed`, `gen-cell`, `gen-close`, `gen-div`, `gen-fib`, `gen-from`, `gen-nested`, `gen-pipeline`, `gen-pipeline-adapters`, `gen-produce`, `gen-return`, `gen-value`, `key-value`, `lend-div`, `lend-pipeline`, `parse-int`, `rec-emit`, `rec-even-odd`, `rec-fib`, `rec-layer`, `rec-log`, `rec-mixed`, `rec-overflow`, `rec-parser`, `rec-tree`, `rec-yield`, `sort-lines`, `trim-replace`, `utf8-count` | the next suite (§10.7) |
+| not a program | `13-1-library` (its `def`s erase to Core's library terms, `library_erasures`), `forms` (parse-only) | — |
+
+`corpus/sugar/`'s pairs are classed by their core forms (`*.core.bc`, 34): `for-value`, `gen-div`,
+`gen-from`, `gen-range`, `gen-return`, `gen-yields` are E; the other 28 hold no effect primitive.
+`corpus/reject/`, `corpus/pending/` and `corpus/fail/` are not accepted by Core and are not floor;
+`corpus/reject/gen-self-borrow.bc` is the draft's target beyond the floor (tier 2).
+
+### 10.7 Not in this suite
+
+- **The effect programs** (E above, and Core's `EffPrograms.lean`, GhostEnd's `Tuple`, `Capture`,
+  `Instance`, `Branch`, `Callee`, Targets' `d_storeCancelNU`, NonVacuity's `d_forgetBody`) are
+  tier-1 floor. They read the draft's `F_Σ` clause (GhostEnd's piece) at the pushed stack where a
+  lend is open, and the unwinding callback rows. They belong to the next suite.
+- **The codata programs** (C) read `ν` through Core's `cC`, equal (`cRLMTopNuEq`); their other
+  draft nodes, a persistent step and `unfoldN`, are read by the affine programs.
+- **X** (`GROUND.md` §3.4): GhostEnd's `Kernel`, Recursion's `stepV_derives` (CBPVWorld's own
+  `CDerives`), SecondClass's derived rules, Grades', Outlives' and CBPV*'s own judgements.
