@@ -154,6 +154,35 @@ theorem monoOwnGMAtBoxN (Γ : Ctx VTy) : MonoOwnGMAtBoxN (ℍ := ℍ) .binder0 �
               exact ih γ hPB'' hfr'' h
   exact key Γ γ hPB hfr hgs
 
+/-! ### What the `∀I` row needs beside the box at a persistent context
+
+The `∀` clause's own lend names its entry by the type's binder, which is no reserved name, so the
+box does not reach the row's push directly. The row's push differs from a box step only in the
+entry's name. The statement below says the relation does not read that name; it is stated and not
+derived here. The row's two reading transports (`CtxExtendMSAt`, `CtxShadowMSAt`, `Nx.lean`) are
+the other step: the box's pushes may read a variable the extended reading binds, so they move with
+the reading as well. -/
+
+/-- An entry with its payload type's variable `x` read as `y`. -/
+def renEnt (x y : LifeVar) (e : LEnt) : LEnt := { e with T := e.T.applyLSub [(x, .var y)] }
+
+/-- **The relation does not read the name of a stack entry that nothing in sight reads**: renaming
+the entry's variable `x` to `y`, and `x` to `y` in the payload types of the entries pushed after it,
+leaves `vRLM` as it is, when neither name is read or bound by the type or read by the reading, `y`
+is new to the stack and to every payload type, and `x` is read by no payload type at or below the
+entry. With `persistentPushN` it gives the `∀I` row's own push at a context the box carries. Not
+derived here. -/
+def VRLMStackRename : Prop :=
+  ∀ (A : VTy) (σ₁ σ₂ : LStack) (e : LEnt) (y : LifeVar) (δ : LSub) (αs : List Life)
+    (ls : List SRec) (v : Val) (ρ : WRes),
+    ¬ VFree e.x A → e.x ∉ VTy.binders A → ¬ VFree y A → y ∉ VTy.binders A →
+    δ.find? e.x = none → δ.find? y = none →
+    e.x ∉ (σ₁ ++ σ₂).map LEnt.x → y ∉ (σ₁ ++ e :: σ₂).map LEnt.x →
+    (∀ e' ∈ σ₁ ++ e :: σ₂, ¬ VFree y e'.T) → (∀ e' ∈ e :: σ₂, ¬ VFree e.x e'.T) →
+    αs.length = (σ₁ ++ e :: σ₂).length →
+    (vRLM (ℍ := ℍ) .binder0 none (σ₁ ++ e :: σ₂) δ A αs ls v ρ ↔
+      vRLM (ℍ := ℍ) .binder0 none (σ₁.map (renEnt e.x y) ++ { e with x := y } :: σ₂) δ A αs ls v ρ)
+
 end ProbeD1
 
 end
