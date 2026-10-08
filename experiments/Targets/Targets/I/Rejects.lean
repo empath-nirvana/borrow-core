@@ -3,10 +3,11 @@ import Targets.Instance.TiedKernel
 import Targets.Base.Closed
 
 /-!
-# The interaction — the rejections at `J₁` (decision AR)
+# The interaction — the rejections, at Core's kernel (decision AR)
 
-`Rejects J₁.read` is four inversions of Core's kernel `CDerives` (`J₁.read` is Core's kernel,
-`Inst.j1_read`): AT05, AT06, AT08 and AT13 have no derivation at any computation type.
+`Rejects tier1` (`rejects_tier1`; at `J₁` through `Inst.j1_read`, `Targets/I/AcceptsRejects.lean`) is
+four inversions of Core's kernel `CDerives`: AT05, AT06, AT08 and AT13 have no derivation, at any
+context and any judgement.
 
 **The same-term rules.**  Fourteen of Core's rules conclude with their premise's term: the value
 rules `!E`, `[]I`, `[]E`, `⊑` at `Imm` and `Mut`, `μ`'s `roll` and `unroll`; `return`, its reading
@@ -24,16 +25,19 @@ unrolled), unless that head is `!` (dereliction reaches its content), `Imm` or `
 lifetime).  Persistence is a property of the head (`Hnf.persistent`).
 
 **The inversions.**  A variable is read at a view of its live slot's type (`der_var`); a pair at the
-views of a tensor of its parts' types (`der_pair`); an application by `⊸E`, `[app]`, `[let]`, the
-polymorphic let, `∀E` or a projection (`der_app`); a λ-value through the rule that types its body,
-or as one of the λ-constants (`der_lam`).  Every free variable of a typed term has a live slot
-(`fv_live`), so a variable used on both sides of a split is persistent.
+views of a tensor of its parts' types (`der_pair`); `()` at `1`'s views over a consumed context, or at
+`⊤` (`der_unit`); an application by `⊸E`, `[app]`, `[let]`, the polymorphic let, `∀E` or a
+projection (`der_app`); a λ-value through the rule that types its body, or as one of the λ-constants
+at its axiom's type (`der_lam`); `let (x, y)`, `;`, `then` and `handle` by their own rules
+(`der_letpair`, `der_seq`, `der_then`, `der_hnd`); `alloc` at `A ⊸ Ref A`; a primitive by its own rule
+only, and `load` has none (`der_prim`).  Every free variable of a typed term has a live slot
+(`fv_live`), so a variable used on both sides of a split is persistent (`splitP_both`).
 
 **The four programs.**
 * **AT08** loads a cell (`load`), and Core has no rule for `load` (`not_der_load`): the program's
   clause applies it, so no derivation reaches it.
 * **AT06**: the clause is in the handler's clause tuple, so at `clauseTy`, a `!U` type, typed over a
-  persistent context; it uses the cell `c`, whose slot is a `Ref`.
+  persistent context; it uses the cell `c`, whose slot is a view of a `Ref`.
 * **AT13**: the clause's continuation is at `kTy` at `lin`, a `U` of a `&`, and `forget` takes only a
   persistent argument, `!`, `Imm`, `Mut`, `Unk` or `ArrayImm`.
 * **AT05**: the callback reaches `withborU dFlag`'s second argument.  Typed as a λ, `withborU dFlag`

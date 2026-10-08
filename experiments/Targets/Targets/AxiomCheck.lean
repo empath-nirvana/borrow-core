@@ -188,6 +188,7 @@ run_meta do
 #print axioms Targets.I.pins_J₁
 #print axioms Targets.I.pins_tier1Open
 #print axioms Targets.I.rejects_J₁
+#print axioms Targets.I.rejects_tied
 #print axioms Targets.I.releasedOnceReuse_J₁
 #print axioms Targets.I.row_nil_of_find_none
 #print axioms Targets.I.sPropsNoCancel_J₁

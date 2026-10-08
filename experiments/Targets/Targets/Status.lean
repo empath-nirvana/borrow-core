@@ -1117,12 +1117,16 @@ theorem status_tier1_J₁_of
 
 /-- PROVED AT σ=[] (decision AR): the composite's programs at `J₁`, each typed, safe, terminating and
 with a computed complete run answering the stated value; and its rejections, AT05, AT06, AT08 and
-AT13, typed at no type by Core's kernel.  AT08's rejection rests on `load` having no rule. -/
+AT13, typed at no type by Core's kernel, nor by the tied kernel at any effect context.  AT08's
+rejection rests on `load` having no rule. -/
 theorem status_acceptsRejects_J₁ :
     I.Accepts (ℍ := ℍ) J₁.read .abortive ∧ Rejects J₁.read ∧
+      (∀ (Ξ : EffCtx) (Δ : BoCa.Lifetime.LifeCtx) (Γ : Ctx VTy) (j : Jdg),
+        ¬ CDerivesAt Ξ Δ Γ at05 j ∧ ¬ CDerivesAt Ξ Δ Γ at06 j ∧ ¬ CDerivesAt Ξ Δ Γ at08 j ∧
+          ¬ CDerivesAt Ξ Δ Γ at13 j) ∧
       ∀ (Δ : BoCa.Lifetime.LifeCtx) (Γ : Ctx VTy) (X : Expr) (j : Jdg),
         ¬ CDerives Δ Γ (.app (.prim .load) X) j :=
-  ⟨I.accepts_J₁, I.rejects_J₁, fun _ _ _ _ => Rej.not_der_load_app⟩
+  ⟨I.accepts_J₁, I.rejects_J₁, fun Ξ _ _ _ => I.rejects_tied Ξ, fun _ _ _ _ => Rej.not_der_load_app⟩
 
 /-- PROVED: tier 1 at `J₁` follows from A's (E) properties, S4, S5 and S6 at every admissible
 effect context (decision AR discharges `Accepts` and `Rejects`). -/

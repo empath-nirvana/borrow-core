@@ -111,6 +111,14 @@ theorem I.rejects_J₁ : Rejects J₁.read := by
   rw [Inst.j1_read]
   exact Rej.rejects_tier1
 
+/-- **The rejections at the tied kernel**: at every effect context, a tied derivation is Core's
+(`CDerivesAt.toCDerives`), so AT05, AT06, AT08 and AT13 have none either. -/
+theorem I.rejects_tied (Ξ : EffCtx) {Δ : BoCa.Lifetime.LifeCtx} {Γ : Ctx VTy} {j : Jdg} :
+    ¬ CDerivesAt Ξ Δ Γ at05 j ∧ ¬ CDerivesAt Ξ Δ Γ at06 j ∧ ¬ CDerivesAt Ξ Δ Γ at08 j ∧
+      ¬ CDerivesAt Ξ Δ Γ at13 j :=
+  ⟨fun h => Rej.not_der_at05 h.toCDerives, fun h => Rej.not_der_at06 h.toCDerives,
+    fun h => Rej.not_der_at08 h.toCDerives, fun h => Rej.not_der_at13 h.toCDerives⟩
+
 /-- **Tier 1 at `J₁`, given A's (E) properties, S4, S5 and S6 at every admissible effect context**:
 `tier1_J₁_of` with the composite's programs and rejections discharged. -/
 theorem I.tier1_J₁_of_ESU
