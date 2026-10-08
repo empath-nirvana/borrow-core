@@ -954,7 +954,7 @@ longer in the build.
 | 3 | Adequacy through platform answers and loop iterations; S2, S3 | LANDED; B2's return conjunct proved at every protocol-keeping platform; B2's drive, S2, S3, `EffSafeDrive` fail as written | pass | d53c464 |
 | 4 | `FinAlone` and S6 | PARTIAL; R1–R4 teeth and the clause refusals proved; `FinAlone` and `LiveOK` fail as written; route 8.2 not accepted, not built | pass (the route's review was the agent's own) | 789506a, 56f10a8 |
 | 5 | The answering class: h2, h4, the unary laws | PARTIAL (the last section); h4 through the comodel and global state proved, and the tail law and algebraicity at the answering class; `AlgLaw` fails as written at `J₁`; `TailLaw`, `EtaHold`, `I4Typing` and `I4Runs` open | not run | 6e38745, 3d861cb |
-| 6 | `BumpSim` (OQ-43) | LANDED (the last section); the simulation proved at the configurations a bump run reaches (`bumpSimAt`), B5 proved from B4′, `B.Guarantees J₁.read B.coreB` proved; `BumpSim` over every related configuration not proved, not used | not run | see the last section |
+| 6 | `BumpSim` (OQ-43) | LANDED (the last section); the simulation proved at the configurations a bump run reaches (`bumpSimAt`), B5 proved from B4′, `B.Guarantees J₁.read B.coreB` proved; `BumpSim` over every related configuration not proved, not used | not run | 3870da8 |
 
 ### Piece 1
 
@@ -1430,7 +1430,7 @@ chain of head steps that allocates nothing, which `rstep_det` reads.
 **What ran.** Piece 6 at Core's machine, with D1–D6 applied. Every result is a fact about Core's
 machine (Core σ=[], read at no world). Nothing in `Core/` changed, and no BoLo definition or borrow
 guarantee was touched. `lake build Targets` passes with AxiomCheck and Audit, and every new
-result's axioms are within `[propext, Classical.choice, Quot.sound]`.
+result's axioms are within `[propext, Classical.choice, Quot.sound]`. Commit: `3870da8`.
 
 **Proved** (`Targets/B/BumpSim.lean`).
 - **B5 at every typing system and borrow world, from B4′** (`releasedOnceReuse_of_soundContracts`).
@@ -1467,12 +1467,12 @@ result's axioms are within `[propext, Classical.choice, Quot.sound]`.
 discharged where B5 applies it (`bump_follows_at`):
 - `P.Respects`: B5 quantifies over the platforms that keep their protocol.
 - `FinDom cB.μ`: every memory a run from `init` reaches is finite (`finDom_pstep`).
-- `AffineAbove g cB.μ cB.e (k + 1)`, with `AffineAbove g' cB'.μ cB'.e k` added to the conclusion:
-  `g` moves as a block the window `[ℓ, ℓ + (k + 2) · 2³²]` above every named location, with `k`
-  steps to go. A step's array arithmetic adds less than `2³²` to a named location
-  (`head_mentions`, `named_step`), so the windows narrow by `2³²` a step (`affineAbove_step`); the
-  identity meets it at `init` at every `k` (`affineAbove_id`). It implies `BlocksAffine`
-  (`blocksAffine_of_affineAbove`).
+- `AffineAbove g cB.μ cB.e (k + 1)`, with `AffineAbove g' cB'.μ cB'.e k` added to the conclusion.
+  `AffineAbove g μ e k`: `g` moves as a block the window `[ℓ, ℓ + (k + 1) · 2³²]` above every named
+  location `ℓ`; a run with `k` steps to go keeps it at `k` (`bump_follows_at`). A step's array
+  arithmetic adds less than `2³²` to a named location (`head_mentions`, `named_step`), so the
+  windows narrow by `2³²` a step (`affineAbove_step`); the identity meets it at `init` at every `k`
+  (`affineAbove_id`). It implies `BlocksAffine` (`blocksAffine_of_affineAbove`).
 - `PlatData P cB`: the platform's stops are at data arguments (`platData_of_safe`).
 
 None is vacuous: B5 is proved through them, for every typed program and every complete run.

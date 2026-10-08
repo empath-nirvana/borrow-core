@@ -75,9 +75,9 @@ start (`Targets/B/BumpSim.lean`):
 
 * **The simulation** (`status_bumpSimAt`): `BumpSim` with the hypotheses a bump run supplies — the
   platform keeps its protocol; the memory is finite (every memory a run from `init` reaches is);
-  `g` moves as a block the window `[ℓ, ℓ + (k + 2) · 2³²]` above every named location `ℓ`, with `k`
-  steps to go (`AffineAbove`; the identity does, at `init`); and the platform's stops are at data
-  arguments (`PlatData`).  The bump step allocates above every name, every window and `X`, where the
+  `g` moves as a block the window `[ℓ, ℓ + (k + 1) · 2³²]` above every named location `ℓ`, at `k`
+  the steps to go (`AffineAbove`, read at `k + 1` before a step and at `k` after it; the identity
+  meets it at `init`); and the platform's stops are at data arguments (`PlatData`).  The bump step allocates above every name, every window and `X`, where the
   new map translates onto the given step's cell or block; a step that allocates nothing is the
   given step renamed, along the same map (`head_image`, Core's unique decomposition), and its array
   arithmetic stays within the windows.
