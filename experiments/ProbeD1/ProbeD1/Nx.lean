@@ -383,6 +383,116 @@ def UnrollRowM (p : Placement) : Prop :=
   ∀ (Δ : LifeCtx) (Γ : Ctx VTy) (e : Expr) (A : VTy),
     SemSM (ℍ := ℍ) p Δ Γ e (.val (.mu A)) → SemSM (ℍ := ℍ) p Δ Γ e (.val (VTy.inst (.mu A) A))
 
+/-! ### Step 3.0: the edits' statements (`NEXT.md` §3.1)
+
+(E1)–(E4) are in `R1.lean` (`InScope`, `OwnPushM`, `StackJM`, `CallbackExt*M`'s `¬ VFree y T`), with
+`VAllFree`, `CAllFree` and the restated `RelMAgreesJ`. -/
+
+/-- `⟦b⟧` is the value of one of `b`'s variables, or `⊤`'s: a meet or a join of two values is one
+of them. At an instance below a bound, `⊤` is excluded, so the instance is in scope. -/
+def InScopeOfInterp : Prop :=
+  ∀ (s : LSub) (b : Lifetime.Life) (m : ℕ),
+    b.interp s = some m → InScope s (OrderDual.toDual m) ∨ m = Lifetime.SLife.top
+
+/-- **After (E1), `GAP.md` §4's adjacency closure is a `vRLM` value at W's own `μ`**: the negation
+of `MuAdjNotVRLM`, decided right after (E1) lands. -/
+def MuAdjVRLME1 : Prop := ¬ MuAdjNotVRLM (ℍ := ℍ)
+
+/-! #### Item 1a′: the empty stack after (E1) -/
+
+/-- **The pair configuration at the empty stack.** `c` is in the revised arising set at the empty
+stack. Its world holds an open 6.64 frame over `Ref 1 ⊗ Ref 1`, whose record `r` owns two distinct
+places, and its local part holds the frame's `imm` cell `ψ`. The judgement's index holds at `c` at
+the reading `δ`, with the cell's place as the context. -/
+def PairNilCfg (c : Cfg) (ψ : CellU BoCa.Loc Val) (r : FrameRec) (l₁ l₂ : BoCa.Loc) (δ : LSub)
+    (B : VTy) : Prop :=
+  ArisesI (ℍ := ℍ) c ∧ c.σ = [] ∧ c.αs = [] ∧ c.ρ.get r.le = some ψ ∧
+    r ∈ c.ps ∧ r ∈ rsOf c.ls ∧ r.T = pairTy ∧ r.v = .pair (.loc l₁) (.loc l₂) ∧ ψ.wit = r.R ∧
+    r.R.get l₁ = some (CellU.ownOf .unit) ∧ r.R.get l₂ = some (CellU.ownOf .unit) ∧ l₁ ≠ l₂ ∧
+    SemIdxM pairΔ pairΓ (.ret B) δ [] [] c.ls (ResU.single r.le ψ) ∧
+    gRLM (ℍ := ℍ) .binder0 [] δ [] c.ls pairΓ [.loc r.le] (ResU.single r.le ψ)
+
+/-- **After (E1), the gap at the empty stack, at `withloadU`'s callback.** At a pair configuration
+at the empty stack, at a reading `δ` whose only value is `ψ`'s lifetime:
+- the program is typed; one own push is at `OwnPushM`, and `TW.reb` reborrows the record's payload
+  at its lifetime;
+- no instance in scope meets the bound, so the first conjunct reads nothing, and the empty stack
+  has no other instantiation (`cutOf [] = none`);
+- at every own push, beside every resource the callback holds, the reborrow at the push's lifetime
+  fails the table at the push.
+
+So after (E1) the own push is the only route, and it fails. Before (E1) the first conjunct read the
+callback here (`PairNilOldGuardHolds`). The view is not shown to arise by `ArisesVI`: no transition
+of the set makes an `Imm` value arise at the empty stack, other than a run's answer. What is shown
+is the configuration's world and the index. -/
+def WithloadUPairGapNilE1 : Prop :=
+  ∃ (c : Cfg) (ψ : CellU BoCa.Loc Val) (r : FrameRec) (l₁ l₂ : BoCa.Loc) (δ : LSub) (B : VTy)
+      (cbE : Expr) (x : LifeVar) (en : LEnt) (β : Life) (ρc cb fρ' : WRes),
+    PairNilCfg (ℍ := ℍ) c ψ r l₁ l₂ δ B ∧
+    ProbeRules pairΔ pairΓ (pairProgU cbE) (.comp (.ret B)) ∧
+    OwnPushM δ (pairCbUC x B) ρc ([], []) en β ∧ ¬ VFree x r.T ∧ PairReb r x β cb ∧
+    StratumLe c.fρ β ∧ ResU.CompS c.fρ cb fρ' ∧ TW fρ' c.ps (rsOf c.ls) ∧
+    Tagged fρ' c.ps c.ls ∧
+    (∀ β', LtLife δ pairΔ.meetOfDom β' → ¬ InScope δ β') ∧
+    ∀ (ρk : WRes) (en' : LEnt) (β' : Life) (cb' ρ : WRes),
+      OwnPushM δ (pairCbUC x B) ρk ([], []) en' β' → PairReb r x β' cb' →
+      ResU.CompS ρk cb' ρ → ¬ TabAtS [en'] [β'] ρ
+
+/-- **After (E1), the empty stack at `withload`'s callback, with the answer's instantiations**
+(decided; not a gate). At every pair configuration at the empty stack, at every own push at
+`OwnPushM` and every instantiation of the push's stack by the answer's `U` clause, the reborrow at
+the push's lifetime is either not related at the instantiated reading, or fails the instantiated
+table. -/
+def WithloadPairGapNilInstE1 : Prop :=
+  ∀ (c : Cfg) (ψ : CellU BoCa.Loc Val) (r : FrameRec) (l₁ l₂ : BoCa.Loc) (δ : LSub) (B : VTy)
+    (x : LifeVar), PairNilCfg (ℍ := ℍ) c ψ r l₁ l₂ δ B → ¬ VFree x r.T →
+    ∀ (ρk : WRes) (en : LEnt) (β : Life) (cb : WRes),
+      OwnPushM δ (pairCbC x B) ρk ([], []) en β → PairReb r x β cb →
+      ∀ (ι₂ : Inst) (ls : List SRec) (ρz ρ : WRes), InstAt [β] ι₂ →
+        vRLM (ℍ := ℍ) .binder0 none [en] (ι₂.sub (δ.extend x β)) (r.T.immReborrow (.var x))
+          (ι₂.life [β]) ls r.v cb →
+        ResU.CompS ρz cb ρ → ¬ TabAtS [en] (ι₂.life [β]) ρ
+
+/-! #### The non-unwinding constants' callback rows -/
+
+/-- **The 6.65 callback at `σ·y`, at the non-unwinding constants' shape**: `CallbackExtMutM` with
+the callback at `∀'y ⊏ c. F (Mut 'y T ⊸ B')` (`axWithbor2Ty`, `axWithbor3Ty`, with
+`B' = ['y] B`). The own push's run of `f ()` answers a `U` value; `vRLM`'s `U` clause reads it at
+the pushed stack, and at the identity instantiation its `⊸` takes the view. With (E4)'s
+`¬ VFree y T`. -/
+def CallbackExtMutMF (p : Placement) : Prop :=
+  ∀ (σ : LStack) (δ : LSub) (y : LifeVar) (c : Lifetime.Life) (T B' : VTy)
+    (αs : List Life) (ls : List SRec) (f w : Val) (ρf : WRes) (e : LEnt) (α : Life) (ρv ρ : WRes),
+    ¬ VFree y T → StackOK σ αs → OuterBelowTop αs → RecsOutside αs ls → SubOutside σ αs δ →
+    e.x = y → e.k = .mut → e.T = T → y ∉ CTy.binders (.ret (.lolli (.mut (.var y) T) B')) →
+    OwnOKI δ σ αs e α ρf → LtLife (extS δ σ αs) c α → RecsOutside (α :: αs) ls → SubFresh δ α →
+    TabAtS σ αs ρf → PlaceViewsL (extS δ σ αs) σ αs ls ρf →
+    vRLM (ℍ := ℍ) p none σ δ (VTy.all y c (.lolli (.mut (.var y) T) B')) αs ls f ρf →
+    vRLM (ℍ := ℍ) p none (e :: σ) (δ.extend y α) (.mut (.var y) T) (α :: αs) ls w ρv →
+    ResU.CompS ρf ρv ρ → TabAtS (e :: σ) (α :: αs) ρ →
+    PlaceViewsL (extS (δ.extend y α) (e :: σ) (α :: αs)) (e :: σ) (α :: αs) ls ρ →
+    cRLM (ℍ := ℍ) p (e :: σ) (δ.extend y α) (.ret B') (α :: αs) ls
+      (.app (.app (.val f) (.val .unit)) (.val w)) ρ
+
+/-- **The 6.64 callback at `σ·y`, at the non-unwinding constants' shape**: `CallbackExtImmM` with
+the callback at `∀'y ⊏ c. F (Imm 'y T ⊸ B')` (`axWithbor1Ty`; `axWithloadTy` at a `Ref` payload,
+where `Imm̲ 'y (Ref T) = Imm 'y T`). With (E4)'s `¬ VFree y T`. -/
+def CallbackExtImmMF (p : Placement) : Prop :=
+  ∀ (σ : LStack) (δ : LSub) (y : LifeVar) (c : Lifetime.Life) (T B' : VTy)
+    (αs : List Life) (ls ls' : List SRec) (f w : Val) (ρf : WRes) (e : LEnt) (u : Val) (α : Life)
+    (ρv ρ : WRes),
+    ¬ VFree y T → StackOK σ αs → OuterBelowTop αs → RecsOutside αs ls → SubOutside σ αs δ →
+    e.x = y → e.k = .imm u → e.T = T → y ∉ CTy.binders (.ret (.lolli (.imm (.var y) T) B')) →
+    OwnOKI δ σ αs e α ρf → LtLife (extS δ σ αs) c α → RecsOutside (α :: αs) ls' →
+    SubFresh δ α → TabAtS σ αs ρf → PlaceViewsL (extS δ σ αs) σ αs ls ρf →
+    Ext ls ls' ρf → KeepsT ls ls' ρf →
+    vRLM (ℍ := ℍ) p none σ δ (VTy.all y c (.lolli (.imm (.var y) T) B')) αs ls f ρf →
+    vRLM (ℍ := ℍ) p none (e :: σ) (δ.extend y α) (.imm (.var y) T) (α :: αs) ls' w ρv →
+    ResU.CompS ρf ρv ρ → TabAtS (e :: σ) (α :: αs) ρ →
+    PlaceViewsL (extS (δ.extend y α) (e :: σ) (α :: αs)) (e :: σ) (α :: αs) ls' ρ →
+    cRLM (ℍ := ℍ) p (e :: σ) (δ.extend y α) (.ret B') (α :: αs) ls'
+      (.app (.app (.val f) (.val .unit)) (.val w)) ρ
+
 end ProbeD1
 
 end
