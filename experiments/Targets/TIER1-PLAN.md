@@ -18,10 +18,12 @@
 **Every result is at Core σ=[]** (`coreW`, `B.coreB`). Tier 1 keeps T1, so no lend spans a stop.
 `W`, Law 2, the spanning rules and `J₂` belong to tier 2, which this track leaves alone.
 
-**Where it stands.** `J₁` is built (decision D5, below). `I.Tier1 J₁` follows from A's
-(E) properties, S5 and S6 at every admissible effect context, `Accepts` and `Rejects`
-(`I.tier1_J₁_of`). Piece 5 has run: D1.h4 is proved through the comodel, with global state as the
-first theory; D1.h2 is open. Piece 6 has run (the last section): B5 is proved, and with it
+**Where it stands.** `J₁` is built (decision D5, below). `I.Tier1 J₁` **fails as written**: S4's
+catch law fails at `ΞA` since the capture cell (round 3), and A's (E) properties and S5 fail as
+written at `J₁` (round 3, steps T3 and T4). `Accepts` and `Rejects` are proved (step T5), so
+`I.Tier1 J₁` follows from A's (E) properties, S4, S5 and S6 at every admissible effect context
+(`I.tier1_J₁_of_ESU`). Piece 5 has run: D1.h4 is proved through the comodel, with global state as
+the first theory; D1.h2 is open. Piece 6 has run: B5 is proved, and with it
 `B.Guarantees J₁.read B.coreB`.
 
 The six pieces below are ordered by what depends on them. Ties go to the larger unknown first.
@@ -52,7 +54,7 @@ The six pieces below are ordered by what depends on them. Ties go to the larger 
 | `B.Guarantees J₁.read B.coreB` | B1 in 2; B2, B3, B4, B4′ in 3; B5 in 6; B0, B6, B7 and the bounds are proved or follow from 2 |
 | `Bounds coreW`, `Interface coreW` | proved (`tier1Core_world`) |
 | `Pins J₁ admClosedOp .abortive` | 2 |
-| `Accepts`, `Rejects` | not in these six |
+| `Accepts`, `Rejects` | not in these six; proved in round 3, step T5 |
 
 ---
 
@@ -2107,3 +2109,119 @@ does not touch.
 - From earlier rounds: S4's restatement; `OnlyOwnerFrees`, `NoDanglingUse`; E7–E9, forcing a
   `!U C` slot, `unr` at abortive operations, `unfold`'s value; `TailLaw`, `EtaHold`; `Accepts`,
   `Rejects`; `RowVarKernel J₁`.
+
+## Round 3, step T5: `Accepts` and `Rejects` at `J₁` (decision AR)
+
+**Where tier 1 stands.** Unchanged in kind: `I.Tier1 J₁` **fails as written** through S4's catch
+law at `ΞA` (`I.not_tier1_J₁`), and its (E) and S5 hypotheses fail as written too (T3, T4). Decision
+AR is applied: **`Accepts J₁.read .abortive` and `Rejects J₁.read` are PROVED** (`I.accepts_J₁`,
+`I.rejects_J₁`), so `I.Tier1 J₁` follows from A's (E) properties, S4, S5 and S6 at every admissible
+effect context (`I.tier1_J₁_of_ESU`). Nothing in `Core/`, BoLo or SPEC changed, and no borrow
+guarantee was weakened. Every result is at Core σ=[]. On `tier1-effects`, not pushed.
+
+| step | status | commits |
+|---|---|---|
+| runs with memory, computed (base) | LANDED: `runM`, `memAt`, `memOp`, `runM_sound` (`Targets/Base/LookMem.lean`) | 1af8dc0 |
+| `Rejects` at Core's kernel | PROVED: thirteen inversions of `CDerives`; `not_der_at05`, `not_der_at06`, `not_der_at08`, `not_der_at13`, `rejects_tier1` (`Targets/I/Rejects.lean`) | 29ed0d0 |
+| `Accepts` and `Rejects` at `J₁` | PROVED: the eight runs computed (`run_*`), `compositeT1_tier1`, `I.accepts_J₁`, `I.rejects_J₁`, `I.tier1_J₁_of_ESU`; the rejections at the tied kernel too (`I.rejects_tied`) (`Targets/I/AcceptsRejects.lean`); Status, AxiomCheck, README | 3f18d49, 78fe527 |
+
+**`Accepts`** (`Accepts J₁.read .abortive` is `CompositeT1 tier1`: `J₁.read` is Core's kernel,
+`j1_read`, and at `.abortive` the tier-2 conjunct asks nothing).
+- Each of the eight programs was already typed at its data answer, safe and terminating under the
+  empty platform (`acceptedT1_*`, from B's `soundRetAt_tier1_none`). What was missing is `AcceptedAt`'s
+  last conjunct: one complete run answering the stated value.
+- **The runs are computed.** `runM` adds the four memory steps (`alloc`, `free`, `load`, `store`) to
+  `look`'s steps, at a memory kept as a list of cells, allocating one past the largest location in
+  use. The kernel evaluates each program's run to its answer at the empty list (`run_*`, by `rfl`;
+  25 to 169 steps). `runM_sound` makes each a run of Core's machine (`Steps`), and `prun_of_steps` a
+  run under the empty platform. `logOutside`, `logInBorrow`, `takeProg` and `tickAnsProg`'s answers
+  were not determined by adequacy (their flags), and are now theorems; the interpreter's `*_eval`
+  stay evidence.
+
+**`Rejects`** (no type at all: `∀ C, ¬ J₁.read.closed atXX C`).
+- **The inversions, and their cost** (CLAUDE.md: "Do not invert `CDerives` casually"). Thirteen
+  inductions on `CDerives`, about 2200 lines (`Targets/I/Rejects.lean`), 17 s to build. Fourteen of
+  Core's rules conclude with their premise's term: the value rules `!E`, `[]I`, `[]E`, the two `⊑`,
+  `roll`, `unroll`; `return`, `ofRet`, `[sub]`, `ν`'s two; at a λ-value the two thunk rules. Each
+  inversion carries a class of judgements through them: a value read at `T` is read at the views of
+  `T` and rows over them (`ValCls`); a computation type that is no row's, no `&` and no `ν` is left by
+  none (`JR.rigid`; `ν`'s rules are at `&`-trees only, `CTy.NuOk`). Views keep a type's head (boxes
+  stripped, `μ` unrolled) unless it is `!`, `Imm` or `Mut` (`VView.hnf`); persistence is the head's
+  (`Hnf.persistent`). The term shapes: a variable, a pair, `()`, an application (`⊸E`, `[app]`,
+  `[let]`, the polymorphic let, `∀E`, the projections), a λ-value (through the rule that types its
+  body, or as a λ-constant at its axiom's type), `let (x, y)`, `;`, `then`, `handle`, `alloc`, the
+  primitives. With them, every free variable of a typed term has a live slot (`fv_live`), so a
+  variable used on both sides of a split is persistent (`splitP_both`).
+- Every refutation holds at every context and judgement, not only at the empty context and a
+  computation type.
+- **AT06** (`not_der_at06`): `[handle]` types the clause tuple at `clausesTy`, so the clause at
+  `!U(A ⊗ kTy ⊸ F_Σ R)`; a λ-value at a `!` thunk is typed over a persistent context (`lam_bang`), and
+  the clause uses the cell, whose slot is a view of a `Ref`. RESTRUCTURE §3.4's reason.
+- **AT13** (`not_der_at13`): `κ` is at `kTy` at `lin`, a thunk of an `&`; `forget`'s axioms take `!`,
+  `Imm`, `Mut`, `Unk` and `ArrayImm`, and as a λ it drops a persistent argument only
+  (`not_forget_kappa`). RESTRUCTURE §3.4's reason.
+- **AT05** (`not_der_at05`): through its three bindings, each possibly the polymorphic let, `w c f`
+  is typed in a context `At05Ctx` describes (`at05_core`). As a λ, `withborU dFlag` uses its source on
+  both sides of its `then` (`wb_generic`), and the source is the cell, a `Ref`; as an unwinding
+  constant, `w c` is read only at `cb ⊸ F_Σ R` (`at05_M`), `cb = U(∀'x ⊏ @b. L ⊸ F_Σ(['x] B))` with `L`
+  a borrow, where `λm. (m, m)` uses `m` on both sides of a split (`not_at05F_cb`). RESTRUCTURE §3.4's
+  reason ("`Mut` has no copy rule"), and it holds at the `Imm` lend too: the `copy` axiom types the
+  λ-value `copy`, not a body under a borrow.
+- **AT08** (`not_der_at08`): see finding 1.
+
+**Findings.**
+1. **AT08's rejection rests on `load`, which has no rule of its own in Core's kernel**
+   (machine-checked: `der_prim`, `not_der_load`, `not_der_load_app`); reads go through `withload` and
+   `swap`. The clause applies `load` to the cell holding `κ`, so no derivation reaches it. The reason
+   RESTRUCTURE §3.4 gives for AT08 (`kTy` at `lin` and `aff` neither droppable nor persistent; an
+   `Imm` view of a thunk cannot be forced) is not what refuses the program as written, so this
+   conjunct of `Rejects` does not pin that discipline. A restatement of AT08's program, reading the
+   cell by `withload` or `swap`, is the user's.
+2. `Accepts`' runs replace the interpreter's evidence for the tier-1 composite: their answers are
+   theorems at Core's machine.
+3. `Rejects` is stated at `J₁.read`, Core's whole kernel; at an effect context our instance reads the
+   tied kernel `CDerivesAt Ξ`, whose derivations are Core's (`toCDerives`), so the rejections hold
+   there too (`I.rejects_tied`).
+4. The existing inversions are over today's kernel (`CDerivesNU`, `Instance/Inversion.lean`) and the
+   tied kernel (`CDerivesAt`, `Instance/TiedKernel.lean`); `Rejects` reads Core's `CDerives`, so the
+   inductions are rebuilt on it, reusing their helpers (`forceE_cases`, `soloP_slot`, `effOf_inj`,
+   `effOf_ne_nu`, `effOf_ne_amp`, `effOf_isRet`, `qualsVal_inj`).
+
+**Readings for the user to confirm** (pending; the user has not objected to 1–3):
+1. `J₁`'s kernel is Core's whole `CDerives` (`J₁.read`), read at an effect context as the tied
+   kernel `CDerivesAt Ξ` (decision R).
+2. Row polymorphism is the polymorphic let; the general `[handle]` is the handler value form over a
+   persistent context.
+3. D4: the no-interception condition is `FinRow FR`; a use of `κ` is a step applying `κ` to a data
+   value (`UseAt`); "observationally" is `RunsAlike` at data answers.
+4. Decision AR's "some complete run" is read on a run of Core's machine under the allocator that
+   takes one past the largest location in use, as a `PRun` under the empty platform.
+
+**Unspent hypotheses.**
+- `AcceptedT1`'s safety and termination are passed to `AcceptedAt` as they are; the computed run
+  reads neither.
+- `[handle]`'s consumed handler context (`Ctx.DeadP Γ₁`, in `der_hnd`) is read by no refutation:
+  AT06's persistence comes from the clause's `!U` type (`bangThunkV`), not from it.
+- `lam_bang`'s persistent context is read by AT06 only; `der_bind`'s `CtxLe` outputs by AT05 and AT06
+  only.
+- `tier1.closed`'s row context (`RowCtx.Models []`) is spent only to instantiate it.
+
+**Unused uniqueness/functionality results.** `det_ourInst`, `AStep1.deterministic` and `rstep_det`:
+the runs are computed, so no determinism is read. Read: `Hnf.unique` (through `Hnf.eq_self`),
+`Inst.effOf_inj`, `qualsVal_inj`.
+
+**Untranscribed in the run-up.**
+- `RejectsAT07` (AT07's stuck run; not a conjunct of `Combined`); `Tier2Programs` (no tier-2 typing
+  system).
+- AT08's program in the reading RESTRUCTURE §3.4 intends (finding 1).
+
+**Gate.** `lake build Targets` passes with AxiomCheck and Audit; every new result's axioms are within
+`[propext, Classical.choice, Quot.sound]`, with a `#print axioms` line for each. `make gate` passed once, at 3f18d49 ("ci-local --source: ALL
+PASSED"); it builds the library, which this step does not touch. `lake build Targets` passes at
+78fe527.
+
+**Remaining.**
+- The user's calls: S4's restatement; algebraicity's (or keeping continuations out of finalisers);
+  E7–E9 and option A; S5's restatement (`CancellationPfx`); AT08's program (finding 1).
+- From earlier rounds: `OnlyOwnerFrees`, `NoDanglingUse`; `CancelsStd`, `FinRowsAt`; forcing a `!U C`
+  slot, `unr` at abortive operations, `unfold`'s value; `TailLaw`, `EtaHold`; `RowVarKernel J₁`.
