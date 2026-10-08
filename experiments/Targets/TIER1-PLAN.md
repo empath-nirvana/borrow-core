@@ -18,13 +18,13 @@
 **Every result is at Core σ=[]** (`coreW`, `B.coreB`). Tier 1 keeps T1, so no lend spans a stop.
 `W`, Law 2, the spanning rules and `J₂` belong to tier 2, which this track leaves alone.
 
-**Where it stands.** `J₁` is built (decision D5, below). `I.Tier1 J₁` **fails as written**: S4's
-catch law fails at `ΞA` since the capture cell (round 3), and A's (E) properties and S5 fail as
-written at `J₁` (round 3, steps T3 and T4). `Accepts` and `Rejects` are proved (step T5), so
-`I.Tier1 J₁` follows from A's (E) properties, S4, S5 and S6 at every admissible effect context
-(`I.tier1_J₁_of_ESU`). Piece 5 has run: D1.h4 is proved through the comodel, with global state as
-the first theory; D1.h2 is open. Piece 6 has run: B5 is proved, and with it
-`B.Guarantees J₁.read B.coreB`.
+**Where it stands.** `J₁` is built (decision D5, below). `I.Tier1 J₁` **fails as written**: A's
+(E) properties and S5 fail as written at `J₁` (round 3, steps T3 and T4). S4 is restated so that a
+catch may allocate the capture cell, and is proved at `J₁` at every effect context (fix-up F1,
+below). `Accepts` and `Rejects` are proved (step T5), so `I.Tier1 J₁` follows from A's (E)
+properties, S5 and S6 at every admissible effect context (`I.tier1_J₁_of_ECU`). Piece 5 has run:
+D1.h4 is proved through the comodel, with global state as the first theory; D1.h2 is open. Piece 6
+has run: B5 is proved, and with it `B.Guarantees J₁.read B.coreB`.
 
 The six pieces below are ordered by what depends on them. Ties go to the larger unknown first.
 `I.Tier1 J₁` also needs work that is not among these pieces; it is listed at the end.
@@ -2313,3 +2313,144 @@ hand-off and use; S4's and `AlgLaw`'s restatements; `TailLaw` against the finali
 1. Resolve the T4 finding: the guard frame and `FinRowsAt noFinRaise J₁`.
 2. `OnlyOwnerFrees` and `NoDanglingUse`.
 3. The user's restatements above, then the (E) programs they unblock.
+
+## Fix-up outcome
+
+A short proof-side fix-up before tier 1 is wired into the language: the statements that predate the
+capture cell (SPEC §25) and the pieces round 3 left undelivered. Steps F1–F5; the goal is that
+`I.tier1_J₁_of_ESU`'s premises hold except where a user decision is pending (E7–E9 under option A;
+S6's `OnlyOwnerFrees` and `NoDanglingUse`, a separate unit). On `tier1-effects`, not pushed.
+
+**Where tier 1 stands (after F1).** `I.Tier1 J₁` **fails as written** through A's (E) properties
+(E7–E9 under option A; `I.not_tier1_J₁`, `status_tier1_J₁`) and through S5 as written. **S4 is
+RESTATED at the capture cell and PROVED at `J₁` at every effect context** (`I.handlerSem_J₁`), so
+`I.Tier1 J₁` follows from A's (E) properties, S5 and S6 at every admissible effect context
+(`I.tier1_J₁_of_ECU`), and `I.Tier1Core` from S5 at today's kernel (`I.tier1Core_of_S5`). No change
+to `Core/`, BoLo, the machine or the relation; every existing Core and BoLo theorem builds unchanged.
+Every result is at Core σ=[].
+
+| step | status | commits |
+|---|---|---|
+| F1: S4's catch law at the capture cell | LANDED. A carries a continuation's cell (`Cell`, `captureAt`, `cellFree`, `withCell`); the catch law hands `capture l H K` keeping the store, or `κ` at one fresh unit cell with the store gaining that cell and nothing else (`CatchLaw`, `JoinAcross`); deep resume and an affine cancel at a cell release it (`ResumeCellLaw`, `CancelCellLaw`). PROVED at our instance at every effect context (`handlerSem_ourInst`), so at `J₁` (`I.handlerSem_J₁`) and today's kernel. S4 with no cell kept (`HandlerSemNoCell`), equal to S4 at every cell-free instance (`handlerSem_iff_noCell`); teeth (`not_handlerSem_toy`); not vacuous at `J₁` (`I.catchLaw_progT_cell`, `status_cellLaws_J₁`) | af7d30d |
+
+### F1: S4 at the capture cell
+
+**The statement** (`Targets/A/Soundness.lean`, `Targets/A/System.lean`).
+- The capture cell is the one-shot continuation object of Affect §3.1 (and Hazel's): allocated at
+  the catch, released by the continuation's use. A now carries it: a type of cells (`Cell`), `κ` at
+  a cell (`captureAt k l H K ℓ`, indexed by the operation's class, whose cancel branch it is), a
+  location the store does not hold (`cellFree c ℓ`), and the store with a unit cell at `ℓ`
+  (`withCell c ℓ`). At our instance: locations, `kappaC (k = affine) ℓ`, `μ ℓ = none`, `μ.upd ℓ ()`.
+- `JoinAcross c c' t`: `c` reaches a common reduct with `t` at `c'`'s store by store-keeping steps but
+  one, a step that leaves the store of `c'`. At `c' = withCell c ℓ` that step is the allocation; at
+  `c = withCell c' ℓ` the release.
+- The catch law (`CatchLaw`): at a catch of a resuming operation the clause gets the argument and
+  either `capture l H K` with the store kept (`PureJoin`, as before), or `captureAt o.cls l H K ℓ`
+  at a location `ℓ` the store does not hold, across one step to `withCell c ℓ`
+  (`JoinAcross c (withCell c ℓ)`). Literature-simple: Affect's
+  `(handle K[do v] with h, σ) → (h (v, cont ℓ K), σ[ℓ ↦ ·])`, `ℓ` fresh.
+- **Not weakened beyond the cell.** The store change allowed is exactly one fresh unit cell, and the
+  `κ` handed at it is pinned as `capture l H K` is: deep resume at a cell (`ResumeCellLaw`) releases
+  the cell and runs `handle l H K[w]`, and an affine `κ`'s cancel at a cell (`CancelCellLaw`)
+  releases it and starts `cancelOf l H K`. Without these two the catch law would hand a `κ` no law
+  reads. A linear `κ`'s cancel has no law: its cancel branch has no step (SPEC §25), and S6 says it
+  is never cancelled. The return, abortive, deep-resume, cancel and finaliser laws are unchanged.
+- `HandlerSem` is the nine laws (`RetLaw`, `CatchLaw`, `AbortLaw`, `ResumeLaw`, `ResumeCellLaw`,
+  `CancelLaw`, `CancelCellLaw`, `ThenLaw`, `FinLaw`). **`HandlerSemNoCell`** is S4 with no cell (the
+  seven laws, the catch store-keeping, `CatchKeep`), kept as a record.
+
+**Teeth** (every instance; `Targets/A/UnaryLaws.lean`).
+- At an instance with no cells the two statements are the same (`handlerSem_iff_noCell`), so every
+  refutation of S4 with no cell at such an instance refutes S4 (`not_handlerSem_of_noCell`). The
+  statements differ only at a cell.
+- No refutation of S4 at a bad instance existed before this step; one is built: at `toy` with a
+  `handle` that ignores its clauses (no cells), the catch never meets its clause applied to the
+  argument and `κ`, so S4 with no cell fails (`not_handlerSemNoCell_toy`) and so does S4
+  (`not_handlerSem_toy`).
+
+**At our instance: PROVED at every effect context** (`Targets/Instance/HandlerCell.lean`), given
+`LiveOK`, at a row form whose names are not `0` and whose signatures are indexable by `UInt32`
+(`orowRF`'s are).
+- The earlier proof is split into one theorem per law (`Targets/Instance/Machine.lean`:
+  `retLaw_ourInst`, `catch_unr_ourInst`, `abortLaw_ourInst`, `resumeLaw_ourInst`,
+  `cancelLaw_ourInst`, `thenLaw_ourInst`, `finLaw_ourInst`), shared by S4 and by S4 with no cell
+  (`handlerSemNoCell_ourInst` under `CatchUnr`).
+- The catch law (`catchLaw_ourInst`) by the operation's qualifier: at `unr` the tag is `2`, the catch
+  hands `kappa` and keeps the store (`catch_unr_ourInst`); at `lin` or `aff` (`catch_cell_ourInst`):
+  the `[op]` step (store-keeping) hands `kappaCell`; the reached memory is finite (`finDom_reach`), so
+  some `ℓ` is free (`exists_fresh_of_live`); the allocation of `()` at `ℓ` is the one step to
+  `withCell c ℓ`; `κ`'s β-step at `ℓ` gives `kappaC (cellAff q) ℓ` (`kappaCBody_subst`), which is
+  `captureAt o.cls … ℓ` since the class of a resuming `lin`/`aff` operation is `linear`/`affine`.
+- Deep resume at a cell (`resumeCellLaw_ourInst`): `resume` binds `w`; `kappaC`'s β, case and `;`
+  reach `free ℓ` quietly (`kappaC_resume_parts`); the release gives back the memory without `ℓ`
+  (`del_upd_fresh`); quietly on to `hnd H K[w]`. Cancel at a cell (`cancelCellLaw_ourInst`): the same
+  through the cancel branch (`kappaC_cancel_parts`, new beside the resume's) to
+  `ccatch (hnd H K[raise (0, (0, (N, none)))])`. A handler of non-values gives the stuck junk `()`,
+  excluded by `LiveOK`.
+- `handlerSem_ourInst`, `handlerSem_orow`; `I.handlerSem_J₁` at `J₁` (`liveOK_J₁`, now in
+  `Targets/I/J1.lean`, one declaration); at today's kernel from `liveOK_tier1Open`
+  (`status_machShape_handlerSem_tier1Open`).
+
+**Not vacuous at `J₁`.**
+- The catch law (`I.catchLaw_progT_cell`): at the admissible `ΞA`, `progT` reaches the catch of the
+  linear `tick` (`live_progT_catch`), every premise of the law holding there; the store-keeping
+  alternative fails (`not_pureJoin_progT`, the refutation of S4 with no cell, now a lemma), and the
+  catch allocates `κ`'s cell.
+- The laws at a cell (`status_cellLaws_J₁`): E4's `deepGen` reaches its clause's `resume` of `κ` at
+  its cell with the cell held (`resumeCell_deepGen`: the catch, the allocation, the runner's `tick`,
+  the β-step); `algAffProg` reaches its finaliser's cancel of the affine `κ` at its cell
+  (`cancelCell_algAffProg`). Each is a configuration a typed program reaches at which every premise
+  of the law holds.
+
+**S4 with no cell, kept** (`not_handlerSemNoCell_J₁_ΞA`): fails at `J₁` at `ΞA`, by `progT`; holds
+where resuming operations are unrestricted (`handlerSemNoCell_orow`, `I.handlerSemNoCell_J₁`).
+
+**Tier 1 re-derived.** `I.not_tier1_J₁` is now through (E) (`Inst.not_eProps_J₁` at `ΞA`; moved to
+`Targets/I/AcceptsRejects.lean`). `I.tier1_J₁_of_ECU` discharges `hS4`; `I.tier1_J₁_of_ESU` and
+`I.tier1_J₁_of` keep their statements. SPEC §25's *Open* note on S4 updated; the register's P1 and
+P11 rows updated.
+
+**The premises of `I.tier1_J₁_of_ESU`, after F1.**
+
+| premise | status | Lean |
+|---|---|---|
+| `hE`: A's (E) properties at every admissible `Ξ` | **FAILS AS WRITTEN** (E7, E8, E9 under option A); the user's decision (E7–E9's programs or option A) | `Inst.not_eProps_J₁`, `status_eProps_J₁` |
+| `hS4`: S4 at every admissible `Ξ` | **PROVED** (at every effect context) | `I.handlerSem_J₁` |
+| `hC`: S5 at every admissible `Ξ` | **FAILS AS WRITTEN** (`fire` reads the β-step after `[finalise]`; F3's restatement); read prefix-closed, the unwind PROVED, the no-interception given `CancelsStd` (F4's guard frame for its `ccatch`/`cfin` half) | `I.not_cancellation_admissible`, `status_cancellation_J₁` |
+| `hU`: S6 at every admissible `Ξ` | OPEN: reduced to `OnlyOwnerFrees` and `NoDanglingUse` (not this unit) | `I.contUseEv_J₁_of` |
+| `Accepts`, `Rejects` | PROVED | `I.accepts_J₁`, `I.rejects_J₁` |
+
+**Readings for the user to confirm** (pending).
+1. S4's restatement at the cell: a catch may allocate exactly one fresh unit cell, and hands `κ` at
+   it; `κ` at a cell is pinned by deep resume and affine cancel at a cell, which release it. The
+   catch's first alternative (`capture l H K`, store kept) stays, for an operation whose `κ` owns no
+   cell (at our instance, an unrestricted resuming one).
+2. `κ` at a cell is indexed by the operation's class: a linear `κ`'s cancel has no law.
+3. The laws at a cell read a store that holds the cell with the unit value (`withCell c ℓ`, `ℓ` free
+   in `c`).
+
+**Unspent hypotheses.** `ResumeCellLaw`'s class `k` is read by nothing at our instance (the resume
+branch is the same at every class). `hnz` is read only by the abortive and finaliser laws, `hlen`
+only by the catch and abortive laws. `LiveOK` gives closedness (values, handler values, the junk
+cases) and `GoesOn`; the finiteness that gives a free location comes from `Live` itself (a run from
+`init`).
+
+**Unused uniqueness/functionality results.** `rstep_det`, `AStep1.deterministic`: the proofs build
+runs and read no determinism. Read: `det_ourInst` (in `not_pureJoin_progT`), `Targets.head_alloc_inv`
+(in `no_pureStep_alloc`).
+
+**Untranscribed in the run-up.** A-level laws on `withCell`/`cellFree` (that `withCell` keeps the
+term and commutes with `setT`): not stated; the laws read `withCell` only through `setT` and `term`,
+and the instance's are by `rfl` (good faith). A refutation of S4 at a bad instance with cells (a
+catch allocating two cells, or handing a `κ` its resume does not release): not built.
+
+**Gate.** `lake build Targets` passes with AxiomCheck (`#print axioms` of each new result, every set
+within `[propext, Classical.choice, Quot.sound]`) and Audit. `make gate` is the separate stage's.
+
+**Remaining** (F2–F5, then the user's calls).
+- F2: algebraicity observing a finaliser's start, not its code; F3: S5 read prefix-closed, the trace's
+  fire step with its β-step; F4: the guard frame, `FinRowsAt`, `CancelsStd`'s `ccatch`/`cfin` half;
+  F5: AT08 rejected by the continuation rule.
+- The user's: E7–E9 against option A; S6's `OnlyOwnerFrees` and `NoDanglingUse`; the earlier rounds'
+  open items (forcing a `!U C` slot, `unr` at abortive operations, `unfold`'s value, `TailLaw`,
+  `EtaHold`, `RowVarKernel J₁`).
