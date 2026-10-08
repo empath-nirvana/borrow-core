@@ -2321,7 +2321,7 @@ capture cell (SPEC §25) and the pieces round 3 left undelivered. Steps F1–F5;
 `I.tier1_J₁_of_ESU`'s premises hold except where a user decision is pending (E7–E9 under option A;
 S6's `OnlyOwnerFrees` and `NoDanglingUse`, a separate unit). On `tier1-effects`, not pushed.
 
-**Where tier 1 stands (after F1).** `I.Tier1 J₁` **fails as written** through A's (E) properties
+**Where tier 1 stands (after F2).** `I.Tier1 J₁` **fails as written** through A's (E) properties
 (E7–E9 under option A; `I.not_tier1_J₁`, `status_tier1_J₁`) and through S5 as written. **S4 is
 RESTATED at the capture cell and PROVED at `J₁` at every effect context** (`I.handlerSem_J₁`), so
 `I.Tier1 J₁` follows from A's (E) properties, S5 and S6 at every admissible effect context
@@ -2332,6 +2332,7 @@ Every result is at Core σ=[].
 | step | status | commits |
 |---|---|---|
 | F1: S4's catch law at the capture cell | LANDED. A carries a continuation's cell (`Cell`, `captureAt`, `cellFree`, `withCell`); the catch law hands `capture l H K` keeping the store, or `κ` at one fresh unit cell with the store gaining that cell and nothing else (`CatchLaw`, `JoinAcross`); deep resume and an affine cancel at a cell release it (`ResumeCellLaw`, `CancelCellLaw`). PROVED at our instance at every effect context (`handlerSem_ourInst`), so at `J₁` (`I.handlerSem_J₁`) and today's kernel. S4 with no cell kept (`HandlerSemNoCell`), equal to S4 at every cell-free instance (`handlerSem_iff_noCell`); teeth (`not_handlerSem_toy`); not vacuous at `J₁` (`I.catchLaw_progT_cell`, `status_cellLaws_J₁`) | af7d30d |
+| F2: algebraicity, a finaliser's start observed but not its code | LANDED, given `CfinQuiet`. `AlgLaw` compares the two sides with each `fire D` read as `fire ()` (`Ev.start`, `RunsAlikeStart`); `AlgLawCode` (the code observed) kept, implies it, refuted at `J₁` and `ΞA` (`not_algLawCode_J₁`, `not_algLawCode_ΞA`). PROVED at `J₁` at every effect context given `CfinQuiet` (no configuration a typed program reaches is at a `[cfin-raise]` step; option A; F4's `guard` frame is its route): the two sides run step for step alike (`Instance/AlgSim.lean`, `algLaw_of_good`; `I.algLaw_J₁_of`). At `algAffProg`'s configuration the restated law holds (`algLaw_algAffProg`) | 2caf85a |
 
 ### F1: S4 at the capture cell
 
@@ -2454,3 +2455,109 @@ within `[propext, Classical.choice, Quot.sound]`) and Audit. `make gate` is the 
 - The user's: E7–E9 against option A; S6's `OnlyOwnerFrees` and `NoDanglingUse`; the earlier rounds'
   open items (forcing a `!U C` slot, `unr` at abortive operations, `unfold`'s value, `TailLaw`,
   `EtaHold`, `RowVarKernel J₁`).
+
+### F2: algebraicity, a finaliser's start observed but not its code
+
+**The statement** (`Targets/A/UnaryLaws.lean`).
+- `Ev.start` reads a finaliser's start `fire D` as `fire ()` and every other event as it is; two
+  events read alike exactly when they are equal or both a finaliser's start
+  (`Ev.start_eq_start_iff`), and they are observable alike (`Ev.obs_of_start_eq`).
+- `RunsAlikeStart t₁ t₂` is `RunsAlike` with each trace read through `Ev.start` (`ObsStartFrom`,
+  `obsStartFrom_iff`: a complete run's answer and its trace mapped by `Ev.start`). `AlgLaw` reads it:
+  `(op v to x. M) to y. N` runs as `op v to x. (M to y. N)`, a finaliser's start observed, not its
+  code. D4's reading applied to the trace's events: the two sides capture different continuations,
+  and a finaliser that holds its side's `κ` is a different term on each side, though it starts at
+  the same point of each run.
+- **Kept as a record**: `AlgLawCode`, the statement before (traces compared event by event, `fire D`
+  by `D`). It implies `AlgLaw` (`algLaw_of_algLawCode`, through `runsAlikeStart_of_runsAlike`); its
+  refutations stay (`not_algLawCode_J₁`, `not_algLawCode_ΞA`, formerly `not_algLaw_J₁`,
+  `not_algLaw_ΞA`; `not_algLawCode_toy`).
+- **Teeth**: `AlgLaw` fails where `bind` does not associate with `perform` (`not_algLaw_toy`); `toy`
+  shows no event, so a finaliser's code plays no part.
+- The alternative repair, keeping continuations out of finalisers, is a surface rule; not applied.
+
+**At `J₁`: PROVED at every effect context, given `CfinQuiet`** (`I.algLaw_J₁_of`,
+`status_algLaw_J₁`).
+- **The relation** (`Targets/Instance/AlgSim.lean`). `AlgRel M N` relates terms equal constructor by
+  constructor except where the left holds `(x to x. M) to y. N` and the right `y to x. (M to y. N)`,
+  at related `x` and `y`; `AlgRelK` relates contexts (the left's frames `□ to x. M`, `□ to y. N`
+  against the right's `□ to x. (M to y. N)`), `AlgRelH` memories. Kept by shifting and substitution
+  when `M` and `N` are closed under their binders (`AlgRel.shift`, `AlgRel.subst`); the machine reads
+  related terms alike — a frame's handler name and what it stops, a clause, a tag, a literal, an
+  allocation (`AlgRelK.hasHnd`, `AlgRelK.catches`, `AlgRelK.hndNames`, `clauseAt_rel`, `capTag_eq`,
+  `AlgRel.host_call_eq`, `AlgRel.allocs_eq`) — and on terms with no λ it is equality
+  (`AlgRel.eq_of_lamFree`). The continuation a catch hands each side (`kappaAt_rel`), and everything
+  a clause builds from it, is related.
+- **A head step** (`AlgRel.head`): every rule of Core's machine steps alike at a related redex and
+  memory, an allocation at the same location. Its label agrees read without a finaliser's code
+  (`labelOf_start`), a cancel-mode finaliser's error agreeing when it holds no λ.
+- **A machine step** (`ostep_sim`, through `AlgRel.plug_inv`): the left's step is the right's by the
+  same rule at the related redex, but at the left's inner `x to x. M` at a value, where the left's
+  β-step and the right's β-step at `y to x. (M to y. N)` both reach `M[x] to y. N` (`algR_beta`).
+- **Runs**: forward (`rstep_fwd`, `rpath_fwd`; the runner answers alike at an argument with no λ),
+  and back (`rstep_bwd`, `rpath_bwd`: the left goes on by `LiveOK`; its step is the right's by Core's
+  unique decomposition and determinism, `plug_decomp` and `head_det`; an allocation is re-taken at
+  the right's location, `AlgRel.head_back_alloc`). Complete runs end at related values, equal when
+  the left's answer is data (`obsStartFrom_iff_rel`).
+- **What a typed program's runs give** (`AlgGood`; `Targets/I/AlgJ1.lean`): closed and going on
+  (`LiveOK`); answering data (`lamFree_answer_of_coreClosed`: the run under the runner's platform
+  continues to an end or a stop, a value takes no step); asking the runner at data
+  (`lamFree_io_of_coreClosed`: every run of a program in Core's relation keeps the protocol of the
+  platform restricted to data arguments, `platData_of_start`, after B5's `platData_of_safe`; the
+  operation is the platform's, since a stop it does not answer would be a stop of the row the runner
+  answers); a cancel-mode finaliser's raise keeping an error with no λ, read from `CfinQuiet`.
+- `algLaw_of_good`: algebraicity at every typing system whose typed programs' runs are `AlgGood`.
+
+**The added hypothesis, `CfinQuiet`**: no configuration a typed program reaches is at a
+`[cfin-raise]` step.
+- Source: option A (SPEC §19, decision D3): `[then]` types a finaliser at `F 1`, so it handles its
+  raises itself.
+- Scope: the configurations the law reads (`Live`). It is read only where a cancel-mode finaliser
+  raises past its `cfin` frame: there the kept error is an event's value (`finEnd (some …)`), which
+  could hold the side's `κ`.
+- **Not proved here, and its non-vacuity at `J₁` is not shown.** Core's relation gives it inside
+  `[then]`'s compatibility (`ewp_cfin` at an abort-only table with no entry); no lemma carries that
+  to the configurations of a run (`wpG_seg` sees a run's segments whole). F4's `guard` frame makes it
+  a run invariant: every `cfin` frame then holds `guard e` or a value, so no `[cfin-raise]` redex
+  arises. F4 must then extend `AlgRel.head` with `guard`'s rule and the changed `[finalise]` results.
+
+**The witness, on the right side** (`algLaw_algAffProg`, `algAffProg_start`; `status_unaryLaws`).
+At the configuration `algAffProg` reaches with the law's left side under its two handlers (typed at
+`F 1` with its rows tied, reached under every runner), each side's complete runs answer `()` and show
+one finaliser's start at whatever cell `κ`'s allocation picks (`obsFrom_algAffL`, `obsFrom_algAffR`,
+from `obsFrom_algSide`). Read without the code the two coincide; read with it they differ
+(`finE_D2_ne`, `not_algLawCode_J₁`).
+
+**The premises of `I.tier1_J₁_of_ESU`**: unchanged by F2 (algebraicity is beside done; F1's table
+stands).
+
+**Readings for the user to confirm** (pending).
+1. Algebraicity observes a finaliser's start, not its code (`Ev.start`): D4 read at the trace's
+   events. Keeping continuations out of finalisers, the alternative, is not applied.
+2. A cancel-mode finaliser's end keeps its error as observed (`finEnd r` is not read through
+   `Ev.start`); at option A no typed run reaches one with an error (`CfinQuiet`).
+3. `TailLaw` and `EtaHold` still compare `fire D` by `D` (`RunsAlike`); whether they read the same
+   observation is the user's.
+
+**Unspent hypotheses.** `AlgLaw`'s grading (`(S.sig l)[i]? = some o`, `o.cls ≠ .abortive`) is read
+by nothing at our instance: the two sides run alike at every operation. `der`'s typing is read only
+through `LiveOK`, the data answer and the platform's protocol. `AdmEff` is read by nothing (every
+effect context).
+
+**Unused uniqueness/functionality results.** `rstep_det`, `det_ourInst`, `AStep1.deterministic`:
+the converse reads Core's `plug_decomp` and `head_det` directly.
+
+**Untranscribed in the run-up.** `CfinQuiet` at `J₁` (F4's `guard` frame); `TailLaw` and `EtaHold`
+against the start observation.
+
+**Gate.** `lake build Targets` passes with AxiomCheck (`#print axioms` of each new result, every set
+within `[propext, Classical.choice, Quot.sound]`) and Audit. Nothing in `Core/`, BoLo, the machine or
+the relation changed. `make gate` is the separate stage's.
+
+**Remaining** (F3–F5, then the user's calls).
+- F3: S5 read prefix-closed, the trace's fire step with its β-step; F4: the guard frame,
+  `FinRowsAt`, `CancelsStd`'s `ccatch`/`cfin` half, and with it `CfinQuiet` at `J₁` (and
+  `AlgRel.head`'s `guard` case); F5: AT08 rejected by the continuation rule.
+- The user's: E7–E9 against option A; S6's `OnlyOwnerFrees` and `NoDanglingUse`; the readings above;
+  the earlier rounds' open items (forcing a `!U C` slot, `unr` at abortive operations, `unfold`'s
+  value, `TailLaw`, `EtaHold`, `RowVarKernel J₁`).
