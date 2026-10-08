@@ -1502,3 +1502,109 @@ and `run_sim` (which do not build) were read as a guide; their renaming is rebui
 **Next.** What `I.Tier1 J₁` still needs, unchanged by this piece: A's (E) properties at `J₁`, S5's
 bridges at `noFinRaise`, S6, `Accepts` and `Rejects`.
 
+
+---
+
+## Round 2 outcome
+
+**Where tier 1 stands.** `I.Tier1 J₁` is not proved. It follows from five open conditions
+(`I.tier1_J₁_of`): A's (E) properties at `J₁`, S5's bridges at `noFinRaise`, S6, `Accepts` and
+`Rejects`. Round 2 applied the user's decisions of 2026-10-07 (D1–D6) and ran pieces 5 and 6.
+**`B.Guarantees J₁.read B.coreB` is proved** (`I.guarantees_J₁`), as are S0–S4 and `LiveOK` at
+every effect context. Every result is at Core σ=[]. No BoLo definition changed and no borrow
+guarantee was weakened: `fundamentalC`, `adequacyC` and `adequacyD` keep their statements with the
+new rules' cases. HEAD is `31bc8f3`, on `tier1-effects`, not pushed.
+
+| step | status | verifier | commits |
+|---|---|---|---|
+| R1: D1–D4, D6 | LANDED. S1 (`rowNU_of_wf`, `rowAlgebra_ourInst_tier1Open`), S2, S3, `LiveOK` (`Inst.safety_ourInst_tier1Open`, `Inst.effSafe_ourInst_tier1Open`, `Inst.liveOK_tier1Open`), S0, S4, B2 at BoLo (`adequate_core`), B3/B4 (`sound_tier1NU`), `EffSafeDrive` (`effSafeDrive_tier1NU`); each new hypothesis shown needed (`safety_needs_tie`, `liveOK_needs_tie`, `adequateDrive_needs_nuOk`, `effSafeDrive_needs_nuOk`, `noIntercept_needs_finRow`, `subClosed_needs_wf`); the invalid S1 refutation removed; encoding defect (`i` and `i + 2³²` one operation) repaired by `opJunk` | pass | 134d83d |
+| R2: D5, `J₁` by Core rules | LANDED, PARTIAL. SPEC §24: `CDerives.letPoly`, `CDerives.effHandleV`, `effThen` at `F 1`, with `fundamentalC` cases `letPoly_compatC`, `handleV_compatC`, `thenA_compatC`; `J₁` built (`j1_read`, `fl_core_J₁`, `rowAlgebra_ourInst_J₁`, `sPropsNoCancel_J₁`); `I.Tier1 J₁` reduced (`tier1_J₁_of`). S6 route 8.4 probed and stopped (`not_ghostCoupling`) | pass | d365b49, 828da25, 4ba8385, d5d2254 |
+| R3: piece 5, h2/h4 and the unary laws | PARTIAL. h4 through the comodel (`ansCorrect_of_comodel`), global state (`state_isComodel`, `I.state_correct_J₁`, non-vacuity `not_ansCorrect_badState`), `TailLaw` and `AlgLaw` at the answering class (`tailLaw_quiet`, `algLaw_quiet`). `AlgLaw` fails at `J₁` as defined (`not_algLaw_J₁`; see the finding). `TailLaw`, `EtaHold`, `I4Typing`, `I4Runs` (stated) open | **fail: one major finding (open, below)** | 6e38745, 3d861cb, bdbea9d |
+| R4: piece 6, `BumpSim` (OQ-43) | LANDED. `bumpSimAt` at the configurations a bump run reaches; B5 from B4′ at every typing system and world (`releasedOnceReuse_of_soundContracts`); `I.guarantees_J₁`; `tier1_J₁_of` and `tier1Core_of` no longer take `BumpSim`. `BumpSim` over every related configuration not proved and no longer used | pass | 3870da8, 31bc8f3 |
+
+**Kernel changes** (effect side only; SPEC §24, Entry 23):
+- **Polymorphic let** (`CDerives.letPoly`, `Core/PolyLet.lean`): binds a closed λ-value and
+  substitutes it, so one function is used at several rows. Row polymorphism is this let, not a `∀`
+  over rows in Core's types (reading 2 below).
+- **`[handle]` at a value form** (`CDerives.effHandleV`, `Core/EffRules.lean`): the handler is a
+  value form over the persistent part of the context. The old two-variable rule is now the theorem
+  `CDerives.effHandle`, with its statement unchanged.
+- **`[then]` at option A** (D3's kernel half): `effThen` types its finaliser at `F 1`, so a
+  finaliser's raises are handled locally. Check 2's four derivations, whose finalisers let a raise
+  escape, were removed.
+
+The machine, the relation and the borrow rules are unchanged.
+
+> **OPEN VERIFIER FINDING (major), R3.** `not_algLaw_J₁` and `not_algLaw_ΞA` hold of `J₁` as
+> defined, but the witness `algFireProg` types its inner handler of operation 5 at
+> `R5 = Row.ofEff 5 Eu 0 ++ Sx` with `Eu = [(.unr, unit, unit)]`, while `ΞA` declares 5 `lin`.
+> So `R5` is not tied to `ΞA` (`¬ RowAt ΞA R5`; not yet a Lean fact). The failure rests on `J₁`'s
+> inner judgements being untied to `Ξ` (R2's reading 1) and on an `unr` continuation held by a
+> finaliser. Under D1 and D6 the witness probably does not type. Status.lean (the piece-5 bullet,
+> the AlgLaw/TailLaw/EtaHold row, `status_unaryLaws`) and the piece-5 section above present it as a
+> failure at an admissible context. Not yet done: state that dependence in those places, prove
+> `¬ RowAt ΞA R5`, list tying `J₁`'s inner rows to `Ξ` as the D1-consistent repair next to the two
+> offered (observe a finaliser's start without its code; restrict `unr`), and keep `AlgLaw` at the
+> tied, unr-free class OPEN. Until then, do not cite `not_algLaw_J₁` as a failure at an admissible
+> context.
+
+**Gate.** `make gate` at `31bc8f3` passed ("ci-local: ALL PASSED"): build, compile scaling,
+hygiene and axioms, axiom report, corpus parse and check (22 pending programs failing as
+recorded), sugar pairs, typed IR, book doc-tests (82 passed, 1 ignored, 0 failed) and book build.
+The source stage ran only on goldens not yet verified (`make gate-full` not run). Lean's
+unused-tactic linter flags `skip` at `Core/Steps.lean:627` and `:644`. Outside the gate, 19
+experiment libraries outside the default targets fail to build, none from these commits; two
+touch them: Grades lacks the `letPoly` and `effHandleV` cases (it already lacked `countFold`,
+`countTry` and `effThen`), and LoopBorrow's `decide +kernel` gets stuck evaluating the checker.
+
+**Readings for the user to confirm.**
+1. D4's no-interception condition is `FinRow FR` on every finaliser a cancel or unwind fires.
+2. D4's "use" of `κ` is a step applying `κ` to a data value (`UseAt`).
+3. D4's "observationally": `RunsAlike` at data answers; `EffSafeDrive` at a finished drive
+   (`DoneDrive`).
+4. D2 is carried as positivity (`CTy.NuOk`); distinct keys imply it at a platform answering the row.
+5. `J₁`'s kernel is Core's whole `CDerives`, with its inner judgements not tied to `Ξ` (bears on the
+   R3 finding).
+6. Row polymorphism is the polymorphic let; "general `[handle]`" is a value-form handler over a
+   persistent context.
+7. `AnsCorrect` binds the continuation outermost; `IsComodel` is read through the co-operations'
+   own runs; `Theory` is `Lab → List Eqn`; `I4Runs` compares reached values at a data answer.
+
+**Decisions for the user.**
+- `AlgLaw`: tie `J₁`'s inner rows to `Ξ` (pending the R3 finding), observe a finaliser's start
+  without its code, or restrict `unr` (decision 63).
+- S6: route 8.4 needs a BoLo change (a resource kind not lowered to the heap, or `wpTS` checking
+  run-end conditions), which the user's rule excludes. Route 8.2 (`CfgTyped`) is the remaining
+  kernel-free route; 8.3 is AGREE Q9.
+- Whether `I4Typing` takes `I4a`'s premise on `s₀`.
+
+**Remaining.**
+- A's (E) properties at `J₁`: the runs and the eight schema lemmas. The callbacks `λ_. M` need
+  weakening by an unused live slot or a λ with a dead binder at an effectful type; neither is
+  derived, and no obstruction is verified.
+- S5 at `noFinRaise`: `noIntercept_of_core`, `unwindOrder_of_core`, and `FinRowsAt`.
+- S6 (above). `Accepts`, `Rejects` (needs inversions over `CDerives`).
+- `TailLaw`, `EtaHold` (inversions), `I4Typing` at `J₁`, `I4Runs` (a two-context simulation),
+  `ctlForm_fold`.
+- `RowVarKernel J₁`, `FLOpen` at polymorphic slots, `EffSafeDriveOfFL` at a generic world.
+
+**Unspent hypotheses.** `AdmEff` is used by no proved S property beyond S1's `Ξ.NU`; `letPoly`'s
+`hV` is read only by `okE_of_derives`; `BumpSimAt`'s `BlocksAffine` is never read; of
+`P.Respects`, `nz`, `lin` and `data` are only passed on; B4′'s `Terminates` is not read; the typing
+premises of `AnsCorrect` and `IsComodel` give only closedness.
+
+**Unused uniqueness/functionality results.** `det_ourInst` (in R2's probe, R3 and R4) and
+`AStep1.deterministic`.
+
+**Untranscribed in the run-up.** The schema lemmas and the (E) runs; `RowVarKernel J₁`;
+`noIntercept_of_core`, `unwindOrder_of_core`, `cancellation_of_core`; `CfgTyped`; the composite
+programs' derivations; the `CDerives` inversions `Rejects`, `TailLaw`, `EtaHold` and `I4Typing`
+need; the row strengthening for `n`-free subterms; `I4Runs`'s simulation and the borrow form's run
+facts (`op_tail`, `op_answer`, `handle_fold`, `clauseRun`, `seqCalls`); `ctlForm_fold`.
+
+**Next.**
+1. Resolve the R3 finding (`¬ RowAt ΞA R5`; correct Status and the piece-5 section).
+2. A's (E) properties at `J₁`.
+3. S5's bridges at `noFinRaise`.
+4. `Accepts` and `Rejects`.
+5. The user's call on S6 and `AlgLaw`.
