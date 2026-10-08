@@ -29,7 +29,8 @@ introductions retried at it.
 * **The revised own lend, futures and lends.** `OwnOKI` and `FutOKI`: the lent and the inserted
   places hold no cell of the resource at any depth. `OwnPushI`: at a callback-shaped type the own
   lend is the view's lend (`ViewAt`). `LendMutI`, `LendImmI`, `ArisesI`: a lend fresh below the
-  records (`LendFresh`). They replace W₀'s when the revision lands.
+  records (`LendFresh`) and below `⊤` ([TR] 6.64's and 6.65's H4). They replace W₀'s when the
+  revision lands.
 * **The instantiation.** `Inst` is the identity or a re-stratification `Restrat.Emb c` at the
   stack's cut `cutOf αs`. It moves the lifetimes below the cut, strictly monotonically and
   downward, and fixes every one at or above it. It acts on the index: the reading substitution
@@ -564,13 +565,16 @@ def SharedReadFixed : Prop :=
 /-! ### The revised arising set: lends fresh below the records -/
 
 /-- **A 6.65 lend opened, fresh below the records**: `LendMut`, its lifetime below every record's
-frame lifetime and reading. -/
+frame lifetime and reading, and below `⊤`. [TR] 6.65's proof: "Let α be some lifetime where
+α ⊏ γ ⊓ β (H4)", strictly below a lifetime. A configuration carries no reading of the bound, so the
+last field is that consequence alone. -/
 def LendMutI (c c' : Cfg) (e : LEnt) : Prop :=
-  LendMut c c' e ∧ ∀ α ∈ c'.αs.head?, LendFresh c.ls α
+  LendMut c c' e ∧ (∀ α ∈ c'.αs.head?, LendFresh c.ls α) ∧ ∀ α ∈ c'.αs.head?, α < ⊤
 
-/-- **A 6.64 lend opened, fresh below the records.** -/
+/-- **A 6.64 lend opened, fresh below the records**, and below `⊤`. [TR] 6.64's proof: "Let α be
+some lifetime where α ⊏ β (H4)". -/
 def LendImmI (c c' : Cfg) (e : LEnt) : Prop :=
-  LendImm c c' e ∧ ∀ α ∈ c'.αs.head?, LendFresh c.ls α
+  LendImm c c' e ∧ (∀ α ∈ c'.αs.head?, LendFresh c.ls α) ∧ ∀ α ∈ c'.αs.head?, α < ⊤
 
 mutual
 /-- **The configurations that arise at W, revised**: `Arises` with its lends at `LendMutI` and

@@ -34,3 +34,6 @@ import ProbeD1.GapCover
 import ProbeD1.GapRows
 import ProbeD1.GapPos
 import ProbeD1.GapRoom
+import ProbeD1.R1
+import ProbeD1.R1Thaw
+import ProbeD1.R1Mono
