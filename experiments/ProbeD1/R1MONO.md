@@ -1498,7 +1498,7 @@ stack until a stack entry lends a range (§1.2, §3.2).
 | `ProbeD1/Binder.lean` | `LendMutI`, `LendImmI` with H4's consequence (§3.1; definitions only, this revision) |
 | `ProbeD1/R1Thaw.lean` | §1: `RelMAgreesJ`, the equations, `VRLMMonoAt`, `VRLMRoll`, `relendJ_sepRange`, `RelendMValueE`, the corollaries, the rows, `Statement0UFullM .binder0`; optional `MuAdjNotVRLM`, `VRLMUnroll` |
 | `ProbeD1/R1Mono.lean` | §2: `GdIndex`, `GdRelated`, `gdG` at the pushed stack, `GdNotPushed`, `NotMonoOwnGM0`, `GdNotCore`, `GdNotRecsInsideOwn`, `GdIdxNotArisesOf`, the instance lemmas (with `FutPartI`), `¬ MonoGM`, `¬ MonoVM`; the consumer and the test at `gd`: `AllIRowMOfMonoOwnGM`, `GdMDerivable`, `GdAllIHoldsAtM`, `GdRowRefutation`; the restricted route: `GdCtxNotCore`, `GdRestrictedMet`, `AllIRowMCOfMonoOwnGMC`, `MonoOwnGMC .binder0` (attempted, its stopping step reported); `EnvExtNone`, `EnvPushNone`, `MonoExtME`, `MonoOwnUFreeME`, `MonoExtMOfE`, `MonoOwnGUFreeMOfE`; optional `GdNotCbpv`, `GdReached` |
-| `ProbeD1/R1Owed.lean` | §3: `OuterBelowTopPush`, `OuterBelowTopFresh`, `OuterBelowTopArises`; `LeafPos`'s lemmas, `PayLeavesOfPayExt`, `RetainedPayViewRow`, `RetainedPayInstRow`, the transports, `SliceGuardFails`, `RetainedPaySliceRow`, `ReadOutAtInternalPayload`, `LeafPosTyEq`, `PayExtOfTyEq`, `PayLeavesOfTyEq`, `RetainedPayLoadMutBound`, `RetainedPayLoadImmRow`, `RetainedPayLoadMutRow` (attempted, expected to stop at `EntryPayLeaves` at a bound view), `RetainedPayLoadMutRowMet`, `RetainedPayLoadImmRowMet`; if the stop is reached, `ThawLeafP` and `VwPayLeaves` (attempted, outcomes reported); `ExtInstT`, `LineageUnique`, `TagFixed`, `KeepsTOfTagged`, `ResumeKeepsT`, `RelAboveOfTagged`, `ExtKeepsTInst`, `ShareKeepsT`, `RelFramesNotEnded`, `ShareKeepsTMet`; optional `NotViewSlotInst` |
+| `ProbeD1/R1Owed.lean` | §3 (the build adds `LoadGuardFails`, `LoadGuardFails2`, `loadGuardFails`, `loadGuardFails2`, `rebGuardFails`): `OuterBelowTopPush`, `OuterBelowTopFresh`, `OuterBelowTopArises`; `LeafPos`'s lemmas, `PayLeavesOfPayExt`, `RetainedPayViewRow`, `RetainedPayInstRow`, the transports, `SliceGuardFails`, `RetainedPaySliceRow`, `ReadOutAtInternalPayload`, `LeafPosTyEq`, `PayExtOfTyEq`, `PayLeavesOfTyEq`, `RetainedPayLoadMutBound`, `RetainedPayLoadImmRow`, `RetainedPayLoadMutRow` (attempted, expected to stop at `EntryPayLeaves` at a bound view), `RetainedPayLoadMutRowMet`, `RetainedPayLoadImmRowMet`; if the stop is reached, `ThawLeafP` and `VwPayLeaves` (attempted, outcomes reported); `ExtInstT`, `LineageUnique`, `TagFixed`, `KeepsTOfTagged`, `ResumeKeepsT`, `RelAboveOfTagged`, `ExtKeepsTInst`, `ShareKeepsT`, `RelFramesNotEnded`, `ShareKeepsTMet`; optional `NotViewSlotInst` |
 | `ProbeD1/R1Stmt0.lean` | §4: `EnvCoreNone`, `VRLMDataE`, `VRLMDataOfE`, `NilSoundRetM`, `FutPartI`, `ForceRowM`, `CallbackExtMutM`, `CallbackExtImmM`, `Statement0MBesideMono0`, `MonoUnrestrictedRefuted0` |
 | `ProbeD1/R1AllI.lean` | §2.6, added by the build: the `∀I` row at one context from three transports of it (`allIRowMNKAt0_of`), the transports at contexts reaching no `U` and the row there (`allIRowMNKUFree0`, `allIRowMNKNil0`), `cRLM_step`, `not_subOutsideExtendAny`; the test at `gd` at a derivable body (`gdMtDerivable`, `gdAllIHoldsAtMt`) |
 
@@ -1789,6 +1789,9 @@ obligation at a narrower scope:
   `gd`'s among them.
 - `RetainedPayLoadMutRowNJ` (`R1Owed.lean`): `RetainedPayLoadMutRow` at a payload type with no join
   (`NoJoinV`).
+- `LoadGuardFails` and `LoadGuardFails2` (`R1Owed.lean`): a cell exactly at the own lend's lifetime,
+  at a place the pushed stack does not lend, fails the table there; two such cells, at distinct
+  places the old stack does not lend, fail it at every pushed stack.
 - `MonoOwnGMAt`, `CtxExtendMAt`, `CtxShadowMAt`, `SemSMNK` and `AllIRowMNKAt` (`R1AllI.lean`): the
   `∀I` row's needs at one context, and the row at the indices whose stack does not name the binder.
 - `gdMt` (`R1AllI.lean`): a derivable body for the test at `gd`, used in place of `gdM`. It binds
@@ -1925,8 +1928,26 @@ obligation at a narrower scope:
     (`InternalLeafArises`) was not attempted.
   - The variant leaf: `ThawLeafP` is proved (the thaw re-establishes it at a bound place).
     `VwPayLeaves` was not attempted. The variant is stated, not adopted.
-  - Not attempted: `RetainedPayLoadImmRow` (`withload`, `foldImm`), `RetainedPayLoadMutRowMet` and
-    `RetainedPayLoadImmRowMet`.
+  - **`withload`'s read-out: the guard excludes a reborrowed cell at a place no entry lends.**
+    - `reb_α` makes each `own` or `mut` cell it carries an `imm` cell exactly at `α`, the own
+      lend's lifetime (`ResU.RebAt`).
+    - At a place the pushed stack does not lend, the table's second conjunct puts every borrow cell
+      strictly above the outermost lend, which is at or above `α`. So the table fails there
+      (`LoadGuardFails`, `loadGuardFails`; through `reb`, `rebGuardFails`).
+    - The own lend's entry lends one place. So two such cells, at distinct places the old stack
+      does not lend, fail the guard at every pushed stack (`LoadGuardFails2`, `loadGuardFails2`),
+      as two slice elements do (`sliceGuardFails`).
+    - Where such a resource is `ρb`, `RetainedPayLoadImmRow`'s hypothesis
+      `TabAtS (en :: σ) (α :: αs) ρb` fails, and the row is vacuous there.
+    - [unchecked] An argument related at the reborrowed type of a payload with two `Mut` or `Ref`
+      leaves side by side (`Ref 1 ⊗ Ref 1`, a family of references) holds two such cells at the
+      top, one per leaf. The callback's guard reads them with the closure's resource. So the
+      callback's clause says nothing about such an argument, and `withload` at such a payload is
+      not covered at W, as the slice rows are not.
+    - The missing object is an entry lending the reborrowed payload's places, or a table that
+      admits the cells the innermost lend's reborrow makes. Neither is built.
+  - Not attempted: `RetainedPayLoadImmRow` at the payloads the guard admits,
+    `RetainedPayLoadMutRowMet` and `RetainedPayLoadImmRowMet`.
   - The slice rows: `SliceGuardFails` is proved. `RetainedPaySliceRow` is proved but vacuous, and
     is not counted.
 - **`KeepsT` at the share: reduced.**
@@ -1967,9 +1988,12 @@ obligation at a narrower scope:
     `CtxExtendMAt`, `CtxShadowMAt`). `MonoOwnGM` is refuted there at `gd` when unrestricted, and
     the restricted step was not attempted in Lean;
   - at an index whose stack's innermost entry is named by the binder.
+- **`withload` at a payload with two `Mut` or `Ref` leaves side by side**: outside the guard at the
+  pushed stack (`loadGuardFails2`; the step from the payload to the two cells is [unchecked]). The
+  missing object is named in §8.1.
 - **`RetainedPay`.**
   - `EntryPayLeaves` at a bound `Mut` view.
-  - `RetainedPayLoadImmRow`.
+  - `RetainedPayLoadImmRow` at the payloads the guard admits.
   - A join.
   - The slice rows' missing range-lending entry.
   - The `Met` witnesses.
@@ -2017,6 +2041,10 @@ obligation at a narrower scope:
   arise. That refutes a lemma for the row, not the row: at `gd` the row's conclusion holds at a
   derivable body that exercises the closure (`gdAllIHoldsAtMt`). The row's remaining cases are not
   derived.
+- **The guard leaves out a second borrow constant.** Beside the slice rows at two or more elements,
+  `withload` at a payload whose reborrow puts two cells at the own lend's lifetime at distinct
+  places no entry lends meets the guard at no pushed stack (`loadGuardFails2`). The guard and the
+  stack are ours. What they lack is named in §8.1 and not built.
 - **OQ-8 is not decided.** No refutation passed DESIGN §11, and `cbpv` and `binder` were not redone
   at `vRLM`. No failure of type (a), (b) or (d) occurred: no guard beside `TW`, no relation family
   beside W, and no second quantifier. The fallback is not triggered.
@@ -2070,13 +2098,23 @@ obligation at a narrower scope:
   missing object is a stack entry lending a range of places. The elements' `CohS` would read
   against it, and their `RetainedPay` would be vacuous at its places. The element operations at the
   empty stack owe no more at `vRLM` than at `vRLJ`.
+- **`withload` at a payload with two `Mut` or `Ref` leaves side by side** (not covered at W).
+  `reb_α` makes their cells `imm` cells exactly at the own lend's lifetime, at places no entry of
+  the old stack lends. The pushed entry lends at most one of them, and the table excludes the
+  other at the pushed stack (`loadGuardFails`, `loadGuardFails2`, `rebGuardFails`). So the
+  callback's clause says nothing about such an argument [unchecked: the argument holds the two
+  cells at the top, one per leaf, and the guard reads them with the closure's resource]. The
+  missing object is an entry lending the reborrowed payload's places, or a table that admits the
+  cells the innermost lend's reborrow makes. Either changes the draft guard or the stack, which is
+  the user's to decide.
 - **`RetainedPay` at the read-outs** (open).
   - At a bound `Mut` view the build stops where expected, at `EntryPayLeaves`
     (`retainedPayLoadMutRowNJ_of_entry`).
   - The variant leaf (`mutLeafP`, `immLeafP`) is stated, not adopted. Of its two costs, `ThawLeafP`
     is proved and `VwPayLeaves` was not attempted. The variant needs W's views to carry
     `PayLeavesAt`, a change to the draft views, which is the user's to decide.
-  - Not attempted: `RetainedPayLoadImmRow` and the two `Met` witnesses.
+  - Not attempted: `RetainedPayLoadImmRow` at the payloads the guard admits, and the two `Met`
+    witnesses.
 - **A join** (`⊔`).
   - At `∀E` at `'v ⊔ 'w`, `⟦'v ⊔ 'w⟧` external says nothing of the shorter of the two.
   - In a payload type at the read-outs, `TyEq` pins a join only as a whole.

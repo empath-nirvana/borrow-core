@@ -2232,7 +2232,13 @@ draft relation is `vRLM`: `vRLJ` with Core's `tvar`, `μ` and `fam` clauses read
   - `OuterBelowTop`: proved at every lend and at the arising set (`outerBelowTopArises`).
   - `RetainedPay`: proved at the view, the transports, `∀E` with no join and a retained `Mut`
     read-out. At a bound `Mut` read-out it stops where expected, at `EntryPayLeaves`
-    (`retainedPayLoadMutRowNJ_of_entry`). `RetainedPayLoadImmRow` was not attempted.
+    (`retainedPayLoadMutRowNJ_of_entry`).
+  - `withload` at a payload with two `Mut` or `Ref` leaves side by side: `reb_α` makes their cells
+    `imm` cells exactly at the own lend's lifetime, at places no entry of the old stack lends. The
+    pushed entry lends at most one, and the table excludes the other at the pushed stack
+    (`loadGuardFails2`). So, as for the slice rows, the callback's clause says nothing about such an
+    argument [unchecked], and that `withload` is not covered at W. The missing object (an entry
+    lending the payload's places, or a table admitting the reborrow's cells) is not built.
   - `KeepsT` at the share: proved from `LineageUnique` (`shareKeepsT_of`), which is not derived.
 - **Statement 0 at `binder0`.**
   - Every fact beside monotonicity is proved (`statement0MBesideMono0`).

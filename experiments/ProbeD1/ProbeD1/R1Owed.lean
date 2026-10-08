@@ -10,8 +10,10 @@ import ProbeD1.R1Mono
 * **`RetainedPay` row by row** (§3.2): the lend's view, the transports across a push, a pop and a
   binding, a leaf's payload type a part of the slot's (`leafPos_vFree`, `payLeavesOfPayExt`), the
   slice borrows outside W at two or more elements (`sliceGuardFails`, `retainedPaySliceRow`, both
-  vacuous at the guard), and `InternalPayloadArises`'s shape refuting no read-out
-  (`readOutAtInternalPayload`).
+  vacuous at the guard), `withload`'s reborrow of an `own` or `mut` cell failing the guard at the
+  pushed stack where no entry lends its place (`loadGuardFails`, `rebGuardFails`, and
+  `loadGuardFails2` at two such cells), and `InternalPayloadArises`'s shape refuting no
+  read-out (`readOutAtInternalPayload`).
 -/
 
 noncomputable section
@@ -202,6 +204,72 @@ theorem retainedPaySliceRow : RetainedPaySliceRow (ℍ := ℍ) := by
   have := lt_at_of_inStratum (ht.2 o ho (ℓ + i) ψ hnot hψ) hk
   rw [hat] at this
   exact absurd hαo (not_le.mpr this)
+
+
+/-! ### §3.2 `withload`'s read-out at the pushed stack: the guard and a reborrowed cell
+
+`reb_α` ([TR] p. 5, `ResU.RebAt`) makes an `own` or `mut` cell of the witness an `imm` cell exactly
+at `α`, the own lend's lifetime. At a place the pushed stack does not lend, the table's second
+conjunct puts every borrow cell strictly above the outermost lend, which is at or above `α`
+(`loadGuardFails`, `rebGuardFails`). The own lend's entry lends one place, so two such cells at
+distinct places the old stack does not lend fail the guard at every pushed stack
+(`loadGuardFails2`), as two slice elements do (`sliceGuardFails`). Where that is the callback's
+argument, its clause says nothing about the run, and `RetainedPayLoadImmRow`'s hypothesis
+`TabAtS (en :: σ) (α :: αs) ρb` fails. -/
+
+/-- **A cell exactly at the own lend's lifetime, at a place the pushed stack does not lend, fails
+the table there.** -/
+def LoadGuardFails : Prop :=
+  ∀ (σ : LStack) (αs : List Life) (en : LEnt) (α : Life) (ρ : WRes) (k : BoCa.Loc) (v : Val)
+    (χ : WRes) (h : χ.InStratum (LSet.singleton α).join),
+    StackOK (en :: σ) (α :: αs) → k ∉ (en :: σ).map LEnt.l →
+    ρ.get k = some (CellU.immOf (LSet.singleton α) v χ h) → ¬ TabAtS (en :: σ) (α :: αs) ρ
+
+theorem loadGuardFails : LoadGuardFails := by
+  intro σ αs en α ρ k v χ h hok hk hψ ht
+  obtain ⟨o, ho⟩ : ∃ o, (α :: αs).getLast? = some o := by
+    cases h' : (α :: αs).getLast? with
+    | none => simp at h'
+    | some o => exact ⟨o, rfl⟩
+  have hαo : α ≤ o := GhostEnd.head_le_last hok.2.1 o ho
+  have hlt : o < (CellU.immOf (LSet.singleton α) v χ h).at :=
+    lt_at_of_inStratum (ht.2 o ho k _ hk hψ) CellU.kind_immOf_ne_own
+  exact absurd hαo (not_le.mpr hlt)
+
+/-- **Two cells exactly at the own lend's lifetime, at distinct places the old stack does not
+lend, fail the table at every pushed stack**: the pushed entry lends at most one of them. -/
+def LoadGuardFails2 : Prop :=
+  ∀ (σ : LStack) (αs : List Life) (en : LEnt) (α : Life) (ρ : WRes) (k₁ k₂ : BoCa.Loc)
+    (v₁ v₂ : Val) (χ₁ χ₂ : WRes) (h₁ : χ₁.InStratum (LSet.singleton α).join)
+    (h₂ : χ₂.InStratum (LSet.singleton α).join),
+    StackOK (en :: σ) (α :: αs) → k₁ ≠ k₂ → k₁ ∉ σ.map LEnt.l → k₂ ∉ σ.map LEnt.l →
+    ρ.get k₁ = some (CellU.immOf (LSet.singleton α) v₁ χ₁ h₁) →
+    ρ.get k₂ = some (CellU.immOf (LSet.singleton α) v₂ χ₂ h₂) → ¬ TabAtS (en :: σ) (α :: αs) ρ
+
+theorem loadGuardFails2 : LoadGuardFails2 := by
+  intro σ αs en α ρ k₁ k₂ v₁ v₂ χ₁ χ₂ h₁ h₂ hok hne hσ₁ hσ₂ hψ₁ hψ₂
+  by_cases he : en.l = k₁
+  · refine loadGuardFails σ αs en α ρ k₂ v₂ χ₂ h₂ hok ?_ hψ₂
+    rw [List.map_cons, List.mem_cons, not_or]
+    exact ⟨fun h => hne (he.symm.trans h.symm), hσ₂⟩
+  · refine loadGuardFails σ αs en α ρ k₁ v₁ χ₁ h₁ hok ?_ hψ₁
+    rw [List.map_cons, List.mem_cons, not_or]
+    exact ⟨fun h => he h.symm, hσ₁⟩
+
+/-- **`withload`'s reborrow of an `own` or `mut` cell, at a place the pushed stack does not lend,
+fails the guard there** (`ResU.RebAt`'s `own` and `mut` clauses, then `loadGuardFails`). -/
+theorem rebGuardFails {σ : LStack} {αs : List Life} {en : LEnt} {α : Life} {ρ ρb p : WRes}
+    {k : BoCa.Loc} (hok : StackOK (en :: σ) (α :: αs)) (hk : k ∉ (en :: σ).map LEnt.l)
+    (hr : ResU.RebAt α ρ ρb k p)
+    (hcell : (∃ v, ρ.get k = some (CellU.ownOf v)) ∨
+      ∃ (b : Life) (v : Val) (χ : WRes) (hb : χ.InStratum b) (P : Val → SPropS BoCa.Loc Val b)
+        (hw : P v ⟨χ, hb⟩), ρ.get k = some (CellU.mutOf b v χ hb P hw)) :
+    ¬ TabAtS (en :: σ) (α :: αs) ρb := by
+  rcases hcell with ⟨v, hv⟩ | ⟨b, v, χ, hb, P, hw, hv⟩
+  · obtain ⟨h, hget⟩ := hr.2.1 v hv
+    exact loadGuardFails σ αs en α ρb k v _ h hok hk hget
+  · obtain ⟨⟨h, hget⟩, -⟩ := hr.2.2.1 b v χ hb P hw hv
+    exact loadGuardFails σ αs en α ρb k v χ h hok hk hget
 
 
 /-! ### §3.2 The nested `Mut` leaf of a bound view: through `CohS`'s `TyEq` -/

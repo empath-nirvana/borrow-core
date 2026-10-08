@@ -303,7 +303,16 @@ admits is not in `vRLM` (`muAdjNotVRLM`).
 - The payload condition (`RetainedPay`): proved at the lend's view, the transports and `∀E` with no
   join. At the `Mut` read-out through a bound view it stops where the design expected, at
   `EntryPayLeaves`: the condition for the lending entry's own payload type, which the index does not
-  carry. The `Imm` read-out was not attempted.
+  carry.
+- **A new gap in the guard: `withload` of a value holding two references side by side.**
+  `withload` hands its callback the payload re-borrowed at the new lend's lifetime, so each owned
+  or mutable cell becomes a shared cell at exactly that lifetime. The guard forbids such a cell at
+  a place no stack entry lends (`rebGuardFails`). The new lend's entry lends one place, so with two
+  such cells side by side (`Ref 1 ⊗ Ref 1`) one is always forbidden (`loadGuardFails2`). So, as
+  with slices, the callback's clause says nothing there, and W does not cover `withload` of such a
+  payload [unchecked: the step from the payload's type to the two cells]. Fixing it means a stack
+  entry that lends the payload's places, or a guard that admits the re-borrow's cells; both change
+  W's draft definitions.
 - The tags at the share (`KeepsT`): proved from `LineageUnique` (a record lies in one frame's
   lineage), which is not derived.
 
@@ -313,7 +322,8 @@ admits is not in `vRLM` (`muAdjNotVRLM`).
 indices.
 
 **What it decides.** R1 is closed at `binder0`, and statement 0 there is down to the `∀I` row's two
-open cases. OQ-8 is still undecided, because no refutation passed the arising check and `cbpv` and
+open cases. The guard, as drafted, leaves out `withload` of a value holding two references side by
+side, as it leaves out slices of two or more elements. OQ-8 is still undecided, because no refutation passed the arising check and `cbpv` and
 `binder` were not redone at `vRLM`. No machine-checked failure of type (a), (b) or (d) occurred,
 and the fallback is not triggered.
 
@@ -333,6 +343,9 @@ the placement with the most proved, the remaining work is:
   - `RetainedPay`: `EntryPayLeaves` at a bound `Mut` view (or the variant leaf, which changes W's
     views, the user's to decide), the `Imm` read-out, joins, and the slice rows' missing
     range-lending entry.
+  - `withload` at a payload with two references side by side: outside the guard
+    (`loadGuardFails2`); an entry lending the payload's places, or a guard admitting the
+    re-borrow's cells, is not built.
   - `KeepsT`: `LineageUnique`, and `FramesKept` from statement 2.
   - `ViewSlotInst` without `OuterBelowTop`.
 - **OQ-8, where the future-world quantifier goes.** Still undecided. `cbpv` and `binder` have not

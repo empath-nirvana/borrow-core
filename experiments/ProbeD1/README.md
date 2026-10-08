@@ -321,7 +321,13 @@ fact about our statement.
     - at a `Mut` read-out, proved at a retained view. At a bound view it reduces to
       `EntryPayLeaves` (the entry's payload type's leaves), the expected stop
       (`retainedPayLoadMutRowNJ_of_entry`);
-    - not attempted: the `Imm` read-out (`RetainedPayLoadImmRow`);
+    - `withload` at a payload with two `Mut` or `Ref` leaves side by side (`Ref 1 ⊗ Ref 1`) is
+      outside the guard. Its reborrow makes their cells `imm` cells exactly at the own lend's
+      lifetime, at places no entry of the old stack lends. The pushed entry lends at most one, and
+      the table excludes the other (`loadGuardFails2`). So, like the slice rows, it is not covered at
+      W [unchecked: the argument holds the two cells at the top, and the callback's guard reads
+      them with the closure's resource]. The `Imm` read-out at the payloads the guard admits was
+      not attempted;
     - the slice rows at two or more elements stay outside W (`SliceGuardFails`).
   - `KeepsT` at the share: proved from `LineageUnique` (`shareKeepsT_of`), which is not derived,
     and `FramesKept`, which statement 2 supplies.
@@ -336,6 +342,8 @@ fact about our statement.
   - R1 is closed at `binder0`.
   - Statement 0 there reduces to the `∀I` row at a live `U` slot and at indices whose stack names
     the binder.
+  - The guard leaves out a second borrow constant: beside the slice rows, `withload` at a payload
+    with two references side by side (`loadGuardFails2`).
   - OQ-8 is not decided: no refutation passed DESIGN §11, and `cbpv` and `binder` were not redone
     at `vRLM`.
   - No failure of type (a), (b) or (d) occurred, and the fallback is not triggered.
