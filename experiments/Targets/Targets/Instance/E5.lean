@@ -249,7 +249,8 @@ theorem p1_segB (nl ne : UInt32) (qe : Qual) (ℓ : Loc) :
 
 theorem p1_segC (nl ne : UInt32) (qe : Qual) :
     lookEnd 3 ((p1KF nl ne qe).plug .unit) =
-      (p1K0 nl).plug (hndE (toResultV ne (qualsVal [qe])) (raiseE (.val (opPayload ne 0 Val.unit)))) := by
+      (p1K0 nl).plug (hndE (toResultV ne (qualsVal [qe]))
+        (raiseE (.val (opPayload ne 0 Val.unit)))) := by
   rfl
 
 theorem p1_segD (nl : UInt32) :
@@ -262,8 +263,10 @@ theorem p1_segD (nl : UInt32) :
 answers is applied to `ff` and resumes `κ`, which releases the cell and reinstalls both handlers;
 then the raise reaches `toResult`'s handler. -/
 theorem cellQuiet_p1 (nl ne : UInt32) (qe : Qual) (hne : ne ≠ nl) :
-    CellQuiet (ℍ := ℍ) (withLogE nl (qualsVal [.lin]).1 (toResultE ne (qualsVal [qe]).1 (body5E nl ne)))
-      ((p1K0 nl).plug (hndE (toResultV ne (qualsVal [qe])) (raiseE (.val (opPayload ne 0 Val.unit))))) := by
+    CellQuiet (ℍ := ℍ)
+      (withLogE nl (qualsVal [.lin]).1 (toResultE ne (qualsVal [qe]).1 (body5E nl ne)))
+      ((p1K0 nl).plug (hndE (toResultV ne (qualsVal [qe]))
+        (raiseE (.val (opPayload ne 0 Val.unit))))) := by
   refine ⟨p1KA nl ne qe, ?_, fun ℓ => ⟨p1KF nl ne qe, ?_, ?_⟩⟩
   · rw [p1_start]
     have hK : (p1K ne qe).HasHnd nl = false := by
@@ -327,15 +330,18 @@ theorem p2_segB (nl ne : UInt32) (qe : Qual) (ℓ : Loc) :
 
 theorem p2_segC (nl ne : UInt32) (qe : Qual) :
     lookEnd 3 ((p2KF nl ne qe).plug .unit) =
-      hndE (toResultV ne (qualsVal [qe])) ((p2Kh nl).plug (raiseE (.val (opPayload ne 0 Val.unit)))) := by
+      hndE (toResultV ne (qualsVal [qe]))
+        ((p2Kh nl).plug (raiseE (.val (opPayload ne 0 Val.unit)))) := by
   rfl
 
 /-- **`toResult` outside `withLog` runs around `κ`'s cell to the raise**: `log` is caught by
 `withLog`'s handler around `κ`'s cell; the state function resumes `κ`, which releases the cell and
 reinstalls `withLog`'s handler, inside which the raise is performed. -/
 theorem cellQuiet_p2 (nl ne : UInt32) (qe : Qual) :
-    CellQuiet (ℍ := ℍ) (toResultE ne (qualsVal [qe]).1 (withLogE nl (qualsVal [.lin]).1 (body5E nl ne)))
-      (hndE (toResultV ne (qualsVal [qe])) ((p2Kh nl).plug (raiseE (.val (opPayload ne 0 Val.unit))))) := by
+    CellQuiet (ℍ := ℍ)
+      (toResultE ne (qualsVal [qe]).1 (withLogE nl (qualsVal [.lin]).1 (body5E nl ne)))
+      (hndE (toResultV ne (qualsVal [qe]))
+        ((p2Kh nl).plug (raiseE (.val (opPayload ne 0 Val.unit))))) := by
   refine ⟨p2KA nl ne qe, ?_, fun ℓ => ⟨p2KF nl ne qe, ?_, ?_⟩⟩
   · rw [p2_start]
     have e : (p2KA nl ne qe).plug (allocE Val.unit) = (p2K0 ne qe).plug
