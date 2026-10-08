@@ -128,6 +128,41 @@ theorem muAdjVRLME1 : MuAdjVRLME1 (ℍ := ℍ) := by
   exact ⟨muAdjTy_noMut, muAdjTy_cl, fun P hP => hP _ _ (by
     rw [vRLM_thunk_env .binder0 _ none]; exact hU)⟩
 
+/-! ### Item 1a re-checked against the edited relation -/
+
+/-- **The gate's configuration after (E1)–(E4)** (`NEXT.md` §1.2, "Which relation"): the witness push
+meets `OwnPushM` (its payload type is closed), the index meets `StackJM` (the entry is `pairΔ`'s),
+and after (E1) the callback's first conjunct reads no instance at `pc`'s index at any
+instantiation: the instantiated reading has one value, the instantiated lend, and every instance
+below the bound is below it (`pairBoundBelow`). -/
+theorem pairGate_afterEdits :
+    OwnPushM ⟨[]⟩ (pairCbUC 1 .unit) PMap.empty ([pE], [pα]) pEn pβ ∧
+    StackJM [pE] [pα] ⟨[]⟩ pairΔ pairΓ (.ret .unit) ∧
+    ∀ ι : Inst, InstAt [pα] ι → ∀ β, LtLife (extS (ι.sub ⟨[]⟩) [pE] (ι.life [pα]))
+      pairΔ.meetOfDom β → ¬ InScope (extS (ι.sub ⟨[]⟩) [pE] (ι.life [pα])) β := by
+  refine ⟨⟨pOwnPush _ (empty_not_deepAt 3) (ResU.inStratum_empty _),
+    fun y hy => absurd hy (by simp [pEn, VFree]), by simp [pEn, VFree]⟩,
+    ⟨⟨by simp [pE], fun e he y hy => ?_, fun e he => ?_⟩, fun e he hΔ _ _ => ?_⟩,
+    fun ι _ β hlt hin => ?_⟩
+  · rw [List.mem_singleton] at he; subst he
+    exact absurd hy (pairTy_closed y)
+  · rw [List.mem_singleton] at he; subst he
+    exact Or.inl ⟨.top, rfl⟩
+  · rw [List.mem_singleton] at he; subst he
+    exact absurd hΔ (by simp [pE, LifeCtx.find?, LifeCtx.extend, Lifetime.assocFind])
+  · have hsub : ι.sub ⟨[]⟩ = ⟨[]⟩ := by
+      cases ι with
+      | none => rfl
+      | some p => rfl
+    rw [hsub] at hlt hin
+    have hβ : β < ι.life1 pα := pairBoundBelow ⟨[]⟩ pE (ι.life1 pα) β rfl hlt
+    obtain ⟨q, hq, hqβ⟩ := hin
+    simp only [Inst.life, List.map_cons, List.map_nil, extS, LSub.extend, pE,
+      List.mem_singleton] at hq
+    subst hq
+    rw [← hqβ] at hβ
+    exact lt_irrefl _ hβ
+
 /-! ### Item 1a′ at the pair -/
 
 /-- The gate's world at the empty stack: the frame open, its cell the local part. -/

@@ -31,7 +31,7 @@ variable {ℍ : BoCa.Host} [BoCa.HostIs ℍ]
 namespace ProbeD1
 open BoCa BoCa.Fig16 BoCa.Fig16.BoLo BoCa.Fig16.LogRel BoCa.Fig16.LogRel.Core
 open BoCa.Lifetime (LSub LifeCtx LifeVar)
-open GhostEnd (LEnt LStack LKind extS vwE vwS vis stratS ReLend TabAtS jdgCty)
+open GhostEnd (LEnt LStack LKind extS vwE vwS vis stratS ReLend TabAtS jdgCty stopS OpenS)
 
 /-! ### Item 1a: the two-cell guard gap -/
 
@@ -492,6 +492,202 @@ def CallbackExtImmMF (p : Placement) : Prop :=
     PlaceViewsL (extS (δ.extend y α) (e :: σ) (α :: αs)) (e :: σ) (α :: αs) ls' ρ →
     cRLM (ℍ := ℍ) p (e :: σ) (δ.extend y α) (.ret B') (α :: αs) ls'
       (.app (.app (.val f) (.val .unit)) (.val w)) ρ
+
+/-! ### Item 3: the `∀I` row's open cases (`NEXT.md` §3.2–§3.4) -/
+
+/-- **`SubOutside` along a binding of the innermost entry's variable**, the entry pushed fresh below
+the reading. -/
+def SubOutsideExtendNamed : Prop :=
+  ∀ (σ : LStack) (αs : List Life) (δ : LSub) (e : LEnt) (α a : Life),
+    (σ.map LEnt.x).Nodup → σ.head? = some e → αs.head? = some a → SubFresh δ a →
+    SubOutside σ αs δ → SubOutside σ αs (δ.extend e.x α)
+
+/-- **`[allI]` at one context, at every index.** -/
+def AllIRowMAt (p : Placement) (Γ : Ctx VTy) : Prop :=
+  ∀ (Δ : LifeCtx) (x : LifeVar) (b : Lifetime.Life) (M : Expr) (S : VTy) (C : CTy),
+    b.mentions x = false → (∀ y u, Δ.find? y = some u → u.mentions x = false) →
+    (∀ s ∈ Γ, s.live = true → ¬ VFree x s.ty) → Δ.find? x = none →
+    (∀ s ∈ Γ, s.live = true → x ∉ VTy.binders s.ty) →
+    SemSM (ℍ := ℍ) p (Δ.extend x b) (⟨S, false⟩ :: Γ) M (.comp C) →
+    SemSM (ℍ := ℍ) p Δ Γ (.val (.lam M)) (.comp (.all x b C))
+
+/-- **The context at the reading extended at the innermost entry's variable**, which the stack
+shadows: at a context reaching no `U`. `StackOK σ αs` (beside `NEXT.md`'s statement) keeps the
+stack's lifetimes in step with its entries, so that the stack reads the head's variable. -/
+def CtxExtendNamedMAt (p : Placement) (Γ : Ctx VTy) : Prop :=
+  ∀ (σ : LStack) (δ : LSub) (γ : List Val) (αs : List Life) (ls : List SRec) (ρ : WRes)
+    (e : LEnt) (α : Life),
+    StackOK σ αs → σ.head? = some e → InScope (extS δ σ αs) α → CtxFresh e.x Γ →
+    gRLM (ℍ := ℍ) p σ δ αs ls Γ γ ρ → gRLM (ℍ := ℍ) p σ (δ.extend e.x α) αs ls Γ γ ρ
+
+/-- **The same at every context, at an instance in scope**: the entry's variable is read in no
+entry's payload type (`StackJM`'s third kind gives it). `VRLMReadEquiv` with `X = {e.x}`. -/
+def CtxExtendNamedMSAt (p : Placement) (Γ : Ctx VTy) : Prop :=
+  ∀ (σ : LStack) (δ : LSub) (γ : List Val) (αs : List Life) (ls : List SRec) (ρ : WRes)
+    (e : LEnt) (α : Life),
+    StackOK σ αs → σ.head? = some e → δ.find? e.x = none → (∀ e' ∈ σ, ¬ VFree e.x e'.T) →
+    InScope (extS δ σ αs) α → CtxFresh e.x Γ →
+    gRLM (ℍ := ℍ) p σ δ αs ls Γ γ ρ → gRLM (ℍ := ℍ) p σ (δ.extend e.x α) αs ls Γ γ ρ
+
+/-- **Two readings the relation cannot tell apart at a stack.** The base readings agree off `X`,
+and so do the stack's (`extS` reads the stack's variables alike). The values in scope agree. A lend
+below the innermost is fresh below one exactly when it is fresh below the other (at the empty
+stack, every lend). -/
+def ReadEquiv (X : LifeVar → Prop) (σ : LStack) (αs : List Life) (δ₁ δ₂ : LSub) : Prop :=
+  (∀ y, ¬ X y → δ₁.find? y = δ₂.find? y) ∧
+  (∀ α, InScope (extS δ₁ σ αs) α ↔ InScope (extS δ₂ σ αs) α) ∧
+  ∀ a, (∀ h ∈ αs.head?, a < h) → (SubFresh δ₁ a ↔ SubFresh δ₂ a)
+
+/-- **`vRLM` reads only what `ReadEquiv` fixes**, at every type and in both directions. `X` avoids
+the type's free variables and binders, the environment's types, and the entries' payload types. -/
+def VRLMReadEquiv : Prop :=
+  ∀ (A : VTy) (η : Option (Nat → WEnt)) (X : LifeVar → Prop) (σ : LStack) (δ₁ δ₂ : LSub)
+    (αs : List Life) (ls : List SRec) (v : Val) (ρ : WRes),
+    (∀ y, X y → ¬ VFree y A ∧ y ∉ VTy.binders A ∧ ∀ n, ¬ VFree y (wEnv η n).ty) →
+    (∀ y, X y → ∀ e ∈ σ, ¬ VFree y e.T) → StackOK σ αs → ReadEquiv X σ αs δ₁ δ₂ →
+    (vRLM (ℍ := ℍ) .binder0 η σ δ₁ A αs ls v ρ ↔ vRLM (ℍ := ℍ) .binder0 η σ δ₂ A αs ls v ρ)
+
+/-- **`CtxExtendMAt` at an instance in scope.** -/
+def CtxExtendMSAt (p : Placement) (Γ : Ctx VTy) : Prop :=
+  ∀ (σ : LStack) (δ : LSub) (γ : List Val) (αs : List Life) (ls : List SRec) (ρ : WRes)
+    (x : LifeVar) (α : Life),
+    StackOK σ αs → x ∉ σ.map LEnt.x → δ.find? x = none → StackPayAvoids x σ →
+    InScope (extS δ σ αs) α →
+    (∀ s ∈ Γ, s.live = true → ¬ VFree x s.ty ∧ x ∉ VTy.binders s.ty) →
+    gRLM (ℍ := ℍ) p σ δ αs ls Γ γ ρ → gRLM (ℍ := ℍ) p σ (δ.extend x α) αs ls Γ γ ρ
+
+/-- **`CtxShadowMAt` with the facts the symmetric route reads**: the pushed stack in shape, and the
+pushed entry's payload type not reading its own variable (`OwnPushM`'s `selfFree`). -/
+def CtxShadowMSAt (p : Placement) (Γ : Ctx VTy) : Prop :=
+  ∀ (σ : LStack) (δ : LSub) (γ : List Val) (αs : List Life) (ls : List SRec) (ρ : WRes)
+    (e : LEnt) (α : Life),
+    StackOK (e :: σ) (α :: αs) → δ.find? e.x = none → ¬ VFree e.x e.T →
+    StackPayAvoids e.x σ →
+    (∀ s ∈ Γ, s.live = true → ¬ VFree e.x s.ty ∧ e.x ∉ VTy.binders s.ty) →
+    gRLM (ℍ := ℍ) p (e :: σ) δ (α :: αs) ls Γ γ ρ →
+      gRLM (ℍ := ℍ) p (e :: σ) (δ.extend e.x α) (α :: αs) ls Γ γ ρ
+
+/-- **The own push's view is outside the old guard**: beside any resource, a borrow cell exactly at
+the pushed lifetime fails the old stack's table, so the old `⊸` clause says nothing about an
+argument holding it. A fact about the clause, not an obstruction. -/
+def PushedViewOutsideOldGuard : Prop :=
+  ∀ (σ : LStack) (αs : List Life) (a : Life) (l : BoCa.Loc) (ψ : CellU BoCa.Loc Val) (ρc ρ : WRes),
+    αs ≠ [] → List.IsChain (· < ·) (a :: αs) → ψ.kind ≠ Kind.own → ψ.at = a →
+    ResU.CompS ρc (ResU.single l ψ) ρ → ¬ TabAtS σ αs ρ
+
+/-- A value type holding no owned cell (no `Ref`, at any depth W reads). -/
+def RefFree : VTy → Prop
+  | .ref _ => False
+  | .tensor A B => RefFree A ∧ RefFree B
+  | .sum A B => RefFree A ∧ RefFree B
+  | .bang A => RefFree A
+  | .box _ A => RefFree A
+  | .mu A => RefFree A
+  | .fam L => RefFree L
+  | _ => True
+
+mutual
+/-- **A value type the own push carries by its clauses' shape.** -/
+def PushStableV : VTy → Prop
+  | .thunk C => PushStableC C
+  | .tensor A B => PushStableV A ∧ PushStableV B
+  | .sum A B => PushStableV A ∧ PushStableV B
+  | .bang A => PushStableV A
+  | .box _ A => PushStableV A
+  | .ref A => PushStableV A
+  | .mu A => PushStableV A
+  | .fam L => PushStableV L
+  | _ => True
+/-- **A computation type the own push carries**: no lifetime `∀`, no effect layer, no `ν`, and
+every argument reaching no `U` and holding no owned cell. -/
+def PushStableC : CTy → Prop
+  | .ret A => PushStableV A
+  | .arr A C => UFreeM A ∧ RefFree A ∧ PushStableC C
+  | .amp C D => PushStableC C ∧ PushStableC D
+  | .top => True
+  | .all _ _ _ => False
+  | .nu _ => False
+  | .eff _ _ _ _ _ _ => False
+end
+
+/-- **`MonoOwnGMAt` at a context whose live slots are push-stable.** -/
+def MonoOwnGMAtPS (p : Placement) : Prop :=
+  ∀ Γ : Ctx VTy, (∀ s ∈ Γ, s.live = true → PushStableV s.ty) → MonoOwnGMAt (ℍ := ℍ) p Γ
+
+/-- **The `⊸` case of the push, at an argument holding the pushed view.** As stated, refuted at
+`gd` (`gdG_pushed`, `gd_run_fails_of`), at a configuration not shown to arise. -/
+def PushArrStep : Prop :=
+  ∀ (σ : LStack) (δ : LSub) (A : VTy) (D : CTy) (αs : List Life) (ls : List SRec) (e : Expr)
+    (ρf : WRes) (en : LEnt) (a : Life) (w : Val) (ρv ρ : WRes) (ψ : CellU BoCa.Loc Val),
+    StackOK (en :: σ) (a :: αs) → OuterBelowTop αs → RecsOutside (a :: αs) ls →
+    SubOutside σ αs δ → SubFresh δ a → δ.find? en.x = none →
+    ¬ CFree en.x (.arr A D) → en.x ∉ CTy.binders (.arr A D) → StackPayAvoids en.x σ →
+    (∀ ψ', ¬ DeepAt ρf en.l ψ') → ρf.InStratum a → TabAtS σ αs ρf →
+    PlaceViewsL (extS δ σ αs) σ αs ls ρf →
+    cRLM (ℍ := ℍ) .binder0 σ δ (.arr A D) αs ls e ρf →
+    vRLM (ℍ := ℍ) .binder0 none (en :: σ) δ A (a :: αs) ls w ρv →
+    ρv.get en.l = some ψ → ψ.kind ≠ Kind.own → ψ.at = a →
+    ResU.CompS ρf ρv ρ → TabAtS (en :: σ) (a :: αs) ρ →
+    PlaceViewsL (extS δ (en :: σ) (a :: αs)) (en :: σ) (a :: αs) ls ρ →
+    cRLM (ℍ := ℍ) .binder0 (en :: σ) δ D (a :: αs) ls (.app e (.val w)) ρ
+
+/-- **`PushArrStep` under the Core-value restriction**, at types with no lifetime `∀`. -/
+def PushArrStepC : Prop :=
+  ∀ (σ : LStack) (δ : LSub) (A : VTy) (D : CTy) (αs : List Life) (ls : List SRec) (e : Expr)
+    (ρf : WRes) (en : LEnt) (a : Life) (w : Val) (ρv ρ : WRes),
+    VAllFree A → CAllFree D →
+    StackOK (en :: σ) (a :: αs) → OuterBelowTop αs → RecsOutside (a :: αs) ls →
+    SubOutside σ αs δ → SubFresh δ a → δ.find? en.x = none →
+    ¬ CFree en.x (.arr A D) → en.x ∉ CTy.binders (.arr A D) → StackPayAvoids en.x σ →
+    (∀ ψ', ¬ DeepAt ρf en.l ψ') → ρf.InStratum a → TabAtS σ αs ρf →
+    PlaceViewsL (extS δ σ αs) σ αs ls ρf →
+    cRLM (ℍ := ℍ) .binder0 σ δ (.arr A D) αs ls e ρf → cC (.arr A D) ls (extS δ σ αs) e ρf →
+    vRLM (ℍ := ℍ) .binder0 none (en :: σ) δ A (a :: αs) ls w ρv →
+    ResU.CompS ρf ρv ρ → TabAtS (en :: σ) (a :: αs) ρ →
+    PlaceViewsL (extS δ (en :: σ) (a :: αs)) (en :: σ) (a :: αs) ls ρ →
+    cRLM (ℍ := ℍ) .binder0 (en :: σ) δ D (a :: αs) ls (.app e (.val w)) ρ
+
+/-- **The `⊸` case at an argument reaching a `U` that holds nothing** (the pop): a `U` value over
+the empty resource, related at the pushed stack, is related at the stack. -/
+def PopUStep : Prop :=
+  ∀ (σ : LStack) (δ : LSub) (C : CTy) (αs : List Life) (ls : List SRec) (w : Val) (en : LEnt)
+    (a : Life),
+    StackOK (en :: σ) (a :: αs) → OuterBelowTop αs → RecsOutside (a :: αs) ls →
+    SubOutside σ αs δ → SubFresh δ a → δ.find? en.x = none → ¬ CFree en.x C →
+    en.x ∉ CTy.binders C → StackPayAvoids en.x σ →
+    vRLM (ℍ := ℍ) .binder0 none (en :: σ) δ (.thunk C) (a :: αs) ls w PMap.empty →
+    vRLM (ℍ := ℍ) .binder0 none σ δ (.thunk C) αs ls w PMap.empty
+
+/-- **The `F_Σ` case of the push, at a stop.** -/
+def PushEffStep : Prop :=
+  ∀ (δ : LSub) (σ : LStack) (Tab : OpTab) (Q Q' : List Life → List SRec → Val → WProp)
+    (αs : List Life) (ls : List SRec) (t : Expr) (ρ : WRes) (en : LEnt) (a : Life),
+    StackOK (en :: σ) (a :: αs) → (∀ ψ, ¬ DeepAt ρ en.l ψ) → ρ.InStratum a → TabAtS σ αs ρ →
+    (∀ (a' : Life) (αs' : List Life) (ls' : List SRec) (v : Val) (ρ' : WRes),
+      Q αs' ls' v ρ' → Q' (a' :: αs') ls' v ρ') →
+    stopS δ σ Tab (OpenS δ σ Tab Q) αs ls t ρ →
+    stopS δ (en :: σ) Tab (OpenS δ (en :: σ) Tab Q') (a :: αs) ls t ρ
+
+/-- **The `∀` case of the push.** -/
+def PushAllStep : Prop :=
+  ∀ (σ : LStack) (δ : LSub) (z : LifeVar) (c : Lifetime.Life) (C : CTy) (αs : List Life)
+    (ls : List SRec) (e : Expr) (ρ : WRes) (en : LEnt) (a : Life),
+    StackOK (en :: σ) (a :: αs) → OuterBelowTop αs → RecsOutside (a :: αs) ls →
+    SubOutside σ αs δ → SubFresh δ a → δ.find? en.x = none → ¬ CFree en.x (.all z c C) →
+    en.x ∉ CTy.binders (.all z c C) → StackPayAvoids en.x σ → (∀ ψ, ¬ DeepAt ρ en.l ψ) →
+    ρ.InStratum a →
+    cRLM (ℍ := ℍ) .binder0 σ δ (.all z c C) αs ls e ρ →
+    cRLM (ℍ := ℍ) .binder0 (en :: σ) δ (.all z c C) (a :: αs) ls e ρ
+
+/-- **`MonoOwnGMC` at one context**, with the pushed variable read in no entry's payload type. -/
+def MonoOwnGMCAt (p : Placement) (Γ : Ctx VTy) : Prop :=
+  ∀ (σ : LStack) (δ : LSub) (γ : List Val) (αs : List Life) (ls : List SRec) (ρ : WRes)
+    (C : CTy) (e : LEnt) (a : Life),
+    StackPayAvoids e.x σ → StackOK σ αs → OuterBelowTop αs → RecsOutside αs ls →
+    SubOutside σ αs δ → OwnPushI δ C ρ (σ, αs) e a → δ.find? e.x = none → CtxFresh e.x Γ →
+    RecsOutside (a :: αs) ls → SubFresh δ a → TabAtS σ αs ρ →
+    PlaceViewsL (extS δ σ αs) σ αs ls ρ →
+    gRLMC (ℍ := ℍ) p σ δ αs ls Γ γ ρ → gRLMC (ℍ := ℍ) p (e :: σ) δ (a :: αs) ls Γ γ ρ
 
 end ProbeD1
 
