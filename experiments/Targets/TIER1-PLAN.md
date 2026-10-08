@@ -1675,3 +1675,123 @@ not written out); S4's restatement.
 - `OnlyOwnerFrees` and `NoDanglingUse` at `J₁` (routes above).
 - A's (E) properties at `J₁`; S5's bridges at `noFinRaise`; `Accepts` and `Rejects`; the earlier
   round's open items.
+
+## Round 3, step T2: `J₁`'s inner rows tied (decision R)
+
+**Where tier 1 stands.** Unchanged in kind: `I.Tier1 J₁` **fails as written** through S4's catch
+law at `ΞA` (`I.not_tier1_J₁`, re-established at the tied `J₁`). Decision R is applied: our
+instance reads `J₁` at an effect context with the rows of its handlers and operations tied to the
+context, as D1 ties a program's row. The open verifier finding on `not_algLaw_J₁` is settled, both
+ways the decision named: the round-2 witness is outside the tied kernel (machine-checked, down to
+an inversion of the tied kernel), and algebraicity still **fails as written at the tied `J₁`**, at
+`ΞA`, by a witness at the affine `wait`. Nothing in `Core/` changed, no BoLo definition changed, and
+no borrow guarantee was weakened: `J₁.read` (what B and the pins read) is Core's whole kernel, as
+before. Every result is at Core σ=[]. On `tier1-effects`, not pushed.
+
+| step | status | commits |
+|---|---|---|
+| R: the tie | LANDED. `CDerivesAt Ξ` (`Instance/TiedKernel.lean`): Core's `CDerives` with `RowAt Ξ` at `[perform]`, `[raise]` and `[handle]`; a tied derivation is Core's (`toCDerives`). `OurTyping.derAt`, the judgement at an effect context, read by `ourInst`; `J₁`'s is `J1DerAt` (`Instance/J1.lean`), every other typing system's is its `der`. Re-established at the tied `J₁`, every statement unchanged: the let law, S1, S0, S2, S3, `LiveOK`, S4 where resuming operations are unrestricted, leak freedom, S6's reduction, global state's model, the answering-class laws, the failures of S4 and of the bad state | 612dd94 |
+| R: the finding | SETTLED. The round-2 witness `algFireProg`: `¬ RowAt ΞA R5` (`not_rowAt_R5`); no tied handler of `5` carries `unr` (`not_tied_hnd5_unr`); the tied `J₁` at `ΞA` types it at no type (`not_der_algFireProg_J₁`). Algebraicity FAILS AS WRITTEN at the tied `J₁` (`not_algLaw_J₁`, `not_algLaw_ΞA`), by `algAffProg` | 612dd94 |
+
+**Gate.** `lake build Targets` passes with AxiomCheck and Audit; every new result's axioms are within
+`[propext, Classical.choice, Quot.sound]`. `make gate` passed once, at 612dd94's tree ("ci-local
+--source: ALL PASSED"); it builds the library, which this step does not touch.
+
+**The tie** (`Targets/Instance/TiedKernel.lean`, `Targets/Instance/J1.lean`).
+- **Which rows.** The decision names handlers' and operations' rows: `RowAt Ξ` at `[perform]` and
+  `[raise]` (the row the operation is found in) and at `[handle]` (the handled row `(n)↑E ⊙ Σ`).
+  These are the rules that read an operation's signature off a row. `[sub]`, `[let]`, `[then]` and
+  the borrow constants' rows are Core's, untied.
+- **At a handler** the tie makes `E` a prefix of `Ξ n` (`sig_prefix_of_rowAt`), so the handler
+  value's tags (SPEC §25) are a prefix of `Ξ`'s qualifiers of `n` (`hndTags_of_rowAt`).
+- **`J₁` at `Ξ`** (`J1DerAt`): `J1Der` with Core's kernel read as `CDerivesAt Ξ`, at the row
+  environments tied to `Ξ` (`EnvAt`, as D1 reads a program's row: a polymorphic function performing
+  at `[op] ⊙ ρ` is typed only where `ρ` is tied), its polymorphic slots closed by λ-values typed at
+  their instances at tied rows (`ClosingAt`, `PolyInstAt`). `ourInst orowRF Ξ J₁` is, by definition,
+  `ourInst orowRF Ξ (OurTyping.ofDer (J1DerAt Ξ))` (`ourInst_J₁`), so InstanceSafety's results apply
+  through `coreClosed_J₁At`.
+- **`OurTyping`** gains `derAt : EffCtx → …`, the judgement at an effect context. `ourInst` reads it
+  where it read `der`; `J.read`, `RowVarKernel`, `FLOpen` still read `der`. `ElabClosed` (piece 2's
+  route) is restated over `derAt` at every context, since its consumer reads our instance.
+- **Where the tie lives.** `CDerivesAt` is a Targets-side copy of Core's judgement, as `CDerivesNU`
+  is, with `toCDerives` its map into Core. Putting the tie into Core's `CDerives` (a row predicate
+  as a parameter) is the other way; it would reach every Core proof, and was not taken.
+- **Inversions of the tied kernel** (each one induction, `cdat_terms`): `derAt_hnd` (`[handle]` is the
+  only rule concluding a handler term; its tags are a prefix of `Ξ`'s and its body is typed),
+  `derAt_let` (a `let` types its body, or its body with the λ-value in place at `[let-poly]`, or the
+  λ-value itself at a call-by-value application), `derAt_lam` (a λ-value whose body is an
+  application types the body; no term constant is such a λ-value). `derAt_withH` reads a `withH`
+  through them. Cost: about 130 lines, with the term simp set (`cdat_terms`, `cdnu_terms` with the
+  handler at a value form).
+
+**The finding, settled** (`Targets/Instance/UnaryLaws.lean`, `status_unaryLaws`).
+- **The round-2 witness is outside the tied kernel.** `algFireProg` handles `5` at `[unr]` where
+  `ΞA` declares `tick` linear: `not_rowAt_R5`, `not_tied_hnd5_unr`, and
+  `not_der_algFireProg_J₁ : ∀ C, ¬ (ourInst orowRF ΞA J₁).der [] algFireProg C`. Its refutation
+  measured `J₁` before decision R and is not kept (Status, "Retired and restated").
+- **Algebraicity fails as written at the tied `J₁`** (`not_algLaw_J₁`, at every context declaring
+  `exn` at `1` and `wait` at `2`; `not_algLaw_ΞA`). The witness `algAffProg` is typed with every
+  handler's and operation's row tied (`d_algAffProg`):
+  `handle_exn (handle_wait algL2 with holdCancelCl) with (λ_. ())`, where
+  `holdCancelCl = λ(a, k). raise exn then y. k.resume y unwind (handle_exn (k.cancel) with λ_. ())`.
+  The clause's `then` branch resumes the affine `κ`, the finaliser cancels it; the finaliser is at
+  `F 1` because it handles the cancel's `exn` itself (option A admits it). Both sides answer `()`;
+  each run allocates `κ`'s cell, fires the finaliser, which mentions the side's `κ`, releases the
+  cell and ends. Every complete run of the right side fires a finaliser holding the frame
+  `□ to x. (ret x to y. ret ())` and the left's does not, at every pair of cells (`finE_D2_ne`).
+- **What this says about the repairs.** Tying rows does not exclude it, and at an admissible context
+  no tied row has a resuming `unr` operation (`rowNU_of_rowAt`), so restricting `unr` does not
+  either. The round-2 docstring's "at a linear or affine continuation no finaliser at `F 1` can hold
+  it" was not machine-checked and does not hold of affine continuations: a finaliser can use `κ` by
+  its cancel branch when it handles the cancel's row (`d_holdD`). The repairs left are the user's: observe a
+  finaliser's start without its code (D4 read at the trace's events), or keep continuations out of
+  finalisers (a premise on `[then]`'s finaliser context).
+- **Runs with events** (`Targets/Instance/CellRuns.lean`): the complete runs from an allocation are,
+  at some free location, the allocation there and what follows (`obsFrom_alloc_ex_iff`); along a
+  chain of head steps, the chain's observable events and what follows its end
+  (`obsFrom_chain_obs_iff`, `obsFrom_head_iff`). The location the allocation picks appears in the
+  finaliser's code, so the refutation is read at every location, not through `obsFrom_alloc_iff`'s
+  location-free form.
+
+**Findings.**
+1. Algebraicity fails as written at the tied, unr-free class (above); the restatement is the user's.
+2. `TailLaw`: the round-2 note that no witness types by the `unr` mechanism does not extend to the
+   affine one. Whether a `TailLaw` witness types through a finaliser that uses its `κ` is not
+   checked. Status records `TailLaw` as OPEN, not proved and not refuted.
+3. A tied handler's signature is a prefix of `Ξ n`, not necessarily all of it. A's `handle` encodes
+   the handler frame with `Ξ`'s whole tags (`qsOf`), so a typed program's handler of a proper prefix
+   is not an A-level handler frame: S4's catch law and S6's capture events (`CatchEvAt`) do not read
+   its catches. Whether the tie should ask a handler's signature to be all of `Ξ n` is a reading for
+   the user (below).
+
+**Readings for the user to confirm** (pending; the user has not objected to 1–3):
+1. `J₁`'s kernel is Core's whole `CDerives`: `J₁.read`, which B and the pins read. At an effect
+   context our instance reads `CDerivesAt Ξ` (decision R).
+2. Row polymorphism is the polymorphic let; the general `[handle]` is the handler value form over a
+   persistent context.
+3. D4: the no-interception condition is `FinRow FR`; a use of `κ` is a step applying `κ` to a data
+   value (`UseAt`); "observationally" is `RunsAlike` at data answers.
+4. Decision R's scope: the tie at `[perform]`, `[raise]` and `[handle]`; row environments and
+   polymorphic instances read at tied rows; `[sub]`, `[let]`, `[then]` and the borrow constants'
+   rows untied.
+5. A tied handler's signature is a prefix of `Ξ n` (finding 3).
+6. Decision S6's reading (round 3): a capture event is a catch at an A-level handler frame.
+
+**Unspent hypotheses.** The tie is read by no positive result: S0–S3, the let law, S1, leak freedom,
+S6's reduction and the comodel results hold at the untied kernel too, and reach the tied one through
+`toCDerives`. It is read only by the exclusion (`not_tied_hnd5_unr`, `not_derAt_algFireProg`).
+`not_algLaw_J₁`'s `h1 : Ξ 1 = Eab` is read only by the witness's typing.
+
+**Unused uniqueness/functionality results.** `det_ourInst`, `AStep1.deterministic`; the runs read
+`rstep_det` (through `obsFrom_head_iff`) and `rstep_alloc_inv`.
+
+**Untranscribed in the run-up.** `TailLaw` checked against the finaliser mechanism; `EtaHold`'s
+inversion (the tied kernel's inversions are its pattern); `I4Typing`'s inversions (`derAt_hnd` gives
+the handled body's typing); S4's and now algebraicity's restatements.
+
+**Remaining.**
+- The user's restatements: S4's capture laws; algebraicity's observation of finalisers (or a premise
+  keeping continuations out of finalisers); whether a tied handler declares all of `Ξ n`.
+- `OnlyOwnerFrees` and `NoDanglingUse` at `J₁`; `TailLaw`, `EtaHold`.
+- A's (E) properties at `J₁` (their programs typed by `CDerivesAt Ξ` at a rich context); S5's bridges
+  at `noFinRaise`; `Accepts` and `Rejects`.
