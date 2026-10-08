@@ -58,6 +58,7 @@ run_meta do
 #print axioms BoCa.BoLo.Kont.plug_shift
 #print axioms Targets.A.EffectSystem.c1_of_rowSig
 #print axioms Targets.A.EffectSystem.cancellationPfx_of
+#print axioms Targets.A.EffectSystem.catchLaw_of_keep
 #print axioms Targets.A.EffectSystem.caughtEv_pos
 #print axioms Targets.A.EffectSystem.cfgAt_cons_succ
 #print axioms Targets.A.EffectSystem.complete_of_terminates
@@ -69,6 +70,7 @@ run_meta do
 #print axioms Targets.A.EffectSystem.eq_two
 #print axioms Targets.A.EffectSystem.etaLin_of_etaHold
 #print axioms Targets.A.EffectSystem.fwdH_hold_eq
+#print axioms Targets.A.EffectSystem.handlerSem_iff_noCell
 #print axioms Targets.A.EffectSystem.lastC_append
 #print axioms Targets.A.EffectSystem.lastC_cons
 #print axioms Targets.A.EffectSystem.lastC_nil
@@ -81,6 +83,9 @@ run_meta do
 #print axioms Targets.A.EffectSystem.not_effSafe_of_stuck
 #print axioms Targets.A.EffectSystem.not_etaHold_toy
 #print axioms Targets.A.EffectSystem.not_etaLin_toy
+#print axioms Targets.A.EffectSystem.not_handlerSemNoCell_toy
+#print axioms Targets.A.EffectSystem.not_handlerSem_of_noCell
+#print axioms Targets.A.EffectSystem.not_handlerSem_toy
 #print axioms Targets.A.EffectSystem.not_higherOrderPoly_of_monoCallback
 #print axioms Targets.A.EffectSystem.not_loops_of_total
 #print axioms Targets.A.EffectSystem.not_noColouring_of_monoCallback
@@ -95,9 +100,12 @@ run_meta do
 #print axioms Targets.A.EffectSystem.rstep_cfgAt
 #print axioms Targets.A.EffectSystem.rtick_respects
 #print axioms Targets.A.EffectSystem.rtl_respects
+#print axioms Targets.A.EffectSystem.toy_cell_isEmpty
+#print axioms Targets.A.EffectSystem.toy_live
 #print axioms Targets.A.EffectSystem.toy_not_obs_true
 #print axioms Targets.A.EffectSystem.toy_not_runsAlike
 #print axioms Targets.A.EffectSystem.toy_obs_false
+#print axioms Targets.A.EffectSystem.toy_pureSteps
 #print axioms Targets.A.EffectSystem.toy_r₀_respects
 #print axioms Targets.A.EffectSystem.unwindOrderPfx_of
 #print axioms Targets.B.bindK_plain
@@ -137,6 +145,7 @@ run_meta do
 #print axioms Targets.I.cC_ret_eq
 #print axioms Targets.I.cancellationPfx_J₁_of
 #print axioms Targets.I.cancellationPfx_tier1Open
+#print axioms Targets.I.catchLaw_progT_cell
 #print axioms Targets.I.combined_prog
 #print axioms Targets.I.contUseEv_J₁_of
 #print axioms Targets.I.d_fireProg
@@ -154,6 +163,7 @@ run_meta do
 #print axioms Targets.I.fl_of_flOpen
 #print axioms Targets.I.guarantees_J₁
 #print axioms Targets.I.guarantees_noB5_J₁
+#print axioms Targets.I.handlerSemNoCell_J₁
 #print axioms Targets.I.handlerSem_J₁
 #print axioms Targets.I.i1Prog_of_combined
 #print axioms Targets.I.i2Prog_of_combined
@@ -200,9 +210,11 @@ run_meta do
 #print axioms Targets.I.tier1Core_B
 #print axioms Targets.I.tier1Core_guarantees
 #print axioms Targets.I.tier1Core_of
+#print axioms Targets.I.tier1Core_of_S5
 #print axioms Targets.I.tier1Core_releasedOnceReuse
 #print axioms Targets.I.tier1Core_world
 #print axioms Targets.I.tier1_J₁_of
+#print axioms Targets.I.tier1_J₁_of_ECU
 #print axioms Targets.I.tier1_J₁_of_ESU
 #print axioms Targets.I.unwindOrderPfx_J₁
 #print axioms Targets.I.unwindOrderPfx_fireProg
@@ -252,6 +264,7 @@ run_meta do
 #print axioms Targets.Inst.SameThunk.trans
 #print axioms Targets.Inst.ThunkOf.unique
 #print axioms Targets.Inst.ValInv.of_same
+#print axioms Targets.Inst.abortLaw_ourInst
 #print axioms Targets.Inst.admEff_ΞA
 #print axioms Targets.Inst.admEff_Ξst
 #print axioms Targets.Inst.admRow_nil
@@ -307,7 +320,10 @@ run_meta do
 #print axioms Targets.Inst.calm_side
 #print axioms Targets.Inst.calm_tailClause
 #print axioms Targets.Inst.calm_threeUses
+#print axioms Targets.Inst.cancelCellLaw_ourInst
+#print axioms Targets.Inst.cancelCell_algAffProg
 #print axioms Targets.Inst.cancelK_plug
+#print axioms Targets.Inst.cancelLaw_ourInst
 #print axioms Targets.Inst.cancelOfE_of_val
 #print axioms Targets.Inst.cancelOfE_val
 #print axioms Targets.Inst.cancel_pfx
@@ -315,11 +331,17 @@ run_meta do
 #print axioms Targets.Inst.capRun_end
 #print axioms Targets.Inst.capRun_shapes
 #print axioms Targets.Inst.capTag_qsOf_unr
+#print axioms Targets.Inst.captureAtE_of_not_val
+#print axioms Targets.Inst.captureAtE_of_val
 #print axioms Targets.Inst.captureE_of_not_val
 #print axioms Targets.Inst.captureE_of_val
 #print axioms Targets.Inst.captureE_val
 #print axioms Targets.Inst.catchEv_cell
+#print axioms Targets.Inst.catchKeep_ourInst
+#print axioms Targets.Inst.catchLaw_ourInst
 #print axioms Targets.Inst.catchShape_plug
+#print axioms Targets.Inst.catch_cell_ourInst
+#print axioms Targets.Inst.catch_unr_ourInst
 #print axioms Targets.Inst.catches_hndK
 #print axioms Targets.Inst.catches_of_noUnwind
 #print axioms Targets.Inst.cellQuiet_opStep
@@ -548,6 +570,7 @@ run_meta do
 #print axioms Targets.Inst.envAt_nil
 #print axioms Targets.Inst.eq_hole_of_plug_prim
 #print axioms Targets.Inst.exists_fresh_of_finDom
+#print axioms Targets.Inst.exists_fresh_of_live
 #print axioms Targets.Inst.exists_relLoc
 #print axioms Targets.Inst.exists_var_of_isOVal
 #print axioms Targets.Inst.false_of_stuck_live
@@ -573,6 +596,7 @@ run_meta do
 #print axioms Targets.Inst.finE_DR2_pat
 #print axioms Targets.Inst.finE_of_not_lam
 #print axioms Targets.Inst.finE_shift
+#print axioms Targets.Inst.finLaw_ourInst
 #print axioms Targets.Inst.fin_cons
 #print axioms Targets.Inst.fin_pfx
 #print axioms Targets.Inst.find_dropName_ne
@@ -596,6 +620,8 @@ run_meta do
 #print axioms Targets.Inst.handleK_hasHnd
 #print axioms Targets.Inst.handleK_ne_drive
 #print axioms Targets.Inst.handleK_noUnwind
+#print axioms Targets.Inst.handlerSemNoCell_orow
+#print axioms Targets.Inst.handlerSemNoCell_ourInst
 #print axioms Targets.Inst.handlerSem_orow
 #print axioms Targets.Inst.handlerSem_ourInst
 #print axioms Targets.Inst.hasHnd_bindK
@@ -644,6 +670,7 @@ run_meta do
 #print axioms Targets.Inst.k_twice
 #print axioms Targets.Inst.kappaAt_cell
 #print axioms Targets.Inst.kappaAt_tag_cell
+#print axioms Targets.Inst.kappaC_cancel_parts
 #print axioms Targets.Inst.kappaC_inj
 #print axioms Targets.Inst.kappaC_resume_parts
 #print axioms Targets.Inst.kappaCancelShape_cancelE
@@ -685,6 +712,7 @@ run_meta do
 #print axioms Targets.Inst.live_cfgAt
 #print axioms Targets.Inst.live_of_ostep
 #print axioms Targets.Inst.live_of_pureSteps
+#print axioms Targets.Inst.live_progT_catch
 #print axioms Targets.Inst.loopK_hasHnd
 #print axioms Targets.Inst.loopK_steps
 #print axioms Targets.Inst.loopLaws_ourInst
@@ -773,7 +801,7 @@ run_meta do
 #print axioms Targets.Inst.not_goesOn_lvStuck
 #print axioms Targets.Inst.not_goesOn_stuck
 #print axioms Targets.Inst.not_goes_drive
-#print axioms Targets.Inst.not_handlerSem_J₁_ΞA
+#print axioms Targets.Inst.not_handlerSemNoCell_J₁_ΞA
 #print axioms Targets.Inst.not_has_ε₀
 #print axioms Targets.Inst.not_isComodel_badState
 #print axioms Targets.Inst.not_isLoopSum_data
@@ -790,6 +818,7 @@ run_meta do
 #print axioms Targets.Inst.not_liveAt_deadP
 #print axioms Targets.Inst.not_nestedHandlers_tier1Open
 #print axioms Targets.Inst.not_nu_unrOp
+#print axioms Targets.Inst.not_pureJoin_progT
 #print axioms Targets.Inst.not_rowAt_R5
 #print axioms Targets.Inst.not_rowAt_Slv
 #print axioms Targets.Inst.not_rowAt_op₀
@@ -913,6 +942,7 @@ run_meta do
 #print axioms Targets.Inst.polyUse_hof_J₁
 #print axioms Targets.Inst.prog2d_beta
 #print axioms Targets.Inst.progT_catch
+#print axioms Targets.Inst.progT_catch_term
 #print axioms Targets.Inst.progT_derives
 #print axioms Targets.Inst.progT_derivesAt
 #print axioms Targets.Inst.pstep_of_io
@@ -925,6 +955,7 @@ run_meta do
 #print axioms Targets.Inst.pureSteps_head
 #print axioms Targets.Inst.pureSteps_of_chain
 #print axioms Targets.Inst.pureSteps_of_core
+#print axioms Targets.Inst.pureSteps_of_quiet
 #print axioms Targets.Inst.qsOf_eq
 #print axioms Targets.Inst.quiet_ansClause
 #print axioms Targets.Inst.quiet_appE
@@ -965,11 +996,15 @@ run_meta do
 #print axioms Targets.Inst.refuses_dropClause
 #print axioms Targets.Inst.refuses_twiceClause
 #print axioms Targets.Inst.resume0_subst
+#print axioms Targets.Inst.resumeCellLaw_ourInst
+#print axioms Targets.Inst.resumeCell_deepGen
 #print axioms Targets.Inst.resumeE_steps
 #print axioms Targets.Inst.resumeE_subst
 #print axioms Targets.Inst.resumeE_var0_subst
+#print axioms Targets.Inst.resumeLaw_ourInst
 #print axioms Targets.Inst.resumeShape_resumeE
 #print axioms Targets.Inst.resuming_of_cls
+#print axioms Targets.Inst.retLaw_ourInst
 #print axioms Targets.Inst.rich_labs
 #print axioms Targets.Inst.rkube_respects
 #print axioms Targets.Inst.rowAlgebra_noSub_ourInst
@@ -1107,6 +1142,7 @@ run_meta do
 #print axioms Targets.Inst.thenK_fins
 #print axioms Targets.Inst.thenK_not_noUnwind
 #print axioms Targets.Inst.thenK_plug
+#print axioms Targets.Inst.thenLaw_ourInst
 #print axioms Targets.Inst.tiedAt_F
 #print axioms Targets.Inst.tiedAt_unit
 #print axioms Targets.Inst.tier1Open_read
@@ -2042,6 +2078,7 @@ run_meta do
 #print axioms Targets.status_bumpSim_at_reuse
 #print axioms Targets.status_cancellation_J₁
 #print axioms Targets.status_carryW
+#print axioms Targets.status_cellLaws_J₁
 #print axioms Targets.status_clauseRefusals
 #print axioms Targets.status_combined_prog
 #print axioms Targets.status_conservative_core
@@ -2113,9 +2150,12 @@ run_meta do
 #print axioms Targets.status_tier1Core_B
 #print axioms Targets.status_tier1Core_guarantees
 #print axioms Targets.status_tier1Core_of
+#print axioms Targets.status_tier1Core_of_S5
 #print axioms Targets.status_tier1Core_world
 #print axioms Targets.status_tier1Open_read
+#print axioms Targets.status_tier1_J₁
 #print axioms Targets.status_tier1_J₁_of
+#print axioms Targets.status_tier1_J₁_of_ECU
 #print axioms Targets.status_tier1_J₁_of_ESU
 #print axioms Targets.status_unaryLaws
 #print axioms Targets.status_unaryLaws_not_vacuous

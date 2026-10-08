@@ -5,7 +5,7 @@ import Targets.Instance.Theories
 # The interaction — the answering class at `J₁`: the laws of handling and the theory of state
 
 `J₁`'s reached configurations are closed (`LiveOK`, from Core's relation and B2's runs,
-`liveOK_of_coreClosed`), and its typed closed values are closed (`closed_of_derV_J₁`).  So the
+`liveOK_J₁`), and its typed closed values are closed (`closed_of_derV_J₁`).  So the
 Instance's results at the answering class hold at `J₁`, at every effect context:
 
 * **D1.h4** (`state_correct_J₁`): the state-passing handler of `stateCo` is a model of global
@@ -27,10 +27,6 @@ open BoCa.BoLo (Kont)
 open Targets.Inst (OVal OVTy ourInst J₁ J1Der Quiet)
 
 variable {Ξ : EffCtx}
-
-/-- **`J₁`'s reached configurations are closed and go on.** -/
-theorem liveOK_J₁ : Inst.LiveOK (ℍ := ℍ) orowRF Ξ J₁ :=
-  Inst.liveOK_of_coreClosed (D := Inst.J1DerAt Ξ) (Inst.coreClosed_J₁At Ξ)
 
 /-- **The handler of global state is correct at `J₁`** (D1.h4 (b), (c)), at every effect context,
 carrier and label. -/

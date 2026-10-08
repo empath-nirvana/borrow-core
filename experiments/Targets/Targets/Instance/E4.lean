@@ -295,6 +295,81 @@ theorem runsTo_deepGen {ly lt : (orowAlg Ξ).Lab} (hly : Ξ ly.1 = [(.aff, boolT
   rw [deepGen_val, qsOf_eq hly]
   exact runsTo_of_obsFrom _ (v := Val.unit) fun w tr => obsFrom_deepGen ly lt finDom_empty w tr
 
+/-- **S4's deep resume at a cell is not vacuous at `J₁`**: `deepGen`'s run reaches, after its first
+catch, the cell's allocation and the runner's answer to the clause's `tick`, the clause's resume of
+`κ` at its cell, the memory holding the cell — a configuration at which every premise of
+`ResumeCellLaw` holds. -/
+theorem resumeCell_deepGen {ly lt : (orowAlg Ξ).Lab} (hly : Ξ ly.1 = [(.aff, boolT, .unit)])
+    (hlt : Ξ lt.1 = [(.lin, .unit, .unit)]) (hne : ly.1 ≠ lt.1) :
+    ∃ (c : Heap × Expr) (ℓ : Loc) (K₀ : Kont) (H : OVal × List OVal) (K : Kont) (w : OVal),
+      (𝕁).cellFree c ℓ ∧ (𝕁).Live ((𝕁).withCell c ℓ) ∧
+      (𝕁).term ((𝕁).withCell c ℓ) =
+        (𝕁).plug K₀ ((𝕁).resume ((𝕁).captureAt .affine ly H K ℓ) w) := by
+  have hℓ : (Adequacy.emptyMem : Heap) 0 = none := rfl
+  have hqs : qsOf Ξ ly.1 = (qualsVal [.aff]).1 := qsOf_eq hly
+  have hreach : (𝕁).RReach ((𝕁).Rtick lt) ((𝕁).rinit ((𝕁).Rtick lt) ((𝕁).deepGen ly lt))
+      ((Adequacy.emptyMem.upd 0 Val.unit,
+        resumeE (kappaC true 0 ly.1 (dgH ly.1 lt.1) (bindK (dgN1 ly.1))) .unit), ()) := by
+    -- the catch of the first yield
+    obtain ⟨q₀, hc₀, -⟩ := quiet_dgHop (ℍ := ℍ) ly.1 lt.1 (bindK (dgN1 ly.1))
+      ⟨.inj₂ .unit, .inj₂ .unit⟩ rfl
+    have h₀ := rreach_of_chain (J := J₁) (Ξ := Ξ) ((𝕁).Rtick lt) (μ := Adequacy.emptyMem) (s := ())
+      hc₀
+    -- the allocation of `κ`'s cell
+    have hal : (𝕁).RStep ((𝕁).Rtick lt)
+        ((Adequacy.emptyMem, (dgKA ly.1 lt.1 ⟨.inj₂ .unit, .inj₂ .unit⟩ (bindK (dgN1 ly.1))).plug
+          (allocE Val.unit)), ())
+        (labelOf orowRF Ξ (allocE Val.unit))
+        ((Adequacy.emptyMem.upd 0 Val.unit, (dgKA ly.1 lt.1 ⟨.inj₂ .unit, .inj₂ .unit⟩
+          (bindK (dgN1 ly.1))).plug (.val (Val.loc 0))), ()) :=
+      .mach (OStep.mach (Head.alloc _ Val.unit 0 hℓ))
+    -- to the clause's `tick`
+    have hq₁ := quiet_of_look (ℍ := ℍ) 3 ((dgKA ly.1 lt.1 ⟨.inj₂ .unit, .inj₂ .unit⟩
+      (bindK (dgN1 ly.1))).plug (.val (Val.loc 0))) rfl
+    rw [dg_seg1] at hq₁
+    obtain ⟨q₁, hc₁, -⟩ := hq₁
+    have h₁ := rreach_of_chain (J := J₁) (Ξ := Ξ) ((𝕁).Rtick lt)
+      (μ := Adequacy.emptyMem.upd 0 Val.unit) (s := ()) hc₁
+    -- the runner answers the `tick`
+    have hpe : (𝕁).perform lt 0 (𝕁).unitV =
+        performE (.val (opPayload lt.1 (UInt32.ofNat 0) Val.unit)) :=
+      (perform_eq (ℍ := ℍ) (RF := orowRF) (Ξ := Ξ) (J := J₁) (l := lt) (𝕁).unitV
+        (by norm_num)).trans rfl
+    have hio : (𝕁).RStep ((𝕁).Rtick lt) ((Adequacy.emptyMem.upd 0 Val.unit,
+        (dgKT ly.1 lt.1 0 (bindK (dgN1 ly.1))).plug
+          (performE (.val (opPayload lt.1 (UInt32.ofNat 0) Val.unit)))), ())
+        ((𝕁).tickEv lt)
+        ((Adequacy.emptyMem.upd 0 Val.unit, (dgKT ly.1 lt.1 0 (bindK (dgN1 ly.1))).plug .unit), ()) := by
+      have := A.EffectSystem.RStep.io (S := 𝕁) (R := (𝕁).Rtick lt)
+        (c := (Adequacy.emptyMem.upd 0 Val.unit,
+          (dgKT ly.1 lt.1 0 (bindK (dgN1 ly.1))).plug ((𝕁).perform lt 0 (𝕁).unitV)))
+        (s := ()) (s' := ()) (K := dgKT ly.1 lt.1 0 (bindK (dgN1 ly.1))) (l := lt) (i := 0)
+        (v := (𝕁).unitV) (w := (𝕁).unitV) rfl rfl ⟨rfl, rfl⟩ (if_pos ⟨rfl, rfl⟩)
+      rw [hpe] at this
+      exact this
+    -- the β-step to the resume
+    have h₂ := rreach_of_chain (J := J₁) (Ξ := Ξ) ((𝕁).Rtick lt)
+      (μ := Adequacy.emptyMem.upd 0 Val.unit) (s := ())
+      (lookRun_sound (ℍ := ℍ) 1 ((dgKT ly.1 lt.1 0 (bindK (dgN1 ly.1))).plug .unit))
+    have e : lookEnd 1 ((dgKT ly.1 lt.1 0 (bindK (dgN1 ly.1))).plug .unit) =
+        resumeE (kappaC true 0 ly.1 (dgH ly.1 lt.1) (bindK (dgN1 ly.1))) .unit := rfl
+    rw [e] at h₂
+    show (𝕁).RReach ((𝕁).Rtick lt) ((Adequacy.emptyMem, deepGenE ly.1 lt.1 (qsOf Ξ ly.1)), ()) _
+    rw [hqs, deepGenE_aff]
+    exact ((((h₀.tail ⟨_, hal⟩).trans h₁).tail ⟨_, hio⟩).trans h₂)
+  refine ⟨(Adequacy.emptyMem,
+      resumeE (kappaC true 0 ly.1 (dgH ly.1 lt.1) (bindK (dgN1 ly.1))) .unit), 0, .hole,
+    (⟨.lam .unit, .lam⟩, [⟨tickingClE lt.1, .lam⟩]), bindK (dgN1 ly.1), (𝕁).unitV, hℓ,
+    ⟨(𝕁).deepGen ly lt, _, (𝕁).Rtick lt, (), A.EffectSystem.rtick_respects ((sig_tick_iff lt).mpr hlt),
+      der_deepGen_J₁ hly hlt hne, hreach⟩, ?_⟩
+  show _ = resumeE (captureAtE (decide (A.OpClass.affine = .affine)) 0 ly.1 (qsOf Ξ ly.1)
+    (.lam .unit) [tickingClE lt.1] (bindK (dgN1 ly.1))) .unit
+  rw [hqs]
+  unfold captureAtE
+  rw [dif_pos (show IsVal (hndValE ly.1 (qualsVal [.aff]).1 (.lam .unit) [tickingClE lt.1]) from
+    (dgH ly.1 lt.1).2)]
+  rfl
+
 end Run
 
 /-! ### E4 -/

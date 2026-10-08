@@ -2,6 +2,7 @@ import Targets.I.Combined
 import Targets.I.OpenRel
 import Targets.I.Restricted.InstanceSafety
 import Targets.Instance.J1
+import Targets.Instance.HandlerCell
 
 /-!
 # The interaction — tier 1 at `J₁` (TIER1-PLAN §2; decision D5)
@@ -24,10 +25,11 @@ the closed λ-values Core types at every instance, and a value `ovalW` relates t
 
 **A's (S) properties at `J₁`**, at every effect context, where our instance reads `J₁` with its
 inner rows tied (decision R; `sPropsNoCancel_J₁`): S0 and S4 (from `LiveOK`,
-`liveOK_of_coreClosed` at `coreClosed_J₁At`), the let law (`letLaw_ourInst_J₁`), S1
-(`rowAlgebra_ourInst_J₁`), `DataDiv`, S2 and S3 (`safety_of_coreClosed`,
-`effSafe_of_coreClosed`).  S5 waits on its bridges, and S6 on a route
-(`Targets/I/GhostCoupling.lean`).  `[Core σ=[]]`
+`liveOK_of_coreClosed` at `coreClosed_J₁At`; S4 at the capture cell, `handlerSem_J₁`), the let law
+(`letLaw_ourInst_J₁`), S1 (`rowAlgebra_ourInst_J₁`), `DataDiv`, S2 and S3 (`safety_of_coreClosed`,
+`effSafe_of_coreClosed`).  S4's catch law is not vacuous there: at the admissible `ΞA` it holds at
+the catch of the linear `tick` by its cell alone (`catchLaw_progT_cell`).  S5 waits on its bridges,
+and S6 on a route (`Targets/I/GhostCoupling.lean`).  `[Core σ=[]]`
 -/
 
 noncomputable section
@@ -145,18 +147,67 @@ theorem sPropsNoCancel_J₁ {Ξ : EffCtx} :
     Inst.safety_of_coreClosed (D := Inst.J1DerAt Ξ) (Inst.coreClosed_J₁At Ξ),
     Inst.effSafe_of_coreClosed (D := Inst.J1DerAt Ξ) (Inst.coreClosed_J₁At Ξ)⟩
 
-/-- **S4 at `J₁`**, at an effect context whose resuming operations are unrestricted (`CatchUnr`):
-there `κ` owns no cell, and the catch keeps the store (SPEC §25). -/
-theorem handlerSem_J₁ {Ξ : EffCtx} (hU : Ξ.CatchUnr) : (ourInst (ℍ := ℍ) orowRF Ξ J₁).HandlerSem :=
-  Inst.handlerSem_orow
-    (Inst.liveOK_of_coreClosed (D := Inst.J1DerAt Ξ) (Inst.coreClosed_J₁At Ξ)) hU
+/-- **`J₁`'s reached configurations are closed and go on**, at every effect context: its closed
+programs there are Core's (`liveOK_of_coreClosed`). -/
+theorem liveOK_J₁ {Ξ : EffCtx} : Inst.LiveOK (ℍ := ℍ) orowRF Ξ J₁ :=
+  Inst.liveOK_of_coreClosed (D := Inst.J1DerAt Ξ) (Inst.coreClosed_J₁At Ξ)
+
+/-- **S4 at `J₁`**, at every effect context: the catch of an unrestricted operation hands `kappa`
+and keeps the store; that of a linear or affine one allocates `κ`'s cell (SPEC §25), whose resume
+and affine cancel release it. -/
+theorem handlerSem_J₁ {Ξ : EffCtx} : (ourInst (ℍ := ℍ) orowRF Ξ J₁).HandlerSem :=
+  Inst.handlerSem_orow liveOK_J₁
+
+/-- **S4 with no cell at `J₁`**, at an effect context whose resuming operations are unrestricted
+(`CatchUnr`): there `κ` owns no cell, and the catch keeps the store.  It fails at the admissible
+`ΞA` (`Inst.not_handlerSemNoCell_J₁_ΞA`). -/
+theorem handlerSemNoCell_J₁ {Ξ : EffCtx} (hU : Ξ.CatchUnr) :
+    (ourInst (ℍ := ℍ) orowRF Ξ J₁).HandlerSemNoCell :=
+  Inst.handlerSemNoCell_orow liveOK_J₁ hU
+
+/-- **S4's catch law is not vacuous at `J₁`, and holds there by its cell**: at the admissible
+`ΞA`, `progT` reaches the catch of the linear `tick`, a live configuration at which every premise
+of the catch law holds; there the store-keeping alternative fails (`Inst.not_pureJoin_progT`), and
+the catch allocates `κ`'s cell at a free location, handing the clause `κ` at it. -/
+theorem catchLaw_progT_cell :
+    (ourInst (ℍ := ℍ) orowRF Inst.ΞA J₁).Live (Adequacy.emptyMem, lookEnd 2 Inst.progT) ∧
+    (ourInst (ℍ := ℍ) orowRF Inst.ΞA J₁).term (Adequacy.emptyMem, lookEnd 2 Inst.progT) =
+      (ourInst (ℍ := ℍ) orowRF Inst.ΞA J₁).plug .hole
+        ((ourInst (ℍ := ℍ) orowRF Inst.ΞA J₁).handle Inst.lab5A
+          ((ourInst (ℍ := ℍ) orowRF Inst.ΞA J₁).hnd ⟨Inst.hrT, .lam⟩ [⟨Inst.clT, .lam⟩])
+          ((ourInst (ℍ := ℍ) orowRF Inst.ΞA J₁).plug .hole
+            ((ourInst (ℍ := ℍ) orowRF Inst.ΞA J₁).perform Inst.lab5A 0
+              (ourInst (ℍ := ℍ) orowRF Inst.ΞA J₁).unitV))) ∧
+    ((ourInst (ℍ := ℍ) orowRF Inst.ΞA J₁).sig Inst.lab5A)[0]? =
+      some ⟨Inst.OVTy.ofV .unit, Inst.OVTy.ofV .unit, .linear⟩ ∧
+    ¬ (ourInst (ℍ := ℍ) orowRF Inst.ΞA J₁).PureJoin (Adequacy.emptyMem, lookEnd 2 Inst.progT)
+      ((ourInst (ℍ := ℍ) orowRF Inst.ΞA J₁).setT (Adequacy.emptyMem, lookEnd 2 Inst.progT)
+        ((ourInst (ℍ := ℍ) orowRF Inst.ΞA J₁).plug .hole ((ourInst (ℍ := ℍ) orowRF Inst.ΞA J₁).app
+          ((ourInst (ℍ := ℍ) orowRF Inst.ΞA J₁).force ⟨Inst.clT, .lam⟩)
+          ((ourInst (ℍ := ℍ) orowRF Inst.ΞA J₁).pair (ourInst (ℍ := ℍ) orowRF Inst.ΞA J₁).unitV
+            ((ourInst (ℍ := ℍ) orowRF Inst.ΞA J₁).capture Inst.lab5A
+              ((ourInst (ℍ := ℍ) orowRF Inst.ΞA J₁).hnd ⟨Inst.hrT, .lam⟩ [⟨Inst.clT, .lam⟩])
+              .hole))))) ∧
+    ∃ ℓ, (ourInst (ℍ := ℍ) orowRF Inst.ΞA J₁).cellFree (Adequacy.emptyMem, lookEnd 2 Inst.progT) ℓ ∧
+      (ourInst (ℍ := ℍ) orowRF Inst.ΞA J₁).JoinAcross (Adequacy.emptyMem, lookEnd 2 Inst.progT)
+        ((ourInst (ℍ := ℍ) orowRF Inst.ΞA J₁).withCell (Adequacy.emptyMem, lookEnd 2 Inst.progT) ℓ)
+        ((ourInst (ℍ := ℍ) orowRF Inst.ΞA J₁).plug .hole ((ourInst (ℍ := ℍ) orowRF Inst.ΞA J₁).app
+          ((ourInst (ℍ := ℍ) orowRF Inst.ΞA J₁).force ⟨Inst.clT, .lam⟩)
+          ((ourInst (ℍ := ℍ) orowRF Inst.ΞA J₁).pair (ourInst (ℍ := ℍ) orowRF Inst.ΞA J₁).unitV
+            ((ourInst (ℍ := ℍ) orowRF Inst.ΞA J₁).captureAt .linear Inst.lab5A
+              ((ourInst (ℍ := ℍ) orowRF Inst.ΞA J₁).hnd ⟨Inst.hrT, .lam⟩ [⟨Inst.clT, .lam⟩])
+              .hole ℓ)))) :=
+  ⟨Inst.live_progT_catch, Inst.progT_catch_term, Inst.sig_lab5A, Inst.not_pureJoin_progT,
+    ((handlerSem_J₁ (Ξ := Inst.ΞA)).2.1 _ .hole Inst.lab5A ⟨Inst.hrT, .lam⟩ [⟨Inst.clT, .lam⟩] .hole 0
+      _ ⟨Inst.OVTy.ofV .unit, Inst.OVTy.ofV .unit, .linear⟩ ⟨Inst.clT, .lam⟩ Inst.live_progT_catch
+      Inst.progT_catch_term rfl Inst.sig_lab5A (fun h => by cases h) rfl).resolve_left
+      Inst.not_pureJoin_progT⟩
 
 /-- **Tier 1 at `J₁`, given what is open**: A's (E) properties, S4, S5 and S6 at every admissible
 effect context, and the composite's programs and rejections.  The rest of `Tier1 J₁` is proved:
 A's (S) properties but S4, S5 and S6 (`sPropsNoCancel_J₁`), B's guarantees (`guarantees_J₁`), the
-world's conjuncts at `coreW` (`tier1Core_world`), and the pins (`pins_J₁`).  S4's catch law hands
-`capture l H K` and keeps the store, which the catch of a linear or affine operation does not
-(SPEC §25): `hS4` fails at the admissible `ΞA` (`Inst.not_handlerSem_J₁_ΞA`, `not_tier1_J₁`). -/
+world's conjuncts at `coreW` (`tier1Core_world`), and the pins (`pins_J₁`).  S4 is proved too
+(`handlerSem_J₁`), so `hS4` is met: `tier1_J₁_of_ECU` takes the rest. -/
 theorem tier1_J₁_of
     (hE : ∀ Ξ, AdmEff Ξ → (ourInst (ℍ := ℍ) orowRF Ξ J₁).EProps)
     (hS4 : ∀ Ξ, AdmEff Ξ → (ourInst (ℍ := ℍ) orowRF Ξ J₁).HandlerSem)

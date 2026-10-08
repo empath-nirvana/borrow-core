@@ -5,7 +5,8 @@ import Targets.A.Binary
 
 The P11 chapter lists the tail-resumptive law, algebraicity and η among the unary laws of handler
 correctness.  S4 (`HandlerSem`) has none of the three: its conjuncts are reductions up to
-store-keeping steps (`PureJoin`, form F.1 of the P11/I5 menu), and the two sides of each of these
+store-keeping steps, and at a continuation's cell up to its allocation or release (`PureJoin`,
+`JoinAcross`; form F.1 of the P11/I5 menu), and the two sides of each of these
 laws are not joinable in general (the tail-resumptive clause runs outside `K` on one side and inside
 it on the other; η relates a handler to no handler).  Their only statements were binary: A₂'s
 `HandlerLaws` (tail, algebraicity) and Core's `Laws` (`LawTail`, `LawAlg`, `CapEta`).
@@ -36,7 +37,8 @@ or of done: whether these laws belong in done is a menu choice (P11/I5 menu axes
 the user.
 
 `not_tailLaw_toy`, `not_algLaw_toy`, `not_etaHold_toy` and `not_etaLin_toy` show that each fails at
-an instance (`toy`) whose handler or bind ignores its clauses.
+an instance (`toy`) whose handler or bind ignores its clauses.  So does S4 (`not_handlerSem_toy`):
+`toy` has no cells, and its refutation of S4 with no cell is one of S4.
 -/
 
 namespace Targets.A
@@ -250,6 +252,10 @@ def toy (hd : Bool → Bool) (bd : Bool → Bool → Bool) : EffectSystem where
   fins := fun _ => []
   capture := fun _ _ _ => ()
   cancelOf := fun _ _ _ => false
+  Cell := Empty
+  captureAt := fun _ _ _ _ _ => ()
+  cellFree := fun _ _ => False
+  withCell := fun c _ => c
   init := id
   term := id
   setT := fun _ t => t
@@ -307,6 +313,36 @@ operation is linear. -/
 theorem not_etaLin_toy : ¬ (toy (fun _ => true) bd).EtaLin := fun h =>
   toy_not_runsAlike rfl rfl (h () false (fun o ho => by
     simp only [toy] at ho; rw [List.mem_singleton.mp ho]; exact fun h => nomatch h))
+
+/-! ### S4 at `toy` -/
+
+/-- At `toy`, every configuration is reached: it is its own program's start. -/
+theorem toy_live (c : Bool) : (toy hd bd).Live c :=
+  ⟨c, (), (toy hd bd).R₀, (), toy_r₀_respects, trivial, Relation.ReflTransGen.refl⟩
+
+/-- At `toy`, nothing steps, so store-keeping steps go nowhere. -/
+theorem toy_pureSteps {c d : Bool} (h : (toy hd bd).PureSteps c d) : c = d := by
+  induction h with
+  | refl => rfl
+  | tail _ hs _ =>
+      obtain ⟨_, hst, -⟩ := hs
+      exact hst.elim
+
+/-- `toy` has no cells. -/
+theorem toy_cell_isEmpty : IsEmpty (toy hd bd).Cell := inferInstanceAs (IsEmpty Empty)
+
+/-- **S4 with no cell is not trivially true**: its catch law fails where `handle` ignores its
+clauses (`hd = id`); the catch, stopped, never meets its clause applied to the argument and `κ`. -/
+theorem not_handlerSemNoCell_toy : ¬ (toy id bd).HandlerSemNoCell := fun h => by
+  have h' := h.2.1 true () () () [()] () 0 () ⟨(), (), .linear⟩ () (toy_live true) rfl rfl rfl
+    (fun h => nomatch h) rfl
+  obtain ⟨d, h₁, h₂⟩ := h'
+  exact Bool.noConfusion ((toy_pureSteps h₁).trans (toy_pureSteps h₂).symm)
+
+/-- **S4 has teeth where no cell is involved**: `toy` has no cells, so the refutation of S4 with no
+cell refutes S4 (`not_handlerSem_of_noCell`). -/
+theorem not_handlerSem_toy : ¬ (toy id bd).HandlerSem :=
+  not_handlerSem_of_noCell _ toy_cell_isEmpty not_handlerSemNoCell_toy
 
 end EffectSystem
 

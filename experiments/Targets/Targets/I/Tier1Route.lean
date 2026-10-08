@@ -3,6 +3,7 @@ import Targets.I.OpenRel
 import Targets.Instance.J1Checks
 import Targets.Instance.Checks
 import Targets.I.Restricted.InstanceSafety
+import Targets.Instance.HandlerCell
 
 /-!
 # The interaction — tier 1 and the elaboration route (TIER1-PLAN §2)
@@ -20,8 +21,9 @@ today's kernel does not, and its FL needs more than `fundamentalC`.
 **The restricted tier-1 reduction at today's kernel** (`tier1Core_of`): A's properties but S4 and
 S5 hold at every admissible effect context (`sPropsNoCancel_tier1Open`: S0 from `LiveOK`, the let
 law, S1, `DataDiv`, S2, S3), and B's guarantees hold (`tier1Core_guarantees`), so `I.Tier1Core`
-follows from S4 and S5 there.  S4's capture laws keep the store, which the catch of a linear or
-affine operation does not (SPEC §25).
+follows from S4 and S5 there.  S4 holds at every effect context, its catch law allocating the
+capture cell at a linear or affine operation (`Inst.handlerSem_orow`, from `LiveOK`), so
+`I.Tier1Core` follows from S5 (`tier1Core_of_S5`).
 -/
 
 noncomputable section
@@ -50,8 +52,7 @@ theorem sPropsNoCancel_tier1Open {Ξ : EffCtx} (hΞ : Inst.AdmEff Ξ) :
     Inst.rowAlgebra_ourInst_tier1Open hΞ.1, Inst.dataDiv_ourInst, Inst.safety_ourInst_tier1Open,
     Inst.effSafe_ourInst_tier1Open⟩
 
-/-- **The restricted tier-1 reduction, given S4 and S5 at today's kernel.**  S4's capture laws keep
-the store, which the catch of a linear or affine operation does not (SPEC §25). -/
+/-- **The restricted tier-1 reduction, given S4 and S5 at today's kernel.** -/
 theorem tier1Core_of
     (hS4 : ∀ Ξ, Inst.AdmEff Ξ → (Inst.ourInst (ℍ := ℍ) orowRF Ξ Inst.tier1Open).HandlerSem)
     (hC : ∀ Ξ, Inst.AdmEff Ξ → (Inst.ourInst (ℍ := ℍ) orowRF Ξ Inst.tier1Open).Cancellation
@@ -60,6 +61,13 @@ theorem tier1Core_of
   refine ⟨fun Ξ hΞ => ?_, tier1Core_guarantees, hB, hI, pins_tier1Open, hD, hW⟩
   obtain ⟨h0, hl, h1, hd, h2, h3⟩ := sPropsNoCancel_tier1Open (ℍ := ℍ) hΞ
   exact ⟨h0, hl, h1, hd, h2, h3, hS4 Ξ hΞ, hC Ξ hΞ⟩
+
+/-- **The restricted tier-1 reduction, given S5 at today's kernel**: S4 holds there at every effect
+context (`Inst.handlerSem_orow`, from `Inst.liveOK_tier1Open`). -/
+theorem tier1Core_of_S5
+    (hC : ∀ Ξ, Inst.AdmEff Ξ → (Inst.ourInst (ℍ := ℍ) orowRF Ξ Inst.tier1Open).Cancellation
+      (Inst.ourInst (ℍ := ℍ) orowRF Ξ Inst.tier1Open).noFinRaise) : Tier1Core (ℍ := ℍ) :=
+  tier1Core_of (fun _ _ => Inst.handlerSem_orow Inst.liveOK_tier1Open) hC
 
 end Targets.I
 

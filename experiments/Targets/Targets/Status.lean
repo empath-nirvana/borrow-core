@@ -37,7 +37,7 @@ import Targets.I.AcceptsRejects
 Status words: **PROVED**, **PROVED AT σ=[]**, **PROVED AT A RESTRICTION** (the restriction named),
 **OPEN**, **FAILS AS WRITTEN** (a machine-checked configuration; the restatement is the user's),
 **RESTATED** (by the user's decisions of 2026-10-07, below; a refutation of the earlier statement is
-not kept).  Four parts: **A**, an effect system, abstractly; **B**, the borrow calculus, given;
+not kept, except where a row says it is kept as a record).  Four parts: **A**, an effect system, abstractly; **B**, the borrow calculus, given;
 **I**, the interaction and the combined theorem; **the Instance**, our calculus as one instance of
 A.
 
@@ -51,36 +51,34 @@ interaction's option-neutral rules, the pins, the composite's programs and its r
 
 **Done: OPEN.**  Neither `J₂` nor `W` is defined.
 
-**Tier 1** (`I.Tier1 J₁`): **FAILS AS WRITTEN** since the capture cell (`status_handlerSem_cell`):
-its A conjunct asks S4 at every admissible effect context, and S4's catch law, which hands
-`capture l H K` and keeps the store, fails at `ΞA`, where the catch of the linear `tick` allocates
-`κ`'s cell.  The restatement of S4's capture laws is the user's.  S5 (`Cancellation noFinRaise`)
-also **FAILS AS WRITTEN** at `J₁` at `ΞA` (`status_cancellation_J₁`; S5's bridges, below): its
-traces stop only at `[]` and read a fire step's administrative steps whole, while `[finalise]` leaves
-`D ()`, one β-step from `D`.  Read prefix-closed (a candidate restatement), its unwind is PROVED at
-every effect context and its no-interception given `CancelsStd`.  Before the cell, the reduction
-(`status_tier1_J₁_of`) stood as below.  `J₁` is built (decision D5):
-Core's kernel with SPEC §24's rules (the polymorphic let, the general `[handle]`, `[then]` at option
-A) over the open types, with the row `∀` (`Targets/Instance/J1.lean`); our instance at an effect
-context reads it with the rows of its handlers and operations tied to the context (decision R,
-below).  Proved of it: A's (S) properties but S4, S5 and S6 at every effect context (S4 at an
-effect context whose resuming operations are unrestricted), B's guarantees (B5 included, piece 6),
-the world's conjuncts and the pins, and the composite's programs (`Accepts`) and rejections
-(`Rejects`; decision AR, below).  So `I.Tier1 J₁` follows from A's (E) properties (which **fail as
-written** at `J₁`: E7, E8, E9, option A; decision E, below), S4, S5 and S6 at every admissible
-effect context (`status_tier1_J₁_of_ESU`).  TIER1-PLAN §2's first route (elaborating each
-derivation into the kernel before D5) does not reach tier 1 (`status_elab_route`); `J₁` is built by
-D5's route instead.
+**Tier 1** (`I.Tier1 J₁`): **FAILS AS WRITTEN** (`status_tier1_J₁`): its A conjunct asks A's (E)
+properties at every admissible effect context, and E7, E8 and E9 fail at `J₁` at every effect
+context under option A (decision E, below).  S5 (`Cancellation noFinRaise`) also **FAILS AS
+WRITTEN** at `J₁` at `ΞA` (`status_cancellation_J₁`; S5's bridges, below): its traces stop only at
+`[]` and read a fire step's administrative steps whole, while `[finalise]` leaves `D ()`, one β-step
+from `D`.  Read prefix-closed (a candidate restatement), its unwind is PROVED at every effect context
+and its no-interception given `CancelsStd`.  **S4 is RESTATED at the capture cell and PROVED at
+`J₁` at every effect context** (`status_handlerSem_cell`; fix-up F1, below): a catch either hands
+`capture l H K` and keeps the store, or allocates one fresh unit cell and hands `κ` at it; S4 with no
+cell fails at `ΞA` and is kept as a record.  `J₁` is built (decision D5): Core's kernel with
+SPEC §24's rules (the polymorphic let, the general `[handle]`, `[then]` at option A) over the open
+types, with the row `∀` (`Targets/Instance/J1.lean`); our instance at an effect context reads it with
+the rows of its handlers and operations tied to the context (decision R, below).  Proved of it: A's
+(S) properties but S5 and S6 at every effect context, B's guarantees (B5 included, piece 6), the
+world's conjuncts and the pins, and the composite's programs (`Accepts`) and rejections (`Rejects`;
+decision AR, below).  So `I.Tier1 J₁` follows from A's (E) properties, S5 and S6 at every admissible
+effect context (`status_tier1_J₁_of_ECU`; with S4 as a hypothesis, `status_tier1_J₁_of_ESU`).
+TIER1-PLAN §2's first route (elaborating each derivation into the kernel before D5) does not reach
+tier 1 (`status_elab_route`); `J₁` is built by D5's route instead.
 
 **The restricted tier-1 reduction** (`I.Tier1Core`, at today's kernel `tier1Open` and Core's world):
-**PROVED AT σ=[] given S4 and S5 at today's kernel** (`status_tier1Core_of`).  Proved of it: A's
-properties but S4 and S5 at every admissible effect context — S0 (from `LiveOK`, proved), the let
-law, S1, `DataDiv`, S2 and S3 (`status_sPropsNoCancel_tier1Open`); B's guarantees, B5 included
+**PROVED AT σ=[] given S5 at today's kernel** (`status_tier1Core_of_S5`; with S4 as a hypothesis,
+`status_tier1Core_of`).  Proved of it: A's properties but S5 at every admissible effect context — S0
+(from `LiveOK`, proved), the let law, S1, `DataDiv`, S2 and S3 (`status_sPropsNoCancel_tier1Open`),
+S4 at every effect context (`status_machShape_handlerSem_tier1Open`); B's guarantees, B5 included
 (`status_tier1Core_guarantees`; B5 alone, `status_releasedOnceReuse_tier1Open`); the world
 conjuncts and the device at `coreW` (`status_tier1Core_world`); its `Pins` conjunct
-(`status_pins_tier1Open`).  Missing: S4 at an effect context with a resuming linear or affine
-operation (its catch law hands the clause `capture l H K` and keeps the store; the catch of such an
-operation hands `κ` a fresh cell, SPEC §25 — the capture cell, below), and S5 at our instance, which
+(`status_pins_tier1Open`).  Missing: S5 at our instance, which
 fails as written at today's kernel too (`not_cancellation_tier1Open`); read prefix-closed, its unwind
 is PROVED there and its no-interception given `CancelsStd` (`cancellationPfx_tier1Open`).
 
@@ -184,19 +182,59 @@ unchanged; the lowering's counts are unchanged.
   algebraicity at the answering class and D1.h4's comodel reduction hold at every operation
   (`calm_tailClause`, `calm_opStep`, `calm_fold`); the bad-state witness runs calmly around two
   cells.
-* **S4's catch law reads `capture` and FAILS AS WRITTEN at `J₁`** (`status_handlerSem_cell`): at
-  `ΞA` Core's handled program at the linear `tick` reaches the catch, from which the store-keeping
-  steps reach only the catch and the clause at `κ` before its cell, while the clause at
-  `capture l H K` runs through terms that name neither `perform` nor `alloc`
-  (`not_handlerSem_J₁_ΞA`).  So `Tier1 J₁` fails as written (`I.not_tier1_J₁`).  The law holds at an
-  effect context whose resuming operations are unrestricted (`handlerSem_orow` under `CatchUnr`);
-  an admissible context has none.  The restatement is the user's.
+* **S4, restated at the cell, is PROVED at `J₁` at every effect context** (`status_handlerSem_cell`;
+  fix-up F1, below).  S4 with no cell (`HandlerSemNoCell`), whose catch law hands `capture l H K`
+  and keeps the store, fails at `ΞA`: Core's handled program at the linear `tick` reaches the catch,
+  from which the store-keeping steps reach only the catch and the clause at `κ` before its cell,
+  while the clause at `capture l H K` runs through terms that name neither `perform` nor `alloc`
+  (`not_handlerSemNoCell_J₁_ΞA`, kept as a record).  It holds at an effect context whose resuming
+  operations are unrestricted (`handlerSemNoCell_orow`); an admissible context has none.
 * **S6 at `J₁`, reduced to the cell's ownership** (`status_contUseEv_J₁_of`): a capture event hands
   `kappaC aff ℓ …` at a freshly allocated `ℓ` (`catchEv_cell`); a use releases `ℓ` three steps later,
   a linear `κ`'s cancel reaching a branch with no step (`use_frees_cell`); every complete run ends at
   the empty memory (`I.leakFreeAt_J₁`).  From these, S6 follows given two run properties of the cell,
   OPEN: only a capture's `κ` releases its cell (`OnlyOwnerFrees`), and a `κ` is used only while a
   cell of its own lives (`NoDanglingUse`) (`contUseEv_of_cells`).
+
+## Fix-up F1: S4 at the capture cell
+
+S4's catch law asked every catch to hand `capture l H K`, a value computed from the handler and the
+context, and to keep the store; the capture cell (decision S6, SPEC §25) makes the catch of a linear
+or affine operation allocate.  S4 is restated so that a catch may allocate the cell, and no further.
+
+* **The statement** (`Targets/A/Soundness.lean`).  A continuation may own a cell of the store: A
+  carries the cells (`Cell`), `κ` at a cell (`captureAt k l H K ℓ`, the continuation of a caught
+  operation of class `k`), a location the store does not hold (`cellFree`), and the store with a
+  unit cell added (`withCell`) — the one-shot continuation object of Affect §3.1, allocated at the
+  catch and released by the continuation's use.  `JoinAcross c c' t`: a common reduct with `t` at
+  `c'`'s store, reached from `c` by store-keeping steps but one, which leaves the store of `c'`.  The
+  catch law (`CatchLaw`): the clause gets the argument and `κ`, either `capture l H K` with the store
+  kept (`PureJoin`, as before), or `κ` at a fresh cell `ℓ` with the store gaining `ℓ` and nothing else
+  (`JoinAcross c (withCell c ℓ)`).  Deep resume and cancel at a cell (`ResumeCellLaw`,
+  `CancelCellLaw`, an affine `κ`'s): `κ` at `ℓ`, in a store holding `ℓ`, releases `ℓ` and then runs as
+  `capture l H K` does.  The return, abortive, deep-resume, cancel and finaliser laws are unchanged.
+  `HandlerSem` is the nine laws; `HandlerSemNoCell` is S4 with no cell (seven laws, the catch
+  store-keeping), kept.
+* **Not weakened beyond the cell.**  At an instance with no cells the two are the same statement
+  (`handlerSem_iff_noCell`, every instance), so every refutation of S4 with no cell at such an
+  instance refutes S4 (`not_handlerSem_of_noCell`).  S4 has teeth where no cell is involved: at an
+  instance whose `handle` ignores its clauses the catch law fails (`not_handlerSem_toy`).  The cell
+  alternative changes the store by exactly one allocation, of a location the store does not hold,
+  and hands `κ` at that location, whose resume and cancel the cell laws pin.
+* **At our instance, PROVED at every effect context** (`handlerSem_ourInst`, `handlerSem_orow`;
+  at `J₁`, `I.handlerSem_J₁`; at today's kernel from `liveOK_tier1Open`), given `LiveOK`: at an
+  unrestricted operation the catch hands `kappa` and keeps the store (`catch_unr_ourInst`); at a
+  linear or affine one it allocates `()` at a location the reached memory leaves free (memories of
+  reached configurations are finite) and hands `kappaC` there (`catch_cell_ourInst`); resuming
+  `kappaC` and cancelling an affine one release the cell three steps later and run on as `kappa`'s do
+  (`resumeCellLaw_ourInst`, `cancelCellLaw_ourInst`; `kappaC_resume_parts`, `kappaC_cancel_parts`).
+* **Not vacuous at `J₁`** (`I.catchLaw_progT_cell`, `status_cellLaws_J₁`): at the admissible `ΞA`,
+  `progT` reaches the catch of the linear `tick`, where every premise of the catch law holds; the
+  store-keeping alternative fails there (`not_pureJoin_progT`), and the catch allocates `κ`'s cell.
+  E4's `deepGen` reaches its clause's resume of `κ` at its cell (`resumeCell_deepGen`), and
+  algebraicity's witness `algAffProg` its finaliser's cancel of an affine `κ` at its cell
+  (`cancelCell_algAffProg`), each a configuration at which every premise of the law at a cell
+  holds.
 
 ## S5's bridges (decision S5, 2026-10-08)
 
@@ -260,9 +298,10 @@ derivation the same way (`status_innerTie`).
   kernel (`j1_read`, unchanged), so B's guarantees, FL and the pins at `J₁` are unchanged.
 * **Re-established at the tied `J₁`**, every statement unchanged: the let law and S1
   (`letLaw_ourInst_J₁`, `rowAlgebra_ourInst_J₁`), S0, S2, S3 and `LiveOK` (through
-  `coreClosed_J₁At`), S4 where resuming operations are unrestricted, leak freedom and S6's
-  reduction, the comodel results, the answering-class laws, and the failures of S4 (`progT` types
-  with its rows tied, `progT_derivesAt`) and of the bad state's handler (`d_stProg` at `Ξst`).
+  `coreClosed_J₁At`), S4 with no cell where resuming operations are unrestricted, leak freedom
+  and S6's reduction, the comodel results, the answering-class laws, and the failures of S4 with no
+  cell (`progT` types with its rows tied, `progT_derivesAt`) and of the bad state's handler
+  (`d_stProg` at `Ξst`).
 * **The open finding on algebraicity, settled** (`status_unaryLaws`): the round-2 witness handles
   the name `5` at an `unr` operation where `ΞA` declares `tick` linear; its handled row is not tied
   to `ΞA` (`not_rowAt_R5`), no tied handler of `5` carries the tag `unr` (`not_tied_hnd5_unr`), and
@@ -399,7 +438,8 @@ every admissible effect context:
 | E3 needs divergence; a pure-row loop that diverges is not at a data answer | PROVED (every instance; the latter with `RowAlgebra`) | `not_loops_of_total`, `divInTypes_of_loops` |
 | effect safety has teeth; Def. 5.1 (1) from one signature object | PROVED (every instance) | `not_der_unhandled`, `c1_of_rowSig` |
 | the runners `Rtick`, `Rtl`, `Rrec` keep their protocol | PROVED (every instance; `Rrec` at distinct labels) | `rtick_respects`, `rtl_respects`, `rrec_respects` |
-| A's properties at our instance | at today's kernel, every admissible effect context: S0, the let law, S1, `DataDiv`, S2, S3 PROVED AT σ=[]; at `J₁`, every effect context: the same, PROVED AT σ=[]; S4 PROVED AT σ=[] at an effect context whose resuming operations are unrestricted, OPEN elsewhere (its catch law reads `capture`; SPEC §25); S5 **FAILS AS WRITTEN** at both (read prefix-closed: below); S6 OPEN (below) | `status_sPropsNoCancel_tier1Open`, `status_sPropsNoCancel_J₁` |
+| A's properties at our instance | at today's kernel, every admissible effect context: S0, the let law, S1, `DataDiv`, S2, S3 PROVED AT σ=[]; at `J₁`, every effect context: the same, PROVED AT σ=[]; S4, RESTATED at the capture cell, PROVED AT σ=[] at both at every effect context (S4 with no cell at an effect context whose resuming operations are unrestricted; it fails at `J₁` at `ΞA`, kept as a record); S5 **FAILS AS WRITTEN** at both (read prefix-closed: below); S6 OPEN (below) | `status_sPropsNoCancel_tier1Open`, `status_sPropsNoCancel_J₁`, `status_machShape_handlerSem_tier1Open`, `status_handlerSem_cell` |
+| S4 (`HandlerSem`), RESTATED at the capture cell (F1): a catch hands `capture l H K` keeping the store, or one fresh unit cell and `κ` at it (`CatchLaw`, `JoinAcross`); `κ` at a cell released by its resume and an affine cancel (`ResumeCellLaw`, `CancelCellLaw`); the other five laws unchanged. S4 with no cell (`HandlerSemNoCell`) kept | at an instance with no cells the two agree (PROVED, every instance), so a refutation of S4 with no cell there refutes S4; S4 fails where `handle` ignores its clauses (PROVED) | `handlerSem_iff_noCell`, `not_handlerSem_of_noCell`, `catchLaw_of_keep`, `not_handlerSem_toy`, `not_handlerSemNoCell_toy` |
 | the unary laws beside done, `UnaryLaws` (`TailLaw`, `AlgLaw`, `EtaHold`) and the alternative `EtaLin`: run-level (menu form F.3), the tail law's hygiene as hypotheses, compared at a program's data answers (D4) | RESTATED; STATED (at our instance: the Instance's rows); **not in done**: whether they join done is a menu choice (P11/I5 menu axes H, F, K), for the user | `Targets/A/UnaryLaws.lean` |
 | theories (D1.h3, D1.h4 (a)–(b)): equations in signatures (`Eqn`, `SLComp`, `Theory`), the state-passing handler of co-operations (`ansHnd`, `runAt`), handler correctness (`AnsCorrect`, Plotkin–Pretnar Def. 4.5 at `RunsAlike`), comodels (`IsComodel`, Ahman–Bauer Def. 1 with equations), global state (`stateTheory`, `stateCo`, `badStateCo`) | stated (elaborate); at our instance: the Instance's rows | `Targets/A/Theories.lean` |
 | `EtaHold` gives `EtaLin`; each of the four fails at an instance whose handler or bind ignores its clauses | PROVED | `etaLin_of_etaHold`, `not_tailLaw_toy`, `not_algLaw_toy`, `not_etaHold_toy`, `not_etaLin_toy` |
@@ -440,7 +480,7 @@ every admissible effect context:
 | `Pins tier1Open admClosedOp .abortive`, with `I4a` at the unr-free rules | PROVED AT σ=[] (abortive rows) | `I.pins_tier1Open`, `i4a_tier1NU` |
 | Law 1 at the relation: `ovalW` at `U(∀ρ:k. C)` and `!U(∀ρ:k. C)` is the intersection of the instances; `FLOpen M J` gives `FL M J.read`; `FLOpen` at today's kernel | PROVED (generic); PROVED AT σ=[] | `I.ovalW_allR`, `I.ovalW_bang_allR`, `I.fl_of_flOpen`, `I.flOpen_core_tier1Open` |
 | `J₁`: its reading is Core's kernel; FL at BoLo (B1); B's guarantees; the pins; FL at its open judgements over contexts with no polymorphic slot, a polymorphic type read as the intersection of its instances (Law 1) | PROVED AT σ=[] (abortive rows for the pins); `FLOpen coreB J₁` at contexts with a polymorphic slot NOT PROVED (a value `ovalW` relates there need not be a closed λ-value Core types) | `status_j1`, `status_guarantees_J₁`, `status_pins_J₁`, `I.flOpen_J₁_mono` |
-| tier 1 at `J₁` | **FAILS AS WRITTEN** since the capture cell: S4's catch law fails at `ΞA` (the restatement is the user's).  It follows from A's (E) properties, S4, S5 and S6 at every admissible effect context, `Accepts` and `Rejects` being proved (decision AR).  The (E) properties also fail as written at `J₁` (E7, E8, E9, option A; decision E), and so does S5 (its traces read prefix-closed hold; S5's bridges) | `status_handlerSem_cell`, `I.not_tier1_J₁`, `status_tier1_J₁_of`, `status_tier1_J₁_of_ESU`, `status_eProps_J₁`, `status_cancellation_J₁` |
+| tier 1 at `J₁` | **FAILS AS WRITTEN**: A's (E) properties fail at `J₁` (E7, E8, E9, option A; decision E), and so does S5 (its traces read prefix-closed hold; S5's bridges).  S4, restated at the capture cell, is PROVED at every effect context, so tier 1 follows from A's (E) properties, S5 and S6 at every admissible effect context, `Accepts` and `Rejects` being proved (decision AR) | `status_tier1_J₁`, `I.not_tier1_J₁`, `status_handlerSem_cell`, `status_tier1_J₁_of`, `status_tier1_J₁_of_ESU`, `status_tier1_J₁_of_ECU`, `status_eProps_J₁`, `status_cancellation_J₁` |
 | TIER1-PLAN §2's route (elaborate `J₁` into today's unr-free kernel, then `fundamentalC`) | **DOES NOT REACH TIER 1**: closed derivations that elaborate type no A-level handler, so E8 fails; today's kernel types no let-bound function read at two rows | `I.not_tier1_of_elabClosed`, `not_der_letTwo` |
 | FIX-RUN-END's checks and witness worlds | PROVED | `Targets/I/RunEnd.lean` (73 results) |
 | I1, I3, I5, P11 at `coreW` (the device); I2 at `coreW` | PROVED AT σ=[]; PROVED AT A RESTRICTION (abortive rows) | `i1_core`, `i3_core`, `i5_core`, `p11_core`; `i2_core_abortive` |
@@ -459,7 +499,7 @@ every admissible effect context:
 | our rows meet Def. 3.5 and Def. 5.1; `RowLink orowRF` | PROVED AT A RESTRICTION (`RF = orowRF`) | `rowAlgSafe_orowRF`, `rowLink_orowRF`, `closedRowAlg_lawsSafe` |
 | no typed term intercepts a cancel; the two-frame unwind | PROVED AT σ=[]; an instance | `noInterception_tier1`; `two_frame` |
 | the machine read through contexts: run splitting, determinism where nothing is allocated, runs that join run alike, closed runs stay closed, no step creates a handler named `0` | PROVED AT σ=[] | `steps_plug_split`, `det_ourInst`, `rstep_det`, `runsAlike_of_join`, `closed_steps`, `hndNamesNZ_steps` |
-| S0 (`MachShape`: `AppLaw`, `Congr`, `OpStuck`, `LoopLaws`, `DriveLaws`) and S4 (`HandlerSem`) at our instance | S0 PROVED AT σ=[] given `LiveOK` (every configuration a typed program reaches has a closed term and goes on), at every typing system; `Congr` and `OpStuck` without it. S4 the same at an effect context whose resuming operations are unrestricted (`CatchUnr`); **FAILS AS WRITTEN at `J₁`** at `ΞA`, whose linear `tick`'s catch hands `κ` a fresh cell rather than `capture l H K` and does not keep the store (SPEC §25; `not_handlerSem_J₁_ΞA`). At today's kernel `LiveOK` holds at every effect context (D1). `LiveOK` needs the tie | `machShape_orow`, `handlerSem_orow`, `handlerSem_ourInst`; `liveOK_tier1Open`, `status_machShape_handlerSem_tier1Open`; `liveOK_needs_tie` |
+| S0 (`MachShape`: `AppLaw`, `Congr`, `OpStuck`, `LoopLaws`, `DriveLaws`) and S4 (`HandlerSem`) at our instance | S0 PROVED AT σ=[] given `LiveOK` (every configuration a typed program reaches has a closed term and goes on), at every typing system; `Congr` and `OpStuck` without it. S4, RESTATED at the capture cell, the same at every effect context: the catch of an unrestricted operation hands `kappa` and keeps the store; that of a linear or affine one allocates `()` at a free location and hands `kappaC` there; resuming `kappaC` and cancelling an affine one release the cell (SPEC §25). Not vacuous: at `J₁` and `ΞA` the catch of the linear `tick` holds the law by its cell alone. S4 with no cell (`HandlerSemNoCell`) at an effect context whose resuming operations are unrestricted (`CatchUnr`); it **FAILS at `J₁`** at `ΞA`, kept as a record. At today's kernel `LiveOK` holds at every effect context (D1). `LiveOK` needs the tie | `machShape_orow`, `handlerSem_orow`, `handlerSem_ourInst`, `catchLaw_ourInst`, `catch_unr_ourInst`, `catch_cell_ourInst`, `resumeCellLaw_ourInst`, `cancelCellLaw_ourInst`, `I.catchLaw_progT_cell`, `handlerSemNoCell_orow`, `not_handlerSemNoCell_J₁_ΞA`; `liveOK_tier1Open`, `status_machShape_handlerSem_tier1Open`; `liveOK_needs_tie` |
 | `LiveOK` is met at a typing system that types one program with a handler, an operation it catches and a continuation | PROVED | `liveOK_JnLog` |
 | S5 (`Cancellation noFinRaise`) at our instance, RESTATED (D3, D4) | **FAILS AS WRITTEN** at every typing system that types `fireProg` and `(); ()`, so at `J₁` and today's kernel, at every effect context declaring `exn : 1 ↠ 0` at `1` (`ΞA` among them): the path of a fire step alone follows no unwind trace, since `[finalise]` leaves `D ()` and A's `UnwindTrace.fire` reads the β-step to `D` whole. Read prefix-closed (`CancellationPfx`, a candidate restatement): the bridges are built (`unwindOrderPfx_of_core`, `noInterceptPfx_of_core`, `cancellationPfx_of_core`, from `LiveOK`, labels named nonzero, and each fired finaliser meeting the condition running to `()` from every finite memory), and give the unwind PROVED AT σ=[] at `J₁` and today's kernel at every effect context, the no-interception given `CancelsStd` (OPEN). The no-interception condition is needed: `NoInterception` is syntactic, and a typed program's cancelled finaliser may perform the operation its region's dying handler catches; its run follows no cancel trace at any set of endings | `status_cancellation_J₁`, `status_finOK`, `not_unwindOrder_of_types`, `unwind_pfx`, `cancel_pfx`, `unwindOrderPfx_fireProg`; `noIntercept_needs_finRow` |
 | Core's `FinaliserOrder` (I3.b) | PROVED, given `NoInterception` and `FinAloneAt FR` (a fired finaliser's run alone, platform-free, ends at a value or an uncaught raise of a name in `FR`), at today's endings (nonzero names) and at option A's (none). At a typing system with FL at Core's world, `FinAloneAt FR` follows from `FinRowsAt FR` (an operation the finaliser's run alone leaves uncaught is a raise of a name in `FR`): stuck redexes are excluded by FL and B2's runs. So at today's unr-free kernel `FinaliserOrder` follows from `FinRowsAt` alone (PROVED AT σ=[]). `FinRowsAt` OPEN: route 8.2's obligations (`RowRoute`) give it (PROVED), and no `RowRoute` is built (TIER1-PLAN §4: the review did not accept route 8.2). It is not on S5's bridges' route: decision D4 put the fired finalisers' typing into S5, and typing gives each such finaliser's run to `()` from every finite memory (`finOK_of_finRow`) | `finaliserOrder_at`, `finaliserOrder_A`, `finAloneAt_of_finRows`, `finaliserOrder_tier1NU_of_finRows`, `finaliserOrder_tier1NU_of_finRowsA`, `finRowsAt_of_route`, `finaliserOrder_of_route` |
@@ -531,6 +571,12 @@ entry.
   the tie excludes (`not_rowAt_R5`, `not_tied_hnd5_unr`): the tied `J₁` at `ΞA` types the witness at
   no type (`not_der_algFireProg_J₁`).  `not_algLaw_J₁` now refutes algebraicity at the tied `J₁` by
   `algAffProg`.  `algFireProg` and its typing by Core's kernel (`d_algFireProg`) stay.
+* S4's statement before the capture cell (every catch hands `capture l H K` and keeps the store):
+  **kept** as S4 with no cell, `HandlerSemNoCell`, with its refutation at `J₁` and `ΞA` (`not_handlerSemNoCell_J₁_ΞA`, from
+  `not_pureJoin_progT`) and its proof where resuming operations are unrestricted
+  (`handlerSemNoCell_orow`).  S4 is restated at the capture cell (fix-up F1, above).  The earlier
+  S4 proofs are split into one theorem per law, the laws that read no cell shared by both
+  statements (`retLaw_ourInst` … `finLaw_ourInst`).
 * Check 2's derivations (`d_thenProgNU`, `d_prog₃TNU`, `d_thenRaiseProgNU`, `d_unwindProgNU`):
   **removed** with D3's kernel half.  Their finalisers let a raise escape, which option A excludes
   (SPEC §24); the programs stay (`Instance/CheckPrograms.lean`).
@@ -572,8 +618,16 @@ theorem status_tier1Core_of
       (ourInst (ℍ := ℍ) orowRF Ξ tier1Open).noFinRaise) : I.Tier1Core (ℍ := ℍ) :=
   I.tier1Core_of hS4 hC
 
+/-- PROVED AT σ=[], given S5 at today's kernel: the restricted tier-1 reduction; S4 holds there at
+every effect context. -/
+theorem status_tier1Core_of_S5
+    (hC : ∀ Ξ, AdmEff Ξ → (ourInst (ℍ := ℍ) orowRF Ξ tier1Open).Cancellation
+      (ourInst (ℍ := ℍ) orowRF Ξ tier1Open).noFinRaise) : I.Tier1Core (ℍ := ℍ) :=
+  I.tier1Core_of_S5 hC
+
 /-- PROVED AT σ=[]: A's properties at today's kernel but S4, S5 (and S6, which the restricted
-reduction does not hold), at every admissible effect context.  S4 at `status_machShape_handlerSem`. -/
+reduction does not hold), at every admissible effect context.  S4 at
+`status_machShape_handlerSem_tier1Open`. -/
 theorem status_sPropsNoCancel_tier1Open {Ξ : EffCtx} (hΞ : AdmEff Ξ) :
     (ourInst (ℍ := ℍ) orowRF Ξ tier1Open).MachShape ∧ (ourInst (ℍ := ℍ) orowRF Ξ tier1Open).LetLaw ∧
       (ourInst (ℍ := ℍ) orowRF Ξ tier1Open).RowAlgebra ∧ (ourInst (ℍ := ℍ) orowRF Ξ tier1Open).DataDiv ∧
@@ -912,23 +966,25 @@ theorem status_rows : RowAlgSafe orowRF ∧ RowLink orowRF := ⟨rowAlgSafe_orow
 /-- PROVED AT σ=[]: no typed term intercepts a cancel. -/
 theorem status_noInterception_tier1 : NoInterception tier1 := noInterception_tier1
 
-/-- PROVED AT σ=[], given `LiveOK`: S0 at our instance, at every typing system; S4 at an effect
-context whose resuming operations are unrestricted (`CatchUnr`), where the catch hands `capture`
-and keeps the store (at a linear or affine operation it hands `κ` a fresh cell, SPEC §25). -/
+/-- PROVED AT σ=[], given `LiveOK`: S0 and S4 at our instance, at every typing system and effect
+context, S4 at the capture cell (a linear or affine operation's catch allocates `κ`'s cell, SPEC
+§25); S4 with no cell at an effect context whose resuming operations are unrestricted
+(`CatchUnr`), where every catch hands `capture` and keeps the store. -/
 theorem status_machShape_handlerSem (Ξ : EffCtx) (J : OurTyping orowRF)
     (hL : Inst.LiveOK (ℍ := ℍ) orowRF Ξ J) :
-    (ourInst (ℍ := ℍ) orowRF Ξ J).MachShape ∧
-      (Ξ.CatchUnr → (ourInst (ℍ := ℍ) orowRF Ξ J).HandlerSem) :=
-  ⟨Inst.machShape_orow hL, Inst.handlerSem_orow hL⟩
+    (ourInst (ℍ := ℍ) orowRF Ξ J).MachShape ∧ (ourInst (ℍ := ℍ) orowRF Ξ J).HandlerSem ∧
+      (Ξ.CatchUnr → (ourInst (ℍ := ℍ) orowRF Ξ J).HandlerSemNoCell) :=
+  ⟨Inst.machShape_orow hL, Inst.handlerSem_orow hL, Inst.handlerSemNoCell_orow hL⟩
 
-/-- PROVED AT σ=[]: `LiveOK`, so S0, at today's kernel at every effect context (D1); S4 there at an
-effect context whose resuming operations are unrestricted. -/
+/-- PROVED AT σ=[]: `LiveOK`, so S0 and S4, at today's kernel at every effect context (D1); S4 with no
+cell there at an effect context whose resuming operations are unrestricted. -/
 theorem status_machShape_handlerSem_tier1Open (Ξ : EffCtx) :
     Inst.LiveOK (ℍ := ℍ) orowRF Ξ tier1Open ∧
       (ourInst (ℍ := ℍ) orowRF Ξ tier1Open).MachShape ∧
-      (Ξ.CatchUnr → (ourInst (ℍ := ℍ) orowRF Ξ tier1Open).HandlerSem) :=
+      (ourInst (ℍ := ℍ) orowRF Ξ tier1Open).HandlerSem ∧
+      (Ξ.CatchUnr → (ourInst (ℍ := ℍ) orowRF Ξ tier1Open).HandlerSemNoCell) :=
   ⟨Inst.liveOK_tier1Open, Inst.machShape_orow Inst.liveOK_tier1Open,
-    Inst.handlerSem_orow Inst.liveOK_tier1Open⟩
+    Inst.handlerSem_orow Inst.liveOK_tier1Open, Inst.handlerSemNoCell_orow Inst.liveOK_tier1Open⟩
 
 /-- PROVED: S5's no-interception condition is needed (D4).  A typing system that types one program
 with no `ccatch`, no `cfin` and no handler named `0` reaches a cancel whose region's finaliser
@@ -1092,13 +1148,13 @@ theorem status_guarantees_J₁ : B.Guarantees (ℍ := ℍ) J₁.read (B.coreB (�
 /-- PROVED AT σ=[] (abortive rows): `Pins` at `J₁`. -/
 theorem status_pins_J₁ : I.Pins J₁ admClosedOp .abortive := I.pins_J₁
 
-/-- PROVED AT σ=[]: A's (S) properties at `J₁` but S4, S5 and S6, at every effect context; S4 at an
-effect context whose resuming operations are unrestricted. -/
+/-- PROVED AT σ=[]: A's (S) properties at `J₁` but S5 and S6, at every effect context, S4 at the
+capture cell. -/
 theorem status_sPropsNoCancel_J₁ (Ξ : EffCtx) :
     (ourInst (ℍ := ℍ) orowRF Ξ J₁).MachShape ∧ (ourInst (ℍ := ℍ) orowRF Ξ J₁).LetLaw ∧
       (ourInst (ℍ := ℍ) orowRF Ξ J₁).RowAlgebra ∧ (ourInst (ℍ := ℍ) orowRF Ξ J₁).DataDiv ∧
       (ourInst (ℍ := ℍ) orowRF Ξ J₁).Safety ∧ (ourInst (ℍ := ℍ) orowRF Ξ J₁).EffSafe ∧
-      (Ξ.CatchUnr → (ourInst (ℍ := ℍ) orowRF Ξ J₁).HandlerSem) :=
+      (ourInst (ℍ := ℍ) orowRF Ξ J₁).HandlerSem :=
   ⟨I.sPropsNoCancel_J₁.1, I.sPropsNoCancel_J₁.2.1, I.sPropsNoCancel_J₁.2.2.1,
     I.sPropsNoCancel_J₁.2.2.2.1, I.sPropsNoCancel_J₁.2.2.2.2.1, I.sPropsNoCancel_J₁.2.2.2.2.2,
     I.handlerSem_J₁⟩
@@ -1139,6 +1195,26 @@ theorem status_tier1_J₁_of_ESU
     I.Tier1 (ℍ := ℍ) J₁ :=
   I.tier1_J₁_of_ESU hE hS4 hC hU
 
+/-- PROVED: tier 1 at `J₁` follows from A's (E) properties, S5 and S6 at every admissible effect
+context: S4 is proved at every effect context (`I.handlerSem_J₁`), and `Accepts` and `Rejects`
+(decision AR). -/
+theorem status_tier1_J₁_of_ECU
+    (hE : ∀ Ξ, AdmEff Ξ → (ourInst (ℍ := ℍ) orowRF Ξ J₁).EProps)
+    (hC : ∀ Ξ, AdmEff Ξ → (ourInst (ℍ := ℍ) orowRF Ξ J₁).Cancellation
+      (ourInst (ℍ := ℍ) orowRF Ξ J₁).noFinRaise)
+    (hU : ∀ Ξ, AdmEff Ξ → (ourInst (ℍ := ℍ) orowRF Ξ J₁).ContUseEv) :
+    I.Tier1 (ℍ := ℍ) J₁ :=
+  I.tier1_J₁_of_ECU hE hC hU
+
+/-- **FAILS AS WRITTEN**: tier 1 at `J₁`.  Its A conjunct asks A's (E) properties at every
+admissible effect context, and E7, E8 and E9 fail at `J₁` at every effect context under option A;
+its S5 hypothesis fails as written too, at the admissible `ΞA`. -/
+theorem status_tier1_J₁ :
+    ¬ I.Tier1 (ℍ := ℍ) J₁ ∧ ¬ (ourInst (ℍ := ℍ) orowRF Inst.ΞA J₁).EProps ∧
+      ¬ (∀ Ξ, AdmEff Ξ → (ourInst (ℍ := ℍ) orowRF Ξ J₁).Cancellation
+        (ourInst (ℍ := ℍ) orowRF Ξ J₁).noFinRaise) :=
+  ⟨I.not_tier1_J₁, Inst.not_eProps_J₁, I.not_cancellation_admissible⟩
+
 /-- PROVED (decision E): A's (E) properties at `J₁`.  At every admissible effect context E1, E4 and
 E6, and E5 where no `exn` signature is `unr`; E7, E8 and E9 fail as written at every effect context
 (option A), and so `EProps`, and with it the (E) hypothesis of `status_tier1_J₁_of`. -/
@@ -1165,11 +1241,49 @@ theorem status_ghostCoupling :
       (∀ ρ : WRes, ResU.Lower ρ Adequacy.emptyMem → ρ = PMap.empty) :=
   ⟨fun n _ qs hq => I.not_semC_R1 (ℍ := ℍ) n qs hq, fun _ h => I.lower_empty_eq h⟩
 
-/-- **FAILS AS WRITTEN at `J₁`**: S4's catch law, at the admissible `ΞA`, since the capture cell; so
-`Tier1 J₁`.  The witness is Core's handled program at the linear `tick`. -/
+/-- **PROVED AT σ=[]** (fix-up F1): S4, restated at the capture cell, at `J₁` at every effect
+context; not vacuously, its catch law holding at the catch of `ΞA`'s linear `tick` by the cell
+alone.  S4 with no cell fails at the admissible `ΞA` (the witness is Core's handled program at the
+linear `tick`), and is kept as a record.  At every instance with no cells the two agree, and S4 fails
+at an instance whose `handle` ignores its clauses. -/
 theorem status_handlerSem_cell :
-    AdmEff Inst.ΞA ∧ ¬ (ourInst (ℍ := ℍ) orowRF Inst.ΞA J₁).HandlerSem ∧ ¬ I.Tier1 (ℍ := ℍ) J₁ :=
-  ⟨Inst.admEff_ΞA, Inst.not_handlerSem_J₁_ΞA, I.not_tier1_J₁⟩
+    (∀ Ξ, (ourInst (ℍ := ℍ) orowRF Ξ J₁).HandlerSem) ∧
+      (AdmEff Inst.ΞA ∧ ¬ (ourInst (ℍ := ℍ) orowRF Inst.ΞA J₁).HandlerSemNoCell) ∧
+      ¬ (ourInst (ℍ := ℍ) orowRF Inst.ΞA J₁).PureJoin (Adequacy.emptyMem, lookEnd 2 Inst.progT)
+        ((ourInst (ℍ := ℍ) orowRF Inst.ΞA J₁).setT (Adequacy.emptyMem, lookEnd 2 Inst.progT)
+          ((ourInst (ℍ := ℍ) orowRF Inst.ΞA J₁).plug .hole ((ourInst (ℍ := ℍ) orowRF Inst.ΞA J₁).app
+            ((ourInst (ℍ := ℍ) orowRF Inst.ΞA J₁).force ⟨Inst.clT, .lam⟩)
+            ((ourInst (ℍ := ℍ) orowRF Inst.ΞA J₁).pair (ourInst (ℍ := ℍ) orowRF Inst.ΞA J₁).unitV
+              ((ourInst (ℍ := ℍ) orowRF Inst.ΞA J₁).capture Inst.lab5A
+                ((ourInst (ℍ := ℍ) orowRF Inst.ΞA J₁).hnd ⟨Inst.hrT, .lam⟩ [⟨Inst.clT, .lam⟩])
+                .hole))))) ∧
+      (∀ S : A.EffectSystem, IsEmpty S.Cell → (S.HandlerSem ↔ S.HandlerSemNoCell)) ∧
+      (∀ bd : Bool → Bool → Bool, ¬ (A.toy id bd).HandlerSem) :=
+  ⟨fun _ => I.handlerSem_J₁, ⟨Inst.admEff_ΞA, Inst.not_handlerSemNoCell_J₁_ΞA⟩,
+    I.catchLaw_progT_cell.2.2.2.1, fun S hC => S.handlerSem_iff_noCell hC,
+    fun _ => A.EffectSystem.not_handlerSem_toy⟩
+
+/-- **PROVED AT σ=[]**: S4's laws at a cell are not vacuous at `J₁`.  At every effect context with a
+`yield` and a `tick` label, `deepGen` (E4) reaches the clause's resume of `κ` at its cell, the memory
+holding the cell; at every one declaring `exn` at `1` and `wait` at `2`, `algAffProg` reaches its
+finaliser's cancel of the affine `κ` at its cell — each a configuration at which every premise of
+the law holds. -/
+theorem status_cellLaws_J₁ :
+    (∀ (Ξ : EffCtx) (ly lt : (orowAlg Ξ).Lab), Ξ ly.1 = [(.aff, Inst.boolT, .unit)] →
+      Ξ lt.1 = [(.lin, .unit, .unit)] → ly.1 ≠ lt.1 →
+      ∃ c ℓ K₀ H K w, (ourInst (ℍ := ℍ) orowRF Ξ J₁).cellFree c ℓ ∧
+        (ourInst (ℍ := ℍ) orowRF Ξ J₁).Live ((ourInst (ℍ := ℍ) orowRF Ξ J₁).withCell c ℓ) ∧
+        (ourInst (ℍ := ℍ) orowRF Ξ J₁).term ((ourInst (ℍ := ℍ) orowRF Ξ J₁).withCell c ℓ) =
+          (ourInst (ℍ := ℍ) orowRF Ξ J₁).plug K₀ ((ourInst (ℍ := ℍ) orowRF Ξ J₁).resume
+            ((ourInst (ℍ := ℍ) orowRF Ξ J₁).captureAt .affine ly H K ℓ) w)) ∧
+    (∀ (Ξ : EffCtx), Ξ 1 = Inst.Eab → ∀ (h2 : Ξ 2 = Inst.Ew),
+      ∃ c ℓ K₀ H K, (ourInst (ℍ := ℍ) orowRF Ξ J₁).cellFree c ℓ ∧
+        (ourInst (ℍ := ℍ) orowRF Ξ J₁).Live ((ourInst (ℍ := ℍ) orowRF Ξ J₁).withCell c ℓ) ∧
+        (ourInst (ℍ := ℍ) orowRF Ξ J₁).term ((ourInst (ℍ := ℍ) orowRF Ξ J₁).withCell c ℓ) =
+          (ourInst (ℍ := ℍ) orowRF Ξ J₁).plug K₀ ((ourInst (ℍ := ℍ) orowRF Ξ J₁).cancel
+            ((ourInst (ℍ := ℍ) orowRF Ξ J₁).captureAt .affine (Inst.labWait Ξ h2) H K ℓ))) :=
+  ⟨fun _ _ _ hly hlt hne => Inst.resumeCell_deepGen hly hlt hne,
+    fun Ξ h1 h2 => Inst.cancelCell_algAffProg Ξ h1 h2⟩
 
 /-- PROVED AT σ=[]: what typing gives about a fired finaliser that meets S5's no-interception
 condition at option A.  A program in Core's relation at `F 1` runs to `()` from every finite memory;

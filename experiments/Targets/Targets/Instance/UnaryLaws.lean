@@ -372,6 +372,50 @@ theorem not_algLaw_J₁ (h1 : Ξ 1 = Eab) (h2 : Ξ 2 = Ew) : ¬ (𝕁).AlgLaw :=
   injection this.1 with h'
   exact finE_D2_ne 0 ℓ h'
 
+/-- **S4's cancel at a cell is not vacuous at `J₁`**: `algAffProg`'s run reaches, after the catch of
+the affine `wait`, the cell's allocation and the finaliser's start, the finaliser's cancel of `κ` at
+its cell, the memory holding the cell — a configuration at which every premise of
+`CancelCellLaw` holds. -/
+theorem cancelCell_algAffProg (h1 : Ξ 1 = Eab) (h2 : Ξ 2 = Ew) :
+    ∃ (c : Heap × Expr) (ℓ : Loc) (K₀ : Kont) (H : OVal × List OVal) (K : Kont),
+      (𝕁).cellFree c ℓ ∧ (𝕁).Live ((𝕁).withCell c ℓ) ∧
+      (𝕁).term ((𝕁).withCell c ℓ) =
+        (𝕁).plug K₀ ((𝕁).cancel ((𝕁).captureAt .affine (labWait Ξ h2) H K ℓ)) := by
+  have hℓ : (Adequacy.emptyMem : Heap) 0 = none := rfl
+  have hreach : (𝕁).RReach (𝕁).R₀ ((𝕁).rinit (𝕁).R₀ algAffProg)
+      ((Adequacy.emptyMem.upd 0 Val.unit, (K1₀.comp ((Kont.seq .hole raise1).comp K1₀)).plug
+        (.app (kappaC true 0 2 H2V KL2) (.val (Val.inj₂ Val.unit)))), ()) := by
+    have h₀ := rreach_of_chain (𝕁).R₀ (μ := Adequacy.emptyMem) (s := ())
+      (lookRun_sound (ℍ := ℍ) 4 algAffProg)
+    rw [algAff_c] at h₀
+    have h₁ := rreach_of_chain (𝕁).R₀ (μ := Adequacy.emptyMem) (s := ())
+      (lookRun_sound (ℍ := ℍ) 1 (algAffK₀.plug algL2))
+    rw [algL2_hop] at h₁
+    have hal : (𝕁).RStep (𝕁).R₀ ((Adequacy.emptyMem, (KA KL2).plug (allocE Val.unit)), ())
+        (labelOf orowRF Ξ (allocE Val.unit))
+        ((Adequacy.emptyMem.upd 0 Val.unit, (KA KL2).plug (.val (Val.loc 0))), ()) :=
+      .mach (OStep.mach (Head.alloc _ Val.unit 0 hℓ))
+    have h₂ := rreach_of_chain (𝕁).R₀ (μ := Adequacy.emptyMem.upd 0 Val.unit) (s := ())
+      (lookRun_sound (ℍ := ℍ) 7 ((KA KL2).plug (.val (Val.loc 0))))
+    have e : lookEnd 7 ((KA KL2).plug (.val (Val.loc 0))) =
+        (K1₀.comp ((Kont.seq .hole raise1).comp K1₀)).plug
+          (.app (kappaC true 0 2 H2V KL2) (.val (Val.inj₂ Val.unit))) := rfl
+    rw [e] at h₂
+    exact ((h₀.trans h₁).tail ⟨_, hal⟩).trans h₂
+  refine ⟨(Adequacy.emptyMem, (K1₀.comp ((Kont.seq .hole raise1).comp K1₀)).plug
+      (.app (kappaC true 0 2 H2V KL2) (.val (Val.inj₂ Val.unit)))), 0,
+    K1₀.comp ((Kont.seq .hole raise1).comp K1₀), (⟨.lam (.var 0), .lam⟩, [⟨holdCancelCl, .lam⟩]),
+    KL2, hℓ,
+    ⟨algAffProg, _, (𝕁).R₀, (), r₀_respects, der_J₁_ret (by decide) (d_algAffProg h1 h2), hreach⟩, ?_⟩
+  have hq : qsOf Ξ 2 = (qualsVal [.aff]).1 := by rw [qsOf, h2]; rfl
+  show _ = (K1₀.comp ((Kont.seq .hole raise1).comp K1₀)).plug (cancelE (captureAtE
+    (decide (A.OpClass.affine = .affine)) 0 2 (qsOf Ξ 2) (.lam (.var 0)) [holdCancelCl] KL2))
+  rw [hq]
+  unfold captureAtE
+  rw [dif_pos (show IsVal (hndValE 2 (qualsVal [.aff]).1 (.lam (.var 0)) [holdCancelCl]) from
+    isVal_H2E)]
+  rfl
+
 end AlgW
 
 /-! ### The witness at an unrestricted continuation, outside the tied kernel -/

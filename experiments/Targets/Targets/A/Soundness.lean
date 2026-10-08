@@ -24,8 +24,12 @@ nothing meets every one; the lower bounds are the (E) properties (`Targets/A/Exp
   (`Live`).  With no equations in signatures (OQ-22), "If the
   effect theory is empty, then any handler is correct" (after Def. 4.5), so handler correctness is
   exactly these equations.  The deep-resume conjunct is Yoshioka's
-  "v_cont = λz.handle_l S E[z] with h".  S4 states Core's continuation as built (`capture` a
-  value, the catch, resume and cancel laws store-keeping), which excludes OQ-50 (b) (§7 Q9).
+  "v_cont = λz.handle_l S E[z] with h".  A continuation may own a cell of the store (OQ-50 (b),
+  decision S6; the one-shot continuation object of Affect §3.1): the catch then allocates one fresh
+  cell and hands `κ` at it, and `κ`'s resume and an affine `κ`'s cancel release it, each law
+  otherwise store-keeping (`JoinAcross`).  A continuation with no cell is `capture l H K`, a value
+  computed from the handler and the context.  `HandlerSemNoCell` is S4 with no cell, every
+  continuation `capture l H K`; at an instance with no cells the two agree (`handlerSem_iff_noCell`).
 * **S5** (`Cancellation FR`): SPEC §19 as built (decision 62): a cancel is not interceptable, fires
   the frozen finalisers innermost first, keeps the first error outside the region, suppresses the
   region's own, and re-raises the kept error at the canceller; an unwind fires each finaliser in
@@ -114,39 +118,120 @@ def EffSafe : Prop :=
 
 /-! ### S4: the handler laws, unary -/
 
+/-- **A common reduct across one change of store**: `c` reaches it by steps that keep the store
+but one, which leaves the store of `c'`; at the store of `c'` the term `t` reaches it by steps that
+keep the store.  At `c' = withCell c ℓ` the one step allocates the cell `ℓ`; at
+`c = withCell c' ℓ` it releases it. -/
+def JoinAcross (c c' : S.Conf) (t : S.Term) : Prop :=
+  ∃ c₁ ev t₂ d, S.PureSteps c c₁ ∧ S.step c₁ ev (S.setT c' t₂) ∧ S.PureSteps (S.setT c' t₂) d ∧
+    S.PureSteps (S.setT c' t) d
+
+/-- The return law: "return V handled with … to x : A. N(x) = N(V)". -/
+def RetLaw : Prop :=
+  ∀ c K₀ l r cs v, S.Live c → S.term c = S.plug K₀ (S.handle l (S.hnd r cs) (S.ret v)) →
+    S.PureJoin c (S.setT c (S.plug K₀ (S.app (S.force r) v)))
+
+/-- **The catch law**: a resuming operation caught, the clause gets the argument and `κ`.  Either
+`κ` is `capture l H K` and the store is kept, or `κ` owns a cell: the store gains one fresh cell
+`ℓ`, holding the unit value, and `κ` is the continuation at `ℓ` — the one-shot continuation object
+of Affect §3.1 and of SPEC §25 (decision S6).  Each side is otherwise store-keeping. -/
+def CatchLaw : Prop :=
+  ∀ c K₀ l r cs K i v (o : OpSig S.Ty) cl,
+    S.Live c → S.term c = S.plug K₀ (S.handle l (S.hnd r cs) (S.plug K (S.perform l i v))) →
+    S.catches K l = false → (S.sig l)[i]? = some o → o.cls ≠ .abortive → cs[i]? = some cl →
+    S.PureJoin c (S.setT c (S.plug K₀ (S.app (S.force cl) (S.pair v (S.capture l (S.hnd r cs) K))))) ∨
+    ∃ ℓ, S.cellFree c ℓ ∧ S.JoinAcross c (S.withCell c ℓ)
+      (S.plug K₀ (S.app (S.force cl) (S.pair v (S.captureAt o.cls l (S.hnd r cs) K ℓ))))
+
+/-- The catch law with no cell: the clause gets the argument and `capture l H K`, and the store is
+kept. -/
+def CatchKeep : Prop :=
+  ∀ c K₀ l r cs K i v (o : OpSig S.Ty) cl,
+    S.Live c → S.term c = S.plug K₀ (S.handle l (S.hnd r cs) (S.plug K (S.perform l i v))) →
+    S.catches K l = false → (S.sig l)[i]? = some o → o.cls ≠ .abortive → cs[i]? = some cl →
+    S.PureJoin c (S.setT c (S.plug K₀ (S.app (S.force cl) (S.pair v (S.capture l (S.hnd r cs) K)))))
+
+/-- An abortive operation caught: the clause gets the argument only, and `κ` is never reified. -/
+def AbortLaw : Prop :=
+  ∀ c K₀ l r cs K i v (o : OpSig S.Ty) cl,
+    S.Live c → S.term c = S.plug K₀ (S.handle l (S.hnd r cs) (S.plug K (S.raise l i v))) →
+    S.catches K l = false → S.unwindClear K → (S.sig l)[i]? = some o → o.cls = .abortive →
+    cs[i]? = some cl → S.PureJoin c (S.setT c (S.plug K₀ (S.app (S.force cl) v)))
+
+/-- Deep resume: resuming `κ` runs the frozen context under the same handler again (Yoshioka's
+"v_cont = λz.handle_l S E[z] with h"). -/
+def ResumeLaw : Prop :=
+  ∀ c K₀ l H K w, S.Live c → S.term c = S.plug K₀ (S.resume (S.capture l H K) w) →
+    S.PureJoin c (S.setT c (S.plug K₀ (S.handle l H (S.plug K (S.ret w)))))
+
+/-- Deep resume at a cell: resuming `κ` at its cell `ℓ`, in a store that holds `ℓ`, releases `ℓ`
+and runs the frozen context under the same handler again. -/
+def ResumeCellLaw : Prop :=
+  ∀ c K₀ k l H K ℓ w, S.cellFree c ℓ → S.Live (S.withCell c ℓ) →
+    S.term (S.withCell c ℓ) = S.plug K₀ (S.resume (S.captureAt k l H K ℓ) w) →
+    S.JoinAcross (S.withCell c ℓ) c (S.plug K₀ (S.handle l H (S.plug K (S.ret w))))
+
+/-- Cancel starts `κ`'s cancel run, in the canceller's context. -/
+def CancelLaw : Prop :=
+  ∀ c K₀ l H K, S.Live c → S.term c = S.plug K₀ (S.cancel (S.capture l H K)) →
+    S.PureJoin c (S.setT c (S.plug K₀ (S.cancelOf l H K)))
+
+/-- Cancel at a cell: cancelling an affine `κ` at its cell `ℓ`, in a store that holds `ℓ`, releases
+`ℓ` and starts `κ`'s cancel run.  (A linear `κ` is never cancelled; S6.) -/
+def CancelCellLaw : Prop :=
+  ∀ c K₀ l H K ℓ, S.cellFree c ℓ → S.Live (S.withCell c ℓ) →
+    S.term (S.withCell c ℓ) = S.plug K₀ (S.cancel (S.captureAt .affine l H K ℓ)) →
+    S.JoinAcross (S.withCell c ℓ) c (S.plug K₀ (S.cancelOf l H K))
+
+/-- A finaliser frame whose body returned continues with `N`. -/
+def ThenLaw : Prop :=
+  ∀ c K₀ v N D, S.Live c → S.term c = S.plug K₀ (S.thenT (S.ret v) N D) →
+    S.PureJoin c (S.setT c (S.plug K₀ (S.bind (S.ret v) N)))
+
+/-- An unwind that reaches a finaliser frame fires the finaliser and runs it where the frame was,
+inside a context `Kp` of the instance's that catches nothing; once it returns `()`, the raise goes
+on (SPEC [finalise]). -/
+def FinLaw : Prop :=
+  ∀ c K₀ N D K m j w, S.Live c → S.term c = S.plug K₀ (S.thenT (S.plug K (S.raise m j w)) N D) →
+    S.catches K m = false → S.unwindClear K →
+    ∃ c₁ Kp, S.step c (.fire D) c₁ ∧ (∀ m', S.catches Kp m' = false) ∧ S.unwindClear Kp ∧
+      S.PureSteps c₁ (S.setT c (S.plug (S.kcomp K₀ Kp) D)) ∧
+      S.PureSteps (S.setT c (S.plug (S.kcomp K₀ Kp) (S.ret S.unitV)))
+        (S.setT c (S.plug K₀ (S.raise m j w)))
+
 /-- **S4.** -/
 def HandlerSem : Prop :=
-  -- return: "return V handled with … to x : A. N(x) = N(V)"
-  (∀ c K₀ l r cs v, S.Live c → S.term c = S.plug K₀ (S.handle l (S.hnd r cs) (S.ret v)) →
-     S.PureJoin c (S.setT c (S.plug K₀ (S.app (S.force r) v)))) ∧
-  -- a resuming operation caught: the clause gets the argument and κ
-  (∀ c K₀ l r cs K i v (o : OpSig S.Ty) cl,
-     S.Live c → S.term c = S.plug K₀ (S.handle l (S.hnd r cs) (S.plug K (S.perform l i v))) →
-     S.catches K l = false → (S.sig l)[i]? = some o → o.cls ≠ .abortive → cs[i]? = some cl →
-     S.PureJoin c (S.setT c (S.plug K₀ (S.app (S.force cl) (S.pair v (S.capture l (S.hnd r cs) K)))))) ∧
-  -- an abortive operation caught: the clause gets the argument only, and κ is never reified
-  (∀ c K₀ l r cs K i v (o : OpSig S.Ty) cl,
-     S.Live c → S.term c = S.plug K₀ (S.handle l (S.hnd r cs) (S.plug K (S.raise l i v))) →
-     S.catches K l = false → S.unwindClear K → (S.sig l)[i]? = some o → o.cls = .abortive →
-     cs[i]? = some cl → S.PureJoin c (S.setT c (S.plug K₀ (S.app (S.force cl) v)))) ∧
-  -- deep resume: resuming κ runs the frozen context under the same handler again
-  (∀ c K₀ l H K w, S.Live c → S.term c = S.plug K₀ (S.resume (S.capture l H K) w) →
-     S.PureJoin c (S.setT c (S.plug K₀ (S.handle l H (S.plug K (S.ret w)))))) ∧
-  -- cancel starts κ's cancel run, in the canceller's context
-  (∀ c K₀ l H K, S.Live c → S.term c = S.plug K₀ (S.cancel (S.capture l H K)) →
-     S.PureJoin c (S.setT c (S.plug K₀ (S.cancelOf l H K)))) ∧
-  -- a finaliser frame whose body returned continues with `N`
-  (∀ c K₀ v N D, S.Live c → S.term c = S.plug K₀ (S.thenT (S.ret v) N D) →
-     S.PureJoin c (S.setT c (S.plug K₀ (S.bind (S.ret v) N)))) ∧
-  -- an unwind that reaches a finaliser frame fires the finaliser and runs it where the frame was,
-  -- inside a context `Kp` of the instance's that catches nothing; once it returns `()`, the raise
-  -- goes on (SPEC [finalise])
-  (∀ c K₀ N D K m j w, S.Live c → S.term c = S.plug K₀ (S.thenT (S.plug K (S.raise m j w)) N D) →
-     S.catches K m = false → S.unwindClear K →
-     ∃ c₁ Kp, S.step c (.fire D) c₁ ∧ (∀ m', S.catches Kp m' = false) ∧ S.unwindClear Kp ∧
-       S.PureSteps c₁ (S.setT c (S.plug (S.kcomp K₀ Kp) D)) ∧
-       S.PureSteps (S.setT c (S.plug (S.kcomp K₀ Kp) (S.ret S.unitV)))
-         (S.setT c (S.plug K₀ (S.raise m j w))))
+  S.RetLaw ∧ S.CatchLaw ∧ S.AbortLaw ∧ S.ResumeLaw ∧ S.ResumeCellLaw ∧ S.CancelLaw ∧
+    S.CancelCellLaw ∧ S.ThenLaw ∧ S.FinLaw
+
+/-- **S4 with no cell**: every catch hands `capture l H K` and keeps the store.  At an instance with
+no cells it is S4 (`handlerSem_iff_noCell`); at ours it fails at `J₁`, where the catch of a linear or
+affine operation allocates `κ`'s cell (`Targets/Instance/HandlerCell.lean`). -/
+def HandlerSemNoCell : Prop :=
+  S.RetLaw ∧ S.CatchKeep ∧ S.AbortLaw ∧ S.ResumeLaw ∧ S.CancelLaw ∧ S.ThenLaw ∧ S.FinLaw
+
+/-- The catch law with no cell gives the catch law. -/
+theorem catchLaw_of_keep (h : S.CatchKeep) : S.CatchLaw :=
+  fun c K₀ l r cs K i v o cl hl ht hK hs ho hc => .inl (h c K₀ l r cs K i v o cl hl ht hK hs ho hc)
+
+/-- **At an instance with no cells, S4 is S4 with no cell**: the catch law's cell alternative
+needs a cell, and the laws at a cell are about none.  So every refutation of S4 with no cell at
+such an instance refutes S4. -/
+theorem handlerSem_iff_noCell (hC : IsEmpty S.Cell) : S.HandlerSem ↔ S.HandlerSemNoCell := by
+  constructor
+  · rintro ⟨h1, h2, h3, h4, -, h6, -, h8, h9⟩
+    refine ⟨h1, fun c K₀ l r cs K i v o cl hl ht hK hs ho hc => ?_, h3, h4, h6, h8, h9⟩
+    rcases h2 c K₀ l r cs K i v o cl hl ht hK hs ho hc with h | ⟨ℓ, -⟩
+    · exact h
+    · exact hC.elim ℓ
+  · rintro ⟨h1, h2, h3, h4, h6, h8, h9⟩
+    exact ⟨h1, S.catchLaw_of_keep h2, h3, h4, fun _ _ _ _ _ _ ℓ => hC.elim ℓ, h6,
+      fun _ _ _ _ _ ℓ => hC.elim ℓ, h8, h9⟩
+
+/-- A refutation of S4 with no cell, at an instance with no cells, refutes S4. -/
+theorem not_handlerSem_of_noCell (hC : IsEmpty S.Cell) (h : ¬ S.HandlerSemNoCell) :
+    ¬ S.HandlerSem :=
+  fun h' => h ((S.handlerSem_iff_noCell hC).1 h')
 
 /-! ### S5: cancellation, as built (SPEC §19; decision 62) -/
 

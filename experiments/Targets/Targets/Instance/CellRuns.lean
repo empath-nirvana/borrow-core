@@ -35,7 +35,7 @@ variable {ℍ : BoCa.Host} [BoCa.HostIs ℍ]
 namespace Targets.Inst
 open BoCa BoCa.Fig16 BoCa.Fig16.BoLo BoCa.Fig16.LogRel BoCa.Fig16.LogRel.Core
 open BoCa.BoLo (Heap Steps Step1 Head Kont performE raiseE opPayload hndE ubindE hndVal kappa
-  clauseAt capTag kappaAt kappaC kappaCBody kappaCell freeE)
+  clauseAt capTag kappaAt kappaC kappaCBody kappaCell freeE ccatchE cancelVal)
 open BoCa.Lifetime (LifeCtx)
 open Targets (RowForm EffCtx orowRF orowAlg HeadChain)
 
@@ -452,7 +452,7 @@ theorem runsAlike_of_live_calm (hL : LiveOK (ℍ := ℍ) RF Ξ J) {t₁ t₂ : E
 
 end CalmObs
 
-/-! ### Resuming `κ` around its cell -/
+/-! ### Resuming and cancelling `κ` around its cell -/
 
 /-- The value `κ`'s resume branch leaves after its cell's release: `λy. hnd H K[y]`, before its
 substitutions are carried out. -/
@@ -477,6 +477,29 @@ theorem kappaC_resume_parts (aff : Bool) (ℓ : Loc) (n : UInt32) (H : Val) (K :
         (hndE (H.shift 3 0) ((K.shift 3 0).plug (.var 0))))) w) rfl rfl
     rw [kappa_resume_subst] at hb
     exact hb
+
+/-- The term an affine `κ`'s cancel branch leaves after its cell's release:
+`ccatch (hnd H K[raise (0, (0, (N, none)))])`, before its substitutions are carried out. -/
+def kCanE (n : UInt32) (H : Val) (K : Kont) : Expr :=
+  Expr.subst 0 Val.unit (Expr.subst 1 (Val.inj₂ Val.unit)
+    (ccatchE (hndE (H.shift 2 0) ((K.shift 2 0).plug
+      (raiseE (.val (cancelVal (n :: K.hndNames) none)))))))
+
+/-- **Cancelling an affine `κ` at its cell `ℓ`** reaches the release of `ℓ` quietly, and from the
+release's answer reaches `κ`'s cancel run quietly. -/
+theorem kappaC_cancel_parts (ℓ : Loc) (n : UInt32) (H : Val) (K : Kont) :
+    Quiet (ℍ := ℍ) (.app (kappaC true ℓ n H K) (.val (Val.inj₂ .unit)))
+      ((Kont.seq .hole (kCanE n H K)).plug (freeE (.val (Val.loc ℓ)))) ∧
+    Quiet (ℍ := ℍ) ((Kont.seq .hole (kCanE n H K)).plug (.val Val.unit))
+      (Targets.cancelOf n H K) := by
+  refine ⟨?_, ?_⟩
+  · refine (Quiet.head .hole (fun μ => Head.beta μ _ _) rfl rfl).trans ?_
+    refine (Quiet.head .hole (fun μ => Head.case₂ μ Val.unit _ _) rfl rfl).trans ?_
+    exact Quiet.head .hole (fun μ => Head.seq μ _) rfl rfl
+  · refine (Quiet.head (ℍ := ℍ) .hole (fun μ => Head.seq μ (kCanE n H K)) rfl rfl).trans ?_
+    have e : kCanE n H K = Targets.cancelOf n H K := kappa_cancel_subst n H K _ _
+    rw [e]
+    exact Quiet.refl _
 
 /-- A run `look` computes, none of whose steps is a finaliser's, is quiet. -/
 theorem quiet_of_look (k : ℕ) (e : Expr) (hf : (Targets.lookRun k e).all (fun x => !finHead x.2.1) = true) :

@@ -7,7 +7,8 @@ import Mathlib.Data.List.Infix
 **An effect system** is any calculus with effects, read as call-by-push-value with an effect
 index: a signature of operations with arities and a control class, rows over it (an effect algebra,
 `EffAlg`), a typing judgement at a row closed under binding a value, handlers given by a return
-clause and a clause per operation, continuations resumed or cancelled, a labelled small-step
+clause and a clause per operation, continuations resumed or cancelled (a continuation may own a
+cell of the store, which its use releases), a labelled small-step
 semantics whose evaluation contexts include `□ to x. N` and `□ V`, and a platform (a runner,
 Ahman–Bauer Def. 1) that answers the operations left at the top.
 
@@ -131,6 +132,16 @@ structure EffectSystem where
   capture : EA.Lab → Hnd → Kont → Val
   /-- The start of `κ`'s cancel run. -/
   cancelOf : EA.Lab → Hnd → Kont → Term
+  /-- A continuation's cell: a location of the store.  A one-shot continuation can be a store
+  object at a fresh location, which its use releases (Affect §3.1; Hazel; SPEC §25's capture
+  cell). -/
+  Cell    : Type
+  /-- `κ` at its cell: the continuation of a caught operation of class `k`, owning the cell. -/
+  captureAt : OpClass → EA.Lab → Hnd → Kont → Cell → Val
+  /-- The store holds nothing at the location. -/
+  cellFree : Conf → Cell → Prop
+  /-- The store with a cell at the location, holding the unit value; the term is kept. -/
+  withCell : Conf → Cell → Conf
   init    : Term → Conf
   term    : Conf → Term
   /-- The same store, another term. -/

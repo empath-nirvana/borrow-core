@@ -3776,11 +3776,11 @@ no `[TR]` lemma and no borrow rule changes; the cell is handled by 6.141, 6.142,
 
 ### Open
 
-- **S4's catch law** (`A.HandlerSem`) hands the clause `capture l H K` and keeps the store. With the
-  cell it fails as written at tier 1's typing at an admissible effect context
-  (`not_handlerSem_J₁_ΞA`): the catch of a linear operation is followed by the cell's allocation.
-  It holds where every resuming operation is unrestricted. Its restatement is open (TIER1-PLAN,
-  *Round 3*).
+- **S4** (`A.HandlerSem`) is stated with the cell: a catch hands the clause `capture l H K` and
+  keeps the store, or allocates one fresh unit cell and hands `κ` at it, whose resume and affine
+  cancel release it. It holds at tier 1's typing at every effect context (`handlerSem_J₁`). S4 as
+  first stated, every catch keeping the store, fails there at an admissible effect context
+  (`not_handlerSemNoCell_J₁_ΞA`) (TIER1-PLAN, *Fix-up outcome*).
 - **S6 at tier 1's typing**, from the cell: reduced to leak freedom (proved) and two ownership
   properties of the cell, open (`contUseEv_J₁_of`; TIER1-PLAN, *Round 3*).
 

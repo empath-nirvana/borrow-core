@@ -22,6 +22,7 @@ each signature the (E) programs use).
 | `Kont`, `plug`, `kcomp`, frames | Core's `Kont`, `Kont.plug`, `Kont.comp`; `bindF N` is `□ to x. N`, `appF V` is `□ V`, `handleF` the handler frame, `thenF` the `ubind` frame |
 | `catches`, `unwindClear`, `fins` | `Kont.HasHnd`; no `ubind` and no `cfin` frame; `Kont.fins`, each read as an A-term |
 | `capture`, `cancelOf` | `kappa`, `cancelOf` (base): the continuation of an unrestricted operation; at a linear or affine one the catch hands `kappaC` at a fresh cell (SPEC §25) |
+| `Cell`, `captureAt`, `cellFree`, `withCell` | locations; `kappaC` at the location, affine at an affine class (SPEC §25); the memory holds nothing at the location; the memory with `()` at the location |
 | `step` | `Step1` under every allocator, labelled `fire D` at `ufin`/`ufinC`, `finEnd` at `cfret`/`cferr`, `tau` otherwise; and the driver's `top` steps |
 | `derV`, `der` | `J` at `Ξ` (`derAt`: its inner rows tied to `Ξ`, decision R), at the empty lifetime context and a row context declaring row variables at `any`, every slot live; a computation at a returner whose row is tied to `Ξ` (`OCTy.TiedAt`, decision D1); a driven program is typed at `[]` and a loop sum, its current step's type, the loop's row below the step's and its body positive (decision D2) |
 
@@ -40,7 +41,7 @@ variable {ℍ : BoCa.Host} [BoCa.HostIs ℍ]
 namespace Targets.Inst
 open BoCa BoCa.Fig16 BoCa.Fig16.BoLo BoCa.Fig16.LogRel BoCa.Fig16.LogRel.Core
 open BoCa.BoLo (Heap Steps Step1 Head Kont performE raiseE opPayload hndE ubindE cfinE cancelVal
-  kappa)
+  kappa kappaC)
 open BoCa.Lifetime (LSub LifeCtx LifeVar)
 open Targets (RVar RowEnv RowCon RowCtx RowForm EffCtx TypingJ OutJ Phase nextE orowRF RowClass
   RowAt rowAt_nil orowAlg ORow)
@@ -219,6 +220,13 @@ def captureE (n : UInt32) (qs r : Expr) (cs : List Expr) (K : Kont) : Expr :=
   if h : IsVal (hndValE n qs r cs) then kappa n ⟨_, h⟩ K else .unit
 
 open Classical in
+/-- `κ` at its cell `ℓ` (`kappaC`, SPEC §25), at a handler of values: affine when its cancel releases
+the cell. -/
+def captureAtE (aff : Bool) (ℓ : Loc) (n : UInt32) (qs r : Expr) (cs : List Expr) (K : Kont) :
+    Expr :=
+  if h : IsVal (hndValE n qs r cs) then kappaC aff ℓ n ⟨_, h⟩ K else .unit
+
+open Classical in
 /-- The start of `κ`'s cancel run (`cancelOf`), at a handler of values. -/
 def cancelOfE (n : UInt32) (qs r : Expr) (cs : List Expr) (K : Kont) : Expr :=
   if h : IsVal (hndValE n qs r cs) then Targets.cancelOf n ⟨_, h⟩ K else .unit
@@ -357,6 +365,14 @@ def ourInst (RF : RowForm) (Ξ : EffCtx) (J : OurTyping RF) : A.EffectSystem whe
     · unfold kappa; exact .lam
     · exact .unit⟩
   cancelOf l H K := cancelOfE (RF.name Ξ l) (qsOf Ξ (RF.name Ξ l)) H.1.1 (H.2.map Subtype.val) K
+  Cell := Loc
+  captureAt k l H K ℓ := ⟨captureAtE (decide (k = .affine)) ℓ (RF.name Ξ l) (qsOf Ξ (RF.name Ξ l))
+    H.1.1 (H.2.map Subtype.val) K, by
+    unfold captureAtE; split
+    · unfold kappaC; exact .lam
+    · exact .unit⟩
+  cellFree c ℓ := c.1 ℓ = none
+  withCell c ℓ := (c.1.upd ℓ Val.unit, c.2)
   init e := (Adequacy.emptyMem, e)
   term c := c.2
   setT c t := (c.1, t)

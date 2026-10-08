@@ -1,6 +1,7 @@
 import Targets.I.J1
 import Targets.I.Rejects
 import Targets.Base.LookMem
+import Targets.Instance.FinRaise
 
 /-!
 # The interaction — the composite's programs and rejections at `J₁` (decision AR)
@@ -20,7 +21,10 @@ empty platform (`prun_of_steps`).
 have no derivation in Core's kernel, at any context and judgement.
 
 **Tier 1 at `J₁`** follows from A's (E) properties, S4, S5 and S6 at every admissible effect context
-(`tier1_J₁_of_ESU`); each of those fails as written at `J₁` (`Targets/Status.lean`).  `[Core σ=[]]`
+(`tier1_J₁_of_ESU`).  S4 is proved at every effect context (`I.handlerSem_J₁`, the capture cell's
+catch law), so it follows from (E), S5 and S6 (`tier1_J₁_of_ECU`).  (E) fails as written at `J₁`
+under option A (E7–E9), so tier 1 does (`not_tier1_J₁`); S5 fails as written too, and S6 is open
+(`Targets/Status.lean`).  `[Core σ=[]]`
 -/
 
 noncomputable section
@@ -129,6 +133,24 @@ theorem I.tier1_J₁_of_ESU
     (hU : ∀ Ξ, AdmEff Ξ → (ourInst (ℍ := ℍ) orowRF Ξ J₁).ContUseEv) :
     I.Tier1 (ℍ := ℍ) J₁ :=
   I.tier1_J₁_of hE hS4 hC hU I.accepts_J₁ I.rejects_J₁
+
+/-- **Tier 1 at `J₁`, given A's (E) properties, S5 and S6 at every admissible effect context**: S4
+is proved at every effect context (`I.handlerSem_J₁`, the capture cell's catch law), and `Accepts`
+and `Rejects` (decision AR). -/
+theorem I.tier1_J₁_of_ECU
+    (hE : ∀ Ξ, AdmEff Ξ → (ourInst (ℍ := ℍ) orowRF Ξ J₁).EProps)
+    (hC : ∀ Ξ, AdmEff Ξ → (ourInst (ℍ := ℍ) orowRF Ξ J₁).Cancellation
+      (ourInst (ℍ := ℍ) orowRF Ξ J₁).noFinRaise)
+    (hU : ∀ Ξ, AdmEff Ξ → (ourInst (ℍ := ℍ) orowRF Ξ J₁).ContUseEv) :
+    I.Tier1 (ℍ := ℍ) J₁ :=
+  I.tier1_J₁_of_ESU hE (fun _ _ => I.handlerSem_J₁) hC hU
+
+/-- **Tier 1 at `J₁` FAILS AS WRITTEN**: its A conjunct asks A's (E) properties at every admissible
+effect context, and E7, E8 and E9 fail at `J₁` at every effect context under option A
+(`Inst.not_eProps_J₁`); its S5 hypothesis fails as written too (`I.not_cancellation_admissible`).
+S4 holds at every effect context (`I.handlerSem_J₁`). -/
+theorem I.not_tier1_J₁ : ¬ I.Tier1 (ℍ := ℍ) J₁ := fun h =>
+  Inst.not_eProps_J₁ (h.1 Inst.ΞA Inst.admEff_ΞA).2
 
 end Targets
 

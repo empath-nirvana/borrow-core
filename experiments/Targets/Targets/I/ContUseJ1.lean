@@ -808,13 +808,6 @@ theorem contUseEv_J₁_of (hO : ∀ Ξ, AdmEff Ξ → OnlyOwnerFrees (ℍ := ℍ
     (Inst.liveOK_of_coreClosed (D := Inst.J1DerAt Ξ) (Inst.coreClosed_J₁At Ξ))
     leakFreeAt_J₁ (hO Ξ hΞ) (hN Ξ hΞ)
 
-/-- **Tier 1 at `J₁` FAILS AS WRITTEN**: its A conjunct asks S4 at every admissible effect context,
-and S4's catch law, which hands `capture l H K` and keeps the store, fails at `ΞA`, whose `tick` is
-linear: the catch of a linear operation allocates `κ`'s cell (`Inst.not_handlerSem_J₁_ΞA`).  The
-restatement of S4's capture laws is the user's. -/
-theorem not_tier1_J₁ : ¬ Tier1 (ℍ := ℍ) J₁ := fun h =>
-  Inst.not_handlerSem_J₁_ΞA ((h.1 Inst.ΞA Inst.admEff_ΞA).1.2.2.2.2.2.2.1)
-
 end Targets.I
 
 end
