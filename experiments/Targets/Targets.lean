@@ -7,6 +7,7 @@ import Targets.A.NonVacuity
 import Targets.A.Programs
 import Targets.A.Soundness
 import Targets.A.UnaryLaws
+import Targets.A.Theories
 import Targets.A.System
 import Targets.Base.Closed
 import Targets.Base.CoreCancel
@@ -49,10 +50,13 @@ import Targets.Instance.Restricted.NoInterception
 import Targets.Instance.Restricted.Programs
 import Targets.Instance.Restricted.Unwind
 import Targets.Instance.Rows
+import Targets.Instance.Runs
 import Targets.Instance.RunTyping
 import Targets.Instance.Safety
 import Targets.Instance.Types
 import Targets.Instance.Typing
+import Targets.Instance.Theories
+import Targets.Instance.UnaryLaws
 import Targets.Instance.ZeroCost
 import Targets.I.Binder
 import Targets.I.Combined

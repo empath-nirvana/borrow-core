@@ -23,6 +23,8 @@ import Targets.Instance.RunTyping
 import Targets.I.Restricted.InstanceSafety
 import Targets.I.GhostCoupling
 import Targets.I.J1
+import Targets.I.Theories
+import Targets.Instance.UnaryLaws
 
 /-!
 # Targets — status, by system (RESTRUCTURE §0)
@@ -114,6 +116,35 @@ the world conjuncts and the device at `coreW` (`status_tier1Core_world`); its `P
   type; checked in Lean before the repair.  An index beyond `UInt32` now encodes to an open stuck
   term (`opJunk`), which no closed configuration holds.
 
+## Piece 5: the answering class (D1.h1, D1.h3, D1.h4)
+
+* **Theories** (D1.h3, D1.h4; `Targets/A/Theories.lean`).  Equations are writable in signatures:
+  an equation is two straight-line computations over one label's operations and the same
+  parameters, ending in the continuation (`Eqn`, `SLComp`, `Theory`, OQ-22 (a)).  The answering
+  handler is the state-passing handler of co-operations (`ansHnd`, decision 59); it is a model of
+  a theory when the two sides of each equation, handled and run from each state, run alike
+  (`AnsCorrect`, Plotkin–Pretnar Def. 4.5 at `RunsAlike`); co-operations are a comodel when their
+  own runs of the two sides reach one final state and continuation argument (`IsComodel`,
+  Ahman–Bauer Def. 1 with equations).  Global state is the first theory (`stateTheory`, four laws).
+* **The comodel reduction, D1.h4 (c)** (`ansCorrect_of_comodel`): at our instance, co-operations
+  that run quietly (`PureCo`, this piece's added hypothesis) and form a comodel give a correct
+  handler, at every typing system whose reached configurations are closed: the handled sides fold
+  as the co-runs do (`quiet_fold`, the native counterpart of `handle_fold`) and meet.  `stateCo`
+  is a comodel and its handler correct (`state_isComodel`, `state_correct`; at `J₁`,
+  `I.state_correct_J₁`).  Not vacuous: at `J₁` and an admissible context with a state signature
+  (`Ξst`), the handler whose `put` keeps the old state fails the update–lookup law at a typed
+  program, and its co-operations are no comodel (`status_theories`).
+* **The unary laws at our instance** (D1.h1, D4's restatement).  **Algebraicity FAILS AS WRITTEN
+  at `J₁`** (`status_unaryLaws`): an inner handler at an `unr` operation holds its persistent
+  continuation in a finaliser frame, and the trace's `fire D` compares `D`'s code, which mentions
+  the continuation the two sides capture differently (`Targets/Instance/UnaryLaws.lean`).  At a
+  linear or affine continuation no finaliser at `F 1` can hold it.  Two repairs, the user's: a
+  finaliser's start observed without its code (D4 read at the trace's events), or `unr`
+  restricted (decision 63).  The tail-resumptive law and η: OPEN (below).  At the answering class
+  (a tail-resumptive clause whose code runs quietly) both the tail-resumptive law and
+  algebraicity hold (`tailLaw_quiet`, `algLaw_quiet`; at `J₁`, `I.tailLaw_quiet_J₁`,
+  `I.algLaw_quiet_J₁`).
+
 ## System A
 
 | target | status | Lean |
@@ -125,7 +156,8 @@ the world conjuncts and the device at `coreW` (`status_tier1Core_world`); its `P
 | effect safety has teeth; Def. 5.1 (1) from one signature object | PROVED (every instance) | `not_der_unhandled`, `c1_of_rowSig` |
 | the runners `Rtick`, `Rtl`, `Rrec` keep their protocol | PROVED (every instance; `Rrec` at distinct labels) | `rtick_respects`, `rtl_respects`, `rrec_respects` |
 | A's properties at our instance | at today's kernel, every admissible effect context: S0, the let law, S1, `DataDiv`, S2, S3, S4 PROVED AT σ=[]; at `J₁`, every effect context: the same, PROVED AT σ=[]; S5 OPEN (bridges not built); S6 OPEN (below) | `status_sPropsNoCancel_tier1Open`, `status_sPropsNoCancel_J₁` |
-| the unary laws beside done, `UnaryLaws` (`TailLaw`, `AlgLaw`, `EtaHold`) and the alternative `EtaLin`: run-level (menu form F.3), the tail law's hygiene as hypotheses, compared at a program's data answers (D4) | RESTATED; STATED, not proved (at no instance); **not in done**: whether they join done is a menu choice (P11/I5 menu axes H, F, K), for the user | `Targets/A/UnaryLaws.lean` |
+| the unary laws beside done, `UnaryLaws` (`TailLaw`, `AlgLaw`, `EtaHold`) and the alternative `EtaLin`: run-level (menu form F.3), the tail law's hygiene as hypotheses, compared at a program's data answers (D4) | RESTATED; STATED (at our instance: the Instance's rows); **not in done**: whether they join done is a menu choice (P11/I5 menu axes H, F, K), for the user | `Targets/A/UnaryLaws.lean` |
+| theories (D1.h3, D1.h4 (a)–(b)): equations in signatures (`Eqn`, `SLComp`, `Theory`), the state-passing handler of co-operations (`ansHnd`, `runAt`), handler correctness (`AnsCorrect`, Plotkin–Pretnar Def. 4.5 at `RunsAlike`), comodels (`IsComodel`, Ahman–Bauer Def. 1 with equations), global state (`stateTheory`, `stateCo`, `badStateCo`) | stated (elaborate); at our instance: the Instance's rows | `Targets/A/Theories.lean` |
 | `EtaHold` gives `EtaLin`; each of the four fails at an instance whose handler or bind ignores its clauses | PROVED | `etaLin_of_etaHold`, `not_tailLaw_toy`, `not_algLaw_toy`, `not_etaHold_toy`, `not_etaLin_toy` |
 | A₃'s reference programs (the `Tgt` code checking each `refCost` entry) | not written | RESTRUCTURE §Unresolved |
 
@@ -189,7 +221,10 @@ the world conjuncts and the device at `coreW` (`status_tier1Core_world`); its `P
 | route 8.4 to S6: a ghost obligation in `contShare`, consumed where `κ` is resumed or cancelled, read by `NoOwn` at a run's end | **STOPPED at its probe**: FL at BoLo does not give S6, at one capture, one resume and one cancel (R1, R2, R3 are in Core's relation at `F bool`, whose clause is `wpTS`, and break S6); along their runs BoLo's world is the empty resource | `status_ghostCoupling`, `I.not_ghostCoupling`, `I.ghost_probe`, `I.lower_empty_eq` |
 | S6's teeth: R1–R4 (RESTRUCTURE §6.1) at our machine | PROVED: every typing system over our machine that types one of them at `F 0 bool` fails S6 (R1 at a label whose first operation resumes, R3 at a linear one, R2 and R4 at any; at a general row form, given what `orowRF` gives); `JR` types all four, and at `ΞA` each lemma applies | `not_contUse_of_der_R1` … `_R4`, `not_contUse_of_der_R1_orow` … `_R4_orow`, `teeth_JR_ΞA` |
 | today's kernel types none of R1–R4 | PROVED, by the handler's form (our handler is the run-time frame, its clauses values; `[handle]` types clause variables). At the clauses, by the linearity of `κ` (RESTRUCTURE §6.1's reason): today's clause typing refuses R1's, R2's and R4's clauses at every resuming `lin` or `aff` operation (a live slot of `kTy` is neither dropped nor duplicated) and R3's at every `lin` one (a linear `κ`'s cancel is at `⊤`); at the clause type of a linear `1 ↠ 1`, where all four are refused, a clause that resumes `κ` once is typed, and `cancelCl` is typed at `aff` and refused at `lin`. At `unr` the argument does not apply (multi-shot is not considered) | `refuses_R_tier1Open`, `refuses_R_clauses`, `clauseRefusals_pinned` |
-| `AlgLaw`, `TailLaw` at our instance, RESTATED (D4: data answers) | OPEN (not checked at today's kernel) | — |
+| `AlgLaw`, `TailLaw`, `EtaHold` at our instance, RESTATED (D4: data answers) | `AlgLaw` **FAILS AS WRITTEN at `J₁`**, at the admissible `ΞA`: `algFireProg`, typed by Core's kernel, reaches the law's left side under a handler at an `unr` operation whose clause holds its persistent continuation in a finaliser and raises; the two runs answer `()` and show `fire` of finalisers that differ as terms. `TailLaw` OPEN: by this mechanism no witness types (an `unr` outer handler forces the tail clause's continuation context persistent, and our instance's `resume` forces only a `U` slot); not proved. `EtaHold` OPEN: `[handle]`'s `hnS` keeps a forwarding handler's own name out of its clauses' row, so by that reading no typed program installs one (not checked by an inversion); not proved | `not_algLaw_J₁`, `not_algLaw_ΞA`, `d_algFireProg`, `finE_DL_ne` |
+| the tail-resumptive law and algebraicity at the answering class (a clause `λ(a, k). c a to b. k.resume b` whose code runs quietly) | PROVED at every typing system with `LiveOK`, so at `J₁` | `quiet_tailClause`, `tailLaw_quiet`, `algLaw_quiet`, `I.tailLaw_quiet_J₁`, `I.algLaw_quiet_J₁` |
+| D1.h4 (c), the comodel reduction: co-operations that run quietly (`PureCo`) and form a comodel give a correct handler | PROVED at every typing system with `LiveOK` whose typed closed values are closed | `ansCorrect_of_comodel`, `quiet_fold`, `quiet_opStep`, `quiet_coFrom` |
+| global state: `stateCo` a comodel of the four laws, its handler correct; not vacuous | PROVED (at `J₁`: `I.state_correct_J₁`); at `J₁` and the admissible `Ξst`, the handler whose `put` keeps the old state fails the update–lookup law at a typed program, and its co-operations are no comodel | `state_isComodel`, `state_correct`, `I.state_correct_J₁`, `not_ansCorrect_badState`, `not_isComodel_badState`, `admEff_Ξst` |
 | `LetLaw` at today's kernel | PROVED (typing) | `letLaw_ourInst_tier1Open` |
 | S1 (`RowAlgebra`) at our instance, RESTATED (D6: `SubClosed` at a well-formed target row) | PROVED at today's kernel, at every effect context with no resuming `unr` operation, the admissible ones among them; `EA.Laws`, `EA.Safe` and `RowSig` at every typing system. The premise is needed | `rowAlgebra_ourInst_tier1Open`, `rowAlgebra_noSub_ourInst`, `subClosed_nu_tier1Open`, `rowNU_of_wf`; `subClosed_needs_wf` |
 | A-level handlers at today's kernel | **NOT TYPED** by `tier1Open` (the kernel's fragment without SPEC §24's rules): our instance's `handle` is the run-time frame, clauses as values; the fragment's `[handle]` types only `hndTerm n ir ic e`. So E4, E5, E6, E7 and E8 **FAIL** at `tier1Open` at every effect context.  Core's `[handle]` (§24) types the frame form, and so does `J₁`; no (E) property is checked at `J₁` | `not_der_handleK`, `not_der_handle_tier1Open`, `status_handlers_tier1Open` |
@@ -809,6 +844,36 @@ theorem status_ghostCoupling :
       ¬ (ourInst (ℍ := ℍ) orowRF Inst.ΞA I.JRp).ContUse ∧
       (∀ ρ : WRes, ResU.Lower ρ Adequacy.emptyMem → ρ = PMap.empty) :=
   ⟨I.not_ghostCoupling, I.fl_core_JRp, I.ghost_probe_resume, fun _ h => I.lower_empty_eq h⟩
+
+/-! ## Piece 5: the answering class -/
+
+/-- **FAILS AS WRITTEN at `J₁`**: algebraicity, at the admissible effect context `ΞA`.  The
+witness is typed by Core's kernel. -/
+theorem status_unaryLaws :
+    (AdmEff Inst.ΞA ∧ ¬ (ourInst (ℍ := ℍ) orowRF Inst.ΞA J₁).AlgLaw) ∧
+      CDerives BoCa.Lifetime.LifeCtx.empty [] Inst.algFireProg (.comp (.ret .unit)) ∧
+      Inst.finE Inst.DL5.1 ≠ Inst.finE Inst.DR5.1 :=
+  ⟨Inst.not_algLaw_ΞA, Inst.d_algFireProg, Inst.finE_DL_ne⟩
+
+/-- **PROVED AT σ=[]**: the theory of global state at `J₁` — `stateCo` is a comodel and its
+handler is correct, at every effect context, carrier and label; and not vacuously: at the
+admissible `Ξst`, the handler whose `put` keeps the old state is no model and its co-operations no
+comodel. -/
+theorem status_theories :
+    (∀ (Ξ : EffCtx) (T : Inst.OVTy) (l : (orowAlg Ξ).Lab),
+      (ourInst (ℍ := ℍ) orowRF Ξ J₁).IsComodel ((ourInst (ℍ := ℍ) orowRF Ξ J₁).stateTheory T) l
+        (ourInst (ℍ := ℍ) orowRF Ξ J₁).stateCo T ∧
+      (ourInst (ℍ := ℍ) orowRF Ξ J₁).AnsCorrect ((ourInst (ℍ := ℍ) orowRF Ξ J₁).stateTheory T) l
+        (ourInst (ℍ := ℍ) orowRF Ξ J₁).stateCo T) ∧
+    AdmEff Inst.Ξst ∧
+    ¬ (ourInst (ℍ := ℍ) orowRF Inst.Ξst J₁).AnsCorrect
+      ((ourInst (ℍ := ℍ) orowRF Inst.Ξst J₁).stateTheory Inst.stT) Inst.labSt
+      (ourInst (ℍ := ℍ) orowRF Inst.Ξst J₁).badStateCo Inst.stT ∧
+    ¬ (ourInst (ℍ := ℍ) orowRF Inst.Ξst J₁).IsComodel
+      ((ourInst (ℍ := ℍ) orowRF Inst.Ξst J₁).stateTheory Inst.stT) Inst.labSt
+      (ourInst (ℍ := ℍ) orowRF Inst.Ξst J₁).badStateCo Inst.stT :=
+  ⟨fun _ T l => ⟨Inst.state_isComodel_J₁ T l, I.state_correct_J₁ T l⟩, Inst.admEff_Ξst,
+    Inst.not_ansCorrect_badState, Inst.not_isComodel_badState⟩
 
 /-- Binary and cross-language over Core, out of the first pass (stated, OPEN). -/
 example (J : TypingJ) (fuse : Val → Val → Val) : Prop :=
