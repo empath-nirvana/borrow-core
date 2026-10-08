@@ -39,6 +39,7 @@ Instance; the Instance imports no B or I; I imports everything.
 | | `Targets/A/Expressiveness.lean` | E1 `NoColouring` … E10 `Reconciler`; `EProps`; `Props := SProps ∧ EProps` |
 | | `Targets/A/NonVacuity.lean` | the abstract non-vacuity lemmas |
 | | `Targets/A/Binary.lean`, `Targets/A/Lowering.lean` | A₂ (the binary laws) and A₃ (the erased lowering over a fixed target), stated, out of the first pass |
+| | `Targets/A/UnaryLaws.lean`, `Targets/A/Theories.lean` | the unary laws beside done, run-level (`TailLaw`, `AlgLaw`, `EtaHold`, `EtaLin`); theories: equations in signatures (`Eqn`, `Theory`), the state-passing handler of co-operations (`ansHnd`, `runAt`), handler correctness (`AnsCorrect`), comodels (`IsComodel`), global state (`stateTheory`, `stateCo`) |
 | **base** | `Targets/Base/*` | Core's machine, rows and typing as B, I and the Instance read them: platforms, runs, `PRun`, `ReleasedOnce`, B5's `Named`, `Expr.mapLoc`, `Heap.push`, `RelAt`, `Bump`, `BumpSim` (`Machine.lean`); the statements about runs that mention no world, `Sound`, Core's `EffSafe`, `EffSafeDrive` (`RunProps.lean`); `TypingJ`, `tier1`, `tier1NU`, the `RC_*` rules (`Typing.lean`); Core's cancel and unwind shapes (`CoreCancel.lean`); a typed term is closed at its context (`Closed.lean`); the polymorphic let's premise term (`Fill.lean`); the answering implementations; contextual approximation |
 | **B** | `Targets/B/World.lean` | `BWorld`, a borrow world with borrow fields only; `coreB`, Core's relation as one |
 | | `Targets/B/Adequacy.lean`, `PlatSafe.lean` | B2 at BoLo (`adequate_core`); runs under a platform that answers part of the row |
@@ -56,6 +57,7 @@ Instance; the Instance imports no B or I; I imports everything.
 | | `Targets/Instance/Restricted/*`, `Binary.lean`, `ZeroCost.lean` | Core's no-interception and two-frame unwind; `storeCancel` unr-free; A₂ over Core, stated; A₃'s lowering classes |
 | | `Targets/Instance/J1.lean` | `J₁`, tier 1's typing: Core's kernel over the open types, a polymorphic slot closed by substitution (`Closing`, `fillS`); its reading is `tier1`; the let law and S1 at our instance |
 | | `Targets/Instance/Inversion.lean`, `J1Checks.lean` | what today's kernel does not type (A-level handlers, a let read at two instances, a persistent function called at an effectful row, `()` at a resuming `unr` row); the checks on TIER1-PLAN §2's route; the let law and S1's parts at our instance |
+| | `Targets/Instance/Runs.lean`, `Theories.lean`, `UnaryLaws.lean` | quiet runs (`Quiet`) and complete runs along a chain; the fold of a straight-line computation under the answering handler and the comodel reduction (`quiet_fold`, `ansCorrect_of_comodel`), global state correct and its bad `put` no model; `AlgLaw` at `J₁` (`not_algLaw_J₁`) and the tail law and algebraicity at the answering class |
 | **I** | `Targets/I/World.lean` | `SemWorld extends B.BWorld` (`held`, `Stop`, `share`), `coreW`, the effectful wp |
 | | `Targets/I/Interface.lean`, `Device.lean`, `Pins.lean`, `Routes.lean` | I1–I5 at the world; `Bounds`, `Interface`, the proof device `Device`, `EmbedsNil`; R-CLOSEDOP; `effSafeOfFL`, `contractsW_of_meets` |
 | | `Targets/I/Programs.lean` | the composite programs: `at02`, `at04`, `at12`, `at17`, `genSelf`, and the rejected AT05–AT08, AT13; `AcceptedAt`, `Tier2Programs`, `Rejects`, `RejectsAT07` |
@@ -64,6 +66,7 @@ Instance; the Instance imports no B or I; I imports everything.
 | | `Targets/I/OpenRel.lean`, `Tier1Route.lean` | Law 1 at the relation (`ovalW`, `FLOpen`, `fl_of_flOpen`); the elaboration route does not reach tier 1; `Tier1Core` from S5 and `BumpSim` |
 | | `Targets/I/Restricted/InstanceSafety.lean` | S2, S3 and `LiveOK` at every typing system whose closed programs are Core's (today's kernel, `J₁`): a run under a runner is the run under its platform, and B2's runs give A's |
 | | `Targets/I/J1.lean`, `GhostCoupling.lean` | B1, B's guarantees, the pins, FL at the open judgements and A's (S) properties at `J₁`; `Tier1 J₁` from what is open (`tier1_J₁_of`); route 8.4's probe for S6, stopped (`not_ghostCoupling`) |
+| | `Targets/I/Theories.lean` | the answering class at `J₁`: global state's handler correct, the tail law and algebraicity there |
 | meta | `Targets/Audit.lean`, `Status.lean`, `AxiomCheck.lean` | the step-index audit with nine negative tests and the pin of Core's relation; the record; the axiom check |
 
 ## Done

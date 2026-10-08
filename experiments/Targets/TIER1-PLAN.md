@@ -18,9 +18,10 @@
 **Every result is at Core σ=[]** (`coreW`, `B.coreB`). Tier 1 keeps T1, so no lend spans a stop.
 `W`, Law 2, the spanning rules and `J₂` belong to tier 2, which this track leaves alone.
 
-**Where it stands.** `J₁` is built (decision D5, the last section). `I.Tier1 J₁` follows from A's
+**Where it stands.** `J₁` is built (decision D5, below). `I.Tier1 J₁` follows from A's
 (E) properties, S5 and S6 at every admissible effect context, `Accepts`, `Rejects` and `BumpSim`
-(`I.tier1_J₁_of`).
+(`I.tier1_J₁_of`). Piece 5 has run (the last section): D1.h4 is proved through the comodel, with
+global state as the first theory; D1.h2 is open.
 
 The six pieces below are ordered by what depends on them. Ties go to the larger unknown first.
 `I.Tier1 J₁` also needs work that is not among these pieces; it is listed at the end.
@@ -951,7 +952,7 @@ longer in the build.
 | 2 | Law 1: `J₁` and the row `∀` | STOPPED at its stop condition; Law 1 at the relation proved (`ovalW_allR`, `FLOpen`); `J₁` not built | **fail: one major finding (open, below)** | dff0a57, 335046f |
 | 3 | Adequacy through platform answers and loop iterations; S2, S3 | LANDED; B2's return conjunct proved at every protocol-keeping platform; B2's drive, S2, S3, `EffSafeDrive` fail as written | pass | d53c464 |
 | 4 | `FinAlone` and S6 | PARTIAL; R1–R4 teeth and the clause refusals proved; `FinAlone` and `LiveOK` fail as written; route 8.2 not accepted, not built | pass (the route's review was the agent's own) | 789506a, 56f10a8 |
-| 5 | The answering class: h2, h4, the unary laws | NOT RUN | — | — |
+| 5 | The answering class: h2, h4, the unary laws | PARTIAL (the last section); h4 through the comodel and global state proved, and the tail law and algebraicity at the answering class; `AlgLaw` fails as written at `J₁`; `TailLaw`, `EtaHold`, `I4Typing` and `I4Runs` open | not run | 6e38745, 3d861cb |
 | 6 | `BumpSim` (OQ-43) | NOT RUN | — | — |
 
 ### Piece 1
@@ -1274,3 +1275,149 @@ composite's derivations in Core's kernel; `Rejects`' inversions over `CDerives`;
 3. S6 by a route that does not run through FL at BoLo: route 8.2's run-time typing, or the user's
    call on a resource kind for `κ` (a BoLo change, so the user's).
 4. `Accepts`, `Rejects` at `J₁`; piece 5 (h2, h4) and piece 6 (`BumpSim`).
+
+---
+
+## Piece 5 run: the answering class
+
+**What ran.** Piece 5 at `J₁` (D5), with D1–D4 and D6 applied: D1.h4 through the comodel, the
+unary laws at our instance, and D1.h2. Every result is at Core σ=[]. `lake build Targets` passes
+with AxiomCheck and Audit, and every new result's axioms are within
+`[propext, Classical.choice, Quot.sound]`. Nothing in `Core/` changed, and no BoLo definition or
+borrow guarantee was touched. Commits: `6e38745` (theories, the comodel reduction, global state,
+the unary laws) and `3d861cb` (`I4Runs`, the Status rows for h2).
+
+**Proved.**
+- **Equations in signatures, D1.h4 (a)–(b)** (`A/Theories.lean`, which imports nothing of ours).
+  - An equation is two straight-line computations over one label's operations and the same
+    parameters, ending in the continuation (`VExpr`, `SLComp`, `Eqn`; `Theory`, OQ-22 (a)).
+  - The answering handler is the state-passing handler of co-operations (`ansHnd`, `runAt`;
+    decision 59).
+  - `AnsCorrect` is Plotkin–Pretnar Def. 4.5 read at `RunsAlike`. `IsComodel` is Ahman–Bauer
+    Def. 1 with equations, read through the co-operations' own runs (`coRun`).
+  - Global state is the first theory: `stateSig`, `stateTheory` (get–get, get–put, put–put,
+    put–get) and `stateCo`; `badStateCo` is the witness.
+- **The comodel reduction, D1.h4 (c)** (`ansCorrect_of_comodel`, `Instance/Theories.lean`). It
+  holds at every typing system with `LiveOK` whose typed closed values are closed: co-operations
+  that run quietly (`PureCo`) and form a comodel give a correct handler. The route:
+  - one clause step (`quiet_opStep`);
+  - the handled side's fold over the computation (`quiet_fold`, the native counterpart of
+    `handle_fold`);
+  - the co-run's fold (`quiet_coFrom`).
+
+  The two sides meet at one configuration, because their co-runs reach one state and one
+  continuation argument.
+- **Global state** (`state_isComodel`, `state_correct`; `I.state_correct_J₁` at every effect
+  context, carrier and label). **Not vacuous** (`not_ansCorrect_badState`,
+  `not_isComodel_badState`). The witness is at `J₁` and the admissible `Ξst` (`admEff_Ξst`). There
+  the handler whose `put` keeps the old state fails the update–lookup law at a program Core's
+  kernel types (`d_stProg`). Its co-operations are no comodel.
+- **The unary laws at the answering class** (`Instance/UnaryLaws.lean`). A clause
+  `λ(a, k). c a to b. k.resume b` whose code runs quietly runs in place (`quiet_tailClause`). So
+  the tail-resumptive law and algebraicity hold there (`tailLaw_quiet`, `algLaw_quiet`; at `J₁`,
+  `I.tailLaw_quiet_J₁`, `I.algLaw_quiet_J₁`).
+- **Runs** (`Instance/Runs.lean`).
+  - Quiet runs (`Quiet`: chains of head steps with no finaliser event) and their closure lemmas.
+  - Quiet runs that meet run alike (`runsAlike_of_quiet`, through `runsAlike_of_join`).
+  - β, `letpair`, `appE`, `resumeE`, the handler's hop and κ's resume, each as a quiet chain.
+  - A complete run from a chain is the chain's path (`complete_chain_eq`, through `rstep_det`).
+
+**Fails as written: `AlgLaw` at `J₁`** (`not_algLaw_J₁`, `not_algLaw_ΞA`; `status_unaryLaws`).
+- **The witness.** `algFireProg` is typed by Core's kernel (`d_algFireProg`) at the admissible
+  `ΞA`. An inner handler at an `unr` operation holds its persistent continuation in a finaliser
+  frame, and its clause raises to an outer handler that aborts.
+- **The failure.** Both sides answer `()`. Their traces show `fire D` at finalisers that differ as
+  terms (`finE_DL_ne`): each `D` mentions the continuation its side captured. At a linear or affine
+  operation, no finaliser at `F 1` holds the continuation.
+- **The decision is the user's.** Either observe a finaliser's start without its code (D4 read at
+  the trace's events), or restrict `unr` (decision 63). Under either, the law beyond the answering
+  class is still OPEN.
+
+**Open.**
+- **`TailLaw` at our instance.** Not proved, not refuted. By `algFireProg`'s mechanism no witness
+  types: an `unr` outer handler forces the tail clause's continuation context to be persistent,
+  while our instance's `resume` forces only `U` slots. That is a reading of the rules, not a
+  theorem.
+- **`EtaHold`.** Not proved. `[handle]`'s `hnS` keeps a forwarding handler's own name out of its
+  clauses' row, so by that reading no typed program installs `fwdH true l`. Not checked by an
+  inversion.
+- **D1.h2, `I4Typing` at `J₁`** (`i4Typing_J₁`). Not derived, and no obstruction is verified. It
+  needs:
+  - inversions of Core's typing at `bindE`, at `effHandleV` (`hndTerm`) and along `capPass`'s
+    spine (`bind`, `effLet`, `unitE`, `tensorE`, `sumE`, and `effPerform` under `effSub`), taken
+    through `ret`/`ofRet` and the `ν` rules, which apply at any term;
+  - the clause typing read back to `co_j`'s type;
+  - a typing of an `n`-free subterm at the row without `n`, an induction over `CDerives` (none
+    found in Core);
+  - `ansCall`'s typing through `withswap` at `Mut x S`;
+  - then `I4a`'s conclusion at `J₁`.
+
+  This plan's cost note (§5, Risk) names only the spine's inversions.
+- **D1.h2, `I4Runs`.** STATED (`I/Interface.lean`), not proved. Its proof needs a simulation:
+  `n`-free code runs under the handler frame on one side and under the lend's frames on the other,
+  through continuations that outer handlers capture and resume. The borrow form's cell is placed at
+  a location the other run never uses. Not built. A restriction to straight-line bodies
+  (`handle_fold` against a fold of `ctlForm`) was not built either: it would cover no body that
+  performs an operation an outer handler catches.
+- **`ctlForm_fold`** (§5's `Base/Answering.lean`). Not built. The fold at native `hnd` is
+  `quiet_fold`, for `ansHnd` at our instance's encodings. `ctlForm` is Base's term: its clauses
+  are let-bound before the handler, and no lemma relates the two terms.
+
+**Added hypotheses, and their scope.**
+- **`PureCo co`** (`ansCorrect_of_comodel`). Each co-operation is closed, and at a closed state and
+  argument it runs quietly to a pair of closed values. Co-operations that allocate or show events
+  would make the two sides' memories or traces differ. `stateCo` meets it (`pureCo_stateCo`), and
+  so does `badStateCo` (`pureCo_badStateCo`).
+- **`hlen` and `hwf`** (the same theorem). `co` has at most `2³²` co-operations, and each
+  equation names operations of `co` and values bound before it (`Eqn.WF`). `stateTheory` meets
+  both (`stateTheory_wf`).
+- **`LiveOK` and the closedness of typed closed values.** Both hold at `J₁` (`I.liveOK_J₁`,
+  `closed_of_derV_J₁`).
+- **`I4Runs`, beyond `I4Typing`'s hypotheses on the forms.** Data state, operations and body
+  answer; `s₀` at a value judgement; a data answer of the program. Its docstring names the
+  mechanism each excludes. None is checked by a witness.
+
+**Readings to confirm.**
+1. **`AnsCorrect` binds the continuation outermost** (`lets (vs ++ [k])`). The parameters sit at
+   `j + p` under the results, and `k` is a closed value, as they are.
+2. **`IsComodel` is read through the co-operations' own runs** of each side from each state: both
+   sides reach one final state and one continuation argument. This is the run-level reading of
+   Ahman–Bauer's equality of co-operation composites on the carrier.
+3. **`Theory` is `Lab → List Eqn`.** `stateTheory T` gives the four laws at every label whose
+   signature is `stateSig T`, decided classically.
+4. **`I4Runs` compares the values reached** from the configuration, at a data answer of the
+   program. That is this plan's "reach the same values … a data answer".
+5. **`I4Typing`'s `s₀`.**
+   - `I4Typing` carries no judgement of `s₀`.
+   - The control form reads `s₀` in `bindE s₀ …`, at the row `S`.
+   - The borrow form reads it under `alloc'`, through `lolliE`, at a value judgement. `I4a`
+     carries that judgement.
+
+   I have not derived `I4Typing` at an `s₀` typed only at an effectful row, and I have not
+   verified that any obstruction is real. Whether `I4Typing` takes `I4a`'s premise is the user's
+   call.
+
+**Unspent hypotheses.** `AnsCorrect`'s and `IsComodel`'s typing premises (the state's and the
+parameters' `derV`) are spent only for closedness (`hJV`); no type is read, and `state_isComodel`
+holds at every carrier.
+
+**Unused uniqueness and functionality results.** `det_ourInst` is not used. Every run here is a
+chain of head steps that allocates nothing, which `rstep_det` reads.
+
+**Untranscribed in the run-up.**
+- `ctlForm_fold`.
+- `i4Typing_J₁`'s inversions, the row strengthening at an `n`-free subterm, and `ansCall`'s
+  typing.
+- `I4Runs`'s two-context simulation.
+- The inversions that would settle `TailLaw` and `EtaHold`.
+- §5's reuse list, unread by this piece: the borrow form's run facts (`op_tail`, `op_answer`,
+  `handle_fold`, `clauseRun`, `seqCalls`), which serve `I4Runs`; `ewp_handle`;
+  `steps_plug_split`.
+
+**Next.**
+1. The user's call on `AlgLaw`'s observation (a finaliser's start without its code, or `unr`
+   restricted), and on `I4Typing`'s `s₀`.
+2. `I4Typing` at `J₁`: the inversions and the row strengthening, then `I4a` at `J₁`.
+3. `I4Runs`: the two-context simulation.
+4. `TailLaw` and `EtaHold`: the inversions that turn the readings into theorems, or the witnesses.
+5. Piece 6 (`BumpSim`).
