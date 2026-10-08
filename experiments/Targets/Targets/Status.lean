@@ -23,6 +23,7 @@ import Targets.Instance.RunTyping
 import Targets.I.Restricted.InstanceSafety
 import Targets.I.GhostCoupling
 import Targets.I.J1
+import Targets.I.ContUseJ1
 import Targets.I.Theories
 import Targets.Instance.UnaryLaws
 import Targets.B.BumpSim
@@ -47,7 +48,11 @@ interaction's option-neutral rules, the pins, the composite's programs and its r
 
 **Done: OPEN.**  Neither `J₂` nor `W` is defined.
 
-**Tier 1** (`I.Tier1 J₁`): OPEN, **reduced** (`status_tier1_J₁_of`).  `J₁` is built (decision D5):
+**Tier 1** (`I.Tier1 J₁`): **FAILS AS WRITTEN** since the capture cell (`status_handlerSem_cell`):
+its A conjunct asks S4 at every admissible effect context, and S4's catch law, which hands
+`capture l H K` and keeps the store, fails at `ΞA`, where the catch of the linear `tick` allocates
+`κ`'s cell.  The restatement of S4's capture laws is the user's.  Before it, the reduction
+(`status_tier1_J₁_of`) stood as below.  `J₁` is built (decision D5):
 Core's kernel with SPEC §24's rules (the polymorphic let, the general `[handle]`, `[then]` at option
 A) over the open types, with the row `∀` (`Targets/Instance/J1.lean`).  Proved of it: A's (S)
 properties but S4, S5 and S6 at every effect context (S4 at an effect context whose resuming
@@ -167,9 +172,19 @@ unchanged; the lowering's counts are unchanged.
   algebraicity at the answering class and D1.h4's comodel reduction hold at every operation
   (`calm_tailClause`, `calm_opStep`, `calm_fold`); the bad-state witness runs calmly around two
   cells.
-* **S4's catch law reads `capture`**: it holds at an effect context whose resuming operations are
-  unrestricted (`handlerSem_orow` under `CatchUnr`), and is OPEN elsewhere; an admissible context
-  has no resuming unrestricted operation.
+* **S4's catch law reads `capture` and FAILS AS WRITTEN at `J₁`** (`status_handlerSem_cell`): at
+  `ΞA` Core's handled program at the linear `tick` reaches the catch, from which the store-keeping
+  steps reach only the catch and the clause at `κ` before its cell, while the clause at
+  `capture l H K` runs through terms that name neither `perform` nor `alloc`
+  (`not_handlerSem_J₁_ΞA`).  So `Tier1 J₁` fails as written (`I.not_tier1_J₁`).  The law holds at an
+  effect context whose resuming operations are unrestricted (`handlerSem_orow` under `CatchUnr`);
+  an admissible context has none.  The restatement is the user's.
+* **S6 at `J₁`, reduced to the cell's ownership** (`status_contUseEv_J₁_of`): a capture event hands
+  `kappaC aff ℓ …` at a freshly allocated `ℓ` (`catchEv_cell`); a use releases `ℓ` three steps later,
+  a linear `κ`'s cancel reaching a branch with no step (`use_frees_cell`); every complete run ends at
+  the empty memory (`I.leakFreeAt_J₁`).  From these, S6 follows given two run properties of the cell,
+  OPEN: only a capture's `κ` releases its cell (`OnlyOwnerFrees`), and a `κ` is used only while a
+  cell of its own lives (`NoDanglingUse`) (`contUseEv_of_cells`).
 
 ## Piece 5: the answering class (D1.h1–h4)
 
@@ -255,7 +270,7 @@ unchanged; the lowering's counts are unchanged.
 | `Pins tier1Open admClosedOp .abortive`, with `I4a` at the unr-free rules | PROVED AT σ=[] (abortive rows) | `I.pins_tier1Open`, `i4a_tier1NU` |
 | Law 1 at the relation: `ovalW` at `U(∀ρ:k. C)` and `!U(∀ρ:k. C)` is the intersection of the instances; `FLOpen M J` gives `FL M J.read`; `FLOpen` at today's kernel | PROVED (generic); PROVED AT σ=[] | `I.ovalW_allR`, `I.ovalW_bang_allR`, `I.fl_of_flOpen`, `I.flOpen_core_tier1Open` |
 | `J₁`: its reading is Core's kernel; FL at BoLo (B1); B's guarantees; the pins; FL at its open judgements over contexts with no polymorphic slot, a polymorphic type read as the intersection of its instances (Law 1) | PROVED AT σ=[] (abortive rows for the pins); `FLOpen coreB J₁` at contexts with a polymorphic slot NOT PROVED (a value `ovalW` relates there need not be a closed λ-value Core types) | `status_j1`, `status_guarantees_J₁`, `status_pins_J₁`, `I.flOpen_J₁_mono` |
-| tier 1 at `J₁` | OPEN; follows from A's (E) properties, S4, S5, S6, `Accepts` and `Rejects` | `status_tier1_J₁_of` |
+| tier 1 at `J₁` | **FAILS AS WRITTEN** since the capture cell: S4's catch law fails at `ΞA` (the restatement is the user's); before it, it followed from A's (E) properties, S4, S5, S6, `Accepts` and `Rejects` | `status_handlerSem_cell`, `I.not_tier1_J₁`, `status_tier1_J₁_of` |
 | TIER1-PLAN §2's route (elaborate `J₁` into today's unr-free kernel, then `fundamentalC`) | **DOES NOT REACH TIER 1**: closed derivations that elaborate type no A-level handler, so E8 fails; today's kernel types no let-bound function read at two rows | `I.not_tier1_of_elabClosed`, `not_der_letTwo` |
 | FIX-RUN-END's checks and witness worlds | PROVED | `Targets/I/RunEnd.lean` (73 results) |
 | I1, I3, I5, P11 at `coreW` (the device); I2 at `coreW` | PROVED AT σ=[]; PROVED AT A RESTRICTION (abortive rows) | `i1_core`, `i3_core`, `i5_core`, `p11_core`; `i2_core_abortive` |
@@ -274,12 +289,12 @@ unchanged; the lowering's counts are unchanged.
 | our rows meet Def. 3.5 and Def. 5.1; `RowLink orowRF` | PROVED AT A RESTRICTION (`RF = orowRF`) | `rowAlgSafe_orowRF`, `rowLink_orowRF`, `closedRowAlg_lawsSafe` |
 | no typed term intercepts a cancel; the two-frame unwind | PROVED AT σ=[]; an instance | `noInterception_tier1`; `two_frame` |
 | the machine read through contexts: run splitting, determinism where nothing is allocated, runs that join run alike, closed runs stay closed, no step creates a handler named `0` | PROVED AT σ=[] | `steps_plug_split`, `det_ourInst`, `rstep_det`, `runsAlike_of_join`, `closed_steps`, `hndNamesNZ_steps` |
-| S0 (`MachShape`: `AppLaw`, `Congr`, `OpStuck`, `LoopLaws`, `DriveLaws`) and S4 (`HandlerSem`) at our instance | S0 PROVED AT σ=[] given `LiveOK` (every configuration a typed program reaches has a closed term and goes on), at every typing system; `Congr` and `OpStuck` without it. S4 the same at an effect context whose resuming operations are unrestricted (`CatchUnr`); OPEN at one with a resuming linear or affine operation, whose catch hands `κ` a fresh cell rather than `capture l H K` (SPEC §25). At today's kernel `LiveOK` holds at every effect context (D1). `LiveOK` needs the tie | `machShape_orow`, `handlerSem_orow`, `handlerSem_ourInst`; `liveOK_tier1Open`, `status_machShape_handlerSem_tier1Open`; `liveOK_needs_tie` |
+| S0 (`MachShape`: `AppLaw`, `Congr`, `OpStuck`, `LoopLaws`, `DriveLaws`) and S4 (`HandlerSem`) at our instance | S0 PROVED AT σ=[] given `LiveOK` (every configuration a typed program reaches has a closed term and goes on), at every typing system; `Congr` and `OpStuck` without it. S4 the same at an effect context whose resuming operations are unrestricted (`CatchUnr`); **FAILS AS WRITTEN at `J₁`** at `ΞA`, whose linear `tick`'s catch hands `κ` a fresh cell rather than `capture l H K` and does not keep the store (SPEC §25; `not_handlerSem_J₁_ΞA`). At today's kernel `LiveOK` holds at every effect context (D1). `LiveOK` needs the tie | `machShape_orow`, `handlerSem_orow`, `handlerSem_ourInst`; `liveOK_tier1Open`, `status_machShape_handlerSem_tier1Open`; `liveOK_needs_tie` |
 | `LiveOK` is met at a typing system that types one program with a handler, an operation it catches and a continuation | PROVED | `liveOK_JnLog` |
 | S5 (`Cancellation noFinRaise`) at our instance, RESTATED (D3, D4) | OPEN: the bridges `noIntercept_of_core`, `unwindOrder_of_core` are not built. The no-interception condition is needed: `NoInterception` is syntactic, and a typed program's cancelled finaliser may perform the operation its region's dying handler catches; its run follows no cancel trace at any set of endings | `noIntercept_needs_finRow` |
 | Core's `FinaliserOrder` (I3.b) | PROVED, given `NoInterception` and `FinAloneAt FR` (a fired finaliser's run alone, platform-free, ends at a value or an uncaught raise of a name in `FR`), at today's endings (nonzero names) and at option A's (none). At a typing system with FL at Core's world, `FinAloneAt FR` follows from `FinRowsAt FR` (an operation the finaliser's run alone leaves uncaught is a raise of a name in `FR`): stuck redexes are excluded by FL and B2's runs. So at today's unr-free kernel `FinaliserOrder` follows from `FinRowsAt` alone (PROVED AT σ=[]). `FinRowsAt` OPEN: route 8.2's obligations (`RowRoute`) give it (PROVED), and no `RowRoute` is built (TIER1-PLAN §4: the review did not accept route 8.2) | `finaliserOrder_at`, `finaliserOrder_A`, `finAloneAt_of_finRows`, `finaliserOrder_tier1NU_of_finRows`, `finaliserOrder_tier1NU_of_finRowsA`, `finRowsAt_of_route`, `finaliserOrder_of_route` |
 | `FinAlone` (piece 1's added hypothesis) | RESTATED by D3: its consumer reads `FinAloneAt FR`, platform-free | — |
-| S6 (`ContUseEv`) at our instance, RESTATED (decision S6: per capture event, on complete runs, at data answers) | OPEN at today's kernel and at `J₁` | — |
+| S6 (`ContUseEv`) at our instance, RESTATED (decision S6: per capture event, on complete runs, at data answers) | OPEN at today's kernel; at `J₁` REDUCED to two ownership properties of the capture cell, `OnlyOwnerFrees` and `NoDanglingUse` (OPEN), given `LiveOK` and leak freedom (PROVED at `J₁`): a capture event allocates `κ`'s cell, a use releases it three steps later, a linear `κ`'s cancel is stuck | `status_contUseEv_J₁_of`, `contUseEv_of_cells`, `catchEv_cell`, `use_frees_cell`, `leakFree_of_coreClosed` |
 | route 8.4 to S6: an obligation created at `[op]`, consumed where `κ` is resumed or cancelled, read by leak freedom at a run's end | the capture cell is that obligation (SPEC §25): R1 at a linear or affine operation is not in Core's relation at `F bool` (its run leaks `κ`'s cell); BoLo's world at the empty heap is the empty resource | `status_ghostCoupling`, `I.not_semC_R1`, `I.lower_empty_eq` |
 | S6's tooth: R1 (RESTRUCTURE §6.1) at our machine | PROVED: every typing system over our machine that types R1 at `F 0 bool`, at a label whose first operation resumes and is linear or affine, fails S6; `JR` types it, and at `ΞA` the lemma applies. R2–R4 have no complete run at such an operation | `not_contUseEv_of_der_R1`, `not_contUseEv_of_der_R1_orow`, `teeth_JR_ΞA` |
 | today's kernel types none of R1–R4 | PROVED, by the handler's form (our handler is the run-time frame, its clauses values; `[handle]` types clause variables). At the clauses, by the linearity of `κ` (RESTRUCTURE §6.1's reason): today's clause typing refuses R1's, R2's and R4's clauses at every resuming `lin` or `aff` operation (a live slot of `kTy` is neither dropped nor duplicated) and R3's at every `lin` one (a linear `κ`'s cancel is at `⊤`); at the clause type of a linear `1 ↠ 1`, where all four are refused, a clause that resumes `κ` once is typed, and `cancelCl` is typed at `aff` and refused at `lin`. At `unr` the argument does not apply (multi-shot is not considered) | `refuses_R_tier1Open`, `refuses_R_clauses`, `clauseRefusals_pinned` |
@@ -918,6 +933,21 @@ theorem status_ghostCoupling :
       ¬ SemC BoCa.Lifetime.LifeCtx.empty [] (Inst.rProg n (q :: qs) Inst.dropV) (.ret Inst.boolT)) ∧
       (∀ ρ : WRes, ResU.Lower ρ Adequacy.emptyMem → ρ = PMap.empty) :=
   ⟨fun n _ qs hq => I.not_semC_R1 (ℍ := ℍ) n qs hq, fun _ h => I.lower_empty_eq h⟩
+
+/-- **FAILS AS WRITTEN at `J₁`**: S4's catch law, at the admissible `ΞA`, since the capture cell; so
+`Tier1 J₁`.  The witness is Core's handled program at the linear `tick`. -/
+theorem status_handlerSem_cell :
+    AdmEff Inst.ΞA ∧ ¬ (ourInst (ℍ := ℍ) orowRF Inst.ΞA J₁).HandlerSem ∧ ¬ I.Tier1 (ℍ := ℍ) J₁ :=
+  ⟨Inst.admEff_ΞA, Inst.not_handlerSem_J₁_ΞA, I.not_tier1_J₁⟩
+
+/-- PROVED AT σ=[]: leak freedom at `J₁`, and S6 at `J₁` from the capture cell's two ownership
+properties (OPEN). -/
+theorem status_contUseEv_J₁_of :
+    (∀ Ξ, Inst.LeakFreeAt (ℍ := ℍ) Ξ J₁) ∧
+    ((∀ Ξ, AdmEff Ξ → Inst.OnlyOwnerFrees (ℍ := ℍ) Ξ J₁) →
+      (∀ Ξ, AdmEff Ξ → Inst.NoDanglingUse (ℍ := ℍ) Ξ J₁) →
+      ∀ Ξ, AdmEff Ξ → (ourInst (ℍ := ℍ) orowRF Ξ J₁).ContUseEv) :=
+  ⟨fun _ => I.leakFreeAt_J₁, I.contUseEv_J₁_of⟩
 
 /-! ## Piece 5: the answering class -/
 

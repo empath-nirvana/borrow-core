@@ -150,8 +150,9 @@ theorem handlerSem_J₁ {Ξ : EffCtx} (hU : Ξ.CatchUnr) : (ourInst (ℍ := ℍ)
 /-- **Tier 1 at `J₁`, given what is open**: A's (E) properties, S4, S5 and S6 at every admissible
 effect context, and the composite's programs and rejections.  The rest of `Tier1 J₁` is proved:
 A's (S) properties but S4, S5 and S6 (`sPropsNoCancel_J₁`), B's guarantees (`guarantees_J₁`), the
-world's conjuncts at `coreW` (`tier1Core_world`), and the pins (`pins_J₁`).  S4's capture laws keep
-the store, which the catch of a linear or affine operation does not (SPEC §25). -/
+world's conjuncts at `coreW` (`tier1Core_world`), and the pins (`pins_J₁`).  S4's catch law hands
+`capture l H K` and keeps the store, which the catch of a linear or affine operation does not
+(SPEC §25): `hS4` fails at the admissible `ΞA` (`Inst.not_handlerSem_J₁_ΞA`, `not_tier1_J₁`). -/
 theorem tier1_J₁_of
     (hE : ∀ Ξ, AdmEff Ξ → (ourInst (ℍ := ℍ) orowRF Ξ J₁).EProps)
     (hS4 : ∀ Ξ, AdmEff Ξ → (ourInst (ℍ := ℍ) orowRF Ξ J₁).HandlerSem)

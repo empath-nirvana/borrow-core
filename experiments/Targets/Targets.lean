@@ -66,6 +66,7 @@ import Targets.I.Device
 import Targets.I.GhostCoupling
 import Targets.I.Interface
 import Targets.I.J1
+import Targets.I.ContUseJ1
 import Targets.I.NonVacuity
 import Targets.I.OpenRel
 import Targets.I.Pins

@@ -60,6 +60,7 @@ Instance; the Instance imports no B or I; I imports everything.
 | | `Targets/Instance/Inversion.lean`, `J1Checks.lean` | what today's kernel does not type (A-level handlers, a let read at two instances, a persistent function called at an effectful row, `()` at a resuming `unr` row); the checks on TIER1-PLAN §2's route; the let law and S1's parts at our instance |
 | | `Targets/Instance/Runs.lean`, `CellRuns.lean`, `Theories.lean`, `UnaryLaws.lean` | quiet runs (`Quiet`) and complete runs along a chain; runs around a capture cell (`CellQuiet`, `Calm`, `runsAlike_of_calm`); the fold of a straight-line computation under the answering handler and the comodel reduction (`calm_fold`, `ansCorrect_of_comodel`), global state correct and its bad `put` no model; `AlgLaw` at `J₁` (`not_algLaw_J₁`) and the tail law and algebraicity at the answering class |
 | | `Targets/Instance/ContUse.lean` | S6's tooth at the capture cell: R1's run, and a typing system that types R1 fails `ContUseEv` (`not_contUseEv_of_der_R1`, `teeth_JR_ΞA`) |
+| | `Targets/Instance/HandlerCell.lean` | S4's catch law, read at `capture`, fails at `J₁` and `ΞA` since the capture cell (`not_handlerSem_J₁_ΞA`) |
 | **I** | `Targets/I/World.lean` | `SemWorld extends B.BWorld` (`held`, `Stop`, `share`), `coreW`, the effectful wp |
 | | `Targets/I/Interface.lean`, `Device.lean`, `Pins.lean`, `Routes.lean` | I1–I5 at the world; `Bounds`, `Interface`, the proof device `Device`, `EmbedsNil`; R-CLOSEDOP; `effSafeOfFL`, `contractsW_of_meets` |
 | | `Targets/I/Programs.lean` | the composite programs: `at02`, `at04`, `at12`, `at17`, `genSelf`, and the rejected AT05–AT08, AT13; `AcceptedAt`, `Tier2Programs`, `Rejects`, `RejectsAT07` |
@@ -68,6 +69,7 @@ Instance; the Instance imports no B or I; I imports everything.
 | | `Targets/I/OpenRel.lean`, `Tier1Route.lean` | Law 1 at the relation (`ovalW`, `FLOpen`, `fl_of_flOpen`); the elaboration route does not reach tier 1; `Tier1Core` from S5 |
 | | `Targets/I/Restricted/InstanceSafety.lean` | S2, S3 and `LiveOK` at every typing system whose closed programs are Core's (today's kernel, `J₁`): a run under a runner is the run under its platform, and B2's runs give A's |
 | | `Targets/I/J1.lean`, `GhostCoupling.lean` | B1, B's guarantees, the pins, FL at the open judgements and A's (S) properties at `J₁`; `Tier1 J₁` from what is open (`tier1_J₁_of`); route 8.4's obligation at the capture cell: R1 at a linear or affine operation is not in Core's relation (`not_semC_R1`) |
+| | `Targets/I/ContUseJ1.lean` | S6 at the capture cell: a capture event allocates `κ`'s cell (`catchEv_cell`), a use releases it (`use_frees_cell`), leak freedom (`leakFreeAt_J₁`); S6 from the cell's ownership (`contUseEv_of_cells`, `contUseEv_J₁_of`); `Tier1 J₁` fails as written through S4 (`not_tier1_J₁`) |
 | | `Targets/I/Theories.lean` | the answering class at `J₁`: global state's handler correct, the tail law and algebraicity there |
 | meta | `Targets/Audit.lean`, `Status.lean`, `AxiomCheck.lean` | the step-index audit with nine negative tests and the pin of Core's relation; the record; the axiom check |
 
