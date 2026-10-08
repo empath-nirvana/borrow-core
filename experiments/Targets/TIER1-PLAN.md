@@ -1921,3 +1921,189 @@ Classical.choice, Quot.sound]`, `#print axioms` for each) and Audit. `make gate`
   loop, with `RunsForever`'s tools.
 - From earlier rounds: S4's restatement; S5's bridges at `noFinRaise`; `OnlyOwnerFrees`,
   `NoDanglingUse`; `TailLaw`, `EtaHold`; `Accepts`, `Rejects`; `RowVarKernel J₁`.
+
+## Round 3, step T4: S5's bridges (decision S5)
+
+**Where tier 1 stands.** Unchanged in kind: `I.Tier1 J₁` **fails as written** through S4's catch
+law at `ΞA` (`I.not_tier1_J₁`). Its S5 hypothesis also **fails as written**: S5
+(`Cancellation noFinRaise`) fails at `J₁` and at today's kernel, at every effect context declaring
+`exn : 1 ↠ 0` at the name `1`, the admissible `ΞA` among them (`I.not_cancellation_admissible`,
+`status_cancellation_J₁`). The cause is in A's trace definitions, not in our machine: a trace stops
+only at `[]`, and its `fire` constructor reads the administrative steps after a fire step whole.
+Read prefix-closed (a candidate restatement, `A.CancellationPfx`), S5's unwind is PROVED at `J₁` and
+at today's kernel at every effect context, and its no-interception is PROVED given `CancelsStd`, an
+added hypothesis that is OPEN at `J₁`. Nothing in `Core/`, BoLo or SPEC changed, and no borrow
+guarantee was weakened. Every result is at Core σ=[]. On `tier1-effects`, not pushed.
+
+| step | status | commits |
+|---|---|---|
+| a closed program runs from every finite memory (B) | LANDED: `ownWorld`, `runs_of_rel`, `runs_of_rel_unit` | 826b968 |
+| S5's traces at our machine (the Instance) | LANDED: `unwind_pfx`, `cancel_pfx` (every path is a trace once at most one step of the run is appended); the bridges `unwindOrderPfx_of_core`, `noInterceptPfx_of_core`, `cancellationPfx_of_core` | 826b968 |
+| S5 at `J₁` and today's kernel (I) | read prefix-closed: the unwind PROVED at every effect context (`unwindOrderPfx_J₁`, `cancellationPfx_tier1Open`), the no-interception PROVED given `CancelsStd` (`noInterceptPfx_J₁_of`). As written: **FAILS** (`not_unwindOrder_of_types`, `not_cancellation_J₁`, `not_cancellation_tier1Open`, `not_cancellation_admissible`) | 826b968 |
+| `FinRowsAt` | OPEN; not on the bridges' route (D4's `FinRow` names the finalisers S5 fires) | — |
+
+**What typing gives about a fired finaliser** (`I.finOK_of_finRow`; `Targets/B/HeapFrame.lean`).
+- D4 made the no-interception condition part of S5: each finaliser S5 fires meets `FinRow FR`, a
+  closed program typed at a row of abortive operations of `FR`'s labels. At option A that row
+  admits nothing.
+- At a typing system whose closed programs are Core's (`CoreClosed`: `J₁` and today's kernel), the
+  row is tied to the effect context (D1). A tied row that admits no label's operation finds nothing,
+  so it is empty (`row_nil_of_find_none`). Core's kernel types the finaliser at `F 1`
+  (`der_cases`), and FL puts it in Core's relation there.
+- A program in Core's relation at `F A`, at the empty resource, runs to a value from every memory
+  with finitely many cells (`runs_of_rel`). The memory is the lowering of the `TW` world that owns
+  each of its cells (`ownWorld`, built by `TW.alloc` from `∅`, through `alloc_world`), and that
+  world is `wpG`'s frame. A given run is a prefix of `wpG`'s run under the allocator that replays it
+  (`wpG_seg`), and the pure row allows no stop. At `F 1` the value is `()` (`runs_of_rel_unit`).
+- Reached memories are finite (`finDom_reach`). So every fired finaliser S5 names runs to `()` from
+  the memory it fires at (`FinOK`).
+
+**The traces at our machine** (`Targets/Instance/CancelRuns.lean`).
+- A step of `Kf[t]`, where `t` steps at the same memory, is `t`'s step under `Kf`, with the same
+  label and runner state (`ostep_unplug`, `rstep_unplug`, through Core's `plug_cmp` and
+  `head_nested`). So while the fired finaliser has a step, the whole run is its run alone (A's
+  `Alone`).
+- **The unwind** (`unwind_pfx`, by strong induction on the path; its finaliser phase `pend_pfx`).
+  - `Std K` has no finaliser frame (the trace's `out`), or an innermost one with none inside
+    (`std_split`).
+  - The raise is Core's, at a value (`raise_live`, from `LiveOK`), and `[finalise]` is the only
+    step (`rstep_fire_inv`, labelled `fire D`). The β-step `(λ_. D↑) () ↦ D` is the only next step.
+  - `D` runs alone. At `()`, `(); raise p ↦ raise p` (`[1↦]`), and the unwind goes on through the
+    rest of `K`.
+- **The cancel** (`cancel_pfx`; its finaliser phase `fin_pfx`), from
+  `ccatch (hnd H K[raise (0, (0, (N, none)))])`, with `K` free of `ccatch` and `cfin` and no handler
+  named `0` in `hnd H ∘ K`.
+  - With no finaliser frame left, `[cancel]` answers `()` (the trace's `answer`).
+  - Otherwise the innermost finaliser frame holds a pair of values (`ubind_pair_live`: otherwise the
+    configuration would not go on, against `LiveOK`), and `[finalise-cancel]` fires `finE D`
+    (`rstep_fireC_inv`).
+  - The β-step follows when `D` is a λ. `D` runs alone under `cfin` to `()`, and `[cfin-ret]`
+    (labelled `finEnd none`) hands the cancel on, with nothing kept.
+- Each phase gives, for every path `q`, a `q'` of length at most one such that `q ++ q'` is a path
+  and a trace. `q'` is the β-step, when `q` stops right after a fire step.
+
+**The finding: S5 as written fails, at A's trace definitions** (`Targets/I/S5J1.lean`).
+- `CancelTrace.fire` and `UnwindTrace.fire` take the fire step, a `PurePath c₁ q₀ c₂` of
+  administrative steps, and the finaliser at `c₂`; a trace stops only at `[]`. So a path that stops
+  inside `q₀` follows no trace, although the traces' docstring says "a trace may stop anywhere".
+- At our machine `[finalise]` leaves `D (); raise p` and `[finalise-cancel]` leaves `cfin s (D ())`.
+  That is one β-step from `D` whenever `D` is a λ, and A's `thenF` always makes it one.
+- **Machine-checked** (`not_unwindOrder_of_types`). The witness is
+  `fireProg = handle_exn (raise exn () then x. x unwind ((); ()))`, typed by `J₁` with its rows tied
+  (`d_fireProg`) and by today's kernel (`d_fireProgNU`), at every effect context declaring
+  `exn : 1 ↠ 0` at `1`.
+  - Every premise of `UnwindOrder noFinRaise` holds at its raise under the finaliser frame
+    (`fireProg_premises`): the configuration is reached by `look`'s run, the context is one A-level
+    finaliser frame holding no handler, the finaliser `(); ()` is a closed program at the pure row,
+    and the runner answers nothing.
+  - The path of the fire step alone follows no unwind trace (`not_unwindTrace_one`): `(); ()` is at
+    no evaluation position of `((λ_. (); ()) ()); raise p` (`fireAfter_ne`, through `evalSubs`).
+  - At `ΞA`, which is admissible, this refutes S5 at `J₁` (`not_cancellation_ΞA`) and at today's
+    kernel.
+- At the same configuration the prefix-closed reading holds (`unwindOrderPfx_fireProg`).
+- **The restatement is the user's.** The candidate is `A.CancellationPfx`
+  (`Targets/A/CancelPrefix.lean`): every path is a prefix of a trace, that is, some continuation of
+  it, itself a path, is a trace. The target implies it (`cancellationPfx_of`). A repair at the
+  definitions themselves would let a trace stop inside each administrative path (`fire`'s `q₀`,
+  `returned`'s `q₁`). At our machine only a stop between the fire step and `D`'s start is missed: a
+  stop before `returned`'s one-step `q₁` is a `running` trace.
+
+**What S5's no-interception reads at our instance.**
+- It starts at `cancel (capture l H K)`. At our instance `capture` is `kappa`, the `κ` the catch
+  hands at an operation the handler's tags read `unr`.
+  - At an admissible context a typed program performs only operations `Ξ` declares resuming, and a
+    handler with `Ξ`'s tags (as `capture`'s are) tags them `lin` or `aff`. By that reading no typed
+    program reaches NoIntercept's premise there.
+  - This is not machine-checked: it needs a run invariant on the payloads of `perform`s and on
+    handler values.
+- The cancels that arise at an admissible context are of the capture cell's affine `κ` (SPEC §25).
+  They reach `cancelOf` after the step that frees the cell, so NoIntercept's `PureSteps` premise
+  excludes them.
+- `cancel_pfx` is stated at `cancelOf`, at any reached configuration, so it covers them too.
+  NoIntercept's restatement at the cell's `κ` is the user's.
+
+**Added hypotheses, and their scope.**
+- **`CancelsStd`** (the cancel bridge's). At a configuration a typed program reaches that cancels
+  `capture l H K`, the context `K` holds no `ccatch`, no `cfin` and no handler named `0`.
+  - Source: SPEC §19's "its handlers are dying, so they catch nothing", read at the capture (no
+    operation is caught across a cancel or a cancel-mode finaliser), and I3.c's `NoInterception`
+    read on the captured context.
+  - Scope: it is about the context the continuation was captured in, not about the cancel run, so it
+    does not assume the trace.
+  - OPEN at `J₁`. Its handler half needs that a runner's answers in a typed program's run are data
+    (B's `platData_of_safe` gives this of the arguments; it is not transported to A's runs here).
+    Its `ccatch`/`cfin` half needs that no operation escapes a fired finaliser, which is
+    `FinRowsAt`'s kind of whole-run fact.
+  - Non-vacuity is not shown. At an admissible context its premise is, by the reading above, never
+    met.
+- The instance-level bridges also take `LiveOK` (PROVED at `J₁` and today's kernel), that label
+  names are not `0` (`orowRF`'s labels), and `FinRow → FinOK` (PROVED at both, `status_finOK`).
+
+**`FinRowsAt`: OPEN, and not on S5's bridges' route.**
+- D4 put the fired finalisers' typing into S5's statement, and `finOK_of_finRow` gives what the
+  traces need.
+- `FinRowsAt` asks about every finaliser a typed program's run fires, with no typing hypothesis on
+  it. It still serves Core's I3.b (`FinaliserOrder`, from it by `finaliserOrder_A`) and the
+  `ccatch`/`cfin` half of `CancelsStd`.
+- Its routes are unchanged:
+  - a run-time typing with preservation (route 8.2). That is BRIEF §10's side mechanism, so stop and
+    report;
+  - an effect-side kernel change that makes an operation escaping a fired finaliser stuck. Then FL
+    and B's stuck-freedom (`stuck_of_rel`) give it, as the capture cell made S6's obligation a fact
+    of Core's relation.
+- *A draft of the second, for the user (not applied).*
+  - SPEC §19: `[finalise]` becomes `ubind (N, D) K[raise p] ↦ guard (D ()); raise p`, and
+    `[finalise-cancel]` becomes `… ↦ cfin s (guard (D ()))`.
+  - A new frame `guard □` with `guard v ↦ v` and no rule at an operation its body leaves uncaught.
+    It is a run-time form, with no typing rule.
+  - `then_compatC` would read `D` at `F 1` (option A), where `D`'s run makes no stop, so `guard`
+    never blocks a typed program. `fundamentalC`, `adequacyC` and `adequacyD` keep their
+    statements, and the lowering erases `guard`.
+  - It would give `FinRowsAt (fun _ => False) J₁` from FL. With an invariant that every `κ`'s
+    captured context is free of `cfin` (no hop captures across `guard`), it would also give
+    `CancelsStd`'s `ccatch`/`cfin` half.
+
+**Readings for the user to confirm** (pending; the user has not objected to 1–3):
+1. `J₁`'s kernel is Core's whole `CDerives` (`J₁.read`), read at an effect context as the tied
+   kernel `CDerivesAt Ξ` (decision R).
+2. Row polymorphism is the polymorphic let; the general `[handle]` is the handler value form over a
+   persistent context.
+3. D4: the no-interception condition is `FinRow FR`; a use of `κ` is a step applying `κ` to a data
+   value (`UseAt`); "observationally" is `RunsAlike` at data answers.
+4. Decision S5's bridges are read at S5 as written. Where S5 as written fails, the bridges are proved
+   at the candidate `CancellationPfx`, and S5 itself is reported, not restated.
+5. `CancelsStd`'s source is SPEC §19's dying handlers, read at the capture.
+
+**Unspent hypotheses.**
+- S5's `Answers R ε` is read by no bridge: the traces hold under every runner that keeps its
+  protocol, and `Respects` is read only through `Live`, for `LiveOK`.
+- The program's typing is read only through `Live` (closedness, `GoesOn`).
+- `CancelTrace`'s region `N` (`Region l K`) is read by nothing: at option A no finaliser's raise
+  reaches `keep`.
+- `AdmEff` is read by nothing: the bridges and the prefix-closed results hold at every effect
+  context.
+- `FinRow`'s row is read only to show it empty.
+
+**Unused uniqueness/functionality results.** `det_ourInst` and `AStep1.deterministic`. Read:
+`rstep_det`, `innerCatch_unique`, `plug_opE_eq`, `step1_raise`, `head_ubind_raise`, `plug_cmp`,
+`head_nested`, and `ResU.Lower.functional` (inside `wpG_seg`).
+
+**Untranscribed in the run-up.**
+- S5 at a set of endings other than `noFinRaise` (the `superseded` case and `ended` with an error);
+  the target reads `noFinRaise`.
+- `CancelsStd`'s discharge (above), and a run invariant showing that NoIntercept's premise is
+  unreachable at an admissible context.
+- `FinRowsAt` (above).
+
+**Gate.** `lake build Targets` passes with AxiomCheck and Audit. Every new result's axioms are
+within `[propext, Classical.choice, Quot.sound]`, with a `#print axioms` line for each. `make gate`
+passed once, at 826b968 ("ci-local --source: ALL PASSED"); it builds the library, which this step
+does not touch.
+
+**Remaining.**
+- The user's calls: S5's restatement (prefix-closed traces, `CancellationPfx`); NoIntercept at the
+  capture cell's `κ`; a route for `CancelsStd` and `FinRowsAt` (the `guard` frame drafted above, or a
+  run-time typing).
+- From earlier rounds: S4's restatement; `OnlyOwnerFrees`, `NoDanglingUse`; E7–E9, forcing a
+  `!U C` slot, `unr` at abortive operations, `unfold`'s value; `TailLaw`, `EtaHold`; `Accepts`,
+  `Rejects`; `RowVarKernel J₁`.
