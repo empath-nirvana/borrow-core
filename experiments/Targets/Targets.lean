@@ -14,6 +14,7 @@ import Targets.Base.Closed
 import Targets.Base.CoreCancel
 import Targets.Base.Ctx
 import Targets.Base.Look
+import Targets.Base.LookMem
 import Targets.Base.Data
 import Targets.Base.Fill
 import Targets.Base.Machine
@@ -77,6 +78,7 @@ import Targets.Instance.E5
 import Targets.Instance.E2
 import Targets.Instance.E10
 import Targets.Instance.ZeroCost
+import Targets.I.AcceptsRejects
 import Targets.I.Binder
 import Targets.I.Combined
 import Targets.I.Device
@@ -89,6 +91,7 @@ import Targets.I.NonVacuity
 import Targets.I.OpenRel
 import Targets.I.Pins
 import Targets.I.Programs
+import Targets.I.Rejects
 import Targets.I.Restricted.Answering
 import Targets.I.Restricted.CompositeT1
 import Targets.I.Restricted.Core

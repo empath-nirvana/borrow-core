@@ -41,7 +41,7 @@ Instance; the Instance imports no B or I; I imports everything.
 | | `Targets/A/NonVacuity.lean` | the abstract non-vacuity lemmas |
 | | `Targets/A/Binary.lean`, `Targets/A/Lowering.lean` | A₂ (the binary laws) and A₃ (the erased lowering over a fixed target), stated, out of the first pass |
 | | `Targets/A/UnaryLaws.lean`, `Targets/A/Theories.lean` | the unary laws beside done, run-level (`TailLaw`, `AlgLaw`, `EtaHold`, `EtaLin`); theories: equations in signatures (`Eqn`, `Theory`), the state-passing handler of co-operations (`ansHnd`, `runAt`), handler correctness (`AnsCorrect`), comodels (`IsComodel`), global state (`stateTheory`, `stateCo`) |
-| **base** | `Targets/Base/*` | Core's machine, rows and typing as B, I and the Instance read them: platforms, runs, `PRun`, `ReleasedOnce`, B5's `Named`, `Expr.mapLoc`, `Heap.push`, `RelAt`, `Bump`, `BumpSim` (`Machine.lean`); the statements about runs that mention no world, `Sound`, Core's `EffSafe`, `EffSafeDrive` (`RunProps.lean`); `TypingJ`, `tier1`, `tier1NU`, the `RC_*` rules (`Typing.lean`); Core's cancel and unwind shapes (`CoreCancel.lean`); a typed term is closed at its context (`Closed.lean`); the polymorphic let's premise term (`Fill.lean`); the answering implementations; contextual approximation |
+| **base** | `Targets/Base/*` | Core's machine, rows and typing as B, I and the Instance read them: platforms, runs, `PRun`, `ReleasedOnce`, B5's `Named`, `Expr.mapLoc`, `Heap.push`, `RelAt`, `Bump`, `BumpSim` (`Machine.lean`); the statements about runs that mention no world, `Sound`, Core's `EffSafe`, `EffSafeDrive` (`RunProps.lean`); `TypingJ`, `tier1`, `tier1NU`, the `RC_*` rules (`Typing.lean`); Core's cancel and unwind shapes (`CoreCancel.lean`); a typed term is closed at its context (`Closed.lean`); the polymorphic let's premise term (`Fill.lean`); runs computed by the kernel, `look` (steps that keep the memory) and `runM` (the memory steps added, a run of Core's machine, `runM_sound`) (`Look.lean`, `LookMem.lean`); the answering implementations; contextual approximation |
 | **B** | `Targets/B/World.lean` | `BWorld`, a borrow world with borrow fields only; `coreB`, Core's relation as one |
 | | `Targets/B/Adequacy.lean`, `PlatSafe.lean` | B2 at BoLo (`adequate_core`); runs under a platform that answers part of the row |
 | | `Targets/B/HeapFrame.lean` | a closed program in Core's relation runs from every finite memory, its cells `wpG`'s frame (`ownWorld`, `runs_of_rel`, `runs_of_rel_unit`) |
@@ -76,6 +76,8 @@ Instance; the Instance imports no B or I; I imports everything.
 | | `Targets/I/J1.lean`, `GhostCoupling.lean` | B1, B's guarantees, the pins, FL at the open judgements and A's (S) properties at `J₁`; `Tier1 J₁` from what is open (`tier1_J₁_of`); route 8.4's obligation at the capture cell: R1 at a linear or affine operation is not in Core's relation (`not_semC_R1`) |
 | | `Targets/I/ContUseJ1.lean` | S6 at the capture cell: a capture event allocates `κ`'s cell (`catchEv_cell`), a use releases it (`use_frees_cell`), leak freedom (`leakFreeAt_J₁`); S6 from the cell's ownership (`contUseEv_of_cells`, `contUseEv_J₁_of`); `Tier1 J₁` fails as written through S4 (`not_tier1_J₁`) |
 | | `Targets/I/Theories.lean` | the answering class at `J₁`: global state's handler correct, the tail law and algebraicity there |
+| | `Targets/I/Rejects.lean` | inversions of Core's kernel (thirteen inductions on `CDerives`, a class of judgements carried through the same-term rules; every free variable of a typed term has a live slot, `fv_live`); AT05, AT06, AT08 and AT13 have no derivation (`rejects_tier1`), AT08's for want of a rule for `load` |
+| | `Targets/I/AcceptsRejects.lean` | decision AR: the composite's eight programs with their answers on computed runs (`compositeT1_tier1`), `Accepts` and `Rejects` at `J₁` (`I.accepts_J₁`, `I.rejects_J₁`); `Tier1 J₁` from A's (E) properties, S4, S5 and S6 (`I.tier1_J₁_of_ESU`) |
 | | `Targets/I/S5J1.lean` | S5 at `J₁` and today's kernel: a fired finaliser that meets the no-interception condition runs to `()` from every finite memory (`finOK_of_finRow`); S5 read prefix-closed (`unwindOrderPfx_J₁`, `noInterceptPfx_J₁_of`, `cancellationPfx_tier1Open`); S5 as written fails (`not_cancellation_J₁`, `not_cancellation_tier1Open`, `not_cancellation_admissible`) |
 | meta | `Targets/Audit.lean`, `Status.lean`, `AxiomCheck.lean` | the step-index audit with nine negative tests and the pin of Core's relation; the record; the axiom check |
 
@@ -98,10 +100,10 @@ written at `J₁` (`not_cancellation_J₁`): its traces stop only at `[]` and re
 administrative steps whole; read prefix-closed, its unwind is proved and its no-interception given
 `CancelsStd`. `J₁` is Core's kernel
 with SPEC §24's rules over the open types, with the row `∀` (decision D5); our instance reads it at
-an effect context with its handlers' and operations' rows tied to the context (decision R). Before
-the cell, `Tier1 J₁` followed from A's (E) properties, S4, S5 and S6, `Accepts` and `Rejects`
-(`tier1_J₁_of`); the (E) properties fail as written at `J₁` (E7, E8, E9 at option A;
-`not_eProps_J₁`).
+an effect context with its handlers' and operations' rows tied to the context (decision R).
+`Accepts` and `Rejects` are proved at `J₁` (decision AR), so `Tier1 J₁` follows from A's (E)
+properties, S4, S5 and S6 (`tier1_J₁_of_ESU`); the (E) properties fail as written at `J₁` (E7, E8,
+E9 at option A; `not_eProps_J₁`).
 
 **The restricted tier-1 reduction** `Tier1Core` (today's kernel `tier1Open`, Core's world)
 follows from S5 at today's kernel (`tier1Core_of`). Proved of it: A's properties but S5 at every
@@ -155,8 +157,9 @@ From `Targets/Status.lean`. *PROVED AT σ=[]* is Core's relation (`coreB`, `core
 | a reachable leak breaks the combined theorem | PROVED (generic) | `not_combined_of_leak` |
 | Core's extern contract gives W's at row-abortive types, with `EmbedsNil` | PROVED (generic) | `contractsW_of_meets` |
 | the composite programs run (interpreter, evidence only) | checked | `at02_eval` … `at17_eval`, `genSelf_eval`, `at07_eval` (a use after free) |
-| `CompositeT1 tier1`'s typing and safety | PROVED AT A RESTRICTION (no platform operation) | `acceptedT1_*` |
-| `Tier2Programs`, `Accepts`, `Rejects`, `RejectsAT07` at a typing system | OPEN | — |
+| `CompositeT1 tier1`: typed, safe and terminating under the empty platform, one complete run answering the stated value | PROVED AT σ=[] (the runs computed by `runM`) | `compositeT1_tier1`, `acceptedT1_*`, `run_*` |
+| `Accepts J₁.read .abortive`, `Rejects J₁.read` (decision AR) | PROVED AT σ=[]; AT08's rejection rests on `load` having no rule | `I.accepts_J₁`, `I.rejects_J₁` |
+| `Tier2Programs`, `RejectsAT07` at a typing system | OPEN | — |
 | I1, I3, I5, P11 at `coreW`; I2 at abortive rows; `EmbedsNil coreW` | PROVED AT σ=[]; AT A RESTRICTION | `status_device_core`, `embedsNil_core` |
 | FIX-RUN-END's checks and witness worlds | PROVED | `Targets/I/RunEnd.lean` |
 

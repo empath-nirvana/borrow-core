@@ -29,6 +29,7 @@ import Targets.Instance.UnaryLaws
 import Targets.B.BumpSim
 import Targets.Instance.E10
 import Targets.I.S5J1
+import Targets.I.AcceptsRejects
 
 /-!
 # Targets — status, by system (RESTRUCTURE §0)
@@ -64,10 +65,12 @@ A) over the open types, with the row `∀` (`Targets/Instance/J1.lean`); our ins
 context reads it with the rows of its handlers and operations tied to the context (decision R,
 below).  Proved of it: A's (S) properties but S4, S5 and S6 at every effect context (S4 at an
 effect context whose resuming operations are unrestricted), B's guarantees (B5 included, piece 6),
-the world's conjuncts and the pins.  `I.Tier1 J₁` follows from A's (E) properties (which **fail as
-written** at `J₁`: E7, E8, E9, option A; decision E, below), S4, S5 and S6 at every
-admissible effect context, the composite's programs (`Accepts`) and rejections (`Rejects`).  TIER1-PLAN §2's first route (elaborating each derivation into the kernel before
-D5) does not reach tier 1 (`status_elab_route`); `J₁` is built by D5's route instead.
+the world's conjuncts and the pins, and the composite's programs (`Accepts`) and rejections
+(`Rejects`; decision AR, below).  So `I.Tier1 J₁` follows from A's (E) properties (which **fail as
+written** at `J₁`: E7, E8, E9, option A; decision E, below), S4, S5 and S6 at every admissible
+effect context (`status_tier1_J₁_of_ESU`).  TIER1-PLAN §2's first route (elaborating each
+derivation into the kernel before D5) does not reach tier 1 (`status_elab_route`); `J₁` is built by
+D5's route instead.
 
 **The restricted tier-1 reduction** (`I.Tier1Core`, at today's kernel `tier1Open` and Core's world):
 **PROVED AT σ=[] given S4 and S5 at today's kernel** (`status_tier1Core_of`).  Proved of it: A's
@@ -313,6 +316,41 @@ every admissible effect context:
   (`derV_timeoutR_J₁`, `polyUseOpen_timeoutR_J₁`, `callsThrough_timeoutR`).  `retry` forces a body
   at `!U C` (as E2c); the loop is built by `unfold` (as E3).
 
+## The composite's programs and rejections at `J₁` (decision AR, 2026-10-08)
+
+`J₁`'s reading is Core's kernel (`j1_read`), so both conjuncts are about `CDerives`.
+
+* **`Accepts J₁.read .abortive`: PROVED AT σ=[]** (`I.accepts_J₁`; `CompositeT1 tier1`,
+  `compositeT1_tier1`).  Each of the eight programs is typed at its data answer and safe and
+  terminating under the empty platform (`acceptedT1_*`), and one complete run answers the stated value.
+  The run is computed: `runM` (`Targets/Base/LookMem.lean`) adds the memory steps (`alloc`, `free`,
+  `load`, `store`, at a memory kept as a list of cells) to `look`'s steps, the kernel evaluates it to
+  the answer at the empty memory (`run_*`, by `rfl`), and `runM_sound` makes it a run of Core's
+  machine.  The interpreter's runs (`*_eval`) stay evidence; these are proofs.
+* **`Rejects J₁.read`: PROVED AT σ=[]** (`I.rejects_J₁`; `Rej.rejects_tier1`): AT05, AT06, AT08 and
+  AT13 have no derivation in Core's kernel, at any context and any judgement
+  (`Targets/I/Rejects.lean`).  The inversions are thirteen inductions on `CDerives`, each carrying a
+  class of judgements through the fourteen same-term rules (the value rules `!E`, `[]I`, `[]E`, the
+  two `⊑`, `roll`, `unroll`; `return`, `ofRet`, `[sub]`, `ν`'s two; at a λ-value, the two thunk
+  rules): a variable, a pair, `()`, an application, a λ-value (with its constants' axioms), `let (x,
+  y)`, `;`, `then`, `handle`, `alloc`, the primitives; and every free variable of a typed term has a
+  live slot (`fv_live`).  About 2200 lines, 17 s to build.
+  * **AT06** (`not_der_at06`): the clause is in `[handle]`'s clause tuple, so at a `!U` type over a
+    persistent context, and it uses the cell, whose slot is a view of a `Ref`.
+  * **AT13** (`not_der_at13`): the clause's `κ` is at `kTy` at `lin`, a thunk of an `&`; `forget`'s
+    axioms take `!`, `Imm`, `Mut`, `Unk` and `ArrayImm`, and as a λ it drops a persistent argument
+    only (`not_forget_kappa`).
+  * **AT05** (`not_der_at05`): typed as a λ, `withborU dFlag` uses its source on both sides of its
+    `then` (`wb_generic`), and the cell is a `Ref`; typed by an unwinding constant, the callback is
+    at `∀'x ⊏ @b. L ⊸ F_Σ(['x] B)`, `L` a borrow, where `λm. (m, m)` uses `m` on both sides of a
+    split (`not_at05F_cb`).  The `copy` axiom types the λ-value `copy`, not a body under a borrow,
+    so the rejection holds at the `Imm` lend too.
+  * **AT08** (`not_der_at08`): **the rejection rests on `load`**, which has no rule of its own in
+    Core's kernel (`der_prim`, `not_der_load_app`); reads go through `withload` and `swap`.  The
+    reason RESTRUCTURE §3.4 gives (`kTy` at `lin` and `aff` neither droppable nor persistent) is not
+    what refuses the program as written.  A restatement of AT08's program, reading the cell by
+    `withload` or `swap`, is the user's.
+
 ## Piece 5: the answering class (D1.h1–h4)
 
 * **Theories** (D1.h3, D1.h4; `Targets/A/Theories.lean`).  Equations are writable in signatures:
@@ -394,14 +432,15 @@ every admissible effect context:
 | Core's extern contract gives W's at row-abortive types, with `EmbedsNil` | PROVED (generic) | `contractsW_of_meets` |
 | a reachable leak breaks the combined theorem | PROVED (generic) | `not_combined_of_leak`; the witness `leakW` |
 | the composite programs run (interpreter, evidence) | checked | `at02_eval` … `at17_eval`, `genSelf_eval` (the generator borrowing its own state), `at07_eval` (AT07 runs into `useAfterFree`) |
-| `CompositeT1 tier1`'s typing and safety | PROVED AT A RESTRICTION (`Platform.none`) | `acceptedT1_*` |
-| `Tier2Programs`, `Accepts`, `Rejects`, `RejectsAT07` | OPEN (no tier-2 typing system; inversions to build) | — |
+| `CompositeT1 tier1`: typed, safe and terminating under the empty platform, one complete run answering the stated value | PROVED AT σ=[] (the run computed by `runM`, `runM_sound`) | `compositeT1_tier1`, `acceptedT1_*`, `run_*` |
+| `Accepts J₁.read .abortive`, `Rejects J₁.read` (decision AR) | PROVED AT σ=[]; AT08's rejection rests on `load` having no rule | `I.accepts_J₁`, `I.rejects_J₁`, `Rej.rejects_tier1`, `status_acceptsRejects_J₁` |
+| `Tier2Programs`, `RejectsAT07` | OPEN (no tier-2 typing system; AT07's stuck run not written out) | — |
 | `EffSafe tier1` (Core's P2) | PROVED AT σ=[] | `effSafe_tier1` |
 | `EffSafeDrive` (P2 for driven programs), RESTATED (D2: a positive loop body; D4: a finished drive observed, `DoneDrive`) | PROVED AT σ=[] at every typing system with FL at BoLo, so at today's unr-free kernel; the hypothesis is needed; the route at a generic world, `EffSafeDriveOfFL`, OPEN | `effSafeDrive_of_FL`, `effSafeDrive_tier1NU`; `effSafeDrive_needs_nuOk` |
 | `Pins tier1Open admClosedOp .abortive`, with `I4a` at the unr-free rules | PROVED AT σ=[] (abortive rows) | `I.pins_tier1Open`, `i4a_tier1NU` |
 | Law 1 at the relation: `ovalW` at `U(∀ρ:k. C)` and `!U(∀ρ:k. C)` is the intersection of the instances; `FLOpen M J` gives `FL M J.read`; `FLOpen` at today's kernel | PROVED (generic); PROVED AT σ=[] | `I.ovalW_allR`, `I.ovalW_bang_allR`, `I.fl_of_flOpen`, `I.flOpen_core_tier1Open` |
 | `J₁`: its reading is Core's kernel; FL at BoLo (B1); B's guarantees; the pins; FL at its open judgements over contexts with no polymorphic slot, a polymorphic type read as the intersection of its instances (Law 1) | PROVED AT σ=[] (abortive rows for the pins); `FLOpen coreB J₁` at contexts with a polymorphic slot NOT PROVED (a value `ovalW` relates there need not be a closed λ-value Core types) | `status_j1`, `status_guarantees_J₁`, `status_pins_J₁`, `I.flOpen_J₁_mono` |
-| tier 1 at `J₁` | **FAILS AS WRITTEN** since the capture cell: S4's catch law fails at `ΞA` (the restatement is the user's); before it, it followed from A's (E) properties, S4, S5, S6, `Accepts` and `Rejects`.  The (E) properties also fail as written at `J₁` (E7, E8, E9, option A; decision E), and so does S5 (its traces read prefix-closed hold; S5's bridges) | `status_handlerSem_cell`, `I.not_tier1_J₁`, `status_tier1_J₁_of`, `status_eProps_J₁`, `status_cancellation_J₁` |
+| tier 1 at `J₁` | **FAILS AS WRITTEN** since the capture cell: S4's catch law fails at `ΞA` (the restatement is the user's).  It follows from A's (E) properties, S4, S5 and S6 at every admissible effect context, `Accepts` and `Rejects` being proved (decision AR).  The (E) properties also fail as written at `J₁` (E7, E8, E9, option A; decision E), and so does S5 (its traces read prefix-closed hold; S5's bridges) | `status_handlerSem_cell`, `I.not_tier1_J₁`, `status_tier1_J₁_of`, `status_tier1_J₁_of_ESU`, `status_eProps_J₁`, `status_cancellation_J₁` |
 | TIER1-PLAN §2's route (elaborate `J₁` into today's unr-free kernel, then `fundamentalC`) | **DOES NOT REACH TIER 1**: closed derivations that elaborate type no A-level handler, so E8 fails; today's kernel types no let-bound function read at two rows | `I.not_tier1_of_elabClosed`, `not_der_letTwo` |
 | FIX-RUN-END's checks and witness worlds | PROVED | `Targets/I/RunEnd.lean` (73 results) |
 | I1, I3, I5, P11 at `coreW` (the device); I2 at `coreW` | PROVED AT σ=[]; PROVED AT A RESTRICTION (abortive rows) | `i1_core`, `i3_core`, `i5_core`, `p11_core`; `i2_core_abortive` |
@@ -1075,6 +1114,26 @@ theorem status_tier1_J₁_of
     (hAc : I.Accepts (ℍ := ℍ) J₁.read .abortive) (hRj : Rejects J₁.read) :
     I.Tier1 (ℍ := ℍ) J₁ :=
   I.tier1_J₁_of hE hS4 hC hU hAc hRj
+
+/-- PROVED AT σ=[] (decision AR): the composite's programs at `J₁`, each typed, safe, terminating and
+with a computed complete run answering the stated value; and its rejections, AT05, AT06, AT08 and
+AT13, typed at no type by Core's kernel.  AT08's rejection rests on `load` having no rule. -/
+theorem status_acceptsRejects_J₁ :
+    I.Accepts (ℍ := ℍ) J₁.read .abortive ∧ Rejects J₁.read ∧
+      ∀ (Δ : BoCa.Lifetime.LifeCtx) (Γ : Ctx VTy) (X : Expr) (j : Jdg),
+        ¬ CDerives Δ Γ (.app (.prim .load) X) j :=
+  ⟨I.accepts_J₁, I.rejects_J₁, fun _ _ _ _ => Rej.not_der_load_app⟩
+
+/-- PROVED: tier 1 at `J₁` follows from A's (E) properties, S4, S5 and S6 at every admissible
+effect context (decision AR discharges `Accepts` and `Rejects`). -/
+theorem status_tier1_J₁_of_ESU
+    (hE : ∀ Ξ, AdmEff Ξ → (ourInst (ℍ := ℍ) orowRF Ξ J₁).EProps)
+    (hS4 : ∀ Ξ, AdmEff Ξ → (ourInst (ℍ := ℍ) orowRF Ξ J₁).HandlerSem)
+    (hC : ∀ Ξ, AdmEff Ξ → (ourInst (ℍ := ℍ) orowRF Ξ J₁).Cancellation
+      (ourInst (ℍ := ℍ) orowRF Ξ J₁).noFinRaise)
+    (hU : ∀ Ξ, AdmEff Ξ → (ourInst (ℍ := ℍ) orowRF Ξ J₁).ContUseEv) :
+    I.Tier1 (ℍ := ℍ) J₁ :=
+  I.tier1_J₁_of_ESU hE hS4 hC hU
 
 /-- PROVED (decision E): A's (E) properties at `J₁`.  At every admissible effect context E1, E4 and
 E6, and E5 where no `exn` signature is `unr`; E7, E8 and E9 fail as written at every effect context
