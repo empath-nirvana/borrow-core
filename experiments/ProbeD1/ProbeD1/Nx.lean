@@ -689,6 +689,165 @@ def MonoOwnGMCAt (p : Placement) (Γ : Ctx VTy) : Prop :=
     PlaceViewsL (extS δ σ αs) σ αs ls ρ →
     gRLMC (ℍ := ℍ) p σ δ αs ls Γ γ ρ → gRLMC (ℍ := ℍ) p (e :: σ) δ (a :: αs) ls Γ γ ρ
 
+/-! ### Item 4: `MonoHide` at `vRLM`, and the consumers (`NEXT.md` §4) -/
+
+/-- **A value inside a handler of the names `N`, at `vRLM`.** -/
+def MonoHideM (p : Placement) : Prop :=
+  ∀ (σ : LStack) (δ : LSub) (A : VTy) (αs : List Life) (ls : List SRec) (v : Val) (ρ : WRes)
+    (N : UInt32 → Bool), StackOK σ αs → TabAtS σ αs ρ → PlaceViewsL (extS δ σ αs) σ αs ls ρ →
+    vRLM (ℍ := ℍ) p none σ δ A αs ls v ρ → vRLM (ℍ := ℍ) p none (hideS N σ) δ A αs ls v ρ
+
+/-- **A context inside a handler of the names `N`** (`[handle]`'s transport). -/
+def MonoHideGM (p : Placement) : Prop :=
+  ∀ (σ : LStack) (δ : LSub) (Γ : Ctx VTy) (γ : List Val) (αs : List Life) (ls : List SRec)
+    (ρ : WRes) (N : UInt32 → Bool), StackOK σ αs → TabAtS σ αs ρ →
+    PlaceViewsL (extS δ σ αs) σ αs ls ρ →
+    gRLM (ℍ := ℍ) p σ δ αs ls Γ γ ρ → gRLM (ℍ := ℍ) p (hideS N σ) δ αs ls Γ γ ρ
+
+/-- **Hiding names no entry's row holds changes nothing.** -/
+def HideInvisible : Prop :=
+  ∀ (N : UInt32 → Bool) (σ : LStack), (∀ e ∈ σ, ∀ n, N n = true → e.cross n = false) →
+    hideS N σ = σ
+
+mutual
+/-- **A value type carries the operation name `n`**: an effect layer of `n` under a `U`, through
+the formers W reads itself (Core's leaves read no stack). -/
+inductive CarriesV (n : UInt32) : VTy → Prop
+  | thunk {C : CTy} : CarriesC n C → CarriesV n (.thunk C)
+  | tensorL {A B : VTy} : CarriesV n A → CarriesV n (.tensor A B)
+  | tensorR {A B : VTy} : CarriesV n B → CarriesV n (.tensor A B)
+  | sumL {A B : VTy} : CarriesV n A → CarriesV n (.sum A B)
+  | sumR {A B : VTy} : CarriesV n B → CarriesV n (.sum A B)
+  | bang {A : VTy} : CarriesV n A → CarriesV n (.bang A)
+  | box {a : Lifetime.Life} {A : VTy} : CarriesV n A → CarriesV n (.box a A)
+  | ref {A : VTy} : CarriesV n A → CarriesV n (.ref A)
+  | fam {L : VTy} : CarriesV n L → CarriesV n (.fam L)
+  | mu {A : VTy} : CarriesV n A → CarriesV n (.mu A)
+/-- **A computation type carries the operation name `n`.** -/
+inductive CarriesC (n : UInt32) : CTy → Prop
+  | eff {i : UInt32} {q : Qual} {A B : VTy} {C : CTy} : CarriesC n (.eff n i q A B C)
+  | effIn {m i : UInt32} {q : Qual} {A B : VTy} {C : CTy} :
+      CarriesC n C → CarriesC n (.eff m i q A B C)
+  | ret {A : VTy} : CarriesV n A → CarriesC n (.ret A)
+  | arrA {A : VTy} {C : CTy} : CarriesV n A → CarriesC n (.arr A C)
+  | arrC {A : VTy} {C : CTy} : CarriesC n C → CarriesC n (.arr A C)
+  | ampL {C D : CTy} : CarriesC n C → CarriesC n (.amp C D)
+  | ampR {C D : CTy} : CarriesC n D → CarriesC n (.amp C D)
+  | all {x : LifeVar} {c : Lifetime.Life} {C : CTy} : CarriesC n C → CarriesC n (.all x c C)
+end
+
+/-- **The relation reads an entry's row only at the names the type carries.** -/
+def VRLMHideAvoid : Prop :=
+  ∀ (p : Placement) (N : UInt32 → Bool) (σ : LStack) (δ : LSub) (A : VTy) (αs : List Life)
+    (ls : List SRec), (∀ n, N n = true → ¬ CarriesV n A) →
+    vRLM (ℍ := ℍ) p none (hideS N σ) δ A αs ls = vRLM (ℍ := ℍ) p none σ δ A αs ls
+
+/-- **`[handle]`'s context transport at `binder0`, where it is invisible**: the handled name crosses
+no entry, or no live type carries it. -/
+def MonoHideGMHandle0 : Prop :=
+  ∀ (σ : LStack) (δ : LSub) (Γ : Ctx VTy) (γ : List Val) (αs : List Life) (ls : List SRec)
+    (ρ : WRes) (n : UInt32),
+    ((∀ e ∈ σ, e.cross n = false) ∨ ∀ s ∈ Γ, s.live = true → ¬ CarriesV n s.ty) →
+    gRLM (ℍ := ℍ) .binder0 σ δ αs ls Γ γ ρ →
+    gRLM (ℍ := ℍ) .binder0 (hideS (· == n) σ) δ αs ls Γ γ ρ
+
+/-- **`MonoHideM`'s `F_Σ` case at a stop**, the step the general case reads: a stop at `σ` is a stop
+at `hideS N σ`, with the piece's continuation carried along. -/
+def HideStopStep : Prop :=
+  ∀ (δ : LSub) (σ : LStack) (N : UInt32 → Bool) (Tab : OpTab)
+    (Q : List Life → List SRec → Val → WProp) (αs : List Life) (ls : List SRec) (t : Expr)
+    (ρ : WRes),
+    StackOK σ αs → TabAtS σ αs ρ →
+    stopS δ σ Tab (OpenS δ σ Tab Q) αs ls t ρ →
+    stopS δ (hideS N σ) Tab (OpenS δ (hideS N σ) Tab Q) αs ls t ρ
+
+/-- Statement 4's `ovalU` at `vRLM`. -/
+def ovalUM (p : Placement) (σ : LStack) (δ : LSub) (αs : List Life) (ls : List SRec) :
+    Targets.Inst.OCTy → Targets.RowEnv → Val → WProp
+  | .allR ρ k C, η, v => fun r => ∀ s : Row, k.cls.Admits s → (∀ o ∈ s, k.adm o) →
+      ovalUM p σ δ αs ls C (Function.update η ρ s) v r
+  | C, η, v => vRLM (ℍ := ℍ) p none σ δ (.thunk (Targets.Inst.OCTy.den η C)) αs ls v
+
+/-- Statement 4's `ovalW` at `vRLM`. -/
+def ovalWM (p : Placement) (σ : LStack) (δ : LSub) (αs : List Life) (ls : List SRec) :
+    Targets.Inst.OVTy → Targets.RowEnv → Val → WProp
+  | .thunk C, η, v => ovalUM p σ δ αs ls C η v
+  | .bang A, η, v => fun r => r = PMap.empty ∧ ovalWM p σ δ αs ls A η v r
+  | A, η, v => vRLM (ℍ := ℍ) p none σ δ (Targets.Inst.OVTy.den η A) αs ls v
+
+/-- **`AllRMono`'s record-order half at `vRLM .binder0`**: a row-polymorphic value carried along
+an extension of the list that keeps the tags. -/
+def AllRExtM0 : Prop :=
+  ∀ (σ : LStack) (δ : LSub) (αs : List Life) (ls ls' : List SRec) (ρv : Targets.RVar)
+    (k : Targets.RowCon) (C : Targets.Inst.OCTy) (η : Targets.RowEnv) (v : Val) (r : WRes),
+    StackOK σ αs → OuterBelowTop αs → RecsOutside αs ls → RecsOutside αs ls' →
+    Ext ls ls' r → KeepsT ls ls' r → TabAtS σ αs r → PlaceViewsL (extS δ σ αs) σ αs ls r →
+    ovalWM (ℍ := ℍ) .binder0 σ δ αs ls (.thunk (.allR ρv k C)) η v r →
+    ovalWM (ℍ := ℍ) .binder0 σ δ αs ls' (.thunk (.allR ρv k C)) η v r
+
+/-- **`AllRMono`'s own-push half**: carried across the callback's own push (`OwnPushM`, with the
+`∀` clause's freshness). -/
+def AllROwnM0 : Prop :=
+  ∀ (σ : LStack) (δ : LSub) (αs : List Life) (ls : List SRec) (ρv : Targets.RVar)
+    (k : Targets.RowCon) (C : Targets.Inst.OCTy) (η : Targets.RowEnv) (v : Val) (r : WRes)
+    (C' : CTy) (e : LEnt) (a : Life),
+    StackPayAvoids e.x σ → StackOK σ αs → OuterBelowTop αs → RecsOutside αs ls →
+    SubOutside σ αs δ → OwnPushM δ C' r (σ, αs) e a → δ.find? e.x = none →
+    (∀ η', ¬ VFree e.x (Targets.Inst.OVTy.den η' (.thunk (.allR ρv k C))) ∧
+      e.x ∉ VTy.binders (Targets.Inst.OVTy.den η' (.thunk (.allR ρv k C)))) →
+    RecsOutside (a :: αs) ls → SubFresh δ a → TabAtS σ αs r →
+    PlaceViewsL (extS δ σ αs) σ αs ls r →
+    ovalWM (ℍ := ℍ) .binder0 σ δ αs ls (.thunk (.allR ρv k C)) η v r →
+    ovalWM (ℍ := ℍ) .binder0 (e :: σ) δ (a :: αs) ls (.thunk (.allR ρv k C)) η v r
+
+/-- **`AllRMono`'s instantiation half**: the thaw (`RelendMValue`'s form) through the
+intersection. A `U` introduction at `binder0` thaws every captured slot (`CtxRelendsAllM`, inside
+`statement0UFullM`); this is that step at a slot holding a row-polymorphic value. -/
+def AllRThawM0 : Prop :=
+  ∀ (σ : LStack) (δ : LSub) (αs : List Life) (ls : List SRec) (ρv : Targets.RVar)
+    (k : Targets.RowCon) (C : Targets.Inst.OCTy) (η : Targets.RowEnv) (v : Val) (r : WRes),
+    StackOK σ αs → OuterBelowTop αs → RecsOutside αs ls → TabAtS σ αs r →
+    PlaceViewsL (extS δ σ αs) σ αs ls r →
+    ovalWM (ℍ := ℍ) .binder0 σ δ αs ls (.thunk (.allR ρv k C)) η v r →
+    RelendJ δ σ
+      (fun δ' αs' ls' => ovalWM (ℍ := ℍ) .binder0 σ δ' αs' ls' (.thunk (.allR ρv k C)) η v)
+      αs ls r
+
+/-- **`AllRMono`'s hiding half**: carried into a handler of the names `N`. -/
+def AllRHideM0 : Prop :=
+  ∀ (σ : LStack) (δ : LSub) (αs : List Life) (ls : List SRec) (ρv : Targets.RVar)
+    (k : Targets.RowCon) (C : Targets.Inst.OCTy) (η : Targets.RowEnv) (v : Val) (r : WRes)
+    (N : UInt32 → Bool),
+    StackOK σ αs → TabAtS σ αs r → PlaceViewsL (extS δ σ αs) σ αs ls r →
+    ovalWM (ℍ := ℍ) .binder0 σ δ αs ls (.thunk (.allR ρv k C)) η v r →
+    ovalWM (ℍ := ℍ) .binder0 (hideS N σ) δ αs ls (.thunk (.allR ρv k C)) η v r
+
+/-- **Statement 4's `AllRMono` at `vRLM .binder0`**: a row-polymorphic value carried along the
+four index changes between its making and its use inside a borrow's callback. -/
+def AllRMonoM0 : Prop :=
+  AllRExtM0 (ℍ := ℍ) ∧ AllROwnM0 (ℍ := ℍ) ∧ AllRThawM0 (ℍ := ℍ) ∧ AllRHideM0 (ℍ := ℍ)
+
+/-- **An intersection commutes with `RelendJ`**: a resource meeting `RelendJ` at each member of a
+nonempty family of clauses meets it at their intersection. The step `AllRThawM0` takes at a slot
+that holds resource. -/
+def RelendJInter : Prop :=
+  ∀ (I : Type) (P : I → LSub → List Life → List SRec → WProp) (δ : LSub) (σ : LStack)
+    (αs : List Life) (ls : List SRec) (ρ : WRes), Nonempty I →
+    StackOK σ αs → TabAtS σ αs ρ → PlaceViewsL (extS δ σ αs) σ αs ls ρ →
+    (∀ i, RelendJ δ σ (P i) αs ls ρ) →
+    RelendJ δ σ (fun δ' αs' ls' ρ' => ∀ i, P i δ' αs' ls' ρ') αs ls ρ
+
+/-- **Statement 0 at `binder0`, read at the consumers the inventory finds.** Its conjuncts:
+- the facts beside monotonicity;
+- the record order;
+- the `∀I` row (its context across the own push, to the binder's reading, and to the shadow);
+- `[handle]`'s context into the hidden stack;
+- statement 4's `AllRMono` at `vRLM .binder0`, which DESIGN derives from `MonoV` and `MonoC`: its
+  four halves (record order, own push, the thaw, hiding). -/
+def Statement0MAtConsumers0Full : Prop :=
+  Statement0MBesideMono0 (ℍ := ℍ) ∧ MonoExtM (ℍ := ℍ) .binder0 ∧ AllIRowM (ℍ := ℍ) .binder0 ∧
+    MonoHideGM (ℍ := ℍ) .binder0 ∧ AllRMonoM0 (ℍ := ℍ)
+
 end ProbeD1
 
 end
