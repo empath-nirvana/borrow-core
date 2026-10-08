@@ -1,12 +1,13 @@
 import ProbeD1.R1Owed
 
 /-!
-# ProbeD1 — the persistence box: a persistent thunk at every world of `binder0`'s order
+# ProbeD1 — the persistence box: a persistent thunk at every instantiation and reserved-name push
 
-`vRLM`'s `!` clause reads a persistent thunk at every world `binder0`'s order reaches from the
-stack (`PBox`, `R1.lean`): every instantiation of the stack, every list the instantiated lifetimes
-keep outside, and every finite sequence of own pushes at the empty resource under reserved names
-(`BoxStep`). This file proves what the box needs and gives.
+`vRLM`'s `!` clause reads a persistent thunk at every instantiation of the stack, every list the
+instantiated lifetimes keep outside, and every finite sequence of own pushes at the empty resource
+under reserved names (`PBox`, `BoxStep`, `R1.lean`). No `binder0` clause pushes under a reserved
+name: the pushes are a new reach of the `!` clause. This file proves what the box needs and
+gives.
 
 * **The world facts** (`BoxIdx`, `boxIdx_inst`, `boxIdx_steps`): an index `SemSM` reads stays one
   along an instantiation and along the box's pushes, every pushed entry under a reserved name.

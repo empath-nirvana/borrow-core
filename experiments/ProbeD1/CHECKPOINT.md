@@ -72,8 +72,8 @@ This is a plain-language summary of where the D1 tractability probe stands. The 
 > [!WARNING]
 > **The guard-gap unit (`NEXT.md`) has been through the verifiers. One passed, with two minor
 > findings. The content review did not pass: three major findings and two minor ones.** This file
-> is corrected below. README, DESIGN §15.10 and `NEXT.md` §9–§10 still carry the wording each
-> finding names, and are not yet corrected. Until they are, read this file over them.
+> is corrected below, and README, DESIGN §15.10 and `NEXT.md` §9–§10 carry the same corrections
+> (`GROUND.md` §1).
 > - **Major: the `!` clause is not "fixed"; what is proved is narrower.** `persistentPushN` and
 >   `monoOwnGMAtBoxN` carry a persistent thunk across instantiations and across an own push under a
 >   *reserved* name (`NsVar`, x ≥ 2^32) only. Two pushes are outside that:
@@ -593,7 +593,7 @@ judged. At `binder0`, the placement with the most proved, the remaining work is:
    - The four major findings in `NEXT.md` *Unresolved* were answered in the text and not reviewed
      again.
    - The guard-gap unit's content review (the warning at the top): three major and two minor
-     findings, corrected here and not yet in README, DESIGN §15.10 or `NEXT.md` §9–§10.
+     findings, corrected here and in README, DESIGN §15.10 and `NEXT.md` §9–§10.
    - The statement-0 unit's minor wording findings are still open (the note at the top).
 
    This is needed under every option.

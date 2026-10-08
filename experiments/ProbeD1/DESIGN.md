@@ -2285,9 +2285,10 @@ The draft relation was edited twice:
   - (E2): its own lend is at `OwnPushM`;
   - (E3): `SemSM` reads `StackJM`;
   - (E4): `¬ VFree y T` on the callback statements.
-- The persistence box (`NEXT.md` §10.2). `vRLM`'s `!` clause reads a persistent thunk at every world
-  `binder0`'s order reaches: every instantiation, every list kept outside, and every finite
-  sequence of own pushes at the empty resource under reserved names.
+- The persistence box (`NEXT.md` §10.2). `vRLM`'s `!` clause reads a persistent thunk at every
+  instantiation, every list kept outside, and every finite sequence of own pushes at the empty
+  resource under reserved names (`NsVar`). The pushes are a new reach of the `!` clause: no
+  `binder0` clause pushes under a reserved name.
 
 Nothing outside ProbeD1 changed. The statement changes are listed in `NEXT.md` §9:
 - `RelMAgreesJ` is restated;
@@ -2296,18 +2297,25 @@ Nothing outside ProbeD1 changed. The statement changes are listed in `NEXT.md` �
 - the two `!U` rows take `PersistentBoxed`.
 
 In brief:
-- **The two-cell gap is real at `withloadU`** (`withloadUPairGapReal`).
-  - At an arising configuration, the program is typed at `withloadU`, and one own push has a closed
-    payload type. [TR] 6.150's `TW.reb` reborrows at the push's lifetime into a tagged typed world,
-    and the reborrowed pair fails the guard at every reading the callback's clause offers.
+- **The two-cell gap is real at `withloadU`, on [TR] 6.175's route** (`withloadUPairGapReal`).
+  - At an arising configuration, the program is typed at `withloadU`, and one own push has a
+    closed payload type. [TR] 6.150's `TW.reb` reborrows at the push's lifetime into a tagged
+    typed world, and the pair reborrowed at each reading's own lifetime fails the guard at every
+    reading `CbReading` lists (each instantiation, then each instance below the bound or each
+    single own push). No `withloadU` row is refuted: another argument might meet the table at
+    a non-identity instantiation (`PairArgCellsLe`, not built). The non-vacuity push `pEn`
+    lends place 3 at type `1`, unrelated to the payload.
   - At `withload`'s own thunked type, the statement is refuted at the same configuration
     (`not_withloadPairGapInst`). The answer's `U` clause instantiates the lend below the cells,
     where they meet the table.
-  - After (E1), the gap also shows at the empty stack (`withloadUPairGapNilE1`). Before (E1) it did
-    not (`pairNilOldGuardHolds`).
+  - After (E1), the route fails at the empty stack too (`withloadUPairGapNilE1`), at a view not
+    shown to arise (no `ArisesVI` witness). That is not evidence of a defect, and not a trigger
+    to revisit (E1). `pairNilOldGuardHolds` says only that the table at `[]` holds of every
+    resource.
   - The slice gate (`SliceUGapReal`) is not built.
-  - Under the corrections, this is a defect of the draft's stack entry on a borrow-only program, not
-    a restriction. The designed fix is item 1b's block (`NEXT.md` §1.6), which is not built.
+  - Under the corrections this is treated as a defect of the draft on a borrow-only program, not
+    a restriction. That its cause is the single-place stack entry is [read], not a theorem. The
+    designed fix is item 1b's block (`NEXT.md` §1.6), which is not built.
 - **`VRLMUnroll` is proved** (`vRLMUnroll`), with `vRLM`'s substitution lemma (`vRLMSubst`) and the
   roll and unroll rows at every placement.
 - **The `∀I` row.**
@@ -2326,43 +2334,70 @@ In brief:
   - The consumers inventory and table were not written. So statement 0 at `binder0` is not said to
     reduce to anything.
 - **The floor (correction (i)).**
-  - Before the box, nothing in the `!` clause carried a persistent value across a push. At `vRLJ`,
-    before (E1), a persistent closure at a type with no lifetime `∀` is related at a stack and not
-    after the own lend's push (`gdBangJ`, at `gd`, not shown to arise).
-  - So (E1) was kept, and the `!` clause was fixed.
-  - With the box, a persistent thunk is carried by construction across instantiations and own
-    pushes under reserved names (`persistentPushN`), and the two `!U` rows are re-proved
-    (`statement0UFullM`).
+  - Before the box, nothing in the `!` clause carried a persistent value across a push. At
+    `vRLJ`, before (E1), a persistent closure at a type with no lifetime `∀` is related at a
+    stack and not after the own lend's push (`gdBangJ`). That is at `gd`, not shown to arise,
+    and its closure is no Core value, so it is not evidence of a defect on a borrow-only
+    program.
+  - (E1) was kept, and the `!` clause gained the persistence box. The clause is not fixed. The
+    box carries a persistent thunk by construction across instantiations and own pushes at the
+    empty resource under reserved names (`NsVar`) only (`persistentPushN`, `monoOwnGMAtBoxN`);
+    the two `!U` rows are re-proved at it (`statement0UFullM`).
+  - Two pushes are outside it: the push `gdBangJ` fails at (`gdY`, named `2`), and the `∀`
+    clause's own push, named by the type's binder (`OwnPushI`, `e.x = x`). The second is
+    correction (i)'s case, a lifetime-polymorphic `!U` combinator carried into a lend's
+    callback. Both wait on `VRLMStackRename` (stated, not derived) and a reduction not built.
+    No `binder0` clause makes a reserved-name push, so the carrying proved may have no consumer
+    yet. The user's example was not built.
   - Open:
-    - the `∀I` row's binder-named push at a persistent context (`VRLMStackRename`, stated);
+    - the `∀I` row's binder-named push at a persistent context (`VRLMStackRename` and the
+      reduction);
     - the reading transports at a `!U` slot;
     - `PBox` at a `!B` reaching `U` below its top;
     - linear closures across a push;
     - the floor's own statement at `σ = []` (OQ-58's statements, not attempted).
 - **`reconB′`, as the language writes it (correction (ii))** (`reconB'`, `reconB'_eval`).
-  - `retry` is a handler around the lend, and the callback performs `wait`.
-  - The callback is closed [read]. Its `∀I` row is read at the empty context, where it holds
-    (`reconCb_allI`); the typing is not built.
-  - What it owes is the suspension inside the lend, which is tier 2.
+  - `retry` is a handler installed around the lend, and the callback performs `wait`. It runs to
+    `(tt, ff)` with no cell left (`reconB'_eval`).
+  - Its callback is closed [read]. `reconCb_allI` is `allIRowMUFree0 []` under a
+    program-specific name. The typing is not built.
+  - What it owes beyond that row is [unchecked]. Its lend is `lendCell`, whose term is
+    `withborUE dFlag`, which only the unwinding rules type, and those do not admit `wait`. Which
+    typing rule and which callback row apply (`CallbackExtImmM` at the `.arr` shape, or the
+    thunked `CallbackExtImmMF`, stated and not proved, a borrow-level obligation and not tier 2)
+    is open. The suspension inside the lend (tier 2) is among what it owes.
 - **Item 1b** was not reached. **Not reviewed again**: four major findings of the design reviews
   (`NEXT.md`, *Unresolved*).
 - **What it decides.**
   - OQ-8 is not decided.
-    - The gate's gap is at an arising configuration. But it is a defect of the stack entry and the
-      guard, which the placements share [read], and 1b is designed to fix it.
+    - The gate's gap is at an arising configuration, on [TR] 6.175's route. That it lies in the
+      stack entry and the guard, which the placements share, is [read]; 1b is designed to fix it.
     - No refutation of a placement's statement passed §11.
     - `cbpv` and `binder` were not redone at `vRLM`.
-  - No failure of type (a) or (b) occurred: there is no guard beside `TW`, and no relation family
-    beside W.
-  - (d) did not occur, because statement 0 does not yet hold, with the box or without it.
-    - The box makes the `!` clause reach stacks other than its own by something other than `FutQ`:
-      instantiations, and own pushes at the empty resource under reserved names. `binder0`'s `U`
-      and `∀` clauses already make these moves.
-    - If statement 0 comes to hold only with the box, §12.2's reading of (d) applies to it, and the
-      report must say so.
+  - No failure of type (a) or (b) occurred: there is no guard beside `TW`, and no relation
+    family beside W.
+  - (d), reported against both of §12.2's readings:
+    - **The design's reading.** A clause was changed to reach stacks other than its own by
+      something other than `FutQ`: the `!` clause's box, at instantiations and at own pushes at
+      the empty resource under reserved names. `binder0`'s `U` clause makes the
+      instantiations; its `∀` clause's push is at the type it reads, named by its binder, so
+      the reserved-name pushes are a new reach of the `!` clause. Statement 0 is not
+      established at `binder0` (it does not yet hold), with the box or without it. The bundle
+      as stated is refuted with the unrestricted monotonicity statements at `gd`, which is not
+      shown to arise and is not `binder0`'s status (`not_statement0M_binder0`,
+      `monoUnrestrictedRefuted0`). The consumer form waits on `AllIRowM .binder0`. So (d) did
+      not occur. If statement 0 comes to hold only with the box, (d) under this reading
+      applies to it.
+    - **The synthesis's wording.** `OwnPush` at `U` was not needed: `binder0` has no own push
+      at `U`. `MonoOwnG` at the `∀` clause's push is not derived: refuted unrestricted at `gd`,
+      not shown to arise (`monoUnrestrictedRefuted0`); its restrictions proved at contexts
+      reaching no `U` (`monoOwnGUFreeMA`, read by `allIRowMUFree0`) and at persistent contexts
+      across reserved-name pushes (`monoOwnGMAtBoxN`); not derived at a live `U` slot or at the
+      binder-named push (`VRLMStackRename`, stated). No push was made a future.
   - The fallback is not triggered.
-  - Under the corrections, the defects found on borrow-only programs are the draft's to fix: the
-    two-cell gap, and the `!` clause (now fixed).
+  - Under the corrections, these are open on borrow-only programs, and the draft's to close if
+    they fail: the two-cell gap on [TR] 6.175's route (item 1b), and the `!` clause at the
+    binder-named push (`VRLMStackRename`, stated, not derived).
 
 ---
 

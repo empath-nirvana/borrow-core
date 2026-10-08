@@ -762,8 +762,8 @@ theorem thunkVRowM : ThunkVRowM (ℍ := ℍ) .binder0 := by
     hSD hMod hro hso ht hpv hg)
 
 /-! The two `!U` introductions and `statement0UFullM` are in `R1Box.lean`: at the persistence box
-their thunk is read at every world of `binder0`'s order, which needs the box's world facts and
-the `U`-free push (`R1Mono.lean`). -/
+their thunk is read at every instantiation and every reserved-name push, which needs the box's world
+facts and the `U`-free push (`R1Mono.lean`). -/
 
 /-! ### `GAP.md` §4's `μ` slot at W's own `μ`
 

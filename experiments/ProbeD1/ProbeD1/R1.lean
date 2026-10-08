@@ -111,13 +111,12 @@ def StackJM (σ : LStack) (αs : List Life) (δ : LSub) (Δ : LifeCtx) (Γ : Ctx
     ∀ e ∈ σ, Δ.find? e.x = none → σ.head? = some e → (∃ c C', C = .all e.x c C') →
       (∀ a ∈ αs.head?, SubFresh δ a) ∧ ∀ e' ∈ σ, ¬ VFree e.x e'.T
 
-/-! #### The persistence box: `binder0`'s world order at a persistent value -/
+/-! #### The persistence box -/
 
-/-- **One step of `binder0`'s world order at a persistent value**, read at the reading `δ` and the
-list `ls`: an own push at the empty resource (`OwnOKI`). The entry is under a name no program binds
-(`NsVar`), new to the stack and to the reading, and not read by its own payload type; its lifetime
-is below the stack and below `⊤`, and fresh below the records and the reading, as the `∀` clause's
-own lend is. -/
+/-- **One step of the persistence box**, read at the reading `δ` and the list `ls`: an own push at
+the empty resource (`OwnOKI`). The entry is under a name no program binds (`NsVar`), new to the
+stack and to the reading, and not read by its own payload type; its lifetime is below the stack
+and below `⊤`, and fresh below the records and the reading, as the `∀` clause's own lend is. -/
 inductive BoxStep (δ : LSub) (ls : List SRec) : Stk → Stk → Prop
   | push {σ : LStack} {αs : List Life} (e : LEnt) (a : Life) :
       OwnOKI δ σ αs e a PMap.empty → a < ⊤ → NsVar e.x → δ.find? e.x = none →
@@ -146,7 +145,8 @@ through W's formers and the leaves' types closed by it; Core's `vCE` clauses at 
 `fam`, at W's relation. `X` never occurs under `U` (`VTy.subst` leaves `U C` alone) nor in a
 `Mut` payload (`NoMut`); in an `Imm` payload it is read through the closed type, Core's `μ` at the
 observable view, as every `Imm` payload is Core's at `vRLJ`. At `!` it is `vRLJ`'s clause with the
-persistence box (`PBox`): a persistent thunk is read at every world of `binder0`'s order. -/
+persistence box (`PBox`): a persistent thunk is read at every instantiation and every
+reserved-name push. -/
 def vRLM (p : Placement) :
     Option (Nat → WEnt) → LStack → LSub → VTy → List Life → List SRec → Val → WProp
   | _, σ, δ, .thunk C, αs, ls, f =>
@@ -424,8 +424,8 @@ def UFreeM : VTy → Prop
   | _ => True
 
 /-- **A persistent context the persistence box carries**: every live slot is a persistent thunk
-`!U C` (`PBox` reads it at every world of `binder0`'s order) or persistent data reaching no `U`
-(carried by its clauses' shape). The values the rules make persistent are thunks (`bangThunkF`,
+`!U C` (`PBox` reads it at every instantiation and every reserved-name push) or persistent data
+reaching no `U` (carried by its clauses' shape). The values the rules make persistent are thunks (`bangThunkF`,
 `bangThunkV`, a host operation's `!(A ⊸ B)`); a slot of persistent data reaching a `U` not itself
 under a `!`, such as `!(U C ⊗ 1)`, is the case left out. -/
 def PersistentBoxed (Γ : Ctx VTy) : Prop :=
