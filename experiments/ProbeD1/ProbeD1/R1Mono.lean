@@ -122,7 +122,8 @@ theorem monoExtME_go : ∀ (A : VTy) (η η' : Option (Nat → WEnt)) (σ : LSta
           (ihB η η' σ δ αs ls ls' v₂ ρ hE hok hob hro hro' he hkt ht hpv h₂)⟩
   | bang A ih =>
       intro η η' σ δ αs ls ls' v ρ hE hok hob hro hro' he hkt ht hpv h
-      exact ⟨h.1, ih η η' σ δ αs ls ls' v ρ hE hok hob hro hro' he hkt ht hpv h.2⟩
+      exact ⟨h.1, ih η η' σ δ αs ls ls' v ρ hE hok hob hro hro' he hkt ht hpv h.2.1,
+        pBox_env h.2.2⟩
   | box a A ih =>
       intro η η' σ δ αs ls ls' v ρ hE hok hob hro hro' he hkt ht hpv h
       obtain ⟨α, hα, hv, hout⟩ := h
@@ -427,7 +428,8 @@ theorem monoOwnUFree_go (p : Placement) (e : LEnt) (a : Life) : ∀ (A : VTy)
           (ihB η η' σ δ αs ls v₂ ρ hu.2 hE hok hch hsf hσ (fun h' => hx (Or.inr h')) hF h₂)⟩
   | bang A ih =>
       intro η η' σ δ αs ls v ρ hu hE hok hch hsf hσ hx hF h
-      exact ⟨h.1, ih η η' σ δ αs ls v ρ hu hE hok hch hsf hσ hx hF h.2⟩
+      exact ⟨h.1, ih η η' σ δ αs ls v ρ hu hE hok hch hsf hσ hx hF h.2.1,
+        pBox_of_not_thunk fun C hC => by subst hC; exact hu⟩
   | box b A ih =>
       intro η η' σ δ αs ls v ρ hu hE hok hch hsf hσ hx hF h
       obtain ⟨α, hα, hv, hout⟩ := h

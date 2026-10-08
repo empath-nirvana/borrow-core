@@ -1,4 +1,4 @@
-import ProbeD1.R1Owed
+import ProbeD1.R1Box
 
 /-!
 # ProbeD1 — statement 0 at `vRLM` (`R1MONO.md` §4)

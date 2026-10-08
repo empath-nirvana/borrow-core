@@ -437,7 +437,8 @@ theorem vRLM_reading_uFree (p : Placement) : ∀ (A : VTy) (η : Option (Nat →
           (fun y hy => hag y (hy.imp (fun h' => Or.inr h') id)) hagE h₂)⟩
   | bang A ih =>
       intro η σ δ₁ δ₂ αs ls v ρ hu hag hagE h
-      exact ⟨h.1, ih η σ δ₁ δ₂ αs ls v ρ hu hag hagE h.2⟩
+      exact ⟨h.1, ih η σ δ₁ δ₂ αs ls v ρ hu hag hagE h.2.1,
+        pBox_of_not_thunk fun C hC => by subst hC; exact hu⟩
   | box b A ih =>
       intro η σ δ₁ δ₂ αs ls v ρ hu hag hagE h
       obtain ⟨α, hα, hv, hout⟩ := h

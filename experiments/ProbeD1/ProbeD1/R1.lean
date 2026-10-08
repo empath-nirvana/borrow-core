@@ -111,13 +111,42 @@ def StackJM (σ : LStack) (αs : List Life) (δ : LSub) (Δ : LifeCtx) (Γ : Ctx
     ∀ e ∈ σ, Δ.find? e.x = none → σ.head? = some e → (∃ c C', C = .all e.x c C') →
       (∀ a ∈ αs.head?, SubFresh δ a) ∧ ∀ e' ∈ σ, ¬ VFree e.x e'.T
 
+/-! #### The persistence box: `binder0`'s world order at a persistent value -/
+
+/-- **One step of `binder0`'s world order at a persistent value**, read at the reading `δ` and the
+list `ls`: an own push at the empty resource (`OwnOKI`). The entry is under a name no program binds
+(`NsVar`), new to the stack and to the reading, and not read by its own payload type; its lifetime
+is below the stack and below `⊤`, and fresh below the records and the reading, as the `∀` clause's
+own lend is. -/
+inductive BoxStep (δ : LSub) (ls : List SRec) : Stk → Stk → Prop
+  | push {σ : LStack} {αs : List Life} (e : LEnt) (a : Life) :
+      OwnOKI δ σ αs e a PMap.empty → a < ⊤ → NsVar e.x → δ.find? e.x = none →
+      ¬ VFree e.x e.T → RecsOutside (a :: αs) ls → SubFresh δ a →
+      BoxStep δ ls (σ, αs) (e :: σ, a :: αs)
+
+/-- **The persistence box** of a `!` value at its type `A`. At a thunk type `U C`: every
+instantiation of the stack, every list the instantiated lifetimes keep outside, and every finite
+sequence of `BoxStep`s from the instantiated stack there. At any other type it asks nothing. A
+persistent value holds nothing, so no part of it is lent and none is moved, and the box reads it at
+every world the value can be carried to: a callback's own push, a resume's instantiation, a run's
+list. -/
+def PBox (A : VTy) (δ : LSub) (σ : LStack) (αs : List Life)
+    (P : LStack → LSub → List Life → List SRec → Prop) : Prop :=
+  match A with
+  | .thunk _ => ∀ ι : Inst, InstAt αs ι → ∀ ls' : List SRec, RecsOutside (ι.life αs) ls' →
+      ∀ (σ' : LStack) (αs' : List Life),
+        Relation.ReflTransGen (BoxStep (ι.sub δ) ls') (σ, ι.life αs) (σ', αs') →
+        P σ' (ι.sub δ) αs' ls'
+  | _ => True
+
 mutual
 /-- **W's value relation, reading `μ`, `[L]` and type variables itself.** `vRLJ`'s clauses at
-`U`, `⊗`, `⊕`, `!`, `[@a]`, `Ref`, `Mut`, `Imm` and the data leaves, the environment threaded
+`U`, `⊗`, `⊕`, `[@a]`, `Ref`, `Mut`, `Imm` and the data leaves, the environment threaded
 through W's formers and the leaves' types closed by it; Core's `vCE` clauses at `tvar`, `μ` and
 `fam`, at W's relation. `X` never occurs under `U` (`VTy.subst` leaves `U C` alone) nor in a
 `Mut` payload (`NoMut`); in an `Imm` payload it is read through the closed type, Core's `μ` at the
-observable view, as every `Imm` payload is Core's at `vRLJ`. -/
+observable view, as every `Imm` payload is Core's at `vRLJ`. At `!` it is `vRLJ`'s clause with the
+persistence box (`PBox`): a persistent thunk is read at every world of `binder0`'s order. -/
 def vRLM (p : Placement) :
     Option (Nat → WEnt) → LStack → LSub → VTy → List Life → List SRec → Val → WProp
   | _, σ, δ, .thunk C, αs, ls, f =>
@@ -132,7 +161,8 @@ def vRLM (p : Placement) :
   | η, σ, δ, .sum A B, αs, ls, v =>
       BoLo.or (ex fun v₁ => ⌜v = .inj₁ v₁⌝ ⋆ vRLM p η σ δ A αs ls v₁)
               (ex fun v₂ => ⌜v = .inj₂ v₂⌝ ⋆ vRLM p η σ δ B αs ls v₂)
-  | η, σ, δ, .bang A, αs, ls, v => fun ρ => ρ = PMap.empty ∧ vRLM p η σ δ A αs ls v ρ
+  | η, σ, δ, .bang A, αs, ls, v => fun ρ => ρ = PMap.empty ∧ vRLM p η σ δ A αs ls v ρ ∧
+      PBox A δ σ αs (fun σ' δ' αs' ls' => vRLM p η σ' δ' A αs' ls' v PMap.empty)
   | η, σ, δ, .box a A, αs, ls, v =>
       atLife (extS δ σ αs) a fun α => box α (vRLM p η σ δ A αs ls v)
   | η, σ, δ, .ref A, αs, ls, v =>
@@ -272,16 +302,42 @@ def CAllFree : CTy → Prop
   | .eff _ _ _ _ _ C => CAllFree C
 end
 
-/-- **`vRLM` is `vRLJ` where neither reads a `μ`, a `[L]`, a type variable or a lifetime `∀`.**
-`vRLM`'s `∀` clause reads the instances in scope and the own lends at `OwnPushM` (`NEXT.md`
-(E1), (E2)); `vRLJ`'s keeps the old clause. Proved without `VAllFree` at commit `5210cf1`, before
-the edits. -/
+mutual
+/-- No persistent thunk (`!U C`) at any depth, outside a `Mut` or `Imm` payload and outside `ν`:
+there `vRLM`'s `!` clause reads the persistence box (`PBox`), and `vRLJ`'s does not. -/
+def VBoxFree : VTy → Prop
+  | .thunk C => CBoxFree C
+  | .tensor A B => VBoxFree A ∧ VBoxFree B
+  | .sum A B => VBoxFree A ∧ VBoxFree B
+  | .bang A => (∀ C, A ≠ .thunk C) ∧ VBoxFree A
+  | .box _ A => VBoxFree A
+  | .ref A => VBoxFree A
+  | .mu A => VBoxFree A
+  | .fam A => VBoxFree A
+  | _ => True
+/-- The same at a computation type. -/
+def CBoxFree : CTy → Prop
+  | .ret A => VBoxFree A
+  | .arr A C => VBoxFree A ∧ CBoxFree C
+  | .amp C D => CBoxFree C ∧ CBoxFree D
+  | .top => True
+  | .all _ _ C => CBoxFree C
+  | .nu _ => True
+  | .eff _ _ _ _ _ C => CBoxFree C
+end
+
+/-- **`vRLM` is `vRLJ` where neither reads a `μ`, a `[L]`, a type variable, a lifetime `∀` or a
+persistent thunk.** `vRLM`'s `∀` clause reads the instances in scope and the own lends at
+`OwnPushM` (`NEXT.md` (E1), (E2)), and its `!` clause the persistence box; `vRLJ` keeps the old
+clauses. Proved without `VAllFree` at commit `5210cf1`, before the edits, and without `VBoxFree`
+before the box. -/
 def RelMAgreesJ : Prop :=
   (∀ (p : Placement) (σ : LStack) (δ : LSub) (A : VTy) (αs : List Life) (ls : List SRec)
-      (v : Val), VMuFree A → VAllFree A →
+      (v : Val), VMuFree A → VAllFree A → VBoxFree A →
       vRLM (ℍ := ℍ) p none σ δ A αs ls v = vRLJ (ℍ := ℍ) p σ δ A αs ls v) ∧
   ∀ (p : Placement) (σ : LStack) (δ : LSub) (C : CTy) (αs : List Life) (ls : List SRec)
-    (e : Expr), CMuFree C → CAllFree C → cRLM (ℍ := ℍ) p σ δ C αs ls e = cRLJ (ℍ := ℍ) p σ δ C αs ls e
+    (e : Expr), CMuFree C → CAllFree C → CBoxFree C →
+      cRLM (ℍ := ℍ) p σ δ C αs ls e = cRLJ (ℍ := ℍ) p σ δ C αs ls e
 
 /-! #### The fixed point's facts -/
 
@@ -355,6 +411,26 @@ def ThawInstM (p : Placement) : Prop :=
     PlaceViewsL (extS δ σ αs) σ αs ls ρ → vRLM (ℍ := ℍ) p none σ δ (.thunk C) αs ls f ρ →
     RelendJ δ σ (fun δ' αs' ls' => vRLM (ℍ := ℍ) p none σ δ' (.thunk C) αs' ls' f) αs ls ρ
 
+/-- A value type that reaches no `U` through the formers W reads itself (`UFree` at `vRLM`). -/
+def UFreeM : VTy → Prop
+  | .thunk _ => False
+  | .tensor A B => UFreeM A ∧ UFreeM B
+  | .sum A B => UFreeM A ∧ UFreeM B
+  | .bang A => UFreeM A
+  | .box _ A => UFreeM A
+  | .ref A => UFreeM A
+  | .mu A => UFreeM A
+  | .fam L => UFreeM L
+  | _ => True
+
+/-- **A persistent context the persistence box carries**: every live slot is a persistent thunk
+`!U C` (`PBox` reads it at every world of `binder0`'s order) or persistent data reaching no `U`
+(carried by its clauses' shape). The values the rules make persistent are thunks (`bangThunkF`,
+`bangThunkV`, a host operation's `!(A ⊸ B)`); a slot of persistent data reaching a `U` not itself
+under a `!`, such as `!(U C ⊗ 1)`, is the case left out. -/
+def PersistentBoxed (Γ : Ctx VTy) : Prop :=
+  ∀ s ∈ Γ, s.live = true → ∃ B, s.ty = .bang B ∧ ((∃ C, B = .thunk C) ∨ UFreeM B)
+
 def ThunkFRowM (p : Placement) : Prop :=
   ∀ (Δ : LifeCtx) (Γ : Ctx VTy) (M : Expr) (A : VTy),
     SemSM (ℍ := ℍ) p Δ (⟨.unit, false⟩ :: Γ) M (.comp (.ret A)) →
@@ -365,13 +441,17 @@ def ThunkVRowM (p : Placement) : Prop :=
     SemSM (ℍ := ℍ) p Δ Γ (.val (.lam N)) (.comp C) →
     SemSM (ℍ := ℍ) p Δ Γ (.val (.lam N)) (.val (.thunk C))
 
+/-- **`!U` of `F A` at `vRLM`**, the context persistent and carried by the box (`PersistentBoxed`,
+added with the box). -/
 def BangThunkFRowM (p : Placement) : Prop :=
-  ∀ (Δ : LifeCtx) (Γ : Ctx VTy) (M : Expr) (A : VTy), Persistent Γ →
+  ∀ (Δ : LifeCtx) (Γ : Ctx VTy) (M : Expr) (A : VTy), Persistent Γ → PersistentBoxed Γ →
     SemSM (ℍ := ℍ) p Δ (⟨.unit, false⟩ :: Γ) M (.comp (.ret A)) →
     SemSM (ℍ := ℍ) p Δ Γ (.val (.lam M)) (.val (.bang (.thunk (.ret A))))
 
+/-- **`!U C` at `vRLM`**, the context persistent and carried by the box. -/
 def BangThunkVRowM (p : Placement) : Prop :=
-  ∀ (Δ : LifeCtx) (Γ : Ctx VTy) (N : Expr) (C : CTy), Persistent Γ → C.isRet = false →
+  ∀ (Δ : LifeCtx) (Γ : Ctx VTy) (N : Expr) (C : CTy), Persistent Γ → PersistentBoxed Γ →
+    C.isRet = false →
     OwnHyg Δ Γ C → SemSM (ℍ := ℍ) p Δ Γ (.val (.lam N)) (.comp C) →
     SemSM (ℍ := ℍ) p Δ Γ (.val (.lam N)) (.val (.bang (.thunk C)))
 
@@ -447,18 +527,6 @@ def MonoExtM (p : Placement) : Prop :=
     StackOK σ αs → OuterBelowTop αs → RecsOutside αs ls → RecsOutside αs ls' →
     Ext ls ls' ρ → KeepsT ls ls' ρ → TabAtS σ αs ρ → PlaceViewsL (extS δ σ αs) σ αs ls ρ →
     vRLM (ℍ := ℍ) p none σ δ A αs ls v ρ → vRLM (ℍ := ℍ) p none σ δ A αs ls' v ρ
-
-/-- A value type that reaches no `U` through the formers W reads itself (`UFree` at `vRLM`). -/
-def UFreeM : VTy → Prop
-  | .thunk _ => False
-  | .tensor A B => UFreeM A ∧ UFreeM B
-  | .sum A B => UFreeM A ∧ UFreeM B
-  | .bang A => UFreeM A
-  | .box _ A => UFreeM A
-  | .ref A => UFreeM A
-  | .mu A => UFreeM A
-  | .fam L => UFreeM L
-  | _ => True
 
 /-- **`MonoOwnGM` at a context whose live slots reach no `U`** (`monoOwnG_uFree` at `vRLM`). -/
 def MonoOwnGUFreeM (p : Placement) : Prop :=

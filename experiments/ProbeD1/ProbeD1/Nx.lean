@@ -358,10 +358,13 @@ def VRLMRename : Prop :=
     (αs : List Life) (ls : List SRec),
     vRLM (ℍ := ℍ) p (some ρ) σ δ (A.rename r) αs ls = vRLM (ℍ := ℍ) p (some (ρ ∘ r)) σ δ A αs ls
 
-/-- **Substitution moves into the environment** (`vCE_subst`'s analog). -/
+/-- **Substitution moves into the environment** (`vCE_subst`'s analog), at a substitution of no
+thunk: `vRLM`'s `!` clause reads the persistence box at a syntactic `!U C`, so a thunk substituted
+for a variable directly under a `!` would move into the box. The unrolling substitutes a `μ`
+(`VRLMInst`). Stated for every substitution before the box. -/
 def VRLMSubst : Prop :=
   ∀ (p : Placement) (A : VTy) (ρ : Nat → WEnt) (τ : Nat → VTy) (σ : LStack) (δ : LSub)
-    (αs : List Life) (ls : List SRec),
+    (αs : List Life) (ls : List SRec), (∀ n C, τ n ≠ .thunk C) →
     vRLM (ℍ := ℍ) p (some ρ) σ δ (A.subst τ) αs ls =
       vRLM (ℍ := ℍ) p (some (substEnvW p ρ τ σ δ αs ls)) σ δ A αs ls
 

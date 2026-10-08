@@ -53,7 +53,9 @@ theorem vRLM_some (p : Placement) (σ : LStack) (δ : LSub) (αs : List Life) (l
   | ref A ih => intro η; funext v; rw [vRLM, vRLM, ih]
   | fam L ih => intro η; funext v; rw [vRLM, vRLM, ih]
   | box a A ih => intro η; funext v; rw [vRLM, vRLM, ih]
-  | bang A ih => intro η; funext v; rw [vRLM, vRLM, ih]
+  | bang A ih =>
+      intro η; funext v
+      rw [vRLM, vRLM, ih, pBox_env_eq p η (some (wEnv η))]
   | imm a A _ =>
       intro η; funext v
       rw [vRLM_imm_eq, vRLM_imm_eq, wClose_eq, wClose_eq]; rfl
@@ -90,7 +92,17 @@ theorem vRLM_rename (p : Placement) (σ : LStack) (δ : LSub) (αs : List Life) 
   | ref A ih => intro ρ r; funext v; rw [VTy.rename, vRLM, vRLM, ih]
   | fam L ih => intro ρ r; funext v; rw [VTy.rename, vRLM, vRLM, ih]
   | box a A ih => intro ρ r; funext v; rw [VTy.rename, vRLM, vRLM, ih]
-  | bang A ih => intro ρ r; funext v; rw [VTy.rename, vRLM, vRLM, ih]
+  | bang A ih =>
+      intro ρ r; funext v
+      rw [VTy.rename, vRLM, vRLM, ih]
+      cases A with
+      | thunk C => rw [VTy.rename, pBox_env_eq p (some ρ) (some (ρ ∘ r))]
+      | tvar n =>
+          rw [VTy.rename, pBox_not_thunk_eq (fun C h => by cases h),
+            pBox_not_thunk_eq (fun C h => by cases h)]
+      | _ =>
+          rw [VTy.rename, pBox_not_thunk_eq (fun C h => by cases h),
+            pBox_not_thunk_eq (fun C h => by cases h)]
   | imm a A _ =>
       intro ρ r; funext v
       rw [VTy.rename, vRLM_imm_eq, vRLM_imm_eq]
@@ -112,36 +124,61 @@ theorem vRLM_rename (p : Placement) (σ : LStack) (δ : LSub) (αs : List Life) 
 theorem vRLMRename : VRLMRename (ℍ := ℍ) :=
   fun p A ρ r σ δ αs ls => vRLM_rename p σ δ αs ls A ρ r
 
-/-- **`VRLMSubst`.** -/
+/-- A renaming of a type that is no thunk is no thunk. -/
+theorem rename_ne_thunk {A : VTy} (r : Nat → Nat) (h : ∀ C, A ≠ .thunk C) :
+    ∀ C, A.rename r ≠ .thunk C := by
+  intro C hC
+  cases A <;> simp [VTy.rename] at hC
+  exact h _ rfl
+
+/-- The lifted substitution substitutes no thunk when the substitution does not. -/
+theorem upS_ne_thunk {τ : Nat → VTy} (h : ∀ n C, τ n ≠ .thunk C) :
+    ∀ n C, VTy.upS τ n ≠ .thunk C
+  | 0, _, hC => by cases hC
+  | n + 1, C, hC => rename_ne_thunk Nat.succ (h n) C hC
+
+/-- **`VRLMSubst`**, at a substitution of no thunk. The `!` clause reads the persistence box at a
+syntactic `!U C`, so a thunk substituted for a variable under a `!` would move into the box. -/
 theorem vRLM_subst (p : Placement) (σ : LStack) (δ : LSub) (αs : List Life) (ls : List SRec) :
-    ∀ (A : VTy) (ρ : Nat → WEnt) (τ : Nat → VTy),
+    ∀ (A : VTy) (ρ : Nat → WEnt) (τ : Nat → VTy), (∀ n C, τ n ≠ .thunk C) →
       vRLM (ℍ := ℍ) p (some ρ) σ δ (A.subst τ) αs ls =
         vRLM (ℍ := ℍ) p (some (substEnvW p ρ τ σ δ αs ls)) σ δ A αs ls := by
   intro A
   induction A using VTy.recV with
-  | unit => intro ρ τ; rfl
-  | int w => intro ρ τ; rfl
-  | opq k => intro ρ τ; rfl
-  | zero => intro ρ τ; rfl
-  | unk => intro ρ τ; rfl
-  | thunk C => intro ρ τ; funext v; exact vRLM_thunk_env p _ _ σ δ C αs ls v
-  | tensor A B ihA ihB => intro ρ τ; funext v; rw [VTy.subst, vRLM, vRLM, ihA, ihB]
-  | sum A B ihA ihB => intro ρ τ; funext v; rw [VTy.subst, vRLM, vRLM, ihA, ihB]
-  | ref A ih => intro ρ τ; funext v; rw [VTy.subst, vRLM, vRLM, ih]
-  | fam L ih => intro ρ τ; funext v; rw [VTy.subst, vRLM, vRLM, ih]
-  | box a A ih => intro ρ τ; funext v; rw [VTy.subst, vRLM, vRLM, ih]
-  | bang A ih => intro ρ τ; funext v; rw [VTy.subst, vRLM, vRLM, ih]
+  | unit => intro ρ τ _; rfl
+  | int w => intro ρ τ _; rfl
+  | opq k => intro ρ τ _; rfl
+  | zero => intro ρ τ _; rfl
+  | unk => intro ρ τ _; rfl
+  | thunk C => intro ρ τ _; funext v; exact vRLM_thunk_env p _ _ σ δ C αs ls v
+  | tensor A B ihA ihB =>
+      intro ρ τ hτ; funext v; rw [VTy.subst, vRLM, vRLM, ihA ρ τ hτ, ihB ρ τ hτ]
+  | sum A B ihA ihB =>
+      intro ρ τ hτ; funext v; rw [VTy.subst, vRLM, vRLM, ihA ρ τ hτ, ihB ρ τ hτ]
+  | ref A ih => intro ρ τ hτ; funext v; rw [VTy.subst, vRLM, vRLM, ih ρ τ hτ]
+  | fam L ih => intro ρ τ hτ; funext v; rw [VTy.subst, vRLM, vRLM, ih ρ τ hτ]
+  | box a A ih => intro ρ τ hτ; funext v; rw [VTy.subst, vRLM, vRLM, ih ρ τ hτ]
+  | bang A ih =>
+      intro ρ τ hτ; funext v
+      rw [VTy.subst, vRLM, vRLM, ih ρ τ hτ]
+      cases A with
+      | thunk C => rw [VTy.subst, pBox_env_eq p (some ρ) (some (substEnvW p ρ τ σ δ αs ls))]
+      | tvar n =>
+          rw [VTy.subst, pBox_not_thunk_eq (hτ n), pBox_not_thunk_eq (fun C h => by cases h)]
+      | _ =>
+          rw [VTy.subst, pBox_not_thunk_eq (fun C h => by cases h),
+            pBox_not_thunk_eq (fun C h => by cases h)]
   | imm a A _ =>
-      intro ρ τ; funext v
+      intro ρ τ _; funext v
       rw [VTy.subst, vRLM_imm_eq, vRLM_imm_eq]
       simp only [wClose, substEnvW, VTy.subst_subst]
   | «mut» a A _ =>
-      intro ρ τ; funext v
+      intro ρ τ _; funext v
       rw [VTy.subst, vRLM_mut_eq, vRLM_mut_eq]
       simp only [wClose, substEnvW, VTy.subst_subst]
-  | tvar n => intro ρ τ; rfl
+  | tvar n => intro ρ τ _; rfl
   | mu A ih =>
-      intro ρ τ; funext v
+      intro ρ τ hτ; funext v
       have eM : wClose (some ρ) (.mu (A.subst (VTy.upS τ)))
           = wClose (some (substEnvW p ρ τ σ δ αs ls)) (.mu A) := by
         simp only [wClose, substEnvW]
@@ -156,7 +193,7 @@ theorem vRLM_subst (p : Placement) (σ : LStack) (δ : LSub) (αs : List Life) (
       apply propext
       refine forall_congr' fun P => imp_congr ?_ Iff.rfl
       refine forall_congr' fun v' => forall_congr' fun r' => imp_congr ?_ Iff.rfl
-      rw [ih]
+      rw [ih _ _ (upS_ne_thunk hτ)]
       have eenv : substEnvW p (VTy.scons ⟨wClose (some (substEnvW p ρ τ σ δ αs ls)) (.mu A), P⟩ ρ)
           (VTy.upS τ) σ δ αs ls =
           VTy.scons ⟨wClose (some (substEnvW p ρ τ σ δ αs ls)) (.mu A), P⟩
@@ -173,7 +210,7 @@ theorem vRLM_subst (p : Placement) (σ : LStack) (δ : LSub) (αs : List Life) (
       rw [eenv]
 
 theorem vRLMSubst : VRLMSubst (ℍ := ℍ) :=
-  fun p A ρ τ σ δ αs ls => vRLM_subst p σ δ αs ls A ρ τ
+  fun p A ρ τ σ δ αs ls hτ => vRLM_subst p σ δ αs ls A ρ τ hτ
 
 /-! ### The unroll equation -/
 
@@ -183,7 +220,7 @@ theorem vRLM_inst (p : Placement) (A : VTy) (σ : LStack) (δ : LSub) (αs : Lis
     vRLM (ℍ := ℍ) p none σ δ (VTy.inst (.mu A) A) αs ls =
       vRLM (ℍ := ℍ) p (some (VTy.scons ⟨.mu A, vRLM p none σ δ (.mu A) αs ls⟩ (wEnv none)))
         σ δ A αs ls := by
-  rw [vRLM_some, VTy.inst, vRLM_subst]
+  rw [vRLM_some, VTy.inst, vRLM_subst _ _ _ _ _ _ _ _ (fun n C h => by cases n <;> cases h)]
   congr 2
   funext n
   cases n with

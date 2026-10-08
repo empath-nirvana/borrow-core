@@ -6,9 +6,11 @@ import ProbeD1.R1
 `R1.lean` states `vRLM`: `vRLJ` with Core's `tvar`, `μ` and `fam` clauses read at W's formers. This
 file proves what `R1MONO.md` §1 plans for it.
 
-* **Where `vRLM` is `vRLJ`** (`relMAgreesJ`): at a type with no `μ`, `fam` or type variable outside
-  a borrow payload, computation types included. The leaves agree because `wClose none` is the
-  identity.
+* **Where `vRLM` is `vRLJ`** (`relMAgreesJ`): at a type with no `μ`, `fam`, type variable, lifetime
+  `∀` or persistent thunk outside a borrow payload, computation types included. The leaves agree
+  because `wClose none` is the identity.
+* **The persistence box** (`pBox_mono`, `pBox_inst`, `pBox_env`): what the `!` clause's box asks is
+  kept by an instantiation (`instComp`), and at a thunk it reads no environment.
 * **The fixed point's facts** (`vRLMMonoAt`, `vRLMRoll`): monotone in a variable's candidate, and
   the body read at the `μ` itself is the `μ`. W's leaves read an environment entry only through
   its type, so monotonicity needs no `NoMut` at the leaves; the `μ` clause carries Core's `NoMut`
@@ -20,10 +22,9 @@ file proves what `R1MONO.md` §1 plans for it.
   candidate, and `vRLMRoll` at each instantiated index. At `[L]` slot by slot
   (`relendJ_sepRange`); at a variable by the environment's hypothesis; every other case is
   `GapRows.lean`'s, the leaves at their closed types.
-* **The corollaries** (`ctxRelendsAllM`, `thawInstM`, the four `U` rows, `statement0UFullM`):
-  `GapRows.lean`'s proofs at `vRLM`, at every context.
-* **`GAP.md` §4's `μ` slot at W's own `μ`** (`muAdjNotVRLM`): the closure Core's `μ` admits there
-  by adjacency is no `vRLM` value.
+* **The corollaries** (`ctxRelendsAllM`, `thawInstM`, the two `U` rows `thunkFRowM` and
+  `thunkVRowM`): `GapRows.lean`'s proofs at `vRLM`, at every context. The two `!U` rows and
+  `statement0UFullM` are in `R1Box.lean`.
 -/
 
 noncomputable section
@@ -83,112 +84,193 @@ theorem vRLM_thunk_env (p : Placement) (η η' : Option (Nat → WEnt)) (σ : LS
 /-! ### Where `vRLM` is `vRLJ` -/
 
 mutual
-theorem vRLM_none_eq (p : Placement) : ∀ (A : VTy), VMuFree A → VAllFree A →
+theorem vRLM_none_eq (p : Placement) : ∀ (A : VTy), VMuFree A → VAllFree A → VBoxFree A →
     ∀ (σ : LStack) (δ : LSub) (αs : List Life) (ls : List SRec),
       vRLM (ℍ := ℍ) p none σ δ A αs ls = vRLJ (ℍ := ℍ) p σ δ A αs ls
-  | .thunk C, h, h', σ, δ, αs, ls => by
+  | .thunk C, h, h', hb, σ, δ, αs, ls => by
       funext f
-      have ih := cRLM_eq p C h h'
+      have ih := cRLM_eq p C h h' hb
       rw [vRLM, vRLJ]
       simp only [ih]
-  | .tensor A B, h, h', σ, δ, αs, ls => by
+  | .tensor A B, h, h', hb, σ, δ, αs, ls => by
       funext v
-      have ihA := vRLM_none_eq p A h.1 h'.1
-      have ihB := vRLM_none_eq p B h.2 h'.2
+      have ihA := vRLM_none_eq p A h.1 h'.1 hb.1
+      have ihB := vRLM_none_eq p B h.2 h'.2 hb.2
       rw [vRLM, vRLJ]
       simp only [ihA, ihB]
-  | .sum A B, h, h', σ, δ, αs, ls => by
+  | .sum A B, h, h', hb, σ, δ, αs, ls => by
       funext v
-      have ihA := vRLM_none_eq p A h.1 h'.1
-      have ihB := vRLM_none_eq p B h.2 h'.2
+      have ihA := vRLM_none_eq p A h.1 h'.1 hb.1
+      have ihB := vRLM_none_eq p B h.2 h'.2 hb.2
       rw [vRLM, vRLJ]
       simp only [ihA, ihB]
-  | .bang A, h, h', σ, δ, αs, ls => by
+  | .bang A, h, h', hb, σ, δ, αs, ls => by
       funext v
-      have ih := vRLM_none_eq p A h h'
+      have ih := vRLM_none_eq p A h h' hb.2
+      have hP : ∀ P, PBox A δ σ αs P ↔ True := fun P => by
+        cases A with
+        | thunk C => exact absurd rfl (hb.1 C)
+        | _ => exact Iff.rfl
+      rw [vRLM, vRLJ]
+      funext ρ
+      simp only [ih, hP, and_true]
+  | .box a A, h, h', hb, σ, δ, αs, ls => by
+      funext v
+      have ih := vRLM_none_eq p A h h' hb
       rw [vRLM, vRLJ]
       simp only [ih]
-  | .box a A, h, h', σ, δ, αs, ls => by
+  | .ref A, h, h', hb, σ, δ, αs, ls => by
       funext v
-      have ih := vRLM_none_eq p A h h'
+      have ih := vRLM_none_eq p A h h' hb
       rw [vRLM, vRLJ]
       simp only [ih]
-  | .ref A, h, h', σ, δ, αs, ls => by
-      funext v
-      have ih := vRLM_none_eq p A h h'
-      rw [vRLM, vRLJ]
-      simp only [ih]
-  | .mut a T, _, _, σ, δ, αs, ls => by
+  | .mut a T, _, _, _, σ, δ, αs, ls => by
       funext v
       rw [vRLM_mut_eq]; rfl
-  | .imm a T, _, _, σ, δ, αs, ls => by
+  | .imm a T, _, _, _, σ, δ, αs, ls => by
       funext v
       rw [vRLM_imm_eq]; rfl
-  | .unit, _, _, _, _, _, _ => rfl
-  | .zero, _, _, _, _, _, _ => rfl
-  | .unk, _, _, _, _, _, _ => rfl
-  | .int _, _, _, _, _, _, _ => rfl
-  | .opq _, _, _, _, _, _, _ => rfl
-  | .tvar _, h, _, _, _, _, _ => h.elim
-  | .mu _, h, _, _, _, _, _ => h.elim
-  | .fam _, h, _, _, _, _, _ => h.elim
-theorem cRLM_eq (p : Placement) : ∀ (C : CTy), CMuFree C → CAllFree C →
+  | .unit, _, _, _, _, _, _, _ => rfl
+  | .zero, _, _, _, _, _, _, _ => rfl
+  | .unk, _, _, _, _, _, _, _ => rfl
+  | .int _, _, _, _, _, _, _, _ => rfl
+  | .opq _, _, _, _, _, _, _, _ => rfl
+  | .tvar _, h, _, _, _, _, _, _ => h.elim
+  | .mu _, h, _, _, _, _, _, _ => h.elim
+  | .fam _, h, _, _, _, _, _, _ => h.elim
+theorem cRLM_eq (p : Placement) : ∀ (C : CTy), CMuFree C → CAllFree C → CBoxFree C →
     ∀ (σ : LStack) (δ : LSub) (αs : List Life) (ls : List SRec),
       cRLM (ℍ := ℍ) p σ δ C αs ls = cRLJ (ℍ := ℍ) p σ δ C αs ls
-  | .ret B, h, h', σ, δ, αs, ls => by
+  | .ret B, h, h', hb, σ, δ, αs, ls => by
       funext e
-      have ih := vRLM_none_eq p B h h'
+      have ih := vRLM_none_eq p B h h' hb
       rw [cRLM, cRLJ]
       simp only [ih]
-  | .arr A C, h, h', σ, δ, αs, ls => by
+  | .arr A C, h, h', hb, σ, δ, αs, ls => by
       funext e
-      have ihA := vRLM_none_eq p A h.1 h'.1
-      have ihC := cRLM_eq p C h.2 h'.2
+      have ihA := vRLM_none_eq p A h.1 h'.1 hb.1
+      have ihC := cRLM_eq p C h.2 h'.2 hb.2
       rw [cRLM, cRLJ]
       simp only [ihA, ihC]
-  | .amp C D, h, h', σ, δ, αs, ls => by
+  | .amp C D, h, h', hb, σ, δ, αs, ls => by
       funext e
-      have ihC := cRLM_eq p C h.1 h'.1
-      have ihD := cRLM_eq p D h.2 h'.2
+      have ihC := cRLM_eq p C h.1 h'.1 hb.1
+      have ihD := cRLM_eq p D h.2 h'.2 hb.2
       rw [cRLM, cRLJ]
       simp only [ihC, ihD]
-  | .top, _, _, _, _, _, _ => by
+  | .top, _, _, _, _, _, _, _ => by
       funext e
       rw [cRLM, cRLJ]
-  | .all _ _ _, _, h', _, _, _, _ => h'.elim
-  | .nu C, _, _, σ, δ, αs, ls => by
+  | .all _ _ _, _, h', _, _, _, _, _ => h'.elim
+  | .nu C, _, _, _, σ, δ, αs, ls => by
       funext e
       rw [cRLM, cRLJ]
-  | .eff n i q A B C, h, h', σ, δ, αs, ls => by
+  | .eff n i q A B C, h, h', hb, σ, δ, αs, ls => by
       funext e
-      have ih := effRetM_eq p C h h'
+      have ih := effRetM_eq p C h h' hb
       rw [cRLM, cRLJ]
       simp only [ih]
-theorem effRetM_eq (p : Placement) : ∀ (C : CTy), CMuFree C → CAllFree C →
+theorem effRetM_eq (p : Placement) : ∀ (C : CTy), CMuFree C → CAllFree C → CBoxFree C →
     ∀ (σ : LStack) (δ : LSub) (αs : List Life),
       effRetM (ℍ := ℍ) p σ δ C αs = effRetJ (ℍ := ℍ) p σ δ C αs
-  | .ret A, h, h', σ, δ, αs => by
-      have ih := vRLM_none_eq p A h h'
+  | .ret A, h, h', hb, σ, δ, αs => by
+      have ih := vRLM_none_eq p A h h' hb
       rw [effRetM, effRetJ]
       funext ls v
       rw [ih]
-  | .eff _ _ _ _ _ C, h, h', σ, δ, αs => by
-      have ih := effRetM_eq p C h h'
+  | .eff _ _ _ _ _ C, h, h', hb, σ, δ, αs => by
+      have ih := effRetM_eq p C h h' hb
       rw [effRetM, effRetJ]
       exact ih σ δ αs
-  | .arr _ _, _, _, _, _, _ => rfl
-  | .amp _ _, _, _, _, _, _ => rfl
-  | .top, _, _, _, _, _ => rfl
-  | .all _ _ _, _, _, _, _, _ => rfl
-  | .nu _, _, _, _, _, _ => rfl
+  | .arr _ _, _, _, _, _, _, _ => rfl
+  | .amp _ _, _, _, _, _, _, _ => rfl
+  | .top, _, _, _, _, _, _ => rfl
+  | .all _ _ _, _, _, _, _, _, _ => rfl
+  | .nu _, _, _, _, _, _, _ => rfl
 end
 
-/-- **`RelMAgreesJ`**, restated at types with no lifetime `∀` (`NEXT.md` §3.1). The unrestricted
-statement was proved at commit `5210cf1`, before (E1) and (E2) changed `vRLM`'s `∀` clause. -/
+/-- **`RelMAgreesJ`**, restated at types with no lifetime `∀` (`NEXT.md` §3.1) and no persistent
+thunk. The statement without `VAllFree` was proved at commit `5210cf1`, before (E1) and (E2)
+changed `vRLM`'s `∀` clause; the one without `VBoxFree` before the persistence box. -/
 theorem relMAgreesJ : RelMAgreesJ (ℍ := ℍ) :=
-  ⟨fun p σ δ A αs ls v hA hA' => by rw [vRLM_none_eq p A hA hA'],
-    fun p σ δ C αs ls e hC hC' => by rw [cRLM_eq p C hC hC']⟩
+  ⟨fun p σ δ A αs ls v hA hA' hb => by rw [vRLM_none_eq p A hA hA' hb],
+    fun p σ δ C αs ls e hC hC' hb => by rw [cRLM_eq p C hC hC' hb]⟩
 
+
+/-! ### The persistence box -/
+
+/-- **The box is monotone in what it asks.** -/
+theorem pBox_mono {A : VTy} {δ : LSub} {σ : LStack} {αs : List Life}
+    {P Q : LStack → LSub → List Life → List SRec → Prop}
+    (hPQ : ∀ σ' δ' αs' ls', P σ' δ' αs' ls' → Q σ' δ' αs' ls') (h : PBox A δ σ αs P) :
+    PBox A δ σ αs Q := by
+  cases A with
+  | thunk C => exact fun ι hat ls' hro σ' αs' hst => hPQ _ _ _ _ (h ι hat ls' hro σ' αs' hst)
+  | _ => trivial
+
+/-- **The box at a thunk type**, unfolded. -/
+theorem pBox_thunk {C : CTy} {δ : LSub} {σ : LStack} {αs : List Life}
+    {P : LStack → LSub → List Life → List SRec → Prop} :
+    PBox (.thunk C) δ σ αs P ↔ ∀ ι : Inst, InstAt αs ι → ∀ ls' : List SRec,
+      RecsOutside (ι.life αs) ls' → ∀ (σ' : LStack) (αs' : List Life),
+        Relation.ReflTransGen (BoxStep (ι.sub δ) ls') (σ, ι.life αs) (σ', αs') →
+        P σ' (ι.sub δ) αs' ls' := Iff.rfl
+
+/-- **The box is kept by an instantiation**: an instantiation of the instantiated stack, after the
+first, is one of the stack (`instComp`). -/
+theorem pBox_inst {A : VTy} {δ : LSub} {σ : LStack} {αs : List Life}
+    {P : LStack → LSub → List Life → List SRec → Prop} {ι : Inst} (hat : InstAt αs ι)
+    (h : PBox A δ σ αs P) : PBox A (ι.sub δ) σ (ι.life αs) P := by
+  cases A with
+  | thunk C =>
+      intro ι₂ hat₂ ls' hro σ' αs' hst
+      obtain ⟨ι₃, hat₃, hsub, hlife, -⟩ := instComp αs ι ι₂ hat hat₂
+      have hl₃ : ι₃.life αs = ι₂.life (ι.life αs) := by
+        simp only [Inst.life, List.map_map]
+        exact List.map_congr_left fun a _ => hlife a
+      have := h ι₃ hat₃ ls' (by rw [hl₃]; exact hro) σ' αs' (by rw [hl₃, hsub]; exact hst)
+      rwa [hsub] at this
+  | _ => trivial
+
+/-- **The box asks nothing at a type that is no thunk.** -/
+theorem pBox_of_not_thunk {A : VTy} {δ : LSub} {σ : LStack} {αs : List Life}
+    {P : LStack → LSub → List Life → List SRec → Prop} (h : ∀ C, A ≠ .thunk C) :
+    PBox A δ σ αs P := by
+  cases A with
+  | thunk C => exact absurd rfl (h C)
+  | _ => trivial
+
+/-- **At a thunk the box reads no environment**: the `U` clause reads none. -/
+theorem pBox_env {p : Placement} {η η' : Option (Nat → WEnt)} {A : VTy} {δ : LSub} {σ : LStack}
+    {αs : List Life} {v : Val}
+    (h : PBox A δ σ αs (fun σ' δ' αs' ls' => vRLM (ℍ := ℍ) p η σ' δ' A αs' ls' v PMap.empty)) :
+    PBox A δ σ αs (fun σ' δ' αs' ls' => vRLM (ℍ := ℍ) p η' σ' δ' A αs' ls' v PMap.empty) := by
+  cases A with
+  | thunk C =>
+      exact pBox_mono (fun σ' δ' αs' ls' hv => by rwa [vRLM_thunk_env p η' η]) h
+  | _ => trivial
+
+/-- **At a thunk the box reads no environment**, as an equation. -/
+theorem pBox_env_eq (p : Placement) (η η' : Option (Nat → WEnt)) (A : VTy) (δ : LSub)
+    (σ : LStack) (αs : List Life) (v : Val) :
+    PBox A δ σ αs (fun σ' δ' αs' ls' => vRLM (ℍ := ℍ) p η σ' δ' A αs' ls' v PMap.empty) =
+      PBox A δ σ αs (fun σ' δ' αs' ls' => vRLM (ℍ := ℍ) p η' σ' δ' A αs' ls' v PMap.empty) := by
+  cases A with
+  | thunk C =>
+      have e : (fun σ' δ' αs' ls' => vRLM (ℍ := ℍ) p η σ' δ' (.thunk C) αs' ls' v PMap.empty) =
+          (fun σ' δ' αs' ls' => vRLM (ℍ := ℍ) p η' σ' δ' (.thunk C) αs' ls' v PMap.empty) := by
+        funext σ' δ' αs' ls'
+        rw [vRLM_thunk_env p η η']
+      rw [e]
+  | _ => rfl
+
+/-- **The box at a type that is no thunk is trivial**, as an equation. -/
+theorem pBox_not_thunk_eq {A : VTy} {δ : LSub} {σ : LStack} {αs : List Life}
+    {P : LStack → LSub → List Life → List SRec → Prop} (h : ∀ C, A ≠ .thunk C) :
+    PBox A δ σ αs P = True := by
+  cases A with
+  | thunk C => exact absurd rfl (h C)
+  | _ => rfl
 
 /-! ### The fixed point's facts -/
 
@@ -230,7 +312,8 @@ theorem vRLM_mono_at (p : Placement) : ∀ (A : VTy) (k : Nat) (η₁ η₂ : Na
       exact ⟨α, hα, ih k η₁ η₂ hk ht hP hPk σ δ αs ls v ρ hb, ho⟩
   | bang A ih =>
       intro k η₁ η₂ hk ht hP hPk σ δ αs ls v ρ h
-      exact ⟨h.1, ih k η₁ η₂ hk ht hP hPk σ δ αs ls v ρ h.2⟩
+      exact ⟨h.1, ih k η₁ η₂ hk ht hP hPk σ δ αs ls v ρ h.2.1,
+        pBox_mono (fun σ' δ' αs' ls' => ih k η₁ η₂ hk ht hP hPk σ' δ' αs' ls' v _) h.2.2⟩
   | imm a T _ =>
       intro k η₁ η₂ _ ht _ _ σ δ αs ls v ρ h
       rw [vRLM_imm_eq] at h ⊢
@@ -380,7 +463,7 @@ theorem relendM_valueE : ∀ (A : VTy) (η : Option (Nat → WEnt))
           (ihB η ηf δ σ αs ls v₂ ρ hE hok hob hro ht hpv h₂)
   | bang A ih =>
       intro η ηf δ σ αs ls v ρ hE hok hob hro ht hpv h
-      obtain ⟨rfl, h₁⟩ := h
+      obtain ⟨rfl, h₁, hB⟩ := h
       obtain ⟨ds, ρz, ρn, hc, hn, hz, H⟩ := ih η ηf δ σ αs ls v _ hE hok hob hro ht hpv h₁
       have hz0 := eq_empty_of_compS_left hc
       have hn0 := eq_empty_of_compS_right hc
@@ -389,7 +472,9 @@ theorem relendM_valueE : ∀ (A : VTy) (η : Option (Nat → WEnt))
         fun ι hat ls' he hkt hks hro' ρv τ hv hcv => ?_⟩
       have hv0 : ρv = PMap.empty := vwSW_eq_empty_inst ι hn.1 hv.1
       subst hv0
-      exact ⟨eq_empty_of_compS_empty hcv, H ι hat ls' he hkt hks hro' PMap.empty τ hv hcv⟩
+      have hτ := eq_empty_of_compS_empty hcv
+      refine ⟨hτ, H ι hat ls' he hkt hks hro' PMap.empty τ hv hcv, ?_⟩
+      exact pBox_env (pBox_inst hat hB)
   | box a A ih =>
       intro η ηf δ σ αs ls v ρ hE hok hob hro ht hpv h
       obtain ⟨α, hα, hv, hout⟩ := h
@@ -676,36 +761,9 @@ theorem thunkVRowM : ThunkVRowM (ℍ := ℍ) .binder0 := by
     (stackJ_kinds_of_notAll hJ.1 (fun _ _ _ h => by cases h))
     hSD hMod hro hso ht hpv hg)
 
-/-- **`BangThunkFRowM binder0`**: the context is persistent, so it, and the thunk with it, hold
-nothing. -/
-theorem bangThunkFRowM : BangThunkFRowM (ℍ := ℍ) .binder0 := by
-  intro Δ Γ M A hP hM hBL hSc δ σ αs ls γ ρ hok hob hJ hSD hMod hro hso ht hpv hg
-  have hρ : ρ = PMap.empty := gSepRLM_persistent Γ γ ρ hP (pure_sep_iff.mp hg).2
-  show wpTS ls (.val (.lam (Expr.psub 1 γ M))) _ ρ
-  refine wpTS_val _ _ _ _ ⟨hρ, thunkF_U_M hM ⟨hBL.1, fun s hs hl => ?_⟩
-    ⟨hSc.1, fun s hs hl => ?_⟩ hok hob (stackJ_body hJ.1 (fun _ _ _ h => by cases h)
-      (fun _ h => h) fun _ => ctxAvoids_dead) hSD hMod hro hso ht hpv hg⟩
-  · rcases List.mem_cons.mp hs with rfl | hs
-    · simp at hl
-    · exact hBL.2 s hs hl
-  · rcases List.mem_cons.mp hs with rfl | hs
-    · simp at hl
-    · exact hSc.2 s hs hl
-
-/-- **`BangThunkVRowM binder0`.** -/
-theorem bangThunkVRowM : BangThunkVRowM (ℍ := ℍ) .binder0 := by
-  intro Δ Γ N C hP hC _ hN hBL hSc δ σ αs ls γ ρ hok hob hJ hSD hMod hro hso ht hpv hg
-  have hρ : ρ = PMap.empty := gSepRLM_persistent Γ γ ρ hP (pure_sep_iff.mp hg).2
-  show wpTS ls (.val (.lam (Expr.psub 1 γ N))) _ ρ
-  exact wpTS_val _ _ _ _ ⟨hρ, thunkV_U_M hC hN hBL hSc hok hob
-    (stackJ_body hJ.1 (fun _ _ _ h => by cases h) (fun _ h => h) fun _ h => h)
-    (stackJ_kinds_of_notAll hJ.1 (fun _ _ _ h => by cases h))
-    hSD hMod hro hso ht hpv hg⟩
-
-/-- **The `U` side of statement 0 at `binder0`, at `vRLM`, at every context** (`Statement0UFullM`):
-R1 closed at `binder0`. -/
-theorem statement0UFullM : Statement0UFullM (ℍ := ℍ) .binder0 :=
-  ⟨thawInstM, ctxRelendsAllM, thunkFRowM, thunkVRowM, bangThunkFRowM, bangThunkVRowM⟩
+/-! The two `!U` introductions and `statement0UFullM` are in `R1Box.lean`: at the persistence box
+their thunk is read at every world of `binder0`'s order, which needs the box's world facts and
+the `U`-free push (`R1Mono.lean`). -/
 
 /-! ### `GAP.md` §4's `μ` slot at W's own `μ`
 
