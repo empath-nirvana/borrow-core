@@ -2205,8 +2205,9 @@ draft relation is `vRLM`: `vRLJ` with Core's `tvar`, `μ` and `fam` clauses read
   `vRLM` value (`muAdjNotVRLM`).
 - **Monotonicity.**
   - The record half is proved (`monoExtM0`).
-  - The own push is proved at contexts reaching no `U`, with the pushed variable free in the
-    entries' payload types (`StackPayAvoids`, which every `SemSM` index gives; `monoOwnGUFreeMA`).
+  - The own push is proved at contexts reaching no `U`, with the pushed variable free in none of
+    the entries' payload types (`StackPayAvoids`, which every `SemSM` index gives for a variable
+    new to `Δ` and to the stack; `monoOwnGUFreeMA`).
   - The unrestricted `MonoOwnGM`, `MonoGM` and `MonoVM` at `binder0` are refuted at `gd`
     (`notMonoOwnGM0`, `notMonoGM0`, `notMonoVM0`). In `gd`, a closure's `U` clause rests on the
     guard's box at `↓head`, and the push breaks the box. `gd` is not shown to arise, and two facts

@@ -286,9 +286,10 @@ fact about our statement.
 - **Monotonicity at `binder0`.**
   - The record half is proved (`monoExtM0`).
   - The own push is proved at contexts reaching no `U` (`monoOwnGUFreeMA`). It needs one added
-    hypothesis, `StackPayAvoids`: the pushed variable is free in the entries' payload types. Every
-    `SemSM` index gives it (`stackPayAvoids_of_stackJ`). `MonoOwnUFreeME` and `MonoOwnGUFreeM` as
-    stated lack it and are not derived.
+    hypothesis, `StackPayAvoids`: the pushed variable is free in none of the entries' payload
+    types. Every `SemSM` index gives it for a variable new to `Δ` and to the stack
+    (`stackPayAvoids_of_stackJ`). `MonoOwnUFreeME` and `MonoOwnGUFreeM` as stated lack it and are
+    not derived.
   - **The unrestricted `MonoOwnGM`, `MonoGM` and `MonoVM` are refuted** at the configuration `gd`
     (`notMonoOwnGM0`, `notMonoGM0`, `notMonoVM0`).
     - In `gd` the closure `λg. return g` at `U(U(F 1) ⊸ F([@'1] U(F 1)))` is a value at the stack

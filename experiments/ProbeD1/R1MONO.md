@@ -1784,14 +1784,15 @@ obligation at a narrower scope:
 - `StackPayAvoids x σ` (`R1Mono.lean`): the pushed variable is free in no entry's payload type.
   `MonoOwnUFreeMEA`, `MonoOwnGUFreeMA` and `MonoOwnGMCUFreeA` are `MonoOwnUFreeME`,
   `MonoOwnGUFreeM` and `MonoOwnGMC`, at contexts reaching no `U`, with it added. Every index
-  `SemSM` reads gives it (`stackPayAvoids_of_stackJ`), and it holds at every stack whose entries'
-  payload types are closed, `gd`'s among them.
+  `SemSM` reads gives it for a variable new to `Δ` and to the stack, as the own lend's is
+  (`stackPayAvoids_of_stackJ`), and it holds at every stack whose entries' payload types are closed,
+  `gd`'s among them.
 - `RetainedPayLoadMutRowNJ` (`R1Owed.lean`): `RetainedPayLoadMutRow` at a payload type with no join
   (`NoJoinV`).
 - `MonoOwnGMAt`, `CtxExtendMAt`, `CtxShadowMAt`, `SemSMNK` and `AllIRowMNKAt` (`R1AllI.lean`): the
   `∀I` row's needs at one context, and the row at the indices whose stack does not name the binder.
-- `gdMt` (`R1AllI.lean`): a derivable body for the test at `gd`, in place of `gdM`, which binds the
-  thunk before applying `f` to it.
+- `gdMt` (`R1AllI.lean`): a derivable body for the test at `gd`, used in place of `gdM`. It binds
+  the thunk before applying `f` to it.
 
 ### 8.1 Per statement
 
@@ -1824,7 +1825,7 @@ obligation at a narrower scope:
 - **The push at a context reaching no `U`.**
   - `MonoOwnUFreeME` and `MonoOwnGUFreeM` as stated: not derived. At the pushed stack a leaf's
     `CohS` reads the old entries' payload types at the pushed reading, and `TyEq` with them needs the
-    pushed variable free in them. Neither statement carries that.
+    pushed variable to be free in none of them. Neither statement carries that.
   - With it added (`StackPayAvoids`): `MonoOwnUFreeMEA` and `MonoOwnGUFreeMA` are proved at every
     placement (`monoOwnUFreeMEA`, `monoOwnGUFreeMA`). `EnvPushNone` is proved.
   - `MonoOwnGUFreeMOfE`: not attempted. `monoOwnGUFreeMA` is proved slot by slot in the same way, with
@@ -1997,7 +1998,7 @@ obligation at a narrower scope:
   - Not used: `LinPath.functional`.
 - **Printed lemmas in the run-up that are untranscribed**: none read here.
 - **Hypotheses added**:
-  - `StackPayAvoids`, held at every index `SemSM` reads;
+  - `StackPayAvoids`, held at every index `SemSM` reads for a variable new to `Δ` and to the stack;
   - `NoJoinV` at `RetainedPayLoadMutRowNJ`, held at every payload type with no `⊔`;
   - `LineageUnique` in the `KeepsT` chain, not derived;
   - `EntryPayLeaves` at `retainedPayLoadMutRowNJ_of_entry`, not derived (the expected stop);
