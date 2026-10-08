@@ -60,6 +60,14 @@ import Targets.Instance.Typing
 import Targets.Instance.Theories
 import Targets.Instance.TiedKernel
 import Targets.Instance.UnaryLaws
+import Targets.Instance.FinRaise
+import Targets.Instance.ELabels
+import Targets.Instance.ETyping
+import Targets.Instance.EHof
+import Targets.Instance.E1
+import Targets.Instance.ERuns
+import Targets.Instance.E1Runs
+import Targets.Instance.EProps
 import Targets.Instance.ZeroCost
 import Targets.I.Binder
 import Targets.I.Combined
