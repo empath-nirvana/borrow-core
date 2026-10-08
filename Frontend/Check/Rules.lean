@@ -274,7 +274,7 @@ def rEffHandle {S : CRow} {E : List (CQual × CVTy × CVTy)} {n : UInt32} {A R :
     (rM : Res Δ T (.comp (effOf (BoCa.Fig16.LogRel.Core.Row.ofEff n E 0 ++ S) A)))
     (h₁ : overlapOK T (oneL T ir) (oneL T ic) = true)
     (h₂ : overlapOK T (orL (oneL T ir) (oneL T ic)) rM.F.u = true) : Res Δ T (.comp (effOf S R)) :=
-  ⟨BoCa.Fig16.LogRel.Core.hndTerm n ir ic rM.e,
+  ⟨BoCa.Fig16.LogRel.Core.hndTerm n (E.map Prod.fst) ir ic rM.e,
     (((Fam.var T ir _ hir).split (Fam.var T ic _ hic) h₁).split rM.F h₂).map
       fun _ ⟨_, _, hs, ⟨_, _, hs₁, hr, hc⟩, he⟩ => .effHandle hs hs₁ hr hc hn0 hnS hlen he⟩
 

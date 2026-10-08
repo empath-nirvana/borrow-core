@@ -179,3 +179,13 @@ import Frontend.Check.Externs
 #print axioms BoCa.Fig16.LogRel.Core.handleV_compatC
 #print axioms BoCa.Fig16.LogRel.Core.thenA_compatC
 #print axioms BoCa.Fig16.LogRel.Core.CDerives.effHandle
+-- SPEC §25 (entry 24): the capture cell
+#print axioms BoCa.Fig16.LogRel.Core.ewp_alloc
+#print axioms BoCa.Fig16.LogRel.Core.ewp_free
+#print axioms BoCa.Fig16.LogRel.Core.kappaCBody_subst
+#print axioms BoCa.Fig16.LogRel.Core.ewp_kappaCell
+#print axioms BoCa.Fig16.LogRel.Core.ewp_kappaC_resume
+#print axioms BoCa.Fig16.LogRel.Core.ewp_kappaC_cancel
+#print axioms BoCa.Fig16.LogRel.Core.capTag_ofEff
+#print axioms BoCa.Fig16.LogRel.Core.ewp_handle
+#print axioms BoCa.Fig16.LogRel.Core.handle_compatC

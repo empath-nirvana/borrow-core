@@ -10,6 +10,9 @@ with `K = hnd (2, H₂) (ubind (id, D) [·])` inside the cancelled region, so `H
   is suppressed; `H₂` does not catch it, and the cancel answers `()` (`prog_run`).
 * `prog₃`: the finaliser raises name `3`, which `H₃` handles outside the region.  The error is
   kept, re-raised at the canceller, and `H₃` catches it (`prog₃_run`).
+
+The handlers' operations are unrestricted (`qualsVal [.unr]`), so `κ` owns no cell (§25) and the
+runs allocate nothing.
 -/
 
 noncomputable section
@@ -29,17 +32,17 @@ def idV : Val := Val.lam (.var 0)
 /-- Handler `1`'s clause: `λp. let (x, k) = p; k (inj₂ ())`, the cancel entry of `κ`. -/
 def c₁ : Val := Val.lam (.letpair (.var 0) (.app (.var 0) (.val (Val.inj₂ Val.unit))))
 
-def H₁ : Val := hndVal 1 idV (Val.pair c₁ Val.unit)
+def H₁ : Val := hndVal 1 (qualsVal [.unr]) idV (Val.pair c₁ Val.unit)
 
 /-- Handler `2`'s clause answers `()`. -/
 def c₂ : Val := Val.lam (.val Val.unit)
 
-def H₂ : Val := hndVal 2 idV (Val.pair c₂ Val.unit)
+def H₂ : Val := hndVal 2 (qualsVal [.unr]) idV (Val.pair c₂ Val.unit)
 
 /-- Handler `3`'s clause answers `inj₂ ()`. -/
 def c₃ : Val := Val.lam (.val (Val.inj₂ Val.unit))
 
-def H₃ : Val := hndVal 3 idV (Val.pair c₃ Val.unit)
+def H₃ : Val := hndVal 3 (qualsVal [.unr]) idV (Val.pair c₃ Val.unit)
 
 /-- A finaliser that raises name `m`. -/
 def D (m : UInt32) : Val := Val.lam (raiseE (.val (opPayload m 0 Val.unit)))
@@ -78,7 +81,7 @@ theorem body_run (m : UInt32) (μ : Heap) :
         (.appR (.app (.val (.prim .hnd)) (.val H₂)) .hole)).plug
           (raiseE (.val (cancelVal [1, 2] (errNext [1, 2] none m 0 Val.unit)))))) := by
   let κv : Val := ⟨kappa 1 H₁ (K m), by unfold kappa; exact .lam⟩
-  refine .more (st .hole (Head.hop μ 1 0 idV (Val.pair c₁ Val.unit) c₁ Val.unit (K m) hc₁ rfl)) ?_
+  refine .more (st .hole (Head.hop μ 1 0 (qualsVal [.unr]) idV (Val.pair c₁ Val.unit) c₁ Val.unit (K m) hc₁ rfl)) ?_
   refine .more (st .hole (Head.beta μ _ (Val.pair Val.unit κv))) ?_
   refine .more (st .hole (Head.letpair μ Val.unit κv _)) ?_
   refine .more (st .hole (Head.beta μ _ (Val.inj₂ Val.unit))) ?_
@@ -120,7 +123,7 @@ theorem prog₃_run (μ : Heap) : Steps (ℍ := ℍ) μ prog₃ μ (.val (Val.in
   refine .more (st (.appR (.app (.val (.prim .hnd)) (.val H₃)) .hole)
     (Head.creraise μ [1, 2] (opPayload 3 0 Val.unit) _ rfl)) ?_
   show Steps μ (hndE H₃ (Kont.hole.plug (raiseE (.val (opPayload 3 0 Val.unit))))) μ _
-  refine .more (st .hole (Head.hunwind μ 3 0 idV (Val.pair c₃ Val.unit) c₃ Val.unit .hole hc₃ rfl)) ?_
+  refine .more (st .hole (Head.hunwind μ 3 0 (qualsVal [.unr]) idV (Val.pair c₃ Val.unit) c₃ Val.unit .hole hc₃ rfl)) ?_
   refine .more (st .hole (Head.beta μ _ Val.unit)) ?_
   exact .refl _ _
 

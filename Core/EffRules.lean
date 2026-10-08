@@ -24,7 +24,8 @@ open BoCa
 open BoCa.Fig16
 open BoCa.Fig16.BoLo
 open BoCa.BoLo (Heap Steps Step1 Head Kont eLoad eStore Step1N performE raiseE opPayload
-  cancelVal hndE ubindE ccatchE cfinE hndVal kappa clauseAt errNext)
+  cancelVal hndE ubindE ccatchE cfinE hndVal kappa clauseAt errNext capTag kappaAt kappaC
+  kappaCBody kappaCell freeE stuckE)
 open BoCa.Lifetime (LSub LifeCtx LifeVar)
 
 /-! ### Rows -/
@@ -489,6 +490,20 @@ theorem Kont.shift_zero : ∀ (K : Kont) (c : Nat), K.shift 0 c = K
   | .inj₁ K, c => by simp only [Kont.shift, Kont.shift_zero K c]
   | .inj₂ K, c => by simp only [Kont.shift, Kont.shift_zero K c]
 
+/-- `κ`'s resume branch, substituted at its three binders and the answer `w`, is `hnd H K[w]`. -/
+theorem kappa_resume_subst (H : Val) (K : Kont) (w s u : Val) :
+    Expr.subst 0 w (Expr.subst 1 u (Expr.subst 2 s
+      (hndE (Val.shift 3 0 H) ((Kont.shift 3 0 K).plug (Expr.var 0))))) =
+      hndE H (K.plug (.val w)) := by
+  simp only [hndE, Expr.subst, Expr.val, Val.val_shift]
+  rw [Expr.subst_shift 2 0 2 s H.1 (by omega) (by omega),
+    Expr.subst_shift 1 0 1 u H.1 (by omega) (by omega),
+    Expr.subst_shift 0 0 0 w H.1 (by omega) (by omega), Expr.shift_zero,
+    plug_shift_subst 2 K 0 2 s _ (by omega) (by omega),
+    plug_shift_subst 1 K 0 1 u _ (by omega) (by omega),
+    plug_shift_subst 0 K 0 0 w _ (by omega) (by omega), Kont.shift_zero]
+  simp [Expr.subst]
+
 /-- Resuming `κ` at `w` runs `hnd H K[w]`. -/
 theorem ewp_kappa_resume {Tb : Table} (hTb : Tb.Mono) (n : UInt32) (H : Val) (K : Kont) (w : Val)
     {ls : List SRec} {Q : List SRec → Val → WProp} {ρ : WRes}
@@ -499,19 +514,7 @@ theorem ewp_kappa_resume {Tb : Table} (hTb : Tb.Mono) (n : UInt32) (H : Val) (K 
     (Kont.appL .hole w)) ls Q ρ ?_
   refine ewp_step hTb (fun μ => (Step1N.head (Head.seq μ _) rfl).plug (Kont.appL .hole w)) ls Q ρ ?_
   refine ewp_step hTb (fun μ => Step1N.head (Head.beta μ _ w) rfl) ls Q ρ ?_
-  have e : ∀ (s u : Val), Expr.subst 0 w (Expr.subst 1 u (Expr.subst 2 s
-      (hndE (Val.shift 3 0 H) ((Kont.shift 3 0 K).plug (Expr.var 0))))) =
-      hndE H (K.plug (.val w)) := by
-    intro s u
-    simp only [hndE, Expr.subst, Expr.val, Val.val_shift]
-    rw [Expr.subst_shift 2 0 2 s H.1 (by omega) (by omega),
-      Expr.subst_shift 1 0 1 u H.1 (by omega) (by omega),
-      Expr.subst_shift 0 0 0 w H.1 (by omega) (by omega), Expr.shift_zero,
-      plug_shift_subst 2 K 0 2 s _ (by omega) (by omega),
-      plug_shift_subst 1 K 0 1 u _ (by omega) (by omega),
-      plug_shift_subst 0 K 0 0 w _ (by omega) (by omega), Kont.shift_zero]
-    simp [Expr.subst]
-  rw [show (0 + 1 : Nat) = 1 from rfl, show (0 + 1 + 1 : Nat) = 2 from rfl, e]
+  rw [show (0 + 1 : Nat) = 1 from rfl, show (0 + 1 + 1 : Nat) = 2 from rfl, kappa_resume_subst]
   exact h
 
 theorem subst_namesVal (j : Nat) (s : Val) : ∀ N : List UInt32,
@@ -525,6 +528,19 @@ theorem subst_cancelVal_none (j : Nat) (s : Val) (N : List UInt32) :
   simp only [cancelVal, opPayload, BoCa.BoLo.errVal, Val.pair, Val.i32, Val.inj₁, Val.unit,
     Expr.subst, subst_namesVal]
 
+/-- `κ`'s cancel branch, substituted at its two binders, is `ccatch (hnd H K[raise …])`. -/
+theorem kappa_cancel_subst (n : UInt32) (H : Val) (K : Kont) (s u : Val) :
+    Expr.subst 0 u (Expr.subst 1 s
+      (ccatchE (hndE (Val.shift 2 0 H) ((Kont.shift 2 0 K).plug
+        (raiseE (.val (cancelVal (n :: K.hndNames) none))))))) =
+      ccatchE (hndE H (K.plug (raiseE (.val (cancelVal (n :: K.hndNames) none))))) := by
+  simp only [ccatchE, hndE, Expr.subst, Expr.val, Val.val_shift]
+  rw [Expr.subst_shift 1 0 1 s H.1 (by omega) (by omega),
+    Expr.subst_shift 0 0 0 u H.1 (by omega) (by omega), Expr.shift_zero,
+    plug_shift_subst 1 K 0 1 s _ (by omega) (by omega),
+    plug_shift_subst 0 K 0 0 u _ (by omega) (by omega), Kont.shift_zero]
+  simp only [raiseE, Expr.subst, Expr.val, subst_cancelVal_none, Val.prim]
+
 /-- Cancelling `κ` runs `ccatch (hnd H K[raise (0, (0, (N, none)))])`. -/
 theorem ewp_kappa_cancel {Tb : Table} (hTb : Tb.Mono) (n : UInt32) (H : Val) (K : Kont)
     {ls : List SRec} {Q : List SRec → Val → WProp} {ρ : WRes}
@@ -534,34 +550,115 @@ theorem ewp_kappa_cancel {Tb : Table} (hTb : Tb.Mono) (n : UInt32) (H : Val) (K 
   refine ewp_step hTb (fun μ => Step1N.head (Head.beta μ _ _) rfl) ls Q ρ ?_
   refine ewp_step hTb (fun μ => Step1N.head (Head.case₂ μ Val.unit _ _) rfl) ls Q ρ ?_
   refine ewp_step hTb (fun μ => Step1N.head (Head.seq μ _) rfl) ls Q ρ ?_
-  have e : ∀ (s u : Val), Expr.subst 0 u (Expr.subst 1 s
-      (ccatchE (hndE (Val.shift 2 0 H) ((Kont.shift 2 0 K).plug
-        (raiseE (.val (cancelVal (n :: K.hndNames) none))))))) =
-      ccatchE (hndE H (K.plug (raiseE (.val (cancelVal (n :: K.hndNames) none))))) := by
-    intro s u
-    simp only [ccatchE, hndE, Expr.subst, Expr.val, Val.val_shift]
-    rw [Expr.subst_shift 1 0 1 s H.1 (by omega) (by omega),
-      Expr.subst_shift 0 0 0 u H.1 (by omega) (by omega), Expr.shift_zero,
-      plug_shift_subst 1 K 0 1 s _ (by omega) (by omega),
-      plug_shift_subst 0 K 0 0 u _ (by omega) (by omega), Kont.shift_zero]
-    simp only [raiseE, Expr.subst, Expr.val, subst_cancelVal_none, Val.prim]
-  rw [show (0 + 1 : Nat) = 1 from rfl, e]
+  rw [show (0 + 1 : Nat) = 1 from rfl, kappa_cancel_subst]
   exact h
+
+/-! ### The capture cell  `[spec §25]` -/
+
+/-- An allocation at an evaluation position, in front of an `ewpTS`: `[TR]` 6.141 (`wpTS_alloc`)
+then the rest of the run, at the allocated cell. -/
+theorem ewp_alloc {Tb : Table} (hTb : Tb.Mono) (K : Kont) (v : Val) {ls : List SRec}
+    {Q : List SRec → Val → WProp} {ρ : WRes}
+    (h : ∀ ℓ : Loc, (ptoOwn ℓ v ─⋆ ewpTS ls (K.plug (.val (Val.loc ℓ))) Tb Q) ρ) :
+    ewpTS ls (K.plug (.app (.val (.prim .alloc)) (.val v))) Tb Q ρ :=
+  ewp_fold hTb (wpG_bind_pure K _ ls _ ρ (wpTS_alloc ls v _ ρ
+    (fun ℓ σ₁ σ₂ hp hc => ewp_unfold hTb (h ℓ σ₁ σ₂ hp hc))))
+
+/-- A release of an owned cell at an evaluation position, in front of an `ewpTS`: `[TR]` 6.142
+(`wpTS_free`) then the rest of the run, at the cell's contents. -/
+theorem ewp_free {Tb : Table} (hTb : Tb.Mono) (K : Kont) (ℓ : Loc) (v : Val) {ls : List SRec}
+    {Q : List SRec → Val → WProp} {ρ : WRes}
+    (h : (ptoOwn ℓ v ⋆ ewpTS ls (K.plug (.val v)) Tb Q) ρ) :
+    ewpTS ls (K.plug (freeE (.val (Val.loc ℓ)))) Tb Q ρ := by
+  obtain ⟨ρ₁, ρ₂, hc, hp, hq⟩ := h
+  exact ewp_fold hTb (wpG_bind_pure K _ ls _ ρ (wpTS_free ls ℓ v _ ρ
+    ⟨ρ₁, ρ₂, hc, hp, ewp_unfold hTb hq⟩))
+
+/-- `κ`'s body over its cell, at the cell's location, is `kappaC`. -/
+theorem kappaCBody_subst (aff : Bool) (ℓ : Loc) (n : UInt32) (H : Val) (K : Kont) :
+    Expr.subst 0 (Val.loc ℓ) (kappaCBody aff n H K) = kappaC aff ℓ n H K := by
+  cases aff <;>
+  simp only [kappaCBody, kappaC, freeE, stuckE, hndE, ccatchE, raiseE, Expr.subst, Expr.val,
+    Val.val_shift, Bool.false_eq_true, if_true, if_false, Val.loc, Val.lam, Val.prim, Val.unit] <;>
+  first
+    | (rw [Expr.subst_shift 3 0 3 _ H.1 (by omega) (by omega),
+        plug_shift_subst 3 K 0 3 _ _ (by omega) (by omega)]
+       simp [Expr.subst, Val.shift, Expr.shift, Expr.subst_shift 2 0 2 _ H.1 (by omega) (by omega),
+         plug_shift_subst 2 K 0 2 _ _ (by omega) (by omega), subst_cancelVal_none])
+    | (simp [Expr.subst, Val.shift, Expr.shift, Expr.subst_shift 3 0 3 _ H.1 (by omega) (by omega),
+         plug_shift_subst 3 K 0 3 _ _ (by omega) (by omega), Expr.subst_shift 2 0 2 _ H.1 (by omega) (by omega),
+         plug_shift_subst 2 K 0 2 _ _ (by omega) (by omega), subst_cancelVal_none])
+
+/-- **The capture cell's allocation**: `κ` before its cell, at an evaluation position, allocates
+the cell by the ordinary `alloc` step and becomes `kappaC` at its location. -/
+theorem ewp_kappaCell {Tb : Table} (hTb : Tb.Mono) (aff : Bool) (n : UInt32) (H : Val) (K : Kont)
+    (Kc : Kont) {ls : List SRec} {Q : List SRec → Val → WProp} {ρ : WRes}
+    (h : ∀ ℓ : Loc, (ptoOwn ℓ Val.unit ─⋆ ewpTS ls (Kc.plug (kappaC aff ℓ n H K)) Tb Q) ρ) :
+    ewpTS ls (Kc.plug (kappaCell aff n H K)) Tb Q ρ := by
+  have e : Kc.plug (kappaCell aff n H K) =
+      (Kc.comp (.appR (.val (.lam (kappaCBody aff n H K))) .hole)).plug
+        (.app (.val (.prim .alloc)) (.val Val.unit)) := by
+    rw [Kont.plug_comp]; rfl
+  rw [e]
+  refine ewp_alloc hTb _ Val.unit (fun ℓ σ₁ σ₂ hp hc => ?_)
+  rw [Kont.plug_comp]
+  refine ewp_step hTb (fun μ => (Step1N.head (Head.beta μ _ (Val.loc ℓ)) rfl).plug Kc) ls Q σ₂ ?_
+  rw [kappaCBody_subst]
+  exact h ℓ σ₁ σ₂ hp hc
+
+/-- `kappaC` is a value. -/
+theorem isVal_kappaC (aff : Bool) (ℓ : Loc) (n : UInt32) (H : Val) (K : Kont) :
+    IsVal (kappaC aff ℓ n H K) := by unfold kappaC; exact .lam
+
+/-- **Resuming a `κ` that owns a cell** at `w` frees the cell, then runs `hnd H K[w]`. -/
+theorem ewp_kappaC_resume {Tb : Table} (hTb : Tb.Mono) (aff : Bool) (ℓ : Loc) (n : UInt32)
+    (H : Val) (K : Kont) (w : Val) {ls : List SRec} {Q : List SRec → Val → WProp} {ρ : WRes}
+    (h : (ptoOwn ℓ Val.unit ⋆ ewpTS ls (hndE H (K.plug (.val w))) Tb Q) ρ) :
+    ewpTS ls (.app (.app (kappaC aff ℓ n H K) (.val (Val.inj₁ .unit))) (.val w)) Tb Q ρ := by
+  refine ewp_step hTb (fun μ => (Step1N.head (Head.beta μ _ _) rfl).plug (Kont.appL .hole w)) ls Q ρ ?_
+  refine ewp_step hTb (fun μ => (Step1N.head (Head.case₁ μ Val.unit _ _) rfl).plug
+    (Kont.appL .hole w)) ls Q ρ ?_
+  refine ewp_step hTb (fun μ => (Step1N.head (Head.seq μ _) rfl).plug (Kont.appL .hole w)) ls Q ρ ?_
+  refine ewp_free hTb (Kont.appL (Kont.seq .hole _) w) ℓ Val.unit ?_
+  obtain ⟨ρ₁, ρ₂, hc, hp, hq⟩ := h
+  refine ⟨ρ₁, ρ₂, hc, hp, ?_⟩
+  refine ewp_step hTb (fun μ => (Step1N.head (Head.seq μ _) rfl).plug (Kont.appL .hole w)) ls Q ρ₂ ?_
+  refine ewp_step hTb (fun μ => Step1N.head (Head.beta μ _ w) rfl) ls Q ρ₂ ?_
+  rw [show (0 + 1 : Nat) = 1 from rfl, show (0 + 1 + 1 : Nat) = 2 from rfl, kappa_resume_subst]
+  exact hq
+
+/-- **Cancelling an affine `κ`** frees its cell, then runs
+`ccatch (hnd H K[raise (0, (0, (N, none)))])`. -/
+theorem ewp_kappaC_cancel {Tb : Table} (hTb : Tb.Mono) (ℓ : Loc) (n : UInt32) (H : Val) (K : Kont)
+    {ls : List SRec} {Q : List SRec → Val → WProp} {ρ : WRes}
+    (h : (ptoOwn ℓ Val.unit ⋆ ewpTS ls (ccatchE (hndE H (K.plug (raiseE (.val (cancelVal
+      (n :: K.hndNames) none)))))) Tb Q) ρ) :
+    ewpTS ls (.app (kappaC true ℓ n H K) (.val (Val.inj₂ .unit))) Tb Q ρ := by
+  refine ewp_step hTb (fun μ => Step1N.head (Head.beta μ _ _) rfl) ls Q ρ ?_
+  refine ewp_step hTb (fun μ => Step1N.head (Head.case₂ μ Val.unit _ _) rfl) ls Q ρ ?_
+  refine ewp_step hTb (fun μ => Step1N.head (Head.seq μ _) rfl) ls Q ρ ?_
+  refine ewp_free hTb (Kont.seq .hole _) ℓ Val.unit ?_
+  obtain ⟨ρ₁, ρ₂, hc, hp, hq⟩ := h
+  refine ⟨ρ₁, ρ₂, hc, hp, ?_⟩
+  refine ewp_step hTb (fun μ => Step1N.head (Head.seq μ _) rfl) ls Q ρ₂ ?_
+  rw [show (0 + 1 : Nat) = 1 from rfl, kappa_cancel_subst]
+  exact hq
 
 /-! ### Handlers -/
 
 /-- The handler frame `hnd H [·]`. -/
 abbrev hndK (H : Val) : Kont := .appR (.app (.val (.prim .hnd)) (.val H)) .hole
 
-theorem hndK_catches (n : UInt32) (hr hs : Val) (m : UInt32) :
-    (hndK (hndVal n hr hs)).Catches m = (n == m) := by
+theorem hndK_catches (n : UInt32) (qs hr hs : Val) (m : UInt32) :
+    (hndK (hndVal n qs hr hs)).Catches m = (n == m) := by
   simp [Kont.Catches, hndVal, Val.pair, Val.i32, Expr.val]
 
-theorem hndK_hasHnd (n : UInt32) (hr hs : Val) (m : UInt32) :
-    (hndK (hndVal n hr hs)).HasHnd m = (n == m) := by
+theorem hndK_hasHnd (n : UInt32) (qs hr hs : Val) (m : UInt32) :
+    (hndK (hndVal n qs hr hs)).HasHnd m = (n == m) := by
   simp [Kont.HasHnd, hndVal, Val.pair, Val.i32, Expr.val]
 
-theorem hndK_hndNames (n : UInt32) (hr hs : Val) : (hndK (hndVal n hr hs)).hndNames = [n] := by
+theorem hndK_hndNames (n : UInt32) (qs hr hs : Val) :
+    (hndK (hndVal n qs hr hs)).hndNames = [n] := by
   simp [Kont.hndNames, hndVal, Val.pair, Val.i32, Expr.val]
 
 /-- The relation of `κ`'s type at an operation's entry: resumed at every answer, and, with
@@ -607,14 +704,64 @@ theorem ewp_ccatch {Tin Tout : OpTab} {N : List UInt32} (H : Val) (hH : (hndK H)
       exact wpG_here _ _ _ σ (Or.inr (Or.inr ⟨.hole, m, j, w, en,
         pure_sep_mk ⟨rfl, rfl, hT m j en hm hTe, ha⟩ ⟨τa, τb, hcab, ⟨hPA, hnA⟩, hnb⟩⟩))
 
+/-- A qualifier's tag in a handler value: `0` linear, `1` affine, `2` unrestricted.
+`[spec §25]` -/
+def Qual.tag : Qual → UInt32
+  | .lin => 0
+  | .aff => 1
+  | .unr => 2
+
+/-- The tags of a list of qualifiers, as the right-nested tuple a handler value holds.
+`[spec §25]` -/
+def qualsVal : List Qual → Val
+  | [] => Val.unit
+  | q :: qs => Val.pair (Val.i32 q.tag) (qualsVal qs)
+
+theorem capTag_qualsVal : ∀ (qs : List Qual) (j : Nat) (h : j < qs.length),
+    capTag (qualsVal qs).1 j = qs[j].tag
+  | [], _, h => by simp at h
+  | q :: qs, 0, _ => by simp [qualsVal, capTag, Val.pair, Val.i32]
+  | q :: qs, j + 1, h => by
+      simp only [qualsVal, Val.pair, capTag, List.getElem_cons_succ]
+      exact capTag_qualsVal qs j (by simpa using h)
+
+@[simp] theorem psub_qualsVal (k : Nat) (γ : List Val) :
+    ∀ qs : List Qual, Expr.psub k γ (qualsVal qs).1 = (qualsVal qs).1
+  | [] => rfl
+  | q :: qs => by
+      simp only [qualsVal, Val.pair, Val.i32, Expr.psub, psub_qualsVal k γ qs]
+
+@[simp] theorem shift_qualsVal (d c : Nat) :
+    ∀ qs : List Qual, Expr.shift d c (qualsVal qs).1 = (qualsVal qs).1
+  | [] => rfl
+  | q :: qs => by
+      simp only [qualsVal, Val.pair, Val.i32, Expr.shift, shift_qualsVal d c qs]
+
+@[simp] theorem subst_qualsVal (j : Nat) (s : Val) :
+    ∀ qs : List Qual, Expr.subst j s (qualsVal qs).1 = (qualsVal qs).1
+  | [] => rfl
+  | q :: qs => by
+      simp only [qualsVal, Val.pair, Val.i32, Expr.subst, subst_qualsVal j s qs]
+
+/-- The continuation `[op]` hands at a tag: a cell at a linear or affine operation. -/
+theorem kappaAt_tag (q : Qual) (n : UInt32) (H : Val) (K : Kont) :
+    kappaAt q.tag n H K = (match q with
+      | .lin => kappaCell false n H K
+      | .aff => kappaCell true n H K
+      | .unr => kappa n H K) := by
+  cases q <;> simp [kappaAt, Qual.tag]
+
 /-- **A handler** (`[handle]`), by induction on the least fixed point of the inner computation.
 `[ret]` answers through `h_ret`; an operation of the handler's name runs its clause, with `κ`
 resumed by the induction hypothesis and cancelled by the inner computation's cancel run under
-`ccatch`; an abortive one runs its clause and drops the abandoned continuation; an operation of
-another name passes outward, the handler reinstalled in its continuation.  `[spec §19]` -/
+`ccatch`; at a linear or affine operation `κ` first gets its cell (`ewp_kappaCell`), which its
+resume and its cancel free; an abortive one runs its clause and drops the abandoned continuation;
+an operation of another name passes outward, the handler reinstalled in its continuation.  The
+handler's tags `qs` record its operations' qualifiers.  `[spec §19, §25]` -/
 theorem ewp_handle (Tin Tout : OpTab) (n : UInt32) (hn0 : n ≠ 0)
-    (hTin : ∀ m i, m ≠ n → Tin m i = Tout m i) (hr hs : Val)
+    (hTin : ∀ m i, m ≠ n → Tin m i = Tout m i) (qs hr hs : Val)
     (Qin Qout : List SRec → Val → WProp)
+    (hq : ∀ i en, Tin n i = some en → en.abort = false → capTag qs.1 i.toNat = en.q.tag)
     (hret : ∀ ls v ρ, Qin ls v ρ → ewpTS ls (.app (.val hr) (.val v)) (opTable Tout) Qout ρ)
     (hop : ∀ i en, Tin n i = some en → ∃ c, clauseAt hs.1 i.toNat = some c ∧
       (en.abort = false → ∀ ls v (κ : Val) ρ, (en.PA ls v ⋆ KapRel Tout Qout en ls κ) ρ →
@@ -622,7 +769,7 @@ theorem ewp_handle (Tin Tout : OpTab) (n : UInt32) (hn0 : n ≠ 0)
       (en.abort = true → ∀ ls v ρ, en.PA ls v ρ →
         ewpTS ls (.app (.val c) (.val v)) (opTable Tout) Qout ρ)) :
     ∀ {ls : List SRec} {e : Expr} {ρ : WRes}, ewpTS ls e (opTable Tin) Qin ρ →
-      ewpTS ls (hndE (hndVal n hr hs) e) (opTable Tout) Qout ρ := by
+      ewpTS ls (hndE (hndVal n qs hr hs) e) (opTable Tout) Qout ρ := by
   have hmap : ∀ N : List UInt32, n ∈ N → ∀ m j en, m ∉ N → Tin m j = some en →
       Tout m j = some en := fun N hN m j en hm h => by
     rw [← hTin m j (fun e => hm (e ▸ hN))]; exact h
@@ -631,16 +778,16 @@ theorem ewp_handle (Tin Tout : OpTab) (n : UInt32) (hn0 : n ≠ 0)
     | N, hN, ls, some E, ρ, ⟨m, j, w, en, h⟩ => by
         obtain ⟨⟨h₁, h₂, h₃, h₄⟩, h₅⟩ := pure_sep_iff.mp h
         exact ⟨m, j, w, en, pure_sep_mk ⟨h₁, h₂, hmap N hN m j en h₂ h₃, h₄⟩ h₅⟩
-  have hC0 : (hndK (hndVal n hr hs)).Catches 0 = false := by
+  have hC0 : (hndK (hndVal n qs hr hs)).Catches 0 = false := by
     rw [hndK_catches]; simpa using hn0
   intro ls e ρ h
-  refine ewp_ind (fun ls e ρ => ewpTS ls (hndE (hndVal n hr hs) e) (opTable Tout) Qout ρ) ?_ h
+  refine ewp_ind (fun ls e ρ => ewpTS ls (hndE (hndVal n qs hr hs) e) (opTable Tout) Qout ρ) ?_ h
   intro ls e ρ hstep
-  refine ewp_fold (opTable_mono Tout) (wpG_bind (hndK (hndVal n hr hs)) e ls _ ρ ?_)
+  refine ewp_fold (opTable_mono Tout) (wpG_bind (hndK (hndVal n qs hr hs)) e ls _ ρ ?_)
   refine wpG_mono (fun ls' t σ ht => ?_) hstep
   rcases ht with ⟨v, rfl, hv⟩ | ht
   · -- `[ret]`
-    exact wpG_head (fun μ => Head.hret μ n hr hs v) rfl _ _ σ
+    exact wpG_head (fun μ => Head.hret μ n qs hr hs v) rfl _ _ σ
       (ewp_unfold (opTable_mono Tout) (hret _ _ _ hv))
   rcases ht with ⟨K₁, m, i, v, en, hp⟩ | ⟨K₁, m, i, v, en, hp⟩
   · obtain ⟨⟨rfl, hK₁, hT, ha⟩, ρa, ρk, hcak, hA, hu, hcont⟩ := pure_sep_iff.mp hp
@@ -648,18 +795,39 @@ theorem ewp_handle (Tin Tout : OpTab) (n : UInt32) (hn0 : n ≠ 0)
     · -- `[op]` at the handler's name: the clause, with `κ`
       subst hm
       obtain ⟨c, hc, hna, -⟩ := hop i en hT
-      refine wpG_head (fun μ => Head.hop μ m i hr hs c v K₁ hc hK₁) rfl _ _ σ ?_
-      refine ewp_unfold (opTable_mono Tout) (hna ha ls' v
-        ⟨kappa m (hndVal m hr hs) K₁, by unfold kappa; exact .lam⟩ σ ⟨ρa, ρk, hcak, hA, ?_⟩)
-      refine ⟨hu, fun ls'' he => ⟨fun w τ₁ τ₂ hB hc => ?_, fun hq => ?_⟩⟩
-      · exact ewp_kappa_resume (opTable_mono Tout) m _ K₁ w
-          ((hcont ls'' he).1 w τ₁ τ₂ hB hc)
-      · refine ewp_kappa_cancel (opTable_mono Tout) m _ K₁ ?_
-        exact ewp_ccatch (Tin := Tin) _ hC0 (hmap _ (List.mem_cons_self))
-          ((hcont ls'' he).2 hq (m :: K₁.hndNames) List.mem_cons_self
+      refine wpG_head (fun μ => Head.hop μ m i qs hr hs c v K₁ hc hK₁) rfl _ _ σ ?_
+      have hcan : ∀ ls'', Ext ls' ls'' ρk → en.q ≠ .lin →
+          ewpTS ls'' (ccatchE (hndE (hndVal m qs hr hs) (K₁.plug (raiseE (.val
+            (cancelVal (m :: K₁.hndNames) none)))))) (opTable Tout) (fun _ v => ⌜v = Val.unit⌝) ρk :=
+        fun ls'' he hq' => ewp_ccatch (Tin := Tin) _ hC0 (hmap _ (List.mem_cons_self))
+          ((hcont ls'' he).2 hq' (m :: K₁.hndNames) List.mem_cons_self
             (fun x hx => List.mem_cons_of_mem _ hx))
+      rw [hq i en hT ha, kappaAt_tag]
+      cases hqq : en.q with
+      | unr =>
+          refine ewp_unfold (opTable_mono Tout) (hna ha ls' v
+            ⟨kappa m (hndVal m qs hr hs) K₁, by unfold kappa; exact .lam⟩ σ ⟨ρa, ρk, hcak, hA, ?_⟩)
+          refine ⟨hu, fun ls'' he => ⟨fun w τ₁ τ₂ hB hc => ?_, fun hq' => ?_⟩⟩
+          · exact ewp_kappa_resume (opTable_mono Tout) m _ K₁ w
+              ((hcont ls'' he).1 w τ₁ τ₂ hB hc)
+          · exact ewp_kappa_cancel (opTable_mono Tout) m _ K₁ (hcan ls'' he hq')
+      | aff | lin =>
+          refine ewp_unfold (opTable_mono Tout) (ewp_kappaCell (opTable_mono Tout) _ m
+            (hndVal m qs hr hs) K₁ (.appR (.val c) (.pairR v .hole)) (fun ℓ σ₁ σ₂ hcell hc₂ => ?_))
+          obtain ⟨y, hy₁, hy₂⟩ := compS_reassoc hcak hc₂
+          refine hna ha ls' v ⟨_, isVal_kappaC _ ℓ m (hndVal m qs hr hs) K₁⟩ σ₂
+            ⟨ρa, y, hy₂, hA, ?_⟩
+          refine ⟨fun h' => (by rw [hqq] at h'; cases h'),
+            fun ls'' he => ⟨fun w τ₁ τ₂ hB hcτ => ?_, fun hq' => ?_⟩⟩
+          · obtain ⟨z, hz, hzτ⟩ := compS_exch hy₁ hcτ
+            exact ewp_kappaC_resume (opTable_mono Tout) _ ℓ m _ K₁ w
+              ⟨σ₁, z, ResU.CompS.comm hzτ, hcell, (hcont ls'' (Ext.left hy₁ he)).1 w τ₁ z hB hz⟩
+          · first
+              | exact absurd hqq hq'
+              | exact ewp_kappaC_cancel (opTable_mono Tout) ℓ m _ K₁
+                  ⟨σ₁, ρk, ResU.CompS.comm hy₁, hcell, hcan ls'' (Ext.left hy₁ he) hq'⟩
     · -- an operation of another name passes outward
-      refine wpG_here _ _ _ σ (Or.inr (Or.inl ⟨(hndK (hndVal n hr hs)).comp K₁, m, i, v, en,
+      refine wpG_here _ _ _ σ (Or.inr (Or.inl ⟨(hndK (hndVal n qs hr hs)).comp K₁, m, i, v, en,
         pure_sep_mk ⟨(Kont.plug_comp _ _ _).symm, ?_, (hTin m i hm) ▸ hT, ha⟩
           ⟨ρa, ρk, hcak, hA, hu, fun ls'' he => ⟨fun w τ₁ τ₂ hB hc => ?_, fun hq N hN hNK => ?_⟩⟩⟩))
       · rw [hasHnd_comp, hndK_hasHnd, hK₁]; simpa using Ne.symm hm
@@ -675,13 +843,13 @@ theorem ewp_handle (Tin Tout : OpTab) (n : UInt32) (hn0 : n ≠ 0)
     · -- `[unwind]` at the handler's name: the clause; the continuation is dropped
       subst hm
       obtain ⟨c, hc, -, hab⟩ := hop i en hT
-      refine wpG_head (fun μ => Head.hunwind μ m i hr hs c v K₁ hc hK₁) rfl _ _ σ ?_
+      refine wpG_head (fun μ => Head.hunwind μ m i qs hr hs c v K₁ hc hK₁) rfl _ _ σ ?_
       refine wpG_garbage (wpG_mono (fun _ _ _ ⟨τ₁, τ₂, hcτ, hq, hnτ⟩ => ⟨τ₁, τ₂, hcτ, hnτ, hq⟩)
         (wpG_frame (e := .app (.val c) (.val v)) (fun _ => fun τ => NoOwn τ)
           (fun _ _ _ h => h) σ ⟨ρa, ρn, hcan,
             ewp_unfold (opTable_mono Tout) (hab ha ls' v ρa hPA), hnn⟩))
     · -- an abortive operation of another name passes outward
-      refine wpG_here _ _ _ σ (Or.inr (Or.inr ⟨(hndK (hndVal n hr hs)).comp K₁, m, i, v, en,
+      refine wpG_here _ _ _ σ (Or.inr (Or.inr ⟨(hndK (hndVal n qs hr hs)).comp K₁, m, i, v, en,
         pure_sep_mk ⟨(Kont.plug_comp _ _ _).symm, ?_, (hTin m i hm) ▸ hT, ha⟩
           ⟨ρa, ρn, hcan, ⟨hPA, hnA⟩, hnn⟩⟩))
       rw [catches_comp, hndK_catches, hK₁]; simpa using Ne.symm hm
@@ -993,9 +1161,11 @@ def clausesTy (S : Row) (R : VTy) : List (Qual × VTy × VTy) → VTy
 /-- `h_ret`'s type: `!U(A ⊸ F_Σ R)`. -/
 def retTy (S : Row) (A R : VTy) : VTy := .bang (.thunk (.arr A (CTy.effOf S R)))
 
-/-- `handle_n e with (h_ret, hs)`, `h_ret` and `hs` variables. -/
-def hndTerm (n : UInt32) (ir ic : Nat) (e : Expr) : Expr :=
-  .app (.app (.val (.prim .hnd)) (.pair (.val (Val.i32 n)) (.pair (.var ir) (.var ic)))) e
+/-- `handle_n e with (h_ret, hs)`, `h_ret` and `hs` variables, the handler's tags those of the
+qualifiers `qs` (`qualsVal`).  `[spec §19, §25]` -/
+def hndTerm (n : UInt32) (qs : List Qual) (ir ic : Nat) (e : Expr) : Expr :=
+  .app (.app (.val (.prim .hnd)) (.pair (.val (Val.i32 n))
+    (.pair (.val (qualsVal qs)) (.pair (.var ir) (.var ic))))) e
 
 theorem Row.find_ofEff (n : UInt32) : ∀ (E : List (Qual × VTy × VTy)) (k : Nat) (m i : UInt32)
     (o : OpSig), Row.find (Row.ofEff n E k) m i = some o →
@@ -1087,17 +1257,52 @@ private theorem substAll_var' {γ : List Val} {i : Nat} {v : Val} (hv : γ[i]? =
   show Expr.psub 0 γ (.var i) = _
   simp only [Expr.psub, if_neg (Nat.not_lt_zero i), Nat.sub_zero, hv, Val.shift_zero]
 
+/-- An operation of the handler's name in `Σ` extended by the handler's effect is the effect's
+`j`-th, at index `j`. -/
+theorem Row.tab_ofEff_self {S : Row} {E : List (Qual × VTy × VTy)} {n : UInt32} {δ : LSub}
+    (hnS : ∀ o ∈ S, o.n ≠ n) (hlen : E.length ≤ 2 ^ 32) {i : UInt32} {en : OpEnt}
+    (hT : Row.tab (Row.ofEff n E 0 ++ S) δ n i = some en) :
+    ∃ j, ∃ hj : j < E.length, i.toNat = j ∧ i = UInt32.ofNat (0 + j) ∧
+      en = OpSig.ent δ ⟨n, UInt32.ofNat (0 + j), E[j].1, E[j].2.1, E[j].2.2⟩ := by
+  obtain ⟨o, hf, rfl⟩ := Row.tab_some hT
+  have hfo : Row.find (Row.ofEff n E 0) n i = some o := by
+    rw [Row.find_append] at hf
+    cases h₁ : Row.find (Row.ofEff n E 0) n i with
+    | some o' => rw [h₁] at hf; exact hf
+    | none =>
+        rw [h₁] at hf
+        obtain ⟨hm, hn, -⟩ := Row.find_mem hf
+        exact absurd hn (hnS o hm)
+  obtain ⟨-, j, hj, rfl, rfl⟩ := Row.find_ofEff n E 0 n i o hfo
+  have hjn : (UInt32.ofNat (0 + j)).toNat = j := by
+    rw [Nat.zero_add]; exact UInt32.toNat_ofNat_of_lt' (by simp [UInt32.size]; omega)
+  exact ⟨j, hj, hjn, rfl, rfl⟩
+
+/-- A handler records its effect's qualifiers: the tag at each operation's index is its
+qualifier's.  `[spec §25]` -/
+theorem capTag_ofEff {S : Row} {E : List (Qual × VTy × VTy)} {n : UInt32} {δ : LSub}
+    (hnS : ∀ o ∈ S, o.n ≠ n) (hlen : E.length ≤ 2 ^ 32) (i : UInt32) (en : OpEnt)
+    (hT : Row.tab (Row.ofEff n E 0 ++ S) δ n i = some en) :
+    capTag (qualsVal (E.map Prod.fst)).1 i.toNat = en.q.tag := by
+  obtain ⟨j, hj, hji, -, rfl⟩ := Row.tab_ofEff_self hnS hlen hT
+  rw [hji, capTag_qualsVal _ j (by simpa using hj)]
+  simp [OpSig.ent]
+
 /-- **A handler at clause values**: the answer clause and the clauses related at `∅`, at one list
 (at a `!` type the relation at one list gives it at every list, `ext_empty'`), and the handled
-computation at `Σ` extended by the handler's name, which `Σ` does not hold.  `[spec §19]` -/
+computation at `Σ` extended by the handler's name, which `Σ` does not hold.  The handler's tags are
+its effect's qualifiers.  `[spec §19, §25]` -/
 theorem ewp_handle_vals {S : Row} {E : List (Qual × VTy × VTy)} {n : UInt32} {A R : VTy}
     {δ : LSub} {ls₀ : List SRec} {vr vc : Val} (hn0 : n ≠ 0) (hnS : ∀ o ∈ S, o.n ≠ n)
     (hlen : E.length ≤ 2 ^ 32) (hVr : vC true (retTy S A R) ls₀ δ vr PMap.empty)
     (hVc : vC true (clausesTy S R E) ls₀ δ vc PMap.empty) {ls : List SRec} {e : Expr} {ρ : WRes}
     (he : ewpTS ls e (opTable (Row.tab (Row.ofEff n E 0 ++ S) δ)) (fun ls v => vC true A ls δ v) ρ) :
-    ewpTS ls (hndE (hndVal n vr vc) e) (opTable (Row.tab S δ)) (fun ls v => vC true R ls δ v) ρ := by
-  refine ewp_handle (Row.tab (Row.ofEff n E 0 ++ S) δ) (Row.tab S δ) n hn0 ?_ vr vc
-    (fun ls v => vC true A ls δ v) (fun ls v => vC true R ls δ v) ?_ ?_ he
+    ewpTS ls (hndE (hndVal n (qualsVal (E.map Prod.fst)) vr vc) e) (opTable (Row.tab S δ))
+      (fun ls v => vC true R ls δ v) ρ := by
+  refine ewp_handle (Row.tab (Row.ofEff n E 0 ++ S) δ) (Row.tab S δ) n hn0 ?_
+    (qualsVal (E.map Prod.fst)) vr vc
+    (fun ls v => vC true A ls δ v) (fun ls v => vC true R ls δ v)
+    (fun i en hT _ => capTag_ofEff hnS hlen i en hT) ?_ ?_ he
   · intro m i hm
     simp [Row.tab, Row.find_append, Row.find_ofEff_ne n E 0 m i hm]
   · intro ls' v σ hv
@@ -1144,7 +1349,7 @@ theorem handle_compatC {Δ : LifeCtx} {Γ Γ₁ Γ₂ Γr Γc : Ctx VTy} {e : Ex
     (hr : Ctx.SoloP Γr ir (retTy S A R)) (hc : Ctx.SoloP Γc ic (clausesTy S R E))
     (hn0 : n ≠ 0) (hnS : ∀ o ∈ S, o.n ≠ n) (hlen : E.length ≤ 2 ^ 32)
     (he : SemC Δ Γ₂ e (CTy.effOf (Row.ofEff n E 0 ++ S) A)) :
-    SemC Δ Γ (hndTerm n ir ic e) (CTy.effOf S R) := by
+    SemC Δ Γ (hndTerm n (E.map Prod.fst) ir ic e) (CTy.effOf S R) := by
   intro δ γ ls ρ hδ hg
   obtain ⟨ρ₁, ρ₂, hc12, hg₁, hg₂⟩ := gDenC_split hsp hg
   obtain ⟨ρr, ρcl, hcrc, hgr, hgc⟩ := gDenC_split hsp₁ hg₁
@@ -1157,9 +1362,13 @@ theorem handle_compatC {Δ : LifeCtx} {Γ Γ₁ Γ₂ Γr Γc : Ctx VTy} {e : Ex
   subst hρr hρc
   rw [eq_of_compS_empty_left hcrc] at hc12
   rw [eq_of_compS_empty_left hc12]
-  show cC _ ls δ (Expr.app (Expr.app (.val (.prim .hnd)) (.pair (.val (Val.i32 n))
-    (.pair (substAll γ (.var ir)) (substAll γ (.var ic))))) (substAll γ e)) ρ₂
-  rw [substAll_var' hvr, substAll_var' hvc]
+  have hsub : substAll γ (hndTerm n (E.map Prod.fst) ir ic e) =
+      Expr.app (Expr.app (.val (.prim .hnd)) (.pair (.val (Val.i32 n))
+        (.pair (.val (qualsVal (E.map Prod.fst))) (.pair (substAll γ (.var ir))
+          (substAll γ (.var ic)))))) (substAll γ e) := by
+    simp only [hndTerm, substAll, Expr.psub, Expr.val, Val.prim, Val.i32, psub_qualsVal]
+  show cC _ ls δ (substAll γ (hndTerm n (E.map Prod.fst) ir ic e)) ρ₂
+  rw [hsub, substAll_var' hvr, substAll_var' hvc]
   exact (cC_effOf S R ls δ _ ρ₂).mpr (ewp_handle_vals hn0 hnS hlen hVr hVc
     ((cC_effOf _ A ls δ _ ρ₂).mp (he δ γ ls ρ₂ hδ hg₂)))
 
@@ -1167,11 +1376,24 @@ theorem handle_compatC {Δ : LifeCtx} {Γ Γ₁ Γ₂ Γr Γc : Ctx VTy} {e : Ex
 
 /-- `handle_n e with H`, `H` the handler's pair `(h_ret, hs)` as an expression.  `hndTerm` is its
 instance at two variables (`hndTerm_eq`).  `[spec §19, §24]` -/
-def hndExpr (n : UInt32) (H e : Expr) : Expr :=
-  .app (.app (.val (.prim .hnd)) (.pair (.val (Val.i32 n)) H)) e
+def hndExpr (n : UInt32) (qs : List Qual) (H e : Expr) : Expr :=
+  .app (.app (.val (.prim .hnd)) (.pair (.val (Val.i32 n)) (.pair (.val (qualsVal qs)) H))) e
 
-theorem hndTerm_eq (n : UInt32) (ir ic : Nat) (e : Expr) :
-    hndTerm n ir ic e = hndExpr n (.pair (.var ir) (.var ic)) e := rfl
+theorem hndTerm_eq (n : UInt32) (qs : List Qual) (ir ic : Nat) (e : Expr) :
+    hndTerm n qs ir ic e = hndExpr n qs (.pair (.var ir) (.var ic)) e := rfl
+
+/-- A closing substitution of `handle_n e with H` closes `H` and `e`. -/
+theorem psub_hndExpr (k : Nat) (γ : List Val) (n : UInt32) (qs : List Qual) (H e : Expr) :
+    Expr.psub k γ (hndExpr n qs H e) = hndExpr n qs (Expr.psub k γ H) (Expr.psub k γ e) := by
+  simp only [hndExpr, Expr.psub, Expr.val, Val.prim, Val.i32, psub_qualsVal]
+
+theorem shift_hndExpr (d c : Nat) (n : UInt32) (qs : List Qual) (H e : Expr) :
+    Expr.shift d c (hndExpr n qs H e) = hndExpr n qs (Expr.shift d c H) (Expr.shift d c e) := by
+  simp only [hndExpr, Expr.shift, Expr.val, Val.prim, Val.i32, shift_qualsVal]
+
+theorem subst_hndExpr (j : Nat) (s : Val) (n : UInt32) (qs : List Qual) (H e : Expr) :
+    Expr.subst j s (hndExpr n qs H e) = hndExpr n qs (Expr.subst j s H) (Expr.subst j s e) := by
+  simp only [hndExpr, Expr.subst, Expr.val, Val.prim, Val.i32, subst_qualsVal]
 
 /-- `e` is a value form over the live slots of `Γ`: a value, a variable of a live slot, or a pair
 or injection of these.  A closing substitution of `Γ` makes it a value
@@ -1340,7 +1562,7 @@ theorem handleV_compatC {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {H e : Expr} {
     (hc : SemV Δ Γ₁ H (.tensor (retTy S A R) (clausesTy S R E)))
     (hn0 : n ≠ 0) (hnS : ∀ o ∈ S, o.n ≠ n) (hlen : E.length ≤ 2 ^ 32)
     (he : SemC Δ Γ₂ e (CTy.effOf (Row.ofEff n E 0 ++ S) A)) :
-    SemC Δ Γ (hndExpr n H e) (CTy.effOf S R) := by
+    SemC Δ Γ (hndExpr n (E.map Prod.fst) H e) (CTy.effOf S R) := by
   intro δ γ ls ρ hδ hg
   obtain ⟨ρ₁, ρ₂, hc12, hg₁, hg₂⟩ := gDenC_split hsp hg
   obtain ⟨hlw₁, hs₁⟩ := gDenC_iff.mp hg₁
@@ -1350,7 +1572,9 @@ theorem handleV_compatC {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {H e : Expr} {
   have hval : IsVal (substAll γ H) := isVal_psub_valFormIn hlw₁ hH
   have hH' := hc δ γ ls PMap.empty hδ hg₁
   have hE' := (cC_effOf _ A ls δ _ ρ₂).mp (he δ γ ls ρ₂ hδ hg₂)
-  show cC _ ls δ (hndExpr n (substAll γ H) (substAll γ e)) ρ₂
+  show cC _ ls δ (Expr.psub 0 γ (hndExpr n (E.map Prod.fst) H e)) ρ₂
+  rw [psub_hndExpr]
+  show cC _ ls δ (hndExpr n (E.map Prod.fst) (substAll γ H) (substAll γ e)) ρ₂
   refine (cC_effOf S R ls δ _ ρ₂).mpr (ewp_fold (opTable_mono _) ?_)
   intro ρf fρ ps hf hcf hT htg Al k
   obtain ⟨ls', ρ', -, hv⟩ := wpTS_val_post (v := ⟨substAll γ H, hval⟩) hH'

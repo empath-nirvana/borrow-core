@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 0.40 · 2026-10-02
+Version 0.42 · 2026-10-08
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -2445,20 +2445,21 @@ Six primitives (`ccatch` and `cfin`, below), and no new `Expr` constructor:
 
     perform_n V          ≜  perform (n, V)                  (`.app (.prim .perform) …`)   non-abortive
     raise_n V            ≜  raise (n, V)                    (`.app (.prim .raise) …`)     abortive
-    handle_n e with H    ≜  hnd (n, H) e                    (`.app (.app (.prim .hnd) …) e`)
+    handle_n e with H    ≜  hnd (n, (qs, H)) e              (`.app (.app (.prim .hnd) …) e`)
     M then x. N unwind D ≜  ubind (λx. N, λ_. D) M          (`.app (.app (.prim .ubind) …) M`)
 
 `ubind` is `M to x. N` with a finaliser `D`, which runs instead of `N` when `M` unwinds.
 
-`H = (h_ret, h_op)` is a pair of values, and `n` a literal. Evaluation is argument-first, so `e`
-runs under the frame `hnd (n, H) [·]`. A context `K` is **free of `n`** (`Kont.NoHnd n K`) when
+`H = (h_ret, h_op)` is a pair of values, `n` a literal, and `qs` the tags of the operations'
+qualifiers (§25), which `[handle]` writes. Evaluation is argument-first, so `e` runs under the frame
+`hnd (n, (qs, H)) [·]`; below, `hnd (n, H)` abbreviates it. A context `K` is **free of `n`** (`Kont.NoHnd n K`) when
 none of its frames is `hnd (n, H′) [·]`. It may hold handlers of other names. A context is
 **unwind-clear** (`Kont.NoUbind K`) when none of its frames is `ubind _ [·]`. The head steps
 below and the cancel steps (*Cancels*) do not allocate:
 
     (μ, hnd (n, H) v)                  ↦  (μ, h_ret v)                                     [ret]
     (μ, hnd (n, H) K[perform (n, v)])  ↦  (μ, h_op (v, κ))     K free of n, where          [op]
-          κ = λy. hnd (n, H) K[y]
+          κ = λy. hnd (n, H) K[y]                          (at a linear or affine operation, §25)
     (μ, hnd (n, H) K[raise (n, v)])    ↦  (μ, h_op v)          K free of n, unwind-clear   [unwind]
     (μ, ubind (N, D) v)                ↦  (μ, N v)                                         [then]
     (μ, ubind (N, D) K[raise (m, v)])  ↦  (μ, D (); raise (m, v))   K unwind-clear, m ≠ ⊥  [finalise]
@@ -2583,8 +2584,9 @@ Six rules, over `CDerives` with its context premises (§10):
     persistent, the clause of the `j`-th operation at index `j` (`Row.ofEff`, `clausesTy`), and
     `n ≠ 0` (`CDerives.effHandleV`, §24); `h_ret` and the clauses as two variables is its
     instance (`CDerives.effHandle`).
-- **The linear `κ`** is the same `&` pair as the others: the machine builds one `κ` whatever the
-  qualifier. Its cancel branch is at `⊤`, so the clause can only resume it.
+- **The linear `κ`** is the same `&` pair as the others, its cancel branch at `⊤`, so the clause
+  can only resume it. The machine builds `κ` by the operation's qualifier (§25): at `lin` and `aff`
+  it owns a cell, and a linear `κ`'s cancel branch has no step.
 
 - **Rows.** `[handle]` removes its name and passes the rest outward. Its clauses and its answer
   are at `Σ`, so a clause may perform the outer handlers' operations. That is how two handlers
@@ -3685,16 +3687,99 @@ glue (§12's destructors) already was.
 
 ### Open
 
-- **S6 (the use of a continuation) by a ghost obligation in `contShare` (TIER1-PLAN §4, route
-  8.4).** Probed and stopped: a closed program's relation at its pure type is `wpTS`, where no
-  protocol table occurs, and three programs that drop, twice resume, and cancel a linear `κ` are in
-  it while breaking S6's count; at the empty heap BoLo's world is the empty resource, so `NoOwn`
-  sees no obligation along their runs (`experiments/Targets/Targets/I/GhostCoupling.lean`). The
-  route needs a resource kind or a run-end condition BoLo's model does not have.
+- **S6 (the use of a continuation)**: §25 gives a linear or affine `κ` a unit cell, so BoLo's leak
+  freedom and safety see a dropped or twice-used `κ`. A ghost obligation in `contShare` (TIER1-PLAN
+  §4, route 8.4) does not: a closed program's relation at its pure type is `wpTS`, where no protocol
+  table occurs (`experiments/Targets/Targets/I/GhostCoupling.lean`).
 - Other instances of S5's parameter (a finaliser that may let the raises of some labels escape),
   and OQ-7 (finalisers that resume, or clean up asynchronously).
 - Row variables in Core's types. The row `∀` of tier 1's typing is in `experiments/Targets`'s open
   types, read through this entry's `[let-poly]`.
+
+## 25. Entry 24 — the capture cell: a linear or affine continuation owns a unit cell
+
+### Motivation
+
+Decision S6 (2026-10-08). Tier 1's soundness property S6 (`experiments/Targets`, `A.ContUse`) asks
+that a continuation caught at a linear or affine operation be used as often as it was caught, and a
+linear one never be cancelled. BoLo's linearity is linearity of resources: no `own` cell is leaked.
+A `κ` held no resource of its own, so a run that drops it, resumes it twice or cancels a linear one
+left the memory as a correct run would, and Core's relation could not tell them apart
+(`experiments/Targets/Targets/I/GhostCoupling.lean`). This entry gives each such `κ` a resource: a
+unit cell, allocated by the ordinary allocator and freed when `κ` is used. It changes no BoLo
+definition: the cell is an `own` cell, and BoLo's leak freedom and safety see the three runs above.
+
+### Terms and machine
+
+- **The handler value** is `(n, (qs, (h_ret, hs)))` (`hndVal`). `qs` is a right-nested tuple of
+  tags, one per operation at the operation's index: `0` linear, `1` affine, `2` unrestricted
+  (`capTag qs i`, `2` where there is none).
+- **`[op]`** hands the clause `κ` by the operation's tag `t` (`kappaAt`):
+  - at `t = 2`, §19's `κ` (`kappa`);
+  - at `t ∈ {0, 1}`,
+
+        κ = (λc. λs. case s { inj₁ u. u; free c; λy. hnd (n, (qs, H)) K[y]
+                            | inj₂ u. C }) (alloc ())                       (`kappaCell`)
+
+    with `C = u; free c; ccatch (hnd (n, (qs, H)) K[raise (⊥, (N, none))])` at `t = 1` and
+    `C = () ()`, a term with no step, at `t = 0`.
+
+  The `[op]` step itself keeps the memory. The clause's argument then evaluates `alloc ()`, an
+  ordinary allocation (the allocator's location, `ARun`), and `κ` is `kappaC` at the cell `ℓ`.
+- **Using `κ` frees its cell** as soon as the branch is chosen: `κ (inj₁ ())` frees `ℓ` and answers
+  `λy. hnd (n, (qs, H)) K[y]`; at `t = 1`, `κ (inj₂ ())` frees `ℓ` and cancels.
+- So a run that drops `κ` ends with its cell allocated; a run that uses `κ` twice frees `ℓ` twice,
+  which has no step unless `ℓ` was allocated again in between (never, under an allocator that does
+  not reuse); a run that cancels a linear `κ` reaches `() ()`, which has no step.
+
+### Typing
+
+`[handle]` writes its effect's qualifiers into the term (`hndExpr n (map fst E) H e`, and
+`hndTerm` at two variables): `handle_n e with H ≜ hnd (n, (qualsVal (map fst E), H)) e`. No rule
+changes otherwise, and `CDerives` has the same indices. The checker emits the same tags
+(`Frontend/Check/Rules.lean`, `rEffHandle`).
+
+### Semantics
+
+No change to `wpTS`, `wpG`, `ewpTS`, `opTable`, `contShare`, `KapRel` or the relation.
+
+- `ewp_handle` takes the handler's tags and the hypothesis that each operation's tag is its
+  qualifier's; `ewp_handle_vals` discharges it at `[handle]`'s tags (`capTag_ofEff`).
+- At a linear or affine operation, the clause runs after the cell's allocation (`ewp_kappaCell`,
+  from 6.141 through `ewp_alloc`), and `κ`'s relation `KapRel` holds of `kappaC` at the
+  continuation's share and the cell: resuming frees the cell, then runs `hnd H K[w]`
+  (`ewp_kappaC_resume`, from 6.142 through `ewp_free`); at an affine operation cancelling frees
+  it, then cancels (`ewp_kappaC_cancel`). A linear `κ`'s cancel branch is at `⊤` in `kTy`, so
+  `KapRel` asks nothing of it.
+
+### Theorems
+
+`fundamentalC`, `adequacyC`, `fundamentalD`, `adequacyD`, `adequacyD_obs` and every compatibility
+lemma keep their statements; `handle_compatC` and `handleV_compatC` are at the term with its tags.
+The acceptance programs run as before, every cell freed (`Core/EffPrograms.lean`, the interpreter's
+runs by `decide`); every kernel program prints the same value and `live 0` at the source and at every
+compiled stage (`scripts/compile-kernel.sh`).
+
+### Lowering
+
+The backend builds `κ` itself (`Backend/Clos/Capture.lean`, `Kap`) and never sees the cell; it
+reads past the tags (`Backend/Clos/Convert.lean`). A cell holding `1` takes no words, so it would
+allocate nothing if it were lowered (`zeroCell`, §23). The kernel and corpus counts are unchanged.
+
+### Baseline
+
+`Paper/`'s machine changes in §19's rows only: the handler value, `[op]` and its `κ`. No BoLo row,
+no `[TR]` lemma and no borrow rule changes; the cell is handled by 6.141, 6.142, `TW.alloc` and
+`TW.free`. `Support`'s interpreter follows the machine. The untyped kernel shapes
+(`Backend/Kernel.lean`) carry no tags, so their continuations are unrestricted, and
+`Core/EffCancel.lean`'s handlers are unrestricted.
+
+### Open
+
+- **S4's capture laws** (`A.HandlerSem`) ask the catch, the resume and the cancel to keep the
+  store. With the cell, the catch is followed by the cell's allocation and the resume and the
+  cancel free it (TIER1-PLAN, *Round 3*).
+- **S6 at tier 1's typing**, from the cell: TIER1-PLAN, *Round 3*.
 
 ---
 
@@ -3785,6 +3870,11 @@ Stage 5 is implemented:
 The lowering of control operations and cancels is implemented (#205): `Backend/Clos/Capture.lean`,
 with every kernel program at every stage (*Lowering*).
 
+Entry 24 (§25) is implemented: the machine in `Paper/S3_Dynamics/Definitions.lean` (`hndVal`,
+`capTag`, `kappaAt`, `kappaC`, `kappaCell`, `Head.hop`), the interpreter, `Core/EffRules.lean`
+(`ewp_kappaCell`, `ewp_kappaC_resume`, `ewp_kappaC_cancel`, `ewp_handle`), `Core/Fundamental.lean`,
+the checker (`rEffHandle`) and `Backend/Clos/Convert.lean`.
+
 Entry 23 (§24) is implemented: `Core/PolyLet.lean` (`letPoly_compatC`), `Core/EffRules.lean`
 (`handleV_compatC`, `ewp_handle_vals`, `thenA_compatC`) and `Core/Fundamental.lean`
 (`CDerives.letPoly`, `CDerives.effHandleV`, `CDerives.effThen`, the theorem `CDerives.effHandle`);
@@ -3794,6 +3884,12 @@ the checker types a finaliser at `F 1` (`Frontend/Check/Steps.lean`, `Frontend/C
 ---
 
 ## Changelog
+
+- **0.42** (2026-10-08) — §25 (decision S6): the capture cell. At a linear or affine operation
+  `[op]`'s `κ` owns a unit cell, allocated by the ordinary allocator and freed when `κ` is used; a
+  linear `κ`'s cancel branch has no step. The handler value carries its operations' qualifier tags,
+  which `[handle]` writes. §19's *Terms and machine* and *Typing* revised, §24's *Open* revised. No
+  change to the relation, the effectful `wp` or any borrow rule.
 
 - **0.41** (2026-10-07) — §24 (decisions D3, D5): the polymorphic let `[let-poly]` (a closed
   λ-value bound by substitution, so one function is used at several rows), the general `[handle]`

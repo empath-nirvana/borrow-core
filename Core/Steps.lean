@@ -239,11 +239,12 @@ def payloadName : Val → Option UInt32
 @[simp] theorem payloadName_opPayload (n i : UInt32) (v : Val) :
     payloadName (opPayload n i v) = some n := rfl
 
-theorem hndVal_inj {n n' : UInt32} {hr hs hr' hs' : Val}
-    (h : (hndVal n hr hs).1 = (hndVal n' hr' hs').1) : n = n' ∧ hr = hr' ∧ hs = hs' := by
+theorem hndVal_inj {n n' : UInt32} {qs hr hs qs' hr' hs' : Val}
+    (h : (hndVal n qs hr hs).1 = (hndVal n' qs' hr' hs').1) :
+    n = n' ∧ qs = qs' ∧ hr = hr' ∧ hs = hs' := by
   simp only [hndVal, Val.pair, Val.i32, Expr.pair.injEq, Expr.prim.injEq, Prim.lit.injEq,
     IntLit.i32.injEq] at h
-  exact ⟨h.1, Subtype.ext h.2.1, Subtype.ext h.2.2⟩
+  exact ⟨h.1, Subtype.ext h.2.1, Subtype.ext h.2.2.1, Subtype.ext h.2.2.2⟩
 
 theorem opPayload_inj {n n' i i' : UInt32} {v v' : Val} (h : opPayload n i v = opPayload n' i' v') :
     n = n' ∧ i = i' ∧ v = v' := by
@@ -302,7 +303,7 @@ theorem cancelVal_inj {N N' : List UInt32} {e e' : Option Val}
 handler, a finaliser or a `ccatch`, and the function part `hnd H` or `ubind ND` of a handler or
 finaliser whose body is a value. -/
 def CatcherPos (K : Kont) (e : Expr) : Prop :=
-  (∃ n hr hs K', K = .appR (.app (.val (.prim .hnd)) (.val (hndVal n hr hs))) K') ∨
+  (∃ n qs hr hs K', K = .appR (.app (.val (.prim .hnd)) (.val (hndVal n qs hr hs))) K') ∨
   (∃ N D K', K = .appR (.app (.val (.prim .ubind)) (.val (Val.pair N D))) K') ∨
   (∃ K', K = .appR (.val (.prim .ccatch)) K') ∨
   (∃ (w H : Val) (p : Prim), p.Inert ∧ K = .appL .hole w ∧ e = .app (.val (.prim p)) (.val H)) ∨
@@ -316,18 +317,18 @@ theorem head_plug {μ μ' : Heap} {E a' : Expr} (hh : Head μ E μ' a') :
   | hole => exact absurd rfl hK
   | appR f K =>
       cases hh with
-      | hret n hr hs w =>
+      | hret n qs hr hs w =>
           simp only [hndE, Kont.plug, Expr.app.injEq] at hE
           exact absurd (K.isVal_of_plug (hE.2 ▸ w.2)) hnv
       | uthen N D w =>
           simp only [ubindE, Kont.plug, Expr.app.injEq] at hE
           exact absurd (K.isVal_of_plug (hE.2 ▸ w.2)) hnv
-      | hop n i hr hs c v K₀ hc hK₀ =>
+      | hop n i qs hr hs c v K₀ hc hK₀ =>
           simp only [hndE, Kont.plug, Expr.app.injEq] at hE
-          exact .inl ⟨n, hr, hs, K, by rw [hE.1]⟩
-      | hunwind n i hr hs c v K₀ hc hK₀ =>
+          exact .inl ⟨n, qs, hr, hs, K, by rw [hE.1]⟩
+      | hunwind n i qs hr hs c v K₀ hc hK₀ =>
           simp only [hndE, Kont.plug, Expr.app.injEq] at hE
-          exact .inl ⟨n, hr, hs, K, by rw [hE.1]⟩
+          exact .inl ⟨n, qs, hr, hs, K, by rw [hE.1]⟩
       | ufin N D n i v K₀ hn hK₀ =>
           simp only [ubindE, Kont.plug, Expr.app.injEq] at hE
           exact .inr (.inl ⟨N, D, K, by rw [hE.1]⟩)
@@ -352,20 +353,20 @@ theorem head_plug {μ μ' : Heap} {E a' : Expr} (hh : Head μ E μ' a') :
           first | (simp at hE; done) | (injection hE with h1 h2; rw [← h2]; isv)
   | appL K v =>
       cases hh with
-      | hret n hr hs w =>
+      | hret n qs hr hs w =>
           simp only [hndE, Kont.plug, Expr.app.injEq] at hE
           obtain ⟨h1, -⟩ := hE
           obtain rfl := plug_primApp h1.symm hnv
-          exact .inr (.inr (.inr (.inl ⟨v, hndVal n hr hs, .hnd, trivial, rfl, by simpa [Kont.plug] using h1.symm⟩)))
+          exact .inr (.inr (.inr (.inl ⟨v, hndVal n qs hr hs, .hnd, trivial, rfl, by simpa [Kont.plug] using h1.symm⟩)))
       | uthen N D w =>
           simp only [ubindE, Kont.plug, Expr.app.injEq] at hE
           obtain ⟨h1, -⟩ := hE
           obtain rfl := plug_primApp h1.symm hnv
           exact .inr (.inr (.inr (.inl ⟨v, .pair N D, .ubind, trivial, rfl, by simpa [Kont.plug] using h1.symm⟩)))
-      | hop n i hr hs c w K₀ hc hK₀ =>
+      | hop n i qs hr hs c w K₀ hc hK₀ =>
           simp only [hndE, Kont.plug, Expr.app.injEq] at hE
           exact (opE_not_isVal false (opPayload n i w) (K₀.isVal_of_plug (show IsVal (K₀.plug (performE (.val (opPayload n i w)))) from by rw [hE.2]; exact v.2))).elim
-      | hunwind n i hr hs c w K₀ hc hK₀ =>
+      | hunwind n i qs hr hs c w K₀ hc hK₀ =>
           simp only [hndE, Kont.plug, Expr.app.injEq] at hE
           exact (opE_not_isVal true (opPayload n i w) (K₀.isVal_of_plug (show IsVal (K₀.plug (raiseE (.val (opPayload n i w)))) from by rw [hE.2]; exact v.2))).elim
       | ufin N D n i w K₀ hn hK₀ =>
@@ -423,11 +424,11 @@ theorem head_not_opPlug {μ μ' : Heap} {a' : Expr} {K₁ : Kont} {r : Bool} {p 
     · exact head_not_inertApp (p := .perform) trivial (by simpa [opE, performE] using h)
     · exact head_not_inertApp (p := .raise) trivial (by simpa [opE, raiseE] using h)
   rcases head_plug h K₁ (opE_not_isVal r p) rfl h0 with
-    ⟨n₀, hr₀, hs₀, K', rfl⟩ | ⟨N₀, D₀, K', rfl⟩ | ⟨K', rfl⟩ | ⟨w, H, q, hq, rfl, he⟩ |
+    ⟨n₀, qs₀, hr₀, hs₀, K', rfl⟩ | ⟨N₀, D₀, K', rfl⟩ | ⟨K', rfl⟩ | ⟨w, H, q, hq, rfl, he⟩ |
       ⟨Ns₀, err₀, K', rfl⟩
-  · generalize hE : (Kont.appR (.app (.val (.prim .hnd)) (.val (hndVal n₀ hr₀ hs₀))) K').plug (opE r p) = E at h
+  · generalize hE : (Kont.appR (.app (.val (.prim .hnd)) (.val (hndVal n₀ qs₀ hr₀ hs₀))) K').plug (opE r p) = E at h
     cases h with
-    | hop n' i hr hs c v K₀ hc hK₀ =>
+    | hop n' i qs hr hs c v K₀ hc hK₀ =>
         simp only [hndE, Kont.plug, Expr.app.injEq] at hE
         obtain ⟨⟨-, hH⟩, hE⟩ := hE
         obtain ⟨rfl, rfl, rfl⟩ := plug_opE_eq (r' := false) (p' := opPayload n' i v)
@@ -435,7 +436,7 @@ theorem head_not_opPlug {μ μ' : Heap} {a' : Expr} {K₁ : Kont} {r : Bool} {p 
         obtain rfl : n₀ = n' := by simp [hndVal, Val.pair, Val.i32, Expr.val] at hH; exact hH.1
         simp at hn; subst hn
         simp [OpFree, Kont.HasHnd, hndVal, Val.i32, Val.pair] at hK
-    | hunwind n' i hr hs c v K₀ hc hK₀ =>
+    | hunwind n' i qs hr hs c v K₀ hc hK₀ =>
         simp only [hndE, Kont.plug, Expr.app.injEq] at hE
         obtain ⟨⟨-, hH⟩, hE⟩ := hE
         obtain ⟨rfl, rfl, rfl⟩ := plug_opE_eq (r' := true) (p' := opPayload n' i v)
@@ -443,7 +444,7 @@ theorem head_not_opPlug {μ μ' : Heap} {a' : Expr} {K₁ : Kont} {r : Bool} {p 
         obtain rfl : n₀ = n' := by simp [hndVal, Val.pair, Val.i32, Expr.val] at hH; exact hH.1
         simp at hn; subst hn
         simp [OpFree, Kont.Catches, hndVal, Val.i32, Val.pair] at hK
-    | hret n' hr hs w =>
+    | hret n' qs hr hs w =>
         simp only [hndE, Kont.plug, Expr.app.injEq] at hE
         exact opE_not_isVal r p (K'.isVal_of_plug (hE.2 ▸ w.2))
     | _ => simp_all [Kont.plug, hndE, ubindE, ccatchE, cfinE, opE, raiseE, performE]
@@ -518,20 +519,20 @@ theorem head_nested {μ μ' μ₂ μ₂' : Heap} {E E' a a' : Expr} (hh : Head �
     (K : Kont) (hE : E = K.plug a) (ha : Head μ₂ a μ₂' a') : K = .hole := by
   by_contra hK
   rcases head_plug hh K ha.not_isVal hE hK with
-    ⟨n₀, hr₀, hs₀, K', rfl⟩ | ⟨N₀, D₀, K', rfl⟩ | ⟨K', rfl⟩ | ⟨w, H, q, hq, rfl, rfl⟩ |
+    ⟨n₀, qs₀, hr₀, hs₀, K', rfl⟩ | ⟨N₀, D₀, K', rfl⟩ | ⟨K', rfl⟩ | ⟨w, H, q, hq, rfl, rfl⟩ |
       ⟨Ns₀, err₀, K', rfl⟩
   · subst hE
-    generalize hE : (Kont.appR (.app (.val (.prim .hnd)) (.val (hndVal n₀ hr₀ hs₀))) K').plug a = X at hh
+    generalize hE : (Kont.appR (.app (.val (.prim .hnd)) (.val (hndVal n₀ qs₀ hr₀ hs₀))) K').plug a = X at hh
     cases hh with
-    | hop n i hr hs c v K₀ hc hK₀ =>
+    | hop n i qs hr hs c v K₀ hc hK₀ =>
         simp only [hndE, Kont.plug, Expr.app.injEq] at hE
         exact nested_op (r := false) (payloadName_opPayload n i v) (by simpa [OpFree] using hK₀) ha
           (by simpa [opE] using hE.2)
-    | hunwind n i hr hs c v K₀ hc hK₀ =>
+    | hunwind n i qs hr hs c v K₀ hc hK₀ =>
         simp only [hndE, Kont.plug, Expr.app.injEq] at hE
         exact nested_op (r := true) (payloadName_opPayload n i v) (by simpa [OpFree] using hK₀) ha
           (by simpa [opE] using hE.2)
-    | hret n hr hs w =>
+    | hret n qs hr hs w =>
         simp only [hndE, Kont.plug, Expr.app.injEq] at hE
         exact ha.not_isVal (K'.isVal_of_plug (by rw [hE.2]; exact w.2))
     | _ => simp_all [Kont.plug, hndE, ubindE, ccatchE, cfinE]
@@ -621,7 +622,7 @@ theorem head_det_eff {μ μ₁ μ₂ : Heap} {a a₁ a₂ : Expr} (h₁ : Head �
               | (have := (opPayload_inj hp).1; simp_all; done))
           | skip
        all_goals first
-        | (obtain ⟨-, rfl, rfl⟩ := hndVal_inj h1)
+        | (obtain ⟨-, rfl, rfl, rfl⟩ := hndVal_inj h1)
         | (obtain ⟨rfl, rfl⟩ := valPair_inj h1)
         | (obtain ⟨rfl, rfl⟩ := cancelVal_inj (Subtype.ext h1))
         | skip
@@ -673,7 +674,7 @@ theorem plain_comp_right : ∀ (K K' : Kont), (K.comp K').Plain = true → K'.Pl
   | _ => simp_all [Kont.comp, Kont.Plain]
 
 theorem catcherPos_not_plain {K : Kont} {e : Expr} (h : CatcherPos K e) : K.Plain = false := by
-  rcases h with ⟨n, hr, hs, K', rfl⟩ | ⟨N, D, K', rfl⟩ | ⟨K', rfl⟩ | ⟨w, H, q, -, rfl, -⟩ |
+  rcases h with ⟨n, qs, hr, hs, K', rfl⟩ | ⟨N, D, K', rfl⟩ | ⟨K', rfl⟩ | ⟨w, H, q, -, rfl, -⟩ |
     ⟨Ns, err, K', rfl⟩ <;>
     simp [Kont.Plain, Expr.val, Val.prim, hndVal, Val.pair, Val.i32, cancelVal, opPayload]
 

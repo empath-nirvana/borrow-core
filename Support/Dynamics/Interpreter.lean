@@ -175,13 +175,14 @@ or the stop passed outward. -/
 def catchOp (μ : Mem) (f : Expr) (r : Bool) (K : BoLo.Kont) (p : Val) : Step :=
   let pass := Step.op r (.appR f K) p
   match f, p.1 with
-  | .app (.prim .hnd) (.pair (.prim (.lit (.i32 m))) (.pair hr hs)),
+  | .app (.prim .hnd) (.pair (.prim (.lit (.i32 m))) (.pair qs (.pair hr hs))),
       .pair (.prim (.lit (.i32 n))) (.pair (.prim (.lit (.i32 i))) v) =>
     if n = m then
-      match valOf? (.pair (.prim (.lit (.i32 m))) (.pair hr hs)), clauseOf hs i.toNat, valOf? v with
+      match valOf? (.pair (.prim (.lit (.i32 m))) (.pair qs (.pair hr hs))), clauseOf hs i.toNat,
+        valOf? v with
       | some H, some c, some w =>
         if r then .next μ (.app (.val c) (.val w))
-        else .next μ (.app (.val c) (.pair (.val w) (BoLo.kappa n H K)))
+        else .next μ (.app (.val c) (.pair (.val w) (BoLo.kappaAt (BoLo.capTag qs i.toNat) n H K)))
       | _, _, _ => .stuck .badPrimArg
     else pass
   | .app (.prim .ubind) (.pair _ d), .pair (.prim (.lit (.i32 n))) _ =>
@@ -213,7 +214,8 @@ def catchOp (μ : Mem) (f : Expr) (r : Bool) (K : BoLo.Kont) (p : Val) : Step :=
 `perform`/`raise` stopping. -/
 def effApp? (μ : Mem) (f : Expr) (v : Val) : Option Step :=
   match f with
-  | .app (.prim .hnd) (.pair _ (.pair hr _)) => (valOf? hr).map fun h => .next μ (.app (.val h) (.val v))
+  | .app (.prim .hnd) (.pair _ (.pair _ (.pair hr _))) =>
+      (valOf? hr).map fun h => .next μ (.app (.val h) (.val v))
   | .app (.prim .ubind) (.pair nn _) => (valOf? nn).map fun N => .next μ (.app (.val N) (.val v))
   | .app (.prim .cfin) s => (valOf? s).map fun st => .next μ (BoLo.raiseE (.val st))
   | .prim .perform => some (.op false .hole v)

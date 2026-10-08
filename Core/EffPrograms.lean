@@ -104,7 +104,7 @@ def hrR : Expr := .val (.lam (.inj₁ (.var 0)))
 def clsR : Expr := .pair (.val (.lam (.inj₂ (.var 0)))) (.val .unit)
 
 /-- `handle_1 e with to_result`. -/
-def toResult (e : Expr) : Expr := bindE clsR (bindE hrR (hndTerm 1 0 1 e))
+def toResult (e : Expr) : Expr := bindE clsR (bindE hrR (hndTerm 1 [.aff] 0 1 e))
 
 theorem d_hrR {Δ : LifeCtx} {Γ : Ctx VTy} {S : Row} {A : VTy} (hΓ : Ctx.Dead Γ) :
     CDerives Δ Γ hrR (.val (retTy S A (.sum A .unit))) :=
@@ -431,7 +431,7 @@ def clL : Expr :=
 def clsL : Expr := .pair clL (.val .unit)
 
 /-- `with_log e`. -/
-def withLog (e : Expr) : Expr := bindE clsL (bindE hrL (hndTerm 2 0 1 e))
+def withLog (e : Expr) : Expr := bindE clsL (bindE hrL (hndTerm 2 [.aff] 0 1 e))
 
 theorem d_hrL {Δ : LifeCtx} {Γ : Ctx VTy} {S : Row} {A : VTy} (hΓ : Ctx.Dead Γ) :
     CDerives Δ Γ hrL (.val (retTy S A (.tensor A Flag))) :=
@@ -785,7 +785,7 @@ def clsT : Expr := .pair clT (.val .unit)
 
 /-- **Program 5**: `take n producer`. -/
 def takeProg (n : ℕ) : Expr :=
-  bindE clsT (bindE hrT (bindE (hndTerm 3 0 1 producer)
+  bindE clsT (bindE hrT (bindE (hndTerm 3 [.aff] 0 1 producer)
     (bindE (.val (num n)) (.app (.var 1) (.var 0)))))
 
 theorem d_yieldE {Δ : LifeCtx} {Γ : Ctx VTy} (hΓ : Ctx.DeadP Γ) :
@@ -902,7 +902,7 @@ def clS : Expr :=
 def clsS : Expr := .pair clS (.val .unit)
 
 /-- **Program 6.** -/
-def storeCancel : Expr := bindE clsS (bindE hrS (hndTerm 4 0 1 performer))
+def storeCancel : Expr := bindE clsS (bindE hrS (hndTerm 4 [.aff] 0 1 performer))
 
 theorem susp_not_unr : ¬ Row.Unr [suspSig] := by
   rintro ⟨o, ho, h⟩; simp at ho; subst ho; cases h

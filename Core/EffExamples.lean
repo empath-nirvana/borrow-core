@@ -33,7 +33,7 @@ def hr : Expr := .val (.lam (.var 0))
 
 /-- The program. -/
 def prog : Expr :=
-  bindE cls (bindE hr (hndTerm 1 0 1 (performE (opArgE 1 0 (.val .unit)))))
+  bindE cls (bindE hr (hndTerm 1 [.lin] 0 1 (performE (opArgE 1 0 (.val .unit)))))
 
 theorem cl₀_derives : CDerives LifeCtx.empty [] cl₀ (.val (clauseTy [] .unit (.lin, .unit, .unit))) := by
   refine .bangThunkV (fun _ hs => by simp at hs) rfl (.lam ?_)
@@ -65,7 +65,7 @@ def clC : Expr :=
 
 /-- The program with an affine operation whose clause cancels `κ`. -/
 def progC : Expr :=
-  bindE (.pair clC (.val .unit)) (bindE hr (hndTerm 1 0 1 (performE (opArgE 1 0 (.val .unit)))))
+  bindE (.pair clC (.val .unit)) (bindE hr (hndTerm 1 [.aff] 0 1 (performE (opArgE 1 0 (.val .unit)))))
 
 theorem clC_derives : CDerives LifeCtx.empty [] clC (.val (clauseTy [] .unit (.aff, .unit, .unit))) := by
   refine .bangThunkV (fun _ hs => by simp at hs) rfl (.lam ?_)

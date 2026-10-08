@@ -26,7 +26,8 @@ open BoCa.Fig16.LogRel.Core.CancelIntercept in
 /-- `prog₃` (`Core/EffCancel.lean`) with `H₃`'s answer clause `λx. inj₁ x`: `inl ()` when the cancel
 ends cleanly, `inr ()` when the finaliser's error reaches `H₃`. -/
 def cancelKept : BoCa.Expr :=
-  BoCa.BoLo.hndE (BoCa.BoLo.hndVal 3 (BoCa.Val.lam (.inj₁ (.var 0))) (BoCa.Val.pair c₃ BoCa.Val.unit))
+  BoCa.BoLo.hndE (BoCa.BoLo.hndVal 3 (BoCa.Fig16.LogRel.Core.qualsVal [.unr])
+    (BoCa.Val.lam (.inj₁ (.var 0))) (BoCa.Val.pair c₃ BoCa.Val.unit))
     (body 3)
 
 /-! ### Shapes
@@ -50,9 +51,10 @@ def hostE (op : HostOp) (a : Expr) : Expr := .app (.prim (.host op)) a
 def performU (n : UInt32) (v : Expr := .unit) : Expr :=
   .app (.prim .perform) (.pair (i32E n) (.pair (i32E 0) v))
 
-/-- `handle_n e with (hr, (cl, ()))`. -/
+/-- `handle_n e with (hr, (cl, ()))`, with no tags: its operation's continuation is unrestricted
+and owns no cell (spec §25), as a term that resumes it twice needs. -/
 def hndE (n : UInt32) (hr cl : Expr) (e : Expr) : Expr :=
-  .app (.app (.prim .hnd) (.pair (i32E n) (.pair hr (.pair cl .unit)))) e
+  .app (.app (.prim .hnd) (.pair (i32E n) (.pair .unit (.pair hr (.pair cl .unit))))) e
 
 /-- `λx. x`. -/
 def idE : Expr := .lam (.var 0)

@@ -311,12 +311,18 @@ host.
 /-!
 ### — no printed counterpart — handlers, operations and finalisers · `[spec §19]`
 
-`hnd (n, (h_ret, hs)) e` runs `e` under a handler named `n`; `perform (n, (i, v))` and
-`raise (n, (i, v))` are its control and abortive operations; `ubind (N, D) M` is `M` then `N`,
-with the finaliser `D` when `M` unwinds; `ccatch e` catches the reserved name `0`, the cancel of a
-continuation.  A frame *catches* a `raise` of name `n` when it is a handler of `n`, a finaliser,
-a cancel-mode finaliser `cfin`, or (at `n = 0`) a `ccatch`; a `perform` of name `n` is caught
-only by a handler of `n`.
+`hnd (n, (qs, (h_ret, hs))) e` runs `e` under a handler named `n`, whose operations' continuations
+have the qualifiers the tags `qs` record; `perform (n, (i, v))` and `raise (n, (i, v))` are its
+control and abortive operations; `ubind (N, D) M` is `M` then `N`, with the finaliser `D` when `M`
+unwinds; `ccatch e` catches the reserved name `0`, the cancel of a continuation.  A frame
+*catches* a `raise` of name `n` when it is a handler of `n`, a finaliser, a cancel-mode finaliser
+`cfin`, or (at `n = 0`) a `ccatch`; a `perform` of name `n` is caught only by a handler of `n`.
+
+**The capture cell** (`[spec §25]`).  At a linear or affine operation, the continuation `κ` the
+`[op]` step hands the clause owns a fresh cell holding `()`, allocated by the ordinary `alloc`
+before the clause runs.  Using `κ` frees it: resuming, and at an affine operation cancelling.  A
+linear `κ`'s cancel branch has no step.  So a `κ` dropped leaves its cell behind, and a `κ` used
+twice frees its cell twice.
 
 **Cancels.**  A cancel is a `raise` of the reserved name `0` whose payload is a cancel state
 `(N, err)`: the names `N` of the handlers inside the cancelled region, and the first error a
@@ -348,8 +354,16 @@ def raiseE (p : Expr) : Expr := .app (.val (.prim .raise)) p
 /-- The payload `(n, (i, v))` of an operation.  `[spec §19]` -/
 def opPayload (n i : UInt32) (v : Val) : Val := .pair (.i32 n) (.pair (.i32 i) v)
 
-/-- The handler value `(n, (h_ret, hs))`.  `[spec §19]` -/
-def hndVal (n : UInt32) (hr hs : Val) : Val := .pair (.i32 n) (.pair hr hs)
+/-- The handler value `(n, (qs, (h_ret, hs)))`: its name, the tags of its operations'
+qualifiers, its answer clause and its clauses.  `[spec §19, §25]` -/
+def hndVal (n : UInt32) (qs hr hs : Val) : Val := .pair (.i32 n) (.pair qs (.pair hr hs))
+
+/-- The `i`-th tag of a right-nested tuple of tags; `2` (unrestricted) where there is none.
+The tags are `0` (linear), `1` (affine) and `2` (unrestricted).  `[spec §25]` -/
+def capTag : Expr → Nat → UInt32
+  | .pair (.prim (.lit (.i32 t))) _, 0 => t
+  | .pair _ r, i + 1 => capTag r i
+  | _, _ => 2
 
 open Classical in
 /-- The `i`-th clause of a right-nested tuple of clauses.  `[spec §19]` -/
@@ -440,6 +454,47 @@ def kappa (n : UInt32) (H : Val) (K : Kont) : Expr :=
     (.seq (.var 0) (.val (.lam (hndE (H.shift 3 0) ((K.shift 3 0).plug (.var 0))))))
     (.seq (.var 0) (ccatchE (hndE (H.shift 2 0) ((K.shift 2 0).plug (raiseE (.val (cancelVal (n :: K.hndNames) none)))))))))
 
+/-- `free e`.  `[spec §25]` -/
+def freeE (e : Expr) : Expr := .app (.val (.prim .free)) e
+
+/-- A term with no step: `() ()`.  `[spec §25]` -/
+def stuckE : Expr := .app (.val .unit) (.val .unit)
+
+/-- `κ` at a linear (`aff = false`) or affine operation, its cell at `ℓ`: `kappa`'s branches,
+each freeing `ℓ` once the branch is chosen.  A linear `κ`'s cancel branch is at `⊤` and has no
+step.  `[spec §25]` -/
+def kappaC (aff : Bool) (ℓ : Loc) (n : UInt32) (H : Val) (K : Kont) : Expr :=
+  .val (.lam (.case (.var 0)
+    (.seq (.var 0) (.seq (freeE (.val (.loc ℓ)))
+      (.val (.lam (hndE (H.shift 3 0) ((K.shift 3 0).plug (.var 0)))))))
+    (if aff then
+      .seq (.var 0) (.seq (freeE (.val (.loc ℓ)))
+        (ccatchE (hndE (H.shift 2 0) ((K.shift 2 0).plug
+          (raiseE (.val (cancelVal (n :: K.hndNames) none)))))))
+    else stuckE)))
+
+/-- `kappaC`'s body over its cell, the cell the variable `c` (index `0` outside the `λs`). -/
+def kappaCBody (aff : Bool) (n : UInt32) (H : Val) (K : Kont) : Expr :=
+  .lam (.case (.var 0)
+    (.seq (.var 0) (.seq (freeE (.var 2))
+      (.val (.lam (hndE (H.shift 4 0) ((K.shift 4 0).plug (.var 0)))))))
+    (if aff then
+      .seq (.var 0) (.seq (freeE (.var 2))
+        (ccatchE (hndE (H.shift 3 0) ((K.shift 3 0).plug
+          (raiseE (.val (cancelVal (n :: K.hndNames) none)))))))
+    else stuckE))
+
+/-- `κ` at a linear or affine operation, before its cell: `(λc. kappaCBody) (alloc ())`, so the
+cell is allocated by the ordinary `alloc` step, and `κ` is `kappaC` at its location.
+`[spec §25]` -/
+def kappaCell (aff : Bool) (n : UInt32) (H : Val) (K : Kont) : Expr :=
+  .app (.val (.lam (kappaCBody aff n H K))) (.app (.val (.prim .alloc)) (.val .unit))
+
+/-- The continuation the `[op]` step hands the clause, by the operation's tag: `kappaCell` at a
+linear (`0`) or affine (`1`) operation, `kappa` otherwise.  `[spec §19, §25]` -/
+def kappaAt (t n : UInt32) (H : Val) (K : Kont) : Expr :=
+  if t = 0 then kappaCell false n H K else if t = 1 then kappaCell true n H K else kappa n H K
+
 /-- The head reductions of `[TR]` p. 4's `↦` box: `TR3.Head` under other names, the host
     step of `SPEC.md` §8, and the array steps of §9. -/
 inductive Head {ℍ : Host} [HostIs ℍ] : Heap → Expr → Heap → Expr → Prop where
@@ -495,19 +550,21 @@ inductive Head {ℍ : Host} [HostIs ℍ] : Heap → Expr → Heap → Expr → P
   | boundedFix (μ : Heap) (s : Val) (k : UInt32) (a : Val) :
       Head μ (.app (.val (.prim .boundedFix)) (.val (.pair s (.pair (.i32 k) a)))) μ
         (boundedFixNext s k a)
-  /-- `[ret]`: `hnd (n, (h_ret, hs)) v ↦ h_ret v`.  `[spec §19]` -/
-  | hret (μ : Heap) (n : UInt32) (hr hs w : Val) :
-      Head μ (hndE (hndVal n hr hs) (.val w)) μ (.app (.val hr) (.val w))
-  /-- `[op]`: `hnd H K[perform (n, (i, v))] ↦ h_i (v, κ)`, `K` free of `n`.  `[spec §19]` -/
-  | hop (μ : Heap) (n i : UInt32) (hr hs c v : Val) (K : Kont)
+  /-- `[ret]`: `hnd (n, (qs, (h_ret, hs))) v ↦ h_ret v`.  `[spec §19]` -/
+  | hret (μ : Heap) (n : UInt32) (qs hr hs w : Val) :
+      Head μ (hndE (hndVal n qs hr hs) (.val w)) μ (.app (.val hr) (.val w))
+  /-- `[op]`: `hnd H K[perform (n, (i, v))] ↦ h_i (v, κ)`, `K` free of `n`, `κ` by the
+      operation's tag (`kappaAt`).  `[spec §19, §25]` -/
+  | hop (μ : Heap) (n i : UInt32) (qs hr hs c v : Val) (K : Kont)
       (hc : clauseAt hs.1 i.toNat = some c) (hK : K.HasHnd n = false) :
-      Head μ (hndE (hndVal n hr hs) (K.plug (performE (.val (opPayload n i v))))) μ
-        (.app (.val c) (.pair (.val v) (kappa n (hndVal n hr hs) K)))
+      Head μ (hndE (hndVal n qs hr hs) (K.plug (performE (.val (opPayload n i v))))) μ
+        (.app (.val c) (.pair (.val v)
+          (kappaAt (capTag qs.1 i.toNat) n (hndVal n qs hr hs) K)))
   /-- `[unwind]`: `hnd H K[raise (n, (i, v))] ↦ h_i v`, `K` catching nothing of `n`.
       `[spec §19]` -/
-  | hunwind (μ : Heap) (n i : UInt32) (hr hs c v : Val) (K : Kont)
+  | hunwind (μ : Heap) (n i : UInt32) (qs hr hs c v : Val) (K : Kont)
       (hc : clauseAt hs.1 i.toNat = some c) (hK : K.Catches n = false) :
-      Head μ (hndE (hndVal n hr hs) (K.plug (raiseE (.val (opPayload n i v))))) μ
+      Head μ (hndE (hndVal n qs hr hs) (K.plug (raiseE (.val (opPayload n i v))))) μ
         (.app (.val c) (.val v))
   /-- `[then]`: `ubind (N, D) v ↦ N v`.  `[spec §19]` -/
   | uthen (μ : Heap) (N D w : Val) :

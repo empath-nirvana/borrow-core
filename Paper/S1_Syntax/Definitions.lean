@@ -75,7 +75,7 @@ inductive Prim where
   /-- An abortive operation: `raise (n, (i, v))` unwinds to the nearest handler named `n`, each
       finaliser on the way running innermost first.  `[spec §19]` -/
   | raise
-  /-- The handler frame `hnd (n, (h_ret, hs)) e`.  `[spec §19]` -/
+  /-- The handler frame `hnd (n, (qs, (h_ret, hs))) e`.  `[spec §19, §25]` -/
   | hnd
   /-- The finaliser frame `ubind (N, D) M`: `M` then `N`, or `D` when `M` unwinds.  `[spec §19]` -/
   | ubind
