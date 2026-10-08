@@ -320,6 +320,37 @@ def I4Typing (J : TypingJ) (Adm : OpAdm) (c : RowClass) : Prop :=
     J.at LifeCtx.empty [] d (.val (.lolli (.ref impl.S) .unit)) →
     J.closed (ansRun d s₀ body) (CTy.effOf S (.tensor impl.S R))
 
+/-- **I4, the run correspondence** (D1.h2, unary): at a configuration that a typed closed program
+at a data answer reaches under a platform that keeps its protocol, with the control form of a
+typed answering body in the evaluation context `K₀`, the runs from it and from the same
+configuration with the borrow form in `K₀` reach the same values.
+
+The hypotheses are `I4Typing`'s on the two forms, without the two lifetime premises that only the
+borrow form's typing reads, and with three more:
+* **data state, data operations and a data answer of the body**;
+* **`s₀` at a value judgement**, as `I4a` reads it: the control form runs `e` up to its first
+  operation of `n` before it runs `s₀`, and the borrow form runs `s₀` first;
+* **a data answer of the program**: a continuation captured across the form by an outer handler
+  holds the control form's handler frame on one side and the borrow form's frames on the other,
+  so an answer that returned it would differ as a term.
+
+Values are compared, not traces: when the body raises past the borrow form's finaliser frame, that
+finaliser fires, and the control form has no such frame. -/
+def I4Runs (J : TypingJ) (Adm : OpAdm) (c : RowClass) : Prop :=
+  ∀ (impl : AnsImpl) (n : UInt32) (d s₀ e body : Expr) (S : Row) (R : VTy) (x : LifeVar),
+    capPass n impl.co 0 (e.shift 1 0) = some body → impl.S.Data → R.Data →
+    (∀ ab ∈ impl.E, ab.1.Data ∧ ab.2.Data) → ImplTyped J impl →
+    RowSpan Adm LifeCtx.empty x S → c.Admits S → closedAt 0 d = true →
+    J.at LifeCtx.empty [] s₀ (.val impl.S) →
+    J.closed (ctlForm n impl s₀ e) (CTy.effOf S (.tensor impl.S R)) →
+    J.at LifeCtx.empty [] d (.val (.lolli (.ref impl.S) .unit)) →
+    ∀ (P : Platform), P.Respects →
+    ∀ (e₀ : Expr) (S₀ : Row) (A : VTy) (cf : Conf P) (K₀ : Kont), A.Data →
+      J.closed e₀ (CTy.effOf S₀ A) → PSteps (ℍ := ℍ) P (init P e₀) cf →
+      cf.e = K₀.plug (ctlForm n impl s₀ e) →
+      ∀ v : Val, (∃ c', PSteps (ℍ := ℍ) P cf c' ∧ c'.e = .val v) ↔
+        (∃ c', PSteps (ℍ := ℍ) P ⟨cf.μ, K₀.plug (ansRun d s₀ body), cf.s⟩ c' ∧ c'.e = .val v)
+
 /-- **I4.c, equivalence** (binary): the control form and the borrow form are contextually
 equivalent. -/
 def I4c (J : TypingJ) : Prop :=

@@ -116,7 +116,7 @@ the world conjuncts and the device at `coreW` (`status_tier1Core_world`); its `P
   type; checked in Lean before the repair.  An index beyond `UInt32` now encodes to an open stuck
   term (`opJunk`), which no closed configuration holds.
 
-## Piece 5: the answering class (D1.h1, D1.h3, D1.h4)
+## Piece 5: the answering class (D1.h1–h4)
 
 * **Theories** (D1.h3, D1.h4; `Targets/A/Theories.lean`).  Equations are writable in signatures:
   an equation is two straight-line computations over one label's operations and the same
@@ -144,6 +144,12 @@ the world conjuncts and the device at `coreW` (`status_tier1Core_world`); its `P
   (a tail-resumptive clause whose code runs quietly) both the tail-resumptive law and
   algebraicity hold (`tailLaw_quiet`, `algLaw_quiet`; at `J₁`, `I.tailLaw_quiet_J₁`,
   `I.algLaw_quiet_J₁`).
+* **The answering class as `[handle]`, D1.h2: OPEN.**  `I4Typing` (the typing half) and `I4Runs`
+  (the run correspondence, stated here: the control form and the borrow form in one evaluation
+  context of a reached configuration reach the same values) are not derived at `J₁`, and no
+  obstruction is verified (the interaction's rows).  Under D1+B4 the facts the hard test asks of an
+  answering handler (its fold, its correctness as a model, the answering-class laws) are proved at
+  native `hnd` directly, above.
 
 ## System A
 
@@ -199,7 +205,8 @@ the world conjuncts and the device at `coreW` (`status_tier1Core_world`); its `P
 | FIX-RUN-END's checks and witness worlds | PROVED | `Targets/I/RunEnd.lean` (73 results) |
 | I1, I3, I5, P11 at `coreW` (the device); I2 at `coreW` | PROVED AT σ=[]; PROVED AT A RESTRICTION (abortive rows) | `i1_core`, `i3_core`, `i5_core`, `p11_core`; `i2_core_abortive` |
 | `EmbedsNil coreW` | PROVED AT σ=[] | `embedsNil_core` |
-| `AdequateOfLaws`, `FreezeBinder`, `BinderMachine`, `NotVDenNaturalArises`, `I4Typing`, `I4c` | OPEN (stated) | — |
+| `AdequateOfLaws`, `FreezeBinder`, `BinderMachine`, `NotVDenNaturalArises`, `I4c` | OPEN (stated) | — |
+| D1.h2: `I4Typing` (the typing half) and `I4Runs` (the run correspondence, unary: from a configuration a typed program at a data answer reaches, the control form and the borrow form in one evaluation context reach the same values; data state, operations and body answer, `s₀` at a value judgement) | OPEN (stated); not derived at `J₁`, and no obstruction verified. `I4Typing` needs inversions of Core's typing at `bindE`, at `effHandleV` and along `capPass`'s spine, the clause typing read back to `co_j`'s, a typing of an `n`-free subterm at the row without `n` (none found in Core), and `ansCall`'s typing through `withswap`. `I4Typing` carries no judgement of `s₀`, which the borrow form reads under `alloc'` at a value judgement and `I4a` carries; it is not derived at an `s₀` typed only at an effectful row. `I4Runs` needs a simulation of `n`-free code run under the handler frame on one side and the lend's frames on the other, through the continuations outer handlers capture | `Targets/I/Interface.lean` |
 
 ## The Instance
 
