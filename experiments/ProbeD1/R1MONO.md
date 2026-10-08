@@ -1995,7 +1995,8 @@ obligation at a narrower scope:
   Core's, the two least fixed points compared both ways.
 - Proved: `NilSoundRetM` (`nilSoundRetM`) and `Statement0SharedM` (`statement0SharedM`, with
   `FutPartI`).
-- Proved: `ForceRowM` at every placement (`forceRowM`), and `CallbackExtMutM` and `CallbackExtImmM`
+- Proved: `ForceRowM` at every placement (`forceRowM`; since the block, `LEDGER.md` §11.3, stated
+  at `binder0` only), and `CallbackExtMutM` and `CallbackExtImmM`
   at `binder0` and `binder`, at the unwinding forms' `.arr` callback shape.
 - **`Statement0MBesideMono0`: proved** (`statement0MBesideMono0`). Every fact of statement 0
   beside monotonicity holds at `binder0` at `vRLM`.

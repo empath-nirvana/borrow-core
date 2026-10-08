@@ -8,7 +8,8 @@ import ProbeD1.R1Box
   at the body; W's candidate is a predicate at one index, Core's joint over the mode and the list,
   and a data body reads its variable at the mode and list it is read at (`EnvCore`).
 * **The nil slice** (`nilSoundRetM`): `nilSoundRet`'s proof at `vRLM`.
-* **`[force]`** (`forceRowM`): at every placement, the `U` clause at the identity (`relendJ_id` at
+* **`[force]`** (`forceRowM`): at `binder0` (block stacks at `cbpv` and `binder` are not derived;
+  `LEDGER.md` §11.3), the `U` clause at the identity (`relendJ_id` at
   `binder0`, the reflexive re-lend and future otherwise), the views handed back as they were.
 * **The callbacks at `σ·y`** (`callbackExtMutM_own`, `callbackExtImmM_own`): at a placement whose
   `∀` clause makes the own lend, the `U` clause at the identity, the own-lend conjunct at the

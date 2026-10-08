@@ -227,7 +227,7 @@ its rows are built.
 | # | draft condition | what it can reject or leave unproved | probes |
 |---|---|---|---|
 | D1 | (E1): `∀`'s first conjunct reads instances in scope only | `∀E` at an instance not in scope; a top-level polymorphic value is checked by its own pushes alone (`cRLMAllTop`) | P4 (`∀E` at `'a`, in scope); P7, P21, P22; P20; the borrowers' `g [] b` at the callback's own variable (P10, P11, P25–P27, P29, P33, P34); the persistent defs called at a callback's own variable: P46's `body ['z]`, P48's `body ['z] ['w]` and `inner ['z]`, P43's `get ['x]`, P58's `k ['z]`, P60's externs; P56's `read ['y]` |
-| D2 | the own push lends one place (`OwnPushM`). After part (3) the `∀` clause also reads a block of two or more entries at one lifetime, at a callback whose argument fits them (`OwnPushB`, `BlockFits`, `CbArg`); the gate passes at the pair and at an array of `I32` at the empty stack (§11) | a consumer handing its callback several cells at one lifetime; after part (3), at the rows only (§11.5) | S1 (two cells); S2: P46's `withload` at `array i32` (ten cells), P48's two, P43's, P47's, P56's (five), P58's, P57's slice lend; one cell, the positive controls: P5's `withload` of a record, P16's of a variant, P33's of a list cell; no cell: P1, P2, P27's leaf load |
+| D2 | the own push lends one place (`OwnPushM`). After part (3) the `∀` clause also reads a block of two or more entries at one lifetime, at a callback whose argument fits them (`OwnPushB`, `BlockFits`, `CbArg`); the gate passes at the pair and at an array of `I32` at the empty stack (§11) | a consumer handing its callback several cells at one lifetime. After part (3) the block gate passes at the empty stack; its guard lemma holds at every stack under hypotheses discharged only at `[]`; at the arising configuration (`withloadUPairGapReal`, the enclosing lend's stack) the block gate is not attempted; the rows at `[]` stop at (l3) (§11.5) | S1 (two cells); S2: P46's `withload` at `array i32` (ten cells), P48's two, P43's, P47's, P56's (five), P58's, P57's slice lend; one cell, the positive controls: P5's `withload` of a record, P16's of a variant, P33's of a list cell; no cell: P1, P2, P27's leaf load |
 | D3 | `OwnOKI.placeFree`: the callback holds no cell at the lent place, at any depth (a block's `OwnOKB.placeFree` admits `own` cells frozen under an `imm` ancestor) | a callback holding a copy of the view whose witness owns the reborrowed places; at the rows, a callee's resource the frame rule and [TR] 6.150 hand over at the predicate level (§11.5) | S5 |
 | D4 | `PBox`: a persistent thunk holds at every box world | a persistent value Core accepts that misbehaves at a phantom push | P3; the steps of P12, P35–P41; P13's `tab10V`, `dropI32V`; the algebras of P10, P11, P25–P27, P29; P33's stages; the persistent defs of P43–P48; P52's `incCb`; P42's `callBorrowed`; P60's externs. At a first-order persistent value Core derives at a dead context the box holds (G5c) |
 | D5 | the box carries only reserved-name pushes | a persistent context value across the `∀I` row's binder-named push | P33 (`stepV` at `g : countTy`; `cbE` and the borrower capturing `g`), P34, the borrowers at `g : fTy` (P10, P11, P25–P27, P29); P58 (`k`); P42's `fnMut`; the `lend_*` combinators of P43–P45; P60 (`write_byte`) |
@@ -447,15 +447,19 @@ No program is claimed to meet the floor. The suite claims the entries it states,
   `sliceLoad` is not built: P56 serves. After part (3) the gate at an array of `I32` passes at the
   empty stack at every length (`loadGateNilB_arrayI32`); the row at `[]` stops at (l3) (§11.5).
 - **S3, the user's case** (`bangUse`): `body : !(∀'z ⊏ ⊤. Imm 'z I32 ⊗ I32 ⊸ ['z] I32)` holds no
-  resource, is written at the top of the program, and is called inside the load's callback at the
-  callback's own lifetime. It is written in place, as the checker writes a `def` at its use. It
+  resource and is called inside the load's callback at the callback's own lifetime. S3 is the
+  inlined form: `bangBodyE` is written inside `useCb`, at its use, as Core's checker compiles a
+  top-level `def`. The top-level, slot-carried form is P33, NOT BUILT on D5. It
   answers `(7, 8)` (`bangUse_eval`). The producer, the call, both callbacks and the root are PROVED
   (`accBangUse_proved`, GR:1946); the carry side's glue (`unbang body`, `body ['z]`) and the three
   borrow constants are NOT BUILT. The slot-carried form is P33: its producer `stepV` and carry side
   `cbE` wait on the binder-named push at a persistent context (D5).
-- **S4, `reconB′`**: recorded, NOT BUILT; tier 2.
-- **S5, `loadKeepsView`**: not built (optional, D3). Its gate fails `OwnOKI.placeFree` at the
-  needed entry, and stays so after part (3), whose relaxed `placeFree` is for blocks only
+- **S4, `reconB′`**: recorded, NOT BUILT. Its typing is not built; which rule types
+  `withborUE dFlag` under `wait` is open [read], so it is not classified as outside the floor on
+  that basis.
+- **S5, `loadKeepsView`**: not built. It is a borrow-only `cImmBorrow` variant Core accepts, so it
+  is a floor obligation, open on D3. That its gate fails `OwnOKI.placeFree` at the needed entry is
+  [read], unchecked in Lean; if it holds, it is a draft defect. It and stays so after part (3), whose relaxed `placeFree` is for blocks only
   (`GROUND.md` §3.6).
 
 ### 10.6 The corpus programs
@@ -569,7 +573,9 @@ The rows are re-proved in `GROUND.md` §4.5's order, and `lake build ProbeD1` is
   `RelendJ` (`(p.uFut || p.uOwn) = false`: `binder0`, the draft's). At `cbpv` and `binder`, at
   block stacks, it is not derived. The draft uses `binder0` only, every watched row passed, and
   the condition was met at placements that are not the draft's, so the fallback (§4.8: revert the
-  edits to `cRLM`, `SemSM`, `SemIdxM`, `SemSMC`) was not applied. The edit and its re-proofs are
+  edits to `cRLM`, `SemSM`, `SemIdxM`, `SemSMC`) was not applied: the clause was read as scoped to
+  §4.5's watched rows, as its parenthetical says. At stacks with no block nothing proved before is
+  lost; the row at every placement under `StackOK` is not yet a named theorem in the library. The edit and its re-proofs are
   one commit (`06fc3dc`), so the fallback is that commit reverted.
 
 ### 11.4 The statement-change register (`GROUND.md` §4.7)

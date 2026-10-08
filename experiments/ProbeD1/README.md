@@ -445,8 +445,10 @@ The statement changes are listed in `NEXT.md` §9.
     The second is correction (i)'s case, a lifetime-polymorphic `!U` combinator carried into a
     lend's callback. Both wait on `VRLMStackRename` (stated, not derived) and a reduction that
     is not built. No `binder0` clause makes a reserved-name push, so the carrying proved may
-    have no consumer yet. The user's example was not built, so it is unchecked that `withload`
-    of a pair is the only borrow-only program (E1) affects.
+    have no consumer yet. The user's example was not built in that unit, so it is unchecked that `withload`
+    of a pair is the only borrow-only program (E1) affects. The grounding unit built its inlined
+    form (`bangUse`, `LEDGER.md` §10.5 S3); the slot-carried form (P33) is NOT BUILT on the
+    binder-named push (D5).
   - Open:
     - the `∀I` row's binder-named push at a persistent context (`VRLMStackRename` and the
       reduction);
@@ -514,9 +516,9 @@ block's outcome (§11).
   them (`OwnPushB`, `BlockFits`, `CbArg`, `Block.lean`), and `SemSM`, `SemSMC`, `SemIdxM` admit
   stacks holding blocks. The gate is proved, and so are the block gates at the pair and at an
   array of `I32`, at the empty stack, both shapes (`loadGateNilB_pairTy`,
-  `loadGateNilB_arrayI32`), with `FreePlaceExists` (`freePlaceExists`). Every row is re-proved,
-  and every theorem proved before is proved after. The statements whose text changed are listed
-  with their reasons (§11.4). Among them is `forceRowM`, now at `binder0` only: at `cbpv` and
+  `loadGateNilB_arrayI32`), with `FreePlaceExists` (`freePlaceExists`). Every theorem proved before
+  is proved after, except `forceRowM`, now stated at `binder0` only. The statements whose text
+  changed are listed with their reasons (§11.4). `forceRowM` is among them: at `cbpv` and
   `binder` the `U` clause reads `ReLend`'s reflexive re-lend, which a block stack's chain is not. This meets the
   stop rule's general clause at placements that are not the draft's, and the fallback was not
   applied (§11.3).

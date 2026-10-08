@@ -268,7 +268,8 @@ def LoadGateNil (A : VTy) (C' : LifeVar → CTy) : Prop :=
       TabAtS [en] [β] ρ ∧ PlaceViewsL (extS (δ.extend x β) [en] [β]) [en] [β] ls ρ
 
 /-- **Every resource leaves a place free at every depth.** `[TR]`'s `Res` is finite at every depth
-(the stratification, `docs/adjudications.md` D10), so one exists; the lemma is not built here.
+(the stratification, `docs/adjudications.md` D10), so one exists; proved as `freePlaceExists`
+(`GroundBlock.lean`).
 The own push at a payload with no reborrowed cell lends such a place. -/
 def FreePlaceExists : Prop := ∀ ρ : WRes, ∃ l : BoCa.Loc, ∀ ψ, ¬ DeepAt ρ l ψ
 
@@ -1742,10 +1743,10 @@ theorem readArrayGet :
 
 end ArrayGet
 
-/-! ### S4 `reconB′` (`NxRecon.lean`): tier 2, not the floor
+/-! ### S4 `reconB′` (`NxRecon.lean`): recorded, not attempted
 
-No Core derivation exists: `wait` resumes inside the lend, and the unwinding rules do not admit
-it. Its entries are recorded, not attempted. -/
+Its typing is not built; which rule types `withborUE dFlag` under `wait` is open. Its entries
+are recorded, not attempted. -/
 
 section Recon
 open BoCa.Fig16.LogRel.Core.EffPrograms (Flag)

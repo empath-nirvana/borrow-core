@@ -2348,7 +2348,7 @@ In brief:
     correction (i)'s case, a lifetime-polymorphic `!U` combinator carried into a lend's
     callback. Both wait on `VRLMStackRename` (stated, not derived) and a reduction not built.
     No `binder0` clause makes a reserved-name push, so the carrying proved may have no consumer
-    yet. The user's example was not built.
+    yet. The user's example was not built in this unit; the grounding unit built its inlined form (`bangUse`, `LEDGER.md` §10.5 S3), and the slot-carried form (P33) is NOT BUILT on the binder-named push (D5).
   - Open:
     - the `∀I` row's binder-named push at a persistent context (`VRLMStackRename` and the
       reduction);
@@ -2423,8 +2423,9 @@ In brief:
   `SemSM`, `SemSMC` and `SemIdxM` admit block stacks.
   - The gate is proved, and so are the block gates at the pair and at an array of `I32` at the
     empty stack, with `FreePlaceExists` proved (`Res` finite at every depth).
-  - Every row is re-proved; every theorem proved before is proved after, its text changed only
-    where §11.4 lists it with the reason.
+  - Every theorem proved before is proved after, except `forceRowM`, now stated at `binder0` only;
+    a statement's text changed only where §11.4 lists it with the reason. Losing `forceRowM` at
+    block stacks is a cost the block puts on `cbpv` and `binder`, and counts in OQ-8's accounting.
   - The stop rule's general clause was met outside the draft: `forceRowM` at `cbpv` and `binder`,
     whose `U` clause reads the reflexive `ReLend`, which a block stack's chain is not. It is now
     stated at `binder0`. The watched rows all passed, and the fallback was not applied (§11.3).
@@ -2436,9 +2437,11 @@ In brief:
   and the block gives no placement's statement a refutation that passes §11. No failure of type
   (a) or (b) occurred. On (d), the block push is, like the single push, the `∀` clause's push at
   the type it reads, named by its binder [read], so §15.10's report of (d) is unchanged. The
-  fallback to D3 is not triggered. On borrow-only programs the two-cell defect is now open at the
-  rows, not at the guard: the gates pass, and the rows wait on 6.150's interface and 6.64's
-  frame.
+  fallback to D3 is not triggered. On borrow-only programs the block gate passes at the empty
+  stack. Its guard lemma (`PairGuardHoldsB`) holds at every stack under hypotheses discharged only
+  at `[]`. At the arising configuration where the single push fails (the enclosing lend's stack,
+  `withloadUPairGapReal`) the block gate is not attempted. The rows at `[]` wait on 6.150's
+  interface and 6.64's frame.
 
 ---
 

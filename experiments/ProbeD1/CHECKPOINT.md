@@ -118,6 +118,38 @@ This is a plain-language summary of where the D1 tractability probe stands. The 
 > The hygiene review passed: no `sorry` or forbidden keyword, and every axiom set is within
 > `[propext, Classical.choice, Quot.sound]`.
 
+> [!NOTE]
+> **All verifiers passed on the grounding unit (`GROUND.md`, `LEDGER.md`).** Three reviews, each
+> with minor findings only. The whole-module axiom check reports every ProbeD1 declaration within
+> `[propext, Classical.choice, Quot.sound]`, with no `sorry` or forbidden keyword.
+> - Addressed in this commit (prose and docstrings only; `lake build ProbeD1` clean):
+>   - "every theorem proved before is proved after" now names the one exception, `forceRowM`, stated
+>     at `binder0` only (README, DESIGN §15.11, `R1Stmt0.lean`'s module docstring, `R1MONO.md`);
+>   - "the gates pass" / "at the rows only" now say the block gate passes at the empty stack, its
+>     guard lemma holds at every stack under hypotheses discharged only at `[]`, and at the arising
+>     configuration of the single push's failure the block gate is not attempted (DESIGN §15.11,
+>     LEDGER D2);
+>   - S3 is the inlined form of the user's case; the top-level slot-carried form is P33, NOT BUILT
+>     on D5 (LEDGER §10.5; the stale "not built" lines in README and DESIGN §15.10 now say so);
+>   - S4's "no Core derivation exists" is withdrawn: its typing is not built and which rule applies
+>     is open (LEDGER §10.5, `GroundRegress.lean`);
+>   - S5's gate failure is marked [read], and S5 is a floor obligation open on D3, not optional;
+>   - `FreePlaceExists`'s docstring points to `freePlaceExists`.
+> - Still open (minor):
+>   - `forceRowM` at every placement under `StackOK` is not yet a named theorem; a verifier
+>     elaborated it in a scratch file through `force_UM` (axioms within the three);
+>   - `SemIdxM` now reads the weaker `StackOKB`/`StackJBase`, so `pSemIdx`, `pSemIdxN` and the
+>     pair/slice configurations certify a weaker index than before with unchanged text (nothing
+>     false; their proofs still build `StackOK`);
+>   - LEDGER §6's constant rows: Core's rules are at `Ctx.DeadP`, G5c only at `Ctx.Dead`, so a
+>     constant used while a persistent combinator is in scope is not covered;
+>   - `CoreValToW` (G5v) still assumes `StackOK`, so "at every index" holds at block-free indices;
+>   - LEDGER C3's thunk-payload direction has no theorem (mark [read] or prove it);
+>   - missing ledger rows: `PersistentBoxed` against Core's `Persistent` (draft ⊆ Core [read]: it
+>     leaves e.g. a `!` combinator over `!(U C ⊗ 1)` unproved), the block definitions, and Core's
+>     `withborS`/`famTy` as W4's nearest Core object;
+>   - stale citations in LEDGER C5, A2/A3, and A7's unmarked claim.
+
 ## The question
 
 D1 is the design built on rows and ghost end. At a stop, the lend is re-lent at a fresh lifetime
@@ -533,12 +565,38 @@ draft's own definitions, not the borrow calculus:
 
 This unit set the draft against Core, tested it on Core's borrow-only programs, and built the
 block. The details are in `LEDGER.md`.
-- **The ledger.** Every draft definition with a Core counterpart is set against it, and "agrees" is
-  written only where a theorem proves it. The draft is Core at flat types at every stack, inside
-  Core at first-order arguments, and Core at the empty stack at the `NilTy` types. At a
-  first-order judgement, Core's derivation gives the draft's judgement at every index.
+- **The ledger: how far the draft is from Core.** Every draft definition with a Core counterpart
+  is set against it, and "agrees" is written only where a theorem proves it.
+  - **Agree** (proved): at flat types the draft's value relation is Core's at every stack (G1); at
+    the empty stack it is Core's at the `NilTy` types, references and their products, sums and
+    families included (G3), and Core sits inside the draft there at thunks too (G4′). At a
+    first-order judgement Core's derivation gives the draft's judgement at every index (G5). The
+    arising set's worlds are `TW` worlds and every `TW` world arises at `[]` (G8). The draft's
+    run at `F 1` gives Core's adequacy (G10).
+  - **Diverge** (the register, D1–D12): the draft is stricter than Core in what it reads at `∀`
+    (instances in scope only, D1), at the own push (one place, D2; nothing held at the lent place,
+    D3), at persistent values (the box, D4; reserved-name pushes only, D5), at closures captured
+    in a callback (D6), at pushed stacks and returned views (D7), and in W's own `μ`, `[L]` and
+    thunk payloads (D10, D11). For programs this means: each is a place where a program Core
+    accepts may be left unproved by the draft. None is shown to reject an arising borrow-only
+    program except the single push at a pair (D2), which the block now addresses at the gate.
+  - **Not stated**: the floor itself (`DraftFL` at `[]`) and the embedding of BoLo's programs
+    (G12) are stated, not proved.
 - **The suite.** Each borrow-only program's obligation is the floor at every node of its
-  derivation, at every index. No entry FAILS. The roots, the first-order callbacks and the
+  derivation, at every index. No entry FAILS. In short (`LEDGER.md` §10.4):
+
+  | program(s) | result |
+  |---|---|
+  | `cImmBorrow`, `cRecBorrow`, `readFields`, `mutFields` | roots and callbacks PROVED; borrow constants NOT BUILT |
+  | `cBang`, `cInst`, `exProg`, `arrProg`, P53/P54 | every stated entry PROVED |
+  | the `withborF2`/`withborS`/`borrowerM` family, the fold algebras, the counters | roots, algebras, first-order callbacks PROVED; closure-capturing callbacks (D6) and persistent slots (D5) NOT BUILT |
+  | S1 `withload` of a pair (both shapes) | 8 PROVED, the 2 `withload` rows NOT BUILT; block gate PROVED at `[]` |
+  | S2 `withload` of a slice (`array-get.bc`) | 3 PROVED, 2 NOT BUILT; block gate PROVED at `[]` for an `I32` array |
+  | S3 the user's case, inlined (`bangUse`) | producer, call, callbacks, root PROVED; carry glue and 3 constants NOT BUILT; slot-carried form P33 NOT BUILT (D5) |
+  | S4 `reconB′` | NOT BUILT (typing not built) |
+  | S5 `loadKeepsView` | not built; floor obligation open on D3 |
+
+ The roots, the first-order callbacks and the
   constants Core derives at first-order types are proved. Not built: the borrow constants' rows,
   the glue at `U` slots, and a persistent slot across the binder-named push. No program is claimed
   to meet the floor. The LoopBorrow programs (`eachImm`, `zipPushPush`) and `lend-lib-each` do not
@@ -547,7 +605,13 @@ block. The details are in `LEDGER.md`.
 - **The block** is built in place beside the single push. A callback whose argument has two or
   more borrow leaves at its binder is also read at a block of entries at one lifetime, one per
   leaf. The gate is proved, and so are the pair's and the `I32` array's block gates at the empty
-  stack. Every row is re-proved; the changed statements are listed with reasons.
+  stack. Every theorem proved before is proved after except `forceRowM`; the changed statements
+  are listed with reasons (`LEDGER.md` §11.4).
+- **Did the block fix the pair/slice gap?** At the guard, at the empty stack: yes, the block gates
+  pass. The pair and slice entries did not go PROVED, because the `withload` constant's row at `[]`
+  stops at the callback's push, which needs facts [TR] 6.150's rule does not hand its continuation
+  (`LoadGateNilBI`). At the arising configuration where the single push fails, the block gate is
+  not attempted.
 - **One row met the stop rule outside the draft.** `forceRowM` holds now only at `binder0`. At
   `cbpv` and `binder` the `U` clause reads the reflexive re-lend, which a block stack is not. The
   watched rows all passed, and the fallback was not applied (`LEDGER.md` §11.3).
@@ -570,8 +634,10 @@ judged. At `binder0`, the placement with the most proved, the remaining work is:
   - The `withload` rows at the empty stack stop at the callback's push (`LoadGateNilBI`). The gate
     is proved under the reborrow's structure and the callback's freedom at the reborrowed places,
     which [TR] 6.150's rule does not hand its continuation. Next: a 6.150 rule that hands them
-    over, or a gate that does without them. At a callback holding a frozen copy of the view (S5,
-    D3) a single push stays route-blocked.
+    over, or a gate that does without them. The block gate at the enclosing lend's stack (where
+    the single push fails, `withloadUPairGapReal`) is not attempted.
+  - S5 (a callback holding a copy of the view, D3) is a floor obligation, open; that its gate
+    fails `placeFree` is [read].
   - `withbor` (1) at the empty stack stops at the payload in 6.64's frame (`NilPayloadCore`), and
     at a flat payload next at the own push's `placeFree` (`ImmFramePlaceFree`).
   - The rows at every index are not attempted. The slice gate (`SliceUGapReal`) is not built.
@@ -626,7 +692,8 @@ judged. At `binder0`, the placement with the most proved, the remaining work is:
      §8, with this unit's results.
    - The four major findings in `NEXT.md` *Unresolved* were answered in the text and not reviewed
      again.
-   - The grounding unit's four review findings, and what the build found, are in `GROUND.md` §8.
+   - The grounding unit's four design-review findings, and what the build found, are in
+     `GROUND.md` §8. Its verification's open minors are in the note at the top.
    - The guard-gap unit's content review (the warning at the top): three major and two minor
      findings, corrected here and in README, DESIGN §15.10 and `NEXT.md` §9–§10.
    - The statement-0 unit's minor wording findings are still open (the note at the top).
