@@ -2754,3 +2754,54 @@ without an arising configuration (§3.1). In (3), §4.8's rules.
 - **Technique built.** The grounding theorems follow `vRLM_dataE`'s environment induction (G1) and
   `adequacyD`'s proof (G11). G5c reads Core at each instantiated reading. The attempted rows follow
   `withbor1_compatX` and `withload_compatX` step for step.
+
+---
+
+## 8. Unresolved
+
+The design review's four major findings, not edited into the sections above, with what the build
+found. Part (3)'s outcome is `LEDGER.md` §11.
+
+1. **§3.4, §3.7: the enumeration's reach.** Add the six LoopBorrow programs, and classify GhostEnd's
+   derivations, Targets' `d_storeCancelNU` and NonVacuity's, Recursion's `stepV_derives` and
+   SecondClass's. Replace "corpus programs have no Lean derivation" with the checker route.
+   - The build: §3.4 lists P43–P48 and §3.7 the checker route, but none of the six could be taken
+     in. `LoopBorrow.Instances` does not build on this branch: two of its files no longer parse,
+     and for the other four `decide +kernel` at `(mainOf …).isSome` is stuck, though `#eval` gives
+     `true` (`LEDGER.md` §10.2). P57 and P58 are not taken in for the same kernel reason. P56
+     (`array-get.bc`) is taken in by the checker route. GhostEnd's, Targets', NonVacuity's,
+     Recursion's and SecondClass's derivations are classed in `LEDGER.md` §10.7, and the corpus in
+     §10.6.
+2. **§0 fact 4, §3.6 S2 and S3: the primary instances.** Use `eachImm` (P46) and `zipPushPush`
+   (P48) as S2's and S3's primary instances, and correct fact 4.
+   - The build: `eachImm`, `zipPushPush` and `lend-lib-each` are unavailable on this branch (item
+     1). S2 is served by `array-get.bc` (P56, five cells at one lifetime), S3 by `bangUse` (built
+     for the suite) and, slot-carried, by P33.
+3. **§1.1 R5, §1.2 D5: statement 0's status.** Say that statement 0 is not established at
+   `binder0` (it does not yet hold), with the box or without it; that the bundle is refuted at
+   `gd`, which is not shown to arise and is not `binder0`'s status (`not_statement0M_binder0`,
+   `monoUnrestrictedRefuted0`); and that the consumer form waits on `AllIRowM .binder0`.
+   - The build: R5's and D5's text above says this, and part (0) applied it (`README.md`,
+     `DESIGN.md` §15.10, commit `2d6b0ae`). After part (3) the consumer form still waits on
+     `AllIRowM .binder0`, now with the block conjunct among its obligations.
+4. **§4.2, §2.8 D12, §3.7: D12's reach.** It was understated. Either restate it, or make the block's
+   fit read leaves one to one at both callback shapes, so that blocks of two or more arise only at
+   multi-leaf payloads.
+   - The build: §4.2's form does the second, and it is what was built. `BlockFits` assigns one
+     entry per leaf and `CbArg` reads the argument at both shapes, and a single-leaf callback
+     pushes no block (`blockFitsLeafLe`). D12's reach under that form is §4.2's, recorded with its
+     two obligations in `LEDGER.md` §11.7.
+
+**What part (3) left open that this design did not foresee** (`LEDGER.md` §11):
+- **`forceRowM` at `cbpv` and `binder`.** `SemSM` admits block stacks at every placement, and at
+  those placements `force` reads the reflexive re-lend `ReLend αs αs`, whose chain is strict.
+  `forceRowM` is stated at `binder0` only, and at the other two at block stacks it is not derived.
+  This meets §4.8's general stop clause outside the draft, while every watched row passed. The
+  fallback was not applied; it is the revert of commit `06fc3dc`.
+- **The rows at the empty stack.** None closes. `withbor` (1) stops at the payload in 6.64's frame
+  (`NilPayloadCore`, which holds at a flat payload), and at a flat payload next at the own push's
+  `placeFree` at the framed place (`ImmFramePlaceFree`). Both `withload` rows stop at (l3): the
+  block gate reads the reborrow's structure and the callback's freedom at the reborrowed places,
+  which [TR] 6.150's rule does not hand its continuation (`LoadGateNilBI`). §4.6 expected (l3) to
+  be the gate; the gate is proved, but under hypotheses the rule does not supply.
+- **`PairGuardHoldsB`** gained two hypotheses, both `PVLStart`'s, which the gate discharges.

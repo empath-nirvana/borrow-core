@@ -529,21 +529,55 @@ draft's own definitions, not the borrow calculus:
   0 comes to hold only with the box, DESIGN §12.2's reading of (d) applies; (d) is to be reported
   against both of §12.2's readings.
 
+## Grounding, the regression suite and the block (`GROUND.md`)
+
+This unit set the draft against Core, tested it on Core's borrow-only programs, and built the
+block. The details are in `LEDGER.md`.
+- **The ledger.** Every draft definition with a Core counterpart is set against it, and "agrees" is
+  written only where a theorem proves it. The draft is Core at flat types at every stack, inside
+  Core at first-order arguments, and Core at the empty stack at the `NilTy` types. At a
+  first-order judgement, Core's derivation gives the draft's judgement at every index.
+- **The suite.** Each borrow-only program's obligation is the floor at every node of its
+  derivation, at every index. No entry FAILS. The roots, the first-order callbacks and the
+  constants Core derives at first-order types are proved. Not built: the borrow constants' rows,
+  the glue at `U` slots, and a persistent slot across the binder-named push. No program is claimed
+  to meet the floor. The LoopBorrow programs (`eachImm`, `zipPushPush`) and `lend-lib-each` do not
+  build on this branch, so `array-get.bc` serves the slice case and `bangUse`, built for the
+  suite, the user's case.
+- **The block** is built in place beside the single push. A callback whose argument has two or
+  more borrow leaves at its binder is also read at a block of entries at one lifetime, one per
+  leaf. The gate is proved, and so are the pair's and the `I32` array's block gates at the empty
+  stack. Every row is re-proved; the changed statements are listed with reasons.
+- **One row met the stop rule outside the draft.** `forceRowM` holds now only at `binder0`. At
+  `cbpv` and `binder` the `U` clause reads the reflexive re-lend, which a block stack is not. The
+  watched rows all passed, and the fallback was not applied (`LEDGER.md` §11.3).
+- **The rows at the empty stack do not close.** `withbor` (1) stops at the payload in 6.64's frame,
+  and at a flat payload next at the own push's `placeFree`. Both `withload` rows stop at the
+  callback's push: the block gate needs the reborrow's structure, which [TR] 6.150's rule does not
+  hand its continuation. None of these is derived, and no obstruction is verified.
+- **D12**, the block's divergence at a stop, reaches no program of Core or of the suite. It owes
+  two obligations before any program with a stop at a stack holding a block is claimed.
+
 ## What remains for tier 2
 
 Tier 2 needs `Statement0 p` at some placement, then statements 1–4 and both programs. Borrow-only
 programs are a floor. A gap on one is a defect of the draft, and it is fixed before tier 2 is
 judged. At `binder0`, the placement with the most proved, the remaining work is:
-- **The two-cell defect: the block (item 1b).**
-  - `withload` of a pair of references fails the guard at a configuration that arises, on [TR]
-    6.175's route (`withloadUPairGapReal`). At the empty stack after (E1) it fails only at a view
-    not shown to arise (`withloadUPairGapNilE1`).
-  - The slices at two or more elements fail the same way (`SliceGuardFails`). Their gate
-    (`SliceUGapReal`) is not built.
-  - The designed fix is a block entry: one lend of several places at one lifetime (`NEXT.md`
-    §1.6). It changes `StackOK`, so every row at `binder0` is re-proved at the revised relation.
-  - If the block's gate fails, (E1) is revisited at the top level, as a defect of the draft, once
-    the empty-stack view is shown to arise.
+- **The two-cell defect, after the block (`LEDGER.md` §11).**
+  - The block is built and every row re-proved. The gates at the pair and at an array of `I32`
+    pass at the empty stack. A single push still fails at the pair (`withloadUPairGapReal`, every
+    single-push reading).
+  - The `withload` rows at the empty stack stop at the callback's push (`LoadGateNilBI`). The gate
+    is proved under the reborrow's structure and the callback's freedom at the reborrowed places,
+    which [TR] 6.150's rule does not hand its continuation. Next: a 6.150 rule that hands them
+    over, or a gate that does without them. At a callback holding a frozen copy of the view (S5,
+    D3) a single push stays route-blocked.
+  - `withbor` (1) at the empty stack stops at the payload in 6.64's frame (`NilPayloadCore`), and
+    at a flat payload next at the own push's `placeFree` (`ImmFramePlaceFree`).
+  - The rows at every index are not attempted. The slice gate (`SliceUGapReal`) is not built.
+  - D12's two obligations (the share's block re-lend, and what a stop crossing a block owes) are
+    owed before any program with a stop at a stack holding a block is claimed.
+  - `forceRowM` at `cbpv` and `binder` at block stacks: not derived.
 - **The floor for persistent values, the rest of it.**
   - The `∀I` row's own lend at a persistent context, which is correction (i)'s case (a
     lifetime-polymorphic `!U` combinator inside a callback): `VRLMStackRename` (stated, not
@@ -592,6 +626,7 @@ judged. At `binder0`, the placement with the most proved, the remaining work is:
      §8, with this unit's results.
    - The four major findings in `NEXT.md` *Unresolved* were answered in the text and not reviewed
      again.
+   - The grounding unit's four review findings, and what the build found, are in `GROUND.md` §8.
    - The guard-gap unit's content review (the warning at the top): three major and two minor
      findings, corrected here and in README, DESIGN §15.10 and `NEXT.md` §9–§10.
    - The statement-0 unit's minor wording findings are still open (the note at the top).
@@ -604,8 +639,10 @@ judged. At `binder0`, the placement with the most proved, the remaining work is:
    found the two-cell defect at an arising configuration, proved the unroll row and the `∀I` row at
    every index at those contexts, and gave persistent thunks the box. What is left, the floor
    first:
-   - the block (item 1b), which is the designed fix for the two-cell defect at `withload` and the
-     slices;
+   - the block's rows: `withload`'s callback push at [TR] 6.150's interface (`LoadGateNilBI`),
+     `withbor` (1)'s payload in 6.64's frame and the own push there (`NilPayloadCore`,
+     `ImmFramePlaceFree`), then the rows at every index; D12's two obligations before any
+     effectful multi-leaf callback;
    - the floor's rest:
      - `VRLMStackRename`;
      - the reading transports at a `!U` slot;

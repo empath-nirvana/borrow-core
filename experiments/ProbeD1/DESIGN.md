@@ -2399,6 +2399,47 @@ In brief:
     they fail: the two-cell gap on [TR] 6.175's route (item 1b), and the `!` clause at the
     binder-named push (`VRLMStackRename`, stated, not derived).
 
+### 15.11 Grounding, the regression suite and the block, built (`GROUND.md`)
+
+`GROUND.md` is the design; `LEDGER.md` holds the results. The commits are `2d6b0ae` (part (0)),
+`5d8cb63` (part (1)), `a0d89bb` (part (2)), `55cc2b7`, `06fc3dc` and `6eabdf0` (part (3)).
+- **Part (0)**: the guard-gap unit's review corrections in README, §15.10 and `NEXT.md` §9–§10.
+- **Part (1), the ledger** (`LEDGER.md` §1–§9, `GroundLedger.lean`). Each draft definition with a
+  Core counterpart is set against it, a relationship claimed only with its theorem. G1: the draft
+  is Core's at flat types at every stack. G2: inside Core's at first-order arguments. G3: Core's at
+  `NilTy` at the empty stack. G5: at a first-order judgement Core's derivation gives the draft's
+  judgement at every index. G5′: at the empty stack at `NilComp` judgements, constants included.
+  The floor itself (`DraftFL`, `DraftFLNil`) is stated, not claimed. The divergence register
+  (D1–D12) names each draft condition stricter or weaker than Core where it can reach a
+  borrow-only program.
+- **Part (2), the suite** (`LEDGER.md` §10, `GroundRegress.lean`). No entry FAILS. The roots, the
+  first-order callbacks and the constants Core derives at first-order types are PROVED, at every
+  index. The borrow constants' rows, the glue at `U` slots, and a persistent slot across the
+  binder-named push are NOT BUILT, each with its missing lemma. No program is claimed to meet the
+  floor.
+- **Part (3), the block** (`LEDGER.md` §11). It is built in place, beside the single push: the `∀`
+  clause's third conjunct reads a block of two or more entries at one lifetime at a callback whose
+  argument fits them one per leaf, at both callback shapes (`OwnPushB`, `BlockFits`, `CbArg`).
+  `SemSM`, `SemSMC` and `SemIdxM` admit block stacks.
+  - The gate is proved, and so are the block gates at the pair and at an array of `I32` at the
+    empty stack, with `FreePlaceExists` proved (`Res` finite at every depth).
+  - Every row is re-proved; every theorem proved before is proved after, its text changed only
+    where §11.4 lists it with the reason.
+  - The stop rule's general clause was met outside the draft: `forceRowM` at `cbpv` and `binder`,
+    whose `U` clause reads the reflexive `ReLend`, which a block stack's chain is not. It is now
+    stated at `binder0`. The watched rows all passed, and the fallback was not applied (§11.3).
+  - The rows at the empty stack do not close (§11.5). `withbor` (1) stops at the payload in 6.64's
+    frame (`NilPayloadCore`), then at a flat payload at the own push's `placeFree`
+    (`ImmFramePlaceFree`). Both `withload` rows stop at the callback's push at [TR] 6.150's
+    interface (`LoadGateNilBI`). None is derived and no obstruction is verified.
+- **What it decides.** OQ-8 is not decided: `cbpv` and `binder` are still not redone at `vRLM`,
+  and the block gives no placement's statement a refutation that passes §11. No failure of type
+  (a) or (b) occurred. On (d), the block push is, like the single push, the `∀` clause's push at
+  the type it reads, named by its binder [read], so §15.10's report of (d) is unchanged. The
+  fallback to D3 is not triggered. On borrow-only programs the two-cell defect is now open at the
+  rows, not at the guard: the gates pass, and the rows wait on 6.150's interface and 6.64's
+  frame.
+
 ---
 
 ## Unresolved: the reviews' findings, answered and not reviewed again

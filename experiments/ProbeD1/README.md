@@ -492,6 +492,46 @@ The statement changes are listed in `NEXT.md` §9.
       stated). No push was made a future: `binder0` reads none.
   - The fallback is not triggered.
 
+## Grounding, the regression suite and the block (`GROUND.md`): the outcome
+
+`GROUND.md` plans four parts. `LEDGER.md` holds the ledger, the suite's results (§10) and the
+block's outcome (§11).
+- **(0) The doc fixes** the guard-gap unit's content review asked for: made (`2d6b0ae`).
+- **(1) The grounding ledger** (`LEDGER.md` §1–§9, `GroundLedger.lean`). Every draft definition
+  with a Core counterpart is set against it, and "agrees" is written only where a named theorem
+  proves it. The draft relation is Core's at flat types at every stack (G1), inside Core's at
+  first-order arguments (G2), and Core's at `NilTy` at the empty stack (G3). At a first-order
+  judgement Core's derivation gives the draft's judgement at every index (G5), and at the empty
+  stack at `NilComp` judgements, constants included (G5′).
+- **(2) The regression suite** (`LEDGER.md` §10, `GroundRegress.lean`). Each borrow-only
+  program's obligation is `DraftFL` at every node of its derivation, at every index. Each entry is
+  PROVED, NOT BUILT with its missing lemma, or FAILS with an arising configuration. No entry is
+  FAILS. The roots, the first-order callbacks and the constants Core derives at first-order types
+  are PROVED. The borrow constants' rows, the glue at `U` slots and the persistent slot across the
+  binder-named push are NOT BUILT. No program is claimed to meet the floor.
+- **(3) The block** (`LEDGER.md` §11). It is built in place, beside the single push: `cRLM`'s `∀`
+  clause reads a block of two or more entries at one lifetime at a callback whose argument fits
+  them (`OwnPushB`, `BlockFits`, `CbArg`, `Block.lean`), and `SemSM`, `SemSMC`, `SemIdxM` admit
+  stacks holding blocks. The gate is proved, and so are the block gates at the pair and at an
+  array of `I32`, at the empty stack, both shapes (`loadGateNilB_pairTy`,
+  `loadGateNilB_arrayI32`), with `FreePlaceExists` (`freePlaceExists`). Every row is re-proved,
+  and every theorem proved before is proved after. The statements whose text changed are listed
+  with their reasons (§11.4). Among them is `forceRowM`, now at `binder0` only: at `cbpv` and
+  `binder` the `U` clause reads `ReLend`'s reflexive re-lend, which a block stack's chain is not. This meets the
+  stop rule's general clause at placements that are not the draft's, and the fallback was not
+  applied (§11.3).
+- **The rows at the empty stack** (§11.5). `Withbor1NilRowM`, `WithloadNilRowM` and
+  `WithloadUNilRowM` are attempted and none closes. `withbor` (1) stops at the payload in 6.64's
+  frame (`NilPayloadCore`), and at a flat payload next at the own push's `placeFree`
+  (`ImmFramePlaceFree`). Both `withload` rows stop at (l3): the block gate reads the reborrow's
+  structure and the callback's freedom at the reborrowed places, which [TR] 6.150's rule does not
+  hand its continuation (`LoadGateNilBI`). None of these is derived, and no obstruction is
+  verified.
+- **So the pair and slice entries read**: the gates PROVED; K2 and K2′ at the empty stack NOT BUILT
+  at (l3); at every index NOT BUILT.
+- **D12**, the block's divergence at a stop, reaches no program of Core or of the suite. It owes
+  two obligations before a program with a stop at a stack holding a block is claimed (§11.7).
+
 ## Files
 
 | file | contents |
@@ -530,16 +570,24 @@ The statement changes are listed in `NEXT.md` §9.
 | `ProbeD1/R1Thaw.lean` | R1: `relMAgreesJ` (restated, see `NEXT.md` §9), `vRLMMonoAt`, `vRLMRoll`, `relendMValueE`, `ctxRelendsAllM`, `thawInstM`, `thunkFRowM`, `thunkVRowM`; the persistence box's local facts (`pBox_mono`, `pBox_inst`, `pBox_env`). The two `!U` rows and `statement0UFullM` are in `R1Box.lean`; `muAdjNotVRLM` (proved at `5210cf1`) is withdrawn |
 | `ProbeD1/R1Mono.lean` | monotonicity: `monoExtM0`, `monoOwnUFreeMEA`, `monoOwnGUFreeMA` (`StackPayAvoids`), `futPartI`, the instance lemmas, the configuration `gd` (`gdIndex`, `gdRelated`, `gdNotPushed`, `notMonoOwnGM0`, `notMonoGM0`, `notMonoVM0`, `gdNotCore`, `gdNotRecsInsideOwn`, `gdIdxNotArisesOf`, `gdRowRefutation`), the restricted route (`gdCtxNotCore`, `gdRestrictedMet`, `monoOwnGMCUFreeA`) |
 | `ProbeD1/R1Owed.lean` | the three obligations: `outerBelowTopArises`; `RetainedPay` by row (`retainedPayViewRow`, the transports, `retainedPayInstRow`, `payLeavesOfTyEq`, `retainedPayLoadMutBound`, `retainedPayLoadMutRowNJ_of_entry`, `sliceGuardFails`, `loadGuardFails`, `loadGuardFails2`, `rebGuardFails`, `thawLeafP`); `KeepsT` at the share (`relAboveOfTagged`, `extKeepsTInst`, `shareKeepsT_of` and its chain from `LineageUnique`) |
-| `ProbeD1/R1Stmt0.lean` | statement 0 at `vRLM`: `vRLMDataE`, `nilSoundRetM`, `statement0SharedM`, `forceRowM`, the callbacks, `statement0MBesideMono0`, `not_statement0M_binder0`, `statement0MAtConsumers0_iff` |
-| `ProbeD1/R1AllI.lean` | the `∀I` row at `binder0`: `allIRowMNKAt0_of` (one context, three transports), `vRLM_reading_uFree`, the transports at contexts reaching no `U`, `allIRowMNKUFree0`, `allIRowMNKNil0`, `cRLM_step`, `not_subOutsideExtendAny`; the test at `gd` (`gdMtDerivable`, `gdAllIHoldsAtMt`) |
+| `ProbeD1/R1Stmt0.lean` | statement 0 at `vRLM`: `vRLMDataE`, `nilSoundRetM`, `statement0SharedM`, `forceRowM` (at `binder0`), the callbacks, `statement0MBesideMono0`, `not_statement0M_binder0`, `statement0MAtConsumers0_iff` |
+| `ProbeD1/R1AllI.lean` | the `∀I` row at `binder0`: `allIRowMNKAt0_of` (one context, five transports, the block conjunct among them), `vRLM_reading_uFree`, the transports at contexts reaching no `U`, `allIRowMNKUFree0`, `allIRowMNKNil0`, `cRLM_step`, `not_subOutsideExtendAny`; the test at `gd` (`gdMtDerivable`, `gdAllIHoldsAtMt`) |
 | `NEXT.md` | the design of the guard-gap unit: the two-cell gap and its arising check, `VRLMUnroll`, the edits (E1)–(E4) and the `∀I` row's open cases, `MonoHide` and the consumers, the block; §9 the build's outcome; §10 the corrections of 2026-10-08 (the floor, the persistence box, `reconB′`); *Unresolved* four review findings |
 | `ProbeD1/Nx.lean` | that design's definitions and `def … : Prop` statements; no proofs |
 | `ProbeD1/NxGuard.lean` | the guard lemmas: `pairRebCells`, `pairCallbackGuardFails`, `pairCallbackGuardFailsLe`, `sliceCallbackGuardFails`, `pairBoundBelow`, `pairNilOldGuardHolds` |
 | `ProbeD1/NxGuardPair.lean` | the pair configuration in the typed world and `ArisesI` (`pc_arises`, `pairCfg`), the program at `withloadU` and `withload` (`pairWithloadUTyped`, `pairWithloadTyped`), `TW.reb` at an own push's lifetime, link (d) (`pairGuardRejectsU_of`, `sliceGuardRejectsU_of`), the gate `withloadUPairGapReal`, `not_withloadPairGapInst` |
 | `ProbeD1/NxUnroll.lean` | `vRLMSome`, `vRLMRename`, `vRLMSubst`, `vRLMInst`, `vRLMUnroll`, `rollRowM`, `unrollRowM` |
 | `ProbeD1/NxE1.lean` | `muAdjVRLME1`; the gate after the edits (`pairGate_afterEdits`); item 1a′ (`withloadUPairGapNilE1`, `not_withloadPairGapNilInstE1`) |
-| `ProbeD1/NxAllI.lean` | the binder-named index (`subOutsideExtendNamed`, `allIRowMAt0_of`, `ctxExtendNamedMAt_uFree`), `allIRowMUFree0`; `not_readEquivRelend` |
+| `ProbeD1/NxAllI.lean` | the binder-named index, a block at the head (`subOutsideExtendNamedB`, `stackJBase_allNamed`, `allIRowMAt0_of`, `ctxExtendNamedMBAt_uFree`), `allIRowMUFree0`; `not_readEquivRelend` |
 | `ProbeD1/NxHide.lean` | `hideInvisible`, `monoHideGMHandle0_noCross`, `allRHideM0_noCross`, `allRExtM0`, `relendJInter_empty`, `allRThawM0Empty` |
-| `ProbeD1/R1Box.lean` | the persistence box: the index facts along it (`BoxIdx`, `boxIdx_inst`, `boxIdx_steps`, `stackJ_of_boxIdx`), its transitivity (`boxSteps_inst`, `pBox_world`), a persistent context at every box world (`gRLM_boxWorld`), the two `!U` rows at the box (`bangThunkFRowM`, `bangThunkVRowM`, `statement0UFullM`) |
+| `ProbeD1/R1Box.lean` | the persistence box: the index facts along it (`BoxIdx`, `boxIdx_inst`, `boxIdx_steps`, `stackJ_of_boxIdx`), its transitivity (`boxSteps_inst`, `pBox_worldB`), a persistent context at every box world (`gRLM_boxWorld`), the two `!U` rows at the box (`bangThunkFRowM`, `bangThunkVRowM`, `statement0UFullM`) |
 | `ProbeD1/NxFloor.lean` | the floor: `inScope_top_none`, `gdBangJ`, `persistentBoxWorld`, `persistentPushN`, `monoOwnGMAtBoxN`; `VRLMStackRename` (stated) |
 | `ProbeD1/NxRecon.lean` | `reconB′` as the language writes it (`reconB'`, `reconB'_eval`), `reconCb_allI` |
+| `GROUND.md` | the design of the grounding unit: the doc fixes, the ledger, the regression suite, the block; §8 the review findings not edited in, and what part (3) left open |
+| `LEDGER.md` | the grounding ledger (§1–§9), the regression suite's results (§10), the block's outcome (§11) |
+| `ProbeD1/GroundLedger.lean` | the grounding theorems G1–G12 (`vRLMFlat`, `vRLMFOArg`, `coreToSemSM`, `coreToSemSMConst`, `coreToSemSMNil`, `adequacyNilM`, …), the empty-stack unfoldings, and the rows of `fundamentalC` as statements |
+| `ProbeD1/GroundRegress.lean` | the producer lemmas, the gate at `1` (`loadGateNil_unit_of`), the seeds (`pairLoad`, `pairLoadU`, `bangUse`), P56 by the checker route, and the suite's entries |
+| `ProbeD1/Block.lean` | the block's definitions: `blockL`, `StackOKB`, `BlockFits`, `CbArg`, `OwnOKB`, `OwnPushB`, `StackJBase`, `StackJB` |
+| `ProbeD1/R1Block.lean` | the block's shape facts (`stackOKB_of_ok`, `instStackOKB`, `stackJBaseIff`), `StackJBase` along the rows, and the guard at an instantiated block stack (`guardInstB`) |
+| `ProbeD1/R1MonoB.lean` | a context reaching no `U` across a block push (`monoOwnGUFreeMB`) and across a single push onto a stack with blocks (`monoOwnGUFreeMA_len`) |
+| `ProbeD1/GroundBlock.lean` | the block's gate (`blockFitsLeafLe`, `blockFitsReb`, `pvlStartB`, `pairGuardHoldsB`, `loadGateNilB_pairTy`, `loadGateNilB_arrayI32`), `freePlaceExists`, and the rows attempted at the empty stack with their missing steps (`NilPayloadCore`, `ImmFramePlaceFree`, `LoadGateNilBI`) |
