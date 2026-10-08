@@ -4,10 +4,10 @@ import ProbeD1.NxHide
 # ProbeD1 — the floor for persistent values (`NEXT.md` §10)
 
 The corrections of 2026-10-08 set a floor: ordinary closures, higher-order functions and borrows
-without suspension are proved in Core (`fundamentalC` at `σ = []`), the draft relation must reproduce
-that, and a persistent resource-free value must be carried across a lend push by construction. This
-file records what (E1) left, what the relation before (E1) already lacked, and what the persistence
-box (`PBox`, `R1.lean`; `R1Box.lean`) gives.
+without suspension are proved in Core (`fundamentalC` at `σ = []`), the draft relation must
+reproduce that, and a persistent resource-free value must be carried across a lend push by
+construction. This file records what (E1) left, what the relation before (E1) already lacked, and
+what the persistence box (`PBox`, `R1.lean`; `R1Box.lean`) gives.
 
 * **What (E1) leaves at the top level** (`inScope_top_none`): at the empty stack and the empty
   reading no lifetime is in scope, so the `∀` clause's first conjunct reads no instance there. A
@@ -34,9 +34,9 @@ open GhostEnd (LEnt LStack LKind extS vwE vwS vis stratS ReLend TabAtS jdgCty)
 
 /-! ### What (E1) leaves at the top level -/
 
-/-- **At the empty stack and the empty reading no lifetime is in scope**: under (E1) the `∀` clause's
-first conjunct reads no instance at a top-level index, and the own lends are the only readings a
-value made there is checked at. -/
+/-- **At the empty stack and the empty reading no lifetime is in scope**: under (E1) the `∀`
+clause's first conjunct reads no instance at a top-level index, and the own lends are the only
+readings a value made there is checked at. -/
 theorem inScope_top_none (α : Life) : ¬ InScope (extS (⟨[]⟩ : LSub) [] []) α := by
   rintro ⟨p, hp, -⟩
   simp [extS] at hp
@@ -50,15 +50,16 @@ theorem gdTy_free : VMuFree gdTy ∧ VAllFree gdTy ∧ VBoxFree gdTy := by
 /-- **At `vRLJ`, the relation before (E1) and before the box, a persistent resource-free closure is
 related at a stack and not after the own lend's push**: `gdF` at `!gdTy` (`gdRelated`,
 `gdNotPushed`, read at `vRLJ` by `relMAgreesJ`). The push is `gdIndex`'s own lend. `gdTy` has no
-lifetime `∀`, so (E1) is not what fails here. A fact about the draft relation, at a configuration not
-shown to arise, whose closure is no Core value (`gdNotCore`). -/
+lifetime `∀`, so (E1) is not what fails here. A fact about the draft relation, at a configuration
+not shown to arise, whose closure is no Core value (`gdNotCore`). -/
 theorem gdBangJ :
     vRLJ (ℍ := ℍ) .binder0 gdσ gdδ (.bang gdTy) gdαs gdls gdF PMap.empty ∧
       ¬ vRLJ (ℍ := ℍ) .binder0 (gdY :: gdσ) gdδ (.bang gdTy) (lifeN 4 :: gdαs) gdls gdF
         PMap.empty := by
   obtain ⟨h1, h2, h3⟩ := gdTy_free
   have eq : ∀ (σ : LStack) (αs : List Life),
-      vRLM (ℍ := ℍ) .binder0 none σ gdδ gdTy αs gdls gdF = vRLJ (ℍ := ℍ) .binder0 σ gdδ gdTy αs gdls gdF :=
+      vRLM (ℍ := ℍ) .binder0 none σ gdδ gdTy αs gdls gdF =
+        vRLJ (ℍ := ℍ) .binder0 σ gdδ gdTy αs gdls gdF :=
     fun σ αs => relMAgreesJ.1 .binder0 σ gdδ gdTy αs gdls gdF h1 h2 h3
   obtain ⟨hlw, hgs⟩ := pure_sep_iff.mp (gdRelated (ℍ := ℍ))
   constructor
