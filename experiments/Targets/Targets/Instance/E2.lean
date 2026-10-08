@@ -41,6 +41,8 @@ def Row.firsts : Row → Row
   | [] => []
   | o :: S => o :: (Row.firsts S).filter (fun o' => !(o'.n == o.n && o'.i == o.i))
 
+/-- Filtering a row by a test that keeps every entry of the name `n` and index `i` keeps their
+first match. -/
 theorem find_filter_ne {n i : UInt32} {p : OpSig → Bool}
     (hp : ∀ o, o.n = n → o.i = i → p o = true) :
     ∀ S : Row, Row.find (S.filter p) n i = Row.find S n i
@@ -63,6 +65,7 @@ theorem find_filter_ne {n i : UInt32} {p : OpSig → Bool}
           rw [hk]
           exact find_filter_ne hp S
 
+/-- A row's first matches find what the row finds. -/
 theorem find_firsts : ∀ (S : Row) (n i : UInt32), Row.find (Row.firsts S) n i = Row.find S n i
   | [], _, _ => rfl
   | o :: S, n, i => by
@@ -85,6 +88,7 @@ theorem find_firsts : ∀ (S : Row) (n i : UInt32), Row.find (Row.firsts S) n i 
         rw [this]
         exact find_firsts S n i
 
+/-- Each of a row's first matches is what the row finds at its name and index. -/
 theorem mem_firsts : ∀ {S : Row} {o : OpSig}, o ∈ Row.firsts S → Row.find S o.n o.i = some o
   | [], _, h => by simp [Row.firsts] at h
   | o' :: S, o, h => by
@@ -567,6 +571,25 @@ theorem e2d_J₁ (hΞ : Ξ.NU) (hX : NoUnr Ξ) {ly le : (orowAlg Ξ).Lab}
       (𝕁).RunsTo (𝕁).R₀ ((𝕁).prog2d ly le) ((𝕁).pair (𝕁).tt ((𝕁).inr (𝕁).unitV)) [] :=
   ⟨_, derV_sumGen_J₁ hly hX, polyUseOpen_sumGen_J₁ hΞ ly, der_body2d_J₁ hΞ hly hle hqe hne,
     runsTo_prog2d hly hle (Ne.symm hne)⟩
+
+/-- **E2's fourth conjunct at `J₁`**, at every label list `HigherOrderPoly` quantifies over, at an
+effect context with no resuming `unr` operation and no `unr` operation at all. -/
+theorem higherOrderPoly_e2d_J₁ (hΞ : Ξ.NU) (hX : NoUnr Ξ) (ls : List (orowAlg Ξ).Lab)
+    (hls : (𝕁).LabelsAt [(𝕁).sigExn, (𝕁).sigWait, (𝕁).sigYield, (𝕁).sigLog] ls)
+    (le lw ly llog : (orowAlg Ξ).Lab) (hlsEq : ls = [le, lw, ly, llog]) :
+    ∃ As, (𝕁).derV [] ((𝕁).sumGen ly) As ∧
+      (𝕁).PolyUseOpen [As] ly (fun g => (𝕁).call ((𝕁).var 0) g) (𝕁).UnitT (𝕁).bool ∧
+      (𝕁).der [As] ((𝕁).body2d ly le) ((𝕁).F (𝕁).EA.unit (𝕁).ty2d) ∧
+      (𝕁).RunsTo (𝕁).R₀ ((𝕁).prog2d ly le) ((𝕁).pair (𝕁).tt ((𝕁).inr (𝕁).unitV)) [] := by
+  subst hlsEq
+  have h₀ := hls.2.2 0 (Nat.zero_lt_succ _) (Nat.zero_lt_succ _)
+  have h₂ := hls.2.2 2 (by show 2 < 4; decide) (by show 2 < 4; decide)
+  obtain ⟨qe, hle, hqe⟩ := (sig_exn_iff le).mp h₀
+  have hly := (sig_yield_iff hΞ ly).mp h₂
+  have hne : ly.1 ≠ le.1 := fun h => by
+    rw [h, hle] at hly
+    simp at hly
+  exact e2d_J₁ hΞ hX hly hle hqe hne
 
 end E2d
 

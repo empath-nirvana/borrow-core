@@ -27,6 +27,7 @@ import Targets.I.ContUseJ1
 import Targets.I.Theories
 import Targets.Instance.UnaryLaws
 import Targets.B.BumpSim
+import Targets.Instance.E10
 
 /-!
 # Targets — status, by system (RESTRUCTURE §0)
@@ -58,7 +59,8 @@ A) over the open types, with the row `∀` (`Targets/Instance/J1.lean`); our ins
 context reads it with the rows of its handlers and operations tied to the context (decision R,
 below).  Proved of it: A's (S) properties but S4, S5 and S6 at every effect context (S4 at an
 effect context whose resuming operations are unrestricted), B's guarantees (B5 included, piece 6),
-the world's conjuncts and the pins.  `I.Tier1 J₁` follows from what is open: A's (E) properties, S4, S5 and S6 at every
+the world's conjuncts and the pins.  `I.Tier1 J₁` follows from A's (E) properties (which **fail as
+written** at `J₁`: E7, E8, E9, option A; decision E, below), S4, S5 and S6 at every
 admissible effect context, the composite's programs (`Accepts`) and rejections (`Rejects`).  TIER1-PLAN §2's first route (elaborating each derivation into the kernel before
 D5) does not reach tier 1 (`status_elab_route`); `J₁` is built by D5's route instead.
 
@@ -220,6 +222,48 @@ derivation the same way (`status_innerTie`).
   frame, and S4's catch law and S6's capture events do not read its catches.  Whether a handler
   declares all of `Ξ n` is a reading for the user (TIER1-PLAN, round 3, step T2).
 
+## A's (E) properties at `J₁` (decision E, 2026-10-08)
+
+**`EProps` FAILS AS WRITTEN at `J₁`**, at every effect context (`status_eProps_J₁`): E7, E8 and E9
+each ask for a typing of a program whose finaliser raises to its context, and `[then]` types a
+finaliser at `F 1`
+(option A, D3; `not_cancelPolicy_J₁`, `not_unwindPolicy_J₁`, `not_storedK_J₁`).  The others, at
+every admissible effect context:
+
+* **The callbacks** (SPEC §26, Entry 25): Core's `[λ-dead]` types `λx. M : 1 ⊸ F_Σ B` with `x`'s
+  slot dead (`lamDead_compatC`), so a schema's callback `λ_. M`, `M` typed at the empty context, is
+  typed (`d_cbDead`).  Weakening by an unused live slot is not derived.
+* **E1, no colouring: PROVED** (`noColouring_J₁`): `hof` typed once at `U(∀ρ. U(1 ⊸ F_ρ bool) ⊸
+  F_ρ bool)`, its schema, its call, and E1's and E1′'s programs typed and run, E1′'s around the
+  affine `wait`'s capture cell.
+* **E2, higher-order polymorphism: NOT DERIVED.**  Its fourth program (E2d, `sumGen`) is PROVED at
+  every admissible effect context with no `unr` operation (`e2d_J₁`, at every label list
+  `higherOrderPoly_e2d_J₁`; `NoUnr`, met by `ΞA`): typed once, its schema at every `yield ⊙ ε`,
+  its body typed and run.  Its clause's `[let]` holds
+  `x : bool` across the resume, and at a row with an `unr` operation `[let]` asks the continuation's
+  context to be persistent (`!`).  E2a (`twice`), E2b (`compose`) and E2c (`retryP`) are not derived
+  and no obstruction is verified: each holds a function at `!U C` (used twice; held across a `[let]`
+  at a row with a non-linear operation, whose continuation's context must drop; called from a
+  handler's clause, whose context is persistent) and forces it, and Core's `force` reads a slot at
+  `U C` only.
+* **E3, loops: NOT DERIVED**, no obstruction verified.  Our instance writes `unfold f g s` as the
+  stepped codata value `etaN C ⟨f, g⟩ s` (`unfoldE`), whose code applies Core's recursive handle
+  `selfNu` (the self-application `selfV`).  The tied kernel types coiteration only as the constant
+  `unfold_C` (`[unfold]`) and a `&`-computation only in `⟨M, N⟩`'s form (`withI`); no rule concludes
+  a type for `etaN`.  TIER1-PLAN §4 records that `unfold`'s unrolled states need a rule of their own.
+  E3's runs are not attempted.
+* **E4, deep handlers: PROVED** (`deepHandler_J₁`): `deepGen` typed at `tick`'s row; it answers `()`
+  showing two ticks, each yield caught around `κ`'s cell and the handler reinstalled by the resume.
+* **E5, nested handlers in both orders: PROVED** at every admissible effect context with no `unr`
+  `exn` signature (`nestedHandlers_J₁`, `NoUnrExn`, met by `ΞA`).  With `toResult` outside,
+  `withLog`'s clause is typed at `exn`'s row, and its state function's `[let]` holds the logged
+  `bool` across the resume.
+* **E6, no accidental handling: PROVED** (`tunnel_J₁`): `fwrap` typed once, its handler at the row
+  without `exnᵢ`; the callback's raise of `exnₒ` passes it.
+* **E10, the reconciler: NOT DERIVED.**  `timeout` is typed once, with its schema and its call
+  (`derV_timeoutR_J₁`, `polyUseOpen_timeoutR_J₁`, `callsThrough_timeoutR`).  `retry` forces a body
+  at `!U C` (as E2c); the loop is built by `unfold` (as E3).
+
 ## Piece 5: the answering class (D1.h1–h4)
 
 * **Theories** (D1.h3, D1.h4; `Targets/A/Theories.lean`).  Equations are writable in signatures:
@@ -307,7 +351,7 @@ derivation the same way (`status_innerTie`).
 | `Pins tier1Open admClosedOp .abortive`, with `I4a` at the unr-free rules | PROVED AT σ=[] (abortive rows) | `I.pins_tier1Open`, `i4a_tier1NU` |
 | Law 1 at the relation: `ovalW` at `U(∀ρ:k. C)` and `!U(∀ρ:k. C)` is the intersection of the instances; `FLOpen M J` gives `FL M J.read`; `FLOpen` at today's kernel | PROVED (generic); PROVED AT σ=[] | `I.ovalW_allR`, `I.ovalW_bang_allR`, `I.fl_of_flOpen`, `I.flOpen_core_tier1Open` |
 | `J₁`: its reading is Core's kernel; FL at BoLo (B1); B's guarantees; the pins; FL at its open judgements over contexts with no polymorphic slot, a polymorphic type read as the intersection of its instances (Law 1) | PROVED AT σ=[] (abortive rows for the pins); `FLOpen coreB J₁` at contexts with a polymorphic slot NOT PROVED (a value `ovalW` relates there need not be a closed λ-value Core types) | `status_j1`, `status_guarantees_J₁`, `status_pins_J₁`, `I.flOpen_J₁_mono` |
-| tier 1 at `J₁` | **FAILS AS WRITTEN** since the capture cell: S4's catch law fails at `ΞA` (the restatement is the user's); before it, it followed from A's (E) properties, S4, S5, S6, `Accepts` and `Rejects` | `status_handlerSem_cell`, `I.not_tier1_J₁`, `status_tier1_J₁_of` |
+| tier 1 at `J₁` | **FAILS AS WRITTEN** since the capture cell: S4's catch law fails at `ΞA` (the restatement is the user's); before it, it followed from A's (E) properties, S4, S5, S6, `Accepts` and `Rejects`.  The (E) properties also fail as written at `J₁` (E7, E8, E9, option A; decision E) | `status_handlerSem_cell`, `I.not_tier1_J₁`, `status_tier1_J₁_of`, `status_eProps_J₁` |
 | TIER1-PLAN §2's route (elaborate `J₁` into today's unr-free kernel, then `fundamentalC`) | **DOES NOT REACH TIER 1**: closed derivations that elaborate type no A-level handler, so E8 fails; today's kernel types no let-bound function read at two rows | `I.not_tier1_of_elabClosed`, `not_der_letTwo` |
 | FIX-RUN-END's checks and witness worlds | PROVED | `Targets/I/RunEnd.lean` (73 results) |
 | I1, I3, I5, P11 at `coreW` (the device); I2 at `coreW` | PROVED AT σ=[]; PROVED AT A RESTRICTION (abortive rows) | `i1_core`, `i3_core`, `i5_core`, `p11_core`; `i2_core_abortive` |
@@ -342,12 +386,13 @@ derivation the same way (`status_innerTie`).
 | global state: `stateCo` a comodel of the four laws, its handler correct; not vacuous | PROVED (at `J₁`: `I.state_correct_J₁`); at `J₁` and the admissible `Ξst`, the handler whose `put` keeps the old state fails the update–lookup law at a typed program, and its co-operations are no comodel | `state_isComodel`, `state_correct`, `I.state_correct_J₁`, `not_ansCorrect_badState`, `not_isComodel_badState`, `admEff_Ξst` |
 | `LetLaw` at today's kernel | PROVED (typing) | `letLaw_ourInst_tier1Open` |
 | S1 (`RowAlgebra`) at our instance, RESTATED (D6: `SubClosed` at a well-formed target row) | PROVED at today's kernel, at every effect context with no resuming `unr` operation, the admissible ones among them; `EA.Laws`, `EA.Safe` and `RowSig` at every typing system. The premise is needed | `rowAlgebra_ourInst_tier1Open`, `rowAlgebra_noSub_ourInst`, `subClosed_nu_tier1Open`, `rowNU_of_wf`; `subClosed_needs_wf` |
-| A-level handlers at today's kernel | **NOT TYPED** by `tier1Open` (the kernel's fragment without SPEC §24's rules): our instance's `handle` is the run-time frame, clauses as values; the fragment's `[handle]` types only `hndTerm n ir ic e`. So E4, E5, E6, E7 and E8 **FAIL** at `tier1Open` at every effect context.  Core's `[handle]` (§24) types the frame form, and so does `J₁`; no (E) property is checked at `J₁` | `not_der_handleK`, `not_der_handle_tier1Open`, `status_handlers_tier1Open` |
+| A-level handlers at today's kernel | **NOT TYPED** by `tier1Open` (the kernel's fragment without SPEC §24's rules): our instance's `handle` is the run-time frame, clauses as values; the fragment's `[handle]` types only `hndTerm n ir ic e`. So E4, E5, E6, E7 and E8 **FAIL** at `tier1Open` at every effect context.  Core's `[handle]` (§24) types the frame form, and so does `J₁`; the (E) properties at `J₁` are the row below | `not_der_handleK`, `not_der_handle_tier1Open`, `status_handlers_tier1Open` |
 | a let-bound function used at two rows; a persistent function called at an effectful row | **NOT TYPED** by today's kernel: one slot has one type, of which every judgement a variable is read at is a view; a variable used as a function is a `U` slot | `not_der_letTwo`, `der_var_inv`, `der_var_arr_thunk`, `not_der_callBang` |
 | `Safety` (S2), `EffSafe` (S3), `LiveOK` at our instance | PROVED AT σ=[] at today's kernel, every effect context (D1): a run under a runner is the run under the platform it gives (`platformOf`), step for step from a typed program, and B2's runs give A's. The tie is needed | `safety_ourInst_tier1Open`, `effSafe_ourInst_tier1Open`, `liveOK_tier1Open`; `safety_needs_tie`, `liveOK_needs_tie` |
 | `DataDiv` at our instance | PROVED (every row form, effect context and typing system) | `dataDiv_ourInst` |
 | `J₁`, `Pins J₁`, the let law and S1 at `J₁` | BUILT; PROVED AT σ=[] (S1 at every effect context: Core's `[sub]` asks nothing of its rows); our instance reads `J₁` at an effect context with its handlers' and operations' rows tied to it (decision R): Core's tied kernel `CDerivesAt Ξ` at tied row environments, every tied derivation Core's, a tied handler's tags a prefix of the context's | `Inst.J₁`, `status_pins_J₁`, `status_sPropsNoCancel_J₁`, `status_innerTie` |
-| `RowVarKernel J₁`, the schema halves of E1, E2, E6, E10, the (E) programs at `J₁` | NOT PROVED, not attempted.  A schema's callback `λ_. M` puts `M`, typed at the empty context, under a live binder it does not use (Core's `lam`); Core's λ with a dead binder (`thunkF`) is at the pure returner only, and Core has no weakening by an unused live slot (a direct induction meets `bangThunkV`'s `Persistent` premise).  `[allR-I]` at `J₁` reads a value judgement at `U C` as Core typing the λ at `C`, an inversion of Core's thunk rules.  Neither is derived, and no obstruction is verified | — |
+| A's (E) properties at `J₁` (decision E) | `EProps` **FAILS AS WRITTEN** at every effect context: E7, E8, E9 (option A).  PROVED at every admissible effect context: E1, E4, E6; E5 where no `exn` signature is `unr`; E2's fourth program (E2d) where no operation is `unr`; E10's `timeout` (typed once, its schema, its call).  NOT DERIVED, no obstruction verified: E2a–E2c and E10's `retry` (a function at `!U C` forced; Core's `force` reads a `U C` slot); E3 and E10's loop (`unfold`'s stepped value `etaN`, which no rule types).  The callbacks by SPEC §26's `[λ-dead]`; weakening by an unused live slot not derived | `status_eProps_J₁`, `noColouring_J₁`, `deepHandler_J₁`, `tunnel_J₁`, `nestedHandlers_J₁`, `e2d_J₁`, `higherOrderPoly_e2d_J₁`, `derV_timeoutR_J₁`, `polyUseOpen_timeoutR_J₁`, `callsThrough_timeoutR`, `not_eProps_J₁`, `lamDead_compatC` |
+| `RowVarKernel J₁` | NOT PROVED, not attempted.  `[allR-I]` at `J₁` reads a value judgement at `U C` as Core typing the λ at `C`, an inversion of Core's thunk rules; not derived, and no obstruction is verified | — |
 | `monoCallback_tier1Open` (today's kernel fails E1, E2, E6, E10); the positive (E) runs at `tier1Open` | OPEN (inversions and runs to build, RESTRUCTURE §6.1) | — |
 | `RowVarKernel J₂`, `spanRules_J₂` | OPEN (`J₂` not built) | — |
 | A₂ over Core (`Laws`, `Abstraction`), A₃'s lowering classes | stated, out of the first pass | `Targets/Instance/Binary.lean`, `Targets/Instance/ZeroCost.lean` |
@@ -980,6 +1025,23 @@ theorem status_tier1_J₁_of
     (hAc : I.Accepts (ℍ := ℍ) J₁.read .abortive) (hRj : Rejects J₁.read) :
     I.Tier1 (ℍ := ℍ) J₁ :=
   I.tier1_J₁_of hE hS4 hC hU hAc hRj
+
+/-- PROVED (decision E): A's (E) properties at `J₁`.  At every admissible effect context E1, E4 and
+E6, and E5 where no `exn` signature is `unr`; E7, E8 and E9 fail as written at every effect context
+(option A), and so `EProps`, and with it the (E) hypothesis of `status_tier1_J₁_of`. -/
+theorem status_eProps_J₁ {Ξ : EffCtx} (hΞ : AdmEff Ξ) :
+    (ourInst (ℍ := ℍ) orowRF Ξ J₁).NoColouring ∧ (ourInst (ℍ := ℍ) orowRF Ξ J₁).DeepHandler ∧
+      (ourInst (ℍ := ℍ) orowRF Ξ J₁).Tunnel ∧
+      (Inst.NoUnrExn Ξ → (ourInst (ℍ := ℍ) orowRF Ξ J₁).NestedHandlers) ∧
+      ¬ (ourInst (ℍ := ℍ) orowRF Ξ J₁).CancelPolicy ∧
+      ¬ (ourInst (ℍ := ℍ) orowRF Ξ J₁).UnwindPolicy ∧ ¬ (ourInst (ℍ := ℍ) orowRF Ξ J₁).StoredK ∧
+      ¬ (ourInst (ℍ := ℍ) orowRF Ξ J₁).EProps :=
+  ⟨Inst.noColouring_J₁ hΞ, Inst.deepHandler_J₁ hΞ, Inst.tunnel_J₁ hΞ, Inst.nestedHandlers_J₁ hΞ,
+    Inst.not_cancelPolicy_J₁, Inst.not_unwindPolicy_J₁, Inst.not_storedK_J₁, Inst.not_eProps_J₁⟩
+
+/-- PROVED (decision E): the hypotheses of E2d and E5 are met at the admissible `ΞA`. -/
+theorem status_noUnr_ΞA : AdmEff Inst.ΞA ∧ Inst.NoUnr Inst.ΞA ∧ Inst.NoUnrExn Inst.ΞA :=
+  ⟨Inst.admEff_ΞA, Inst.noUnr_ΞA, Inst.noUnrExn_ΞA⟩
 
 /-- PROVED: route 8.4's obligation, at the capture cell.  R1 at a linear or affine operation is not
 in Core's relation at `F bool`: its run leaks `κ`'s cell, and Core's relation at a returner ends every

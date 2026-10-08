@@ -1795,3 +1795,129 @@ the handled body's typing); S4's and now algebraicity's restatements.
 - `OnlyOwnerFrees` and `NoDanglingUse` at `J₁`; `TailLaw`, `EtaHold`.
 - A's (E) properties at `J₁` (their programs typed by `CDerivesAt Ξ` at a rich context); S5's bridges
   at `noFinRaise`; `Accepts` and `Rejects`.
+
+## Round 3, step T3: A's (E) properties at `J₁` (decision E)
+
+**Where tier 1 stands.** Unchanged in kind: `I.Tier1 J₁` **fails as written** through S4's catch
+law at `ΞA` (`I.not_tier1_J₁`). Its (E) conjunct also **fails as written**: `EProps` fails at `J₁`
+at every effect context (`not_eProps_J₁`), through E7, E8 and E9 at option A. Decision E is
+applied: the callbacks `λ_. M` are typed by a new Core rule, SPEC §26's `[λ-dead]`. No BoLo
+definition changed and no borrow guarantee was weakened: `fundamentalC`, `adequacyC` and
+`adequacyD` keep their statements, with `[λ-dead]`'s case (`lamDead_compatC`). Every result is at
+Core σ=[]. On `tier1-effects`, not pushed.
+
+| step | status | commits |
+|---|---|---|
+| the callbacks (SPEC §26, Entry 25) | LANDED. `CDerives.lamDead`: `Δ; x̸, Γ ⊢ M : F_Σ B ⟹ Δ; Γ ⊢ λx. M : 1 ⊸ F_Σ B`, the binder's slot dead; `fundamentalC`'s case `lamDead_compatC` (from `lam_compatC`, the unit binder's slot read dead, `gDenC_unit_dead`); `Weaken`'s case; the tied kernel's copy (`CDerivesAt.lamDead`) and its maps. At our instance a callback is `d_cbDead`. Weakening by an unused live slot is not derived | f2c98d6 |
+| E1, E7, E8, E9 | E1 PROVED at every admissible effect context (`noColouring_J₁`). E7, E8, E9 FAIL AS WRITTEN at every effect context (`not_cancelPolicy_J₁`, `not_unwindPolicy_J₁`, `not_storedK_J₁`), so `EProps` (`not_eProps_J₁`) | 1361bb5 |
+| E4, E5, E6 | E4, E6 PROVED at every admissible effect context (`deepHandler_J₁`, `tunnel_J₁`); E5 PROVED at every admissible one with no `unr` `exn` signature (`nestedHandlers_J₁`) | 8befb94 |
+| E2 | E2d PROVED at every admissible effect context with no `unr` operation, at every label list (`e2d_J₁`, `higherOrderPoly_e2d_J₁`); E2a, E2b, E2c NOT DERIVED | e968072 |
+| E10 | `timeout` typed once, its schema and its call PROVED (`derV_timeoutR_J₁`, `polyUseOpen_timeoutR_J₁`, `callsThrough_timeoutR`); `retry` and the loop NOT DERIVED | 50a93ce |
+| E3 | NOT DERIVED; runs not attempted | — |
+
+**Per property** (`Targets/Instance/E*.lean`; `status_eProps_J₁`).
+- **E1** (`noColouring_J₁`): `hof` typed once at `U(∀ρ:any. U(1 ⊸ F_ρ bool) ⊸ F_ρ bool)`
+  (`derV_hof_J₁`); its schema (`polyUse_hof_J₁`: the callback is `[λ-dead]`'s, `hof`'s closing read
+  at the instance of the use's row, `der_callPoly_J₁`); it calls its callback catching nothing
+  (`callsThrough_hof`); E1's and E1′'s programs typed (`der_threeUses_J₁`, `der_usesS_J₁`) and run
+  to their answers showing nothing (`runsTo_noColour`, `runsTo_noColourS`), E1′ around the affine
+  `wait`'s capture cell, released when the closure the handler answered resumes `κ`.
+- **E2**: `sumGen` typed once at `U(∀ρ:any. U(1 ⊸ F_{yield ⊙ ρ} 1) ⊸ F_ρ bool)`
+  (`derV_sumGen_J₁`), its handler at each instance at the first matches of the row without `yield`
+  (`Row.firsts`, `Row.dropName`); its schema at every `yield ⊙ ε`, `ε` without `yield`
+  (`polyUseOpen_sumGen_J₁`); E2d's body typed (`der_body2d_J₁`) and run to `(tt, inr ())`
+  (`runsTo_prog2d`): three catches around their cells, the second inside the first's clause, the
+  raise passing `sumGen`'s reinstalled handler. `twice`, `compose` and `retryP` are not derived
+  (finding 2).
+- **E3**: not derived (finding 4).
+- **E4** (`deepHandler_J₁`): `deepGen` typed at `tick`'s row (`der_deepGen_J₁`; the clause
+  `tick (); resume k ()` is a `[let]` at a row of one linear operation, `d_tickingCl`); its run
+  answers `()` showing two ticks (`runsTo_deepGen`): each yield is caught around `κ`'s cell, the
+  runner answers the clause's `tick` (`obsFrom_io_iff`), and the resume releases the cell and
+  reinstalls the handler (`obsFrom_dgCatch`).
+- **E5** (`nestedHandlers_J₁`): `withLog`, a state-passing handler of the linear `log`, typed and
+  run outside `toResult` (to `(inr (), tt)`) and inside it (to `inr ()`): the raise passes
+  `withLog`'s reinstalled handler, which the unwind drops with its state (`calm_p1`, `calm_p2`).
+- **E6** (`tunnel_J₁`): `fwrap` typed once, its handler at the row without `exnᵢ` (`d_fwrap`,
+  `Row.dropName`); its schema at every row without `exnᵢ` (`polyUseLacks_fwrap_J₁`); it calls its
+  callback under its own handler only (`callsThrough_fwrap`); `tunnel`'s raise of `exnₒ` passes it
+  and is caught outside (`runsTo_tunnel`).
+- **E7, E8, E9**: fail as written (finding 1).
+- **E10**: `timeout` above; `retry` (finding 2) and the loop (finding 4) are not derived.
+
+**Run tools added** (`Targets/Instance/ERuns.lean`): a platform operation the context does not
+catch, answered by the runner, shows its event and continues from the answer (`obsFrom_io_iff`);
+a program runs to `v` showing `tr` when its complete runs are exactly those (`runsTo_of_obsFrom`).
+
+**Findings.**
+1. **`EProps` fails as written at `J₁`** (machine-checked, at every effect context): E7, E8 and E9
+   each ask for a typing of a program whose finaliser raises to its context (E7b, E8b, E9c), and
+   `[then]` types a finaliser at `F 1` (option A, D3); no derivation types them (`not_der_e7b_J₁`, `not_der_e8b_J₁`,
+   `not_der_e9c_J₁`, by the inversions `derAt_then`, `derAt_raise`, `derAt_hnd`). So the (E)
+   hypothesis of `I.tier1_J₁_of` cannot be met at `J₁`. The restatement (E7–E9's programs, or
+   option A) is the user's.
+2. **Core forces a `U C` slot only.** `twice` (E2a) uses its argument twice, so its slot is at
+   `!U C`; `compose` (E2b) holds `g₂` across `g₁ () to _.`, a `[let]` at the callbacks' row whose
+   continuation's context must drop at a row with a non-linear operation (`Row.Weak → Ctx.Drops`),
+   so `g₂` is at `!U C`; `retryP` (E2c) and `retry` (E10) call a function from a handler's clause,
+   whose context is persistent (`[handle]` at a value form). Each then forces that function, and
+   `CDerivesAt.force` reads a slot at `U C`; no rule forces a `!U C` slot (`bangE` derelicts an
+   expression, and `force` takes a slot). Not derived; no obstruction verified. Options, for the
+   user: a Core rule forcing a `!U C` slot (dereliction at `force`; its `fundamentalC` case from
+   `bangE`'s and `force`'s), or the instance writing `force` of a variable as a derelicting `let`
+   (every program's encoding changes), or restated programs.
+3. **`[let]` at a row with an `unr` operation asks a persistent continuation context, abortive
+   operations included.** `withLog`'s clause (E5, `toResult` outside) and `sumGen`'s clause (E2d)
+   hold a `bool` across the resume; `bool` is not `!`, so their `[let]` needs a row with no `unr`
+   operation. `AdmEff` admits `unr` at abortive operations (`Ξ.NU`), so E5 is proved where no `exn`
+   signature is `unr` (`NoUnrExn`) and E2d where no operation is (`NoUnr`); `ΞA` meets both
+   (`status_noUnr_ΞA`). Whether the two typings fail at an `unr` `exn` label is not derived, and no
+   obstruction is verified. Options, for the user: restrict `unr` at abortive operations (decision
+   63; the standing "on friction, restrict or remove `unr`"), or read `[let]`'s side condition at
+   resuming `unr` operations only, with its `fundamentalC` case.
+4. **`unfold`'s value is not typed.** Our instance writes `unfold f g s` as the stepped codata value
+   `etaN C ⟨f, g⟩ s` (`unfoldE`), whose code applies Core's recursive handle `selfNu` (the
+   self-application `selfV`, `Core/Fix.lean`). The tied kernel types coiteration only as the
+   constant `unfold_C` (`[unfold]`) and a `&`-computation only in `⟨M, N⟩`'s form (`withI`); no rule
+   concludes a type for `etaN`. §4 above records that `unfold`'s unrolled states need a rule of
+   their own. So E3's typings and E10's loop are not derived; no obstruction verified. Options, for
+   the user: a Core rule typing `etaN C g s` at `U(νX. C)` (its semantic case from
+   `unfold_compatX`), or the instance writing `unfold f g s` as `⟨π₁ (unfold_C c s), π₂ (unfold_C c
+   s)⟩` (typed by `withI`, the projections and `[unfold]`; the machine's loop lemmas change). E3's
+   runs (`RunsForever` at a driven loop) need tools not built here.
+
+**Readings for the user to confirm** (pending):
+1. `J₁`'s kernel is Core's whole `CDerives` (`J₁.read`), read at an effect context as the tied
+   kernel `CDerivesAt Ξ` (decision R).
+2. Row polymorphism is the polymorphic let; the general `[handle]` is the handler value form over a
+   persistent context.
+3. D4: the no-interception condition is `FinRow FR`; a use of `κ` is a step applying `κ` to a data
+   value (`UseAt`); "observationally" is `RunsAlike` at data answers and `EffSafeDrive` at a
+   finished drive.
+4. Decision E's "a dead binder at an effectful type" is `[λ-dead]` at `1 ⊸ F_Σ B` (SPEC §26).
+5. An (E) property holds at an effect context when it holds at every label list with the stated
+   signatures (`ForLabels`); at our instance an abortive signature reads `aff` and `unr` alike
+   (`clsOf`), so an `unr` `exn` label is one of E5's labels (finding 3).
+
+**Unspent hypotheses.** `AdmEff`'s `ClosedLife` is read by no (E) result; its `Rich` only gives the
+labels; `Ξ.NU` is read through the closings' instances (`der_callPoly_J₁`) and `yield`'s signature
+(`sig_aff_iff`). `NoUnr` is read only by `derV_sumGen_J₁`, `NoUnrExn` only by E5's second program.
+
+**Unused uniqueness/functionality results.** `det_ourInst`, `AStep1.deterministic`. The runs read
+`rstep_det` (through `obsFrom_mstep_iff`), `rstep_alloc_inv` (`obsFrom_alloc_iff`) and the runner's
+step's uniqueness (`obsFrom_io_iff`, by `perform_cases`, `plug_perform_inj`, `opPayload_inj`).
+
+**Untranscribed in the run-up.** A rule or encoding for forcing a `!U C` slot (finding 2); a typing
+of `unfold`'s value (finding 4); `RunsForever`'s tools at a driven loop; inversions of the tied kernel
+at `force` and at `etaN` that would machine-check findings 2 and 4; `RowVarKernel J₁`.
+
+**Gate.** `lake build Targets` passes with AxiomCheck (every new result's axioms within `[propext,
+Classical.choice, Quot.sound]`, `#print axioms` for each) and Audit. `make gate` passed once
+("ci-local --source: ALL PASSED"), on the library as this step leaves it (SPEC §26's rule).
+
+**Remaining.**
+- The user's calls: E7–E9 (finding 1); forcing a `!U C` slot (finding 2), then E2a–E2c and E10's
+  `retry`; `unr` at abortive operations (finding 3); `unfold`'s value (finding 4), then E3 and E10's
+  loop, with `RunsForever`'s tools.
+- From earlier rounds: S4's restatement; S5's bridges at `noFinRaise`; `OnlyOwnerFrees`,
+  `NoDanglingUse`; `TailLaw`, `EtaHold`; `Accepts`, `Rejects`; `RowVarKernel J₁`.

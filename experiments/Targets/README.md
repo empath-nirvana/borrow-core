@@ -62,6 +62,7 @@ Instance; the Instance imports no B or I; I imports everything.
 | | `Targets/Instance/Runs.lean`, `CellRuns.lean`, `Theories.lean`, `UnaryLaws.lean` | quiet runs (`Quiet`) and complete runs along a chain; runs around a capture cell (`CellQuiet`, `Calm`, `runsAlike_of_calm`); the fold of a straight-line computation under the answering handler and the comodel reduction (`calm_fold`, `ansCorrect_of_comodel`), global state correct and its bad `put` no model; `AlgLaw` fails at `J₁`, its inner rows tied, by a finaliser that holds an affine `κ` (`not_algLaw_J₁`), the round-2 witness outside the tied kernel (`not_rowAt_R5`); the tail law and algebraicity at the answering class |
 | | `Targets/Instance/ContUse.lean` | S6's tooth at the capture cell: R1's run, and a typing system that types R1 fails `ContUseEv` (`not_contUseEv_of_der_R1`, `teeth_JR_ΞA`) |
 | | `Targets/Instance/HandlerCell.lean` | S4's catch law, read at `capture`, fails at `J₁` and `ΞA` since the capture cell (`not_handlerSem_J₁_ΞA`) |
+| | `Targets/Instance/FinRaise.lean`, `ELabels.lean`, `ETyping.lean`, `EHof.lean`, `ERuns.lean`, `E1.lean`, `E1Runs.lean`, `EProps.lean`, `E2.lean`, `E4.lean`, `E5.lean`, `E6.lean`, `E10.lean` | A's (E) properties at `J₁` (decision E): E1, E4 and E6 at every admissible context, E5 and E2's `sumGen` program with no `unr` operation in the way, E10's `timeout`; E7, E8, E9 fail as written (option A), so `EProps` does (`not_eProps_J₁`) |
 | **I** | `Targets/I/World.lean` | `SemWorld extends B.BWorld` (`held`, `Stop`, `share`), `coreW`, the effectful wp |
 | | `Targets/I/Interface.lean`, `Device.lean`, `Pins.lean`, `Routes.lean` | I1–I5 at the world; `Bounds`, `Interface`, the proof device `Device`, `EmbedsNil`; R-CLOSEDOP; `effSafeOfFL`, `contractsW_of_meets` |
 | | `Targets/I/Programs.lean` | the composite programs: `at02`, `at04`, `at12`, `at17`, `genSelf`, and the rejected AT05–AT08, AT13; `AcceptedAt`, `Tier2Programs`, `Rejects`, `RejectsAT07` |
@@ -92,7 +93,8 @@ def I.Combined (RF : RowForm) (J : OurTyping RF) (M : SemWorld) (Adm : OpAdm) (c
 with SPEC §24's rules over the open types, with the row `∀` (decision D5); our instance reads it at
 an effect context with its handlers' and operations' rows tied to the context (decision R). Before
 the cell, `Tier1 J₁` followed from A's (E) properties, S4, S5 and S6, `Accepts` and `Rejects`
-(`tier1_J₁_of`).
+(`tier1_J₁_of`); the (E) properties fail as written at `J₁` (E7, E8, E9 at option A;
+`not_eProps_J₁`).
 
 **The restricted tier-1 reduction** `Tier1Core` (today's kernel `tier1Open`, Core's world)
 follows from S5 at today's kernel (`tier1Core_of`). Proved of it: A's properties but S5 at every
@@ -158,7 +160,8 @@ From `Targets/Status.lean`. *PROVED AT σ=[]* is Core's relation (`coreB`, `core
 | our rows meet Def. 3.5 and Def. 5.1 | PROVED AT A RESTRICTION (`orowRF`) | `rowAlgSafe_orowRF`, `rowLink_orowRF` |
 | no typed term intercepts a cancel; the two-frame unwind | PROVED AT σ=[]; an instance | `noInterception_tier1`; `two_frame` |
 | the semantic bridges (`AppLaw`, `Congr`, `OpStuck`, `LoopLaws`, `DriveLaws`, `LetLaw`, `RowAlgebra`, `Safety`, `EffSafe`, `HandlerSem`, `Cancellation`, `ContUseEv`) | OPEN | — |
-| `monoCallback_tier1Open`, R1–R4 at our machine, the positive (E) runs | OPEN | — |
+| `monoCallback_tier1Open`, R1–R4 at our machine | OPEN | — |
+| A's (E) properties at `J₁` (decision E) | `EProps` FAILS AS WRITTEN (E7, E8, E9; option A). PROVED: E1, E4, E6 at every admissible context; E5 where no `exn` signature is `unr`; E2d where no operation is `unr`; E10's `timeout`. NOT DERIVED, no obstruction verified: E2a–E2c and E10's `retry` (a function at `!U C` forced), E3 and E10's loop (`unfold`'s stepped value `etaN`) | `status_eProps_J₁`, `e2d_J₁`, `derV_timeoutR_J₁`, `polyUseOpen_timeoutR_J₁` |
 
 ### The step-index audit
 
