@@ -154,10 +154,10 @@ theorem d_holdCancelCl (h1 : Ξ 1 = Eab) {Δ : LifeCtx} {Γ : Ctx VTy} (hΓ : Ct
   refine .bangThunkV (dead_noLive hΓ) rfl (.lam ?_)
   refine .tensorE (.left (deadSplit hΓ)) (.var (.here hΓ.toP)) ?_
   refine .effThen (A := .unit) (.right (.left (.dead (deadSplit hΓ)))) ?_ ?_
-    (fun h => absurd h (by simp [Row.Unr, Row.ofEff])) ?_ ?_ (d_holdD h1 hΓ)
+    (fun h => absurd h (by simp [Row.UnrD, Row.ofEff, capB])) ?_ ?_ (d_holdD h1 hΓ)
   · intro o ho; simp [Row.ofEff] at ho; subst ho; decide
   · simp [Row.Uniq, Row.ofEff]
-  · exact .effRaise (o := ⟨1, 0, .aff, .unit, .zero⟩)
+  · exact .effRaise (o := ⟨1, 0, .aff, .unit, .zero, .ret .unit⟩)
       (rowAt_ofEff_append h1 (by decide) (by simp) (rowAt_nil Ξ)) rfl rfl .unit
       (.unitI (.cons (.drop rfl (.cons hΓ.toP))))
   · exact .app (.right (.left (.dead (.dead (deadSplit hΓ)))))
@@ -174,7 +174,7 @@ theorem d_algL2 (h1 : Ξ 1 = Eab) (h2 : Ξ 2 = Ew) {Δ : LifeCtx} {Γ : Ctx VTy}
   refine .effLet (A := .unit) (deadSplit hΓ) (fun _ => Ctx.Dead.drops hΓ) (fun _ => dead_noLive hΓ)
     ?_ ?_
   · refine .effLet (A := .unit) (deadSplit hΓ) (fun _ => Ctx.Dead.drops hΓ)
-      (fun _ => dead_noLive hΓ) (.effPerform (o := ⟨2, 0, .aff, .unit, .unit⟩) (rowAt_R2 h1 h2)
+      (fun _ => dead_noLive hΓ) (.effPerform (o := ⟨2, 0, .aff, .unit, .unit, .ret .unit⟩) (rowAt_R2 h1 h2)
         rfl rfl (.unitI hΓ.toP)) ?_
     exact .effSub (S := []) (rowLe_nil _) (.ret (.var (.here hΓ.toP)))
   · exact .effSub (S := []) (rowLe_nil _) (.ret (.unitI (.drop rfl hΓ.toP)))
@@ -575,11 +575,11 @@ theorem d_holdRaiseCl {Δ : LifeCtx} {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
     CDerives Δ Γ holdRaiseCl (.val (clauseTy Sx .unit (.unr, .unit, .unit))) := by
   refine .bangThunkV (dead_noLive hΓ) rfl (.lam ?_)
   refine .tensorE (.left (deadSplit hΓ)) (.var (.here hΓ.toP)) ?_
-  refine .effThen (A := .unit) (.right (.left (.dead (deadSplit hΓ)))) ?_ ?_
-    (fun h => absurd h (by simp [Row.Unr, Row.ofEff])) ?_ ?_ ?_
+  refine CDerives.effThenA (A := .unit) (.right (.left (.dead (deadSplit hΓ)))) ?_ ?_
+    (fun h => absurd h (by simp [Row.UnrD, Row.ofEff, capB])) ?_ ?_ ?_
   · intro o ho; simp [Row.ofEff] at ho; subst ho; decide
   · simp [Row.Uniq, Row.ofEff]
-  · exact .effRaise (o := ⟨1, 0, .aff, .unit, .zero⟩) rfl rfl .unit
+  · exact .effRaise (o := ⟨1, 0, .aff, .unit, .zero, .ret .unit⟩) rfl rfl .unit
       (.unitI (.cons (.drop rfl (.cons hΓ.toP))))
   · exact .effSub (S := []) (rowLe_nil _)
       (.ret (.unitI (.drop rfl (.drop rfl (.cons (.cons hΓ.toP))))))
@@ -592,7 +592,7 @@ theorem d_algL5 {Δ : LifeCtx} {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
   refine .effLet (A := .unit) (deadSplit hΓ) (fun _ => Ctx.Dead.drops hΓ) (fun _ => dead_noLive hΓ)
     ?_ ?_
   · refine .effLet (A := .unit) (deadSplit hΓ) (fun _ => Ctx.Dead.drops hΓ)
-      (fun _ => dead_noLive hΓ) (.effPerform (o := ⟨5, 0, .unr, .unit, .unit⟩) rfl rfl
+      (fun _ => dead_noLive hΓ) (.effPerform (o := ⟨5, 0, .unr, .unit, .unit, .ret .unit⟩) rfl rfl
         (.unitI hΓ.toP)) ?_
     exact .effSub (S := []) (rowLe_nil _) (.ret (.var (.here hΓ.toP)))
   · exact .effSub (S := []) (rowLe_nil _) (.ret (.unitI (.drop rfl hΓ.toP)))
@@ -622,7 +622,7 @@ theorem d_algFireProg : CDerives LifeCtx.empty [] algFireProg (.comp (.ret .unit
 `tick : 1 ↠ 1` linear. -/
 theorem not_rowAt_R5 : ¬ RowAt ΞA R5 := by
   intro h
-  obtain ⟨-, -, hg⟩ := h 5 0 ⟨5, 0, .unr, .unit, .unit⟩ rfl
+  obtain ⟨-, -, hg⟩ := h 5 0 ⟨5, 0, .unr, .unit, .unit, .ret .unit⟩ rfl
   simp [ΞA] at hg
 
 /-- **A tied derivation of `withH n q cl e`**, `e` closed: the handler's tag `[q]` is a prefix of

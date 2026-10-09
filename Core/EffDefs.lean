@@ -164,12 +164,16 @@ theorem dead_plain : ∀ K : Kont, (∀ n, K.HasHnd n = false) → K.Catches 0 =
 /-! ### Operation tables  `[spec §19]` -/
 
 /-- An operation's entry: its continuation's qualifier, whether it is abortive (answer `0` at a
-qualifier with weakening), and the relations of its argument and answer types. -/
+qualifier with weakening), the relations of its argument and answer types, and its cancel
+obligation: `none` at the cancel row `⊤`, otherwise the run a cancel of a continuation captured
+at the operation owes from the dead region's start (`cancelObl` of the cancel row's table).
+`[spec §19, §27]` -/
 structure OpEnt where
   q : Qual
   abort : Bool
   PA : List SRec → Val → WProp
   PB : List SRec → Val → WProp
+  fin : Option (List SRec → Expr → WProp)
 
 /-- An operation table: the entry of the operation `i` of the name `n`, if the row has it. -/
 abbrev OpTab := UInt32 → UInt32 → Option OpEnt
@@ -190,42 +194,59 @@ def errOk (T : OpTab) (ls : List SRec) : Option Val → WProp
         ⌜E = opPayload m j w ∧ T m j = some en ∧ en.abort = true⌝ ⋆
           fun ρ => en.PA ls w ρ ∧ NoOwn ρ
 
-/-- The table of a cancel run whose kept errors are `T`'s: it stops only at the cancel itself,
-having unwound every frame that catches it, with an admissible error and nothing owned left
-behind. -/
-def cancelTab (T : OpTab) : Table := fun ls t _ =>
-  ex fun (K : Kont) => ex fun (err : Option Val) =>
-    ⌜t = K.plug (raiseE (.val (cancelVal err))) ∧ K.Catches 0 = false⌝ ⋆
-      (errOk T ls err ⋆ fun ρ => NoOwn ρ)
-
-/-- What cancelling the continuation `K` of an operation owes: the dead region `K†` run to the
-cancel's end, keeping no error (a finaliser lets no raise escape it, SPEC §24).
-`[spec §19]` -/
-def cancelOwed (ls : List SRec) (K : Kont) : WProp :=
-  ewpTS ls (K.dead.plug (raiseE (.val (cancelVal none)))) (cancelTab OpTab.empty)
-    (fun _ _ _ => False)
+/-- What cancelling the continuation `K` of an operation whose entry is `en` owes: the dead region
+`K†` run from the cancel's start at the entry's cancel obligation; nothing at the cancel row `⊤`
+(`en.fin = none`), whose continuation cannot be cancelled.  `[spec §19, §27]` -/
+def cancelOK (en : OpEnt) (ls : List SRec) (K : Kont) : WProp := fun ρ =>
+  ∀ P, en.fin = some P → P ls (K.dead.plug (raiseE (.val (cancelVal none)))) ρ
 
 /-- The continuation's share at a stopped operation: `∅` at `unr`; at every extension of the
-list, resumed at every answer in `PB`; and, with weakening, cancelled.  `[spec §19]` -/
+list, resumed at every answer in `PB`; and, with weakening, cancelled (`cancelOK`).
+`[spec §19, §27]` -/
 def contShare (en : OpEnt) (ls : List SRec) (K : Kont) (Φ : List SRec → Expr → WProp) : WProp :=
   fun ρ =>
     (en.q = .unr → ρ = PMap.empty) ∧
     ∀ ls', Ext ls ls' ρ →
       (∀ w : Val, (en.PB ls' w ─⋆ Φ ls' (K.plug (.val w))) ρ) ∧
-      (en.q ≠ .lin → cancelOwed ls' K ρ)
+      (en.q ≠ .lin → cancelOK en ls' K ρ)
+
+/-- A stop at a non-abortive operation of `T`, `perform (n, (i, v))` under a context free of `n`:
+the argument, and the continuation's share.  `[spec §19]` -/
+def performStop (T : OpTab) : Table := fun ls t Φ =>
+  ex fun (K : Kont) => ex fun (n : UInt32) => ex fun (i : UInt32) => ex fun (v : Val) =>
+    ex fun (en : OpEnt) =>
+      ⌜t = K.plug (performE (.val (opPayload n i v))) ∧ K.HasHnd n = false ∧
+        T n i = some en ∧ en.abort = false⌝ ⋆ (en.PA ls v ⋆ contShare en ls K Φ)
+
+/-- The table of a cancel run whose kept errors and performed operations are `T`'s: the cancel's
+end, having unwound every frame that catches it, with an admissible error and nothing owned left
+behind; or an operation of `T` a running finaliser performs, which passes the dead region to a
+live handler, owing its continuation's share.  `[spec §19, §27]` -/
+def cancelTab (T : OpTab) : Table := fun ls t Φ =>
+  BoLo.or
+    (ex fun (K : Kont) => ex fun (err : Option Val) =>
+      ⌜t = K.plug (raiseE (.val (cancelVal err))) ∧ K.Catches 0 = false⌝ ⋆
+        (errOk T ls err ⋆ fun ρ => NoOwn ρ))
+    (performStop T ls t Φ)
+
+/-- The cancel obligation of a cancel row's table `T`: the cancel run at `cancelTab T`.
+`[spec §27]` -/
+def cancelObl (T : OpTab) : List SRec → Expr → WProp :=
+  fun ls e => ewpTS ls e (cancelTab T) (fun _ _ _ => False)
+
+/-- The cancel run of the continuation `K` at the empty cancel row: the dead region `K†` run to
+the cancel's end, keeping no error and performing nothing.  `[spec §19]` -/
+def cancelOwed (ls : List SRec) (K : Kont) : WProp :=
+  cancelObl OpTab.empty ls (K.dead.plug (raiseE (.val (cancelVal none))))
 
 /-- The protocol table of an operation table.  `[spec §19]`
 * a non-abortive `perform (n, (i, v))` under a context free of `n`: the argument, and the
-  continuation's share;
+  continuation's share (`performStop`);
 * an abortive `raise (n, (i, v))` under a context catching nothing of `n`: the argument, which
   holds nothing owned (an abandoned error is dropped), and the abandoned continuation, which holds
   nothing owned either. -/
 def opTable (T : OpTab) : Table := fun ls t Φ =>
-  BoLo.or
-    (ex fun (K : Kont) => ex fun (n : UInt32) => ex fun (i : UInt32) => ex fun (v : Val) =>
-      ex fun (en : OpEnt) =>
-        ⌜t = K.plug (performE (.val (opPayload n i v))) ∧ K.HasHnd n = false ∧
-          T n i = some en ∧ en.abort = false⌝ ⋆ (en.PA ls v ⋆ contShare en ls K Φ))
+  BoLo.or (performStop T ls t Φ)
     (ex fun (K : Kont) => ex fun (n : UInt32) => ex fun (i : UInt32) => ex fun (v : Val) =>
       ex fun (en : OpEnt) =>
         ⌜t = K.plug (raiseE (.val (opPayload n i v))) ∧ K.Catches n = false ∧

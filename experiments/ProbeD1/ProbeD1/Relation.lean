@@ -130,14 +130,14 @@ the stack when `p.bindFut`, at the index itself otherwise; at `∀` it holds als
 there when `p.allOwn`. -/
 def cRL (p : Placement) : LStack → LSub → CTy → List Life → List SRec → Expr → WProp
   | σ, δ, .ret B, αs, ls, e => wpTS ls e fun ls'' v => vRL p σ δ B αs ls'' v
-  | σ, δ, .eff n i q A B C, αs, ls, e =>
+  | σ, δ, .eff n i q A B fin C, αs, ls, e =>
       if p.shareFut then
-        bodySF true δ (rowTab n i q A B C δ) (fun σ' αs' ls v => effRet p σ' δ C αs' ls v)
-          (OpenSF true δ (rowTab n i q A B C δ) (fun σ' αs' ls v => effRet p σ' δ C αs' ls v))
+        bodySF true δ (rowTab n i q A B fin C δ) (fun σ' αs' ls v => effRet p σ' δ C αs' ls v)
+          (OpenSF true δ (rowTab n i q A B fin C δ) (fun σ' αs' ls v => effRet p σ' δ C αs' ls v))
           σ αs ls e
       else
-        bodyS δ σ (rowTab n i q A B C δ) (fun αs' ls v => effRet p σ δ C αs' ls v)
-          (OpenS δ σ (rowTab n i q A B C δ) (fun αs' ls v => effRet p σ δ C αs' ls v)) αs ls e
+        bodyS δ σ (rowTab n i q A B fin C δ) (fun αs' ls v => effRet p σ δ C αs' ls v)
+          (OpenS δ σ (rowTab n i q A B fin C δ) (fun αs' ls v => effRet p σ δ C αs' ls v)) αs ls e
   | σ, δ, .arr A C, αs, ls, e => fun ρ =>
       ∀ ls' σ' αs', ExtQ p.bindFut ls ls' ρ → FutQ p.bindFut δ ρ (σ, αs) (σ', αs') →
         FutAvoids (.arr A C) σ σ' → ∀ v,
@@ -159,7 +159,7 @@ termination_by structural _ _ C => C
 /-- The answer relation of `F_Σ R`: `vRL R`. -/
 def effRet (p : Placement) : LStack → LSub → CTy → List Life → List SRec → Val → WProp
   | σ, δ, .ret A, αs => fun ls v => vRL p σ δ A αs ls v
-  | σ, δ, .eff _ _ _ _ _ C, αs => effRet p σ δ C αs
+  | σ, δ, .eff _ _ _ _ _ _ C, αs => effRet p σ δ C αs
   | _, _, _, _ => fun _ _ _ => False
 termination_by structural _ _ C => C
 end

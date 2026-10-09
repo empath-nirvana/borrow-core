@@ -33,7 +33,7 @@ theorem effSafe_tier1 : EffSafe (ℍ := ℍ) tier1 :=
 /-! ### The route to effect safety of driven programs -/
 
 /-- The operation `1.0 : 1 ↠ 1`, linear. -/
-def op₁ : OpSig := ⟨1, 0, .lin, .unit, .unit⟩
+def op₁ : OpSig := ⟨1, 0, .lin, .unit, .unit, .ret .unit⟩
 
 /-- A row that reads as `[op₁]` and whose loop body is not positive. -/
 def rowShadow : Row := [op₁, shadowOp op₁]

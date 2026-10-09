@@ -188,9 +188,9 @@ termination_by structural _ A => A
 /-- **`cRL_σ` with the table as a guard at `⊸` and `∀`.** D16.1's `cRLs` otherwise. -/
 def cRLa (σ : LStack) : LSub → CTy → List Life → List SRec → Expr → WProp
   | δ, .ret B, αs, ls, e => wpTS ls e fun ls'' v => vRLa σ δ B αs ls'' v
-  | δ, .eff n i q A B C, αs, ls, e =>
-      bodyS δ σ (rowTab n i q A B C δ) (fun αs' ls v => effRetA σ δ C αs' ls v)
-        (OpenS δ σ (rowTab n i q A B C δ) (fun αs' ls v => effRetA σ δ C αs' ls v)) αs ls e
+  | δ, .eff n i q A B fin C, αs, ls, e =>
+      bodyS δ σ (rowTab n i q A B fin C δ) (fun αs' ls v => effRetA σ δ C αs' ls v)
+        (OpenS δ σ (rowTab n i q A B fin C δ) (fun αs' ls v => effRetA σ δ C αs' ls v)) αs ls e
   | δ, .arr A C, αs, ls, e => fun ρ =>
       ∀ v, (vRLa σ δ A αs ls v ─⋆ guardS σ αs (cRLa σ δ C αs ls (.app e (.val v)))) ρ
   | δ, .amp C D, αs, ls, e => fun ρ =>
@@ -205,7 +205,7 @@ termination_by structural _ C => C
 /-- The answer relation of `F_Σ R` at the restated relation. -/
 def effRetA (σ : LStack) : LSub → CTy → List Life → List SRec → Val → WProp
   | δ, .ret A, αs => fun ls v => vRLa σ δ A αs ls v
-  | δ, .eff _ _ _ _ _ C, αs => effRetA σ δ C αs
+  | δ, .eff _ _ _ _ _ _ C, αs => effRetA σ δ C αs
   | _, _, _ => fun _ _ _ => False
 termination_by structural _ C => C
 end
@@ -240,9 +240,9 @@ def GFPA : Prop := ∀ σ : LStack, GFPAtA σ
 /-- `cRLa` at `F_Σ R` is D16.1's piece itself: the stack components are not restated. -/
 theorem cRLa_eff (σ : LStack) (δ : LSub) (n i : UInt32) (q : Qual) (A B : VTy) (C : CTy)
     (αs : List Life) (ls : List SRec) (e : Expr) :
-    cRLa σ δ (.eff n i q A B C) αs ls e =
-      bodyS δ σ (rowTab n i q A B C δ) (fun αs' ls v => effRetA σ δ C αs' ls v)
-        (OpenS δ σ (rowTab n i q A B C δ) (fun αs' ls v => effRetA σ δ C αs' ls v)) αs ls e :=
+    cRLa σ δ (.eff n i q A B fin C) αs ls e =
+      bodyS δ σ (rowTab n i q A B fin C δ) (fun αs' ls v => effRetA σ δ C αs' ls v)
+        (OpenS δ σ (rowTab n i q A B fin C δ) (fun αs' ls v => effRetA σ δ C αs' ls v)) αs ls e :=
   rfl
 
 /-! ### At `σ = []`: the kernel's relation -/
@@ -302,7 +302,7 @@ theorem cRLa_nil : ∀ (δ : LSub) (C : CTy), cRLa [] δ C [] = fun ls e => cC C
       funext ls e
       show wpTS ls e (fun ls'' v => vRLa [] δ B [] ls'' v) = _
       rw [vRLa_nil δ B]; rfl
-  | δ, .eff n i q A B C => by
+  | δ, .eff n i q A B fin C => by
       funext ls e ρ
       exact propext (bodyS_nil_iff (Q' := effRet C δ)
         (fun ls v ρ => by rw [effRetA_nil δ C]))
@@ -330,7 +330,7 @@ theorem effRetA_nil : ∀ (δ : LSub) (C : CTy), effRetA [] δ C [] = effRet C �
   | δ, .ret A => by
       show (fun ls v => vRLa [] δ A [] ls v) = _
       rw [vRLa_nil δ A]; rfl
-  | δ, .eff _ _ _ _ _ C => effRetA_nil δ C
+  | δ, .eff _ _ _ _ _ _ C => effRetA_nil δ C
   | _, .arr _ _ => rfl
   | _, .amp _ _ => rfl
   | _, .top => rfl
@@ -411,8 +411,8 @@ theorem thunkE_RLa {G : List Life → List SRec → WProp} {M : Expr} {n i : UIn
     {A B : VTy} {C : CTy} {γ : List Val} {αs : List Life} {ls : List SRec} {ρ : WRes}
     (hG : RelendableS δ [] σ G αs ls ρ)
     (hM : ∀ αs', ReLend αs' αs → ∀ ls' τ, G αs' ls' τ →
-      cRLa σ δ (.eff n i q A B C) αs' ls' (substAll (Val.unit :: γ) M) τ) :
-    vRLa σ δ (.thunk (.eff n i q A B C)) αs ls (Val.lam (Expr.psub 1 γ M)) ρ := fun _ => by
+      cRLa σ δ (.eff n i q A B fin C) αs' ls' (substAll (Val.unit :: γ) M) τ) :
+    vRLa σ δ (.thunk (.eff n i q A B fin C)) αs ls (Val.lam (Expr.psub 1 γ M)) ρ := fun _ => by
   obtain ⟨ds, ρz, ρn, hc, hn, hz, hth⟩ := hG
   refine ⟨ds, ρz, ρn, hc, hn, hz, fun ls' he αs' hr ρv τ hv hcv => ?_⟩
   refine wpG_step (fun μ => Step1N.head (Head.beta μ _ Val.unit) rfl) ls' _ τ ?_
@@ -462,7 +462,7 @@ theorem cRLa_step {σ : LStack} : ∀ (C : CTy) {δ : LSub} {e e' : Expr},
     (∀ μ : Heap, Step1N μ e μ e') → ∀ (αs : List Life) (ls : List SRec),
       Entails (cRLa σ δ C αs ls e') (cRLa σ δ C αs ls e)
   | .ret _, _, _, _, h, _, ls => wpTS_step h ls _
-  | .eff _ _ _ _ _ _, _, _, _, h, _, ls => wpG_step h ls _
+  | .eff _ _ _ _ _ _ _, _, _, _, h, _, ls => wpG_step h ls _
   | .arr _ C, _, _, _, h, αs, ls => fun _ h' v ρ₁ ρ₂ hv hc ht =>
       cRLa_step C (fun μ => (h μ).plug (Kont.appL .hole v)) αs ls _ (h' v ρ₁ ρ₂ hv hc ht)
   | .amp C D, _, _, _, h, αs, ls => fun _ ⟨h₁, h₂⟩ =>
@@ -593,15 +593,16 @@ theorem openS_congr {σ : LStack} (h : SAg σ δ₁ δ₂) : OpenS δ₁ σ = Op
   unfold OpenS
   simp only [openFS_congr h]
 
-theorem rowTab_congr {n i : UInt32} {q : Qual} {A B : VTy} {C : CTy}
-    (h : ∀ y, CFree y (.eff n i q A B C) → δ₁.find? y = δ₂.find? y) :
-    rowTab n i q A B C δ₁ = rowTab n i q A B C δ₂ := by
+theorem rowTab_congr {n i : UInt32} {q : Qual} {A B : VTy} {fin C : CTy}
+    (h : ∀ y, CFree y (.eff n i q A B fin C) → δ₁.find? y = δ₂.find? y) :
+    rowTab n i q A B fin C δ₁ = rowTab n i q A B fin C δ₂ := by
   have hA : ∀ ls, vC true A ls δ₁ = vC true A ls δ₂ :=
     fun ls => vC_congr A (fun y hy => h y (Or.inl hy)) true ls
   have hB : ∀ ls, vC true B ls δ₁ = vC true B ls δ₂ :=
     fun ls => vC_congr B (fun y hy => h y (Or.inr (Or.inl hy))) true ls
-  have hT := effTab_congr C (fun y hy => h y (Or.inr (Or.inr hy)))
-  simp only [rowTab, hA, hB, hT]
+  have hF := finObl_congr fin (fun y hy => h y (Or.inr (Or.inr (Or.inl hy))))
+  have hT := effTab_congr C (fun y hy => h y (Or.inr (Or.inr (Or.inr hy))))
+  simp only [rowTab, hA, hB, hF, hT]
 
 end
 
@@ -686,14 +687,14 @@ theorem cRLa_congr (σ : LStack) : ∀ (C : CTy) {δ₁ δ₂ : LSub},
       show wpTS ls e (fun ls'' v => vRLa σ δ₁ B αs ls'' v) =
         wpTS ls e (fun ls'' v => vRLa σ δ₂ B αs ls'' v)
       rw [ih]
-  | .eff n i q A B C, δ₁, δ₂, h, hs => by
+  | .eff n i q A B fin C, δ₁, δ₂, h, hs => by
       have hR := rowTab_congr h
-      have ih := effRetA_congr σ C (fun y hy => h y (Or.inr (Or.inr hy))) hs
+      have ih := effRetA_congr σ C (fun y hy => h y (Or.inr (Or.inr (Or.inr hy)))) hs
       funext αs ls e
-      show bodyS δ₁ σ (rowTab n i q A B C δ₁) (fun αs' ls v => effRetA σ δ₁ C αs' ls v)
-          (OpenS δ₁ σ (rowTab n i q A B C δ₁) (fun αs' ls v => effRetA σ δ₁ C αs' ls v)) αs ls e =
-        bodyS δ₂ σ (rowTab n i q A B C δ₂) (fun αs' ls v => effRetA σ δ₂ C αs' ls v)
-          (OpenS δ₂ σ (rowTab n i q A B C δ₂) (fun αs' ls v => effRetA σ δ₂ C αs' ls v)) αs ls e
+      show bodyS δ₁ σ (rowTab n i q A B fin C δ₁) (fun αs' ls v => effRetA σ δ₁ C αs' ls v)
+          (OpenS δ₁ σ (rowTab n i q A B fin C δ₁) (fun αs' ls v => effRetA σ δ₁ C αs' ls v)) αs ls e =
+        bodyS δ₂ σ (rowTab n i q A B fin C δ₂) (fun αs' ls v => effRetA σ δ₂ C αs' ls v)
+          (OpenS δ₂ σ (rowTab n i q A B fin C δ₂) (fun αs' ls v => effRetA σ δ₂ C αs' ls v)) αs ls e
       rw [hR, ih, bodyS_congr hs, openS_congr hs]
   | .arr A C, δ₁, δ₂, h, hs => by
       have hA := vRLa_congr σ A (fun y hy => h y (Or.inl hy)) hs
@@ -749,8 +750,8 @@ theorem effRetA_congr (σ : LStack) : ∀ (C : CTy) {δ₁ δ₂ : LSub},
       funext αs
       show (fun ls v => vRLa σ δ₁ A αs ls v) = (fun ls v => vRLa σ δ₂ A αs ls v)
       rw [ih]
-  | .eff _ _ _ _ _ C, _, _, h, hs =>
-      effRetA_congr σ C (fun y hy => h y (Or.inr (Or.inr hy))) hs
+  | .eff _ _ _ _ _ _ C, _, _, h, hs =>
+      effRetA_congr σ C (fun y hy => h y (Or.inr (Or.inr (Or.inr hy)))) hs
   | .arr _ _, _, _, _, _ => rfl
   | .amp _ _, _, _, _, _ => rfl
   | .top, _, _, _, _ => rfl

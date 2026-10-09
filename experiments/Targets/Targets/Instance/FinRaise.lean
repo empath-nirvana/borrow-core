@@ -39,14 +39,14 @@ open BoCa.Lifetime (LifeCtx)
 /-- **The operation `(n, i)` is in a computation type's row**: a layer of `F_Σ` at the key `(n, i)`,
 under `ν`'s observations as `ν`'s unrolling reads them. -/
 def CTy.HasOp (n i : UInt32) : CTy → Prop
-  | .eff n' i' _ _ _ C => (n' = n ∧ i' = i) ∨ CTy.HasOp n i C
+  | .eff n' i' _ _ _ _ C => (n' = n ∧ i' = i) ∨ CTy.HasOp n i C
   | .nu C => CTy.HasOp n i C
   | _ => False
 
 theorem CTy.hasOp_instT (n i : UInt32) (S : VTy) :
     ∀ C : CTy, CTy.HasOp n i (CTy.instT S C) ↔ CTy.HasOp n i C
   | .ret _ | .amp _ _ | .arr _ _ | .top | .all _ _ _ | .nu _ => Iff.rfl
-  | .eff n' i' q A B C => by
+  | .eff n' i' q A B fin C => by
       simp only [CTy.instT, CTy.HasOp, CTy.hasOp_instT n i S C]
 
 theorem CTy.hasOp_unroll (n i : UInt32) (C : CTy) :
@@ -85,7 +85,8 @@ theorem CTy.hasOp_of_rowLe {S S' : Row} (hle : RowLe S S') {n i : UInt32} (A : V
     (h : CTy.HasOp n i (CTy.effOf S A)) : CTy.HasOp n i (CTy.effOf S' A) := by
   rw [CTy.hasOp_effOf] at h ⊢
   obtain ⟨o, hf⟩ := Row.find_isSome_iff.mpr h
-  exact Row.find_isSome_iff.mp ⟨o, hle n i o hf⟩
+  obtain ⟨o', hf', -⟩ := hle n i o hf
+  exact Row.find_isSome_iff.mp ⟨o', hf'⟩
 
 /-! ### Inversions of the tied kernel -/
 

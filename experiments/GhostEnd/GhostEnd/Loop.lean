@@ -160,7 +160,7 @@ theorem loop_spans_yields (K : UInt32) (δ : LSub) (l : BoCa.Loc) (v : Val) (ls 
     Lifetime.Life.interp_defined_of_wf hδ (Lifetime.meetOfDomL_wf LifeCtx.empty.entries)
   intro ρ hρ
   refine (cC_effOf [yieldOp] _ ls δ _ ρ).mpr ?_
-  refine withbor_relend (Row.tab [yieldOp] δ) (βP := ⊤) ?_ _ v
+  refine withbor_relend (Row.tab [yieldOp] δ) (Row.tab_plainCancel [yieldOp] δ) (βP := ⊤) ?_ _ v
     (relend_lam2 (opTable_mono _) (loopBody_closed K) ?_) ρ hρ
   · intro ls w σ h
     rw [h.1]; exact ResU.inStratum_empty _

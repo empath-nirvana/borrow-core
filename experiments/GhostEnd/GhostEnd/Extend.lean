@@ -80,9 +80,9 @@ stack's and is either the bound variable (the lend the binder names) or not free
 the extension rebinds nothing the body reads. `τ = []` is `cRLa`'s clause. -/
 def cRLk : LStack → LSub → CTy → List Life → List SRec → Expr → WProp
   | σ, δ, .ret B, αs, ls, e => wpTS ls e fun ls'' v => vRLk σ δ B αs ls'' v
-  | σ, δ, .eff n i q A B C, αs, ls, e =>
-      bodyS δ σ (rowTab n i q A B C δ) (fun αs' ls v => effRetK σ δ C αs' ls v)
-        (OpenS δ σ (rowTab n i q A B C δ) (fun αs' ls v => effRetK σ δ C αs' ls v)) αs ls e
+  | σ, δ, .eff n i q A B fin C, αs, ls, e =>
+      bodyS δ σ (rowTab n i q A B fin C δ) (fun αs' ls v => effRetK σ δ C αs' ls v)
+        (OpenS δ σ (rowTab n i q A B fin C δ) (fun αs' ls v => effRetK σ δ C αs' ls v)) αs ls e
   | σ, δ, .arr A C, αs, ls, e => fun ρ =>
       ∀ v, (vRLk σ δ A αs ls v ─⋆ guardS σ αs (cRLk σ δ C αs ls (.app e (.val v)))) ρ
   | σ, δ, .amp C D, αs, ls, e => fun ρ =>
@@ -99,7 +99,7 @@ termination_by structural _ _ C => C
 /-- The answer relation of `F_Σ R`. -/
 def effRetK : LStack → LSub → CTy → List Life → List SRec → Val → WProp
   | σ, δ, .ret A, αs => fun ls v => vRLk σ δ A αs ls v
-  | σ, δ, .eff _ _ _ _ _ C, αs => effRetK σ δ C αs
+  | σ, δ, .eff _ _ _ _ _ _ C, αs => effRetK σ δ C αs
   | _, _, _, _ => fun _ _ _ => False
 termination_by structural _ _ C => C
 end

@@ -138,7 +138,7 @@ section S1
 variable {Ξ : EffCtx}
 
 /-- A resuming `unr` operation: in no admissible effect context, but in rows of the algebra. -/
-def unrOp : OpSig := ⟨1, 0, .unr, .unit, .unit⟩
+def unrOp : OpSig := ⟨1, 0, .unr, .unit, .unit, .ret .unit⟩
 
 theorem not_nu_unrOp : ¬ Row.NU [unrOp] := by
   intro h
@@ -217,7 +217,7 @@ theorem subClosed_nu_tier1Open {Γ : List OVTy} {e : Expr} {ε₁ ε₂ : ORow} 
     · obtain ⟨S, S₀, A₀, hS₀, hC₀, hC⟩ := hL η
       have hC' : CTy.effOf (orowRF.den Ξ ε₁ η) (A.den η) = CTy.effOf S (.sum A₀ (.thunk (CTy.loopEff S₀ A₀ .unit))) := hC
       obtain ⟨rfl, hA⟩ := effOf_inj hC'
-      refine ⟨orowRF.den Ξ ε₂ η, S₀, A₀, fun n i o hf => hle η n i o (hS₀ n i o hf), hC₀, ?_⟩
+      refine ⟨orowRF.den Ξ ε₂ η, S₀, A₀, RowLe.trans hS₀ (hle η), hC₀, ?_⟩
       show CTy.effOf (orowRF.den Ξ ε₂ η) (A.den η) = _
       rw [hA]
     · rcases List.mem_append.mp hp with hp | hp
@@ -306,7 +306,7 @@ theorem rowSig_orow {J : OurTyping orowRF} : (ourInst (ℍ := ℍ) orowRF Ξ J).
     constructor
     · rintro ⟨hi, h⟩
       obtain ⟨o, ho⟩ := Option.isSome_iff_exists.mp h
-      obtain ⟨hm, j, hj, hij, -⟩ := Row.find_ofEff _ _ _ _ _ _ ho
+      obtain ⟨hm, j, hj, hij, -⟩ := Row.find_ofEff _ _ _ _ _ _ _ ho
       have hlen := l.2.2.2
       have : i = j := by
         have := congrArg UInt32.toNat hij

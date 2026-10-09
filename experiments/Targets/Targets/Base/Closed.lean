@@ -93,7 +93,7 @@ theorem closedAt_of_derives {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg}
   | unfoldN => exact closedAt_of_zero (unfoldV_closed _) _
   | effPerform _ _ _ ih | effRaise _ _ _ _ ih =>
       simp [performE, raiseE, opArgE, closedAt, Expr.val, Val.prim, Val.i32, ih]
-  | effThen hs _ _ _ _ _ _ ihM ihN ihD =>
+  | effThen hs _ _ _ _ _ _ _ _ _ _ ihM ihN ihD =>
       rw [(splitP_length hs).1] at ihM
       rw [List.length_cons, (splitP_length hs).2] at ihN ihD
       simp [thenE, closedAt, Expr.val, Val.prim, Val.lam, ihM, ihN, ihD]

@@ -225,9 +225,9 @@ def OpenS (δ : LSub) (σ : LStack) (Tab : OpTab) (Q : List Life → List SRec �
 
 /-- The operation table of `F_Σ R`'s outermost layer, the operation types read at `δ` (closed
 data, SPEC §19). -/
-def rowTab (n i : UInt32) (q : Qual) (A B : VTy) (C : CTy) (δ : LSub) : OpTab :=
+def rowTab (n i : UInt32) (q : Qual) (A B : VTy) (fin C : CTy) (δ : LSub) : OpTab :=
   OpTab.ext n i ⟨q, B.isZero && q != .lin, fun ls v => vC true A ls δ v,
-    fun ls v => vC true B ls δ v⟩ (effTab C δ)
+    fun ls v => vC true B ls δ v, if capB q B then finObl fin δ else none⟩ (effTab C δ)
 
 /-! ### D16.1 -/
 
@@ -251,9 +251,9 @@ termination_by structural _ A => A
 /-- **`cRL_σ`**, D16.1's computation relation. At `F_Σ R` the piece `OpenD_σ` at Σ's table. -/
 def cRLs (σ : LStack) : LSub → CTy → List Life → List SRec → Expr → WProp
   | δ, .ret B, αs, ls, e => wpTS ls e fun ls'' v => vRLs σ δ B αs ls'' v
-  | δ, .eff n i q A B C, αs, ls, e =>
-      bodyS δ σ (rowTab n i q A B C δ) (fun αs' ls v => effRetS σ δ C αs' ls v)
-        (OpenS δ σ (rowTab n i q A B C δ) (fun αs' ls v => effRetS σ δ C αs' ls v)) αs ls e
+  | δ, .eff n i q A B fin C, αs, ls, e =>
+      bodyS δ σ (rowTab n i q A B fin C δ) (fun αs' ls v => effRetS σ δ C αs' ls v)
+        (OpenS δ σ (rowTab n i q A B fin C δ) (fun αs' ls v => effRetS σ δ C αs' ls v)) αs ls e
   | δ, .arr A C, αs, ls, e => fun ρ =>
       ∀ v, (vRLs σ δ A αs ls v ─⋆ cRLs σ δ C αs ls (.app e (.val v))) ρ
   | δ, .amp C D, αs, ls, e => fun ρ =>
@@ -267,7 +267,7 @@ termination_by structural _ C => C
 /-- The answer relation of `F_Σ R` at the stack: `vRL_σ R`. -/
 def effRetS (σ : LStack) : LSub → CTy → List Life → List SRec → Val → WProp
   | δ, .ret A, αs => fun ls v => vRLs σ δ A αs ls v
-  | δ, .eff _ _ _ _ _ C, αs => effRetS σ δ C αs
+  | δ, .eff _ _ _ _ _ _ C, αs => effRetS σ δ C αs
   | _, _, _ => fun _ _ _ => False
 termination_by structural _ C => C
 end
@@ -542,7 +542,7 @@ theorem cRLs_nil : ∀ (δ : LSub) (C : CTy), cRLs [] δ C [] = fun ls e => cC C
       funext ls e
       show wpTS ls e (fun ls'' v => vRLs [] δ B [] ls'' v) = _
       rw [vRLs_nil δ B]; rfl
-  | δ, .eff n i q A B C => by
+  | δ, .eff n i q A B fin C => by
       funext ls e ρ
       exact propext (bodyS_nil_iff (Q' := effRet C δ)
         (fun ls v ρ => by rw [effRetS_nil δ C]))
@@ -569,7 +569,7 @@ theorem effRetS_nil : ∀ (δ : LSub) (C : CTy), effRetS [] δ C [] = effRet C �
   | δ, .ret A => by
       show (fun ls v => vRLs [] δ A [] ls v) = _
       rw [vRLs_nil δ A]; rfl
-  | δ, .eff _ _ _ _ _ C => effRetS_nil δ C
+  | δ, .eff _ _ _ _ _ _ C => effRetS_nil δ C
   | _, .arr _ _ => rfl
   | _, .amp _ _ => rfl
   | _, .top => rfl
@@ -679,8 +679,8 @@ theorem thunkE_RLs {G : List Life → List SRec → WProp} {M : Expr} {n i : UIn
     {A B : VTy} {C : CTy} {γ : List Val} {αs : List Life} {ls : List SRec} {ρ : WRes}
     (hG : RelendableS δ [] σ G αs ls ρ)
     (hM : ∀ αs', ReLend αs' αs → ∀ ls' τ, G αs' ls' τ →
-      cRLs σ δ (.eff n i q A B C) αs' ls' (substAll (Val.unit :: γ) M) τ) :
-    vRLs σ δ (.thunk (.eff n i q A B C)) αs ls (Val.lam (Expr.psub 1 γ M)) ρ := by
+      cRLs σ δ (.eff n i q A B fin C) αs' ls' (substAll (Val.unit :: γ) M) τ) :
+    vRLs σ δ (.thunk (.eff n i q A B fin C)) αs ls (Val.lam (Expr.psub 1 γ M)) ρ := by
   obtain ⟨ds, ρz, ρn, hc, hn, hz, hth⟩ := hG
   refine ⟨ds, ρz, ρn, hc, hn, hz, fun ls' he αs' hr ρv τ hv hcv => ?_⟩
   refine wpG_step (fun μ => Step1N.head (Head.beta μ _ Val.unit) rfl) ls' _ τ ?_

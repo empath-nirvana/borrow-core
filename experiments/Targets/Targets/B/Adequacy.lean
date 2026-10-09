@@ -205,9 +205,12 @@ theorem stop_op (hP : P.Respects) {S : Row} (hle : RowLe S P.ops) {δ : LSub} {n
     ∃ o, Row.find P.ops n i = some o ∧ en = o.ent δ ∧ o.q = .lin ∧ o.abort = false ∧
       o.A.Data ∧ o.B.Data := by
   obtain ⟨o, hf, rfl⟩ := Row.tab_some h
-  have hfP := hle n i o hf
+  obtain ⟨o', hfP, hs⟩ := RowLe.sig hle hf
   have hm := (Row.find_mem hfP).1
-  exact ⟨o, hfP, rfl, (hP.lin o hm).1, (hP.lin o hm).2, (hP.data o hm).1, (hP.data o hm).2⟩
+  have hc : capB o.q o.B = false := by
+    simp [capB, hs.2.2.1, (hP.lin o' hm).1]
+  exact ⟨o', hfP, OpSig.ent_eq_of_sig δ hs hc, (hP.lin o' hm).1, (hP.lin o' hm).2,
+    (hP.data o' hm).1, (hP.data o' hm).2⟩
 
 /-- An end `wpG`'s post at an operation table allows takes no step: a value, or an operation no
 frame of its context catches (`opPlug_no_step`). -/
@@ -578,8 +581,10 @@ types, so its loop bodies are positive. -/
 theorem loopEffBody_nuOk_of_uniq {P : Platform} (hP : P.Respects) {S : Row} (hU : S.Uniq)
     (hle : RowLe S P.ops) (A B : VTy) : (CTy.loopEffBody S A B).NuOk :=
   CTy.loopEffBody_nuOk (fun o ho => by
-    have hm := (Row.find_mem (hle o.n o.i o (Row.find_of_mem hU ho))).1
-    exact ⟨dataB_cl (hP.data o hm).1, dataB_cl (hP.data o hm).2⟩) A B
+    obtain ⟨o', hf', hs⟩ := RowLe.sig hle (Row.find_of_mem hU ho)
+    have hm := (Row.find_mem hf').1
+    rw [hs.2.2.2.1, hs.2.2.2.2]
+    exact ⟨dataB_cl (hP.data o' hm).1, dataB_cl (hP.data o' hm).2⟩) A B
 
 /-- **B2's drive conjunct at BoLo at the rows whose operations have distinct keys**: there the
 positivity hypothesis holds (`loopEffBody_nuOk_of_uniq`). -/
@@ -602,7 +607,7 @@ theorem adequateAt_core_none : AdequateAt (ℍ := ℍ) (B.coreB (ℍ := ℍ)) Pl
 
 /-- The shadow of an operation: its key, linear, at the open argument type `tvar 0`, answering `1`.
 Behind the operation in a row, `Row.find` never finds it. -/
-def shadowOp (o : OpSig) : OpSig := ⟨o.n, o.i, .lin, .tvar 0, .unit⟩
+def shadowOp (o : OpSig) : OpSig := ⟨o.n, o.i, .lin, .tvar 0, .unit, .ret .unit⟩
 
 /-- `[o, shadowOp o]` reads as `[o]`: the shadow is never found. -/
 theorem find_shadow (o : OpSig) {n i : UInt32} {x : OpSig}
@@ -666,13 +671,13 @@ theorem adequateDrive_needs_nuOk {P : Platform} (hP : P.Respects) {o : OpSig} (h
       ¬ SafeDrive (ℍ := ℍ) P .unit (.val Val.unit) := by
   refine ⟨?_, not_nuOk_shadow o _ _, cC_loop_unit_of_not_nuOk (not_nuOk_shadow o _ _),
     not_safeDrive_unit P .unit⟩
-  intro n i x hx
+  refine RowLe.of_find fun n i x hx => ?_
   obtain ⟨rfl, rfl, rfl⟩ := find_shadow o hx
   exact Row.find_of_mem hP.uniq ho
 
 /-- The platform with one operation, `1.0 : 1 ↠ 1`, linear, answering `()`. -/
 def Platform.one : Platform :=
-  ⟨[⟨1, 0, .lin, .unit, .unit⟩], Unit, (), fun _ _ _ _ => some (Val.unit, ())⟩
+  ⟨[⟨1, 0, .lin, .unit, .unit, .ret .unit⟩], Unit, (), fun _ _ _ _ => some (Val.unit, ())⟩
 
 theorem platformOne_respects : Platform.one.Respects where
   uniq := List.pairwise_singleton _ _
@@ -763,8 +768,10 @@ end DriveStop
 /-- A stop of a row is a stop of every larger row. -/
 theorem stopsIn_mono {T S : Row} (hle : RowLe T S) {e : Expr} (h : StopsIn T e) : StopsIn S e := by
   rcases h with ⟨K, n, i, v, o, he, hK, hf, ha⟩ | ⟨K, n, i, v, o, he, hK, hf, ha⟩
-  · exact Or.inl ⟨K, n, i, v, o, he, hK, hle n i o hf, ha⟩
-  · exact Or.inr ⟨K, n, i, v, o, he, hK, hle n i o hf, ha⟩
+  · obtain ⟨o', hf', hs⟩ := RowLe.sig hle hf
+    exact Or.inl ⟨K, n, i, v, o', he, hK, hf', hs.abort_eq ▸ ha⟩
+  · obtain ⟨o', hf', hs⟩ := RowLe.sig hle hf
+    exact Or.inr ⟨K, n, i, v, o', he, hK, hf', hs.abort_eq ▸ ha⟩
 
 /-- The start of a program in Core's relation at the empty configuration. -/
 theorem platStart_init {P : Platform} {T : Row} {Q : List SRec → Val → WProp} {e : Expr}
@@ -791,7 +798,7 @@ theorem effSafeDrive_of_rel {S S₀ : Row} {A : VTy} (hle : RowLe S₀ S)
     rc.2 = .drive ∧ ∃ (T : Row) (c₀ : Conf Platform.none), RowLe T S ∧
       PlatStart Platform.none T (QStep S₀ A .unit) c₀ ∧ Steps (ℍ := ℍ) c₀.μ c₀.e rc.1.μ rc.1.e
   have h₀ : Inv (init _ M, .drive) :=
-    ⟨rfl, S, init _ M, fun _ _ _ hf => hf,
+    ⟨rfl, S, init _ M, RowLe.refl S,
       platStart_init ((cC_effOf S _ [] LSub.empty M PMap.empty).mp h), .refl _ _⟩
   have hstep : ∀ rc rc', Inv rc → RStep (ℍ := ℍ) Platform.none rc rc' → Inv rc' := by
     rintro rc rc' ⟨hph, T, c₀, hT, hs₀, hr⟩ hs
@@ -840,7 +847,7 @@ theorem effSafeDrive_of_rel {S S₀ : Row} {A : VTy} (hle : RowLe S₀ S)
 D4's observed end). -/
 theorem effSafeDrive_of_FL {J : TypingJ} (hFL : FL (B.coreB (ℍ := ℍ)) J) :
     EffSafeDrive (ℍ := ℍ) J :=
-  fun _ _ _ _ hC hJ => effSafeDrive_of_rel (fun _ _ _ hf => hf) hC (comp_of_FL hFL hJ)
+  fun _ _ _ _ hC hJ => effSafeDrive_of_rel (RowLe.refl _) hC (comp_of_FL hFL hJ)
 
 /-- **Effect safety of driven programs at today's unr-free kernel.** -/
 theorem effSafeDrive_tier1NU : EffSafeDrive (ℍ := ℍ) tier1NU :=

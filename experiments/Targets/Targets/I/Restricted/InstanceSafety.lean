@@ -358,7 +358,7 @@ variable {R : (ourInst (ℍ := ℍ) orowRF Ξ (OurTyping.ofDer D)).Runner} {S : 
 /-- The platform of a runner that keeps its protocol, at a row tied to the effect context, agrees
 with the row. -/
 theorem platAgree_platformOf : PlatAgree (platformOf R S) S :=
-  platAgree_of_le platformOf_sub (fun _ _ _ h => h)
+  platAgree_of_le platformOf_sub (RowLe.refl S)
 
 /-- **What a plain program's run under a runner reaches** is closed and reached by the same run
 under the runner's platform. -/
@@ -717,7 +717,7 @@ theorem rstep_drive_of_pstep {S : Row} {μ : Heap} {t : Expr} {s : R.St}
 theorem rowLe_platformOf {ε : ORow} (hS : RowAt Ξ (orowRF.den Ξ ε (fun _ => [])))
     (hans : (𝕊).Answers R ε) :
     RowLe (orowRF.den Ξ ε (fun _ => [])) (platformOf R (orowRF.den Ξ ε (fun _ => []))).ops := by
-  intro n i o hf
+  refine RowLe.of_find fun n i o hf => ?_
   obtain ⟨l, rfl, -⟩ := lab_of_rowAt (D := D) hS hf
   refine find_platformOf.2 ⟨hf, l, rfl, hans l i.toNat ⟨i.toNat_lt, fun η => ?_⟩⟩
   show Targets.Row.Has (orowRF.den Ξ ε η) l.1 (UInt32.ofNat i.toNat)

@@ -138,13 +138,13 @@ theorem nilSoundRet (p : Placement) : NilSoundRet (ℍ := ℍ) p := by
       have h' : wpTS ls e (fun ls'' v => vRL p [] δ A [] ls'' v) ρ := h
       simpa only [vRL_data p [] δ [] hA, show extS δ [] [] = δ from rfl] using h'
   | cons o S =>
-      show ewpTS ls e (opTable (rowTab o.n o.i o.q o.A o.B (CTy.effOf S A) δ))
+      show ewpTS ls e (opTable (rowTab o.n o.i o.q o.A o.B o.fin (CTy.effOf S A) δ))
         (Core.effRet (CTy.effOf S A) δ) ρ
       have hQ : ∀ ls v ρ, effRet p [] δ (CTy.effOf S A) [] ls v ρ ↔
           Core.effRet (CTy.effOf S A) δ ls v ρ := fun ls v ρ => by
         rw [effRet_nil_data p δ hA S ls v]
       refine (GhostEnd.bodyS_nil_iff (δ := δ) hQ).mp ?_
-      have h' : cRL p [] δ (.eff o.n o.i o.q o.A o.B (CTy.effOf S A)) [] ls e ρ := h
+      have h' : cRL p [] δ (.eff o.n o.i o.q o.A o.B o.fin (CTy.effOf S A)) [] ls e ρ := h
       unfold cRL at h'
       split at h'
       · exact bodySF_bodyS (fun _ _ _ _ _ _ _ h'' => openSF_openS h'') _ h'

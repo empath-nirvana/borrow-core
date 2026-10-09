@@ -115,7 +115,8 @@ def predLocAct {M : SemWorld} (a : StkAct M) (π : Equiv.Perm Loc)
 def entLocAct {M : SemWorld} (a : StkAct M) (π : Equiv.Perm Loc) (en : OpEntI (Idx M.Stk)) :
     OpEntI (Idx M.Stk) :=
   ⟨en.q, en.abort, fun i v ρ => en.PA (idxLocAct a π⁻¹ i) (v.renameLoc π⁻¹) (ρ.mapLoc π⁻¹),
-    fun i v ρ => en.PB (idxLocAct a π⁻¹ i) (v.renameLoc π⁻¹) (ρ.mapLoc π⁻¹)⟩
+    fun i v ρ => en.PB (idxLocAct a π⁻¹ i) (v.renameLoc π⁻¹) (ρ.mapLoc π⁻¹),
+    en.fin.map fun P ls e ρ => P (ls.map (srecLoc π⁻¹)) (e.renameLoc π⁻¹) (ρ.mapLoc π⁻¹)⟩
 
 /-- A table conjugated by `π`. -/
 def tabLocAct {M : SemWorld} (a : StkAct M) (π : Equiv.Perm Loc) (T : OpTabI (Idx M.Stk)) :
@@ -150,7 +151,9 @@ def entImgLife {M : SemWorld} (a : StkAct M) {c : Life} (θ : Restrat.Emb c)
     (en : OpEntI (Idx M.Stk)) : OpEntI (Idx M.Stk) :=
   ⟨en.q, en.abort,
     fun i v ρ => ∃ i₀ ρ₀, i = idxLifeAct a θ i₀ ∧ ρ = θ.relRU ρ₀ ∧ en.PA i₀ v ρ₀,
-    fun i v ρ => ∃ i₀ ρ₀, i = idxLifeAct a θ i₀ ∧ ρ = θ.relRU ρ₀ ∧ en.PB i₀ v ρ₀⟩
+    fun i v ρ => ∃ i₀ ρ₀, i = idxLifeAct a θ i₀ ∧ ρ = θ.relRU ρ₀ ∧ en.PB i₀ v ρ₀,
+    en.fin.map fun P ls e ρ => ∃ ls₀ ρ₀, ls = ls₀.map (srecRestrat θ) ∧ ρ = θ.relRU ρ₀ ∧
+      P ls₀ e ρ₀⟩
 
 /-- A table's direct image along a re-stratification. -/
 def tabImgLife {M : SemWorld} (a : StkAct M) {c : Life} (θ : Restrat.Emb c)

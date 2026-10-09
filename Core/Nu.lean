@@ -1,6 +1,6 @@
 import Core.FoldImm
 import Core.NuRel
-import Core.EffRules
+import Core.EffFin
 
 /-!
 # Core — coiteration on `νX. C`  `[spec §7]`
@@ -75,7 +75,7 @@ def childV (c o : Val) : Val := .lam (.app (.app (.val (c.shift 1 0)) (.val .uni
 /-- The answer type of an effectful observation `F_Σ A`: `A`.  `[spec §19]` -/
 def effAns : CTy → VTy
   | .ret A => A
-  | .eff _ _ _ _ _ C => effAns C
+  | .eff _ _ _ _ _ _ C => effAns C
   | _ => .unit
 
 /-- `node_C wr c`: the answer of the observation tree `C` to its observations, with `c ()` the
@@ -87,7 +87,7 @@ At `A ⊸ D`: `λx. node_D wr (childA c x)`, the argument passed on to the step'
 def nodeV : CTy → Val
   | .ret A => .lam (.val (.lam
       (bindE (.app (.var 0) (.val .unit)) (.app (.app (.val (mapV A)) (.var 2)) (.var 0)))))
-  | .eff _ _ _ _ _ C => .lam (.val (.lam
+  | .eff _ _ _ _ _ _ C => .lam (.val (.lam
       (bindE (.app (.var 0) (.val .unit)) (.app (.app (.val (mapV (effAns C))) (.var 2)) (.var 0)))))
   | .amp C D => .lam (.val (.lam (.val (.lam (.case (.var 0)
       (.app (.app (.val (nodeV C)) (.var 3))
@@ -104,7 +104,7 @@ theorem nodeV_closed : ∀ C : CTy, closedAt 0 (nodeV C).1 = true
   | .amp C D => by
       simp [nodeV, closedAt, closedAt_mono _ (nodeV_closed C) (Nat.zero_le _),
         closedAt_mono _ (nodeV_closed D) (Nat.zero_le _)]
-  | .eff _ _ _ _ _ C => by
+  | .eff _ _ _ _ _ _ C => by
       simp [nodeV, bindE, closedAt, closedAt_mono _ (mapV_closed (effAns C)) (Nat.zero_le _)]
   | .arr _ D => by
       simp [nodeV, closedAt, closedAt_mono _ (nodeV_closed D) (Nat.zero_le _)]
@@ -252,8 +252,8 @@ theorem nodeV_ret_steps (A : VTy) (wr c : Val) :
   exact .refl
 
 /-- `node_{F_Σ A} wr c ↦ c () to w. map_A wr w`. -/
-theorem nodeV_eff_steps (n i : UInt32) (q : Qual) (A B : VTy) (C : CTy) (wr c : Val) :
-    PureSteps (.app (.app (.val (nodeV (.eff n i q A B C))) (.val wr)) (.val c))
+theorem nodeV_eff_steps (n i : UInt32) (q : Qual) (A B : VTy) (fin C : CTy) (wr c : Val) :
+    PureSteps (.app (.app (.val (nodeV (.eff n i q A B fin C))) (.val wr)) (.val c))
       (bindE (.app (.val c) (.val .unit)) (.app (.app (.val (mapV (effAns C)))
         (.val (wr.shift 1 0))) (.var 0))) := by
   refine (PureSteps.beta_in (.appL .hole _) _ wr).trans ?_
@@ -396,17 +396,17 @@ theorem ewp_pureSteps {Tb : Table} (hTb : Tb.Mono) {e e' : Expr} (h : PureSteps 
 
 theorem EffLeaf.ans_poly : ∀ {C : CTy}, C.EffLeaf → (effAns C).Poly
   | .ret _, h => h
-  | .eff _ _ _ _ _ C, h => EffLeaf.ans_poly (C := C) h.2.2
+  | .eff _ _ _ _ _ _ C, h => EffLeaf.ans_poly (C := C) h.2.2
 
 theorem effRetE_ans (η : Option (Nat → TEnt)) (δ : LSub) : ∀ {C : CTy}, C.EffLeaf →
     effRetE η C δ = fun ls v => vCE η true (effAns C) ls δ v
   | .ret _, _ => rfl
-  | .eff _ _ _ _ _ C, h => effRetE_ans η δ (C := C) h.2.2
+  | .eff _ _ _ _ _ _ C, h => effRetE_ans η δ (C := C) h.2.2
 
 theorem effRet_instT_ans (S : VTy) (δ : LSub) : ∀ {C : CTy}, C.EffLeaf →
     effRet (C.instT S) δ = fun ls v => vC true (VTy.inst S (effAns C)) ls δ v
   | .ret _, _ => rfl
-  | .eff _ _ _ _ _ C, h => effRet_instT_ans S δ (C := C) h.2.2
+  | .eff _ _ _ _ _ _ C, h => effRet_instT_ans S δ (C := C) h.2.2
 
 /-- **The node lemma**: when `c ()` runs a computation of `D[S/X]`, `node_D (unfold step) c` is
 one unfolding of `D` at the candidate. -/
@@ -440,23 +440,31 @@ theorem node_ok (C : CTy) (g : Val) (S : VTy) (δ : LSub) :
       cB_pureSteps _ D (nodeV_arr_steps A D _ c v) ls δ ρ₂
         (node_ok C g S δ D hD.2 (childA c v) (.app M (.val v)) ls ρ₂
           ((childA_steps c v).trans (PureSteps.plug (.appL .hole _) hc)) (hM v ρ₁ ρ₂ hv hcomp))
-  | .eff n i q A B D, hD, c, M, ls, ρ, hc, hM => by
+  | .eff n i q A B fin D, hD, c, M, ls, ρ, hc, hM => by
       have hR := EffLeaf.ans_poly (C := D) hD.2.2
       show ewpTS ls _ _ (effRetE _ D δ) ρ
       have hM' : ewpTS ls M (opTable (OpTab.ext n i
-          ⟨q, B.isZero && q != .lin, fun ls v => vC true A ls δ v, fun ls v => vC true B ls δ v⟩
+          ⟨q, B.isZero && q != .lin, fun ls v => vC true A ls δ v, fun ls v => vC true B ls δ v,
+            if capB q B then finObl fin δ else none⟩
             (effTab D δ))) (fun ls v => vC true (VTy.inst S (effAns D)) ls δ v) ρ := by
         have h' := hM
         simp only [CTy.instT, cC, effTab_instT, effRet_instT_ans S δ hD.2.2] at h'
         exact h'
       rw [effRetE_ans _ δ hD.2.2]
-      refine ewp_pureSteps (opTable_mono _) (nodeV_eff_steps n i q A B D _ c) ls _ ρ ?_
+      refine ewp_pureSteps (opTable_mono _) (nodeV_eff_steps n i q A B fin D _ c) ls _ ρ ?_
       refine ewp_pureSteps (opTable_mono _) (PureSteps.plug (.appR (.val (.lam _)) .hole) hc)
         ls _ ρ ?_
       refine ewp_frame_plain _ (.appR (.val (.lam _)) .hole) (fun n => by simp [Kont.HasHnd])
         (fun n => by simp [Kont.Catches]) (fun _ => emp)
         (fun _ _ _ _ h => h) (fun _ _ _ _ h => h) (fun _ _ _ _ _ _ _ h => by rw [h.1]; exact noOwn_empty)
-        (fun _ _ _ _ _ _ _ h => h.1) _ _ ?_ hM' ⟨rfl, trivial⟩ (ResU.comp_empty_right ρ)
+        (fun _ _ _ _ _ _ _ h => h.1) ?_ _ _ ?_ hM' ⟨rfl, trivial⟩ (ResU.comp_empty_right ρ)
+      · intro n' i' en hT _ _ ls₁ K₁ ρ₁ σ ρ₁' hcan hσ hc
+        have hT' : effTab (.eff n i q A B fin D) δ n' i' = some en := hT
+        rw [effTab_rowOf] at hT'
+        obtain ⟨o, -, rfl⟩ := Row.tab_some hT'
+        rw [hσ.1] at hc
+        exact ent_plain δ _ (fun _ => by simp [Kont.HasHnd]) (by simp [Kont.Catches]) noOwn_empty o
+          hcan hc
       rintro ls' w σ ⟨σ₁, σ₂, hcσ, hw, hemp, -⟩
       rw [hemp] at hcσ
       obtain rfl := eq_of_compS_empty_left (ResU.CompS.comm hcσ)

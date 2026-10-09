@@ -53,7 +53,7 @@ def CTy.AbortRows : CTy → Prop
   | .amp C D => C.AbortRows ∧ D.AbortRows
   | .top => True
   | .all _ _ C | .nu C => C.AbortRows
-  | .eff _ _ q A B C => (B.isZero && q != .lin) = true ∧ A.AbortRows ∧ B.AbortRows ∧ C.AbortRows
+  | .eff _ _ q A B fin C => (B.isZero && q != .lin) = true ∧ A.AbortRows ∧ B.AbortRows ∧ C.AbortRows
 end
 
 

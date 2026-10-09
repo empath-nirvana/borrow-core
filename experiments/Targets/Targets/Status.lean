@@ -123,10 +123,12 @@ start (`Targets/B/BumpSim.lean`):
 * **D3, finalisers: option A.**  S5's endings are parameterised by the labels whose raises a
   finaliser may let escape (`Cancellation FR`); the target reads the empty instance `noFinRaise`.
   `FinaliserOrder` reads the same parameter (`FinAloneAt FR`, platform-free, subsuming `FinAlone`);
-  option A's is `finaliserOrder_A`.  The kernel half is applied with D5: Core's `[then]` types its
-  finaliser at the pure row (SPEC §24, `CDerives.effThen`), and so do `CDerivesNU` and the pin's
-  `RC_effThen`.  Check 2's derivations, whose finalisers let a raise escape, are not kept.
-  OQ-7 is separate and open.
+  option A's is `finaliserOrder_A`.  The kernel half is applied with D5: Core's `[then]` at option A
+  types its finaliser at the pure row (SPEC §24, now the derived rule `CDerives.effThenA` of SPEC
+  §27's `[then]`), and so do `CDerivesNU`, `CDerivesAt` and the pin's `RC_effThen`, each with
+  `[then]`'s unrestricted premise read at every depth of the cancel rows (`Row.UnrD`), as Core's.
+  Check 2's derivations, whose finalisers let a raise escape, are not kept.  OQ-7 is separate and
+  open.
 * **D4, the restatements.**  S6 counts a step that applies `κ` to a data value as a use (`UseAt`);
   `RunsAlike` (read by `TailLaw`, `EtaHold` and `AlgLawCode`; `AlgLaw` reads it with a finaliser's
   start observed but not its code, fix-up F2) compares a program's data answers;
@@ -640,7 +642,8 @@ index, an operation's index into its handler's tag list: data); report 2, `AHead
 the allocator's allocation count, never decremented, which selects the allocator's location), and,
 via `Loc` only, `Head`, `Chain`, `GPos`, `LinPath`, `MutPos`, `RefPos`, `TW` (heaps, resources,
 locations: names); report 3, `Table`, `ewpTS`, `vCE._f` (their `∀`-bound predicates range over
-lend records, `List SRec`, whose `Life` is a lifetime); report 5 (a), `AHead.alloc`, `AHead.tab`
+lend records, `List SRec`, whose `Life` is a lifetime) and `cancelOK` (its `∀`-bound predicate is
+the cancel obligation an entry carries, SPEC §27, read at lend records); report 5 (a), `AHead.alloc`, `AHead.tab`
 (the allocation count).  Reports 4 and 5 (b): none.  The nine negative tests pass, each at its own
 entry.
 

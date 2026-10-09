@@ -194,8 +194,6 @@ import Frontend.Check.Externs
 #print axioms BoCa.Fig16.LogRel.Core.dead_plain
 #print axioms BoCa.Fig16.LogRel.Core.hasHnd_dead
 #print axioms BoCa.Fig16.LogRel.Core.catches_dead
-#print axioms BoCa.Fig16.LogRel.Core.ewp_cfin
-#print axioms BoCa.Fig16.LogRel.Core.cancel_then
 #print axioms BoCa.Fig16.LogRel.Core.ewp_frame_then
 #print axioms BoCa.Fig16.LogRel.Core.ewp_ccatch
 #print axioms BoCa.Fig16.LogRel.Core.head_det_eff
@@ -212,3 +210,28 @@ import Frontend.Check.Externs
 -- SPEC §26 (entry 25): a λ whose binder is dead, at an effectful returner
 #print axioms BoCa.Fig16.LogRel.Core.gDenC_unit_dead
 #print axioms BoCa.Fig16.LogRel.Core.lamDead_compatC
+-- SPEC §27 (entry 26): finalisers with effects
+#print axioms BoCa.Fig16.LogRel.Core.finObl_eq
+#print axioms BoCa.Fig16.LogRel.Core.FinLe.refl
+#print axioms BoCa.Fig16.LogRel.Core.FinLe.trans
+#print axioms BoCa.Fig16.LogRel.Core.RowLe.trans
+#print axioms BoCa.Fig16.LogRel.Core.RowLe.of_find
+#print axioms BoCa.Fig16.LogRel.Core.finObl_mono
+#print axioms BoCa.Fig16.LogRel.Core.Row.tab_le
+#print axioms BoCa.Fig16.LogRel.Core.cancelOK_le
+#print axioms BoCa.Fig16.LogRel.Core.ewp_sub
+#print axioms BoCa.Fig16.LogRel.Core.cancel_frame
+#print axioms BoCa.Fig16.LogRel.Core.plain_cancel₀
+#print axioms BoCa.Fig16.LogRel.Core.cancel_frame_drop
+#print axioms BoCa.Fig16.LogRel.Core.ent_plain
+#print axioms BoCa.Fig16.LogRel.Core.ThenLe.nil
+#print axioms BoCa.Fig16.LogRel.Core.cfin_cancel
+#print axioms BoCa.Fig16.LogRel.Core.cfin_run
+#print axioms BoCa.Fig16.LogRel.Core.then_cancel
+#print axioms BoCa.Fig16.LogRel.Core.cancel_then_nil
+#print axioms BoCa.Fig16.LogRel.Core.seq_raise_run
+#print axioms BoCa.Fig16.LogRel.Core.sub_compatC
+#print axioms BoCa.Fig16.LogRel.Core.let_compatC
+#print axioms BoCa.Fig16.LogRel.Core.handleV_compatC
+#print axioms BoCa.Fig16.LogRel.Core.CDerives.effThenA
+#print axioms BoCa.Fig16.LogRel.Core.Row.unrD_iff_of_fin

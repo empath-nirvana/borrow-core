@@ -43,7 +43,7 @@ def deepGenE (ny nt : UInt32) (qs : Expr) : Expr :=
 
 /-- A row is below itself before any row. -/
 theorem rowLe_append_nil (P S : Row) : RowLe (P ++ []) (P ++ S) := by
-  intro m i o h
+  refine RowLe.of_find fun m i o h => ?_
   rw [List.append_nil] at h
   rw [Row.find_append, h, Option.some_or]
 

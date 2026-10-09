@@ -277,11 +277,12 @@ may span: capture, the stop's role, resume, the lend frames, and the spanning bo
 def I2 (M : SemWorld) (O : OutJ) (Adm : OpAdm) (c : RowClass) : Prop :=
   Arises M ∧ StopVisible M ∧ ShareResume M ∧ FramesW (ℍ := ℍ) M c ∧ SpanBorrows M O Adm c
 
-/-- **I3.a**: `contShare`'s cancel conjunct (`cancelOwed`) at W, at affine entries, with the
-closing clause: the cancel of the dead region `K†` keeps no error, and its end holds nothing its
-start did not. -/
+/-- **I3.a**: `contShare`'s cancel conjunct at W, at affine entries whose cancel row is empty
+(SPEC §27), with the closing clause: the cancel of the dead region `K†` keeps no error, and its end
+holds nothing its start did not. -/
 def ShareCancel (M : SemWorld) : Prop :=
-  ∀ T en n i K Φ ρ, M.share T en n i K Φ ρ → en.q ≠ .lin → en.q ≠ .unr → ∀ i', M.Ext i i' ρ →
+  ∀ T en n i K Φ ρ, M.share T en n i K Φ ρ → en.q ≠ .lin → en.q ≠ .unr →
+    en.fin = some (cancelObl OpTab.empty) → ∀ i', M.Ext i i' ρ →
     ewpW (ℍ := ℍ) M i' (Kont.plug K.dead (raiseE (.val (cancelVal none))))
       (cancelTabW (fun _ _ => none) (fun i'' => (∀ f ∈ (M.held i'').1, f ∈ (M.held i').1) ∧
                                   (∀ x ∈ (M.held i'').2, x ∈ (M.held i').2)))
@@ -407,6 +408,7 @@ def AntiFrameW (M : SemWorld) : Prop :=
 def FrameW (M : SemWorld) : Prop :=
   ∀ (T : OpTabI (Idx M.Stk)) (K : Kont), (∀ n, K.HasHnd n = false) →
     (∀ n, K.Catches n = false) → (∀ n j en, T n j = some en → en.q ≠ .unr) →
+    (∀ n j en, T n j = some en → ∀ P, en.fin = some P → P = cancelObl OpTab.empty) →
     ∀ (Fr : Idx M.Stk → WProp),
     (∀ ps i ps' i' t, M.Stop (ps, i) (ps', i') t → (∀ x, x ∈ i'.1 ↔ x ∈ i.1) →
        Entails (Fr i) (Fr i')) →

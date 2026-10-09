@@ -32,7 +32,7 @@ def AcceptedT1 (e : Expr) (A : VTy) : Prop :=
 /-- A closed `CDerives` derivation at a data answer is accepted. -/
 theorem acceptedT1_of_derives {e : Expr} {A : VTy} (hA : A.Data)
     (h : CDerives LifeCtx.empty [] e (.comp (.ret A))) : AcceptedT1 (ℍ := ℍ) e A :=
-  ⟨fun _ _ => h, soundRetAt_tier1_none [] A e hA (fun _ _ _ h => h) (fun _ _ => h)⟩
+  ⟨fun _ _ => h, soundRetAt_tier1_none [] A e hA (RowLe.nil _) (fun _ _ => h)⟩
 
 
 end Targets

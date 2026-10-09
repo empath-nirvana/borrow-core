@@ -197,7 +197,7 @@ theorem nu_ofEff_aff {n : UInt32} {A B : VTy} {S : Row} (hS : Row.NU S) :
   · rw [hf] at h
     have h' : o' = o := Option.some.inj h
     subst h'
-    obtain ⟨-, j, hj, -, rfl⟩ := Row.find_ofEff n _ 0 m i _ hf
+    obtain ⟨-, j, hj, -, rfl⟩ := Row.find_ofEff n _ 0 _ m i _ hf
     obtain rfl : j = 0 := by simp at hj; omega
     right; simp
 
@@ -320,7 +320,7 @@ theorem nu_ofEff_lin {n : UInt32} {A B : VTy} {S : Row} (hS : Row.NU S) :
   · rw [hf] at h
     have h' : o' = o := Option.some.inj h
     subst h'
-    obtain ⟨-, j, hj, -, rfl⟩ := Row.find_ofEff n _ 0 m i _ hf
+    obtain ⟨-, j, hj, -, rfl⟩ := Row.find_ofEff n _ 0 _ m i _ hf
     obtain rfl : j = 0 := by simp at hj; omega
     right; simp
 
@@ -348,7 +348,7 @@ theorem d_algLNU {Δ : LifeCtx} {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
     (fun h => absurd h (by simp [Row.Unr, Row.ofEff])) ?_ ?_
   · refine .effLet (A := .unit) nu_S₁₁ (deadSplit hΓ) (fun _ => Ctx.Dead.drops hΓ)
       (fun h => absurd h (by simp [Row.Unr, Row.ofEff]))
-      (.effPerform (o := ⟨11, 0, .lin, .unit, .unit⟩) nu_S₁₁ rfl rfl (.unitI hΓ.toP)) ?_
+      (.effPerform (o := ⟨11, 0, .lin, .unit, .unit, .ret .unit⟩) nu_S₁₁ rfl rfl (.unitI hΓ.toP)) ?_
     exact .effSub (S := []) nu_S₁₁ (fun _ _ _ h => by simp [Row.find] at h)
       (.ret (.var (.here hΓ.toP)))
   · exact .effSub (S := []) nu_S₁₁ (fun _ _ _ h => by simp [Row.find] at h)
@@ -374,7 +374,7 @@ theorem d_tickCENU {Δ : LifeCtx} {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
   refine .effLet (A := .unit) nu_S₁₁ (.right (deadSplit hΓ))
     (fun h => absurd h (by simp [Row.Weak, Row.ofEff]))
     (fun h => absurd h (by simp [Row.Unr, Row.ofEff])) ?_ ?_
-  · exact .effPerform (o := ⟨11, 0, .lin, .unit, .unit⟩) nu_S₁₁ rfl rfl (.unitI (Ctx.Dead.cons hΓ).toP)
+  · exact .effPerform (o := ⟨11, 0, .lin, .unit, .unit, .ret .unit⟩) nu_S₁₁ rfl rfl (.unitI (Ctx.Dead.cons hΓ).toP)
   · exact .effSub (S := []) nu_S₁₁ (fun _ _ _ h => by simp [Row.find] at h)
       (.ret (.unitI (.drop rfl (.drop rfl hΓ.toP))))
 
@@ -406,7 +406,7 @@ theorem d_tailProgNU : CDerivesNU LifeCtx.empty [] tailProg (.comp (.ret (schedR
   refine d_withSchedLinNU ?_
   exact d_withHTNU (S := S₁₁) (A := .unit) (R := .unit) (nu_ofEff_lin nu_S₁₁) (by decide)
     (by simp [Row.ofEff]) (by cdead) (d_tailClNU (by cdead)) (d_idRetNU nu_S₁₁ (by cdead))
-    (.effPerform (o := ⟨5, 0, .lin, .unit, .unit⟩) (nu_ofEff_lin nu_S₁₁) rfl rfl
+    (.effPerform (o := ⟨5, 0, .lin, .unit, .unit, .ret .unit⟩) (nu_ofEff_lin nu_S₁₁) rfl rfl
       (.unitI (by cdead)))
 
 end Targets.Inst

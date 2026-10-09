@@ -55,7 +55,7 @@ inductive OCTy where
   | top
   | all (x : LifeVar) (b : Lifetime.Life) (C : OCTy)
   | nu (C : OCTy)
-  | eff (n i : UInt32) (q : Qual) (A B : VTy) (C : OCTy)
+  | eff (n i : UInt32) (q : Qual) (A B : VTy) (fin : CTy) (C : OCTy)
   /-- `F_S A`, `S` a row family over the row environment. -/
   | effF (S : RowEnv → Row) (A : OVTy)
   /-- `∀ρ:k. C`, the row `∀`. -/
@@ -89,7 +89,7 @@ def OCTy.den (η : RowEnv) : OCTy → CTy
   | .top => .top
   | .all x b C => .all x b (OCTy.den η C)
   | .nu C => .nu (OCTy.den η C)
-  | .eff n i q A B C => .eff n i q A B (OCTy.den η C)
+  | .eff n i q A B fin C => .eff n i q A B fin (OCTy.den η C)
   | .effF S A => CTy.effOf (S η) (OVTy.den η A)
   | .allR _ _ C => OCTy.den η C
 end
@@ -121,7 +121,7 @@ def OCTy.ofC : CTy → OCTy
   | .top => .top
   | .all x b C => .all x b (OCTy.ofC C)
   | .nu C => .nu (OCTy.ofC C)
-  | .eff n i q A B C => .eff n i q A B (OCTy.ofC C)
+  | .eff n i q A B fin C => .eff n i q A B fin (OCTy.ofC C)
 end
 
 mutual
@@ -137,7 +137,7 @@ theorem OCTy.den_ofC (η : RowEnv) : ∀ C : CTy, OCTy.den η (OCTy.ofC C) = C
   | .arr A C => by simp only [OCTy.ofC, OCTy.den, OVTy.den_ofV η A, OCTy.den_ofC η C]
   | .amp C D => by simp only [OCTy.ofC, OCTy.den, OCTy.den_ofC η C, OCTy.den_ofC η D]
   | .top => rfl
-  | .all _ _ C | .nu C | .eff _ _ _ _ _ C => by simp only [OCTy.ofC, OCTy.den, OCTy.den_ofC η C]
+  | .all _ _ C | .nu C | .eff _ _ _ _ _ _ C => by simp only [OCTy.ofC, OCTy.den, OCTy.den_ofC η C]
 end
 
 mutual
@@ -153,7 +153,7 @@ def OCTy.RFree : OCTy → Prop
   | .arr A C => OVTy.RFree A ∧ OCTy.RFree C
   | .amp C D => OCTy.RFree C ∧ OCTy.RFree D
   | .top => True
-  | .all _ _ C | .nu C | .eff _ _ _ _ _ C => OCTy.RFree C
+  | .all _ _ C | .nu C | .eff _ _ _ _ _ _ C => OCTy.RFree C
   | .effF _ A => OVTy.RFree A
   | .allR _ _ _ => False
 end
@@ -170,7 +170,7 @@ theorem OCTy.rFree_ofC : ∀ C : CTy, OCTy.RFree (OCTy.ofC C)
   | .arr A C => ⟨OVTy.rFree_ofV A, OCTy.rFree_ofC C⟩
   | .amp C D => ⟨OCTy.rFree_ofC C, OCTy.rFree_ofC D⟩
   | .top => trivial
-  | .all _ _ C | .nu C | .eff _ _ _ _ _ C => OCTy.rFree_ofC C
+  | .all _ _ C | .nu C | .eff _ _ _ _ _ _ C => OCTy.rFree_ofC C
 end
 
 /-- An open judgement's subject: a value at an open value type, or a computation at an open

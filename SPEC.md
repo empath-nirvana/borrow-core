@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 0.44 · 2026-10-09
+Version 0.45 · 2026-10-09
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -2596,7 +2596,7 @@ Six rules, over `CDerives` with its context premises (§10):
     Δ; Γ ⊢ raise_{n,i} V : F_Σ B          (any B: an abortive operation, whose answer 0 is absurd)
 
     Γ = Γ₁, Γ₂    Δ; Γ₁ ⊢ M : F_Σ A    Δ; x : A, Γ₂ ⊢ N : F_Σ B    Δ; Γ₂ ⊢ D : F 1
-    ──────────────────────────────────────────────────────────── [then]   (§24: D at the pure row)
+    ──────────────────────────────────────────────────────────── [then]   (§27: D at its own row)
     Δ; Γ ⊢ M then x. N unwind D : F_Σ B
 
     Γ = Γ₁, Γ₂    Δ; Γ₁ ⊢ M : F_Σ A    Δ; x : A, Γ₂ ⊢ N : F_Σ B
@@ -2611,6 +2611,7 @@ Six rules, over `CDerives` with its context premises (§10):
 
     K_i = U((B_i ⊸ F_Σ R) & ⊤) (lin),   U((B_i ⊸ F_Σ R) & F_Σ 1) (aff),   !U((B_i ⊸ F_Σ R) & F_Σ 1) (unr)
     an abortive operation's clause is !U(A_i ⊸ F_Σ R): the machine has cancelled κ
+    (§27: the cancel branch is at F_{F_i ⊕ Σ} 1, F_i the operation's cancel row)
 
 - **As built** (`Core/Fundamental.lean`, `CDerives.eff*`; `Core/EffRules.lean`):
   - a row is a list of operations `(n, i, q, A_i, B_i)`, and `F_Σ R` is `CTy.effOf Σ R`;
@@ -2637,12 +2638,12 @@ Six rules, over `CDerives` with its context premises (§10):
   - `&`, `∀`, and thunks of λ-values (a block `!U(A ⊸ F_Σ B)`).
 - **Unwinding contexts.** `[then]` is `[let]` with a finaliser. `D` runs in the same `Γ₂` as `N`,
   additively, and disposes it (§12's destructors).
-- **A finaliser lets no operation escape it** (§24, option A): `D : F 1`. It handles its own
-  raises, and calls answering operations. The machine sends a finaliser's raises and operations to
-  the nearest live handler (*Cancels*); a typing of finalisers that raise to live handlers and
-  perform operations is decisions D2 and D3 of 2026-10-08, and until it lands a finaliser is typed
-  at `F 1`. A plain `[let]` at a row with an abortive or affine operation needs `Γ₂` to drop with
-  nothing owned (borrows, `!`, data), since a cancel or an unwind abandons it.
+- **A finaliser's effects** (§27, decisions D2 and D3 of 2026-10-08): `D` is at its own row
+  `Σ_D ≤ Σ`, and each operation of `M` whose continuation may be cancelled records `D`'s effects in
+  its cancel row. The machine sends a finaliser's raises and operations to the nearest live handler
+  (*Cancels*), and `[sub]` at the cancel's use asks them to have a live instance there. A plain
+  `[let]` at a row with an abortive or affine operation needs `Γ₂` to drop with nothing owned
+  (borrows, `!`, data), since a cancel or an unwind abandons it.
 - **Drop glue** is a surface obligation: the elaborator inserts a `[then]` finaliser for every
   owned local in scope at a possible weakening point, as Rust inserts drop glue. So the side
   condition "the abandoned context drops with nothing owned" is met automatically. The kernel
@@ -2710,16 +2711,12 @@ Six rules, over `CDerives` with its context premises (§10):
 
 ### Finalisers that perform operations (K3, #162)
 
-A finaliser is a computation `D : F 1` (§24, option A), run where its `ubind` stands:
+A finaliser is a computation `D : F_{Σ_D} 1` (§27), run where its `ubind` stands:
 
 - it may call answering operations (flush a log, close a socket through its capability);
-- it may raise, and handles its raises itself: none escapes it.
-
-The machine gives a finaliser's escaping raises and its operations their meaning; a typed
-program's finaliser reaches neither under option A. They are what a typing of finalisers with
-effects reads (decisions D2 and D3 of 2026-10-08: a finaliser may raise and perform operations of
-live handlers, and a raise or operation of a name with no live instance outside the dying region is
-a type error).
+- it may raise and perform operations of live handlers: those outside the `[then]` during an
+  ordinary unwind, and those outside every region that can cancel it during a cancel (§27's cancel
+  rows).
 
 If a finaliser raises during an ordinary unwind, the new unwind **supersedes** the pending one:
 the pending `raise (m, v)` is in the finaliser's continuation and is abandoned. During a cancel,
@@ -3697,6 +3694,8 @@ needs three things today's rules lack:
 - The finaliser is at the pure row: it handles its own raises, and none escapes it. A program
   whose finaliser lets a raise escape is no longer typed; the corpus has none. The machine is
   unchanged (§19's *Cancels* and *Finalisers that perform operations*).
+- **Superseded by §27**, whose `[then]` types the finaliser at its own row. This rule stays as a
+  derived rule (`CDerives.effThenA`), its unrestricted premise read at some depth.
 
 ### Semantics
 
@@ -3705,7 +3704,7 @@ No change to the machine, the relation, `wpTS`, `wpG` or `ewpTS`.
 - `[let-poly]` (`letPoly_compatC`, `Core/PolyLet.lean`): the let takes one β-step, which allocates
   nothing, to `N` with the λ-value for `x` (`cC_head`); closing that term with the λ-value at the
   dead slot is closing `N` at the λ-value (`psub_fill`).
-- `[handle]` (`handleV_compatC`, `Core/EffRules.lean`): `H` closes to a value; its relation is read
+- `[handle]` (`handleV_compatC`, `Core/EffFin.lean`): `H` closes to a value; its relation is read
   off `wpTS` at that value, under the frame the handled run starts in (`wpTS_val_post`: the run from
   a value takes no step); at the persistent types `retTy` and `clausesTy` it holds at `∅`; the
   handler is then `ewp_handle` at clause values (`ewp_handle_vals`), which `handle_compatC` now
@@ -3874,6 +3873,138 @@ and no borrow lemma changes. The checker does not emit the rule.
 - **Weakening by an unused live slot of a persistent type**, as a derived rule of the kernel: not
   derived. A direct induction meets the `!Γ` premises above.
 
+## 27. Entry 26 — finalisers with effects: cancel rows
+
+### Motivation
+
+Decisions D2 and D3 of 2026-10-08 (D1 is §19's frame deadness). A finaliser may raise and perform
+operations of names with a live instance outside every region that can cancel it (D2); a raise or
+operation of a name with no live instance there is a type error (D3). Under §24's option A a
+finaliser is at `F 1`.
+
+The check cannot live in `[then]`. `e7b 1 2 = toResult 2 (timeoutH 1 (bodyF 1 (raise 2)))` and
+`e7c 1 2 = timeoutH 1 (toResult 2 (bodyF 1 (raise 2)))` hold the same `[then]` subterm at rows with
+the same entries, and D3 accepts the first and rejects the second. What decides is the row of the
+code that cancels, which is visible where `κ`'s cancel branch is used. So each operation whose
+continuation may be cancelled records what that cancel may do, its *cancel row*; the record is
+carried outward through function types and `[sub]`, and checked where the cancel is invoked.
+
+### Typing
+
+- **Cancel rows.** A row entry is `⟨n, i, q, A, B, F⟩` (`OpSig.fin`), and `F_Σ A`'s layers are
+  `CTy.eff n i q A B F C`. An entry is *capturable* when it is not abortive and `q ≠ lin`
+  (`capB`): its `κ` has a cancel branch, and `F` is read only there. A cancel row is `⊤`
+  (`CTy.top`) or a row, its layers `F.rowOf`, whose capturable entries carry cancel rows in turn:
+  a finite tree. The default is the empty row (`F 1`), and every existing derivation uses it.
+- **Order** (`FinLe`, `OpSig.LeF`, `RowLe`). `F ≤ ⊤`; `R ≤ R′` when each entry `R` finds is the
+  one `R′` finds at its key (`n i q A B` equal), with its cancel row `≤` at a capturable entry.
+  `[sub]` is this order: an entry's cancel row only grows outward.
+- **`F ⋈ E ≤ T`** (`ThenLe`), where `F` is the cancel row of a continuation captured below a
+  finaliser whose row is `E`: `T = ⊤`, or `F ≠ ⊤` and
+  - each entry `x` of `F` is `T`'s at its key, its cancel row `x.fin ⋈ E ≤ T(x).fin` at a
+    capturable `x` (a nested cancel below the finaliser fires it too);
+  - each entry `z` of `E` is `T`'s at its key, its cancel row `pend (aborts F) z.fin ≤ T(z).fin`
+    at a capturable `z` (`PendLe`: a cancel of the finaliser's own continuation passes the `cfin`
+    that keeps an error of `F`'s abortive entries, and those errors are `T(z).fin`'s, at every
+    depth).
+
+  Both are relations, defined by recursion on the depth of `F` (`G`).
+- **`[then]`**:
+
+      Γ = Γ₁, Γ₂    Δ; Γ₁ ⊢ M : F_{Σ_M} A    Δ; x : A, Γ₂ ⊢ N : F_Σ B    Δ; x̸, Γ₂ ⊢ D : F_{Σ_D} 1
+      Σ_M ≤ Σ    Σ_D ≤ Σ    for every capturable o of Σ_M:  Σ_M(o).fin ⋈ Σ_D ≤ Σ(o).fin
+      (Σ has an unrestricted operation at some depth ⇒ !Γ₂)
+      (Σ_D has an unrestricted operation at some depth ⇒ Σ_M's pending errors are persistent)
+      ──────────────────────────────────────────────────────────────── [then]
+      Δ; Γ ⊢ M then x. N unwind D : F_Σ B          (§19: Σ's names nonzero, its keys unique)
+
+  - `Σ_D ≤ Σ`: during an ordinary unwind `D` runs where the `[then]` stands, so its effects, and
+    its operations' cancel rows, are the `[then]`'s.
+  - `Σ_M(o).fin ⋈ Σ_D ≤ Σ(o).fin`: a cancel of a continuation captured at `o` inside `M` runs `D`
+    under its `cfin`, and so does every cancel nested in it.
+  - *At some depth* (`Row.UnrD`): at `Σ`'s top, or in the cancel row of a capturable entry at some
+    depth. `D`'s frame runs in the cancels below it, where an unrestricted operation may resume its
+    continuation twice.
+  - *Pending errors* (`Row.PendPers`): the arguments of `Σ_M`'s abortive entries, and of the
+    abortive entries of its capturable entries' cancel rows at every depth, are `!`. A running
+    finaliser's `cfin` holds such an error while a cancel of its continuation runs.
+  - §24's `[then]` is the instance `Σ_M = Σ`, `Σ_D = ∅` (`CDerives.effThenA`), since `F ⋈ ∅ ≤ F`
+    (`ThenLe.nil`).
+- **`[handle]`** is §24's rule, with the `i`-th operation's cancel row `F_i` (`Row.ofEff n E 0 fs`,
+  `clausesTy S R E fs`), and
+
+      K_i = U((B_i ⊸ F_Σ R) & ⊤) (lin),   U((B_i ⊸ F_Σ R) & C_i) (aff),   !U((B_i ⊸ F_Σ R) & C_i) (unr)
+      C_i = F_{F_i ⊕ Σ} 1,   ⊤ when F_i = ⊤                                          (`cancelTy`)
+
+  `F_i ⊕ Σ` is `F_i`'s layers ahead of `Σ`'s (`F.rowOf ++ Σ`), rows being read first match. At
+  `F_i = []` it is `Σ`, so `κ`'s type is unchanged for every existing derivation. `[handle]` gains
+  no premise: D3's check is `[sub]` from `C_i` to the row of the code that invokes the cancel. A
+  handler that never cancels is checked for nothing.
+- **Every other rule is unchanged**, `[let]`'s side condition included; `[perform]` and `[raise]`
+  take entries at any cancel rows.
+
+### Semantics
+
+No change to the machine, `wpTS`, `wpG`, `ewpTS`'s definition, BoLo's world or a borrow lemma.
+
+- **Entries** (`OpEnt.fin`, `finObl`): a capturable entry's cancel obligation at `δ`, none at `⊤`.
+  `cancelObl T ls e ≜ ewpTS ls e (cancelTab T) ⊥`: the cancel run stops at its end
+  `K₀[raise (⊥, err)]` (`err` none, or an abortive entry of `T` at its argument relation, with
+  nothing owned left) or at a non-abortive operation of `T` under a context free of it, owing its
+  continuation as any stop does (`performStop`).
+- **The continuation's share** (`contShare`): at a capturable entry, the cancel run of the dead
+  region at the entry's obligation (`cancelOK`). At the empty cancel row it is §19's
+  `cancelOwed`.
+- **The lemmas** (`Core/EffFin.lean`):
+  - obligations grow with cancel rows (`finObl_mono`, `cancelOK_le`, `ewp_sub`): `[sub]`
+    (`sub_compatC`);
+  - a cancel under a plain context (`cancel_frame`, `plain_cancel₀`); a frame beside it holding
+    nothing owned is left behind at the run's first stop (`cancel_frame_drop`, from `wpG_garbage`;
+    `ent_plain`), so `[let]` reads nothing of the cancel rows (`let_compatC`);
+  - `[cfin-cancel]`: `cfin err` around a nested cancel run at `G` is a cancel run at any `G′` with
+    `pend {err} G ≤ G′` (`cfin_cancel`); a finaliser at `Σ_D` under a cancel's `cfin` is a cancel run
+    (`cfin_run`); the `[then]` frame in a cancel is a cancel run at `F ⋈ Σ_D`, by induction on `F`
+    (`then_cancel`); a finaliser that performs during an ordinary unwind (`seq_raise_run`);
+    `[then]` (`ewp_frame_then`, `then_compatC`);
+  - `κ`'s cancel branch: the cancel run at `F_i`, under its `ccatch`, is in the relation at `C_i`
+    (`ewp_ccatch`), and `KapRel`'s cancel part is at `C_i`'s table (`ewp_handle`, `handle_compatC`,
+    `handleV_compatC`).
+
+### Theorems
+
+`fundamentalC`, `adequacyC`, `fundamentalD`, `adequacyD`, `adequacyD_obs` and every compatibility
+lemma keep their statements, over the extended judgment. `CDerives.effThen` takes `Σ_M`, `Σ_D` and
+the premises above; `effHandleV` takes the cancel rows; `effSub`'s `RowLe` is the order above.
+`CDerives.effThenA` and `CDerives.effHandle` keep their former shapes, `effThenA`'s unrestricted
+premise read at some depth. No new index.
+
+### Programs
+
+The runs of §19's cancels are unchanged (`Core/EffCancel.lean`).
+
+### Lowering
+
+Under option A a finaliser never suspends, and the backend does not lower one that does.
+
+### Baseline
+
+`Paper/`, `Support/`, the machine and the effectful `wp` are unchanged; no borrow rule and no borrow
+lemma changes. Every existing derivation types at empty cancel rows. The checker emits empty cancel
+rows (`Frontend/Check/Elab.lean`) and reads `[then]`'s premise at some depth (`Row.unrDB`), which at
+its rows is the top-level test, so it accepts and rejects what it did.
+
+### Open
+
+- **`[then]`'s two premises on unrestricted operations** restrict `unr` beyond §19's `[then]`
+  (decision 63). §19's top-level premise is not enough: the finaliser's frame is live in the
+  cancels below it.
+- **`⊤` cancel rows.** A continuation whose cancel would need unboundedly many outer instances
+  (recursion through a finaliser's capturable operation) gets `⊤` and cannot be cancelled: the
+  approximation of a finite type.
+- **S5 at D2's endings, algebraicity's `KeptKapFree`, and `CfinEnds`**
+  (`experiments/Targets/FINALISERS.md` §3). An unrestricted continuation discarded with a kept
+  error inside it is the tolerated exception to "no error is dropped".
+
 ---
 
 ## Status
@@ -3970,8 +4101,7 @@ Frame deadness (*Cancels*, decision D1 of 2026-10-08) is implemented: the dead r
 `Core/EffDefs.lean`, and the cancel lemmas, `ewp_handle` and `then_compatC` in
 `Core/EffRules.lean`; the runs and the refutation of the abortive-row `[then]` in
 `Core/EffCancel.lean`; the lowering keeps the first error with no mask (`Backend/Clos/Capture.lean`,
-`Backend/Clos/Unwind.lean`). The typing of finalisers with effects (decisions D2, D3) is not yet
-built: a finaliser is typed at `F 1`.
+`Backend/Clos/Unwind.lean`). The typing of finalisers with effects (decisions D2, D3) is §27.
 
 Entry 24 (§25) is implemented: the machine in `Paper/S3_Dynamics/Definitions.lean` (`hndVal`,
 `capTag`, `kappaAt`, `kappaC`, `kappaCell`, `Head.hop`), the interpreter, `Core/EffRules.lean`
@@ -3981,15 +4111,35 @@ the checker (`rEffHandle`) and `Backend/Clos/Convert.lean`.
 Entry 25 (§26) is implemented: `Core/Fundamental.lean` (`CDerives.lamDead`, `lamDead_compatC`) and
 `Core/Weaken.lean`.
 
-Entry 23 (§24) is implemented: `Core/PolyLet.lean` (`letPoly_compatC`), `Core/EffRules.lean`
+Entry 23 (§24) is implemented: `Core/PolyLet.lean` (`letPoly_compatC`), `Core/EffFin.lean`
 (`handleV_compatC`, `ewp_handle_vals`, `then_compatC`) and `Core/Fundamental.lean`
-(`CDerives.letPoly`, `CDerives.effHandleV`, `CDerives.effThen`, the theorem `CDerives.effHandle`);
-the checker types a finaliser at `F 1` (`Frontend/Check/Steps.lean`, `Frontend/Check/Rules.lean`,
-`Frontend/Check/Checker.lean`).
+(`CDerives.letPoly`, `CDerives.effHandleV`, the theorems `CDerives.effThenA` and
+`CDerives.effHandle`); the checker types a finaliser at `F 1` (`Frontend/Check/Steps.lean`,
+`Frontend/Check/Rules.lean`, `Frontend/Check/Checker.lean`).
+
+Entry 26 (§27) is implemented in the kernel: cancel rows in `Core/Types.lean` (`OpSig.fin`,
+`CTy.eff`'s `fin`, `CTy.rowOf`, `capB`); the entries' cancel obligations in `Core/EffDefs.lean`
+(`OpEnt.fin`, `cancelOK`, `cancelTab`, `cancelObl`) and `Core/Relation.lean` (`finObl`); the order,
+`⋈`, the cancel lemmas and the compatibility of `[sub]`, `[let]`, `[then]` and `[handle]` in
+`Core/EffFin.lean`; the rules in `Core/Fundamental.lean` (`CDerives.effThen`, `effHandleV`); the
+checker's empty cancel rows (`Frontend/Check/`). The backend does not lower a finaliser that
+suspends.
 
 ---
 
 ## Changelog
+
+- **0.45** (2026-10-09) — §27 (decisions D2 and D3 of 2026-10-08): finalisers with effects. Each
+  operation whose continuation may be cancelled carries a cancel row, what that cancel may do;
+  `[sub]` lets cancel rows only grow, `κ`'s cancel branch is at `F_{F_i ⊕ Σ} 1`, and `[sub]` where
+  the cancel is invoked asks a finaliser's raises and operations to have a live instance there.
+  `[then]` types its finaliser at its own row, each cancel row of its computation above the cancel
+  row combined with the finaliser's (`⋈`); its unrestricted premise is read at some depth, and the
+  errors pending at the finaliser are persistent when the finaliser's row has an unrestricted
+  operation. §24's `[then]` is a derived rule. §19's *Typing* and *Finalisers that perform
+  operations* point to §27. No change to the machine, `wpTS`, `wpG`, `ewpTS`, `[let]`, the
+  statements of `fundamentalC`, `adequacyC`, `fundamentalD`, `adequacyD` or any borrow rule, and
+  every existing derivation types at empty cancel rows.
 
 - **0.44** (2026-10-09) — §19 (decision D1 of 2026-10-08): deadness by frame. `κ`'s cancel branch
   runs the cancelled region with its handler frames and cancel delimiters removed (`Kont.dead`),

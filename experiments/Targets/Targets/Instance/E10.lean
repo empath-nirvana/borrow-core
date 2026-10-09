@@ -100,6 +100,7 @@ theorem d_timeoutR {lw : (orowAlg Ξ).Lab} (hlw : Ξ lw.1 = [(.aff, .unit, .unit
   have hcb : RowLe (rowOf lw ++ r)
       (Row.ofEff lw.1 [(.aff, .unit, .unit)] 0 ++ Row.dropName lw.1 r) := by
     have h₁ := rowLe_ofEff_dropName (rowAt_rowOf_append lw hr) lw.1
+      fun i o hf _ => fin_rowOf_append lw (rowAt_rowOf_append lw hr) i o hf
     rwa [dropName_rowOf_append, hlw] at h₁
   refine .lam (.effSub (rowLe_dropName lw.1 r) ?_)
   refine d_handleL lw hlw (rowAt_dropName hr lw.1) (fun o ho => ne_of_mem_dropName o ho)

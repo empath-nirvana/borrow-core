@@ -1288,11 +1288,11 @@ theorem d_stBodyL {Ξ : EffCtx} (h13 : Ξ 13 = stE) {Δ : LifeCtx} :
   refine .bind (A := boolT) (.right .nil) (.ret (.sumI₁ (.unitI (.cons .nil)))) ?_
   refine .effLet (A := .unit) (.left (.right .nil)) (fun h => absurd h nW_stRow)
     (fun h => absurd h nU_stRow)
-    (.effPerform (o := ⟨13, 1, .lin, boolT, .unit⟩) (rowAt_stRow h13) rfl rfl
+    (.effPerform (o := ⟨13, 1, .lin, boolT, .unit, .ret .unit⟩) (rowAt_stRow h13) rfl rfl
       (.var (.here (.cons .nil)))) ?_
   refine .effLet (A := boolT) (.left (.dead (.right .nil))) (fun h => absurd h nW_stRow)
     (fun h => absurd h nU_stRow)
-    (.effPerform (o := ⟨13, 0, .lin, .unit, boolT⟩) (rowAt_stRow h13) rfl rfl
+    (.effPerform (o := ⟨13, 0, .lin, .unit, boolT, .ret .unit⟩) (rowAt_stRow h13) rfl rfl
       (.unitI (.drop rfl (.cons (.cons .nil)))))
     ?_
   exact .bind (A := boolT) (.left (.dead (.dead (.right .nil))))
@@ -1308,7 +1308,7 @@ theorem d_stBodyR {Ξ : EffCtx} (h13 : Ξ 13 = stE) {Δ : LifeCtx} :
   refine .bind (A := boolT) (.right .nil) (.ret (.sumI₁ (.unitI (.cons .nil)))) ?_
   refine .effLet (A := .unit) (.dup rfl (.right .nil)) (fun h => absurd h nW_stRow)
     (fun h => absurd h nU_stRow)
-    (.effPerform (o := ⟨13, 1, .lin, boolT, .unit⟩) (rowAt_stRow h13) rfl rfl
+    (.effPerform (o := ⟨13, 1, .lin, boolT, .unit, .ret .unit⟩) (rowAt_stRow h13) rfl rfl
       (.var (.here (.cons .nil)))) ?_
   exact .bind (A := boolT) (.left (.left (.right .nil)))
     (.ret (.var (.skip rfl (.here (.cons .nil)))))

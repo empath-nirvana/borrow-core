@@ -113,7 +113,7 @@ def ExtW (i i' : Ix) (ρ : WRes) : Prop := OrdW LSub.empty i i' ρ
 /-- A table at W's index read at the records, the stack fixed. -/
 def OpTabI.at (T : OpTabI Ix) (s : Stk) : OpTab :=
   fun n j => (T n j).map fun en => ⟨en.q, en.abort, fun ls v => en.PA (ls, s) v,
-    fun ls v => en.PB (ls, s) v⟩
+    fun ls v => en.PB (ls, s) v, en.fin⟩
 
 /-- **W as the interaction's world.** -/
 def WP (p : Placement) : Targets.SemWorld where
@@ -129,7 +129,7 @@ def WP (p : Placement) : Targets.SemWorld where
   Stop a b _ := (∀ q, q ∈ b.1 ↔ q ∈ a.1) ∧ (∀ x, x ∈ b.2.1 ↔ x ∈ a.2.1) ∧ b.2.2 = a.2.2
   share _ en _ i K Φ :=
     contShare ⟨en.q, en.abort, fun ls v => en.PA (ls, i.2) v,
-      fun ls v => en.PB (ls, i.2) v⟩ i.1 K (fun ls t => Φ (ls, i.2) t)
+      fun ls v => en.PB (ls, i.2) v, en.fin⟩ i.1 K (fun ls t => Φ (ls, i.2) t)
 
 end ProbeD1
 

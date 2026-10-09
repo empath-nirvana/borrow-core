@@ -23,12 +23,12 @@ open BoCa.BoLo (performE)
 open BoCa.Programs (alloc' free' app2)
 
 /-- `Foo : 1 ↠^lin 1`, the operation `0` of the name `5`. -/
-def fooSig : OpSig := ⟨5, 0, .lin, .unit, .unit⟩
+def fooSig : OpSig := ⟨5, 0, .lin, .unit, .unit, .ret .unit⟩
 
 def fooE : Expr := performE (opArgE 5 0 (.val .unit))
 
 /-- `Choose : 1 ↠^lin Flag`, the operation `0` of the name `6`. -/
-def chooseSig : OpSig := ⟨6, 0, .lin, .unit, Flag⟩
+def chooseSig : OpSig := ⟨6, 0, .lin, .unit, Flag, .ret .unit⟩
 
 def chooseE : Expr := performE (opArgE 6 0 (.val .unit))
 

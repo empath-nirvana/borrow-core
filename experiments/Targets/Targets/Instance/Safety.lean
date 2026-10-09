@@ -49,7 +49,7 @@ end DataDiv
 /-! ### S2 and S3 at today's kernel -/
 
 /-- An operation at the reserved name `0`: `0.0 : 1 ↠ 1`, linear. -/
-def op₀ : OpSig := ⟨0, 0, .lin, .unit, .unit⟩
+def op₀ : OpSig := ⟨0, 0, .lin, .unit, .unit, .ret .unit⟩
 
 /-- The closed row holding `op₀` alone. -/
 def ε₀ : ORow := ⟨[op₀], none⟩

@@ -24,7 +24,7 @@ open BoCa.Fig16.LogRel.Core.EffPrograms
 open BoCa.Lifetime (LifeCtx LifeVar)
 
 /-- `ping : 1 ↠^lin 1`, the operation `0` of the name `9`. -/
-def pingSig : OpSig := ⟨9, 0, .lin, .unit, .unit⟩
+def pingSig : OpSig := ⟨9, 0, .lin, .unit, .unit, .ret .unit⟩
 
 /-- A platform with one operation, answering `()` and keeping its state. -/
 def Platform.ping : Platform :=

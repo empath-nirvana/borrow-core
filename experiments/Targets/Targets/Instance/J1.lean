@@ -117,7 +117,7 @@ theorem OVTy.isPoly_of_rFree : ∀ {A : OVTy}, A.RFree → A.isPoly = false
   | .unit, _ | .tensor _ _, _ | .zero, _ | .sum _ _, _ | .ref _, _ | .imm _ _, _ | .mut _ _, _
   | .box _ _, _ | .unk, _ | .tvar _, _ | .mu _, _ | .int _, _ | .fam _, _ | .opq _, _ => rfl
   | .thunk (.ret _), _ | .thunk (.arr _ _), _ | .thunk (.amp _ _), _ | .thunk .top, _
-  | .thunk (.all _ _ _), _ | .thunk (.nu _), _ | .thunk (.eff _ _ _ _ _ _), _
+  | .thunk (.all _ _ _), _ | .thunk (.nu _), _ | .thunk (.eff _ _ _ _ _ _ _), _
   | .thunk (.effF _ _), _ => rfl
   | .bang .unit, _ | .bang (.tensor _ _), _ | .bang .zero, _ | .bang (.sum _ _), _
   | .bang (.ref _), _ | .bang (.imm _ _), _ | .bang (.mut _ _), _ | .bang (.box _ _), _
@@ -125,7 +125,7 @@ theorem OVTy.isPoly_of_rFree : ∀ {A : OVTy}, A.RFree → A.isPoly = false
   | .bang (.fam _), _ | .bang (.opq _), _ => rfl
   | .bang (.thunk (.ret _)), _ | .bang (.thunk (.arr _ _)), _ | .bang (.thunk (.amp _ _)), _
   | .bang (.thunk .top), _ | .bang (.thunk (.all _ _ _)), _ | .bang (.thunk (.nu _)), _
-  | .bang (.thunk (.eff _ _ _ _ _ _)), _ | .bang (.thunk (.effF _ _)), _ => rfl
+  | .bang (.thunk (.eff _ _ _ _ _ _ _)), _ | .bang (.thunk (.effF _ _)), _ => rfl
 
 /-! ### Closing the polymorphic slots -/
 
@@ -637,7 +637,7 @@ theorem subClosed_J₁_tied {Γ : List OVTy} {e : Expr} {ε₁ ε₂ : ORow} {A 
     have hC' : CTy.effOf (orowRF.den Ξ ε₁ η) (A.den η) =
         CTy.effOf S (.sum A₀ (.thunk (CTy.loopEff S₀ A₀ .unit))) := hC
     obtain ⟨rfl, hA⟩ := effOf_inj hC'
-    refine ⟨orowRF.den Ξ ε₂ η, S₀, A₀, fun n i o hf => hle η n i o (hS₀ n i o hf), hC₀, ?_⟩
+    refine ⟨orowRF.den Ξ ε₂ η, S₀, A₀, RowLe.trans hS₀ (hle η), hC₀, ?_⟩
     show CTy.effOf (orowRF.den Ξ ε₂ η) (A.den η) = _
     rw [hA]
 

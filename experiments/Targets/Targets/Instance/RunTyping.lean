@@ -52,7 +52,7 @@ def lvProg : Expr := bindE (performE (opArgE 6 0 (.val .unit))) (.seq (.var 0) (
 theorem d_lvProgNU : CDerivesNU LifeCtx.empty [] lvProg (.comp (CTy.effOf Slv .unit)) :=
   .effLet (A := .unit) nu_Slv .nil (fun _ _ h => absurd h List.not_mem_nil)
     (fun _ _ h => absurd h List.not_mem_nil)
-    (.effPerform (o := ⟨6, 0, .lin, .unit, .unit⟩) nu_Slv rfl rfl (.unitI .nil))
+    (.effPerform (o := ⟨6, 0, .lin, .unit, .unit, .ret .unit⟩) nu_Slv rfl rfl (.unitI .nil))
     (.unitE (.left .nil) (.var (.here .nil))
       (.effSub (S := []) nu_Slv (fun _ _ _ h => by simp [Row.find] at h) (.ret (.unitI (.cons .nil)))))
 
@@ -94,7 +94,7 @@ theorem lvStuck_reach :
 /-- `[6.0 : 1 ↠ 1]` is not tied to `ΞA`, which declares `6` at `1 ↠ bool`. -/
 theorem not_rowAt_Slv : ¬ RowAt ΞA Slv := by
   intro h
-  have := (h 6 0 ⟨6, 0, .lin, .unit, .unit⟩ (by simp [Slv, Row.ofEff, Row.find])).2.2
+  have := (h 6 0 ⟨6, 0, .lin, .unit, .unit, .ret .unit⟩ (by simp [Slv, Row.ofEff, Row.find])).2.2
   simp [ΞA, boolT] at this
 
 theorem lvStuck_stuck : StuckAt (ℍ := ℍ) (.seq (Val.inj₁ Val.unit).1 .unit) :=

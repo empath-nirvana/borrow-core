@@ -620,7 +620,7 @@ theorem fv_live {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives
       simp only [BoCa.BoLo.performE, BoCa.BoLo.raiseE, opArgE, Expr.val, Val.prim, Val.i32,
         Expr.HasVar, false_or] at hk
       exact ih k hk
-  | effThen hs _ _ _ _ _ _ ihM ihN ihD =>
+  | effThen hs _ _ _ _ _ _ _ _ _ _ ihM ihN ihD =>
       intro k hk
       simp only [thenE, Expr.val, Val.prim, Val.lam, Expr.HasVar, false_or] at hk
       rcases hk with (hk | hk) | hk
@@ -1038,7 +1038,7 @@ theorem der_then {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerive
     ∀ N D M, e = thenE N D M → ∃ Γ₁ Γ₂ A j₁ j₂, Ctx.SplitP Γ Γ₁ Γ₂ ∧ CDerives Δ Γ₁ M j₁ ∧
       CDerives Δ (⟨A, true⟩ :: Γ₂) N j₂ := by
   induction h with
-  | effThen hs _ _ _ hM hN _ => intro N D M he; cases he; exact ⟨_, _, _, _, _, hs, hM, hN⟩
+  | effThen hs _ _ _ _ _ _ _ hM hN _ => intro N D M he; cases he; exact ⟨_, _, _, _, _, hs, hM, hN⟩
   | force => intro N D M he; rcases forceE_var he with h | h <;> simp [thenE] at h
   | lolliE _ _ hf =>
       intro N D M he; simp only [thenE, Expr.app.injEq] at he; obtain ⟨rfl, -⟩ := he
@@ -1059,15 +1059,15 @@ at the tensor of the return clause's type and the clauses', over a consumed cont
 theorem der_hnd {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives Δ Γ e j) :
     ∀ (n : UInt32) (Q H M : Expr),
       e = .app (.app (.prim .hnd) (.pair (.prim (.lit (.i32 n))) (.pair Q H))) M →
-      ∃ (Γ₁ Γ₂ : Ctx VTy) (S : Row) (E : List (Qual × VTy × VTy)) (A R : VTy), Ctx.SplitP Γ Γ₁ Γ₂ ∧
-        Ctx.DeadP Γ₁ ∧ Q = (qualsVal (E.map Prod.fst)).1 ∧
-        CDerives Δ Γ₁ H (.val (.tensor (retTy S A R) (clausesTy S R E))) := by
+      ∃ (Γ₁ Γ₂ : Ctx VTy) (S : Row) (E : List (Qual × VTy × VTy)) (fs : Nat → CTy) (A R : VTy),
+        Ctx.SplitP Γ Γ₁ Γ₂ ∧ Ctx.DeadP Γ₁ ∧ Q = (qualsVal (E.map Prod.fst)).1 ∧
+        CDerives Δ Γ₁ H (.val (.tensor (retTy S A R) (clausesTy S R E fs))) := by
   induction h with
   | effHandleV hs hd _ hc _ _ _ _ =>
       intro n Q H M he
       simp only [hndExpr, Expr.val, Val.prim, Val.i32, Expr.app.injEq, Expr.pair.injEq] at he
       obtain ⟨⟨-, -, rfl, rfl⟩, -⟩ := he
-      exact ⟨_, _, _, _, _, _, hs, hd, rfl, hc⟩
+      exact ⟨_, _, _, _, _, _, _, hs, hd, rfl, hc⟩
   | force => intro n Q H M he; rcases forceE_var he with h | h <;> simp at h
   | lolliE _ _ hf =>
       intro n Q H M he; simp only [Expr.app.injEq] at he; obtain ⟨rfl, -⟩ := he
@@ -1531,13 +1531,13 @@ theorem VarCls.val {T Y : VTy} (h : VarCls T (.val Y)) : VView T Y := by
 views to the clauses' type, whose signature carries the handler's tags. -/
 theorem hnd_clauses {Δ : LifeCtx} {Γ : Ctx VTy} {n : UInt32} {qs : List Qual} {X M : Expr}
     {j : Jdg} (h : CDerives Δ Γ (hndExpr n qs (.pair X (.var 1)) M) j) :
-    ∃ T S R E, Γ[1]? = some ⟨T, true⟩ ∧ VView T (clausesTy S R E) ∧ E.map Prod.fst = qs := by
-  obtain ⟨Γ₁, Γ₂, S, E, A, R, hs, -, hQ, hH⟩ := der_hnd h n _ _ M rfl
+    ∃ T S R E fs, Γ[1]? = some ⟨T, true⟩ ∧ VView T (clausesTy S R E fs) ∧ E.map Prod.fst = qs := by
+  obtain ⟨Γ₁, Γ₂, S, E, fs, A, R, hs, -, hQ, hH⟩ := der_hnd h n _ _ M rfl
   have hE : E.map Prod.fst = qs := (qualsVal_inj hQ).symm
   rcases der_pair hH X (.var 1) rfl with ⟨Γ₁₁, Γ₁₂, A', B', hs', -, hv, hc⟩ | he
   · obtain ⟨-, rfl⟩ := vview_tensor hc
     obtain ⟨T, hT, hcT⟩ := der_var hv 1 rfl
-    exact ⟨T, S, R, E, splitP_le_left hs _ _ (splitP_le_right hs' _ _ hT), hcT.val, hE⟩
+    exact ⟨T, S, R, E, fs, splitP_le_left hs _ _ (splitP_le_right hs' _ _ hT), hcT.val, hE⟩
   · simp [emptyFamV, Val.arr, Val.pair, Val.loc, Val.i32] at he
 
 /-- **A pair read at a row**: its first part is read at the first factor of a tensor whose views
@@ -1702,8 +1702,8 @@ theorem handleWith_clause {Δ : LifeCtx} {Γ : Ctx VTy} {n : UInt32} {q : Qual} 
     (hNc : NotConst (.lam (bindE (.val (.lam (.var 0))) (hndTerm n [q] 0 1 M))))
     (hHc : NotConst (.lam (hndTerm n [q] 0 1 M)))
     (hM : ((M.subst 0 (Val.lam (.var 0))).shift 1 0) = M) :
-    ∃ Γ₁ S₁ T₁ S R E, CtxLe Γ₁ Γ ∧ CDerives Δ Γ₁ (.pair cl .unit) (.comp (CTy.effOf S₁ T₁)) ∧
-      VView T₁ (clausesTy S R E) ∧ E.map Prod.fst = [q] := by
+    ∃ Γ₁ S₁ T₁ S R E fs, CtxLe Γ₁ Γ ∧ CDerives Δ Γ₁ (.pair cl .unit) (.comp (CTy.effOf S₁ T₁)) ∧
+      VView T₁ (clausesTy S R E fs) ∧ E.map Prod.fst = [q] := by
   obtain ⟨Γ₁, Γ', T₁, b, S₁, j₁, hle₁, -, hP, hN₁⟩ := der_bind (M := .pair cl .unit) h
     (fun i h => by cases h) (fun b h => hcl' b h) (fun h => by cases h) (fun h => by cases h)
     (fun h => by cases h) (by not_withPair) hNc
@@ -1726,16 +1726,16 @@ theorem handleWith_clause {Δ : LifeCtx} {Γ : Ctx VTy} {n : UInt32} {q : Qual} 
         rw [he] at hH5
         exact hH5
   obtain ⟨Γ₄, j₄, X, hslot, hH5⟩ := hH
-  obtain ⟨T, S, R, E, hT, hv, hE⟩ := hnd_clauses hH5
+  obtain ⟨T, S, R, E, fs, hT, hv, hE⟩ := hnd_clauses hH5
   obtain rfl := hslot T hT
-  exact ⟨Γ₁, S₁, T, S, R, E, hle₁, hP, hv, hE⟩
+  exact ⟨Γ₁, S₁, T, S, R, E, fs, hle₁, hP, hv, hE⟩
 
 /-- The clause tuple's clause is read at the clause type of its handler's one operation: at a linear
 operation, `!U(A ⊗ kTy ⊸ F_Σ R)`. -/
 theorem clause_lin {Δ : LifeCtx} {Γ : Ctx VTy} {cl : Expr} {S₁ : Row} {T₁ : VTy} {S : Row}
-    {R : VTy} {E : List (Qual × VTy × VTy)}
+    {R : VTy} {E : List (Qual × VTy × VTy)} {fs : Nat → CTy}
     (hP : CDerives Δ Γ (.pair cl .unit) (.comp (CTy.effOf S₁ T₁)))
-    (hv : VView T₁ (clausesTy S R E)) (hE : E.map Prod.fst = [.lin]) :
+    (hv : VView T₁ (clausesTy S R E fs)) (hE : E.map Prod.fst = [.lin]) :
     ∃ Γ' A₀ B₀, CtxLe Γ' Γ ∧ CDerives Δ Γ' cl
       (.val (.bang (.thunk (.arr (.tensor A₀ (.thunk (.amp (.arr B₀ (CTy.effOf S R)) .top)))
         (CTy.effOf S R))))) := by
@@ -1750,7 +1750,7 @@ theorem clause_lin {Δ : LifeCtx} {Γ : Ctx VTy} {cl : Expr} {S₁ : Row} {T₁ 
   subst hE
   obtain ⟨Γ', A, B, hle, hcl, hv'⟩ := pair_row hP (fun c h => by cases h)
   obtain ⟨rfl, -⟩ := vview_tensor (hv'.trans hv)
-  have hty : clauseTy S R (.lin, A₀, B₀) =
+  have hty : clauseTy S R (.lin, A₀, B₀) (fs 0) =
       .bang (.thunk (.arr (.tensor A₀ (.thunk (.amp (.arr B₀ (CTy.effOf S R)) .top)))
         (CTy.effOf S R))) := by
     simp [clauseTy, kTy]
@@ -1766,7 +1766,7 @@ abbrev at13Cl : Expr := .lam (.letpair (.var 0) (.seq (.app forget (.var 0)) uni
 `[handle]`'s), and `forget κ` has no derivation there (`not_forget_kappa`). -/
 theorem not_der_at13 {Δ : LifeCtx} {Γ : Ctx VTy} {j : Jdg} : ¬ CDerives Δ Γ at13 j := by
   intro h
-  obtain ⟨Γ₁, S₁, T₁, S, R, E, -, hP, hv, hE⟩ := handleWith_clause (cl := at13Cl) h
+  obtain ⟨Γ₁, S₁, T₁, S, R, E, fs, -, hP, hv, hE⟩ := handleWith_clause (cl := at13Cl) h
     (fun b h => by cases h) (by not_const) (by not_const) rfl
   obtain ⟨Γ_cl, A₀, B₀, -, hCL⟩ := clause_lin hP hv hE
   obtain ⟨-, hB⟩ := lam_bang hCL (fun h => by cases h) (by not_withPair) (by not_const)
@@ -1833,7 +1833,7 @@ theorem not_der_at06 {Δ : LifeCtx} {Γ : Ctx VTy} {j : Jdg} : ¬ CDerives Δ Γ
     (fun i h => by cases h) (fun b h => by cases h) (fun h => by cases h) (fun h => by cases h)
     (fun h => by cases h) (by not_withPair) (by not_const)
   obtain ⟨A₀, hvc⟩ := alloc_row hA
-  obtain ⟨Γ_p, S₁, T₁, S', R, E, hle_p, hP, hv, hE⟩ :=
+  obtain ⟨Γ_p, S₁, T₁, S', R, E, fs, hle_p, hP, hv, hE⟩ :=
     handleWith_clause (cl := at06Cl) (M := at06Body) hN (fun b h => by cases h) (by not_const)
       (by not_const) rfl
   obtain ⟨Γ_cl, A₁, B₁, hle_cl, hCL⟩ := clause_lin hP hv hE

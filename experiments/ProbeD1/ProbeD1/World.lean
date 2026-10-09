@@ -144,7 +144,7 @@ def CTy.binders : CTy → List LifeVar
   | .top => []
   | .all y _ C => y :: CTy.binders C
   | .nu C => CTy.binders C
-  | .eff _ _ _ A B C => VTy.binders A ++ VTy.binders B ++ CTy.binders C
+  | .eff _ _ _ A B fin C => VTy.binders A ++ VTy.binders B ++ CTy.binders C
 end
 
 /-- **The entries a future inserted are not read by the computation type `C`**: an entry of `σ'`

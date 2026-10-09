@@ -42,7 +42,7 @@ theorem d_performerNU : CDerivesNU LifeCtx.empty [⟨retTy [] .unit .unit, false
       (.lolliE (.dead (.left (deadSplit hΓ))) (.var (.there (.here hΓ.toP))) (.free hΓ₂.toP))
       (.ret (.var (.here hΓ₂.toP))) (.ret (.var (.here hΓ₂.toP))))
   refine .effThen (A := .unit) nu_susp (.right (deadSplit hΓ)) (by simp [Row.NZ, suspSig])
-    (by simp [Row.Uniq]) (fun h => absurd h susp_not_unr)
+    (by simp [Row.Uniq]) (fun h => absurd h susp_not_unrD)
     (.effPerform (o := suspSig) nu_susp rfl rfl (.unitI hΓ₁.toP)) ?_ ?_
   · refine .unitE (.right (.left (deadSplit hΓ))) hdrop ?_
     exact .effSub (S := []) nu_susp (fun _ _ _ h => by simp [Row.find] at h)

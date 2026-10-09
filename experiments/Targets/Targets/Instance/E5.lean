@@ -57,7 +57,7 @@ def logR (S : Row) (A : VTy) : VTy := .thunk (.arr boolT (CTy.effOf S (.tensor A
 /-- A row whose operations are not the name `n`'s is below `n`'s signature row before it. -/
 theorem rowLe_ofEff_cons {n : UInt32} (E : List (Qual × VTy × VTy)) {T : Row}
     (hT : ∀ o ∈ T, o.n ≠ n) : RowLe T (Row.ofEff n E 0 ++ T) := by
-  intro m i o hf
+  refine RowLe.of_find fun m i o hf => ?_
   obtain ⟨hmem, hn, -⟩ := Row.find_mem hf
   have hm : m ≠ n := by rw [← hn]; exact hT o hmem
   rw [Row.find_append, Targets.find_ofEff_other _ hm, Option.none_or]

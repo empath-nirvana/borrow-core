@@ -183,7 +183,7 @@ handing it `λa. perform (n, 0) a` at `ρ := {n}` and handling `n` outside by a 
 with `c`: even an `f` that handles effects of its own cannot intercept `n`. -/
 def Tunnel (J : TypingJ) (P : Platform) : Prop :=
   ∀ (f c : Val) (ρ : RVar) (k : RowCon) (A B R : VTy) (n : UInt32),
-    let op : OpSig := ⟨n, 0, .lin, A, B⟩
+    let op : OpSig := ⟨n, 0, .lin, A, B, .ret .unit⟩
     n ≠ 0 → k.cls.Admits [] → k.cls.Admits [op] → k.adm op →
     J [(ρ, k)] LifeCtx.empty (fun _ => []) (.val f) (fun η => .val (hofTy A B R (η ρ))) →
     J.at LifeCtx.empty [] (.val c) (.val (.bang (.thunk (.arr A (.ret B))))) →

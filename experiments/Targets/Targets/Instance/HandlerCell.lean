@@ -345,7 +345,7 @@ theorem progT_derives : CDerives LifeCtx.empty [] progT (.comp (.ret .unit)) := 
   exact .effHandle (S := []) (E := EffExamples.E₁) (A := .unit) (R := .unit)
     (.left (.left .nil)) (.left (.right .nil)) (.here (.cons .nil)) (.there (.here .nil))
     (by decide) (by simp) (by simp)
-    (.effPerform (o := ⟨5, 0, .lin, .unit, .unit⟩) (by rfl) rfl (.unitI (.cons (.cons .nil))))
+    (.effPerform (o := ⟨5, 0, .lin, .unit, .unit, .ret .unit⟩) (by rfl) rfl (.unitI (.cons (.cons .nil))))
 
 /-- Core's clause `cl₀` (`Core/EffExamples.lean`), in Core's kernel with its inner rows tied: it
 performs nothing and handles nothing. -/
@@ -371,7 +371,7 @@ theorem progT_derivesAt : CDerivesAt ΞA LifeCtx.empty [] progT (.comp (.ret .un
   exact .effHandle (S := []) (E := EffExamples.E₁) (A := .unit) (R := .unit) hAt
     (.left (.left .nil)) (.left (.right .nil)) (.here (.cons .nil)) (.there (.here .nil))
     (by decide) (by simp) (by simp)
-    (.effPerform (o := ⟨5, 0, .lin, .unit, .unit⟩) hAt (by rfl) rfl
+    (.effPerform (o := ⟨5, 0, .lin, .unit, .unit, .ret .unit⟩) hAt (by rfl) rfl
       (.unitI (.cons (.cons .nil))))
 
 /-- `cl₀`, the clause, as a term. -/

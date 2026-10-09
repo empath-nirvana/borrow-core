@@ -107,9 +107,12 @@ theorem i1_core : I1 (ℍ := ℍ) (coreW (ℍ := ℍ)) := by
     rcases hNU n j o hf with h | h
     · rw [h] at ha; cases ha
     · exact h
-  have hκ : KapRel (Row.tab S δ) (fun ls v => vC true R ls δ v) (OpSig.ent δ ⟨n, j, o.q, o.A, o.B⟩)
+  have hfin : o.fin = .ret .unit := by
+    obtain ⟨-, jj, -, -, rfl⟩ := Row.find_ofEff n E 0 finsNil n j o hfo; rfl
+  have hκ : KapRel (Row.tab S δ) (fun ls v => vC true R ls δ v)
+      (OpSig.ent δ ⟨n, j, o.q, o.A, o.B, .ret .unit⟩) (cancelTabOf S (.ret .unit) δ)
       ls ⟨kappaC (o.q == .aff) ℓ (hndVal n qs hr hs) K, by unfold kappaC; exact .lam⟩ ρ := by
-    refine ⟨fun h' => absurd h' hq, fun ls' he => ⟨fun w τ₁ τ₂ hB hcτ => ?_, fun hq' => ?_⟩⟩
+    refine ⟨fun h' => absurd h' hq, fun ls' he => ⟨fun w τ₁ τ₂ hB hcτ => ?_, fun hq' Tk hTk => ?_⟩⟩
     · obtain ⟨z, hz, hzτ⟩ := compS_exch hc hcτ
       have h₁ := (hk ls' (Ext.left hc he)).1 w τ₁ z hB hz
       simp only [ewpW_core_eq, opTabW_core_down, hTout] at h₁
@@ -120,8 +123,11 @@ theorem i1_core : I1 (ℍ := ℍ) (coreW (ℍ := ℍ)) := by
         · exact absurd hh hq''
         · rfl
         · exact absurd hh hq
-      have hco := (hk ls' (Ext.left hc he)).2 hq'
-      have hcc := ewp_ccatch (T := OpTab.empty) (Tout := Row.tab S δ)
+      have hco := (hk ls' (Ext.left hc he)).2 hq' (cancelObl OpTab.empty) (by
+        show (if capB o.q o.B then finObl o.fin δ else none) = _
+        have hB : o.B.isZero = false := by simpa [OpSig.abort, haff] using ha
+        rw [hfin, if_pos (by simp [capB, haff, hB])]; rfl)
+      have hcc := ewp_ccatch (T := OpTab.empty) (Tout := Tk)
         (fun _ _ _ h => by simp [OpTab.empty] at h) hco
       simp only [haff]
       exact ewp_kappaC_cancel (opTable_mono _) ℓ _ K ⟨σ, ρk, ResU.CompS.comm hc, hcell, hcc⟩
@@ -235,7 +241,7 @@ theorem i2_core_abortive : I2 (ℍ := ℍ) (coreW (ℍ := ℍ)) OutJ.core admClo
 
 /-- **`I3 coreW`**: PROVED AT σ=[] (`coreW` holds nothing, by definition). -/
 theorem i3_core : I3 (ℍ := ℍ) (coreW (ℍ := ℍ)) := by
-  intro T en n i K Φ ρ h hlin _ i' he
+  intro T en n i K Φ ρ h hlin _ hfin i' he
   rcases i' with ⟨ls', ⟨⟩⟩
   rw [ewpW_core]
   have hd : TableI.down (cancelTabW (fun _ _ => none) (fun i'' =>
@@ -243,9 +249,10 @@ theorem i3_core : I3 (ℍ := ℍ) (coreW (ℍ := ℍ)) := by
       (∀ x ∈ ((coreW (ℍ := ℍ)).held i'').2, x ∈ ((coreW (ℍ := ℍ)).held (ls', ())).2))) =
       cancelTab OpTab.empty := by
     funext ls t Φ' ρ'
-    exact propext (cancelTabW_core (fun _ => ⟨fun _ h => by simp at h, fun _ h => by simp at h⟩))
+    exact propext (cancelTabW_core (fun _ _ _ h => by simp at h)
+      (fun _ => ⟨fun _ h => by simp at h, fun _ h => by simp at h⟩))
   rw [hd]
-  exact (h.2 ls' he).2 hlin
+  exact (h.2 ls' he).2 hlin _ hfin
 
 theorem antiFrameW_core : AntiFrameW (ℍ := ℍ) (coreW (ℍ := ℍ)) := by
   intro Tb ℓ α T δ Q i e hTb ρ h
@@ -263,19 +270,28 @@ theorem antiFrameW_core : AntiFrameW (ℍ := ℍ) (coreW (ℍ := ℍ)) := by
   exact hF
 
 theorem frameW_core : FrameW (ℍ := ℍ) (coreW (ℍ := ℍ)) := by
-  intro T K hH hC hU Fr hFs hFe hW Q₁ Q hk i e ρ h ρ₂ ρ' hF hc
+  intro T K hH hC hU hF₀ Fr hFs hFe hW Q₁ Q hk i e ρ h ρ₂ ρ' hF hc
   rcases i with ⟨ls, ⟨⟩⟩
   rw [ewpW_core, opTabW_core_down] at h ⊢
   refine ewp_frame_plain (OpTabI.down T) K hH hC (fun ls => Fr (ls, ()))
     (fun ls ls' hs => hFs [] (ls, ()) [] (ls', ()) (.val .unit) ⟨fun _ => Iff.rfl, hs⟩ hs)
-    (fun ls ls' ρ he hf => hFe (ls, ()) (ls', ()) ρ he hf) ?_ ?_ (fun ls v => Q₁ (ls, ()) v)
+    (fun ls ls' ρ he hf => hFe (ls, ()) (ls', ()) ρ he hf) ?_ ?_ ?_ (fun ls v => Q₁ (ls, ()) v)
     (fun ls v => Q (ls, ()) v) ?_ h hF hc
-  · intro n j en hT hq ls ρ hf
+  · intro n j en hT ha ls ρ hf
     obtain ⟨en₀, hT₀, rfl⟩ := opTabI_down_some.mp hT
-    exact hW n j en₀ hT₀ hq (ls, ()) ρ hf
+    exact hW n j en₀ hT₀ (Or.inr ha) (ls, ()) ρ hf
   · intro n j en hT hq
     obtain ⟨en₀, hT₀, rfl⟩ := opTabI_down_some.mp hT
     exact absurd hq (hU n j en₀ hT₀)
+  · intro n j en hT ha hq ls₁ K₁ ρ₁ σ ρ₁' hcan hσ hc₁ P hP
+    obtain ⟨en₀, hT₀, rfl⟩ := opTabI_down_some.mp hT
+    have hP' := hF₀ n j en₀ hT₀ P hP
+    subst hP'
+    show cancelObl _ ls₁ ((K.comp K₁).dead.plug _) ρ₁'
+    rw [dead_comp, dead_plain K hH (hC 0), Kont.plug_comp]
+    exact cancel_frame K hH (hC 0) (OpTab.Le.refl _)
+      (hW n j en₀ hT₀ (Or.inl hq) (ls₁, ()) σ hσ) (fun _ _ _ h => by simp [OpTab.empty] at h)
+      (fun _ _ _ h => by simp [OpTab.empty] at h) (hcan _ hP) hc₁
   · intro ls v ρ hq
     have := hk (ls, ()) v ρ hq
     rw [ewpW_core, opTabW_core_down] at this

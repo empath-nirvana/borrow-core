@@ -260,10 +260,10 @@ def rEffThen {S : CRow} {A B : CVTy} (hNZ : S.NZ) (hUq : S.Uniq)
     (F : Fam T (fun L => (CDerives Δ (mkCtx (A :: T) (true :: L)) eN (.comp (effOf S B)) ∧
       CDerives Δ (mkCtx (.unit :: T) (false :: L)) eD
         (.comp (effOf [] .unit))) ∧
-      (S.Unr → Persistent (mkCtx T L))))
+      (S.UnrD → Persistent (mkCtx T L))))
     (h : overlapOK T rM.F.u F.u = true) : Res Δ T (.comp (effOf S B)) :=
   ⟨BoCa.Fig16.LogRel.Core.thenE eN eD rM.e, (rM.F.split F h).map
-    fun _ ⟨_, _, hs, h₁, ⟨hN, hD⟩, hU⟩ => .effThen hs hNZ hUq hU h₁ hN hD⟩
+    fun _ ⟨_, _, hs, h₁, ⟨hN, hD⟩, hU⟩ => CDerives.effThenA hs hNZ hUq hU h₁ hN hD⟩
 
 /-- `[handle]`: `handle_n e with (h_ret, hs)`, the answer clause and the clauses the slots `ir`
 and `ic`. -/

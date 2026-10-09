@@ -343,9 +343,9 @@ inductive CDerivesAt (Ξ : EffCtx) : LifeCtx → Ctx VTy → Expr → Jdg → Pr
       (hN : CDerivesAt Ξ Δ (⟨A, true⟩ :: Γ₂) N (.comp (CTy.effOf S B))) :
       CDerivesAt Ξ Δ Γ (.app (.val (.lam N)) M) (.comp (CTy.effOf S B))
   /-- `[then]`: `M then x. N unwind D`, the finaliser at the pure row: its raises are handled
-  inside it, so none escapes it (option A).  `[spec §19, §24]` -/
+  inside it, so none escapes it (option A, Core's `CDerives.effThenA`).  `[spec §19, §24, §27]` -/
   | effThen {Δ Γ Γ₁ Γ₂ M N D A B} {S : Row} (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hNZ : S.NZ)
-      (hUq : S.Uniq) (hU : S.Unr → Persistent Γ₂)
+      (hUq : S.Uniq) (hU : S.UnrD → Persistent Γ₂)
       (hM : CDerivesAt Ξ Δ Γ₁ M (.comp (CTy.effOf S A)))
       (hN : CDerivesAt Ξ Δ (⟨A, true⟩ :: Γ₂) N (.comp (CTy.effOf S B)))
       (hD : CDerivesAt Ξ Δ (⟨.unit, false⟩ :: Γ₂) D (.comp (.ret .unit))) :
@@ -460,7 +460,7 @@ theorem CDerivesAt.toCDerives {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {e : E
   | effPerform _ hf hna _ ih1 => exact .effPerform hf hna ih1
   | effRaise _ hf ha hd _ ih1 => exact .effRaise hf ha hd ih1
   | effLet hs hW hU _ _ ih1 ih2 => exact .effLet hs hW hU ih1 ih2
-  | effThen hs hNZ hUq hU _ _ _ ih1 ih2 ih3 => exact .effThen hs hNZ hUq hU ih1 ih2 ih3
+  | effThen hs hNZ hUq hU _ _ _ ih1 ih2 ih3 => exact CDerives.effThenA hs hNZ hUq hU ih1 ih2 ih3
   | effHandleV _ hs hd hH _ hn0 hnS hlen _ ihc ihe => exact .effHandleV hs hd hH ihc hn0 hnS hlen ihe
   | letPoly b hcl _ _ ihV ihN => exact .letPoly b hcl ihV ihN
 
@@ -478,7 +478,7 @@ theorem CDerivesAt.effHandle {Ξ : EffCtx} {Δ Γ Γ₁ Γ₂ Γr Γc e} {S : Ro
   obtain ⟨sr', hsr', hlr'⟩ := hs₁.live_left hsr hlr
   obtain ⟨sc', hsc', hlc'⟩ := hs₁.live_right hsc hlc
   exact .effHandleV hAt hs
-    (hs₁.deadP (hr.deadP (retTy_persistent S A R)) (hc.deadP (clausesTy_persistent S R E)))
+    (hs₁.deadP (hr.deadP (retTy_persistent S A R)) (hc.deadP (clausesTy_persistent S R E finsNil)))
     (.pair (.var hsr' hlr') (.var hsc' hlc')) (.tensorI hs₁ (.var hr) (.var hc)) hn0 hnS hlen he
 
 /-! ### What the tie gives at a handler -/
@@ -486,13 +486,13 @@ theorem CDerivesAt.effHandle {Ξ : EffCtx} {Δ Γ Γ₁ Γ₂ Γr Γc e} {S : Ro
 /-- A signature's row finds its `j`-th operation at the index `j`, below `2³²`. -/
 theorem find_ofEff_at (n : UInt32) (E : List (Qual × VTy × VTy)) (j : Nat) (hj : j < E.length)
     (hlen : E.length ≤ 2 ^ 32) :
-    Row.find (Row.ofEff n E 0) n (UInt32.ofNat j) = some ⟨n, UInt32.ofNat j, E[j].1, E[j].2.1, E[j].2.2⟩ := by
+    Row.find (Row.ofEff n E 0) n (UInt32.ofNat j) = some ⟨n, UInt32.ofNat j, E[j].1, E[j].2.1, E[j].2.2, .ret .unit⟩ := by
   have hj' : j < 2 ^ 32 := by omega
   have hi : (UInt32.ofNat j).toNat = 0 + j := by
     rw [Nat.zero_add]; exact UInt32.toNat_ofNat_of_lt' (by simp [UInt32.size]; omega)
   obtain ⟨o, ho⟩ := Option.isSome_iff_exists.mp
     (Inst.find_ofEff_isSome n E 0 j (UInt32.ofNat j) hi (by omega) hj)
-  obtain ⟨-, j', hj'', hij, rfl⟩ := Row.find_ofEff n E 0 n _ o ho
+  obtain ⟨-, j', hj'', hij, rfl⟩ := Row.find_ofEff n E 0 _ n _ o ho
   have : j' = j := by
     have h2 := congrArg UInt32.toNat hij
     rw [hi, Nat.zero_add, Nat.zero_add,
@@ -518,7 +518,7 @@ theorem sig_prefix_of_rowAt {Ξ : EffCtx} {n : UInt32} {E : List (Qual × VTy ×
   intro j
   by_cases hj : j < E.length
   · have hf : Row.find (Row.ofEff n E 0 ++ S) n (UInt32.ofNat j) =
-        some ⟨n, UInt32.ofNat j, E[j].1, E[j].2.1, E[j].2.2⟩ := by
+        some ⟨n, UInt32.ofNat j, E[j].1, E[j].2.1, E[j].2.2, .ret .unit⟩ := by
       rw [Row.find_append, find_ofEff_at n E j hj hlen, Option.some_or]
     obtain ⟨-, -, hg⟩ := h n _ _ hf
     rw [UInt32.toNat_ofNat_of_lt' (by simp [UInt32.size]; omega)] at hg

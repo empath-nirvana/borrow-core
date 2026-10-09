@@ -59,7 +59,7 @@ theorem find_dropName_self (n : UInt32) :
         exact find_dropName_self n S i
 
 theorem rowLe_dropName (n : UInt32) (S : Row) : RowLe (Row.dropName n S) S := by
-  intro m i o hf
+  refine RowLe.of_find fun m i o hf => ?_
   by_cases hm : m = n
   · subst hm; rw [find_dropName_self] at hf; cases hf
   · rwa [find_dropName_ne hm] at hf
@@ -69,8 +69,10 @@ theorem ne_of_mem_dropName {n : UInt32} {S : Row} : ∀ o ∈ Row.dropName n S, 
   simpa [Row.dropName] using (List.mem_filter.mp ho).2
 
 /-- **A tied row is below its name's signature row before the rest**: the name's operations are
-the context's, at their indices. -/
-theorem rowLe_ofEff_dropName {Ξ : EffCtx} {S : Row} (hS : RowAt Ξ S) (n : UInt32) :
+the context's, at their indices, when the row's capturable operations of the name have empty cancel
+rows (the signature row's, SPEC §27). -/
+theorem rowLe_ofEff_dropName {Ξ : EffCtx} {S : Row} (hS : RowAt Ξ S) (n : UInt32)
+    (hF : ∀ i o, Row.find S n i = some o → capB o.q o.B = true → o.fin = .ret .unit) :
     RowLe S (Row.ofEff n (Ξ n) 0 ++ Row.dropName n S) := by
   intro m i o hf
   rw [Row.find_append]
@@ -86,12 +88,27 @@ theorem rowLe_ofEff_dropName {Ξ : EffCtx} {S : Row} (hS : RowAt Ξ S) (n : UInt
     rw [hf', Option.some_or]
     rw [List.getElem?_eq_getElem hj] at hget
     have hg := Option.some.inj hget
-    obtain ⟨n', i', q, A, B⟩ := o
-    simp only at hn hi hg ⊢
+    have hF' := hF i o hf
+    obtain ⟨n', i', q, A, B, fin⟩ := o
+    simp only at hn hi hg hF' ⊢
     subst hn; subst hi
     rw [hg]
+    refine ⟨_, rfl, ⟨rfl, rfl, rfl, rfl, rfl⟩, fun hc => ?_⟩
+    rw [hF' hc]
+    exact FinLe.refl _
   · rw [Targets.find_ofEff_other _ hm, Option.none_or, find_dropName_ne hm]
-    exact hf
+    exact ⟨o, hf, OpSig.LeF.refl o⟩
+
+/-- A tied row's operations of a name whose signature is one abortive operation are not
+capturable. -/
+theorem capB_of_rowAt_abortive {Ξ : EffCtx} {S : Row} (hS : RowAt Ξ S) {n : UInt32} {q : Qual}
+    {A : VTy} (hn : Ξ n = [(q, A, .zero)]) (i : UInt32) (o : OpSig) (hf : Row.find S n i = some o) :
+    capB o.q o.B = false := by
+  obtain ⟨-, -, hget⟩ := hS n i o hf
+  rw [hn] at hget
+  have hm := List.mem_of_getElem? hget
+  simp only [List.mem_singleton, Prod.mk.injEq] at hm
+  simp [capB, hm.2.2, VTy.isZero]
 
 theorem rowAt_dropName {Ξ : EffCtx} {S : Row} (hS : RowAt Ξ S) (n : UInt32) :
     RowAt Ξ (Row.dropName n S) :=
@@ -139,7 +156,8 @@ theorem d_fwrap (li : (orowAlg Ξ).Lab) {q : Qual} (hli : Ξ li.1 = [(q, .unit, 
   refine .lam (.effSub (rowLe_dropName li.1 r) ?_)
   refine d_handleL li hli (S := Row.dropName li.1 r) (rowAt_dropName hr li.1)
     (fun o ho => ne_of_mem_dropName o ho) isVal_fwrapH (d_fwrapH (kill_dead _) _ hq) ?_
-  have hle := rowLe_ofEff_dropName hr li.1
+  have hle := rowLe_ofEff_dropName hr li.1 fun i o hf hc => by
+    rw [capB_of_rowAt_abortive hr hli i o hf] at hc; cases hc
   rw [hli] at hle
   exact .effSub hle (d_callVar0 .nil)
 

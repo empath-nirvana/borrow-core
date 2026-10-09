@@ -103,8 +103,8 @@ theorem effOf_inj : ∀ {S S' : Row} {Y Y' : VTy}, CTy.effOf S Y = CTy.effOf S' 
   | _ :: _, [], _, _, h => by simp [CTy.effOf] at h
   | o :: S, o' :: S', _, _, h => by
       simp only [CTy.effOf, CTy.eff.injEq] at h
-      obtain ⟨h1, h2, h3, h4, h5, h6⟩ := h
-      obtain ⟨rfl, rfl⟩ := effOf_inj h6
+      obtain ⟨h1, h2, h3, h4, h5, h6, h7⟩ := h
+      obtain ⟨rfl, rfl⟩ := effOf_inj h7
       cases o; cases o'
       simp_all
 

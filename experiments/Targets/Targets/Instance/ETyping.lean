@@ -122,7 +122,7 @@ theorem d_raiseLab {Δ : LifeCtx} {Γ : Ctx VTy} (hΓ : Ctx.DeadP Γ) (l : (orow
     (hl : Ξ l.1 = [(q, .unit, .zero)]) (hq : q ≠ .lin) (B : VTy) :
     CDerivesAt Ξ Δ Γ (raiseE (opArgE l.1 0 .unit))
       (.comp (CTy.effOf (Row.ofEff l.1 [(q, .unit, .zero)] 0 ++ []) B)) :=
-  .effRaise (o := ⟨l.1, 0, q, .unit, .zero⟩) (rowAt_ofEff_lab l hl) (by simp [Row.ofEff, Row.find])
+  .effRaise (o := ⟨l.1, 0, q, .unit, .zero, .ret .unit⟩) (rowAt_ofEff_lab l hl) (by simp [Row.ofEff, Row.find])
     (by cases q <;> simp_all [OpSig.abort, VTy.isZero]) .unit (.unitI hΓ)
 
 /-- The perform of a label's resuming `A ↠ B` at its row. -/
@@ -131,7 +131,7 @@ theorem d_performLab {Δ : LifeCtx} {Γ : Ctx VTy} (l : (orowAlg Ξ).Lab) {q : Q
     (hV : CDerivesAt Ξ Δ Γ V (.val A)) :
     CDerivesAt Ξ Δ Γ (performE (opArgE l.1 0 V))
       (.comp (CTy.effOf (Row.ofEff l.1 [(q, A, B)] 0 ++ []) B)) :=
-  .effPerform (o := ⟨l.1, 0, q, A, B⟩) (rowAt_ofEff_lab l hl) (by simp [Row.ofEff, Row.find])
+  .effPerform (o := ⟨l.1, 0, q, A, B, .ret .unit⟩) (rowAt_ofEff_lab l hl) (by simp [Row.ofEff, Row.find])
     (by simp [OpSig.abort, hB]) hV
 
 /-! ### The handlers the (E) programs share -/

@@ -162,9 +162,9 @@ theorem CDerives.append_dead (h' : Ctx.Dead Γ') {Δ : LifeCtx} {Γ : Ctx VTy} {
       exact .effLet (splitP_append h' hs)
         (fun hw => live_append (P := fun s => s.ty.Drop) h' (hW hw))
         (fun hu => persistent_append h' (hU hu)) ihM ihN
-  | effThen hs hNZ hUq hU _ _ _ ihM ihN ihD =>
+  | effThen hs hNZ hUq hU hMS hDS hfin hP _ _ _ ihM ihN ihD =>
       exact .effThen (splitP_append h' hs) hNZ hUq (fun hu => persistent_append h' (hU hu))
-        ihM ihN ihD
+        hMS hDS hfin hP ihM ihN ihD
   | effHandleV hs hd hH _ hn0 hnS hlen _ ihc ihe =>
       exact .effHandleV (splitP_append h' hs) (deadP_append h' hd) hH.append ihc hn0 hnS hlen ihe
   | letPoly b hcl hV _ _ ihN => exact .letPoly b hcl hV ihN

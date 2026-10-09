@@ -159,7 +159,7 @@ theorem okE_mapV : ∀ A : VTy, okE (mapV A).1 = true
 theorem okE_nodeV : ∀ C : CTy, okE (nodeV C).1 = true
   | .ret A => by simp [nodeV, bindE, okE, okE_app, okE_mapV]
   | .amp C D => by simp [nodeV, okE, okE_app, okE_nodeV C, okE_nodeV D]
-  | .eff _ _ _ _ _ C => by simp [nodeV, bindE, okE, okE_app, okE_mapV]
+  | .eff _ _ _ _ _ _ C => by simp [nodeV, bindE, okE, okE_app, okE_mapV]
   | .arr _ D => by simp [nodeV, okE, okE_app, okE_nodeV D]
   | .top | .all _ _ _ | .nu _ => rfl
 

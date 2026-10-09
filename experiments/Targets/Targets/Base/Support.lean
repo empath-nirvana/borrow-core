@@ -434,14 +434,14 @@ theorem CDerives.insert_dead (hd : Ctx.Dead Γd) {Δ : LifeCtx} {Γ₀ : Ctx VTy
       rw [h₁] at eM; rw [List.length_cons, h₂] at eN
       exact .effLet hs' (fun hw => live_insert hd (P := fun s => s.ty.Drop) (hW hw))
         (fun hu => live_insert hd (hU hu)) eM eN
-  | effThen hs hNZ hUq hU _ _ _ ihM ihN ihD =>
+  | effThen hs hNZ hUq hU hMS hDS hfin hP _ _ _ ihM ihN ihD =>
       intro Γa Γb hΓ; subst hΓ
       obtain ⟨Γa₁, Γb₁, Γa₂, Γb₂, rfl, rfl, h₁, h₂, hs'⟩ := splitP_insert hd Γa hs
       have eM := ihM Γa₁ Γb₁ rfl
       have eN := ihN (_ :: Γa₂) Γb₂ rfl
       have eD := ihD (_ :: Γa₂) Γb₂ rfl
       rw [h₁] at eM; rw [List.length_cons, h₂] at eN eD
-      exact .effThen hs' hNZ hUq (fun hu => live_insert hd (hU hu)) eM eN eD
+      exact .effThen hs' hNZ hUq (fun hu => live_insert hd (hU hu)) hMS hDS hfin hP eM eN eD
   | effHandleV hs hdd hH _ hn0 hnS hlen _ ihc ihe =>
       intro Γa Γb hΓ; subst hΓ
       obtain ⟨Γa₁, Γb₁, Γa₂, Γb₂, rfl, rfl, h₁, h₂, hs'⟩ := splitP_insert hd Γa hs

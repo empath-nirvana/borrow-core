@@ -30,15 +30,19 @@ open BoCa BoCa.Fig16 BoCa.Fig16.BoLo BoCa.Fig16.LogRel BoCa.Fig16.LogRel.Core
 open BoCa.BoLo (Heap Steps Step1 Head Kont Alloc ARun AStep1 performE raiseE opPayload)
 open BoCa.Lifetime (LSub LifeCtx LifeVar)
 
-/-- The platform answers an operation of the row `S` only at the row's entry. -/
+/-- The platform answers an operation of the row `S` only as the row's operation: its name,
+index, qualifier, argument and answer types. -/
 def PlatAgree (P : Platform) (S : Row) : Prop :=
-  ∀ n i o o', Row.find S n i = some o → Row.find P.ops n i = some o' → o = o'
+  ∀ n i o o', Row.find S n i = some o → Row.find P.ops n i = some o' → o.Sig o'
 
 /-- A platform whose operations are the row's agrees with every row below. -/
 theorem platAgree_of_le {P : Platform} {S T : Row}
     (hsub : ∀ n i o, Row.find P.ops n i = some o → Row.find S n i = some o) (hle : RowLe T S) :
-    PlatAgree P T :=
-  fun n i _ _ hT hP => Option.some.inj ((hle n i _ hT).symm.trans (hsub n i _ hP))
+    PlatAgree P T := by
+  intro n i o o' hT hP
+  obtain ⟨o'', hf'', hs⟩ := RowLe.sig hle hT
+  obtain rfl := Option.some.inj ((hsub n i o' hP).symm.trans hf'')
+  exact hs
 
 /-- **A stop the platform does not answer**, at an operation of the row `S`: an operation its
 context leaves uncaught, `S` finds it, a raise exactly when the operation is abortive, and a raise
@@ -52,7 +56,8 @@ def UnansweredAt (P : Platform) (S : Row) (e : Expr) : Prop :=
 theorem unansweredAt_mono {P : Platform} {T S : Row} (hle : RowLe T S) {e : Expr}
     (h : UnansweredAt P T e) : UnansweredAt P S e := by
   obtain ⟨r, K, n, i, v, o, he, hK, hf, hab, hP⟩ := h
-  exact ⟨r, K, n, i, v, o, he, hK, hle n i o hf, hab, hP⟩
+  obtain ⟨o', hf', hs⟩ := RowLe.sig hle hf
+  exact ⟨r, K, n, i, v, o', he, hK, hf', hs.abort_eq.symm.trans hab, hP⟩
 
 section Plat
 variable (P : Platform) (S : Row) (Q : List SRec → Val → WProp)
@@ -85,14 +90,16 @@ theorem answer_at_stop_agree (hP : P.Respects) {S : Row} (hag : PlatAgree P S) {
     obtain ⟨rfl, rfl, rfl⟩ := opPayload_inj hpay
     subst hK'
     obtain ⟨oS, hfS, rfl⟩ := Row.tab_some hT
-    obtain rfl := hag n i oS o hfS hfP
+    have hsg := hag n i oS o hfS hfP
     have hm := (Row.find_mem hfP).1
-    obtain ⟨hdA, hdB⟩ := hP.data oS hm
+    obtain ⟨hdA, hdB⟩ := hP.data o hm
+    rw [← hsg.2.2.2.1] at hdA
+    rw [← hsg.2.2.2.2] at hdB
     obtain ⟨rfl, hv⟩ := (vC_data hdA).mp hA
     obtain rfl := eq_of_compS_empty_left hc
-    refine ⟨hK, hv, fun w hw => ?_⟩
-    exact (hshare.2 ls (Ext.refl ls ρ)).1 w PMap.empty ρ ((vC_data hdB).mpr ⟨rfl, hw⟩)
-      (ResU.comp_empty_right ρ)
+    refine ⟨hK, by rw [← hsg.2.2.2.1]; exact hv, fun w hw => ?_⟩
+    exact (hshare.2 ls (Ext.refl ls ρ)).1 w PMap.empty ρ
+      ((vC_data hdB).mpr ⟨rfl, by rw [hsg.2.2.2.2]; exact hw⟩) (ResU.comp_empty_right ρ)
   · obtain ⟨⟨he, -⟩, -⟩ := pure_sep_iff.mp hp
     exact absurd he (plug_perform_ne_raise K K' _ _)
 
@@ -217,7 +224,7 @@ theorem driveSafe_init {M : Expr}
     (h : cC (ℍ := ℍ) (CTy.effOf S (.sum A (.thunk (CTy.loopEff S₀ A .unit)))) [] LSub.empty M
       PMap.empty) :
     DriveSafe (ℍ := ℍ) P S S₀ A (init P M, .drive) :=
-  ⟨rfl, S, init P M, fun _ _ _ hf => hf,
+  ⟨rfl, S, init P M, RowLe.refl S,
     platStart_init ((cC_effOf S _ [] LSub.empty M PMap.empty).mp h), .refl⟩
 
 /-- **The invariant is kept by every step of the drive**, under a platform whose operations are the
@@ -286,7 +293,7 @@ theorem driveSafe_step_le {P : Platform} (hP : P.Respects) {S S₀ : Row} {A : V
   rcases rstep_cases hs with ⟨hp, hph'⟩ | ⟨hph', -⟩ | ⟨-, l, he, rfl⟩
   · exact ⟨hph'.trans hph, T, c₀, hT, h₀, hr.tail hp⟩
   · rw [hph] at hph'; cases hph'
-  · obtain ⟨c', hc', hend⟩ := platStart_cont hP (fun n i o hf => hle n i o (hT n i o hf)) h₀ hr
+  · obtain ⟨c', hc', hend⟩ := platStart_cont hP (RowLe.trans hT hle) h₀ hr
     obtain rfl := psteps_from_val he hc'
     exact ⟨rfl, S₀, _, hS₀, platStart_inr hC he hend, .refl⟩
 
@@ -309,7 +316,7 @@ theorem safeDriveFrom_of_rel {P : Platform} (hP : P.Respects) {S S₀ : Row} {A 
   obtain ⟨hph, T, c₀, hT, h₀, hr⟩ := hinv
   simp only at hph
   subst hph
-  obtain ⟨c', hc', hend⟩ := platStart_cont hP (fun n i o hf => hle n i o (hT n i o hf)) h₀ hr
+  obtain ⟨c', hc', hend⟩ := platStart_cont hP (RowLe.trans hT hle) h₀ hr
   rcases Relation.ReflTransGen.cases_head hc' with rfl | ⟨c₁, h₁, -⟩
   · obtain ⟨v, ls, ρ, -, -, -, he, hQ, -⟩ := id hend
     simp only at he

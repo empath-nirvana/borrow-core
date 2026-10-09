@@ -1,4 +1,5 @@
 import Core.EffBorrow
+import Core.EffFin
 import Targets.A.EffAlg
 import Targets.Base.Rows
 
@@ -143,25 +144,28 @@ theorem rowAt_append {Ξ : EffCtx} {S S' : Row} (h : RowAt Ξ S) (h' : RowAt Ξ 
   | some o' => rw [hS, Option.some_or] at hf; cases hf; exact h n i o hS
 
 /-- A row below a row tied to `Ξ` is tied to `Ξ`. -/
-theorem rowAt_of_le {Ξ : EffCtx} {S S' : Row} (hle : RowLe S S') (h : RowAt Ξ S') : RowAt Ξ S :=
-  fun n i o hf => h n i o (hle n i o hf)
+theorem rowAt_of_le {Ξ : EffCtx} {S S' : Row} (hle : RowLe S S') (h : RowAt Ξ S') : RowAt Ξ S := by
+  intro n i o hf
+  obtain ⟨o', hf', hs⟩ := RowLe.sig hle hf
+  obtain ⟨h₁, h₂, h₃⟩ := h n i o' hf'
+  exact ⟨h₁, h₂, by rw [hs.2.2.1, hs.2.2.2.1, hs.2.2.2.2]; exact h₃⟩
 
 /-- The prefix of a row tied to `Ξ`, read with its tail empty, is tied to `Ξ`. -/
 theorem rowAt_left {Ξ : EffCtx} {S S' : Row} (h : RowAt Ξ (S ++ S')) : RowAt Ξ S :=
-  rowAt_of_le (fun n i o hf => by rw [Row.find_append, hf, Option.some_or]) h
+  rowAt_of_le (RowLe.of_find fun n i o hf => by rw [Row.find_append, hf, Option.some_or]) h
 
 /-- A signature's row finds its first operation. -/
 theorem find_ofEff_zero (n : UInt32) {E : List (Qual × VTy × VTy)} (hE : E ≠ []) :
     ∃ o, Row.find (Row.ofEff n E 0) n 0 = some o := by
   cases E with
   | nil => exact absurd rfl hE
-  | cons p E => exact ⟨⟨n, 0, p.1, p.2.1, p.2.2⟩, by simp [Row.ofEff, Row.find]⟩
+  | cons p E => exact ⟨⟨n, 0, p.1, p.2.1, p.2.2, .ret .unit⟩, by simp [Row.ofEff, Row.find]⟩
 
 /-- A signature's row is well formed at its effect context. -/
 theorem ofEff_wf (Ξ : EffCtx) (n : UInt32) (hn : n ≠ 0) (hlen : (Ξ n).length ≤ 2 ^ 32) :
     RowAt Ξ (Row.ofEff n (Ξ n) 0) := by
   intro m i o h
-  obtain ⟨rfl, j, hj, rfl, rfl⟩ := Row.find_ofEff n (Ξ n) 0 m i o h
+  obtain ⟨rfl, j, hj, rfl, rfl⟩ := Row.find_ofEff n (Ξ n) 0 finsNil m i o h
   refine ⟨hn, hlen, ?_⟩
   have hj' : (UInt32.ofNat (0 + j)).toNat = j := by
     rw [Nat.zero_add]; exact UInt32.toNat_ofNat_of_lt' (by simp [UInt32.size]; omega)
@@ -170,7 +174,7 @@ theorem ofEff_wf (Ξ : EffCtx) (n : UInt32) (hn : n ≠ 0) (hlen : (Ξ n).length
 
 /-- Lookup in a signature's row at another name. -/
 theorem find_ofEff_other {n m : UInt32} (E : List (Qual × VTy × VTy)) (h : m ≠ n) (i : UInt32) :
-    Row.find (Row.ofEff n E 0) m i = none := Row.find_ofEff_ne n E 0 m i h
+    Row.find (Row.ofEff n E 0) m i = none := Row.find_ofEff_ne n E 0 finsNil m i h
 
 /-- `(L)↑ ⊙ ε₀ ∼ ε₂`, `L′ ≠ L`, `(L′)↑ ⊙ ε′ ∼ ε₂`: then `(L)↑ ⊙ ε′ ∼ ε′`. -/
 theorem rowEq_lift_absorb {n n' : UInt32} {E E' : List (Qual × VTy × VTy)} {ε₀ ε' ε₂ : Row}
@@ -493,6 +497,7 @@ theorem rowLink_orowRF : RowLink orowRF where
       exact rowEq_append hr (rowEq_refl _)
     intro n i o hf
     rw [← heqv n i, hcomp n i, Row.find_append, hf, Option.some_or]
+    exact ⟨o, rfl, OpSig.LeF.refl o⟩
   names Ξ n hn hE hlen := ⟨⟨n, hn, hE, hlen⟩, rfl⟩
   rows Ξ S _ := ⟨⟨S, none⟩, fun η => rowEq_of_eq (List.append_nil S)⟩
   vars Ξ α := ⟨⟨[], some α⟩, fun η => rfl⟩

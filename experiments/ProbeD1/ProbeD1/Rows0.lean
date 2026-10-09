@@ -132,7 +132,7 @@ theorem substAll_forceE' {γ : List Val} {i : Nat} {v : Val} (hv : γ[i]? = some
   | .ret _ => by
       show Expr.app (Expr.psub 0 γ (.var i)) (Expr.psub 0 γ Expr.unit) = _
       rw [← substAll, GhostEnd.substAll_var_l hv]; rfl
-  | .eff _ _ _ _ _ _ => by
+  | .eff _ _ _ _ _ _ _ => by
       show Expr.app (Expr.psub 0 γ (.var i)) (Expr.psub 0 γ Expr.unit) = _
       rw [← substAll, GhostEnd.substAll_var_l hv]; rfl
   | .arr _ _ => GhostEnd.substAll_var_l hv

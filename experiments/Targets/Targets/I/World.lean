@@ -35,12 +35,13 @@ def TableI.Mono {I : Type} (Tb : TableI I) : Prop :=
 def TableI.Abortive {I : Type} (Tb : TableI I) : Prop :=
   ∀ i t (Φ Φ' : I → Expr → WProp) ρ, Tb i t Φ ρ → Tb i t Φ' ρ
 
-/-- An operation's entry (`OpEnt`), at any index. -/
+/-- An operation's entry (`OpEnt`), at any index, with Core's cancel obligation (`OpEnt.fin`). -/
 structure OpEntI (I : Type) where
   q : Qual
   abort : Bool
   PA : I → Val → WProp
   PB : I → Val → WProp
+  fin : Option (List SRec → Expr → WProp)
 
 /-- An operation table (`OpTab`), at any index. -/
 abbrev OpTabI (I : Type) := UInt32 → UInt32 → Option (OpEntI I)
@@ -136,7 +137,8 @@ def cancelTabW {I : Type} (T : OpTabI I) (Cl : I → Prop) : TableI I :=
 
 /-- An operation's entry at W (`OpSig.ent`). -/
 def entW (M : SemWorld) (δ : LSub) (o : OpSig) : OpEntI (Idx M.Stk) :=
-  ⟨o.q, o.abort, fun i v => M.val true o.A i δ v, fun i v => M.val true o.B i δ v⟩
+  ⟨o.q, o.abort, fun i v => M.val true o.A i δ v, fun i v => M.val true o.B i δ v,
+    if capB o.q o.B then finObl o.fin δ else none⟩
 
 /-- The table of a row at W (`Row.tab`). -/
 def rowTabW (M : SemWorld) (S : Row) (δ : LSub) : OpTabI (Idx M.Stk) :=
@@ -144,7 +146,7 @@ def rowTabW (M : SemWorld) (S : Row) (δ : LSub) : OpTabI (Idx M.Stk) :=
 
 /-- An entry at Core's index read at Core's records. -/
 def OpEntI.down (en : OpEntI (Idx Unit)) : OpEnt :=
-  ⟨en.q, en.abort, fun ls v => en.PA (ls, ()) v, fun ls v => en.PB (ls, ()) v⟩
+  ⟨en.q, en.abort, fun ls v => en.PA (ls, ()) v, fun ls v => en.PB (ls, ()) v, en.fin⟩
 
 /-- A table at Core's index read at Core's records. -/
 def OpTabI.down (T : OpTabI (Idx Unit)) : OpTab := fun n i => (T n i).map OpEntI.down
@@ -266,18 +268,24 @@ theorem errOkW_core {T : OpTabI (Idx Unit)} {ls : List SRec} :
         obtain ⟨en, hT', rfl⟩ := opTabI_down_some.mp hT
         exact ⟨m, j, w, en, pure_sep_mk ⟨hE, hT', ha⟩ hR⟩
 
-/-- `cancelTabW` at the trivial closing clause, at `coreW`'s tables, is `cancelTab`. -/
+/-- `cancelTabW` at the trivial closing clause, at `coreW`'s tables of abortive operations, is
+`cancelTab`: a cancel run there performs nothing. -/
 theorem cancelTabW_core {T : OpTabI (Idx Unit)} {Cl : Idx Unit → Prop}
+    (hA : ∀ n j en, T n j = some en → en.abort = true)
     (hCl : ∀ i, Cl i) {ls : List SRec} {t : Expr} {Φ : Idx Unit → Expr → WProp} {ρ : WRes} :
     cancelTabW T Cl (ls, ()) t Φ ρ ↔
       cancelTab (OpTabI.down T) ls t (fun ls e => Φ (ls, ()) e) ρ := by
   constructor
   · rintro ⟨K, err, h⟩
     obtain ⟨⟨ht, hK, -⟩, τ₁, τ₂, hc, he, hn⟩ := pure_sep_iff.mp h
-    exact ⟨K, err, pure_sep_mk ⟨ht, hK⟩ ⟨τ₁, τ₂, hc, errOkW_core.mp he, hn⟩⟩
-  · rintro ⟨K, err, h⟩
-    obtain ⟨⟨ht, hK⟩, τ₁, τ₂, hc, he, hn⟩ := pure_sep_iff.mp h
-    exact ⟨K, err, pure_sep_mk ⟨ht, hK, hCl _⟩ ⟨τ₁, τ₂, hc, errOkW_core.mpr he, hn⟩⟩
+    exact Or.inl ⟨K, err, pure_sep_mk ⟨ht, hK⟩ ⟨τ₁, τ₂, hc, errOkW_core.mp he, hn⟩⟩
+  · rintro (⟨K, err, h⟩ | ⟨K, n, j, v, en', h⟩)
+    · obtain ⟨⟨ht, hK⟩, τ₁, τ₂, hc, he, hn⟩ := pure_sep_iff.mp h
+      exact ⟨K, err, pure_sep_mk ⟨ht, hK, hCl _⟩ ⟨τ₁, τ₂, hc, errOkW_core.mpr he, hn⟩⟩
+    · obtain ⟨⟨-, -, hT, ha⟩, -⟩ := pure_sep_iff.mp h
+      obtain ⟨en, hT', rfl⟩ := opTabI_down_some.mp hT
+      rw [show (OpEntI.down en).abort = en.abort from rfl, hA n j en hT'] at ha
+      cases ha
 
 /-- A row's table at `coreW`, read at Core's records, is `Row.tab`. -/
 theorem rowTabW_core (S : Row) (δ : LSub) :

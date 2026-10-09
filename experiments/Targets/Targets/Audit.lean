@@ -320,7 +320,7 @@ def expectedCore : List (String × List String) :=
   [("shapes", ["BoCa.BoLo.capTag._sparseCasesOn_5", "BoCa.BoLo.capTag.match_1", "BoCa.BoLo.clauseAt.match_1", "BoCa.Fig16.BoLo.sepRange", "BoCa.Fig16.BoLo.sepRange._f", "BoCa.Fig16.BoLo.sepRange.match_1", "BoCa.Fig16.Cell", "BoCa.Fig16.LogRel.Core.VTy.upR.match_1", "BoCa.dropFill", "BoCa.dropFill._f", "BoCa.tabFill", "BoCa.tabFill._f", "BoCa.tabFill.match_1"]),
    ("families", ["BoCa.BoLo.AHead", "BoCa.BoLo.ARun"]),
    ("viaLoc", ["BoCa.BoLo.Head", "BoCa.Fig16.LogRel.Core.Chain", "BoCa.Fig16.LogRel.Core.GPos", "BoCa.Fig16.LogRel.Core.LinPath", "BoCa.Fig16.LogRel.Core.MutPos", "BoCa.Fig16.LogRel.Core.RefPos", "BoCa.Fig16.LogRel.Core.TW"]),
-   ("fixes", ["BoCa.Fig16.LogRel.Core.Table", "BoCa.Fig16.LogRel.Core.ewpTS", "BoCa.Fig16.LogRel.Core.vCE._f"]),
+   ("fixes", ["BoCa.Fig16.LogRel.Core.Table", "BoCa.Fig16.LogRel.Core.cancelOK", "BoCa.Fig16.LogRel.Core.ewpTS", "BoCa.Fig16.LogRel.Core.vCE._f"]),
    ("iters", []),
    ("succCtors", ["BoCa.BoLo.AHead.alloc", "BoCa.BoLo.AHead.tab"]),
    ("arith", [])]
@@ -352,13 +352,13 @@ def pinHash (root : Name) : MetaM UInt64 := do
 
 /-- Core's relation as this branch imports it. -/
 def pinned : List (Name × UInt64) :=
-  [(``BoCa.Fig16.LogRel.Core.vCE, 2634188461942789339),
-   (``BoCa.Fig16.LogRel.Core.cC, 1577135250918925567),
-   (``BoCa.Fig16.LogRel.Core.wpTS, 9102727463225695086),
-   (``BoCa.Fig16.LogRel.Core.wpG, 15068369448990440630),
-   (``BoCa.Fig16.LogRel.Core.ewpTS, 9716194076298458845),
-   (``BoCa.Fig16.LogRel.Core.opTable, 17297278857222068005),
-   (``BoCa.Fig16.LogRel.Core.contShare, 7895051437212535705)]
+  [(``BoCa.Fig16.LogRel.Core.vCE, 4224350275360622522),
+   (``BoCa.Fig16.LogRel.Core.cC, 10052761383202749273),
+   (``BoCa.Fig16.LogRel.Core.wpTS, 1577467443602226383),
+   (``BoCa.Fig16.LogRel.Core.wpG, 2190156933293162215),
+   (``BoCa.Fig16.LogRel.Core.ewpTS, 13095697111844460356),
+   (``BoCa.Fig16.LogRel.Core.opTable, 5711552692547684334),
+   (``BoCa.Fig16.LogRel.Core.contShare, 13619346373965667916)]
 
 end Targets.Audit
 

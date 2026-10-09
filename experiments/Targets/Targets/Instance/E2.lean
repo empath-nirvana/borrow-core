@@ -113,11 +113,11 @@ theorem mem_of_mem_firsts {S : Row} {o : OpSig} (h : o ∈ Row.firsts S) : o ∈
   (Row.find_mem (mem_firsts h)).1
 
 theorem rowLe_firsts (S : Row) : RowLe (Row.firsts S) S := by
-  intro n i o h
+  refine RowLe.of_find fun n i o h => ?_
   rwa [find_firsts] at h
 
 theorem rowLe_to_firsts (S : Row) : RowLe S (Row.firsts S) := by
-  intro n i o h
+  refine RowLe.of_find fun n i o h => ?_
   rwa [find_firsts]
 
 /-- **No operation of the context is `unr`.** -/
@@ -215,17 +215,34 @@ theorem dropName_rowOf_append (l : (orowAlg Ξ).Lab) (r : Row) :
     simp [mem_ofEff_n ho]
   rw [this, List.nil_append]
 
+/-- A tied row headed by a name's signature row finds that name's operations there, at the
+signature row's empty cancel rows. -/
+theorem fin_rowOf_append (l : (orowAlg Ξ).Lab) {r : Row} (hS : RowAt Ξ (rowOf l ++ r)) (i : UInt32)
+    (o : OpSig) (hf : Row.find (rowOf l ++ r) l.1 i = some o) : o.fin = .ret .unit := by
+  obtain ⟨-, hlen, hget⟩ := hS l.1 i o hf
+  have hj : i.toNat < (Ξ l.1).length := by
+    by_contra h
+    rw [List.getElem?_eq_none (by omega)] at hget; cases hget
+  have hf' := find_ofEff_at l.1 (Ξ l.1) i.toNat hj hlen
+  rw [UInt32.ofNat_toNat] at hf'
+  rw [Row.find_append] at hf
+  unfold rowOf at hf
+  rw [hf', Option.some_or] at hf
+  cases hf
+  rfl
+
 /-- **`sumGen` at an instance**: the handler at the first matches of the row without `yield`. -/
 theorem d_sumGen {ly : (orowAlg Ξ).Lab} (hly : Ξ ly.1 = [(.aff, boolT, .unit)]) (hX : NoUnr Ξ)
     {r : Row} (hr : RowAt Ξ r) {Δ : LifeCtx} :
     CDerivesAt Ξ Δ [] (sumGenE ly.1 (qsOf Ξ ly.1))
       (.comp (.arr (.thunk (.arr .unit (CTy.effOf (rowOf ly ++ r) .unit))) (CTy.effOf r boolT))) := by
-  have hSr : RowLe (Row.firsts (Row.dropName ly.1 r)) r := fun n i o h =>
-    rowLe_dropName ly.1 r n i o (rowLe_firsts _ n i o h)
+  have hSr : RowLe (Row.firsts (Row.dropName ly.1 r)) r :=
+    RowLe.trans (rowLe_firsts _) (rowLe_dropName ly.1 r)
   have hSat : RowAt Ξ (Row.firsts (Row.dropName ly.1 r)) := Targets.rowAt_of_le hSr hr
   have hcb : RowLe (rowOf ly ++ r)
       (Row.ofEff ly.1 [(.aff, boolT, .unit)] 0 ++ Row.firsts (Row.dropName ly.1 r)) := by
     have h₁ := rowLe_ofEff_dropName (rowAt_rowOf_append ly hr) ly.1
+      fun i o hf _ => fin_rowOf_append ly (rowAt_rowOf_append ly hr) i o hf
     rw [dropName_rowOf_append, hly] at h₁
     intro n i o h
     have h' := h₁ n i o h

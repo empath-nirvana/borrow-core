@@ -377,10 +377,10 @@ inductive CDerivesNU : LifeCtx → Ctx VTy → Expr → Jdg → Prop where
       (hM : CDerivesNU Δ Γ₁ M (.comp (CTy.effOf S A)))
       (hN : CDerivesNU Δ (⟨A, true⟩ :: Γ₂) N (.comp (CTy.effOf S B))) :
       CDerivesNU Δ Γ (.app (.val (.lam N)) M) (.comp (CTy.effOf S B))
-  /-- `[then]`: `M then x. N unwind D`, the finaliser at the pure row (option A).
-  `[spec §19, §24]` -/
+  /-- `[then]`: `M then x. N unwind D`, the finaliser at the pure row (option A, Core's
+  `CDerives.effThenA`).  `[spec §19, §24, §27]` -/
   | effThen {Δ Γ Γ₁ Γ₂ M N D A B} {S : Row} (hNU : Row.NU S) (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hNZ : S.NZ)
-      (hUq : S.Uniq) (hU : S.Unr → Persistent Γ₂)
+      (hUq : S.Uniq) (hU : S.UnrD → Persistent Γ₂)
       (hM : CDerivesNU Δ Γ₁ M (.comp (CTy.effOf S A)))
       (hN : CDerivesNU Δ (⟨A, true⟩ :: Γ₂) N (.comp (CTy.effOf S B)))
       (hD : CDerivesNU Δ (⟨.unit, false⟩ :: Γ₂) D (.comp (.ret .unit))) :
@@ -484,7 +484,7 @@ theorem CDerivesNU.toCDerives {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg}
   | effPerform _ hf hna _ ih1 => exact .effPerform hf hna ih1
   | effRaise hf ha hd _ ih1 => exact .effRaise hf ha hd ih1
   | effLet _ hs hW hU _ _ ih1 ih2 => exact .effLet hs hW hU ih1 ih2
-  | effThen _ hs hNZ hUq hU _ _ _ ih1 ih2 ih3 => exact .effThen hs hNZ hUq hU ih1 ih2 ih3
+  | effThen _ hs hNZ hUq hU _ _ _ ih1 ih2 ih3 => exact CDerives.effThenA hs hNZ hUq hU ih1 ih2 ih3
   | effHandle _ hs hs₁ hr hc hn0 hnS hlen _ ih1 => exact .effHandle hs hs₁ hr hc hn0 hnS hlen ih1
 
 /-- The unr-free fragment of tier 1. -/
@@ -809,7 +809,7 @@ def RC_effThen (J : TypingJ) (R : Row → Prop) : Prop :=
     (∀ η, Θ.Models η → R (S η)) →
     (∀ η, Θ.Models η → Ctx.SplitP (Γ η) (Γ₁ η) (Γ₂ η)) →
     (∀ η, Θ.Models η → (S η).NZ) → (∀ η, Θ.Models η → (S η).Uniq) →
-    (∀ η, Θ.Models η → (S η).Unr → Persistent (Γ₂ η)) →
+    (∀ η, Θ.Models η → (S η).UnrD → Persistent (Γ₂ η)) →
     J Θ Δ Γ₁ M (fun η => .comp (CTy.effOf (S η) (A η))) →
     J Θ Δ (fun η => ⟨A η, true⟩ :: Γ₂ η) N (fun η => .comp (CTy.effOf (S η) (B η))) →
     J Θ Δ (fun η => ⟨.unit, false⟩ :: Γ₂ η) D (fun _ => .comp (.ret .unit)) →
@@ -980,7 +980,7 @@ theorem rc_effLet_tier1 (R : Row → Prop) : RC_effLet tier1 R :=
   fun _ _ _ _ _ _ _ _ _ _ _ hs hW hU hM hN η hη => CDerives.effLet (hs η hη) (hW η hη) (hU η hη) (hM η hη) (hN η hη)
 
 theorem rc_effThen_tier1 (R : Row → Prop) : RC_effThen tier1 R :=
-  fun _ _ _ _ _ _ _ _ _ _ _ _ hs hNZ hUq hU hM hN hD η hη => CDerives.effThen (hs η hη) (hNZ η hη) (hUq η hη) (hU η hη) (hM η hη) (hN η hη) (hD η hη)
+  fun _ _ _ _ _ _ _ _ _ _ _ _ hs hNZ hUq hU hM hN hD η hη => CDerives.effThenA (hs η hη) (hNZ η hη) (hUq η hη) (hU η hη) (hM η hη) (hN η hη) (hD η hη)
 
 theorem rc_effHandle_tier1 (R : Row → Prop) : RC_effHandle tier1 R :=
   fun _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ hqs _ hside hn0 he η hη =>

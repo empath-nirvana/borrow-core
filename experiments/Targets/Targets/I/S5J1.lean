@@ -208,10 +208,10 @@ theorem d_fireProg (h1 : Ξ 1 = Inst.Eab) :
   refine Inst.d_withHAt (S := []) (Targets.rowAt_ofEff_append h1 (by decide) (by simp) (rowAt_nil Ξ))
     (by decide) (by simp) .nil (Inst.d_abortClAt (S := []) .nil) ?_
   refine .effThen (A := .unit) (deadSplit (by cdead)) ?_ ?_
-    (fun h => absurd h (by simp [Row.Unr, Row.ofEff])) ?_ ?_ ?_
+    (fun h => absurd h (by simp [Row.UnrD, Row.ofEff, capB])) ?_ ?_ ?_
   · intro o ho; simp [Row.ofEff] at ho; subst ho; decide
   · simp [Row.Uniq, Row.ofEff]
-  · exact .effRaise (o := ⟨1, 0, .aff, .unit, .zero⟩)
+  · exact .effRaise (o := ⟨1, 0, .aff, .unit, .zero, .ret .unit⟩)
       (Targets.rowAt_ofEff_append h1 (by decide) (by simp) (rowAt_nil Ξ)) rfl rfl .unit
       (.unitI (by cdead))
   · exact .effSub (S := []) (Inst.rowLe_nil _) (.ret (.var (.here (by cdead))))
@@ -306,10 +306,10 @@ theorem d_fireProgNU : Targets.CDerivesNU LifeCtx.empty [] fireProg (.comp (.ret
   refine Inst.d_withHNU (S := []) (Inst.nu_ofEff_aff Inst.nu_nil) Inst.nu_nil (by decide) (by simp)
     .nil (Inst.d_abortClNU Inst.nu_nil .nil) ?_
   refine .effThen (A := .unit) (Inst.nu_ofEff_aff Inst.nu_nil) (deadSplit (by cdead)) ?_ ?_
-    (fun h => absurd h (by simp [Row.Unr, Row.ofEff])) ?_ ?_ ?_
+    (fun h => absurd h (by simp [Row.UnrD, Row.ofEff, capB])) ?_ ?_ ?_
   · intro o ho; simp [Row.ofEff] at ho; subst ho; decide
   · simp [Row.Uniq, Row.ofEff]
-  · exact .effRaise (o := ⟨1, 0, .aff, .unit, .zero⟩) rfl rfl .unit (.unitI (by cdead))
+  · exact .effRaise (o := ⟨1, 0, .aff, .unit, .zero, .ret .unit⟩) rfl rfl .unit (.unitI (by cdead))
   · exact .effSub (Inst.nu_ofEff_aff Inst.nu_nil) (Inst.rowLe_nil _)
       (.ret (.var (.here (by cdead))))
   · exact .unitE (deadSplit (by cdead)) (.unitI (by cdead)) (.ret (.unitI (by cdead)))

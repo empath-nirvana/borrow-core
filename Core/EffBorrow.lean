@@ -156,8 +156,9 @@ theorem Row.Unwind.tab_extend {S : Row} {x : LifeVar} (hS : S.Unwind x) (δ : LS
   | some o =>
       obtain ⟨ha, -, hx, -⟩ := hS o (Row.find_mem hf).1
       have hB : ¬ VFree x o.B := by rw [OpSig.B_zero ha]; exact id
+      have hc : capB o.q o.B = false := by simp [capB, OpSig.B_zero ha, VTy.isZero]
       simp only [Option.map_some, OpSig.ent, vC_extend_of_not_free hx,
-        vC_extend_of_not_free hB]
+        vC_extend_of_not_free hB, hc, Bool.false_eq_true, if_false]
 
 /-- An argument of the row outlives every lifetime. -/
 theorem Row.Unwind.out {S : Row} {x : LifeVar} (hS : S.Unwind x) (δ : LSub) (α : Life) :
