@@ -53,9 +53,10 @@ interaction's option-neutral rules, the pins, the composite's programs and its r
 
 **Done: OPEN.**  Neither `J₂` nor `W` is defined.
 
-**Tier 1** (`I.Tier1 J₁`): **FAILS AS WRITTEN** (`status_tier1_J₁`): its A conjunct asks A's (E)
-properties at every admissible effect context, and E7, E8 and E9 fail at `J₁` at every effect
-context under option A (decision E, below).  **S5 is RESTATED prefix-closed** (fix-up F3, below):
+**Tier 1** (`I.Tier1 J₁`): **OPEN** (`status_tier1_J₁`): its A conjunct asks A's (E) properties at
+every admissible effect context.  `J₁`'s kernel takes SPEC §27's `[then]` (M3, below), so E7, E8
+and E9's refutations under option A are retired; E7c, a finaliser raising to a handler the cancel
+kills, is rejected by D3 and restated in M4 (FINALISERS §4).  **S5 is RESTATED prefix-closed** (fix-up F3, below):
 every run from a cancel's or an unwind's start is a prefix of a trace; and **RESTATED under frame
 deadness** (M3, below): a cancel's trace passes the running finaliser of an earlier cancel
 (`pend`), and a cancel's start is a cancel of `capture l H K` or of an affine continuation at its
@@ -66,8 +67,8 @@ of 2026-10-08).  Read whole, S5 fails at `ΞA` and is kept as a record.  **S4 is
 effect context** (`status_handlerSem_cell`; fix-up F1, below): a catch either hands `capture l H K`
 and keeps the store, or allocates one fresh unit cell and hands `κ` at it; S4 with no cell fails at
 `ΞA` and is kept as a record.  `J₁` is built (decision D5): Core's kernel with
-SPEC §24's rules (the polymorphic let, the general `[handle]`, `[then]` at option A) over the open
-types, with the row `∀` (`Targets/Instance/J1.lean`); our instance at an effect context reads it with
+SPEC §24's rules (the polymorphic let, the general `[handle]`) and §27's `[then]` and cancel rows
+over the open types, with the row `∀` (`Targets/Instance/J1.lean`); our instance at an effect context reads it with
 the rows of its handlers and operations tied to the context (decision R, below).  Proved of it: A's
 (S) properties but S6 at every effect context, S5 given `CancelsNamed`, B's guarantees (B5 included,
 piece 6), the world's conjuncts and the pins, and the composite's programs (`Accepts`) and
@@ -127,8 +128,9 @@ start (`Targets/B/BumpSim.lean`):
   `FinaliserOrder` reads the same parameter (`FinAloneAt FR`, platform-free, subsuming `FinAlone`);
   option A's is `finaliserOrder_A`.  The kernel half is applied with D5: Core's `[then]` at option A
   types its finaliser at the pure row (SPEC §24, now the derived rule `CDerives.effThenA` of SPEC
-  §27's `[then]`), and so do `CDerivesNU`, `CDerivesAt` and the pin's `RC_effThen`, each with
-  `[then]`'s unrestricted premise read at every depth of the cancel rows (`Row.UnrD`), as Core's.
+  §27's `[then]`), and so do `CDerivesNU` and the pin's `RC_effThen`, each with `[then]`'s
+  unrestricted premise read at every depth of the cancel rows (`Row.UnrD`), as Core's.  `J₁`'s
+  kernel (`CDerivesAt`) takes §27's `[then]` since M3 (below).
   Check 2's derivations, whose finalisers let a raise escape, are not kept.  OQ-7 is separate and
   open.
 * **D4, the restatements.**  S6 counts a step that applies `κ` to a data value as a use (`UseAt`);
@@ -387,12 +389,10 @@ the finaliser's row into the cancel rows of its computation (`⋈`).  Here:
 * **Rows.**  `RowLe` is the cancel-row order (`RowLe.sig`, `RowLe.of_find`).  `PlatAgree` asks a
   platform's operation to be the row's by signature (`OpSig.Sig`), since a platform answers at the
   row's types: a strengthening of every theorem that assumes it.
-* **The tied kernel stays at option A.**  `CDerivesNU`, `CDerivesAt` and `RC_effThen` keep their
-  `[then]` with the finaliser at the pure row, Core's derived `CDerives.effThenA`, and read its
-  premise on unrestricted operations at every depth of the cancel rows (`Row.UnrD`), as Core's.  So
-  `J₁` types no finaliser with effects, and the refutations of E7, E8 and E9 at `J₁`
-  (`Instance/FinRaise.lean`) stand; they are of option A, and are replaced when the tied kernel
-  takes §27's `[then]` (FINALISERS §4).
+* **The tied kernel takes §27's `[then]` and `[handle]` in M3** (below).  `CDerivesNU` and
+  `RC_effThen` keep their `[then]` with the finaliser at the pure row, Core's derived
+  `CDerives.effThenA`, and read its premise on unrestricted operations at every depth of the cancel
+  rows (`Row.UnrD`), as Core's.
 * **I3 and `FrameW`** are stated at entries whose cancel row is empty, the cancel they describe
   (`ShareCancel`'s cancel at the empty error table); `i3_core`, `frameW_core` and `i1_core` read
   Core's cancel obligations.
@@ -477,11 +477,11 @@ derivation the same way (`status_innerTie`).
 
 ## A's (E) properties at `J₁` (decision E, 2026-10-08)
 
-**`EProps` FAILS AS WRITTEN at `J₁`**, at every effect context (`status_eProps_J₁`): E7, E8 and E9
-each ask for a typing of a program whose finaliser raises to its context, and `[then]` types a
-finaliser at `F 1`
-(option A, D3; `not_cancelPolicy_J₁`, `not_unwindPolicy_J₁`, `not_storedK_J₁`).  The others, at
-every admissible effect context:
+**E7, E8 and E9 at `J₁` are OPEN** (`status_eProps_J₁`): each asks for a typing of a program whose
+finaliser raises to its context, which option A's `[then]` refused; `J₁`'s kernel takes SPEC §27's
+`[then]` since M3 (below), and the refutations of option A are retired.  E7c's finaliser raises to
+a handler the cancel kills, which D3 rejects; its restatement is M4's.  The others, at every
+admissible effect context:
 
 * **The callbacks** (SPEC §26, Entry 25): Core's `[λ-dead]` types `λx. M : 1 ⊸ F_Σ B` with `x`'s
   slot dead (`lamDead_compatC`), so a schema's callback `λ_. M`, `M` typed at the empty context, is
@@ -643,7 +643,7 @@ every admissible effect context:
 | `Pins tier1Open admClosedOp .abortive`, with `I4a` at the unr-free rules | PROVED AT σ=[] (abortive rows) | `I.pins_tier1Open`, `i4a_tier1NU` |
 | Law 1 at the relation: `ovalW` at `U(∀ρ:k. C)` and `!U(∀ρ:k. C)` is the intersection of the instances; `FLOpen M J` gives `FL M J.read`; `FLOpen` at today's kernel | PROVED (generic); PROVED AT σ=[] | `I.ovalW_allR`, `I.ovalW_bang_allR`, `I.fl_of_flOpen`, `I.flOpen_core_tier1Open` |
 | `J₁`: its reading is Core's kernel; FL at BoLo (B1); B's guarantees; the pins; FL at its open judgements over contexts with no polymorphic slot, a polymorphic type read as the intersection of its instances (Law 1) | PROVED AT σ=[] (abortive rows for the pins); `FLOpen coreB J₁` at contexts with a polymorphic slot NOT PROVED (a value `ovalW` relates there need not be a closed λ-value Core types) | `status_j1`, `status_guarantees_J₁`, `status_pins_J₁`, `I.flOpen_J₁_mono` |
-| tier 1 at `J₁` | **FAILS AS WRITTEN**: A's (E) properties fail at `J₁` (E7, E8, E9, option A; decision E); S5 read whole fails too (kept as a record).  S4, restated at the capture cell, is PROVED at every effect context, and S5, restated prefix-closed and under frame deadness, given `CancelsNamed`, so tier 1 follows from A's (E) properties, `CancelsNamed` and S6 at every admissible effect context, `Accepts` and `Rejects` being proved (decision AR) | `status_tier1_J₁`, `I.not_tier1_J₁`, `status_handlerSem_cell`, `status_tier1_J₁_of`, `status_tier1_J₁_of_ESU`, `status_tier1_J₁_of_ECU`, `status_tier1_J₁_of_ENU`, `status_eProps_J₁`, `status_cancellation_J₁` |
+| tier 1 at `J₁` | **OPEN**: A's (E) properties at `J₁` are open (E7, E8, E9: `J₁` takes §27's `[then]`, the refutations of option A retired; E7c restated in M4); S5 read whole fails (kept as a record).  S4, restated at the capture cell, is PROVED at every effect context, and S5, restated prefix-closed and under frame deadness, given `CancelsNamed`, so tier 1 follows from A's (E) properties, `CancelsNamed` and S6 at every admissible effect context, `Accepts` and `Rejects` being proved (decision AR) | `status_tier1_J₁`, `status_handlerSem_cell`, `status_tier1_J₁_of`, `status_tier1_J₁_of_ESU`, `status_tier1_J₁_of_ECU`, `status_tier1_J₁_of_ENU`, `status_eProps_J₁`, `status_cancellation_J₁` |
 | TIER1-PLAN §2's route (elaborate `J₁` into today's unr-free kernel, then `fundamentalC`) | **DOES NOT REACH TIER 1**: closed derivations that elaborate type no A-level handler, so E8 fails; today's kernel types no let-bound function read at two rows | `I.not_tier1_of_elabClosed`, `not_der_letTwo` |
 | FIX-RUN-END's checks and witness worlds | PROVED | `Targets/I/RunEnd.lean` (73 results) |
 | I1, I3, I5, P11 at `coreW` (the device); I2 at `coreW` | PROVED AT σ=[]; PROVED AT A RESTRICTION (abortive rows) | `i1_core`, `i3_core`, `i5_core`, `p11_core`; `i2_core_abortive` |
@@ -683,7 +683,7 @@ every admissible effect context:
 | `Safety` (S2), `EffSafe` (S3), `LiveOK` at our instance | PROVED AT σ=[] at today's kernel, every effect context (D1): a run under a runner is the run under the platform it gives (`platformOf`), step for step from a typed program, and B2's runs give A's. The tie is needed | `safety_ourInst_tier1Open`, `effSafe_ourInst_tier1Open`, `liveOK_tier1Open`; `safety_needs_tie`, `liveOK_needs_tie` |
 | `DataDiv` at our instance | PROVED (every row form, effect context and typing system) | `dataDiv_ourInst` |
 | `J₁`, `Pins J₁`, the let law and S1 at `J₁` | BUILT; PROVED AT σ=[] (S1 at every effect context: Core's `[sub]` asks nothing of its rows); our instance reads `J₁` at an effect context with its handlers' and operations' rows tied to it (decision R): Core's tied kernel `CDerivesAt Ξ` at tied row environments, every tied derivation Core's, a tied handler's tags a prefix of the context's | `Inst.J₁`, `status_pins_J₁`, `status_sPropsNoCancel_J₁`, `status_innerTie` |
-| A's (E) properties at `J₁` (decision E) | `EProps` **FAILS AS WRITTEN** at every effect context: E7, E8, E9 (option A).  PROVED at every admissible effect context: E1, E4, E6; E5 where no `exn` signature is `unr`; E2's fourth program (E2d) where no operation is `unr`; E10's `timeout` (typed once, its schema, its call).  NOT DERIVED, no obstruction verified: E2a–E2c and E10's `retry` (a function at `!U C` forced; Core's `force` reads a `U C` slot); E3 and E10's loop (`unfold`'s stepped value `etaN`, which no rule types).  The callbacks by SPEC §26's `[λ-dead]`; weakening by an unused live slot not derived | `status_eProps_J₁`, `noColouring_J₁`, `deepHandler_J₁`, `tunnel_J₁`, `nestedHandlers_J₁`, `e2d_J₁`, `higherOrderPoly_e2d_J₁`, `derV_timeoutR_J₁`, `polyUseOpen_timeoutR_J₁`, `callsThrough_timeoutR`, `not_eProps_J₁`, `lamDead_compatC` |
+| A's (E) properties at `J₁` (decision E) | E7, E8, E9 OPEN: `J₁` takes §27's `[then]` (M3), the refutations of option A retired; E7c restated in M4.  PROVED at every admissible effect context: E1, E4, E6; E5 where no `exn` signature is `unr`; E2's fourth program (E2d) where no operation is `unr`; E10's `timeout` (typed once, its schema, its call).  NOT DERIVED, no obstruction verified: E2a–E2c and E10's `retry` (a function at `!U C` forced; Core's `force` reads a `U C` slot); E3 and E10's loop (`unfold`'s stepped value `etaN`, which no rule types).  The callbacks by SPEC §26's `[λ-dead]`; weakening by an unused live slot not derived | `status_eProps_J₁`, `noColouring_J₁`, `deepHandler_J₁`, `tunnel_J₁`, `nestedHandlers_J₁`, `e2d_J₁`, `higherOrderPoly_e2d_J₁`, `derV_timeoutR_J₁`, `polyUseOpen_timeoutR_J₁`, `callsThrough_timeoutR`, `lamDead_compatC` |
 | `RowVarKernel J₁` | NOT PROVED, not attempted.  `[allR-I]` at `J₁` reads a value judgement at `U C` as Core typing the λ at `C`, an inversion of Core's thunk rules; not derived, and no obstruction is verified | — |
 | `monoCallback_tier1Open` (today's kernel fails E1, E2, E6, E10); the positive (E) runs at `tier1Open` | OPEN (inversions and runs to build, RESTRUCTURE §6.1) | — |
 | `RowVarKernel J₂`, `spanRules_J₂` | OPEN (`J₂` not built) | — |
@@ -761,6 +761,17 @@ entry.
   operation its region's handler caught, and that handler is dead during the cancel; the run now
   stops at the operation and is a cancel trace at every set of endings (`finAlone_dead`,
   `status_finAlone_dead`).
+* S5's cancel trace before frame deadness (finalisers alone, `keep` with the region's names,
+  `Region`), and its premise a cancel of `capture l H K` only: **restated** (M3, above) with a
+  region's actions (`pend`), first-wins with no name list, and the cancel of an affine continuation
+  at its cell.  `CancelsStd` and `cancelsStd_of`: **retired**, read by nothing; `CancelsNoCtl` and
+  `CancelsNZ` are kept as definitions, read by nothing.
+* The refutations of E7, E8 and E9 at `J₁` under option A (`not_der_e7b_J₁`, `not_der_e7c_J₁`,
+  `not_der_e8b_J₁`, `not_der_e9c_J₁`, `not_cancelPolicy_J₁`, `not_unwindPolicy_J₁`,
+  `not_storedK_J₁`, `not_eProps_J₁`, `I.not_tier1_J₁`, with the inversion `derAt_then` they read):
+  **retired** when `J₁`'s kernel took SPEC §27's `[then]` (M3).  `e7b`, `e7d`, `e8b` and `e9c`
+  raise from a finaliser to a live handler, which §27 types; `e7c` raises to a handler the cancel
+  kills, which D3 rejects, and E7c is restated in M4 (FINALISERS §4).
 -/
 
 noncomputable section
@@ -1393,16 +1404,16 @@ theorem status_tier1_J₁_of_ECU
     I.Tier1 (ℍ := ℍ) J₁ :=
   I.tier1_J₁_of_ECU hE hC hU
 
-/-- **FAILS AS WRITTEN**: tier 1 at `J₁`.  Its A conjunct asks A's (E) properties at every
-admissible effect context, and E7, E8 and E9 fail at `J₁` at every effect context under option A.
-S5 read whole fails too, at the admissible `ΞA` (kept as a record); S5 is read prefix-closed
-(fix-up F3), restated under frame deadness (M3), and holds given `CancelsNamed`
+/-- **OPEN**: tier 1 at `J₁`.  Its A conjunct asks A's (E) properties at every admissible effect
+context; `J₁`'s kernel takes SPEC §27's `[then]`, so the refutations of E7, E8 and E9 under option A
+are retired, and E7c (a finaliser raising to a handler the cancel kills, which D3 rejects) is
+restated in M4.  S5 read whole fails at the admissible `ΞA` (kept as a record); S5 is read
+prefix-closed (fix-up F3), restated under frame deadness (M3), and holds given `CancelsNamed`
 (`status_cancellation_J₁`). -/
 theorem status_tier1_J₁ :
-    ¬ I.Tier1 (ℍ := ℍ) J₁ ∧ ¬ (ourInst (ℍ := ℍ) orowRF Inst.ΞA J₁).EProps ∧
-      ¬ (∀ Ξ, AdmEff Ξ → (ourInst (ℍ := ℍ) orowRF Ξ J₁).CancellationWhole
+    ¬ (∀ Ξ, AdmEff Ξ → (ourInst (ℍ := ℍ) orowRF Ξ J₁).CancellationWhole
         (ourInst (ℍ := ℍ) orowRF Ξ J₁).noFinRaise) :=
-  ⟨I.not_tier1_J₁, Inst.not_eProps_J₁, I.not_cancellationWhole_admissible⟩
+  I.not_cancellationWhole_admissible
 
 /-- PROVED: tier 1 at `J₁` follows from A's (E) properties, `CancelsNamed` (every cancelled
 continuation's running finalisers hold kept errors of labels' names) and S6 at every admissible
@@ -1415,18 +1426,14 @@ theorem status_tier1_J₁_of_ENU
     I.Tier1 (ℍ := ℍ) J₁ :=
   I.tier1_J₁_of_ENU hE hN hU
 
-/-- PROVED (decision E): A's (E) properties at `J₁`.  At every admissible effect context E1, E4 and
-E6, and E5 where no `exn` signature is `unr`; E7, E8 and E9 fail as written at every effect context
-(option A), and so `EProps`, and with it the (E) hypothesis of `status_tier1_J₁_of`. -/
+/-- PROVED (decision E): A's (E) properties at `J₁`, at every admissible effect context: E1, E4 and
+E6, and E5 where no `exn` signature is `unr`.  E7, E8 and E9 are OPEN: `J₁`'s kernel takes SPEC
+§27's `[then]`, and the refutations under option A are retired (M3); E7c is restated in M4. -/
 theorem status_eProps_J₁ {Ξ : EffCtx} (hΞ : AdmEff Ξ) :
     (ourInst (ℍ := ℍ) orowRF Ξ J₁).NoColouring ∧ (ourInst (ℍ := ℍ) orowRF Ξ J₁).DeepHandler ∧
       (ourInst (ℍ := ℍ) orowRF Ξ J₁).Tunnel ∧
-      (Inst.NoUnrExn Ξ → (ourInst (ℍ := ℍ) orowRF Ξ J₁).NestedHandlers) ∧
-      ¬ (ourInst (ℍ := ℍ) orowRF Ξ J₁).CancelPolicy ∧
-      ¬ (ourInst (ℍ := ℍ) orowRF Ξ J₁).UnwindPolicy ∧ ¬ (ourInst (ℍ := ℍ) orowRF Ξ J₁).StoredK ∧
-      ¬ (ourInst (ℍ := ℍ) orowRF Ξ J₁).EProps :=
-  ⟨Inst.noColouring_J₁ hΞ, Inst.deepHandler_J₁ hΞ, Inst.tunnel_J₁ hΞ, Inst.nestedHandlers_J₁ hΞ,
-    Inst.not_cancelPolicy_J₁, Inst.not_unwindPolicy_J₁, Inst.not_storedK_J₁, Inst.not_eProps_J₁⟩
+      (Inst.NoUnrExn Ξ → (ourInst (ℍ := ℍ) orowRF Ξ J₁).NestedHandlers) :=
+  ⟨Inst.noColouring_J₁ hΞ, Inst.deepHandler_J₁ hΞ, Inst.tunnel_J₁ hΞ, Inst.nestedHandlers_J₁ hΞ⟩
 
 /-- PROVED (decision E): the hypotheses of E2d and E5 are met at the admissible `ΞA`. -/
 theorem status_noUnr_ΞA : AdmEff Inst.ΞA ∧ Inst.NoUnr Inst.ΞA ∧ Inst.NoUnrExn Inst.ΞA :=

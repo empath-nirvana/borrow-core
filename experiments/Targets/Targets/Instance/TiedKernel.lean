@@ -6,14 +6,17 @@ import Targets.Instance.J1Checks
 
 Decision D1 ties a program's row to the effect context `Ξ` (`RowAt`, `OCTy.TiedAt`): every
 operation the row finds is a label's, at the signature `Ξ` declares.  Decision R ties the rows
-inside a derivation the same way: **`CDerivesAt Ξ`** is Core's `CDerives` (SPEC §19, §24, §25)
-with the premise `RowAt Ξ` at the three rules that read an operation's signature off a row —
+inside a derivation the same way: **`CDerivesAt Ξ`** is Core's `CDerives` (SPEC §19, §24, §25,
+§27) with the premise `RowAt Ξ` at the three rules that read an operation's signature off a row —
 `[perform]` and `[raise]` (the row the operation is found in) and `[handle]` (the handled row
 `(n)↑E ⊙ Σ`, whose signature `E` is the handler's, and whose qualifiers are the handler value's
-tags, SPEC §25).  Every other rule is Core's, verbatim.
+tags, SPEC §25).  Every other rule is Core's, verbatim, `[then]` with its finaliser's row and the
+cancel rows of SPEC §27 among them.  The tie reads no cancel row (`rowAt_ofEff_fs`).
 
 * `CDerivesAt.toCDerives`: a tied derivation is one of Core's, so `fundamentalC` holds of it.
 * `CDerivesAt.effHandle`: `[handle]` at two clause variables, as Core's `CDerives.effHandle`.
+* `CDerivesAt.effThenA`: `[then]` with its finaliser at the pure row (option A), as Core's
+  `CDerives.effThenA`.
 * `CDerivesAt.append_dead`: weakening by consumed slots at the end, as Core's
   `CDerives.append_dead`.
 
@@ -342,23 +345,28 @@ inductive CDerivesAt (Ξ : EffCtx) : LifeCtx → Ctx VTy → Expr → Jdg → Pr
       (hM : CDerivesAt Ξ Δ Γ₁ M (.comp (CTy.effOf S A)))
       (hN : CDerivesAt Ξ Δ (⟨A, true⟩ :: Γ₂) N (.comp (CTy.effOf S B))) :
       CDerivesAt Ξ Δ Γ (.app (.val (.lam N)) M) (.comp (CTy.effOf S B))
-  /-- `[then]`: `M then x. N unwind D`, the finaliser at the pure row: its raises are handled
-  inside it, so none escapes it (option A, Core's `CDerives.effThenA`).  `[spec §19, §24, §27]` -/
-  | effThen {Δ Γ Γ₁ Γ₂ M N D A B} {S : Row} (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hNZ : S.NZ)
-      (hUq : S.Uniq) (hU : S.UnrD → Persistent Γ₂)
-      (hM : CDerivesAt Ξ Δ Γ₁ M (.comp (CTy.effOf S A)))
+  /-- `[then]`: `M then x. N unwind D`, `M` at `Σ_M ≤ Σ` and the finaliser at `Σ_D ≤ Σ`, each
+  capturable operation of `Σ_M` with `Σ(o).fin ≥ Σ_M(o).fin ⋈ Σ_D` (Core's `CDerives.effThen`;
+  option A, the finaliser at `F 1`, is `CDerivesAt.effThenA`).  `[spec §19, §24, §27]` -/
+  | effThen {Δ Γ Γ₁ Γ₂ M N D A B} {S SM SD : Row} (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hNZ : S.NZ)
+      (hUq : S.Uniq) (hU : S.UnrD → Persistent Γ₂) (hMS : RowLe SM S) (hDS : RowLe SD S)
+      (hfin : ∀ n i o o', Row.find SM n i = some o → Row.find S n i = some o' →
+        capB o.q o.B = true → ThenLe o.fin SD o'.fin)
+      (hP : SD.UnrD → SM.PendPers)
+      (hM : CDerivesAt Ξ Δ Γ₁ M (.comp (CTy.effOf SM A)))
       (hN : CDerivesAt Ξ Δ (⟨A, true⟩ :: Γ₂) N (.comp (CTy.effOf S B)))
-      (hD : CDerivesAt Ξ Δ (⟨.unit, false⟩ :: Γ₂) D (.comp (.ret .unit))) :
+      (hD : CDerivesAt Ξ Δ (⟨.unit, false⟩ :: Γ₂) D (.comp (CTy.effOf SD .unit))) :
       CDerivesAt Ξ Δ Γ (thenE N D M) (.comp (CTy.effOf S B))
   /-- `[handle]`: `handle_n e with H`, the handler's pair `H = (h_ret, hs)` a value form over a
-  part of the context whose live slots are persistent, `n` not in `Σ`.  At two variables it is
-  `hndTerm` (`CDerivesAt.effHandle`).  `[spec §19, §24]` -/
-  | effHandleV {Δ Γ Γ₁ Γ₂ H e} {S : Row} {E : List (Qual × VTy × VTy)} {n : UInt32}
-      {A R : VTy} (hAt : RowAt Ξ (Row.ofEff n E 0 ++ S)) (hs : Ctx.SplitP Γ Γ₁ Γ₂)
+  part of the context whose live slots are persistent, `n` not in `Σ`, the `j`-th operation's
+  cancel row `fs j`, the handled row tied to `Ξ`.  At two variables and empty cancel rows it is
+  `hndTerm` (`CDerivesAt.effHandle`).  `[spec §19, §24, §27]` -/
+  | effHandleV {Δ Γ Γ₁ Γ₂ H e} {S : Row} {E : List (Qual × VTy × VTy)} {fs : Nat → CTy}
+      {n : UInt32} {A R : VTy} (hAt : RowAt Ξ (Row.ofEff n E 0 fs ++ S)) (hs : Ctx.SplitP Γ Γ₁ Γ₂)
       (hd : Ctx.DeadP Γ₁) (hH : H.ValFormIn Γ₁)
-      (hc : CDerivesAt Ξ Δ Γ₁ H (.val (.tensor (retTy S A R) (clausesTy S R E))))
+      (hc : CDerivesAt Ξ Δ Γ₁ H (.val (.tensor (retTy S A R) (clausesTy S R E fs))))
       (hn0 : n ≠ 0) (hnS : ∀ o ∈ S, o.n ≠ n) (hlen : E.length ≤ 2 ^ 32)
-      (he : CDerivesAt Ξ Δ Γ₂ e (.comp (CTy.effOf (Row.ofEff n E 0 ++ S) A))) :
+      (he : CDerivesAt Ξ Δ Γ₂ e (.comp (CTy.effOf (Row.ofEff n E 0 fs ++ S) A))) :
       CDerivesAt Ξ Δ Γ (hndExpr n (E.map Prod.fst) H e) (.comp (CTy.effOf S R))
   /-- `[let-poly]`: `let x = λy. b in N` for a closed λ-value, from `N` with the λ-value for `x`,
   `x`'s slot dead.  Each occurrence of the λ-value in `N` is typed on its own, at its own row: the
@@ -460,9 +468,22 @@ theorem CDerivesAt.toCDerives {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {e : E
   | effPerform _ hf hna _ ih1 => exact .effPerform hf hna ih1
   | effRaise _ hf ha hd _ ih1 => exact .effRaise hf ha hd ih1
   | effLet hs hW hU _ _ ih1 ih2 => exact .effLet hs hW hU ih1 ih2
-  | effThen hs hNZ hUq hU _ _ _ ih1 ih2 ih3 => exact CDerives.effThenA hs hNZ hUq hU ih1 ih2 ih3
+  | effThen hs hNZ hUq hU hMS hDS hfin hP _ _ _ ih1 ih2 ih3 =>
+      exact .effThen hs hNZ hUq hU hMS hDS hfin hP ih1 ih2 ih3
   | effHandleV _ hs hd hH _ hn0 hnS hlen _ ihc ihe => exact .effHandleV hs hd hH ihc hn0 hnS hlen ihe
   | letPoly b hcl _ _ ihV ihN => exact .letPoly b hcl ihV ihN
+
+/-- `[then]` with its finaliser at the pure row (SPEC §24, option A), tied: `effThen` at
+`Σ_M = Σ` and `Σ_D = ∅`, since `F ⋈ ∅ ≤ F` (`ThenLe.nil`).  `[spec §24, §27]` -/
+theorem CDerivesAt.effThenA {Ξ : EffCtx} {Δ Γ Γ₁ Γ₂ M N D A B} {S : Row}
+    (hs : Ctx.SplitP Γ Γ₁ Γ₂) (hNZ : S.NZ) (hUq : S.Uniq) (hU : S.UnrD → Persistent Γ₂)
+    (hM : CDerivesAt Ξ Δ Γ₁ M (.comp (CTy.effOf S A)))
+    (hN : CDerivesAt Ξ Δ (⟨A, true⟩ :: Γ₂) N (.comp (CTy.effOf S B)))
+    (hD : CDerivesAt Ξ Δ (⟨.unit, false⟩ :: Γ₂) D (.comp (.ret .unit))) :
+    CDerivesAt Ξ Δ Γ (thenE N D M) (.comp (CTy.effOf S B)) :=
+  .effThen (SD := []) hs hNZ hUq hU (RowLe.refl S) (RowLe.nil S)
+    (fun _ _ o _ hf hf' _ => by rw [hf] at hf'; cases hf'; exact ThenLe.nil o.fin)
+    (fun ⟨_, h, _⟩ => absurd h List.not_mem_nil) hM hN hD
 
 /-- `[handle]` at two variables, tied: Core's `CDerives.effHandle` with the handled row tied to
 `Ξ`.  `[spec §19]` -/
@@ -508,6 +529,54 @@ theorem rowAt_ofEff_append {Ξ : EffCtx} {n : UInt32} {E : List (Qual × VTy × 
     RowAt Ξ (Row.ofEff n E 0 ++ S) := by
   subst hE
   exact rowAt_append (ofEff_wf Ξ n hn hlen) hS
+
+/-- **An effect's row finds, at each key, operations of the same signature at any cancel rows.** -/
+theorem find_ofEff_sig (n : UInt32) : ∀ (E : List (Qual × VTy × VTy)) (k : Nat) (fs fs' : Nat → CTy)
+    (m i : UInt32) (o : OpSig), Row.find (Row.ofEff n E k fs) m i = some o →
+      ∃ o', Row.find (Row.ofEff n E k fs') m i = some o' ∧ o.Sig o'
+  | [], _, _, _, _, _, _, h => by simp [Row.ofEff, Row.find] at h
+  | (q, A, B) :: E, k, fs, fs', m, i, o, h => by
+      by_cases hk : m = n ∧ i = UInt32.ofNat k
+      · have h₁ : Row.find (Row.ofEff n ((q, A, B) :: E) k fs) m i = some ⟨n, UInt32.ofNat k, q, A, B, fs 0⟩ := by
+          simp [Row.ofEff, Row.find, hk]
+        have h₂ : Row.find (Row.ofEff n ((q, A, B) :: E) k fs') m i = some ⟨n, UInt32.ofNat k, q, A, B, fs' 0⟩ := by
+          simp [Row.ofEff, Row.find, hk]
+        rw [h₁] at h; cases h
+        exact ⟨_, h₂, rfl, rfl, rfl, rfl, rfl⟩
+      · have hd : decide (m = n ∧ i = UInt32.ofNat k) = false := decide_eq_false hk
+        have h₁ : Row.find (Row.ofEff n ((q, A, B) :: E) k fs) m i =
+            Row.find (Row.ofEff n E (k + 1) (fun j => fs (j + 1))) m i := by
+          simp only [Row.ofEff, Row.find, List.find?_cons, hd]
+        have h₂ : Row.find (Row.ofEff n ((q, A, B) :: E) k fs') m i =
+            Row.find (Row.ofEff n E (k + 1) (fun j => fs' (j + 1))) m i := by
+          simp only [Row.ofEff, Row.find, List.find?_cons, hd]
+        rw [h₁] at h; rw [h₂]
+        exact find_ofEff_sig n E (k + 1) _ _ m i o h
+
+/-- **The tie reads no cancel row**: an effect's row before a tied row is tied at any cancel rows
+when it is at some. -/
+theorem rowAt_ofEff_fs {Ξ : EffCtx} {n : UInt32} {E : List (Qual × VTy × VTy)} {fs fs' : Nat → CTy}
+    {S : Row} (h : RowAt Ξ (Row.ofEff n E 0 fs ++ S)) : RowAt Ξ (Row.ofEff n E 0 fs' ++ S) := by
+  intro m i o hf
+  rw [Row.find_append] at hf
+  cases hA : Row.find (Row.ofEff n E 0 fs') m i with
+  | some o₁ =>
+      rw [hA, Option.some_or] at hf
+      have ho : o₁ = o := Option.some.inj hf
+      subst ho
+      obtain ⟨o', hf', hsig⟩ := find_ofEff_sig n E 0 fs' fs m i o₁ hA
+      obtain ⟨h₁, h₂, h₃⟩ := h m i o' (by rw [Row.find_append, hf', Option.some_or])
+      refine ⟨h₁, h₂, ?_⟩
+      rw [h₃, hsig.2.2.1, hsig.2.2.2.1, hsig.2.2.2.2]
+  | none =>
+      rw [hA, Option.none_or] at hf
+      have hB : Row.find (Row.ofEff n E 0 fs) m i = none := by
+        cases hB : Row.find (Row.ofEff n E 0 fs) m i with
+        | none => rfl
+        | some o₂ =>
+            obtain ⟨o', hf', -⟩ := find_ofEff_sig n E 0 fs fs' m i o₂ hB
+            rw [hA] at hf'; cases hf'
+      exact h m i o (by rw [Row.find_append, hB, Option.none_or, hf])
 
 /-- **A tied handler's signature is a prefix of the context's**: the handled row `(n)↑E ⊙ Σ`, tied
 to `Ξ`, finds each operation of `E` at the signature `Ξ n` declares at its index. -/
@@ -587,11 +656,11 @@ theorem derAt_hnd {Ξ : EffCtx} {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jd
   induction h <;> intro n Q H M he <;> cdat_terms <;> (try simp_all [not_derAt_app_hnd'])
   case force _ _ i C _ =>
     rcases Inst.forceE_cases C (.var i) with h | h <;> rw [h] at he <;> simp at he
-  case effHandleV _ _ _ _ _ e' S E n' A R hAt _ _ _ _ _ _ hlen he' _ _ =>
+  case effHandleV _ _ _ _ _ e' S E fs n' A R hAt _ _ _ _ _ _ hlen he' _ _ =>
     obtain ⟨⟨rfl, rfl, -⟩, rfl⟩ := he
     refine ⟨fun qs hq => ?_, _, _, he'⟩
     rw [← qualsVal_inj hq]
-    exact hndTags_of_rowAt hAt hlen
+    exact hndTags_of_rowAt (rowAt_ofEff_fs (fs' := finsNil) hAt) hlen
 
 /-- **A tied derivation of a λ-value whose body is an application** types the body, at some
 contexts: no term constant is such a λ-value. -/
@@ -725,9 +794,9 @@ theorem CDerivesAt.append_dead {Ξ : EffCtx} (h' : Ctx.Dead Γ') {Δ : LifeCtx} 
       exact .effLet (splitP_append h' hs)
         (fun hw => live_append (P := fun s => s.ty.Drop) h' (hW hw))
         (fun hu => persistent_append h' (hU hu)) ihM ihN
-  | effThen hs hNZ hUq hU _ _ _ ihM ihN ihD =>
+  | effThen hs hNZ hUq hU hMS hDS hfin hP _ _ _ ihM ihN ihD =>
       exact .effThen (splitP_append h' hs) hNZ hUq (fun hu => persistent_append h' (hU hu))
-        ihM ihN ihD
+        hMS hDS hfin hP ihM ihN ihD
   | effHandleV hAt hs hd hH _ hn0 hnS hlen _ ihc ihe =>
       exact .effHandleV hAt (splitP_append h' hs) (deadP_append h' hd) hH.append ihc hn0 hnS hlen
         ihe

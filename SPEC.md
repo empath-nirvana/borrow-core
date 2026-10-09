@@ -4030,10 +4030,10 @@ its rows is the top-level test, so it accepts and rejects what it did.
 - **The lowering of a finaliser that suspends** (`experiments/Targets/FINALISERS.md` §2.9: its
   cancel arm as a code of its own, each finaliser call a resumption point). Until it lands, a
   feature without its lowering.
-- **Tier 1's kernel at §27** (`experiments/Targets`, `CDerivesAt`): `J₁` types finalisers at the
-  pure row. At §27's `[then]` it types `e7b` and the rest, and the refutations of E7, E8 and E9 at
-  `J₁` (`Targets/Instance/FinRaise.lean`), which are of option A, are replaced by their proofs
-  (FINALISERS.md §4).
+- **E7, E8 and E9 at tier 1's kernel** (`experiments/Targets`): `J₁`'s kernel (`CDerivesAt`) takes
+  §27's `[then]` and cancel rows, so it types `e7b` and the rest, and the refutations of E7, E8 and
+  E9 at `J₁`, which were of option A, are retired; their proofs, and E7c restated as its rejection
+  (D3), are FINALISERS.md §4.
 - **`[then]`'s two premises on unrestricted operations** restrict `unr` beyond §19's `[then]`
   (decision 63). §19's top-level premise is not enough: the finaliser's frame is live in the
   cancels below it.

@@ -153,7 +153,7 @@ theorem d_holdCancelCl (h1 : Ξ 1 = Eab) {Δ : LifeCtx} {Γ : Ctx VTy} (hΓ : Ct
     CDerivesAt Ξ Δ Γ holdCancelCl (.val (clauseTy Sx .unit (.aff, .unit, .unit))) := by
   refine .bangThunkV (dead_noLive hΓ) rfl (.lam ?_)
   refine .tensorE (.left (deadSplit hΓ)) (.var (.here hΓ.toP)) ?_
-  refine .effThen (A := .unit) (.right (.left (.dead (deadSplit hΓ)))) ?_ ?_
+  refine CDerivesAt.effThenA (A := .unit) (.right (.left (.dead (deadSplit hΓ)))) ?_ ?_
     (fun h => absurd h (by simp [Row.UnrD, Row.ofEff, capB])) ?_ ?_ (d_holdD h1 hΓ)
   · intro o ho; simp [Row.ofEff] at ho; subst ho; decide
   · simp [Row.Uniq, Row.ofEff]

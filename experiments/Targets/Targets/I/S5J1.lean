@@ -209,7 +209,7 @@ theorem d_fireProg (h1 : Ξ 1 = Inst.Eab) :
     Targets.CDerivesAt Ξ LifeCtx.empty [] fireProg (.comp (.ret .unit)) := by
   refine Inst.d_withHAt (S := []) (Targets.rowAt_ofEff_append h1 (by decide) (by simp) (rowAt_nil Ξ))
     (by decide) (by simp) .nil (Inst.d_abortClAt (S := []) .nil) ?_
-  refine .effThen (A := .unit) (deadSplit (by cdead)) ?_ ?_
+  refine Targets.CDerivesAt.effThenA (A := .unit) (deadSplit (by cdead)) ?_ ?_
     (fun h => absurd h (by simp [Row.UnrD, Row.ofEff, capB])) ?_ ?_ ?_
   · intro o ho; simp [Row.ofEff] at ho; subst ho; decide
   · simp [Row.Uniq, Row.ofEff]

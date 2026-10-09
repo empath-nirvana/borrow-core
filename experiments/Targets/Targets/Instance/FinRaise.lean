@@ -2,24 +2,21 @@ import Targets.Instance.J1
 import Targets.A.NonVacuity
 
 /-!
-# The Instance — a finaliser that raises to its context is not typed (option A, decision D3)
+# The Instance — inversions of the tied kernel at a raise, a finaliser frame's context and a `let`
 
-Core's `[then]` types its finaliser at the pure row (SPEC §24, option A): a finaliser handles its
-own raises, and none escapes it.  A's cancel and unwind policies (E7, E8) and its stored
-continuation's cancel (E9c) are stated at programs whose finaliser raises an error to a handler
-outside the finaliser: `e7b`, `e7c`, `e7d`, `e8b`, `e9c`.  `J₁`, Core's kernel with its inner rows
-tied to the effect context, types none of them, at any context and judgement, so E7, E8 and E9 fail
-as written at `J₁` at every effect context.
+`J₁`'s kernel (`CDerivesAt`) takes SPEC §27's `[then]`: a finaliser may raise and perform, its
+effects recorded in the cancel rows of the operations its computation performs.  The refutations of
+E7, E8 and E9 at `J₁` were of option A (the finaliser at `F 1`), and are retired with it: `e7b`,
+`e7d`, `e8b` and `e9c` raise from a finaliser to a live handler, which §27 types, and `e7c` raises
+to a handler the cancel kills, which D3 rejects (FINALISERS §4, M4).  What stays are the inversions
+those refutations read:
 
-* `derAt_raise`: a tied derivation of `raise (n, (i, V))` is at a computation type whose row has the
-  operation `(n, i)` (`CTy.HasOp`); `F 1` has none (`not_derAt_raise_ret`).
-* `derAt_then`: a tied derivation of `M then x. N unwind D` types the finaliser `D` at `F 1`
-  (`[then]` is the only rule whose conclusion's term is a finaliser frame).
+* `derAt_raise`: a tied derivation of `raise (n, (i, V))` is at a computation type whose row has
+  the operation `(n, i)` (`CTy.HasOp`); `F 1` has none (`not_derAt_raise_ret`).
 * `derAt_let_arg`: a tied derivation of `(λx. N) M` types `M`, unless `M` is a λ-value, a variable
   or one of the arguments `()`, `inj₁ ()`, `inj₂ ()` of `∀E` and the projections.
-* With `derAt_hnd` (`Targets/Instance/TiedKernel.lean`), each program's finaliser is read off its
-  handlers and `let`s: `not_derAt_e7b` … `not_derAt_e9c`, and so `not_cancelPolicy_J₁`,
-  `not_unwindPolicy_J₁`, `not_storedK_J₁`.
+* `derAt_handleK`, with `derAt_hnd` (`Targets/Instance/TiedKernel.lean`): a handler frame's body is
+  typed.
 
 Each inversion is one induction on the derivation; a rule whose premise has the conclusion's term
 carries the claim through, every other rule is told apart by its conclusion's term (`cdat_terms`).
@@ -148,18 +145,6 @@ theorem not_derAt_raise_ret {Δ : LifeCtx} {Γ : Ctx VTy} {n i : UInt32} {V : Ex
   cases hC
   exact hop
 
-/-- **A tied derivation of a finaliser frame types its finaliser at `F 1`**: `[then]` is the only
-rule whose conclusion's term is `M then x. N unwind D`. -/
-theorem derAt_then {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg}
-    (h : CDerivesAt Ξ Δ Γ e j) : ∀ N D M, e = thenE N D M →
-      ∃ Γ₂ : Ctx VTy, CDerivesAt Ξ Δ (⟨.unit, false⟩ :: Γ₂) D (.comp (.ret .unit)) := by
-  induction h <;> intro N D M he <;> cdat_terms <;> (try simp_all [not_derAt_app_ubind'])
-  case force _ _ i C _ =>
-    rcases Inst.forceE_cases C (.var i) with h | h <;> rw [h] at he <;> simp at he
-  case effThen =>
-    obtain ⟨⟨-, rfl⟩, -⟩ := he
-    exact ⟨_, by assumption⟩
-
 /-- **A tied derivation of a `let` `(λx. N) M` types `M`**, unless `M` is a λ-value (`[let-poly]`),
 a variable (`[app]` at the λ-value) or the argument `()`, `inj₁ ()`, `inj₂ ()` of `∀E` and the
 projections. -/
@@ -181,9 +166,9 @@ namespace Targets.Inst
 open BoCa BoCa.Fig16 BoCa.Fig16.BoLo BoCa.Fig16.LogRel.Core
 open BoCa.BoLo (Kont)
 open BoCa.Lifetime (LifeCtx)
-open Targets (CDerivesAt derAt_hnd derAt_then derAt_let_arg not_derAt_raise_ret)
+open Targets (CDerivesAt derAt_hnd derAt_let_arg not_derAt_raise_ret)
 
-/-! ### The programs whose finaliser raises to its context -/
+/-! ### Handler frames and closed programs -/
 
 section Programs
 variable {Ξ : EffCtx}
@@ -193,32 +178,6 @@ theorem derAt_handleK {Δ : LifeCtx} {Γ : Ctx VTy} {j : Jdg} {n : UInt32} {qs r
     {cs : List Expr} {M : Expr} (h : CDerivesAt Ξ Δ Γ ((handleK n qs r cs).plug M) j) :
     ∃ (Γ' : Ctx VTy) (C : CTy), CDerivesAt Ξ Δ Γ' M (.comp C) :=
   (derAt_hnd h n qs (.pair r (clausesE cs)) M rfl).2
-
-/-- A tied derivation of a finaliser frame `M then x. N unwind D` types `D`, under the frame's
-binder, at `F 1`. -/
-theorem derAt_thenK {Δ : LifeCtx} {Γ : Ctx VTy} {j : Jdg} {N D M : Expr}
-    (h : CDerivesAt Ξ Δ Γ ((thenK N D).plug M) j) :
-    ∃ Γ₂ : Ctx VTy, CDerivesAt Ξ Δ (⟨.unit, false⟩ :: Γ₂) (D.shift 1 0) (.comp (.ret .unit)) :=
-  derAt_then h N (D.shift 1 0) M rfl
-
-/-- A raise at our instance, shifted past the finaliser's binder, is the raise. -/
-theorem raise_shift {J : OurTyping orowRF} (l : (orowAlg Ξ).Lab) :
-    ((ourInst (ℍ := ℍ) orowRF Ξ J).raise l 0 (ourInst (ℍ := ℍ) orowRF Ξ J).unitV).shift 1 0 =
-      BoCa.BoLo.raiseE (opArgE l.1 (UInt32.ofNat 0) (.val .unit)) := by
-  show Expr.shift 1 0 (if (0 : ℕ) < 2 ^ 32 then
-      BoCa.BoLo.raiseE (opArgE l.1 (UInt32.ofNat 0) (.val .unit)) else opJunk true) = _
-  rw [if_pos (by norm_num)]
-  rfl
-
-/-- **A finaliser frame whose finaliser raises at our instance has no tied derivation.** -/
-theorem not_derAt_thenK_raise {J : OurTyping orowRF} {Δ : LifeCtx} {Γ : Ctx VTy} {j : Jdg}
-    {N M : Expr} (l : (orowAlg Ξ).Lab) :
-    ¬ CDerivesAt Ξ Δ Γ ((thenK N ((ourInst (ℍ := ℍ) orowRF Ξ J).raise l 0
-      (ourInst (ℍ := ℍ) orowRF Ξ J).unitV)).plug M) j := by
-  intro h
-  obtain ⟨Γ₂, hD⟩ := derAt_thenK h
-  rw [raise_shift] at hD
-  exact not_derAt_raise_ret hD
 
 local notation "𝕁" => ourInst (ℍ := ℍ) orowRF Ξ J₁
 
@@ -235,75 +194,6 @@ theorem handleK_ne_drive (n : UInt32) (qs r : Expr) (cs : List Expr) (M M' : Exp
 
 theorem bindE_ne_drive (M N M' : Expr) : bindE M N ≠ driveE M' := by
   simp [driveE, driveMark, bindE, Expr.val, Val.lam]
-
-/-- **`e7b` is not typed at `J₁`**: its finaliser raises `exnₒ` to the handler outside the
-timeout, and `[then]` types a finaliser at `F 1` (option A). -/
-theorem not_der_e7b_J₁ (lw lo : (orowAlg Ξ).Lab) (C : OCTy) : ¬ (𝕁).der [] ((𝕁).e7b lw lo) C := by
-  intro h
-  obtain ⟨C', hd⟩ := derAt_of_der_J₁ h (handleK_ne_drive _ _ _ _ _)
-  obtain ⟨_, _, hd⟩ := derAt_handleK hd
-  obtain ⟨_, _, hd⟩ := derAt_handleK hd
-  exact not_derAt_thenK_raise lo hd
-
-/-- **`e7c` is not typed at `J₁`**: its finaliser raises `exnᵢ` to the handler inside the timeout. -/
-theorem not_der_e7c_J₁ (lw li : (orowAlg Ξ).Lab) (C : OCTy) : ¬ (𝕁).der [] ((𝕁).e7c lw li) C := by
-  intro h
-  obtain ⟨C', hd⟩ := derAt_of_der_J₁ h (handleK_ne_drive _ _ _ _ _)
-  obtain ⟨_, _, hd⟩ := derAt_handleK hd
-  obtain ⟨_, _, hd⟩ := derAt_handleK hd
-  exact not_derAt_thenK_raise li hd
-
-/-- **`e8b` is not typed at `J₁`**: its finaliser raises `exn_b` past the unwind of `exn_a`. -/
-theorem not_der_e8b_J₁ (la lb : (orowAlg Ξ).Lab) (C : OCTy) : ¬ (𝕁).der [] ((𝕁).e8b la lb) C := by
-  intro h
-  obtain ⟨C', hd⟩ := derAt_of_der_J₁ h (handleK_ne_drive _ _ _ _ _)
-  obtain ⟨_, _, hd⟩ := derAt_handleK hd
-  obtain ⟨_, _, hd⟩ := derAt_handleK hd
-  exact not_derAt_thenK_raise lb hd
-
-/-- **`e9c` is not typed at `J₁`**: the stored continuation's frame holds a finaliser that raises
-`exnₒ`. -/
-theorem not_der_e9c_J₁ (ly lo : (orowAlg Ξ).Lab) (C : OCTy) : ¬ (𝕁).der [] ((𝕁).e9c ly lo) C := by
-  intro h
-  obtain ⟨C', hd⟩ := derAt_of_der_J₁ h (handleK_ne_drive _ _ _ _ _)
-  obtain ⟨_, _, hd⟩ := derAt_handleK hd
-  rcases derAt_let_arg hd _ _ rfl with ⟨b, hb⟩ | ⟨i, hi⟩ | hu | hu | hu | ⟨_, _, hd⟩
-  · simp [A.EffectSystem.stash, ourInst, handleK, Kont.plug] at hb
-  · simp [A.EffectSystem.stash, ourInst, handleK, Kont.plug] at hi
-  · simp [A.EffectSystem.stash, ourInst, handleK, Kont.plug] at hu
-  · simp [A.EffectSystem.stash, ourInst, handleK, Kont.plug] at hu
-  · simp [A.EffectSystem.stash, ourInst, handleK, Kont.plug] at hu
-  obtain ⟨_, _, hd⟩ := derAt_handleK hd
-  exact not_derAt_thenK_raise lo hd
-
-/-- **E7 fails as written at `J₁`**, at every effect context: `e7b`'s finaliser raises to its
-context. -/
-theorem not_cancelPolicy_J₁ : ¬ (𝕁).CancelPolicy := by
-  rintro ⟨⟨ls, hls⟩, hP⟩
-  obtain ⟨lw, la, lb, rfl⟩ := A.EffectSystem.eq_three hls.1
-  obtain ⟨-, -, h, -⟩ := hP _ hls lw la lb rfl
-  exact not_der_e7b_J₁ lw la _ h
-
-/-- **E8 fails as written at `J₁`**, at every effect context: `e8b`'s finaliser raises to its
-context. -/
-theorem not_unwindPolicy_J₁ : ¬ (𝕁).UnwindPolicy := by
-  rintro ⟨⟨ls, hls⟩, hP⟩
-  obtain ⟨la, lb, rfl⟩ := A.EffectSystem.eq_two hls.1
-  obtain ⟨-, -, h, -⟩ := hP _ hls la lb rfl
-  exact not_der_e8b_J₁ la lb _ h
-
-/-- **E9 fails as written at `J₁`**, at every effect context: `e9c`'s finaliser raises to its
-context. -/
-theorem not_storedK_J₁ : ¬ (𝕁).StoredK := by
-  rintro ⟨⟨ls, hls⟩, hP⟩
-  obtain ⟨ly, lo, rfl⟩ := A.EffectSystem.eq_two hls.1
-  obtain ⟨-, -, -, -, h, -⟩ := hP _ hls ly lo rfl
-  exact not_der_e9c_J₁ ly lo _ h
-
-/-- **A's (E) properties fail as written at `J₁`**, at every effect context: E7, E8 and E9 each
-type a finaliser that raises to its context, which option A's `[then]` does not admit. -/
-theorem not_eProps_J₁ : ¬ (𝕁).EProps :=
-  fun h => not_cancelPolicy_J₁ h.2.2.2.2.2.2.1
 
 end Programs
 

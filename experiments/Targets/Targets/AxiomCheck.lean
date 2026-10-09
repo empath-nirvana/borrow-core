@@ -190,7 +190,6 @@ run_meta do
 #print axioms Targets.I.not_cancellationWhole_ΞA
 #print axioms Targets.I.not_combined_of_leak
 #print axioms Targets.I.not_semC_R1
-#print axioms Targets.I.not_tier1_J₁
 #print axioms Targets.I.not_tier1_of_elabClosed
 #print axioms Targets.I.not_unwindOrderWhole_J₁
 #print axioms Targets.I.not_unwindOrderWhole_of_types
@@ -525,7 +524,6 @@ run_meta do
 #print axioms Targets.Inst.den_ofV_any
 #print axioms Targets.Inst.derAt_handleK
 #print axioms Targets.Inst.derAt_of_der_J₁
-#print axioms Targets.Inst.derAt_thenK
 #print axioms Targets.Inst.derAt_withH
 #print axioms Targets.Inst.derNU_perform₀
 #print axioms Targets.Inst.derV_J₁_of
@@ -810,7 +808,6 @@ run_meta do
 #print axioms Targets.Inst.not_algLawCode_J₁
 #print axioms Targets.Inst.not_algLawCode_ΞA
 #print axioms Targets.Inst.not_ansCorrect_badState
-#print axioms Targets.Inst.not_cancelPolicy_J₁
 #print axioms Targets.Inst.not_cancelPolicy_tier1Open
 #print axioms Targets.Inst.not_closed_opJunk
 #print axioms Targets.Inst.not_contUseEv_of_der_R1
@@ -818,16 +815,11 @@ run_meta do
 #print axioms Targets.Inst.not_data_thunkSum
 #print axioms Targets.Inst.not_deepHandler_tier1Open
 #print axioms Targets.Inst.not_derAt_algFireProg
-#print axioms Targets.Inst.not_derAt_thenK_raise
 #print axioms Targets.Inst.not_der_algFireProg_J₁
 #print axioms Targets.Inst.not_der_app_hnd
 #print axioms Targets.Inst.not_der_app_hnd'
 #print axioms Targets.Inst.not_der_app_varBang
 #print axioms Targets.Inst.not_der_callBang
-#print axioms Targets.Inst.not_der_e7b_J₁
-#print axioms Targets.Inst.not_der_e7c_J₁
-#print axioms Targets.Inst.not_der_e8b_J₁
-#print axioms Targets.Inst.not_der_e9c_J₁
 #print axioms Targets.Inst.not_der_handleK
 #print axioms Targets.Inst.not_der_handle_of_elabClosed
 #print axioms Targets.Inst.not_der_handle_tier1Open
@@ -836,7 +828,6 @@ run_meta do
 #print axioms Targets.Inst.not_der_prim_hnd
 #print axioms Targets.Inst.not_der_prim_hnd'
 #print axioms Targets.Inst.not_der_unit_nonNU
-#print axioms Targets.Inst.not_eProps_J₁
 #print axioms Targets.Inst.not_freeIn_closed
 #print axioms Targets.Inst.not_freeIn_of_closedAt
 #print axioms Targets.Inst.not_goesOn_free
@@ -863,12 +854,10 @@ run_meta do
 #print axioms Targets.Inst.not_rowAt_R5
 #print axioms Targets.Inst.not_rowAt_Slv
 #print axioms Targets.Inst.not_rowAt_op₀
-#print axioms Targets.Inst.not_storedK_J₁
 #print axioms Targets.Inst.not_tied_hnd5_unr
 #print axioms Targets.Inst.not_tunnel_tier1Open
 #print axioms Targets.Inst.not_unr_firsts
 #print axioms Targets.Inst.not_unr_lin
-#print axioms Targets.Inst.not_unwindPolicy_J₁
 #print axioms Targets.Inst.not_unwindPolicy_of_elabClosed
 #print axioms Targets.Inst.not_unwindPolicy_tier1Open
 #print axioms Targets.Inst.not_unwindTrace_one
@@ -1037,7 +1026,6 @@ run_meta do
 #print axioms Targets.Inst.raise_eq
 #print axioms Targets.Inst.raise_junk
 #print axioms Targets.Inst.raise_live
-#print axioms Targets.Inst.raise_shift
 #print axioms Targets.Inst.raise_toNat
 #print axioms Targets.Inst.refuses_R_clauses
 #print axioms Targets.Inst.refuses_R_tier1Open
@@ -1576,7 +1564,6 @@ run_meta do
 #print axioms Targets.derAt_let
 #print axioms Targets.derAt_let_arg
 #print axioms Targets.derAt_raise
-#print axioms Targets.derAt_then
 #print axioms Targets.driveInv_safe
 #print axioms Targets.driveInv_step
 #print axioms Targets.driveSafe_cont
@@ -2449,3 +2436,6 @@ run_meta do
 #print axioms Targets.Inst.hnd_val_of_cancel
 #print axioms Targets.Inst.fin_rowOf_append
 #print axioms Targets.Inst.capB_of_rowAt_abortive
+#print axioms Targets.CDerivesAt.effThenA
+#print axioms Targets.find_ofEff_sig
+#print axioms Targets.rowAt_ofEff_fs
