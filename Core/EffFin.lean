@@ -182,6 +182,14 @@ theorem RowLe.of_find {S S' : Row} (h : ∀ n i o, Row.find S n i = some o → R
 /-- The empty row is below every row. -/
 theorem RowLe.nil (S : Row) : RowLe [] S := fun _ _ _ h => by simp [Row.find] at h
 
+/-- A row is below another when each of its operations is below the one the other finds at its
+key. -/
+theorem RowLe.of_mem {S S' : Row}
+    (h : ∀ o ∈ S, ∃ o', Row.find S' o.n o.i = some o' ∧ o.LeF o') : RowLe S S' := by
+  intro n i o hf
+  obtain ⟨hm, rfl, rfl⟩ := Row.find_mem hf
+  exact h o hm
+
 /-- An operation a row finds is the same operation in a larger row. -/
 theorem RowLe.sig {S S' : Row} (h : RowLe S S') {n i : UInt32} {o : OpSig}
     (hf : Row.find S n i = some o) : ∃ o', Row.find S' n i = some o' ∧ o.Sig o' := by

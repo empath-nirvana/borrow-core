@@ -3980,7 +3980,19 @@ premise read at some depth. No new index.
 
 ### Programs
 
-The runs of §19's cancels are unchanged (`Core/EffCancel.lean`).
+The runs of §19's cancels are unchanged (`Core/EffCancel.lean`). Their handlers' operations are
+unrestricted, so `κ`'s slot is `!U(…)`, and a variable is read at a computation type only from a
+`U` slot: a typed clause binds `κ` first, `(λk. k (inj₂ ())) κ` (`cancelCT`, `resumeCT`). The typed
+programs (`Core/EffCancelTyped.lean`) are the untyped ones with those clauses, and run as they do,
+one β-step longer at each use of `κ`:
+
+- **`progT`** (D3): handler `1` cancels the continuation of `perform 1`, whose region holds a
+  handler of `2` and a finaliser that raises `2`. It is typed at a row holding `2`, the cancel row
+  of `perform 1`'s continuation `{2}` (`d_progT`), and at no row without `2`
+  (`experiments/Targets`, `not_der_progT`, by inversion through `[handle]`, `[then]` and the
+  clause); its run ends at a raise of `2` that no handler catches (`progT_run`).
+- **`progOutT`**: `progT` under a live handler of `2`, typed at `F (1 ⊕ 1)` (`d_progOutT`); its run
+  reaches `inj₂ ()` (`progOutT_run`).
 
 ### Lowering
 

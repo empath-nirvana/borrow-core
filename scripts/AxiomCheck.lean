@@ -235,3 +235,14 @@ import Frontend.Check.Externs
 #print axioms BoCa.Fig16.LogRel.Core.handleV_compatC
 #print axioms BoCa.Fig16.LogRel.Core.CDerives.effThenA
 #print axioms BoCa.Fig16.LogRel.Core.Row.unrD_iff_of_fin
+#print axioms BoCa.Fig16.LogRel.Core.CancelIntercept.cancelT_start
+#print axioms BoCa.Fig16.LogRel.Core.CancelIntercept.resumeT_start
+#print axioms BoCa.Fig16.LogRel.Core.CancelIntercept.bodyT_run
+#print axioms BoCa.Fig16.LogRel.Core.CancelIntercept.progT_run
+#print axioms BoCa.Fig16.LogRel.Core.CancelIntercept.progOutT_run
+#print axioms BoCa.Fig16.LogRel.Core.CancelIntercept.d_cancelCT
+#print axioms BoCa.Fig16.LogRel.Core.CancelIntercept.d_resumeCT
+#print axioms BoCa.Fig16.LogRel.Core.CancelIntercept.d_then₂
+#print axioms BoCa.Fig16.LogRel.Core.CancelIntercept.d_inner₂
+#print axioms BoCa.Fig16.LogRel.Core.CancelIntercept.d_progT
+#print axioms BoCa.Fig16.LogRel.Core.CancelIntercept.d_progOutT

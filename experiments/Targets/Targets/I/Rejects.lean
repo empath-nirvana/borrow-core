@@ -216,12 +216,13 @@ theorem Hnf.persistent {T h : VTy} (hh : Hnf T h) : T.persistent = h.persistent 
 /-! ### The same-term rules, at the judgements -/
 
 /-- One same-term step of Core's rules, at the judgements alone: a value step, `return`, its reading
-back (`ofRet`), `[sub]`, and `ν`'s two rules (at an `&`-tree, `CTy.NuOk`). -/
+back (`ofRet`), `[sub]` with its order on rows, and `ν`'s two rules (at an `&`-tree,
+`CTy.NuOk`). -/
 inductive JS : Jdg → Jdg → Prop
   | val {A B : VTy} : VS A B → JS (.val A) (.val B)
   | ret (A : VTy) : JS (.val A) (.comp (.ret A))
   | ofRet (A : VTy) : JS (.comp (.ret A)) (.val A)
-  | effSub (S S' : Row) (A : VTy) : JS (.comp (CTy.effOf S A)) (.comp (CTy.effOf S' A))
+  | effSub (S S' : Row) (A : VTy) : RowLe S S' → JS (.comp (CTy.effOf S A)) (.comp (CTy.effOf S' A))
   | nuIn (C : CTy) : C.NuOk → JS (.comp C.unroll) (.comp (.nu C))
   | nuOut (C : CTy) : C.NuOk → JS (.comp (.nu C)) (.comp C.unroll)
 
@@ -259,7 +260,7 @@ theorem ValCls.step {T : VTy} {j j' : Jdg} (hs : JS j j') (h : ValCls T j) : Val
       obtain ⟨S, Y, he, hY⟩ := h
       obtain ⟨-, rfl⟩ := Inst.effOf_inj (S := []) he
       exact hY
-  | effSub S S' A =>
+  | effSub S S' A _ =>
       obtain ⟨S₀, Y, he, hY⟩ := h
       obtain ⟨-, rfl⟩ := Inst.effOf_inj he
       exact ⟨S', _, rfl, hY⟩
@@ -295,7 +296,7 @@ theorem JS.not_rigid {D : CTy} {j : Jdg} (hs : JS (.comp D) j) (hD : Rigid D) : 
   obtain ⟨he, ha, hn⟩ := hD
   cases hs with
   | ofRet A => exact he [] A rfl
-  | effSub S S' A => exact he S A rfl
+  | effSub S S' A _ => exact he S A rfl
   | nuIn C hC =>
       obtain ⟨C₁, C₂, hu⟩ := unroll_amp hC
       exact ha C₁ C₂ hu
@@ -328,7 +329,7 @@ theorem JR.comp_val {D : CTy} {Y : VTy} (hr : JR (.comp D) (.val Y)) :
         obtain ⟨D', rfl, hD'⟩ := ih
         cases hs with
         | ofRet A => exact absurd rfl (hD' [] A)
-        | effSub S S' A => exact absurd rfl (hD' S A)
+        | effSub S S' A _ => exact absurd rfl (hD' S A)
         | nuIn C hC =>
             refine ⟨_, rfl, fun S A h => Inst.effOf_ne_nu S A C h.symm⟩
         | nuOut C hC =>
@@ -348,7 +349,7 @@ theorem JR.ampNu {D : CTy} {j : Jdg} (hr : JR (.comp D) j) (hD : AmpNu D) :
       obtain ⟨D', rfl, hD'⟩ := ih
       cases hs with
       | ofRet A => rcases hD' with ⟨_, _, h⟩ | ⟨_, h⟩ <;> cases h
-      | effSub S S' A =>
+      | effSub S S' A _ =>
           rcases hD' with ⟨_, _, h⟩ | ⟨_, h⟩
           · exact absurd h (Inst.effOf_ne_amp _ _ _ _)
           · exact absurd h (Inst.effOf_ne_nu _ _ _)
@@ -728,8 +729,8 @@ theorem der_var {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives
       intro i he; obtain ⟨T, hT, hc⟩ := ih i he; exact ⟨T, hT, hc.step (JS.ret _)⟩
   | ofRet _ ih =>
       intro i he; obtain ⟨T, hT, hc⟩ := ih i he; exact ⟨T, hT, hc.step (JS.ofRet _)⟩
-  | effSub _ _ ih =>
-      intro i he; obtain ⟨T, hT, hc⟩ := ih i he; exact ⟨T, hT, hc.step (JS.effSub _ _ _)⟩
+  | effSub hle _ ih =>
+      intro i he; obtain ⟨T, hT, hc⟩ := ih i he; exact ⟨T, hT, hc.step (JS.effSub _ _ _ hle)⟩
   | nuIn hC _ ih =>
       intro i he; obtain ⟨T, hT, hc⟩ := ih i he; exact ⟨T, hT, hc.step (JS.nuIn _ hC)⟩
   | nuOut hC _ ih =>
@@ -769,10 +770,10 @@ theorem der_pair {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerive
       rcases ih a b he with ⟨Γ₁, Γ₂, A, B, hs, h₁, h₂, hc⟩ | h
       · exact .inl ⟨Γ₁, Γ₂, A, B, hs, h₁, h₂, hc.step (JS.ofRet _)⟩
       · exact .inr h
-  | effSub _ _ ih =>
+  | effSub hle _ ih =>
       intro a b he
       rcases ih a b he with ⟨Γ₁, Γ₂, A, B, hs, h₁, h₂, hc⟩ | h
-      · exact .inl ⟨Γ₁, Γ₂, A, B, hs, h₁, h₂, hc.step (JS.effSub _ _ _)⟩
+      · exact .inl ⟨Γ₁, Γ₂, A, B, hs, h₁, h₂, hc.step (JS.effSub _ _ _ hle)⟩
       · exact .inr h
   | nuIn hC _ ih =>
       intro a b he
@@ -836,10 +837,10 @@ theorem der_unit {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerive
       intro he; rcases ih he with ⟨hd, hc⟩ | hr
       · exact .inl ⟨hd, hc.step (JS.ofRet _)⟩
       · exact .inr (hr.tail (JS.ofRet _))
-  | effSub _ _ ih =>
+  | effSub hle _ ih =>
       intro he; rcases ih he with ⟨hd, hc⟩ | hr
-      · exact .inl ⟨hd, hc.step (JS.effSub _ _ _)⟩
-      · exact .inr (hr.tail (JS.effSub _ _ _))
+      · exact .inl ⟨hd, hc.step (JS.effSub _ _ _ hle)⟩
+      · exact .inr (hr.tail (JS.effSub _ _ _ hle))
   | nuIn hC _ ih =>
       intro he; rcases ih he with ⟨hd, hc⟩ | hr
       · exact .inl ⟨hd, hc.step (JS.nuIn _ hC)⟩
@@ -886,7 +887,7 @@ theorem der_prim_alloc {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : C
   | alloc => intro _; exact ⟨_, ValCls.refl _⟩
   | ret _ ih => intro he; obtain ⟨A, hc⟩ := ih he; exact ⟨A, hc.step (JS.ret _)⟩
   | ofRet _ ih => intro he; obtain ⟨A, hc⟩ := ih he; exact ⟨A, hc.step (JS.ofRet _)⟩
-  | effSub _ _ ih => intro he; obtain ⟨A, hc⟩ := ih he; exact ⟨A, hc.step (JS.effSub _ _ _)⟩
+  | effSub hle _ ih => intro he; obtain ⟨A, hc⟩ := ih he; exact ⟨A, hc.step (JS.effSub _ _ _ hle)⟩
   | nuIn hC _ ih => intro he; obtain ⟨A, hc⟩ := ih he; exact ⟨A, hc.step (JS.nuIn _ hC)⟩
   | nuOut hC _ ih => intro he; obtain ⟨A, hc⟩ := ih he; exact ⟨A, hc.step (JS.nuOut _ hC)⟩
   | bangE _ ih => intro he; obtain ⟨A, hc⟩ := ih he; exact ⟨A, hc.step (JS.val (VS.bang _))⟩
@@ -986,8 +987,8 @@ theorem der_app {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives
       intro X Y he; obtain ⟨j₀, hb, hr⟩ := ih X Y he; exact ⟨j₀, hb, hr.tail (JS.ret _)⟩
   | ofRet _ ih =>
       intro X Y he; obtain ⟨j₀, hb, hr⟩ := ih X Y he; exact ⟨j₀, hb, hr.tail (JS.ofRet _)⟩
-  | effSub _ _ ih =>
-      intro X Y he; obtain ⟨j₀, hb, hr⟩ := ih X Y he; exact ⟨j₀, hb, hr.tail (JS.effSub _ _ _)⟩
+  | effSub hle _ ih =>
+      intro X Y he; obtain ⟨j₀, hb, hr⟩ := ih X Y he; exact ⟨j₀, hb, hr.tail (JS.effSub _ _ _ hle)⟩
   | nuIn hC _ ih =>
       intro X Y he; obtain ⟨j₀, hb, hr⟩ := ih X Y he; exact ⟨j₀, hb, hr.tail (JS.nuIn _ hC)⟩
   | nuOut hC _ ih =>
@@ -1222,7 +1223,7 @@ theorem der_lam {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives
   | withI => intro M he; exact .inr (.inr (.inr (.inr (.inl ⟨_, _, he.symm⟩))))
   | ret _ ih => intro M he; exact (ih M he).step (JS.ret _)
   | ofRet _ ih => intro M he; exact (ih M he).step (JS.ofRet _)
-  | effSub _ _ ih => intro M he; exact (ih M he).step (JS.effSub _ _ _)
+  | effSub hle _ ih => intro M he; exact (ih M he).step (JS.effSub _ _ _ hle)
   | nuIn hC _ ih => intro M he; exact (ih M he).step (JS.nuIn _ hC)
   | nuOut hC _ ih => intro M he; exact (ih M he).step (JS.nuOut _ hC)
   | bangE _ ih => intro M he; exact (ih M he).step (JS.val (VS.bang _))

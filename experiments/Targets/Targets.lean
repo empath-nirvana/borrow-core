@@ -95,6 +95,7 @@ import Targets.I.OpenRel
 import Targets.I.Pins
 import Targets.I.Programs
 import Targets.I.Rejects
+import Targets.I.RejectsFin
 import Targets.I.Restricted.Answering
 import Targets.I.Restricted.CompositeT1
 import Targets.I.Restricted.Core

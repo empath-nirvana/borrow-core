@@ -18,6 +18,7 @@ import Targets.Audit
 import Targets.I.Tier1Route
 import Targets.I.Restricted.FinAlone
 import Targets.Instance.ClauseRefusals
+import Targets.I.RejectsFin
 import Targets.Instance.ContUse
 import Targets.Instance.RunTyping
 import Targets.I.Restricted.InstanceSafety
