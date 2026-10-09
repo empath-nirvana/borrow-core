@@ -175,7 +175,7 @@ def Tm.keyStr : Tm → String
   | .catch n b => s!"T({n},{b.keyStr})"
   | .fin p dd b => s!"I({p},{dd},{b.keyStr})"
   | .catchAll b => s!"A({b.keyStr})"
-  | .reraise p m => s!"E({p},{m})"
+  | .reraise p => s!"E({p})"
   | .run f a => s!"G({f},{a})"
   | .await p k => s!"Y({p},{k})"
 

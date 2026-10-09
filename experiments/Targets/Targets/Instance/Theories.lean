@@ -330,8 +330,8 @@ theorem quiet_opStep {n i : UInt32} {ts : List Qual} {co : List OVal}
     (hb : closedAt 0 b.1 = true)
     (hq : Quiet (ℍ := ℍ) (.app co[i.toNat].1 (Val.pair s a).1) (.val (Val.pair s' b)))
     {R : Expr} (hR : closedAt 1 R = true)
-    (hu : kappaAt (capTag (qualsVal ts).1 i.toNat) n (ansHV n ts co) (bindK R) =
-      kappa n (ansHV n ts co) (bindK R)) :
+    (hu : kappaAt (capTag (qualsVal ts).1 i.toNat) (ansHV n ts co) (bindK R) =
+      kappa (ansHV n ts co) (bindK R)) :
     Quiet (ℍ := ℍ)
       ((stFrame s).plug (hndE (ansHV n ts co) (bindE (performE (.val (opPayload n i a))) R)))
       ((stFrame s').plug (hndE (ansHV n ts co) (R.subst 0 b))) := by
@@ -339,15 +339,15 @@ theorem quiet_opStep {n i : UInt32} {ts : List Qual} {co : List OVal}
   have hH := closedAt_ansHV n ts hco
   have hRk : closedAt 0 ((bindK R).plug .unit) = true := by
     simp [bindK, Kont.plug, closedAt, hR]
-  have hκ : closedAt 0 (kappa n (ansHV n ts co) (bindK R)) = true := closedAt_kappa n hH hRk
-  have hκv := isVal_kappa n (ansHV n ts co) (bindK R)
+  have hκ : closedAt 0 (kappa (ansHV n ts co) (bindK R)) = true := closedAt_kappa hH hRk
+  have hκv := isVal_kappa (ansHV n ts co) (bindK R)
   -- the catch
   have h₁ := quiet_hop (ℍ := ℍ) (stFrame s) n i (qualsVal ts) ⟨ansRetE, .lam⟩
     ⟨_, isVal_ansClauses co⟩ ⟨ansClauseE co[i.toNat].1, .lam⟩ a (bindK R)
     (clauseAt_ansHV hi) (by simp [bindK, Kont.HasHnd]) hu
   refine h₁.trans ?_
   refine (quiet_ansClause hi hc _ hκv hκ hs ha hs' hb hq).trans ?_
-  have h₁₁ := quiet_kappa_resume (ℍ := ℍ) (stFrame s') n (ansHV n ts co) (bindK R) b
+  have h₁₁ := quiet_kappa_resume (ℍ := ℍ) (stFrame s') (ansHV n ts co) (bindK R) b
   refine h₁₁.trans ?_
   have h₁₂ := quiet_beta (ℍ := ℍ)
     ((stFrame s').comp (.appR (.app (.prim .hnd) (ansHV n ts co).1) .hole)) R b
@@ -364,8 +364,8 @@ theorem cellQuiet_opStep {n i : UInt32} {ts : List Qual} {co : List OVal} (aff :
     (hb : closedAt 0 b.1 = true)
     (hq : Quiet (ℍ := ℍ) (.app co[i.toNat].1 (Val.pair s a).1) (.val (Val.pair s' b)))
     {R : Expr} (hR : closedAt 1 R = true)
-    (hcell : kappaAt (capTag (qualsVal ts).1 i.toNat) n (ansHV n ts co) (bindK R) =
-      kappaCell aff n (ansHV n ts co) (bindK R)) :
+    (hcell : kappaAt (capTag (qualsVal ts).1 i.toNat) (ansHV n ts co) (bindK R) =
+      kappaCell aff (ansHV n ts co) (bindK R)) :
     CellQuiet (ℍ := ℍ)
       ((stFrame s).plug (hndE (ansHV n ts co) (bindE (performE (.val (opPayload n i a))) R)))
       ((stFrame s').plug (hndE (ansHV n ts co) (R.subst 0 b))) := by
@@ -376,18 +376,18 @@ theorem cellQuiet_opStep {n i : UInt32} {ts : List Qual} {co : List OVal} (aff :
   have hh : ∀ μ, Head (ℍ := ℍ) μ
       (hndE (ansHV n ts co) ((bindK R).plug (performE (.val (opPayload n i a))))) μ
       (.app (.val ⟨ansClauseE co[i.toNat].1, .lam⟩)
-        (.pair (.val a) (kappaCell aff n (ansHV n ts co) (bindK R)))) := by
+        (.pair (.val a) (kappaCell aff (ansHV n ts co) (bindK R)))) := by
     intro μ
     have h : Head (ℍ := ℍ) μ
         (hndE (ansHV n ts co) ((bindK R).plug (performE (.val (opPayload n i a))))) μ
         (.app (.val ⟨ansClauseE co[i.toNat].1, .lam⟩)
-          (.pair (.val a) (kappaAt (capTag (qualsVal ts).1 i.toNat) n (ansHV n ts co) (bindK R)))) :=
+          (.pair (.val a) (kappaAt (capTag (qualsVal ts).1 i.toNat) (ansHV n ts co) (bindK R)))) :=
       Head.hop (ℍ := ℍ) μ n i (qualsVal ts) ⟨ansRetE, .lam⟩ ⟨_, isVal_ansClauses co⟩
         ⟨ansClauseE co[i.toNat].1, .lam⟩ a (bindK R) (clauseAt_ansHV hi)
         (by simp [bindK, Kont.HasHnd])
     rwa [hcell] at h
   refine ⟨(stFrame s).comp (.appR (.val ⟨ansClauseE co[i.toNat].1, .lam⟩) (.pairR a
-    (.appR (.val (Val.lam (kappaCBody aff n (ansHV n ts co) (bindK R)))) .hole))), ?_,
+    (.appR (.val (Val.lam (kappaCBody aff (ansHV n ts co) (bindK R)))) .hole))), ?_,
     fun ℓ => ?_⟩
   · rw [Kont.plug_comp]
     exact Quiet.head (stFrame s) hh rfl rfl
@@ -395,15 +395,15 @@ theorem cellQuiet_opStep {n i : UInt32} {ts : List Qual} {co : List OVal} (aff :
     ?_, ?_⟩
   · rw [Kont.plug_comp, Kont.plug_comp]
     have hb₀ := Quiet.head (ℍ := ℍ) (.appR (.val ⟨ansClauseE co[i.toNat].1, .lam⟩) (.pairR a .hole))
-      (fun μ => Head.beta μ (kappaCBody aff n (ansHV n ts co) (bindK R)) (Val.loc ℓ)) rfl rfl
+      (fun μ => Head.beta μ (kappaCBody aff (ansHV n ts co) (bindK R)) (Val.loc ℓ)) rfl rfl
     rw [kappaCBody_subst] at hb₀
     refine (hb₀.plug (stFrame s)).trans ?_
-    have hκ := closedAt_kappaC aff ℓ n hH hRk
-    refine (quiet_ansClause hi hc _ (isVal_kappaC aff ℓ n (ansHV n ts co) (bindK R)) hκ hs ha hs'
+    have hκ := closedAt_kappaC aff ℓ hH hRk
+    refine (quiet_ansClause hi hc _ (isVal_kappaC aff ℓ (ansHV n ts co) (bindK R)) hκ hs ha hs'
       hb hq).trans ?_
-    exact (kappaC_resume_parts aff ℓ n (ansHV n ts co) (bindK R) b).1.plug (stFrame s')
+    exact (kappaC_resume_parts aff ℓ (ansHV n ts co) (bindK R) b).1.plug (stFrame s')
   · rw [Kont.plug_comp]
-    refine ((kappaC_resume_parts aff ℓ n (ansHV n ts co) (bindK R) b).2.plug (stFrame s')).trans ?_
+    refine ((kappaC_resume_parts aff ℓ (ansHV n ts co) (bindK R) b).2.plug (stFrame s')).trans ?_
     have h₁₂ := quiet_beta (ℍ := ℍ)
       ((stFrame s').comp (.appR (.app (.prim .hnd) (ansHV n ts co).1) .hole)) R b
     simp only [Kont.plug_comp] at h₁₂

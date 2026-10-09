@@ -114,19 +114,19 @@ theorem not_semC_R1 (n : UInt32) {q : Qual} (qs : List Qual) (hq : q ≠ .unr) :
   rw [htag, kappaAt_cell hq] at hop
   have hal := Head.alloc (ℍ := ℍ) Adequacy.emptyMem Val.unit 0 rfl
   have hb := Head.beta (ℍ := ℍ) (Adequacy.emptyMem.upd 0 Val.unit)
-    (kappaCBody (cellAff q) n (rH n (q :: qs) dropV) rK) (Val.loc 0)
+    (kappaCBody (cellAff q) (rH n (q :: qs) dropV) rK) (Val.loc 0)
   rw [kappaCBody_subst] at hb
   have hs : Steps Adequacy.emptyMem (rProg n (q :: qs) dropV) (Adequacy.emptyMem.upd 0 Val.unit)
       (.val (Val.inj₁ Val.unit)) :=
     .more ⟨.hole, _, _, Inst.rProg_eq n (q :: qs) dropV, rfl, hop⟩ <|
     .more ⟨.appR (.val dropV) (.pairR Val.unit
-      (.appR (.val (Val.lam (kappaCBody (cellAff q) n (rH n (q :: qs) dropV) rK))) .hole)),
+      (.appR (.val (Val.lam (kappaCBody (cellAff q) (rH n (q :: qs) dropV) rK))) .hole)),
       _, _, rfl, rfl, hal⟩ <|
     .more ⟨.appR (.val dropV) (.pairR Val.unit .hole), _, _, rfl, rfl, hb⟩ <|
     .more ⟨.hole, _, _, rfl, rfl, Head.beta _ _ (Val.pair Val.unit
-      ⟨kappaC (cellAff q) 0 n (rH n (q :: qs) dropV) rK, isVal_kappaC _ _ _ _ _⟩)⟩ <|
+      ⟨kappaC (cellAff q) 0 (rH n (q :: qs) dropV) rK, isVal_kappaC _ _ _ _⟩)⟩ <|
     .more ⟨.hole, _, _, rfl, rfl, Head.letpair _ Val.unit
-      ⟨kappaC (cellAff q) 0 n (rH n (q :: qs) dropV) rK, isVal_kappaC _ _ _ _ _⟩ (.inj₁ .unit)⟩ <|
+      ⟨kappaC (cellAff q) 0 (rH n (q :: qs) dropV) rK, isVal_kappaC _ _ _ _⟩ (.inj₁ .unit)⟩ <|
     .refl _ _
   obtain ⟨v, hs', -⟩ := theorem32D _ (fun _ => True) hwp' hs
   obtain ⟨h₁, -⟩ := steps_from_val (v := Val.inj₁ Val.unit) hs'

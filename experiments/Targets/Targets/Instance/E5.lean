@@ -206,9 +206,9 @@ def raiseU (ne : UInt32) : Expr := raiseE (opArgE ne 0 .unit)
 cell is still to be allocated. -/
 theorem head_wlHop (nl : UInt32) (K : Kont) (v : Val) (hK : K.HasHnd nl = false) (μ : Heap) :
     Head (ℍ := ℍ) μ (hndE (wlH nl) (K.plug (performE (.val (opPayload nl 0 v))))) μ
-      (.app (.val ⟨logClE, .lam⟩) (.pair (.val v) (kappaCell false nl (wlH nl) K))) := by
-  have hk : kappaAt (capTag (qualsVal [.lin]).1 (0 : UInt32).toNat) nl (wlH nl) K =
-      kappaCell false nl (wlH nl) K := by
+      (.app (.val ⟨logClE, .lam⟩) (.pair (.val v) (kappaCell false (wlH nl) K))) := by
+  have hk : kappaAt (capTag (qualsVal [.lin]).1 (0 : UInt32).toNat) (wlH nl) K =
+      kappaCell false (wlH nl) K := by
     simp [capTag, qualsVal, Qual.tag, kappaAt, Val.pair, Val.i32]
   have h := Head.hop (ℍ := ℍ) μ nl 0 (qualsVal [.lin]) ⟨logRetE, .lam⟩
     ⟨clausesE [logClE], .pair .lam .unit⟩ ⟨logClE, .lam⟩ v K
@@ -225,7 +225,7 @@ def p1K (ne : UInt32) (qe : Qual) : Kont :=
 /-- Around the allocation of `κ`'s cell. -/
 def p1KA (nl ne : UInt32) (qe : Qual) : Kont :=
   (bindK (appE (.var 0) (.inj₁ .unit))).comp (.appR logClE (.pairR ⟨.inj₂ .unit, .inj₂ .unit⟩
-    (.appR (.lam (kappaCBody false nl (wlH nl) (p1K ne qe))) .hole)))
+    (.appR (.lam (kappaCBody false (wlH nl) (p1K ne qe))) .hole)))
 
 /-- Around the release of `κ`'s cell, when the state function resumes `κ`. -/
 def p1KF (nl ne : UInt32) (qe : Qual) : Kont :=
@@ -273,7 +273,7 @@ theorem cellQuiet_p1 (nl ne : UInt32) (qe : Qual) (hne : ne ≠ nl) :
       simp [p1K, handleK, hndValE, Kont.HasHnd, Kont.comp, bindK, raiseU, hne]
     have e : (p1KA nl ne qe).plug (allocE Val.unit) = (bindK (appE (.var 0) (.inj₁ .unit))).plug
         (.app (.val ⟨logClE, .lam⟩) (.pair (.val ⟨.inj₂ .unit, .inj₂ .unit⟩)
-          (kappaCell false nl (wlH nl) (p1K ne qe)))) := by
+          (kappaCell false (wlH nl) (p1K ne qe)))) := by
       rw [p1KA, Kont.plug_comp]; rfl
     rw [e]
     exact Quiet.head _ (head_wlHop nl (p1K ne qe) _ hK) rfl rfl
@@ -304,7 +304,7 @@ def p2K0 (ne : UInt32) (qe : Qual) : Kont :=
 /-- Around the allocation of `κ`'s cell. -/
 def p2KA (nl ne : UInt32) (qe : Qual) : Kont :=
   (p2K0 ne qe).comp (.appR logClE (.pairR ⟨.inj₂ .unit, .inj₂ .unit⟩
-    (.appR (.lam (kappaCBody false nl (wlH nl) (bindK (raiseU ne)))) .hole)))
+    (.appR (.lam (kappaCBody false (wlH nl) (bindK (raiseU ne)))) .hole)))
 
 /-- Around the release of `κ`'s cell. -/
 def p2KF (nl ne : UInt32) (qe : Qual) : Kont :=
@@ -346,7 +346,7 @@ theorem cellQuiet_p2 (nl ne : UInt32) (qe : Qual) :
   · rw [p2_start]
     have e : (p2KA nl ne qe).plug (allocE Val.unit) = (p2K0 ne qe).plug
         (.app (.val ⟨logClE, .lam⟩) (.pair (.val ⟨.inj₂ .unit, .inj₂ .unit⟩)
-          (kappaCell false nl (wlH nl) (bindK (raiseU ne))))) := by
+          (kappaCell false (wlH nl) (bindK (raiseU ne))))) := by
       rw [p2KA, Kont.plug_comp]; rfl
     rw [e]
     exact Quiet.head _ (head_wlHop nl (bindK (raiseU ne)) _ rfl) rfl rfl

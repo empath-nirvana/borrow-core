@@ -132,8 +132,8 @@ theorem rProg_eq (n : UInt32) (qs : List Qual) (cl : Val) :
 def cellAff (q : Qual) : Bool := q == .aff
 
 /-- The tag of a linear or affine operation is a cell's. -/
-theorem kappaAt_cell {q : Qual} (hq : q ≠ .unr) (n : UInt32) (H : Val) (K : Kont) :
-    kappaAt q.tag n H K = kappaCell (cellAff q) n H K := by
+theorem kappaAt_cell {q : Qual} (hq : q ≠ .unr) (H : Val) (K : Kont) :
+    kappaAt q.tag H K = kappaCell (cellAff q) H K := by
   cases q
   · rfl
   · rfl
@@ -141,7 +141,7 @@ theorem kappaAt_cell {q : Qual} (hq : q ≠ .unr) (n : UInt32) (H : Val) (K : Ko
 
 /-- `withCl`'s `κ` at its cell `ℓ`. -/
 def rκ (q : Qual) (qs : List Qual) (ℓ : Loc) (n : UInt32) (cl : Val) : OVal :=
-  ⟨kappaC (cellAff q) ℓ n (rH n (q :: qs) cl) rK, .lam⟩
+  ⟨kappaC (cellAff q) ℓ (rH n (q :: qs) cl) rK, .lam⟩
 
 /-! ### Steps at our instance -/
 
@@ -208,9 +208,9 @@ theorem stuck_free_r₀ {μ : Heap} (K : Kont) {ℓ : Loc} (hμ : μ ℓ = none)
 cell at `ℓ`, and `κ` at its cell: the clause applied to `((), κ)`. -/
 def prefixPath (R : (𝕊).Runner) (s : R.St) (μ : Heap) (q : Qual) (qs : List Qual) (ℓ : Loc)
     (n : UInt32) (cl : Val) : List ((𝕊).Event × (𝕊).RConf R) :=
-  [(.tau, ((μ, .app cl.1 (.pair .unit (kappaCell (cellAff q) n (rH n (q :: qs) cl) rK))), s)),
+  [(.tau, ((μ, .app cl.1 (.pair .unit (kappaCell (cellAff q) (rH n (q :: qs) cl) rK))), s)),
    (.tau, ((μ.upd ℓ Val.unit, .app cl.1 (.pair .unit
-      (.app (.lam (kappaCBody (cellAff q) n (rH n (q :: qs) cl) rK)) (.loc ℓ)))), s)),
+      (.app (.lam (kappaCBody (cellAff q) (rH n (q :: qs) cl) rK)) (.loc ℓ)))), s)),
    (.tau, ((μ.upd ℓ Val.unit, .app cl.1 (.pair .unit (rκ q qs ℓ n cl).1)), s))]
 
 /-- **The catch of a linear or affine operation** hands its clause `κ` at a fresh cell: the `[op]`
@@ -226,8 +226,8 @@ theorem rpath_prefix (R : (𝕊).Runner) (s : R.St) {μ : Heap} {q : Qual} (qs :
   refine .cons (rstep_head R s .hole hop rfl) ?_
   have hal := Head.alloc (ℍ := ℍ) μ Val.unit ℓ hμ
   refine .cons (rstep_head R s (K := .appR (.val cl) (.pairR Val.unit
-    (.appR (.val (Val.lam (kappaCBody (cellAff q) n (rH n (q :: qs) cl) rK))) .hole))) hal rfl) ?_
-  have hb := Head.beta (ℍ := ℍ) (μ.upd ℓ Val.unit) (kappaCBody (cellAff q) n (rH n (q :: qs) cl) rK)
+    (.appR (.val (Val.lam (kappaCBody (cellAff q) (rH n (q :: qs) cl) rK))) .hole))) hal rfl) ?_
+  have hb := Head.beta (ℍ := ℍ) (μ.upd ℓ Val.unit) (kappaCBody (cellAff q) (rH n (q :: qs) cl) rK)
     (Val.loc ℓ)
   rw [kappaCBody_subst] at hb
   refine .cons (rstep_head R s (K := .appR (.val cl) (.pairR Val.unit .hole)) hb rfl) ?_
@@ -369,10 +369,10 @@ theorem take_r1 (R : (𝕊).Runner) (s : R.St) (q : Qual) (qs : List Qual) (n : 
     ((((Adequacy.emptyMem, rProg n (q :: qs) dropV), s) : (𝕊).RConf R) ::
       (r1Path R s q qs n).map Prod.snd).take (r1Path R s q qs n).length =
     [((Adequacy.emptyMem, rProg n (q :: qs) dropV), s),
-     ((Adequacy.emptyMem, .app dropV.1 (.pair .unit (kappaCell (cellAff q) n
+     ((Adequacy.emptyMem, .app dropV.1 (.pair .unit (kappaCell (cellAff q)
         (rH n (q :: qs) dropV) rK))), s),
      ((Adequacy.emptyMem.upd 0 Val.unit, .app dropV.1 (.pair .unit
-        (.app (.lam (kappaCBody (cellAff q) n (rH n (q :: qs) dropV) rK)) (.loc 0)))), s),
+        (.app (.lam (kappaCBody (cellAff q) (rH n (q :: qs) dropV) rK)) (.loc 0)))), s),
      ((Adequacy.emptyMem.upd 0 Val.unit, .app dropV.1 (.pair .unit (rκ q qs 0 n dropV).1)), s),
      ((Adequacy.emptyMem.upd 0 Val.unit,
         .letpair (.pair .unit (rκ q qs 0 n dropV).1) (.inj₁ .unit)), s)] := by
@@ -420,7 +420,7 @@ theorem not_contUseEv_of_der_R1 (hU : ∀ η, RF.den Ξ (RF.alg Ξ).unit η = []
       · intro heq
         have h1 : (𝕊).term ((𝕊).cfgAt (((Adequacy.emptyMem, rProg (RF.name Ξ l) (q :: qs) dropV), ())
             : (𝕊).RConf R) q₁ 1).1 = Expr.app dropV.1 (.pair .unit (kappaCell (cellAff q)
-              (RF.name Ξ l) (rH (RF.name Ξ l) (q :: qs) dropV) rK)) := rfl
+              (rH (RF.name Ξ l) (q :: qs) dropV) rK)) := rfl
         rw [h1] at heq
         injection heq with _ h2
         injection h2 with _ h3
@@ -430,7 +430,7 @@ theorem not_contUseEv_of_der_R1 (hU : ∀ η, RF.den Ξ (RF.alg Ξ).unit η = []
       · intro heq
         have h1 : (𝕊).term ((𝕊).cfgAt (((Adequacy.emptyMem, rProg (RF.name Ξ l) (q :: qs) dropV), ())
             : (𝕊).RConf R) q₁ 2).1 = Expr.app dropV.1 (.pair .unit
-              (.app (.lam (kappaCBody (cellAff q) (RF.name Ξ l) (rH (RF.name Ξ l) (q :: qs) dropV)
+              (.app (.lam (kappaCBody (cellAff q) (rH (RF.name Ξ l) (q :: qs) dropV)
                 rK)) (.loc 0))) := rfl
         rw [h1] at heq
         injection heq with _ h2

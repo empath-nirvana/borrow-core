@@ -63,7 +63,7 @@ open BoCa.Lifetime (LSub LifeCtx LifeVar)
 /-- **I5.β at every world**: resuming `κ` at `w` runs `hnd H K[w]` (`ewp_kappa_resume`'s four
 administrative steps, at `ewpW`). -/
 theorem i5beta (M : SemWorld) : I5beta (ℍ := ℍ) M := by
-  intro Tb n H K w i Q ρ hTb h
+  intro Tb H K w i Q ρ hTb h
   refine ewpW_step hTb (fun μ => (Step1N.head (Head.beta μ _ _) rfl).plug
     (Kont.appL .hole w)) i Q ρ ?_
   refine ewpW_step hTb (fun μ => (Step1N.head (Head.case₁ μ Val.unit _ _) rfl).plug
@@ -108,29 +108,23 @@ theorem i1_core : I1 (ℍ := ℍ) (coreW (ℍ := ℍ)) := by
     · rw [h] at ha; cases ha
     · exact h
   have hκ : KapRel (Row.tab S δ) (fun ls v => vC true R ls δ v) (OpSig.ent δ ⟨n, j, o.q, o.A, o.B⟩)
-      ls ⟨kappaC (o.q == .aff) ℓ n (hndVal n qs hr hs) K, by unfold kappaC; exact .lam⟩ ρ := by
+      ls ⟨kappaC (o.q == .aff) ℓ (hndVal n qs hr hs) K, by unfold kappaC; exact .lam⟩ ρ := by
     refine ⟨fun h' => absurd h' hq, fun ls' he => ⟨fun w τ₁ τ₂ hB hcτ => ?_, fun hq' => ?_⟩⟩
     · obtain ⟨z, hz, hzτ⟩ := compS_exch hc hcτ
       have h₁ := (hk ls' (Ext.left hc he)).1 w τ₁ z hB hz
       simp only [ewpW_core_eq, opTabW_core_down, hTout] at h₁
-      exact ewp_kappaC_resume (opTable_mono _) _ ℓ n _ K w ⟨σ, z, ResU.CompS.comm hzτ, hcell, h₁⟩
+      exact ewp_kappaC_resume (opTable_mono _) _ ℓ _ K w ⟨σ, z, ResU.CompS.comm hzτ, hcell, h₁⟩
     · have hq'' : o.q ≠ .lin := hq'
       have haff : o.q = .aff := by
         cases hh : o.q
         · exact absurd hh hq''
         · rfl
         · exact absurd hh hq
-      have hC0 : (hndK (hndVal n qs hr hs)).Catches 0 = false := by
-        rw [hndK_catches]; simpa using hn0
-      have hco := (hk ls' (Ext.left hc he)).2 hq' (n :: K.hndNames) List.mem_cons_self
-        (fun x hx => List.mem_cons_of_mem _ hx)
-      rw [hTin] at hco
-      have hcc := ewp_ccatch (Tin := Row.tab (Row.ofEff n E 0 ++ S) δ) (Tout := Row.tab S δ) _ hC0
-        (fun m j' en hm h => by
-          have hmn : m ≠ n := fun e => hm (e ▸ List.mem_cons_self)
-          simpa [Row.tab, Row.find_append, Row.find_ofEff_ne n E 0 m j' hmn] using h) hco
+      have hco := (hk ls' (Ext.left hc he)).2 hq'
+      have hcc := ewp_ccatch (T := OpTab.empty) (Tout := Row.tab S δ)
+        (fun _ _ _ h => by simp [OpTab.empty] at h) hco
       simp only [haff]
-      exact ewp_kappaC_cancel (opTable_mono _) ℓ n _ K ⟨σ, ρk, ResU.CompS.comm hc, hcell, hcc⟩
+      exact ewp_kappaC_cancel (opTable_mono _) ℓ _ K ⟨σ, ρk, ResU.CompS.comm hc, hcell, hcc⟩
   exact vC_kTy_of_kapRel o.A n j hκ
 
 theorem mutFrameUW_core : MutFrameUW (ℍ := ℍ) (coreW (ℍ := ℍ)) := by
@@ -241,17 +235,17 @@ theorem i2_core_abortive : I2 (ℍ := ℍ) (coreW (ℍ := ℍ)) OutJ.core admClo
 
 /-- **`I3 coreW`**: PROVED AT σ=[] (`coreW` holds nothing, by definition). -/
 theorem i3_core : I3 (ℍ := ℍ) (coreW (ℍ := ℍ)) := by
-  intro T en n i K Φ ρ h hlin _ i' he N hN hNK
+  intro T en n i K Φ ρ h hlin _ i' he
   rcases i' with ⟨ls', ⟨⟩⟩
   rw [ewpW_core]
-  have hd : TableI.down (cancelTabW T N (fun i'' =>
+  have hd : TableI.down (cancelTabW (fun _ _ => none) (fun i'' =>
       (∀ f ∈ ((coreW (ℍ := ℍ)).held i'').1, f ∈ ((coreW (ℍ := ℍ)).held (ls', ())).1) ∧
       (∀ x ∈ ((coreW (ℍ := ℍ)).held i'').2, x ∈ ((coreW (ℍ := ℍ)).held (ls', ())).2))) =
-      cancelTab (OpTabI.down T) N := by
+      cancelTab OpTab.empty := by
     funext ls t Φ' ρ'
     exact propext (cancelTabW_core (fun _ => ⟨fun _ h => by simp at h, fun _ h => by simp at h⟩))
   rw [hd]
-  exact (h.2 ls' he).2 hlin N hN hNK
+  exact (h.2 ls' he).2 hlin
 
 theorem antiFrameW_core : AntiFrameW (ℍ := ℍ) (coreW (ℍ := ℍ)) := by
   intro Tb ℓ α T δ Q i e hTb ρ h
@@ -269,10 +263,10 @@ theorem antiFrameW_core : AntiFrameW (ℍ := ℍ) (coreW (ℍ := ℍ)) := by
   exact hF
 
 theorem frameW_core : FrameW (ℍ := ℍ) (coreW (ℍ := ℍ)) := by
-  intro T K hH hC hN hU Fr hFs hFe hW Q₁ Q hk i e ρ h ρ₂ ρ' hF hc
+  intro T K hH hC hU Fr hFs hFe hW Q₁ Q hk i e ρ h ρ₂ ρ' hF hc
   rcases i with ⟨ls, ⟨⟩⟩
   rw [ewpW_core, opTabW_core_down] at h ⊢
-  refine ewp_frame_plain (OpTabI.down T) K hH hC hN (fun ls => Fr (ls, ()))
+  refine ewp_frame_plain (OpTabI.down T) K hH hC (fun ls => Fr (ls, ()))
     (fun ls ls' hs => hFs [] (ls, ()) [] (ls', ()) (.val .unit) ⟨fun _ => Iff.rfl, hs⟩ hs)
     (fun ls ls' ρ he hf => hFe (ls, ()) (ls', ()) ρ he hf) ?_ ?_ (fun ls v => Q₁ (ls, ()) v)
     (fun ls v => Q (ls, ()) v) ?_ h hF hc

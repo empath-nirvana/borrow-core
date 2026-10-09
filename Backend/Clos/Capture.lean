@@ -31,13 +31,13 @@ is the suspended computation: a closure of the code's *resume code* `R` over its
 there. The resumption points are the `perform`s, the calls of codes that may suspend in non-tail
 position, and `drive`'s forwarding. At a point the code builds its state and returns `inr`; each
 frame it suspends through (`let`, `catch`, `fin`) passes the `inr` on. `R` takes `inl y` to resume
-and `inr mask` to cancel, and switches on the state:
+and `inr ()` to cancel, and switches on the state:
 
 - **resume**: the point's continuation, its frames rebuilt around `y` (a call point first resumes
   its callee's `k`, and suspends again at the same point if the callee does);
 - **cancel**: the callee's `k` cancelled first (innermost), then the finalisers of the point's
   `fin` frames, innermost first, and every other variable dropped. It answers `inl ()`, or
-  `inr E`, the first error a finaliser raised whose name is not in `mask`: decision (C) of §19.
+  `inr E`, the first error a finaliser raised (§19, *Cancels*).
 
 So a caller's state holds its callee's `k` at a call point: **suspension through calls nests**,
 and `κ` is a value of statically known size. Which codes may suspend is the least solution of the
@@ -56,10 +56,10 @@ operation, and the clause resumes `κ` once, in tail position, and neither suspe
 the operation is a direct call of the clause, its resume removed: the handler is the one known
 statically, and nothing is suspended or resumed.
 
-**Cancels.** `κ`'s cancel entry cancels `k` with the mask of the names of the handlers its region
-may hold, then answers `()` or re-raises the kept error (`reraise`). The mask is the handler
-sites reachable from the handler's body; it is the region's set exactly when no handler site is
-reached again from its own body, which is checked when a finaliser may raise.
+**Cancels.** `κ`'s cancel entry cancels `k`, then answers `()` or re-raises the kept error
+(`reraise`) at the canceller. The region's handlers are dead, as §19's *Cancels* asks: a cancel
+runs from the canceller's call of `κ`, and the cancel arms run only the points' `fin` frames, so
+a finaliser's raise meets the arm's `catchAll`, never a handler of the region.
 -/
 
 namespace Backend.Clos
@@ -228,13 +228,13 @@ where
     | .when s k n x b r => .when s k n x b (go pl r)
     | _ => .absurd pl
 
-/-- `κ`'s body: `inl ()` gives the resume closure `Res`; `inr ()` cancels `k` with `mask` and
-answers `()`, or re-raises the error the cancel kept (`reraise`). -/
-def kapBody (h : HInfo) (mask : UInt64) (reraise : Bool) : Except String Tm := do
+/-- `κ`'s body: `inl ()` gives the resume closure `Res`; `inr ()` cancels `k` and answers `()`,
+or re-raises the error the cancel kept (`reraise`). -/
+def kapBody (h : HInfo) (reraise : Bool) : Except String Tm := do
   let #[hr, cls, k, s, s', u₁, u₂, mk, mm, e, eu, eq] := h.kVars | throw "capture: κ's variables"
-  let err : Tm := if reraise then .reraise eq mask else .drop eq .unit
+  let err : Tm := if reraise then .reraise eq else .drop eq .unit
   return .letv s' (.var s) (.case s' u₁ (.drop u₁ (.clos h.res [hr, cls, k])) u₂
-    (.drop u₂ (.drop hr (.drop cls (.letv mk (.lit (.i64 mask)) (.letv mm (.inj true mk)
+    (.drop u₂ (.drop hr (.drop cls (.letv mk .unit (.letv mm (.inj true mk)
       (.letv e (.app k mm) (.case e eu (.var eu) eq err))))))))
 
 /-- A control handler's site: its body becomes the code `B`, run and driven. -/
@@ -249,7 +249,7 @@ def controlSite (O : Ops) (n : UInt32) (hr cls : Var) (b : Tm) : KM Tm := do
   let kVars ← kfreshN 12
   let h : HInfo := { n, body := cB, drv := cDrv, kap := cKap, res := cRes, dVars, kVars }
   kset cDrv ⟨[dVars[0]!, dVars[1]!], dVars[2]!, ← drvBody O h true⟩
-  kset cKap ⟨[kVars[0]!, kVars[1]!, kVars[2]!], kVars[3]!, ← liftM (kapBody h 0 false)⟩
+  kset cKap ⟨[kVars[0]!, kVars[1]!, kVars[2]!], kVars[3]!, ← liftM (kapBody h false)⟩
   let rv ← kfreshN 7
   kset cRes ⟨[rv[0]!, rv[1]!, rv[2]!], rv[3]!, .letv rv[4]! (.inj false rv[3]!)
     (.letv rv[5]! (.run rv[2]! rv[4]!) (.letv rv[6]! (.clos cDrv [rv[0]!, rv[1]!])
@@ -496,7 +496,7 @@ def aliasesIn (t : Tm) (x : Var) : List Var := Id.run do
 
 /-- Every variable a term uses as an operand, bound in it or not, once per use. -/
 def Tm.operands : Tm → List Var
-  | .var x | .raise x | .reraise x _ | .perform x | .absurd x | .inj _ x | .con _ _ x => [x]
+  | .var x | .raise x | .reraise x | .perform x | .absurd x | .inj _ x | .con _ _ x => [x]
   | .unit | .lit _ => []
   | .pair a b | .app a b | .run a b | .await a b => [a, b]
   | .clos _ xs | .prim _ xs => xs
@@ -588,7 +588,7 @@ def Tm.rename (σ : Std.HashMap Var Var) : Tm → Tm
   | .copy x x' b => .copy (σ.getD x x) (σ.getD x' x') (b.rename σ)
   | .drop x b => .drop (σ.getD x x) (b.rename σ)
   | .raise p => .raise (σ.getD p p)
-  | .reraise p m => .reraise (σ.getD p p) m
+  | .reraise p => .reraise (σ.getD p p)
   | .perform p => .perform (σ.getD p p)
   | .catch n b => .catch n (b.rename σ)
   | .fin q dd b => .fin q (σ.getD dd dd) (b.rename σ)
@@ -871,25 +871,14 @@ def MEnv.resumeArm (E : MEnv) (j : Nat) (y : Var) (k : Option Var) : KM Tm := do
     | _, none => throw "capture: a call point with no callee"
   E.plug hole pt.frames
 
-/-- The first error kept: `e` when it is one; else `r`'s error, unless its name is in `mask`. -/
-def errNext (e r z : Var) : KM Tm := do
-  let u ← kfresh; let v ← kfresh; let q ← kfresh; let ee ← kfresh; let u' ← kfresh
-  let m ← kfresh; let rest ← kfresh; let m₂ ← kfresh; let m64 ← kfresh; let sh ← kfresh
-  let sr ← kfresh; let one ← kfresh; let an ← kfresh; let bit ← kfresh; let t ← kfresh
-  let u₁ ← kfresh; let u₂ ← kfresh; let u₃ ← kfresh; let q' ← kfresh
-  let none' : Tm := .letv u' .unit (.inj false u')
-  let test : Tm :=
-    .letpair m rest q (.copy m m₂ (.letv m64 (.prim (.host .extend_u) [m₂])
-      (.letv sh (.pair z m64) (.letv sr (.prim (.host (.bin .w64 .shr_u)) [sh])
-        (.letv one (.lit (.i64 1)) (.letv an (.pair sr one)
-          (.letv bit (.prim (.host (.bin .w64 .and)) [an]) (.letv t (.prim (.host (.eqz .w64)) [bit])
-            (.case t u₁ (.drop u₁ (.drop m (.drop rest none')))
-              u₂ (.drop u₂ (.letv q' (.pair m rest) (.inj true q'))))))))))))
-  return .case e u (.drop u (.case r v (.drop v (.drop z none')) q test))
-    ee (.drop r (.drop z (.letv u₃ (.var ee) (.inj true u₃))))
+/-- The first error kept: `e` when it is one; else `r`'s error. -/
+def errNext (e r : Var) : KM Tm := do
+  let u ← kfresh; let v ← kfresh; let q ← kfresh; let ee ← kfresh; let u₃ ← kfresh
+  return .case e u (.case r v (.drop v (.inj false u)) q (.drop u (.inj true q)))
+    ee (.drop r (.letv u₃ (.var ee) (.inj true u₃)))
 
-/-- Cancel point `j` with the mask `z`: the callee's `k` first, then the finalisers of its `fin`
-frames, innermost first, every other variable dropped; the first error kept. -/
+/-- Cancel point `j`, `z` the cancel's `()`: the callee's `k` first, then the finalisers of its
+`fin` frames, innermost first, every other variable dropped; the first error kept. -/
 def MEnv.cancelArm (E : MEnv) (j : Nat) (z : Var) (k : Option Var) : KM Tm := do
   let some pt := E.points[j]? | throw "capture: no point"
   let dds := pt.frames.filterMap fun | .fin_ dd => some dd | _ => none
@@ -898,28 +887,26 @@ def MEnv.cancelArm (E : MEnv) (j : Nat) (z : Var) (k : Option Var) : KM Tm := do
   let fins := dds.map fun dd => (dd, (E.F.codesOf dd).any (E.F.raises[·]?.getD false))
   let e₀ ← kfresh
   let rec go : List (Var × Bool) → Var → KM Tm
-    | [], e => do return .drop z (.var e)
+    | [], e => do return .var e
     | (dd, raising) :: rest, e => do
       let u ← kfresh; let rr ← kfresh
       if raising then
-        let zc ← kfresh; let e' ← kfresh
+        let e' ← kfresh
         let u₀ ← kfresh
-        return .copy z zc (.letv u₀ .unit (.letv u (.inj true u₀) (.letv rr (.catchAll (.app dd u))
-          (.letv e' (← errNext e rr zc) (← go rest e')))))
+        return .letv u₀ .unit (.letv u (.inj true u₀) (.letv rr (.catchAll (.app dd u))
+          (.letv e' (← errNext e rr) (← go rest e'))))
       else
         let u₀ ← kfresh
         return .letv u₀ .unit (.letv u (.inj true u₀) (.letv rr (.app dd u) (.drop rr (← go rest e))))
   let tail ← go fins e₀
   let start ← match k with
     | some k => do
-      let zc ← kfresh; let mz ← kfresh
-      pure (.copy z zc (.letv mz (.inj true zc) (.letv e₀ (.app k mz) tail)))
-    | none => do
-      let u ← kfresh
-      pure (.letv u .unit (.letv e₀ (.inj false u) tail))
+      let mz ← kfresh
+      pure (.letv mz (.inj true z) (.letv e₀ (.app k mz) tail))
+    | none => pure (.letv e₀ (.inj false z) tail)
   return Tm.drops others start
 
-/-- Group `g`'s resume code: `inl y` resumes, `inr mask` cancels, by the state's variant. -/
+/-- Group `g`'s resume code: `inl y` resumes, `inr ()` cancels, by the state's variant. -/
 def MEnv.resumeCode (E : MEnv) (g : Nat) : KM Code := do
   let s ← kfresh; let m ← kfresh; let m' ← kfresh; let y ← kfresh; let z ← kfresh
   let pts := E.points.toList.zipIdx.filter (·.1.group == g)
@@ -967,32 +954,6 @@ def plainCode (F : SFacts) (t : Tm) : Except String Tm := do
     throw s!"capture: a call of a code that may suspend (code {F.codesOf f}), outside every handler of its operations"
   return t.plain
 
-/-! ### Cancel masks -/
-
-/-- The codes reachable from `c` by calls and runs. -/
-def reachable (F : SFacts) (codes : Array Code) (c : Nat) : List Nat := Id.run do
-  let mut seen : Std.HashSet Nat := ({} : Std.HashSet Nat).insert c
-  let mut work := [c]
-  for _ in [0:codes.size + 1] do
-    let new := (work.flatMap fun c => ((codes[c]?.map (·.body.callees)).getD []).flatMap F.codesOf)
-      |>.filter (!seen.contains ·) |>.eraseDups
-    if new.isEmpty then break
-    seen := new.foldl (·.insert ·) seen
-    work := new
-  return seen.toList
-
-/-- Each control handler's cancel mask: the names of the handler sites reachable from its body,
-its own included. -/
-def masks (F : SFacts) (codes : Array Code) (hs : Array HInfo) : Except String (Array UInt64) := do
-  let nameOfBody : Std.HashMap Nat UInt32 := hs.foldl (fun m h => m.insert h.body h.n) {}
-  hs.mapM fun h => do
-    let rs := reachable F codes h.body
-    let names : List UInt32 := h.n :: rs.flatMap fun c =>
-      ((codes[c]?.map (·.body.catches)).getD []) ++ (nameOfBody[c]?).toList
-    names.foldlM (fun (m : UInt64) (n : UInt32) => do
-      if n ≥ 64 then throw s!"capture: a cancel whose finalisers may raise, under a handler named {n} ≥ 64, is not lowered"
-      pure (m ||| ((1 : UInt64) <<< n.toUInt64))) 0
-
 /-! ### The pass -/
 
 /-- The term has a construct of §19 that this pass lowers. -/
@@ -1030,7 +991,7 @@ def Prog.capture (p : Prog) : Except String Prog := do
       let main ← directCalls O tcs main
       let q₁ : Prog := { p with main, codes := (← get).codes }
       pure (main, q₁, ← liftE (SFacts.of O q₁ hs))
-    -- `drive`'s forwarding, where its body suspends with another name's operation; `κ`'s mask and
+    -- `drive`'s forwarding, where its body suspends with another name's operation; `κ`'s
     -- re-raise, where a finaliser may raise.
     -- A finaliser frame's clauses as one code (`markUbinds`) may raise in its continuing arm; only
     -- its finalising arm runs at a cancel.
@@ -1040,18 +1001,12 @@ def Prog.capture (p : Prog) : Except String Prog := do
       | _ => F.raises[d]?.getD false
     let anyRaise := q₀.codes.toList.any fun c => c.body.finalisers.any fun dd =>
       (F.codesOf dd).any finRaises
-    let ms ← if anyRaise then liftE (masks F q₀.codes hs) else pure (hs.map fun _ => 0)
-    if anyRaise then
-      let succ := q₀.codes.map fun c => (c.body.callees.flatMap F.codesOf).eraseDups
-      let cyc := onCycle succ
-      if hs.toList.any (fun h => cyc[h.body]!) then
-        throw "capture: a cancel whose finalisers may raise, under a handler reached from its own body, is not lowered"
-    for (h, i) in hs.toList.zipIdx do
+    for h in hs.toList do
       let forward := (F.skeys[h.body]?.getD []).any fun j => O.keys[j]!.1 != h.n
       let d := q₀.codes[h.drv]!
       if !forward then kset h.drv { d with body := noForward d.body }
       let kc := q₀.codes[h.kap]!
-      kset h.kap { kc with body := ← liftE (kapBody h ms[i]! anyRaise) }
+      kset h.kap { kc with body := ← liftE (kapBody h anyRaise) }
     -- Each code that answers outcomes becomes a machine; the others are plain.
     let codes₁ := (← get).codes
     for k in [0:codes₁.size] do

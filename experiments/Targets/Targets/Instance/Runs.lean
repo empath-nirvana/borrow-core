@@ -104,11 +104,11 @@ theorem quiet_resumeE (K : Kont) (k : Expr) (w : Val) :
 
 /-- **Resuming `κ` at `w` reaches `hnd H K[w]`**, quietly: `kappa_resume_steps`'s four head
 steps. -/
-theorem quiet_kappa_resume (K₀ : Kont) (n : UInt32) (H : Val) (K : Kont) (w : Val) :
-    Quiet (ℍ := ℍ) (K₀.plug (.app (.app (kappa n H K) (.val (Val.inj₁ .unit))) (.val w)))
+theorem quiet_kappa_resume (K₀ : Kont) (H : Val) (K : Kont) (w : Val) :
+    Quiet (ℍ := ℍ) (K₀.plug (.app (.app (kappa H K) (.val (Val.inj₁ .unit))) (.val w)))
       (K₀.plug (hndE H (K.plug (.val w)))) := by
-  have e₀ : K₀.plug (.app (.app (kappa n H K) (.val (Val.inj₁ .unit))) (.val w)) =
-      (K₀.comp (.appL .hole w)).plug (.app (kappa n H K) (.val (Val.inj₁ .unit))) := by
+  have e₀ : K₀.plug (.app (.app (kappa H K) (.val (Val.inj₁ .unit))) (.val w)) =
+      (K₀.comp (.appL .hole w)).plug (.app (kappa H K) (.val (Val.inj₁ .unit))) := by
     rw [Kont.plug_comp]; rfl
   rw [e₀]
   refine (Quiet.head (K₀.comp (.appL .hole w)) (fun μ => Head.beta μ _ _) rfl rfl).trans ?_
@@ -138,11 +138,11 @@ theorem quiet_kappa_resume (K₀ : Kont) (n : UInt32) (H : Val) (K : Kont) (w : 
 SPEC §25.) -/
 theorem quiet_hop (K₀ : Kont) (n i : UInt32) (qs hr hs c v : Val) (K : Kont)
     (hc : clauseAt hs.1 i.toNat = some c) (hK : K.HasHnd n = false)
-    (hu : kappaAt (capTag qs.1 i.toNat) n (hndVal n qs hr hs) K = kappa n (hndVal n qs hr hs) K) :
+    (hu : kappaAt (capTag qs.1 i.toNat) (hndVal n qs hr hs) K = kappa (hndVal n qs hr hs) K) :
     Quiet (ℍ := ℍ) (K₀.plug (hndE (hndVal n qs hr hs) (K.plug (performE (.val (opPayload n i v))))))
-      (K₀.plug (.app (.val c) (.pair (.val v) (kappa n (hndVal n qs hr hs) K)))) := by
+      (K₀.plug (.app (.val c) (.pair (.val v) (kappa (hndVal n qs hr hs) K)))) := by
   have h : ∀ μ, Head (ℍ := ℍ) μ (hndE (hndVal n qs hr hs) (K.plug (performE (.val (opPayload n i v)))))
-      μ (.app (.val c) (.pair (.val v) (kappa n (hndVal n qs hr hs) K))) := by
+      μ (.app (.val c) (.pair (.val v) (kappa (hndVal n qs hr hs) K))) := by
     intro μ
     have h := Head.hop (ℍ := ℍ) μ n i qs hr hs c v K hc hK
     rwa [hu] at h

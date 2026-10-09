@@ -19,9 +19,9 @@ typing system whose closed programs are Core's it is a run invariant:
   a data argument with data (`Platform.Respects.typed`).
 
 So every configuration a typed program reaches names no handler `0` (`hndNZ_reach`).  A cancelled
-`κ`'s cancel run starts, three steps later, at `ccatch (hnd H K[raise …])`, which holds the
-continuation's context `K` itself; so `K` has no handler of `0` (`cancelsNZ_of_coreClosed`; at
-`J₁`, `I.cancelsNZ_J₁`).  `[Core σ=[]]`
+`κ = kappa H K` holds the continuation's context `K` in its resume branch `λy. hnd H K[y]`, shifted
+past the branch's binders, and a shift keeps a context's handler names (`hasHnd_shift`); so `K` has
+no handler of `0` (`cancelsNZ_of_coreClosed`; at `J₁`, `I.cancelsNZ_J₁`).  `[Core σ=[]]`
 -/
 
 noncomputable section
@@ -32,6 +32,65 @@ namespace Targets
 open BoCa BoCa.Fig16 BoCa.Fig16.BoLo BoCa.Fig16.LogRel BoCa.Fig16.LogRel.Core
 open BoCa.BoLo (Heap Steps Step1 Head Kont performE raiseE opPayload)
 open BoCa.Lifetime (LSub)
+
+/-! ### A shift keeps handler names -/
+
+/-- A frame is a handler frame of name `m` exactly when its shift is. -/
+theorem hndFrame_shift_iff (f : Expr) (d c : ℕ) (m : UInt32) :
+    (∃ x, f.shift d c = .app (.prim .hnd) (.pair (.prim (.lit (.i32 m))) x)) ↔
+      ∃ x, f = .app (.prim .hnd) (.pair (.prim (.lit (.i32 m))) x) := by
+  constructor
+  · rintro ⟨x, h⟩
+    cases f with
+    | var i => simp only [Expr.shift] at h; split at h <;> cases h
+    | app g a =>
+        simp only [Expr.shift, Expr.app.injEq] at h
+        obtain ⟨hg, ha⟩ := h
+        cases g with
+        | var i => simp only [Expr.shift] at hg; split at hg <;> cases hg
+        | prim p =>
+            simp only [Expr.shift, Expr.prim.injEq] at hg
+            subst hg
+            cases a with
+            | var i => simp only [Expr.shift] at ha; split at ha <;> cases ha
+            | pair a₁ a₂ =>
+                simp only [Expr.shift, Expr.pair.injEq] at ha
+                obtain ⟨ha₁, -⟩ := ha
+                cases a₁ with
+                | var i => simp only [Expr.shift] at ha₁; split at ha₁ <;> cases ha₁
+                | prim q =>
+                    simp only [Expr.shift, Expr.prim.injEq] at ha₁
+                    subst ha₁
+                    exact ⟨a₂, rfl⟩
+                | _ => simp [Expr.shift] at ha₁
+            | _ => simp [Expr.shift] at ha
+        | _ => simp [Expr.shift] at hg
+    | _ => simp [Expr.shift] at h
+  · rintro ⟨x, rfl⟩
+    exact ⟨x.shift d c, by simp [Expr.shift]⟩
+
+/-- **A shift keeps a context's handler names.** -/
+theorem hasHnd_shift (n : UInt32) (d : ℕ) :
+    ∀ (K : Kont) (c : ℕ), (K.shift d c).HasHnd n = K.HasHnd n := by
+  intro K
+  induction K with
+  | hole => intro c; rfl
+  | appR f K ih =>
+      intro c
+      simp only [Kont.shift, Kont.HasHnd, ih]
+      congr 1
+      split
+      next m x hx =>
+        obtain ⟨x', rfl⟩ := (hndFrame_shift_iff f d c m).1 ⟨x, hx⟩
+        rfl
+      next hne =>
+        split
+        next m' x' =>
+          obtain ⟨x, hx⟩ := (hndFrame_shift_iff _ d c m').2 ⟨x', rfl⟩
+          exact absurd hx (hne m' x)
+        next => rfl
+  | pairL K e ih | pairR v K ih | letpair K e ih | case K e₁ e₂ ih | appL K v ih | seq K e ih
+  | inj₁ K ih | inj₂ K ih => intro c; simp only [Kont.shift, Kont.HasHnd, ih]
 
 /-! ### Data names no handler -/
 
@@ -231,9 +290,9 @@ theorem hndNZ_reach (hJ : CoreClosed (OurTyping.ofDer D)) (hR : R.Respects) {P :
       · rw [he]; exact a.2
 
 /-- **A cancelled continuation's context has no handler of `0`**, at every typing system whose
-closed programs are Core's: the cancel of `κ = kappa n H K` reaches, three steps later, the start
-of its cancel run `ccatch (hnd H K[raise …])` (`kappa_cancel_run`), which names no handler `0`
-since no run of a typed program creates one (`hndNZ_reach`, `hndNamesNZ_steps`); so `K` names
+closed programs are Core's: the configuration that cancels `κ = kappa H K` names no handler `0`,
+since no run of a typed program creates one (`hndNZ_reach`), and `κ`'s resume branch
+`λy. hnd H K[y]` holds `K` shifted, which keeps its handler names (`hasHnd_shift`); so `K` names
 none.  The handler is a value: otherwise the cancel is stuck at `() (inj₂ ())`, against
 `LiveOK`. -/
 theorem cancelsNZ_of_coreClosed (hJ : CoreClosed (OurTyping.ofDer D)) :
@@ -241,7 +300,7 @@ theorem cancelsNZ_of_coreClosed (hJ : CoreClosed (OurTyping.ofDer D)) :
   intro R hR e ε A _ he c₀ K₀ l H K hreach h₀
   have hlive : (𝕊).Live c₀.1 := ⟨e, _, R, c₀.2, hR, he, hreach⟩
   have hgo := (liveOK_of_coreClosed hJ c₀.1 hlive).2
-  obtain ⟨hnz, hμ⟩ := hndNZ_reach hJ hR he hreach
+  obtain ⟨hnz, -⟩ := hndNZ_reach hJ hR he hreach
   obtain ⟨⟨μ₀, e₀⟩, s₀⟩ := c₀
   change e₀ = Kont.plug K₀ (cancelE (captureE (orowRF.name Ξ l) (qsOf Ξ (orowRF.name Ξ l)) H.1.1
     (H.2.map Subtype.val) K)) at h₀
@@ -256,26 +315,16 @@ theorem cancelsNZ_of_coreClosed (hJ : CoreClosed (OurTyping.ofDer D)) :
     exact not_goesOn_stuck (stuckAt_unit_app (Val.inj₂ Val.unit)) K₀ μ₀
       (plug_unit_app_ne_drive K₀ _) hgo
   rw [captureE_of_val K hv] at h₀
-  -- the configuration is no value, so its memory names no handler `0`
-  have hμ' : HeapNZ μ₀ := by
-    rcases hμ with hμ | hval
-    · exact hμ
-    · exfalso
-      change IsVal e₀ at hval
-      rw [h₀] at hval
-      have := K₀.isVal_of_plug hval
-      exact absurd this (by simp [cancelE, kappa])
-  have hrun : Steps (ℍ := ℍ) μ₀ e₀ μ₀ (K₀.plug (Targets.cancelOf (orowRF.name Ξ l) ⟨_, hv⟩ K)) := by
-    rw [h₀]
-    exact Steps.plug K₀ (kappa_cancel_run μ₀ _ _ K)
-  have hnz' := (hndNamesNZ_steps hrun hnz hμ').1
-  have hc : (Targets.cancelOf (orowRF.name Ξ l) ⟨_, hv⟩ K).HndNamesNZ :=
-    (plug_hndNZ_inv K₀ ⟨fun _ _ h => by simp [Targets.cancelOf, ccatchE] at h,
-      fun _ h => by simp [Targets.cancelOf, ccatchE] at h⟩ hnz').2
-  simp only [Targets.cancelOf] at hc
-  rw [hndNZ_ccatchE] at hc
-  have hc' := hndNZ_app_inv (f := .app (.prim .hnd) _) (by simp) hc
-  exact hasHnd0_of_knz K (plug_hndNZ_inv K (notNameLike_raise _) hc'.2).1
+  -- `κ`'s resume branch holds `K` shifted, and names no handler `0`
+  rw [h₀] at hnz
+  have hc : (cancelE (kappa ⟨_, hv⟩ K)).HndNamesNZ :=
+    (plug_hndNZ_inv K₀ ⟨fun _ _ h => by simp [cancelE] at h, fun _ h => by simp [cancelE] at h⟩
+      hnz).2
+  have hκ := (hndNZ_app_inv (by simp [kappa]) hc).1
+  simp only [kappa, Expr.val, Val.lam, Expr.HndNamesNZ, true_and] at hκ
+  have hr := (hndNZ_app_inv (f := .app (.prim .hnd) _) (by simp) hκ.1).2
+  have h0 := hasHnd0_of_knz (K.shift 3 0) hr
+  rwa [hasHnd_shift] at h0
 
 end Reach
 

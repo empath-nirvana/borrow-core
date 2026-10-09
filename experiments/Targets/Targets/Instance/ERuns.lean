@@ -196,37 +196,37 @@ allocation; at the cell's location `ℓ`, `κ`'s β-step, the clause and `κ`'s 
 release of `ℓ`; after it, the rest of the resume branch (`kappaC_resume_parts`). -/
 theorem cellQuiet_resumeCl (aff : Bool) (K₀ : Kont) (n : UInt32) (qs hr : Val) (K : Kont)
     (v : Val) (hK : K.HasHnd n = false)
-    (htag : kappaAt (capTag qs.1 (0 : UInt32).toNat) n (hndVal n qs hr resumerCsV) K =
-      kappaCell aff n (hndVal n qs hr resumerCsV) K)
+    (htag : kappaAt (capTag qs.1 (0 : UInt32).toNat) (hndVal n qs hr resumerCsV) K =
+      kappaCell aff (hndVal n qs hr resumerCsV) K)
     (hH : closedAt 0 (hndVal n qs hr resumerCsV).1 = true) (hKc : closedAt 0 (K.plug .unit) = true) :
     CellQuiet (ℍ := ℍ)
       (K₀.plug (hndE (hndVal n qs hr resumerCsV) (K.plug (performE (.val (opPayload n 0 v))))))
       (K₀.plug (hndE (hndVal n qs hr resumerCsV) (K.plug (.val Val.unit)))) := by
   set H := hndVal n qs hr resumerCsV with hHdef
   have hh : ∀ μ, Head (ℍ := ℍ) μ (hndE H (K.plug (performE (.val (opPayload n 0 v))))) μ
-      (.app (.val resumeClV) (.pair (.val v) (kappaCell aff n H K))) := by
+      (.app (.val resumeClV) (.pair (.val v) (kappaCell aff H K))) := by
     intro μ
     have h := Head.hop (ℍ := ℍ) μ n 0 qs hr resumerCsV resumeClV v K
       (clauseAt_clausesE [resumeClE] 0 .lam rfl) hK
     rwa [htag] at h
   refine ⟨K₀.comp (.appR (.val resumeClV) (.pairR v
-    (.appR (.val (Val.lam (kappaCBody aff n H K))) .hole))), ?_, fun ℓ => ?_⟩
+    (.appR (.val (Val.lam (kappaCBody aff H K))) .hole))), ?_, fun ℓ => ?_⟩
   · rw [Kont.plug_comp]
     exact Quiet.head K₀ hh rfl rfl
   refine ⟨K₀.comp (Kont.appL (Kont.seq .hole (kResV H K)) Val.unit), ?_, ?_⟩
   · rw [Kont.plug_comp, Kont.plug_comp]
-    have hκc : closedAt 0 (kappaC aff ℓ n H K) = true := closedAt_kappaC aff ℓ n hH hKc
+    have hκc : closedAt 0 (kappaC aff ℓ H K) = true := closedAt_kappaC aff ℓ hH hKc
     have hb₀ := Quiet.head (ℍ := ℍ) (.appR (.val resumeClV) (.pairR v .hole))
-      (fun μ => Head.beta μ (kappaCBody aff n H K) (Val.loc ℓ)) rfl rfl
+      (fun μ => Head.beta μ (kappaCBody aff H K) (Val.loc ℓ)) rfl rfl
     rw [kappaCBody_subst] at hb₀
     refine (hb₀.plug K₀).trans ?_
-    let κ : Val := ⟨kappaC aff ℓ n H K, isVal_kappaC aff ℓ n H K⟩
+    let κ : Val := ⟨kappaC aff ℓ H K, isVal_kappaC aff ℓ H K⟩
     have h₁ := quiet_beta (ℍ := ℍ) K₀ (.letpair (.var 0) (resumeE (.var 0) .unit)) (Val.pair v κ)
     have e₁ : Expr.subst 0 (Val.pair v κ) (.letpair (.var 0) (resumeE (.var 0) .unit)) =
         .letpair (.val (Val.pair v κ)) (resumeE (.var 0) .unit) := by
       simp [Expr.subst, resumeE, Expr.shift, Val.pair]
     rw [e₁] at h₁
-    refine (show Quiet (ℍ := ℍ) (K₀.plug (.app (.val resumeClV) (.pair (.val v) (kappaC aff ℓ n H K))))
+    refine (show Quiet (ℍ := ℍ) (K₀.plug (.app (.val resumeClV) (.pair (.val v) (kappaC aff ℓ H K))))
       _ from h₁).trans ?_
     have h₂ := quiet_letpair (ℍ := ℍ) K₀ v κ (resumeE (.var 0) .unit)
     have e₂ : Expr.subst 0 v (Expr.subst 0 (κ.shift 1 0) (resumeE (.var 0) .unit)) =
@@ -236,9 +236,9 @@ theorem cellQuiet_resumeCl (aff : Bool) (K₀ : Kont) (n : UInt32) (qs hr : Val)
     rw [e₂] at h₂
     refine h₂.trans ?_
     refine (quiet_resumeE (ℍ := ℍ) K₀ κ.1 Val.unit).trans ?_
-    exact (kappaC_resume_parts aff ℓ n H K Val.unit).1.plug K₀
+    exact (kappaC_resume_parts aff ℓ H K Val.unit).1.plug K₀
   · rw [Kont.plug_comp]
-    exact (kappaC_resume_parts aff ℓ n H K Val.unit).2.plug K₀
+    exact (kappaC_resume_parts aff ℓ H K Val.unit).2.plug K₀
 
 end Targets.Inst
 

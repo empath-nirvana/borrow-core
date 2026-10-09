@@ -49,15 +49,16 @@ def ReconAccepted (p : Placement) (e : Expr) : Prop :=
 
 /-! ### Statement 6: the sample row -/
 
-/-- **`[then]` at W**, at every stack. The intermediate type `A` is the one the premises add, so the
-row takes its binder hygiene. -/
+/-- **`[then]` at W**, at every stack, the finaliser at the pure row as the kernel's `[then]` types
+it (SPEC §24, option A). The intermediate type `A` is the one the premises add, so the row takes
+its binder hygiene. -/
 def ThenRow (p : Placement) : Prop :=
   ∀ (Δ : LifeCtx) (Γ Γ₁ Γ₂ : Ctx VTy) (M N D : Expr) (A B : VTy) (S : Row),
     Ctx.SplitP Γ Γ₁ Γ₂ → S.NZ → S.Uniq → (S.Unr → Persistent Γ₂) →
     (∀ x ∈ VTy.binders A, ¬ NsVar x) →
     SemS p Δ Γ₁ M (.comp (CTy.effOf S A)) →
     SemS p Δ (⟨A, true⟩ :: Γ₂) N (.comp (CTy.effOf S B)) →
-    SemS p Δ (⟨.unit, false⟩ :: Γ₂) D (.comp (CTy.effOf S.abortOnly .unit)) →
+    SemS p Δ (⟨.unit, false⟩ :: Γ₂) D (.comp (.ret .unit)) →
     SemS p Δ Γ (thenE N D M) (.comp (CTy.effOf S B))
 
 /-! ### The probe at one placement -/

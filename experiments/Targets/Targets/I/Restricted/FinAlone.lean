@@ -115,7 +115,7 @@ theorem no_step_plug {μ : Heap} {t : Expr} (hirr : ∀ μ' t', ¬ Step1 (ℍ :=
   · subst h0
     exact hirr _ _ ⟨.hole, a, a', by simpa [Kont.plug] using h₁.symm, rfl, hh⟩
   rcases head_plug hh K'' hnv h₁ h0 with ⟨n, qs, hr, hs, K₃, rfl⟩ | ⟨N, D, K₃, rfl⟩ | ⟨K₃, rfl⟩ |
-      ⟨w, H, p, hp, rfl, rfl⟩ | ⟨Ns, err, K₃, rfl⟩
+      ⟨w, H, p, hp, rfl, rfl⟩ | ⟨err, K₃, rfl⟩
   · -- a handler frame: `[ret]`, `[op]`, `[unwind]`
     generalize hX : (Kont.appR (.app (.val (.prim .hnd)) (.val (hndVal n qs hr hs))) K₃).plug t = X
       at h₁
@@ -142,7 +142,7 @@ theorem no_step_plug {μ : Heap} {t : Expr} (hirr : ∀ μ' t', ¬ Step1 (ℍ :=
     | ufin N' D' n' i v K₄ _ hK₄ =>
         simp only [ubindE, Kont.plug, Expr.app.injEq] at hX
         exact key K₃ K₄ true n' i v (by simpa [opE] using hX.2) (by simpa [OpFree] using hK₄)
-    | ufinC N' D' Ns err K₄ hK₄ =>
+    | ufinC N' D' err K₄ hK₄ =>
         simp only [ubindE, Kont.plug, Expr.app.injEq] at hX
         exact key K₃ K₄ true 0 0 _ hX.2 (by simpa [OpFree] using hK₄)
     | _ => simp [Kont.plug, hndE, ccatchE, cfinE] at hX
@@ -150,10 +150,10 @@ theorem no_step_plug {μ : Heap} {t : Expr} (hirr : ∀ μ' t', ¬ Step1 (ℍ :=
     generalize hX : (Kont.appR (.val (.prim .ccatch)) K₃).plug t = X at h₁
     subst h₁
     cases hh with
-    | cancel Ns K₄ hK₄ =>
+    | cancel K₄ hK₄ =>
         simp only [ccatchE, Kont.plug, Expr.app.injEq] at hX
         exact key K₃ K₄ true 0 0 _ hX.2 (by simpa [OpFree] using hK₄)
-    | creraise Ns E' K₄ hK₄ =>
+    | creraise E' K₄ hK₄ =>
         simp only [ccatchE, Kont.plug, Expr.app.injEq] at hX
         exact key K₃ K₄ true 0 0 _ hX.2 (by simpa [OpFree] using hK₄)
     | _ => simp [Kont.plug, hndE, ubindE, cfinE] at hX
@@ -161,17 +161,20 @@ theorem no_step_plug {μ : Heap} {t : Expr} (hirr : ∀ μ' t', ¬ Step1 (ℍ :=
     rcases hin with hin | hin
     · exact hin p H hp rfl
     · exact ne_comp_appL hin K' w h₂
-  · -- a cancel-mode finaliser frame: `[cfin-ret]`, `[cfin-raise]`
-    generalize hX : (Kont.appR (.app (.val (.prim .cfin)) (.val (cancelVal Ns err))) K₃).plug t = X
+  · -- a cancel-mode finaliser frame: `[cfin-ret]`, `[cfin-raise]`, `[cfin-cancel]`
+    generalize hX : (Kont.appR (.app (.val (.prim .cfin)) (.val (cancelVal err))) K₃).plug t = X
       at h₁
     subst h₁
     cases hh with
-    | cfret Ns' err' w =>
+    | cfret err' w =>
         simp only [cfinE, Kont.plug, Expr.app.injEq] at hX
         exact keyV K₃ w hX.2
-    | cferr Ns' err' m j w K₄ hK₄ =>
+    | cferr err' m j w K₄ _ hK₄ =>
         simp only [cfinE, Kont.plug, Expr.app.injEq] at hX
         exact key K₃ K₄ true m j w (by simpa [opE] using hX.2) (by simpa [OpFree] using hK₄)
+    | cfcancel err' err'' K₄ hK₄ =>
+        simp only [cfinE, Kont.plug, Expr.app.injEq] at hX
+        exact key K₃ K₄ true 0 0 _ hX.2 (by simpa [OpFree] using hK₄)
     | _ => simp [Kont.plug, hndE, ubindE, ccatchE] at hX
 
 /-! ### The memory half, from B -/
@@ -239,7 +242,7 @@ theorem finAloneAt_of_finRows {FR : UInt32 → Prop} {J : TypingJ} (hR : FinRows
   obtain ⟨rfl, N', D', hND, hcase⟩ := head_ubind_raise hhead
   obtain ⟨rfl, rfl⟩ := valPair_inj hND
   rw [← hE₀] at hst
-  rcases hcase with ⟨n', i', v', -, -, rfl⟩ | ⟨Ns, err, -, rfl⟩
+  rcases hcase with ⟨n', i', v', -, -, rfl⟩ | ⟨err, -, rfl⟩
   · -- `[finalise]`: the finaliser runs inside `K₀[□; raise p]`
     have hX : Steps (ℍ := ℍ) Adequacy.emptyMem e μ'
         (K₀.plug ((Kont.seq .hole (raiseE (.val (opPayload n i v)))).plug t)) :=
@@ -253,22 +256,21 @@ theorem finAloneAt_of_finRows {FR : UInt32 → Prop} {J : TypingJ} (hR : FinRows
     exact h
   · -- `[finalise-cancel]`: the finaliser runs inside `K₀[cfin p □]`
     have hX : Steps (ℍ := ℍ) Adequacy.emptyMem e μ'
-        (K₀.plug ((Kont.appR (.app (.prim .cfin) (cancelVal Ns err).1) .hole).plug t)) :=
+        (K₀.plug ((Kont.appR (.app (.prim .cfin) (cancelVal err).1) .hole).plug t)) :=
       hreach.trans (.more hst (Steps.plug K₀ (Steps.plug (.appR _ .hole) hD)))
-    refine (show ¬ IsVal (K₀.plug ((Kont.appR (.app (.prim .cfin) (cancelVal Ns err).1) .hole).plug t))
+    refine (show ¬ IsVal (K₀.plug ((Kont.appR (.app (.prim .cfin) (cancelVal err).1) .hole).plug t))
       from fun h => hv (Kont.isVal_of_plug _ (Kont.isVal_of_plug _ h))) (stuck_of_rel hrel hX ?_)
     intro μ'' X' h
     refine no_step_plug (μ' := μ'') (E := X') hirr hv hop
-      (K₀.comp (.appR (.app (.prim .cfin) (cancelVal Ns err).1) .hole))
+      (K₀.comp (.appR (.app (.prim .cfin) (cancelVal err).1) .hole))
       (.inr (endsAppL_comp_of rfl rfl K₀)) ?_
     rw [Kont.plug_comp]
     exact h
 
-/-- **`FinaliserOrder` from `FinRowsAt`**, at a typing system that meets FL at Core's world and
-`NoInterception`. -/
-theorem finaliserOrder_of_finRows {J : TypingJ} (hN : NoInterception J)
+/-- **`FinaliserOrder` from `FinRowsAt`**, at a typing system that meets FL at Core's world. -/
+theorem finaliserOrder_of_finRows {J : TypingJ}
     (hR : FinRowsAt (ℍ := ℍ) (· ≠ 0) J) (hFL : FL (B.coreB (ℍ := ℍ)) J) : FinaliserOrder (ℍ := ℍ) J :=
-  finaliserOrder_at hN (finAloneAt_of_finRows hR hFL)
+  finaliserOrder_at (finAloneAt_of_finRows hR hFL)
 
 /-- `NoInterception` at today's unr-free kernel. -/
 theorem noInterception_tier1NU : NoInterception tier1NU := fun Θ _ _ e _ h =>
@@ -278,13 +280,13 @@ theorem noInterception_tier1NU : NoInterception tier1NU := fun Θ _ _ e _ h =>
 I3.b is the operations a fired finaliser's run alone stops at. -/
 theorem finaliserOrder_tier1NU_of_finRows (hR : FinRowsAt (ℍ := ℍ) (· ≠ 0) tier1NU) :
     FinaliserOrder (ℍ := ℍ) tier1NU :=
-  finaliserOrder_of_finRows noInterception_tier1NU hR fl_core_tier1NU
+  finaliserOrder_of_finRows hR fl_core_tier1NU
 
 /-- **`FinaliserOrder` at today's unr-free kernel, given option A's `FinRowsAt`** (decision D3): a
 fired finaliser's run alone leaves no operation uncaught. -/
 theorem finaliserOrder_tier1NU_of_finRowsA (hR : FinRowsAt (ℍ := ℍ) (fun _ => False) tier1NU) :
     FinaliserOrder (ℍ := ℍ) tier1NU :=
-  finaliserOrder_A noInterception_tier1NU (finAloneAt_of_finRows hR fl_core_tier1NU)
+  finaliserOrder_A (finAloneAt_of_finRows hR fl_core_tier1NU)
 
 /-! ### The route's statement (TIER1-PLAN §4, route 8.2) -/
 
@@ -324,11 +326,11 @@ theorem finRowsAt_of_route {J : TypingJ} (hr : RowRoute (ℍ := ℍ) J) :
   have hT' : hr.Typed μ' t S' := hsteps hD hT
   exact hr.stop hT' hS' hNZ K' r m j w ht hfree
 
-/-- The route's obligations, with FL at Core's world, give `FinAloneAt`, and with
-`NoInterception`, `FinaliserOrder`. -/
-theorem finaliserOrder_of_route {J : TypingJ} (hN : NoInterception J) (hr : RowRoute (ℍ := ℍ) J)
+/-- The route's obligations, with FL at Core's world, give `FinAloneAt`, and so
+`FinaliserOrder`. -/
+theorem finaliserOrder_of_route {J : TypingJ} (hr : RowRoute (ℍ := ℍ) J)
     (hFL : FL (B.coreB (ℍ := ℍ)) J) : FinaliserOrder (ℍ := ℍ) J :=
-  finaliserOrder_of_finRows hN (finRowsAt_of_route hr) hFL
+  finaliserOrder_of_finRows (finRowsAt_of_route hr) hFL
 
 end Targets
 

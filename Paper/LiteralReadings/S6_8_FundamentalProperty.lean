@@ -509,6 +509,7 @@ theorem step_beta_inv {μ μ' : Heap} {b : Expr} {v : Val} {e' : Expr}
     | ufinC => simp [BoCa.BoLo.hndE, BoCa.BoLo.ubindE, BoCa.BoLo.ccatchE, BoCa.BoLo.cfinE] at hE
     | cfret => simp [BoCa.BoLo.hndE, BoCa.BoLo.ubindE, BoCa.BoLo.ccatchE, BoCa.BoLo.cfinE] at hE
     | cferr => simp [BoCa.BoLo.hndE, BoCa.BoLo.ubindE, BoCa.BoLo.ccatchE, BoCa.BoLo.cfinE] at hE
+    | cfcancel => simp [BoCa.BoLo.hndE, BoCa.BoLo.ubindE, BoCa.BoLo.ccatchE, BoCa.BoLo.cfinE] at hE
     | creraise => simp [BoCa.BoLo.hndE, BoCa.BoLo.ubindE, BoCa.BoLo.ccatchE, BoCa.BoLo.cfinE] at hE
   · exact absurd ha (no_step_isVal v.2)
   · exact absurd hf (no_step_isVal .lam)
@@ -549,6 +550,7 @@ theorem step_load_inv {μ μ' : Heap} {ℓ : Loc} {e' : Expr}
     | ufinC => simp [BoCa.BoLo.hndE, BoCa.BoLo.ubindE, BoCa.BoLo.ccatchE, BoCa.BoLo.cfinE] at hE
     | cfret => simp [BoCa.BoLo.hndE, BoCa.BoLo.ubindE, BoCa.BoLo.ccatchE, BoCa.BoLo.cfinE] at hE
     | cferr => simp [BoCa.BoLo.hndE, BoCa.BoLo.ubindE, BoCa.BoLo.ccatchE, BoCa.BoLo.cfinE] at hE
+    | cfcancel => simp [BoCa.BoLo.hndE, BoCa.BoLo.ubindE, BoCa.BoLo.ccatchE, BoCa.BoLo.cfinE] at hE
     | creraise => simp [BoCa.BoLo.hndE, BoCa.BoLo.ubindE, BoCa.BoLo.ccatchE, BoCa.BoLo.cfinE] at hE
   · exact absurd ha (no_step_isVal .loc)
   · exact absurd hf (no_step_isVal .prim)
@@ -590,6 +592,7 @@ theorem step_store_inv {μ μ' : Heap} {ℓ : Loc} {v : Val} {e' : Expr}
     | ufinC => simp [BoCa.BoLo.hndE, BoCa.BoLo.ubindE, BoCa.BoLo.ccatchE, BoCa.BoLo.cfinE] at hE
     | cfret => simp [BoCa.BoLo.hndE, BoCa.BoLo.ubindE, BoCa.BoLo.ccatchE, BoCa.BoLo.cfinE] at hE
     | cferr => simp [BoCa.BoLo.hndE, BoCa.BoLo.ubindE, BoCa.BoLo.ccatchE, BoCa.BoLo.cfinE] at hE
+    | cfcancel => simp [BoCa.BoLo.hndE, BoCa.BoLo.ubindE, BoCa.BoLo.ccatchE, BoCa.BoLo.cfinE] at hE
     | creraise => simp [BoCa.BoLo.hndE, BoCa.BoLo.ubindE, BoCa.BoLo.ccatchE, BoCa.BoLo.cfinE] at hE
   · exact absurd ha (no_step_isVal v.2)
   · exact absurd hf (no_step_isVal (.storeV .loc))

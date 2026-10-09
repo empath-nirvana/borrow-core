@@ -79,9 +79,10 @@ theorem fins_comp : ∀ (K₁ K₂ : Kont), (K₁.comp K₂).fins = K₂.fins ++
   | .pairL K _, K₂ | .pairR _ K, K₂ | .letpair K _, K₂ | .case K _ _, K₂ | .appL K _, K₂
   | .seq K _, K₂ | .inj₁ K, K₂ | .inj₂ K, K₂ => by simp only [Kont.comp, Kont.fins, fins_comp K K₂]
 
-/-- The cancel branch of `κ = kappa n H K` after its three administrative steps. -/
-def cancelOf (n : UInt32) (H : Val) (K : Kont) : Expr :=
-  ccatchE (hndE H (K.plug (raiseE (.val (cancelVal (n :: K.hndNames) none)))))
+/-- The cancel branch of `κ = kappa H K` after its three administrative steps: the dead region
+`K†` run from the cancel (SPEC §19, *Cancels*). -/
+def cancelOf (K : Kont) : Expr :=
+  ccatchE (K.dead.plug (raiseE (.val (cancelVal none))))
 
 end Targets
 

@@ -41,7 +41,7 @@ variable {ℍ : BoCa.Host} [BoCa.HostIs ℍ]
 namespace Targets
 open BoCa BoCa.Fig16 BoCa.Fig16.BoLo BoCa.Fig16.LogRel BoCa.Fig16.LogRel.Core
 open BoCa.BoLo (Heap Steps Step1 Head Kont performE raiseE opPayload hndE ubindE ccatchE cfinE
-  hndVal cancelVal kappa clauseAt errNext namesVal errVal capTag kappaAt kappaC kappaCell kappaCBody
+  hndVal cancelVal kappa clauseAt errNext errVal capTag kappaAt kappaC kappaCell kappaCBody
   freeE stuckE)
 
 /-- `omega` over locations: `Loc` unfolded to `Nat` first. -/
@@ -344,24 +344,33 @@ theorem catches_mapLoc (g : Loc → Loc) (n : UInt32) (K : Kont) :
         next => rfl
   | _ => simp_all [Kont.mapLoc, Kont.Catches]
 
-/-- A renamed context has the handler names it had. -/
-theorem hndNames_mapLoc (g : Loc → Loc) (K : Kont) : (K.mapLoc g).hndNames = K.hndNames := by
+/-- A renamed frame dies with a cancel exactly when the frame does. -/
+theorem deadFrame_mapLoc (g : Loc → Loc) (f : Expr) :
+    Kont.DeadFrame (f.mapLoc g) = Kont.DeadFrame f := by
+  unfold Kont.DeadFrame
+  split
+  next m e₂ heq =>
+    obtain ⟨a, b, rfl, ha, hb⟩ := mapLoc_eq_app heq
+    obtain rfl := mapLoc_eq_prim ha
+    obtain ⟨c, d, rfl, hc, -⟩ := mapLoc_eq_pair hb
+    obtain rfl := mapLoc_eq_prim hc
+    rfl
+  next heq =>
+    obtain rfl := mapLoc_eq_prim heq
+    rfl
+  next h₁ h₂ =>
+    split
+    next m e₂ => exact absurd rfl (h₁ m (e₂.mapLoc g))
+    next => exact absurd rfl h₂
+    next => rfl
+
+/-- A renamed region's dead region is the dead region renamed. -/
+theorem dead_mapLoc (g : Loc → Loc) (K : Kont) : (K.mapLoc g).dead = K.dead.mapLoc g := by
   induction K with
   | appR f K ih =>
-      simp only [Kont.mapLoc, Kont.hndNames, ih]
-      congr 1
-      split
-      next m e₂ heq =>
-        obtain ⟨a, b, rfl, ha, hb⟩ := mapLoc_eq_app heq
-        obtain rfl := mapLoc_eq_prim ha
-        obtain ⟨c, d, rfl, hc, -⟩ := mapLoc_eq_pair hb
-        obtain rfl := mapLoc_eq_prim hc
-        rfl
-      next hne =>
-        split
-        next m e₂ => exact absurd rfl (hne m (e₂.mapLoc g))
-        next => rfl
-  | _ => simp_all [Kont.mapLoc, Kont.hndNames]
+      simp only [Kont.mapLoc, Kont.dead, deadFrame_mapLoc, ih]
+      split <;> rfl
+  | _ => simp_all [Kont.mapLoc, Kont.dead]
 
 /-! ### The values and terms the steps build -/
 
@@ -390,28 +399,21 @@ theorem capTag_mapLoc (g : Loc → Loc) (e : Expr) (i : Nat) : capTag (e.mapLoc 
       | succ i => simpa only [Expr.mapLoc, capTag] using ihr i
   | _ => cases i <;> rfl
 
-theorem namesVal_mapLoc (g : Loc → Loc) : ∀ N : List UInt32, (namesVal N).mapLoc g = namesVal N
-  | [] => rfl
-  | m :: N => by
-      show Val.inj₂ (Val.pair ((Val.i32 m).mapLoc g) ((namesVal N).mapLoc g)) = _
-      rw [namesVal_mapLoc g N]; rfl
-
 theorem errVal_mapLoc (g : Loc → Loc) (err : Option Val) :
     (errVal err).mapLoc g = errVal (err.map (Val.mapLoc g)) := by
   cases err <;> rfl
 
-theorem cancelVal_mapLoc (g : Loc → Loc) (N : List UInt32) (err : Option Val) :
-    (cancelVal N err).mapLoc g = cancelVal N (err.map (Val.mapLoc g)) := by
-  simp only [cancelVal, opPayload_mapLoc, pair_mapLoc, namesVal_mapLoc, errVal_mapLoc]
+theorem cancelVal_mapLoc (g : Loc → Loc) (err : Option Val) :
+    (cancelVal err).mapLoc g = cancelVal (err.map (Val.mapLoc g)) := by
+  simp only [cancelVal, opPayload_mapLoc, errVal_mapLoc]
 
-theorem errNext_mapLoc (g : Loc → Loc) (N : List UInt32) (err : Option Val) (m j : UInt32)
-    (w : Val) :
-    (errNext N err m j w).map (Val.mapLoc g) = errNext N (err.map (Val.mapLoc g)) m j (w.mapLoc g) := by
-  cases err with
-  | some E => rfl
-  | none =>
-      simp only [errNext, Option.map_none]
-      split_ifs <;> rfl
+theorem errNext_mapLoc (g : Loc → Loc) (err : Option Val) (m j : UInt32) (w : Val) :
+    (errNext err m j w).map (Val.mapLoc g) = errNext (err.map (Val.mapLoc g)) m j (w.mapLoc g) := by
+  cases err <;> rfl
+
+theorem or_mapLoc (g : Loc → Loc) (err err' : Option Val) :
+    (err.or err').map (Val.mapLoc g) = (err.map (Val.mapLoc g)).or (err'.map (Val.mapLoc g)) := by
+  cases err <;> rfl
 
 theorem hndE_mapLoc (g : Loc → Loc) (H : Val) (e : Expr) :
     (hndE H e).mapLoc g = hndE (H.mapLoc g) (e.mapLoc g) := rfl
@@ -425,69 +427,60 @@ theorem performE_mapLoc (g : Loc → Loc) (p : Expr) :
 theorem raiseE_mapLoc (g : Loc → Loc) (p : Expr) : (raiseE p).mapLoc g = raiseE (p.mapLoc g) := rfl
 
 /-- The continuation `[op]` captures, renamed, is the renamed handler's over the renamed context. -/
-theorem kappa_mapLoc (g : Loc → Loc) (n : UInt32) (H : Val) (K : Kont) :
-    (kappa n H K).mapLoc g = kappa n (H.mapLoc g) (K.mapLoc g) := by
+theorem kappa_mapLoc (g : Loc → Loc) (H : Val) (K : Kont) :
+    (kappa H K).mapLoc g = kappa (H.mapLoc g) (K.mapLoc g) := by
   have h₁ : ((K.shift 3 0).plug (.var 0)).mapLoc g = ((K.mapLoc g).shift 3 0).plug (.var 0) := by
     rw [kont_mapLoc_plug, kont_mapLoc_shift]; rfl
-  have h₂ : ((K.shift 2 0).plug (raiseE (.val (cancelVal (n :: K.hndNames) none)))).mapLoc g =
-      ((K.mapLoc g).shift 2 0).plug (raiseE (.val (cancelVal (n :: (K.mapLoc g).hndNames) none))) := by
-    rw [kont_mapLoc_plug, kont_mapLoc_shift, hndNames_mapLoc, raiseE_mapLoc]
+  have h₂ : ((K.dead.shift 2 0).plug (raiseE (.val (cancelVal none)))).mapLoc g =
+      (((K.mapLoc g).dead.shift 2 0).plug (raiseE (.val (cancelVal none)))) := by
+    rw [kont_mapLoc_plug, kont_mapLoc_shift, dead_mapLoc, raiseE_mapLoc]
     congr 2
-    exact congrArg Subtype.val (cancelVal_mapLoc g _ none)
   have h₃ : (H.shift 3 0).1.mapLoc g = ((H.mapLoc g).shift 3 0).1 :=
     congrArg Subtype.val (valMapLoc_shift g 3 0 H)
-  have h₄ : (H.shift 2 0).1.mapLoc g = ((H.mapLoc g).shift 2 0).1 :=
-    congrArg Subtype.val (valMapLoc_shift g 2 0 H)
-  simp only [kappa, hndE, ccatchE, Expr.val, Val.lam, Val.prim, Expr.mapLoc] at h₁ h₂ h₃ h₄ ⊢
-  rw [h₁, h₂, h₃, h₄]
+  simp only [kappa, hndE, ccatchE, Expr.val, Val.lam, Val.prim, Expr.mapLoc] at h₁ h₂ h₃ ⊢
+  rw [h₁, h₂, h₃]
 
 theorem freeE_mapLoc (g : Loc → Loc) (e : Expr) :
     (freeE e).mapLoc g = freeE (e.mapLoc g) := rfl
 
-theorem kappaC_mapLoc (g : Loc → Loc) (aff : Bool) (ℓ : Loc) (n : UInt32) (H : Val) (K : Kont) :
-    (kappaC aff ℓ n H K).mapLoc g = kappaC aff (g ℓ) n (H.mapLoc g) (K.mapLoc g) := by
+theorem kappaC_mapLoc (g : Loc → Loc) (aff : Bool) (ℓ : Loc) (H : Val) (K : Kont) :
+    (kappaC aff ℓ H K).mapLoc g = kappaC aff (g ℓ) (H.mapLoc g) (K.mapLoc g) := by
   have h₁ : ((K.shift 3 0).plug (.var 0)).mapLoc g = ((K.mapLoc g).shift 3 0).plug (.var 0) := by
     rw [kont_mapLoc_plug, kont_mapLoc_shift]; rfl
-  have h₂ : ((K.shift 2 0).plug (raiseE (.val (cancelVal (n :: K.hndNames) none)))).mapLoc g =
-      ((K.mapLoc g).shift 2 0).plug (raiseE (.val (cancelVal (n :: (K.mapLoc g).hndNames) none))) := by
-    rw [kont_mapLoc_plug, kont_mapLoc_shift, hndNames_mapLoc, raiseE_mapLoc]
+  have h₂ : ((K.dead.shift 2 0).plug (raiseE (.val (cancelVal none)))).mapLoc g =
+      (((K.mapLoc g).dead.shift 2 0).plug (raiseE (.val (cancelVal none)))) := by
+    rw [kont_mapLoc_plug, kont_mapLoc_shift, dead_mapLoc, raiseE_mapLoc]
     congr 2
-    exact congrArg Subtype.val (cancelVal_mapLoc g _ none)
   have h₃ : (H.shift 3 0).1.mapLoc g = ((H.mapLoc g).shift 3 0).1 :=
     congrArg Subtype.val (valMapLoc_shift g 3 0 H)
-  have h₄ : (H.shift 2 0).1.mapLoc g = ((H.mapLoc g).shift 2 0).1 :=
-    congrArg Subtype.val (valMapLoc_shift g 2 0 H)
   cases aff <;>
   simp only [kappaC, hndE, ccatchE, freeE, stuckE, Expr.val, Val.lam, Val.prim, Val.loc, Val.unit,
-    Expr.mapLoc, Bool.false_eq_true, if_true, if_false] at h₁ h₂ h₃ h₄ ⊢ <;>
-  rw [h₁] <;> (try rw [h₂]) <;> rw [h₃] <;> (try rw [h₄])
+    Expr.mapLoc, Bool.false_eq_true, if_true, if_false] at h₁ h₂ h₃ ⊢ <;>
+  rw [h₁] <;> (try rw [h₂]) <;> rw [h₃]
 
-theorem kappaCell_mapLoc (g : Loc → Loc) (aff : Bool) (n : UInt32) (H : Val) (K : Kont) :
-    (kappaCell aff n H K).mapLoc g = kappaCell aff n (H.mapLoc g) (K.mapLoc g) := by
+theorem kappaCell_mapLoc (g : Loc → Loc) (aff : Bool) (H : Val) (K : Kont) :
+    (kappaCell aff H K).mapLoc g = kappaCell aff (H.mapLoc g) (K.mapLoc g) := by
   have h₁ : ((K.shift 4 0).plug (.var 0)).mapLoc g = ((K.mapLoc g).shift 4 0).plug (.var 0) := by
     rw [kont_mapLoc_plug, kont_mapLoc_shift]; rfl
-  have h₂ : ((K.shift 3 0).plug (raiseE (.val (cancelVal (n :: K.hndNames) none)))).mapLoc g =
-      ((K.mapLoc g).shift 3 0).plug (raiseE (.val (cancelVal (n :: (K.mapLoc g).hndNames) none))) := by
-    rw [kont_mapLoc_plug, kont_mapLoc_shift, hndNames_mapLoc, raiseE_mapLoc]
+  have h₂ : ((K.dead.shift 3 0).plug (raiseE (.val (cancelVal none)))).mapLoc g =
+      (((K.mapLoc g).dead.shift 3 0).plug (raiseE (.val (cancelVal none)))) := by
+    rw [kont_mapLoc_plug, kont_mapLoc_shift, dead_mapLoc, raiseE_mapLoc]
     congr 2
-    exact congrArg Subtype.val (cancelVal_mapLoc g _ none)
   have h₃ : (H.shift 4 0).1.mapLoc g = ((H.mapLoc g).shift 4 0).1 :=
     congrArg Subtype.val (valMapLoc_shift g 4 0 H)
-  have h₄ : (H.shift 3 0).1.mapLoc g = ((H.mapLoc g).shift 3 0).1 :=
-    congrArg Subtype.val (valMapLoc_shift g 3 0 H)
   cases aff <;>
   simp only [kappaCell, kappaCBody, hndE, ccatchE, freeE, stuckE, Expr.val, Val.lam, Val.prim,
-    Val.unit, Expr.mapLoc, Bool.false_eq_true, if_true, if_false] at h₁ h₂ h₃ h₄ ⊢ <;>
-  rw [h₁] <;> (try rw [h₂]) <;> rw [h₃] <;> (try rw [h₄])
+    Val.unit, Expr.mapLoc, Bool.false_eq_true, if_true, if_false] at h₁ h₂ h₃ ⊢ <;>
+  rw [h₁] <;> (try rw [h₂]) <;> rw [h₃]
 
-theorem kappaAt_mapLoc (g : Loc → Loc) (t n : UInt32) (H : Val) (K : Kont) :
-    (kappaAt t n H K).mapLoc g = kappaAt t n (H.mapLoc g) (K.mapLoc g) := by
+theorem kappaAt_mapLoc (g : Loc → Loc) (t : UInt32) (H : Val) (K : Kont) :
+    (kappaAt t H K).mapLoc g = kappaAt t (H.mapLoc g) (K.mapLoc g) := by
   unfold kappaAt
   split
-  · exact kappaCell_mapLoc g false n H K
+  · exact kappaCell_mapLoc g false H K
   · split
-    · exact kappaCell_mapLoc g true n H K
-    · exact kappa_mapLoc g n H K
+    · exact kappaCell_mapLoc g true H K
+    · exact kappa_mapLoc g H K
 
 theorem clauseAt_mapLoc (g : Loc → Loc) :
     ∀ (e : Expr) (i : Nat), clauseAt (e.mapLoc g) i = (clauseAt e i).map (Val.mapLoc g)
@@ -866,29 +859,35 @@ theorem head_mapLoc_exists (g : Loc → Loc) {μ μ' : Heap} {b b' : Expr}
       rw [ubindE_mapLoc, kont_mapLoc_plug, raiseE_mapLoc]
       exact ⟨_, _, _, Head.ufin μ (N.mapLoc g) (D.mapLoc g) n i (v.mapLoc g) (K.mapLoc g) hn
         (by rw [catches_mapLoc, hK])⟩
-  | ufinC N D Ns err K hK =>
+  | ufinC N D err K hK =>
       rw [ubindE_mapLoc, kont_mapLoc_plug, raiseE_mapLoc,
-        show (Expr.val (cancelVal Ns err)).mapLoc g = Expr.val (cancelVal Ns (err.map (Val.mapLoc g)))
-          from congrArg Subtype.val (cancelVal_mapLoc g Ns err)]
-      exact ⟨_, _, _, Head.ufinC μ (N.mapLoc g) (D.mapLoc g) Ns (err.map (Val.mapLoc g))
+        show (Expr.val (cancelVal err)).mapLoc g = Expr.val (cancelVal (err.map (Val.mapLoc g)))
+          from congrArg Subtype.val (cancelVal_mapLoc g err)]
+      exact ⟨_, _, _, Head.ufinC μ (N.mapLoc g) (D.mapLoc g) (err.map (Val.mapLoc g))
         (K.mapLoc g) (by rw [catches_mapLoc, hK])⟩
-  | cfret Ns err w =>
+  | cfret err w =>
       rw [cfinE_mapLoc, cancelVal_mapLoc]
-      exact ⟨_, _, _, Head.cfret μ Ns (err.map (Val.mapLoc g)) (w.mapLoc g)⟩
-  | cferr Ns err m j w K hK =>
+      exact ⟨_, _, _, Head.cfret μ (err.map (Val.mapLoc g)) (w.mapLoc g)⟩
+  | cferr err m j w K hm hK =>
       rw [cfinE_mapLoc, kont_mapLoc_plug, raiseE_mapLoc, cancelVal_mapLoc]
-      exact ⟨_, _, _, Head.cferr μ Ns (err.map (Val.mapLoc g)) m j (w.mapLoc g) (K.mapLoc g)
+      exact ⟨_, _, _, Head.cferr μ (err.map (Val.mapLoc g)) m j (w.mapLoc g) (K.mapLoc g) hm
         (by rw [catches_mapLoc, hK])⟩
-  | cancel Ns K hK =>
+  | cfcancel err err' K hK =>
+      rw [cfinE_mapLoc, kont_mapLoc_plug, raiseE_mapLoc, cancelVal_mapLoc,
+        show (Expr.val (cancelVal err')).mapLoc g = Expr.val (cancelVal (err'.map (Val.mapLoc g)))
+          from congrArg Subtype.val (cancelVal_mapLoc g err')]
+      exact ⟨_, _, _, Head.cfcancel μ (err.map (Val.mapLoc g)) (err'.map (Val.mapLoc g))
+        (K.mapLoc g) (by rw [catches_mapLoc, hK])⟩
+  | cancel K hK =>
       rw [ccatchE_mapLoc, kont_mapLoc_plug, raiseE_mapLoc,
-        show (Expr.val (cancelVal Ns none)).mapLoc g = Expr.val (cancelVal Ns none)
-          from congrArg Subtype.val (cancelVal_mapLoc g Ns none)]
-      exact ⟨_, _, _, Head.cancel μ Ns (K.mapLoc g) (by rw [catches_mapLoc, hK])⟩
-  | creraise Ns E K hK =>
+        show (Expr.val (cancelVal none)).mapLoc g = Expr.val (cancelVal none)
+          from congrArg Subtype.val (cancelVal_mapLoc g none)]
+      exact ⟨_, _, _, Head.cancel μ (K.mapLoc g) (by rw [catches_mapLoc, hK])⟩
+  | creraise E K hK =>
       rw [ccatchE_mapLoc, kont_mapLoc_plug, raiseE_mapLoc,
-        show (Expr.val (cancelVal Ns (some E))).mapLoc g = Expr.val (cancelVal Ns (some (E.mapLoc g)))
-          from congrArg Subtype.val (cancelVal_mapLoc g Ns (some E))]
-      exact ⟨_, _, _, Head.creraise μ Ns (E.mapLoc g) (K.mapLoc g) (by rw [catches_mapLoc, hK])⟩
+        show (Expr.val (cancelVal (some E))).mapLoc g = Expr.val (cancelVal (some (E.mapLoc g)))
+          from congrArg Subtype.val (cancelVal_mapLoc g (some E))]
+      exact ⟨_, _, _, Head.creraise μ (E.mapLoc g) (K.mapLoc g) (by rw [catches_mapLoc, hK])⟩
 
 /-- `g` moves the window of the array steps' offsets, `[ℓ, ℓ + 2³²)`, above each location the redex
 mentions as a block. -/
@@ -963,9 +962,9 @@ theorem head_image {g : Loc → Loc} {μ μ' : Heap} {b b' : Expr} (h : Head (�
   | hop n i qs hr hs c v K hc hK =>
       rw [hndE_mapLoc, hndVal_mapLoc, kont_mapLoc_plug, performE_mapLoc,
         show (Expr.app (.val c) (.pair (.val v)
-            (kappaAt (capTag qs.1 i.toNat) n (hndVal n qs hr hs) K))).mapLoc g =
+            (kappaAt (capTag qs.1 i.toNat) (hndVal n qs hr hs) K))).mapLoc g =
           .app (.val (c.mapLoc g)) (.pair (.val (v.mapLoc g))
-            (kappaAt (capTag (qs.mapLoc g).1 i.toNat) n
+            (kappaAt (capTag (qs.mapLoc g).1 i.toNat)
               (hndVal n (qs.mapLoc g) (hr.mapLoc g) (hs.mapLoc g)) (K.mapLoc g))) from by
           simp only [Expr.mapLoc, kappaAt_mapLoc, hndVal_mapLoc]
           rw [show (qs.mapLoc g).1 = qs.1.mapLoc g from rfl, capTag_mapLoc]; rfl]
@@ -984,34 +983,43 @@ theorem head_image {g : Loc → Loc} {μ μ' : Heap} {b b' : Expr} (h : Head (�
       rw [ubindE_mapLoc, kont_mapLoc_plug, raiseE_mapLoc]
       exact Head.ufin _ (N.mapLoc g) (D.mapLoc g) n i (v.mapLoc g) (K.mapLoc g) hn'
         (by rw [catches_mapLoc, hK])
-  | ufinC N D Ns err K hK =>
+  | ufinC N D err K hK =>
       rw [ubindE_mapLoc, kont_mapLoc_plug, raiseE_mapLoc, cfinE_mapLoc,
-        show (Expr.val (cancelVal Ns err)).mapLoc g = Expr.val (cancelVal Ns (err.map (Val.mapLoc g)))
-          from congrArg Subtype.val (cancelVal_mapLoc g Ns err), cancelVal_mapLoc]
-      exact Head.ufinC _ (N.mapLoc g) (D.mapLoc g) Ns (err.map (Val.mapLoc g)) (K.mapLoc g)
+        show (Expr.val (cancelVal err)).mapLoc g = Expr.val (cancelVal (err.map (Val.mapLoc g)))
+          from congrArg Subtype.val (cancelVal_mapLoc g err), cancelVal_mapLoc]
+      exact Head.ufinC _ (N.mapLoc g) (D.mapLoc g) (err.map (Val.mapLoc g)) (K.mapLoc g)
         (by rw [catches_mapLoc, hK])
-  | cfret Ns err w =>
+  | cfret err w =>
       rw [cfinE_mapLoc, raiseE_mapLoc, cancelVal_mapLoc,
-        show (Expr.val (cancelVal Ns err)).mapLoc g = Expr.val (cancelVal Ns (err.map (Val.mapLoc g)))
-          from congrArg Subtype.val (cancelVal_mapLoc g Ns err)]
-      exact Head.cfret _ Ns (err.map (Val.mapLoc g)) (w.mapLoc g)
-  | cferr Ns err m j w K hK =>
+        show (Expr.val (cancelVal err)).mapLoc g = Expr.val (cancelVal (err.map (Val.mapLoc g)))
+          from congrArg Subtype.val (cancelVal_mapLoc g err)]
+      exact Head.cfret _ (err.map (Val.mapLoc g)) (w.mapLoc g)
+  | cferr err m j w K hm hK =>
       rw [cfinE_mapLoc, kont_mapLoc_plug, raiseE_mapLoc, raiseE_mapLoc, cancelVal_mapLoc,
-        show (Expr.val (cancelVal Ns (errNext Ns err m j w))).mapLoc g =
-          Expr.val (cancelVal Ns (errNext Ns (err.map (Val.mapLoc g)) m j (w.mapLoc g))) from by
-          rw [← errNext_mapLoc]; exact congrArg Subtype.val (cancelVal_mapLoc g Ns _)]
-      exact Head.cferr _ Ns (err.map (Val.mapLoc g)) m j (w.mapLoc g) (K.mapLoc g)
+        show (Expr.val (cancelVal (errNext err m j w))).mapLoc g =
+          Expr.val (cancelVal (errNext (err.map (Val.mapLoc g)) m j (w.mapLoc g))) from by
+          rw [← errNext_mapLoc]; exact congrArg Subtype.val (cancelVal_mapLoc g _)]
+      exact Head.cferr _ (err.map (Val.mapLoc g)) m j (w.mapLoc g) (K.mapLoc g) hm
         (by rw [catches_mapLoc, hK])
-  | cancel Ns K hK =>
+  | cfcancel err err' K hK =>
+      rw [cfinE_mapLoc, kont_mapLoc_plug, raiseE_mapLoc, raiseE_mapLoc, cancelVal_mapLoc,
+        show (Expr.val (cancelVal err')).mapLoc g = Expr.val (cancelVal (err'.map (Val.mapLoc g)))
+          from congrArg Subtype.val (cancelVal_mapLoc g err'),
+        show (Expr.val (cancelVal (err.or err'))).mapLoc g =
+          Expr.val (cancelVal ((err.map (Val.mapLoc g)).or (err'.map (Val.mapLoc g)))) from by
+          rw [← or_mapLoc]; exact congrArg Subtype.val (cancelVal_mapLoc g _)]
+      exact Head.cfcancel _ (err.map (Val.mapLoc g)) (err'.map (Val.mapLoc g)) (K.mapLoc g)
+        (by rw [catches_mapLoc, hK])
+  | cancel K hK =>
       rw [ccatchE_mapLoc, kont_mapLoc_plug, raiseE_mapLoc,
-        show (Expr.val (cancelVal Ns none)).mapLoc g = Expr.val (cancelVal Ns none)
-          from congrArg Subtype.val (cancelVal_mapLoc g Ns none)]
-      exact Head.cancel _ Ns (K.mapLoc g) (by rw [catches_mapLoc, hK])
-  | creraise Ns E K hK =>
+        show (Expr.val (cancelVal none)).mapLoc g = Expr.val (cancelVal none)
+          from congrArg Subtype.val (cancelVal_mapLoc g none)]
+      exact Head.cancel _ (K.mapLoc g) (by rw [catches_mapLoc, hK])
+  | creraise E K hK =>
       rw [ccatchE_mapLoc, kont_mapLoc_plug, raiseE_mapLoc, raiseE_mapLoc,
-        show (Expr.val (cancelVal Ns (some E))).mapLoc g = Expr.val (cancelVal Ns (some (E.mapLoc g)))
-          from congrArg Subtype.val (cancelVal_mapLoc g Ns (some E))]
-      exact Head.creraise _ Ns (E.mapLoc g) (K.mapLoc g) (by rw [catches_mapLoc, hK])
+        show (Expr.val (cancelVal (some E))).mapLoc g = Expr.val (cancelVal (some (E.mapLoc g)))
+          from congrArg Subtype.val (cancelVal_mapLoc g (some E))]
+      exact Head.creraise _ (E.mapLoc g) (K.mapLoc g) (by rw [catches_mapLoc, hK])
 
 /-! ### The given run's allocations -/
 
@@ -1065,35 +1073,52 @@ theorem mentionsLoc_kshift {x : Loc} (d c : Nat) (K : Kont) :
   | case K e₁ e₂ ih => simp only [Kont.shift, Kont.plug, Expr.MentionsLoc, ih, mentionsLoc_shift]
   | inj₁ K ih | inj₂ K ih => simp only [Kont.shift, Kont.plug, Expr.MentionsLoc, ih]
 
-theorem namesVal_noLoc {x : Loc} : ∀ N : List UInt32, ¬ (namesVal N).1.MentionsLoc x
-  | [] => fun h => by simp [namesVal, Val.inj₁, Val.unit, Expr.MentionsLoc] at h
-  | m :: N => fun h => by
-      simp only [namesVal, Val.inj₂, Val.pair, Val.i32, Expr.MentionsLoc, false_or] at h
-      exact namesVal_noLoc N h
+/-- A dead region names only locations its region names. -/
+theorem mentionsLoc_dead {x : Loc} : ∀ (K : Kont), (K.dead.plug .unit).MentionsLoc x →
+    (K.plug .unit).MentionsLoc x
+  | .hole, h => h
+  | .appR f K, h => by
+      simp only [Kont.dead] at h
+      split at h
+      · exact Or.inr (mentionsLoc_dead K h)
+      · simp only [Kont.plug, Expr.MentionsLoc] at h ⊢
+        exact h.imp id (mentionsLoc_dead K)
+  | .pairL K _, h | .letpair K _, h | .seq K _, h => by
+      simp only [Kont.dead, Kont.plug, Expr.MentionsLoc] at h ⊢
+      exact h.imp (mentionsLoc_dead K) id
+  | .pairR _ K, h => by
+      simp only [Kont.dead, Kont.plug, Expr.MentionsLoc] at h ⊢
+      exact h.imp id (mentionsLoc_dead K)
+  | .appL K _, h => by
+      simp only [Kont.dead, Kont.plug, Expr.MentionsLoc] at h ⊢
+      exact h.imp (mentionsLoc_dead K) id
+  | .case K _ _, h => by
+      simp only [Kont.dead, Kont.plug, Expr.MentionsLoc] at h ⊢
+      exact h.imp (mentionsLoc_dead K) id
+  | .inj₁ K, h | .inj₂ K, h => by
+      simp only [Kont.dead, Kont.plug, Expr.MentionsLoc] at h ⊢
+      exact mentionsLoc_dead K h
 
-theorem mentionsLoc_cancelVal {x : Loc} {N : List UInt32} {err : Option Val}
-    (h : (cancelVal N err).1.MentionsLoc x) : ∃ E, err = some E ∧ E.1.MentionsLoc x := by
+theorem mentionsLoc_cancelVal {x : Loc} {err : Option Val}
+    (h : (cancelVal err).1.MentionsLoc x) : ∃ E, err = some E ∧ E.1.MentionsLoc x := by
   simp only [cancelVal, opPayload, Val.pair, Val.i32, Expr.MentionsLoc, false_or] at h
-  rcases h with h | h
-  · exact absurd h (namesVal_noLoc N)
-  · cases err with
-    | none => simp [errVal, Val.inj₁, Val.unit, Expr.MentionsLoc] at h
-    | some E => exact ⟨E, rfl, h⟩
+  cases err with
+  | none => simp [errVal, Val.inj₁, Val.unit, Expr.MentionsLoc] at h
+  | some E => exact ⟨E, rfl, h⟩
 
-theorem mentionsLoc_errNext {x : Loc} {N : List UInt32} {err : Option Val} {m j : UInt32} {w E : Val}
-    (he : errNext N err m j w = some E) (h : E.1.MentionsLoc x) :
+theorem mentionsLoc_errNext {x : Loc} {err : Option Val} {m j : UInt32} {w E : Val}
+    (he : errNext err m j w = some E) (h : E.1.MentionsLoc x) :
     (∃ E', err = some E' ∧ E'.1.MentionsLoc x) ∨ w.1.MentionsLoc x := by
   cases err with
-  | some E' => simp only [errNext, Option.some.injEq] at he; subst he; exact .inl ⟨_, rfl, h⟩
+  | some E' => simp only [errNext, Option.some_or, Option.some.injEq] at he; subst he; exact .inl ⟨_, rfl, h⟩
   | none =>
-      simp only [errNext] at he
-      split_ifs at he
-      cases he
+      simp only [errNext, Option.none_or, Option.some.injEq] at he
+      subst he
       simp only [opPayload, Val.pair, Val.i32, Expr.MentionsLoc, false_or] at h
       exact .inr h
 
-theorem mentionsLoc_kappa {x : Loc} {n : UInt32} {H : Val} {K : Kont}
-    (h : (kappa n H K).MentionsLoc x) : H.1.MentionsLoc x ∨ (K.plug .unit).MentionsLoc x := by
+theorem mentionsLoc_kappa {x : Loc} {H : Val} {K : Kont}
+    (h : (kappa H K).MentionsLoc x) : H.1.MentionsLoc x ∨ (K.plug .unit).MentionsLoc x := by
   simp only [kappa, hndE, ccatchE, raiseE, Expr.val, Val.lam, Val.prim, Expr.MentionsLoc,
     false_or] at h
   rcases h with h | h
@@ -1102,16 +1127,14 @@ theorem mentionsLoc_kappa {x : Loc} {n : UInt32} {H : Val} {K : Kont}
     · rcases (mentionsLoc_plug _ _).mp h with h | h
       · exact .inr ((mentionsLoc_kshift 3 0 K).mp h)
       · exact h.elim
-  · rcases h with h | h
-    · exact .inl ((mentionsLoc_shift 2 0 H.1).mp h)
-    · rcases (mentionsLoc_plug _ _).mp h with h | h
-      · exact .inr ((mentionsLoc_kshift 2 0 K).mp h)
-      · simp only [Expr.MentionsLoc, false_or] at h
-        obtain ⟨E, hE, -⟩ := mentionsLoc_cancelVal h
-        cases hE
+  · rcases (mentionsLoc_plug _ _).mp h with h | h
+    · exact .inr (mentionsLoc_dead K ((mentionsLoc_kshift 2 0 K.dead).mp h))
+    · simp only [Expr.MentionsLoc, false_or] at h
+      obtain ⟨E, hE, -⟩ := mentionsLoc_cancelVal h
+      cases hE
 
-theorem mentionsLoc_kappaCell {x : Loc} {aff : Bool} {n : UInt32} {H : Val} {K : Kont}
-    (h : (kappaCell aff n H K).MentionsLoc x) : H.1.MentionsLoc x ∨ (K.plug .unit).MentionsLoc x := by
+theorem mentionsLoc_kappaCell {x : Loc} {aff : Bool} {H : Val} {K : Kont}
+    (h : (kappaCell aff H K).MentionsLoc x) : H.1.MentionsLoc x ∨ (K.plug .unit).MentionsLoc x := by
   cases aff <;>
   simp only [kappaCell, kappaCBody, hndE, ccatchE, raiseE, freeE, stuckE, Expr.val, Val.lam,
     Val.prim, Val.unit, Expr.MentionsLoc, false_or, or_false, Bool.false_eq_true, if_true,
@@ -1121,20 +1144,19 @@ theorem mentionsLoc_kappaCell {x : Loc} {aff : Bool} {n : UInt32} {H : Val} {K :
     · rcases (mentionsLoc_plug _ _).mp h with h | h
       · exact .inr ((mentionsLoc_kshift 4 0 K).mp h)
       · exact h.elim
-  · rcases h with (h | h) | (h | h)
+  · rcases h with (h | h) | h
     · exact .inl ((mentionsLoc_shift 4 0 H.1).mp h)
     · rcases (mentionsLoc_plug _ _).mp h with h | h
       · exact .inr ((mentionsLoc_kshift 4 0 K).mp h)
       · exact h.elim
-    · exact .inl ((mentionsLoc_shift 3 0 H.1).mp h)
     · rcases (mentionsLoc_plug _ _).mp h with h | h
-      · exact .inr ((mentionsLoc_kshift 3 0 K).mp h)
+      · exact .inr (mentionsLoc_dead K ((mentionsLoc_kshift 3 0 K.dead).mp h))
       · simp only [Expr.MentionsLoc, false_or] at h
         obtain ⟨E, hE, -⟩ := mentionsLoc_cancelVal h
         cases hE
 
-theorem mentionsLoc_kappaAt {x : Loc} {t n : UInt32} {H : Val} {K : Kont}
-    (h : (kappaAt t n H K).MentionsLoc x) : H.1.MentionsLoc x ∨ (K.plug .unit).MentionsLoc x := by
+theorem mentionsLoc_kappaAt {x : Loc} {t : UInt32} {H : Val} {K : Kont}
+    (h : (kappaAt t H K).MentionsLoc x) : H.1.MentionsLoc x ∨ (K.plug .unit).MentionsLoc x := by
   unfold kappaAt at h
   split at h
   · exact mentionsLoc_kappaCell h
@@ -1352,30 +1374,43 @@ theorem head_mentions {μ μ' : Heap} {b b' : Expr} (h : Head (ℍ := ℍ) μ b 
       rcases hx with h | h
       · exact .inl (.inr h)
       · exact .inr ((mentionsLoc_plug _ _).mpr (.inr h))
-  | ufinC N D Ns err K hK =>
+  | ufinC N D err K hK =>
       refine .inl ((mentions_app2_prim _ _ _).mpr ?_)
       rcases (mentions_app2_prim _ _ _).mp hx with h | h
       · obtain ⟨E, rfl, hE⟩ := mentionsLoc_cancelVal h
         exact .inr ((mentionsLoc_plug _ _).mpr (.inr ((mentions_app_prim _ _).mpr
-          (show (cancelVal Ns (some E)).1.MentionsLoc x from Or.inr (Or.inr (Or.inr hE))))))
+          (show (cancelVal (some E)).1.MentionsLoc x from Or.inr (Or.inr hE)))))
       · simp only [Val.unit, Expr.val, Expr.MentionsLoc, or_false] at h
         exact .inl (.inr h)
-  | cfret Ns err w =>
+  | cfret err w =>
       refine .inl ((mentions_app2_prim _ _ _).mpr (.inl ?_))
       exact (mentions_app_prim _ _).mp hx
-  | cferr Ns err m j w K hK =>
+  | cferr err m j w K hm hK =>
       refine .inl ((mentions_app2_prim _ _ _).mpr ?_)
       obtain ⟨E, hE, hEx⟩ := mentionsLoc_cancelVal ((mentions_app_prim _ _).mp hx)
       rcases mentionsLoc_errNext hE hEx with ⟨E', rfl, h⟩ | h
-      · exact .inl (Or.inr (Or.inr (Or.inr h)))
+      · exact .inl (Or.inr (Or.inr h))
       · exact .inr ((mentionsLoc_plug _ _).mpr (.inr ((mentions_app_prim _ _).mpr
           ((mentions_opPayload m j w).mpr h))))
-  | cancel Ns K hK => exact absurd hx (by simp [Val.unit, Expr.MentionsLoc])
-  | creraise Ns E K hK =>
+  | cfcancel err err' K hK =>
+      refine .inl ((mentions_app2_prim _ _ _).mpr ?_)
+      obtain ⟨E, hE, hEx⟩ := mentionsLoc_cancelVal ((mentions_app_prim _ _).mp hx)
+      cases err with
+      | some E' =>
+          simp only [Option.some_or, Option.some.injEq] at hE
+          subst hE
+          exact .inl (Or.inr (Or.inr hEx))
+      | none =>
+          simp only [Option.none_or] at hE
+          subst hE
+          exact .inr ((mentionsLoc_plug _ _).mpr (.inr ((mentions_app_prim _ _).mpr
+            (show (cancelVal (some E)).1.MentionsLoc x from Or.inr (Or.inr hEx)))))
+  | cancel K hK => exact absurd hx (by simp [Val.unit, Expr.MentionsLoc])
+  | creraise E K hK =>
       refine .inl ((mentions_app_prim _ _).mpr ?_)
       exact (mentionsLoc_plug _ _).mpr (.inr ((mentions_app_prim _ _).mpr
-        (show (cancelVal Ns (some E)).1.MentionsLoc x from Or.inr (Or.inr (Or.inr
-          ((mentions_app_prim _ _).mp hx))))))
+        (show (cancelVal (some E)).1.MentionsLoc x from Or.inr (Or.inr
+          ((mentions_app_prim _ _).mp hx)))))
 
 /-! ### The simulation's invariant -/
 

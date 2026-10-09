@@ -217,19 +217,19 @@ open Classical in
 handler of values.  At a linear or affine operation the catch hands `kappaC` at a fresh cell
 (SPEC §25), which no function of the handler and the context names. -/
 def captureE (n : UInt32) (qs r : Expr) (cs : List Expr) (K : Kont) : Expr :=
-  if h : IsVal (hndValE n qs r cs) then kappa n ⟨_, h⟩ K else .unit
+  if h : IsVal (hndValE n qs r cs) then kappa ⟨_, h⟩ K else .unit
 
 open Classical in
 /-- `κ` at its cell `ℓ` (`kappaC`, SPEC §25), at a handler of values: affine when its cancel releases
 the cell. -/
 def captureAtE (aff : Bool) (ℓ : Loc) (n : UInt32) (qs r : Expr) (cs : List Expr) (K : Kont) :
     Expr :=
-  if h : IsVal (hndValE n qs r cs) then kappaC aff ℓ n ⟨_, h⟩ K else .unit
+  if h : IsVal (hndValE n qs r cs) then kappaC aff ℓ ⟨_, h⟩ K else .unit
 
 open Classical in
 /-- The start of `κ`'s cancel run (`cancelOf`), at a handler of values. -/
 def cancelOfE (n : UInt32) (qs r : Expr) (cs : List Expr) (K : Kont) : Expr :=
-  if h : IsVal (hndValE n qs r cs) then Targets.cancelOf n ⟨_, h⟩ K else .unit
+  if IsVal (hndValE n qs r cs) then Targets.cancelOf K else .unit
 
 /-- The coalgebra `λs. ⟨f s, g s⟩` of a loop.  `withPair`'s arms sit under its two binders (the
 selector and the branch's unit, Core's `withCtx`), so `s` is `var 2` there and `f`, `g` are shifted
@@ -256,13 +256,26 @@ def errOf (m j : UInt32) (w : Val) : Option ((RF.alg Ξ).Lab × ℕ × OVal) :=
   if h : ∃ l, RF.name Ξ l = m then some (Classical.choose h, j.toNat, OVal.ofVal w) else none
 
 open Classical in
+/-- The error a cancel keeps, read at the labels: the kept raise's label, operation and argument. -/
+def keptErrOf : Option Val → Option ((RF.alg Ξ).Lab × ℕ × OVal)
+  | none => none
+  | some E => if h : ∃ (m j : UInt32) (w : Val), E = opPayload m j w then
+      errOf RF Ξ (Classical.choose h) (Classical.choose (Classical.choose_spec h))
+        (Classical.choose (Classical.choose_spec (Classical.choose_spec h)))
+    else none
+
+open Classical in
 /-- **The label of a head step**: `fire D` at a `ubind` frame stopped by a raise (`[finalise]`,
-`[finalise-cancel]`), `finEnd` at a `cfin` frame whose finaliser returned or raised (`[cfin-ret]`,
-`[cfin-raise]`), `tau` otherwise. -/
+`[finalise-cancel]`), `finEnd` at a `cfin` frame whose finaliser returned, raised, or was passed by
+a nested cancel (`[cfin-ret]`, `[cfin-raise]`, `[cfin-cancel]`: the nested cancel's kept error),
+`tau` otherwise. -/
 def labelOf (a : Expr) : A.Ev (RF.alg Ξ).Lab OVal Expr :=
   if h : ∃ (N D : Val) (e : Expr), a = ubindE (Val.pair N D) e ∧ ¬ IsVal e then
     .fire (finE (Classical.choose (Classical.choose_spec h)).1)
   else if ∃ (s w : Val), a = cfinE s (.val w) then .finEnd none
+  else if h : ∃ (s : Val) (K : Kont) (err : Option Val),
+      a = cfinE s (K.plug (raiseE (.val (cancelVal err)))) then
+    .finEnd (keptErrOf RF Ξ (Classical.choose (Classical.choose_spec (Classical.choose_spec h))))
   else if h : ∃ (s : Val) (K : Kont) (m j : UInt32) (w : Val),
       a = cfinE s (K.plug (raiseE (.val (opPayload m j w)))) then
     .finEnd (errOf RF Ξ (Classical.choose (Classical.choose_spec (Classical.choose_spec h)))

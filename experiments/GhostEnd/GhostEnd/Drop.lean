@@ -53,7 +53,7 @@ def opTableO (Tab : OpTab) (l : BoCa.Loc) (T : VTy) (δ : LSub) : Table := fun l
         Tab n i = some en ∧ en.abort = false⌝ ⋆
       (en.PA ls v ⋆ fun ρ => ∀ ls', Ext ls ls' ρ →
         (∀ w : Val, (en.PB ls' w ─⋆ Φ ls' (K.plug (.val w))) ρ) ∧
-        (en.q ≠ .lin → (cancelOwed Tab n ls' K ⋆ owner l T δ ls') ρ))
+        (en.q ≠ .lin → (cancelOwed ls' K ⋆ owner l T δ ls') ρ))
 
 theorem opTableO_mono (Tab : OpTab) (l : BoCa.Loc) (T : VTy) (δ : LSub) :
     (opTableO Tab l T δ).Mono := by
@@ -67,10 +67,10 @@ theorem opTableO_mono (Tab : OpTab) (l : BoCa.Loc) (T : VTy) (δ : LSub) :
 frame (the owner) is not carried through the callback's run: the callback holds it lent, and each
 stop hands it back (`opTableO`). Resumed, it goes back to the callback's continuation. Cancelled,
 the callback's context unwinds and the finaliser `D` runs on it (`cancel_then`). -/
-theorem ewp_then_owner (Tab Ta : OpTab) (hRA : ResumeAff Tab) (hA : Ta.AbortOnly)
-    (hle : Ta.Le Tab) (hL : Tab.Local) (Nv Dv : Val) (l : BoCa.Loc) (T : VTy) (δ : LSub)
-    {Qd : List SRec → Val → WProp} (hQd : ∀ ls v ρ, Qd ls v ρ → NoOwn ρ)
-    (hD : ∀ ls, Entails (owner l T δ ls) (ewpTS ls (.app (.val Dv) (.val .unit)) (opTable Ta) Qd))
+theorem ewp_then_owner (Tab : OpTab) (hRA : ResumeAff Tab) (Nv Dv : Val) (l : BoCa.Loc) (T : VTy)
+    (δ : LSub) {Qd : List SRec → Val → WProp} (hQd : ∀ ls v ρ, Qd ls v ρ → NoOwn ρ)
+    (hD : ∀ ls, Entails (owner l T δ ls)
+      (ewpTS ls (.app (.val Dv) (.val .unit)) (opTable OpTab.empty) Qd))
     (Q₁ Q : List SRec → Val → WProp)
     (hk : ∀ ls v, Entails (Q₁ ls v) (ewpTS ls ((ubindK Nv Dv).plug (.val v)) (opTable Tab) Q)) :
     ∀ {ls : List SRec} {e : Expr} {ρ : WRes}, ewpTS ls e (opTableO Tab l T δ) Q₁ ρ →
@@ -95,18 +95,17 @@ theorem ewp_then_owner (Tab Ta : OpTab) (hRA : ResumeAff Tab) (hA : Ta.AbortOnly
   · intro w τ₁ τ₂ hB hcτ
     rw [Kont.plug_comp]
     exact (hcont ls'' he).1 w τ₁ τ₂ hB hcτ
-  · intro N hn hNK
-    obtain ⟨ρc, ρo, hco, hcan, ho⟩ := (hcont ls'' he).2 hq'
-    have hc' := hcan N hn (fun m hm => hNK m (by rw [hndNames_comp]; exact List.mem_append_right _ hm))
-    rw [Kont.plug_comp]
-    exact cancel_then hA hle hL Nv Dv (owner l T δ) hOs hQd hD hc' ho hco
+  · obtain ⟨ρc, ρo, hco, hcan, ho⟩ := (hcont ls'' he).2 hq'
+    show ewpTS _ _ _ _ _
+    rw [dead_comp, dead_ubindK, Kont.plug_comp]
+    exact cancel_then (fun _ _ _ h => by simp [OpTab.empty] at h) Nv Dv (owner l T δ) hOs hQd hD
+      hcan ho hco
 
 /-- **`withborU` at a resuming row.** `withborU d ℓ f` from `ℓ ↦ v ⋆ 𝒱⟦T⟧(v)`, the callback
 re-lendable at `opTableO` (6.65 at a resuming table, `ewpTS_M_frameR`) and `d : Ref T ⊸ 1` the
 finaliser. At a return the source is paired with the answer; at a resumption the callback is
 re-lent; at a cancel the callback unwinds and `d` disposes of the owner. -/
-theorem withborR_compat (Tab Ta : OpTab) (hRA : ResumeAff Tab) (hA : Ta.AbortOnly)
-    (hle : Ta.Le Tab) (hL : Tab.Local) {d : Expr} (hdc : closedAt 0 d = true)
+theorem withborR_compat (Tab : OpTab) (hRA : ResumeAff Tab) {d : Expr} (hdc : closedAt 0 d = true)
     {T B : VTy} {δ : LSub} {βP : Life} (hP : ∀ ls w σ, vC true T ls δ w σ → σ.InStratum βP)
     (hd : ∀ ls, wpTS ls d (fun ls'' => vP (.lolli (.ref T) .unit) ls'' δ) PMap.empty)
     (f : Val) (l : BoCa.Loc) (v : Val) (ls : List SRec)
@@ -119,7 +118,7 @@ theorem withborR_compat (Tab Ta : OpTab) (hRA : ResumeAff Tab) (hA : Ta.AbortOnl
   refine withborUE_beta (opTable_mono _) hdc (.loc l) rfl f ?_
   have hcb := ewpTS_M_frameR (opTableO Tab l T δ) (opTableO_mono Tab l T δ) l T δ βP hP
     (finPost l T B δ) ls _ ρ ⟨ρ, PMap.empty, ResU.comp_empty_right ρ, ⟨v, hρ⟩, hR⟩
-  refine ewp_then_owner Tab Ta hRA hA hle hL _ _ l T δ
+  refine ewp_then_owner Tab hRA _ _ l T δ
     (Qd := fun ls v => vP .unit ls δ v) (fun _ _ _ h => by obtain ⟨rfl, -⟩ := h; exact noOwn_empty)
     (fun ls σ ho => ?_) (finPost l T B δ) _ ?_ hcb
   · obtain ⟨w, ρl, ρP, hcl, hl, hw⟩ := ho
@@ -155,13 +154,13 @@ theorem relendO_yield (Tab : OpTab) {n i : UInt32} {en : OpEnt} (hTn : Tab n i =
   intro ls' hext
   have ho : owner l T δ ls' s :=
     ⟨w, ρa, ρc, hs, hown, vC_local true T ((hext.right hρs).right hs) hv⟩
-  refine ⟨fun w' τ₁ τ₂ hBw hcτ => ?_, fun _ => ⟨ργ, s, hρs, fun N _ _ => ?_, ho⟩⟩
+  refine ⟨fun w' τ₁ τ₂ hBw hcτ => ?_, fun _ => ⟨ργ, s, hρs, ?_, ho⟩⟩
   · obtain ⟨rfl, rfl⟩ := hPB _ _ _ hBw
     obtain rfl : τ₂ = ρd := ResU.CompS.functional hcτ (ResU.comp_empty_right ρd)
     refine ⟨s, ργ, ResU.CompS.comm hρs, ho, ?_⟩
     exact relend_step hTb (fun μ => Step1N.head (Head.seq μ rest) rfl)
       (h ls' ργ (hFe ls ls' ργ (hext.left hρs) hF))
-  · refine (ewp_abortive (cancelTab_abortive Tab N)).mpr (wpG_here _ _ _ _ (Or.inr ?_))
+  · refine (ewp_abortive (cancelTab_abortive OpTab.empty)).mpr (wpG_here _ _ _ _ (Or.inr ?_))
     exact ⟨.seq .hole rest, none, pure_sep_mk ⟨rfl, rfl⟩
       ⟨PMap.empty, ργ, compS_empty_left ργ, ⟨rfl, trivial⟩, hFn ls ργ hF⟩⟩
 
@@ -201,7 +200,7 @@ theorem withborR_spans_yields_cC {Δ : LifeCtx} {δ : LSub} (hδ : Δ.Models δ)
     (hN : CDerives (Δ.extend x b) [⟨.mut (.var x) T, true⟩] Nf (.comp (.ret (.box (.var x) B))))
     {d : Expr} (hdc : closedAt 0 d = true)
     (hd : ∀ ls, wpTS ls d (fun ls'' => vP (.lolli (.ref T) .unit) ls'' δ) PMap.empty)
-    (S : Row) (hRA : ∀ o ∈ S, o.abort = false ∧ o.q ≠ .unr) (hUq : S.Uniq)
+    (S : Row) (hRA : ∀ o ∈ S, o.abort = false ∧ o.q ≠ .unr)
     (o : OpSig) (hf : Row.find S o.n o.i = some o) (hoB : o.B = .unit)
     (ys : List Val) (hys : ∀ y ∈ ys, closedAt 0 y.1 = true)
     (hy : ∀ y ∈ ys, ∀ ls, vC true o.A ls δ y PMap.empty)
@@ -217,8 +216,7 @@ theorem withborR_spans_yields_cC {Δ : LifeCtx} {δ : LSub} (hδ : Δ.Models δ)
     exact hRA o' (Row.find_mem hf').1
   have hTn : Row.tab S δ o.n o.i = some (o.ent δ) := by simp [Row.tab, hf]
   have ha : (o.ent δ).abort = false := (hRA o (Row.find_mem hf).1).1
-  refine withborR_compat (Row.tab S δ) (Row.tab S.abortOnly δ) hRA' (Row.abortOnly_abort S δ)
-    (Row.tab_le δ (Row.abortOnly_le hUq)) (Row.tab_local S δ) hdc hP hd _ l v ls ?_ ρ hρ
+  refine withborR_compat (Row.tab S δ) hRA' hdc hP hd _ l v ls ?_ ρ hρ
   refine relend_cbV (opTableO_mono _ _ _ _) o.n o.i ys hys hNf ?_
   refine relendO_chain hδ hbx hΔx hβ hT hB (fundamentalC hN) (Row.tab S δ) hTn ha ?_ l ys hy ls
   intro ls' w σ h
@@ -235,7 +233,7 @@ theorem withborR_spans_yields_sem {Δ : LifeCtx} {x : LifeVar} {b : Lifetime.Lif
     {Nf : Expr} (hNf : closedAt 1 Nf = true)
     (hN : CDerives (Δ.extend x b) [⟨.mut (.var x) T, true⟩] Nf (.comp (.ret (.box (.var x) B))))
     {d : Expr} (hdc : closedAt 0 d = true) (hd : SemV Δ [] d (.lolli (.ref T) .unit))
-    (S : Row) (hRA : ∀ o ∈ S, o.abort = false ∧ o.q ≠ .unr) (hUq : S.Uniq)
+    (S : Row) (hRA : ∀ o ∈ S, o.abort = false ∧ o.q ≠ .unr)
     (o : OpSig) (hf : Row.find S o.n o.i = some o) (hoB : o.B = .unit)
     (ys : List Val) (hys : ∀ y ∈ ys, closedAt 0 y.1 = true)
     (hy : ∀ δ, ∀ y ∈ ys, ∀ ls, vC true o.A ls δ y PMap.empty)
@@ -275,7 +273,7 @@ theorem withborR_spans_yields_sem {Δ : LifeCtx} {x : LifeVar} {b : Lifetime.Lif
       intro ls'
       have h := hd δ [] ls' PMap.empty hδ (gDenC_nil ls' δ)
       rwa [show substAll [] d = d from BoCa.Adequacy.psub_nil 0 d] at h
-    exact withborR_spans_yields_cC hδ hbx hΔx hβ hT hB hP hNf hN hdc hd' S hRA hUq o hf hoB ys
+    exact withborR_spans_yields_cC hδ hbx hΔx hβ hT hB hP hNf hN hdc hd' S hRA o hf hoB ys
       hys (hy δ) ℓ v' ls ρ hrest
 
 /-- **Under the kernel's `[handle]`, at an affine yield.** The body is handed to `handle_compatC`
@@ -292,7 +290,6 @@ theorem handleR_spans_yields {Δ : LifeCtx} {Γ Γ₁ Γr Γc : Ctx VTy} {S' : R
     (hN : CDerives (Δ.extend x b) [⟨.mut (.var x) T, true⟩] Nf (.comp (.ret (.box (.var x) B))))
     {d : Expr} (hdc : closedAt 0 d = true) (hd : SemV Δ [] d (.lolli (.ref T) .unit))
     (hRA : ∀ o ∈ Row.ofEff n E 0 ++ S', o.abort = false ∧ o.q ≠ .unr)
-    (hUq : (Row.ofEff n E 0 ++ S').Uniq)
     (o : OpSig) (hf : Row.find (Row.ofEff n E 0 ++ S') o.n o.i = some o) (hoB : o.B = .unit)
     (ys : List Val) (hys : ∀ y ∈ ys, closedAt 0 y.1 = true)
     (hy : ∀ δ, ∀ y ∈ ys, ∀ ls, vC true o.A ls δ y PMap.empty)
@@ -304,7 +301,7 @@ theorem handleR_spans_yields {Δ : LifeCtx} {Γ Γ₁ Γr Γc : Ctx VTy} {S' : R
     SemC Δ Γ (hndTerm n (E.map Prod.fst) ir ic
       (.app (.app (.val (withborUV d)) (.var 0)) (.val (cbV o.n o.i ys Nf)))) (CTy.effOf S' R) :=
   handle_compatC hsp hsp₁ hr hc hn0 hnS hlen
-    (withborR_spans_yields_sem hb hbx hΔx hT hB hside hNf hN hdc hd _ hRA hUq o hf hoB ys hys hy
+    (withborR_spans_yields_sem hb hbx hΔx hT hB hside hNf hN hdc hd _ hRA o hf hoB ys hys hy
       hcb)
 
 namespace Drop
@@ -327,7 +324,7 @@ theorem spans_two_affine_yields (δ : LSub) (l : BoCa.Loc) (v : Val) (ls : List 
   refine withborR_spans_yields_cC (Δ := LifeCtx.empty) (x := 0) hδ (by decide)
     (fun y u h => by simp [LifeCtx.empty, LifeCtx.find?, Lifetime.assocFind] at h) hβ
     (by simp [VFree]) (by simp [VFree]) (βP := ⊤) ?_ (by decide) d_nfEx (by decide) ?_
-    [yieldAff] ?_ (by simp [Row.Uniq]) yieldAff (by simp [Row.find, yieldAff]) rfl ys
+    [yieldAff] ?_ yieldAff (by simp [Row.find, yieldAff]) rfl ys
     (by simp [ys]; decide) ?_ l v ls
   · intro ls w σ h
     rw [h.1]; exact ResU.inStratum_empty _

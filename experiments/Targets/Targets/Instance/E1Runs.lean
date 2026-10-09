@@ -92,7 +92,7 @@ def schedV (n : UInt32) : Val :=
 
 /-- Around the allocation of `κ`'s cell, after `sched`'s catch. -/
 def usK1 (n : UInt32) : Kont := (bindK usS2).comp (.appR schedClE (.pairR Val.unit
-  (.appR (.lam (kappaCBody true n (schedV n) (bindK (.inj₂ .unit)))) .hole)))
+  (.appR (.lam (kappaCBody true (schedV n) (bindK (.inj₂ .unit)))) .hole)))
 
 /-- Around the release of `κ`'s cell, when the closure resumes `κ`. -/
 def usK2 (n : UInt32) : Kont := (bindK (.pair (.inj₂ .unit) (.var 0))).comp
@@ -125,12 +125,12 @@ theorem cellQuiet_usesS (nw : UInt32) :
   · have hA := quiet_of_look (ℍ := ℍ) 4 (usesSW hofE nw (qualsVal [.aff]).1) rfl
     rw [us_segA] at hA
     refine hA.trans ?_
-    have hk : kappaAt (capTag (qualsVal [.aff]).1 (0 : UInt32).toNat) nw (schedV nw)
-        (bindK (.inj₂ .unit)) = kappaCell true nw (schedV nw) (bindK (.inj₂ .unit)) := by
+    have hk : kappaAt (capTag (qualsVal [.aff]).1 (0 : UInt32).toNat) (schedV nw)
+        (bindK (.inj₂ .unit)) = kappaCell true (schedV nw) (bindK (.inj₂ .unit)) := by
       simp [capTag, qualsVal, Qual.tag, kappaAt, Val.pair, Val.i32]
     have hh : ∀ μ, Head (ℍ := ℍ) μ (hndE (schedV nw) ((bindK (.inj₂ .unit)).plug
         (performE (.val (opPayload nw 0 Val.unit))))) μ (.app (.val ⟨schedClE, .lam⟩)
-        (.pair (.val Val.unit) (kappaCell true nw (schedV nw) (bindK (.inj₂ .unit))))) := by
+        (.pair (.val Val.unit) (kappaCell true (schedV nw) (bindK (.inj₂ .unit))))) := by
       intro μ
       have h := Head.hop (ℍ := ℍ) μ nw 0 (qualsVal [.aff]) ⟨schedRetE, .lam⟩
         ⟨clausesE [schedClE], .pair .lam .unit⟩ ⟨schedClE, .lam⟩ Val.unit (bindK (.inj₂ .unit))
@@ -138,7 +138,7 @@ theorem cellQuiet_usesS (nw : UInt32) :
       simp only [schedV] at hk ⊢
       rwa [hk] at h
     have e : (usK1 nw).plug (allocE Val.unit) = (bindK usS2).plug (.app (.val ⟨schedClE, .lam⟩)
-        (.pair (.val Val.unit) (kappaCell true nw (schedV nw) (bindK (.inj₂ .unit))))) := by
+        (.pair (.val Val.unit) (kappaCell true (schedV nw) (bindK (.inj₂ .unit))))) := by
       rw [usK1, Kont.plug_comp]; rfl
     rw [e]
     exact Quiet.head (bindK usS2) hh rfl rfl

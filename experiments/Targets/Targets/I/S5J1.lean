@@ -24,8 +24,9 @@ nothing.  It reads every run from the start of a cancel or an unwind as a prefix
   (`cancellation_tier1Open`), at every effect context.
 * **S5's no-interception**: PROVED at `J₁` (`noIntercept_J₁_of`) and at today's kernel, given that
   a cancelled continuation's context holds no `ccatch` and no `cfin` frame (`CancelsNoCtl`, OPEN:
-  a whole-run fact about fired finalisers).  The other half of `CancelsStd`, no handler named `0`
-  in that context, is a run invariant (`cancelsNZ_J₁`, `Targets/I/CancelsNZ.lean`).
+  a whole-run fact about fired finalisers).  The cancel runs the dead region `K†`, which holds no
+  handler, so `CancelsStd`'s other half, no handler named `0` in that context, is not read; it is a
+  run invariant (`cancelsNZ_J₁`, `Targets/I/CancelsNZ.lean`).
 * **The extension a run needs is the β-step after a fire** (`Inst.unwind_pfx`, `Inst.cancel_pfx`,
   `Inst.FireExt`): a run is a trace as it is, or, when it stops right after a fire step, once the
   β-step that starts the finaliser is taken.
@@ -133,12 +134,10 @@ theorem unwindOrder_J₁ :
   Inst.unwindOrder_of_core liveOK_J₁ name_ne_zero_orow (fun _ h _ hμ => finOK_J₁ h hμ)
 
 /-- **S5's no-interception at `J₁`**, at every effect context, given that no cancelled
-continuation's context holds a `ccatch` or a `cfin` frame; that it holds no handler named `0` is
-proved (`cancelsNZ_J₁`). -/
+continuation's context holds a `ccatch` or a `cfin` frame. -/
 theorem noIntercept_J₁_of (hN : Inst.CancelsNoCtl (ℍ := ℍ) orowRF Ξ J₁) :
     (ourInst (ℍ := ℍ) orowRF Ξ J₁).NoIntercept (ourInst (ℍ := ℍ) orowRF Ξ J₁).noFinRaise :=
-  Inst.noIntercept_of_core liveOK_J₁ name_ne_zero_orow (fun _ h _ hμ => finOK_J₁ h hμ)
-    (Inst.cancelsStd_of hN cancelsNZ_J₁)
+  Inst.noIntercept_of_core liveOK_J₁ (fun _ h _ hμ => finOK_J₁ h hμ) hN
 
 /-- **S5 at `J₁`**, at every effect context, given `CancelsNoCtl`. -/
 theorem cancellation_J₁_of (hN : Inst.CancelsNoCtl (ℍ := ℍ) orowRF Ξ J₁) :
@@ -157,8 +156,7 @@ theorem cancellation_tier1Open :
       (ourInst (ℍ := ℍ) orowRF Ξ Inst.tier1Open).noFinRaise D → ∀ μ, FinDom μ → FinOK (ℍ := ℍ) μ D :=
     fun _ h _ hμ => finOK_of_finRow (D := Inst.tier1OpenDer) Inst.coreClosed_tier1Open h hμ
   ⟨Inst.unwindOrder_of_core Inst.liveOK_tier1Open name_ne_zero_orow hF,
-    fun hN => Inst.noIntercept_of_core Inst.liveOK_tier1Open name_ne_zero_orow hF
-      (Inst.cancelsStd_of hN cancelsNZ_tier1Open)⟩
+    fun hN => Inst.noIntercept_of_core Inst.liveOK_tier1Open hF hN⟩
 
 end J1
 

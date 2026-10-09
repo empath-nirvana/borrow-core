@@ -352,13 +352,13 @@ def pinHash (root : Name) : MetaM UInt64 := do
 
 /-- Core's relation as this branch imports it. -/
 def pinned : List (Name × UInt64) :=
-  [(``BoCa.Fig16.LogRel.Core.vCE, 9959859532828893445),
-   (``BoCa.Fig16.LogRel.Core.cC, 3615715188283227809),
-   (``BoCa.Fig16.LogRel.Core.wpTS, 5959915866947782996),
-   (``BoCa.Fig16.LogRel.Core.wpG, 5876730344465360364),
-   (``BoCa.Fig16.LogRel.Core.ewpTS, 265682439016940519),
-   (``BoCa.Fig16.LogRel.Core.opTable, 12894917340868813709),
-   (``BoCa.Fig16.LogRel.Core.contShare, 8605809838521521065)]
+  [(``BoCa.Fig16.LogRel.Core.vCE, 2634188461942789339),
+   (``BoCa.Fig16.LogRel.Core.cC, 1577135250918925567),
+   (``BoCa.Fig16.LogRel.Core.wpTS, 9102727463225695086),
+   (``BoCa.Fig16.LogRel.Core.wpG, 15068369448990440630),
+   (``BoCa.Fig16.LogRel.Core.ewpTS, 9716194076298458845),
+   (``BoCa.Fig16.LogRel.Core.opTable, 17297278857222068005),
+   (``BoCa.Fig16.LogRel.Core.contShare, 7895051437212535705)]
 
 end Targets.Audit
 

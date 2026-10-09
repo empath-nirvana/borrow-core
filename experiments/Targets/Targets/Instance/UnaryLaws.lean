@@ -224,24 +224,23 @@ theorem not_isVal_raise1 : ¬ IsVal raise1 := fun h =>
 /-- The context of the allocation of `κ`'s cell after the catch, on the side whose `κ` holds `K`. -/
 def KA (K : Kont) : Kont :=
   K1₀.comp (.appR (.val clV) (.pairR Val.unit
-    (.appR (.val (Val.lam (kappaCBody true 2 H2V K))) .hole)))
+    (.appR (.val (Val.lam (kappaCBody true H2V K))) .hole)))
 
 /-- The context of the release of `κ`'s cell, on the side whose `κ` holds `K`: the outer handler of
 `1`, the raise after the finaliser, the finaliser's handler of `1`, and `κ`'s cancel after the
 release. -/
 def KF (K : Kont) : Kont :=
   K1₀.comp ((Kont.seq .hole raise1).comp (K1₀.comp (Kont.seq .hole
-    (BoCa.BoLo.ccatchE (hndE H2V (K.plug (raiseE (.val (BoCa.BoLo.cancelVal (2 :: K.hndNames)
-      none)))))))))
+    (BoCa.BoLo.ccatchE (K.dead.plug (raiseE (.val (BoCa.BoLo.cancelVal none))))))))
 
 /-- The finaliser each side's frame holds, at the cell `ℓ`:
 `λ_. handle_1 (κ (inj₂ ())) with (λ_. ())`, `κ` the side's continuation. -/
 def DV (K : Kont) (ℓ : Loc) : Val :=
-  Val.lam (withH 1 .aff abortCl (.app (kappaC true ℓ 2 H2V K) (.val (Val.inj₂ Val.unit))))
+  Val.lam (withH 1 .aff abortCl (.app (kappaC true ℓ H2V K) (.val (Val.inj₂ Val.unit))))
 
 /-- The `then` branch each side's frame holds, at the cell `ℓ`: `λy. κ (inj₁ ()) y`. -/
 def NV (K : Kont) (ℓ : Loc) : Val :=
-  Val.lam (.app (.app (kappaC true ℓ 2 H2V K) (.val (Val.inj₁ Val.unit))) (.var 0))
+  Val.lam (.app (.app (kappaC true ℓ H2V K) (.val (Val.inj₁ Val.unit))) (.var 0))
 
 /-- The catch, on each side: the next step allocates `κ`'s cell. -/
 theorem algL2_hop : lookEnd 1 (algAffK₀.plug algL2) = (KA KL2).plug (allocE Val.unit) := by rfl
@@ -395,7 +394,7 @@ theorem cancelCell_algAffProg (h1 : Ξ 1 = Eab) (h2 : Ξ 2 = Ew) :
   have hℓ : (Adequacy.emptyMem : Heap) 0 = none := rfl
   have hreach : (𝕁).RReach (𝕁).R₀ ((𝕁).rinit (𝕁).R₀ algAffProg)
       ((Adequacy.emptyMem.upd 0 Val.unit, (K1₀.comp ((Kont.seq .hole raise1).comp K1₀)).plug
-        (.app (kappaC true 0 2 H2V KL2) (.val (Val.inj₂ Val.unit)))), ()) := by
+        (.app (kappaC true 0 H2V KL2) (.val (Val.inj₂ Val.unit)))), ()) := by
     have h₀ := rreach_of_chain (𝕁).R₀ (μ := Adequacy.emptyMem) (s := ())
       (lookRun_sound (ℍ := ℍ) 4 algAffProg)
     rw [algAff_c] at h₀
@@ -410,11 +409,11 @@ theorem cancelCell_algAffProg (h1 : Ξ 1 = Eab) (h2 : Ξ 2 = Ew) :
       (lookRun_sound (ℍ := ℍ) 7 ((KA KL2).plug (.val (Val.loc 0))))
     have e : lookEnd 7 ((KA KL2).plug (.val (Val.loc 0))) =
         (K1₀.comp ((Kont.seq .hole raise1).comp K1₀)).plug
-          (.app (kappaC true 0 2 H2V KL2) (.val (Val.inj₂ Val.unit))) := rfl
+          (.app (kappaC true 0 H2V KL2) (.val (Val.inj₂ Val.unit))) := rfl
     rw [e] at h₂
     exact ((h₀.trans h₁).tail ⟨_, hal⟩).trans h₂
   refine ⟨(Adequacy.emptyMem, (K1₀.comp ((Kont.seq .hole raise1).comp K1₀)).plug
-      (.app (kappaC true 0 2 H2V KL2) (.val (Val.inj₂ Val.unit)))), 0,
+      (.app (kappaC true 0 H2V KL2) (.val (Val.inj₂ Val.unit)))), 0,
     K1₀.comp ((Kont.seq .hole raise1).comp K1₀), (⟨.lam (.var 0), .lam⟩, [⟨holdCancelCl, .lam⟩]),
     KL2, hℓ,
     ⟨algAffProg, _, (𝕁).R₀, (), r₀_respects, der_J₁_ret (by decide) (d_algAffProg h1 h2), hreach⟩, ?_⟩
@@ -732,7 +731,7 @@ theorem resume0_subst {κ : Expr} (hκ : closedAt 0 κ = true) (w : Val) :
     (resumeE κ (.var 0)).subst 0 w = resumeE κ w.1 := by
   simp [resumeE, Expr.subst, shift_closed0 hκ, subst_closedE hκ]
 
-theorem isVal_kappa (n : UInt32) (H : Val) (K : Kont) : IsVal (kappa n H K) := by
+theorem isVal_kappa (H : Val) (K : Kont) : IsVal (kappa H K) := by
   unfold kappa; exact .lam
 
 /-- **The clause after the catch**: `λ(a, k). c a to b. k.resume b` applied to `(v, κ)` reaches
@@ -766,17 +765,17 @@ theorem quiet_tailBody {c v w : Val} (κ : Expr) (hκv : IsVal κ) (hc : closedA
 the clause (`quiet_tailBody`), and `κ`'s four (`quiet_kappa_resume`). -/
 theorem quiet_tailClause {n i : UInt32} {qs hr hs c v w : Val} {K : Kont}
     (hci : clauseAt hs.1 i.toNat = some ⟨tailOf c.1, .lam⟩) (hK : K.HasHnd n = false)
-    (hu : kappaAt (capTag qs.1 i.toNat) n (hndVal n qs hr hs) K = kappa n (hndVal n qs hr hs) K)
+    (hu : kappaAt (capTag qs.1 i.toNat) (hndVal n qs hr hs) K = kappa (hndVal n qs hr hs) K)
     (hH : closedAt 0 (hndVal n qs hr hs).1 = true) (hKc : closedAt 0 (K.plug .unit) = true)
     (hc : closedAt 0 c.1 = true) (hq : Quiet (ℍ := ℍ) (.app c.1 v.1) (.val w)) :
     Quiet (ℍ := ℍ) (hndE (hndVal n qs hr hs) (K.plug (performE (.val (opPayload n i v)))))
       (hndE (hndVal n qs hr hs) (K.plug (.val w))) := by
-  have hκ : closedAt 0 (kappa n (hndVal n qs hr hs) K) = true := closedAt_kappa n hH hKc
+  have hκ : closedAt 0 (kappa (hndVal n qs hr hs) K) = true := closedAt_kappa hH hKc
   have h₁ := quiet_hop (ℍ := ℍ) .hole n i qs hr hs ⟨tailOf c.1, .lam⟩ v K hci hK hu
   simp only [Kont.plug] at h₁
   refine h₁.trans ?_
-  refine (quiet_tailBody _ (isVal_kappa n _ K) hc hκ hq).trans ?_
-  have h₇ := quiet_kappa_resume (ℍ := ℍ) .hole n (hndVal n qs hr hs) K w
+  refine (quiet_tailBody _ (isVal_kappa _ K) hc hκ hq).trans ?_
+  have h₇ := quiet_kappa_resume (ℍ := ℍ) .hole (hndVal n qs hr hs) K w
   simpa [Kont.plug] using h₇
 
 /-- **A tail-resumptive clause whose code runs quietly resumes in place, at an operation whose
@@ -786,30 +785,30 @@ catch and the allocation; at the cell's location `ℓ`, `κ`'s β-step at `ℓ`,
 resume branch (`kappaC_resume_parts`). -/
 theorem cellQuiet_tailClause {n i : UInt32} {qs hr hs c v w : Val} {K : Kont} (aff : Bool)
     (hci : clauseAt hs.1 i.toNat = some ⟨tailOf c.1, .lam⟩) (hK : K.HasHnd n = false)
-    (hcell : kappaAt (capTag qs.1 i.toNat) n (hndVal n qs hr hs) K =
-      kappaCell aff n (hndVal n qs hr hs) K)
+    (hcell : kappaAt (capTag qs.1 i.toNat) (hndVal n qs hr hs) K =
+      kappaCell aff (hndVal n qs hr hs) K)
     (hH : closedAt 0 (hndVal n qs hr hs).1 = true) (hKc : closedAt 0 (K.plug .unit) = true)
     (hc : closedAt 0 c.1 = true) (hq : Quiet (ℍ := ℍ) (.app c.1 v.1) (.val w)) :
     CellQuiet (ℍ := ℍ) (hndE (hndVal n qs hr hs) (K.plug (performE (.val (opPayload n i v)))))
       (hndE (hndVal n qs hr hs) (K.plug (.val w))) := by
   have hh : ∀ μ, Head (ℍ := ℍ) μ
       (hndE (hndVal n qs hr hs) (K.plug (performE (.val (opPayload n i v))))) μ
-      (.app (.val ⟨tailOf c.1, .lam⟩) (.pair (.val v) (kappaCell aff n (hndVal n qs hr hs) K))) := by
+      (.app (.val ⟨tailOf c.1, .lam⟩) (.pair (.val v) (kappaCell aff (hndVal n qs hr hs) K))) := by
     intro μ
     have h := Head.hop (ℍ := ℍ) μ n i qs hr hs ⟨tailOf c.1, .lam⟩ v K hci hK
     rwa [hcell] at h
   refine ⟨.appR (.val ⟨tailOf c.1, .lam⟩) (.pairR v
-    (.appR (.val (Val.lam (kappaCBody aff n (hndVal n qs hr hs) K))) .hole)),
+    (.appR (.val (Val.lam (kappaCBody aff (hndVal n qs hr hs) K))) .hole)),
     Quiet.head .hole hh rfl rfl, fun ℓ => ?_⟩
   refine ⟨Kont.appL (Kont.seq .hole (kResV (hndVal n qs hr hs) K)) w, ?_,
-    (kappaC_resume_parts aff ℓ n _ K w).2⟩
+    (kappaC_resume_parts aff ℓ _ K w).2⟩
   have hb := Quiet.head (ℍ := ℍ) (.appR (.val ⟨tailOf c.1, .lam⟩) (.pairR v .hole))
-    (fun μ => Head.beta μ (kappaCBody aff n (hndVal n qs hr hs) K) (Val.loc ℓ)) rfl rfl
+    (fun μ => Head.beta μ (kappaCBody aff (hndVal n qs hr hs) K) (Val.loc ℓ)) rfl rfl
   rw [kappaCBody_subst] at hb
   refine hb.trans ?_
-  have hκ := closedAt_kappaC aff ℓ n hH hKc
-  refine (quiet_tailBody _ (isVal_kappaC aff ℓ n _ K) hc hκ hq).trans ?_
-  exact (kappaC_resume_parts aff ℓ n _ K w).1
+  have hκ := closedAt_kappaC aff ℓ hH hKc
+  refine (quiet_tailBody _ (isVal_kappaC aff ℓ _ K) hc hκ hq).trans ?_
+  exact (kappaC_resume_parts aff ℓ _ K w).1
 
 /-- **A tail-resumptive clause whose code runs quietly resumes in place, calmly**, at every
 operation: quietly when its `κ` owns no cell, around the cell when it does. -/

@@ -10,7 +10,7 @@ S6 per capture event (`ContUseEv`, decision S6) at our instance, read through th
 
 * **A capture event hands a cell `κ`** (`catchEv_cell`): at an admissible effect context the
   operation is linear or affine, so the catch is followed by the allocation of a cell at a location
-  `ℓ` the memory does not hold and `κ`'s β-step, and the event's `κ` is `kappaC aff ℓ n H K`, affine
+  `ℓ` the memory does not hold and `κ`'s β-step, and the event's `κ` is `kappaC aff ℓ H K`, affine
   exactly at an affine operation.
 * **A use of a cell `κ` releases its cell three steps later** (`use_frees_cell`): `κ` applied to a
   data value takes its β-step, its `case` and its `;`, the memory unchanged, and releases `ℓ`, which
@@ -169,9 +169,8 @@ which has no step). -/
 theorem use_frees_cell (hL : LiveOK (ℍ := ℍ) orowRF Ξ J) {R : (𝕊).Runner} (hR : R.Respects)
     {e : Expr} {C : OCTy} (hd : (𝕊).der [] e C) {q : List ((𝕊).Event × (𝕊).RConf R)}
     (hq : (𝕊).CompleteFrom R ((𝕊).rinit R e) q) {t : ℕ} (ht : t ≤ q.length) {K₀ : Kont}
-    {w : OVal} {T : OVTy} (hw : (𝕊).DataVal T w) {aff : Bool} {ℓ : Loc} {n : UInt32} {H : Val}
-    {K : Kont}
-    (he : ((𝕊).cfgAt ((𝕊).rinit R e) q t).1.2 = K₀.plug (.app (kappaC aff ℓ n H K) w.1)) :
+    {w : OVal} {T : OVTy} (hw : (𝕊).DataVal T w) {aff : Bool} {ℓ : Loc} {H : Val} {K : Kont}
+    (he : ((𝕊).cfgAt ((𝕊).rinit R e) q t).1.2 = K₀.plug (.app (kappaC aff ℓ H K) w.1)) :
     t + 3 < q.length ∧
       ((𝕊).cfgAt ((𝕊).rinit R e) q (t + 1)).1.1 = ((𝕊).cfgAt ((𝕊).rinit R e) q t).1.1 ∧
       ((𝕊).cfgAt ((𝕊).rinit R e) q (t + 2)).1.1 = ((𝕊).cfgAt ((𝕊).rinit R e) q t).1.1 ∧
@@ -268,19 +267,19 @@ theorem use_frees_cell (hL : LiveOK (ℍ := ℍ) orowRF Ξ J) {R : (𝕊).Runner
         exact ⟨hr1, by rw [h1], by rw [h2], hr3, hr4, hr5, .inl rfl⟩
 
 /-- A cell `κ` before its allocation is no value. -/
-theorem not_isVal_kappaCell (aff : Bool) (n : UInt32) (H : Val) (K : Kont) :
-    ¬ IsVal (kappaCell aff n H K) := by
+theorem not_isVal_kappaCell (aff : Bool) (H : Val) (K : Kont) :
+    ¬ IsVal (kappaCell aff H K) := by
   unfold kappaCell; simp [Expr.val, Val.lam]
 
 /-- **A capture event hands a cell `κ`.**  At an admissible effect context, on a run from a typed
 program at a typing system whose reached configurations go on: the catch's `[op]` step is followed by
 the allocation of the cell at a location `ℓ` the memory does not hold and `κ`'s β-step at `ℓ`, and the
-event's `κ` is `kappaC aff ℓ n H K`, affine exactly at an affine operation. -/
+event's `κ` is `kappaC aff ℓ H K`, affine exactly at an affine operation. -/
 theorem catchEv_cell (hΞ : AdmEff Ξ) (hL : LiveOK (ℍ := ℍ) orowRF Ξ J) {R : (𝕊).Runner}
     (hR : R.Respects) {e : Expr} {C : OCTy} (hd : (𝕊).der [] e C)
     {q : List ((𝕊).Event × (𝕊).RConf R)} (hp : (𝕊).RPath R ((𝕊).rinit R e) q) {j : ℕ} {κ : OVal}
     {k : A.OpClass} (h : (𝕊).CatchEvAt ((𝕊).rinit R e) q j κ k) :
-    ∃ (aff : Bool) (ℓ : Loc) (n : UInt32) (H : Val) (K : Kont), κ.1 = kappaC aff ℓ n H K ∧
+    ∃ (aff : Bool) (ℓ : Loc) (H : Val) (K : Kont), κ.1 = kappaC aff ℓ H K ∧
       (aff = true ↔ k = .affine) ∧ j + 2 < q.length ∧
       ((𝕊).cfgAt ((𝕊).rinit R e) q (j + 1)).1.1 ℓ = none ∧
       (((𝕊).cfgAt ((𝕊).rinit R e) q (j + 2)).1.1 ℓ).isSome := by
@@ -329,15 +328,15 @@ theorem catchEv_cell (hΞ : AdmEff Ξ) (hL : LiveOK (ℍ := ℍ) orowRF Ξ J) {R
   obtain ⟨n, hn⟩ : ∃ n, n = orowRF.name Ξ l := ⟨_, rfl⟩
   obtain ⟨H, hH⟩ : ∃ H : Val, H = hndVal n (qualsVal ((Ξ n).map Prod.fst)) ⟨r.1, hr⟩ ⟨_, hcs⟩ :=
     ⟨_, rfl⟩
-  have hkc : kappaAt (capTag (qualsVal ((Ξ n).map Prod.fst)).1 (UInt32.ofNat i).toNat) n H K =
-      kappaCell (cellAff p.1) n H K := by
+  have hkc : kappaAt (capTag (qualsVal ((Ξ n).map Prod.fst)).1 (UInt32.ofNat i).toNat) H K =
+      kappaCell (cellAff p.1) H K := by
     have e₁ : capTag (qualsVal ((Ξ n).map Prod.fst)).1 (UInt32.ofNat i).toNat = p.1.tag := by
       rw [hn]; exact htag
     rw [e₁]
-    exact kappaAt_cell hqu n H K
+    exact kappaAt_cell hqu H K
   have hhop : Head (ℍ := ℍ) μ (hndE H (K.plug (performE (.val (opPayload n (UInt32.ofNat i)
       ⟨v.1, hv⟩))))) μ (.app (.val ⟨cl.1, hclv⟩) (.pair (.val ⟨v.1, hv⟩)
-        (kappaCell (cellAff p.1) n H K))) := by
+        (kappaCell (cellAff p.1) H K))) := by
     have h0 := Head.hop (ℍ := ℍ) μ n (UInt32.ofNat i) (qualsVal ((Ξ n).map Prod.fst)) ⟨r.1, hr⟩
       ⟨_, hcs⟩ ⟨cl.1, hclv⟩ ⟨v.1, hv⟩ K hca (hn ▸ hK)
     rw [← hH, hkc] at h0
@@ -360,21 +359,21 @@ theorem catchEv_cell (hΞ : AdmEff Ξ) (hL : LiveOK (ℍ := ℍ) orowRF Ξ J) {R
   have hj1 : j + 1 ≠ j' := by
     intro hh
     have hx := handoff (j + 1) _ _ h1 hh
-    exact not_isVal_kappaCell _ _ _ _ (hx ▸ hval3.pair_right)
+    exact not_isVal_kappaCell _ _ _ (hx ▸ hval3.pair_right)
   have hj1q : j + 1 < q.length := by omega
   have h1' : (𝕊).cfgAt ((𝕊).rinit R e) q (j + 1) =
       ((μ, (K₀.comp (.appR (.val ⟨cl.1, hclv⟩) (.pairR ⟨v.1, hv⟩
-        (.appR (.val (Val.lam (kappaCBody (cellAff p.1) n H K))) .hole)))).plug
+        (.appR (.val (Val.lam (kappaCBody (cellAff p.1) H K))) .hole)))).plug
           (allocE Val.unit)), s) := by
     rw [h1, Kont.plug_comp]; rfl
   obtain ⟨ev, hst⟩ := A.EffectSystem.rstep_cfgAt hp (j + 1) hj1q
   rw [h1'] at hst
   obtain ⟨ℓ, hℓ, -, h2⟩ := rstep_alloc_inv R _ Val.unit hst
-  have hb := Head.beta (ℍ := ℍ) (μ.upd ℓ Val.unit) (kappaCBody (cellAff p.1) n H K) (Val.loc ℓ)
+  have hb := Head.beta (ℍ := ℍ) (μ.upd ℓ Val.unit) (kappaCBody (cellAff p.1) H K) (Val.loc ℓ)
   rw [kappaCBody_subst] at hb
   have h2' : (𝕊).cfgAt ((𝕊).rinit R e) q (j + 2) =
       ((μ.upd ℓ Val.unit, (K₀.comp (.appR (.val ⟨cl.1, hclv⟩) (.pairR ⟨v.1, hv⟩ .hole))).plug
-        (.app (.val (Val.lam (kappaCBody (cellAff p.1) n H K))) (.val (Val.loc ℓ)))), s) := by
+        (.app (.val (Val.lam (kappaCBody (cellAff p.1) H K))) (.val (Val.loc ℓ)))), s) := by
     rw [h2, Kont.plug_comp, Kont.plug_comp]; rfl
   have hj2 : j + 2 ≠ j' := by
     intro hh
@@ -386,25 +385,25 @@ theorem catchEv_cell (hΞ : AdmEff Ξ) (hL : LiveOK (ℍ := ℍ) orowRF Ξ J) {R
   have h3 := cfg_next_head hp hj2q h2' hb rfl
   have h3' : (𝕊).cfgAt ((𝕊).rinit R e) q (j + 3) =
       ((μ.upd ℓ Val.unit, K₀.plug (.app (.val ⟨cl.1, hclv⟩) (.pair (.val ⟨v.1, hv⟩)
-        (kappaC (cellAff p.1) ℓ n H K)))), s) := by
+        (kappaC (cellAff p.1) ℓ H K)))), s) := by
     rw [h3, Kont.plug_comp]; rfl
   -- the hand-off is at the third step
   have hj3 : j' = j + 3 := by
     by_contra hne
     have hlt : j + 3 < j' := by omega
-    have hv3 : IsVal (Expr.pair v.1 (kappaC (cellAff p.1) ℓ n H K)) :=
-      .pair hv (isVal_kappaC _ _ _ _ _)
-    refine hfirst (j + 3) ⟨kappaC (cellAff p.1) ℓ n H K, isOVal_of_isVal (isVal_kappaC _ _ _ _ _)⟩
+    have hv3 : IsVal (Expr.pair v.1 (kappaC (cellAff p.1) ℓ H K)) :=
+      .pair hv (isVal_kappaC _ _ _ _)
+    refine hfirst (j + 3) ⟨kappaC (cellAff p.1) ℓ H K, isOVal_of_isVal (isVal_kappaC _ _ _ _)⟩
       (by omega) hlt (by
-        show appK (Expr.pair v.1 (kappaC (cellAff p.1) ℓ n H K)) ≠ .hole
+        show appK (Expr.pair v.1 (kappaC (cellAff p.1) ℓ H K)) ≠ .hole
         unfold appK; rw [dif_pos hv3]; simp) ?_
     rw [h3']
-    change K₀.plug (.app cl.1 (.pair v.1 (kappaC (cellAff p.1) ℓ n H K))) =
-      K₀.plug ((appK (Expr.pair v.1 (kappaC (cellAff p.1) ℓ n H K))).plug cl.1)
+    change K₀.plug (.app cl.1 (.pair v.1 (kappaC (cellAff p.1) ℓ H K))) =
+      K₀.plug ((appK (Expr.pair v.1 (kappaC (cellAff p.1) ℓ H K))).plug cl.1)
     rw [plug_appK_of_isVal hv3 K₀]
   -- the hand-off at the third step names `κ`
-  have hκ : kappaC (cellAff p.1) ℓ n H K = κ.1 := handoff (j + 3) _ _ h3' hj3.symm
-  refine ⟨cellAff p.1, ℓ, n, H, K, hκ.symm, ?_, hj2q, by rw [h1]; exact hℓ, by rw [h2]; simp⟩
+  have hκ : kappaC (cellAff p.1) ℓ H K = κ.1 := handoff (j + 3) _ _ h3' hj3.symm
+  refine ⟨cellAff p.1, ℓ, H, K, hκ.symm, ?_, hj2q, by rw [h1]; exact hℓ, by rw [h2]; simp⟩
   rw [← hcls, hpo]
   rcases hq1 : p.1 with _ | _ | _
   · simp [cellAff, clsOf]
@@ -468,8 +467,8 @@ theorem countP_range_eq_card (p : ℕ → Bool) : ∀ n : ℕ,
         simp [h]
 
 /-- A cell `κ` names its class and its cell. -/
-theorem kappaC_inj {aff aff' : Bool} {ℓ ℓ' : Loc} {n n' : UInt32} {H H' : Val} {K K' : Kont}
-    (h : kappaC aff ℓ n H K = kappaC aff' ℓ' n' H' K') : aff = aff' ∧ ℓ = ℓ' := by
+theorem kappaC_inj {aff aff' : Bool} {ℓ ℓ' : Loc} {H H' : Val} {K K' : Kont}
+    (h : kappaC aff ℓ H K = kappaC aff' ℓ' H' K') : aff = aff' ∧ ℓ = ℓ' := by
   cases aff <;> cases aff' <;>
     simp [kappaC, freeE, stuckE, Expr.val, Val.lam, Val.loc, Val.prim, Val.unit] at h ⊢
   · exact h.1
@@ -518,9 +517,9 @@ def OnlyOwnerFrees (Ξ : EffCtx) (J : OurTyping orowRF) : Prop :=
     (ourInst (ℍ := ℍ) orowRF Ξ J).der [] e ((ourInst (ℍ := ℍ) orowRF Ξ J).F ε A) →
     (ourInst (ℍ := ℍ) orowRF Ξ J).DataTy A → ∀ q,
     (ourInst (ℍ := ℍ) orowRF Ξ J).CompleteFrom R ((ourInst (ℍ := ℍ) orowRF Ξ J).rinit R e) q →
-    ∀ j (κ : OVal) k aff ℓ n H K,
+    ∀ j (κ : OVal) k aff ℓ H K,
       (ourInst (ℍ := ℍ) orowRF Ξ J).CatchEvAt ((ourInst (ℍ := ℍ) orowRF Ξ J).rinit R e) q j κ k →
-      κ.1 = kappaC aff ℓ n H K →
+      κ.1 = kappaC aff ℓ H K →
       ∀ r, j + 1 < r → RelLoc ((ourInst (ℍ := ℍ) orowRF Ξ J).rinit R e) q r ℓ →
       (∀ r', j + 1 < r' → r' < r → ¬ RelLoc ((ourInst (ℍ := ℍ) orowRF Ξ J).rinit R e) q r' ℓ) →
       ∃ u, u + 3 = r ∧
@@ -537,7 +536,7 @@ def NoDanglingUse (Ξ : EffCtx) (J : OurTyping orowRF) : Prop :=
     (ourInst (ℍ := ℍ) orowRF Ξ J).der [] e ((ourInst (ℍ := ℍ) orowRF Ξ J).F ε A) →
     (ourInst (ℍ := ℍ) orowRF Ξ J).DataTy A → ∀ q,
     (ourInst (ℍ := ℍ) orowRF Ξ J).CompleteFrom R ((ourInst (ℍ := ℍ) orowRF Ξ J).rinit R e) q →
-    ∀ u (κ : OVal) aff ℓ n H K, κ.1 = kappaC aff ℓ n H K →
+    ∀ u (κ : OVal) aff ℓ H K, κ.1 = kappaC aff ℓ H K →
       (ourInst (ℍ := ℍ) orowRF Ξ J).UseAt ((ourInst (ℍ := ℍ) orowRF Ξ J).rinit R e) q u κ →
       ∃ j k, (ourInst (ℍ := ℍ) orowRF Ξ J).CatchEvAt ((ourInst (ℍ := ℍ) orowRF Ξ J).rinit R e) q j
           κ k ∧ j + 1 < u ∧
@@ -558,14 +557,14 @@ theorem contUseEv_of_cells (hΞ : AdmEff Ξ) (hL : LiveOK (ℍ := ℍ) orowRF Ξ
     (hN : NoDanglingUse (ℍ := ℍ) Ξ J) : (𝕊).ContUseEv := by
   intro R hR e ε Aty hans hd hA q hq κ ⟨j₀, k₀, hev₀⟩
   have hp := hq.1
-  obtain ⟨aff, ℓ, n, H, K, hκ, -, -, -, -⟩ := catchEv_cell hΞ hL hR hd hp hev₀
+  obtain ⟨aff, ℓ, H, K, hκ, -, -, -, -⟩ := catchEv_cell hΞ hL hR hd hp hev₀
   set c₀ := (𝕊).rinit R e with hc₀
   -- every event handing `κ` allocates `ℓ`, at `κ`'s class
   have hev_cell : ∀ j k, (𝕊).CatchEvAt c₀ q j κ k →
       k = (if aff then .affine else .linear) ∧ j + 2 < q.length ∧
       ((𝕊).cfgAt c₀ q (j + 1)).1.1 ℓ = none ∧ (((𝕊).cfgAt c₀ q (j + 2)).1.1 ℓ).isSome := by
     intro j k hev
-    obtain ⟨aff', ℓ', n', H', K', hκ', hk', hjq, h1, h2⟩ := catchEv_cell hΞ hL hR hd hp hev
+    obtain ⟨aff', ℓ', H', K', hκ', hk', hjq, h1, h2⟩ := catchEv_cell hΞ hL hR hd hp hev
     obtain ⟨rfl, rfl⟩ := kappaC_inj (hκ.symm.trans hκ')
     have hkab : k ≠ .abortive := by
       obtain ⟨-, _, _, _, _, _, _, _, _, _, -, -, -, -, hk, -⟩ := hev
@@ -574,7 +573,7 @@ theorem contUseEv_of_cells (hΞ : AdmEff Ξ) (hL : LiveOK (ℍ := ℍ) orowRF Ξ
     cases aff <;> cases k <;> simp_all
   -- a use of `κ` applies the cell `κ` to a data value
   have huse : ∀ u, (𝕊).UseAt c₀ q u κ → u < q.length ∧ ∃ (K₀ : Kont) (w : OVal) (T : OVTy),
-      (𝕊).DataVal T w ∧ ((𝕊).cfgAt c₀ q u).1.2 = K₀.plug (.app (kappaC aff ℓ n H K) w.1) := by
+      (𝕊).DataVal T w ∧ ((𝕊).cfgAt c₀ q u).1.2 = K₀.plug (.app (kappaC aff ℓ H K) w.1) := by
     rintro u ⟨hu, (K₀ : Kont), (w : OVal), (T : OVTy), hw, he⟩
     refine ⟨hu, K₀, w, T, hw, ?_⟩
     have he' : ((𝕊).cfgAt c₀ q u).1.2 = K₀.plug ((appK w.1).plug κ.1) := he
@@ -628,7 +627,7 @@ theorem contUseEv_of_cells (hΞ : AdmEff Ξ) (hL : LiveOK (ℍ := ℍ) orowRF Ξ
     intro j k hev
     have hex := hrel j k hev
     obtain ⟨hjr, hrl⟩ := Nat.find_spec hex
-    obtain ⟨u, hu, huse'⟩ := hO R hR e ε Aty hans hd hA q hq j κ k aff ℓ n H K hev hκ (Nat.find hex)
+    obtain ⟨u, hu, huse'⟩ := hO R hR e ε Aty hans hd hA q hq j κ k aff ℓ H K hev hκ (Nat.find hex)
       hjr hrl (fun r' h₁ h₂ h₃ => Nat.find_min hex h₂ ⟨h₁, h₃⟩)
     refine ⟨u, ?_, huse'⟩
     show (if h : ∃ r, j + 1 < r ∧ RelLoc c₀ q r ℓ then Nat.find h else 0) = u + 3
@@ -713,7 +712,7 @@ theorem contUseEv_of_cells (hΞ : AdmEff Ξ) (hL : LiveOK (ℍ := ℍ) orowRF Ξ
       have hg : ∀ u, (𝕊).UseAt c₀ q u κ → (∃ k, (𝕊).CatchEvAt c₀ q (g u) κ k) ∧ g u + 1 < u ∧
           ∀ r, g u + 1 < r → r < u → ¬ RelLoc c₀ q r ℓ := by
         intro u hu
-        obtain ⟨j, k, hev, hju, hnr⟩ := hN R hR e ε Aty hans hd hA q hq u κ aff ℓ n H K hκ hu
+        obtain ⟨j, k, hev, hju, hnr⟩ := hN R hR e ε Aty hans hd hA q hq u κ aff ℓ H K hκ hu
         have h : ∃ j, (∃ k, (𝕊).CatchEvAt c₀ q j κ k) ∧ j + 1 < u ∧
             ∀ r, j + 1 < r → r < u → ¬ RelLoc c₀ q r ℓ := ⟨j, ⟨k, hev⟩, hju, hnr⟩
         have hgu : g u = h.choose := dif_pos h
@@ -758,7 +757,7 @@ theorem contUseEv_of_cells (hΞ : AdmEff Ξ) (hL : LiveOK (ℍ := ℍ) orowRF Ξ
       simp only [decide_eq_true_eq] at ht
       obtain ⟨htq, (K₀ : Kont), he⟩ := ht
       have he' : ((𝕊).cfgAt c₀ q t).1.2 =
-          K₀.plug (.app (kappaC false ℓ n H K) ((𝕊).inr (𝕊).unitV).1) := by
+          K₀.plug (.app (kappaC false ℓ H K) ((𝕊).inr (𝕊).unitV).1) := by
         have h' : ((𝕊).cfgAt c₀ q t).1.2 = K₀.plug (cancelE κ.1) := he
         rw [h', hκ]; rfl
       obtain ⟨-, -, -, -, -, -, h⟩ := use_frees_cell hL hR hd hq (le_of_lt htq) hinr he'

@@ -229,7 +229,7 @@ theorem not_raise_stop (hP : P.Respects) {S : Row} (hle : RowLe S P.ops) {δ : L
     ∃ K n i v en, t = K.plug (performE (.val (opPayload n i v))) ∧
       (⌜t = K.plug (performE (.val (opPayload n i v))) ∧ K.HasHnd n = false ∧
         Row.tab S δ n i = some en ∧ en.abort = false⌝ ⋆
-        (en.PA ls v ⋆ contShare (Row.tab S δ) en n ls K Φ)) ρ := by
+        (en.PA ls v ⋆ contShare en ls K Φ)) ρ := by
   rcases h with ⟨K, n, i, v, en, hp⟩ | ⟨K, n, i, v, en, hp⟩
   · exact ⟨K, n, i, v, en, (pure_sep_iff.mp hp).1.1, hp⟩
   · obtain ⟨⟨-, -, hT, ha⟩, -⟩ := pure_sep_iff.mp hp

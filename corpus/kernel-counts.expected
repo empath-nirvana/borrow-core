@@ -11,8 +11,9 @@ take-all 6 4 0 # the cell and the count's five nodes; take's answer closures, ca
 store-cancel 2 0 0 # the producer's cell and the cell the clause stores κ in
 resume-tail 0 0 0
 cancel-now 0 0 0
-cancel-suppressed 0 0 0
 cancel-reraised 0 0 0
+cancel-reentered 0 0 0 # a finaliser's error past the dead inner instance of a re-entered site
+cancel-propagated 0 0 0 # a finaliser's error past a dead handler of its name, to the live one outside
 loop-tail 0 0 0
 loop-captured 0 0 0
 recursive-yield 20 0 0 # recursion through a resumption point: one frame object per level, reused at each resume

@@ -327,7 +327,7 @@ def sgFr (x : Expr) : Kont := bindK (.case x (.var 1) (.inj₂ .unit))
 
 /-- Around the allocation of `κ`'s cell, after the catch of `yield v` in `K`. -/
 def sgKA (ny : UInt32) (v : Val) (K : Kont) : Kont :=
-  .appR sgClE (.pairR v (.appR (.lam (kappaCBody true ny (sgHV ny) K)) .hole))
+  .appR sgClE (.pairR v (.appR (.lam (kappaCBody true (sgHV ny) K)) .hole))
 
 /-- Around the release of `κ`'s cell. -/
 def sgKF (ny : UInt32) (K : Kont) : Kont :=
@@ -390,9 +390,9 @@ theorem s2d_H :
   rfl
 theorem head_sgHop (ny : UInt32) (K : Kont) (v : Val) (hK : K.HasHnd ny = false) (μ : Heap) :
     Head (ℍ := ℍ) μ (hndE (sgHV ny) (K.plug (performE (.val (opPayload ny 0 v))))) μ
-      (.app (.val ⟨sgClE, .lam⟩) (.pair (.val v) (kappaCell true ny (sgHV ny) K))) := by
-  have hk : kappaAt (capTag (qualsVal [.aff]).1 (0 : UInt32).toNat) ny (sgHV ny) K =
-      kappaCell true ny (sgHV ny) K := by
+      (.app (.val ⟨sgClE, .lam⟩) (.pair (.val v) (kappaCell true (sgHV ny) K))) := by
+  have hk : kappaAt (capTag (qualsVal [.aff]).1 (0 : UInt32).toNat) (sgHV ny) K =
+      kappaCell true (sgHV ny) K := by
     simp [capTag, qualsVal, Qual.tag, kappaAt, Val.pair, Val.i32]
   have h := Head.hop (ℍ := ℍ) μ ny 0 (qualsVal [.aff]) ⟨.lam (.inj₁ .unit), .lam⟩
     ⟨clausesE [sgClE], .pair .lam .unit⟩ ⟨sgClE, .lam⟩ v K

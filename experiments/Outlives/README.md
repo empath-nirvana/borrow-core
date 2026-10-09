@@ -10,6 +10,13 @@ recommendation are in `docs/outlives-strictness.md`; this README lists what is h
 The library imports `Core` and changes nothing in it. Every result's axioms are within
 `[propext, Classical.choice, Quot.sound]`.
 
+`LDerives.effThen` types its finaliser at the row's abortive part, as Core's `[then]` did at
+`b1cde24`. When the probe is revived at a later `Core`, its `[then]` follows Core's, rule for rule:
+the pure row (SPEC §24, option A), and SPEC §27's rule with the cancel rows once that lands. The old
+rule's compatibility lemma no longer holds under frame deadness (SPEC §19,
+`not_thenAbort_compatC`). The probe is pinned, and already fails at later commits for SPEC §23's
+reason (`Judgment.lean:106`), so the rule is recorded here and not applied.
+
 | file | content |
 |---|---|
 | `Outlives/Judgment.lean` | the outlives judgment with its box premise and its `Imm`/`Mut` premise as parameters (`VOutP`); `VOutL` (box rule `⊑`, K1), `VOutLe` (all three `⊑`), `CtxOutL`; 6.60 at each (`vC_outlivesL`, `vC_outlivesLe`) |

@@ -120,19 +120,19 @@ def opTabW (M : SemWorld) (T : OpTabI (Idx M.Stk)) : TableI (Idx M.Stk) := fun i
         ((fun ρ => en.PA i v ρ ∧ NoOwn ρ) ⋆ fun ρ => NoOwn ρ))
 
 /-- The error a cancel carries (`errOk`), at any index. -/
-def errOkW {I : Type} (T : OpTabI I) (N : List UInt32) (i : I) : Option Val → WProp
+def errOkW {I : Type} (T : OpTabI I) (i : I) : Option Val → WProp
   | none => emp
   | some E => ex fun m => ex fun j => ex fun w => ex fun (en : OpEntI I) =>
-      ⌜E = opPayload m j w ∧ m ∉ N ∧ T m j = some en ∧ en.abort = true⌝ ⋆
+      ⌜E = opPayload m j w ∧ T m j = some en ∧ en.abort = true⌝ ⋆
         fun ρ => en.PA i w ρ ∧ NoOwn ρ
 
 /-- The table of a cancel run (`cancelTab`), at any index.  `Cl` is a condition on the index the
-cancel ends at (I3.a's closing clause); Core's `cancelTab` is `cancelTabW T N (fun _ => True)`. -/
-def cancelTabW {I : Type} (T : OpTabI I) (N : List UInt32) (Cl : I → Prop) : TableI I :=
+cancel ends at (I3.a's closing clause); Core's `cancelTab` is `cancelTabW T (fun _ => True)`. -/
+def cancelTabW {I : Type} (T : OpTabI I) (Cl : I → Prop) : TableI I :=
   fun i t _ =>
   ex fun (K : Kont) => ex fun (err : Option Val) =>
-    ⌜t = K.plug (raiseE (.val (cancelVal N err))) ∧ K.Catches 0 = false ∧ Cl i⌝ ⋆
-      (errOkW T N i err ⋆ fun ρ => NoOwn ρ)
+    ⌜t = K.plug (raiseE (.val (cancelVal err))) ∧ K.Catches 0 = false ∧ Cl i⌝ ⋆
+      (errOkW T i err ⋆ fun ρ => NoOwn ρ)
 
 /-- An operation's entry at W (`OpSig.ent`). -/
 def entW (M : SemWorld) (δ : LSub) (o : OpSig) : OpEntI (Idx M.Stk) :=
@@ -166,7 +166,7 @@ Core's `contShare`.  Reducible, so that its index type is `Idx Unit` to every ta
   toBWorld := B.coreB (ℍ := ℍ)
   held _ := ([], [])
   Stop a b _ := (∀ p, p ∈ b.1 ↔ p ∈ a.1) ∧ (∀ x, x ∈ b.2.1 ↔ x ∈ a.2.1)
-  share T en n i K Φ := contShare (OpTabI.down T) (OpEntI.down en) n i.1 K (fun ls t => Φ (ls, ()) t)
+  share _ en _ i K Φ := contShare (OpEntI.down en) i.1 K (fun ls t => Φ (ls, ()) t)
 
 /-- `coreW`'s borrow world is `coreB`. -/
 @[simp] theorem coreW_toBWorld : (coreW (ℍ := ℍ)).toBWorld = B.coreB (ℍ := ℍ) := rfl
@@ -252,25 +252,25 @@ theorem opTabW_core_down (T : OpTabI (Idx Unit)) :
   exact propext opTabW_core
 
 /-- `errOkW` at `coreW`'s tables is `errOk`. -/
-theorem errOkW_core {T : OpTabI (Idx Unit)} {N : List UInt32} {ls : List SRec} :
-    ∀ {err : Option Val} {ρ : WRes}, errOkW T N (ls, ()) err ρ ↔ errOk (OpTabI.down T) N ls err ρ
+theorem errOkW_core {T : OpTabI (Idx Unit)} {ls : List SRec} :
+    ∀ {err : Option Val} {ρ : WRes}, errOkW T (ls, ()) err ρ ↔ errOk (OpTabI.down T) ls err ρ
   | none, _ => Iff.rfl
   | some E, ρ => by
       constructor
       · rintro ⟨m, j, w, en, h⟩
-        obtain ⟨⟨hE, hm, hT, ha⟩, hR⟩ := pure_sep_iff.mp h
+        obtain ⟨⟨hE, hT, ha⟩, hR⟩ := pure_sep_iff.mp h
         exact ⟨m, j, w, OpEntI.down en,
-          pure_sep_mk ⟨hE, hm, opTabI_down_some.mpr ⟨en, hT, rfl⟩, ha⟩ hR⟩
+          pure_sep_mk ⟨hE, opTabI_down_some.mpr ⟨en, hT, rfl⟩, ha⟩ hR⟩
       · rintro ⟨m, j, w, en', h⟩
-        obtain ⟨⟨hE, hm, hT, ha⟩, hR⟩ := pure_sep_iff.mp h
+        obtain ⟨⟨hE, hT, ha⟩, hR⟩ := pure_sep_iff.mp h
         obtain ⟨en, hT', rfl⟩ := opTabI_down_some.mp hT
-        exact ⟨m, j, w, en, pure_sep_mk ⟨hE, hm, hT', ha⟩ hR⟩
+        exact ⟨m, j, w, en, pure_sep_mk ⟨hE, hT', ha⟩ hR⟩
 
 /-- `cancelTabW` at the trivial closing clause, at `coreW`'s tables, is `cancelTab`. -/
-theorem cancelTabW_core {T : OpTabI (Idx Unit)} {N : List UInt32} {Cl : Idx Unit → Prop}
+theorem cancelTabW_core {T : OpTabI (Idx Unit)} {Cl : Idx Unit → Prop}
     (hCl : ∀ i, Cl i) {ls : List SRec} {t : Expr} {Φ : Idx Unit → Expr → WProp} {ρ : WRes} :
-    cancelTabW T N Cl (ls, ()) t Φ ρ ↔
-      cancelTab (OpTabI.down T) N ls t (fun ls e => Φ (ls, ()) e) ρ := by
+    cancelTabW T Cl (ls, ()) t Φ ρ ↔
+      cancelTab (OpTabI.down T) ls t (fun ls e => Φ (ls, ()) e) ρ := by
   constructor
   · rintro ⟨K, err, h⟩
     obtain ⟨⟨ht, hK, -⟩, τ₁, τ₂, hc, he, hn⟩ := pure_sep_iff.mp h

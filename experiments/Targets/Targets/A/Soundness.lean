@@ -246,11 +246,11 @@ the empty instance, which the target reads.  OQ-7 (finalisers that resume, or cl
 asynchronously) is a separate question. -/
 def noFinRaise : S.EA.Lab → Prop := fun _ => False
 
-/-- **The no-interception condition** (SPEC §19: "its handlers are dying, so they catch
-nothing"; decision D4 makes it explicit): the finaliser `D` is a closed computation typed at a row
-whose operations are abortive operations of labels in `FR`.  A finaliser performs no resuming
-operation, so nothing it does is caught by a handler of the region a cancel tears down; at
-`noFinRaise` it is typed at the pure row. -/
+/-- **The no-interception condition** (SPEC §19: the region's handler frames are dead, and "a dead
+frame catches nothing"; decision D4 makes it explicit): the finaliser `D` is a closed computation
+typed at a row whose operations are abortive operations of labels in `FR`.  A finaliser performs no
+resuming operation, so nothing it does is caught by a handler of the region a cancel tears down;
+at `noFinRaise` it is typed at the pure row. -/
 def FinRow (FR : S.EA.Lab → Prop) (D : S.Term) : Prop :=
   ∃ ε, (∀ l i, S.has ε l i → FR l ∧ ∃ o : OpSig S.Ty, (S.sig l)[i]? = some o ∧ o.cls = .abortive) ∧
     S.der [] D (S.F ε S.UnitT)

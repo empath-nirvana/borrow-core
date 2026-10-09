@@ -149,11 +149,11 @@ def dgN1 (ny : UInt32) : Expr := performE (opArgE ny 0 (.inj₁ .unit))
 
 /-- Around the allocation of `κ`'s cell, after the catch of `yield v` in `K`. -/
 def dgKA (ny nt : UInt32) (v : Val) (K : Kont) : Kont :=
-  .appR (tickingClE nt) (.pairR v (.appR (.lam (kappaCBody true ny (dgH ny nt) K)) .hole))
+  .appR (tickingClE nt) (.pairR v (.appR (.lam (kappaCBody true (dgH ny nt) K)) .hole))
 
 /-- Around the clause's `tick`, `κ` at the cell `ℓ`. -/
 def dgKT (ny nt : UInt32) (ℓ : Loc) (K : Kont) : Kont :=
-  bindK (resumeE (kappaC true ℓ ny (dgH ny nt) K) .unit)
+  bindK (resumeE (kappaC true ℓ (dgH ny nt) K) .unit)
 
 /-- Around the release of `κ`'s cell. -/
 def dgKF (ny nt : UInt32) (K : Kont) : Kont :=
@@ -170,11 +170,11 @@ cell is still to be allocated. -/
 theorem quiet_dgHop (ny nt : UInt32) (K : Kont) (v : Val) (hK : K.HasHnd ny = false) :
     Quiet (ℍ := ℍ) (hndE (dgH ny nt) (K.plug (performE (.val (opPayload ny 0 v)))))
       ((dgKA ny nt v K).plug (allocE Val.unit)) := by
-  have hk : kappaAt (capTag (qualsVal [.aff]).1 (0 : UInt32).toNat) ny (dgH ny nt) K =
-      kappaCell true ny (dgH ny nt) K := by
+  have hk : kappaAt (capTag (qualsVal [.aff]).1 (0 : UInt32).toNat) (dgH ny nt) K =
+      kappaCell true (dgH ny nt) K := by
     simp [capTag, qualsVal, Qual.tag, kappaAt, Val.pair, Val.i32]
   have hh : ∀ μ, Head (ℍ := ℍ) μ (hndE (dgH ny nt) (K.plug (performE (.val (opPayload ny 0 v))))) μ
-      (.app (.val ⟨tickingClE nt, .lam⟩) (.pair (.val v) (kappaCell true ny (dgH ny nt) K))) := by
+      (.app (.val ⟨tickingClE nt, .lam⟩) (.pair (.val v) (kappaCell true (dgH ny nt) K))) := by
     intro μ
     have h := Head.hop (ℍ := ℍ) μ ny 0 (qualsVal [.aff]) ⟨.lam .unit, .lam⟩
       ⟨clausesE [tickingClE nt], .pair .lam .unit⟩ ⟨tickingClE nt, .lam⟩ v K
@@ -309,7 +309,7 @@ theorem resumeCell_deepGen {ly lt : (orowAlg Ξ).Lab} (hly : Ξ ly.1 = [(.aff, b
   have hqs : qsOf Ξ ly.1 = (qualsVal [.aff]).1 := qsOf_eq hly
   have hreach : (𝕁).RReach ((𝕁).Rtick lt) ((𝕁).rinit ((𝕁).Rtick lt) ((𝕁).deepGen ly lt))
       ((Adequacy.emptyMem.upd 0 Val.unit,
-        resumeE (kappaC true 0 ly.1 (dgH ly.1 lt.1) (bindK (dgN1 ly.1))) .unit), ()) := by
+        resumeE (kappaC true 0 (dgH ly.1 lt.1) (bindK (dgN1 ly.1))) .unit), ()) := by
     -- the catch of the first yield
     obtain ⟨q₀, hc₀, -⟩ := quiet_dgHop (ℍ := ℍ) ly.1 lt.1 (bindK (dgN1 ly.1))
       ⟨.inj₂ .unit, .inj₂ .unit⟩ rfl
@@ -352,13 +352,13 @@ theorem resumeCell_deepGen {ly lt : (orowAlg Ξ).Lab} (hly : Ξ ly.1 = [(.aff, b
       (μ := Adequacy.emptyMem.upd 0 Val.unit) (s := ())
       (lookRun_sound (ℍ := ℍ) 1 ((dgKT ly.1 lt.1 0 (bindK (dgN1 ly.1))).plug .unit))
     have e : lookEnd 1 ((dgKT ly.1 lt.1 0 (bindK (dgN1 ly.1))).plug .unit) =
-        resumeE (kappaC true 0 ly.1 (dgH ly.1 lt.1) (bindK (dgN1 ly.1))) .unit := rfl
+        resumeE (kappaC true 0 (dgH ly.1 lt.1) (bindK (dgN1 ly.1))) .unit := rfl
     rw [e] at h₂
     show (𝕁).RReach ((𝕁).Rtick lt) ((Adequacy.emptyMem, deepGenE ly.1 lt.1 (qsOf Ξ ly.1)), ()) _
     rw [hqs, deepGenE_aff]
     exact ((((h₀.tail ⟨_, hal⟩).trans h₁).tail ⟨_, hio⟩).trans h₂)
   refine ⟨(Adequacy.emptyMem,
-      resumeE (kappaC true 0 ly.1 (dgH ly.1 lt.1) (bindK (dgN1 ly.1))) .unit), 0, .hole,
+      resumeE (kappaC true 0 (dgH ly.1 lt.1) (bindK (dgN1 ly.1))) .unit), 0, .hole,
     (⟨.lam .unit, .lam⟩, [⟨tickingClE lt.1, .lam⟩]), bindK (dgN1 ly.1), (𝕁).unitV, hℓ,
     ⟨(𝕁).deepGen ly lt, _, (𝕁).Rtick lt, (), A.EffectSystem.rtick_respects ((sig_tick_iff lt).mpr hlt),
       der_deepGen_J₁ hly hlt hne, hreach⟩, ?_⟩

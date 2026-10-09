@@ -8,7 +8,7 @@ import Targets.A.UnaryLaws
 The machine layer the bridges and the statement checks read, at Core σ=[]:
 
 * the label of each head step (`labelOf_tau_of`, `labelOf_fire`, `labelOf_uthen`,
-  `labelOf_cfret`, `labelOf_cferr`);
+  `labelOf_cfret`, `labelOf_cferr`, `labelOf_cfcancel`);
 * **determinism** (`det_ourInst`, `rstep_det`): a step whose redex allocates nothing is the only
   step of its configuration, under every runner;
 * a run `look` computes is a path of `ourInst` (`rpath_chainPath`), and from a configuration
@@ -64,8 +64,9 @@ def finHead : Expr → Bool
 
 theorem labelOf_tau_of {a : Expr} (h : finHead a = false) : labelOf RF Ξ a = .tau := by
   unfold labelOf
-  rw [dif_neg, if_neg, dif_neg]
+  rw [dif_neg, if_neg, dif_neg, dif_neg]
   · rintro ⟨s, K, m, j, w, rfl⟩; simp [finHead, cfinE] at h
+  · rintro ⟨s, K, err, rfl⟩; simp [finHead, cfinE] at h
   · rintro ⟨s, w, rfl⟩; simp [finHead, cfinE] at h
   · rintro ⟨N, D, e, rfl, -⟩; simp [finHead, ubindE] at h
 
@@ -90,8 +91,9 @@ theorem labelOf_fire {N D : Val} {e : Expr} (he : ¬ IsVal e) :
 
 theorem labelOf_uthen (N D w : Val) : labelOf RF Ξ (ubindE (Val.pair N D) (.val w)) = .tau := by
   unfold labelOf
-  rw [dif_neg, if_neg, dif_neg]
+  rw [dif_neg, if_neg, dif_neg, dif_neg]
   · rintro ⟨s, K, m, j, w', h⟩; simp [ubindE, cfinE] at h
+  · rintro ⟨s, K, err, h⟩; simp [ubindE, cfinE] at h
   · rintro ⟨s, w', h⟩; simp [ubindE, cfinE] at h
   · rintro ⟨N', D', e, h, he⟩
     simp only [ubindE, Expr.app.injEq, true_and] at h
@@ -102,19 +104,37 @@ theorem labelOf_cfret (s w : Val) : labelOf RF Ξ (cfinE s (.val w)) = .finEnd n
   rw [dif_neg, if_pos ⟨s, w, rfl⟩]
   rintro ⟨N, D, e, h, -⟩; simp [ubindE, cfinE] at h
 
-theorem labelOf_cferr (s : Val) (K : Kont) (m j : UInt32) (w : Val) :
+theorem labelOf_cferr (s : Val) (K : Kont) {m : UInt32} (hm : m ≠ 0) (j : UInt32) (w : Val) :
     labelOf RF Ξ (cfinE s (K.plug (raiseE (.val (opPayload m j w))))) =
       .finEnd (errOf RF Ξ m j w) := by
   unfold labelOf
   have h : ∃ (s' : Val) (K' : Kont) (m' j' : UInt32) (w' : Val),
       cfinE s (K.plug (raiseE (.val (opPayload m j w)))) =
         cfinE s' (K'.plug (raiseE (.val (opPayload m' j' w')))) := ⟨s, K, m, j, w, rfl⟩
-  rw [dif_neg, if_neg, dif_pos h]
+  rw [dif_neg, if_neg, dif_neg, dif_pos h]
   · have hs := Classical.choose_spec (Classical.choose_spec (Classical.choose_spec
       (Classical.choose_spec (Classical.choose_spec h))))
     obtain ⟨-, hp⟩ := plug_raise_inj (cfinE_inj hs).2
     obtain ⟨hm, hj, hw⟩ := opPayload_inj hp
     rw [← hw, ← hj, ← hm]
+  · rintro ⟨s', K', err, h'⟩
+    obtain ⟨-, hp⟩ := plug_raise_inj (cfinE_inj h').2
+    exact hm (opPayload_inj hp).1
+  · rintro ⟨s', w', h'⟩
+    exact plug_raise_ne_val K _ w' (cfinE_inj h').2
+  · rintro ⟨N, D, e, h', -⟩; simp [ubindE, cfinE] at h'
+
+theorem labelOf_cfcancel (s : Val) (K : Kont) (err : Option Val) :
+    labelOf RF Ξ (cfinE s (K.plug (raiseE (.val (cancelVal err))))) =
+      .finEnd (keptErrOf RF Ξ err) := by
+  unfold labelOf
+  have h : ∃ (s' : Val) (K' : Kont) (err' : Option Val),
+      cfinE s (K.plug (raiseE (.val (cancelVal err)))) =
+        cfinE s' (K'.plug (raiseE (.val (cancelVal err')))) := ⟨s, K, err, rfl⟩
+  rw [dif_neg, if_neg, dif_pos h]
+  · have hs := Classical.choose_spec (Classical.choose_spec (Classical.choose_spec h))
+    obtain ⟨-, hp⟩ := plug_raise_inj (cfinE_inj hs).2
+    rw [← cancelVal_inj hp]
   · rintro ⟨s', w', h'⟩
     exact plug_raise_ne_val K _ w' (cfinE_inj h').2
   · rintro ⟨N, D, e, h', -⟩; simp [ubindE, cfinE] at h'
@@ -397,13 +417,13 @@ def resumeShape : Expr → Bool
 
 theorem resumeShape_resumeE (k w : Expr) : resumeShape (resumeE k w) = true := rfl
 
-/-- `cancel κ` at a continuation `κ = kappa n H K`: `κ (inj₂ ())`. -/
+/-- `cancel κ` at a continuation `κ = kappa H K`: `κ (inj₂ ())`. -/
 def kappaCancelShape : Expr → Bool
   | .app (.lam (.case (.var 0) _ _)) (.inj₂ .unit) => true
   | _ => false
 
-theorem kappaCancelShape_cancelE (n : UInt32) (H : Val) (K : Kont) :
-    kappaCancelShape (cancelE (kappa n H K)) = true := rfl
+theorem kappaCancelShape_cancelE (H : Val) (K : Kont) :
+    kappaCancelShape (cancelE (kappa H K)) = true := rfl
 
 /-- `perform p`. -/
 def performShape : Expr → Bool
@@ -980,9 +1000,9 @@ theorem hndVal_of_live (hL : LiveOK (ℍ := ℍ) RF Ξ J) {c : Heap × Expr}
 
 
 /-- Resuming `κ` at `w` reaches `hnd H K[w]`: `ewp_kappa_resume`'s four steps. -/
-theorem kappa_resume_steps {μ : Heap} (K₀ : Kont) (n : UInt32) (H : Val) (K : Kont) (w : Val) :
+theorem kappa_resume_steps {μ : Heap} (K₀ : Kont) (H : Val) (K : Kont) (w : Val) :
     (ourInst (ℍ := ℍ) RF Ξ J).PureSteps
-      (μ, K₀.plug (.app (.app (kappa n H K) (.val (Val.inj₁ .unit))) (.val w)))
+      (μ, K₀.plug (.app (.app (kappa H K) (.val (Val.inj₁ .unit))) (.val w)))
       (μ, K₀.plug (hndE H (K.plug (.val w)))) := by
   refine .trans (pureSteps_head K₀ (.appL .hole w) (Head.beta μ _ _)) ?_
   refine .trans (pureSteps_head K₀ (.appL .hole w) (Head.case₁ μ Val.unit _ _)) ?_
@@ -1004,28 +1024,17 @@ theorem kappa_resume_steps {μ : Heap} (K₀ : Kont) (n : UInt32) (H : Val) (K :
   rw [show (0 + 1 : Nat) = 1 from rfl, show (0 + 1 + 1 : Nat) = 2 from rfl, e]
   rfl
 
-/-- Cancelling `κ` reaches `ccatch (hnd H K[raise (0, (0, (N, none)))])`: `ewp_kappa_cancel`'s
-three steps. -/
-theorem kappa_cancel_steps {μ : Heap} (K₀ : Kont) (n : UInt32) (H : Val) (K : Kont) :
+/-- Cancelling `κ` reaches `ccatch (K†[raise (0, (0, none))])`: `ewp_kappa_cancel`'s three
+steps. -/
+theorem kappa_cancel_steps {μ : Heap} (K₀ : Kont) (H : Val) (K : Kont) :
     (ourInst (ℍ := ℍ) RF Ξ J).PureSteps
-      (μ, K₀.plug (.app (kappa n H K) (.val (Val.inj₂ .unit))))
-      (μ, K₀.plug (Targets.cancelOf n H K)) := by
+      (μ, K₀.plug (.app (kappa H K) (.val (Val.inj₂ .unit))))
+      (μ, K₀.plug (Targets.cancelOf K)) := by
   refine .trans (pureSteps_head K₀ .hole (Head.beta μ _ _)) ?_
   refine .trans (pureSteps_head K₀ .hole (Head.case₂ μ Val.unit _ _)) ?_
   refine .trans (pureSteps_head K₀ .hole (Head.seq μ _)) ?_
-  have e : ∀ (s u : Val), Expr.subst 0 u (Expr.subst 1 s
-      (ccatchE (hndE (Val.shift 2 0 H) ((Kont.shift 2 0 K).plug
-        (raiseE (.val (cancelVal (n :: K.hndNames) none))))))) =
-      ccatchE (hndE H (K.plug (raiseE (.val (cancelVal (n :: K.hndNames) none))))) := by
-    intro s u
-    simp only [ccatchE, hndE, Expr.subst, Expr.val, Val.val_shift]
-    rw [Expr.subst_shift 1 0 1 s H.1 (by omega) (by omega),
-      Expr.subst_shift 0 0 0 u H.1 (by omega) (by omega), Expr.shift_zero,
-      plug_shift_subst 1 K 0 1 s _ (by omega) (by omega),
-      plug_shift_subst 0 K 0 0 u _ (by omega) (by omega), Kont.shift_zero]
-    simp only [raiseE, Expr.subst, Expr.val, subst_cancelVal_none, Val.prim]
   simp only [Kont.plug]
-  rw [show (0 + 1 : Nat) = 1 from rfl, e]
+  rw [show (0 + 1 : Nat) = 1 from rfl, kappa_cancel_subst]
   rfl
 
 
@@ -1070,7 +1079,7 @@ theorem resumeE_steps {μ : Heap} (K₀ : Kont) (k : Expr) (w : Val) :
   exact h
 
 theorem captureE_of_val {n : UInt32} {qs r : Expr} {cs : List Expr} (K : Kont)
-    (h : IsVal (hndValE n qs r cs)) : captureE n qs r cs K = kappa n ⟨_, h⟩ K := by
+    (h : IsVal (hndValE n qs r cs)) : captureE n qs r cs K = kappa ⟨_, h⟩ K := by
   unfold captureE; rw [dif_pos h]
 
 theorem captureE_of_not_val {n : UInt32} {qs r : Expr} {cs : List Expr} (K : Kont)
@@ -1078,8 +1087,8 @@ theorem captureE_of_not_val {n : UInt32} {qs r : Expr} {cs : List Expr} (K : Kon
   unfold captureE; rw [dif_neg h]
 
 theorem cancelOfE_of_val {n : UInt32} {qs r : Expr} {cs : List Expr} (K : Kont)
-    (h : IsVal (hndValE n qs r cs)) : cancelOfE n qs r cs K = Targets.cancelOf n ⟨_, h⟩ K := by
-  unfold cancelOfE; rw [dif_pos h]
+    (h : IsVal (hndValE n qs r cs)) : cancelOfE n qs r cs K = Targets.cancelOf K := by
+  unfold cancelOfE; rw [if_pos h]
 
 /-- **Every resuming operation of `Ξ` is unrestricted**: its `κ` owns no cell (SPEC §25).  At a
 linear or affine operation the catch is followed by the cell's allocation, which changes the
@@ -1190,13 +1199,13 @@ theorem catch_unr_ourInst (hL : LiveOK (ℍ := ℍ) RF Ξ J)
     (.pair v.1 (captureE (RF.name Ξ l) (qsOf Ξ (RF.name Ξ l)) r.1 (cs.map Subtype.val) K)))) _
   rw [captureE_of_val K hH]
   have hk : kappaAt (capTag (qualsVal ((Ξ (RF.name Ξ l)).map Prod.fst)).1 (UInt32.ofNat i).toNat)
-      (RF.name Ξ l) (hndVal (RF.name Ξ l) (qualsVal ((Ξ (RF.name Ξ l)).map Prod.fst))
+      (hndVal (RF.name Ξ l) (qualsVal ((Ξ (RF.name Ξ l)).map Prod.fst))
         ⟨r.1, hr⟩ ⟨_, hcs⟩) K =
-      kappa (RF.name Ξ l) ⟨_, hH⟩ K := by
-    change kappaAt (capTag (qsOf Ξ (RF.name Ξ l)) (UInt32.ofNat i).toNat) _ _ K = _
+      kappa ⟨_, hH⟩ K := by
+    change kappaAt (capTag (qsOf Ξ (RF.name Ξ l)) (UInt32.ofNat i).toNat) _ K = _
     rw [htag']; rfl
   rw [hk]
-  exact appE_steps K₀ cl.1 ⟨.pair v.1 (kappa _ _ K), .pair hv .lam⟩
+  exact appE_steps K₀ cl.1 ⟨.pair v.1 (kappa _ K), .pair hv .lam⟩
 
 /-- **S4's catch law with no cell**, at an effect context whose resuming operations are
 unrestricted (`CatchUnr`): there every catch hands `kappa`, which owns no cell, and keeps the
@@ -1260,7 +1269,7 @@ theorem resumeLaw_ourInst (hL : LiveOK (ℍ := ℍ) RF Ξ J) : (ourInst (ℍ := 
       (μ, K₀.plug ((handleK (RF.name Ξ l) (qsOf Ξ (RF.name Ξ l)) H.1.1
         (H.2.map Subtype.val)).plug (K.plug w.1)))
     rw [captureE_of_val K hH] at hst ⊢
-    exact hst.trans (kappa_resume_steps K₀ _ ⟨_, hH⟩ K ⟨w.1, hw⟩)
+    exact hst.trans (kappa_resume_steps K₀ ⟨_, hH⟩ K ⟨w.1, hw⟩)
   · exfalso
     have hl' := live_of_pureSteps hlive hst
     rw [captureE_of_not_val K hH] at hl'
@@ -1283,7 +1292,7 @@ theorem cancelLaw_ourInst (hL : LiveOK (ℍ := ℍ) RF Ξ J) : (ourInst (ℍ := 
         (H.2.map Subtype.val) K)))
       (μ, K₀.plug (cancelOfE (RF.name Ξ l) (qsOf Ξ (RF.name Ξ l)) H.1.1 (H.2.map Subtype.val) K))
     rw [captureE_of_val K hH, cancelOfE_of_val K hH]
-    exact kappa_cancel_steps K₀ _ _ K
+    exact kappa_cancel_steps K₀ _ K
   · exfalso
     have hg := (hL _ hlive).2
     change GoesOn RF Ξ (μ, K₀.plug (cancelE (captureE (RF.name Ξ l) (qsOf Ξ (RF.name Ξ l)) H.1.1

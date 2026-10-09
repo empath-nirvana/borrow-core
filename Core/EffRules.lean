@@ -105,10 +105,10 @@ theorem ewp_perform_here {T : OpTab} {n i : UInt32} {en : OpEnt} (hT : T n i = s
   refine ewp_fold (opTable_mono T) (wpG_here _ _ _ ρ (Or.inr (Or.inl
     ⟨.hole, n, i, v, en, pure_sep_mk ⟨rfl, rfl, hT, ha⟩
       ⟨ρ, PMap.empty, ResU.comp_empty_right ρ, h, ?_⟩⟩)))
-  refine ⟨fun _ => rfl, fun ls' _ => ⟨fun w σ₁ σ₂ hB hc => ?_, fun _ N _ _ => ?_⟩⟩
+  refine ⟨fun _ => rfl, fun ls' _ => ⟨fun w σ₁ σ₂ hB hc => ?_, fun _ => ?_⟩⟩
   · rw [eq_of_compS_empty_left hc]
     exact ewp_val (opTable_mono T) (hQ _ _ _ hB)
-  · refine (ewp_abortive (cancelTab_abortive T N)).mpr (wpG_here _ _ _ _ (Or.inr ?_))
+  · refine (ewp_abortive (cancelTab_abortive _)).mpr (wpG_here _ _ _ _ (Or.inr ?_))
     exact ⟨.hole, none, pure_sep_mk ⟨rfl, rfl⟩
       ⟨PMap.empty, PMap.empty, ResU.comp_empty_right _, ⟨rfl, trivial⟩, noOwn_empty⟩⟩
 
@@ -126,33 +126,26 @@ theorem ewp_raise_here {T : OpTab} {n i : UInt32} {en : OpEnt} (hT : T n i = som
 /-- `T` is included in `T′`: every entry of `T` is `T′`'s. -/
 def OpTab.Le (T T' : OpTab) : Prop := ∀ n i en, T n i = some en → T' n i = some en
 
-theorem errOk_le {T T' : OpTab} (hT : T.Le T') {N : List UInt32} {ls : List SRec} :
-    ∀ {err : Option Val} {ρ : WRes}, errOk T N ls err ρ → errOk T' N ls err ρ
+theorem errOk_le {T T' : OpTab} (hT : T.Le T') {ls : List SRec} :
+    ∀ {err : Option Val} {ρ : WRes}, errOk T ls err ρ → errOk T' ls err ρ
   | none, _, h => h
   | some _, _, ⟨m, j, w, en, h⟩ => by
-      obtain ⟨⟨h₁, h₂, h₃, h₄⟩, h₅⟩ := pure_sep_iff.mp h
-      exact ⟨m, j, w, en, pure_sep_mk ⟨h₁, h₂, hT _ _ _ h₃, h₄⟩ h₅⟩
+      obtain ⟨⟨h₁, h₃, h₄⟩, h₅⟩ := pure_sep_iff.mp h
+      exact ⟨m, j, w, en, pure_sep_mk ⟨h₁, hT _ _ _ h₃, h₄⟩ h₅⟩
 
-theorem cancelTab_le {T T' : OpTab} (hT : T.Le T') {N : List UInt32} {ls : List SRec} {t : Expr}
-    {Φ Φ' : List SRec → Expr → WProp} {ρ : WRes} (h : cancelTab T N ls t Φ ρ) :
-    cancelTab T' N ls t Φ' ρ := by
+theorem cancelTab_le {T T' : OpTab} (hT : T.Le T') {ls : List SRec} {t : Expr}
+    {Φ Φ' : List SRec → Expr → WProp} {ρ : WRes} (h : cancelTab T ls t Φ ρ) :
+    cancelTab T' ls t Φ' ρ := by
   obtain ⟨K, err, h⟩ := h
   obtain ⟨hp, ρ₁, ρ₂, hc, he, hn⟩ := pure_sep_iff.mp h
   exact ⟨K, err, pure_sep_mk hp ⟨ρ₁, ρ₂, hc, errOk_le hT he, hn⟩⟩
-
-theorem cancelOwed_le {T T' : OpTab} (hT : T.Le T') {n : UInt32} {ls : List SRec} {K : Kont}
-    {ρ : WRes} (h : cancelOwed T n ls K ρ) : cancelOwed T' n ls K ρ :=
-  fun N hn hK => ewp_mono (cancelTab_abortive T' N).mono (fun _ _ _ _ h => cancelTab_le hT h)
-    (fun _ _ _ h => h) (h N hn hK)
 
 /-- The protocol table grows with the operation table. -/
 theorem opTable_le {T T' : OpTab} (hT : T.Le T') {ls : List SRec} {t : Expr}
     {Φ : List SRec → Expr → WProp} {ρ : WRes} (h : opTable T ls t Φ ρ) : opTable T' ls t Φ ρ := by
   rcases h with ⟨K, n, i, v, en, h⟩ | ⟨K, n, i, v, en, h⟩
-  · obtain ⟨⟨h₁, h₂, h₃, h₄⟩, ρ₁, ρ₂, hc, hA, hu, hk⟩ := pure_sep_iff.mp h
-    exact Or.inl ⟨K, n, i, v, en, pure_sep_mk ⟨h₁, h₂, hT _ _ _ h₃, h₄⟩
-      ⟨ρ₁, ρ₂, hc, hA, hu, fun ls' he => ⟨(hk ls' he).1,
-        fun hq => cancelOwed_le hT ((hk ls' he).2 hq)⟩⟩⟩
+  · obtain ⟨⟨h₁, h₂, h₃, h₄⟩, h₅⟩ := pure_sep_iff.mp h
+    exact Or.inl ⟨K, n, i, v, en, pure_sep_mk ⟨h₁, h₂, hT _ _ _ h₃, h₄⟩ h₅⟩
   · obtain ⟨⟨h₁, h₂, h₃, h₄⟩, h₅⟩ := pure_sep_iff.mp h
     exact Or.inr ⟨K, n, i, v, en, pure_sep_mk ⟨h₁, h₂, hT _ _ _ h₃, h₄⟩ h₅⟩
 
@@ -166,17 +159,17 @@ theorem ewp_sub {T T' : OpTab} (hT : T.Le T') {ls : List SRec} {e : Expr}
 
 /-- A cancel run under a context that catches nothing: the context and a frame holding nothing
 owned are left behind at the cancel's end. -/
-theorem cancel_frame {T T' : OpTab} {N : List UInt32} (K : Kont) (hK : K.Catches 0 = false)
-    (hT : ∀ ls err ρ, errOk T N ls err ρ → errOk T' N ls err ρ)
+theorem cancel_frame {T T' : OpTab} (K : Kont) (hK : K.Catches 0 = false)
+    (hT : ∀ ls err ρ, errOk T ls err ρ → errOk T' ls err ρ)
     {ls : List SRec} {e : Expr} {ρ σ ρ' : WRes}
-    (h : ewpTS ls e (cancelTab T N) (fun _ _ _ => False) ρ) (hσ : NoOwn σ)
+    (h : ewpTS ls e (cancelTab T) (fun _ _ _ => False) ρ) (hσ : NoOwn σ)
     (hc : ResU.CompS ρ σ ρ') :
-    ewpTS ls (K.plug e) (cancelTab T' N) (fun _ _ _ => False) ρ' := by
-  refine (ewp_abortive (cancelTab_abortive T' N)).mpr ?_
+    ewpTS ls (K.plug e) (cancelTab T') (fun _ _ _ => False) ρ' := by
+  refine (ewp_abortive (cancelTab_abortive T')).mpr ?_
   refine wpG_bind K e ls _ ρ' ?_
-  have h₁ := wpG_frame (e := e) (Q := ewpPost (cancelTab T N) fun _ _ _ => False)
+  have h₁ := wpG_frame (e := e) (Q := ewpPost (cancelTab T) fun _ _ _ => False)
     (fun _ => fun τ => NoOwn τ) (fun _ _ _ h => h) ρ'
-    ⟨ρ, σ, hc, (ewp_abortive (cancelTab_abortive T N)).mp h, hσ⟩
+    ⟨ρ, σ, hc, (ewp_abortive (cancelTab_abortive T)).mp h, hσ⟩
   refine wpG_mono (fun ls' t τ ht => ?_) h₁
   obtain ⟨τ₁, τ₂, hcτ, hp, hn⟩ := ht
   rcases hp with ⟨_, _, hv⟩ | ⟨K', err, hs⟩
@@ -192,8 +185,7 @@ theorem cancel_frame {T T' : OpTab} {N : List UInt32} (K : Kont) (hK : K.Catches
 of the computation in the hole: resumed with it, and, at a cancel or an abortive stop, left
 behind, holding nothing owned.  At an unrestricted operation the frame is empty.  `[spec §19]` -/
 theorem ewp_frame_plain (T : OpTab) (K : Kont) (hH : ∀ n, K.HasHnd n = false)
-    (hC : ∀ n, K.Catches n = false) (hN : K.hndNames = [])
-    (Fr : List SRec → WProp)
+    (hC : ∀ n, K.Catches n = false) (Fr : List SRec → WProp)
     (hFs : ∀ ls ls', (∀ x, x ∈ ls' ↔ x ∈ ls) → Entails (Fr ls) (Fr ls'))
     (hFe : ∀ ls ls' ρ, Ext ls ls' ρ → Fr ls ρ → Fr ls' ρ)
     (hW : ∀ n i en, T n i = some en → (en.q ≠ .lin ∨ en.abort = true) →
@@ -229,10 +221,9 @@ theorem ewp_frame_plain (T : OpTab) (K : Kont) (hH : ∀ n, K.HasHnd n = false)
       obtain ⟨z, hz, hcz⟩ := compS_exch hk' hcτ
       rw [Kont.plug_comp]
       exact (hcont ls'' (he.left hk')).1 w τ₁ z hB hz (hFe ls' ls'' σ₂ (he.right hk') hF') hcz
-    · intro N hn hNK
-      have hc' := (hcont ls'' (he.left hk')).2 hq N hn
-        (fun m hm => hNK m (by rw [hndNames_comp, hN]; exact hm))
-      rw [Kont.plug_comp]
+    · have hc' := (hcont ls'' (he.left hk')).2 hq
+      show ewpTS _ _ _ _ _
+      rw [dead_comp, dead_plain K hH (hC 0), Kont.plug_comp]
       exact cancel_frame K (hC 0) (fun _ _ _ h => h) hc'
         (hW n i en hT (Or.inl hq) ls' σ₂ hF') hk'
   · -- a `raise`: the frame is left behind
@@ -260,52 +251,51 @@ theorem opTable_abortive {T : OpTab} (hA : T.AbortOnly) : (opTable T).Abortive :
     rw [hA n i en hT] at ha; exact absurd ha (by simp)
   · exact Or.inr h
 
-theorem errOk_local {T : OpTab} (hL : T.Local) {N : List UInt32} {ls ls' : List SRec} {ρ : WRes}
-    (he : Ext ls ls' ρ) : ∀ {err : Option Val}, errOk T N ls err ρ → errOk T N ls' err ρ
+theorem errOk_local {T : OpTab} (hL : T.Local) {ls ls' : List SRec} {ρ : WRes}
+    (he : Ext ls ls' ρ) : ∀ {err : Option Val}, errOk T ls err ρ → errOk T ls' err ρ
   | none, h => h
   | some _, ⟨m, j, w, en, h⟩ => by
-      obtain ⟨⟨h₁, h₂, h₃, h₄⟩, hA, hn⟩ := pure_sep_iff.mp h
-      obtain ⟨hρ, -⟩ := pure_sep_iff.mp h
-      exact ⟨m, j, w, en, pure_sep_mk ⟨h₁, h₂, h₃, h₄⟩
+      obtain ⟨⟨h₁, h₃, h₄⟩, hA, hn⟩ := pure_sep_iff.mp h
+      exact ⟨m, j, w, en, pure_sep_mk ⟨h₁, h₃, h₄⟩
         ⟨(hL m j en h₃ ls ls' w ρ he).1 hA, hn⟩⟩
 
 /-- A cancel stop absorbs garbage. -/
-theorem cancelTab_absorb {T : OpTab} {N : List UInt32} {ls : List SRec} {t : Expr}
-    {Φ : List SRec → Expr → WProp} {ρ₁ ρ₂ ρ : WRes} (h : cancelTab T N ls t Φ ρ₁) (hn : NoOwn ρ₂)
-    (hc : ResU.CompS ρ₁ ρ₂ ρ) : cancelTab T N ls t Φ ρ := by
+theorem cancelTab_absorb {T : OpTab} {ls : List SRec} {t : Expr}
+    {Φ : List SRec → Expr → WProp} {ρ₁ ρ₂ ρ : WRes} (h : cancelTab T ls t Φ ρ₁) (hn : NoOwn ρ₂)
+    (hc : ResU.CompS ρ₁ ρ₂ ρ) : cancelTab T ls t Φ ρ := by
   obtain ⟨K, err, h⟩ := h
   obtain ⟨hp, τa, τb, hcab, he, hnb⟩ := pure_sep_iff.mp h
   obtain ⟨z, hz, hcz⟩ := compS_reassoc hcab hc
   exact ⟨K, err, pure_sep_mk hp ⟨τa, z, hcz, he, noOwn_compS hz hnb hn⟩⟩
 
-/-- **A finaliser under a cancel** (`cfin`).  `D ()` runs at an abortive-only row inside the
-cancel's row; its answer holds nothing owned.  Its first error of a name outside the region is
-kept in the cancel's state and the others are suppressed; then the cancel goes on.
-`[spec §19]` -/
+/-- **A finaliser under a cancel** (`cfin`).  `D ()` runs at an abortive-only row of nonzero
+names inside the cancel's error table; its answer holds nothing owned.  The cancel keeps its first
+error, and a later one loses to it; then the cancel goes on.  `[spec §19]` -/
 theorem ewp_cfin {T Ta : OpTab} (hA : Ta.AbortOnly) (hle : Ta.Le T) (hL : T.Local)
-    {N : List UInt32} {err : Option Val} {ls : List SRec} {d : Expr}
+    (h0 : ∀ j, Ta 0 j = none) {err : Option Val} {ls : List SRec} {d : Expr}
     {Qd : List SRec → Val → WProp} (hQd : ∀ ls v ρ, Qd ls v ρ → NoOwn ρ) {ρd ρe ρ : WRes}
-    (hD : ewpTS ls d (opTable Ta) Qd ρd) (he : errOk T N ls err ρe) (hc : ResU.CompS ρd ρe ρ) :
-    ewpTS ls (cfinE (cancelVal N err) d) (cancelTab T N) (fun _ _ _ => False) ρ := by
-  refine (ewp_abortive (cancelTab_abortive T N)).mpr ?_
-  refine wpG_bind (.appR (.app (.val (.prim .cfin)) (.val (cancelVal N err))) .hole) d ls _ ρ ?_
-  have h₁ := wpG_frame (e := d) (fun ls => errOk T N ls err)
+    (hD : ewpTS ls d (opTable Ta) Qd ρd) (he : errOk T ls err ρe) (hc : ResU.CompS ρd ρe ρ) :
+    ewpTS ls (cfinE (cancelVal err) d) (cancelTab T) (fun _ _ _ => False) ρ := by
+  refine (ewp_abortive (cancelTab_abortive T)).mpr ?_
+  refine wpG_bind (.appR (.app (.val (.prim .cfin)) (.val (cancelVal err))) .hole) d ls _ ρ ?_
+  have h₁ := wpG_frame (e := d) (fun ls => errOk T ls err)
     (fun ls' hs τ h => errOk_local hL (ext_of_same hs τ) h) ρ
     ⟨ρd, ρe, hc, (ewp_abortive (opTable_abortive hA)).mp hD, he⟩
   refine wpG_mono (fun ls' t σ ht => ?_) h₁
   obtain ⟨σ₁, σ₂, hcσ, hp, he'⟩ := ht
   rcases hp with ⟨w, rfl, hw⟩ | hp
   · -- the finaliser finished: the cancel goes on with its state
-    refine wpG_head (fun μ => Head.cfret μ N err w) rfl _ _ σ ?_
+    refine wpG_head (fun μ => Head.cfret μ err w) rfl _ _ σ ?_
     refine wpG_here _ _ _ σ (Or.inr ⟨.hole, err, pure_sep_mk ⟨rfl, rfl⟩
       ⟨σ₂, σ₁, ResU.CompS.comm hcσ, he', hQd _ _ _ hw⟩⟩)
   rcases hp with ⟨K, n, i, v, en, hp⟩ | ⟨K, m, j, w, en, hp⟩
   · obtain ⟨⟨-, -, hT, ha⟩, -⟩ := pure_sep_iff.mp hp
     rw [hA n i en hT] at ha; exact absurd ha (by simp)
-  -- the finaliser raised: keep the error or suppress it
+  -- the finaliser raised: the first error is kept
   obtain ⟨⟨rfl, hK, hT, ha⟩, τa, τb, hcab, ⟨hPA, hnA⟩, hnb⟩ := pure_sep_iff.mp hp
-  refine wpG_head (fun μ => Head.cferr μ N err m j w K hK) rfl _ _ σ ?_
-  refine wpG_here _ _ _ σ (Or.inr ⟨.hole, errNext N err m j w, pure_sep_mk ⟨rfl, rfl⟩ ?_⟩)
+  have hm : m ≠ 0 := fun h => by subst h; rw [h0 j] at hT; exact absurd hT (by simp)
+  refine wpG_head (fun μ => Head.cferr μ err m j w K hm hK) rfl _ _ σ ?_
+  refine wpG_here _ _ _ σ (Or.inr ⟨.hole, errNext err m j w, pure_sep_mk ⟨rfl, rfl⟩ ?_⟩)
   have hnσ₁ : NoOwn σ₁ := noOwn_compS hcab hnA hnb
   cases err with
   | some E =>
@@ -315,20 +305,15 @@ theorem ewp_cfin {T Ta : OpTab} (hA : Ta.AbortOnly) (hle : Ta.Le T) (hL : T.Loca
       subst he''
       have hσ : σ = σ₁ := eq_of_compS_empty_left (ResU.CompS.comm hcσ)
       subst hσ
-      by_cases hm : m ∈ N
-      · simp only [errNext, if_pos hm]
-        exact ⟨PMap.empty, σ, compS_empty_left σ, ⟨rfl, trivial⟩, hnσ₁⟩
-      · simp only [errNext, if_neg hm]
-        exact ⟨τa, τb, hcab, ⟨m, j, w, en, pure_sep_mk ⟨rfl, hm, hle _ _ _ hT, ha⟩ ⟨hPA, hnA⟩⟩,
-          hnb⟩
+      exact ⟨τa, τb, hcab, ⟨m, j, w, en, pure_sep_mk ⟨rfl, hle _ _ _ hT, ha⟩ ⟨hPA, hnA⟩⟩, hnb⟩
 
 /-- A cancel run's `ewpTS` absorbs garbage. -/
-theorem ewp_cancel_absorb {T : OpTab} {N : List UInt32} {ls : List SRec} {e : Expr}
-    {ρ₁ ρ₂ ρ : WRes} (h : ewpTS ls e (cancelTab T N) (fun _ _ _ => False) ρ₁) (hn : NoOwn ρ₂)
-    (hc : ResU.CompS ρ₁ ρ₂ ρ) : ewpTS ls e (cancelTab T N) (fun _ _ _ => False) ρ := by
-  refine (ewp_abortive (cancelTab_abortive T N)).mpr ?_
+theorem ewp_cancel_absorb {T : OpTab} {ls : List SRec} {e : Expr}
+    {ρ₁ ρ₂ ρ : WRes} (h : ewpTS ls e (cancelTab T) (fun _ _ _ => False) ρ₁) (hn : NoOwn ρ₂)
+    (hc : ResU.CompS ρ₁ ρ₂ ρ) : ewpTS ls e (cancelTab T) (fun _ _ _ => False) ρ := by
+  refine (ewp_abortive (cancelTab_abortive T)).mpr ?_
   have h₁ := wpG_frame (e := e) (fun _ => fun τ => NoOwn τ) (fun _ _ _ h => h) ρ
-    ⟨ρ₁, ρ₂, hc, (ewp_abortive (cancelTab_abortive T N)).mp h, hn⟩
+    ⟨ρ₁, ρ₂, hc, (ewp_abortive (cancelTab_abortive T)).mp h, hn⟩
   refine wpG_mono (fun ls' t σ ht => ?_) h₁
   obtain ⟨σ₁, σ₂, hcσ, hp, hn'⟩ := ht
   rcases hp with ⟨_, _, hv⟩ | hp
@@ -339,41 +324,52 @@ theorem ewp_cancel_absorb {T : OpTab} {N : List UInt32} {ls : List SRec} {e : Ex
 abbrev ubindK (Nv Dv : Val) : Kont :=
   .appR (.app (.val (.prim .ubind)) (.val (Val.pair Nv Dv))) .hole
 
-/-- A cancel run through a finaliser frame: the finaliser runs under `cfin` with the frame. -/
-theorem cancel_then {T Ta : OpTab} (hA : Ta.AbortOnly) (hle : Ta.Le T) (hL : T.Local)
-    {N : List UInt32} (Nv Dv : Val) (Fr : List SRec → WProp)
+/-- A finaliser frame stays in a cancelled region. -/
+theorem dead_ubindK (Nv Dv : Val) : (ubindK Nv Dv).dead = ubindK Nv Dv := by
+  simp [Kont.dead, Kont.DeadFrame, Val.pair, Expr.val]
+
+/-- The empty table is abortive-only, and has no entry at the reserved name. -/
+theorem OpTab.empty_abortOnly : OpTab.empty.AbortOnly := fun _ _ _ h => by
+  simp [OpTab.empty] at h
+
+/-- A cancel run through a finaliser frame: the finaliser, which lets no raise escape it (it is at
+the empty table), runs under `cfin` with the frame. -/
+theorem cancel_then {T : OpTab} (hL : T.Local) (Nv Dv : Val) (Fr : List SRec → WProp)
     (hFs : ∀ ls ls', (∀ x, x ∈ ls' ↔ x ∈ ls) → Entails (Fr ls) (Fr ls'))
     {Qd : List SRec → Val → WProp} (hQd : ∀ ls v ρ, Qd ls v ρ → NoOwn ρ)
-    (hD : ∀ ls, Entails (Fr ls) (ewpTS ls (.app (.val Dv) (.val .unit)) (opTable Ta) Qd))
+    (hD : ∀ ls, Entails (Fr ls)
+      (ewpTS ls (.app (.val Dv) (.val .unit)) (opTable OpTab.empty) Qd))
     {ls : List SRec} {e : Expr} {ρ σ ρ' : WRes}
-    (h : ewpTS ls e (cancelTab T N) (fun _ _ _ => False) ρ) (hσ : Fr ls σ)
+    (h : ewpTS ls e (cancelTab T) (fun _ _ _ => False) ρ) (hσ : Fr ls σ)
     (hc : ResU.CompS ρ σ ρ') :
-    ewpTS ls ((ubindK Nv Dv).plug e) (cancelTab T N) (fun _ _ _ => False) ρ' := by
-  refine (ewp_abortive (cancelTab_abortive T N)).mpr ?_
+    ewpTS ls ((ubindK Nv Dv).plug e) (cancelTab T) (fun _ _ _ => False) ρ' := by
+  refine (ewp_abortive (cancelTab_abortive T)).mpr ?_
   refine wpG_bind (ubindK Nv Dv) e ls _ ρ' ?_
   have h₁ := wpG_frame (e := e) Fr (hFs ls) ρ'
-    ⟨ρ, σ, hc, (ewp_abortive (cancelTab_abortive T N)).mp h, hσ⟩
+    ⟨ρ, σ, hc, (ewp_abortive (cancelTab_abortive T)).mp h, hσ⟩
   refine wpG_mono (fun ls' t τ ht => ?_) h₁
   obtain ⟨τ₁, τ₂, hcτ, hp, hF⟩ := ht
   rcases hp with ⟨_, _, hv⟩ | ⟨K', err, hs⟩
   · exact hv.elim
   obtain ⟨⟨rfl, hK'⟩, τa, τb, hcab, he, hnb⟩ := pure_sep_iff.mp hs
-  refine wpG_head (fun μ => Head.ufinC μ Nv Dv N err K' hK') rfl _ _ τ ?_
+  refine wpG_head (fun μ => Head.ufinC μ Nv Dv err K' hK') rfl _ _ τ ?_
   obtain ⟨z, hz, hcz⟩ := compS_exch hcab hcτ
-  exact (ewp_abortive (cancelTab_abortive T N)).mp (ewp_cancel_absorb
-    (ewp_cfin hA hle hL hQd (hD ls' τ₂ hF) he (ResU.CompS.comm hz)) hnb hcz)
+  exact (ewp_abortive (cancelTab_abortive T)).mp (ewp_cancel_absorb
+    (ewp_cfin OpTab.empty_abortOnly (fun _ _ _ h => by simp [OpTab.empty] at h) hL
+      (fun _ => rfl) hQd (hD ls' τ₂ hF) he (ResU.CompS.comm hz)) hnb hcz)
 
 /-- **The finaliser frame around an effectful computation** (`M then x. N unwind D`).  As
 `ewp_frame_plain`, but a cancel or an abortive stop runs the finaliser `D` on the frame instead of
-dropping it: under `cfin` at a cancel, and before the `raise` goes on at an abortive stop.
-`[spec §19]` -/
-theorem ewp_frame_then (T Ta : OpTab) (hA : Ta.AbortOnly) (hle : Ta.Le T) (hL : T.Local)
+dropping it: under `cfin` at a cancel, and before the `raise` goes on at an abortive stop.  The
+finaliser lets no raise escape it: it is at the empty table.  `[spec §19, §24]` -/
+theorem ewp_frame_then (T : OpTab) (hL : T.Local)
     (h0 : ∀ i, T 0 i = none) (Nv Dv : Val) (Fr : List SRec → WProp)
     (hFs : ∀ ls ls', (∀ x, x ∈ ls' ↔ x ∈ ls) → Entails (Fr ls) (Fr ls'))
     (hFe : ∀ ls ls' ρ, Ext ls ls' ρ → Fr ls ρ → Fr ls' ρ)
     (hU : ∀ n i en, T n i = some en → en.q = .unr → ∀ ls ρ, Fr ls ρ → ρ = PMap.empty)
     {Qd : List SRec → Val → WProp} (hQd : ∀ ls v ρ, Qd ls v ρ → v = .unit ∧ NoOwn ρ)
-    (hD : ∀ ls, Entails (Fr ls) (ewpTS ls (.app (.val Dv) (.val .unit)) (opTable Ta) Qd))
+    (hD : ∀ ls, Entails (Fr ls)
+      (ewpTS ls (.app (.val Dv) (.val .unit)) (opTable OpTab.empty) Qd))
     (Q₁ Q : List SRec → Val → WProp)
     (hk : ∀ ls v, Entails (Q₁ ls v ⋆ Fr ls)
       (ewpTS ls ((ubindK Nv Dv).plug (.val v)) (opTable T) Q)) :
@@ -406,12 +402,11 @@ theorem ewp_frame_then (T Ta : OpTab) (hA : Ta.AbortOnly) (hle : Ta.Le T) (hL : 
       obtain ⟨z, hz, hcz⟩ := compS_exch hk' hcτ
       rw [Kont.plug_comp]
       exact (hcont ls'' (he.left hk')).1 w τ₁ z hB hz (hFe ls' ls'' σ₂ (he.right hk') hF') hcz
-    · intro N hn hNK
-      have hc' := (hcont ls'' (he.left hk')).2 hq N hn
-        (fun m hm => hNK m (by rw [hndNames_comp]; exact List.mem_append_right _ hm))
-      rw [Kont.plug_comp]
-      exact cancel_then hA hle hL Nv Dv Fr hFs (fun _ _ _ h => (hQd _ _ _ h).2) hD hc'
-        (hFe ls' ls'' σ₂ (he.right hk') hF') hk'
+    · have hc' := (hcont ls'' (he.left hk')).2 hq
+      show ewpTS _ _ _ _ _
+      rw [dead_comp, dead_ubindK, Kont.plug_comp]
+      exact cancel_then (fun _ _ _ h => by simp [OpTab.empty] at h) Nv Dv Fr hFs
+        (fun _ _ _ h => (hQd _ _ _ h).2) hD hc' (hFe ls' ls'' σ₂ (he.right hk') hF') hk'
   · -- a `raise`: the finaliser runs, then the `raise` goes on
     obtain ⟨⟨rfl, hK₁, hT, ha⟩, ρa, ρn, hcan, ⟨hPA, hnA⟩, hn⟩ := pure_sep_iff.mp hp
     have hn0 : n ≠ 0 := fun h => by subst h; rw [h0 i] at hT; exact absurd hT (by simp)
@@ -423,7 +418,8 @@ theorem ewp_frame_then (T Ta : OpTab) (hA : Ta.AbortOnly) (hle : Ta.Le T) (hL : 
       exact ⟨τa, τb, hcab, ⟨(hL n i en hT ls' ls'' v τa (ext_of_same hs τa)).1 hPA', hnA'⟩, hnb⟩
     have h₂ := wpG_frame (e := .app (.val Dv) (.val .unit)) R hRs σ
       ⟨σ₂, σ₁, ResU.CompS.comm hcσ,
-        (ewp_abortive (opTable_abortive hA)).mp (hD ls' σ₂ hF'), ρa, ρn, hcan, ⟨hPA, hnA⟩, hn⟩
+        (ewp_abortive (opTable_abortive OpTab.empty_abortOnly)).mp (hD ls' σ₂ hF'), ρa, ρn, hcan,
+        ⟨hPA, hnA⟩, hn⟩
     refine wpG_mono (fun ls'' t τ ht => ?_) h₂
     obtain ⟨τ₁, τ₂, hcτ, hp, ra, rn, hcr, ⟨hPA', hnA'⟩, hnr⟩ := ht
     rcases hp with ⟨w, rfl, hw⟩ | hp
@@ -434,16 +430,9 @@ theorem ewp_frame_then (T Ta : OpTab) (hA : Ta.AbortOnly) (hle : Ta.Le T) (hL : 
       exact wpG_here _ _ _ τ (Or.inr (Or.inr ⟨.hole, n, i, v, en,
         pure_sep_mk ⟨rfl, rfl, hT, ha⟩
           ⟨ra, z, hcz, ⟨hPA', hnA'⟩, noOwn_compS hz hnw hnr⟩⟩))
-    rcases hp with ⟨K', m, j, w, en', hp⟩ | ⟨K', m, j, w, en', hp⟩
-    · obtain ⟨⟨-, -, hT', ha'⟩, -⟩ := pure_sep_iff.mp hp
-      rw [hA m j en' hT'] at ha'; exact absurd ha' (by simp)
-    -- the finaliser raised: its error supersedes the pending `raise`
-    obtain ⟨⟨rfl, hK', hT', ha'⟩, qa, qn, hcq, ⟨hPq, hnq⟩, hnqn⟩ := pure_sep_iff.mp hp
-    refine wpG_here _ _ _ τ (Or.inr (Or.inr ⟨.seq K' (raiseE (.val (opPayload n i v))), m, j, w, en',
-      pure_sep_mk ⟨rfl, by simpa [Kont.Catches] using hK', hle _ _ _ hT', ha'⟩ ?_⟩))
-    obtain ⟨z, hz, hcz⟩ := compS_reassoc hcq hcτ
-    exact ⟨qa, z, hcz, ⟨hPq, hnq⟩,
-      noOwn_compS hz hnqn (noOwn_compS hcr hnA' hnr)⟩
+    exfalso
+    rcases hp with ⟨K', m, j, w, en', hp⟩ | ⟨K', m, j, w, en', hp⟩ <;>
+      obtain ⟨⟨-, -, hT', -⟩, -⟩ := pure_sep_iff.mp hp <;> simp [OpTab.empty] at hT'
 
 /-! ### The continuation `κ` -/
 
@@ -505,10 +494,10 @@ theorem kappa_resume_subst (H : Val) (K : Kont) (w s u : Val) :
   simp [Expr.subst]
 
 /-- Resuming `κ` at `w` runs `hnd H K[w]`. -/
-theorem ewp_kappa_resume {Tb : Table} (hTb : Tb.Mono) (n : UInt32) (H : Val) (K : Kont) (w : Val)
+theorem ewp_kappa_resume {Tb : Table} (hTb : Tb.Mono) (H : Val) (K : Kont) (w : Val)
     {ls : List SRec} {Q : List SRec → Val → WProp} {ρ : WRes}
     (h : ewpTS ls (hndE H (K.plug (.val w))) Tb Q ρ) :
-    ewpTS ls (.app (.app (kappa n H K) (.val (Val.inj₁ .unit))) (.val w)) Tb Q ρ := by
+    ewpTS ls (.app (.app (kappa H K) (.val (Val.inj₁ .unit))) (.val w)) Tb Q ρ := by
   refine ewp_step hTb (fun μ => (Step1N.head (Head.beta μ _ _) rfl).plug (Kont.appL .hole w)) ls Q ρ ?_
   refine ewp_step hTb (fun μ => (Step1N.head (Head.case₁ μ Val.unit _ _) rfl).plug
     (Kont.appL .hole w)) ls Q ρ ?_
@@ -517,36 +506,26 @@ theorem ewp_kappa_resume {Tb : Table} (hTb : Tb.Mono) (n : UInt32) (H : Val) (K 
   rw [show (0 + 1 : Nat) = 1 from rfl, show (0 + 1 + 1 : Nat) = 2 from rfl, kappa_resume_subst]
   exact h
 
-theorem subst_namesVal (j : Nat) (s : Val) : ∀ N : List UInt32,
-    Expr.subst j s (BoCa.BoLo.namesVal N).1 = (BoCa.BoLo.namesVal N).1
-  | [] => rfl
-  | m :: N => by
-      simp only [BoCa.BoLo.namesVal, Val.inj₂, Val.pair, Val.i32, Expr.subst, subst_namesVal j s N]
-
-theorem subst_cancelVal_none (j : Nat) (s : Val) (N : List UInt32) :
-    Expr.subst j s (cancelVal N none).1 = (cancelVal N none).1 := by
+theorem subst_cancelVal_none (j : Nat) (s : Val) :
+    Expr.subst j s (cancelVal none).1 = (cancelVal none).1 := by
   simp only [cancelVal, opPayload, BoCa.BoLo.errVal, Val.pair, Val.i32, Val.inj₁, Val.unit,
-    Expr.subst, subst_namesVal]
+    Expr.subst]
 
-/-- `κ`'s cancel branch, substituted at its two binders, is `ccatch (hnd H K[raise …])`. -/
-theorem kappa_cancel_subst (n : UInt32) (H : Val) (K : Kont) (s u : Val) :
+/-- `κ`'s cancel branch, substituted at its two binders, is `ccatch (K†[raise …])`. -/
+theorem kappa_cancel_subst (K : Kont) (s u : Val) :
     Expr.subst 0 u (Expr.subst 1 s
-      (ccatchE (hndE (Val.shift 2 0 H) ((Kont.shift 2 0 K).plug
-        (raiseE (.val (cancelVal (n :: K.hndNames) none))))))) =
-      ccatchE (hndE H (K.plug (raiseE (.val (cancelVal (n :: K.hndNames) none))))) := by
-  simp only [ccatchE, hndE, Expr.subst, Expr.val, Val.val_shift]
-  rw [Expr.subst_shift 1 0 1 s H.1 (by omega) (by omega),
-    Expr.subst_shift 0 0 0 u H.1 (by omega) (by omega), Expr.shift_zero,
-    plug_shift_subst 1 K 0 1 s _ (by omega) (by omega),
-    plug_shift_subst 0 K 0 0 u _ (by omega) (by omega), Kont.shift_zero]
+      (ccatchE ((K.dead.shift 2 0).plug (raiseE (.val (cancelVal none)))))) =
+      ccatchE (K.dead.plug (raiseE (.val (cancelVal none)))) := by
+  simp only [ccatchE, Expr.subst, Expr.val]
+  rw [plug_shift_subst 1 K.dead 0 1 s _ (by omega) (by omega),
+    plug_shift_subst 0 K.dead 0 0 u _ (by omega) (by omega), Kont.shift_zero]
   simp only [raiseE, Expr.subst, Expr.val, subst_cancelVal_none, Val.prim]
 
-/-- Cancelling `κ` runs `ccatch (hnd H K[raise (0, (0, (N, none)))])`. -/
-theorem ewp_kappa_cancel {Tb : Table} (hTb : Tb.Mono) (n : UInt32) (H : Val) (K : Kont)
+/-- Cancelling `κ` runs `ccatch (K†[raise (0, (0, none))])`. -/
+theorem ewp_kappa_cancel {Tb : Table} (hTb : Tb.Mono) (H : Val) (K : Kont)
     {ls : List SRec} {Q : List SRec → Val → WProp} {ρ : WRes}
-    (h : ewpTS ls (ccatchE (hndE H (K.plug (raiseE (.val (cancelVal (n :: K.hndNames) none))))))
-      Tb Q ρ) :
-    ewpTS ls (.app (kappa n H K) (.val (Val.inj₂ .unit))) Tb Q ρ := by
+    (h : ewpTS ls (ccatchE (K.dead.plug (raiseE (.val (cancelVal none))))) Tb Q ρ) :
+    ewpTS ls (.app (kappa H K) (.val (Val.inj₂ .unit))) Tb Q ρ := by
   refine ewp_step hTb (fun μ => Step1N.head (Head.beta μ _ _) rfl) ls Q ρ ?_
   refine ewp_step hTb (fun μ => Step1N.head (Head.case₂ μ Val.unit _ _) rfl) ls Q ρ ?_
   refine ewp_step hTb (fun μ => Step1N.head (Head.seq μ _) rfl) ls Q ρ ?_
@@ -575,28 +554,24 @@ theorem ewp_free {Tb : Table} (hTb : Tb.Mono) (K : Kont) (ℓ : Loc) (v : Val) {
     ⟨ρ₁, ρ₂, hc, hp, ewp_unfold hTb hq⟩))
 
 /-- `κ`'s body over its cell, at the cell's location, is `kappaC`. -/
-theorem kappaCBody_subst (aff : Bool) (ℓ : Loc) (n : UInt32) (H : Val) (K : Kont) :
-    Expr.subst 0 (Val.loc ℓ) (kappaCBody aff n H K) = kappaC aff ℓ n H K := by
+theorem kappaCBody_subst (aff : Bool) (ℓ : Loc) (H : Val) (K : Kont) :
+    Expr.subst 0 (Val.loc ℓ) (kappaCBody aff H K) = kappaC aff ℓ H K := by
   cases aff <;>
   simp only [kappaCBody, kappaC, freeE, stuckE, hndE, ccatchE, raiseE, Expr.subst, Expr.val,
     Val.val_shift, Bool.false_eq_true, if_true, if_false, Val.loc, Val.lam, Val.prim, Val.unit] <;>
-  first
-    | (rw [Expr.subst_shift 3 0 3 _ H.1 (by omega) (by omega),
-        plug_shift_subst 3 K 0 3 _ _ (by omega) (by omega)]
-       simp [Expr.subst, Val.shift, Expr.shift, Expr.subst_shift 2 0 2 _ H.1 (by omega) (by omega),
-         plug_shift_subst 2 K 0 2 _ _ (by omega) (by omega), subst_cancelVal_none])
-    | (simp [Expr.subst, Val.shift, Expr.shift, Expr.subst_shift 3 0 3 _ H.1 (by omega) (by omega),
-         plug_shift_subst 3 K 0 3 _ _ (by omega) (by omega), Expr.subst_shift 2 0 2 _ H.1 (by omega) (by omega),
-         plug_shift_subst 2 K 0 2 _ _ (by omega) (by omega), subst_cancelVal_none])
+  rw [Expr.subst_shift 3 0 3 _ H.1 (by omega) (by omega),
+    plug_shift_subst 3 K 0 3 _ _ (by omega) (by omega)] <;>
+  simp [Expr.subst, Val.shift, Expr.shift,
+    plug_shift_subst 2 K.dead 0 2 _ _ (by omega) (by omega), subst_cancelVal_none]
 
 /-- **The capture cell's allocation**: `κ` before its cell, at an evaluation position, allocates
 the cell by the ordinary `alloc` step and becomes `kappaC` at its location. -/
-theorem ewp_kappaCell {Tb : Table} (hTb : Tb.Mono) (aff : Bool) (n : UInt32) (H : Val) (K : Kont)
+theorem ewp_kappaCell {Tb : Table} (hTb : Tb.Mono) (aff : Bool) (H : Val) (K : Kont)
     (Kc : Kont) {ls : List SRec} {Q : List SRec → Val → WProp} {ρ : WRes}
-    (h : ∀ ℓ : Loc, (ptoOwn ℓ Val.unit ─⋆ ewpTS ls (Kc.plug (kappaC aff ℓ n H K)) Tb Q) ρ) :
-    ewpTS ls (Kc.plug (kappaCell aff n H K)) Tb Q ρ := by
-  have e : Kc.plug (kappaCell aff n H K) =
-      (Kc.comp (.appR (.val (.lam (kappaCBody aff n H K))) .hole)).plug
+    (h : ∀ ℓ : Loc, (ptoOwn ℓ Val.unit ─⋆ ewpTS ls (Kc.plug (kappaC aff ℓ H K)) Tb Q) ρ) :
+    ewpTS ls (Kc.plug (kappaCell aff H K)) Tb Q ρ := by
+  have e : Kc.plug (kappaCell aff H K) =
+      (Kc.comp (.appR (.val (.lam (kappaCBody aff H K))) .hole)).plug
         (.app (.val (.prim .alloc)) (.val Val.unit)) := by
     rw [Kont.plug_comp]; rfl
   rw [e]
@@ -607,14 +582,14 @@ theorem ewp_kappaCell {Tb : Table} (hTb : Tb.Mono) (aff : Bool) (n : UInt32) (H 
   exact h ℓ σ₁ σ₂ hp hc
 
 /-- `kappaC` is a value. -/
-theorem isVal_kappaC (aff : Bool) (ℓ : Loc) (n : UInt32) (H : Val) (K : Kont) :
-    IsVal (kappaC aff ℓ n H K) := by unfold kappaC; exact .lam
+theorem isVal_kappaC (aff : Bool) (ℓ : Loc) (H : Val) (K : Kont) :
+    IsVal (kappaC aff ℓ H K) := by unfold kappaC; exact .lam
 
 /-- **Resuming a `κ` that owns a cell** at `w` frees the cell, then runs `hnd H K[w]`. -/
-theorem ewp_kappaC_resume {Tb : Table} (hTb : Tb.Mono) (aff : Bool) (ℓ : Loc) (n : UInt32)
+theorem ewp_kappaC_resume {Tb : Table} (hTb : Tb.Mono) (aff : Bool) (ℓ : Loc)
     (H : Val) (K : Kont) (w : Val) {ls : List SRec} {Q : List SRec → Val → WProp} {ρ : WRes}
     (h : (ptoOwn ℓ Val.unit ⋆ ewpTS ls (hndE H (K.plug (.val w))) Tb Q) ρ) :
-    ewpTS ls (.app (.app (kappaC aff ℓ n H K) (.val (Val.inj₁ .unit))) (.val w)) Tb Q ρ := by
+    ewpTS ls (.app (.app (kappaC aff ℓ H K) (.val (Val.inj₁ .unit))) (.val w)) Tb Q ρ := by
   refine ewp_step hTb (fun μ => (Step1N.head (Head.beta μ _ _) rfl).plug (Kont.appL .hole w)) ls Q ρ ?_
   refine ewp_step hTb (fun μ => (Step1N.head (Head.case₁ μ Val.unit _ _) rfl).plug
     (Kont.appL .hole w)) ls Q ρ ?_
@@ -627,13 +602,12 @@ theorem ewp_kappaC_resume {Tb : Table} (hTb : Tb.Mono) (aff : Bool) (ℓ : Loc) 
   rw [show (0 + 1 : Nat) = 1 from rfl, show (0 + 1 + 1 : Nat) = 2 from rfl, kappa_resume_subst]
   exact hq
 
-/-- **Cancelling an affine `κ`** frees its cell, then runs
-`ccatch (hnd H K[raise (0, (0, (N, none)))])`. -/
-theorem ewp_kappaC_cancel {Tb : Table} (hTb : Tb.Mono) (ℓ : Loc) (n : UInt32) (H : Val) (K : Kont)
+/-- **Cancelling an affine `κ`** frees its cell, then runs `ccatch (K†[raise (0, (0, none))])`. -/
+theorem ewp_kappaC_cancel {Tb : Table} (hTb : Tb.Mono) (ℓ : Loc) (H : Val) (K : Kont)
     {ls : List SRec} {Q : List SRec → Val → WProp} {ρ : WRes}
-    (h : (ptoOwn ℓ Val.unit ⋆ ewpTS ls (ccatchE (hndE H (K.plug (raiseE (.val (cancelVal
-      (n :: K.hndNames) none)))))) Tb Q) ρ) :
-    ewpTS ls (.app (kappaC true ℓ n H K) (.val (Val.inj₂ .unit))) Tb Q ρ := by
+    (h : (ptoOwn ℓ Val.unit ⋆ ewpTS ls (ccatchE (K.dead.plug (raiseE (.val (cancelVal none)))))
+      Tb Q) ρ) :
+    ewpTS ls (.app (kappaC true ℓ H K) (.val (Val.inj₂ .unit))) Tb Q ρ := by
   refine ewp_step hTb (fun μ => Step1N.head (Head.beta μ _ _) rfl) ls Q ρ ?_
   refine ewp_step hTb (fun μ => Step1N.head (Head.case₂ μ Val.unit _ _) rfl) ls Q ρ ?_
   refine ewp_step hTb (fun μ => Step1N.head (Head.seq μ _) rfl) ls Q ρ ?_
@@ -657,9 +631,9 @@ theorem hndK_hasHnd (n : UInt32) (qs hr hs : Val) (m : UInt32) :
     (hndK (hndVal n qs hr hs)).HasHnd m = (n == m) := by
   simp [Kont.HasHnd, hndVal, Val.pair, Val.i32, Expr.val]
 
-theorem hndK_hndNames (n : UInt32) (qs hr hs : Val) :
-    (hndK (hndVal n qs hr hs)).hndNames = [n] := by
-  simp [Kont.hndNames, hndVal, Val.pair, Val.i32, Expr.val]
+/-- A handler frame is dead in a cancelled region. -/
+theorem dead_hndK (n : UInt32) (qs hr hs : Val) : (hndK (hndVal n qs hr hs)).dead = .hole := by
+  simp [Kont.dead, Kont.DeadFrame, hndVal, Val.pair, Val.i32, Expr.val]
 
 /-- The relation of `κ`'s type at an operation's entry: resumed at every answer, and, with
 weakening, cancelled at `F_Σ 1`.  `[spec §19]` -/
@@ -672,37 +646,32 @@ def KapRel (Tout : OpTab) (Qout : List SRec → Val → WProp) (en : OpEnt) (ls 
     (en.q ≠ .lin → ewpTS ls' (.app κ.1 (.val (Val.inj₂ .unit))) (opTable Tout)
       (fun _ v => ⌜v = Val.unit⌝) ρ)
 
-/-- A cancel run caught at `ccatch` under the reinstalled handler: `()`, or the kept error raised
-at the canceller.  `[spec §19]` -/
-theorem ewp_ccatch {Tin Tout : OpTab} {N : List UInt32} (H : Val) (hH : (hndK H).Catches 0 = false)
-    (hT : ∀ m j en, m ∉ N → Tin m j = some en → Tout m j = some en)
+/-- A cancel run caught at `ccatch`: `()`, or the kept error raised at the canceller, where its
+operation is the canceller's.  `[spec §19]` -/
+theorem ewp_ccatch {T Tout : OpTab} (hT : T.Le Tout)
     {ls : List SRec} {e : Expr} {ρ : WRes}
-    (h : ewpTS ls e (cancelTab Tin N) (fun _ _ _ => False) ρ) :
-    ewpTS ls (ccatchE (hndE H e)) (opTable Tout) (fun _ v => ⌜v = Val.unit⌝) ρ := by
+    (h : ewpTS ls e (cancelTab T) (fun _ _ _ => False) ρ) :
+    ewpTS ls (ccatchE e) (opTable Tout) (fun _ v => ⌜v = Val.unit⌝) ρ := by
   refine ewp_fold (opTable_mono Tout) ?_
-  refine wpG_bind ((Kont.appR (.val (.prim .ccatch)) .hole).comp (hndK H)) e ls _ ρ ?_
-  refine wpG_mono (fun ls' t σ ht => ?_) ((ewp_abortive (cancelTab_abortive Tin N)).mp h)
+  refine wpG_bind (Kont.appR (.val (.prim .ccatch)) .hole) e ls _ ρ ?_
+  refine wpG_mono (fun ls' t σ ht => ?_) ((ewp_abortive (cancelTab_abortive T)).mp h)
   rcases ht with ⟨_, _, hv⟩ | ⟨K', err, hs⟩
   · exact hv.elim
   obtain ⟨⟨rfl, hK'⟩, τa, τb, hcab, he, hnb⟩ := pure_sep_iff.mp hs
-  have hK : ((hndK H).comp K').Catches 0 = false := by rw [catches_comp, hH, hK']; rfl
-  rw [Kont.plug_comp]
-  show wpG ls' (ccatchE ((hndK H).plug (K'.plug _))) _ σ
-  rw [← Kont.plug_comp]
   cases err with
   | none =>
-      refine wpG_head (fun μ => Head.cancel μ N _ hK) rfl _ _ σ ?_
+      refine wpG_head (fun μ => Head.cancel μ K' hK') rfl _ _ σ ?_
       have hτa : τa = PMap.empty := he.1
       subst hτa
       rw [← eq_of_compS_empty_left hcab] at hnb
       refine wpG_garbage (wpG_here _ _ _ σ ⟨PMap.empty, σ, compS_empty_left σ, hnb,
         Or.inl ⟨Val.unit, rfl, rfl, rfl⟩⟩)
   | some E =>
-      refine wpG_head (fun μ => Head.creraise μ N E _ hK) rfl _ _ σ ?_
+      refine wpG_head (fun μ => Head.creraise μ E K' hK') rfl _ _ σ ?_
       obtain ⟨m, j, w, en, he⟩ := he
-      obtain ⟨⟨rfl, hm, hTe, ha⟩, hPA, hnA⟩ := pure_sep_iff.mp he
+      obtain ⟨⟨rfl, hTe, ha⟩, hPA, hnA⟩ := pure_sep_iff.mp he
       exact wpG_here _ _ _ σ (Or.inr (Or.inr ⟨.hole, m, j, w, en,
-        pure_sep_mk ⟨rfl, rfl, hT m j en hm hTe, ha⟩ ⟨τa, τb, hcab, ⟨hPA, hnA⟩, hnb⟩⟩))
+        pure_sep_mk ⟨rfl, rfl, hT m j en hTe, ha⟩ ⟨τa, τb, hcab, ⟨hPA, hnA⟩, hnb⟩⟩))
 
 /-- A qualifier's tag in a handler value: `0` linear, `1` affine, `2` unrestricted.
 `[spec §25]` -/
@@ -744,20 +713,21 @@ theorem capTag_qualsVal : ∀ (qs : List Qual) (j : Nat) (h : j < qs.length),
       simp only [qualsVal, Val.pair, Val.i32, Expr.subst, subst_qualsVal j s qs]
 
 /-- The continuation `[op]` hands at a tag: a cell at a linear or affine operation. -/
-theorem kappaAt_tag (q : Qual) (n : UInt32) (H : Val) (K : Kont) :
-    kappaAt q.tag n H K = (match q with
-      | .lin => kappaCell false n H K
-      | .aff => kappaCell true n H K
-      | .unr => kappa n H K) := by
+theorem kappaAt_tag (q : Qual) (H : Val) (K : Kont) :
+    kappaAt q.tag H K = (match q with
+      | .lin => kappaCell false H K
+      | .aff => kappaCell true H K
+      | .unr => kappa H K) := by
   cases q <;> simp [kappaAt, Qual.tag]
 
 /-- **A handler** (`[handle]`), by induction on the least fixed point of the inner computation.
 `[ret]` answers through `h_ret`; an operation of the handler's name runs its clause, with `κ`
-resumed by the induction hypothesis and cancelled by the inner computation's cancel run under
-`ccatch`; at a linear or affine operation `κ` first gets its cell (`ewp_kappaCell`), which its
-resume and its cancel free; an abortive one runs its clause and drops the abandoned continuation;
-an operation of another name passes outward, the handler reinstalled in its continuation.  The
-handler's tags `qs` record its operations' qualifiers.  `[spec §19, §25]` -/
+resumed by the induction hypothesis and cancelled by the inner computation's cancel run of the
+dead region under `ccatch`; at a linear or affine operation `κ` first gets its cell
+(`ewp_kappaCell`), which its resume and its cancel free; an abortive one runs its clause and drops
+the abandoned continuation; an operation of another name passes outward, the handler reinstalled in
+its continuation, and dead in that continuation's cancel, so the inner cancel run is the outer one.
+The handler's tags `qs` record its operations' qualifiers.  `[spec §19, §25]` -/
 theorem ewp_handle (Tin Tout : OpTab) (n : UInt32) (hn0 : n ≠ 0)
     (hTin : ∀ m i, m ≠ n → Tin m i = Tout m i) (qs hr hs : Val)
     (Qin Qout : List SRec → Val → WProp)
@@ -770,16 +740,6 @@ theorem ewp_handle (Tin Tout : OpTab) (n : UInt32) (hn0 : n ≠ 0)
         ewpTS ls (.app (.val c) (.val v)) (opTable Tout) Qout ρ)) :
     ∀ {ls : List SRec} {e : Expr} {ρ : WRes}, ewpTS ls e (opTable Tin) Qin ρ →
       ewpTS ls (hndE (hndVal n qs hr hs) e) (opTable Tout) Qout ρ := by
-  have hmap : ∀ N : List UInt32, n ∈ N → ∀ m j en, m ∉ N → Tin m j = some en →
-      Tout m j = some en := fun N hN m j en hm h => by
-    rw [← hTin m j (fun e => hm (e ▸ hN))]; exact h
-  have hmapE : ∀ N : List UInt32, n ∈ N → ∀ ls err ρ, errOk Tin N ls err ρ → errOk Tout N ls err ρ
-    | N, hN, ls, none, ρ, h => h
-    | N, hN, ls, some E, ρ, ⟨m, j, w, en, h⟩ => by
-        obtain ⟨⟨h₁, h₂, h₃, h₄⟩, h₅⟩ := pure_sep_iff.mp h
-        exact ⟨m, j, w, en, pure_sep_mk ⟨h₁, h₂, hmap N hN m j en h₂ h₃, h₄⟩ h₅⟩
-  have hC0 : (hndK (hndVal n qs hr hs)).Catches 0 = false := by
-    rw [hndK_catches]; simpa using hn0
   intro ls e ρ h
   refine ewp_ind (fun ls e ρ => ewpTS ls (hndE (hndVal n qs hr hs) e) (opTable Tout) Qout ρ) ?_ h
   intro ls e ρ hstep
@@ -797,47 +757,43 @@ theorem ewp_handle (Tin Tout : OpTab) (n : UInt32) (hn0 : n ≠ 0)
       obtain ⟨c, hc, hna, -⟩ := hop i en hT
       refine wpG_head (fun μ => Head.hop μ m i qs hr hs c v K₁ hc hK₁) rfl _ _ σ ?_
       have hcan : ∀ ls'', Ext ls' ls'' ρk → en.q ≠ .lin →
-          ewpTS ls'' (ccatchE (hndE (hndVal m qs hr hs) (K₁.plug (raiseE (.val
-            (cancelVal (m :: K₁.hndNames) none)))))) (opTable Tout) (fun _ v => ⌜v = Val.unit⌝) ρk :=
-        fun ls'' he hq' => ewp_ccatch (Tin := Tin) _ hC0 (hmap _ (List.mem_cons_self))
-          ((hcont ls'' he).2 hq' (m :: K₁.hndNames) List.mem_cons_self
-            (fun x hx => List.mem_cons_of_mem _ hx))
+          ewpTS ls'' (ccatchE (K₁.dead.plug (raiseE (.val (cancelVal none))))) (opTable Tout)
+            (fun _ v => ⌜v = Val.unit⌝) ρk :=
+        fun ls'' he hq' => ewp_ccatch (T := OpTab.empty) (fun _ _ _ h => by simp [OpTab.empty] at h)
+          ((hcont ls'' he).2 hq')
       rw [hq i en hT ha, kappaAt_tag]
       cases hqq : en.q with
       | unr =>
           refine ewp_unfold (opTable_mono Tout) (hna ha ls' v
-            ⟨kappa m (hndVal m qs hr hs) K₁, by unfold kappa; exact .lam⟩ σ ⟨ρa, ρk, hcak, hA, ?_⟩)
+            ⟨kappa (hndVal m qs hr hs) K₁, by unfold kappa; exact .lam⟩ σ ⟨ρa, ρk, hcak, hA, ?_⟩)
           refine ⟨hu, fun ls'' he => ⟨fun w τ₁ τ₂ hB hc => ?_, fun hq' => ?_⟩⟩
-          · exact ewp_kappa_resume (opTable_mono Tout) m _ K₁ w
+          · exact ewp_kappa_resume (opTable_mono Tout) _ K₁ w
               ((hcont ls'' he).1 w τ₁ τ₂ hB hc)
-          · exact ewp_kappa_cancel (opTable_mono Tout) m _ K₁ (hcan ls'' he hq')
+          · exact ewp_kappa_cancel (opTable_mono Tout) _ K₁ (hcan ls'' he hq')
       | aff | lin =>
-          refine ewp_unfold (opTable_mono Tout) (ewp_kappaCell (opTable_mono Tout) _ m
+          refine ewp_unfold (opTable_mono Tout) (ewp_kappaCell (opTable_mono Tout) _
             (hndVal m qs hr hs) K₁ (.appR (.val c) (.pairR v .hole)) (fun ℓ σ₁ σ₂ hcell hc₂ => ?_))
           obtain ⟨y, hy₁, hy₂⟩ := compS_reassoc hcak hc₂
-          refine hna ha ls' v ⟨_, isVal_kappaC _ ℓ m (hndVal m qs hr hs) K₁⟩ σ₂
+          refine hna ha ls' v ⟨_, isVal_kappaC _ ℓ (hndVal m qs hr hs) K₁⟩ σ₂
             ⟨ρa, y, hy₂, hA, ?_⟩
           refine ⟨fun h' => (by rw [hqq] at h'; cases h'),
             fun ls'' he => ⟨fun w τ₁ τ₂ hB hcτ => ?_, fun hq' => ?_⟩⟩
           · obtain ⟨z, hz, hzτ⟩ := compS_exch hy₁ hcτ
-            exact ewp_kappaC_resume (opTable_mono Tout) _ ℓ m _ K₁ w
+            exact ewp_kappaC_resume (opTable_mono Tout) _ ℓ _ K₁ w
               ⟨σ₁, z, ResU.CompS.comm hzτ, hcell, (hcont ls'' (Ext.left hy₁ he)).1 w τ₁ z hB hz⟩
           · first
               | exact absurd hqq hq'
-              | exact ewp_kappaC_cancel (opTable_mono Tout) ℓ m _ K₁
+              | exact ewp_kappaC_cancel (opTable_mono Tout) ℓ _ K₁
                   ⟨σ₁, ρk, ResU.CompS.comm hy₁, hcell, hcan ls'' (Ext.left hy₁ he) hq'⟩
     · -- an operation of another name passes outward
       refine wpG_here _ _ _ σ (Or.inr (Or.inl ⟨(hndK (hndVal n qs hr hs)).comp K₁, m, i, v, en,
         pure_sep_mk ⟨(Kont.plug_comp _ _ _).symm, ?_, (hTin m i hm) ▸ hT, ha⟩
-          ⟨ρa, ρk, hcak, hA, hu, fun ls'' he => ⟨fun w τ₁ τ₂ hB hc => ?_, fun hq N hN hNK => ?_⟩⟩⟩))
+          ⟨ρa, ρk, hcak, hA, hu, fun ls'' he => ⟨fun w τ₁ τ₂ hB hc => ?_, fun hq => ?_⟩⟩⟩))
       · rw [hasHnd_comp, hndK_hasHnd, hK₁]; simpa using Ne.symm hm
       · rw [Kont.plug_comp]; exact (hcont ls'' he).1 w τ₁ τ₂ hB hc
-      · have hnN : n ∈ N := hNK n (by rw [hndNames_comp, hndK_hndNames]; exact List.mem_cons_self)
-        rw [Kont.plug_comp]
-        exact cancel_frame _ hC0 (hmapE N hnN)
-          ((hcont ls'' he).2 hq N hN (fun x hx => hNK x (by
-            rw [hndNames_comp, hndK_hndNames]; exact List.mem_cons_of_mem _ hx)))
-          noOwn_empty (ResU.comp_empty_right _)
+      · show ewpTS _ _ _ _ _
+        rw [dead_comp, dead_hndK]
+        exact (hcont ls'' he).2 hq
   · obtain ⟨⟨rfl, hK₁, hT, ha⟩, ρa, ρn, hcan, ⟨hPA, hnA⟩, hnn⟩ := pure_sep_iff.mp hp
     by_cases hm : m = n
     · -- `[unwind]` at the handler's name: the clause; the continuation is dropped
@@ -1069,7 +1025,7 @@ theorem let_compatC {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {M N : Expr} {A B 
   obtain ⟨ρ₁, ρ₂, hc, hg₁, hg₂⟩ := gDenC_split hsp hg
   refine (cC_effOf S B ls δ _ ρ).mpr ?_
   refine ewp_frame_plain (Row.tab S δ) (.appR (.val (.lam (Expr.psub 1 γ N))) .hole)
-    (fun n => by simp [Kont.HasHnd]) (fun n => by simp [Kont.Catches]) (by simp [Kont.hndNames])
+    (fun n => by simp [Kont.HasHnd]) (fun n => by simp [Kont.Catches])
     (fun ls => gDenC ls δ Γ₂ γ) (fun _ _ hs σ h => gDenC_same hs h)
     (fun _ _ _ he h => gDenC_local he h) ?_ ?_ (fun ls v => vC true A ls δ v) _ ?_
     ((cC_effOf S A ls δ _ ρ₁).mp (hM δ γ ls ρ₁ hδ hg₁)) hg₂ hc
@@ -1091,20 +1047,19 @@ theorem let_compatC {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {M N : Expr} {A B 
 def thenE (N D M : Expr) : Expr :=
   .app (.app (.val (.prim .ubind)) (.pair (.val (.lam N)) (.val (.lam D)))) M
 
-/-- `[then]` at a row: the finaliser `D`, at the row's abortive operations, runs on the context of
-`N` at a cancel and at an abortive stop.  `[spec §19]` -/
+/-- `[then]` at a row: the finaliser `D`, which lets no raise escape it (it is at the pure row,
+SPEC §24), runs on the context of `N` at a cancel and at an abortive stop.  `[spec §19, §24]` -/
 theorem then_compatC {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {M N D : Expr} {A B : VTy} {S : Row}
-    (hsp : Ctx.SplitP Γ Γ₁ Γ₂) (hNZ : S.NZ) (hUq : S.Uniq) (hU : S.Unr → Persistent Γ₂)
+    (hsp : Ctx.SplitP Γ Γ₁ Γ₂) (hNZ : S.NZ) (hU : S.Unr → Persistent Γ₂)
     (hM : SemC Δ Γ₁ M (CTy.effOf S A)) (hN : SemC Δ (⟨A, true⟩ :: Γ₂) N (CTy.effOf S B))
-    (hD : SemC Δ (⟨.unit, false⟩ :: Γ₂) D (CTy.effOf S.abortOnly .unit)) :
+    (hD : SemC Δ (⟨.unit, false⟩ :: Γ₂) D (.ret .unit)) :
     SemC Δ Γ (thenE N D M) (CTy.effOf S B) := by
   intro δ γ ls ρ hδ hg
   obtain ⟨ρ₁, ρ₂, hc, hg₁, hg₂⟩ := gDenC_split hsp hg
   refine (cC_effOf S B ls δ _ ρ).mpr ?_
   change ewpTS ls ((ubindK (Val.lam (Expr.psub 1 γ N)) (Val.lam (Expr.psub 1 γ D))).plug
     (substAll γ M)) _ _ ρ
-  refine ewp_frame_then (Row.tab S δ) (Row.tab S.abortOnly δ) (Row.abortOnly_abort S δ)
-    (Row.tab_le δ (Row.abortOnly_le hUq)) (Row.tab_local S δ) (Row.tab_zero hNZ δ) _ _
+  refine ewp_frame_then (Row.tab S δ) (Row.tab_local S δ) (Row.tab_zero hNZ δ) _ _
     (fun ls => gDenC ls δ Γ₂ γ) (fun _ _ hs σ h => gDenC_same hs h)
     (fun _ _ _ he h => gDenC_local he h) ?_ (Qd := fun ls v => vC true .unit ls δ v) ?_ ?_
     (fun ls v => vC true A ls δ v) _ ?_
@@ -1119,7 +1074,7 @@ theorem then_compatC {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {M N D : Expr} {A
     refine ewp_step (opTable_mono _)
       (fun μ => Step1N.head (Head.beta μ (Expr.psub 1 γ D) Val.unit) rfl) ls' _ σ ?_
     rw [← substAll_cons']
-    exact (cC_effOf S.abortOnly .unit ls' δ _ σ).mp
+    exact ewp_of_wp (opTable_mono _)
       (hD δ (Val.unit :: γ) ls' σ hδ (gDenC_dead_cons .unit Val.unit h))
   · rintro ls' v σ ⟨σ₁, σ₂, hcσ, hv, hg₂'⟩
     obtain ⟨hlen, hgs⟩ := gDenC_iff.mp hg₂'
@@ -1593,17 +1548,5 @@ theorem handleV_compatC {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {H e : Expr} {
   rw [hHe]
   exact ewp_unfold (opTable_mono _) (ewp_handle_vals hn0 hnS hlen hVr hVc hE')
     ρf fρ ps hf hcf hT htg Al k
-
-/-! ### `[then]` at option A  `[spec §24]` -/
-
-/-- **`[then]` with a finaliser that lets no raise escape** (option A, decision D3): the finaliser
-at the pure row.  `[spec §24]` -/
-theorem thenA_compatC {Δ : LifeCtx} {Γ Γ₁ Γ₂ : Ctx VTy} {M N D : Expr} {A B : VTy} {S : Row}
-    (hsp : Ctx.SplitP Γ Γ₁ Γ₂) (hNZ : S.NZ) (hUq : S.Uniq) (hU : S.Unr → Persistent Γ₂)
-    (hM : SemC Δ Γ₁ M (CTy.effOf S A)) (hN : SemC Δ (⟨A, true⟩ :: Γ₂) N (CTy.effOf S B))
-    (hD : SemC Δ (⟨.unit, false⟩ :: Γ₂) D (.ret .unit)) :
-    SemC Δ Γ (thenE N D M) (CTy.effOf S B) :=
-  then_compatC hsp hNZ hUq hU hM hN
-    (sub_compatC (S := []) (fun _ _ _ h => by simp [Row.find] at h) hD)
 
 end BoCa.Fig16.LogRel.Core

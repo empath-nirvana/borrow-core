@@ -59,7 +59,7 @@ def LawOp (J : TypingJ) (P : Platform) : Prop :=
     CtxEquiv (ℍ := ℍ) J P (CTy.effOf S R)
       (thunkF (hndE (hndVal n qs hr hs) (K.plug (performE (.val (opPayload n i v))))))
       (thunkF (.app (.val c) (.pair (.val v)
-        (kappaAt (capTag qs.1 i.toNat) n (hndVal n qs hr hs) K))))
+        (kappaAt (capTag qs.1 i.toNat) (hndVal n qs hr hs) K))))
 
 def LawFwd (J : TypingJ) (P : Platform) : Prop :=
   ∀ n m i qs hr hs (v : Val) (K : Kont) S R, m ≠ n → K.HasHnd m = false →
@@ -88,9 +88,9 @@ def LawAlg (J : TypingJ) (P : Platform) : Prop :=
 /-- β for capture: resuming `κ` at `w` is the frozen computation at `w` under its handler.  It is
 stated at the unrestricted `κ`; a linear or affine `κ` frees its cell first (SPEC §25). -/
 def CapBeta (J : TypingJ) (P : Platform) : Prop :=
-  ∀ n H K (w : Val) S R, J.closed (hndE H (K.plug (.val w))) (CTy.effOf S R) →
+  ∀ H K (w : Val) S R, J.closed (hndE H (K.plug (.val w))) (CTy.effOf S R) →
     CtxEquiv (ℍ := ℍ) J P (CTy.effOf S R)
-      (thunkF (.app (.app (kappa n H K) (.val (Val.inj₁ .unit))) (.val w)))
+      (thunkF (.app (.app (kappa H K) (.val (Val.inj₁ .unit))) (.val w)))
       (thunkF (hndE H (K.plug (.val w))))
 
 /-- The forwarding clause of operation `j`, re-performed as `n'`:

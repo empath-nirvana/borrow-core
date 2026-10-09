@@ -177,7 +177,7 @@ import Frontend.Check.Externs
 #print axioms BoCa.Fig16.LogRel.Core.wpTS_val_post
 #print axioms BoCa.Fig16.LogRel.Core.ewp_handle_vals
 #print axioms BoCa.Fig16.LogRel.Core.handleV_compatC
-#print axioms BoCa.Fig16.LogRel.Core.thenA_compatC
+#print axioms BoCa.Fig16.LogRel.Core.then_compatC
 #print axioms BoCa.Fig16.LogRel.Core.CDerives.effHandle
 -- SPEC §25 (entry 24): the capture cell
 #print axioms BoCa.Fig16.LogRel.Core.ewp_alloc
@@ -189,6 +189,26 @@ import Frontend.Check.Externs
 #print axioms BoCa.Fig16.LogRel.Core.capTag_ofEff
 #print axioms BoCa.Fig16.LogRel.Core.ewp_handle
 #print axioms BoCa.Fig16.LogRel.Core.handle_compatC
+-- SPEC §19, *Cancels* (decision D1): deadness by frame
+#print axioms BoCa.Fig16.LogRel.Core.dead_comp
+#print axioms BoCa.Fig16.LogRel.Core.dead_plain
+#print axioms BoCa.Fig16.LogRel.Core.hasHnd_dead
+#print axioms BoCa.Fig16.LogRel.Core.catches_dead
+#print axioms BoCa.Fig16.LogRel.Core.ewp_cfin
+#print axioms BoCa.Fig16.LogRel.Core.cancel_then
+#print axioms BoCa.Fig16.LogRel.Core.ewp_frame_then
+#print axioms BoCa.Fig16.LogRel.Core.ewp_ccatch
+#print axioms BoCa.Fig16.LogRel.Core.head_det_eff
+#print axioms BoCa.Fig16.LogRel.Core.CancelIntercept.prog_run
+#print axioms BoCa.Fig16.LogRel.Core.CancelIntercept.prog_final
+#print axioms BoCa.Fig16.LogRel.Core.CancelIntercept.prog₃_run
+#print axioms BoCa.Fig16.LogRel.Core.CancelIntercept.progOut_run
+#print axioms BoCa.Fig16.LogRel.Core.CancelIntercept.progRe_run
+#print axioms BoCa.Fig16.LogRel.Core.CancelIntercept.progFinOp_run
+#print axioms BoCa.Fig16.LogRel.Core.CancelIntercept.progNC₁_run
+#print axioms BoCa.Fig16.LogRel.Core.CancelIntercept.progDrop_run
+#print axioms BoCa.Fig16.LogRel.Core.CancelIntercept.progKeep_run
+#print axioms BoCa.Fig16.LogRel.Core.CancelIntercept.not_thenAbort_compatC
 -- SPEC §26 (entry 25): a λ whose binder is dead, at an effectful returner
 #print axioms BoCa.Fig16.LogRel.Core.gDenC_unit_dead
 #print axioms BoCa.Fig16.LogRel.Core.lamDead_compatC

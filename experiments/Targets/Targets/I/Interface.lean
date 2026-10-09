@@ -42,7 +42,7 @@ def I1 (M : SemWorld) : Prop :=
         (fun i'' v => M.val true R i'' δ v)) ρk →
     ptoOwn ℓ Val.unit σ → ResU.CompS ρk σ ρ →
     M.val true (kTy S R o.q o.B) i δ
-      ⟨kappaC (o.q == .aff) ℓ n (hndVal n qs hr hs) K, by unfold kappaC; exact .lam⟩ ρ
+      ⟨kappaC (o.q == .aff) ℓ (hndVal n qs hr hs) K, by unfold kappaC; exact .lam⟩ ρ
 
 /-- OQ-56's question: which operations a borrow callback's row may hold, given the context and the
 lend's variable. -/
@@ -278,14 +278,14 @@ def I2 (M : SemWorld) (O : OutJ) (Adm : OpAdm) (c : RowClass) : Prop :=
   Arises M ∧ StopVisible M ∧ ShareResume M ∧ FramesW (ℍ := ℍ) M c ∧ SpanBorrows M O Adm c
 
 /-- **I3.a**: `contShare`'s cancel conjunct (`cancelOwed`) at W, at affine entries, with the
-closing clause: the cancel's end holds nothing its start did not. -/
+closing clause: the cancel of the dead region `K†` keeps no error, and its end holds nothing its
+start did not. -/
 def ShareCancel (M : SemWorld) : Prop :=
   ∀ T en n i K Φ ρ, M.share T en n i K Φ ρ → en.q ≠ .lin → en.q ≠ .unr → ∀ i', M.Ext i i' ρ →
-    ∀ N : List UInt32, n ∈ N → (∀ m ∈ K.hndNames, m ∈ N) →
-      ewpW (ℍ := ℍ) M i' (Kont.plug K (raiseE (.val (cancelVal N none))))
-        (cancelTabW T N (fun i'' => (∀ f ∈ (M.held i'').1, f ∈ (M.held i').1) ∧
-                                    (∀ x ∈ (M.held i'').2, x ∈ (M.held i').2)))
-        (fun _ _ _ => False) ρ
+    ewpW (ℍ := ℍ) M i' (Kont.plug K.dead (raiseE (.val (cancelVal none))))
+      (cancelTabW (fun _ _ => none) (fun i'' => (∀ f ∈ (M.held i'').1, f ∈ (M.held i').1) ∧
+                                  (∀ x ∈ (M.held i'').2, x ∈ (M.held i').2)))
+      (fun _ _ _ => False) ρ
 
 /-- **I3** at W. -/
 def I3 (M : SemWorld) : Prop := ShareCancel (ℍ := ℍ) M
@@ -370,9 +370,9 @@ def I4c (J : TypingJ) : Prop :=
 handler.  It is stated at an unrestricted operation's `κ`, which owns no cell; a linear or affine
 `κ` frees its cell first (SPEC §25; at Core's world `ewp_kappaC_resume`). -/
 def I5beta (M : SemWorld) : Prop :=
-  ∀ (Tb : TableI (Idx M.Stk)) (n : UInt32) (H : Val) (K : Kont) (w : Val) i Q ρ,
+  ∀ (Tb : TableI (Idx M.Stk)) (H : Val) (K : Kont) (w : Val) i Q ρ,
     TableI.Mono Tb → ewpW (ℍ := ℍ) M i (hndE H (K.plug (.val w))) Tb Q ρ →
-    ewpW (ℍ := ℍ) M i (.app (.app (kappa n H K) (.val (Val.inj₁ .unit))) (.val w)) Tb Q ρ
+    ewpW (ℍ := ℍ) M i (.app (.app (kappa H K) (.val (Val.inj₁ .unit))) (.val w)) Tb Q ρ
 
 /-- The view `ℓ ↦ M_α 𝒱⟦T⟧δ` at W. -/
 def mutView (M : SemWorld) (ℓ : Loc) (α : Life) (T : VTy) (δ : LSub) (i : Idx M.Stk) : WProp :=
@@ -406,7 +406,7 @@ def AntiFrameW (M : SemWorld) : Prop :=
 `hFs` transcribed: Stop-related indices whose visible records agree give `Fr i ⊨ Fr i'`. -/
 def FrameW (M : SemWorld) : Prop :=
   ∀ (T : OpTabI (Idx M.Stk)) (K : Kont), (∀ n, K.HasHnd n = false) →
-    (∀ n, K.Catches n = false) → K.hndNames = [] → (∀ n j en, T n j = some en → en.q ≠ .unr) →
+    (∀ n, K.Catches n = false) → (∀ n j en, T n j = some en → en.q ≠ .unr) →
     ∀ (Fr : Idx M.Stk → WProp),
     (∀ ps i ps' i' t, M.Stop (ps, i) (ps', i') t → (∀ x, x ∈ i'.1 ↔ x ∈ i.1) →
        Entails (Fr i) (Fr i')) →

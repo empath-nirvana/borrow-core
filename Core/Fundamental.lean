@@ -579,7 +579,7 @@ theorem fundamentalC {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg}
   | effPerform hf hna _ ih => exact perform_compatC hf hna ih
   | effRaise hf ha hd _ ih => exact raise_compatC hf ha (fun _ _ _ _ h => vC_noOwn_of_drop hd h) ih
   | effLet hs hW hU _ _ ihM ihN => exact let_compatC hs hW hU ihM ihN
-  | effThen hs hNZ hUq hU _ _ _ ihM ihN ihD => exact thenA_compatC hs hNZ hUq hU ihM ihN ihD
+  | effThen hs hNZ _ hU _ _ _ ihM ihN ihD => exact then_compatC hs hNZ hU ihM ihN ihD
   | effHandleV hs hd hH _ hn0 hnS hlen _ ihc ihe =>
       exact handleV_compatC hs hd hH ihc hn0 hnS hlen ihe
   | letPoly b hcl _ _ _ ihN => exact letPoly_compatC (Val.lam b) hcl ihN

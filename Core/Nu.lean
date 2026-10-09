@@ -454,7 +454,7 @@ theorem node_ok (C : CTy) (g : Val) (S : VTy) (δ : LSub) :
       refine ewp_pureSteps (opTable_mono _) (PureSteps.plug (.appR (.val (.lam _)) .hole) hc)
         ls _ ρ ?_
       refine ewp_frame_plain _ (.appR (.val (.lam _)) .hole) (fun n => by simp [Kont.HasHnd])
-        (fun n => by simp [Kont.Catches]) (by simp [Kont.hndNames]) (fun _ => emp)
+        (fun n => by simp [Kont.Catches]) (fun _ => emp)
         (fun _ _ _ _ h => h) (fun _ _ _ _ h => h) (fun _ _ _ _ _ _ _ h => by rw [h.1]; exact noOwn_empty)
         (fun _ _ _ _ _ _ _ h => h.1) _ _ ?_ hM' ⟨rfl, trivial⟩ (ResU.comp_empty_right ρ)
       rintro ls' w σ ⟨σ₁, σ₂, hcσ, hw, hemp, -⟩

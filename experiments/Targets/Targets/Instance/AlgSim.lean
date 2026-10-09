@@ -13,8 +13,8 @@ there they go wherever the clause sends `κ`: into a finaliser, into a stored cl
   `AlgRelK M N` relates evaluation contexts the same way, the left's two frames against the right's
   one; `AlgRelH M N` relates memories cell by cell.  With `M` and `N` closed under their binders the
   relation is kept by shifting and substitution (`AlgRel.shift`, `AlgRel.subst`), and the machine
-  reads alike what it reads off a related term: a frame's handler name and what it stops
-  (`AlgRelK.hasHnd`, `AlgRelK.catches`, `AlgRelK.hndNames`), a clause and a tag (`clauseAt_rel`,
+  reads alike what it reads off a related term: a frame's handler name, what it stops and what a
+  dead region keeps (`AlgRelK.hasHnd`, `AlgRelK.catches`, `AlgRelK.dead`), a clause and a tag (`clauseAt_rel`,
   `capTag_eq`), a literal (`AlgRel.host_call_eq`), and an allocation (`AlgRel.allocs_eq`).  On terms
   with no λ it is equality (`AlgRel.eq_of_lamFree`).
 * **A head step** (`AlgRel.head`): at a related redex and memory the same rule steps to a related
@@ -43,7 +43,7 @@ variable {ℍ : BoCa.Host} [BoCa.HostIs ℍ]
 namespace Targets.Inst
 open BoCa BoCa.Fig16 BoCa.Fig16.BoLo BoCa.Fig16.LogRel BoCa.Fig16.LogRel.Core
 open BoCa.BoLo (Heap Steps Step1 Head Kont performE raiseE opPayload hndE ubindE ccatchE cfinE
-  hndVal cancelVal kappa clauseAt errNext namesVal errVal capTag kappaAt kappaC kappaCell kappaCBody
+  hndVal cancelVal kappa clauseAt errNext errVal capTag kappaAt kappaC kappaCell kappaCBody
   freeE stuckE)
 
 /-! ### The relation -/
@@ -571,21 +571,23 @@ theorem hasHnd_frame {f f' : Expr} (h : AlgRel M N f f') (n : UInt32) {K K' : Ko
       exact absurd hx (hne m' x)
     next => rfl
 
-/-- The handler names of a frame, read alike on both sides. -/
-theorem hndNames_frame {f f' : Expr} (h : AlgRel M N f f') {K K' : Kont}
-    (hK : K.hndNames = K'.hndNames) : Kont.hndNames (.appR f K) = Kont.hndNames (.appR f' K') := by
-  simp only [Kont.hndNames, hK]
-  congr 1
+/-- A frame the dead region drops, read alike on both sides. -/
+theorem deadFrame_eq {f f' : Expr} (h : AlgRel M N f f') : Kont.DeadFrame f = Kont.DeadFrame f' := by
+  unfold Kont.DeadFrame
   split
   next m x =>
     obtain ⟨x', hx'⟩ := (hndFrame_iff h m).1 ⟨x, rfl⟩
     subst hx'
     rfl
-  next hne =>
+  next =>
+    rw [(primFrame_iff h .ccatch).1 rfl]
+  next h₁ h₂ =>
     split
     next m' x' =>
       obtain ⟨x, hx⟩ := (hndFrame_iff h m').2 ⟨x', rfl⟩
-      exact absurd hx (hne m' x)
+      exact absurd hx (h₁ m' x)
+    next =>
+      exact absurd ((primFrame_iff h .ccatch).2 rfl) h₂
     next => rfl
 
 /-- What stops a raise at a frame, read alike on both sides. -/
@@ -641,13 +643,26 @@ theorem catches {K K' : Kont} (hK : AlgRelK M N K K') (n : UInt32) : K.Catches n
   | pairL _ _ ih | pairR _ _ ih | letpair _ _ ih | case _ _ _ ih | appL _ _ ih | seq _ _ ih
   | inj₁ _ ih | inj₂ _ ih => simpa [Kont.Catches] using ih
 
-theorem hndNames {K K' : Kont} (hK : AlgRelK M N K K') : K.hndNames = K'.hndNames := by
+/-- Related contexts have related dead regions. -/
+theorem dead {K K' : Kont} (hK : AlgRelK M N K K') : AlgRelK M N K.dead K'.dead := by
   induction hK with
-  | hole => rfl
-  | appR hf _ ih => exact hndNames_frame hf ih
-  | alg _ ih => simpa [Kont.hndNames] using ih
-  | pairL _ _ ih | pairR _ _ ih | letpair _ _ ih | case _ _ _ ih | appL _ _ ih | seq _ _ ih
-  | inj₁ _ ih | inj₂ _ ih => simpa [Kont.hndNames] using ih
+  | hole => exact .hole
+  | appR hf _ ih =>
+      simp only [Kont.dead, deadFrame_eq hf]
+      split
+      · exact ih
+      · exact .appR hf ih
+  | alg _ ih =>
+      simp only [Kont.dead, Kont.DeadFrame, Bool.false_eq_true, ↓reduceIte]
+      exact .alg ih
+  | pairL _ he ih => exact .pairL ih he
+  | pairR hv _ ih => exact .pairR hv ih
+  | letpair _ he ih => exact .letpair ih he
+  | case _ h₁ h₂ ih => exact .case ih h₁ h₂
+  | appL _ hv ih => exact .appL ih hv
+  | seq _ he ih => exact .seq ih he
+  | inj₁ _ ih => exact .inj₁ ih
+  | inj₂ _ ih => exact .inj₂ ih
 
 end AlgRelK
 
@@ -703,13 +718,6 @@ inductive ErrRel (M N : Expr) : Option Val → Option Val → Prop
   | none : ErrRel M N none none
   | some {E E' : Val} : AlgRel M N E.1 E'.1 → ErrRel M N (some E) (some E')
 
-theorem lamFree_namesVal : ∀ Ns : List UInt32, lamFree (namesVal Ns).1 = true
-  | [] => rfl
-  | m :: Ns => by
-      show lamFree (.inj₂ (.pair (.prim (.lit (.i32 m))) (namesVal Ns).1)) = true
-      simp only [lamFree, Bool.true_and]
-      exact lamFree_namesVal Ns
-
 /-- Congruence, constructor by constructor, closing with the hypotheses at hand. -/
 macro "alg_cong" : tactic => `(tactic| repeat' (first
   | assumption | exact AlgRel.refl _ | apply AlgRel.pair | apply AlgRel.inj₁ | apply AlgRel.inj₂
@@ -736,45 +744,47 @@ theorem hndVal_inv {n : UInt32} {qs hr hs : Val} {y : Expr} (h : AlgRel M N (hnd
   rw [ha.lit_inv]
   exact ⟨⟨c, hc.isVal qs.2⟩, ⟨e, he.isVal hr.2⟩, ⟨f, hf.isVal hs.2⟩, rfl, hc, he, hf⟩
 
-/-- A related cancel payload: the same names, a related kept error. -/
-theorem cancelVal_inv {Ns : List UInt32} {err : Option Val} {y : Expr}
-    (h : AlgRel M N (cancelVal Ns err).1 y) :
-    ∃ err', y = (cancelVal Ns err').1 ∧ ErrRel M N err err' := by
+/-- A related cancel payload: a related kept error. -/
+theorem cancelVal_inv {err : Option Val} {y : Expr}
+    (h : AlgRel M N (cancelVal err).1 y) :
+    ∃ err', y = (cancelVal err').1 ∧ ErrRel M N err err' := by
   obtain ⟨v', rfl, hv⟩ := h.opPayload_inv
-  obtain ⟨a, b, he, ha, hb⟩ := hv.pair_inv
-  have ha' := ha.eq_of_lamFree (lamFree_namesVal Ns)
-  subst ha'
   cases err with
   | none =>
-      obtain ⟨c, rfl, hc⟩ := hb.inj₁_inv
+      obtain ⟨c, he, hc⟩ := (show AlgRel M N (.inj₁ .unit) v'.1 from hv).inj₁_inv
       rw [hc.unit_inv] at he
       refine ⟨none, ?_, .none⟩
-      rw [show v' = Val.pair (namesVal Ns) (errVal none) from Subtype.ext he]
+      rw [show v' = errVal none from Subtype.ext he]
       rfl
   | some E =>
-      obtain ⟨c, rfl, hc⟩ := hb.inj₂_inv
+      obtain ⟨c, he, hc⟩ := (show AlgRel M N (.inj₂ E.1) v'.1 from hv).inj₂_inv
       refine ⟨some ⟨c, hc.isVal E.2⟩, ?_, .some hc⟩
-      rw [show v' = Val.pair (namesVal Ns) (errVal (some ⟨c, hc.isVal E.2⟩)) from Subtype.ext he]
+      rw [show v' = errVal (some ⟨c, hc.isVal E.2⟩) from Subtype.ext he]
       rfl
 
 end AlgRel
 
-theorem ErrRel.next {err err' : Option Val} (h : ErrRel M N err err') (Ns : List UInt32)
+theorem ErrRel.next {err err' : Option Val} (h : ErrRel M N err err')
     (m j : UInt32) {w w' : Val} (hw : AlgRel M N w.1 w'.1) :
-    ErrRel M N (errNext Ns err m j w) (errNext Ns err' m j w') := by
+    ErrRel M N (errNext err m j w) (errNext err' m j w') := by
   cases h with
   | none =>
-      simp only [errNext]
-      split_ifs
-      · exact .none
-      · refine .some ?_
-        show AlgRel M N (opPayload m j w).1 (opPayload m j w').1
-        simp only [opPayload, Val.pair, Val.i32]
-        alg_cong
+      show ErrRel M N (Option.some (opPayload m j w)) (Option.some (opPayload m j w'))
+      refine .some ?_
+      show AlgRel M N (opPayload m j w).1 (opPayload m j w').1
+      simp only [opPayload, Val.pair, Val.i32]
+      alg_cong
   | some hE => exact .some hE
 
-theorem ErrRel.cancelRel {err err' : Option Val} (h : ErrRel M N err err') (Ns : List UInt32) :
-    AlgRel M N (cancelVal Ns err).1 (cancelVal Ns err').1 := by
+/-- The earlier of two kept errors, related. -/
+theorem ErrRel.or {e₁ e₁' e₂ e₂' : Option Val} (h₁ : ErrRel M N e₁ e₁') (h₂ : ErrRel M N e₂ e₂') :
+    ErrRel M N (e₁.or e₂) (e₁'.or e₂') := by
+  cases h₁ with
+  | none => exact h₂
+  | some hE => exact .some hE
+
+theorem ErrRel.cancelRel {err err' : Option Val} (h : ErrRel M N err err') :
+    AlgRel M N (cancelVal err).1 (cancelVal err').1 := by
   cases h with
   | none => exact AlgRel.refl _
   | some hE =>
@@ -785,34 +795,30 @@ section Builders
 variable (hM : closedAt 1 M = true) (hN : closedAt 1 N = true)
 include hM hN
 
-theorem kappa_rel {n : UInt32} {H H' : Val} {K K' : Kont} (hH : AlgRel M N H.1 H'.1)
-    (hK : AlgRelK M N K K') : AlgRel M N (kappa n H K) (kappa n H' K') := by
+theorem kappa_rel {H H' : Val} {K K' : Kont} (hH : AlgRel M N H.1 H'.1)
+    (hK : AlgRelK M N K K') : AlgRel M N (kappa H K) (kappa H' K') := by
   have h3 := (hK.shift hM hN 3 0).plug (AlgRel.var (M := M) (N := N) 0)
-  have h2 := (hK.shift hM hN 2 0).plug
-    (AlgRel.refl (M := M) (N := N) (raiseE (.val (cancelVal (n :: K.hndNames) none))))
+  have h2 := (hK.dead.shift hM hN 2 0).plug
+    (AlgRel.refl (M := M) (N := N) (raiseE (.val (cancelVal none))))
   have hH3 := hH.shiftV hM hN 3 0
-  have hH2 := hH.shiftV hM hN 2 0
   unfold kappa
-  rw [← hK.hndNames]
   alg_cong
 
-theorem kappaCBody_rel {aff : Bool} {n : UInt32} {H H' : Val} {K K' : Kont}
+theorem kappaCBody_rel {aff : Bool} {H H' : Val} {K K' : Kont}
     (hH : AlgRel M N H.1 H'.1) (hK : AlgRelK M N K K') :
-    AlgRel M N (kappaCBody aff n H K) (kappaCBody aff n H' K') := by
+    AlgRel M N (kappaCBody aff H K) (kappaCBody aff H' K') := by
   have h4 := (hK.shift hM hN 4 0).plug (AlgRel.var (M := M) (N := N) 0)
-  have h3 := (hK.shift hM hN 3 0).plug
-    (AlgRel.refl (M := M) (N := N) (raiseE (.val (cancelVal (n :: K.hndNames) none))))
+  have h3 := (hK.dead.shift hM hN 3 0).plug
+    (AlgRel.refl (M := M) (N := N) (raiseE (.val (cancelVal none))))
   have hH4 := hH.shiftV hM hN 4 0
-  have hH3 := hH.shiftV hM hN 3 0
   unfold kappaCBody
-  rw [← hK.hndNames]
   cases aff <;> simp only [if_true, if_false, Bool.false_eq_true] <;> alg_cong
 
-theorem kappaAt_rel {t n : UInt32} {H H' : Val} {K K' : Kont} (hH : AlgRel M N H.1 H'.1)
-    (hK : AlgRelK M N K K') : AlgRel M N (kappaAt t n H K) (kappaAt t n H' K') := by
-  have hb₀ := kappaCBody_rel hM hN (aff := false) (n := n) hH hK
-  have hb₁ := kappaCBody_rel hM hN (aff := true) (n := n) hH hK
-  have hk := kappa_rel hM hN (n := n) hH hK
+theorem kappaAt_rel {t : UInt32} {H H' : Val} {K K' : Kont} (hH : AlgRel M N H.1 H'.1)
+    (hK : AlgRelK M N K K') : AlgRel M N (kappaAt t H K) (kappaAt t H' K') := by
+  have hb₀ := kappaCBody_rel hM hN (aff := false) hH hK
+  have hb₁ := kappaCBody_rel hM hN (aff := true) hH hK
+  have hk := kappa_rel hM hN hH hK
   unfold kappaAt kappaCell
   split_ifs <;> alg_cong
 
@@ -1182,7 +1188,7 @@ theorem AlgRel.head {μ μ' ν : Heap} {a a' b : Expr} (hh : Head (ℍ := ℍ) �
         simp only [opPayload, Val.pair, Val.i32]
         alg_cong
       exact .seq (.app hb₁ .unit) (.app (.prim _) hp)
-  | ufinC N₀ D Ns err K hK =>
+  | ufinC N₀ D err K hK =>
       obtain ⟨ND', e', rfl, hND, he⟩ := hab.prim2_inv (p := .ubind) (v := Val.pair N₀ D)
       obtain ⟨a₁, b₁, hND', ha₁, hb₁⟩ := (show AlgRel M N (.pair N₀.1 D.1) ND'.1 from hND).pair_inv
       let N₀' : Val := ⟨a₁, ha₁.isVal N₀.2⟩
@@ -1190,47 +1196,58 @@ theorem AlgRel.head {μ μ' ν : Heap} {a a' b : Expr} (hh : Head (ℍ := ℍ) �
       have : ND' = Val.pair N₀' D' := Subtype.ext hND'
       subst this
       obtain ⟨K', x', rfl, hK', hx⟩ :=
-        (show AlgRel M N (K.plug (.app (.prim .raise) (cancelVal Ns err).1)) e' from he).plugOp_inv
+        (show AlgRel M N (K.plug (.app (.prim .raise) (cancelVal err).1)) e' from he).plugOp_inv
           (by decide)
       obtain ⟨err', rfl, herr⟩ := hx.cancelVal_inv
-      exact ⟨ν, _, Head.ufinC ν N₀' D' Ns err' K' (by rw [← hK'.catches]; exact hK),
-        .app (.app (.prim _) (herr.cancelRel Ns)) (.app hb₁ .unit), hμ⟩
-  | cfret Ns err w =>
-      obtain ⟨s', e', rfl, hs, he⟩ := hab.prim2_inv (p := .cfin) (v := cancelVal Ns err)
+      exact ⟨ν, _, Head.ufinC ν N₀' D' err' K' (by rw [← hK'.catches]; exact hK),
+        .app (.app (.prim _) herr.cancelRel) (.app hb₁ .unit), hμ⟩
+  | cfret err w =>
+      obtain ⟨s', e', rfl, hs, he⟩ := hab.prim2_inv (p := .cfin) (v := cancelVal err)
       obtain ⟨err', hs', herr⟩ := hs.cancelVal_inv
-      have : s' = cancelVal Ns err' := Subtype.ext hs'
+      have : s' = cancelVal err' := Subtype.ext hs'
       subst this
       let w' : Val := ⟨e', he.isVal w.2⟩
-      exact ⟨ν, _, Head.cfret ν Ns err' w', .app (.prim _) (herr.cancelRel Ns), hμ⟩
-  | cferr Ns err m j w K hK =>
-      obtain ⟨s', e', rfl, hs, he⟩ := hab.prim2_inv (p := .cfin) (v := cancelVal Ns err)
+      exact ⟨ν, _, Head.cfret ν err' w', .app (.prim _) herr.cancelRel, hμ⟩
+  | cferr err m j w K hm hK =>
+      obtain ⟨s', e', rfl, hs, he⟩ := hab.prim2_inv (p := .cfin) (v := cancelVal err)
       obtain ⟨err', hs', herr⟩ := hs.cancelVal_inv
-      have : s' = cancelVal Ns err' := Subtype.ext hs'
+      have : s' = cancelVal err' := Subtype.ext hs'
       subst this
       obtain ⟨K', x', rfl, hK', hx⟩ :=
         (show AlgRel M N (K.plug (.app (.prim .raise) (opPayload m j w).1)) e' from he).plugOp_inv
           (by decide)
       obtain ⟨w', rfl, hw⟩ := hx.opPayload_inv
-      exact ⟨ν, _, Head.cferr ν Ns err' m j w' K' (by rw [← hK'.catches]; exact hK),
-        .app (.prim _) ((herr.next Ns m j hw).cancelRel Ns), hμ⟩
-  | cancel Ns K hK =>
+      exact ⟨ν, _, Head.cferr ν err' m j w' K' hm (by rw [← hK'.catches]; exact hK),
+        .app (.prim _) (herr.next m j hw).cancelRel, hμ⟩
+  | cfcancel err err₂ K hK =>
+      obtain ⟨s', e', rfl, hs, he⟩ := hab.prim2_inv (p := .cfin) (v := cancelVal err)
+      obtain ⟨err', hs', herr⟩ := hs.cancelVal_inv
+      have : s' = cancelVal err' := Subtype.ext hs'
+      subst this
+      obtain ⟨K', x', rfl, hK', hx⟩ :=
+        (show AlgRel M N (K.plug (.app (.prim .raise) (cancelVal err₂).1)) e' from he).plugOp_inv
+          (by decide)
+      obtain ⟨err₂', rfl, herr₂⟩ := hx.cancelVal_inv
+      exact ⟨ν, _, Head.cfcancel ν err' err₂' K' (by rw [← hK'.catches]; exact hK),
+        .app (.prim _) (herr.or herr₂).cancelRel, hμ⟩
+  | cancel K hK =>
       obtain ⟨e', rfl, he⟩ := hab.primApp_inv (p := .ccatch)
       obtain ⟨K', x', rfl, hK', hx⟩ :=
-        (show AlgRel M N (K.plug (.app (.prim .raise) (cancelVal Ns none).1)) e' from he).plugOp_inv
+        (show AlgRel M N (K.plug (.app (.prim .raise) (cancelVal none).1)) e' from he).plugOp_inv
           (by decide)
       obtain ⟨err', rfl, herr⟩ := hx.cancelVal_inv
       cases herr
-      exact ⟨ν, _, Head.cancel ν Ns K' (by rw [← hK'.catches]; exact hK), .unit, hμ⟩
-  | creraise Ns E K hK =>
+      exact ⟨ν, _, Head.cancel ν K' (by rw [← hK'.catches]; exact hK), .unit, hμ⟩
+  | creraise E K hK =>
       obtain ⟨e', rfl, he⟩ := hab.primApp_inv (p := .ccatch)
       obtain ⟨K', x', rfl, hK', hx⟩ :=
-        (show AlgRel M N (K.plug (.app (.prim .raise) (cancelVal Ns (some E)).1)) e' from
+        (show AlgRel M N (K.plug (.app (.prim .raise) (cancelVal (some E)).1)) e' from
           he).plugOp_inv (by decide)
       obtain ⟨err', rfl, herr⟩ := hx.cancelVal_inv
       cases herr with
       | some hE =>
           rename_i E'
-          exact ⟨ν, _, Head.creraise ν Ns E' K' (by rw [← hK'.catches]; exact hK),
+          exact ⟨ν, _, Head.creraise ν E' K' (by rw [← hK'.catches]; exact hK),
             .app (.prim _) hE, hμ⟩
 
 end Head
@@ -1304,32 +1321,49 @@ theorem labelOf_start {RF : RowForm} {Ξ : EffCtx} {μ μ' : Heap} {a a' b : Exp
         ⟨b₁, hb₁.isVal D.2⟩).1) e' = ubindE (Val.pair ⟨a₁, ha₁.isVal N₀.2⟩ ⟨b₁, hb₁.isVal D.2⟩) e'
         from rfl, labelOf_fire (fun h => hnv (he.isVal_left h))]
       rfl
-  | ufinC N₀ D Ns err K hK =>
+  | ufinC N₀ D err K hK =>
       obtain ⟨ND', e', rfl, hND, he⟩ := hab.prim2_inv (p := .ubind) (v := Val.pair N₀ D)
       obtain ⟨a₁, b₁, hND', ha₁, hb₁⟩ := (show AlgRel M N (.pair N₀.1 D.1) ND'.1 from hND).pair_inv
       have hND'' : ND' = Val.pair ⟨a₁, ha₁.isVal N₀.2⟩ ⟨b₁, hb₁.isVal D.2⟩ := Subtype.ext hND'
       subst hND''
-      have hnv : ¬ IsVal (K.plug (raiseE (.val (cancelVal Ns err)))) := fun h =>
+      have hnv : ¬ IsVal (K.plug (raiseE (.val (cancelVal err)))) := fun h =>
         plug_raise_ne_val K _ ⟨_, h⟩ rfl
       rw [labelOf_fire hnv, show Expr.app (.app (.prim .ubind) (Val.pair ⟨a₁, ha₁.isVal N₀.2⟩
         ⟨b₁, hb₁.isVal D.2⟩).1) e' = ubindE (Val.pair ⟨a₁, ha₁.isVal N₀.2⟩ ⟨b₁, hb₁.isVal D.2⟩) e'
         from rfl, labelOf_fire (fun h => hnv (he.isVal_left h))]
       rfl
-  | cfret Ns err w =>
-      obtain ⟨s', e', rfl, hs, he⟩ := hab.prim2_inv (p := .cfin) (v := cancelVal Ns err)
+  | cfret err w =>
+      obtain ⟨s', e', rfl, hs, he⟩ := hab.prim2_inv (p := .cfin) (v := cancelVal err)
       rw [labelOf_cfret, show Expr.app (.app (.prim .cfin) s'.1) e' = cfinE s'
         (.val ⟨e', he.isVal w.2⟩) from rfl, labelOf_cfret]
-  | cferr Ns err m j w K hK =>
-      obtain ⟨s', e', rfl, hs, he⟩ := hab.prim2_inv (p := .cfin) (v := cancelVal Ns err)
+  | cferr err m j w K hm hK =>
+      obtain ⟨s', e', rfl, hs, he⟩ := hab.prim2_inv (p := .cfin) (v := cancelVal err)
       obtain ⟨K', x', rfl, hK', hx⟩ :=
         (show AlgRel M N (K.plug (.app (.prim .raise) (opPayload m j w).1)) e' from he).plugOp_inv
           (by decide)
       obtain ⟨w', rfl, hw⟩ := hx.opPayload_inv
       have hw' : w' = w := Subtype.ext (hw.eq_of_lamFree (hpay _ K m j w rfl hK))
       subst hw'
-      rw [labelOf_cferr, show Expr.app (.app (.prim .cfin) s'.1)
+      rw [labelOf_cferr _ _ hm, show Expr.app (.app (.prim .cfin) s'.1)
         (K'.plug (.app (.prim .raise) (opPayload m j w').1)) =
-        cfinE s' (K'.plug (raiseE (.val (opPayload m j w')))) from rfl, labelOf_cferr]
+        cfinE s' (K'.plug (raiseE (.val (opPayload m j w')))) from rfl, labelOf_cferr _ _ hm]
+  | cfcancel err err₂ K hK =>
+      obtain ⟨s', e', rfl, hs, he⟩ := hab.prim2_inv (p := .cfin) (v := cancelVal err)
+      obtain ⟨K', x', rfl, hK', hx⟩ :=
+        (show AlgRel M N (K.plug (.app (.prim .raise) (cancelVal err₂).1)) e' from he).plugOp_inv
+          (by decide)
+      obtain ⟨err₂', rfl, herr⟩ := hx.cancelVal_inv
+      have hl : lamFree (errVal err₂).1 = true := hpay _ K 0 0 (errVal err₂) rfl hK
+      have he₂ : err₂' = err₂ := by
+        cases herr with
+        | none => rfl
+        | some hE =>
+            rename_i E E'
+            exact congrArg some (Subtype.ext (hE.eq_of_lamFree hl))
+      subst he₂
+      rw [labelOf_cfcancel, show Expr.app (.app (.prim .cfin) s'.1)
+        (K'.plug (.app (.prim .raise) (cancelVal err₂').1)) =
+        cfinE s' (K'.plug (raiseE (.val (cancelVal err₂')))) from rfl, labelOf_cfcancel]
   | _ => exact tau rfl
 
 /-! ### A machine step, through the relation -/

@@ -174,16 +174,16 @@ theorem head_not_inertApp {μ μ' : Heap} {p : Prim} {v : Val} {a' : Expr} (hp :
     (h : Head μ (.app (.val (.prim p)) (.val v)) μ' a') : False := by
   generalize hE : Expr.app (.val (.prim p)) (.val v) = E at h
   cases h with
-  | cancel Ns K hK =>
+  | cancel K hK =>
       simp only [ccatchE, Expr.app.injEq] at hE
       obtain ⟨-, hE⟩ := hE
-      have hv : IsVal (K.plug (raiseE (.val (cancelVal Ns none)))) := by rw [← hE]; exact v.2
+      have hv : IsVal (K.plug (raiseE (.val (cancelVal none)))) := by rw [← hE]; exact v.2
       have := K.isVal_of_plug hv
       simp [raiseE] at this
-  | creraise Ns E K hK =>
+  | creraise E K hK =>
       simp only [ccatchE, Expr.app.injEq] at hE
       obtain ⟨-, hE⟩ := hE
-      have hv : IsVal (K.plug (raiseE (.val (cancelVal Ns (some E))))) := by rw [← hE]; exact v.2
+      have hv : IsVal (K.plug (raiseE (.val (cancelVal (some E))))) := by rw [← hE]; exact v.2
       have := K.isVal_of_plug hv
       simp [raiseE] at this
   | _ => cases p <;> simp_all [Prim.Inert, hndE, ubindE, cfinE, Expr.val, Val.prim, Val.lam]
@@ -275,29 +275,16 @@ theorem plug_raise_inj {K K' : Kont} {p p' : Val}
     (h : K.plug (raiseE (.val p)) = K'.plug (raiseE (.val p'))) : K = K' ∧ p = p' :=
   let h' := plug_opE_eq (r := true) (r' := true) h; ⟨h'.1, h'.2.2⟩
 
-theorem namesVal_inj : ∀ {N N' : List UInt32}, namesVal N = namesVal N' → N = N'
-  | [], [], _ => rfl
-  | [], _ :: _, h => by simp [namesVal, Val.inj₁, Val.inj₂] at h
-  | _ :: _, [], h => by simp [namesVal, Val.inj₁, Val.inj₂] at h
-  | m :: N, m' :: N', h => by
-      have h := congrArg Subtype.val h
-      simp only [namesVal, Val.inj₂, Val.pair, Val.i32, Expr.inj₂.injEq, Expr.pair.injEq,
-        Expr.prim.injEq, Prim.lit.injEq, IntLit.i32.injEq] at h
-      rw [h.1, namesVal_inj (Subtype.ext h.2)]
-
 theorem errVal_inj {e e' : Option Val} (h : errVal e = errVal e') : e = e' := by
   have h := congrArg Subtype.val h
   cases e <;> cases e' <;> simp [errVal, Val.inj₁, Val.inj₂] at h ⊢
   exact Subtype.ext h
 
-theorem cancelVal_inj {N N' : List UInt32} {e e' : Option Val}
-    (h : cancelVal N e = cancelVal N' e') : N = N' ∧ e = e' := by
+theorem cancelVal_inj {e e' : Option Val} (h : cancelVal e = cancelVal e') : e = e' := by
   obtain ⟨-, -, h⟩ := opPayload_inj h
-  obtain ⟨h₁, h₂⟩ := valPair_inj (congrArg Subtype.val h)
-  exact ⟨namesVal_inj h₁, errVal_inj h₂⟩
+  exact errVal_inj h
 
-@[simp] theorem payloadName_cancelVal (N : List UInt32) (e : Option Val) :
-    payloadName (cancelVal N e) = some 0 := rfl
+@[simp] theorem payloadName_cancelVal (e : Option Val) : payloadName (cancelVal e) = some 0 := rfl
 
 /-- The evaluation positions strictly inside a redex that do not hold a value: the body of a
 handler, a finaliser or a `ccatch`, and the function part `hnd H` or `ubind ND` of a handler or
@@ -307,7 +294,7 @@ def CatcherPos (K : Kont) (e : Expr) : Prop :=
   (∃ N D K', K = .appR (.app (.val (.prim .ubind)) (.val (Val.pair N D))) K') ∨
   (∃ K', K = .appR (.val (.prim .ccatch)) K') ∨
   (∃ (w H : Val) (p : Prim), p.Inert ∧ K = .appL .hole w ∧ e = .app (.val (.prim p)) (.val H)) ∨
-  (∃ Ns err K', K = .appR (.app (.val (.prim .cfin)) (.val (cancelVal Ns err))) K')
+  (∃ err K', K = .appR (.app (.val (.prim .cfin)) (.val (cancelVal err))) K')
 
 /-- A strict evaluation position of a redex that holds a non-value is a catcher position. -/
 theorem head_plug {μ μ' : Heap} {E a' : Expr} (hh : Head μ E μ' a') :
@@ -332,19 +319,22 @@ theorem head_plug {μ μ' : Heap} {E a' : Expr} (hh : Head μ E μ' a') :
       | ufin N D n i v K₀ hn hK₀ =>
           simp only [ubindE, Kont.plug, Expr.app.injEq] at hE
           exact .inr (.inl ⟨N, D, K, by rw [hE.1]⟩)
-      | ufinC N D Ns err K₀ hK₀ =>
+      | ufinC N D err K₀ hK₀ =>
           simp only [ubindE, Kont.plug, Expr.app.injEq] at hE
           exact .inr (.inl ⟨N, D, K, by rw [hE.1]⟩)
-      | cancel Ns K₀ hK₀ =>
+      | cancel K₀ hK₀ =>
           simp only [ccatchE, Kont.plug, Expr.app.injEq] at hE
           exact .inr (.inr (.inl ⟨K, by rw [hE.1]⟩))
-      | creraise Ns E K₀ hK₀ =>
+      | creraise E K₀ hK₀ =>
           simp only [ccatchE, Kont.plug, Expr.app.injEq] at hE
           exact .inr (.inr (.inl ⟨K, by rw [hE.1]⟩))
-      | cferr Ns err m j w K₀ hK₀ =>
+      | cferr err m j w K₀ hm hK₀ =>
           simp only [cfinE, Kont.plug, Expr.app.injEq] at hE
-          exact .inr (.inr (.inr (.inr ⟨Ns, err, K, by rw [hE.1]⟩)))
-      | cfret Ns err w =>
+          exact .inr (.inr (.inr (.inr ⟨err, K, by rw [hE.1]⟩)))
+      | cfcancel err err' K₀ hK₀ =>
+          simp only [cfinE, Kont.plug, Expr.app.injEq] at hE
+          exact .inr (.inr (.inr (.inr ⟨err, K, by rw [hE.1]⟩)))
+      | cfret err w =>
           simp only [cfinE, Kont.plug, Expr.app.injEq] at hE
           exact absurd (K.isVal_of_plug (hE.2 ▸ w.2)) hnv
       | _ =>
@@ -372,23 +362,26 @@ theorem head_plug {μ μ' : Heap} {E a' : Expr} (hh : Head μ E μ' a') :
       | ufin N D n i w K₀ hn hK₀ =>
           simp only [ubindE, Kont.plug, Expr.app.injEq] at hE
           exact (opE_not_isVal true (opPayload n i w) (K₀.isVal_of_plug (show IsVal (K₀.plug (raiseE (.val (opPayload n i w)))) from by rw [hE.2]; exact v.2))).elim
-      | ufinC N D Ns err K₀ hK₀ =>
+      | ufinC N D err K₀ hK₀ =>
           simp only [ubindE, Kont.plug, Expr.app.injEq] at hE
           exact (plug_raise_ne_val K₀ _ v hE.2).elim
-      | cancel Ns K₀ hK₀ =>
+      | cancel K₀ hK₀ =>
           simp only [ccatchE, Kont.plug, Expr.app.injEq] at hE
           exact (plug_raise_ne_val K₀ _ v hE.2).elim
-      | creraise Ns E K₀ hK₀ =>
+      | creraise E K₀ hK₀ =>
           simp only [ccatchE, Kont.plug, Expr.app.injEq] at hE
           exact (plug_raise_ne_val K₀ _ v hE.2).elim
-      | cferr Ns err m j w K₀ hK₀ =>
+      | cferr err m j w K₀ hm hK₀ =>
           simp only [cfinE, Kont.plug, Expr.app.injEq] at hE
           exact (plug_raise_ne_val K₀ _ v hE.2).elim
-      | cfret Ns err w =>
+      | cfcancel err err' K₀ hK₀ =>
+          simp only [cfinE, Kont.plug, Expr.app.injEq] at hE
+          exact (plug_raise_ne_val K₀ _ v hE.2).elim
+      | cfret err w =>
           simp only [cfinE, Kont.plug, Expr.app.injEq] at hE
           obtain ⟨h1, -⟩ := hE
           obtain rfl := plug_primApp h1.symm hnv
-          exact .inr (.inr (.inr (.inl ⟨v, cancelVal Ns err, .cfin, trivial, rfl, by simpa [Kont.plug] using h1.symm⟩)))
+          exact .inr (.inr (.inr (.inl ⟨v, cancelVal err, .cfin, trivial, rfl, by simpa [Kont.plug] using h1.symm⟩)))
       | _ =>
           exfalso; apply hnv; apply K.isVal_of_plug
           simp only [Kont.plug] at hE
@@ -425,7 +418,7 @@ theorem head_not_opPlug {μ μ' : Heap} {a' : Expr} {K₁ : Kont} {r : Bool} {p 
     · exact head_not_inertApp (p := .raise) trivial (by simpa [opE, raiseE] using h)
   rcases head_plug h K₁ (opE_not_isVal r p) rfl h0 with
     ⟨n₀, qs₀, hr₀, hs₀, K', rfl⟩ | ⟨N₀, D₀, K', rfl⟩ | ⟨K', rfl⟩ | ⟨w, H, q, hq, rfl, he⟩ |
-      ⟨Ns₀, err₀, K', rfl⟩
+      ⟨err₀, K', rfl⟩
   · generalize hE : (Kont.appR (.app (.val (.prim .hnd)) (.val (hndVal n₀ qs₀ hr₀ hs₀))) K').plug (opE r p) = E at h
     cases h with
     | hop n' i qs hr hs c v K₀ hc hK₀ =>
@@ -456,10 +449,10 @@ theorem head_not_opPlug {μ μ' : Heap} {a' : Expr} {K₁ : Kont} {r : Bool} {p 
         obtain ⟨rfl, rfl, rfl⟩ := plug_opE_eq (r' := true) (p' := opPayload n' i v)
           (by simpa [opE] using hE)
         simp [OpFree, Kont.Catches] at hK
-    | ufinC N D Ns err K₀ hK₀ =>
+    | ufinC N D err K₀ hK₀ =>
         simp only [ubindE, Kont.plug, Expr.app.injEq] at hE
         obtain ⟨-, hE⟩ := hE
-        obtain ⟨rfl, rfl, rfl⟩ := plug_opE_eq (r' := true) (p' := cancelVal Ns err)
+        obtain ⟨rfl, rfl, rfl⟩ := plug_opE_eq (r' := true) (p' := cancelVal err)
           (by simpa [opE] using hE)
         simp [OpFree, Kont.Catches] at hK
     | uthen N D w =>
@@ -468,32 +461,38 @@ theorem head_not_opPlug {μ μ' : Heap} {a' : Expr} {K₁ : Kont} {r : Bool} {p 
     | _ => simp_all [Kont.plug, hndE, ubindE, ccatchE, cfinE, opE, raiseE, performE]
   · generalize hE : (Kont.appR (.val (.prim .ccatch)) K').plug (opE r p) = E at h
     cases h with
-    | cancel Ns K₀ hK₀ =>
+    | cancel K₀ hK₀ =>
         simp only [ccatchE, Kont.plug, Expr.app.injEq] at hE
         obtain ⟨-, hE⟩ := hE
-        obtain ⟨rfl, rfl, rfl⟩ := plug_opE_eq (r' := true) (p' := cancelVal Ns none)
+        obtain ⟨rfl, rfl, rfl⟩ := plug_opE_eq (r' := true) (p' := cancelVal none)
           (by simpa [opE] using hE)
         simp at hn; subst hn
         simp [OpFree, Kont.Catches] at hK
-    | creraise Ns E K₀ hK₀ =>
+    | creraise E K₀ hK₀ =>
         simp only [ccatchE, Kont.plug, Expr.app.injEq] at hE
         obtain ⟨-, hE⟩ := hE
-        obtain ⟨rfl, rfl, rfl⟩ := plug_opE_eq (r' := true) (p' := cancelVal Ns (some E))
+        obtain ⟨rfl, rfl, rfl⟩ := plug_opE_eq (r' := true) (p' := cancelVal (some E))
           (by simpa [opE] using hE)
         simp at hn; subst hn
         simp [OpFree, Kont.Catches] at hK
     | _ => simp_all [Kont.plug, hndE, ubindE, ccatchE, cfinE, opE, raiseE, performE]
   · generalize hE : (Kont.appL .hole w).plug (opE r p) = E at h
     cases h <;> cases r <;> simp_all [Kont.plug, hndE, ubindE, ccatchE, cfinE, opE, raiseE, performE]
-  · generalize hE : (Kont.appR (.app (.val (.prim .cfin)) (.val (cancelVal Ns₀ err₀))) K').plug (opE r p) = E at h
+  · generalize hE : (Kont.appR (.app (.val (.prim .cfin)) (.val (cancelVal err₀))) K').plug (opE r p) = E at h
     cases h with
-    | cferr Ns err m j v K₀ hK₀ =>
+    | cferr err m j v K₀ hm hK₀ =>
         simp only [cfinE, Kont.plug, Expr.app.injEq] at hE
         obtain ⟨-, hE⟩ := hE
         obtain ⟨rfl, rfl, rfl⟩ := plug_opE_eq (r' := true) (p' := opPayload m j v)
           (by simpa [opE] using hE)
         simp [OpFree, Kont.Catches] at hK
-    | cfret Ns err w =>
+    | cfcancel err err' K₀ hK₀ =>
+        simp only [cfinE, Kont.plug, Expr.app.injEq] at hE
+        obtain ⟨-, hE⟩ := hE
+        obtain ⟨rfl, rfl, rfl⟩ := plug_opE_eq (r' := true) (p' := cancelVal err')
+          (by simpa [opE] using hE)
+        simp [OpFree, Kont.Catches] at hK
+    | cfret err w =>
         simp only [cfinE, Kont.plug, Expr.app.injEq] at hE
         exact opE_not_isVal r p (K'.isVal_of_plug (hE.2 ▸ w.2))
     | _ => simp_all [Kont.plug, hndE, ubindE, ccatchE, cfinE, opE, raiseE, performE]
@@ -520,7 +519,7 @@ theorem head_nested {μ μ' μ₂ μ₂' : Heap} {E E' a a' : Expr} (hh : Head �
   by_contra hK
   rcases head_plug hh K ha.not_isVal hE hK with
     ⟨n₀, qs₀, hr₀, hs₀, K', rfl⟩ | ⟨N₀, D₀, K', rfl⟩ | ⟨K', rfl⟩ | ⟨w, H, q, hq, rfl, rfl⟩ |
-      ⟨Ns₀, err₀, K', rfl⟩
+      ⟨err₀, K', rfl⟩
   · subst hE
     generalize hE : (Kont.appR (.app (.val (.prim .hnd)) (.val (hndVal n₀ qs₀ hr₀ hs₀))) K').plug a = X at hh
     cases hh with
@@ -543,9 +542,9 @@ theorem head_nested {μ μ' μ₂ μ₂' : Heap} {E E' a a' : Expr} (hh : Head �
         simp only [ubindE, Kont.plug, Expr.app.injEq] at hE
         exact nested_op (r := true) (payloadName_opPayload n i v) (by simpa [OpFree] using hK₀) ha
           (by simpa [opE] using hE.2)
-    | ufinC N D Ns err K₀ hK₀ =>
+    | ufinC N D err K₀ hK₀ =>
         simp only [ubindE, Kont.plug, Expr.app.injEq] at hE
-        exact nested_op (r := true) (payloadName_cancelVal Ns err) (by simpa [OpFree] using hK₀) ha
+        exact nested_op (r := true) (payloadName_cancelVal err) (by simpa [OpFree] using hK₀) ha
           (by simpa [opE] using hE.2)
     | uthen N D w =>
         simp only [ubindE, Kont.plug, Expr.app.injEq] at hE
@@ -554,24 +553,28 @@ theorem head_nested {μ μ' μ₂ μ₂' : Heap} {E E' a a' : Expr} (hh : Head �
   · subst hE
     generalize hE : (Kont.appR (.val (.prim .ccatch)) K').plug a = X at hh
     cases hh with
-    | cancel Ns K₀ hK₀ =>
+    | cancel K₀ hK₀ =>
         simp only [ccatchE, Kont.plug, Expr.app.injEq] at hE
-        exact nested_op (r := true) (payloadName_cancelVal Ns none) (by simpa [OpFree] using hK₀) ha
+        exact nested_op (r := true) (payloadName_cancelVal none) (by simpa [OpFree] using hK₀) ha
           (by simpa [opE] using hE.2)
-    | creraise Ns E K₀ hK₀ =>
+    | creraise E K₀ hK₀ =>
         simp only [ccatchE, Kont.plug, Expr.app.injEq] at hE
-        exact nested_op (r := true) (payloadName_cancelVal Ns (some E)) (by simpa [OpFree] using hK₀)
+        exact nested_op (r := true) (payloadName_cancelVal (some E)) (by simpa [OpFree] using hK₀)
           ha (by simpa [opE] using hE.2)
     | _ => simp_all [Kont.plug, hndE, ubindE, ccatchE, cfinE]
   · exact head_not_inertApp hq ha
   · subst hE
-    generalize hE : (Kont.appR (.app (.val (.prim .cfin)) (.val (cancelVal Ns₀ err₀))) K').plug a = X at hh
+    generalize hE : (Kont.appR (.app (.val (.prim .cfin)) (.val (cancelVal err₀))) K').plug a = X at hh
     cases hh with
-    | cferr Ns err m j v K₀ hK₀ =>
+    | cferr err m j v K₀ hm hK₀ =>
         simp only [cfinE, Kont.plug, Expr.app.injEq] at hE
         exact nested_op (r := true) (payloadName_opPayload m j v) (by simpa [OpFree] using hK₀) ha
           (by simpa [opE] using hE.2)
-    | cfret Ns err w =>
+    | cfcancel err err' K₀ hK₀ =>
+        simp only [cfinE, Kont.plug, Expr.app.injEq] at hE
+        exact nested_op (r := true) (payloadName_cancelVal err') (by simpa [OpFree] using hK₀) ha
+          (by simpa [opE] using hE.2)
+    | cfret err w =>
         simp only [cfinE, Kont.plug, Expr.app.injEq] at hE
         exact ha.not_isVal (K'.isVal_of_plug (by rw [hE.2]; exact w.2))
     | _ => simp_all [Kont.plug, hndE, ubindE, ccatchE, cfinE]
@@ -616,7 +619,7 @@ theorem head_det_eff {μ μ₁ μ₂ : Heap} {a a₁ a₂ : Expr} (h₁ : Head �
              obtain ⟨rfl, rfl, rfl⟩ := opPayload_inj hp)
           | (obtain ⟨rfl, hp⟩ := plug_raise_inj h2
              first
-              | (obtain ⟨rfl, hc⟩ := cancelVal_inj hp
+              | (have hc := cancelVal_inj hp
                  first | subst hc | simp at hc)
               | (obtain ⟨rfl, rfl, rfl⟩ := opPayload_inj hp)
               | (have := (opPayload_inj hp).1; simp_all; done))
@@ -624,7 +627,7 @@ theorem head_det_eff {μ μ₁ μ₂ : Heap} {a a₁ a₂ : Expr} (h₁ : Head �
        all_goals first
         | (obtain ⟨-, rfl, rfl, rfl⟩ := hndVal_inj h1)
         | (obtain ⟨rfl, rfl⟩ := valPair_inj h1)
-        | (obtain ⟨rfl, rfl⟩ := cancelVal_inj (Subtype.ext h1))
+        | (obtain rfl := cancelVal_inj (Subtype.ext h1))
         | skip
        all_goals (simp_all; done))
     | (first
@@ -638,7 +641,7 @@ theorem head_det_eff {μ μ₁ μ₂ : Heap} {a a₁ a₂ : Expr} (h₁ : Head �
              obtain ⟨rfl, rfl, rfl⟩ := opPayload_inj hp)
           | (obtain ⟨rfl, hp⟩ := plug_raise_inj hx
              first
-              | (obtain ⟨rfl, hc⟩ := cancelVal_inj hp
+              | (have hc := cancelVal_inj hp
                  first | subst hc | simp at hc)
               | (obtain ⟨rfl, rfl, rfl⟩ := opPayload_inj hp)
               | (have := (opPayload_inj hp).1; simp_all; done))
@@ -675,7 +678,7 @@ theorem plain_comp_right : ∀ (K K' : Kont), (K.comp K').Plain = true → K'.Pl
 
 theorem catcherPos_not_plain {K : Kont} {e : Expr} (h : CatcherPos K e) : K.Plain = false := by
   rcases h with ⟨n, qs, hr, hs, K', rfl⟩ | ⟨N, D, K', rfl⟩ | ⟨K', rfl⟩ | ⟨w, H, q, -, rfl, -⟩ |
-    ⟨Ns, err, K', rfl⟩ <;>
+    ⟨err, K', rfl⟩ <;>
     simp [Kont.Plain, Expr.val, Val.prim, hndVal, Val.pair, Val.i32, cancelVal, opPayload]
 
 /-- A step of `K[e]`, `e` holding a redex, is a step of `e` under `K`. -/

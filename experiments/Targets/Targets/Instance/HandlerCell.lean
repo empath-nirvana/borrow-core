@@ -111,7 +111,7 @@ theorem pureSteps_of_quiet {μ : Heap} (K₀ : Kont) {e e' : Expr} (h : Quiet (�
 
 theorem captureAtE_of_val {aff : Bool} {ℓ : Loc} {n : UInt32} {qs r : Expr} {cs : List Expr}
     (K : Kont) (h : IsVal (hndValE n qs r cs)) :
-    captureAtE aff ℓ n qs r cs K = kappaC aff ℓ n ⟨_, h⟩ K := by
+    captureAtE aff ℓ n qs r cs K = kappaC aff ℓ ⟨_, h⟩ K := by
   unfold captureAtE; rw [dif_pos h]
 
 theorem captureAtE_of_not_val {aff : Bool} {ℓ : Loc} {n : UInt32} {qs r : Expr} {cs : List Expr}
@@ -165,29 +165,29 @@ theorem catch_cell_ourInst (hL : LiveOK (ℍ := ℍ) RF Ξ J)
   have hH : IsVal (hndValE (RF.name Ξ l) (qsOf Ξ (RF.name Ξ l)) r.1 (cs.map Subtype.val)) :=
     .pair .prim (.pair hqv (.pair hr hcs))
   have hkc : kappaAt (capTag (qualsVal ((Ξ (RF.name Ξ l)).map Prod.fst)).1 (UInt32.ofNat i).toNat)
-      (RF.name Ξ l) (hndVal (RF.name Ξ l) (qualsVal ((Ξ (RF.name Ξ l)).map Prod.fst)) ⟨r.1, hr⟩
-        ⟨_, hcs⟩) K = kappaCell (cellAff q) (RF.name Ξ l) ⟨_, hH⟩ K := by
-    change kappaAt (capTag (qsOf Ξ (RF.name Ξ l)) (UInt32.ofNat i).toNat) _ _ K = _
+      (hndVal (RF.name Ξ l) (qualsVal ((Ξ (RF.name Ξ l)).map Prod.fst)) ⟨r.1, hr⟩
+        ⟨_, hcs⟩) K = kappaCell (cellAff q) ⟨_, hH⟩ K := by
+    change kappaAt (capTag (qsOf Ξ (RF.name Ξ l)) (UInt32.ofNat i).toNat) _ K = _
     rw [UInt32.toNat_ofNat_of_lt' hi, htag]
-    exact kappaAt_cell hq _ _ K
+    exact kappaAt_cell hq _ K
   have hhop := Head.hop (ℍ := ℍ) μ (RF.name Ξ l) (UInt32.ofNat i)
     (qualsVal ((Ξ (RF.name Ξ l)).map Prod.fst)) ⟨r.1, hr⟩ ⟨_, hcs⟩ ⟨cl.1, hclv⟩ ⟨v.1, hv⟩ K hca hK
   rw [hkc] at hhop
   have hb := Head.beta (ℍ := ℍ) (μ.upd ℓ Val.unit)
-    (kappaCBody (cellAff q) (RF.name Ξ l) ⟨_, hH⟩ K) (Val.loc ℓ)
+    (kappaCBody (cellAff q) ⟨_, hH⟩ K) (Val.loc ℓ)
   rw [kappaCBody_subst] at hb
   have hstep := OStep.mach (ℍ := ℍ) (RF := RF) (Ξ := Ξ)
     (K := K₀.comp (.appR (.val ⟨cl.1, hclv⟩) (.pairR ⟨v.1, hv⟩
-      (.appR (.val (Val.lam (kappaCBody (cellAff q) (RF.name Ξ l) ⟨_, hH⟩ K))) .hole))))
+      (.appR (.val (Val.lam (kappaCBody (cellAff q) ⟨_, hH⟩ K))) .hole))))
     (Head.alloc μ Val.unit ℓ hℓ)
   refine ⟨ℓ, hℓ, _, _, _, (μ.upd ℓ Val.unit, K₀.plug (.app (.val ⟨cl.1, hclv⟩)
-    (.pair (.val ⟨v.1, hv⟩) (kappaC (cellAff q) ℓ (RF.name Ξ l) ⟨_, hH⟩ K)))), ?_, hstep, ?_, ?_⟩
+    (.pair (.val ⟨v.1, hv⟩) (kappaC (cellAff q) ℓ ⟨_, hH⟩ K)))), ?_, hstep, ?_, ?_⟩
   · -- the `[op]` step
     rw [Kont.plug_comp]
     exact pureSteps_head K₀ .hole hhop
   · -- `κ`'s β-step at its cell
     show (𝕊).PureSteps (μ.upd ℓ Val.unit, (K₀.comp (.appR (.val ⟨cl.1, hclv⟩) (.pairR ⟨v.1, hv⟩
-      (.appR (.val (Val.lam (kappaCBody (cellAff q) (RF.name Ξ l) ⟨_, hH⟩ K))) .hole)))).plug
+      (.appR (.val (Val.lam (kappaCBody (cellAff q) ⟨_, hH⟩ K))) .hole)))).plug
         (.val (Val.loc ℓ))) _
     have h := pureSteps_head (ℍ := ℍ) (RF := RF) (Ξ := Ξ) (J := J)
       (K₀.comp (.appR (.val ⟨cl.1, hclv⟩) (.pairR ⟨v.1, hv⟩ .hole))) .hole hb
@@ -198,8 +198,8 @@ theorem catch_cell_ourInst (hL : LiveOK (ℍ := ℍ) RF Ξ J)
       (captureAtE (decide (o.cls = .affine)) ℓ (RF.name Ξ l) (qsOf Ξ (RF.name Ξ l)) r.1
         (cs.map Subtype.val) K)))) _
     rw [captureAtE_of_val K hH, haff]
-    exact appE_steps K₀ cl.1 ⟨.pair v.1 (kappaC (cellAff q) ℓ (RF.name Ξ l) ⟨_, hH⟩ K),
-      .pair hv (isVal_kappaC _ _ _ _ _)⟩
+    exact appE_steps K₀ cl.1 ⟨.pair v.1 (kappaC (cellAff q) ℓ ⟨_, hH⟩ K),
+      .pair hv (isVal_kappaC _ _ _ _)⟩
 
 /-- **S4's catch law** at a configuration a typed program reaches, at a row form whose labels'
 signatures are indexable by `UInt32`, at every effect context: at an unrestricted operation the
@@ -244,8 +244,8 @@ theorem resumeCellLaw_ourInst (hL : LiveOK (ℍ := ℍ) RF Ξ J) : (𝕊).Resume
       (H.2.map Subtype.val) K) ⟨w.1, hw⟩
   by_cases hH : IsVal (hndValE (RF.name Ξ l) (qsOf Ξ (RF.name Ξ l)) H.1.1 (H.2.map Subtype.val))
   · rw [captureAtE_of_val K hH] at hst
-    obtain ⟨hq₁, hq₂⟩ := kappaC_resume_parts (ℍ := ℍ) (decide (k = .affine)) ℓ (RF.name Ξ l)
-      ⟨_, hH⟩ K ⟨w.1, hw⟩
+    obtain ⟨hq₁, hq₂⟩ := kappaC_resume_parts (ℍ := ℍ) (decide (k = .affine)) ℓ ⟨_, hH⟩ K
+      ⟨w.1, hw⟩
     have hfr : Head (ℍ := ℍ) (μ.upd ℓ Val.unit) (freeE (.val (Val.loc ℓ))) μ (.val Val.unit) := by
       have h := Head.free (ℍ := ℍ) (μ.upd ℓ Val.unit) ℓ Val.unit (Heap.upd_same _ _ _)
       rwa [del_upd_fresh hfree] at h
@@ -277,12 +277,12 @@ theorem cancelCellLaw_ourInst (hL : LiveOK (ℍ := ℍ) RF Ξ J) : (𝕊).Cancel
     (H.2.map Subtype.val) K)) at he
   subst he
   by_cases hH : IsVal (hndValE (RF.name Ξ l) (qsOf Ξ (RF.name Ξ l)) H.1.1 (H.2.map Subtype.val))
-  · obtain ⟨hq₁, hq₂⟩ := kappaC_cancel_parts (ℍ := ℍ) ℓ (RF.name Ξ l) ⟨_, hH⟩ K
+  · obtain ⟨hq₁, hq₂⟩ := kappaC_cancel_parts (ℍ := ℍ) ℓ ⟨_, hH⟩ K
     have hfr : Head (ℍ := ℍ) (μ.upd ℓ Val.unit) (freeE (.val (Val.loc ℓ))) μ (.val Val.unit) := by
       have h := Head.free (ℍ := ℍ) (μ.upd ℓ Val.unit) ℓ Val.unit (Heap.upd_same _ _ _)
       rwa [del_upd_fresh hfree] at h
     have hstep := OStep.mach (ℍ := ℍ) (RF := RF) (Ξ := Ξ)
-      (K := K₀.comp (Kont.seq .hole (kCanE (RF.name Ξ l) ⟨_, hH⟩ K))) hfr
+      (K := K₀.comp (Kont.seq .hole (kCanE K))) hfr
     rw [Kont.plug_comp, Kont.plug_comp] at hstep
     refine ⟨_, _, _, _, ?_, hstep, pureSteps_of_quiet K₀ hq₂, ?_⟩
     · show (𝕊).PureSteps (μ.upd ℓ Val.unit, K₀.plug (cancelE (captureAtE true ℓ (RF.name Ξ l)
@@ -386,7 +386,7 @@ theorem progT_catch : lookEnd 2 progT =
   rfl
 
 /-- The clause applied to the argument and `capture l H K`, run: a chain to `()`. -/
-def capRun : Expr := appE clT (.pair .unit (kappa 5 ⟨hndValE 5 (qualsVal [.lin]).1 hrT [clT],
+def capRun : Expr := appE clT (.pair .unit (kappa ⟨hndValE 5 (qualsVal [.lin]).1 hrT [clT],
   .pair .prim (.pair (qualsVal [.lin]).2 (.pair .lam (.pair .lam .unit)))⟩ .hole))
 
 theorem capRun_end : lookEnd 20 capRun = .unit := by rfl
@@ -442,13 +442,13 @@ theorem not_pureJoin_progT :
   have hhop := Head.hop (ℍ := ℍ) Adequacy.emptyMem 5 0 (qualsVal [.lin]) ⟨hrT, .lam⟩
     ⟨clausesE [clT], .pair .lam .unit⟩ ⟨clT, .lam⟩ Val.unit .hole
     (clauseAt_clausesE [clT] 0 .lam rfl) rfl
-  have hkc : kappaAt (capTag (qualsVal [.lin]).1 (0 : UInt32).toNat) 5
+  have hkc : kappaAt (capTag (qualsVal [.lin]).1 (0 : UInt32).toNat)
       (hndVal 5 (qualsVal [.lin]) ⟨hrT, .lam⟩ ⟨clausesE [clT], .pair .lam .unit⟩) .hole =
-      kappaCell false 5 (hndVal 5 (qualsVal [.lin]) ⟨hrT, .lam⟩ ⟨clausesE [clT], .pair .lam .unit⟩)
+      kappaCell false (hndVal 5 (qualsVal [.lin]) ⟨hrT, .lam⟩ ⟨clausesE [clT], .pair .lam .unit⟩)
         .hole := rfl
   rw [hkc] at hhop
   have hL : d = (Adequacy.emptyMem, lookEnd 2 progT) ∨
-      d = (Adequacy.emptyMem, .app clT (.pair .unit (kappaCell false 5
+      d = (Adequacy.emptyMem, .app clT (.pair .unit (kappaCell false
         (hndVal 5 (qualsVal [.lin]) ⟨hrT, .lam⟩ ⟨clausesE [clT], .pair .lam .unit⟩) .hole))) := by
     rcases Relation.ReflTransGen.cases_head hdL with rfl | ⟨c₁, ⟨ev, hst, -⟩, hrest⟩
     · exact .inl rfl
@@ -460,7 +460,7 @@ theorem not_pureJoin_progT :
       · rfl
       · exact (no_pureStep_alloc (J := J₁) (μ := Adequacy.emptyMem)
           (.appR (.val ⟨clT, .lam⟩) (.pairR Val.unit (.appR (.val (Val.lam (BoCa.BoLo.kappaCBody
-            false 5 (hndVal 5 (qualsVal [.lin]) ⟨hrT, .lam⟩ ⟨clausesE [clT], .pair .lam .unit⟩)
+            false (hndVal 5 (qualsVal [.lin]) ⟨hrT, .lam⟩ ⟨clausesE [clT], .pair .lam .unit⟩)
               .hole))) .hole))) hpst).elim
   -- from the clause at `capture l H K`: the chain to `()`
   have hHV : IsVal (hndValE 5 (qsOf ΞA 5) hrT (List.map Subtype.val [(⟨clT, .lam⟩ : OVal)])) :=
@@ -480,7 +480,7 @@ theorem not_pureJoin_progT :
   rcases hL with rfl | rfl
   · have hp : occursIn isPerform (lookEnd 2 progT) = true := by rfl
     simp [hp] at hall
-  · have ha : occursIn isAlloc (.app clT (.pair .unit (kappaCell false 5
+  · have ha : occursIn isAlloc (.app clT (.pair .unit (kappaCell false
         (hndVal 5 (qualsVal [.lin]) ⟨hrT, .lam⟩ ⟨clausesE [clT], .pair .lam .unit⟩) .hole))) =
         true := by rfl
     simp [ha] at hall

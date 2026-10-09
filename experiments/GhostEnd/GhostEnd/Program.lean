@@ -132,7 +132,7 @@ theorem withbor_relend (Tab : OpTab) {l : BoCa.Loc} {T B : VTy} {δ : LSub}
       ⟨ρ, PMap.empty, ResU.comp_empty_right ρ, ⟨v, hρ⟩, hR⟩
   -- the pair frame `(ℓ, [·])`
   have hpair := ewp_frame_plain Tab (.pairR (Val.loc l) .hole)
-    (fun _ => rfl) (fun _ => rfl) rfl (fun _ => emp)
+    (fun _ => rfl) (fun _ => rfl) (fun _ => emp)
     (fun _ _ _ _ h => h) (fun _ _ _ _ h => h)
     (fun _ _ _ _ _ _ _ h => by rw [h.1]; exact noOwn_empty)
     (fun _ _ _ _ _ _ _ h => h.1)

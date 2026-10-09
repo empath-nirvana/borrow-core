@@ -362,7 +362,7 @@ run_meta do
 #print axioms Targets.Inst.catch_cell_ourInst
 #print axioms Targets.Inst.catch_unr_ourInst
 #print axioms Targets.Inst.catches_frame
-#print axioms Targets.Inst.catches_hndK
+#print axioms Targets.Inst.deadFrame_eq
 #print axioms Targets.Inst.catches_of_noUnwind
 #print axioms Targets.Inst.cellQuiet_opStep
 #print axioms Targets.Inst.cellQuiet_p1
@@ -374,7 +374,6 @@ run_meta do
 #print axioms Targets.Inst.cfgAt_chainPath
 #print axioms Targets.Inst.cfg_next_head
 #print axioms Targets.Inst.cfinE_inj
-#print axioms Targets.Inst.cfinShape_p5Kf
 #print axioms Targets.Inst.chainTerms_length
 #print axioms Targets.Inst.choose_lab
 #print axioms Targets.Inst.clauseAt_ansHV
@@ -663,7 +662,6 @@ run_meta do
 #print axioms Targets.Inst.head_wlHop
 #print axioms Targets.Inst.higherOrderPoly_e2d_J₁
 #print axioms Targets.Inst.hndFrame_iff
-#print axioms Targets.Inst.hndNames_frame
 #print axioms Targets.Inst.hndVal_of_live
 #print axioms Targets.Inst.hofC_den
 #print axioms Targets.Inst.hofC_rFree
@@ -714,6 +712,7 @@ run_meta do
 #print axioms Targets.Inst.lab_ne_of_sig
 #print axioms Targets.Inst.lab_of_rowAt
 #print axioms Targets.Inst.labelOf_cferr
+#print axioms Targets.Inst.labelOf_cfcancel
 #print axioms Targets.Inst.labelOf_cfret
 #print axioms Targets.Inst.labelOf_fire
 #print axioms Targets.Inst.labelOf_ne_io
@@ -728,7 +727,6 @@ run_meta do
 #print axioms Targets.Inst.labelsAt_E6
 #print axioms Targets.Inst.lamFree_answer_of_coreClosed
 #print axioms Targets.Inst.lamFree_io_of_coreClosed
-#print axioms Targets.Inst.lamFree_namesVal
 #print axioms Targets.Inst.lamFree_of_dataVal
 #print axioms Targets.Inst.lamFree_opArgE
 #print axioms Targets.Inst.lastC_chainPath
@@ -784,8 +782,13 @@ run_meta do
 #print axioms Targets.Inst.noColouring_J₁
 #print axioms Targets.Inst.noIO_ourInst
 #print axioms Targets.Inst.noIntercept_of_core
-#print axioms Targets.Inst.noIntercept_needs_finRow
 #print axioms Targets.Inst.noInterception_J₄
+#print axioms Targets.Inst.finAloneProg_stop
+#print axioms Targets.Inst.finE_lam_finP
+#print axioms Targets.Inst.p5_fire
+#print axioms Targets.Inst.p5_beta
+#print axioms Targets.Inst.p5_stuck
+#print axioms Targets.Inst.finAlone_dead
 #print axioms Targets.Inst.noUnrExn_ΞA
 #print axioms Targets.Inst.noUnr_ΞA
 #print axioms Targets.Inst.noUnwind_comp
@@ -845,7 +848,6 @@ run_meta do
 #print axioms Targets.Inst.not_isComodel_badState
 #print axioms Targets.Inst.not_isLoopSum_data
 #print axioms Targets.Inst.not_isLoopSum_nLogTy
-#print axioms Targets.Inst.not_isOVal_finP
 #print axioms Targets.Inst.not_isOVal_prim_app
 #print axioms Targets.Inst.not_isVal_head
 #print axioms Targets.Inst.not_isVal_kappaCell
@@ -953,12 +955,6 @@ run_meta do
 #print axioms Targets.Inst.p2_val
 #print axioms Targets.Inst.p5_c
 #print axioms Targets.Inst.p5_c₀
-#print axioms Targets.Inst.p5_noCfin₃
-#print axioms Targets.Inst.p5_noFin₁
-#print axioms Targets.Inst.p5_noFin₃
-#print axioms Targets.Inst.p5_path
-#print axioms Targets.Inst.p5_run
-#print axioms Targets.Inst.p5_terms
 #print axioms Targets.Inst.payloadName_rel
 #print axioms Targets.Inst.pend_cons
 #print axioms Targets.Inst.pend_pfx
@@ -1492,6 +1488,8 @@ run_meta do
 #print axioms Targets.catches_mapLoc
 #print axioms Targets.catches_of_innerCatch
 #print axioms Targets.ccatchE_mapLoc
+#print axioms Targets.deadFrame_mapLoc
+#print axioms Targets.dead_mapLoc
 #print axioms Targets.cfinE_mapLoc
 #print axioms Targets.clauseAt_mapLoc
 #print axioms Targets.clauseOf_some
@@ -1500,10 +1498,10 @@ run_meta do
 #print axioms Targets.closedAt_dropFill
 #print axioms Targets.closedAt_host
 #print axioms Targets.closedAt_kappa
+#print axioms Targets.closedAt_dead
 #print axioms Targets.closedAt_kappaAt
 #print axioms Targets.closedAt_kappaC
 #print axioms Targets.closedAt_kappaCell
-#print axioms Targets.closedAt_namesVal
 #print axioms Targets.closedAt_of_derives
 #print axioms Targets.closedAt_of_fill
 #print axioms Targets.closedAt_of_zero
@@ -1570,6 +1568,7 @@ run_meta do
 #print axioms Targets.endsAppL_appL
 #print axioms Targets.endsAppL_comp_of
 #print axioms Targets.errNext_mapLoc
+#print axioms Targets.or_mapLoc
 #print axioms Targets.errOf_some
 #print axioms Targets.errOkW_core
 #print axioms Targets.errVal_mapLoc
@@ -1617,6 +1616,7 @@ run_meta do
 #print axioms Targets.find_shadow
 #print axioms Targets.fins_comp
 #print axioms Targets.fins_innerUbind
+#print axioms Targets.fins_dead
 #print axioms Targets.fins_nil_of_catches
 #print axioms Targets.fixSelf_mapLoc
 #print axioms Targets.fl_core_jShadow
@@ -1678,7 +1678,6 @@ run_meta do
 #print axioms Targets.hndNZ_kappaAt
 #print axioms Targets.hndNZ_kappaCell
 #print axioms Targets.hndNZ_loc
-#print axioms Targets.hndNZ_namesVal
 #print axioms Targets.hndNZ_opPayload
 #print axioms Targets.hndNZ_opPayload_inv
 #print axioms Targets.hndNZ_opt
@@ -1695,7 +1694,6 @@ run_meta do
 #print axioms Targets.hndNZ_val_i32
 #print axioms Targets.hndNZ_val_shift
 #print axioms Targets.hndNamesNZ_steps
-#print axioms Targets.hndNames_mapLoc
 #print axioms Targets.hndTags_of_rowAt
 #print axioms Targets.hndTerm_shift
 #print axioms Targets.hndVal_mapLoc
@@ -1731,6 +1729,7 @@ run_meta do
 #print axioms Targets.kappa_cancel_run
 #print axioms Targets.kappa_mapLoc
 #print axioms Targets.knz_shift
+#print axioms Targets.knz_dead
 #print axioms Targets.kont_mapLoc_congr
 #print axioms Targets.kont_mapLoc_plug
 #print axioms Targets.kont_mapLoc_shift
@@ -1769,6 +1768,7 @@ run_meta do
 #print axioms Targets.mentionsLoc_mapLoc
 #print axioms Targets.mentionsLoc_of_mentionsArr
 #print axioms Targets.mentionsLoc_plug
+#print axioms Targets.mentionsLoc_dead
 #print axioms Targets.mentionsLoc_shift
 #print axioms Targets.mentionsLoc_subst
 #print axioms Targets.mentionsLoc_tabFill
@@ -1787,11 +1787,9 @@ run_meta do
 #print axioms Targets.nameOf?_val
 #print axioms Targets.named_init
 #print axioms Targets.named_step
-#print axioms Targets.namesOf_some
-#print axioms Targets.namesVal_mapLoc
-#print axioms Targets.namesVal_noLoc
 #print axioms Targets.ne_comp_appL
 #print axioms Targets.noCtl_comp
+#print axioms Targets.noCtl_dead
 #print axioms Targets.noInterception_tier1
 #print axioms Targets.noInterception_tier1NU
 #print axioms Targets.noLoc_of_dataVal
@@ -2160,6 +2158,7 @@ run_meta do
 #print axioms Targets.status_extendsNU_tier1
 #print axioms Targets.status_finOK
 #print axioms Targets.status_finaliserOrder_of
+#print axioms Targets.status_finAlone_dead
 #print axioms Targets.status_fl_core_tier1
 #print axioms Targets.status_ghostCoupling
 #print axioms Targets.status_guarantees_J₁
@@ -2174,7 +2173,6 @@ run_meta do
 #print axioms Targets.status_loops
 #print axioms Targets.status_machShape_handlerSem
 #print axioms Targets.status_machShape_handlerSem_tier1Open
-#print axioms Targets.status_noIntercept_needs_finRow
 #print axioms Targets.status_noInterception_tier1
 #print axioms Targets.status_noUnr_ΞA
 #print axioms Targets.status_not_combined_of_leak
@@ -2355,8 +2353,8 @@ run_meta do
 #print axioms Targets.Inst.AlgRel.unit_inv
 #print axioms Targets.Inst.AlgRel.var_inv
 #print axioms Targets.Inst.AlgRelK.catches
+#print axioms Targets.Inst.AlgRelK.dead
 #print axioms Targets.Inst.AlgRelK.hasHnd
-#print axioms Targets.Inst.AlgRelK.hndNames
 #print axioms Targets.Inst.AlgRelK.plug
 #print axioms Targets.Inst.AlgRelK.refl
 #print axioms Targets.Inst.AlgRelK.shift
@@ -2368,6 +2366,7 @@ run_meta do
 #print axioms Targets.Inst.AlgRelH.upd
 #print axioms Targets.Inst.ErrRel.cancelRel
 #print axioms Targets.Inst.ErrRel.next
+#print axioms Targets.Inst.ErrRel.or
 #print axioms Targets.Inst.FireExt.nil
 #print axioms Targets.Inst.FireExt.cons
 #print axioms Targets.Inst.FireExt.fire
@@ -2383,11 +2382,11 @@ run_meta do
 #print axioms Targets.Inst.hndNZ_of_der
 #print axioms Targets.Inst.hndNZ_reach
 #print axioms Targets.Inst.cancelsNZ_of_coreClosed
+#print axioms Targets.hndFrame_shift_iff
+#print axioms Targets.hasHnd_shift
 #print axioms Targets.I.cancelsNZ_J₁
 #print axioms Targets.I.cancelsNZ_tier1Open
 #print axioms Targets.I.tier1_J₁_of_ENU
 #print axioms Targets.status_tier1_J₁_of_ENU
 #print axioms Targets.Inst.rpath_prefix_chainPath
 #print axioms Targets.Inst.purePath_end
-#print axioms Targets.Inst.p5x₃_end
-#print axioms Targets.Inst.p5x₃_noPerform

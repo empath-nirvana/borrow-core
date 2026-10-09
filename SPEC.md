@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 0.43 · 2026-10-08
+Version 0.44 · 2026-10-09
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -2466,14 +2466,15 @@ below and the cancel steps (*Cancels*) do not allocate:
 
 - **The continuation.** The `[op]` step's `κ` is the pair of its entries:
 
-      κ = ⟨ λy. hnd (n, H) K[y] ,  λ_. ccatch (hnd (n, H) K[raise (⊥, (N, none))]) ⟩
+      κ = ⟨ λy. hnd (n, H) K[y] ,  λ_. ccatch (K†[raise (⊥, none)]) ⟩
 
-  - `⊥` is a reserved name that no program uses, and `N` is the list of names of the
-    **cancelled region's** handlers: `n` and those of `K` (`Kont.hndNames`).
+  - `⊥` is a reserved name that no program uses.
+  - `K†` is the **cancelled region** `K` with its handler frames and its `ccatch` frames removed
+    (`Kont.dead`): the region is dead, and a dead frame catches nothing (*Cancels*). Its other
+    frames stay, finaliser frames among them.
   - `ccatch e` is a delimiter that catches only `⊥`.
-  - So cancelling resumes `κ` at the operation with an unwind. The unwind runs `K`'s finalisers
-    and the unwinding forms of the borrows in `K`, passes the reinstalled `hnd (n, H)`, and stops
-    at `ccatch` (*Cancels*).
+  - So cancelling runs the region with an unwind. The unwind runs `K`'s finalisers and the
+    unwinding forms of the borrows in `K`, and stops at `ccatch` (*Cancels*).
 - **Unwinding runs innermost first.** A `raise` goes to the nearest `ubind` (its finaliser runs,
   then it raises again from there) or to its handler, whichever is nearer.
 - **Other handlers' frames are transparent to it.** They are dropped, which is sound because
@@ -2489,44 +2490,81 @@ below and the cancel steps (*Cancels*) do not allocate:
 - **Unique decomposition** holds: no redex holds another redex at an evaluation position
   (`head_nested`), and a redex that holds a non-value holds it at a catcher position
   (`head_plug`). The `[op]` redex holds `perform (n, v)`, which is not a redex, under frames free
-  of `n`. §13's determinism gains the capture cases (`head_det_eff`).
+  of `n`. §13's determinism gains the capture cases (`head_det_eff`); `[cfin-raise]` and
+  `[cfin-cancel]` are told apart by the raise's name.
 
 ### Cancels
 
-A cancel is not interceptable. The frames of the cancelled region, `hnd (n, H) K`, are being torn
-down: nothing in the region resumes, and **its handlers are dying**, so they catch nothing. A
-cancel is `raise (⊥, s)` with a **cancel state** `s = (N, err)`: `N` names the region's handlers,
-and `err` is the error kept so far (`none` at the start). No handler is named `⊥`, so the region's
-handlers never catch the cancel itself. At a finaliser the cancel runs `D ()` under a sixth
-primitive, `cfin s`, which catches every `raise` escaping `D`:
+A cancel is not interceptable. The cancelled region `K` is torn down: nothing in it resumes, and
+**its handler frames are dead**. Deadness is a property of frames, not names: `κ`'s cancel branch
+runs the region with its handler frames and its cancel delimiters removed (`K†`), so a dead frame
+catches nothing, neither a raise nor an operation, and a finaliser's effects reach the nearest
+*live* instance of their name, outside the region. A cancel is `raise (⊥, err)` with a **cancel
+state** `err`, the error kept so far (`none` at the start). No handler is named `⊥`, so no live
+handler catches the cancel itself. At a finaliser the cancel runs `D ()` under a sixth primitive,
+`cfin err`:
 
-    (μ, ubind (N', D) K[raise (⊥, s)])   ↦  (μ, cfin s (D ()))                K unwind-clear   [finalise-cancel]
-    (μ, cfin s v)                        ↦  (μ, raise (⊥, s))                                  [cfin-ret]
-    (μ, cfin (N, err) K[raise (m, v)])   ↦  (μ, raise (⊥, (N, err′)))         K catching nothing of m   [cfin-raise]
-          err′ = err if err ≠ none;  none if m ∈ N;  (m, v) otherwise
-    (μ, ccatch K[raise (⊥, (N, none))])  ↦  (μ, ())                            K unwind-clear   [cancel]
-    (μ, ccatch K[raise (⊥, (N, E))])     ↦  (μ, raise E)                       K unwind-clear   [cancel-raise]
+    (μ, ubind (N, D) K[raise (⊥, err)])  ↦  (μ, cfin err (D ()))         K catching nothing of ⊥   [finalise-cancel]
+    (μ, cfin err v)                       ↦  (μ, raise (⊥, err))                                     [cfin-ret]
+    (μ, cfin err K[raise (m, v)])         ↦  (μ, raise (⊥, err ∨ (m, v)))  m ≠ ⊥, K catching nothing of m   [cfin-raise]
+    (μ, cfin err K[raise (⊥, err′)])      ↦  (μ, raise (⊥, err ∨ err′))    K catching nothing of ⊥   [cfin-cancel]
+    (μ, ccatch K[raise (⊥, none)])        ↦  (μ, ())                       K catching nothing of ⊥   [cancel]
+    (μ, ccatch K[raise (⊥, E)])           ↦  (μ, raise E)                  K catching nothing of ⊥   [cancel-raise]
+
+where `err ∨ e` is `err` when `err ≠ none`, and `e` otherwise: the first error wins.
 
 - **An error raised by a finaliser during a cancel is re-raised at the canceller**, after every
-  frame of the region has finalised, where live handlers catch it as any ordinary error. The
-  canceller's outcome is "cancelled" (`()`), or "cancelled, and cleanup failed with `E`" (an
-  ordinary `raise E` at the canceller's point).
-- **Several failures:** the first is re-raised, and the rest are suppressed.
-- **An error of a name in `N`** (a handler of the region only) has no live handler at the
-  canceller: re-raising it would leave an operation no handler receives. It is suppressed.
+  frame of the region has finalised, and meets the nearest live instance of its name there, as
+  any raise does. The canceller's outcome is "cancelled" (`()`), or "cancelled, and cleanup
+  failed with `E`" (an ordinary `raise E` at the canceller's point).
+- **No error is dropped because of its name.** A name whose site the region re-enters, a dead
+  instance inside the region and a live one outside it, reaches the live one (`progRe`,
+  `progOut`). A name handled only inside the region has no live handler at the canceller: its
+  re-raise is an operation no handler receives, and a typing of finalisers rejects such a
+  finaliser (decision D3 of 2026-10-08; `prog`, below).
+- **Several failures:** the first is kept and re-raised, a policy; the later ones lose to it.
+- **A finaliser's operation** passes the dead region and the cancel's delimiter, and the nearest
+  live handler of its name catches it. Its continuation holds the running finaliser's `cfin`, the
+  region's remaining frames and the canceller's context. Resumed, the finaliser and then the
+  cancel go on (`progFinOp`).
+- **A cancel nested in a cancel.** When that handler cancels the finaliser's continuation, the new
+  cancel's region holds the running finaliser's `cfin` and the first cancel's `ccatch`. The
+  `ccatch` is dead, and the new cancel passes the `cfin` by `[cfin-cancel]`, which keeps the
+  earlier error, the first cancel's. The first region's remaining finalisers run under the new
+  cancel, which ends at its own `ccatch` (`progNC₁`).
+- **An unrestricted continuation dropped.** When the finaliser's continuation is unrestricted and
+  its handler discards it, the kept error and the region's remaining finalisers go with it
+  (`progDrop`; resumed instead, the error reaches its live handler, `progKeep`). This is the case
+  of any discarded unrestricted continuation, which never runs its region's finalisers: `unr` is
+  tolerated, never designed for.
 - Ordinary unwinding (a `raise` of a name other than `⊥`) is unchanged: a finaliser's raise
   supersedes the pending one and is caught by the live handlers around the finaliser.
-- `Core/EffCancel.lean` machine-checks both outcomes. In `prog` the finaliser raises the name of a
-  handler inside the region, and the cancel answers `()`. In `prog₃` it raises a name handled
-  outside the region, and that handler receives the error.
+- `Core/EffCancel.lean` machine-checks each outcome, as runs (`Steps` of `Head` steps) and by the
+  interpreter (`eval`):
 
-**Why this rule.** The finaliser's own raises are caught at `cfin`, next to `D`, before any frame
-of the region sees them. So the region's handlers need no marking and no removal, and `κ` keeps
-the frames it captured. The cancel state rides in the `raise`'s payload, so a cancel is an
-ordinary abortive unwind for every existing frame, and `ubind`'s two finalise rules split on the
-payload's name. `cfin` is one more catcher frame beside `hnd`, `ubind` and `ccatch`, so unique
-decomposition and determinism extend case by case. The frames of a `raise` are the frame lemmas
-of any abortive operation.
+  | program | the region and its finalisers | answer |
+  |---|---|---|
+  | `prog` | a dead `2`; the finaliser raises `2` | `raise (2, (0, ()))`, which no handler catches: no step (`prog_final`) |
+  | `prog₃` | a dead `2`; the finaliser raises `3`, handled outside | `inj₂ ()` |
+  | `progOut` | `prog` under a live `2` | `inj₂ ()` |
+  | `progRe` | `f ()` re-enters the site `3`; the finaliser raises `3`; a live `3` outside | `inj₂ ()` |
+  | `progFinOp` | a dead `4`; the finaliser performs `4`; a live `4` outside resumes it | `inj₁ ()` |
+  | `progNC₁` | as `progFinOp`, the live `4` cancelling the finaliser's continuation | `()` |
+  | `progDrop` | a finaliser raises `2` (kept); a later one performs `4`, whose `unr` clause drops its continuation | `inj₁ ()`; the live `2` never runs |
+  | `progKeep` | as `progDrop`, the clause resuming | `inj₂ ()`: the kept `2` reaches the live `2` |
+
+**Why this rule.** Deadness is decided where the region is known: `[op]` builds `κ` from `K`, and
+removing the dead frames there makes every cancel rule local. No rule reads a name, and a dead
+frame cannot catch because it is not there. A dead frame and no frame cannot be told apart: a dead
+frame's body never becomes a value, since the only `⊥` raise inside the region is the region's own
+cancel, which nothing in it catches, and `cfin` always yields a `⊥` raise. So the removal needs no
+primitive, and `HasHnd` and `Catches` are unchanged. The `ccatch` frames in `K` are delimiters of
+cancels in progress (`K` was captured inside a running finaliser): they belong to the dead region,
+and removing them lets the outer cancel reach its own `ccatch`, which is what non-interceptability
+asks. The `cfin` frames stay: a `cfin` holds a kept error, which `[cfin-cancel]` merges into the
+passing cancel's state. The cancel state rides in the `raise`'s payload, so a cancel is an ordinary
+abortive unwind for every other frame; `ubind`'s two finalise rules and `cfin`'s two catching rules
+split on the payload's name, so unique decomposition and determinism extend case by case.
 
 ### Types
 
@@ -2600,11 +2638,11 @@ Six rules, over `CDerives` with its context premises (§10):
 - **Unwinding contexts.** `[then]` is `[let]` with a finaliser. `D` runs in the same `Γ₂` as `N`,
   additively, and disposes it (§12's destructors).
 - **A finaliser lets no operation escape it** (§24, option A): `D : F 1`. It handles its own
-  raises, and calls answering operations. During a cancel, a non-abortive operation of a
-  finaliser could reach a dying handler of the region. Its clause could answer without resuming,
-  and the region would then continue as if not cancelled. A plain `[let]` at a row with an abortive or
-  affine operation needs `Γ₂` to drop with nothing owned (borrows, `!`, data), since a cancel or
-  an unwind abandons it.
+  raises, and calls answering operations. The machine sends a finaliser's raises and operations to
+  the nearest live handler (*Cancels*); a typing of finalisers that raise to live handlers and
+  perform operations is decisions D2 and D3 of 2026-10-08, and until it lands a finaliser is typed
+  at `F 1`. A plain `[let]` at a row with an abortive or affine operation needs `Γ₂` to drop with
+  nothing owned (borrows, `!`, data), since a cancel or an unwind abandons it.
 - **Drop glue** is a surface obligation: the elaborator inserts a `[then]` finaliser for every
   owned local in scope at a possible weakening point, as Rust inserts drop glue. So the side
   condition "the abandoned context drops with nothing owned" is met automatically. The kernel
@@ -2645,12 +2683,11 @@ Six rules, over `CDerives` with its context premises (§10):
 
   for `n : E ∈ Σ` at `lin` and `unr`; at `aff` and `unr` the continuation's share also owes the
   cancel run (the `ewpTS` fixed point supplies both). At a stop `K[perform (n, (i, v))]` that run
-  is `K[raise (⊥, (n :: names K, none))]` at the table of `F_Σ 1` extended by `⊥`. It is
-  owed at `Σ`, the handler's row, because every finaliser error it re-raises has a name outside
-  the region, and a finaliser's row names only the region's handlers and `Σ`. So `κ`'s type stays
-  `U((B_i ⊸ F_Σ R) & F_Σ 1)`: the cancel entry's row `Σ` already holds the finalisers' abortive
-  operations that a cancel re-raises. At an abortive operation the continuation is abandoned, so
-  it must hold nothing owned:
+  is the dead region's, `K†[raise (⊥, none)]`, owed at the empty error table (`cancelOwed`): a
+  finaliser lets no raise escape it (§24), so the cancel keeps no error and its `ccatch` answers
+  `()`. A handler the stop passes outward is dead in that run, so the run a forwarded stop owes is
+  the inner one unchanged. So `κ`'s type stays `U((B_i ⊸ F_Σ R) & F_Σ 1)`. At an abortive
+  operation the continuation is abandoned, so it must hold nothing owned:
 
       Π_Σ n i ls v Φ  ≜  𝒱⟦A_i⟧(ls)δ(v) ⋆ (λρ_k. NoOwn ρ_k)
 
@@ -2678,22 +2715,25 @@ A finaliser is a computation `D : F 1` (§24, option A), run where its `ubind` s
 - it may call answering operations (flush a log, close a socket through its capability);
 - it may raise, and handles its raises itself: none escapes it.
 
-The machine keeps the rules below for a raise that escapes a finaliser; a typed program's finaliser
-reaches none of them. They are what a typing at another instance of S5's parameter (the labels a
-finaliser may let escape) would read.
+The machine gives a finaliser's escaping raises and its operations their meaning; a typed
+program's finaliser reaches neither under option A. They are what a typing of finalisers with
+effects reads (decisions D2 and D3 of 2026-10-08: a finaliser may raise and perform operations of
+live handlers, and a raise or operation of a name with no live instance outside the dying region is
+a type error).
 
 If a finaliser raises during an ordinary unwind, the new unwind **supersedes** the pending one:
 the pending `raise (m, v)` is in the finaliser's continuation and is abandoned. During a cancel,
-the first error of a name outside the region is kept and re-raised at the canceller, and the rest
-are suppressed (*Cancels*). So an operation that raises must have an argument that drops with
-nothing owned (a `NoOwn` value: data, borrows, `!`). The protocol's `NoOwn` share covers the
-abandoned argument.
+the first error is kept and re-raised at the canceller, and the later ones lose to it
+(*Cancels*). So an operation that raises must have an argument that drops with nothing owned (a
+`NoOwn` value: data, borrows, `!`). The protocol's `NoOwn` share covers the abandoned argument. A
+finaliser's operation, during a cancel or an ordinary unwind, is caught by the nearest live handler
+of its name, and its continuation holds the rest of the finaliser and the frames outside it
+(*Cancels*).
 
 Richer policies are K3 (#162), and *Open*:
 
-- richer reporting of suppressed finaliser errors (a count, a list, a chain), or a finaliser that
-  must not fail (a row with no abortive operation);
-- non-abortive control operations in a finaliser;
+- richer reporting of finaliser errors that lose to the first (a count, a list, a chain), or a
+  finaliser that must not fail (a row with no abortive operation);
 - a finaliser that hands a residual to the handler (§14's `close` residual);
 - retrying a failed flush.
 
@@ -2768,11 +2808,11 @@ Richer policies are K3 (#162), and *Open*:
      These are the new semantic obligations of unwinding, and they are what "an unwind crosses a
      borrow without T1" means. If one does not hold, the stage stops with a machine-checked
      obstruction, and the unwinding forms are withdrawn.
-   - **Cancelling a continuation** (`cancel_compatC`) is resuming it into
-     `raise (⊥, (N, none))`. Its obligations are the resumption's and the frame lemmas above;
-     `ccatch`'s compatibility is `[unwind]`'s, and `cfin`'s is `[finalise]`'s with the kept error
-     at the canceller's row. So cancelling a stored continuation needs nothing beyond what storing it
-     needed. A continuation stored while it captures borrows is T1 (#172). Once T1 makes that
+   - **Cancelling a continuation** is running its dead region from `raise (⊥, none)`
+     (`cancelOwed`, `ewp_ccatch`). Its obligations are the frame lemmas above; `ccatch`'s
+     compatibility is `[unwind]`'s, and `cfin`'s is `[finalise]`'s, with the finaliser at the pure
+     row (`ewp_cfin`, `cancel_then`). So cancelling a stored continuation needs nothing beyond what
+     storing it needed. A continuation stored while it captures borrows is T1 (#172). Once T1 makes that
      storage sound, the lends it holds are ended by the same LIFO frame lemmas that end them at a
      `raise`. Within this entry, non-abortive control operations cannot cross a borrow, so no stored `κ`
      captures a lend, and `cancel` needs only the unwinding forms of the borrows *inside* `κ`.
@@ -2910,14 +2950,14 @@ runs in constant stack.
 operations when it has more than one (`wrapRaise`), and a handler's clause takes it out of its
 variant: a code that raises two operations of different argument types answers one payload type.
 
-**Cancel** is the state's destructor. The resume code takes `inr mask` and switches on the state:
+**Cancel** is the state's destructor. The resume code takes `inr ()` and switches on the state:
 the callee's `k` is cancelled first (innermost), then the point's finalisers run innermost first,
 and every other variable is dropped; borrows' unwinding forms are finaliser frames, so their
-lends end here. A finaliser's error is caught (`catchAll`), and the first error whose name is not
-in the mask is kept: the canceller re-raises it (`reraise`), and every other one is suppressed,
-decision (C) of *Cancels*. The mask is the names of the handler sites reachable from the cancelled
-handler's body; it is the region's names `N` exactly when no handler site is reached again from
-its own body, which is checked when a finaliser may raise.
+lends end here. A finaliser's error is caught (`catchAll`), and the first one is kept: the
+canceller re-raises it (`reraise`), and the later ones lose to it (*Cancels*). The region's
+handlers are dead, as *Cancels* asks: a cancel runs from the canceller's call of `κ`, and the
+cancel arms run only the points' `fin` frames, so a finaliser's raise meets the arm's `catchAll`,
+never a handler of the region.
 
 **What the representation costs**, as Rust does:
 - **Recursion through a resumption point.** A code whose state holds its own `k` has a recursive
@@ -2941,18 +2981,17 @@ finalise (`markUbinds`, `Backend/Clos/Convert.lean`): exactly one of them runs, 
 is captured once, not copied (the drop glue around an operation that holds an owned list or
 cell, §15).
 
-**Not lowered**, rejected with a message: a name that has both control and abortive operations; a
-cancel whose finalisers may raise under a handler site reached from its own body, or under a
-handler named `64` or more.
+**Not lowered**, rejected with a message: a name that has both control and abortive operations.
 
 **As built** (`Backend/Kernel.lean`, `bcc kernel`, `scripts/compile-kernel.sh`). Every
 acceptance program, with its native variants, `Core/EffExamples.lean`'s two handled programs and
-`Core/EffCancel.lean`'s two cancels, compiles through every stage with the same answer and
-`live 0`, as do terms for the shapes above (100000 operations of a loop as direct calls, and as
-suspensions resumed in tail position, both in constant stack; recursion through a resumption
-point; two possible callees; forwarding with and without a cancel; a continuation resumed
-twice). The counts (`corpus/kernel-counts.expected`) and the hand-written
-equivalents (`corpus/capture-*-hand.bc`):
+`Core/EffCancel.lean`'s cancels `prog₃`, `progRe` and `progOut`, compiles through every stage
+with the same answer and `live 0`, as do terms for the shapes above (100000 operations of a loop
+as direct calls, and as suspensions resumed in tail position, both in constant stack; recursion
+through a resumption point; two possible callees; forwarding with and without a cancel; a
+continuation resumed twice). `prog` is not compiled: its run ends at a raise no handler catches
+(*Cancels*). The counts (`corpus/kernel-counts.expected`) and the hand-written equivalents
+(`corpus/capture-*-hand.bc`):
 
 | program | allocations | dispatched calls | hand-written |
 |---|---|---|---|
@@ -2973,8 +3012,10 @@ own: its handler answers one of two closures. The lowering adds neither.
 - A non-abortive control operation crossing a borrow's scope (T1, #172). Cancelling
   such a stored continuation then needs nothing more.
 - Finaliser policies beyond "a new unwind supersedes" and "a cancel keeps the first error"
-  (K3, #162): richer reporting of suppressed finaliser errors; non-abortive control operations in
-  a finaliser.
+  (K3, #162): richer reporting of finaliser errors that lose to the first.
+- The typing of finalisers that raise to live handlers and perform operations (decisions D2, D3
+  of 2026-10-08), and the lowering of a finaliser that suspends. The machine already gives them
+  their meaning (*Cancels*).
 - Parameterized handlers are written with a state-passing answer type
   `F R = F(U(S ⊸ F (A ⊗ S)))`, which the elaborator gives a handler with a state (§21); a native
   parameter in the lowering is not provided: each resume applies a closure of the state, a
@@ -3669,8 +3710,10 @@ No change to the machine, the relation, `wpTS`, `wpG` or `ewpTS`.
   a value takes no step); at the persistent types `retTy` and `clausesTy` it holds at `∅`; the
   handler is then `ewp_handle` at clause values (`ewp_handle_vals`), which `handle_compatC` now
   also reads.
-- `[then]` (`thenA_compatC`): a finaliser at the pure row is one at `F_{Σ^abort} 1` by `[sub]`
-  (`sub_compatC`), so `then_compatC` applies.
+- `[then]` (`then_compatC`): the finaliser at the pure row, so a cancel through the frame keeps no
+  error. Since §19's dead regions, the rule with the finaliser at `F_{Σ^abort} 1` does not hold:
+  at `prog`'s `[then]` its premises hold and the cancel it owes keeps an error the canceller's row
+  does not have (`not_thenAbort_compatC`, `Core/EffCancel.lean`).
 
 ### Theorems
 
@@ -3721,7 +3764,7 @@ definition: the cell is an `own` cell, and BoLo's leak freedom and safety see th
         κ = (λc. λs. case s { inj₁ u. u; free c; λy. hnd (n, (qs, H)) K[y]
                             | inj₂ u. C }) (alloc ())                       (`kappaCell`)
 
-    with `C = u; free c; ccatch (hnd (n, (qs, H)) K[raise (⊥, (N, none))])` at `t = 1` and
+    with `C = u; free c; ccatch (K†[raise (⊥, none)])` at `t = 1` (`K†` the dead region, §19) and
     `C = () ()`, a term with no step, at `t = 0`.
 
   The `[op]` step itself keeps the memory. The clause's argument then evaluates `alloc ()`, an
@@ -3920,6 +3963,16 @@ Stage 5 is implemented:
 The lowering of control operations and cancels is implemented (#205): `Backend/Clos/Capture.lean`,
 with every kernel program at every stage (*Lowering*).
 
+Frame deadness (*Cancels*, decision D1 of 2026-10-08) is implemented: the dead region `Kont.dead`,
+`κ`'s cancel branch, the cancel state of the kept error alone and `[cfin-cancel]` in
+`Paper/S3_Dynamics/Definitions.lean`; the interpreter; unique decomposition and determinism with
+`[cfin-cancel]` in `Core/Steps.lean`; `cancelOwed` at the dead region and the empty error table in
+`Core/EffDefs.lean`, and the cancel lemmas, `ewp_handle` and `then_compatC` in
+`Core/EffRules.lean`; the runs and the refutation of the abortive-row `[then]` in
+`Core/EffCancel.lean`; the lowering keeps the first error with no mask (`Backend/Clos/Capture.lean`,
+`Backend/Clos/Unwind.lean`). The typing of finalisers with effects (decisions D2, D3) is not yet
+built: a finaliser is typed at `F 1`.
+
 Entry 24 (§25) is implemented: the machine in `Paper/S3_Dynamics/Definitions.lean` (`hndVal`,
 `capTag`, `kappaAt`, `kappaC`, `kappaCell`, `Head.hop`), the interpreter, `Core/EffRules.lean`
 (`ewp_kappaCell`, `ewp_kappaC_resume`, `ewp_kappaC_cancel`, `ewp_handle`), `Core/Fundamental.lean`,
@@ -3929,7 +3982,7 @@ Entry 25 (§26) is implemented: `Core/Fundamental.lean` (`CDerives.lamDead`, `la
 `Core/Weaken.lean`.
 
 Entry 23 (§24) is implemented: `Core/PolyLet.lean` (`letPoly_compatC`), `Core/EffRules.lean`
-(`handleV_compatC`, `ewp_handle_vals`, `thenA_compatC`) and `Core/Fundamental.lean`
+(`handleV_compatC`, `ewp_handle_vals`, `then_compatC`) and `Core/Fundamental.lean`
 (`CDerives.letPoly`, `CDerives.effHandleV`, `CDerives.effThen`, the theorem `CDerives.effHandle`);
 the checker types a finaliser at `F 1` (`Frontend/Check/Steps.lean`, `Frontend/Check/Rules.lean`,
 `Frontend/Check/Checker.lean`).
@@ -3937,6 +3990,19 @@ the checker types a finaliser at `F 1` (`Frontend/Check/Steps.lean`, `Frontend/C
 ---
 
 ## Changelog
+
+- **0.44** (2026-10-09) — §19 (decision D1 of 2026-10-08): deadness by frame. `κ`'s cancel branch
+  runs the cancelled region with its handler frames and cancel delimiters removed (`Kont.dead`),
+  so a dead frame catches nothing, and a finaliser's raises and operations reach the nearest live
+  instance of their name. The cancel state is the kept error alone, the first winning (`N` and the
+  by-name suppression removed). A cancel that reaches a running finaliser's `cfin` keeps that
+  finaliser's cancel's error, the earlier one (`[cfin-cancel]`). `prog` now ends at a raise no
+  handler catches, and leaves the compiled kernel programs; `cancel-reentered` and
+  `cancel-propagated` join them. The lowering keeps the first error (the mask is removed).
+  `then_compatC` takes its finaliser at the pure row (§24's rule); the abortive-row rule fails
+  under dead regions (`not_thenAbort_compatC`). No change to the statements of `fundamentalC`,
+  `adequacyC`, `fundamentalD`, `adequacyD` or any borrow rule, and every typed program runs as
+  before.
 
 - **0.43** (2026-10-08) — §26 (decision E): `[λ-dead]`, a λ whose binder is dead at `1 ⊸ F_Σ B`,
   so a closed callback body at any row is passed as `λ_. M`. No change to the machine, the relation

@@ -13,7 +13,7 @@ import Backend.Clos.Convert
   static), so its *key* `(n, i)` is known. A code raises the keys its body may raise and no
   frame of it catches: a `raise`'s key, the keys of the codes a call may call (the 0-CFA,
   `Backend/Clos/Flow.lean`), a `catch n`'s body less the keys of `n`, a finaliser frame's body and
-  finaliser, and a `reraise`'s keys, those any `catchAll` catches whose names are not in its mask. The least solution is found by
+  finaliser, and a `reraise`'s keys, those any `catchAll` catches. The least solution is found by
   iteration.
 - **The convention.** A code that may raise answers a sum: `inl v` when it returns `v`, `inr p`
   when it raises `p`. Codes that a call may call alike share one convention (a class of the
@@ -62,7 +62,7 @@ def Tm.fv : Tm → List Var
   | .absurd s => [s]
   | .copy x x' b => x :: b.fv.filter (· != x')
   | .drop x b => x :: b.fv
-  | .raise p | .reraise p _ | .perform p => [p]
+  | .raise p | .reraise p | .perform p => [p]
   | .await p k => [p, k]
   | .hnd _ hr cls b => hr :: cls :: b.fv
   | .ubind nn dd b => nn :: dd :: b.fv
@@ -122,7 +122,7 @@ def UFacts.rcOf (F : UFacts) (cs : List Nat) : Raises :=
 /-- The keys a term may raise. -/
 def UFacts.raises (F : UFacts) : Tm → Raises
   | .raise p => (payloadKey F.defs p).map ([·])
-  | .reraise _ mask => F.rr.map (·.filter fun k => k.1 ≥ 64 || (mask >>> k.1.toUInt64) &&& 1 == 0)
+  | .reraise _ => F.rr
   | .app f _ | .run f _ => F.rcOf (F.codesOf f)
   | .letv _ e b => Raises.union (F.raises e) (F.raises b)
   | .letpair _ _ _ b | .copy _ _ b | .drop _ b => F.raises b
@@ -233,9 +233,9 @@ def lowerP (E : UEnv) (outer : List Var) : Tm → UM Tm
   | .copy x x' b => return .copy x x' (← lowerP E outer b)
   | .drop x b => return .drop x (← lowerP E outer b)
   | .app f a => callAs false (E.sumAt f) f a
-  | .reraise p mask => do
-    -- An error the mask excludes entirely is never kept.
-    if !E.mayR (.reraise p mask) then return .absurd p
+  | .reraise p => do
+    -- No finaliser raises: no error is kept.
+    if !E.mayR (.reraise p) then return .absurd p
     throw "unwind: a raise where none is handled"
   | .raise _ => throw "unwind: a raise where none is handled"
   | .catch n b => do
@@ -255,7 +255,7 @@ def lowerP (E : UEnv) (outer : List Var) : Tm → UM Tm
 
 /-- `t` at a sum: `inl` of its value, or `inr` of what it raises. -/
 def lowerS (E : UEnv) (outer : List Var) : Tm → UM Tm
-  | .raise p | .reraise p _ => return .inj true p
+  | .raise p | .reraise p => return .inj true p
   | .app f a => callAs true (E.sumAt f) f a
   | .letv x e b => do
     let own := b.fvs.filter (· != x)

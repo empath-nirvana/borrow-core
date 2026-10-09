@@ -474,8 +474,8 @@ def kResV (H : Val) (K : Kont) : Expr :=
 
 /-- **Resuming `κ` at its cell `ℓ`** reaches the release of `ℓ` quietly, and from the release's
 answer reaches `hnd H K[w]` quietly. -/
-theorem kappaC_resume_parts (aff : Bool) (ℓ : Loc) (n : UInt32) (H : Val) (K : Kont) (w : Val) :
-    Quiet (ℍ := ℍ) (.app (.app (kappaC aff ℓ n H K) (.val (Val.inj₁ .unit))) (.val w))
+theorem kappaC_resume_parts (aff : Bool) (ℓ : Loc) (H : Val) (K : Kont) (w : Val) :
+    Quiet (ℍ := ℍ) (.app (.app (kappaC aff ℓ H K) (.val (Val.inj₁ .unit))) (.val w))
       ((Kont.appL (Kont.seq .hole (kResV H K)) w).plug (freeE (.val (Val.loc ℓ)))) ∧
     Quiet (ℍ := ℍ) ((Kont.appL (Kont.seq .hole (kResV H K)) w).plug (.val Val.unit))
       (hndE H (K.plug (.val w))) := by
@@ -491,25 +491,24 @@ theorem kappaC_resume_parts (aff : Bool) (ℓ : Loc) (n : UInt32) (H : Val) (K :
     exact hb
 
 /-- The term an affine `κ`'s cancel branch leaves after its cell's release:
-`ccatch (hnd H K[raise (0, (0, (N, none)))])`, before its substitutions are carried out. -/
-def kCanE (n : UInt32) (H : Val) (K : Kont) : Expr :=
+`ccatch (K†[raise (0, (0, none))])`, before its substitutions are carried out. -/
+def kCanE (K : Kont) : Expr :=
   Expr.subst 0 Val.unit (Expr.subst 1 (Val.inj₂ Val.unit)
-    (ccatchE (hndE (H.shift 2 0) ((K.shift 2 0).plug
-      (raiseE (.val (cancelVal (n :: K.hndNames) none)))))))
+    (ccatchE ((K.dead.shift 2 0).plug (raiseE (.val (cancelVal none))))))
 
 /-- **Cancelling an affine `κ` at its cell `ℓ`** reaches the release of `ℓ` quietly, and from the
 release's answer reaches `κ`'s cancel run quietly. -/
-theorem kappaC_cancel_parts (ℓ : Loc) (n : UInt32) (H : Val) (K : Kont) :
-    Quiet (ℍ := ℍ) (.app (kappaC true ℓ n H K) (.val (Val.inj₂ .unit)))
-      ((Kont.seq .hole (kCanE n H K)).plug (freeE (.val (Val.loc ℓ)))) ∧
-    Quiet (ℍ := ℍ) ((Kont.seq .hole (kCanE n H K)).plug (.val Val.unit))
-      (Targets.cancelOf n H K) := by
+theorem kappaC_cancel_parts (ℓ : Loc) (H : Val) (K : Kont) :
+    Quiet (ℍ := ℍ) (.app (kappaC true ℓ H K) (.val (Val.inj₂ .unit)))
+      ((Kont.seq .hole (kCanE K)).plug (freeE (.val (Val.loc ℓ)))) ∧
+    Quiet (ℍ := ℍ) ((Kont.seq .hole (kCanE K)).plug (.val Val.unit))
+      (Targets.cancelOf K) := by
   refine ⟨?_, ?_⟩
   · refine (Quiet.head .hole (fun μ => Head.beta μ _ _) rfl rfl).trans ?_
     refine (Quiet.head .hole (fun μ => Head.case₂ μ Val.unit _ _) rfl rfl).trans ?_
     exact Quiet.head .hole (fun μ => Head.seq μ _) rfl rfl
-  · refine (Quiet.head (ℍ := ℍ) .hole (fun μ => Head.seq μ (kCanE n H K)) rfl rfl).trans ?_
-    have e : kCanE n H K = Targets.cancelOf n H K := kappa_cancel_subst n H K _ _
+  · refine (Quiet.head (ℍ := ℍ) .hole (fun μ => Head.seq μ (kCanE K)) rfl rfl).trans ?_
+    have e : kCanE K = Targets.cancelOf K := kappa_cancel_subst K _ _
     rw [e]
     exact Quiet.refl _
 
@@ -520,8 +519,8 @@ theorem quiet_of_look (k : ℕ) (e : Expr) (hf : (Targets.lookRun k e).all (fun 
     simpa using List.all_eq_true.1 hf x hx⟩
 
 /-- The tag of a linear or affine qualifier makes the catch's `κ` a cell's. -/
-theorem kappaAt_tag_cell {q : Qual} (hq : q ≠ .unr) (n : UInt32) (H : Val) (K : Kont) :
-    kappaAt q.tag n H K = kappaCell (cellAff q) n H K := kappaAt_cell hq n H K
+theorem kappaAt_tag_cell {q : Qual} (hq : q ≠ .unr) (H : Val) (K : Kont) :
+    kappaAt q.tag H K = kappaCell (cellAff q) H K := kappaAt_cell hq H K
 
 end Targets.Inst
 

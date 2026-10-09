@@ -12,10 +12,11 @@ no-interception property (`NoInterception`: typed terms hold no `ccatch`, no `cf
 named `0`).  They mention no world.  A's S5 (`Targets/A/Soundness.lean`) is the run-based form at
 every instance; these are the Instance's route to it at Core (RESTRUCTURE §4.1).
 
-**`FinaliserOrder` holds at every typing system that meets `NoInterception` and `FinAloneAt`**
-(`finaliserOrder_at`, from `cancelOrder_at` and `unwindOrder_at`).  The route:
-* **no step creates a handler named `0`** (`hndNamesNZ_steps`), so the frames a cancel tears down
-  and its handler stop the cancel only at finaliser frames;
+**`FinaliserOrder` holds at every typing system that meets `FinAloneAt`** (`finaliserOrder_at`,
+from `cancelOrder_at` and `unwindOrder_at`).  The route:
+* **a cancel runs its region dead** (SPEC §19): `κ`'s cancel branch runs `K†`, which holds no
+  handler and, when `K` holds no `ccatch` and no `cfin`, none of those either (`hasHnd_dead`,
+  `noCtl_dead`), so it stops the cancel only at finaliser frames;
 * **a step at a raise is the step of its innermost stopping frame** (`step1_raise`; that frame is
   unique, `innerCatch_unique`), so a cancel or an unwind goes from finaliser frame to finaliser
   frame;
@@ -54,16 +55,16 @@ def cancelAnswer : Option Val → Expr
 /-- A cancel run that fires the finalisers `fs`, innermost first: one `ufinC` per finaliser, its
 `D ()` run under `cfin` to `cfret`/`cferr`, and at the end `ccatch` answering. -/
 inductive CancelRun : Heap → Expr → List Expr → Heap → Expr → Prop
-  | caught {μ : Heap} {K : Kont} {Ns : List UInt32} {err : Option Val}
+  | caught {μ : Heap} {K : Kont} {err : Option Val}
       (hK : K.Catches 0 = false) :
-      CancelRun μ (ccatchE (K.plug (raiseE (.val (cancelVal Ns err))))) [] μ (cancelAnswer err)
-  | fin {μ μ₁ μ₂ : Heap} {K₀ K : Kont} {Nv Dv : Val} {Ns : List UInt32} {err err' : Option Val}
+      CancelRun μ (ccatchE (K.plug (raiseE (.val (cancelVal err))))) [] μ (cancelAnswer err)
+  | fin {μ μ₁ μ₂ : Heap} {K₀ K : Kont} {Nv Dv : Val} {err err' : Option Val}
       {fs : List Expr} {r : Expr} (hK : K.Catches 0 = false)
-      (hD : Steps (ℍ := ℍ) μ (cfinE (cancelVal Ns err) (.app (.val Dv) (.val .unit))) μ₁
-              (raiseE (.val (cancelVal Ns err'))))
-      (hr : CancelRun μ₁ (ccatchE (K₀.plug (raiseE (.val (cancelVal Ns err'))))) fs μ₂ r) :
+      (hD : Steps (ℍ := ℍ) μ (cfinE (cancelVal err) (.app (.val Dv) (.val .unit))) μ₁
+              (raiseE (.val (cancelVal err'))))
+      (hr : CancelRun μ₁ (ccatchE (K₀.plug (raiseE (.val (cancelVal err'))))) fs μ₂ r) :
       CancelRun μ
-        (ccatchE (K₀.plug (ubindE (Val.pair Nv Dv) (K.plug (raiseE (.val (cancelVal Ns err)))))))
+        (ccatchE (K₀.plug (ubindE (Val.pair Nv Dv) (K.plug (raiseE (.val (cancelVal err)))))))
         (Dv.1 :: fs) μ₂ r
 
 /-- An unwind that fires the finalisers `fs`, innermost first: one `ufin` per finaliser, its
@@ -94,19 +95,20 @@ def _root_.BoCa.BoLo.Kont.NoCtl : Kont → Prop
 
 /-- **I3.b, cancel**: in a typed program, every complete run of a continuation's cancel fires the
 frozen finalisers once each, innermost first.  (The three administrative steps from
-`κ (inj₂ ())` to `cancelOf n H K` are pure; the canceller's context `K₀` takes no part until
+`κ (inj₂ ())` to `cancelOf K` are pure; the canceller's context `K₀` takes no part until
 `ccatch` answers.) -/
 def CancelOrder (J : TypingJ) : Prop :=
-  ∀ e A, J.closed e (.ret A) → ∀ μ₁ (K₀ : Kont) n H K, Kont.NoCtl K →
-    Steps (ℍ := ℍ) Adequacy.emptyMem e μ₁ (K₀.plug (.app (kappa n H K) (.val (Val.inj₂ .unit)))) →
-    ∀ μ₃ r, Steps (ℍ := ℍ) μ₁ (cancelOf n H K) μ₃ r →
+  ∀ e A, J.closed e (.ret A) → ∀ μ₁ (K₀ : Kont) H K, Kont.NoCtl K →
+    Steps (ℍ := ℍ) Adequacy.emptyMem e μ₁ (K₀.plug (.app (kappa H K) (.val (Val.inj₂ .unit)))) →
+    ∀ μ₃ r, Steps (ℍ := ℍ) μ₁ (cancelOf K) μ₃ r →
       (r = .val .unit ∨ ∃ E, r = raiseE (.val E)) →
-      CancelRun (ℍ := ℍ) μ₁ (cancelOf n H K) K.fins μ₃ r
+      CancelRun (ℍ := ℍ) μ₁ (cancelOf K) K.fins μ₃ r
 
 /-- **I3.b, unwind**: every complete unwind through frames with no handler fires their finalisers
 once each, innermost first. -/
 def UnwindOrder (J : TypingJ) : Prop :=
-  ∀ e A, J.closed e (.ret A) → ∀ μ₁ (K₀ K : Kont) n i v, K.hndNames = [] → Kont.NoCtl K → n ≠ 0 →
+  ∀ e A, J.closed e (.ret A) → ∀ μ₁ (K₀ K : Kont) n i v, (∀ m, K.HasHnd m = false) → Kont.NoCtl K →
+    n ≠ 0 →
     Steps (ℍ := ℍ) Adequacy.emptyMem e μ₁ (K₀.plug (K.plug (raiseE (.val (opPayload n i v))))) →
     ∀ μ₂ (K' : Kont) m j w, K'.Catches m = false →
       Steps (ℍ := ℍ) μ₁ (K.plug (raiseE (.val (opPayload n i v)))) μ₂
@@ -412,6 +414,60 @@ theorem knz_shift {K : Kont} (hK : KNZ K) (d : ℕ) : KNZ (K.shift d 0) := by
   simp only [Expr.shift, Nat.not_lt_zero, if_false, zero_add] at h
   exact (plug_hndNZ_inv _ (notNameLike_var d) h).1
 
+/-- A dead region keeps a part of the region's frames: its handlers are named nonzero when the
+region's are. -/
+theorem knz_dead : ∀ {K : Kont}, KNZ K → KNZ K.dead
+  | .hole, h => h
+  | .pairL K e, h => by
+      simp only [KNZ, Kont.plug, Expr.HndNamesNZ] at h
+      simp only [KNZ, Kont.dead, Kont.plug, Expr.HndNamesNZ]; exact ⟨knz_dead h.1, h.2⟩
+  | .pairR v K, h => by
+      simp only [KNZ, Kont.plug, Expr.HndNamesNZ] at h
+      simp only [KNZ, Kont.dead, Kont.plug, Expr.HndNamesNZ]; exact ⟨h.1, knz_dead h.2⟩
+  | .letpair K e, h => by
+      simp only [KNZ, Kont.plug, Expr.HndNamesNZ] at h
+      simp only [KNZ, Kont.dead, Kont.plug, Expr.HndNamesNZ]; exact ⟨knz_dead h.1, h.2⟩
+  | .case K e₁ e₂, h => by
+      simp only [KNZ, Kont.plug, Expr.HndNamesNZ] at h
+      simp only [KNZ, Kont.dead, Kont.plug, Expr.HndNamesNZ]; exact ⟨knz_dead h.1, h.2⟩
+  | .seq K e, h => by
+      simp only [KNZ, Kont.plug, Expr.HndNamesNZ] at h
+      simp only [KNZ, Kont.dead, Kont.plug, Expr.HndNamesNZ]; exact ⟨knz_dead h.1, h.2⟩
+  | .inj₁ K, h => by
+      simp only [KNZ, Kont.plug, Expr.HndNamesNZ] at h
+      simp only [KNZ, Kont.dead, Kont.plug, Expr.HndNamesNZ]; exact knz_dead h
+  | .inj₂ K, h => by
+      simp only [KNZ, Kont.plug, Expr.HndNamesNZ] at h
+      simp only [KNZ, Kont.dead, Kont.plug, Expr.HndNamesNZ]; exact knz_dead h
+  | .appL K v, h => by
+      simp only [KNZ, Kont.plug] at h
+      rw [hndNZ_app] at h
+      rcases h with ⟨hK, -⟩ | ⟨-, hK, hv⟩
+      · exact absurd hK (plug_ne_prim (fun _ h => by cases h) _)
+      · simp only [KNZ, Kont.dead, Kont.plug]
+        rw [hndNZ_app]
+        exact .inr ⟨plug_ne_prim (fun _ h => by cases h) _, knz_dead hK, hv⟩
+  | .appR f K, h => by
+      have hK : KNZ K := by
+        simp only [KNZ, Kont.plug] at h
+        rw [hndNZ_app] at h
+        rcases h with ⟨rfl, m, r, hpr, -, hr⟩ | ⟨-, -, hK⟩
+        · obtain ⟨v, K', rfl, hv, rfl⟩ := plug_eq_namePair (notNameLike_var 0) hpr
+          simp only [KNZ, Kont.plug, Expr.HndNamesNZ]
+          exact ⟨by show v.1.HndNamesNZ; rw [hv]; simp [Expr.HndNamesNZ], hr⟩
+        · exact hK
+      simp only [Kont.dead]
+      split
+      · exact knz_dead hK
+      · simp only [KNZ, Kont.plug] at h ⊢
+        rw [hndNZ_app] at h ⊢
+        rcases h with ⟨rfl, m, r, hpr, hm, hr⟩ | ⟨hf, hf', -⟩
+        · obtain ⟨v, K', rfl, hv, rfl⟩ := plug_eq_namePair (notNameLike_var 0) hpr
+          have hd := knz_dead hK
+          simp only [KNZ, Kont.dead, Kont.plug, Expr.HndNamesNZ] at hd
+          exact .inl ⟨rfl, m, (K'.dead).plug (.var 0), by simp [Kont.dead, Kont.plug, hv], hm, hd.2⟩
+        · exact .inr ⟨hf, hf', knz_dead hK⟩
+
 theorem hndNZ_clauseAt : ∀ (e : Expr) (i : ℕ) {c : Val}, BoCa.BoLo.clauseAt e i = some c →
     e.HndNamesNZ → c.1.HndNamesNZ
   | .pair c' _, 0, c, h, he => by
@@ -424,13 +480,6 @@ theorem hndNZ_clauseAt : ∀ (e : Expr) (i : ℕ) {c : Val}, BoCa.BoLo.clauseAt 
   | .lam _, _, _, h, _ | .loc _, _, _, h, _ | .prim _, _, _, h, _ | .seq _ _, _, _, h, _
   | .letpair _ _, _, _, h, _ | .case _ _ _, _, _, h, _ | .app _ _, _, _, h, _ => by
       simp [BoCa.BoLo.clauseAt] at h
-
-theorem hndNZ_namesVal : ∀ N : List UInt32, (BoCa.BoLo.namesVal N).1.HndNamesNZ
-  | [] => by simp [BoCa.BoLo.namesVal, Val.inj₁, Val.unit, Expr.HndNamesNZ]
-  | m :: N => by
-      have := hndNZ_namesVal N
-      simp only [BoCa.BoLo.namesVal, Val.inj₂, Val.pair, Val.i32, Expr.HndNamesNZ] at this ⊢
-      exact ⟨by simp, this⟩
 
 theorem hndNZ_errVal {err : Option Val} (h : ∀ E, err = some E → E.1.HndNamesNZ) :
     (BoCa.BoLo.errVal err).1.HndNamesNZ := by
@@ -446,19 +495,16 @@ theorem hndNZ_opPayload_inv {n i : UInt32} {v : Val} (h : (opPayload n i v).1.Hn
     v.1.HndNamesNZ := by
   simp only [opPayload, Val.pair, Val.i32, Expr.HndNamesNZ] at h; exact h.2.2
 
-theorem hndNZ_cancelVal (N : List UInt32) {err : Option Val}
-    (h : ∀ E, err = some E → E.1.HndNamesNZ) : (cancelVal N err).1.HndNamesNZ := by
-  simp only [cancelVal]
-  apply hndNZ_opPayload
-  simp only [Val.pair, Expr.HndNamesNZ]
-  exact ⟨hndNZ_namesVal N, hndNZ_errVal h⟩
+theorem hndNZ_cancelVal {err : Option Val}
+    (h : ∀ E, err = some E → E.1.HndNamesNZ) : (cancelVal err).1.HndNamesNZ :=
+  hndNZ_opPayload 0 0 (hndNZ_errVal h)
 
-theorem hndNZ_cancelVal_inv {N : List UInt32} {err : Option Val}
-    (h : (cancelVal N err).1.HndNamesNZ) : ∀ E, err = some E → E.1.HndNamesNZ := by
+theorem hndNZ_cancelVal_inv {err : Option Val}
+    (h : (cancelVal err).1.HndNamesNZ) : ∀ E, err = some E → E.1.HndNamesNZ := by
   rintro E rfl
   have h' := hndNZ_opPayload_inv h
-  simp only [Val.pair, BoCa.BoLo.errVal, Val.inj₂, Expr.HndNamesNZ] at h'
-  exact h'.2
+  simp only [BoCa.BoLo.errVal, Val.inj₂, Expr.HndNamesNZ] at h'
+  exact h'
 
 theorem hndNZ_raise {p : Val} (hp : p.1.HndNamesNZ) : (raiseE (.val p)).HndNamesNZ := by
   simp only [raiseE, Expr.val, Val.prim]
@@ -509,7 +555,7 @@ theorem hndVal_shift (d : ℕ) (n : UInt32) (qs hr hs : Val) :
 
 theorem hndNZ_kappa {n : UInt32} {qs hr hs : Val} {K : Kont} (hn : n ≠ 0)
     (hq' : qs.1.HndNamesNZ) (hr' : hr.1.HndNamesNZ)
-    (hs' : hs.1.HndNamesNZ) (hK : KNZ K) : (kappa n (hndVal n qs hr hs) K).HndNamesNZ := by
+    (hs' : hs.1.HndNamesNZ) (hK : KNZ K) : (kappa (hndVal n qs hr hs) K).HndNamesNZ := by
   simp only [kappa, Expr.val, Val.lam, Expr.HndNamesNZ]
   refine ⟨trivial, ⟨trivial, ?_⟩, trivial, ?_⟩
   · rw [hndVal_shift, hndNZ_hndE]
@@ -518,13 +564,12 @@ theorem hndNZ_kappa {n : UInt32} {qs hr hs : Val} {K : Kont} (hn : n ≠ 0)
   · simp only [ccatchE, Expr.val, Val.prim]
     rw [hndNZ_app]
     refine .inr ⟨by simp, by simp [Expr.HndNamesNZ], ?_⟩
-    rw [hndVal_shift, hndNZ_hndE]
-    exact ⟨hn, hndNZ_val_shift hq' 2 0, hndNZ_val_shift hr' 2 0, hndNZ_val_shift hs' 2 0,
-      plug_hndNZ _ (knz_shift hK 2) (hndNZ_raise (hndNZ_cancelVal _ (fun _ h => by cases h)))⟩
+    exact plug_hndNZ _ (knz_shift (knz_dead hK) 2)
+      (hndNZ_raise (hndNZ_cancelVal (fun _ h => by cases h)))
 
 theorem hndNZ_kappaCell {n : UInt32} {qs hr hs : Val} {K : Kont} (aff : Bool) (hn : n ≠ 0)
     (hq' : qs.1.HndNamesNZ) (hr' : hr.1.HndNamesNZ)
-    (hs' : hs.1.HndNamesNZ) (hK : KNZ K) : (kappaCell aff n (hndVal n qs hr hs) K).HndNamesNZ := by
+    (hs' : hs.1.HndNamesNZ) (hK : KNZ K) : (kappaCell aff (hndVal n qs hr hs) K).HndNamesNZ := by
   simp only [kappaCell, kappaCBody, Expr.val, Val.lam, Val.prim, Val.unit, freeE, stuckE]
   rw [hndNZ_app, hndNZ_app]
   refine .inr ⟨by simp, ?_, .inr ⟨by simp, by simp [Expr.HndNamesNZ], trivial⟩⟩
@@ -543,13 +588,12 @@ theorem hndNZ_kappaCell {n : UInt32} {qs hr hs : Val} {K : Kont} (aff : Bool) (h
       · simp only [ccatchE, Expr.val, Val.prim]
         rw [hndNZ_app]
         refine .inr ⟨by simp, by simp [Expr.HndNamesNZ], ?_⟩
-        rw [hndVal_shift, hndNZ_hndE]
-        exact ⟨hn, hndNZ_val_shift hq' 3 0, hndNZ_val_shift hr' 3 0, hndNZ_val_shift hs' 3 0,
-          plug_hndNZ _ (knz_shift hK 3) (hndNZ_raise (hndNZ_cancelVal _ (fun _ h => by cases h)))⟩
+        exact plug_hndNZ _ (knz_shift (knz_dead hK) 3)
+          (hndNZ_raise (hndNZ_cancelVal (fun _ h => by cases h)))
 
 theorem hndNZ_kappaAt {t n : UInt32} {qs hr hs : Val} {K : Kont} (hn : n ≠ 0)
     (hq' : qs.1.HndNamesNZ) (hr' : hr.1.HndNamesNZ)
-    (hs' : hs.1.HndNamesNZ) (hK : KNZ K) : (kappaAt t n (hndVal n qs hr hs) K).HndNamesNZ := by
+    (hs' : hs.1.HndNamesNZ) (hK : KNZ K) : (kappaAt t (hndVal n qs hr hs) K).HndNamesNZ := by
   unfold kappaAt
   split
   · exact hndNZ_kappaCell false hn hq' hr' hs' hK
@@ -778,28 +822,42 @@ theorem hndNZ_head {μ μ' : Heap} {a a' : Expr} (h : Head (ℍ := ℍ) μ a μ'
       simp only [Val.pair, Expr.HndNamesNZ] at hND
       obtain ⟨-, hp⟩ := plug_hndNZ_inv K (notNameLike_raise _) hb
       exact ⟨⟨hndNZ_app_val hND.2 (by simp [Val.unit, Expr.HndNamesNZ]), hp⟩, hμ⟩
-  | ufinC N D Ns err K hK =>
+  | ufinC N D err K hK =>
       obtain ⟨hND, hb⟩ := (hndNZ_ubindE _ _).1 ha
       simp only [Val.pair, Expr.HndNamesNZ] at hND
       obtain ⟨-, hp⟩ := plug_hndNZ_inv K (notNameLike_raise _) hb
       exact ⟨(hndNZ_cfinE _ _).2 ⟨hndNZ_raise_inv hp,
         hndNZ_app_val hND.2 (by simp [Val.unit, Expr.HndNamesNZ])⟩, hμ⟩
-  | cfret Ns err w =>
+  | cfret err w =>
       exact ⟨hndNZ_raise ((hndNZ_cfinE _ _).1 ha).1, hμ⟩
-  | cferr Ns err m j w K hK =>
+  | cferr err m j w K hm hK =>
       obtain ⟨hs', hb⟩ := (hndNZ_cfinE _ _).1 ha
       obtain ⟨-, hp⟩ := plug_hndNZ_inv K (notNameLike_raise _) hb
       have hw := hndNZ_opPayload_inv (hndNZ_raise_inv hp)
-      refine ⟨hndNZ_raise (hndNZ_cancelVal Ns ?_), hμ⟩
+      refine ⟨hndNZ_raise (hndNZ_cancelVal ?_), hμ⟩
       intro E hE
-      simp only [BoCa.BoLo.errNext] at hE
-      split at hE
-      · exact hndNZ_cancelVal_inv hs' E hE
-      · split at hE
-        · cases hE
-        · cases hE; exact hndNZ_opPayload m j hw
-  | cancel Ns K hK => exact ⟨by simp [Val.unit, Expr.HndNamesNZ], hμ⟩
-  | creraise Ns E K hK =>
+      cases err with
+      | some E' =>
+          simp only [BoCa.BoLo.errNext, Option.some_or] at hE
+          exact hndNZ_cancelVal_inv hs' E hE
+      | none =>
+          simp only [BoCa.BoLo.errNext, Option.none_or, Option.some.injEq] at hE
+          subst hE; exact hndNZ_opPayload m j hw
+  | cfcancel err err' K hK =>
+      obtain ⟨hs', hb⟩ := (hndNZ_cfinE _ _).1 ha
+      obtain ⟨-, hp⟩ := plug_hndNZ_inv K (notNameLike_raise _) hb
+      have hs'' := hndNZ_raise_inv hp
+      refine ⟨hndNZ_raise (hndNZ_cancelVal ?_), hμ⟩
+      intro E hE
+      cases err with
+      | some E' =>
+          simp only [Option.some_or] at hE
+          exact hndNZ_cancelVal_inv hs' E hE
+      | none =>
+          simp only [Option.none_or] at hE
+          exact hndNZ_cancelVal_inv hs'' E hE
+  | cancel K hK => exact ⟨by simp [Val.unit, Expr.HndNamesNZ], hμ⟩
+  | creraise E K hK =>
       obtain ⟨-, hp⟩ := plug_hndNZ_inv K (notNameLike_raise _) ((hndNZ_ccatchE _).1 ha)
       exact ⟨hndNZ_raise (hndNZ_cancelVal_inv (hndNZ_raise_inv hp) E rfl), hμ⟩
 
@@ -1027,7 +1085,7 @@ theorem step1_raise {μ μ' : Heap} {K : Kont} {p : Val} {n : UInt32} {T : Expr}
       exact absurd hh not_head_raise
     rcases head_plug hh K'' hnv h₁ h0 with
       ⟨m, qs, hr, hs, K', rfl⟩ | ⟨N, D, K', rfl⟩ | ⟨K', rfl⟩ | ⟨w, H, q, -, rfl, -⟩ |
-        ⟨Ns, err, K', rfl⟩
+        ⟨err, K', rfl⟩
     · subst h₁
       generalize hX : (Kont.appR (.app (.val (.prim .hnd)) (.val (hndVal m qs hr hs))) K').plug
         (raiseE (.val p)) = X at hh
@@ -1061,14 +1119,14 @@ theorem step1_raise {μ μ' : Heap} {K : Kont} {p : Val} {n : UInt32} {T : Expr}
           subst hp
           refine ⟨Kx, _, K', _, ⟨by rw [hf.2], hK₀, ?_⟩, .ufin μ N' D' n' i v K' hn hK₀, rfl⟩
           simp [FrameCatches, Kont.Catches, Expr.val]
-      | ufinC N' D' Ns err K₀ hK₀ =>
+      | ufinC N' D' err K₀ hK₀ =>
           simp only [ubindE, Kont.plug, Expr.app.injEq] at hX
           obtain ⟨hf, hb⟩ := hX
           obtain ⟨hK', hpv⟩ := plug_raise_inj hb
           subst hK' hpv
           simp only [payloadName_cancelVal, Option.some.injEq] at hp
           subst hp
-          refine ⟨Kx, _, K', _, ⟨by rw [hf.2], hK₀, ?_⟩, .ufinC μ N' D' Ns err K' hK₀, rfl⟩
+          refine ⟨Kx, _, K', _, ⟨by rw [hf.2], hK₀, ?_⟩, .ufinC μ N' D' err K' hK₀, rfl⟩
           simp [FrameCatches, Kont.Catches, Expr.val]
       | uthen N' D' w =>
           simp only [ubindE, Kont.plug, Expr.app.injEq] at hX
@@ -1077,42 +1135,51 @@ theorem step1_raise {μ μ' : Heap} {K : Kont} {p : Val} {n : UInt32} {T : Expr}
     · subst h₁
       generalize hX : (Kont.appR (.val (.prim .ccatch)) K').plug (raiseE (.val p)) = X at hh
       cases hh with
-      | cancel Ns K₀ hK₀ =>
+      | cancel K₀ hK₀ =>
           simp only [ccatchE, Kont.plug, Expr.app.injEq] at hX
           obtain ⟨hf, hb⟩ := hX
           obtain ⟨hK', hpv⟩ := plug_raise_inj hb
           subst hK' hpv
           simp only [payloadName_cancelVal, Option.some.injEq] at hp
           subst hp
-          refine ⟨Kx, _, K', _, ⟨rfl, hK₀, ?_⟩, .cancel μ Ns K' hK₀, rfl⟩
+          refine ⟨Kx, _, K', _, ⟨rfl, hK₀, ?_⟩, .cancel μ K' hK₀, rfl⟩
           simp [FrameCatches, Kont.Catches, Expr.val]
-      | creraise Ns E K₀ hK₀ =>
+      | creraise E K₀ hK₀ =>
           simp only [ccatchE, Kont.plug, Expr.app.injEq] at hX
           obtain ⟨hf, hb⟩ := hX
           obtain ⟨hK', hpv⟩ := plug_raise_inj hb
           subst hK' hpv
           simp only [payloadName_cancelVal, Option.some.injEq] at hp
           subst hp
-          refine ⟨Kx, _, K', _, ⟨rfl, hK₀, ?_⟩, .creraise μ Ns E K' hK₀, rfl⟩
+          refine ⟨Kx, _, K', _, ⟨rfl, hK₀, ?_⟩, .creraise μ E K' hK₀, rfl⟩
           simp [FrameCatches, Kont.Catches, Expr.val]
       | _ => simp_all [Kont.plug, hndE, ubindE, cfinE]
     · subst h₁
       generalize hX : (Kont.appL .hole w).plug (raiseE (.val p)) = X at hh
       cases hh <;> simp_all [Kont.plug, hndE, ubindE, ccatchE, cfinE, raiseE]
     · subst h₁
-      generalize hX : (Kont.appR (.app (.val (.prim .cfin)) (.val (cancelVal Ns err))) K').plug
+      generalize hX : (Kont.appR (.app (.val (.prim .cfin)) (.val (cancelVal err))) K').plug
         (raiseE (.val p)) = X at hh
       cases hh with
-      | cferr Ns' err' m j w K₀ hK₀ =>
+      | cferr err' m j w K₀ hm hK₀ =>
           simp only [cfinE, Kont.plug, Expr.app.injEq] at hX
           obtain ⟨hf, hb⟩ := hX
           obtain ⟨hK', hpv⟩ := plug_raise_inj hb
           subst hK' hpv
           simp only [payloadName_opPayload, Option.some.injEq] at hp
           subst hp
-          refine ⟨Kx, _, K', _, ⟨by rw [hf.2], hK₀, ?_⟩, .cferr μ Ns' err' m j w K' hK₀, rfl⟩
+          refine ⟨Kx, _, K', _, ⟨by rw [hf.2], hK₀, ?_⟩, .cferr μ err' m j w K' hm hK₀, rfl⟩
           simp [FrameCatches, Kont.Catches, Expr.val]
-      | cfret Ns' err' w =>
+      | cfcancel err' err'' K₀ hK₀ =>
+          simp only [cfinE, Kont.plug, Expr.app.injEq] at hX
+          obtain ⟨hf, hb⟩ := hX
+          obtain ⟨hK', hpv⟩ := plug_raise_inj hb
+          subst hK' hpv
+          simp only [payloadName_cancelVal, Option.some.injEq] at hp
+          subst hp
+          refine ⟨Kx, _, K', _, ⟨by rw [hf.2], hK₀, ?_⟩, .cfcancel μ err' err'' K' hK₀, rfl⟩
+          simp [FrameCatches, Kont.Catches, Expr.val]
+      | cfret err' w =>
           simp only [cfinE, Kont.plug, Expr.app.injEq] at hX
           exact absurd hX.2 (plug_raise_ne_val _ _ _)
       | _ => simp_all [Kont.plug, hndE, ubindE, ccatchE]
@@ -1221,16 +1288,44 @@ theorem noCtl_comp : ∀ (K₁ K₂ : Kont), (K₁.comp K₂).NoCtl ↔ K₁.NoC
   | appR f K ih => simp only [Kont.comp, Kont.NoCtl, ih]; tauto
   | _ => simp_all [Kont.comp, Kont.NoCtl]
 
+/-- The dead region of a context with no `ccatch` and no `cfin` frame has none either. -/
+theorem noCtl_dead : ∀ {K : Kont}, K.NoCtl → K.dead.NoCtl
+  | .hole, h => h
+  | .appR f K, h => by
+      simp only [Kont.dead]
+      split
+      · exact noCtl_dead h.2
+      · exact ⟨h.1, noCtl_dead h.2⟩
+  | .pairL K _, h | .pairR _ K, h | .letpair K _, h | .case K _ _, h | .appL K _, h
+  | .seq K _, h | .inj₁ K, h | .inj₂ K, h => noCtl_dead (K := K) h
+
+/-- A dead region keeps the region's finaliser frames. -/
+theorem fins_dead : ∀ K : Kont, K.dead.fins = K.fins
+  | .hole => rfl
+  | .appR f K => by
+      simp only [Kont.dead]
+      split
+      · rename_i hf
+        rw [fins_dead K]
+        simp only [Kont.fins]
+        split
+        · simp [Kont.DeadFrame] at hf
+        · simp
+      · simp only [Kont.fins, fins_dead K]
+  | .pairL K _ | .pairR _ K | .letpair K _ | .case K _ _ | .appL K _ | .seq K _ | .inj₁ K
+  | .inj₂ K => by simp only [Kont.dead, Kont.fins, fins_dead K]
+
 /-- A stopping frame of a context with no handler, `ccatch` or `cfin` frame, at a name other than
 `0`, is a finaliser frame. -/
 theorem frame_ubind_of_unwind {n : UInt32} {f : Expr} {Ki : Kont} (hf : FrameCatches n f)
-    (hn : n ≠ 0) (hH : (Kont.appR f Ki).hndNames = []) (hC : (Kont.appR f Ki).NoCtl) :
+    (hn : n ≠ 0) (hH : ∀ m, (Kont.appR f Ki).HasHnd m = false) (hC : (Kont.appR f Ki).NoCtl) :
     ∃ x, f = .app (.prim .ubind) x := by
   simp only [FrameCatches, Kont.Catches, Bool.or_false] at hf
-  simp only [Kont.hndNames, List.append_eq_nil_iff] at hH
   obtain ⟨⟨hc, hc'⟩, -⟩ := hC
   split at hf
-  · simp at hH
+  · rename_i m r
+    have := hH m
+    simp [Kont.HasHnd] at this
   · exact ⟨_, rfl⟩
   · simp at hf; exact absurd hf hn
   · exact absurd rfl (hc' _)
@@ -1261,8 +1356,8 @@ theorem head_ubind_raise {μ μ' : Heap} {x : Expr} {Ki : Kont} {p : Val} {a' : 
     μ' = μ ∧ ∃ N D : Val, x = (Val.pair N D).1 ∧
       ((∃ n i v, n ≠ 0 ∧ p = opPayload n i v ∧
           a' = .seq (.app (.val D) (.val .unit)) (raiseE (.val p))) ∨
-       (∃ Ns err, p = cancelVal Ns err ∧
-          a' = cfinE (cancelVal Ns err) (.app (.val D) (.val .unit)))) := by
+       (∃ err, p = cancelVal err ∧
+          a' = cfinE (cancelVal err) (.app (.val D) (.val .unit)))) := by
   generalize hX : Expr.app (.app (.prim .ubind) x) (Ki.plug (raiseE (.val p))) = X at h
   cases h with
   | ufin N D n i v K hn hK =>
@@ -1270,11 +1365,11 @@ theorem head_ubind_raise {μ μ' : Heap} {x : Expr} {Ki : Kont} {p : Val} {a' : 
       obtain ⟨hx, hb⟩ := hX
       obtain ⟨-, rfl⟩ := plug_raise_inj hb
       exact ⟨rfl, N, D, hx, .inl ⟨n, i, v, hn, rfl, rfl⟩⟩
-  | ufinC N D Ns err K hK =>
+  | ufinC N D err K hK =>
       simp only [ubindE, Expr.app.injEq, Expr.val, Val.prim, true_and] at hX
       obtain ⟨hx, hb⟩ := hX
       obtain ⟨-, rfl⟩ := plug_raise_inj hb
-      exact ⟨rfl, N, D, hx, .inr ⟨Ns, err, rfl, rfl⟩⟩
+      exact ⟨rfl, N, D, hx, .inr ⟨err, rfl, rfl⟩⟩
   | uthen N D w =>
       simp only [ubindE, Expr.app.injEq] at hX
       exact absurd hX.2 (plug_raise_ne_val _ _ _)
@@ -1347,7 +1442,7 @@ first**: `KA` holds no handler, `ccatch` or `cfin` frame, and `KB` stops nothing
 theorem unwindRun_of {J : TypingJ} (hF : FinAloneAt (ℍ := ℍ) (· ≠ 0) J) {e : Expr} {A : VTy}
     (he : J.closed e (.ret A)) (K₀ : Kont) :
     ∀ (k : ℕ) (KA KB : Kont) (μ : Heap) (n i : UInt32) (v : Val), KA.fins.length = k →
-      KA.hndNames = [] → KA.NoCtl → KB.Catches n = false → n ≠ 0 →
+      (∀ m, KA.HasHnd m = false) → KA.NoCtl → KB.Catches n = false → n ≠ 0 →
       Steps (ℍ := ℍ) Adequacy.emptyMem e μ
         (K₀.plug ((KA.comp KB).plug (raiseE (.val (opPayload n i v))))) →
       ∀ μ₂ (K' : Kont) m j w, K'.Catches m = false →
@@ -1365,7 +1460,9 @@ theorem unwindRun_of {J : TypingJ} (hF : FinAloneAt (ℍ := ℍ) (· ≠ 0) J) {
     rw [fins_nil_of_catches KA hA]
     exact unwind_out (by rw [catches_comp, hA, hB]; rfl) hrun
   obtain ⟨Ko, f, Ki, rfl, hKi, hf⟩ := innerCatch_exists n KA hA
-  have hHo := (List.append_eq_nil_iff.1 ((hndNames_comp _ _).symm.trans hH))
+  have hHo : (∀ m, Ko.HasHnd m = false) ∧ (∀ m, (Kont.appR f Ki).HasHnd m = false) :=
+    ⟨fun m => by have := hH m; rw [hasHnd_comp, Bool.or_eq_false_iff] at this; exact this.1,
+     fun m => by have := hH m; rw [hasHnd_comp, Bool.or_eq_false_iff] at this; exact this.2⟩
   have hCo := (noCtl_comp _ _).1 hC
   obtain ⟨x, rfl⟩ := frame_ubind_of_unwind (Ki := Ki) hf hn hHo.2 hCo.2
   have hctx : (Ko.comp (.appR (.app (.prim .ubind) x) Ki)).comp KB =
@@ -1387,7 +1484,7 @@ theorem unwindRun_of {J : TypingJ} (hF : FinAloneAt (ℍ := ℍ) (· ≠ 0) J) {
   obtain ⟨rfl, rfl, rfl⟩ := innerCatch_unique hIC hIC'
   obtain ⟨hμ, N, D, rfl, hcase⟩ := head_ubind_raise hhead
   subst μ₁
-  rcases hcase with ⟨n', i', v', -, hp', rfl⟩ | ⟨Ns, err, hp', -⟩
+  rcases hcase with ⟨n', i', v', -, hp', rfl⟩ | ⟨err, hp', -⟩
   swap
   · exact absurd (opPayload_inj hp').1 hn
   clear hp'
@@ -1469,24 +1566,13 @@ theorem unwindOrder_at {J : TypingJ} (hF : FinAloneAt (ℍ := ℍ) (· ≠ 0) J)
 
 /-! ### The cancel -/
 
-/-- Cancelling `κ` reaches `cancelOf n H K` by `ewp_kappa_cancel`'s three steps. -/
-theorem kappa_cancel_run (μ : Heap) (n : UInt32) (H : Val) (K : Kont) :
-    Steps (ℍ := ℍ) μ (.app (kappa n H K) (.val (Val.inj₂ .unit))) μ (cancelOf n H K) := by
+/-- Cancelling `κ` reaches `cancelOf K` by `ewp_kappa_cancel`'s three steps. -/
+theorem kappa_cancel_run (μ : Heap) (H : Val) (K : Kont) :
+    Steps (ℍ := ℍ) μ (.app (kappa H K) (.val (Val.inj₂ .unit))) μ (cancelOf K) := by
   refine .more (Step1.head (Head.beta μ _ _)) ?_
   refine .more (Step1.head (Head.case₂ μ Val.unit _ _)) ?_
   refine .more (Step1.head (Head.seq μ _)) ?_
-  have e : ∀ (s u : Val), Expr.subst 0 u (Expr.subst 1 s
-      (ccatchE (hndE (Val.shift 2 0 H) ((Kont.shift 2 0 K).plug
-        (raiseE (.val (cancelVal (n :: K.hndNames) none))))))) =
-      ccatchE (hndE H (K.plug (raiseE (.val (cancelVal (n :: K.hndNames) none))))) := by
-    intro s u
-    simp only [ccatchE, hndE, Expr.subst, Expr.val, Val.val_shift]
-    rw [Expr.subst_shift 1 0 1 s H.1 (by omega) (by omega),
-      Expr.subst_shift 0 0 0 u H.1 (by omega) (by omega), Expr.shift_zero,
-      plug_shift_subst 1 K 0 1 s _ (by omega) (by omega),
-      plug_shift_subst 0 K 0 0 u _ (by omega) (by omega), Kont.shift_zero]
-    simp only [raiseE, Expr.subst, Expr.val, subst_cancelVal_none, Val.prim]
-  rw [show (0 + 1 : Nat) = 1 from rfl, e]
+  rw [show (0 + 1 : Nat) = 1 from rfl, kappa_cancel_subst]
   exact .refl _ _
 
 /-- A raise at the top takes no step. -/
@@ -1558,14 +1644,14 @@ abbrev ccatchK (K : Kont) : Kont := .appR (.prim .ccatch) K
 /-- **A cancel run through frames with no `ccatch`, no `cfin` and no handler of `0` fires their
 finalisers once each, innermost first.** -/
 theorem cancelRun_of {J : TypingJ} (hF : FinAloneAt (ℍ := ℍ) (· ≠ 0) J) {e : Expr} {A : VTy}
-    (he : J.closed e (.ret A)) (K₀ : Kont) (Ns : List UInt32) :
+    (he : J.closed e (.ret A)) (K₀ : Kont) :
     ∀ (k : ℕ) (Kc : Kont) (μ : Heap) (err : Option Val), Kc.fins.length = k →
       Kc.NoCtl → Kc.HasHnd 0 = false →
       Steps (ℍ := ℍ) Adequacy.emptyMem e μ
-        (K₀.plug (ccatchE (Kc.plug (raiseE (.val (cancelVal Ns err)))))) →
-      ∀ μ₃ r, Steps (ℍ := ℍ) μ (ccatchE (Kc.plug (raiseE (.val (cancelVal Ns err))))) μ₃ r →
+        (K₀.plug (ccatchE (Kc.plug (raiseE (.val (cancelVal err)))))) →
+      ∀ μ₃ r, Steps (ℍ := ℍ) μ (ccatchE (Kc.plug (raiseE (.val (cancelVal err))))) μ₃ r →
         (r = .val .unit ∨ ∃ E, r = raiseE (.val E)) →
-        CancelRun (ℍ := ℍ) μ (ccatchE (Kc.plug (raiseE (.val (cancelVal Ns err))))) Kc.fins μ₃
+        CancelRun (ℍ := ℍ) μ (ccatchE (Kc.plug (raiseE (.val (cancelVal err))))) Kc.fins μ₃
           r := by
   intro k
   induction k using Nat.strong_induction_on with
@@ -1575,13 +1661,13 @@ theorem cancelRun_of {J : TypingJ} (hF : FinAloneAt (ℍ := ℍ) (· ≠ 0) J) {
     rcases hr with rfl | ⟨E, rfl⟩
     · exact val_irr (w := Val.unit)
     · exact raise_top_irr
-  have hne : r ≠ ccatchE (Kc.plug (raiseE (.val (cancelVal Ns err)))) := by
+  have hne : r ≠ ccatchE (Kc.plug (raiseE (.val (cancelVal err)))) := by
     rcases hr with rfl | ⟨E, rfl⟩
     · simp [ccatchE]
     · simp [ccatchE, raiseE]
   obtain ⟨μ₁, T₁, hst, hrest⟩ := steps_first hrun hne
   obtain ⟨Ko', f', Ki', a', hIC', hhead, rfl⟩ :=
-    step1_raise (K := ccatchK Kc) (payloadName_cancelVal Ns err) hst
+    step1_raise (K := ccatchK Kc) (payloadName_cancelVal err) hst
   by_cases hA : Kc.Catches 0 = true
   swap
   · -- the canceller answers
@@ -1592,18 +1678,18 @@ theorem cancelRun_of {J : TypingJ} (hF : FinAloneAt (ℍ := ℍ) (· ≠ 0) J) {
     rw [fins_nil_of_catches Kc hA]
     have hcase : μ₁ = μ ∧ a' = cancelAnswer err := by
       clear hrun hrest hreach hst ih hrirr hne hIC hIC' hr hk hC hH
-      generalize hX : Expr.app (.prim .ccatch) (Kc.plug (raiseE (.val (cancelVal Ns err)))) = X
+      generalize hX : Expr.app (.prim .ccatch) (Kc.plug (raiseE (.val (cancelVal err)))) = X
         at hhead
       cases hhead with
-      | cancel Ns' K₀' hK₀' =>
+      | cancel K₀' hK₀' =>
           simp only [ccatchE, Expr.app.injEq, Expr.val, Val.prim, true_and] at hX
           obtain ⟨-, hp⟩ := plug_raise_inj hX
-          obtain ⟨rfl, rfl⟩ := cancelVal_inj hp
+          obtain rfl := cancelVal_inj hp
           exact ⟨rfl, rfl⟩
-      | creraise Ns' E K₀' hK₀' =>
+      | creraise E K₀' hK₀' =>
           simp only [ccatchE, Expr.app.injEq, Expr.val, Val.prim, true_and] at hX
           obtain ⟨-, hp⟩ := plug_raise_inj hX
-          obtain ⟨rfl, rfl⟩ := cancelVal_inj hp
+          obtain rfl := cancelVal_inj hp
           exact ⟨rfl, rfl⟩
       | _ => simp_all [hndE, ubindE, cfinE]
     obtain ⟨hμ₁, rfl⟩ := hcase
@@ -1625,56 +1711,55 @@ theorem cancelRun_of {J : TypingJ} (hF : FinAloneAt (ℍ := ℍ) (· ≠ 0) J) {
   obtain ⟨rfl, rfl, rfl⟩ := innerCatch_unique hIC hIC'
   obtain ⟨hμ, N, D, rfl, hcase⟩ := head_ubind_raise hhead
   subst μ₁
-  rcases hcase with ⟨n', i', v', hn', hp', -⟩ | ⟨Ns', err', hp', rfl⟩
+  rcases hcase with ⟨n', i', v', hn', hp', -⟩ | ⟨err', hp', rfl⟩
   · exact absurd (opPayload_inj hp').1.symm hn'
-  obtain ⟨rfl, rfl⟩ := cancelVal_inj hp'
+  obtain rfl := cancelVal_inj hp'
   have hk' : Ko.fins.length < k := by
     rw [fins_innerUbind hKi] at hk; simp at hk; omega
   rw [fins_innerUbind hKi]
   have hT : ccatchE ((Ko.comp (.appR (.app (.prim .ubind) (Val.pair N D).1) Ki)).plug
-      (raiseE (.val (cancelVal Ns err)))) =
-      ccatchE (Ko.plug (ubindE (Val.pair N D) (Ki.plug (raiseE (.val (cancelVal Ns err)))))) := by
+      (raiseE (.val (cancelVal err)))) =
+      ccatchE (Ko.plug (ubindE (Val.pair N D) (Ki.plug (raiseE (.val (cancelVal err)))))) := by
     rw [Kont.plug_comp]; rfl
   rw [hT] at hreach hst ⊢
   -- the finaliser's run under `cfin`
   have hrest' : Steps (ℍ := ℍ) μ (((ccatchK Ko).comp
-      (.appR (.app (.prim .cfin) (cancelVal Ns err).1) .hole)).plug (.app (.val D) (.val .unit)))
+      (.appR (.app (.prim .cfin) (cancelVal err).1) .hole)).plug (.app (.val D) (.val .unit)))
       μ₃ r := by
     rw [Kont.plug_comp]; exact hrest
   obtain ⟨μ₂, t, hD, hirr, hcont⟩ := steps_plug_split_end _ hrest' hrirr
   have hfire : Steps (ℍ := ℍ) Adequacy.emptyMem e μ ((K₀.comp (ccatchK Ko)).plug
-      (ubindE (Val.pair N D) (Ki.plug (raiseE (.val (opPayload 0 0
-        (Val.pair (BoCa.BoLo.namesVal Ns) (BoCa.BoLo.errVal err)))))))) := by
+      (ubindE (Val.pair N D) (Ki.plug (raiseE (.val (opPayload 0 0 (BoCa.BoLo.errVal err))))))) := by
     rw [Kont.plug_comp]; exact hreach
   have hpre : Steps (ℍ := ℍ) Adequacy.emptyMem e μ₂
-      (K₀.plug (((ccatchK Ko).comp (.appR (.app (.prim .cfin) (cancelVal Ns err).1) .hole)).plug
+      (K₀.plug (((ccatchK Ko).comp (.appR (.app (.prim .cfin) (cancelVal err).1) .hole)).plug
         t)) := by
     refine hreach.trans (.more (hst.plug K₀) ?_)
     have := Steps.plug (K₀.comp ((ccatchK Ko).comp
-      (.appR (.app (.prim .cfin) (cancelVal Ns err).1) .hole))) hD
+      (.appR (.app (.prim .cfin) (cancelVal err).1) .hole))) hD
     simp only [Kont.plug_comp] at this ⊢
     exact this
   rw [Kont.plug_comp] at hcont hpre
-  rcases hF he hfire hKi hD hirr with hval | ⟨K'', m, j, w, rfl, hK'', -⟩
+  rcases hF he hfire hKi hD hirr with hval | ⟨K'', m, j, w, rfl, hK'', hm⟩
   · -- the finaliser returned: `[cfin-ret]`
     obtain ⟨w, rfl⟩ : ∃ w : Val, t = w.1 := ⟨⟨t, hval⟩, rfl⟩
-    have hret := Head.cfret (ℍ := ℍ) μ₂ Ns err w
-    have hne' : r ≠ (ccatchK Ko).plug (cfinE (cancelVal Ns err) (.val w)) := by
+    have hret := Head.cfret (ℍ := ℍ) μ₂ err w
+    have hne' : r ≠ (ccatchK Ko).plug (cfinE (cancelVal err) (.val w)) := by
       rcases hr with rfl | ⟨E, rfl⟩
       · simp [Kont.plug]
       · simp [Kont.plug, raiseE]
     obtain ⟨μ₄, T₄, hst₄, hrest₄⟩ := steps_first hcont hne'
     obtain ⟨hμ₄, rfl⟩ := step1_det hret rfl hst₄
     subst μ₄
-    have hD' : Steps (ℍ := ℍ) μ (cfinE (cancelVal Ns err) (.app (.val D) (.val .unit))) μ₂
-        (raiseE (.val (cancelVal Ns err))) :=
-      (Steps.plug (.appR (.app (.prim .cfin) (cancelVal Ns err).1) .hole) hD).trans
+    have hD' : Steps (ℍ := ℍ) μ (cfinE (cancelVal err) (.app (.val D) (.val .unit))) μ₂
+        (raiseE (.val (cancelVal err))) :=
+      (Steps.plug (.appR (.app (.prim .cfin) (cancelVal err).1) .hole) hD).trans
         (Steps.one (Step1.head hret))
     exact .fin hKi hD' (ih Ko.fins.length hk' Ko μ₂ err rfl hCo.1 hHo.1
       (hpre.trans (.more (hst₄.plug K₀) (.refl _ _))) μ₃ r hrest₄ hr)
   · -- the finaliser raised: `[cfin-raise]`
-    have hraise := Head.cferr (ℍ := ℍ) μ₂ Ns err m j w K'' hK''
-    have hne' : r ≠ (ccatchK Ko).plug (cfinE (cancelVal Ns err)
+    have hraise := Head.cferr (ℍ := ℍ) μ₂ err m j w K'' hm hK''
+    have hne' : r ≠ (ccatchK Ko).plug (cfinE (cancelVal err)
         (K''.plug (raiseE (.val (opPayload m j w))))) := by
       rcases hr with rfl | ⟨E, rfl⟩
       · simp [Kont.plug]
@@ -1682,55 +1767,35 @@ theorem cancelRun_of {J : TypingJ} (hF : FinAloneAt (ℍ := ℍ) (· ≠ 0) J) {
     obtain ⟨μ₄, T₄, hst₄, hrest₄⟩ := steps_first hcont hne'
     obtain ⟨hμ₄, rfl⟩ := step1_det hraise rfl hst₄
     subst μ₄
-    have hD' : Steps (ℍ := ℍ) μ (cfinE (cancelVal Ns err) (.app (.val D) (.val .unit))) μ₂
-        (raiseE (.val (cancelVal Ns (BoCa.BoLo.errNext Ns err m j w)))) :=
-      (Steps.plug (.appR (.app (.prim .cfin) (cancelVal Ns err).1) .hole) hD).trans
+    have hD' : Steps (ℍ := ℍ) μ (cfinE (cancelVal err) (.app (.val D) (.val .unit))) μ₂
+        (raiseE (.val (cancelVal (BoCa.BoLo.errNext err m j w)))) :=
+      (Steps.plug (.appR (.app (.prim .cfin) (cancelVal err).1) .hole) hD).trans
         (Steps.one (Step1.head hraise))
     exact .fin hKi hD' (ih Ko.fins.length hk' Ko μ₂ _ rfl hCo.1 hHo.1
       (hpre.trans (.more (hst₄.plug K₀) (.refl _ _))) μ₃ r hrest₄ hr)
 
-/-- **I3.b, cancel, given `NoInterception` and `FinAloneAt`.** -/
-theorem cancelOrder_at {J : TypingJ} (hN : NoInterception J) (hF : FinAloneAt (ℍ := ℍ) (· ≠ 0) J) :
+/-- **I3.b, cancel, given `FinAloneAt`**: the cancel runs the dead region, which holds no handler
+(SPEC §19, *Cancels*), so no handler stops it before its finaliser frames. -/
+theorem cancelOrder_at {J : TypingJ} (hF : FinAloneAt (ℍ := ℍ) (· ≠ 0) J) :
     CancelOrder (ℍ := ℍ) J := by
-  intro e A he μ₁ K₀ n H K hC hreach μ₃ r hrun hr
-  have hreach' : Steps (ℍ := ℍ) Adequacy.emptyMem e μ₁ (K₀.plug (cancelOf n H K)) :=
-    hreach.trans (Steps.plug K₀ (kappa_cancel_run μ₁ n H K))
-  have hnz := (hndNamesNZ_steps hreach' (hN _ _ _ _ _ he).2.2 heapNZ_empty).1
-  have hc : (cancelOf n H K).HndNamesNZ :=
-    (plug_hndNZ_inv K₀ ⟨fun _ _ h => by simp [cancelOf, ccatchE] at h,
-      fun _ h => by simp [cancelOf, ccatchE] at h⟩ hnz).2
-  simp only [cancelOf] at hc
-  rw [hndNZ_ccatchE] at hc
-  have hc' := hndNZ_app_inv (f := .app (.prim .hnd) H.1) (by simp) hc
-  have hH0 : (Kont.appR (.app (.prim .hnd) H.1) .hole).HasHnd 0 = false := by
-    have h := hc'.1
-    rw [hndNZ_app] at h
-    rcases h with ⟨-, m, r', hpr, hm, -⟩ | ⟨h, -, -⟩
-    · simp only [Kont.HasHnd, hpr, Bool.or_false]; simpa using hm
-    · exact absurd rfl h
-  have hK0 : K.HasHnd 0 = false :=
-    hasHnd0_of_knz K (plug_hndNZ_inv K (notNameLike_raise _) hc'.2).1
-  have hCc : ((Kont.appR (.app (.prim .hnd) H.1) .hole).comp K).NoCtl :=
-    (noCtl_comp _ _).2 ⟨⟨⟨by simp, fun _ h => by simp at h⟩, trivial⟩, hC⟩
-  have hHc : ((Kont.appR (.app (.prim .hnd) H.1) .hole).comp K).HasHnd 0 = false := by
-    rw [hasHnd_comp, hH0, hK0]; rfl
-  have hfins : ((Kont.appR (.app (.prim .hnd) H.1) .hole).comp K).fins = K.fins := by
-    rw [fins_comp]; simp [Kont.fins]
-  have h := cancelRun_of hF he K₀ (n :: K.hndNames) _ _ μ₁ none rfl hCc hHc hreach' μ₃ r hrun hr
-  rw [hfins] at h
+  intro e A he μ₁ K₀ H K hC hreach μ₃ r hrun hr
+  have hreach' : Steps (ℍ := ℍ) Adequacy.emptyMem e μ₁ (K₀.plug (cancelOf K)) :=
+    hreach.trans (Steps.plug K₀ (kappa_cancel_run μ₁ H K))
+  have h := cancelRun_of hF he K₀ _ K.dead μ₁ none rfl (noCtl_dead hC) (hasHnd_dead 0 K) hreach'
+    μ₃ r hrun hr
+  rw [fins_dead] at h
   exact h
 
-/-- **I3.b given `NoInterception` and `FinAloneAt`** at today's endings (raises of nonzero
-names). -/
-theorem finaliserOrder_at {J : TypingJ} (hN : NoInterception J)
-    (hF : FinAloneAt (ℍ := ℍ) (· ≠ 0) J) : FinaliserOrder (ℍ := ℍ) J :=
-  ⟨cancelOrder_at hN hF, unwindOrder_at hF⟩
+/-- **I3.b given `FinAloneAt`** at today's endings (raises of nonzero names). -/
+theorem finaliserOrder_at {J : TypingJ} (hF : FinAloneAt (ℍ := ℍ) (· ≠ 0) J) :
+    FinaliserOrder (ℍ := ℍ) J :=
+  ⟨cancelOrder_at hF, unwindOrder_at hF⟩
 
-/-- **I3.b at option A** (decision D3): given `NoInterception` and that a fired finaliser's run
-alone ends at a value. -/
-theorem finaliserOrder_A {J : TypingJ} (hN : NoInterception J)
-    (hF : FinAloneAt (ℍ := ℍ) (fun _ => False) J) : FinaliserOrder (ℍ := ℍ) J :=
-  finaliserOrder_at hN (finAloneAt_mono (fun _ h => h.elim) hF)
+/-- **I3.b at option A** (decision D3): given that a fired finaliser's run alone ends at a
+value. -/
+theorem finaliserOrder_A {J : TypingJ} (hF : FinAloneAt (ℍ := ℍ) (fun _ => False) J) :
+    FinaliserOrder (ℍ := ℍ) J :=
+  finaliserOrder_at (finAloneAt_mono (fun _ h => h.elim) hF)
 
 end Targets
 

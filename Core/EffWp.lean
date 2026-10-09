@@ -1010,7 +1010,7 @@ theorem wpG_frame {ls : List SRec} {e : Expr} {Q : List SRec → Expr → WProp}
   exact ⟨σ₁, ρ₂, ResU.CompS.comm hcσ, hq, hR ls' hls ρ₂ hr⟩
 
 /-- The table of a cancel run owes no continuation. -/
-theorem cancelTab_abortive (T : OpTab) (N : List UInt32) : (cancelTab T N).Abortive :=
+theorem cancelTab_abortive (T : OpTab) : (cancelTab T).Abortive :=
   fun _ _ _ _ _ h => h
 
 end BoCa.Fig16.LogRel.Core

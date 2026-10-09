@@ -127,9 +127,9 @@ def WP (p : Placement) : Targets.SemWorld where
   comp C i δ e := cRL p i.2.1 δ C i.2.2 i.1 e
   held _ := ([], [])
   Stop a b _ := (∀ q, q ∈ b.1 ↔ q ∈ a.1) ∧ (∀ x, x ∈ b.2.1 ↔ x ∈ a.2.1) ∧ b.2.2 = a.2.2
-  share T en n i K Φ :=
-    contShare (OpTabI.at T i.2) ⟨en.q, en.abort, fun ls v => en.PA (ls, i.2) v,
-      fun ls v => en.PB (ls, i.2) v⟩ n i.1 K (fun ls t => Φ (ls, i.2) t)
+  share _ en _ i K Φ :=
+    contShare ⟨en.q, en.abort, fun ls v => en.PA (ls, i.2) v,
+      fun ls v => en.PB (ls, i.2) v⟩ i.1 K (fun ls t => Φ (ls, i.2) t)
 
 end ProbeD1
 

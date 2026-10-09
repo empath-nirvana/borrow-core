@@ -9,7 +9,7 @@ that keeps every memory and allocates nothing (`red K a a'`: `e = K[a]`, `a ↦ 
 that no frame of its context catches (`op r K p n`: `e = K[op p]`, the context free of the name
 `n`), or something it does not decide (`stuck`).  It covers the steps a run through handlers,
 finalisers and cancels takes (`beta`, `seq`, `letpair`, `case`, `hret`, `hop`, `hunwind`, `uthen`,
-`ufin`, `ufinC`, `cfret`, `cferr`, `cancel`, `creraise`) and no step that reads or changes the
+`ufin`, `ufinC`, `cfret`, `cferr`, `cfcancel`, `cancel`, `creraise`) and no step that reads or changes the
 memory.  `look_sound` states what each answer means in Core's terms (`Head`, `opE`, `OpFree`).
 
 `look` is computed by the kernel, so the run of a closed program through these steps is a
@@ -23,7 +23,7 @@ variable {ℍ : BoCa.Host} [BoCa.HostIs ℍ]
 namespace Targets
 open BoCa BoCa.Fig16 BoCa.Fig16.BoLo BoCa.Fig16.LogRel BoCa.Fig16.LogRel.Core
 open BoCa.BoLo (Heap Steps Step1 Head Kont performE raiseE opPayload hndE ubindE ccatchE cfinE
-  hndVal cancelVal kappa clauseAt namesVal errVal errNext kappaAt capTag)
+  hndVal cancelVal kappa clauseAt errVal errNext kappaAt capTag)
 
 /-! ### Deciding values and payloads -/
 
@@ -68,44 +68,6 @@ theorem clauseOf_some : ∀ (hs : Expr) (i : ℕ) (c : Val), clauseOf hs i = som
   | .loc _, _, _, h | .prim _, _, _, h | .seq _ _, _, _, h | .letpair _ _, _, _, h
   | .case _ _ _, _, _, h | .app _ _, _, _, h => by simp [clauseOf] at h
 
-theorem namesOf_some : ∀ (x : Expr) (N : List UInt32), namesOf x = some N → x = (namesVal N).1
-  | .inj₁ .unit, N, h => by
-      simp only [namesOf, Option.some.injEq] at h
-      subst h; rfl
-  | .inj₂ (.pair (.prim (.lit (.i32 m))) r), N, h => by
-      simp only [namesOf, Option.map_eq_some_iff] at h
-      obtain ⟨N', hN', rfl⟩ := h
-      rw [namesOf_some r N' hN']
-      rfl
-  | .var _, _, h | .unit, _, h | .pair _ _, _, h | .lam _, _, h | .loc _, _, h | .prim _, _, h
-  | .seq _ _, _, h | .letpair _ _, _, h | .case _ _ _, _, h | .app _ _, _, h => by
-      simp [namesOf] at h
-  | .inj₁ (.var _), _, h | .inj₁ (.pair _ _), _, h | .inj₁ (.inj₁ _), _, h
-  | .inj₁ (.inj₂ _), _, h | .inj₁ (.lam _), _, h | .inj₁ (.loc _), _, h | .inj₁ (.prim _), _, h
-  | .inj₁ (.seq _ _), _, h | .inj₁ (.letpair _ _), _, h | .inj₁ (.case _ _ _), _, h
-  | .inj₁ (.app _ _), _, h => by simp [namesOf] at h
-  | .inj₂ (.var _), _, h | .inj₂ .unit, _, h | .inj₂ (.inj₁ _), _, h | .inj₂ (.inj₂ _), _, h
-  | .inj₂ (.lam _), _, h | .inj₂ (.loc _), _, h | .inj₂ (.prim _), _, h | .inj₂ (.seq _ _), _, h
-  | .inj₂ (.letpair _ _), _, h | .inj₂ (.case _ _ _), _, h | .inj₂ (.app _ _), _, h => by
-      simp [namesOf] at h
-  | .inj₂ (.pair (.var _) _), _, h | .inj₂ (.pair .unit _), _, h
-  | .inj₂ (.pair (.pair _ _) _), _, h | .inj₂ (.pair (.inj₁ _) _), _, h
-  | .inj₂ (.pair (.inj₂ _) _), _, h | .inj₂ (.pair (.lam _) _), _, h
-  | .inj₂ (.pair (.loc _) _), _, h | .inj₂ (.pair (.seq _ _) _), _, h
-  | .inj₂ (.pair (.letpair _ _) _), _, h | .inj₂ (.pair (.case _ _ _) _), _, h
-  | .inj₂ (.pair (.app _ _) _), _, h => by simp [namesOf] at h
-  | .inj₂ (.pair (.prim (.lit (.i64 _))) _), _, h | .inj₂ (.pair (.prim (.lit (.u8 _))) _), _, h
-  | .inj₂ (.pair (.prim .alloc) _), _, h | .inj₂ (.pair (.prim .free) _), _, h
-  | .inj₂ (.pair (.prim .load) _), _, h | .inj₂ (.pair (.prim .store) _), _, h
-  | .inj₂ (.pair (.prim (.host _)) _), _, h | .inj₂ (.pair (.prim .tab) _), _, h
-  | .inj₂ (.pair (.prim .idx) _), _, h | .inj₂ (.pair (.prim .drop) _), _, h
-  | .inj₂ (.pair (.prim .split) _), _, h | .inj₂ (.pair (.prim .count) _), _, h
-  | .inj₂ (.pair (.prim .countTry) _), _, h | .inj₂ (.pair (.prim .boundedFix) _), _, h
-  | .inj₂ (.pair (.prim .perform) _), _, h | .inj₂ (.pair (.prim .raise) _), _, h
-  | .inj₂ (.pair (.prim .hnd) _), _, h | .inj₂ (.pair (.prim .ubind) _), _, h
-  | .inj₂ (.pair (.prim .ccatch) _), _, h | .inj₂ (.pair (.prim .cfin) _), _, h => by
-      simp [namesOf] at h
-
 theorem errOf_some (y : Expr) (err : Option Val) (h : BoCa.errOf y = some err) :
     y = (errVal err).1 := by
   unfold BoCa.errOf at h
@@ -149,35 +111,20 @@ theorem payOf?_some {e : Expr} {n i : UInt32} {w : Val} (h : payOf? e = some (n,
     rw [valOf?_some hw']; rfl
   · cases h
 
-/-- The state `(N, err)` of a cancel payload. -/
-def cancelOf? (e : Expr) : Option (List UInt32 × Option Val) :=
+/-- The state `err` of a cancel payload. -/
+def cancelOf? (e : Expr) : Option (Option Val) :=
   match payOf? e with
-  | some (0, 0, w) =>
-      match w.1 with
-      | .pair x y =>
-          match namesOf x, BoCa.errOf y with
-          | some N, some err => some (N, err)
-          | _, _ => none
-      | _ => none
+  | some (0, 0, w) => BoCa.errOf w.1
   | _ => none
 
-theorem cancelOf?_some {e : Expr} {N : List UInt32} {err : Option Val}
-    (h : cancelOf? e = some (N, err)) : e = (cancelVal N err).1 := by
+theorem cancelOf?_some {e : Expr} {err : Option Val} (h : cancelOf? e = some err) :
+    e = (cancelVal err).1 := by
   unfold cancelOf? at h
   split at h
   · rename_i w hw
     rw [payOf?_some hw]
-    split at h
-    · rename_i x y hxy
-      split at h
-      · rename_i N' err' hN herr
-        simp only [Option.some.injEq, Prod.mk.injEq] at h
-        obtain ⟨rfl, rfl⟩ := h
-        have hw' : w = Val.pair (namesVal N') (errVal err') :=
-          Subtype.ext (by rw [hxy, namesOf_some x N' hN, errOf_some y err' herr]; rfl)
-        rw [hw']; rfl
-      · cases h
-    · cases h
+    have hw' : w = errVal err := Subtype.ext (errOf_some w.1 err h)
+    rw [hw']; rfl
   · cases h
 
 /-! ### Where evaluation stands -/
@@ -209,7 +156,7 @@ def catchOp (f arg : Expr) (r : Bool) (K : Kont) (p : Val) (n : UInt32) : Look :
             | some c =>
                 if r then .red .hole (.app f arg) (.app c.1 w.1)
                 else .red .hole (.app f arg) (.app c.1 (.pair w.1
-                  (kappaAt (capTag qs i.toNat) n (hndVal n qsv hrv hsv) K)))
+                  (kappaAt (capTag qs i.toNat) (hndVal n qsv hrv hsv) K)))
             | none => .stuck
         | _, _, _, _ => .stuck
     | .app (.prim .ubind) (.pair N D), true =>
@@ -226,14 +173,22 @@ def catchOp (f arg : Expr) (r : Bool) (K : Kont) (p : Val) (n : UInt32) : Look :
         | _, _ => .stuck
     | .prim .ccatch, true =>
         match cancelOf? p.1 with
-        | some (_, none) => .red .hole (.app f arg) (.val .unit)
-        | some (_, some E) => .red .hole (.app f arg) (raiseE (.val E))
+        | some none => .red .hole (.app f arg) (.val .unit)
+        | some (some E) => .red .hole (.app f arg) (raiseE (.val E))
         | none => .stuck
     | .app (.prim .cfin) s, true =>
-        match cancelOf? s, payOf? p.1 with
-        | some (N, err), some (m, j, w) =>
-            .red .hole (.app f arg) (raiseE (.val (cancelVal N (errNext N err m j w))))
-        | _, _ => .stuck
+        match cancelOf? s with
+        | some err =>
+            if n = 0 then
+              match cancelOf? p.1 with
+              | some err' => .red .hole (.app f arg) (raiseE (.val (cancelVal (err.or err'))))
+              | none => .stuck
+            else
+              match payOf? p.1 with
+              | some (m, j, w) =>
+                  .red .hole (.app f arg) (raiseE (.val (cancelVal (errNext err m j w))))
+              | none => .stuck
+        | none => .stuck
     | _, _ => .stuck
 
 /-- **Where the evaluation of a term stands.** -/
@@ -410,12 +365,11 @@ theorem catchOp_sound {f a : Expr} {r : Bool} {K : Kont} {p : Val} {n : UInt32}
         · rename_i hn0
           subst hn0
           split
-          · rename_i st hst
-            obtain ⟨Ns, err⟩ := st
-            have hp' : p = cancelVal Ns err := Subtype.ext (cancelOf?_some hst)
+          · rename_i err hst
+            have hp' : p = cancelVal err := Subtype.ext (cancelOf?_some hst)
             subst hp'
             refine ⟨rfl, fun μ => ?_, rfl⟩
-            exact Head.ufinC μ Nv Dv Ns err K (by simpa [OpFree] using hK)
+            exact Head.ufinC μ Nv Dv err K (by simpa [OpFree] using hK)
           · trivial
         · rename_i hn0
           split
@@ -433,29 +387,45 @@ theorem catchOp_sound {f a : Expr} {r : Bool} {K : Kont} {p : Val} {n : UInt32}
       have hn0 : n = 0 := by simpa [Kont.Catches] using hcatch
       subst hn0
       split
-      · rename_i Ns hst
-        have hp' : p = cancelVal Ns none := Subtype.ext (cancelOf?_some hst)
+      · rename_i hst
+        have hp' : p = cancelVal none := Subtype.ext (cancelOf?_some hst)
         subst hp'
         refine ⟨rfl, fun μ => ?_, rfl⟩
-        exact Head.cancel μ Ns K (by simpa [OpFree] using hK)
-      · rename_i Ns E hst
-        have hp' : p = cancelVal Ns (some E) := Subtype.ext (cancelOf?_some hst)
+        exact Head.cancel μ K (by simpa [OpFree] using hK)
+      · rename_i E hst
+        have hp' : p = cancelVal (some E) := Subtype.ext (cancelOf?_some hst)
         subst hp'
         refine ⟨rfl, fun μ => ?_, rfl⟩
-        exact Head.creraise μ Ns E K (by simpa [OpFree] using hK)
+        exact Head.creraise μ E K (by simpa [OpFree] using hK)
       · trivial
     · -- a cancel-mode finaliser frame, at a raise
       rename_i s
       split
-      · rename_i N err m j w hst hpay
+      · rename_i err hst
         have hs := cancelOf?_some hst
         subst hs
-        have hp' : p = opPayload m j w := Subtype.ext (payOf?_some hpay)
-        subst hp'
-        simp only [payloadName_opPayload, Option.some.injEq] at hn
-        subst hn
-        refine ⟨rfl, fun μ => ?_, rfl⟩
-        exact Head.cferr μ N err m j w K (by simpa [OpFree] using hK)
+        split
+        · -- a cancel reaches it
+          rename_i hn0
+          subst hn0
+          split
+          · rename_i err' hst'
+            have hp' : p = cancelVal err' := Subtype.ext (cancelOf?_some hst')
+            subst hp'
+            refine ⟨rfl, fun μ => ?_, rfl⟩
+            exact Head.cfcancel μ err err' K (by simpa [OpFree] using hK)
+          · trivial
+        · -- the finaliser raised
+          rename_i hn0
+          split
+          · rename_i m j w hpay
+            have hp' : p = opPayload m j w := Subtype.ext (payOf?_some hpay)
+            subst hp'
+            simp only [payloadName_opPayload, Option.some.injEq] at hn
+            subst hn
+            refine ⟨rfl, fun μ => ?_, rfl⟩
+            exact Head.cferr μ err m j w K hn0 (by simpa [OpFree] using hK)
+          · trivial
       · trivial
     · trivial
 
@@ -621,11 +591,10 @@ theorem look_sound : ∀ e : Expr, LookOK (ℍ := ℍ) e (look e)
           · trivial
         · rename_i st
           split
-          · rename_i c hc
-            obtain ⟨Ns, err⟩ := c
+          · rename_i err hc
             have hs := cancelOf?_some hc
             subst hs
-            exact ⟨rfl, fun μ => Head.cfret μ Ns err va, rfl⟩
+            exact ⟨rfl, fun μ => Head.cfret μ err va, rfl⟩
           · trivial
         · split
           · trivial

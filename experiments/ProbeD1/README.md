@@ -98,6 +98,13 @@ Not attempted. The stop rule stops the probe after statement 0 when `Statement0 
 placement. OQ-58's facts (`NilAgrees` and the three beside it) wait on a bundle that holds, so they
 were not attempted either. `reconB′`'s term was not committed, since statement 2 was not reached.
 
+Statement 6 (`ThenRow`) types the finaliser at the pure row, as the kernel's `[then]` has since
+SPEC §24 (option A). Its earlier form, with the finaliser at the row's abortive part, was Core's old
+`then_compatC`, which no longer holds under frame deadness (SPEC §19; `not_thenAbort_compatC`,
+`Core/EffCancel.lean`). Restating it at SPEC §27's rule, with the cancel rows, is the probe's if it
+goes on. W's `share` reads Core's `contShare`, which no longer takes the operation table or the
+name.
+
 ## What it means for D1, and for the fallback
 
 - **D1's tractability is not settled by this probe.** Statement 0's per-placement facts that carry

@@ -12,11 +12,19 @@ lowers their operations in `Backend/Clos/Capture.lean` and `Backend/Clos/Unwind.
   `Core/EffPrograms.lean`.
 - The two handled programs of `Core/EffExamples.lean`, typed there: a clause that resumes `κ` in
   tail position (`prog`), and one that cancels it (`progC`).
-- The cancels of `Core/EffCancel.lean`, a finaliser that raises during a cancel: `prog`, its error
-  suppressed (`prog_run`); and `prog₃` with an answer clause that tags the value, its error
-  re-raised at the canceller and caught outside the region (`prog₃_run`).
-- Terms that exercise the lowering's other shapes (*Shapes*, below). They are not typed: each
-  stage is compared with `Support`'s interpreter on them.
+- The cancels of `Core/EffCancel.lean`, a finaliser that raises during a cancel, its error kept and
+  re-raised at the canceller: `prog₃` with an answer clause that tags the value, the error caught
+  outside the region (`prog₃_run`); `progRe`, the region re-entering the site of the error's
+  name, whose dead inner instance does not catch it and whose live outer one does (`progRe_run`);
+  and `progOut`, `prog` under a live outer handler of the error's name (`progOut_run`).
+- Terms that exercise the lowering's other shapes (*Shapes*, below).
+
+The cancels and the shapes are not typed: each stage is compared with `Support`'s interpreter on
+them.  `Core/EffCancel.lean`'s `prog` is not compiled: its finaliser raises a name handled only
+inside the cancelled region, whose handlers are dead, so its run ends at a raise no handler catches
+(`prog_run`, `prog_final`), and a typing of finalisers rejects it (SPEC §19, *Cancels*).  Its
+other runs (a finaliser that performs, a cancel nested in a cancel, an unrestricted continuation
+dropped with a kept error) are Lean runs there.
 -/
 
 namespace Backend
@@ -148,8 +156,9 @@ def kernelPrograms : List (String × BoCa.Expr) :=
     ("store-cancel", storeCancel),
     ("resume-tail", BoCa.Fig16.LogRel.Core.EffExamples.prog),
     ("cancel-now", BoCa.Fig16.LogRel.Core.EffExamples.progC),
-    ("cancel-suppressed", BoCa.Fig16.LogRel.Core.CancelIntercept.prog),
     ("cancel-reraised", cancelKept),
+    ("cancel-reentered", BoCa.Fig16.LogRel.Core.CancelIntercept.progRe),
+    ("cancel-propagated", BoCa.Fig16.LogRel.Core.CancelIntercept.progOut),
     ("loop-tail", Shapes.loopTail 100000),
     ("loop-captured", Shapes.loopCaptured 100000),
     ("recursive-yield", Shapes.recYield 20),

@@ -253,6 +253,10 @@ owner is in the stop's share. `Drop.lean` lifts the unwinding `withborU` to a re
   `κ` at an affine operation. `spans_two_affine_yields` discharges every hypothesis, with
   `free : Ref 1 ⊸ 1` as the finaliser.
 
+A cancel runs the dead region `K†` and keeps an error alone (SPEC §19), so `opTableO`'s cancel
+part is `cancelOwed ls' K`, and the finaliser runs at the empty table (option A, SPEC §24): the
+`withborR` results read no abortive table of the row and no uniqueness of its keys.
+
 Disposing of the owner needed nothing new: the cancel happens at a list `Ext`-above the stop's,
 the owner is Kripke there, and the lend is not re-opened. What a cancel asks of the borrower is
 that its frozen share unwinds, which a frame owning nothing does at once. T15.5's drop clause has

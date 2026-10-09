@@ -90,12 +90,76 @@ theorem catches_comp (n : UInt32) : ∀ (K K' : Kont),
   | appR f K ih => simp only [Kont.comp, Kont.Catches, ih, Bool.or_assoc]
   | _ => simp_all [Kont.comp, Kont.Catches]
 
-theorem hndNames_comp : ∀ (K K' : Kont), (K.comp K').hndNames = K.hndNames ++ K'.hndNames := by
+/-! ### The dead region  `[spec §19]` -/
+
+theorem dead_comp : ∀ (K K' : Kont), (K.comp K').dead = K.dead.comp K'.dead := by
   intro K K'
   induction K with
-  | hole => simp [Kont.comp, Kont.hndNames]
-  | appR f K ih => simp only [Kont.comp, Kont.hndNames, ih, List.append_assoc]
-  | _ => simp_all [Kont.comp, Kont.hndNames]
+  | hole => rfl
+  | appR f K ih =>
+      simp only [Kont.comp, Kont.dead, ih]
+      split <;> rfl
+  | _ => simp_all [Kont.comp, Kont.dead]
+
+/-- A dead region holds no handler frame. -/
+theorem hasHnd_dead (n : UInt32) : ∀ K : Kont, K.dead.HasHnd n = false := by
+  intro K
+  induction K with
+  | hole => rfl
+  | appR f K ih =>
+      simp only [Kont.dead]
+      split
+      · exact ih
+      · rename_i hf
+        simp only [Kont.HasHnd, ih, Bool.or_false]
+        split
+        · rename_i m r
+          simp [Kont.DeadFrame] at hf
+        · rfl
+  | _ => simp_all [Kont.dead, Kont.HasHnd]
+
+/-- A dead region catches only at its finaliser frames, `ubind` and `cfin`, which catch every
+name: whether it catches does not depend on the name. -/
+theorem catches_dead (n m : UInt32) : ∀ K : Kont, K.dead.Catches n = K.dead.Catches m := by
+  intro K
+  induction K with
+  | hole => rfl
+  | appR f K ih =>
+      simp only [Kont.dead]
+      split
+      · exact ih
+      · rename_i hf
+        simp only [Kont.Catches, ih]
+        congr 1
+        split <;> simp_all [Kont.DeadFrame]
+  | _ => simp_all [Kont.dead, Kont.Catches]
+
+/-- A region whose frames catch nothing and hold no handler is its own dead region. -/
+theorem dead_plain : ∀ K : Kont, (∀ n, K.HasHnd n = false) → K.Catches 0 = false → K.dead = K := by
+  intro K
+  induction K with
+  | hole => intro _ _; rfl
+  | appR f K ih =>
+      intro hH hC
+      have hH' : ∀ n, K.HasHnd n = false := fun n => by
+        have := hH n; simp only [Kont.HasHnd, Bool.or_eq_false_iff] at this; exact this.2
+      have hC' : K.Catches 0 = false := by
+        simp only [Kont.Catches, Bool.or_eq_false_iff] at hC; exact hC.2
+      simp only [Kont.dead, ih hH' hC']
+      split
+      · rename_i hf
+        exfalso
+        unfold Kont.DeadFrame at hf
+        split at hf
+        · rename_i m r
+          have := hH m
+          simp [Kont.HasHnd] at this
+        · simp [Kont.Catches] at hC
+        · cases hf
+      · rfl
+  | _ =>
+      intro hH hC
+      simp_all [Kont.dead, Kont.HasHnd, Kont.Catches]
 
 /-! ### Operation tables  `[spec §19]` -/
 
@@ -118,35 +182,37 @@ def OpTab.ext (n i : UInt32) (en : OpEnt) (T : OpTab) : OpTab :=
   fun n' i' => if n' = n ∧ i' = i then some en else T n' i'
 
 /-- The error a cancel carries is admissible at the canceller: none, or an abortive operation of
-the row whose name is outside the cancelled region, at its argument relation. -/
-def errOk (T : OpTab) (N : List UInt32) (ls : List SRec) : Option Val → WProp
+the table, at its argument relation. -/
+def errOk (T : OpTab) (ls : List SRec) : Option Val → WProp
   | none => emp
   | some E => ex fun (m : UInt32) => ex fun (j : UInt32) => ex fun (w : Val) =>
       ex fun (en : OpEnt) =>
-        ⌜E = opPayload m j w ∧ m ∉ N ∧ T m j = some en ∧ en.abort = true⌝ ⋆
+        ⌜E = opPayload m j w ∧ T m j = some en ∧ en.abort = true⌝ ⋆
           fun ρ => en.PA ls w ρ ∧ NoOwn ρ
 
-/-- The table of a cancel run over the region `N`: it stops only at the cancel itself, having
-unwound every frame that catches it, with an admissible error and nothing owned left behind. -/
-def cancelTab (T : OpTab) (N : List UInt32) : Table := fun ls t _ =>
+/-- The table of a cancel run whose kept errors are `T`'s: it stops only at the cancel itself,
+having unwound every frame that catches it, with an admissible error and nothing owned left
+behind. -/
+def cancelTab (T : OpTab) : Table := fun ls t _ =>
   ex fun (K : Kont) => ex fun (err : Option Val) =>
-    ⌜t = K.plug (raiseE (.val (cancelVal N err))) ∧ K.Catches 0 = false⌝ ⋆
-      (errOk T N ls err ⋆ fun ρ => NoOwn ρ)
+    ⌜t = K.plug (raiseE (.val (cancelVal err))) ∧ K.Catches 0 = false⌝ ⋆
+      (errOk T ls err ⋆ fun ρ => NoOwn ρ)
 
-/-- What cancelling the continuation `K` of an operation of the name `n` owes: run to the cancel's
-end at every region `N` holding `n` and `K`'s handlers.  `[spec §19]` -/
-def cancelOwed (T : OpTab) (n : UInt32) (ls : List SRec) (K : Kont) : WProp := fun ρ =>
-  ∀ N : List UInt32, n ∈ N → (∀ m ∈ K.hndNames, m ∈ N) →
-    ewpTS ls (K.plug (raiseE (.val (cancelVal N none)))) (cancelTab T N) (fun _ _ _ => False) ρ
+/-- What cancelling the continuation `K` of an operation owes: the dead region `K†` run to the
+cancel's end, keeping no error (a finaliser lets no raise escape it, SPEC §24).
+`[spec §19]` -/
+def cancelOwed (ls : List SRec) (K : Kont) : WProp :=
+  ewpTS ls (K.dead.plug (raiseE (.val (cancelVal none)))) (cancelTab OpTab.empty)
+    (fun _ _ _ => False)
 
 /-- The continuation's share at a stopped operation: `∅` at `unr`; at every extension of the
 list, resumed at every answer in `PB`; and, with weakening, cancelled.  `[spec §19]` -/
-def contShare (T : OpTab) (en : OpEnt) (n : UInt32) (ls : List SRec) (K : Kont)
-    (Φ : List SRec → Expr → WProp) : WProp := fun ρ =>
-  (en.q = .unr → ρ = PMap.empty) ∧
-  ∀ ls', Ext ls ls' ρ →
-    (∀ w : Val, (en.PB ls' w ─⋆ Φ ls' (K.plug (.val w))) ρ) ∧
-    (en.q ≠ .lin → cancelOwed T n ls' K ρ)
+def contShare (en : OpEnt) (ls : List SRec) (K : Kont) (Φ : List SRec → Expr → WProp) : WProp :=
+  fun ρ =>
+    (en.q = .unr → ρ = PMap.empty) ∧
+    ∀ ls', Ext ls ls' ρ →
+      (∀ w : Val, (en.PB ls' w ─⋆ Φ ls' (K.plug (.val w))) ρ) ∧
+      (en.q ≠ .lin → cancelOwed ls' K ρ)
 
 /-- The protocol table of an operation table.  `[spec §19]`
 * a non-abortive `perform (n, (i, v))` under a context free of `n`: the argument, and the
@@ -159,7 +225,7 @@ def opTable (T : OpTab) : Table := fun ls t Φ =>
     (ex fun (K : Kont) => ex fun (n : UInt32) => ex fun (i : UInt32) => ex fun (v : Val) =>
       ex fun (en : OpEnt) =>
         ⌜t = K.plug (performE (.val (opPayload n i v))) ∧ K.HasHnd n = false ∧
-          T n i = some en ∧ en.abort = false⌝ ⋆ (en.PA ls v ⋆ contShare T en n ls K Φ))
+          T n i = some en ∧ en.abort = false⌝ ⋆ (en.PA ls v ⋆ contShare en ls K Φ))
     (ex fun (K : Kont) => ex fun (n : UInt32) => ex fun (i : UInt32) => ex fun (v : Val) =>
       ex fun (en : OpEnt) =>
         ⌜t = K.plug (raiseE (.val (opPayload n i v))) ∧ K.Catches n = false ∧
