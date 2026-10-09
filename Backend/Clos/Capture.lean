@@ -59,7 +59,9 @@ statically, and nothing is suspended or resumed.
 **Cancels.** `κ`'s cancel entry cancels `k`, then answers `()` or re-raises the kept error
 (`reraise`) at the canceller. The region's handlers are dead, as §19's *Cancels* asks: a cancel
 runs from the canceller's call of `κ`, and the cancel arms run only the points' `fin` frames, so
-a finaliser's raise meets the arm's `catchAll`, never a handler of the region.
+a finaliser's raise meets the arm's `catchAll`, never a handler of the region. A finaliser whose
+finalising arm may suspend (§27: it performs an operation of a control handler) is rejected with a
+message: the arms call a finaliser directly.
 -/
 
 namespace Backend.Clos
@@ -1001,6 +1003,16 @@ def Prog.capture (p : Prog) : Except String Prog := do
       | _ => F.raises[d]?.getD false
     let anyRaise := q₀.codes.toList.any fun c => c.body.finalisers.any fun dd =>
       (F.codesOf dd).any finRaises
+    -- A finaliser whose finalising arm may suspend, performing an operation of a control handler,
+    -- is not lowered: an unwind and a cancel arm run it as a direct call (SPEC §27, *Lowering*).
+    let finSuspends (d : Nat) : Bool := match q₀.codes[d]?.map (·.body) with
+      | some (Tm.letv s' (Tm.var _) (Tm.case s'' _ _ _ D)) =>
+        if s' == s'' then !(sKeysOf O F d [] D).isEmpty else !(F.skeys[d]?.getD []).isEmpty
+      | _ => !(F.skeys[d]?.getD []).isEmpty
+    if (main :: q₀.codes.toList.map (·.body)).any fun b => b.finalisers.any fun dd =>
+        (F.codesOf dd).any finSuspends then
+      throw ("capture: a finaliser that may perform an operation of a control handler is not " ++
+        "lowered (SPEC §27)")
     for h in hs.toList do
       let forward := (F.skeys[h.body]?.getD []).any fun j => O.keys[j]!.1 != h.n
       let d := q₀.codes[h.drv]!

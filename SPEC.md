@@ -4009,7 +4009,14 @@ one β-step longer at each use of `κ`:
 
 ### Lowering
 
-Under option A a finaliser never suspends, and the backend does not lower one that does.
+The backend lowers a finaliser that raises (`Backend/Clos/Capture.lean`, `Backend/Clos/Unwind.lean`),
+not one that may suspend, performing an operation of a control handler: an unwind and a cancel arm
+call a finaliser directly. `Capture` rejects such a finaliser with a message. The four shapes, a
+finaliser that performs (`progFinOp`), a cancel nested in a cancel (`progNC₁`), and a kept error
+dropped with an unrestricted continuation or resumed (`progDrop`, `progKeep`), are Lean runs
+(`Core/EffCancel.lean`, `Core/EffCancelTyped.lean`) and interpreter runs, not kernel programs. The
+checker emits no such finaliser: its finalisers are destructors at `F 1`. No kernel program and
+no count changes.
 
 ### Baseline
 
@@ -4020,6 +4027,13 @@ its rows is the top-level test, so it accepts and rejects what it did.
 
 ### Open
 
+- **The lowering of a finaliser that suspends** (`experiments/Targets/FINALISERS.md` §2.9: its
+  cancel arm as a code of its own, each finaliser call a resumption point). Until it lands, a
+  feature without its lowering.
+- **Tier 1's kernel at §27** (`experiments/Targets`, `CDerivesAt`): `J₁` types finalisers at the
+  pure row. At §27's `[then]` it types `e7b` and the rest, and the refutations of E7, E8 and E9 at
+  `J₁` (`Targets/Instance/FinRaise.lean`), which are of option A, are replaced by their proofs
+  (FINALISERS.md §4).
 - **`[then]`'s two premises on unrestricted operations** restrict `unr` beyond §19's `[then]`
   (decision 63). §19's top-level premise is not enough: the finaliser's frame is live in the
   cancels below it.
@@ -4147,8 +4161,9 @@ Entry 26 (§27) is implemented in the kernel: cancel rows in `Core/Types.lean` (
 (`OpEnt.fin`, `cancelOK`, `cancelTab`, `cancelObl`) and `Core/Relation.lean` (`finObl`); the order,
 `⋈`, the cancel lemmas and the compatibility of `[sub]`, `[let]`, `[then]` and `[handle]` in
 `Core/EffFin.lean`; the rules in `Core/Fundamental.lean` (`CDerives.effThen`, `effHandleV`); the
-checker's empty cancel rows (`Frontend/Check/`). The backend does not lower a finaliser that
-suspends.
+checker's empty cancel rows (`Frontend/Check/`); the typed cancel programs in
+`Core/EffCancelTyped.lean`. The backend rejects a finaliser that may suspend
+(`Backend/Clos/Capture.lean`).
 
 ---
 

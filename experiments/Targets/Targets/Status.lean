@@ -385,6 +385,34 @@ running finaliser's `cfin` frame.  No statement here changes.
   continuation's handler meets no handler; its run stops there and is a cancel trace at every set
   of endings, so the no-interception condition's teeth are OPEN.
 
+## Finalisers with effects (decisions D2, D3 of 2026-10-08, SPEC §27)
+
+Core's rows carry cancel rows: each capturable operation records what a cancel of its continuation
+may do, `[sub]` lets them only grow, `κ`'s cancel branch is at `F_{F ⊕ Σ} 1`, and `[then]` combines
+the finaliser's row into the cancel rows of its computation (`⋈`).  Here:
+
+* **Rows.**  `RowLe` is the cancel-row order (`RowLe.sig`, `RowLe.of_find`).  `PlatAgree` asks a
+  platform's operation to be the row's by signature (`OpSig.Sig`), since a platform answers at the
+  row's types: a strengthening of every theorem that assumes it.
+* **The tied kernel stays at option A.**  `CDerivesNU`, `CDerivesAt` and `RC_effThen` keep their
+  `[then]` with the finaliser at the pure row, Core's derived `CDerives.effThenA`, and read its
+  premise on unrestricted operations at every depth of the cancel rows (`Row.UnrD`), as Core's.  So
+  `J₁` types no finaliser with effects, and the refutations of E7, E8 and E9 at `J₁`
+  (`Instance/FinRaise.lean`) stand; they are of option A, and are replaced when the tied kernel
+  takes §27's `[then]` (FINALISERS §4).
+* **I3 and `FrameW`** are stated at entries whose cancel row is empty, the cancel they describe
+  (`ShareCancel`'s cancel at the empty error table); `i3_core`, `frameW_core` and `i1_core` read
+  Core's cancel obligations.
+* **D3 at Core's kernel** (`I/RejectsFin.lean`).  `progT`, typed at a row holding `2`
+  (`d_progT`), has no derivation at a row without `2` (`not_der_progT`): the `[then]` puts `2` in
+  the cancel row of `perform 1`'s continuation, and `H₁`'s clause reads `κ`'s cancel at its own row.
+  `progNCrecT`, two finalisers that perform `4` under the handler of `4` that cancels, has no
+  derivation at all (`not_der_progNCrecT`, the leftover clause), and its run ends at a `perform 4`
+  no handler catches (`progNCrecT_stuck`).  The inversions read each rule and then the same-term
+  rules, which only grow rows (`JS.effSub`'s order, `JR.rowLe`).
+* **The audit** pins Core's relation anew and reports `cancelOK` among the fixed points: its
+  `∀`-bound predicate is the cancel obligation an entry carries.
+
 ## Decision R: `J₁`'s inner rows tied (2026-10-08)
 
 Decision D1 ties a program's row to the effect context; decision R ties the rows inside its

@@ -2714,7 +2714,7 @@ updated as each lands. On `tier1-effects`, not pushed.
 |---|---|---|
 | M0: GhostEnd and ProbeD1 build at SPEC §25's `hndTerm` | LANDED | dc10293 |
 | M1: frame deadness in the machine (SPEC §19, 0.44) | LANDED (below) | 185025b |
-| M2: the typing of finalisers with effects (SPEC §27) | not started | |
+| M2: the typing of finalisers with effects (SPEC §27) | LANDED in Core; tier 1's kernel at option A; lowering by the fallback (below) | 833b026, 5b9f216, dd01061; M2c with this record |
 | M3: S5's `pend`, the cell clause, algebraicity, no dropped error | not started | |
 | M4: E7–E9 at `J₁` | not started | |
 | M5: AT08 by the continuation rule | not started | |
@@ -2834,3 +2834,114 @@ region `N` is read by nothing (no finaliser's raise reaches `keep` at `noFinRais
 
 **Remaining.** M2–M5 as planned. `CancelsNoCtl` stays a hypothesis of S5's no-interception until
 M3; E7c's statement and docstring are M4's (it still describes the by-name suppression).
+
+### M2: the typing of finalisers with effects
+
+**SPEC §27 (0.45)**, implemented in Core (`Core/EffFin.lean`, `Core/Fundamental.lean`,
+`Core/Types.lean`, `Core/EffDefs.lean`, `Core/Relation.lean`, `Core/EffRules.lean`).
+- A row entry is `⟨n, i, q, A, B, F⟩`, `F` its cancel row (`OpSig.fin`, `CTy.eff`'s `fin`), read at
+  capturable entries (`capB`: not abortive, not linear). `[sub]`'s `RowLe` is the cancel-row order
+  (`FinLe`, `OpSig.LeF`): cancel rows only grow.
+- `[then]` (`CDerives.effThen`) takes `Σ_M`, `Σ_D` and `F ⋈ Σ_D ≤ Σ(o).fin` (`ThenLe`, with
+  `PendLe` for `pend`), both relations by recursion on the cancel row. §24's rule is the derived
+  `CDerives.effThenA`.
+- `[handle]` (`effHandleV`) takes the cancel rows `fs`; `κ`'s cancel branch is at
+  `cancelTy Σ F = F_{F.rowOf ++ Σ} 1` (`⊤` at `F = ⊤`): `S ⊕ F` as `F`'s layers ahead, rows being
+  read first match.
+- The semantics: each entry's cancel obligation (`OpEnt.fin`, `finObl`, `cancelObl` at
+  `cancelTab`, which now stops at the cancel row's operations, `performStop`), `contShare`'s cancel
+  part (`cancelOK`), `KapRel`'s at `cancelTabOf`. Proved: `finObl_mono`, `cancelOK_le`, `ewp_sub`;
+  `cancel_frame`, `plain_cancel₀`, `cancel_frame_drop` (a frame holding nothing owned left behind
+  at the cancel's first stop, by `wpG_garbage`), `ent_plain`; `cfin_cancel` (`[cfin-cancel]`),
+  `cfin_run`, `then_cancel` (the finaliser frame in a cancel, `⋈`), `seq_raise_run` (ordinary
+  unwinding through a performing finaliser), `ewp_frame_then`, `ewp_ccatch`, `ewp_handle`; and
+  `sub_compatC`, `let_compatC`, `then_compatC`, `handle_compatC`, `handleV_compatC`.
+- `fundamentalC`, `adequacyC`, `fundamentalD`, `adequacyD`, `adequacyD_obs` keep their
+  statements. No change to the machine, `wpTS`, `wpG`, `ewpTS`'s definition, `[let]` or any borrow
+  rule; BoLo's printed rules are untouched. Every existing derivation types at empty cancel rows.
+- **Two premises beyond FINALISERS §2.4**, both on `unr` (decision 63): `[then]`'s `!Γ₂` premise
+  reads an unrestricted operation at some depth of the cancel rows (`Row.UnrD`), and a new premise
+  asks the errors pending at the finaliser to be persistent when the finaliser's row has one
+  (`Row.PendPers`). The finaliser frame is live in the cancels below it, where an unrestricted
+  operation may resume its continuation twice. `[let]` is unchanged: a plain frame is left behind at
+  a cancel's first stop (`cancel_frame_drop`).
+- The checker emits empty cancel rows and reads `[then]`'s premise at some depth (`Row.unrDB`),
+  which at its rows is the top-level test. Corpus check unchanged.
+
+**M2b, the programs** (`Core/EffCancelTyped.lean`). The cancel programs' handlers are
+unrestricted, so `κ`'s slot is `!U(…)`, and Core reads a variable at a computation type only from a
+`U` slot: their clauses, which apply `κ` directly, have no derivation. The typed programs bind `κ`
+first (`cancelCT`, `resumeCT`) and run as the untyped ones do, one β-step longer per use of `κ`;
+the untyped ones, and so the kernel shapes and their counts, are unchanged.
+
+| program | derivation | run |
+|---|---|---|
+| `progT` | at a row holding `2` (`d_progT`); none at a row without `2` (`not_der_progT`) | a raise of `2` no handler catches |
+| `progOutT` | `F (1 ⊕ 1)`, cancel row `{2}` | `inj₂ ()` |
+| `cancelKeptT` | `F (1 ⊕ 1)`, cancel row `{3}` | `inj₂ ()` |
+| `progReT` | `F (1 ⊕ 1)`: `f ()` at `{1}`, cancel row `{3}` | `inj₂ ()` |
+| `progFinOpT` | `F (1 ⊕ 1)`, cancel row `{4}` | `inj₁ ()` |
+| `progNC₁T` | `F 1`, cancel row `{4}`, the outer `4`'s own `[]` | `()` |
+| `progDropT` | `F (1 ⊕ 1)`, cancel row `{2, 4⟨{2}⟩}` (`pend`) | `inj₁ ()` |
+| `progKeepT` | `F (1 ⊕ 1)`, the same | `inj₂ ()` |
+| `progNCrecT` | none, at any judgement (`not_der_progNCrecT`: the leftover clause) | a `perform 4` no handler catches (`progNCrecT_stuck`) |
+
+The rejections are in `I/RejectsFin.lean`, by inversion through `[handle]`, `[then]`, `[perform]`,
+`[raise]` and the clause, each rule followed by the same-term rules, which only grow rows:
+`JS.effSub` now carries `[sub]`'s order (`JR.rowLe`), and `der_hndJ`, `der_thenJ`, `der_performJ`,
+`der_raiseJ`, `der_letpairJ` return the rule's conclusion with the same-term path.
+
+**M2b, tier 1's kernel: not landed.** `CDerivesAt` (`J₁`'s kernel), `CDerivesNU` and the pin's
+`RC_effThen` keep `[then]` at the pure row, Core's `effThenA`, with its premise read at every depth
+as Core's. Extending `CDerivesAt` to §27's `[then]` makes `J₁` type `e7b` and the rest, so the
+refutations of E7, E8 and E9 at `J₁` (`Instance/FinRaise.lean`'s `derAt_then`, which reads the
+finaliser at `F 1`) become false; FINALISERS §4 replaces them in M4. The extension was built
+(the tie reads a handled row's operations at any cancel rows) and backed out of this step for that
+reason. `ncProg` (`timeoutH l₂ (timeoutH l₁ (bodyF l₁ (perform l₂ 0 ())))` at `J₁`) waits on it.
+
+**M2c: the fallback.** The backend lowers a finaliser that raises, not one that may suspend: an
+unwind and a cancel arm call a finaliser directly. `Capture` now rejects such a finaliser with a
+message (`capture: a finaliser that may perform an operation of a control handler is not lowered
+(SPEC §27)`); at the closure stage `progFinOp`, `progNC₁`, `progDrop` and `progKeep` are rejected
+with it, and `progOut` compiles as before. Every kernel program prints the same value, `live 0`, at
+the same counts (`scripts/compile-kernel.sh`). The four shapes are Lean and interpreter runs. This
+departs from "every feature lands with its lowering" (reading 7, the user's call).
+
+**Targets.** `lake build Targets` passes, AxiomCheck and Audit included; the 17 failing experiment
+modules are the baseline's, at the same first errors, and `GhostEnd`, `ProbeD1` and `Targets`
+build.
+- `RowLe` is the cancel-row order (`RowLe.sig`, `RowLe.of_find`, `RowLe.of_mem`); a name-dropping
+  row lemma (`rowLe_ofEff_dropName`) takes the premise that the row's capturable operations of the
+  name have empty cancel rows, discharged at every use (abortive signatures, `fin_rowOf_append`).
+- `PlatAgree` asks the platform's operations to be the row's by signature (a strengthening).
+- `ShareCancel` (I3) and `FrameW` are stated at entries whose cancel row is empty, the cancel they
+  describe; GhostEnd's frame lemmas likewise (`FinNil`).
+- The handler inversions (`der_hnd`, `hnd_clauses`, `handleWith_clause`, `clause_lin`) take the
+  cancel rows.
+- The audit pins Core's relation anew and reports `cancelOK` (the entry's stored obligation, at lend
+  records).
+
+**The hard stop, M2.**
+
+| check | finding |
+|---|---|
+| (1) a law | none: §27 implements D2 and D3 |
+| (2) behaviour or counts | none. The machine and the kernel programs are unchanged (`compile-kernel.sh`); the corpus checks as before; `Capture`'s new rejection reaches no checked program (the checker's finalisers are destructors at `F 1`) and no kernel program |
+| (3) runtime block | none: typing rules, and a compile-time rejection |
+| (4) rejection | `progT` and `progNCrecT` (D3, recorded). `[then]`'s two premises on `unr` reject programs whose finaliser frame would be resumed twice in a cancel below it: decision 63 (`unr` restricted where it causes friction); no existing derivation is affected |
+| (5) weakened target | none. I3 and `FrameW` are the pre-§27 statements read at the entries they described (all entries had empty cancel rows); `RC_effThen` tracks Core's rule; `PlatAgree` is strengthened |
+
+**Unspent hypotheses.** `[then]`'s `Σ.Uniq` is read by no compatibility lemma, as at M1
+(`then_compatC` takes the rest). `cancelTy`'s `⊤` case is used by no program here: every typed
+cancel row is finite. `CDerivesAt`'s `RowAt` is unchanged and reads no cancel row.
+
+**Uniqueness/functionality results.** Read: `Option.some.inj` on `Row.find` in the inversions, and
+`ResU.CompS.functional` (`eq_of_compS_empty_left`) in `cancel_frame_drop`. Not read: `det_ourInst`,
+`rstep_det`, `AStep1.deterministic`.
+
+**Untranscribed in the run-up.** The separation lemma `e7c_of_then`; `e7c`'s rejection (M4);
+`ncProg` at `J₁`; the A-level `acts` and `pend` (M3); the backend's cancel code for finalisers
+that suspend (FINALISERS §2.9).
+
+**Remaining.** Tier 1's kernel at §27 with M4 (E7–E9 at `J₁`, `FinRaise.lean`'s refutations
+replaced) and `ncProg`; the lowering of a finaliser that suspends; M3–M5.
