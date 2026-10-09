@@ -2704,3 +2704,133 @@ SPEC, the machine or the relation changed. `make gate` is the separate stage's.
   no-interception at the cell's `κ`; the readings above; the earlier rounds' open items (forcing a
   `!U C` slot, `unr` at abortive operations, `unfold`'s value, `TailLaw`, `EtaHold`,
   `RowVarKernel J₁`).
+
+## Frame-deadness unit outcome
+
+The unit implements decisions D1–D4 of 2026-10-08 (`FINALISERS.md`). Steps M0–M5; this section is
+updated as each lands. On `tier1-effects`, not pushed.
+
+| step | status | commits |
+|---|---|---|
+| M0: GhostEnd and ProbeD1 build at SPEC §25's `hndTerm` | LANDED | dc10293 |
+| M1: frame deadness in the machine (SPEC §19, 0.44) | LANDED (below) | 185025b |
+| M2: the typing of finalisers with effects (SPEC §27) | not started | |
+| M3: S5's `pend`, the cell clause, algebraicity, no dropped error | not started | |
+| M4: E7–E9 at `J₁` | not started | |
+| M5: AT08 by the continuation rule | not started | |
+
+### M1: frame deadness
+
+**The machine** (`Paper/S3_Dynamics/Definitions.lean`).
+- `κ`'s cancel branch runs `ccatch (K†[raise (0, (0, none))])`. `K†` (`Kont.dead`) is `K` without
+  its handler frames and its `ccatch` frames (`Kont.DeadFrame`), so a dead frame catches nothing, a
+  raise or an operation alike, and a finaliser's effects reach the nearest live instance of their
+  name. `kappa`, `kappaC`, `kappaCBody`, `kappaCell` and `kappaAt` no longer take the operation's
+  name.
+- The cancel's state is the kept error alone, the first winning: `cancelVal err`, and
+  `errNext err m j w = err.or (some (m, j, w))`. The name list `N`, `namesVal`, `Kont.hndNames` and
+  the by-name suppression are gone. `[cfin-raise]` is at a name other than `0`; the new
+  `[cfin-cancel]` (`Head.cfcancel`) passes a running finaliser's `cfin`, keeping the earlier error.
+- SPEC §19 *Cancels* revised, with §24 and §25 updated and the changelog's 0.44 entry. The
+  interpreter follows (`Support/Dynamics/Interpreter.lean`). The backend's cancel mask is removed
+  (`Backend/Clos/`): the lowering keeps the first error.
+
+**Kernel programs.** Every row of `corpus/kernel-counts.expected` but `cancel-suppressed` is
+unchanged, answers and counts. `cancel-suppressed` (`prog`) leaves the compiled list: its run ends
+at `raise (2, (0, ()))`, which no handler catches (`prog_run`, `prog_final`, `prog_eval`).
+`cancel-reentered` (`progRe`) and `cancel-propagated` (`progOut`) join, `inr ()` at `0 0 0`. The
+corpus and its goldens are unchanged.
+
+**Core.**
+- The relation's cancel state follows the machine: `errOk`, `cancelTab` and `contShare` read no
+  name list, and `cancelOwed ls K` is `K†`'s cancel run at the empty error table.
+- Re-proved: `ewp_cfin`, `cancel_then`, `ewp_frame_then`, `ewp_frame_plain`, `ewp_ccatch`,
+  `ewp_handle`, the `κ` lemmas, and the cases of `Core/Steps.lean` and `Core/Demonic.lean`
+  (`[cfin-cancel]` in unique decomposition and determinism). New: `dead_comp`, `hasHnd_dead`,
+  `catches_dead`, `dead_plain`, `dead_ubindK`, `dead_hndK`.
+- `then_compatC` takes the finaliser at the pure row, `[then]`'s rule since SPEC §24 (the former
+  `thenA_compatC`, now without `S.Uniq`). The abortive-row rule fails under dead regions:
+  `not_thenAbort_compatC` at `prog`'s `[then]` (`Core/EffCancel.lean`).
+- `fundamentalC`, `adequacyC`, `fundamentalD` and `adequacyD` keep their statements, and so does
+  every borrow rule. BoLo's printed rules are untouched.
+- The runs (`Core/EffCancel.lean`, `Steps` from any memory, and the interpreter by `decide`):
+  `prog` (the dead `2` catches nothing; the error is re-raised and stops), `prog₃` (`inj₂ ()`),
+  `progOut` (the error past the dead `2` to the live `2` outside), `progRe` (the region re-enters
+  the site `3`; its instance there is dead, and the error reaches the live `3` outside),
+  `progFinOp` (the finaliser's operation passes the dead inner `4` and the cancel's delimiter; the
+  live `4` outside resumes it: `inj₁ ()`), `progNC₁` (the outer `4` cancels the finaliser's
+  continuation; `[cfin-cancel]`), `progDrop`, `progKeep`.
+
+**Targets.** `lake build Targets` passes, AxiomCheck and Audit included. No target's statement
+changes. In detail:
+- **S5's bridges read the dead region**: `cancel_pfx` at `K†`, which keeps `K`'s finalisers
+  (`fins_dead`) and holds no handler (`hasHnd_dead`), so `noIntercept_of_core` reads
+  `CancelsNoCtl` alone and no longer the labels' nonzero names. `CancelsNZ` is kept, reworked
+  through `κ`'s resume branch, which holds `K` shifted (`hasHnd_shift`). `noIntercept_J₁_of` and
+  `cancellation_tier1Open` keep their statements.
+- **Core's `FinaliserOrder`** no longer reads `NoInterception` (`cancelOrder_at`,
+  `finaliserOrder_at`, `finaliserOrder_A`, `finaliserOrder_of_route`; `status_runTyping` drops the
+  premise). A strengthening.
+- **The label of `[cfin-cancel]`** is `finEnd` of the kept error of the cancel that passed the frame
+  (`keptErrOf`, `labelOf_cfcancel`; `labelOf_cferr` at a name other than `0`). No trace here takes
+  that step: `CancelsNoCtl` excludes it, until M3's `pend`.
+- **Algebraicity's simulation** relates dead regions (`deadFrame_eq`, `AlgRelK.dead`), kept errors
+  under `or` (`ErrRel.or`), and steps `[cfin-cancel]` alike (`AlgRel.head`, `labelOf_start`).
+  `CfinQuiet` reads as before; at a name of `0` it now covers `[cfin-cancel]`.
+- **B5's simulation** renames the new step (`head_image`; `dead_mapLoc`, `deadFrame_mapLoc`,
+  `or_mapLoc`, `mentionsLoc_dead`).
+- **Check 4, re-checked** (FINALISERS §1.10, re-check 1). `noIntercept_needs_finRow` is retired:
+  its witness's finaliser performed the operation its region's handler caught, and that handler is
+  now dead. Machine-checked in its place (`finAlone_dead`, `status_finAlone_dead`): at `J₄` the run
+  from the cancel's start fires the finaliser, starts it, and stops at its operation, which no frame
+  catches (`p5_stuck`); that run is a cancel trace at every set of endings and every region. The
+  no-interception condition's teeth are OPEN until a finaliser can raise to a live handler (M2).
+- **Re-check 2.** `cancelsNZ_J₁` and `cancelsNZ_tier1Open` keep their statements (above).
+- Names: the `κ` lemmas lose the unused name argument (`kappaAt_cell`, `kappaC_resume_parts`,
+  `kappaC_cancel_parts`, `quiet_kappa_resume`, `isVal_kappa`, `not_isVal_kappaCell`,
+  `kappaCancelShape_cancelE`), and so do `I5beta`, `OnlyOwnerFrees`, `NoDanglingUse`,
+  `catchEv_cell` and `use_frees_cell`, where the name no longer occurs.
+- The Audit's pins of Core's relation are recomputed: each hashes the closure of its definition,
+  and the machine in that closure changed.
+
+**The experiments** (FINALISERS §1.10, re-check 3). Every library in `lakefile.toml` rebuilt and
+compared with the build after M0 and before M1a: the same 17 modules fail, each at the same first
+error (in `CBPVCore`, `CBPVWorld`, `CBPVMu`, `Experiments`' `CBPVSplit`, `CoeffectsStrict`,
+`FrameEnd`, `FrameTheorems`, `Grades`, `LoopBorrow`, `Optics`, `Outlives`, `Places`, `Projection`,
+`Records`, `Relaxed` and `SecondClass`, and so in the libraries that import them), and every other
+library builds, `GhostEnd`, `ProbeD1` and `Targets` among them.
+- `GhostEnd`: `ewp_frame_plain` loses `hN`. `opTableO`'s cancel part is `cancelOwed ls' K`, and
+  `ewp_then_owner` runs its finaliser at the empty table, as Core's `cancel_then` does; so
+  `ewp_then_owner`, `withborR_compat` and the `withborR` chain read no abortive table of the row and
+  no uniqueness of its keys (README, step 3b).
+- `ProbeD1`: W's `share` follows `contShare`'s signature; statement 6 (`ThenRow`) takes the
+  finaliser at the pure row, Core's rule, recorded in its README.
+- `Outlives`: pinned at `b1cde24` and failing before the unit for SPEC §23's reason. Its `[then]`
+  rule is chosen (Core's, rule for rule) and recorded in its README, not applied.
+
+**The hard stop, M1.**
+
+| check | finding |
+|---|---|
+| (1) a law | none changed: D1–D4 are the decided algebra, and the rules implement them |
+| (2) behaviour or counts | `prog` only, exempt (D1/D3). Every other kernel row and the corpus are unchanged; the two new kernel programs are additions |
+| (3) runtime block | none: `Kont.dead` removes frames that catch nothing, `[cfin-cancel]` gives a step, and the mask (a suppression) is gone |
+| (4) rejection | none in the kernel (the typing is unchanged, option A). ProbeD1's statement 6 and Outlives's rule move to the kernel's `[then]`, as FINALISERS §1.12 records |
+| (5) weakened target | none. `then_compatC` and GhostEnd's `ewp_then_owner`, internal lemmas, take their finaliser at the pure row because the relation's cancel state changed (`not_thenAbort_compatC`). `noIntercept_needs_finRow`, a non-vacuity record whose witness D1 removes, is retired with the run machine-checked in its place |
+
+**Unspent hypotheses.** `CancelsStd`'s handler half (`CancelsNZ`) is proved and no longer read by
+S5's bridges. `noIntercept_of_core` no longer reads the labels' nonzero names. `CancelTrace`'s
+region `N` is read by nothing (no finaliser's raise reaches `keep` at `noFinRaise`).
+
+**Uniqueness/functionality results.** Read by M1's new steps: `AStep1.deterministic`
+(`thenCancel_runs`, for `not_thenAbort_compatC`). Read as before: `rstep_det` and
+`innerCatch_unique` (the traces). Not read: `det_ourInst`; `Check 4`'s stop reads
+`no_ostep_op`, not determinism.
+
+**Untranscribed in the run-up.** The A-level `acts` and `pend`, S5's cell clause, and
+`labelOf`'s use by a trace (M3); `KeptKapFree` and `CfinEnds` (M3); the separation lemma
+`e7c_of_then` and SPEC §27's rules (M2); the backend's cancel code for finalisers that suspend
+(M2c).
+
+**Remaining.** M2–M5 as planned. `CancelsNoCtl` stays a hypothesis of S5's no-interception until
+M3; E7c's statement and docstring are M4's (it still describes the by-name suppression).
