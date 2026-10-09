@@ -32,7 +32,14 @@ nothing. Notation: `⊥` is the reserved cancel name `0`; `err ∨ e` is `err` w
   condition (every effect of a region's finalisers must also be recorded for each capturable
   operation a finaliser performs). It is sound but rejects a lawful program, `progNC₁` (§2.7), so it
   would be hard stop 4. The rule chosen records the nested cancels' effects precisely (the cancel
-  rows of §2.3) and rejects only what D3 rejects.
+  rows of §2.3) and rejects only what D3 rejects. S5's restatement at the capture cell (§3.1)
+  strengthens a target and is put to the user (reading 8); it is not a stop either.
+- **M0, the baseline.** GhostEnd and ProbeD1 do not build at `45c2021`. `hndTerm` gained its tags
+  argument with §25, and three sites still pass the old arguments: `GhostEnd/Handle.lean:90`,
+  `GhostEnd/Drop.lean:304` and `ProbeD1/Statement34.lean:44`. Passing `E.map Prod.fst`, as
+  `handle_compatC`'s conclusion does, restores both libraries; a scratch build at `45c2021`
+  checked this, and nothing of it is committed. M0 commits it, so that M1's builds before and
+  after compare. Outlives stays pinned at `b1cde24` (§1.10).
 - **M1, the machine.** κ's cancel branch tears down the region with its handler frames and cancel
   delimiters removed (`Kont.dead`). The cancel state is the kept error alone (no `N`), the first
   winning. One new rule, `[cfin-cancel]`, gives a cancel that reaches a running finaliser's `cfin`
@@ -43,6 +50,12 @@ nothing. Notation: `⊥` is the reserved cancel name `0`; `err ∨ e` is `err` w
   (`prog` under a live outer `2`), show propagation. The lowering keeps the first error (the mask
   is removed). Core's relation changes only where the cancel state did; `fundamentalC`,
   `adequacyC` and `adequacyD` keep their statements.
+  - `progDrop` and `progKeep` join the Lean runs (§1.5). An `unr` handler discards a continuation
+    that holds a kept error, and in the second program the same handler resumes it. Today's
+    machine already behaves this way; D1 neither creates nor removes the path.
+  - Every experiment library but `EffModel` and `EffModelRel` reaches the machine and is rebuilt
+    before and after (§1.10). ProbeD1's statement 6 follows Core's `[then]`. Outlives is not
+    changed; its rule is chosen for when it is revived.
 - **M2, the typing (SPEC §27).**
   - Each capturable row entry carries a *cancel row*: what cancelling a continuation captured
     there may raise or perform. Each capturable operation in it carries, in turn, its own cancel
@@ -54,16 +67,30 @@ nothing. Notation: `⊥` is the reserved cancel name `0`; `err ∨ e` is `err` w
     is `⊤`. `[sub]` at the cancel's use carries the D3 check, and `[handle]` gains no premise.
   - Every existing derivation types at the default (empty) cancel rows.
   - `prog` and `e7c` are rejected (D3). `e7b`, `e7d`, `e8b`, `e9c`, `cancelKept`, `P_re`,
-    `progOut`, `progFinOp` and `progNC₁` type.
+    `progOut`, `progFinOp`, `progNC₁` (`unr`, and affine at every admissible context), `progDrop`
+    and `progKeep` type.
   - The lowering of finalisers that suspend (M2c) is part of M2.
 - **M3.**
   - S5's cancel trace is restated into line with D1: first-wins with no name list, and a `pend`
-    step for a running finaliser's `cfin` in the region. `CancelsNoCtl` and `CancelsNZ` are then
-    not needed: `dead` removes every handler and `ccatch` frame from the cancel run. So
-    `noIntercept_J₁` is planned outright.
+    step for a running finaliser's `cfin` in the region. D2 forces `pend`; it is not a choice.
+    `not_cancelsNoCtl_J₁` refutes `CancelsNoCtl` at `J₁` at a typed program: `ncProg`, of
+    `progNC₁`'s shape, at a context that declares its two operations `unr`. `CancelsNoCtl` and
+    `CancelsNZ` are not needed once the trace has `pend`, so `noIntercept_J₁` is planned outright
+    at every effect context.
+  - S5 and `CancelsNoCtl` read a cancel of `capture l H K`, the continuation of an `unr`
+    operation. At an admissible context every resuming operation is linear or affine, and the
+    catch hands `captureAt` instead (S4 at the cell, F1). S5's no-interception therefore reads no
+    cancel that a `J₁` program makes there. M3 restates it at the cell, as F1 restated S4
+    (reading 8). The affine `progNC₁` is the witness that `pend` is needed at every admissible
+    context.
   - `CfinQuiet` is false once M2 types `e7b`; it is retired. Algebraicity is planned given
     `KeptKapFree`, the fact `AlgSim` reads, and its run-level obligation is stated.
-  - "No typed run drops an error" is a run property provable from the machine and `adequacyD`.
+  - "No typed run drops an error" is stated at contexts with no non-abortive `unr` operation
+    (D4's pattern), which is what `J₁`'s admissible contexts are. It is planned from the machine
+    and `CfinEnds`: no `cfin` frame is discarded inside a value. At `J₁`, `CfinEnds` comes from
+    S6's use-once property and the resume branch's carry. The one tolerated exception is an `unr`
+    continuation discarded with a kept error inside it. `progDrop`'s run records it, and
+    `not_noDroppedError_unr` shows the restriction is needed.
 - **M4.** E7 (E7c restated as its rejection, D3), E8 and E9 at `J₁`. `FinRaise.lean`'s
   refutations and `I.not_tier1_J₁` go. Tier 1 at `J₁` becomes open, not refuted.
 - **M5.** AT08 is rewritten so that only the continuation rule rejects it, as the previous design
@@ -194,9 +221,13 @@ Three things are at odds with D1:
 | `progOut` | `hnd 2ₒ prog` | `inl ()`: `2` is in `N` (the inner `2` is above `D`) | `inr ()` |
 | `progFinOp` | `hnd 4ₒ (hnd 1 (hnd 4ᵢ ((perform 1) then x. x unwind perform 4)))`; `H₄ᵢ`'s clause answers `inr ()` without resuming, `H₄ₒ`'s resumes | stuck: the dying `4ᵢ` catches the finaliser's `perform 4`, answers, and `ccatch` holds a value | `inl ()`: the operation passes the removed `4ᵢ` and `ccatch`, `4ₒ` resumes it, the finaliser returns, and the cancel answers `()` |
 | `progNC₁` | `progFinOp` with `H₄ₒ`'s clause cancelling its κ | intercepted (old `[cfin-raise]` at `⊥`) | `H₄ₒ`'s answer: κ₄'s region `[cfin none] [ccatch₁] [H₁'s clause context]` is dead, `ccatch₁` is removed, and the `⊥` raise meets `cfin none` (`[cfin-cancel]`) and then `ccatch₄` |
+| `progDrop` | `hnd 2ₒ (hnd 4ₒ (hnd 1 (((perform 1) then x. x unwind raise 2) then y. y unwind perform 4)))`; `H₄ₒ`'s clause answers `inl ()` and never uses κ₄, `H₂ₒ`'s answers `inr ()` | `inl ()`: the inner finaliser's `2` is kept (`2 ∉ N = [1]`); the outer finaliser's `perform 4` passes its `cfin`, the reinstalled `hnd 1` and `ccatch₁`, and `4ₒ`'s clause discards κ₄, and the kept `2` with it | the same: κ₁'s region has no handler or `ccatch` for `dead` to remove; κ₄'s region `[cfin (some 2)] [ccatch₁]` is discarded with κ₄. `H₂ₒ`'s clause never runs |
+| `progKeep` | `progDrop` with `H₄ₒ`'s clause resuming κ₄ with `()` | `inr ()`: the finaliser returns, `[cfin-ret]` carries the kept `2`, `[cancel-raise]` re-raises it at `H₁`'s clause, and `2ₒ` catches it | the same |
 
 Every run is checked in Lean as `Core/EffCancel.lean` checks `prog_run` today: explicit `Steps`
-with `Head` constructors, one theorem each.
+with `Head` constructors, one theorem each. `progDrop` and `progKeep` were also run by today's
+interpreter (`BoCa.eval` at `45c2021`, a scratch file importing only `Support.Dynamics.Interpreter`
+and built from source): `inj₁ ()` and `inj₂ ()`.
 
 ### 1.6 SPEC §19 changes
 
@@ -217,6 +248,10 @@ with `Head` constructors, one theorem each.
     context. Resumed, the finaliser and then the cancel go on.
   - A cancel of that continuation removes the inner `ccatch` and passes the inner `cfin` by
     `[cfin-cancel]`. The inner region's remaining finalisers run under it.
+  - If that continuation is `unr` and its handler discards it, then the kept error and the
+    region's remaining finalisers go with it (`progDrop`). This is the case of any discarded `unr`
+    continuation, which never runs its region's finalisers. `unr` is tolerated, never designed for
+    (§3.3).
   - Ordinary unwinding is unchanged.
   - *Why this rule*: §1.3.
 - ***Typing*.** Unchanged in M1 (option A). The finaliser paragraph's "a non-abortive operation
@@ -225,7 +260,7 @@ with `Head` constructors, one theorem each.
 - ***Finalisers that perform operations*.** States the machine's behaviour: raises kept first-wins
   and re-raised at the canceller, operations to live handlers, `[cfin-cancel]`. "Non-abortive
   control operations in a finaliser" is removed from *Open*.
-- ***Programs*, *As built*.** `Core/EffCancel.lean`'s six programs, with their runs as in §1.5.
+- ***Programs*, *As built*.** `Core/EffCancel.lean`'s programs, with their runs as in §1.5.
 - ***Lowering*.**
   - The cancel paragraph: the resume code takes `inr ()`. The first error a finaliser raises is
     kept and re-raised (`reraise`), and every later one is suppressed. The region's drivers are
@@ -312,10 +347,17 @@ error table is the empty one: no typed finaliser raises or performs past its `cf
     - Forwarding: `dead (hndK ∘ K₁) = K₁†`, so the inner obligation *is* the outer one.
       `hmap`/`hmapE` are deleted.
   - `then_compatC` is restated with `D` at the pure row. Its old statement (`D` at
-    `F_{Σ^abort} 1`) is false under D1's machine at `prog`'s `[then]`, because it relied on the
-    suppression. `thenA_compatC` becomes `then_compatC`, and M2 generalises it (§2.8).
+    `F_{Σ^abort} 1`) relied on the suppression and fails under D1's machine at `prog`'s `[then]`.
+    M1a records this as `not_thenAbort_compatC`, at `M = perform 1`, `N = x`, `D = raise 2`,
+    `S = {1, 2}`:
+    - the premises hold (`perform_compatC`, `var_compatC`, `raise_compatC` at the abortive row);
+    - the conclusion asks κ's cancel share at the empty error table;
+    - the cancel's run ends at `raise (⊥, some 2)`, which has no step.
+
+    `thenA_compatC` becomes `then_compatC`, and M2 generalises it (§2.8). Two experiments state
+    the old rule, Outlives's `LDerives.effThen` and ProbeD1's statement 6 (§1.10).
 - **`Core/Steps.lean`, `Core/Demonic.lean`.** §1.4.
-- **`Core/EffCancel.lean`.** Rewritten with the six programs of §1.5 and their runs.
+- **`Core/EffCancel.lean`.** Rewritten with the programs of §1.5 and their runs.
 - **`Core/EffBorrow.lean`, `Core/Fundamental.lean`.** No statement changes. The unwinding forms'
   finalisers are closed at `F 1`, and `fundamentalC`'s `effThen` case still reads `thenA_compatC`.
 - **`Paper/LiteralReadings/S6_8_FundamentalProperty.lean`.** Its case lists over `Head` gain
@@ -351,11 +393,47 @@ error table is the empty one: no typed finaliser raises or performs past its `cf
   the cancel term `ccatch (hnd H K[…])`, which now holds `K†`. The handler half of `CancelsStd`
   then comes from κ's resume branch `λy. hnd H K[y]`, which still holds `K`. The proof is reworked
   and the statement kept; M3 retires it (§3.1).
-- **Re-check 3: the experiments that import Core's effect files.** `GhostEnd` (`Drop.lean` reads
-  `cancelOwed … n …` and `N`), `SecondClass`, `Grades`, `LoopBorrow`, `FrameTheorems` and
-  `Optics` are each built with `lake build <lib>` before and after. A file that names a changed
-  definition is updated, and a result that was about the name list is recorded as such. None of
-  them is a default target or a gate step.
+- **Re-check 3: every experiment library.**
+  - Every library in `lakefile.toml` reaches the machine (`Paper.S3_Dynamics.Definitions`) except
+    `EffModel` and `EffModelRel`, which are standalone. The following also reach Core's effect
+    files: `Affine`, `Coeffects`, `CoeffectsStrict`, `FrameTheorems`, `TwoRun`, `GhostEnd`,
+    `Grades`, `LoopBorrow`, `Optics`, `Outlives`, `PositiveArrays`, `Restrat`, `SecondClass`,
+    `Targets` and `ProbeD1`.
+  - Each is built with `lake build <lib>` after M0 and before M1a, again after M1c, and again
+    after M2a. A library that fails before is recorded as a pre-existing failure with its first
+    error, and the unit does not repair it. None is a default target or a gate step.
+  - These name a changed definition (found by `grep`):
+    - **`GhostEnd`.**
+      - `Drop.lean`: `cancelOwed … n …`, `N`, `cancelTab_abortive`, `cancel_then`,
+        `ewp_frame_then`, `cancelVal`.
+      - `Program.lean`: `ewp_frame_plain`, which loses `hN`, and `ewp_handle`.
+      - `Chain.lean`: `contShare`.
+
+      A result that was about the name list is recorded as such.
+    - **`ProbeD1`.** It imports `Targets.I.Device`, `Targets.I.Interface` and GhostEnd, so it is
+      built after both.
+      - `Sem.lean:131` builds an `OpEnt` with the anonymous constructor and passes it to
+        `contShare`. The call follows `contShare`'s signature in M1. In M2 the entry takes `fin`,
+        the empty table (M1's instance).
+      - `Programs.lean:52–61`, statement 6 (`ThenRow`), states `[then]` with the finaliser at
+        `S.abortOnly`. That is the old `then_compatC`, which `not_thenAbort_compatC` refutes.
+        M1c restates it at the pure row, Core's rule since §24, and records the change in
+        ProbeD1's README. Restating it at §27's rule is the probe's job if the probe goes on.
+    - **`Outlives`**, the one exception:
+      - It does not build at `45c2021`. Checked: `Outlives/Judgment.lean:106` passes
+        `Δ.EntailsLe` where `Δ.EntailsLt` is expected. The strict premise it probes was relaxed in
+        Core by SPEC §23, and its README pins it to `b1cde24`.
+      - Its `LDerives.effThen` (`Derives.lean:330–334`) types the finaliser at `S.abortOnly`, and
+        `fundamentalL` closes that case with the old `then_compatC` (`Derives.lean:440`).
+      - **The rule chosen.** `LDerives`'s `[then]` follows Core's, as its docstring says every
+        rule does ("rule for rule"). That is the pure row (`thenA_compatC`, option A) until §27,
+        and §27's rule afterwards, with its `effHandle` carrying cancel rows. Its own `[then]`
+        then rejects what Core's rejects: finalisers shaped like `e7b` until §27, and those shaped
+        like `prog` under D3.
+      - **Not applied in this unit.** The probe is pinned and already fails, for a reason the unit
+        does not touch. The rule is recorded in its README and in §1.12, so the omission is not
+        silent.
+    - The rest name no changed definition and should build unchanged.
 - **Statements.** No Targets statement changes in M1. `CancelsNoCtl` stays a hypothesis until M3,
   and S5 at `noFinRaise` never meets a kept error under option A.
 
@@ -368,7 +446,7 @@ error table is the empty one: no typed finaliser raises or performs past its `cf
 | `cancel-suppressed` (`prog`) | leaves the compiled list: its run ends at a raise no handler catches, so no stage prints a value | row removed |
 | `cancel-reentered` (`progRe`), new shape | `inr ()`, `live 0` | measured when added; `0 0 0` expected (no cell at `unr`, and `f` is known) |
 | `cancel-propagated` (`progOut`), new shape | `inr ()`, `live 0` | measured when added; `0 0 0` expected |
-| `cancel-perform` (`progFinOp`), `cancel-nested` (`progNC₁`) | in Lean and the interpreter in M1; compiled in M2c (§2.9) | rows added in M2c |
+| `cancel-perform` (`progFinOp`), `cancel-nested` (`progNC₁`), `cancel-dropped` (`progDrop`), `cancel-resumed` (`progKeep`) | in Lean and the interpreter in M1; compiled in M2c (§2.9) | rows added in M2c |
 
 - `Backend/Kernel.lean`'s doc lists `prog` among the untyped terms and records its new run.
 - The corpus and its goldens are unchanged: drop glue is typed at `F 1`, so no corpus finaliser
@@ -381,8 +459,9 @@ error table is the empty one: no typed finaliser raises or performs past its `cf
 | (1) a law | none changed. D1–D4 are the decided algebra, and the rules implement them |
 | (2) behaviour or counts | `prog` only, which is exempt (D1/D3). Every typed program takes the same steps: the removed frames were passed in the same single step that drops them. Answers, memory and counts are unchanged |
 | (3) runtime block | none. `dead` removes frames that catch nothing, `[cfin-cancel]` gives a step, and the mask, a suppression, is removed |
-| (4) rejection | none. The typing is unchanged (option A) |
-| (5) weakened target | none. `then_compatC`, an internal lemma, is restated because the relation's cancel state changed. `noIntercept_needs_finRow` is a non-vacuity record whose witness D1 removes |
+| (4) rejection | none in the kernel: the typing is unchanged (option A). In the experiments, a typing change is reported, not repaired silently. Outlives's `LDerives.effThen` would move to the pure row, which rejects finalisers shaped like `e7b` (until §27) and like `prog` (D3) in its own `[then]`. That is the restriction Core has had since §24, and the rule is chosen but not applied: the probe is pinned at `b1cde24` and already fails at `45c2021` (§1.10) |
+| (5) weakened target | none. `then_compatC`, an internal lemma, is restated because the relation's cancel state changed, and `not_thenAbort_compatC` records why. ProbeD1's statement 6 is restated the same way, into line with the kernel's `[then]`. `noIntercept_needs_finRow` is a non-vacuity record whose witness D1 removes |
+| M0 | three call sites pass `hndTerm`'s §25 tags argument, a term former's new argument. No result changes what it says |
 
 ## 2. M2: the typing (SPEC §27)
 
@@ -547,6 +626,9 @@ Cancel rows are written `o⟨F⟩`.
 | `progOut` | `1⟨{2}⟩`; the inner `2`'s outer row lacks `2` (`hnS`) | `H₁`'s clause at `{2}` (`2ₒ`) | `inr ()` |
 | `progFinOp` | `1⟨{4⟨[]⟩}⟩` | `H₁`'s clause at `{4⟨…⟩}`; `H₄ₒ` resumes | `inl ()` |
 | `progNC₁` | `1⟨{4⟨[]⟩}⟩`; `4`'s entry gets nothing more (no `[then]` encloses a `perform 4`) | `H₁`'s, then `H₄ₒ`'s at `[] ⊕ []` | `H₄ₒ`'s answer |
+| `ncProg l₁ l₂` (A-level, §3.1): at two `unr` labels, and at two affine `wait` labels at every admissible context | `l₁⟨{l₂⟨[]⟩}⟩` | `timeoutH l₁`'s clause at `{l₂⟨[]⟩}`, then `timeoutH l₂`'s at `[]` | `inr ()`; at `wait`, both cells freed |
+| `progDrop` | the inner `[then]` gives `1⟨{2}⟩`; the outer one adds `4` with `2` pending: `1⟨{2, 4⟨{2}⟩}⟩` | `H₁`'s clause at `{2, 4⟨{2}⟩}` (`4ₒ`, `2ₒ` outside); `H₄ₒ` (`unr`) never uses κ₄ | `inl ()`: the kept `2` goes with κ₄, the tolerated exception of §3.3 |
+| `progKeep` | as `progDrop` | the same; `H₄ₒ` resumes κ₄ | `inr ()`: `2ₒ` catches the kept `2` |
 
 - **Every lawful finaliser types.** Take each capturable entry's cancel row to be the least
   solution of the `[then]` premises. A cancel's `[sub]` then holds exactly when what that cancel
@@ -578,6 +660,11 @@ Cancel rows are written `o⟨F⟩`.
 - **Checked when M2 lands:** `progNCrec`, two `[then]`s whose finalisers both `perform z`, under
   `z`'s cancelling handler, is rejected, and its untyped run ends at an unhandled operation. This is
   the soundness witness for the leftover clause.
+- **Not rejected: `progDrop`.** A finaliser may perform an operation whose `unr` clause discards
+  its continuation. Rejecting `unr` operations in finalisers would reject programs the algebra
+  gives a meaning to (hard stop 4). The kept error that goes with the continuation is §3.3's
+  tolerated exception, which D4's pattern handles by stating the property at contexts with no
+  non-abortive `unr` operation.
 
 ### 2.8 `CDerives`, `fundamentalC`, the checker, Targets
 
@@ -619,10 +706,12 @@ in two places.
 - **Ordinary unwinding.** `fin dd b` with `dd` able to suspend is rewritten in `Capture`, before
   `machine`, to `case catchAll b {inl v ⇒ v | inr p ⇒ dd (inr ()); raise p}`. The finaliser's
   call is then a call point. A raise of `dd` supersedes `p`, as `finally`'s law says.
-- **Kernel shapes.** `cancel-perform` (`progFinOp`) and `cancel-nested` (`progNC₁`), each at
-  every stage with `live 0`. Counts are measured and recorded. No existing count may change,
+- **Kernel shapes.** `cancel-perform` (`progFinOp`), `cancel-nested` (`progNC₁`),
+  `cancel-dropped` (`progDrop`, answer `inl ()`) and `cancel-resumed` (`progKeep`, answer `inr ()`),
+  each at every stage with `live 0`. `cancel-dropped` makes every stage agree with the interpreter
+  on the tolerated exception. Counts are measured and recorded. No existing count may change,
   because programs whose finalisers do not suspend take today's path.
-- **Fallback, if the construction does not fit this unit.** The two shapes stay Lean and
+- **Fallback, if the construction does not fit this unit.** The four shapes stay Lean and
   interpreter runs, and `Capture` rejects a finaliser that may suspend with a message. This
   departs from "every feature lands with its lowering", and the step reports it to the user. It is
   not a hard-stop item.
@@ -637,7 +726,9 @@ in two places.
   - *Programs*: §2.6–§2.7.
   - *Lowering*: §2.9.
   - *Baseline*: no BoLo or borrow rule change.
-  - *Open*: reading 3's `⊤` approximation, S5 at D2's endings (§3.1), and `KeptKapFree` (§3.2).
+  - *Open*: reading 3's `⊤` approximation, S5 at D2's endings (§3.1), `KeptKapFree` (§3.2), and
+    `CfinEnds` (§3.3). An `unr` continuation discarded with a kept error inside it is the tolerated
+    exception to "no error is dropped" (`progDrop`).
 - **§19.** *Typing*'s `[then]` line and κ's types point to §27. "A finaliser lets no operation
   escape it" is rewritten. *Finalisers that perform operations* points to §27.
 - **§24.** `[then]` at option A is marked superseded by §27. It stays a derived rule
@@ -651,22 +742,72 @@ in two places.
 | (1) a law | none: §27 implements D2 and D3 |
 | (2) behaviour or counts | none. Terms, machine and counts are unchanged, and M2c adds shapes. The checker emits default cancel rows |
 | (3) runtime block | none: a typing rule |
-| (4) rejection | `prog` and `e7c` (D3, recorded). Reading 3's `⊤` is the approximation of a finite type, not a designed restriction, and it is put to the user as a reading. The closure rule that would have been a stop is not adopted (§2.7) |
+| (4) rejection | `prog` and `e7c` (D3, recorded). Reading 3's `⊤` is the approximation of a finite type, not a designed restriction, and it is put to the user as a reading. The closure rule that would have been a stop is not adopted (§2.7). `unr` operations in finalisers stay typed (`progDrop`, §2.7) |
 | (5) weakened target | none |
 
 ## 3. M3: `CancelsNoCtl`, algebraicity, and no dropped error
 
-### 3.1 S5's cancel trace under D1; `CancelsNoCtl` and `CancelsNZ` retired
+### 3.1 S5's cancel trace under D1: `pend`, `CancelsNoCtl` refuted, S5 at the cell
 
-**Why the hypotheses go.**
-- `CancelsNoCtl` (no `ccatch`, no `cfin` in a cancelled continuation's context) and `CancelsNZ`
-  (no handler named `0` there) were what `noIntercept_of_core` needed: a `ccatch`, a `cfin` or a
-  handler of `0` in `K` would have caught the cancel.
-- The cancel run is now `ccatch (K†[raise (⊥, none)])`, and `K†` holds no handler and no
-  `ccatch`. A `cfin` in `K†` is a running finaliser whose cancel the region holds, and it is
-  passed by `[cfin-cancel]`.
-- Neither hypothesis is needed once the trace has a step for `cfin`. Whether `CancelsNoCtl` holds at
-  `J₁` after M2 is not claimed here. Nested cancels make it doubtful, but no witness is built.
+**What `CancelsNoCtl` reads.**
+- `CancelsNoCtl RF Ξ J` (`Instance/CancelRuns.lean:829`) asks that `K` hold no `ccatch` and no
+  `cfin` (`K.NoCtl`) at every configuration a typed program reaches that holds
+  `K₀[cancel (capture l H K)]`. `CancelsNZ` asks that `K` hold no handler named `0` there.
+  `noIntercept_of_core` needed both, because a `ccatch`, a `cfin` or a handler of `0` in `K` would
+  have caught the cancel.
+- Both of them, and S5's `NoIntercept` (`A/Soundness.lean:334`), read a cancel of
+  `capture l H K`. That is the instance's `captureE`, which is `kappa`: the continuation of an
+  `unr` operation, with no cell. F1 restated S4 at the capture cell (`CancelCellLaw` beside
+  `CancelLaw`). S5 and `CancelsStd` were not restated (TIER1-PLAN, piece 6, finding 4: "S5's
+  statements read `capture` and `cancelOf`; they are not checked here against the cell").
+- The quantifier therefore reaches a `J₁` program only where a resuming operation is `unr`. At an
+  admissible context (`Ξ.NU`) every resuming operation is linear or affine. The tie makes the
+  handler's tags `Ξ`'s qualifiers (`hndTags_of_rowAt`), so the catch hands `captureAt k l H K ℓ`
+  (`kappaC`). As terms, `K₀[cancel (captureAt …)]` never has the form `K₀'[cancel (capture …)]`,
+  because `kappaC`'s resume branch frees `ℓ` and `kappa`'s does not. An affine nested cancel
+  therefore refutes nothing at an admissible context.
+- Not proved here: that no `J₁` run at an admissible context reaches `cancel (capture l H K)`
+  (`noUnrKappa_J₁`, the analogue of `cancelsNZ_J₁`). If that holds, then `CancelsNoCtl`,
+  `CancelsNZ` and S5's no-interception hold there vacuously.
+
+**`CancelsNoCtl` refuted at `J₁` by a typed witness.**
+- `J₁`, `noIntercept_J₁_of` and `cancellation_J₁_of` are stated at every effect context.
+- The context: `Ξu` declares two names at `(.unr, .unit, .unit)`, so `¬ Ξu.NU`.
+- The program: `ncProg l₁ l₂ = timeoutH l₂ (timeoutH l₁ (bodyF l₁ (perform l₂ 0 ())))` at those
+  names. It has `progNC₁`'s shape and types at `J₁` under §27 (§2.6).
+- The configuration: the run reaches `timeoutH l₂`'s clause cancelling `capture l₂ H₂ K₂`, where
+  `K₂ = [cfin none] [ccatch₁] [bind]` (innermost first). So `¬ K₂.NoCtl`.
+- `not_cancelsNoCtl_J₁ : ¬ Inst.CancelsNoCtl orowRF Ξu J₁`, with every hypothesis discharged: the
+  runner `R₀` and `Respects`, `Answers` at the empty row, the derivation (M2b), and the reached
+  configuration by `runM`/`look` and `rpath_chainPath`. The pattern is `noIntercept_needs_finRow`
+  (`Instance/Checks.lean:340`), at the same kind of context (`Ξ 2 = [(.unr, .unit, .unit)]`).
+- M3 reports `CancelsNoCtl` as **refuted at `J₁` by a typed witness, and not needed by
+  `noIntercept_J₁`**. It is kept as the refuted record. `CancelsStd`, `CancelsNZ` and
+  `cancelsNZ_J₁` are not read. They are kept as records or deleted; that is the user's choice, and
+  deletion is the default.
+
+**Why the trace gains `pend` (into line with the algebra, not a weakening).**
+- D2 types nested cancels: a finaliser's capturable operation whose live handler cancels its
+  continuation, as in `ncProg`. That cancel's run passes the running finaliser's `cfin` by
+  `[cfin-cancel]` (§1.2), and the earlier error wins.
+- A trace with no step for `[cfin-cancel]` cannot follow that run. `not_cancelsNoCtl_J₁` shows
+  that the hypothesis which used to exclude such runs fails at a typed program. So `CancelTrace`
+  gains `pend`. The run it follows is the algebra's, and the traces admit no run the algebra
+  excludes, so this is not hard stop 5.
+- The cancel run is now `ccatch (K†[raise (⊥, none)])`. `K†` holds no handler and no `ccatch`. A
+  `cfin` in it is a running finaliser of a cancel the region holds, and `[cfin-cancel]` passes it.
+  Once the trace has `pend`, neither `CancelsNoCtl` nor `CancelsNZ` is needed.
+
+**S5 at the cell (into line with F1; a strengthening, reading 8).**
+- `NoIntercept` gains a cell clause, as `CancelLaw` gained `CancelCellLaw`. Its configuration is
+  `K₀[cancel (captureAt .affine l H K ℓ)]`, reached, in a store that holds `ℓ`. From there the
+  cancel's start `K₀[cancelOf l H K]` is reached across the cell's release, by the steps of
+  `cancelCellLaw_ourInst`. The conclusion is the same as for `capture`.
+- Its witness at every admissible context is `ncAff = ncProg lw₁ lw₂` at two `wait` labels;
+  `Rich` gives two names at `(.aff, .unit, .unit)`. The nested cancel of
+  `captureAt .affine lw₂ H₂ K₂ ℓ₂` has `K₂ = [cfin none] [ccatch₁] [bind]`. Its run from the
+  cancel's start takes `[cfin-cancel]` before `[cancel]` (`ncAff_pend_J₁`, by `runM` under M1's
+  machine), and only `pend` follows that step. So `pend` is needed at every admissible context too.
 
 **The restatement (A-level, into line with D1; not a weakening).**
 - `keep` loses its name argument: `keep err r = err ∨ r`. `Region` is no longer read.
@@ -677,18 +818,19 @@ in two places.
   `e ∨ err`, the earlier error winning. `labelOf` reads `[cfin-cancel]` as `finEnd` of the inner
   error.
 - `NoIntercept`'s premise (`FinRow FR` of the fired finalisers) and S5's parameter `noFinRaise`
-  are unchanged. S5 at D2's endings is reading 4.
+  are unchanged. S5 at D2's endings is reading 4. `NoIntercept` gains the cell clause above.
 
 **The proof plan.**
 - `cancel_pfx` and `fin_pfx` (`Instance/CancelRuns.lean`) are re-run at `K†`, with a `pend` case
-  from `[cfin-cancel]`.
+  from `[cfin-cancel]`. The cell clause reaches `cancelOf l H K` by `cancelCellLaw_ourInst`'s
+  steps, then follows the same trace.
 - `noIntercept_of_core` loses `CancelsStd`.
-- So `I.noIntercept_J₁` and `I.cancellation_J₁` are PROVED outright at every admissible context,
-  and the same holds at `tier1Open`.
-- `CancelsStd`, `CancelsNoCtl`, `CancelsNZ` and `cancelsNZ_J₁` are kept as records or deleted
-  (the user's choice; deletion is the default, since they are not read).
+- So `I.noIntercept_J₁` and `I.cancellation_J₁` are planned PROVED outright at every effect
+  context, and at `tier1Open`. At an admissible context they bind through the cell clause.
 - New teeth for `FinRow`, after M2: `e7b` is typed at `J₁`, and its finaliser raises `lo`. Its run
-  from the cancel's start shows `finEnd (some lo)`, which no trace at `noFinRaise` admits.
+  from the cancel's start shows `finEnd (some lo)`, which no trace at `noFinRaise` admits. At an
+  admissible context `e7b`'s `wait` continuation is a cell continuation, so the teeth bite through
+  the cell clause.
 
 ### 3.2 Algebraicity (D4)
 
@@ -721,22 +863,86 @@ in two places.
 
 ### 3.3 "No typed run drops an error"
 
-`NoDroppedError J`, for every typed closed program `P` and every run from it:
+**Where it is stated (D4's pattern).**
+- It is stated at contexts with no non-abortive `unr` operation. At `J₁` these are the admissible
+  contexts (`Ξ.NU`, `rowNU_of_rowAt`). At today's kernel they are `tier1NU` (`CDerivesNU`).
+- It is not claimed for every `CDerives` program. Core types `unr` handlers (EffCancel's handlers
+  are all `unr`), and at such a handler it fails (`progDrop`).
 
-1. **Kept first.** At every `[cfin-raise]` step the next state is `err ∨ (m, v)`, and at every
-   `[cfin-cancel]` step it is `err ∨ err'`. An error leaves a cancel's state only by first-wins.
-   This is a fact of the machine (`Head.cferr`, `Head.cfcancel`).
-2. **Re-raised.** A cancel whose state is `some E` ends by `[cancel-raise]`, raising `E` at the
-   canceller (`Head.creraise`).
-3. **Caught.** No run of a typed closed program at `F 1` ends at a raise. This is `adequacyD`:
-   every run reaches `()` and is never stuck. An unhandled raise would be a final non-value.
+**The statement.** `Inst.NoDroppedError RF Ξ J` is a predicate on the runs of `ourInst RF Ξ J`
+that counts `Head` steps. On every complete run `q` of a program typed at `J` with a data answer
+(the runs `ContUseEv` reads),
 
-The only other ways an error leaves a configuration are the algebra's: a handler catches it
-(`[unwind]`), a finaliser's raise supersedes it in ordinary unwinding (`finally`'s law), or a
-cancel abandons a continuation that holds a pending ordinary raise (reading 2). So the property
-is PROVED outright, from the machine and `adequacyD`. Its A-level form is a predicate on runs, and
-the step lemmas are by `cases` on `Head`. The previous design's `CfinRegionQuiet` (open behind
-configuration typing) is not needed: D1's machine has no suppressing rule left to exclude.
+    keeps q = reraises q + merges q
+
+- `keeps` counts the `[cfin-raise]` steps at state `none`. Each one starts a kept error. At state
+  `some` the new error is not kept, since the first wins.
+- `reraises` counts the `[cancel-raise]` steps.
+- `merges` counts the `[cfin-cancel]` steps at two kept errors. The passing error is superseded,
+  since the first wins (reading 1).
+
+So every kept error leaves the run in one of two ways: it is re-raised at a canceller, or it loses
+to an earlier error. A re-raised error is then an ordinary raise. `adequacyD` says no complete run
+ends at an unhandled raise, so what happens next is the algebra's: a handler catches it
+(`[unwind]`), a finaliser's raise supersedes it in ordinary unwinding (`finally`'s law), or a cancel
+abandons it with a continuation that holds it as a pending ordinary raise (reading 2).
+
+**The ways a kept error can leave a configuration.**
+- The algebra's ways: re-raised at its canceller (`[cancel-raise]`), or superseded by first-wins
+  (`[cfin-raise]` at `some`, `[cfin-cancel]` at two kept errors).
+- **The one tolerated exception.** A persistent continuation (`unr`, at `!U(…)`) holds a running
+  finaliser's `cfin (some E)` and is discarded or never used. The clause may drop it without
+  resuming or cancelling it. `E` goes with it, and so do the region's remaining finalisers. `unr`
+  is tolerated, never designed for.
+  - The same exception already applies to "every finaliser runs". A discarded `unr`
+    continuation never runs its region's finalisers, whether or not a cancel is in progress, on
+    today's machine as on D1's.
+  - A second resumption of such a continuation re-raises `E` twice. Multi-shot is ignored.
+- Typing does not reject `unr` operations in finalisers. Doing so would be hard stop 4 (§2.7).
+
+**The witness.**
+- `progDrop` (§1.5): `H₄ₒ` (`unr`) discards κ₄, which holds `cfin (some 2)`. The run answers
+  `inl ()` and `H₂ₒ`'s clause never runs, so `keeps = 1` and `reraises = merges = 0`.
+- `progKeep` is the same program with κ₄ resumed. It answers `inr ()`, with `keeps = reraises = 1`.
+- M1 runs both in Lean (`Core/EffCancel.lean`) and in the interpreter. M2b derives both in
+  `CDerives` under §27, and M2c compiles them.
+- M3 builds `not_noDroppedError_unr : ¬ Inst.NoDroppedError orowRF Ξd J₁`, with every
+  hypothesis discharged. `Ξd` declares `progDrop`'s three names, with `1` and `4` `unr` and
+  resuming, so it is not admissible. The program is `progDrop`'s A-level form, built from
+  `timeoutH`, `toResult` and an `unr` clause that splits off κ and answers without it. This records
+  that the restriction to contexts with no non-abortive `unr` operation is needed.
+
+**The proof plan, at admissible contexts.**
+1. **Machine facts**, by `cases` on `Head`.
+   - A kept error is held either by a `cfin (some E)` frame or by the `raise (⊥, some E)` at the
+     evaluation position.
+   - `[finalise-cancel]`, `[cfin-ret]` and `[cfin-raise]` at `some` move it from one holder to the
+     other. `[cfin-cancel]` merges two holders, and `[cancel-raise]` re-raises.
+   - κ's resume branch reinstates `K`. Its cancel branch keeps `K`'s `cfin` frames, because `dead`
+     keeps `cfin`.
+   - No other rule creates or removes a holder.
+2. **`CfinEnds`, the run-level obligation.** On a complete run, every continuation handed at a
+   capture event is used exactly once, and the resume branch that a use takes is applied exactly
+   once.
+   - Only these values can hold a `cfin` frame: a continuation captured inside a running
+     finaliser, and that continuation's resume branch. A value that holds either one counts as
+     well.
+   - So under `CfinEnds` no holder is discarded or copied, and the machine facts give the equation
+     by induction on the run.
+3. **`CfinEnds` at `J₁`.**
+   - At an admissible context every continuation is a cell continuation (linear or affine), handed
+     at a capture event.
+   - The first half is S6 (`ContUseEv`). At `J₁`, `I.contUseEv_J₁_of` reduces S6 to
+     `OnlyOwnerFrees` and `NoDanglingUse`, both open.
+   - The second half, `ResumeApplied`, is the same kind of carry as `KeptKapFree`'s (§3.2). A typed
+     clause applies the linear `B ⊸ F_S R` it gets from κ, but no lemma yet exposes a fact of a
+     derivation at a configuration of a run.
+
+Outcome of M3: `NoDroppedError` is PROVED at `J₁` at every admissible context given `CfinEnds`.
+`CfinEnds` is either proved from S6 and `ResumeApplied`, or stated as the exact remaining
+obligation. It is a predicate on our instance's runs, and the step lemmas are by `cases` on `Head`.
+The previous design's `CfinRegionQuiet` is not needed, because D1's machine has no suppressing
+rule left to exclude.
 
 ## 4. M4: E7, E8, E9 at `J₁`; `EProps`
 
@@ -781,45 +987,64 @@ configuration typing) is not needed: D1's machine has no suppressing rule left t
 |---|---|
 | `hE`: A's (E) properties at every admissible `Ξ` | E7 (restated), E8, E9 PROVED. Open: E2a–c and E10's `retry` (a `!U C` forced); E3 and E10's loop (`unfold`'s value); E5 and E2d at contexts with an `unr` `exn` or `unr` operation |
 | `hS4`: S4 | PROVED (re-checked after M1 and M2) |
-| `hC`: S5 (`noFinRaise`) | PROVED outright (§3.1) |
+| `hC`: S5 (`noFinRaise`), restated with `pend` and the cell clause | PROVED outright at every effect context (§3.1). At an admissible context it binds through the cell clause (reading 8) |
 | `hU`: S6 | OPEN: `OnlyOwnerFrees`, `NoDanglingUse` (not this unit) |
 | `Accepts`, `Rejects` | PROVED; AT08 restated |
 
 So tier 1 at `J₁` is **open, not refuted**: (E)'s four remaining parts and S6's two ownership
-properties. Beside done: `AlgLaw` given `KeptKapFree` (§3.2), and `NoDroppedError` proved (§3.3).
+properties. Alongside it:
+- `AlgLaw` given `KeptKapFree` (§3.2);
+- `NoDroppedError` at every admissible context given `CfinEnds`, whose open parts are S6 and
+  `ResumeApplied` (§3.3), with its restriction recorded by `not_noDroppedError_unr`;
+- `CancelsNoCtl` refuted at `J₁` by a typed witness and not needed (`not_cancelsNoCtl_J₁`, §3.1).
+
+`status_tier1_J₁_of` drops its `CancelsNoCtl` premise.
 
 ## 6. The hard stop, step by step
 
 | step | (1) law | (2) programs | (3) runtime block | (4) rejects lawful | (5) weakens target |
 |---|---|---|---|---|---|
-| M1a machine, Core, interpreter, SPEC §19 | no: implements D1 | `prog` only (exempt); same steps, memory and answers elsewhere | no | no | no (`then_compatC`: internal, restated with the relation) |
+| M0 GhostEnd, ProbeD1 at §25's `hndTerm` | no | no (experiments only, which did not build) | no | no | no: a term former's new argument |
+| M1a machine, Core, interpreter, SPEC §19 | no: implements D1 | `prog` only (exempt); same steps, memory and answers elsewhere | no | no | no (`then_compatC`: internal, restated with the relation; `not_thenAbort_compatC` records why) |
 | M1b backend mask, kernel list | no | `cancel-suppressed` row removed (exempt); counts unchanged | removes a suppression | no | no |
-| M1c Targets, experiments | no | no | no | no | `noIntercept_needs_finRow`: a record whose witness D1 removes (re-checked) |
+| M1c Targets, experiments | no | no | no | no in the kernel. Outlives's `[then]` rule is chosen and not applied, since the probe is pinned and already fails (§1.10, §1.12) | `noIntercept_needs_finRow`: a record whose witness D1 removes (re-checked). ProbeD1's statement 6 is restated into line with the kernel's `[then]` |
 | M2a typing, relation, SPEC §27 | no | no: default cancel rows | no | `prog`, `e7c`: D3. `⊤`: reading 3 | no |
 | M2b derivations, `not_der_prog` | no | no | no | D3 | no |
 | M2c lowering of suspending finalisers | no | new shapes only | no | no | no |
-| M3 S5 trace, hypotheses retired | no | no | no | no | into line (D1); hypotheses dropped, not the target |
+| M3 S5 trace, hypotheses retired | no | no | no | no | into line (D1, D2): `pend` is forced by `not_cancelsNoCtl_J₁` and admits only the algebra's runs; the hypotheses are dropped, not the target. The cell clause strengthens S5 (reading 8) |
 | M3 algebraicity | no | no | no | no | D4: kept values observed; obligation stated |
-| M3 `NoDroppedError` | no | no | no | no | no |
+| M3 `NoDroppedError` | no | no | no | no: `unr` operations in finalisers stay typed | no. It is stated at contexts with no non-abortive `unr` operation, D4's pattern; `not_noDroppedError_unr` shows the restriction is needed |
 | M4 E7–E9 | no | no | no | E7c: D3 | into line (D3) |
 | M5 AT08, status | no | no | no | AT08 was already rejected | into line with AT08's intent |
 
 ## 7. Order of work and size
 
+The worktree's build cache holds artefacts built from sources other than `45c2021`'s: the rejected
+stash, whose interpreter reports a `sealed` stop that `45c2021` does not have, and the scratch M0
+patch. So every check uses `lake build`, which rebuilds by hash, and no check runs `lake env lean`
+against the cache before a build.
+
+0. **M0** (small): `hndTerm`'s tags argument at `GhostEnd/Handle.lean:90`,
+   `GhostEnd/Drop.lean:304` and `ProbeD1/Statement34.lean:44`. Check: `lake build GhostEnd ProbeD1`,
+   then the baseline builds of every experiment library (§1.10, Re-check 3).
 1. **M1a** (medium): `Paper/S3_Dynamics/Definitions.lean`, `Core/Steps.lean`, `Core/Demonic.lean`,
-   `Core/EffDefs.lean`, `Core/EffWp.lean`, `Core/EffRules.lean`, `Core/EffCancel.lean`,
-   `Core/Nu.lean`, `Paper/LiteralReadings/…`, the interpreter, and SPEC §19 with changelog 0.44.
-   Check: `lake build`, targeted.
+   `Core/EffDefs.lean`, `Core/EffWp.lean`, `Core/EffRules.lean` (with `not_thenAbort_compatC`),
+   `Core/EffCancel.lean` (the programs of §1.5), `Core/Nu.lean`, `Paper/LiteralReadings/…`,
+   the interpreter, and SPEC §19 with changelog 0.44. Check: `lake build`, targeted.
 2. **M1b** (small): the backend's mask, `Backend/Kernel.lean`, `corpus/kernel-counts.expected`.
    Check: `scripts/compile-kernel.sh`.
-3. **M1c** (wide, mechanical): Targets and the experiments (§1.10). Check:
-   `lake build Targets` (AxiomCheck, Audit).
+3. **M1c** (wide, mechanical): Targets and the experiments (§1.10). That includes GhostEnd's three
+   files, ProbeD1's `contShare` call and statement 6, and Outlives's README. Check:
+   `lake build Targets` (AxiomCheck, Audit), then every experiment library against the baseline.
 4. **M2a** (large): cancel rows on `OpSig`/`CTy.eff`, the order, `⋈`, the rules, the semantic
    `fin` and `cancelOK`, §2.5's lemmas, `fundamentalC`'s cases, the checker's defaults, SPEC §27.
-5. **M2b** (medium): derivations of `cancelKept`, `progRe`, `progOut`, `progFinOp`, `progNC₁`;
-   `not_der_prog`; `progNCrec`'s rejection; Targets' `CDerivesAt` and its inversions.
+   ProbeD1's `OpEnt` takes `fin`. Check: every experiment library again.
+5. **M2b** (medium): derivations of `cancelKept`, `progRe`, `progOut`, `progFinOp`, `progNC₁`,
+   `progDrop`, `progKeep`, and `ncProg` at `J₁` (`unr` at `Ξu`, `wait` at every admissible
+   context); `not_der_prog`; `progNCrec`'s rejection; Targets' `CDerivesAt` and its inversions.
 6. **M2c** (medium–large): §2.9.
-7. **M3** (medium): §3.1–§3.3.
+7. **M3** (medium–large): §3.1–§3.3. That is `not_cancelsNoCtl_J₁`, S5's `pend` and cell clause,
+   `ncAff_pend_J₁`, `not_cfinQuiet_J₁`, `NoDroppedError` and `not_noDroppedError_unr`.
 8. **M4** (medium): §4.
 9. **M5** (medium): §5. Then TIER1-PLAN's outcome, the register rows and `Status.lean`.
 10. **`make gate` once**, as the separate stage.
@@ -833,7 +1058,8 @@ Each step is committed on `tier1-effects` with the session trailer.
 2. **A pending ordinary raise in a cancelled continuation is abandoned with it.** A finaliser
    running during ordinary unwinding (`D (); raise p`) performs an operation, and its handler
    cancels the continuation. The continuation's code, `raise p` included, does not run
-   (algebraicity). Only a cancel's kept error, which is machine state, is never dropped.
+   (algebraicity). Only a cancel's kept error, which is machine state, is never dropped (at
+   contexts with no non-abortive `unr` operation, §3.3).
 3. **`⊤` cancel rows.** A continuation whose cancel would need unboundedly many outer handler
    instances (recursion through a finaliser's capturable operation) cannot be cancelled. This is
    the approximation of a finite type, not a designed restriction.
@@ -846,6 +1072,22 @@ Each step is committed on `tier1-effects` with the session trailer.
    (`prog` under a live outer `2`) is compiled in its place.
 7. **The M2c fallback** (§2.9), if it is needed, departs from "every feature lands with its
    lowering". It is the user's call.
+8. **S5 at the capture cell** (§3.1). S5's no-interception and `CancelsNoCtl` read only `capture`,
+   the continuation of an `unr` operation. At an admissible context no such continuation is
+   handed, so as stated S5 says nothing about a cancel there. M3 adds a cell clause, as F1 added
+   `CancelCellLaw` to S4. This strengthens the target. The alternative is to leave S5 as written
+   and report it as binding only at contexts with `unr` resuming operations.
+9. **"No typed run drops an error" is a count on complete runs** (`keeps = reraises + merges`),
+   stated at contexts with no non-abortive `unr` operation. An `unr` continuation discarded with a
+   kept error inside it is the tolerated exception (`progDrop`), as it already is for "every
+   finaliser runs".
+10. **Outlives's `[then]` follows Core's when it is revived.** That means the pure row until §27,
+    and §27's rule after, with cancel rows on its `effHandle`. It is not applied now, because the
+    probe is pinned at `b1cde24` and fails at `45c2021` for SPEC §23's reason. The alternative is to
+    repair the probe at HEAD within this unit.
+11. **M0 touches two experiments** to restore their build at §25's `hndTerm`, so that M1's
+    before-and-after comparison means something. The alternative is to record both as failing
+    before the unit and to compare nothing.
 
 ## Unspent hypotheses, unused results, untranscribed in the run-up
 
@@ -854,13 +1096,22 @@ Each step is committed on `tier1-effects` with the session trailer.
     spent. §27 types exactly what §2.5 proves.
   - κ's cancel entry at `S ⊕ F` over-approximates by `S`, which keeps `kTy` unchanged at
     `F = []`.
-  - `AdmEff`'s `ClosedLife` and `Rich` are read by nothing here.
+  - `AdmEff`'s `ClosedLife` is read by nothing here. `Rich` is read once, for the two `wait`
+    labels of `ncAff`. `NU` is read by `NoDroppedError`'s scope and by §3.1, through
+    `rowNU_of_rowAt`.
 - **Unused uniqueness results.** `det_ourInst` and `rstep_det` are read by no step of M1–M2. M3's
-  traces read `rstep_det` and `innerCatch_unique`, as F3's did.
+  traces read `rstep_det` and `innerCatch_unique`, as F3's did. The two refutations
+  (`not_cancelsNoCtl_J₁`, `not_noDroppedError_unr`) each need only one computed run, so they read
+  no uniqueness result. `hndTags_of_rowAt` is what makes an admissible context's continuations
+  cell continuations (§3.1).
 - **Untranscribed in the run-up.**
   - The separation lemma (`e7c_of_then`).
-  - The terms `progOut`, `progFinOp`, `progNC₁` and `progNCrec`.
-  - The A-level `acts` and `pend` (§3.1).
+  - The terms `progOut`, `progFinOp`, `progNC₁`, `progNCrec`, `progDrop`, `progKeep`, and the
+    A-level `ncProg`.
+  - `not_thenAbort_compatC` (§1.9).
+  - The A-level `acts` and `pend`, and S5's cell clause (§3.1).
+  - `noUnrKappa_J₁`: that no `J₁` run at an admissible context reaches `cancel (capture l H K)`
+    (§3.1). Not needed by the plan, and not built.
   - S5's trace for a finaliser's operation answered outside the region (reading 4).
-  - The run-level carry for `KeptKapFree` (§3.2).
+  - The run-level carries: `KeptKapFree` (§3.2), and `CfinEnds`' `ResumeApplied` (§3.3).
   - The backend's cancel code (§2.9).
