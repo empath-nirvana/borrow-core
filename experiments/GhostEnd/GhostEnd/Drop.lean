@@ -301,7 +301,7 @@ theorem handleR_spans_yields {Δ : LifeCtx} {Γ Γ₁ Γr Γc : Ctx VTy} {S' : R
     (hr : Ctx.SoloP Γr ir (retTy S' (.tensor (.ref T) B) R))
     (hc : Ctx.SoloP Γc ic (clausesTy S' R E))
     (hn0 : n ≠ 0) (hnS : ∀ o ∈ S', o.n ≠ n) (hlen : E.length ≤ 2 ^ 32) :
-    SemC Δ Γ (hndTerm n ir ic
+    SemC Δ Γ (hndTerm n (E.map Prod.fst) ir ic
       (.app (.app (.val (withborUV d)) (.var 0)) (.val (cbV o.n o.i ys Nf)))) (CTy.effOf S' R) :=
   handle_compatC hsp hsp₁ hr hc hn0 hnS hlen
     (withborR_spans_yields_sem hb hbx hΔx hT hB hside hNf hN hdc hd _ hRA hUq o hf hoB ys hys hy
