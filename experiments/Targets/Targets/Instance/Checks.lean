@@ -306,8 +306,8 @@ program, and that program holds no `ccatch`, no `cfin` and no handler named `0`;
 cancel of `κ`, and the cancel's start.  The cancelled region's finaliser performs the operation of
 the handler whose continuation is cancelled, and meets `FinRow` at no set of endings.  The cancel
 runs the region with that handler removed: the finaliser fires, starts, and its operation meets no
-frame that catches it, so the run stops there; that run is a cancel trace at every set of endings
-and every region. -/
+frame that catches it, so the run stops there; the region's one action is the finaliser's fire,
+and that run is a cancel trace of it at every set of endings. -/
 theorem finAlone_dead (h2 : Ξ 2 = [(.unr, .unit, .unit)]) :
     NoInterception J₄.read ∧
       (𝕁).der [] finAloneProg ((𝕁).F (orowAlg Ξ).unit (OVTy.ofV .unit)) ∧
@@ -321,8 +321,9 @@ theorem finAlone_dead (h2 : Ξ 2 = [(.unr, .unit, .unit)]) :
       (∀ FR, ¬ (𝕁).FinRow FR finP) ∧
       (𝕁).RPath (𝕁).R₀ ((Adequacy.emptyMem, lookEnd 8 finAloneProg), ()) (p5q (ℍ := ℍ) Ξ) ∧
       (∀ ev c', ¬ (𝕁).RStep (𝕁).R₀ ((Adequacy.emptyMem, p5Kf.plug finP), ()) ev c') ∧
-      ∀ FR N, (𝕁).CancelTrace (𝕁).R₀ FR N .hole ((Adequacy.emptyMem, lookEnd 8 finAloneProg), ())
-        [finP] none (p5q (ℍ := ℍ) Ξ) := by
+      (𝕁).acts p5K = [.fire finP] ∧
+      ∀ FR, (𝕁).CancelTrace (𝕁).R₀ FR .hole ((Adequacy.emptyMem, lookEnd 8 finAloneProg), ())
+        [.fire finP] none (p5q (ℍ := ℍ) Ξ) := by
   have hc₀ : lookEnd 5 finAloneProg = (𝕁).plug .hole ((𝕁).cancel ((𝕁).capture (lab2 Ξ h2) p5H p5K)) := by
     show lookEnd 5 finAloneProg = Kont.hole.plug (cancelE (captureE 2 (qsOf Ξ 2) _ _ p5K))
     rw [show qsOf Ξ 2 = (qualsVal [.unr]).1 by simp [qsOf, h2],
@@ -341,7 +342,7 @@ theorem finAlone_dead (h2 : Ξ 2 = [(.unr, .unit, .unit)]) :
     rreach_of_chain (𝕁).R₀ (lookRun_sound (ℍ := ℍ) 5 finAloneProg), hc₀,
     pureSteps_of_chain (RF := orowRF) (Ξ := Ξ) (J := J₄) (μ := Adequacy.emptyMem)
       (lookRun_sound (ℍ := ℍ) 3 (lookEnd 5 finAloneProg)), hc, rfl, ?_,
-    .cons hfire (.cons (.mach hβ.1) .nil), p5_stuck Ξ, fun FR N => ?_⟩
+    .cons hfire (.cons (.mach hβ.1) .nil), p5_stuck Ξ, rfl, fun FR => ?_⟩
   · rintro FR ⟨ε, -, -, ⟨Θ, -, he⟩ | ⟨-, M, he, -⟩⟩
     · have he' : finP = finAloneProg := he
       simp [finP, finAloneProg, withH, bindE, performE] at he'
@@ -350,8 +351,8 @@ theorem finAlone_dead (h2 : Ξ 2 = [(.unr, .unit, .unit)]) :
         ((Adequacy.emptyMem, ccatchE (cfinE (cancelVal none) (.app (.lam finP) .unit))), ())
         [(.tau, ((Adequacy.emptyMem, p5Kf.plug finP), ()))]
         ((Adequacy.emptyMem, p5Kf.plug finP), ()) := .cons hβ rfl .nil
-    have := A.EffectSystem.CancelTrace.fire (S := 𝕁) (R := (𝕁).R₀) (FR := FR) (N := N)
-      (K₀ := .hole) (fs := []) (err := none) (Kf := p5Kf) (q := [])
+    have := A.EffectSystem.CancelTrace.fire (S := 𝕁) (R := (𝕁).R₀) (FR := FR)
+      (K₀ := .hole) (as := []) (err := none) (Kf := p5Kf) (q := [])
       (c₂ := ((Adequacy.emptyMem, p5Kf.plug finP), ())) hfire hpp rfl (.running .nil)
     simpa [p5q] using this
 

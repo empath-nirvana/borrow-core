@@ -26,11 +26,9 @@ variable (S : EffectSystem)
 cancel trace. -/
 def NoInterceptWhole (FR : S.EA.Lab → Prop) : Prop :=
   ∀ R : S.Runner, R.Respects → ∀ e ε A, S.Answers R ε → S.der [] e (S.F ε A) →
-    ∀ (c₀ c : S.RConf R) K₀ l H K q, S.RReach R (S.rinit R e) c₀ →
-      S.term c₀.1 = S.plug K₀ (S.cancel (S.capture l H K)) →
-      S.PureSteps c₀.1 c.1 → c.2 = c₀.2 → S.term c.1 = S.plug K₀ (S.cancelOf l H K) →
+    ∀ (c₀ c : S.RConf R) K₀ l H K q, S.RReach R (S.rinit R e) c₀ → S.CancelStart c₀ c K₀ l H K →
       (∀ D ∈ S.fins K, S.FinRow FR D) →
-      S.RPath R c q → S.CancelTrace R FR (S.Region l K) K₀ c (S.fins K) none q
+      S.RPath R c q → S.CancelTrace R FR K₀ c (S.acts K) none q
 
 /-- **S5's unwind, read whole**: as `UnwindOrder`, with every run from the raise an unwind
 trace. -/
@@ -50,8 +48,8 @@ variable {S}
 /-- The whole reading implies S5: a run that is a trace is a prefix of one. -/
 theorem noIntercept_of_whole {FR : S.EA.Lab → Prop} (h : S.NoInterceptWhole FR) :
     S.NoIntercept FR :=
-  fun R hR e ε A hA he c₀ c K₀ l H K q hreach h₀ hps hs hc hfin hq =>
-    ⟨[], by simpa using hq, by simpa using h R hR e ε A hA he c₀ c K₀ l H K q hreach h₀ hps hs hc hfin hq⟩
+  fun R hR e ε A hA he c₀ c K₀ l H K q hreach hst hfin hq =>
+    ⟨[], by simpa using hq, by simpa using h R hR e ε A hA he c₀ c K₀ l H K q hreach hst hfin hq⟩
 
 theorem unwindOrder_of_whole {FR : S.EA.Lab → Prop} (h : S.UnwindOrderWhole FR) :
     S.UnwindOrder FR :=

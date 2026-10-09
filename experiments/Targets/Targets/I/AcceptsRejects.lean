@@ -24,9 +24,9 @@ have no derivation in Core's kernel, at any context and judgement.
 **Tier 1 at `J₁`** follows from A's (E) properties, S4, S5 and S6 at every admissible effect context
 (`tier1_J₁_of_ESU`).  S4 is proved at every effect context (`I.handlerSem_J₁`, the capture cell's
 catch law), so it follows from (E), S5 and S6 (`tier1_J₁_of_ECU`).  S5 is proved at every effect
-context given `CancelsNoCtl` (`I.cancellation_J₁_of`), so it follows from (E), `CancelsNoCtl` and S6
+context given `CancelsNamed` (`I.cancellation_J₁_of`), so it follows from (E), `CancelsNamed` and S6
 (`tier1_J₁_of_ENU`).  (E) fails as written at `J₁` under option A (E7–E9), so tier 1 does
-(`not_tier1_J₁`); `CancelsNoCtl` and S6 are open (`Targets/Status.lean`).  `[Core σ=[]]`
+(`not_tier1_J₁`); `CancelsNamed` and S6 are open (`Targets/Status.lean`).  `[Core σ=[]]`
 -/
 
 noncomputable section
@@ -147,13 +147,13 @@ theorem I.tier1_J₁_of_ECU
     I.Tier1 (ℍ := ℍ) J₁ :=
   I.tier1_J₁_of_ESU hE (fun _ _ => I.handlerSem_J₁) hC hU
 
-/-- **Tier 1 at `J₁`, given A's (E) properties at every admissible effect context, that no cancelled
-continuation's context holds a `ccatch` or a `cfin` frame, and S6**: S4 is proved
-(`I.handlerSem_J₁`), and so is S5 but `CancelsNoCtl` (`I.cancellation_J₁_of`; its unwind outright,
-its handler half a run invariant). -/
+/-- **Tier 1 at `J₁`, given A's (E) properties at every admissible effect context, that every
+cancelled continuation's running finalisers hold kept errors the labels read, and S6**: S4 is proved
+(`I.handlerSem_J₁`), and so is S5 but `CancelsNamed` (`I.cancellation_J₁_of`; its unwind
+outright). -/
 theorem I.tier1_J₁_of_ENU
     (hE : ∀ Ξ, AdmEff Ξ → (ourInst (ℍ := ℍ) orowRF Ξ J₁).EProps)
-    (hN : ∀ Ξ, AdmEff Ξ → Inst.CancelsNoCtl (ℍ := ℍ) orowRF Ξ J₁)
+    (hN : ∀ Ξ, AdmEff Ξ → Inst.CancelsNamed (ℍ := ℍ) orowRF Ξ J₁)
     (hU : ∀ Ξ, AdmEff Ξ → (ourInst (ℍ := ℍ) orowRF Ξ J₁).ContUseEv) :
     I.Tier1 (ℍ := ℍ) J₁ :=
   I.tier1_J₁_of_ECU hE (fun Ξ hΞ => I.cancellation_J₁_of (hN Ξ hΞ)) hU
@@ -161,7 +161,7 @@ theorem I.tier1_J₁_of_ENU
 /-- **Tier 1 at `J₁` FAILS AS WRITTEN**: its A conjunct asks A's (E) properties at every admissible
 effect context, and E7, E8 and E9 fail at `J₁` at every effect context under option A
 (`Inst.not_eProps_J₁`).  S4 holds at every effect context (`I.handlerSem_J₁`), and S5 given
-`CancelsNoCtl` (`I.cancellation_J₁_of`). -/
+`CancelsNamed` (`I.cancellation_J₁_of`). -/
 theorem I.not_tier1_J₁ : ¬ I.Tier1 (ℍ := ℍ) J₁ := fun h =>
   Inst.not_eProps_J₁ (h.1 Inst.ΞA Inst.admEff_ΞA).2
 

@@ -51,6 +51,19 @@ inductive Ev (Lab Val Term : Type)
   | io (l : Lab) (i : ℕ) (v w : Val)
   | top
 
+/-- What a cancel meets at a frame of the region it tears down: a finaliser, which it fires; or a
+running finaliser of an earlier cancel, whose continuation is the one being cancelled (a finaliser
+performed an operation and its handler cancels it), holding the error that earlier cancel has kept
+so far. -/
+inductive Act (Lab Val Term : Type)
+  | fire (D : Term)
+  | pend (e : Option (Lab × ℕ × Val))
+
+/-- The finaliser a cancel fires at an action, if it fires one. -/
+def Act.fire? {Lab Val Term : Type} : Act Lab Val Term → Option Term
+  | .fire D => some D
+  | .pend _ => none
+
 /-- **An effect system**: any calculus with effects, read as call-by-push-value with an effect
 index. -/
 structure EffectSystem where
@@ -128,6 +141,9 @@ structure EffectSystem where
   unwindClear : Kont → Prop
   /-- Its finalisers, innermost first. -/
   fins    : Kont → List Term
+  /-- What a cancel meets at its frames, innermost first: its finalisers, and the running
+  finalisers of earlier cancels with the errors those cancels have kept. -/
+  acts    : Kont → List (Act EA.Lab Val Term)
   /-- `κ`, handed to the clause of a caught operation. -/
   capture : EA.Lab → Hnd → Kont → Val
   /-- The start of `κ`'s cancel run. -/

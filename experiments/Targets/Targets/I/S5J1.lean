@@ -23,10 +23,12 @@ nothing.  It reads every run from the start of a cancel or an unwind as a prefix
 * **S5's unwind**: PROVED at `J₁` (`unwindOrder_J₁`) and at today's kernel
   (`cancellation_tier1Open`), at every effect context.
 * **S5's no-interception**: PROVED at `J₁` (`noIntercept_J₁_of`) and at today's kernel, given that
-  a cancelled continuation's context holds no `ccatch` and no `cfin` frame (`CancelsNoCtl`, OPEN:
-  a whole-run fact about fired finalisers).  The cancel runs the dead region `K†`, which holds no
-  handler, so `CancelsStd`'s other half, no handler named `0` in that context, is not read; it is a
-  run invariant (`cancelsNZ_J₁`, `Targets/I/CancelsNZ.lean`).
+  a cancelled continuation's running finalisers hold kept errors the labels read (`CancelsNamed`:
+  every `cfin` frame of the region holds none or a raise of a label's name; a whole-run fact about
+  the names finalisers raise).  The cancel runs the dead region `K†`, which holds no handler and no
+  `ccatch` frame, so the cancel trace passes a running finaliser's `cfin` frame by `[cfin-cancel]`
+  (`pend`), and reads no handler name; no handler named `0` is a run invariant read by nothing here
+  (`cancelsNZ_J₁`, `Targets/I/CancelsNZ.lean`).
 * **The extension a run needs is the β-step after a fire** (`Inst.unwind_pfx`, `Inst.cancel_pfx`,
   `Inst.FireExt`): a run is a trace as it is, or, when it stops right after a fire step, once the
   β-step that starts the finaliser is taken.
@@ -133,23 +135,23 @@ theorem unwindOrder_J₁ :
     (ourInst (ℍ := ℍ) orowRF Ξ J₁).UnwindOrder (ourInst (ℍ := ℍ) orowRF Ξ J₁).noFinRaise :=
   Inst.unwindOrder_of_core liveOK_J₁ name_ne_zero_orow (fun _ h _ hμ => finOK_J₁ h hμ)
 
-/-- **S5's no-interception at `J₁`**, at every effect context, given that no cancelled
-continuation's context holds a `ccatch` or a `cfin` frame. -/
-theorem noIntercept_J₁_of (hN : Inst.CancelsNoCtl (ℍ := ℍ) orowRF Ξ J₁) :
+/-- **S5's no-interception at `J₁`**, at every effect context, given that every cancelled
+continuation's running finalisers hold kept errors the labels read. -/
+theorem noIntercept_J₁_of (hN : Inst.CancelsNamed (ℍ := ℍ) orowRF Ξ J₁) :
     (ourInst (ℍ := ℍ) orowRF Ξ J₁).NoIntercept (ourInst (ℍ := ℍ) orowRF Ξ J₁).noFinRaise :=
   Inst.noIntercept_of_core liveOK_J₁ (fun _ h _ hμ => finOK_J₁ h hμ) hN
 
-/-- **S5 at `J₁`**, at every effect context, given `CancelsNoCtl`. -/
-theorem cancellation_J₁_of (hN : Inst.CancelsNoCtl (ℍ := ℍ) orowRF Ξ J₁) :
+/-- **S5 at `J₁`**, at every effect context, given `CancelsNamed`. -/
+theorem cancellation_J₁_of (hN : Inst.CancelsNamed (ℍ := ℍ) orowRF Ξ J₁) :
     (ourInst (ℍ := ℍ) orowRF Ξ J₁).Cancellation (ourInst (ℍ := ℍ) orowRF Ξ J₁).noFinRaise :=
   ⟨noIntercept_J₁_of hN, unwindOrder_J₁⟩
 
 /-- **S5 at today's kernel**: the unwind at every effect context, the no-interception given
-`CancelsNoCtl`. -/
+`CancelsNamed`. -/
 theorem cancellation_tier1Open :
     (ourInst (ℍ := ℍ) orowRF Ξ Inst.tier1Open).UnwindOrder
         (ourInst (ℍ := ℍ) orowRF Ξ Inst.tier1Open).noFinRaise ∧
-      (Inst.CancelsNoCtl (ℍ := ℍ) orowRF Ξ Inst.tier1Open →
+      (Inst.CancelsNamed (ℍ := ℍ) orowRF Ξ Inst.tier1Open →
         (ourInst (ℍ := ℍ) orowRF Ξ Inst.tier1Open).NoIntercept
           (ourInst (ℍ := ℍ) orowRF Ξ Inst.tier1Open).noFinRaise) :=
   have hF : ∀ D, (ourInst (ℍ := ℍ) orowRF Ξ Inst.tier1Open).FinRow

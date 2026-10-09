@@ -39,8 +39,10 @@ def ConfLaws : Prop :=
 
 /-- Plugging composes.  The five named frames plug as their formers.  A handler frame of `l`
 catches `l` and nothing else, a finaliser frame stops a raise and holds its finaliser, the driver
-catches nothing and stops nothing, and `catches`, `unwindClear` and `fins` are computed frame by
-frame.  Forwarding is structural.  The instance's other frames are its own. -/
+catches nothing and stops nothing, and `catches`, `unwindClear`, `fins` and `acts` are computed
+frame by frame; the finalisers a cancel fires are the context's finalisers, and a context no frame
+of which stops a raise holds no action.  Forwarding is structural.  The instance's other frames
+are its own. -/
 def KontLaws : Prop :=
   (∀ t, S.plug S.hole t = t) ∧
   (∀ K₁ K₂ t, S.plug (S.kcomp K₁ K₂) t = S.plug K₁ (S.plug K₂ t)) ∧
@@ -61,7 +63,13 @@ def KontLaws : Prop :=
   (∀ l H, S.fins (S.handleF l H) = []) ∧ (∀ N D, S.fins (S.thenF N D) = [D]) ∧
   S.fins S.driveF = [] ∧
   (∀ K₁ K₂, S.fins (S.kcomp K₁ K₂) = S.fins K₂ ++ S.fins K₁) ∧
-  (∀ K, S.unwindClear K → S.fins K = [])
+  (∀ K, S.unwindClear K → S.fins K = []) ∧
+  S.acts S.hole = [] ∧ (∀ N, S.acts (S.bindF N) = []) ∧ (∀ V, S.acts (S.appF V) = []) ∧
+  (∀ l H, S.acts (S.handleF l H) = []) ∧ (∀ N D, S.acts (S.thenF N D) = [.fire D]) ∧
+  S.acts S.driveF = [] ∧
+  (∀ K₁ K₂, S.acts (S.kcomp K₁ K₂) = S.acts K₂ ++ S.acts K₁) ∧
+  (∀ K, S.unwindClear K → S.acts K = []) ∧
+  (∀ K, (S.acts K).filterMap Act.fire? = S.fins K)
 
 /-- `c` arises from a typed closed program, under a runner that keeps its protocol.  The laws that
 assert a step (`AppLaw`, `LoopLaws`, `DriveLaws`, and S4's `HandlerSem`) are about such

@@ -20,7 +20,7 @@ each signature the (E) programs use).
 | `unfold A B f g s` | `unfoldV (loopEffBody [] A B)` at the coalgebra `λs. ⟨f s, g s⟩` and the state, stepped to its loop value `etaN` (`unfoldV`'s code is type-directed, so `unfold` carries the answer types); `next` is `nextE`, `close l` is `l (inj₂ ())` |
 | `drive M`, `driveF` | the context `drive □`, a frame Core never steps (an applied literal); the driver's steps are `top` steps at the whole term (`RStep.again`, and the return to the main program at `inj₁ a`) |
 | `Kont`, `plug`, `kcomp`, frames | Core's `Kont`, `Kont.plug`, `Kont.comp`; `bindF N` is `□ to x. N`, `appF V` is `□ V`, `handleF` the handler frame, `thenF` the `ubind` frame |
-| `catches`, `unwindClear`, `fins` | `Kont.HasHnd`; no `ubind` and no `cfin` frame; `Kont.fins`, each read as an A-term |
+| `catches`, `unwindClear`, `fins`, `acts` | `Kont.HasHnd`; no `ubind` and no `cfin` frame; `Kont.fins`, each read as an A-term; `kActs`: `fire` at a `ubind` frame, `pend` at a running finaliser's `cfin` frame with its kept error read at the labels |
 | `capture`, `cancelOf` | `kappa`, `cancelOf` (base): the continuation of an unrestricted operation; at a linear or affine one the catch hands `kappaC` at a fresh cell (SPEC §25) |
 | `Cell`, `captureAt`, `cellFree`, `withCell` | locations; `kappaC` at the location, affine at an affine class (SPEC §25); the memory holds nothing at the location; the memory with `()` at the location |
 | `step` | `Step1` under every allocator, labelled `fire D` at `ufin`/`ufinC`, `finEnd` at `cfret`/`cferr`, `tau` otherwise; and the driver's `top` steps |
@@ -265,6 +265,24 @@ def keptErrOf : Option Val → Option ((RF.alg Ξ).Lab × ℕ × OVal)
     else none
 
 open Classical in
+/-- The error a running finaliser's `cfin` frame holds, read at the labels: the frame's state is a
+cancel's `cancelVal err`. -/
+def cfinErrOf (st : Expr) : Option ((RF.alg Ξ).Lab × ℕ × OVal) :=
+  if h : ∃ err, st = (cancelVal err).1 then keptErrOf RF Ξ (Classical.choose h) else none
+
+/-- **What a cancel meets at `K`'s frames**, innermost first: the finaliser of a `[then]` frame
+`ubind (N, D)` (read as an A-term), and a running finaliser's `cfin` frame with the error its
+cancel has kept.  In `.appR f K` the frame `f` is outside `K`. -/
+def kActs : Kont → List (A.Act (RF.alg Ξ).Lab OVal Expr)
+  | .hole => []
+  | .appR f K => kActs K ++ (match f with
+      | .app (.prim .ubind) (.pair _ D) => [.fire (finE D)]
+      | .app (.prim .cfin) st => [.pend (cfinErrOf RF Ξ st)]
+      | _ => [])
+  | .pairL K _ | .pairR _ K | .letpair K _ | .case K _ _ | .appL K _ | .seq K _ | .inj₁ K
+  | .inj₂ K => kActs K
+
+open Classical in
 /-- **The label of a head step**: `fire D` at a `ubind` frame stopped by a raise (`[finalise]`,
 `[finalise-cancel]`), `finEnd` at a `cfin` frame whose finaliser returned, raised, or was passed by
 a nested cancel (`[cfin-ret]`, `[cfin-raise]`, `[cfin-cancel]`: the nested cancel's kept error),
@@ -373,6 +391,7 @@ def ourInst (RF : RowForm) (Ξ : EffCtx) (J : OurTyping RF) : A.EffectSystem whe
   catches K l := K.HasHnd (RF.name Ξ l)
   unwindClear K := K.NoUnwind
   fins K := K.fins.map finE
+  acts := kActs RF Ξ
   capture l H K := ⟨captureE (RF.name Ξ l) (qsOf Ξ (RF.name Ξ l)) H.1.1 (H.2.map Subtype.val) K, by
     unfold captureE; split
     · unfold kappa; exact .lam

@@ -102,6 +102,50 @@ theorem fins_map_of_noUnwind (K : Kont) (h : K.NoUnwind) : List.map finE K.fins 
 theorem appK_fins_map (V : Expr) : List.map finE (appK V).fins = [] := by
   rw [appK_fins]; rfl
 
+/-! ### What a cancel meets at a context's frames -/
+
+theorem kActs_comp : ∀ (K₁ K₂ : Kont), kActs RF Ξ (K₁.comp K₂) = kActs RF Ξ K₂ ++ kActs RF Ξ K₁
+  | .hole, _ => by simp [Kont.comp, kActs]
+  | .appR f K, K₂ => by simp only [Kont.comp, kActs, kActs_comp K K₂, List.append_assoc]
+  | .pairL K _, K₂ | .pairR _ K, K₂ | .letpair K _, K₂ | .case K _ _, K₂ | .appL K _, K₂
+  | .seq K _, K₂ | .inj₁ K, K₂ | .inj₂ K, K₂ => by simp only [Kont.comp, kActs, kActs_comp K K₂]
+
+theorem kActs_of_noUnwind : ∀ (K : Kont), K.NoUnwind → kActs RF Ξ K = []
+  | .hole, _ => rfl
+  | .appR f K, h => by
+      obtain ⟨hu, hc, hK⟩ := h
+      simp only [kActs, kActs_of_noUnwind K hK, List.nil_append]
+      split
+      · exact absurd rfl (hu _)
+      · exact absurd rfl (hc _)
+      · rfl
+  | .pairL K _, h | .pairR _ K, h | .letpair K _, h | .case K _ _, h | .appL K _, h
+  | .seq K _, h | .inj₁ K, h | .inj₂ K, h => kActs_of_noUnwind K h
+
+theorem appK_kActs (V : Expr) : kActs RF Ξ (appK V) = [] := by
+  unfold appK; split <;> rfl
+
+theorem thenK_kActs (N D : Expr) : kActs RF Ξ (thenK N D) = [.fire D] := by
+  simp only [thenK, kActs, List.nil_append]
+  rw [finE_shift]
+
+/-- **The finalisers a cancel fires are the context's.** -/
+theorem fire_kActs : ∀ (K : Kont), (kActs RF Ξ K).filterMap A.Act.fire? = K.fins.map finE
+  | .hole => rfl
+  | .appR f K => by
+      simp only [kActs, Kont.fins, List.filterMap_append, List.map_append, fire_kActs K]
+      congr 1
+      split
+      · simp [A.Act.fire?]
+      · split
+        · simp_all
+        · simp [A.Act.fire?]
+      · split
+        · simp_all
+        · rfl
+  | .pairL K _ | .pairR _ K | .letpair K _ | .case K _ _ | .appL K _ | .seq K _ | .inj₁ K
+  | .inj₂ K => by simp only [kActs, Kont.fins, fire_kActs K]
+
 /-- **The context laws**, when the row form tells names apart. -/
 theorem kontLaws_ourInst (hinj : Function.Injective (RF.name Ξ)) :
     (ourInst (ℍ := ℍ) RF Ξ J).KontLaws :=
@@ -112,7 +156,9 @@ theorem kontLaws_ourInst (hinj : Function.Injective (RF.name Ξ)) :
     fun V => appK_noUnwind V.1, fun _ _ => handleK_noUnwind _ _ _ _, fun N D => thenK_not_noUnwind N D,
     driveK_noUnwind, fun K₁ K₂ => noUnwind_comp K₁ K₂, rfl, fun _ => rfl, fun V => appK_fins_map V.1,
     fun _ _ => rfl, fun N D => thenK_fins N D, rfl, fun K₁ K₂ => fins_map_comp K₁ K₂,
-    fun K h => fins_map_of_noUnwind K h⟩
+    fun K h => fins_map_of_noUnwind K h, rfl, fun _ => rfl, fun V => appK_kActs V.1, fun _ _ => rfl,
+    fun N D => thenK_kActs N D, rfl, fun K₁ K₂ => kActs_comp K₁ K₂,
+    fun K h => kActs_of_noUnwind K h, fun K => fire_kActs K⟩
 
 theorem labelOf_ne_io (a : Expr) (l : (RF.alg Ξ).Lab) (i : ℕ) (v w : OVal) :
     labelOf RF Ξ a ≠ .io l i v w := by

@@ -331,6 +331,7 @@ def toy (hd : Bool → Bool) (bd : Bool → Bool → Bool) : EffectSystem where
   catches := fun _ _ => false
   unwindClear := fun _ => True
   fins := fun _ => []
+  acts := fun _ => []
   capture := fun _ _ _ => ()
   cancelOf := fun _ _ _ => false
   Cell := Empty

@@ -30,20 +30,23 @@ nothing meets every one; the lower bounds are the (E) properties (`Targets/A/Exp
   otherwise store-keeping (`JoinAcross`).  A continuation with no cell is `capture l H K`, a value
   computed from the handler and the context.  `HandlerSemNoCell` is S4 with no cell, every
   continuation `capture l H K`; at an instance with no cells the two agree (`handlerSem_iff_noCell`).
-* **S5** (`Cancellation FR`): SPEC §19 as built (decision 62): a cancel is not interceptable, fires
-  the frozen finalisers innermost first, keeps the first error outside the region, suppresses the
-  region's own, and re-raises the kept error at the canceller; an unwind fires each finaliser in
-  place, a finaliser's raise superseding the pending one.  Its set of endings is parameterised by
-  `FR`, the labels whose raises a finaliser may let escape (decision D3); the target reads it at
-  `noFinRaise`, option A, where a finaliser handles its raises itself.  Each statement carries the
-  no-interception condition explicitly (decision D4, `FinRow`): the finalisers that fire are closed
-  computations typed at a row of abortive operations of `FR`'s labels.  Each reads a run
-  prefix-closed, as a safety property is read (Alpern–Schneider): every run from the start is a
-  prefix of a trace, that is, some continuation of it, itself a run, follows the trace.  So a run
-  may stop anywhere, inside a fire step's administrative steps (the steps that start the fired
-  finaliser, at our instance the β-step of `D ()`) among other places, and every step it takes is a
-  trace's.  Ahman–Bauer Thm 7 and Voigt–Schuster–Brachthäuser Thm 3.6 are possible proof routes,
-  not the statements' shape.
+* **S5** (`Cancellation FR`): SPEC §19 as built (decision 62, with the frame deadness of decision
+  D1 of 2026-10-08): a cancel is not interceptable, since the region's handler frames are dead; it
+  fires the frozen finalisers innermost first, passes the running finaliser of an earlier cancel
+  whose continuation it cancels (a finaliser performed an operation and its handler cancels it),
+  keeps the first error, the earlier cancel's first, and re-raises the kept error at the canceller;
+  an unwind fires each finaliser in place, a finaliser's raise superseding the pending one.  A
+  cancel's start is a cancel of `capture l H K` or of an affine continuation at its cell
+  (`CancelStart`).  Its set of endings is parameterised by `FR`, the labels whose raises a
+  finaliser may let escape (decision D3); the target reads it at `noFinRaise`, option A, where a
+  finaliser handles its raises itself.  Each statement carries the no-interception condition
+  explicitly (decision D4, `FinRow`): the finalisers that fire are closed computations typed at a
+  row of abortive operations of `FR`'s labels.  Each reads a run prefix-closed, as a safety property
+  is read (Alpern–Schneider): every run from the start is a prefix of a trace, that is, some
+  continuation of it, itself a run, follows the trace.  So a run may stop anywhere, inside a fire
+  step's administrative steps (the steps that start the fired finaliser, at our instance the β-step
+  of `D ()`) among other places, and every step it takes is a trace's.  Ahman–Bauer Thm 7 and
+  Voigt–Schuster–Brachthäuser Thm 3.6 are possible proof routes, not the statements' shape.
 * **S6** (`ContUseEv`): Tang et al. Thm 3.6 ("tagged linear values are not duplicated or discarded
   during evaluation"); Affect ("continuations corresponding to one-shot effects are resumed at most
   once").  A use of a continuation is a step that applies it to a data value (decision D4: a
@@ -263,16 +266,16 @@ def FinEnd (FR : S.EA.Lab → Prop) : Option (S.EA.Lab × ℕ × S.Val) → Prop
 /-- An error a cancel keeps: a raise's label, operation and argument. -/
 abbrev Err : Type := Option (S.EA.Lab × ℕ × S.Val)
 
-open Classical in
-/-- [cfin-raise]: "err′ = err if err ≠ none; none if m ∈ N; (m, v) otherwise". -/
-noncomputable def keep (N : S.EA.Lab → Prop) : S.Err → S.Err → S.Err
+/-- [cfin-raise], [cfin-cancel]: the first error is kept (SPEC §19, *Cancels*; first-wins is the
+policy, decision D1 of 2026-10-08).  No error is dropped because of its label: the region's
+handler frames are dead, so a kept error is raised at the canceller and meets the nearest live
+handler of its label. -/
+def keep : S.Err → S.Err → S.Err
   | some e, _ => some e
-  | none, none => none
-  | none, some (m, j, w) => if N m then none else some (m, j, w)
+  | none, r => r
 
-/-- The region a cancel of `capture l H K` tears down: `l` and every label a handler frame of `K`
-catches. -/
-def Region (l : S.EA.Lab) (K : S.Kont) (m : S.EA.Lab) : Prop := m = l ∨ S.catches K m = true
+/-- An action of a cancel at our signature: `fire D` or `pend e`. -/
+abbrev SAct : Type := Act S.EA.Lab S.Val S.Term
 
 /-- The canceller is answered ([cancel], [cancel-raise]): `()`, or the kept error raised at it. -/
 def Answered (K₀ : S.Kont) : S.Err → S.Term → Prop
@@ -296,49 +299,65 @@ def Ended {R : S.Runner} (Kf : S.Kont) (c : S.RConf R) : S.Err → Prop
       S.catches K m = false ∧ S.unwindClear K
 
 mutual
-/-- **A cancel trace**: `fs` are the frozen finalisers not yet fired, and `err` is the error kept
-so far.  Each finaliser fires, innermost first: the fire step, the administrative steps that start
-the finaliser (`q₀`), then its run alone to an end `FR` allows, which updates the kept error.  Last,
-the canceller is answered, and after the answer anything may follow.  A trace stops before a fire
-step or the answer (`stop`) and while a finaliser runs alone (`FinTrace.running`); S5 reads a run
-as a prefix of a trace (`NoIntercept`), so a run may stop anywhere. -/
-inductive CancelTrace (R : S.Runner) (FR N : S.EA.Lab → Prop) (K₀ : S.Kont) :
-    S.RConf R → List S.Term → S.Err → List (S.Event × S.RConf R) → Prop
-  | stop {c : S.RConf R} {fs : List S.Term} {err : S.Err} : CancelTrace R FR N K₀ c fs err []
+/-- **A cancel trace**: `as` are the actions of the region not yet taken, innermost first, and
+`err` is the error kept so far.  At a finaliser the cancel fires it: the fire step, the
+administrative steps that start the finaliser (`q₀`), then its run alone to an end `FR` allows,
+which updates the kept error.  At a running finaliser of an earlier cancel (`pend e`) the cancel
+passes it in one step, which ends that finaliser with the error kept so far, and the earlier
+cancel's error `e` comes first.  Last, the canceller is answered, and after the answer anything may
+follow.  A trace stops before an action or the answer (`stop`) and while a finaliser runs alone
+(`FinTrace.running`); S5 reads a run as a prefix of a trace (`NoIntercept`), so a run may stop
+anywhere. -/
+inductive CancelTrace (R : S.Runner) (FR : S.EA.Lab → Prop) (K₀ : S.Kont) :
+    S.RConf R → List S.SAct → S.Err → List (S.Event × S.RConf R) → Prop
+  | stop {c : S.RConf R} {as : List S.SAct} {err : S.Err} : CancelTrace R FR K₀ c as err []
   | answer {c c' : S.RConf R} {err : S.Err} {q : List (S.Event × S.RConf R)} :
       S.RStep R c .tau c' → S.Answered K₀ err (S.term c'.1) →
-      CancelTrace R FR N K₀ c [] err ((.tau, c') :: q)
-  | fire {c c₁ c₂ : S.RConf R} {D : S.Term} {fs : List S.Term} {err : S.Err} {Kf : S.Kont}
+      CancelTrace R FR K₀ c [] err ((.tau, c') :: q)
+  | fire {c c₁ c₂ : S.RConf R} {D : S.Term} {as : List S.SAct} {err : S.Err} {Kf : S.Kont}
       {q₀ q : List (S.Event × S.RConf R)} :
       S.RStep R c (.fire D) c₁ → S.PurePath R c₁ q₀ c₂ → S.term c₂.1 = S.plug Kf D →
-      FinTrace R FR N K₀ Kf c₂ fs err q →
-      CancelTrace R FR N K₀ c (D :: fs) err ((.fire D, c₁) :: q₀ ++ q)
+      FinTrace R FR K₀ Kf c₂ as err q →
+      CancelTrace R FR K₀ c (.fire D :: as) err ((.fire D, c₁) :: q₀ ++ q)
+  | pend {c c' : S.RConf R} {e : S.Err} {as : List S.SAct} {err : S.Err}
+      {q : List (S.Event × S.RConf R)} :
+      S.RStep R c (.finEnd err) c' → CancelTrace R FR K₀ c' as (S.keep e err) q →
+      CancelTrace R FR K₀ c (.pend e :: as) err ((.finEnd err, c') :: q)
 /-- A cancel trace while a finaliser runs alone in `Kf`. -/
-inductive FinTrace (R : S.Runner) (FR N : S.EA.Lab → Prop) (K₀ : S.Kont) :
-    S.Kont → S.RConf R → List S.Term → S.Err → List (S.Event × S.RConf R) → Prop
-  | running {Kf : S.Kont} {c : S.RConf R} {fs : List S.Term} {err : S.Err}
+inductive FinTrace (R : S.Runner) (FR : S.EA.Lab → Prop) (K₀ : S.Kont) :
+    S.Kont → S.RConf R → List S.SAct → S.Err → List (S.Event × S.RConf R) → Prop
+  | running {Kf : S.Kont} {c : S.RConf R} {as : List S.SAct} {err : S.Err}
       {q : List (S.Event × S.RConf R)} {c' : S.RConf R} :
-      S.Alone R Kf c q c' → FinTrace R FR N K₀ Kf c fs err q
-  | ended {Kf : S.Kont} {c : S.RConf R} {fs : List S.Term} {err : S.Err}
+      S.Alone R Kf c q c' → FinTrace R FR K₀ Kf c as err q
+  | ended {Kf : S.Kont} {c : S.RConf R} {as : List S.SAct} {err : S.Err}
       {q : List (S.Event × S.RConf R)} {c' : S.RConf R} {r : S.Err} {c'' : S.RConf R}
       {q' : List (S.Event × S.RConf R)} :
       S.Alone R Kf c q c' → S.Ended Kf c' r → S.FinEnd FR r →
-      S.RStep R c' (.finEnd r) c'' → CancelTrace R FR N K₀ c'' fs (S.keep N err r) q' →
-      FinTrace R FR N K₀ Kf c fs err (q ++ (.finEnd r, c'') :: q')
+      S.RStep R c' (.finEnd r) c'' → CancelTrace R FR K₀ c'' as (S.keep err r) q' →
+      FinTrace R FR K₀ Kf c as err (q ++ (.finEnd r, c'') :: q')
 end
 
+/-- **The start of a cancel**: `c₀` cancels the continuation captured at `K` under the handler
+`H` of `l`, and `c` holds the start of its cancel run in the canceller's context `K₀`, reached from
+`c₀` keeping the runner's state — by steps that keep the store from a cancel of `capture l H K`, or
+by steps of the machine (the release of the cell among them) from a cancel of an affine
+continuation at its cell. -/
+def CancelStart {R : S.Runner} (c₀ c : S.RConf R) (K₀ : S.Kont) (l : S.EA.Lab) (H : S.Hnd)
+    (K : S.Kont) : Prop :=
+  ((S.term c₀.1 = S.plug K₀ (S.cancel (S.capture l H K)) ∧ S.PureSteps c₀.1 c.1) ∨
+    ∃ ℓ, S.term c₀.1 = S.plug K₀ (S.cancel (S.captureAt .affine l H K ℓ)) ∧ S.Reach c₀.1 c.1) ∧
+  c.2 = c₀.2 ∧ S.term c.1 = S.plug K₀ (S.cancelOf l H K)
+
 /-- **Not interceptable, in order, with the error policy**: every run of a typed program from the
-start of a cancel of `capture l H K`, whose finalisers meet the no-interception condition, is a
-prefix of a cancel trace of `fins K` with nothing kept: some continuation of it, itself a run,
-follows the trace. -/
+start of a cancel, whose finalisers meet the no-interception condition, is a prefix of a cancel
+trace of the region's actions with nothing kept: some continuation of it, itself a run, follows the
+trace. -/
 def NoIntercept (FR : S.EA.Lab → Prop) : Prop :=
   ∀ R : S.Runner, R.Respects → ∀ e ε A, S.Answers R ε → S.der [] e (S.F ε A) →
-    ∀ (c₀ c : S.RConf R) K₀ l H K q, S.RReach R (S.rinit R e) c₀ →
-      S.term c₀.1 = S.plug K₀ (S.cancel (S.capture l H K)) →
-      S.PureSteps c₀.1 c.1 → c.2 = c₀.2 → S.term c.1 = S.plug K₀ (S.cancelOf l H K) →
+    ∀ (c₀ c : S.RConf R) K₀ l H K q, S.RReach R (S.rinit R e) c₀ → S.CancelStart c₀ c K₀ l H K →
       (∀ D ∈ S.fins K, S.FinRow FR D) →
       S.RPath R c q → ∃ q', S.RPath R c (q ++ q') ∧
-        S.CancelTrace R FR (S.Region l K) K₀ c (S.fins K) none (q ++ q')
+        S.CancelTrace R FR K₀ c (S.acts K) none (q ++ q')
 
 /-- The frames of `K` that stop a raise are handler frames and finaliser frames. -/
 inductive Std : S.Kont → Prop
