@@ -38,6 +38,16 @@ restate a target to match them, or report that one does not hold. It may not cha
   only inside the region is a **type error**. Not a runtime seal, not a stuck state. Every
   finaliser runs, so the teardown completes. Which of several finaliser errors wins is a policy,
   not part of the algebra.
+- **Deadness is a property of handler frames, not names** (2026-10-08). A cancel kills the
+  cancelled region's frames; a dead frame catches nothing — no raise, no operation — so a
+  finaliser's effects (raises and ordinary operations alike) reach the nearest *live* instance,
+  even when a re-entered site has a dead instance of the same name inside the region. The machine
+  never silently drops a finaliser's error; typing guarantees a live handler exists. This replaces
+  SPEC §19's by-name suppression (`N`, `errNext`'s middle case) and the lowering's cancel mask.
+- **Finalisers may perform ordinary operations** of live handlers, not only raise (2026-10-08).
+- **Algebraicity is observed with kept errors' values**; where `unr` continuations get in the way,
+  the law is proved at contexts with no `unr` operation (as E5 and E2d), never by observing less
+  (2026-10-08).
 - **Safety means every operation that is performed or raised has a live handler**. A stuck state
   or a silently dropped error is never a semantics.
 - **Effect handling is erased**: tail-resumptive → call, abortive → branch, suspension → state
