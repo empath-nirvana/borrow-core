@@ -1332,6 +1332,15 @@ run_meta do
 #print axioms Targets.Rej.lam_arr
 #print axioms Targets.Rej.not_der_progT
 #print axioms Targets.Rej.not_der_progT_ret
+#print axioms Targets.Rej.cancelPair_jr
+#print axioms Targets.Rej.cancelTy_rowLe
+#print axioms Targets.Rej.FindsAt.mono
+#print axioms Targets.Rej.FindsCap.mono
+#print axioms Targets.Rej.FindsRec.mono
+#print axioms Targets.Rej.thenLe_findsCap
+#print axioms Targets.Rej.thenLe_findsRec
+#print axioms Targets.Rej.not_der_progNCrecT
+#print axioms Targets.Rej.progNCrecT_stuck
 #print axioms Targets.Rej.varCls_of_le
 #print axioms Targets.Rej.vview_bang_thunk_unit
 #print axioms Targets.Rej.not_der_load

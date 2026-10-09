@@ -3993,6 +3993,19 @@ one β-step longer at each use of `κ`:
   clause); its run ends at a raise of `2` that no handler catches (`progT_run`).
 - **`progOutT`**: `progT` under a live handler of `2`, typed at `F (1 ⊕ 1)` (`d_progOutT`); its run
   reaches `inj₂ ()` (`progOutT_run`).
+- **`cancelKeptT`** and **`progReT`**: the kept raise of `3` caught by a live `3` outside the
+  region, the region re-entering the site `3` in `progReT` (`f ()` at `{1}`); cancel row `{3}`.
+- **`progFinOpT`** and **`progNC₁T`**: the finaliser performs `4`, whose live instance at the
+  cancel is the outer handler, which resumes it, or cancels its continuation (`[cfin-cancel]`);
+  cancel row `{4}`.
+- **`progDropT`** and **`progKeepT`**: a finaliser raises `2`, kept, and a later finaliser performs
+  `4` with `2` pending: cancel row `{2, 4⟨{2}⟩}` (`pend`). `H₄ₒ`'s unrestricted clause drops the
+  continuation, and the kept error with it (`inj₁ ()`, *Open*), or resumes it (`inj₂ ()`).
+- **`progNCrecT`** (the leftover clause): two finalisers perform `4` under the handler of `4` that
+  cancels. The second is a leftover of the first one's cancel, so `⋈` puts `4` in the cancel row of
+  the `4` in the cancel row of `1`, which the cancelling handler's clause row, its own outer row,
+  cannot hold: no derivation (`not_der_progNCrecT`). Its run ends at a `perform 4` no handler
+  catches (`progNCrecT_run`, `progNCrecT_stuck`).
 
 ### Lowering
 
