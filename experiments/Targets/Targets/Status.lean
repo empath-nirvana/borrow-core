@@ -32,6 +32,7 @@ import Targets.Instance.E10
 import Targets.I.S5J1
 import Targets.I.AcceptsRejects
 import Targets.I.AlgJ1
+import Targets.Instance.CancelWitness
 
 /-!
 # Targets — status, by system (RESTRUCTURE §0)
@@ -308,11 +309,11 @@ with its β-step.
 * **Not weakened beyond the β-step.**  Every step a run takes is a trace's step; only where it may
   stop changes.  At our machine the extension a run needs is nothing, or the one step after a fire
   step that ends it, the β-step that starts the finaliser (`FireExt`; `unwind_pfx`, `cancel_pfx`).
-* **Teeth: OPEN.**  At `J₄`, whose program meets `NoInterception`, the cancelled region's
-  finaliser performs the operation of the handler whose continuation is cancelled; the cancel runs
-  the region dead, so that operation meets no handler, the run stops there, and the run is a cancel
-  trace at every set of endings (`status_finAlone_dead`).  Teeth for `FinRow` need a finaliser whose
-  raise escapes to a live handler, which today's kernel does not type (option A).
+* **Teeth: PROVED** (M3, below; `finRow_teeth_J₁`): `e7b`'s finaliser raises to a live handler,
+  which `J₁` types under SPEC §27, and its cancel's run is a prefix of no trace at `noFinRaise`.  At
+  `J₄` the cancelled region's finaliser performs the operation of the handler whose continuation is
+  cancelled; that handler is dead, the run stops there, and the run is a cancel trace at every set
+  of endings (`status_finAlone_dead`).
 * **At `J₁` and today's kernel, at every effect context** (`status_cancellation_J₁`): the unwind
   PROVED (`unwindOrder_J₁`, `cancellation_tier1Open`); the no-interception, as restated under frame
   deadness (M3, below), PROVED given `CancelsNamed` (`noIntercept_J₁_of`).  No handler named `0` in
@@ -440,6 +441,28 @@ finaliser's continuation: a cancel nested in a cancel, whose region holds the ru
   machine raises only those, the cancel's `0`, and kept errors.  A run invariant of `hndNZ_reach`'s
   kind.
 * **`CancelsNoCtl`** is read by nothing: the restated trace passes a `cfin` frame.
+* **A trace's administrative steps show nothing** (`PurePath`, RESTATED, a strengthening): the
+  steps that start a fired finaliser, and those after a finaliser returns in an unwind, are
+  store-keeping `tau` steps.  Read with any label, a step that shows a finaliser's end could be
+  taken as one of them, and a run whose finaliser let a raise escape followed a trace at
+  `noFinRaise` whenever the escaped raise later stood where the finaliser had (`e7b`'s run does).
+* **Witnesses at `J₁`** (`Targets/Instance/CancelWitness.lean`; `status_finEffects_J₁`), at every
+  effect context declaring `exn` at `1` and `wait` at `2` and `8`, `ΞA` among them.  `J₁`'s kernel
+  takes §27's `[then]` (below), so `e7b` (A's E7b) and `ncAff` (a `timeout` of `wait₂` around a
+  `timeout` of `wait₁` whose body's finaliser performs `wait₂`) are typed with their cancel rows
+  (`d_e7b`, `d_ncAff`), and their runs are computed (`runM`):
+  - **a cancel nested in a cancel arises, and the trace passes it** (`ncAff_pend_J₁`): the cancel
+    of `wait₂`'s affine continuation at its cell starts at a region of no finaliser and one running
+    finaliser of the cancel of `wait₁` (`acts = [pend none]`); from there `[cfin-cancel]` then
+    `[cancel]` is a cancel trace that takes `pend`, and no trace that reads the region by its
+    finalisers alone (the trace before this restatement) follows it.  So `pend` is needed at every
+    admissible context;
+  - **the no-interception condition has teeth** (`finRow_teeth_J₁`): `e7b`'s cancel fires
+    `raise exn ()`, which meets `FinRow` at no endings without `exn`; its fire, its start and the
+    escaped raise (`[cfin-raise]`, `finEnd` of an error) are a prefix of no cancel trace at
+    `noFinRaise`.  So S5's no-interception read without its condition fails at `J₁`;
+  - **`CfinQuiet` fails** (`not_cfinQuiet_J₁`, `not_cfinQuiet_admissible`): `e7b` reaches a
+    `[cfin-raise]` step.
 
 ## Decision R: `J₁`'s inner rows tied (2026-10-08)
 
@@ -1538,6 +1561,53 @@ theorem status_cancellation_J₁ :
     fun _ => I.cancelsNZ_tier1Open, Inst.admEff_ΞA, I.not_cancellationWhole_ΞA,
     I.not_cancellationWhole_tier1Open (by simp [Inst.ΞA]),
     (I.unwindOrder_fireProg (by simp [Inst.ΞA])).imp fun _ h => h.2⟩
+
+/-- **PROVED** (M3): finalisers with effects at `J₁`, at the admissible `ΞA`.  `CfinQuiet` fails:
+`e7b`'s finaliser raises under the cancel's `cfin` frame.  A cancel nested in a cancel arises:
+`ncAff`'s run reaches the cancel of an affine continuation whose region holds the running finaliser
+of an earlier cancel, and from its start the run is a cancel trace that takes `pend`, which no
+trace that reads the region by its finalisers alone follows.  The no-interception condition has
+teeth: `e7b`'s cancel fires a finaliser that meets `FinRow` at no endings without `exn`, and its
+fire, start and escaped raise are a prefix of no cancel trace at `noFinRaise`. -/
+theorem status_finEffects_J₁ :
+    ¬ (∀ Ξ, AdmEff Ξ → Inst.CfinQuiet (ℍ := ℍ) orowRF Ξ J₁) ∧
+    (ourInst (ℍ := ℍ) orowRF Inst.ΞA J₁).der [] Inst.nc28
+      ((ourInst (ℍ := ℍ) orowRF Inst.ΞA J₁).F (orowAlg Inst.ΞA).unit
+        (Inst.OVTy.ofV (.sum (.sum Inst.boolT .unit) .unit))) ∧
+    (∃ (c₀ c : (ourInst (ℍ := ℍ) orowRF Inst.ΞA J₁).RConf (ourInst (ℍ := ℍ) orowRF Inst.ΞA J₁).R₀)
+        (q : List ((ourInst (ℍ := ℍ) orowRF Inst.ΞA J₁).Event ×
+          (ourInst (ℍ := ℍ) orowRF Inst.ΞA J₁).RConf (ourInst (ℍ := ℍ) orowRF Inst.ΞA J₁).R₀)),
+      (ourInst (ℍ := ℍ) orowRF Inst.ΞA J₁).RReach (ourInst (ℍ := ℍ) orowRF Inst.ΞA J₁).R₀
+        ((ourInst (ℍ := ℍ) orowRF Inst.ΞA J₁).rinit (ourInst (ℍ := ℍ) orowRF Inst.ΞA J₁).R₀ Inst.nc28)
+        c₀ ∧
+      (ourInst (ℍ := ℍ) orowRF Inst.ΞA J₁).CancelStart c₀ c Inst.K0n
+        (Inst.labW 8 (by decide) (by simp [Inst.ΞA])) Inst.timeoutHnd Inst.Kn ∧
+      (ourInst (ℍ := ℍ) orowRF Inst.ΞA J₁).acts Inst.Kn = [.pend none] ∧
+      (ourInst (ℍ := ℍ) orowRF Inst.ΞA J₁).RPath (ourInst (ℍ := ℍ) orowRF Inst.ΞA J₁).R₀ c q ∧
+      (ourInst (ℍ := ℍ) orowRF Inst.ΞA J₁).CancelTrace (ourInst (ℍ := ℍ) orowRF Inst.ΞA J₁).R₀
+        (ourInst (ℍ := ℍ) orowRF Inst.ΞA J₁).noFinRaise Inst.K0n c [.pend none] none q ∧
+      ∀ FR, ¬ (ourInst (ℍ := ℍ) orowRF Inst.ΞA J₁).CancelTrace
+        (ourInst (ℍ := ℍ) orowRF Inst.ΞA J₁).R₀ FR Inst.K0n c
+        (((ourInst (ℍ := ℍ) orowRF Inst.ΞA J₁).fins Inst.Kn).map .fire) none q) ∧
+    (∃ (c₀ c : (ourInst (ℍ := ℍ) orowRF Inst.ΞA J₁).RConf (ourInst (ℍ := ℍ) orowRF Inst.ΞA J₁).R₀)
+        (q : List ((ourInst (ℍ := ℍ) orowRF Inst.ΞA J₁).Event ×
+          (ourInst (ℍ := ℍ) orowRF Inst.ΞA J₁).RConf (ourInst (ℍ := ℍ) orowRF Inst.ΞA J₁).R₀)),
+      (ourInst (ℍ := ℍ) orowRF Inst.ΞA J₁).RReach (ourInst (ℍ := ℍ) orowRF Inst.ΞA J₁).R₀
+        ((ourInst (ℍ := ℍ) orowRF Inst.ΞA J₁).rinit (ourInst (ℍ := ℍ) orowRF Inst.ΞA J₁).R₀ Inst.e7b21)
+        c₀ ∧
+      (ourInst (ℍ := ℍ) orowRF Inst.ΞA J₁).CancelStart c₀ c Inst.K0b
+        (Inst.labW 2 (by decide) (by simp [Inst.ΞA])) Inst.timeoutHnd Inst.Kb ∧
+      (ourInst (ℍ := ℍ) orowRF Inst.ΞA J₁).fins Inst.Kb = [Inst.raiseX1] ∧
+      ¬ (ourInst (ℍ := ℍ) orowRF Inst.ΞA J₁).FinRow (ourInst (ℍ := ℍ) orowRF Inst.ΞA J₁).noFinRaise
+        Inst.raiseX1 ∧
+      (ourInst (ℍ := ℍ) orowRF Inst.ΞA J₁).RPath (ourInst (ℍ := ℍ) orowRF Inst.ΞA J₁).R₀ c q ∧
+      ∀ q', ¬ (ourInst (ℍ := ℍ) orowRF Inst.ΞA J₁).CancelTrace (ourInst (ℍ := ℍ) orowRF Inst.ΞA J₁).R₀
+        (ourInst (ℍ := ℍ) orowRF Inst.ΞA J₁).noFinRaise Inst.K0b c
+        ((ourInst (ℍ := ℍ) orowRF Inst.ΞA J₁).acts Inst.Kb) none (q ++ q')) :=
+  let hn := Inst.ncAff_pend_J₁ (ℍ := ℍ) (Ξ := Inst.ΞA) (by simp [Inst.ΞA]) (by simp [Inst.ΞA])
+  ⟨Inst.not_cfinQuiet_admissible, hn.1,
+    let ⟨c₀, c, q, h₁, h₂, h₃, _, h₅, h₆, h₇⟩ := hn.2; ⟨c₀, c, q, h₁, h₂, h₃, h₅, h₆, h₇⟩,
+    Inst.finRow_teeth_J₁ (by simp [Inst.ΞA]) (by simp [Inst.ΞA])⟩
 
 /-- PROVED AT σ=[]: leak freedom at `J₁`, and S6 at `J₁` from the capture cell's two ownership
 properties (OPEN). -/

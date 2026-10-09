@@ -197,9 +197,9 @@ theorem purePath_end {S : A.EffectSystem} {R : S.Runner} {c c' : S.RConf R}
     (q = [] ∧ c' = c) ∨ ∃ ev, q.getLast? = some (ev, c') := by
   induction h with
   | nil => exact .inl ⟨rfl, rfl⟩
-  | @cons c ev c₁ q c'' _ _ _ ih =>
+  | @cons c c₁ q c'' _ _ _ ih =>
       rcases ih with ⟨rfl, rfl⟩ | ⟨ev', hl⟩
-      · exact .inr ⟨ev, rfl⟩
+      · exact .inr ⟨.tau, rfl⟩
       · refine .inr ⟨ev', ?_⟩
         cases q with
         | nil => simp at hl

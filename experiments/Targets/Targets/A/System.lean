@@ -232,12 +232,12 @@ def lastC {R : S.Runner} (c : S.RConf R) (q : List (S.Event × S.RConf R)) : S.R
 def RReach (R : S.Runner) : S.RConf R → S.RConf R → Prop :=
   Relation.ReflTransGen (fun c c' => ∃ ev, S.RStep R c ev c')
 
-/-- A path of store-keeping machine steps, the runner's state unchanged. -/
+/-- **A path of administrative steps**: store-keeping machine steps that show nothing (`tau`), the
+runner's state unchanged. -/
 inductive PurePath (R : S.Runner) : S.RConf R → List (S.Event × S.RConf R) → S.RConf R → Prop
   | nil {c : S.RConf R} : PurePath R c [] c
-  | cons {c : S.RConf R} {ev : S.Event} {c' : S.RConf R} {q : List (S.Event × S.RConf R)}
-      {c'' : S.RConf R} :
-      S.PureStep c.1 ev c'.1 → c'.2 = c.2 → PurePath R c' q c'' → PurePath R c ((ev, c') :: q) c''
+  | cons {c : S.RConf R} {c' : S.RConf R} {q : List (S.Event × S.RConf R)} {c'' : S.RConf R} :
+      S.PureStep c.1 .tau c'.1 → c'.2 = c.2 → PurePath R c' q c'' → PurePath R c ((.tau, c') :: q) c''
 
 /-- The observable events: the platform's answers and the finaliser events. -/
 def _root_.Targets.A.Ev.Obs {Lab Val Term : Type} : Ev Lab Val Term → Bool
