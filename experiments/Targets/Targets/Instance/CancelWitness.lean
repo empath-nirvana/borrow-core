@@ -429,6 +429,19 @@ theorem not_cfinQuiet_J₁ (h1 : Ξ 1 = Eab) (h2 : Ξ 2 = Ew) : ¬ CfinQuiet (�
   rw [Kfb, Kont.plug_comp]
   rfl
 
+/-- **`KeptLamFree` is not vacuous at `J₁`**, at every effect context declaring `exn` at `1` and
+`wait` at `2`: `e7b`, typed by `J₁`, reaches a `[cfin-raise]` step, the configuration it reads, and
+the error kept there, `()`, holds no λ. -/
+theorem keptLamFree_reads_J₁ (h1 : Ξ 1 = Eab) (h2 : Ξ 2 = Ew) :
+    ∃ c, (𝕁).Live c ∧ ∃ (K₀ : Kont) (s : Val) (K : Kont) (m j : UInt32) (w : Val),
+      c.2 = K₀.plug (BoCa.BoLo.cfinE s (K.plug (raiseE (.val (opPayload m j w))))) ∧
+        K.Catches m = false ∧ lamFree w.1 = true := by
+  refine ⟨_, ⟨e7b21, _, (𝕁).R₀, (), r₀_respects, der_e7b_J₁ h1 h2, e7b_reach12⟩,
+    K0b.comp (ccatchK .hole), cancelVal none, .hole, 1, 0, Val.unit, ?_, rfl, rfl⟩
+  show Kfb.plug _ = _
+  rw [Kfb, Kont.plug_comp]
+  rfl
+
 /-- **`ncAff` is typed by `J₁`**, at every effect context declaring `wait` at `2` and `8`. -/
 theorem der_ncAff_J₁ (h2 : Ξ 2 = Ew) (h8 : Ξ 8 = Ew) :
     (𝕁).der [] nc28 ((𝕁).F (orowAlg Ξ).unit (OVTy.ofV (.sum (.sum boolT .unit) .unit))) := by

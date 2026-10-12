@@ -1,6 +1,7 @@
 import Targets.I.J1
 import Targets.I.Theories
 import Targets.I.CancelsNZ
+import Targets.I.CancelsNamed
 import Targets.B.HeapFrame
 import Targets.Instance.CancelRuns
 import Targets.Instance.UnaryLaws
@@ -22,13 +23,16 @@ nothing.  It reads every run from the start of a cancel or an unwind as a prefix
   typing into S5's statement, so the bridges need it only for the finalisers S5 names.
 * **S5's unwind**: PROVED at `J₁` (`unwindOrder_J₁`) and at today's kernel
   (`cancellation_tier1Open`), at every effect context.
-* **S5's no-interception**: PROVED at `J₁` (`noIntercept_J₁_of`) and at today's kernel, given that
-  a cancelled continuation's running finalisers hold kept errors the labels read (`CancelsNamed`:
-  every `cfin` frame of the region holds none or a raise of a label's name; a whole-run fact about
-  the names finalisers raise).  The cancel runs the dead region `K†`, which holds no handler and no
-  `ccatch` frame, so the cancel trace passes a running finaliser's `cfin` frame by `[cfin-cancel]`
-  (`pend`), and reads no handler name; no handler named `0` is a run invariant read by nothing here
-  (`cancelsNZ_J₁`, `Targets/I/CancelsNZ.lean`).
+* **S5's no-interception**: PROVED at `J₁` at every effect context (`noIntercept_J₁`).  The bridge
+  (`noIntercept_J₁_of`) asks that a cancelled continuation's running finalisers hold kept errors the
+  labels read (`CancelsNamed`: every `cfin` frame of the region holds none or a raise of a label's
+  name), and at `J₁` that is a run invariant (`cancelsNamed_J₁`, `Targets/I/CancelsNamed.lean`): the
+  tied kernel raises only labels' names, and no step keeps another.  At today's kernel, whose rows
+  are not tied to the effect context, the no-interception is given `CancelsNamed`.  The cancel runs
+  the dead region `K†`, which holds no handler and no `ccatch` frame, so the cancel trace passes a
+  running finaliser's `cfin` frame by `[cfin-cancel]` (`pend`), and reads no handler name; no
+  handler named `0` is a run invariant read by nothing here (`cancelsNZ_J₁`,
+  `Targets/I/CancelsNZ.lean`).
 * **The extension a run needs is the β-step after a fire** (`Inst.unwind_pfx`, `Inst.cancel_pfx`,
   `Inst.FireExt`): a run is a trace as it is, or, when it stops right after a fire step, once the
   β-step that starts the finaliser is taken.
@@ -145,6 +149,16 @@ theorem noIntercept_J₁_of (hN : Inst.CancelsNamed (ℍ := ℍ) orowRF Ξ J₁)
 theorem cancellation_J₁_of (hN : Inst.CancelsNamed (ℍ := ℍ) orowRF Ξ J₁) :
     (ourInst (ℍ := ℍ) orowRF Ξ J₁).Cancellation (ourInst (ℍ := ℍ) orowRF Ξ J₁).noFinRaise :=
   ⟨noIntercept_J₁_of hN, unwindOrder_J₁⟩
+
+/-- **S5's no-interception at `J₁`**, at every effect context. -/
+theorem noIntercept_J₁ :
+    (ourInst (ℍ := ℍ) orowRF Ξ J₁).NoIntercept (ourInst (ℍ := ℍ) orowRF Ξ J₁).noFinRaise :=
+  noIntercept_J₁_of cancelsNamed_J₁
+
+/-- **S5 at `J₁`**, at every effect context. -/
+theorem cancellation_J₁ :
+    (ourInst (ℍ := ℍ) orowRF Ξ J₁).Cancellation (ourInst (ℍ := ℍ) orowRF Ξ J₁).noFinRaise :=
+  cancellation_J₁_of cancelsNamed_J₁
 
 /-- **S5 at today's kernel**: the unwind at every effect context, the no-interception given
 `CancelsNamed`. -/

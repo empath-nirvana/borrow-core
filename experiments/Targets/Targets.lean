@@ -12,6 +12,7 @@ import Targets.A.Theories
 import Targets.A.System
 import Targets.Base.Closed
 import Targets.Base.CoreCancel
+import Targets.Base.RaiseNames
 import Targets.Base.Ctx
 import Targets.Base.Look
 import Targets.Base.LookMem
@@ -83,6 +84,7 @@ import Targets.I.AcceptsRejects
 import Targets.I.AlgJ1
 import Targets.I.Binder
 import Targets.I.CancelsNZ
+import Targets.I.CancelsNamed
 import Targets.I.Combined
 import Targets.I.Device
 import Targets.I.GhostCoupling

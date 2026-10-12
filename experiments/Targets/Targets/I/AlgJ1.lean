@@ -21,15 +21,16 @@ parts are facts of Core's relation:
   `platData_of_safe`), and the operation is the platform's (a stop it does not answer would be a
   stop of the row the runner answers).
 
-The fifth, that a cancel-mode finaliser's raise keeps an error with no λ, is read here from
-`CfinQuiet`: no configuration a typed program reaches is at a `[cfin-raise]` step.  Its source is
-option A (SPEC §19, decision D3): `[then]` types a finaliser at `F 1`, so a finaliser handles its
-raises itself.  It is not proved here: Core's relation gives it inside `[then]`'s compatibility
-(`ewp_cfin` at an abort-only table with no entry), and no lemma carries that to the configurations
-of a run.  The `guard` frame drafted for `FinRowsAt` (TIER1-PLAN, round 3, step T4) makes it a
-run invariant: every `cfin` frame then holds `guard e` or a value.
+The fifth, that every error a typed program's run keeps at a running finaliser's `cfin` frame holds
+no λ, is the hypothesis `KeptLamFree`.  It is what the simulation reads: `AlgRel` relates λ-terms
+structurally, so two related kept errors are equal terms when they hold no λ, and their `finEnd`
+labels are then equal, as decision D4 observes them.  `CfinQuiet` (no `[cfin-raise]` step at all)
+gives it (`keptLamFree_of_cfinQuiet`), and fails at `J₁` (`not_cfinQuiet_J₁`: SPEC §27 types a
+finaliser that raises to a live handler).  `KeptLamFree` is not proved here: Core's relation gives
+a raised argument's type inside `[then]`'s compatibility, and no lemma carries a fact of the
+relation to the configurations of a run.
 
-So algebraicity as restated holds at `J₁` given `CfinQuiet` (`I.algLaw_J₁_of`).  `[Core σ=[]]`
+So algebraicity as restated holds at `J₁` given `KeptLamFree` (`I.algLaw_J₁_of`).  `[Core σ=[]]`
 -/
 
 noncomputable section
@@ -200,16 +201,16 @@ theorem lamFree_io_of_coreClosed (hJ : CoreClosed (OurTyping.ofDer D)) (hR : R.R
   obtain ⟨o, hf⟩ := hfo
   exact lamFree_of_dataVal (hPD K l.1 (UInt32.ofNat i) v₀ o he₀ hK hf)
 
-/-- **What a typed program's runs give algebraicity**, given that none reaches a `[cfin-raise]`
-step: every configuration its run reaches is `AlgGood`. -/
+/-- **What a typed program's runs give algebraicity**, given that every error they keep holds no
+λ: every configuration its run reaches is `AlgGood`. -/
 theorem algGood_of_coreClosed (hJ : CoreClosed (OurTyping.ofDer D))
-    (hcf : CfinQuiet (ℍ := ℍ) orowRF Ξ (OurTyping.ofDer D)) (hR : R.Respects) {P : Expr}
+    (hk : KeptLamFree (ℍ := ℍ) orowRF Ξ (OurTyping.ofDer D)) (hR : R.Respects) {P : Expr}
     {ε : ORow} {A : OVTy} (hA : (𝕊).DataTy A) (hP : (𝕊).der [] P ((𝕊).F ε A))
     {x : (𝕊).RConf R} (hx : (𝕊).RReach R ((𝕊).rinit R P) x) : AlgGood R x := by
   have hlive : (𝕊).Live x.1 := ⟨P, _, R, x.2, hR, hP, hx⟩
   obtain ⟨hc, hgo⟩ := liveOK_of_coreClosed hJ x.1 hlive
   exact ⟨hc, hgo, fun K l i v hterm hK ha => lamFree_io_of_coreClosed hJ hR hA hP hx hterm hK ha,
-    fun K₀ s K m j w he hK => (hcf x.1 hlive ⟨K₀, s, K, m, j, w, he, hK⟩).elim,
+    fun K₀ s K m j w he hK => hk x.1 hlive K₀ s K m j w he hK,
     lamFree_answer_of_coreClosed hJ hR hA hP hx⟩
 
 end Facts
@@ -218,18 +219,17 @@ end Targets.Inst
 
 namespace Targets.I
 open BoCa BoCa.Fig16 BoCa.Fig16.BoLo BoCa.Fig16.LogRel BoCa.Fig16.LogRel.Core
-open Targets.Inst (ourInst J₁ J1DerAt coreClosed_J₁At CfinQuiet)
+open Targets.Inst (ourInst J₁ J1DerAt coreClosed_J₁At KeptLamFree)
 
 /-- **Algebraicity at `J₁`, a finaliser's start observed but not its code**, at every effect
-context, given that no configuration a typed program reaches is at a `[cfin-raise]` step (option
-A's finalisers; the drafted `guard` frame makes it a run invariant).  The two sides run step
-for step alike (`Inst.algLaw_of_good`); a typed program's runs are closed and go on, answer data and
-ask the runner at data (`Inst.algGood_of_coreClosed`). -/
-theorem algLaw_J₁_of {Ξ : EffCtx} (hcf : CfinQuiet (ℍ := ℍ) orowRF Ξ J₁) :
+context, given that every error a typed program's run keeps holds no λ.  The two sides run step for
+step alike (`Inst.algLaw_of_good`); a typed program's runs are closed and go on, answer data and ask
+the runner at data (`Inst.algGood_of_coreClosed`). -/
+theorem algLaw_J₁_of {Ξ : EffCtx} (hk : KeptLamFree (ℍ := ℍ) orowRF Ξ J₁) :
     (ourInst (ℍ := ℍ) orowRF Ξ J₁).AlgLaw := by
   show (ourInst (ℍ := ℍ) orowRF Ξ (Inst.OurTyping.ofDer (J1DerAt Ξ))).AlgLaw
   exact Inst.algLaw_of_good (fun _ _ _ _ _ hR hA hP hx =>
-    Inst.algGood_of_coreClosed (D := J1DerAt Ξ) (coreClosed_J₁At Ξ) hcf hR hA hP hx)
+    Inst.algGood_of_coreClosed (D := J1DerAt Ξ) (coreClosed_J₁At Ξ) hk hR hA hP hx)
 
 end Targets.I
 

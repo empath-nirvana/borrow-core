@@ -24,11 +24,10 @@ have no derivation in Core's kernel, at any context and judgement.
 **Tier 1 at `J₁`** follows from A's (E) properties, S4, S5 and S6 at every admissible effect context
 (`tier1_J₁_of_ESU`).  S4 is proved at every effect context (`I.handlerSem_J₁`, the capture cell's
 catch law), so it follows from (E), S5 and S6 (`tier1_J₁_of_ECU`).  S5 is proved at every effect
-context given `CancelsNamed` (`I.cancellation_J₁_of`), so it follows from (E), `CancelsNamed` and S6
-(`tier1_J₁_of_ENU`).  (E) at `J₁` is open: `J₁`'s kernel takes SPEC §27's `[then]`, so E7b, E7d,
-E8 and E9 raise from a finaliser to a live handler, which it types, and E7c, which raises to a
-handler the cancel kills, is rejected (D3) and restated so (FINALISERS §4); `CancelsNamed` and S6
-are open (`Targets/Status.lean`).  `[Core σ=[]]`
+context (`I.cancellation_J₁`), so it follows from (E) and S6 (`tier1_J₁_of_EU`).  (E) at `J₁` is
+open: `J₁`'s kernel takes SPEC §27's `[then]`, so E7b, E7d, E8 and E9 raise from a finaliser to a
+live handler, which it types, and E7c, which raises to a handler the cancel kills, is rejected (D3)
+and restated so (FINALISERS §4); S6 is open (`Targets/Status.lean`).  `[Core σ=[]]`
 -/
 
 noncomputable section
@@ -149,16 +148,13 @@ theorem I.tier1_J₁_of_ECU
     I.Tier1 (ℍ := ℍ) J₁ :=
   I.tier1_J₁_of_ESU hE (fun _ _ => I.handlerSem_J₁) hC hU
 
-/-- **Tier 1 at `J₁`, given A's (E) properties at every admissible effect context, that every
-cancelled continuation's running finalisers hold kept errors the labels read, and S6**: S4 is proved
-(`I.handlerSem_J₁`), and so is S5 but `CancelsNamed` (`I.cancellation_J₁_of`; its unwind
-outright). -/
-theorem I.tier1_J₁_of_ENU
+/-- **Tier 1 at `J₁`, given A's (E) properties and S6 at every admissible effect context**: S4 is
+proved (`I.handlerSem_J₁`), and so is S5 (`I.cancellation_J₁`). -/
+theorem I.tier1_J₁_of_EU
     (hE : ∀ Ξ, AdmEff Ξ → (ourInst (ℍ := ℍ) orowRF Ξ J₁).EProps)
-    (hN : ∀ Ξ, AdmEff Ξ → Inst.CancelsNamed (ℍ := ℍ) orowRF Ξ J₁)
     (hU : ∀ Ξ, AdmEff Ξ → (ourInst (ℍ := ℍ) orowRF Ξ J₁).ContUseEv) :
     I.Tier1 (ℍ := ℍ) J₁ :=
-  I.tier1_J₁_of_ECU hE (fun Ξ hΞ => I.cancellation_J₁_of (hN Ξ hΞ)) hU
+  I.tier1_J₁_of_ECU hE (fun _ _ => I.cancellation_J₁) hU
 
 end Targets
 

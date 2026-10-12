@@ -30,8 +30,8 @@ there they go wherever the clause sends `κ`: into a finaliser, into a stored cl
   determinism, an allocation taken at the right's location.
 * **Algebraicity** (`algLaw_of_good`): at every typing system whose typed programs' runs are
   `AlgGood`, the two sides' complete runs show the same answers and traces read without a
-  finaliser's code.  `CfinQuiet` (no `[cfin-raise]` step on a typed program's run) is what gives
-  `AlgGood`'s errors at `J₁` (`Targets/I/AlgJ1.lean`).
+  finaliser's code.  `KeptLamFree` (every error a typed program's run keeps holds no λ) is what
+  gives `AlgGood`'s errors at `J₁` (`Targets/I/AlgJ1.lean`).
 
 `[Core σ=[]]`
 -/
@@ -1529,8 +1529,9 @@ local notation "𝕊" => ourInst (ℍ := ℍ) RF Ξ J
 
 /-- **What algebraicity reads of the configurations of a run**: closed, going on, asking the
 platform at arguments that hold no λ, keeping only errors that hold no λ at a cancel-mode
-finaliser's raise, and answering a term with no λ.  Each is a fact about the runs of typed programs
-(`LiveOK`, the platform's protocol, option A's finalisers, data answers). -/
+finaliser's `cfin` frame, and answering a term with no λ.  The first, second, third and fifth are
+facts about the runs of typed programs (`LiveOK`, the platform's protocol, data answers); the fourth
+is `KeptLamFree`. -/
 structure AlgGood (R : (𝕊).Runner) (x : (𝕊).RConf R) : Prop where
   closed : closedAt 0 x.1.2 = true
   goes : GoesOn (ℍ := ℍ) RF Ξ x.1
@@ -1544,11 +1545,26 @@ structure AlgGood (R : (𝕊).Runner) (x : (𝕊).RConf R) : Prop where
 
 /-- **No configuration a typed program reaches is at a `[cfin-raise]` step**: a finaliser a cancel
 runs never lets a raise escape to its `cfin` frame.  Option A's `[then]` types a finaliser at
-`F 1` (SPEC §19, decision D3: a finaliser handles its raises itself). -/
+`F 1` (SPEC §19, decision D3: a finaliser handles its raises itself).  SPEC §27 types a finaliser
+that raises to a live handler, and `J₁` takes it, so this fails at `J₁` (`not_cfinQuiet_J₁`). -/
 def _root_.Targets.Inst.CfinQuiet (RF : RowForm) (Ξ : EffCtx) (J : OurTyping RF) : Prop :=
   ∀ c, (ourInst (ℍ := ℍ) RF Ξ J).Live c → ¬ ∃ (K₀ : Kont) (s : Val) (K : Kont) (m j : UInt32)
     (w : Val), c.2 = K₀.plug (cfinE s (K.plug (raiseE (.val (opPayload m j w))))) ∧
       K.Catches m = false
+
+/-- **Every error a typed program's run keeps holds no λ**: at a configuration a typed program
+reaches, a raise that escapes a running finaliser to its `cfin` frame (`[cfin-raise]`) or a cancel
+that passes it (`[cfin-cancel]`) carries an argument with no λ.  What `AlgGood.cfin` reads: the two
+sides' kept errors are then equal terms, so their `finEnd` labels are equal. -/
+def _root_.Targets.Inst.KeptLamFree (RF : RowForm) (Ξ : EffCtx) (J : OurTyping RF) : Prop :=
+  ∀ c, (ourInst (ℍ := ℍ) RF Ξ J).Live c → ∀ (K₀ : Kont) (s : Val) (K : Kont) (m j : UInt32)
+    (w : Val), c.2 = K₀.plug (cfinE s (K.plug (raiseE (.val (opPayload m j w))))) →
+      K.Catches m = false → lamFree w.1 = true
+
+/-- A run with no `[cfin-raise]` step keeps no error. -/
+theorem _root_.Targets.Inst.keptLamFree_of_cfinQuiet {RF : RowForm} {Ξ : EffCtx}
+    {J : OurTyping RF} (h : Inst.CfinQuiet (ℍ := ℍ) RF Ξ J) : Inst.KeptLamFree (ℍ := ℍ) RF Ξ J :=
+  fun c hc K₀ s K m j w he hK => (h c hc ⟨K₀, s, K, m, j, w, he, hK⟩).elim
 
 variable (hM : closedAt 1 M = true) (hN : closedAt 1 N = true)
 include hM hN
