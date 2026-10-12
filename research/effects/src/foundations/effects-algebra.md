@@ -45,7 +45,7 @@ let-polymorphism (`letPoly`). ☐ *Rank is open; see OA4.*
 
 | law | statement | status |
 |---|---|---|
-| A1 sequencing | `(op v; y.M) to z. N = op v; y.(M to z. N)` | Model (L1a); Core: `AlgLaw` with a finaliser's start observed, proved given `KeptKapFree` (frame-deadness run, M3) |
+| A1 sequencing | `(op v; y.M) to z. N = op v; y.(M to z. N)` | Model (L1a); Core: `AlgLaw` with a finaliser's start observed, proved given `KeptLamFree`, which fails at the admissible context `ΞT` (frame-deadness run, M3) |
 | A1 application, projection | `(op v; y.M) w = op v; y.(M w)`, and the same at `π` | Model (L1a) |
 | A2 abort | `raise e to z. N = raise e`; `(raise e) w = raise e` | Model (L1a, arity 0) |
 | A3 abort through a finaliser | `K[raise e] = D_K; raise e` | Model; Core: the finally law, see §2.4 |
