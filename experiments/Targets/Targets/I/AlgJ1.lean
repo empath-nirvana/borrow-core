@@ -28,7 +28,9 @@ labels are then equal, as decision D4 observes them.  `CfinQuiet` (no `[cfin-rai
 gives it (`keptLamFree_of_cfinQuiet`), and fails at `J₁` (`not_cfinQuiet_J₁`: SPEC §27 types a
 finaliser that raises to a live handler).  `KeptLamFree` is not proved here: Core's relation gives
 a raised argument's type inside `[then]`'s compatibility, and no lemma carries a fact of the
-relation to the configurations of a run.
+relation to the configurations of a run.  It fails at an admissible context whose abortive
+operation takes a thunk (`not_keptLamFree_ΞT`, `Targets/Instance/KeptLamWitness.lean`), so this
+route reaches the contexts whose typed runs keep no λ.
 
 So algebraicity as restated holds at `J₁` given `KeptLamFree` (`I.algLaw_J₁_of`).  `[Core σ=[]]`
 -/

@@ -34,6 +34,7 @@ import Targets.I.AcceptsRejects
 import Targets.I.AlgJ1
 import Targets.Instance.CancelWitness
 import Targets.Instance.DropWitness
+import Targets.Instance.KeptLamWitness
 
 /-!
 # Targets — status, by system (RESTRUCTURE §0)
@@ -294,6 +295,16 @@ continuations out of finalisers, is a surface rule and is not applied.
   proved here: Core's relation gives a raised argument's type inside `[raise]`'s and `[then]`'s
   compatibility, and no lemma carries a fact of the relation to a run's configurations.  It is not
   vacuous at `J₁`: `e7b`'s run reaches a `[cfin-raise]` step, whose kept error `()` holds no λ.
+  **It fails at the admissible `ΞT`** (`not_keptLamFree_ΞT`, `Targets/Instance/KeptLamWitness.lean`):
+  `ΞT` adds to `ΞA` an abortive affine `!U(1 ⊸ F 1) ↠ 0`, and `e7b` with its finaliser raising the
+  thunk `λ_. ()` is typed by `J₁` and keeps it.  So this route reaches the effect contexts whose
+  typed runs keep no λ, not every admissible one.  What the law needs there is weaker: the two
+  sides' kept errors equal.  At an admissible context a kept error holds no captured continuation
+  (a `!` holds only persistent slots, and every continuation is linear or affine), but `AlgRel`
+  relates λ-bodies structurally wherever they are, so two related values with no continuation in
+  them need not be equal.  A simulation relation that confines the law's frames to captured
+  continuations (and to the code they unfold to) would read that weaker hypothesis
+  (FINALISERS §3.2's `KeptKapFree`); it is not built, and the hypothesis is not derived.
 * **The witness, on the right side** (`algLaw_algAffProg`, `algAffProg_start`): at the
   configuration `algAffProg` reaches with the law's left side under its two handlers, under every
   runner, each side's complete runs answer `()` and show one finaliser's start — at every cell
@@ -752,7 +763,7 @@ admissible effect context:
 | route 8.4 to S6: an obligation created at `[op]`, consumed where `κ` is resumed or cancelled, read by leak freedom at a run's end | the capture cell is that obligation (SPEC §25): R1 at a linear or affine operation is not in Core's relation at `F bool` (its run leaks `κ`'s cell); BoLo's world at the empty heap is the empty resource | `status_ghostCoupling`, `I.not_semC_R1`, `I.lower_empty_eq` |
 | S6's tooth: R1 (RESTRUCTURE §6.1) at our machine | PROVED: every typing system over our machine that types R1 at `F 0 bool`, at a label whose first operation resumes and is linear or affine, fails S6; `JR` types it, and at `ΞA` the lemma applies. R2–R4 have no complete run at such an operation | `not_contUseEv_of_der_R1`, `not_contUseEv_of_der_R1_orow`, `teeth_JR_ΞA` |
 | today's kernel types none of R1–R4 | PROVED, by the handler's form (our handler is the run-time frame, its clauses values; `[handle]` types clause variables). At the clauses, by the linearity of `κ` (RESTRUCTURE §6.1's reason): today's clause typing refuses R1's, R2's and R4's clauses at every resuming `lin` or `aff` operation (a live slot of `kTy` is neither dropped nor duplicated) and R3's at every `lin` one (a linear `κ`'s cancel is at `⊤`); at the clause type of a linear `1 ↠ 1`, where all four are refused, a clause that resumes `κ` once is typed, and `cancelCl` is typed at `aff` and refused at `lin`. At `unr` the argument does not apply (multi-shot is not considered) | `refuses_R_tier1Open`, `refuses_R_clauses`, `clauseRefusals_pinned` |
-| `AlgLaw`, `TailLaw`, `EtaHold` at our instance, RESTATED (D4: data answers; F2: a finaliser's start observed but not its code) | `AlgLaw` **PROVED at `J₁` at every effect context given `KeptLamFree`** (every error a typed program's run keeps at a running finaliser's `cfin` frame holds no λ; `CfinQuiet`, option A's, implies it and fails at `J₁`): the two sides run step for step alike, every term along the two runs related by `AlgRel` (the left's frames `□ to x. M`, `□ to y. N` against the right's `□ to x. (M to y. N)`, wherever a catch puts them), every rule of Core's machine stepping alike at related redexes, the left's inner β-step at `x to x. M` and the right's at `y to x. (M to y. N)` reaching `M[x] to y. N`; a typed program's runs are closed and go on, answer data and ask the runner at data. Not vacuous: at `algAffProg`'s configuration (`J₁`, `ΞA`) each side's complete runs answer `()` and show one finaliser's start, where `AlgLawCode` fails. `AlgLawCode` **FAILS AS WRITTEN at `J₁`** (kept as a record): `algAffProg`, typed by Core's kernel with every handler's and operation's row tied to `ΞA`, reaches the law's left side under a handler of the affine `wait` whose clause raises inside a finaliser frame; the finaliser cancels `κ` and handles the cancel's raises itself; the two runs answer `()` and show `fire` of finalisers that differ as terms, at every cell `κ`'s allocation picks. The round-2 witness `algFireProg` (an `unr` continuation held by a finaliser) is outside the tied kernel: its handled row is not tied to `ΞA`, no tied handler of `5` carries the tag `unr`, and the tied `J₁` at `ΞA` types it at no type. `TailLaw` OPEN: not proved, not refuted; it compares `fire D` by `D`'s code, as `AlgLawCode` does. `EtaHold` OPEN: `[handle]`'s `hnS` keeps a forwarding handler's own name out of its clauses' row, so by that reading no typed program installs one (not checked by an inversion); not proved | `I.algLaw_J₁_of`, `algLaw_of_good`, `algGood_of_coreClosed`, `AlgRel.head`, `ostep_sim`, `rstep_fwd`, `rstep_bwd`, `obsStartFrom_iff_rel`, `lamFree_answer_of_coreClosed`, `lamFree_io_of_coreClosed`, `algLaw_algAffProg`, `algAffProg_start`; `not_algLawCode_J₁`, `not_algLawCode_ΞA`, `d_algAffProg`, `finE_D2_ne`; `d_algFireProg`, `not_rowAt_R5`, `not_tied_hnd5_unr`, `not_der_algFireProg_J₁` |
+| `AlgLaw`, `TailLaw`, `EtaHold` at our instance, RESTATED (D4: data answers; F2: a finaliser's start observed but not its code) | `AlgLaw` **PROVED at `J₁` at every effect context given `KeptLamFree`** (every error a typed program's run keeps at a running finaliser's `cfin` frame holds no λ; `CfinQuiet`, option A's, implies it and fails at `J₁`; `KeptLamFree` FAILS at the admissible `ΞT`, a finaliser raising a thunk, so the route does not reach every admissible context; the weaker hypothesis the law needs there, no captured continuation in a kept error, would need a simulation relation that confines the law's frames to continuations, not built): the two sides run step for step alike, every term along the two runs related by `AlgRel` (the left's frames `□ to x. M`, `□ to y. N` against the right's `□ to x. (M to y. N)`, wherever a catch puts them), every rule of Core's machine stepping alike at related redexes, the left's inner β-step at `x to x. M` and the right's at `y to x. (M to y. N)` reaching `M[x] to y. N`; a typed program's runs are closed and go on, answer data and ask the runner at data. Not vacuous: at `algAffProg`'s configuration (`J₁`, `ΞA`) each side's complete runs answer `()` and show one finaliser's start, where `AlgLawCode` fails. `AlgLawCode` **FAILS AS WRITTEN at `J₁`** (kept as a record): `algAffProg`, typed by Core's kernel with every handler's and operation's row tied to `ΞA`, reaches the law's left side under a handler of the affine `wait` whose clause raises inside a finaliser frame; the finaliser cancels `κ` and handles the cancel's raises itself; the two runs answer `()` and show `fire` of finalisers that differ as terms, at every cell `κ`'s allocation picks. The round-2 witness `algFireProg` (an `unr` continuation held by a finaliser) is outside the tied kernel: its handled row is not tied to `ΞA`, no tied handler of `5` carries the tag `unr`, and the tied `J₁` at `ΞA` types it at no type. `TailLaw` OPEN: not proved, not refuted; it compares `fire D` by `D`'s code, as `AlgLawCode` does. `EtaHold` OPEN: `[handle]`'s `hnS` keeps a forwarding handler's own name out of its clauses' row, so by that reading no typed program installs one (not checked by an inversion); not proved | `I.algLaw_J₁_of`, `not_keptLamFree_ΞT`, `algLaw_of_good`, `algGood_of_coreClosed`, `AlgRel.head`, `ostep_sim`, `rstep_fwd`, `rstep_bwd`, `obsStartFrom_iff_rel`, `lamFree_answer_of_coreClosed`, `lamFree_io_of_coreClosed`, `algLaw_algAffProg`, `algAffProg_start`; `not_algLawCode_J₁`, `not_algLawCode_ΞA`, `d_algAffProg`, `finE_D2_ne`; `d_algFireProg`, `not_rowAt_R5`, `not_tied_hnd5_unr`, `not_der_algFireProg_J₁` |
 | the tail-resumptive law and algebraicity at the answering class (a clause `λ(a, k). c a to b. k.resume b` whose code runs quietly) | PROVED at every typing system with `LiveOK`, so at `J₁`, at every operation: quietly when `κ` owns no cell, around its cell when it does | `calm_tailClause`, `quiet_tailClause`, `cellQuiet_tailClause`, `tailLaw_quiet`, `algLaw_quiet`, `I.tailLaw_quiet_J₁`, `I.algLaw_quiet_J₁` |
 | runs around a capture cell: finite memories on every run from `init`; the allocation at every free location; calm runs compose, go under contexts and keep the complete runs' answers and traces | PROVED | `finDom_reach`, `obsFrom_alloc_iff`, `obsFrom_mstep_iff`, `obsFrom_calm_iff`, `runsAlike_of_calm`, `kappaC_resume_parts` |
 | D1.h4 (c), the comodel reduction: co-operations that run quietly (`PureCo`) and form a comodel give a correct handler | PROVED at every typing system with `LiveOK` whose typed closed values are closed | `ansCorrect_of_comodel`, `calm_fold`, `calm_opStep`, `calm_side`, `quiet_coFrom` |
@@ -1743,13 +1754,16 @@ theorem status_unaryLaws :
 /-- **PROVED AT σ=[] given `KeptLamFree`** (M3): algebraicity as restated (a finaliser's start
 observed but not its code, fix-up F2; a kept error's value observed, decision D4) at `J₁`, at every
 effect context, given that every error a typed program's run keeps holds no λ; `CfinQuiet` gives
-`KeptLamFree` and fails at `J₁`; `KeptLamFree` reads a configuration `e7b` reaches at the
-admissible `ΞA`, where it holds; at every typing system whose typed programs' runs are `AlgGood`;
-and the statement with the finaliser's code observed gives it, at every instance. -/
+`KeptLamFree` and fails at `J₁`; `KeptLamFree` fails at the admissible `ΞT`, where a finaliser
+raises a thunk (`!U C` drops), so this route does not reach every admissible effect context;
+`KeptLamFree` reads a configuration `e7b` reaches at the admissible `ΞA`, where it holds; at every
+typing system whose typed programs' runs are `AlgGood`; and the statement with the finaliser's
+code observed gives it, at every instance. -/
 theorem status_algLaw_J₁ :
     (∀ Ξ, Inst.KeptLamFree (ℍ := ℍ) orowRF Ξ J₁ → (ourInst (ℍ := ℍ) orowRF Ξ J₁).AlgLaw) ∧
     (∀ Ξ, Inst.CfinQuiet (ℍ := ℍ) orowRF Ξ J₁ → Inst.KeptLamFree (ℍ := ℍ) orowRF Ξ J₁) ∧
     ¬ (∀ Ξ, AdmEff Ξ → Inst.CfinQuiet (ℍ := ℍ) orowRF Ξ J₁) ∧
+    ¬ (∀ Ξ, AdmEff Ξ → Inst.KeptLamFree (ℍ := ℍ) orowRF Ξ J₁) ∧
     (∃ c, (ourInst (ℍ := ℍ) orowRF Inst.ΞA J₁).Live c ∧ ∃ (K₀ : BoCa.BoLo.Kont) (s : Val)
       (K : BoCa.BoLo.Kont) (m j : UInt32) (w : Val),
       c.2 = K₀.plug (BoCa.BoLo.cfinE s (K.plug (BoCa.BoLo.raiseE (.val (BoCa.BoLo.opPayload m j w))))) ∧
@@ -1762,7 +1776,8 @@ theorem status_algLaw_J₁ :
         Inst.AlgGood R c) → (ourInst (ℍ := ℍ) RF Ξ J).AlgLaw) ∧
     (∀ S : A.EffectSystem, S.AlgLawCode → S.AlgLaw) :=
   ⟨fun _ h => I.algLaw_J₁_of h, fun _ h => Inst.keptLamFree_of_cfinQuiet h,
-    Inst.not_cfinQuiet_admissible, Inst.keptLamFree_reads_J₁ (by simp [Inst.ΞA]) (by simp [Inst.ΞA]),
+    Inst.not_cfinQuiet_admissible, Inst.not_keptLamFree_admissible,
+    Inst.keptLamFree_reads_J₁ (by simp [Inst.ΞA]) (by simp [Inst.ΞA]),
     fun _ _ _ h => Inst.algLaw_of_good h, fun S h => S.algLaw_of_algLawCode h⟩
 
 /-- **PROVED AT σ=[]**: the theory of global state at `J₁` — `stateCo` is a comodel and its

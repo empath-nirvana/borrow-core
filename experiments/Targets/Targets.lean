@@ -82,6 +82,7 @@ import Targets.Instance.E2
 import Targets.Instance.E10
 import Targets.Instance.ZeroCost
 import Targets.Instance.DropWitness
+import Targets.Instance.KeptLamWitness
 import Targets.I.AcceptsRejects
 import Targets.I.AlgJ1
 import Targets.I.Binder
