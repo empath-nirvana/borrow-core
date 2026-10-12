@@ -2715,7 +2715,7 @@ updated as each lands. On `tier1-effects`, not pushed.
 | M0: GhostEnd and ProbeD1 build at SPEC §25's `hndTerm` | LANDED | dc10293 |
 | M1: frame deadness in the machine (SPEC §19, 0.44) | LANDED (below) | 185025b |
 | M2: the typing of finalisers with effects (SPEC §27) | LANDED in Core; tier 1's kernel at option A; lowering by the fallback (below) | 833b026, 5b9f216, dd01061; M2c with this record |
-| M3: S5's `pend`, the cell clause, algebraicity, no dropped error | not started | |
+| M3: S5's `pend`, the cell clause, algebraicity, no dropped error | LANDED (below): S5 PROVED at `J₁`; algebraicity given `KeptLamFree`, which fails at an admissible context; no dropped error PROVED on the runs that capture no kept error | 3665c0b, 925b251, e70e59f, 8c8c7ca, ed57d98, 073b785; this record |
 | M4: E7–E9 at `J₁` | not started | |
 | M5: AT08 by the continuation rule | not started | |
 
@@ -2945,3 +2945,111 @@ that suspend (FINALISERS §2.9).
 
 **Remaining.** Tier 1's kernel at §27 with M4 (E7–E9 at `J₁`, `FinRaise.lean`'s refutations
 replaced) and `ncProg`; the lowering of a finaliser that suspends; M3–M5.
+
+### M3: S5 under frame deadness, algebraicity, no dropped error
+
+On `tier1-effects`, not pushed.  `lake build Targets` passes, AxiomCheck and Audit included.  No
+machine, kernel program, count or corpus changes; no change to `Core/`, BoLo or SPEC beyond §27's
+*Open* note of 925b251.
+
+**S5 (RESTATED, PROVED at `J₁` at every effect context).**
+- The restatement (3665c0b, FINALISERS §3.1): a region's actions (`acts`: `fire D` and the running
+  finalisers of earlier cancels, `pend e`); the cancel trace takes `pend` in one step, labelled
+  `finEnd` of the error kept so far, the earlier first; `keep` is first-wins with no name list; a
+  cancel's start (`CancelStart`) is a cancel of `capture l H K` or of an affine continuation at its
+  cell (reading 8).  A trace's administrative steps are store-keeping `tau` steps (e70e59f).
+- `J₁`'s kernel takes SPEC §27's `[then]` and `[handle]` with cancel rows (925b251), so `e7b` and
+  `ncAff` are typed there; the refutations of E7–E9 under option A are retired.
+- The no-interception bridge reads a kept error at the labels (`keptErrOf`): A's events carry
+  labels, so a kept error of a name no label has would be read as none.  The bridge therefore asks
+  `CancelsNamed`: every running finaliser's `cfin` frame of a cancelled region holds none or the
+  raise of a label's name.  **At `J₁` it is a run invariant** (8c8c7ca; `Targets/Base/RaiseNames.lean`,
+  `Targets/I/CancelsNamed.lean`): `Expr.RaiseOK P` says every raise is of a name in `P` or a
+  cancel's and every cancel state keeps none or a raise of a name in `P`; the tied kernel types
+  only terms that raise their labels' names and hold no `cfin` (`rcE_of_derivesAt`); no machine
+  step leaves the names (`raiseOK_step1`); the runner answers at data (`raiseOK_reach`); `κ`'s
+  resume branch holds its context shifted (`kcfinNamed_of_shift`).  So `I.noIntercept_J₁` and
+  `I.cancellation_J₁` hold at every effect context with no hypothesis, and tier 1 at `J₁` follows
+  from A's (E) properties and S6 (`I.tier1_J₁_of_EU`).  At today's kernel, whose inner rows are not
+  tied, S5's no-interception stays given `CancelsNamed` (`cancellation_tier1Open`).
+- `pend` is needed at every admissible context (`ncAff_pend_J₁`, at `ΞA`); the no-interception
+  condition has teeth (`finRow_teeth_J₁`, `e7b`).
+- **`CancelsNoCtl` FAILS at `J₁`** (ed57d98, `not_cancelsNoCtl_J₁`, `Targets/Instance/DropWitness.lean`):
+  at `Ξu` (`1`, `4` resuming `unr`; `2`, `3` abortive `unr`), Core's `progNC₁T`, tied to `Ξu` and
+  typed by `J₁`, reaches the cancel of the outer `4`'s `capture 4 H K` with a `ccatch` and a `cfin`
+  frame in `K`.  S5 reads no such hypothesis.  `CancelsNZ` stays proved and read by nothing.
+- Deviation from FINALISERS §3.1: the plan expected the no-interception outright because `keep`
+  reads no names; the labels the trace reads make `CancelsNamed` necessary, and it is proved at
+  `J₁` by the run invariant above, not at today's kernel.
+
+**Algebraicity (decision D4; RESTATED hypothesis, not derived).**
+- `CfinQuiet` (no `[cfin-raise]` step) is retired as the hypothesis: it fails at `J₁` (`e7b`).
+- `I.algLaw_J₁_of` takes `KeptLamFree`: every error a typed program's run keeps at a running
+  finaliser's `cfin` frame holds no λ, which is what `AlgGood.cfin` reads.  Kept errors' values stay
+  observed.  `CfinQuiet` implies it.  It reads a configuration `e7b` reaches at `ΞA`
+  (`keptLamFree_reads_J₁`).
+- **`KeptLamFree` FAILS at the admissible `ΞT`** (073b785, `not_keptLamFree_ΞT`): `ΞT` adds to
+  `ΞA` an abortive affine `!U(1 ⊸ F 1) ↠ 0` at `13`; `e7b` with its finaliser raising the thunk
+  `λ_. ()` is typed by `J₁` and keeps it.  So `algLaw_J₁_of` reaches the contexts whose typed runs
+  keep no λ, not every admissible one.
+- Deviation from FINALISERS §3.2: the design named `KeptKapFree` (kept errors hold no captured
+  continuation) and read `AlgRel`-related values with no continuation as equal.  `AlgRel` relates
+  λ-bodies structurally wherever they are, so two related values with no continuation in them need
+  not be equal; `KeptKapFree` gives the law only through a simulation relation that confines the
+  law's frames to captured continuations and the code they unfold to.  That relation is not built.
+- Remaining obligation: (i) that relation and the simulation re-proved over it; (ii) `KeptKapFree`
+  at admissible contexts from typing (a `!` holds only persistent slots, every continuation is
+  linear or affine), which needs a fact of Core's relation carried to a run's configurations, as
+  `platData_of_start` carries the platform's protocol.  Neither is derived; no obstruction to the
+  law itself has been verified.
+
+**No typed run drops an error (decision D1).**
+- `NoDroppedError` (`Targets/I/NoDropped.lean`): on every complete run of a program typed at a data
+  answer, `keeps = reraises + merges` (`[cfin-raise]` at a cancel that kept nothing; `[cancel-raise]`;
+  `[cfin-cancel]` at two kept errors).
+- **PROVED AT σ=[] at `J₁`, at every effect context, on the runs that capture no context holding a
+  kept error** (ed57d98, `I.noDroppedErrorNKC_J₁`).  The holders of kept errors are counted (`kc`,
+  `Targets/Base/KeptCount.lean`) and sit on the evaluation spine (`OnPath`); every rule of Core's
+  machine changes their number only as the count says (`kc_head`, `kc_step1`), under the run
+  invariants (`raiseOK_of_start`, `hndNZ_of_start`, `platData_of_start`) and Core's unique
+  decomposition (`keepAt_iff`, through `plug_decomp`).
+- The restriction is needed (`not_noDroppedError_unr`): at `Ξu`, Core's `progDropT` keeps the first
+  finaliser's raise of `2`, and its second finaliser performs `4`, whose `unr` handler drops the
+  continuation holding the kept error (FINALISERS §3.3's tolerated exception).
+- Not vacuous: `e7b` at `ΞA` (`noDroppedErrorNKC_reads_ΞA`, its run through `runM` and `tracM`) and
+  `cancelKeptT` at `Ξu` (`noDroppedErrorNKC_reads`: one keep, one re-raise).
+- Deviation from FINALISERS §3.3: the plan was "PROVED given `CfinEnds`"; built instead is the
+  unconditional count on the runs whose `[op]` steps capture no kept error.  OPEN: the runs that
+  capture one (a running finaliser of a cancel that has kept an error performs an operation a live
+  handler outside the region catches).  At an admissible context that continuation is linear or
+  affine, and the count would follow from S6's use exactly once together with a count of the holders
+  inside continuations (each counted once, though `κ` holds its context in both branches); that
+  accounting is not built, and `CfinEnds` is not stated.  No obstruction verified.
+
+**The hard stop, M3.**
+
+| check | finding |
+|---|---|
+| (1) a law | none changed |
+| (2) behaviour or counts | none: no machine, kernel program, corpus program or count changes |
+| (3) runtime block | none |
+| (4) rejection | none |
+| (5) weakened target | none.  S5's trace is restated into line with D1/D2 (`pend`, forced by `ncAff_pend_J₁`), its no-interception now holds with no hypothesis at `J₁`; algebraicity's hypothesis is weakened (`CfinQuiet` → `KeptLamFree`), a strengthening; `NoDroppedError` is a new target, proved on a stated class of runs, the rest recorded open |
+
+**Unspent hypotheses.** `NoDroppedError`'s `Answers R ε` is not read by the restricted count, and
+its `DataTy A` only to take the program plain (`plain_of_dataTy`), not the answer's data.
+`noDroppedErrorNKC_J₁` reads every handler named nonzero only at `[unwind]`.  `KeptLamFree` is read
+only at `AlgGood.cfin`.
+
+**Uniqueness/functionality results.** Read: `plug_decomp` (`keepAt_iff`, `reraiseAt_iff`,
+`mergeAt_iff`), `nested_op` (no counted step at a platform stop), `cancelVal_inj`, `plug_raise_inj`,
+`opPayload_inj`.  Not read: `det_ourInst`, `rstep_det`, `AStep1.deterministic`.
+
+**Untranscribed in the run-up.** The simulation relation that confines algebraicity's frames to
+captured continuations (FINALISERS §3.2); the count of kept errors held inside continuations
+(FINALISERS §3.3's `CfinEnds`); `CancelsNamed` at today's kernel (its rows are not tied).
+
+**Remaining.** Algebraicity at every admissible context (the two obligations above); `NoDroppedError`
+on the runs that capture a kept error; M4 (E7–E9 at `J₁`, E7c's restatement as its rejection) and
+M5 (AT08 by the continuation rule).  `I.tier1_J₁_of_EU`: tier 1 at `J₁` from A's (E) properties
+and S6 at every admissible context.
