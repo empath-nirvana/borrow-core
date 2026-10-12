@@ -2716,7 +2716,7 @@ updated as each lands. On `tier1-effects`, not pushed.
 | M1: frame deadness in the machine (SPEC §19, 0.44) | LANDED (below) | 185025b |
 | M2: the typing of finalisers with effects (SPEC §27) | LANDED in Core; tier 1's kernel at option A; lowering by the fallback (below) | 833b026, 5b9f216, dd01061; M2c with this record |
 | M3: S5's `pend`, the cell clause, algebraicity, no dropped error | LANDED (below): S5 PROVED at `J₁`; algebraicity given `KeptLamFree`, which fails at an admissible context; no dropped error PROVED on the runs that capture no kept error | 3665c0b, 925b251, e70e59f, 8c8c7ca, ed57d98, 073b785; this record |
-| M4: E7–E9 at `J₁` | not started | |
+| M4: E7–E9 at `J₁` | LANDED (below): E7 and E8 PROVED at every admissible context, E9 where no `exn` is `unr`; E7c RESTATED as its rejection at the rows without its inner label | this record |
 | M5: AT08 by the continuation rule | not started | |
 
 ### M1: frame deadness
@@ -3053,3 +3053,90 @@ captured continuations (FINALISERS §3.2); the count of kept errors held inside 
 on the runs that capture a kept error; M4 (E7–E9 at `J₁`, E7c's restatement as its rejection) and
 M5 (AT08 by the continuation rule).  `I.tier1_J₁_of_EU`: tier 1 at `J₁` from A's (E) properties
 and S6 at every admissible context.
+
+### M4: E7, E8, E9 at `J₁`
+
+On `tier1-effects`, not pushed.  `lake build Targets` passes, AxiomCheck and Audit included.  No
+machine, kernel program, count, corpus program, `Core/` file or BoLo definition changes.
+
+**E7c RESTATED** (`Targets/A/Expressiveness.lean`, `CancelPolicy`; decision D3).  E7c's two conjuncts
+(`e7c` typed at the pure row, its run answering `inr ()` with the finaliser's raise suppressed by
+name) become one: `∀ ε A, S.Lacks ε la → ¬ S.der [] (S.e7c lw la) (S.F ε A)`, the rejection at
+every row without the inner label.
+- Deviation from FINALISERS §4, which wrote `∀ C, ¬ S.der [] (S.e7c lw la) C`.  At `J₁`, `e7c` is
+  typed at its inner label's row (`der_e7c_lift_J₁`, `e7c_typed_at_lift_J₁`): there the context has
+  an instance of the label, and the finaliser's raise reaches it (decision D1), as in `progOut`.
+  D3 rejects a finaliser's raise of a name with no live instance outside the region, which is the
+  rows without the label.  A rejection at every type would reject a program the algebra gives a
+  meaning to.
+- `e7c` left A₃'s `ZeroCost` corpus (`Targets/A/Lowering.lean`), which lists the terminating (E)
+  programs.  A₃ is stated, not proved, and nothing reads the entry.
+
+**E7: PROVED at every admissible effect context** (`cancelPolicy_J₁`, `Targets/Instance/E7.lean`).
+- Typings: `d_e7a` (`wait`'s cancel row empty), `d_e7b` (M3's), `d_e7d` (the outer `[then]`'s
+  premise `{exnₐ} ⋈ {exn_b} ≤ {exnₐ, exn_b}`, `thenLe_finRaise2`).
+- Runs, at every two labels: the catch of the affine `wait` allocates `κ`'s cell at every free
+  location, the clause cancels `κ`, which releases it, and the complete runs from the start are
+  those from the cancel's start (`obsFrom_tmCatch`).  Each labelled step is its own lemma:
+  `obsFrom_ufinC` (`[finalise-cancel]`, `fire`), `obsFrom_cfret` and `obsFrom_cferr` (`finEnd`),
+  `obsFrom_finRaise`, `obsFrom_reraise_toResult` (`[cancel-raise]` then `toResult`'s catch past a
+  context that catches nothing of the label).  `runsTo_e7a`, `runsTo_e7b`, `runsTo_e7d`.
+- E7c's rejection, by inversion of Core's kernel (`Rej.not_der_e7c`): `[handle] wait` (`der_hndJ`;
+  its tags give one affine operation), `[handle] exnᵢ`, `[then]` (`der_thenJ`), the body's `wait`
+  through `bind`/`[let]` (`der_letJ`, new: the bound term at a row, the conclusion at that row or
+  the bound term at the empty row), `[perform]` and `[raise]`; `[then]`'s premise puts `exnᵢ` in
+  `wait`'s cancel row, `[sub]` keeps it up to the handler; the `timeout` clause reads `κ`'s cancel
+  branch at its own row (`timeoutCl_finds`, through `kcancel_jr_aff`, new: an affine `κ`'s cancel
+  branch applied is read at what the same-term rules reach from `cancelTy`).  At `J₁` from `Lacks`
+  at the empty row environment (`not_der_e7c_J₁`, `derAt_F_J₁`, `names_den_of_lacks`).
+
+**E8: PROVED at every admissible effect context** (`unwindPolicy_J₁`, `Targets/Instance/E8.lean`):
+`e8b`'s finaliser at `exn_b`'s row, below the `[then]`'s (`d_e8b`); the unwind fires the finaliser in
+place (`obsFrom_ufin`, `[finalise]`), and its raise supersedes the pending one (`runsTo_e8b`).
+
+**E9: PROVED at every admissible effect context with no `unr` `exn` signature** (`storedK_J₁`,
+`NoUnrExn`, met by `ΞA`; `Targets/Instance/E9.lean`).
+- `stash`'s clause answers a closure that holds the affine `κ` (`d_stashCl`): `κ` is captured by a
+  linear thunk, the closure's cancel branch a `[let]` of `cancel k` holding `x`, its resume branch a
+  `[let]` of `resume k ()` applying the closure the resumed computation answers.
+- E9a resumes `κ` after `stash` returned, twice (two cells, `calm_e9a`); E9b cancels it
+  (`calm_e9b`); in E9c the stored `κ`'s region holds a finaliser raising `exnₒ`, which the cancel
+  fires and re-raises at the closure, inside `toResult` (`obsFrom_e9cCatch`, `runsTo_e9c`).
+- At a context with an `unr` `exn` signature E9c is not derived, and no obstruction has been
+  verified.  The closure's cancel branch holds `x : bool` across `cancel k`, a `[let]` at a row with
+  `exnₒ`; `[let]`'s premise `Σ.Unr → Persistent Γ₂` reads an abortive `unr` operation as `unr`, and
+  `bool`'s slot is not `!`.  E5 has the same restriction (`nestedHandlers_J₁`).
+
+**Status** (`Targets/Status.lean`): `status_eProps_J₁` adds E7, E8, and E9 under `NoUnrExn`;
+`status_e7c_J₁` states E7c's scope (rejected at the rows without the label, typed at its row).  SPEC
+§27's *Open* records E9 at an `unr` `exn`.
+
+**The hard stop, M4.**
+
+| check | finding |
+|---|---|
+| (1) a law | none changed |
+| (2) behaviour or counts | none: no machine, kernel program, corpus program or count changes |
+| (3) runtime block | none |
+| (4) rejection | E7c, decision D3, at the rows without its inner label only; at that label's row `e7c` is typed |
+| (5) weakened target | none.  E7c is restated into line with D3; FINALISERS §4's form at every type is not adopted because `J₁` types `e7c` at its label's row, where the algebra gives it a meaning.  `ZeroCost`'s corpus drops the rejected `e7c`, being the terminating (E) programs |
+
+**Unspent hypotheses.** `AdmEff`'s `ClosedLife` is read by no M4 result.  The runs of E7a, E7b,
+E8 and E9 do not read the labels' distinctness (the cancelled regions hold no handler frame); E7d's
+run does (the kept raise passes `toResult` of `exn_b`), and so do the typings with two `toResult`s
+(a handler's outer row lacks its own label).  `NoUnrExn` is read only by E9c's `[let]`.
+
+**Uniqueness/functionality results.** Read: `rstep_det` (through `obsFrom_head_iff`,
+`obsFrom_mstep_iff`: each step is the only step of its configuration), `rstep_alloc_inv` (through
+`obsFrom_alloc_iff`: the allocation at every free location), `qualsVal_inj` (a handler's tags give
+its signature), `vview_tensor`, `vview_thunk`, `JR.amp_amp` (views and same-term rules are
+functional at a tensor, a thunk and an `&`), `Row.find_ofEff_ne`.  Not read: `det_ourInst`,
+`AStep1.deterministic`.
+
+**Untranscribed in the run-up.** E9c's rejection at an `unr` `exn` (not attempted: it is an
+inversion through `toResult`, the call's `[let]`, `[handle] yield`, the clause and the closure's case,
+at the tied kernel, where the raise's qualifier is the context's).
+
+**Remaining.** A's (E) properties at `J₁`: E2a–c, E3, E10's `retry` and loop (not derived), E2d at
+an `unr` operation and E5, E9 at an `unr` `exn` (not derived).  M5 (AT08 by the continuation rule,
+and `tier1_J₁_of_ESU`'s table).

@@ -281,7 +281,7 @@ def fwrap (li : S.EA.Lab) : S.Val := S.lam (S.handle li (S.hnd (S.lam (S.ret (S.
 def tunnel (li lo : S.EA.Lab) : S.Term :=
   S.toResult lo (S.lets [S.fwrap li] (S.call (S.var 0) (S.failCb lo)))
 
-/-! ### E7: abandoning a suspension, and the cancel policy as built -/
+/-! ### E7: abandoning a suspension, and the cancel policy -/
 
 /-- `body D = (wait (); return tt) then x. return x unwind D`. -/
 def bodyF (lw : S.EA.Lab) (D : S.Term) : S.Term :=

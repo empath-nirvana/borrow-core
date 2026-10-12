@@ -25,9 +25,9 @@ have no derivation in Core's kernel, at any context and judgement.
 (`tier1_J₁_of_ESU`).  S4 is proved at every effect context (`I.handlerSem_J₁`, the capture cell's
 catch law), so it follows from (E), S5 and S6 (`tier1_J₁_of_ECU`).  S5 is proved at every effect
 context (`I.cancellation_J₁`), so it follows from (E) and S6 (`tier1_J₁_of_EU`).  (E) at `J₁` is
-open: `J₁`'s kernel takes SPEC §27's `[then]`, so E7b, E7d, E8 and E9 raise from a finaliser to a
-live handler, which it types, and E7c, which raises to a handler the cancel kills, is rejected (D3)
-and restated so (FINALISERS §4); S6 is open (`Targets/Status.lean`).  `[Core σ=[]]`
+open: E2a–c, E3 and E10's `retry` and loop are not derived, nor E2d, E5 and E9 at a context with an
+`unr` operation in the way; E7 (E7c restated as its rejection, D3) and E8 are proved
+(`Targets/Instance/E7.lean`, `E8.lean`).  S6 is open (`Targets/Status.lean`).  `[Core σ=[]]`
 -/
 
 noncomputable section

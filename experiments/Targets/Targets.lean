@@ -80,6 +80,9 @@ import Targets.Instance.E4
 import Targets.Instance.E5
 import Targets.Instance.E2
 import Targets.Instance.E10
+import Targets.Instance.E7
+import Targets.Instance.E8
+import Targets.Instance.E9
 import Targets.Instance.ZeroCost
 import Targets.Instance.DropWitness
 import Targets.Instance.KeptLamWitness

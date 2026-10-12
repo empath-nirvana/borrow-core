@@ -7,11 +7,10 @@ import Targets.Instance.E1Runs
   typed once, its one typing serves a callback at every row (SPEC §26's `[λ-dead]` passes the
   callback), it calls its callback catching nothing, and E1's and E1′'s programs are typed and run
   to their answers with no event, around the capture cell of the affine `wait` (SPEC §25).
-* **E7, E8, E9: OPEN.**  Each asks for a typing of a program whose finaliser raises to its context;
-  `J₁`'s kernel takes SPEC §27's `[then]`, which types a finaliser that raises to a live handler,
-  and rejects `e7c`, whose finaliser raises to a handler the cancel kills (D3; restated in M4).
-* **E2, E4, E5, E6, E10** at `J₁`: `Targets/Instance/E2.lean`, `E4.lean`, `E5.lean`, `E6.lean`,
-  `E10.lean`.
+* **E2, E4, E5, E6, E7, E8, E9, E10** at `J₁`: `Targets/Instance/E2.lean`, `E4.lean`, `E5.lean`,
+  `E6.lean`, `E7.lean`, `E8.lean`, `E9.lean`, `E10.lean`.  `J₁`'s kernel takes SPEC §27's `[then]`,
+  which types a finaliser that raises to a live handler (E7b, E7d, E8b, E9c) and rejects `e7c`,
+  whose finaliser raises to a handler the cancel kills (decision D3).
 -/
 
 noncomputable section

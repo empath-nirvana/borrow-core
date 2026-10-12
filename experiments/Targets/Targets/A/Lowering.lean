@@ -169,7 +169,7 @@ def Run (ρ : Platform) (p : Prog) (ws : List ℕ) (tr : List IoEv) (k : ℕ × 
 /-- The terminating (E) programs, the corpus of `ZeroCost`. -/
 inductive CorpusId
   | e1 | e1' | e2a | e2b | e2c | e2d | e3b | e3c | e3g | e4 | e5log | e5fail | e6
-  | e7a | e7b | e7c | e7d | e8a | e8b | e9a | e9b | e9c
+  | e7a | e7b | e7d | e8a | e8b | e9a | e9b | e9c
   deriving DecidableEq, Repr
 
 /-- **The hand-written equivalents' costs** (allocations, dispatches).  E1: the pure call, a
@@ -181,7 +181,7 @@ raises.  E6: a branch.  E7, E8: the finalisers called on the exit paths.  None a
 makes an indirect call. -/
 def refCost : CorpusId → ℕ × ℕ
   | .e1 | .e1' | .e2a | .e2b | .e2c | .e2d | .e3b | .e3c | .e3g | .e4 | .e5log | .e5fail | .e6
-  | .e7a | .e7b | .e7c | .e7d | .e8a | .e8b | .e9a | .e9b | .e9c => (0, 0)
+  | .e7a | .e7b | .e7d | .e8a | .e8b | .e9a | .e9b | .e9c => (0, 0)
 
 end Tgt
 
@@ -213,8 +213,8 @@ noncomputable def rtick2 : List S.EA.Lab → S.Runner
   | [a] => S.Rtick a
   | _ => S.R₀
 
-/-- **The corpus**: E1, E1′, E2a–d, E3b, E3c, E3g, E4, E5 (both orders), E6, E7a–d, E8a–b,
-E9a–c, at the labels of their (E) properties. -/
+/-- **The corpus**: E1, E1′, E2a–d, E3b, E3c, E3g, E4, E5 (both orders), E6, E7a, E7b, E7d,
+E8a–b, E9a–c, at the labels of their (E) properties.  E7c is the program E7 rejects. -/
 noncomputable def corpus : List S.CorpusEntry :=
   [⟨.e1, S.at2 S.noColour, fun _ => S.R₀, [S.sigExn, S.sigWait]⟩,
    ⟨.e1', S.at2 fun _ lw => S.noColourS lw, fun _ => S.R₀, [S.sigExn, S.sigWait]⟩,
@@ -234,7 +234,6 @@ noncomputable def corpus : List S.CorpusEntry :=
    ⟨.e6, S.at2 S.tunnel, fun _ => S.R₀, [S.sigExn, S.sigExn]⟩,
    ⟨.e7a, S.at3 fun lw _ _ => S.e7a lw, fun _ => S.R₀, [S.sigWait, S.sigExn, S.sigExn]⟩,
    ⟨.e7b, S.at3 fun lw la _ => S.e7b lw la, fun _ => S.R₀, [S.sigWait, S.sigExn, S.sigExn]⟩,
-   ⟨.e7c, S.at3 fun lw la _ => S.e7c lw la, fun _ => S.R₀, [S.sigWait, S.sigExn, S.sigExn]⟩,
    ⟨.e7d, S.at3 S.e7d, fun _ => S.R₀, [S.sigWait, S.sigExn, S.sigExn]⟩,
    ⟨.e8a, S.at2 fun la _ => S.e8a la, fun _ => S.R₀, [S.sigExn, S.sigExn]⟩,
    ⟨.e8b, S.at2 S.e8b, fun _ => S.R₀, [S.sigExn, S.sigExn]⟩,

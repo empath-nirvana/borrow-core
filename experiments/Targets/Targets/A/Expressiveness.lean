@@ -166,19 +166,20 @@ def Tunnel : Prop :=
       S.der [] (S.tunnel li lo) (S.F S.EA.unit (S.Sum S.bool S.UnitT)) ∧
       S.RunsTo S.R₀ (S.tunnel li lo) (S.inr S.unitV) []
 
-/-- **E7: abandoning a suspension, and the cancel policy as built** (SPEC §19 *Cancels*;
-*Acceptance* (5), (6)).  A timer cancels a suspended body whose frame holds a finaliser.  E7a: the
-canceller proceeds and the frozen finaliser runs once; E7b: its error is re-raised at the
-canceller; E7c: the error of a label the cancelled region handles is suppressed, and the region's
-dying handler does not catch it; E7d: innermost first, and the first error is kept. -/
+/-- **E7: abandoning a suspension, and the cancel policy** (SPEC §19 *Cancels*, §27; *Acceptance*
+(5), (6); decisions D1 and D3 of 2026-10-08).  A timer cancels a suspended body whose frame holds a
+finaliser.  E7a: the canceller proceeds and the frozen finaliser runs once; E7b: its error is
+re-raised at the canceller; E7c: a finaliser that raises a label the cancelled region handles is
+rejected at every row without that label, where no instance of it is live outside the region (at a
+row with the label, its raise reaches the context's instance); E7d: innermost first, and the first
+error is kept. -/
 def CancelPolicy : Prop :=
   S.ForLabels [S.sigWait, S.sigExn, S.sigExn] fun ls => ∀ lw la lb, ls = [lw, la, lb] →
     S.der [] (S.e7a lw) (S.F S.EA.unit (S.Sum S.bool S.UnitT)) ∧
     S.RunsTo S.R₀ (S.e7a lw) (S.inr S.unitV) [.fire (S.ret S.unitV), .finEnd none] ∧
     S.der [] (S.e7b lw la) (S.F S.EA.unit S.ty7) ∧
     S.RunsTo S.R₀ (S.e7b lw la) (S.inr S.unitV) (S.finTr la) ∧
-    S.der [] (S.e7c lw la) (S.F S.EA.unit S.ty7) ∧
-    S.RunsTo S.R₀ (S.e7c lw la) (S.inr S.unitV) (S.finTr la) ∧
+    (∀ ε A, S.Lacks ε la → ¬ S.der [] (S.e7c lw la) (S.F ε A)) ∧
     S.der [] (S.e7d lw la lb) (S.F S.EA.unit S.ty7d) ∧
     S.RunsTo S.R₀ (S.e7d lw la lb) (S.inr S.unitV) (S.finTr la ++ S.finTr lb)
 

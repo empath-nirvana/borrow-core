@@ -5,11 +5,8 @@ import Targets.A.NonVacuity
 # The Instance — inversions of the tied kernel at a raise, a finaliser frame's context and a `let`
 
 `J₁`'s kernel (`CDerivesAt`) takes SPEC §27's `[then]`: a finaliser may raise and perform, its
-effects recorded in the cancel rows of the operations its computation performs.  The refutations of
-E7, E8 and E9 at `J₁` were of option A (the finaliser at `F 1`), and are retired with it: `e7b`,
-`e7d`, `e8b` and `e9c` raise from a finaliser to a live handler, which §27 types, and `e7c` raises
-to a handler the cancel kills, which D3 rejects (FINALISERS §4, M4).  What stays are the inversions
-those refutations read:
+effects recorded in the cancel rows of the operations its computation performs (E7, E8 and E9 at
+`J₁`: `Targets/Instance/E7.lean`, `E8.lean`, `E9.lean`).  The inversions here:
 
 * `derAt_raise`: a tied derivation of `raise (n, (i, V))` is at a computation type whose row has
   the operation `(n, i)` (`CTy.HasOp`); `F 1` has none (`not_derAt_raise_ret`).

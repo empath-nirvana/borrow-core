@@ -4030,10 +4030,12 @@ its rows is the top-level test, so it accepts and rejects what it did.
 - **The lowering of a finaliser that suspends** (`experiments/Targets/FINALISERS.md` §2.9: its
   cancel arm as a code of its own, each finaliser call a resumption point). Until it lands, a
   feature without its lowering.
-- **E7, E8 and E9 at tier 1's kernel** (`experiments/Targets`): `J₁`'s kernel (`CDerivesAt`) takes
-  §27's `[then]` and cancel rows, so it types `e7b` and the rest, and the refutations of E7, E8 and
-  E9 at `J₁`, which were of option A, are retired; their proofs, and E7c restated as its rejection
-  (D3), are FINALISERS.md §4.
+- **E9 at a context with an unrestricted `exn`** (`experiments/Targets`, the frame-deadness unit's
+  M4). At tier 1's kernel E7 and E8 hold at every admissible context, and E7c is rejected at every
+  row without its inner label (D3; at that label's row it is typed, its raise reaching the context's
+  instance). E9's stored closure holds `x : bool` across `cancel k`, a `[let]` at a row holding
+  `exnₒ`, and `[let]` asks a persistent context at a row with an unrestricted operation, an abortive
+  one included; so E9 is proved where no `exn` is unrestricted, as E5 is.
 - **`[then]`'s two premises on unrestricted operations** restrict `unr` beyond §19's `[then]`
   (decision 63). §19's top-level premise is not enough: the finaliser's frame is live in the
   cancels below it.
