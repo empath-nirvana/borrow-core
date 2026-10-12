@@ -4040,9 +4040,15 @@ its rows is the top-level test, so it accepts and rejects what it did.
 - **`⊤` cancel rows.** A continuation whose cancel would need unboundedly many outer instances
   (recursion through a finaliser's capturable operation) gets `⊤` and cannot be cancelled: the
   approximation of a finite type.
-- **S5 at D2's endings, algebraicity's `KeptKapFree`, and `CfinEnds`**
-  (`experiments/Targets/FINALISERS.md` §3). An unrestricted continuation discarded with a kept
-  error inside it is the tolerated exception to "no error is dropped".
+- **S5 at D2's endings, algebraicity at every admissible context, and a kept error held by a
+  continuation** (`experiments/Targets/TIER1-PLAN.md`, the frame-deadness unit's M3). S5's
+  no-interception is proved at tier 1's kernel at finalisers that let no raise escape, not at D2's
+  endings. Algebraicity is proved given that every kept error holds no λ, which fails where a
+  finaliser raises a thunk; the weaker hypothesis (no captured continuation in a kept error) needs a
+  simulation relation that confines the law's frames to continuations. "No error is dropped" is
+  proved on the runs whose `[op]` steps capture no kept error. An unrestricted continuation
+  discarded with a kept error inside it is the tolerated exception; a linear or affine one holding a
+  kept error waits on S6's use exactly once.
 
 ---
 

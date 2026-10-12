@@ -1110,7 +1110,8 @@ running finaliser's `cfin` frame of `K` holds a kept error that is none or a rai
 name.  A `cfin` frame keeps what a finaliser raised (`[cfin-raise]`) or what a cancel passing it
 kept (`[cfin-cancel]`), so this is a whole-run fact about the names finalisers raise.  The cancel
 bridge's added hypothesis (`noIntercept_of_core`): the cancel's traces read a kept error at the
-labels, and an error of a name no label has would be read as none. -/
+labels, and an error of a name no label has would be read as none.  At `J₁` it is a run invariant
+(`I.cancelsNamed_J₁`, `Targets/I/CancelsNamed.lean`). -/
 def CancelsNamed (RF : RowForm) (Ξ : EffCtx) (J : OurTyping RF) : Prop :=
   ∀ R : (ourInst (ℍ := ℍ) RF Ξ J).Runner, R.Respects → ∀ e ε A,
     (ourInst (ℍ := ℍ) RF Ξ J).Answers R ε →
@@ -1125,7 +1126,8 @@ def CancelsNamed (RF : RowForm) (Ξ : EffCtx) (J : OurTyping RF) : Prop :=
 /-- **A cancelled continuation's context holds no `ccatch` and no `cfin` frame**, at a cancel of
 `capture l H K`.  Before frame deadness (decision D1 of 2026-10-08) it was the cancel bridge's
 hypothesis; the cancel's traces now pass a running finaliser's `cfin` frame (`pend`), and a cancel
-nested in a cancel puts one there. -/
+nested in a cancel puts one there: it fails at `J₁` (`not_cancelsNoCtl_J₁`,
+`Targets/Instance/DropWitness.lean`). -/
 def CancelsNoCtl (RF : RowForm) (Ξ : EffCtx) (J : OurTyping RF) : Prop :=
   ∀ R : (ourInst (ℍ := ℍ) RF Ξ J).Runner, R.Respects → ∀ e ε A,
     (ourInst (ℍ := ℍ) RF Ξ J).Answers R ε →
