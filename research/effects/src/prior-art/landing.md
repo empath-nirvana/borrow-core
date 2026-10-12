@@ -70,8 +70,9 @@ literature will not settle our remaining questions; our proofs have to.
   settled** (only the guarantees are).
   - A dense carrier (N15) would make adjacency undefinable, but our construction recurses down
     `⊏`, which is well-founded only on ℕ-like carriers.
-  - Loan sets / invalidation (Oxide, Polonius, LLBC) are position-free without step-indexing, but
-    their proofs are on paper only, with no closures or async.
+  - Loan sets / invalidation (Oxide, Polonius, LLBC) are position-free without step-indexing.
+    Their proofs are on paper, which is not a cost: BoLo was paper-only too, and transcribing a
+    paper proof is how this project works. The real gap is coverage: no closures, no async.
 - **Invalidation at the cut.** Borrows internal to a suspended region cannot be touched
   (linearity moved the place in), so the check is about the model, not the program. Borrows that
   cross in payloads (lending iterators) get a real rule: resuming invalidates outstanding views.

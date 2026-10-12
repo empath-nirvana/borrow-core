@@ -54,7 +54,8 @@ Tier 2 stays a goal.
   lifetimes in play.
 - **Invalidation at the cut.** Internal borrows cannot be touched while suspended; borrows
   crossing in payloads (lending iterators) are invalidated by resuming. Anchor: the loan-set
-  models (Oxide, Polonius, LLBC).
+  models (Oxide, Polonius, LLBC; paper proofs, a fine basis to transcribe; the gap is no
+  closures or async).
 - **Scoped tasks** via linear continuations (Swift's escape from the trilemma).
 - **Resume versus cancel** when a consumer of a lent value aborts (Swift SE-0474).
 
