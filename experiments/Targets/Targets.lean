@@ -13,6 +13,7 @@ import Targets.A.System
 import Targets.Base.Closed
 import Targets.Base.CoreCancel
 import Targets.Base.RaiseNames
+import Targets.Base.KeptCount
 import Targets.Base.Ctx
 import Targets.Base.Look
 import Targets.Base.LookMem
@@ -80,11 +81,13 @@ import Targets.Instance.E5
 import Targets.Instance.E2
 import Targets.Instance.E10
 import Targets.Instance.ZeroCost
+import Targets.Instance.DropWitness
 import Targets.I.AcceptsRejects
 import Targets.I.AlgJ1
 import Targets.I.Binder
 import Targets.I.CancelsNZ
 import Targets.I.CancelsNamed
+import Targets.I.NoDropped
 import Targets.I.Combined
 import Targets.I.Device
 import Targets.I.GhostCoupling
