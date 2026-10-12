@@ -2707,8 +2707,79 @@ SPEC, the machine or the relation changed. `make gate` is the separate stage's.
 
 ## Frame-deadness unit outcome
 
-The unit implements decisions D1–D4 of 2026-10-08 (`FINALISERS.md`). Steps M0–M5; this section is
-updated as each lands. On `tier1-effects`, not pushed.
+The unit implements decisions D1–D4 of 2026-10-08 (`FINALISERS.md`). Steps M0–M5 have landed on
+`tier1-effects` (HEAD 3cdeb3c before this record). Nothing is pushed and `main` is untouched. The
+full `make gate` passed once at 3cdeb3c (`ci-local --source: ALL PASSED`). No hard stop applied, and
+the verifiers raised no blocker or major finding.
+
+**In plain terms.**
+- **The machine.** When a continuation is cancelled, the handlers inside the cancelled region are
+  now dead. A dead handler catches nothing, so a finaliser's raise or operation goes to the nearest
+  live handler outside the region. The machine never silently drops a finaliser's error; if two
+  errors are kept, the first one wins. This replaces SPEC §19's suppression by name and the
+  backend's cancel mask (SPEC 0.44).
+- **The typing.** A finaliser may now raise and perform operations, but only of names that have a
+  live handler outside every region that can cancel it. This is written as cancel rows on `[then]`
+  and `[handle]` (SPEC §27, 0.45). A finaliser raising a name with no live handler outside is a
+  type error (D3). Core's `fundamentalC`, `adequacyC` and `adequacyD` keep their statements.
+- **Programs.**
+  - Every kernel and corpus program keeps its answer and its counts, except `cancel-suppressed`
+    (`prog`).
+  - `prog` left the compiled kernel list: it now ends at a raise no handler catches, and its typed
+    form is rejected (`not_der_progT`).
+  - Two kernel programs were added, `cancel-reentered` and `cancel-propagated`, both `inr ()` at
+    counts `0 0 0`.
+  - A finaliser that performs an operation of a live outer handler runs correctly in Lean and in
+    the interpreter (`progFinOp`).
+  - The backend refuses to compile a finaliser that may suspend, with a message. This is a
+    fallback, not a lowering.
+- **S5, `CancelsNoCtl`, algebraicity.**
+  - S5 is proved at `J₁` at every effect context with no extra hypothesis (`I.cancellation_J₁`).
+    This covers finalisers that do not raise to a live handler; S5 at D2's endings is still open.
+  - `CancelsNoCtl` is refuted at `J₁` and nothing reads it any more.
+  - Algebraicity keeps the kept errors' values in the observation. It is proved given
+    `KeptLamFree`, which fails at one admissible context (`not_keptLamFree_ΞT`).
+  - "No typed run drops an error" is proved on runs where no continuation captures a kept error.
+    A restriction of this kind is shown to be needed (`not_noDroppedError_unr`).
+- **E7–E9.**
+  - E7 and E8 are proved at every admissible context.
+  - E9 is proved at the contexts with no `unr` `exn` signature.
+  - E7c is restated as its rejection at every row without its inner label. At that label's own
+    row, `J₁` types it and the raise reaches the live instance.
+- **AT08.** AT08 is restated so that it reads its cell by `swap` and `free`. Its rejection by the
+  continuation rule is proved at Core's kernel (`Rej.not_der_at08`). The same clause using the copy
+  once is typed and runs.
+- **Tier 1 at `J₁`** follows from these premises at every admissible effect context
+  (`status_tier1_J₁_of_open`), none of them derived and no obstruction verified:
+  - E2, E3 and E10;
+  - E5 and E9 where an `exn` signature is `unr`;
+  - S6's `OnlyOwnerFrees` and `NoDanglingUse`.
+
+**For the user to confirm.**
+1. The M2c lowering fallback: finalisers that may suspend are not compiled (FINALISERS reading 7).
+2. The two new `[then]` premises under decision 63 (`Row.UnrD` at any depth of the cancel rows;
+   `PendPers`). No existing derivation is affected.
+3. For E5 and E9 at an `unr` `exn` signature, one of two options:
+   - restrict `unr` `exn` signatures out of the admissible contexts (decision 63); or
+   - refine Core's `[let]` premise to resuming `unr` operations, which needs a SPEC entry.
+4. E7c is restated as rejected only at rows without its inner label, not at every type.
+5. Whether `CancelsNZ` (proved) and `CancelsNoCtl` (refuted) are deleted or kept as records.
+6. `prog` is now recorded as Lean and interpreter runs, not compiled as an untyped Shape.
+
+**Open minor findings, not fixed in this unit.**
+- `Status.lean` still calls the no-interception teeth OPEN in three places, but they are proved
+  by `finRow_teeth_J₁`.
+- `KeptLamFree`'s docstring is narrower than its definition, which covers every raise that reaches
+  a running finaliser's `cfin` frame.
+- The interpreter's `[cfin-cancel]` branch does not check `j = 0`. Name 0 is raised only at index 0.
+- ShareCancel and FrameW are stated only at an empty cancel row. Their forms at a non-empty row are
+  open.
+- An affine AT08 is not stated.
+- `experiments/Targets/GHOST-RESOURCE.md` is untracked and was not created by this unit.
+
+| gate | result |
+|---|---|
+| full `make gate` at 3cdeb3c | PASSED: build, hygiene and axioms, corpus parse/check/compile, kernel compile, sugar pairs, typed IR, book doc-tests (83 blocks, 82 passed, 1 ignored) and book build |
 
 | step | status | commits |
 |---|---|---|
@@ -2716,8 +2787,8 @@ updated as each lands. On `tier1-effects`, not pushed.
 | M1: frame deadness in the machine (SPEC §19, 0.44) | LANDED (below) | 185025b |
 | M2: the typing of finalisers with effects (SPEC §27) | LANDED in Core; tier 1's kernel at option A; lowering by the fallback (below) | 833b026, 5b9f216, dd01061; M2c with this record |
 | M3: S5's `pend`, the cell clause, algebraicity, no dropped error | LANDED (below): S5 PROVED at `J₁`; algebraicity given `KeptLamFree`, which fails at an admissible context; no dropped error PROVED on the runs that capture no kept error | 3665c0b, 925b251, e70e59f, 8c8c7ca, ed57d98, 073b785; this record |
-| M4: E7–E9 at `J₁` | LANDED (below): E7 and E8 PROVED at every admissible context, E9 where no `exn` is `unr`; E7c RESTATED as its rejection at the rows without its inner label | this record |
-| M5: AT08 by the continuation rule; what `tier1_J₁_of_ESU` needs | LANDED (below): AT08 RESTATED and refused by the continuation rule, PROVED at Core's kernel; its control typed and run; tier 1 reduced to its open premises (`status_tier1_J₁_of_open`) | this record |
+| M4: E7–E9 at `J₁` | LANDED (below): E7 and E8 PROVED at every admissible context, E9 where no `exn` is `unr`; E7c RESTATED as its rejection at the rows without its inner label | 4e45ee4 |
+| M5: AT08 by the continuation rule; what `tier1_J₁_of_ESU` needs | LANDED (below): AT08 RESTATED and refused by the continuation rule, PROVED at Core's kernel; its control typed and run; tier 1 reduced to its open premises (`status_tier1_J₁_of_open`) | 3cdeb3c |
 
 ### M1: frame deadness
 
