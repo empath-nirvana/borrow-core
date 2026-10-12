@@ -46,6 +46,18 @@ Tier 2 stays a goal.
     §4.2), and lending iterators break PL1.
   - Not derived; no obstruction verified.
 
+## Leads (from the 2026-10-12 survey, [prior-art/landing.md](prior-art/landing.md) §4)
+
+- **The lifetime carrier is not settled.** Only the fundamental property, adequacy and the borrow
+  guarantees are. A dense order would make adjacency undefinable (N15), but our construction
+  recurses down `⊏`. First test: rebuild `GapWitness` over a dense carrier, recursing over the
+  lifetimes in play.
+- **Invalidation at the cut.** Internal borrows cannot be touched while suspended; borrows
+  crossing in payloads (lending iterators) are invalidated by resuming. Anchor: the loan-set
+  models (Oxide, Polonius, LLBC).
+- **Scoped tasks** via linear continuations (Swift's escape from the trilemma).
+- **Resume versus cancel** when a consumer of a lent value aborts (Swift SE-0474).
+
 ## How to restart
 
 1. **Finish part 1 first** (`foundations/effects-algebra.md`): the effect theory, stated and
