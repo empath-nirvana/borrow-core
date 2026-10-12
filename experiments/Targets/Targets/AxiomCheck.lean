@@ -1303,6 +1303,17 @@ run_meta do
 #print axioms Targets.Rej.not_der_at06
 #print axioms Targets.Rej.not_der_at08
 #print axioms Targets.Rej.not_der_at13
+#print axioms Targets.Rej.alloc_var_row
+#print axioms Targets.Rej.at08Once_runs
+#print axioms Targets.Rej.d_at08Once
+#print axioms Targets.Rej.d_at08OnceCl
+#print axioms Targets.Rej.der_swap
+#print axioms Targets.Rej.der_swap_app
+#print axioms Targets.Rej.der_swap_var
+#print axioms Targets.Rej.not_der_swapBody₁
+#print axioms Targets.Rej.not_der_swapLet
+#print axioms Targets.Rej.swap_lam
+#print axioms Targets.Rej.vview_ref
 #print axioms Targets.Rej.JR.amp
 #print axioms Targets.Rej.JR.amp_amp
 #print axioms Targets.Rej.JR.rowLe
@@ -1483,6 +1494,8 @@ run_meta do
 #print axioms Targets.at02_eval
 #print axioms Targets.at04_eval
 #print axioms Targets.at07_eval
+#print axioms Targets.at08_eval
+#print axioms Targets.at08Once_eval
 #print axioms Targets.at12_eval
 #print axioms Targets.at17_eval
 #print axioms Targets.blocksAffine_of_affineAbove
@@ -2402,6 +2415,7 @@ run_meta do
 #print axioms Targets.I.cancelsNZ_tier1Open
 #print axioms Targets.I.tier1_J₁_of_EU
 #print axioms Targets.status_tier1_J₁_of_EU
+#print axioms Targets.status_tier1_J₁_of_open
 #print axioms Targets.Inst.rpath_prefix_chainPath
 #print axioms Targets.Inst.purePath_end
 #print axioms Targets.Inst.kActs_comp

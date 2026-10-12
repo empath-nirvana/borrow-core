@@ -77,9 +77,12 @@ over the open types, with the row `∀` (`Targets/Instance/J1.lean`); our instan
 the rows of its handlers and operations tied to the context (decision R, below).  Proved of it: A's
 (S) properties but S6 at every effect context, B's guarantees (B5 included, piece 6), the world's
 conjuncts and the pins, and the composite's programs (`Accepts`) and rejections (`Rejects`;
-decision AR, below).  So `I.Tier1 J₁` follows from A's (E) properties and S6 at every admissible
-effect context (`status_tier1_J₁_of_EU`; with S5 as a hypothesis, `status_tier1_J₁_of_ECU`; with S4
-too, `status_tier1_J₁_of_ESU`).
+decision AR, below; AT08 **RESTATED** so that the continuation rule refuses it, M5).  So `I.Tier1 J₁`
+follows from A's (E) properties and S6 at every admissible effect context (`status_tier1_J₁_of_EU`;
+with S5 as a hypothesis, `status_tier1_J₁_of_ECU`; with S4 too, `status_tier1_J₁_of_ESU`), and from
+what of them is open (`status_tier1_J₁_of_open`): at every admissible effect context, E2, E3 and
+E10, E5 and E9 where an `exn` signature is `unr`, and S6's two ownership properties of the capture
+cell, `OnlyOwnerFrees` and `NoDanglingUse`.
 TIER1-PLAN §2's first route (elaborating each derivation into the kernel before D5) does not reach
 tier 1 (`status_elab_route`); `J₁` is built by D5's route instead.
 
@@ -644,12 +647,12 @@ context:
   machine.  The interpreter's runs (`*_eval`) stay evidence; these are proofs.
 * **`Rejects J₁.read`: PROVED AT σ=[]** (`I.rejects_J₁`; `Rej.rejects_tier1`): AT05, AT06, AT08 and
   AT13 have no derivation in Core's kernel, at any context and any judgement
-  (`Targets/I/Rejects.lean`).  The inversions are thirteen inductions on `CDerives`, each carrying a
+  (`Targets/I/Rejects.lean`).  The inversions are fourteen inductions on `CDerives`, each carrying a
   class of judgements through the fourteen same-term rules (the value rules `!E`, `[]I`, `[]E`, the
   two `⊑`, `roll`, `unroll`; `return`, `ofRet`, `[sub]`, `ν`'s two; at a λ-value, the two thunk
   rules): a variable, a pair, `()`, an application, a λ-value (with its constants' axioms), `let (x,
-  y)`, `;`, `then`, `handle`, `alloc`, the primitives; and every free variable of a typed term has a
-  live slot (`fv_live`).  About 2200 lines, 17 s to build.
+  y)`, `;`, `then`, `handle`, `alloc`, `swap`, the primitives; and every free variable of a typed term
+  has a live slot (`fv_live`).  About 2500 lines, 19 s to build.
   * **AT06** (`not_der_at06`): the clause is in `[handle]`'s clause tuple, so at a `!U` type over a
     persistent context, and it uses the cell, whose slot is a view of a `Ref`.
   * **AT13** (`not_der_at13`): the clause's `κ` is at `kTy` at `lin`, a thunk of an `&`; `forget`'s
@@ -660,11 +663,18 @@ context:
     at `∀'x ⊏ @b. L ⊸ F_Σ(['x] B)`, `L` a borrow, where `λm. (m, m)` uses `m` on both sides of a
     split (`not_at05F_cb`).  The `copy` axiom types the λ-value `copy`, not a body under a borrow,
     so the rejection holds at the `Imm` lend too.
-  * **AT08** (`not_der_at08`): **the rejection rests on `load`**, which has no rule of its own in
-    Core's kernel (`der_prim`, `not_der_load_app`); reads go through `withload` and `swap`.  The
-    reason RESTRUCTURE §3.4 gives (`kTy` at `lin` and `aff` neither droppable nor persistent) is not
-    what refuses the program as written.  A restatement of AT08's program, reading the cell by
-    `withload` or `swap`, is the user's.
+  * **AT08** (`not_der_at08`; RESTATED, M5): **refused by the continuation rule**, RESTRUCTURE
+    §3.4's reason.  The clause reads its cell by `swap` and `free`: it stores `κ`, reads it out with
+    `swap` as `k₁`, puts `k₁` back with a second `swap`, reads it out again with `free` as `k₂`, and
+    resumes both.  `κ` is at `kTy` at `lin`, a thunk of an `&`; `alloc` stores a view of it
+    (`alloc_var_row`); `swap` is typed at its axiom `Ref A ⊸ B ⊸ Ref B ⊗ A` alone, since its body
+    loads its cell (`der_swap`), so the first `swap` reads that view out as `k₁` (`der_swap_app`).
+    `k₁` is used by the second `swap` and by its resume, on the two sides of a split, so its slot is
+    persistent (`splitP_both`), which a view of a thunk is not (`kview`).  Nothing else refuses it:
+    the same clause with the copy used once (`at08Once`: `k₁` put back, only `k₂` resumed) is typed
+    by Core's kernel at `F 1` (`d_at08Once`) and every run of it ends at `()` with the memory empty
+    (`at08Once_runs`).  At the interpreter AT08's second resume frees `κ`'s cell again, a use after
+    free (`at08_eval`, evidence): a linear `κ` is handed at a cell its resume releases (SPEC §25).
 
 ## Piece 5: the answering class (D1.h1–h4)
 
@@ -748,16 +758,16 @@ context:
 | the corollaries of `Combined` | PROVED (generic) | `combined_prog`, `i1Prog_of_combined`, `i2Prog_of_combined`, `effSafe_core_of_combined`, `soundnessContractsAR_of_combined` |
 | Core's extern contract gives W's at row-abortive types, with `EmbedsNil` | PROVED (generic) | `contractsW_of_meets` |
 | a reachable leak breaks the combined theorem | PROVED (generic) | `not_combined_of_leak`; the witness `leakW` |
-| the composite programs run (interpreter, evidence) | checked | `at02_eval` … `at17_eval`, `genSelf_eval` (the generator borrowing its own state), `at07_eval` (AT07 runs into `useAfterFree`) |
+| the composite programs run (interpreter, evidence) | checked | `at02_eval` … `at17_eval`, `genSelf_eval` (the generator borrowing its own state), `at07_eval` (AT07 runs into `useAfterFree`), `at08_eval` (AT08's second resume frees `κ`'s cell again), `at08Once_eval` |
 | `CompositeT1 tier1`: typed, safe and terminating under the empty platform, one complete run answering the stated value | PROVED AT σ=[] (the run computed by `runM`, `runM_sound`) | `compositeT1_tier1`, `acceptedT1_*`, `run_*` |
-| `Accepts J₁.read .abortive`, `Rejects J₁.read` (decision AR) | PROVED AT σ=[]; AT08's rejection rests on `load` having no rule | `I.accepts_J₁`, `I.rejects_J₁`, `Rej.rejects_tier1`, `status_acceptsRejects_J₁` |
+| `Accepts J₁.read .abortive`, `Rejects J₁.read` (decision AR) | PROVED AT σ=[]; AT08 RESTATED (M5), refused by the continuation rule: its copy of `κ` is used twice, and the same clause with the copy used once is typed and runs | `I.accepts_J₁`, `I.rejects_J₁`, `Rej.rejects_tier1`, `Rej.not_der_at08`, `Rej.d_at08Once`, `Rej.at08Once_runs`, `status_acceptsRejects_J₁` |
 | `Tier2Programs`, `RejectsAT07` | OPEN (no tier-2 typing system; AT07's stuck run not written out) | — |
 | `EffSafe tier1` (Core's P2) | PROVED AT σ=[] | `effSafe_tier1` |
 | `EffSafeDrive` (P2 for driven programs), RESTATED (D2: a positive loop body; D4: a finished drive observed, `DoneDrive`) | PROVED AT σ=[] at every typing system with FL at BoLo, so at today's unr-free kernel; the hypothesis is needed; the route at a generic world, `EffSafeDriveOfFL`, OPEN | `effSafeDrive_of_FL`, `effSafeDrive_tier1NU`; `effSafeDrive_needs_nuOk` |
 | `Pins tier1Open admClosedOp .abortive`, with `I4a` at the unr-free rules | PROVED AT σ=[] (abortive rows) | `I.pins_tier1Open`, `i4a_tier1NU` |
 | Law 1 at the relation: `ovalW` at `U(∀ρ:k. C)` and `!U(∀ρ:k. C)` is the intersection of the instances; `FLOpen M J` gives `FL M J.read`; `FLOpen` at today's kernel | PROVED (generic); PROVED AT σ=[] | `I.ovalW_allR`, `I.ovalW_bang_allR`, `I.fl_of_flOpen`, `I.flOpen_core_tier1Open` |
 | `J₁`: its reading is Core's kernel; FL at BoLo (B1); B's guarantees; the pins; FL at its open judgements over contexts with no polymorphic slot, a polymorphic type read as the intersection of its instances (Law 1) | PROVED AT σ=[] (abortive rows for the pins); `FLOpen coreB J₁` at contexts with a polymorphic slot NOT PROVED (a value `ovalW` relates there need not be a closed λ-value Core types) | `status_j1`, `status_guarantees_J₁`, `status_pins_J₁`, `I.flOpen_J₁_mono` |
-| tier 1 at `J₁` | **OPEN**: A's (E) properties at `J₁` are open (E2a–c, E3, E10's `retry` and loop not derived; E5 and E9 at a context with an `unr` `exn`, and E2d with an `unr` operation, not derived; E7 and E8 PROVED, E9 where no `exn` is `unr`, M4); S5 read whole fails (kept as a record).  S4, restated at the capture cell, and S5, restated prefix-closed and under frame deadness, are PROVED at every effect context, so tier 1 follows from A's (E) properties and S6 at every admissible effect context, `Accepts` and `Rejects` being proved (decision AR) | `status_tier1_J₁`, `status_handlerSem_cell`, `status_tier1_J₁_of`, `status_tier1_J₁_of_ESU`, `status_tier1_J₁_of_ECU`, `status_tier1_J₁_of_EU`, `status_eProps_J₁`, `status_cancellation_J₁` |
+| tier 1 at `J₁` | **OPEN**: A's (E) properties at `J₁` are open (E2a–c, E3, E10's `retry` and loop not derived; E5 and E9 at a context with an `unr` `exn`, and E2d with an `unr` operation, not derived; E1, E4, E6, E7 and E8 PROVED, E5 and E9 where no `exn` is `unr`, M4); S5 read whole fails (kept as a record).  S4, restated at the capture cell, and S5, restated prefix-closed and under frame deadness, are PROVED at every effect context, and `Accepts` and `Rejects` are PROVED (decision AR; AT08 restated, M5).  So `tier1_J₁_of_ESU` needs, at every admissible effect context, E2, E3 and E10, E5 and E9 where an `exn` signature is `unr`, and S6's two ownership properties of the capture cell, `OnlyOwnerFrees` and `NoDanglingUse`: nothing else | `status_tier1_J₁`, `status_handlerSem_cell`, `status_tier1_J₁_of`, `status_tier1_J₁_of_ESU`, `status_tier1_J₁_of_ECU`, `status_tier1_J₁_of_EU`, `status_tier1_J₁_of_open`, `status_eProps_J₁`, `status_cancellation_J₁` |
 | TIER1-PLAN §2's route (elaborate `J₁` into today's unr-free kernel, then `fundamentalC`) | **DOES NOT REACH TIER 1**: closed derivations that elaborate type no A-level handler, so E8 fails; today's kernel types no let-bound function read at two rows | `I.not_tier1_of_elabClosed`, `not_der_letTwo` |
 | FIX-RUN-END's checks and witness worlds | PROVED | `Targets/I/RunEnd.lean` (73 results) |
 | I1, I3, I5, P11 at `coreW` (the device); I2 at `coreW` | PROVED AT σ=[]; PROVED AT A RESTRICTION (abortive rows) | `i1_core`, `i3_core`, `i5_core`, `p11_core`; `i2_core_abortive` |
@@ -896,6 +906,12 @@ entry.
   its inner label.  The restatement at every type (FINALISERS §4) is not adopted: at the inner
   label's row `e7c` is typed at `J₁` (`e7c_typed_at_lift_J₁`).  `e7c` left A₃'s `ZeroCost` corpus,
   which lists the terminating (E) programs.
+* AT08's program before M5 (the clause read its cell holding `κ` twice with `load`, which has no
+  rule in Core's kernel, so `load` and not the continuation rule refused it): **RESTATED** (M5) to
+  read the cell by `swap` and `free`, so that the continuation rule refuses it, as RESTRUCTURE
+  §3.4 has it.  `Rejects`' statement is unchanged.  `not_der_load_app` stays, read by `der_swap`;
+  `status_acceptsRejects_J₁`'s conjunct stating it is replaced by AT08's control (`d_at08Once`,
+  `at08Once_runs`).
 -/
 
 noncomputable section
@@ -1495,16 +1511,20 @@ theorem status_tier1_J₁_of
 
 /-- PROVED AT σ=[] (decision AR): the composite's programs at `J₁`, each typed, safe, terminating and
 with a computed complete run answering the stated value; and its rejections, AT05, AT06, AT08 and
-AT13, typed at no type by Core's kernel, nor by the tied kernel at any effect context.  AT08's
-rejection rests on `load` having no rule. -/
+AT13, typed at no type by Core's kernel, nor by the tied kernel at any effect context.  AT08 is
+refused by the continuation rule (M5): the same clause with the copy of `κ` used once is typed by
+Core's kernel at `F 1`, and every run of it ends at `()` with the memory empty. -/
 theorem status_acceptsRejects_J₁ :
     I.Accepts (ℍ := ℍ) J₁.read .abortive ∧ Rejects J₁.read ∧
       (∀ (Ξ : EffCtx) (Δ : BoCa.Lifetime.LifeCtx) (Γ : Ctx VTy) (j : Jdg),
         ¬ CDerivesAt Ξ Δ Γ at05 j ∧ ¬ CDerivesAt Ξ Δ Γ at06 j ∧ ¬ CDerivesAt Ξ Δ Γ at08 j ∧
           ¬ CDerivesAt Ξ Δ Γ at13 j) ∧
-      ∀ (Δ : BoCa.Lifetime.LifeCtx) (Γ : Ctx VTy) (X : Expr) (j : Jdg),
-        ¬ CDerives Δ Γ (.app (.prim .load) X) j :=
-  ⟨I.accepts_J₁, I.rejects_J₁, fun Ξ _ _ _ => I.rejects_tied Ξ, fun _ _ _ _ => Rej.not_der_load_app⟩
+      CDerives BoCa.Lifetime.LifeCtx.empty [] at08Once (.comp (.ret .unit)) ∧
+      ∀ {μ₁ : BoCa.BoLo.Heap} {e₁ : Expr},
+        BoCa.BoLo.Steps (ℍ := ℍ) Adequacy.emptyMem at08Once μ₁ e₁ →
+          BoCa.BoLo.Steps (ℍ := ℍ) μ₁ e₁ Adequacy.emptyMem (.val .unit) :=
+  ⟨I.accepts_J₁, I.rejects_J₁, fun Ξ _ _ _ => I.rejects_tied Ξ, Rej.d_at08Once,
+    fun hs => Rej.at08Once_runs hs⟩
 
 /-- PROVED: tier 1 at `J₁` follows from A's (E) properties, S4, S5 and S6 at every admissible
 effect context (decision AR discharges `Accepts` and `Rejects`). -/
@@ -1529,10 +1549,11 @@ theorem status_tier1_J₁_of_ECU
   I.tier1_J₁_of_ECU hE hC hU
 
 /-- **OPEN**: tier 1 at `J₁`.  Its A conjunct asks A's (E) properties at every admissible effect
-context; E7 and E8 are proved there, E9 where no `exn` signature is `unr`, and E7c is restated as
-its rejection (decision D3; `status_eProps_J₁`).  S5 read whole fails at the admissible `ΞA` (kept as
-a record); S5 is read prefix-closed (fix-up F3), restated under frame deadness (M3), and holds at
-every effect context (`status_cancellation_J₁`). -/
+context; E1, E4, E6, E7 and E8 are proved there, E5 and E9 where no `exn` signature is `unr`, and E7c
+is restated as its rejection (decision D3; `status_eProps_J₁`).  S5 read whole fails at the
+admissible `ΞA` (kept as a record); S5 is read prefix-closed (fix-up F3), restated under frame
+deadness (M3), and holds at every effect context (`status_cancellation_J₁`).  What remains is
+`status_tier1_J₁_of_open`'s premises. -/
 theorem status_tier1_J₁ :
     ¬ (∀ Ξ, AdmEff Ξ → (ourInst (ℍ := ℍ) orowRF Ξ J₁).CancellationWhole
         (ourInst (ℍ := ℍ) orowRF Ξ J₁).noFinRaise) :=
@@ -1545,6 +1566,30 @@ theorem status_tier1_J₁_of_EU
     (hU : ∀ Ξ, AdmEff Ξ → (ourInst (ℍ := ℍ) orowRF Ξ J₁).ContUseEv) :
     I.Tier1 (ℍ := ℍ) J₁ :=
   I.tier1_J₁_of_EU hE hU
+
+/-- PROVED: **what `tier1_J₁_of_ESU` needs**.  Tier 1 at `J₁` follows from, at every admissible
+effect context, E2, E3 and E10; E5 and E9 where an `exn` signature is `unr`; and S6's two ownership
+properties of the capture cell (`OnlyOwnerFrees`, `NoDanglingUse`).  The rest of its premises is
+proved: S4 and S5 at every effect context (M3), E1, E4, E6, E7 and E8 at every admissible one, E5 and
+E9 where no `exn` signature is `unr` (M4), S6 from the two properties (`I.contUseEv_J₁_of`), and
+`Accepts` and `Rejects` (decision AR; AT08 restated, M5). -/
+theorem status_tier1_J₁_of_open
+    (hE2 : ∀ Ξ, AdmEff Ξ → (ourInst (ℍ := ℍ) orowRF Ξ J₁).HigherOrderPoly)
+    (hE3 : ∀ Ξ, AdmEff Ξ → (ourInst (ℍ := ℍ) orowRF Ξ J₁).Loops)
+    (hE5 : ∀ Ξ, AdmEff Ξ → ¬ Inst.NoUnrExn Ξ → (ourInst (ℍ := ℍ) orowRF Ξ J₁).NestedHandlers)
+    (hE9 : ∀ Ξ, AdmEff Ξ → ¬ Inst.NoUnrExn Ξ → (ourInst (ℍ := ℍ) orowRF Ξ J₁).StoredK)
+    (hE10 : ∀ Ξ, AdmEff Ξ → (ourInst (ℍ := ℍ) orowRF Ξ J₁).Reconciler)
+    (hO : ∀ Ξ, AdmEff Ξ → Inst.OnlyOwnerFrees (ℍ := ℍ) Ξ J₁)
+    (hN : ∀ Ξ, AdmEff Ξ → Inst.NoDanglingUse (ℍ := ℍ) Ξ J₁) :
+    I.Tier1 (ℍ := ℍ) J₁ := by
+  refine I.tier1_J₁_of_EU (fun Ξ hΞ => ?_) (I.contUseEv_J₁_of hO hN)
+  by_cases hx : Inst.NoUnrExn Ξ
+  · exact ⟨Inst.noColouring_J₁ hΞ, hE2 Ξ hΞ, hE3 Ξ hΞ, Inst.deepHandler_J₁ hΞ,
+      Inst.nestedHandlers_J₁ hΞ hx, Inst.tunnel_J₁ hΞ, Inst.cancelPolicy_J₁ hΞ,
+      Inst.unwindPolicy_J₁ hΞ, Inst.storedK_J₁ hΞ hx, hE10 Ξ hΞ⟩
+  · exact ⟨Inst.noColouring_J₁ hΞ, hE2 Ξ hΞ, hE3 Ξ hΞ, Inst.deepHandler_J₁ hΞ, hE5 Ξ hΞ hx,
+      Inst.tunnel_J₁ hΞ, Inst.cancelPolicy_J₁ hΞ, Inst.unwindPolicy_J₁ hΞ, hE9 Ξ hΞ hx,
+      hE10 Ξ hΞ⟩
 
 /-- PROVED (decision E): A's (E) properties at `J₁`, at every admissible effect context: E1, E4, E6,
 E7 (E7c restated as its rejection, decision D3) and E8, and E5 and E9 where no `exn` signature is

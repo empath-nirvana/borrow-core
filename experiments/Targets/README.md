@@ -69,7 +69,7 @@ Instance; the Instance imports no B or I; I imports everything.
 | | `Targets/Instance/FinRaise.lean`, `ELabels.lean`, `ETyping.lean`, `EHof.lean`, `ERuns.lean`, `E1.lean`, `E1Runs.lean`, `EProps.lean`, `E2.lean`, `E4.lean`, `E5.lean`, `E6.lean`, `E7.lean`, `E8.lean`, `E9.lean`, `E10.lean` | A's (E) properties at `J₁` (decision E): E1, E4, E6, E7 (E7c rejected at the rows without its inner label, decision D3) and E8 at every admissible context, E5, E9 and E2's `sumGen` program with no `unr` operation in the way, E10's `timeout` |
 | **I** | `Targets/I/World.lean` | `SemWorld extends B.BWorld` (`held`, `Stop`, `share`), `coreW`, the effectful wp |
 | | `Targets/I/Interface.lean`, `Device.lean`, `Pins.lean`, `Routes.lean` | I1–I5 at the world; `Bounds`, `Interface`, the proof device `Device`, `EmbedsNil`; R-CLOSEDOP; `effSafeOfFL`, `contractsW_of_meets` |
-| | `Targets/I/Programs.lean` | the composite programs: `at02`, `at04`, `at12`, `at17`, `genSelf`, and the rejected AT05–AT08, AT13; `AcceptedAt`, `Tier2Programs`, `Rejects`, `RejectsAT07` |
+| | `Targets/I/Programs.lean` | the composite programs: `at02`, `at04`, `at12`, `at17`, `genSelf`, and the rejected AT05–AT08, AT13; AT08's control `at08Once` (the copy of `κ` used once); `AcceptedAt`, `Tier2Programs`, `Rejects`, `RejectsAT07` |
 | | `Targets/I/Combined.lean` | **`I.Combined`**, done's statement; `Tier1`, `Tier1Core`; the corollaries |
 | | `Targets/I/RunEnd.lean`, `Binder.lean`, `NonVacuity.lean`, `Restricted/*` | FIX-RUN-END's checks and witness worlds; the freeze binder at W; witnesses for the pins; the restricted results at `coreW` and `tier1` |
 | | `Targets/I/OpenRel.lean`, `Tier1Route.lean` | Law 1 at the relation (`ovalW`, `FLOpen`, `fl_of_flOpen`); the elaboration route does not reach tier 1; `Tier1Core` from S5 (`tier1Core_of_S5`) |
@@ -77,7 +77,7 @@ Instance; the Instance imports no B or I; I imports everything.
 | | `Targets/I/J1.lean`, `GhostCoupling.lean` | B1, B's guarantees, the pins, FL at the open judgements and A's (S) properties at `J₁`, S4 at every effect context (`handlerSem_J₁`) and not vacuously (`catchLaw_progT_cell`); `Tier1 J₁` from what is open (`tier1_J₁_of`); route 8.4's obligation at the capture cell: R1 at a linear or affine operation is not in Core's relation (`not_semC_R1`) |
 | | `Targets/I/ContUseJ1.lean` | S6 at the capture cell: a capture event allocates `κ`'s cell (`catchEv_cell`), a use releases it (`use_frees_cell`), leak freedom (`leakFreeAt_J₁`); S6 from the cell's ownership (`contUseEv_of_cells`, `contUseEv_J₁_of`) |
 | | `Targets/I/Theories.lean` | the answering class at `J₁`: global state's handler correct, the tail law and algebraicity there |
-| | `Targets/I/Rejects.lean` | inversions of Core's kernel (thirteen inductions on `CDerives`, a class of judgements carried through the same-term rules; every free variable of a typed term has a live slot, `fv_live`); AT05, AT06, AT08 and AT13 have no derivation (`rejects_tier1`), AT08's for want of a rule for `load` |
+| | `Targets/I/Rejects.lean` | inversions of Core's kernel (fourteen inductions on `CDerives`, a class of judgements carried through the same-term rules; every free variable of a typed term has a live slot, `fv_live`; `swap` typed at its axiom alone, `der_swap`); AT05, AT06, AT08 and AT13 have no derivation (`rejects_tier1`), AT08's by the continuation rule: its copy of `κ` is used on both sides of a split, and the same clause with the copy used once is typed (`d_at08Once`, `at08Once_runs`) |
 | | `Targets/I/AcceptsRejects.lean` | decision AR: the composite's eight programs with their answers on computed runs (`compositeT1_tier1`), `Accepts` and `Rejects` at `J₁` (`I.accepts_J₁`, `I.rejects_J₁`); `Tier1 J₁` from A's (E) properties and S6, S4 and S5 being proved (`I.tier1_J₁_of_EU`; with S5, `I.tier1_J₁_of_ECU`; with S4, `I.tier1_J₁_of_ESU`) |
 | | `Targets/I/AlgJ1.lean` | algebraicity at `J₁`, a finaliser's start observed but not its code, given `CfinQuiet` (`I.algLaw_J₁_of`): a typed program's runs answer data (`lamFree_answer_of_coreClosed`) and ask the runner at data (`lamFree_io_of_coreClosed`, `platData_of_start`) |
 | | `Targets/I/CancelsNZ.lean` | no run of a typed program creates a handler named `0`, under every runner that keeps its protocol (`hndNZ_reach`: the runner is asked at data and answers data, a driven program's runs too, `driveData_of_reach`); so a cancelled continuation's context has no handler of `0` (`cancelsNZ_of_coreClosed`, `I.cancelsNZ_J₁`) |
@@ -105,11 +105,13 @@ restated so that a catch may allocate the capture cell, is proved at `J₁` at e
 (`handlerSem_J₁`). `J₁` is Core's kernel
 with SPEC §24's rules over the open types, with the row `∀` (decision D5); our instance reads it at
 an effect context with its handlers' and operations' rows tied to the context (decision R).
-`Accepts` and `Rejects` are proved at `J₁` (decision AR), so `Tier1 J₁` follows from A's (E)
-properties and S6 (`tier1_J₁_of_EU`).  Of the (E) properties at `J₁`, E1, E4, E6, E7 (E7c rejected
-at the rows without its inner label, decision D3) and E8 are proved at every admissible context,
-E5 and E9 where no `exn` is `unr`, E2d where no operation is; E2a–c, E3 and E10's `retry` and loop
-are not derived (`status_eProps_J₁`).
+`Accepts` and `Rejects` are proved at `J₁` (decision AR; AT08 refused by the continuation rule), so
+`Tier1 J₁` follows from A's (E) properties and S6 (`tier1_J₁_of_EU`).  Of the (E) properties at
+`J₁`, E1, E4, E6, E7 (E7c rejected at the rows without its inner label, decision D3) and E8 are
+proved at every admissible context, E5 and E9 where no `exn` is `unr`, E2d where no operation is;
+E2a–c, E3 and E10's `retry` and loop are not derived (`status_eProps_J₁`).  So tier 1 needs, at
+every admissible context, E2, E3 and E10, E5 and E9 where an `exn` is `unr`, and S6's two ownership
+properties of the capture cell, `OnlyOwnerFrees` and `NoDanglingUse` (`status_tier1_J₁_of_open`).
 
 **The restricted tier-1 reduction** `Tier1Core` (today's kernel `tier1Open`, Core's world)
 follows from S5 at today's kernel (`tier1Core_of_S5`). Proved of it: A's properties but S5 at every
@@ -161,9 +163,9 @@ From `Targets/Status.lean`. *PROVED AT σ=[]* is Core's relation (`coreB`, `core
 | the corollaries of `Combined`: the conjuncts that read no world, I1 and I2 at the program level, Core's P2, the SPEC's externs (with `EmbedsNil`) | PROVED (generic) | `combined_prog`, `i1Prog_of_combined`, `i2Prog_of_combined`, `effSafe_core_of_combined`, `soundnessContractsAR_of_combined` |
 | a reachable leak breaks the combined theorem | PROVED (generic) | `not_combined_of_leak` |
 | Core's extern contract gives W's at row-abortive types, with `EmbedsNil` | PROVED (generic) | `contractsW_of_meets` |
-| the composite programs run (interpreter, evidence only) | checked | `at02_eval` … `at17_eval`, `genSelf_eval`, `at07_eval` (a use after free) |
+| the composite programs run (interpreter, evidence only) | checked | `at02_eval` … `at17_eval`, `genSelf_eval`, `at07_eval` (a use after free), `at08_eval` (the second resume frees `κ`'s cell again), `at08Once_eval` |
 | `CompositeT1 tier1`: typed, safe and terminating under the empty platform, one complete run answering the stated value | PROVED AT σ=[] (the runs computed by `runM`) | `compositeT1_tier1`, `acceptedT1_*`, `run_*` |
-| `Accepts J₁.read .abortive`, `Rejects J₁.read` (decision AR) | PROVED AT σ=[]; AT08's rejection rests on `load` having no rule | `I.accepts_J₁`, `I.rejects_J₁` |
+| `Accepts J₁.read .abortive`, `Rejects J₁.read` (decision AR) | PROVED AT σ=[]; AT08 RESTATED (M5), refused by the continuation rule | `I.accepts_J₁`, `I.rejects_J₁`, `Rej.not_der_at08`, `Rej.d_at08Once` |
 | `Tier2Programs`, `RejectsAT07` at a typing system | OPEN | — |
 | I1, I3, I5, P11 at `coreW`; I2 at abortive rows; `EmbedsNil coreW` | PROVED AT σ=[]; AT A RESTRICTION | `status_device_core`, `embedsNil_core` |
 | FIX-RUN-END's checks and witness worlds | PROVED | `Targets/I/RunEnd.lean` |

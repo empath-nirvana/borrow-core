@@ -222,16 +222,37 @@ def at06 : Expr :=
         (.app (.app (.var 0) (.val (.inj₁ .unit))) (.val .unit))))))
       (bindE fooE (dropB (.app free' (.var 3)))))
 
-/-- **AT08**: a continuation in a shared cell, read twice: the clause stores `κ` in a cell, loads
-it twice and resumes both copies.  `kTy` at `lin` and `aff` is neither droppable nor persistent. -/
+/-- **AT08**: a continuation in a shared cell, read twice.  The clause stores `κ` in a cell, reads
+it out with `swap` (leaving `()`), puts the copy `k₁` back with a second `swap`, reads it out again
+with `free` as `k₂`, and resumes both, `k₁` at the cell's old `()` and `k₂` at the operation's
+argument:
+
+    op (a, κ) ⇒ c ← alloc κ; (c, k₁) ← swap c (); (c, u) ← swap c k₁; k₂ ← free c;
+                r ← resume k₁ u; r; resume k₂ a
+
+The two `swap`s are a `load` of the cell.  `k₁` is used twice, and `kTy` at `lin` and `aff` is
+neither droppable nor persistent. -/
 def at08 : Expr :=
   handleWith 5 .lin (.val (.lam (.letpair (.var 0)
     (bindE (.app alloc' (.var 0))
-      (bindE (.app (.val (.prim .load)) (.var 0))
-        (bindE (.app (.val (.prim .load)) (.var 1))
-          (.seq (dropB (.app free' (.var 2)))
-            (.seq (.app (.app (.var 1) (.val (.inj₁ .unit))) (.val .unit))
-              (.app (.app (.var 0) (.val (.inj₁ .unit))) (.val .unit)))))))))) fooE
+      (.letpair (.app (.app swap (.var 0)) unit')
+        (.letpair (.app (.app swap (.var 1)) (.var 0))
+          (bindE (.app free' (.var 1))
+            (bindE (.app (.app (.var 3) (.val (.inj₁ .unit))) (.var 1))
+              (.seq (.var 0) (.app (.app (.var 1) (.val (.inj₁ .unit))) (.var 8))))))))))) fooE
+
+/-- **AT08 with the copy used once**: the same reads and writes of the cell at `κ`'s type, `k₁` put
+back into the cell and only `k₂` resumed, `u` consumed by `;`.  Moving `κ` through a cell and using
+it once is allowed, as `storeCancel` does:
+
+    op (a, κ) ⇒ c ← alloc κ; (c, k₁) ← swap c (); (c, u) ← swap c k₁; k₂ ← free c; u; resume k₂ a -/
+def at08Once : Expr :=
+  handleWith 5 .lin (.val (.lam (.letpair (.var 0)
+    (bindE (.app alloc' (.var 0))
+      (.letpair (.app (.app swap (.var 0)) unit')
+        (.letpair (.app (.app swap (.var 1)) (.var 0))
+          (bindE (.app free' (.var 1))
+            (.seq (.var 1) (.app (.app (.var 0) (.val (.inj₁ .unit))) (.var 7)))))))))) fooE
 
 /-- **AT13**: `forget κ`: a `lin` or `aff` continuation has no weakening, and the `forget`
 constants are at `Imm`, `Mut`, `!` and `Unk`; discard is an explicit cancel. -/
@@ -251,6 +272,20 @@ def at07 : Expr :=
 theorem at07_eval :
     (match eval at07 with
       | .stuck .useAfterFree => true
+      | _ => false) = true := by decide
+
+/-- **AT08 runs into a freed cell**: `κ` is linear, so the `[op]` step hands it at a cell its resume
+releases (SPEC §25); the first resume releases the cell, and the second frees it again, where the
+interpreter stops at a use after free. -/
+theorem at08_eval :
+    (match eval at08 with
+      | .stuck .useAfterFree => true
+      | _ => false) = true := by decide
+
+/-- **AT08 with the copy used once runs**: the answer `()`, and no cell left. -/
+theorem at08Once_eval :
+    (match eval at08Once with
+      | .value ⟨.unit, _⟩ false => true
       | _ => false) = true := by decide
 
 /-! ### Accepted, with an answer -/

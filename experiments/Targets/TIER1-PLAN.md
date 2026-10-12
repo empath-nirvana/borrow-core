@@ -2717,7 +2717,7 @@ updated as each lands. On `tier1-effects`, not pushed.
 | M2: the typing of finalisers with effects (SPEC §27) | LANDED in Core; tier 1's kernel at option A; lowering by the fallback (below) | 833b026, 5b9f216, dd01061; M2c with this record |
 | M3: S5's `pend`, the cell clause, algebraicity, no dropped error | LANDED (below): S5 PROVED at `J₁`; algebraicity given `KeptLamFree`, which fails at an admissible context; no dropped error PROVED on the runs that capture no kept error | 3665c0b, 925b251, e70e59f, 8c8c7ca, ed57d98, 073b785; this record |
 | M4: E7–E9 at `J₁` | LANDED (below): E7 and E8 PROVED at every admissible context, E9 where no `exn` is `unr`; E7c RESTATED as its rejection at the rows without its inner label | this record |
-| M5: AT08 by the continuation rule | not started | |
+| M5: AT08 by the continuation rule; what `tier1_J₁_of_ESU` needs | LANDED (below): AT08 RESTATED and refused by the continuation rule, PROVED at Core's kernel; its control typed and run; tier 1 reduced to its open premises (`status_tier1_J₁_of_open`) | this record |
 
 ### M1: frame deadness
 
@@ -3140,3 +3140,100 @@ at the tied kernel, where the raise's qualifier is the context's).
 **Remaining.** A's (E) properties at `J₁`: E2a–c, E3, E10's `retry` and loop (not derived), E2d at
 an `unr` operation and E5, E9 at an `unr` `exn` (not derived).  M5 (AT08 by the continuation rule,
 and `tier1_J₁_of_ESU`'s table).
+
+### M5: AT08 by the continuation rule; what `tier1_J₁_of_ESU` needs
+
+On `tier1-effects`, not pushed.  `lake build Targets` passes, AxiomCheck and Audit included.  No
+machine, kernel program, count, corpus program, `Core/` file, BoLo definition or SPEC change.
+
+**AT08 RESTATED** (`Targets/I/Programs.lean`; previous design §G4, FINALISERS §5).  The clause reads
+its cell by `swap` and `free`, the two `swap`s being a `load`:
+
+    op (a, κ) ⇒ c ← alloc κ; (c, k₁) ← swap c (); (c, u) ← swap c k₁; k₂ ← free c;
+                r ← resume k₁ u; r; resume k₂ a
+
+Core's application takes a variable argument (`[app]`), so the design's two `resume … ()` take the
+cell's old content `u` and the operation's argument `a`, both `()`; every value but `k₁` is used
+exactly once.  `Rejects`' statement is unchanged.
+
+**The rejection: PROVED at Core's kernel, at every context and judgement** (`Rej.not_der_at08`), so
+at the tied kernel at every effect context (`I.rejects_tied`, through `toCDerives`).
+- The clause tuple gives `κ` at `kTy` at `lin`, a thunk of an `&` (`handleWith_clause`,
+  `clause_lin`, `lam_bang`, `der_letpair`).
+- `c ← alloc κ`: the cell holds a view `Aκ` of `κ`'s type (`der_bind`, `alloc_var_row`), not
+  persistent (`kview`).
+- `(c₁, k₁) ← swap c ()`: `swap` is typed at its axiom `Ref A ⊸ B ⊸ Ref B ⊗ A` alone (`der_swap`), so
+  `swap c ()` is `⊸E`'s twice (`der_swap_var`, `der_swap_app`), `c` at `Ref A`, and `A = Aκ`
+  (`vview_ref`, views of a `Ref` keep it): `k₁`'s slot is at `Aκ`.
+- `(c₂, u) ← swap c₁ k₁`: `k₁` is free in the `swap` and in the rest (its resume), so its slot is live
+  on both sides of `[⊗E]`'s split (`fv_live`) and persistent (`splitP_both`), which `Aκ` is not.
+- **New inversion, cost** (CLAUDE.md, *Do not invert `CDerives` casually*): `der_swap` is one more
+  induction on `CDerives` (the fourteenth in `Targets/I/Rejects.lean`); typed through its body,
+  `swap` would load its cell (`not_der_swapBody₁`, `not_der_swapLet`, from `not_der_load_app`).
+  `der_swap_var`, `der_swap_app` and `alloc_var_row` are case analyses of `der_app`.  The file grows
+  from 2225 to 2469 lines; it builds in about 20 s.
+- Deviation from FINALISERS §5's plan, which read `swap`'s type off `der_app` and `der_lam`:
+  `der_lam` reads a λ-constant other than `forget` and `withborU` at a view of *some* type
+  (`LamAx`'s `OtherLam` case), which says nothing of `swap`'s axiom.  `der_swap` is that fact.
+
+**The rejection is the continuation rule's** (the control, `at08Once`).  The same clause with the
+copy used once (`k₁` put back, only `k₂` resumed, `u` consumed by `;`) is typed by Core's kernel at
+`F 1` (`Rej.d_at08Once`, with `d_at08OnceCl`: `alloc`, both `swap`s and `free` at `κ`'s type), and
+every run of it ends at `()` with the memory empty (`Rej.at08Once_runs`, from `adequacyD`).  AT08
+differs from it only by `k₁`'s second use.  At the interpreter (evidence, as `at07_eval`), AT08's
+second resume frees `κ`'s cell again, a use after free (`at08_eval`): a linear `κ` is handed at a
+cell its resume releases (SPEC §25).  So, at the interpreter, AT08 does not run safely although its
+`κ` holds nothing: RESTRUCTURE §3.4's remark that the static rejections run safely where `κ` holds
+nothing is not true of AT08 under the capture cell.  The remark is not a target.
+
+**What `tier1_J₁_of_ESU` needs** (`Targets/Status.lean`).  `status_tier1_J₁_of_open` (PROVED):
+`I.Tier1 J₁` follows from, at every admissible effect context, E2, E3 and E10; E5 and E9 where an
+`exn` signature is `unr` (`¬ NoUnrExn Ξ`); and `OnlyOwnerFrees` and `NoDanglingUse`.
+
+| premise of `tier1_J₁_of_ESU` | after M1–M5 |
+|---|---|
+| `hE`: A's (E) properties at every admissible `Ξ` | E1, E4, E6, E7 (E7c RESTATED as its rejection, D3) and E8 PROVED; E5 and E9 PROVED where no `exn` signature is `unr`; E2d where no operation is `unr`.  NOT DERIVED, no obstruction verified: E2a–c and E10's `retry` (a function at `!U C` forced), E3 and E10's loop (`unfold`'s value), E5 and E9 at an `unr` `exn` |
+| `hS4`: S4 | PROVED at every effect context (`I.handlerSem_J₁`) |
+| `hC`: S5 | PROVED at every effect context (`I.cancellation_J₁`) |
+| `hU`: S6 | REDUCED to the capture cell's `OnlyOwnerFrees` and `NoDanglingUse` (`I.contUseEv_J₁_of`), both OPEN |
+| `Accepts`, `Rejects` | PROVED (`I.accepts_J₁`, `I.rejects_J₁`); AT08 RESTATED |
+
+So tier 1 at `J₁` is **open, not refuted**.  Beside it: algebraicity given `KeptLamFree`, which fails
+at an admissible context (M3); `NoDroppedError` on the runs that capture no kept error (M3);
+`CancelsNoCtl` refuted at `J₁` and read by nothing (M3).  `status_tier1_J₁_of` has no `CancelsNoCtl`
+premise.  Deviation from FINALISERS §5's table: E9 is proved where no `exn` signature is `unr`, not at
+every admissible context (M4).
+
+**Status** (`Targets/Status.lean`): the AT08 bullet, the interaction rows, the tier-1 row and the
+Done paragraph; `status_acceptsRejects_J₁` carries AT08's control in place of the conjunct that
+`load` has no rule (recorded under *Retired and restated*); `status_tier1_J₁_of_open`.  README rows
+follow.
+
+**The hard stop, M5.**
+
+| check | finding |
+|---|---|
+| (1) a law | none changed |
+| (2) behaviour or counts | none: AT08 and `at08Once` are Targets programs, in no kernel or corpus list; no machine, kernel program, corpus program or count changes |
+| (3) runtime block | none |
+| (4) rejection | AT08 was rejected before; it resumes a linear `κ` twice, which the decided algebra gives no meaning (a linear `κ` is used exactly once) |
+| (5) weakened target | none.  `Rejects`' statement is unchanged and AT08 is brought into line with its intent (RESTRUCTURE §3.4): the conjunct now pins the continuation rule, which the control shows |
+
+**Unspent hypotheses.** AT08's rejection does not read `handleWith_clause`'s and `clause_lin`'s
+context inclusions (`CtxLe`), `clause_lin`'s argument and answer types, `lam_bang`'s persistent
+context, `der_bind`'s binder liveness (`fv_live` gives the slots live), or `kTy`'s `⊤` cancel branch
+(only that `κ` is a thunk of an `&`).  `der_swap_app`'s side conditions (its second argument no
+projection's index) are read once, at the first `swap`'s `()`; the second `swap` is read only for its
+free variables.  `Rejects` states AT08 at `lin`; an affine AT08 is not stated.
+
+**Uniqueness/functionality results.** Read: `Hnf.unique` (through `VView.eq_of_heads`, in
+`vview_ref`), `vview_tensor`, `vview_thunk`, `Inst.effOf_inj` (`alloc_var_row`).  Not read:
+`det_ourInst`, `rstep_det`, `AStep1.deterministic` (the control's runs come from `adequacyD`).
+
+**Untranscribed in the run-up.** None that AT08's rejection reads: every inversion it uses is built.
+AT08's stuck run at Core's machine is not written out (interpreter evidence only), as AT07's is not
+(`RejectsAT07`).
+
+**Remaining.** Tier 1's open premises (above); algebraicity at every admissible context and
+`NoDroppedError` on the runs that capture a kept error (M3); the M2c lowering fallback (M2).  The
+full `make gate` runs once, as the separate stage.

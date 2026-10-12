@@ -30,12 +30,16 @@ views of a tensor of its parts' types (`der_pair`); `()` at `1`'s views over a c
 projection (`der_app`); a λ-value through the rule that types its body, or as one of the λ-constants
 at its axiom's type (`der_lam`); `let (x, y)`, `;`, `then` and `handle` by their own rules
 (`der_letpair`, `der_seq`, `der_then`, `der_hnd`); `alloc` at `A ⊸ Ref A`; a primitive by its own rule
-only, and `load` has none (`der_prim`).  Every free variable of a typed term has a live slot
-(`fv_live`), so a variable used on both sides of a split is persistent (`splitP_both`).
+only, and `load` has none (`der_prim`); `swap` at `Ref A ⊸ B ⊸ Ref B ⊗ A` only, since its body loads
+its cell (`der_swap`).  Every free variable of a typed term has a live slot (`fv_live`), so a variable
+used on both sides of a split is persistent (`splitP_both`).
 
 **The four programs.**
-* **AT08** loads a cell (`load`), and Core has no rule for `load` (`not_der_load`): the program's
-  clause applies it, so no derivation reaches it.
+* **AT08**: the clause's `κ` is at `kTy` at `lin`, a thunk of an `&`.  `alloc` stores a view of it,
+  and the first `swap` reads that view out as `k₁` (`alloc_var_row`, `der_swap_app`).  `k₁` is used by
+  the second `swap` and by its resume, on the two sides of a split, so its slot is persistent, which a
+  view of a thunk is not (`kview`).  The same clause with the copy used once is typed (`d_at08Once`)
+  and runs to `()` with the memory empty (`at08Once_runs`).
 * **AT06**: the clause is in the handler's clause tuple, so at `clauseTy`, a `!U` type, typed over a
   persistent context; it uses the cell `c`, whose slot is a view of a `Ref`.
 * **AT13**: the clause's continuation is at `kTy` at `lin`, a `U` of a `&`, and `forget` takes only a
@@ -1462,22 +1466,12 @@ theorem der_bindLam {Δ : LifeCtx} {Γ : Ctx VTy} {N b : Expr} {j : Jdg}
   · cases hu
   · rcases hX with hX | hX | ⟨Z, hX⟩ | ⟨Z, hX⟩ <;> cases hX
 
-/-! ### AT08: `load` has no rule -/
+/-! ### `load` has no rule -/
 
 /-- `load x` has no derivation. -/
 theorem not_der_load_app {Δ : LifeCtx} {Γ : Ctx VTy} {X : Expr} {j : Jdg} :
     ¬ CDerives Δ Γ (.app (.prim .load) X) j :=
   fun h => not_der_app_prim h .load X rfl id (by decide) (by decide)
-
-/-- AT08's clause, under its binder. -/
-abbrev at08Body : Expr :=
-  .letpair (.var 0)
-    (bindE (.app alloc' (.var 0))
-      (bindE (.app (.val (.prim .load)) (.var 0))
-        (bindE (.app (.val (.prim .load)) (.var 1))
-          (.seq (dropB (.app free' (.var 2)))
-            (.seq (.app (.app (.var 1) (.val (.inj₁ .unit))) (.val .unit))
-              (.app (.app (.var 0) (.val (.inj₁ .unit))) (.val .unit)))))))
 
 /-- A term is no λ-constant, by unfolding. -/
 macro "not_const" : tactic => `(tactic| (simp only [NotConst, OtherLam, forget, copy, swap, withbor,
@@ -1500,24 +1494,130 @@ macro "not_withPair" : tactic => `(tactic| (intro M₁ M₂ h; simp [withPair, E
     hndTerm, hndExpr, Val.unit, Val.prim, Val.i32, Val.inj₁, Val.inj₂, Val.pair, fooE, dropB,
     BoCa.BoLo.performE, opArgE, handleWith, free', alloc'] at h))
 
-/-- **AT08 has no derivation**: its clause loads a cell, and `load` has no rule. -/
-theorem not_der_at08 {Δ : LifeCtx} {Γ : Ctx VTy} {j : Jdg} : ¬ CDerives Δ Γ at08 j := by
+/-! ### `swap` is typed at its axiom alone -/
+
+/-- `swap`'s body under its first binder: `λy₂. let y₁ = load x in store x y₂; (x, y₁)`. -/
+abbrev swapBody₁ : Expr :=
+  .lam (elet (.app load' v1) (.seq (.app (.app store' v2) v1) (.pair v2 v0)))
+
+/-- `swap` written as a λ has the body `swapBody₁`. -/
+theorem swap_lam {M : Expr} (h : Expr.lam M = swap) : M = swapBody₁ := by
+  cases h; rfl
+
+/-- `swap`'s innermost body loads the cell, and `load` has no rule. -/
+theorem not_der_swapLet {Δ : LifeCtx} {Γ : Ctx VTy} {j : Jdg} :
+    ¬ CDerives Δ Γ (elet (.app load' v1) (.seq (.app (.app store' v2) v1) (.pair v2 v0))) j := by
   intro h
-  obtain ⟨_, _, _, _, _, _, _, _, hP, _⟩ := der_bind (M := .pair (.lam at08Body) .unit) h
-    (fun i h => by cases h) (fun b h => by cases h) (fun h => by cases h) (fun h => by cases h)
-    (fun h => by cases h) (by not_withPair) (by not_const)
-  rcases der_pair hP _ _ rfl with ⟨_, _, _, _, _, hCL, _, _⟩ | he
-  · obtain ⟨_, _, _, hB⟩ := (der_lam hCL _ rfl).body (by not_withPair)
-      (NotConst.notAx (by not_const) _)
-    obtain ⟨_, _, _, _, _, _, _, hR₁⟩ := der_letpair hB _ _ rfl
-    obtain ⟨_, _, _, _, _, _, _, _, _, hR₂⟩ := der_bind hR₁ (fun i h => by cases h)
-      (fun b h => by cases h) (fun h => by cases h) (fun h => by cases h) (fun h => by cases h)
-      (by not_withPair) (by not_const)
-    obtain ⟨_, _, _, _, _, _, _, _, hL, _⟩ := der_bind hR₂ (fun i h => by cases h)
-      (fun b h => by cases h) (fun h => by cases h) (fun h => by cases h) (fun h => by cases h)
-      (by not_withPair) (by not_const)
-    exact not_der_load_app hL
-  · simp [emptyFamV, Val.arr] at he
+  obtain ⟨_, _, _, _, _, _, _, _, hL, _⟩ := der_bind h (fun i h => by cases h)
+    (fun b h => by cases h) (fun h => by cases h) (fun h => by cases h) (fun h => by cases h)
+    (by not_withPair) (by not_const)
+  exact not_der_load_app hL
+
+/-- `swap`'s body under its first binder has no derivation. -/
+theorem not_der_swapBody₁ {Δ : LifeCtx} {Γ : Ctx VTy} {j : Jdg} : ¬ CDerives Δ Γ swapBody₁ j := by
+  intro h
+  obtain ⟨_, _, _, hB⟩ := (der_lam h _ rfl).body
+    (fun M₁ M₂ h => by simp [withPair, elet, Expr.val, Val.lam] at h)
+    (NotConst.notAx (by not_const) _)
+  exact not_der_swapLet hB
+
+/-- **`swap` is read at the views of its axiom's type** `Ref A ⊸ B ⊸ Ref B ⊗ A`: typed through its
+body, it would load its cell. -/
+theorem der_swap {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {j : Jdg} (h : CDerives Δ Γ e j) :
+    e = swap → ∃ A B, ValCls (axSwapTy A B) j := by
+  induction h with
+  | swap => intro _; exact ⟨_, _, ValCls.refl _⟩
+  | lam h => intro he; obtain rfl := swap_lam he; exact (not_der_swapBody₁ h).elim
+  | lamDead h => intro he; obtain rfl := swap_lam he; exact (not_der_swapBody₁ h).elim
+  | allI _ _ _ h => intro he; obtain rfl := swap_lam he; exact (not_der_swapBody₁ h).elim
+  | thunkF h => intro he; obtain rfl := swap_lam he; exact (not_der_swapBody₁ h).elim
+  | bangThunkF _ h => intro he; obtain rfl := swap_lam he; exact (not_der_swapBody₁ h).elim
+  | thunkV hC _ ih =>
+      intro he; obtain ⟨A, B, hc⟩ := ih he; rw [hc.comp_isRet] at hC; cases hC
+  | bangThunkV _ hC _ ih =>
+      intro he; obtain ⟨A, B, hc⟩ := ih he; rw [hc.comp_isRet] at hC; cases hC
+  | ret _ ih => intro he; obtain ⟨A, B, hc⟩ := ih he; exact ⟨A, B, hc.step (JS.ret _)⟩
+  | ofRet _ ih => intro he; obtain ⟨A, B, hc⟩ := ih he; exact ⟨A, B, hc.step (JS.ofRet _)⟩
+  | effSub hle _ ih =>
+      intro he; obtain ⟨A, B, hc⟩ := ih he; exact ⟨A, B, hc.step (JS.effSub _ _ _ hle)⟩
+  | nuIn hC _ ih => intro he; obtain ⟨A, B, hc⟩ := ih he; exact ⟨A, B, hc.step (JS.nuIn _ hC)⟩
+  | nuOut hC _ ih => intro he; obtain ⟨A, B, hc⟩ := ih he; exact ⟨A, B, hc.step (JS.nuOut _ hC)⟩
+  | bangE _ ih => intro he; obtain ⟨A, B, hc⟩ := ih he; exact ⟨A, B, hc.step (JS.val (VS.bang _))⟩
+  | boxI _ _ ih =>
+      intro he; obtain ⟨A, B, hc⟩ := ih he; exact ⟨A, B, hc.step (JS.val (VS.boxI _ _))⟩
+  | boxE _ ih =>
+      intro he; obtain ⟨A, B, hc⟩ := ih he; exact ⟨A, B, hc.step (JS.val (VS.boxE _ _))⟩
+  | immSub _ _ ih =>
+      intro he; obtain ⟨A, B, hc⟩ := ih he; exact ⟨A, B, hc.step (JS.val (VS.immS _ _ _))⟩
+  | mutSub _ _ ih =>
+      intro he; obtain ⟨A, B, hc⟩ := ih he; exact ⟨A, B, hc.step (JS.val (VS.mutS _ _ _))⟩
+  | roll _ _ _ ih =>
+      intro he; obtain ⟨A, B, hc⟩ := ih he; exact ⟨A, B, hc.step (JS.val (VS.roll _))⟩
+  | unroll _ ih =>
+      intro he; obtain ⟨A, B, hc⟩ := ih he; exact ⟨A, B, hc.step (JS.val (VS.unroll _))⟩
+  | force => intro he; rcases forceE_var he with h | h <;> cases h
+  | _ => intro he; cd_terms
+
+/-- **`swap x`, `x` a variable, is `⊸E`'s**: `x` is read at `Ref A`, and `swap x` at the views of
+`B ⊸ Ref B ⊗ A`. -/
+theorem der_swap_var {Δ : LifeCtx} {Γ : Ctx VTy} {i : Nat} {j : Jdg}
+    (h : CDerives Δ Γ (.app swap (.var i)) j) :
+    ∃ Γ₁ A B, CtxLe Γ₁ Γ ∧ CDerives Δ Γ₁ (.var i) (.val (.ref A)) ∧
+      ValCls (.lolli B (.tensor (.ref B) A)) j := by
+  obtain ⟨j₀, hb, hr⟩ := der_app h _ _ rfl
+  rcases hb with ⟨Γ₁, Γ₂, A, B, hs, hY, hf, rfl⟩ | ⟨Γ₁, Γ₂, i', A, C, hi, hs, hf, hx, rfl⟩ |
+    ⟨N, Γ₁, Γ₂, A, S, C, hN, hs, hY, hN', rfl⟩ | ⟨N, b, C, -, hb, -⟩ |
+    ⟨-, -, -, -, hu, -⟩ | ⟨-, -, -, -, hu, -⟩ | ⟨-, -, hu, -⟩ | ⟨-, -, hu, -⟩ | ⟨hu, -⟩ | hX
+  · obtain ⟨A', B', hc⟩ := der_swap hf rfl
+    have := vview_thunk hc
+    simp only [CTy.arr.injEq, CTy.ret.injEq] at this
+    obtain ⟨rfl, rfl⟩ := this
+    exact ⟨Γ₁, A', B', splitP_le_left hs, hY, (ValCls.refl _).reach hr⟩
+  · obtain ⟨A', B', hc⟩ := der_swap hf rfl
+    have := hc.comp_isRet
+    simp [CTy.isRet] at this
+  · obtain rfl := swap_lam hN.symm
+    exact (not_der_swapBody₁ hN').elim
+  · cases hb
+  · cases hu
+  · cases hu
+  · cases hu
+  · cases hu
+  · cases hu
+  · rcases hX with hX | hX | ⟨Z, hX⟩ | ⟨Z, hX⟩ <;> cases hX
+
+/-- **`swap x y`, `x` a variable and `y` no projection's index, is `⊸E`'s**: `x` is read at
+`Ref A`, and `swap x y` at the views of `Ref B ⊗ A`. -/
+theorem der_swap_app {Δ : LifeCtx} {Γ : Ctx VTy} {i : Nat} {Y : Expr} {j : Jdg}
+    (h : CDerives Δ Γ (.app (.app swap (.var i)) Y) j) (hY₁ : Y ≠ .inj₁ .unit)
+    (hY₂ : Y ≠ .inj₂ .unit) :
+    ∃ Γ₁ A B, CtxLe Γ₁ Γ ∧ CDerives Δ Γ₁ (.var i) (.val (.ref A)) ∧
+      ValCls (.tensor (.ref B) A) j := by
+  obtain ⟨j₀, hb, hr⟩ := der_app h _ _ rfl
+  rcases hb with ⟨Γ₁, Γ₂, A, B, hs, hY, hf, rfl⟩ | ⟨Γ₁, Γ₂, i', A, C, hi, hs, hf, hx, rfl⟩ |
+    ⟨N, Γ₁, Γ₂, A, S, C, hN, -⟩ | ⟨N, b, C, hN, -⟩ |
+    ⟨x, b, C, a, -, hf, rfl⟩ | ⟨x, b, A, a, -, hf, rfl⟩ | ⟨-, -, hu, -⟩ | ⟨-, -, hu, -⟩ |
+    ⟨-, i', hu⟩ | hX
+  · obtain ⟨Γ₃, A', B', hle, hc, hcl⟩ := der_swap_var hf
+    have := vview_thunk hcl
+    simp only [CTy.arr.injEq, CTy.ret.injEq] at this
+    obtain ⟨rfl, rfl⟩ := this
+    exact ⟨Γ₃, A', B', hle.trans (splitP_le_right hs), hc, (ValCls.refl _).reach hr⟩
+  · obtain ⟨_, _, _, -, -, hcl⟩ := der_swap_var hf
+    have := hcl.comp_isRet
+    simp [CTy.isRet] at this
+  · cases hN
+  · cases hN
+  · obtain ⟨_, _, _, -, -, hcl⟩ := der_swap_var hf
+    have := hcl.comp_isRet
+    simp [CTy.isRet] at this
+  · obtain ⟨_, _, _, -, -, hcl⟩ := der_swap_var hf
+    have := vview_thunk hcl
+    cases this
+  · exact (hY₁ hu).elim
+  · exact (hY₂ hu).elim
+  · cases hu
+  · rcases hX with hX | hX | ⟨Z, hX⟩ | ⟨Z, hX⟩ <;> cases hX
 
 /-! ### Helpers for the clause tuples -/
 
@@ -1847,6 +1947,150 @@ theorem not_der_at06 {Δ : LifeCtx} {Γ : Ctx VTy} {j : Jdg} : ¬ CDerives Δ Γ
   simp only [List.getElem?_cons_zero, Option.some.injEq, Slot.mk.injEq] at this
   obtain ⟨rfl, -⟩ := this
   exact vview_ref_bang hvc
+
+/-! ### AT08: a continuation read twice out of a cell -/
+
+/-- A view of a `Ref` that is a `Ref` has its content. -/
+theorem vview_ref {A A' : VTy} (h : VView (.ref A) (.ref A')) : A = A' := by
+  have := h.eq_of_heads (fun _ _ h => by cases h) (fun _ h => by cases h) (fun _ h => by cases h)
+    (fun _ _ h => by cases h) (fun _ _ h => by cases h) (fun _ _ h => by cases h)
+    (fun _ h => by cases h)
+  cases this; rfl
+
+/-- **`alloc x`, `x` a variable, read at a row**: `x` is read at `A`, and the row's type is a view of
+`Ref A`. -/
+theorem alloc_var_row {Δ : LifeCtx} {Γ : Ctx VTy} {i : Nat} {S : Row} {T : VTy}
+    (h : CDerives Δ Γ (.app alloc' (.var i)) (.comp (CTy.effOf S T))) :
+    ∃ Γ₁ A, CtxLe Γ₁ Γ ∧ CDerives Δ Γ₁ (.var i) (.val A) ∧ VView (.ref A) T := by
+  obtain ⟨j₀, hb, hr⟩ := der_app h _ _ rfl
+  rcases hb with ⟨Γ₁, Γ₂, A, B, hs, hY, hf, rfl⟩ | ⟨Γ₁, Γ₂, i', A, C, hi, hs, hf, hx, rfl⟩ |
+    ⟨N, -, -, -, -, -, hN, -⟩ | ⟨N, b, C, hN, -⟩ |
+    ⟨-, -, -, -, hu, -⟩ | ⟨-, -, -, -, hu, -⟩ | ⟨-, -, hu, -⟩ | ⟨-, -, hu, -⟩ | ⟨hu, -⟩ | hX
+  · obtain ⟨A₀, hc⟩ := der_prim_alloc hf rfl
+    have := vview_thunk hc
+    simp only [CTy.arr.injEq, CTy.ret.injEq] at this
+    obtain ⟨rfl, rfl⟩ := this
+    obtain ⟨S', Y, he, hY'⟩ := (ValCls.refl (.ref A₀)).reach hr
+    obtain ⟨-, rfl⟩ := Inst.effOf_inj he
+    exact ⟨Γ₁, A₀, splitP_le_left hs, hY, hY'⟩
+  · obtain ⟨A₀, hc⟩ := der_prim_alloc hf rfl
+    have := hc.comp_isRet
+    simp [CTy.isRet] at this
+  · cases hN
+  · cases hN
+  · cases hu
+  · cases hu
+  · cases hu
+  · cases hu
+  · cases hu
+  · rcases hX with hX | hX | ⟨Z, hX⟩ | ⟨Z, hX⟩ <;> cases hX
+
+/-- AT08's clause. -/
+abbrev at08Cl : Expr :=
+  .lam (.letpair (.var 0)
+    (bindE (.app alloc' (.var 0))
+      (.letpair (.app (.app swap (.var 0)) unit')
+        (.letpair (.app (.app swap (.var 1)) (.var 0))
+          (bindE (.app free' (.var 1))
+            (bindE (.app (.app (.var 3) (.val (.inj₁ .unit))) (.var 1))
+              (.seq (.var 0) (.app (.app (.var 1) (.val (.inj₁ .unit))) (.var 8)))))))))
+
+/-- **AT08 has no derivation**: the clause's `κ` is at `kTy` at `lin`, a thunk of an `&` (the clause
+tuple is `[handle]`'s).  `alloc` stores a view of it; `swap` is typed at its axiom alone, so the first
+`swap` reads that view out as `k₁`.  The second `swap` uses `k₁` and so does `k₁`'s resume, on the
+two sides of a split: `k₁`'s slot is persistent, and a view of a thunk is not. -/
+theorem not_der_at08 {Δ : LifeCtx} {Γ : Ctx VTy} {j : Jdg} : ¬ CDerives Δ Γ at08 j := by
+  intro h
+  obtain ⟨Γ₁, S₁, T₁, S, R, E, fs, -, hP, hv, hE⟩ := handleWith_clause (cl := at08Cl) h
+    (fun b h => by cases h) (by not_const) (by not_const) rfl
+  obtain ⟨Γ_cl, A₀, B₀, -, hCL⟩ := clause_lin hP hv hE
+  obtain ⟨-, hB⟩ := lam_bang hCL (fun h => by cases h) (by not_withPair) (by not_const)
+  -- `(a, κ)`: `κ`'s slot is at `kTy` at `lin`
+  obtain ⟨Γ₆₁, Γ₆₂, A₆, B₆, j₆, hs₆, hV₆, hM₆⟩ := der_letpair hB _ _ rfl
+  obtain ⟨T₆, hT₆, hc₆⟩ := der_var hV₆ 0 rfl
+  have hT := splitP_le_left hs₆ 0 T₆ hT₆
+  simp only [List.getElem?_cons_zero, Option.some.injEq, Slot.mk.injEq, and_true] at hT
+  subst hT
+  obtain ⟨-, rfl⟩ := vview_tensor hc₆.val
+  -- `c ← alloc κ`: the cell holds a view `Aκ` of `κ`'s type, which is not persistent
+  obtain ⟨Γ₇, Γ₇', T₇, b₇, S₇, j₇, hle₇, -, hA₇, hN₇⟩ := der_bind hM₆ (fun i h => by cases h)
+    (fun b h => by cases h) (fun h => by cases h) (fun h => by cases h) (fun h => by cases h)
+    (by not_withPair) (by not_const)
+  obtain ⟨Γκ, Aκ, hleκ, hκ, hcell⟩ := alloc_var_row hA₇
+  obtain ⟨Tκ, hTκ, hcκ⟩ := der_var hκ 0 rfl
+  have hTκ' := hle₇ 0 Tκ (hleκ 0 Tκ hTκ)
+  simp only [List.getElem?_cons_zero, Option.some.injEq, Slot.mk.injEq, and_true] at hTκ'
+  subst hTκ'
+  obtain ⟨hAκ, -⟩ := kview hcκ.val
+  -- `(c₁, k₁) ← swap c ()`: `k₁` is at the cell's content type
+  obtain ⟨Γ₈₁, Γ₈₂, A₈, B₈, j₈, hs₈, hV₈, hM₈⟩ := der_letpair hN₇ _ _ rfl
+  obtain ⟨Γc, Ac, Bc, hlec, hc, hcl⟩ := der_swap_app hV₈ (fun h => by cases h) (fun h => by cases h)
+  obtain ⟨rfl, rfl⟩ := vview_tensor hcl
+  obtain ⟨Tc, hTc, hcc⟩ := der_var hc 0 rfl
+  have hTc' := splitP_le_left hs₈ 0 Tc (hlec 0 Tc hTc)
+  simp only [List.getElem?_cons_zero, Option.some.injEq, Slot.mk.injEq] at hTc'
+  obtain ⟨rfl, -⟩ := hTc'
+  obtain rfl := vview_ref (hcell.trans hcc.val)
+  -- `(c₂, u) ← swap c₁ k₁`: `k₁` is used here and by its resume
+  obtain ⟨Γ₉₁, Γ₉₂, A₉, B₉, j₉, hs₉, hV₉, hM₉⟩ := der_letpair hM₈ _ _ rfl
+  obtain ⟨T₁, hT₁⟩ := fv_live hV₉ 0 (by simp [Expr.HasVar])
+  obtain ⟨T₂, hT₂⟩ := fv_live hM₉ 2 (by simp [Expr.HasVar, bindE, Expr.val, Val.lam, Val.inj₁,
+    Val.unit])
+  have hp := splitP_both hs₉ hT₁ (slot_succ₂ hT₂)
+  have hT₁' := splitP_le_left hs₉ 0 T₁ hT₁
+  simp only [List.getElem?_cons_zero, Option.some.injEq, Slot.mk.injEq, and_true] at hT₁'
+  subst hT₁'
+  simp [VTy.Persistent, hAκ] at hp
+
+/-- AT08's clause with the copy used once. -/
+abbrev at08OnceCl : Expr :=
+  .lam (.letpair (.var 0)
+    (bindE (.app alloc' (.var 0))
+      (.letpair (.app (.app swap (.var 0)) unit')
+        (.letpair (.app (.app swap (.var 1)) (.var 0))
+          (bindE (.app free' (.var 1))
+            (.seq (.var 1) (.app (.app (.var 0) (.val (.inj₁ .unit))) (.var 7))))))))
+
+/-- The clause of `at08Once` at its clause type: `alloc`, `swap` and `free` at `κ`'s type, `k₂`
+resumed once. -/
+theorem d_at08OnceCl {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
+    CDerives LifeCtx.empty Γ at08OnceCl (.val (clauseTy [] .unit (.lin, .unit, .unit))) := by
+  refine .bangThunkV (persistent_dead hΓ) rfl (.lam ?_)
+  refine .tensorE (.left (deadSplit hΓ)) (.var (.here hΓ.toP)) ?_
+  refine .bind (A := .ref (kTy [] .unit .lin .unit)) (.left (.right (.dead (deadSplit hΓ))))
+    (.ret (appW (.var (by csolo)) (.alloc (by cdead)))) ?_
+  refine .tensorE (A := .ref .unit) (B := kTy [] .unit .lin .unit)
+    (.left (.dead (.right (.dead (deadSplit hΓ)))))
+    (appW (.unitI (by cdead)) (appW (.var (by csolo)) (.swap (by cdead)))) ?_
+  refine .tensorE (A := .ref (kTy [] .unit .lin .unit)) (B := .unit)
+    (.left (.left (.dead (.dead (.right (.dead (deadSplit hΓ)))))))
+    (appW (.var (by csolo)) (appW (.var (by csolo)) (.swap (by cdead)))) ?_
+  refine .bind (A := kTy [] .unit .lin .unit)
+    (.right (.left (.dead (.dead (.dead (.dead (.right (.dead (deadSplit hΓ)))))))))
+    (.ret (appW (.var (by csolo)) (.free (by cdead)))) ?_
+  refine .unitE (.right (.left (.dead (.dead (.dead (.dead (.dead (.right (.dead
+    (deadSplit hΓ)))))))))) (.var (by csolo)) ?_
+  exact .app (.left (.dead (.dead (.dead (.dead (.dead (.dead (.right (.dead
+      (deadSplit hΓ))))))))))
+    (.proj₁ (.force (C := .amp (.arr .unit (CTy.effOf [] .unit)) .top) (.here (by cdead))))
+    (by csolo)
+
+open BoCa.Fig16.LogRel.Core.EffPrograms (d_hrS) in
+/-- **AT08 with the copy used once is typed** by Core's kernel at `F 1`: the cell's reads and
+writes at `κ`'s type are typed, and AT08 differs from it only by the copy's second use. -/
+theorem d_at08Once : CDerives LifeCtx.empty [] at08Once (.comp (.ret .unit)) := by
+  refine .bind .nil (.ret (.tensorI .nil (d_at08OnceCl .nil) (.unitI .nil))) ?_
+  refine .bind (.right .nil) (.ret (d_hrS (.cons .nil))) ?_
+  exact .effHandle (S := []) (E := [(.lin, .unit, .unit)]) (n := 5) (A := .unit) (R := .unit)
+    (.left (.left .nil)) (.left (.right .nil)) (.here (.cons .nil)) (.there (.here .nil))
+    (by decide) (by simp) (by simp) (.effPerform (o := fooSig) rfl rfl (.unitI (by cdead)))
+
+/-- **AT08 with the copy used once runs**: every run, under every allocator, ends at `()` with the
+empty memory. -/
+theorem at08Once_runs {μ₁ : BoCa.BoLo.Heap} {e₁ : Expr}
+    (hs : BoCa.BoLo.Steps Adequacy.emptyMem at08Once μ₁ e₁) :
+    BoCa.BoLo.Steps μ₁ e₁ Adequacy.emptyMem (.val .unit) :=
+  adequacyD d_at08Once hs
 
 /-! ### AT05: the callback uses its borrow twice -/
 
