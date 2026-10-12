@@ -856,8 +856,12 @@ entry.
 * S5's cancel trace before frame deadness (finalisers alone, `keep` with the region's names,
   `Region`), and its premise a cancel of `capture l H K` only: **restated** (M3, above) with a
   region's actions (`pend`), first-wins with no name list, and the cancel of an affine continuation
-  at its cell.  `CancelsStd` and `cancelsStd_of`: **retired**, read by nothing; `CancelsNoCtl` and
-  `CancelsNZ` are kept as definitions, read by nothing.
+  at its cell.  `CancelsStd` and `cancelsStd_of`: **retired**, read by nothing; `CancelsNoCtl`
+  (refuted at `J₁`, `not_cancelsNoCtl_J₁`) and `CancelsNZ` (proved, `cancelsNZ_J₁`) are kept as
+  records, read by nothing.
+* `CfinQuiet` (no `[cfin-raise]` step on a typed program's run), algebraicity's hypothesis under
+  option A: **retired** as the hypothesis (M3) and kept as a definition with its refutation at `J₁`
+  (`not_cfinQuiet_J₁`); `KeptLamFree`, which it implies, replaces it.
 * The refutations of E7, E8 and E9 at `J₁` under option A (`not_der_e7b_J₁`, `not_der_e7c_J₁`,
   `not_der_e8b_J₁`, `not_der_e9c_J₁`, `not_cancelPolicy_J₁`, `not_unwindPolicy_J₁`,
   `not_storedK_J₁`, `not_eProps_J₁`, `I.not_tier1_J₁`, with the inversion `derAt_then` they read):
