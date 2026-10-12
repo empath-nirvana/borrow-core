@@ -75,3 +75,28 @@ Tier 2 stays a goal.
    - conservativity first (the relation agrees with Core on programs where no lend spans a stop);
    - a regression suite that can fail;
    - stop after two successive patches.
+
+## Proposal (2026-10-12, not decided): no internal borrows across a suspension
+
+A lend opened inside a suspendable computation must be returned before its next suspension
+point. Lending is free between suspensions. Borrows from outside may be held across suspensions.
+Lends end at last use (non-lexical), not only at block end.
+
+This is today's T1 plus checker ergonomics, and it would make tier 2 *excluded by design for
+now*. Evidence: [prior-art/no-borrows-across-suspension.md](prior-art/no-borrows-across-suspension.md).
+- No passing program is newly rejected; all pending programs are blocked by other things.
+- Non-lexical ending newly accepts `gen-self-borrow` and `lend-let-used`.
+- C# 13 has nearly this rule.
+
+What it costs:
+- **Main loss:** a lazy generator over a borrowed linked structure. Each pointer hop is a
+  `withload` at a shorter lifetime (`imm_view_rejected`). Its push-form fix needs K4 (effectful
+  fold constants).
+- Concurrent children sharing a parent's local.
+- Lending-iterator adapter composition.
+- Correction to the proposal's premise: a `for` over a stored generator inside a borrow block is
+  rejected (SPEC §14).
+
+**Status:** recorded as a proposal only; revisit after as much of tier 1 as possible has landed
+in the kernel. K4 should be weighed in the tier-1 work, with "traverse a borrowed tree lazily" as
+its acceptance program.
