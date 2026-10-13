@@ -30,6 +30,11 @@ Core's slots at `-n`, `Shift.lean`'s position shift `shiftQ` is such a `ψ` (`sh
   of a borrow (`rhoMM`), a typed world (`tw_nested`).
 * `reslotFailsAtEveryCut`: in particular every segment shift `Restrat.Emb.shift c k`, `k > 0`, at
   every cut `c`.
+* `reslot_fails_vD'`, `reslot_fails_cD'`: the same with the slots placed anew after the move
+  (`ι'`, with `ψ ∘ ι = ι' ∘ θ` on the slots), so re-slotting together with any position move
+  fails; `exists_readingMove`: such a `ψ` exists for every `ι`, `ι'` and `θ`.
+* `remake_not_move`: made afresh at the moved slots, each `mut` cell storing `𝒱⟦−⟧` at the moved
+  reading, the borrow of a borrow is related; moved, it is not.
 * `not_bridgeV`: re-slotting the resource and the records is not moving the slots' positions
   (`ι` to `ι ∘ θ`). It fails without `Imm`, so no extension of the fragment restores it.
 * `not_denseThawTop`: the dense analogue of `Bridge.not_coreThawTop`, at every `L` and `ι`.
@@ -280,6 +285,25 @@ theorem succ_lt_life (n : ℕ) : OrderDual.toDual (n + 1) < (OrderDual.toDual n 
   show n < n + 1
   omega
 
+/-- **The re-slotting breaks the value relation**, with the slots placed anew as well: for every
+lifetime order, every placement `ι` before the move and `ι'` after it, every re-slotting other than
+the identity and every reading move `ψ` with `ψ ∘ ι = ι' ∘ θ` on the slots, the borrow of a borrow
+is related before the move and not after. -/
+theorem reslot_fails_vD' (ι ι' : Slots L) {c : Life} (θ : Restrat.Emb c) (hθ : ∃ x, θ x ≠ x)
+    (ψ : L → L) (hψ : ∀ s, ψ (ι s) = ι' (θ s)) :
+    ∃ (ls : List SRec) (δ : LSubD L) (v : Val) (ρ : WRes),
+      vD (ℍ := ℍ) ι mm ls δ v ρ ∧
+      ¬ vD (ℍ := ℍ) ι' mm (ls.map (Targets.srecRestrat θ)) (δ.map ψ) v (θ.relRU ρ) := by
+  obtain ⟨n, hgap, hθn⟩ := exists_gap θ hθ
+  have hbs := succ_lt_life n
+  refine ⟨[], δmm ι (OrderDual.toDual (n + 1)) (OrderDual.toDual n), .loc 0,
+    rhoMM ι _ 0 1 (δmm_find1 ι _ _) hbs,
+    vD_rhoMM ι _ 0 1 (δmm_find0 ι _ _) (δmm_find1 ι _ _) hbs, ?_⟩
+  rw [List.map_nil]
+  refine not_vD_mm_relRU ι' θ hgap (δmm_map_find1 ι _ _ ψ) ?_ [] _ _
+  rw [hψ]
+  exact ι'.le_iff.mpr hθn.le
+
 /-- **The re-slotting breaks the value relation**: for every lifetime order, every placement of the
 slots, every re-slotting other than the identity and every reading move agreeing with it on the
 slots, the borrow of a borrow is related before the move and not after. -/
@@ -288,21 +312,42 @@ theorem reslot_fails_vD (ι : Slots L) {c : Life} (θ : Restrat.Emb c) (hθ : �
     ∃ (A : VTy) (ls : List SRec) (δ : LSubD L) (v : Val) (ρ : WRes), FragV A ∧
       vD (ℍ := ℍ) ι A ls δ v ρ ∧
       ¬ vD (ℍ := ℍ) ι A (ls.map (Targets.srecRestrat θ)) (δ.map ψ) v (θ.relRU ρ) := by
-  obtain ⟨n, hgap, hθn⟩ := exists_gap θ hθ
-  have hbs := succ_lt_life n
-  refine ⟨mm, [], δmm ι (OrderDual.toDual (n + 1)) (OrderDual.toDual n), .loc 0,
-    rhoMM ι _ 0 1 (δmm_find1 ι _ _) hbs, fragV_mm,
-    vD_rhoMM ι _ 0 1 (δmm_find0 ι _ _) (δmm_find1 ι _ _) hbs, ?_⟩
-  rw [List.map_nil]
-  refine not_vD_mm_relRU ι θ hgap (δmm_map_find1 ι _ _ ψ) ?_ [] _ _
-  rw [hψ]
-  exact ι.le_iff.mpr hθn.le
+  obtain ⟨ls, δ, v, ρ, h₁, h₂⟩ := reslot_fails_vD' (ℍ := ℍ) ι ι θ hθ ψ hψ
+  exact ⟨mm, ls, δ, v, ρ, fragV_mm, h₁, h₂⟩
 
 theorem not_reslotInvV (ι : Slots L) {c : Life} (θ : Restrat.Emb c) (hθ : ∃ x, θ x ≠ x)
     (ψ : L → L) (hψ : ∀ s, ψ (ι s) = ι (θ s)) : ¬ ReslotInvV (ℍ := ℍ) ι θ ψ := by
   intro h
   obtain ⟨A, ls, δ, v, ρ, hA, h₁, h₂⟩ := reslot_fails_vD (ℍ := ℍ) ι θ hθ ψ hψ
   exact h₂ ((h A hA ls δ v ρ).mpr h₁)
+
+/-- **Re-made, not moved**: at the moved reading, the borrow of a borrow made afresh at the moved
+slots — the same locations and values, each `mut` cell storing `𝒱⟦−⟧` at the moved reading — is
+related, and the moved one, whose cells store images, is not. -/
+theorem remake_not_move (ι : Slots L) {c : Life} (θ : Restrat.Emb c) (hθ : ∃ x, θ x ≠ x)
+    (ψ : L → L) (hψ : ∀ s, ψ (ι s) = ι (θ s)) :
+    ∃ (bo si : Life) (hbs : bo < si) (hbs' : θ bo < θ si)
+      (h1' : ((δmm ι bo si).map ψ).find? 1 = some (ι (θ si))),
+      vD (ℍ := ℍ) ι mm [] (δmm ι bo si) (.loc 0)
+        (rhoMM ι (δmm ι bo si) 0 1 (δmm_find1 ι _ _) hbs) ∧
+      vD (ℍ := ℍ) ι mm [] ((δmm ι bo si).map ψ) (.loc 0)
+        (rhoMM ι ((δmm ι bo si).map ψ) 0 1 h1' hbs') ∧
+      ¬ vD (ℍ := ℍ) ι mm [] ((δmm ι bo si).map ψ) (.loc 0)
+        (θ.relRU (rhoMM ι (δmm ι bo si) 0 1 (δmm_find1 ι _ _) hbs)) := by
+  obtain ⟨n, hgap, hθn⟩ := exists_gap θ hθ
+  have hbs := succ_lt_life n
+  have h1' : ((δmm ι (OrderDual.toDual (n + 1)) (OrderDual.toDual n)).map ψ).find? 1 =
+      some (ι (θ (OrderDual.toDual n))) := by
+    rw [δmm_map_find1, hψ]
+  have h0' : ((δmm ι (OrderDual.toDual (n + 1)) (OrderDual.toDual n)).map ψ).find? 0 =
+      some (ι (θ (OrderDual.toDual (n + 1)))) := by
+    show some (ψ (ι _)) = _
+    rw [hψ]
+  refine ⟨_, _, hbs, θ.strictMono hbs, h1',
+    vD_rhoMM ι _ 0 1 (δmm_find0 ι _ _) (δmm_find1 ι _ _) hbs,
+    vD_rhoMM ι _ 0 1 h0' h1' (θ.strictMono hbs), ?_⟩
+  refine not_vD_mm_relRU ι θ hgap h1' ?_ [] _ _
+  exact ι.le_iff.mpr hθn.le
 
 /-- The borrow of a borrow, re-slotted, is a typed world. -/
 theorem tw_relRU_rhoMM (ι : Slots L) {c : Life} (θ : Restrat.Emb c) (δ : LSubD L)
@@ -315,23 +360,40 @@ theorem tw_relRU_rhoMM (ι : Slots L) {c : Life} (θ : Restrat.Emb c) (δ : LSub
     (by decide) (Restrat.Emb.relRU_empty (e := θ)) ?_
   rw [innerView, θ.relRU_single, θ.relU_mutOf]
 
-/-- **The re-slotting breaks the computation relation**: the same configuration at
-`F (Mut 'a (Mut 'b 1))` and `return ℓ`. -/
-theorem reslot_fails_cD (ι : Slots L) {c : Life} (θ : Restrat.Emb c) (hθ : ∃ x, θ x ≠ x)
-    (ψ : L → L) (hψ : ∀ s, ψ (ι s) = ι (θ s)) :
+/-- **The re-slotting breaks the computation relation**, with the slots placed anew as well: the
+same configuration at `F (Mut 'a (Mut 'b 1))` and `return ℓ`. -/
+theorem reslot_fails_cD' (ι ι' : Slots L) {c : Life} (θ : Restrat.Emb c) (hθ : ∃ x, θ x ≠ x)
+    (ψ : L → L) (hψ : ∀ s, ψ (ι s) = ι' (θ s)) :
     ∃ (ls : List SRec) (δ : LSubD L) (e : Expr) (ρ : WRes),
       cD (ℍ := ℍ) ι (.ret mm) ls δ e ρ ∧
-      ¬ cD (ℍ := ℍ) ι (.ret mm) (ls.map (Targets.srecRestrat θ)) (δ.map ψ) e (θ.relRU ρ) := by
+      ¬ cD (ℍ := ℍ) ι' (.ret mm) (ls.map (Targets.srecRestrat θ)) (δ.map ψ) e (θ.relRU ρ) := by
   obtain ⟨n, hgap, hθn⟩ := exists_gap θ hθ
   have hbs := succ_lt_life n
   refine ⟨[], δmm ι (OrderDual.toDual (n + 1)) (OrderDual.toDual n), .val (.loc 0),
     rhoMM ι _ 0 1 (δmm_find1 ι _ _) hbs,
     wpTS_val [] (.loc 0) _ _ (vD_rhoMM ι _ 0 1 (δmm_find0 ι _ _) (δmm_find1 ι _ _) hbs), ?_⟩
   rw [List.map_nil]
-  refine not_wpTS_mm_relRU ι θ hgap (δmm_map_find1 ι _ _ ψ) ?_ _ _
+  refine not_wpTS_mm_relRU ι' θ hgap (δmm_map_find1 ι _ _ ψ) ?_ _ _
     (tw_relRU_rhoMM ι θ _ (δmm_find1 ι _ _) hbs)
   rw [hψ]
-  exact ι.le_iff.mpr hθn.le
+  exact ι'.le_iff.mpr hθn.le
+
+/-- **The re-slotting breaks the computation relation**: the same configuration at
+`F (Mut 'a (Mut 'b 1))` and `return ℓ`. -/
+theorem reslot_fails_cD (ι : Slots L) {c : Life} (θ : Restrat.Emb c) (hθ : ∃ x, θ x ≠ x)
+    (ψ : L → L) (hψ : ∀ s, ψ (ι s) = ι (θ s)) :
+    ∃ (ls : List SRec) (δ : LSubD L) (e : Expr) (ρ : WRes),
+      cD (ℍ := ℍ) ι (.ret mm) ls δ e ρ ∧
+      ¬ cD (ℍ := ℍ) ι (.ret mm) (ls.map (Targets.srecRestrat θ)) (δ.map ψ) e (θ.relRU ρ) :=
+  reslot_fails_cD' ι ι θ hθ ψ hψ
+
+/-- A reading move agreeing with `ι' ∘ θ ∘ ι⁻¹` on the slots exists for every `ι`, `ι'` and `θ`. -/
+theorem exists_readingMove (ι ι' : Slots L) {c : Life} (θ : Restrat.Emb c) :
+    ∃ ψ : L → L, ∀ s, ψ (ι s) = ι' (θ s) := by
+  classical
+  refine ⟨fun x => ι' (θ (Function.invFun ι.f x)), fun s => ?_⟩
+  show ι' (θ (Function.invFun ι.f (ι s))) = ι' (θ s)
+  rw [Function.leftInverse_invFun ι.strictMono.injective s]
 
 theorem not_reslotInvC (ι : Slots L) {c : Life} (θ : Restrat.Emb c) (hθ : ∃ x, θ x ≠ x)
     (ψ : L → L) (hψ : ∀ s, ψ (ι s) = ι (θ s)) : ¬ ReslotInvC (ℍ := ℍ) ι θ ψ := by

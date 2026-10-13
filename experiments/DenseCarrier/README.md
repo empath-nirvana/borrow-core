@@ -240,7 +240,12 @@ type.
 * `not_reslotInvV`, `not_reslotInvC`, `reslotFailsAtEveryCut`: the failure at every `L`, `ι`,
   `θ ≠ id`, `ψ`, and at every segment shift by `k > 0` at every cut. `shiftQ_ratSlots`: at
   `WithTop ℚ` probe 1's position shift is a `ψ` for `Restrat.Emb.shift`, so `not_reslotInvC_rat`
-  is the faithful version of §4's shift.
+  is the faithful version of §4's shift. `reslot_fails_vD'`, `reslot_fails_cD'`: the same when
+  the slots are also placed anew after the move (`ψ ∘ ι = ι' ∘ θ`), so re-slotting combined with
+  any position move fails; `exists_readingMove`: such a `ψ` exists for every `ι`, `ι'`, `θ`.
+* `remake_not_move`: at the moved reading, the borrow of a borrow made afresh at the moved slots —
+  same locations and values, each `mut` cell storing `𝒱⟦−⟧` at the moved reading — is related,
+  and the moved one, whose cells store images, is not.
 * `not_bridgeV`: re-slotting the resource and records by `θ` is not moving the slots' positions to
   `ι ∘ θ` (`Slots.reslot`). The fragment has no `Imm`, and the bridge fails without it; adding
   `Imm` adds `mut_not_natural`'s own witness and restores nothing.
@@ -262,7 +267,9 @@ A cell sits at a slot, so a lifetime of `L` carries a cell only at a slot's posi
   is not empty and holds no slot.
 
 So the moves the relation is invariant under (positions, `cD_map`) cannot put a slot in the gap,
-and the move that frees slots there (re-slotting, §5) breaks the relation.
+and the moves that free slots there (re-slotting, with or without new positions, §5) break the
+relation: no move of the two-order design puts the resumer's lends in a gap beneath the region
+with the relation preserved.
 
 ## 7. Cells at every lifetime: finite support (`Nominal.lean`)
 
@@ -335,7 +342,7 @@ identity is not onto (`exists_gap`), so every such move leaves free slots.
 
 **So Law 2 should be built on Core's carrier, unchanged, with the region's lends ended at the stop
 and re-made at the fresh lifetime, not moved.** A re-made `mut` cell stores `𝒱⟦T⟧` at the new
-reading, which is what a moved cell lacks. κ's frames then have to be related at the fresh
+reading, which is what a moved cell lacks (`remake_not_move`). κ's frames then have to be related at the fresh
 lifetime without naturality, through the quantifiers the borrow rules already carry: the
 callback's `∀'x ⊏ b`, which holds at every lifetime below its bound, and 6.65's `И`, which makes
 the borrow's cell at every lifetime below a bound. The two-order design is not needed for that.
