@@ -19,6 +19,7 @@ and `tick : 1 ↠ 1` at `5`, linear. No abortive operation of it is unrestricted
 | `hofTwoRows` (E1) | `hof` let-bound once (`[let-poly]`) and used at the pure row, at `exn`'s under `toResult`, and at `wait`'s under a handler that resumes `κ` at its cell; its callbacks `λ_. M` are `[λ-dead]`'s | `(tt, (inr (), tt))` |
 | `sumGen` (E2d) | a consumer of a generator, let-bound once and used at `yield ⊙ ∅` and `yield ⊙ exn`; the raise passes its reinstalled handler | `(tt, inr ())` |
 | `deepGen` (E4) | a deep handler: reinstalled at each resume, it catches both yields, its clause performing `tick` at each; a handler of `tick` counts them | `((), 2)` |
+| `deepGenPlain` (E4) | the same deep handler under a handler of `tick` that resumes | `()` |
 | `nestedLogOutside`, `nestedFailOutside` (E5) | a state-passing handler of the linear `log` and `toResult`, nested both ways: the log kept beside the error, or dropped with the handler the raise unwinds | `(inr (), tt)`, `inr ()` |
 | `tunnel` (E6) | `fwrap`'s handler of `exnᵢ` passes the callback's raise of `exnₒ` to `toResult` | `inr ()` |
 | `e7a`, `e7b`, `e7d` (E7) | `timeout` cancels a suspended body: the finalisers fire innermost first, and the first error is kept and re-raised at the canceller | `inr ()` |
@@ -151,6 +152,9 @@ def countClV : Val :=
 /-- **E4**: `deepGen` under a handler of `tick` that counts, from `0`. -/
 def deepGen : Expr :=
   bindE (hndE (hQ 5 .lin pairRetV countClV) deepGenE) (appE (.var 0) (num 0).1)
+
+/-- **E4**, `deepGen` under a handler of `tick` that resumes. -/
+def deepGenPlain : Expr := hndE (resumerH 5 .lin) deepGenE
 
 /-! ### E5: nested handlers in both orders (`nested-log-outside`, `nested-fail-outside`) -/
 
@@ -1040,6 +1044,12 @@ theorem dAt_deepGen {Δ : LifeCtx} :
       (dAt_pairRet [] .unit natN) dAt_countCl dAt_deepGenE)
     (dAt_callVar .nil (CDerivesAt.ofEffFree (d_num (.cons .nil) 0) rfl))
 
+/-- **E4 under a handler of `tick` that resumes is typed** at the pure row. -/
+theorem dAt_deepGenPlain {Δ : LifeCtx} : CDerivesAt ΞE Δ [] deepGenPlain (.comp (.ret .unit)) :=
+  dAt_hQ .nil .nil ΞE_5 (by decide) (S := []) (rowAt_nil ΞE) (by simp) (F := .ret .unit)
+    (X := .unit) (CDerivesAt.ofEffFree (CancelIntercept.d_idV [] .unit) rfl)
+    (dAt_resumeCl [] .unit (by decide) rfl) dAt_deepGenE
+
 end E4
 
 /-! ### E1, E2d and E10: one function at several rows (`[let-poly]`) -/
@@ -1301,6 +1311,10 @@ theorem d_sumGen {Δ : LifeCtx} :
 theorem d_deepGen {Δ : LifeCtx} : CDerives Δ [] deepGen (.comp (.ret (.tensor .unit natN))) :=
   dAt_deepGen.toCDerives
 
+/-- E4, `deepGen` under a handler of `tick` that resumes. -/
+theorem d_deepGenPlain {Δ : LifeCtx} : CDerives Δ [] deepGenPlain (.comp (.ret .unit)) :=
+  dAt_deepGenPlain.toCDerives
+
 /-- E5, `withLog` outside `toResult`. -/
 theorem d_nestedLogOutside {Δ : LifeCtx} :
     CDerives Δ [] nestedLogOutside (.comp (.ret (.tensor (.sum .unit .unit) boolT))) :=
@@ -1380,6 +1394,12 @@ the counting handler counts two ticks. -/
 theorem deepGen_run :
     Steps (ℍ := ℍ) Adequacy.emptyMem deepGen Adequacy.emptyMem
       (.val (Val.pair Val.unit (num 2))) :=
+  runM_val (k := 200) (m := []) (m' := []) rfl
+
+/-- **E4 under a handler of `tick` that resumes runs to `()`**: both yields are caught, and each
+`tick` is resumed at once. -/
+theorem deepGenPlain_run :
+    Steps (ℍ := ℍ) Adequacy.emptyMem deepGenPlain Adequacy.emptyMem (.val Val.unit) :=
   runM_val (k := 200) (m := []) (m' := []) rfl
 
 /-- **E5, `withLog` outside, runs to `(inr (), tt)`**: the log is kept beside the error. -/

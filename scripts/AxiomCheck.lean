@@ -428,6 +428,9 @@ import Frontend.Check.Externs
 #print axioms BoCa.Fig16.LogRel.Core.Tier1Programs.dAt_deepGen
 #print axioms BoCa.Fig16.LogRel.Core.Tier1Programs.d_deepGen
 #print axioms BoCa.Fig16.LogRel.Core.Tier1Programs.deepGen_run
+#print axioms BoCa.Fig16.LogRel.Core.Tier1Programs.dAt_deepGenPlain
+#print axioms BoCa.Fig16.LogRel.Core.Tier1Programs.d_deepGenPlain
+#print axioms BoCa.Fig16.LogRel.Core.Tier1Programs.deepGenPlain_run
 #print axioms BoCa.Fig16.LogRel.Core.Tier1Programs.dAt_nestedLogOutside
 #print axioms BoCa.Fig16.LogRel.Core.Tier1Programs.d_nestedLogOutside
 #print axioms BoCa.Fig16.LogRel.Core.Tier1Programs.nestedLogOutside_run

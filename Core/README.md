@@ -243,7 +243,8 @@ effect).
   is a closed term with a derivation tied to the effect context `ΞE`, which has no unrestricted
   abortive operation (`noUnrExn_ΞE`), and a run computed by `runM` to its answer at the empty
   memory: a function let-bound once and used at several rows by `[let-poly]` (`hofTwoRows`,
-  `sumGen`, `timeoutProg`), a deep handler (`deepGen`), nested handlers in both orders
+  `sumGen`, `timeoutProg`), a deep handler under a handler of `tick` that counts (`deepGen`) and
+  one that resumes (`deepGenPlain`), nested handlers in both orders
   (`nestedLogOutside`, `nestedFailOutside`), no accidental handling (`tunnel`), a cancelled
   suspension's finalisers (`e7a`, `e7b`, `e7d`), an unwind through a finaliser that raises (`e8b`),
   and a stored continuation resumed, cancelled, or cancelled through a finaliser that raises
