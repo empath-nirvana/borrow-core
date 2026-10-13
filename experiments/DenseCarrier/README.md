@@ -30,7 +30,9 @@ lifetimes in play.
    exactly when the order has no infinite ascending chain (`carrier_iff`). A `mut` cell of stratum
    `α` stores an arbitrary predicate on the cells of a stratum above it, so along an ascending chain
    the cardinals of the strata would descend forever. No dense order with two points carries the
-   paper's model (`no_carrier_of_dense`, `no_carrier_withTopRat`).
+   paper's model (`no_carrier_of_dense`, `no_carrier_withTopRat`), and every order that does is
+   rigid, its only automorphism the identity (`carrier_rigid`): equivariance under the cells' own
+   index is empty on every carrier, not only on `ℕᵒᵈ`.
 2. **What can be dense is the order the relation reads.** The cells keep a reverse-well-ordered
    index, the *slots* (the lifetimes in play; Core's own `Life = ℕᵒᵈ`, so Core's model is reused
    unchanged). The relation reads its lifetimes in a second order `L`, the reading `δ` and the `∀`
@@ -47,10 +49,11 @@ lifetimes in play.
    `k > 0`, preserves and reflects the relation at every configuration and every type of the
    fragment (`segShift_iff`, `segShiftInvD`). The same fragment at `L = Life` fails at every cut
    (`segShiftFailsAtEveryCutD`).
-5. **FL map**: the `∀` rules are re-proved over every `L` at Core's own premises (`allI_compatD`,
-   `allE_compatD`). Every other rule transfers by porting the relation layer to `δ : LSubD L` and
-   `ι`; none needs new mathematics; one hypothesis is needed, a slot below every lifetime of `L`
-   (§5).
+5. **FL map**: the `∀` rules and a borrow constant (`withbor` lending `Ref A` as `Mut 'x A`,
+   `[TR]` 6.173) are re-proved over every `L` at Core's own premises (`allI_compatD`,
+   `allE_compatD`, `withbor2_compatD`). Every other rule transfers by porting the relation layer
+   to `δ : LSubD L` and `ι`; none needs new mathematics; one hypothesis is needed, a slot below
+   every lifetime of `L` (§5).
 
 **Kill criterion: not met.** The paper's carrier does need recursion down a reverse-well-founded
 order (`carrier_iff`), so it cannot recurse down a dense `⊏`. But the recursion need not run on the
@@ -121,6 +124,9 @@ it.
 * `exists_strictMono_of_dense`, `no_carrier_of_dense`, `no_carrier_withTopRat`,
   `no_carrier_withTopRat_BoCa`: a dense order with two points has such a chain, so no solution, at
   `WithTop ℚ` and at `[TR]` §3's `Loc` and `Val`.
+* `carrier_rigid`: an order that carries the model has only the identity automorphism (a
+  reverse-well-ordered order is rigid). So no order carrying the cells is homogeneous, and the
+  order whose automorphisms move lifetimes has to be a second one.
 
 Keeping a dense order as the index would need the stored predicates restricted (finitely
 supported, or syntactic); not attempted, since the index need not be dense.
@@ -131,8 +137,9 @@ at `-n` and slot `0` at `⊤` (`ratSlots`, below every lifetime a slot: `ratSlot
 
 * `Slots L`: a strictly monotone map from Core's `Life` (the slots) into `L`, `⊤` to `⊤`.
 * `LSubD L`, `interpD` (`⊤`, `⊔`, `⊓` of `L`), `atLifeD`, `LtLifeD`, `ModelsD`, `EntailsLtD`.
-* `InStratumD`, `OutlivesD`, `boxD`, `ptoMutD`; the relation `vD` at `1`, `[@a]`, `Mut`, and `cD` at
-  `F`, `⊸`, `⊤`, `∀`; `gSepD`, `gDenD`, `SemD`. `FragV`/`FragC` name the fragment.
+* `InStratumD`, `OutlivesD`, `boxD`, `ptoMutD`; the relation `vD` at `1`, `⊗`, `U`, `Ref`,
+  `[@a]`, `Mut`, and `cD` at `F`, `⊸`, `⊤`, `∀`, one mutual block as Core's; `gSepD`, `gDenD`,
+  `SemD`. `FragV`/`FragC` name the fragment.
 
 Everything else is Core's own definition, imported, not copied: cells, resources, `●`, `○`, the
 walks, `↭`, `wpTS` with its typed world `TW` and tagged record lists, `⋆`, `─⋆`, `⌜−⌝`.
@@ -199,8 +206,8 @@ records and resource moved together, with the move made on the positions.
 ## 5. The FL map
 
 What each rule of `fundamentalC` (`Core/Fundamental.lean`) reads in the lifetime order, and what
-its compatibility proof needs when `δ` and the `∀` move to `L`. Re-proved here: `allI`, `allE`.
-The rest is the reading of the existing proofs, not re-proved.
+its compatibility proof needs when `δ` and the `∀` move to `L`. Re-proved here: `allI`, `allE`,
+`withbor2`. The rest is the reading of the existing proofs, not re-proved.
 
 | rules | read in `L` | transfer |
 |---|---|---|
@@ -213,12 +220,14 @@ The rest is the reading of the existing proofs, not re-proved.
 | `immSub`, `mutSub` | `α ⊑ ι b`, antitone in `α`; `Δ ⊨ @a ⊑ @b` | transfers; the premise by `entailsLeD_of_entailsLe` (proved) |
 | `boxI`, `boxE` | `[α]` through `ι`; 6.60 (`vC_outlives`) | transfers: 6.60's induction reads the order of `L` and `ι`'s monotonicity |
 | `copy`, `forgetImm`, `forgetMut`, `forgetUnk`, `arrLen`, `arrGet`, `arrCopy`, `arrForget`, `sliceGetM`, `sliceLenM`, `sliceSplitI/M`, `sliceEmptyI/M`, `sliceReplaceM`, `sliceSwapM` | the `Imm`/`Mut` clauses through `ι`; `Imm`'s coherence `CohE` compares the type at `δ` with a record's `(T, δ)` | transfers once records carry `LSubD L` (`FrameRec.δ`) and the typed world's 6.64 premises (`vShape`) read `L` through `ι`: a re-indexing of `FrameRecords`, `World` and the shapes |
-| `withbor1/2/3`, `withload`, `withswap`, their unwinding forms, `sliceBorrowM/I` (and `U`), `foldImm` | the callback's `∀` at a fresh lifetime | transfers. Core instantiates the callback at the lifetime `α` of `И`'s cell (6.64/6.65), a slot; here at `ι α`, with `И`'s bound taken at a slot whose position is below `@(⊓Δ)δ`. **Needs a slot below every lifetime of `L`** (`ratSlots_unbounded` at `WithTop ℚ`). The frames, their `↓`-strata and the (c) places stay on the slots, untouched; plus the record re-indexing above |
+| `withbor2` | the callback's `∀` at a fresh lifetime; 6.60 at the side condition; `U` | **re-proved**: `withbor2_compatD` (at `WithTop ℚ`: `withbor2_compatD_rat`), Core's proof step for step. Core instantiates the callback at the lifetime `α` of 6.65's `И`, a slot; here at `ι α`, with `И`'s bound taken at a slot whose position is below `@(⊓Δ)δ` (`fresh_bound`); the borrow and the result's `[−]` at `ι α` are the model's at `α` (`ptoMutD_slot`, `outlivesD_slot`); 6.65 itself is the model's (`wpTS_M_frameG`: `wpTS_M_frameX` with the payload predicate abstracted); 6.60 non-strict over `L` reads the side condition (`vD_outlivesLe`), its premise carried by `definedD_of_defines`. **Needs a slot below every lifetime of `L`** (`ratSlots_unbounded` at `WithTop ℚ`) |
+| `withbor1/3`, `withload`, `withswap`, their unwinding forms, `sliceBorrowM/I` (and `U`), `foldImm` | the callback's `∀` at a fresh lifetime | transfers as `withbor2` does; the `Imm` lends (6.64, 6.150) also need the record re-indexing above. The frames, their `↓`-strata and the (c) places stay on the slots, untouched |
 | `adequacyC`, `theorem32` | `δ = ∅` | unchanged |
 
 **New mathematics: none for FL.** The work is the port of the relation layer (the 282
 relation-level (a) places and what rests on them), the record and typed-world re-indexing, the
-fresh-slot hypothesis, and the two premise transfers (proved).
+fresh-slot hypothesis, and the premise transfers (proved: `entailsLtD_of_entailsLt`,
+`entailsLeD_of_entailsLe`, `definedD_of_defines`).
 
 ## What is open
 
@@ -238,15 +247,16 @@ it: over a dense `L` the relation does not read the room between a cell and a bo
 (`dense_same_order_type`), and moves of a whole configuration are invisible to it (`cD_map`,
 `segShift_iff`).
 
-**The rest of the relation over `L`.** Built here: `1`, `[@a]`, `Mut`, `F`, `⊸`, `⊤`, `∀`, with
-Core's records and typed world. Not built: the other formers' clauses, records over `L`, and the
-compatibility lemmas of §5 other than `allI`/`allE`.
+**The rest of the relation over `L`.** Built here: `1`, `⊗`, `U`, `Ref`, `[@a]`, `Mut`, `F`,
+`⊸`, `⊤`, `∀`, with Core's records and typed world. Not built: the other formers' clauses
+(`⊕`, `0`, `!`, `Imm`, `μ`, `[L]`, `I32`, `Unk`, `&`, `ν`, rows), records over `L`, and the
+compatibility lemmas of §5 other than `allI`, `allE` and `withbor2`.
 
 ## Files
 
 | file | content |
 |---|---|
-| `DenseCarrier/Cantor.lean` | the layer equation over any linear order; `carrier_iff`, `no_carrier_of_dense` |
+| `DenseCarrier/Cantor.lean` | the layer equation over any linear order; `carrier_iff`, `no_carrier_of_dense`, `carrier_rigid` |
 | `DenseCarrier/Carrier.lean` | `Slots`, `LSubD`, `interpD`, `atLifeD`, `LtLifeD`, `ModelsD`, `EntailsLtD` |
 | `DenseCarrier/Relation.lean` | `ptoMutD`, `OutlivesD`, `boxD`, `vD`, `cD`, `SemD` |
 | `DenseCarrier/Faithful.lean` | `vD_id`, `cD_id`: Core at `L = Life` |
@@ -254,7 +264,8 @@ compatibility lemmas of §5 other than `allI`/`allE`.
 | `DenseCarrier/Gap.lean` | `holdsD`, `failsD`, the gap test |
 | `DenseCarrier/Rat.lean` | `WithTop ℚ`: `ratSlots`, `shiftQ`, `plIso`, `exists_aut_agree` |
 | `DenseCarrier/Shift.lean` | the shift test |
-| `DenseCarrier/FL.lean` | `allI_compatD`, `allE_compatD`, the premise transfers |
+| `DenseCarrier/FL.lean` | `allI_compatD`, `allE_compatD`, the premise transfers, the fresh lifetime through `ι` |
+| `DenseCarrier/Borrow.lean` | `withbor2_compatD`; `wpTS_M_frameG`, `vD_outlivesLe`, `vD_local` |
 | `scripts/Census.lean`, `scripts/classify.py`, `scripts/Deps.lean` | the census |
 
 Reproduce the census: `lake env lean experiments/DenseCarrier/scripts/Census.lean > census.txt`,
