@@ -70,7 +70,8 @@ exist (step 7). Each failure is a machine-checked statement.
 `not_reslotInvV`, the dense thaw by `not_denseThawTop`, a slot in the gap by
 `shiftSlots_gap_empty` with `not_reslotInvC`, a dense carrier by `no_fsCarrier`.
 
-**Law 2's design: Core's carrier, with the region's lends re-made, not moved** (see *Law 2*).
+**Law 2's design: the two-order design, with the region's lends re-made, not moved** (see
+*Law 2*).
 
 ## 1. Census
 
@@ -332,30 +333,42 @@ fresh-slot hypothesis, and the premise transfers (proved: `entailsLtD_of_entails
 ## Law 2
 
 **No carrier supports Law 2 as a move of a suspended configuration.** On Core's carrier ProbeD1's
-witnesses and `not_segShiftInv_noAll`; on the two-order design `not_reslotInvC`, and position moves
-cannot put the region beneath the resumer's lends (`placement_keeps_order`); a carrier with cells
-at every lifetime of a dense order does not exist (`no_fsCarrier`). The refutations share one
-mechanism: a moved `mut` cell stores the image of its predicate, and the relation at the moved
-reading admits cells at the slots the move leaves free, which the image refuses
-(`ofS_relS_ne_vD_mb`). The slots are rigid (`carrier_rigid`): a re-slotting other than the
-identity is not onto (`exists_gap`), so every such move leaves free slots.
+witnesses and `not_segShiftInv_noAll`; on the two-order design `not_reslotInvC` and
+`reslot_fails_cD'`, and position moves cannot put the region beneath the resumer's lends
+(`placement_keeps_order`); a carrier with cells at every lifetime of a dense order does not exist
+(`no_fsCarrier`). The re-slotting refutations share one mechanism: a moved `mut` cell stores the
+image of its predicate, and the relation at the moved reading admits cells at the slots the move
+leaves free, which the image refuses (`ofS_relS_ne_vD_mb`). The slots are rigid (`carrier_rigid`):
+a re-slotting other than the identity is not onto (`exists_gap`), so every such move leaves free
+slots.
 
-**So Law 2 should be built on Core's carrier, unchanged, with the region's lends ended at the stop
-and re-made at the fresh lifetime, not moved.** A re-made `mut` cell stores `𝒱⟦T⟧` at the new
-reading, which is what a moved cell lacks (`remake_not_move`). κ's frames then have to be related at the fresh
-lifetime without naturality, through the quantifiers the borrow rules already carry: the
-callback's `∀'x ⊏ b`, which holds at every lifetime below its bound, and 6.65's `И`, which makes
-the borrow's cell at every lifetime below a bound. The two-order design is not needed for that.
-What it gains — a `∀` that reads no adjacency, position moves the relation does not see — concerns
-moves, and no position move reorders the region and the resumer's lends; it costs the port of
-the relation layer (§1). It stays the fallback if relating κ at the fresh lifetime turns out to
-need a `∀` that reads no room.
+**So Law 2 re-makes the region's lends; it does not move them.** Ended at the stop and made afresh
+at the fresh lifetime, each `mut` cell stores `𝒱⟦T⟧` at the new reading, which is what a moved cell
+lacks: at the borrow of a borrow the re-made configuration is related where the moved one is not
+(`remake_not_move`). κ's frames then have to be related at the fresh lifetime by an argument that
+does not go through naturality, through the quantifiers the borrow rules carry: the callback's
+`∀'x ⊏ b`, which holds at every lifetime below its bound, and 6.65's `И`, which makes the borrow's
+cell at every lifetime below a bound. That argument is Law 2 itself.
+
+**Build it on the two-order design.** Re-making the region beneath the resumer's lends opens room
+between the lifetimes at and above the cut and the region's cells. Core's relation reads that room:
+at `L = Life` the `∀` clause holds at a cell made at the slot adjacent to its bound and fails at the
+same cell made one slot lower (`coreAllAdjacentD`, ProbeD1's `coreAllAdjacent`), a re-make that
+breaks the relation. Over a dense `L` the relation reads no room: the clause does not tell cells
+below its bound apart (`dense_same_order_type`), and room opened by moving positions is invisible
+(`segShift_iff`). The cells themselves cannot be dense (`no_fsCarrier`), so among the designs tried
+here the two-order design is the one that reads no room. Its cost is the port of the relation layer (§1, §8), with no new
+mathematics for FL; Core's cells, recursion and statics stay as they are. If Law 2's argument never
+meets a `∀` that holds by adjacency at the configurations that arise, Core's carrier would suffice;
+ProbeD1's witnesses are not claimed to arise, and that is not settled here.
 
 ## What is open
 
 **Relating κ at the fresh lifetime.** Whether κ's frames, with the region's lends ended at the
 stop and re-made at a fresh lifetime beneath the resumer's list, are related there through the
-`∀` and `И` of the borrow rules: not derived, no obstruction verified. The refutations above are
+`∀` and `И` of the borrow rules: not derived, no obstruction verified over a dense `L`. At
+`L = Life` the re-make of a cell adjacent to a `∀`'s bound breaks the relation
+(`coreAllAdjacentD`); whether such a configuration arises is not settled. The refutations above are
 of moves at every configuration; whether the borrow of a borrow arises inside a suspended region is
 not checked, and the refutations do not depend on it.
 
