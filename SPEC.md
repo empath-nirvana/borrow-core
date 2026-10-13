@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 0.54 · 2026-10-13
+Version 0.55 · 2026-10-13
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -1690,7 +1690,9 @@ and §19 is preserved: every construct of this entry is elaborated into core bef
   a cancel that hands back a residual, or a `linear ctl` iteration effect (no `break`).
 - **Callbacks that yield** need effectful callbacks (#161): a closure that performs an operation
   is a computation passed as a value (`corpus/pending/yield-callback.bc`). So do adapters as
-  handlers over a computation (`|>` at a computation parameter).
+  handlers over a computation (`|>` at a computation parameter). In Core, a generic function
+  whose callback yields to a scheduler is typed and run (§19 *Programs*, the async colourless
+  test).
 - **A total consumer of a generator that loops.** A `for` over one is div: its turns are
   unbounded. A finite source written as data, or a sized iterator (§16), is total, and so is a
   generator whose body does not loop.
@@ -2265,7 +2267,7 @@ program's derivation gives it (`checkProgram_letPoly`).
   (`retry`, a handler that re-runs its body, and `|>` at a computation parameter). The effect
   properties E1 (a higher-order function under two handlers), E2d (a consumer of generators at two
   rows) and E6 (a wrapper whose handler the callback's raise passes) are Core programs (§19
-  *Programs*) and wait for them at the surface (§24 *Open*).
+  *Programs*) and wait for them at the surface (§24 *Open*), as does the async colourless test.
 - An operation that answers a borrow into the handler's state (#160); `lookup` answers a copy.
 - A handler parameter that is not `!` is the handler's state (§21); its native lowering (§19
   *Open*).
@@ -3109,6 +3111,27 @@ typed where `exn` is affine (§27 *Typing*). The kernel programs `hof-two-rows`,
 compiled at every stage; the lets of `hofTwoRows`, `sumGen` and `timeoutProg` are lowered per use
 (§24 *Lowering*).
 
+**The async colourless test** (`Core/EffAsyncPrograms.lean`). One generic function, written once
+with no async marker, is run with a plain callback and with a callback that suspends to a
+scheduler, which stores each task's continuation, runs the other task, and resumes it later. The
+programs are typed and run as the effect properties are: derivations tied to `ΞE`, runs computed by
+`runM`.
+- `forN (k, (f, s))` calls `f` `k` times, threading `s`: §20's `bounded_fix` whose budget is the
+  count. Its step calls `f` by a `[let]` at `f`'s row whose continuation holds only the
+  self-reference and `f`, both `!`, so `forN` is typed at every row (`dAt_forN`). The plain
+  callback `tick` advances a two-bit count; `yieldTick` first performs `yield` of the task's tag.
+- The spawn handler of `yield` answers the tag beside `κ`, stored as `Iter bool S 1` (§15's stored
+  generator: `next` is `κ`'s resume entry, `close` its cancel entry). Its clause does not resume.
+- The scheduler `rr` is a round robin over the two tasks' stored continuations, `bounded_fix` at
+  the pure row. Each round resumes each task that yielded, which runs to its next `yield` or its
+  end, and records the tags; it answers once both have ended, or when its budget is spent, with
+  the tasks as they stand.
+- `asyncSync` is `forN` at the pure row with `tick`, and answers `(ff, (tt, tt))`. `asyncTasks` is
+  `forN` at `yield`'s row, run by two tasks under the scheduler: both end, and the trace, oldest
+  first, is `A B A B A B`. `asyncColourless` is `forN` let-bound once and used at both rows
+  (`[let-poly]`). They are the kernel programs `async-sync`, `async-tasks` and `async-colourless`
+  (*Lowering*).
+
 ### Lowering
 
 The backend lowers §19 in two passes over the closure IR (`Backend/Clos/Capture.lean`, then
@@ -3230,6 +3253,14 @@ continuation resumed twice; a let-bound function used at two rows through what i
 
 `take`'s extra allocation is its count's node (a unary number), and its dispatched calls are its
 own: its handler answers one of two closures. The lowering adds neither.
+
+The async colourless test's kernel programs (*Programs*) measure `0 0 0` at the pure row
+(`async-sync`). At `yield`'s row (`async-tasks`, and `async-colourless`, which holds both) they
+measure `6 0 0`, the six objects the trace's list nodes. Each task's suspended state, `κ` over the
+spawn handler and `forN`'s state machine, is a value of statically known size held in the
+scheduler's state, and every call is direct. Rust's comparison is `join!` over two futures of one
+`async fn`: each future's state machine stored inline in the joining future, each poll a direct
+call.
 
 ### Open
 
@@ -3969,6 +4000,9 @@ closure type: no use dispatches, allocates, or answers for another use's effects
   `hof-two-rows`, `sum-gen` and `timeout`, and `poly-id` is `λf. f` let-bound and used at two
   rows that differ only in what it answers. Each runs with no allocation, no dispatched call and
   no deep copy (`corpus/kernel-counts.expected`).
+- The async colourless test's `forN` (§19 *Programs*) is used at two rows in `async-colourless`,
+  and lowered per use; in `async-tasks` both tasks use it at one row, and it is lowered once, one
+  code for both tasks.
 
 ### Theorems
 
@@ -4502,8 +4536,9 @@ inner term stops stepping (`steps_plug_split`, `step1_plug_of_step`), and a cont
 by the non-value it holds (`plug_inj_ctx`), in `Core/Steps.lean`; a typed term is closed at its
 context (`closedAt_of_derives`), and a run from a closed term whose stored values are closed keeps
 both closed (`closed_steps`), in `Core/Closed.lean`; `runM` computes a run at a finite memory,
-deciding each step (`look`, `look_sound`), and every run it computes is a run of the machine
-(`runM_sound`, `runM_val`), in `Core/Run.lean`.
+deciding each step (`look`, `look_sound`; the steps of handlers, finalisers and cancels, and
+`bounded_fix`'s, whose budget the machine counts at every host), and every run it computes is a run
+of the machine (`runM_sound`, `runM_val`), in `Core/Run.lean`.
 
 The handler laws (§19 *Laws*) are machine lemmas in `Core/EffMachine.lean`, with no change to
 `CDerives`, the machine or the relation: H-ret, H-op at the capture cell (`catch_unr`,
@@ -4540,9 +4575,10 @@ is an induction on `CDerives`, so a rule added to `CDerives` adds a case to each
 (`Core/Inversions.lean`, *Cost*).
 
 The effect properties' programs (§19 *Programs*, *Laws* item 3) are `Core/EffTier1Programs.lean`,
-each with a derivation tied to its effect context and a run computed by `runM`, with no change to
-`CDerives`, the machine or the relation; those the backend compiles are kernel programs
-(`Backend/Kernel.lean`, their counts in `corpus/kernel-counts.expected`).
+and the async colourless test's `Core/EffAsyncPrograms.lean`, each with a derivation tied to its
+effect context and a run computed by `runM`, with no change to `CDerives`, the machine or the
+relation; those the backend compiles are kernel programs (`Backend/Kernel.lean`, their counts in
+`corpus/kernel-counts.expected`).
 
 The unwind and the cancel (§19 *Laws* items 5 and 6) are stated of Core's machine in
 `Core/EffCancelRuns.lean`, with no change to `CDerives`, the machine or the relation. Read
@@ -4554,6 +4590,19 @@ at finalisers typed at rows of abortive operations (`FinRow`, `finAlone_of_finRo
 ---
 
 ## Changelog
+
+- **0.55** (2026-10-13) — §19 *Programs*: the async colourless test. `forN`, written once, calls a
+  callback `k` times by `bounded_fix` with the count as its budget, and is typed at every row; it
+  runs at the pure row with a plain callback (`asyncSync`), and at `yield`'s row in two tasks whose
+  continuations a spawn handler stores as stored generators and a round-robin scheduler resumes in
+  turn (`asyncTasks`); `asyncColourless` let-binds it once and uses it at both rows. Each is typed
+  by a derivation tied to `ΞE` and run by `runM` (`Core/EffAsyncPrograms.lean`), and is a kernel
+  program (`async-sync` `0 0 0`; `async-tasks` and `async-colourless` `6 0 0`, the trace's list
+  nodes; new rows of `corpus/kernel-counts.expected`, no existing row changes). §19 *Lowering*: the
+  counts, and Rust's `join!` as the comparison. §24 *Lowering*: `forN` lowered per use in
+  `async-colourless`, once in `async-tasks`. *Status*: `runM` decides `bounded_fix`'s step
+  (`look`, `look_sound`, `Core/Run.lean`). §15 and §18 *Open*: the surface waits for #161. No
+  change to the machine, the relation, `CDerives` or the statement of any theorem.
 
 - **0.54** (2026-10-13) — §26 *Baseline*: the checker emits `[λ-dead]` for `fun (x : 1) -> M` at
   `1 -o F_Σ B` whose body does not use `x`, and `[λ]` otherwise; every program erases as before,

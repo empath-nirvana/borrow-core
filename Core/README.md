@@ -158,9 +158,9 @@ effect).
   context is determined by the non-value it holds (`plug_inj_ctx`). A typed term is closed at its
   context (`closedAt_of_derives`), and a run from a closed term whose stored values are closed
   keeps both closed (`closed_steps`). `runM` computes a run at a finite memory, `look` deciding
-  each step that leaves the memory alone (`look_sound`; a row of them is a chain of head steps,
-  `lookRun_sound`); every run `runM` computes is a run of the machine (`runM_sound`), so a closed
-  program's run to a value is proved by `rfl` (`runM_val`).
+  each step that leaves the memory alone, `bounded_fix`'s among them (`look_sound`; a row of them
+  is a chain of head steps, `lookRun_sound`); every run `runM` computes is a run of the machine
+  (`runM_sound`), so a closed program's run to a value is proved by `rfl` (`runM_val`).
 - **The handler laws as machine lemmas** (`SPEC.md` §19 *Laws*, §25, `EffMachine.lean`), in every
   context, each step its configuration's only step (`Step1Only`, `step1Only_plug`) but an
   allocation. H-ret (`catch_ret`); H-op: the catch hands the clause `kappa` at an unrestricted
@@ -250,6 +250,12 @@ effect).
   and a stored continuation resumed, cancelled, or cancelled through a finaliser that raises
   (`storedKResume`, `storedKCancel`, `storedKFin`). A tied derivation weakens by consumed slots at
   the end (`CDerivesAt.append_dead`).
+- **The async colourless test** (`SPEC.md` §19 *Programs*, `EffAsyncPrograms.lean`), typed and run
+  as the effect properties are. `forN`, `bounded_fix` with the count as its budget, is typed at
+  every row (`dAt_forN`). It runs at the pure row with a plain callback (`asyncSync`), and at
+  `yield`'s row in two tasks (`asyncTasks`): a spawn handler stores each task's `κ` as a stored
+  generator, and a round-robin scheduler resumes them in turn, its trace showing them interleaved.
+  `asyncColourless` let-binds `forN` once and uses it at both rows.
 - **Embedding.** `embed : DerivesWf Δ Γ e T → CDerives Δ (cbvCtx Γ) e (.val (cbv T))` for every
   `DerivesWf` rule, and `adequacy_of_derivesWf`. `EmbeddingExamples.lean` runs BoLo's baseline
   programs through it.

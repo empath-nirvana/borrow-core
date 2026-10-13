@@ -79,6 +79,7 @@ import Core.EffCancelRuns
 import Core.Inversions
 import Core.Rejections
 import Core.EffTier1Programs
+import Core.EffAsyncPrograms
 import Core.Stale
 import Core.Stdio
 import Core.Handlers

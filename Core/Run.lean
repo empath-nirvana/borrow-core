@@ -2,17 +2,19 @@ import Core.Steps
 import Support.Dynamics.Interpreter
 
 /-!
-# Core — a run of the machine, computed  `[spec §3, §19]`
+# Core — a run of the machine, computed  `[spec §3, §19, §20]`
 
 `look e` finds the evaluation position of `e` and says what is there: `e` is a value, a head step
 that keeps every memory and allocates nothing (`red K a a'`: `e = K[a]`, `a ↦ a'`), an operation
 that no frame of its context catches (`op r K p n`: `e = K[op p]`, the context free of the name
 `n`), or something it does not decide (`stuck`).  It covers the steps a run through handlers,
 finalisers and cancels takes (`beta`, `seq`, `letpair`, `case`, `hret`, `hop`, `hunwind`,
-`uthen`, `ufin`, `ufinC`, `cfret`, `cferr`, `cfcancel`, `cancel`, `creraise`) and no step that
-reads or changes the memory.  `look_sound` states what each answer means in Core's terms (`Head`,
-`opE`, `OpFree`).  The steps `look` finds in a row are a computation (`lookRun`), and each is a
-head step at a context that keeps every memory (`HeadChain`, `lookRun_sound`).
+`uthen`, `ufin`, `ufinC`, `cfret`, `cferr`, `cfcancel`, `cancel`, `creraise`), the fuelled fixed
+point's step (`boundedFix`, whose budget the machine counts down, so it is the same at every
+host), and no step that reads or changes the memory.  `look_sound` states what each answer means
+in Core's terms (`Head`, `opE`, `OpFree`).  The steps `look` finds in a row are a computation
+(`lookRun`), and each is a head step at a context that keeps every memory (`HeadChain`,
+`lookRun_sound`).
 
 `runM` adds the four memory steps (`alloc`, `free`, `load`, `store`) at a finite memory kept as a
 list of cells (`LMem`); an allocation takes one past the largest location in use.  `memAt` finds
@@ -280,6 +282,13 @@ def look : Expr → Look
               match cancelOf? s with
               | some _ => .red .hole (.app f a) (raiseE s)
               | none => .stuck
+          | .prim .boundedFix =>
+              match a with
+              | .pair s (.pair (.prim (.lit (.i32 k))) x) =>
+                  match valOf? s, valOf? x with
+                  | some vs, some vx => .red .hole (.app f a) (boundedFixNext vs k vx)
+                  | _, _ => .stuck
+              | _ => .stuck
           | _ =>
               match valOf? f with
               | some _ => .stuck
@@ -601,6 +610,17 @@ theorem look_sound : ∀ e : Expr, LookOK (ℍ := ℍ) e (look e)
             have hs := cancelOf?_some hc
             subst hs
             exact ⟨rfl, fun μ => Head.cfret μ err va, rfl⟩
+          · trivial
+        · split
+          · rename_i s k x hva'
+            split
+            · rename_i vs vx hs hx
+              obtain rfl := valOf?_some hs
+              obtain rfl := valOf?_some hx
+              have hv : va = Val.pair vs (Val.pair (Val.i32 k) vx) := Subtype.ext hva'
+              subst hv
+              exact ⟨rfl, fun μ => Head.boundedFix μ vs k vx, rfl⟩
+            · trivial
           · trivial
         · split
           · trivial

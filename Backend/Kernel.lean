@@ -3,6 +3,7 @@ import Core.EffCancel
 import Core.EffExamples
 import Core.Rejections
 import Core.EffTier1Programs
+import Core.EffAsyncPrograms
 
 /-!
 # Backend — kernel programs
@@ -30,6 +31,10 @@ lowers their operations in `Backend/Clos/Capture.lean` and `Backend/Clos/Unwind.
   `tunnel`, no accidental handling; `e7a`, `e7b` and `e7d`, a cancelled suspension's finalisers;
   `e8b`, an unwind through a finaliser that raises; and `storedKResume`, `storedKCancel` and
   `storedKFin`, a stored continuation.
+- `Core/EffAsyncPrograms.lean`'s async colourless test, typed and run alike: `forN`, one generic
+  function, at the pure row with a plain callback (`asyncSync`), at `yield`'s row in two tasks a
+  round-robin scheduler interleaves (`asyncTasks`), and let-bound once and used at both rows
+  (`asyncColourless`).
 - Terms that exercise the lowering's other shapes (*Shapes*, below).
 
 The cancels and the shapes are not typed: each stage is compared with `Support`'s interpreter on
@@ -201,6 +206,9 @@ def kernelPrograms : List (String × BoCa.Expr) :=
     ("stored-k-cancel", BoCa.Fig16.LogRel.Core.Tier1Programs.storedKCancel),
     ("stored-k-fin", BoCa.Fig16.LogRel.Core.Tier1Programs.storedKFin),
     ("timeout", BoCa.Fig16.LogRel.Core.Tier1Programs.timeoutProg),
+    ("async-sync", BoCa.Fig16.LogRel.Core.AsyncPrograms.asyncSync),
+    ("async-tasks", BoCa.Fig16.LogRel.Core.AsyncPrograms.asyncTasks),
+    ("async-colourless", BoCa.Fig16.LogRel.Core.AsyncPrograms.asyncColourless),
     ("loop-tail", Shapes.loopTail 100000),
     ("loop-captured", Shapes.loopCaptured 100000),
     ("recursive-yield", Shapes.recYield 20),

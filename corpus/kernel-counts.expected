@@ -30,6 +30,9 @@ stored-k-resume 0 3 0 # stash's answer is one of two closures (the clauses'), ca
 stored-k-cancel 0 1 0 # stash's answer, called once: it cancels κ
 stored-k-fin 0 1 0 # stash's answer, called once: it cancels κ, whose finaliser raises
 timeout 0 0 0
+async-sync 0 0 0 # forN at the pure row: bounded_fix's levels are native calls of known code, and tick a direct call
+async-tasks 6 0 0 # the trace's six list nodes; each task's suspended state is a value of known size in the scheduler's state, resumed by a direct call
+async-colourless 6 0 0 # async-sync and async-tasks beside each other: forN lowered per use
 loop-tail 0 0 0
 loop-captured 0 0 0
 recursive-yield 20 0 0 # recursion through a resumption point: one frame object per level, reused at each resume
