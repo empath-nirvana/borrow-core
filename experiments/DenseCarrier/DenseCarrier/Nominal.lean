@@ -240,8 +240,9 @@ def Y (k : ℕ) : Set K.C :=
         ∃ v' ρ' P', K.out c = .mut (a (k + 1)) v' ρ' P') ∧
       ∀ σ : L ≃o L, σ (a k) = a k → σ (a (k + 1)) = a (k + 1) → K.act σ x = x}
 
-/-- **The witness pins the lifetime below**: an automorphism fixing `a (k+1)` that keeps a cell of
-`Y (k+1)` in `Y (k+1)` fixes `a (k+2)`, hence the cell. -/
+/-- **The witness pins the next lifetime of the chain**: an automorphism fixing `a (k+1)` that keeps
+a cell of `Y (k+1)` in `Y (k+1)` fixes `a (k+2)`, the lifetime of the cell's witness, hence the
+cell. -/
 theorem Y_pin {k : ℕ} {y : K.C} (hy : y ∈ K.Y a ℓ₀ (k + 1)) {σ : L ≃o L}
     (h1 : σ (a (k + 1)) = a (k + 1)) (hσy : K.act σ y ∈ K.Y a ℓ₀ (k + 1)) : K.act σ y = y := by
   obtain ⟨⟨v, c, P, hy, v', ρ', P', hc⟩, hsupp⟩ := hy

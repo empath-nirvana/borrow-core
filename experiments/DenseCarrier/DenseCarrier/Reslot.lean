@@ -142,8 +142,8 @@ theorem not_wpTS_mm_relRU (ι : Slots L) {c : Life} (θ : Restrat.Emb c) {g : Li
   obtain ⟨Q₀, -, -, -, rfl, -, -⟩ := θ.flatAt_mut_moved k₀
   exact ofS_relS_ne_vD_mb ι θ hg hβ hβg Q₀ ls₀ hQ'
 
-/-- **A re-slotting other than the identity leaves a gap below a slot it moves**: the least moved
-slot `n` is not an image, and its image lies below it. -/
+/-- **A re-slotting other than the identity leaves its least moved slot with no preimage**, and
+moves that slot below itself. -/
 theorem exists_gap {c : Life} (θ : Restrat.Emb c) (hθ : ∃ x, θ x ≠ x) :
     ∃ n : ℕ, (∀ x, θ x ≠ OrderDual.toDual n) ∧ θ (OrderDual.toDual n) < OrderDual.toDual n := by
   classical
