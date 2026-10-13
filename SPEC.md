@@ -2821,6 +2821,64 @@ Richer policies are K3 (#162), and *Open*:
    - §14's adequacy holds for divergent programs whose observations are effectful.
    - A closed program with an unhandled operation is not typed at `F 1`.
 
+### Laws
+
+The equations and semantic choices the effect system is decided to satisfy, each with the Core
+theorem that states it. A law of the machine is stated in every evaluation context
+(`Core/EffMachine.lean`), and a step it names is its configuration's only step (`Step1Only`, by
+unique decomposition and determinism), except an allocation, which takes any location the memory
+does not hold. Safety is stated of the runs of typed programs (`Core/EffSafety.lean`).
+
+1. **Deep handler laws** (Plotkin–Pretnar).
+   - *H-ret*: `hnd (n, H) v ↦ h_ret v` (`catch_ret`).
+   - *H-op*: `hnd (n, H) K[perform (n, v)] ↦ h_op (v, κ)`, `K` free of `n`, keeping the memory
+     (`catch_step`).
+     - At an unrestricted operation `κ` is `kappa H K` (`catch_unr`). Resuming it at `w` runs
+       `hnd (n, H) K[w]`, the handler reinstalled (`kappa_resume_steps`); cancelling it runs
+       `ccatch (K†[raise (⊥, none)])` (`kappa_cancel_steps`).
+     - At a linear or affine operation the next two steps allocate `κ`'s cell at a location `ℓ`
+       the memory does not hold, any such, and hand the clause `kappaC` at `ℓ`, affine exactly at
+       an affine operation (`catch_cell`). Every run from the catch is a prefix of these three
+       steps or goes on from them (`catchEv_cell`).
+     - Resuming `kappaC` at `ℓ`, at a memory holding `()` at `ℓ`, releases `ℓ` and runs
+       `hnd (n, H) K[w]` (`kappaC_resume`): three steps reach the release, and after it `κ`
+       resumes as `kappa` does (`kappaC_resume_parts`, `kappa_resume_kResume`). An affine `κ`'s
+       cancel releases `ℓ` and runs `κ`'s cancel run (`kappaC_cancel`). A linear `κ`'s cancel
+       branch has no step (`kappaC_cancel_lin`).
+     - On a run to a value, a use of `κ` at its cell releases the cell three steps later: `κ` is
+       applied to `inj₁ ()`, or to `inj₂ ()` at an affine operation, and the memory holds `ℓ`
+       (`use_frees_cell`).
+   - *H-fwd*: an operation of a name `m ≠ n` is no redex at `hnd (n, H)`. With `K` free of `m`,
+     `hnd (n, H) K[perform (m, v)]` takes no step in a context free of `m`; under the nearest
+     handler of `m`, that handler catches it, and its `κ` holds `hnd (n, H)` (`catch_fwd`), so
+     resuming `κ` reinstalls both (`fwd_resume`). With `K` catching nothing of `m`,
+     `hnd (n, H) K[raise (m, v)]` steps, in every context, as `raise (m, v)` does (`fwd_abort`).
+   - The abortive catch `hnd (n, H) K[raise (n, v)] ↦ h_op v`, `K` catching nothing of `n`
+     (`catch_abort`), and the finaliser frame: `ubind (N, D) v ↦ N v` (`then_ret`), and
+     `ubind (N, D) K[raise (m, v)] ↦ D (); raise (m, v)`, `m ≠ ⊥` and `K` catching nothing of `m`,
+     the finaliser running under a frame that catches nothing (`then_fin`).
+2. **Algebraicity.**
+   - *At an abortive operation*: `raise e to x. P = raise e` and `(raise e) w = raise e`. In the
+     machine, `raise p` under frames that catch nothing of its name steps, in every context,
+     exactly as `raise p` steps there: the frame that catches it drops them (`abort_absorbs`;
+     `abort_to`, `abort_app`).
+   - *Sequencing*, `op(v) to x. P = op(v; y. (k y to x. P))`, is not yet a Core theorem.
+9. **Safety**: every operation a run performs has a live handler of its name, and every raise a
+   live frame that catches it; a stuck state is never a semantics. Stated of a typed closed
+   program, a closed computation of `F A` (its row empty, `A` any type), and of its runs from the
+   empty memory:
+   - Every run continues to a value (`total_every_run`), so none is stuck (`adequacyD_safe` at
+     `F 1`).
+   - No configuration a run reaches is `K[perform p]` with `K` free of a handler of `p`'s name, or
+     `K[raise p]` with `K` catching nothing of it: each is a value or steps (`effSafe_closed`).
+   - Each configuration a run reaches has a closed term and closed stored values, and goes on
+     (`LiveOK`, `liveOK_closed`). It holds no stuck redex at an evaluation position
+     (`LiveOK.not_stuck`), `() ()` among them (`stuckAt_unit_app`): the cancel branch of a linear
+     `κ` (`kappaC_cancel_lin`) is never reached.
+   - At a persistent `A`, a run that reaches a value reaches it at the empty memory, every cell it
+     allocated released, each continuation's cell (§25) among them (`leakFree_closed`,
+     `Core/EffPrograms.lean`).
+
 ### Baseline
 
 `cC (F A)`, `wpTS`, every existing rule and every existing compatibility lemma keep their
@@ -3799,6 +3857,14 @@ The acceptance programs run as before, every cell freed (`Core/EffPrograms.lean`
 runs by `decide`); every kernel program prints the same value and `live 0` at the source and at every
 compiled stage (`scripts/compile-kernel.sh`).
 
+The machine's laws at the cell are §19 *Laws* item 1 (`Core/EffMachine.lean`). The catch of a
+linear or affine operation allocates `κ`'s cell at a free location and hands `kappaC` there
+(`catch_cell`), and every run from the catch that takes two steps has allocated the cell
+(`catchEv_cell`): such a catch does not keep the memory. Resuming `κ` and an affine `κ`'s cancel
+release the cell (`kappaC_resume`, `kappaC_cancel`); on a run to a value a use of `κ` releases it
+three steps later (`use_frees_cell`); a linear `κ`'s cancel branch has no step
+(`kappaC_cancel_lin`).
+
 ### Lowering
 
 The backend builds `κ` itself (`Backend/Clos/Capture.lean`, `Kap`) and never sees the cell; it
@@ -3815,13 +3881,11 @@ no `[TR]` lemma and no borrow rule changes; the cell is handled by 6.141, 6.142,
 
 ### Open
 
-- **S4** is stated with the cell: a catch hands the clause `capture l H K` and
-  keeps the store, or allocates one fresh unit cell and hands `κ` at it, whose resume and affine
-  cancel release it. It holds at tier 1's typing at every effect context. S4 as first stated, every
-  catch keeping the store, fails there at an admissible effect context. Neither is yet a Core
-  theorem.
-- **S6 at tier 1's typing**, from the cell: reduced to leak freedom (proved) and two ownership
-  properties of the cell, open. The reduction is not yet a Core theorem.
+- **S6 at tier 1's typing**, from the cell: reduced to `LiveOK`, leak freedom and two ownership
+  properties of the cell, open. `LiveOK` and leak freedom are Core theorems (`liveOK_closed`,
+  `leakFree_closed`; §19 *Laws*, *Safety*), and so are the two machine facts the reduction reads: a
+  capture event allocates `κ`'s cell (`catchEv_cell`), and a use of `κ` releases it three steps
+  later (`use_frees_cell`). The reduction itself is not yet a Core theorem.
 
 ## 26. Entry 25 — a λ whose binder is dead, at an effectful returner
 
@@ -4167,6 +4231,26 @@ Entry 26 (§27) is implemented in the kernel: cancel rows in `Core/Types.lean` (
 checker's empty cancel rows (`Frontend/Check/`); the typed cancel programs in
 `Core/EffCancelTyped.lean`. The backend rejects a finaliser that may suspend
 (`Backend/Clos/Capture.lean`).
+
+The facts a statement about every run of a program reads (§3, §13, §19), with no change to
+`CDerives`, the machine or the relation: a run through an evaluation context splits where the
+inner term stops stepping (`steps_plug_split`, `step1_plug_of_step`), and a context is determined
+by the non-value it holds (`plug_inj_ctx`), in `Core/Steps.lean`; a typed term is closed at its
+context (`closedAt_of_derives`), and a run from a closed term whose stored values are closed keeps
+both closed (`closed_steps`), in `Core/Closed.lean`; `runM` computes a run at a finite memory,
+deciding each step (`look`, `look_sound`), and every run it computes is a run of the machine
+(`runM_sound`, `runM_val`), in `Core/Run.lean`.
+
+The handler laws (§19 *Laws*) are machine lemmas in `Core/EffMachine.lean`, with no change to
+`CDerives`, the machine or the relation: H-ret, H-op at the capture cell (`catch_unr`,
+`catch_cell`, `catchEv_cell`, `kappaC_resume`, `kappaC_cancel`, `kappaC_cancel_lin`,
+`use_frees_cell`), H-fwd (`catch_fwd`, `fwd_resume`, `fwd_abort`), `[unwind]`, `[then]` and
+`[finalise]`, and an abort's absorption of the frames it passes (`abort_absorbs`).
+
+Safety (§19 *Laws*) is stated of the runs of typed closed programs, with no change to
+`CDerives`, the machine or the relation: `effSafe_closed`, `LiveOK` and `liveOK_closed` in
+`Core/EffSafety.lean`, and leak freedom at a persistent answer (`leakFree_closed`) in
+`Core/EffPrograms.lean`.
 
 ---
 

@@ -152,11 +152,39 @@ effect).
   relation only if it is safe under every allocator: `λ_. staleL`, which loads a location it
   freed, is in `wpTSAngelic` (`staleL_angelic`) but outside the relation at `!U(1 ⊸ F 1)`
   (`staleClosure_not_vC`, `Stale.lean`; #41).
+- **Runs through a context, closed runs, computed runs** (`Steps.lean`, `Closed.lean`,
+  `Run.lean`). A run of `K[e]` is `K` around a run of `e`, or it runs `e` to a term that takes no
+  step and goes on from `K` around that term (`steps_plug_split`, `step1_plug_of_step`); a
+  context is determined by the non-value it holds (`plug_inj_ctx`). A typed term is closed at its
+  context (`closedAt_of_derives`), and a run from a closed term whose stored values are closed
+  keeps both closed (`closed_steps`). `runM` computes a run at a finite memory, `look` deciding
+  each step that leaves the memory alone (`look_sound`; a row of them is a chain of head steps,
+  `lookRun_sound`); every run `runM` computes is a run of the machine (`runM_sound`), so a closed
+  program's run to a value is proved by `rfl` (`runM_val`).
+- **The handler laws as machine lemmas** (`SPEC.md` §19 *Laws*, §25, `EffMachine.lean`), in every
+  context, each step its configuration's only step (`Step1Only`, `step1Only_plug`) but an
+  allocation. H-ret (`catch_ret`); H-op: the catch hands the clause `kappa` at an unrestricted
+  operation (`catch_unr`), and at a linear or affine one allocates `κ`'s cell at a free location and
+  hands `kappaC` there (`catch_cell`), every run from the catch a prefix of those three steps or
+  going on from them (`catchEv_cell`); resuming `kappaC` releases the cell and runs `hnd H K[w]`
+  (`kappaC_resume`), an affine cancel releases it and cancels (`kappaC_cancel`), a linear cancel has
+  no step (`kappaC_cancel_lin`), and on a run to a value a use of `κ` releases its cell three steps
+  later (`use_frees_cell`); H-fwd (`catch_fwd`, `fwd_resume`, `fwd_abort`); `[unwind]`, `[then]` and
+  `[finalise]` (`catch_abort`, `then_ret`, `then_fin`). A2: `raise p` under frames that catch
+  nothing of its name steps, in every context, as `raise p` does (`abort_absorbs`, `abort_to`,
+  `abort_app`).
 - **Totality** (`SPEC.md` §14, `Totality.lean`). A closed computation of `F A` terminates on every
   run: under every allocator its run reaches a value (`total_every_alloc`), every run under an
   allocator is a prefix of it (`total_run_prefix`), every run continues to a value
   (`total_every_run`), and there is no infinite run (`total_no_infinite_run`, through the
   allocator `Alloc.ofRun` built from the run).
+- **Effect safety** (`SPEC.md` §19 *Laws*, `EffSafety.lean`). Every configuration a typed closed
+  program reaches from the empty memory is a value or steps, and is no operation that no live frame
+  catches: no `K[perform p]` with `K` free of a handler of `p`'s name, no `K[raise p]` with `K`
+  catching nothing of it (`effSafe_closed`). Each such configuration is `LiveOK`: its term and
+  stored values are closed, and it goes on (`liveOK_closed`), so it holds no stuck redex
+  (`LiveOK.not_stuck`). At a persistent answer a run to a value ends at the empty memory, every
+  continuation's cell released (`leakFree_closed`, `EffPrograms.lean`).
 - **Embedding.** `embed : DerivesWf Δ Γ e T → CDerives Δ (cbvCtx Γ) e (.val (cbv T))` for every
   `DerivesWf` rule, and `adequacy_of_derivesWf`. `EmbeddingExamples.lean` runs BoLo's baseline
   programs through it.

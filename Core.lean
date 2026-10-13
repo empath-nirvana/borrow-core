@@ -52,6 +52,9 @@ import Core.ReuseList
 import Core.DelayApprox
 import Core.DelayPrograms
 import Core.Steps
+import Core.Closed
+import Core.Run
+import Core.EffMachine
 import Core.DelayNaive
 import Core.StreamPrograms
 import Core.Integers
@@ -67,6 +70,7 @@ import Core.Demonic
 import Core.EffExamples
 import Core.EffPrograms
 import Core.Totality
+import Core.EffSafety
 import Core.Stale
 import Core.Stdio
 import Core.Handlers

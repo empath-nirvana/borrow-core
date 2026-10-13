@@ -53,6 +53,19 @@ theorem adequacyD_obs {e : Expr} {A : VTy} (hA : A.Persistent)
       exact ⟨rfl, ls, hv⟩) _ hwp
   exact theorem32D e _ hwp' hs
 
+/-- **Leak freedom at a persistent answer**: a run of a closed computation of a persistent type `A`
+from the empty memory that reaches a value reaches it at the empty memory, and the value is in
+`A`'s relation.  The memory holds every cell the run allocates, a continuation's capture cell
+(§25) among them, so none is left at the end.  `adequacyD_val` at persistent answers.
+`[spec §13, §19, §25]` -/
+theorem leakFree_closed {e : Expr} {A : VTy} (hA : A.Persistent)
+    (h : CDerives LifeCtx.empty [] e (.comp (.ret A)))
+    {μ₁ : Heap} {w : Val} (hs : Steps Adequacy.emptyMem e μ₁ (.val w)) :
+    μ₁ = Adequacy.emptyMem ∧ ∃ ls, vP A ls LSub.empty w PMap.empty := by
+  obtain ⟨v, hsteps, hv⟩ := adequacyD_obs hA h hs
+  obtain ⟨h₁, rfl⟩ := steps_from_val hsteps
+  exact ⟨h₁.symm, hv⟩
+
 /-- A value of `0 ⊕ 1` is `inj₂ ()`. -/
 theorem vP_zero_sum {ls : List SRec} {δ : LSub} {v : Val} {ρ : BoCa.Fig16.BoLo.WRes}
     (h : vP (.sum .zero .unit) ls δ v ρ) : v = Val.inj₂ Val.unit := by
