@@ -284,6 +284,34 @@ import Frontend.Check.Externs
 #print axioms BoCa.Fig16.LogRel.Core.kcfinNamed_of_shift
 #print axioms BoCa.Fig16.LogRel.Core.kcfinNamed_of_cancel
 #print axioms BoCa.Fig16.LogRel.Core.cancelsNamed_of_derivesAt
+-- SPEC §19, *Laws* items 5 and 6: the unwind and the cancel, on every run
+#print axioms BoCa.Fig16.LogRel.Core.step1_raise
+#print axioms BoCa.Fig16.LogRel.Core.innerCatch_unique
+#print axioms BoCa.Fig16.LogRel.Core.fins_dead
+#print axioms BoCa.Fig16.LogRel.Core.noCC_dead
+#print axioms BoCa.Fig16.LogRel.Core.kcfinNamed_dead
+#print axioms BoCa.Fig16.LogRel.Core.path_of_steps
+#print axioms BoCa.Fig16.LogRel.Core.Path.steps
+#print axioms BoCa.Fig16.LogRel.Core.unwind_pfx
+#print axioms BoCa.Fig16.LogRel.Core.cancel_pfx
+#print axioms BoCa.Fig16.LogRel.Core.wpG_seg
+#print axioms BoCa.Fig16.LogRel.Core.ownWorld
+#print axioms BoCa.Fig16.LogRel.Core.finAlone_of_derives
+#print axioms BoCa.Fig16.LogRel.Core.finOK_of_derives
+#print axioms BoCa.Fig16.LogRel.Core.finAlone_of_finRow
+#print axioms BoCa.Fig16.LogRel.Core.finOK_of_finRow
+#print axioms BoCa.Fig16.LogRel.Core.unwind_prefix
+#print axioms BoCa.Fig16.LogRel.Core.cancel_prefix
+#print axioms BoCa.Fig16.LogRel.Core.unwindOrder_at
+#print axioms BoCa.Fig16.LogRel.Core.cancelOrder_at
+#print axioms BoCa.Fig16.LogRel.Core.finaliserOrder_at
+#print axioms BoCa.Fig16.LogRel.Core.finaliserOrder_A
+#print axioms BoCa.Fig16.LogRel.Core.CancelIntercept.supersede_prefix
+#print axioms BoCa.Fig16.LogRel.Core.CancelIntercept.finAloneAt_supersedeE
+#print axioms BoCa.Fig16.LogRel.Core.CancelIntercept.supersede_finaliserOrder
+#print axioms BoCa.Fig16.LogRel.Core.CancelIntercept.dAt_progOutT
+#print axioms BoCa.Fig16.LogRel.Core.CancelIntercept.progOutT_cancels
+#print axioms BoCa.Fig16.LogRel.Core.CancelIntercept.progOutT_cancel_prefix
 -- SPEC §26 (entry 25): a λ whose binder is dead, at an effectful returner
 #print axioms BoCa.Fig16.LogRel.Core.gDenC_unit_dead
 #print axioms BoCa.Fig16.LogRel.Core.lamDead_compatC

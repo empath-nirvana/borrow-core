@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 0.48 · 2026-10-13
+Version 0.49 · 2026-10-13
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -2480,7 +2480,8 @@ below and the cancel steps (*Cancels*) do not allocate:
   - So cancelling runs the region with an unwind. The unwind runs `K`'s finalisers and the
     unwinding forms of the borrows in `K`, and stops at `ccatch` (*Cancels*).
 - **Unwinding runs innermost first.** A `raise` goes to the nearest `ubind` (its finaliser runs,
-  then it raises again from there) or to its handler, whichever is nearer.
+  then it raises again from there) or to its handler, whichever is nearer (`unwind_prefix`,
+  *Laws*).
 - **Other handlers' frames are transparent to it.** They are dropped, which is sound because
   their clauses are `!`, at `∅`.
 - **Capture passes `ubind` frames**, which `κ` keeps.
@@ -2526,7 +2527,8 @@ where `err ∨ e` is `err` when `err ≠ none`, and `e` otherwise: the first err
   `progOut`). A name handled only inside the region has no live handler at the canceller: its
   re-raise is an operation no handler receives, and a typing of finalisers rejects such a
   finaliser (decision D3 of 2026-10-08; `prog`, below).
-- **Several failures:** the first is kept and re-raised, a policy; the later ones lose to it.
+- **Several failures:** the first is kept and re-raised, a policy; the later ones lose to it. Every
+  run of a cancel follows this (`cancel_prefix`, *Laws*).
 - **A finaliser's operation** passes the dead region and the cancel's delimiter, and the nearest
   live handler of its name catches it. Its continuation holds the running finaliser's `cfin`, the
   region's remaining frames and the canceller's context. Resumed, the finaliser and then the
@@ -2897,6 +2899,45 @@ does not hold. Safety is stated of the runs of typed programs (`Core/EffSafety.l
      exactly as `raise p` steps there: the frame that catches it drops them (`abort_absorbs`;
      `abort_to`, `abort_app`).
    - *Sequencing*, `op(v) to x. P = op(v; y. (k y to x. P))`, is not yet a Core theorem.
+5. **A cancel is not interceptable, and the cancelled region's frames are dead.** `κ`'s cancel
+   branch runs the region with its handler frames and cancel delimiters removed (`Kont.dead`), so
+   a dead frame catches nothing (`hasHnd_dead`, `catches_dead`, `noCC_dead`). Read prefix-closed
+   (`cancel_prefix`, `Core/EffCancelRuns.lean`): take a run of a term a tied derivation types,
+   from the empty memory, that cancels `kappa H K`, or `kappaC aff ℓ H K` at its cell, and reaches
+   the start of the cancel run (after the cell's release). Every path from there is a prefix of the
+   cancel trace of `K†` (`CancelTr`):
+   - `K`'s finalisers fire innermost first, each by `[finalise-cancel]` and then `D ()` running
+     alone under `cfin`, to `[cfin-ret]` or `[cfin-raise]`;
+   - a running finaliser's `cfin` frame is passed by `[cfin-cancel]`, its error first;
+   - the first kept error wins, and the canceller gets `()` or the kept error re-raised, an error of
+     a name of the effect context (`CancelsNamed`).
+
+   The hypothesis is that each of `K`'s finalisers is a closed computation at a row of abortive
+   operations of the context's names (`FinRow`). Typing then gives that it runs alone from every
+   memory with finitely many cells (`finAlone_of_finRow`; at the empty row, to `()`,
+   `finOK_of_finRow`). A finaliser that performs an operation a handler outside it answers (§27) is
+   not covered (§27 *Open*). `progOutT` meets the hypotheses: a tied derivation types it, its run
+   cancels `κ`, and its region's finaliser raises `2` (`progOutT_cancel_prefix`).
+6. **The finally law; a finaliser's raise propagates; a raise with no live handler is a type
+   error.**
+   - *Finally*: `(raise e) then x. N unwind D = D (); raise e`. `[finalise]` steps
+     `ubind (N, D) K[raise (m, v)]`, `m ≠ ⊥` and `K` catching nothing of `m`, to
+     `D (); raise (m, v)`, its only step (`then_fin`); `then_compatC` is the rule's compatibility.
+   - *Unwinding*, read prefix-closed (`unwind_prefix`): from a raise of a name `m ≠ ⊥` pending
+     under frames with no running finaliser's `cfin`, every path is a prefix of the unwind trace
+     (`UnwindTr`). The finalisers fire innermost first, each running alone. One that returns `()`
+     hands the raise on (`[1↦]`); one whose own raise escapes supersedes the pending raise, which
+     goes on from there. A handler of the raise's name ends the trace. The hypothesis is item 5's
+     (`FinRow`); `(raise 1) then x. x unwind raise 2` meets it (`supersede_prefix`).
+   - *Complete runs* (`finaliserOrder_at`): suppose each finaliser a program's runs fire runs alone
+     to a value or to an uncaught raise of a name `≠ ⊥` (`FinAloneAt`). Then every complete unwind
+     through frames with no handler fires their finalisers innermost first, a finaliser's raise
+     superseding the pending one (`UnwindRun`). So does every complete cancel of `kappa H K`, `K`
+     holding no `ccatch` or `cfin` frame, keeping the first error (`CancelRun`). The program
+     above meets `FinAloneAt` (`finAloneAt_supersedeE`, `supersede_finaliserOrder`).
+   - *A raise with no live handler*: a typed closed program's raises are caught (item 9). A
+     finaliser whose raise has no live handler at the canceller is rejected by §27's typing
+     (`progT` at the rows without `2`); that rejection is not yet a Core theorem.
 9. **Safety**: every operation a run performs has a live handler of its name, and every raise a
    live frame that catches it; a stuck state is never a semantics. Stated of a typed closed
    program, a closed computation of `F A` (its row empty, `A` any type), and of its runs from the
@@ -3825,8 +3866,9 @@ glue (§12's destructors) already was.
 - **S6 (the use of a continuation)**: §25 gives a linear or affine `κ` a unit cell, so BoLo's leak
   freedom and safety see a dropped or twice-used `κ`. A ghost obligation in `contShare` does not: a
   closed program's relation at its pure type is `wpTS`, where no protocol table occurs.
-- Other instances of S5's parameter (a finaliser that may let the raises of some labels escape),
-  and OQ-7 (finalisers that resume, or clean up asynchronously).
+- OQ-7 (finalisers that resume, or clean up asynchronously). S5 holds at every instance of its
+  parameter, a finaliser that lets the raises of some names escape (`unwind_prefix` and
+  `cancel_prefix` at `FinRow`, §19 *Laws*).
 - Row variables in Core's types. Tier 1's typing has a row `∀` in its open types,
   outside Core, read through this entry's `[let-poly]`.
 
@@ -4139,10 +4181,11 @@ its rows is the top-level test, so it accepts and rejects what it did.
 - **`⊤` cancel rows.** A continuation whose cancel would need unboundedly many outer instances
   (recursion through a finaliser's capturable operation) gets `⊤` and cannot be cancelled: the
   approximation of a finite type.
-- **S5 at D2's endings, algebraicity at every admissible context, and a kept error held by a
-  continuation**. S5's
-  no-interception is proved at tier 1's kernel at finalisers that let no raise escape, not at D2's
-  endings. Algebraicity is proved given that every kept error holds no λ, which fails where a
+- **S5 at a finaliser that performs, algebraicity at every admissible context, and a kept error
+  held by a continuation**. S5 is a Core theorem at finalisers that let raises escape
+  (`unwind_prefix`, `cancel_prefix`, at `FinRow`; §19 *Laws* items 5 and 6), not at D2's finaliser
+  that performs an operation a handler outside it answers, whose run is not a run alone.
+  Algebraicity is proved given that every kept error holds no λ, which fails where a
   finaliser raises a thunk; the weaker hypothesis (no captured continuation in a kept error) needs a
   simulation relation that confines the law's frames to continuations. "No error is dropped" is
   proved on the runs whose `[op]` steps capture no kept error. An unrestricted continuation
@@ -4305,9 +4348,26 @@ with no change to `CDerives`, the machine or the relation: `Expr.RaiseOK`, `Heap
 them (`raiseOK_reach`), and every cancel they reach keeps errors of those names (`KCfinNamed`,
 `CancelsNamed`, `cancelsNamed_of_derivesAt`).
 
+The unwind and the cancel (§19 *Laws* items 5 and 6) are stated of Core's machine in
+`Core/EffCancelRuns.lean`, with no change to `CDerives`, the machine or the relation. Read
+prefix-closed over paths (`Path`): `unwind_prefix` (`UnwindTr`) and `cancel_prefix` (`CancelTr`),
+at finalisers typed at rows of abortive operations (`FinRow`, `finAlone_of_finRow`,
+`finOK_of_finRow`). On complete runs: `finaliserOrder_at` and `finaliserOrder_A` (`CancelRun`,
+`UnwindRun`, `FinaliserOrder`), given `FinAloneAt`.
+
 ---
 
 ## Changelog
+
+- **0.49** (2026-10-13) — §19 *Laws* items 5 and 6: a cancel is not interceptable and the cancelled
+  region's frames are dead, and the finally law, read on every run. From a raise pending under
+  finaliser frames, and from the start of a continuation's cancel run, every path is a prefix of
+  the trace that fires the frames' finalisers innermost first, each running alone; a finaliser's
+  raise supersedes an unwind's, a cancel keeps the first error and passes a running finaliser's
+  `cfin`, and the canceller gets `()` or the kept error (`Core/EffCancelRuns.lean`). The hypothesis
+  is a typing of each fired finaliser at a row of abortive operations; a finaliser that performs is
+  *Open* (§27). §24 *Open* no longer lists other instances of S5's parameter. No change to the
+  machine, the relation, `CDerives` or the statement of any theorem.
 
 - **0.48** (2026-10-13) — §19 *Typing*: the names a run raises. A tied term is at its effect
   context's names, no step leaves them, and every cancel its runs reach keeps errors of those names
