@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 0.47 · 2026-10-13
+Version 0.48 · 2026-10-13
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -2651,6 +2651,15 @@ Six rules, over `CDerives` with its context premises (§10):
     abortive operation; the checker rejects one, so the effect context of a checked program has
     none (`EffCtx.NoUnrExn`, `checkProgram_tiedAt`). In a row tied to such a context an
     unrestricted operation resumes (`abort_false_of_rowAt`).
+  - **The names a run raises** (`Core/RaiseNames.lean`). `[raise]` finds its operation in a row
+    tied to `Ξ`, and no rule types a `cfin`, so a tied term is at `Ξ`'s names
+    (`raiseOK_of_derivesAt`): each raise in it is of a name `Ξ` declares, or a cancel whose kept
+    error is, and each `cfin` holds such a cancel state (`Expr.RaiseOK`, at `EffCtx.Names`). No
+    step breaks this, nor stores a value that breaks it (`raiseOK_step1`), so every configuration a
+    run reaches from the empty memory is at `Ξ`'s names (`raiseOK_reach`). So the errors cancels
+    keep are of names of `Ξ`: at every cancel of `κ` a run reaches, each running finaliser's `cfin`
+    frame of the cancelled region keeps none or a raise of a name of `Ξ` (`CancelsNamed`,
+    `cancelsNamed_of_derivesAt`).
 
 - **Rows.** `[handle]` removes its name and passes the rest outward. Its clauses and its answer
   are at `Σ`, so a clause may perform the outer handlers' operations. That is how two handlers
@@ -4289,9 +4298,21 @@ builds every derivation tied (`Frontend/Check/Tied.lean`, `Frontend/Check/Rules.
 restriction to affine abortive operations (§18) is the checker's (`elabRow`,
 `Frontend/Check/Elab.lean`; `sigsOkB`) and the elaborator's (`Frontend/Elab/Effects.lean`).
 
+The names a run raises (§19 *Typing*) are stated as a run invariant in `Core/RaiseNames.lean`,
+with no change to `CDerives`, the machine or the relation: `Expr.RaiseOK`, `HeapRaiseOK`,
+`raiseOK_step1` and `raiseOK_steps`; a tied term is at its effect context's names
+(`EffCtx.Names`, decided by `rcE`; `raiseOK_of_derivesAt`), its runs from the empty memory stay at
+them (`raiseOK_reach`), and every cancel they reach keeps errors of those names (`KCfinNamed`,
+`CancelsNamed`, `cancelsNamed_of_derivesAt`).
+
 ---
 
 ## Changelog
+
+- **0.48** (2026-10-13) — §19 *Typing*: the names a run raises. A tied term is at its effect
+  context's names, no step leaves them, and every cancel its runs reach keeps errors of those names
+  (`Core/RaiseNames.lean`). No change to the machine, the relation, `CDerives` or the statement of
+  any theorem.
 
 - **0.47** (2026-10-13) — §19 *Typing* (decision R): a program gives each operation one
   signature. `CDerivesAt Ξ` is `CDerives` with `[perform]`, `[raise]` and `[handle]` reading rows

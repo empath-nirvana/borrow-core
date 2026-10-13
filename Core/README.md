@@ -194,6 +194,14 @@ effect).
   (`sig_prefix_of_rowAt`, `hndTags_of_rowAt`). `EffCtx.NoUnrExn`: no abortive operation is
   unrestricted (§18); in a row tied to such a context an unrestricted operation resumes
   (`abort_false_of_rowAt`). The checker builds every derivation tied (`Frontend/Check/Tied.lean`).
+- **The names a run raises** (`SPEC.md` §19 *Typing*, `RaiseNames.lean`). `Expr.RaiseOK P`: every
+  raise of a term is of a name in `P` or a cancel, every cancel state keeps none or a raise of a
+  name in `P`, and `cfin` holds only a cancel state. No step leaves it, nor stores a value that
+  does (`HeapRaiseOK`), when `0` is not in `P` (`raiseOK_step1`, `raiseOK_steps`). A tied term
+  is at its effect context's names, `EffCtx.Names` (`raiseOK_of_derivesAt`; `rcE` decides it), so
+  every configuration its runs reach from the empty memory is at them (`raiseOK_reach`), and at
+  every cancel of `κ` they reach, the cancelled region's running finalisers keep none or an error
+  of such a name (`CancelsNamed`, `cancelsNamed_of_derivesAt`).
 - **Embedding.** `embed : DerivesWf Δ Γ e T → CDerives Δ (cbvCtx Γ) e (.val (cbv T))` for every
   `DerivesWf` rule, and `adequacy_of_derivesWf`. `EmbeddingExamples.lean` runs BoLo's baseline
   programs through it.

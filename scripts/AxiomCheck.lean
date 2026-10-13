@@ -270,6 +270,20 @@ import Frontend.Check.Externs
 #print axioms Frontend.Check.checkProgram_tied
 #print axioms Frontend.Check.checkProgram_tiedAt
 #print axioms Frontend.Check.checkProgram_sound
+-- SPEC §19, *Typing*: the names a run raises, and the errors a cancel keeps
+#print axioms BoCa.Fig16.LogRel.Core.raiseOK_head
+#print axioms BoCa.Fig16.LogRel.Core.raiseOK_step1
+#print axioms BoCa.Fig16.LogRel.Core.raiseOK_steps
+#print axioms BoCa.Fig16.LogRel.Core.rcE_sound
+#print axioms BoCa.Fig16.LogRel.Core.EffCtx.names_zero
+#print axioms BoCa.Fig16.LogRel.Core.names_of_rowAt
+#print axioms BoCa.Fig16.LogRel.Core.rcE_of_derivesAt
+#print axioms BoCa.Fig16.LogRel.Core.raiseOK_of_derivesAt
+#print axioms BoCa.Fig16.LogRel.Core.raiseOK_reach
+#print axioms BoCa.Fig16.LogRel.Core.kcfinNamed_of_kraiseOK
+#print axioms BoCa.Fig16.LogRel.Core.kcfinNamed_of_shift
+#print axioms BoCa.Fig16.LogRel.Core.kcfinNamed_of_cancel
+#print axioms BoCa.Fig16.LogRel.Core.cancelsNamed_of_derivesAt
 -- SPEC §26 (entry 25): a λ whose binder is dead, at an effectful returner
 #print axioms BoCa.Fig16.LogRel.Core.gDenC_unit_dead
 #print axioms BoCa.Fig16.LogRel.Core.lamDead_compatC

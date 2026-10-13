@@ -72,6 +72,7 @@ import Core.EffPrograms
 import Core.Totality
 import Core.EffSafety
 import Core.Tied
+import Core.RaiseNames
 import Core.Stale
 import Core.Stdio
 import Core.Handlers
