@@ -37,6 +37,9 @@ below are design and research notes.
 - [Effect polymorphism](effect-polymorphism.md) — functions over effectful computations (#161):
   copies over static names, provided and tunneled rows, site freshness, stored callbacks. A design;
   nothing is built.
+- [Effectful callbacks at the surface](surface-callbacks.md) — callbacks of every order, stored
+  callbacks and stored continuations, as elaboration into Core's rules; the async colourless test
+  from source. A proposal; nothing is built.
 - [The affine closure, `FnMut`](fnmut.md) — Rust's `FnMut` as codata, `νX. (A ⊸ F(B ⊗ [@c] U X)) & F 1`
   (#236): an experiment over a fork of `Core` with `ν`'s positivity relaxed; the kernel change is
   described, not made.

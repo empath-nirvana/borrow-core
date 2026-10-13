@@ -61,7 +61,7 @@ the options and their trade-offs and settles none of them.
 |---|---|---|---|---|
 | `map-div-fold.bc` | data × effects (div) | a div callback called inside a fold's algebra is not specialized, even in the whole program; separately compiled, it needs effect polymorphism (no variable over computation types) | surface; kernel for separate compilation | pending (SPEC §14, #63) |
 | `callbacks-in-data.bc` | data × effects (div) × coeffects | a callback stored in data keeps its written effect, so a list cannot hold a total and a div callback | surface, then kernel; open design question | pending (SPEC §14 Open) |
-| `async-borrow.bc` | codata × effects × scope | `async fn`, `spawn`, `.await`, a scheduler; a scheduler over tasks at different lifetimes | surface, runtime; open design question | pending (#52) |
+| `async-borrow.bc` | codata × effects × scope | a task yields inside `fold_imm`'s callback, so its stored continuation holds the lend the fold opens at each pointer hop (T1); behind it, a fold whose algebra performs an operation (K4) and effectful callbacks (#161) | kernel (tier 2) | pending (#172) |
 | `iter-mut.bc` | codata × effects × scope | no family of leaf `mut` borrows `[Mut 'c A]`, no `iter_mut` | kernel | pending (#57, SPEC §9 Open) |
 | `noalloc.bc` | effects | `F` is not graded and `alloc` is untracked, so no type says "does not allocate" | kernel; open design question | pending (the account's §8 item 5) |
 | `dig-bang.bc` | coeffects | digging `!A ⊸ !!A`, valid in the model, is not a rule; promotion is at `fun`/`Fun` only | kernel | pending (SPEC §2 Open) |
@@ -107,8 +107,9 @@ Judged by how natural the program is, and how often a user would write it:
 
 Less natural, each needed mostly through generic code or in niche programs: `dig-bang.bc`,
 `box-dup.bc` (the model validates both; each is one lemma), `noalloc.bc`, `two-writers.bc`
-(Rust rejects it too), `backtrack-multishot.bc`, `fold-under-u.bc`, `async-borrow.bc` (until
-there is a runtime), `needs-stdout.bc` (ambient `main` and `&mut` cover the common case).
+(Rust rejects it too), `backtrack-multishot.bc`, `fold-under-u.bc`, `async-borrow.bc` (tier 2: a
+lend held across a suspension), `needs-stdout.bc` (ambient `main` and `&mut` cover the common
+case).
 
 ## What writing them found
 

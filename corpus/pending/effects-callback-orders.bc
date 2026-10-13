@@ -1,0 +1,45 @@
+-- pending: effectful callbacks at every order (#161; docs/surface-callbacks.md §1)
+-- Callbacks taking callbacks, each written once and used at several rows: `apply` (order 4)
+-- applies an order-3 function to an order-2 one; `plain` and `yielding` (order 3) run the order-2
+-- function they are given with an order-1 closure each writes, which performs nothing in `plain`
+-- and yields what it is given in `yielding`; `both` (order 2) calls its callback at 1 and at 2.
+-- The yield of the order-1 closure is handled by the `for` in `main`, through `both`, `yielding`
+-- and `apply`; the raise of the order-2 closure literal in `main` is handled by `to_result`
+-- around it, through `plain` and `apply`. `apply` is used at three rows (none, `Yield`, `Fail`),
+-- `both` at two and `plain` at two, and none of them is marked for any.
+--
+-- Blocked by #161: `yielding` performs `Yield` and is passed as a value, and the closures that
+-- yield and raise perform an operation where they are not run in place. The same program with no
+-- operation in it checks today and measures 0 0 0 (docs/surface-callbacks.md §1.3). The order-2
+-- closure literal in `main`, which performs an operation and is given a callback that `plain`
+-- makes, has the shape #233's R2a left pending (`cb-higher-rank.bc`, branch `effect-callbacks`).
+--
+-- Once it lands: (i32[30], (i32[30], (i32[3], inr i32[30]))): 10 + 20 at the pure row; the same
+-- answer with 1 and 2 yielded to the `for`, whose sum is 3; the order-2 closure's sum, 30, raised;
+-- `live 0`.
+--
+-- now: 41:26: `yielding` performs `Yield` and is passed as a value: it can only be called (effectful callbacks, #161)
+
+include fail
+include yield
+
+-- Order 2: calls its callback at 1 and at 2.
+fn both(f: !(i32 => i32)) -> i32 = f(1) + f(2)
+
+-- Order 3: runs the order-2 function it is given with a callback that performs nothing.
+fn plain(g: !(!(i32 => i32) => i32)) -> i32 = g(!{ x -> x * 10 })
+
+-- Order 3: the same with a callback that yields what it is given.
+fn yielding(g: !(!(i32 => i32) => i32)) -> i32 with Yield[i32] = g(!{ x -> yield(x); x * 10 })
+
+-- Order 4: applies an order-3 function to an order-2 one.
+fn apply(h: !(!(!(i32 => i32) => i32) => i32), g: !(!(i32 => i32) => i32)) -> i32 = h(g)
+
+main -> i32 * (i32 * (i32 * (i32 + i32))) =
+  let a = apply(plain, both);
+  let mut seen = 0;
+  let b = for x in apply(yielding, both) { seen = seen + x };
+  let c = with to_result[i32, i32] {
+    apply(plain, !{ f -> let s = f(1) + f(2); if s > 25 { raise(s) } else { s } })
+  };
+  (a, (b, (seen, c)))

@@ -1,35 +1,35 @@
--- pending: #52
--- An async task that holds a borrow: two tasks read one borrowed list, one of them yielding to
--- the scheduler between elements, and the block awaits both before the borrow ends.
+-- pending: T1 (#172), a lend held across a suspension (tier 2; A2 of docs/surface-callbacks.md)
+-- Two tasks read one borrowed list, one of them yielding to the scheduler at each element, and
+-- the block runs both to their ends before the borrow ends. Nothing is marked: a task is an
+-- ordinary function, `sum` yields from inside its fold's callback, `sum_alg`, and the scheduler
+-- is the one of `corpus/pending/async-colourless.bc`: a handler whose clause stores each task's
+-- continuation, and a round robin over the stored continuations. This is the tier-2 acceptance
+-- program.
 --
--- Axes: codata × effects × scope. A task is codata (a `Loop` whose state is the rest of the
--- task's run) over the ambient effect; its state holds an `imm` borrow of the list (scope).
+-- Axes: codata × effects × scope. A suspended task is codata (an iterator over its
+-- continuation); the continuation of `sum` holds `imm` borrows of the list.
 --
--- Blocked by: the surface, the runtime and one open design question (#52). A task that holds a
--- borrow within the borrow's scope is covered by the kernel as it is: the thunk clause of the
--- relation holds a suspended computation at its resource, borrows included, and a task that
--- leaves a nested scope does so as `[@d] U(Loop …)`, the rule `corpus/axes/scope-boxed-iter.bc`
--- uses. Not built: `async fn` (a function elaborated as a state machine, reusing SPEC §14's
--- specialization with a scheduler step as the effect's computation type), `spawn`, `.await`,
--- and a scheduler. Open design question: a scheduler holding tasks whose borrows have
--- different lifetimes (the strict account, §6).
---   - Scoped spawning: a task cannot outlive the scope that spawned it (this program's shape).
---     Needs no new typing; the scheduler is a loop inside the scope. But a borrow scope's body
---     is one computation of `F`, so a scheduler that runs until its tasks finish, without
---     bound, meets `corpus/pending/borrow-across-loop.bc`.
---   - Existential lifetimes: a task queue of type `exists 'a. [@a] U(Loop …)` holds tasks from
---     different scopes. A new type former and a new relation clause, and the scope must still
---     outlive the queue.
---   - Owned data only (`'static` tasks, Rust's `tokio::spawn`): no borrows cross into a task;
---     simplest, and it rules this program out.
+-- Blocked by T1 (#172): the lends the fold opens inside the task. `fold_imm`'s algebra is given
+-- an `imm 'y` view of each node at a lifetime `'y` of the fold's own (SPEC §6: the algebra is at
+-- `∀'y ⊏ ⊤`), a lend opened at each pointer hop. `sum_alg` yields with that lend open, so the
+-- stored continuation holds it across the suspension. Core's stops forbid a lend opened inside
+-- a computation to be open at its stop (T1, and `↭` for a `mut` lend), and every borrow's
+-- callback performs abortive operations only (SPEC §19). Lifting that is tier 2. Behind the same
+-- yield: a fold whose algebra performs an operation (K4, SPEC §18 Open; the folds' algebras are
+-- pure, SPEC §6) and effectful callbacks (#161), which is today's error.
 --
--- Spelling (a hypothesis): Rust's `async fn`, `spawn`, `.await`, and `yield_now()`.
---
--- Today: the parser reads `async` as one more argument of the application that ends the line
--- before (`alloc_s[Node] (x, t)`), and stops at `<`: neither `async fn` nor a `fn` with a
--- lifetime parameter is provided.
+-- What is not tier 2 here: the borrow `b1` itself, lent by the enclosing block before the
+-- tasks start, is held by `sum`'s continuation as a borrow from outside the handled computation,
+-- and the tasks stay inside the block (`U C` has no outlives rule). The same program with
+-- `sum_alg` not yielding checks today and runs to `i32[9]` at 7 0 0, the list's cells
+-- (docs/surface-callbacks.md §5.1). A scheduler holding tasks whose borrows have different
+-- lifetimes is a separate open question (existential lifetimes, or owned tasks only).
 --
 -- Once it lands: the tasks compute 6 (the sum) and 3 (the length). Golden: `i32[9]`, `live 0`.
+--
+-- now: 48:56: `sum_alg` performs `Yield` and is passed as a value: it can only be called (effectful callbacks, #161)
+
+include yield
 
 type List = mu X. 1 + (ref i32 * ref X)
 shape Node = node (leaf i32) (leaf List)
@@ -37,18 +37,46 @@ shape Node = node (leaf i32) (leaf List)
 def nil : List = roll inl ()
 fn cons(x: i32, t: List) -> List = roll inr alloc_s[Node] (x, t)
 
-async fn sum<'a>(l: imm 'a List) -> i32 =
-  fold_imm l { inl () -> 0 | inr (b, s) -> yield_now().await; *b + s }
+-- A stored task: it yielded, with its continuation, or it ended with its answer.
+type Slot = (1 * U (iter 1 i32 1)) + i32
 
-async fn len<'a>(l: imm 'a List) -> i32 =
-  fold_imm l { inl () -> 0 | inr (_, n) -> n + 1 }
+-- The fold's callback for the sum: it yields to whoever runs the task, then adds.
+fn sum_alg<'y>(r: 1 + imm 'y i32 * i32) -> i32 with Yield[1] =
+  match r { inl _ -> 0 | inr (b, s) -> yield(()); *b + s }
+
+fn sum<'a>(l: imm 'a List) -> i32 =
+  (unbang (fold_imm[1 + ref i32 * ref X, 'b, top, i32] sum_alg)) ['a] l
+
+fn len_alg<'y>(r: 1 + imm 'y i32 * i32) -> i32 = match r { inl _ -> 0 | inr (_, n) -> n + 1 }
+
+fn len<'a>(l: imm 'a List) -> i32 =
+  (unbang (fold_imm[1 + ref i32 * ref X, 'b, top, i32] len_alg)) ['a] l
+
+-- The spawn handler: its clause stores the continuation as the task's rest.
+handler spawn: Yield[1], i32 -> (1 * U (iter 1 i32 1)) + i32 = {
+  return(n) = inr(n);
+  yield(u, k) = inl((u, thunkv nu_in < v <- return (); (force k).1 v, (force k).2 >))
+}
+
+-- One turn of a task that yielded: resume it.
+fn turn(s: Slot) -> Slot = match s {
+  inl p -> let (u, t) = p; o <- (nu_out (force t)).1; o
+| inr n -> inr(n)
+}
+
+-- A task's answer; one that has not ended is closed, which cancels it.
+fn value(s: Slot) -> i32 = match s {
+  inl p -> let (u, t) = p; c <- (nu_out (force t)).2; 0
+| inr n -> n
+}
 
 main -> i32 =
   let l = alloc(cons(1, cons(2, cons(3, nil))));
-  borrow imm l { b ->
-    let (b1, b2) = copy(b);
-    let t = spawn(sum(b1));
-    let u = spawn(len(b2));
-    t.await + u.await
-  }
--- now: 41:12: expected `[`, found name `l`
+  let r = borrow imm l { 'x, b ->
+    let (b1, b2) = copy['x, List] b;
+    let mut t : Slot = with spawn { sum(b1) };
+    let mut u : Slot = with spawn { len(b2) };
+    for _ in 0..8 { t = turn(t); u = turn(u) };
+    value(t) + value(u)
+  };
+  r

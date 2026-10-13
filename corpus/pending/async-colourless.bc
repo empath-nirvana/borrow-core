@@ -1,0 +1,77 @@
+-- pending: effectful callbacks (#161; docs/surface-callbacks.md)
+-- The async colourless test from source (A1; the kernel programs `async-sync`, `async-tasks` and
+-- `async-colourless`, SPEC §19 Programs). `for_n` is written once, with no marker: it calls its
+-- callback `k` times, threading a state. `main` uses it with `tick`, which performs nothing, and
+-- two tasks use it with `yield_tick`, which yields its task's tag to whoever runs it. Each task
+-- runs under `spawn`, a handler whose clause does not resume: it answers the tag beside the
+-- task's continuation, stored as an iterator whose `next` resumes it and whose `close` cancels
+-- it. The scheduler is a round robin over the two stored continuations: each round resumes each
+-- task that yielded, which runs to its next `yield` or its end, and records the tag. The tasks
+-- interleave, A B A B A B.
+--
+-- Blocked by #161: `yield_tick` performs `Yield` and is passed as a value, so `for_n` would be
+-- used at `Yield`'s row. Everything else elaborates today: the program with `task`'s call of
+-- `for_n` written as three calls of `yield_tick` checks, runs to the answer below at every stage
+-- and measures 6 0 0, the counts of the kernel's `async-colourless` (docs/surface-callbacks.md
+-- §3.3). Behind #161: `for_n`'s loop at `Yield`'s row. Today a counted loop whose body calls a
+-- function that resumes is rejected (`count_try`'s step is pure), and one whose body performs the
+-- operation itself is a div loop (SPEC §16, Effectful bodies), which no handler wraps (SPEC §21
+-- Open). `with spawn { task(…) }` needs the loop as a computation the handler can wrap
+-- (docs/surface-callbacks.md E8, OQ-S1). The clause that stores the continuation is written in
+-- core text.
+--
+-- Once it lands: ((inl (), i32[3]), (inr (inl (), i32[3]), (inr (inr (), i32[3]), inr (inr (),
+-- inr (inl (), inr (inr (), inr (inl (), inr (inr (), inr (inl (), inl ())))))))))): the sync
+-- use's state (A, 3); both tasks ended at 3; the trace, most recent first, B A B A B A; `live 0`.
+--
+-- now: 52:12: `yield_tick` performs `Yield` and is passed as a value: it can only be called (effectful callbacks, #161)
+
+include yield
+
+type Trace = mu X. 1 + (bool * X)
+type Slot = (bool * U (iter bool (bool * i32) 1)) + (bool * i32)
+
+-- The generic function: `k` calls of `f`, threading `s`.
+fn for_n[S](k: i32, f: !(S => S), s: S) -> S =
+  let mut st = s;
+  for _ in 0..k { st = f(st) };
+  st
+
+-- A callback that performs nothing: one more on the count.
+fn tick(st: bool * i32) -> bool * i32 = let (t, c) = st; (t, c + 1)
+
+-- A callback that suspends: it yields its task's tag, then ticks.
+fn yield_tick(st: bool * i32) -> bool * i32 with Yield[bool] =
+  let (t, c) = st;
+  yield(t);
+  (t, c + 1)
+
+-- A task: the generic function at `Yield`'s row.
+fn task(tag: bool) -> bool * i32 =
+  let s0 : bool * i32 = (tag, 0);
+  for_n(3, yield_tick, s0)
+
+-- The spawn handler: its clause stores the continuation as the task's rest.
+handler spawn[S]: Yield[bool], S -> (bool * U (iter bool S 1)) + S = {
+  return(s) = inr(s);
+  yield(t, k) = inl((t, thunkv nu_in < u <- return (); (force k).1 u, (force k).2 >))
+}
+
+-- One turn of a task that yielded: resume it, and record the tag it yielded with.
+fn turn(s: Slot, tr: Trace) -> Slot * Trace = match s {
+  inl p -> let (tag, t) = p; o <- (nu_out (force t)).1; (o, (roll (inr (tag, tr)) : Trace))
+| inr d -> (inr(d), tr)
+}
+
+main -> (bool * i32) * (Slot * (Slot * Trace)) =
+  let s0 : bool * i32 = (false, 0);
+  let sync = for_n(3, tick, s0);
+  let mut a : Slot = with spawn { task(false) };
+  let mut b : Slot = with spawn { task(true) };
+  let mut tr : Trace = roll (inl ());
+  for _ in 0..8 {
+    let (a2, tr2) = turn(a, tr);
+    let (b2, tr3) = turn(b, tr2);
+    a = a2; b = b2; tr = tr3
+  };
+  (sync, (a, (b, tr)))
