@@ -8,3 +8,5 @@ import DenseCarrier.Rat
 import DenseCarrier.Shift
 import DenseCarrier.FL
 import DenseCarrier.Borrow
+import DenseCarrier.Reslot
+import DenseCarrier.Nominal
