@@ -66,6 +66,45 @@ theorem shiftQ_strictMono {c : WithTop ℚ} {k : ℚ} (hk : 0 < k) : StrictMono 
               exact WithTop.coe_lt_coe.mpr (by linarith)
             · rw [shiftQ_of_le (not_lt.mp hq)]; exact hxy
 
+/-! ### Slots in `WithTop ℚ` -/
+
+/-- The position of Core's slot `n`: `⊤` at `0`, `-n` otherwise. -/
+def ratPos (n : ℕ) : WithTop ℚ := if n = 0 then ⊤ else ((-(n : ℚ) : ℚ) : WithTop ℚ)
+
+theorem ratPos_lt {m n : ℕ} (h : n < m) : ratPos m < ratPos n := by
+  have hm : m ≠ 0 := by omega
+  unfold ratPos
+  rw [if_neg hm]
+  by_cases hn : n = 0
+  · rw [if_pos hn]; exact WithTop.coe_lt_top _
+  · rw [if_neg hn]
+    exact WithTop.coe_lt_coe.mpr (neg_lt_neg (by exact_mod_cast h))
+
+open BoCa.Fig16 in
+/-- Core's slots in `WithTop ℚ`: slot `n` at `-n`, slot `0` at `⊤`. -/
+def ratSlots : Slots (WithTop ℚ) where
+  f x := ratPos (OrderDual.ofDual x)
+  strictMono := fun _ _ hxy => ratPos_lt hxy
+  map_top := if_pos rfl
+
+open BoCa.Fig16 in
+/-- Below every lifetime of `WithTop ℚ` there is a slot. -/
+theorem ratSlots_unbounded (q : WithTop ℚ) : ∃ s : Life, ratSlots s < q := by
+  induction q using WithTop.recTopCoe with
+  | top =>
+      refine ⟨OrderDual.toDual 1, ?_⟩
+      show ratPos 1 < ⊤
+      unfold ratPos
+      rw [if_neg one_ne_zero]
+      exact WithTop.coe_lt_top _
+  | coe r =>
+      obtain ⟨n, hn⟩ := exists_nat_gt (-r)
+      refine ⟨OrderDual.toDual (n + 1), ?_⟩
+      show ratPos (n + 1) < r
+      unfold ratPos
+      rw [if_neg (Nat.succ_ne_zero n)]
+      exact WithTop.coe_lt_coe.mpr (by push_cast; linarith)
+
 /-! ### The translation -/
 
 /-- Translation by `-k`, on `WithTop ℚ`. -/

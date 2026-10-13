@@ -518,6 +518,39 @@ theorem entailsLtD_of_entailsLt {Δ : LifeCtx} {a b : Lifetime.Life} (h : Δ.Ent
   have : f n' ≤ f m' := hfm (not_lt.mp hle)
   exact absurd hlt (not_lt.mpr this)
 
+/-- `Δ ⊨ @a ⊑ @b` over `L` (`LifeCtx.EntailsLe` over `L`). -/
+def EntailsLeD (L : Type) [LinearOrder L] [OrderTop L] (Δ : LifeCtx) (a b : Lifetime.Life) :
+    Prop :=
+  ∀ δ : LSubD L, ModelsD Δ δ → ∃ m n, interpD δ a = some m ∧ interpD δ b = some n ∧ m ≤ n
+
+/-- **Core's `Δ ⊨ @a ⊑ @b` holds over every lifetime order `L`**, by the same re-reading. -/
+theorem entailsLeD_of_entailsLe {Δ : LifeCtx} {a b : Lifetime.Life} (h : Δ.EntailsLe a b) :
+    EntailsLeD L Δ a b := by
+  intro δ hδ
+  set f := rankIn (valsD δ) with hf
+  have hfm : Monotone f := rankIn_mono _
+  have hft : f ⊤ = ⊤ := rankIn_top _
+  have hint : ∀ c : Lifetime.Life,
+      c.interp (toLSub (δ.map f)) = (interpD δ c).map (fun v => OrderDual.ofDual (f v)) := by
+    intro c
+    rw [interp_toLSub, interpD_map hfm hft]
+    cases interpD δ c <;> rfl
+  have hmod : Δ.Models (toLSub (δ.map f)) := by
+    intro x u hu
+    obtain ⟨m, n, hm, hn, hlt⟩ := hδ x u hu
+    refine ⟨OrderDual.ofDual (f m), OrderDual.ofDual (f n), ?_, ?_, ?_⟩
+    · rw [toLSub_find?, LSubD.find?_map, hm]; rfl
+    · rw [hint, hn]; rfl
+    · exact rankIn_strict _ (interpD_mem_valsD δ u hn) hlt
+  obtain ⟨m, n, hm, hn, hle⟩ := h _ hmod
+  rw [hint] at hm hn
+  obtain ⟨m', hm', rfl⟩ := Option.map_eq_some_iff.mp hm
+  obtain ⟨n', hn', rfl⟩ := Option.map_eq_some_iff.mp hn
+  refine ⟨m', n', hm', hn', ?_⟩
+  by_contra hlt
+  have : f n' < f m' := rankIn_strict _ (interpD_mem_valsD δ a hm') (not_le.mp hlt)
+  exact absurd hle (not_le.mpr this)
+
 /-! ### `∀E` -/
 
 /-- **`∀E` over `L`** (`allE_compatC`), at Core's own premise `Δ ⊨ @a ⊏ @b`. -/

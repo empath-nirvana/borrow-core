@@ -35,6 +35,18 @@ open ProbeD1 (adjE)
 
 /-! ### `L = WithTop ℚ` -/
 
+/-- **A move of the configuration's lifetimes that agrees with an order automorphism on them
+leaves the relation unchanged**, at every lifetime order: the slots moved by `θ`, the reading
+moved by `θ`, and `θ` equal to an automorphism `π` on every slot position and every value of the
+reading. -/
+theorem cD_comp_of_agree {L : Type} [LinearOrder L] [OrderTop L] (ι : Slots L) {θ : L → L}
+    (hθ : StrictMono θ) (hθt : θ ⊤ = ⊤) (π : L ≃o L) (hι : ∀ s, π (ι s) = θ (ι s))
+    (δ : LSubD L) (hδ : ∀ p ∈ δ.entries, π p.2 = θ p.2) (C : CTy) (ls : List SRec) (e : Expr) :
+    cD (ℍ := ℍ) (ι.comp θ hθ hθt) C ls (δ.map θ) e = cD (ℍ := ℍ) ι C ls δ e := by
+  have h₁ : ι.comp θ hθ hθt = ι.map π := Slots.ext fun s => (hι s).symm
+  have h₂ : δ.map θ = δ.map π := LSubD.map_congr fun p hp => (hδ p hp).symm
+  rw [h₁, h₂, cD_map]
+
 /-- The slots moved by the segment shift at `c` by `k`. -/
 def shiftSlots (ι : Slots (WithTop ℚ)) (c : WithTop ℚ) {k : ℚ} (hk : 0 < k) :
     Slots (WithTop ℚ) :=

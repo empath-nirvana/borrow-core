@@ -88,13 +88,10 @@ def visit (e : Expr) : M Unit := do
     return .continue)
 
 /-- The user-facing declaration an auxiliary one (`_proof_n`, `match_n`, …) belongs to. -/
-partial def rootName (n : Name) : Name :=
-  if n.isInternal then
-    match n with
-    | .str p _ => rootName p
-    | .num p _ => rootName p
-    | .anonymous => n
-  else n
+def rootName : Name → Name
+  | .anonymous => .anonymous
+  | n@(.str p _) => if n.isInternal then rootName p else n
+  | n@(.num p _) => if n.isInternal then rootName p else n
 
 def interesting (mods : Array Name) (env : Environment) (n : Name) : Option Name := do
   let idx ← env.getModuleIdxFor? n
