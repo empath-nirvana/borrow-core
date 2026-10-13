@@ -253,7 +253,17 @@ effect).
 - **Embedding.** `embed : DerivesWf Δ Γ e T → CDerives Δ (cbvCtx Γ) e (.val (cbv T))` for every
   `DerivesWf` rule, and `adequacy_of_derivesWf`. `EmbeddingExamples.lean` runs BoLo's baseline
   programs through it.
-- Weakening by consumed trailing slots: `CDerives.append_dead`.
+- Weakening by consumed trailing slots: `CDerives.append_dead`; by consumed slots inside a
+  context, the term's variables past them shifted: `CDerives.insert_dead`,
+  `CDerivesAt.insert_dead` (`InsertDead.lean`).
+- **A function copied at each use is `[let-poly]`'s premise** (`SPEC.md` §24 *Theorems*,
+  `LetCopy.lean`). A derivation of a term holding a closed λ-value gives the rule's derivation of
+  the let that binds it once, whose body is the term with the λ-value's occurrences replaced by
+  the bound variable (`Expr.unfill`, `subst_unfill`; `CDerives.letPoly_copy`,
+  `CDerivesAt.letPoly_copy`). The copies of `hofTwoRows`, `sumGen` and `timeoutProg` unfill to
+  their lets' bodies (`threeUses_unfill`, `sumGenUses_unfill`, `timeoutUses_unfill`), and the
+  checker's copies of a `def` are such terms (`Frontend/Check/Program.lean`,
+  `checkProgram_letPoly`).
 
 ### Derived rules
 

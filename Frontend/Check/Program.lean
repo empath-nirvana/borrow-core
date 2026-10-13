@@ -202,6 +202,20 @@ theorem checkProgram_tiedAt {p : Program} {r : Report} {c : Checked}
     CDerivesAt c.Ξ LifeCtx.empty c.ctx c.e (.comp c.C) ∧ c.Ξ.NoUnrExn :=
   ⟨c.derivAt, noUnrExn_effCtxOf c.ok⟩
 
+/-- **The checker's copies are `[let-poly]`'s premise** (decision 45): a `def` is checked at each
+use, so `main`'s erasure holds a function at each of its uses. For a closed λ-value `λb` typed at
+the empty context, `main`'s derivation gives `[let-poly]`'s, tied at the program's effect context,
+of the let that binds `λb` once: its body is `main`'s erasure with `λb`'s occurrences replaced by
+the bound variable (`Expr.unfill`), whose filling is `main`'s erasure (`subst_unfill`).
+`[spec §18, §24]` -/
+theorem checkProgram_letPoly {p : Program} {r : Report} {c : Checked}
+    (_h : checkProgram p = .ok r) (_hc : r.main = some c) {b : BoCa.Expr} {j : Jdg}
+    (hcl : BoCa.Fig16.LogRel.Core.closedAt 0 (BoCa.Val.lam b).1 = true)
+    (hV : CDerivesAt c.Ξ LifeCtx.empty [] (.val (.lam b)) j) :
+    CDerivesAt c.Ξ LifeCtx.empty c.ctx (.app (.val (.lam (c.e.unfill b 0))) (.val (.lam b)))
+      (.comp c.C) :=
+  BoCa.Fig16.LogRel.Core.CDerivesAt.letPoly_copy b hcl hV c.derivAt
+
 /-- **Soundness of the checker.** If `bcc` accepts a program, its `main` erases to an `Expr`
 with a `CDerives` derivation at `Δ = ∅` and the context of its externs. -/
 theorem checkProgram_sound {p : Program} {r : Report} {c : Checked}

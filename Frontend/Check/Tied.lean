@@ -89,6 +89,12 @@ theorem lam {s : CRow} {M : BoCa.Expr} {A : CVTy} {C : CCTy}
     (h : TiedDer s Δ (⟨A, true⟩ :: Γ) M (.comp C)) :
     TiedDer s Δ Γ (.val (BoCa.Val.lam M)) (.comp (.arr A C)) := fun Ξ hΞ => .lam (h Ξ hΞ)
 
+/-- `[λ-dead]`: `λx. M : 1 ⊸ F_Σ B`, `x`'s slot dead.  `[spec §26]` -/
+theorem lamDead {s : CRow} {M : BoCa.Expr} {S : CRow} {B : CVTy}
+    (h : TiedDer s Δ (⟨.unit, false⟩ :: Γ) M (.comp (effOf S B))) :
+    TiedDer s Δ Γ (.val (BoCa.Val.lam M)) (.comp (.arr .unit (effOf S B))) :=
+  fun Ξ hΞ => .lamDead (h Ξ hΞ)
+
 theorem app {s : CRow} {Γ₁ Γ₂ : Ctx CVTy} {M : BoCa.Expr} {i : Nat} {A : CVTy} {C : CCTy}
     (hs : BoCa.Fig16.LogRel.Core.Ctx.SplitP Γ Γ₁ Γ₂) (hM : TiedDer s Δ Γ₁ M (.comp (.arr A C)))
     (hx : BoCa.Fig16.LogRel.Core.Ctx.SoloP Γ₂ i A) : TiedDer s Δ Γ (.app M (.var i)) (.comp C) :=

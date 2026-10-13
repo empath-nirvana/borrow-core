@@ -2,6 +2,7 @@ import Core.EffCancelTyped
 import Core.Run
 import Core.Count
 import Core.Weaken
+import Core.LetCopy
 
 /-!
 # Core — the effect properties as programs  `[spec §19, §24–§27]`
@@ -29,7 +30,9 @@ and `tick : 1 ↠ 1` at `5`, linear. No abortive operation of it is unrestricted
 
 The handlers are values (`hQ`, §24's `[handle]` at a value form) with one operation each
 (`dAt_hQ`); a let-bound function's uses are typed each at its own row from `[let-poly]`'s premise,
-the body with the function in place (`threeUses_subst`, `sumGenUses_subst`, `timeoutUses_subst`).
+the body with the function in place (`threeUses_subst`, `sumGenUses_subst`, `timeoutUses_subst`),
+and that copy, the function replaced by the bound variable, is the let's body (`threeUses_unfill`,
+`sumGenUses_unfill`, `timeoutUses_unfill`; `Core/LetCopy.lean`).
 E5's state function and E9's closure hold a `bool` across a `[let]` at a row with `exn`, which
 needs that row to have no unrestricted operation: `exn` is affine. The programs the backend compiles
 are kernel programs (`Backend/Kernel.lean`).
@@ -1105,6 +1108,10 @@ def threeUsesHof : Expr :=
 theorem threeUses_subst :
     (threeUses.subst 0 (Val.lam (appE (.var 0) .unit))).shift 1 0 = threeUsesHof := rfl
 
+/-- E1's body is its copy, `hof` at each use, with `hof` replaced by the bound variable
+(`Expr.unfill`). -/
+theorem threeUses_unfill : threeUsesHof.unfill (appE (.var 0) .unit) 0 = threeUses := by decide
+
 /-- **E1's body, `hof` at each use**: at the pure row, at `exn`'s row under `toResult`, and at
 `wait`'s row under `resumer`. -/
 theorem dAt_threeUsesHof {Δ : LifeCtx} :
@@ -1189,6 +1196,10 @@ def sumGenUsesW : Expr :=
 theorem sumGenUses_subst :
     (sumGenUses.subst 0 (Val.lam (hndE sgH (appE (.var 0) .unit)))).shift 1 0 = sumGenUsesW := rfl
 
+/-- E2d's body is its copy with `sumGen` replaced by the bound variable (`Expr.unfill`). -/
+theorem sumGenUses_unfill :
+    sumGenUsesW.unfill (hndE sgH (appE (.var 0) .unit)) 0 = sumGenUses := by decide
+
 /-- **E2d's uses, `sumGen` at each**: at the pure row, and at `exn`'s row under `toResult`, the
 generators at `yield ⊙` each. -/
 theorem dAt_sumGenUsesW {Δ : LifeCtx} :
@@ -1266,6 +1277,11 @@ def timeoutUsesW : Expr :=
 theorem timeoutUses_subst :
     (timeoutUses.subst 0 (Val.lam (hndE (hQ 2 .aff idV tmClV) (appE (.var 0) .unit)))).shift 1 0 =
       timeoutUsesW := rfl
+
+/-- E10's body is its copy with `timeout` replaced by the bound variable (`Expr.unfill`). -/
+theorem timeoutUses_unfill :
+    timeoutUsesW.unfill (hndE (hQ 2 .aff idV tmClV) (appE (.var 0) .unit)) 0 = timeoutUses := by
+  decide
 
 /-- **E10's uses, `timeout` at each**: around a body that waits, at the pure row; and around a
 body that raises `exn`, at `exn`'s row under `toResult`, the raise passing `timeout`'s handler. -/

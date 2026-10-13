@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 0.53 · 2026-10-13
+Version 0.54 · 2026-10-13
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -2153,6 +2153,12 @@ first and hands them back first, and its type has the sites' operations as its r
 elaborated. Resolution is lexical: an operation goes to the innermost handler of its effect around
 it, or to what the enclosing function's copy was given.
 
+The checker checks a copy, as any `def`, at each of its uses, so a program holding a closed
+function at its uses is §24's `[let-poly]` read by substitution: the program's derivation gives the
+rule's derivation of the let that binds the function once (`checkProgram_letPoly`, §24
+*Theorems*). The copies for two assignments of names are two functions, each performing at its own
+names.
+
 **Where an abortive operation may stand.**
 - *In a counted loop's body* (`for` over data, §16): `count_try`'s step is pure, so the step
   handles the operations of the names its body performs itself, each leaving the loop by its exit,
@@ -2247,14 +2253,19 @@ Rejects: `corpus/reject/effect-*.bc`.
 
 No change to `CDerives`, the relation, the machine or the checker's rules: control effects are
 §19's, checked by the certifying checker's §19 builders. `fundamentalC`, `adequacyC`,
-`fundamentalD` and `adequacyD` keep their statements and cover every elaborated program.
+`fundamentalD` and `adequacyD` keep their statements and cover every elaborated program. The
+copies are `[let-poly]`'s premise term (§24): the checker does not emit the rule, and a checked
+program's derivation gives it (`checkProgram_letPoly`).
 
 ### Open
 
 - Named instances and lexical resolution between two instances of an effect (S2, #155); bundles
   (#156).
 - Effectful callbacks, stored or passed (#161), and with them functions over computations
-  (`retry`, a handler that re-runs its body, and `|>` at a computation parameter).
+  (`retry`, a handler that re-runs its body, and `|>` at a computation parameter). The effect
+  properties E1 (a higher-order function under two handlers), E2d (a consumer of generators at two
+  rows) and E6 (a wrapper whose handler the callback's raise passes) are Core programs (§19
+  *Programs*) and wait for them at the surface (§24 *Open*).
 - An operation that answers a borrow into the handler's state (#160); `lookup` answers a copy.
 - A handler parameter that is not `!` is the handler's state (§21); its native lowering (§19
   *Open*).
@@ -3973,16 +3984,38 @@ closure type: no use dispatches, allocates, or answers for another use's effects
   `exn` (§19 *Programs*). The premise's term, the body with the λ at each use, is computed
   (`threeUses_subst`, `sumGenUses_subst`, `timeoutUses_subst`); it is the term the backend compiles
   (*Lowering*).
+- **The copy is the premise.** A term holding a closed λ-value at some of its places is
+  `[let-poly]`'s premise term for the let that binds the λ-value once. With the bound slot dead in
+  front, a derivation of the term is one of the premise: weakening by consumed slots inside a
+  context (`CDerives.insert_dead`, `CDerivesAt.insert_dead`, `Core/InsertDead.lean`), so the let
+  has a derivation (`CDerives.letPoly_of_fill`). The let's body is the term with the λ-value's
+  occurrences replaced by the bound variable (`Expr.unfill`), whose filling is the term
+  (`subst_unfill`): `CDerives.letPoly_copy`, and `CDerivesAt.letPoly_copy` for a tied derivation
+  (`Core/LetCopy.lean`). The copies of `hofTwoRows`, `sumGen` and `timeoutProg` unfill to their
+  lets' bodies (`threeUses_unfill`, `sumGenUses_unfill`, `timeoutUses_unfill`). The checker's
+  copies are such terms (§18 *Rows*): a checked program's derivation gives the let's
+  (`checkProgram_letPoly`).
 
 ### Baseline
 
 `Paper/`, `Support/`, the machine, `cC`/`vC` and the effectful `wp` are unchanged; no borrow rule
 and no borrow lemma changes. The checker (`Frontend/Check/`) types a finaliser at `F 1`: the drop
-glue (§12's destructors) already was.
+glue (§12's destructors) already was. The checker does not emit `[let-poly]`: it checks a `def` at
+each use, which is the rule's premise term, and a checked program's derivation gives the rule's
+derivation of the let (`checkProgram_letPoly`). No program from source has a let used at two rows
+(*Open*).
 
 ### Open
 
 - OQ-7 (finalisers that resume, or clean up asynchronously).
+- **One function at two rows, from source.** The effect properties E1, E2d and E6 use a function
+  whose row is its callback's: `hof`, `sumGen` and `fwrap` (§19 *Programs*). The surface rejects
+  a closure that performs an operation where it performs, and a function with a row passed as a
+  value where it is passed (§18 *Not provided*, effectful callbacks, #161); a generator that also
+  raises is not stored (§15 *Open*). The core text writes a λ's binder with its type, the row
+  included, so a let-bound function has one row there. The kernel programs `hof-two-rows`,
+  `sum-gen` and `tunnel` are the three as Core terms; at the surface they are the pending programs
+  `corpus/pending/effects-hof-two-rows.bc`, `effects-sum-gen.bc` and `effects-tunnel.bc`.
 - **A let-bound function used at different value types.** The lowering specialises per row
   (*Lowering*): a `[let-poly]` let whose uses are at one row but at different value types
   (`λx. x` at `I32` and at `1`) is lowered once, and the layout types (`Backend/Clos/Types.lean`)
@@ -4126,12 +4159,17 @@ No change to the machine, the relation, `wpTS`, `wpG` or `ewpTS`.
 `fundamentalC`, `adequacyC`, `adequacyD`, `adequacyD_obs` and every compatibility lemma keep their
 statements, over the extended judgment. `CDerives` gains `lamDead`. The callbacks of §19
 *Programs*' effect properties, `λ_. M` for a closed `M`, are typed by it (`dAt_cb`,
-`Core/EffTier1Programs.lean`).
+`Core/EffTier1Programs.lean`), and so is every such callback the checker meets (*Baseline*).
 
 ### Baseline
 
 `Paper/`, `Support/`, the machine, `cC`/`vC` and the effectful `wp` are unchanged; no borrow rule
-and no borrow lemma changes. The checker does not emit the rule.
+and no borrow lemma changes. The checker emits the rule for `fun (x : 1) -> M` at `1 -o F_Σ B`
+whose body does not use `x`: the body is checked under the binder's slot as before, and the slot is
+closed dead (`lamIt`, `rLamDead`, `TiedDer.lamDead`, `Frontend/Check/`); otherwise `[λ]`. The term
+is the λ either way, so every program erases as before. A callback whose answer is a `!` promotion
+is accepted where it was rejected: under `[λ]` the binder is live, and the promotion's `!Γ` premise
+does not take a live slot of `1` (`corpus/core-callback-dead.bc`, counts `0 0 0`).
 
 ### Open
 
@@ -4435,14 +4473,16 @@ Entry 24 (§25) is implemented: the machine in `Paper/S3_Dynamics/Definitions.le
 (`ewp_kappaCell`, `ewp_kappaC_resume`, `ewp_kappaC_cancel`, `ewp_handle`), `Core/Fundamental.lean`,
 the checker (`rEffHandle`) and `Backend/Clos/Convert.lean`.
 
-Entry 25 (§26) is implemented: `Core/Fundamental.lean` (`CDerives.lamDead`, `lamDead_compatC`) and
-`Core/Weaken.lean`.
+Entry 25 (§26) is implemented: `Core/Fundamental.lean` (`CDerives.lamDead`, `lamDead_compatC`),
+`Core/Weaken.lean` and the checker (`lamIt`, `rLamDead`, `Frontend/Check/`).
 
 Entry 23 (§24) is implemented: `Core/PolyLet.lean` (`letPoly_compatC`), `Core/EffFin.lean`
 (`handleV_compatC`, `ewp_handle_vals`, `then_compatC`) and `Core/Fundamental.lean`
 (`CDerives.letPoly`, `CDerives.effHandleV`, the theorems `CDerives.effThenA` and
 `CDerives.effHandle`); the checker types a finaliser at `F 1` (`Frontend/Check/Steps.lean`,
-`Frontend/Check/Rules.lean`, `Frontend/Check/Checker.lean`).
+`Frontend/Check/Rules.lean`, `Frontend/Check/Checker.lean`). The copy is the polymorphic let's
+premise term in `Core/InsertDead.lean` and `Core/LetCopy.lean` (`CDerives.letPoly_copy`), read off
+a checked program by `checkProgram_letPoly` (`Frontend/Check/Program.lean`).
 
 Entry 26 (§27) is implemented in the kernel: cancel rows in `Core/Types.lean` (`OpSig.fin`,
 `CTy.eff`'s `fin`, `CTy.rowOf`, `capB`); the entries' cancel obligations in `Core/EffDefs.lean`
@@ -4514,6 +4554,24 @@ at finalisers typed at rows of abortive operations (`FinRow`, `finAlone_of_finRo
 ---
 
 ## Changelog
+
+- **0.54** (2026-10-13) — §26 *Baseline*: the checker emits `[λ-dead]` for `fun (x : 1) -> M` at
+  `1 -o F_Σ B` whose body does not use `x`, and `[λ]` otherwise; every program erases as before,
+  and a callback whose answer is a `!` promotion, which `[λ]` does not type, is accepted
+  (`corpus/core-callback-dead.bc`, counts `0 0 0`). §24 *Theorems*: a term holding a closed
+  λ-value is `[let-poly]`'s premise term for the let that binds it once, by weakening by consumed
+  slots inside a context (`CDerives.insert_dead`, `CDerivesAt.insert_dead`); the let's body is
+  computed (`Expr.unfill`, `subst_unfill`), and a derivation of the term gives the let's
+  (`CDerives.letPoly_copy`, `CDerivesAt.letPoly_copy`); E1's, E2d's and E10's copies unfill to
+  their lets' bodies (`threeUses_unfill`, `sumGenUses_unfill`, `timeoutUses_unfill`). §18 *Rows*
+  and *Baseline*, §24
+  *Baseline*: the checker's copies, a `def` checked at each use, are that premise term, and a
+  checked program's derivation gives the let's (`checkProgram_letPoly`); the checker does not emit
+  `[let-poly]`. §18 *Open* and §24 *Open*: the effect properties E1, E2d and E6 from source wait for
+  effectful callbacks (#161), recorded as pending programs (`corpus/pending/effects-hof-two-rows.bc`,
+  `effects-sum-gen.bc`, `effects-tunnel.bc`). `DecidableEq` on `Expr` is derived in
+  `Core/LetCopy.lean`, where the checker reads it. No change to the machine, the relation,
+  `CDerives` or the statement of any theorem.
 
 - **0.53** (2026-10-13) — §24 *Lowering*: a `[let-poly]` let whose uses are at different rows is
   lowered per use, as its β-reduct. The backend finds the rows by converting every such let as its

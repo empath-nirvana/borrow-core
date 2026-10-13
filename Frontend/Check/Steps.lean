@@ -562,6 +562,29 @@ def funIt {v : LifeVar} {bl : CLife} {C : CCTy} (E : Env) (T : List CVTy) (sp : 
     else throw ⟨sp, s!"`Fun '{name}`: its number {ppLVar v} occurs in a bound of the lifetime context"⟩
   else throw ⟨sp, s!"`Fun '{name}`: its bound mentions its own number {ppLVar v}"⟩
 
+/-- `fun (x : 1) -> M` at `1 -o F_Σ B` whose body does not use `x`: `[λ-dead]`, the binder's
+slot closed dead.  `[spec §26]` -/
+def lamDeadIt {S : CRow} {B : CVTy} (rM : Res Δ (.unit :: T) (.comp (effOf S B))) :
+    Option (Res Δ T (.comp (.arr .unit (effOf S B)))) :=
+  rM.F.popDead.map rLamDead
+
+/-- `fun (x : A) -> M`, `M` checked under the binder's slot: `[λ-dead]` (SPEC §26) when `A` is `1`,
+`M`'s type is a returner chain `F_Σ B` and `M` does not use `x`; `[λ]` otherwise, the binder's
+slot closed live. -/
+def lamIt {A : CVTy} {C : CCTy} (E : Env) (x : Ident) (rM : Res Δ (A :: T) (.comp C)) :
+    Except Error (Res Δ T (.comp (.arr A C))) :=
+  match A, rM with
+  | .unit, rM =>
+    match effRow? C with
+    | some (S, B) =>
+      if hC : effOf S B = C then
+        match lamDeadIt (hC ▸ rM) with
+        | some r => pure (hC ▸ r)
+        | none => rLam <$> popL E x.span x.name rM.F
+      else rLam <$> popL E x.span x.name rM.F
+    | none => rLam <$> popL E x.span x.name rM.F
+  | _, rM => rLam <$> popL E x.span x.name rM.F
+
 /-! ### Effectful bindings  `[spec §19]` -/
 
 /-- A computation at the row `S′`, at the row `S` by `[sub]`. -/

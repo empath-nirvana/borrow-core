@@ -1,0 +1,18 @@
+-- pending: #161 (effectful callbacks)
+-- E6, no accidental handling (SPEC §19 Laws item 3; the kernel program `tunnel`): `fwrap` runs
+-- its callback under its own handler of `Fail`, `default(false)`. The callback raises `Fail`, and
+-- it is written under `to_result`: its raise goes to the handler around it where it is written,
+-- and passes `fwrap`'s, whose static name is its own site's.
+--
+-- Blocked by #161: a closure that performs an operation is a computation passed as a value. The
+-- kernel program is `tunnel` (SPEC §19 Programs), compiled at every stage.
+--
+-- Once it lands: `inr ()`: the error, at `to_result`; `live 0`.
+--
+-- now: 18:52: an operation of `Fail` is performed inside a closure or block that is not run in place: it cannot reach its handler (effectful callbacks, #161)
+
+include fail
+
+fn fwrap(g: !(1 => bool)) -> bool = with default[1, bool](false) { g(()) }
+
+main -> bool + 1 = with to_result[1, bool] { fwrap(!{ u -> raise(()) }) }
