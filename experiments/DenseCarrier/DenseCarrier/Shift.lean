@@ -104,12 +104,12 @@ theorem cD_imp_cutAllD {L : Type} [LinearOrder L] [OrderTop L] (ι : Slots L) (C
     (ls : List SRec) (δ : LSubD L) (e : Expr) (ρ : WRes) (h : cD (ℍ := ℍ) ι C ls δ e ρ) :
     CutAllD (ℍ := ℍ) ι C ls δ e ρ := fun π => by rw [cD_map]; exact h
 
-/-! ### `L = Life`: Core -/
+/-! ### `L = Life`, the cells kept and the slots' positions moved -/
 
 /-- The cut `m`, read at `'1`. -/
 abbrev cutδ (m : ℕ) : LSubD Life := ⟨[(1, OrderDual.toDual m)]⟩
 
-/-- Core's slots moved by `Restrat.Emb.shift` at the cut `m` by `k`. -/
+/-- The slots' positions in `L = Life` moved by `Restrat.Emb.shift` at the cut `m` by `k`. -/
 def coreShiftSlots (m k : ℕ) : Slots Life :=
   Slots.id.comp (Restrat.Emb.shift (OrderDual.toDual m) k).f
     (Restrat.Emb.shift _ k).strictMono (Restrat.Emb.map_top _)

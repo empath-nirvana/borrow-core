@@ -114,7 +114,8 @@ Classes: **(a)** carrier-independent once `Life` is any dense unbounded linear o
   (`Core/World.lean`) in place of `Res_{↓α}`; not attempted.
 
 **The cost of the real switch.** Making `Life` itself dense is impossible: (b) has no dense
-version. The switch that is possible keeps (b), (c) and the 23 model-level (a) places on the slots
+version (`no_carrier_of_dense`), nor one with finitely supported stored predicates
+(`no_fsCarrier`, §7). The switch that is possible keeps (b), (c) and the 23 model-level (a) places on the slots
 untouched, and ports the 282 relation-level (a) places, with everything that rests on them, to
 `δ : LSubD L` and `ι`. That port is mechanical (§8).
 
