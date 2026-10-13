@@ -77,48 +77,75 @@ theorem boxD_id (α : Life) (P : WProp) : boxD Slots.id α P = box α P := by
 theorem ptoMutD_id (l : Loc) (α : Life) (ls : List SRec) (P : List SRec → Val → WProp) :
     ptoMutD Slots.id l α ls P = ptoMutS l α ls P := rfl
 
+mutual
 /-- **At the identity slots the value relation is Core's**, at every fragment type. -/
 theorem vD_id : ∀ (A : VTy), FragV A → ∀ (ls : List SRec) (δ : LSubD Life),
-    vD Slots.id A ls δ = vC true A ls (toLSub δ)
+    vD (ℍ := ℍ) Slots.id A ls δ = vC true A ls (toLSub δ)
   | .unit, _, _, _ => rfl
+  | .tensor A B, h, ls, δ => by
+      obtain ⟨hA, hB⟩ := h
+      funext v
+      show (ex fun v₁ => ex fun v₂ => ⌜v = .pair v₁ v₂⌝ ⋆
+          vD (ℍ := ℍ) Slots.id A ls δ v₁ ⋆ vD (ℍ := ℍ) Slots.id B ls δ v₂) =
+        (ex fun v₁ => ex fun v₂ => ⌜v = .pair v₁ v₂⌝ ⋆
+          vC true A ls (toLSub δ) v₁ ⋆ vC true B ls (toLSub δ) v₂)
+      simp only [vD_id A hA ls δ, vD_id B hB ls δ]
+  | .thunk C, hC, ls, δ => by
+      funext v ρ
+      show (∀ ls', Ext ls ls' ρ → cD (ℍ := ℍ) Slots.id C ls' δ (forceE C (.val v)) ρ) =
+        (∀ ls', Ext ls ls' ρ → cC (ℍ := ℍ) C ls' (toLSub δ) (forceE C (.val v)) ρ)
+      simp only [cD_id C hC]
+  | .ref A, hA, ls, δ => by
+      funext v
+      show (ex fun ℓ => ex fun v' => ⌜v = .loc ℓ⌝ ⋆ ptoOwn ℓ v' ⋆
+          vD (ℍ := ℍ) Slots.id A ls δ v') =
+        (ex fun ℓ => ex fun v' => ⌜v = .loc ℓ⌝ ⋆ ptoOwn ℓ v' ⋆ vC true A ls (toLSub δ) v')
+      simp only [vD_id A hA ls δ]
   | .box a A, hA, ls, δ => by
       funext v
-      show atLifeD δ a (fun α => boxD Slots.id α (vD Slots.id A ls δ v)) =
+      show atLifeD δ a (fun α => boxD Slots.id α (vD (ℍ := ℍ) Slots.id A ls δ v)) =
         atLife (toLSub δ) a (fun α => box α (vC true A ls (toLSub δ) v))
       rw [atLife_toLSub, vD_id A hA ls δ]
       simp only [boxD_id]
   | .mut a A, hA, ls, δ => by
       funext v
       show atLifeD δ a (fun α => ex fun ℓ => ⌜v = .loc ℓ⌝ ⋆
-          ptoMutD Slots.id ℓ α ls (fun ls₀ => vD Slots.id A ls₀ δ)) =
+          ptoMutD Slots.id ℓ α ls (fun ls₀ => vD (ℍ := ℍ) Slots.id A ls₀ δ)) =
         atLife (toLSub δ) a (fun α => ex fun ℓ => ⌜v = .loc ℓ⌝ ⋆
           ptoMutS ℓ α ls (fun ls₀ => vC true A ls₀ (toLSub δ)))
       rw [atLife_toLSub]
       simp only [ptoMutD_id, vD_id A hA]
+  | .zero, h, _, _ | .sum _ _, h, _, _ | .imm _ _, h, _, _ | .bang _, h, _, _
+  | .unk, h, _, _ | .tvar _, h, _, _ | .mu _, h, _, _ | .int _, h, _, _ | .fam _, h, _, _
+  | .opq _, h, _, _ => h.elim
 
 /-- **At the identity slots the computation relation is Core's**, at every fragment type. -/
 theorem cD_id : ∀ (C : CTy), FragC C → ∀ (ls : List SRec) (δ : LSubD Life) (e : Expr),
     cD (ℍ := ℍ) Slots.id C ls δ e = cC (ℍ := ℍ) C ls (toLSub δ) e
   | .ret A, hA, ls, δ, e => by
-      show wpTS ls e (fun ls'' => vD Slots.id A ls'' δ) =
+      show wpTS ls e (fun ls'' => vD (ℍ := ℍ) Slots.id A ls'' δ) =
         wpTS ls e (fun ls'' => vC true A ls'' (toLSub δ))
       simp only [vD_id A hA]
-  | .arr A C, ⟨hA, hC⟩, ls, δ, e => by
+  | .arr A C, h, ls, δ, e => by
+      obtain ⟨hA, hC⟩ := h
       funext ρ
-      show (∀ v, (vD Slots.id A ls δ v ─⋆ cD Slots.id C ls δ (.app e (.val v))) ρ) =
-        (∀ v, (vC true A ls (toLSub δ) v ─⋆ cC C ls (toLSub δ) (.app e (.val v))) ρ)
+      show (∀ v, (vD (ℍ := ℍ) Slots.id A ls δ v ─⋆
+          cD (ℍ := ℍ) Slots.id C ls δ (.app e (.val v))) ρ) =
+        (∀ v, (vC true A ls (toLSub δ) v ─⋆ cC (ℍ := ℍ) C ls (toLSub δ) (.app e (.val v))) ρ)
       simp only [vD_id A hA, cD_id C hC]
   | .top, _, _, _, _ => rfl
   | .all x c C, hC, ls, δ, e => by
       funext ρ
       show (∀ α : Life, (⌜LtLifeD δ c α⌝ ─⋆
-          cD Slots.id C ls (δ.extend x α) (.app e (.val .unit))) ρ) =
+          cD (ℍ := ℍ) Slots.id C ls (δ.extend x α) (.app e (.val .unit))) ρ) =
         (∀ α : Life, (⌜LtLife (toLSub δ) c α⌝ ─⋆
-          cC C ls ((toLSub δ).extend x α) (.app e (.val .unit))) ρ)
+          cC (ℍ := ℍ) C ls ((toLSub δ).extend x α) (.app e (.val .unit))) ρ)
       apply propext
       refine forall_congr' fun α => ?_
       rw [← toLSub_extend δ x α, ← cD_id C hC ls (δ.extend x α)]
       simp only [ltLife_toLSub]
+  | .amp _ _, h, _, _, _ | .nu _, h, _, _, _ | .eff _ _ _ _ _ _, h, _, _, _ => h.elim
+end
 
 end DenseCarrier
 

@@ -19,6 +19,7 @@ written over an arbitrary linear order `L` (`CellFG`: the paper's `CellF` with `
 * `carrier_iff`: a solution exists exactly when `L` is reverse-well-founded.
 * `no_carrier_of_dense`: a densely ordered `L` with two points has such a chain, so no solution;
   `no_carrier_withTopRat` at `WithTop ℚ`.
+* `carrier_rigid`: an order that carries the model has no order automorphism but the identity.
 
 So a dense lifetime order cannot also be the stratification index of the paper's carrier: the
 index of the strata must stay reverse-well-ordered (the lifetimes in play, finitely many or
@@ -177,6 +178,15 @@ theorem carrier_iff [Nonempty Loc] [Nonempty Val] :
     exact wellFoundedGT_of_no_chain fun a ha => no_carrier_of_strictMono Cell hC a ha
   · intro _
     exact ⟨CellG Loc Val, carrier_of_wellFoundedGT Loc Val⟩
+
+/-- **Every order that carries the paper's model is rigid**: its only order automorphism is the
+identity. Invariance under the automorphisms of the cells' own index is therefore empty, on `ℕᵒᵈ`
+and on every other order that carries the model; the order whose automorphisms can move lifetimes
+has to be another one. -/
+theorem carrier_rigid [Nonempty Loc] [Nonempty Val] {Cell : L → Type} (hC : IsCarrier Loc Val Cell)
+    (e : L ≃o L) : e = OrderIso.refl L := by
+  haveI := (carrier_iff (Loc := Loc) (Val := Val)).mp ⟨Cell, hC⟩
+  exact Subsingleton.elim _ _
 
 /-- A dense order has an infinite strictly ascending chain below any point above another. -/
 theorem exists_strictMono_of_dense [DenselyOrdered L] {x y : L} (h : x < y) :

@@ -62,29 +62,81 @@ theorem atLifeD_congr {δ₁ δ₂ : LSubD L} {a a' : Lifetime.Life} (h : interp
   unfold atLifeD
   rw [h]
 
+mutual
 /-- `𝒱⟦A⟧` reads `δ` only at the variables free in `A` (`vC_congr`). -/
 theorem vD_congr (ι : Slots L) : ∀ (A : VTy) {δ₁ δ₂ : LSubD L},
-    (∀ y, VFree y A → δ₁.find? y = δ₂.find? y) → ∀ ls, vD ι A ls δ₁ = vD ι A ls δ₂
+    (∀ y, VFree y A → δ₁.find? y = δ₂.find? y) → ∀ ls, vD (ℍ := ℍ) ι A ls δ₁ = vD (ℍ := ℍ) ι A ls δ₂
   | .unit, _, _, _, _ => rfl
+  | .tensor A B, δ₁, δ₂, h, ls => by
+      funext v
+      show (ex fun v₁ => ex fun v₂ => ⌜v = .pair v₁ v₂⌝ ⋆
+          vD (ℍ := ℍ) ι A ls δ₁ v₁ ⋆ vD (ℍ := ℍ) ι B ls δ₁ v₂) =
+        (ex fun v₁ => ex fun v₂ => ⌜v = .pair v₁ v₂⌝ ⋆
+          vD (ℍ := ℍ) ι A ls δ₂ v₁ ⋆ vD (ℍ := ℍ) ι B ls δ₂ v₂)
+      simp only [vD_congr ι A (fun y hy => h y (Or.inl hy)) ls,
+        vD_congr ι B (fun y hy => h y (Or.inr hy)) ls]
+  | .thunk C, δ₁, δ₂, h, ls => by
+      funext v ρ
+      show (∀ ls', Ext ls ls' ρ → cD (ℍ := ℍ) ι C ls' δ₁ (forceE C (.val v)) ρ) =
+        (∀ ls', Ext ls ls' ρ → cD (ℍ := ℍ) ι C ls' δ₂ (forceE C (.val v)) ρ)
+      simp only [cD_congr ι C h]
+  | .ref A, δ₁, δ₂, h, ls => by
+      funext v
+      show (ex fun ℓ => ex fun v' => ⌜v = .loc ℓ⌝ ⋆ ptoOwn ℓ v' ⋆ vD (ℍ := ℍ) ι A ls δ₁ v') =
+        (ex fun ℓ => ex fun v' => ⌜v = .loc ℓ⌝ ⋆ ptoOwn ℓ v' ⋆ vD (ℍ := ℍ) ι A ls δ₂ v')
+      simp only [vD_congr ι A h ls]
   | .box a A, δ₁, δ₂, h, ls => by
       funext v
-      show atLifeD δ₁ a (fun α => boxD ι α (vD ι A ls δ₁ v)) =
-        atLifeD δ₂ a (fun α => boxD ι α (vD ι A ls δ₂ v))
+      show atLifeD δ₁ a (fun α => boxD ι α (vD (ℍ := ℍ) ι A ls δ₁ v)) =
+        atLifeD δ₂ a (fun α => boxD ι α (vD (ℍ := ℍ) ι A ls δ₂ v))
       have ha : interpD δ₁ a = interpD δ₂ a := interpD_congr a (fun y hy => h y (Or.inl hy))
       rw [vD_congr ι A (fun y hy => h y (Or.inr hy)) ls, atLifeD_congr ha]
   | .mut a A, δ₁, δ₂, h, ls => by
       funext v
       show atLifeD δ₁ a (fun α => ex fun ℓ => ⌜v = .loc ℓ⌝ ⋆
-          ptoMutD ι ℓ α ls (fun ls₀ => vD ι A ls₀ δ₁)) =
+          ptoMutD ι ℓ α ls (fun ls₀ => vD (ℍ := ℍ) ι A ls₀ δ₁)) =
         atLifeD δ₂ a (fun α => ex fun ℓ => ⌜v = .loc ℓ⌝ ⋆
-          ptoMutD ι ℓ α ls (fun ls₀ => vD ι A ls₀ δ₂))
+          ptoMutD ι ℓ α ls (fun ls₀ => vD (ℍ := ℍ) ι A ls₀ δ₂))
       have ha : interpD δ₁ a = interpD δ₂ a := interpD_congr a (fun y hy => h y (Or.inl hy))
       simp only [vD_congr ι A (fun y hy => h y (Or.inr hy))]
       rw [atLifeD_congr ha]
-  | .tensor _ _, _, _, _, _ | .zero, _, _, _, _ | .sum _ _, _, _, _, _ | .thunk _, _, _, _, _
-  | .ref _, _, _, _, _ | .imm _ _, _, _, _, _ | .bang _, _, _, _, _ | .unk, _, _, _, _
-  | .tvar _, _, _, _, _ | .mu _, _, _, _, _ | .int _, _, _, _, _ | .fam _, _, _, _, _
-  | .opq _, _, _, _, _ => rfl
+  | .zero, _, _, _, _ | .sum _ _, _, _, _, _ | .imm _ _, _, _, _, _ | .bang _, _, _, _, _
+  | .unk, _, _, _, _ | .tvar _, _, _, _, _ | .mu _, _, _, _, _ | .int _, _, _, _, _
+  | .fam _, _, _, _, _ | .opq _, _, _, _, _ => rfl
+
+/-- `𝒞⟦C⟧` reads `δ` only at the variables free in `C`. -/
+theorem cD_congr (ι : Slots L) : ∀ (C : CTy) {δ₁ δ₂ : LSubD L},
+    (∀ y, CFree y C → δ₁.find? y = δ₂.find? y) →
+      ∀ ls e, cD (ℍ := ℍ) ι C ls δ₁ e = cD (ℍ := ℍ) ι C ls δ₂ e
+  | .ret A, δ₁, δ₂, h, ls, e => by
+      show wpTS ls e (fun ls'' => vD (ℍ := ℍ) ι A ls'' δ₁) =
+        wpTS ls e (fun ls'' => vD (ℍ := ℍ) ι A ls'' δ₂)
+      simp only [vD_congr ι A h]
+  | .arr A C, δ₁, δ₂, h, ls, e => by
+      funext ρ
+      show (∀ v, (vD (ℍ := ℍ) ι A ls δ₁ v ─⋆ cD (ℍ := ℍ) ι C ls δ₁ (.app e (.val v))) ρ) =
+        (∀ v, (vD (ℍ := ℍ) ι A ls δ₂ v ─⋆ cD (ℍ := ℍ) ι C ls δ₂ (.app e (.val v))) ρ)
+      simp only [vD_congr ι A (fun y hy => h y (Or.inl hy)),
+        cD_congr ι C (fun y hy => h y (Or.inr hy))]
+  | .top, _, _, _, _, _ => rfl
+  | .all x c C, δ₁, δ₂, h, ls, e => by
+      funext ρ
+      show (∀ α : L, (⌜LtLifeD δ₁ c α⌝ ─⋆
+          cD (ℍ := ℍ) ι C ls (δ₁.extend x α) (.app e (.val .unit))) ρ) =
+        (∀ α : L, (⌜LtLifeD δ₂ c α⌝ ─⋆
+          cD (ℍ := ℍ) ι C ls (δ₂.extend x α) (.app e (.val .unit))) ρ)
+      have hc : interpD δ₁ c = interpD δ₂ c := interpD_congr c (fun y hy => h y (Or.inl hy))
+      have hC : ∀ α : L, cD (ℍ := ℍ) ι C ls (δ₁.extend x α) (.app e (.val .unit)) =
+          cD (ℍ := ℍ) ι C ls (δ₂.extend x α) (.app e (.val .unit)) := by
+        intro α
+        refine cD_congr ι C (fun y hy => ?_) ls _
+        by_cases hxy : x = y
+        · subst hxy; rw [LSubD.find?_extend_self, LSubD.find?_extend_self]
+        · rw [LSubD.find?_extend_ne δ₁ α hxy, LSubD.find?_extend_ne δ₂ α hxy]
+          exact h y (Or.inr ⟨Ne.symm hxy, hy⟩)
+      simp only [LtLifeD, hc, hC]
+  | .amp _ _, _, _, _, _, _ | .nu _, _, _, _, _, _ | .eff _ _ _ _ _ _, _, _, _, _, _ => rfl
+end
 
 theorem vD_extend_of_not_free (ι : Slots L) {x : LifeVar} {T : VTy} (h : ¬ VFree x T)
     (ls : List SRec) (δ : LSubD L) (α : L) : vD ι T ls (δ.extend x α) = vD ι T ls δ :=
@@ -336,44 +388,67 @@ theorem CTyEqD.instLife (x : LifeVar) (a : Lifetime.Life) (C : CTy) {δ : LSubD 
     (ha : interpD δ a = some α) : CTyEqD (CTy.instLife x a C) δ C (δ.extend x α) :=
   CTyEqD.applyLSub C [(x, a)] δ (δ.extend x α) (fun y _ => instLifeD_var x a ha y)
 
+/-- One computation type at two readings is forced the same way (`forceE_of_cTyEq`). -/
+theorem forceE_of_cTyEqD {C C' : CTy} {δ δ' : LSubD L} (h : CTyEqD C δ C' δ') :
+    forceE C = forceE C' := by
+  cases C <;> cases C' <;> first | rfl | simp_all [CTyEqD]
+
+mutual
 /-- `𝒱⟦S⟧` reads a type only up to `TyEqD` (`vC_tyEq`). -/
 theorem vD_tyEq (ι : Slots L) : ∀ (A A' : VTy) (δ δ' : LSubD L), TyEqD A δ A' δ' →
-    ∀ ls, vD ι A ls δ = vD ι A' ls δ' := by
-  intro A
-  induction A using VTy.recV with
-  | unit => intro A' δ δ' h ls; cases A' <;> simp only [TyEqD] at h; rfl
-  | box a A ih =>
-      intro A' δ δ' h ls
+    ∀ ls, vD (ℍ := ℍ) ι A ls δ = vD (ℍ := ℍ) ι A' ls δ'
+  | .unit, A', δ, δ', h, ls => by cases A' <;> simp only [TyEqD] at h; rfl
+  | .tensor A B, A', δ, δ', h, ls => by
+      cases A' <;> simp only [TyEqD] at h
+      rename_i A' B'
+      funext v
+      show (ex fun v₁ => ex fun v₂ => ⌜v = .pair v₁ v₂⌝ ⋆
+          vD (ℍ := ℍ) ι A ls δ v₁ ⋆ vD (ℍ := ℍ) ι B ls δ v₂) =
+        (ex fun v₁ => ex fun v₂ => ⌜v = .pair v₁ v₂⌝ ⋆
+          vD (ℍ := ℍ) ι A' ls δ' v₁ ⋆ vD (ℍ := ℍ) ι B' ls δ' v₂)
+      simp only [vD_tyEq ι A A' δ δ' h.1 ls, vD_tyEq ι B B' δ δ' h.2 ls]
+  | .thunk C, A', δ, δ', h, ls => by
+      cases A' <;> simp only [TyEqD] at h
+      rename_i C'
+      funext v ρ
+      show (∀ ls', Ext ls ls' ρ → cD (ℍ := ℍ) ι C ls' δ (forceE C (.val v)) ρ) =
+        (∀ ls', Ext ls ls' ρ → cD (ℍ := ℍ) ι C' ls' δ' (forceE C' (.val v)) ρ)
+      rw [forceE_of_cTyEqD h]
+      simp only [cD_tyEq ι C C' δ δ' h]
+  | .ref A, A', δ, δ', h, ls => by
+      cases A' <;> simp only [TyEqD] at h
+      rename_i A'
+      funext v
+      show (ex fun ℓ => ex fun v' => ⌜v = .loc ℓ⌝ ⋆ ptoOwn ℓ v' ⋆ vD (ℍ := ℍ) ι A ls δ v') =
+        (ex fun ℓ => ex fun v' => ⌜v = .loc ℓ⌝ ⋆ ptoOwn ℓ v' ⋆ vD (ℍ := ℍ) ι A' ls δ' v')
+      simp only [vD_tyEq ι A A' δ δ' h ls]
+  | .box a A, A', δ, δ', h, ls => by
       cases A' <;> simp only [TyEqD] at h
       rename_i a' A'
       funext v
-      show atLifeD δ a (fun α => boxD ι α (vD ι A ls δ v)) =
-        atLifeD δ' a' (fun α => boxD ι α (vD ι A' ls δ' v))
-      rw [ih A' δ δ' h.2 ls, atLifeD_congr h.1]
-  | «mut» a A ih =>
-      intro A' δ δ' h ls
+      show atLifeD δ a (fun α => boxD ι α (vD (ℍ := ℍ) ι A ls δ v)) =
+        atLifeD δ' a' (fun α => boxD ι α (vD (ℍ := ℍ) ι A' ls δ' v))
+      rw [vD_tyEq ι A A' δ δ' h.2 ls, atLifeD_congr h.1]
+  | .mut a A, A', δ, δ', h, ls => by
       cases A' <;> simp only [TyEqD] at h
       rename_i a' A'
       funext v
       show atLifeD δ a (fun α => ex fun ℓ => ⌜v = .loc ℓ⌝ ⋆
-          ptoMutD ι ℓ α ls (fun ls₀ => vD ι A ls₀ δ)) =
+          ptoMutD ι ℓ α ls (fun ls₀ => vD (ℍ := ℍ) ι A ls₀ δ)) =
         atLifeD δ' a' (fun α => ex fun ℓ => ⌜v = .loc ℓ⌝ ⋆
-          ptoMutD ι ℓ α ls (fun ls₀ => vD ι A' ls₀ δ'))
-      simp only [ih A' δ δ' h.2]
+          ptoMutD ι ℓ α ls (fun ls₀ => vD (ℍ := ℍ) ι A' ls₀ δ'))
+      simp only [vD_tyEq ι A A' δ δ' h.2]
       rw [atLifeD_congr h.1]
-  | tensor A B _ _ => intro A' δ δ' h ls; cases A' <;> simp only [TyEqD] at h; rfl
-  | zero => intro A' δ δ' h ls; cases A' <;> simp only [TyEqD] at h; rfl
-  | sum A B _ _ => intro A' δ δ' h ls; cases A' <;> simp only [TyEqD] at h; rfl
-  | thunk C => intro A' δ δ' h ls; cases A' <;> simp only [TyEqD] at h; rfl
-  | ref A _ => intro A' δ δ' h ls; cases A' <;> simp only [TyEqD] at h; rfl
-  | imm a A _ => intro A' δ δ' h ls; cases A' <;> simp only [TyEqD] at h; rfl
-  | bang A _ => intro A' δ δ' h ls; cases A' <;> simp only [TyEqD] at h; rfl
-  | unk => intro A' δ δ' h ls; cases A' <;> simp only [TyEqD] at h; rfl
-  | tvar n => intro A' δ δ' h ls; cases A' <;> simp only [TyEqD] at h; rfl
-  | mu A _ => intro A' δ δ' h ls; cases A' <;> simp only [TyEqD] at h; rfl
-  | int w => intro A' δ δ' h ls; cases A' <;> simp only [TyEqD] at h; rfl
-  | fam L _ => intro A' δ δ' h ls; cases A' <;> simp only [TyEqD] at h; rfl
-  | opq k => intro A' δ δ' h ls; cases A' <;> simp only [TyEqD] at h; rfl
+  | .zero, A', δ, δ', h, ls => by cases A' <;> simp only [TyEqD] at h; rfl
+  | .sum _ _, A', δ, δ', h, ls => by cases A' <;> simp only [TyEqD] at h; rfl
+  | .imm _ _, A', δ, δ', h, ls => by cases A' <;> simp only [TyEqD] at h; rfl
+  | .bang _, A', δ, δ', h, ls => by cases A' <;> simp only [TyEqD] at h; rfl
+  | .unk, A', δ, δ', h, ls => by cases A' <;> simp only [TyEqD] at h; rfl
+  | .tvar _, A', δ, δ', h, ls => by cases A' <;> simp only [TyEqD] at h; rfl
+  | .mu _, A', δ, δ', h, ls => by cases A' <;> simp only [TyEqD] at h; rfl
+  | .int _, A', δ, δ', h, ls => by cases A' <;> simp only [TyEqD] at h; rfl
+  | .fam _, A', δ, δ', h, ls => by cases A' <;> simp only [TyEqD] at h; rfl
+  | .opq _, A', δ, δ', h, ls => by cases A' <;> simp only [TyEqD] at h; rfl
 
 /-- `𝒞⟦C⟧` reads a type only up to `CTyEqD` (`cC_tyEq`). -/
 theorem cD_tyEq (ι : Slots L) : ∀ (C C' : CTy) (δ δ' : LSubD L), CTyEqD C δ C' δ' →
@@ -381,26 +456,30 @@ theorem cD_tyEq (ι : Slots L) : ∀ (C C' : CTy) (δ δ' : LSubD L), CTyEqD C �
   | .ret A, C', δ, δ', h, ls, e => by
       cases C' <;> simp only [CTyEqD] at h
       rename_i A'
-      show wpTS ls e (fun ls'' => vD ι A ls'' δ) = wpTS ls e (fun ls'' => vD ι A' ls'' δ')
+      show wpTS ls e (fun ls'' => vD (ℍ := ℍ) ι A ls'' δ) =
+        wpTS ls e (fun ls'' => vD (ℍ := ℍ) ι A' ls'' δ')
       simp only [vD_tyEq ι A A' δ δ' h]
   | .arr A C, C', δ, δ', h, ls, e => by
       cases C' <;> simp only [CTyEqD] at h
       rename_i A' C'
       funext ρ
-      show (∀ v, (vD ι A ls δ v ─⋆ cD ι C ls δ (.app e (.val v))) ρ) =
-        (∀ v, (vD ι A' ls δ' v ─⋆ cD ι C' ls δ' (.app e (.val v))) ρ)
+      show (∀ v, (vD (ℍ := ℍ) ι A ls δ v ─⋆ cD (ℍ := ℍ) ι C ls δ (.app e (.val v))) ρ) =
+        (∀ v, (vD (ℍ := ℍ) ι A' ls δ' v ─⋆ cD (ℍ := ℍ) ι C' ls δ' (.app e (.val v))) ρ)
       simp only [vD_tyEq ι A A' δ δ' h.1, cD_tyEq ι C C' δ δ' h.2]
   | .top, C', δ, δ', h, ls, e => by cases C' <;> simp only [CTyEqD] at h; rfl
   | .all x b C, C', δ, δ', h, ls, e => by
       cases C' <;> simp only [CTyEqD] at h
       rename_i x' b' C'
       funext ρ
-      show (∀ α : L, (⌜LtLifeD δ b α⌝ ─⋆ cD ι C ls (δ.extend x α) (.app e (.val .unit))) ρ) =
-        (∀ α : L, (⌜LtLifeD δ' b' α⌝ ─⋆ cD ι C' ls (δ'.extend x' α) (.app e (.val .unit))) ρ)
+      show (∀ α : L, (⌜LtLifeD δ b α⌝ ─⋆
+          cD (ℍ := ℍ) ι C ls (δ.extend x α) (.app e (.val .unit))) ρ) =
+        (∀ α : L, (⌜LtLifeD δ' b' α⌝ ─⋆
+          cD (ℍ := ℍ) ι C' ls (δ'.extend x' α) (.app e (.val .unit))) ρ)
       simp only [LtLifeD, h.1, cD_tyEq ι C C' _ _ (h.2 _)]
-  | .amp C D, C', δ, δ', h, ls, e => by cases C' <;> simp only [CTyEqD] at h; rfl
-  | .nu C, C', δ, δ', h, ls, e => by cases C' <;> simp only [CTyEqD] at h; rfl
+  | .amp _ _, C', δ, δ', h, ls, e => by cases C' <;> simp only [CTyEqD] at h; rfl
+  | .nu _, C', δ, δ', h, ls, e => by cases C' <;> simp only [CTyEqD] at h; rfl
   | .eff _ _ _ _ _ _, C', δ, δ', h, ls, e => by cases C' <;> simp only [CTyEqD] at h; rfl
+end
 
 /-! ### The typing's lifetime premise, read in `L` -/
 
@@ -550,6 +629,41 @@ theorem entailsLeD_of_entailsLe {Δ : LifeCtx} {a b : Lifetime.Life} (h : Δ.Ent
   by_contra hlt
   have : f n' < f m' := rankIn_strict _ (interpD_mem_valsD δ a hm') (not_le.mp hlt)
   exact absurd hle (not_le.mpr this)
+
+/-! ### The borrow rules' fresh lifetime, through `ι`
+
+Core's borrow constants (`withbor2_compatX` and the rest) take the fresh lifetime from the model's
+`И` (6.64/6.65's frame rules): every slot `α` below a bound the proof chooses, at which the borrow's
+cell is made. The callback's `∀` then has to be instantiated at that lifetime. Over `L` it is
+instantiated at `ι α`, and the three facts below are what the proofs read there: a `Mut` borrow
+and a `[−]` at the slot's position are the model's at the slot, and the bound can be chosen so that
+every slot below it is below the callback's bound in `L`, given a slot below every lifetime of
+`L`. -/
+
+/-- `ℓ ↦ M_{ι α}` over `L` is the model's `ℓ ↦ M_α` at the slot `α`. -/
+theorem ptoMutD_slot (ι : Slots L) (l : Loc) (α : Life) (ls : List SRec)
+    (P : List SRec → Val → WProp) : ptoMutD ι l (ι α) ls P = ptoMutS l α ls P := by
+  funext ρ
+  simp only [ptoMutD, ptoMutS, ι.le_iff]
+
+/-- `[ι α]` over `L` is the model's `[α]` at the slot `α`. -/
+theorem outlivesD_slot (ι : Slots L) (ρ : WRes) (α : Life) : OutlivesD ι ρ (ι α) ↔ Outlives ρ α := by
+  refine forall_congr' fun _ => forall_congr' fun ψ => imp_congr_right fun _ => ?_
+  cases ψ with
+  | own v => exact Iff.rfl
+  | imm i => exact ι.lt_iff
+  | «mut» m => exact ι.lt_iff
+
+theorem boxD_slot (ι : Slots L) (α : Life) (P : WProp) : boxD ι (ι α) P = box α P := by
+  funext ρ
+  exact propext (and_congr_right fun _ => outlivesD_slot ι ρ α)
+
+/-- **The fresh bound**: below any slot `a` and any lifetime `m` of `L` there is a slot `b` every
+slot below which sits below `m`, when some slot sits below `m`. -/
+theorem fresh_bound (ι : Slots L) (a : Life) {m : L} (hm : ∃ s, ι s < m) :
+    ∃ b : Life, b ≤ a ∧ ∀ α, α < b → ι α < m := by
+  obtain ⟨s, hs⟩ := hm
+  refine ⟨a ⊓ s, inf_le_left, fun α hα => lt_trans (ι.strictMono (lt_of_lt_of_le hα inf_le_right)) hs⟩
 
 /-! ### `∀E` -/
 

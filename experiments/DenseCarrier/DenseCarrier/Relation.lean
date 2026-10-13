@@ -4,8 +4,9 @@ import DenseCarrier.Carrier
 # DenseCarrier — Core's relation over the lifetime order `L`, at the fragment `GapWitness` reads
 
 The clauses are `Core/Relation.lean`'s, at the formers `GapWitness.lean` and `SegShift.lean`
-use (`1`, `Mut`, `F`, `∀`) and the ones the `∀` rules of the fundamental property meet beside
-them (`[@a]`, `⊸`, `⊤`). Each clause is Core's with these changes, and no other:
+use (`1`, `Mut`, `F`, `∀`), the ones the `∀` rules of the fundamental property meet beside them
+(`[@a]`, `⊸`, `⊤`), and those of a borrow constant's type (`U`, `Ref`, `⊗`). Each clause is
+Core's with these changes, and no other:
 
 * `δ` is `LSubD L` and `@aδ` is `interpD` (values in `L`, not `ℕ`);
 * the `∀` clause ranges over `α : L`;
@@ -49,9 +50,15 @@ def ptoMutD (ι : Slots L) (l : Loc) (α : L) (ls : List SRec) (P : List SRec �
     α ≤ ι b ∧ ρ = ResU.single l (CellU.mutOf b u σ h Q hw) ∧ ofS Q = P ls₀ ∧
     (∀ x, x ∈ ls₀ ↔ (x ∈ ls ∧ x.2 ⊐ b)) ∧ ∀ ls' u' σ', P ls' u' σ' → σ'.InStratum b
 
+mutual
 /-- `𝒱⟦A⟧(ls)δ(v)` at the fragment's value types (`vCE none true`'s clauses). -/
 def vD (ι : Slots L) : VTy → List SRec → LSubD L → Val → WProp
   | .unit, _, _, v => ⌜v = .unit⌝
+  | .tensor A B, ls, δ, v =>
+      ex fun v₁ => ex fun v₂ => ⌜v = .pair v₁ v₂⌝ ⋆ vD ι A ls δ v₁ ⋆ vD ι B ls δ v₂
+  | .thunk C, ls, δ, v => fun ρ => ∀ ls', Ext ls ls' ρ → cD ι C ls' δ (forceE C (.val v)) ρ
+  | .ref A, ls, δ, v =>
+      ex fun ℓ => ex fun v' => ⌜v = .loc ℓ⌝ ⋆ ptoOwn ℓ v' ⋆ vD ι A ls δ v'
   | .box a A, ls, δ, v => atLifeD δ a fun α => boxD ι α (vD ι A ls δ v)
   | .mut a A, ls, δ, v =>
       atLifeD δ a fun α => ex fun ℓ => ⌜v = .loc ℓ⌝ ⋆
@@ -66,10 +73,15 @@ def cD (ι : Slots L) : CTy → List SRec → LSubD L → Expr → WProp
   | .all x c C, ls, δ, e => fun ρ =>
       ∀ α : L, (⌜LtLifeD δ c α⌝ ─⋆ cD ι C ls (δ.extend x α) (.app e (.val .unit))) ρ
   | _, _, _, _ => fun _ => False
+end
 
+mutual
 /-- The fragment's value types. -/
 def FragV : VTy → Prop
   | .unit => True
+  | .tensor A B => FragV A ∧ FragV B
+  | .thunk C => FragC C
+  | .ref A => FragV A
   | .box _ A => FragV A
   | .mut _ A => FragV A
   | _ => False
@@ -81,6 +93,7 @@ def FragC : CTy → Prop
   | .top => True
   | .all _ _ C => FragC C
   | _ => False
+end
 
 /-- `⊛_{x ∈ dom(Γ)} 𝒱⟦Γ(x)⟧(ls)δ(γ(x))` (`gSepC`). -/
 def gSepD (ι : Slots L) (ls : List SRec) (δ : LSubD L) : Ctx VTy → List Val → WProp

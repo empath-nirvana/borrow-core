@@ -83,54 +83,75 @@ theorem ptoMutD_map (ι : Slots L) (π : L ≃o L) (l : Loc) (α : L) (ls : List
   funext ρ
   simp only [ptoMutD, Slots.map_apply, π.le_iff_le]
 
+mutual
 /-- **The value relation is invariant under every order automorphism of `L`.** -/
 theorem vD_map (ι : Slots L) (π : L ≃o L) : ∀ (A : VTy) (ls : List SRec) (δ : LSubD L),
-    vD (ι.map π) A ls (δ.map π) = vD ι A ls δ
+    vD (ℍ := ℍ) (ι.map π) A ls (δ.map π) = vD (ℍ := ℍ) ι A ls δ
   | .unit, _, _ => rfl
+  | .tensor A B, ls, δ => by
+      funext v
+      show (ex fun v₁ => ex fun v₂ => ⌜v = .pair v₁ v₂⌝ ⋆
+          vD (ℍ := ℍ) (ι.map π) A ls (δ.map π) v₁ ⋆ vD (ℍ := ℍ) (ι.map π) B ls (δ.map π) v₂) =
+        (ex fun v₁ => ex fun v₂ => ⌜v = .pair v₁ v₂⌝ ⋆
+          vD (ℍ := ℍ) ι A ls δ v₁ ⋆ vD (ℍ := ℍ) ι B ls δ v₂)
+      simp only [vD_map ι π A ls δ, vD_map ι π B ls δ]
+  | .thunk C, ls, δ => by
+      funext v ρ
+      show (∀ ls', Ext ls ls' ρ → cD (ℍ := ℍ) (ι.map π) C ls' (δ.map π) (forceE C (.val v)) ρ) =
+        (∀ ls', Ext ls ls' ρ → cD (ℍ := ℍ) ι C ls' δ (forceE C (.val v)) ρ)
+      simp only [cD_map ι π C]
+  | .ref A, ls, δ => by
+      funext v
+      show (ex fun ℓ => ex fun v' => ⌜v = .loc ℓ⌝ ⋆ ptoOwn ℓ v' ⋆
+          vD (ℍ := ℍ) (ι.map π) A ls (δ.map π) v') =
+        (ex fun ℓ => ex fun v' => ⌜v = .loc ℓ⌝ ⋆ ptoOwn ℓ v' ⋆ vD (ℍ := ℍ) ι A ls δ v')
+      simp only [vD_map ι π A ls δ]
   | .box a A, ls, δ => by
       funext v
-      show atLifeD (δ.map π) a (fun α => boxD (ι.map π) α (vD (ι.map π) A ls (δ.map π) v)) =
-        atLifeD δ a (fun α => boxD ι α (vD ι A ls δ v))
+      show atLifeD (δ.map π) a (fun α => boxD (ι.map π) α
+          (vD (ℍ := ℍ) (ι.map π) A ls (δ.map π) v)) =
+        atLifeD δ a (fun α => boxD ι α (vD (ℍ := ℍ) ι A ls δ v))
       rw [atLifeD_map, vD_map ι π A ls δ]
       simp only [boxD_map]
   | .mut a A, ls, δ => by
       funext v
       show atLifeD (δ.map π) a (fun α => ex fun ℓ => ⌜v = .loc ℓ⌝ ⋆
-          ptoMutD (ι.map π) ℓ α ls (fun ls₀ => vD (ι.map π) A ls₀ (δ.map π))) =
+          ptoMutD (ι.map π) ℓ α ls (fun ls₀ => vD (ℍ := ℍ) (ι.map π) A ls₀ (δ.map π))) =
         atLifeD δ a (fun α => ex fun ℓ => ⌜v = .loc ℓ⌝ ⋆
-          ptoMutD ι ℓ α ls (fun ls₀ => vD ι A ls₀ δ))
+          ptoMutD ι ℓ α ls (fun ls₀ => vD (ℍ := ℍ) ι A ls₀ δ))
       rw [atLifeD_map]
       simp only [vD_map ι π A, ptoMutD_map]
-  | .tensor _ _, _, _ | .zero, _, _ | .sum _ _, _, _ | .thunk _, _, _ | .ref _, _, _
-  | .imm _ _, _, _ | .bang _, _, _ | .unk, _, _ | .tvar _, _, _ | .mu _, _, _ | .int _, _, _
-  | .fam _, _, _ | .opq _, _, _ => rfl
+  | .zero, _, _ | .sum _ _, _, _ | .imm _ _, _, _ | .bang _, _, _ | .unk, _, _
+  | .tvar _, _, _ | .mu _, _, _ | .int _, _, _ | .fam _, _, _ | .opq _, _, _ => rfl
 
 /-- **The computation relation is invariant under every order automorphism of `L`.** At `∀` the
 quantifier over `L` is re-indexed by `π`, which needs `π` onto. -/
 theorem cD_map (ι : Slots L) (π : L ≃o L) : ∀ (C : CTy) (ls : List SRec) (δ : LSubD L) (e : Expr),
     cD (ℍ := ℍ) (ι.map π) C ls (δ.map π) e = cD (ℍ := ℍ) ι C ls δ e
   | .ret A, ls, δ, e => by
-      show wpTS ls e (fun ls'' => vD (ι.map π) A ls'' (δ.map π)) =
-        wpTS ls e (fun ls'' => vD ι A ls'' δ)
+      show wpTS ls e (fun ls'' => vD (ℍ := ℍ) (ι.map π) A ls'' (δ.map π)) =
+        wpTS ls e (fun ls'' => vD (ℍ := ℍ) ι A ls'' δ)
       simp only [vD_map]
   | .arr A C, ls, δ, e => by
       funext ρ
-      show (∀ v, (vD (ι.map π) A ls (δ.map π) v ─⋆
-          cD (ι.map π) C ls (δ.map π) (.app e (.val v))) ρ) =
-        (∀ v, (vD ι A ls δ v ─⋆ cD ι C ls δ (.app e (.val v))) ρ)
+      show (∀ v, (vD (ℍ := ℍ) (ι.map π) A ls (δ.map π) v ─⋆
+          cD (ℍ := ℍ) (ι.map π) C ls (δ.map π) (.app e (.val v))) ρ) =
+        (∀ v, (vD (ℍ := ℍ) ι A ls δ v ─⋆ cD (ℍ := ℍ) ι C ls δ (.app e (.val v))) ρ)
       simp only [vD_map, cD_map ι π C]
   | .top, _, _, _ => rfl
   | .all x c C, ls, δ, e => by
       funext ρ
       show (∀ α' : L, (⌜LtLifeD (δ.map π) c α'⌝ ─⋆
-          cD (ι.map π) C ls ((δ.map π).extend x α') (.app e (.val .unit))) ρ) =
-        (∀ α : L, (⌜LtLifeD δ c α⌝ ─⋆ cD ι C ls (δ.extend x α) (.app e (.val .unit))) ρ)
+          cD (ℍ := ℍ) (ι.map π) C ls ((δ.map π).extend x α') (.app e (.val .unit))) ρ) =
+        (∀ α : L, (⌜LtLifeD δ c α⌝ ─⋆
+          cD (ℍ := ℍ) ι C ls (δ.extend x α) (.app e (.val .unit))) ρ)
       apply propext
       rw [π.surjective.forall]
       refine forall_congr' fun α => ?_
       rw [← LSubD.map_extend, cD_map ι π C ls (δ.extend x α)]
       simp only [ltLifeD_map]
   | .amp _ _, _, _, _ | .nu _, _, _, _ | .eff _ _ _ _ _ _, _, _, _ => rfl
+end
 
 theorem gSepD_map (ι : Slots L) (π : L ≃o L) (ls : List SRec) (δ : LSubD L) :
     ∀ (Γ : Ctx VTy) (γ : List Val), gSepD (ι.map π) ls (δ.map π) Γ γ = gSepD ι ls δ Γ γ
