@@ -67,14 +67,14 @@ structure LSubD (L : Type) where
   entries : List (LifeVar × L)
 
 namespace LSubD
-variable {L : Type}
+variable {L L' L'' : Type}
 
 def find? (δ : LSubD L) (x : LifeVar) : Option L := Lifetime.assocFind x δ.entries
 
 def extend (δ : LSubD L) (x : LifeVar) (α : L) : LSubD L := ⟨(x, α) :: δ.entries⟩
 
-/-- `δ` moved by a map of `L`. -/
-def map (φ : L → L) (δ : LSubD L) : LSubD L := ⟨δ.entries.map fun p => (p.1, φ p.2)⟩
+/-- `δ` moved by a map of lifetimes. -/
+def map (φ : L → L') (δ : LSubD L) : LSubD L' := ⟨δ.entries.map fun p => (p.1, φ p.2)⟩
 
 theorem find?_extend (δ : LSubD L) (x : LifeVar) (α : L) (y : LifeVar) :
     (δ.extend x α).find? y = if x = y then some α else δ.find? y := by
@@ -88,7 +88,7 @@ theorem find?_extend_ne (δ : LSubD L) {x y : LifeVar} (α : L) (h : x ≠ y) :
     (δ.extend x α).find? y = δ.find? y := by
   rw [find?_extend, if_neg h]
 
-theorem assocFind_map (φ : L → L) (x : LifeVar) :
+theorem assocFind_map (φ : L → L') (x : LifeVar) :
     ∀ es : List (LifeVar × L),
       Lifetime.assocFind x (es.map fun p => (p.1, φ p.2)) = (Lifetime.assocFind x es).map φ
   | [] => rfl
@@ -98,17 +98,18 @@ theorem assocFind_map (φ : L → L) (x : LifeVar) :
       · rfl
       · exact assocFind_map φ x t
 
-theorem find?_map (φ : L → L) (δ : LSubD L) (x : LifeVar) :
+theorem find?_map (φ : L → L') (δ : LSubD L) (x : LifeVar) :
     (δ.map φ).find? x = (δ.find? x).map φ :=
   assocFind_map φ x δ.entries
 
-theorem map_extend (φ : L → L) (δ : LSubD L) (x : LifeVar) (α : L) :
+theorem map_extend (φ : L → L') (δ : LSubD L) (x : LifeVar) (α : L) :
     (δ.extend x α).map φ = (δ.map φ).extend x (φ α) := rfl
 
-theorem map_map (φ ψ : L → L) (δ : LSubD L) : (δ.map φ).map ψ = δ.map (ψ ∘ φ) := by
+theorem map_map (φ : L → L') (ψ : L' → L'') (δ : LSubD L) :
+    (δ.map φ).map ψ = δ.map (ψ ∘ φ) := by
   simp [map, Function.comp_def]
 
-theorem map_congr {φ ψ : L → L} {δ : LSubD L} (h : ∀ p ∈ δ.entries, φ p.2 = ψ p.2) :
+theorem map_congr {φ ψ : L → L'} {δ : LSubD L} (h : ∀ p ∈ δ.entries, φ p.2 = ψ p.2) :
     δ.map φ = δ.map ψ := by
   simp only [map, LSubD.mk.injEq]
   exact List.map_congr_left fun p hp => by rw [h p hp]
@@ -174,7 +175,8 @@ theorem interpD_applySub {σ : Lifetime.LSubst} {δ δ' : LSubD L} : ∀ (c : Li
         ihq (fun y hy => h y (by simp [Lifetime.Life.mentions, hy]))]
 
 /-- A monotone map keeping `⊤` commutes with `@aδ`. -/
-theorem interpD_map {φ : L → L} (hφ : Monotone φ) (hφt : φ ⊤ = ⊤) (δ : LSubD L) :
+theorem interpD_map {L' : Type} [LinearOrder L'] [OrderTop L'] {φ : L → L'} (hφ : Monotone φ)
+    (hφt : φ ⊤ = ⊤) (δ : LSubD L) :
     ∀ a : Lifetime.Life, interpD (δ.map φ) a = (interpD δ a).map φ := by
   intro a
   induction a with
