@@ -217,6 +217,17 @@ effect).
   `finOK_of_finRow`, through `ownWorld` and `wpG_seg`). On complete runs, given that each fired
   finaliser runs alone to a value or an uncaught raise (`FinAloneAt`): `finaliserOrder_at`
   (`CancelRun`, `UnwindRun`).
+- **Inversions, and what no derivation types** (`SPEC.md` §19 *Laws* item 4 and *Programs*,
+  `Inversions.lean`, `Rejections.lean`). Each inversion is an induction on `CDerives` that carries a
+  class of judgements through the rules concluding with their premise's term: a variable is read at
+  a view of its live slot's type (`der_var`), an application is typed by a rule that concludes with
+  one (`der_app`), a λ-value through the rule that types its body or as a constant (`der_lam`),
+  `swap` at its axiom alone (`der_swap`), and every free variable of a typed term has a live slot
+  (`fv_live`). A clause's linear or affine `κ` is neither dropped nor used twice, nor cancelled at a
+  linear operation (`refuses_R_clauses`, `clauseRefusals_pinned`), and `at05`, `at06`, `at08` and
+  `at13` have no derivation at all (`not_der_at05`, …). `at08Once`, `at08` with the copy used once,
+  is typed and every run of it ends at `()` (`d_at08Once`, `at08Once_runs`; the kernel program
+  `at08-once`). A rule added to `CDerives` adds a case to each inversion.
 - **Embedding.** `embed : DerivesWf Δ Γ e T → CDerives Δ (cbvCtx Γ) e (.val (cbv T))` for every
   `DerivesWf` rule, and `adequacy_of_derivesWf`. `EmbeddingExamples.lean` runs BoLo's baseline
   programs through it.

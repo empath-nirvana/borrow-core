@@ -312,6 +312,21 @@ import Frontend.Check.Externs
 #print axioms BoCa.Fig16.LogRel.Core.CancelIntercept.dAt_progOutT
 #print axioms BoCa.Fig16.LogRel.Core.CancelIntercept.progOutT_cancels
 #print axioms BoCa.Fig16.LogRel.Core.CancelIntercept.progOutT_cancel_prefix
+-- SPEC §19, *Laws* item 4 and *Programs*: a continuation's use, and the programs no derivation types
+#print axioms BoCa.Fig16.LogRel.Core.Inversions.fv_live
+#print axioms BoCa.Fig16.LogRel.Core.Inversions.der_var
+#print axioms BoCa.Fig16.LogRel.Core.Inversions.der_app
+#print axioms BoCa.Fig16.LogRel.Core.Inversions.der_lam
+#print axioms BoCa.Fig16.LogRel.Core.Inversions.der_swap
+#print axioms BoCa.Fig16.LogRel.Core.Inversions.refuses_R_clauses
+#print axioms BoCa.Fig16.LogRel.Core.Inversions.clauseRefusals_pinned
+#print axioms BoCa.Fig16.LogRel.Core.Rejections.not_forget_kappa
+#print axioms BoCa.Fig16.LogRel.Core.Rejections.not_der_at05
+#print axioms BoCa.Fig16.LogRel.Core.Rejections.not_der_at06
+#print axioms BoCa.Fig16.LogRel.Core.Rejections.not_der_at08
+#print axioms BoCa.Fig16.LogRel.Core.Rejections.not_der_at13
+#print axioms BoCa.Fig16.LogRel.Core.Rejections.d_at08Once
+#print axioms BoCa.Fig16.LogRel.Core.Rejections.at08Once_runs
 -- SPEC §26 (entry 25): a λ whose binder is dead, at an effectful returner
 #print axioms BoCa.Fig16.LogRel.Core.gDenC_unit_dead
 #print axioms BoCa.Fig16.LogRel.Core.lamDead_compatC

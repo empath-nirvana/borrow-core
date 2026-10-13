@@ -1,6 +1,7 @@
 import Core.EffPrograms
 import Core.EffCancel
 import Core.EffExamples
+import Core.Rejections
 
 /-!
 # Backend — kernel programs
@@ -17,6 +18,9 @@ lowers their operations in `Backend/Clos/Capture.lean` and `Backend/Clos/Unwind.
   outside the region (`prog₃_run`); `progRe`, the region re-entering the site of the error's
   name, whose dead inner instance does not catch it and whose live outer one does (`progRe_run`);
   and `progOut`, `prog` under a live outer handler of the error's name (`progOut_run`).
+- `Core/Rejections.lean`'s `at08Once`, the typed control of the refused AT08: a clause that moves
+  `κ` through a cell with `alloc`, `swap` and `free`, and resumes it once (`d_at08Once`,
+  `at08Once_runs`).
 - Terms that exercise the lowering's other shapes (*Shapes*, below).
 
 The cancels and the shapes are not typed: each stage is compared with `Support`'s interpreter on
@@ -159,6 +163,7 @@ def kernelPrograms : List (String × BoCa.Expr) :=
     ("cancel-reraised", cancelKept),
     ("cancel-reentered", BoCa.Fig16.LogRel.Core.CancelIntercept.progRe),
     ("cancel-propagated", BoCa.Fig16.LogRel.Core.CancelIntercept.progOut),
+    ("at08-once", BoCa.Fig16.LogRel.Core.Rejections.at08Once),
     ("loop-tail", Shapes.loopTail 100000),
     ("loop-captured", Shapes.loopCaptured 100000),
     ("recursive-yield", Shapes.recYield 20),

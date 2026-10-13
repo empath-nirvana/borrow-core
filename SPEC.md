@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 0.49 · 2026-10-13
+Version 0.50 · 2026-10-13
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -2401,7 +2401,8 @@ questions:
   - shutdown.
 
   An affine `κ` is consumed by exactly one of its two entries. So "a continuation cannot be
-  dropped" (#185, `forget_not_lolli`) is answered by the destructor `cancel`, not by a `forget`.
+  dropped" (#185, `forget_not_lolli`) is answered by the destructor `cancel`, not by a `forget`:
+  in Core, `forget κ` has no derivation at `1` (`not_forget_kappa`, *Laws* item 4).
   A strictly linear `κ` has no `cancel`, for must-complete computations.
 
 ### Names: which handler handles an operation
@@ -2899,6 +2900,22 @@ does not hold. Safety is stated of the runs of typed programs (`Core/EffSafety.l
      exactly as `raise p` steps there: the frame that catches it drops them (`abort_absorbs`;
      `abort_to`, `abort_app`).
    - *Sequencing*, `op(v) to x. P = op(v; y. (k y to x. P))`, is not yet a Core theorem.
+4. **Continuations are linear or affine; `unr` is tolerated.** A clause's `κ` is at `kTy`
+   (*Kinds of operation*): at a linear or affine operation a thunk of an `&`, which is not
+   persistent, its cancel branch at `⊤` at a linear one. So a typed clause uses `κ` as its qualifier
+   allows, by inversion of `CDerives` (`Core/Inversions.lean`):
+   - At every resuming linear or affine operation, every context and every cancel row, a clause
+     that drops `κ` (R1), resumes it twice (R2), or cancels and then resumes it (R4) has no
+     derivation at its clause type; at every linear one, neither has a clause that cancels it (R3)
+     (`refuses_R_clauses`). The refusals are of `κ`'s use, not of the clauses' form: at the clause
+     type of a linear `1 ↠ 1` a clause that resumes `κ` once is typed, and a clause that cancels
+     `κ` is typed at an affine operation and refused at a linear one (`clauseRefusals_pinned`).
+   - `forget κ` has no derivation at `1` (`not_forget_kappa`), and a handler whose clause stores
+     `κ` in a cell and reads it out twice has none at all (`not_der_at08`). Moving `κ` through a
+     cell and resuming it once is typed (`d_at08Once`).
+
+   An unrestricted `κ` is `!`, and a clause may use it any number of times. That every run of a
+   typed program uses each linear or affine `κ` it catches once (S6) is §25 *Open*.
 5. **A cancel is not interceptable, and the cancelled region's frames are dead.** `κ`'s cancel
    branch runs the region with its handler frames and cancel delimiters removed (`Kont.dead`), so
    a dead frame catches nothing (`hasHnd_dead`, `catches_dead`, `noCC_dead`). Read prefix-closed
@@ -3015,6 +3032,17 @@ interpreter has §19's steps, and `eval` gives each program's answer by `decide`
 5. `takeProg n`, for every `n`: `take` is a state-passing handler, `U(N ⊸ F(1 ⊕ 1))`.
 6. `storeCancel`: `κ` stored in a cell, taken back and cancelled.
 
+**Rejected** (`Core/Rejections.lean`). No derivation types these, at any context and any judgement,
+each by inversion of `CDerives` (`Core/Inversions.lean`):
+- `at05`: an answering handler whose body uses its `Mut` capability twice, `(m, m)`
+  (`not_der_at05`);
+- `at06`: a clause that releases a cell the handled body also releases; a clause is at a `!` type,
+  so it captures only persistent values (`not_der_at06`);
+- `at08`: a clause that stores `κ` in a cell and reads it out twice (`not_der_at08`). `at08Once`,
+  the same clause with the copy used once, is typed (`d_at08Once`), and every run of it ends at `()`
+  with the memory empty (`at08Once_runs`); it is the kernel program `at08-once`;
+- `at13`: a clause that forgets `κ` (`not_der_at13`).
+
 ### Lowering
 
 The backend lowers §19 in two passes over the closure IR (`Backend/Clos/Capture.lean`, then
@@ -3116,8 +3144,9 @@ cell, §15).
 **Not lowered**, rejected with a message: a name that has both control and abortive operations.
 
 **As built** (`Backend/Kernel.lean`, `bcc kernel`, `scripts/compile-kernel.sh`). Every
-acceptance program, with its native variants, `Core/EffExamples.lean`'s two handled programs and
-`Core/EffCancel.lean`'s cancels `prog₃`, `progRe` and `progOut`, compiles through every stage
+acceptance program, with its native variants, `Core/EffExamples.lean`'s two handled programs,
+`Core/EffCancel.lean`'s cancels `prog₃`, `progRe` and `progOut`, and `Core/Rejections.lean`'s
+`at08Once` (`κ` moved through a cell, `at08-once`), compiles through every stage
 with the same answer and `live 0`, as do terms for the shapes above (100000 operations of a loop
 as direct calls, and as suspensions resumed in tail position, both in constant stack; recursion
 through a resumption point; two possible callees; forwarding with and without a cancel; a
@@ -3809,6 +3838,9 @@ Decisions D3 and D5 (2026-10-07). Tier 1's typing needs three things today's rul
   Terms carry no rows, so this is let-polymorphism by substitution: one closed function used at as
   many rows as it has occurrences. The value restriction holds: only a closed λ-value is bound.
 - The term is the let itself, `(λx. N) (λy. b)`; the rule adds no term former and no type former.
+- Core's types have no row variable: a function used at several rows is let-bound and typed at each
+  occurrence. Tier 1's typing has a row `∀` in its open types, outside Core, and reads it through
+  this rule.
 
       Γ = Γ₁, Γ₂    Γ₁'s live slots persistent    H a value form over Γ₁
       Δ; Γ₁ ⊢ H : !U(A ⊸ F_Σ R) ⊗ ⊗_i C_i       Δ; Γ₂ ⊢ e : F_{Σ, n : E} A
@@ -3854,6 +3886,9 @@ No change to the machine, the relation, `wpTS`, `wpG` or `ewpTS`.
   their statements, over the extended judgment.
 - `CDerives` gains `letPoly` and `effHandleV`, loses the constructor `effHandle` (now the theorem
   `CDerives.effHandle`), and `effThen`'s finaliser premise is at `F 1`. No new index.
+- S5 holds at every instance of its parameter, a finaliser that lets the raises of some names
+  escape, not only at the empty set: `unwind_prefix` and `cancel_prefix` at `FinRow` (§19 *Laws*
+  items 5 and 6).
 
 ### Baseline
 
@@ -3863,14 +3898,7 @@ glue (§12's destructors) already was.
 
 ### Open
 
-- **S6 (the use of a continuation)**: §25 gives a linear or affine `κ` a unit cell, so BoLo's leak
-  freedom and safety see a dropped or twice-used `κ`. A ghost obligation in `contShare` does not: a
-  closed program's relation at its pure type is `wpTS`, where no protocol table occurs.
-- OQ-7 (finalisers that resume, or clean up asynchronously). S5 holds at every instance of its
-  parameter, a finaliser that lets the raises of some names escape (`unwind_prefix` and
-  `cancel_prefix` at `FinRow`, §19 *Laws*).
-- Row variables in Core's types. Tier 1's typing has a row `∀` in its open types,
-  outside Core, read through this entry's `[let-poly]`.
+- OQ-7 (finalisers that resume, or clean up asynchronously).
 
 ## 25. Entry 24 — the capture cell: a linear or affine continuation owns a unit cell
 
@@ -3963,7 +3991,9 @@ no `[TR]` lemma and no borrow rule changes; the cell is handled by 6.141, 6.142,
   properties of the cell, open. `LiveOK` and leak freedom are Core theorems (`liveOK_closed`,
   `leakFree_closed`; §19 *Laws*, *Safety*), and so are the two machine facts the reduction reads: a
   capture event allocates `κ`'s cell (`catchEv_cell`), and a use of `κ` releases it three steps
-  later (`use_frees_cell`). The reduction itself is not yet a Core theorem.
+  later (`use_frees_cell`). The reduction itself is not yet a Core theorem. The typing's side is:
+  a clause that drops `κ`, uses it twice, or cancels a linear one has no derivation
+  (`refuses_R_clauses`, §19 *Laws* item 4).
 
 ## 26. Entry 25 — a λ whose binder is dead, at an effectful returner
 
@@ -4348,6 +4378,14 @@ with no change to `CDerives`, the machine or the relation: `Expr.RaiseOK`, `Heap
 them (`raiseOK_reach`), and every cancel they reach keeps errors of those names (`KCfinNamed`,
 `CancelsNamed`, `cancelsNamed_of_derivesAt`).
 
+A continuation's use (§19 *Laws* item 4) and the programs no derivation types (§19 *Programs*) are
+stated by inversion of `CDerives`, with no change to `CDerives`, the machine or the relation: the
+inversions (`fv_live`, `der_var`, `der_app`, `der_lam`, `der_swap`, …) and `refuses_R_clauses` in
+`Core/Inversions.lean`, and `not_der_at05`, `not_der_at06`, `not_der_at08`, `not_der_at13` and the
+typed control `at08Once` (the kernel program `at08-once`) in `Core/Rejections.lean`. Each inversion
+is an induction on `CDerives`, so a rule added to `CDerives` adds a case to each
+(`Core/Inversions.lean`, *Cost*).
+
 The unwind and the cancel (§19 *Laws* items 5 and 6) are stated of Core's machine in
 `Core/EffCancelRuns.lean`, with no change to `CDerives`, the machine or the relation. Read
 prefix-closed over paths (`Path`): `unwind_prefix` (`UnwindTr`) and `cancel_prefix` (`CancelTr`),
@@ -4358,6 +4396,16 @@ at finalisers typed at rows of abortive operations (`FinRow`, `finAlone_of_finRo
 ---
 
 ## Changelog
+
+- **0.50** (2026-10-13) — §19 *Laws* item 4: a continuation is used as its qualifier allows. At a
+  resuming linear or affine operation a clause that drops `κ`, resumes it twice, or cancels and
+  then resumes it has no derivation, and at a linear one neither has a clause that cancels it;
+  `forget κ` has none at `1`. §19 *Programs*: four programs no derivation types (`at05`, `at06`,
+  `at08`, `at13`), each by inversion of `CDerives` (`Core/Inversions.lean`,
+  `Core/Rejections.lean`), and `at08`'s typed control, the kernel program `at08-once`. §24 *Open*
+  keeps OQ-7 alone: S5 at every instance of its parameter is in *Theorems*, the use of a continuation
+  is §25's, and Core's row polymorphism by `[let-poly]` is in *Typing*. No change to the machine,
+  the relation, `CDerives` or the statement of any theorem.
 
 - **0.49** (2026-10-13) — §19 *Laws* items 5 and 6: a cancel is not interceptable and the cancelled
   region's frames are dead, and the finally law, read on every run. From a raise pending under

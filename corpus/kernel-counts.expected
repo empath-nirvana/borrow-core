@@ -14,6 +14,7 @@ cancel-now 0 0 0
 cancel-reraised 0 0 0
 cancel-reentered 0 0 0 # a finaliser's error past the dead inner instance of a re-entered site
 cancel-propagated 0 0 0 # a finaliser's error past a dead handler of its name, to the live one outside
+at08-once 1 0 0 # the cell the clause moves κ through
 loop-tail 0 0 0
 loop-captured 0 0 0
 recursive-yield 20 0 0 # recursion through a resumption point: one frame object per level, reused at each resume
