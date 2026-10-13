@@ -124,8 +124,8 @@ inductive Tm where
   bound to `x` (which frees `s`); otherwise `r`, with `s` still owned. A chain of `when`s on one
   `s` is one `switch` on its tag. -/
   | when (s : Var) (k n : Nat) (x : Var) (b r : Tm)
-  /-- Unreachable: `s` cannot occur here (a variant no enclosing `when` names, or an error no
-  name of which a `reraise` may raise). -/
+  /-- Unreachable: `s` cannot occur here (a variant no enclosing `when` names, or an error a
+  `reraise` cannot raise, since no finaliser raises). -/
   | absurd (s : Var)
   /-- `catch n body`: `inl v` when `body` returns `v`, `inr p` when it raises `p` of the name
   `n`; a raise of another name passes on. `Unwind` lowers it. -/
@@ -138,9 +138,9 @@ inductive Tm where
   /-- `catchAll body`: `inl v` when `body` returns `v`, `inr p` when it raises `p` of any name.
   `Unwind` lowers it. -/
   | catchAll (body : Tm)
-  /-- `reraise p mask`: raise the payload `p`, an error a finaliser raised during a cancel whose
-  name is not in the bitmask `mask` of the cancelled region's names. `Unwind` lowers it. -/
-  | reraise (p : Var) (mask : UInt64)
+  /-- `reraise p`: raise the payload `p`, the first error a finaliser raised during a cancel, at
+  the canceller. `Unwind` lowers it. -/
+  | reraise (p : Var)
   /-- `run f a`: call `f` on `a`, a code that may suspend, and answer its outcome (`inl v`, or
   `inr (payload, κ)`) as a value. `Capture` introduces and lowers it. -/
   | run (f a : Var)

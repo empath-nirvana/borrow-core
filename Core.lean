@@ -14,6 +14,7 @@ import Core.Reborrow
 import Core.FrameRules
 import Core.EffWp
 import Core.EffCancel
+import Core.EffCancelTyped
 import Core.Persistent
 import Core.Compatibility
 import Core.NuRel

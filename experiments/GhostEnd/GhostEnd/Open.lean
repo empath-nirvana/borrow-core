@@ -68,7 +68,7 @@ theorem withbor_of_relendOfTyped (H : RelendOfTyped) {Δ : LifeCtx} {δ : LSub}
         (.app (.app withbor (.val (.loc l))) (.val ⟨.lam (.lam M), .lam⟩))) := by
   intro ρ hρ
   refine (cC_effOf S _ ls δ _ ρ).mpr ?_
-  exact withbor_relend (Row.tab S δ) hP _ v
+  exact withbor_relend (Row.tab S δ) (Row.tab_plainCancel S δ) hP _ v
     (relend_lam2 (opTable_mono _) hM (H Δ δ x b T B S M hδ hx hbx hΔx hT hB hS hD l ls)) ρ hρ
 
 /-- **Not derived.** O15.1 as §15 states it: 6.65 over `ewpTS` at a table that may resume, the

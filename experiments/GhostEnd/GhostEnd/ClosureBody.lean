@@ -278,7 +278,7 @@ theorem withbor_of_rbodyC {δ : LSub} (hδ : Δ.Models δ) {β : Life} (hβ : b.
         (.app (.app withbor (.val (.loc l))) (.val ⟨.lam (.lam M), .lam⟩))) := by
   intro ρ hρ
   refine (cC_effOf S _ ls δ _ ρ).mpr ?_
-  exact withbor_relend (Row.tab S δ) hP _ v
+  exact withbor_relend (Row.tab S δ) (Row.tab_plainCancel S δ) hP _ v
     (relend_lam2 (opTable_mono _) hM (relend_of_rbodyC hT hB hδ hβ h l ls)) ρ hρ
 
 end

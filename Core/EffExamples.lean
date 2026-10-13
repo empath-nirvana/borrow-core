@@ -33,7 +33,7 @@ def hr : Expr := .val (.lam (.var 0))
 
 /-- The program. -/
 def prog : Expr :=
-  bindE cls (bindE hr (hndTerm 1 0 1 (performE (opArgE 1 0 (.val .unit)))))
+  bindE cls (bindE hr (hndTerm 1 [.lin] 0 1 (performE (opArgE 1 0 (.val .unit)))))
 
 theorem cl₀_derives : CDerives LifeCtx.empty [] cl₀ (.val (clauseTy [] .unit (.lin, .unit, .unit))) := by
   refine .bangThunkV (fun _ hs => by simp at hs) rfl (.lam ?_)
@@ -50,7 +50,7 @@ theorem prog_derives : CDerives LifeCtx.empty [] prog (.comp (.ret .unit)) := by
   exact .effHandle (S := []) (E := E₁) (A := .unit) (R := .unit)
     (.left (.left .nil)) (.left (.right .nil)) (.here (.cons .nil)) (.there (.here .nil))
     (by decide) (by simp) (by simp)
-    (.effPerform (o := ⟨1, 0, .lin, .unit, .unit⟩) (by rfl) rfl (.unitI (.cons (.cons .nil))))
+    (.effPerform (o := ⟨1, 0, .lin, .unit, .unit, .ret .unit⟩) (by rfl) rfl (.unitI (.cons (.cons .nil))))
 
 /-- **Every run of the handled program reaches `()` at the empty memory.** -/
 theorem prog_runs {μ₁ : Heap} {e₁ : Expr} (hs : Steps Adequacy.emptyMem prog μ₁ e₁) :
@@ -65,7 +65,7 @@ def clC : Expr :=
 
 /-- The program with an affine operation whose clause cancels `κ`. -/
 def progC : Expr :=
-  bindE (.pair clC (.val .unit)) (bindE hr (hndTerm 1 0 1 (performE (opArgE 1 0 (.val .unit)))))
+  bindE (.pair clC (.val .unit)) (bindE hr (hndTerm 1 [.aff] 0 1 (performE (opArgE 1 0 (.val .unit)))))
 
 theorem clC_derives : CDerives LifeCtx.empty [] clC (.val (clauseTy [] .unit (.aff, .unit, .unit))) := by
   refine .bangThunkV (fun _ hs => by simp at hs) rfl (.lam ?_)
@@ -82,7 +82,7 @@ theorem progC_derives : CDerives LifeCtx.empty [] progC (.comp (.ret .unit)) := 
   exact .effHandle (S := []) (E := [(.aff, .unit, .unit)]) (A := .unit) (R := .unit)
     (.left (.left .nil)) (.left (.right .nil)) (.here (.cons .nil)) (.there (.here .nil))
     (by decide) (by simp) (by simp)
-    (.effPerform (o := ⟨1, 0, .aff, .unit, .unit⟩) (by rfl) rfl (.unitI (.cons (.cons .nil))))
+    (.effPerform (o := ⟨1, 0, .aff, .unit, .unit, .ret .unit⟩) (by rfl) rfl (.unitI (.cons (.cons .nil))))
 
 /-- **Every run of the cancelling program reaches `()` at the empty memory.** -/
 theorem progC_runs {μ₁ : Heap} {e₁ : Expr} (hs : Steps Adequacy.emptyMem progC μ₁ e₁) :

@@ -63,7 +63,7 @@ already is, and is forced by using it as it stands.  A thunk of `F_Σ A` is forc
 `F A`. -/
 def forceE : CTy → Expr → Expr
   | .ret _, e => .app e (.val .unit)
-  | .eff _ _ _ _ _ _, e => .app e (.val .unit)
+  | .eff _ _ _ _ _ _ _, e => .app e (.val .unit)
   | _, e => e
 
 /-- An entry of the relation's type-variable environment: the closed type the variable stands
@@ -162,26 +162,37 @@ def cC : CTy → List SRec → LSub → Expr → WProp
       ∀ α, (⌜LtLife δ c α⌝ ─⋆ cC C ls (δ.extend x α) (.app e (.val .unit))) ρ
   | .nu C, ls, δ, e => fun ρ => C.NuOk →
       ∃ R : CPred, R.Le (fun ls' e' => cB (some (nuEnv C R)) C ls' δ e') ∧ R ls e ρ
-  | .eff n i q A B C, ls, δ, e =>
+  | .eff n i q A B fin C, ls, δ, e =>
       ewpTS ls e (opTable (OpTab.ext n i
         ⟨q, B.isZero && q != .lin, fun ls v => vCE none true A ls δ v,
-          fun ls v => vCE none true B ls δ v⟩ (effTab C δ))) (effRet C δ)
-/-- The operation table of a row `F_Σ R`'s layers.  `[spec §19]` -/
+          fun ls v => vCE none true B ls δ v, if capB q B then finObl fin δ else none⟩
+          (effTab C δ))) (effRet C δ)
+/-- The operation table of a row `F_Σ R`'s layers, each capturable entry with its cancel row's
+obligation.  `[spec §19, §27]` -/
 def effTab : CTy → LSub → OpTab
-  | .eff n i q A B C, δ => OpTab.ext n i
+  | .eff n i q A B fin C, δ => OpTab.ext n i
       ⟨q, B.isZero && q != .lin, fun ls v => vCE none true A ls δ v,
-        fun ls v => vCE none true B ls δ v⟩ (effTab C δ)
+        fun ls v => vCE none true B ls δ v, if capB q B then finObl fin δ else none⟩ (effTab C δ)
   | _, _ => OpTab.empty
+/-- The cancel obligation of a cancel row: `none` at `⊤`; otherwise the cancel run at the table
+of the row's layers (`cancelObl (effTab F δ)`, `finObl_eq`).  `[spec §27]` -/
+def finObl : CTy → LSub → Option (List SRec → Expr → WProp)
+  | .top, _ => none
+  | .eff n i q A B fin C, δ => some (cancelObl (OpTab.ext n i
+      ⟨q, B.isZero && q != .lin, fun ls v => vCE none true A ls δ v,
+        fun ls v => vCE none true B ls δ v, if capB q B then finObl fin δ else none⟩
+        (effTab C δ)))
+  | _, _ => some (cancelObl OpTab.empty)
 /-- The answer relation of a row `F_Σ R`: `𝒱⟦R⟧`.  `[spec §19]` -/
 def effRet : CTy → LSub → List SRec → Val → WProp
   | .ret A, δ => fun ls v => vCE none true A ls δ v
-  | .eff _ _ _ _ _ C, δ => effRet C δ
+  | .eff _ _ _ _ _ _ C, δ => effRet C δ
   | _, _ => fun _ _ _ => False
 /-- The answer relation of a row `F_Σ R` under a type-variable environment: `𝒱⟦R⟧` at `η`.
 `[spec §19]` -/
 def effRetE : Option (Nat → TEnt) → CTy → LSub → List SRec → Val → WProp
   | η, .ret A, δ => fun ls v => vCE η true A ls δ v
-  | η, .eff _ _ _ _ _ C, δ => effRetE η C δ
+  | η, .eff _ _ _ _ _ _ C, δ => effRetE η C δ
   | _, _, _ => fun _ _ _ => False
 /-- One unfolding of an observation tree under a type-variable environment: `cC`'s `F`, `&` and
 `F_Σ` clauses with `vCE η` at the answer; a row's operation types are closed and read without
@@ -193,10 +204,11 @@ def cB : Option (Nat → TEnt) → CTy → List SRec → LSub → Expr → WProp
   | η, .ret A, ls, δ, e => wpTS ls e (fun ls'' => vCE η true A ls'' δ)
   | η, .amp C D, ls, δ, e => fun ρ =>
       cB η C ls δ (.app e (.val (.inj₁ .unit))) ρ ∧ cB η D ls δ (.app e (.val (.inj₂ .unit))) ρ
-  | η, .eff n i q A B C, ls, δ, e =>
+  | η, .eff n i q A B fin C, ls, δ, e =>
       ewpTS ls e (opTable (OpTab.ext n i
         ⟨q, B.isZero && q != .lin, fun ls v => vCE none true A ls δ v,
-          fun ls v => vCE none true B ls δ v⟩ (effTab C δ))) (effRetE η C δ)
+          fun ls v => vCE none true B ls δ v, if capB q B then finObl fin δ else none⟩
+          (effTab C δ))) (effRetE η C δ)
   | η, .arr A D, ls, δ, e => fun ρ =>
       ∀ v, (vCE none true A ls δ v ─⋆ cB η D ls δ (.app e (.val v))) ρ
   | _, .top, _, _, _ | _, .all _ _ _, _, _, _ | _, .nu _, _, _, _ =>
@@ -205,7 +217,7 @@ end
 
 theorem effRetE_none : ∀ (C : CTy) (δ : LSub), effRetE none C δ = effRet C δ
   | .ret _, _ => rfl
-  | .eff _ _ _ _ _ C, δ => effRetE_none C δ
+  | .eff _ _ _ _ _ _ C, δ => effRetE_none C δ
   | .arr _ _, _ | .amp _ _, _ | .top, _ | .all _ _ _, _ | .nu _, _ => rfl
 
 /-- `𝒱⟦A⟧(ls)δ(v)`: the relation at a type read with no environment. -/

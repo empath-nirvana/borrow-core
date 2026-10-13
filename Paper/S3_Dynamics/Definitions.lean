@@ -311,20 +311,28 @@ host.
 /-!
 ### — no printed counterpart — handlers, operations and finalisers · `[spec §19]`
 
-`hnd (n, (h_ret, hs)) e` runs `e` under a handler named `n`; `perform (n, (i, v))` and
-`raise (n, (i, v))` are its control and abortive operations; `ubind (N, D) M` is `M` then `N`,
-with the finaliser `D` when `M` unwinds; `ccatch e` catches the reserved name `0`, the cancel of a
-continuation.  A frame *catches* a `raise` of name `n` when it is a handler of `n`, a finaliser,
-a cancel-mode finaliser `cfin`, or (at `n = 0`) a `ccatch`; a `perform` of name `n` is caught
-only by a handler of `n`.
+`hnd (n, (qs, (h_ret, hs))) e` runs `e` under a handler named `n`, whose operations' continuations
+have the qualifiers the tags `qs` record; `perform (n, (i, v))` and `raise (n, (i, v))` are its
+control and abortive operations; `ubind (N, D) M` is `M` then `N`, with the finaliser `D` when `M`
+unwinds; `ccatch e` catches the reserved name `0`, the cancel of a continuation.  A frame
+*catches* a `raise` of name `n` when it is a handler of `n`, a finaliser, a cancel-mode finaliser
+`cfin`, or (at `n = 0`) a `ccatch`; a `perform` of name `n` is caught only by a handler of `n`.
 
-**Cancels.**  A cancel is a `raise` of the reserved name `0` whose payload is a cancel state
-`(N, err)`: the names `N` of the handlers inside the cancelled region, and the first error a
-finaliser of the region raised with a name outside `N` (`cancelVal`).  The handlers inside the
-region never catch it (no handler is named `0`).  At a finaliser the cancel runs `D ()` under
-`cfin`, which catches every `raise` escaping `D`: the first error of a name outside `N` is kept
-in the state, and every other one is suppressed (`errNext`).  At `ccatch` the cancel answers `()`,
-or re-raises the kept error at the canceller.
+**The capture cell** (`[spec §25]`).  At a linear or affine operation, the continuation `κ` the
+`[op]` step hands the clause owns a fresh cell holding `()`, allocated by the ordinary `alloc`
+before the clause runs.  Using `κ` frees it: resuming, and at an affine operation cancelling.  A
+linear `κ`'s cancel branch has no step.  So a `κ` dropped leaves its cell behind, and a `κ` used
+twice frees its cell twice.
+
+**Cancels.**  A cancel is a `raise` of the reserved name `0` whose payload is a cancel state: the
+first error a finaliser of the cancelled region raised, if any (`cancelVal`).  The cancelled region
+is dead: `κ`'s cancel branch runs it with its handler frames and its cancel delimiters removed
+(`Kont.dead`), so no frame of the region catches the cancel, a finaliser's raise or a finaliser's
+operation.  At a finaliser the cancel runs `D ()` under `cfin`.  A raise escaping `D` is caught
+there, and the first error is kept (`errNext`).  An operation of `D` passes the dead region to the
+nearest live handler; if that handler cancels its continuation, the new cancel reaches the running
+finaliser's `cfin`, and the error kept there, the earlier one, wins.  At `ccatch` the cancel answers
+`()`, or re-raises the kept error at the canceller.
 -/
 
 /-- `hnd H e`.  `[spec §19]` -/
@@ -348,8 +356,16 @@ def raiseE (p : Expr) : Expr := .app (.val (.prim .raise)) p
 /-- The payload `(n, (i, v))` of an operation.  `[spec §19]` -/
 def opPayload (n i : UInt32) (v : Val) : Val := .pair (.i32 n) (.pair (.i32 i) v)
 
-/-- The handler value `(n, (h_ret, hs))`.  `[spec §19]` -/
-def hndVal (n : UInt32) (hr hs : Val) : Val := .pair (.i32 n) (.pair hr hs)
+/-- The handler value `(n, (qs, (h_ret, hs)))`: its name, the tags of its operations'
+qualifiers, its answer clause and its clauses.  `[spec §19, §25]` -/
+def hndVal (n : UInt32) (qs hr hs : Val) : Val := .pair (.i32 n) (.pair qs (.pair hr hs))
+
+/-- The `i`-th tag of a right-nested tuple of tags; `2` (unrestricted) where there is none.
+The tags are `0` (linear), `1` (affine) and `2` (unrestricted).  `[spec §25]` -/
+def capTag : Expr → Nat → UInt32
+  | .pair (.prim (.lit (.i32 t))) _, 0 => t
+  | .pair _ r, i + 1 => capTag r i
+  | _, _ => 2
 
 open Classical in
 /-- The `i`-th clause of a right-nested tuple of clauses.  `[spec §19]` -/
@@ -358,27 +374,18 @@ def clauseAt : Expr → Nat → Option Val
   | .pair _ r, i + 1 => clauseAt r i
   | _, _ => none
 
-/-- A list of names as a value: `inj₁ ()` or `inj₂ (m, N)`.  `[spec §19]` -/
-def namesVal : List UInt32 → Val
-  | [] => .inj₁ .unit
-  | m :: N => .inj₂ (.pair (.i32 m) (namesVal N))
-
 /-- An optional error as a value: `inj₁ ()` or `inj₂ E`.  `[spec §19]` -/
 def errVal : Option Val → Val
   | none => .inj₁ .unit
   | some E => .inj₂ E
 
-/-- The cancel payload `(0, (0, (N, err)))`: the names of the handlers of the cancelled region and
-the error kept so far.  `[spec §19]` -/
-def cancelVal (N : List UInt32) (err : Option Val) : Val :=
-  opPayload 0 0 (.pair (namesVal N) (errVal err))
+/-- The cancel payload `(0, (0, err))`: the error kept so far.  `[spec §19]` -/
+def cancelVal (err : Option Val) : Val := opPayload 0 0 (errVal err)
 
-/-- The error a cancel keeps after a finaliser raises `(m, (j, w))`: the first error of a name
-outside the region.  `[spec §19]` -/
-def errNext (N : List UInt32) (err : Option Val) (m j : UInt32) (w : Val) : Option Val :=
-  match err with
-  | some E => some E
-  | none => if m ∈ N then none else some (opPayload m j w)
+/-- The error a cancel keeps after a finaliser raises `(m, (j, w))`: the first one.
+`[spec §19]` -/
+def errNext (err : Option Val) (m j : UInt32) (w : Val) : Option Val :=
+  err.or (some (opPayload m j w))
 
 namespace Kont
 
@@ -406,15 +413,27 @@ def Catches (n : UInt32) : Kont → Bool
         | .app (.prim .cfin) _ => true
         | _ => false) || Catches n K
 
-/-- The names of `K`'s handler frames.  `[spec §19]` -/
-def hndNames : Kont → List UInt32
-  | .hole => []
-  | .pairL K _ | .pairR _ K | .letpair K _ | .case K _ _ | .appL K _ | .seq K _ | .inj₁ K
-  | .inj₂ K => hndNames K
-  | .appR f K =>
-      (match f with
-        | .app (.prim .hnd) (.pair (.prim (.lit (.i32 m))) _) => [m]
-        | _ => []) ++ hndNames K
+/-- A frame `f [·]` that a cancel kills: a handler frame `hnd (m, …) [·]` or a cancel delimiter
+`ccatch [·]`.  `[spec §19]` -/
+def DeadFrame (f : Expr) : Bool :=
+  match f with
+  | .app (.prim .hnd) (.pair (.prim (.lit (.i32 _))) _) => true
+  | .prim .ccatch => true
+  | _ => false
+
+/-- `K†`: the cancelled region `K` with the frames a cancel kills removed, its handler frames and
+its cancel delimiters (`DeadFrame`).  Its other frames stay, finalisers among them.  `[spec §19]` -/
+def dead : Kont → Kont
+  | .hole => .hole
+  | .pairL K e => .pairL (dead K) e
+  | .pairR v K => .pairR v (dead K)
+  | .letpair K e => .letpair (dead K) e
+  | .case K e₁ e₂ => .case (dead K) e₁ e₂
+  | .appR f K => if DeadFrame f then dead K else .appR f (dead K)
+  | .appL K v => .appL (dead K) v
+  | .seq K e => .seq (dead K) e
+  | .inj₁ K => .inj₁ (dead K)
+  | .inj₂ K => .inj₂ (dead K)
 
 /-- Shift every term of a context.  `[spec §19]` -/
 def shift (d c : Nat) : Kont → Kont
@@ -432,13 +451,51 @@ def shift (d c : Nat) : Kont → Kont
 end Kont
 
 /-- The continuation `κ` the `[op]` step hands the clause: the `&` pair of its resume branch
-`λy. hnd H K[y]` and its cancel branch `ccatch (hnd H K[raise (0, (0, (N, none)))])`, `N` the
-names of `H` and of `K`'s handlers, written as `λs. case s {inj₁ u. u; λy. … | inj₂ u. u; …}`.
-`[spec §19]` -/
-def kappa (n : UInt32) (H : Val) (K : Kont) : Expr :=
+`λy. hnd H K[y]` and its cancel branch `ccatch (K†[raise (0, (0, none))])`, the region `K` dead
+(`Kont.dead`), written as `λs. case s {inj₁ u. u; λy. … | inj₂ u. u; …}`.  `[spec §19]` -/
+def kappa (H : Val) (K : Kont) : Expr :=
   .val (.lam (.case (.var 0)
     (.seq (.var 0) (.val (.lam (hndE (H.shift 3 0) ((K.shift 3 0).plug (.var 0))))))
-    (.seq (.var 0) (ccatchE (hndE (H.shift 2 0) ((K.shift 2 0).plug (raiseE (.val (cancelVal (n :: K.hndNames) none)))))))))
+    (.seq (.var 0) (ccatchE ((K.dead.shift 2 0).plug (raiseE (.val (cancelVal none))))))))
+
+/-- `free e`.  `[spec §25]` -/
+def freeE (e : Expr) : Expr := .app (.val (.prim .free)) e
+
+/-- A term with no step: `() ()`.  `[spec §25]` -/
+def stuckE : Expr := .app (.val .unit) (.val .unit)
+
+/-- `κ` at a linear (`aff = false`) or affine operation, its cell at `ℓ`: `kappa`'s branches,
+each freeing `ℓ` once the branch is chosen.  A linear `κ`'s cancel branch is at `⊤` and has no
+step.  `[spec §25]` -/
+def kappaC (aff : Bool) (ℓ : Loc) (H : Val) (K : Kont) : Expr :=
+  .val (.lam (.case (.var 0)
+    (.seq (.var 0) (.seq (freeE (.val (.loc ℓ)))
+      (.val (.lam (hndE (H.shift 3 0) ((K.shift 3 0).plug (.var 0)))))))
+    (if aff then
+      .seq (.var 0) (.seq (freeE (.val (.loc ℓ)))
+        (ccatchE ((K.dead.shift 2 0).plug (raiseE (.val (cancelVal none))))))
+    else stuckE)))
+
+/-- `kappaC`'s body over its cell, the cell the variable `c` (index `0` outside the `λs`). -/
+def kappaCBody (aff : Bool) (H : Val) (K : Kont) : Expr :=
+  .lam (.case (.var 0)
+    (.seq (.var 0) (.seq (freeE (.var 2))
+      (.val (.lam (hndE (H.shift 4 0) ((K.shift 4 0).plug (.var 0)))))))
+    (if aff then
+      .seq (.var 0) (.seq (freeE (.var 2))
+        (ccatchE ((K.dead.shift 3 0).plug (raiseE (.val (cancelVal none))))))
+    else stuckE))
+
+/-- `κ` at a linear or affine operation, before its cell: `(λc. kappaCBody) (alloc ())`, so the
+cell is allocated by the ordinary `alloc` step, and `κ` is `kappaC` at its location.
+`[spec §25]` -/
+def kappaCell (aff : Bool) (H : Val) (K : Kont) : Expr :=
+  .app (.val (.lam (kappaCBody aff H K))) (.app (.val (.prim .alloc)) (.val .unit))
+
+/-- The continuation the `[op]` step hands the clause, by the operation's tag: `kappaCell` at a
+linear (`0`) or affine (`1`) operation, `kappa` otherwise.  `[spec §19, §25]` -/
+def kappaAt (t : UInt32) (H : Val) (K : Kont) : Expr :=
+  if t = 0 then kappaCell false H K else if t = 1 then kappaCell true H K else kappa H K
 
 /-- The head reductions of `[TR]` p. 4's `↦` box: `TR3.Head` under other names, the host
     step of `SPEC.md` §8, and the array steps of §9. -/
@@ -495,19 +552,21 @@ inductive Head {ℍ : Host} [HostIs ℍ] : Heap → Expr → Heap → Expr → P
   | boundedFix (μ : Heap) (s : Val) (k : UInt32) (a : Val) :
       Head μ (.app (.val (.prim .boundedFix)) (.val (.pair s (.pair (.i32 k) a)))) μ
         (boundedFixNext s k a)
-  /-- `[ret]`: `hnd (n, (h_ret, hs)) v ↦ h_ret v`.  `[spec §19]` -/
-  | hret (μ : Heap) (n : UInt32) (hr hs w : Val) :
-      Head μ (hndE (hndVal n hr hs) (.val w)) μ (.app (.val hr) (.val w))
-  /-- `[op]`: `hnd H K[perform (n, (i, v))] ↦ h_i (v, κ)`, `K` free of `n`.  `[spec §19]` -/
-  | hop (μ : Heap) (n i : UInt32) (hr hs c v : Val) (K : Kont)
+  /-- `[ret]`: `hnd (n, (qs, (h_ret, hs))) v ↦ h_ret v`.  `[spec §19]` -/
+  | hret (μ : Heap) (n : UInt32) (qs hr hs w : Val) :
+      Head μ (hndE (hndVal n qs hr hs) (.val w)) μ (.app (.val hr) (.val w))
+  /-- `[op]`: `hnd H K[perform (n, (i, v))] ↦ h_i (v, κ)`, `K` free of `n`, `κ` by the
+      operation's tag (`kappaAt`).  `[spec §19, §25]` -/
+  | hop (μ : Heap) (n i : UInt32) (qs hr hs c v : Val) (K : Kont)
       (hc : clauseAt hs.1 i.toNat = some c) (hK : K.HasHnd n = false) :
-      Head μ (hndE (hndVal n hr hs) (K.plug (performE (.val (opPayload n i v))))) μ
-        (.app (.val c) (.pair (.val v) (kappa n (hndVal n hr hs) K)))
+      Head μ (hndE (hndVal n qs hr hs) (K.plug (performE (.val (opPayload n i v))))) μ
+        (.app (.val c) (.pair (.val v)
+          (kappaAt (capTag qs.1 i.toNat) (hndVal n qs hr hs) K)))
   /-- `[unwind]`: `hnd H K[raise (n, (i, v))] ↦ h_i v`, `K` catching nothing of `n`.
       `[spec §19]` -/
-  | hunwind (μ : Heap) (n i : UInt32) (hr hs c v : Val) (K : Kont)
+  | hunwind (μ : Heap) (n i : UInt32) (qs hr hs c v : Val) (K : Kont)
       (hc : clauseAt hs.1 i.toNat = some c) (hK : K.Catches n = false) :
-      Head μ (hndE (hndVal n hr hs) (K.plug (raiseE (.val (opPayload n i v))))) μ
+      Head μ (hndE (hndVal n qs hr hs) (K.plug (raiseE (.val (opPayload n i v))))) μ
         (.app (.val c) (.val v))
   /-- `[then]`: `ubind (N, D) v ↦ N v`.  `[spec §19]` -/
   | uthen (μ : Heap) (N D w : Val) :
@@ -520,27 +579,31 @@ inductive Head {ℍ : Host} [HostIs ℍ] : Heap → Expr → Heap → Expr → P
         (.seq (.app (.val D) (.val .unit)) (raiseE (.val (opPayload n i v))))
   /-- `[finalise-cancel]`: `ubind (N, D) K[raise s] ↦ cfin s (D ())`, `s` a cancel.
       `[spec §19]` -/
-  | ufinC (μ : Heap) (N D : Val) (Ns : List UInt32) (err : Option Val) (K : Kont)
-      (hK : K.Catches 0 = false) :
-      Head μ (ubindE (.pair N D) (K.plug (raiseE (.val (cancelVal Ns err))))) μ
-        (cfinE (cancelVal Ns err) (.app (.val D) (.val .unit)))
+  | ufinC (μ : Heap) (N D : Val) (err : Option Val) (K : Kont) (hK : K.Catches 0 = false) :
+      Head μ (ubindE (.pair N D) (K.plug (raiseE (.val (cancelVal err))))) μ
+        (cfinE (cancelVal err) (.app (.val D) (.val .unit)))
   /-- `[cfin-ret]`: the finaliser finished; the cancel goes on.  `[spec §19]` -/
-  | cfret (μ : Heap) (Ns : List UInt32) (err : Option Val) (w : Val) :
-      Head μ (cfinE (cancelVal Ns err) (.val w)) μ (raiseE (.val (cancelVal Ns err)))
-  /-- `[cfin-raise]`: the finaliser raised `(m, (j, w))`; the cancel keeps it or suppresses it
-      (`errNext`), and goes on.  `[spec §19]` -/
-  | cferr (μ : Heap) (Ns : List UInt32) (err : Option Val) (m j : UInt32) (w : Val) (K : Kont)
+  | cfret (μ : Heap) (err : Option Val) (w : Val) :
+      Head μ (cfinE (cancelVal err) (.val w)) μ (raiseE (.val (cancelVal err)))
+  /-- `[cfin-raise]`: the finaliser raised `(m, (j, w))`, `m` not the cancel's name; the cancel
+      keeps the first error (`errNext`), and goes on.  `[spec §19]` -/
+  | cferr (μ : Heap) (err : Option Val) (m j : UInt32) (w : Val) (K : Kont) (hm : m ≠ 0)
       (hK : K.Catches m = false) :
-      Head μ (cfinE (cancelVal Ns err) (K.plug (raiseE (.val (opPayload m j w))))) μ
-        (raiseE (.val (cancelVal Ns (errNext Ns err m j w))))
-  /-- `[cancel]`: `ccatch K[raise (0, (0, (N, none)))] ↦ ()`, `K` catching nothing of `0`.
+      Head μ (cfinE (cancelVal err) (K.plug (raiseE (.val (opPayload m j w))))) μ
+        (raiseE (.val (cancelVal (errNext err m j w))))
+  /-- `[cfin-cancel]`: a cancel reached the running finaliser's `cfin`; it keeps the earlier
+      error, the finaliser's cancel's, and goes on.  `[spec §19]` -/
+  | cfcancel (μ : Heap) (err err' : Option Val) (K : Kont) (hK : K.Catches 0 = false) :
+      Head μ (cfinE (cancelVal err) (K.plug (raiseE (.val (cancelVal err'))))) μ
+        (raiseE (.val (cancelVal (err.or err'))))
+  /-- `[cancel]`: `ccatch K[raise (0, (0, none))] ↦ ()`, `K` catching nothing of `0`.
       `[spec §19]` -/
-  | cancel (μ : Heap) (Ns : List UInt32) (K : Kont) (hK : K.Catches 0 = false) :
-      Head μ (ccatchE (K.plug (raiseE (.val (cancelVal Ns none))))) μ (.val .unit)
-  /-- `[cancel-raise]`: `ccatch K[raise (0, (0, (N, some E)))] ↦ raise E`: the kept error, raised
-      at the canceller.  `[spec §19]` -/
-  | creraise (μ : Heap) (Ns : List UInt32) (E : Val) (K : Kont) (hK : K.Catches 0 = false) :
-      Head μ (ccatchE (K.plug (raiseE (.val (cancelVal Ns (some E)))))) μ (raiseE (.val E))
+  | cancel (μ : Heap) (K : Kont) (hK : K.Catches 0 = false) :
+      Head μ (ccatchE (K.plug (raiseE (.val (cancelVal none))))) μ (.val .unit)
+  /-- `[cancel-raise]`: `ccatch K[raise (0, (0, some E))] ↦ raise E`: the kept error, raised at
+      the canceller.  `[spec §19]` -/
+  | creraise (μ : Heap) (E : Val) (K : Kont) (hK : K.Catches 0 = false) :
+      Head μ (ccatchE (K.plug (raiseE (.val (cancelVal (some E)))))) μ (raiseE (.val E))
 
 /-!
 Rows 3.11, 3.12, continued.

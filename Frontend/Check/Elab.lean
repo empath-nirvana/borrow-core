@@ -185,13 +185,13 @@ def ppC (nm : List (String × LifeVar)) (p : Nat) : CCTy → String
   | .nu (.amp (.ret (.sum (.tensor A (.tvar 0)) R)) (.ret R')) =>
       parenIf (p > 5) s!"iter {ppV nm 0 6 A} {ppV nm 0 6 R} {ppV nm 0 6 R'}"
   | .nu C => parenIf (p > 0) s!"nu {tvName 0}. {ppC nm 0 C}"
-  | .eff n i q A B C =>
+  | .eff n i q A B fin C =>
       let (es, r) := ppEff nm C
       parenIf (p > 5)
         s!"F[{", ".intercalate (s!"{n}.{i} {qualStr q} {ppV nm 0 0 A} ~> {ppV nm 0 0 B}" :: es)}] {r}"
 /-- The entries of a row's layers `F_Σ`, and what is under them. -/
 def ppEff (nm : List (String × LifeVar)) : CCTy → List String × String
-  | .eff n i q A B C =>
+  | .eff n i q A B fin C =>
       let (es, r) := ppEff nm C
       (s!"{n}.{i} {qualStr q} {ppV nm 0 0 A} ~> {ppV nm 0 0 B}" :: es, r)
   | .ret A => ([], ppV nm 0 6 A)
@@ -385,7 +385,8 @@ def elabRow : Nat → TyEnv → Span → Row → Except Error CRow
     | .nil => pure []
     | .cons k i q A B r => do
         if k < 2 ^ 32 ∧ i < 2 ^ 32 then
-          let o : COpSig := ⟨UInt32.ofNat k, UInt32.ofNat i, q.toCore, ← elabV n E A, ← elabV n E B⟩
+          let o : COpSig :=
+            ⟨UInt32.ofNat k, UInt32.ofNat i, q.toCore, ← elabV n E A, ← elabV n E B, .ret .unit⟩
           pure (o :: (← elabRow n E sp r))
         else err sp s!"the operation {k}.{i}: a name and an index are below 2^32"
 /-- A shape. -/

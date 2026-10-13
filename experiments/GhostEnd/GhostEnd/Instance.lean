@@ -31,7 +31,7 @@ theorem d_nfEx :
         (CtxOutlives.solo (LifeCtx.defines_of_wf rfl) .unit (.cons (.cons .nil))))))
 
 /-- `yield : I32 ↠ 1`, linear and resuming. -/
-def yieldOp : OpSig := ⟨7, 0, .lin, .int .w32, .unit⟩
+def yieldOp : OpSig := ⟨7, 0, .lin, .int .w32, .unit, .ret .unit⟩
 
 /-- The payloads. -/
 def ys : List Val := [Val.i32 1, Val.i32 2]

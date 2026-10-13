@@ -116,7 +116,7 @@ theorem withbor_step₂ (l : BoCa.Loc) (f : Val) (μ : Heap) :
 `(ℓ, f () ℓ)`. The borrower runs under 6.65 at the resuming table (`ewpTS_M_frameR`), and the
 pair frame `(ℓ, [·])` is carried through every stop (`ewp_frame_plain`). From
 `ℓ ↦ v ⋆ 𝒱⟦T⟧(v)` the program answers in `𝒱⟦Ref T ⊗ B⟧`. -/
-theorem withbor_relend (Tab : OpTab) {l : BoCa.Loc} {T B : VTy} {δ : LSub}
+theorem withbor_relend (Tab : OpTab) (hTab : Tab.PlainCancel) {l : BoCa.Loc} {T B : VTy} {δ : LSub}
     {βP : Life} (hP : ∀ ls w σ, vC true T ls δ w σ → σ.InStratum βP) (f : Val)
     {ls : List SRec} (v : Val)
     (hR : Relend (opTable Tab) l T δ (finPost l T B δ) ls
@@ -132,10 +132,15 @@ theorem withbor_relend (Tab : OpTab) {l : BoCa.Loc} {T B : VTy} {δ : LSub}
       ⟨ρ, PMap.empty, ResU.comp_empty_right ρ, ⟨v, hρ⟩, hR⟩
   -- the pair frame `(ℓ, [·])`
   have hpair := ewp_frame_plain Tab (.pairR (Val.loc l) .hole)
-    (fun _ => rfl) (fun _ => rfl) rfl (fun _ => emp)
+    (fun _ => rfl) (fun _ => rfl) (fun _ => emp)
     (fun _ _ _ _ h => h) (fun _ _ _ _ h => h)
     (fun _ _ _ _ _ _ _ h => by rw [h.1]; exact noOwn_empty)
     (fun _ _ _ _ _ _ _ h => h.1)
+    (fun n i en hT ha hq ls K₁ ρ₁ σ ρ₁' hcan hσ hc => by
+      have hσ' : σ = PMap.empty := hσ.1
+      subst hσ'
+      rw [ResU.CompS.functional hc (ResU.comp_empty_right ρ₁)]
+      exact hTab n i en hT ha hq _ (fun _ => rfl) rfl ls K₁ ρ₁ hcan)
     (finPost l T B δ) (fun ls r => vC true (.tensor (.ref T) B) ls δ r) ?_ hcb
     (ρ₂ := PMap.empty) ⟨rfl, trivial⟩ (ResU.comp_empty_right ρ)
   · exact ewp_step (opTable_mono Tab) (withbor_step₁ l _) ls _ ρ
@@ -171,7 +176,7 @@ theorem withbor_spans_yields {Δ : LifeCtx} {δ : LSub} (hδ : Δ.Models δ) {x 
     {βP : Life} (hP : ∀ ls w σ, vC true T ls δ w σ → σ.InStratum βP)
     {Nf : Expr} (hNf : closedAt 1 Nf = true)
     (hN : SemC (Δ.extend x b) [⟨.mut (.var x) T, true⟩] Nf (.ret (.box (.var x) B)))
-    (Tab : OpTab) {n i : UInt32} {en : OpEnt} (hTn : Tab n i = some en)
+    (Tab : OpTab) (hTab : Tab.PlainCancel) {n i : UInt32} {en : OpEnt} (hTn : Tab n i = some en)
     (ha : en.abort = false) (hq : en.q = .lin)
     (hPB : ∀ ls w ρ, en.PB ls w ρ → w = Val.unit ∧ ρ = PMap.empty)
     (ys : List Val) (hys : ∀ y ∈ ys, closedAt 0 y.1 = true)
@@ -180,7 +185,7 @@ theorem withbor_spans_yields {Δ : LifeCtx} {δ : LSub} (hδ : Δ.Models δ) {x 
     Entails (ptoOwn l v ⋆ vC true T ls δ v)
       (ewpTS ls (.app (.app withbor (.val (.loc l))) (.val (cbV n i ys Nf))) (opTable Tab)
         (fun ls r => vC true (.tensor (.ref T) B) ls δ r)) :=
-  withbor_relend Tab hP _ v (relend_cbV (opTable_mono Tab) n i ys hys hNf
+  withbor_relend Tab hTab hP _ v (relend_cbV (opTable_mono Tab) n i ys hys hNf
     (relend_chain hδ hbx hΔx hβ hT hB hN Tab hTn ha hq hPB l ys hy ls))
 
 /-- `withbor_spans_yields` at the kernel's relation: a row `Σ` whose `yield` is linear, resuming,
@@ -204,6 +209,7 @@ theorem withbor_spans_yields_cC {Δ : LifeCtx} {δ : LSub} (hδ : Δ.Models δ) 
   intro ρ hρ
   refine (cC_effOf S _ ls δ _ ρ).mpr ?_
   refine withbor_spans_yields hδ hbx hΔx hβ hT hB hP hNf (fundamentalC hN) (Row.tab S δ)
+    (Row.tab_plainCancel S δ)
     (en := o.ent δ) (by simp [Row.tab, hf]) ha hq ?_ ys hys hy l v ls ρ hρ
   intro ls' w σ h
   simp only [OpSig.ent, hoB] at h

@@ -32,7 +32,7 @@ IR. One pass does three things:
   nothing; applied, `selfV B a` is a call of it. When `B` is the step of `fold_own` or
   `fold_reuse`, the step's code is recorded (`Prog.folds`) for the flat IR's pointer reversal.
 - **η.** `λv. y v` of a variable `y` is `y`.
-- **Operations** (spec §19). `raise p`, `perform p`, a handler `hnd (n, (hr, cls)) e` and a
+- **Operations** (spec §19). `raise p`, `perform p`, a handler `hnd (n, (qs, (hr, cls))) e` and a
   finaliser frame `ubind (N, D) M` are closure-IR nodes, which `Capture` and `Unwind` lower. The
   cancel frames `ccatch` and `cfin` occur only in the continuations the machine builds, and are
   rejected.
@@ -532,12 +532,15 @@ def conv (ctx : Ctx) (e : Expr) (id : Nat) : CM Tm := do
       return .letv pv (← conv ctx p k₂) (.perform pv)
   | .app (.prim .ccatch) _ | .app (.app (.prim .cfin) _) _ =>
       throw "a cancel frame (`ccatch`, `cfin`) is a frame of the machine's continuations, not a term of a program"
-  | .app (.app (.prim .hnd) (.pair (.prim (.lit (.i32 n))) (.pair hr cls))) e => do
-      -- `hnd (n, (hr, cls)) e` (§19): the clauses' parts, then the handled body. The parts are
-      -- values, so the order is the machine's.
+  | .app (.app (.prim .hnd) (.pair (.prim (.lit (.i32 n))) (.pair _ (.pair hr cls)))) e => do
+      -- `hnd (n, (qs, (hr, cls))) e` (§19): the clauses' parts, then the handled body. The parts
+      -- are values, so the order is the machine's. The tags `qs` say which continuations own a
+      -- cell (§25); the lowering builds `κ` itself (`Capture`), with no cell.
       let kH := k₁ + 2
       let kN := kH + 1
-      let kHC := kN + (← sizeAt kN)
+      let kQH := kN + (← sizeAt kN)
+      let kQ := kQH + 1
+      let kHC := kQ + (← sizeAt kQ)
       let kHr := kHC + 1
       let kCls := kHr + (← sizeAt kHr)
       let (cs, cH, cE) ← plan2 ctx (← fvsAt kHC 0) (← fvsAt k₂ 0)

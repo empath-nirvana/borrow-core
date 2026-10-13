@@ -83,9 +83,9 @@ search:
   callee's, and `κ` has a size known statically. At a point the code builds its state and returns
   `inr`, and each frame it suspends through passes the `inr` on.
 - The resume code takes `inl y` to resume: a switch on the state, then the point's continuation
-  with its frames rebuilt around `y`. It takes `inr mask` to cancel: the callee's `k` first, then
+  with its frames rebuilt around `y`. It takes `inr ()` to cancel: the callee's `k` first, then
   the point's finalisers, innermost first, every other variable dropped; the first error a
-  finaliser raises whose name is not in `mask` is kept, and `κ`'s cancel re-raises it (`reraise`).
+  finaliser raises is kept, and `κ`'s cancel re-raises it at the canceller (`reraise`).
 - Which codes may suspend is the least solution of the operations their bodies and callees may
   perform, over the closure flow. Codes called at one site share a convention, and so do a code
   and a code it calls in tail position when the call closes a loop of tail calls or the caller has
@@ -496,9 +496,10 @@ by a `clos` of a code whose closure is built, or by `main`).
 simulates the source's run of its body to a value or to a stop `K[perform (n, v)]`, the state
 relating to `K` frame by frame (its variant to the point, its fields to the values `K`'s frames
 hold, its callee's `k` to the inner frames), and the resume code's entry at `y` to `K[y]`; its
-cancel entry simulates the cancel run `K[raise (⊥, s)]` to `ccatch`, the mask standing for `N`
-(exactly, when no handler site is reached from its own body). The handler's driver simulates
-`[ret]`, `[op]` and forwarding. Nothing checks these at run time beyond the interpreters agreeing.
+cancel entry simulates the cancel run of the dead region, `K†[raise (⊥, err)]` to `ccatch`: the
+cancel arms run only the points' `fin` frames, which are the finaliser frames `K†` keeps. The
+handler's driver simulates `[ret]`, `[op]` and forwarding. Nothing checks these at run time beyond
+the interpreters agreeing.
 
 **Native fixed points** are an obligation of their own: the code `λx. B[self := clos c []]`
 simulates the combinator's `selfV B`. The source side is `Core/Fix.lean`'s unrolling

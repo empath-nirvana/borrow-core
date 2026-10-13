@@ -276,7 +276,7 @@ def synC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp →
       let ⟨_, rN⟩ ← atRow E N.span S
         (← synC n { (E.minus rM.F.u).pushOwn x.name A with row := some S } Δ (A :: T) N)
       let rD ← chkC n ((E.minus rM.F.u).push none) Δ (.unit :: T) D
-        (effOf (BoCa.Fig16.LogRel.Core.Row.abortOnly S) .unit)
+        (effOf [] .unit)
       let FN ← popL E x.span x.name rN.F
       pure ⟨_, ← thenIt E sp rM' FN rD⟩
     | .perform sp k i V => do
@@ -518,7 +518,7 @@ def chkC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp → (C : 
           let rM' ← liftRow E M.span S rM
           let rN ← chkC n ((E.minus rM.F.u).pushOwn x.name A) Δ (A :: T) N (effOf S B)
           let rD ← chkC n ((E.minus rM.F.u).push none) Δ (.unit :: T) D
-            (effOf (BoCa.Fig16.LogRel.Core.Row.abortOnly S) .unit)
+            (effOf [] .unit)
           let FN ← popL E x.span x.name rN.F
           pure (hC ▸ (← thenIt E sp rM' FN rD))
         else err sp "internal error: a returner chain"
