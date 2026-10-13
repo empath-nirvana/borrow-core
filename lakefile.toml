@@ -184,3 +184,8 @@ roots = ["Targets"]
 name = "ProbeD1"
 srcDir = "experiments/ProbeD1"
 roots = ["ProbeD1"]
+
+[[lean_lib]]
+name = "DenseCarrier"
+srcDir = "experiments/DenseCarrier"
+roots = ["DenseCarrier"]
