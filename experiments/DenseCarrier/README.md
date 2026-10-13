@@ -19,48 +19,58 @@ machine-checked facts block it:
 
 The hypothesis: over a dense order such as `(ℚ, <)` there is always room between lifetimes, and
 the order is homogeneous, so a relation invariant under its automorphisms is invariant under the
-moves Law 2 makes. The known cost: `Paper/S5_Model` builds the cells by well-founded recursion down
-`⊏` on `ℕ`, which a dense order does not support. The proposed replacement: recurse over the
-lifetimes in play.
+moves Law 2 makes. The question: **can a suspended region's lifetimes be moved — cells, resource,
+records and reading together — so that the resumer's lends sit in a gap beneath them, with the
+relation preserved, at every cut?**
 
 ## The outcome
 
-1. **The stratification index cannot be dense** (`Cantor.lean`, proved). The paper's layer
-   equation `Cell_α ≅ own + imm(Imm_α) + mut(Mut_α)`, written over any linear order, has a solution
-   exactly when the order has no infinite ascending chain (`carrier_iff`). A `mut` cell of stratum
-   `α` stores an arbitrary predicate on the cells of a stratum above it, so along an ascending chain
-   the cardinals of the strata would descend forever. No dense order with two points carries the
-   paper's model (`no_carrier_of_dense`, `no_carrier_withTopRat`), and every order that does is
-   rigid, its only automorphism the identity (`carrier_rigid`): equivariance under the cells' own
-   index is empty on every carrier, not only on `ℕᵒᵈ`.
-2. **What can be dense is the order the relation reads.** The cells keep a reverse-well-ordered
-   index, the *slots* (the lifetimes in play; Core's own `Life = ℕᵒᵈ`, so Core's model is reused
-   unchanged). The relation reads its lifetimes in a second order `L`, the reading `δ` and the `∀`
-   range over `L`, and a cell is compared with an `L`-lifetime through an order embedding `ι` of the
-   slots into `L`. At `L = Life` and `ι = id` the fragment built here is Core's relation
-   (`vD_id`, `cD_id`).
-3. **Gap test, at a dense `L`: passed** (proved). The adjacency witness cannot be built
-   (`not_denseCoreAllAdjacent`): the clause fails at every cell below its bound, and so does not
-   tell configurations of one order type apart (`dense_same_order_type`). The relation is invariant
-   under every order automorphism of `L` (`cD_map`, `vD_map`, `semD_map`). The same generic
-   theorems at `L = Life` reproduce `CoreAllAdjacent` (`coreAllAdjacentD`, and through `cD_id`
-   ProbeD1's own statement, `coreAllAdjacent_via_cD`).
-4. **Shift test, at `L = WithTop ℚ`: passed** (proved). Every segment shift, at every cut, by every
-   `k > 0`, preserves and reflects the relation at every configuration and every type of the
-   fragment (`segShift_iff`, `segShiftInvD`). The same fragment at `L = Life` fails at every cut
-   (`segShiftFailsAtEveryCutD`).
-5. **FL map**: the `∀` rules and a borrow constant (`withbor` lending `Ref A` as `Mut 'x A`,
-   `[TR]` 6.173) are re-proved over every `L` at Core's own premises (`allI_compatD`,
-   `allE_compatD`, `withbor2_compatD`). Every other rule transfers by porting the relation layer
-   to `δ : LSubD L` and `ι`; none needs new mathematics; one hypothesis is needed, a slot below
-   every lifetime of `L` (§5).
+**No, on any carrier tried.** The moves the relation does not see (positions, step 4) cannot put a
+slot in the gap; the move that frees slots there (re-slotting, step 5) breaks the relation, inside
+the fragment, at every cut; and a carrier with cells at every lifetime of a dense order does not
+exist (step 7). Each failure is a machine-checked statement.
 
-**Kill criterion: not met.** The paper's carrier does need recursion down a reverse-well-founded
-order (`carrier_iff`), so it cannot recurse down a dense `⊏`. But the recursion need not run on the
-order the relation reads: recursion over the lifetimes in play (the slots) replaces recursion over
-`Life`, and the shift does not fail over the dense carrier.
+1. **The stratification index cannot be dense** (`Cantor.lean`). The layer equation
+   `Cell_α ≅ own + imm(Imm_α) + mut(Mut_α)` over a linear order has a solution exactly when the
+   order has no infinite ascending chain (`carrier_iff`), and every order that carries it is rigid
+   (`carrier_rigid`).
+2. **The two-order design** (§2): Core's cells, unchanged, on the slots `Life = ℕᵒᵈ`; the relation
+   reads its lifetimes in a second order `L` through an order embedding `ι` of the slots. At
+   `L = Life`, `ι = id` it is Core's relation (`vD_id`, `cD_id`).
+3. **Gap test: passed** (§3). At a dense `L` the `∀` reads no room between a cell and its bound
+   (`not_denseCoreAllAdjacent`, `dense_same_order_type`), and the relation is invariant under every
+   automorphism of `L` (`cD_map`).
+4. **Moving the slots' positions: invariant** (§4). A segment shift of `L` applied to the slots'
+   positions and the reading preserves and reflects the relation at every cut (`segShift_iff`).
+   It is a corollary of `cD_map` and the homogeneity of `ℚ`, and it moves no cell.
+5. **The faithful shift — cells re-slotted, records, reading moved — fails** (§5).
+   For every `L`, every placement `ι`, every re-slotting `θ` other than the identity and every
+   reading move `ψ` agreeing with `ι ∘ θ ∘ ι⁻¹` on the slots, a borrow of a borrow is related at
+   `Mut 'a (Mut 'b 1)` and at `F (Mut 'a (Mut 'b 1))` before the move and not after
+   (`not_reslotInvV`, `not_reslotInvC`), at every cut (`reslotFailsAtEveryCut`); probe 1's own
+   position shift is such a `ψ` (`shiftQ_ratSlots`). The bridge — re-slotting equals moving `ι` —
+   fails at the same type, without `Imm` (`not_bridgeV`). The dense thaw at the top cut fails
+   (`not_denseThawTop`). In Core the same configuration refutes
+   `SegShift.SegShiftInv` and `Bridge.CoreThawTop` at a type with no `∀`
+   (`not_segShiftInv_noAll`, `not_coreThawTop_noAll`).
+6. **No slot in the gap** (§6). A placement of the slots keeps their order and the
+   slots between any two (`slots_between_iff`, `placement_keeps_order`); the gap probe 1's shift
+   opens in `L` holds no slot (`shiftSlots_gap_empty`). The move that does free slots there is the
+   re-slotting of step 5, which breaks the relation.
+7. **A dense carrier with finitely supported predicates does not exist** (§7). The
+   layer equation with cells at every lifetime, acted on by the automorphisms of `L`, and stored
+   predicates finitely supported (nominal sets with ordered atoms) has no solution over an order
+   with an infinite ascending chain (`no_fsCarrier`), at a dense `L` (`no_fsCarrier_of_dense`),
+   even with supports restricted to lifetimes at or above the cell
+   (`no_fsCarrier_withTopRat_above`). At `Life` Core's cells are one (`fsCarrier_life`).
+8. **FL map** (§8): `allI`, `allE` and `withbor` (2) re-proved over every `L`; every other rule
+   transfers by the port of the relation layer.
 
-**What this does not settle: Law 2 itself.** See *What is open*.
+**Kill criterion: met**, at each step: the faithful shift by `not_reslotInvC` and
+`not_reslotInvV`, the dense thaw by `not_denseThawTop`, a slot in the gap by
+`shiftSlots_gap_empty` with `not_reslotInvC`, a dense carrier by `no_fsCarrier`.
+
+**Law 2's design: Core's carrier, with the region's lends re-made, not moved** (see *Law 2*).
 
 ## 1. Census
 
@@ -105,7 +115,7 @@ Classes: **(a)** carrier-independent once `Life` is any dense unbounded linear o
 **The cost of the real switch.** Making `Life` itself dense is impossible: (b) has no dense
 version. The switch that is possible keeps (b), (c) and the 23 model-level (a) places on the slots
 untouched, and ports the 282 relation-level (a) places, with everything that rests on them, to
-`δ : LSubD L` and `ι`. That port is mechanical (§5).
+`δ : LSubD L` and `ι`. That port is mechanical (§8).
 
 ## 2. The carrier
 
@@ -127,8 +137,8 @@ it.
   reverse-well-ordered order is rigid). So an order carrying the cells has no automorphism to move
   a lifetime with, and the order whose automorphisms move lifetimes has to be a second one.
 
-Keeping a dense order as the index would need the stored predicates restricted (finitely
-supported, or syntactic); not attempted, since the index need not be dense.
+Keeping a dense order as the index with finitely supported stored predicates is §7: no such
+carrier exists (`no_fsCarrier`). Syntactic stored predicates are not attempted.
 
 **The construction** (`Carrier.lean`, `Relation.lean`). The carrier the relation reads is any
 linear order `L` with a top; the dense instance is `WithTop ℚ` (`Rat.lean`), with Core's slot `n`
@@ -151,9 +161,14 @@ walks, `↭`, `wpTS` with its typed world `TW` and tagged record lists, `⋆`, `
 | `cC` at `∀`: `∀ α : Life` | `∀ α : L` | the `∀` ranges over the dense order |
 | `ptoMutS`: `α ⊑ b` | `ptoMutD`: `α ⊑ ι b` | `α` is an `L`-lifetime, `b` a slot |
 | `box`/`Outlives`: `α ⊏ @ψ` | `boxD`/`OutlivesD`: `α ⊏ ι(@ψ)` | as above |
-| `LifeCtx.Models`, `EntailsLt` | `ModelsD`, `EntailsLtD` | over `L`; Core's premises carry over (§5) |
+| `LifeCtx.Models`, `EntailsLt` | `ModelsD`, `EntailsLtD` | over `L`; Core's premises carry over (§8) |
 
-The stratified recursion is not replaced; it stays where `carrier_iff` allows it, on the slots.
+**The cell recursion is unchanged.** The cells, resources and their recursion are Core's own,
+`Paper/S5_Model`'s `Cell` by `WellFounded.fix` down `⊏` on `Life = ℕᵒᵈ`, slot for slot; only the
+relation reads `L`. **The statics are unchanged too**: typing, `Δ ⊨ @a ⊏ @b`, `Δ ⊨ @a ⊑ @b` and
+`Δ ⊨ @a` stay Core's, over `ℕ` (`SLife`, `LifeCtx.Models` on `LSub`); `ModelsD` and `EntailsLtD`
+are the relation's reading of them over `L`, and Core's premises reach it through
+`entailsLtD_of_entailsLt`, `entailsLeD_of_entailsLe` and `definedD_of_defines` (§8).
 **Faithfulness**: at `L = Life`, `ι = Slots.id`, `vD_id` and `cD_id` give equality with Core's
 `vC true` and `cC` at every fragment type, record list, reading and resource; so ProbeD1's
 statements are this fragment's at that instance (`coreAllAdjacent_via_cD`).
@@ -178,31 +193,106 @@ value `Λ. return ℓ₀`, and a `mut` cell at a slot `b` below the bound `m = @
   slots (`ι.map π`); `vD_map`, `cD_map` (equalities), `semD_map`. The only clause that needs `π`
   onto is `∀`, re-indexed by `α' = π α`. On `ℕᵒᵈ` the only automorphism is the identity.
 
-## 4. The shift test (`Shift.lean`, `Rat.lean`)
+## 4. Moving the slots' positions (`Shift.lean`, `Rat.lean`)
 
-The segment shift at the cut `c` by `k > 0` (`shiftQ c k`): every lifetime strictly below `c`
-moves down by `k`, the rest stays; it is an order embedding, not onto. On a configuration it
-moves what the relation reads in `L`, the slots' positions (`shiftSlots ι c hk`) and the reading;
-the resource, records and term are the model's and stay. This is `SegShift.lean`'s move: reading,
-records and resource moved together, with the move made on the positions.
+The segment shift of `L` at the cut `c` by `k > 0` (`shiftQ c k`): every lifetime strictly below
+`c` moves down by `k`, the rest stays; it is an order embedding, not onto. Here it moves what the
+relation reads in `L`, the slots' positions (`shiftSlots ι c hk`) and the reading; the resource,
+records and term stay, so no cell changes slot. This is invariance under moving slot positions,
+a corollary of `cD_map` and the homogeneity of `ℚ`. It is not `SegShift.lean`'s move, which
+re-slots the cells and the records: that move is §5's.
 
 * `exists_aut_agree`, `config_bound`, `slots_bound`: on a configuration's lifetimes (every slot
   position and every value of the reading) the shift agrees with an order automorphism of
   `WithTop ℚ`: the translation when `c = ⊤`, else `plIso`, which translates up to the greatest
   relevant lifetime below the cut, stretches the rest of the way up to the cut, and fixes the cut
   and above.
-* `segShift_iff`: **the shifted configuration is related exactly when the configuration is**, at
-  every cut, `k`, slots, type, records, reading, term and resource. `segShiftInvD` is the dense
-  analogue of `SegShift.SegShiftInv`.
-* `not_denseCoreAllNotNatural`: the dense analogue of `CoreAllNotNatural` (related before the
-  shift at `⊤` by `1`, not after) is false. `cD_imp_cutAllD`: the relation implies the
-  position-`∀` (`ProbeD1/Gap.lean`'s reading (A), `CutAllC`), the dense analogue of
-  `NotCoreAllImpCutAll` being its negation. `cD_comp_of_agree`: any move agreeing with an
-  automorphism on the configuration's lifetimes leaves the relation unchanged, at every `L`.
-* At `L = Life`: `segShiftFailsAtEveryCutD`: every shift by `k > 0` (`Restrat.Emb.shift`, on the
-  positions), at every cut, breaks the relation at the cell adjacent to the cut.
+* `segShift_iff`: **the configuration with its positions and reading shifted is related exactly
+  when the configuration is**, at every cut, `k`, slots, type, records, reading, term and
+  resource; `segShiftInvD` states it as an invariance.
+* `not_denseCoreAllNotNatural`: `CoreAllNotNatural` with the move made on positions is false.
+  `cD_imp_cutAllD`: the relation implies the position-`∀`, its renaming of positions and reading
+  by every automorphism of `L`. `cD_comp_of_agree`: any move agreeing with an automorphism on the
+  configuration's lifetimes leaves the relation unchanged, at every `L`.
+* At `L = Life`: `segShiftFailsAtEveryCutD`: every position shift by `k > 0`
+  (`Restrat.Emb.shift`), at every cut, breaks the relation at the cell adjacent to the cut.
 
-## 5. The FL map
+## 5. Re-slotting a region (`Reslot.lean`)
+
+ProbeD1's move, over `L`: every cell re-slotted by `θ : Restrat.Emb c` (`θ.relRU`: its lifetime
+moved, its witness moved, its stored predicate moved to its image), every record by
+`Targets.srecRestrat θ`, the reading by any `ψ : L → L` with `ψ (ι s) = ι (θ s)` for every slot.
+`ReslotInvV`/`ReslotInvC` state that this preserves and reflects the relation at every fragment
+type.
+
+* **The witness** (`rhoMM`, `vD_rhoMM`): a borrow of a borrow,
+  `ℓ ↦ mut(n+1, ℓ′, ℓ′ ↦ mut(n, (), ∅, 𝒱⟦1⟧), 𝒱⟦Mut 'b 1⟧δ)`, related at `Mut 'a (Mut 'b 1)` with
+  `'a`, `'b` read at the two slots' positions, and at `F (Mut 'a (Mut 'b 1))` with `return ℓ`; a
+  typed world (`tw_nested`), so `wpTS` cannot hold at it vacuously.
+* **Why it fails** (`ofS_relS_ne_vD_mb`): a re-slotting other than the identity moves its least
+  moved slot `g` below `g` and leaves `g` with no preimage (`exists_gap`). At the moved reading
+  `𝒱⟦Mut 'b 1⟧` holds at a `mut` cell at `g`; the re-slotted outer cell stores the image of its predicate, which
+  holds only at re-slotted resources. So no re-slotted resource is related at
+  `Mut 'a (Mut 'b 1)` (`not_vD_mm_relRU`), and no re-slotted typed world runs to such a value
+  (`not_wpTS_mm_relRU`: `↭` keeps each `mut` cell's stored predicate, and every `mut` cell of a
+  re-slotted flattening stores an image, `Restrat.Emb.flatAt_mut_moved`). This is
+  `Restrat.MutCounterexample.mut_not_natural`'s mechanism, with `Mut` in place of `Imm`.
+* `not_reslotInvV`, `not_reslotInvC`, `reslotFailsAtEveryCut`: the failure at every `L`, `ι`,
+  `θ ≠ id`, `ψ`, and at every segment shift by `k > 0` at every cut. `shiftQ_ratSlots`: at
+  `WithTop ℚ` probe 1's position shift is a `ψ` for `Restrat.Emb.shift`, so `not_reslotInvC_rat`
+  is the faithful version of §4's shift.
+* `not_bridgeV`: re-slotting the resource and records by `θ` is not moving the slots' positions to
+  `ι ∘ θ` (`Slots.reslot`). The fragment has no `Imm`, and the bridge fails without it; adding
+  `Imm` adds `mut_not_natural`'s own witness and restores nothing.
+* `not_denseThawTop`, `not_denseThawTop_rat`: `Bridge.CoreThawTop` over `L`, at every `ι` and
+  every `ψ` agreeing with `shift ⊤ 1`.
+* In Core, through `cD_id`: `core_reslot_fails`, `not_segShiftInv_noAll`, `not_coreThawTop_noAll`.
+  ProbeD1's witnesses read the room below a `∀`'s bound, which a dense `L` removes; this one has
+  no `∀` and fails at every lifetime order.
+
+## 6. No slot in the gap (`Reslot.lean`)
+
+A cell sits at a slot, so a lifetime of `L` carries a cell only at a slot's position.
+
+* `slots_between_iff`, `no_slot_between_adjacent`: under every placement the slots whose positions
+  lie between two slots' positions are the slots between them; adjacent slots stay adjacent.
+* `placement_keeps_order`: lends taken below the region's stay below them under every placement,
+  so no position move puts the region beneath the resumer's lends.
+* `shiftSlots_gap_empty`, `shiftQ_gap_nonempty`: the gap `[q − k, q)` probe 1's shift opens in `L`
+  is not empty and holds no slot.
+
+So the moves the relation is invariant under (positions, `cD_map`) cannot put a slot in the gap,
+and the move that frees slots there (re-slotting, §5) breaks the relation.
+
+## 7. Cells at every lifetime: finite support (`Nominal.lean`)
+
+The other way to make room is a carrier whose cells live at every lifetime of a dense `L`, so that
+`L`'s automorphisms move cells too, with no gap: cells by recursion over the finitely many
+lifetimes in play, stored predicates finitely supported (nominal sets with ordered atoms).
+
+* `FSCarrier L Loc Val Adm`: the layer equation over `L` in the union view (`CellU`'s with `L` for
+  `Life`): cells `C` acted on by `L ≃o L`, a map `out` from cells to layers that is injective,
+  lands in the well-formed layers, reaches each of them, and commutes with the action. A
+  well-formed `mut` layer's predicate holds only in its stratum, at the cell's value and witness,
+  and is supported by a finite `S` with `Adm β S`: `AnySupport` (nominal) or `SupportAbove` (only
+  lifetimes at or above the cell's, as the predicates the relation stores are).
+* `no_fsCarrier`: **no solution over an order with an infinite ascending chain** `a₀ < a₁ < ⋯`.
+  The cells `Y k` at `a k` whose witness is one cell at `a (k+1)`, fixed by the automorphisms
+  fixing `a k` and `a (k+1)`, receive the subsets of `Y (k+1)` injectively: `T` is stored as its
+  closure under those automorphisms (`clo`), supported by `{a k, a (k+1)}`, and the witness pins
+  `a (k+2)` (`Y_pin`), so the closure meets `Y (k+1)` in `T` alone (`mem_clo_iff`). Then
+  `#Y k ≥ 2^#Y (k+1)`, a descending sequence of cardinals. The stored predicate holds at cells
+  whose witness sits at any of the infinitely many lifetimes above `a (k+1)` an automorphism
+  fixing `a k`, `a (k+1)` reaches.
+* `no_fsCarrier_of_dense`, `no_fsCarrier_withTopRat`, `no_fsCarrier_withTopRat_above`: none over a
+  dense order with two points, in the nominal reading or with supports above the cell.
+* `fsCarrier_life`, `fsCarrier_lifeAny`, `fsCarrier_lifeAbove`: over `Life`, whose only
+  automorphism is the identity, Core's cells are one, so the notion is the paper's model.
+
+Finite support does not replace recursion down `⊏`: the obstruction is `Cantor.lean`'s, with the
+stored predicates confined to what a cell at a lifetime and the one above it can see.
+
+## 8. The FL map
 
 What each rule of `fundamentalC` (`Core/Fundamental.lean`) reads in the lifetime order, and what
 its compatibility proof needs when `δ` and the `∀` move to `L`. Re-proved here: `allI`, `allE`,
@@ -223,34 +313,55 @@ its compatibility proof needs when `δ` and the `∀` move to `L`. Re-proved her
 | `withbor1/3`, `withload`, `withswap`, their unwinding forms, `sliceBorrowM/I` (and `U`), `foldImm` | the callback's `∀` at a fresh lifetime | transfers as `withbor2` does; the `Imm` lends (6.64, 6.150) also need the record re-indexing above. The frames, their `↓`-strata and the (c) places stay on the slots, untouched |
 | `adequacyC`, `theorem32` | `δ = ∅` | unchanged |
 
+The re-proved lemmas are statements about Core's rules only at fragment types: outside
+`FragV`/`FragC` the relation is `False`, and there they hold for that reason alone.
+
 **New mathematics: none for FL.** The work is the port of the relation layer (the 282
 relation-level (a) places and what rests on them), the record and typed-world re-indexing, the
 fresh-slot hypothesis, and the premise transfers (proved: `entailsLtD_of_entailsLt`,
 `entailsLeD_of_entailsLe`, `definedD_of_defines`).
 
+
+## Law 2
+
+**No carrier supports Law 2 as a move of a suspended configuration.** On Core's carrier ProbeD1's
+witnesses and `not_segShiftInv_noAll`; on the two-order design `not_reslotInvC`, and position moves
+cannot put the region beneath the resumer's lends (`placement_keeps_order`); a carrier with cells
+at every lifetime of a dense order does not exist (`no_fsCarrier`). The refutations share one
+mechanism: a moved `mut` cell stores the image of its predicate, and the relation at the moved
+reading admits cells at the slots the move leaves free, which the image refuses
+(`ofS_relS_ne_vD_mb`). The slots are rigid (`carrier_rigid`): a re-slotting other than the
+identity is not onto (`exists_gap`), so every such move leaves free slots.
+
+**So Law 2 should be built on Core's carrier, unchanged, with the region's lends ended at the stop
+and re-made at the fresh lifetime, not moved.** A re-made `mut` cell stores `𝒱⟦T⟧` at the new
+reading, which is what a moved cell lacks. κ's frames then have to be related at the fresh
+lifetime without naturality, through the quantifiers the borrow rules already carry: the
+callback's `∀'x ⊏ b`, which holds at every lifetime below its bound, and 6.65's `И`, which makes
+the borrow's cell at every lifetime below a bound. The two-order design is not needed for that.
+What it gains — a `∀` that reads no adjacency, position moves the relation does not see — concerns
+moves, and no position move reorders the region and the resumer's lends; it costs the port of
+the relation layer (§1). It stays the fallback if relating κ at the fresh lifetime turns out to
+need a `∀` that reads no room.
+
 ## What is open
 
-**Law 2 itself.** The shift test moves every lifetime the configuration reads, slot positions
-included: after `shiftSlots`, no slot sits in the gap `[c − k, c)`. The resumer's lends are cells,
-so at slots, and in the shifted world they cannot sit in that gap. Putting them there means moving
-the region's lifetimes past slots that stay. An order embedding of the slots cannot: the region's
-slots and the resumer's are one order, and with fresh lifetimes taken below everything in play the
-resumer's slots lie below the region's. Nor can an automorphism of the slots, which is the
-identity (`carrier_rigid`). Re-slotting the region's cells by an order embedding, each stored
-predicate moved to its image, is not natural at `Mut 'a (Imm 'b 1)`
-(`Restrat.MutCounterexample.mut_not_natural`): the moved interpretation holds at the gap the
-embedding leaves, and the moved predicate refuses it. Law 2 instead ends the region's lends and
-re-lends at fresh slots below the resumer's, with the region's reading moved to them and the
-re-made `mut` cells' predicates read at the moved reading. Whether the region's relation survives
-that is Law 2: not derived, no obstruction verified. What this probe removes is the obstruction
-ProbeD1 machine-checked against it: over a dense `L` the relation does not read the room between a
-cell and a bound (`dense_same_order_type`), and moves of a whole configuration are invisible to it
-(`cD_map`, `segShift_iff`).
+**Relating κ at the fresh lifetime.** Whether κ's frames, with the region's lends ended at the
+stop and re-made at a fresh lifetime beneath the resumer's list, are related there through the
+`∀` and `И` of the borrow rules: not derived, no obstruction verified. The refutations above are
+of moves at every configuration; whether the borrow of a borrow arises inside a suspended region is
+not checked, and the refutations do not depend on it.
+
+**Where the bridge holds.** It fails at `Mut 'a (Mut 'b 1)`. On which smaller fragment it holds
+is not determined; at `U` it would need `Restrat`'s `WpNatural`, which is open.
+
+**Syntactic stored predicates.** A carrier storing types and readings in place of predicates is not
+attempted; a cell would have to carry `𝒱⟦T⟧` at its witness, and `𝒱⟦T⟧` reads every cell.
 
 **The rest of the relation over `L`.** Built here: `1`, `⊗`, `U`, `Ref`, `[@a]`, `Mut`, `F`,
 `⊸`, `⊤`, `∀`, with Core's records and typed world. Not built: the other formers' clauses
 (`⊕`, `0`, `!`, `Imm`, `μ`, `[L]`, `I32`, `Unk`, `&`, `ν`, rows), records over `L`, and the
-compatibility lemmas of §5 other than `allI`, `allE` and `withbor2`.
+compatibility lemmas of §8 other than `allI`, `allE` and `withbor2`.
 
 ## Files
 
@@ -263,9 +374,11 @@ compatibility lemmas of §5 other than `allI`, `allE` and `withbor2`.
 | `DenseCarrier/Equivariance.lean` | `vD_map`, `cD_map`, `semD_map` |
 | `DenseCarrier/Gap.lean` | `holdsD`, `failsD`, the gap test |
 | `DenseCarrier/Rat.lean` | `WithTop ℚ`: `ratSlots`, `shiftQ`, `plIso`, `exists_aut_agree` |
-| `DenseCarrier/Shift.lean` | the shift test |
+| `DenseCarrier/Shift.lean` | moving the slots' positions: `segShift_iff`, `segShiftFailsAtEveryCutD` |
 | `DenseCarrier/FL.lean` | `allI_compatD`, `allE_compatD`, the premise transfers, the fresh lifetime through `ι` |
 | `DenseCarrier/Borrow.lean` | `withbor2_compatD`; `wpTS_M_frameG`, `vD_outlivesLe`, `vD_local` |
+| `DenseCarrier/Reslot.lean` | re-slotting: `not_reslotInvC`, `reslotFailsAtEveryCut`, `not_bridgeV`, `not_denseThawTop`, `core_reslot_fails`; no slot in the gap |
+| `DenseCarrier/Nominal.lean` | `FSCarrier`, `no_fsCarrier`, `fsCarrier_life` |
 | `scripts/Census.lean`, `scripts/classify.py`, `scripts/Deps.lean` | the census |
 
 Reproduce the census: `lake env lean experiments/DenseCarrier/scripts/Census.lean > census.txt`,

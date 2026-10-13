@@ -2,25 +2,25 @@ import DenseCarrier.Gap
 import DenseCarrier.Rat
 
 /-!
-# DenseCarrier — the shift test
+# DenseCarrier — moving the slots' positions
 
-The move a resume makes on a suspended region (`SegShift.lean`): every lifetime strictly below a
-cut `c` moves `k` lower, everything at or above the cut stays, and a gap opens between the cut and
-the moved segment. On a configuration it moves what the relation reads in `L`: the slots'
-positions and the reading `δ`. The resource, records and term are the model's and stay.
+A segment shift of the lifetime order: every lifetime of `L` strictly below a cut `c` moves `k`
+lower, everything at or above the cut stays, and a gap opens in `L` between the cut and the moved
+segment. Here it moves what the relation reads in `L` and nothing else: the slots' positions and
+the reading `δ`. The resource, the records and the term stay, so no cell changes slot. This is
+**not** `SegShift.lean`'s move, which re-slots the cells and the records (`θ.relRU`,
+`srecRestrat θ`); that move is `Reslot.lean`'s, and it breaks the relation (`not_reslotInvC`).
 
-* **`L = WithTop ℚ`: every segment shift preserves the relation, at every cut, at every
-  configuration and every type of the fragment** (`segShiftInvD`), and reflects it
-  (`segShift_iff`). The shift is not onto, but on the configuration's lifetimes it agrees with an
-  order automorphism (`exists_aut_agree`), and the relation is invariant under automorphisms
-  (`cD_map`).
-* **`L = Life` (Core): every segment shift by `k > 0`, at every cut, breaks the relation somewhere**
+* **`L = WithTop ℚ`: invariance under moving slot positions**, at every cut, every configuration
+  and every type of the fragment (`segShift_iff`, `segShiftInvD`). It is a corollary of `cD_map`
+  and the homogeneity of `ℚ`: the shift is not onto, but on the configuration's lifetimes it agrees
+  with an order automorphism (`exists_aut_agree`).
+* **`L = Life`: a position shift by `k > 0`, at every cut, breaks the relation somewhere**
   (`segShiftFailsAtEveryCutD`): the cell adjacent to the cut has no room below the cut before the
-  shift and `k` lifetimes of room after it (`holdsD`, `failsD`). This is
-  `ProbeD1.segShiftFailsAtEveryCut` with the move made on the slots' positions.
+  shift and `k` lifetimes of room after it (`holdsD`, `failsD`).
 
-So the two carriers differ exactly where `SegShift.lean` located the failure: the `∀` reading the
-room between a cell and the cut.
+So at `L = Life` the `∀` reads the room between a cell and the cut, and at `WithTop ℚ` it does
+not. The gap the shift opens in `L` holds no slot (`Reslot.shiftSlots_gap_empty`).
 -/
 
 noncomputable section
@@ -52,8 +52,9 @@ def shiftSlots (ι : Slots (WithTop ℚ)) (c : WithTop ℚ) {k : ℚ} (hk : 0 < 
     Slots (WithTop ℚ) :=
   ι.comp (shiftQ c k) (shiftQ_strictMono hk) (shiftQ_top c k)
 
-/-- **The segment shift, at every cut, leaves the relation unchanged**: the moved configuration is
-related exactly when the configuration is. -/
+/-- **Moving the slots' positions by the segment shift, at every cut, leaves the relation
+unchanged**: the configuration with its positions and reading moved is related exactly when the
+configuration is (a corollary of `cD_map`, through `exists_aut_agree`). -/
 theorem segShift_iff (ι : Slots (WithTop ℚ)) (c : WithTop ℚ) {k : ℚ} (hk : 0 < k) (C : CTy)
     (ls : List SRec) (δ : LSubD (WithTop ℚ)) (e : Expr) :
     cD (ℍ := ℍ) (shiftSlots ι c hk) C ls (δ.map (shiftQ c k)) e = cD (ℍ := ℍ) ι C ls δ e := by
@@ -64,8 +65,9 @@ theorem segShift_iff (ι : Slots (WithTop ℚ)) (c : WithTop ℚ) {k : ℚ} (hk 
     LSubD.map_congr fun p hp => (hπ p.2 (Or.inr (List.mem_map.mpr ⟨p, hp, rfl⟩))).symm
   rw [hι, hδ, cD_map]
 
-/-- **The segment shift preserves the relation at every cut** (the dense analogue of
-`SegShift.SegShiftInv`, which is false on `ℕᵒᵈ`). -/
+/-- **Moving the slots' positions by a segment shift preserves the relation at every cut.**
+`SegShift.SegShiftInv` re-slots the cells instead; its analogue here is `Reslot.ReslotInvC`,
+which is false at every lifetime order. -/
 def SegShiftInvD : Prop :=
   ∀ (c : WithTop ℚ) (k : ℚ) (hk : 0 < k) (ι : Slots (WithTop ℚ)) (C : CTy) (ls : List SRec)
     (δ : LSubD (WithTop ℚ)) (e : Expr) (ρ : WRes),
@@ -76,8 +78,10 @@ theorem segShiftInvD : SegShiftInvD (ℍ := ℍ) := by
   rw [segShift_iff]
   exact h
 
-/-- The dense analogue of `CoreAllNotNatural`: a configuration related before the shift at `⊤`
-by `1` and not after it. -/
+/-- A configuration related before the position shift at `⊤` by `1` and not after it:
+`CoreAllNotNatural` with the move made on the slots' positions instead of re-slotting the cells.
+With the cells re-slotted such a configuration exists at every lifetime order
+(`Reslot.reslot_fails_cD`, `Reslot.not_denseThawTop`). -/
 def DenseCoreAllNotNatural (ι : Slots (WithTop ℚ)) : Prop :=
   ∃ (C : CTy) (ls : List SRec) (δ : LSubD (WithTop ℚ)) (e : Expr) (ρ : WRes),
     cD (ℍ := ℍ) ι C ls δ e ρ ∧
@@ -88,14 +92,14 @@ theorem not_denseCoreAllNotNatural (ι : Slots (WithTop ℚ)) :
   rintro ⟨C, ls, δ, e, ρ, h₁, h₂⟩
   exact h₂ (segShiftInvD ⊤ 1 one_pos ι C ls δ e ρ h₁)
 
-/-- The position-`∀` over `L` (reading (A) of `ProbeD1/Gap.lean`, `CutAllC`): the relation at every
-renaming of the configuration by an order automorphism of `L`. -/
+/-- The position-`∀` over `L`: the relation at every renaming of the slots' positions and the
+reading by an order automorphism of `L`. Reading (A) of `ProbeD1/Gap.lean` (`CutAllC`) renames
+the cells too; that renaming is `Reslot.lean`'s re-slotting. -/
 def CutAllD {L : Type} [LinearOrder L] [OrderTop L] (ι : Slots L) (C : CTy) (ls : List SRec)
     (δ : LSubD L) (e : Expr) : WProp :=
   fun ρ => ∀ π : L ≃o L, cD (ℍ := ℍ) (ι.map π) C ls (δ.map π) e ρ
 
-/-- **The relation implies the position-`∀`**, at every lifetime order: the dense analogue of
-`ProbeD1.NotCoreAllImpCutAll` is the positive statement. -/
+/-- **The relation implies the position-`∀`**, at every lifetime order (`cD_map`). -/
 theorem cD_imp_cutAllD {L : Type} [LinearOrder L] [OrderTop L] (ι : Slots L) (C : CTy)
     (ls : List SRec) (δ : LSubD L) (e : Expr) (ρ : WRes) (h : cD (ℍ := ℍ) ι C ls δ e ρ) :
     CutAllD (ℍ := ℍ) ι C ls δ e ρ := fun π => by rw [cD_map]; exact h
@@ -129,7 +133,8 @@ theorem room_succ (m : ℕ) (α : Life) (h : α < OrderDual.toDual m) :
   show m + 1 ≤ OrderDual.ofDual α
   omega
 
-/-- **Every segment shift by `k > 0`, at every cut, breaks Core's relation somewhere**: the
+/-- **At `L = Life`, every position shift by `k > 0`, at every cut, breaks the relation
+somewhere**: the slots' positions moved by `Restrat.Emb.shift` with the cells kept, at the
 configuration with the bound at the cut and a `mut` cell adjacent to it. -/
 def SegShiftFailsAtEveryCutD : Prop :=
   ∀ (m k : ℕ), 0 < k →

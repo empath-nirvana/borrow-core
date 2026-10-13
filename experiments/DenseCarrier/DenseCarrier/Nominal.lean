@@ -9,28 +9,33 @@ chain when a `mut` cell may store every predicate on the stratum above it. The n
 `L` and restricts what a cell stores: the cells form a set acted on by the automorphisms of `L`,
 and a stored predicate must be finitely supported, invariant under every automorphism fixing some
 finite set of lifetimes. This is the carrier that recursion over the finitely many lifetimes in
-play would build: a cell, and each predicate it stores, mentions finitely many lifetimes.
+play would build: a cell, and each predicate it stores, mentions finitely many lifetimes. A
+dense `L`'s automorphisms would then move cells as well as readings, with no gap.
 
-* `FSCarrier`: a solution of the layer equation over `L` in the union view (`CellU`'s, with `L`
-  for `Life`): a set of cells `C` acted on by `L ≃o L`, and a map `out` from cells to layers that
-  is injective, lands in the well-formed layers, reaches each of them, and commutes with the
-  action. A well-formed `mut` layer stores a predicate that holds only in its stratum, holds at
-  the cell's value and witness, and is finitely supported.
-* `no_fsCarrier`: **over an order with an infinite ascending chain there is no such carrier.**
+* `FSCarrier L Loc Val Adm`: a solution of the layer equation over `L` in the union view
+  (`CellU`'s, with `L` for `Life`): a set of cells `C` acted on by `L ≃o L`, and a map `out` from
+  cells to layers that is injective, lands in the well-formed layers, reaches each of them, and
+  commutes with the action. A well-formed `mut` layer stores a predicate that holds only in its
+  stratum, holds at the cell's value and witness, and is supported by a finite set `S` with
+  `Adm β S`. `AnySupport` is the nominal reading; `SupportAbove` admits only lifetimes at or above
+  the cell's, as the outlives discipline of `Mut 'a A` gives the predicates the relation stores.
+* `no_fsCarrier`: **over an order with an infinite ascending chain there is no such carrier**,
+  whenever a cell may store a predicate supported by `∅` or by its own lifetime and one above it.
   Along `a₀ < a₁ < ⋯`, let `Y k` be the cells at `a k` whose witness is one cell at `a (k+1)` and
   which are fixed by every automorphism fixing `a k` and `a (k+1)`. A subset `T` of `Y (k+1)` is
   stored as its closure under the automorphisms fixing `a k` and `a (k+1)` (`clo`), a predicate
-  supported by those two lifetimes; the witness of a cell of `Y (k+1)` pins `a (k+2)`, so the
-  closure meets `Y (k+1)` in `T` alone (`mem_clo_iff`). So `#Y k ≥ 2^#Y (k+1) > #Y (k+1)`, a
-  descending sequence of cardinals. The stored closure holds at cells at every lifetime above
-  `a (k+1)` that such an automorphism reaches: infinitely many, at a dense `L`.
-* `no_fsCarrier_of_dense`, `no_fsCarrier_withTopRat`: no dense order with two points carries one,
-  at `WithTop ℚ` among them.
-* `fsCarrier_life`: Core's own cells are an `FSCarrier` over `Life`, whose only automorphism is
-  the identity: the notion is the paper's model, and not empty.
+  supported by those two lifetimes; the witness of a cell of `Y (k+1)` pins `a (k+2)` (`Y_pin`),
+  so the closure meets `Y (k+1)` in `T` alone (`mem_clo_iff`). So `#Y k ≥ 2^#Y (k+1) > #Y (k+1)`,
+  a descending sequence of cardinals. The stored closure holds at cells whose witness sits at any
+  lifetime above `a (k+1)` that such an automorphism reaches: infinitely many, at a dense `L`.
+* `no_fsCarrier_of_dense`, `no_fsCarrier_withTopRat`, `no_fsCarrier_withTopRat_above`: no dense
+  order with two points carries one, in the nominal reading or with supports above the cell.
+* `fsCarrier_life`, `fsCarrier_lifeAny`, `fsCarrier_lifeAbove`: Core's own cells are an
+  `FSCarrier` over `Life`, whose only automorphism is the identity: the notion is the paper's
+  model, and not empty.
 
-The supports the proof uses are the stored cell's own lifetime and one lifetime above it, so
-restricting stored predicates to lifetimes at or above the cell's does not avoid it.
+So finite support does not replace recursion down `⊏`: the obstruction is `Cantor.lean`'s, with
+the predicates confined to those a cell at a lifetime and the one above it can see.
 -/
 
 noncomputable section
@@ -155,32 +160,42 @@ def Supported (act : (L ≃o L) → C → C) (S : Finset L) (P : Val → PMap Lo
 
 /-- A well-formed layer, `CellFG`'s side conditions in the union view: the witness in its
 stratum; a stored predicate that holds only in the stratum, holds at the value and the witness,
-and is finitely supported. -/
-def LayerWF (out : C → LayerU L Loc Val C) (act : (L ≃o L) → C → C) :
-    LayerU L Loc Val C → Prop
+and is supported by a finite set of lifetimes that `Adm` admits for a cell at `β`. -/
+def LayerWF (Adm : L → Finset L → Prop) (out : C → LayerU L Loc Val C)
+    (act : (L ≃o L) → C → C) : LayerU L Loc Val C → Prop
   | .own _ => True
   | .imm ls _ ρ => ResInStr out ls.join ρ
   | .mut β v ρ P => ResInStr out β ρ ∧ (∀ v' ρ', P v' ρ' → ResInStr out β ρ') ∧ P v ρ ∧
-      ∃ S : Finset L, Supported act S P
+      ∃ S : Finset L, Adm β S ∧ Supported act S P
 
 end Ops
 
 /-- **A solution of the layer equation over `L` with finitely supported stored predicates**: a set
 of cells acted on by the automorphisms of `L`, and the cells' layers, `C ≃ {y // LayerWF y}`
-commuting with the action. -/
-structure FSCarrier (L Loc Val : Type) [LinearOrder L] where
+commuting with the action. `Adm β S` says which finite supports a cell at `β` may store a
+predicate with. -/
+structure FSCarrier (L Loc Val : Type) [LinearOrder L] (Adm : L → Finset L → Prop) where
   C : Type
   act : (L ≃o L) → C → C
   act_refl : ∀ x, act (OrderIso.refl L) x = x
   act_trans : ∀ σ τ x, act (σ.trans τ) x = act τ (act σ x)
   out : C → LayerU L Loc Val C
   out_injective : Function.Injective out
-  out_wf : ∀ x, LayerWF out act (out x)
-  out_surj : ∀ y, LayerWF out act y → ∃ x, out x = y
+  out_wf : ∀ x, LayerWF Adm out act (out x)
+  out_surj : ∀ y, LayerWF Adm out act y → ∃ x, out x = y
   out_act : ∀ σ x, out (act σ x) = layerAct act σ (out x)
 
+/-- The nominal reading: every finite support. -/
+abbrev AnySupport {L : Type} : L → Finset L → Prop := fun _ _ => True
+
+/-- Supports at or above the cell's own lifetime, as the outlives discipline of `Mut 'a A` gives
+the predicates the relation stores. -/
+abbrev SupportAbove {L : Type} [LinearOrder L] : L → Finset L → Prop :=
+  fun β S => ∀ x ∈ S, β ≤ x
+
 namespace FSCarrier
-variable {L Loc Val : Type} [LinearOrder L] (K : FSCarrier L Loc Val)
+variable {L Loc Val : Type} [LinearOrder L] {Adm : L → Finset L → Prop}
+  (K : FSCarrier L Loc Val Adm)
 
 theorem act_symm_act (σ : L ≃o L) (x : K.C) : K.act σ.symm (K.act σ x) = x := by
   rw [← K.act_trans, OrderIso.self_trans_symm, K.act_refl]
@@ -266,9 +281,9 @@ theorem mem_clo_iff {k : ℕ} {T : Set K.C} (hT : T ⊆ K.Y a ℓ₀ (k + 1)) {y
 /-! ### The stored predicates -/
 
 /-- The cell at `a (k+1)` with an empty witness, storing "the witness is empty". -/
-theorem exists_c (v₀ : Val) (k : ℕ) :
+theorem exists_c (v₀ : Val) (k : ℕ) (hA : Adm (a (k + 1)) ∅) :
     ∃ c, K.out c = .mut (a (k + 1)) v₀ PMap.empty (fun _ ρ => ρ = PMap.empty) := by
-  refine K.out_surj _ ⟨fun l x h => absurd h (by simp), ?_, rfl, ∅, ?_⟩
+  refine K.out_surj _ ⟨fun l x h => absurd h (by simp), ?_, rfl, ∅, hA, ?_⟩
   · rintro _ _ rfl l x h
     exact absurd h (by simp)
   · intro σ _ v ρ
@@ -322,8 +337,8 @@ theorem enc_supported {ℓ₁ : Loc} {v₀ : Val} {k : ℕ} {c : K.C}
 /-- The stored layer of a subset `T` of `Y (k+1)` is well formed. -/
 theorem enc_wf (ha : StrictMono a) {ℓ₁ : Loc} {v₀ : Val} {k : ℕ} {c : K.C}
     (hc : K.out c = .mut (a (k + 1)) v₀ PMap.empty (fun _ ρ => ρ = PMap.empty)) {T : Set K.C}
-    (hT : T ⊆ K.Y a ℓ₀ (k + 1)) :
-    LayerWF K.out K.act
+    (hT : T ⊆ K.Y a ℓ₀ (k + 1)) (hA : Adm (a k) {a k, a (k + 1)}) :
+    LayerWF Adm K.out K.act
       (.mut (a k) v₀ (pmapSingle ℓ₀ c) (K.enc ℓ₀ ℓ₁ c (K.clo a k T))) := by
   have hck : InStr K.out (a k) c := K.inStr_of_out hc (ha (Nat.lt_succ_self k))
   have hsingle : ∀ (l : Loc) (x : K.C), InStr K.out (a k) x →
@@ -336,7 +351,7 @@ theorem enc_wf (ha : StrictMono a) {ℓ₁ : Loc} {v₀ : Val} {k : ℕ} {c : K.
       exact hx
     · rw [pmapSingle_get_ne _ e] at hy
       exact absurd hy (by simp)
-  refine ⟨hsingle _ _ hck, ?_, Or.inl rfl, _, K.enc_supported a ℓ₀ hc T⟩
+  refine ⟨hsingle _ _ hck, ?_, Or.inl rfl, _, hA, K.enc_supported a ℓ₀ hc T⟩
   rintro _ ρ' (rfl | ⟨z, ⟨σ, -, hσ1, t, ht, rfl⟩, rfl⟩)
   · exact hsingle _ _ hck
   · refine hsingle _ _ ?_
@@ -347,18 +362,19 @@ theorem enc_wf (ha : StrictMono a) {ℓ₁ : Loc} {v₀ : Val} {k : ℕ} {c : K.
     exact K.inStr_of_out e (ha (Nat.lt_succ_self k))
 
 /-- **A subset of `Y (k+1)` is stored by a cell of `Y k`, injectively.** -/
-theorem exists_inj (ha : StrictMono a) {ℓ₁ : Loc} (hℓ : ℓ₀ ≠ ℓ₁) (v₀ : Val) (k : ℕ) :
+theorem exists_inj (ha : StrictMono a) {ℓ₁ : Loc} (hℓ : ℓ₀ ≠ ℓ₁) (v₀ : Val) (k : ℕ)
+    (hA₀ : Adm (a (k + 1)) ∅) (hA₂ : Adm (a k) {a k, a (k + 1)}) :
     ∃ f : Set (K.Y a ℓ₀ (k + 1)) → K.Y a ℓ₀ k, Function.Injective f := by
   classical
-  obtain ⟨c, hc⟩ := K.exists_c a v₀ k
+  obtain ⟨c, hc⟩ := K.exists_c a v₀ k hA₀
   have hsub : ∀ T : Set (K.Y a ℓ₀ (k + 1)), Subtype.val '' T ⊆ K.Y a ℓ₀ (k + 1) := by
     rintro T _ ⟨t, -, rfl⟩
     exact t.2
   let m : Set (K.Y a ℓ₀ (k + 1)) → K.C := fun T =>
-    Classical.choose (K.out_surj _ (K.enc_wf a ℓ₀ ha (ℓ₁ := ℓ₁) hc (hsub T)))
+    Classical.choose (K.out_surj _ (K.enc_wf a ℓ₀ ha (ℓ₁ := ℓ₁) hc (hsub T) hA₂))
   have hm : ∀ T, K.out (m T) =
       .mut (a k) v₀ (pmapSingle ℓ₀ c) (K.enc ℓ₀ ℓ₁ c (K.clo a k (Subtype.val '' T))) :=
-    fun T => Classical.choose_spec (K.out_surj _ (K.enc_wf a ℓ₀ ha (ℓ₁ := ℓ₁) hc (hsub T)))
+    fun T => Classical.choose_spec (K.out_surj _ (K.enc_wf a ℓ₀ ha (ℓ₁ := ℓ₁) hc (hsub T) hA₂))
   have hmY : ∀ T, m T ∈ K.Y a ℓ₀ k := by
     intro T
     refine ⟨⟨v₀, c, _, hm T, v₀, _, _, hc⟩, fun σ h0 h1 => ?_⟩
@@ -401,31 +417,52 @@ end FSCarrier
 /-! ### No carrier over an ascending chain -/
 
 /-- **No solution of the layer equation with finitely supported stored predicates over an order
-with an infinite strictly ascending chain**, given two locations and a value. -/
-theorem no_fsCarrier {L Loc Val : Type} [LinearOrder L] {ℓ₀ ℓ₁ : Loc} (hℓ : ℓ₀ ≠ ℓ₁) (v₀ : Val)
-    {a : ℕ → L} (ha : StrictMono a) (K : FSCarrier L Loc Val) : False := by
+with an infinite strictly ascending chain**, given two locations and a value, whenever a cell at
+`a (k+1)` may store a predicate supported by `∅` and a cell at `a k` one supported by
+`{a k, a (k+1)}`. -/
+theorem no_fsCarrier {L Loc Val : Type} [LinearOrder L] {Adm : L → Finset L → Prop}
+    {ℓ₀ ℓ₁ : Loc} (hℓ : ℓ₀ ≠ ℓ₁) (v₀ : Val) {a : ℕ → L} (ha : StrictMono a)
+    (hA₀ : ∀ k, Adm (a (k + 1)) ∅) (hA₂ : ∀ k, Adm (a k) {a k, a (k + 1)})
+    (K : FSCarrier L Loc Val Adm) : False := by
   have key : ∀ n, Cardinal.mk (K.Y a ℓ₀ (n + 1)) < Cardinal.mk (K.Y a ℓ₀ n) := by
     intro n
-    obtain ⟨f, hf⟩ := K.exists_inj a ℓ₀ ha hℓ v₀ n
+    obtain ⟨f, hf⟩ := K.exists_inj a ℓ₀ ha hℓ v₀ n (hA₀ n) (hA₂ n)
     calc Cardinal.mk (K.Y a ℓ₀ (n + 1)) < 2 ^ Cardinal.mk (K.Y a ℓ₀ (n + 1)) := Cardinal.cantor _
       _ = Cardinal.mk (Set (K.Y a ℓ₀ (n + 1))) := Cardinal.mk_set.symm
       _ ≤ Cardinal.mk (K.Y a ℓ₀ n) := Cardinal.mk_le_of_injective hf
   exact not_strictAnti_of_wellFoundedLT (fun n => Cardinal.mk (K.Y a ℓ₀ n))
     (strictAnti_nat_of_succ_lt key)
 
-/-- **No dense order with two points carries one.** -/
+/-- **No dense order with two points carries one**, whenever a cell may store a predicate
+supported by `∅` or by its own lifetime and one above it: in the nominal reading
+(`AnySupport`), and with supports at or above the cell (`SupportAbove`). -/
 theorem no_fsCarrier_of_dense {L Loc Val : Type} [LinearOrder L] [DenselyOrdered L]
-    [Nontrivial Loc] [Nonempty Val] {x y : L} (h : x < y) : IsEmpty (FSCarrier L Loc Val) := by
+    [Nontrivial Loc] [Nonempty Val] {Adm : L → Finset L → Prop} (hA₀ : ∀ β, Adm β ∅)
+    (hA₂ : ∀ β β', β < β' → Adm β {β, β'}) {x y : L} (h : x < y) :
+    IsEmpty (FSCarrier L Loc Val Adm) := by
   refine ⟨fun K => ?_⟩
   obtain ⟨ℓ₀, ℓ₁, hℓ⟩ := exists_pair_ne Loc
   obtain ⟨v₀⟩ := (inferInstance : Nonempty Val)
   obtain ⟨a, ha, -⟩ := exists_strictMono_of_dense h
-  exact no_fsCarrier hℓ v₀ ha K
+  exact no_fsCarrier hℓ v₀ ha (fun _ => hA₀ _) (fun k => hA₂ _ _ (ha (Nat.lt_succ_self k))) K
 
-/-- At `WithTop ℚ`, with `[TR]` §3's `Loc` and `Val`. -/
-theorem no_fsCarrier_withTopRat : IsEmpty (FSCarrier (WithTop ℚ) BoCa.Loc BoCa.Val) :=
+/-- At `WithTop ℚ`, with `[TR]` §3's `Loc` and `Val`, in the nominal reading. -/
+theorem no_fsCarrier_withTopRat :
+    IsEmpty (FSCarrier (WithTop ℚ) BoCa.Loc BoCa.Val AnySupport) :=
   haveI : Nonempty BoCa.Val := ⟨BoCa.Val.unit⟩
-  no_fsCarrier_of_dense (show ((0 : ℚ) : WithTop ℚ) < ⊤ from WithTop.coe_lt_top 0)
+  no_fsCarrier_of_dense (fun _ => trivial) (fun _ _ _ => trivial)
+    (show ((0 : ℚ) : WithTop ℚ) < ⊤ from WithTop.coe_lt_top 0)
+
+/-- At `WithTop ℚ`, with supports at or above the cell. -/
+theorem no_fsCarrier_withTopRat_above :
+    IsEmpty (FSCarrier (WithTop ℚ) BoCa.Loc BoCa.Val SupportAbove) :=
+  haveI : Nonempty BoCa.Val := ⟨BoCa.Val.unit⟩
+  no_fsCarrier_of_dense (fun _ _ h => absurd h (Finset.notMem_empty _))
+    (fun β β' hlt x hx => by
+      rcases Finset.mem_insert.mp hx with rfl | hx
+      · exact le_rfl
+      · rw [Finset.mem_singleton.mp hx]; exact hlt.le)
+    (show ((0 : ℚ) : WithTop ℚ) < ⊤ from WithTop.coe_lt_top 0)
 
 /-! ### Core's cells are an `FSCarrier` over `Life` -/
 
@@ -520,12 +557,13 @@ theorem lifeOut_injective : Function.Injective (lifeOut (Loc := Loc) (Val := Val
           subst hPP
           rfl
 
-theorem lifeOut_wf (x : CellU Loc Val) : LayerWF lifeOut lifeAct (lifeOut x) := by
+theorem lifeOut_wf {Adm : Life → Finset Life → Prop} (hA : ∀ β, Adm β ∅) (x : CellU Loc Val) :
+    LayerWF Adm lifeOut lifeAct (lifeOut x) := by
   cases x with
   | own v => exact trivial
   | imm i => exact (resInStr_lifeOut _ _).mpr i.ρ.toU_inStratum
   | «mut» m =>
-      refine ⟨(resInStr_lifeOut _ _).mpr m.ρ.toU_inStratum, ?_, ?_, ∅, ?_⟩
+      refine ⟨(resInStr_lifeOut _ _).mpr m.ρ.toU_inStratum, ?_, ?_, ∅, hA _, ?_⟩
       · rintro _ _ ⟨h, -⟩
         exact (resInStr_lifeOut _ _).mpr h
       · refine ⟨m.ρ.toU_inStratum, ?_⟩
@@ -534,8 +572,8 @@ theorem lifeOut_wf (x : CellU Loc Val) : LayerWF lifeOut lifeAct (lifeOut x) := 
       · intro σ _ v ρ
         rw [pmap_map_id' (f := lifeAct σ) (fun _ => rfl)]
 
-theorem lifeOut_surj (y : LayerU Life Loc Val (CellU Loc Val))
-    (hy : LayerWF lifeOut lifeAct y) : ∃ x, lifeOut x = y := by
+theorem lifeOut_surj {Adm : Life → Finset Life → Prop} (y : LayerU Life Loc Val (CellU Loc Val))
+    (hy : LayerWF Adm lifeOut lifeAct y) : ∃ x, lifeOut x = y := by
   cases y with
   | own v => exact ⟨.own v, rfl⟩
   | imm ls v ρ =>
@@ -587,20 +625,29 @@ theorem layerAct_refl (y : LayerU Life Loc Val (CellU Loc Val)) :
       · intro hu
         exact ⟨r, pmap_map_id' (f := lifeAct (OrderIso.refl Life)) (fun _ => rfl) r, hu⟩
 
-/-- **Core's carrier is an `FSCarrier` over `Life`**: `Life` has no automorphism but the identity,
-so every stored predicate is supported by `∅`, and `out` is a cell's constructor. -/
-def fsCarrier_life : FSCarrier Life Loc Val where
+/-- **Core's carrier is an `FSCarrier` over `Life`**, for every admissibility that admits `∅`:
+`Life` has no automorphism but the identity, so every stored predicate is supported by `∅`, and
+`out` is a cell's constructor. -/
+def fsCarrier_life {Adm : Life → Finset Life → Prop} (hA : ∀ β, Adm β ∅) :
+    FSCarrier Life Loc Val Adm where
   C := CellU Loc Val
   act := lifeAct
   act_refl _ := rfl
   act_trans _ _ _ := rfl
   out := lifeOut
   out_injective := lifeOut_injective
-  out_wf := lifeOut_wf
+  out_wf := lifeOut_wf hA
   out_surj := lifeOut_surj
   out_act σ x := by
     rw [Subsingleton.elim σ (OrderIso.refl Life), layerAct_refl]
     rfl
+
+/-- In the nominal reading. -/
+def fsCarrier_lifeAny : FSCarrier Life Loc Val AnySupport := fsCarrier_life fun _ => trivial
+
+/-- With supports at or above the cell. -/
+def fsCarrier_lifeAbove : FSCarrier Life Loc Val SupportAbove :=
+  fsCarrier_life fun _ _ h => absurd h (Finset.notMem_empty _)
 
 end Life
 

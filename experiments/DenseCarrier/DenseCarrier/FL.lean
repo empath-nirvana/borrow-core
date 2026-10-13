@@ -20,6 +20,14 @@ import Support.Statics.Presupposed
   them.
 
 Neither proof uses a fact about `L` beyond its being a linear order with a top.
+
+The statics stay Core's, over `ℕ` (`SLife`, `LifeCtx.EntailsLt`, `LifeCtx.EntailsLe`,
+`LifeCtx.Defines` on `LSub`); their premises reach the relation over `L` through
+`entailsLtD_of_entailsLt`, `entailsLeD_of_entailsLe` and `definedD_of_defines` (`Borrow.lean`).
+
+The relation is `False` outside the fragment (`FragV`, `FragC`), so these lemmas are statements
+about Core's rules only when every type in them is in the fragment; elsewhere they hold for that
+reason alone.
 -/
 
 noncomputable section

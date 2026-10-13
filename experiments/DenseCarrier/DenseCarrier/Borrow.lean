@@ -18,6 +18,9 @@ payload predicate (`wpTS_M_frameG`, Core's `wpTS_M_frameX` with `𝒱⟦A⟧δ` 
 Beside it: `[−]` over `L` read on the slots (`outlivesD_iff`), 6.60 non-strict over `L`
 (`vD_outlivesLe`), the relation stable along `Ext` (`vD_local`), persistent types at `∅`
 (`vD_empty_of_persistent`), and a consumed context at `∅` (`gSepD_deadP`).
+
+`withbor2_compatD` is a statement about `[TR]` 6.173 only when `A` and `B` are in the fragment
+(`FragV`): elsewhere `𝒱⟦A⟧` or `𝒱⟦B⟧` is `False` over `L`.
 -/
 
 noncomputable section

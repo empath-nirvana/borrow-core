@@ -26,12 +26,18 @@ Core's slots at `-n`, `Shift.lean`'s position shift `shiftQ` is such a `ψ` (`sh
   flattening stores an image (`Restrat.Emb.flatAt_mut_moved`).
 * `not_reslotInvV`, `not_reslotInvC`: for every `L`, every `ι`, every re-slotting `θ` other than
   the identity and every `ψ` agreeing with `ι ∘ θ ∘ ι⁻¹` on the slots, a configuration is related
-  before the move and not after, at `Mut 'a (Mut 'b 1)` and at `F (Mut 'a (Mut 'b 1))`.
+  before the move and not after, at `Mut 'a (Mut 'b 1)` and at `F (Mut 'a (Mut 'b 1))`: a borrow
+  of a borrow (`rhoMM`), a typed world (`tw_nested`).
 * `reslotFailsAtEveryCut`: in particular every segment shift `Restrat.Emb.shift c k`, `k > 0`, at
   every cut `c`.
 * `not_bridgeV`: re-slotting the resource and the records is not moving the slots' positions
-  (`ι` to `ι ∘ θ`).
+  (`ι` to `ι ∘ θ`). It fails without `Imm`, so no extension of the fragment restores it.
 * `not_denseThawTop`: the dense analogue of `Bridge.not_coreThawTop`, at every `L` and `ι`.
+* In Core (`L = Life`, the identity placement, through `cD_id`): `core_reslot_fails`,
+  `not_segShiftInv_noAll`, `not_coreThawTop_noAll`, at a type with no `∀`.
+* No slot in the gap: a placement of the slots keeps their order and never creates room between
+  two of them (`slots_between_iff`, `no_slot_between_adjacent`, `placement_keeps_order`), and the
+  gap probe 1's position shift opens in `L` holds no slot (`shiftSlots_gap_empty`).
 
 What re-slotting cannot do is the gap: `θ` leaves slots with no preimage, and the relation at the
 moved reading reads cells there.
@@ -313,13 +319,13 @@ theorem tw_relRU_rhoMM (ι : Slots L) {c : Life} (θ : Restrat.Emb c) (δ : LSub
 `F (Mut 'a (Mut 'b 1))` and `return ℓ`. -/
 theorem reslot_fails_cD (ι : Slots L) {c : Life} (θ : Restrat.Emb c) (hθ : ∃ x, θ x ≠ x)
     (ψ : L → L) (hψ : ∀ s, ψ (ι s) = ι (θ s)) :
-    ∃ (C : CTy) (ls : List SRec) (δ : LSubD L) (e : Expr) (ρ : WRes), FragC C ∧
-      cD (ℍ := ℍ) ι C ls δ e ρ ∧
-      ¬ cD (ℍ := ℍ) ι C (ls.map (Targets.srecRestrat θ)) (δ.map ψ) e (θ.relRU ρ) := by
+    ∃ (ls : List SRec) (δ : LSubD L) (e : Expr) (ρ : WRes),
+      cD (ℍ := ℍ) ι (.ret mm) ls δ e ρ ∧
+      ¬ cD (ℍ := ℍ) ι (.ret mm) (ls.map (Targets.srecRestrat θ)) (δ.map ψ) e (θ.relRU ρ) := by
   obtain ⟨n, hgap, hθn⟩ := exists_gap θ hθ
   have hbs := succ_lt_life n
-  refine ⟨.ret mm, [], δmm ι (OrderDual.toDual (n + 1)) (OrderDual.toDual n), .val (.loc 0),
-    rhoMM ι _ 0 1 (δmm_find1 ι _ _) hbs, fragC_retMM,
+  refine ⟨[], δmm ι (OrderDual.toDual (n + 1)) (OrderDual.toDual n), .val (.loc 0),
+    rhoMM ι _ 0 1 (δmm_find1 ι _ _) hbs,
     wpTS_val [] (.loc 0) _ _ (vD_rhoMM ι _ 0 1 (δmm_find0 ι _ _) (δmm_find1 ι _ _) hbs), ?_⟩
   rw [List.map_nil]
   refine not_wpTS_mm_relRU ι θ hgap (δmm_map_find1 ι _ _ ψ) ?_ _ _
@@ -330,8 +336,8 @@ theorem reslot_fails_cD (ι : Slots L) {c : Life} (θ : Restrat.Emb c) (hθ : �
 theorem not_reslotInvC (ι : Slots L) {c : Life} (θ : Restrat.Emb c) (hθ : ∃ x, θ x ≠ x)
     (ψ : L → L) (hψ : ∀ s, ψ (ι s) = ι (θ s)) : ¬ ReslotInvC (ℍ := ℍ) ι θ ψ := by
   intro h
-  obtain ⟨C, ls, δ, e, ρ, hC, h₁, h₂⟩ := reslot_fails_cD (ℍ := ℍ) ι θ hθ ψ hψ
-  exact h₂ ((h C hC ls δ e ρ).mpr h₁)
+  obtain ⟨ls, δ, e, ρ, h₁, h₂⟩ := reslot_fails_cD (ℍ := ℍ) ι θ hθ ψ hψ
+  exact h₂ ((h _ fragC_retMM ls δ e ρ).mpr h₁)
 
 /-! ### At every cut -/
 
@@ -354,8 +360,10 @@ def ReslotFailsAtEveryCut (ι : Slots L) : Prop :=
       ¬ cD (ℍ := ℍ) ι C (ls.map (Targets.srecRestrat (Restrat.Emb.shift c k))) (δ.map ψ) e
         ((Restrat.Emb.shift c k).relRU ρ)
 
-theorem reslotFailsAtEveryCut (ι : Slots L) : ReslotFailsAtEveryCut (ℍ := ℍ) ι :=
-  fun c _ hk ψ hψ => reslot_fails_cD ι _ (shift_ne_id c hk) ψ hψ
+theorem reslotFailsAtEveryCut (ι : Slots L) : ReslotFailsAtEveryCut (ℍ := ℍ) ι := by
+  intro c _ hk ψ hψ
+  obtain ⟨ls, δ, e, ρ, h₁, h₂⟩ := reslot_fails_cD (ℍ := ℍ) ι _ (shift_ne_id c hk) ψ hψ
+  exact ⟨_, ls, δ, e, ρ, fragC_retMM, h₁, h₂⟩
 
 /-- At `WithTop ℚ`, `Shift.lean`'s position shift agrees with the re-slotting on Core's slots: the
 faithful shift is probe 1's shift of the reading together with the re-slotting of the cells. -/
@@ -415,6 +423,60 @@ theorem not_bridgeV (ι : Slots L) {c : Life} (θ : Restrat.Emb c) (hθ : ∃ x,
   refine not_vD_mm_relRU ι θ hgap (δmm_find1 _ _ _) ?_ [] _ _ hm
   exact ι.le_iff.mpr hθn.le
 
+/-! ### No slot in the gap
+
+In the two-order design a cell sits at a slot, so a lifetime of `L` carries a cell only if it is a
+slot's position. The moves the relation is invariant under move positions (`cD_map`,
+`segShift_iff`), and those keep the order of the slots and the number of slots between any two:
+they never put a slot between two slots that had none between them, nor the region's slots below
+the resumer's when the resumer's lends were taken below them. Probe 1's shift opens a gap of `L`
+that holds no slot. The move that does free slots there is re-slotting, which breaks the relation
+(`not_reslotInvC`). -/
+
+/-- **A placement of the slots never creates room between two slots**: under every placement, the
+slots whose positions lie strictly between those of `r` and `t` are the slots strictly between
+them. -/
+theorem slots_between_iff (ι : Slots L) (r s t : Life) :
+    (ι r < ι s ∧ ι s < ι t) ↔ (r < s ∧ s < t) :=
+  and_congr ι.lt_iff ι.lt_iff
+
+/-- Adjacent slots stay adjacent: under every placement no slot sits strictly between the
+positions of the slot `n + 1` and the slot `n` above it. -/
+theorem no_slot_between_adjacent (ι : Slots L) (n : ℕ) (s : Life) :
+    ¬ (ι (OrderDual.toDual (n + 1)) < ι s ∧ ι s < ι (OrderDual.toDual n)) := by
+  rw [slots_between_iff]
+  rintro ⟨h₁, h₂⟩
+  have e₁ : OrderDual.ofDual s < n + 1 := h₁
+  have e₂ : n < OrderDual.ofDual s := h₂
+  omega
+
+/-- The resumer's lends, taken below the region's, stay below them under every placement. -/
+theorem placement_keeps_order (ι : Slots L) {f r : Life} (h : f < r) : ι f < ι r :=
+  ι.strictMono h
+
+/-- **Probe 1's shift opens a gap of `L` that holds no slot**: after the shift at the cut `q` by
+`k > 0`, no slot's position lies in `[q - k, q)`. -/
+theorem shiftSlots_gap_empty (ι : Slots (WithTop ℚ)) (q : ℚ) {k : ℚ} (hk : 0 < k) (s : Life) :
+    ¬ (((q - k : ℚ) : WithTop ℚ) ≤ shiftSlots ι q hk s ∧ shiftSlots ι q hk s < (q : WithTop ℚ)) := by
+  rintro ⟨h₁, h₂⟩
+  change ((q - k : ℚ) : WithTop ℚ) ≤ shiftQ q k (ι s) at h₁
+  change shiftQ q k (ι s) < (q : WithTop ℚ) at h₂
+  by_cases h : ι s < (q : WithTop ℚ)
+  · obtain ⟨r, hr⟩ : ∃ r : ℚ, ι s = r :=
+      WithTop.ne_top_iff_exists.mp (ne_top_of_lt h) |>.imp fun _ e => e.symm
+    rw [hr] at h h₁
+    rw [shiftQ_coe_lt h] at h₁
+    have h' : r < q := WithTop.coe_lt_coe.mp h
+    have h₁' : q - k ≤ r - k := WithTop.coe_le_coe.mp h₁
+    linarith
+  · rw [shiftQ_of_le (not_lt.mp h)] at h₂
+    exact h h₂
+
+/-- The gap is not empty. -/
+theorem shiftQ_gap_nonempty (q : ℚ) {k : ℚ} (hk : 0 < k) :
+    ((q - k : ℚ) : WithTop ℚ) < (q : WithTop ℚ) :=
+  WithTop.coe_lt_coe.mpr (by linarith)
+
 /-! ### The dense thaw at the top cut -/
 
 /-- **The dense thaw at `⊤`** (`Bridge.CoreThawTop` over `L`): every lifetime below `⊤`
@@ -431,9 +493,49 @@ reading move agreeing with `shift ⊤ 1` on the slots. -/
 theorem not_denseThawTop (ι : Slots L) (ψ : L → L) (hψ : ∀ s, ψ (ι s) = ι (ProbeD1.adjθ s)) :
     ¬ DenseThawTop (ℍ := ℍ) ι ψ := by
   intro h
-  obtain ⟨C, ls, δ, e, ρ, -, h₁, h₂⟩ :=
+  obtain ⟨ls, δ, e, ρ, h₁, h₂⟩ :=
     reslot_fails_cD (ℍ := ℍ) ι ProbeD1.adjθ (shift_ne_id ⊤ one_pos) ψ hψ
-  exact h₂ (h C ls δ e ρ h₁)
+  exact h₂ (h _ ls δ e ρ h₁)
+
+/-! ### In Core
+
+At `L = Life` and the identity placement the fragment relation is Core's (`cD_id`), so the same
+configuration refutes `SegShift.SegShiftInv` and `Bridge.CoreThawTop` at `F (Mut 'a (Mut 'b 1))`,
+a type with no `∀`. ProbeD1's witnesses read the room below a `∀`'s bound; this one reads none, and
+fails at every lifetime order the same way. -/
+
+theorem toLSub_map_emb {c : Life} (θ : Restrat.Emb c) (δ : LSubD Life) :
+    toLSub (δ.map θ.f) = Restrat.LSub.mapN θ.toNat (toLSub δ) := by
+  simp only [toLSub, LSubD.map, Restrat.LSub.mapN, List.map_map]
+  rfl
+
+/-- **Core's relation is not invariant under re-slotting at a type with no `∀`**: at every
+re-slotting other than the identity, at every cut. -/
+theorem core_reslot_fails {c : Life} (θ : Restrat.Emb c) (hθ : ∃ x, θ x ≠ x) :
+    ∃ (ls : List SRec) (δ : BoCa.Lifetime.LSub) (e : Expr) (ρ : WRes),
+      cC (ℍ := ℍ) (.ret mm) ls δ e ρ ∧
+      ¬ cC (ℍ := ℍ) (.ret mm) (ls.map (Targets.srecRestrat θ)) (Restrat.LSub.mapN θ.toNat δ) e
+        (θ.relRU ρ) := by
+  obtain ⟨ls, δ, e, ρ, h₁, h₂⟩ := reslot_fails_cD (ℍ := ℍ) Slots.id θ hθ θ.f (fun _ => rfl)
+  refine ⟨ls, toLSub δ, e, ρ, ?_, ?_⟩
+  · rw [← cD_id _ fragC_retMM]
+    exact h₁
+  · rw [← toLSub_map_emb, ← cD_id _ fragC_retMM]
+    exact h₂
+
+/-- `SegShift.SegShiftInv` is false at a type with no `∀`. -/
+theorem not_segShiftInv_noAll : ¬ ProbeD1.SegShift.SegShiftInv (ℍ := ℍ) := by
+  intro h
+  obtain ⟨ls, δ, e, ρ, h₁, h₂⟩ :=
+    core_reslot_fails (ℍ := ℍ) (ProbeD1.SegShift.segθ ⊤ 1) (shift_ne_id ⊤ one_pos)
+  exact h₂ (h ⊤ 1 _ ls δ e ρ h₁)
+
+/-- `Bridge.CoreThawTop` is false at a type with no `∀`. -/
+theorem not_coreThawTop_noAll : ¬ ProbeD1.Bridge.CoreThawTop (ℍ := ℍ) := by
+  intro h
+  obtain ⟨ls, δ, e, ρ, h₁, h₂⟩ :=
+    core_reslot_fails (ℍ := ℍ) ProbeD1.adjθ (shift_ne_id ⊤ one_pos)
+  exact h₂ (h _ ls δ e ρ h₁)
 
 /-- At `WithTop ℚ`, Core's slots at `-n`, and the reading translated by `-1`. -/
 theorem not_denseThawTop_rat : ¬ DenseThawTop (ℍ := ℍ) ratSlots (shiftQ ⊤ 1) := by
