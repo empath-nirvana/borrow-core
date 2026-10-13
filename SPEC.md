@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 0.51 · 2026-10-13
+Version 0.52 · 2026-10-13
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -2900,6 +2900,11 @@ does not hold. Safety is stated of the runs of typed programs (`Core/EffSafety.l
      exactly as `raise p` steps there: the frame that catches it drops them (`abort_absorbs`;
      `abort_to`, `abort_app`).
    - *Sequencing*, `op(v) to x. P = op(v; y. (k y to x. P))`, is not yet a Core theorem.
+3. **Static per-site names: no accidental handling.** An operation is caught by the nearest live
+   handler of its name (*Names*); a handler of another name passes it, in the machine as item 1's
+   H-fwd (`fwd_abort`). `tunnel` (E6, `Core/EffTier1Programs.lean`): `fwrap` handles `exnᵢ` around
+   a callback that raises `exnₒ`, and the raise passes `fwrap`'s handler to `toResult`'s outside
+   (`d_tunnel`, `tunnel_run`; the kernel program `tunnel`).
 4. **Continuations are linear or affine; `unr` is tolerated.** A clause's `κ` is at `kTy`
    (*Kinds of operation*): at a linear or affine operation a thunk of an `&`, which is not
    persistent, its cancel branch at `⊤` at a linear one. So a typed clause uses `κ` as its qualifier
@@ -3052,6 +3057,44 @@ each by inversion of `CDerives` (`Core/Inversions.lean`):
   the same clause with the copy used once, is typed (`d_at08Once`), and every run of it ends at `()`
   with the memory empty (`at08Once_runs`); it is the kernel program `at08-once`;
 - `at13`: a clause that forgets `κ` (`not_der_at13`).
+
+**The effect properties** (`Core/EffTier1Programs.lean`). Each program is a closed term with a
+derivation tied to its effect context `ΞE` (`CDerivesAt`, read in `CDerives`), which has no
+unrestricted abortive operation (`noUnrExn_ΞE`), and a run computed by `runM` from the empty memory
+to its answer at the empty memory (`runM_val`):
+- E1, a function at several rows: `hofTwoRows`, `hof = λg. g ()` let-bound once (§24's
+  `[let-poly]`) and called with a pure callback, with one that raises `exn` under `toResult`, and
+  with one that performs the affine `wait` under a handler that resumes `κ` at its cell. The
+  callbacks `λ_. M` are §26's `[λ-dead]`. It answers `(tt, (inr (), tt))` (`d_hofTwoRows`,
+  `hofTwoRows_run`).
+- E2d: `sumGen`, a consumer of a generator let-bound once and used with generators at `yield ⊙ ∅`
+  and at `yield ⊙ exn`; the raise of `exn` passes its reinstalled handler. It answers
+  `(tt, inr ())`.
+- E4, a deep handler: `deepGen`, whose handler of `yield`, reinstalled at the resume, catches both
+  yields, its clause performing the linear `tick` at each; a handler of `tick` counts them. It
+  answers `((), 2)`.
+- E5, nested handlers in both orders: `withLog`, a state-passing handler of the linear `log`, and
+  `toResult`. With `withLog` outside, the log is kept beside the error (`nestedLogOutside`,
+  `(inr (), tt)`); inside, the raise unwinds `withLog`'s handler and its state
+  (`nestedFailOutside`, `inr ()`).
+- E6, no accidental handling: `tunnel` (*Laws* item 3).
+- E7, abandoning a suspension: `timeout` cancels a body whose region holds finalisers: one that
+  returns (`e7a`), one that raises `exnₒ`, handled outside (`e7b`), and two that raise, the first
+  error kept and re-raised at the canceller (`e7d`). Each answers `inr ()`. E7c is rejected
+  (*Laws* item 6).
+- E8b, the finally law: `e8b` unwinds `exn_a` through a finaliser that raises `exn_b`, which
+  supersedes it. It answers `inl (inr ())`.
+- E9, a stored continuation: a clause answers a closure holding the affine `κ`, called after the
+  handler has returned. It resumes `κ` (`storedKResume`, `ff`), cancels it (`storedKCancel`, `tt`),
+  or cancels it and its region's finaliser raises `exnₒ`, caught outside (`storedKFin`, `inr ()`).
+- E10: `timeoutProg`, `timeout` let-bound once, which cancels a body that waits and passes a body's
+  raise. It answers `(ff, inr ())`.
+
+E5's state function and E9's closure hold a `bool` across a `[let]` at a row with `exn`, so they are
+typed where `exn` is affine (§27 *Typing*). The kernel programs `deep-gen`, `nested-log-outside`,
+`nested-fail-outside`, `tunnel`, `e7a`, `e7b`, `e7d`, `e8b`, `stored-k-resume`, `stored-k-cancel`
+and `stored-k-fin` are these terms, compiled at every stage. `hofTwoRows`, `sumGen` and
+`timeoutProg` are not compiled (§24 *Open*).
 
 ### Lowering
 
@@ -3899,6 +3942,10 @@ No change to the machine, the relation, `wpTS`, `wpG` or `ewpTS`.
 - S5 holds at every instance of its parameter, a finaliser that lets the raises of some names
   escape, not only at the empty set: `unwind_prefix` and `cancel_prefix` at `FinRow` (§19 *Laws*
   items 5 and 6).
+- `[let-poly]` types a closed λ let-bound once and used at several rows: `hofTwoRows` (E1),
+  `sumGen` (E2d) and `timeoutProg` (E10), each with a use at the pure row and one under a handler of
+  `exn` (§19 *Programs*). The premise's term, the body with the λ at each use, is computed
+  (`threeUses_subst`, `sumGenUses_subst`, `timeoutUses_subst`).
 
 ### Baseline
 
@@ -3909,6 +3956,12 @@ glue (§12's destructors) already was.
 ### Open
 
 - OQ-7 (finalisers that resume, or clean up asynchronously).
+- **The lowering of a let-bound function used under different handlers.** The backend's flow
+  analysis (`Backend/Clos/Flow.lean`) gives the function's code every name its callbacks raise, so
+  `Backend/Clos/Unwind.lean` takes a use outside the handler of `exn` to raise it and rejects the
+  program: `hofTwoRows`, `sumGen` and `timeoutProg` (§19 *Programs*) are not kernel programs. Their
+  β-reducts, the function copied at each use (`[let-poly]`'s premise, and what §18's elaboration
+  makes by copying a function per assignment of its effects), compile at every stage.
 
 ## 25. Entry 24 — the capture cell: a linear or affine continuation owns a unit cell
 
@@ -4040,7 +4093,9 @@ No change to the machine, the relation, `wpTS`, `wpG` or `ewpTS`.
 ### Theorems
 
 `fundamentalC`, `adequacyC`, `adequacyD`, `adequacyD_obs` and every compatibility lemma keep their
-statements, over the extended judgment. `CDerives` gains `lamDead`.
+statements, over the extended judgment. `CDerives` gains `lamDead`. The callbacks of §19
+*Programs*' effect properties, `λ_. M` for a closed `M`, are typed by it (`dAt_cb`,
+`Core/EffTier1Programs.lean`).
 
 ### Baseline
 
@@ -4127,8 +4182,10 @@ cancel is invoked.
   (`EffCtx.NoUnrExn`), and no name's signature is one unrestricted `exn`
   (`EffCtx.NoUnrExn.ne_exn`). E9's stored closure holds `x : bool` across `cancel k`, a `[let]` at
   a row holding `exnₒ`, and `[let]` asks a persistent context at a row with an unrestricted
-  operation, an abortive one included; so E9, as E5, is typed where no `exn` is unrestricted (tier
-  1's programs, not yet Core programs), which is every context the restriction leaves.
+  operation, an abortive one included; so E9, as E5, is typed where no `exn` is unrestricted, which
+  is every context the restriction leaves: `storedKFin` and `nestedFailOutside` (§19 *Programs*)
+  are typed at `ΞE`, whose `exn` is affine (`dAt_storedKFin`, `dAt_nestedFailOutside`,
+  `noUnrExn_ΞE`).
 
 ### Semantics
 
@@ -4212,7 +4269,8 @@ finaliser that performs (`progFinOp`), a cancel nested in a cancel (`progNC₁`)
 dropped with an unrestricted continuation or resumed (`progDrop`, `progKeep`), are Lean runs
 (`Core/EffCancel.lean`, `Core/EffCancelTyped.lean`) and interpreter runs, not kernel programs. The
 checker emits no such finaliser: its finalisers are destructors at `F 1`. No kernel program and
-no count changes.
+no count changes. Finalisers that raise run at every stage in the kernel programs `e7a`, `e7b`,
+`e7d`, `e8b` and `stored-k-fin` (§19 *Programs*).
 
 ### Baseline
 
@@ -4410,6 +4468,11 @@ typed control `at08Once` (the kernel program `at08-once`) in `Core/Rejections.le
 is an induction on `CDerives`, so a rule added to `CDerives` adds a case to each
 (`Core/Inversions.lean`, *Cost*).
 
+The effect properties' programs (§19 *Programs*, *Laws* item 3) are `Core/EffTier1Programs.lean`,
+each with a derivation tied to its effect context and a run computed by `runM`, with no change to
+`CDerives`, the machine or the relation; those the backend compiles are kernel programs
+(`Backend/Kernel.lean`, their counts in `corpus/kernel-counts.expected`).
+
 The unwind and the cancel (§19 *Laws* items 5 and 6) are stated of Core's machine in
 `Core/EffCancelRuns.lean`, with no change to `CDerives`, the machine or the relation. Read
 prefix-closed over paths (`Path`): `unwind_prefix` (`UnwindTr`) and `cancel_prefix` (`CancelTr`),
@@ -4420,6 +4483,19 @@ at finalisers typed at rows of abortive operations (`FinRow`, `finAlone_of_finRo
 ---
 
 ## Changelog
+
+- **0.52** (2026-10-13) — §19 *Programs*: the effect properties as Core programs. E1, E2d, E4,
+  E5 in both orders, E6, E7a/b/d, E8b, E9a/b/c and E10, each a closed term with a derivation tied
+  to the effect context `ΞE`, which has no unrestricted abortive operation, and a run computed by
+  `runM` to its answer at the empty memory (`Core/EffTier1Programs.lean`); a tied derivation
+  weakens by consumed slots (`CDerivesAt.append_dead`). §19 *Laws* item 3: static per-site names,
+  `tunnel`. §24 *Theorems*: `[let-poly]` types E1, E2d and E10's let-bound functions; §24 *Open*:
+  their let forms are not lowered when the uses are under different handlers. §26: the programs'
+  callbacks are `[λ-dead]`'s. §27 *Typing*: E5 and E9 are Core programs at an affine `exn`. New
+  kernel programs `deep-gen`, `nested-log-outside`, `nested-fail-outside`, `tunnel`, `e7a`, `e7b`,
+  `e7d`, `e8b`, `stored-k-resume`, `stored-k-cancel`, `stored-k-fin`, their counts measured (new
+  rows of `corpus/kernel-counts.expected`; no existing row changes). No change to the machine, the
+  relation, `CDerives` or the statement of any theorem.
 
 - **0.51** (2026-10-13) — §19 *Laws* item 6 and §27 *Programs*: the rejections of decision D3 are
   Core theorems, each by inversion of `CDerives`. `progT` has no derivation at a row without `2`,

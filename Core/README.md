@@ -239,6 +239,16 @@ effect).
   `progT` has no derivation at a row without `2` (`not_der_progT`), `progNCrecT` none at all
   (`not_der_progNCrecT`), and E7c (`e7c`) none at a row without `exnᵢ` (`not_der_e7c`), while at
   the row of `exnᵢ` it is typed by a tied derivation (`dAt_e7c_lift`, `d_e7c_lift`).
+- **The effect properties as programs** (`SPEC.md` §19 *Programs*, `EffTier1Programs.lean`). Each
+  is a closed term with a derivation tied to the effect context `ΞE`, which has no unrestricted
+  abortive operation (`noUnrExn_ΞE`), and a run computed by `runM` to its answer at the empty
+  memory: a function let-bound once and used at several rows by `[let-poly]` (`hofTwoRows`,
+  `sumGen`, `timeoutProg`), a deep handler (`deepGen`), nested handlers in both orders
+  (`nestedLogOutside`, `nestedFailOutside`), no accidental handling (`tunnel`), a cancelled
+  suspension's finalisers (`e7a`, `e7b`, `e7d`), an unwind through a finaliser that raises (`e8b`),
+  and a stored continuation resumed, cancelled, or cancelled through a finaliser that raises
+  (`storedKResume`, `storedKCancel`, `storedKFin`). A tied derivation weakens by consumed slots at
+  the end (`CDerivesAt.append_dead`).
 - **Embedding.** `embed : DerivesWf Δ Γ e T → CDerives Δ (cbvCtx Γ) e (.val (cbv T))` for every
   `DerivesWf` rule, and `adequacy_of_derivesWf`. `EmbeddingExamples.lean` runs BoLo's baseline
   programs through it.
