@@ -6,7 +6,7 @@ Capture, which freezes a computation at an operation, and resume both preserve t
 
 As a binder: the relation and the invariant are equivariant under bijections of locations and instances and under order-respecting renamings of lifetimes. Resume and placement are instantiations.
 
-**Lean target:** not yet stated. It goes in the targets library with an enumerated `sorry`.
+**Lean target:** [`experiments/Targets/RESTRUCTURE.md`](../../../../experiments/Targets/RESTRUCTURE.md) §3.2, §3.6: in done, `Arises` (every configuration the world reaches arises, with the frames suspended computations hold counted), in I's `Interface`, and the tier-2 programs, accepted with their answers (`Tier2Programs`: `at02`, `at04`, `at12`, `at17`, `genSelf`). The rest of `I2` is the proof device's, beside done, since each part fixes an option of OQ-8 or OQ-9: `StopVisible` (the stop restores the visible frames), `ShareResume` (the resume conjunct of the share at every future index), `FramesW` ([TR] 6.64 and 6.65 at W) and `SpanBorrows` (the six unwinding borrow constants at the spanning rows). The spanning typing rules are `J₂`'s mechanism, recorded as `spanRules_J₂`, not a pin. The binder reading is `FreezeBinder`, beside done (`CombinedBinder`): its location half a symmetry, its lifetime half forward instantiation. In Lean: `Arises coreW` is PROVED AT σ=[] (`arises_core`); `I2` is PROVED AT A RESTRICTION at Core σ=[], at abortive rows (`i2_core_abortive`), and OPEN at W; `Tier2Programs` at a typing system is OPEN (the interpreter runs the programs, as evidence); `FreezeBinder` is OPEN, and its first check, `NotVDenNaturalArises`, is stated and OPEN.
 
 ## Why it matters
 

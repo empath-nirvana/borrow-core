@@ -174,3 +174,18 @@ roots = ["Restrat"]
 name = "GhostEnd"
 srcDir = "experiments/GhostEnd"
 roots = ["GhostEnd"]
+
+[[lean_lib]]
+name = "Targets"
+srcDir = "experiments/Targets"
+roots = ["Targets"]
+
+[[lean_lib]]
+name = "ProbeD1"
+srcDir = "experiments/ProbeD1"
+roots = ["ProbeD1"]
+
+[[lean_lib]]
+name = "DenseCarrier"
+srcDir = "experiments/DenseCarrier"
+roots = ["DenseCarrier"]

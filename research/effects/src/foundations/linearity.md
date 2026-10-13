@@ -6,7 +6,7 @@ The literature mostly assumes affine values with silent weakening, as in Rust's 
 - exactly-once finalisation is conjectured, not proved (Koka), or left as future work (Affect).
 
 BoLo is linear: adequacy ends with empty memory. In our kernel, discarding a continuation is an explicit cancel, because an affine continuation owes `cancelOwed`. So:
-- there is no `forget`;
+- a `lin` or `aff` continuation has no `forget`; an `unr` one can be forgotten, but it holds no resource;
 - a drop is a cancel, with the semantics SPEC §19 defines;
 - exactly-once finalisation is a theorem shape (P5).
 

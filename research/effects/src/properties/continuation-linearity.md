@@ -4,7 +4,7 @@
 
 A continuation is used as its qualifier says: a linear one exactly once, an affine one at most once, with an explicit cancel when it is not used.
 
-**Lean target:** not yet stated. It goes in the targets library with an enumerated `sorry`.
+**Lean target:** [`experiments/Targets/RESTRUCTURE.md`](../../../../experiments/Targets/RESTRUCTURE.md) §1.5: A's S6 `ContUse`. On every run of a typed program, no continuation is used more often than it was caught, a linear one is never cancelled, and on a complete run at a data answer each is used exactly as often as it was caught; uses are observed from the run's terms (resume and cancel sites). It is in done. The resource half is B4 with B5: B4 frees every cell a cancelled continuation held, and B5 (`ReleasedOnceReuse`) releases each allocation once, location reuse included. On runs that reuse no location, release exactly once is a tautology about runs (`releasedOnceAll`), and `P8a`, which read it at the runs that capture a continuation, is retired. In Lean: `ContUse` is stated, and OPEN at our instance. Its witnesses R1–R4 (`Targets/A/Programs.lean`), which any typing system that types one must fail, are not yet run at our machine. S6's proof route is OQ-50's (RESTRUCTURE §7 Q9).
 
 ## Why it matters
 

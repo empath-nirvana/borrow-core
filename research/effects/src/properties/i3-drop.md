@@ -4,7 +4,7 @@
 
 Dropping a suspended computation is a cancel. It runs every finaliser of the frozen frames exactly once, LIFO, and ends every lend it holds.
 
-**Lean target:** not yet stated. It goes in the targets library with an enumerated `sorry`.
+**Lean target:** [`experiments/Targets/RESTRUCTURE.md`](../../../../experiments/Targets/RESTRUCTURE.md) §3.2, §3.7. In done, dropping a suspended computation is A's S5 `Cancellation`: a cancel fires the frozen finalisers innermost first, each once, keeps the first outside error and suppresses the region's own, and nothing intercepts it (`NoIntercept`, `UnwindOrder`). E7 and E9c observe each fire and end in their traces. B4 with B5 releases the memory a cancelled continuation held. The world-level preservation conjunct `I3` (`ShareCancel`, with an option-neutral closing clause: the cancel leaves nothing newly held) is the proof device's, beside done. "Ends every lend it holds" needs OQ-57's accounting of which held frames a continuation froze; `CancelCloses` is named-only until then. None claims termination. In Lean: S5 at our instance is OPEN (the bridges `noIntercept_of_core`, `unwindOrder_of_core` are not built). Its routes at Core are Core's `NoInterception tier1`, PROVED AT σ=[] (`noInterception_tier1`), and Core's `FinaliserOrder`, OPEN, with its two-frame unwind run proved (`two_frame`). `I3 coreW` is PROVED AT σ=[] (`i3_core`). `CancelCloses` is named-only.
 
 ## Why it matters
 

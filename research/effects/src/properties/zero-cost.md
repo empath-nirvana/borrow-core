@@ -7,7 +7,7 @@ Each lowering class preserves behaviour:
 - an abortive clause is a branch;
 - a suspension is a state machine.
 
-**Lean target:** not yet stated. It goes in the targets library with an enumerated `sorry`.
+**Lean target:** [`experiments/Targets/RESTRUCTURE.md`](../../../../experiments/Targets/RESTRUCTURE.md) §1.7: A₃'s `LoweringCorrect` (the lowered program observes exactly what the source does) and `ZeroCost` (on the corpus of terminating (E) programs, each lowered program allocates and dispatches no more than its fixed hand-written reference), over a fixed first-order target `Tgt` defined in A, in which no instruction captures, saves, restores or searches a stack, so erasure is structural. Out of the first pass; OQ-23 asks whether it is a theorem. The driven programs are not in the corpus. In Lean: both are stated (`Targets/A/Lowering.lean`); the reference programs themselves are not written, so `refCost` (zero at every entry) is unchecked; `LowClass` names the backend's lowering classes. OPEN.
 
 ## Why it matters
 
