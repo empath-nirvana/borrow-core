@@ -17,6 +17,23 @@ prints. Code an entry adds or changes is tagged `[spec §N]`.
   The changelog records each version.
 <!-- ANCHOR_END: spec-first -->
 
+## Changing Core
+
+<!-- ANCHOR: changing-core -->
+Core is the language's kernel, not a transcription. "Spec first" fixes the order of work (entry,
+then code), not how much may change. When a program the language should run needs a kernel
+change, make the kernel change: types, rules, the relation, the lifetime carrier and the machine
+may all be rewritten. What must hold afterwards:
+
+- the fundamental property and adequacy, restated over the new relation if it changes;
+- every borrow guarantee;
+- every corpus and kernel program, with the same output (a changed count is explained).
+
+The rules of the paper transcription (`bolo-formalization`: follow the printed proof, never edit
+a printed statement, no new mathematics) do not apply here. The growth rules below are cost
+guidance for choosing between designs, not bans.
+<!-- ANCHOR_END: changing-core -->
+
 ## Growth discipline
 
 <!-- ANCHOR: growth -->
