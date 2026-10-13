@@ -1,0 +1,22 @@
+-- SPEC §26 in the core text: a callback `λ_. M` whose binder is dead. `apply` calls its callback
+-- at `()` and applies the persistent function it answers to 41. The callback's answer is a `!`
+-- promotion, which asks that every live slot of its context be at a `!` type, so the callback's
+-- binder, of type `1`, cannot be dropped inside it: typed live (`[λ]`), the binder is not
+-- consumed. The body does not use it, so the checker types the callback with the binder dead
+-- (`[λ-dead]`).
+--
+-- Answer: i32[42].
+
+def apply : !U (U (1 -o F !U (i32 -o F i32)) -o F i32) =
+  !thunkv fun (mk : U (1 -o F !U (i32 -o F i32))) ->
+    u <- return ();
+    f <- (force mk) u;
+    g <- return (unbang f);
+    x <- return i32[41];
+    (force g) x
+
+main : F i32 =
+  h <- return (unbang apply);
+  cb <- return (thunkv fun (u : 1) ->
+    return (!thunkv fun (y : i32) -> return ((unbang host[add32]) (y, i32[1]))));
+  (force h) cb

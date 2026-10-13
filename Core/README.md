@@ -243,7 +243,8 @@ effect).
   is a closed term with a derivation tied to the effect context `ΞE`, which has no unrestricted
   abortive operation (`noUnrExn_ΞE`), and a run computed by `runM` to its answer at the empty
   memory: a function let-bound once and used at several rows by `[let-poly]` (`hofTwoRows`,
-  `sumGen`, `timeoutProg`), a deep handler (`deepGen`), nested handlers in both orders
+  `sumGen`, `timeoutProg`), a deep handler under a handler of `tick` that counts (`deepGen`) and
+  one that resumes (`deepGenPlain`), nested handlers in both orders
   (`nestedLogOutside`, `nestedFailOutside`), no accidental handling (`tunnel`), a cancelled
   suspension's finalisers (`e7a`, `e7b`, `e7d`), an unwind through a finaliser that raises (`e8b`),
   and a stored continuation resumed, cancelled, or cancelled through a finaliser that raises
@@ -252,7 +253,17 @@ effect).
 - **Embedding.** `embed : DerivesWf Δ Γ e T → CDerives Δ (cbvCtx Γ) e (.val (cbv T))` for every
   `DerivesWf` rule, and `adequacy_of_derivesWf`. `EmbeddingExamples.lean` runs BoLo's baseline
   programs through it.
-- Weakening by consumed trailing slots: `CDerives.append_dead`.
+- Weakening by consumed trailing slots: `CDerives.append_dead`; by consumed slots inside a
+  context, the term's variables past them shifted: `CDerives.insert_dead`,
+  `CDerivesAt.insert_dead` (`InsertDead.lean`).
+- **A function copied at each use is `[let-poly]`'s premise** (`SPEC.md` §24 *Theorems*,
+  `LetCopy.lean`). A derivation of a term holding a closed λ-value gives the rule's derivation of
+  the let that binds it once, whose body is the term with the λ-value's occurrences replaced by
+  the bound variable (`Expr.unfill`, `subst_unfill`; `CDerives.letPoly_copy`,
+  `CDerivesAt.letPoly_copy`). The copies of `hofTwoRows`, `sumGen` and `timeoutProg` unfill to
+  their lets' bodies (`threeUses_unfill`, `sumGenUses_unfill`, `timeoutUses_unfill`), and the
+  checker's copies of a `def` are such terms (`Frontend/Check/Program.lean`,
+  `checkProgram_letPoly`).
 
 ### Derived rules
 

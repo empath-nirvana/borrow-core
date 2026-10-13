@@ -23,15 +23,13 @@ lowers their operations in `Backend/Clos/Capture.lean` and `Backend/Clos/Unwind.
   `κ` through a cell with `alloc`, `swap` and `free`, and resumes it once (`d_at08Once`,
   `at08Once_runs`).
 - `Core/EffTier1Programs.lean`'s programs of the effect properties, each typed at its effect context
-  and run by `runM`: `deepGen`, a deep handler under a handler of `tick` that counts;
-  `nestedLogOutside` and `nestedFailOutside`, nested handlers in both orders; `tunnel`, no accidental
-  handling; `e7a`, `e7b` and `e7d`, a cancelled suspension's finalisers; `e8b`, an unwind through a
-  finaliser that raises; and `storedKResume`, `storedKCancel` and `storedKFin`, a stored
-  continuation.
-  `hofTwoRows`, `sumGen` and `timeoutProg`, each a function let-bound once and used under different
-  handlers, are not compiled: the lowering's flow analysis (`Backend/Clos/Flow.lean`) gives the
-  function's code every name its callbacks raise, so `Backend/Clos/Unwind.lean` takes its use
-  outside the handler of `exn` to raise it (SPEC §24 *Open*).
+  and run by `runM`: `hofTwoRows`, `sumGen` and `timeoutProg`, each a function let-bound once and
+  used at different rows, which the conversion lowers per use (`Backend/Clos/Poly.lean`);
+  `deepGen`, a deep handler under a handler of `tick` that counts, and `deepGenPlain`, under one
+  that resumes; `nestedLogOutside` and `nestedFailOutside`, nested handlers in both orders;
+  `tunnel`, no accidental handling; `e7a`, `e7b` and `e7d`, a cancelled suspension's finalisers;
+  `e8b`, an unwind through a finaliser that raises; and `storedKResume`, `storedKCancel` and
+  `storedKFin`, a stored continuation.
 - Terms that exercise the lowering's other shapes (*Shapes*, below).
 
 The cancels and the shapes are not typed: each stage is compared with `Support`'s interpreter on
@@ -58,7 +56,8 @@ def cancelKept : BoCa.Expr :=
 Each is a closed term the lowering takes a path of its own on: a loop of tail calls through a
 suspension, recursion through a suspension point, a call that may reach two codes that suspend, a
 handler inside a handler that forwards the outer one's operations (and a cancel through it), a
-continuation resumed twice, and operations whose clause resumes in tail position (direct calls). -/
+continuation resumed twice, operations whose clause resumes in tail position (direct calls), and a
+let-bound function whose uses differ in row only through what it answers. -/
 
 namespace Shapes
 open BoCa
@@ -154,6 +153,18 @@ def multiShot : Expr :=
       (.app (.app (.var 0) (.inj₁ .unit)) (.inj₂ .unit)))))
   hndE 8 idE cl (.case (performU 8) (i32E 1) (i32E 10))
 
+open BoCa.Fig16.LogRel.Core.Tier1Programs (appE pureCbE failCbE) in
+open BoCa.Fig16.LogRel.Core.CancelIntercept (toResultH) in
+/-- `let id = λf. f in ((id pureCb) (), toResult ((id failCb) ()))`: `id` neither raises nor
+suspends, and its uses are at two rows through what each answers, the pure callback or the one that
+raises `exn`; so it is lowered per use (`Backend/Clos/Poly.lean`). -/
+def polyId : Expr :=
+  letE (.lam (.var 0))
+    (letE (letE (appE (.var 0) pureCbE) (appE (.var 0) .unit))
+      (letE (BoCa.BoLo.hndE (toResultH 1 .aff)
+          (letE (appE (.var 1) (failCbE 1)) (appE (.var 0) .unit)))
+        (.pair (.var 1) (.var 0))))
+
 end Shapes
 
 /-- The kernel programs `bcc kernel` compiles, by name. -/
@@ -175,7 +186,10 @@ def kernelPrograms : List (String × BoCa.Expr) :=
     ("cancel-reentered", BoCa.Fig16.LogRel.Core.CancelIntercept.progRe),
     ("cancel-propagated", BoCa.Fig16.LogRel.Core.CancelIntercept.progOut),
     ("at08-once", BoCa.Fig16.LogRel.Core.Rejections.at08Once),
+    ("hof-two-rows", BoCa.Fig16.LogRel.Core.Tier1Programs.hofTwoRows),
+    ("sum-gen", BoCa.Fig16.LogRel.Core.Tier1Programs.sumGen),
     ("deep-gen", BoCa.Fig16.LogRel.Core.Tier1Programs.deepGen),
+    ("deep-gen-plain", BoCa.Fig16.LogRel.Core.Tier1Programs.deepGenPlain),
     ("nested-log-outside", BoCa.Fig16.LogRel.Core.Tier1Programs.nestedLogOutside),
     ("nested-fail-outside", BoCa.Fig16.LogRel.Core.Tier1Programs.nestedFailOutside),
     ("tunnel", BoCa.Fig16.LogRel.Core.Tier1Programs.tunnel),
@@ -186,6 +200,7 @@ def kernelPrograms : List (String × BoCa.Expr) :=
     ("stored-k-resume", BoCa.Fig16.LogRel.Core.Tier1Programs.storedKResume),
     ("stored-k-cancel", BoCa.Fig16.LogRel.Core.Tier1Programs.storedKCancel),
     ("stored-k-fin", BoCa.Fig16.LogRel.Core.Tier1Programs.storedKFin),
+    ("timeout", BoCa.Fig16.LogRel.Core.Tier1Programs.timeoutProg),
     ("loop-tail", Shapes.loopTail 100000),
     ("loop-captured", Shapes.loopCaptured 100000),
     ("recursive-yield", Shapes.recYield 20),
@@ -193,6 +208,7 @@ def kernelPrograms : List (String × BoCa.Expr) :=
     ("two-callees-tail", Shapes.twoCallees Shapes.resumeCl),
     ("forward", Shapes.forward),
     ("forward-cancel", Shapes.forwardCancel),
-    ("multi-shot", Shapes.multiShot) ]
+    ("multi-shot", Shapes.multiShot),
+    ("poly-id", Shapes.polyId) ]
 
 end Backend

@@ -966,6 +966,15 @@ def Tm.hasCapture : Tm → Bool
   | .case _ _ b₁ _ b₂ => b₁.hasCapture || b₂.hasCapture
   | _ => false
 
+/-- The program with its handlers and finaliser frames lowered (`handlers`), the codes they make
+after its own. -/
+def lowerHandlers (O : Ops) (p : Prog) : KM Prog := do
+  let main ← handlers O p.main
+  let mut codes := #[]
+  for c in p.codes do codes := codes.push { c with body := ← handlers O c.body }
+  modify fun s => { s with codes := codes ++ s.codes.extract p.codes.size s.codes.size }
+  return { p with main, codes := (← get).codes }
+
 /-- **Lower the handlers, control operations and cancels.**  A program with none is returned as
 it is. -/
 def Prog.capture (p : Prog) : Except String Prog := do
@@ -975,11 +984,8 @@ def Prog.capture (p : Prog) : Except String Prog := do
   let next := (terms.map Tm.maxVar).foldl max 0 + 1
   let act : KM Prog := do
     -- Handlers and finaliser frames.
-    let main ← handlers O p.main
-    let mut codes := #[]
-    for c in p.codes do codes := codes.push { c with body := ← handlers O c.body }
-    modify fun s => { s with codes := codes ++ s.codes.extract p.codes.size s.codes.size }
-    let q₀ : Prog := { p with main, codes := (← get).codes }
+    let q₀ ← lowerHandlers O p
+    let main := q₀.main
     let hs := (← get).hs
     let F₀ ← liftE (SFacts.of O q₀ hs)
     -- Tail-resumptive operations become direct calls; then the analysis again.
@@ -1032,5 +1038,28 @@ where
   liftE {α} (x : Except String α) : KM α := match x with
     | .ok a => pure a
     | .error e => throw e
+
+/-- The lowering's analysis of a program once its handlers are lowered (`SFacts.of`): the flow,
+the codes of the lowered program (the program's own first), and for each of them the operations it
+may suspend with, as payload variants, and the keys it may raise. -/
+structure EffFacts where
+  S : Solver
+  codes : Array Code
+  skeys : Array (List Nat)
+  raises : Array Raises
+
+/-- The lowering's analysis of a program (`EffFacts`). -/
+def Prog.effects (p : Prog) : Except String EffFacts := do
+  let terms := p.main :: p.codes.toList.map (·.body)
+  if !(p.main.hasCapture || p.codes.any (·.body.hasCapture)) then
+    let some S := solve p.codes p.constraints (1 <<< 40) | throw "the flow analysis did not finish"
+    return ⟨S, p.codes, .replicate p.codes.size [], (UFacts.solve (terms.foldl defsOf {}) S p).rc⟩
+  let O ← Ops.of p
+  let next := (terms.map Tm.maxVar).foldl max 0 + 1
+  let act : KM EffFacts := do
+    let q ← lowerHandlers O p
+    let F ← Prog.capture.liftE (SFacts.of O q (← get).hs)
+    return ⟨F.S, q.codes, F.skeys, F.U.rc⟩
+  act.run' ⟨next, p.codes, #[]⟩
 
 end Backend.Clos

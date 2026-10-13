@@ -29,7 +29,7 @@ and `nu_out` erase, and `unfold` is a closed λ-term.
 | stage | file | what it is | interpreter |
 |---|---|---|---|
 | source | `Source.lean` | `main`'s erasure | `Support`'s `step` at `wasmHost` |
-| closure IR | `Clos/Syntax.lean`, `Clos/Convert.lean`, `Clos/Capture.lean`, `Clos/Unwind.lean`, `Clos/Collapse.lean` | named A-normal form, explicit environments and ownership; §19's handlers, operations and cancels lowered | `Clos/Interp.lean` |
+| closure IR | `Clos/Syntax.lean`, `Clos/Convert.lean`, `Clos/Poly.lean`, `Clos/Capture.lean`, `Clos/Unwind.lean`, `Clos/Collapse.lean` | named A-normal form, explicit environments and ownership; a let used at different rows per use; §19's handlers, operations and cancels lowered | `Clos/Interp.lean` |
 | layout types | `Clos/Types.lean` | a layout type for every closure-IR variable, code and constructor; each type's layout; each closure type's union of codes | — |
 | closure flow | `Clos/Flow.lean` | a 0-CFA: the codes each call may call | — |
 | flat IR | `Flat/Syntax.lean`, `Flat/Lower.lean` | functions over words, locals, allocation, calls and tail calls of several results, `ite` | `Flat/Interp.lean` |
@@ -62,6 +62,20 @@ iterators) and the programs of `Core/`. **η** `λv. y v` of a variable `y` is `
 `unfold`'s map at a recursive position forwards the rest of the codata: no closure wraps a closure
 of its own type. A term of neither shape is converted as any other λ; the combinator written
 some other way (a bare `X X`, as `Core/DelayNaive.lean` does) stays the λ-terms it is.
+
+**Polymorphic lets** (`Clos/Poly.lean`, SPEC §24). A let of a closed λ, `(λx. N) (λy. b)`,
+is `[let-poly]`'s: each use of `x` may be at its own row. A code is lowered once, at one
+convention, and the closure flow gives it every value any use passes it, so a let whose uses are at
+different rows is converted as its β-reduct `N[λy. b / x]` (`polyLets`): each use is a code of its
+own, and a use that applies the λ is a `let` of its argument, inlined as a definition is. Which
+lets: the program is first converted with every such let used more than once replaced, each use's
+λ marked so that the conversion records the codes it makes, and analysed as `Capture` analyses it
+(`Prog.effects`). A use's row is, for each of its codes, the operations the code may suspend with
+and the keys it may raise, and the same of every closure the code may be given, answer or capture;
+the uses of one instance of a let are at one row when these agree code by code. Only the lets
+whose uses differ are replaced in the program compiled, so a program whose lets are each used at
+one row is converted as written. A self-application `(λx. N) (λx. N)`, the Z combinator's `X X`,
+is not a let.
 
 **Handlers and control operations** (`Clos/Capture.lean`, SPEC §19). `Convert` keeps `perform p`,
 a handler `hnd n (hr, cls) e` and a finaliser frame `ubind (N, D) M` as closure-IR nodes, and
@@ -133,7 +147,8 @@ closure of which is built (from `main`, transitively) is in no union and is comp
 **Layout types** (`Clos/Types.lean`). Unification over the closure IR gives every variable a
 layout type `1 | i32 | i64 | A ⊗ B | A ⊕ B | ⊕[A, …] | fn(A; C, D) | loc A` (see Representation).
 Value types are monomorphic: a definition is substituted at each use, and polymorphism is over
-lifetimes only, whose arguments are `()`. Unification has no occurs check, since `μ` and `ν`
+lifetimes only, whose arguments are `()`; a let-bound λ used at different value types but at one
+row is reported (SPEC §24 *Open*). Unification has no occurs check, since `μ` and `ν`
 leave regular trees. Two code shapes carry the typing of `&`: a code that cases on its parameter
 answers `inl ()` and `inr ()` at its two arms' types, and a call whose argument is a literal
 injection is a projection; a code that passes its parameter to a function in tail position (as
@@ -501,6 +516,10 @@ cancel arms run only the points' `fin` frames, which are the finaliser frames `K
 handler's driver simulates `[ret]`, `[op]` and forwarding. Nothing checks these at run time beyond
 the interpreters agreeing.
 
+**Polymorphic lets** need nothing of their own: the program converted is the source one β-step
+later at each let replaced (`letPoly_compatC`'s step), which neither allocates nor touches the
+heap; a use's copy of the λ is a closure of a code of its own, or a `let` where it is applied.
+
 **Native fixed points** are an obligation of their own: the code `λx. B[self := clos c []]`
 simulates the combinator's `selfV B`. The source side is `Core/Fix.lean`'s unrolling
 (`selfV_steps_in`: `selfV w` reaches `fixV w = B[selfV/self][w/x]` by three pure β-steps, in any
@@ -543,6 +562,9 @@ merging finds the layout types of its result, which the flat IR reuses.
   injections, so the source's and the closure IR's size, the state's width and the words each
   transition passes are all proportional to the number of points: a body of `P` points costs
   about `P²`. A `main` of 160 points (loops and direct-style div calls) compiles in about 4 s.
+- *A polymorphic let.* A program with a let of a closed λ used more than once is converted and
+  analysed twice (Polymorphic lets), and its first conversion has every such let replaced, so
+  nested lets copy their bodies once per use at each level.
 - *The checker on a large body.* `Frontend/Check` keeps a use mask as long as the context at each
   node (`orL`, `subL`), and decides freeness by walking types (`vfreeB`); on the body of such a
   `main` it grows about as the square of the body (1.1 s of the 4 s above). Its masks carry the

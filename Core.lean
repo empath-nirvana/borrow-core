@@ -72,6 +72,8 @@ import Core.EffPrograms
 import Core.Totality
 import Core.EffSafety
 import Core.Tied
+import Core.InsertDead
+import Core.LetCopy
 import Core.RaiseNames
 import Core.EffCancelRuns
 import Core.Inversions

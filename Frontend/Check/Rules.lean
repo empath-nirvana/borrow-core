@@ -159,6 +159,13 @@ def rLam {A : CVTy} {C : CCTy} {sM : CRow}
     Res Δ T (.comp (.arr A C)) :=
   ⟨Expr.val (BoCa.Val.lam eM), sM, FM.map fun _ h => .lam h⟩
 
+/-- `[λ-dead]`: `λx. M : 1 ⊸ F_Σ B`, the binder's slot closed dead: `M` does not use it.
+`[spec §26]` -/
+def rLamDead {S : CRow} {B : CVTy} {sM : CRow}
+    (FM : Fam T (fun L => TiedDer sM Δ (mkCtx (.unit :: T) (false :: L)) eM (.comp (effOf S B)))) :
+    Res Δ T (.comp (.arr .unit (effOf S B))) :=
+  ⟨Expr.val (BoCa.Val.lam eM), sM, FM.map fun _ h => .lamDead h⟩
+
 def rApp {A : CVTy} {C : CCTy} (rM : Res Δ T (.comp (.arr A C))) (i : Nat)
     (hi : T[i]? = some A) (h : overlapOK T rM.F.u (oneL T i) = true) : Res Δ T (.comp C) :=
   ⟨.app rM.e (.var i), rM.sigs, (rM.F.split (Fam.var T i A hi) h).map fun _ ⟨_, _, hs, h₁, h₂⟩ =>

@@ -2,6 +2,7 @@ import Core.EffCancelTyped
 import Core.Run
 import Core.Count
 import Core.Weaken
+import Core.LetCopy
 
 /-!
 # Core — the effect properties as programs  `[spec §19, §24–§27]`
@@ -19,6 +20,7 @@ and `tick : 1 ↠ 1` at `5`, linear. No abortive operation of it is unrestricted
 | `hofTwoRows` (E1) | `hof` let-bound once (`[let-poly]`) and used at the pure row, at `exn`'s under `toResult`, and at `wait`'s under a handler that resumes `κ` at its cell; its callbacks `λ_. M` are `[λ-dead]`'s | `(tt, (inr (), tt))` |
 | `sumGen` (E2d) | a consumer of a generator, let-bound once and used at `yield ⊙ ∅` and `yield ⊙ exn`; the raise passes its reinstalled handler | `(tt, inr ())` |
 | `deepGen` (E4) | a deep handler: reinstalled at each resume, it catches both yields, its clause performing `tick` at each; a handler of `tick` counts them | `((), 2)` |
+| `deepGenPlain` (E4) | the same deep handler under a handler of `tick` that resumes | `()` |
 | `nestedLogOutside`, `nestedFailOutside` (E5) | a state-passing handler of the linear `log` and `toResult`, nested both ways: the log kept beside the error, or dropped with the handler the raise unwinds | `(inr (), tt)`, `inr ()` |
 | `tunnel` (E6) | `fwrap`'s handler of `exnᵢ` passes the callback's raise of `exnₒ` to `toResult` | `inr ()` |
 | `e7a`, `e7b`, `e7d` (E7) | `timeout` cancels a suspended body: the finalisers fire innermost first, and the first error is kept and re-raised at the canceller | `inr ()` |
@@ -28,7 +30,9 @@ and `tick : 1 ↠ 1` at `5`, linear. No abortive operation of it is unrestricted
 
 The handlers are values (`hQ`, §24's `[handle]` at a value form) with one operation each
 (`dAt_hQ`); a let-bound function's uses are typed each at its own row from `[let-poly]`'s premise,
-the body with the function in place (`threeUses_subst`, `sumGenUses_subst`, `timeoutUses_subst`).
+the body with the function in place (`threeUses_subst`, `sumGenUses_subst`, `timeoutUses_subst`),
+and that copy, the function replaced by the bound variable, is the let's body (`threeUses_unfill`,
+`sumGenUses_unfill`, `timeoutUses_unfill`; `Core/LetCopy.lean`).
 E5's state function and E9's closure hold a `bool` across a `[let]` at a row with `exn`, which
 needs that row to have no unrestricted operation: `exn` is affine. The programs the backend compiles
 are kernel programs (`Backend/Kernel.lean`).
@@ -151,6 +155,9 @@ def countClV : Val :=
 /-- **E4**: `deepGen` under a handler of `tick` that counts, from `0`. -/
 def deepGen : Expr :=
   bindE (hndE (hQ 5 .lin pairRetV countClV) deepGenE) (appE (.var 0) (num 0).1)
+
+/-- **E4**, `deepGen` under a handler of `tick` that resumes. -/
+def deepGenPlain : Expr := hndE (resumerH 5 .lin) deepGenE
 
 /-! ### E5: nested handlers in both orders (`nested-log-outside`, `nested-fail-outside`) -/
 
@@ -1040,6 +1047,12 @@ theorem dAt_deepGen {Δ : LifeCtx} :
       (dAt_pairRet [] .unit natN) dAt_countCl dAt_deepGenE)
     (dAt_callVar .nil (CDerivesAt.ofEffFree (d_num (.cons .nil) 0) rfl))
 
+/-- **E4 under a handler of `tick` that resumes is typed** at the pure row. -/
+theorem dAt_deepGenPlain {Δ : LifeCtx} : CDerivesAt ΞE Δ [] deepGenPlain (.comp (.ret .unit)) :=
+  dAt_hQ .nil .nil ΞE_5 (by decide) (S := []) (rowAt_nil ΞE) (by simp) (F := .ret .unit)
+    (X := .unit) (CDerivesAt.ofEffFree (CancelIntercept.d_idV [] .unit) rfl)
+    (dAt_resumeCl [] .unit (by decide) rfl) dAt_deepGenE
+
 end E4
 
 /-! ### E1, E2d and E10: one function at several rows (`[let-poly]`) -/
@@ -1094,6 +1107,10 @@ def threeUsesHof : Expr :=
 /-- `[let-poly]`'s premise term for E1 is its body with `hof` at each use. -/
 theorem threeUses_subst :
     (threeUses.subst 0 (Val.lam (appE (.var 0) .unit))).shift 1 0 = threeUsesHof := rfl
+
+/-- E1's body is its copy, `hof` at each use, with `hof` replaced by the bound variable
+(`Expr.unfill`). -/
+theorem threeUses_unfill : threeUsesHof.unfill (appE (.var 0) .unit) 0 = threeUses := by decide
 
 /-- **E1's body, `hof` at each use**: at the pure row, at `exn`'s row under `toResult`, and at
 `wait`'s row under `resumer`. -/
@@ -1179,6 +1196,10 @@ def sumGenUsesW : Expr :=
 theorem sumGenUses_subst :
     (sumGenUses.subst 0 (Val.lam (hndE sgH (appE (.var 0) .unit)))).shift 1 0 = sumGenUsesW := rfl
 
+/-- E2d's body is its copy with `sumGen` replaced by the bound variable (`Expr.unfill`). -/
+theorem sumGenUses_unfill :
+    sumGenUsesW.unfill (hndE sgH (appE (.var 0) .unit)) 0 = sumGenUses := by decide
+
 /-- **E2d's uses, `sumGen` at each**: at the pure row, and at `exn`'s row under `toResult`, the
 generators at `yield ⊙` each. -/
 theorem dAt_sumGenUsesW {Δ : LifeCtx} :
@@ -1257,6 +1278,11 @@ theorem timeoutUses_subst :
     (timeoutUses.subst 0 (Val.lam (hndE (hQ 2 .aff idV tmClV) (appE (.var 0) .unit)))).shift 1 0 =
       timeoutUsesW := rfl
 
+/-- E10's body is its copy with `timeout` replaced by the bound variable (`Expr.unfill`). -/
+theorem timeoutUses_unfill :
+    timeoutUsesW.unfill (hndE (hQ 2 .aff idV tmClV) (appE (.var 0) .unit)) 0 = timeoutUses := by
+  decide
+
 /-- **E10's uses, `timeout` at each**: around a body that waits, at the pure row; and around a
 body that raises `exn`, at `exn`'s row under `toResult`, the raise passing `timeout`'s handler. -/
 theorem dAt_timeoutUsesW {Δ : LifeCtx} :
@@ -1300,6 +1326,10 @@ theorem d_sumGen {Δ : LifeCtx} :
 /-- E4 (`deepGen`). -/
 theorem d_deepGen {Δ : LifeCtx} : CDerives Δ [] deepGen (.comp (.ret (.tensor .unit natN))) :=
   dAt_deepGen.toCDerives
+
+/-- E4, `deepGen` under a handler of `tick` that resumes. -/
+theorem d_deepGenPlain {Δ : LifeCtx} : CDerives Δ [] deepGenPlain (.comp (.ret .unit)) :=
+  dAt_deepGenPlain.toCDerives
 
 /-- E5, `withLog` outside `toResult`. -/
 theorem d_nestedLogOutside {Δ : LifeCtx} :
@@ -1380,6 +1410,12 @@ the counting handler counts two ticks. -/
 theorem deepGen_run :
     Steps (ℍ := ℍ) Adequacy.emptyMem deepGen Adequacy.emptyMem
       (.val (Val.pair Val.unit (num 2))) :=
+  runM_val (k := 200) (m := []) (m' := []) rfl
+
+/-- **E4 under a handler of `tick` that resumes runs to `()`**: both yields are caught, and each
+`tick` is resumed at once. -/
+theorem deepGenPlain_run :
+    Steps (ℍ := ℍ) Adequacy.emptyMem deepGenPlain Adequacy.emptyMem (.val Val.unit) :=
   runM_val (k := 200) (m := []) (m' := []) rfl
 
 /-- **E5, `withLog` outside, runs to `(inr (), tt)`**: the log is kept beside the error. -/

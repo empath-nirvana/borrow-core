@@ -331,8 +331,7 @@ def synC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp →
     | .lam _ x A M => do
       let A' ← E.elabV Δ A
       let ⟨_, rM⟩ ← synC n (E.pushOwn x.name A') Δ (A' :: T) M
-      let FM ← popL E x.span x.name rM.F
-      pure ⟨_, rLam FM⟩
+      pure ⟨_, ← lamIt E x rM⟩
     | .app sp M x => do
       let ⟨C, rM⟩ ← synC n E Δ T M
       match C, rM with
@@ -536,8 +535,7 @@ def chkC : Nat → Env → (Δ : LifeCtx) → (T : List CVTy) → Comp → (C : 
         let A' ← E.elabV Δ A
         if hA : A' = A₀ then do
           let rM ← chkC n (E.pushOwn x.name A') Δ (A' :: T) M C
-          let FM ← popL E x.span x.name rM.F
-          pure (hA ▸ rLam FM)
+          pure (hA ▸ (← lamIt E x rM))
         else err A.span s!"the binder is annotated `{E.ppV A'}`, but the expected type is `{E.ppV A₀} -o …`"
       | C => err sp s!"`fun` is checked against `{E.ppC C}`, which is not a `-o` type"
     | .with_ sp M N =>

@@ -6,6 +6,7 @@ import Backend.Clos.Convert
 import Backend.Clos.Collapse
 import Backend.Clos.Unwind
 import Backend.Clos.Capture
+import Backend.Clos.Poly
 import Backend.Kernel
 import Backend.Clos.Interp
 import Backend.Flat.Lower

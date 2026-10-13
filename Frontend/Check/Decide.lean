@@ -1,5 +1,6 @@
 import Core.Fundamental
 import Core.Dtor
+import Core.LetCopy
 
 /-!
 # Frontend — Check — deciders for the side conditions
@@ -8,7 +9,7 @@ Every side condition of `CDerives` that the checker discharges (syntax-core §11
 decided by a `Bool` function proved sound: `f … = true → P …`. Each is also complete for the
 cases the comments name; where it is not, the gap is stated at the function.
 
-* `DecidableEq` on `VTy`, `CTy` and `Expr` (§12 item 4), derived.
+* `DecidableEq` on `VTy` and `CTy` (§12 item 4), derived; on `Expr`, `Core/LetCopy.lean`'s.
 * `VTy.clB`, `VTy.occB`, `VTy.noMutB`: `Cl`, `Occ`, `NoMut`, exactly.
 * `CTy.nuOkB`: `νX. C`'s positivity `NuOk`, exactly.
 * `vfreeB`/`cfreeB`: `VFree`/`CFree`, exactly.
@@ -26,12 +27,6 @@ deriving instance DecidableEq for VTy, CTy
 deriving instance DecidableEq for OpSig
 
 end BoCa.Fig16.LogRel.Core
-
-namespace BoCa
-
-deriving instance DecidableEq for Expr
-
-end BoCa
 
 namespace BoCa.Fig16.LogRel.Core.Check
 open BoCa BoCa.Lifetime

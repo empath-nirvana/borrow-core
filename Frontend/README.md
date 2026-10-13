@@ -119,7 +119,7 @@ judgment, for the derived forms of syntax-core §9), so what the checker returns
 
 | file | contents |
 |---|---|
-| `Check/Decide.lean` | `DecidableEq` on `VTy`, `CTy`, `Expr`; a `Bool` decider for each side condition, with its soundness lemma |
+| `Check/Decide.lean` | `DecidableEq` on `VTy` and `CTy` (on `Expr`, `Core/LetCopy.lean`'s); a `Bool` decider for each side condition, with its soundness lemma |
 | `Check/Fam.lean` | linearity: masks of used and absorbable slots, and a derivation at every liveness between them |
 | `Check/Elab.lean` | surface lifetimes, types and shapes to `Core`'s; a printer back |
 | `Check/Tied.lean` | tied derivations (SPEC §19, decision R): `TiedDer`, one lemma per rule the builders apply, and the program's effect context (`effCtxOf`, `sigsOkB`) |
@@ -152,6 +152,18 @@ judgment, for the derived forms of syntax-core §9), so what the checker returns
 `c.e` is `main`'s erasure, `c.C` its type and `c.ctx` its externs, the last declared at index 0,
 all live. `checked_sem` is the Fundamental Property at it (`SemC ∅ c.ctx c.e c.C`, at every
 host), and `checked_runs` adequacy for a closed `main : F 1`.
+
+    theorem checkProgram_letPoly {p : Program} {r : Report} {c : Checked}
+        (h : checkProgram p = .ok r) (hc : r.main = some c) {b : Expr} {j : Jdg}
+        (hcl : closedAt 0 (Val.lam b).1 = true) (hV : CDerivesAt c.Ξ LifeCtx.empty [] (.val (.lam b)) j) :
+        CDerivesAt c.Ξ LifeCtx.empty c.ctx (.app (.val (.lam (c.e.unfill b 0))) (.val (.lam b)))
+          (.comp c.C)
+
+A `def` is checked at each of its uses (§10), so `main`'s erasure holds a function at each use:
+the copy, which is `[let-poly]`'s premise term (SPEC §18 *Rows*, §24 *Theorems*). For a closed
+λ-value typed at the empty context, the theorem gives the rule's derivation of the let that binds
+it once, its body `main`'s erasure with the λ-value's occurrences replaced by the bound variable
+(`Expr.unfill`, `Core/LetCopy.lean`). The checker does not emit `[let-poly]`.
 
 **Tied derivations** (SPEC §19, decision R). Every derivation the checker builds is tied: it is
 `CDerivesAt Ξ` (`Core/Tied.lean`) at every effect context `Ξ` at which the rows it reads at
@@ -280,6 +292,10 @@ borrows (`synConstU`, `Consts.lean`); their side conditions are decided by `rowL
 * **Abortive operations are affine** (SPEC §18, decision 63). A row entry `n.i unr A ~> 0` is
   rejected where it is written (`elabRow`), and so is an unrestricted operation answering `0` among
   `main`'s rows.
+* **Callbacks `λ_. M`** (SPEC §26). `fun (x : 1) -> M` at `1 -o F_Σ B` whose body does not use
+  `x` is `[λ-dead]` (`lamIt`, `rLamDead`): the body is checked under the binder's slot as for
+  `[λ]`, and the slot is closed dead instead of live. A rule inside the body whose premise takes
+  only `!` slots (a `!` promotion, `[let]` at an unrestricted row) then does not meet the binder.
 
 ### Standard I/O (SPEC §11)
 

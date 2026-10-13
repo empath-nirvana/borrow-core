@@ -182,6 +182,15 @@ import Frontend.Check.Externs
 -- SPEC §24 (entry 23): the polymorphic let, `[handle]` at a value form, `[then]` at option A
 #print axioms BoCa.Fig16.LogRel.Core.psub_fill
 #print axioms BoCa.Fig16.LogRel.Core.letPoly_compatC
+#print axioms BoCa.Fig16.LogRel.Core.fill_shift
+#print axioms BoCa.Fig16.LogRel.Core.CDerives.insert_dead
+#print axioms BoCa.Fig16.LogRel.Core.CDerivesAt.insert_dead
+#print axioms BoCa.Fig16.LogRel.Core.subst_unfill
+#print axioms BoCa.Fig16.LogRel.Core.CDerives.letPoly_of_fill
+#print axioms BoCa.Fig16.LogRel.Core.CDerives.letPoly_copy
+#print axioms BoCa.Fig16.LogRel.Core.CDerivesAt.letPoly_of_fill
+#print axioms BoCa.Fig16.LogRel.Core.CDerivesAt.letPoly_copy
+#print axioms Frontend.Check.checkProgram_letPoly
 #print axioms BoCa.Fig16.LogRel.Core.wpTS_val_post
 #print axioms BoCa.Fig16.LogRel.Core.ewp_handle_vals
 #print axioms BoCa.Fig16.LogRel.Core.handleV_compatC
@@ -334,6 +343,7 @@ import Frontend.Check.Externs
 -- SPEC §26 (entry 25): a λ whose binder is dead, at an effectful returner
 #print axioms BoCa.Fig16.LogRel.Core.gDenC_unit_dead
 #print axioms BoCa.Fig16.LogRel.Core.lamDead_compatC
+#print axioms Frontend.Check.TiedDer.lamDead
 -- SPEC §27 (entry 26): finalisers with effects
 #print axioms BoCa.Fig16.LogRel.Core.finObl_eq
 #print axioms BoCa.Fig16.LogRel.Core.FinLe.refl
@@ -428,6 +438,9 @@ import Frontend.Check.Externs
 #print axioms BoCa.Fig16.LogRel.Core.Tier1Programs.dAt_deepGen
 #print axioms BoCa.Fig16.LogRel.Core.Tier1Programs.d_deepGen
 #print axioms BoCa.Fig16.LogRel.Core.Tier1Programs.deepGen_run
+#print axioms BoCa.Fig16.LogRel.Core.Tier1Programs.dAt_deepGenPlain
+#print axioms BoCa.Fig16.LogRel.Core.Tier1Programs.d_deepGenPlain
+#print axioms BoCa.Fig16.LogRel.Core.Tier1Programs.deepGenPlain_run
 #print axioms BoCa.Fig16.LogRel.Core.Tier1Programs.dAt_nestedLogOutside
 #print axioms BoCa.Fig16.LogRel.Core.Tier1Programs.d_nestedLogOutside
 #print axioms BoCa.Fig16.LogRel.Core.Tier1Programs.nestedLogOutside_run
@@ -460,4 +473,7 @@ import Frontend.Check.Externs
 #print axioms BoCa.Fig16.LogRel.Core.Tier1Programs.storedKFin_run
 #print axioms BoCa.Fig16.LogRel.Core.Tier1Programs.dAt_timeoutProg
 #print axioms BoCa.Fig16.LogRel.Core.Tier1Programs.d_timeoutProg
+#print axioms BoCa.Fig16.LogRel.Core.Tier1Programs.threeUses_unfill
+#print axioms BoCa.Fig16.LogRel.Core.Tier1Programs.sumGenUses_unfill
+#print axioms BoCa.Fig16.LogRel.Core.Tier1Programs.timeoutUses_unfill
 #print axioms BoCa.Fig16.LogRel.Core.Tier1Programs.timeoutProg_run

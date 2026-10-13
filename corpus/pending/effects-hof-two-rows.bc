@@ -1,0 +1,31 @@
+-- pending: #161 (effectful callbacks)
+-- E1, one function at several rows (SPEC §19 Programs; the kernel program `hof-two-rows`): `hof`
+-- calls its callback, and is called with a pure callback, under `to_result` with one that raises,
+-- and under `resumer` with one that waits, which `resumer` resumes. Written once, it is used at
+-- three rows, and nothing marks it for any of them.
+--
+-- Blocked by #161: a closure that performs an operation is a computation passed as a value, and
+-- `hof` would be used at the closure's row. The kernel types a let-bound `hof` at each use by
+-- `[let-poly]` (SPEC §24), and the backend lowers each use at its own row.
+--
+-- Once it lands: `(inr (), (inr (), inr ()))`: true, the error, and true after the wait resumed;
+-- `live 0`.
+--
+-- now: 30:30: an operation of `Wait` is performed inside a closure or block that is not run in place: it cannot reach its handler (effectful callbacks, #161)
+
+include fail
+
+effect Wait { ctl wait() }
+
+handler resumer[A]: Wait, A -> A = {
+  return(x) = x;
+  wait(k) = k(())
+}
+
+fn hof(g: !(1 => bool)) -> bool = g(())
+
+main -> bool * ((bool + 1) * bool) =
+  let a = hof(!{ u -> true });
+  let b = with to_result[1, bool] { hof(!{ u -> raise(()) }) };
+  let c = with resumer { hof(!{ u -> wait(); true }) };
+  (a, (b, c))

@@ -136,6 +136,14 @@ def Ctx.set (c : Ctx) (i : Nat) (x : Var) : Ctx :=
 /-- The context of the variables `xs`, the first at index 0. -/
 def Ctx.ofList (xs : List Var) : Ctx := xs.foldr (fun x c => c.push x) {}
 
+/-- A marked use of a polymorphic let (`polyLets`): the let's number, the marked use it is
+converted inside (its index among the uses), and the codes its conversion registers, in order,
+the shared code of literals aside. -/
+structure PolyUse where
+  letId : Nat
+  parent : Option Nat
+  codes : Array Nat := #[]
+
 structure CState where
   next : Nat
   codes : Array Code
@@ -146,6 +154,10 @@ structure CState where
   /-- The address of each literal's bytes, by its bytes. -/
   lits : List (List UInt8 × Nat) := []
   litCode : Option Nat := none
+  /-- The marked uses of polymorphic lets converted so far. -/
+  uses : Array PolyUse := #[]
+  /-- The marked uses being converted, innermost first. -/
+  useStack : List Nat := []
 
 abbrev CM := StateT CState (Except String)
 
@@ -459,6 +471,82 @@ def markUbinds : Expr → Expr
   | .case a b c => .case (markUbinds a) (markUbinds b) (markUbinds c)
   | e => e
 
+/-! ### Polymorphic lets
+
+`let x = λy. b in N` with the λ closed is SPEC §24's `[let-poly]`: each occurrence of `x` in `N`
+is typed on its own, at its own row, and the let reduces by one β-step, which allocates nothing,
+to `N` with the λ at each occurrence (`letPoly_compatC`). Lowering is per code: a code raises,
+suspends and is called by one convention, whatever row it is used at. A let whose uses are at
+different rows is converted as that β-reduct, `N[λy. b / x]`, so that each use is lowered at its
+own row, as a definition is substituted at each use (`Backend/README.md`); `Backend/Clos/Poly.lean`
+finds those lets. A let is what `conv` converts as one, `(λx. N) V` whose function is neither the
+axiom `swap` nor a fixed point; a self-application `(λx. N) (λx. N)`, the Z combinator's `X X`, is
+not a let. -/
+
+/-- The free occurrences of the index `j` in `e`. -/
+def idxUses (j : Nat) : Expr → Nat
+  | .var i => if i == j then 1 else 0
+  | .pair a b | .seq a b | .app a b => idxUses j a + idxUses j b
+  | .inj₁ a | .inj₂ a => idxUses j a
+  | .lam b => idxUses (j + 1) b
+  | .letpair a b => idxUses j a + idxUses (j + 2) b
+  | .case a b c => idxUses j a + idxUses (j + 1) b + idxUses (j + 1) c
+  | _ => 0
+
+/-- `e` with the closed term `v` for the index `j`, its free indices above `j` lowered by one:
+`Expr.subst j v` (`Support/Syntax/Terms.lean`) at a closed `v`, which no binder shifts. -/
+def substClosed (j : Nat) (v : Expr) : Expr → Expr
+  | .var i => if i == j then v else if i > j then .var (i - 1) else .var i
+  | .pair a b => .pair (substClosed j v a) (substClosed j v b)
+  | .seq a b => .seq (substClosed j v a) (substClosed j v b)
+  | .app f a => .app (substClosed j v f) (substClosed j v a)
+  | .inj₁ a => .inj₁ (substClosed j v a)
+  | .inj₂ a => .inj₂ (substClosed j v a)
+  | .lam b => .lam (substClosed (j + 1) v b)
+  | .letpair a b => .letpair (substClosed j v a) (substClosed (j + 2) v b)
+  | .case a b c => .case (substClosed j v a) (substClosed (j + 1) v b) (substClosed (j + 1) v c)
+  | e => e
+
+/-- `(λx. N) V` is a polymorphic let: a let, as `conv` converts one and not a self-application, of
+a closed λ that `N` uses more than once. -/
+def polyLet? (N V : Expr) : Bool :=
+  (match V with | .lam _ => true | _ => false) && idxUses 0 N ≥ 2 && (fvsRaw V 0).isEmpty &&
+    !isSwap (.lam N) && (fixBody? (.lam N)).isNone && V != .lam N
+
+/-- The mark of a use of a polymorphic let converted as a code of its own (`polyLets`): the pair
+of this `i64` and the let's number, applied to it, which no checked term has. -/
+def polyUseMark : UInt64 := 0x504F4C5955534553
+
+/-- The λ `v` at a use of the polymorphic let `i`, marked (`polyUseMark`). -/
+def polyUseE (i : Nat) (v : Expr) : Expr :=
+  .app (.prim (.lit (.i64 polyUseMark))) (.pair (.prim (.lit (.i32 i.toUInt32))) v)
+
+/-- The term with the polymorphic lets `sel` holds of replaced by their β-reducts, inner lets
+first; with `mark`, each use's λ is marked (`polyUseE`). The lets are numbered in pre-order from
+the state, whether replaced or not. -/
+def polyLets (sel : Nat → Bool) (mark : Bool) : Expr → StateM Nat Expr
+  | .app (.lam N) V => do
+    let i? ← if polyLet? N V then some <$> modifyGet (fun k => (k, k + 1)) else pure none
+    let N' ← polyLets sel mark N
+    let V' ← polyLets sel mark V
+    match i? with
+    | some i => if sel i then return substClosed 0 (if mark then polyUseE i V' else V') N'
+                else return .app (.lam N') V'
+    | none => return .app (.lam N') V'
+  | .pair a b => return .pair (← polyLets sel mark a) (← polyLets sel mark b)
+  | .seq a b => return .seq (← polyLets sel mark a) (← polyLets sel mark b)
+  | .app a b => return .app (← polyLets sel mark a) (← polyLets sel mark b)
+  | .inj₁ a => return .inj₁ (← polyLets sel mark a)
+  | .inj₂ a => return .inj₂ (← polyLets sel mark a)
+  | .lam b => return .lam (← polyLets sel mark b)
+  | .letpair a b => return .letpair (← polyLets sel mark a) (← polyLets sel mark b)
+  | .case a b c =>
+    return .case (← polyLets sel mark a) (← polyLets sel mark b) (← polyLets sel mark c)
+  | e => pure e
+
+/-- The polymorphic lets of a term. -/
+def polyLetCount (e : Expr) : Nat := ((polyLets (fun _ => false) false e).run 0).2
+
 def setCode (c : Nat) (code : Code) : CM Unit :=
   modify fun s => { s with codes := s.codes.set! c code }
 
@@ -516,6 +604,19 @@ def conv (ctx : Ctx) (e : Expr) (id : Nat) : CM Tm := do
       let d₁ := (if 0 ∈ (← fvsAt k₂ 0) then [] else [x]) ++ only₂
       let d₂ := (if 0 ∈ (← fvsAt k₃ 0) then [] else [y]) ++ only₁
       return wrapCopies cs (.letv s t₀ (.case s x (wrapDrops d₁ t₁) y (wrapDrops d₂ t₂)))
+  | .app (.prim (.lit (.i64 m))) (.pair (.prim (.lit (.i32 i))) v) => do
+      -- A marked use of a polymorphic let (`polyLets`): its λ, and the codes it registers.
+      if m != polyUseMark then throw "a literal applied"
+      let u := (← get).uses.size
+      modify fun s => { s with uses := s.uses.push ⟨i.toNat, s.useStack.head?, #[]⟩,
+                               useStack := u :: s.useStack }
+      let start := (← get).codes.size
+      let t ← conv ctx v (k₂ + 2)
+      let s ← get
+      let cs := ((List.range (s.codes.size - start)).map (· + start)).filter (some · != s.litCode)
+      set { s with uses := s.uses.modify u ({ · with codes := cs.toArray }),
+                   useStack := s.useStack.drop 1 }
+      return t
   | .app (.prim .tab) (.pair (.prim (.lit (.i64 m))) arg) => do
       -- A literal view's `tab`, marked by `markLitViews`: `litTab`.
       if m != litViewMark then throw "a `tab` of a non-length"
@@ -649,11 +750,21 @@ def conv (ctx : Ctx) (e : Expr) (id : Nat) : CM Tm := do
       let c ← register ⟨es, p, body⟩
       return .clos c xs
 
-/-- Closure-convert a closed term. -/
-def convert (e : Expr) : Except String Prog := do
-  let e := markUbinds (markLitViews e)
+/-- The term the conversion converts: the polymorphic lets `sel` holds of replaced by their
+β-reducts, each use marked when `mark` (`polyLets`), then the literal views and finaliser frames
+marked. -/
+def prepare (sel : Nat → Bool) (mark : Bool) (e : Expr) : Expr :=
+  markUbinds (markLitViews ((polyLets sel mark e).run' 0))
+
+/-- Closure-convert a closed term, the polymorphic lets `sel` holds of replaced by their β-reducts
+and, with `mark`, their uses marked; and the marked uses. `convert` (`Backend/Clos/Poly.lean`)
+replaces the lets whose uses are at different rows. -/
+def convertWith (sel : Nat → Bool) (mark : Bool) (e : Expr) :
+    Except String (Prog × Array PolyUse) := do
+  let e := prepare sel mark e
   let (t, s) ← (conv {} e 0).run { next := dummy + 1, codes := #[], pre := .of e }
-  pure { codes := s.codes, main := t, folds := s.folds, data := s.data, litCode := s.litCode }
+  pure ({ codes := s.codes, main := t, folds := s.folds, data := s.data, litCode := s.litCode },
+    s.uses)
 
 /-! ### Externs  `[spec §11]` -/
 
@@ -698,9 +809,12 @@ extern to its host implementation (a fresh cell holding a capability's file desc
 operation's closure), an extern `main` does not use is dropped, and when there are capabilities
 `main`'s result `(caps, a)` gives them back and `a` is the program's value. When `main` returns a
 loop (`loops`), its value is the loop, and the taking back is the code `fin`, run on the value
-the loop finishes with.  `[spec §11]` -/
-def convertMain (exts : List ExtImpl) (loops : Bool) (e : Expr) : Except String Prog := do
-  let e := markUbinds (markLitViews e)
+the loop finishes with. The polymorphic lets `sel` holds of are replaced by their β-reducts and,
+with `mark`, their uses marked; the marked uses are returned too. `convertMain`
+(`Backend/Clos/Poly.lean`) replaces the lets whose uses are at different rows.  `[spec §11]` -/
+def convertMainWith (sel : Nat → Bool) (mark : Bool) (exts : List ExtImpl) (loops : Bool)
+    (e : Expr) : Except String (Prog × Array PolyUse) := do
+  let e := prepare sel mark e
   let ncaps := (exts.filter fun | .cap _ => true | _ => false).length
   let act : CM (Tm × Option Nat) := do
     let xs ← exts.mapM fun _ => fresh
@@ -724,6 +838,7 @@ def convertMain (exts : List ExtImpl) (loops : Bool) (e : Expr) : Except String 
       | .io k => body := .letv x (← ioValue k) body
     return (body, fin)
   let ((t, fin), s) ← act.run { next := dummy + 1, codes := #[], pre := .of e }
-  pure { codes := s.codes, main := t, fin, folds := s.folds, data := s.data, litCode := s.litCode }
+  pure ({ codes := s.codes, main := t, fin, folds := s.folds, data := s.data,
+          litCode := s.litCode }, s.uses)
 
 end Backend.Clos
