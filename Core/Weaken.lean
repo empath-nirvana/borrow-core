@@ -75,6 +75,7 @@ theorem CDerives.append_dead (h' : Ctx.Dead Γ') {Δ : LifeCtx} {Γ : Ctx VTy} {
   | bind hs _ _ ihM ihN => exact .bind (splitP_append h' hs) ihM ihN
   | force hs => exact .force (soloP_append h' hs)
   | lam _ ih => exact .lam ih
+  | lamDead _ ih => exact .lamDead ih
   | app hs _ hx ih => exact .app (splitP_append h' hs) ih (soloP_append h' hx)
   | withI _ _ ihM ihN => exact .withI ihM ihN
   | proj₁ _ ih => exact .proj₁ ih
@@ -161,12 +162,12 @@ theorem CDerives.append_dead (h' : Ctx.Dead Γ') {Δ : LifeCtx} {Γ : Ctx VTy} {
       exact .effLet (splitP_append h' hs)
         (fun hw => live_append (P := fun s => s.ty.Drop) h' (hW hw))
         (fun hu => persistent_append h' (hU hu)) ihM ihN
-  | effThen hs hNZ hUq hU _ _ _ ihM ihN ihD =>
+  | effThen hs hNZ hUq hU hMS hDS hfin hP _ _ _ ihM ihN ihD =>
       exact .effThen (splitP_append h' hs) hNZ hUq (fun hu => persistent_append h' (hU hu))
-        ihM ihN ihD
-  | effHandle hs hs₁ hr hc hn0 hnS hlen _ ih =>
-      exact .effHandle (splitP_append h' hs) (splitP_append h' hs₁) (soloP_append h' hr)
-        (soloP_append h' hc) hn0 hnS hlen ih
+        hMS hDS hfin hP ihM ihN ihD
+  | effHandleV hs hd hH _ hn0 hnS hlen _ ihc ihe =>
+      exact .effHandleV (splitP_append h' hs) (deadP_append h' hd) hH.append ihc hn0 hnS hlen ihe
+  | letPoly b hcl hV _ _ ihN => exact .letPoly b hcl hV ihN
 
 end BoCa.Fig16.LogRel.Core
 

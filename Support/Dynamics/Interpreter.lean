@@ -113,8 +113,9 @@ def delta (H : Host) (μ : Mem) : Expr → Val → Step
 /-! ### Handlers, operations and finalisers  `[spec §19]`
 
 The capture steps of `Head` (`hret`, `hop`, `hunwind`, `uthen`, `ufin`, `ufinC`, `cfret`,
-`cferr`, `cancel`, `creraise`), executable: a `perform` or `raise` stops (`Step.op`), the stop
-passes outward through the frames that do not catch it, and the first that does reduces. -/
+`cferr`, `cfcancel`, `cancel`, `creraise`), executable: a `perform` or `raise` stops (`Step.op`),
+the stop passes outward through the frames that do not catch it, and the first that does
+reduces. -/
 
 /-- `e` is a value, decided. -/
 def isValB : Expr → Bool
@@ -158,12 +159,6 @@ def clauseOf : Expr → Nat → Option Val
   | .pair _ r, i + 1 => clauseOf r i
   | _, _ => none
 
-/-- The names of a `namesVal`. -/
-def namesOf : Expr → Option (List UInt32)
-  | .inj₁ .unit => some []
-  | .inj₂ (.pair (.prim (.lit (.i32 m))) r) => (namesOf r).map (m :: ·)
-  | _ => none
-
 /-- The error of an `errVal`. -/
 def errOf : Expr → Option (Option Val)
   | .inj₁ .unit => some none
@@ -175,13 +170,14 @@ or the stop passed outward. -/
 def catchOp (μ : Mem) (f : Expr) (r : Bool) (K : BoLo.Kont) (p : Val) : Step :=
   let pass := Step.op r (.appR f K) p
   match f, p.1 with
-  | .app (.prim .hnd) (.pair (.prim (.lit (.i32 m))) (.pair hr hs)),
+  | .app (.prim .hnd) (.pair (.prim (.lit (.i32 m))) (.pair qs (.pair hr hs))),
       .pair (.prim (.lit (.i32 n))) (.pair (.prim (.lit (.i32 i))) v) =>
     if n = m then
-      match valOf? (.pair (.prim (.lit (.i32 m))) (.pair hr hs)), clauseOf hs i.toNat, valOf? v with
+      match valOf? (.pair (.prim (.lit (.i32 m))) (.pair qs (.pair hr hs))), clauseOf hs i.toNat,
+        valOf? v with
       | some H, some c, some w =>
         if r then .next μ (.app (.val c) (.val w))
-        else .next μ (.app (.val c) (.pair (.val w) (BoLo.kappa n H K)))
+        else .next μ (.app (.val c) (.pair (.val w) (BoLo.kappaAt (BoLo.capTag qs i.toNat) H K)))
       | _, _, _ => .stuck .badPrimArg
     else pass
   | .app (.prim .ubind) (.pair _ d), .pair (.prim (.lit (.i32 n))) _ =>
@@ -192,20 +188,27 @@ def catchOp (μ : Mem) (f : Expr) (r : Bool) (K : BoLo.Kont) (p : Val) : Step :=
         else .next μ (.seq (.app (.val D) (.val .unit)) (BoLo.raiseE (.val p)))
       | none => .stuck .badPrimArg
     else pass
-  | .prim .ccatch, .pair (.prim (.lit (.i32 0))) (.pair _ (.pair _ err)) =>
+  | .prim .ccatch, .pair (.prim (.lit (.i32 0))) (.pair _ err) =>
     if r then
       match errOf err with
       | some none => .next μ (.val .unit)
       | some (some E) => .next μ (BoLo.raiseE (.val E))
       | none => .stuck .badPrimArg
     else pass
-  | .app (.prim .cfin) (.pair _ (.pair _ (.pair ns err))),
+  | .app (.prim .cfin) (.pair _ (.pair _ err)),
       .pair (.prim (.lit (.i32 m))) (.pair (.prim (.lit (.i32 j))) w) =>
     if r then
-      match namesOf ns, errOf err, valOf? w with
-      | some N, some e, some w' =>
-        .next μ (BoLo.raiseE (.val (BoLo.cancelVal N (BoLo.errNext N e m j w'))))
-      | _, _, _ => .stuck .badPrimArg
+      match errOf err with
+      | some e =>
+        if m = 0 then
+          match errOf w with
+          | some e' => .next μ (BoLo.raiseE (.val (BoLo.cancelVal (e.or e'))))
+          | none => .stuck .badPrimArg
+        else
+          match valOf? w with
+          | some w' => .next μ (BoLo.raiseE (.val (BoLo.cancelVal (BoLo.errNext e m j w'))))
+          | none => .stuck .badPrimArg
+      | none => .stuck .badPrimArg
     else pass
   | _, _ => pass
 
@@ -213,7 +216,8 @@ def catchOp (μ : Mem) (f : Expr) (r : Bool) (K : BoLo.Kont) (p : Val) : Step :=
 `perform`/`raise` stopping. -/
 def effApp? (μ : Mem) (f : Expr) (v : Val) : Option Step :=
   match f with
-  | .app (.prim .hnd) (.pair _ (.pair hr _)) => (valOf? hr).map fun h => .next μ (.app (.val h) (.val v))
+  | .app (.prim .hnd) (.pair _ (.pair _ (.pair hr _))) =>
+      (valOf? hr).map fun h => .next μ (.app (.val h) (.val v))
   | .app (.prim .ubind) (.pair nn _) => (valOf? nn).map fun N => .next μ (.app (.val N) (.val v))
   | .app (.prim .cfin) s => (valOf? s).map fun st => .next μ (BoLo.raiseE (.val st))
   | .prim .perform => some (.op false .hole v)

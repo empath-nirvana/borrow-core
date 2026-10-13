@@ -67,7 +67,7 @@ theorem vP_zero_sum {ls : List SRec} {δ : LSub} {v : Val} {ρ : BoCa.Fig16.BoLo
 abbrev Flag : VTy := .sum .unit .unit
 
 /-- `raise : 1 ↠^aff 0`, the operation `0` of the name `1`. -/
-def failSig : OpSig := ⟨1, 0, .aff, .unit, .zero⟩
+def failSig : OpSig := ⟨1, 0, .aff, .unit, .zero, .ret .unit⟩
 
 /-- The row `{Fail}`. -/
 abbrev Sf : Row := [failSig]
@@ -104,7 +104,7 @@ def hrR : Expr := .val (.lam (.inj₁ (.var 0)))
 def clsR : Expr := .pair (.val (.lam (.inj₂ (.var 0)))) (.val .unit)
 
 /-- `handle_1 e with to_result`. -/
-def toResult (e : Expr) : Expr := bindE clsR (bindE hrR (hndTerm 1 0 1 e))
+def toResult (e : Expr) : Expr := bindE clsR (bindE hrR (hndTerm 1 [.aff] 0 1 e))
 
 theorem d_hrR {Δ : LifeCtx} {Γ : Ctx VTy} {S : Row} {A : VTy} (hΓ : Ctx.Dead Γ) :
     CDerives Δ Γ hrR (.val (retTy S A (.sum A .unit))) :=
@@ -414,7 +414,7 @@ The body `log (); raise ()` runs at the row `{Fail, Log}`.
 Both rows hold both names, in the two orders. -/
 
 /-- `log : 1 ↠^aff 1`, the operation `0` of the name `2`. -/
-def logSig : OpSig := ⟨2, 0, .aff, .unit, .unit⟩
+def logSig : OpSig := ⟨2, 0, .aff, .unit, .unit, .ret .unit⟩
 
 /-- `Log`'s operations. -/
 abbrev El : List (Qual × VTy × VTy) := [(.aff, .unit, .unit)]
@@ -431,7 +431,7 @@ def clL : Expr :=
 def clsL : Expr := .pair clL (.val .unit)
 
 /-- `with_log e`. -/
-def withLog (e : Expr) : Expr := bindE clsL (bindE hrL (hndTerm 2 0 1 e))
+def withLog (e : Expr) : Expr := bindE clsL (bindE hrL (hndTerm 2 [.aff] 0 1 e))
 
 theorem d_hrL {Δ : LifeCtx} {Γ : Ctx VTy} {S : Row} {A : VTy} (hΓ : Ctx.Dead Γ) :
     CDerives Δ Γ hrL (.val (retTy S A (.tensor A Flag))) :=
@@ -754,7 +754,7 @@ run, under every allocator, ends at the empty memory (`takeProg_runs`): when `ta
 producer early, the cell it held is freed. -/
 
 /-- `yield : 1 ↠^aff 1`. -/
-def yieldSig : OpSig := ⟨3, 0, .aff, .unit, .unit⟩
+def yieldSig : OpSig := ⟨3, 0, .aff, .unit, .unit, .ret .unit⟩
 
 /-- `Yield`'s operations. -/
 abbrev Ey : List (Qual × VTy × VTy) := [(.aff, .unit, .unit)]
@@ -785,7 +785,7 @@ def clsT : Expr := .pair clT (.val .unit)
 
 /-- **Program 5**: `take n producer`. -/
 def takeProg (n : ℕ) : Expr :=
-  bindE clsT (bindE hrT (bindE (hndTerm 3 0 1 producer)
+  bindE clsT (bindE hrT (bindE (hndTerm 3 [.aff] 0 1 producer)
     (bindE (.val (num n)) (.app (.var 1) (.var 0)))))
 
 theorem d_yieldE {Δ : LifeCtx} {Γ : Ctx VTy} (hΓ : Ctx.DeadP Γ) :
@@ -795,12 +795,15 @@ theorem d_yieldE {Δ : LifeCtx} {Γ : Ctx VTy} (hΓ : Ctx.DeadP Γ) :
 theorem yield_not_unr : ¬ Row.Unr [yieldSig] := by
   rintro ⟨o, ho, h⟩; simp at ho; subst ho; cases h
 
+theorem yield_not_unrD : ¬ Row.UnrD [yieldSig] := fun h =>
+  yield_not_unr ((Row.unrD_iff_of_fin (by simp [yieldSig])).mp h)
+
 theorem d_producer {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
     CDerives LifeCtx.empty Γ producer (.comp (CTy.effOf [yieldSig] .unit)) := by
   refine .bind (A := .ref Flag) (deadSplit hΓ)
     (.ret (appW (.sumI₁ (.unitI (by cdead))) (.alloc (by cdead)))) ?_
-  refine .effThen (A := .unit) (.right (deadSplit hΓ)) (by simp [Row.NZ, yieldSig])
-    (by simp [Row.Uniq]) (fun h => absurd h yield_not_unr) ?_ ?_ ?_
+  refine CDerives.effThenA (A := .unit) (.right (deadSplit hΓ)) (by simp [Row.NZ, yieldSig])
+    (by simp [Row.Uniq]) (fun h => absurd h yield_not_unrD) ?_ ?_ ?_
   · refine .effLet (A := .unit) (deadSplit (Ctx.Dead.cons hΓ)) (fun _ => Ctx.Dead.drops (Ctx.Dead.cons hΓ))
       (fun h => absurd h yield_not_unr) (d_yieldE (Ctx.Dead.cons hΓ).toP) ?_
     exact .effLet (A := .unit) (.dup rfl (deadSplit (Ctx.Dead.cons hΓ)))
@@ -879,7 +882,7 @@ computation of `F 1`, so every run, under every allocator, ends at `()` with the
 (`storeCancel_runs`). -/
 
 /-- `susp : 1 ↠^aff 1`. -/
-def suspSig : OpSig := ⟨4, 0, .aff, .unit, .unit⟩
+def suspSig : OpSig := ⟨4, 0, .aff, .unit, .unit, .ret .unit⟩
 
 /-- `Susp`'s operations. -/
 abbrev Es : List (Qual × VTy × VTy) := [(.aff, .unit, .unit)]
@@ -902,17 +905,20 @@ def clS : Expr :=
 def clsS : Expr := .pair clS (.val .unit)
 
 /-- **Program 6.** -/
-def storeCancel : Expr := bindE clsS (bindE hrS (hndTerm 4 0 1 performer))
+def storeCancel : Expr := bindE clsS (bindE hrS (hndTerm 4 [.aff] 0 1 performer))
 
 theorem susp_not_unr : ¬ Row.Unr [suspSig] := by
   rintro ⟨o, ho, h⟩; simp at ho; subst ho; cases h
+
+theorem susp_not_unrD : ¬ Row.UnrD [suspSig] := fun h =>
+  susp_not_unr ((Row.unrD_iff_of_fin (by simp [suspSig])).mp h)
 
 theorem d_performer {Γ : Ctx VTy} (hΓ : Ctx.Dead Γ) :
     CDerives LifeCtx.empty Γ performer (.comp (CTy.effOf [suspSig] .unit)) := by
   refine .bind (A := .ref Flag) (deadSplit hΓ)
     (.ret (appW (.sumI₁ (.unitI (by cdead))) (.alloc (by cdead)))) ?_
-  refine .effThen (A := .unit) (.right (deadSplit hΓ)) (by simp [Row.NZ, suspSig])
-    (by simp [Row.Uniq]) (fun h => absurd h susp_not_unr)
+  refine CDerives.effThenA (A := .unit) (.right (deadSplit hΓ)) (by simp [Row.NZ, suspSig])
+    (by simp [Row.Uniq]) (fun h => absurd h susp_not_unrD)
     (.effPerform (o := suspSig) rfl rfl (.unitI (Ctx.Dead.cons hΓ).toP)) ?_ ?_
   · refine .unitE (.right (.left (deadSplit hΓ)))
       (d_dropB (appW (.var (by csolo)) (.free (by cdead))) (by cdead)) ?_

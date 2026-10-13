@@ -90,22 +90,90 @@ theorem catches_comp (n : UInt32) : ∀ (K K' : Kont),
   | appR f K ih => simp only [Kont.comp, Kont.Catches, ih, Bool.or_assoc]
   | _ => simp_all [Kont.comp, Kont.Catches]
 
-theorem hndNames_comp : ∀ (K K' : Kont), (K.comp K').hndNames = K.hndNames ++ K'.hndNames := by
+/-! ### The dead region  `[spec §19]` -/
+
+theorem dead_comp : ∀ (K K' : Kont), (K.comp K').dead = K.dead.comp K'.dead := by
   intro K K'
   induction K with
-  | hole => simp [Kont.comp, Kont.hndNames]
-  | appR f K ih => simp only [Kont.comp, Kont.hndNames, ih, List.append_assoc]
-  | _ => simp_all [Kont.comp, Kont.hndNames]
+  | hole => rfl
+  | appR f K ih =>
+      simp only [Kont.comp, Kont.dead, ih]
+      split <;> rfl
+  | _ => simp_all [Kont.comp, Kont.dead]
+
+/-- A dead region holds no handler frame. -/
+theorem hasHnd_dead (n : UInt32) : ∀ K : Kont, K.dead.HasHnd n = false := by
+  intro K
+  induction K with
+  | hole => rfl
+  | appR f K ih =>
+      simp only [Kont.dead]
+      split
+      · exact ih
+      · rename_i hf
+        simp only [Kont.HasHnd, ih, Bool.or_false]
+        split
+        · rename_i m r
+          simp [Kont.DeadFrame] at hf
+        · rfl
+  | _ => simp_all [Kont.dead, Kont.HasHnd]
+
+/-- A dead region catches only at its finaliser frames, `ubind` and `cfin`, which catch every
+name: whether it catches does not depend on the name. -/
+theorem catches_dead (n m : UInt32) : ∀ K : Kont, K.dead.Catches n = K.dead.Catches m := by
+  intro K
+  induction K with
+  | hole => rfl
+  | appR f K ih =>
+      simp only [Kont.dead]
+      split
+      · exact ih
+      · rename_i hf
+        simp only [Kont.Catches, ih]
+        congr 1
+        split <;> simp_all [Kont.DeadFrame]
+  | _ => simp_all [Kont.dead, Kont.Catches]
+
+/-- A region whose frames catch nothing and hold no handler is its own dead region. -/
+theorem dead_plain : ∀ K : Kont, (∀ n, K.HasHnd n = false) → K.Catches 0 = false → K.dead = K := by
+  intro K
+  induction K with
+  | hole => intro _ _; rfl
+  | appR f K ih =>
+      intro hH hC
+      have hH' : ∀ n, K.HasHnd n = false := fun n => by
+        have := hH n; simp only [Kont.HasHnd, Bool.or_eq_false_iff] at this; exact this.2
+      have hC' : K.Catches 0 = false := by
+        simp only [Kont.Catches, Bool.or_eq_false_iff] at hC; exact hC.2
+      simp only [Kont.dead, ih hH' hC']
+      split
+      · rename_i hf
+        exfalso
+        unfold Kont.DeadFrame at hf
+        split at hf
+        · rename_i m r
+          have := hH m
+          simp [Kont.HasHnd] at this
+        · simp [Kont.Catches] at hC
+        · cases hf
+      · rfl
+  | _ =>
+      intro hH hC
+      simp_all [Kont.dead, Kont.HasHnd, Kont.Catches]
 
 /-! ### Operation tables  `[spec §19]` -/
 
 /-- An operation's entry: its continuation's qualifier, whether it is abortive (answer `0` at a
-qualifier with weakening), and the relations of its argument and answer types. -/
+qualifier with weakening), the relations of its argument and answer types, and its cancel
+obligation: `none` at the cancel row `⊤`, otherwise the run a cancel of a continuation captured
+at the operation owes from the dead region's start (`cancelObl` of the cancel row's table).
+`[spec §19, §27]` -/
 structure OpEnt where
   q : Qual
   abort : Bool
   PA : List SRec → Val → WProp
   PB : List SRec → Val → WProp
+  fin : Option (List SRec → Expr → WProp)
 
 /-- An operation table: the entry of the operation `i` of the name `n`, if the row has it. -/
 abbrev OpTab := UInt32 → UInt32 → Option OpEnt
@@ -118,48 +186,67 @@ def OpTab.ext (n i : UInt32) (en : OpEnt) (T : OpTab) : OpTab :=
   fun n' i' => if n' = n ∧ i' = i then some en else T n' i'
 
 /-- The error a cancel carries is admissible at the canceller: none, or an abortive operation of
-the row whose name is outside the cancelled region, at its argument relation. -/
-def errOk (T : OpTab) (N : List UInt32) (ls : List SRec) : Option Val → WProp
+the table, at its argument relation. -/
+def errOk (T : OpTab) (ls : List SRec) : Option Val → WProp
   | none => emp
   | some E => ex fun (m : UInt32) => ex fun (j : UInt32) => ex fun (w : Val) =>
       ex fun (en : OpEnt) =>
-        ⌜E = opPayload m j w ∧ m ∉ N ∧ T m j = some en ∧ en.abort = true⌝ ⋆
+        ⌜E = opPayload m j w ∧ T m j = some en ∧ en.abort = true⌝ ⋆
           fun ρ => en.PA ls w ρ ∧ NoOwn ρ
 
-/-- The table of a cancel run over the region `N`: it stops only at the cancel itself, having
-unwound every frame that catches it, with an admissible error and nothing owned left behind. -/
-def cancelTab (T : OpTab) (N : List UInt32) : Table := fun ls t _ =>
-  ex fun (K : Kont) => ex fun (err : Option Val) =>
-    ⌜t = K.plug (raiseE (.val (cancelVal N err))) ∧ K.Catches 0 = false⌝ ⋆
-      (errOk T N ls err ⋆ fun ρ => NoOwn ρ)
-
-/-- What cancelling the continuation `K` of an operation of the name `n` owes: run to the cancel's
-end at every region `N` holding `n` and `K`'s handlers.  `[spec §19]` -/
-def cancelOwed (T : OpTab) (n : UInt32) (ls : List SRec) (K : Kont) : WProp := fun ρ =>
-  ∀ N : List UInt32, n ∈ N → (∀ m ∈ K.hndNames, m ∈ N) →
-    ewpTS ls (K.plug (raiseE (.val (cancelVal N none)))) (cancelTab T N) (fun _ _ _ => False) ρ
+/-- What cancelling the continuation `K` of an operation whose entry is `en` owes: the dead region
+`K†` run from the cancel's start at the entry's cancel obligation; nothing at the cancel row `⊤`
+(`en.fin = none`), whose continuation cannot be cancelled.  `[spec §19, §27]` -/
+def cancelOK (en : OpEnt) (ls : List SRec) (K : Kont) : WProp := fun ρ =>
+  ∀ P, en.fin = some P → P ls (K.dead.plug (raiseE (.val (cancelVal none)))) ρ
 
 /-- The continuation's share at a stopped operation: `∅` at `unr`; at every extension of the
-list, resumed at every answer in `PB`; and, with weakening, cancelled.  `[spec §19]` -/
-def contShare (T : OpTab) (en : OpEnt) (n : UInt32) (ls : List SRec) (K : Kont)
-    (Φ : List SRec → Expr → WProp) : WProp := fun ρ =>
-  (en.q = .unr → ρ = PMap.empty) ∧
-  ∀ ls', Ext ls ls' ρ →
-    (∀ w : Val, (en.PB ls' w ─⋆ Φ ls' (K.plug (.val w))) ρ) ∧
-    (en.q ≠ .lin → cancelOwed T n ls' K ρ)
+list, resumed at every answer in `PB`; and, with weakening, cancelled (`cancelOK`).
+`[spec §19, §27]` -/
+def contShare (en : OpEnt) (ls : List SRec) (K : Kont) (Φ : List SRec → Expr → WProp) : WProp :=
+  fun ρ =>
+    (en.q = .unr → ρ = PMap.empty) ∧
+    ∀ ls', Ext ls ls' ρ →
+      (∀ w : Val, (en.PB ls' w ─⋆ Φ ls' (K.plug (.val w))) ρ) ∧
+      (en.q ≠ .lin → cancelOK en ls' K ρ)
+
+/-- A stop at a non-abortive operation of `T`, `perform (n, (i, v))` under a context free of `n`:
+the argument, and the continuation's share.  `[spec §19]` -/
+def performStop (T : OpTab) : Table := fun ls t Φ =>
+  ex fun (K : Kont) => ex fun (n : UInt32) => ex fun (i : UInt32) => ex fun (v : Val) =>
+    ex fun (en : OpEnt) =>
+      ⌜t = K.plug (performE (.val (opPayload n i v))) ∧ K.HasHnd n = false ∧
+        T n i = some en ∧ en.abort = false⌝ ⋆ (en.PA ls v ⋆ contShare en ls K Φ)
+
+/-- The table of a cancel run whose kept errors and performed operations are `T`'s: the cancel's
+end, having unwound every frame that catches it, with an admissible error and nothing owned left
+behind; or an operation of `T` a running finaliser performs, which passes the dead region to a
+live handler, owing its continuation's share.  `[spec §19, §27]` -/
+def cancelTab (T : OpTab) : Table := fun ls t Φ =>
+  BoLo.or
+    (ex fun (K : Kont) => ex fun (err : Option Val) =>
+      ⌜t = K.plug (raiseE (.val (cancelVal err))) ∧ K.Catches 0 = false⌝ ⋆
+        (errOk T ls err ⋆ fun ρ => NoOwn ρ))
+    (performStop T ls t Φ)
+
+/-- The cancel obligation of a cancel row's table `T`: the cancel run at `cancelTab T`.
+`[spec §27]` -/
+def cancelObl (T : OpTab) : List SRec → Expr → WProp :=
+  fun ls e => ewpTS ls e (cancelTab T) (fun _ _ _ => False)
+
+/-- The cancel run of the continuation `K` at the empty cancel row: the dead region `K†` run to
+the cancel's end, keeping no error and performing nothing.  `[spec §19]` -/
+def cancelOwed (ls : List SRec) (K : Kont) : WProp :=
+  cancelObl OpTab.empty ls (K.dead.plug (raiseE (.val (cancelVal none))))
 
 /-- The protocol table of an operation table.  `[spec §19]`
 * a non-abortive `perform (n, (i, v))` under a context free of `n`: the argument, and the
-  continuation's share;
+  continuation's share (`performStop`);
 * an abortive `raise (n, (i, v))` under a context catching nothing of `n`: the argument, which
   holds nothing owned (an abandoned error is dropped), and the abandoned continuation, which holds
   nothing owned either. -/
 def opTable (T : OpTab) : Table := fun ls t Φ =>
-  BoLo.or
-    (ex fun (K : Kont) => ex fun (n : UInt32) => ex fun (i : UInt32) => ex fun (v : Val) =>
-      ex fun (en : OpEnt) =>
-        ⌜t = K.plug (performE (.val (opPayload n i v))) ∧ K.HasHnd n = false ∧
-          T n i = some en ∧ en.abort = false⌝ ⋆ (en.PA ls v ⋆ contShare T en n ls K Φ))
+  BoLo.or (performStop T ls t Φ)
     (ex fun (K : Kont) => ex fun (n : UInt32) => ex fun (i : UInt32) => ex fun (v : Val) =>
       ex fun (en : OpEnt) =>
         ⌜t = K.plug (raiseE (.val (opPayload n i v))) ∧ K.Catches n = false ∧

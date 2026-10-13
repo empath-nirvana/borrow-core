@@ -947,16 +947,29 @@ theorem ewp_bind_pure_frame {Tb : Table} (hTb : Tb.Mono) (K : Kont) (e : Expr) (
   fun ρ h' => ewp_fold hTb (wpG_bind_frame K e ls P R _ hR
     (fun ls' hls v σ hσ => ewp_unfold hTb (h ls' hls v σ hσ)) ρ h')
 
+/-- A stop at an operation is monotone in the continuations it owes. -/
+theorem performStop_mono (T : OpTab) : (performStop T).Mono := by
+  intro ls t Φ Φ' ρ hΦ h
+  obtain ⟨K, n, i, v, en, h⟩ := h
+  obtain ⟨hp, h⟩ := pure_sep_iff.mp h
+  refine ⟨K, n, i, v, en, pure_sep_mk hp ?_⟩
+  obtain ⟨ρ₁, ρ₂, hc, hA, hk, hK⟩ := h
+  refine ⟨ρ₁, ρ₂, hc, hA, hk, fun ls' hext => ⟨fun w σ₁ σ₂ hB hcσ => ?_, (hK ls' hext).2⟩⟩
+  exact hΦ _ _ _ ((hK ls' hext).1 w σ₁ σ₂ hB hcσ)
+
 /-- The protocol table of an operation table is monotone in the continuations it owes. -/
 theorem opTable_mono (T : OpTab) : (opTable T).Mono := by
   intro ls t Φ Φ' ρ hΦ h
-  rcases h with ⟨K, n, i, v, en, h⟩ | h
-  · obtain ⟨hp, h⟩ := pure_sep_iff.mp h
-    refine Or.inl ⟨K, n, i, v, en, pure_sep_mk hp ?_⟩
-    obtain ⟨ρ₁, ρ₂, hc, hA, hk, hK⟩ := h
-    refine ⟨ρ₁, ρ₂, hc, hA, hk, fun ls' hext => ⟨fun w σ₁ σ₂ hB hcσ => ?_, (hK ls' hext).2⟩⟩
-    exact hΦ _ _ _ ((hK ls' hext).1 w σ₁ σ₂ hB hcσ)
+  rcases h with h | h
+  · exact Or.inl (performStop_mono T ls t Φ Φ' ρ hΦ h)
   · exact Or.inr h
+
+/-- The table of a cancel run is monotone in the continuations it owes. -/
+theorem cancelTab_mono (T : OpTab) : (cancelTab T).Mono := by
+  intro ls t Φ Φ' ρ hΦ h
+  rcases h with h | h
+  · exact Or.inl h
+  · exact Or.inr (performStop_mono T ls t Φ Φ' ρ hΦ h)
 
 /-- A run of no steps: the term is where `wpG` ends.  `wpTS_val`'s proof at any term. -/
 theorem wpG_here (ls : List SRec) (e : Expr) (Q : List SRec → Expr → WProp) :
@@ -1009,9 +1022,6 @@ theorem wpG_frame {ls : List SRec} {e : Expr} {Q : List SRec → Expr → WProp}
   refine wpG_ramify ls e Q _ ρ ⟨ρ₁, ρ₂, hc, hw, fun ls' hls t σ₁ σ₂ hq hcσ => ?_⟩
   exact ⟨σ₁, ρ₂, ResU.CompS.comm hcσ, hq, hR ls' hls ρ₂ hr⟩
 
-/-- The table of a cancel run owes no continuation. -/
-theorem cancelTab_abortive (T : OpTab) (N : List UInt32) : (cancelTab T N).Abortive :=
-  fun _ _ _ _ _ h => h
 
 end BoCa.Fig16.LogRel.Core
 

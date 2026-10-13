@@ -145,10 +145,11 @@ theorem CTyEq.applyLSub : ∀ (C : CTy) (σ : Lifetime.LSubst) (δ δ' : LSub),
        CTyEq.applyLSub D σ δ δ' (fun y hy => h y (Or.inr hy))⟩
   | .top, _, _, _, _ => trivial
   | .nu C, σ, δ, δ', h => CTyEq.applyLSub C σ δ δ' h
-  | .eff _ _ _ A B C, σ, δ, δ', h =>
+  | .eff _ _ _ A B fin C, σ, δ, δ', h =>
       ⟨rfl, rfl, rfl, TyEq.applyLSub A σ δ δ' (fun y hy => h y (Or.inl hy)),
        TyEq.applyLSub B σ δ δ' (fun y hy => h y (Or.inr (Or.inl hy))),
-       CTyEq.applyLSub C σ δ δ' (fun y hy => h y (Or.inr (Or.inr hy)))⟩
+       CTyEq.applyLSub fin σ δ δ' (fun y hy => h y (Or.inr (Or.inr (Or.inl hy)))),
+       CTyEq.applyLSub C σ δ δ' (fun y hy => h y (Or.inr (Or.inr (Or.inr hy))))⟩
   | .all y b S, σ, δ, δ', h => by
       have hb : (b.applySub σ).interp δ = b.interp δ' :=
         interp_applySub b (fun w hw => h w (Or.inl hw))
@@ -803,31 +804,44 @@ theorem cC_congr : ∀ (C : CTy) {δ₁ δ₂ : LSub}, (∀ y, CFree y C → δ�
           exact h y (Or.inr ⟨Ne.symm hxy, hy⟩)
       have hL : ∀ α : Life, LtLife δ₁ c α = LtLife δ₂ c α := by intro α; unfold LtLife; rw [hc]
       funext e; simp only [cC, hC, hL]
-  | .eff n i q A B C, δ₁, δ₂, h, ls => by
+  | .eff n i q A B fin C, δ₁, δ₂, h, ls => by
       have hA := vCE_congr A none (fun y hy => h y (Or.inl hy)) (envAgree_none _ _) true
       have hB := vCE_congr B none (fun y hy => h y (Or.inr (Or.inl hy))) (envAgree_none _ _) true
-      have hT := effTab_congr C (fun y hy => h y (Or.inr (Or.inr hy)))
-      have hR := effRet_congr C (fun y hy => h y (Or.inr (Or.inr hy)))
-      funext e; simp only [cC, hA, hB, hT, hR]
+      have hF := finObl_congr fin (fun y hy => h y (Or.inr (Or.inr (Or.inl hy))))
+      have hT := effTab_congr C (fun y hy => h y (Or.inr (Or.inr (Or.inr hy))))
+      have hR := effRet_congr C (fun y hy => h y (Or.inr (Or.inr (Or.inr hy))))
+      funext e; simp only [cC, hA, hB, hF, hT, hR]
 /-- The operation table of a row depends on `δ` only at its free variables. -/
 theorem effTab_congr : ∀ (C : CTy) {δ₁ δ₂ : LSub}, (∀ y, CFree y C → δ₁.find? y = δ₂.find? y) →
     effTab C δ₁ = effTab C δ₂
-  | .eff n i q A B C, δ₁, δ₂, h => by
+  | .eff n i q A B fin C, δ₁, δ₂, h => by
       have hA := vCE_congr A none (fun y hy => h y (Or.inl hy)) (envAgree_none _ _) true
       have hB := vCE_congr B none (fun y hy => h y (Or.inr (Or.inl hy))) (envAgree_none _ _) true
-      have hT := effTab_congr C (fun y hy => h y (Or.inr (Or.inr hy)))
-      simp only [effTab, hA, hB, hT]
+      have hF := finObl_congr fin (fun y hy => h y (Or.inr (Or.inr (Or.inl hy))))
+      have hT := effTab_congr C (fun y hy => h y (Or.inr (Or.inr (Or.inr hy))))
+      simp only [effTab, hA, hB, hF, hT]
   | .ret _, _, _, _ | .arr _ _, _, _, _ | .amp _ _, _, _, _ | .top, _, _, _
   | .all _ _ _, _, _, _ | .nu _, _, _, _ => by simp only [effTab]
+/-- A cancel row's obligation depends on `δ` only at its free variables. -/
+theorem finObl_congr : ∀ (C : CTy) {δ₁ δ₂ : LSub}, (∀ y, CFree y C → δ₁.find? y = δ₂.find? y) →
+    finObl C δ₁ = finObl C δ₂
+  | .eff n i q A B fin C, δ₁, δ₂, h => by
+      have hA := vCE_congr A none (fun y hy => h y (Or.inl hy)) (envAgree_none _ _) true
+      have hB := vCE_congr B none (fun y hy => h y (Or.inr (Or.inl hy))) (envAgree_none _ _) true
+      have hF := finObl_congr fin (fun y hy => h y (Or.inr (Or.inr (Or.inl hy))))
+      have hT := effTab_congr C (fun y hy => h y (Or.inr (Or.inr (Or.inr hy))))
+      simp only [finObl, hA, hB, hF, hT]
+  | .ret _, _, _, _ | .arr _ _, _, _, _ | .amp _ _, _, _, _ | .top, _, _, _
+  | .all _ _ _, _, _, _ | .nu _, _, _, _ => by simp only [finObl]
 /-- The answer relation of a row depends on `δ` only at its free variables. -/
 theorem effRet_congr : ∀ (C : CTy) {δ₁ δ₂ : LSub}, (∀ y, CFree y C → δ₁.find? y = δ₂.find? y) →
     effRet C δ₁ = effRet C δ₂
   | .ret A, δ₁, δ₂, h => by
       have hA := vCE_congr A none h (envAgree_none _ _) true
       simp only [effRet, hA]
-  | .eff _ _ _ _ _ C, δ₁, δ₂, h => by
+  | .eff _ _ _ _ _ _ C, δ₁, δ₂, h => by
       simp only [effRet]
-      exact effRet_congr C (fun y hy => h y (Or.inr (Or.inr hy)))
+      exact effRet_congr C (fun y hy => h y (Or.inr (Or.inr (Or.inr hy))))
   | .arr _ _, _, _, _ | .amp _ _, _, _, _ | .top, _, _, _
   | .all _ _ _, _, _, _ | .nu _, _, _, _ => by simp only [effRet]
 /-- The answer relation of a row under an environment depends on `δ` only at the free variables
@@ -838,9 +852,9 @@ theorem effRetE_congr : ∀ (C : CTy) (η : Option (Nat → TEnt)) {δ₁ δ₂ 
   | .ret A, η, δ₁, δ₂, h, hη => by
       have hA := vCE_congr A η h hη true
       simp only [effRetE, hA]
-  | .eff _ _ _ _ _ C, η, δ₁, δ₂, h, hη => by
+  | .eff _ _ _ _ _ _ C, η, δ₁, δ₂, h, hη => by
       simp only [effRetE]
-      exact effRetE_congr C η (fun y hy => h y (Or.inr (Or.inr hy))) hη
+      exact effRetE_congr C η (fun y hy => h y (Or.inr (Or.inr (Or.inr hy)))) hη
   | .arr _ _, _, _, _, _, _ | .amp _ _, _, _, _, _, _ | .top, _, _, _, _, _
   | .all _ _ _, _, _, _, _, _ | .nu _, _, _, _, _, _ => by simp only [effRetE]
 /-- One unfolding of an observation tree depends on `δ` only at the free variables of the tree
@@ -855,12 +869,13 @@ theorem cB_congr : ∀ (C : CTy) (η : Option (Nat → TEnt)) {δ₁ δ₂ : LSu
       have h₁ := cB_congr C η (fun y hy => h y (Or.inl hy)) hη ls
       have h₂ := cB_congr D η (fun y hy => h y (Or.inr hy)) hη ls
       funext e; simp only [cB, h₁, h₂]
-  | .eff n i q A B C, η, δ₁, δ₂, h, hη, ls => by
+  | .eff n i q A B fin C, η, δ₁, δ₂, h, hη, ls => by
       have hA := vCE_congr A none (fun y hy => h y (Or.inl hy)) (envAgree_none _ _) true
       have hB := vCE_congr B none (fun y hy => h y (Or.inr (Or.inl hy))) (envAgree_none _ _) true
-      have hT := effTab_congr C (fun y hy => h y (Or.inr (Or.inr hy)))
-      have hR := effRetE_congr C η (fun y hy => h y (Or.inr (Or.inr hy))) hη
-      funext e; simp only [cB, hA, hB, hT, hR]
+      have hF := finObl_congr fin (fun y hy => h y (Or.inr (Or.inr (Or.inl hy))))
+      have hT := effTab_congr C (fun y hy => h y (Or.inr (Or.inr (Or.inr hy))))
+      have hR := effRetE_congr C η (fun y hy => h y (Or.inr (Or.inr (Or.inr hy)))) hη
+      funext e; simp only [cB, hA, hB, hF, hT, hR]
   | .arr A D, η, _, _, h, hη, ls => by
       have hA := vCE_congr A none (fun y hy => h y (Or.inl hy)) (envAgree_none _ _) true ls
       have hD := cB_congr D η (fun y hy => h y (Or.inr hy)) hη ls
@@ -917,9 +932,9 @@ theorem CTyEq.effLeaf_iff : ∀ (C : CTy) {C' : CTy} {δ δ' : LSub}, CTyEq C δ
   | .ret A, C', _, _, h => by
       cases C' <;> simp only [CTyEq] at h
       exact TyEq.poly_iff A h
-  | .eff n i q A B C, C', _, _, h => by
+  | .eff n i q A B fin C, C', _, _, h => by
       cases C' <;> simp only [CTyEq] at h
-      obtain ⟨rfl, rfl, rfl, hA, hB, hC⟩ := h
+      obtain ⟨rfl, rfl, rfl, hA, hB, -, hC⟩ := h
       exact and_congr (TyEq.Cl_iff A 0 hA) (and_congr (TyEq.Cl_iff B 0 hB)
         (CTyEq.effLeaf_iff C hC))
   | .arr _ _, C', _, _, h | .top, C', _, _, h | .all _ _ _, C', _, _, h | .nu _, C', _, _, h
@@ -934,9 +949,9 @@ theorem CTyEq.nuLeaf_iff : ∀ (C : CTy) {C' : CTy} {δ δ' : LSub}, CTyEq C δ 
   | .amp C D, C', _, _, h => by
       cases C' <;> simp only [CTyEq] at h
       exact and_congr (CTyEq.nuLeaf_iff C h.1) (CTyEq.nuLeaf_iff D h.2)
-  | .eff n i q A B C, C', _, _, h => by
+  | .eff n i q A B fin C, C', _, _, h => by
       cases C' <;> simp only [CTyEq] at h
-      exact CTyEq.effLeaf_iff (.eff n i q A B C) (C' := .eff _ _ _ _ _ _) h
+      exact CTyEq.effLeaf_iff (.eff n i q A B fin C) (C' := .eff _ _ _ _ _ _ _) h
   | .arr A D, C', _, _, h => by
       cases C' <;> simp only [CTyEq] at h
       exact and_congr (TyEq.Cl_iff A 0 h.1) (CTyEq.nuLeaf_iff D h.2)
@@ -1075,38 +1090,54 @@ theorem cC_tyEq_aux : ∀ (C : CTy) {C' : CTy} {δ δ' : LSub}, CTyEq C δ C' δ
       have hL : ∀ α : Life, LtLife δ c α = LtLife δ' c' α := by
         intro α; unfold LtLife; rw [h.1]
       intro ls; funext e; simp only [cC, hT, hL]
-  | .eff n i q A B C, C', δ, δ', h => by
+  | .eff n i q A B fin C, C', δ, δ', h => by
       cases C' <;> simp only [CTyEq] at h
-      obtain ⟨rfl, rfl, rfl, hA, hB, hC⟩ := h
+      obtain ⟨rfl, rfl, rfl, hA, hB, hF, hC⟩ := h
       have ihA := vCE_tyEq A none none hA (envEq_none _ _) true
       have ihB := vCE_tyEq B none none hB (envEq_none _ _) true
+      have ihF := finObl_tyEq fin hF
       have hT := effTab_tyEq C hC
       have hR := effRet_tyEq C hC
       have hz := TyEq.isZero_eq B hB
-      intro ls; funext e; simp only [cC, ihA, ihB, hT, hR, hz]
+      intro ls; funext e; simp only [cC, ihA, ihB, ihF, hT, hR, hz]; rw [capB_congr hz]
 theorem effTab_tyEq : ∀ (C : CTy) {C' : CTy} {δ δ' : LSub}, CTyEq C δ C' δ' →
     effTab C δ = effTab C' δ'
-  | .eff n i q A B C, C', δ, δ', h => by
+  | .eff n i q A B fin C, C', δ, δ', h => by
       cases C' <;> simp only [CTyEq] at h
-      obtain ⟨rfl, rfl, rfl, hA, hB, hC⟩ := h
+      obtain ⟨rfl, rfl, rfl, hA, hB, hF, hC⟩ := h
       have ihA := vCE_tyEq A none none hA (envEq_none _ _) true
       have ihB := vCE_tyEq B none none hB (envEq_none _ _) true
+      have ihF := finObl_tyEq fin hF
       have hT := effTab_tyEq C hC
       have hz := TyEq.isZero_eq B hB
-      simp only [effTab, ihA, ihB, hT, hz]
+      simp only [effTab, ihA, ihB, ihF, hT, hz]; rw [capB_congr hz]
   | .ret _, C', _, _, h | .arr _ _, C', _, _, h | .amp _ _, C', _, _, h | .top, C', _, _, h
   | .all _ _ _, C', _, _, h | .nu _, C', _, _, h => by
       cases C' <;> simp only [CTyEq] at h <;> simp only [effTab]
+theorem finObl_tyEq : ∀ (C : CTy) {C' : CTy} {δ δ' : LSub}, CTyEq C δ C' δ' →
+    finObl C δ = finObl C' δ'
+  | .eff n i q A B fin C, C', δ, δ', h => by
+      cases C' <;> simp only [CTyEq] at h
+      obtain ⟨rfl, rfl, rfl, hA, hB, hF, hC⟩ := h
+      have ihA := vCE_tyEq A none none hA (envEq_none _ _) true
+      have ihB := vCE_tyEq B none none hB (envEq_none _ _) true
+      have ihF := finObl_tyEq fin hF
+      have hT := effTab_tyEq C hC
+      have hz := TyEq.isZero_eq B hB
+      simp only [finObl, ihA, ihB, ihF, hT, hz]; rw [capB_congr hz]
+  | .ret _, C', _, _, h | .arr _ _, C', _, _, h | .amp _ _, C', _, _, h | .top, C', _, _, h
+  | .all _ _ _, C', _, _, h | .nu _, C', _, _, h => by
+      cases C' <;> simp only [CTyEq] at h <;> simp only [finObl]
 theorem effRet_tyEq : ∀ (C : CTy) {C' : CTy} {δ δ' : LSub}, CTyEq C δ C' δ' →
     effRet C δ = effRet C' δ'
   | .ret A, C', δ, δ', h => by
       cases C' <;> simp only [CTyEq] at h
       have ihA := vCE_tyEq A none none h (envEq_none _ _) true
       simp only [effRet, ihA]
-  | .eff _ _ _ _ _ C, C', δ, δ', h => by
+  | .eff _ _ _ _ _ _ C, C', δ, δ', h => by
       cases C' <;> simp only [CTyEq] at h
       simp only [effRet]
-      exact effRet_tyEq C h.2.2.2.2.2
+      exact effRet_tyEq C h.2.2.2.2.2.2
   | .arr _ _, C', _, _, h | .amp _ _, C', _, _, h | .top, C', _, _, h
   | .all _ _ _, C', _, _, h | .nu _, C', _, _, h => by
       cases C' <;> simp only [CTyEq] at h <;> simp only [effRet]
@@ -1116,10 +1147,10 @@ theorem effRetE_tyEq : ∀ (C : CTy) {C' : CTy} {δ δ' : LSub}, CTyEq C δ C' �
       cases C' <;> simp only [CTyEq] at h
       have ihA := vCE_tyEq A η η' h hη true
       simp only [effRetE, ihA]
-  | .eff _ _ _ _ _ C, C', δ, δ', h, η, η', hη => by
+  | .eff _ _ _ _ _ _ C, C', δ, δ', h, η, η', hη => by
       cases C' <;> simp only [CTyEq] at h
       simp only [effRetE]
-      exact effRetE_tyEq C h.2.2.2.2.2 η η' hη
+      exact effRetE_tyEq C h.2.2.2.2.2.2 η η' hη
   | .arr _ _, C', _, _, h, _, _, _ | .amp _ _, C', _, _, h, _, _, _ | .top, C', _, _, h, _, _, _
   | .all _ _ _, C', _, _, h, _, _, _ | .nu _, C', _, _, h, _, _, _ => by
       cases C' <;> simp_all [CTyEq, effRetE]
@@ -1135,15 +1166,16 @@ theorem cB_tyEq : ∀ (C : CTy) {C' : CTy} {δ δ' : LSub}, CTyEq C δ C' δ' �
       have ihC := cB_tyEq C h.1 η η' hη ls
       have ihD := cB_tyEq D h.2 η η' hη ls
       funext e; simp only [cB, ihC, ihD]
-  | .eff n i q A B C, C', δ, δ', h, η, η', hη, ls => by
+  | .eff n i q A B fin C, C', δ, δ', h, η, η', hη, ls => by
       cases C' <;> simp only [CTyEq] at h
-      obtain ⟨rfl, rfl, rfl, hA, hB, hC⟩ := h
+      obtain ⟨rfl, rfl, rfl, hA, hB, hF, hC⟩ := h
       have ihA := vCE_tyEq A none none hA (envEq_none _ _) true
       have ihB := vCE_tyEq B none none hB (envEq_none _ _) true
+      have ihF := finObl_tyEq fin hF
       have hT := effTab_tyEq C hC
       have hR := effRetE_tyEq C hC η η' hη
       have hz := TyEq.isZero_eq B hB
-      funext e; simp only [cB, ihA, ihB, hT, hR, hz]
+      funext e; simp only [cB, ihA, ihB, ihF, hT, hR, hz]; rw [capB_congr hz]
   | .arr A D, C', _, _, h, η, η', hη, ls => by
       cases C' <;> simp only [CTyEq] at h
       have ihA := vCE_tyEq A none none h.1 (envEq_none _ _) true ls
