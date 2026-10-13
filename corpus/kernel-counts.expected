@@ -14,6 +14,18 @@ cancel-now 0 0 0
 cancel-reraised 0 0 0
 cancel-reentered 0 0 0 # a finaliser's error past the dead inner instance of a re-entered site
 cancel-propagated 0 0 0 # a finaliser's error past a dead handler of its name, to the live one outside
+at08-once 1 0 0 # the cell the clause moves κ through
+deep-gen 2 3 0 # the counting clause resumes non-tail: a frame object at each of the two ticks; the count is one of two closures (the clauses'), called three times
+nested-log-outside 0 2 0 # withLog's answer is one of two closures (the clauses'), called twice
+nested-fail-outside 0 1 0 # withLog's answer, called once: the raise unwinds past its handler
+tunnel 0 0 0
+e7a 0 0 0
+e7b 0 0 0
+e7d 0 0 0
+e8b 0 0 0
+stored-k-resume 0 3 0 # stash's answer is one of two closures (the clauses'), called three times
+stored-k-cancel 0 1 0 # stash's answer, called once: it cancels κ
+stored-k-fin 0 1 0 # stash's answer, called once: it cancels κ, whose finaliser raises
 loop-tail 0 0 0
 loop-captured 0 0 0
 recursive-yield 20 0 0 # recursion through a resumption point: one frame object per level, reused at each resume

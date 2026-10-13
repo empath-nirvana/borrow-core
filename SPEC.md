@@ -1,6 +1,6 @@
 # Borrow core — specification
 
-Version 0.49 · 2026-10-13
+Version 0.52 · 2026-10-13
 
 The library — `Paper/`, `Support/`, `Examples/`, `Core/` — implements this document and nothing else. A
 change to the language is a new entry here, written before any code; the library then
@@ -2401,7 +2401,8 @@ questions:
   - shutdown.
 
   An affine `κ` is consumed by exactly one of its two entries. So "a continuation cannot be
-  dropped" (#185, `forget_not_lolli`) is answered by the destructor `cancel`, not by a `forget`.
+  dropped" (#185, `forget_not_lolli`) is answered by the destructor `cancel`, not by a `forget`:
+  in Core, `forget κ` has no derivation at `1` (`not_forget_kappa`, *Laws* item 4).
   A strictly linear `κ` has no `cancel`, for must-complete computations.
 
 ### Names: which handler handles an operation
@@ -2899,6 +2900,27 @@ does not hold. Safety is stated of the runs of typed programs (`Core/EffSafety.l
      exactly as `raise p` steps there: the frame that catches it drops them (`abort_absorbs`;
      `abort_to`, `abort_app`).
    - *Sequencing*, `op(v) to x. P = op(v; y. (k y to x. P))`, is not yet a Core theorem.
+3. **Static per-site names: no accidental handling.** An operation is caught by the nearest live
+   handler of its name (*Names*); a handler of another name passes it, in the machine as item 1's
+   H-fwd (`fwd_abort`). `tunnel` (E6, `Core/EffTier1Programs.lean`): `fwrap` handles `exnᵢ` around
+   a callback that raises `exnₒ`, and the raise passes `fwrap`'s handler to `toResult`'s outside
+   (`d_tunnel`, `tunnel_run`; the kernel program `tunnel`).
+4. **Continuations are linear or affine; `unr` is tolerated.** A clause's `κ` is at `kTy`
+   (*Kinds of operation*): at a linear or affine operation a thunk of an `&`, which is not
+   persistent, its cancel branch at `⊤` at a linear one. So a typed clause uses `κ` as its qualifier
+   allows, by inversion of `CDerives` (`Core/Inversions.lean`):
+   - At every resuming linear or affine operation, every context and every cancel row, a clause
+     that drops `κ` (R1), resumes it twice (R2), or cancels and then resumes it (R4) has no
+     derivation at its clause type; at every linear one, neither has a clause that cancels it (R3)
+     (`refuses_R_clauses`). The refusals are of `κ`'s use, not of the clauses' form: at the clause
+     type of a linear `1 ↠ 1` a clause that resumes `κ` once is typed, and a clause that cancels
+     `κ` is typed at an affine operation and refused at a linear one (`clauseRefusals_pinned`).
+   - `forget κ` has no derivation at `1` (`not_forget_kappa`), and a handler whose clause stores
+     `κ` in a cell and reads it out twice has none at all (`not_der_at08`). Moving `κ` through a
+     cell and resuming it once is typed (`d_at08Once`).
+
+   An unrestricted `κ` is `!`, and a clause may use it any number of times. That every run of a
+   typed program uses each linear or affine `κ` it catches once (S6) is §25 *Open*.
 5. **A cancel is not interceptable, and the cancelled region's frames are dead.** `κ`'s cancel
    branch runs the region with its handler frames and cancel delimiters removed (`Kont.dead`), so
    a dead frame catches nothing (`hasHnd_dead`, `catches_dead`, `noCC_dead`). Read prefix-closed
@@ -2917,7 +2939,11 @@ does not hold. Safety is stated of the runs of typed programs (`Core/EffSafety.l
    memory with finitely many cells (`finAlone_of_finRow`; at the empty row, to `()`,
    `finOK_of_finRow`). A finaliser that performs an operation a handler outside it answers (§27) is
    not covered (§27 *Open*). `progOutT` meets the hypotheses: a tied derivation types it, its run
-   cancels `κ`, and its region's finaliser raises `2` (`progOutT_cancel_prefix`).
+   cancels `κ`, and its region's finaliser raises `2` (`progOutT_cancel_prefix`). So does
+   `progOutTA`, the same program at an affine raise of `2` (`progOutTA_cancel_prefix`), typed by a
+   tied derivation at an effect context with no unrestricted abortive operation (`EffCtx.NoUnrExn`,
+   §18; `noUnrExn_Ξ₁₂A`): the shape the checker gives every program it accepts
+   (`checkProgram_tiedAt`).
 6. **The finally law; a finaliser's raise propagates; a raise with no live handler is a type
    error.**
    - *Finally*: `(raise e) then x. N unwind D = D (); raise e`. `[finalise]` steps
@@ -2936,8 +2962,14 @@ does not hold. Safety is stated of the runs of typed programs (`Core/EffSafety.l
      holding no `ccatch` or `cfin` frame, keeping the first error (`CancelRun`). The program
      above meets `FinAloneAt` (`finAloneAt_supersedeE`, `supersede_finaliserOrder`).
    - *A raise with no live handler*: a typed closed program's raises are caught (item 9). A
-     finaliser whose raise has no live handler at the canceller is rejected by §27's typing
-     (`progT` at the rows without `2`); that rejection is not yet a Core theorem.
+     finaliser whose raise has no live handler at the canceller is rejected by §27's typing, by
+     inversion of `CDerives` (`Core/EffCancelTyped.lean`, §27 *Programs*). `progT`, whose
+     finaliser raises `2` handled only inside the cancelled region, has no derivation at a row
+     without `2` (`not_der_progT`). E7c, a `timeout` whose cancelled region handles its
+     finaliser's raise of `exnᵢ`, has none at a row without `exnᵢ` (`not_der_e7c`), and is typed
+     at the row of `exnᵢ` (`d_e7c_lift`): the rejection is of the rows with no live instance.
+     `progNCrecT`, whose second finaliser performs the operation of the handler that cancels, has
+     no derivation at all (`not_der_progNCrecT`).
 9. **Safety**: every operation a run performs has a live handler of its name, and every raise a
    live frame that catches it; a stuck state is never a semantics. Stated of a typed closed
    program, a closed computation of `F A` (its row empty, `A` any type), and of its runs from the
@@ -3014,6 +3046,55 @@ interpreter has §19's steps, and `eval` gives each program's answer by `decide`
      for every `n`.
 5. `takeProg n`, for every `n`: `take` is a state-passing handler, `U(N ⊸ F(1 ⊕ 1))`.
 6. `storeCancel`: `κ` stored in a cell, taken back and cancelled.
+
+**Rejected** (`Core/Rejections.lean`). No derivation types these, at any context and any judgement,
+each by inversion of `CDerives` (`Core/Inversions.lean`):
+- `at05`: an answering handler whose body uses its `Mut` capability twice, `(m, m)`
+  (`not_der_at05`);
+- `at06`: a clause that releases a cell the handled body also releases; a clause is at a `!` type,
+  so it captures only persistent values (`not_der_at06`);
+- `at08`: a clause that stores `κ` in a cell and reads it out twice (`not_der_at08`). `at08Once`,
+  the same clause with the copy used once, is typed (`d_at08Once`), and every run of it ends at `()`
+  with the memory empty (`at08Once_runs`); it is the kernel program `at08-once`;
+- `at13`: a clause that forgets `κ` (`not_der_at13`).
+
+**The effect properties** (`Core/EffTier1Programs.lean`). Each program is a closed term with a
+derivation tied to its effect context `ΞE` (`CDerivesAt`, read in `CDerives`), which has no
+unrestricted abortive operation (`noUnrExn_ΞE`), and a run computed by `runM` from the empty memory
+to its answer at the empty memory (`runM_val`):
+- E1, a function at several rows: `hofTwoRows`, `hof = λg. g ()` let-bound once (§24's
+  `[let-poly]`) and called with a pure callback, with one that raises `exn` under `toResult`, and
+  with one that performs the affine `wait` under a handler that resumes `κ` at its cell. The
+  callbacks `λ_. M` are §26's `[λ-dead]`. It answers `(tt, (inr (), tt))` (`d_hofTwoRows`,
+  `hofTwoRows_run`).
+- E2d: `sumGen`, a consumer of a generator let-bound once and used with generators at `yield ⊙ ∅`
+  and at `yield ⊙ exn`; the raise of `exn` passes its reinstalled handler. It answers
+  `(tt, inr ())`.
+- E4, a deep handler: `deepGen`, whose handler of `yield`, reinstalled at the resume, catches both
+  yields, its clause performing the linear `tick` at each; a handler of `tick` counts them. It
+  answers `((), 2)`.
+- E5, nested handlers in both orders: `withLog`, a state-passing handler of the linear `log`, and
+  `toResult`. With `withLog` outside, the log is kept beside the error (`nestedLogOutside`,
+  `(inr (), tt)`); inside, the raise unwinds `withLog`'s handler and its state
+  (`nestedFailOutside`, `inr ()`).
+- E6, no accidental handling: `tunnel` (*Laws* item 3).
+- E7, abandoning a suspension: `timeout` cancels a body whose region holds finalisers: one that
+  returns (`e7a`), one that raises `exnₒ`, handled outside (`e7b`), and two that raise, the first
+  error kept and re-raised at the canceller (`e7d`). Each answers `inr ()`. E7c is rejected
+  (*Laws* item 6).
+- E8b, the finally law: `e8b` unwinds `exn_a` through a finaliser that raises `exn_b`, which
+  supersedes it. It answers `inl (inr ())`.
+- E9, a stored continuation: a clause answers a closure holding the affine `κ`, called after the
+  handler has returned. It resumes `κ` (`storedKResume`, `ff`), cancels it (`storedKCancel`, `tt`),
+  or cancels it and its region's finaliser raises `exnₒ`, caught outside (`storedKFin`, `inr ()`).
+- E10: `timeoutProg`, `timeout` let-bound once, which cancels a body that waits and passes a body's
+  raise. It answers `(ff, inr ())`.
+
+E5's state function and E9's closure hold a `bool` across a `[let]` at a row with `exn`, so they are
+typed where `exn` is affine (§27 *Typing*). The kernel programs `deep-gen`, `nested-log-outside`,
+`nested-fail-outside`, `tunnel`, `e7a`, `e7b`, `e7d`, `e8b`, `stored-k-resume`, `stored-k-cancel`
+and `stored-k-fin` are these terms, compiled at every stage. `hofTwoRows`, `sumGen` and
+`timeoutProg` are not compiled (§24 *Open*).
 
 ### Lowering
 
@@ -3116,8 +3197,9 @@ cell, §15).
 **Not lowered**, rejected with a message: a name that has both control and abortive operations.
 
 **As built** (`Backend/Kernel.lean`, `bcc kernel`, `scripts/compile-kernel.sh`). Every
-acceptance program, with its native variants, `Core/EffExamples.lean`'s two handled programs and
-`Core/EffCancel.lean`'s cancels `prog₃`, `progRe` and `progOut`, compiles through every stage
+acceptance program, with its native variants, `Core/EffExamples.lean`'s two handled programs,
+`Core/EffCancel.lean`'s cancels `prog₃`, `progRe` and `progOut`, and `Core/Rejections.lean`'s
+`at08Once` (`κ` moved through a cell, `at08-once`), compiles through every stage
 with the same answer and `live 0`, as do terms for the shapes above (100000 operations of a loop
 as direct calls, and as suspensions resumed in tail position, both in constant stack; recursion
 through a resumption point; two possible callees; forwarding with and without a cancel; a
@@ -3809,6 +3891,9 @@ Decisions D3 and D5 (2026-10-07). Tier 1's typing needs three things today's rul
   Terms carry no rows, so this is let-polymorphism by substitution: one closed function used at as
   many rows as it has occurrences. The value restriction holds: only a closed λ-value is bound.
 - The term is the let itself, `(λx. N) (λy. b)`; the rule adds no term former and no type former.
+- Core's types have no row variable: a function used at several rows is let-bound and typed at each
+  occurrence. Tier 1's typing has a row `∀` in its open types, outside Core, and reads it through
+  this rule.
 
       Γ = Γ₁, Γ₂    Γ₁'s live slots persistent    H a value form over Γ₁
       Δ; Γ₁ ⊢ H : !U(A ⊸ F_Σ R) ⊗ ⊗_i C_i       Δ; Γ₂ ⊢ e : F_{Σ, n : E} A
@@ -3854,6 +3939,13 @@ No change to the machine, the relation, `wpTS`, `wpG` or `ewpTS`.
   their statements, over the extended judgment.
 - `CDerives` gains `letPoly` and `effHandleV`, loses the constructor `effHandle` (now the theorem
   `CDerives.effHandle`), and `effThen`'s finaliser premise is at `F 1`. No new index.
+- S5 holds at every instance of its parameter, a finaliser that lets the raises of some names
+  escape, not only at the empty set: `unwind_prefix` and `cancel_prefix` at `FinRow` (§19 *Laws*
+  items 5 and 6).
+- `[let-poly]` types a closed λ let-bound once and used at several rows: `hofTwoRows` (E1),
+  `sumGen` (E2d) and `timeoutProg` (E10), each with a use at the pure row and one under a handler of
+  `exn` (§19 *Programs*). The premise's term, the body with the λ at each use, is computed
+  (`threeUses_subst`, `sumGenUses_subst`, `timeoutUses_subst`).
 
 ### Baseline
 
@@ -3863,14 +3955,13 @@ glue (§12's destructors) already was.
 
 ### Open
 
-- **S6 (the use of a continuation)**: §25 gives a linear or affine `κ` a unit cell, so BoLo's leak
-  freedom and safety see a dropped or twice-used `κ`. A ghost obligation in `contShare` does not: a
-  closed program's relation at its pure type is `wpTS`, where no protocol table occurs.
-- OQ-7 (finalisers that resume, or clean up asynchronously). S5 holds at every instance of its
-  parameter, a finaliser that lets the raises of some names escape (`unwind_prefix` and
-  `cancel_prefix` at `FinRow`, §19 *Laws*).
-- Row variables in Core's types. Tier 1's typing has a row `∀` in its open types,
-  outside Core, read through this entry's `[let-poly]`.
+- OQ-7 (finalisers that resume, or clean up asynchronously).
+- **The lowering of a let-bound function used under different handlers.** The backend's flow
+  analysis (`Backend/Clos/Flow.lean`) gives the function's code every name its callbacks raise, so
+  `Backend/Clos/Unwind.lean` takes a use outside the handler of `exn` to raise it and rejects the
+  program: `hofTwoRows`, `sumGen` and `timeoutProg` (§19 *Programs*) are not kernel programs. Their
+  β-reducts, the function copied at each use (`[let-poly]`'s premise, and what §18's elaboration
+  makes by copying a function per assignment of its effects), compile at every stage.
 
 ## 25. Entry 24 — the capture cell: a linear or affine continuation owns a unit cell
 
@@ -3963,7 +4054,9 @@ no `[TR]` lemma and no borrow rule changes; the cell is handled by 6.141, 6.142,
   properties of the cell, open. `LiveOK` and leak freedom are Core theorems (`liveOK_closed`,
   `leakFree_closed`; §19 *Laws*, *Safety*), and so are the two machine facts the reduction reads: a
   capture event allocates `κ`'s cell (`catchEv_cell`), and a use of `κ` releases it three steps
-  later (`use_frees_cell`). The reduction itself is not yet a Core theorem.
+  later (`use_frees_cell`). The reduction itself is not yet a Core theorem. The typing's side is:
+  a clause that drops `κ`, uses it twice, or cancels a linear one has no derivation
+  (`refuses_R_clauses`, §19 *Laws* item 4).
 
 ## 26. Entry 25 — a λ whose binder is dead, at an effectful returner
 
@@ -4000,7 +4093,9 @@ No change to the machine, the relation, `wpTS`, `wpG` or `ewpTS`.
 ### Theorems
 
 `fundamentalC`, `adequacyC`, `adequacyD`, `adequacyD_obs` and every compatibility lemma keep their
-statements, over the extended judgment. `CDerives` gains `lamDead`.
+statements, over the extended judgment. `CDerives` gains `lamDead`. The callbacks of §19
+*Programs*' effect properties, `λ_. M` for a closed `M`, are typed by it (`dAt_cb`,
+`Core/EffTier1Programs.lean`).
 
 ### Baseline
 
@@ -4023,10 +4118,11 @@ finaliser is at `F 1`.
 
 The check cannot live in `[then]`. `e7b 1 2 = toResult 2 (timeoutH 1 (bodyF 1 (raise 2)))` and
 `e7c 1 2 = timeoutH 1 (toResult 2 (bodyF 1 (raise 2)))` hold the same `[then]` subterm at rows with
-the same entries, and D3 accepts the first and rejects the second. What decides is the row of the
-code that cancels, which is visible where `κ`'s cancel branch is used. So each operation whose
-continuation may be cancelled records what that cancel may do, its *cancel row*; the record is
-carried outward through function types and `[sub]`, and checked where the cancel is invoked.
+the same entries, and D3 accepts the first and rejects the second (`not_der_e7c`, *Programs*). What
+decides is the row of the code that cancels, which is visible where `κ`'s cancel branch is used. So
+each operation whose continuation may be cancelled records what that cancel may do, its *cancel
+row*; the record is carried outward through function types and `[sub]`, and checked where the
+cancel is invoked.
 
 ### Typing
 
@@ -4086,8 +4182,10 @@ carried outward through function types and `[sub]`, and checked where the cancel
   (`EffCtx.NoUnrExn`), and no name's signature is one unrestricted `exn`
   (`EffCtx.NoUnrExn.ne_exn`). E9's stored closure holds `x : bool` across `cancel k`, a `[let]` at
   a row holding `exnₒ`, and `[let]` asks a persistent context at a row with an unrestricted
-  operation, an abortive one included; so E9, as E5, is typed where no `exn` is unrestricted (tier
-  1's programs, not yet Core programs), which is every context the restriction leaves.
+  operation, an abortive one included; so E9, as E5, is typed where no `exn` is unrestricted, which
+  is every context the restriction leaves: `storedKFin` and `nestedFailOutside` (§19 *Programs*)
+  are typed at `ΞE`, whose `exn` is affine (`dAt_storedKFin`, `dAt_nestedFailOutside`,
+  `noUnrExn_ΞE`).
 
 ### Semantics
 
@@ -4134,10 +4232,13 @@ one β-step longer at each use of `κ`:
 
 - **`progT`** (D3): handler `1` cancels the continuation of `perform 1`, whose region holds a
   handler of `2` and a finaliser that raises `2`. It is typed at a row holding `2`, the cancel row
-  of `perform 1`'s continuation `{2}` (`d_progT`), and at no row without `2`
-  (by inversion through `[handle]`, `[then]` and the clause; not yet a Core theorem); its run ends at a raise of `2` that no handler catches (`progT_run`).
+  of `perform 1`'s continuation `{2}` (`d_progT`), and at no row without `2` (`not_der_progT`, by
+  inversion through `[handle]`, `[then]` and the clause); its run ends at a raise of `2` that no
+  handler catches (`progT_run`).
 - **`progOutT`**: `progT` under a live handler of `2`, typed at `F (1 ⊕ 1)` (`d_progOutT`); its run
-  reaches `inj₂ ()` (`progOutT_run`).
+  reaches `inj₂ ()` (`progOutT_run`). **`progOutTA`** is the same program at an affine raise of `2`,
+  typed by a tied derivation at a context with no unrestricted abortive operation
+  (`dAt_progOutTA`, `noUnrExn_Ξ₁₂A`), and run alike (`progOutTA_run`).
 - **`cancelKeptT`** and **`progReT`**: the kept raise of `3` caught by a live `3` outside the
   region, the region re-entering the site `3` in `progReT` (`f ()` at `{1}`); cancel row `{3}`.
 - **`progFinOpT`** and **`progNC₁T`**: the finaliser performs `4`, whose live instance at the
@@ -4149,8 +4250,15 @@ one β-step longer at each use of `κ`:
 - **`progNCrecT`** (the leftover clause): two finalisers perform `4` under the handler of `4` that
   cancels. The second is a leftover of the first one's cancel, so `⋈` puts `4` in the cancel row of
   the `4` in the cancel row of `1`, which the cancelling handler's clause row, its own outer row,
-  cannot hold: no derivation (not yet a Core theorem). Its run ends at a `perform 4` no handler
-  catches (`progNCrecT_run`).
+  cannot hold: no derivation at any context and judgement (`not_der_progNCrecT`). Its run ends at a
+  `perform 4` no handler catches (`progNCrecT_run`, `progNCrecT_stuck`).
+- **`e7c nw ni qi`** (D3, E7c): `timeout (handle exnᵢ {…} (body (raise exnᵢ ())))`. `timeout`
+  handles an affine `wait : 1 ↠ 1` and its clause cancels `κ`; the body's finaliser raises `exnᵢ`,
+  handled only inside the cancelled region. `[then]` puts `exnᵢ` in `wait`'s cancel row, and the
+  clause reads `κ`'s cancel branch at its own row, so no derivation types the program at a row
+  without `exnᵢ` (`not_der_e7c`). At the row of `exnᵢ` it is typed, by a tied derivation at an
+  effect context declaring `wait` and `exnᵢ` (`dAt_e7c_lift`, `d_e7c_lift`); at an affine `exnᵢ`
+  that context has no unrestricted abortive operation (`noUnrExn_Ξe7c`).
 
 ### Lowering
 
@@ -4161,7 +4269,8 @@ finaliser that performs (`progFinOp`), a cancel nested in a cancel (`progNC₁`)
 dropped with an unrestricted continuation or resumed (`progDrop`, `progKeep`), are Lean runs
 (`Core/EffCancel.lean`, `Core/EffCancelTyped.lean`) and interpreter runs, not kernel programs. The
 checker emits no such finaliser: its finalisers are destructors at `F 1`. No kernel program and
-no count changes.
+no count changes. Finalisers that raise run at every stage in the kernel programs `e7a`, `e7b`,
+`e7d`, `e8b` and `stored-k-fin` (§19 *Programs*).
 
 ### Baseline
 
@@ -4309,8 +4418,11 @@ Entry 26 (§27) is implemented in the kernel: cancel rows in `Core/Types.lean` (
 (`OpEnt.fin`, `cancelOK`, `cancelTab`, `cancelObl`) and `Core/Relation.lean` (`finObl`); the order,
 `⋈`, the cancel lemmas and the compatibility of `[sub]`, `[let]`, `[then]` and `[handle]` in
 `Core/EffFin.lean`; the rules in `Core/Fundamental.lean` (`CDerives.effThen`, `effHandleV`); the
-checker's empty cancel rows (`Frontend/Check/`); the typed cancel programs in
-`Core/EffCancelTyped.lean`. The backend rejects a finaliser that may suspend
+checker's empty cancel rows (`Frontend/Check/`); the typed cancel programs, and the programs the
+typing rejects (`not_der_progT`, `not_der_progNCrecT`, `not_der_e7c`), in
+`Core/EffCancelTyped.lean`, by inversions of `CDerives` that read the rows a computation is read at
+(`der_hndJ`, `der_thenJ`, `der_performJ`, `der_raiseJ`, `der_letJ`, `JR.rowLe` in
+`Core/Inversions.lean`). The backend rejects a finaliser that may suspend
 (`Backend/Clos/Capture.lean`).
 
 The facts a statement about every run of a program reads (§3, §13, §19), with no change to
@@ -4348,6 +4460,19 @@ with no change to `CDerives`, the machine or the relation: `Expr.RaiseOK`, `Heap
 them (`raiseOK_reach`), and every cancel they reach keeps errors of those names (`KCfinNamed`,
 `CancelsNamed`, `cancelsNamed_of_derivesAt`).
 
+A continuation's use (§19 *Laws* item 4) and the programs no derivation types (§19 *Programs*) are
+stated by inversion of `CDerives`, with no change to `CDerives`, the machine or the relation: the
+inversions (`fv_live`, `der_var`, `der_app`, `der_lam`, `der_swap`, …) and `refuses_R_clauses` in
+`Core/Inversions.lean`, and `not_der_at05`, `not_der_at06`, `not_der_at08`, `not_der_at13` and the
+typed control `at08Once` (the kernel program `at08-once`) in `Core/Rejections.lean`. Each inversion
+is an induction on `CDerives`, so a rule added to `CDerives` adds a case to each
+(`Core/Inversions.lean`, *Cost*).
+
+The effect properties' programs (§19 *Programs*, *Laws* item 3) are `Core/EffTier1Programs.lean`,
+each with a derivation tied to its effect context and a run computed by `runM`, with no change to
+`CDerives`, the machine or the relation; those the backend compiles are kernel programs
+(`Backend/Kernel.lean`, their counts in `corpus/kernel-counts.expected`).
+
 The unwind and the cancel (§19 *Laws* items 5 and 6) are stated of Core's machine in
 `Core/EffCancelRuns.lean`, with no change to `CDerives`, the machine or the relation. Read
 prefix-closed over paths (`Path`): `unwind_prefix` (`UnwindTr`) and `cancel_prefix` (`CancelTr`),
@@ -4358,6 +4483,40 @@ at finalisers typed at rows of abortive operations (`FinRow`, `finAlone_of_finRo
 ---
 
 ## Changelog
+
+- **0.52** (2026-10-13) — §19 *Programs*: the effect properties as Core programs. E1, E2d, E4,
+  E5 in both orders, E6, E7a/b/d, E8b, E9a/b/c and E10, each a closed term with a derivation tied
+  to the effect context `ΞE`, which has no unrestricted abortive operation, and a run computed by
+  `runM` to its answer at the empty memory (`Core/EffTier1Programs.lean`); a tied derivation
+  weakens by consumed slots (`CDerivesAt.append_dead`). §19 *Laws* item 3: static per-site names,
+  `tunnel`. §24 *Theorems*: `[let-poly]` types E1, E2d and E10's let-bound functions; §24 *Open*:
+  their let forms are not lowered when the uses are under different handlers. §26: the programs'
+  callbacks are `[λ-dead]`'s. §27 *Typing*: E5 and E9 are Core programs at an affine `exn`. New
+  kernel programs `deep-gen`, `nested-log-outside`, `nested-fail-outside`, `tunnel`, `e7a`, `e7b`,
+  `e7d`, `e8b`, `stored-k-resume`, `stored-k-cancel`, `stored-k-fin`, their counts measured (new
+  rows of `corpus/kernel-counts.expected`; no existing row changes). No change to the machine, the
+  relation, `CDerives` or the statement of any theorem.
+
+- **0.51** (2026-10-13) — §19 *Laws* item 6 and §27 *Programs*: the rejections of decision D3 are
+  Core theorems, each by inversion of `CDerives`. `progT` has no derivation at a row without `2`,
+  `progNCrecT` none at all, and E7c (`e7c`) none at a row without its inner `exnᵢ`; at the row of
+  `exnᵢ`, E7c is typed by a tied derivation (`Core/EffCancelTyped.lean`). The inversions read the
+  rows a computation is read at: `[handle]`, `[then]`, `[perform]`, `[raise]`, `[let]` and `bind` at
+  their conclusions, and the rules that conclude with their premise's term only grow rows
+  (`Core/Inversions.lean`). §19 *Laws* item 5: `cancel_prefix`'s hypotheses are met by a program
+  whose effect context has no unrestricted abortive operation, `progOutT` at an affine raise of `2`
+  (`progOutTA`, `Core/EffCancelRuns.lean`). No change to the machine, the relation, `CDerives` or
+  the statement of any theorem.
+
+- **0.50** (2026-10-13) — §19 *Laws* item 4: a continuation is used as its qualifier allows. At a
+  resuming linear or affine operation a clause that drops `κ`, resumes it twice, or cancels and
+  then resumes it has no derivation, and at a linear one neither has a clause that cancels it;
+  `forget κ` has none at `1`. §19 *Programs*: four programs no derivation types (`at05`, `at06`,
+  `at08`, `at13`), each by inversion of `CDerives` (`Core/Inversions.lean`,
+  `Core/Rejections.lean`), and `at08`'s typed control, the kernel program `at08-once`. §24 *Open*
+  keeps OQ-7 alone: S5 at every instance of its parameter is in *Theorems*, the use of a continuation
+  is §25's, and Core's row polymorphism by `[let-poly]` is in *Typing*. No change to the machine,
+  the relation, `CDerives` or the statement of any theorem.
 
 - **0.49** (2026-10-13) — §19 *Laws* items 5 and 6: a cancel is not interceptable and the cancelled
   region's frames are dead, and the finally law, read on every run. From a raise pending under

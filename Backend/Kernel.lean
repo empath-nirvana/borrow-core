@@ -1,6 +1,8 @@
 import Core.EffPrograms
 import Core.EffCancel
 import Core.EffExamples
+import Core.Rejections
+import Core.EffTier1Programs
 
 /-!
 # Backend — kernel programs
@@ -17,6 +19,19 @@ lowers their operations in `Backend/Clos/Capture.lean` and `Backend/Clos/Unwind.
   outside the region (`prog₃_run`); `progRe`, the region re-entering the site of the error's
   name, whose dead inner instance does not catch it and whose live outer one does (`progRe_run`);
   and `progOut`, `prog` under a live outer handler of the error's name (`progOut_run`).
+- `Core/Rejections.lean`'s `at08Once`, the typed control of the refused AT08: a clause that moves
+  `κ` through a cell with `alloc`, `swap` and `free`, and resumes it once (`d_at08Once`,
+  `at08Once_runs`).
+- `Core/EffTier1Programs.lean`'s programs of the effect properties, each typed at its effect context
+  and run by `runM`: `deepGen`, a deep handler under a handler of `tick` that counts;
+  `nestedLogOutside` and `nestedFailOutside`, nested handlers in both orders; `tunnel`, no accidental
+  handling; `e7a`, `e7b` and `e7d`, a cancelled suspension's finalisers; `e8b`, an unwind through a
+  finaliser that raises; and `storedKResume`, `storedKCancel` and `storedKFin`, a stored
+  continuation.
+  `hofTwoRows`, `sumGen` and `timeoutProg`, each a function let-bound once and used under different
+  handlers, are not compiled: the lowering's flow analysis (`Backend/Clos/Flow.lean`) gives the
+  function's code every name its callbacks raise, so `Backend/Clos/Unwind.lean` takes its use
+  outside the handler of `exn` to raise it (SPEC §24 *Open*).
 - Terms that exercise the lowering's other shapes (*Shapes*, below).
 
 The cancels and the shapes are not typed: each stage is compared with `Support`'s interpreter on
@@ -159,6 +174,18 @@ def kernelPrograms : List (String × BoCa.Expr) :=
     ("cancel-reraised", cancelKept),
     ("cancel-reentered", BoCa.Fig16.LogRel.Core.CancelIntercept.progRe),
     ("cancel-propagated", BoCa.Fig16.LogRel.Core.CancelIntercept.progOut),
+    ("at08-once", BoCa.Fig16.LogRel.Core.Rejections.at08Once),
+    ("deep-gen", BoCa.Fig16.LogRel.Core.Tier1Programs.deepGen),
+    ("nested-log-outside", BoCa.Fig16.LogRel.Core.Tier1Programs.nestedLogOutside),
+    ("nested-fail-outside", BoCa.Fig16.LogRel.Core.Tier1Programs.nestedFailOutside),
+    ("tunnel", BoCa.Fig16.LogRel.Core.Tier1Programs.tunnel),
+    ("e7a", BoCa.Fig16.LogRel.Core.Tier1Programs.e7a),
+    ("e7b", BoCa.Fig16.LogRel.Core.Tier1Programs.e7b),
+    ("e7d", BoCa.Fig16.LogRel.Core.Tier1Programs.e7d),
+    ("e8b", BoCa.Fig16.LogRel.Core.Tier1Programs.e8b),
+    ("stored-k-resume", BoCa.Fig16.LogRel.Core.Tier1Programs.storedKResume),
+    ("stored-k-cancel", BoCa.Fig16.LogRel.Core.Tier1Programs.storedKCancel),
+    ("stored-k-fin", BoCa.Fig16.LogRel.Core.Tier1Programs.storedKFin),
     ("loop-tail", Shapes.loopTail 100000),
     ("loop-captured", Shapes.loopCaptured 100000),
     ("recursive-yield", Shapes.recYield 20),

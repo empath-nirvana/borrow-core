@@ -74,6 +74,9 @@ import Core.EffSafety
 import Core.Tied
 import Core.RaiseNames
 import Core.EffCancelRuns
+import Core.Inversions
+import Core.Rejections
+import Core.EffTier1Programs
 import Core.Stale
 import Core.Stdio
 import Core.Handlers
