@@ -185,6 +185,38 @@ effect).
   stored values are closed, and it goes on (`liveOK_closed`), so it holds no stuck redex
   (`LiveOK.not_stuck`). At a persistent answer a run to a value ends at the empty memory, every
   continuation's cell released (`leakFree_closed`, `EffPrograms.lean`).
+- **Decision R: one signature per operation** (`SPEC.md` §19 *Typing*, `Tied.lean`). An effect
+  context `Ξ` gives each name its signature; a row is tied to `Ξ` when every operation it finds is
+  at `Ξ`'s signature (`RowAt`). `CDerivesAt Ξ` is `CDerives` with `RowAt Ξ` at `[perform]`,
+  `[raise]` and `[handle]`, every other rule verbatim; a tied derivation is a `CDerives` derivation
+  (`CDerivesAt.toCDerives`), and one of a term with no `perform`, `raise` or `hnd` is tied at every
+  context (`CDerivesAt.ofEffFree`). At a handler its signature is a prefix of `Ξ`'s
+  (`sig_prefix_of_rowAt`, `hndTags_of_rowAt`). `EffCtx.NoUnrExn`: no abortive operation is
+  unrestricted (§18); in a row tied to such a context an unrestricted operation resumes
+  (`abort_false_of_rowAt`). The checker builds every derivation tied (`Frontend/Check/Tied.lean`).
+- **The names a run raises** (`SPEC.md` §19 *Typing*, `RaiseNames.lean`). `Expr.RaiseOK P`: every
+  raise of a term is of a name in `P` or a cancel, every cancel state keeps none or a raise of a
+  name in `P`, and `cfin` holds only a cancel state. No step leaves it, nor stores a value that
+  does (`HeapRaiseOK`), when `0` is not in `P` (`raiseOK_step1`, `raiseOK_steps`). A tied term
+  is at its effect context's names, `EffCtx.Names` (`raiseOK_of_derivesAt`; `rcE` decides it), so
+  every configuration its runs reach from the empty memory is at them (`raiseOK_reach`), and at
+  every cancel of `κ` they reach, the cancelled region's running finalisers keep none or an error
+  of such a name (`CancelsNamed`, `cancelsNamed_of_derivesAt`).
+- **The unwind and the cancel, on every run** (`SPEC.md` §19 *Laws* items 5 and 6,
+  `EffCancelRuns.lean`). A step at a raise is the step of the innermost frame that stops it
+  (`step1_raise`, `innerCatch_unique`). Read over paths (`Path`), prefix-closed: from a raise
+  pending under frames with no running finaliser's `cfin`, every path is a prefix of the unwind
+  trace (`unwind_prefix`, `UnwindTr`): the finalisers fire innermost first, each running alone, one
+  that returns `()` hands the raise on and one whose raise escapes supersedes it. From the start of
+  a continuation's cancel run, `kappa H K` or `kappaC aff ℓ H K` after its cell's release, in a run
+  of a tied term, every path is a prefix of the cancel trace of `K†` (`cancel_prefix`,
+  `CancelTr`): `K`'s finalisers fire innermost first, a running finaliser's `cfin` is passed by
+  `[cfin-cancel]`, the first kept error wins, and the canceller gets `()` or the kept error, of a
+  name of the effect context. The hypothesis is each finaliser's typing at a row of abortive
+  operations (`FinRow`), which makes it run alone from every finite memory (`finAlone_of_finRow`,
+  `finOK_of_finRow`, through `ownWorld` and `wpG_seg`). On complete runs, given that each fired
+  finaliser runs alone to a value or an uncaught raise (`FinAloneAt`): `finaliserOrder_at`
+  (`CancelRun`, `UnwindRun`).
 - **Embedding.** `embed : DerivesWf Δ Γ e T → CDerives Δ (cbvCtx Γ) e (.val (cbv T))` for every
   `DerivesWf` rule, and `adequacy_of_derivesWf`. `EmbeddingExamples.lean` runs BoLo's baseline
   programs through it.

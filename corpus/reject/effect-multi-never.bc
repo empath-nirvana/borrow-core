@@ -1,0 +1,6 @@
+-- An unrestricted operation that answers `never` (SPEC §18): an abortive operation is affine
+-- (decision 63), so `multi ctl` is not provided for one.
+-- expect: 4:25: `boom` is `multi ctl` and answers `never`: an operation that never resumes is affine, `ctl` (decision 63)
+effect Boom { multi ctl boom() -> never }
+
+main -> i32 = 0

@@ -7,6 +7,7 @@ import Frontend.Tests
 import Frontend.Check.Decide
 import Frontend.Check.Fam
 import Frontend.Check.Elab
+import Frontend.Check.Tied
 import Frontend.Check.Rules
 import Frontend.Check.Steps
 import Frontend.Check.Consts

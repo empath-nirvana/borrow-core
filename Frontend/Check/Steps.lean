@@ -12,7 +12,7 @@ contexts, `boxed`, application to a variable, `<,>`, `case` and `Fun`.
 namespace Frontend.Check
 open BoCa BoCa.Lifetime
 open BoCa.Fig16.LogRel.Core.Check
-open BoCa.Fig16.LogRel.Core (CDerives Jdg FShape HasDtor toFShape isX0)
+open BoCa.Fig16.LogRel.Core (Jdg FShape HasDtor toFShape isX0)
 
 /-! ### Fold shapes and destructors, decided -/
 
@@ -365,9 +365,9 @@ def popD {A : CVTy} {P : List Bool → Prop} (sp : Span) (F : Fam (A :: T) P) :
   | some F' => pure F'
   | none => throw ⟨sp, "internal error: a dead binder is used"⟩
 
-def withPop {j : Jdg} {e : CExpr} (sp : Span)
-    (F : Fam (withT T) (fun L => CDerives Δ (mkCtx (withT T) L) e j)) :
-    Except Error (Fam T (fun L => CDerives Δ (BoCa.Fig16.LogRel.Core.withCtx (mkCtx T L)) e j)) :=
+def withPop {j : Jdg} {e : CExpr} {s : CRow} (sp : Span)
+    (F : Fam (withT T) (fun L => TiedDer s Δ (mkCtx (withT T) L) e j)) :
+    Except Error (Fam T (fun L => TiedDer s Δ (BoCa.Fig16.LogRel.Core.withCtx (mkCtx T L)) e j)) :=
   match popWith F with
   | some F' => pure F'
   | none => throw ⟨sp, "internal error: a dead binder is used"⟩
@@ -482,8 +482,11 @@ def dropOne {C : CCTy} (sp : Span) (i : Nat) (r : Res Δ T (.comp C)) :
   match hi : T[i]? with
   | some A =>
     if hA : hasDtorB A = true then
-      if h : overlapOK T (oneL T i) r.F.u = true then pure (rDrop i A hi (hasDtorB_sound hA) r h)
-      else throw ⟨sp, "internal error: a dropped slot is used"⟩
+      if hE : (BoCa.Fig16.LogRel.Core.dtorE A).effFree = true then
+        if h : overlapOK T (oneL T i) r.F.u = true then
+          pure (rDrop i A hi (hasDtorB_sound hA) hE r h)
+        else throw ⟨sp, "internal error: a dropped slot is used"⟩
+      else throw ⟨sp, "internal error: a destructor performs or handles an operation"⟩
     else throw ⟨sp, "internal error: an owed slot has no destructor"⟩
   | none => throw ⟨sp, "internal error: an owed slot is out of range"⟩
 
@@ -599,9 +602,9 @@ def finalOf (E : Env) (sp : Span) (_S : CRow) (u : List Bool) :
   pure r
 
 /-- `[then]` at the row `S`: `N` (its binder closed) and the finaliser `D` at one context. -/
-def thenIt (E : Env) (sp : Span) {S : CRow} {A B : CVTy} {eN : CExpr}
+def thenIt (E : Env) (sp : Span) {S : CRow} {A B : CVTy} {eN : CExpr} {sN : CRow}
     (rM : Res Δ T (.comp (effOf S A)))
-    (FN : Fam T (fun L => CDerives Δ (mkCtx (A :: T) (true :: L)) eN (.comp (effOf S B))))
+    (FN : Fam T (fun L => TiedDer sN Δ (mkCtx (A :: T) (true :: L)) eN (.comp (effOf S B))))
     (rD : Res Δ (.unit :: T) (.comp (effOf [] .unit))) :
     Except Error (Res Δ T (.comp (effOf S B))) := do
   if hNZ : Row.nzB S = true then
@@ -610,8 +613,8 @@ def thenIt (E : Env) (sp : Span) {S : CRow} {A B : CVTy} {eN : CExpr}
       if s₁ : subL FN.u (orL FD.u FD.w) = true then
         if s₂ : subL FD.u (orL FN.u FN.w) = true then
           let F := FN.merge FD s₁ s₂
-          let F' : Fam T (fun L => (CDerives Δ (mkCtx (A :: T) (true :: L)) eN (.comp (effOf S B)) ∧
-              CDerives Δ (mkCtx (.unit :: T) (false :: L)) rD.e
+          let F' : Fam T (fun L => (TiedDer sN Δ (mkCtx (A :: T) (true :: L)) eN (.comp (effOf S B)) ∧
+              TiedDer rD.sigs Δ (mkCtx (.unit :: T) (false :: L)) rD.e
                 (.comp (effOf [] .unit))) ∧
               (S.UnrD → BoCa.Fig16.LogRel.Core.Persistent (mkCtx T L))) ←
             if hu : Row.unrDB S = true then
@@ -654,7 +657,7 @@ def effBind (E : Env) (sp : Span) (x : Ident) (lin : Bool) {S : CRow} {A B : CVT
             rcases this.2 with h' | h'
             · exact absurd (Row.unrB_iff.mpr hU) (by simp [h'])
             · exact h')⟩ :
-          CDerives Δ (mkCtx (A :: T) (true :: _)) rN.e (.comp (effOf S B)) ∧
+          TiedDer rN.sigs Δ (mkCtx (A :: T) (true :: _)) rN.e (.comp (effOf S B)) ∧
             (S.Weak → (mkCtx T _).Drops) ∧ (S.Unr → BoCa.Fig16.LogRel.Core.Persistent (mkCtx T _)))
       if h : overlapOK T rM.F.u FN'.u = true then pure (rEffLet rM FN' h)
       else throw (splitErr E T sp rM.F.u FN'.u)
@@ -665,7 +668,7 @@ def effBind (E : Env) (sp : Span) (x : Ident) (lin : Bool) {S : CRow} {A B : CVT
     let FN' := FN.map fun _ h =>
       (⟨h, fun hW => absurd (Row.weakB_iff.mpr hW) (by simp [hw]),
         fun hU => absurd (Row.weakB_iff.mpr (Row.weak_of_unr hU)) (by simp [hw])⟩ :
-        CDerives Δ (mkCtx (A :: T) (true :: _)) rN.e (.comp (effOf S B)) ∧
+        TiedDer rN.sigs Δ (mkCtx (A :: T) (true :: _)) rN.e (.comp (effOf S B)) ∧
           (S.Weak → (mkCtx T _).Drops) ∧ (S.Unr → BoCa.Fig16.LogRel.Core.Persistent (mkCtx T _)))
     if h : overlapOK T rM.F.u FN'.u = true then pure (rEffLet rM FN' h)
     else throw (splitErr E T sp rM.F.u FN'.u)

@@ -378,7 +378,8 @@ def elabC : Nat → TyEnv → CTy → Except Error CCTy
     | .eff sp r A => do
         let S ← elabRow n E sp r
         pure (BoCa.Fig16.LogRel.Core.CTy.effOf S (← elabV n E A))
-/-- A row: each operation's name and index below `2^32`.  `[spec §19]` -/
+/-- A row: each operation's name and index below `2^32`, and no unrestricted operation answering
+`0`: an abortive operation is affine (decision 63).  `[spec §18, §19]` -/
 def elabRow : Nat → TyEnv → Span → Row → Except Error CRow
   | 0, _, sp, _ => err sp "type abbreviations nested too deeply"
   | n + 1, E, sp, r => match r with
@@ -387,7 +388,10 @@ def elabRow : Nat → TyEnv → Span → Row → Except Error CRow
         if k < 2 ^ 32 ∧ i < 2 ^ 32 then
           let o : COpSig :=
             ⟨UInt32.ofNat k, UInt32.ofNat i, q.toCore, ← elabV n E A, ← elabV n E B, .ret .unit⟩
-          pure (o :: (← elabRow n E sp r))
+          if o.q == .unr && o.B.isZero then
+            err sp (s!"the operation {k}.{i} is unrestricted and answers `0`: an abortive " ++
+              s!"operation is affine, `{k}.{i} aff … ~> 0` (decision 63)")
+          else pure (o :: (← elabRow n E sp r))
         else err sp s!"the operation {k}.{i}: a name and an index are below 2^32"
 /-- A shape. -/
 def elabS : Nat → TyEnv → Shape → Except Error CShape
