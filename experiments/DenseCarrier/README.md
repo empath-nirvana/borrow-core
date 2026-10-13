@@ -107,7 +107,6 @@ version. The switch that is possible keeps (b), (c) and the 23 model-level (a) p
 untouched, and ports the 282 relation-level (a) places, with everything that rests on them, to
 `δ : LSubD L` and `ι`. That port is mechanical (§5).
 
-
 ## 2. The carrier
 
 **The index of the strata** (`Cantor.lean`). `CellFG` is `Paper/S5_Model`'s `CellF` with `Life`
@@ -125,8 +124,8 @@ it.
   `no_carrier_withTopRat_BoCa`: a dense order with two points has such a chain, so no solution, at
   `WithTop ℚ` and at `[TR]` §3's `Loc` and `Val`.
 * `carrier_rigid`: an order that carries the model has only the identity automorphism (a
-  reverse-well-ordered order is rigid). So no order carrying the cells is homogeneous, and the
-  order whose automorphisms move lifetimes has to be a second one.
+  reverse-well-ordered order is rigid). So an order carrying the cells has no automorphism to move
+  a lifetime with, and the order whose automorphisms move lifetimes has to be a second one.
 
 Keeping a dense order as the index would need the stored predicates restricted (finitely
 supported, or syntactic); not attempted, since the index need not be dense.
@@ -216,7 +215,7 @@ its compatibility proof needs when `δ` and the `∀` move to `L`. Re-proved her
 | `effSub`, `effPerform`, `effRaise`, `effLet`, `effThen`, `effHandle` | nothing: operation types are closed in lifetimes | unchanged |
 | `allI` | `∀` over `L`, `⟦Δ⟧` | **re-proved**, Core's proof step for step: `allI_compatD` |
 | `allE` | `∀` at `@aδ`; `Δ ⊨ @a ⊏ @b` | **re-proved**: `allE_compatD`, through `CTyEqD.instLife` and `cD_tyEq` (Core's `CTyEq.instLife` with `interpD`). Its premise is Core's own `LifeCtx.EntailsLt` over `ℕ`, carried to `L` by `entailsLtD_of_entailsLt`: a reading's values are finitely many, and re-read by rank (`rankIn`) in `ℕᵒᵈ` they keep `⊤`, `⊔`, `⊓` and the strict order |
-| `allEV` | `allE` under `U` | transfers as `allE` does, once `U` is built over `L` |
+| `allEV` | `allE` under `U` | transfers as `allE` does (`U` is built over `L`) |
 | `immSub`, `mutSub` | `α ⊑ ι b`, antitone in `α`; `Δ ⊨ @a ⊑ @b` | transfers; the premise by `entailsLeD_of_entailsLe` (proved) |
 | `boxI`, `boxE` | `[α]` through `ι`; 6.60 (`vC_outlives`) | transfers: 6.60's induction reads the order of `L` and `ι`'s monotonicity |
 | `copy`, `forgetImm`, `forgetMut`, `forgetUnk`, `arrLen`, `arrGet`, `arrCopy`, `arrForget`, `sliceGetM`, `sliceLenM`, `sliceSplitI/M`, `sliceEmptyI/M`, `sliceReplaceM`, `sliceSwapM` | the `Imm`/`Mut` clauses through `ι`; `Imm`'s coherence `CohE` compares the type at `δ` with a record's `(T, δ)` | transfers once records carry `LSubD L` (`FrameRec.δ`) and the typed world's 6.64 premises (`vShape`) read `L` through `ι`: a re-indexing of `FrameRecords`, `World` and the shapes |
@@ -236,16 +235,17 @@ included: after `shiftSlots`, no slot sits in the gap `[c − k, c)`. The resume
 so at slots, and in the shifted world they cannot sit in that gap. Putting them there means moving
 the region's lifetimes past slots that stay. An order embedding of the slots cannot: the region's
 slots and the resumer's are one order, and with fresh lifetimes taken below everything in play the
-resumer's slots lie below the region's. Law 2 does it by ending the region's lends and re-lending
-at fresh slots below the resumer's, with the region's reading moved to them. Re-slotting the region's cells by an order embedding, each stored
-predicate moved to its image, is not the way: it is not natural at `Mut 'a (Imm 'b 1)`
-(`Restrat.MutCounterexample.mut_not_natural`), where the moved interpretation holds at the gap the
-embedding leaves and the moved predicate refuses it. So the re-lend re-creates the region's `mut`
-cells with their predicates re-read at the moved reading. Whether the region's relation survives
-that is Law 2: not derived, no obstruction verified. What this probe removes is the obstruction ProbeD1 machine-checked against
-it: over a dense `L` the relation does not read the room between a cell and a bound
-(`dense_same_order_type`), and moves of a whole configuration are invisible to it (`cD_map`,
-`segShift_iff`).
+resumer's slots lie below the region's. Nor can an automorphism of the slots, which is the
+identity (`carrier_rigid`). Re-slotting the region's cells by an order embedding, each stored
+predicate moved to its image, is not natural at `Mut 'a (Imm 'b 1)`
+(`Restrat.MutCounterexample.mut_not_natural`): the moved interpretation holds at the gap the
+embedding leaves, and the moved predicate refuses it. Law 2 instead ends the region's lends and
+re-lends at fresh slots below the resumer's, with the region's reading moved to them and the
+re-made `mut` cells' predicates read at the moved reading. Whether the region's relation survives
+that is Law 2: not derived, no obstruction verified. What this probe removes is the obstruction
+ProbeD1 machine-checked against it: over a dense `L` the relation does not read the room between a
+cell and a bound (`dense_same_order_type`), and moves of a whole configuration are invisible to it
+(`cD_map`, `segShift_iff`).
 
 **The rest of the relation over `L`.** Built here: `1`, `⊗`, `U`, `Ref`, `[@a]`, `Mut`, `F`,
 `⊸`, `⊤`, `∀`, with Core's records and typed world. Not built: the other formers' clauses
