@@ -266,7 +266,7 @@ def gen (codes : Array Code) : Tm → GM Key
       let kb ← gen codes b
       emit (.app (.var dd) .none (← freshKey) none)
       pure kb
-  | .reraise p _ => do
+  | .reraise p => do
       emit (.sub (.var p) .raised)
       pure .none
   | .perform p => do

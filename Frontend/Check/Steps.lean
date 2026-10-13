@@ -196,7 +196,7 @@ def Env.ppL (E : Env) (a : CLife) : String := ppLifeP E.lenv 1 a
 /-- `C` as a returner chain `F_Σ A`: its row and answer. -/
 def effRow? : CCTy → Option (CRow × CVTy)
   | .ret A => some ([], A)
-  | .eff n i q A B C => (effRow? C).map fun (S, R) => (⟨n, i, q, A, B⟩ :: S, R)
+  | .eff n i q A B fin C => (effRow? C).map fun (S, R) => (⟨n, i, q, A, B, fin⟩ :: S, R)
   | _ => none
 
 /-- The environment of a computation checked against `C`: the row of `C` when it is a returner
@@ -264,7 +264,7 @@ def clausesRead (S : CRow) (R : CVTy) :
   | .tensor c rest => do
     let ⟨e, he⟩ ← firstClause S R c (clauseCands c)
     let ⟨E, hE⟩ ← clausesRead S R rest
-    pure ⟨e :: E, by simp only [BoCa.Fig16.LogRel.Core.clausesTy, he, hE]⟩
+    pure ⟨e :: E, by subst he hE; rfl⟩
   | _ => none
 
 /-- `h_ret`'s type `!U(A -o F_S R)` read back. -/
@@ -580,11 +580,11 @@ def atRow (E : Env) (sp : Span) (S : CRow) :
         s!"type `F[…] B`, but it has type `{E.ppC C}`"⟩
 
 /-- The finaliser of an effectful binding: the destructors of the non-persistent slots `u` (the
-slots the rest of the computation uses), under the binder's dead slot, at the row's abortive
-operations. It runs when an abortive operation of the bound computation stops the rest.
-SPEC §19's drop glue: `[then]`'s `D`, inserted as SPEC §12 inserts destructors. -/
-def finalOf (E : Env) (sp : Span) (S : CRow) (u : List Bool) :
-    Except Error (Res Δ (.unit :: T) (.comp (effOf (BoCa.Fig16.LogRel.Core.Row.abortOnly S) .unit))) := do
+slots the rest of the computation uses), under the binder's dead slot, at the pure row (SPEC §24:
+a finaliser lets no raise escape). It runs when an abortive operation of the bound computation
+stops the rest. SPEC §19's drop glue: `[then]`'s `D`, inserted as SPEC §12 inserts destructors. -/
+def finalOf (E : Env) (sp : Span) (_S : CRow) (u : List Bool) :
+    Except Error (Res Δ (.unit :: T) (.comp (effOf [] .unit))) := do
   let idx := (List.range T.length).filter fun i =>
     u.getD i false && !((T[i]?.map (·.persistent)).getD true)
   let r0 : Res Δ (.unit :: T) (.comp (.ret .unit)) := rRet rUnit
@@ -596,13 +596,13 @@ def finalOf (E : Env) (sp : Span) (S : CRow) (u : List Bool) :
         "that may abort, and its type has no destructor: an abortive operation of the bound " ++
         "computation would abandon it"⟩
     | none => throw ⟨sp, "internal error: a slot is out of range"⟩
-  pure (rEffSub (S := []) rfl r)
+  pure r
 
 /-- `[then]` at the row `S`: `N` (its binder closed) and the finaliser `D` at one context. -/
 def thenIt (E : Env) (sp : Span) {S : CRow} {A B : CVTy} {eN : CExpr}
     (rM : Res Δ T (.comp (effOf S A)))
     (FN : Fam T (fun L => CDerives Δ (mkCtx (A :: T) (true :: L)) eN (.comp (effOf S B))))
-    (rD : Res Δ (.unit :: T) (.comp (effOf (BoCa.Fig16.LogRel.Core.Row.abortOnly S) .unit))) :
+    (rD : Res Δ (.unit :: T) (.comp (effOf [] .unit))) :
     Except Error (Res Δ T (.comp (effOf S B))) := do
   if hNZ : Row.nzB S = true then
     if hUq : Row.uniqB S = true then
@@ -612,9 +612,9 @@ def thenIt (E : Env) (sp : Span) {S : CRow} {A B : CVTy} {eN : CExpr}
           let F := FN.merge FD s₁ s₂
           let F' : Fam T (fun L => (CDerives Δ (mkCtx (A :: T) (true :: L)) eN (.comp (effOf S B)) ∧
               CDerives Δ (mkCtx (.unit :: T) (false :: L)) rD.e
-                (.comp (effOf (BoCa.Fig16.LogRel.Core.Row.abortOnly S) .unit))) ∧
-              (S.Unr → BoCa.Fig16.LogRel.Core.Persistent (mkCtx T L))) ←
-            if hu : Row.unrB S = true then
+                (.comp (effOf [] .unit))) ∧
+              (S.UnrD → BoCa.Fig16.LogRel.Core.Persistent (mkCtx T L))) ←
+            if hu : Row.unrDB S = true then
               if hs : usedSat isBangB T F.u = true then
                 pure ((F.restrict isBangB hs).map fun _ ⟨h, hp⟩ => ⟨h, fun _ => persistent_of hp⟩)
               else match firstBad isBangB T F.u with
@@ -622,7 +622,7 @@ def thenIt (E : Env) (sp : Span) {S : CRow} {A B : CVTy} {eN : CExpr}
                     s!"after an operation of the row `{ppRow E S}`, which may resume more than " ++
                     "once: it must be a `!` type"⟩
                 | none => throw ⟨sp, "internal error: an unrestricted row"⟩
-            else pure (F.map fun _ h => ⟨h, fun hU => absurd (Row.unrB_iff.mpr hU) (by simp [hu])⟩)
+            else pure (F.map fun _ h => ⟨h, fun hU => absurd (Row.unrDB_iff.mpr hU) (by simp [hu])⟩)
           if h : overlapOK T rM.F.u F'.u = true then
             pure (rEffThen (Row.nzB_sound hNZ) (Row.uniqB_sound hUq) rM F' h)
           else throw (splitErr E T sp rM.F.u F'.u)
