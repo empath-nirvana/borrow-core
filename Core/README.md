@@ -152,6 +152,15 @@ effect).
   relation only if it is safe under every allocator: `λ_. staleL`, which loads a location it
   freed, is in `wpTSAngelic` (`staleL_angelic`) but outside the relation at `!U(1 ⊸ F 1)`
   (`staleClosure_not_vC`, `Stale.lean`; #41).
+- **Runs through a context, closed runs, computed runs** (`Steps.lean`, `Closed.lean`,
+  `Run.lean`). A run of `K[e]` is `K` around a run of `e`, or it runs `e` to a term that takes no
+  step and goes on from `K` around that term (`steps_plug_split`, `step1_plug_of_step`); a
+  context is determined by the non-value it holds (`plug_inj_ctx`). A typed term is closed at its
+  context (`closedAt_of_derives`), and a run from a closed term whose stored values are closed
+  keeps both closed (`closed_steps`). `runM` computes a run at a finite memory, `look` deciding
+  each step that leaves the memory alone (`look_sound`; a row of them is a chain of head steps,
+  `lookRun_sound`); every run `runM` computes is a run of the machine (`runM_sound`), so a closed
+  program's run to a value is proved by `rfl` (`runM_val`).
 - **Totality** (`SPEC.md` §14, `Totality.lean`). A closed computation of `F A` terminates on every
   run: under every allocator its run reaches a value (`total_every_alloc`), every run under an
   allocator is a prefix of it (`total_run_prefix`), every run continues to a value

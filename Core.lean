@@ -52,6 +52,8 @@ import Core.ReuseList
 import Core.DelayApprox
 import Core.DelayPrograms
 import Core.Steps
+import Core.Closed
+import Core.Run
 import Core.DelayNaive
 import Core.StreamPrograms
 import Core.Integers

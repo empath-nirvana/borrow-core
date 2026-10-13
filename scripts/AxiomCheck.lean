@@ -41,6 +41,14 @@ import Frontend.Check.Externs
 #print axioms BoCa.Fig16.LogRel.Core.staleClosure_not_immPayload
 #print axioms BoCa.BoLo.AStep1.deterministic
 #print axioms BoCa.Fig16.LogRel.Core.steps_replay
+#print axioms BoCa.Fig16.LogRel.Core.step1_plug_of_step
+#print axioms BoCa.Fig16.LogRel.Core.steps_plug_split
+#print axioms BoCa.Fig16.LogRel.Core.plug_inj_ctx
+#print axioms BoCa.Fig16.LogRel.Core.closedAt_of_derives
+#print axioms BoCa.Fig16.LogRel.Core.closed_steps
+#print axioms BoCa.Fig16.LogRel.Core.look_sound
+#print axioms BoCa.Fig16.LogRel.Core.runM_sound
+#print axioms BoCa.Fig16.LogRel.Core.runM_val
 #print axioms BoCa.Fig16.LogRel.Core.embed
 #print axioms BoCa.Fig16.LogRel.Core.adequacy_of_derivesWf
 #print axioms BoCa.Fig16.LogRel.Core.withborM2_wf
