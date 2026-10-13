@@ -87,7 +87,7 @@ theorem handle_spans_yields {Δ : LifeCtx} {Γ Γ₁ Γr Γc : Ctx VTy} {S' : Ro
     (hr : Ctx.SoloP Γr ir (retTy S' (.tensor (.ref T) B) R))
     (hc : Ctx.SoloP Γc ic (clausesTy S' R E))
     (hn0 : n ≠ 0) (hnS : ∀ o ∈ S', o.n ≠ n) (hlen : E.length ≤ 2 ^ 32) :
-    SemC Δ Γ (hndTerm n ir ic
+    SemC Δ Γ (hndTerm n (E.map Prod.fst) ir ic
       (.app (.app withbor (.var 0)) (.val (cbV o.n o.i ys Nf)))) (CTy.effOf S' R) :=
   handle_compatC hsp hsp₁ hr hc hn0 hnS hlen
     (withbor_spans_yields_sem hb hbx hΔx hT hB hside hNf hN _ o hf ha hq hoB ys hys hy hcb)

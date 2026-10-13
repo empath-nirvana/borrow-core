@@ -245,13 +245,17 @@ owner is in the stop's share. `Drop.lean` lifts the unwinding `withborU` to a re
   owes the continuation. Cancelled, it splits into the callback's own cancel and the owner.
 - `ewp_then_owner`: the frame `ubind (N, D) [·]` around such a callback. At a cancel the
   callback's context unwinds and the finaliser `D` runs on the owner under `cfin`
-  (`cancel_then`, as `ewp_frame_then` uses it).
+  (`cancel_then_nil`, `then_cancel` at the empty cancel row).
 - `withborR_compat`: `withborU d ℓ f` at the row's table, from a callback re-lendable at
   `opTableO` (`ewpTS_M_frameR`) and `d : Ref T ⊸ 1` (`fin_run`).
 - `withborR_spans_yields_cC`, `withborR_spans_yields_sem`, `handleR_spans_yields`: a borrower
   spanning affine yields, at the kernel's relation and under `[handle]`, whose clause receives
   `κ` at an affine operation. `spans_two_affine_yields` discharges every hypothesis, with
   `free : Ref 1 ⊸ 1` as the finaliser.
+
+A cancel runs the dead region `K†` and keeps an error alone (SPEC §19), so `opTableO`'s cancel
+part is `cancelOwed ls' K`, and the finaliser runs at the empty table (option A, SPEC §24): the
+`withborR` results read no abortive table of the row and no uniqueness of its keys.
 
 Disposing of the owner needed nothing new: the cancel happens at a list `Ext`-above the stop's,
 the owner is Kripke there, and the lend is not re-opened. What a cancel asks of the borrower is
