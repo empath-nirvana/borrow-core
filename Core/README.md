@@ -161,6 +161,18 @@ effect).
   each step that leaves the memory alone (`look_sound`; a row of them is a chain of head steps,
   `lookRun_sound`); every run `runM` computes is a run of the machine (`runM_sound`), so a closed
   program's run to a value is proved by `rfl` (`runM_val`).
+- **The handler laws as machine lemmas** (`SPEC.md` §19 *Laws*, §25, `EffMachine.lean`), in every
+  context, each step its configuration's only step (`Step1Only`, `step1Only_plug`) but an
+  allocation. H-ret (`catch_ret`); H-op: the catch hands the clause `kappa` at an unrestricted
+  operation (`catch_unr`), and at a linear or affine one allocates `κ`'s cell at a free location and
+  hands `kappaC` there (`catch_cell`), every run from the catch a prefix of those three steps or
+  going on from them (`catchEv_cell`); resuming `kappaC` releases the cell and runs `hnd H K[w]`
+  (`kappaC_resume`), an affine cancel releases it and cancels (`kappaC_cancel`), a linear cancel has
+  no step (`kappaC_cancel_lin`), and on a run to a value a use of `κ` releases its cell three steps
+  later (`use_frees_cell`); H-fwd (`catch_fwd`, `fwd_resume`, `fwd_abort`); `[unwind]`, `[then]` and
+  `[finalise]` (`catch_abort`, `then_ret`, `then_fin`). A2: `raise p` under frames that catch
+  nothing of its name steps, in every context, as `raise p` does (`abort_absorbs`, `abort_to`,
+  `abort_app`).
 - **Totality** (`SPEC.md` §14, `Totality.lean`). A closed computation of `F A` terminates on every
   run: under every allocator its run reaches a value (`total_every_alloc`), every run under an
   allocator is a prefix of it (`total_run_prefix`), every run continues to a value

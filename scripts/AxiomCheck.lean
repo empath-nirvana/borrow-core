@@ -215,6 +215,37 @@ import Frontend.Check.Externs
 #print axioms BoCa.Fig16.LogRel.Core.CancelIntercept.progDrop_run
 #print axioms BoCa.Fig16.LogRel.Core.CancelIntercept.progKeep_run
 #print axioms BoCa.Fig16.LogRel.Core.CancelIntercept.not_thenAbort_compatC
+-- SPEC §19, *Laws*: the handler laws and an abort's absorption, as machine lemmas
+#print axioms BoCa.Fig16.LogRel.Core.step1Only_plug
+#print axioms BoCa.Fig16.LogRel.Core.stuck_no_step
+#print axioms BoCa.Fig16.LogRel.Core.step1_alloc_iff
+#print axioms BoCa.Fig16.LogRel.Core.step1_free_iff
+#print axioms BoCa.Fig16.LogRel.Core.opPlug_no_step
+#print axioms BoCa.Fig16.LogRel.Core.catch_ret
+#print axioms BoCa.Fig16.LogRel.Core.catch_step
+#print axioms BoCa.Fig16.LogRel.Core.catch_unr
+#print axioms BoCa.Fig16.LogRel.Core.catch_cell
+#print axioms BoCa.Fig16.LogRel.Core.catchEv_cell
+#print axioms BoCa.Fig16.LogRel.Core.CancelIntercept.kappa_resume_steps
+#print axioms BoCa.Fig16.LogRel.Core.CancelIntercept.kappa_cancel_steps
+#print axioms BoCa.Fig16.LogRel.Core.kResume_beta
+#print axioms BoCa.Fig16.LogRel.Core.kappa_resume_kResume
+#print axioms BoCa.Fig16.LogRel.Core.kappaC_resume_parts
+#print axioms BoCa.Fig16.LogRel.Core.kappaC_resume
+#print axioms BoCa.Fig16.LogRel.Core.kappaC_cancel_parts
+#print axioms BoCa.Fig16.LogRel.Core.kappaC_cancel
+#print axioms BoCa.Fig16.LogRel.Core.kappaC_cancel_lin
+#print axioms BoCa.Fig16.LogRel.Core.use_frees_cell
+#print axioms BoCa.Fig16.LogRel.Core.catch_fwd
+#print axioms BoCa.Fig16.LogRel.Core.fwd_resume
+#print axioms BoCa.Fig16.LogRel.Core.catch_abort
+#print axioms BoCa.Fig16.LogRel.Core.then_ret
+#print axioms BoCa.Fig16.LogRel.Core.then_fin
+#print axioms BoCa.Fig16.LogRel.Core.head_raise_ctx
+#print axioms BoCa.Fig16.LogRel.Core.abort_absorbs
+#print axioms BoCa.Fig16.LogRel.Core.abort_to
+#print axioms BoCa.Fig16.LogRel.Core.abort_app
+#print axioms BoCa.Fig16.LogRel.Core.fwd_abort
 -- SPEC §26 (entry 25): a λ whose binder is dead, at an effectful returner
 #print axioms BoCa.Fig16.LogRel.Core.gDenC_unit_dead
 #print axioms BoCa.Fig16.LogRel.Core.lamDead_compatC
