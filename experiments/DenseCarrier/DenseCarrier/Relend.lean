@@ -116,7 +116,8 @@ theorem RemakeC.erase {a b : CellU Loc Val} (h : RemakeC θ a b) : b.erase = a.e
   | «mut» hk hk' hat hv => exact hv
 
 /-- The witness of a re-made cell is the re-made witness. -/
-theorem RemakeC.wit {a b : CellU Loc Val} (h : RemakeC θ a b) : ∀ l, RemakeO θ (a.wit.get l) (b.wit.get l) := by
+theorem RemakeC.wit {a b : CellU Loc Val} (h : RemakeC θ a b) :
+    ∀ l, RemakeO θ (a.wit.get l) (b.wit.get l) := by
   cases h with
   | own v => intro l; exact RemakeO.none
   | «mut» hk hk' hat hv hw => exact hw
@@ -271,7 +272,8 @@ def RelendV (ι : Slots L) (A : VTy) : Prop :=
       ∃ ρ', RemakeR R.θ ρ ρ' ∧
         vD (ℍ := ℍ) ι A (ls.map (Targets.srecRestrat R.θ)) (δ.map R.ψ) v ρ'
 
-/-- The first-order types of the fragment: `1`, `⊗`, `Ref`, `[@a]` and `Mut`, nested to any depth. -/
+/-- The first-order types of the fragment: `1`, `⊗`, `Ref`, `[@a]` and `Mut`, nested to any
+depth. -/
 def FOV : VTy → Prop
   | .unit => True
   | .tensor A B => FOV A ∧ FOV B
@@ -426,7 +428,8 @@ theorem compS_swap {ρ₁ ρ₁' ρ₂ ρ : WRes} (hc : ResU.CompS ρ₁ ρ₂ �
     (hne : ∀ l a, ρ₁.get l = some a → a.kind ≠ Kind.imm)
     (hdom : ∀ l, ρ₁'.get l = none ↔ ρ₁.get l = none) :
     ∃ ρ', ResU.CompS ρ₁' ρ₂ ρ' ∧ (∀ l, ρ'.get l = none ↔ ρ.get l = none) ∧
-      (∀ l, ρ₁.get l = none → ρ'.get l = ρ.get l) ∧ (∀ l, ρ₂.get l = none → ρ'.get l = ρ₁'.get l) := by
+      (∀ l, ρ₁.get l = none → ρ'.get l = ρ.get l) ∧
+      (∀ l, ρ₂.get l = none → ρ'.get l = ρ₁'.get l) := by
   have hd := disjoint_of_compS hc hne
   have hd' : ∀ l, ρ₁'.get l = none ∨ ρ₂.get l = none := fun l => by
     rcases hd l with e | e
@@ -566,8 +569,8 @@ theorem lower_vD (ι : Slots L) : ∀ A, FOV A → ∀ (ls : List SRec) (δ : LS
   | .int _, h, _, _, _, _, _, _, _ | .fam _, h, _, _, _, _, _, _, _
   | .opq _, h, _, _, _, _, _, _, _ => h.elim
 
-/-- **`lbV` reads lifetimes only**: a slot at or below the moved position of `b` that `lbV` admits at
-the moved reading makes `lbV` admit `b` at the original one. -/
+/-- **`lbV` reads lifetimes only**: a slot at or below the moved position of `b` that `lbV`
+admits at the moved reading makes `lbV` admit `b` at the original one. -/
 theorem lbV_relend {ι : Slots L} (R : Relend ι) : ∀ (A : VTy) (δ : LSubD L) {t b : Life},
     lbV ι A (δ.map R.ψ) t → ι t ≤ R.ψ (ι b) → lbV ι A δ b
   | .tensor A B, δ, _, _, h, hle =>

@@ -17,9 +17,9 @@ on the cells of a stratum `τ ⊐ σ`). It exists over every `L`: the index the 
 lifetimes used as strata, has nothing to run along.
 
 The order automorphisms of `L` act on it, moving positions and keeping strata (`pact`, a cell's
-stored predicate moved to its image), and the action is a **bijection** (`pact_bijective`): the image
-of a stored predicate is its whole transport, with no position left free. On the two-order design
-the re-slotting of a region is not onto (`exists_gap`), which is what `Reslot.lean`'s and
+stored predicate moved to its image), and the action is a **bijection** (`pact_bijective`): the
+image of a stored predicate is its whole transport, with no position left free. On the two-order
+design the re-slotting of a region is not onto (`exists_gap`), which is what `Reslot.lean`'s and
 `RelendRoom.lean`'s refutations turn on.
 
 What this carrier does not give: the relation's `Mut` clause equates a cell's stored predicate with

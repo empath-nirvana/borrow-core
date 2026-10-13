@@ -170,8 +170,8 @@ theorem exists_adjGap {c : Life} (θ : Restrat.Emb c) (hθ : ∃ x, θ x ≠ x) 
 
 /-! ### Re-lending does not reflect the relation -/
 
-/-- At the reading of `'a` at the moved slot `m + 1` and `'b` at the fixed slot `m`, the moved reading
-has room, and `boxMM` is inhabited there by a typed world. -/
+/-- At the reading of `'a` at the moved slot `m + 1` and `'b` at the fixed slot `m`, the moved
+reading has room, and `boxMM` is inhabited there by a typed world. -/
 theorem boxMM_moved {ι : Slots L} (R : Relend ι) {m : ℕ}
     (hfix : R.θ (OrderDual.toDual m) = OrderDual.toDual m)
     (hmove : R.θ (OrderDual.toDual (m + 1)) < OrderDual.toDual (m + 1)) :
@@ -197,7 +197,8 @@ theorem not_reflect_boxMM {ι : Slots L} (R : Relend ι) (hθ : ∃ x, R.θ x �
       ∀ ls w ρ, ¬ vD (ℍ := ℍ) ι boxMM ls δ w ρ := by
   obtain ⟨m, hfix, hmove⟩ := exists_adjGap R.θ hθ
   obtain ⟨ρ', h', hT⟩ := boxMM_moved (ℍ := ℍ) R hfix hmove
-  exact ⟨_, _, ρ', h', hT, fun ls w ρ => vD_boxMM_empty ι (δmm_find0 ι _ _) (δmm_find1 ι _ _) ls w ρ⟩
+  exact ⟨_, _, ρ', h', hT,
+    fun ls w ρ => vD_boxMM_empty ι (δmm_find0 ι _ _) (δmm_find1 ι _ _) ls w ρ⟩
 
 /-! ### The closure -/
 
@@ -221,7 +222,8 @@ theorem not_cD_kC (ι : Slots L) {δ : LSubD L} {w : Val} {ρ₁ : WRes}
       BoCa.BoLo.Alloc.leastFree 0
   exact vD_mm0_empty ι _ _ _ _ hQ
 
-/-- **No closure of `kU` with an empty resource is related where `boxMM` holds at a typed world.** -/
+/-- **No closure of `kU` with an empty resource is related where `boxMM` holds at a typed
+world.** -/
 theorem not_vD_kU (ι : Slots L) {δ : LSubD L} {w : Val} {ρ₁ : WRes}
     (h₁ : vD (ℍ := ℍ) ι boxMM [] δ w ρ₁) (hT : TW ρ₁ [] []) (v : Val) :
     ¬ vD (ℍ := ℍ) ι kU [] δ v PMap.empty :=
@@ -258,8 +260,8 @@ def OrderParamV (ι : Slots L) (A : VTy) : Prop :=
       vD (ℍ := ℍ) ι A (ls.map (Targets.srecRestrat R.θ)) (δ.map R.ψ) v ρ' →
         ∃ ρ, RemakeR R.θ ρ ρ' ∧ vD (ℍ := ℍ) ι A ls δ v ρ
 
-/-- **The relation is not order-parametric, at a first-order type**, wherever a re-lending other than
-the identity exists: `boxMM` is read differently at two readings of one order type. -/
+/-- **The relation is not order-parametric, at a first-order type**, wherever a re-lending other
+than the identity exists: `boxMM` is read differently at two readings of one order type. -/
 theorem not_orderParamV_boxMM {ι : Slots L} (R : Relend ι) (hθ : ∃ x, R.θ x ≠ x) :
     ¬ OrderParamV (ℍ := ℍ) ι boxMM := by
   rintro ⟨-, hrefl⟩

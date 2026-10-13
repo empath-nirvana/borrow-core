@@ -87,8 +87,8 @@ theorem relend_gDenD {ι : Slots L} (R : Relend ι) {ls : List SRec} {δ : LSubD
 
 /-! ### Terms the fundamental property relates -/
 
-/-- **A term the fundamental property relates re-lends whenever its captured context does**, at every
-computation type: `SemD` holds at the moved reading, which `⟦Δ⟧` admits. -/
+/-- **A term the fundamental property relates re-lends whenever its captured context does**, at
+every computation type: `SemD` holds at the moved reading, which `⟦Δ⟧` admits. -/
 theorem semD_relend {ι : Slots L} (R : Relend ι) {Δ : LifeCtx} {Γ : Ctx VTy} {e : Expr} {C : CTy}
     (hS : SemD (ℍ := ℍ) ι Δ Γ e C) {δ : LSubD L} {γ : List Val} {ls' : List SRec}
     {ρ ρ' : WRes} (hδ : ModelsD Δ δ) (hR : RemakeR R.θ ρ ρ')

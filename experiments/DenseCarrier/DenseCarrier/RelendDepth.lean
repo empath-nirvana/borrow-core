@@ -14,8 +14,8 @@ The instances `RelendFL.lean`'s and `RelendRoom.lean`'s general statements are t
   re-make holds at depth three by the induction that holds at every depth.
 * **A nested borrow inside a closure**: the closure the fundamental property gives the identity,
   `λx. x : U (mmm ⊸ F mmm)`, is related at every reading (`vD_idClosure`) and so re-lends
-  (`relend_idClosure_mmm`); the closure `RelendRoom.lean` builds at `kU = U (boxMM ⊸ F mm0)`, related
-  only because its argument type is empty, does not (`not_relend_kU`).
+  (`relend_idClosure_mmm`); the closure `RelendRoom.lean` builds at `kU = U (boxMM ⊸ F mm0)`,
+  related only because its argument type is empty, does not (`not_relend_kU`).
 * **Inside a stored continuation's type**: `kMut = Mut 'a ([@'a] kU)` (`not_relend_kMut`).
 -/
 
@@ -75,8 +75,8 @@ theorem δ3_find0 (ι : Slots L) (s₀ s₁ s₂ : Life) : (δ3 ι s₀ s₁ s�
 theorem δ3_find1 (ι : Slots L) (s₀ s₁ s₂ : Life) : (δ3 ι s₀ s₁ s₂).find? 1 = some (ι s₁) := rfl
 theorem δ3_find2 (ι : Slots L) (s₀ s₁ s₂ : Life) : (δ3 ι s₀ s₁ s₂).find? 2 = some (ι s₂) := rfl
 
-/-- **`Mut 'b (Mut 'c 1)` holds at a borrow of a borrow** whose outer cell is at `g`, when `@'b ⊑ ι g`
-and `'c` reads a slot `s₂` above `g`. -/
+/-- **`Mut 'b (Mut 'c 1)` holds at a borrow of a borrow** whose outer cell is at `g`, when
+`@'b ⊑ ι g` and `'c` reads a slot `s₂` above `g`. -/
 theorem exists_vD_mbc (ι : Slots L) {δ : LSubD L} {g s₂ : Life} {β : L}
     (h1 : δ.find? 1 = some β) (hβ : β ≤ ι g) (h2 : δ.find? 2 = some (ι s₂)) (hg : g < s₂) :
     ∃ ρ, vD (ℍ := ℍ) ι mbc [] δ (.loc 0) ρ ∧ ∃ ψ, ρ.get 0 = some ψ ∧ ψ.at = g := by
@@ -112,9 +112,9 @@ theorem relend_mmm {ι : Slots L} (R : Relend ι) {s₀ s₁ s₂ : Life} (h01 :
 
 /-! ### Moving fails at depth three -/
 
-/-- **An image is not a predicate that holds where the move leaves a slot free**: if `P` holds at a
-resource with a top-level cell at a slot `g` no slot moves to, the image of a stored predicate is not
-`P`. -/
+/-- **An image is not a predicate that holds where the move leaves a slot free**: if `P` holds at
+a resource with a top-level cell at a slot `g` no slot moves to, the image of a stored predicate is
+not `P`. -/
 theorem ofS_relS_ne_of_gap {c : Life} (θ : Restrat.Emb c) {g : Life} (hg : ∀ x, θ x ≠ g)
     {b₀ : Life} (Q₀ : Val → SPropS Loc Val b₀) {P : Val → WProp} {u : Val} {r : WRes} {l : Loc}
     {ψ : CellU Loc Val} (hP : P u r) (hl : r.get l = some ψ) (hψ : ψ.at = g) :
