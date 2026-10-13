@@ -5,11 +5,12 @@ import Frontend.Check.Steps
 
 Each constant (syntax-core §8, §8a) is one `CDerives` constructor at a consumed context, and each
 derived form (§9) one Lean theorem concluding a `CDerives` judgment; the brackets give every
-argument, so nothing is searched. A binder argument (`withbor1['x, …]`, `fold_imm[F, 'y, …]`,
-`withbor_s_mut[σ, 'c, T]`, `withbor_f2_*['c, 'a, 'b, …]`) is numbered by §3: `Δ.freshVar`, and
-`withbor_f2`'s internal `'a`, `'b` are `Δ.freshVar` and `Δ.freshVar + 1`. Each side condition is
-decided by a `Bool` function of `Frontend/Check/Decide.lean` and discharged by its soundness
-lemma.
+argument, so nothing is searched. A constant holds no operation, so its derivation is tied at
+every effect context (`TiedDer.ofCDerives`, decided by `Expr.effFree`). A binder argument
+(`withbor1['x, …]`, `fold_imm[F, 'y, …]`, `withbor_s_mut[σ, 'c, T]`,
+`withbor_f2_*['c, 'a, 'b, …]`) is numbered by §3: `Δ.freshVar`, and `withbor_f2`'s internal `'a`,
+`'b` are `Δ.freshVar` and `Δ.freshVar + 1`. Each side condition is decided by a `Bool` function of
+`Frontend/Check/Decide.lean` and discharged by its soundness lemma.
 
 A fold's shape argument is a type with the recursive position `X`, decoded to an `FShape` by
 §5's canonical `dec`: maximal closed leaves, then `ref X`, `X`, `*` and `+`.
@@ -18,8 +19,8 @@ A fold's shape argument is a type with the recursive position `X`, decoded to an
 namespace Frontend.Check
 open BoCa BoCa.Lifetime
 open BoCa.Fig16.LogRel.Core.Check
-open BoCa.Fig16.LogRel.Core (CDerives Jdg VFree VOutlives VOutlivesLe FShape FD₁ mutM immM formerMut formerImm d_allocS
-  d_freeS withborSM_wf withborSI_wf withborM2_wf withborI2_wf shortenE_wf FamSide cbTy2 famTy2
+open BoCa.Fig16.LogRel.Core (CDerives CDerivesAt Jdg VFree VOutlives VOutlivesLe FShape FD₁ mutM immM
+  d_allocS d_freeS withborSM_wf withborSI_wf withborM2_wf withborI2_wf FamSide cbTy2 famTy2
   plainV HasDtor dtorE dtor_wf withborUE withbor1UTy withbor2UTy withbor3UTy withloadUTy
   sliceBorrowMUTy sliceBorrowIUTy closedAt)
 
@@ -55,15 +56,19 @@ def elabFShape (E : Env) (Δ : LifeCtx) (sp : Span) (F : VTy) :
 section
 variable {Δ : LifeCtx} {T : List CVTy}
 
-/-- A constant: its rule at every consumed context. -/
-def cDead {A : CVTy} (e : CExpr) (h : ∀ {Γ}, BoCa.Fig16.LogRel.Core.Ctx.DeadP Γ → CDerives Δ Γ e (.val A)) :
-    Σ B : CVTy, Res Δ T (.val B) :=
-  ⟨A, e, (Fam.dead T).map fun _ hd => h hd⟩
+/-- A constant: its rule at every consumed context, tied. -/
+def cDead {A : CVTy} (sp : Span) (e : CExpr)
+    (h : ∀ {Γ}, BoCa.Fig16.LogRel.Core.Ctx.DeadP Γ → CDerives Δ Γ e (.val A)) :
+    Except Error (Σ B : CVTy, Res Δ T (.val B)) :=
+  if he : e.effFree = true then pure ⟨A, e, [], (Fam.dead T).map fun _ hd => .ofCDerives (h hd) he⟩
+  else err sp "internal error: a constant performs or handles an operation"
 
-/-- A derived form stated at `Ctx.Dead`: every slot dead. -/
-def cStrict {A : CVTy} (e : CExpr) (h : ∀ {Γ}, Ctx.Dead Γ → CDerives Δ Γ e (.val A)) :
-    Σ B : CVTy, Res Δ T (.val B) :=
-  ⟨A, e, (Fam.deadStrict T).map fun _ hd => h hd⟩
+/-- A derived form stated at `Ctx.Dead`: every slot dead, tied. -/
+def cStrict {A : CVTy} (sp : Span) (e : CExpr) (h : ∀ {Γ}, Ctx.Dead Γ → CDerives Δ Γ e (.val A)) :
+    Except Error (Σ B : CVTy, Res Δ T (.val B)) :=
+  if he : e.effFree = true then
+    pure ⟨A, e, [], (Fam.deadStrict T).map fun _ hd => .ofCDerives (h hd) he⟩
+  else err sp "internal error: a derived form performs or handles an operation"
 
 /-- `'x` fresh for `Δ` and free in neither `A` nor `B`. -/
 def freshFor (sp : Span) (x : LifeVar) (A B : CVTy) :
@@ -147,7 +152,7 @@ def synConstU (E : Env) (Δ : LifeCtx) (T : List CVTy) (sp : Span) :
       let ⟨hsc⟩ ← needB sp (scopedB Δ A) s!"`{ppVTy A}` mentions a lifetime not in scope"
       let ⟨hS⟩ ← unwindRow sp x S
       let ⟨hdt, hdc⟩ ← finaliser sp (.ref A)
-      pure (cStrict (A := withbor1UTy x Δ.meetOfDom A B S) _ fun hd =>
+      (cStrict sp (A := withbor1UTy x Δ.meetOfDom A B S) _ fun hd =>
         CDerives.withbor1U x hd.toP hx (scopedB_sound hsc) h₁ h₂ hS hdc (dtor_wf hdt hd))
   | .withbor2U _ b A B r => do
       let b ← E.elabL Δ b
@@ -159,7 +164,7 @@ def synConstU (E : Env) (Δ : LifeCtx) (T : List CVTy) (sp : Span) :
       let ⟨hside⟩ ← outlivesWitness sp b A
       let ⟨hS⟩ ← unwindRow sp x S
       let ⟨hdt, hdc⟩ ← finaliser sp (.ref A)
-      pure (cStrict (A := withbor2UTy x Δ.meetOfDom A B S) _ fun hd =>
+      (cStrict sp (A := withbor2UTy x Δ.meetOfDom A B S) _ fun hd =>
         CDerives.withbor2U x hd.toP hx hside h₁ h₂ hS hdc (dtor_wf hdt hd))
   | .withbor3U a _ A B r => do
       let a ← E.elabL Δ a
@@ -170,7 +175,7 @@ def synConstU (E : Env) (Δ : LifeCtx) (T : List CVTy) (sp : Span) :
       let ⟨⟨hx, h₁, h₂⟩⟩ ← freshFor sp x A B
       let ⟨hS⟩ ← unwindRow sp x S
       let ⟨hdt, hdc⟩ ← finaliser sp (.mut a A)
-      pure (cStrict (A := withbor3UTy a x Δ.meetOfDom A B S) _ fun hd =>
+      (cStrict sp (A := withbor3UTy a x Δ.meetOfDom A B S) _ fun hd =>
         CDerives.withbor3U x hd.toP hx h₁ h₂ hS hdc (dtor_wf hdt hd))
   | .withloadU a _ A B r => do
       let a ← E.elabL Δ a
@@ -180,7 +185,7 @@ def synConstU (E : Env) (Δ : LifeCtx) (T : List CVTy) (sp : Span) :
       let x := Δ.freshVar
       let ⟨⟨hx, h₁, h₂⟩⟩ ← freshFor sp x A B
       let ⟨hS⟩ ← unwindRow sp x S
-      pure (cDead (A := withloadUTy a x Δ.meetOfDom A B S) _ fun hd =>
+      (cDead sp (A := withloadUTy a x Δ.meetOfDom A B S) _ fun hd =>
         CDerives.withloadU x hd hx h₁ h₂ hS)
   | .sliceBorrowMutU _ b A B r => do
       let b ← E.elabL Δ b
@@ -193,7 +198,7 @@ def synConstU (E : Env) (Δ : LifeCtx) (T : List CVTy) (sp : Span) :
       let ⟨hB⟩ ← outlivesWitness sp b B
       let ⟨hS⟩ ← unwindRow sp x S
       let ⟨hdt, hdc⟩ ← finaliser sp (.fam (.ref A))
-      pure (cStrict (A := sliceBorrowMUTy x Δ.meetOfDom A B S) _ fun hd =>
+      (cStrict sp (A := sliceBorrowMUTy x Δ.meetOfDom A B S) _ fun hd =>
         CDerives.sliceBorrowMU x hd.toP hA hB h₁ h₂ hS hdc (dtor_wf hdt hd))
   | .sliceBorrowImmU _ b A B r => do
       let b ← E.elabL Δ b
@@ -207,7 +212,7 @@ def synConstU (E : Env) (Δ : LifeCtx) (T : List CVTy) (sp : Span) :
       let ⟨hB⟩ ← outlivesWitness sp b B
       let ⟨hS⟩ ← unwindRow sp x S
       let ⟨hdt, hdc⟩ ← finaliser sp (.fam (.ref A))
-      pure (cStrict (A := sliceBorrowIUTy x Δ.meetOfDom A B S) _ fun hd =>
+      (cStrict sp (A := sliceBorrowIUTy x Δ.meetOfDom A B S) _ fun hd =>
         CDerives.sliceBorrowIU x hd.toP (scopedB_sound hsc) hA hB h₁ h₂ hS hdc (dtor_wf hdt hd))
   | _ => err sp "internal error: not an unwinding borrow"
 
@@ -218,40 +223,40 @@ def synConst (E : Env) (Δ : LifeCtx) (T : List CVTy) (sp : Span) :
     Const → Except Error (Σ A : CVTy, Res Δ T (.val A))
   | .alloc A => do
       let A ← E.elabV Δ A
-      pure (cDead _ fun hd => CDerives.alloc (A := A) hd)
+      (cDead sp _ fun hd => CDerives.alloc (A := A) hd)
   | .free A => do
       let A ← E.elabV Δ A
-      pure (cDead _ fun hd => CDerives.free (A := A) hd)
+      (cDead sp _ fun hd => CDerives.free (A := A) hd)
   | .swap A B => do
       let A ← E.elabV Δ A
       let B ← E.elabV Δ B
-      pure (cDead _ fun hd => CDerives.swap (A := A) (B := B) hd)
+      (cDead sp _ fun hd => CDerives.swap (A := A) (B := B) hd)
   | .copy a A => do
       let a ← E.elabL Δ a
       let A ← E.elabV Δ A
-      pure (cDead _ fun hd => CDerives.copy (a := a) (A := A) hd)
+      (cDead sp _ fun hd => CDerives.copy (a := a) (A := A) hd)
   | .copyBang A => do
       let A ← E.elabV Δ A
-      pure (cDead _ fun hd => CDerives.copyBang (A := A) hd)
+      (cDead sp _ fun hd => CDerives.copyBang (A := A) hd)
   | .forgetImm a A => do
       let a ← E.elabL Δ a
       let A ← E.elabV Δ A
-      pure (cDead _ fun hd => CDerives.forgetImm (a := a) (A := A) hd)
+      (cDead sp _ fun hd => CDerives.forgetImm (a := a) (A := A) hd)
   | .forgetMut a A => do
       let a ← E.elabL Δ a
       let A ← E.elabV Δ A
-      pure (cDead _ fun hd => CDerives.forgetMut (a := a) (A := A) hd)
-  | .forgetUnk => pure (cDead _ fun hd => CDerives.forgetUnk hd)
+      (cDead sp _ fun hd => CDerives.forgetMut (a := a) (A := A) hd)
+  | .forgetUnk => (cDead sp _ fun hd => CDerives.forgetUnk hd)
   | .forgetBang A => do
       let A ← E.elabV Δ A
-      pure (cDead _ fun hd => CDerives.forgetBang (A := A) hd)
+      (cDead sp _ fun hd => CDerives.forgetBang (A := A) hd)
   | .withbor1 _ A B => do
       let A ← E.elabV Δ A
       let B ← E.elabV Δ B
       let x := Δ.freshVar
       let ⟨⟨hx, h₁, h₂⟩⟩ ← freshFor sp x A B
       let ⟨hsc⟩ ← needB sp (scopedB Δ A) s!"`{ppVTy A}` mentions a lifetime not in scope"
-      pure (cDead _ fun hd => CDerives.withbor1 x hd hx (scopedB_sound hsc) h₁ h₂)
+      (cDead sp _ fun hd => CDerives.withbor1 x hd hx (scopedB_sound hsc) h₁ h₂)
   | .withbor2 _ b A B => do
       let b ← E.elabL Δ b
       let A ← E.elabV Δ A
@@ -259,26 +264,26 @@ def synConst (E : Env) (Δ : LifeCtx) (T : List CVTy) (sp : Span) :
       let x := Δ.freshVar
       let ⟨⟨hx, h₁, h₂⟩⟩ ← freshFor sp x A B
       let ⟨hside⟩ ← outlivesWitness sp b A
-      pure (cDead _ fun hd => CDerives.withbor2 x hd hx hside h₁ h₂)
+      (cDead sp _ fun hd => CDerives.withbor2 x hd hx hside h₁ h₂)
   | .withbor3 a _ A B => do
       let a ← E.elabL Δ a
       let A ← E.elabV Δ A
       let B ← E.elabV Δ B
       let x := Δ.freshVar
       let ⟨⟨hx, h₁, h₂⟩⟩ ← freshFor sp x A B
-      pure (cDead _ fun hd => CDerives.withbor3 (a := a) x hd hx h₁ h₂)
+      (cDead sp _ fun hd => CDerives.withbor3 (a := a) x hd hx h₁ h₂)
   | .withload a _ A B => do
       let a ← E.elabL Δ a
       let A ← E.elabV Δ A
       let B ← E.elabV Δ B
       let x := Δ.freshVar
       let ⟨⟨hx, h₁, h₂⟩⟩ ← freshFor sp x A B
-      pure (cDead _ fun hd => CDerives.withload (a := a) x hd hx h₁ h₂)
+      (cDead sp _ fun hd => CDerives.withload (a := a) x hd hx h₁ h₂)
   | .withswap a A B => do
       let a ← E.elabL Δ a
       let A ← E.elabV Δ A
       let B ← E.elabV Δ B
-      pure (cDead _ fun hd => CDerives.withswap (a := a) (A := A) (B := B) hd)
+      (cDead sp _ fun hd => CDerives.withswap (a := a) (A := A) (B := B) hd)
   | .foldImm F _ c R => do
       let ⟨G, hW, hG⟩ ← elabFShape E Δ sp F
       let c ← E.elabL Δ c
@@ -288,42 +293,42 @@ def synConst (E : Env) (Δ : LifeCtx) (T : List CVTy) (sp : Span) :
       let ⟨hyR⟩ ← needB sp (!vfreeB y R) s!"the binder {ppLVar y} occurs in `{ppVTy R}`"
       let ⟨hR⟩ ← needB sp (outlivesAllB R) (s!"`fold_imm`'s result `{ppVTy R}` must outlive " ++
         "every lifetime: no `U`, `unk`, `imm`, `mut` or `box`")
-      pure (cDead _ fun hd => CDerives.foldImm G y c R hd hW hG
+      (cDead sp _ fun hd => CDerives.foldImm G y c R hd hW hG
         (not_vfree_of_vfreeB (by simpa using hyM)) (not_vfree_of_vfreeB (by simpa using hyR))
         (outlivesAllB_sound R hR))
   | .foldOwn F R => do
       let ⟨G, hW, hG⟩ ← elabFShape E Δ sp F
       let R ← E.elabV Δ R
-      pure (cDead _ fun hd => CDerives.foldOwn G R hd hW hG)
+      (cDead sp _ fun hd => CDerives.foldOwn G R hd hW hG)
   | .foldReuse F R => do
       let ⟨G, hW, hG⟩ ← elabFShape E Δ sp F
       let R ← E.elabV Δ R
-      pure (cDead _ fun hd => CDerives.foldReuse G R hd hW hG)
+      (cDead sp _ fun hd => CDerives.foldReuse G R hd hW hG)
   | .fixd A S => do
       let A ← E.elabV Δ A
       let S ← E.elabV Δ S
-      pure (cDead _ fun hd => CDerives.fixD A S hd)
+      (cDead sp _ fun hd => CDerives.fixD A S hd)
   | .unfoldS A S => do
       let A ← E.elabV Δ A
       let S ← E.elabV Δ S
-      pure (cDead _ fun hd => CDerives.unfoldS A S hd)
+      (cDead sp _ fun hd => CDerives.unfoldS A S hd)
   | .unfold C S => do
       let C' ← E.elabC Δ C
       let S ← E.elabV Δ S
       match C' with
       | .nu B =>
         if hB : CTy.nuOkB B = true then
-          pure (cDead _ fun hd => CDerives.unfoldN B S (CTy.nuOkB_sound B hB) hd)
+          (cDead sp _ fun hd => CDerives.unfoldN B S (CTy.nuOkB_sound B hB) hd)
         else err C.span s!"`unfold[C, S]` needs each observation of `{E.ppC C'}` to have `U X` only under `*` and `+`"
       | _ => err C.span s!"`unfold[C, S]` needs a `nu` type, but `C` is `{E.ppC C'}`"
-  | .lit c => pure (cDead _ fun hd => CDerives.lit c hd)
-  | .host op => pure (cDead _ fun hd => CDerives.hostOp op hd)
+  | .lit c => (cDead sp _ fun hd => CDerives.lit c hd)
+  | .host op => (cDead sp _ fun hd => CDerives.hostOp op hd)
   | .allocS σ => do
       let s ← E.elabS Δ σ
-      pure (cStrict _ fun hd => d_allocS s hd)
+      (cStrict sp _ fun hd => d_allocS s hd)
   | .freeS σ => do
       let s ← E.elabS Δ σ
-      pure (cStrict _ fun hd => d_freeS s hd)
+      (cStrict sp _ fun hd => d_freeS s hd)
   | .withborS m σ _ T' => do
       let s ← E.elabS Δ σ
       let T' ← E.elabV Δ T'
@@ -333,9 +338,9 @@ def synConst (E : Env) (Δ : LifeCtx) (T : List CVTy) (sp : Span) :
       let c := Δ.freshVar
       let ⟨hc⟩ ← needB sp (Δ.find? c).isNone s!"{ppLVar c} is already bound"
       match m with
-      | .mut => pure (cStrict _ fun hd =>
+      | .mut => (cStrict sp _ fun hd =>
           withborSM_wf hσ c hT (by simpa [LifeCtx.Ok] using hΔ) (by simpa using hc) hd)
-      | .imm => pure (cStrict _ fun hd =>
+      | .imm => (cStrict sp _ fun hd =>
           withborSI_wf hσ c hT (by simpa [LifeCtx.Ok] using hΔ) (by simpa using hc) hd)
   | .withborF2Mut _ _ _ w A B T' => do
       let w ← E.elabL Δ w
@@ -351,47 +356,47 @@ def synConst (E : Env) (Δ : LifeCtx) (T : List CVTy) (sp : Span) :
         s!"`{ppVTy B}` must outlive the family's outer borrow"
       let ⟨hTo⟩ ← needB sp (outlivesB (FD₁ Δ x) (.var x) T')
         s!"`{ppVTy T'}` must outlive the family's outer borrow"
-      pure (cStrict _ fun hd => withborM2_wf s hA (outlivesB_sound _ _ _ hBo)
+      (cStrict sp _ fun hd => withborM2_wf s hA (outlivesB_sound _ _ _ hBo)
         (outlivesB_sound _ _ _ hTo) hd)
   | .arrayNew A => do
       let A ← E.elabV Δ A
-      pure (cDead _ fun hd => CDerives.arrNew A hd)
+      (cDead sp _ fun hd => CDerives.arrNew A hd)
   | .arrayFree A => do
       let A ← E.elabV Δ A
-      pure (cDead _ fun hd => CDerives.arrFree A hd)
+      (cDead sp _ fun hd => CDerives.arrFree A hd)
   | .arraySize A => do
       let A ← E.elabV Δ A
-      pure (cDead _ fun hd => CDerives.arrSize A hd)
+      (cDead sp _ fun hd => CDerives.arrSize A hd)
   | .arrayReplace A => do
       let A ← E.elabV Δ A
-      pure (cDead _ fun hd => CDerives.arrReplace A hd)
+      (cDead sp _ fun hd => CDerives.arrReplace A hd)
   | .arrayLen a A => do
       let a ← E.elabL Δ a
       let A ← E.elabV Δ A
-      pure (cDead _ fun hd => CDerives.arrLen a A hd)
+      (cDead sp _ fun hd => CDerives.arrLen a A hd)
   | .arrayGet a A => do
       let a ← E.elabL Δ a
       let A ← E.elabV Δ A
-      pure (cDead _ fun hd => CDerives.arrGet a A hd)
+      (cDead sp _ fun hd => CDerives.arrGet a A hd)
   | .arrayCopy a A => do
       let a ← E.elabL Δ a
       let A ← E.elabV Δ A
-      pure (cDead _ fun hd => CDerives.arrCopy a A hd)
+      (cDead sp _ fun hd => CDerives.arrCopy a A hd)
   | .arrayForget a A => do
       let a ← E.elabL Δ a
       let A ← E.elabV Δ A
-      pure (cDead _ fun hd => CDerives.arrForget a A hd)
+      (cDead sp _ fun hd => CDerives.arrForget a A hd)
   | .countFold S => do
       let S ← E.elabV Δ S
-      pure (cDead _ fun hd => CDerives.countFold S hd)
+      (cDead sp _ fun hd => CDerives.countFold S hd)
   | .countTry S T => do
       let S ← E.elabV Δ S
       let T ← E.elabV Δ T
-      pure (cDead _ fun hd => CDerives.countTry S T hd)
+      (cDead sp _ fun hd => CDerives.countTry S T hd)
   | .boundedFix A C => do
       let A ← E.elabV Δ A
       let C ← E.elabC Δ C
-      pure (cDead _ fun hd => CDerives.boundedFix A C hd)
+      (cDead sp _ fun hd => CDerives.boundedFix A C hd)
   | .sliceBorrowMut _ b A B => do
       let b ← E.elabL Δ b
       let A ← E.elabV Δ A
@@ -400,7 +405,7 @@ def synConst (E : Env) (Δ : LifeCtx) (T : List CVTy) (sp : Span) :
       let ⟨⟨_, h₁, h₂⟩⟩ ← freshFor (Δ := Δ) sp x A B
       let ⟨hA⟩ ← outlivesWitness sp b A
       let ⟨hB⟩ ← outlivesWitness sp b B
-      pure (cDead _ fun hd => CDerives.sliceBorrowM x hd hA hB h₁ h₂)
+      (cDead sp _ fun hd => CDerives.sliceBorrowM x hd hA hB h₁ h₂)
   | .sliceBorrowImm _ b A B => do
       let b ← E.elabL Δ b
       let A ← E.elabV Δ A
@@ -410,39 +415,39 @@ def synConst (E : Env) (Δ : LifeCtx) (T : List CVTy) (sp : Span) :
       let ⟨hsc⟩ ← needB sp (scopedB Δ A) s!"`{ppVTy A}` mentions a lifetime not in scope"
       let ⟨hA⟩ ← outlivesWitness sp b A
       let ⟨hB⟩ ← outlivesWitness sp b B
-      pure (cDead _ fun hd => CDerives.sliceBorrowI x hd (scopedB_sound hsc) hA hB h₁ h₂)
+      (cDead sp _ fun hd => CDerives.sliceBorrowI x hd (scopedB_sound hsc) hA hB h₁ h₂)
   | .sliceGetMut a A => do
       let a ← E.elabL Δ a
       let A ← E.elabV Δ A
-      pure (cDead _ fun hd => CDerives.sliceGetM a A hd)
+      (cDead sp _ fun hd => CDerives.sliceGetM a A hd)
   | .sliceLenMut a A => do
       let a ← E.elabL Δ a
       let A ← E.elabV Δ A
-      pure (cDead _ fun hd => CDerives.sliceLenM a A hd)
+      (cDead sp _ fun hd => CDerives.sliceLenM a A hd)
   | .sliceSplitImm a A => do
       let a ← E.elabL Δ a
       let A ← E.elabV Δ A
-      pure (cDead _ fun hd => CDerives.sliceSplitI a A hd)
+      (cDead sp _ fun hd => CDerives.sliceSplitI a A hd)
   | .sliceSplitMut a A => do
       let a ← E.elabL Δ a
       let A ← E.elabV Δ A
-      pure (cDead _ fun hd => CDerives.sliceSplitM a A hd)
+      (cDead sp _ fun hd => CDerives.sliceSplitM a A hd)
   | .sliceEmptyImm a A => do
       let a ← E.elabL Δ a
       let A ← E.elabV Δ A
-      pure (cDead _ fun hd => CDerives.sliceEmptyI a A hd)
+      (cDead sp _ fun hd => CDerives.sliceEmptyI a A hd)
   | .sliceEmptyMut a A => do
       let a ← E.elabL Δ a
       let A ← E.elabV Δ A
-      pure (cDead _ fun hd => CDerives.sliceEmptyM a A hd)
+      (cDead sp _ fun hd => CDerives.sliceEmptyM a A hd)
   | .sliceReplaceMut a A => do
       let a ← E.elabL Δ a
       let A ← E.elabV Δ A
-      pure (cDead _ fun hd => CDerives.sliceReplaceM a A hd)
+      (cDead sp _ fun hd => CDerives.sliceReplaceM a A hd)
   | .sliceSwapMut a A => do
       let a ← E.elabL Δ a
       let A ← E.elabV Δ A
-      pure (cDead _ fun hd => CDerives.sliceSwapM a A hd)
+      (cDead sp _ fun hd => CDerives.sliceSwapM a A hd)
   | .withborF2Imm _ _ _ A B T' => do
       let A ← E.elabV Δ A
       let B ← E.elabV Δ B
@@ -457,7 +462,7 @@ def synConst (E : Env) (Δ : LifeCtx) (T : List CVTy) (sp : Span) :
         s!"`{ppVTy B}` must outlive the family's outer borrow"
       let ⟨hTo⟩ ← needB sp (outlivesB (FD₁ Δ x) (.var x) T')
         s!"`{ppVTy T'}` must outlive the family's outer borrow"
-      pure (cStrict _ fun hd => withborI2_wf s (scopedB_sound hA) (scopedB_sound hB)
+      (cStrict sp _ fun hd => withborI2_wf s (scopedB_sound hA) (scopedB_sound hB)
         (outlivesB_sound _ _ _ hBo) (outlivesB_sound _ _ _ hTo) hd)
   | c@(.withbor1U ..) | c@(.withbor2U ..) | c@(.withbor3U ..) | c@(.withloadU ..)
   | c@(.sliceBorrowMutU ..) | c@(.sliceBorrowImmU ..) => synConstU E Δ T sp c
@@ -471,25 +476,27 @@ def famLife (M : Mode) : CShape → CVTy → Option CLife
 
 /-- `shortenE σ` applied to a checked family. -/
 def shortenAt {A B : CVTy} {s : CShape} (r : Res Δ T (.val A))
-    (h : ∀ {Γ e}, CDerives Δ Γ e (.val A) →
-      CDerives Δ Γ (BoCa.Fig16.LogRel.Core.shortenE s e) (.val B)) : Res Δ T (.val B) :=
-  ⟨BoCa.Fig16.LogRel.Core.shortenE s r.e, r.F.map fun _ hd => h hd⟩
+    (h : ∀ {Ξ Γ e}, CDerivesAt Ξ Δ Γ e (.val A) →
+      CDerivesAt Ξ Δ Γ (BoCa.Fig16.LogRel.Core.shortenE s e) (.val B)) : Res Δ T (.val B) :=
+  ⟨BoCa.Fig16.LogRel.Core.shortenE s r.e, r.sigs, r.F.map fun _ hd Ξ hΞ => h (hd Ξ hΞ)⟩
 
 /-- `shorten_mut[σ, @a] V` / `shorten_imm[σ, @a] V`: `V : fam m @b σ` with `Δ ⊨ @a ⊑ @b`. -/
 def shortenIt {A : CVTy} (_E : Env) (T : List CVTy) (sp : Span) (m : Mode) (s : CShape)
     (a : CLife) (r : Res Δ T (.val A)) : Except Error (Σ B : CVTy, Res Δ T (.val B)) := do
-  let ⟨hσ⟩ ← plainShape sp s
+  let ⟨_⟩ ← plainShape sp s
   let some b := famLife m s A
     | err sp s!"`shorten` needs a family of borrows over its shape, but the operand has type `{ppVTy A}`"
   let ⟨hle⟩ ← needB sp (leB Δ a b) s!"cannot show `{ppLife a}` ⊑ `{ppLife b}` from the lifetime context"
   match m with
   | .mut =>
     if h : A = s.famTy mutM b then
-      pure ⟨_, shortenAt (h ▸ r) fun hd => shortenE_wf formerMut hσ hd (leB_sound hle)⟩
+      pure ⟨_, shortenAt (h ▸ r) fun hd =>
+        shortenE_wfAt mutM (fun h' hle' => .mutSub h' hle') hd (leB_sound hle)⟩
     else err sp s!"`shorten_mut` needs `fam mut @ σ`, but the operand has type `{ppVTy A}`"
   | .imm =>
     if h : A = s.famTy immM b then
-      pure ⟨_, shortenAt (h ▸ r) fun hd => shortenE_wf formerImm hσ hd (leB_sound hle)⟩
+      pure ⟨_, shortenAt (h ▸ r) fun hd =>
+        shortenE_wfAt immM (fun h' hle' => .immSub h' hle') hd (leB_sound hle)⟩
     else err sp s!"`shorten_imm` needs `fam imm @ σ`, but the operand has type `{ppVTy A}`"
 
 end

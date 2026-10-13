@@ -815,3 +815,8 @@ Each entry: the decision, and why. Newest last.
     - It supersedes "we also don't need multishot unless we get it for free" (2026-10-02).
     - Multi-shot never blocks, shapes or adds cost to a definition, rule, law, proof or plan.
     - Where the `unr` qualifier or `multi ctl` causes friction, it is restricted or removed.
+    - Applied on 2026-10-12, among the user's decisions of that day listed in the tier-1 landing
+      inventory (`experiments/Targets/LANDING.md` on `tier1-effects`): "E5 and E9 at an `unr`
+      `exn` signature are **restricted out**". An abortive operation is affine: `multi ctl op(…) ->
+      never` is rejected, and so is an unrestricted operation answering `0` in a core row (SPEC
+      §18, 0.47).

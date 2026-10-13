@@ -185,6 +185,15 @@ effect).
   stored values are closed, and it goes on (`liveOK_closed`), so it holds no stuck redex
   (`LiveOK.not_stuck`). At a persistent answer a run to a value ends at the empty memory, every
   continuation's cell released (`leakFree_closed`, `EffPrograms.lean`).
+- **Decision R: one signature per operation** (`SPEC.md` §19 *Typing*, `Tied.lean`). An effect
+  context `Ξ` gives each name its signature; a row is tied to `Ξ` when every operation it finds is
+  at `Ξ`'s signature (`RowAt`). `CDerivesAt Ξ` is `CDerives` with `RowAt Ξ` at `[perform]`,
+  `[raise]` and `[handle]`, every other rule verbatim; a tied derivation is a `CDerives` derivation
+  (`CDerivesAt.toCDerives`), and one of a term with no `perform`, `raise` or `hnd` is tied at every
+  context (`CDerivesAt.ofEffFree`). At a handler its signature is a prefix of `Ξ`'s
+  (`sig_prefix_of_rowAt`, `hndTags_of_rowAt`). `EffCtx.NoUnrExn`: no abortive operation is
+  unrestricted (§18); in a row tied to such a context an unrestricted operation resumes
+  (`abort_false_of_rowAt`). The checker builds every derivation tied (`Frontend/Check/Tied.lean`).
 - **Embedding.** `embed : DerivesWf Δ Γ e T → CDerives Δ (cbvCtx Γ) e (.val (cbv T))` for every
   `DerivesWf` rule, and `adequacy_of_derivesWf`. `EmbeddingExamples.lean` runs BoLo's baseline
   programs through it.

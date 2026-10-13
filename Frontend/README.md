@@ -122,6 +122,7 @@ judgment, for the derived forms of syntax-core §9), so what the checker returns
 | `Check/Decide.lean` | `DecidableEq` on `VTy`, `CTy`, `Expr`; a `Bool` decider for each side condition, with its soundness lemma |
 | `Check/Fam.lean` | linearity: masks of used and absorbable slots, and a derivation at every liveness between them |
 | `Check/Elab.lean` | surface lifetimes, types and shapes to `Core`'s; a printer back |
+| `Check/Tied.lean` | tied derivations (SPEC §19, decision R): `TiedDer`, one lemma per rule the builders apply, and the program's effect context (`effCtxOf`, `sigsOkB`) |
 | `Check/Rules.lean` | one builder per `CDerives` constructor, and `rDrop` (SPEC §12) |
 | `Check/Steps.lean` | the environment, messages, the deciders of fold shapes and destructors, the drops, and the steps shared by the checker's cases |
 | `Check/Consts.lean` | constants (§8, §8a, §8b) and derived forms (§9) |
@@ -144,18 +145,31 @@ judgment, for the derived forms of syntax-core §9), so what the checker returns
         (h : checkProgram p = .ok r) (hc : r.main = some c) :
         CDerives LifeCtx.empty c.ctx c.e (.comp c.C)
 
+    theorem checkProgram_tiedAt {p : Program} {r : Report} {c : Checked}
+        (h : checkProgram p = .ok r) (hc : r.main = some c) :
+        CDerivesAt c.Ξ LifeCtx.empty c.ctx c.e (.comp c.C) ∧ c.Ξ.NoUnrExn
+
 `c.e` is `main`'s erasure, `c.C` its type and `c.ctx` its externs, the last declared at index 0,
 all live. `checked_sem` is the Fundamental Property at it (`SemC ∅ c.ctx c.e c.C`, at every
 host), and `checked_runs` adequacy for a closed `main : F 1`.
 
+**Tied derivations** (SPEC §19, decision R). Every derivation the checker builds is tied: it is
+`CDerivesAt Ξ` (`Core/Tied.lean`) at every effect context `Ξ` at which the rows it reads at
+`[perform]`, `[raise]` and `[handle]` are (`TiedDer`, `Check/Tied.lean`), and `checkProgram_tied`
+reads that off. `checkMain` decides that those rows give each operation one signature, of a
+nonzero name, and none unrestricted answering `0` (`sigsOkB`), and the program's effect context
+`c.Ξ` is the one they give (`effCtxOf`). A constant holds no operation, so its derivation is tied
+at every context (`CDerivesAt.ofEffFree`, decided by `Expr.effFree`).
+
 **How derivations are represented.** The checker returns, for each subterm, a `Res Δ T j`: the
-erasure `e` and a `Fam`, which holds masks `u` (the slots the subterm uses) and `w` (the live
-slots it can be given without using them) over the slot types `T`, and a proof of
-`CDerives Δ (mkCtx T L) e j` for every liveness `L` with `u ⊆ L ⊆ u ∪ w`. A `Res` is built only by
-the rule builders of `Rules.lean`/`Consts.lean`, each of which applies its constructor to the
-premises' proofs, with its side conditions discharged by the soundness lemmas of `Decide.lean`.
-So the theorem above is the `deriv` field of the result; there is no separate proof, and no
-data-level derivation tree to trust. The derivations are proofs, erased at run time: `bcc` runs
+erasure `e`, the rows `sigs` its derivations read at `[perform]`, `[raise]` and `[handle]`, and a
+`Fam`, which holds masks `u` (the slots the subterm uses) and `w` (the live slots it can be given
+without using them) over the slot types `T`, and a proof of `TiedDer sigs Δ (mkCtx T L) e j` for
+every liveness `L` with `u ⊆ L ⊆ u ∪ w`. A `Res` is built only by the rule builders of
+`Rules.lean`/`Consts.lean`, each of which applies its constructor to the premises' proofs, with its
+side conditions discharged by the soundness lemmas of `Decide.lean`. So the theorems above read
+the `tied` field of the result; there is no separate proof, and no data-level derivation tree to
+trust. The derivations are proofs, erased at run time: `bcc` runs
 the checker compiled, and `CrossCheck.lean` runs it in the kernel.
 
 **Linearity** (syntax-core §7, §11). `w` holds the persistent slots at every leaf
@@ -260,6 +274,12 @@ borrows (`synConstU`, `Consts.lean`); their side conditions are decided by `rowL
   source, the cell's and the array's otherwise), closed by evaluation; the derivation is
   `dtor_wf` at a dead context, so these constants absorb no slot (as item 5 of the
   incompleteness).
+* **One signature per operation** (decision R). `rPerform` and `rRaise` read their row, and
+  `rEffHandle` its handled row, into the result's `sigs`; `checkMain` rejects a `main` whose rows
+  give one operation two signatures, or an operation of the name `0` (`sigsOkB`, `sigsErr`).
+* **Abortive operations are affine** (SPEC §18, decision 63). A row entry `n.i unr A ~> 0` is
+  rejected where it is written (`elabRow`), and so is an unrestricted operation answering `0` among
+  `main`'s rows.
 
 ### Standard I/O (SPEC §11)
 

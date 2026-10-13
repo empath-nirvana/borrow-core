@@ -46,7 +46,9 @@ What is not provided, with the message that says so: an operation inside a closu
 is not run in place, and a function with a row passed as a value (effectful callbacks, #161); a
 lend `&mut x` in the arguments of a call that threads a capability; an operation of an answering
 effect inside a clause; an effect with both kinds of operation; type parameters on an answering
-effect; a function with a row whose result is a computation (a loop or a generator).
+effect; an unrestricted operation that answers `never` (`multi ctl`: an abortive operation is
+affine, decision 63); a function with a row whose result is a computation (a loop or a
+generator).
 -/
 
 namespace Frontend.Elab.Effects
@@ -2231,6 +2233,9 @@ def elaborate (ds : List Decl) (lib : List String := []) :
             "an effect has one kind"⟩
         if sig.answering && !tps.isEmpty then
           throw ⟨e.span, s!"`{e.name}` is answering and takes type parameters: not provided"⟩
+        if let some o := ops.find? (fun o => o.abortive && o.kind == .ctl .unr) then
+          throw ⟨o.name.span, s!"`{o.name.name}` is `multi ctl` and answers `never`: an " ++
+            "operation that never resumes is affine, `ctl` (decision 63)"⟩
         env := { env with effs := env.effs ++ [sig],
                           ops := env.ops ++ (ops.zipIdx.map fun (o, i) => ⟨e.name, i, o⟩) }
         report sp "effect" (s!"{e.name}: " ++ ", ".intercalate (ops.map fun o =>

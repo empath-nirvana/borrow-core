@@ -253,6 +253,23 @@ import Frontend.Check.Externs
 #print axioms BoCa.Fig16.LogRel.Core.LiveOK.ne_opPlug
 #print axioms BoCa.Fig16.LogRel.Core.LiveOK.not_stuck
 #print axioms BoCa.Fig16.LogRel.Core.EffPrograms.leakFree_closed
+-- SPEC §19, *Typing*: decision R, one signature per operation; §18, abortive operations affine
+#print axioms BoCa.Fig16.LogRel.Core.CDerivesAt.toCDerives
+#print axioms BoCa.Fig16.LogRel.Core.CDerivesAt.ofEffFree
+#print axioms BoCa.Fig16.LogRel.Core.CDerivesAt.effThenA
+#print axioms BoCa.Fig16.LogRel.Core.CDerivesAt.effHandle
+#print axioms BoCa.Fig16.LogRel.Core.rowAt_of_le
+#print axioms BoCa.Fig16.LogRel.Core.rowAt_ofEff_fs
+#print axioms BoCa.Fig16.LogRel.Core.sig_prefix_of_rowAt
+#print axioms BoCa.Fig16.LogRel.Core.hndTags_of_rowAt
+#print axioms BoCa.Fig16.LogRel.Core.rowAt_of_sigsAt
+#print axioms BoCa.Fig16.LogRel.Core.EffCtx.NoUnrExn.ne_exn
+#print axioms BoCa.Fig16.LogRel.Core.abort_false_of_rowAt
+#print axioms Frontend.Check.sigsAt_effCtxOf
+#print axioms Frontend.Check.noUnrExn_effCtxOf
+#print axioms Frontend.Check.checkProgram_tied
+#print axioms Frontend.Check.checkProgram_tiedAt
+#print axioms Frontend.Check.checkProgram_sound
 -- SPEC §26 (entry 25): a λ whose binder is dead, at an effectful returner
 #print axioms BoCa.Fig16.LogRel.Core.gDenC_unit_dead
 #print axioms BoCa.Fig16.LogRel.Core.lamDead_compatC

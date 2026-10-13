@@ -12,23 +12,46 @@ only at its uses; `main` is checked at `Δ = ∅` and the context of the externs
 at index `0`, all live.
 
 **Soundness.** A successful check of `main` returns a `Checked`: the erased `Expr` with a
-`CDerives LifeCtx.empty Γ e (comp C)` derivation, `Γ` the externs. The derivation is built by
-the rule builders from the checked premises, so it is a proof, not a claim; `checkProgram_sound`
-reads it off, `checked_sem` applies the Fundamental Property, and `checked_runs` applies
-adequacy to a closed `main : F 1`.
+derivation of `main` at `Δ = ∅` and `Γ` the externs, tied (decision R): `CDerivesAt Ξ` at every
+effect context `Ξ` at which the rows it reads at `[perform]`, `[raise]` and `[handle]` are. The
+check decides that those rows give each operation one signature, of a nonzero name, and that no
+unrestricted operation among them answers `0` (decision 63); the program's effect context `c.Ξ` is
+the one they give. The derivation is built by the rule builders from the checked premises, so it
+is a proof, not a claim. `checkProgram_tied` reads it off at every such context,
+`checkProgram_tiedAt` at the program's own, `checkProgram_sound` reads the `CDerives` derivation it
+is, `checked_sem` applies the Fundamental Property, and `checked_runs` applies adequacy to a
+closed `main : F 1`.
 -/
 
 namespace Frontend.Check
 open BoCa BoCa.Lifetime
 open BoCa.Fig16.LogRel.Core.Check
-open BoCa.Fig16.LogRel.Core (CDerives Jdg SemC fundamentalC adequacyC)
+open BoCa.Fig16.LogRel.Core (CDerives CDerivesAt Jdg SemC fundamentalC adequacyC EffCtx SigsAt)
 
-/-- A checked `main`: its context, erasure and type, with the derivation. -/
+/-- A checked `main`: its context, erasure and type, the rows its derivation reads at `[perform]`,
+`[raise]` and `[handle]`, which give each operation one signature (`sigsOkB`), and the derivation,
+tied at every effect context at which those rows are. -/
 structure Checked where
   ctx : Ctx CVTy
   e : CExpr
   C : CCTy
-  deriv : CDerives LifeCtx.empty ctx e (.comp C)
+  sigs : CRow
+  ok : sigsOkB sigs = true
+  tied : TiedDer sigs LifeCtx.empty ctx e (.comp C)
+
+/-- **The program's effect context**: each name's signature, as the rows `main`'s derivation reads
+give it. For an elaborated program these are its effect declarations' signatures at its handler
+sites: the elaborator writes each row and each handler's clauses from the declarations (SPEC §18).
+`[spec §19]` -/
+def Checked.Ξ (c : Checked) : EffCtx := effCtxOf c.sigs
+
+/-- `main`'s derivation at the program's effect context. -/
+theorem Checked.derivAt (c : Checked) : CDerivesAt c.Ξ LifeCtx.empty c.ctx c.e (.comp c.C) :=
+  c.tied _ (sigsAt_effCtxOf c.ok)
+
+/-- `main`'s derivation, a `CDerives` derivation. -/
+theorem Checked.deriv (c : Checked) : CDerives LifeCtx.empty c.ctx c.e (.comp c.C) :=
+  c.derivAt.toCDerives
 
 /-- What `bcc check` prints, and the checked `main`. -/
 structure Report where
@@ -54,6 +77,23 @@ def firstUnconsumed : List Bool → List Bool → Option Nat
   | a :: as, b :: bs => if !(a || b) then some 0 else (firstUnconsumed as bs).map (· + 1)
   | _, _ => none
 
+/-- Why the rows `main`'s derivation reads fail `sigsOkB`: an operation of the reserved name `0`,
+an unrestricted operation answering `0`, or an operation with two signatures.  `[spec §18, §19]` -/
+def sigsErr (s : CRow) : String :=
+  let sig (o : COpSig) : String := s!"`{qualStr o.q} {ppVTy o.A} ~> {ppVTy o.B}`"
+  match s.find? (·.n == 0) with
+  | some o => s!"`main` performs or handles the operation 0.{o.i}, of the reserved name 0"
+  | none =>
+    match s.find? (fun o => o.q == .unr && o.B.isZero) with
+    | some o => s!"the operation {o.n}.{o.i} is unrestricted and answers `0`: an abortive " ++
+        "operation is affine (decision 63)"
+    | none =>
+      match s.findSome? (fun o => (s.find? fun o' => o'.n == o.n && o'.i == o.i &&
+          !(o'.q == o.q && o'.A == o.A && o'.B == o.B)).map (o, ·)) with
+      | some (o, o') => s!"the operation {o.n}.{o.i} has two signatures in this program, " ++
+          s!"{sig o} and {sig o'}: an operation has one signature (decision R)"
+      | none => "internal error: the operations' signatures"
+
 /-- Check `main : C = M`. -/
 def checkMain (ds : Array Decl) (k : Nat) (sp : Span) (C : CTy) (M : Comp) :
     Except Error Checked := do
@@ -63,7 +103,9 @@ def checkMain (ds : Array Decl) (k : Nat) (sp : Span) (C : CTy) (M : Comp) :
   let C' ← E.elabC LifeCtx.empty C
   let r ← chkC checkFuel E LifeCtx.empty T M C'
   if h : subL (allL T) (orL r.F.u r.F.w) = true then
-    pure ⟨mkCtx T (allL T), r.e, C', r.F.d _ (btw_allL T _ _ r.F.hu r.F.hw h)⟩
+    if hs : sigsOkB r.sigs = true then
+      pure ⟨mkCtx T (allL T), r.e, C', r.sigs, hs, r.F.d _ (btw_allL T _ _ r.F.hu r.F.hw h)⟩
+    else throw ⟨sp, sigsErr r.sigs⟩
   else match firstUnconsumed r.F.u r.F.w with
     | some i => throw ⟨sp, s!"`main` does not consume the extern {E.slotName i}, of type " ++
         s!"`{E.slotTy T i}`, which is not persistent"⟩
@@ -142,6 +184,23 @@ def checkProgram (p : Program) (copies : Bool := true) : Except Error Report := 
   | none => pure rep
 
 /-! ### Soundness -/
+
+/-- **Every derivation the checker emits is tied** (decision R): if `bcc` accepts a program, its
+`main` erases to an `Expr` with a `CDerivesAt Ξ` derivation at `Δ = ∅` and the context of its
+externs, at every effect context `Ξ` at which the rows the derivation reads at `[perform]`,
+`[raise]` and `[handle]` are.  `[spec §19]` -/
+theorem checkProgram_tied {p : Program} {r : Report} {c : Checked}
+    (_h : checkProgram p = .ok r) (_hc : r.main = some c) :
+    ∀ Ξ : EffCtx, SigsAt Ξ c.sigs → CDerivesAt Ξ LifeCtx.empty c.ctx c.e (.comp c.C) :=
+  c.tied
+
+/-- **At the program's own effect context**, whose abortive operations are affine (decision 63):
+`main`'s derivation is `CDerivesAt c.Ξ`, and `c.Ξ` has no unrestricted operation answering `0`.
+`[spec §18, §19]` -/
+theorem checkProgram_tiedAt {p : Program} {r : Report} {c : Checked}
+    (_h : checkProgram p = .ok r) (_hc : r.main = some c) :
+    CDerivesAt c.Ξ LifeCtx.empty c.ctx c.e (.comp c.C) ∧ c.Ξ.NoUnrExn :=
+  ⟨c.derivAt, noUnrExn_effCtxOf c.ok⟩
 
 /-- **Soundness of the checker.** If `bcc` accepts a program, its `main` erases to an `Expr`
 with a `CDerives` derivation at `Δ = ∅` and the context of its externs. -/
