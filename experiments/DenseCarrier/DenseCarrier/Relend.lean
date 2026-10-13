@@ -608,6 +608,44 @@ theorem strat_relend {ι : Slots L} (R : Relend ι) {A : VTy} (hA : FOV A) {δ :
     rw [inStratum_iff_of_mut hk₂] at hin
     exact absurd hat₂ (not_le.mpr hin)
 
+/-! ### Re-making one lent cell, at any payload -/
+
+/-- **Re-making a lent cell, at any payload type**: a configuration related at `Mut 'a A` has a
+re-make related at the moved reading when its payload's values re-lend (`hwit`) and the payload's
+stratification is carried to the moved reading (`hstrat`). These are the two obligations a stored
+predicate `𝒱⟦A⟧` meets for its cell to be re-made, at every depth and every payload; at first-order
+payloads `relend_fov` discharges both. -/
+theorem relend_mut {ι : Slots L} (R : Relend ι) {a : Lifetime.Life} {A : VTy}
+    {ls : List SRec} {δ : LSubD L} {v : Val} {ρ : WRes}
+    (hwit : ∀ ls₀ u σ, vD (ℍ := ℍ) ι A ls₀ δ u σ → ∀ ls₁ : List SRec,
+      ∃ σ', RemakeR R.θ σ σ' ∧ vD (ℍ := ℍ) ι A ls₁ (δ.map R.ψ) u σ')
+    (hstrat : ∀ b : Life, (∀ ls u σ, vD (ℍ := ℍ) ι A ls δ u σ → σ.InStratum b) →
+      (∃ ls u σ, vD (ℍ := ℍ) ι A ls δ u σ) →
+      ∀ ls u σ', vD (ℍ := ℍ) ι A ls (δ.map R.ψ) u σ' → σ'.InStratum (R.θ b))
+    (h : vD (ℍ := ℍ) ι (.mut a A) ls δ v ρ) (ls' : List SRec) :
+    ∃ ρ', RemakeR R.θ ρ ρ' ∧ vD (ℍ := ℍ) ι (.mut a A) ls' (δ.map R.ψ) v ρ' := by
+  obtain ⟨α, hα, ℓ, hsep⟩ := h
+  obtain ⟨hv, b, u, σ, hσ, Q, hw, ls₀, hαb, rfl, hQ, -, hstr⟩ := pure_sep_iff.mp hsep
+  have hP : vD (ℍ := ℍ) ι A ls₀ δ u σ := by
+    have h0 : ofS Q u σ := ⟨hσ, hw⟩
+    rwa [hQ] at h0
+  obtain ⟨σ', hRσ, hσ'⟩ := hwit ls₀ u σ hP (ls'.filter (fun r => decide (r.2 ⊐ R.θ b)))
+  have hσs : σ'.InStratum (R.θ b) := hRσ.inStratum hσ
+  have hstr' := hstrat b hstr ⟨ls₀, u, σ, hP⟩
+  let Q' : Val → SPropS Loc Val (R.θ b) := fun x r =>
+    vD (ℍ := ℍ) ι A (ls'.filter (fun r => decide (r.2 ⊐ R.θ b))) (δ.map R.ψ) x r.val
+  have hw' : Q' u ⟨σ', hσs⟩ := hσ'
+  refine ⟨ResU.single ℓ (CellU.mutOf (R.θ b) u σ' hσs Q' hw'), remakeR_single ?_, R.ψ α,
+    R.interp_some hα, ℓ, pure_sep_mk hv ⟨R.θ b, u, σ', hσs, Q', hw',
+      ls'.filter (fun r => decide (r.2 ⊐ R.θ b)), ?_, rfl, ?_,
+      fun x => by simp [List.mem_filter], hstr'⟩⟩
+  · refine RemakeC.mut (CellU.kind_mutOf _ _ _ _ _ _) (CellU.kind_mutOf _ _ _ _ _ _) rfl rfl ?_
+    rw [CellU.wit_mutOf, CellU.wit_mutOf]
+    exact hRσ
+  · rw [← R.agree]; exact R.mono.monotone hαb
+  · funext x r
+    exact propext ⟨fun ⟨_, h⟩ => h, fun h => ⟨hstr' _ _ _ h, h⟩⟩
+
 /-! ### Re-lending at the first-order types -/
 
 /-- **Re-lending preserves the relation at every first-order type, at any depth**: one induction
@@ -637,29 +675,9 @@ theorem relend_fov {ι : Slots L} (R : Relend ι) : ∀ A, FOV A → ∀ (ls : L
       obtain ⟨α, hα, hb, ho⟩ := h
       obtain ⟨ρ', hR, hb'⟩ := relend_fov R A hf ls δ v ρ hb ls'
       exact ⟨ρ', hR, R.ψ α, R.interp_some hα, hb', hR.outlivesD R ho⟩
-  | .mut a A, hf, ls, δ, v, ρ, h, ls' => by
-      obtain ⟨α, hα, ℓ, hsep⟩ := h
-      obtain ⟨hv, b, u, σ, hσ, Q, hw, ls₀, hαb, rfl, hQ, -, hstr⟩ := pure_sep_iff.mp hsep
-      have hP : vD (ℍ := ℍ) ι A ls₀ δ u σ := by
-        have h0 : ofS Q u σ := ⟨hσ, hw⟩
-        rwa [hQ] at h0
-      obtain ⟨σ', hRσ, hσ'⟩ :=
-        relend_fov R A hf ls₀ δ u σ hP (ls'.filter (fun r => decide (r.2 ⊐ R.θ b)))
-      have hσs : σ'.InStratum (R.θ b) := hRσ.inStratum hσ
-      have hstr' := strat_relend R (A := A) hf hstr ⟨ls₀, u, σ, hP⟩
-      let Q' : Val → SPropS Loc Val (R.θ b) := fun x r =>
-        vD (ℍ := ℍ) ι A (ls'.filter (fun r => decide (r.2 ⊐ R.θ b))) (δ.map R.ψ) x r.val
-      have hw' : Q' u ⟨σ', hσs⟩ := hσ'
-      refine ⟨ResU.single ℓ (CellU.mutOf (R.θ b) u σ' hσs Q' hw'), remakeR_single ?_, R.ψ α,
-        R.interp_some hα, ℓ, pure_sep_mk hv ⟨R.θ b, u, σ', hσs, Q', hw',
-          ls'.filter (fun r => decide (r.2 ⊐ R.θ b)), ?_, rfl, ?_,
-          fun x => by simp [List.mem_filter], hstr'⟩⟩
-      · refine RemakeC.mut (CellU.kind_mutOf _ _ _ _ _ _) (CellU.kind_mutOf _ _ _ _ _ _) rfl rfl ?_
-        rw [CellU.wit_mutOf, CellU.wit_mutOf]
-        exact hRσ
-      · rw [← R.agree]; exact R.mono.monotone hαb
-      · funext x r
-        exact propext ⟨fun ⟨_, h⟩ => h, fun h => ⟨hstr' _ _ _ h, h⟩⟩
+  | .mut a A, hf, ls, δ, v, ρ, h, ls' =>
+      relend_mut R (fun ls₀ u σ hP ls₁ => relend_fov R A hf ls₀ δ u σ hP ls₁)
+        (fun _ hC hI => strat_relend R (A := A) hf hC hI) h ls'
   | .zero, h, _, _, _, _, _, _ | .sum _ _, h, _, _, _, _, _, _
   | .thunk _, h, _, _, _, _, _, _ | .imm _ _, h, _, _, _, _, _, _
   | .bang _, h, _, _, _, _, _, _ | .unk, h, _, _, _, _, _, _

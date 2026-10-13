@@ -47,7 +47,7 @@ theorem exists_covBy_of_wellFoundedGT {S : Type} [LinearOrder S] [WellFoundedGT 
 lifetime just below each lifetime, with no lifetime between them. -/
 theorem carrier_covBy {L Loc Val : Type} [LinearOrder L] [NoMinOrder L] [Nonempty Loc]
     [Nonempty Val] {Cell : L → Type} (hC : IsCarrier Loc Val Cell) (x : L) : ∃ y, y ⋖ x := by
-  haveI := (carrier_iff (Loc := Loc) (Val := Val)).mp ⟨Cell, hC⟩
+  have := (carrier_iff (Loc := Loc) (Val := Val)).mp ⟨Cell, hC⟩
   exact exists_covBy_of_wellFoundedGT x
 
 /-! ### The positioned carrier -/

@@ -27,8 +27,9 @@ relation preserved, at every cut?**
 
 **No, on any carrier tried.** The moves the relation does not see (positions, step 4) cannot put a
 slot in the gap; the move that frees slots there (re-slotting, step 5) breaks the relation, inside
-the fragment, at every cut; and a carrier with cells at every lifetime of a dense order does not
-exist (step 7). Each failure is a machine-checked statement.
+the fragment, at every cut; and a carrier with cells at every lifetime of a dense order storing every
+finitely supported predicate does not exist (step 7). Each failure is a machine-checked statement.
+Re-making the region's cells in place of moving them is *Re-lending*.
 
 1. **The stratification index cannot be dense** (`Cantor.lean`). The layer equation
    `Cell_α ≅ own + imm(Imm_α) + mut(Mut_α)` over a linear order has a solution exactly when the
@@ -57,21 +58,26 @@ exist (step 7). Each failure is a machine-checked statement.
    slots between any two (`slots_between_iff`, `placement_keeps_order`); the gap probe 1's shift
    opens in `L` holds no slot (`shiftSlots_gap_empty`). The move that does free slots there is the
    re-slotting of step 5, which breaks the relation.
-7. **A dense carrier with finitely supported predicates does not exist** (§7). The
-   layer equation with cells at every lifetime, acted on by the automorphisms of `L`, and stored
-   predicates finitely supported (nominal sets with ordered atoms) has no solution over an order
-   with an infinite ascending chain (`no_fsCarrier`), at a dense `L` (`no_fsCarrier_of_dense`),
-   even with supports restricted to lifetimes at or above the cell
-   (`no_fsCarrier_withTopRat_above`). At `Life` Core's cells are one (`fsCarrier_life`).
+7. **A dense carrier storing every finitely supported predicate does not exist** (§7). The
+   full layer equation with cells at every lifetime, acted on by the automorphisms of `L`, every
+   finitely supported predicate storable (nominal sets with ordered atoms), has no solution over an
+   order with an infinite ascending chain (`no_fsCarrier`), at a dense `L`
+   (`no_fsCarrier_of_dense`), even with supports restricted to lifetimes at or above the cell
+   (`no_fsCarrier_withTopRat_above`). At `Life` Core's cells are one (`fsCarrier_life`). A carrier
+   storing a restricted class of predicates, finite carriers glued along embeddings
+   (`carrier_of_wellFoundedGT`), and a carrier whose strata are kept apart from the lifetimes
+   (`Positioned.lean`) are not ruled out.
 8. **FL map** (§8): `allI`, `allE` and `withbor` (2) re-proved over every `L`; every other rule
    transfers by the port of the relation layer.
 
 **Kill criterion: met**, at each step: the faithful shift by `not_reslotInvC` and
 `not_reslotInvV`, the dense thaw by `not_denseThawTop`, a slot in the gap by
-`shiftSlots_gap_empty` with `not_reslotInvC`, a dense carrier by `no_fsCarrier`.
+`shiftSlots_gap_empty` with `not_reslotInvC`, a dense carrier storing every finitely supported
+predicate by `no_fsCarrier`.
 
-**Law 2's design: the two-order design, with the region's lends re-made, not moved** (see
-*Law 2*).
+**Law 2 re-makes the region's lends, it does not move them** (*Law 2*). Re-made, they re-lend at
+every first-order type at every depth, and every term Core's typing derives re-lends at every type;
+at `U` re-lending reads room, on every lifetime order (*Re-lending*).
 
 ## 1. Census
 
@@ -114,7 +120,7 @@ Classes: **(a)** carrier-independent once `Life` is any dense unbounded linear o
   (`Core/World.lean`) in place of `Res_{↓α}`; not attempted.
 
 **The cost of the real switch.** Making `Life` itself dense is impossible: (b) has no dense
-version (`no_carrier_of_dense`), nor one with finitely supported stored predicates
+version (`no_carrier_of_dense`), nor one storing every finitely supported predicate
 (`no_fsCarrier`, §7). The switch that is possible keeps (b), (c) and the 23 model-level (a) places on the slots
 untouched, and ports the 282 relation-level (a) places, with everything that rests on them, to
 `δ : LSubD L` and `ι`. That port is mechanical (§8).
@@ -139,8 +145,9 @@ it.
   reverse-well-ordered order is rigid). So an order carrying the cells has no automorphism to move
   a lifetime with, and the order whose automorphisms move lifetimes has to be a second one.
 
-Keeping a dense order as the index with finitely supported stored predicates is §7: no such
-carrier exists (`no_fsCarrier`). Syntactic stored predicates are not attempted.
+Keeping a dense order as the index with every finitely supported predicate storable is §7: no such
+carrier exists (`no_fsCarrier`). A restricted class of stored predicates, or strata kept apart from
+the lifetimes (`Positioned.lean`), is not ruled out. Syntactic stored predicates are not attempted.
 
 **The construction** (`Carrier.lean`, `Relation.lean`). The carrier the relation reads is any
 linear order `L` with a top; the dense instance is `WithTop ℚ` (`Rat.lean`), with Core's slot `n`
@@ -299,7 +306,10 @@ lifetimes in play, stored predicates finitely supported (nominal sets with order
   automorphism is the identity, Core's cells are one, so the notion is the paper's model.
 
 Finite support does not replace recursion down `⊏`: the obstruction is `Cantor.lean`'s, with the
-stored predicates confined to what a cell at a lifetime and the one above it can see.
+stored predicates confined to what a cell at a lifetime and the one above it can see. It is an
+obstruction to the full layer equation, `out` reaching every well-formed layer: a carrier storing a
+restricted class of predicates, finite carriers glued along embeddings, and a carrier whose strata
+are kept apart from the lifetimes (`Positioned.lean`, *Re-lending*) are not ruled out.
 
 ## 8. The FL map
 
@@ -333,45 +343,198 @@ fresh-slot hypothesis, and the premise transfers (proved: `entailsLtD_of_entails
 
 ## Law 2
 
-**No carrier supports Law 2 as a move of a suspended configuration.** On Core's carrier ProbeD1's
-witnesses and `not_segShiftInv_noAll`; on the two-order design `not_reslotInvC` and
-`reslot_fails_cD'`, and position moves cannot put the region beneath the resumer's lends
-(`placement_keeps_order`); a carrier with cells at every lifetime of a dense order does not exist
-(`no_fsCarrier`). The re-slotting refutations share one mechanism: a moved `mut` cell stores the
-image of its predicate, and the relation at the moved reading admits cells at the slots the move
-leaves free, which the image refuses (`ofS_relS_ne_vD_mb`). The slots are rigid (`carrier_rigid`):
-a re-slotting other than the identity is not onto (`exists_gap`), so every such move leaves free
-slots.
+**No move that carries stored predicates to their image (`θ.relRU`) preserves the relation, on any
+carrier tried.** On Core's carrier ProbeD1's witnesses and `not_segShiftInv_noAll`; on the
+two-order design `not_reslotInvC` and `reslot_fails_cD'`, and position moves cannot put the region
+beneath the resumer's lends (`placement_keeps_order`); a carrier with cells at every lifetime of a
+dense order storing every finitely supported predicate does not exist (`no_fsCarrier`). The
+re-slotting refutations share one mechanism: a moved `mut` cell stores the image of its predicate,
+and the relation at the moved reading admits cells at the slots the move leaves free, which the image
+refuses (`ofS_relS_ne_vD_mb`). The slots are rigid (`carrier_rigid`): a re-slotting other than the
+identity is not onto (`exists_gap`), so every such move leaves free slots.
 
 **So Law 2 re-makes the region's lends; it does not move them.** Ended at the stop and made afresh
 at the fresh lifetime, each `mut` cell stores `𝒱⟦T⟧` at the new reading, which is what a moved cell
 lacks: at the borrow of a borrow the re-made configuration is related where the moved one is not
-(`remake_not_move`). κ's frames then have to be related at the fresh lifetime by an argument that
-does not go through naturality, through the quantifiers the borrow rules carry: the callback's
-`∀'x ⊏ b`, which holds at every lifetime below its bound, and 6.65's `И`, which makes the borrow's
-cell at every lifetime below a bound. That argument is Law 2 itself.
+(`remake_not_move`), and at every first-order type at every depth (*Re-lending*, `relend_fov`).
 
-**Build it on the two-order design.** Re-making the region beneath the resumer's lends opens room
-between the lifetimes at and above the cut and the region's cells. Core's relation reads that room:
-at `L = Life` the `∀` clause holds at a cell made at the slot adjacent to its bound and fails at the
-same cell made one slot lower (`coreAllAdjacentD`, ProbeD1's `coreAllAdjacent`), a re-make that
-breaks the relation. Over a dense `L` the relation reads no room: the clause does not tell cells
-below its bound apart (`dense_same_order_type`), and room opened by moving positions is invisible
-(`segShift_iff`). The cells themselves cannot be dense (`no_fsCarrier`), so among the designs tried
-here the two-order design is the one that reads no room. Its cost is the port of the relation layer (§1, §8), with no new
-mathematics for FL; Core's cells, recursion and statics stay as they are. If Law 2's argument never
-meets a `∀` that holds by adjacency at the configurations that arise, Core's carrier would suffice;
-ProbeD1's witnesses are not claimed to arise, and that is not settled here.
+**Where the room is read.** Re-making the region beneath the resumer's lends opens room between the
+lifetimes at and above the cut and the region's cells. Core's `∀` clause reads that room: at
+`L = Life` it holds at a cell made at the slot adjacent to its bound and fails at the same cell made
+one slot lower (`coreAllAdjacentD`, ProbeD1's `coreAllAdjacent`). Over a dense `L` the `∀` clause
+does not: it does not tell cells below its bound apart (`dense_same_order_type`), and room opened by
+moving positions is invisible (`segShift_iff`). The relation's quantifiers over resources read it on
+every `L`: a cell sits at a slot, the slots are discrete (`carrier_covBy`), and a type can need a
+slot strictly between two lifetimes (`not_reflect_boxMM`); through the argument of a `⊸` this
+breaks re-lending at `U` (`not_relend_kU`, at every re-lending other than the identity on every `L`,
+and in Core). Density of the reading removes room from the `∀` clause and from nothing else.
+
+**What carries Law 2 at `U` is where the closure came from.** The refuting closure is related only
+because its argument type is empty at the reading; a term the fundamental property relates is
+related at every reading in `⟦Δ⟧`, and re-lends at every type once its captured context does
+(`semD_relend`); in Core every derivable term over a first-order context re-lends
+(`core_relend_derivable`), on Core's own carrier. κ's frames are not such a term: their relation
+comes from the run that suspended them, and relating them at the fresh lifetime is what remains
+(*What is open*).
+
+## Re-lending: an invariant at any depth (`Relend*.lean`, `Positioned.lean`)
+
+The question: nesting depth is order, so a fix for `Mut 'a (Mut 'b 1)` has to be the same at
+`Mut 'a (Mut 'b (Mut 'c 1))`; Law 2 needs one property, defined once, closed under every type
+former by one induction, that makes re-lending valid. The hypothesis tested: stored predicates are
+**order-parametric** — they read only the order of the lifetimes in their support, so they survive
+every order-preserving re-lending.
+
+**The answer.** Depth is not where it fails: re-made, the region's cells re-lend at every
+first-order type at every depth, by one induction, at every lifetime order and on Core's own
+carrier. Order-parametricity is false, already at a first-order type, at every re-lending other
+than the identity, on every lifetime order and in Core: the relation reads **room**, whether a slot lies between two lifetimes, because a cell sits
+at a slot and the slots are discrete. Through the argument of a `⊸` the failure of reflection becomes
+a failure of re-lending at `U`, inside a closure and inside a stored continuation's type, at a
+closure that stores no predicate at all. What makes re-lending valid at `U` is that the closure is a
+term the fundamental property relates: every term Core's typing derives re-lends at every type. That
+is a fact about how a configuration was built, not a property of the predicates its cells store.
+
+**Re-lending** (`Relend.lean`). `Relend ι`: a re-slotting `θ : Restrat.Emb c` of the slots below
+the cut and a reading move `ψ` that keeps the order and agrees with it on the slots
+(`ψ (ι s) = ι (θ s)`). `θ` may put the region below any given lifetimes (`Restrat.Emb.shift_fresh`),
+so "beneath the resumer's list" is one choice of it; at `WithTop ℚ` probe 1's shift is one
+(`ratRelend`), at `Life` the re-slotting itself (`lifeRelend`). The region's cells are **re-made**
+(`RemakeC`, `RemakeO`, `RemakeR`): same location, kind and value, the slot moved by `θ`, the witness
+re-made cell by cell, the stored predicate whatever the relation at the moved reading asks for.
+
+**1. The invariant.**
+
+* `RelendV ι A`: at every re-lending, every configuration related at `A` has a re-make related at
+  the moved reading, with the records re-slotted. A `mut` cell storing `𝒱⟦A⟧` can be re-made when its
+  payload satisfies it; `relend_mut` isolates the two obligations at any payload: the payload's
+  values re-lend, and its stratification (the payload lies in the cell's stratum) is carried to the
+  moved reading.
+* `OrderParamV ι A`, the hypothesis as stated: `RelendV ι A` and its converse, every configuration
+  related at the moved reading being the re-make of one related at the reading.
+* Not vacuous: `RelendV` holds at every first-order type (`relendV_of_fov`) and fails at `kU`
+  (`not_relendV_kU`); `OrderParamV` fails at `boxMM` (`not_orderParamV_boxMM`).
+* Conservativity, in Core (`L = Life`, the identity placement): Core's relation `vC` re-lends at
+  every first-order type at every configuration (`core_relend_fov`), so at every configuration a
+  kernel program builds; every term Core's typing derives, closed by a first-order context, re-lends
+  at every computation type (`core_relend_derivable`, through `fundamentalC`). Not checked: a
+  configuration whose closures are not terms the fundamental property relates, κ's frames mid-run
+  among them.
+
+**2. Closure.**
+
+* `1`, `⊗`, `Ref`, `[@a]`, `Mut`, nested to any depth: **proved**, by one induction
+  (`relend_fov`). At `Mut` the witness re-lends by the induction hypothesis and the stratification
+  is carried by `strat_relend`: where a payload's top-level `mut` cells may sit is read by lifetime
+  comparisons only (`lbV`, `cells_of_vD`, `lbV_relend`), and a top-level cell can be lowered to any
+  slot those comparisons admit (`lower_vD`). No split on depth or on a witness; `FOV` is the grammar
+  of the first-order formers.
+* `U`: **fails**, machine-checked (`not_relendV_kU`), at every lifetime order, placement and
+  re-lending other than the identity, at every cut (`not_relendV_kU_everyCut`), at `WithTop ℚ`
+  (`not_relendV_kU_rat`) and in Core (`core_not_relend_kU`, `core_not_relend_kU_everyCut`), at
+  `kU = U ([@'a] (Mut 'a (Mut 'b 1)) ⊸ F (Mut 'a (Mut 'a 1)))`, a type with no `∀` and no `Imm`.
+  The kill criterion is met at this step; no patch was tried.
+* `⊸`: the same failure at the computation level (`RelendC`, `not_relendC_kC`). `∀` and `F`: not
+  derived. At `∀` one re-make has to serve every instance of the quantifier; at `F` the `wpTS`
+  frames at the moved reading have to be sent back, and a frame holding a cell at a slot the
+  re-slotting frees is the re-make of nothing (`Restrat`'s `frame_outside_image`, for images). No
+  obstruction verified at either.
+* `Imm` is outside the fragment (`vD` is `False` there) and is not addressed.
+
+**Why `U` fails: room** (`RelendRoom.lean`). `[@'a] (Mut 'a (Mut 'b 1))` (`boxMM`) needs its outer
+cell strictly above `@'a` (the `[−]`) and strictly below the inner cell (the `Mut` clause's
+stratification): a slot strictly between `@'a` and `@'b`. With `'a` at a slot and `'b` at the slot
+just above it, nothing is related (`vD_boxMM_empty`); with a slot between them, a borrow of a borrow
+is, and is a typed world (`vD_boxMM_room`, `tw_rhoMM`). A re-lending other than the identity fixes
+a slot and moves the slot just below it lower (`exists_adjGap`), so it opens such a slot: `boxMM` is
+empty at the reading and inhabited at the moved reading (`not_reflect_boxMM`). A closure of `kU` is
+then related at the reading because its argument type has no value there (`vD_kU_vacuous`); at the
+moved reading the argument is there and `F (Mut 'a (Mut 'a 1))` has no value (`vD_mm0_empty`,
+`not_cD_kC`). The closure's resource is empty: it stores no predicate, so no invariant of stored
+predicates excludes it. Every order that carries the layer equation and has no least element has a
+lifetime just below each lifetime (`carrier_covBy`), so a carrier whose cells sit at their lifetimes
+has the adjacent pair the witness uses.
+
+**What carries re-lending at `U`** (`RelendFL.lean`). The fundamental property relates a term at
+every reading in `⟦Δ⟧`, and a re-lending keeps `⟦Δ⟧` (`modelsD_relend`,
+`Restrat.Emb.models_mapN_iff`). So a term it relates re-lends at every computation type — `U`, `⊸`,
+`∀`, `F` — once its captured context does (`semD_relend`); a first-order context does
+(`relend_gDenD`, `semD_relend_fov`); in Core, `core_relend_derivable`. The refuting closure is no
+such term: a typable `λ` of type `kU` would be related at the moved reading, where its result type
+has no value. A captured closure re-lends by the same argument when it is itself such a term over a
+context that re-lends; that hereditary version is not built.
+
+**3. Consequence, at the instances** (`RelendDepth.lean`).
+
+* Depth three, `Mut 'a (Mut 'b (Mut 'c 1))`: a borrow of a borrow of a borrow, re-made, is related at
+  the moved reading at `mmm` and at `F mmm` (`relend_mmm`, an instance of `relend_fov`); moved it is
+  not, at every re-slotting other than the identity (`move_not_remake_mmm`): the moved outer cell
+  stores the image of `𝒱⟦Mut 'b (Mut 'c 1)⟧`, and at the moved reading that predicate holds at a
+  borrow of a borrow whose outer cell sits at a slot the move frees (`ofS_relS_ne_of_gap`,
+  `no_preimage`).
+* A nested borrow inside a closure: the identity closure at `U (mmm ⊸ F mmm)` re-lends
+  (`relend_idClosure_mmm`; `vD_idClosure`: related at every reading); the closure of `kU` does not
+  (`not_relend_kU`).
+* Inside a stored continuation's type: `kMut = Mut 'a ([@'a] kU)`, a lent cell holding the closure
+  of `kU`, is related at the reading, and no re-make of it is related at the moved one
+  (`not_relend_kMut`).
+* At every cut: each positive statement holds at every re-lending, and each refutation at every
+  segment shift by `k > 0` at every cut.
+* The typed world: the configurations the refutations run `wpTS` at are typed worlds (`tw_rhoMM`);
+  that a re-make of a typed world is a typed world is not derived.
+
+**4. The carrier.** For the first-order part the two-order design suffices, and so does Core's own
+carrier (`core_relend_fov`, `core_relend_derivable` are at `L = Life`). For `U` pointwise no lifetime
+order suffices: `not_relendV_kU` holds at every `L` and placement that admit a re-lending other than
+the identity, because the cells sit at slots. A carrier with no room keeps the lifetime and the stratum apart (`Positioned.lean`): a cell
+carries a position in any linear order `L` and a stratum in a reverse-well-founded index only the
+recursion reads (`PCell`, `PCell_eq`). It exists over every `L`, dense ones included, and sidesteps
+`no_fsCarrier`, whose descending cardinals run along an ascending chain of lifetimes used as strata.
+The automorphisms of `L` act on it, moving positions and keeping strata, and the action is a
+bijection (`pact`, `pact_bijective`): the image of a stored predicate is its whole transport, where on
+the two-order design a re-slotting leaves slots free (`exists_gap`). Not derived: whether Core's
+relation ports to it. Its `Mut` clause would store `𝒱⟦A⟧` cut down to the cell's stratum, and a store
+into a lent place would have to show the stored value's cells lie in that stratum, which positions do
+not determine.
+
+**5. The FL map.** At a first-order payload no compatibility lemma has anything to add: every
+predicate the relation stores there satisfies the invariant (`relendV_of_fov`), and the borrow
+constants' cells (6.65's, `wpTS_M_frameG`, in `withbor2_compatD` and §8's other borrow rows) store
+exactly those. At a payload containing `U` no compatibility lemma can show it of the predicate it
+stores: `not_relend_kMut` is a lent cell the relation relates whose stored predicate fails it. What
+holds there is a property of the stored value — a closure the fundamental property relates — which
+the `lam` and `thunk` rules produce and `semD_relend` carries; `relend_mut` says what the cell's
+re-make then needs: the value re-lends, and the stratification is carried, which a borrow constant
+gives when its cell sits below a lifetime bounding the payload (`withbor2_compatD`'s slot below
+`@bδ`, with `VOutlivesLe Δ b A`). New mathematics: none for first-order types or for terms the
+fundamental property relates (both proved); for κ's frames mid-run, whose relation is not an
+instance of the fundamental property, re-lending needs an argument this probe does not have — a
+relation re-lendable by construction at `U` (OQ-8's second option), or a simulation of the suspended
+run at the fresh lifetime.
 
 ## What is open
 
-**Relating κ at the fresh lifetime.** Whether κ's frames, with the region's lends ended at the
-stop and re-made at a fresh lifetime beneath the resumer's list, are related there through the
-`∀` and `И` of the borrow rules: not derived, no obstruction verified over a dense `L`. At
-`L = Life` the re-make of a cell adjacent to a `∀`'s bound breaks the relation
-(`coreAllAdjacentD`); whether such a configuration arises is not settled. The refutations above are
-of moves at every configuration; whether the borrow of a borrow arises inside a suspended region is
-not checked, and the refutations do not depend on it.
+**Relating κ at the fresh lifetime.** κ's frames, with the region's lends ended at the stop and
+re-made at a fresh lifetime beneath the resumer's list, are related there when κ is a term the
+fundamental property relates over a first-order context (`core_relend_derivable`). κ mid-run is not
+such a term; whether its frames are related at the fresh lifetime, through the `∀` and `И` of the
+borrow rules or otherwise: not derived, no obstruction verified. The pointwise route fails at `U`
+(`not_relend_kU`, `not_relend_kMut`).
+
+**Arising.** The Lean refutations — of moves (§5, *Law 2*), of order-parametricity and of
+re-lending at `U` (*Re-lending*) — do not depend on arising: each exhibits a configuration of the
+relation at every lifetime order. Their consequence for Law 2 does. Whether a borrow of a borrow
+arises inside a suspended region, whether a closure related only because its argument type is empty
+arises (no typable `λ` is: it would be related at the moved reading, where its result type has no
+value), and whether a `∀` that holds by adjacency arises (`coreAllAdjacentD`) are not checked.
+
+**Re-lending at `∀` and `F`; re-made typed worlds; captured closures.** Not derived: `RelendC` at
+`∀` (one re-make for every instance) and at `F` (the `wpTS` frames sent back from the moved reading),
+that a re-make of a typed world is a typed world, and the hereditary `semD_relend` for a captured
+closure that is itself a term the fundamental property relates.
+
+**The positioned carrier's relation.** Whether Core's relation and the fundamental property port to
+`PCell`, with the `Mut` clause's stored predicate cut down to the cell's stratum: not derived.
 
 **Where the bridge holds.** It fails at `Mut 'a (Mut 'b 1)`. On which smaller fragment it holds
 is not determined; at `U` it would need `Restrat`'s `WpNatural`, which is open.
@@ -400,6 +563,11 @@ compatibility lemmas of §8 other than `allI`, `allE` and `withbor2`.
 | `DenseCarrier/Borrow.lean` | `withbor2_compatD`; `wpTS_M_frameG`, `vD_outlivesLe`, `vD_local` |
 | `DenseCarrier/Reslot.lean` | re-slotting: `not_reslotInvC`, `reslotFailsAtEveryCut`, `not_bridgeV`, `not_denseThawTop`, `core_reslot_fails`; no slot in the gap |
 | `DenseCarrier/Nominal.lean` | `FSCarrier`, `no_fsCarrier`, `fsCarrier_life` |
+| `DenseCarrier/Relend.lean` | `Relend`, `RemakeR`, the invariant `RelendV`; `relend_mut`, `strat_relend`, `relend_fov`, `relendV_of_fov` |
+| `DenseCarrier/RelendRoom.lean` | room: `not_reflect_boxMM`, `not_orderParamV_boxMM`, `not_relendC_kC`, `not_relend_kU`, `not_relend_kMut`, `not_relendV_kU_everyCut`, `core_not_relend_kU` |
+| `DenseCarrier/RelendFL.lean` | `semD_relend`, `semD_relend_fov`, `core_relend_fov`, `core_relend_derivable` |
+| `DenseCarrier/RelendDepth.lean` | depth three: `relend_mmm`, `move_not_remake_mmm`; `relend_idClosure_mmm` |
+| `DenseCarrier/Positioned.lean` | `carrier_covBy`; the positioned carrier `PCell`, `pact_bijective` |
 | `scripts/Census.lean`, `scripts/classify.py`, `scripts/Deps.lean` | the census |
 
 Reproduce the census: `lake env lean experiments/DenseCarrier/scripts/Census.lean > census.txt`,

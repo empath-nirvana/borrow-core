@@ -206,14 +206,13 @@ theorem vD_kU_vacuous (ι : Slots L) {δ : LSubD L} (hE : ∀ ls w σ, ¬ vD (�
     (ls : List SRec) (v : Val) (ρ : WRes) : vD (ℍ := ℍ) ι kU ls δ v ρ :=
   fun ls' _ w ρ₁ _ h₁ _ => absurd h₁ (hE ls' w ρ₁)
 
-/-- **No closure of `kU` with an empty resource is related where `boxMM` holds at a typed world**:
-the argument is there, and `F mm0` has no value. -/
-theorem not_vD_kU (ι : Slots L) {δ : LSubD L} {w : Val} {ρ₁ : WRes}
-    (h₁ : vD (ℍ := ℍ) ι boxMM [] δ w ρ₁) (hT : TW ρ₁ [] []) (v : Val) :
-    ¬ vD (ℍ := ℍ) ι kU [] δ v PMap.empty := by
-  intro h
-  have hc : cD (ℍ := ℍ) ι kC [] δ (.val v) PMap.empty := h [] (Ext.refl [] _)
-  have hwp : wpTS [] (.app (.val v) (.val w)) (fun ls'' => vD (ℍ := ℍ) ι mm0 ls'' δ) ρ₁ :=
+/-- **`boxMM ⊸ F mm0` fails at the empty resource where `boxMM` holds at a typed world**: the
+argument is there, and `F mm0` has no value. -/
+theorem not_cD_kC (ι : Slots L) {δ : LSubD L} {w : Val} {ρ₁ : WRes}
+    (h₁ : vD (ℍ := ℍ) ι boxMM [] δ w ρ₁) (hT : TW ρ₁ [] []) (e : Expr) :
+    ¬ cD (ℍ := ℍ) ι kC [] δ e PMap.empty := by
+  intro hc
+  have hwp : wpTS [] (.app e (.val w)) (fun ls'' => vD (ℍ := ℍ) ι mm0 ls'' δ) ρ₁ :=
     hc w ρ₁ ρ₁ h₁ (compS_empty_left ρ₁)
   have hval : ResU.Valid ρ₁ := hT.valid
   obtain ⟨ρ', -, -, -, -, v', -, -, -, ls', -, -, -, -, -, -, -, -, -, -, -, -, -, -, hQ⟩ :=
@@ -221,6 +220,12 @@ theorem not_vD_kU (ι : Slots L) {δ : LSubD L} {w : Val} {ρ₁ : WRes}
       (compS_empty_left _) hT (fun _ hx => absurd hx List.not_mem_nil)
       BoCa.BoLo.Alloc.leastFree 0
   exact vD_mm0_empty ι _ _ _ _ hQ
+
+/-- **No closure of `kU` with an empty resource is related where `boxMM` holds at a typed world.** -/
+theorem not_vD_kU (ι : Slots L) {δ : LSubD L} {w : Val} {ρ₁ : WRes}
+    (h₁ : vD (ℍ := ℍ) ι boxMM [] δ w ρ₁) (hT : TW ρ₁ [] []) (v : Val) :
+    ¬ vD (ℍ := ℍ) ι kU [] δ v PMap.empty :=
+  fun h => not_cD_kC ι h₁ hT (.val v) (h [] (Ext.refl [] _))
 
 /-- **Re-lending breaks the relation at `U`**: for every re-lending other than the identity, a
 closure of `kU` with an empty resource is related at a reading, and its re-make (the empty
@@ -241,6 +246,46 @@ theorem not_relendV_kU {ι : Slots L} (R : Relend ι) (hθ : ∃ x, R.θ x ≠ x
   obtain ⟨δ, v, h₁, h₂⟩ := not_relend_kU (ℍ := ℍ) R hθ
   obtain ⟨ρ', hR, h'⟩ := h R [] δ v PMap.empty h₁
   exact h₂ ⟨ρ', hR, h'⟩
+
+/-! ### The hypothesis as stated, and the computation level -/
+
+/-- **Order-parametric at `A`**, the hypothesis tested: re-lending preserves the relation at `A` and
+reflects it — every configuration related at the moved reading is the re-make of one related at the
+reading — so that `𝒱⟦A⟧` depends only on the order of the lifetimes it reads. -/
+def OrderParamV (ι : Slots L) (A : VTy) : Prop :=
+  RelendV (ℍ := ℍ) ι A ∧
+    ∀ (R : Relend ι) (ls : List SRec) (δ : LSubD L) (v : Val) (ρ' : WRes),
+      vD (ℍ := ℍ) ι A (ls.map (Targets.srecRestrat R.θ)) (δ.map R.ψ) v ρ' →
+        ∃ ρ, RemakeR R.θ ρ ρ' ∧ vD (ℍ := ℍ) ι A ls δ v ρ
+
+/-- **The relation is not order-parametric, at a first-order type**, wherever a re-lending other than
+the identity exists: `boxMM` is read differently at two readings of one order type. -/
+theorem not_orderParamV_boxMM {ι : Slots L} (R : Relend ι) (hθ : ∃ x, R.θ x ≠ x) :
+    ¬ OrderParamV (ℍ := ℍ) ι boxMM := by
+  rintro ⟨-, hrefl⟩
+  obtain ⟨δ, v, ρ', h', -, hE⟩ := not_reflect_boxMM (ℍ := ℍ) R hθ
+  obtain ⟨ρ, -, h⟩ := hrefl R [] δ v ρ' h'
+  exact hE [] v ρ h
+
+/-- **Re-lendable at a computation type `C`.** -/
+def RelendC (ι : Slots L) (C : CTy) : Prop :=
+  ∀ (R : Relend ι) (ls : List SRec) (δ : LSubD L) (e : Expr) (ρ : WRes),
+    cD (ℍ := ℍ) ι C ls δ e ρ →
+      ∃ ρ', RemakeR R.θ ρ ρ' ∧
+        cD (ℍ := ℍ) ι C (ls.map (Targets.srecRestrat R.θ)) (δ.map R.ψ) e ρ'
+
+/-- **`⊸` is where the room enters**: at `boxMM ⊸ F mm0` every term is related at a reading with no
+room, and none at the empty resource at its moved reading. The argument position is contravariant,
+so the failure of reflection at `boxMM` is a failure of preservation here. -/
+theorem not_relendC_kC {ι : Slots L} (R : Relend ι) (hθ : ∃ x, R.θ x ≠ x) :
+    ¬ RelendC (ℍ := ℍ) ι kC := by
+  intro h
+  obtain ⟨δ, w, ρ₁, h₁, hT, hE⟩ := not_reflect_boxMM (ℍ := ℍ) R hθ
+  have hc : cD (ℍ := ℍ) ι kC [] δ (.val .unit) PMap.empty :=
+    fun w' ρa _ ha _ => absurd ha (hE [] w' ρa)
+  obtain ⟨ρ', hR, h'⟩ := h R [] δ (.val .unit) PMap.empty hc
+  rw [remakeR_empty_iff.mp hR] at h'
+  exact not_cD_kC ι h₁ hT _ h'
 
 /-! ### The closure stored in a lent cell -/
 
