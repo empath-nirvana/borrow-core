@@ -60,9 +60,10 @@ source's finaliser before the unwind continues outward. Its obligations are the 
 `ewpTS_I_frameU`, `ewpTS_M_frameU` and `ewpTS_M_antiFrameU` in
 [`Core/EffWp.lean`](https://github.com/empath-nirvana/borrow-core/blob/main/Core/EffWp.lean), used by
 [`Core/EffBorrow.lean`](https://github.com/empath-nirvana/borrow-core/blob/main/Core/EffBorrow.lean). Cancelling a stored continuation runs
-its finalisers innermost first and answers `()`, or re-raises at the canceller the first error a
-finaliser raised to a handler outside the cancelled region; both outcomes are run in
-[`Core/EffCancel.lean`](https://github.com/empath-nirvana/borrow-core/blob/main/Core/EffCancel.lean) (`prog_run`, `prog₃_run`). The six
+its finalisers innermost first, with the handlers of the cancelled region dead, and answers `()`,
+or re-raises at the canceller the first error a finaliser raised, to the nearest live handler of
+its name; the outcomes are run in
+[`Core/EffCancel.lean`](https://github.com/empath-nirvana/borrow-core/blob/main/Core/EffCancel.lean) (`prog₃_run`, `progRe_run`, `progFinOp_run`, …). The six
 acceptance programs of §19 (two effects in both nesting orders, logging and raising inside a
 borrow, an infinite loop that logs, early exit from a producer that holds a cell, and
 cancelling a stored continuation) are closed derivations in
