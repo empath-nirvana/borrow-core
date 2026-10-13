@@ -2823,10 +2823,11 @@ Richer policies are K3 (#162), and *Open*:
 
 ### Laws
 
-The equations the effect system is decided to satisfy, each with the Core theorem that states it
-of the machine, in every evaluation context (`Core/EffMachine.lean`). A step a law names is its
-configuration's only step (`Step1Only`, by unique decomposition and determinism), except an
-allocation, which takes any location the memory does not hold.
+The equations and semantic choices the effect system is decided to satisfy, each with the Core
+theorem that states it. A law of the machine is stated in every evaluation context
+(`Core/EffMachine.lean`), and a step it names is its configuration's only step (`Step1Only`, by
+unique decomposition and determinism), except an allocation, which takes any location the memory
+does not hold. Safety is stated of the runs of typed programs (`Core/EffSafety.lean`).
 
 1. **Deep handler laws** (Plotkin–Pretnar).
    - *H-ret*: `hnd (n, H) v ↦ h_ret v` (`catch_ret`).
@@ -2862,6 +2863,21 @@ allocation, which takes any location the memory does not hold.
      exactly as `raise p` steps there: the frame that catches it drops them (`abort_absorbs`;
      `abort_to`, `abort_app`).
    - *Sequencing*, `op(v) to x. P = op(v; y. (k y to x. P))`, is not yet a Core theorem.
+9. **Safety**: every operation a run performs has a live handler of its name, and every raise a
+   live frame that catches it; a stuck state is never a semantics. Stated of a typed closed
+   program, a closed computation of `F A` (its row empty, `A` any type), and of its runs from the
+   empty memory:
+   - Every run continues to a value (`total_every_run`), so none is stuck (`adequacyD_safe` at
+     `F 1`).
+   - No configuration a run reaches is `K[perform p]` with `K` free of a handler of `p`'s name, or
+     `K[raise p]` with `K` catching nothing of it: each is a value or steps (`effSafe_closed`).
+   - Each configuration a run reaches has a closed term and closed stored values, and goes on
+     (`LiveOK`, `liveOK_closed`). It holds no stuck redex at an evaluation position
+     (`LiveOK.not_stuck`), `() ()` among them (`stuckAt_unit_app`): the cancel branch of a linear
+     `κ` (`kappaC_cancel_lin`) is never reached.
+   - At a persistent `A`, a run that reaches a value reaches it at the empty memory, every cell it
+     allocated released, each continuation's cell (§25) among them (`leakFree_closed`,
+     `Core/EffPrograms.lean`).
 
 ### Baseline
 
@@ -3865,8 +3881,9 @@ no `[TR]` lemma and no borrow rule changes; the cell is handled by 6.141, 6.142,
 
 ### Open
 
-- **S6 at tier 1's typing**, from the cell: reduced to leak freedom (proved) and two ownership
-  properties of the cell, open. The two machine facts the reduction reads are Core theorems: a
+- **S6 at tier 1's typing**, from the cell: reduced to `LiveOK`, leak freedom and two ownership
+  properties of the cell, open. `LiveOK` and leak freedom are Core theorems (`liveOK_closed`,
+  `leakFree_closed`; §19 *Laws*, *Safety*), and so are the two machine facts the reduction reads: a
   capture event allocates `κ`'s cell (`catchEv_cell`), and a use of `κ` releases it three steps
   later (`use_frees_cell`). The reduction itself is not yet a Core theorem.
 
@@ -4229,6 +4246,11 @@ The handler laws (§19 *Laws*) are machine lemmas in `Core/EffMachine.lean`, wit
 `catch_cell`, `catchEv_cell`, `kappaC_resume`, `kappaC_cancel`, `kappaC_cancel_lin`,
 `use_frees_cell`), H-fwd (`catch_fwd`, `fwd_resume`, `fwd_abort`), `[unwind]`, `[then]` and
 `[finalise]`, and an abort's absorption of the frames it passes (`abort_absorbs`).
+
+Safety (§19 *Laws*) is stated of the runs of typed closed programs, with no change to
+`CDerives`, the machine or the relation: `effSafe_closed`, `LiveOK` and `liveOK_closed` in
+`Core/EffSafety.lean`, and leak freedom at a persistent answer (`leakFree_closed`) in
+`Core/EffPrograms.lean`.
 
 ---
 

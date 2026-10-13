@@ -178,6 +178,13 @@ effect).
   allocator is a prefix of it (`total_run_prefix`), every run continues to a value
   (`total_every_run`), and there is no infinite run (`total_no_infinite_run`, through the
   allocator `Alloc.ofRun` built from the run).
+- **Effect safety** (`SPEC.md` §19 *Laws*, `EffSafety.lean`). Every configuration a typed closed
+  program reaches from the empty memory is a value or steps, and is no operation that no live frame
+  catches: no `K[perform p]` with `K` free of a handler of `p`'s name, no `K[raise p]` with `K`
+  catching nothing of it (`effSafe_closed`). Each such configuration is `LiveOK`: its term and
+  stored values are closed, and it goes on (`liveOK_closed`), so it holds no stuck redex
+  (`LiveOK.not_stuck`). At a persistent answer a run to a value ends at the empty memory, every
+  continuation's cell released (`leakFree_closed`, `EffPrograms.lean`).
 - **Embedding.** `embed : DerivesWf Δ Γ e T → CDerives Δ (cbvCtx Γ) e (.val (cbv T))` for every
   `DerivesWf` rule, and `adequacy_of_derivesWf`. `EmbeddingExamples.lean` runs BoLo's baseline
   programs through it.

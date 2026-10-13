@@ -246,6 +246,13 @@ import Frontend.Check.Externs
 #print axioms BoCa.Fig16.LogRel.Core.abort_to
 #print axioms BoCa.Fig16.LogRel.Core.abort_app
 #print axioms BoCa.Fig16.LogRel.Core.fwd_abort
+-- SPEC §19, *Laws*: safety, of the runs of typed closed programs
+#print axioms BoCa.Fig16.LogRel.Core.ne_opPlug_of_goes
+#print axioms BoCa.Fig16.LogRel.Core.effSafe_closed
+#print axioms BoCa.Fig16.LogRel.Core.liveOK_closed
+#print axioms BoCa.Fig16.LogRel.Core.LiveOK.ne_opPlug
+#print axioms BoCa.Fig16.LogRel.Core.LiveOK.not_stuck
+#print axioms BoCa.Fig16.LogRel.Core.EffPrograms.leakFree_closed
 -- SPEC §26 (entry 25): a λ whose binder is dead, at an effectful returner
 #print axioms BoCa.Fig16.LogRel.Core.gDenC_unit_dead
 #print axioms BoCa.Fig16.LogRel.Core.lamDead_compatC

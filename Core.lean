@@ -70,6 +70,7 @@ import Core.Demonic
 import Core.EffExamples
 import Core.EffPrograms
 import Core.Totality
+import Core.EffSafety
 import Core.Stale
 import Core.Stdio
 import Core.Handlers
